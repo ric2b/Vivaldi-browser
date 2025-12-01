@@ -94,10 +94,12 @@ SharedDictionaryStorageOnDisk::SharedDictionaryStorageOnDisk(
       isolation_key_(isolation_key),
       on_deleted_closure_runner_(std::move(on_deleted_closure_runner)),
       dictionary_cache_(dictionary_cache) {
-  memory_pressure_listener_ = std::make_unique<base::MemoryPressureListener>(
-      FROM_HERE,
-      base::BindRepeating(&SharedDictionaryStorageOnDisk::OnMemoryPressure,
-                          weak_factory_.GetWeakPtr()));
+  memory_pressure_listener_ =
+      std::make_unique<base::AsyncMemoryPressureListener>(
+          FROM_HERE,
+          base::MemoryPressureListenerTag::kSharedDictionaryStorageOnDisk,
+          base::BindRepeating(&SharedDictionaryStorageOnDisk::OnMemoryPressure,
+                              weak_factory_.GetWeakPtr()));
   manager_->metadata_store().GetDictionaries(
       isolation_key_,
       base::BindOnce(
@@ -237,12 +239,14 @@ bool SharedDictionaryStorageOnDisk::UpdateLastFetchTimeIfAlreadyRegistered(
     const std::string& match,
     const std::set<mojom::RequestDestination>& match_dest,
     const std::string& id,
+    const std::optional<base::TimeDelta>& ttl,
     base::Time last_fetch_time) {
   WrappedDictionaryInfo* matched_info = FindRegisteredInDictionaryInfoMap(
       dictionary_info_map_, url, response_time, expiration, match, match_dest,
-      id);
+      id, ttl);
   if (matched_info) {
-    manager_->UpdateDictionaryLastFetchTime(*matched_info, last_fetch_time);
+    manager_->UpdateDictionaryLastFetchTime(*matched_info, last_fetch_time,
+                                            ttl);
     return true;
   }
   return false;

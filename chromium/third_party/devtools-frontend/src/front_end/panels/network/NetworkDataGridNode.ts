@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -45,6 +45,7 @@ import * as Protocol from '../../generated/protocol.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import type * as HAR from '../../models/har/har.js';
 import * as Logs from '../../models/logs/logs.js';
+import type * as NetworkTimeCalculator from '../../models/network_time_calculator/network_time_calculator.js';
 import * as NetworkForward from '../../panels/network/forward/forward.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
@@ -55,32 +56,30 @@ import * as UI from '../../ui/legacy/legacy.js';
 import {render} from '../../ui/lit/lit.js';
 import {PanelUtils} from '../utils/utils.js';
 
-import type {NetworkTimeCalculator} from './NetworkTimeCalculator.js';
-
 const UIStrings = {
   /**
-   *@description Text in Network Data Grid Node of the Network panel
+   * @description Text in Network Data Grid Node of the Network panel
    */
   redirect: 'Redirect',
   /**
-   *@description Content of the request method column in the network log view. Some requests require an additional request to check permissions, and this additional request is called 'Preflight Request', see https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request. In the request method column we use, for example, 'POST + Preflight' to indicate that the request method was 'POST' and the request was accompanied by a preflight request. Since the column is short, the translation for Preflight in this context should ideally also be short.
-   *@example {GET} PH1
+   * @description Content of the request method column in the network log view. Some requests require an additional request to check permissions, and this additional request is called 'Preflight Request', see https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request. In the request method column we use, for example, 'POST + Preflight' to indicate that the request method was 'POST' and the request was accompanied by a preflight request. Since the column is short, the translation for Preflight in this context should ideally also be short.
+   * @example {GET} PH1
    */
   sPreflight: '{PH1} + Preflight',
   /**
-   *@description Name of a network initiator type
+   * @description Name of a network initiator type
    */
   preflight: 'Preflight',
   /**
-   *@description Title for a link element in the network log view
+   * @description Title for a link element in the network log view
    */
   selectPreflightRequest: 'Select preflight request',
   /**
-   *@description Text in Network Data Grid Node of the Network panel
+   * @description Text in Network Data Grid Node of the Network panel
    */
   failed: '(failed)',
   /**
-   *@description Text in Network Data Grid Node of the Network panel
+   * @description Text in Network Data Grid Node of the Network panel
    */
   data: '(data)',
   /**
@@ -89,15 +88,15 @@ const UIStrings = {
    */
   canceled: '(canceled)',
   /**
-   *@description Reason in Network Data Grid Node of the Network panel
+   * @description Reason in Network Data Grid Node of the Network panel
    */
   other: 'other',
   /**
-   *@description Reason in Network Data Grid Node of the Network panel
+   * @description Reason in Network Data Grid Node of the Network panel
    */
   csp: 'csp',
   /**
-   *@description Reason in Network Data Grid Node of the Network panel
+   * @description Reason in Network Data Grid Node of the Network panel
    */
   origin: 'origin',
   /**
@@ -121,33 +120,33 @@ const UIStrings = {
    */
   corpNotSameOriginAfterDefaultedToSameOriginByCoep: 'CORP not "same-origin" after defaulted to "same-origin" by COEP',
   /**
-   *@description Noun. Shown in a table cell as the reason why a network request failed. "integrity" here refers to the integrity of the network request itself in a cryptographic sense: signature verification might have failed, for instance.
+   * @description Noun. Shown in a table cell as the reason why a network request failed. "integrity" here refers to the integrity of the network request itself in a cryptographic sense: signature verification might have failed, for instance.
    */
   integrity: 'integrity',
   /**
-   *@description Reason in Network Data Grid Node of the Network panel
+   * @description Reason in Network Data Grid Node of the Network panel
    */
   devtools: 'devtools',
   /**
-   *@description Text in Network Data Grid Node of the Network panel
-   *@example {mixed-content} PH1
+   * @description Text in Network Data Grid Node of the Network panel
+   * @example {mixed-content} PH1
    */
   blockeds: '(blocked:{PH1})',
   /**
-   *@description Text in Network Data Grid Node of the Network panel
+   * @description Text in Network Data Grid Node of the Network panel
    */
   blockedTooltip: 'This request was blocked due to misconfigured response headers, click to view the headers',
   /**
-   *@description Text in Network Data Grid Node of the Network panel
+   * @description Text in Network Data Grid Node of the Network panel
    */
   corsError: 'CORS error',
   /**
-   *@description Tooltip providing the cors error code
-   *@example {PreflightDisallowedRedirect} PH1
+   * @description Tooltip providing the cors error code
+   * @example {PreflightDisallowedRedirect} PH1
    */
   crossoriginResourceSharingErrorS: 'Cross-Origin Resource Sharing error: {PH1}',
   /**
-   *@description Text in Network Data Grid Node of the Network panel
+   * @description Text in Network Data Grid Node of the Network panel
    */
   finished: 'Finished',
   /**
@@ -170,170 +169,170 @@ const UIStrings = {
    */
   push: 'Push / ',
   /**
-   *@description Text in Network Data Grid Node of the Network panel
+   * @description Text in Network Data Grid Node of the Network panel
    */
   parser: 'Parser',
   /**
-   *@description Label for a group of JavaScript files
+   * @description Label for a group of JavaScript files
    */
   script: 'Script',
   /**
-   *@description Cell title in Network Data Grid Node of the Network panel
+   * @description Cell title in Network Data Grid Node of the Network panel
    */
   preload: 'Preload',
   /**
-   *@description Cell title in Network Data Grid Node of the Network panel
+   * @description Cell title in Network Data Grid Node of the Network panel
    */
   earlyHints: 'early-hints',
   /**
-   *@description Text in Network Data Grid Node of the Network panel
+   * @description Text in Network Data Grid Node of the Network panel
    */
   signedexchange: 'signed-exchange',
   /**
-   *@description Title for a link element in the network log view
+   * @description Title for a link element in the network log view
    */
   selectTheRequestThatTriggered: 'Select the request that triggered this preflight',
   /**
-   *@description Text for other types of items
+   * @description Text for other types of items
    */
   otherC: 'Other',
   /**
-   *@description Text of a DOM element in Network Data Grid Node of the Network panel
+   * @description Text of a DOM element in Network Data Grid Node of the Network panel
    */
   memoryCache: '(memory cache)',
   /**
-   *@description Cell title in Network Data Grid Node of the Network panel. Indicates that the response came from memory cache.
-   *@example {50 B} PH1
+   * @description Cell title in Network Data Grid Node of the Network panel. Indicates that the response came from memory cache.
+   * @example {50 B} PH1
    */
   servedFromMemoryCacheResource: 'Served from memory cache, resource size: {PH1}',
   /**
-   *@description Text of a DOM element in Network Data Grid Node of the Network panel
+   * @description Text of a DOM element in Network Data Grid Node of the Network panel
    */
   serviceWorker: '(`ServiceWorker`)',
   /**
-   *@description Cell title in Network Data Grid Node of the Network panel
-   *@example {4 B} PH1
-   *@example {10 B} PH2
+   * @description Cell title in Network Data Grid Node of the Network panel
+   * @example {4 B} PH1
+   * @example {10 B} PH2
    */
   servedFromNetwork: '{PH1} transferred over network, resource size: {PH2}',
   /**
-   *@description Cell title in Network Data Grid Node of the Network panel
-   *@example {4 B} PH1
-   *@example {10 B} PH2
+   * @description Cell title in Network Data Grid Node of the Network panel
+   * @example {4 B} PH1
+   * @example {10 B} PH2
    */
   servedFromNetworkMissingServiceWorkerRoute:
       '{PH1} transferred over network, resource size: {PH2}, no matching ServiceWorker routes',
   /**
-   *@description Cell title in Network Data Grid Node of the Network panel
-   *@example {4 B} PH1
+   * @description Cell title in Network Data Grid Node of the Network panel
+   * @example {4 B} PH1
    */
   servedFromServiceWorkerResource: 'Served from `ServiceWorker`, resource size: {PH1}',
   /**
-   *@description Cell title in Network Data Grid Node of the Network panel
-   *@example {4 B} PH1
+   * @description Cell title in Network Data Grid Node of the Network panel
+   * @example {4 B} PH1
    */
   servedFromSignedHttpExchange: 'Served from Signed HTTP Exchange, resource size: {PH1}',
   /**
-   *@description Cell title in Network Data Grid Node of the Network panel. Indicates that the response came from preloaded web bundle. See https://web.dev/web-bundles/
-   *@example {4 B} PH1
+   * @description Cell title in Network Data Grid Node of the Network panel. Indicates that the response came from preloaded web bundle. See https://web.dev/web-bundles/
+   * @example {4 B} PH1
    */
   servedFromWebBundle: 'Served from Web Bundle, resource size: {PH1}',
   /**
-   *@description Text of a DOM element in Network Data Grid Node of the Network panel
+   * @description Text of a DOM element in Network Data Grid Node of the Network panel
    */
   prefetchCache: '(prefetch cache)',
   /**
-   *@description Cell title in Network Data Grid Node of the Network panel
-   *@example {4 B} PH1
+   * @description Cell title in Network Data Grid Node of the Network panel
+   * @example {4 B} PH1
    */
   servedFromPrefetchCacheResource: 'Served from prefetch cache, resource size: {PH1}',
   /**
-   *@description Text of a DOM element in Network Data Grid Node of the Network panel
+   * @description Text of a DOM element in Network Data Grid Node of the Network panel
    */
   diskCache: '(disk cache)',
   /**
-   *@description Cell title in Network Data Grid Node of the Network panel
-   *@example {10 B} PH1
+   * @description Cell title in Network Data Grid Node of the Network panel
+   * @example {10 B} PH1
    */
   servedFromDiskCacheResourceSizeS: 'Served from disk cache, resource size: {PH1}',
   /**
-   *@description Cell title in Network Data Grid Node of the Network panel
-   *@example {1} PH1
-   *@example {4 B} PH2
+   * @description Cell title in Network Data Grid Node of the Network panel
+   * @example {1} PH1
+   * @example {4 B} PH2
    */
   matchedToServiceWorkerRouter: 'Matched to `ServiceWorker router`#{PH1}, resource size: {PH2}',
 
   /**
-   *@description Cell title in Network Data Grid Node of the Network panel
-   *@example {1} PH1
-   *@example {4 B} PH2
-   *@example {12 B} PH3
+   * @description Cell title in Network Data Grid Node of the Network panel
+   * @example {1} PH1
+   * @example {4 B} PH2
+   * @example {12 B} PH3
    */
   matchedToServiceWorkerRouterWithNetworkSource:
       'Matched to `ServiceWorker router`#{PH1}, {PH2} transferred over network, resource size: {PH3}',
   /**
-   *@description Text in Network Data Grid Node of the Network panel
+   * @description Text in Network Data Grid Node of the Network panel
    */
   pending: 'Pending',
   /**
-   *@description Text describing the depth of a top level node in the network datagrid
+   * @description Text describing the depth of a top level node in the network datagrid
    */
   level: 'level 1',
   /**
-   *@description Text in Network Data Grid Node of the Network panel
+   * @description Text in Network Data Grid Node of the Network panel
    */
   webBundleError: 'Web Bundle error',
   /**
-   *@description Alternative text for the web bundle inner request icon in Network Data Grid Node of the Network panel
+   * @description Alternative text for the web bundle inner request icon in Network Data Grid Node of the Network panel
    * Indicates that the response came from preloaded web bundle. See https://web.dev/web-bundles/
    */
   webBundleInnerRequest: 'Served from Web Bundle',
   /**
-   *@description Text in Network Data Grid Node of the Network panel
+   * @description Text in Network Data Grid Node of the Network panel
    */
   webBundle: '(Web Bundle)',
   /**
-   *@description Tooltip text for subtitles of Time cells in Network request rows. Latency is the time difference
+   * @description Tooltip text for subtitles of Time cells in Network request rows. Latency is the time difference
    * between the time a response to a network request is received and the time the request is started.
    */
   timeSubtitleTooltipText: 'Latency (response received time - start time)',
   /**
-   *@description Tooltip text giving the reason why a specific HTTP transport protocol has been used
+   * @description Tooltip text giving the reason why a specific HTTP transport protocol has been used
    */
   alternativeJobWonWithoutRace:
       '`Chrome` used a `HTTP/3` connection induced by an \'`Alt-Svc`\' header without racing against establishing a connection using a different `HTTP` version.',
   /**
-   *@description Tooltip text giving the reason why a specific HTTP transport protocol has been used
+   * @description Tooltip text giving the reason why a specific HTTP transport protocol has been used
    */
   alternativeJobWonRace:
       '`Chrome` used a `HTTP/3` connection induced by an \'`Alt-Svc`\' header because it won a race against establishing a connection using a different `HTTP` version.',
   /**
-   *@description Tooltip text giving the reason why a specific HTTP transport protocol has been used
+   * @description Tooltip text giving the reason why a specific HTTP transport protocol has been used
    */
   mainJobWonRace: '`Chrome` used this protocol because it won a race against establishing a `HTTP/3` connection.',
   /**
-   *@description Tooltip text giving the reason why a specific HTTP transport protocol has been used
+   * @description Tooltip text giving the reason why a specific HTTP transport protocol has been used
    */
   mappingMissing:
       '`Chrome` did not use an alternative `HTTP` version because no alternative protocol information was available when the request was issued, but an \'`Alt-Svc`\' header was present in the response.',
   /**
-   *@description Tooltip text giving the reason why a specific HTTP transport protocol has been used
+   * @description Tooltip text giving the reason why a specific HTTP transport protocol has been used
    */
   broken: '`Chrome` did not try to establish a `HTTP/3` connection because it was marked as broken.',
   /**
-   *@description Tooltip text giving the reason why a specific HTTP transport protocol has been used
+   * @description Tooltip text giving the reason why a specific HTTP transport protocol has been used
    */
   dnsAlpnH3JobWonWithoutRace:
       '`Chrome` used a `HTTP/3` connection due to the `DNS record` indicating `HTTP/3` support. There was no race against establishing a connection using a different `HTTP` version.',
   /**
-   *@description Tooltip text giving the reason why a specific HTTP transport protocol has been used
+   * @description Tooltip text giving the reason why a specific HTTP transport protocol has been used
    */
   dnsAlpnH3JobWonRace:
       '`Chrome` used a `HTTP/3` connection due to the `DNS record` indicating `HTTP/3` support, which won a race against establishing a connection using a different `HTTP` version.',
   /**
-   *@description Tooltip to explain the resource's initial priority
-   *@example {High} PH1
-   *@example {Low} PH2
+   * @description Tooltip to explain the resource's initial priority
+   * @example {High} PH1
+   * @example {Low} PH2
    */
   initialPriorityToolTip: '{PH1}, Initial priority: {PH2}',
   /**
@@ -350,8 +349,14 @@ export const enum Events {
   RequestActivated = 'RequestActivated',
 }
 
+export const enum RequestPanelBehavior {
+  ShowPanel = 'ShowPanel',
+  HidePanel = 'HidePanel',
+  Unchanged = 'Unchanged',
+}
+
 export interface RequestActivatedEvent {
-  showPanel: boolean;
+  showPanel: RequestPanelBehavior;
   takeFocus?: boolean;
   tab?: NetworkForward.UIRequestLocation.UIRequestTabs;
 }
@@ -374,9 +379,9 @@ export interface NetworkLogViewInterface extends Common.EventTarget.EventTarget<
   addFilmStripFrames(times: number[]): void;
   selectFilmStripFrame(time: number): void;
   clearFilmStripFrame(): void;
-  timeCalculator(): NetworkTimeCalculator;
-  calculator(): NetworkTimeCalculator;
-  setCalculator(x: NetworkTimeCalculator): void;
+  timeCalculator(): NetworkTimeCalculator.NetworkTimeCalculator;
+  calculator(): NetworkTimeCalculator.NetworkTimeCalculator;
+  setCalculator(x: NetworkTimeCalculator.NetworkTimeCalculator): void;
   flatNodesList(): NetworkNode[];
   updateNodeBackground(): void;
   updateNodeSelectedClass(isSelected: boolean): void;
@@ -766,6 +771,24 @@ export class NetworkRequestNode extends NetworkNode {
     return aScore - bScore || aRequest.identityCompare(bRequest);
   }
 
+  static IsAdRelatedComparator(a: NetworkNode, b: NetworkNode): number {
+    // TODO(allada) Handle this properly for group nodes.
+    const aRequest = a.requestOrFirstKnownChildRequest();
+    const bRequest = b.requestOrFirstKnownChildRequest();
+    if (!aRequest || !bRequest) {
+      return !aRequest ? -1 : 1;
+    }
+    const aIsAdRelated = aRequest.isAdRelated();
+    const bIsAdRelated = bRequest.isAdRelated();
+    if (aIsAdRelated > bIsAdRelated) {
+      return 1;
+    }
+    if (bIsAdRelated > aIsAdRelated) {
+      return -1;
+    }
+    return aRequest.identityCompare(bRequest);
+  }
+
   static RequestPropertyComparator(propertyName: string, a: NetworkNode, b: NetworkNode): number {
     // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1033,6 +1056,10 @@ export class NetworkRequestNode extends NetworkNode {
         this.renderAddressSpaceCell(cell, this.requestInternal.remoteAddressSpace());
         break;
       }
+      case 'is-ad-related': {
+        this.setTextAndTitle(cell, this.requestInternal.isAdRelated().toLocaleString());
+        break;
+      }
       case 'cookies': {
         this.setTextAndTitle(cell, this.arrayLength(this.requestInternal.includedRequestCookies()));
         break;
@@ -1145,11 +1172,13 @@ export class NetworkRequestNode extends NetworkNode {
       cell.style.setProperty('padding-left', leftPadding);
       cell.tabIndex = -1;
       cell.addEventListener('dblclick', this.openInNewTab.bind(this), false);
-      cell.addEventListener('mousedown', () => {
+      cell.addEventListener('mousedown', (event: MouseEvent) => {
         // When the request panel isn't visible yet, firing the RequestActivated event
         // doesn't make it visible if no request is selected. So we'll select it first.
         this.select();
-        this.parentView().dispatchEventToListeners(Events.RequestActivated, {showPanel: true});
+        // Only open panel on mousedown with left mouse button.
+        const showPanel = event.button ? RequestPanelBehavior.Unchanged : RequestPanelBehavior.ShowPanel;
+        this.parentView().dispatchEventToListeners(Events.RequestActivated, {showPanel});
       });
       cell.addEventListener('focus', () => this.parentView().resetFocus());
 
@@ -1285,7 +1314,7 @@ export class NetworkRequestNode extends NetworkNode {
         this.setTextAndTitleAsLink(
             cell, i18nString(UIStrings.blockeds, {PH1: reason}), i18nString(UIStrings.blockedTooltip), () => {
               this.parentView().dispatchEventToListeners(Events.RequestActivated, {
-                showPanel: true,
+                showPanel: RequestPanelBehavior.ShowPanel,
                 tab: NetworkForward.UIRequestLocation.UIRequestTabs.HEADERS_COMPONENT,
               });
             });

@@ -24,6 +24,7 @@ declare_args() {
   ios_toolchains_path = ""
   xcode_version = ""
   xcode_version_int = 0
+  xcode_version_verbatim = ""
   xcode_build = ""
   machine_os_build = ""
 
@@ -36,6 +37,8 @@ declare_args() {
   # Set to `target_platform` to generate Xcode project with the
   # corresponding platform SDK.
   target_xcode_platform = target_platform
+
+  ios_use_sdk = false
 }
 
 # Building XCTests requires copying XCTRunner.app which is part of the iOS
@@ -94,6 +97,10 @@ if (ios_sdk_path == "") {
     assert(false, "unsupported target_platform=$target_platform")
   }
 
+  if (ios_use_sdk != false) {
+    ios_sdk_name = "$ios_sdk_name${ios_use_sdk}"
+  }
+
   ios_sdk_info_args = [
     "--get_sdk_info",
     "--get_machine_info",
@@ -124,6 +131,7 @@ if (ios_sdk_path == "") {
   ios_toolchains_path = _ios_sdk_result.toolchains_path
   xcode_version = _ios_sdk_result.xcode_version
   xcode_version_int = _ios_sdk_result.xcode_version_int
+  xcode_version_verbatim = _ios_sdk_result.xcode_version_verbatim
   xcode_build = _ios_sdk_result.xcode_build
   machine_os_build = _ios_sdk_result.machine_os_build
   if (target_environment == "simulator") {

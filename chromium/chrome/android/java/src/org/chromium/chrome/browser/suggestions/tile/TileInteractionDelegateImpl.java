@@ -5,17 +5,16 @@
 package org.chromium.chrome.browser.suggestions.tile;
 
 import android.annotation.SuppressLint;
+import android.os.Build;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 
-import org.chromium.base.CancelableRunnable;
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.base.task.PostTask;
-import org.chromium.base.task.TaskTraits;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.native_page.ContextMenuManager.ContextMenuItemId;
 import org.chromium.chrome.browser.preloading.AndroidPrerenderManager;
@@ -23,9 +22,8 @@ import org.chromium.chrome.browser.suggestions.SiteSuggestion;
 import org.chromium.chrome.browser.suggestions.SuggestionsMetrics;
 import org.chromium.chrome.browser.suggestions.tile.TileDragDelegate.ReorderFlow;
 import org.chromium.ui.mojom.WindowOpenDisposition;
+import org.chromium.ui.util.MotionEventUtils;
 import org.chromium.url.GURL;
-
-import java.util.Objects;
 
 /**
  * TileView's UI interaction handler, including tile usage via touch and tile modification via
@@ -42,30 +40,25 @@ class TileInteractionDelegateImpl
     private final TileGroup.Delegate mTileGroupDelegate;
     private final TileDragDelegate mTileDragDelegate;
     private final TileGroup.CustomTileModificationDelegate mCustomTileModificationDelegate;
-    private final int mPrerenderDelay;
     private final Tile mTile;
     private final View mView;
     private final AndroidPrerenderManager mAndroidPrerenderManager;
 
     private @Nullable Runnable mOnClickRunnable;
     private @Nullable Runnable mOnRemoveRunnable;
-    private @Nullable CancelableRunnable mPrerenderRunnable;
-    private @Nullable GURL mPrerenderedUrl;
-    private @Nullable GURL mScheduldedPrerenderingUrl;
+    private boolean mPrerenderTriggered;
 
     public TileInteractionDelegateImpl(
             ContextMenuManager contextMenuManager,
             TileGroup.Delegate tileGroupDelegate,
             TileDragDelegate tileDragDelegate,
             TileGroup.CustomTileModificationDelegate customTileModificationDelegate,
-            int prerenderDelay,
             Tile tile,
             View view) {
         mContextMenuManager = contextMenuManager;
         mTileGroupDelegate = tileGroupDelegate;
         mTileDragDelegate = tileDragDelegate;
         mCustomTileModificationDelegate = customTileModificationDelegate;
-        mPrerenderDelay = prerenderDelay;
         mTile = tile;
         mView = view;
 
@@ -73,10 +66,12 @@ class TileInteractionDelegateImpl
         mView.setOnKeyListener(this);
         mView.setOnLongClickListener(this);
         mView.setOnTouchListener(this);
+        mView.setOnGenericMotionListener(this);
 
         mAndroidPrerenderManager = AndroidPrerenderManager.getAndroidPrerenderManager();
 
         mTileGroupDelegate.initAndroidPrerenderManager(mAndroidPrerenderManager);
+        mPrerenderTriggered = false;
     }
 
     // TileGroup.TileInteractionDelegate => OnClickListener implementation.
@@ -86,54 +81,6 @@ class TileInteractionDelegateImpl
         mTileDragDelegate.reset();
         if (mOnClickRunnable != null) mOnClickRunnable.run();
         mTileGroupDelegate.openMostVisitedItem(WindowOpenDisposition.CURRENT_TAB, mTile);
-    }
-
-    private void maybePrerender(GURL url) {
-        if (!ChromeFeatureList.isEnabled(
-                ChromeFeatureList.NEW_TAB_PAGE_ANDROID_TRIGGER_FOR_PRERENDER2)) {
-            return;
-        }
-
-        // Avoid resetting the delayed task if witness several MotionEvent.ACTION_DOWN in a row. If
-        // the URL has been scheduled to be prerendered or already prerendered, it should be
-        // skipped.
-        if (Objects.equals(mScheduldedPrerenderingUrl, url)
-                || Objects.equals(mPrerenderedUrl, url)) {
-            return;
-        }
-
-        assert mScheduldedPrerenderingUrl == null;
-        mScheduldedPrerenderingUrl = url;
-        mPrerenderRunnable =
-                new CancelableRunnable(
-                        () -> {
-                            if (mAndroidPrerenderManager.startPrerendering(url)) {
-                                mPrerenderedUrl = url;
-                            }
-                            mScheduldedPrerenderingUrl = null;
-                        });
-        PostTask.postDelayedTask(TaskTraits.UI_DEFAULT, mPrerenderRunnable, mPrerenderDelay);
-    }
-
-    // This function cancels scheduled prerendering or calls stopPrerendering to stop stale
-    // prerendering.
-    private void cancelPrerender() {
-        if (!ChromeFeatureList.isEnabled(
-                ChromeFeatureList.NEW_TAB_PAGE_ANDROID_TRIGGER_FOR_PRERENDER2)) {
-            return;
-        }
-
-        if (mPrerenderRunnable != null) {
-            mPrerenderRunnable.cancel();
-            mPrerenderRunnable = null;
-        }
-
-        if (mPrerenderedUrl != null) {
-            mAndroidPrerenderManager.stopPrerendering();
-        }
-
-        mPrerenderedUrl = null;
-        mScheduldedPrerenderingUrl = null;
     }
 
     // TileGroup.TileInteractionDelegate => View.OnKeyListener implementation.
@@ -174,9 +121,11 @@ class TileInteractionDelegateImpl
     @SuppressLint("ClickableViewAccessibility")
     public boolean onTouch(View view, MotionEvent event) {
         if (event.getAction() == MotionEvent.ACTION_DOWN) {
-            maybePrerender(mTile.getUrl());
-        } else if (event.getAction() == MotionEvent.ACTION_CANCEL) {
-            cancelPrerender();
+            mAndroidPrerenderManager.startPrerendering(mTile.getUrl());
+            mPrerenderTriggered = true;
+        } else if (event.getAction() == MotionEvent.ACTION_CANCEL && mPrerenderTriggered) {
+            mAndroidPrerenderManager.stopPrerendering();
+            mPrerenderTriggered = false;
         }
 
         // Handle tile drag-and-drop separately.
@@ -187,6 +136,17 @@ class TileInteractionDelegateImpl
         }
 
         return false;
+    }
+
+    // TileGroup.TileInteractionDelegate => View.OnGenericMotionListener implementation.
+    @Override
+    public boolean onGenericMotion(View view, MotionEvent event) {
+        if (MotionEventUtils.isSecondaryClick(event.getButtonState())
+                && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                && view.hasOnLongClickListeners()) {
+            return view.performLongClick();
+        }
+        return view.onGenericMotionEvent(event);
     }
 
     // TileGroup.TileInteractionDelegate implementation.
@@ -267,7 +227,9 @@ class TileInteractionDelegateImpl
             case ContextMenuItemId.OPEN_IN_NEW_TAB_IN_GROUP:
                 return true;
             case ContextMenuItemId.OPEN_IN_INCOGNITO_TAB:
-                return true;
+                return !IncognitoUtils.shouldOpenIncognitoAsWindow();
+            case ContextMenuItemId.OPEN_IN_INCOGNITO_WINDOW:
+                return IncognitoUtils.shouldOpenIncognitoAsWindow();
             case ContextMenuItemId.OPEN_IN_NEW_WINDOW:
                 return true;
             case ContextMenuItemId.SAVE_FOR_OFFLINE:

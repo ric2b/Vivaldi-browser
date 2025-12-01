@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,7 @@
  * Where X is the prompt and Y is the explanation. To avoid having to update a
  * lot of examples, this parser also supports this format.
  *
- * @param comment - The comment string to split.
+ * @param comment The comment string to split.
  * @returns An object containing the found keys and their values.
  */
 export function parseComment(comment: string): Record<string, string> {

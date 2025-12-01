@@ -113,8 +113,8 @@
 #include "gpu/ipc/client/client_shared_image_interface.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
-#include "ipc/ipc_channel_handle.h"
-#include "ipc/ipc_channel_mojo.h"
+#include "ipc/ipc_channel.h"
+#include "ipc/ipc_channel_factory.h"
 #include "ipc/ipc_platform_file.h"
 #include "media/base/decoder_factory.h"
 #include "media/base/media.h"
@@ -162,6 +162,7 @@
 #include "third_party/blink/public/web/web_user_level_memory_pressure_signal_generator.h"
 #include "third_party/blink/public/web/web_v8_features.h"
 #include "third_party/blink/public/web/web_view.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 #include "third_party/skia/include/core/SkFontMgr.h"
 #include "third_party/skia/include/core/SkGraphics.h"
 #include "ui/base/ui_base_switches.h"
@@ -261,7 +262,6 @@ static_assert(
 // the base::ThreadPool. Does not currently work on Fuchsia due to FIDL
 // requiring thread affinity.
 BASE_FEATURE(kUseThreadPoolForMediaTaskRunner,
-             "UseThreadPoolForMediaTaskRunner",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Updates the crash key for whether this renderer is foregrounded.
@@ -269,42 +269,6 @@ void UpdateForegroundCrashKey(bool foreground) {
   static auto* const crash_key = base::debug::AllocateCrashKeyString(
       "renderer_foreground", base::debug::CrashKeySize::Size32);
   base::debug::SetCrashKeyString(crash_key, base::ToString(foreground));
-}
-
-scoped_refptr<viz::ContextProviderCommandBuffer> CreateOffscreenContext(
-    scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
-    const gpu::SharedMemoryLimits& limits,
-    bool support_locking,
-    bool support_gles2_interface,
-    bool support_raster_interface,
-    bool support_gpu_rasterization,
-    bool support_grcontext,
-    bool automatic_flushes,
-    viz::command_buffer_metrics::ContextType type,
-    int32_t stream_id,
-    gpu::SchedulingPriority stream_priority) {
-  DCHECK(gpu_channel_host);
-  // This is used to create a few different offscreen contexts:
-  // - The shared main thread context, used by blink for 2D Canvas.
-  // - The compositor worker context, used for GPU raster.
-  // - The media context, used for accelerated video decoding.
-  // This is for an offscreen context, so the default framebuffer doesn't need
-  // alpha, depth, stencil, antialiasing.
-  gpu::ContextCreationAttribs attributes;
-  attributes.lose_context_when_out_of_memory = true;
-  attributes.enable_gles2_interface = support_gles2_interface;
-  attributes.enable_raster_interface = support_raster_interface;
-  attributes.enable_grcontext = support_grcontext;
-  // Using RasterDecoder for OOP-R backend, so we need support_raster_interface
-  // and !support_gles2_interface.
-  attributes.enable_gpu_rasterization = support_gpu_rasterization &&
-                                        support_raster_interface &&
-                                        !support_gles2_interface;
-  return base::MakeRefCounted<viz::ContextProviderCommandBuffer>(
-      std::move(gpu_channel_host), stream_id, stream_priority,
-      GURL("chrome://gpu/RenderThreadImpl::CreateOffscreenContext/" +
-           viz::command_buffer_metrics::ContextTypeToString(type)),
-      automatic_flushes, support_locking, limits, attributes, type);
 }
 
 // Hook that allows single-sample metric code from //components/metrics to
@@ -630,12 +594,21 @@ void RenderThreadImpl::Init() {
   // been initialized by the Zygote before this instance became a Renderer.
   media::InitializeMediaLibrary();
 
-  memory_pressure_listener_ = std::make_unique<base::MemoryPressureListener>(
-      FROM_HERE,
-      base::BindRepeating(&RenderThreadImpl::OnMemoryPressure,
-                          base::Unretained(this)),
-      base::BindRepeating(&RenderThreadImpl::OnSyncMemoryPressure,
-                          base::Unretained(this)));
+  memory_pressure_listener_ =
+      std::make_unique<base::AsyncMemoryPressureListener>(
+          FROM_HERE, base::MemoryPressureListenerTag::kRenderThreadImpl,
+          base::BindRepeating(&RenderThreadImpl::OnMemoryPressure,
+                              base::Unretained(this)));
+  // In tests or in single-process mode, the render thread does not live on the
+  // main thread of the process, so we can't register a sync listener.
+  if (base::SingleThreadTaskRunner::GetMainThreadDefault()
+          ->BelongsToCurrentThread()) {
+    sync_memory_pressure_listener_ =
+        std::make_unique<base::SyncMemoryPressureListener>(
+            base::MemoryPressureListenerTag::kRenderThreadImpl,
+            base::BindRepeating(&RenderThreadImpl::OnSyncMemoryPressure,
+                                base::Unretained(this)));
+  }
 
   discardable_memory_allocator_ = CreateDiscardableMemoryAllocator();
 
@@ -1008,22 +981,12 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
   // video decoding if gpu compositing is off.
   if (is_gpu_compositing_disabled_)
     return nullptr;
-  // This context is only used to create textures and mailbox them, so
-  // use lower limits than the default.
-  gpu::SharedMemoryLimits limits = gpu::SharedMemoryLimits::ForMailboxContext();
-  bool support_locking = false;
-  bool support_gles2_interface = true;
-  bool support_raster_interface = false;
-  bool support_oop_rasterization = false;
-  bool support_grcontext = false;
-  bool automatic_flushes = false;
-  scoped_refptr<viz::ContextProviderCommandBuffer> media_context_provider =
-      CreateOffscreenContext(gpu_channel_host, limits, support_locking,
-                             support_gles2_interface, support_raster_interface,
-                             support_oop_rasterization, support_grcontext,
-                             automatic_flushes,
-                             viz::command_buffer_metrics::ContextType::MEDIA,
-                             kGpuStreamIdMedia, kGpuStreamPriorityMedia);
+
+  auto media_context_provider = viz::ContextProviderCommandBuffer::CreateForGL(
+      gpu_channel_host, kGpuStreamIdMedia, kGpuStreamPriorityMedia,
+      GURL("chrome://gpu/RenderThreadImpl::CreateOffscreenContext/Media"),
+      viz::command_buffer_metrics::ContextType::MEDIA,
+      /*lose_context_when_out_of_memory=*/true);
 
   const bool enable_video_decode_accelerator =
 #if BUILDFLAG(IS_LINUX)
@@ -1101,20 +1064,16 @@ RenderThreadImpl::GetVideoFrameCompositorContextProvider(
   // This context is only used to create textures and mailbox them, so
   // use lower limits than the default.
   gpu::SharedMemoryLimits limits = gpu::SharedMemoryLimits::ForMailboxContext();
+  video_frame_compositor_context_provider_ =
+      viz::ContextProviderCommandBuffer::CreateForRaster(
+          gpu_channel_host, kGpuStreamIdMedia, kGpuStreamPriorityMedia,
+          GURL("chrome://gpu/RenderThreadImpl::CreateOffscreenContext/"
+               "RenderCompositor"),
+          /*automatic_flushes=*/false, /*support_locking=*/false, limits,
+          viz::command_buffer_metrics::ContextType::RENDERER_COMPOSITOR,
+          /*enable_gpu_rasterization=*/false,
+          /*lose_context_when_out_of_memory=*/true);
 
-  bool support_locking = false;
-  // Use RasterInterface always.
-  bool support_gles2_interface = false;
-  bool support_raster_interface = true;
-  bool support_oop_rasterization = false;
-  bool support_grcontext = false;
-  bool automatic_flushes = false;
-  video_frame_compositor_context_provider_ = CreateOffscreenContext(
-      gpu_channel_host, limits, support_locking, support_gles2_interface,
-      support_raster_interface, support_oop_rasterization, support_grcontext,
-      automatic_flushes,
-      viz::command_buffer_metrics::ContextType::RENDER_COMPOSITOR,
-      kGpuStreamIdMedia, kGpuStreamPriorityMedia);
   return video_frame_compositor_context_provider_;
 }
 
@@ -1158,34 +1117,23 @@ RenderThreadImpl::SharedMainThreadContextProvider() {
     return nullptr;
   }
 
-  if (base::FeatureList::IsEnabled(
-          ::features::kDisallowRasterInterfaceWithoutSkiaBackend) &&
-      gpu_channel_host->gpu_info().skia_backend_type ==
-          gpu::SkiaBackendType::kNone) {
+  if (gpu_channel_host->gpu_info().skia_backend_type ==
+      gpu::SkiaBackendType::kNone) {
     return nullptr;
   }
 
-  bool support_locking = false;
-  bool support_raster_interface = true;
-  // TODO(zmo): today if Skia backend is set, Chrome either runs in GPU
-  // acceleration mode, either on top of real GPU, or on top of SwiftShader
-  // (for testing). This may change in the future if we move Skia software
-  // rendering to be OOP as well.
-  bool support_oop_rasterization =
-      gpu_channel_host->gpu_info().skia_backend_type !=
-      gpu::SkiaBackendType::kNone;
-  bool support_gles2_interface = false;
-  bool support_grcontext = !support_oop_rasterization;
-  // Enable automatic flushes to improve canvas throughput.
-  // See https://crbug.com/880901
-  bool automatic_flushes = true;
+  shared_main_thread_contexts_ =
+      viz::ContextProviderCommandBuffer::CreateForRaster(
+          std::move(gpu_channel_host), kGpuStreamIdDefault,
+          kGpuStreamPriorityDefault,
+          GURL("chrome://gpu/RenderThreadImpl::CreateOffscreenContext/"
+               "RendererMainThread"),
+          /*automatic_flushes=*/true, /*support_locking=*/false,
+          gpu::SharedMemoryLimits(),
+          viz::command_buffer_metrics::ContextType::RENDERER_MAIN_THREAD,
+          /*enable_gpu_rasterization=*/true,
+          /*lose_context_when_out_of_memory=*/true);
 
-  shared_main_thread_contexts_ = CreateOffscreenContext(
-      std::move(gpu_channel_host), gpu::SharedMemoryLimits(), support_locking,
-      support_gles2_interface, support_raster_interface,
-      support_oop_rasterization, support_grcontext, automatic_flushes,
-      viz::command_buffer_metrics::ContextType::RENDERER_MAIN_THREAD,
-      kGpuStreamIdDefault, kGpuStreamPriorityDefault);
   auto result = shared_main_thread_contexts_->BindToCurrentSequence();
   if (result != gpu::ContextResult::kSuccess) {
     shared_main_thread_contexts_ = nullptr;
@@ -1437,13 +1385,12 @@ scoped_refptr<gpu::GpuChannelHost> RenderThreadImpl::EstablishGpuChannelSync() {
 
 void RenderThreadImpl::EstablishGpuChannel(
     EstablishGpuChannelCallback callback) {
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
-      "gpu", "RenderThreadImpl::EstablishGpuChannel", this);
+  TRACE_EVENT_BEGIN("gpu", "RenderThreadImpl::EstablishGpuChannel",
+                    perfetto::Track::FromPointer(this));
   gpu_->EstablishGpuChannel(base::BindOnce(
       [](EstablishGpuChannelCallback callback, RenderThreadImpl* thread,
          scoped_refptr<gpu::GpuChannelHost> host) {
-        TRACE_EVENT_NESTABLE_ASYNC_END0(
-            "gpu", "RenderThreadImpl::EstablishGpuChannel", thread);
+        TRACE_EVENT_END("gpu", perfetto::Track::FromPointer(thread));
         if (host)
           GetContentClient()->SetGpuInfo(host->gpu_info());
         std::move(callback).Run(std::move(host));
@@ -1575,9 +1522,14 @@ void RenderThreadImpl::UpdateSystemColorInfo(
     mojom::UpdateSystemColorInfoParamsPtr params) {
   auto* native_theme = ui::NativeTheme::GetInstanceForWeb();
 
+  // LINT.IfChange(UserColor)
+  // TODO(pkasting): This is not the right way of plumbing this; it should go
+  // through the preferences/settings route that things like preferred contrast,
+  // preferred color scheme, forced colors, etc. use.
   bool did_accent_color_change =
       native_theme->user_color() != params->accent_color;
   native_theme->set_user_color(params->accent_color);
+  // LINT.ThenChange(//third_party/blink/renderer/platform/theme/web_theme_engine_default.cc:UserColor)
 
   if (did_accent_color_change) {
     // Notify blink of accent color changes. These can affect CSS styles and
@@ -1675,8 +1627,6 @@ RenderThreadImpl::SharedCompositorWorkerContextProvider(
     return shared_worker_context_provider_;
   }
 
-  bool support_locking = true;
-
   // If the compositor worker context supports GPU rasterization then renderer
   // tiles will be rasterized on the GPU.
   bool support_gpu_rasterization =
@@ -1684,19 +1634,20 @@ RenderThreadImpl::SharedCompositorWorkerContextProvider(
           .status_values[gpu::GPU_FEATURE_TYPE_GPU_TILE_RASTERIZATION] ==
       gpu::kGpuFeatureStatusEnabled;
 
-  bool support_gles2_interface = false;
-  bool support_raster_interface = true;
-  bool support_grcontext = false;
-  bool automatic_flushes = false;
   auto shared_memory_limits =
       support_gpu_rasterization ? gpu::SharedMemoryLimits::ForOOPRasterContext()
                                 : gpu::SharedMemoryLimits();
-  shared_worker_context_provider_ = CreateOffscreenContext(
-      std::move(gpu_channel_host), shared_memory_limits, support_locking,
-      support_gles2_interface, support_raster_interface,
-      support_gpu_rasterization, support_grcontext, automatic_flushes,
-      viz::command_buffer_metrics::ContextType::RENDER_WORKER,
-      kGpuStreamIdWorker, kGpuStreamPriorityWorker);
+  shared_worker_context_provider_ =
+      viz::ContextProviderCommandBuffer::CreateForRaster(
+          std::move(gpu_channel_host), kGpuStreamIdWorker,
+          kGpuStreamPriorityWorker,
+          GURL("chrome://gpu/RenderThreadImpl::CreateOffscreenContext/"
+               "RenderWorker"),
+          /*automatic_flushes=*/false, /*support_locking=*/true,
+          shared_memory_limits,
+          viz::command_buffer_metrics::ContextType::RENDERER_RASTER_WORKER,
+          /*enable_gpu_rasterization=*/support_gpu_rasterization,
+          /*lose_context_when_out_of_memory=*/true);
 
   auto result = shared_worker_context_provider_->BindToCurrentSequence();
   if (result != gpu::ContextResult::kSuccess) {

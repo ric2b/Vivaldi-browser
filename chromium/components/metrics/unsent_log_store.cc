@@ -101,7 +101,7 @@ class LogsPrefWriter {
   void Finish() {
     DCHECK(!finished_);
     finished_ = true;
-    std::reverse(list_value_->begin(), list_value_->end());
+    std::ranges::reverse(*list_value_);
   }
 
   base::HistogramBase::Count32 unsent_samples_count() const {
@@ -338,11 +338,12 @@ void UnsentLogStore::TrimAndPersistUnsentLogs(bool overwrite_in_memory_store) {
   if (overwrite_in_memory_store) {
     // We went in reverse order, but appended entries. So reverse list to
     // correct.
-    std::reverse(trimmed_list.begin(), trimmed_list.end());
+    std::ranges::reverse(trimmed_list);
 
     size_t dropped_logs_count = list_.size() - trimmed_list.size();
-    if (dropped_logs_count > 0)
+    if (dropped_logs_count > 0) {
       metrics_->RecordDroppedLogsNum(dropped_logs_count);
+    }
 
     // Put the trimmed list in the correct place.
     list_.swap(trimmed_list);
@@ -509,8 +510,9 @@ void UnsentLogStore::WriteToMetricsPref(
     base::HistogramBase::Count32 unsent_samples_count,
     base::HistogramBase::Count32 sent_samples_count,
     size_t unsent_persisted_size) const {
-  if (metadata_pref_name_ == nullptr)
+  if (metadata_pref_name_ == nullptr) {
     return;
+  }
 
   ScopedDictPrefUpdate update(local_state_, metadata_pref_name_);
   base::Value::Dict& pref_data = update.Get();
@@ -522,8 +524,9 @@ void UnsentLogStore::WriteToMetricsPref(
 }
 
 void UnsentLogStore::RecordMetaDataMetrics() {
-  if (metadata_pref_name_ == nullptr)
+  if (metadata_pref_name_ == nullptr) {
     return;
+  }
 
   const base::Value::Dict& value = local_state_->GetDict(metadata_pref_name_);
 

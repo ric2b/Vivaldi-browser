@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/css/style_scope.h"
+
 #include "third_party/blink/renderer/core/css/parser/css_selector_parser.h"
 #include "third_party/blink/renderer/core/css/properties/css_parsing_utils.h"
 #include "third_party/blink/renderer/core/css/style_rule.h"
@@ -15,13 +16,12 @@ namespace blink {
 StyleScope::StyleScope(StyleRule* from, CSSSelectorList* to)
     : from_(from), to_(to) {}
 
-StyleScope::StyleScope(StyleSheetContents* contents, CSSSelectorList* to)
-    : contents_(contents), to_(to) {}
-
 StyleScope::StyleScope(const StyleScope& other)
-    : contents_(other.contents_),
-      from_(other.from_ ? other.from_->Copy() : nullptr),
-      to_(other.to_ ? other.to_->Copy() : nullptr),
+    : from_(other.from_
+                ? To<StyleRule>(other.from_->Clone(/*new_parent=*/nullptr,
+                                                   /*env_bindings=*/nullptr))
+                : nullptr),
+      to_(other.to_ ? other.to_->Renest(/*new_parent=*/nullptr) : nullptr),
       parent_(other.parent_) {}
 
 StyleScope* StyleScope::CopyWithParent(const StyleScope* parent) const {
@@ -30,17 +30,14 @@ StyleScope* StyleScope::CopyWithParent(const StyleScope* parent) const {
   return copy;
 }
 
-const StyleScope* StyleScope::Renest(StyleRule* new_parent) const {
-  StyleRule* reparented_from =
-      from_ ? blink::To<StyleRule>(from_->Renest(new_parent)) : nullptr;
-  if (from_ == reparented_from) {
-    return this;
-  }
+const StyleScope* StyleScope::Clone(StyleRule* new_parent) const {
+  StyleRule* reparented_from = from_
+                                   ? blink::To<StyleRule>(from_->Clone(
+                                         new_parent, /*env_bindings=*/nullptr))
+                                   : nullptr;
   // Note that for the "to" selector, any '&' selectors must point
   // to the "from" selector.
   CSSSelectorList* reparented_to = to_ ? to_->Renest(reparented_from) : nullptr;
-  // For implicit scopes, we should have exited early due to from_==nullptr.
-  CHECK(!contents_);
   // The `parent_` member should only be populated via calls to CopyWithParent
   // (RuleSet-time), and this StyleScope should not be one such copy.
   CHECK(!parent_);
@@ -121,14 +118,13 @@ StyleScope* StyleScope::Parse(CSSParserTokenStream& stream,
 
   if (from.empty()) {
     // Implicitly rooted.
-    return MakeGarbageCollected<StyleScope>(style_sheet, to_list);
+    return MakeGarbageCollected<StyleScope>(/*from=*/nullptr, to_list);
   }
 
   return MakeGarbageCollected<StyleScope>(from_rule, to_list);
 }
 
 void StyleScope::Trace(blink::Visitor* visitor) const {
-  visitor->Trace(contents_);
   visitor->Trace(from_);
   visitor->Trace(to_);
   visitor->Trace(parent_);

@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -10,17 +10,21 @@ import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Platform from '../../../core/platform/platform.js';
 import * as Root from '../../../core/root/root.js';
+import * as SDK from '../../../core/sdk/sdk.js';
 import * as AiAssistanceModel from '../../../models/ai_assistance/ai_assistance.js';
+import * as Workspace from '../../../models/workspace/workspace.js';
+import * as ElementsPanel from '../../../panels/elements/elements.js';
+import * as PanelUtils from '../../../panels/utils/utils.js';
 import * as Marked from '../../../third_party/marked/marked.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import type * as MarkdownView from '../../../ui/components/markdown_view/markdown_view.js';
+import type {MarkdownLitRenderer} from '../../../ui/components/markdown_view/MarkdownView.js';
 import * as UI from '../../../ui/legacy/legacy.js';
 import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import {PatchWidget} from '../PatchWidget.js';
 
 import chatViewStyles from './chatView.css.js';
-import {MarkdownRendererWithCodeBlock} from './MarkdownRendererWithCodeBlock.js';
 import {UserActionRow} from './UserActionRow.js';
 
 const {html, Directives: {ifDefined, ref}} = Lit;
@@ -39,41 +43,41 @@ const UIStrings = {
    */
   settingsLink: 'AI assistance in Settings',
   /**
-   *@description Text for asking the user to turn the AI assistance feature in settings first before they are able to use it.
-   *@example {AI assistance in Settings} PH1
+   * @description Text for asking the user to turn the AI assistance feature in settings first before they are able to use it.
+   * @example {AI assistance in Settings} PH1
    */
   turnOnForStyles: 'Turn on {PH1} to get help with understanding CSS styles',
   /**
-   *@description Text for asking the user to turn the AI assistance feature in settings first before they are able to use it.
-   *@example {AI assistance in Settings} PH1
+   * @description Text for asking the user to turn the AI assistance feature in settings first before they are able to use it.
+   * @example {AI assistance in Settings} PH1
    */
   turnOnForStylesAndRequests: 'Turn on {PH1} to get help with styles and network requests',
   /**
-   *@description Text for asking the user to turn the AI assistance feature in settings first before they are able to use it.
-   *@example {AI assistance in Settings} PH1
+   * @description Text for asking the user to turn the AI assistance feature in settings first before they are able to use it.
+   * @example {AI assistance in Settings} PH1
    */
   turnOnForStylesRequestsAndFiles: 'Turn on {PH1} to get help with styles, network requests, and files',
   /**
-   *@description Text for asking the user to turn the AI assistance feature in settings first before they are able to use it.
-   *@example {AI assistance in Settings} PH1
+   * @description Text for asking the user to turn the AI assistance feature in settings first before they are able to use it.
+   * @example {AI assistance in Settings} PH1
    */
   turnOnForStylesRequestsPerformanceAndFiles:
       'Turn on {PH1} to get help with styles, network requests, performance, and files',
   /**
-   *@description The footer disclaimer that links to more information about the AI feature.
+   * @description The footer disclaimer that links to more information about the AI feature.
    */
   learnAbout: 'Learn about AI in DevTools',
   /**
-   *@description Text informing the user that AI assistance is not available in Incognito mode or Guest mode.
+   * @description Text informing the user that AI assistance is not available in Incognito mode or Guest mode.
    */
   notAvailableInIncognitoMode: 'AI assistance is not available in Incognito mode or Guest mode',
 
   /**
-   *@description Label added to the text input to describe the context for screen readers. Not shown visibly on screen.
+   * @description Label added to the text input to describe the context for screen readers. Not shown visibly on screen.
    */
   inputTextAriaDescription: 'You can also use one of the suggested prompts above to start your conversation',
   /**
-   *@description Label added to the button that reveals the selected context item in DevTools
+   * @description Label added to the button that reveals the selected context item in DevTools
    */
   revealContextDescription: 'Reveal the selected context item in DevTools',
 } as const;
@@ -83,27 +87,27 @@ const UIStrings = {
 */
 const UIStringsNotTranslate = {
   /**
-   *@description Title for the send icon button.
+   * @description Title for the send icon button.
    */
   sendButtonTitle: 'Send',
   /**
-   *@description Title for the start new chat
+   * @description Title for the start new chat
    */
   startNewChat: 'Start new chat',
   /**
-   *@description Title for the cancel icon button.
+   * @description Title for the cancel icon button.
    */
   cancelButtonTitle: 'Cancel',
   /**
-   *@description Label for the "select an element" button.
+   * @description Label for the "select an element" button.
    */
   selectAnElement: 'Select an element',
   /**
-   *@description Label for the "select an element" button.
+   * @description Label for the "select an element" button.
    */
   noElementSelected: 'No element selected',
   /**
-   *@description Text for the empty state of the AI assistance panel.
+   * @description Text for the empty state of the AI assistance panel.
    */
   emptyStateText: 'How can I help you?',
   /**
@@ -116,7 +120,7 @@ const UIStringsNotTranslate = {
    */
   maxStepsError: 'Seems like I am stuck with the investigation. It would be better if you start over.',
   /**
-   *@description Displayed when the user stop the response
+   * @description Displayed when the user stop the response
    */
   stoppedResponse: 'You stopped this response',
   /**
@@ -132,75 +136,75 @@ const UIStringsNotTranslate = {
    */
   negativeSideEffectConfirmation: 'Cancel',
   /**
-   *@description The generic name of the AI agent (do not translate)
+   * @description The generic name of the AI agent (do not translate)
    */
   ai: 'AI',
   /**
-   *@description The fallback text when we can't find the user full name
+   * @description The fallback text when we can't find the user full name
    */
   you: 'You',
   /**
-   *@description The fallback text when a step has no title yet
+   * @description The fallback text when a step has no title yet
    */
   investigating: 'Investigating',
   /**
-   *@description Prefix to the title of each thinking step of a user action is required to continue
+   * @description Prefix to the title of each thinking step of a user action is required to continue
    */
   paused: 'Paused',
   /**
-   *@description Heading text for the code block that shows the executed code.
+   * @description Heading text for the code block that shows the executed code.
    */
   codeExecuted: 'Code executed',
   /**
-   *@description Heading text for the code block that shows the code to be executed after side effect confirmation.
+   * @description Heading text for the code block that shows the code to be executed after side effect confirmation.
    */
   codeToExecute: 'Code to execute',
   /**
-   *@description Heading text for the code block that shows the returned data.
+   * @description Heading text for the code block that shows the returned data.
    */
   dataReturned: 'Data returned',
   /**
-   *@description Aria label for the check mark icon to be read by screen reader
+   * @description Aria label for the check mark icon to be read by screen reader
    */
   completed: 'Completed',
   /**
-   *@description Aria label for the cancel icon to be read by screen reader
+   * @description Aria label for the cancel icon to be read by screen reader
    */
   canceled: 'Canceled',
   /**
-   *@description Text displayed when the chat input is disabled due to reading past conversation.
+   * @description Text displayed when the chat input is disabled due to reading past conversation.
    */
   pastConversation: 'You\'re viewing a past conversation.',
   /**
-   *@description Title for the take screenshot button.
+   * @description Title for the take screenshot button.
    */
   takeScreenshotButtonTitle: 'Take screenshot',
   /**
-   *@description Title for the remove image input button.
+   * @description Title for the remove image input button.
    */
   removeImageInputButtonTitle: 'Remove image input',
   /**
-   *@description Alt text for the image input (displayed in the chat messages) that has been sent to the model.
+   * @description Alt text for the image input (displayed in the chat messages) that has been sent to the model.
    */
   imageInputSentToTheModel: 'Image input sent to the model',
   /**
-   *@description Alt text for the account avatar.
+   * @description Alt text for the account avatar.
    */
   accountAvatar: 'Account avatar',
   /**
-   *@description Title for the x-link which wraps the image input rendered in chat messages.
+   * @description Title for the x-link which wraps the image input rendered in chat messages.
    */
   openImageInNewTab: 'Open image in a new tab',
   /**
-   *@description Alt text for image when it is not available.
+   * @description Alt text for image when it is not available.
    */
   imageUnavailable: 'Image unavailable',
   /**
-   *@description Title for the add image button.
+   * @description Title for the add image button.
    */
   addImageButtonTitle: 'Add image',
   /**
-   *@description Disclaimer text right after the chat input.
+   * @description Disclaimer text right after the chat input.
    */
   inputDisclaimerForEmptyState: 'This is an experimental AI feature and won\'t always get it right.',
 } as const;
@@ -210,8 +214,8 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 const lockedString = i18n.i18n.lockedString;
 
 const SCROLL_ROUNDING_OFFSET = 1;
-const TOOLTIP_POPOVER_OFFSET = 4;
-const RELEVANT_DATA_LINK_ID = 'relevant-data-link';
+const RELEVANT_DATA_LINK_FOOTER_ID = 'relevant-data-link-footer';
+const RELEVANT_DATA_LINK_CHAT_ID = 'relevant-data-link-chat';
 
 export interface Step {
   isLoading: boolean;
@@ -273,6 +277,7 @@ export interface Props {
   onCancelClick: () => void;
   onContextClick: () => void;
   onNewConversation: () => void;
+  onCopyResponseClick: (message: ModelChatMessage) => void;
   onTakeScreenshot?: () => void;
   onRemoveImageInput?: () => void;
   onTextInputChange: (input: string) => void;
@@ -298,17 +303,16 @@ export interface Props {
   disclaimerText: Platform.UIString.LocalizedString;
   isTextInputEmpty: boolean;
   uploadImageInputEnabled?: boolean;
+  markdownRenderer: MarkdownLitRenderer;
 }
 
 export class ChatView extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
-  #markdownRenderer = new MarkdownRendererWithCodeBlock();
   #scrollTop?: number;
   #props: Props;
   #messagesContainerElement?: Element;
   #mainElementRef?: Lit.Directives.Ref<Element> = Lit.Directives.createRef();
   #messagesContainerResizeObserver = new ResizeObserver(() => this.#handleMessagesContainerResize());
-  #popoverHelper: UI.PopoverHelper.PopoverHelper|null = null;
   /**
    * Indicates whether the chat scroll position should be pinned to the bottom.
    *
@@ -333,7 +337,6 @@ export class ChatView extends HTMLElement {
   }
 
   set props(props: Props) {
-    this.#markdownRenderer = new MarkdownRendererWithCodeBlock();
     this.#props = props;
     this.#render();
   }
@@ -385,63 +388,6 @@ export class ChatView extends HTMLElement {
     }
 
     this.#setMainElementScrollTop(this.#mainElementRef.value.scrollHeight);
-  }
-
-  #handleChatUiRef(el: Element|undefined): void {
-    if (!el || this.#popoverHelper) {
-      return;
-    }
-
-    // TODO: Update here when b/409965560 is fixed.
-    this.#popoverHelper = new UI.PopoverHelper.PopoverHelper((el as HTMLElement), event => {
-      const popoverShownNode =
-          event.target instanceof HTMLElement && event.target.id === RELEVANT_DATA_LINK_ID ? event.target : null;
-      if (!popoverShownNode) {
-        return null;
-      }
-
-      // We move the glass pane to be a bit lower so
-      // that it does not disappear when moving the cursor
-      // over to link.
-      const nodeBox = popoverShownNode.boxInWindow();
-      nodeBox.y = nodeBox.y + TOOLTIP_POPOVER_OFFSET;
-      return {
-        box: nodeBox,
-        show: async (popover: UI.GlassPane.GlassPane) => {
-          // clang-format off
-          Lit.render(html`
-            <style>
-              .info-tooltip-container {
-                max-width: var(--sys-size-28);
-                padding: var(--sys-size-4) var(--sys-size-5);
-
-                .tooltip-link {
-                  display: block;
-                  margin-top: var(--sys-size-4);
-                  color: var(--sys-color-primary);
-                  padding-left: 0;
-                }
-              }
-            </style>
-            <div class="info-tooltip-container">
-              ${this.#props.disclaimerText}
-              <button
-                class="link tooltip-link"
-                role="link"
-                jslog=${VisualLogging.link('open-ai-settings').track({
-                  click: true,
-                })}
-                @click=${() => {
-                  void UI.ViewManager.ViewManager.instance().showView('chrome-ai');
-                }}
-              >${i18nString(UIStrings.learnAbout)}</button>
-            </div>`, popover.contentElement, {host: this});
-          // clang-format on
-          return true;
-        },
-      };
-    });
-    this.#popoverHelper.setTimeout(0);
   }
 
   #handleMessagesContainerResize(): void {
@@ -579,9 +525,11 @@ export class ChatView extends HTMLElement {
       // clang-format off
       const footerContents = this.#props.conversationType
         ? renderRelevantDataDisclaimer({
-            isLoading: this.#props.isLoading,
-            blockedByCrossOrigin: this.#props.blockedByCrossOrigin,
-          })
+          isLoading: this.#props.isLoading,
+          blockedByCrossOrigin: this.#props.blockedByCrossOrigin,
+          tooltipId: RELEVANT_DATA_LINK_FOOTER_ID,
+          disclaimerText: this.#props.disclaimerText,
+        })
         : html`<p>
             ${lockedString(UIStringsNotTranslate.inputDisclaimerForEmptyState)}
             <button
@@ -607,7 +555,7 @@ export class ChatView extends HTMLElement {
     // clang-format off
     Lit.render(html`
       <style>${chatViewStyles}</style>
-      <div class="chat-ui" ${Lit.Directives.ref(this.#handleChatUiRef)}>
+      <div class="chat-ui">
         <main @scroll=${this.#handleScroll} ${ref(this.#mainElementRef)}>
           ${renderMainContents({
             state: this.#props.state,
@@ -619,13 +567,14 @@ export class ChatView extends HTMLElement {
             isTextInputDisabled: this.#props.isTextInputDisabled,
             suggestions: this.#props.emptyStateSuggestions,
             userInfo: this.#props.userInfo,
-            markdownRenderer: this.#markdownRenderer,
+            markdownRenderer: this.#props.markdownRenderer,
             conversationType: this.#props.conversationType,
             changeSummary: this.#props.changeSummary,
             changeManager: this.#props.changeManager,
             onSuggestionClick: this.#handleSuggestionClick,
             onFeedbackSubmit: this.#props.onFeedbackSubmit,
             onMessageContainerRef: this.#handleMessageContainerRef,
+            onCopyResponseClick: this.#props.onCopyResponseClick,
           })}
           ${this.#props.isReadOnly
             ? renderReadOnlySection({
@@ -638,6 +587,7 @@ export class ChatView extends HTMLElement {
                 isTextInputDisabled: this.#props.isTextInputDisabled,
                 inputPlaceholder: this.#props.inputPlaceholder,
                 state: this.#props.state,
+                disclaimerText: this.#props.disclaimerText,
                 selectedContext: this.#props.selectedContext,
                 inspectElementToggled: this.#props.inspectElementToggled,
                 multimodalInputEnabled: this.#props.multimodalInputEnabled,
@@ -666,7 +616,7 @@ export class ChatView extends HTMLElement {
   }
 }
 
-function renderTextAsMarkdown(text: string, markdownRenderer: MarkdownRendererWithCodeBlock, {animate, ref: refFn}: {
+function renderTextAsMarkdown(text: string, markdownRenderer: MarkdownLitRenderer, {animate, ref: refFn}: {
   animate?: boolean,
   ref?: (element?: Element) => void,
 } = {}): Lit.TemplateResult {
@@ -747,7 +697,7 @@ function renderStepDetails({
   isLast,
 }: {
   step: Step,
-  markdownRenderer: MarkdownRendererWithCodeBlock,
+  markdownRenderer: MarkdownLitRenderer,
   isLast: boolean,
 }): Lit.LitTemplate {
   const sideEffects = isLast && step.sideEffect ? renderSideEffectConfirmationUi(step) : Lit.nothing;
@@ -811,7 +761,7 @@ function renderStepBadge({step, isLoading, isLast}: {
 function renderStep({step, isLoading, markdownRenderer, isLast}: {
   step: Step,
   isLoading: boolean,
-  markdownRenderer: MarkdownRendererWithCodeBlock,
+  markdownRenderer: MarkdownLitRenderer,
   isLast: boolean,
 }): Lit.LitTemplate {
   const stepClasses = Lit.Directives.classMap({
@@ -831,7 +781,7 @@ function renderStep({step, isLoading, markdownRenderer, isLast}: {
           ${renderTitle(step)}
           <devtools-icon
             class="arrow"
-            .name=${'chevron-down'}
+            name="chevron-down"
           ></devtools-icon>
         </div>
       </summary>
@@ -912,6 +862,7 @@ function renderChatMessage({
   markdownRenderer,
   onSuggestionClick,
   onFeedbackSubmit,
+  onCopyResponseClick,
 }: {
   message: ChatMessage,
   isLoading: boolean,
@@ -919,16 +870,17 @@ function renderChatMessage({
   canShowFeedbackForm: boolean,
   isLast: boolean,
   userInfo: Pick<Host.InspectorFrontendHostAPI.SyncInformation, 'accountImage'|'accountFullName'>,
-  markdownRenderer: MarkdownRendererWithCodeBlock,
+  markdownRenderer: MarkdownLitRenderer,
   onSuggestionClick: (suggestion: string) => void,
   onFeedbackSubmit: (rpcId: Host.AidaClient.RpcGlobalId, rate: Host.AidaClient.Rating, feedback?: string) => void,
+  onCopyResponseClick: (message: ModelChatMessage) => void,
 }): Lit.TemplateResult {
   if (message.entity === ChatMessageEntity.USER) {
     const name = userInfo.accountFullName || lockedString(UIStringsNotTranslate.you);
     const image = userInfo.accountImage ?
         html`<img src="data:image/png;base64, ${userInfo.accountImage}" alt=${UIStringsNotTranslate.accountAvatar} />` :
         html`<devtools-icon
-          .name=${'profile'}
+          name="profile"
         ></devtools-icon>`;
     const imageInput = message.imageInput && 'inlineData' in message.imageInput ?
         renderImageChatMessage(message.imageInput.inlineData) :
@@ -990,6 +942,7 @@ function renderChatMessage({
             },
             suggestions: (isLast && !isReadOnly) ? message.suggestions : undefined,
             onSuggestionClick,
+            onCopyResponseClick: () => onCopyResponseClick(message),
             canShowFeedbackForm,
           })}></devtools-widget>`
       }
@@ -1015,6 +968,43 @@ function renderImageChatMessage(inlineData: Host.AidaClient.MediaBlob): Lit.LitT
       <img src=${imageUrl} alt=${UIStringsNotTranslate.imageInputSentToTheModel} />
     </x-link>`;
   // clang-format on
+}
+
+function renderContextIcon(context: AiAssistanceModel.ConversationContext<unknown>|null): Lit.LitTemplate {
+  if (!context) {
+    return Lit.nothing;
+  }
+  const item = context.getItem();
+  // FIXME: move this to presenter once PanelUtils are declarative. The instance
+  // checking should be in the presenter and the rendering in the view function.
+  if (item instanceof SDK.NetworkRequest.NetworkRequest) {
+    return PanelUtils.PanelUtils.getIconForNetworkRequest(item);
+  }
+  if (item instanceof Workspace.UISourceCode.UISourceCode) {
+    return PanelUtils.PanelUtils.getIconForSourceFile(item);
+  }
+  if (item instanceof AiAssistanceModel.AgentFocus) {
+    return html`<devtools-icon name="performance" title="Performance"></devtools-icon>`;
+  }
+  if (item instanceof SDK.DOMModel.DOMNode) {
+    return Lit.nothing;
+  }
+  return Lit.nothing;
+}
+
+function renderContextTitle(
+    context: AiAssistanceModel.ConversationContext<unknown>, disabled: boolean): Lit.TemplateResult|string {
+  const item = context.getItem();
+  if (item instanceof SDK.DOMModel.DOMNode) {
+    // FIXME: move this to the model code.
+    const hiddenClassList =
+        item.classNames().filter(className => className.startsWith(AiAssistanceModel.AI_ASSISTANCE_CSS_CLASS_NAME));
+    return html`<devtools-widget .widgetConfig=${UI.Widget.widgetConfig(ElementsPanel.DOMLinkifier.DOMNodeLink, {
+      node: item,
+      options: {hiddenClassList, disabled}
+    })}></devtools-widget>`;
+  }
+  return context.getTitle();
 }
 
 function renderSelection({
@@ -1084,8 +1074,8 @@ function renderSelection({
       @keydown=${handleKeyDown}
       aria-description=${i18nString(UIStrings.revealContextDescription)}
     >
-      ${selectedContext?.getIcon() ? html`${selectedContext?.getIcon()}` : Lit.nothing}
-      <span class="title">${selectedContext?.getTitle({ disabled: isTextInputDisabled }) ?? lockedString(UIStringsNotTranslate.noElementSelected)}</span>
+      ${renderContextIcon(selectedContext)}
+      <span class="title">${selectedContext ? renderContextTitle(selectedContext, isTextInputDisabled) : lockedString(UIStringsNotTranslate.noElementSelected)}</span>
     </div>
   </div>`;
   // clang-format on
@@ -1102,6 +1092,7 @@ function renderMessages({
   changeManager,
   onSuggestionClick,
   onFeedbackSubmit,
+  onCopyResponseClick,
   onMessageContainerRef,
 }: {
   messages: ChatMessage[],
@@ -1109,9 +1100,10 @@ function renderMessages({
   isReadOnly: boolean,
   canShowFeedbackForm: boolean,
   userInfo: Pick<Host.InspectorFrontendHostAPI.SyncInformation, 'accountImage'|'accountFullName'>,
-  markdownRenderer: MarkdownRendererWithCodeBlock,
+  markdownRenderer: MarkdownLitRenderer,
   onSuggestionClick: (suggestion: string) => void,
   onFeedbackSubmit: (rpcId: Host.AidaClient.RpcGlobalId, rate: Host.AidaClient.Rating, feedback?: string) => void,
+  onCopyResponseClick: (message: ModelChatMessage) => void,
   onMessageContainerRef: (el: Element|undefined) => void,
   changeSummary?: string,
   changeManager?: AiAssistanceModel.ChangeManager,
@@ -1145,6 +1137,7 @@ function renderMessages({
           markdownRenderer,
           onSuggestionClick,
           onFeedbackSubmit,
+          onCopyResponseClick,
         }),
       )}
       ${renderPatchWidget()}
@@ -1385,8 +1378,12 @@ function renderImageInput({
   // clang-format on
 }
 
-function renderRelevantDataDisclaimer(
-    {isLoading, blockedByCrossOrigin}: {isLoading: boolean, blockedByCrossOrigin: boolean}): Lit.LitTemplate {
+function renderRelevantDataDisclaimer({isLoading, blockedByCrossOrigin, tooltipId, disclaimerText}: {
+  isLoading: boolean,
+  blockedByCrossOrigin: boolean,
+  tooltipId: string,
+  disclaimerText: string,
+}): Lit.LitTemplate {
   const classes =
       Lit.Directives.classMap({'chat-input-disclaimer': true, 'hide-divider': !isLoading && blockedByCrossOrigin});
   // clang-format off
@@ -1395,7 +1392,7 @@ function renderRelevantDataDisclaimer(
       <button
         class="link"
         role="link"
-        id=${RELEVANT_DATA_LINK_ID}
+        aria-details=${tooltipId}
         jslog=${VisualLogging.link('open-ai-settings').track({
           click: true,
         })}
@@ -1403,6 +1400,7 @@ function renderRelevantDataDisclaimer(
           void UI.ViewManager.ViewManager.instance().showView('chrome-ai');
         }}
       >${lockedString('Relevant data')}</button>&nbsp;${lockedString('is sent to Google')}
+      ${renderDisclamerTooltip(tooltipId, disclaimerText)}
     </p>
   `;
   // clang-format on
@@ -1422,6 +1420,7 @@ function renderChatInput({
   isTextInputEmpty,
   uploadImageInputEnabled,
   aidaAvailability,
+  disclaimerText,
   onContextClick,
   onInspectElementClick,
   onSubmit,
@@ -1442,6 +1441,7 @@ function renderChatInput({
   inspectElementToggled: boolean,
   isTextInputEmpty: boolean,
   aidaAvailability: Host.AidaClient.AidaAccessPreconditions,
+  disclaimerText: string,
   onContextClick: () => void,
   onInspectElementClick: () => void,
   onSubmit: (ev: SubmitEvent) => void,
@@ -1499,7 +1499,7 @@ function renderChatInput({
         </div>
         <div class="chat-input-actions-right">
           <div class="chat-input-disclaimer-container">
-            ${renderRelevantDataDisclaimer({isLoading, blockedByCrossOrigin})}
+            ${renderRelevantDataDisclaimer({ isLoading, blockedByCrossOrigin, tooltipId: RELEVANT_DATA_LINK_CHAT_ID, disclaimerText})}
           </div>
           ${renderMultimodalInputButtons({
             multimodalInputEnabled, blockedByCrossOrigin, isTextInputDisabled, imageInput, uploadImageInputEnabled, onTakeScreenshot, onImageUpload
@@ -1530,7 +1530,7 @@ function renderAidaUnavailableContents(
 }
 
 function renderConsentViewContents(): Lit.TemplateResult {
-  const settingsLink = document.createElement('button');
+  const settingsLink = document.createElement('span');
   settingsLink.textContent = i18nString(UIStrings.settingsLink);
   settingsLink.classList.add('link');
   UI.ARIAUtils.markAsLink(settingsLink);
@@ -1568,7 +1568,7 @@ function renderDisabledState(contents: Lit.TemplateResult): Lit.TemplateResult {
       <div class="disabled-view">
         <div class="disabled-view-icon-container">
           <devtools-icon
-            .name=${'smart-assistant'}
+            name="smart-assistant"
           ></devtools-icon>
         </div>
         <div>
@@ -1596,6 +1596,7 @@ function renderMainContents({
   changeManager,
   onSuggestionClick,
   onFeedbackSubmit,
+  onCopyResponseClick,
   onMessageContainerRef,
 }: {
   state: State,
@@ -1607,10 +1608,11 @@ function renderMainContents({
   isTextInputDisabled: boolean,
   suggestions: AiAssistanceModel.ConversationSuggestion[],
   userInfo: Pick<Host.InspectorFrontendHostAPI.SyncInformation, 'accountImage'|'accountFullName'>,
-  markdownRenderer: MarkdownRendererWithCodeBlock,
+  markdownRenderer: MarkdownLitRenderer,
   changeManager: AiAssistanceModel.ChangeManager,
   onSuggestionClick: (suggestion: string) => void,
   onFeedbackSubmit: (rpcId: Host.AidaClient.RpcGlobalId, rate: Host.AidaClient.Rating, feedback?: string) => void,
+  onCopyResponseClick: (message: ModelChatMessage) => void,
   onMessageContainerRef: (el: Element|undefined) => void,
   conversationType?: AiAssistanceModel.ConversationType,
   changeSummary?: string,
@@ -1640,11 +1642,35 @@ function renderMainContents({
       onSuggestionClick,
       onFeedbackSubmit,
       onMessageContainerRef,
-
+      onCopyResponseClick
     });
   }
 
   return renderEmptyState({isTextInputDisabled, suggestions, onSuggestionClick});
+}
+
+function renderDisclamerTooltip(id: string, disclaimerText: string): Lit.TemplateResult {
+  // clang-format off
+  return html`
+    <devtools-tooltip
+      id=${id}
+      variant=${'rich'}
+    >
+      <div class="info-tooltip-container">
+        ${disclaimerText}
+        <button
+          class="link tooltip-link"
+          role="link"
+          jslog=${VisualLogging.link('open-ai-settings').track({
+            click: true,
+          })}
+          @click=${() => {
+            void UI.ViewManager.ViewManager.instance().showView('chrome-ai');
+          }}>${i18nString(UIStrings.learnAbout)}
+        </button>
+      </div>
+    </devtools-tooltip>`;
+  // clang-format on
 }
 
 declare global {

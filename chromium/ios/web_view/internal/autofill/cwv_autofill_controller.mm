@@ -9,6 +9,7 @@
 
 #import "base/apple/foundation_util.h"
 #import "base/functional/callback.h"
+#import "base/ios/block_types.h"
 #import "base/notimplemented.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/values.h"
@@ -58,6 +59,31 @@ using autofill::FieldRendererId;
 using autofill::FormData;
 using autofill::FormRendererId;
 using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
+
+namespace {
+// Helper function to map C++ enum to Objective-C enum
+CWVAutofillProgressDialogType ToCWVAutofillProgressDialogType(
+    autofill::AutofillProgressDialogType type) {
+  switch (type) {
+    case autofill::AutofillProgressDialogType::kUnspecified:
+      return CWVAutofillProgressDialogTypeUnspecified;
+    case autofill::AutofillProgressDialogType::kVirtualCardUnmaskProgressDialog:
+      return CWVAutofillProgressDialogTypeVirtualCardUnmask;
+    case autofill::AutofillProgressDialogType::kServerCardUnmaskProgressDialog:
+      return CWVAutofillProgressDialogTypeServerCardUnmask;
+    case autofill::AutofillProgressDialogType::kServerIbanUnmaskProgressDialog:
+      return CWVAutofillProgressDialogTypeIbanUnmask;
+    case autofill::AutofillProgressDialogType::k3dsFetchVcnProgressDialog:
+      return CWVAutofillProgressDialogType3DSFetchVCN;
+    case autofill::AutofillProgressDialogType::
+        kCardInfoRetrievalEnrolledUnmaskProgressDialog:
+      return CWVAutofillProgressDialogTypeCardInfoRetrievalEnrolledUnmask;
+    case autofill::AutofillProgressDialogType::kBnplFetchVcnProgressDialog:
+      return CWVAutofillProgressDialogTypeBNPLFetchVCN;
+  }
+  return CWVAutofillProgressDialogTypeUnspecified;
+}
+}  // namespace
 
 @implementation CWVAutofillController {
   // Bridge to observe the |webState|.
@@ -144,18 +170,10 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
     _formActivityObserverBridge =
         std::make_unique<autofill::FormActivityObserverBridge>(webState, self);
 
-    auto from_web_state_impl =
-        [](web::WebState* web_state) -> autofill::AutofillClientIOS* {
-      if (CWVWebView* web_view = [CWVWebView webViewForWebState:web_state]) {
-        CWVAutofillController* controller = web_view.autofillController;
-        return [controller autofillClient];
-      }
-      return nullptr;
-    };
-    _autofillClient = autofillClientForTest
-                          ? std::move(autofillClientForTest)
-                          : autofill::WebViewAutofillClientIOS::Create(
-                                from_web_state_impl, _webState, self);
+    _autofillClient =
+        autofillClientForTest
+            ? std::move(autofillClientForTest)
+            : autofill::WebViewAutofillClientIOS::Create(_webState, self);
 
     _passwordManagerClient = std::move(passwordManagerClient);
     _passwordManagerClient->set_bridge(self);
@@ -513,6 +531,36 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
   }
 }
 
+- (void)showAutofillProgressDialogOfType:
+            (autofill::AutofillProgressDialogType)type
+                          cancelCallback:(base::OnceClosure)cancelCallback {
+  if ([_delegate respondsToSelector:@selector
+                 (autofillController:showProgressDialogOfType:cancelAction:)]) {
+    CWVAutofillProgressDialogType cwvType =
+        ToCWVAutofillProgressDialogType(type);
+
+    ProceduralBlock block = base::CallbackToBlock(std::move(cancelCallback));
+    [_delegate autofillController:self
+         showProgressDialogOfType:cwvType
+                     cancelAction:block];
+  }
+}
+
+- (void)closeAutofillProgressDialogWithConfirmation:(BOOL)showConfirmation
+                                 completionCallback:
+                                     (base::OnceClosure)callback {
+  if ([_delegate respondsToSelector:@selector
+                 (autofillController:
+                     closeProgressDialogWithConfirmation:completion:)]) {
+    ProceduralBlock block = callback
+                                ? base::CallbackToBlock(std::move(callback))
+                                : (ProceduralBlock)nil;
+    [_delegate autofillController:self
+        closeProgressDialogWithConfirmation:showConfirmation
+                                 completion:block];
+  }
+}
+
 #pragma mark - AutofillDriverIOSBridge
 
 - (void)fillData:(const std::vector<autofill::FormFieldData::FillData>&)fields
@@ -638,14 +686,17 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
 - (void)webState:(web::WebState*)webState
     didSubmitDocumentWithFormData:(const autofill::FormData&)formData
                    hasUserGesture:(BOOL)userInitiated
-                          inFrame:(web::WebFrame*)frame {
-  if ([_delegate respondsToSelector:@selector
-                 (autofillController:
-                     didSubmitFormWithName:frameID:userInitiated:)]) {
+                          inFrame:(web::WebFrame*)frame
+                   perfectFilling:(BOOL)perfectFilling {
+  if ([_delegate
+          respondsToSelector:@selector
+          (autofillController:
+              didSubmitFormWithName:frameID:userInitiated:perfectFilling:)]) {
     [_delegate autofillController:self
             didSubmitFormWithName:base::SysUTF16ToNSString(formData.name())
                           frameID:base::SysUTF8ToNSString(frame->GetFrameId())
-                    userInitiated:userInitiated];
+                    userInitiated:userInitiated
+                   perfectFilling:perfectFilling];
   }
 }
 

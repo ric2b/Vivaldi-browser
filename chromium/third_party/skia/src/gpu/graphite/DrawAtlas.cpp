@@ -99,7 +99,7 @@ DrawAtlas::DrawAtlas(SkColorType colorType, size_t bpp, int width, int height,
         , fAtlasID(next_id())
         , fGenerationCounter(generationCounter)
         , fAtlasGeneration(fGenerationCounter->next())
-        , fPrevFlushToken(AtlasToken::InvalidToken())
+        , fPrevFlushToken(Token::InvalidToken())
         , fFlushesSinceLastUse(0)
         , fMaxPages(allowMultitexturing == AllowMultitexturing::kYes ?
                             PlotLocator::kMaxMultitexturePages : 1)
@@ -180,8 +180,18 @@ bool DrawAtlas::recordUploads(DrawContext* dc, Recorder* recorder) {
 
                 // Src and dst colorInfo are the same
                 SkColorInfo colorInfo(fColorType, kUnknown_SkAlphaType, nullptr);
-                if (!dc->recordUpload(recorder, sk_ref_sp(proxy), colorInfo, colorInfo, levels,
-                                      dstRect, /*ConditionalUploadContext=*/nullptr)) {
+                const UploadSource uploadSource = UploadSource::Make(
+                        recorder->priv().caps(), *proxy, colorInfo, colorInfo, levels, dstRect);
+                if (!uploadSource.isValid()) {
+                    return false;
+                }
+                if (!dc->recordUpload(recorder,
+                                      sk_ref_sp(proxy),
+                                      colorInfo,
+                                      colorInfo,
+                                      uploadSource,
+                                      dstRect,
+                                      /*ConditionalUploadContext=*/nullptr)) {
                     return false;
                 }
             }
@@ -293,7 +303,7 @@ SkIPoint DrawAtlas::prepForRender(const AtlasLocator& locator, SkAutoPixmapStora
     return plot->prepForRender(locator, pixmap);
 }
 
-void DrawAtlas::compact(AtlasToken startTokenForNextFlush) {
+void DrawAtlas::compact(Token startTokenForNextFlush) {
     if (fNumActivePages < 1) {
         fPrevFlushToken = startTokenForNextFlush;
         return;
@@ -385,7 +395,7 @@ void DrawAtlas::compact(AtlasToken startTokenForNextFlush) {
             // If this plot was used recently
             if (plot->flushesSinceLastUsed() <= kPlotRecentlyUsedCount) {
                 usedPlots++;
-            } else if (plot->lastUseToken() != AtlasToken::InvalidToken()) {
+            } else if (plot->lastUseToken() != Token::InvalidToken()) {
                 // otherwise if aged out just evict it.
                 this->processEvictionAndResetRects(plot, /*freeData=*/false);
             }
@@ -538,7 +548,7 @@ void DrawAtlas::markUsedPlotsAsFull() {
     }
 }
 
-void DrawAtlas::freeGpuResources(AtlasToken token) {
+void DrawAtlas::freeGpuResources(Token token) {
     PlotList::Iter plotIter;
     for (int pageIndex = (int)(fNumActivePages)-1; pageIndex >= 0; --pageIndex) {
         const Page& currPage = fPages[pageIndex];

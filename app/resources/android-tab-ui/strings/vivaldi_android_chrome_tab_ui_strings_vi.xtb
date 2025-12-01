@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="vi">
+<translation id="2330212241471632770">{TABS_COUNT,plural,
+          =1 {Đánh dấu thẻ}
+          other {Đánh dấu các thẻ}
+        }</translation>
 </translationbundle>

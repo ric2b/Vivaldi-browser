@@ -116,7 +116,7 @@ class UpdateMechanismField(field_types.SingleLineTextField):
         # Only warn for Static, for now.
         elif primary == "Static" and bug_link is None:
             return vr.ValidationWarning(
-                reason="{self._name} has no link to autoroll exception.",
+                reason=f"{self._name} has no link to autoroll exception.",
                 additional=[
                     "Please add a link if an exception bug has been filed.",
                     f"Example: '{mechanism} (https://crbug.com/12345)'"

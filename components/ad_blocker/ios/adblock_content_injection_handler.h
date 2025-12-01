@@ -5,7 +5,6 @@
 
 #include <memory>
 
-#include "base/functional/callback.h"
 #include "base/values.h"
 #include "components/ad_blocker/core/adblock_resources.h"
 #include "components/ad_blocker/public/core/adblock_types.h"

@@ -672,6 +672,14 @@ TEST_F(LensOverlayUrlBuilderTest,
   EXPECT_EQ(lens::AppendInvocationSourceParamToURL(
                 base_url, lens::LensOverlayInvocationSource::kOmnibox),
             expected_omnibox_url);
+
+  std::string expected_context_menu_video_url =
+      base::StringPrintf("%s?source=chrome.cr.ctxv", kResultsSearchBaseUrl);
+  EXPECT_EQ(
+      lens::AppendInvocationSourceParamToURL(
+          base_url,
+          lens::LensOverlayInvocationSource::kContentAreaContextMenuVideo),
+      expected_context_menu_video_url);
 }
 
 TEST_F(LensOverlayUrlBuilderTest,
@@ -839,11 +847,18 @@ TEST_F(LensOverlayUrlBuilderTest, ShouldOpenSearchURLInNewTab) {
       GURL(std::string(kResultsSearchBaseUrl) + "?udm=24");
   const GURL results_url_aim_mode =
       GURL(std::string(kResultsSearchBaseUrl) + "?udm=50");
-  EXPECT_FALSE(lens::ShouldOpenSearchURLInNewTab(base_results_url));
-  EXPECT_FALSE(lens::ShouldOpenSearchURLInNewTab(results_url_unimodal));
-  EXPECT_FALSE(lens::ShouldOpenSearchURLInNewTab(results_url_multimodal));
-  EXPECT_TRUE(lens::ShouldOpenSearchURLInNewTab(results_url_shopping_mode));
-  EXPECT_TRUE(lens::ShouldOpenSearchURLInNewTab(results_url_aim_mode));
+  EXPECT_FALSE(lens::ShouldOpenSearchURLInNewTab(
+      base_results_url, /*is_aim_feature_enabled=*/false));
+  EXPECT_FALSE(lens::ShouldOpenSearchURLInNewTab(
+      results_url_unimodal, /*is_aim_feature_enabled=*/false));
+  EXPECT_FALSE(lens::ShouldOpenSearchURLInNewTab(
+      results_url_multimodal, /*is_aim_feature_enabled=*/false));
+  EXPECT_TRUE(lens::ShouldOpenSearchURLInNewTab(
+      results_url_shopping_mode, /*is_aim_feature_enabled=*/false));
+  EXPECT_TRUE(lens::ShouldOpenSearchURLInNewTab(
+      results_url_aim_mode, /*is_aim_feature_enabled=*/false));
+  EXPECT_TRUE(lens::ShouldOpenSearchURLInNewTab(
+      results_url_aim_mode, /*is_aim_feature_enabled=*/true));
 }
 
 TEST_F(LensOverlayUrlBuilderTest,
@@ -860,7 +875,10 @@ TEST_F(LensOverlayUrlBuilderTest,
   const GURL base_results_url = GURL(kResultsSearchBaseUrl);
   const GURL results_url_mgt_mode =
       GURL(std::string(kResultsSearchBaseUrl) + "?udm=50");
-  EXPECT_FALSE(lens::ShouldOpenSearchURLInNewTab(results_url_mgt_mode));
+  EXPECT_FALSE(lens::ShouldOpenSearchURLInNewTab(
+      results_url_mgt_mode, /*is_aim_feature_enabled=*/true));
+  EXPECT_TRUE(lens::ShouldOpenSearchURLInNewTab(
+      results_url_mgt_mode, /*is_aim_feature_enabled=*/false));
 }
 
 TEST_F(LensOverlayUrlBuilderTest, URLsMatchWithoutTextFragment) {
@@ -933,6 +951,59 @@ TEST_F(LensOverlayUrlBuilderTest, AddPDFScrollToParametersToUrl) {
   EXPECT_TRUE(base_url.EqualsIgnoringRef(actual_url_no_fragments));
   EXPECT_EQ(actual_url_no_fragments.ref(),
             base::StringPrintf("page=%d", expected_pdf_page_number));
+}
+
+TEST_F(LensOverlayUrlBuilderTest, ExtractTimeInSecondsFromQueryIfExists) {
+  EXPECT_EQ(lens::ExtractTimeInSecondsFromQueryIfExists(
+                GURL("https://www.youtube.com/watch?v=test&t=10s")),
+            base::Seconds(10));
+  EXPECT_EQ(lens::ExtractTimeInSecondsFromQueryIfExists(
+                GURL("https://www.youtube.com/watch?v=test&t=10")),
+            base::Seconds(10));
+  EXPECT_EQ(lens::ExtractTimeInSecondsFromQueryIfExists(
+                GURL("https://www.youtube.com/watch?v=test&t=1s")),
+            base::Seconds(1));
+  EXPECT_EQ(lens::ExtractTimeInSecondsFromQueryIfExists(
+                GURL("https://www.youtube.com/watch?v=test&t=1")),
+            base::Seconds(1));
+  EXPECT_EQ(lens::ExtractTimeInSecondsFromQueryIfExists(
+                GURL("https://www.youtube.com/watch?v=test&t=60s")),
+            base::Seconds(60));
+  EXPECT_EQ(lens::ExtractTimeInSecondsFromQueryIfExists(
+                GURL("https://www.youtube.com/watch?v=test")),
+            std::nullopt);
+  EXPECT_EQ(lens::ExtractTimeInSecondsFromQueryIfExists(
+                GURL("https://www.youtube.com/watch?v=test&t=s")),
+            std::nullopt);
+  EXPECT_EQ(lens::ExtractTimeInSecondsFromQueryIfExists(
+                GURL("https://www.youtube.com/watch?v=test&t=abcs")),
+            std::nullopt);
+}
+
+TEST_F(LensOverlayUrlBuilderTest, ExtractVideoNameIfExists) {
+  EXPECT_EQ(lens::ExtractVideoNameIfExists(
+                GURL("https://www.youtube.com/watch?v=VIDEO_ID")),
+            "VIDEO_ID");
+  EXPECT_EQ(lens::ExtractVideoNameIfExists(
+                GURL("https://www.youtube.com/embed/VIDEO_ID")),
+            "VIDEO_ID");
+  EXPECT_EQ(lens::ExtractVideoNameIfExists(GURL("https://www.google.com")),
+            std::nullopt);
+  EXPECT_EQ(
+      lens::ExtractVideoNameIfExists(GURL("https://www.google.com?v=VIDEO_ID")),
+      std::nullopt);
+  EXPECT_EQ(lens::ExtractVideoNameIfExists(
+                GURL("https://www.google.com/embed/VIDEO_ID")),
+            std::nullopt);
+  EXPECT_EQ(lens::ExtractVideoNameIfExists(
+                GURL("https://www.google.com/watch?v=VIDEO_ID")),
+            std::nullopt);
+  EXPECT_EQ(
+      lens::ExtractVideoNameIfExists(GURL("https://www.youtube.com/watch?v=")),
+      std::nullopt);
+  EXPECT_EQ(
+      lens::ExtractVideoNameIfExists(GURL("https://www.youtube.com/embed/")),
+      std::nullopt);
 }
 
 }  // namespace lens

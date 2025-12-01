@@ -34,6 +34,10 @@ extern const char kLocationOverrideInternalName[];
 extern const char kLocationOverrideName[];
 extern const char kLocationOverrideDescription[];
 
+extern const char kNewAboutPageInternalName[];
+extern const char kNewAboutPageName[];
+extern const char kNewAboutPageDescription[];
+
 extern const char kNewPrivacyReportInternalName[];
 extern const char kNewPrivacyReportName[];
 extern const char kNewPrivacyReportDescription[];
@@ -49,10 +53,6 @@ extern const char kShowTopSitesDescription[];
 extern const char kSpeeddialWidgetsInternalName[];
 extern const char kSpeeddialWidgetsName[];
 extern const char kSpeeddialWidgetsDescription[];
-
-extern const char kTabsButtonInternalName[];
-extern const char kTabsButtonName[];
-extern const char kTabsButtonDescription[];
 
 extern const char kViewMarkdownAsHTMLInternalName[];
 extern const char kViewMarkdownAsHTMLName[];

@@ -106,7 +106,7 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
 
   // Creates a SiteInstance for |url| like CreateForUrlInfo() would except the
   // instance that is returned has its process_reuse_policy set to
-  // REUSE_PENDING_OR_COMMITTED_SITE_SUBFRAME and the default SiteInstance will
+  // kReusePendingOrCommittedSiteSubframe and the default SiteInstance will
   // never be returned.
   static scoped_refptr<SiteInstanceImpl> CreateReusableInstanceForTesting(
       BrowserContext* browser_context,
@@ -170,13 +170,12 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
   RenderProcessHost* GetOrCreateProcessForTesting() override;
   SiteInstanceGroupId GetSiteInstanceGroupId() override;
   BrowserContext* GetBrowserContext() override;
-  const GURL& GetSiteURL() override;
+  const GURL& GetSiteURL() const override;
   const StoragePartitionConfig& GetStoragePartitionConfig() override;
   scoped_refptr<SiteInstance> GetRelatedSiteInstance(const GURL& url) override;
   bool IsRelatedSiteInstance(const SiteInstance* instance) override;
   size_t GetRelatedActiveContentsCount() override;
   bool RequiresDedicatedProcess() override;
-  bool RequiresOriginKeyedProcess() override;
   bool IsSandboxed() override;
   bool IsSameSiteWithURL(const GURL& url) override;
   bool IsGuest() override;

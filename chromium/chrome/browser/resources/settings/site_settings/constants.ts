@@ -68,9 +68,6 @@ export enum ContentSettingsTypes {
   PDF_DOCUMENTS = 'pdfDocuments',
   SITE_DATA = 'site-data',
   OFFER_WRITING_HELP = 'offer-writing-help',
-
-  // Vivaldi:
-  AUTOPLAY = 'autoplay',
 }
 
 /**
@@ -146,6 +143,19 @@ export enum SettingsState {
   CPSS = 2,
   BLOCK = 3,
 }
+
+/**
+ * Enumeration of states for the Javascript optimizer default setting generated
+ * pref. Must be kept in sync with the JavascriptOptimizerSetting enum in:
+ * chrome/browser/content_settings/generated_javascript_optimizer_pref.h
+ */
+// LINT.IfChange(JavascriptOptimizerSetting)
+export enum JavascriptOptimizerSetting {
+  BLOCKED = 0,
+  ALLOWED = 1,
+  BLOCKED_FOR_UNFAMILIAR_SITES = 2,
+}
+// LINT.ThenChange(//chrome/browser/content_settings/generated_javascript_optimizer_pref.h:JavascriptOptimizerSetting)
 
 /**
  * An invalid subtype value.

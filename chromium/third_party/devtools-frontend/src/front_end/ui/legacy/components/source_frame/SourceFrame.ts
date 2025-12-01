@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2011 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2011 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../../../core/common/common.js';
@@ -46,15 +20,15 @@ import * as UI from '../../legacy.js';
 
 const UIStrings = {
   /**
-   *@description Text for the source of something
+   * @description Text for the source of something
    */
   source: 'Source',
   /**
-   *@description Text to pretty print a file
+   * @description Text to pretty print a file
    */
   prettyPrint: 'Pretty print',
   /**
-   *@description Text when something is loading
+   * @description Text when something is loading
    */
   loading: 'Loading…',
   /**
@@ -70,39 +44,39 @@ const UIStrings = {
    */
   bytecodePositionXs: 'Bytecode position `0x`{PH1}',
   /**
-   *@description Text in Source Frame of the Sources panel
-   *@example {2} PH1
-   *@example {2} PH2
+   * @description Text in Source Frame of the Sources panel
+   * @example {2} PH1
+   * @example {2} PH2
    */
   lineSColumnS: 'Line {PH1}, Column {PH2}',
   /**
-   *@description Text in Source Frame of the Sources panel
-   *@example {2} PH1
+   * @description Text in Source Frame of the Sources panel
+   * @example {2} PH1
    */
   dCharactersSelected: '{PH1} characters selected',
   /**
-   *@description Text in Source Frame of the Sources panel
-   *@example {2} PH1
-   *@example {2} PH2
+   * @description Text in Source Frame of the Sources panel
+   * @example {2} PH1
+   * @example {2} PH2
    */
   dLinesDCharactersSelected: '{PH1} lines, {PH2} characters selected',
   /**
-   *@description Headline of warning shown to users when pasting text/code into DevTools.
+   * @description Headline of warning shown to users when pasting text/code into DevTools.
    */
   doYouTrustThisCode: 'Do you trust this code?',
   /**
-   *@description Warning shown to users when pasting text/code into DevTools.
-   *@example {allow pasting} PH1
+   * @description Warning shown to users when pasting text/code into DevTools.
+   * @example {allow pasting} PH1
    */
   doNotPaste:
       'Don\'t paste code you do not understand or have not reviewed yourself into DevTools. This could allow attackers to steal your identity or take control of your computer. Please type \'\'{PH1}\'\' below to allow pasting.',
   /**
-   *@description Text a user needs to type in order to confirm that they are aware of the danger of pasting code into the DevTools console.
+   * @description Text a user needs to type in order to confirm that they are aware of the danger of pasting code into the DevTools console.
    */
   allowPasting: 'allow pasting',
   /**
-   *@description Input box placeholder which instructs the user to type 'allow pasting' into the input box.
-   *@example {allow pasting} PH1
+   * @description Input box placeholder which instructs the user to type 'allow pasting' into the input box.
+   * @example {allow pasting} PH1
    */
   typeAllowPasting: 'Type \'\'{PH1}\'\'',
   /**
@@ -181,7 +155,10 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
   constructor(
       lazyContent: () => Promise<TextUtils.ContentData.ContentDataOrError>,
       private readonly options: SourceFrameOptions = {}) {
-    super(i18nString(UIStrings.source));
+    super({
+      title: i18nString(UIStrings.source),
+      viewId: 'source',
+    });
 
     this.lazyContent = lazyContent;
 
@@ -311,7 +288,7 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
           activeDark: 'var(--sys-color-divider-prominent)',
         },
       }),
-      infobarState,
+      sourceFrameInfobarState,
     ];
   }
 
@@ -548,12 +525,12 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
 
   protected async setContentDataOrError(contentDataPromise: Promise<TextUtils.ContentData.ContentDataOrError>):
       Promise<void> {
-    const progressIndicator = new UI.ProgressIndicator.ProgressIndicator();
-    progressIndicator.setTitle(i18nString(UIStrings.loading));
-    progressIndicator.setTotalWork(100);
-    this.progressToolbarItem.element.appendChild(progressIndicator.element);
+    const progressIndicator = document.createElement('devtools-progress');
+    progressIndicator.title = i18nString(UIStrings.loading);
+    progressIndicator.totalWork = 100;
+    this.progressToolbarItem.element.appendChild(progressIndicator);
 
-    progressIndicator.setWorked(1);
+    progressIndicator.worked = 1;
     const contentData = await contentDataPromise;
 
     let error: string|undefined;
@@ -580,8 +557,8 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
       this.wasmDisassemblyInternal = null;
     }
 
-    progressIndicator.setWorked(100);
-    progressIndicator.done();
+    progressIndicator.worked = 100;
+    progressIndicator.done = true;
 
     if (this.rawContent === content && error === undefined) {
       return;
@@ -622,10 +599,10 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
     } else {
       this.positionToReveal = {...position, shouldHighlight};
     }
-    this.innerRevealPositionIfNeeded();
+    this.#revealPositionIfNeeded();
   }
 
-  private innerRevealPositionIfNeeded(): void {
+  #revealPositionIfNeeded(): void {
     if (!this.positionToReveal) {
       return;
     }
@@ -650,10 +627,10 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
   scrollToLine(line: number): void {
     this.clearPositionToReveal();
     this.lineToScrollTo = line;
-    this.innerScrollToLineIfNeeded();
+    this.#scrollToLineIfNeeded();
   }
 
-  private innerScrollToLineIfNeeded(): void {
+  #scrollToLineIfNeeded(): void {
     if (this.lineToScrollTo !== null) {
       if (this.loaded && this.isShowing()) {
         const {textEditor} = this;
@@ -666,10 +643,10 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
 
   setSelection(textRange: TextUtils.TextRange.TextRange): void {
     this.selectionToSet = textRange;
-    this.innerSetSelectionIfNeeded();
+    this.#setSelectionIfNeeded();
   }
 
-  private innerSetSelectionIfNeeded(): void {
+  #setSelectionIfNeeded(): void {
     const sel = this.selectionToSet;
     if (sel && this.loaded && this.isShowing()) {
       const {textEditor} = this;
@@ -683,9 +660,9 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
   }
 
   private wasShownOrLoaded(): void {
-    this.innerRevealPositionIfNeeded();
-    this.innerSetSelectionIfNeeded();
-    this.innerScrollToLineIfNeeded();
+    this.#revealPositionIfNeeded();
+    this.#setSelectionIfNeeded();
+    this.#scrollToLineIfNeeded();
     this.textEditor.shadowRoot?.querySelector('.cm-lineNumbers')
         ?.setAttribute('jslog', `${VisualLogging.gutter('line-numbers').track({click: true})}`);
     this.textEditor.shadowRoot?.querySelector('.cm-foldGutter')
@@ -882,6 +859,10 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
   }
 
   supportsCaseSensitiveSearch(): boolean {
+    return true;
+  }
+
+  supportsWholeWordSearch(): boolean {
     return true;
   }
 
@@ -1246,21 +1227,26 @@ const sourceFrameTheme = CodeMirror.EditorView.theme({
 export type RevealPosition = number|{lineNumber: number, columnNumber?: number}|
     {from: {lineNumber: number, columnNumber: number}, to: {lineNumber: number, columnNumber: number}};
 
+// This is usually an Infobar but is also used for AiCodeCompletionSummaryToolbar
+export interface SourceFrameInfobar {
+  element: HTMLElement;
+  order?: number;
+}
+
 // Infobar panel state, used to show additional panels below the editor.
+export const addSourceFrameInfobar = CodeMirror.StateEffect.define<SourceFrameInfobar>();
+export const removeSourceFrameInfobar = CodeMirror.StateEffect.define<SourceFrameInfobar>();
 
-export const addInfobar = CodeMirror.StateEffect.define<UI.Infobar.Infobar>();
-export const removeInfobar = CodeMirror.StateEffect.define<UI.Infobar.Infobar>();
-
-const infobarState = CodeMirror.StateField.define<UI.Infobar.Infobar[]>({
-  create(): UI.Infobar.Infobar[] {
+const sourceFrameInfobarState = CodeMirror.StateField.define<SourceFrameInfobar[]>({
+  create(): SourceFrameInfobar[] {
     return [];
   },
-  update(current, tr): UI.Infobar.Infobar[] {
+  update(current, tr): SourceFrameInfobar[] {
     for (const effect of tr.effects) {
-      if (effect.is(addInfobar)) {
+      if (effect.is(addSourceFrameInfobar)) {
         current = current.concat(effect.value);
-      } else if (effect.is(removeInfobar)) {
-        current = current.filter(b => b !== effect.value);
+      } else if (effect.is(removeSourceFrameInfobar)) {
+        current = current.filter(b => b.element !== effect.value.element);
       }
     }
     return current;
@@ -1268,5 +1254,7 @@ const infobarState = CodeMirror.StateField.define<UI.Infobar.Infobar[]>({
   provide: (field): CodeMirror.Extension => CodeMirror.showPanel.computeN(
       [field],
       (state): Array<() => CodeMirror.Panel> =>
-          state.field(field).map((bar): (() => CodeMirror.Panel) => (): CodeMirror.Panel => ({dom: bar.element}))),
+          state.field(field)
+              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+              .map((bar): (() => CodeMirror.Panel) => (): CodeMirror.Panel => ({dom: bar.element}))),
 });

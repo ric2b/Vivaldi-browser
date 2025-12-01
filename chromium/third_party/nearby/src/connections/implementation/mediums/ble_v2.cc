@@ -1025,6 +1025,7 @@ void BleV2::ProcessFetchGattAdvertisementsRequest(
       /*ClientGattConnectionCallback=*/{});
   if (!gatt_client || !gatt_client->IsValid()) {
     advertisement_read_result.RecordLastReadStatus(false);
+    LOG(WARNING) << "Failed to connect to GATT server.";
     return;
   }
 
@@ -1052,6 +1053,7 @@ void BleV2::ProcessFetchGattAdvertisementsRequest(
     // TODO(b/222392304): More test coverage.
     LOG(WARNING) << "GATT client doesn't have characteristics.";
     advertisement_read_result.RecordLastReadStatus(false);
+    gatt_client->Disconnect();
     return;
   }
 
@@ -1066,6 +1068,7 @@ void BleV2::ProcessFetchGattAdvertisementsRequest(
     // TODO(b/222392304): More test coverage.
     LOG(WARNING) << "GATT client doesn't have characteristics.";
     advertisement_read_result.RecordLastReadStatus(false);
+    gatt_client->Disconnect();
     return;
   }
 
@@ -1105,8 +1108,8 @@ void BleV2::ProcessFetchGattAdvertisementsRequest(
 
 bool BleV2::StopAdvertisementGattServerLocked() {
   if (!IsAdvertisementGattServerRunningLocked()) {
-    LOG(INFO) << "Unable to stop the advertisement GATT server because "
-                 "it's not running.";
+    VLOG(1) << "Unable to stop the advertisement GATT server because it's not "
+               "running.";
     return false;
   }
 

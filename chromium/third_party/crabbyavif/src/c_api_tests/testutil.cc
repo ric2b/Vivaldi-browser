@@ -241,6 +241,45 @@ bool AreByteSequencesEqual(const avifRWData& data1, const avifRWData& data2) {
   return AreByteSequencesEqual(data1.data, data1.size, data2.data, data2.size);
 }
 
+bool ArePlanesEqual(const avifImage& image1, const avifImage& image2,
+                    avifChannelIndex c) {
+  if (image1.width != image2.width || image1.height != image2.height ||
+      image1.depth != image2.depth || image1.yuvFormat != image2.yuvFormat ||
+      image1.yuvRange != image2.yuvRange) {
+    return false;
+  }
+
+  const uint8_t* row1 = avifImagePlane(&image1, c);
+  const uint8_t* row2 = avifImagePlane(&image2, c);
+  if (!row1 != !row2) {
+    return false;
+  }
+  if (c == AVIF_CHAN_A && row1 != nullptr &&
+      image1.alphaPremultiplied != image2.alphaPremultiplied) {
+    return false;
+  }
+  const uint32_t row_bytes1 = avifImagePlaneRowBytes(&image1, c);
+  const uint32_t row_bytes2 = avifImagePlaneRowBytes(&image2, c);
+  const uint32_t plane_width = avifImagePlaneWidth(&image1, c);
+  const uint32_t plane_height = avifImagePlaneHeight(&image1, c);
+  for (uint32_t y = 0; y < plane_height; ++y) {
+    if (avifImageUsesU16(&image1)) {
+      if (!std::equal(reinterpret_cast<const uint16_t*>(row1),
+                      reinterpret_cast<const uint16_t*>(row1) + plane_width,
+                      reinterpret_cast<const uint16_t*>(row2))) {
+        return false;
+      }
+    } else {
+      if (!std::equal(row1, row1 + plane_width, row2)) {
+        return false;
+      }
+    }
+    row1 += row_bytes1;
+    row2 += row_bytes2;
+  }
+  return true;
+}
+
 bool AreImagesEqual(const avifImage& image1, const avifImage& image2,
                     bool ignore_alpha) {
   if (image1.width != image2.width || image1.height != image2.height ||

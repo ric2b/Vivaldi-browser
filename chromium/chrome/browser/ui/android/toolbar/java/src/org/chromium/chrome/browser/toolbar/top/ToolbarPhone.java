@@ -21,18 +21,15 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.util.FloatProperty;
-import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewDebug;
 import android.view.ViewGroup;
 import android.view.ViewStub;
-import android.widget.FrameLayout;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.DrawableRes;
@@ -54,14 +51,16 @@ import org.chromium.build.annotations.NullUnmarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.LocationBar;
+import org.chromium.chrome.browser.omnibox.LocationBarBackgroundDrawable;
+import org.chromium.chrome.browser.omnibox.LocationBarBackgroundDrawable.HairlineBehavior;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
 import org.chromium.chrome.browser.omnibox.SearchEngineUtils;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
+import org.chromium.chrome.browser.omnibox.navattach.NavigationFulfillmentType;
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownScrollListener;
-import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.theme.SurfaceColorUpdateUtils;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
@@ -72,6 +71,7 @@ import org.chromium.chrome.browser.toolbar.ToolbarProgressBar;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
 import org.chromium.chrome.browser.toolbar.back_button.BackButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.extensions.ExtensionToolbarCoordinator;
+import org.chromium.chrome.browser.toolbar.forward_button.ForwardButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.optional_button.ButtonData;
 import org.chromium.chrome.browser.toolbar.optional_button.OptionalButtonCoordinator;
@@ -107,6 +107,7 @@ import android.widget.ImageView;
 import androidx.core.widget.ImageViewCompat;
 
 import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.ui.widget.ChromeImageButton;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
@@ -192,7 +193,7 @@ public class ToolbarPhone extends ToolbarLayout
     protected ColorDrawable mToolbarBackground;
 
     /** The omnibox background (white with a shadow). */
-    private GradientDrawable mLocationBarBackground;
+    private LocationBarBackgroundDrawable mLocationBarBackground;
 
     private Drawable mActiveLocationBarBackground;
 
@@ -228,6 +229,8 @@ public class ToolbarPhone extends ToolbarLayout
     private final int mToolbarSidePadding;
     private final int mToolbarSidePaddingForNtp;
     private final int mBackgroundHeightIncreaseWhenFocus;
+    private final int mVerticalPaddingWhenFocused;
+    private int mTopPaddingForEdgeToEdgeNtp;
 
     private @Nullable ValueAnimator mBrandColorTransitionAnimation;
     private boolean mBrandColorTransitionActive;
@@ -279,6 +282,7 @@ public class ToolbarPhone extends ToolbarLayout
     public ChromeImageButton mPanelButton;
     private ChromeImageButton mBackButton;
     private ChromeImageButton mForwardButton;
+    private @Nullable ForwardButtonCoordinator mForwardButtonCoordinator;
     private @Nullable NavigationPopup mNavigationPopup;
     private HistoryDelegate mHistoryDelegate;
     /** End Vivaldi **/
@@ -297,8 +301,6 @@ public class ToolbarPhone extends ToolbarLayout
     // Added due to https://crbug.com/323888159 to mark the loading phase while navigating from NTP
     // to webpages.
     private boolean mIsInLoadingPhaseFromNtpToWebpage;
-
-    private final boolean mAlwaysShowDseIconOnNtp;
 
     // The following are some properties used during animation.  We use explicit property classes
     // to avoid the cost of reflection for each animation setup.
@@ -327,17 +329,20 @@ public class ToolbarPhone extends ToolbarLayout
         mToolbarSidePadding = OmniboxResourceProvider.getToolbarSidePadding(context);
         mToolbarSidePaddingForNtp = OmniboxResourceProvider.getToolbarSidePaddingForNtp(context);
         mBackgroundHeightIncreaseWhenFocus =
-                OmniboxResourceProvider.getToolbarOnFocusHeightIncrease(context);
+                OmniboxResourceProvider.getLocationBarBackgroundOnFocusHeightIncrease(context);
+        mVerticalPaddingWhenFocused =
+                getResources()
+                        .getDimensionPixelSize(
+                                R.dimen.toolbar_vertical_padding_when_bottom_focused);
         mToolbarBackgroundColorForNtp =
                 ContextCompat.getColor(getContext(), R.color.home_surface_background_color);
-        float LocationBarBackgroundColorAlphaForNtp =
+        float locationBarBackgroundColorAlphaForNtp =
                 ResourcesCompat.getFloat(
                         getResources(), R.dimen.home_surface_search_box_background_alpha);
         mLocationBarBackgroundColorForNtp =
                 ColorUtils.setAlphaComponentWithFloat(
                         SemanticColorUtils.getDefaultIconColorAccent1(context),
-                        LocationBarBackgroundColorAlphaForNtp);
-        mAlwaysShowDseIconOnNtp = OmniboxFeatures.sOmniboxMobileParityUpdate.isEnabled();
+                        locationBarBackgroundColorAlphaForNtp);
     }
 
     @Override
@@ -369,6 +374,7 @@ public class ToolbarPhone extends ToolbarLayout
             mForwardButton.setImageDrawable(
                     getResources().getDrawable(R.drawable.vivaldi_bottom_nav_forward_56dp));
             // End Vivaldi
+
             setLayoutTransition(null);
 
             if (getMenuButtonCoordinator() != null) {
@@ -394,6 +400,7 @@ public class ToolbarPhone extends ToolbarLayout
             ToolbarProgressBar progressBar,
             @Nullable ReloadButtonCoordinator reloadButtonCoordinator,
             @Nullable BackButtonCoordinator backButtonCoordinator,
+            @Nullable ForwardButtonCoordinator forwardButtonCoordinator,
             @Nullable HomeButtonDisplay homeButtonDisplay,
             @Nullable ExtensionToolbarCoordinator extensionToolbarCoordinator,
             ThemeColorProvider themeColorProvider,
@@ -409,6 +416,7 @@ public class ToolbarPhone extends ToolbarLayout
                 progressBar,
                 reloadButtonCoordinator,
                 backButtonCoordinator,
+                forwardButtonCoordinator,
                 homeButtonDisplay,
                 extensionToolbarCoordinator,
                 themeColorProvider,
@@ -434,17 +442,33 @@ public class ToolbarPhone extends ToolbarLayout
         }
         // Vivaldi
         mHistoryDelegate = historyDelegate;
+        mForwardButtonCoordinator = forwardButtonCoordinator;
     }
 
     @Override
     @Initializer
     public void setLocationBarCoordinator(LocationBarCoordinator locationBarCoordinator) {
         mLocationBar = locationBarCoordinator;
+        mLocationBar
+                .getNavigationFulfillmentTypeSupplier()
+                .addObserver((type) -> updateBackgroundHairline(urlHasFocus(), type));
         Resources res = getResources();
         mLocationBarBackgroundVerticalInset =
                 res.getDimensionPixelSize(R.dimen.location_bar_vertical_margin);
         mLocationBarBackground = createModernLocationBarBackground(getContext());
         mActiveLocationBarBackground = mLocationBarBackground;
+    }
+
+    private void updateBackgroundHairline(boolean urlHasFocus, @NavigationFulfillmentType int type) {
+        if (!urlHasFocus) {
+            mLocationBarBackground.setHairlineBehavior(HairlineBehavior.NONE);
+            return;
+        }
+
+        mLocationBarBackground.setHairlineBehavior(
+                type == NavigationFulfillmentType.AI_MODE
+                        ? HairlineBehavior.RAINBOW
+                        : HairlineBehavior.MONOTONE);
     }
 
     @Override
@@ -464,15 +488,17 @@ public class ToolbarPhone extends ToolbarLayout
      * @param context The activity {@link Context}.
      * @return The drawable for the modern location bar background.
      */
-    public static GradientDrawable createModernLocationBarBackground(Context context) {
-        GradientDrawable drawable =
-                (GradientDrawable)
-                        context.getDrawable(R.drawable.modern_toolbar_text_box_background);
-        assumeNonNull(drawable);
-        drawable.mutate();
-        drawable.setColor(
-                SurfaceColorUpdateUtils.getOmniboxBackgroundColor(
-                        context, /* isIncognito= */ false));
+    public static LocationBarBackgroundDrawable createModernLocationBarBackground(Context context) {
+        Resources resources = context.getResources();
+        var drawable =
+                new LocationBarBackgroundDrawable(
+                        context,
+                        /* cornerRadiusPx= */ resources.getDimensionPixelSize(
+                                R.dimen.modern_toolbar_background_corner_radius),
+                        /* strokePx= */ resources.getDimensionPixelSize(R.dimen.chip_border_width),
+                        ContextCompat.getColor(context, R.color.color_on_surface_with_alpha_20));
+        drawable.setBackgroundColor(
+                ContextCompat.getColor(context, R.color.toolbar_text_box_bg_color));
         return drawable;
     }
 
@@ -497,7 +523,7 @@ public class ToolbarPhone extends ToolbarLayout
     private void updateModernLocationBarColor(@ColorInt int color) {
         if (mCurrentLocationBarColor == color) return;
         mCurrentLocationBarColor = color;
-        mLocationBarBackground.setTint(color);
+        mLocationBarBackground.setBackgroundColor(color);
         if (mOptionalButtonCoordinator != null) {
             mOptionalButtonCoordinator.setBackgroundColorFilter(color);
         }
@@ -585,8 +611,11 @@ public class ToolbarPhone extends ToolbarLayout
         if (mBackButton != null) {
             mBackButton.setLongClickable(true);
         }
-        if (mForwardButton != null) {
-            mForwardButton.setLongClickable(true);
+        // TODO CHR142: Replace ForwardButton with the ForwardButtonCoordinator
+        if (mForwardButton != null && mForwardButtonCoordinator != null) {
+            /*mForwardButton.setClickCallback(metaState
+                    -> mForwardButtonCoordinator.forward(metaState, "VivaldiToolbarPhoneForward"));
+            mForwardButton.setLongClickable(true);*/
         }
         // End Vivaldi
 
@@ -680,7 +709,7 @@ public class ToolbarPhone extends ToolbarLayout
         return mToolbarBackground;
     }
 
-    void setLocationBarBackgroundDrawableForTesting(GradientDrawable background) {
+    void setLocationBarBackgroundDrawableForTesting(LocationBarBackgroundDrawable background) {
         mLocationBarBackground = background;
     }
 
@@ -693,12 +722,8 @@ public class ToolbarPhone extends ToolbarLayout
     private boolean layoutLocationBarWithoutAnimationExpansion(int containerWidth) {
         // Note that Toolbar's direction depends on system layout direction while
         // LocationBar's direction depends on its text inside.
-        FrameLayout.LayoutParams locationBarLayoutParams =
-                getFrameLayoutParams(getLocationBar().getContainerView());
-
-        // Chrome prevents layout_gravity="left" from being defined in XML, but it simplifies
-        // the logic, so it is manually specified here.
-        locationBarLayoutParams.gravity = Gravity.TOP | Gravity.LEFT;
+        MarginLayoutParams locationBarLayoutParams =
+                mLocationBar.getPhoneCoordinator().getMarginLayoutParams();
 
         int width = 0;
         int leftMargin = 0;
@@ -1102,8 +1127,8 @@ public class ToolbarPhone extends ToolbarLayout
         TraceEvent.begin("ToolbarPhone.updateLocationBarLayoutForExpansionAnimation");
         if (isInTabSwitcherMode()) return;
 
-        FrameLayout.LayoutParams locationBarLayoutParams =
-                mLocationBar.getPhoneCoordinator().getFrameLayoutParams();
+        MarginLayoutParams locationBarLayoutParams =
+                mLocationBar.getPhoneCoordinator().getMarginLayoutParams();
         int currentLeftMargin = locationBarLayoutParams.leftMargin;
         int currentWidth = locationBarLayoutParams.width;
 
@@ -1150,12 +1175,6 @@ public class ToolbarPhone extends ToolbarLayout
         locationBarBaseTranslationX *= 1f - mUrlExpansionFraction;
 
         boolean isLocationBarShownInNtp = isLocationBarShownInNtp();
-        Tab currentTab = getToolbarDataProvider().getTab();
-        if (currentTab != null) {
-            getToolbarDataProvider()
-                    .getNewTabPageDelegate()
-                    .setUrlFocusChangeAnimationPercent(mUrlFocusChangeFraction);
-        }
 
         float locationBarTranslationX;
         if (isLocationBarRtl) {
@@ -1178,9 +1197,7 @@ public class ToolbarPhone extends ToolbarLayout
             // state. If the DSE icon is always visible on the NTP, it should stay at full alpha and
             // in its final location rather than being affected by scroll offset.
             float ntpUrlExpansionFraction =
-                    mAlwaysShowDseIconOnNtp && isLocationBarShownInNtp
-                            ? 1.0f
-                            : mNtpSearchBoxScrollFraction;
+                    isLocationBarShownInNtp ? 1.0f : mNtpSearchBoxScrollFraction;
             mLocationBar.setUrlFocusChangeFraction(
                     ntpUrlExpansionFraction, mUrlFocusChangeFraction);
 
@@ -1356,6 +1373,7 @@ public class ToolbarPhone extends ToolbarLayout
         }
 
         NewTabPageDelegate ntpDelegate = getToolbarDataProvider().getNewTabPageDelegate();
+        ntpDelegate.setUrlFocusChangeAnimationPercent(mUrlFocusChangeFraction);
         // #getSearchBoxBounds is only valid once the NTP can actually draw itself.
         if (ntpDelegate.hasCompletedFirstLayout()) {
             ntpDelegate.getSearchBoxBounds(mNtpSearchBoxBounds, mNtpSearchBoxTranslation);
@@ -2110,7 +2128,8 @@ public class ToolbarPhone extends ToolbarLayout
         // - investigate what else needs to be done to make the WRAP_CONTENT work well as the
         //   default / static setting (likely leading to elimination of `toolbar_height_no_shadow`
         //   dimension).
-        if (OmniboxFeatures.allowMultilineEditField()) {
+        if (OmniboxFeatures.allowMultilineEditField()
+                || ChromeFeatureList.sAndroidBottomToolbarV2.isEnabled()) {
             var params = getLayoutParams();
             params.height =
                     hasFocus
@@ -2118,6 +2137,16 @@ public class ToolbarPhone extends ToolbarLayout
                             : getResources()
                                     .getDimensionPixelSize(R.dimen.toolbar_height_no_shadow);
             setLayoutParams(params);
+        }
+
+        if (ChromeFeatureList.sAndroidBottomToolbarV2.isEnabled()) {
+            int verticalPadding = hasFocus ? mVerticalPaddingWhenFocused : 0;
+            setPaddingRelative(
+                    getPaddingStart(),
+                    verticalPadding + mTopPaddingForEdgeToEdgeNtp,
+                    getPaddingEnd(),
+                    verticalPadding);
+            updateBackgroundHairline(hasFocus, NavigationFulfillmentType.DEFAULT);
         }
 
         updateBackground(hasFocus);
@@ -2431,6 +2460,7 @@ public class ToolbarPhone extends ToolbarLayout
         // bar height as the top padding to the toolbar. This ensures the toolbar stays in its
         // original screen position, and the entire top area (status bar and toolbar) is rendered
         // with the toolbar's color.
+        mTopPaddingForEdgeToEdgeNtp = newTopPadding;
         ViewGroup.MarginLayoutParams marginLayoutParams =
                 (ViewGroup.MarginLayoutParams) getLayoutParams();
         int height =
@@ -2438,7 +2468,11 @@ public class ToolbarPhone extends ToolbarLayout
                         + newTopPadding;
         marginLayoutParams.height = height;
 
-        setPaddingRelative(getPaddingStart(), newTopPadding, getPaddingEnd(), getPaddingBottom());
+        setPaddingRelative(
+                getPaddingStart(),
+                mTopPaddingForEdgeToEdgeNtp,
+                getPaddingEnd(),
+                getPaddingBottom());
     }
 
     private boolean hideShadowForIncognitoNtp() {
@@ -2997,14 +3031,6 @@ public class ToolbarPhone extends ToolbarLayout
 
     private boolean inOrEnteringTabSwitcher() {
         return mTabSwitcherState == TAB_SWITCHER || mTabSwitcherState == ENTERING_TAB_SWITCHER;
-    }
-
-    // Vivaldi
-    @Override
-    void updateForwardButtonVisibility(boolean canGoForward) {
-        boolean enableButton = canGoForward && !isInTabSwitcherMode();
-        mForwardButton.setEnabled(enableButton);
-        mForwardButton.setFocusable(enableButton);
     }
 
     // Vivaldi

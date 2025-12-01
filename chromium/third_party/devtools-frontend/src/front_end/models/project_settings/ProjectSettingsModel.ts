@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,7 +18,7 @@ const WELL_KNOWN_DEVTOOLS_JSON_PATH = '/.well-known/appspecific/com.chrome.devto
  * served by the `DevToolsDataSource` in Chromium) and it's path starts with
  * `/bundled/`.
  *
- * @param url - the URL string to check.
+ * @param url the URL string to check.
  * @returns `true` if `url` refers to a resource in the Chromium DevTools bundle.
  */
 function isDevToolsBundledURL(url: string): boolean {
@@ -36,7 +36,7 @@ function isDevToolsBundledURL(url: string): boolean {
  * parameter (indicating that `--custom-devtools-frontend=` command line option
  * was used).
  *
- * @param frame - the `ResourceTreeFrame` to check.
+ * @param frame the `ResourceTreeFrame` to check.
  * @returns `true` if `frame` is considered safe for loading the project settings.
  * @see https://goo.gle/devtools-json-design
  */

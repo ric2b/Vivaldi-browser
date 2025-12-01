@@ -55,6 +55,9 @@ constexpr BooleanMediumSelector kTestCases[] = {
         .bluetooth = true,
     },
     BooleanMediumSelector{
+        .awdl  = true,
+    },
+    BooleanMediumSelector{
         .wifi_lan = true,
     },
     BooleanMediumSelector{
@@ -80,6 +83,14 @@ constexpr BooleanMediumSelector kTestCases[] = {
         .wifi_lan = true,
         .wifi_hotspot = true,
     },
+    BooleanMediumSelector{
+        .bluetooth = true,
+        .ble = true,
+        .web_rtc = true,
+        .wifi_lan = true,
+        .wifi_direct = true,
+        .awdl = true,
+    },
 };
 
 // Combines the bool `kEnableBleV2` as param testing but should revert it back
@@ -89,6 +100,8 @@ class P2pPointToPointPcpHandlerTest
  protected:
   void SetUp() override {
     LOG(INFO) << "SetUp: begin";
+    NearbyFlags::GetInstance().OverrideBoolFlagValue(
+        config_package_nearby::nearby_connections_feature::kEnableAwdl, true);
     NearbyFlags::GetInstance().OverrideBoolFlagValue(
         config_package_nearby::nearby_connections_feature::kEnableBleV2,
         std::get<1>(GetParam()));
@@ -102,10 +115,16 @@ class P2pPointToPointPcpHandlerTest
       LOG(INFO) << "SetUp: WifiLan enabled";
     }
     if (advertising_options_.allowed.wifi_hotspot) {
-      LOG(INFO) << "SetUp: WifiLan enabled";
+      LOG(INFO) << "SetUp: WifiHotspot enabled";
+    }
+    if (advertising_options_.allowed.wifi_direct) {
+      LOG(INFO) << "SetUp: WifiDirect enabled";
     }
     if (advertising_options_.allowed.web_rtc) {
       LOG(INFO) << "SetUp: WebRTC enabled";
+    }
+    if (advertising_options_.allowed.awdl) {
+      LOG(INFO) << "SetUp: Awdl enabled";
     }
     LOG(INFO) << "SetUp: end";
   }
@@ -118,12 +137,16 @@ class P2pPointToPointPcpHandlerTest
           Strategy::kP2pPointToPoint,
           std::get<0>(GetParam()),
       },
+      false,  // auto_upgrade_bandwidth
+      true,  // enforce_topology_constraints
   };
   AdvertisingOptions advertising_options_{
       {
           Strategy::kP2pPointToPoint,
           std::get<0>(GetParam()),
       },
+      false,  // auto_upgrade_bandwidth
+      true,  // enforce_topology_constraints
   };
   DiscoveryOptions discovery_options_{
       {

@@ -25,6 +25,8 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace web_app {
 namespace {
 
@@ -36,6 +38,11 @@ base::FilePath GetLocalizableAppShortcutsSubdirName() {
   static const char kChromiumAppDirName[] = "Chromium Apps.localized";
   static const char kChromeAppDirName[] = "Chrome Apps.localized";
   static const char kChromeCanaryAppDirName[] = "Chrome Canary Apps.localized";
+
+  static const char kVivaldiAppDirName[] = "Vivaldi Apps.localized";
+  if (vivaldi::IsVivaldiRunning()) {
+    return base::FilePath(kVivaldiAppDirName);
+  } // End Vivaldi
 
   switch (chrome::GetChannel()) {
     case version_info::Channel::UNKNOWN:

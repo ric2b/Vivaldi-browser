@@ -41,6 +41,7 @@
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/browser/ui/intent_picker_tab_helper.h"
 #include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/ui/omnibox/omnibox_view.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_prefs.h"
@@ -54,7 +55,7 @@
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_button.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_coordinator.h"
-#include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
+#include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/top_container_background.h"
 #include "chrome/browser/ui/views/global_media_controls/media_toolbar_button_contextual_menu.h"
@@ -89,7 +90,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
-#include "components/omnibox/browser/omnibox_view.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/send_tab_to_self/features.h"
@@ -123,7 +123,7 @@
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/tooltip_manager.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/window/non_client_view.h"
+#include "ui/views/window/frame_view.h"
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 #include "chrome/browser/recovery/recovery_install_global_error_factory.h"
@@ -191,7 +191,7 @@ class TabstripLikeBackground : public views::Background {
                                                                  browser_view_);
     if (!painted) {
       SkColor frame_color =
-          browser_view_->frame()->GetFrameView()->GetFrameColor(
+          browser_view_->browser_widget()->GetFrameView()->GetFrameColor(
               BrowserFrameActiveState::kUseCurrent);
       canvas->DrawColor(frame_color);
     }
@@ -199,6 +199,12 @@ class TabstripLikeBackground : public views::Background {
 
   const raw_ptr<BrowserView> browser_view_;
 };
+
+bool IsMigratedClickToCallBubble(
+    IntentPickerBubbleView::BubbleType bubble_type) {
+  return bubble_type == IntentPickerBubbleView::BubbleType::kClickToCall &&
+         IsPageActionMigrated(PageActionIconType::kClickToCall);
+}
 
 }  // namespace
 
@@ -656,14 +662,15 @@ void ToolbarView::ShowIntentPickerBubble(
     highlighted_button = GetPageActionView(kActionShowIntentPicker);
   }
 
-  if (!highlighted_button) {
-    return;
+  // Post migration, highlighted_button is a nullptr for ClickToCall
+  // BubbleType but the bubble still gets shown without a page action being
+  // shown/highlighted.
+  if (highlighted_button || IsMigratedClickToCallBubble(bubble_type)) {
+    IntentPickerBubbleView::ShowBubble(
+        location_bar(), highlighted_button, bubble_type, GetWebContents(),
+        std::move(app_info), show_stay_in_chrome, show_remember_selection,
+        initiating_origin, std::move(callback));
   }
-
-  IntentPickerBubbleView::ShowBubble(
-      location_bar(), highlighted_button, bubble_type, GetWebContents(),
-      std::move(app_info), show_stay_in_chrome, show_remember_selection,
-      initiating_origin, std::move(callback));
 }
 
 void ToolbarView::ShowBookmarkBubble(const GURL& url, bool already_bookmarked) {
@@ -1261,12 +1268,13 @@ void ToolbarView::OnTabStripModelChanged(
 
 void ToolbarView::UpdateRecedingCornerRadius() {
   bool tab_strip_has_trailing_frame_buttons =
-      browser_view_->tabstrip()->controller()->IsFrameButtonsRightAligned() ^
-      base::i18n::IsRTL();
+      !browser_view_->browser_widget()
+           ->GetFrameView()
+           ->CaptionButtonsOnLeadingEdge();
   bool tab_strip_has_leading_action_buttons =
       (!tabs::GetTabSearchTrailingTabstrip(browser()->profile()) &&
        !features::HasTabSearchToolbarButton());
-  bool first_tab_selected = browser_->tab_strip_model()->active_index() == 0;
+  bool first_tab_selected = browser_->tab_strip_model()->IsTabInForeground(0);
 
   int new_corner_radius;
 

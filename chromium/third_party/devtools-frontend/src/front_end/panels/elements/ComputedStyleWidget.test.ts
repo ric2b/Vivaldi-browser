@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import * as SDK from '../../core/sdk/sdk.js';
@@ -71,6 +71,21 @@ describeWithMockConnection('ComputedStyleWidget', () => {
 
       return computedStyleWidget;
     }
+
+    it('renders colors correctly', async () => {
+      computedStyleWidget =
+          createComputedStyleWidgetForTest(SDK.CSSStyleDeclaration.Type.Animation, '--animation-name');
+
+      computedStyleWidget.update();
+      await computedStyleWidget.updateComplete;
+
+      const treeOutline = computedStyleWidget.contentElement.querySelector('devtools-tree-outline') as
+          TreeOutline.TreeOutline.TreeOutline<unknown>;
+      await treeOutline.expandRecursively(2);
+
+      const traceElement = await waitForTraceElement(treeOutline);
+      assert.strictEqual(traceElement?.innerText, 'red');
+    });
 
     it('renders trace element with correct selector for declarations coming from animations', async () => {
       computedStyleWidget =

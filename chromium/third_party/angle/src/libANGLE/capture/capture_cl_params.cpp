@@ -5,6 +5,11 @@
 //
 // capture_cl_params.cpp:
 //   Pointer parameter capture functions for the OpenCL entry points.
+//
+
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
 
 #include "libANGLE/CLImage.h"
 #include "libANGLE/capture/capture_cl_autogen.h"
@@ -4355,4 +4360,23 @@ void CaptureIcdGetPlatformIDsKHR_num_platforms(bool isCallValid,
         paramCapture->readBufferSizeBytes = sizeof(cl_uint);
     }
 }
+
+void CaptureIcdGetFunctionAddressForPlatformKHR_func_name(bool isCallValid,
+                                                          cl_platform_id platform,
+                                                          const char *func_name,
+                                                          angle::ParamCapture *paramCapture)
+{
+    // TODO: Implement this later
+    // http://anglebug.com/441956395
+}
+
+void CaptureIcdSetPlatformDispatchDataKHR_dispatch_data(bool isCallValid,
+                                                        cl_platform_id platform,
+                                                        void *dispatch_data,
+                                                        angle::ParamCapture *paramCapture)
+{
+    // TODO: Implement this later
+    // http://anglebug.com/441956395
+}
+
 }  // namespace cl

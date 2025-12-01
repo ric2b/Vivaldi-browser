@@ -2,6 +2,8 @@
 
 #include "components/search_engines/search_engines_helper.h"
 
+#include "base/strings/string_util.h"
+
 #include "components/country_codes/country_codes.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/search_engine_type.h"
@@ -9,6 +11,16 @@
 #include "components/search_engines/search_engines_managers_factory.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/vivaldi_pref_names.h"
+
+const char kSearchTermsParameterFull[] = "{searchTerms}";
+const char kGoogleUnescapedSearchTermsParameterFull[] =
+    "{google:unescapedSearchTerms}";
+// Display value for kSearchTermsParameter.
+const char kDisplaySearchTerms[] = "%s";
+const char kDisplayEscapedSearchTerms[] = "%25s";
+
+// Display value for kGoogleUnescapedSearchTermsParameter.
+const char kDisplayUnescapedSearchTerms[] = "%S";
 
 namespace TemplateURLPrepopulateData {
 
@@ -222,3 +234,24 @@ std::optional<RegulatoryExtensionType> StringToRegulatoryExtensionType(
   return it->second;
 }
 }  // namespace TemplateURLPrepopulateData
+
+std::string GetUrlToDisplay(const std::string& url) {
+  std::string result(url);
+  base::ReplaceSubstringsAfterOffset(&result, 0, kSearchTermsParameterFull,
+                                     kDisplaySearchTerms);
+  base::ReplaceSubstringsAfterOffset(&result, 0,
+                                     kGoogleUnescapedSearchTermsParameterFull,
+                                     kDisplayUnescapedSearchTerms);
+  return result;
+}
+
+std::string GetUrlFromDisplay(std::string url) {
+  std::string result(url);
+  base::ReplaceSubstringsAfterOffset(&result, 0, kDisplaySearchTerms,
+                                     kSearchTermsParameterFull);
+  base::ReplaceSubstringsAfterOffset(&result, 0, kDisplayUnescapedSearchTerms,
+                                     kGoogleUnescapedSearchTermsParameterFull);
+  base::ReplaceSubstringsAfterOffset(&result, 0, kDisplayEscapedSearchTerms,
+                                     kSearchTermsParameterFull);
+  return result;
+}

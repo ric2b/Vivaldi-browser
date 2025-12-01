@@ -31,7 +31,10 @@ enum class NTPMIAEntrypointVariation {
   // The entrypoint is shown inside the enlarged fake omnibox without incognito
   // shortcut.
   kEnlargedFakeboxNoIncognito = 4,
-  kMaxValue = kEnlargedFakeboxNoIncognito,
+  // The entrypoint is shown as a quick actions button, with enlarged fake
+  // omnibox
+  kAIMInQuickAction = 5,
+  kMaxValue = kAIMInQuickAction,
 };
 
 #pragma mark - Feature declarations
@@ -64,10 +67,6 @@ BASE_DECLARE_FEATURE(kEnableSignedOutViewDemotion);
 
 // Feature flag to enable ghost cards on the iPad feeds.
 BASE_DECLARE_FEATURE(kEnableiPadFeedGhostCards);
-
-// Feature flag to enable account-switching UI when tapping the NTP identity
-// disc.
-BASE_DECLARE_FEATURE(kIdentityDiscAccountMenu);
 
 // Feature flag to enable in-product help for swipe action on the Feed.
 BASE_DECLARE_FEATURE(kFeedSwipeInProductHelp);

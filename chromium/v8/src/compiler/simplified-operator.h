@@ -9,6 +9,7 @@
 
 #include "src/base/compiler-specific.h"
 #include "src/base/container-utils.h"
+#include "src/base/macros.h"
 #include "src/codegen/machine-type.h"
 #include "src/codegen/tnode.h"
 #include "src/common/globals.h"
@@ -47,7 +48,7 @@ struct WasmTypeCheckConfig;
 
 size_t hash_value(BaseTaggedness);
 
-std::ostream& operator<<(std::ostream&, BaseTaggedness);
+V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream&, BaseTaggedness);
 
 struct ConstFieldInfo {
   // the map that introduced the const field, if any. An access is considered
@@ -992,6 +993,7 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   const Operator* ChangeTaggedToUint32();
   const Operator* ChangeTaggedToFloat64();
   const Operator* ChangeTaggedToTaggedSigned();
+  const Operator* ChangeNumberOrHoleToFloat64();
   const Operator* ChangeInt31ToTaggedSigned();
   const Operator* ChangeInt32ToTagged();
   const Operator* ChangeInt64ToTagged();
@@ -1007,7 +1009,8 @@ class V8_EXPORT_PRIVATE SimplifiedOperatorBuilder final
   const Operator* TruncateBigIntToWord64();
   const Operator* ChangeInt64ToBigInt();
   const Operator* ChangeUint64ToBigInt();
-  const Operator* TruncateTaggedToWord32();
+  const Operator* TruncateNumberOrOddballToWord32();
+  const Operator* TruncateNumberOrOddballOrHoleToWord32();
   const Operator* TruncateTaggedToFloat64();
   const Operator* TruncateTaggedToFloat64PreserveUndefined();
   const Operator* TruncateTaggedToBit();

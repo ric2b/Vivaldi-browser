@@ -22,10 +22,6 @@
       "id": 7,
       "merge_method": "none"
     },
-    "vivaldi.address_bar.extensions.show_hidden_toggle": {
-      "id": 8,
-      "merge_method": "none"
-    },
     "vivaldi.address_bar.extensions.show_all_toggle": {
       "id": 9,
       "merge_method": "none"
@@ -92,10 +88,6 @@
     },
     "vivaldi.address_bar.inline_search.enabled": {
       "id": 32,
-      "merge_method": "none"
-    },
-    "vivaldi.address_bar.inline_search.suggest_enabled": {
-      "id": 33,
       "merge_method": "none"
     },
     "vivaldi.address_bar.inline_search.suggest_on_nickname": {
@@ -316,10 +308,6 @@
     },
     "vivaldi.calendar.auto_tab_datetime": {
       "id": 89,
-      "merge_method": "none"
-    },
-    "vivaldi.calendar.default_account_id": {
-      "id": 90,
       "merge_method": "none"
     },
     "vivaldi.calendar.handle_ics_downloads": {
@@ -946,10 +934,6 @@
       "id": 249,
       "merge_method": "none"
     },
-    "vivaldi.tabs.double_click_close": {
-      "id": 250,
-      "merge_method": "none"
-    },
     "vivaldi.tabs.page_load_info": {
       "id": 251,
       "merge_method": "none"
@@ -1008,10 +992,6 @@
     },
     "vivaldi.tabs.stacking.allow_dnd": {
       "id": 267,
-      "merge_method": "none"
-    },
-    "vivaldi.tabs.stacking.allow_rename": {
-      "id": 268,
       "merge_method": "none"
     },
     "vivaldi.tabs.stacking.dnd_delay": {
@@ -1074,10 +1054,6 @@
       "id": 283,
       "merge_method": "none"
     },
-    "vivaldi.appearance.hud.enabled": {
-      "id": 284,
-      "merge_method": "none"
-    },
     "vivaldi.translate.enabled": {
       "id": 285,
       "merge_method": "none"
@@ -1120,10 +1096,6 @@
     },
     "vivaldi.webpages.full_screen.hide_mouse": {
       "id": 295,
-      "merge_method": "none"
-    },
-    "vivaldi.webpages.full_screen.show_bubble": {
-      "id": 296,
       "merge_method": "none"
     },
     "vivaldi.webpages.picture_in_picture_button.enabled": {
@@ -3839,11 +3811,6 @@
         "default": "top"
       },
       "search": {
-        "enabled": {
-          "description": "[DEPRECATED 2019/12] Replaced by display enum",
-          "type": "boolean",
-          "default": true
-        },
         "direct_match_enabled": {
           "description": "Used both in AddressField and SearchField.",
           "type": "boolean",
@@ -3887,7 +3854,7 @@
         "keep_selected": {
           "type": "boolean",
           "description": "Keep last search engine selected in search field",
-          "default": true
+          "default": false
         },
         "keep_typed_text": {
           "type": "boolean",
@@ -3899,7 +3866,7 @@
           "default": false
         },
         "typed_history": {
-          "description": "History of searches made with the search field",
+          "description": "[DEPRECATED 2025/09] History of searches made with the search field",
           "type": "list",
           "default": []
         },
@@ -3943,22 +3910,12 @@
         "type": "boolean",
         "default": false
       },
-      "show_profile": {
-        "description": "[DEPRECATED 2022/04] VB-70320 Toolbar component",
-        "type": "boolean",
-        "default": true
-      },
       "show_progress": {
         "type": "boolean",
         "default": true
       },
       "show_qr_generator": {
         "description": "Controls the visibility of QR button.",
-        "type": "boolean",
-        "default": false
-      },
-      "show_reading_list": {
-        "description": "[DEPRECATED 2022/04] VB-70320 Toolbar component",
         "type": "boolean",
         "default": false
       },
@@ -4495,11 +4452,6 @@
           "default": false
         }
       },
-      "refresh_tokens": {
-        "description": "DEPRECATED 2023/02. See oAuth refresh_token",
-        "type": "dictionary",
-        "default": {}
-      },
       "handle_ics_downloads": {
         "description": "Whether Calendar should handle downloaded ics files when opened inside Vivaldi",
         "type": "boolean",
@@ -4591,11 +4543,6 @@
         "type": "boolean",
         "default": false
       },
-      "use_popout": {
-        "description": "[DEPRECATED 2022/04] VB-70320 Toolbar component",
-        "type": "boolean",
-        "default": false
-      },
       "avoid_target_filenamecollisions_when_saving_as": {
         "description": "If true avoid target filename collisions when choosing download target via 'Save as...'",
         "type": "boolean",
@@ -4619,22 +4566,22 @@
     },
     "hue": {
       "bridge_ip": {
-        "description": "Hue Bridge IP address",
+        "description": "[DEPRECATED 2025/10] Hue Bridge IP address",
         "type": "string",
         "default": ""
       },
       "enabled": {
-        "description": "Enable Hue Light integration",
+        "description": "[DEPRECATED 2025/10] Enable Hue Light integration",
         "type": "boolean",
         "default": false
       },
       "lights": {
-        "description": "List of selected light MAC addresses",
+        "description": "[DEPRECATED 2025/10] List of selected light MAC addresses",
         "type": "list",
         "default": []
       },
       "username": {
-        "description": "Hue access token, called username in the API",
+        "description": "[DEPRECATED 2025/10] Hue access token, called username in the API",
         "type": "string",
         "default": ""
       }
@@ -4729,7 +4676,8 @@
       "tab_to_all_uses_system_default": {
         "description": "Set tab_to_all based on the operating system configuration",
         "type": "boolean",
-        "default": false
+        "default": false,
+        "default_mac": true
       }
     },
     "list": {
@@ -4752,6 +4700,11 @@
       },
       "auto_generate_contacts": {
         "description": "Auto generate contacts based on recipients in sent messages",
+        "type": "boolean",
+        "default": true
+      },
+      "bar_visible": {
+        "description": "Main mail toolbar visibility",
         "type": "boolean",
         "default": true
       },
@@ -5009,11 +4962,6 @@
         "type": "list",
         "default": []
       },
-      "refresh_tokens": {
-        "description": "DEPRECATED 2023/02. See oAuth refresh_token",
-        "type": "dictionary",
-        "default": {}
-      },
       "send_or_queue": {
         "description": "Should button in Mail Composer Send directly or Queue to Outbox?",
         "type": "enum",
@@ -5022,16 +4970,6 @@
           "queue": 1
         },
         "default": "send"
-      },
-      "search_ascending": {
-        "description": "[DEPRECATED 2021/10] VB-28216 Replaced with search_sort_order",
-        "type": "boolean",
-        "default": true
-      },
-      "search_threading": {
-        "description": "[DEPRECATED 2021/10] VB-28216 Replaced with search_sort_field",
-        "type": "boolean",
-        "default": true
       },
       "search_sort_order": {
         "description": "The order in which mail messages are sorted",
@@ -5046,7 +4984,7 @@
         "description": "The field used when sorting mail messages - default for folders other than sent",
         "type": "enum",
         "enum_values": {
-          "sentDate": 0,
+          "receivedDate": 0,
           "sender": 1,
           "subject": 2,
           "threads": 3
@@ -5324,12 +5262,12 @@
         },
         "tree": {
           "height": {
-            "description": "[DEPRECATED 07/2025] Notes manager tree height",
+            "description": "Notes manager tree height (used only with VivaldiNewNoteEditor experiments, deprecate it after removing the experiment)",
             "type": "integer",
             "default": 40
           },
           "width": {
-            "description": "[DEPRECATED 07/2025] Notes manager tree width",
+            "description": "Notes manager tree width (used only with VivaldiNewNoteEditor experiments, deprecate it after removing the experiment)",
             "type": "integer",
             "default": 50
           }
@@ -5866,6 +5804,13 @@
           "type": "double",
           "default": 0.0
         }
+      },
+      "stats": {
+        "last_shown": {
+          "description": "Index of last shown blocker stats fun fact to avoid repeating.",
+          "type": "integer",
+          "default": 0
+        }
       }
     },
     "chained_commands": {
@@ -6200,16 +6145,6 @@
           "type": "boolean",
           "default": true
         },
-        "titles_and_favicon_visible": {
-          "description": "[DEPRECATED 2021/3]",
-          "type": "enum",
-          "enum_values": {
-            "always": 0,
-            "show_title": 1,
-            "never": 2
-          },
-          "default": "always"
-        },
         "game_button_show": {
           "description": "Show Game button on the Speed Dial",
           "type": "boolean",
@@ -6239,7 +6174,7 @@
           "default": true
         },
         "privacy_stats_show": {
-          "description": "[DEPRECATED 2025/4] Display privacy statistics in the SpeedDial",
+          "description": "Display privacy statistics in the SpeedDial (used only with VivaldiSpeeddialWidgets experiments, deprecate it after removing the experiment)",
           "type": "boolean",
           "default": false
         }
@@ -6551,13 +6486,6 @@
         },
         "default": "progress_bar"
       },
-      "favicon_spinner": {
-        "enabled": {
-          "description": "[DEPRECATED 2019/6]",
-          "type": "boolean",
-          "default": false
-        }
-      },
       "focus_webview": {
         "description": "Focus webpage instead of address bar on new tab",
         "type": "boolean",
@@ -6595,11 +6523,6 @@
             "custom": 4
           },
           "default": "startpage"
-        },
-        "url": {
-          "description": "[DEPRECATED 2018-11] The actual URL for new tabs",
-          "type": "string",
-          "default": ""
         },
         "custom_url": {
           "description": "The URL set to be used when choosing a custom URL for new tabs",
@@ -6792,6 +6715,11 @@
           "description": "Show the counters in the tab button popup.",
           "type": "boolean",
           "default": true
+        },
+        "show_tips": {
+          "description": "Show helpful tips in the tab button.",
+          "type": "boolean",
+          "default": true
         }
       }
     },
@@ -6846,21 +6774,6 @@
       }
     },
     "theme": {
-      "color_accent_saturation_limit": {
-        "description": "[DEPRECATED 2021/11] Kept for migration",
-        "type": "double",
-        "default": 1.0
-      },
-      "blur_enable": {
-        "description": "[DEPRECATED 2021/11] Kept for migration",
-        "type": "boolean",
-        "default": true
-      },
-      "contrast": {
-        "description": "[DEPRECATED 2021/09] Kept for migration",
-        "type": "double",
-        "default": 5.0
-      },
       "dim_blurred": {
         "description": "Dim colors in windows without focus",
         "type": "boolean",
@@ -6874,30 +6787,10 @@
         "default": "Private"
       },
       "background": {
-        "data": {
-          "description": "[DEPRECATED 2021/11] Kept for migration",
-          "type": "string",
-          "default": ""
-        },
-        "user_color": {
-          "description": "[DEPRECATED 2021/11] Kept for migration",
-          "type": "string",
-          "default": ""
-        },
         "user_image": {
-          "description": "[TO BE DEPRECATED] Kept for migration, also used as temporary holding when selecting image",
+          "description": "Used as temporary holding when selecting image",
           "type": "file_path",
           "default": ""
-        },
-        "position": {
-          "description": "[DEPRECATED 2021/11] Kept for migration",
-          "type": "enum",
-          "enum_values": {
-            "stretched": 0,
-            "repeating": 1,
-            "centered": 2
-          },
-          "default": "stretched"
         }
       },
       "simple_scrollbar": {
@@ -6944,16 +6837,6 @@
             "dark": "Vivaldi2"
           }
         }
-      },
-      "transparency": {
-        "description": "[DEPRECATED 2021/11] Kept for migration",
-        "type": "double",
-        "default": 0.95
-      },
-      "transparent_tab_bar": {
-        "description": "[DEPRECATED 2021/11] Kept for migration",
-        "type": "boolean",
-        "default": false
       },
       "use_animation": {
         "type": "boolean",
@@ -7944,50 +7827,9 @@
         "default": true
       },
       "widgets": {
-        "description": "An ordered list of widgets and their options. Defaults are added in code.",
+        "description": "A list of start page widgets and their options. Defaults are added in code which depends on this being a list with one invalid widget.",
         "type": "list",
-        "default": [
-          {
-            "id": "1",
-            "type": "weather",
-            "background": "solid",
-            "locationId": 0,
-            "precipitationUnit": "mm",
-            "size": "regular",
-            "temperatureUnit": "celsius",
-            "view": "WEEK",
-            "windspeedUnit": "ms"
-          },
-          {
-            "id": "2",
-            "type": "shortcuts",
-            "background": "semi-transparent",
-            "folderId": "DEFAULT",
-            "showThumbnail": false,
-            "showTitle": false,
-            "size": "regular"
-          },
-          {
-            "id": "3",
-            "type": "webpage",
-            "background": "solid",
-            "shareTheme": false,
-            "size": "double_height",
-            "url": "https://www.wiktionary.org/"
-          },
-          {
-            "id": "4",
-            "type": "sticky-note",
-            "background": "semi-transparent",
-            "size": "regular"
-          },
-          {
-            "id": "5",
-            "type": "tip",
-            "background": "semi-transparent",
-            "size": "regular"
-          }
-        ]
+        "default": [{ "speeddialGroupId": "-1" }]
       },
       "sticky_notes": {
         "description": "Store all note content from sticky-note widget.",
@@ -7996,6 +7838,11 @@
           "widgetId": "4",
           "content": ""
         }]
+      },
+      "columns": {
+        "description": "Number columns used for widget positioning. Needs to default to zero for detection of default value.",
+        "type": "integer",
+        "default": 0
       },
       "column_limit": {
         "description": "The maximum number of columns in the widget grid.",
@@ -8410,6 +8257,18 @@
     }
   },
   "chromium_local": {
+    "kMemorySaverEnabled": {
+      "path": "performance_tuning.high_efficiency_mode.state",
+      "type": "integer"
+    },
+    "kMemorySaverAggressiveness": {
+      "path": "performance_tuning.high_efficiency_mode.aggressiveness",
+      "type": "integer"
+    },
+    "kBatterySaverState": {
+      "path": "performance_tuning.battery_saver_mode.state",
+      "type": "integer"
+    },
     "kCertRevocationCheckingEnabled": {
       "path": "ssl.rev_checking.enabled",
       "type": "boolean"
@@ -8433,10 +8292,6 @@
     "kHoverCardMemoryUsageEnabled": {
       "path": "browser.hovercard.memory_usage_enabled",
       "type": "boolean"
-    },
-    "kMemorySaverModeState": {
-      "path": "performance_tuning.high_efficiency_mode.state",
-      "type": "integer"
     },
     "kMemorySaverModeTimeBeforeDiscardInMinutes": {
       "path": "performance_tuning.high_efficiency_mode.time_before_discard_in_minutes",

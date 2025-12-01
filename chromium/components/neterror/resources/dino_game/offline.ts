@@ -404,6 +404,8 @@ export class Runner {
       case 'speed':
         this.setSpeed(value);
         break;
+      default:
+        break;
     }
   }
 
@@ -967,6 +969,7 @@ export class Runner {
       case RunnerEvents.GAMEPADCONNECTED:
         this.onGamepadConnected();
         break;
+      default:
     }
   }
 
@@ -1558,7 +1561,7 @@ export class Runner {
     if (soundBuffer) {
       assert(this.audioContext);
       const sourceNode = this.audioContext.createBufferSource();
-      sourceNode.buffer = soundBuffer || null;
+      sourceNode.buffer = soundBuffer;
       sourceNode.connect(this.audioContext.destination);
       sourceNode.start(0);
     }

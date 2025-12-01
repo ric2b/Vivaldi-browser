@@ -16,6 +16,7 @@
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/test_utils/valuables_data_test_utils.h"
+#include "components/autofill/core/browser/ui/payments/bnpl_ui_delegate.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/web_contents_tester.h"
@@ -31,12 +32,14 @@
 #include "chrome/browser/ui/android/tab_model/tab_model_test_helper.h"
 #include "chrome/browser/ui/autofill/autofill_snackbar_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/autofill_message_controller.h"
+#include "components/autofill/core/browser/payments/android_bnpl_strategy.h"
 #include "components/autofill/core/browser/payments/autofill_save_card_ui_info.h"
 #include "components/feature_engagement/test/mock_tracker.h"
 #include "ui/android/window_android.h"
 #else  // !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.h"
 #include "chrome/browser/ui/ui_features.h"  // nogncheck
+#include "components/autofill/core/browser/payments/desktop_bnpl_strategy.h"
 #endif                                      // BUILDFLAG(IS_ANDROID)
 
 using ::autofill::test::CreateLoyaltyCard;
@@ -739,6 +742,26 @@ TEST_F(ChromePaymentsAutofillClientTest, RiskDataCaching_DataCached) {
   EXPECT_CALL(callback2, Run).Times(0);
 
   chrome_payments_client()->LoadRiskData(callback2.Get());
+}
+
+// Test that BNPL strategy is created and returned correctly.
+TEST_F(ChromePaymentsAutofillClientTest, GetBnplStrategy) {
+  payments::BnplStrategy* strategy =
+      chrome_payments_client()->GetBnplStrategy();
+  ASSERT_NE(strategy, nullptr);
+
+  // Test that the same instance is returned on subsequent calls.
+  EXPECT_EQ(strategy, chrome_payments_client()->GetBnplStrategy());
+}
+
+// Test that BNPL UI delegate is created and returned correctly.
+TEST_F(ChromePaymentsAutofillClientTest, GetBnplUiDelegate) {
+  payments::BnplUiDelegate* ui_delegate =
+      chrome_payments_client()->GetBnplUiDelegate();
+  ASSERT_NE(ui_delegate, nullptr);
+
+  // Test that the same instance is returned on subsequent calls.
+  EXPECT_EQ(ui_delegate, chrome_payments_client()->GetBnplUiDelegate());
 }
 
 #if !BUILDFLAG(IS_ANDROID)

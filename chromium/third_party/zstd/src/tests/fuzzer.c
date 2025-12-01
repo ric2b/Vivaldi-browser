@@ -44,6 +44,14 @@
 /* must be included after util.h, due to ERROR macro redefinition issue on Visual Studio */
 #include "zstd_internal.h" /* ZSTD_WORKSPACETOOLARGE_MAXDURATION, ZSTD_WORKSPACETOOLARGE_FACTOR, KB, MB */
 #include "threading.h"    /* ZSTD_pthread_create, ZSTD_pthread_join */
+#include "compress/hist.h" /* HIST_count_wksp */
+#include "compress/zstd_compress_internal.h" /* ZSTD_get1BlockSummary */
+
+
+/*-************************************
+*  Macros
+**************************************/
+#define COUNTOF(array)    (sizeof(array) / sizeof(*(array)))
 
 
 /*-************************************
@@ -567,6 +575,123 @@ static void test_decompressBound(unsigned tnb)
     DISPLAYLEVEL(3, "OK \n");
 }
 
+static unsigned test_histCountWksp(unsigned seed, unsigned testNb)
+{
+    static const unsigned symLowLimits[] =  {   0,  27,   0,   0,  27,  42,   0,   0, 27, 42, 27, 42 };
+    static const unsigned symHighLimits[] = { 255, 255, 210, 110,  42,  42, 210, 110, 42, 42, 42, 42 };
+    static const unsigned symMaxLimits[] =  { 255, 255, 255, 255, 255, 255, 230, 130, 99, 99, 42, 42 };
+    static const size_t inputSizes[] = { 3367, 1761, 893, 117 };
+    unsigned workspace[HIST_WKSP_SIZE_U32];
+    size_t res, i, is, il;
+
+    DISPLAYLEVEL(3, "test%3u : HIST_count_wksp with empty source : ", testNb++);
+    {
+        /* With NULL source UBSan of older Clang could fail: applying zero offset to null pointer. */
+        static const unsigned char source[4] = { 0 };
+        unsigned count[1] = { 0 };
+        unsigned maxSym = 0;
+        res = HIST_count_wksp(count, &maxSym, source, 0, workspace, sizeof(workspace));
+        CHECK_EQ(res, 0);
+        CHECK_EQ(maxSym, 0);
+        CHECK_EQ(count[0], 0);
+    }
+    DISPLAYLEVEL(3, "OK \n");
+
+#if HIST_WKSP_SIZE_U32
+    DISPLAYLEVEL(3, "test%3u : HIST_count_wksp with small workspace : ", testNb++);
+    {
+        unsigned count[1] = { 0 };
+        unsigned maxSym = 0;
+        res = HIST_count_wksp(count, &maxSym, NULL, 0, workspace, sizeof(workspace) - 1);
+        CHECK_EQ(res, ERROR(workSpace_tooSmall));
+        CHECK_EQ(maxSym, 0);
+        CHECK_EQ(count[0], 0);
+    }
+    DISPLAYLEVEL(3, "OK \n");
+
+    DISPLAYLEVEL(3, "test%3u : HIST_count_wksp with wrong workspace alignment : ", testNb++);
+    {
+        unsigned count[1] = { 0 };
+        unsigned maxSym = 0;
+        res = HIST_count_wksp(count, &maxSym, NULL, 0, (unsigned*)(void*)((char*)workspace + 1), sizeof(workspace));
+        CHECK_EQ(res, ERROR(GENERIC));
+        CHECK_EQ(maxSym, 0);
+        CHECK_EQ(count[0], 0);
+    }
+    DISPLAYLEVEL(3, "OK \n");
+#endif
+
+    DISPLAYLEVEL(3, "test%3u : HIST_count_wksp with symbol out of range, small size : ", testNb++);
+    {
+        /* For less elements HIST_count_parallel_wksp would fail. */
+        static const unsigned char source[4] = { 1, 4, 0, 2 };
+        static const unsigned expected[6] = { 0 };
+        unsigned count[6] = { 0 };
+        unsigned maxSym = 2;
+        res = HIST_count_wksp(count, &maxSym, source, sizeof(source), workspace, sizeof(workspace));
+        CHECK_EQ(res, ERROR(maxSymbolValue_tooSmall));
+        CHECK_EQ(maxSym, 2);
+        for (i = 0; i < COUNTOF(expected); ++i) CHECK_EQ(count[i], expected[i]);
+    }
+    DISPLAYLEVEL(3, "OK \n");
+
+    DISPLAYLEVEL(3, "test%3u : HIST_count_wksp with symbol out of range, medium size : ", testNb++);
+    {
+        unsigned char source[3407];
+        unsigned count[6] = { 0 };
+        unsigned maxSym = 2;
+        for (i = 0; i < COUNTOF(source); ++i) {
+            source[i] = (48271 * (i + 1)) & 3;
+        }
+        res = HIST_count_wksp(count, &maxSym, source, sizeof(source), workspace, sizeof(workspace));
+        CHECK_EQ(res, ERROR(maxSymbolValue_tooSmall));
+        CHECK_EQ(maxSym, 2);
+        for (i = 0; i < COUNTOF(count); ++i) CHECK_EQ(count[i], 0);
+    }
+    DISPLAYLEVEL(3, "OK \n");
+
+    for (il = 0; il < COUNTOF(symMaxLimits); ++il) {
+        unsigned symMax = symMaxLimits[il];
+        unsigned symLow = symLowLimits[il];
+        unsigned symHigh = symHighLimits[il];
+        unsigned symRange = symHigh - symLow + 1;
+
+        for (is = 0; is < COUNTOF(inputSizes); ++is) {
+            unsigned char source[4000];
+            size_t inputSize = inputSizes[is];
+            assert(inputSize <= sizeof(source));
+            DISPLAYLEVEL(3, "test%3u : HIST_count_wksp test in [%u..%u], symMax: %u, inputSize: %u : ",
+                         testNb++, symLow, symHigh, symMax, (unsigned)inputSize);
+            {
+                unsigned count[260] = { 0 };
+                unsigned expected[COUNTOF(count)] = { 0 };
+                unsigned maxSym = symMax;
+                unsigned realMaxSym = symMax;
+                unsigned maxCount = 0;
+                for (i = 0; i < inputSize; ++i) {
+                    unsigned prng = (48271 * (i + seed)) % symRange + symLow;
+                    source[i] = (unsigned char)prng;
+                    ++expected[prng];
+                }
+                /* for basic buffer overwrite checks */
+                for (i = maxSym + 1; i < COUNTOF(count); ++i) expected[i] = count[i] = ~0u;
+                for (i = 0; i <= maxSym; ++i) maxCount = MAX(maxCount, expected[i]);
+                for (i = realMaxSym; i > 0; --i) {
+                    if (expected[i]) break;
+                    --realMaxSym;
+                }
+                res = HIST_count_wksp(count, &maxSym, source, inputSize, workspace, sizeof(workspace));
+                CHECK_EQ(res, maxCount);
+                CHECK_EQ(maxSym, realMaxSym);
+                for (i = 0; i < COUNTOF(expected); ++i) CHECK_EQ(count[i], expected[i]);
+            }
+            DISPLAYLEVEL(3, "OK \n");
+        }
+    }
+
+    return testNb;
+}
+
 static void test_setCParams(unsigned tnb)
 {
     ZSTD_CCtx* const cctx = ZSTD_createCCtx();
@@ -645,6 +770,210 @@ static void test_blockSplitter_incompressibleExpansionProtection(unsigned testNb
     DISPLAYLEVEL(3, "OK \n");
 }
 
+size_t convertSequences_noRepcodes(SeqDef* dstSeqs, const ZSTD_Sequence* inSeqs,
+    size_t nbSequences);
+
+static size_t convertSequences_noRepcodes_ref(
+    SeqDef* dstSeqs,
+    const ZSTD_Sequence* inSeqs,
+    size_t nbSequences)
+{
+    size_t longLen = 0;
+    size_t n;
+    for (n=0; n<nbSequences; n++) {
+        dstSeqs[n].offBase = OFFSET_TO_OFFBASE(inSeqs[n].offset);
+        dstSeqs[n].litLength = (U16)inSeqs[n].litLength;
+        dstSeqs[n].mlBase = (U16)(inSeqs[n].matchLength - MINMATCH);
+        /* Check for long length > 65535. */
+        if (UNLIKELY(inSeqs[n].matchLength > 65535+MINMATCH)) {
+            assert(longLen == 0);
+            longLen = n + 1;
+        }
+        if (UNLIKELY(inSeqs[n].litLength > 65535)) {
+            assert(longLen == 0);
+            longLen = n + nbSequences + 1;
+        }
+    }
+    return longLen;
+}
+
+static unsigned test_convertSequences_noRepcodes(unsigned seed, unsigned testNb)
+{
+    ZSTD_Sequence nsrc[12];
+    SeqDef ndst[12], rdst[12];
+    size_t ref, ret, i, j;
+
+    seed += 0xDEADBEEF;
+    for (i = 0; i < COUNTOF(nsrc); ++i) {
+        seed = 48271 * ((unsigned)i + seed);
+        nsrc[i].offset = (seed & 0xFFFF) | 1;   /* Offset shall not be zero. */
+        seed = 48271 * ((unsigned)i + seed);
+        nsrc[i].litLength = seed & 0xFFFF;
+        seed = 48271 * ((unsigned)i + seed);
+        nsrc[i].matchLength = (seed & 0xFFFFFF) % (65536 + MINMATCH);
+        seed = 48271 * ((unsigned)i + seed);
+        nsrc[i].rep = seed & 0xFF;
+    }
+
+    /* For near overflow and proper negative value handling. */
+    nsrc[5].matchLength = 65535 + MINMATCH;
+    nsrc[6].litLength = 65535;
+    nsrc[6].matchLength = 0;
+    nsrc[7].litLength = 0;
+    nsrc[7].matchLength = MINMATCH;
+
+    for (i = 0; i <= COUNTOF(nsrc); ++i) {
+        DISPLAYLEVEL(3, "test%3u : convertSequences_noRepcodes with %u inputs : ",
+                     testNb++, (unsigned)i);
+        memset(ndst, 0, sizeof(ndst));
+        memset(rdst, 0, sizeof(rdst));
+        ref = convertSequences_noRepcodes_ref(rdst, nsrc, i);
+        ret = convertSequences_noRepcodes(ndst, nsrc, i);
+        CHECK_EQ(ret, ref);
+        CHECK_EQ(memcmp(rdst, ndst, sizeof(ndst)), 0);
+        DISPLAYLEVEL(3, "OK \n");
+    }
+
+    nsrc[7].matchLength = 65536 + MINMATCH;
+    for (i = 8; i <= COUNTOF(nsrc); ++i) {
+        DISPLAYLEVEL(3, "test%3u : convertSequences_noRepcodes with %u inputs and "
+                     "matchLength overflow : ",
+                     testNb++, (unsigned)i);
+        memset(ndst, 0, sizeof(ndst));
+        memset(rdst, 0, sizeof(rdst));
+        ref = convertSequences_noRepcodes_ref(rdst, nsrc, i);
+        ret = convertSequences_noRepcodes(ndst, nsrc, i);
+        CHECK_EQ(ret, ref);
+        CHECK_EQ(memcmp(rdst, ndst, sizeof(ndst)), 0);
+        DISPLAYLEVEL(3, "OK \n");
+
+        assert(COUNTOF(nsrc) > 8);
+        for (j = 4; j < 8; ++j) {
+            DISPLAYLEVEL(3, "test%3u : convertSequences_noRepcodes with %u inputs and "
+                         "matchLength overflow #%u : ",
+                         testNb++, (unsigned)i, (unsigned)(i - j));
+            memset(ndst, 0, sizeof(ndst));
+            memset(rdst, 0, sizeof(rdst));
+            ref = convertSequences_noRepcodes_ref(rdst, nsrc + j, i - j);
+            ret = convertSequences_noRepcodes(ndst, nsrc + j, i - j);
+            CHECK_EQ(ret, ref);
+            CHECK_EQ(memcmp(rdst, ndst, sizeof(ndst)), 0);
+            DISPLAYLEVEL(3, "OK \n");
+        }
+    }
+    nsrc[7].matchLength = 1;
+
+    nsrc[7].litLength = 65536;
+    for (i = 8; i <= COUNTOF(nsrc); ++i) {
+        DISPLAYLEVEL(3, "test%3u : convertSequences_noRepcodes with %u inputs and "
+                     "litLength overflow: ",
+                     testNb++, (unsigned)i);
+        memset(ndst, 0, sizeof(ndst));
+        memset(rdst, 0, sizeof(rdst));
+        ref = convertSequences_noRepcodes_ref(rdst, nsrc, i);
+        ret = convertSequences_noRepcodes(ndst, nsrc, i);
+        CHECK_EQ(ret, ref);
+        CHECK_EQ(memcmp(rdst, ndst, sizeof(ndst)), 0);
+        DISPLAYLEVEL(3, "OK \n");
+
+        assert(COUNTOF(nsrc) > 8);
+        for (j = 4; j < 8; ++j) {
+            DISPLAYLEVEL(3, "test%3u : convertSequences_noRepcodes with %u inputs and "
+                         "litLength overflow #%u: ",
+                         testNb++, (unsigned)i, (unsigned)(i - j));
+            memset(ndst, 0, sizeof(ndst));
+            memset(rdst, 0, sizeof(rdst));
+            ref = convertSequences_noRepcodes_ref(rdst, nsrc + j, i - j);
+            ret = convertSequences_noRepcodes(ndst, nsrc + j, i - j);
+            CHECK_EQ(ret, ref);
+            CHECK_EQ(memcmp(rdst, ndst, sizeof(ndst)), 0);
+            DISPLAYLEVEL(3, "OK \n");
+        }
+    }
+
+    return testNb;
+}
+
+static unsigned test_get1BlockSummary(unsigned testNb)
+{
+    static const ZSTD_Sequence nseqs[] = {
+        { 10, 2, 4, 1 },
+        { 20, 3, 5, 2 },
+        { 30, 6, 8, 3 },
+        { 40, 7, 9, 4 },
+        { 50, 10, 12, 5 },
+        { 60, 11, 13, 6 },
+        { 0,  14, 0, 7 },
+        { 70, 15, 17, 8 },
+        { 80, 16, 18, 9 },
+        { 90, 19, 21, 1 },
+        { 99, 20, 22, 2 },
+    };
+    static const BlockSummary blocks[] = {
+        { 7, 104, 53 },
+        { 6, 98, 51 },
+        { 5, 90, 48 },
+        { 4, 76, 42 },
+        { 3, 60, 35 },
+        { 2, 38, 25 },
+        { 1, 14, 14 },
+    };
+    size_t i;
+
+    DISPLAYLEVEL(3, "test%3u : ZSTD_get1BlockSummary with empty array : ", testNb++);
+    {
+        BlockSummary bs = ZSTD_get1BlockSummary(nseqs, 0);
+        CHECK_EQ(bs.nbSequences, ERROR(externalSequences_invalid));
+    }
+    DISPLAYLEVEL(3, "OK \n");
+
+    DISPLAYLEVEL(3, "test%3u : ZSTD_get1BlockSummary with 1 literal only : ", testNb++);
+    {
+        static const ZSTD_Sequence seqs[] = { { 0, 5, 0, 0 } };
+        BlockSummary bs = ZSTD_get1BlockSummary(seqs, 1);
+        CHECK_EQ(bs.nbSequences, 1);
+        CHECK_EQ(bs.litSize, 5);
+        CHECK_EQ(bs.blockSize, 5);
+    }
+    DISPLAYLEVEL(3, "OK \n");
+
+    DISPLAYLEVEL(3, "test%3u : ZSTD_get1BlockSummary with no terminator : ", testNb++);
+    {
+        static const ZSTD_Sequence seqs[] = { { 10, 2, 4, 0 }, { 20, 3, 5, 0 } };
+        BlockSummary bs = ZSTD_get1BlockSummary(seqs, 2);
+        CHECK_EQ(bs.nbSequences, ERROR(externalSequences_invalid));
+    }
+    DISPLAYLEVEL(3, "OK \n");
+
+    DISPLAYLEVEL(3, "test%3u : ZSTD_get1BlockSummary with rep ignored : ", testNb++);
+    {
+        static const ZSTD_Sequence seqs[] = {
+            { 10, 2, 4, 2 },
+            { 10, 3, 5, 2 },
+            { 0, 7, 0, 3 },
+        };
+        BlockSummary bs = ZSTD_get1BlockSummary(seqs, 3);
+        CHECK_EQ(bs.nbSequences, 3);
+        CHECK_EQ(bs.litSize, 2 + 3 + 7);
+        CHECK_EQ(bs.blockSize, (4 + 5) + (2 + 3 + 7));
+    }
+    DISPLAYLEVEL(3, "OK \n");
+
+    assert(COUNTOF(nseqs) > COUNTOF(blocks));
+    for (i = 0; i < COUNTOF(blocks); ++i) {
+        BlockSummary bs;
+        DISPLAYLEVEL(3, "test%3u : ZSTD_get1BlockSummary with %u inputs : ",
+                     testNb++, (unsigned)(COUNTOF(nseqs) - i));
+        bs = ZSTD_get1BlockSummary(nseqs + i, COUNTOF(nseqs) - i);
+        CHECK_EQ(bs.nbSequences, blocks[i].nbSequences);
+        CHECK_EQ(bs.litSize, blocks[i].litSize);
+        CHECK_EQ(bs.blockSize, blocks[i].blockSize);
+        DISPLAYLEVEL(3, "OK \n");
+    }
+
+    return testNb;
+}
+
 /* ============================================================= */
 
 static int basicUnitTests(U32 const seed, double compressibility)
@@ -711,6 +1040,8 @@ static int basicUnitTests(U32 const seed, double compressibility)
         if (params.chainLog != 17) goto _output_error;
     }
     DISPLAYLEVEL(3, "OK \n");
+
+    testNb = test_histCountWksp(seed, testNb);
 
     DISPLAYLEVEL(3, "test%3u : compress %u bytes : ", testNb++, (unsigned)CNBuffSize);
     {   ZSTD_CCtx* const cctx = ZSTD_createCCtx();
@@ -3877,6 +4208,10 @@ static int basicUnitTests(U32 const seed, double compressibility)
         free(seqs);
     }
     DISPLAYLEVEL(3, "OK \n");
+
+    testNb = test_convertSequences_noRepcodes(seed, testNb);
+
+    testNb = test_get1BlockSummary(testNb);
 
     DISPLAYLEVEL(3, "test%3i : ZSTD_compressSequencesAndLiterals : ", testNb++);
     {

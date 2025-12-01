@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -78,39 +78,39 @@ const UIStrings = {
    */
   consoleWasCleared: 'Console was cleared',
   /**
-   *@description Message element title in Console View Message of the Console panel
-   *@example {Ctrl+L} PH1
+   * @description Message element title in Console View Message of the Console panel
+   * @example {Ctrl+L} PH1
    */
   clearAllMessagesWithS: 'Clear all messages with {PH1}',
   /**
-   *@description Message prefix in Console View Message of the Console panel
+   * @description Message prefix in Console View Message of the Console panel
    */
   assertionFailed: 'Assertion failed: ',
   /**
-   *@description Message text in Console View Message of the Console panel
-   *@example {console.log(1)} PH1
+   * @description Message text in Console View Message of the Console panel
+   * @example {console.log(1)} PH1
    */
   violationS: '`[Violation]` {PH1}',
   /**
-   *@description Message text in Console View Message of the Console panel
-   *@example {console.log(1)} PH1
+   * @description Message text in Console View Message of the Console panel
+   * @example {console.log(1)} PH1
    */
   interventionS: '`[Intervention]` {PH1}',
   /**
-   *@description Message text in Console View Message of the Console panel
-   *@example {console.log(1)} PH1
+   * @description Message text in Console View Message of the Console panel
+   * @example {console.log(1)} PH1
    */
   deprecationS: '`[Deprecation]` {PH1}',
   /**
-   *@description Note title in Console View Message of the Console panel
+   * @description Note title in Console View Message of the Console panel
    */
   thisValueWillNotBeCollectedUntil: 'This value will not be collected until console is cleared.',
   /**
-   *@description Note title in Console View Message of the Console panel
+   * @description Note title in Console View Message of the Console panel
    */
   thisValueWasEvaluatedUponFirst: 'This value was evaluated upon first expanding. It may have changed since then.',
   /**
-   *@description Note title in Console View Message of the Console panel
+   * @description Note title in Console View Message of the Console panel
    */
   functionWasResolvedFromBound: 'Function was resolved from bound function.',
   /**
@@ -119,11 +119,11 @@ const UIStrings = {
    */
   exception: '<exception>',
   /**
-   *@description Text to indicate an item is a warning
+   * @description Text to indicate an item is a warning
    */
   warning: 'Warning',
   /**
-   *@description Text for errors
+   * @description Text for errors
    */
   error: 'Error',
   /**
@@ -153,71 +153,71 @@ const UIStrings = {
    */
   errorS: '{n, plural, =1 {Error, Repeated # time} other {Error, Repeated # times}}',
   /**
-   *@description Text appended to grouped console messages that are related to URL requests
+   * @description Text appended to grouped console messages that are related to URL requests
    */
   url: '<URL>',
   /**
-   *@description Text appended to grouped console messages about tasks that took longer than N ms
+   * @description Text appended to grouped console messages about tasks that took longer than N ms
    */
   tookNms: 'took <N>ms',
   /**
-   *@description Text appended to grouped console messages about tasks that are related to some DOM event
+   * @description Text appended to grouped console messages about tasks that are related to some DOM event
    */
   someEvent: '<some> event',
   /**
-   *@description Text appended to grouped console messages about tasks that are related to a particular milestone
+   * @description Text appended to grouped console messages about tasks that are related to a particular milestone
    */
   Mxx: ' M<XX>',
   /**
-   *@description Text appended to grouped console messages about tasks that are related to autofill completions
+   * @description Text appended to grouped console messages about tasks that are related to autofill completions
    */
   attribute: '<attribute>',
   /**
-   *@description Text for the index of something
+   * @description Text for the index of something
    */
   index: '(index)',
   /**
-   *@description Text for the value of something
+   * @description Text for the value of something
    */
   value: 'Value',
   /**
-   *@description Title of the Console tool
+   * @description Title of the Console tool
    */
   console: 'Console',
   /**
-   *@description Message to indicate a console message with a stack table is expanded
+   * @description Message to indicate a console message with a stack table is expanded
    */
   stackMessageExpanded: 'Stack table expanded',
   /**
-   *@description Message to indicate a console message with a stack table is collapsed
+   * @description Message to indicate a console message with a stack table is collapsed
    */
   stackMessageCollapsed: 'Stack table collapsed',
   /**
-   *@description Message to offer insights for a console error message
+   * @description Message to offer insights for a console error message
    */
   explainThisError: 'Understand this error',
   /**
-   *@description Message to offer insights for a console warning message
+   * @description Message to offer insights for a console warning message
    */
   explainThisWarning: 'Understand this warning',
   /**
-   *@description Message to offer insights for a console message
+   * @description Message to offer insights for a console message
    */
   explainThisMessage: 'Understand this message',
   /**
-   *@description Message to offer insights for a console error message
+   * @description Message to offer insights for a console error message
    */
   explainThisErrorWithAI: 'Understand this error. Powered by AI.',
   /**
-   *@description Message to offer insights for a console warning message
+   * @description Message to offer insights for a console warning message
    */
   explainThisWarningWithAI: 'Understand this warning. Powered by AI.',
   /**
-   *@description Message to offer insights for a console message
+   * @description Message to offer insights for a console message
    */
   explainThisMessageWithAI: 'Understand this message. Powered by AI',
   /**
-   *@description Tooltip shown when user hovers over the cookie icon to explain that the button will bring the user to the cookie report
+   * @description Tooltip shown when user hovers over the cookie icon to explain that the button will bring the user to the cookie report
    */
   SeeIssueInCookieReport: 'Click to open privacy and security panel and show third-party cookie report',
 } as const;
@@ -233,8 +233,8 @@ export const getMessageForElement = (element: Element): ConsoleViewMessage|undef
  * Combines the error description (essentially the `Error#stack` property value)
  * with the `issueSummary`.
  *
- * @param description - the `description` property of the `Error` remote object.
- * @param issueSummary - the optional `issueSummary` of the `exceptionMetaData`.
+ * @param description the `description` property of the `Error` remote object.
+ * @param issueSummary the optional `issueSummary` of the `exceptionMetaData`.
  * @returns the enriched description.
  * @see https://goo.gle/devtools-reduce-network-noise-design
  */
@@ -289,7 +289,8 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     element: HTMLElement,
     forceSelect: () => void,
   }>;
-  private readonly messageResized: (arg0: Common.EventTarget.EventTargetEvent<UI.TreeOutline.TreeElement>) => void;
+  private readonly messageResized:
+      (arg0: Common.EventTarget.EventTargetEvent<HTMLElement|UI.TreeOutline.TreeElement>) => void;
   // The wrapper that contains consoleRowWrapper and other elements in a column.
   protected elementInternal: HTMLElement|null;
   // The element that wraps console message elements in a row.
@@ -323,7 +324,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
   constructor(
       consoleMessage: SDK.ConsoleModel.ConsoleMessage, linkifier: Components.Linkifier.Linkifier,
       requestResolver: Logs.RequestResolver.RequestResolver, issueResolver: IssuesManager.IssueResolver.IssueResolver,
-      onResize: (arg0: Common.EventTarget.EventTargetEvent<UI.TreeOutline.TreeElement>) => void) {
+      onResize: (arg0: Common.EventTarget.EventTargetEvent<HTMLElement|UI.TreeOutline.TreeElement>) => void) {
     this.message = consoleMessage;
     this.linkifier = linkifier;
     this.requestResolver = requestResolver;
@@ -662,7 +663,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
       if (UI.UIUtils.isEditing() || contentElement.hasSelection()) {
         return;
       }
-      this.expandTrace && this.expandTrace(stackTraceElement.classList.contains('hidden-stack-trace'));
+      this.expandTrace?.(stackTraceElement.classList.contains('hidden-stack-trace'));
       event.consume();
     };
 
@@ -943,15 +944,14 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
         result.appendChild(this.formatParameterAsObject(remoteObject, false));
         return;
       }
-      const renderResult = await UI.UIUtils.Renderer.render((node as Object));
+      const renderResult = await UI.UIUtils.Renderer.render(node);
       if (renderResult) {
-        if (renderResult.tree) {
-          this.selectableChildren.push(renderResult.tree);
-          renderResult.tree.addEventListener(UI.TreeOutline.Events.ElementAttached, this.messageResized);
-          renderResult.tree.addEventListener(UI.TreeOutline.Events.ElementExpanded, this.messageResized);
-          renderResult.tree.addEventListener(UI.TreeOutline.Events.ElementCollapsed, this.messageResized);
-        }
-        result.appendChild(renderResult.node);
+        this.selectableChildren.push(renderResult);
+        const resizeObserver = new ResizeObserver(() => {
+          this.messageResized({data: renderResult.element});
+        });
+        resizeObserver.observe(renderResult.element);
+        result.appendChild(renderResult.element);
       } else {
         result.appendChild(this.formatParameterAsObject(remoteObject, false));
       }
@@ -1229,7 +1229,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     }
 
     if (event.key === 'ArrowLeft') {
-      this.elementInternal && this.elementInternal.focus();
+      this.elementInternal?.focus();
       return true;
     }
     if (event.key === 'ArrowRight') {
@@ -1240,7 +1240,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     if (event.key === 'ArrowUp') {
       const firstVisibleChild = this.nearestVisibleChild(0);
       if (this.selectableChildren[focusedChildIndex] === firstVisibleChild && firstVisibleChild) {
-        this.elementInternal && this.elementInternal.focus();
+        this.elementInternal?.focus();
         return true;
       }
       if (this.selectNearestVisibleChild(focusedChildIndex - 1, true /* backwards */)) {
@@ -1462,12 +1462,9 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
 
   #createHoverButton(): HTMLButtonElement {
     const icon = new IconButton.Icon.Icon();
-    icon.data = {
-      iconName: 'lightbulb-spark',
-      color: 'var(--devtools-icon-color)',
-      width: '16px',
-      height: '16px',
-    };
+    icon.name = 'lightbulb-spark';
+    icon.style.color = 'var(--devtools-icon-color)';
+    icon.classList.add('medium');
     const button = document.createElement('button');
     button.append(icon);
     button.onclick = (event: Event) => {
@@ -1507,15 +1504,13 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
       this.messageIcon = null;
     }
 
-    let color = '';
+    const color = '';
     let iconName = '';
     let accessibleName = '';
     if (this.message.level === Protocol.Log.LogEntryLevel.Warning) {
-      color = 'var(--icon-warning)';
       iconName = 'warning-filled';
       accessibleName = i18nString(UIStrings.warning);
     } else if (this.message.level === Protocol.Log.LogEntryLevel.Error) {
-      color = 'var(--icon-error)';
       iconName = 'cross-circle-filled';
       accessibleName = i18nString(UIStrings.error);
     } else if (this.message.originatesFromLogpoint) {
@@ -1530,13 +1525,9 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     }
 
     this.messageIcon = new IconButton.Icon.Icon();
-    this.messageIcon.data = {
-      iconName,
-      color,
-      width: '14px',
-      height: '14px',
-    };
-    this.messageIcon.classList.add('message-level-icon');
+    this.messageIcon.name = iconName;
+    this.messageIcon.style.color = color;
+    this.messageIcon.classList.add('message-level-icon', 'small');
     if (this.contentElementInternal) {
       this.contentElementInternal.insertBefore(this.messageIcon, this.contentElementInternal.firstChild);
     }
@@ -1976,7 +1967,8 @@ export class ConsoleGroupViewMessage extends ConsoleViewMessage {
   constructor(
       consoleMessage: SDK.ConsoleModel.ConsoleMessage, linkifier: Components.Linkifier.Linkifier,
       requestResolver: Logs.RequestResolver.RequestResolver, issueResolver: IssuesManager.IssueResolver.IssueResolver,
-      onToggle: () => void, onResize: (arg0: Common.EventTarget.EventTargetEvent<UI.TreeOutline.TreeElement>) => void) {
+      onToggle: () => void,
+      onResize: (arg0: Common.EventTarget.EventTargetEvent<HTMLElement|UI.TreeOutline.TreeElement>) => void) {
     console.assert(consoleMessage.isGroupStartMessage());
     super(consoleMessage, linkifier, requestResolver, issueResolver, onResize);
     this.collapsedInternal = consoleMessage.type === Protocol.Runtime.ConsoleAPICalledEventType.StartGroupCollapsed;
@@ -2063,7 +2055,7 @@ export class ConsoleCommand extends ConsoleViewMessage {
   constructor(
       consoleMessage: SDK.ConsoleModel.ConsoleMessage, linkifier: Components.Linkifier.Linkifier,
       requestResolver: Logs.RequestResolver.RequestResolver, issueResolver: IssuesManager.IssueResolver.IssueResolver,
-      onResize: (arg0: Common.EventTarget.EventTargetEvent<UI.TreeOutline.TreeElement>) => void) {
+      onResize: (arg0: Common.EventTarget.EventTargetEvent<HTMLElement|UI.TreeOutline.TreeElement>) => void) {
     super(consoleMessage, linkifier, requestResolver, issueResolver, onResize);
     this.formattedCommand = null;
   }
@@ -2077,8 +2069,8 @@ export class ConsoleCommand extends ConsoleViewMessage {
     this.setContentElement(newContentElement);
     newContentElement.classList.add('console-user-command');
     const userCommandIcon = new IconButton.Icon.Icon();
-    userCommandIcon.data = {iconName: 'chevron-right', color: 'var(--icon-default)', width: '16px', height: '16px'};
-    userCommandIcon.classList.add('command-result-icon');
+    userCommandIcon.name = 'chevron-right';
+    userCommandIcon.classList.add('command-result-icon', 'medium');
     newContentElement.appendChild(userCommandIcon);
 
     elementToMessage.set(newContentElement, this);
@@ -2110,8 +2102,8 @@ export class ConsoleCommandResult extends ConsoleViewMessage {
       element.classList.add('console-user-command-result');
       if (this.consoleMessage().level === Protocol.Log.LogEntryLevel.Info) {
         const icon = new IconButton.Icon.Icon();
-        icon.data = {iconName: 'chevron-left-dot', color: 'var(--icon-default)', width: '16px', height: '16px'};
-        icon.classList.add('command-result-icon');
+        icon.name = 'chevron-left-dot';
+        icon.classList.add('command-result-icon', 'medium');
         element.insertBefore(icon, element.firstChild);
       }
     }
@@ -2125,7 +2117,7 @@ export class ConsoleTableMessageView extends ConsoleViewMessage {
   constructor(
       consoleMessage: SDK.ConsoleModel.ConsoleMessage, linkifier: Components.Linkifier.Linkifier,
       requestResolver: Logs.RequestResolver.RequestResolver, issueResolver: IssuesManager.IssueResolver.IssueResolver,
-      onResize: (arg0: Common.EventTarget.EventTargetEvent<UI.TreeOutline.TreeElement>) => void) {
+      onResize: (arg0: Common.EventTarget.EventTargetEvent<HTMLElement|UI.TreeOutline.TreeElement>) => void) {
     super(consoleMessage, linkifier, requestResolver, issueResolver, onResize);
     console.assert(consoleMessage.type === Protocol.Runtime.ConsoleAPICalledEventType.Table);
     this.dataGrid = null;

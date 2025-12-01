@@ -128,10 +128,10 @@ static int FUNC(tile_info)(CodedBitstreamContext *ctx, RWContext *rw,
 
     ub(1, tile_size_present_in_fh_flag);
 
-    cbs_apv_derive_tile_info(&priv->tile_info, fh);
+    cbs_apv_derive_tile_info(ctx, fh);
 
     if (current->tile_size_present_in_fh_flag) {
-        for (int t = 0; t < priv->tile_info.num_tiles; t++) {
+        for (int t = 0; t < priv->num_tiles; t++) {
             us(32, tile_size_in_fh[t], 10, MAX_UINT_BITS(32), 1, t);
         }
     }
@@ -236,6 +236,8 @@ static int FUNC(tile)(CodedBitstreamContext *ctx, RWContext *rw,
 #ifdef READ
         int pos = get_bits_count(rw);
         av_assert0(pos % 8 == 0);
+        if (get_bits_left(rw) < 8LL * comp_size)
+            return AVERROR_INVALIDDATA;
         current->tile_data[c] = (uint8_t*)align_get_bits(rw);
         skip_bits_long(rw, 8 * comp_size);
 #else
@@ -260,7 +262,7 @@ static int FUNC(frame)(CodedBitstreamContext *ctx, RWContext *rw,
 
     CHECK(FUNC(frame_header)(ctx, rw, &current->frame_header));
 
-    for (int t = 0; t < priv->tile_info.num_tiles; t++) {
+    for (int t = 0; t < priv->num_tiles; t++) {
         us(32, tile_size[t], 10, MAX_UINT_BITS(32), 1, t);
 
         CHECK(FUNC(tile)(ctx, rw, &current->tile[t],

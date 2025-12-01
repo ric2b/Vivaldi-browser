@@ -16,12 +16,12 @@
 
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "sharing/certificates/nearby_share_certificate_storage.h"
@@ -109,18 +109,20 @@ void FakeNearbyShareCertificateStorage::GetPublicCertificate(
   get_public_certificate_callback_ = std::move(callback);
 }
 
-std::optional<std::vector<NearbySharePrivateCertificate>>
-FakeNearbyShareCertificateStorage::GetPrivateCertificates() const {
+std::vector<NearbySharePrivateCertificate>
+FakeNearbyShareCertificateStorage::GetPrivateCertificates() {
+  absl::MutexLock lock(mutex_);
   return private_certificates_;
 }
 
-std::optional<absl::Time>
+absl::Time
 FakeNearbyShareCertificateStorage::NextPublicCertificateExpirationTime() const {
   return next_public_certificate_expiration_time_;
 }
 
 void FakeNearbyShareCertificateStorage::ReplacePrivateCertificates(
     absl::Span<const NearbySharePrivateCertificate> private_certificates) {
+  absl::MutexLock lock(mutex_);
   private_certificates_ = std::vector<NearbySharePrivateCertificate>(
       private_certificates.begin(), private_certificates.end());
 }
@@ -156,7 +158,7 @@ void FakeNearbyShareCertificateStorage::SetPublicCertificateIds(
 }
 
 void FakeNearbyShareCertificateStorage::SetNextPublicCertificateExpirationTime(
-    std::optional<absl::Time> time) {
+    absl::Time time) {
   next_public_certificate_expiration_time_ = time;
 }
 

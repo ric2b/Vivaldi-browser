@@ -27,18 +27,20 @@
 #include <io.h>
 #include <wchar.h>
 #include <windows.h>
+
+// shellapi.h must be included after windows.h.
 #include <shellapi.h>
 
 // Create a wchar_t array containing Unicode parameters.
-#define INIT_WARGV(ARGC, ARGV)                                                \
-  int wargc;                                                                  \
-  const W_CHAR** const wargv =                                                \
-      (const W_CHAR**)CommandLineToArgvW(GetCommandLineW(), &wargc);          \
-  do {                                                                        \
-    if (wargv == NULL || wargc != (ARGC)) {                                   \
-      fprintf(stderr, "Error: Unable to get Unicode arguments.\n");           \
-      FREE_WARGV_AND_RETURN(-1);                                              \
-    }                                                                         \
+#define INIT_WARGV(ARGC, ARGV)                                       \
+  int wargc;                                                         \
+  const W_CHAR** const wargv =                                       \
+      (const W_CHAR**)CommandLineToArgvW(GetCommandLineW(), &wargc); \
+  do {                                                               \
+    if (wargv == NULL || wargc != (ARGC)) {                          \
+      fprintf(stderr, "Error: Unable to get Unicode arguments.\n");  \
+      FREE_WARGV_AND_RETURN(-1);                                     \
+    }                                                                \
   } while (0)
 
 // Use this to get a Unicode argument (e.g. file path).
@@ -48,7 +50,7 @@
 #define GET_WARGV_OR_NULL() wargv
 
 // Release resources. LocalFree() is needed after CommandLineToArgvW().
-#define FREE_WARGV() LOCAL_FREE((W_CHAR** const)wargv)
+#define FREE_WARGV() LOCAL_FREE((W_CHAR**)wargv)
 #define LOCAL_FREE(WARGV)                  \
   do {                                     \
     if ((WARGV) != NULL) LocalFree(WARGV); \

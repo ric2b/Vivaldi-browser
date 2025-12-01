@@ -7,6 +7,7 @@
 #include <memory>
 #include <sstream>
 #include <utility>
+#include <vector>
 
 #include "gn/config.h"
 #include "gn/ninja_target_command_util.h"
@@ -597,6 +598,91 @@ TEST_F(CompileCommandsTest, EscapedFlags) {
       "]\n";
 #endif
   EXPECT_EQ(expected, out);
+}
+
+TEST_F(CompileCommandsTest, ModuleMap) {
+  Err err;
+
+  // This setup's toolchain does not have precompiled headers defined.
+  // A precompiled header toolchain.
+  Settings module_settings(build_settings(), "withmodules/");
+  Toolchain module_toolchain(&module_settings,
+                             Label(SourceDir("//toolchain/"), "withmodules"));
+  module_settings.set_toolchain_label(module_toolchain.label());
+  module_settings.set_default_toolchain_label(toolchain()->label());
+
+  // Declare a C++ compiler that supports PCH.
+  std::unique_ptr<Tool> cxx = Tool::CreateTool(CTool::kCToolCxx);
+  CTool* cxx_tool = cxx->AsC();
+  TestWithScope::SetCommandForTool(
+      "c++ {{source}} {{cflags}} {{cflags_cc}} {{module_deps}} "
+      "{{defines}} {{include_dirs}} -o {{output}}",
+      cxx_tool);
+  cxx_tool->set_outputs(SubstitutionList::MakeForTest(
+      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
+  module_toolchain.SetTool(std::move(cxx));
+
+  std::unique_ptr<Tool> cxx_module_tool =
+      Tool::CreateTool(CTool::kCToolCxxModule);
+  TestWithScope::SetCommandForTool(
+      "c++ {{source}} {{cflags}} {{cflags_cc}} {{module_deps_no_self}} "
+      "{{defines}} {{include_dirs}} -fmodule-name={{label}} -c -x c++ "
+      "-Xclang -emit-module -o {{output}}",
+      cxx_module_tool.get());
+  cxx_module_tool->set_outputs(SubstitutionList::MakeForTest(
+      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.pcm"));
+  module_toolchain.SetTool(std::move(cxx_module_tool));
+
+  module_toolchain.ToolchainSetupComplete();
+
+  Target module_target(&module_settings, Label(SourceDir("//foo/"), "module"));
+  module_target.set_output_type(Target::SOURCE_SET);
+  module_target.visibility().SetPublic();
+  module_target.sources().push_back(SourceFile("//foo/foo.modulemap"));
+  module_target.source_types_used().Set(SourceFile::SOURCE_MODULEMAP);
+  module_target.SetToolchain(&module_toolchain);
+  ASSERT_TRUE(module_target.OnResolved(&err));
+
+  Target dep_target(&module_settings, Label(SourceDir("//foo/"), "dep"));
+  dep_target.set_output_type(Target::SOURCE_SET);
+  dep_target.visibility().SetPublic();
+  dep_target.sources().push_back(SourceFile("//foo/dep.cc"));
+  dep_target.source_types_used().Set(SourceFile::SOURCE_CPP);
+  dep_target.public_deps().push_back(LabelTargetPair(&module_target));
+  dep_target.SetToolchain(&module_toolchain);
+  ASSERT_TRUE(dep_target.OnResolved(&err));
+
+  std::vector<const Target*> targets;
+  targets.push_back(&module_target);
+  targets.push_back(&dep_target);
+
+  CompileCommandsWriter writer;
+  std::string out = writer.RenderJSON(build_settings(), targets);
+
+#if defined(OS_WIN)
+  const char expected[] =
+      "[\r\n"
+      "  {\r\n"
+      "    \"file\": \"../../foo/dep.cc\",\r\n"
+      "    \"directory\": \"out/Debug\",\r\n"
+      "    \"command\": \"c++ ../../foo/dep.cc    "
+      "-fmodule-file=withmodules/obj/foo/module.foo.pcm   -o  "
+      "withmodules/obj/foo/dep.dep.o\"\r\n"
+      "  }\r\n"
+      "]\r\n";
+#else
+  const char expected[] =
+      "[\n"
+      "  {\n"
+      "    \"file\": \"../../foo/dep.cc\",\n"
+      "    \"directory\": \"out/Debug\",\n"
+      "    \"command\": \"c++ ../../foo/dep.cc    "
+      "-fmodule-file=withmodules/obj/foo/module.foo.pcm   -o  "
+      "withmodules/obj/foo/dep.dep.o\"\n"
+      "  }\n"
+      "]\n";
+#endif
+  EXPECT_EQ(expected, out) << expected << "\n" << out;
 }
 
 TEST_F(CompileCommandsTest, CollectTargets) {

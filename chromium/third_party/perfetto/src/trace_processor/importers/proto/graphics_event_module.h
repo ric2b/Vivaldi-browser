@@ -18,23 +18,32 @@
 #define SRC_TRACE_PROCESSOR_IMPORTERS_PROTO_GRAPHICS_EVENT_MODULE_H_
 
 #include <cstdint>
-#include "perfetto/base/build_config.h"
+
+#include "perfetto/trace_processor/ref_counted.h"
 #include "src/trace_processor/importers/common/parser_types.h"
 #include "src/trace_processor/importers/proto/frame_timeline_event_parser.h"
 #include "src/trace_processor/importers/proto/gpu_event_parser.h"
 #include "src/trace_processor/importers/proto/graphics_frame_event_parser.h"
+#include "src/trace_processor/importers/proto/packet_sequence_state_generation.h"
 #include "src/trace_processor/importers/proto/proto_importer_module.h"
 
 #include "protos/perfetto/trace/trace_packet.pbzero.h"
 
-namespace perfetto {
-namespace trace_processor {
+namespace perfetto::trace_processor {
 
 class GraphicsEventModule : public ProtoImporterModule {
  public:
-  explicit GraphicsEventModule(TraceProcessorContext* context);
+  explicit GraphicsEventModule(ProtoImporterModuleContext* module_context,
+                               TraceProcessorContext* context);
 
   ~GraphicsEventModule() override;
+
+  ModuleResult TokenizePacket(
+      const protos::pbzero::TracePacket_Decoder&,
+      TraceBlobView* packet,
+      int64_t packet_timestamp,
+      RefPtr<PacketSequenceStateGeneration> sequence_state,
+      uint32_t field_id) override;
 
   void ParseTracePacketData(const protos::pbzero::TracePacket::Decoder&,
                             int64_t ts,
@@ -47,7 +56,6 @@ class GraphicsEventModule : public ProtoImporterModule {
   FrameTimelineEventParser frame_timeline_parser_;
 };
 
-}  // namespace trace_processor
-}  // namespace perfetto
+}  // namespace perfetto::trace_processor
 
 #endif  // SRC_TRACE_PROCESSOR_IMPORTERS_PROTO_GRAPHICS_EVENT_MODULE_H_

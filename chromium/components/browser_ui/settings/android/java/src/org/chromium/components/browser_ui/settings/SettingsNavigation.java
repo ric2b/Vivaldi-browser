@@ -31,10 +31,11 @@ public interface SettingsNavigation {
         SettingsFragment.GOOGLE_SERVICES,
         SettingsFragment.MANAGE_SYNC,
         SettingsFragment.FINANCIAL_ACCOUNTS,
-        SettingsFragment.NON_CARD_PAYMENT_METHODS
+        SettingsFragment.NON_CARD_PAYMENT_METHODS,
+        SettingsFragment.PASSWORDS // Vivaldi
     })
     @Retention(RetentionPolicy.SOURCE)
-    public @interface SettingsFragment {
+    @interface SettingsFragment {
         /// Main settings page.
         int MAIN = 0;
         /// Browsing Data management.
@@ -55,6 +56,8 @@ public interface SettingsNavigation {
         int FINANCIAL_ACCOUNTS = 8;
         /// Non-card payment methods.
         int NON_CARD_PAYMENT_METHODS = 9;
+        // Vivaldi Password Manager
+        int PASSWORDS = 99;
     }
 
     /**

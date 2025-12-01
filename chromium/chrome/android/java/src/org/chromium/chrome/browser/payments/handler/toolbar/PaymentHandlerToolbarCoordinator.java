@@ -9,9 +9,8 @@ import android.view.Gravity;
 import android.view.View;
 
 import androidx.annotation.DrawableRes;
-import androidx.annotation.NonNull;
 
-import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.page_info.ChromePageInfoControllerDelegate;
 import org.chromium.chrome.browser.page_info.ChromePageInfoHighlight;
@@ -27,12 +26,15 @@ import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 import org.chromium.url.GURL;
 
+import java.util.function.Supplier;
+
 /**
  * PaymentHandlerToolbar coordinator, which owns the component overall, i.e., creates other objects
  * in the component and connects them. It decouples the implementation of this component from other
  * components and acts as the point of contact between them. Any code in this component that needs
  * to interact with another component does that through this coordinator.
  */
+@NullMarked
 public class PaymentHandlerToolbarCoordinator implements PaymentHandlerToolbarMediatorDelegate {
     private final WebContents mWebContents;
     private final Activity mActivity;
@@ -50,17 +52,18 @@ public class PaymentHandlerToolbarCoordinator implements PaymentHandlerToolbarMe
 
     /**
      * Constructs the payment-handler toolbar component coordinator.
+     *
      * @param activity The main activity.
      * @param webContents The {@link WebContents} of the payment handler app.
      * @param url The url of the payment handler app, i.e., that of
-     *         "PaymentRequestEvent.openWindow(url)".
+     *     "PaymentRequestEvent.openWindow(url)".
      * @param modalDialogManagerSupplier Supplies the {@link ModalDialogManager}.
      */
     public PaymentHandlerToolbarCoordinator(
-            @NonNull Activity activity,
-            @NonNull WebContents webContents,
-            @NonNull GURL url,
-            @NonNull Supplier<ModalDialogManager> modalDialogManagerSupplier) {
+            Activity activity,
+            WebContents webContents,
+            GURL url,
+            Supplier<ModalDialogManager> modalDialogManagerSupplier) {
         assert activity != null;
         assert webContents != null;
         assert url != null;
@@ -157,23 +160,15 @@ public class PaymentHandlerToolbarCoordinator implements PaymentHandlerToolbarMe
         // storeInfoActionHandlerSupplier or ephemeralTabCoordinatorSupplier and don't show
         // "store info" row because this UI is already in a bottom sheet and clicking "store info"
         // row would trigger another bottom sheet.
-        PageInfoController.show(
-                mActivity,
-                mWebContents,
-                null,
-                PageInfoController.OpenedFromSource.TOOLBAR,
-                new ChromePageInfoControllerDelegate(
-                        mActivity,
-                        mWebContents,
+        PageInfoController.show(mActivity, mWebContents,
+                /* contentPublisher= */ null, PageInfoController.OpenedFromSource.TOOLBAR,
+                new ChromePageInfoControllerDelegate(mActivity, mWebContents,
                         mModalDialogManagerSupplier,
-                        /* offlinePageLoadUrlDelegate= */ new OfflinePageUtils
-                                .WebContentsOfflinePageLoadUrlDelegate(mWebContents),
+                        /* offlinePageLoadUrlDelegate= */
+                        new OfflinePageUtils.WebContentsOfflinePageLoadUrlDelegate(mWebContents),
                         /* storeInfoActionHandlerSupplier= */ null,
                         /* ephemeralTabCoordinatorSupplier= */ null,
-                        ChromePageInfoHighlight.noHighlight(),
-                        null),
-                ChromePageInfoHighlight.noHighlight(),
-                Gravity.TOP,
-                null); // Vivaldi
+                        ChromePageInfoHighlight.noHighlight(), null),
+                ChromePageInfoHighlight.noHighlight(), Gravity.TOP, () -> {}); // Vivaldi
     }
 }

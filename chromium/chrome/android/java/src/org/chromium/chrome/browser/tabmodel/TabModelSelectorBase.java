@@ -147,12 +147,13 @@ public abstract class TabModelSelectorBase
     }
 
     /**
-     * Should be called once the native library is loaded so that the actual internals of this
-     * class can be initialized.
+     * Should be called once the native library is loaded so that the actual internals of this class
+     * can be initialized.
      *
      * @param tabContentProvider A {@link TabContentManager} instance.
      */
-    public void onNativeLibraryReady(TabContentManager tabContentProvider) {}
+    public void onNativeLibraryReady(
+            TabContentManager tabContentProvider, boolean wasTabCollectionsActive) {}
 
     @Override
     public void onTabsViewShown() {}
@@ -362,6 +363,15 @@ public abstract class TabModelSelectorBase
         int count = 0;
         for (int i = 0; i < getModels().size(); i++) {
             count += mTabModelInternals.get(i).getCount();
+        }
+        return count;
+    }
+
+    @Override
+    public int getTotalPinnedTabCount() {
+        int count = 0;
+        for (int i = 0; i < getModels().size(); i++) {
+            count += mTabModelInternals.get(i).getPinnedTabsCount();
         }
         return count;
     }

@@ -312,12 +312,9 @@ Tagged<Object> SwissNameDictionary::ValueAt(InternalIndex entry) {
 
 std::optional<Tagged<Object>> SwissNameDictionary::TryValueAt(
     InternalIndex entry) {
-#if DEBUG
-  Isolate* isolate;
-  GetIsolateFromHeapObject(*this, &isolate);
-  DCHECK_NE(isolate, nullptr);
-  SLOW_DCHECK(!isolate->heap()->IsPendingAllocation(Tagged(*this)));
-#endif  // DEBUG
+  SLOW_DCHECK(Isolate::Current()->heap() ==
+              Heap::FromWritableHeapObject(*this));
+  SLOW_DCHECK(Isolate::Current()->heap()->IsPendingAllocation(Tagged(*this)));
   // We can read Capacity() in a non-atomic way since we are reading an
   // initialized object which is not pending allocation.
   if (static_cast<unsigned>(entry.as_int()) >=
@@ -576,8 +573,10 @@ void SwissNameDictionary::Initialize(IsolateT* isolate,
 
   memset(CtrlTable(), Ctrl::kEmpty, CtrlTableSize(capacity));
 
-  MemsetTagged(RawField(DataTableStartOffset()), roots.the_hole_value(),
-               capacity * kDataTableEntryCount);
+  if (capacity > 0) {
+    MemsetTagged(RawField(DataTableStartOffset()), roots.the_hole_value(),
+                 capacity * kDataTableEntryCount);
+  }
 
   set_meta_table(meta_table);
 
@@ -655,9 +654,8 @@ SwissNameDictionary::IterateEntriesOrdered() {
     return IndexIterable(DirectHandle<SwissNameDictionary>::null());
   }
 
-  Isolate* isolate;
-  GetIsolateFromHeapObject(*this, &isolate);
-  DCHECK_NE(isolate, nullptr);
+  Isolate* isolate = Isolate::Current();
+  DCHECK_EQ(isolate, Heap::FromWritableHeapObject(*this)->isolate());
   return IndexIterable(direct_handle(*this, isolate));
 }
 

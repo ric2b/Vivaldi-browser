@@ -8,7 +8,6 @@ from PB.go.chromium.org.luci.common.proto.findings import findings as findings_p
 from recipe_engine import post_process
 
 
-PYTHON_VERSION_COMPATIBILITY = 'PY3'
 
 DEPS = [
     'gclient',

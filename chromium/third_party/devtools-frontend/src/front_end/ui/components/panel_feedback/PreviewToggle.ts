@@ -1,4 +1,4 @@
-// Copyright (c) 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -22,15 +22,15 @@ export interface PreviewToggleData {
 
 const UIStrings = {
   /**
-   *@description Link text the user can click to provide feedback to the team.
+   * @description Link text the user can click to provide feedback to the team.
    */
   previewTextFeedbackLink: 'Send us your feedback.',
   /**
-   *@description Link text the user can click to provide feedback to the team.
+   * @description Link text the user can click to provide feedback to the team.
    */
   shortFeedbackLink: 'Send feedback',
   /**
-   *@description Link text the user can click to see documentation.
+   * @description Link text the user can click to see documentation.
    */
   learnMoreLink: 'Learn More',
 } as const;
@@ -70,12 +70,7 @@ export class PreviewToggle extends HTMLElement {
             ?checked=${checked}
             @change=${this.#checkboxChanged}
             aria-label=${this.#name} />
-            <devtools-icon .data=${{
-              iconName: 'experiment',
-              width: '16px',
-              height: '16px',
-              color: 'var(--icon-default)',
-            }}>
+            <devtools-icon name="experiment" class="medium">
           </devtools-icon>${this.#name}
           </devtools-checkbox>
         <div class="spacer"></div>

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <condition_variable>  // NOLINT(build/c++11)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -33,6 +34,11 @@
 #include <benchmark/benchmark.h>
 #include <pthreadpool.h>
 
+#if XNN_PLATFORM_QURT
+#include <qurt.h>
+#include <HAP_power.h>
+#endif
+
 // Common flags for all benchmarks.
 int FLAGS_num_threads = 1;
 int FLAGS_batch_size = 1;
@@ -46,7 +52,7 @@ namespace {
 static void* wipe_buffer = nullptr;
 static size_t wipe_buffer_size = 0;
 
-static std::once_flag wipe_buffer_guard;
+static std::once_flag wipe_buffer_guard;  // NOLINT(build/c++11)
 
 static void InitWipeBuffer() {
 #if XNN_ENABLE_CPUINFO
@@ -93,11 +99,17 @@ void PthreadpoolClearL2Cache(std::atomic<size_t>* counter, size_t id) {
 #else
   WipeCache();
 #endif  // XNN_ENABLE_CPUINFO
-  // Spin until all threads are done. This ensures that each thread calls this
+  // Wait until all threads are done. This ensures that each thread calls this
   // function exactly once.
-  counter->fetch_sub(1, std::memory_order_acquire);
-  while (counter->load(std::memory_order_acquire) > 0) {
-    std::atomic_thread_fence(std::memory_order_acquire);
+  static std::mutex mutex;  // NOLINT(build/c++11)
+  static std::condition_variable cond_var;
+  std::unique_lock<std::mutex> lock(mutex);  // NOLINT(build/c++11)
+  if (counter->fetch_sub(1) == 1) {
+    cond_var.notify_all();
+  } else {
+    while (counter->load() > 0) {
+      cond_var.wait(lock);
+    }
   }
 }
 
@@ -223,7 +235,7 @@ void DisableDenormals() {
 
 // Return clock rate in Hz.
 uint64_t GetCurrentCpuFrequency() {
-#ifdef __linux__
+#if defined(__linux__)
   int freq = 0;
   char cpuinfo_name[512];
   int cpu = sched_getcpu();
@@ -238,7 +250,12 @@ uint64_t GetCurrentCpuFrequency() {
     }
     fclose(f);
   }
-#endif  // __linux__
+#elif XNN_PLATFORM_QURT
+  HAP_power_response_t response = {.type = HAP_power_get_clk_Freq};
+  if (HAP_power_get(NULL, &response) == AEE_SUCCESS) {
+    return static_cast<uint64_t>(response.clkFreqHz);
+  }
+#endif
   return 0;
 }
 

@@ -95,7 +95,6 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #else
 #include "chrome/browser/accessibility/tree_fixing/pref_names.h"
-#include "chrome/browser/profiles/guest_profile_creation_logger.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -257,12 +256,6 @@ void OffTheRecordProfileImpl::Init() {
   if (IsIncognitoProfile())
     base::RecordAction(base::UserMetricsAction("IncognitoMode_Started"));
 
-#if !BUILDFLAG(IS_ANDROID)
-  if (IsGuestSession()) {
-    profile::MaybeRecordGuestChildCreation(this);
-  }
-#endif
-
 #if BUILDFLAG(IS_CHROMEOS)
   if (otr_profile_id_->IsCaptivePortal()) {
     // Set a pref to indicate that the Profile's PrefService is associated
@@ -350,10 +343,6 @@ std::string OffTheRecordProfileImpl::GetProfileUserName() const {
   return std::string();
 }
 
-base::FilePath OffTheRecordProfileImpl::GetPath() {
-  return profile_->GetPath();
-}
-
 base::FilePath OffTheRecordProfileImpl::GetPath() const {
   return profile_->GetPath();
 }
@@ -421,11 +410,6 @@ OffTheRecordProfileImpl::GetExtensionSpecialStoragePolicy() {
 
 bool OffTheRecordProfileImpl::IsChild() const {
   return profile_->IsChild();
-}
-
-bool OffTheRecordProfileImpl::AllowsBrowserWindows() const {
-  return profile_->AllowsBrowserWindows() &&
-         otr_profile_id_->AllowsBrowserWindows();
 }
 
 PrefService* OffTheRecordProfileImpl::GetPrefs() {

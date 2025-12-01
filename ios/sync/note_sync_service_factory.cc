@@ -31,8 +31,7 @@ NoteSyncServiceFactory::NoteSyncServiceFactory()
 NoteSyncServiceFactory::~NoteSyncServiceFactory() {}
 
 std::unique_ptr<KeyedService> NoteSyncServiceFactory::BuildServiceInstanceFor(
-    web::BrowserState* context) const {
-  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
+    ProfileIOS* profile) const {
   auto note_sync_service = std::make_unique<sync_notes::NoteSyncService>(
       SyncedFileStoreFactory::GetForProfile(profile),
       syncer::WipeModelUponSyncDisabledBehavior::kNever);

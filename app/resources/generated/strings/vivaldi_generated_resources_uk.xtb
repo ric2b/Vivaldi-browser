@@ -12,6 +12,7 @@
 <translation id="1163931534039071049">&amp;Переглянути джерело фрейма</translation>
 <translation id="1165039591588034296">Помилка</translation>
 <translation id="1175364870820465910">&amp;Друк...</translation>
+<translation id="1177548198167638471">Більше не питати</translation>
 <translation id="1181037720776840403">Видалити</translation>
 <translation id="1184037892196730210">Не вдалося запустити трансляцію екрана</translation>
 <translation id="1187722533808055681">Вихід зі стану неактивності</translation>
@@ -28,9 +29,10 @@
 <translation id="1451375123200651445">Веб-сторінка, один файл</translation>
 <translation id="1465176863081977902">&amp;Копіювати адресу аудіо</translation>
 <translation id="1476607407192946488">&amp;Налаштування мови</translation>
-<translation id="1546280085599573572">Це розширення змінило сторінку, яка відкривається під час натискання кнопки "Домашня сторінка".</translation>
+<translation id="1478607704480248626">Установка не включена</translation>
 <translation id="1552752544932680961">Налаштування розширення</translation>
 <translation id="15662109988763471">Вибраний принтер недоступний або його встановлено неправильно. Перевірте принтер або спробуйте вибрати інший.</translation>
+<translation id="1581962803218266616">Показати в Finder</translation>
 <translation id="1588438908519853928">Звичайний</translation>
 <translation id="1588870296199743671">Відкрити посилання за допомогою...</translation>
 <translation id="1589055389569595240">Показати опцію "Правопис і граматика"</translation>
@@ -49,14 +51,18 @@
 <translation id="176587472219019965">&amp;Нове вікно</translation>
 <translation id="1769104665586091481">Відкрити посилання в новому &amp;вікні</translation>
 <translation id="1779468444204342338">Мінімальні</translation>
+<translation id="1805822111539868586">Інспектувати перегляди</translation>
 <translation id="1815083418640426271">Вставити як звичайний текст</translation>
 <translation id="1828901632669367785">Друкувати за допомогою системного діалогу...</translation>
+<translation id="1843048149176045210">Копіювати посилання для завантаження</translation>
 <translation id="1850508293116537636">Повернути за &amp;годинниковою стрілкою</translation>
 <translation id="1886996562706621347">Дозволити сайтам запитувати, щоб стати обробниками протоколів за умовчанням (рекомендовано)</translation>
 <translation id="1901303067676059328">Вибрати &amp;все</translation>
+<translation id="1906488504371069394">Відкрийте більше розширень і тем у <ph name="BEGIN_LINK" />веб-магазині Chromee<ph name="END_LINK" /></translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1925021887439448749">Введіть веб-адресу</translation>
 <translation id="1932098463447129402">Не раніше</translation>
+<translation id="1936157145127842922">Показати в теці</translation>
 <translation id="1936931585862840749">Введіть число, щоб зазначити кількість копій для друку (від 1 до <ph name="MAX_COPIES" />).</translation>
 <translation id="2019718679933488176">&amp;Відкрити аудіо в новій вкладці</translation>
 <translation id="2050339315714019657">Книжкова</translation>
@@ -70,7 +76,7 @@
 <translation id="215753907730220065">Вийти з повноекранного режиму</translation>
 <translation id="2158475082070321257">Копіювати посилання на виділений текст</translation>
 <translation id="2177950615300672361">Анонімна вкладка: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Модуль Native Client: <ph name="NEXE_NAME" /></translation>
+<translation id="2187906491731510095">Розширення оновлено</translation>
 <translation id="2218515861914035131">Вставити як звичайний текст</translation>
 <translation id="2249605167705922988">напр., 1–5, 8, 11–13</translation>
 <translation id="2280486287150724112">Праве поле</translation>
@@ -81,9 +87,12 @@
 <translation id="2326931316514688470">&amp;Перезавантажити додаток</translation>
 <translation id="2327492829706409234">Увімкнути програму</translation>
 <translation id="2348176352564285430">Додаток: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="2378602615417849384">{NUM_EXTENSIONS, plural,
+      =1 {Це розширення скоро може втратити підтримку}
+      other {Ці розширення скоро може втратити підтримку}
+    }</translation>
 <translation id="2378982052244864789">Виберіть каталог розширення.</translation>
 <translation id="2379281330731083556">Друкувати за допомогою діалогового вікна системи... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Невідомий плагін</translation>
 <translation id="2423578206845792524">Збер&amp;егти зображення як...</translation>
 <translation id="2439110203301358333">Інша програма на вашому комп’ютері додала розширення, яке може змінити роботу Vivaldi.</translation>
 <translation id="2443487764245141020">Щоб розпізнавати ваш пристрій, сайтам, можливо, буде потрібен ідентифікатор</translation>
@@ -95,6 +104,7 @@
 <translation id="2550212893339833758">Пам'ять підкачки</translation>
 <translation id="2553440850688409052">Сховати цей плагін</translation>
 <translation id="2607101320794533334">Інформація про відкритий ключ суб'єкта</translation>
+<translation id="261305050785128654">Дозвольте сайтам знати мови, якими ви розмовляєте. Вони показуватимуть вміст цими мовами, коли це можливо.</translation>
 <translation id="26224892172169984">Заборонити всім сайтам обробляти протоколи</translation>
 <translation id="2653275834716714682">Заміна тексту</translation>
 <translation id="265390580714150011">Значення поля</translation>
@@ -102,12 +112,12 @@
 <translation id="2678063897982469759">Знову ввімкнути</translation>
 <translation id="2719936478972253983">Заблоковані файли cookie</translation>
 <translation id="2721037002783622288">&amp;Шукати зображення через <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2722547199758472013">ID: <ph name="EXTENSION_ID" /></translation>
 <translation id="2738771556149464852">Не пізніше</translation>
 <translation id="2749881179542288782">Перевірити граматику та правопис</translation>
 <translation id="2785873697295365461">Дескриптори файлу</translation>
 <translation id="2825758591930162672">Відкритий ключ суб'єкта</translation>
 <translation id="2850541429955027218">Додати тему</translation>
-<translation id="2861941300086904918">Менеджер безпеки Native Client</translation>
 <translation id="2881076733170862447">Коли ви натискаєте на розширення</translation>
 <translation id="2889064240420137087">Відкрити посилання за допомогою...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> не може зв’язатися з цим принтером. Перевірте, чи принтер підключено, і повторіть спробу.</translation>
@@ -131,6 +141,10 @@
 <translation id="3129173833825111527">Ліве поле</translation>
 <translation id="3144647712221361880">Відкрити посилання як</translation>
 <translation id="3222066309010235055">Візуалізатор: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3228985231489269630">{NUM_EXTENSIONS, plural,
+      =1 {Вилучити або замінити його подібними розширеннями з <ph name="BEGIN_LINK" />веб-магазину Chrome<ph name="END_LINK" />.}
+      other {Вилучити або замінити їх подібними розширеннями з <ph name="BEGIN_LINK" />веб-магазину Chrome<ph name="END_LINK" />}
+    }</translation>
 <translation id="3241680850019875542">Виберіть кореневий каталог для пакування розширення. Щоб оновити розширення, також виберіть файл секретного ключа для повторного використання.</translation>
 <translation id="3275778913554317645">Відкрити у вікні</translation>
 <translation id="3280237271814976245">Зберегти &amp;як...</translation>
@@ -153,8 +167,10 @@
 <translation id="3493881266323043047">Чинність</translation>
 <translation id="3511307672085573050">&amp;Копіювати адресу посилання</translation>
 <translation id="354068948465830244">Може переглядати й змінювати дані сайту</translation>
+<translation id="3555812735919707620">Видалити розширення</translation>
 <translation id="3560034655160545939">&amp;Перевірка орфографії</translation>
-<translation id="3587482841069643663">Всі</translation>
+<translation id="3581861561942370740">Пошук в історії завантаження</translation>
+<translation id="3612673635130633812">Завантажено за допомогою &lt;a href="<ph name="URL" />"&gt;<ph name="EXTENSION" />&lt;/a&gt;</translation>
 <translation id="3627588569887975815">Відкрити посилання в &amp;приватному вікні</translation>
 <translation id="3678156199662914018">Розширення: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Запит на спільний доступ до екрана від <ph name="APP_NAME" /></translation>
@@ -170,6 +186,7 @@
 <translation id="3838085852053358637">Не вдалося завантажити розширення</translation>
 <translation id="383891835335927981">Масштабування сайтів не змінено</translation>
 <translation id="385051799172605136">Назад</translation>
+<translation id="3855441664322950881">Запакувати розширення</translation>
 <translation id="3858860766373142691">Назва</translation>
 <translation id="3861977424605124250">Показувати під час запуску</translation>
 <translation id="3867944738977021751">Поля сертифіката</translation>
@@ -183,6 +200,7 @@
 <translation id="3948116654032448504">&amp;Шукати зображення в <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3979395879372752341">Додано нове розширення (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">Копіювати посилання на виділений текст</translation>
+<translation id="399788104667917863">Закріпити на панелі</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Додати до словника</translation>
 <translation id="4058793769387728514">Перевірити документ зараз</translation>
@@ -197,7 +215,6 @@
 <translation id="4131410914670010031">Чорно-білий друк</translation>
 <translation id="4165986682804962316">Налаштування сайтів</translation>
 <translation id="4170314459383239649">Очищати під час виходу</translation>
-<translation id="4176463684765177261">Вимкнено</translation>
 <translation id="4200983522494130825">Нова &amp;вкладка</translation>
 <translation id="4225397296022057997">На всіх сайтах</translation>
 <translation id="4256316378292851214">&amp;Зберегти відео як...</translation>
@@ -221,15 +238,19 @@
 <translation id="4613271546271159013">Розширення змінило сторінку, яка з’являється, коли ви відкриваєте нову вкладку.</translation>
 <translation id="4616405296204756919">Ви можете використовувати збережені паролі на будь-якому пристрої. Усі вони збережені у <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Відкрити відео в новій вкладці</translation>
+<translation id="4644205769234414680">Дозволити в приватному вікні</translation>
+<translation id="4654801841330730814">Всі</translation>
 <translation id="4677772697204437347">Пам'ять GPU</translation>
 <translation id="4681930562518940301">Відкрити оригінальне &amp;зображення в новій вкладці</translation>
 <translation id="4711638718396952945">Відновити налаштування</translation>
 <translation id="4726710629007580002">Під час встановлення розширення були такі попередження:</translation>
+<translation id="473775607612524610">Оновити</translation>
 <translation id="4763408175235639573">Файли cookie, створені під час перегляду сторінки</translation>
 <translation id="479536056609751218">Веб-сторінка, тільки HTML</translation>
 <translation id="4827904420700932487">Створити QR-код для цього зображення</translation>
 <translation id="4839303808932127586">Збере&amp;гти відео як...</translation>
 <translation id="4840096453115567876">Усе одно вийти з приватного режиму?</translation>
+<translation id="4885692421645694729">Це розширення не має додаткового доступу до сайту</translation>
 <translation id="488785315393301722">Показати деталі</translation>
 <translation id="4895799941222633551">Створити &amp;ярлик…</translation>
 <translation id="4912643508233590958">Вихід зі стану неактивності</translation>
@@ -246,13 +267,13 @@
 <translation id="5059526285558225588">Виберіть, чим поділитися</translation>
 <translation id="5063480226653192405">Використання</translation>
 <translation id="5116628073786783676">&amp;Зберегти аудіо як...</translation>
-<translation id="5143374789336132547">Розширення "<ph name="EXTENSION_NAME" />" змінило сторінку, яка відкривається під час натискання кнопки "Домашня сторінка".</translation>
 <translation id="5154108062446123722">Додаткові налаштування для <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5154702632169343078">Тема</translation>
+<translation id="5170568018924773124">Показати в теці</translation>
 <translation id="5171343362375269016">Пам'ять підкачки</translation>
-<translation id="5233019165164992427">Порт налагодження NaCl</translation>
 <translation id="5233231016133573565">Ідентифікатор процесу</translation>
 <translation id="5233736638227740678">&amp;Вставити</translation>
+<translation id="5244466461749935369">Поки що залишити</translation>
 <translation id="5256861893479663409">На всіх сайтах</translation>
 <translation id="5260334392110301220">Розумні лапки</translation>
 <translation id="5269977353971873915">Помилка друку</translation>
@@ -273,7 +294,6 @@
 <translation id="5485102783864353244">Установити додаток</translation>
 <translation id="5486561344817861625">Імітувати перезапуск браузера</translation>
 <translation id="5509693895992845810">Зберегти &amp;як...</translation>
-<translation id="5521078259930077036">Це домашня сторінка, яку ви очікували?</translation>
 <translation id="5542132724887566711">Профіль</translation>
 <translation id="5556459405103347317">Перезавантажити</translation>
 <translation id="5575473780076478375">Розширення в режимі анонімного перегляду: <ph name="EXTENSION_NAME" /></translation>
@@ -285,15 +305,14 @@
 <translation id="5677928146339483299">Заблоковано</translation>
 <translation id="5707185214361380026">Помилка завантаження розширення з:</translation>
 <translation id="5713171467967533494">Відкривати у браузері Vivaldi</translation>
-<translation id="5715711091495208045">Посередник для плагінів: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Зберегти як PDF</translation>
 <translation id="5747809636523347288">Вс&amp;тавити й перейти до <ph name="URL" /></translation>
 <translation id="5759728514498647443">Документи, які ви друкуєте через додаток <ph name="APP_NAME" />, може переглядати додаток <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">&amp;Зберегти аудіо як...</translation>
+<translation id="577313026359983030">Мої розширення</translation>
 <translation id="5780973441651030252">Пріоритет процесів</translation>
 <translation id="5804241973901381774">Дозволи</translation>
 <translation id="5828633471261496623">Друк...</translation>
-<translation id="583281660410589416">Невідомий</translation>
 <translation id="5851868085455377790">Видавець</translation>
 <translation id="5860491529813859533">Увімкнути</translation>
 <translation id="5910363049092958439">&amp;Зберегти зображення як...</translation>
@@ -329,6 +348,7 @@
 <translation id="6374469231428023295">Повторити</translation>
 <translation id="6398765197997659313">Вийти з повноекранного режиму</translation>
 <translation id="6406303162637086258">Імітувати перезапуск браузера</translation>
+<translation id="6419546358665792306">Завантажити розпаковане</translation>
 <translation id="6445450263907939268">Якщо ви не хочете цих змін, можна відновити попередні налаштування.</translation>
 <translation id="6447842834002726250">Cookie-файли</translation>
 <translation id="6498249116389603658">&amp;Усі мови</translation>
@@ -345,7 +365,6 @@
 <translation id="6691936601825168937">&amp;Вперед</translation>
 <translation id="6786747875388722282">Розширення</translation>
 <translation id="6787839852456839824">Комбінації клавіш</translation>
-<translation id="6798954102094737107">Плагін: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Зберегти зміни</translation>
 <translation id="6824564591481349393">Копіювати &amp;адресу електронної пошти</translation>
 <translation id="6840155290835956714">Запитувати перед надсиланням</translation>
@@ -378,10 +397,10 @@
 <translation id="7453008956351770337">Вибираючи цей принтер, ви надаєте доступ до нього такому розширенню:</translation>
 <translation id="7564847347806291057">Завершити процес</translation>
 <translation id="7576690715254076113">Розібрати за копіями</translation>
+<translation id="7612050744024016345">Усі розширення</translation>
 <translation id="7629827748548208700">Вкладка: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Скасувати</translation>
 <translation id="7659154729610375585">Усе одно вийти з приватного режиму?</translation>
-<translation id="7661259717474717992">Дозволити сайтам зберігати та переглядати дані файлів cookie</translation>
 <translation id="7663719505383602579">Одержувач: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Встановлено адміністратором</translation>
 <translation id="7685038817958445325">Не вдалося запустити трансляцію</translation>
@@ -415,6 +434,7 @@
 Зберігайте свій файл ключа в безпечному місці. Він знадобиться вам для створення нових версій вашого розширення.</translation>
 <translation id="8004582292198964060">Переглядач</translation>
 <translation id="8018313076035239964">Налаштуйте, яку інформацію можуть використовувати веб-сайти та який вміст вони можуть вам показувати</translation>
+<translation id="8023801379949507775">Оновити розширення зараз</translation>
 <translation id="8071432093239591881">Друкувати як зображення</translation>
 <translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
         =1 {# заклакда}
@@ -428,7 +448,6 @@
 <translation id="8261378640211443080">Це розширення встановлено не із сайту <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />. Можливо, його було додано без вашого відома.</translation>
 <translation id="8351419472474436977">Розширення керує налаштуваннями проксі-сервера, тобто може змінювати та переривати будь-які ваші дії онлайн, а також стежити за ними. Якщо ви не знаєте причини такої зміни, імовірно, вона небажана.</translation>
 <translation id="8382913212082956454">Копіювати &amp;адресу електронної пошти</translation>
-<translation id="8434480141477525001">Порт налагодження NaCl</translation>
 <translation id="8449008133205184768">Вставити із збереженням стилю</translation>
 <translation id="8477178913400731244">Видалити дані</translation>
 <translation id="8477384620836102176">&amp;Загальні</translation>
@@ -438,6 +457,7 @@
 <translation id="8546306075665861288">Кеш зображень</translation>
 <translation id="8569682776816196752">Не знайдено жодного місця призначення</translation>
 <translation id="8584280235376696778">&amp;Відкрити відео в новій вкладці</translation>
+<translation id="8587660243683137365">Установити цю сторінку як додаток</translation>
 <translation id="8605428685123651449">Пам'ять SQLite</translation>
 <translation id="8615618338313291042">Програма в режимі анонімного перегляду: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">Кеш CSS</translation>
@@ -447,6 +467,7 @@
 <translation id="8708000541097332489">Очищати під час виходу</translation>
 <translation id="8714838604780058252">Фонові зображення</translation>
 <translation id="8725066075913043281">Повторити</translation>
+<translation id="8770406935328356739">Коренева тека розширення</translation>
 <translation id="8774934320277480003">Верхнє поле</translation>
 <translation id="8798099450830957504">За умовчанням</translation>
 <translation id="8808478386290700967">Веб-магазин</translation>
@@ -457,6 +478,7 @@
 <translation id="8899851313684471736">Відкрити посилання у новому &amp;вікні</translation>
 <translation id="8915370057835397490">Завантаження пропозиції</translation>
 <translation id="8916476537757519021">Додатковий анонімний фрейм: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8926389886865778422">Більше не питати</translation>
 <translation id="8929696694736010839">Лише поточний сеанс в приватному режимі</translation>
 <translation id="895944840846194039">Пам'ять JavaScript</translation>
 <translation id="8962083179518285172">Сховати деталі</translation>
@@ -470,7 +492,7 @@
 <translation id="9137916601698928395">Відкрити посилання як <ph name="USER" /></translation>
 <translation id="916607977885256133">Картинка в картинці</translation>
 <translation id="9170848237812810038">&amp;Скасувати</translation>
-<translation id="9215293857209265904">Додано розширення "<ph name="EXTENSION_NAME" />"</translation>
+<translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" додано</translation>
 <translation id="9218430445555521422">Установити за умовчанням</translation>
 <translation id="93766956588638423">Відновити розширення</translation>
 <translation id="961012016278832836">Старий Microsoft Edge</translation>

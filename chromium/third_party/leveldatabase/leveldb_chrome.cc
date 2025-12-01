@@ -72,6 +72,7 @@ class Globals {
         // time it is called.
         memory_pressure_listener_(
             FROM_HERE,
+            base::MemoryPressureListenerTag::kLevelDb,
             base::BindRepeating(&Globals::OnMemoryPressure,
                                 base::Unretained(this))) {}
 
@@ -128,7 +129,7 @@ class Globals {
   mutable leveldb::port::Mutex env_mutex_;
   base::flat_set<leveldb::Env*> in_memory_envs_;
   // Listens for the system being under memory pressure.
-  const base::MemoryPressureListener memory_pressure_listener_;
+  const base::AsyncMemoryPressureListener memory_pressure_listener_;
 };
 
 class ChromeMemEnv : public leveldb::EnvWrapper {

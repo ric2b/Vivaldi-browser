@@ -8,6 +8,7 @@
 #import "base/time/time.h"
 #import "components/segmentation_platform/embedder/default_model/device_switcher_model.h"
 #import "ios/chrome/browser/shared/model/utils/first_run_util.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 
 namespace {
 /// The time delta for a user to be considered as a new user.
@@ -51,6 +52,16 @@ bool IsSafariSwitcher(
                                                          excludedLabels);
   // Verify that the user hasn't used an `excluded` device recently.
   return intersection.empty();
+}
+
+bool ShouldFocusedOmniboxFollowSteadyStatePosition() {
+#if defined(VIVALDI_BUILD)
+  // Using Chromium approach to pin omnibox above keyboard.
+  // This helps reducing our patch and looks to be working as expected.
+  return true;
+#else
+  return base::FeatureList::IsEnabled(kBottomOmniboxEvolution);
+#endif // End Vivaldi
 }
 
 }  // namespace omnibox

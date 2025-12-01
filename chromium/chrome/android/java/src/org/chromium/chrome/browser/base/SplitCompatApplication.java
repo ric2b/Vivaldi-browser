@@ -29,7 +29,6 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.memory.MemoryPressureMonitor;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.version_info.VersionConstants;
 import org.chromium.build.BuildConfig;
@@ -50,6 +49,8 @@ import org.chromium.components.crash.PureJavaExceptionHandler.JavaExceptionRepor
 import org.chromium.components.embedder_support.application.FontPreloadingWorkaround;
 import org.chromium.components.module_installer.util.ModuleUtil;
 import org.chromium.ui.base.ResourceBundle;
+
+import java.util.function.Supplier;
 
 /**
  * Application base class which will call through to the given {@link Impl}. Application classes
@@ -196,6 +197,14 @@ public class SplitCompatApplication extends Application {
         }
 
         maybeInitProcessType();
+        LibraryLoader.getInstance().setLinkerImplementation(ProductConfig.USE_CHROMIUM_LINKER);
+
+        // Renderer and GPU processes have command line passed to them via IPC
+        // (see ChildProcessService.java).
+        if (isBrowserProcess && ChromeFeatureList.sLoadNativeEarly.isEnabled()) {
+            CommandLineInitUtil.initCommandLine(
+                    COMMAND_LINE_FILE, SplitCompatApplication::shouldUseDebugFlags);
+        }
 
         if (isBrowserProcess) {
             performBrowserProcessPreloading(context);
@@ -203,7 +212,6 @@ public class SplitCompatApplication extends Application {
 
         AsyncTask.takeOverAndroidThreadPool();
         ResourceBundle.setAvailablePakLocales(ProductConfig.LOCALES);
-        LibraryLoader.getInstance().setLinkerImplementation(ProductConfig.USE_CHROMIUM_LINKER);
 
         if (!isBrowserProcess) {
             EarlyTraceEvent.earlyEnableInChildWithoutCommandLine();
@@ -215,8 +223,10 @@ public class SplitCompatApplication extends Application {
             PathUtils.setPrivateDataDirectorySuffix(PRIVATE_DATA_DIRECTORY_SUFFIX);
             // Renderer and GPU processes have command line passed to them via IPC
             // (see ChildProcessService.java).
-            CommandLineInitUtil.initCommandLine(
-                    COMMAND_LINE_FILE, SplitCompatApplication::shouldUseDebugFlags);
+            if (!ChromeFeatureList.sLoadNativeEarly.isEnabled()) {
+                CommandLineInitUtil.initCommandLine(
+                        COMMAND_LINE_FILE, SplitCompatApplication::shouldUseDebugFlags);
+            }
 
             TraceEvent.maybeEnableEarlyTracing(/* readCommandLine= */ true);
             TraceEvent.begin(ATTACH_BASE_CONTEXT_EVENT);

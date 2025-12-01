@@ -2,7 +2,6 @@
 
 #include "components/ad_blocker/core/ddg_rules_parser.h"
 
-#include "base/json/json_string_value_serializer.h"
 #include "base/strings/string_util.h"
 #include "components/ad_blocker/core/parse_result.h"
 #include "components/ad_blocker/core/parse_utils.h"
@@ -163,7 +162,7 @@ void DuckDuckGoRulesParser::AddBlockingRuleForDomain(
     const base::Value::List* excluded_origins) {
   RequestFilterRule rule;
   rule.original_rule_text = domain;
-  rule.resource_types.set();
+  rule.resource_types.PutAll(RegularResourceTypes::All());
   rule.anchor_type.set(RequestFilterRule::kAnchorHost);
   rule.host = domain;
   rule.pattern = domain;
@@ -228,9 +227,9 @@ void DuckDuckGoRulesParser::ParseRule(
     make_redirect_rule = true;
   }
 
-  std::optional<std::bitset<RequestFilterRule::kTypeCount>> exception_types;
+  std::optional<RegularResourceTypes> exception_types;
   std::optional<std::set<std::string>> exception_domains;
-  std::optional<std::bitset<RequestFilterRule::kTypeCount>> option_types;
+  std::optional<RegularResourceTypes> option_types;
   std::optional<std::set<std::string>> option_domains;
   if (exceptions) {
     exception_types = GetTypes(exceptions);
@@ -250,9 +249,9 @@ void DuckDuckGoRulesParser::ParseRule(
     }
   }
 
-  if ((exception_types && exception_types->none()) ||
+  if ((exception_types && exception_types->empty()) ||
       (exception_domains && exception_domains->empty()) ||
-      (option_types && option_types->none()) ||
+      (option_types && option_types->empty()) ||
       (option_domains && option_domains->empty())) {
     // Exceptions / Options specifying types/domains should always provice
     // valid content for them
@@ -262,7 +261,7 @@ void DuckDuckGoRulesParser::ParseRule(
 
   if (!option_types) {
     option_types.emplace();
-    option_types->set();
+    option_types->PutAll(RegularResourceTypes::All());
   }
 
   std::string plain_pattern = MaybeConvertRegexToPlainPattern(*pattern);
@@ -274,7 +273,7 @@ void DuckDuckGoRulesParser::ParseRule(
     RequestFilterRule filter_rule;
     filter_rule.original_rule_text = domain + ":" + *pattern;
     if (!default_ignore || ignore)
-      filter_rule.decision = RequestFilterRule::kPass;
+      filter_rule.decision = RuleDecision::kPass;
     if (default_ignore == false && ignore == false) {
       DCHECK(exceptions);
       // Under the DDG implementation, if a block rule has options and
@@ -327,26 +326,28 @@ void DuckDuckGoRulesParser::ParseRule(
         filter_rule.included_domains.swap(exception_domains.value());
       }
       filter_rule.resource_types = option_types.value();
-      if (exception_types)
-        filter_rule.resource_types &= exception_types.value();
+      if (exception_types) {
+        RegularResourceTypes to_remove = RegularResourceTypes::All();
+        to_remove.RemoveAll(exception_types.value());
+        filter_rule.resource_types.RemoveAll(to_remove);
+      }
     } else {
       if (option_domains)
         filter_rule.included_domains.swap(option_domains.value());
       filter_rule.resource_types = option_types.value();
       if (!ignore) {
-        DCHECK(default_ignore &&
-               filter_rule.decision != RequestFilterRule::kPass);
+        DCHECK(default_ignore && filter_rule.decision != RuleDecision::kPass);
         // Under the DDG implementation, exceptions always mean ignore, so
         // they're only meaningful for block rules
         if (exception_domains)
           filter_rule.excluded_domains.swap(exception_domains.value());
         // Exceptions have priority over options.
         if (exception_types)
-          filter_rule.resource_types &= ~exception_types.value();
+          filter_rule.resource_types.RemoveAll(exception_types.value());
       }
     }
 
-    if (filter_rule.resource_types.none()) {
+    if (filter_rule.resource_types.empty()) {
       parse_result_->rules_info.unsupported_rules++;
       return;
     }
@@ -360,8 +361,7 @@ void DuckDuckGoRulesParser::ParseRule(
     }
     filter_rule.host = domain;
 
-    if (excluded_origins &&
-        filter_rule.decision == RequestFilterRule::kModify) {
+    if (excluded_origins && filter_rule.decision == RuleDecision::kModify) {
       for (const auto& origin : *excluded_origins) {
         if (origin.is_string())
           filter_rule.excluded_domains.insert(origin.GetString());
@@ -384,9 +384,9 @@ void DuckDuckGoRulesParser::ParseRule(
       if (exception_domains)
         redirect_rule.excluded_domains.swap(exception_domains.value());
       if (exception_types)
-        redirect_rule.resource_types &= ~exception_types.value();
+        redirect_rule.resource_types.RemoveAll(exception_types.value());
     }
-    if (redirect_rule.resource_types.none()) {
+    if (redirect_rule.resource_types.empty()) {
       parse_result_->rules_info.unsupported_rules++;
       return;
     }
@@ -407,7 +407,7 @@ void DuckDuckGoRulesParser::ParseRule(
       }
     }
 
-    redirect_rule.modifier = RequestFilterRule::kRedirect;
+    redirect_rule.modifier = ModifierType::kRedirect;
     redirect_rule.modifier_values = {*surrogate};
 
     parse_result_->request_filter_rules.push_back(std::move(redirect_rule));
@@ -415,9 +415,9 @@ void DuckDuckGoRulesParser::ParseRule(
   }
 }
 
-std::optional<std::bitset<RequestFilterRule::kTypeCount>>
-DuckDuckGoRulesParser::GetTypes(const base::Value* rule_properties) {
-  std::bitset<RequestFilterRule::kTypeCount> types;
+std::optional<RegularResourceTypes> DuckDuckGoRulesParser::GetTypes(
+    const base::Value* rule_properties) {
+  RegularResourceTypes types;
   const base::Value::List* types_value =
       rule_properties->GetDict().FindList(kTypesKey);
   if (!types_value)
@@ -431,7 +431,7 @@ DuckDuckGoRulesParser::GetTypes(const base::Value* rule_properties) {
     if (type == kTypeStringMap.end())
       continue;
     else
-      types.set(type->second);
+      types.Put(type->second);
   }
 
   return types;

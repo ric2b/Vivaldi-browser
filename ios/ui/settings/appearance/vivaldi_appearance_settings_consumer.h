@@ -7,6 +7,7 @@
 
 // A protocol implemented by consumers to handle appearance settings
 // state change.
+NS_SWIFT_UI_ACTOR
 @protocol VivaldiAppearanceSettingsConsumer
 
 // Updates the state with the website appearance preference value.

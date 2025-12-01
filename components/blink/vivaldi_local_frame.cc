@@ -8,7 +8,7 @@
 namespace blink {
 
 void LocalFrame::VisibleTextSelectionChanged(
-    const WTF::String& selection_text) const {
+    const String& selection_text) const {
   GetLocalFrameHostRemote().VisibleTextSelectionChanged(selection_text);
 }
 

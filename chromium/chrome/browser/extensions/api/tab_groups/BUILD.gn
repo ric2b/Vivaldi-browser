@@ -27,20 +27,27 @@ source_set("tab_groups") {
     "//components/tab_groups",
     "//extensions/browser",
 
-    # TODO(crbug.com/364501603) Remove this dependency when saved_tab_group_utils.h gets componentized.
+    # TODO(crbug.com/364501603) Remove this dependency when tab_groups_api.cc
+    # stop including browser_list.h and browser_window.h.
     "//chrome/browser/ui",
   ]
 
   deps = [
     "//chrome/browser/extensions",
+    "//chrome/browser/tab_group_sync:factories",
     "//chrome/browser/ui:ui_features",
     "//chrome/browser/ui/browser_window",
     "//chrome/browser/ui/tabs:tab_group",
     "//chrome/browser/ui/tabs:tab_model",
     "//chrome/browser/ui/tabs:tab_strip",
+    "//chrome/browser/ui/tabs/saved_tab_groups",
     "//chrome/common/extensions",
     "//content/public/browser",
     "//extensions/common",
     "//ui/gfx/range",
   ]
+
+  if (is_mac || is_win || is_linux || is_chromeos) {
+    deps += [ "//components/webapps/isolated_web_apps:scheme" ]
+  }
 }

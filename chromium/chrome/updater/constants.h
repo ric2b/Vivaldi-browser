@@ -90,6 +90,12 @@ inline constexpr char kCrashHandlerSwitch[] = "crash-handler";
 // Updates the updater.
 inline constexpr char kUpdateSwitch[] = "update";
 
+// Updates the apps.
+inline constexpr char kUpdateAppsSwitch[] = "update-apps";
+
+// Run as an unzip worker.
+inline constexpr char kUnzipWorkerSwitch[] = "unzip-worker";
+
 // Run as a network worker.
 inline constexpr char kNetWorkerSwitch[] = "net-worker";
 
@@ -260,6 +266,7 @@ inline constexpr char kDevOverrideKeyServerKeepAliveSeconds[] =
     "server_keep_alive";
 inline constexpr char kDevOverrideKeyCrxVerifierFormat[] =
     "crx_verifier_format";
+inline constexpr char kDevOverrideKeyCrxPublicKeyHash[] = "crx_public_key_hash";
 inline constexpr char kDevOverrideKeyMinumumEventLoggingCooldownSeconds[] =
     "minimum_event_logging_cooldown_seconds";
 inline constexpr char kDevOverrideKeyEventLoggingPermissionProviderAppId[] =
@@ -654,6 +661,9 @@ inline constexpr char kInstallSourceTaggedMetainstaller[] = "taggedmi";
 inline constexpr char kInstallSourceOffline[] = "offline";
 inline constexpr char kInstallSourcePolicy[] = "policy";
 inline constexpr char kInstallSourceOnDemand[] = "ondemand";
+
+inline constexpr int kRegistrationSuccess = 0;
+inline constexpr int kRegistrationError = 1;
 
 }  // namespace updater
 

@@ -3,16 +3,15 @@
 #ifndef COMPONENTS_AD_BLOCKER_PUBLIC_CONTENT_ADBLOCK_RULE_SERVICE_H_
 #define COMPONENTS_AD_BLOCKER_PUBLIC_CONTENT_ADBLOCK_RULE_SERVICE_H_
 
-#include <array>
+#include <optional>
+#include <string_view>
 
-#include "base/files/file_path.h"
 #include "base/observer_list_types.h"
 #include "base/uuid.h"
 #include "components/ad_blocker/public/content/adblock_tab_state_and_logs.h"
 #include "components/ad_blocker/public/content/mojom/adblock_cosmetic_filter.mojom.h"
 #include "components/ad_blocker/public/core/adblock_rule_service_core.h"
 #include "components/ad_blocker/public/core/adblock_types.h"
-#include "url/origin.h"
 
 #if BUILDFLAG(IS_IOS)
 namespace web {
@@ -34,10 +33,18 @@ class StatsStore;
 
 class RuleService : public RuleServiceCore {
  public:
+  class Client {
+   public:
+    virtual ~Client();
+    virtual const std::optional<std::string_view>
+    GetBrowserOwnedFrameUrlPrefix() = 0;
+  };
+
   class Observer : public base::CheckedObserver {
    public:
     ~Observer() override;
     virtual void OnRuleServiceStateLoaded(RuleService* rule_service) {}
+    virtual void OnRulesIndexLoaded(RuleGroup group) {}
   };
 
   ~RuleService() override;

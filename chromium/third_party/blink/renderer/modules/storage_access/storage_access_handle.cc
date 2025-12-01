@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/modules/storage_access/storage_access_handle.h"
 
+#include "base/byte_count.h"
 #include "base/types/pass_key.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_storage_estimate.h"
@@ -76,8 +77,8 @@ namespace {
 
 void EstimateImplAfterRemoteEstimate(
     ScriptPromiseResolver<StorageEstimate>* resolver,
-    int64_t current_usage,
-    int64_t current_quota,
+    base::ByteCount current_usage,
+    base::ByteCount current_quota,
     bool success) {
   ScriptState* script_state = resolver->GetScriptState();
   if (!script_state->ContextIsValid()) {
@@ -93,8 +94,8 @@ void EstimateImplAfterRemoteEstimate(
   }
 
   StorageEstimate* estimate = StorageEstimate::Create();
-  estimate->setUsage(current_usage);
-  estimate->setQuota(current_quota);
+  estimate->setUsage(current_usage.InBytesUnsigned());
+  estimate->setQuota(current_quota.InBytesUnsigned());
   estimate->setUsageDetails(StorageUsageDetails::Create());
   resolver->Resolve(estimate);
 }
@@ -321,8 +322,8 @@ ScriptPromise<FileSystemDirectoryHandle> StorageAccessHandle::getDirectory(
           kStorageAccessAPI_requestStorageAccess_BeyondCookies_getDirectory_Use);
   return StorageManagerFileSystemAccess::CheckStorageAccessIsAllowed(
       script_state, exception_state,
-      WTF::BindOnce(&StorageAccessHandle::GetDirectoryImpl,
-                    WrapWeakPersistent(this)));
+      BindOnce(&StorageAccessHandle::GetDirectoryImpl,
+               WrapWeakPersistent(this)));
 }
 
 void StorageAccessHandle::GetDirectoryImpl(
@@ -335,8 +336,8 @@ void StorageAccessHandle::GetDirectoryImpl(
     return;
   }
   remote->GetDirectory(
-      WTF::BindOnce(&StorageManagerFileSystemAccess::DidGetSandboxedFileSystem,
-                    WrapPersistent(resolver)));
+      BindOnce(&StorageManagerFileSystemAccess::DidGetSandboxedFileSystem,
+               WrapPersistent(resolver)));
 }
 
 ScriptPromise<StorageEstimate> StorageAccessHandle::estimate(
@@ -360,8 +361,8 @@ ScriptPromise<StorageEstimate> StorageAccessHandle::estimate(
         DOMExceptionCode::kInvalidStateError));
     return promise;
   }
-  remote->Estimate(WTF::BindOnce(&EstimateImplAfterRemoteEstimate,
-                                 WrapPersistent(resolver)));
+  remote->Estimate(blink::BindOnce(&EstimateImplAfterRemoteEstimate,
+                                   WrapPersistent(resolver)));
   return promise;
 }
 

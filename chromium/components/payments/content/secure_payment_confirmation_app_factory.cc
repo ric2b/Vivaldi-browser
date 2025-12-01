@@ -469,17 +469,22 @@ void SecurePaymentConfirmationAppFactory::DidDownloadAllIcons(
     request->mojo_request->instrument->icon = GURL();
   }
 
-  bool skipSpcAppCreation = !request->delegate->GetSpec() ||
-                            !request->authenticator || !request->credential;
+  bool skip_spc_app_creation = !request->delegate->GetSpec();
+  bool has_authenticator_and_credential =
+      request->authenticator && request->credential;
 #if BUILDFLAG(IS_ANDROID)
-  skipSpcAppCreation =
-      skipSpcAppCreation &&
-      !PaymentsExperimentalFeatures::IsEnabled(
-          features::kSecurePaymentConfirmationFallback) &&
-      !base::FeatureList::IsEnabled(
-          blink::features::kSecurePaymentConfirmationUxRefresh);
+  skip_spc_app_creation =
+      skip_spc_app_creation ||
+      (!has_authenticator_and_credential &&
+       !PaymentsExperimentalFeatures::IsEnabled(
+           features::kSecurePaymentConfirmationFallback) &&
+       !base::FeatureList::IsEnabled(
+           blink::features::kSecurePaymentConfirmationUxRefresh));
+#else
+  skip_spc_app_creation =
+      skip_spc_app_creation || !has_authenticator_and_credential;
 #endif  // BUILDFLAG(IS_ANDROID)
-  if (skipSpcAppCreation) {
+  if (skip_spc_app_creation) {
     request->delegate->OnDoneCreatingPaymentApps();
     return;
   }
@@ -535,7 +540,13 @@ void SecurePaymentConfirmationAppFactory::DidDownloadAllIcons(
     scoped_refptr key_store =
         browser_bound_key_store_for_testing_
             ? std::move(browser_bound_key_store_for_testing_)
-            : GetBrowserBoundKeyStoreInstance();
+            : GetBrowserBoundKeyStoreInstance(BrowserBoundKeyStore::Config {
+#if BUILDFLAG(IS_MAC)
+                .keychain_access_group =
+                    request->delegate->GetPaymentRequestDelegate()
+                        ->GetSecurePaymentConfirmationKeychainAccessGroup();
+#endif  // BUILDFLAG(IS_MAC)
+              });
     device_supports_browser_bound_keys_in_hardware =
         key_store->GetDeviceSupportsHardwareKeys();
     passkey_browser_binder = std::make_unique<PasskeyBrowserBinder>(

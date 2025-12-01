@@ -4,8 +4,6 @@
 
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_coordinator.h"
 
-#import <MaterialComponents/MaterialSnackbar.h>
-
 #import "base/feature_list.h"
 #import "base/metrics/field_trial_params.h"
 #import "base/metrics/histogram_functions.h"
@@ -26,19 +24,21 @@
 #import "components/search/search.h"
 #import "components/search_engines/template_url_service.h"
 #import "components/signin/public/base/signin_metrics.h"
+#import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "components/signin/public/identity_manager/tribool.h"
 #import "components/sync/service/sync_service.h"
 #import "ios/chrome/app/profile/profile_init_stage.h"
 #import "ios/chrome/app/profile/profile_state.h"
 #import "ios/chrome/app/profile/profile_state_observer.h"
-#import "ios/chrome/browser/aim/prototype/coordinator/aim_prototype_coordinator.h"
-#import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_constants.h"
-#import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_coordinator.h"
-#import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_coordinator_delegate.h"
+#import "ios/chrome/browser/aim/prototype/coordinator/aim_prototype_availability.h"
+#import "ios/chrome/browser/authentication/account_menu/coordinator/account_menu_coordinator.h"
+#import "ios/chrome/browser/authentication/account_menu/coordinator/account_menu_coordinator_delegate.h"
+#import "ios/chrome/browser/authentication/account_menu/public/account_menu_constants.h"
 #import "ios/chrome/browser/authentication/ui_bundled/continuation.h"
 #import "ios/chrome/browser/authentication/ui_bundled/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_coordinator.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_view_controller_presenter.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_coordinator.h"
@@ -96,6 +96,7 @@
 #import "ios/chrome/browser/omnibox/model/placeholder_service/placeholder_service.h"
 #import "ios/chrome/browser/omnibox/model/placeholder_service/placeholder_service_factory.h"
 #import "ios/chrome/browser/overscroll_actions/ui_bundled/overscroll_actions_controller.h"
+#import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
@@ -117,8 +118,8 @@
 #import "ios/chrome/browser/shared/public/commands/show_signin_command.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/public/snackbar/snackbar_message.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
-#import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/sharing/ui_bundled/sharing_coordinator.h"
@@ -133,9 +134,12 @@
 #import "ios/chrome/browser/signin/model/system_identity_manager.h"
 #import "ios/chrome/browser/supervised_user/model/family_link_user_capabilities_observer_bridge.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
+#import "ios/chrome/browser/tab_switcher/tab_grid/base_grid/coordinator/tab_grid_observing.h"
+#import "ios/chrome/browser/tab_switcher/tab_grid/base_grid/coordinator/tab_grid_scene_agent.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/public/fakebox_focuser.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/tab_groups/coordinator/tab_group_indicator_coordinator.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
+#import "ios/chrome/browser/web/model/web_navigation_util.h"
 #import "ios/chrome/common/NSString+Chromium.h"
 #import "ios/chrome/common/material_timing.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -157,7 +161,6 @@ using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 @interface NewTabPageCoordinator () <AccountMenuCoordinatorDelegate,
-                                     AIMPrototypeCoordinatorDelegate,
                                      AuthenticationServiceObserving,
                                      ContentSuggestionsDelegate,
                                      DiscoverFeedObserverBridgeDelegate,
@@ -177,6 +180,7 @@ using vivaldi::IsVivaldiRunning;
                                      OverscrollActionsControllerDelegate,
                                      ProfileStateObserver,
                                      SceneStateObserver,
+                                     TabGridObserving,
                                      FamilyLinkUserCapabilitiesObserving,
                                      NewTabPageShortcutsHandler> {
   // Observes changes in the IdentityManager.
@@ -284,8 +288,8 @@ using vivaldi::IsVivaldiRunning;
 @end
 
 @implementation NewTabPageCoordinator {
-  // Coordinator for the AIM prototype.
-  AIMPrototypeCoordinator* _aimPrototypeCoordinator;
+  // IdentityManager for the primary account info.
+  raw_ptr<signin::IdentityManager> _identityManager;
   // Coordinator in charge of handling sharing use cases.
   SharingCoordinator* _sharingCoordinator;
   // Coordinator for presenting the Home customization menu.
@@ -326,6 +330,11 @@ using vivaldi::IsVivaldiRunning;
   return self;
 }
 
+- (void)dealloc {
+  CHECK(!self.started, base::NotFatalUntil::M145);
+  CHECK(!_authServiceObserverBridge, base::NotFatalUntil::M145);
+}
+
 - (void)start {
   if (self.started) {
     return;
@@ -342,6 +351,10 @@ using vivaldi::IsVivaldiRunning;
   // Start observing SceneState changes.
   SceneState* sceneState = self.browser->GetSceneState();
   [sceneState addObserver:self];
+
+  if (IsNTPBackgroundCustomizationEnabled()) {
+    [[TabGridSceneAgent agentFromScene:sceneState] addObserver:self];
+  }
 
   // Configures incognito NTP if user is in incognito mode.
   if (self.isOffTheRecord) {
@@ -385,11 +398,9 @@ using vivaldi::IsVivaldiRunning;
   }
 
   // Update the feed if the account is subject to parental controls.
-  signin::IdentityManager* identityManager =
-      IdentityManagerFactory::GetForProfile(self.profile);
   signin::Tribool capability =
       supervised_user::IsPrimaryAccountSubjectToParentalControls(
-          identityManager);
+          _identityManager);
   [self updateFeedWithIsSupervisedUser:(capability == signin::Tribool::kTrue)];
 
   [self configureNTPMediator];
@@ -417,12 +428,14 @@ using vivaldi::IsVivaldiRunning;
     return;
   }
 
-  [self stopAimPrototypeCoordinator];
-
   _webState = nullptr;
 
   SceneState* sceneState = self.browser->GetSceneState();
   [sceneState removeObserver:self];
+
+  if (IsNTPBackgroundCustomizationEnabled()) {
+    [[TabGridSceneAgent agentFromScene:sceneState] removeObserver:self];
+  }
 
   if (self.isOffTheRecord) {
     self.incognitoViewController = nil;
@@ -491,6 +504,8 @@ using vivaldi::IsVivaldiRunning;
 
   [_fakeboxLensIconBubblePresenter dismissAnimated:NO];
 
+  _identityManager = nullptr;
+
   // Vivaldi
   [_speedDialHomeCoordinator stop];
   _speedDialHomeCoordinator = nil;
@@ -528,6 +543,10 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)focusFakebox {
   [self dismissCustomizationMenu];
+  if (MaybeShowAIMPrototype(self.browser,
+                            AIMPrototypeEntrypoint::kNTPFakebox)) {
+    return;
+  }
   _fakeboxTapped = NO;
   [self.NTPViewController focusOmnibox];
 }
@@ -653,6 +672,7 @@ using vivaldi::IsVivaldiRunning;
 // Gets all NTP services from the profile.
 - (void)initializeServices {
   ProfileIOS* profile = self.profile;
+  _identityManager = IdentityManagerFactory::GetForProfile(profile);
   self.authService = AuthenticationServiceFactory::GetForProfile(profile);
   self.templateURLService =
       ios::TemplateURLServiceFactory::GetForProfile(profile);
@@ -666,16 +686,14 @@ using vivaldi::IsVivaldiRunning;
   DCHECK(self.headerViewController);
 
   // Start observing IdentityManager.
-  signin::IdentityManager* identityManager =
-      IdentityManagerFactory::GetForProfile(self.profile);
   _identityObserverBridge =
-      std::make_unique<signin::IdentityManagerObserverBridge>(identityManager,
+      std::make_unique<signin::IdentityManagerObserverBridge>(_identityManager,
                                                               self);
 
   // Start observing Family Link user capabilities.
   _familyLinkUserCapabilitiesObserverBridge = std::make_unique<
       supervised_user::FamilyLinkUserCapabilitiesObserverBridge>(
-      identityManager, self);
+      _identityManager, self);
 
   // Start observing DiscoverFeedService.
   _discoverFeedObserverBridge = std::make_unique<DiscoverFeedObserverBridge>(
@@ -711,6 +729,8 @@ using vivaldi::IsVivaldiRunning;
   id<NewTabPageComponentFactoryProtocol> componentFactory =
       self.componentFactory;
   self.NTPViewController = [componentFactory NTPViewController];
+  self.NTPViewController.incognitoDisabled =
+      IsIncognitoModeDisabled(self.prefService);
   self.headerViewController =
       [componentFactory headerViewControllerForProfile:self.profile];
   self.NTPMediator =
@@ -934,31 +954,33 @@ using vivaldi::IsVivaldiRunning;
 - (void)fakeboxTapped {
   [self dismissCustomizationMenu];
   _fakeboxTapped = YES;
+  if (MaybeShowAIMPrototype(self.browser,
+                            AIMPrototypeEntrypoint::kNTPFakebox)) {
+    return;
+  }
   [self.NTPViewController focusOmnibox];
 }
 
 - (void)identityDiscWasTapped:(UIView*)identityDisc {
-  if (_accountMenuCoordinator || _signinCoordinator) {
+  if (_accountMenuCoordinator) {
     // Double tap, or tap before dismissing of the previous one is complete.
     return;
   }
+  if (_signinCoordinator.viewWillPersist) {
+    return;
+  }
+  [_signinCoordinator stop];
   [self dismissCustomizationMenu];
   [self.NTPMetricsRecorder recordIdentityDiscTapped];
   BOOL isSignedIn =
-      self.authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin);
+      _identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin);
   if (![self isSignInAllowed]) {
     id<SettingsCommands> handler = HandlerForProtocol(
         self.browser->GetCommandDispatcher(), SettingsCommands);
     [handler
         showGoogleServicesSettingsFromViewController:self.baseViewController];
   } else if (isSignedIn) {
-    if (IsIdentityDiscAccountMenuEnabled()) {
-      [self showAccountMenu:identityDisc];
-    } else {
-      id<ApplicationCommands> handler = HandlerForProtocol(
-          self.browser->GetCommandDispatcher(), ApplicationCommands);
-      [handler showSettingsFromViewController:self.baseViewController];
-    }
+    [self showAccountMenu:identityDisc];
   } else {
     __weak __typeof(self) weakSelf = self;
     auto accessPoint = signin_metrics::AccessPoint::kNtpSignedOutIcon;
@@ -1004,6 +1026,7 @@ using vivaldi::IsVivaldiRunning;
 
 #pragma mark - SigninPromoViewMediatorDelegate
 
+// This also belongs to #pragma mark - SigninPromoViewMediatorDelegate
 - (void)showSigninWithCommand:(ShowSigninCommand*)command {
   if (_signinCoordinator) {
     SigninCoordinatorCompletionCallback completion = command.completion;
@@ -1111,8 +1134,8 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (BOOL)isFollowingFeedAvailable {
-  return IsWebChannelsEnabled() && self.authService &&
-         self.authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin);
+  return IsWebChannelsEnabled() && _identityManager &&
+         _identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin);
 }
 
 - (NSUInteger)lastVisibleFeedCardIndex {
@@ -1172,8 +1195,8 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)showSignInUIFromSource:(FeedSignInPromoSource)source {
   // If the user is already signed in, do nothing.
-  if (self.authService &&
-      self.authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
+  if (_identityManager &&
+      _identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
     return;
   }
   // This flow shouldn't be offered if sign-in is disallowed.
@@ -1184,9 +1207,13 @@ using vivaldi::IsVivaldiRunning;
                                   feed::FeedSyncPromo::kShowDisableToast];
     return;
   }
-  if (_accountMenuCoordinator || _signinCoordinator) {
+  if (_accountMenuCoordinator) {
     return;
   }
+  if (_signinCoordinator.viewWillPersist) {
+    return;
+  }
+  [_signinCoordinator stop];
   BOOL hasUserIdentities = [self hasIdentitiesOnDevice];
 
   signin_metrics::AccessPoint accessPoint =
@@ -1222,9 +1249,12 @@ using vivaldi::IsVivaldiRunning;
                                            continuationProvider:
                                                DoNothingContinuationProvider()];
   } else {
+    Browser* browser = self.browser;
+    CHECK_EQ(browser->type(), Browser::Type::kRegular,
+             base::NotFatalUntil::M145);
     _signinCoordinator = [SigninCoordinator
         instantSigninCoordinatorWithBaseViewController:self.NTPViewController
-                                               browser:self.browser
+                                               browser:browser
                                               identity:nil
                                           contextStyle:SigninContextStyle::
                                                            kDefault
@@ -1297,7 +1327,6 @@ using vivaldi::IsVivaldiRunning;
 - (void)updateModuleVisibility {
   [_customizationCoordinator updateMenuData];
   [self handleChangeInModules];
-  [self cancelOmniboxEdit];
   [self setContentOffsetToTop];
   [self.feedHeaderViewController updateForFeedVisibilityChanged];
   UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification,
@@ -1615,32 +1644,7 @@ using vivaldi::IsVivaldiRunning;
   [self stopAccountMenuCoordinator];
 }
 
-#pragma mark - AIMPrototypeCoordinatorDelegate
-
-- (void)aimPrototypeCoordinatorDidFinish:(AIMPrototypeCoordinator*)coordinator {
-  [self stopAimPrototypeCoordinator];
-}
-
 #pragma mark - Private
-
-- (void)startAimPrototypeCoordinator {
-  if (_aimPrototypeCoordinator) {
-    return;
-  }
-  _aimPrototypeCoordinator = [[AIMPrototypeCoordinator alloc]
-      initWithBaseViewController:self.baseViewController
-                         browser:self.browser];
-  _aimPrototypeCoordinator.delegate = self;
-  [_aimPrototypeCoordinator start];
-}
-
-- (void)stopAimPrototypeCoordinator {
-  if (!_aimPrototypeCoordinator) {
-    return;
-  }
-  [_aimPrototypeCoordinator stop];
-  _aimPrototypeCoordinator = nil;
-}
 
 - (void)stopSharingCoordinator {
   [_sharingCoordinator stop];
@@ -1670,9 +1674,7 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (bool)hasIdentitiesOnDevice {
-  return !IdentityManagerFactory::GetForProfile(self.profile)
-              ->GetAccountsOnDevice()
-              .empty();
+  return !_identityManager->GetAccountsOnDevice().empty();
 }
 
 // Update the state, to take into account that the signin coordinator
@@ -1822,15 +1824,12 @@ using vivaldi::IsVivaldiRunning;
           prefs::kHomeCustomizationMagicStackSetUpListEnabled);
       BOOL tabResumptionEnabled = prefService->GetBoolean(
           prefs::kHomeCustomizationMagicStackTabResumptionEnabled);
-      BOOL parcelTrackingEnabled = prefService->GetBoolean(
-          prefs::kHomeCustomizationMagicStackParcelTrackingEnabled);
       BOOL tipsEnabled = prefService->GetBoolean(
           prefs::kHomeCustomizationMagicStackTipsEnabled);
       [self.NTPMetricsRecorder
           recordMagicStackCustomizationStateWithSetUpList:setUpListEnabled
                                               safetyCheck:safetyCheckEnabled
                                             tabResumption:tabResumptionEnabled
-                                           parcelTracking:parcelTrackingEnabled
                                                      tips:tipsEnabled];
 
       // TODO(crbug.com/350990359): Deprecate IOS.NTP.Impression when Home
@@ -1873,8 +1872,10 @@ using vivaldi::IsVivaldiRunning;
 - (void)showSignInDisableMessage {
   id<SnackbarCommands> handler =
       static_cast<id<SnackbarCommands>>(self.browser->GetCommandDispatcher());
-  MDCSnackbarMessage* message = CreateSnackbarMessage(l10n_util::GetNSString(
-      IDS_IOS_NTP_FEED_SIGNIN_PROMO_DISABLE_SNACKBAR_MESSAGE));
+  SnackbarMessage* message = [[SnackbarMessage alloc]
+      initWithTitle:
+          l10n_util::GetNSString(
+              IDS_IOS_NTP_FEED_SIGNIN_PROMO_DISABLE_SNACKBAR_MESSAGE)];
 
   [handler showSnackbarMessage:message];
 }
@@ -2003,15 +2004,18 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)openMIA {
-  if (base::FeatureList::IsEnabled(kAIMPrototype)) {
-    [self startAimPrototypeCoordinator];
+  if (MaybeShowAIMPrototype(self.browser,
+                            AIMPrototypeEntrypoint::kNTPAIMButton)) {
     return;
   }
   [self.NTPMetricsRecorder recordMIATapped];
-  OpenNewTabCommand* command = [OpenNewTabCommand
-      commandWithURLFromChrome:GetUrlForAim(
-                                   self.templateURLService,
-                                   /*query_start_time=*/base::Time::Now())];
+
+  GURL URL = GetUrlForAim(self.templateURLService,
+                          /*query_start_time=*/base::Time::Now());
+  OpenNewTabCommand* command = [OpenNewTabCommand commandWithURLFromChrome:URL];
+  command.extraHeaders =
+      web_navigation_util::VariationHeadersForURL(URL, /*is_incognito=*/false);
+
   id<ApplicationCommands> applicationHandler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), ApplicationCommands);
   [applicationHandler openURLInNewTab:command];
@@ -2039,11 +2043,23 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)openIncognitoSearch {
   [self.NTPMetricsRecorder recordIncognitoTapped];
+  [self dismissCustomizationMenu];
+
   OpenNewTabCommand* command = [OpenNewTabCommand commandWithIncognito:YES];
   command.shouldFocusOmnibox = YES;
   id<ApplicationCommands> applicationHandler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), ApplicationCommands);
   [applicationHandler openURLInNewTab:command];
+}
+
+#pragma mark - TabGridObserving
+
+- (void)willEnterTabGrid {
+  [self clearPresentedState];
+}
+
+- (void)willExitTabGrid {
+  // Do nothing.
 }
 
 #pragma mark - VIVALDI

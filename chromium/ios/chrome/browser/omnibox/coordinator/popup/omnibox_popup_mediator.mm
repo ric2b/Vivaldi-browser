@@ -119,6 +119,8 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
             (OmniboxAutocompleteController*)autocompleteController
                                            hasSuggestions:(BOOL)hasSuggestions
                                                isFocusing:(BOOL)isFocusing {
+  [self.consumer setKeyboardAttachedBottomOmniboxHeight:
+                     self.presenter.keyboardAttachedBottomOmniboxHeight];
   [self.consumer newResultsAvailable];
 
   self.open = hasSuggestions;
@@ -260,6 +262,10 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
 
 - (void)tapTrailingButtonOnSuggestion:(id<AutocompleteSuggestion>)suggestion
                                 inRow:(NSUInteger)row {
+  if (!suggestion) {
+    return;
+  }
+
   if ([suggestion isKindOfClass:[AutocompleteMatchFormatter class]]) {
     AutocompleteMatchFormatter* autocompleteMatchFormatter =
         (AutocompleteMatchFormatter*)suggestion;

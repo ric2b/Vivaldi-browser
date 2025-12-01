@@ -76,7 +76,6 @@ struct LoadProgramOptions {
     std::string filename;
 #if TINT_BUILD_SPV_READER
     /// Spirv-reader options
-    bool use_ir_reader = false;
     tint::spirv::reader::Options spirv_reader_options;
 #endif
     /// The text printer to use for output
@@ -241,6 +240,12 @@ bool ReadFile(const std::string& input_file, std::vector<T>* buffer) {
     }
 
     return true;
+}
+
+/// @param str the string to quote
+/// @returns @p str quoted with <code>'</code>
+inline std::string Quote(std::string_view str) {
+    return "'" + std::string(str) + "'";
 }
 
 }  // namespace tint::cmd

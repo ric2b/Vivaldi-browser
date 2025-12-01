@@ -2,7 +2,9 @@
 
 #include "components/drm_helper/vivaldi_drm_tab_helper.h"
 #include "chrome/browser/browser_process.h"
+#ifndef VIVALDI_SPARKLE_DISABLED
 #include "extensions/api/auto_update/auto_update_api.h"
+#endif
 #include "components/update_client/crx_update_item.h"
 
 #if !BUILDFLAG(IS_LINUX)
@@ -42,7 +44,7 @@ DRMContentTabHelper::DRMContentTabHelper(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
       content::WebContentsUserData<DRMContentTabHelper>(*web_contents),
       media_access_receivers_{web_contents, this} {
-#if !BUILDFLAG(IS_LINUX)
+#if !BUILDFLAG(IS_LINUX) && !defined(VIVALDI_SPARKLE_DISABLED)
   auto* auto_update = extensions::AutoUpdateAPI::GetFactoryInstance()->Get(
       web_contents->GetBrowserContext());
 
@@ -110,6 +112,7 @@ void DRMContentTabHelper::NotifyEncryptedMediaAccess(
   if (key_system != "com.widevine.alpha")
     return;
 
+#ifndef VIVALDI_SPARKLE_DISABLED
   auto* auto_update = extensions::AutoUpdateAPI::GetFactoryInstance()->Get(
       web_contents()->GetBrowserContext());
 
@@ -128,6 +131,7 @@ void DRMContentTabHelper::NotifyEncryptedMediaAccess(
 
   LOG(INFO) << "Encrypted media access was requested, but not yet installed.";
   auto_update->HandleWidevineRequested();
+#endif
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(DRMContentTabHelper);

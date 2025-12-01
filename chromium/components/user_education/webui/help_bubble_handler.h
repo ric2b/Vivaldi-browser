@@ -15,13 +15,13 @@
 #include "base/memory/weak_ptr.h"
 #include "components/user_education/common/help_bubble/help_bubble.h"
 #include "components/user_education/common/help_bubble/help_bubble_params.h"
-#include "components/user_education/webui/tracked_element_webui.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/webui/resources/cr_components/help_bubble/help_bubble.mojom.h"
+#include "ui/webui/resources/js/tracked_element/tracked_element.mojom.h"
 
 namespace content {
 class WebContents;
@@ -33,7 +33,10 @@ class HelpBubbleWebUI;
 
 // Base class abstracting away IPC so that handler functionality can be tested
 // entirely with mocks.
-class HelpBubbleHandlerBase : public help_bubble::mojom::HelpBubbleHandler {
+// TODO(crbug.com/40243115): remove inheritance from TrackedElementHandler.
+class HelpBubbleHandlerBase
+    : public help_bubble::mojom::HelpBubbleHandler,
+      public tracked_element::mojom::TrackedElementHandler {
  public:
   HelpBubbleHandlerBase(const HelpBubbleHandlerBase&) = delete;
   HelpBubbleHandlerBase(const std::vector<ui::ElementIdentifier>& identifiers,
@@ -142,17 +145,22 @@ class HelpBubbleHandlerBase : public help_bubble::mojom::HelpBubbleHandler {
   void OnWebContentsVisibilityChanged(std::optional<bool> visibility);
 
   // mojom::HelpBubbleHandler:
-  void HelpBubbleAnchorVisibilityChanged(const std::string& identifier_name,
-                                         bool visible,
-                                         const gfx::RectF& rect) final;
-  void HelpBubbleAnchorActivated(const std::string& identifier_name) final;
-  void HelpBubbleAnchorCustomEvent(const std::string& identifier_name,
-                                   const std::string& event_name) final;
   void HelpBubbleButtonPressed(const std::string& identifier_name,
                                uint8_t button) final;
   void HelpBubbleClosed(
       const std::string& identifier_name,
       help_bubble::mojom::HelpBubbleClosedReason reason) final;
+  void BindTrackedElementHandler(
+      mojo::PendingReceiver<tracked_element::mojom::TrackedElementHandler>
+          handler) final;
+
+  // tracked_element::mojom::TrackedElementHandler:
+  void TrackedElementVisibilityChanged(const std::string& identifier_name,
+                                       bool visible,
+                                       const gfx::RectF& rect) final;
+  void TrackedElementActivated(const std::string& identifier_name) final;
+  void TrackedElementCustomEvent(const std::string& identifier_name,
+                                 const std::string& event_name) final;
 
   ElementData* GetDataByName(const std::string& identifier_name,
                              ui::ElementIdentifier* found_identifier = nullptr);
@@ -169,6 +177,12 @@ class HelpBubbleHandlerBase : public help_bubble::mojom::HelpBubbleHandler {
   std::unique_ptr<VisibilityProvider> visibility_provider_;
   const ui::ElementContext context_;
   std::map<ui::ElementIdentifier, ElementData> element_data_;
+
+  // TODO(crbug.com/40243115): create a TrackedElementHandler, pass the pending
+  // receiver to it, and remove this receiver.
+  mojo::Receiver<tracked_element::mojom::TrackedElementHandler>
+      tracked_element_handler_receiver_{this};
+
   base::WeakPtrFactory<HelpBubbleHandlerBase> weak_ptr_factory_{this};
 };
 
@@ -186,8 +200,8 @@ class HelpBubbleHandlerBase : public help_bubble::mojom::HelpBubbleHandler {
 // triggering a recreate). If a class has a raw_ptr to a
 // HelpBubbleHandler[Base], then a test MUST be added to ensure that the class
 // releases the reference when the HelpBubbleHandler is destroyed. Tests are
-// already provided for `HelpBubbleWebUI` and `TrackedElementWebUI` in
-// help_bubble_handler_unittest.cc.
+// already provided for `HelpBubbleWebUI` and
+// `TrackedElementHelpBubbleWebUIAnchor` in help_bubble_handler_unittest.cc.
 class HelpBubbleHandler : public HelpBubbleHandlerBase {
  public:
   // Create a help bubble handler (called from the HelpBubbleHandlerFactory

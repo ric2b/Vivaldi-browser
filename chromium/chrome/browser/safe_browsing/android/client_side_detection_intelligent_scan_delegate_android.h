@@ -5,18 +5,31 @@
 #ifndef CHROME_BROWSER_SAFE_BROWSING_ANDROID_CLIENT_SIDE_DETECTION_INTELLIGENT_SCAN_DELEGATE_ANDROID_H_
 #define CHROME_BROWSER_SAFE_BROWSING_ANDROID_CLIENT_SIDE_DETECTION_INTELLIGENT_SCAN_DELEGATE_ANDROID_H_
 
+#include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
+#include "base/memory/weak_ptr.h"
+#include "components/optimization_guide/core/optimization_guide_model_executor.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/safe_browsing/content/browser/client_side_detection_host.h"
+
+class PrefService;
+
+namespace optimization_guide {
+class ModelBrokerClient;
+}  // namespace optimization_guide
 
 namespace safe_browsing {
 
 // Android implementation of IntelligentScanDelegate. This class is responsible
 // for managing sessions and executing the model.
-// TODO(crbug.com/424075615): Implement this class.
 class ClientSideDetectionIntelligentScanDelegateAndroid
     : public ClientSideDetectionHost::IntelligentScanDelegate {
  public:
-  ClientSideDetectionIntelligentScanDelegateAndroid() = default;
-  ~ClientSideDetectionIntelligentScanDelegateAndroid() override = default;
+  ClientSideDetectionIntelligentScanDelegateAndroid(
+      PrefService& pref,
+      std::unique_ptr<optimization_guide::ModelBrokerClient>
+          model_broker_client);
+  ~ClientSideDetectionIntelligentScanDelegateAndroid() override;
 
   ClientSideDetectionIntelligentScanDelegateAndroid(
       const ClientSideDetectionIntelligentScanDelegateAndroid&) = delete;
@@ -29,6 +42,39 @@ class ClientSideDetectionIntelligentScanDelegateAndroid
   void InquireOnDeviceModel(std::string rendered_texts,
                             InquireOnDeviceModelDoneCallback callback) override;
   bool ResetOnDeviceSession() override;
+  bool ShouldShowScamWarning(
+      std::optional<IntelligentScanVerdict> verdict) override;
+
+  // KeyedService implementation.
+  void Shutdown() override;
+
+  bool IsSessionAliveForTesting() { return !!current_inquiry_; }
+  void SetPauseSessionExecutionForTesting(bool pause) {
+    pause_session_execution_for_testing_ = pause;
+  }
+
+ private:
+  class Inquiry;
+
+  void OnPrefsUpdated();
+
+  // Starts on-device model download.
+  void StartModelDownload();
+
+  const raw_ref<PrefService> pref_;
+  // This object is used to download the model and create sessions.
+  // It may be null after shutdown.
+  std::unique_ptr<optimization_guide::ModelBrokerClient> model_broker_client_;
+
+  // A wrapper of the current on-device model session. This is null if there is
+  // no active inquiry.
+  std::unique_ptr<Inquiry> current_inquiry_;
+
+  // PrefChangeRegistrar used to track when the enhanced protection state
+  // changes.
+  PrefChangeRegistrar pref_change_registrar_;
+
+  bool pause_session_execution_for_testing_ = false;
 };
 
 }  // namespace safe_browsing

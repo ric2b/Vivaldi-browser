@@ -37,6 +37,7 @@
 #include "include/private/base/SkTo.h"
 #include "include/utils/SkShadowUtils.h"
 #include "src/base/SkAutoMalloc.h"
+#include "src/base/SkTLazy.h"
 #include "src/core/SkCanvasPriv.h"
 #include "src/core/SkFontPriv.h"
 #include "src/core/SkMaskFilterBase.h"
@@ -517,28 +518,27 @@ void DrawCommand::MakeJsonPath(SkJSONWriter& writer, const SkPath& path) {
     }
     writer.beginArray(DEBUGCANVAS_ATTRIBUTE_VERBS);
     SkPath::Iter iter(path, false);
-    SkPoint      pts[4];
-    SkPath::Verb verb;
-    while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
-        if (verb == SkPath::kClose_Verb) {
+    while (auto rec = iter.next()) {
+        if (rec->fVerb == SkPathVerb::kClose) {
             writer.appendNString(DEBUGCANVAS_VERB_CLOSE);
             continue;
         }
         writer.beginObject();  // verb
-        switch (verb) {
-            case SkPath::kLine_Verb: {
+        SkSpan<const SkPoint> pts = rec->fPoints;
+        switch (rec->fVerb) {
+            case SkPathVerb::kLine: {
                 writer.appendName(DEBUGCANVAS_VERB_LINE);
                 MakeJsonPoint(writer, pts[1]);
                 break;
             }
-            case SkPath::kQuad_Verb: {
+            case SkPathVerb::kQuad: {
                 writer.beginArray(DEBUGCANVAS_VERB_QUAD);
                 MakeJsonPoint(writer, pts[1]);
                 MakeJsonPoint(writer, pts[2]);
                 writer.endArray();  // quad coords
                 break;
             }
-            case SkPath::kCubic_Verb: {
+            case SkPathVerb::kCubic: {
                 writer.beginArray(DEBUGCANVAS_VERB_CUBIC);
                 MakeJsonPoint(writer, pts[1]);
                 MakeJsonPoint(writer, pts[2]);
@@ -546,21 +546,20 @@ void DrawCommand::MakeJsonPath(SkJSONWriter& writer, const SkPath& path) {
                 writer.endArray();  // cubic coords
                 break;
             }
-            case SkPath::kConic_Verb: {
+            case SkPathVerb::kConic: {
                 writer.beginArray(DEBUGCANVAS_VERB_CONIC);
                 MakeJsonPoint(writer, pts[1]);
                 MakeJsonPoint(writer, pts[2]);
-                writer.appendFloat(iter.conicWeight());
+                writer.appendFloat(rec->conicWeight());
                 writer.endArray();  // conic coords
                 break;
             }
-            case SkPath::kMove_Verb: {
+            case SkPathVerb::kMove: {
                 writer.appendName(DEBUGCANVAS_VERB_MOVE);
                 MakeJsonPoint(writer, pts[0]);
                 break;
             }
-            case SkPath::kClose_Verb:
-            case SkPath::kDone_Verb:
+            case SkPathVerb::kClose:
                 // Unreachable
                 break;
         }
@@ -1184,6 +1183,12 @@ void DrawAnnotationCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlData
 
 ////
 
+template <typename T> void assign_if_not_null(std::optional<T>& object, const T* pointer) {
+    if (pointer) {
+        object = *pointer;
+    }
+}
+
 DrawImageCommand::DrawImageCommand(const SkImage*           image,
                                    SkScalar                 left,
                                    SkScalar                 top,
@@ -1193,11 +1198,12 @@ DrawImageCommand::DrawImageCommand(const SkImage*           image,
         , fImage(SkRef(image))
         , fLeft(left)
         , fTop(top)
-        , fSampling(sampling)
-        , fPaint(paint) {}
+        , fSampling(sampling) {
+    assign_if_not_null(fPaint, paint);
+}
 
 void DrawImageCommand::execute(SkCanvas* canvas) const {
-    canvas->drawImage(fImage.get(), fLeft, fTop, fSampling, fPaint.getMaybeNull());
+    canvas->drawImage(fImage.get(), fLeft, fTop, fSampling, SkOptAddressOrNull(fPaint));
 }
 
 bool DrawImageCommand::render(SkCanvas* canvas) const {
@@ -1221,7 +1227,7 @@ void DrawImageCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManag
     flatten(*fImage, writer, urlDataManager);
     writer.appendName(DEBUGCANVAS_ATTRIBUTE_COORDS);
     MakeJsonPoint(writer, fLeft, fTop);
-    if (fPaint.isValid()) {
+    if (fPaint.has_value()) {
         writer.appendName(DEBUGCANVAS_ATTRIBUTE_PAINT);
         MakeJsonPaint(writer, *fPaint, urlDataManager);
     }
@@ -1256,11 +1262,12 @@ DrawImageLatticeCommand::DrawImageLatticeCommand(const SkImage*           image,
         , fImage(SkRef(image))
         , fLattice(lattice)
         , fDst(dst)
-        , fFilter(filter)
-        , fPaint(paint) {}
+        , fFilter(filter) {
+    assign_if_not_null(fPaint, paint);
+}
 
 void DrawImageLatticeCommand::execute(SkCanvas* canvas) const {
-    canvas->drawImageLattice(fImage.get(), fLattice, fDst, fFilter, fPaint.getMaybeNull());
+    canvas->drawImageLattice(fImage.get(), fLattice, fDst, fFilter, SkOptAddressOrNull(fPaint));
 }
 
 bool DrawImageLatticeCommand::render(SkCanvas* canvas) const {
@@ -1284,7 +1291,7 @@ void DrawImageLatticeCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDa
     MakeJsonLattice(writer, fLattice);
     writer.appendName(DEBUGCANVAS_ATTRIBUTE_DST);
     MakeJsonRect(writer, fDst);
-    if (fPaint.isValid()) {
+    if (fPaint.has_value()) {
         writer.appendName(DEBUGCANVAS_ATTRIBUTE_PAINT);
         MakeJsonPaint(writer, *fPaint, urlDataManager);
     }
@@ -1304,11 +1311,13 @@ DrawImageRectCommand::DrawImageRectCommand(const SkImage*              image,
         , fSrc(src)
         , fDst(dst)
         , fSampling(sampling)
-        , fPaint(paint)
-        , fConstraint(constraint) {}
+        , fConstraint(constraint) {
+    assign_if_not_null(fPaint, paint);
+}
 
 void DrawImageRectCommand::execute(SkCanvas* canvas) const {
-    canvas->drawImageRect(fImage.get(), fSrc, fDst, fSampling, fPaint.getMaybeNull(), fConstraint);
+    canvas->drawImageRect(fImage.get(), fSrc, fDst, fSampling,
+                          SkOptAddressOrNull(fPaint), fConstraint);
 }
 
 bool DrawImageRectCommand::render(SkCanvas* canvas) const {
@@ -1334,7 +1343,7 @@ void DrawImageRectCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataM
     MakeJsonRect(writer, fDst);
     writer.appendName(DEBUGCANVAS_ATTRIBUTE_SAMPLING);
     MakeJsonSampling(writer, fSampling);
-    if (fPaint.isValid()) {
+    if (fPaint.has_value()) {
         writer.appendName(DEBUGCANVAS_ATTRIBUTE_PAINT);
         MakeJsonPaint(writer, *fPaint, urlDataManager);
     }
@@ -1361,12 +1370,14 @@ DrawImageRectLayerCommand::DrawImageRectLayerCommand(DebugLayerManager*    layer
         , fSrc(src)
         , fDst(dst)
         , fSampling(sampling)
-        , fPaint(paint)
-        , fConstraint(constraint) {}
+        , fConstraint(constraint) {
+    assign_if_not_null(fPaint, paint);
+}
 
 void DrawImageRectLayerCommand::execute(SkCanvas* canvas) const {
     sk_sp<SkImage> snapshot = fLayerManager->getLayerAsImage(fNodeId, fFrame);
-    canvas->drawImageRect(snapshot.get(), fSrc, fDst, SkSamplingOptions(), fPaint.getMaybeNull(), fConstraint);
+    canvas->drawImageRect(snapshot.get(), fSrc, fDst, SkSamplingOptions(),
+                          SkOptAddressOrNull(fPaint), fConstraint);
 }
 
 bool DrawImageRectLayerCommand::render(SkCanvas* canvas) const {
@@ -1395,7 +1406,7 @@ void DrawImageRectLayerCommand::toJSON(SkJSONWriter& writer, UrlDataManager& url
     MakeJsonRect(writer, fDst);
     writer.appendName(DEBUGCANVAS_ATTRIBUTE_SAMPLING);
     MakeJsonSampling(writer, fSampling);
-    if (fPaint.isValid()) {
+    if (fPaint.has_value()) {
         writer.appendName(DEBUGCANVAS_ATTRIBUTE_PAINT);
         MakeJsonPaint(writer, *fPaint, urlDataManager);
     }
@@ -1567,21 +1578,22 @@ BeginDrawPictureCommand::BeginDrawPictureCommand(const SkPicture* picture,
                                                  const SkMatrix*  matrix,
                                                  const SkPaint*   paint)
         : INHERITED(kBeginDrawPicture_OpType)
-        , fPicture(SkRef(picture))
-        , fMatrix(matrix)
-        , fPaint(paint) {}
+        , fPicture(SkRef(picture)) {
+    assign_if_not_null(fMatrix, matrix);
+    assign_if_not_null(fPaint, paint);
+}
 
 void BeginDrawPictureCommand::execute(SkCanvas* canvas) const {
-    if (fPaint.isValid()) {
+    if (fPaint.has_value()) {
         SkRect bounds = fPicture->cullRect();
-        if (fMatrix.isValid()) {
+        if (fMatrix.has_value()) {
             fMatrix->mapRect(&bounds);
         }
-        canvas->saveLayer(&bounds, fPaint.get());
+        canvas->saveLayer(&bounds, &fPaint.value());
     }
 
-    if (fMatrix.isValid()) {
-        if (!fPaint.isValid()) {
+    if (fMatrix.has_value()) {
+        if (!fPaint.has_value()) {
             canvas->save();
         }
         canvas->concat(*fMatrix);
@@ -1936,8 +1948,9 @@ DrawEdgeAAImageSetCommand::DrawEdgeAAImageSetCommand(const SkCanvas::ImageSetEnt
         , fSet(count)
         , fCount(count)
         , fSampling(sampling)
-        , fPaint(paint)
         , fConstraint(constraint) {
+    assign_if_not_null(fPaint, paint);
+
     int totalDstClipCount, totalMatrixCount;
     SkCanvasPriv::GetDstClipAndMatrixCounts(set, count, &totalDstClipCount, &totalMatrixCount);
 
@@ -1954,17 +1967,20 @@ void DrawEdgeAAImageSetCommand::execute(SkCanvas* canvas) const {
                                             fDstClips.get(),
                                             fPreViewMatrices.get(),
                                             fSampling,
-                                            fPaint.getMaybeNull(),
+                                            SkOptAddressOrNull(fPaint),
                                             fConstraint);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 DrawDrawableCommand::DrawDrawableCommand(SkDrawable* drawable, const SkMatrix* matrix)
-        : INHERITED(kDrawDrawable_OpType), fDrawable(SkRef(drawable)), fMatrix(matrix) {}
+        : INHERITED(kDrawDrawable_OpType)
+        , fDrawable(SkRef(drawable)) {
+    assign_if_not_null(fMatrix, matrix);
+}
 
 void DrawDrawableCommand::execute(SkCanvas* canvas) const {
-    canvas->drawDrawable(fDrawable.get(), fMatrix.getMaybeNull());
+    canvas->drawDrawable(fDrawable.get(), SkOptAddressOrNull(fMatrix));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1998,17 +2014,18 @@ DrawAtlasCommand::DrawAtlasCommand(const SkImage*  image,
         , fTex(tex, count)
         , fColors(colors, colors ? count : 0)
         , fBlendMode(bmode)
-        , fSampling(sampling)
-        , fCull(cull)
-        , fPaint(paint) {}
+        , fSampling(sampling) {
+    assign_if_not_null(fCull, cull);
+    assign_if_not_null(fPaint, paint);
+}
 
 void DrawAtlasCommand::execute(SkCanvas* canvas) const {
     canvas->drawAtlas(fImage.get(),
                       fXform, fTex, fColors,
                       fBlendMode,
                       fSampling,
-                      fCull.getMaybeNull(),
-                      fPaint.getMaybeNull());
+                      SkOptAddressOrNull(fCull),
+                      SkOptAddressOrNull(fPaint));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2023,17 +2040,18 @@ void SaveCommand::execute(SkCanvas* canvas) const { canvas->save(); }
 
 SaveLayerCommand::SaveLayerCommand(const SkCanvas::SaveLayerRec& rec)
         : INHERITED(kSaveLayer_OpType)
-        , fBounds(rec.fBounds)
-        , fPaint(rec.fPaint)
         , fBackdrop(SkSafeRef(rec.fBackdrop))
         , fSaveLayerFlags(rec.fSaveLayerFlags)
         , fBackdropScale(SkCanvasPriv::GetBackdropScaleFactor(rec))
-        , fBackdropTileMode(rec.fBackdropTileMode) {}
+        , fBackdropTileMode(rec.fBackdropTileMode) {
+    assign_if_not_null(fBounds, rec.fBounds);
+    assign_if_not_null(fPaint, rec.fPaint);
+}
 
 void SaveLayerCommand::execute(SkCanvas* canvas) const {
     // In the common case fBackdropScale == 1.f and then this is no different than a regular Rec
-    canvas->saveLayer(SkCanvasPriv::ScaledBackdropLayer(fBounds.getMaybeNull(),
-                                                        fPaint.getMaybeNull(),
+    canvas->saveLayer(SkCanvasPriv::ScaledBackdropLayer(SkOptAddressOrNull(fBounds),
+                                                        SkOptAddressOrNull(fPaint),
                                                         fBackdrop.get(),
                                                         fBackdropScale,
                                                         fBackdropTileMode,
@@ -2042,11 +2060,11 @@ void SaveLayerCommand::execute(SkCanvas* canvas) const {
 
 void SaveLayerCommand::toJSON(SkJSONWriter& writer, UrlDataManager& urlDataManager) const {
     INHERITED::toJSON(writer, urlDataManager);
-    if (fBounds.isValid()) {
+    if (fBounds.has_value()) {
         writer.appendName(DEBUGCANVAS_ATTRIBUTE_BOUNDS);
         MakeJsonRect(writer, *fBounds);
     }
-    if (fPaint.isValid()) {
+    if (fPaint.has_value()) {
         writer.appendName(DEBUGCANVAS_ATTRIBUTE_PAINT);
         MakeJsonPaint(writer, *fPaint, urlDataManager);
     }

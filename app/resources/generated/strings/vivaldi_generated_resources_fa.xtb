@@ -27,7 +27,6 @@
 <translation id="1451375123200651445">صفحه وب، فایل تکی</translation>
 <translation id="1465176863081977902">کپی آدرس صوت</translation>
 <translation id="1476607407192946488">&amp;تنظیمات زبان</translation>
-<translation id="1546280085599573572">این افزونه، صفحه‌ای را با کلیک روی دکمه صفحه اصلی نمایش داده می‌شود، تغییر داده است.</translation>
 <translation id="1552752544932680961">مدیریت افزونه</translation>
 <translation id="15662109988763471">چاپگر انتخابی موجود نیست و یا به‌درستی نصب نشده است. چاپگر خود را بررسی کرده یا چاپگر دیگری را انتخاب کنید.</translation>
 <translation id="1588438908519853928">معمولی</translation>
@@ -68,7 +67,6 @@
 <translation id="215753907730220065">خروج از حالت تمام صفحه</translation>
 <translation id="2158475082070321257">کپی کردن لینک در موارد برجسته‌شده</translation>
 <translation id="2177950615300672361">برگه ناشناس: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">‏ماژول Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">جای‌گذاری به‌عنوان نوشتار ساده</translation>
 <translation id="2249605167705922988">برای مثال 5-1، 8، 13-11</translation>
 <translation id="2280486287150724112">حاشیه راست</translation>
@@ -81,7 +79,6 @@
 <translation id="2348176352564285430">برنامه: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">دایرکتوری برنامهٔ افزودنی را انتخاب کنید.</translation>
 <translation id="2379281330731083556">چاپ با استفاده از گفتگوی سیستم... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">افزایه ناشناس</translation>
 <translation id="2423578206845792524">ذ&amp;خیره‌ی تصویر به‌عنوان...</translation>
 <translation id="2439110203301358333">یکی از نرم‌افزارهای رایانه‌ی شما، افزونه‌ای را اضافه کرده که ممکن است بر کارکرد ویوالدی تأثیر بگذارد.</translation>
 <translation id="2443487764245141020">ممکن است سایت ها نیاز به شناسایی دستگاه شما با شناسه هم داشته باشند</translation>
@@ -105,7 +102,6 @@
 <translation id="2785873697295365461">توصیف‌گرهای فایل</translation>
 <translation id="2825758591930162672">کلید عمومی موضوع</translation>
 <translation id="2850541429955027218">افزودن قالب</translation>
-<translation id="2861941300086904918">‏مدیر امنیت Native Client</translation>
 <translation id="2881076733170862447">وقتی روی افزونه کلیک می‌کنید</translation>
 <translation id="2889064240420137087">گشودن پیوند با...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> نتوانست با این چاپگر ارتباط برقرار کند. مطمئن شوید چاپگر روشن است و دوباره امتحان کنید.</translation>
@@ -152,7 +148,6 @@
 <translation id="3511307672085573050">کپی آدر&amp;س پیوند</translation>
 <translation id="354068948465830244">می‌تواند داده‌های سایت را خوانده و تغییر دهد</translation>
 <translation id="3560034655160545939">&amp;غلط‌گیر املایی</translation>
-<translation id="3587482841069643663">همه</translation>
 <translation id="3627588569887975815">گشودن پیوند در پنجره‌ی حالت &amp;ناشناس</translation>
 <translation id="3678156199662914018">برنامهٔ افزودنی: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">درخواست اشتراک‌گذاری صفحه <ph name="APP_NAME" /></translation>
@@ -193,7 +188,6 @@
 <translation id="4131410914670010031">سیاه و سفید</translation>
 <translation id="4165986682804962316">تنظیمات سایت</translation>
 <translation id="4170314459383239649">پاک‌سازی در هنگام خروج</translation>
-<translation id="4176463684765177261">غیرفعال شد</translation>
 <translation id="4200983522494130825">&amp;زبانه‌ی جدید</translation>
 <translation id="4225397296022057997">در همه‌ی سایت‌ها</translation>
 <translation id="4256316378292851214">ذ&amp;خیره‌ی فایل ویدیویی به‌عنوان...</translation>
@@ -217,6 +211,7 @@
 <translation id="4613271546271159013">یک برنامه افزودنی صفحه‌ای را که موقع باز کردن برگه جدید نشان داده می‌شود، تغییر داده است.</translation>
 <translation id="4616405296204756919">می‌توانید از رمزهای عبور ذخیره شده در هر دستگاهی استفاده کنید. آن‌ها در <ph name="VIVALDI_PASSWORD_MANAGER" /> ذخیره می‌شوند.</translation>
 <translation id="4643612240819915418">&amp;باز کردن فایل ویدویی در زبانه جدید</translation>
+<translation id="4654801841330730814">همه</translation>
 <translation id="4677772697204437347">‏حافظه‌ی واحد گرافیکی</translation>
 <translation id="4681930562518940301">گشودن تصویر اصلی در زبانه‌ی جدید</translation>
 <translation id="4711638718396952945">بازیابی تنظیمات</translation>
@@ -242,11 +237,9 @@
 <translation id="5059526285558225588">انتخاب موارد قابل اشتراک‌گذاری</translation>
 <translation id="5063480226653192405">کاربرد</translation>
 <translation id="5116628073786783676">ذ&amp;خیره‌ی فایل صوتی به‌عنوان...</translation>
-<translation id="5143374789336132547">افزونه «<ph name="EXTENSION_NAME" />»، صفحه‌ای را با کلیک روی دکمه صفحه اصلی نمایش داده می‌شود، تغییر داده است.</translation>
 <translation id="5154108062446123722">تنظیمات پیشرفته برای <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5154702632169343078">موضوع</translation>
 <translation id="5171343362375269016">حافظه بخش سواپ</translation>
-<translation id="5233019165164992427">‏درگاه اشکال‌زدایی NaCl</translation>
 <translation id="5233231016133573565">شناسه فرایند</translation>
 <translation id="5233736638227740678">&amp;چسباندن</translation>
 <translation id="5256861893479663409">در همه‌ی سایت‌ها</translation>
@@ -269,7 +262,6 @@
 <translation id="5485102783864353244">افزودن برنامه</translation>
 <translation id="5486561344817861625">شبیه‌سازی راه‌اندازی مجدد مرورگر</translation>
 <translation id="5509693895992845810">ذخیره &amp;به‌عنوان...</translation>
-<translation id="5521078259930077036">آیا این همان صفحه اصلی مورد انتظار شماست؟</translation>
 <translation id="5542132724887566711">پروفایل</translation>
 <translation id="5556459405103347317">تازه‌سازی</translation>
 <translation id="5575473780076478375">افزونه ناشناس: <ph name="EXTENSION_NAME" /></translation>
@@ -280,7 +272,6 @@
 <translation id="5677928146339483299">مسدود شده</translation>
 <translation id="5707185214361380026">بارگذاری ناموفق افزونه از:</translation>
 <translation id="5713171467967533494">‏باز کردن در مرورگر ویوالدی</translation>
-<translation id="5715711091495208045">واسطه افزایه:‌ <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">‏ذخیره به‌عنوان PDF</translation>
 <translation id="5747809636523347288">&amp;جای‌گذاری و رفتن به <ph name="URL" /></translation>
 <translation id="5759728514498647443">اسنادی که از طریق <ph name="APP_NAME" /> برای چاپ ارسال می‌کنید، می‌توانند توسط <ph name="APP_NAME" /> خوانده شوند.</translation>
@@ -288,7 +279,6 @@
 <translation id="5780973441651030252">اولویت پردازش</translation>
 <translation id="5804241973901381774">مجوزها</translation>
 <translation id="5828633471261496623">در حال چاپ...</translation>
-<translation id="583281660410589416">ناشناس</translation>
 <translation id="5851868085455377790">صادرکننده</translation>
 <translation id="5860491529813859533">فعال‌سازی</translation>
 <translation id="5910363049092958439">ذ&amp;خیره‌ی فایل تصویری به‌عنوان...</translation>
@@ -340,7 +330,6 @@
 <translation id="6691936601825168937">&amp;صفحه‌ی بعد</translation>
 <translation id="6786747875388722282">افزونه‌ها</translation>
 <translation id="6787839852456839824">میان‌برهای صفحه کلید</translation>
-<translation id="6798954102094737107">افزایه: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">حفظ تغییرات</translation>
 <translation id="6824564591481349393">کپی آدرس &amp;ایمیل</translation>
 <translation id="6840155290835956714">پیش از ارسال سؤال شود</translation>
@@ -375,7 +364,6 @@
 <translation id="7629827748548208700">برگه: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">لغو</translation>
 <translation id="7659154729610375585">درهر صورت از حالت ناشناس خارج می‌شوید؟</translation>
-<translation id="7661259717474717992">اجازه به سایت‌ها برای ذخیره‌سازی و خواندن اطلاعات کوکی</translation>
 <translation id="7663719505383602579">گیرنده: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">نصب‌شده توسط مدیر شما</translation>
 <translation id="7685049629764448582">حافظه جاوااسکریپت</translation>
@@ -417,7 +405,6 @@
 <translation id="8261378640211443080">این برنامه‌افزودنی در <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> فهرست نشده است و ممکن است بدون اطلاع شما اضافه شده باشد.</translation>
 <translation id="8351419472474436977">این برنامه افزودنی کنترل تنظیمات پروکسی شما را در اختیار گرفته است یعنی می‌تواند هر چیزی را در که حالت آنلاین انجام می‌دهید تغییر دهد، خراب کند یا استراق سمع کند. اگر مطمئن نیستید چرا این تغییر اتفاق افتاده، احتمالاً این برنامه را نمی‌خواهید.</translation>
 <translation id="8382913212082956454">کپی آدرس ایمیل</translation>
-<translation id="8434480141477525001">‏درگاه اشکال‌زدایی NaCl</translation>
 <translation id="8449008133205184768">جای‌گذاری و انطباق سبک</translation>
 <translation id="8477178913400731244">حذف داده‌ها</translation>
 <translation id="8477384620836102176">&amp;عمومی</translation>

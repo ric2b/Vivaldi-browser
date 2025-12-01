@@ -10,9 +10,7 @@
 #import "app/vivaldi_apptools.h"
 // End Vivaldi
 
-BASE_FEATURE(kNewOverflowMenu,
-             "NewOverflowMenu",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kNewOverflowMenu, base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsNewOverflowMenuEnabled() {
 

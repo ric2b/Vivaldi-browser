@@ -4,8 +4,6 @@
 
 #import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_view_controller.h"
 
-#import <MaterialComponents/MaterialProgressView.h>
-
 #import "base/check.h"
 #import "base/feature_list.h"
 #import "base/metrics/field_trial_params.h"
@@ -51,7 +49,6 @@ const base::TimeDelta kBannerPromoAnimationDuration = base::Seconds(0.5);
 
 // TODO(crbug.com/374808149): Clean up the killswitch.
 BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
-             "PrimaryToolbarViewDidLoadUpdateViews",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 @interface PrimaryToolbarViewController () <TabGroupIndicatorViewDelegate>
@@ -228,40 +225,20 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
       [self verticalMarginForLocationBarForFullscreenProgress:1];
 }
 
-#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  // iOS 17 and later introduce a new way to handle trait changes. If the OS
-  // version is iOS 17 or later, we skip the old way of updating views.
-  if (@available(iOS 17, *)) {
-    return;
-  }
-  [self updateViews:self.view previousTraitCollection:previousTraitCollection];
-
-  // Vivaldi
-  [self refreshToolbarButtons];
-  [self updateToolbarButtonsTintColor];
-  // End Vivaldi
-}
-#endif
-
 - (void)viewDidLoad {
   [super viewDidLoad];
 
-  // On iOS 17 and later, we register for specific trait changes (vertical and
-  // horizontal size classes) and provide a handler method
+  // We register for specific trait changes (vertical and horizontal size
+  // classes) and provide a handler method
   // `updateViews:previousTraitCollection:` to be called when those traits
   // change.
-  if (@available(iOS 17, *)) {
-    [self registerForTraitChanges:@[
-      UITraitVerticalSizeClass.class, UITraitHorizontalSizeClass.class
-    ]
-                       withAction:@selector(updateViews:
-                                      previousTraitCollection:)];
-    // TODO(crbug.com/374808149): Clean up the killswitch.
-    if (base::FeatureList::IsEnabled(kPrimaryToolbarViewDidLoadUpdateViews)) {
-      [self updateViews:self.view previousTraitCollection:nil];
-    }
+  [self
+      registerForTraitChanges:
+          @[ UITraitVerticalSizeClass.class, UITraitHorizontalSizeClass.class ]
+                   withAction:@selector(updateViews:previousTraitCollection:)];
+  // TODO(crbug.com/374808149): Clean up the killswitch.
+  if (base::FeatureList::IsEnabled(kPrimaryToolbarViewDidLoadUpdateViews)) {
+    [self updateViews:self.view previousTraitCollection:nil];
   }
 }
 
@@ -431,6 +408,11 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
 #pragma mark - PrimaryToolbarConsumer
 
 - (void)showBannerPromo {
+
+  if (IsVivaldiRunning())
+    // Do not show the banner promo since that breaks our Primary Toolbar UI.
+    return; // End Vivaldi
+
   [self.view prepareToShowBannerPromo];
   [self.view.superview layoutIfNeeded];
 
@@ -459,6 +441,12 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
 }
 
 - (void)hideBannerPromo {
+
+  if (IsVivaldiRunning())
+    // Avoid triggering any changes to constraints or IntrinsicContentSize to
+    // prevent potential size changes.
+    return; // End Vivaldi
+
   [self.view.superview layoutIfNeeded];
   __weak __typeof(self) weakSelf = self;
   [UIView animateWithDuration:kBannerPromoAnimationDuration.InSecondsF()

@@ -356,8 +356,8 @@ void DedicatedWorkerHost::StartScriptLoad(
       nearest_ancestor_render_frame_host->GetSiteInstance()->GetPartitionDomain(
           storage_partition_impl);
 
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
-      "loading", "WorkerScriptFetcher CreateAndStart", TRACE_ID_LOCAL(this));
+  TRACE_EVENT_BEGIN("loading", "WorkerScriptFetcher CreateAndStart",
+                    perfetto::Track::FromPointer(this));
   WorkerScriptFetcher::CreateAndStart(
       worker_process_host_->GetDeprecatedID(), token_, script_url,
       *nearest_ancestor_render_frame_host, creator_render_frame_host,
@@ -384,8 +384,8 @@ void DedicatedWorkerHost::ReportNoBinderForInterface(const std::string& error) {
 void DedicatedWorkerHost::DidStartScriptLoad(
     std::optional<WorkerScriptFetcherResult> result) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  TRACE_EVENT_NESTABLE_ASYNC_END0(
-      "loading", "WorkerScriptFetcher CreateAndStart", TRACE_ID_LOCAL(this));
+  // WorkerScriptFetcher CreateAndStart
+  TRACE_EVENT_END("loading", perfetto::Track::FromPointer(this));
   TRACE_EVENT("loading", "DedicatedWorkerHost::DidStartScriptLoad",
               "final_response_url", script_request_url_);
 
@@ -459,6 +459,20 @@ void DedicatedWorkerHost::DidStartScriptLoad(
               worker_client_security_state_->is_web_secure_context,
               allow_non_secure_local_network_access,
               PrivateNetworkRequestContext::kWorker);
+
+      // Check for policy overrides on LNA. For dedicated workers, we apply
+      // policy based on origin of the document that owns the worker.
+      // TODO(crbug.com/452389539): Centralize these policy overrides.
+      ContentBrowserClient* client = GetContentClient()->browser();
+      BrowserContext* context = ancestor_render_frame_host->GetBrowserContext();
+      url::Origin origin = ancestor_render_frame_host->GetLastCommittedOrigin();
+      ContentBrowserClient::PrivateNetworkRequestPolicyOverride
+          policy_override = client->ShouldOverridePrivateNetworkRequestPolicy(
+              context, origin);
+      worker_client_security_state_->private_network_request_policy =
+          OverrideLocalNetworkAccessPolicy(
+              worker_client_security_state_->private_network_request_policy,
+              policy_override);
     } else {
       // Preserve incorrect functionality if PNA is not enabled.
       worker_client_security_state_ =
@@ -747,7 +761,8 @@ void DedicatedWorkerHost::CreateWebSocketConnector(
           ancestor_render_frame_host_id_.child_id,
           ancestor_render_frame_host_id_.frame_routing_id,
           GetStorageKey().origin(),
-          ancestor_render_frame_host->GetIsolationInfoForSubresources()),
+          ancestor_render_frame_host->GetIsolationInfoForSubresources(),
+          worker_client_security_state_->Clone()),
       std::move(receiver));
 }
 

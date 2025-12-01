@@ -17,6 +17,7 @@
 #include "base/notreached.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
+#include "build/android_buildflags.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/flags/android/chrome_session_state.h"
 #include "chrome/browser/profiles/profile.h"
@@ -27,6 +28,12 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "url/gurl.h"
+
+// "chrome/browser/ui/browser_window" is available on desktop Android, but not
+// other Android builds.
+#if BUILDFLAG(IS_DESKTOP_ANDROID)
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"  //nogncheck
+#endif
 
 TestTabModel::TestTabModel(Profile* profile,
                            chrome::android::ActivityType activity_type)
@@ -142,8 +149,9 @@ void TestTabModel::DiscardTab(tabs::TabHandle tab) {
   NOTIMPLEMENTED();
 }
 
-void TestTabModel::DuplicateTab(tabs::TabHandle tab) {
+tabs::TabInterface* TestTabModel::DuplicateTab(tabs::TabHandle tab) {
   NOTIMPLEMENTED();
+  return nullptr;
 }
 
 tabs::TabInterface* TestTabModel::GetTab(int index) {
@@ -196,6 +204,26 @@ void TestTabModel::Ungroup(const std::set<tabs::TabHandle>& tabs) {
 void TestTabModel::MoveGroupTo(tab_groups::TabGroupId group_id, int index) {
   NOTIMPLEMENTED();
 }
+
+void TestTabModel::MoveTabToWindow(tabs::TabHandle tab,
+                                   SessionID destination_window_id,
+                                   int destination_index) {
+  NOTIMPLEMENTED();
+}
+
+void TestTabModel::MoveTabGroupToWindow(tab_groups::TabGroupId group_id,
+                                        SessionID destination_window_id,
+                                        int destination_index) {
+  NOTIMPLEMENTED();
+}
+
+#if BUILDFLAG(IS_DESKTOP_ANDROID)
+void TestTabModel::AssociateWithBrowserWindow(BrowserWindowInterface* browser) {
+  scoped_unowned_user_data_ =
+      std::make_unique<ui::ScopedUnownedUserData<TabModel>>(
+          browser->GetUnownedUserDataHost(), *this);
+}
+#endif
 
 OwningTestTabModel::OwningTestTabModel(
     Profile* profile,
@@ -362,8 +390,9 @@ void OwningTestTabModel::DiscardTab(tabs::TabHandle tab) {
   NOTIMPLEMENTED();
 }
 
-void OwningTestTabModel::DuplicateTab(tabs::TabHandle tab) {
+tabs::TabInterface* OwningTestTabModel::DuplicateTab(tabs::TabHandle tab) {
   NOTIMPLEMENTED();
+  return nullptr;
 }
 
 tabs::TabInterface* OwningTestTabModel::GetTab(int index) {
@@ -415,6 +444,18 @@ void OwningTestTabModel::Ungroup(const std::set<tabs::TabHandle>& tabs) {
 
 void OwningTestTabModel::MoveGroupTo(tab_groups::TabGroupId group_id,
                                      int index) {
+  NOTIMPLEMENTED();
+}
+
+void OwningTestTabModel::MoveTabToWindow(tabs::TabHandle tab,
+                                         SessionID destination_window_id,
+                                         int destination_index) {
+  NOTIMPLEMENTED();
+}
+
+void OwningTestTabModel::MoveTabGroupToWindow(tab_groups::TabGroupId group_id,
+                                              SessionID destination_window_id,
+                                              int destination_index) {
   NOTIMPLEMENTED();
 }
 

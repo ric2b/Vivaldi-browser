@@ -255,4 +255,3 @@ go/cr-strings-process.
     should rarely be done.
 -   go/chrome-translation-process: More detailed look of the internals of how
     strings are translated/localized.
-

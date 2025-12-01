@@ -37,6 +37,8 @@
 #ifndef SRC_TINT_LANG_WGSL_ENUMS_H_
 #define SRC_TINT_LANG_WGSL_ENUMS_H_
 
+// clang-format off
+
 #include <cstdint>
 #include <string>
 #include <variant>
@@ -100,8 +102,7 @@ auto& operator<<(STREAM& out, ChromiumDiagnosticRule value) {
 
 /// ParseChromiumDiagnosticRule parses a ChromiumDiagnosticRule from a string.
 /// @param str the string to parse
-/// @returns the parsed enum, or ChromiumDiagnosticRule::kUndefined if the string could not be
-/// parsed.
+/// @returns the parsed enum, or ChromiumDiagnosticRule::kUndefined if the string could not be parsed.
 ChromiumDiagnosticRule ParseChromiumDiagnosticRule(std::string_view str);
 
 constexpr std::string_view kChromiumDiagnosticRuleStrings[] = {
@@ -114,16 +115,18 @@ constexpr std::string_view kChromiumDiagnosticRuleStrings[] = {
 enum class Extension : uint8_t {
     kUndefined,
     kChromiumDisableUniformityAnalysis,
+    kChromiumExperimentalBarycentricCoord,
+    kChromiumExperimentalDynamicBinding,
     kChromiumExperimentalFramebufferFetch,
     kChromiumExperimentalImmediate,
     kChromiumExperimentalPixelLocal,
-    kChromiumExperimentalPrimitiveId,
     kChromiumExperimentalSubgroupMatrix,
     kChromiumInternalGraphite,
     kChromiumInternalInputAttachments,
     kClipDistances,
     kDualSourceBlending,
     kF16,
+    kPrimitiveIndex,
     kSubgroups,
 };
 
@@ -147,32 +150,36 @@ Extension ParseExtension(std::string_view str);
 
 constexpr std::string_view kExtensionStrings[] = {
     "chromium_disable_uniformity_analysis",
+    "chromium_experimental_barycentric_coord",
+    "chromium_experimental_dynamic_binding",
     "chromium_experimental_framebuffer_fetch",
     "chromium_experimental_immediate",
     "chromium_experimental_pixel_local",
-    "chromium_experimental_primitive_id",
     "chromium_experimental_subgroup_matrix",
     "chromium_internal_graphite",
     "chromium_internal_input_attachments",
     "clip_distances",
     "dual_source_blending",
     "f16",
+    "primitive_index",
     "subgroups",
 };
 
 /// All extensions
 static constexpr Extension kAllExtensions[] = {
     Extension::kChromiumDisableUniformityAnalysis,
+    Extension::kChromiumExperimentalBarycentricCoord,
+    Extension::kChromiumExperimentalDynamicBinding,
     Extension::kChromiumExperimentalFramebufferFetch,
     Extension::kChromiumExperimentalImmediate,
     Extension::kChromiumExperimentalPixelLocal,
-    Extension::kChromiumExperimentalPrimitiveId,
     Extension::kChromiumExperimentalSubgroupMatrix,
     Extension::kChromiumInternalGraphite,
     Extension::kChromiumInternalInputAttachments,
     Extension::kClipDistances,
     Extension::kDualSourceBlending,
     Extension::kF16,
+    Extension::kPrimitiveIndex,
     Extension::kSubgroups,
 };
 
@@ -279,6 +286,7 @@ diag::Severity ToSeverity(DiagnosticSeverity sc);
 
 /// DiagnosticRuleSeverities is a map from diagnostic rule to diagnostic severity.
 using DiagnosticRuleSeverities = Hashmap<DiagnosticRule, DiagnosticSeverity, 1>;
+
 
 /// Enumerator of all builtin functions
 enum class BuiltinFn : uint8_t {
@@ -435,6 +443,8 @@ enum class BuiltinFn : uint8_t {
     kSubgroupMatrixMultiplyAccumulate,
     kPrint,
     kTintMaterialize,
+    kHasBinding,
+    kGetBinding,
     kNone,
 };
 
@@ -453,7 +463,7 @@ const char* str(BuiltinFn i);
 template <typename STREAM>
     requires(traits::IsOStream<STREAM>)
 auto& operator<<(STREAM& o, BuiltinFn i) {
-    return o << str(i);
+  return o << str(i);
 }
 
 /// All builtin functions
@@ -611,6 +621,8 @@ constexpr BuiltinFn kBuiltinFns[] = {
     BuiltinFn::kSubgroupMatrixMultiplyAccumulate,
     BuiltinFn::kPrint,
     BuiltinFn::kTintMaterialize,
+    BuiltinFn::kHasBinding,
+    BuiltinFn::kGetBinding,
 };
 
 /// All builtin function names
@@ -768,6 +780,8 @@ constexpr const char* kBuiltinFnStrings[] = {
     "subgroupMatrixMultiplyAccumulate",
     "print",
     "__tint_materialize",
+    "hasBinding",
+    "getBinding",
 };
 
 /// Determines if the given `f` is a coarse derivative.
@@ -837,10 +851,8 @@ bool IsSubgroupMatrix(BuiltinFn f);
 /// @returns true if the given `f` is a quadSwap* builtin
 bool IsQuadSwap(BuiltinFn f);
 
-/// Determines if the given `f` may have side-effects (i.e. writes to at least one of its inputs)
-/// @returns true if intrinsic may have side-effects
-bool HasSideEffects(BuiltinFn f);
-
 }  // namespace tint::wgsl
+
+// clang-format on
 
 #endif  // SRC_TINT_LANG_WGSL_ENUMS_H_

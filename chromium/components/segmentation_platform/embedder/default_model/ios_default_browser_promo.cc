@@ -245,7 +245,6 @@ constexpr std::array<MetadataWriter::UMAFeature, 32> kUMAFeatures = {
 
 // TODO(crbug.com/407788921): Clean up the killswitch.
 BASE_FEATURE(kIOSDefaultBrowserPromoDefaultModel,
-             "IOSDefaultBrowserPromoDefaultModel",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace
@@ -284,6 +283,17 @@ IosDefaultBrowserPromo::GetModelConfig() {
 
   // Set features.
   writer.AddUmaFeatures(kUMAFeatures.data(), kUMAFeatures.size());
+
+  // Add all custom inputs.
+  writer.AddFromInputContext("client_age_weeks", kClientAgeWeeks);
+  writer.AddFromInputContext("is_phone", kIsPhone);
+  writer.AddFromInputContext("is_country_BRIIM", kCountryBRIIM);
+  writer.AddFromInputContext("is_segmentation_android_phone",
+                             kSegmentationAndroidPhone);
+  writer.AddFromInputContext("is_segmentation_ios_chrome_phone",
+                             kSegmentationIOSPhoneChrome);
+  writer.AddFromInputContext("is_segmentation_synced_first_device",
+                             kSegmentationSyncedAndFirstDevice);
 
   return std::make_unique<ModelConfig>(std::move(metadata), kModelVersion);
 }

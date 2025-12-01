@@ -48,6 +48,7 @@
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 
 namespace blink {
@@ -393,12 +394,12 @@ ScriptElementBase::Type HTMLScriptElement::GetScriptElementType() {
 }
 
 Element& HTMLScriptElement::CloneWithoutAttributesAndChildren(
-    Document& factory) const {
+    Document& factory,
+    CustomElementRegistry* registry) const {
   CreateElementFlags flags =
       CreateElementFlags::ByCloneNode().SetAlreadyStarted(
           loader_->AlreadyStarted());
-  return *factory.CreateElement(TagQName(), flags, IsValue(),
-                                /*registry*/ nullptr);
+  return *factory.CreateElement(TagQName(), flags, IsValue(), registry);
 }
 
 bool HTMLScriptElement::IsPotentiallyRenderBlocking() const {
@@ -407,13 +408,6 @@ bool HTMLScriptElement::IsPotentiallyRenderBlocking() const {
 
   if (loader_->IsParserInserted() &&
       loader_->GetScriptType() == ScriptLoader::ScriptTypeAtPrepare::kClassic) {
-    // If ForceInOrderScript is enabled, treat the script having src attribute
-    // as non-render blocking even if it has neither async nor defer attribute.
-    // Because the script is force-in-order'ed, which behaves like the scripts
-    // categorized ScriptSchedulingType::kInOrder. Those're not render blocking.
-    if (base::FeatureList::IsEnabled(features::kForceInOrderScript) &&
-        HasSourceAttribute())
-      return false;
     return !AsyncAttributeValue() && !DeferAttributeValue();
   }
 
@@ -429,6 +423,10 @@ bool HTMLScriptElement::supports(const AtomicString& type) {
   if (type == script_type_names::kImportmap)
     return true;
 
+  if (type == script_type_names::kRoutemap &&
+      RuntimeEnabledFeatures::RouteMatchingEnabled()) {
+    return true;
+  }
   if (type == script_type_names::kSpeculationrules) {
     return true;
   }

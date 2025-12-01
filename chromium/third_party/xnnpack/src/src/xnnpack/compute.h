@@ -34,6 +34,7 @@ enum xnn_parallelization_type {
   xnn_parallelization_type_2d_tile_2d_dynamic_with_thread,
   xnn_parallelization_type_3d,
   xnn_parallelization_type_3d_tile_1d,
+  xnn_parallelization_type_3d_tile_1d_dynamic,
   xnn_parallelization_type_3d_tile_1d_with_thread,
   xnn_parallelization_type_3d_tile_1d_dynamic_with_thread,
   xnn_parallelization_type_3d_tile_2d,
@@ -83,6 +84,7 @@ struct compute_parameters {
     pthreadpool_task_3d_t task_3d;
     pthreadpool_task_3d_tile_1d_t task_3d_tile_1d;
     pthreadpool_task_3d_tile_1d_with_thread_t task_3d_tile_1d_with_thread;
+    pthreadpool_task_3d_tile_1d_dynamic_t task_3d_tile_1d_dynamic;
     pthreadpool_task_3d_tile_1d_dynamic_with_id_t
         task_3d_tile_1d_dynamic_with_id;
     pthreadpool_task_3d_tile_2d_t task_3d_tile_2d;
@@ -491,6 +493,7 @@ struct conv2d_igemm_indirection_init_context {
   size_t dilation_width;
   size_t input_padding_top;
   size_t input_padding_left;
+  size_t mr;
 };
 
 // Context for Indirect Dense Matrix Multiplication.
@@ -728,7 +731,7 @@ struct subconv_context {
 };
 
 XNN_PRIVATE void xnn_compute_dq_zero_buffer_subconv(
-    struct subconv_context* context, size_t batch_index);
+    struct subconv_context* context, size_t batch_index, size_t batch_size);
 
 XNN_PRIVATE void xnn_compute_grouped_subconv2d(
     struct subconv_context* context, size_t batch_index, size_t group_index,
@@ -1135,24 +1138,28 @@ struct reduce_context {
   union {
     xnn_reduce_ukernel_fn contiguous_reduce;
     xnn_reduce_discontiguous_ukernel_fn discontiguous_reduce;
+    xnn_reduce_discontiguous_ukernel_fn2 discontiguous_reduce2;
   } ukernel;
   xnn_vunary_ukernel_fn cvt_ukernel;
   xnn_fill_ukernel_fn fill_ukernel;
   struct xnn_reduce_params params;
   union xnn_unary_uparams cvt_params;
+  // TODO(b/405244706): remove once all the datatypes and reductions are
+  // supported.
+  bool is_old_reduce;
 };
 
 // Compute contiguous reduction over the 1st, 3rd and 5th dimensions of the
 // input tensor.
 XNN_PRIVATE void xnn_compute_contiguous_reduce(
     struct reduce_context* context, size_t output_idx0, size_t output_idx1,
-    size_t output_idx2, size_t output1_block_size, size_t output2_block_size);
+    size_t output_idx2, size_t output2_block_size);
 
 // Compute discontiguous reduction over the 0st, 2rd and 4th dimensions of the
 // input tensor.
 XNN_PRIVATE void xnn_compute_discontiguous_reduce(
     struct reduce_context* context, size_t output_idx0, size_t output_idx1,
-    size_t output_idx2, size_t output1_block_size, size_t output2_block_size);
+    size_t output_idx2, size_t output2_block_size);
 
 struct vmulcaddc_context {
   size_t n;

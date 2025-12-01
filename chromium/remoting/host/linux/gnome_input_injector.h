@@ -5,28 +5,35 @@
 #ifndef REMOTING_HOST_LINUX_GNOME_INPUT_INJECTOR_H_
 #define REMOTING_HOST_LINUX_GNOME_INPUT_INJECTOR_H_
 
-#include <string_view>
+#include <set>
 
+#include "base/memory/weak_ptr.h"
 #include "remoting/host/input_injector.h"
+#include "remoting/host/linux/clipboard_gnome.h"
+#include "remoting/host/linux/gdbus_connection_ref.h"
+#include "remoting/host/linux/pipewire_capture_stream_manager.h"
+#include "third_party/webrtc/modules/desktop_capture/desktop_capture_types.h"
 
 namespace remoting {
 
 class EiSenderSession;
+class EiKeymap;
 
 class GnomeInputInjector : public InputInjector {
  public:
   // The stream's mapping-id is needed for injecting absolute mouse motion.
   // Currently, there is only 1 capture-stream and its mapping-id never
   // changes during the connection lifetime.
-  // TODO: crbug.com/432217140 - when multiple displays are supported, this
-  // parameter should be replaced with some kind of stream-mapping. This should
-  // convert the stream-id from the mouse-event's FractionalCoordinate to a
-  // mapping-id. Alternatively, EiSenderSession could maintain this mapping
-  // information, but this may depend on exactly how the stream-id will be
-  // implemented.
-  GnomeInputInjector(std::unique_ptr<EiSenderSession> session,
-                     std::string_view stream_mapping_id);
+  GnomeInputInjector(
+      base::WeakPtr<EiSenderSession> session,
+      base::WeakPtr<const PipewireCaptureStreamManager> stream_manager,
+      GDBusConnectionRef dbus_connection,
+      gvariant::ObjectPath session_path);
   ~GnomeInputInjector() override;
+
+  base::WeakPtr<GnomeInputInjector> GetWeakPtr();
+
+  void SetKeymap(base::WeakPtr<EiKeymap> keymap);
 
   // InputInjector implementation
   void Start(
@@ -42,8 +49,13 @@ class GnomeInputInjector : public InputInjector {
   void InjectClipboardEvent(const protocol::ClipboardEvent& event) override;
 
  private:
-  std::unique_ptr<EiSenderSession> ei_session_;
-  std::string stream_mapping_id_;
+  base::WeakPtr<EiSenderSession> ei_session_;
+  base::WeakPtr<EiKeymap> keymap_;
+  base::WeakPtr<const PipewireCaptureStreamManager> stream_manager_;
+  ClipboardGnome clipboard_;
+  std::set<uint32_t> pressed_keys_;
+
+  base::WeakPtrFactory<GnomeInputInjector> weak_factory_{this};
 };
 
 }  // namespace remoting

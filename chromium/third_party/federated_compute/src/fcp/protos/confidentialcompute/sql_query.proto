@@ -1,0 +1,85 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.confidentialcompute;
+
+import "fcp/protos/data_type.proto";
+
+option java_package = "com.google.intelligence.fcp.confidentialcompute";
+option java_multiple_files = true;
+
+// Schema information describing a SQL column.
+message ColumnSchema {
+  // The column name.
+  string name = 1;
+
+  // ExampleQuery output vector data type.
+  // TODO: b/425744048 - Remove this dependency on plan.proto.
+  google.internal.federated.plan.DataType type = 2;
+}
+
+// Schema information describing a SQL table.
+message TableSchema {
+  // The table name.
+  string name = 1;
+
+  // Columns associated with this table.
+  repeated ColumnSchema column = 2;
+
+  // The raw SQL statement string to create the table.
+  string create_table_sql = 4;
+}
+
+// Database schema information.
+message DatabaseSchema {
+  // Tables registered in the database.
+  repeated TableSchema table = 1;
+}
+
+message SqlQuery {
+  // Supported SQL dialects.
+  enum SqlDialect {
+    UNKNOWN = 0;
+    SQLITE = 1;
+  }
+
+  // The SQL dialect the query is expressed in.
+  SqlDialect sql_dialect = 1;
+
+  // Schema information for the client database required to run this query.
+
+  DatabaseSchema database_schema = 2;
+
+  // The raw SQL query string.
+  string raw_sql = 3;
+
+  // Schema information for the client SQL query output columns.
+  repeated ColumnSchema output_columns = 4;
+
+  // The numerical identifier for the result blob of the SQL query. This field
+  // is only used by trusted services. If this field is empty then the trusted
+  // SQL service will not encrypt its outputs.
+  optional uint32 output_blob_id = 5;
+}
+
+// A set of SQL queries that are executed on the same inputs.
+message SqlQuerySet {
+  // Map of query names to SQL queries.
+  map<string, SqlQuery> sql_queries = 1;
+
+  // Input database schema for this set of queries.
+  DatabaseSchema database_schema = 2;
+}

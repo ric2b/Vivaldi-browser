@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,34 +9,34 @@ import type {NameValue} from './NetworkRequest.js';
 
 const UIStrings = {
   /**
-   *@description Text in Server Timing
-   *@example {sql-lookup} PH1
+   * @description Text in Server Timing
+   * @example {sql-lookup} PH1
    */
   deprecatedSyntaxFoundPleaseUse:
       'Deprecated syntax found for metric "{PH1}". Please use: <name>;dur=<duration>;desc=<description>',
   /**
-   *@description Text in Server Timing
-   *@example {https} PH1
+   * @description Text in Server Timing
+   * @example {https} PH1
    */
   duplicateParameterSIgnored: 'Duplicate parameter "{PH1}" ignored.',
   /**
-   *@description Text in Server Timing
-   *@example {https} PH1
+   * @description Text in Server Timing
+   * @example {https} PH1
    */
   noValueFoundForParameterS: 'No value found for parameter "{PH1}".',
   /**
-   *@description Text in Server Timing
-   *@example {https} PH1
+   * @description Text in Server Timing
+   * @example {https} PH1
    */
   unrecognizedParameterS: 'Unrecognized parameter "{PH1}".',
   /**
-   *@description Text in Server Timing
+   * @description Text in Server Timing
    */
   extraneousTrailingCharacters: 'Extraneous trailing characters.',
   /**
-   *@description Text in Server Timing
-   *@example {https} PH1
-   *@example {2.0} PH2
+   * @description Text in Server Timing
+   * @example {https} PH1
+   * @example {2.0} PH2
    */
   unableToParseSValueS: 'Unable to parse "{PH1}" value "{PH2}".',
 } as const;
@@ -75,13 +75,13 @@ export class ServerTiming {
       return null;
     }
 
-    const serverTimings = rawServerTimingHeaders.reduce((timings, header) => {
+    const serverTimings = rawServerTimingHeaders.reduce<ServerTiming[]>((timings, header) => {
       const timing = this.createFromHeaderValue(header.value);
       timings.push(...timing.map(function(entry) {
         return new ServerTiming(entry.name, entry.dur ?? null, entry.desc ?? '');
       }));
       return timings;
-    }, ([] as ServerTiming[]));
+    }, []);
     return serverTimings;
   }
 

@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2011 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2011 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 import {InspectorFrontendHostInstance} from './InspectorFrontendHost.js';
 import {EnumeratedHistogram} from './InspectorFrontendHostAPI.js';
@@ -280,11 +254,6 @@ export class UserMetrics {
         EnumeratedHistogram.RecordingCopiedToClipboard, value, RecordingCopiedToClipboard.MAX_VALUE);
   }
 
-  cssHintShown(type: CSSHintType): void {
-    InspectorFrontendHostInstance.recordEnumeratedHistogram(
-        EnumeratedHistogram.CSSHintShown, type, CSSHintType.MAX_VALUE);
-  }
-
   lighthouseModeRun(type: LighthouseModeRun): void {
     InspectorFrontendHostInstance.recordEnumeratedHistogram(
         EnumeratedHistogram.LighthouseModeRun, type, LighthouseModeRun.MAX_VALUE);
@@ -526,7 +495,7 @@ export enum Action {
   AiAssistanceOpenedFromNetworkPanel = 170,
   AiAssistanceOpenedFromSourcesPanel = 171,
   AiAssistanceOpenedFromSourcesPanelFloatingButton = 172,
-  AiAssistanceOpenedFromPerformancePanel = 173,
+  AiAssistanceOpenedFromPerformancePanelCallTree = 173,
   AiAssistanceOpenedFromNetworkPanelFloatingButton = 174,
   AiAssistancePanelOpened = 175,
   AiAssistanceQuerySubmitted = 176,
@@ -536,7 +505,14 @@ export enum Action {
   AiAssistanceSideEffectRejected = 180,
   AiAssistanceError = 181,
   AiAssistanceOpenedFromPerformanceInsight = 182,
-  MAX_VALUE = 183,
+  AiAssistanceOpenedFromPerformanceFullButton = 183,
+  AiCodeCompletionResponseServedFromCache = 184,
+  AiCodeCompletionRequestTriggered = 185,
+  AiCodeCompletionSuggestionDisplayed = 186,
+  AiCodeCompletionSuggestionAccepted = 187,
+  AiCodeCompletionError = 188,
+  AttributeLinkClicked = 189,
+  MAX_VALUE = 190,
   /* eslint-enable @typescript-eslint/naming-convention */
 }
 
@@ -820,18 +796,15 @@ export enum DevtoolsExperiments {
   'instrumentation-breakpoints' = 61,
   'authored-deployed-grouping' = 63,
   'just-my-code' = 65,
-  'highlight-errors-elements-panel' = 73,
   'use-source-map-scopes' = 76,
   'timeline-show-postmessage-events' = 86,
-  'timeline-save-as-gz' = 108,
   'timeline-enhanced-traces' = 90,
   'timeline-compiled-sources' = 91,
   'timeline-debug-mode' = 93,
-  'vertical-drawer' = 107,
   /* eslint-enable @typescript-eslint/naming-convention */
 
   // Increment this when new experiments are added.
-  MAX_VALUE = 109,
+  MAX_VALUE = 110,
 }
 
 // Update DevToolsIssuesPanelIssueExpanded from tools/metrics/histograms/enums.xml if new enum is added.
@@ -1193,25 +1166,6 @@ export enum ManifestSectionCodes {
   MAX_VALUE = 6,
 }
 
-// The names here match the CSSRuleValidator names in CSSRuleValidator.ts.
-export const enum CSSHintType {
-  OTHER = 0,
-  ALIGN_CONTENT = 1,
-  FLEX_ITEM = 2,
-  FLEX_CONTAINER = 3,
-  GRID_CONTAINER = 4,
-  GRID_ITEM = 5,
-  FLEX_GRID = 6,
-  MULTICOL_FLEX_GRID = 7,
-  PADDING = 8,
-  POSITION = 9,
-  Z_INDEX = 10,
-  SIZING = 11,
-  FLEX_OR_GRID_ITEM = 12,
-  FONT_VARIATION_SETTINGS = 13,
-  MAX_VALUE = 14,
-}
-
 export const enum LighthouseModeRun {
   NAVIGATION = 0,
   TIMESPAN = 1,
@@ -1241,7 +1195,8 @@ export const enum SwatchType {
   ANGLE = 7,
   LENGTH = 8,
   POSITION_TRY_LINK = 10,
-  MAX_VALUE = 11,
+  ATTR_LINK = 11,
+  MAX_VALUE = 12,
 }
 
 export const enum BadgeType {

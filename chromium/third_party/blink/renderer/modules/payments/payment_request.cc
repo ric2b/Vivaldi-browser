@@ -892,8 +892,8 @@ PaymentRequest::securePaymentConfirmationAvailability(
   CredentialManagerProxy::From(script_state)
       ->SecurePaymentConfirmationService()
       ->SecurePaymentConfirmationAvailability(
-          WTF::BindOnce(&OnSecurePaymentConfirmationAvailabilityResponse,
-                        std::make_unique<ScopedPromiseResolver>(resolver)));
+          BindOnce(&OnSecurePaymentConfirmationAvailabilityResponse,
+                   std::make_unique<ScopedPromiseResolver>(resolver)));
 
   return promise;
 }
@@ -1256,8 +1256,8 @@ void PaymentRequest::OnUpdatePaymentDetails(PaymentDetailsUpdate* details) {
       *GetExecutionContext(), PassThroughException(isolate));
   if (try_catch.HasCaught()) {
     ApplyContextToException(resolver->GetScriptState(), try_catch.Exception(),
-                            ExceptionContext(v8::ExceptionContext::kConstructor,
-                                             "PaymentDetailsUpdate"));
+                            v8::ExceptionContext::kConstructor,
+                            "PaymentDetailsUpdate", "");
     resolver->Reject(try_catch.Exception());
     ClearResolversAndCloseMojoConnection();
     return;
@@ -1437,8 +1437,8 @@ PaymentRequest::PaymentRequest(
     DomWindow()->GetBrowserInterfaceBroker().GetInterface(
         payment_provider_.BindNewPipeAndPassReceiver(task_runner));
   }
-  payment_provider_.set_disconnect_handler(WTF::BindOnce(
-      &PaymentRequest::OnConnectionError, WrapWeakPersistent(this)));
+  payment_provider_.set_disconnect_handler(
+      BindOnce(&PaymentRequest::OnConnectionError, WrapWeakPersistent(this)));
 
   UseCounter::Count(execution_context, WebFeature::kPaymentRequestInitialized);
   mojo::PendingRemote<payments::mojom::blink::PaymentRequestClient> client;

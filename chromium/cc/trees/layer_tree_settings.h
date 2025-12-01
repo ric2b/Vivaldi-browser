@@ -72,6 +72,9 @@ class CC_EXPORT LayerTreeSettings {
   base::TimeDelta scrollbar_thinning_duration;
   float idle_thickness_scale = 0.4f;
   bool scrollbar_flash_after_any_scroll_update = false;
+  bool scrollbar_flash_once_after_scroll_update = false;
+  bool scrollbar_flash_once_visible_on_viewport = false;
+  bool scrollbar_flash_when_mouse_enter = false;
   base::TimeDelta scroll_animation_duration_for_testing;
   bool layers_always_allowed_lcd_text = false;
   float top_controls_show_threshold = 0.5f;
@@ -119,11 +122,6 @@ class CC_EXPORT LayerTreeSettings {
   // Image Decode Service and raster tiles without images until the decode is
   // ready.
   bool enable_checker_imaging = false;
-
-  // When content needs a wide color gamut, raster in wide if available.
-  // But when the content is sRGB, some situations prefer to raster in
-  // wide while others prefer to raster in sRGB.
-  bool prefer_raster_in_srgb = false;
 
   // The minimum size of an image we should considering decoding using the
   // deferred path.
@@ -235,8 +233,6 @@ class CC_EXPORT LayerTreeSettings {
 
   // Whether to use variable refresh rates when generating begin frames.
   bool enable_variable_refresh_rate = false;
-
-  bool dynamic_safe_area_insets_on_scroll_enabled = false;
 };
 
 }  // namespace cc

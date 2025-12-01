@@ -698,6 +698,7 @@ class SUAppcastTest: XCTestCase {
         
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "E, dd MMM yyyy HH:mm:ss Z"
+        dateFormatter.locale = Locale(identifier: "en_US")
         
         do {
             let testData = try Data(contentsOf: testURL)
@@ -996,6 +997,11 @@ class SUAppcastTest: XCTestCase {
 
             XCTAssertEqual("https://fake.sparkle-project.org/updates/release-3.0.zip", items[0].fileURL?.absoluteString)
             XCTAssertEqual("https://fake.sparkle-project.org/updates/notes/relnote-3.0.txt", items[0].releaseNotesURL?.absoluteString)
+
+            XCTAssertEqual(2, items[0].deltaUpdates!.count)
+
+            XCTAssertEqual("https://fake.sparkle-project.org/updates/3.0_from_2.0.delta", items[0].deltaUpdates!["2.0"]!.fileURL?.absoluteString)
+            XCTAssertEqual("https://fake.sparkle-project.org/updates/3.0_from_1.0.delta", items[0].deltaUpdates!["1.0"]!.fileURL?.absoluteString)
 
             XCTAssertEqual("https://fake.sparkle-project.org/info/info-2.0.txt", items[1].infoURL?.absoluteString)
             

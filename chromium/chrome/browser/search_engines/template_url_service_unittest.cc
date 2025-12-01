@@ -1612,17 +1612,18 @@ TEST_F(TemplateURLServiceTest, GenerateVisitOnKeyword) {
       GURL(t_url->url_ref().ReplaceSearchTerms(
           TemplateURLRef::SearchTermsArgs(u"blah"), search_terms_data())),
       Time::Now(), 0, 0, GURL(), history::RedirectList(),
-      ui::PAGE_TRANSITION_KEYWORD, history::SOURCE_BROWSED, false);
+      ui::PAGE_TRANSITION_KEYWORD, history::SOURCE_BROWSED,
+      history::VisitResponseCodeCategory::kNot404, false);
 
   // Wait for history to finish processing the request.
   test_util()->profile()->BlockUntilHistoryProcessesPendingRequests();
 
   // Query history for the generated url.
   base::CancelableTaskTracker tracker;
-  history::QueryURLResult query_url_result;
-  history->QueryURL(
-      GURL("http://keyword"), true,
-      base::BindLambdaForTesting([&](history::QueryURLResult result) {
+  history::QueryURLAndVisitsResult query_url_result;
+  history->QueryURLAndVisits(
+      GURL("http://keyword"), history::VisitQuery404sPolicy::kInclude404s,
+      base::BindLambdaForTesting([&](history::QueryURLAndVisitsResult result) {
         query_url_result = std::move(result);
       }),
       &tracker);

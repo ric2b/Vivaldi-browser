@@ -15,6 +15,8 @@ namespace base::features {
 // alongside the definition of their values in the .cc file.
 
 // Alphabetical:
+BASE_EXPORT BASE_DECLARE_FEATURE(kBoostCompositorThreadsPriorityWhenIdle);
+
 BASE_EXPORT BASE_DECLARE_FEATURE(kFeatureParamWithCache);
 
 BASE_EXPORT BASE_DECLARE_FEATURE(kFastFilePathIsParent);
@@ -24,13 +26,18 @@ BASE_EXPORT BASE_DECLARE_FEATURE_PARAM(bool,
 
 BASE_EXPORT BASE_DECLARE_FEATURE(kLowEndMemoryExperiment);
 
-BASE_EXPORT BASE_DECLARE_FEATURE_PARAM(size_t, kLowMemoryDeviceThresholdMB);
+BASE_EXPORT BASE_DECLARE_FEATURE_PARAM(int, kLowMemoryDeviceThresholdMB);
 
 // PPM: Poor performance moment.
 //
 // This feature covers fixes to many egregious performance problems and the goal
 // is to measure their aggregated impact.
 BASE_EXPORT BASE_DECLARE_FEATURE(kReducePPMs);
+
+BASE_EXPORT BASE_DECLARE_FEATURE(kStackScanMaxFramePointerToStackEndGap);
+BASE_EXPORT BASE_DECLARE_FEATURE_PARAM(
+    int,
+    kStackScanMaxFramePointerToStackEndGapThresholdMB);
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
 BASE_EXPORT BASE_DECLARE_FEATURE(kPartialLowEndModeOn3GbDevices);
@@ -39,16 +46,23 @@ BASE_EXPORT BASE_DECLARE_FEATURE(kPartialLowEndModeOnMidRangeDevices);
 
 #if BUILDFLAG(IS_ANDROID)
 BASE_EXPORT BASE_DECLARE_FEATURE(kBackgroundNotPerceptibleBinding);
-BASE_EXPORT BASE_DECLARE_FEATURE(kCollectAndroidFrameTimelineMetrics);
+BASE_EXPORT BASE_DECLARE_FEATURE(kEffectiveBindingState);
 BASE_EXPORT BASE_DECLARE_FEATURE(
     kPostPowerMonitorBroadcastReceiverInitToBackground);
 BASE_EXPORT BASE_DECLARE_FEATURE(kPostGetMyMemoryStateToBackground);
+BASE_EXPORT BASE_DECLARE_FEATURE(kRebindingChildServiceConnectionController);
 BASE_EXPORT BASE_DECLARE_FEATURE(kUpdateStateBeforeUnbinding);
+BASE_EXPORT BASE_DECLARE_FEATURE(kUseIsUnboundCheck);
 BASE_EXPORT BASE_DECLARE_FEATURE(kUseSharedRebindServiceConnection);
 
 BASE_EXPORT BASE_DECLARE_FEATURE(kBackgroundThreadPoolFieldTrial);
 BASE_EXPORT BASE_DECLARE_FEATURE_PARAM(int,
                                        kBackgroundThreadPoolFieldTrialConfig);
+
+BASE_EXPORT BASE_DECLARE_FEATURE(kLibraryPrefetcherMadvise);
+BASE_EXPORT BASE_DECLARE_FEATURE_PARAM(size_t, kLibraryPrefetcherMadviseLength);
+BASE_EXPORT BASE_DECLARE_FEATURE_PARAM(bool, kLibraryPrefetcherMadviseFallback);
+
 #endif
 
 // Whether the ReducePPMs feature is enabled. Unlike

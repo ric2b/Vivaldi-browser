@@ -85,7 +85,6 @@ class PLATFORM_EXPORT FrameWidget {
   virtual void RequestDecode(const cc::DrawImage&,
                              base::OnceCallback<void(bool)>,
                              bool speculative) = 0;
-  virtual bool SpeculativeDecodeRequestInFlight() const = 0;
 
   // Forwards to `WebFrameWidget::NotifyPresentationTime()`.
   // `presentation_callback` will be fired when the corresponding renderer frame
@@ -324,6 +323,9 @@ class PLATFORM_EXPORT FrameWidget {
   // other parameters are recorded earlier).
   virtual AnimationFrameTimingInfo* RecordRenderingUpdateEndTime(
       base::TimeTicks) = 0;
+
+  virtual void OnFirstContentfulPaint(
+      const base::TimeTicks& first_paint_time) = 0;
 };
 
 }  // namespace blink

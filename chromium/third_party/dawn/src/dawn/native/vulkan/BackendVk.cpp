@@ -164,6 +164,12 @@ constexpr SkippedMessage kSkippedMessages[] = {
      "vkAllocateMemory(): pAllocateInfo->pNext<VkMemoryDedicatedAllocateInfo>"},
     // crbug.com/324282958
     {"NVIDIA", "vkBindImageMemory: memoryTypeIndex"},
+
+    // crbug.com/441788589
+    {"VUID-vkCmdDraw-None-08114",
+     // vkCmdDraw(): the descriptor
+     "is being used in draw but has never been updated via vkUpdateDescriptorSets() or a similar "
+     "call."},
 };
 
 namespace dawn::native::vulkan {
@@ -335,28 +341,12 @@ MaybeError VulkanInstance::Initialize(const InstanceBase* instance, ICD icd) {
 
     const std::vector<std::string>& searchPaths = instance->GetRuntimeSearchPaths();
 
-    auto CommaSeparatedResolvedSearchPaths = [&](const char* name) {
-        std::string list;
-        bool first = true;
-        for (const std::string& path : searchPaths) {
-            if (!first) {
-                list += ", ";
-            }
-            first = false;
-            list += (path + name);
-        }
-        return list;
-    };
-
     auto LoadVulkan = [&](const char* libName) -> MaybeError {
-        for (const std::string& path : searchPaths) {
-            std::string resolvedPath = path + libName;
-            if (mVulkanLib.Open(resolvedPath)) {
-                return {};
-            }
+        std::string error;
+        if (mVulkanLib.Open(libName, searchPaths, &error)) {
+            return {};
         }
-        return DAWN_FORMAT_INTERNAL_ERROR("Couldn't load Vulkan. Searched %s.",
-                                          CommaSeparatedResolvedSearchPaths(libName));
+        return DAWN_FORMAT_INTERNAL_ERROR("Couldn't load Vulkan: %s", error.c_str());
     };
 
     switch (icd) {
@@ -466,7 +456,7 @@ ResultOrError<VulkanGlobalKnobs> VulkanInstance::CreateVkInstance(const Instance
     appInfo.applicationVersion = 0;
     appInfo.pEngineName = "Dawn";
     appInfo.engineVersion = 0;
-    appInfo.apiVersion = std::min(mGlobalInfo.apiVersion, VK_API_VERSION_1_3);
+    appInfo.apiVersion = std::min(mGlobalInfo.apiVersion, VK_API_VERSION_1_4);
 
     VkInstanceCreateInfo createInfo;
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;

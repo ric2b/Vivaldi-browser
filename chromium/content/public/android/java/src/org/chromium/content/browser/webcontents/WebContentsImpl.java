@@ -34,7 +34,6 @@ import org.chromium.base.TerminationStatus;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.UserData;
 import org.chromium.base.UserDataHost;
-import org.chromium.base.process_launcher.ChildProcessConnection;
 import org.chromium.blink_public.input.SelectionGranularity;
 import org.chromium.build.annotations.Initializer;
 import org.chromium.build.annotations.NullMarked;
@@ -605,9 +604,6 @@ public class WebContentsImpl
             @ChildProcessImportance int mainFrameImportance,
             @ChildProcessImportance int subframeImportance) {
         checkNotDestroyed();
-        assert ChildProcessConnection.supportNotPerceptibleBinding()
-                || (mainFrameImportance != ChildProcessImportance.PERCEPTIBLE
-                        && subframeImportance != ChildProcessImportance.PERCEPTIBLE);
         assert mainFrameImportance >= subframeImportance;
         WebContentsImplJni.get()
                 .setPrimaryPageImportance(
@@ -1225,6 +1221,19 @@ public class WebContentsImpl
     }
 
     @Override
+    public void setCanAcceptLoadDrops(boolean enabled) {
+        checkNotDestroyed();
+        WebContentsImplJni.get().setCanAcceptLoadDrops(mNativeWebContentsAndroid, enabled);
+    }
+
+    @Override
+    public boolean getCanAcceptLoadDropsForTesting() {
+        checkNotDestroyed();
+        return WebContentsImplJni.get()
+                .getCanAcceptLoadDropsForTesting(mNativeWebContentsAndroid); // IN-TEST
+    }
+
+    @Override
     public void updateOffsetTagDefinitions(
             BrowserControlsOffsetTagDefinitions offsetTagDefinitions) {
         if (mNativeWebContentsAndroid == 0) return;
@@ -1258,6 +1267,13 @@ public class WebContentsImpl
     @Override
     public int getOriginalWindowOpenDisposition() {
         return WebContentsImplJni.get().getOriginalWindowOpenDisposition(mNativeWebContentsAndroid);
+    }
+
+    @Override
+    public void updateWindowControlsOverlay(Rect rect) {
+        WebContentsImplJni.get()
+                .updateWindowControlsOverlay(
+                        mNativeWebContentsAndroid, rect.left, rect.top, rect.right, rect.bottom);
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
@@ -1479,6 +1495,10 @@ public class WebContentsImpl
 
         void setLongPressLinkSelectText(long nativeWebContentsAndroid, boolean enabled);
 
+        void setCanAcceptLoadDrops(long nativeWebContentsAndroid, boolean enabled);
+
+        boolean getCanAcceptLoadDropsForTesting(long nativeWebContentsAndroid);
+
         void updateOffsetTagDefinitions(
                 long nativeWebContentsAndroid,
                 BrowserControlsOffsetTagDefinitions offsetTagDefinitions);
@@ -1491,5 +1511,8 @@ public class WebContentsImpl
         boolean hasOpener(long nativeWebContentsAndroid);
 
         int getOriginalWindowOpenDisposition(long nativeWebContentsAndroid);
+
+        void updateWindowControlsOverlay(
+                long nativeWebContentsAndroid, int left, int top, int right, int bottom);
     }
 }

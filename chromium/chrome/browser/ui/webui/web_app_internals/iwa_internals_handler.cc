@@ -11,17 +11,16 @@
 #include "base/strings/stringprintf.h"
 #include "base/types/expected_macros.h"
 #include "base/types/optional_util.h"
-#include "base/version.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/browser/ui/webui/web_app_internals/web_app_internals.mojom.h"
 #include "chrome/browser/web_applications/isolated_web_apps/commands/install_isolated_web_app_command.h"
 #include "chrome/browser/web_applications/isolated_web_apps/commands/isolated_web_app_install_command_helper.h"
+#include "chrome/browser/web_applications/isolated_web_apps/install/isolated_web_app_installation_manager.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_features.h"
-#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_installation_manager.h"
-#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_discovery_task.h"
-#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_manager.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolation_data.h"
+#include "chrome/browser/web_applications/isolated_web_apps/update/isolated_web_app_update_discovery_task.h"
+#include "chrome/browser/web_applications/isolated_web_apps/update/isolated_web_app_update_manager.h"
 #include "chrome/browser/web_applications/isolated_web_apps/update_manifest/update_manifest.h"
 #include "chrome/browser/web_applications/isolated_web_apps/update_manifest/update_manifest_fetcher.h"
 #include "chrome/browser/web_applications/locks/app_lock.h"
@@ -31,6 +30,7 @@
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "components/webapps/isolated_web_apps/iwa_key_distribution_info_provider.h"
+#include "components/webapps/isolated_web_apps/types/iwa_version.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -120,7 +120,7 @@ class IwaInternalsHandler::IwaManifestInstallUpdateHandler
 
   void UpdateManifestInstalledIsolatedWebApp(
       const webapps::AppId& app_id,
-      std::optional<base::Version> pinned_version,
+      std::optional<IwaVersion> pinned_version,
       bool allow_downgrades,
       Handler::UpdateManifestInstalledIsolatedWebAppCallback callback) {
     if (base::Contains(update_requests_, app_id)) {
@@ -201,7 +201,7 @@ class IwaInternalsHandler::IwaManifestInstallUpdateHandler
 
   void OnUpdateApplyTaskCompleted(
       const webapps::AppId& app_id,
-      IsolatedWebAppUpdateApplyTask::CompletionStatus status) override {
+      IsolatedWebAppApplyUpdateCommandResult status) override {
     ASSIGN_OR_RETURN(auto callback, ConsumeUpdateRequest(app_id), [](auto) {});
 
     ASSIGN_OR_RETURN(
@@ -474,8 +474,9 @@ void IwaInternalsHandler::GetIsolatedWebAppDevModeAppInfo(
 
     const web_app::IsolationData& isolation_data = *app.isolation_data();
     std::optional<std::string> pinned_version;
-    if (base::Contains(pinned_versions_, app.app_id())) {
-      pinned_version = pinned_versions_[app.app_id()].GetString();
+    if (auto* version_entry =
+            base::FindOrNull(pinned_versions_, app.app_id())) {
+      pinned_version = version_entry->GetString();
     }
     bool allow_downgrades = app_ids_allowing_downgrades_.contains(app.app_id());
     std::visit(
@@ -557,7 +558,7 @@ void IwaInternalsHandler::ApplyDevModeUpdate(
                            : IwaSourceDevModeWithFileOp(source.WithFileOp(
                                  IwaSourceBundleDevFileOp::kCopy)),
       *url_info,
-      base::BindOnce([](base::expected<base::Version, std::string> result) {
+      base::BindOnce([](base::expected<IwaVersion, std::string> result) {
         if (result.has_value()) {
           return base::StrCat(
               {"Update to version ", result->GetString(),
@@ -582,8 +583,7 @@ void IwaInternalsHandler::UpdateManifestInstalledIsolatedWebApp(
         "WebAppProvider is not available for the current profile.");
     return;
   }
-
-  std::optional<base::Version> pinned_version =
+  std::optional<IwaVersion> pinned_version =
       base::OptionalFromPtr(base::FindOrNull(pinned_versions_, app_id));
   bool allow_downgrades = app_ids_allowing_downgrades_.contains(app_id);
 
@@ -641,13 +641,13 @@ void IwaInternalsHandler::SetPinnedVersionForIsolatedWebApp(
   RETURN_IF_ERROR(GetIsolatedWebAppById(provider->registrar_unsafe(), app_id),
                   [&](auto) { std::move(callback).Run(/*success=*/false); });
 
-  base::Version version = base::Version(pinned_version);
-  if (!version.IsValid()) {
+  auto version = IwaVersion::Create(pinned_version);
+  if (!version.has_value()) {
     std::move(callback).Run(/*success=*/false);
     return;
   }
 
-  pinned_versions_[app_id] = version;
+  pinned_versions_.insert_or_assign(app_id, *std::move(version));
   std::move(callback).Run(/*success=*/true);
 }
 

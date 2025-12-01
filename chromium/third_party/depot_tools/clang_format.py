@@ -84,13 +84,29 @@ def FindClangFormatScriptInChromiumTree(script_name):
         raise NotFoundError('File does not exist: %s' % script_path)
     return script_path
 
+def FindClangFormatInPath():
+    env_path = os.environ.get('PATH')
+    if not env_path:
+        return
+    for bin_dir in env_path.split(os.pathsep):
+        if bin_dir.rstrip(os.sep).endswith('depot_tools'):
+            # skip depot_tools to avoid calling gn.py infinitely.
+            continue
+        tool = os.path.join(
+            bin_dir,
+            'clang-format' + gclient_paths.GetExeSuffix(),
+        )
+        if os.path.isfile(tool):
+            return tool
 
 def main(args):
     try:
         tool = FindClangFormatToolInChromiumTree()
     except NotFoundError as e:
-        sys.stderr.write("%s\n" % str(e))
-        return 1
+        tool = FindClangFormatInPath()
+        if tool is None:
+            sys.stderr.write("%s\n" % str(e))
+            return 1
 
     # Add some visibility to --help showing where the tool lives, since this
     # redirection can be a little opaque.

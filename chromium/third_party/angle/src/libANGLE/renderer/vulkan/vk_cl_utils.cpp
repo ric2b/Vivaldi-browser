@@ -15,6 +15,29 @@ namespace rx
 namespace cl_vk
 {
 
+// Give two cl::BufferRect regions, calculate a series of the buffer copy regions that can be used
+// in vulkan copy buffer command.
+std::vector<VkBufferCopy> CalculateRectCopyRegions(const cl::BufferRect &srcRect,
+                                                   const cl::BufferRect &dstRect)
+{
+    // For copying the buffer rect region should be the same
+    ASSERT(srcRect.getExtents() == dstRect.getExtents());
+    std::vector<VkBufferCopy> copyRegions;
+
+    for (size_t slice = 0; slice < srcRect.mSize.depth; slice++)
+    {
+        for (size_t row = 0; row < srcRect.mSize.height; row++)
+        {
+            VkBufferCopy copyRegion = {};
+            copyRegion.size         = srcRect.mSize.width * srcRect.mElementSize;
+            copyRegion.srcOffset    = srcRect.getRowOffset(slice, row);
+            copyRegion.dstOffset    = dstRect.getRowOffset(slice, row);
+            copyRegions.push_back(copyRegion);
+        }
+    }
+    return copyRegions;
+}
+
 VkExtent3D GetExtent(const cl::Extents &extent)
 {
     VkExtent3D vkExtent{};
@@ -94,13 +117,24 @@ VkMemoryPropertyFlags GetMemoryPropertyFlags(cl::MemFlags memFlags)
     return propFlags;
 }
 
-VkBufferUsageFlags GetBufferUsageFlags(cl::MemFlags memFlags)
+VkBufferUsageFlags GetBufferUsageFlags(cl::MemFlags memFlags, bool physicalAddressing)
 {
     // The buffer usage flags don't particularly affect the buffer in any known drivers, use all the
     // bits that ANGLE needs.
-    return VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-           VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-           VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
+    VkBufferUsageFlags usageFlags =
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+        VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
+
+    if (physicalAddressing)
+    {
+        // VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT specifies that the buffer can be used to
+        // retrieve a buffer device address via vkGetBufferDeviceAddress and use that address to
+        // access the buffer's memory from a shader.
+        usageFlags |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    }
+
+    return usageFlags;
 }
 
 }  // namespace cl_vk

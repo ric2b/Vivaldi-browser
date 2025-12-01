@@ -133,6 +133,14 @@ UIView* SecondaryToolbarLocationBarContainerView(
   // TODO(crbug.com/429955447): Remove when diamond prototype is cleaned.
   NSArray<NSLayoutConstraint*>* _diamondToolbarTopConstraints;
   NSArray<NSLayoutConstraint*>* _diamondToolbarBottomConstraints;
+
+  // Constraints to be activated when the location bar is expanded and
+  // positioned relatively to the cancel button.
+  NSArray<NSLayoutConstraint*>* _expandedConstraints;
+
+  // Constraints to be activated when the location bar is contracted with large
+  // padding between the location bar and the controls.
+  NSArray<NSLayoutConstraint*>* _contractedConstraints;
 }
 
 @synthesize allButtons = _allButtons;
@@ -146,6 +154,7 @@ UIView* SecondaryToolbarLocationBarContainerView(
 @synthesize openNewTabButton = _openNewTabButton;
 @synthesize progressBar = _progressBar;
 @synthesize toolsMenuButton = _toolsMenuButton;
+@synthesize cancelButton = _cancelButton;
 @synthesize tabGridButton = _tabGridButton;
 
 // Vivaldi
@@ -224,6 +233,22 @@ UIView* SecondaryToolbarLocationBarContainerView(
   }
 }
 
+- (void)updateConstraints {
+  if (IsDiamondPrototypeEnabled()) {
+    [super updateConstraints];
+    return;
+  }
+  if (_expanded) {
+    [NSLayoutConstraint deactivateConstraints:_contractedConstraints];
+    [NSLayoutConstraint activateConstraints:_expandedConstraints];
+  } else {
+    [NSLayoutConstraint deactivateConstraints:_expandedConstraints];
+    [NSLayoutConstraint activateConstraints:_contractedConstraints];
+  }
+
+  [super updateConstraints];
+}
+
 #pragma mark - Setup
 
 // Sets all the subviews and constraints of the view.
@@ -256,6 +281,8 @@ UIView* SecondaryToolbarLocationBarContainerView(
   _contentView.backgroundColor =
       self.buttonFactory.toolbarConfiguration.backgroundColor;
   } // End Vivaldi
+
+  [self setUpCancelButton];
 
   if (IsDiamondPrototypeEnabled()) {
     _diamondLocationBarStackView = [[UIStackView alloc] init];
@@ -454,6 +481,34 @@ UIView* SecondaryToolbarLocationBarContainerView(
     AddSameConstraintsToSides(self, self.bottomSeparator,
                               LayoutSides::kLeading | LayoutSides::kTrailing);
 
+    NSLayoutConstraint* visibleCancel = [self.cancelButton.trailingAnchor
+        constraintEqualToAnchor:safeArea.trailingAnchor
+#if defined(VIVALDI_BUILD)
+                       constant:0];
+#else
+                       constant:-kExpandedLocationBarHorizontalMargin];
+#endif // End Vivaldi
+
+    NSLayoutConstraint* hiddenCancel = [self.cancelButton.leadingAnchor
+        constraintEqualToAnchor:self.trailingAnchor];
+
+    _contractedConstraints = @[
+      hiddenCancel,
+      [locationBarContainer.trailingAnchor
+          constraintEqualToAnchor:safeArea.trailingAnchor
+#if defined(VIVALDI_BUILD)
+                         constant:0]
+#else
+                         constant:-kExpandedLocationBarHorizontalMargin],
+#endif // End Vivaldi
+    ];
+
+    _expandedConstraints = @[
+      visibleCancel,
+      [locationBarContainer.trailingAnchor
+          constraintEqualToAnchor:self.cancelButton.leadingAnchor],
+    ];
+
     if (IsDiamondPrototypeEnabled()) {
       [NSLayoutConstraint activateConstraints:@[
         [self.diamondPrototypeButton.leadingAnchor
@@ -494,12 +549,13 @@ UIView* SecondaryToolbarLocationBarContainerView(
         ]];
       } else { // Vivaldi
       [NSLayoutConstraint activateConstraints:@[
+        [self.cancelButton.topAnchor
+            constraintEqualToAnchor:locationBarContainer.topAnchor],
+        [self.cancelButton.bottomAnchor
+            constraintEqualToAnchor:locationBarContainer.bottomAnchor],
         [locationBarContainer.leadingAnchor
             constraintEqualToAnchor:safeArea.leadingAnchor
                            constant:kExpandedLocationBarHorizontalMargin],
-        [locationBarContainer.trailingAnchor
-            constraintEqualToAnchor:safeArea.trailingAnchor
-                           constant:-kExpandedLocationBarHorizontalMargin],
       ]];
       } // End Vivaldi
     }
@@ -517,6 +573,8 @@ UIView* SecondaryToolbarLocationBarContainerView(
           constraintEqualToAnchor:locationBarContainer.bottomAnchor],
     ]];
     } // End Vivaldi
+
+    [self updateConstraints];
 
   } else {  // Bottom omnibox flag disabled.
     [self.buttonStackView.topAnchor
@@ -566,6 +624,19 @@ UIView* SecondaryToolbarLocationBarContainerView(
   }
   } // End Vivaldi
 
+}
+
+// Sets the cancel button to stop editing the location bar.
+- (void)setUpCancelButton {
+  _cancelButton = [self.buttonFactory cancelButton];
+  _cancelButton.translatesAutoresizingMaskIntoConstraints = NO;
+  _cancelButton.hidden = YES;
+  [self addSubview:self.cancelButton];
+}
+
+- (void)setExpanded:(BOOL)expanded {
+  _expanded = expanded;
+  [self setNeedsUpdateConstraints];
 }
 
 #pragma mark - Setters

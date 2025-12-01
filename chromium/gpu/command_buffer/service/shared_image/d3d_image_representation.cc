@@ -7,6 +7,7 @@
 #include "base/strings/strcat.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
+#include "gpu/command_buffer/service/shared_image/d3d11_image_same_adapter_copy_strategy.h"
 #include "gpu/command_buffer/service/shared_image/d3d_image_backing.h"
 #include "gpu/ipc/common/dxgi_helpers.h"
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
@@ -178,9 +179,42 @@ WebNND3DTensorRepresentation::WebNND3DTensorRepresentation(
 
 WebNND3DTensorRepresentation::~WebNND3DTensorRepresentation() = default;
 
+bool WebNND3DTensorRepresentation::BeginAccess() {
+  // Backing rejected access.
+  auto opt_d3d_write_fence =
+      static_cast<D3DImageBacking*>(backing())->BeginAccessWebNN();
+  if (!opt_d3d_write_fence) {
+    return false;
+  }
+
+  // First access, no fence required.
+  scoped_refptr<gfx::D3DSharedFence> d3d_write_fence = *opt_d3d_write_fence;
+  if (!d3d_write_fence) {
+    return true;
+  }
+
+  acquire_fence_ = std::move(d3d_write_fence);
+  return true;
+}
+
+void WebNND3DTensorRepresentation::EndAccess() {
+  static_cast<D3DImageBacking*>(backing())->EndAccessWebNN(
+      std::move(release_fence_));
+}
+
 Microsoft::WRL::ComPtr<ID3D12Resource>
 WebNND3DTensorRepresentation::GetD3D12Buffer() const {
   return static_cast<D3DImageBacking*>(backing())->GetD3D12Buffer();
+}
+
+scoped_refptr<gfx::D3DSharedFence>
+WebNND3DTensorRepresentation::GetAcquireFence() const {
+  return acquire_fence_;
+}
+
+void WebNND3DTensorRepresentation::SetReleaseFence(
+    scoped_refptr<gfx::D3DSharedFence> release_fence) {
+  release_fence_ = std::move(release_fence);
 }
 
 OverlayD3DImageRepresentation::OverlayD3DImageRepresentation(
@@ -377,53 +411,31 @@ D3D11VideoImageCopyRepresentation::CreateFromD3D(SharedImageManager* manager,
   D3D11_TEXTURE2D_DESC source_desc;
   texture->GetDesc(&source_desc);
 
-  D3D11_TEXTURE2D_DESC desc = InitVideoCopyTextureDesc(
+  D3D11_TEXTURE2D_DESC dest_desc = InitVideoCopyTextureDesc(
       source_desc.Width, source_desc.Height, source_desc.Format);
-  Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d_dest_texture;
-  HRESULT hr = d3d_device->CreateTexture2D(&desc, nullptr, &d3d_dest_texture);
+
+  Microsoft::WRL::ComPtr<ID3D11Texture2D> dest_texture;
+  HRESULT hr = d3d_device->CreateTexture2D(&dest_desc, nullptr, &dest_texture);
   if (FAILED(hr)) {
-    LOG(ERROR) << "Failed to create destination texture for video:"
+    LOG(ERROR) << "Failed to create destination texture for video: "
                << logging::SystemErrorCodeToString(hr);
     return nullptr;
   }
+
   std::string updated_debug_label = base::StrCat(
       {"D3D11VideoImageCopyRepresentation_", std::string(debug_label)});
-  d3d_dest_texture->SetPrivateData(WKPDID_D3DDebugObjectName,
-                                   updated_debug_label.length(),
-                                   updated_debug_label.c_str());
+  dest_texture->SetPrivateData(WKPDID_D3DDebugObjectName,
+                               updated_debug_label.length(),
+                               updated_debug_label.c_str());
 
-  Microsoft::WRL::ComPtr<IDXGIResource1> dxgi_resource;
-  hr = d3d_dest_texture.As(&dxgi_resource);
-  CHECK_EQ(hr, S_OK);
-  HANDLE dest_texture_handle;
-  hr = dxgi_resource->CreateSharedHandle(
-      nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr,
-      &dest_texture_handle);
-  CHECK_EQ(hr, S_OK);
-  base::win::ScopedHandle scoped_shared_handle(dest_texture_handle);
-
-  Microsoft::WRL::ComPtr<ID3D11Device1> texture_device1;
-  hr = texture_device->QueryInterface(IID_PPV_ARGS(&texture_device1));
-  CHECK_EQ(hr, S_OK);
-  Microsoft::WRL::ComPtr<ID3D11Texture2D> shared_texture;
-  hr = texture_device1->OpenSharedResource1(dest_texture_handle,
-                                            IID_PPV_ARGS(&shared_texture));
-  CHECK_EQ(hr, S_OK);
-  Microsoft::WRL::ComPtr<IDXGIKeyedMutex> shared_keyed_mutex;
-  hr = shared_texture.As(&shared_keyed_mutex);
-  CHECK_EQ(hr, S_OK);
-  Microsoft::WRL::ComPtr<ID3D11DeviceContext> texture_device_context;
-  texture_device->GetImmediateContext(&texture_device_context);
-
-  hr = shared_keyed_mutex->AcquireSync(0, INFINITE);
-  CHECK_EQ(hr, S_OK);
-  {
-    DXGIScopedReleaseKeyedMutex scoped_keyed_mutex(shared_keyed_mutex, 0);
-    texture_device_context->CopyResource(shared_texture.Get(), texture);
+  if (!D3D11ImageSameAdapterCopyStrategy::CopyD3D11TextureOnSameAdapter(
+          texture, dest_texture.Get())) {
+    LOG(ERROR) << "Failed to copy texture for video";
+    return nullptr;
   }
 
   return std::make_unique<D3D11VideoImageCopyRepresentation>(
-      manager, backing, tracker, d3d_dest_texture.Get());
+      manager, backing, tracker, std::move(dest_texture));
 }
 
 D3D11VideoImageCopyRepresentation::D3D11VideoImageCopyRepresentation(
@@ -488,10 +500,9 @@ bool D3DSkiaGraphiteDawnImageRepresentation::
   return !d3d_image_backing->has_keyed_mutex();
 }
 
-bool D3DSkiaGraphiteDawnImageRepresentation::
-    NeedGraphiteContextSubmitBeforeEndAccess() {
+bool D3DSkiaGraphiteDawnImageRepresentation::SupportsDeferredGraphiteSubmit() {
   D3DImageBacking* d3d_image_backing = static_cast<D3DImageBacking*>(backing());
-  return !d3d_image_backing->SupportsDeferredGraphiteSubmit();
+  return d3d_image_backing->SupportsDeferredGraphiteSubmit();
 }
 
 std::vector<scoped_refptr<SkiaImageRepresentation::GraphiteTextureHolder>>

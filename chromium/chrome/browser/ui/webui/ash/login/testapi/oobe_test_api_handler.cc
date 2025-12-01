@@ -108,9 +108,7 @@ void OobeTestAPIHandler::GetAdditionalParameters(base::Value::Dict* dict) {
   dict->Set("testapi_shouldSkipSplitModifierKeyboardInfo",
             SplitModifierKeyboardInfoScreen::ShouldBeSkipped());
 
-  dict->Set("testapi_shouldSkipAssistant",
-            features::IsOobeSkipAssistantEnabled() ||
-                !BUILDFLAG(ENABLE_CROS_LIBASSISTANT));
+  dict->Set("testapi_shouldSkipAssistant", true);
 
   dict->Set("testapi_isBrandedBuild",
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -121,7 +119,7 @@ void OobeTestAPIHandler::GetAdditionalParameters(base::Value::Dict* dict) {
   );
 
   dict->Set("testapi_isOobeInTabletMode",
-            display::Screen::GetScreen()->InTabletMode() ||
+            display::Screen::Get()->InTabletMode() ||
                 switches::ShouldOobeUseTabletModeFirstRun());
   dict->Set("testapi_shouldSkipConsolidatedConsent",
             !BUILDFLAG(GOOGLE_CHROME_BRANDING));

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The Chromium Authors. All rights reserved.
+ * Copyright 2016 The Chromium Authors
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
@@ -27,8 +27,13 @@ li.search-result {
   font-size: 12px;
   margin-top: 8px;
   padding: 2px 0 2px 4px;
-  word-wrap: normal;
+  overflow-wrap: normal;
   white-space: pre;
+}
+
+li.search-result .tree-element-title {
+  display: flex;
+  width: 100%;
 }
 
 li.search-result:hover {
@@ -64,8 +69,12 @@ li.show-more-matches:hover {
 
 li.search-match {
   margin: 2px 0;
-  word-wrap: normal;
+  overflow-wrap: normal;
   white-space: pre;
+}
+
+li.search-match .tree-element-title {
+  display: flex;
 }
 
 li.search-match.selected:focus-visible {

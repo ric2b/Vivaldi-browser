@@ -45,6 +45,12 @@ public final class ApkInfo {
 
     private static final Object CREATION_LOCK = new Object();
 
+    /**
+     * The SHA256 of the public certificate used to sign the host application. This will default to
+     * an empty string if we were unable to retrieve it.
+     */
+    private static @Nullable String sHostSigningCertSha256;
+
     // Called by the native code to retrieve field values. There is no easy way to
     // return several fields from Java to native, so instead this calls back into
     // native, passing the fields as parameters to a native function.
@@ -111,6 +117,14 @@ public final class ApkInfo {
     }
 
     /**
+     * Check if this is either a debuggable build of Android or of the host app. Use this to enable
+     * developer-only features.
+     */
+    public static boolean isDebugAndroidOrApp() {
+        return AndroidInfo.isDebugAndroid() || isDebugApp();
+    }
+
+    /**
      * Checks if the application targets pre-release SDK B. This must be manually maintained as the
      * SDK goes through finalization.
      */
@@ -135,7 +149,7 @@ public final class ApkInfo {
     }
 
     public static ApkInfo getInstance() {
-        // Some tests mock out things BuildInfo is based on, so disable caching in tests to ensure
+        // Some tests mock out things ApkInfo is based on, so disable caching in tests to ensure
         // such mocking is not defeated by caching.
         if (BuildConfig.IS_FOR_TEST) {
             return new ApkInfo();
@@ -287,6 +301,22 @@ public final class ApkInfo {
         }
         mIApkInfo.resourcesVersion = currentResourcesVersion;
         mIApkInfo.targetSdkVersion = appInfo.targetSdkVersion;
+    }
+
+    @CalledByNative
+    public static @JniType("std::string") String getHostSigningCertSha256() {
+        synchronized (CREATION_LOCK) {
+            // We currently only make use of this certificate for calls from the storage access API
+            // within WebView. So we rather lazy load this value to avoid impacting app startup.
+            String ret = sHostSigningCertSha256;
+            if (ret == null) {
+                String certificate =
+                        PackageUtils.computeCertSignatureSha256ForPackage(getHostPackageName());
+                ret = certificate == null ? "" : certificate;
+                sHostSigningCertSha256 = ret;
+            }
+            return ret;
+        }
     }
 
     @NativeMethods

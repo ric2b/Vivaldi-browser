@@ -951,7 +951,7 @@ bool CalendarEquals(temporal_rs::AnyCalendarKind kind,
     case HijriTabularTypeIIThursday:
       return other_kind == "islamic-tbla" || other_kind == "islamic";
     case HijriUmmAlQura:
-      return other_kind == "islamic-umalqura " || other_kind == "islamic";
+      return other_kind == "islamic-umalqura" || other_kind == "islamic";
     case Iso:
       return other_kind == "iso8601";
     case Japanese:
@@ -1718,6 +1718,28 @@ MaybeDirectHandle<String> FormatDateTime(
     // Revert ICU 72 change that introduced U+202F instead of U+0020
     // to separate time from AM/PM. See https://crbug.com/1414292.
     result = Replace202F(result);
+  }
+
+  if (v8_flags.icu_british_remove_full_weekday_comma) {
+    // Revert ICU 76 adding a comma after a full weekday for en-AU/GB/IN.
+    int32_t found = result.indexOf(',');
+    if (found != -1) {
+      const icu::Locale& locale = date_format.getSmpFmtLocale();
+      if (strcmp(locale.getLanguage(), "en") == 0 &&
+          (strcmp(locale.getCountry(), "AU") == 0 ||
+           strcmp(locale.getCountry(), "GB") == 0 ||
+           strcmp(locale.getCountry(), "IN") == 0)) {
+        // https://github.com/unicode-org/cldr/pull/3879 changed formats like
+        // "EEEE d MMM y" to "EEEE, d MMM y", adding a comma. Check if the
+        // format begins with "EEEE," and if so remove the first comma. This is
+        // the last check because toPattern() allocates a new string.
+        icu::UnicodeString pattern;
+        date_format.toPattern(pattern);
+        if (pattern.startsWith("EEEE,")) {
+          result = result.remove(found, 1);
+        }
+      }
+    }
   }
 
   return Intl::ToString(isolate, result);

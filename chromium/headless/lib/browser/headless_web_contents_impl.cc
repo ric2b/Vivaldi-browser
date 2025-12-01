@@ -21,6 +21,7 @@
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "components/headless/console_message_logger/headless_console_message_logger.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_termination_info.h"
 #include "content/public/browser/navigation_controller.h"
@@ -61,9 +62,7 @@ namespace features {
 
 // Enables prerendering (Speculation Rules API) in the headless mode. This is
 // enabled by default but kept as a kill-switch.
-BASE_FEATURE(kPrerender2InHeadlessMode,
-             "Prerender2InHeadlessMode",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kPrerender2InHeadlessMode, base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace features
 
@@ -274,6 +273,16 @@ class HeadlessWebContentsImpl::Delegate : public content::WebContentsDelegate {
   void SetContentsBounds(content::WebContents* source,
                          const gfx::Rect& bounds) override {
     headless_web_contents_->SetBounds(bounds);
+  }
+
+  bool DidAddMessageToConsole(content::WebContents* source,
+                              blink::mojom::ConsoleMessageLevel log_level,
+                              const std::u16string& message,
+                              int32_t line_no,
+                              const std::u16string& source_id) override {
+    LogConsoleMessage(log_level, message, line_no,
+                      /*is_builtin_component=*/false, source_id);
+    return true;
   }
 
  private:

@@ -41,10 +41,6 @@ bool operator==(const OffsetMappingUnit& unit, const OffsetMappingUnit& other) {
          unit.TextContentEnd() == other.TextContentEnd();
 }
 
-bool operator!=(const OffsetMappingUnit& unit, const OffsetMappingUnit& other) {
-  return !operator==(unit, other);
-}
-
 void PrintTo(const OffsetMappingUnit& unit, std::ostream* ostream) {
   static const std::array<const char*, 3> kTypeNames = {"Identity", "Collapsed",
                                                         "Expanded"};
@@ -79,7 +75,6 @@ class OffsetMappingTest : public RenderingTest {
   void SetupHtml(const char* id, String html) {
     SetBodyInnerHTML(html);
     layout_block_flow_ = To<LayoutBlockFlow>(GetLayoutObjectByElementId(id));
-    DCHECK(layout_block_flow_->IsLayoutNGObject());
     layout_object_ = layout_block_flow_->FirstChild();
   }
 

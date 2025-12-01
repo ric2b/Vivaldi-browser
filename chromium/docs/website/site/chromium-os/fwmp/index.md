@@ -64,21 +64,21 @@ tidy way to extract this from a keyblock yet; coming soon.
 
 ## Setting the FWMP
 
-Use cryptohome to set the FWMP. To do this, the TPM must just have been owned,
+Use device_management_client to set the FWMP. To do this, the TPM must just have been owned,
 or you must know the owner password:
 
-> cryptohome --action=set_firmware_management_parameters
+> device_management_client --action=set_firmware_management_parameters
 > --flags={flags_as_decimal_or_0xhex}
 > \[--developer_key_hash={hash_as_hex_string}\]
 
 To remove the FWMP:
 
-> cryptohome --action=remove_firmware_management_parameters
+> device_management_client --action=remove_firmware_management_parameters
 
 And, of course, you can see what it contains; this works even if you don't know
 the owner password:
 
-> cryptohome --action=get_firmware_management_parameters
+> device_management_client --action=get_firmware_management_parameters
 
 System administrators can automatically set the FWMP on enterprise-enrolled
 devices during the initial device enrollment.

@@ -13,10 +13,11 @@
 <translation id="1925021887439448749">Digitar endereço web personalizado</translation>
 <translation id="2038563949887743358">Ativar "Ver versão para computador"</translation>
 <translation id="208033313373016095">Visualização do leitor para páginas da web</translation>
-<translation id="2149973817440762519">Editar Marcador</translation>
+<translation id="2149973817440762519">Editar favorito</translation>
 <translation id="2306442503286132111">Favorito salvo na pasta <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Aparência</translation>
 <translation id="2501278716633472235">Voltar</translation>
+<translation id="2546283357679194313">Cookies e dados do site</translation>
 <translation id="2633278372998075009">Abas privadas</translation>
 <translation id="2650751991977523696">Baixar o arquivo novamente?</translation>
 <translation id="265156376773362237">Pré-carregamento padrão</translation>
@@ -27,8 +28,8 @@
 <translation id="2951071800649516099">Adicionar páginas à lista de leitura para mais tarde</translation>
 <translation id="3029276696788198026">Sem pré-carregamento</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
-          =1 {<ph name="BOOKMARKS_COUNT_ONE" /> Favorito}
-          other {<ph name="BOOKMARKS_COUNT_MANY" /> Marcadores}}</translation>
+          =1 {<ph name="BOOKMARKS_COUNT_ONE" /> favorito}
+          other {<ph name="BOOKMARKS_COUNT_MANY" /> favoritos}}</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Todos os direitos reservados.</translation>
 <translation id="3110967157686007724">Aba Privada</translation>
 <translation id="3232293466644486101">Excluir dados de navegação…</translation>
@@ -54,7 +55,10 @@
 <translation id="4269820728363426813">Copiar endereço do link</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Ativar o bloqueio de tela nas configurações do Android<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Gerenciador de Senhas</translation>
-<translation id="451872707440238414">Pesquisar seus Marcadores</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, plural,
+          =1 {Abas e grupos não usados por 1 dia ou mais}
+          other {Abas e grupos não usados por # dias ou mais}}</translation>
+<translation id="451872707440238414">Pesquisar seus favoritos</translation>
 <translation id="4526803704855831732">Abas Privadas</translation>
 <translation id="4532845899244822526">Escolher pasta</translation>
 <translation id="4699172675775169585">Imagens e arquivos em cache</translation>
@@ -62,6 +66,7 @@
 
 Tocar para Pesquisar é um recurso apenas disponível quando o Google é seu mecanismo de busca padrão no Vivaldi.</translation>
 <translation id="4759238208242260848">Baixados</translation>
+<translation id="4777866634702576038">Excluir grupo de abas?</translation>
 <translation id="4850886885716139402">Ver</translation>
 <translation id="4883379392681899581">Sair do modo privado</translation>
 <translation id="4943872375798546930">Nenhum resultado</translation>
@@ -77,7 +82,6 @@ Tocar para Pesquisar é um recurso apenas disponível quando o Google é seu mec
 <translation id="5375131951310889874">Saiba mais sobre tópicos em sites sem deixar a página. Tocar para Pesquisar é um recurso apenas disponível quando o Google é seu mecanismo de busca padrão no Vivaldi. Ele envia a palavra e o conteúdo relacionado ao redor dela para o Google Search, retornando definições, imagens, resultados de busca, etc...
 
 Para ajustar o termo pesquisado, pressione por mais tempo para selecionar. Para refinar sua pesquisa, deslize o painel até em cima e toque na caixa de pesquisa.</translation>
-<translation id="543338862236136125">Editar senha</translation>
 <translation id="572328651809341494">Abas recentes</translation>
 <translation id="5833984609253377421">Compartilhar link</translation>
 <translation id="6150320133806434356">Favorito salvo</translation>
@@ -85,7 +89,8 @@ Para ajustar o termo pesquisado, pressione por mais tempo para selecionar. Para 
 <translation id="6336451774241870485">Nova aba privada</translation>
 <translation id="6337323516034698937">Para enviar esta aba para outro dispositivo, faça login no Vivaldi Sync em ambos os dispositivos. Certifique -se de inserir a senha de criptografia, se necessário.</translation>
 <translation id="6341580099087024258">Perguntar onde salvar os arquivos</translation>
-<translation id="6404511346730675251">Editar Marcador</translation>
+<translation id="6364438453358674297">Remover sugestão do histórico?</translation>
+<translation id="6404511346730675251">Editar favorito</translation>
 <translation id="650224091954855786">{FILE_COUNT, plural,
           =1 {Arquivo baixado}
           other {# arquivos baixados}}</translation>
@@ -112,15 +117,21 @@ Para ajustar o termo pesquisado, pressione por mais tempo para selecionar. Para 
 <translation id="8062594758852531064">Pré-carregamento estendido:</translation>
 <translation id="8073388330009372546">Abrir imagem em nova aba</translation>
 <translation id="8127542551745560481">Editar página inicial</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+          =1 {(1) item inativo}
+          other {(#) itens inativos}}</translation>
 <translation id="8266862848225348053">Local para salvar</translation>
 <translation id="8348430946834215779">Usar HTTPS sempre que possível e receba um aviso antes de carregar sites que não têm suporte a esse protocolo</translation>
-<translation id="8560602726703398413">Encontre sua lista de leitura nos Marcadores</translation>
+<translation id="8560602726703398413">Encontre sua lista de leitura nos favoritos</translation>
 <translation id="85991616550051997">Ir para a página inicial</translation>
 <translation id="8693232767599693749">Ver modo de leitura?</translation>
-<translation id="8820817407110198400">Marcadores</translation>
+<translation id="8820817407110198400">Favoritos</translation>
 <translation id="9042893549633094279">Privacidade e segurança</translation>
 <translation id="9063523880881406963">Desativar "Ver versão para computador"</translation>
 <translation id="9080642952018487277">Entrar no modo privado</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+          =1 {Não usado por um dia ou mais}
+          other {Não usado por # dias ou mais}}</translation>
 <translation id="930124987204876019">Excluir histórico, cookies, dados do site, cache…</translation>
 <translation id="961856697154696964">Excluir dados de navegação</translation>
 </translationbundle>

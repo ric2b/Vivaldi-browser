@@ -9,7 +9,6 @@
 
 #include "base/functional/bind.h"
 #include "base/location.h"
-#include "base/notimplemented.h"
 #include "base/observer_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -21,6 +20,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/extensions/extension_install_ui.h"
 #include "chrome/common/buildflags.h"
+#include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/strings/grit/components_strings.h"
@@ -30,6 +30,7 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/image_loader.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_features.h"
 #include "extensions/common/extension_resource.h"
@@ -45,6 +46,8 @@
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_rep.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 using extensions::Extension;
 using extensions::Manifest;
@@ -120,6 +123,12 @@ void ExtensionInstallPrompt::Prompt::SetWebstoreData(
   has_webstore_data_ = true;
 }
 
+void ExtensionInstallPrompt::Prompt::SetInitialExtensionsProviderName(
+    std::u16string initial_extensions_provider_name) {
+  initial_extensions_provider_name_ =
+      std::move(initial_extensions_provider_name);
+}
+
 std::u16string ExtensionInstallPrompt::Prompt::GetDialogTitle() const {
   int id = -1;
   switch (type_) {
@@ -133,12 +142,19 @@ std::u16string ExtensionInstallPrompt::Prompt::GetDialogTitle() const {
       id = IDS_EXTENSION_PERMISSIONS_PROMPT_TITLE;
       break;
     case EXTERNAL_INSTALL_PROMPT:
-      if (extension_->is_app())
+      if (extension_->is_app()) {
         id = IDS_EXTENSION_EXTERNAL_INSTALL_PROMPT_TITLE_APP;
-      else if (extension_->is_theme())
+      } else if (extension_->is_theme()) {
         id = IDS_EXTENSION_EXTERNAL_INSTALL_PROMPT_TITLE_THEME;
-      else
+      } else if (!initial_extensions_provider_name_.empty()) {
+        return l10n_util::GetStringFUTF16(
+            IDS_EXTENSION_EXTERNAL_INITIAL_INSTALL_PROMPT_TITLE_EXTENSION,
+            initial_extensions_provider_name_,
+            extensions::util::GetFixupExtensionNameForUIDisplay(
+                extension_->name()));
+      } else {
         id = IDS_EXTENSION_EXTERNAL_INSTALL_PROMPT_TITLE_EXTENSION;
+      }
       break;
     case REMOTE_INSTALL_PROMPT:
       id = IDS_EXTENSION_REMOTE_INSTALL_PROMPT_TITLE;
@@ -328,16 +344,15 @@ size_t ExtensionInstallPrompt::Prompt::GetPermissionCount() const {
   return prompt_permissions_.permissions.size();
 }
 
+extensions::InstallPromptPermissions
+ExtensionInstallPrompt::Prompt::GetPermissions() const {
+  return prompt_permissions_;
+}
+
 std::u16string ExtensionInstallPrompt::Prompt::GetPermission(
     size_t index) const {
   CHECK_LT(index, prompt_permissions_.permissions.size());
   return prompt_permissions_.permissions[index];
-}
-
-std::u16string ExtensionInstallPrompt::Prompt::GetPermissionsDetails(
-    size_t index) const {
-  CHECK_LT(index, prompt_permissions_.details.size());
-  return prompt_permissions_.details[index];
 }
 
 void ExtensionInstallPrompt::Prompt::AddObserver(Observer* observer) {
@@ -634,24 +649,3 @@ bool ExtensionInstallPrompt::AutoConfirmPromptIfEnabled() {
 
   NOTREACHED();
 }
-
-#if BUILDFLAG(IS_ANDROID)
-// TODO(crbug.com/397754565): Implement a real dialog. This function always
-// accepts the install. On other platforms the implementation lives in the
-// directory //chrome/browser/ui/views/extensions.
-void AlwaysAcceptDialogCallback(
-    std::unique_ptr<ExtensionInstallPromptShowParams> show_params,
-    ExtensionInstallPrompt::DoneCallback done_callback,
-    std::unique_ptr<ExtensionInstallPrompt::Prompt> prompt) {
-  NOTIMPLEMENTED() << "AlwaysAcceptDialogCallback";
-  std::move(done_callback)
-      .Run(ExtensionInstallPrompt::DoneCallbackPayload(
-          ExtensionInstallPrompt::Result::ACCEPTED));
-}
-
-// static
-ExtensionInstallPrompt::ShowDialogCallback
-ExtensionInstallPrompt::GetDefaultShowDialogCallback() {
-  return base::BindRepeating(&AlwaysAcceptDialogCallback);
-}
-#endif

@@ -7,14 +7,17 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
-#import "build/branding_buildflags.h"
+#include "build/branding_buildflags.h"
 #include "components/search_engines/template_url.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/resource/resource_scale_factor.h"
 #include "url/android/gurl_android.h"
 
 #if BUILDFLAG(ENABLE_BUILTIN_SEARCH_PROVIDER_ASSETS)
 #include "third_party/search_engines_data/search_engines_scaled_resources_map.h"
 #endif
+// Vivaldi
+#include "base/strings/utf_string_conversions.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
 #include "components/search_engines/android/jni_headers/TemplateUrl_jni.h"
@@ -109,8 +112,8 @@ JNI_TemplateUrl_GetBuiltInSearchEngineIcon(JNIEnv* env,
 
   if (res_id) {
     return base::android::ToJavaByteArray(
-        env,
-        ui::ResourceBundle::GetSharedInstance().GetRawDataResource(res_id));
+        env, ui::ResourceBundle::GetSharedInstance().GetRawDataResourceForScale(
+                 res_id, ui::k200Percent));
   }
 #endif
   return {};
@@ -120,5 +123,37 @@ JNI_TemplateUrl_GetBuiltInSearchEngineIcon(JNIEnv* env,
 jint JNI_TemplateUrl_GetStarterPackId(JNIEnv* env, jlong template_url_ptr) {
     TemplateURL* template_url = ToTemplateURL(template_url_ptr);
     return template_url->starter_pack_id();
+}
+
+ScopedJavaLocalRef<jstring> JNI_TemplateUrl_GetPostParams(
+    JNIEnv* env,
+    jlong template_url_ptr) {
+  TemplateURL* template_url = ToTemplateURL(template_url_ptr);
+  return base::android::ConvertUTF16ToJavaString(
+      env, base::UTF8ToUTF16(template_url->url_ref().GetPostParamsString()));
+}
+
+ScopedJavaLocalRef<jstring> JNI_TemplateUrl_GetSuggestUrl(
+    JNIEnv* env,
+    jlong template_url_ptr) {
+  TemplateURL* template_url = ToTemplateURL(template_url_ptr);
+  return base::android::ConvertUTF16ToJavaString(
+      env, base::UTF8ToUTF16(template_url->suggestions_url()));
+}
+
+ScopedJavaLocalRef<jstring> JNI_TemplateUrl_GetImageURL(
+    JNIEnv* env,
+    jlong template_url_ptr) {
+  TemplateURL* template_url = ToTemplateURL(template_url_ptr);
+  return base::android::ConvertUTF16ToJavaString(
+      env, base::UTF8ToUTF16(template_url->image_url()));
+}
+
+ScopedJavaLocalRef<jstring> JNI_TemplateUrl_GetImagePostParams(
+    JNIEnv* env,
+    jlong template_url_ptr) {
+  TemplateURL* template_url = ToTemplateURL(template_url_ptr);
+  return base::android::ConvertUTF16ToJavaString(
+      env, base::UTF8ToUTF16(template_url->image_url_post_params()));
 }
 // End Vivaldi

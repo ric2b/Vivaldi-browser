@@ -40,7 +40,7 @@ std::string FindFileInResource(const std::string& base_name,
 }
 
 // Vivaldi
-std::string vivaldiTosFilePath = "terms/EULA.html";
+const char vivaldiTosFilePath[] = "terms/EULA.html";
 // End Vivaldi
 
 }  // namespace

@@ -29,6 +29,7 @@
 #include "base/memory/writable_shared_memory_region.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
+#include "base/strings/string_view_util.h"
 #include "base/unguessable_token.h"
 #include "chromeos/ash/components/dbus/arc/arc.pb.h"
 #include "chromeos/ash/components/dbus/cryptohome/rpc.pb.h"
@@ -435,42 +436,6 @@ class SessionManagerClientImpl : public SessionManagerClient {
   void NotifyLockScreenDismissed() override {
     SimpleMethodCallToSessionManager(
         login_manager::kSessionManagerHandleLockScreenDismissed);
-  }
-
-  bool BlockingRequestBrowserDataMigration(
-      const cryptohome::AccountIdentifier& cryptohome_id,
-      const std::string& mode) override {
-    dbus::MethodCall method_call(
-        login_manager::kSessionManagerInterface,
-        login_manager::kSessionManagerStartBrowserDataMigration);
-    dbus::MessageWriter writer(&method_call);
-    writer.AppendString(cryptohome_id.account_id());
-    writer.AppendString(mode);
-    auto result = blocking_method_caller_->CallMethodAndBlock(&method_call);
-    if (!result.has_value()) {
-      LOG(ERROR) << "BlockingRequestBrowserDataMigration failed :"
-                 << result.error().name() << ":" << result.error().message();
-      return false;
-    }
-
-    return true;
-  }
-
-  bool BlockingRequestBrowserDataBackwardMigration(
-      const cryptohome::AccountIdentifier& cryptohome_id) override {
-    dbus::MethodCall method_call(
-        login_manager::kSessionManagerInterface,
-        login_manager::kSessionManagerStartBrowserDataBackwardMigration);
-    dbus::MessageWriter writer(&method_call);
-    writer.AppendString(cryptohome_id.account_id());
-    auto result = blocking_method_caller_->CallMethodAndBlock(&method_call);
-    if (!result.has_value()) {
-      LOG(ERROR) << "BlockingRequestBrowserDataBackwardMigration failed :"
-                 << result.error().name() << ":" << result.error().message();
-      return false;
-    }
-
-    return true;
   }
 
   void RetrieveActiveSessions(ActiveSessionsCallback callback) override {
@@ -940,14 +905,12 @@ class SessionManagerClientImpl : public SessionManagerClient {
       return;
     }
     dbus::MessageReader reader(response);
-    const uint8_t* values = nullptr;
-    size_t length = 0;
-    if (!reader.PopArrayOfBytes(&values, &length)) {
+    base::span<const uint8_t> values;
+    if (!reader.PopArrayOfBytes(&values)) {
       LOG(ERROR) << "Invalid response: " << response->ToString();
       return;
     }
-    // static_cast does not work due to signedness.
-    extracted->assign(reinterpret_cast<const char*>(values), length);
+    *extracted = base::as_string_view(values);
   }
 
   // Called when kSessionManagerRetrievePolicy or
@@ -1074,23 +1037,22 @@ class SessionManagerClientImpl : public SessionManagerClient {
 
     std::vector<std::string> state_keys;
     while (array_reader.HasMoreData()) {
-      const uint8_t* data = nullptr;
-      size_t size = 0;
-      if (!array_reader.PopArrayOfBytes(&data, &size)) {
+      base::span<const uint8_t> data;
+      if (!array_reader.PopArrayOfBytes(&data)) {
         LOG(ERROR) << "Bad response (not an array of bytes): "
                    << response->ToString();
         std::move(callback).Run(
             base::unexpected(StateKeyErrorType::kInvalidResponse));
         return;
       }
-      if (size == 0) {
+      if (data.empty()) {
         LOG(ERROR) << "Bad response (empty array of bytes): "
                    << response->ToString();
         std::move(callback).Run(
             base::unexpected(StateKeyErrorType::kInvalidResponse));
         return;
       }
-      state_keys.emplace_back(reinterpret_cast<const char*>(data), size);
+      state_keys.emplace_back(base::as_string_view(data));
     }
 
     if (state_keys.empty()) {

@@ -37,7 +37,7 @@ VariationsSafeSeedStoreLocalState::~VariationsSafeSeedStoreLocalState() =
     default;
 
 base::Time VariationsSafeSeedStoreLocalState::GetFetchTime() const {
-  return seed_reader_writer_->GetSeedData().client_fetch_time;
+  return seed_reader_writer_->GetSeedInfo().client_fetch_time;
 }
 
 void VariationsSafeSeedStoreLocalState::SetFetchTime(
@@ -46,21 +46,17 @@ void VariationsSafeSeedStoreLocalState::SetFetchTime(
 }
 
 int VariationsSafeSeedStoreLocalState::GetMilestone() const {
-  return seed_reader_writer_->GetSeedData().milestone;
+  return seed_reader_writer_->GetSeedInfo().milestone;
 }
 
 base::Time VariationsSafeSeedStoreLocalState::GetTimeForStudyDateChecks()
     const {
-  return seed_reader_writer_->GetSeedData().seed_date;
+  return seed_reader_writer_->GetSeedInfo().seed_date;
 }
 
-StoredSeed VariationsSafeSeedStoreLocalState::GetCompressedSeed() const {
-  return seed_reader_writer_->GetSeedData();
-}
-
-void VariationsSafeSeedStoreLocalState::SetCompressedSeed(
+StoreSeedResult VariationsSafeSeedStoreLocalState::SetCompressedSeed(
     ValidatedSeedInfo seed_info) {
-  seed_reader_writer_->StoreValidatedSeedInfo(seed_info);
+  return seed_reader_writer_->StoreValidatedSeedInfo(seed_info);
 }
 
 std::string VariationsSafeSeedStoreLocalState::GetLocale() const {
@@ -73,12 +69,12 @@ void VariationsSafeSeedStoreLocalState::SetLocale(const std::string& locale) {
 
 std::string VariationsSafeSeedStoreLocalState::GetPermanentConsistencyCountry()
     const {
-  return seed_reader_writer_->GetSeedData().permanent_country_code;
+  return seed_reader_writer_->GetSeedInfo().permanent_country_code;
 }
 
 std::string VariationsSafeSeedStoreLocalState::GetSessionConsistencyCountry()
     const {
-  return seed_reader_writer_->GetSeedData().session_country_code;
+  return seed_reader_writer_->GetSeedInfo().session_country_code;
 }
 
 SeedReaderWriter*
@@ -102,7 +98,13 @@ void VariationsSafeSeedStoreLocalState::ClearState() {
 LoadSeedResult VariationsSafeSeedStoreLocalState::ReadSeedData(
     std::string* seed_data,
     std::string* base64_seed_signature) {
-  return seed_reader_writer_->ReadSeedData(seed_data, base64_seed_signature);
+  return seed_reader_writer_->ReadSeedDataOnStartup(seed_data,
+                                                    base64_seed_signature);
+}
+
+void VariationsSafeSeedStoreLocalState::ReadSeedData(
+    SeedReaderWriter::ReadSeedDataCallback done_callback) {
+  seed_reader_writer_->ReadSeedData(std::move(done_callback));
 }
 
 // static

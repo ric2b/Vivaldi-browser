@@ -44,6 +44,9 @@
 #include "chrome/browser/ash/app_list/search/ranking/launch_data.h"
 #include "chrome/browser/ash/app_list/search/search_controller.h"
 #include "chrome/browser/ash/app_list/search/search_controller_factory.h"
+#include "chrome/browser/ash/browser_delegate/browser_controller.h"
+#include "chrome/browser/ash/browser_delegate/browser_delegate.h"
+#include "chrome/browser/ash/browser_delegate/browser_type.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -51,9 +54,7 @@
 #include "chrome/browser/ui/ash/shelf/app_shortcut_shelf_item_controller.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller_util.h"
-#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -222,7 +223,7 @@ void AppListClientImpl::StartSearch(const std::u16string& trimmed_query) {
           state_for_new_user_->started_search && trimmed_query.empty()) {
         state_for_new_user_->first_search_result_recorded = true;
         RecordFirstSearchResult(ash::NO_RESULT,
-                                display::Screen::GetScreen()->InTabletMode());
+                                display::Screen::Get()->InTabletMode());
       } else if (!trimmed_query.empty()) {
         state_for_new_user_->started_search = true;
       }
@@ -280,7 +281,7 @@ void AppListClientImpl::OpenSearchResult(int profile_id,
   }
 
   if (launched_from == ash::AppListLaunchedFrom::kLaunchedFromSearchBox) {
-    if (display::Screen::GetScreen()->InTabletMode()) {
+    if (display::Screen::Get()->InTabletMode()) {
       base::UmaHistogramCounts100("Apps.AppListSearchQueryLengthV2.TabletMode",
                                   last_query_length);
     } else {
@@ -297,9 +298,8 @@ void AppListClientImpl::OpenSearchResult(int profile_id,
       ash::AppListNotifier::Result(result_id, result->metrics_type(),
                                    result->continue_file_suggestion_type()));
 
-  RecordSearchResultOpenTypeHistogram(
-      launched_from, result->metrics_type(),
-      display::Screen::GetScreen()->InTabletMode());
+  RecordSearchResultOpenTypeHistogram(launched_from, result->metrics_type(),
+                                      display::Screen::Get()->InTabletMode());
 
   if (launch_as_default) {
     RecordDefaultSearchResultOpenTypeHistogram(result->metrics_type());
@@ -320,7 +320,7 @@ void AppListClientImpl::OpenSearchResult(int profile_id,
       !state_for_new_user_->first_search_result_recorded) {
     state_for_new_user_->first_search_result_recorded = true;
     RecordFirstSearchResult(result->metrics_type(),
-                            display::Screen::GetScreen()->InTabletMode());
+                            display::Screen::Get()->InTabletMode());
   }
 
   // OpenResult may cause |result| to be deleted.
@@ -453,7 +453,7 @@ void AppListClientImpl::OnAppListVisibilityChanged(bool visible) {
         !state_for_new_user_->first_search_result_recorded) {
       state_for_new_user_->first_search_result_recorded = true;
       RecordFirstSearchResult(ash::NO_RESULT,
-                              display::Screen::GetScreen()->InTabletMode());
+                              display::Screen::Get()->InTabletMode());
     }
   }
 }
@@ -640,9 +640,7 @@ int64_t AppListClientImpl::GetAppListDisplayId() {
   if (!app_list_window) {
     return display::kInvalidDisplayId;
   }
-  return display::Screen::GetScreen()
-      ->GetDisplayNearestWindow(app_list_window)
-      .id();
+  return display::Screen::Get()->GetDisplayNearestWindow(app_list_window).id();
 }
 
 bool AppListClientImpl::IsAppPinned(const std::string& app_id) {
@@ -829,7 +827,7 @@ void AppListClientImpl::RecordViewShown(bool is_app_collections_shown) {
 
   state_for_new_user_->showing_recorded = true;
   state_for_new_user_->shown_in_tablet_mode =
-      display::Screen::GetScreen()->InTabletMode();
+      display::Screen::Get()->InTabletMode();
 
   CHECK(new_user_session_activation_time_.has_value());
   const base::TimeDelta opening_duration =
@@ -868,16 +866,16 @@ void AppListClientImpl::RecordOpenedResultFromSearchBox(
   // Check whether there is any Chrome non-app browser window open and not
   // minimized.
   bool non_app_browser_open_and_not_minimzed = false;
-  for (Browser* browser : *BrowserList::GetInstance()) {
-    if (browser->type() != Browser::TYPE_NORMAL ||
-        browser->window()->IsMinimized()) {
-      // Skip if `browser` is not a normal browser or `browser` is minimized.
-      continue;
-    }
-
-    non_app_browser_open_and_not_minimzed = true;
-    break;
-  }
+  ash::BrowserController::GetInstance()->ForEachBrowser(
+      ash::BrowserController::BrowserOrder::kAscendingCreationTime,
+      [&](ash::BrowserDelegate& browser) {
+        if (browser.GetType() != ash::BrowserType::kNormal ||
+            browser.IsMinimized()) {
+          return ash::BrowserController::kContinueIteration;
+        }
+        non_app_browser_open_and_not_minimzed = true;
+        return ash::BrowserController::kBreakIteration;
+      });
 
   if (non_app_browser_open_and_not_minimzed) {
     UMA_HISTOGRAM_ENUMERATION(
@@ -916,7 +914,7 @@ void AppListClientImpl::MaybeRecordLauncherAction(
   }
 
   state_for_new_user_->action_recorded = true;
-  if (display::Screen::GetScreen()->InTabletMode()) {
+  if (display::Screen::Get()->InTabletMode()) {
     base::UmaHistogramEnumeration("Apps.NewUserFirstLauncherAction.TabletMode",
                                   launched_from);
   } else {
@@ -930,7 +928,7 @@ void AppListClientImpl::MaybeRecordLauncherAction(
   if (launcher_action_duration >= base::TimeDelta()) {
     // `base::Time` may skew. Therefore only record when the time duration is
     // non-negative.
-    if (display::Screen::GetScreen()->InTabletMode()) {
+    if (display::Screen::Get()->InTabletMode()) {
       UMA_HISTOGRAM_CUSTOM_TIMES(
           /*name=*/
           "Apps.TimeBetweenNewUserSessionActivationAndFirstLauncherAction."
@@ -953,7 +951,7 @@ void AppListClientImpl::MaybeRecordActivatedItemVisibility(
     ash::AppListLaunchedFrom launched_from,
     bool is_app_above_the_fold) {
   // Do not record this metric for tablet mode.
-  if (display::Screen::GetScreen()->InTabletMode()) {
+  if (display::Screen::Get()->InTabletMode()) {
     return;
   }
   const std::optional<apps::DefaultAppName> default_app_name =
@@ -993,7 +991,7 @@ void AppListClientImpl::RecordAppsDefaultVisibility(
     const std::vector<std::string>& apps_below_the_fold,
     bool is_apps_collections_page) {
   // Do not record this metric for tablet mode.
-  if (display::Screen::GetScreen()->InTabletMode()) {
+  if (display::Screen::Get()->InTabletMode()) {
     return;
   }
 

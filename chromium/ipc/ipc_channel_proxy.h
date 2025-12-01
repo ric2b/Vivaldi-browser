@@ -22,7 +22,6 @@
 #include "build/build_config.h"
 #include "ipc/ipc.mojom.h"
 #include "ipc/ipc_channel.h"
-#include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -81,7 +80,7 @@ class COMPONENT_EXPORT(IPC) ChannelProxy : public Sender {
   // dispatched to the listener.  The given task runner correspond to a thread
   // on which IPC::Channel is created and used (e.g. IO thread).
   static std::unique_ptr<ChannelProxy> Create(
-      const IPC::ChannelHandle& channel_handle,
+      const mojo::MessagePipeHandle& channel_handle,
       Channel::Mode mode,
       Listener* listener,
       const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
@@ -105,7 +104,7 @@ class COMPONENT_EXPORT(IPC) ChannelProxy : public Sender {
   // proxy that was not initialized in its constructor. If |create_pipe_now| is
   // true, the pipe is created synchronously. Otherwise it's created on the IO
   // thread.
-  void Init(const IPC::ChannelHandle& channel_handle,
+  void Init(const mojo::MessagePipeHandle& channel_handle,
             Channel::Mode mode,
             bool create_pipe_now);
   void Init(std::unique_ptr<ChannelFactory> factory,
@@ -235,14 +234,6 @@ class COMPONENT_EXPORT(IPC) ChannelProxy : public Sender {
     // Sends |message| from appropriate thread.
     void Send(Message* message);
 
-    // Adds |task_runner| for the task to be executed later.
-    void AddListenerTaskRunner(
-        int32_t routing_id,
-        scoped_refptr<base::SingleThreadTaskRunner> task_runner);
-
-    // Removes task runner for |routing_id|.
-    void RemoveListenerTaskRunner(int32_t routing_id);
-
     // Called on the IPC::Channel thread.
     // Returns the task runner associated with |routing_id|.
     scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(
@@ -308,12 +299,6 @@ class COMPONENT_EXPORT(IPC) ChannelProxy : public Sender {
         const std::string& name,
         const GenericAssociatedInterfaceFactory& factory);
 
-    base::Lock listener_thread_task_runners_lock_;
-    // Map of routing_id and listener's thread task runner.
-    std::map<int32_t, scoped_refptr<base::SingleThreadTaskRunner>>
-        listener_thread_task_runners_
-            GUARDED_BY(listener_thread_task_runners_lock_);
-
     scoped_refptr<base::SingleThreadTaskRunner> default_listener_task_runner_;
     raw_ptr<Listener> listener_;
 
@@ -366,9 +351,6 @@ class COMPONENT_EXPORT(IPC) ChannelProxy : public Sender {
       mojo::ScopedInterfaceEndpointHandle handle) {
     factory.Run(mojo::PendingAssociatedReceiver<Interface>(std::move(handle)));
   }
-
-  // Always called once immediately after Init.
-  virtual void OnChannelInit();
 
   // By maintaining this indirection (ref-counted) to our internal state, we
   // can safely be destroyed while the background thread continues to do stuff

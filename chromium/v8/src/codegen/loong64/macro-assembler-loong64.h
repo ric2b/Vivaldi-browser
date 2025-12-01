@@ -181,6 +181,9 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void LoadRootRelative(Register destination, int32_t offset) final;
   void StoreRootRelative(int32_t offset, Register value) final;
 
+  void PreCheckSkippedWriteBarrier(Register object, Register value,
+                                   Register scratch, Label* ok);
+
   // Operand pointing to an external reference.
   // May emit code to set up the scratch register. The operand is
   // only guaranteed to be correct as long as the scratch register
@@ -354,6 +357,16 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void CallRecordWriteStub(
       Register object, Register slot_address, SaveFPRegsMode fp_mode,
       StubCallMode mode = StubCallMode::kCallBuiltinPointer);
+
+  void CallVerifySkippedWriteBarrierStubSaveRegisters(Register object,
+                                                      Register value,
+                                                      SaveFPRegsMode fp_mode);
+  void CallVerifySkippedWriteBarrierStub(Register object, Register value);
+
+  void CallVerifySkippedIndirectWriteBarrierStubSaveRegisters(
+      Register object, Register value, SaveFPRegsMode fp_mode);
+  void CallVerifySkippedIndirectWriteBarrierStub(Register object,
+                                                 Register value);
 
   // For a given |object| and |offset|:
   //   - Move |object| to |dst_object|.
@@ -671,6 +684,10 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
       mov(dst, src);
     }
   }
+
+  // Move src0 to dst0 and src1 to dst1, handling possible overlaps.
+  void MovePair(Register dst0, Register src0, Register dst1, Register src1);
+
   void LoadIsolateField(Register dst, IsolateFieldId id);
 
   inline void FmoveLow(Register dst_low, FPURegister src) {
@@ -800,18 +817,20 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   // Jump the register contains a smi.
   void JumpIfSmi(Register value, Label* smi_label);
 
-  void JumpIfEqual(Register a, int32_t b, Label* dest) {
-    UseScratchRegisterScope temps(this);
-    Register scratch = temps.Acquire();
-    li(scratch, Operand(b));
-    Branch(dest, eq, a, Operand(scratch));
+  inline void JumpIf(Condition cond, Register x, int32_t y, Label* dest) {
+    Branch(dest, cond, x, Operand(y));
   }
 
-  void JumpIfLessThan(Register a, int32_t b, Label* dest) {
-    UseScratchRegisterScope temps(this);
-    Register scratch = temps.Acquire();
-    li(scratch, Operand(b));
-    Branch(dest, lt, a, Operand(scratch));
+  inline void JumpIfEqual(Register x, int32_t y, Label* dest) {
+    Branch(dest, eq, x, Operand(y));
+  }
+
+  inline void JumpIfLessThan(Register x, int32_t y, Label* dest) {
+    Branch(dest, lt, x, Operand(y));
+  }
+
+  inline void JumpIfUnsignedLessThan(Register x, int32_t y, Label* dest) {
+    Branch(dest, lo, x, Operand(y));
   }
 
   // Push a standard frame, consisting of ra, fp, context and JS function.
@@ -1041,6 +1060,10 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   // ---------------------------------------------------------------------------
   // GC Support
 
+  // Performs a fast check for whether `value` is a read-only object or a small
+  // Smi. Only enabled in some configurations.
+  void MaybeJumpIfReadOnlyOrSmallSmi(Register value, Label* dest);
+
   // Notify the garbage collector that we wrote a pointer into an object.
   // |object| is the object being stored into, |value| is the object being
   // stored.
@@ -1049,6 +1072,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void RecordWriteField(
       Register object, int offset, Register value, RAStatus ra_status,
       SaveFPRegsMode save_fp, SmiCheck smi_check = SmiCheck::kInline,
+      ReadOnlyCheck ro_check = ReadOnlyCheck::kInline,
       SlotDescriptor slot = SlotDescriptor::ForDirectPointerSlot());
 
   // For a given |object| notify the garbage collector that the slot at |offset|
@@ -1056,6 +1080,7 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void RecordWrite(
       Register object, Operand offset, Register value, RAStatus ra_status,
       SaveFPRegsMode save_fp, SmiCheck smi_check = SmiCheck::kInline,
+      ReadOnlyCheck ro_check = ReadOnlyCheck::kInline,
       SlotDescriptor slot = SlotDescriptor::ForDirectPointerSlot());
 
   // ---------------------------------------------------------------------------

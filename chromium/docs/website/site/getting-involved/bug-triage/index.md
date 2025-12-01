@@ -140,7 +140,7 @@ are a lot of hotlists, here are the most important for incoming bugs:
     *   Blink == Web Content
     *   Internals == Internals (Network stack, plugins, etc...)
     *   Platform == Chrome's Developer Platform and Tools (Ext, AppsV2,
-                NaCl, DevTools)
+                DevTools)
     *   UI&gt;Shell == ChromeOS Shell/ Window Manager
     *   UI&gt;Browser == Browser
     *   OS&gt;Hardware

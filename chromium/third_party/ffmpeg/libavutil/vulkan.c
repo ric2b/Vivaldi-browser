@@ -447,7 +447,7 @@ int ff_vk_exec_pool_init(FFVulkanContext *s, AVVulkanDeviceQueueFamily *qf,
         pool->query_results = nb_queries;
         pool->query_statuses = nb_queries;
 
-        /* Video encode quieries produce two results per query */
+        /* Video encode queries produce two results per query */
         if (query_type == VK_QUERY_TYPE_VIDEO_ENCODE_FEEDBACK_KHR) {
             int nb_results = av_popcount(ef->encodeFeedbackFlags);
             pool->query_status_stride = nb_results + 1;
@@ -1408,7 +1408,8 @@ int ff_vk_host_map_buffer(FFVulkanContext *s, AVBufferRef **dst,
         return AVERROR(ENOMEM);
 
     /* Add the offset at the start, which gets ignored */
-    buffer_size = offs + src_buf->size;
+    const ptrdiff_t src_offset = src_data - src_buf->data;
+    buffer_size = offs + (src_buf->size - src_offset);
     buffer_size = FFALIGN(buffer_size, s->props.properties.limits.minMemoryMapAlignment);
     buffer_size = FFALIGN(buffer_size, s->hprops.minImportedHostPointerAlignment);
 
@@ -1542,7 +1543,7 @@ int ff_vk_mt_is_np_rgb(enum AVPixelFormat pix_fmt)
         pix_fmt == AV_PIX_FMT_X2RGB10 || pix_fmt == AV_PIX_FMT_X2BGR10 ||
         pix_fmt == AV_PIX_FMT_RGBAF32 || pix_fmt == AV_PIX_FMT_RGBF32 ||
         pix_fmt == AV_PIX_FMT_RGBA128 || pix_fmt == AV_PIX_FMT_RGB96 ||
-        pix_fmt == AV_PIX_FMT_GBRP)
+        pix_fmt == AV_PIX_FMT_GBRP || pix_fmt == AV_PIX_FMT_BAYER_RGGB16)
         return 1;
     return 0;
 }
@@ -1699,7 +1700,8 @@ const char *ff_vk_shader_rep_fmt(enum AVPixelFormat pix_fmt,
     case AV_PIX_FMT_YUVA422P16:
     case AV_PIX_FMT_YUVA444P10:
     case AV_PIX_FMT_YUVA444P12:
-    case AV_PIX_FMT_YUVA444P16: {
+    case AV_PIX_FMT_YUVA444P16:
+    case AV_PIX_FMT_BAYER_RGGB16: {
         const char *rep_tab[] = {
             [FF_VK_REP_NATIVE] = "r16ui",
             [FF_VK_REP_FLOAT] = "r16f",

@@ -407,17 +407,10 @@ HTMLFormControlElement::popoverTargetElement() {
   return HTMLFormControlElement::popoverTargetElement(*this);
 }
 
-Element* HTMLFormControlElement::InterestForElement() const {
-  if (!RuntimeEnabledFeatures::HTMLInterestForAttributeEnabled(
-          GetDocument().GetExecutionContext())) {
-    return nullptr;
-  }
-  if (!IsInTreeScope() || IsDisabledFormControl()) {
-    return nullptr;
-  }
-
-  return GetElementAttributeResolvingReferenceTarget(
-      html_names::kInterestforAttr);
+bool HTMLFormControlElement::IsValidInterestInvoker(Element& target) const {
+  DCHECK(RuntimeEnabledFeatures::HTMLInterestForAttributeEnabled());
+  // Buttons need to be enabled in order to support interest invokers.
+  return !IsDisabledFormControl();
 }
 
 // static
@@ -437,7 +430,7 @@ void HTMLFormControlElement::HandlePopoverActivation(Event& event,
   auto popover = popoverTargetElement(element);
   if (popover.popover) {
     bool event_target_was_nested_popover = false;
-    if (auto* target_node = event.target()->ToNode()) {
+    if (auto* target_node = event.RawTarget()->ToNode()) {
       bool button_is_ancestor_of_popover =
           element.IsShadowIncludingAncestorOf(*popover.popover);
       event_target_was_nested_popover =

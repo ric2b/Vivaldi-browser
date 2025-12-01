@@ -1,11 +1,11 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import type * as Protocol from '../../../generated/protocol.js';
 import * as CPUProfile from '../../../models/cpu_profile/cpu_profile.js';
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
-import {makeCompleteEvent, makeInstantEvent} from '../../../testing/TraceHelpers.js';
+import {allThreadEntriesInTrace, makeCompleteEvent, makeInstantEvent} from '../../../testing/TraceHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as Trace from '../trace.js';
 
@@ -93,15 +93,15 @@ describeWithEnvironment('SamplesIntegrator', function() {
 
   describe('buildProfileCalls', () => {
     it('generates profile calls using trace events and JS samples from a trace file', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'recursive-blocking-js.json.gz');
-      const samplesData = parsedTrace.Samples;
+      const parsedTrace = await TraceLoader.traceEngine(this, 'recursive-blocking-js.json.gz');
+      const samplesData = parsedTrace.data.Samples;
       assert.strictEqual(samplesData.profilesInProcess.size, 1);
       const [[pid, profileByThread]] = samplesData.profilesInProcess.entries();
       const [[tid, cpuProfileData]] = profileByThread.entries();
       const parsedProfile = cpuProfileData.parsedProfile;
       const samplesIntegrator =
           new Trace.Helpers.SamplesIntegrator.SamplesIntegrator(parsedProfile, PROFILE_ID, pid, tid);
-      const traceEvents = parsedTrace.Renderer.allTraceEntries.filter(event => event.pid === pid && event.tid === tid);
+      const traceEvents = allThreadEntriesInTrace(parsedTrace).filter(event => event.pid === pid && event.tid === tid);
       if (!traceEvents) {
         throw new Error('Trace events were unexpectedly not found.');
       }
@@ -342,15 +342,15 @@ describeWithEnvironment('SamplesIntegrator', function() {
       assert.strictEqual(framesForFunctionA[1].dur, runMicroTasks.ts + (runMicroTasks.dur || 0) - expectedBTimestamp);
     });
     it('skips samples from (program), (idle), (root) and (garbage collector) nodes', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'recursive-blocking-js.json.gz');
-      const samplesData = parsedTrace.Samples;
+      const parsedTrace = await TraceLoader.traceEngine(this, 'recursive-blocking-js.json.gz');
+      const samplesData = parsedTrace.data.Samples;
       assert.strictEqual(samplesData.profilesInProcess.size, 1);
       const [[pid, profileByThread]] = samplesData.profilesInProcess.entries();
       const [[tid, cpuProfileData]] = profileByThread.entries();
       const parsedProfile = cpuProfileData.parsedProfile;
       const samplesIntegrator =
           new Trace.Helpers.SamplesIntegrator.SamplesIntegrator(parsedProfile, PROFILE_ID, pid, tid);
-      const traceEvents = parsedTrace.Renderer.allTraceEntries.filter(event => event.pid === pid && event.tid === tid);
+      const traceEvents = allThreadEntriesInTrace(parsedTrace).filter(event => event.pid === pid && event.tid === tid);
       if (!traceEvents) {
         throw new Error('Trace events were unexpectedly not found.');
       }

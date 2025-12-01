@@ -40,28 +40,107 @@
   <message name="IDS_IMPORT_FROM_OPERA_GX" desc="Name of import profile from Opera GX">
     Opera GX
   </message>
+  <message name="IDS_OPERA_IMPORT_FROM_BOOKMARKS_HTML_FILE" desc="browser combo box: Opera Bookmarks HTML File">
+    Opera Bookmarks File
+  </message>
   <message name="IDS_CHROME_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
-    Sadly, your Chrome settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Chrome windows. Then click Continue.
+    Your Chrome settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Chrome windows. Then click Continue.
   </message>
   <message name="IDS_YANDEX_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
-    Sadly, your Yandex settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Yandex windows. Then click Continue.
+    Your Yandex settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Yandex windows. Then click Continue.
   </message>
   <message name="IDS_BRAVE_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
-    Sadly, your Brave settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Brave windows. Then click Continue.
+    Your Brave settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Brave windows. Then click Continue.
   </message>
   <message name="IDS_EDGE_CHROMIUM_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
-    Sadly, your Edge settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Edge windows. Then click Continue.
+    Your Edge settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Edge windows. Then click Continue.
   </message>
   <message name="IDS_OPIUM_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
-    Sadly, your Opera settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Opera windows. Then click Continue.
+    Your Opera settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Opera windows. Then click Continue.
   </message>
   <message name="IDS_OPERA_GX_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
-    Sadly, your Opera GX settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Opera GX windows. Then click Continue.
+    Your Opera GX settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Opera GX windows. Then click Continue.
   </message>
    <message name="IDS_ARC_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
-    Sadly, your Arc settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Arc windows. Then click Continue.
+    Your Arc settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Arc windows. Then click Continue.
+  </message>
+  <message name="IDS_VIVALDI_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
+    Your settings cannot be imported from another Vivaldi instance while it is still running. To import those settings to this browser, please close all windows belonging to the other Vivaldi instance, then click continue.
   </message>
   <message name="IDS_IMPORT_FROM_THUNDERBIRD" desc="browser combo box: Thunderbird email">
     Thunderbird
+  </message>
+  <!-- Error messages for chromium import operations -->
+  <message name="IDS_IMPORT_ERROR_BOOKMARK_FILE_NOT_FOUND" desc="Error message when bookmark file is not found during import">
+    Bookmark file not found
+  </message>
+  <message name="IDS_IMPORT_ERROR_INVALID_BOOKMARK_FILE" desc="Error message when bookmark file is invalid during import">
+    Invalid bookmark file
+  </message>
+  <message name="IDS_IMPORT_ERROR_LOCAL_STATE_NOT_FOUND" desc="Error message when Local State file is not found during import">
+    Unable to find Local State for source profile
+  </message>
+  <message name="IDS_IMPORT_ERROR_LOCAL_STATE_READ_FAILED" desc="Error message when unable to read Local State file during import">
+    Unable to read Local State from disk
+  </message>
+  <message name="IDS_IMPORT_ERROR_LOCAL_STATE_PARSE_FAILED" desc="Error message when unable to parse Local State JSON during import">
+    Unable to parse JSON in Local State
+  </message>
+  <message name="IDS_IMPORT_ERROR_OS_CRYPT_NOT_FOUND" desc="Error message when os_crypt entry is not found in Local State during import">
+    Unable to find 'os_crypt' entry for source profile
+  </message>
+  <message name="IDS_IMPORT_ERROR_ENCRYPTED_KEY_NOT_FOUND" desc="Error message when encrypted_key is not found in Local State during import">
+    Unable to find 'encrypted_key' entry for source profile
+  </message>
+  <message name="IDS_IMPORT_ERROR_NOT_DPAPI_KEY" desc="Error message when key is not a DPAPI key during import">
+    Key is not a DPAPI key, unable to decrypt
+  </message>
+  <message name="IDS_IMPORT_ERROR_DECRYPTION_KEY_INVALID" desc="Error message when decryption key is invalid during import">
+    Decryption key is invalid
+  </message>
+  <message name="IDS_IMPORT_ERROR_LOGIN_DATA_NOT_FOUND" desc="Error message when Login Data file is not found during import">
+    Login Data file not found
+  </message>
+  <message name="IDS_IMPORT_ERROR_PASSWORD_DECRYPTION_FAILED" desc="Error message when password decryption fails during import">
+    Failed to decrypt password(s)
+  </message>
+  <message name="IDS_IMPORT_ERROR_LOGIN_DATABASE_OPEN_FAILED" desc="Error message when unable to open login database during import">
+    Could not open the login database file
+  </message>
+  <message name="IDS_IMPORT_ERROR_LOGIN_DATABASE_READ_FAILED" desc="Error message when unable to read from login database during import">
+    Failed to read the import data
+  </message>
+  <message name="IDS_IMPORT_ERROR_HISTORY_FILE_NOT_FOUND" desc="Error message when history file is not found during import">
+    History file does not exist
+  </message>
+  <message name="IDS_IMPORT_ERROR_HISTORY_DATABASE_OPEN_FAILED" desc="Error message when unable to open history database during import">
+    Could not open the history database file
+  </message>
+  <message name="IDS_IMPORT_ERROR_HISTORY_DATABASE_QUERY_FAILED" desc="Error message when unable to query history database during import">
+    Failed to query the history database file
+  </message>
+  <message name="IDS_IMPORT_ERROR_OPERA_PREFS_FILE_NOT_FOUND" desc="Error message when Opera preferences file is not found during import">
+    Opera preferences file not found
+  </message>
+  <message name="IDS_IMPORT_ERROR_OPERA_PREFS_READ_FAILED" desc="Error message when unable to read Opera preferences file during import">
+    Failed to read Opera preferences file
+  </message>
+  <message name="IDS_IMPORT_ERROR_OPERA_SPEEDDIAL_READ_FAILED" desc="Error message when unable to read Opera speeddial file during import">
+    Could not read speeddial file
+  </message>
+  <message name="IDS_IMPORT_ERROR_OPERA_BOOKMARKS_FILE_NOT_FOUND" desc="Error message when Opera bookmarks file is not found during import">
+    Bookmark file does not exist
+  </message>
+  <message name="IDS_IMPORT_ERROR_OPERA_NOTES_FILE_NOT_FOUND" desc="Error message when Opera notes file is not found during import">
+    Notes file does not exist
+  </message>
+  <message name="IDS_IMPORT_ERROR_OPERA_WAND_FILE_NOT_FOUND" desc="Error message when Opera password (wand) file is not found during import">
+    Password (wand) file does not exist
+  </message>
+  <message name="IDS_IMPORT_ERROR_OPERA_MASTER_PASSWORD_REQUIRED" desc="Error message when Opera master password is required but not provided during import">
+    Master password required but none was supplied
+  </message>
+  <message name="IDS_IMPORT_ERROR_OPERA_WAND_FORMAT_ERROR" desc="Error message when Opera password file format is invalid during import">
+    Password file can't be read and might be corrupt
   </message>
 </grit-part>

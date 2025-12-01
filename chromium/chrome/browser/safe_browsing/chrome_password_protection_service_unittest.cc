@@ -35,7 +35,6 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
-#include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -47,7 +46,6 @@
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
 #include "components/password_manager/core/browser/password_store/mock_password_store_interface.h"
-#include "components/password_manager/core/browser/split_stores_and_local_upm.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -65,6 +63,7 @@
 #include "components/sync/model/data_type_controller_delegate.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/sync_user_events/fake_user_event_service.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/mock_navigation_handle.h"
@@ -75,7 +74,7 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
+#include "base/android/device_info.h"
 #include "chrome/browser/password_manager/android/mock_password_checkup_launcher_helper.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "components/enterprise/connectors/core/features.h"
@@ -286,8 +285,7 @@ class ChromePasswordProtectionServiceTest
     : public ChromeRenderViewHostTestHarness {
  public:
   ChromePasswordProtectionServiceTest()
-      : profile_manager_(TestingBrowserProcess::GetGlobal()),
-        local_state_(TestingBrowserProcess::GetGlobal()) {
+      : profile_manager_(TestingBrowserProcess::GetGlobal()) {
     EXPECT_TRUE(profile_manager_.SetUp());
   }
 
@@ -534,7 +532,6 @@ class ChromePasswordProtectionServiceTest
   std::unique_ptr<policy::MockCloudPolicyClient> client_;
   std::unique_ptr<VerdictCacheManager> cache_manager_;
   TestingProfileManager profile_manager_;
-  ScopedTestingLocalState local_state_;
   base::MockCallback<
       ChromePasswordProtectionService::ChangePhishedCredentialsCallback>
       mock_add_callback_;
@@ -1811,21 +1808,8 @@ TEST_F(ChromePasswordProtectionServiceTest, VerifyPageLoadToken) {
 
 namespace {
 
-class ChromePasswordProtectionServiceWithAccountPasswordStoreTest
-    : public ChromePasswordProtectionServiceTest {
- public:
-  ChromePasswordProtectionServiceWithAccountPasswordStoreTest() {
-#if BUILDFLAG(IS_ANDROID)
-    // Override the GMS version to be big enough for local UPM support, so these
-    // tests still pass in bots with an outdated version.
-    base::android::BuildInfo::GetInstance()->set_gms_version_code_for_test(
-        base::NumberToString(password_manager::GetLocalUpmMinGmsVersion()));
-#endif
-  }
-};
-
-TEST_F(ChromePasswordProtectionServiceWithAccountPasswordStoreTest,
-       VerifyPersistPhishedSavedPasswordCredential) {
+TEST_F(ChromePasswordProtectionServiceTest,
+       VerifyPersistPhishedAccountSavedPasswordCredential) {
   service_->ConfigService(/*is_incognito=*/false,
                           /*is_extended_reporting=*/true);
   std::vector<password_manager::MatchingReusedCredential> credentials;
@@ -1843,8 +1827,8 @@ TEST_F(ChromePasswordProtectionServiceWithAccountPasswordStoreTest,
   service_->PersistPhishedSavedPasswordCredential(credentials);
 }
 
-TEST_F(ChromePasswordProtectionServiceWithAccountPasswordStoreTest,
-       VerifyRemovePhishedSavedPasswordCredential) {
+TEST_F(ChromePasswordProtectionServiceTest,
+       VerifyRemovePhishedAccountSavedPasswordCredential) {
   service_->ConfigService(/*is_incognito=*/false,
                           /*is_extended_reporting=*/true);
   std::vector<password_manager::MatchingReusedCredential> credentials;
@@ -1896,21 +1880,7 @@ class PasswordCheckupWithPhishGuardTest
   raw_ptr<syncer::TestSyncService> sync_service_ = nullptr;
 };
 
-class PasswordCheckupWithPhishGuardAndroidTest
-    : public PasswordCheckupWithPhishGuardTest {
- public:
-  PasswordCheckupWithPhishGuardAndroidTest() = default;
-
-  void SetUp() override {
-    // Override the GMS version to be big enough for local UPM support, so these
-    // tests still pass in bots with an outdated version.
-    base::android::BuildInfo::GetInstance()->set_gms_version_code_for_test(
-        base::NumberToString(password_manager::GetLocalUpmMinGmsVersion()));
-    PasswordCheckupWithPhishGuardTest::SetUp();
-  }
-};
-
-TEST_F(PasswordCheckupWithPhishGuardAndroidTest,
+TEST_F(PasswordCheckupWithPhishGuardTest,
        VerifyPhishGuardDialogOpensPasswordCheckupForAccountStoreSyncing) {
   service_->ConfigService(/*is_incognito=*/false,
                           /*is_extended_reporting=*/true);
@@ -1932,7 +1902,7 @@ TEST_F(PasswordCheckupWithPhishGuardAndroidTest,
   SimulateChangePasswordDialogAction(/*is_syncing=*/true);
 }
 
-TEST_F(PasswordCheckupWithPhishGuardAndroidTest,
+TEST_F(PasswordCheckupWithPhishGuardTest,
        VerifyPhishGuardDialogOpensPasswordCheckupForProfileStoreSyncing) {
   service_->ConfigService(/*is_incognito=*/false,
                           /*is_extended_reporting=*/true);
@@ -1955,7 +1925,7 @@ TEST_F(PasswordCheckupWithPhishGuardAndroidTest,
   SimulateChangePasswordDialogAction(/*is_syncing=*/true);
 }
 
-TEST_F(PasswordCheckupWithPhishGuardAndroidTest,
+TEST_F(PasswordCheckupWithPhishGuardTest,
        VerifyPhishGuardDialogOpensPasswordCheckupForProfileStoreNotSyncing) {
   service_->ConfigService(/*is_incognito=*/false,
                           /*is_extended_reporting=*/true);
@@ -1978,7 +1948,7 @@ TEST_F(PasswordCheckupWithPhishGuardAndroidTest,
   SimulateChangePasswordDialogAction(/*is_syncing=*/false);
 }
 
-TEST_F(PasswordCheckupWithPhishGuardAndroidTest,
+TEST_F(PasswordCheckupWithPhishGuardTest,
        VerifyPhishGuardDialogOpensSafetyCheckMenuForBothStoresSyncing) {
   feature_list_.InitWithFeatures(
       {}, {/*disabled_features=*/features::kSafetyHubLocalPasswordsModule});
@@ -2003,7 +1973,7 @@ TEST_F(PasswordCheckupWithPhishGuardAndroidTest,
   SimulateChangePasswordDialogAction(/*is_syncing=*/true);
 }
 
-TEST_F(PasswordCheckupWithPhishGuardAndroidTest,
+TEST_F(PasswordCheckupWithPhishGuardTest,
        VerifyPhishGuardDialogOpensSafetyHubMenuForBothStoresSyncing) {
   feature_list_.InitWithFeatures(
       /*enabled_features=*/{features::kSafetyHubLocalPasswordsModule}, {});

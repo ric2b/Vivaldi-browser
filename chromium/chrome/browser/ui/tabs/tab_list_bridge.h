@@ -51,7 +51,7 @@ class TabListBridge : public TabListInterface, public TabStripModelObserver {
   tabs::TabInterface* GetActiveTab() override;
   void OpenTab(const GURL& url, int index) override;
   void DiscardTab(tabs::TabHandle tab) override;
-  void DuplicateTab(tabs::TabHandle tab) override;
+  tabs::TabInterface* DuplicateTab(tabs::TabHandle tab) override;
   tabs::TabInterface* GetTab(int index) override;
   int GetIndexOfTab(tabs::TabHandle tab) override;
   void HighlightTabs(tabs::TabHandle tab_to_activate,
@@ -66,6 +66,12 @@ class TabListBridge : public TabListInterface, public TabStripModelObserver {
       const std::set<tabs::TabHandle>& tabs) override;
   void Ungroup(const std::set<tabs::TabHandle>& tabs) override;
   void MoveGroupTo(tab_groups::TabGroupId group_id, int index) override;
+  void MoveTabToWindow(tabs::TabHandle tab,
+                       SessionID destination_window_id,
+                       int destination_index) override;
+  void MoveTabGroupToWindow(tab_groups::TabGroupId group_id,
+                            SessionID destination_window_id,
+                            int destination_index) override;
 
  private:
   // TabStripModelObserver:

@@ -9,6 +9,7 @@
 #define SkPath_DEFINED
 
 #include "include/core/SkMatrix.h"
+#include "include/core/SkPathIter.h"
 #include "include/core/SkPathTypes.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
@@ -26,13 +27,11 @@
 #include <optional>
 #include <tuple>
 
-struct SkArc;
 class SkData;
 class SkPathRef;
 class SkRRect;
 class SkWStream;
 enum class SkPathConvexity;
-enum class SkPathFirstDirection;
 struct SkPathRaw;
 struct SkPathVerbAnalysis;
 
@@ -274,16 +273,6 @@ public:
         example: https://fiddle.skia.org/c/@Path_isRRect
     */
     bool isRRect(SkRRect* rrect) const;
-
-    /** Returns true if path is representable as an oval arc. In other words, could this
-        path be drawn using SkCanvas::drawArc.
-
-        arc  receives parameters of arc
-
-       @param arc  storage for arc; may be nullptr
-       @return     true if SkPath contains only a single arc from an oval
-    */
-    bool isArc(SkArc* arc) const;
 
     /** Returns if SkPath is empty.
         Empty SkPath may have FillType but has no SkPoint, SkPath::Verb, or conic weight.
@@ -600,26 +589,49 @@ public:
         @param pc      whether to apply perspective clipping
         @return        SkPath
     */
-    SkPath makeTransform(const SkMatrix& m,
-                         SkApplyPerspectiveClip pc = SkApplyPerspectiveClip::kYes) const {
+    SkPath makeTransform(const SkMatrix& matrix) const {
         SkPath dst;
-        this->transform(m, &dst, pc);
+        this->transform(matrix, &dst);
         return dst;
     }
 
     SkPath makeScale(SkScalar sx, SkScalar sy) const {
-        return this->makeTransform(SkMatrix::Scale(sx, sy), SkApplyPerspectiveClip::kNo);
+        return this->makeTransform(SkMatrix::Scale(sx, sy));
     }
 
-    /** Returns last point on SkPath in lastPt. Returns false if SkPoint array is empty,
-        storing (0, 0) if lastPt is not nullptr.
+#ifdef SK_SUPPORT_LEGACY_APPLYPERSPECTIVECLIP
+    void transform(const SkMatrix& matrix, SkPath* dst, SkApplyPerspectiveClip) const {
+        this->transform(matrix, dst);
+    }
+    void transform(const SkMatrix& matrix, SkApplyPerspectiveClip) {
+        this->transform(matrix);
+    }
+    SkPath makeTransform(const SkMatrix& m, SkApplyPerspectiveClip) const {
+        return this->makeTransform(m);
+    }
+#endif
 
-        @param lastPt  storage for final SkPoint in SkPoint array; may be nullptr
-        @return        true if SkPoint array contains one or more SkPoint
+    /** Return the last point, or {}
+
+        @return The last if the path contains one or more SkPoint, else returns {}
 
         example: https://fiddle.skia.org/c/@Path_getLastPt
     */
-    bool getLastPt(SkPoint* lastPt) const;
+    std::optional<SkPoint> getLastPt() const;
+
+    // DEPRECATED
+    bool getLastPt(SkPoint* lastPt) const {
+        if (auto lp = this->getLastPt()) {
+            if (lastPt) {
+                *lastPt = *lp;
+            }
+            return true;
+        }
+        if (lastPt) {
+            *lastPt = {0, 0};
+        }
+        return false;
+    }
 
     /** \enum SkPath::SegmentMask
         SegmentMask constants correspond to each drawing Verb type in SkPath; for
@@ -656,15 +668,40 @@ public:
         kDone_Verb  = kClose_Verb + 1
     };
 
-#ifdef SK_HIDE_PATH_EDIT_METHODS
-private:
-#endif
-    /** Returns a copy of this path in the current state, and resets the path to empty. */
-    SkPath detach() {
-        SkPath result = *this;
-        this->reset();
-        return result;
+    /** Specifies whether SkPath is volatile; whether it will be altered or discarded
+        by the caller after it is drawn. SkPath by default have volatile set false, allowing
+        Skia to attach a cache of data which speeds repeated drawing.
+
+        Mark temporary paths, discarded or modified after use, as volatile
+        to inform Skia that the path need not be cached.
+
+        Mark animating SkPath volatile to improve performance.
+        Mark unchanging SkPath non-volatile to improve repeated rendering.
+
+        raster surface SkPath draws are affected by volatile for some shadows.
+        GPU surface SkPath draws are affected by volatile for some shadows and concave geometries.
+
+        @param isVolatile  true if caller will alter SkPath after drawing
+        @return            reference to SkPath
+    */
+    SkPath& setIsVolatile(bool isVolatile) {
+        fIsVolatile = isVolatile;
+        return *this;
     }
+
+    /** Exchanges the verb array, SkPoint array, weights, and SkPath::FillType with other.
+        Cached state is also exchanged. swap() internally exchanges pointers, so
+        it is lightweight and does not allocate memory.
+
+        swap() usage has largely been replaced by operator=(const SkPath& path).
+        SkPath do not copy their content on assignment until they are written to,
+        making assignment as efficient as swap().
+
+        @param other  SkPath exchanged by value
+
+        example: https://fiddle.skia.org/c/@Path_swap
+    */
+    void swap(SkPath& other);
 
     /** Interpolates between SkPath with SkPoint array of equal size.
         Copy verb array and weights to out, and set out SkPoint array to a weighted
@@ -703,6 +740,16 @@ private:
         fFillType ^= 2;
     }
 
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+private:
+#endif
+    /** Returns a copy of this path in the current state, and resets the path to empty. */
+    SkPath detach() {
+        SkPath result = *this;
+        this->reset();
+        return result;
+    }
+
     /** Sets SkPath to its initial state.
         Removes verb array, SkPoint array, and weights, and sets FillType to kWinding.
         Internal storage associated with SkPath is released.
@@ -726,41 +773,6 @@ private:
     */
     SkPath& rewind();
 
-    /** Specifies whether SkPath is volatile; whether it will be altered or discarded
-        by the caller after it is drawn. SkPath by default have volatile set false, allowing
-        Skia to attach a cache of data which speeds repeated drawing.
-
-        Mark temporary paths, discarded or modified after use, as volatile
-        to inform Skia that the path need not be cached.
-
-        Mark animating SkPath volatile to improve performance.
-        Mark unchanging SkPath non-volatile to improve repeated rendering.
-
-        raster surface SkPath draws are affected by volatile for some shadows.
-        GPU surface SkPath draws are affected by volatile for some shadows and concave geometries.
-
-        @param isVolatile  true if caller will alter SkPath after drawing
-        @return            reference to SkPath
-    */
-    SkPath& setIsVolatile(bool isVolatile) {
-        fIsVolatile = isVolatile;
-        return *this;
-    }
-
-    /** Exchanges the verb array, SkPoint array, weights, and SkPath::FillType with other.
-        Cached state is also exchanged. swap() internally exchanges pointers, so
-        it is lightweight and does not allocate memory.
-
-        swap() usage has largely been replaced by operator=(const SkPath& path).
-        SkPath do not copy their content on assignment until they are written to,
-        making assignment as efficient as swap().
-
-        @param other  SkPath exchanged by value
-
-        example: https://fiddle.skia.org/c/@Path_swap
-    */
-    void swap(SkPath& other);
-
     /** Grows SkPath verb array, SkPoint array, and conics to contain additional space.
         May improve performance and use less memory by
         reducing the number and size of allocations when creating SkPath.
@@ -773,24 +785,16 @@ private:
     */
     void incReserve(int extraPtCount, int extraVerbCount = 0, int extraConicCount = 0);
 
-    /** Adds beginning of contour at SkPoint (x, y).
-
-        @param x  x-axis value of contour start
-        @param y  y-axis value of contour start
-        @return   reference to SkPath
-
-        example: https://fiddle.skia.org/c/@Path_moveTo
-    */
-    SkPath& moveTo(SkScalar x, SkScalar y);
-
-    /** Adds beginning of contour at SkPoint p.
-
-        @param p  contour start
-        @return   reference to SkPath
-    */
-    SkPath& moveTo(const SkPoint& p) {
+    /** Specifies the beginning of contour. If the previous verb was a "move" verb,
+     *  then this just replaces the point value of that move, otherwise it appends a new
+     *  "move" verb to the path using the point.
+     *
+     *  Thus, each contour can only have 1 move verb in it (the last one specified).
+     */
+    SkPath& moveTo(SkPoint p) {
         return this->moveTo(p.fX, p.fY);
     }
+    SkPath& moveTo(SkScalar x, SkScalar y);
 
     /** Adds beginning of contour relative to last point.
         If SkPath is empty, starts contour at (dx, dy).
@@ -1473,8 +1477,7 @@ private:
 
         example: https://fiddle.skia.org/c/@Path_transform
     */
-    void transform(const SkMatrix& matrix, SkPath* dst,
-                   SkApplyPerspectiveClip pc = SkApplyPerspectiveClip::kYes) const;
+    void transform(const SkMatrix& matrix, SkPath* dst) const;
 
     /** Transforms verb array, SkPoint array, and weight by matrix.
         transform may change verbs and increase their number.
@@ -1483,9 +1486,8 @@ private:
         @param matrix  SkMatrix to apply to SkPath
         @param pc      whether to apply perspective clipping
     */
-    SkPath& transform(const SkMatrix& matrix,
-                      SkApplyPerspectiveClip pc = SkApplyPerspectiveClip::kYes) {
-        this->transform(matrix, this, pc);
+    SkPath& transform(const SkMatrix& matrix) {
+        this->transform(matrix, this);
         return *this;
     }
 
@@ -1541,10 +1543,17 @@ public:
     }
 #endif
 
+    SkPathIter iter() const;
+
     struct IterRec {
         SkPathVerb            fVerb;
         SkSpan<const SkPoint> fPoints;
         float                 fConicWeight;
+
+        float conicWeight() const {
+            SkASSERT(fVerb == SkPathVerb::kConic);
+            return fConicWeight;
+        }
     };
 
     /** \class SkPath::Iter
@@ -1897,13 +1906,11 @@ public:
     using sk_is_trivially_relocatable = std::true_type;
 
 private:
-    SkPath(sk_sp<SkPathRef>, SkPathFillType, bool isVolatile, SkPathConvexity,
-           SkPathFirstDirection firstDirection);
+    SkPath(sk_sp<SkPathRef>, SkPathFillType, bool isVolatile, SkPathConvexity);
 
     sk_sp<SkPathRef>               fPathRef;
     int                            fLastMoveToIndex;
     mutable std::atomic<uint8_t>   fConvexity;      // SkPathConvexity
-    mutable std::atomic<uint8_t>   fFirstDirection; // SkPathFirstDirection
     uint8_t                        fFillType    : 2;
     uint8_t                        fIsVolatile  : 1;
 
@@ -1973,9 +1980,6 @@ private:
     // Notice the setters are const... these are mutable atomic fields.
     void setConvexity(SkPathConvexity) const;
 
-    void setFirstDirection(SkPathFirstDirection) const;
-    SkPathFirstDirection getFirstDirection() const;
-
     void addRaw(const SkPathRaw&);
 
     /** Returns the comvexity type, computing if needed. Never returns kUnknown.
@@ -2013,9 +2017,8 @@ private:
                                SkPathFillType fillType,
                                bool isVolatile);
 
-    friend class SkAutoPathBoundsUpdate;
+    friend class SkAutoAddSimpleShape;
     friend class SkAutoDisableOvalCheck;
-    friend class SkAutoDisableDirectionCheck;
     friend class SkPathBuilder;
     friend class SkPathEdgeIter;
     friend class SkPathWriter;

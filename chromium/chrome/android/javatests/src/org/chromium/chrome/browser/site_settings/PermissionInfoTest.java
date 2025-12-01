@@ -6,6 +6,8 @@ package org.chromium.chrome.browser.site_settings;
 
 import static org.junit.Assert.assertEquals;
 
+import static org.chromium.components.permissions.PermissionUtil.getGeolocationType;
+
 import androidx.test.filters.SmallTest;
 
 import org.junit.AfterClass;
@@ -33,12 +35,10 @@ import org.chromium.chrome.test.transit.AutoResetCtaTransitTestRule;
 import org.chromium.chrome.test.transit.ChromeTransitTestRules;
 import org.chromium.components.browser_ui.site_settings.GeolocationSetting;
 import org.chromium.components.browser_ui.site_settings.PermissionInfo;
-import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridgeJni;
-import org.chromium.components.content_settings.ContentSettingValues;
+import org.chromium.components.content_settings.ContentSetting;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.content_settings.SessionModel;
-import org.chromium.components.permissions.PermissionsAndroidFeatureList;
 import org.chromium.content_public.common.ContentSwitches;
 
 import java.util.concurrent.Callable;
@@ -112,18 +112,30 @@ public class PermissionInfoTest {
             @ContentSettingsType.EnumType int type,
             String origin,
             String embedder,
-            @ContentSettingValues int setting,
+            @ContentSetting int setting,
             Profile profile,
-            @ContentSettingValues int expectedSetting) {
+            @ContentSetting int expectedSetting) {
         PermissionInfo info =
                 new PermissionInfo(
                         type, origin, embedder, /* isEmbargoed= */ false, SessionModel.DURABLE);
 
-        ThreadUtils.runOnUiThreadBlocking(() -> info.setContentSetting(profile, setting));
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    if (type == ContentSettingsType.GEOLOCATION_WITH_OPTIONS) {
+                        info.setGeolocationSetting(
+                                profile, new GeolocationSetting(setting, setting));
+                    } else {
+                        info.setContentSetting(profile, setting);
+                    }
+                });
 
         CriteriaHelper.pollUiThread(
                 () -> {
-                    return info.getContentSetting(profile) == expectedSetting;
+                    if (type == ContentSettingsType.GEOLOCATION_WITH_OPTIONS) {
+                        return info.getGeolocationSetting(profile).mPrecise == expectedSetting;
+                    } else {
+                        return info.getContentSetting(profile) == expectedSetting;
+                    }
                 });
     }
 
@@ -143,19 +155,19 @@ public class PermissionInfoTest {
             throws Throwable {
         Profile primaryOtrProfile = getPrimaryOtrProfile();
         setSettingAndExpectValue(
-                ContentSettingsType.GEOLOCATION,
+                getGeolocationType(),
                 DSE_ORIGIN,
                 null,
-                ContentSettingValues.BLOCK,
+                ContentSetting.BLOCK,
                 primaryOtrProfile,
-                ContentSettingValues.BLOCK);
+                ContentSetting.BLOCK);
         setSettingAndExpectValue(
-                ContentSettingsType.GEOLOCATION,
+                getGeolocationType(),
                 DSE_ORIGIN,
                 null,
-                ContentSettingValues.DEFAULT,
+                ContentSetting.DEFAULT,
                 primaryOtrProfile,
-                ContentSettingValues.ASK);
+                ContentSetting.ASK);
     }
 
     @Test
@@ -165,19 +177,19 @@ public class PermissionInfoTest {
             throws Throwable {
         Profile nonPrimaryOtrProfile = getNonPrimaryOtrProfile();
         setSettingAndExpectValue(
-                ContentSettingsType.GEOLOCATION,
+                getGeolocationType(),
                 DSE_ORIGIN,
                 null,
-                ContentSettingValues.BLOCK,
+                ContentSetting.BLOCK,
                 nonPrimaryOtrProfile,
-                ContentSettingValues.BLOCK);
+                ContentSetting.BLOCK);
         setSettingAndExpectValue(
-                ContentSettingsType.GEOLOCATION,
+                getGeolocationType(),
                 DSE_ORIGIN,
                 null,
-                ContentSettingValues.DEFAULT,
+                ContentSetting.DEFAULT,
                 nonPrimaryOtrProfile,
-                ContentSettingValues.ASK);
+                ContentSetting.ASK);
     }
 
     @Test
@@ -186,19 +198,19 @@ public class PermissionInfoTest {
     public void testResetDSEGeolocation_RegularProfile_DefaultsToAskFromBlock() throws Throwable {
         Profile regularProfile = getRegularProfile();
         setSettingAndExpectValue(
-                ContentSettingsType.GEOLOCATION,
+                getGeolocationType(),
                 DSE_ORIGIN,
                 null,
-                ContentSettingValues.BLOCK,
+                ContentSetting.BLOCK,
                 regularProfile,
-                ContentSettingValues.BLOCK);
+                ContentSetting.BLOCK);
         setSettingAndExpectValue(
-                ContentSettingsType.GEOLOCATION,
+                getGeolocationType(),
                 DSE_ORIGIN,
                 null,
-                ContentSettingValues.DEFAULT,
+                ContentSetting.DEFAULT,
                 regularProfile,
-                ContentSettingValues.ASK);
+                ContentSetting.ASK);
     }
 
     @Test
@@ -214,16 +226,16 @@ public class PermissionInfoTest {
                 ContentSettingsType.NOTIFICATIONS,
                 DSE_ORIGIN,
                 null,
-                ContentSettingValues.BLOCK,
+                ContentSetting.BLOCK,
                 primaryOtrProfile,
-                ContentSettingValues.BLOCK);
+                ContentSetting.BLOCK);
         setSettingAndExpectValue(
                 ContentSettingsType.NOTIFICATIONS,
                 DSE_ORIGIN,
                 null,
-                ContentSettingValues.DEFAULT,
+                ContentSetting.DEFAULT,
                 primaryOtrProfile,
-                ContentSettingValues.ASK);
+                ContentSetting.ASK);
     }
 
     @Test
@@ -239,16 +251,16 @@ public class PermissionInfoTest {
                 ContentSettingsType.NOTIFICATIONS,
                 DSE_ORIGIN,
                 null,
-                ContentSettingValues.BLOCK,
+                ContentSetting.BLOCK,
                 nonPrimaryOtrProfile,
-                ContentSettingValues.BLOCK);
+                ContentSetting.BLOCK);
         setSettingAndExpectValue(
                 ContentSettingsType.NOTIFICATIONS,
                 DSE_ORIGIN,
                 null,
-                ContentSettingValues.DEFAULT,
+                ContentSetting.DEFAULT,
                 nonPrimaryOtrProfile,
-                ContentSettingValues.ASK);
+                ContentSetting.ASK);
     }
 
     @Test
@@ -261,16 +273,16 @@ public class PermissionInfoTest {
                 ContentSettingsType.NOTIFICATIONS,
                 DSE_ORIGIN,
                 null,
-                ContentSettingValues.BLOCK,
+                ContentSetting.BLOCK,
                 regularProfile,
-                ContentSettingValues.BLOCK);
+                ContentSetting.BLOCK);
         setSettingAndExpectValue(
                 ContentSettingsType.NOTIFICATIONS,
                 DSE_ORIGIN,
                 null,
-                ContentSettingValues.DEFAULT,
+                ContentSetting.DEFAULT,
                 regularProfile,
-                ContentSettingValues.ASK);
+                ContentSetting.ASK);
     }
 
     @Test
@@ -287,10 +299,8 @@ public class PermissionInfoTest {
                         false,
                         SessionModel.DURABLE);
 
-        var defaultSetting =
-                new GeolocationSetting(ContentSettingValues.ASK, ContentSettingValues.ASK);
-        var allowApproximate =
-                new GeolocationSetting(ContentSettingValues.ALLOW, ContentSettingValues.BLOCK);
+        var defaultSetting = new GeolocationSetting(ContentSetting.ASK, ContentSetting.ASK);
+        var allowApproximate = new GeolocationSetting(ContentSetting.ALLOW, ContentSetting.BLOCK);
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -304,45 +314,7 @@ public class PermissionInfoTest {
     @SmallTest
     @Feature({"Preferences"})
     @EnableFeatures("ApproximateGeolocationPermission")
-    public void testGeolocationPermissionMockValues() throws Throwable {
-        PermissionsAndroidFeatureList.APPROXIMATE_GEOLOCATION_SAMPLE_DATA.setForTesting(true);
-        Profile regularProfile = getRegularProfile();
-        var info =
-                new PermissionInfo(
-                        ContentSettingsType.GEOLOCATION_WITH_OPTIONS,
-                        "https://permission.site",
-                        "https://permission.site",
-                        false,
-                        SessionModel.DURABLE);
-
-        var allowApproximate =
-                new GeolocationSetting(ContentSettingValues.ALLOW, ContentSettingValues.BLOCK);
-        var allowPrecise =
-                new GeolocationSetting(ContentSettingValues.ALLOW, ContentSettingValues.ALLOW);
-
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    assertEquals(allowApproximate, info.getGeolocationSetting(regularProfile));
-                    info.setGeolocationSetting(regularProfile, allowPrecise);
-                    assertEquals(allowPrecise, info.getGeolocationSetting(regularProfile));
-
-                    var permissions =
-                            new WebsitePreferenceBridge()
-                                    .getPermissionInfo(
-                                            regularProfile,
-                                            ContentSettingsType.GEOLOCATION_WITH_OPTIONS);
-                    assertEquals(1, permissions.size());
-                    assertEquals(
-                            allowPrecise, permissions.get(0).getGeolocationSetting(regularProfile));
-                });
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Preferences"})
-    @EnableFeatures("ApproximateGeolocationPermission")
     public void testGeolocationPermissionDefault() throws Throwable {
-        PermissionsAndroidFeatureList.APPROXIMATE_GEOLOCATION_SAMPLE_DATA.setForTesting(false);
         Profile regularProfile = getRegularProfile();
         var info =
                 new PermissionInfo(
@@ -352,8 +324,7 @@ public class PermissionInfoTest {
                         false,
                         SessionModel.DURABLE);
 
-        var defaultSetting =
-                new GeolocationSetting(ContentSettingValues.ASK, ContentSettingValues.ASK);
+        var defaultSetting = new GeolocationSetting(ContentSetting.ASK, ContentSetting.ASK);
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> assertEquals(defaultSetting, info.getGeolocationSetting(regularProfile)));

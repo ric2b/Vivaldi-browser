@@ -66,7 +66,7 @@ Pro začátek můžete vyzkoušet třeba tohle.</translation>
 <translation id="1195412055398077112">přesah obrazu</translation>
 <translation id="1195667586424773550">Přetáhněte odkaz na adresní řádek na kartě</translation>
 <translation id="119944043368869598">Vymazat vše</translation>
-<translation id="1199716647557067911">Opravdu chcete přístup pomocí přepínačů vypnout?</translation>
+<translation id="1199716647557067911">Opravdu chcete ovládání přepínači vypnout?</translation>
 <translation id="1201402288615127009">Další</translation>
 <translation id="1210557957257435379">nahrávání obrazovky</translation>
 <translation id="121097972571826261">Dopředu o slovo</translation>
@@ -202,7 +202,7 @@ Pro začátek můžete vyzkoušet třeba tohle.</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1623768535032616219">Sbalit Učebnu Google</translation>
 <translation id="163032029566320584"><ph name="UNAVAILABLE_DLC" /> není k dispozici.</translation>
-<translation id="1632985212731562677">Přístup pomocí přepínačů lze vypnout v Nastavení &gt; Přístupnost.</translation>
+<translation id="1632985212731562677">Ovládání přepínači lze vypnout v Nastavení &gt; Přístupnost.</translation>
 <translation id="1637505162081889933"><ph name="NUM_DEVICES" /> zařízení</translation>
 <translation id="1639239467298939599">Načítání</translation>
 <translation id="1647986356840967552">Předchozí stránka</translation>
@@ -295,7 +295,7 @@ Pro začátek můžete vyzkoušet třeba tohle.</translation>
 <translation id="1948405482892809935">Přepnout na dalšího uživatele</translation>
 <translation id="1951012854035635156">Asistent</translation>
 <translation id="1954252331066828794">Záznam obrazovky byl dokončen</translation>
-<translation id="1956087014741188812">Pozastavit klávesy myši</translation>
+<translation id="1956087014741188812">Pozastavit ovládání myši klávesnicí</translation>
 <translation id="1957958912175573503">Nastavit jazyk</translation>
 <translation id="1961239773406905488">Náhled kamery je skryt</translation>
 <translation id="1961832440516943645"><ph name="DATE" />, <ph name="TIME" /></translation>
@@ -332,10 +332,12 @@ Pro začátek můžete vyzkoušet třeba tohle.</translation>
 <translation id="2083190527011054446">Dobrou noc, <ph name="GIVEN_NAME" />,</translation>
 <translation id="2086334242442703436">Otevřít výběr smajlíků</translation>
 <translation id="2088116547584365419">hry</translation>
+<translation id="2093792000875799555">Zprávy o Steamu pro Chromebook</translation>
 <translation id="209965399369889474">Nejste připojeni k síti</translation>
 <translation id="2107581415810719320">Jiné tlačítko <ph name="BUTTON_NUMBER" /></translation>
 <translation id="2107914222138020205">Váš kabel USB-C nepodporuje rozhraní Thunderbolt. Výkon zařízení může být omezen.</translation>
 <translation id="2108303511227308752">Klávesová zkratka Alt + Backspace se změnila. Pokud chcete použít klávesu Delete, stiskněte <ph name="LAUNCHER_KEY_NAME" /> + Backspace.</translation>
+<translation id="2115680839221566783">Baterie je nabitá na <ph name="PERCENTAGE" /> %. Nabíjení je pozastaveno.</translation>
 <translation id="2126242104232412123">Nová plocha</translation>
 <translation id="2132302418721800944">Zaznamenat celou obrazovku</translation>
 <translation id="2135456203358955318">Zabudovaná lupa</translation>
@@ -364,7 +366,7 @@ Pro začátek můžete vyzkoušet třeba tohle.</translation>
 <translation id="225680501294068881">Vyhledávání zařízení…</translation>
 <translation id="2257486738914982088">Při stahování souboru <ph name="FILENAME" /> se něco pokazilo</translation>
 <translation id="2258734398699965611">Navrhované soubory</translation>
-<translation id="2266607665880926261">Klávesy myši pozastaveny</translation>
+<translation id="2266607665880926261">Ovládání myši klávesnicí pozastaveno</translation>
 <translation id="2268130516524549846">Rozhraní Bluetooth deaktivováno</translation>
 <translation id="2268731132310444948">Krok <ph name="STEP" /> z <ph name="TOTAL_STEPS" /> v prohlídce. Po aktivaci Spouštěče získáte vylepšený vyhledávací panel. Můžete začít psát a hledat své soubory, aplikace a podobně. Můžete také získat odpovědi na otázky týkající se zařízení <ph name="PRODUCT_NAME" />.</translation>
 <translation id="2268813581635650749">Odhlásit vše</translation>
@@ -560,7 +562,7 @@ Když to neuděláte, vestavěný touchpad se za <ph name="TIMEOUT_SECONDS" /> z
 <translation id="2876760662374103627">Ovládání obličejem je aktivní</translation>
 <translation id="2878884018241093801">Žádné nedávné položky</translation>
 <translation id="2880541185262491188">Příliš mnoho pokusů o zadání kódu PIN. Počkejte <ph name="TIME_LEFT" /> a zkuste to znovu</translation>
-<translation id="2883271196820422439">Obnovit klávesy myši</translation>
+<translation id="2883271196820422439">Obnovit ovládání myši klávesnicí</translation>
 <translation id="2885950158625301909">Další informace</translation>
 <translation id="2891209721153296020">„Zrušit výběr“</translation>
 <translation id="2894949423239620203">Kabel může mít vliv na výkon</translation>
@@ -653,7 +655,7 @@ Když to neuděláte, vestavěný touchpad se za <ph name="TIMEOUT_SECONDS" /> z
 <translation id="3181441307743005334">Restartování může chvíli trvat</translation>
 <translation id="3202010236269062730">{NUM_DEVICES,plural, =1{Připojeno k zařízení}few{Připojeno k # zařízením}many{Připojeno k # zařízení}other{Připojeno k # zařízením}}</translation>
 <translation id="320207200541803018">Nastavit časovač</translation>
-<translation id="3203405173652969239">Je zapnutý přístup pomocí přepínačů</translation>
+<translation id="3203405173652969239">Je zapnuté ovládání přepínači</translation>
 <translation id="3206735939915734551">Zapnout/vypnout Caps Lock</translation>
 <translation id="3207953481422525583">Uživatelská nastavení</translation>
 <translation id="3208321278970793882">Aplikace</translation>
@@ -753,7 +755,7 @@ Když to neuděláte, vestavěný touchpad se za <ph name="TIMEOUT_SECONDS" /> z
 <translation id="3539957339480430241">Hotspot zařízení <ph name="DEVICE_NAME" /></translation>
 <translation id="3540893133818942399">Zavřít nastavení zobrazování nedávných fotek a médií z telefonu</translation>
 <translation id="3542066395059568317">Budou se zobrazovat doporučení, abyste mohli pokračovat od místa, kde jste skončili. Doporučení můžete odstranit kliknutím pravým tlačítkem.</translation>
-<translation id="3545224667633138205">Klávesy myši obnoveny</translation>
+<translation id="3545224667633138205">Ovládání myši klávesnicí obnoveno</translation>
 <translation id="3552189655002856821">Wi-Fi je vypnuta</translation>
 <translation id="3554215588514239132">Zobrazit nebo skrýt panel Nástroje pro vývojáře</translation>
 <translation id="3554637740840164787">Položka <ph name="ITEM_TITLE" /> byla připnuta</translation>
@@ -1370,6 +1372,7 @@ Nejsou připojena žádná zařízení.</translation>
 <translation id="5429993543155113935">Anonymní okna v současné době nejsou podporována</translation>
 <translation id="5431318178759467895">Barevně</translation>
 <translation id="5433020815079095860">Zvukový vstup</translation>
+<translation id="543584294741034249">Můžete připojit až tento počet externích displejů: <ph name="DISPLAY_LIMIT" />.</translation>
 <translation id="544691375626129091">Do této návštěvy již byli přidáni všichni dostupní uživatelé.</translation>
 <translation id="54609108002486618">Spravovaný</translation>
 <translation id="5460938382730614333">Popisovač je zapnutý.</translation>
@@ -1587,6 +1590,7 @@ Nejsou připojena žádná zařízení.</translation>
 <translation id="612734058257491180">Asistent Google v relaci hosta není k dispozici.</translation>
 <translation id="6127395413317891856">Jste offline. Zkontrolujte připojení a zkuste to znovu.</translation>
 <translation id="6129953537138746214">Mezerník</translation>
+<translation id="6136872094979134163">Zprávy o Steamu pro Chromebook se nepodařilo načíst.</translation>
 <translation id="6137566720514957455">Otevřít dialogové okno odstranění účtu <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="6141205840878048728">Na co se chcete soustředit?</translation>
 <translation id="6141988275892716286">Potvrzení stahování</translation>
@@ -1676,6 +1680,7 @@ Nejsou připojena žádná zařízení.</translation>
 <translation id="6445835306623867477"><ph name="ROUTE_TITLE" /> na přijímači <ph name="RECEIVER_NAME" /></translation>
 <translation id="6445915701151710649">procesor</translation>
 <translation id="6447111710783417522"><ph name="DATE" />, <ph name="NUMBER" /> událost</translation>
+<translation id="6448529022565414427">Nabíjení pozastaveno</translation>
 <translation id="6449483711453944360">Linuxové aplikace a anonymní okna v současné době nejsou podporovány</translation>
 <translation id="6450245544201845082">Zkratka ke kliknutí pravým tlačítkem je momentálně vypnutá</translation>
 <translation id="6452181791372256707">Odmítnout</translation>
@@ -1877,7 +1882,7 @@ Nová instalace</translation>
 <translation id="7083848064787091821">Soustředění</translation>
 <translation id="7084678090004350185">Přepnout hotspot. Hotspot je zapnutý, je připojen tento počet zařízení: <ph name="DEVICECOUNT" />.</translation>
 <translation id="7086931198345821656">Tato aktualizace vyžaduje vymazání zařízení <ph name="DEVICE_TYPE" /> metodou Powerwash. Všechna data budou smazána. Další informace o nejnovější aktualizaci systému <ph name="SYSTEM_APP_NAME" />.</translation>
-<translation id="7088960765736518739">Přístup pomocí přepínačů</translation>
+<translation id="7088960765736518739">Ovládání přepínači</translation>
 <translation id="709015856939120012">Přiblížit stránku</translation>
 <translation id="7098389117866926363">Zařízení USB Type-C (levý zadní port)</translation>
 <translation id="7100906357717321275">Zobrazit skryté soubory v aplikaci Soubory</translation>
@@ -1886,7 +1891,7 @@ Nová instalace</translation>
 <translation id="7118268675952955085">snímek obrazovky</translation>
 <translation id="7118597077555700347">Otevřít <ph name="SEARCH_RESULT_TEXT" /></translation>
 <translation id="7119327711295338600">Vybrat další slovo nebo písmeno</translation>
-<translation id="7124556000457919678">Pozastavit nebo znovu spustit klávesy myši, pokud jsou zapnuté</translation>
+<translation id="7124556000457919678">Pozastavit nebo znovu spustit ovládání myši klávesnicí, pokud je zapnuté</translation>
 <translation id="7126996685418858413">Otevřeno minulý týden</translation>
 <translation id="7130207228079676353">NEJPRAVDĚPODOBNĚJŠÍ</translation>
 <translation id="7131634465328662194">Budete automaticky odhlášeni.</translation>

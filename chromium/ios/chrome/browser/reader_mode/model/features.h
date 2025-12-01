@@ -11,6 +11,12 @@
 // Feature to enable Reader Mode UI and entry points.
 BASE_DECLARE_FEATURE(kEnableReaderMode);
 
+// Feature to enable Reader Mode omnibox entry point.
+BASE_DECLARE_FEATURE(kEnableReaderModeOmniboxEntryPoint);
+
+// Feature to enable Reader Mode translation.
+BASE_DECLARE_FEATURE(kEnableReaderModeTranslation);
+
 // Feature to enable page eligibility heuristic to determine whether the Tools
 // menu Reader Mode entry point should be shown for the web page.
 BASE_DECLARE_FEATURE(kEnableReaderModePageEligibilityForToolsMenu);
@@ -41,6 +47,9 @@ const base::TimeDelta ReaderModeHeuristicPageLoadDelay();
 
 // Returns whether the Reader Mode feature is available.
 bool IsReaderModeAvailable();
+
+// Returns whether the omnibox entrypoint is enabled.
+bool IsReaderModeOmniboxEntryPointEnabled();
 
 // Returns whether the Reader Mode snackbar is enabled.
 bool IsReaderModeSnackbarEnabled();

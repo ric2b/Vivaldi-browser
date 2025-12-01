@@ -39,6 +39,8 @@ enum AVHWDeviceType {
     AV_HWDEVICE_TYPE_VULKAN,
     AV_HWDEVICE_TYPE_D3D12VA,
     AV_HWDEVICE_TYPE_AMF,
+    /* OpenHarmony Codec device */
+    AV_HWDEVICE_TYPE_OHCODEC,
 };
 
 /**
@@ -561,7 +563,7 @@ enum {
  * values indicate that it failed somehow.
  *
  * On failure, the destination frame will be left blank, except for the
- * hw_frames_ctx/format fields thay may have been set by the caller - those will
+ * hw_frames_ctx/format fields they may have been set by the caller - those will
  * be preserved as they were.
  *
  * @param dst Destination frame, to contain the mapping.

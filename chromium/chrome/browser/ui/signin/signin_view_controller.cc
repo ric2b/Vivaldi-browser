@@ -41,6 +41,7 @@
 #include "components/signin/public/identity_manager/tribool.h"
 #include "components/supervised_user/core/common/features.h"
 #include "components/sync/base/data_type_histogram.h"
+#include "components/sync/base/features.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/buildflags/buildflags.h"
@@ -174,9 +175,8 @@ signin_metrics::PromoAction GetPromoActionForNewAccount(
 bool ShowAccountExtensionsOnSignout(Profile* profile) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // Do not sign out immediately if the user has account extensions.
-  if (extensions::sync_util::IsSyncingExtensionsInTransportMode(profile)) {
-    extensions::AccountExtensionTracker* tracker =
-        extensions::AccountExtensionTracker::Get(profile);
+  if (extensions::AccountExtensionTracker* tracker =
+          extensions::AccountExtensionTracker::Get(profile)) {
     return !tracker->GetSignedInAccountExtensions().empty();
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
@@ -477,13 +477,15 @@ void SigninViewController::ShowModalSyncConfirmationDialog(
 }
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
-void SigninViewController::ShowModalHistorySyncOptInDialog() {
-  CHECK(base::FeatureList::IsEnabled(switches::kEnableHistorySyncOptin));
+void SigninViewController::ShowModalHistorySyncOptInDialog(
+    HistorySyncOptinHelper::FlowCompletedCallback callback) {
+  CHECK(
+      base::FeatureList::IsEnabled(syncer::kReplaceSyncPromosWithSignInPromos));
   CloseModalSignin();
   dialog_ = std::make_unique<SigninModalDialogImpl>(
       SigninViewControllerDelegate::CreateSyncHistoryOptInDelegate(
           browser_->GetBrowserForMigrationOnly(),
-          HistorySyncOptinLaunchContext::kModal),
+          HistorySyncOptinLaunchContext::kModal, std::move(callback)),
       GetOnModalDialogClosedCallback());
 }
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)

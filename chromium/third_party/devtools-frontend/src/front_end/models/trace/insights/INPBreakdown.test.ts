@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,10 +12,11 @@ describeWithEnvironment('INPBreakdown', function() {
       highPercentile = longest;
     }
 
-    it(`process ${traceFile}`, async () => {
+    it(`process ${traceFile}`, async function() {
       const {data} = await processTrace(this, traceFile);
       const navigation = getFirst(data.Meta.navigationsByNavigationId.values());
       const context = navigation ? createContextForNavigation(data, navigation, data.Meta.mainFrameId) : {
+        options: {},
         bounds: data.Meta.traceBounds,
         frameId: data.Meta.mainFrameId,
       };

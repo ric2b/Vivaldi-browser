@@ -18,15 +18,16 @@
 #include "components/autofill/core/browser/payments/mandatory_reauth_manager.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 
+#if BUILDFLAG(IS_ANDROID)
+#include "base/android/device_info.h"
+#endif
+
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_ANDROID)
 #include "components/autofill/core/browser/metrics/payments/better_auth_metrics.h"
 #include "components/autofill/core/browser/payments/credit_card_access_manager_test_api.h"
 #include "components/autofill/core/browser/payments/test_credit_card_fido_authenticator.h"
 #endif
 
-#if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
-#endif
 
 namespace autofill {
 namespace {
@@ -56,9 +57,11 @@ class CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest
 
     // Ensures CreditCardRiskBasedAuthenticator::Authenticate is successfully
     // invoked.
-    EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
+    EXPECT_TRUE(autofill_client()
+                    .GetPaymentsAutofillClient()
                     ->risk_based_authentication_invoked());
-    EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
+    EXPECT_TRUE(autofill_client()
+                    .GetPaymentsAutofillClient()
                     ->autofill_progress_dialog_shown());
 
     // Mock that
@@ -78,7 +81,7 @@ class CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest
 TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
        RiskBasedMaskedServerCardUnmasking_Success) {
 #if BUILDFLAG(IS_ANDROID)
-  if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+  if (base::android::device_info::is_automotive()) {
     GTEST_SKIP() << "This test should not run on automotive.";
   }
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -92,9 +95,11 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
 
   // Ensures CreditCardRiskBasedAuthenticator::Authenticate is successfully
   // invoked.
-  EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
+  EXPECT_TRUE(autofill_client()
+                  .GetPaymentsAutofillClient()
                   ->risk_based_authentication_invoked());
-  EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
+  EXPECT_TRUE(autofill_client()
+                  .GetPaymentsAutofillClient()
                   ->autofill_progress_dialog_shown());
 
   CreditCard card = *masked_server_card;
@@ -114,7 +119,7 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
   // There was no interactive authentication in this flow, so check that this
   // is signaled correctly.
   std::optional<NonInteractivePaymentMethodType> type =
-      test_api(*autofill_client_.GetFormDataImporter())
+      test_api(*autofill_client().GetFormDataImporter())
           .payment_method_type_if_non_interactive_authentication_flow_completed();
   EXPECT_THAT(type, testing::Optional(
                         NonInteractivePaymentMethodType::kMaskedServerCard));
@@ -139,9 +144,11 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
 
   // Ensures CreditCardRiskBasedAuthenticator::Authenticate is successfully
   // invoked.
-  EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
+  EXPECT_TRUE(autofill_client()
+                  .GetPaymentsAutofillClient()
                   ->risk_based_authentication_invoked());
-  EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
+  EXPECT_TRUE(autofill_client()
+                  .GetPaymentsAutofillClient()
                   ->autofill_progress_dialog_shown());
 
   // Mock that CreditCardRiskBasedAuthenticator::RiskBasedAuthenticationResponse
@@ -152,7 +159,8 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
                            RiskBasedAuthenticationResponse::Result::kError));
 
   // Expect the CreditCardAccessManager to end the session.
-  EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
+  EXPECT_TRUE(autofill_client()
+                  .GetPaymentsAutofillClient()
                   ->autofill_error_dialog_shown());
 
   // Expect the metrics are logged correctly.
@@ -180,9 +188,11 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
 
   // Ensures CreditCardRiskBasedAuthenticator::Authenticate is successfully
   // invoked.
-  EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
+  EXPECT_TRUE(autofill_client()
+                  .GetPaymentsAutofillClient()
                   ->risk_based_authentication_invoked());
-  EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
+  EXPECT_TRUE(autofill_client()
+                  .GetPaymentsAutofillClient()
                   ->autofill_progress_dialog_shown());
 
   // Mock the authentication is cancelled.
@@ -217,7 +227,8 @@ TEST_F(
   FetchCreditCard(masked_server_card);
 
   // Ensures CreditCardRiskBasedAuthenticator::Authenticate is not invoked.
-  ASSERT_FALSE(autofill_client_.GetPaymentsAutofillClient()
+  ASSERT_FALSE(autofill_client()
+                   .GetPaymentsAutofillClient()
                    ->risk_based_authentication_invoked());
 }
 
@@ -262,7 +273,7 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
 
   // Expect that we did not signal that there was no interactive authentication.
   EXPECT_FALSE(
-      test_api(*autofill_client_.GetFormDataImporter())
+      test_api(*autofill_client().GetFormDataImporter())
           .payment_method_type_if_non_interactive_authentication_flow_completed()
           .has_value());
 }
@@ -285,9 +296,11 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
 
   // Ensures CreditCardRiskBasedAuthenticator::Authenticate is successfully
   // invoked.
-  EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
+  EXPECT_TRUE(autofill_client()
+                  .GetPaymentsAutofillClient()
                   ->risk_based_authentication_invoked());
-  EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
+  EXPECT_TRUE(autofill_client()
+                  .GetPaymentsAutofillClient()
                   ->autofill_progress_dialog_shown());
 
   // Mock that CreditCardRiskBasedAuthenticator::RiskBasedAuthenticationResponse
@@ -316,7 +329,7 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
 
   // Expect that we did not signal that there was no interactive authentication.
   EXPECT_FALSE(
-      test_api(*autofill_client_.GetFormDataImporter())
+      test_api(*autofill_client().GetFormDataImporter())
           .payment_method_type_if_non_interactive_authentication_flow_completed()
           .has_value());
 
@@ -407,7 +420,7 @@ TEST_F(
 
   // Expect that we did not signal that there was no interactive authentication.
   EXPECT_FALSE(
-      test_api(*autofill_client_.GetFormDataImporter())
+      test_api(*autofill_client().GetFormDataImporter())
           .payment_method_type_if_non_interactive_authentication_flow_completed()
           .has_value());
 }
@@ -487,7 +500,8 @@ TEST_F(
 
   FetchCreditCard(&masked_server_card);
   // Ensures CreditCardRiskBasedAuthenticator::Authenticate is not invoked.
-  ASSERT_FALSE(autofill_client_.GetPaymentsAutofillClient()
+  ASSERT_FALSE(autofill_client()
+                   .GetPaymentsAutofillClient()
                    ->risk_based_authentication_invoked());
 }
 
@@ -497,7 +511,7 @@ TEST_F(
 TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
        CardInfoRetrievalUnmasking_Success) {
 #if BUILDFLAG(IS_ANDROID)
-  if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+  if (base::android::device_info::is_automotive()) {
     GTEST_SKIP() << "This test should not run on automotive.";
   }
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -514,9 +528,11 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
 
   // Ensures CreditCardRiskBasedAuthenticator::Authenticate is successfully
   // invoked.
-  EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
+  EXPECT_TRUE(autofill_client()
+                  .GetPaymentsAutofillClient()
                   ->risk_based_authentication_invoked());
-  EXPECT_TRUE(autofill_client_.GetPaymentsAutofillClient()
+  EXPECT_TRUE(autofill_client()
+                  .GetPaymentsAutofillClient()
                   ->autofill_progress_dialog_shown());
 
   // Mock that CreditCardRiskBasedAuthenticator::RiskBasedAuthenticationResponse
@@ -534,7 +550,7 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
   // There was no interactive authentication in this flow, so check that this
   // is signaled correctly.
   std::optional<NonInteractivePaymentMethodType> type =
-      test_api(*autofill_client_.GetFormDataImporter())
+      test_api(*autofill_client().GetFormDataImporter())
           .payment_method_type_if_non_interactive_authentication_flow_completed();
   EXPECT_THAT(type, testing::Optional(
                         NonInteractivePaymentMethodType::kMaskedServerCard));
@@ -544,7 +560,7 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
 TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
        CardInfoRetrievalUnmasking_Success_Metrics) {
 #if BUILDFLAG(IS_ANDROID)
-  if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+  if (base::android::device_info::is_automotive()) {
     GTEST_SKIP() << "This test should not run on automotive.";
   }
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -569,7 +585,7 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
                                kNoAuthenticationRequired)
           .with_card(*enrolled_card));
 
-  test_api(*autofill_client_.GetFormDataImporter())
+  test_api(*autofill_client().GetFormDataImporter())
       .payment_method_type_if_non_interactive_authentication_flow_completed();
 
   // Expect the metrics are logged correctly.
@@ -588,7 +604,7 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
 TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
        CardInfoRetrievalUnmasking_AuthenticationRequired_OtpOnly) {
 #if BUILDFLAG(IS_ANDROID)
-  if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+  if (base::android::device_info::is_automotive()) {
     GTEST_SKIP() << "This test should not run on automotive.";
   }
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -615,7 +631,7 @@ TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
 
   // Expect that we did not signal that there was no interactive authentication.
   EXPECT_FALSE(
-      test_api(*autofill_client_.GetFormDataImporter())
+      test_api(*autofill_client().GetFormDataImporter())
           .payment_method_type_if_non_interactive_authentication_flow_completed()
           .has_value());
 
@@ -630,7 +646,7 @@ TEST_F(
     CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
     CardInfoRetrievalUnmasking_AuthenticationRequired_OtpOnly_MultiplePhoneNumbers) {
 #if BUILDFLAG(IS_ANDROID)
-  if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+  if (base::android::device_info::is_automotive()) {
     GTEST_SKIP() << "This test should not run on automotive.";
   }
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -658,7 +674,7 @@ TEST_F(
 
   // Expect that we did not signal that there was no interactive authentication.
   EXPECT_FALSE(
-      test_api(*autofill_client_.GetFormDataImporter())
+      test_api(*autofill_client().GetFormDataImporter())
           .payment_method_type_if_non_interactive_authentication_flow_completed()
           .has_value());
 
@@ -695,7 +711,7 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(CardInfoRetrievalUnmaskingYellowPathMetricsTest,
        CardInfoRetrievalUnmasking_AuthenticationRequired_Metrics) {
 #if BUILDFLAG(IS_ANDROID)
-  if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+  if (base::android::device_info::is_automotive()) {
     GTEST_SKIP() << "This test should not run on automotive.";
   }
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -762,7 +778,7 @@ TEST_P(CardInfoRetrievalUnmaskingYellowPathMetricsTest,
 TEST_F(CreditCardAccessManagerRiskBasedMaskedServerCardUnmaskingTest,
        CardInfoRetrievalUnmasking_NonSmsOtpChallenge_SelectionDialogSkipped) {
 #if BUILDFLAG(IS_ANDROID)
-  if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+  if (base::android::device_info::is_automotive()) {
     GTEST_SKIP() << "This test should not run on automotive.";
   }
 #endif  // BUILDFLAG(IS_ANDROID)

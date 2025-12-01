@@ -55,9 +55,6 @@ def builder(name, bucket, os, caches = None, triggered_by = None):
         execution_timeout = 1 * time.hour,
         dimensions = {"cpu": "x86-64", "os": os, "pool": "luci.flex.%s" % bucket},
         triggered_by = triggered_by,
-        experiments = {
-            "luci.recipes.use_python3": 100,
-        },
     )
 
 luci.logdog(
@@ -120,7 +117,10 @@ def ci_builder(name, os, caches = None):
     )
 
 ci_builder("linux", "Ubuntu-22.04")
-ci_builder("mac", "Mac-10.15", caches = [swarming.cache("macos_sdk")])
+
+# macOS version for this builder should be synced with
+# https://source.corp.google.com/h/chromium/infra/infra_superproject/+/main:infra_internal/infra/config/subprojects/gn.star
+ci_builder("mac", "Mac-13", caches = [swarming.cache("macos_sdk")])
 ci_builder("win", "Windows-10", caches = [swarming.cache("windows_sdk")])
 
 luci.cq(
@@ -197,5 +197,8 @@ def try_builder(name, os, caches = None):
     )
 
 try_builder("linux", "Ubuntu-22.04")
-try_builder("mac", "Mac-10.15", caches = [swarming.cache("macos_sdk")])
+
+# macOS version for this builder should be synced with
+# https://source.corp.google.com/h/chromium/infra/infra_superproject/+/main:infra_internal/infra/config/subprojects/gn.star
+try_builder("mac", "Mac-13", caches = [swarming.cache("macos_sdk")])
 try_builder("win", "Windows-10", caches = [swarming.cache("windows_sdk")])

@@ -54,7 +54,6 @@ class SilentWebstoreInstaller : public extensions::WebstoreInstallWithPrompt {
 
   void CompleteInstall(extensions::webstore_install::Result result,
                        const std::string& error) override {
-    this->set_show_post_install_ui(false); // Don't show post-install ui.
     if (result == extensions::webstore_install::SUCCESS) {
       extensions::ExtensionSystem* system =
           extensions::ExtensionSystem::Get(profile());
@@ -63,12 +62,10 @@ class SilentWebstoreInstaller : public extensions::WebstoreInstallWithPrompt {
         return;
       }
 
-#if 0
-      extensions::ExtensionService* service = system->extension_service();
-      service->DisableExtension(
-          id(), extensions::disable_reason::DISABLE_USER_ACTION);
-#endif
+      // Disable the extension after successfull install.
+      SetExtensionEnabled(id(), false /* disable */, profile());
     }
+
     extensions::WebstoreInstallWithPrompt::CompleteInstall(result, error);
   }
 };

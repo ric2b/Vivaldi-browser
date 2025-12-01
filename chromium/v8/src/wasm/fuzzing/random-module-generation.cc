@@ -3758,6 +3758,35 @@ class BodyGen {
     }
 
     if (recursion_limit_reached() || data->size() == 0) {
+      // For defaultable types, prefer to emit *.new_default, because that
+      // makes functions more interesting to execute than ref.null.
+      if (type.is_index()) {
+        ModuleTypeIndex index = type.ref_index();
+        const TypeDefinition& type_def =
+            builder_->builder()->GetType_Unsafe(index);
+        if (type_def.kind == TypeDefinition::kStruct &&
+            !type_def.has_descriptor()) {
+          const StructType* struct_type = type_def.struct_type;
+          bool is_defaultable = std::all_of(
+              struct_type->fields().begin(), struct_type->fields().end(),
+              [](ValueType type) -> bool { return type.is_defaultable(); });
+          if (is_defaultable) {
+            builder_->EmitWithPrefix(kExprStructNewDefault);
+            builder_->EmitU32V(index);
+            return;
+          }
+        } else if (type.ref_type_kind() == RefTypeKind::kArray) {
+          if (type_def.kind == TypeDefinition::kArray) {
+            DCHECK(!type_def.has_descriptor());  // Spec doesn't allow this.
+            if (type_def.array_type->element_type().is_defaultable()) {
+              builder_->EmitI32Const(1);  // Array length.
+              builder_->EmitWithPrefix(kExprArrayNewDefault);
+              builder_->EmitU32V(index);
+              return;
+            }
+          }
+        }
+      }
       if (nullability == kNullable) {
         ref_null(type, data);
         return;
@@ -4208,8 +4237,19 @@ class ModuleGen {
       static_assert(kV8MaxWasmMemory64Pages <= kMaxUInt32);
       uint32_t max_supported_pages =
           mem64 ? max_mem64_pages() : max_mem32_pages();
-      uint32_t min_pages =
-          module_range_->get<uint32_t>() % (max_supported_pages + 1);
+
+      uint32_t min_pages = static_cast<uint32_t>(module_range_->get<uint8_t>());
+      if (min_pages >= 128) {
+        // With a 50% chance, choose a very small number of pages.
+        // This allows the differential fuzzing to compare the entire memory
+        // ranges without decreasing the performance of the fuzzing too much.
+        min_pages = (min_pages % 10) + 1;
+      } else if (min_pages == 127) {
+        // With a 1/256 chance, choose a potentially very large number of pages.
+        min_pages = module_range_->getPseudoRandom<uint32_t>() %
+                    (max_supported_pages + 1);
+      }
+
       if (has_maximum) {
         uint32_t max_pages =
             std::max(min_pages, module_range_->get<uint32_t>() %

@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/byte_count.h"
 #include "base/check_deref.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
@@ -57,6 +58,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
+#include "components/history/core/browser/features.h"
 #include "content/common/associated_interfaces.mojom.h"
 #include "content/common/content_navigation_policy.h"
 #include "content/common/content_switches_internal.h"
@@ -128,6 +130,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/http/http_request_headers.h"
+#include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/content_decoding_interceptor.h"
@@ -238,6 +241,7 @@
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/blink/public/web/web_widget.h"
 #include "third_party/blink/public/web/web_window_features.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 #include "ui/accessibility/ax_tree_update.h"
 #include "ui/events/base_event_utils.h"
 #include "url/origin.h"
@@ -306,9 +310,7 @@ namespace {
 
 // Feature to combine the UpdateState IPC that's sent during commit time with
 // the DidCommit* IPCs. See: http://crbug.com/424829233
-BASE_FEATURE(kReducePageStateIpcs,
-             "ReducePageStateIpcs",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kReducePageStateIpcs, base::FEATURE_ENABLED_BY_DEFAULT);
 
 const int kExtraCharsBeforeAndAfterSelection = 100;
 const size_t kMaxURLLogChars = 1024;
@@ -1163,13 +1165,12 @@ void LogCommitHistograms(base::TimeTicks commit_sent,
                 "MainFrame"
               : "Navigation.RendererRunLoopStartToFirstCommitNavigation2."
                 "Subframe";
-      const auto trace_id = TRACE_ID_WITH_SCOPE(
-          name, TRACE_ID_LOCAL(RenderThreadImpl::current()));
-      TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1(
-          "navigation", name, trace_id, run_loop_start_time, "url",
-          new_page_url);
-      TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0("navigation", name,
-                                                     trace_id, now);
+      const auto trace_id = perfetto::NamedTrack(
+          perfetto::StaticString(name),
+          reinterpret_cast<uintptr_t>(RenderThreadImpl::current()));
+      TRACE_EVENT_BEGIN("navigation", perfetto::StaticString(name), trace_id,
+                        run_loop_start_time, "url", new_page_url);
+      TRACE_EVENT_END("navigation", trace_id, now);
       base::UmaHistogramLongTimes(name, now - run_loop_start_time);
     }
   }
@@ -4417,11 +4418,10 @@ void RenderFrameImpl::OnMainFrameViewportRectangleChanged(
   }
 }
 
-void RenderFrameImpl::OnMainFrameImageAdRectangleChanged(
-    int element_id,
-    const gfx::Rect& image_ad_rect) {
+void RenderFrameImpl::OnMainFrameAdRectangleChanged(int element_id,
+                                                    const gfx::Rect& ad_rect) {
   for (auto& observer : observers_) {
-    observer.OnMainFrameImageAdRectangleChanged(element_id, image_ad_rect);
+    observer.OnMainFrameAdRectangleChanged(element_id, ad_rect);
   }
 }
 
@@ -4536,10 +4536,18 @@ void RenderFrameImpl::FinalizeRequestInternal(
 void RenderFrameImpl::DidLoadResourceFromMemoryCache(
     const blink::WebURLRequest& request,
     const blink::WebURLResponse& response) {
-  for (auto& observer : observers_) {
-    observer.DidLoadResourceFromMemoryCache(
-        request.Url(), response.RequestId(), response.EncodedBodyLength(),
+  if (load_from_memory_cache_callback_) {
+    load_from_memory_cache_callback_.Run(
+        request.Url(), response.RequestId(),
+        base::ByteCount(response.EncodedBodyLength()),
         response.MimeType().Utf8(), response.FromArchive());
+  } else {
+    for (auto& observer : observers_) {
+      observer.DidLoadResourceFromMemoryCache(
+          request.Url(), response.RequestId(),
+          base::ByteCount(response.EncodedBodyLength()),
+          response.MimeType().Utf8(), response.FromArchive());
+    }
   }
 }
 
@@ -4570,7 +4578,8 @@ void RenderFrameImpl::DidCancelResponse(int request_id) {
 void RenderFrameImpl::DidReceiveTransferSizeUpdate(int resource_id,
                                                    int received_data_length) {
   for (auto& observer : observers_) {
-    observer.DidReceiveTransferSizeUpdate(resource_id, received_data_length);
+    observer.DidReceiveTransferSizeUpdate(
+        resource_id, base::ByteCount(received_data_length));
   }
 }
 
@@ -4612,13 +4621,28 @@ void RenderFrameImpl::DidObserveJavaScriptFrameworks(
 
 void RenderFrameImpl::DidObserveSubresourceLoad(
     const blink::SubresourceLoadMetrics& subresource_load_metrics) {
-  for (auto& observer : observers_)
-    observer.DidObserveSubresourceLoad(subresource_load_metrics);
+  if (subresource_load_callback_) {
+    subresource_load_callback_.Run(subresource_load_metrics);
+  } else {
+    for (auto& observer : observers_) {
+      observer.DidObserveSubresourceLoad(subresource_load_metrics);
+    }
+  }
 }
 
 void RenderFrameImpl::SetNewFeatureUsageCallback(
     NewFeatureUsageCallback callback) {
   new_feature_usage_callback_ = std::move(callback);
+}
+
+void RenderFrameImpl::SetSubresourceLoadCallback(
+    SubresourceLoadCallback callback) {
+  subresource_load_callback_ = std::move(callback);
+}
+
+void RenderFrameImpl::SetLoadFromMemoryCacheCallback(
+    LoadFromMemoryCacheCallback callback) {
+  load_from_memory_cache_callback_ = std::move(callback);
 }
 
 void RenderFrameImpl::DidObserveNewFeatureUsage(
@@ -4932,12 +4956,11 @@ RenderFrameImpl::MakeDidCommitProvisionalLoadParams(
     params->url = GURL(kBlockedURL);
   }
 
-  // When `blink::features::kVisitedLinksOnErrorNavigation` is enabled, visits
-  // to reachable URLs that have a 404 status code qualify for history updates.
-  // Otherwise, we shouldn't update history for 404s.
+  // When `history::kVisitedLinksOn404` is enabled, visits to reachable URLs
+  // that have a 404 status code qualify for history updates. Otherwise, we
+  // shouldn't update history for 404s.
   bool does_status_code_qualify_for_history =
-      base::FeatureList::IsEnabled(
-          blink::features::kVisitedLinksOnErrorNavigation) ||
+      base::FeatureList::IsEnabled(history::kVisitedLinksOn404) ||
       response.HttpStatusCode() != 404;
   // TODO(crbug.com/40161149): Reconsider how we calculate
   // should_update_history.
@@ -6013,13 +6036,9 @@ void RenderFrameImpl::SyncSelectionIfRequired(blink::SyncCondition force_sync) {
         offset = 0;
       size_t length =
           selection.EndOffset() - offset + kExtraCharsBeforeAndAfterSelection;
-      if (base::FeatureList::IsEnabled(blink::features::kFastSelectionSync)) {
-        WebString value = controller->TextInputInfo().value;
-        text = value.IsNull() ? value.Utf16()
-                              : value.Substring(offset, length).Utf16();
-      } else {
-        text = frame_->RangeAsText(WebRange(offset, length)).Utf16();
-      }
+      WebString value = controller->TextInputInfo().value;
+      text = value.IsNull() ? value.Utf16()
+                            : value.Substring(offset, length).Utf16();
     } else {
       offset = selection.StartOffset();
       text = frame_->SelectionAsText().Utf16();
@@ -6185,7 +6204,8 @@ void RenderFrameImpl::BeginNavigationInternal(
   std::optional<base::Value::Dict> devtools_initiator;
   if (!info->devtools_initiator_info.IsNull()) {
     std::optional<base::Value> devtools_initiator_value =
-        base::JSONReader::Read(info->devtools_initiator_info.Utf8());
+        base::JSONReader::Read(info->devtools_initiator_info.Utf8(),
+                               base::JSON_PARSE_CHROMIUM_EXTENSIONS);
     if (devtools_initiator_value && devtools_initiator_value->is_dict()) {
       devtools_initiator = std::move(*devtools_initiator_value).TakeDict();
     }
@@ -6265,7 +6285,7 @@ void RenderFrameImpl::BeginNavigationInternal(
     }
   }
   base::UmaHistogramBoolean(
-      "Navigation.RendererInitiated.IsDuplicateWithoutThresholdCheck",
+      "Navigation.RendererInitiated.IsDuplicateWithoutThresholdCheck2",
       is_duplicate_navigation);
   if (is_duplicate_navigation) {
     // The navigation is similar to a previous navigation. Check if it's started
@@ -6274,16 +6294,21 @@ void RenderFrameImpl::BeginNavigationInternal(
     bool start_diff_under_threshold =
         (nav_start_diff <= features::kDuplicateNavThreshold.Get());
     base::UmaHistogramBoolean(
-        "Navigation.RendererInitiated.DuplicateNavIsUnderThreshold",
+        "Navigation.RendererInitiated.DuplicateNavIsUnderThreshold2",
         start_diff_under_threshold);
     base::UmaHistogramTimes(
-        "Navigation.RendererInitiated.DuplicateNavStartTimeDiff",
+        "Navigation.RendererInitiated.DuplicateNavStartTimeDiff2",
         nav_start_diff);
     if (start_diff_under_threshold &&
         base::FeatureList::IsEnabled(features::kIgnoreDuplicateNavs)) {
-      DVLOG(0) << "Ignoring duplicate navigation to " << common_params->url
-               << " due to the short interval since the previous one.";
-      return;
+      if (!base::FeatureList::IsEnabled(
+              features::kIgnoreDuplicateNavsOnlyWithUserGesture) ||
+          common_params->has_user_gesture) {
+        DVLOG(0) << "Ignoring duplicate navigation to " << common_params->url
+                 << " due to the short interval of " << nav_start_diff
+                 << " since the previous one.";
+        return;
+      }
     }
   }
 

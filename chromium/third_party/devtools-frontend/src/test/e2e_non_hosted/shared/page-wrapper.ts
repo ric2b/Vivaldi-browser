@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,11 +33,12 @@ export class PageWrapper {
    */
   async waitForFunction<T>(
       fn: () => T | undefined | Promise<T|undefined>, asyncScope = new AsyncScope(), description?: string) {
+    const signal = AsyncScope.abortSignal;
     const innerFunction = async () => {
       while (true) {
-        AsyncScope.abortSignal?.throwIfAborted();
+        signal?.throwIfAborted();
         const result = await fn();
-        AsyncScope.abortSignal?.throwIfAborted();
+        signal?.throwIfAborted();
         if (result) {
           return result;
         }
@@ -58,8 +59,8 @@ export class PageWrapper {
     });
   }
 
-  async reload() {
-    await this.page.reload();
+  async reload(options?: puppeteer.WaitForOptions) {
+    await this.page.reload(options);
   }
 
   async raf() {

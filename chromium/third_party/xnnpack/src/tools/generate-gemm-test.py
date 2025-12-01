@@ -66,6 +66,32 @@ def split_ukernel_name(name):
     mr_packed = mr // int(mr_packed.group(1))
   else:
     mr_packed = mr
+  if "sme" in target_name:
+    # SME kernels have a non-constant mr, nr that we need to use functions to
+    # learn the value of. However, we cannot call these functions unless SME
+    # is supported by the hardware.
+    mr = """[]() -> size_t {{
+      const struct xnn_hardware_config* hardware_config =
+            xnn_init_hardware_config();
+      if (hardware_config != nullptr && (hardware_config->arch_flags & xnn_arch_arm_sme) == xnn_arch_arm_sme) {{
+        return {name}_get_mr();
+      }} else {{
+        return 0;
+      }}
+    }}
+""".format(name=name)
+    nr = """[]() -> size_t {{
+      const struct xnn_hardware_config* hardware_config =
+            xnn_init_hardware_config();
+      if (hardware_config != nullptr && (hardware_config->arch_flags & xnn_arch_arm_sme) == xnn_arch_arm_sme) {{
+        return {name}_get_nr();
+      }} else {{
+        return 0;
+      }}
+    }}
+""".format(name=name)
+    mr_packed = mr
+
   if "sme2" in target_name:
     # SME2 kernels have a non-constant mr, nr that we need to use functions to
     # learn the value of. However, we cannot call these functions unless SME2
@@ -969,8 +995,7 @@ struct ConstantOrFunction {
 #include "src/xnnpack/pack.h"
 #include "src/xnnpack/packw.h"
 
-{constant_or_function}
-""".format(specification=options.spec, generator=sys.argv[0], constant_or_function=constant_or_function)
+""".format(specification=options.spec, generator=sys.argv[0])
 
     test_outputs = collections.defaultdict(str)
     bench_outputs = benches

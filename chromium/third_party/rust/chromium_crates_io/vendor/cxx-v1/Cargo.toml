@@ -11,9 +11,9 @@
 
 [package]
 edition = "2021"
-rust-version = "1.73"
+rust-version = "1.81"
 name = "cxx"
-version = "1.0.161"
+version = "1.0.185"
 authors = ["David Tolnay <dtolnay@gmail.com>"]
 build = "build.rs"
 links = "cxxbridge1"
@@ -49,6 +49,7 @@ repository = "https://github.com/dtolnay/cxx"
 targets = ["x86_64-unknown-linux-gnu"]
 rustdoc-args = [
     "--generate-link-to-definition",
+    "--generate-macro-expansion",
     "--extern-html-root-url=core=https://doc.rust-lang.org",
     "--extern-html-root-url=alloc=https://doc.rust-lang.org",
     "--extern-html-root-url=std=https://doc.rust-lang.org",
@@ -96,6 +97,10 @@ name = "compiletest"
 path = "tests/compiletest.rs"
 
 [[test]]
+name = "cpp_ui_tests"
+path = "tests/cpp_ui_tests.rs"
+
+[[test]]
 name = "cxx_gen"
 path = "tests/cxx_gen.rs"
 
@@ -116,17 +121,20 @@ name = "unique_ptr"
 path = "tests/unique_ptr.rs"
 
 [dependencies.cxxbridge-macro]
-version = "=1.0.161"
+version = "=1.0.185"
 
 [dependencies.foldhash]
-version = "0.1"
+version = "0.2"
 default-features = false
 
 [dependencies.link-cplusplus]
-version = "1.0.9"
+version = "1.0.11"
+
+[dev-dependencies.cc]
+version = "1.0.101"
 
 [dev-dependencies.cxx-build]
-version = "=1.0.161"
+version = "1"
 
 [dev-dependencies.cxx-gen]
 version = "0.7"
@@ -134,19 +142,40 @@ version = "0.7"
 [dev-dependencies.cxx-test-suite]
 version = "0"
 
+[dev-dependencies.indoc]
+version = "2"
+
+[dev-dependencies.proc-macro2]
+version = "1.0.95"
+
+[dev-dependencies.quote]
+version = "1.0.40"
+
 [dev-dependencies.rustversion]
 version = "1.0.13"
 
+[dev-dependencies.scratch]
+version = "1"
+
+[dev-dependencies.target-triple]
+version = "0.1"
+
+[dev-dependencies.tempfile]
+version = "3.8"
+
 [dev-dependencies.trybuild]
-version = "1.0.81"
+version = "1.0.108"
 features = ["diff"]
 
 [build-dependencies.cc]
-version = "1.0.83"
+version = "1.0.101"
 
 [build-dependencies.cxxbridge-flags]
-version = "=1.0.161"
+version = "=1.0.185"
 default-features = false
 
+[target."cfg(any())".build-dependencies.cxx-build]
+version = "=1.0.185"
+
 [target."cfg(any())".build-dependencies.cxxbridge-cmd]
-version = "=1.0.161"
+version = "=1.0.185"

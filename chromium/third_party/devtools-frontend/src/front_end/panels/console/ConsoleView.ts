@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -75,11 +75,11 @@ import {ConsoleViewport, type ConsoleViewportElement, type ConsoleViewportProvid
 
 const UIStrings = {
   /**
-   *@description Label for button which links to Issues tab, specifying how many issues there are.
+   * @description Label for button which links to Issues tab, specifying how many issues there are.
    */
   issuesWithColon: '{n, plural, =0 {No Issues} =1 {# Issue:} other {# Issues:}}',
   /**
-   *@description Text for the tooltip of the issue counter toolbar item
+   * @description Text for the tooltip of the issue counter toolbar item
    */
   issueToolbarTooltipGeneral: 'Some problems no longer generate console messages, but are surfaced in the issues tab.',
   /**
@@ -94,19 +94,19 @@ const UIStrings = {
    */
   issueToolbarClickToGoToTheIssuesTab: 'Click to go to the issues tab',
   /**
-   *@description Text in Console View of the Console panel
+   * @description Text in Console View of the Console panel
    */
   findStringInLogs: 'Find string in logs',
   /**
-   *@description Tooltip text that appears when hovering over the largeicon settings gear in show settings pane setting in console view of the console panel
+   * @description Tooltip text that appears when hovering over the largeicon settings gear in show settings pane setting in console view of the console panel
    */
   consoleSettings: 'Console settings',
   /**
-   *@description Title of a setting under the Console category that can be invoked through the Command Menu
+   * @description Title of a setting under the Console category that can be invoked through the Command Menu
    */
   groupSimilarMessagesInConsole: 'Group similar messages in console',
   /**
-   *@description Title of a setting under the Console category that can be invoked through the Command Menu
+   * @description Title of a setting under the Console category that can be invoked through the Command Menu
    */
   showCorsErrorsInConsole: 'Show `CORS` errors in console',
   /**
@@ -128,40 +128,40 @@ const UIStrings = {
    */
   consoleSidebarHidden: 'Console sidebar hidden',
   /**
-   *@description Tooltip text that appears on the setting to preserve log when hovering over the item
+   * @description Tooltip text that appears on the setting to preserve log when hovering over the item
    */
   doNotClearLogOnPageReload: 'Do not clear log on page reload / navigation',
   /**
-   *@description Text to preserve the log after refreshing
+   * @description Text to preserve the log after refreshing
    */
   preserveLog: 'Preserve log',
   /**
-   *@description Text in Console View of the Console panel
+   * @description Text in Console View of the Console panel
    */
   hideNetwork: 'Hide network',
   /**
-   *@description Tooltip text that appears on the setting when hovering over it in Console View of the Console panel
+   * @description Tooltip text that appears on the setting when hovering over it in Console View of the Console panel
    */
   onlyShowMessagesFromTheCurrentContext:
       'Only show messages from the current context (`top`, `iframe`, `worker`, extension)',
   /**
-   *@description Alternative title text of a setting in Console View of the Console panel
+   * @description Alternative title text of a setting in Console View of the Console panel
    */
   selectedContextOnly: 'Selected context only',
   /**
-   *@description Description of a setting that controls whether XMLHttpRequests are logged in the console.
+   * @description Description of a setting that controls whether XMLHttpRequests are logged in the console.
    */
   logXMLHttpRequests: 'Log XMLHttpRequests',
   /**
-   *@description Tooltip text that appears on the setting when hovering over it in Console View of the Console panel
+   * @description Tooltip text that appears on the setting when hovering over it in Console View of the Console panel
    */
   eagerlyEvaluateTextInThePrompt: 'Eagerly evaluate text in the prompt',
   /**
-   *@description Description of a setting that controls whether text typed in the console should be autocompleted from commands executed in the local console history.
+   * @description Description of a setting that controls whether text typed in the console should be autocompleted from commands executed in the local console history.
    */
   autocompleteFromHistory: 'Autocomplete from history',
   /**
-   *@description Description of a setting that controls whether user activation is triggered by evaluation'.
+   * @description Description of a setting that controls whether user activation is triggered by evaluation'.
    */
   treatEvaluationAsUserActivation: 'Treat evaluation as user activation',
   /**
@@ -170,56 +170,56 @@ const UIStrings = {
    */
   sHidden: '{n, plural, =1 {# hidden} other {# hidden}}',
   /**
-   *@description Alert message for screen readers when the console is cleared
+   * @description Alert message for screen readers when the console is cleared
    */
   consoleCleared: 'Console cleared',
   /**
-   *@description Text in Console View of the Console panel
-   *@example {index.js} PH1
+   * @description Text in Console View of the Console panel
+   * @example {index.js} PH1
    */
   hideMessagesFromS: 'Hide messages from {PH1}',
   /**
-   *@description Text to save content as a specific file type
+   * @description Text to save content as a specific file type
    */
   saveAs: 'Save as…',
   /**
-   *@description Text to copy Console log to clipboard
+   * @description Text to copy Console log to clipboard
    */
   copyConsole: 'Copy console',
   /**
-   *@description A context menu item in the Console View of the Console panel
+   * @description A context menu item in the Console View of the Console panel
    */
   copyVisibleStyledSelection: 'Copy visible styled selection',
   /**
-   *@description Text to replay an XHR request
+   * @description Text to replay an XHR request
    */
   replayXhr: 'Replay XHR',
   /**
-   *@description Text to indicate DevTools is writing to a file
+   * @description Text to indicate DevTools is writing to a file
    */
   writingFile: 'Writing file…',
   /**
-   *@description Text to indicate the searching is in progress
+   * @description Text to indicate the searching is in progress
    */
   searching: 'Searching…',
   /**
-   *@description Text in Console View of the Console panel
+   * @description Text in Console View of the Console panel
    */
   egEventdCdnUrlacom: 'e.g. `/event\d/ -cdn url:a.com`',
   /**
-   *@description Sdk console message message level verbose of level Labels in Console View of the Console panel
+   * @description Sdk console message message level verbose of level Labels in Console View of the Console panel
    */
   verbose: 'Verbose',
   /**
-   *@description Sdk console message message level info of level Labels in Console View of the Console panel
+   * @description Sdk console message message level info of level Labels in Console View of the Console panel
    */
   info: 'Info',
   /**
-   *@description Sdk console message message level warning of level Labels in Console View of the Console panel
+   * @description Sdk console message message level warning of level Labels in Console View of the Console panel
    */
   warnings: 'Warnings',
   /**
-   *@description Text for errors
+   * @description Text for errors
    */
   errors: 'Errors',
   /**
@@ -228,38 +228,38 @@ const UIStrings = {
    */
   overriddenByFilterSidebar: 'Log levels are controlled by the console sidebar.',
   /**
-   *@description Text in Console View of the Console panel
+   * @description Text in Console View of the Console panel
    */
   customLevels: 'Custom levels',
   /**
-   *@description Text in Console View of the Console panel
-   *@example {Warnings} PH1
+   * @description Text in Console View of the Console panel
+   * @example {Warnings} PH1
    */
   sOnly: '{PH1} only',
   /**
-   *@description Text in Console View of the Console panel
+   * @description Text in Console View of the Console panel
    */
   allLevels: 'All levels',
   /**
-   *@description Text in Console View of the Console panel
+   * @description Text in Console View of the Console panel
    */
   defaultLevels: 'Default levels',
   /**
-   *@description Text in Console View of the Console panel
+   * @description Text in Console View of the Console panel
    */
   hideAll: 'Hide all',
   /**
-   *@description Title of level menu button in console view of the console panel
-   *@example {All levels} PH1
+   * @description Title of level menu button in console view of the console panel
+   * @example {All levels} PH1
    */
   logLevelS: 'Log level: {PH1}',
   /**
-   *@description A context menu item in the Console View of the Console panel
+   * @description A context menu item in the Console View of the Console panel
    */
   default: 'Default',
   /**
-   *@description Text summary to indicate total number of messages in console for accessibility/screen readers.
-   *@example {5} PH1
+   * @description Text summary to indicate total number of messages in console for accessibility/screen readers.
+   * @example {5} PH1
    */
   filteredMessagesInConsole: '{PH1} messages in console',
 
@@ -270,12 +270,13 @@ let consoleViewInstance: ConsoleView;
 
 const MIN_HISTORY_LENGTH_FOR_DISABLING_SELF_XSS_WARNING = 5;
 const DISCLAIMER_TOOLTIP_ID = 'console-ai-code-completion-disclaimer-tooltip';
+const SPINNER_TOOLTIP_ID = 'console-ai-code-completion-spinner-tooltip';
 const CITATIONS_TOOLTIP_ID = 'console-ai-code-completion-citations-tooltip';
 
 export class ConsoleView extends UI.Widget.VBox implements
     UI.SearchableView.Searchable, ConsoleViewportProvider,
     SDK.TargetManager.SDKModelObserver<SDK.ConsoleModel.ConsoleModel> {
-  private readonly searchableViewInternal: UI.SearchableView.SearchableView;
+  readonly #searchableView: UI.SearchableView.SearchableView;
   private readonly sidebar: ConsoleSidebar;
   private isSidebarOpen: boolean;
   private filter: ConsoleViewFilter;
@@ -308,7 +309,8 @@ export class ConsoleView extends UI.Widget.VBox implements
   private messagesCountElement: HTMLElement;
   private viewportThrottler: Common.Throttler.Throttler;
   private pendingBatchResize: boolean;
-  private readonly onMessageResizedBound: (e: Common.EventTarget.EventTargetEvent<UI.TreeOutline.TreeElement>) => void;
+  private readonly onMessageResizedBound:
+      (e: Common.EventTarget.EventTargetEvent<HTMLElement|UI.TreeOutline.TreeElement>) => void;
   private readonly promptElement: HTMLElement;
   private readonly linkifier: Components.Linkifier.Linkifier;
   private consoleMessages: ConsoleViewMessage[];
@@ -321,7 +323,7 @@ export class ConsoleView extends UI.Widget.VBox implements
   private buildHiddenCacheTimeout?: number;
   private searchShouldJumpBackwards?: boolean;
   private searchProgressIndicator?: UI.ProgressIndicator.ProgressIndicator;
-  private innerSearchTimeoutId?: number;
+  #searchTimeoutId?: number;
   private muteViewportUpdates?: boolean;
   private waitForScrollTimeout?: number;
   private issueCounter: IssueCounter.IssueCounter.IssueCounter;
@@ -333,7 +335,7 @@ export class ConsoleView extends UI.Widget.VBox implements
   #isDetached = false;
   #onIssuesCountUpdateBound = this.#onIssuesCountUpdate.bind(this);
   private aiCodeCompletionSetting =
-      Common.Settings.Settings.instance().createSetting('ai-code-completion-fre-completed', false);
+      Common.Settings.Settings.instance().createSetting('ai-code-completion-enabled', false);
   private aiCodeCompletionSummaryToolbarContainer?: HTMLElement;
   private aiCodeCompletionSummaryToolbar?: AiCodeCompletionSummaryToolbar;
 
@@ -342,10 +344,10 @@ export class ConsoleView extends UI.Widget.VBox implements
     this.setMinimumSize(0, 35);
     this.registerRequiredCSS(consoleViewStyles, objectValueStyles, CodeHighlighter.codeHighlighterStyles);
 
-    this.searchableViewInternal = new UI.SearchableView.SearchableView(this, null);
-    this.searchableViewInternal.element.classList.add('console-searchable-view');
-    this.searchableViewInternal.setPlaceholder(i18nString(UIStrings.findStringInLogs));
-    this.searchableViewInternal.setMinimalSearchQuerySize(0);
+    this.#searchableView = new UI.SearchableView.SearchableView(this, null);
+    this.#searchableView.element.classList.add('console-searchable-view');
+    this.#searchableView.setPlaceholder(i18nString(UIStrings.findStringInLogs));
+    this.#searchableView.setMinimalSearchQuerySize(0);
     this.sidebar = new ConsoleSidebar();
     this.sidebar.addEventListener(Events.FILTER_SELECTED, this.onFilterChanged.bind(this));
     this.isSidebarOpen = false;
@@ -355,7 +357,7 @@ export class ConsoleView extends UI.Widget.VBox implements
     this.consoleToolbarContainer.role = 'toolbar';
     this.splitWidget = new UI.SplitWidget.SplitWidget(
         true /* isVertical */, false /* secondIsSidebar */, 'console.sidebar.width', 100);
-    this.splitWidget.setMainWidget(this.searchableViewInternal);
+    this.splitWidget.setMainWidget(this.#searchableView);
     this.splitWidget.setSidebarWidget(this.sidebar);
     this.splitWidget.show(this.element);
     this.splitWidget.hideSidebar();
@@ -386,7 +388,7 @@ export class ConsoleView extends UI.Widget.VBox implements
       this.filter.setLevelMenuOverridden(this.isSidebarOpen);
       this.onFilterChanged();
     });
-    this.contentsElement = this.searchableViewInternal.element;
+    this.contentsElement = this.#searchableView.element;
     this.element.classList.add('console-view');
 
     this.visibleViewMessages = [];
@@ -522,7 +524,7 @@ export class ConsoleView extends UI.Widget.VBox implements
 
     this.viewportThrottler = new Common.Throttler.Throttler(viewportThrottlerTimeout);
     this.pendingBatchResize = false;
-    this.onMessageResizedBound = (e: Common.EventTarget.EventTargetEvent<UI.TreeOutline.TreeElement>) => {
+    this.onMessageResizedBound = (e: Common.EventTarget.EventTargetEvent<HTMLElement|UI.TreeOutline.TreeElement>) => {
       void this.onMessageResized(e);
     };
 
@@ -563,6 +565,7 @@ export class ConsoleView extends UI.Widget.VBox implements
           ConsolePromptEvents.AI_CODE_COMPLETION_REQUEST_TRIGGERED, this.#onAiCodeCompletionRequestTriggered, this);
       this.prompt.addEventListener(
           ConsolePromptEvents.AI_CODE_COMPLETION_RESPONSE_RECEIVED, this.#onAiCodeCompletionResponseReceived, this);
+      this.element.addEventListener('keydown', this.keyDown.bind(this));
     }
 
     this.messagesElement.addEventListener('keydown', this.messagesKeyDown.bind(this), false);
@@ -622,8 +625,11 @@ export class ConsoleView extends UI.Widget.VBox implements
   }
 
   createAiCodeCompletionSummaryToolbar(): void {
-    this.aiCodeCompletionSummaryToolbar =
-        new AiCodeCompletionSummaryToolbar(DISCLAIMER_TOOLTIP_ID, CITATIONS_TOOLTIP_ID, 'console');
+    this.aiCodeCompletionSummaryToolbar = new AiCodeCompletionSummaryToolbar({
+      citationsTooltipId: CITATIONS_TOOLTIP_ID,
+      disclaimerTooltipId: DISCLAIMER_TOOLTIP_ID,
+      spinnerTooltipId: SPINNER_TOOLTIP_ID
+    });
     this.aiCodeCompletionSummaryToolbarContainer = this.element.createChild('div');
     this.aiCodeCompletionSummaryToolbar.show(this.aiCodeCompletionSummaryToolbarContainer, undefined, true);
   }
@@ -651,8 +657,9 @@ export class ConsoleView extends UI.Widget.VBox implements
     this.aiCodeCompletionSummaryToolbar?.setLoading(false);
   }
 
-  static clearConsole(): void {
+  clearConsole(): void {
     SDK.ConsoleModel.ConsoleModel.requestClearMessages();
+    this.prompt.clearAiCodeCompletionCache();
   }
 
   #onIssuesCountUpdate(): void {
@@ -693,11 +700,12 @@ export class ConsoleView extends UI.Widget.VBox implements
   }
 
   searchableView(): UI.SearchableView.SearchableView {
-    return this.searchableViewInternal;
+    return this.#searchableView;
   }
 
   clearHistory(): void {
     this.prompt.history().clear();
+    this.prompt.clearAiCodeCompletionCache();
   }
 
   private consoleHistoryAutocompleteChanged(): void {
@@ -960,7 +968,7 @@ export class ConsoleView extends UI.Widget.VBox implements
           viewMessage,
           !shouldGroupSimilar /* crbug.com/1082963: prevent collapse of same messages when "Group similar" is false */);
       this.updateFilterStatus();
-      this.searchableViewInternal.updateSearchMatchesCount(this.regexMatchRanges.length);
+      this.#searchableView.updateSearchMatchesCount(this.regexMatchRanges.length);
     } else {
       this.needsFullUpdate = true;
     }
@@ -1049,18 +1057,13 @@ export class ConsoleView extends UI.Widget.VBox implements
       return;
     }
 
-    // Track any adjacent messages.
-    const originatingMessage = viewMessage.consoleMessage().originatingMessage();
-    const adjacent = Boolean(originatingMessage && lastMessage?.consoleMessage() === originatingMessage);
-    viewMessage.setAdjacentUserCommandResult(adjacent);
-
-    // Ensure any parent groups for this message are shown.
     const currentGroup = viewMessage.consoleGroup();
-    showGroup(currentGroup, this.visibleViewMessages);
 
-    // Determine whether this message should actually be visible.
-    const shouldShowMessage = !currentGroup?.messagesHidden();
-    if (shouldShowMessage) {
+    if (!currentGroup?.messagesHidden()) {
+      const originatingMessage = viewMessage.consoleMessage().originatingMessage();
+      const adjacent = Boolean(originatingMessage && lastMessage?.consoleMessage() === originatingMessage);
+      viewMessage.setAdjacentUserCommandResult(adjacent);
+      showGroup(currentGroup, this.visibleViewMessages);
       this.visibleViewMessages.push(viewMessage);
       this.searchMessage(this.visibleViewMessages.length - 1);
     }
@@ -1111,19 +1114,18 @@ export class ConsoleView extends UI.Widget.VBox implements
     }
   }
 
-  private async onMessageResized(event: Common.EventTarget.EventTargetEvent<UI.TreeOutline.TreeElement>):
+  private async onMessageResized(event: Common.EventTarget.EventTargetEvent<HTMLElement|UI.TreeOutline.TreeElement>):
       Promise<void> {
-    const treeElement = event.data;
-    if (this.pendingBatchResize || !treeElement.treeOutline) {
+    const treeElement = event.data instanceof UI.TreeOutline.TreeElement ? event.data.treeOutline?.element : event.data;
+    if (this.pendingBatchResize || !treeElement) {
       return;
     }
     this.pendingBatchResize = true;
     await Promise.resolve();
-    const treeOutlineElement = treeElement.treeOutline.element;
     this.viewport.setStickToBottom(this.isScrolledToBottom());
     // Scroll, in case mutations moved the element below the visible area.
-    if (treeOutlineElement.offsetHeight <= this.messagesElement.offsetHeight) {
-      treeOutlineElement.scrollIntoViewIfNeeded();
+    if (treeElement.offsetHeight <= this.messagesElement.offsetHeight) {
+      treeElement.scrollIntoViewIfNeeded();
     }
 
     this.pendingBatchResize = false;
@@ -1174,7 +1176,7 @@ export class ConsoleView extends UI.Widget.VBox implements
           consoleViewMessage?.getExplainActionId(), undefined, /* optional=*/ true);
     }
 
-    if (consoleMessage && consoleMessage.url) {
+    if (consoleMessage?.url) {
       const menuTitle = i18nString(
           UIStrings.hideMessagesFromS, {PH1: new Common.ParsedURL.ParsedURL(consoleMessage.url).displayName});
       contextMenu.headerSection().appendItem(
@@ -1214,19 +1216,19 @@ export class ConsoleView extends UI.Widget.VBox implements
         Platform.DevToolsPath.RawPathString;
     const stream = new Bindings.FileUtils.FileOutputStream();
 
-    const progressIndicator = new UI.ProgressIndicator.ProgressIndicator();
-    progressIndicator.setTitle(i18nString(UIStrings.writingFile));
-    progressIndicator.setTotalWork(this.itemCount());
+    const progressIndicator = document.createElement('devtools-progress');
+    progressIndicator.title = i18nString(UIStrings.writingFile);
+    progressIndicator.totalWork = this.itemCount();
 
     const chunkSize = 350;
 
     if (!await stream.open(filename)) {
       return;
     }
-    this.progressToolbarItem.element.appendChild(progressIndicator.element);
+    this.progressToolbarItem.element.appendChild(progressIndicator);
 
     let messageIndex = 0;
-    while (messageIndex < this.itemCount() && !progressIndicator.isCanceled()) {
+    while (messageIndex < this.itemCount() && !progressIndicator.canceled) {
       const messageContents = [];
       let i;
       for (i = 0; i < chunkSize && i + messageIndex < this.itemCount(); ++i) {
@@ -1235,11 +1237,11 @@ export class ConsoleView extends UI.Widget.VBox implements
       }
       messageIndex += i;
       await stream.write(messageContents.join('\n') + '\n');
-      progressIndicator.setWorked(messageIndex);
+      progressIndicator.worked = messageIndex;
     }
 
     void stream.close();
-    progressIndicator.done();
+    progressIndicator.done = true;
   }
 
   private async copyConsole(): Promise<void> {
@@ -1317,7 +1319,7 @@ export class ConsoleView extends UI.Widget.VBox implements
       }
     }
     this.updateFilterStatus();
-    this.searchableViewInternal.updateSearchMatchesCount(this.regexMatchRanges.length);
+    this.#searchableView.updateSearchMatchesCount(this.regexMatchRanges.length);
     this.jumpToMatch(this.currentMatchRangeIndex);  // Re-highlight current match.
     this.viewport.invalidate();
     this.messagesCountElement.setAttribute(
@@ -1450,6 +1452,19 @@ export class ConsoleView extends UI.Widget.VBox implements
     }
   }
 
+  private async keyDown(event: Event): Promise<void> {
+    const keyboardEvent = (event as KeyboardEvent);
+    if (UI.KeyboardShortcut.KeyboardShortcut.eventHasCtrlEquivalentKey(keyboardEvent)) {
+      if (keyboardEvent.key === 'i') {
+        keyboardEvent.consume(true);
+        await this.prompt.onAiCodeCompletionTeaserActionKeyDown(event);
+      } else if (keyboardEvent.key === 'x') {
+        keyboardEvent.consume(true);
+        this.prompt.onAiCodeCompletionTeaserDismissKeyDown(event);
+      }
+    }
+  }
+
   private printResult(
       result: SDK.RemoteObject.RemoteObject|null, originatingConsoleMessage: SDK.ConsoleModel.ConsoleMessage,
       exceptionDetails?: Protocol.Runtime.ExceptionDetails): void {
@@ -1493,7 +1508,7 @@ export class ConsoleView extends UI.Widget.VBox implements
 
   performSearch(searchConfig: UI.SearchableView.SearchConfig, shouldJump: boolean, jumpBackwards?: boolean): void {
     this.onSearchCanceled();
-    this.searchableViewInternal.updateSearchMatchesCount(0);
+    this.#searchableView.updateSearchMatchesCount(0);
 
     this.searchRegex = searchConfig.toSearchRegex(true).regex;
 
@@ -1504,22 +1519,22 @@ export class ConsoleView extends UI.Widget.VBox implements
       this.searchShouldJumpBackwards = Boolean(jumpBackwards);
     }
 
-    this.searchProgressIndicator = new UI.ProgressIndicator.ProgressIndicator();
-    this.searchProgressIndicator.setTitle(i18nString(UIStrings.searching));
-    this.searchProgressIndicator.setTotalWork(this.visibleViewMessages.length);
-    this.progressToolbarItem.element.appendChild(this.searchProgressIndicator.element);
+    this.searchProgressIndicator = document.createElement('devtools-progress');
+    this.searchProgressIndicator.title = i18nString(UIStrings.searching);
+    this.searchProgressIndicator.totalWork = this.visibleViewMessages.length;
+    this.progressToolbarItem.element.appendChild(this.searchProgressIndicator);
 
-    this.innerSearch(0);
+    this.#search(0);
   }
 
   private cleanupAfterSearch(): void {
     delete this.searchShouldJumpBackwards;
-    if (this.innerSearchTimeoutId) {
-      clearTimeout(this.innerSearchTimeoutId);
-      delete this.innerSearchTimeoutId;
+    if (this.#searchTimeoutId) {
+      clearTimeout(this.#searchTimeoutId);
+      this.#searchTimeoutId = undefined;
     }
     if (this.searchProgressIndicator) {
-      this.searchProgressIndicator.done();
+      this.searchProgressIndicator.done = true;
       delete this.searchProgressIndicator;
     }
   }
@@ -1528,9 +1543,9 @@ export class ConsoleView extends UI.Widget.VBox implements
     // This method is sniffed in tests.
   }
 
-  private innerSearch(index: number): void {
-    delete this.innerSearchTimeoutId;
-    if (this.searchProgressIndicator?.isCanceled()) {
+  #search(index: number): void {
+    this.#searchTimeoutId = undefined;
+    if (this.searchProgressIndicator?.canceled) {
       this.cleanupAfterSearch();
       return;
     }
@@ -1540,7 +1555,7 @@ export class ConsoleView extends UI.Widget.VBox implements
       this.searchMessage(index);
     }
 
-    this.searchableViewInternal.updateSearchMatchesCount(this.regexMatchRanges.length);
+    this.#searchableView.updateSearchMatchesCount(this.regexMatchRanges.length);
     if (typeof this.searchShouldJumpBackwards !== 'undefined' && this.regexMatchRanges.length) {
       this.jumpToMatch(this.searchShouldJumpBackwards ? -1 : 0);
       delete this.searchShouldJumpBackwards;
@@ -1552,9 +1567,9 @@ export class ConsoleView extends UI.Widget.VBox implements
       return;
     }
 
-    this.innerSearchTimeoutId = window.setTimeout(this.innerSearch.bind(this, index), 100);
+    this.#searchTimeoutId = window.setTimeout(this.#search.bind(this, index), 100);
     if (this.searchProgressIndicator) {
-      this.searchProgressIndicator.setWorked(index);
+      this.searchProgressIndicator.worked = index;
     }
   }
 
@@ -1578,6 +1593,10 @@ export class ConsoleView extends UI.Widget.VBox implements
     return true;
   }
 
+  supportsWholeWordSearch(): boolean {
+    return true;
+  }
+
   supportsRegexSearch(): boolean {
     return true;
   }
@@ -1597,7 +1616,7 @@ export class ConsoleView extends UI.Widget.VBox implements
 
     index = Platform.NumberUtilities.mod(index, this.regexMatchRanges.length);
     this.currentMatchRangeIndex = index;
-    this.searchableViewInternal.updateCurrentMatchIndex(index);
+    this.#searchableView.updateCurrentMatchIndex(index);
     matchRange = this.regexMatchRanges[index];
     const message = this.visibleViewMessages[matchRange.messageIndex];
     const highlightNode = message.searchHighlightNode(matchRange.matchIndex);
@@ -1679,6 +1698,17 @@ export class ConsoleView extends UI.Widget.VBox implements
   }
 
   private isAiCodeCompletionEnabled(): boolean {
+    const devtoolsLocale = i18n.DevToolsLocale.DevToolsLocale.instance();
+    const aidaAvailability = Root.Runtime.hostConfig.aidaAvailability;
+    if (!devtoolsLocale.locale.startsWith('en-')) {
+      return false;
+    }
+    if (aidaAvailability?.blockedByGeo) {
+      return false;
+    }
+    if (aidaAvailability?.blockedByAge) {
+      return false;
+    }
     return Boolean(Root.Runtime.hostConfig.devToolsAiCodeCompletion?.enabled);
   }
 }
@@ -1905,7 +1935,7 @@ export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
         ConsoleView.instance().focusPrompt();
         return true;
       case 'console.clear':
-        ConsoleView.clearConsole();
+        ConsoleView.instance().clearConsole();
         return true;
       case 'console.clear.history':
         ConsoleView.instance().clearHistory();

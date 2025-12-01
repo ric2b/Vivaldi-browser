@@ -8,15 +8,19 @@
 #include <vector>
 
 #include "base/run_loop.h"
-#include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
 #include "chrome/browser/ui/webui/new_tab_page/ntp_promo/ntp_promo.mojom-forward.h"
 #include "chrome/browser/ui/webui/new_tab_page/ntp_promo/ntp_promo.mojom.h"
+#include "chrome/browser/ui/webui/webui_embedding_context.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "components/user_education/common/ntp_promo/ntp_promo_controller.h"
 #include "components/user_education/common/ntp_promo/ntp_promo_identifier.h"
 #include "components/user_education/common/ntp_promo/ntp_promo_registry.h"
 #include "components/user_education/common/ntp_promo/ntp_promo_specification.h"
+#include "components/user_education/common/user_education_context.h"
+#include "components/user_education/test/mock_user_education_context.h"
 #include "components/user_education/test/test_user_education_storage_service.h"
 #include "content/public/test/browser_task_environment.h"
+#include "content/public/test/test_renderer_host.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -63,14 +67,15 @@ class MockController : public user_education::NtpPromoController {
 
   MOCK_METHOD(user_education::NtpShowablePromos,
               GenerateShowablePromos,
-              (Profile*));
+              (const user_education::UserEducationContextPtr&));
   MOCK_METHOD(void,
               OnPromosShown,
               (const std::vector<std::string>&,
                const std::vector<std::string>&));
   MOCK_METHOD(void,
               OnPromoClicked,
-              (user_education::NtpPromoIdentifier, BrowserWindowInterface*));
+              (user_education::NtpPromoIdentifier,
+               const user_education::UserEducationContextPtr&));
 };
 
 }  // namespace
@@ -83,7 +88,9 @@ class NtpPromoHandlerTest : public testing::Test {
   MockController& mock_controller() { return mock_controller_; }
   MockClient& mock_client() { return mock_client_; }
   NtpPromoHandler& handler() { return *handler_; }
-  MockBrowserWindowInterface& mock_browser() { return mock_browser_; }
+  const scoped_refptr<user_education::UserEducationContext>& mock_context() {
+    return mock_context_;
+  }
 
   user_education::NtpShowablePromos GetShowablePromos() {
     user_education::NtpShowablePromos promos;
@@ -116,20 +123,23 @@ class NtpPromoHandlerTest : public testing::Test {
 
  private:
   content::BrowserTaskEnvironment task_environment_;
+  content::RenderViewHostTestEnabler test_enabler_;
   user_education::NtpPromoRegistry promo_registry_;
   user_education::test::TestUserEducationStorageService storage_service_;
-  MockController mock_controller_{promo_registry_, storage_service_};
+  MockController mock_controller_{promo_registry_, storage_service_,
+                                  user_education::NtpPromoControllerParams()};
   MockClient mock_client_;
-  MockBrowserWindowInterface mock_browser_;
+  scoped_refptr<user_education::UserEducationContext> mock_context_ =
+      base::MakeRefCounted<user_education::test::MockUserEducationContext>();
   std::unique_ptr<NtpPromoHandler> handler_ = NtpPromoHandler::CreateForTesting(
       mock_client_.BindAndGetRemote(),
       mojo::PendingReceiver<ntp_promo::mojom::NtpPromoHandler>(),
-      &mock_browser_,
+      mock_context(),
       &mock_controller_);
 };
 
 TEST_F(NtpPromoHandlerTest, PassesOnClick) {
-  EXPECT_CALL(mock_controller(), OnPromoClicked(kPromo1Id, &mock_browser()));
+  EXPECT_CALL(mock_controller(), OnPromoClicked(kPromo1Id, mock_context()));
   handler().OnPromoClicked(kPromo1Id);
 }
 

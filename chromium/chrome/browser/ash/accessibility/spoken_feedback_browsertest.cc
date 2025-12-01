@@ -35,6 +35,7 @@
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
+#include "base/metrics/statistics_recorder.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -333,7 +334,8 @@ IN_PROC_BROWSER_TEST_P(LoggedInSpokenFeedbackTest, ChromeVoxSpeaksIntro) {
   if (histogram_tester
           .GetAllSamples("Accessibility.ChromeVox.StartUpSpeechDelay")
           .size() == 0) {
-    HistogramWaiter("Accessibility.ChromeVox.StartUpSpeechDelay").Wait();
+    base::StatisticsRecorder::HistogramWaiter(
+        "Accessibility.ChromeVox.StartUpSpeechDelay").Wait();
   }
 }
 
@@ -1943,7 +1945,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, TouchExploreSecondaryDisplay) {
   display::test::DisplayManagerTestApi display_manager_test_api(
       shell_test_api.display_manager());
 
-  display::Screen* screen = display::Screen::GetScreen();
+  display::Screen* screen = display::Screen::Get();
   int64_t display2 = display_manager_test_api.GetSecondaryDisplay().id();
   screen->SetDisplayForNewWindows(display2);
 
@@ -2756,12 +2758,15 @@ class ShortcutsAppSpokenFeedbackTest : public LoggedInSpokenFeedbackTest {
   ~ShortcutsAppSpokenFeedbackTest() override = default;
 };
 
-// TODO(crbug.com/388867840): Add manifest v3 variant when migration is
-// complete.
 INSTANTIATE_TEST_SUITE_P(
     ManifestV2,
     ShortcutsAppSpokenFeedbackTest,
     ::testing::Values(SpokenFeedbackTestConfig(ManifestVersion::kTwo)));
+
+INSTANTIATE_TEST_SUITE_P(
+    ManifestV3,
+    ShortcutsAppSpokenFeedbackTest,
+    ::testing::Values(SpokenFeedbackTestConfig(ManifestVersion::kThree)));
 
 // TODO(b/288602247): The test is flaky.
 IN_PROC_BROWSER_TEST_P(ShortcutsAppSpokenFeedbackTest,
@@ -2821,12 +2826,15 @@ class SpokenFeedbackWithCandidateWindowTest
   raw_ptr<ui::ime::CandidateWindowView> candidate_window_view_;
 };
 
-// TODO(crbug.com/388867840): Add manifest v3 variant when migration is
-// complete.
 INSTANTIATE_TEST_SUITE_P(
     ManifestV2,
     SpokenFeedbackWithCandidateWindowTest,
     ::testing::Values(SpokenFeedbackTestConfig(ManifestVersion::kTwo)));
+
+INSTANTIATE_TEST_SUITE_P(
+    ManifestV3,
+    SpokenFeedbackWithCandidateWindowTest,
+    ::testing::Values(SpokenFeedbackTestConfig(ManifestVersion::kThree)));
 
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackWithCandidateWindowTest,
                        SpeakSelectedItem) {
@@ -2974,6 +2982,18 @@ INSTANTIATE_TEST_SUITE_P(
     ManifestV2GuestUser,
     SpokenFeedbackWithMagnifierTest,
     ::testing::Values(SpokenFeedbackTestConfig(ManifestVersion::kTwo,
+                                               kTestAsGuestUser)));
+
+INSTANTIATE_TEST_SUITE_P(
+    ManifestV3NormalUser,
+    SpokenFeedbackWithMagnifierTest,
+    ::testing::Values(SpokenFeedbackTestConfig(ManifestVersion::kThree,
+                                               kTestAsNormalUser)));
+
+INSTANTIATE_TEST_SUITE_P(
+    ManifestV3GuestUser,
+    SpokenFeedbackWithMagnifierTest,
+    ::testing::Values(SpokenFeedbackTestConfig(ManifestVersion::kThree,
                                                kTestAsGuestUser)));
 
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackWithMagnifierTest,

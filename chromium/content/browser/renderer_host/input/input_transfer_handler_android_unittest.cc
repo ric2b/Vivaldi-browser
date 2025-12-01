@@ -304,7 +304,6 @@ TEST_F(InputTransferHandlerTest, EmitsTransferInputToVizResultHistogram) {
 TEST_F(InputTransferHandlerTest, RetryTransfer) {
   const std::vector<TransferInputToVizResult> browser_handling_cases = {
       TransferInputToVizResult::kSelectionHandlesActive,
-      TransferInputToVizResult::kCanTriggerBackGesture,
       TransferInputToVizResult::kImeIsActive,
       TransferInputToVizResult::kRequestedByEmbedder,
       TransferInputToVizResult::kMultipleBrowserWindowsOpen};
@@ -463,12 +462,14 @@ TEST_F(InputTransferHandlerTest,
 TEST_F(InputTransferHandlerTest, DoNotRetryTransferIfNoActiveSequence) {
   const std::vector<TransferInputToVizResult> browser_handling_cases = {
       TransferInputToVizResult::kSelectionHandlesActive,
-      TransferInputToVizResult::kCanTriggerBackGesture,
       TransferInputToVizResult::kImeIsActive,
       TransferInputToVizResult::kRequestedByEmbedder,
       TransferInputToVizResult::kMultipleBrowserWindowsOpen};
+  // Use large enough offset(2000ms) here such that the event times don't go in
+  // future, as more events are synthesized in loop below. Event time gets
+  // incremented by 8ms below, every time an event is synthesized.
   base::TimeTicks event_time =
-      base::TimeTicks::Now() - base::Milliseconds(1000);
+      base::TimeTicks::Now() - base::Milliseconds(2000);
   for (int transfer_result = 0;
        transfer_result <= static_cast<int>(TransferInputToVizResult::kMaxValue);
        transfer_result++) {

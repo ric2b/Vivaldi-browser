@@ -57,6 +57,7 @@
 #include "dawn/native/CompilationMessages.h"
 #include "dawn/native/CreatePipelineAsyncEvent.h"
 #include "dawn/native/DawnNative.h"
+#include "dawn/native/DynamicArrayState.h"
 #include "dawn/native/DynamicUploader.h"
 #include "dawn/native/Error.h"
 #include "dawn/native/ErrorData.h"
@@ -79,6 +80,7 @@
 #include "dawn/native/SharedTextureMemory.h"
 #include "dawn/native/Surface.h"
 #include "dawn/native/SwapChain.h"
+#include "dawn/native/TexelBufferView.h"
 #include "dawn/native/Texture.h"
 #include "dawn/native/ValidationUtils_autogen.h"
 #include "dawn/native/WaitListEvent.h"
@@ -296,14 +298,14 @@ DeviceBase::DeviceBase(AdapterBase* adapter,
                        const UnpackedPtr<DeviceDescriptor>& descriptor,
                        const TogglesState& deviceToggles,
                        Ref<DeviceLostEvent>&& lostEvent)
-    : mLostEvent(std::move(lostEvent)),
+    : mPendingLostEvent(std::move(lostEvent)),
       mAdapter(adapter),
       mToggles(deviceToggles),
       mNextPipelineCompatibilityToken(1) {
     DAWN_ASSERT(descriptor);
 
-    DAWN_ASSERT(mLostEvent);
-    mLostEvent->mDevice = this;
+    DAWN_ASSERT(mPendingLostEvent);
+    mPendingLostEvent->mDevice = this;
 
 #if defined(DAWN_ENABLE_ASSERTS)
     static constexpr WGPUUncapturedErrorCallbackInfo kDefaultUncapturedErrorCallbackInfo = {
@@ -365,7 +367,8 @@ DeviceBase::DeviceBase(AdapterBase* adapter,
         cacheDesc.functionUserdata = nullptr;
     }
 
-    mBlobCache = std::make_unique<BlobCache>(cacheDesc);
+    mBlobCache =
+        std::make_unique<BlobCache>(cacheDesc, IsToggleEnabled(Toggle::BlobCacheHashValidation));
 
     if (descriptor->requiredLimits != nullptr) {
         UnpackLimitsIn(descriptor->requiredLimits, &mLimits);
@@ -428,8 +431,8 @@ DeviceBase::DeviceBase() : mState(State::Alive), mToggles(ToggleStage::Device) {
     DeviceDescriptor desc = {};
     desc.deviceLostCallbackInfo = {nullptr, WGPUCallbackMode_AllowSpontaneous, nullptr, nullptr,
                                    nullptr};
-    mLostEvent = DeviceLostEvent::Create(&desc);
-    mLostEvent->mDevice = this;
+    mPendingLostEvent = DeviceLostEvent::Create(&desc);
+    mPendingLostEvent->mDevice = this;
 }
 
 DeviceBase::~DeviceBase() {
@@ -448,6 +451,9 @@ MaybeError DeviceBase::Initialize(const UnpackedPtr<DeviceDescriptor>& descripto
     mDynamicUploader = std::make_unique<DynamicUploader>(this);
     mCallbackTaskManager = AcquireRef(new CallbackTaskManager());
     mInternalPipelineStore = std::make_unique<InternalPipelineStore>(this);
+    if (HasFeature(Feature::ChromiumExperimentalBindless)) {
+        mDynamicArrayDefaultBindings = std::make_unique<DynamicArrayDefaultBindings>();
+    }
 
     DAWN_ASSERT(GetPlatform() != nullptr);
     mWorkerTaskPool = GetPlatform()->CreateWorkerTaskPool();
@@ -458,7 +464,7 @@ MaybeError DeviceBase::Initialize(const UnpackedPtr<DeviceDescriptor>& descripto
     mState = State::Alive;
 
     // Fake an error after the creation of a device here for testing.
-    if (descriptor.Get<DawnFakeDeviceInitializeErrorForTesting>() != nullptr) {
+    if (descriptor.Has<DawnFakeDeviceInitializeErrorForTesting>()) {
         return DAWN_INTERNAL_ERROR("DawnFakeDeviceInitialzeErrorForTesting");
     }
 
@@ -487,6 +493,10 @@ MaybeError DeviceBase::Initialize(const UnpackedPtr<DeviceDescriptor>& descripto
     }
 
     GetInstance()->AddDevice(this);
+
+    // Initialization is successful, allow the device lost event to be triggered from within the
+    // device.
+    mLostEvent = std::move(mPendingLostEvent);
 
     return {};
 }
@@ -637,6 +647,10 @@ void DeviceBase::Destroy() {
             // complete before proceeding with destruction.
             // Ignore errors so that we can continue with destruction
             IgnoreErrors(mQueue->WaitForIdleForDestruction());
+
+            // Call TickImpl once last time to clean up resources
+            // Ignore errors so that we can continue with destruction
+            IgnoreErrors(TickImpl());
             break;
 
         case State::BeingDisconnected:
@@ -658,12 +672,8 @@ void DeviceBase::Destroy() {
     if (mState != State::BeingCreated) {
         // The GPU timeline is finished.
         mQueue->AssumeCommandsComplete();
-        DAWN_ASSERT(mQueue->GetCompletedCommandSerial() == mQueue->GetLastSubmittedCommandSerial());
+        DAWN_ASSERT(mQueue->GetCompletedCommandSerial() >= mQueue->GetLastSubmittedCommandSerial());
         mQueue->Tick(mQueue->GetCompletedCommandSerial());
-
-        // Call TickImpl once last time to clean up resources
-        // Ignore errors so that we can continue with destruction
-        IgnoreErrors(TickImpl());
     }
 
     // At this point GPU operations are always finished, so we are in the disconnected state.
@@ -671,6 +681,7 @@ void DeviceBase::Destroy() {
     // implementations of DestroyImpl checks that we are disconnected before doing work.
     mState = State::Disconnected;
 
+    mDynamicArrayDefaultBindings = nullptr;
     mDynamicUploader = nullptr;
     mEmptyBindGroupLayout = nullptr;
     mEmptyPipelineLayout = nullptr;
@@ -681,7 +692,6 @@ void DeviceBase::Destroy() {
     // Note: mQueue is not released here since the application may still get it after calling
     // Destroy() via APIGetQueue.
     if (mQueue != nullptr) {
-        mQueue->AssumeCommandsComplete();
         mQueue->Destroy();
     }
 
@@ -705,7 +715,7 @@ void DeviceBase::HandleDeviceLost(wgpu::DeviceLostReason reason, std::string_vie
 void DeviceBase::HandleError(std::unique_ptr<ErrorData> error,
                              InternalErrorType additionalAllowedErrors,
                              wgpu::DeviceLostReason lostReason) {
-    auto deviceGuard(GetGuard());
+    auto deviceGuard = GetGuard();
     AppendDebugLayerMessages(error.get());
 
     InternalErrorType type = error->GetType();
@@ -727,6 +737,7 @@ void DeviceBase::HandleError(std::unique_ptr<ErrorData> error,
         // Disconnected so we can detect this case in WaitForIdleForDestruction.
         if (ErrorInjectorEnabled()) {
             IgnoreErrors(mQueue->WaitForIdleForDestruction());
+            IgnoreErrors(TickImpl());
         }
 
         // A real device lost happened. Set the state to disconnected as the device cannot be
@@ -883,7 +894,14 @@ BlobCache* DeviceBase::GetBlobCache() const {
 }
 
 Blob DeviceBase::LoadCachedBlob(const CacheKey& key) {
-    return GetBlobCache()->Load(key);
+    auto loadResult = GetBlobCache()->Load(key);
+    if (loadResult.IsSuccess()) {
+        return loadResult.AcquireSuccess();
+    }
+    // Treat hash validation error as cache miss.
+    loadResult.AcquireError();
+    DAWN_HISTOGRAM_BOOLEAN(GetPlatform(), "BlobCacheHashValidationFailed", true);
+    return Blob();
 }
 
 void DeviceBase::StoreCachedBlob(const CacheKey& key, const Blob& blob) {
@@ -965,6 +983,12 @@ InternalPipelineStore* DeviceBase::GetInternalPipelineStore() {
     return mInternalPipelineStore.get();
 }
 
+DynamicArrayDefaultBindings* DeviceBase::GetDynamicArrayDefaultBindings() {
+    DAWN_ASSERT(HasFeature(Feature::ChromiumExperimentalBindless));
+    DAWN_ASSERT(mDynamicArrayDefaultBindings != nullptr);
+    return mDynamicArrayDefaultBindings.get();
+}
+
 bool DeviceBase::HasPendingTasks() {
     return mAsyncTaskManager->HasPendingTasks() || !mCallbackTaskManager->IsEmpty();
 }
@@ -1014,7 +1038,7 @@ std::vector<const Format*> DeviceBase::GetCompatibleViewFormats(const Format& fo
 }
 
 ResultOrError<Ref<BindGroupLayoutBase>> DeviceBase::GetOrCreateBindGroupLayout(
-    const BindGroupLayoutDescriptor* descriptor,
+    const UnpackedPtr<BindGroupLayoutDescriptor>& descriptor,
     PipelineCompatibilityToken pipelineCompatibilityToken) {
     BindGroupLayoutInternalBase blueprint(this, descriptor, ApiObjectBase::kUntrackedByDevice);
 
@@ -1040,7 +1064,7 @@ ResultOrError<Ref<BindGroupLayoutBase>> DeviceBase::CreateEmptyBindGroupLayout()
     desc.entryCount = 0;
     desc.entries = nullptr;
 
-    return GetOrCreateBindGroupLayout(&desc);
+    return GetOrCreateBindGroupLayout(Unpack(&desc));
 }
 
 ResultOrError<Ref<PipelineLayoutBase>> DeviceBase::CreateEmptyPipelineLayout() {
@@ -1151,20 +1175,20 @@ Ref<AttachmentState> DeviceBase::GetOrCreateAttachmentState(AttachmentState* blu
 
 Ref<AttachmentState> DeviceBase::GetOrCreateAttachmentState(
     const RenderBundleEncoderDescriptor* descriptor) {
-    AttachmentState blueprint(this, descriptor);
+    AttachmentState blueprint(descriptor);
     return GetOrCreateAttachmentState(&blueprint);
 }
 
 Ref<AttachmentState> DeviceBase::GetOrCreateAttachmentState(
     const UnpackedPtr<RenderPipelineDescriptor>& descriptor,
     const PipelineLayoutBase* layout) {
-    AttachmentState blueprint(this, descriptor, layout);
+    AttachmentState blueprint(descriptor, layout);
     return GetOrCreateAttachmentState(&blueprint);
 }
 
 Ref<AttachmentState> DeviceBase::GetOrCreateAttachmentState(
     const UnpackedPtr<RenderPassDescriptor>& descriptor) {
-    AttachmentState blueprint(this, descriptor);
+    AttachmentState blueprint(descriptor);
     return GetOrCreateAttachmentState(&blueprint);
 }
 
@@ -1205,7 +1229,7 @@ BufferBase* DeviceBase::APICreateBuffer(const BufferDescriptor* rawDescriptor) {
             descriptor = Unpack(rawDescriptor);
         }
 
-        bool hasHostMapped = descriptor.Get<BufferHostMappedPointer>() != nullptr;
+        bool hasHostMapped = descriptor.Has<BufferHostMappedPointer>();
         bool fakeOOMAtDevice = false;
         if (auto* ext = descriptor.Get<DawnFakeBufferOOMForTesting>()) {
             fakeOOMAtNativeMap = ext->fakeOOMAtNativeMap;
@@ -1566,7 +1590,7 @@ MaybeError DeviceBase::Tick() {
     // To avoid overly ticking, we only want to tick when:
     // 1. the last submitted serial has moved beyond the completed serial
     // 2. or the backend still has pending commands to submit.
-    DAWN_TRY(mQueue->CheckPassedSerials());
+    DAWN_TRY(mQueue->UpdateCompletedSerial());
     DAWN_TRY(TickImpl());
 
     // TODO(crbug.com/dawn/833): decouple TickImpl from updating the serial so that we can
@@ -1724,9 +1748,12 @@ void DeviceBase::SetWGSLExtensionAllowList() {
         mWGSLAllowedFeatures.extensions.insert(
             tint::wgsl::Extension::kChromiumExperimentalSubgroupMatrix);
     }
-    if (mEnabledFeatures.IsEnabled(Feature::ChromiumExperimentalPrimitiveId)) {
+    if (mEnabledFeatures.IsEnabled(Feature::PrimitiveIndex)) {
+        mWGSLAllowedFeatures.extensions.insert(tint::wgsl::Extension::kPrimitiveIndex);
+    }
+    if (mEnabledFeatures.IsEnabled(Feature::ChromiumExperimentalBindless)) {
         mWGSLAllowedFeatures.extensions.insert(
-            tint::wgsl::Extension::kChromiumExperimentalPrimitiveId);
+            tint::wgsl::Extension::kChromiumExperimentalDynamicBinding);
     }
 
     // Language features are enabled instance-wide.
@@ -1736,6 +1763,11 @@ void DeviceBase::SetWGSLExtensionAllowList() {
 
 const tint::wgsl::AllowedFeatures& DeviceBase::GetWGSLAllowedFeatures() const {
     return mWGSLAllowedFeatures;
+}
+
+bool DeviceBase::AreTexelBuffersEnabled() const {
+    const auto& features = GetWGSLAllowedFeatures().features;
+    return features.count(tint::wgsl::LanguageFeature::kTexelBuffers);
 }
 
 bool DeviceBase::IsValidationEnabled() const {
@@ -1907,32 +1939,45 @@ QueueBase* DeviceBase::GetQueue() const {
 
 // Implementation details of object creation
 
-ResultOrError<Ref<BindGroupBase>> DeviceBase::CreateBindGroup(const BindGroupDescriptor* descriptor,
-                                                              UsageValidationMode mode) {
+ResultOrError<Ref<BindGroupBase>> DeviceBase::CreateBindGroup(
+    const BindGroupDescriptor* rawDescriptor,
+    UsageValidationMode mode) {
     DAWN_TRY(ValidateIsAlive());
+
+    UnpackedPtr<BindGroupDescriptor> descriptor;
     if (IsValidationEnabled()) {
-        DAWN_TRY_CONTEXT(ValidateBindGroupDescriptor(this, descriptor, mode),
-                         "validating %s against %s", descriptor, descriptor->layout);
+        DAWN_TRY_ASSIGN_CONTEXT(descriptor, ValidateBindGroupDescriptor(this, rawDescriptor, mode),
+                                "validating %s against %s", rawDescriptor, rawDescriptor->layout);
+    } else {
+        descriptor = Unpack(rawDescriptor);
     }
     return CreateBindGroupImpl(descriptor);
 }
 
 ResultOrError<Ref<BindGroupLayoutBase>> DeviceBase::CreateBindGroupLayout(
-    const BindGroupLayoutDescriptor* descriptor,
+    const BindGroupLayoutDescriptor* rawDescriptor,
     bool allowInternalBinding) {
     DAWN_TRY(ValidateIsAlive());
+
+    UnpackedPtr<BindGroupLayoutDescriptor> descriptor;
     if (IsValidationEnabled()) {
-        DAWN_TRY_CONTEXT(ValidateBindGroupLayoutDescriptor(this, descriptor, allowInternalBinding),
-                         "validating %s", descriptor);
+        DAWN_TRY_ASSIGN_CONTEXT(
+            descriptor,
+            ValidateBindGroupLayoutDescriptor(this, rawDescriptor, allowInternalBinding),
+            "validating %s", rawDescriptor);
+    } else {
+        descriptor = Unpack(rawDescriptor);
     }
     return GetOrCreateBindGroupLayout(descriptor);
 }
 
 ResultOrError<Ref<BufferBase>> DeviceBase::CreateBuffer(const BufferDescriptor* rawDescriptor) {
     DAWN_TRY(ValidateIsAlive());
+
     UnpackedPtr<BufferDescriptor> descriptor;
     if (IsValidationEnabled()) {
-        DAWN_TRY_ASSIGN(descriptor, ValidateBufferDescriptor(this, rawDescriptor));
+        DAWN_TRY_ASSIGN_CONTEXT(descriptor, ValidateBufferDescriptor(this, rawDescriptor),
+                                "validating %s", rawDescriptor);
     } else {
         descriptor = Unpack(rawDescriptor);
     }
@@ -2175,7 +2220,7 @@ ResultOrError<Ref<ShaderModuleBase>> DeviceBase::CreateShaderModule(
             break;
         }
         case wgpu::SType::ShaderSourceWGSL: {
-            DAWN_INVALID_IF(unpacked.Get<ShaderModuleCompilationOptions>() != nullptr &&
+            DAWN_INVALID_IF(unpacked.Has<ShaderModuleCompilationOptions>() &&
                                 !HasFeature(Feature::ShaderModuleCompilationOptions),
                             "Shader module compilation options used without %s enabled.",
                             wgpu::FeatureName::ShaderModuleCompilationOptions);
@@ -2299,9 +2344,32 @@ ResultOrError<Ref<TextureViewBase>> DeviceBase::CreateTextureView(
     }
 
     return texture->GetOrCreateViewFromCache(
-        descriptor, [&](TextureViewQuery&) -> ResultOrError<Ref<TextureViewBase>> {
+        descriptor, [&](const TextureViewQuery&) -> ResultOrError<Ref<TextureViewBase>> {
             return CreateTextureViewImpl(texture, descriptor);
         });
+}
+
+ResultOrError<Ref<TexelBufferViewBase>> DeviceBase::CreateTexelBufferView(
+    BufferBase* buffer,
+    const TexelBufferViewDescriptor* descriptor) {
+    DAWN_TRY(ValidateIsAlive());
+    DAWN_TRY(ValidateObject(buffer));
+
+    UnpackedPtr<TexelBufferViewDescriptor> unpacked;
+    if (IsValidationEnabled()) {
+        DAWN_TRY_ASSIGN_CONTEXT(unpacked, ValidateTexelBufferViewDescriptor(buffer, descriptor),
+                                "validating %s", descriptor);
+    } else {
+        unpacked = Unpack(descriptor);
+    }
+
+    return CreateTexelBufferViewImpl(buffer, unpacked);
+}
+
+ResultOrError<Ref<TexelBufferViewBase>> DeviceBase::CreateTexelBufferViewImpl(
+    BufferBase* buffer,
+    const UnpackedPtr<TexelBufferViewDescriptor>& descriptor) {
+    return AcquireRef(new TexelBufferViewBase(buffer, descriptor));
 }
 
 // Other implementation details

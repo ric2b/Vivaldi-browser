@@ -121,6 +121,10 @@ config("internal_config") {
     defines += [ "DAWN_ENABLE_ERROR_INJECTION" ]
   }
 
+  if (dawn_force_system_component_load) {
+    defines += [ "DAWN_FORCE_SYSTEM_COMPONENT_LOAD" ]
+  }
+
   # Only internal Dawn targets can use this config, this means only targets in
   # this BUILD.gn file and related subdirs.
   visibility = [
@@ -254,6 +258,7 @@ group("abseil") {
     public_deps = [ "$dawn_abseil_dir:absl" ]
   } else {
     public_deps = [
+      "${dawn_root}/third_party/gn/abseil-cpp:flat_hash_map",
       "${dawn_root}/third_party/gn/abseil-cpp:flat_hash_set",
       "${dawn_root}/third_party/gn/abseil-cpp:inlined_vector",
       "${dawn_root}/third_party/gn/abseil-cpp:no_destructor",
@@ -330,6 +335,7 @@ if (is_win || is_linux || is_chromeos || is_mac || is_fuchsia || is_android ||
       "SystemUtils.h",
       "ThreadLocal.cpp",
       "ThreadLocal.h",
+      "Time.h",
       "TypeTraits.h",
       "TypedInteger.h",
       "UnderlyingType.h",

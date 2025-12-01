@@ -28,16 +28,6 @@ class IdentityTestEnvironmentProfileAdaptor;
 class PrefService;
 class TestSigninClient;
 
-#if BUILDFLAG(IS_CHROMEOS)
-namespace account_manager {
-class AccountManagerFacade;
-}
-
-namespace ash {
-class AccountManagerFactory;
-}
-#endif  // BUILDFLAG(IS_CHROMEOS)
-
 namespace sync_preferences {
 class TestingPrefServiceSyncable;
 }
@@ -416,20 +406,13 @@ class IdentityTestEnvironment : public IdentityManager::DiagnosticsObserver,
   static std::unique_ptr<IdentityManager> BuildIdentityManagerForTests(
       SigninClient* signin_client,
       PrefService* pref_service,
-      base::FilePath user_data_dir
-#if BUILDFLAG(IS_CHROMEOS)
-      ,
-      ash::AccountManagerFactory* account_manager_factory,
-      account_manager::AccountManagerFacade* account_manager_facade
-#endif
-  );
+      base::FilePath user_data_dir);
 
   static std::unique_ptr<IdentityManager> FinishBuildIdentityManagerForTests(
       std::unique_ptr<AccountTrackerService> account_tracker_service,
       std::unique_ptr<ProfileOAuth2TokenService> token_service,
       SigninClient* signin_client,
-      PrefService* pref_service,
-      base::FilePath user_data_dir
+      PrefService* pref_service
 #if BUILDFLAG(IS_CHROMEOS)
       ,
       account_manager::AccountManagerFacade* account_manager_facade

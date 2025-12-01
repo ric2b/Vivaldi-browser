@@ -29,7 +29,9 @@
 #include "quiche/quic/moqt/moqt_priority.h"
 #include "quiche/common/platform/api/quiche_bug_tracker.h"
 #include "quiche/common/platform/api/quiche_export.h"
+#include "quiche/common/platform/api/quiche_logging.h"
 #include "quiche/common/quiche_callbacks.h"
+#include "quiche/common/quiche_data_writer.h"
 #include "quiche/web_transport/web_transport.h"
 
 namespace moqt {
@@ -39,17 +41,18 @@ inline constexpr quic::ParsedQuicVersionVector GetMoqtSupportedQuicVersions() {
 }
 
 enum class MoqtVersion : uint64_t {
-  kDraft12 = 0xff00000c,
+  kDraft14 = 0xff00000e,
   kUnrecognizedVersionForTests = 0xfe0000ff,
 };
 
-inline constexpr MoqtVersion kDefaultMoqtVersion = MoqtVersion::kDraft12;
+inline constexpr MoqtVersion kDefaultMoqtVersion = MoqtVersion::kDraft14;
 inline constexpr uint64_t kDefaultInitialMaxRequestId = 100;
 // TODO(martinduke): Implement an auth token cache.
 inline constexpr uint64_t kDefaultMaxAuthTokenCacheSize = 0;
 inline constexpr uint64_t kMinNamespaceElements = 1;
 inline constexpr uint64_t kMaxNamespaceElements = 32;
 inline constexpr size_t kMaxFullTrackNameSize = 1024;
+inline constexpr uint64_t kMaxObjectId = quiche::kVarInt62MaxValue;
 
 enum AuthTokenType : uint64_t {
   kOutOfBand = 0x0,
@@ -80,16 +83,19 @@ struct QUICHE_EXPORT MoqtSessionParameters {
   MoqtSessionParameters() = default;
   explicit MoqtSessionParameters(quic::Perspective perspective)
       : perspective(perspective), using_webtrans(true) {}
-  MoqtSessionParameters(quic::Perspective perspective, std::string path)
+  MoqtSessionParameters(quic::Perspective perspective, std::string path,
+                        std::string authority)
       : perspective(perspective),
         using_webtrans(false),
-        path(std::move(path)) {}
+        path(std::move(path)),
+        authority(std::move(authority)) {}
   MoqtSessionParameters(quic::Perspective perspective, std::string path,
-                        uint64_t max_request_id)
+                        std::string authority, uint64_t max_request_id)
       : perspective(perspective),
         using_webtrans(true),
         path(std::move(path)),
-        max_request_id(max_request_id) {}
+        max_request_id(max_request_id),
+        authority(std::move(authority)) {}
   MoqtSessionParameters(quic::Perspective perspective, uint64_t max_request_id)
       : perspective(perspective), max_request_id(max_request_id) {}
   bool operator==(const MoqtSessionParameters& other) const = default;
@@ -98,12 +104,14 @@ struct QUICHE_EXPORT MoqtSessionParameters {
   bool deliver_partial_objects = false;
   quic::Perspective perspective = quic::Perspective::IS_SERVER;
   bool using_webtrans = true;
-  std::string path = "";
+  std::string path;
   uint64_t max_request_id = kDefaultInitialMaxRequestId;
   uint64_t max_auth_token_cache_size = kDefaultMaxAuthTokenCacheSize;
   bool support_object_acks = false;
   // TODO(martinduke): Turn authorization_token into structured data.
   std::vector<AuthToken> authorization_token;
+  std::string authority;
+  std::string moqt_implementation = "Google QUICHE MOQT draft 14";
 };
 
 // The maximum length of a message, excluding any OBJECT payload. This prevents
@@ -113,101 +121,128 @@ inline constexpr size_t kMaxMessageHeaderSize = 2048;
 
 class QUICHE_EXPORT MoqtDataStreamType {
  public:
+  static constexpr uint64_t kFetch = 0x05;
+  static constexpr uint64_t kPadding = 0x26d3;
+  static constexpr uint64_t kSubgroupFlag = 0x10;
+  static constexpr uint64_t kExtensionFlag = 0x01;
+  static constexpr uint64_t kEndOfGroupFlag = 0x08;
+  // These two cannot simultaneously be true;
+  static constexpr uint64_t kFirstObjectIdFlag = 0x02;
+  static constexpr uint64_t kSubgroupIdFlag = 0x04;
+
   // Factory functions.
   static std::optional<MoqtDataStreamType> FromValue(uint64_t value) {
-    MoqtDataStreamType stream_type(static_cast<StreamType>(value));
+    MoqtDataStreamType stream_type(value);
     if (stream_type.IsFetch() || stream_type.IsPadding() ||
-        stream_type.IsSubgroup()) {
+        (!((value & kSubgroupIdFlag) && (value & kFirstObjectIdFlag)) &&
+         stream_type.IsSubgroup())) {
       return stream_type;
     }
     return std::nullopt;
   }
-  static MoqtDataStreamType Fetch() {
-    return MoqtDataStreamType(StreamType::kFetch);
-  }
-  static MoqtDataStreamType Padding() {
-    return MoqtDataStreamType(StreamType::kPadding);
-  }
+  static MoqtDataStreamType Fetch() { return MoqtDataStreamType(kFetch); }
+  static MoqtDataStreamType Padding() { return MoqtDataStreamType(kPadding); }
   static MoqtDataStreamType Subgroup(uint64_t subgroup_id,
                                      uint64_t first_object_id,
-                                     bool no_extension_headers) {
+                                     bool no_extension_headers,
+                                     bool end_of_group = false) {
+    uint64_t value = kSubgroupFlag;
+    if (!no_extension_headers) {
+      value |= kExtensionFlag;
+    }
+    if (end_of_group) {
+      value |= kEndOfGroupFlag;
+    }
     if (subgroup_id == 0) {
-      return MoqtDataStreamType(
-          no_extension_headers ? StreamType::kSubgroup0NoExtensionHeaders
-                               : StreamType::kSubgroup0WithExtensionHeaders);
+      return MoqtDataStreamType(value);
     }
     if (subgroup_id == first_object_id) {
-      return MoqtDataStreamType(
-          no_extension_headers
-              ? StreamType::kSubgroupFirstObjectNoExtensionHeaders
-              : StreamType::kSubgroupFirstObjectWithExtensionHeaders);
+      value |= kFirstObjectIdFlag;
+    } else {
+      value |= kSubgroupIdFlag;
     }
-    return MoqtDataStreamType(
-        no_extension_headers
-            ? StreamType::kSubgroupExplicitNoExtensionHeaders
-            : StreamType::kSubgroupExplicitWithExtensionHeaders);
+    return MoqtDataStreamType(value);
   }
   MoqtDataStreamType(const MoqtDataStreamType& other) = default;
-  bool IsFetch() const { return value_ == StreamType::kFetch; }
-  bool IsPadding() const { return value_ == StreamType::kPadding; }
+  bool IsFetch() const { return value_ == kFetch; }
+  bool IsPadding() const { return value_ == kPadding; }
   bool IsSubgroup() const {
-    return value_ >= StreamType::kSubgroup0NoExtensionHeaders &&
-           value_ <= StreamType::kSubgroupExplicitWithExtensionHeaders;
+    QUICHE_CHECK(
+        !((value_ & kSubgroupIdFlag) && (value_ & kFirstObjectIdFlag)));
+    return (value_ & kSubgroupFlag) && (value_ & ~0x1f) == 0;
   }
   bool IsSubgroupPresent() const {
-    return value_ == StreamType::kSubgroupExplicitNoExtensionHeaders ||
-           value_ == StreamType::kSubgroupExplicitWithExtensionHeaders;
+    return IsSubgroup() && (value_ & kSubgroupIdFlag);
   }
   bool SubgroupIsZero() const {
-    return value_ == StreamType::kSubgroup0NoExtensionHeaders ||
-           value_ == StreamType::kSubgroup0WithExtensionHeaders;
+    return IsSubgroup() && !(value_ & kSubgroupIdFlag) &&
+           !(value_ & kFirstObjectIdFlag);
   }
   bool SubgroupIsFirstObjectId() const {
-    return value_ == StreamType::kSubgroupFirstObjectNoExtensionHeaders ||
-           value_ == StreamType::kSubgroupFirstObjectWithExtensionHeaders;
+    return IsSubgroup() && (value_ & kFirstObjectIdFlag);
   }
   bool AreExtensionHeadersPresent() const {
-    return value_ == StreamType::kSubgroup0WithExtensionHeaders ||
-           value_ == StreamType::kSubgroupFirstObjectWithExtensionHeaders ||
-           value_ == StreamType::kSubgroupExplicitWithExtensionHeaders;
+    return IsSubgroup() && (value_ & kExtensionFlag);
   }
-  uint64_t value() const { return static_cast<uint64_t>(value_); }
+  bool EndOfGroupInStream() const {
+    return IsSubgroup() && (value_ & kEndOfGroupFlag);
+  }
+
+  uint64_t value() const { return value_; }
   bool operator==(const MoqtDataStreamType& other) const = default;
-  enum class StreamType : uint64_t {
-    kFetch = 0x05,
-    kSubgroup0NoExtensionHeaders = 0x08,
-    kSubgroup0WithExtensionHeaders = 0x09,
-    kSubgroupFirstObjectNoExtensionHeaders = 0x0a,
-    kSubgroupFirstObjectWithExtensionHeaders = 0x0b,
-    kSubgroupExplicitNoExtensionHeaders = 0x0c,
-    kSubgroupExplicitWithExtensionHeaders = 0x0d,
-    kPadding = 0x26d3,
-  };
 
  private:
-  explicit MoqtDataStreamType(StreamType value) : value_(value) {}
-  const StreamType value_;
+  explicit MoqtDataStreamType(uint64_t value) : value_(value) {}
+  const uint64_t value_;
 };
 
 class QUICHE_EXPORT MoqtDatagramType {
  public:
-  MoqtDatagramType(bool has_status, bool has_extension) : value_(0) {
-    if (has_status) {
+  // The arguments here are properties of the object. The constructor creates
+  // the appropriate type given those properties and the spec restrictions.
+  MoqtDatagramType(bool payload, bool extension, bool end_of_group,
+                   bool zero_object_id)
+      : value_(0) {
+    // Avoid illegal types. Status cannot coexist with the zero-object-id flag
+    // or the end-of-group flag.
+    if (!payload && !end_of_group) {
+      // The only way to express non-normal, non-end-of-group with no payload is
+      // with an explicit status, so we cannot utilize object ID compression.
+      zero_object_id = false;
+    } else if (zero_object_id) {
+      // zero-object-id saves a byte; no-payload does not.
+      payload = true;
+    } else if (!payload) {
+      // If it's an empty end-of-group object, use the explict status because
+      // it's more readable.
+      end_of_group = false;
+    }
+    if (extension) {
+      value_ |= 0x01;
+    }
+    if (end_of_group) {
       value_ |= 0x02;
     }
-    if (has_extension) {
-      value_ |= 0x01;
+    if (zero_object_id) {
+      value_ |= 0x04;
+    }
+    if (!payload) {
+      value_ |= 0x20;
     }
   }
   static std::optional<MoqtDatagramType> FromValue(uint64_t value) {
-    if (value <= 3) {
+    if (value <= 7 || value == 0x20 || value == 0x21) {
       return MoqtDatagramType(value);
     }
     return std::nullopt;
   }
-  bool has_status() const { return value_ & 0x02; }
+  bool has_status() const { return value_ & 0x20; }
+  bool has_object_id() const { return !(value_ & 0x04); }
+  bool end_of_group() const { return value_ & 0x02; }
   bool has_extension() const { return value_ & 0x01; }
   uint64_t value() const { return value_; }
+
+  bool operator==(const MoqtDatagramType& other) const = default;
 
  private:
   uint64_t value_;
@@ -219,20 +254,21 @@ enum class QUICHE_EXPORT MoqtMessageType : uint64_t {
   kSubscribe = 0x03,
   kSubscribeOk = 0x04,
   kSubscribeError = 0x05,
-  kAnnounce = 0x06,
-  kAnnounceOk = 0x7,
-  kAnnounceError = 0x08,
-  kUnannounce = 0x09,
+  kPublishNamespace = 0x06,
+  kPublishNamespaceOk = 0x7,
+  kPublishNamespaceError = 0x08,
+  kPublishNamespaceDone = 0x09,
   kUnsubscribe = 0x0a,
-  kSubscribeDone = 0x0b,
-  kAnnounceCancel = 0x0c,
-  kTrackStatusRequest = 0x0d,
-  kTrackStatus = 0x0e,
+  kPublishDone = 0x0b,
+  kPublishNamespaceCancel = 0x0c,
+  kTrackStatus = 0x0d,
+  kTrackStatusOk = 0x0e,
+  kTrackStatusError = 0x0f,
   kGoAway = 0x10,
-  kSubscribeAnnounces = 0x11,
-  kSubscribeAnnouncesOk = 0x12,
-  kSubscribeAnnouncesError = 0x13,
-  kUnsubscribeAnnounces = 0x14,
+  kSubscribeNamespace = 0x11,
+  kSubscribeNamespaceOk = 0x12,
+  kSubscribeNamespaceError = 0x13,
+  kUnsubscribeNamespace = 0x14,
   kMaxRequestId = 0x15,
   kFetch = 0x16,
   kFetchCancel = 0x17,
@@ -269,6 +305,11 @@ enum class QUICHE_EXPORT MoqtError : uint64_t {
   kAuthTokenCacheOverflow = 0x13,
   kDuplicateAuthTokenAlias = 0x14,
   kVersionNegotiationFailed = 0x15,
+  kMalformedAuthToken = 0x16,
+  kUnknownAuthTokenAlias = 0x17,
+  kExpiredAuthToken = 0x18,
+  kInvalidAuthority = 0x19,
+  kMalformedAuthority = 0x1a,
 };
 
 // Error codes used by MoQT to reset streams.
@@ -285,6 +326,8 @@ enum class QUICHE_EXPORT SetupParameter : uint64_t {
   kMaxRequestId = 0x2,
   kAuthorizationToken = 0x3,
   kMaxAuthTokenCacheSize = 0x4,
+  kAuthority = 0x5,
+  kMoqtImplementation = 0x7,
 
   // QUICHE-specific extensions.
   // Indicates support for OACK messages.
@@ -309,7 +352,7 @@ struct VersionSpecificParameters {
         max_cache_duration(max_cache_duration) {}
   VersionSpecificParameters(AuthTokenType token_type, absl::string_view token) {
     authorization_token.emplace_back(token_type, token);
-  };
+  }
   VersionSpecificParameters(quic::QuicTimeDelta delivery_timeout,
                             AuthTokenType token_type, absl::string_view token)
       : delivery_timeout(delivery_timeout) {
@@ -325,29 +368,34 @@ struct VersionSpecificParameters {
   bool operator==(const VersionSpecificParameters& other) const = default;
 };
 
-// Used for SUBSCRIBE_ERROR, ANNOUNCE_ERROR, ANNOUNCE_CANCEL,
-// SUBSCRIBE_ANNOUNCES_ERROR, and FETCH_ERROR.
+// Used for SUBSCRIBE_ERROR, PUBLISH_NAMESPACE_ERROR, PUBLISH_NAMESPACE_CANCEL,
+// SUBSCRIBE_NAMESPACE_ERROR, and FETCH_ERROR.
 enum class QUICHE_EXPORT RequestErrorCode : uint64_t {
   kInternalError = 0x0,
   kUnauthorized = 0x1,
   kTimeout = 0x2,
   kNotSupported = 0x3,
-  kTrackDoesNotExist = 0x4,          // SUBSCRIBE_ERROR and FETCH_ERROR only.
-  kUninterested = 0x4,               // ANNOUNCE_ERROR and ANNOUNCE_CANCEL only.
-  kNamespacePrefixUnknown = 0x4,     // SUBSCRIBE_ANNOUNCES_ERROR only.
-  kInvalidRange = 0x5,               // SUBSCRIBE_ERROR and FETCH_ERROR only.
-  kNamespacePrefixOverlap = 0x5,     // SUBSCRIBE_ANNOUNCES_ERROR only.
-  kNoObjects = 0x6,                  // FETCH_ERROR only.
-  kInvalidJoiningSubscribeId = 0x7,  // FETCH_ERROR only.
+  kTrackDoesNotExist = 0x4,  // SUBSCRIBE_ERROR and FETCH_ERROR only.
+  kUninterested =
+      0x4,  // PUBLISH_NAMESPACE_ERROR and PUBLISH_NAMESPACE_CANCEL only.
+  kNamespacePrefixUnknown = 0x4,   // SUBSCRIBE_NAMESPACE_ERROR only.
+  kInvalidRange = 0x5,             // SUBSCRIBE_ERROR and FETCH_ERROR only.
+  kNamespacePrefixOverlap = 0x5,   // SUBSCRIBE_NAMESPACE_ERROR only.
+  kNoObjects = 0x6,                // FETCH_ERROR only.
+  kInvalidJoiningRequestId = 0x7,  // FETCH_ERROR only.
+  kUnknownStatusInRange = 0x8,     // FETCH_ERROR only.
+  kMalformedTrack = 0x9,
   kMalformedAuthToken = 0x10,
   kExpiredAuthToken = 0x12,
 };
 
-struct MoqtSubscribeErrorReason {
+struct MoqtRequestError {
   RequestErrorCode error_code;
   std::string reason_phrase;
 };
-using MoqtAnnounceErrorReason = MoqtSubscribeErrorReason;
+// TODO(martinduke): These are deprecated. Replace them in the code.
+using MoqtSubscribeErrorReason = MoqtRequestError;
+using MoqtPublishNamespaceErrorReason = MoqtSubscribeErrorReason;
 
 class TrackNamespace {
  public:
@@ -462,7 +510,15 @@ struct Location {
   // https://moq-wg.github.io/moq-transport/draft-ietf-moq-transport.html#location-structure
   auto operator<=>(const Location&) const = default;
 
-  Location next() const { return Location(group, object + 1); }
+  Location Next() const {
+    if (object == kMaxObjectId) {
+      if (group == kMaxObjectId) {
+        return Location(0, 0);
+      }
+      return Location(group + 1, 0);
+    }
+    return Location(group, object + 1);
+  }
 
   template <typename H>
   friend H AbslHashValue(H h, const Location& m);
@@ -648,7 +704,7 @@ struct QUICHE_EXPORT MoqtUnsubscribe {
   uint64_t request_id;
 };
 
-enum class QUICHE_EXPORT SubscribeDoneCode : uint64_t {
+enum class QUICHE_EXPORT PublishDoneCode : uint64_t {
   kInternalError = 0x0,
   kUnauthorized = 0x1,
   kTrackEnded = 0x2,
@@ -659,9 +715,9 @@ enum class QUICHE_EXPORT SubscribeDoneCode : uint64_t {
   kMalformedTrack = 0x7,
 };
 
-struct QUICHE_EXPORT MoqtSubscribeDone {
+struct QUICHE_EXPORT MoqtPublishDone {
   uint64_t request_id;
-  SubscribeDoneCode status_code;
+  PublishDoneCode status_code;
   uint64_t stream_count;
   std::string error_reason;
 };
@@ -675,87 +731,70 @@ struct QUICHE_EXPORT MoqtSubscribeUpdate {
   VersionSpecificParameters parameters;
 };
 
-struct QUICHE_EXPORT MoqtAnnounce {
+struct QUICHE_EXPORT MoqtPublishNamespace {
   uint64_t request_id;
   TrackNamespace track_namespace;
   VersionSpecificParameters parameters;
 };
 
-struct QUICHE_EXPORT MoqtAnnounceOk {
+struct QUICHE_EXPORT MoqtPublishNamespaceOk {
   uint64_t request_id;
 };
 
-struct QUICHE_EXPORT MoqtAnnounceError {
+struct QUICHE_EXPORT MoqtPublishNamespaceError {
   uint64_t request_id;
   RequestErrorCode error_code;
   std::string error_reason;
 };
 
-struct QUICHE_EXPORT MoqtUnannounce {
+struct QUICHE_EXPORT MoqtPublishNamespaceDone {
   TrackNamespace track_namespace;
 };
 
-struct QUICHE_EXPORT MoqtAnnounceCancel {
+struct QUICHE_EXPORT MoqtPublishNamespaceCancel {
   TrackNamespace track_namespace;
   RequestErrorCode error_code;
   std::string error_reason;
 };
 
-enum class QUICHE_EXPORT MoqtTrackStatusCode : uint64_t {
-  kInProgress = 0x0,
-  kDoesNotExist = 0x1,
-  kNotYetBegun = 0x2,
-  kFinished = 0x3,
-  kStatusNotAvailable = 0x4,
+struct QUICHE_EXPORT MoqtTrackStatus : public MoqtSubscribe {
+  MoqtTrackStatus() = default;
+  MoqtTrackStatus(MoqtSubscribe subscribe) : MoqtSubscribe(subscribe) {}
 };
 
-inline bool DoesTrackStatusImplyHavingData(MoqtTrackStatusCode code) {
-  switch (code) {
-    case MoqtTrackStatusCode::kInProgress:
-    case MoqtTrackStatusCode::kFinished:
-      return true;
-    case MoqtTrackStatusCode::kDoesNotExist:
-    case MoqtTrackStatusCode::kNotYetBegun:
-    case MoqtTrackStatusCode::kStatusNotAvailable:
-      return false;
-  }
-  return false;
-}
-
-struct QUICHE_EXPORT MoqtTrackStatusRequest {
-  uint64_t request_id;
-  FullTrackName full_track_name;
-  VersionSpecificParameters parameters;
+struct QUICHE_EXPORT MoqtTrackStatusOk : public MoqtSubscribeOk {
+  MoqtTrackStatusOk() = default;
+  MoqtTrackStatusOk(MoqtSubscribeOk subscribe_ok)
+      : MoqtSubscribeOk(subscribe_ok) {}
 };
 
-struct QUICHE_EXPORT MoqtTrackStatus {
-  uint64_t request_id;
-  MoqtTrackStatusCode status_code;
-  Location largest_location;
-  VersionSpecificParameters parameters;
+struct QUICHE_EXPORT MoqtTrackStatusError : public MoqtSubscribeError {
+  MoqtTrackStatusError() = default;
+  MoqtTrackStatusError(MoqtSubscribeError subscribe_error)
+      : MoqtSubscribeError(subscribe_error) {}
 };
 
 struct QUICHE_EXPORT MoqtGoAway {
   std::string new_session_uri;
 };
 
-struct QUICHE_EXPORT MoqtSubscribeAnnounces {
+struct QUICHE_EXPORT MoqtSubscribeNamespace {
   uint64_t request_id;
   TrackNamespace track_namespace;
   VersionSpecificParameters parameters;
 };
 
-struct QUICHE_EXPORT MoqtSubscribeAnnouncesOk {
+struct QUICHE_EXPORT MoqtSubscribeNamespaceOk {
   uint64_t request_id;
 };
 
-struct QUICHE_EXPORT MoqtSubscribeAnnouncesError {
+struct QUICHE_EXPORT MoqtSubscribeNamespaceError {
   uint64_t request_id;
   RequestErrorCode error_code;
   std::string error_reason;
 };
 
-struct QUICHE_EXPORT MoqtUnsubscribeAnnounces {
+struct QUICHE_EXPORT MoqtUnsubscribeNamespace {
   TrackNamespace track_namespace;
 };
 
@@ -771,20 +810,18 @@ enum class QUICHE_EXPORT FetchType : uint64_t {
 
 struct StandaloneFetch {
   StandaloneFetch() = default;
-  StandaloneFetch(FullTrackName full_track_name, Location start_object,
-                  uint64_t end_group, std::optional<uint64_t> end_object)
+  StandaloneFetch(FullTrackName full_track_name, Location start_location,
+                  Location end_location)
       : full_track_name(full_track_name),
-        start_object(start_object),
-        end_group(end_group),
-        end_object(end_object) {}
+        start_location(start_location),
+        end_location(end_location) {}
   FullTrackName full_track_name;
-  Location start_object;  // subgroup is ignored
-  uint64_t end_group;
-  std::optional<uint64_t> end_object;
+  Location start_location;
+  Location end_location;
   bool operator==(const StandaloneFetch& other) const {
     return full_track_name == other.full_track_name &&
-           start_object == other.start_object && end_group == other.end_group &&
-           end_object == other.end_object;
+           start_location == other.start_location &&
+           end_location == other.end_location;
   }
   bool operator!=(const StandaloneFetch& other) const {
     return !(*this == other);
@@ -792,13 +829,12 @@ struct StandaloneFetch {
 };
 
 struct JoiningFetchRelative {
-  JoiningFetchRelative(uint64_t joining_subscribe_id, uint64_t joining_start)
-      : joining_subscribe_id(joining_subscribe_id),
-        joining_start(joining_start) {}
-  uint64_t joining_subscribe_id;
+  JoiningFetchRelative(uint64_t joining_request_id, uint64_t joining_start)
+      : joining_request_id(joining_request_id), joining_start(joining_start) {}
+  uint64_t joining_request_id;
   uint64_t joining_start;
   bool operator==(const JoiningFetchRelative& other) const {
-    return joining_subscribe_id == other.joining_subscribe_id &&
+    return joining_request_id == other.joining_request_id &&
            joining_start == other.joining_start;
   }
   bool operator!=(const JoiningFetchRelative& other) const {
@@ -807,13 +843,12 @@ struct JoiningFetchRelative {
 };
 
 struct JoiningFetchAbsolute {
-  JoiningFetchAbsolute(uint64_t joining_subscribe_id, uint64_t joining_start)
-      : joining_subscribe_id(joining_subscribe_id),
-        joining_start(joining_start) {}
-  uint64_t joining_subscribe_id;
+  JoiningFetchAbsolute(uint64_t joining_request_id, uint64_t joining_start)
+      : joining_request_id(joining_request_id), joining_start(joining_start) {}
+  uint64_t joining_request_id;
   uint64_t joining_start;
   bool operator==(const JoiningFetchAbsolute& other) const {
-    return joining_subscribe_id == other.joining_subscribe_id &&
+    return joining_request_id == other.joining_request_id &&
            joining_start == other.joining_start;
   }
   bool operator!=(const JoiningFetchAbsolute& other) const {

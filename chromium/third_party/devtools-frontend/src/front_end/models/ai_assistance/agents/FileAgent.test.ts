@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,15 +38,7 @@ describeWithMockConnection('FileAgent', () => {
     });
   });
 
-  afterEach(() => {
-    sinon.restore();
-  });
-
   describe('buildRequest', () => {
-    beforeEach(() => {
-      sinon.restore();
-    });
-
     it('builds a request with a model id', async () => {
       mockHostConfig('test model');
       const agent = new FileAgent({

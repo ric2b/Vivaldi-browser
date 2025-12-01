@@ -74,6 +74,7 @@ class MailClientService : public KeyedService {
   typedef base::OnceCallback<void(MailSearchCB)> EmailSearchCallback;
 
   typedef base::OnceCallback<void(bool)> ResultCallback;
+  typedef base::OnceCallback<void(int)> CountCallback;
   typedef base::OnceCallback<void(Migration)> VersionCallback;
 
   base::CancelableTaskTracker::TaskId CreateMessages(
@@ -116,6 +117,10 @@ class MailClientService : public KeyedService {
 
   base::CancelableTaskTracker::TaskId CheckDBHealth(
       StatusCallback callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId CountMailSearchMessages(
+      CountCallback callback,
       base::CancelableTaskTracker* tracker);
 
  private:

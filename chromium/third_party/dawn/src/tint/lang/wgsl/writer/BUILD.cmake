@@ -35,9 +35,9 @@
 ################################################################################
 
 include(lang/wgsl/writer/ast_printer/BUILD.cmake)
+include(lang/wgsl/writer/common/BUILD.cmake)
 include(lang/wgsl/writer/ir_to_program/BUILD.cmake)
 include(lang/wgsl/writer/raise/BUILD.cmake)
-include(lang/wgsl/writer/syntax_tree_printer/BUILD.cmake)
 
 if(TINT_BUILD_WGSL_WRITER)
 ################################################################################
@@ -46,8 +46,6 @@ if(TINT_BUILD_WGSL_WRITER)
 # Condition: TINT_BUILD_WGSL_WRITER
 ################################################################################
 tint_add_target(tint_lang_wgsl_writer lib
-  lang/wgsl/writer/options.cc
-  lang/wgsl/writer/options.h
   lang/wgsl/writer/output.cc
   lang/wgsl/writer/output.h
   lang/wgsl/writer/writer.cc
@@ -64,9 +62,9 @@ tint_target_add_dependencies(tint_lang_wgsl_writer lib
   tint_lang_wgsl_ast
   tint_lang_wgsl_program
   tint_lang_wgsl_sem
+  tint_lang_wgsl_writer_common
   tint_lang_wgsl_writer_ir_to_program
   tint_lang_wgsl_writer_raise
-  tint_lang_wgsl_writer_syntax_tree_printer
   tint_utils
   tint_utils_containers
   tint_utils_diagnostic
@@ -98,7 +96,6 @@ if(TINT_BUILD_WGSL_WRITER)
 # Condition: TINT_BUILD_WGSL_WRITER
 ################################################################################
 tint_add_target(tint_lang_wgsl_writer_test test
-  lang/wgsl/writer/options_test.cc
   lang/wgsl/writer/writer_test.cc
 )
 
@@ -114,6 +111,7 @@ tint_target_add_dependencies(tint_lang_wgsl_writer_test test
   tint_lang_wgsl_ast
   tint_lang_wgsl_program
   tint_lang_wgsl_sem
+  tint_lang_wgsl_writer_common
   tint_lang_wgsl_writer_ir_to_program
   tint_lang_wgsl_writer_raise
   tint_utils
@@ -158,7 +156,7 @@ tint_target_add_dependencies(tint_lang_wgsl_writer_fuzz fuzz
   tint_lang_wgsl_ast
   tint_lang_wgsl_program
   tint_lang_wgsl_sem
-  tint_lang_wgsl_writer_ir_to_program
+  tint_lang_wgsl_writer_common
   tint_utils
   tint_utils_bytes
   tint_utils_containers

@@ -10,23 +10,12 @@
 
 #include "src/heap/memory-chunk-inl.h"
 
-namespace v8 {
-namespace internal {
-
-// static
-MemoryChunkMetadata* MemoryChunkMetadata::FromAddress(Address a) {
-  return MemoryChunk::FromAddress(a)->Metadata();
-}
+namespace v8::internal {
 
 // static
 MemoryChunkMetadata* MemoryChunkMetadata::FromAddress(const Isolate* i,
                                                       Address a) {
   return MemoryChunk::FromAddress(a)->Metadata(i);
-}
-
-// static
-MemoryChunkMetadata* MemoryChunkMetadata::FromHeapObject(Tagged<HeapObject> o) {
-  return FromAddress(o.ptr());
 }
 
 // static
@@ -36,19 +25,16 @@ MemoryChunkMetadata* MemoryChunkMetadata::FromHeapObject(const Isolate* i,
 }
 
 // static
-MemoryChunkMetadata* MemoryChunkMetadata::FromHeapObject(
-    const HeapObjectLayout* o) {
-  return FromAddress(reinterpret_cast<Address>(o));
-}
-
-// static
 void MemoryChunkMetadata::UpdateHighWaterMark(Address mark) {
-  if (mark == kNullAddress) return;
+  if (mark == kNullAddress) {
+    return;
+  }
   // Need to subtract one from the mark because when a chunk is full the
   // top points to the next address after the chunk, which effectively belongs
   // to another chunk. See the comment to
   // PageMetadata::FromAllocationAreaAddress.
-  MemoryChunkMetadata* chunk = MemoryChunkMetadata::FromAddress(mark - 1);
+  MemoryChunkMetadata* chunk =
+      MemoryChunkMetadata::FromAddress(Isolate::Current(), mark - 1);
   intptr_t new_mark = static_cast<intptr_t>(mark - chunk->ChunkAddress());
   intptr_t old_mark = chunk->high_water_mark_.load(std::memory_order_relaxed);
   while ((new_mark > old_mark) &&
@@ -57,7 +43,6 @@ void MemoryChunkMetadata::UpdateHighWaterMark(Address mark) {
   }
 }
 
-}  // namespace internal
-}  // namespace v8
+}  // namespace v8::internal
 
 #endif  // V8_HEAP_MEMORY_CHUNK_METADATA_INL_H_

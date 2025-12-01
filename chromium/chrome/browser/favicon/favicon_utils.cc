@@ -137,14 +137,9 @@ gfx::Image TabFaviconFromWebContents(content::WebContents* contents) {
 }
 
 gfx::Image GetDefaultFavicon() {
-  bool is_dark = false;
-#if !BUILDFLAG(IS_ANDROID)
-  // Android doesn't currently implement NativeTheme::GetInstanceForNativeUi.
-  const ui::NativeTheme* native_theme =
-      ui::NativeTheme::GetInstanceForNativeUi();
-  is_dark = native_theme && native_theme->ShouldUseDarkColors();
-#endif
-  return GetDefaultFaviconForColorScheme(is_dark);
+  return GetDefaultFaviconForColorScheme(
+      ui::NativeTheme::GetInstanceForNativeUi()->preferred_color_scheme() ==
+      ui::NativeTheme::PreferredColorScheme::kDark);
 }
 
 ui::ImageModel GetDefaultFaviconModel(ui::ColorId bg_color) {

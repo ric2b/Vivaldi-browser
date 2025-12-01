@@ -77,7 +77,6 @@ Touch to Search je funkce, která je dostupná pouze v případě, že je Google
 <translation id="5375131951310889874">Získejte informace o tématech na webových stránkách, aniž byste opustili stránku. Touch to Search je funkce, která je dostupná pouze v případě, že je Google nastaven jako výchozí vyhledávač ve Vivaldi. Odešle slovo a jeho okolní kontext do Vyhledávání Google a vrátí definice, obrázky, výsledky vyhledávání a další podrobnosti.
 
 Chcete-li upravit hledaný výraz, vyberte jej dlouhým stisknutím. Chcete-li vyhledávání upřesnit, posuňte panel úplně nahoru a klepněte na vyhledávací pole.</translation>
-<translation id="543338862236136125">Upravit heslo</translation>
 <translation id="572328651809341494">Nedávno použité listy</translation>
 <translation id="5833984609253377421">Sdílet odkaz</translation>
 <translation id="6150320133806434356">Záložka uložena</translation>
@@ -86,11 +85,11 @@ Chcete-li upravit hledaný výraz, vyberte jej dlouhým stisknutím. Chcete-li v
 <translation id="6337323516034698937">Pro odeslání tohoto listu do dalšího zařízení se přihlaste k Vivaldi synchronizaci na obou zařízeních. Zadejte také svůj šifrovací klíč, pokud je třeba.</translation>
 <translation id="6341580099087024258">Ptát se, kam ukládat soubory</translation>
 <translation id="6404511346730675251">Upravit záložku</translation>
-<translation id="650224091954855786">{FILE_COUNT,plural,
-          =1{Byl stažen jeden soubor}
-          few{Byly staženy # soubory}
-          many{Bylo staženo # souborů}
-          other{Bylo staženo # souborů}}</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+          =1 {Byl stažen jeden soubor}
+          few {Byly staženy # soubory}
+          many {Bylo staženo # souborů}
+          other {Bylo staženo # souborů}}</translation>
 <translation id="6585139692466700358">Navrhovat překlad stránek v jiných jazycích pomocí překladatelské služby Vivaldi</translation>
 <translation id="6588043302623806746">Používat zabezpečené DNS</translation>
 <translation id="6593061639179217415">Stránky pro počítač</translation>

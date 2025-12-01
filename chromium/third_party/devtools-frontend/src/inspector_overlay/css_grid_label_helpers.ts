@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -375,10 +375,10 @@ export function normalizePositionData(config: NormalizePositionDataConfig, bound
 /**
  * Places the grid row and column number labels on the overlay.
  *
- * @param container - Where to append the labels
- * @param data - The grid line number data
- * @param writingModeMatrix - The transformation matrix in case a vertical writing-mode is applied, to map label positions
- * @param writingMode - The current writing-mode value
+ * @param container Where to append the labels
+ * @param data The grid line number data
+ * @param writingModeMatrix The transformation matrix in case a vertical writing-mode is applied, to map label positions
+ * @param writingMode The current writing-mode value
  */
 export function drawGridLineNumbers(
     container: HTMLElement, data: GridPositionNormalizedData, canvasSize: CanvasSize, emulationScaleFactor: number,

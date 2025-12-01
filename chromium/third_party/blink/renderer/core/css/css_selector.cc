@@ -339,6 +339,8 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
       return kPseudoIdAfter;
     case kPseudoPickerIcon:
       return kPseudoIdPickerIcon;
+    case kPseudoInterestHint:
+      return kPseudoIdInterestHint;
     case kPseudoMarker:
       return kPseudoIdMarker;
     case kPseudoBackdrop:
@@ -436,7 +438,6 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoFullscreen:
     case kPseudoFutureCue:
     case kPseudoHas:
-    case kPseudoHasInterest:
     case kPseudoHasSlotted:
     case kPseudoHasDatalist:
     case kPseudoHorizontal:
@@ -447,6 +448,8 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoInRange:
     case kPseudoIncrement:
     case kPseudoIndeterminate:
+    case kPseudoInterestSource:
+    case kPseudoInterestTarget:
     case kPseudoInvalid:
     case kPseudoIs:
     case kPseudoIsHtml:
@@ -497,7 +500,8 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoState:
     case kPseudoTarget:
     case kPseudoTargetCurrent:
-    case kPseudoTargetOfInterest:
+    case kPseudoTargetBefore:
+    case kPseudoTargetAfter:
     case kPseudoUnknown:
     case kPseudoUnparsed:
     case kPseudoUserInvalid:
@@ -622,7 +626,6 @@ constexpr static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"future", CSSSelector::kPseudoFutureCue},
     {"grammar-error", CSSSelector::kPseudoGrammarError},
     {"granted", CSSSelector::kPseudoPermissionGranted},
-    {"has-interest", CSSSelector::kPseudoHasInterest},
     {"has-slotted", CSSSelector::kPseudoHasSlotted},
     {"horizontal", CSSSelector::kPseudoHorizontal},
     {"host", CSSSelector::kPseudoHost},
@@ -630,6 +633,9 @@ constexpr static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"in-range", CSSSelector::kPseudoInRange},
     {"increment", CSSSelector::kPseudoIncrement},
     {"indeterminate", CSSSelector::kPseudoIndeterminate},
+    {"interest-hint", CSSSelector::kPseudoInterestHint},
+    {"interest-source", CSSSelector::kPseudoInterestSource},
+    {"interest-target", CSSSelector::kPseudoInterestTarget},
     {"invalid", CSSSelector::kPseudoInvalid},
     {"invalid-style", CSSSelector::kPseudoPermissionElementInvalidStyle},
     {"last-child", CSSSelector::kPseudoLastChild},
@@ -669,8 +675,9 @@ constexpr static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"spelling-error", CSSSelector::kPseudoSpellingError},
     {"start", CSSSelector::kPseudoStart},
     {"target", CSSSelector::kPseudoTarget},
+    {"target-after", CSSSelector::kPseudoTargetAfter},
+    {"target-before", CSSSelector::kPseudoTargetBefore},
     {"target-current", CSSSelector::kPseudoTargetCurrent},
-    {"target-of-interest", CSSSelector::kPseudoTargetOfInterest},
     {"target-text", CSSSelector::kPseudoTargetText},
     {"user-invalid", CSSSelector::kPseudoUserInvalid},
     {"user-valid", CSSSelector::kPseudoUserValid},
@@ -781,6 +788,12 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
     return CSSSelector::kPseudoUnknown;
   }
 
+  if ((match->type == CSSSelector::kPseudoTargetBefore ||
+       match->type == CSSSelector::kPseudoTargetAfter) &&
+      !RuntimeEnabledFeatures::CSSScrollMarkerTargetBeforeAfterEnabled()) {
+    return CSSSelector::kPseudoUnknown;
+  }
+
   if ((match->type == CSSSelector::kPseudoScrollMarker ||
        match->type == CSSSelector::kPseudoScrollMarkerGroup) &&
       !RuntimeEnabledFeatures::CSSPseudoScrollMarkersEnabled()) {
@@ -797,21 +810,15 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
     return CSSSelector::kPseudoUnknown;
   }
 
-  if (match->type == CSSSelector::kPseudoPicker &&
-      !HTMLSelectElement::CustomizableSelectEnabled(document)) {
-    return CSSSelector::kPseudoUnknown;
-  }
-
   if ((match->type == CSSSelector::kPseudoSearchText ||
        match->type == CSSSelector::kPseudoCurrent) &&
       !RuntimeEnabledFeatures::SearchTextHighlightPseudoEnabled()) {
     return CSSSelector::kPseudoUnknown;
   }
 
-  if ((match->type == CSSSelector::kPseudoHasInterest ||
-       match->type == CSSSelector::kPseudoTargetOfInterest) &&
-      !RuntimeEnabledFeatures::HTMLInterestForAttributeEnabled(
-          document ? document->GetExecutionContext() : nullptr)) {
+  if ((match->type == CSSSelector::kPseudoInterestSource ||
+       match->type == CSSSelector::kPseudoInterestTarget) &&
+      !RuntimeEnabledFeatures::HTMLInterestForAttributeEnabled()) {
     return CSSSelector::kPseudoUnknown;
   }
 
@@ -895,6 +902,7 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
       [[fallthrough]];
     // For pseudo-elements
     case kPseudoPickerIcon:
+    case kPseudoInterestHint:
     case kPseudoCheckMark:
     case kPseudoBackdrop:
     case kPseudoCue:
@@ -990,7 +998,6 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoFullscreen:
     case kPseudoFutureCue:
     case kPseudoHas:
-    case kPseudoHasInterest:
     case kPseudoHasSlotted:
     case kPseudoHorizontal:
     case kPseudoHost:
@@ -999,6 +1006,8 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoInRange:
     case kPseudoIncrement:
     case kPseudoIndeterminate:
+    case kPseudoInterestSource:
+    case kPseudoInterestTarget:
     case kPseudoInvalid:
     case kPseudoIs:
     case kPseudoLang:
@@ -1041,7 +1050,8 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoState:
     case kPseudoTarget:
     case kPseudoTargetCurrent:
-    case kPseudoTargetOfInterest:
+    case kPseudoTargetBefore:
+    case kPseudoTargetAfter:
     case kPseudoUnknown:
     case kPseudoUnparsed:
     case kPseudoUserInvalid:
@@ -1144,10 +1154,15 @@ String CSSSelector::SelectorTextExpandingPseudoReferences(
 }
 
 template <bool expand_pseudo_references>
-bool CSSSelector::SerializeSimpleSelector(StringBuilder& builder,
+void CSSSelector::SerializeSimpleSelector(StringBuilder& builder,
                                           uintptr_t scope_id) const {
   bool suppress_selector_list = false;
-  if (Match() == kId) {
+  if ((Match() == kTag || Match() == kUniversalTag) && !IsImplicit()) {
+    SerializeNamespacePrefixIfNeeded(TagQName().Prefix(), g_star_atom, builder,
+                                     IsAttributeSelector());
+    SerializeIdentifierOrAny(TagQName().LocalName(), UniversalSelectorAtom(),
+                             builder);
+  } else if (Match() == kId) {
     builder.Append('#');
     SerializeIdentifier(SerializingValue(), builder);
   } else if (Match() == kClass) {
@@ -1361,25 +1376,15 @@ bool CSSSelector::SerializeSimpleSelector(StringBuilder& builder,
                                                     scope_id);
     builder.Append(')');
   }
-  return true;
 }
 
 template <bool expand_pseudo_references>
 const CSSSelector* CSSSelector::SerializeCompound(StringBuilder& builder,
                                                   uintptr_t scope_id) const {
-  if ((Match() == kTag || Match() == kUniversalTag) && !IsImplicit()) {
-    SerializeNamespacePrefixIfNeeded(TagQName().Prefix(), g_star_atom, builder,
-                                     IsAttributeSelector());
-    SerializeIdentifierOrAny(TagQName().LocalName(), UniversalSelectorAtom(),
-                             builder);
-  }
-
   for (const CSSSelector* simple_selector = this; simple_selector;
        simple_selector = simple_selector->NextSimpleSelector()) {
-    if (!simple_selector->SerializeSimpleSelector<expand_pseudo_references>(
-            builder, scope_id)) {
-      return nullptr;
-    }
+    simple_selector->SerializeSimpleSelector<expand_pseudo_references>(
+        builder, scope_id);
     if (simple_selector->Relation() != kSubSelector) {
       return simple_selector;
     }
@@ -1430,6 +1435,7 @@ String CSSSelector::SelectorTextInternal(uintptr_t scope_id) const {
         result = StrCat({" ~ ", builder.ReleaseString(), result});
         break;
       case kSubSelector:
+      case kPseudoChild:
       case kShadowPart:
       case kUAShadow:
       case kShadowSlot:
@@ -1450,15 +1456,8 @@ String CSSSelector::SelectorTextInternal(uintptr_t scope_id) const {
 
 String CSSSelector::SimpleSelectorTextForDebug() const {
   StringBuilder builder;
-  if ((Match() == kTag || Match() == kUniversalTag) && !IsImplicit()) {
-    SerializeNamespacePrefixIfNeeded(TagQName().Prefix(), g_star_atom, builder,
-                                     IsAttributeSelector());
-    SerializeIdentifierOrAny(TagQName().LocalName(), UniversalSelectorAtom(),
-                             builder);
-  } else {
-    // `scope_id` is ignored when `expand_pseudo_references` is false.
-    SerializeSimpleSelector<!kExpandPseudoReferences>(builder, /*scope_id=*/0);
-  }
+  // `scope_id` is ignored when `expand_pseudo_references` is false.
+  SerializeSimpleSelector<!kExpandPseudoReferences>(builder, /*scope_id=*/0);
   return builder.ToString();
 }
 
@@ -1649,6 +1648,7 @@ bool CSSSelector::IsTreeAbidingPseudoElement() const {
          (GetPseudoType() == kPseudoCheckMark ||
           GetPseudoType() == kPseudoBefore || GetPseudoType() == kPseudoAfter ||
           GetPseudoType() == kPseudoPickerIcon ||
+          GetPseudoType() == kPseudoInterestHint ||
           GetPseudoType() == kPseudoMarker ||
           GetPseudoType() == kPseudoPlaceholder ||
           GetPseudoType() == kPseudoFileSelectorButton ||
@@ -1687,6 +1687,7 @@ bool CSSSelector::IsAllowedAfterPart() const {
     case kPseudoBefore:
     case kPseudoAfter:
     case kPseudoPickerIcon:
+    case kPseudoInterestHint:
     case kPseudoPlaceholder:
     case kPseudoFileSelectorButton:
     case kPseudoFirstLine:
@@ -1756,10 +1757,11 @@ bool CSSSelector::IsAllowedAfterPart() const {
     case kPseudoFocusVisible:
     case kPseudoFocusWithin:
     case kPseudoFullPageMedia:
-    case kPseudoHasInterest:
     case kPseudoHasSlotted:
     case kPseudoHover:
     case kPseudoIndeterminate:
+    case kPseudoInterestSource:
+    case kPseudoInterestTarget:
     case kPseudoInvalid:
     case kPseudoLang:
     case kPseudoLink:
@@ -1775,7 +1777,6 @@ bool CSSSelector::IsAllowedAfterPart() const {
     case kPseudoSelectorFragmentAnchor:
     case kPseudoState:
     case kPseudoTarget:
-    case kPseudoTargetOfInterest:
     case kPseudoUserInvalid:
     case kPseudoUserValid:
     case kPseudoValid:
@@ -1805,6 +1806,8 @@ bool CSSSelector::IsAllowedAfterPart() const {
     case kPseudoRelativeAnchor:
     case kPseudoSpatialNavigationFocus:
     case kPseudoTargetCurrent:
+    case kPseudoTargetBefore:
+    case kPseudoTargetAfter:
     case kPseudoVideoPersistent:
     case kPseudoVideoPersistentAncestor:
       return true;
@@ -1924,14 +1927,6 @@ static bool ForAnyInComplexSelector(const Functor& functor,
   return false;
 }
 
-bool CSSSelector::FollowsSlotted() const {
-  const CSSSelector* previous = NextSimpleSelector();
-  if (!previous) {
-    return false;
-  }
-  return previous->GetPseudoType() == kPseudoSlotted;
-}
-
 bool CSSSelector::CrossesTreeScopes() const {
   for (const CSSSelector* s = this; s; s = s->NextSimpleSelector()) {
     switch (s->Relation()) {
@@ -2029,9 +2024,9 @@ void CSSSelector::SetIdentList(
 }
 
 void CSSSelector::Trace(Visitor* visitor) const {
-  if (Match() == kPseudoClass && GetPseudoType() == kPseudoParent) {
+  if (MatchForOilpan() == kPseudoClass && GetPseudoType() == kPseudoParent) {
     visitor->Trace(data_.parent_rule_);
-  } else if (HasRareData()) {
+  } else if (HasRareDataForOilpan()) {
     visitor->Trace(data_.rare_data_);
   }
 }

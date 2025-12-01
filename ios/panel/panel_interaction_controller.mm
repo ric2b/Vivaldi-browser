@@ -7,6 +7,7 @@
 #import "app/vivaldi_apptools.h"
 #import "base/ios/ios_util.h"
 #import "base/strings/utf_string_conversions.h"
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/home/bookmarks_coordinator.h"
 #import "ios/chrome/browser/history/ui_bundled/history_coordinator_delegate.h"
 #import "ios/chrome/browser/history/ui_bundled/history_coordinator.h"
@@ -243,7 +244,9 @@ enum class PresentedState {
                          UISheetPresentationControllerDetent.largeDetent];
   }
 
-  sheetPc.preferredCornerRadius = panel_sheet_corner_radius;
+  if (!@available(iOS 26, *)) {
+    sheetPc.preferredCornerRadius = panel_sheet_corner_radius;
+  }
   sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
   sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
   [_parentController presentViewController:_panelController
@@ -256,7 +259,7 @@ enum class PresentedState {
   _bottomOmniboxEnabled =
       [[PrefBackedBoolean alloc]
           initWithPrefService:GetApplicationContext()->GetLocalState()
-                     prefName:prefs::kBottomOmnibox];
+                     prefName:omnibox::kIsOmniboxInBottomPosition];
   [_bottomOmniboxEnabled setObserver:self];
   // Initialize to the correct value.
   [self booleanDidChange:_bottomOmniboxEnabled];

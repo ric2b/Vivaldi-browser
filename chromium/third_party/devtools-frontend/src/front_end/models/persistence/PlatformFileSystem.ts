@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -148,7 +148,7 @@ export class PlatformFileSystem extends Common.ObjectWrapper.ObjectWrapper<Event
 
   indexContent(progress: Common.Progress.Progress): void {
     queueMicrotask(() => {
-      progress.done();
+      progress.done = true;
     });
   }
 

@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -14,15 +14,15 @@ const {html} = Lit;
 
 const UIStrings = {
   /**
-   *@description Text shown next to the interaction event's input delay time in the detail view.
+   * @description Text shown next to the interaction event's input delay time in the detail view.
    */
   inputDelay: 'Input delay',
   /**
-   *@description Text shown next to the interaction event's thread processing duration in the detail view.
+   * @description Text shown next to the interaction event's thread processing duration in the detail view.
    */
   processingDuration: 'Processing duration',
   /**
-   *@description Text shown next to the interaction event's presentation delay time in the detail view.
+   * @description Text shown next to the interaction event's presentation delay time in the detail view.
    */
   presentationDelay: 'Presentation delay',
 } as const;

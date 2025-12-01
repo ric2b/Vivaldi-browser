@@ -18,11 +18,13 @@ import {GcsUploader} from '../base/gcs_uploader';
 import {raf} from '../core/raf_scheduler';
 import {VERSION} from '../gen/perfetto_version';
 import {getCurrentModalKey, showModal} from '../widgets/modal';
-import {globals} from './globals';
 import {AppImpl} from '../core/app_impl';
 import {Router} from '../core/router';
 import {Button, ButtonVariant} from '../widgets/button';
 import {Intent} from '../widgets/common';
+import {Checkbox} from '../widgets/checkbox';
+import {Anchor} from '../widgets/anchor';
+import {Icons} from '../base/semantic_icons';
 
 const MODAL_KEY = 'crash_modal';
 
@@ -137,7 +139,7 @@ class ErrorDialogComponent implements m.ClassComponent<ErrorDetails> {
     }
 
     // If the user is not a googler, don't even offer the option to upload it.
-    if (!globals.isInternalUser) return;
+    if (!AppImpl.instance.isInternalUser) return;
 
     if (traceSource.type === 'FILE') {
       this.traceState = 'NOT_UPLOADED';
@@ -179,21 +181,19 @@ class ErrorDialogComponent implements m.ClassComponent<ErrorDetails> {
     if (this.traceState !== 'NOT_AVAILABLE') {
       shareTraceSection = m(
         'div',
+        m(Checkbox, {
+          checked: this.attachTrace,
+          oninput: (ev: InputEvent) => {
+            const checked = (ev.target as HTMLInputElement).checked;
+            this.onUploadCheckboxChange(checked);
+          },
+          label:
+            this.traceState === 'UPLOADING'
+              ? `Uploading trace... ${this.uploadStatus}`
+              : 'Tick to share the current trace and help debugging',
+        }),
         m(
-          'label',
-          m(`input[type=checkbox]`, {
-            checked: this.attachTrace,
-            oninput: (ev: InputEvent) => {
-              const checked = (ev.target as HTMLInputElement).checked;
-              this.onUploadCheckboxChange(checked);
-            },
-          }),
-          this.traceState === 'UPLOADING'
-            ? `Uploading trace... ${this.uploadStatus}`
-            : 'Tick to share the current trace and help debugging',
-        ), // m('label')
-        m(
-          'div.modal-small',
+          'div.pf-modal-small',
           `This will upload the trace and attach a link to the bug.
           You may leave it unchecked and attach the trace manually to the bug
           if preferred.`,
@@ -204,13 +204,13 @@ class ErrorDialogComponent implements m.ClassComponent<ErrorDetails> {
     return [
       m(
         'div',
-        m('.modal-logs', msg),
+        m('.pf-modal-logs', msg),
         m(
           'span',
           `Please provide any additional details describing
         how the crash occurred:`,
         ),
-        m('textarea.modal-textarea', {
+        m('textarea.pf-modal-textarea', {
           rows: 3,
           maxlength: 1000,
           oninput: (ev: InputEvent) => {
@@ -305,10 +305,10 @@ function showOutOfMemoryDialog() {
       ),
       m('br'),
       m('br'),
-      m('.modal-bash', tpCmd),
+      m('.pf-modal-bash', tpCmd),
       m('br'),
       m('span', 'For details see '),
-      m('a', {href: url, target: '_blank'}, url),
+      m(Anchor, {href: url, target: '_blank', icon: Icons.ExternalLink}, url),
     ),
   });
 }
@@ -343,14 +343,34 @@ function showWebUSBError() {
       'div',
       m(
         'span',
-        `Is adb already running on the host? Run this command and
-      try again.`,
+        `Cannot access the USB interface for ADB. This can happen when:`,
       ),
       m('br'),
-      m('.modal-bash', '> adb kill-server'),
       m('br'),
-      m('span', 'For details see '),
-      m('a', {href: 'http://b/159048331', target: '_blank'}, 'b/159048331'),
+      m(
+        'ul',
+        m('li', 'Another tool is already using ADB (e.g., chrome://inspect)'),
+        m('li', 'ADB server is running on the host machine'),
+        m('li', 'Another profiling tool has exclusive access to the device'),
+      ),
+      m('br'),
+      m('span', 'Try the following solutions:'),
+      m('br'),
+      m('br'),
+      m(
+        'ol',
+        m('li', 'Close chrome://inspect or other debugging tools'),
+        m('li', 'Run the command below to kill the ADB server:'),
+      ),
+      m('.pf-modal-bash', '> adb kill-server'),
+      m('br'),
+      m('span', '3. Disconnect and reconnect your device'),
+      m('br'),
+      m('br'),
+      m(
+        'span',
+        'Note: Perfetto and chrome://inspect cannot be used simultaneously as they both require exclusive access to the USB ADB interface.',
+      ),
     ),
   });
 }

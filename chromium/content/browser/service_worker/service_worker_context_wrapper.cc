@@ -26,6 +26,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/loader/navigation_url_loader_impl.h"
@@ -465,6 +466,15 @@ void ServiceWorkerContextWrapper::OnClientNavigated(const GURL& script_url,
 
   for (auto& observer : observer_list_) {
     observer.OnClientNavigated(script_url, url);
+  }
+}
+
+void ServiceWorkerContextWrapper::OnPushEventFinished(
+    const GURL& script_url,
+    const std::optional<std::vector<GURL>>& requested_urls) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  for (auto& observer : observer_list_) {
+    observer.OnPushEventFinished(script_url, requested_urls);
   }
 }
 

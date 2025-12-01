@@ -2,6 +2,7 @@
 
 import("//build/config/ios/ios_sdk.gni")
 import("//ios/build/chrome_build.gni")
+import("//vivaldi/testing/testing.gni")
 
 update_template_instance("//ios/chrome/app:chrome") {
   deps += [
@@ -39,7 +40,7 @@ update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_grid:tab_grid_ui
   ]
 }
 
-update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui:ui") {
+update_target("//ios/chrome/browser/tab_switcher/tab_strip/ui:ui") {
   deps += [
     "//vivaldi/ios/ui/ntp:vivaldi_ntp",
   ]
@@ -137,10 +138,12 @@ update_target("//ios/chrome/browser/web/model:web_internal") {
   ]
 }
 
-update_template_instance("//ios/components:ios_components_unittests") {
-  deps += [
-    "//vivaldi/components/ad_blocker/ios:unit_tests"
-  ]
+if(vivaldi_build_tests) {
+  update_template_instance("//ios/components:ios_components_unittests") {
+    deps += [
+      "//vivaldi/components/ad_blocker/ios:unit_tests"
+    ]
+  }
 }
 
 update_target("//ios/chrome/browser/default_promo/ui_bundled:coordinator") {
@@ -243,5 +246,18 @@ update_target("//components/resources:about_credits") {
 update_target("//ios/chrome/browser/settings/ui_bundled:ui_bundled") {
   deps += [
     "//vivaldi/ios/favicon:vivaldi_favicon_service"
+  ]
+}
+
+update_target("//ios/chrome/browser/infobars/model:badge") {
+  deps += [
+    "//vivaldi/ios/ui/vivaldi_infobar_badges:vivaldi_infobar_badges",
+  ]
+}
+
+# Icons for the iPad main menu
+update_target("//ios/chrome/browser/keyboard/ui_bundled:ui_bundled") {
+  deps += [
+    "//vivaldi/ios/ui/context_menu/resources:vivaldi_context_menu_assets",
   ]
 }

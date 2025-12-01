@@ -233,6 +233,22 @@ class SessionsPrivateRestoreLastClosedFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+
+class SessionsPrivateRestoreSyncTabsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sessionsPrivate.restoreSyncTabs",
+                             SESSIONS_RESTORE_SYNC_TABS)
+  SessionsPrivateRestoreSyncTabsFunction() = default;
+
+ private:
+  ~SessionsPrivateRestoreSyncTabsFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+};
+
+
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_SESSIONS_VIVALDI_SESSIONS_API_H_

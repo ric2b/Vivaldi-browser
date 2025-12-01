@@ -4,49 +4,16 @@
 
 #import "base/strings/sys_string_conversions.h"
 #import "components/prefs/pref_service.h"
-#import "components/search_engines/template_url_service_observer.h"
-#import "components/search_engines/template_url_service.h"
+#import "components/search_engines/search_engines_helper.h"
 #import "components/search_engines/template_url.h"
+#import "components/search_engines/template_url_service.h"
+#import "components/search_engines/template_url_service_observer.h"
 #import "components/search_engines/util.h"
 #import "ios/chrome/browser/search_engines/model/search_engine_observer_bridge.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/ui/settings/search_engine/editor/vivaldi_search_engine_editor_swift.h"
 #import "prefs/vivaldi_pref_names.h"
-
-namespace {
-
-// Template URL parameter constants
-const char kSearchTermsParameterFull[] = "{searchTerms}";
-const char kGoogleUnescapedSearchTermsParameterFull[] =
-    "{google:unescapedSearchTerms}";
-
-// Display parameter constants for UI
-const char kDisplaySearchTerms[] = "%s";
-const char kDisplayUnescapedSearchTerms[] = "%S";
-
-/// Converts template URL parameters to display format for UI
-std::string ToDisplay(const std::string& turl_param) {
-  std::string result(turl_param);
-  base::ReplaceSubstringsAfterOffset(&result, 0, kSearchTermsParameterFull,
-                                     kDisplaySearchTerms);
-  base::ReplaceSubstringsAfterOffset(&result, 0,
-                                     kGoogleUnescapedSearchTermsParameterFull,
-                                     kDisplayUnescapedSearchTerms);
-  return result;
-}
-
-/// Converts display format back to template URL parameters
-std::string FromDisplay(const std::string& display_string) {
-  std::string result(display_string);
-  base::ReplaceSubstringsAfterOffset(&result, 0, kDisplaySearchTerms,
-                                     kSearchTermsParameterFull);
-  base::ReplaceSubstringsAfterOffset(&result, 0, kDisplayUnescapedSearchTerms,
-                                     kGoogleUnescapedSearchTermsParameterFull);
-  return result;
-}
-
-}  // namespace
 
 @interface VivaldiSearchEngineEditorMediator () <SearchEngineObserving> {
   // Profile and service dependencies
@@ -127,6 +94,9 @@ std::string FromDisplay(const std::string& display_string) {
 #pragma mark - Private Save Methods
 
 - (void)updateExistingSearchEngine {
+  if (!_templateURLService)
+    return;
+
   TemplateURL* itemToUpdate =
       _templateURLService->GetTemplateURLForGUID(_editingItem->sync_guid());
 
@@ -137,29 +107,37 @@ std::string FromDisplay(const std::string& display_string) {
   _templateURLService->ResetTemplateURL(
       itemToUpdate, base::SysNSStringToUTF16(_editingItemInternal.name),
       base::SysNSStringToUTF16(_editingItemInternal.nickname),
-      FromDisplay(base::SysNSStringToUTF8(_editingItemInternal.url)),
-      FromDisplay(base::SysNSStringToUTF8(_editingItemInternal.postParameters)),
-      FromDisplay(base::SysNSStringToUTF8(_editingItemInternal.suggestURL)),
+      GetUrlFromDisplay(
+          base::SysNSStringToUTF8(_editingItemInternal.url)),
+      GetUrlFromDisplay(
+          base::SysNSStringToUTF8(_editingItemInternal.postParameters)),
+      GetUrlFromDisplay(
+          base::SysNSStringToUTF8(_editingItemInternal.suggestURL)),
       _editingItem->suggestions_url_post_params(),
-      FromDisplay(base::SysNSStringToUTF8(_editingItemInternal.imageSearchURL)),
-      FromDisplay(base::SysNSStringToUTF8(
+      GetUrlFromDisplay(
+          base::SysNSStringToUTF8(_editingItemInternal.imageSearchURL)),
+      GetUrlFromDisplay(base::SysNSStringToUTF8(
           _editingItemInternal.imageSearchPostParameters)),
       TemplateURL::GenerateFaviconURL(
           GURL(base::SysNSStringToUTF8(_editingItemInternal.url))));
 }
 
 - (void)createNewSearchEngine {
+  if (!_templateURLService)
+    return;
+
   TemplateURLData data;
   data.SetShortName(base::SysNSStringToUTF16(_editingItemInternal.name));
   data.SetKeyword(base::SysNSStringToUTF16(_editingItemInternal.nickname));
-  data.SetURL(FromDisplay(base::SysNSStringToUTF8(_editingItemInternal.url)));
-  data.suggestions_url =
-      FromDisplay(base::SysNSStringToUTF8(_editingItemInternal.suggestURL));
-  data.image_url =
-      FromDisplay(base::SysNSStringToUTF8(_editingItemInternal.imageSearchURL));
-  data.search_url_post_params =
-      FromDisplay(base::SysNSStringToUTF8(_editingItemInternal.postParameters));
-  data.image_url_post_params = FromDisplay(
+  data.SetURL(GetUrlFromDisplay(
+      base::SysNSStringToUTF8(_editingItemInternal.url)));
+  data.suggestions_url = GetUrlFromDisplay(
+      base::SysNSStringToUTF8(_editingItemInternal.suggestURL));
+  data.image_url = GetUrlFromDisplay(
+      base::SysNSStringToUTF8(_editingItemInternal.imageSearchURL));
+  data.search_url_post_params = GetUrlFromDisplay(
+      base::SysNSStringToUTF8(_editingItemInternal.postParameters));
+  data.image_url_post_params = GetUrlFromDisplay(
       base::SysNSStringToUTF8(_editingItemInternal.imageSearchPostParameters));
   data.favicon_url = TemplateURL::GenerateFaviconURL(
       GURL(base::SysNSStringToUTF8(_editingItemInternal.url)));
@@ -200,22 +178,26 @@ std::string FromDisplay(const std::string& display_string) {
 
 - (VivaldiSearchEngineEditorItem*)createEditorItemFromTemplateURL:
     (const TemplateURL*)templateURL {
+  if (!_templateURLService)
+    return nil;
+
   return [[VivaldiSearchEngineEditorItem alloc]
                    initWithGuid:base::SysUTF8ToNSString(
                                     templateURL->sync_guid())
                            name:base::SysUTF16ToNSString(
                                     templateURL->short_name())
                        nickname:base::SysUTF16ToNSString(templateURL->keyword())
-                            url:base::SysUTF8ToNSString(
-                                    ToDisplay(templateURL->url()))
-                     suggestURL:base::SysUTF8ToNSString(
-                                    ToDisplay(templateURL->suggestions_url()))
-                 postParameters:base::SysUTF8ToNSString(ToDisplay(
-                                    templateURL->suggestions_url_post_params()))
-                 imageSearchURL:base::SysUTF8ToNSString(
-                                    ToDisplay(templateURL->image_url()))
-      imageSearchPostParameters:base::SysUTF8ToNSString(ToDisplay(
-                                    templateURL->image_url_post_params()))];
+                            url:base::SysUTF8ToNSString(GetUrlToDisplay(
+                                        templateURL->url()))
+                     suggestURL:base::SysUTF8ToNSString(GetUrlToDisplay(
+                                        templateURL->suggestions_url()))
+                 postParameters:base::SysUTF8ToNSString(GetUrlToDisplay(
+                                        templateURL
+                                            ->suggestions_url_post_params()))
+                 imageSearchURL:base::SysUTF8ToNSString(GetUrlToDisplay(
+                                        templateURL->image_url()))
+      imageSearchPostParameters:base::SysUTF8ToNSString(GetUrlToDisplay(
+                                        templateURL->image_url_post_params()))];
 }
 
 - (void)cleanup {

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,50 +6,44 @@ import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Workspace from '../../models/workspace/workspace.js';
+// TODO(crbug.com/442509324): remove UI dependency
+// eslint-disable-next-line rulesdir/no-imports-in-directory
 import * as UI from '../../ui/legacy/legacy.js';
 
 import type * as Persistence from './persistence.js';
 
 const UIStrings = {
   /**
-   *@description Text of a DOM element in Workspace Settings Tab of the Workspace settings in Settings
-   */
-  workspace: 'Workspace',
-  /**
-   *@description Command for showing the Workspace tool in Settings
-   */
-  showWorkspace: 'Show Workspace settings',
-  /**
-   *@description Title of a setting under the Persistence category in Settings
+   * @description Title of a setting under the Persistence category in Settings
    */
   enableLocalOverrides: 'Enable Local Overrides',
   /**
-   *@description A tag of Enable Local Overrides setting that can be searched in the command menu
+   * @description A tag of Enable Local Overrides setting that can be searched in the command menu
    */
   interception: 'interception',
   /**
-   *@description A tag of Enable Local Overrides setting that can be searched in the command menu
+   * @description A tag of Enable Local Overrides setting that can be searched in the command menu
    */
   override: 'override',
   /**
-   *@description A tag of Group Network by frame setting that can be searched in the command menu
+   * @description A tag of Group Network by frame setting that can be searched in the command menu
    */
   network: 'network',
   /**
-   *@description A tag of Enable Local Overrides setting that can be searched in the command menu
+   * @description A tag of Enable Local Overrides setting that can be searched in the command menu
    */
   rewrite: 'rewrite',
   /**
-   *@description A tag of Enable Local Overrides setting that can be searched in the command menu.
+   * @description A tag of Enable Local Overrides setting that can be searched in the command menu.
    *Noun for network request.
    */
   request: 'request',
   /**
-   *@description Title of a setting under the Persistence category that can be invoked through the Command Menu
+   * @description Title of a setting under the Persistence category that can be invoked through the Command Menu
    */
   enableOverrideNetworkRequests: 'Enable override network requests',
   /**
-   *@description Title of a setting under the Persistence category that can be invoked through the Command Menu
+   * @description Title of a setting under the Persistence category that can be invoked through the Command Menu
    */
   disableOverrideNetworkRequests: 'Disable override network requests',
 } as const;
@@ -64,19 +58,6 @@ async function loadPersistenceModule(): Promise<typeof Persistence> {
   }
   return loadedPersistenceModule;
 }
-
-UI.ViewManager.registerViewExtension({
-  location: UI.ViewManager.ViewLocationValues.SETTINGS_VIEW,
-  id: 'workspace',
-  title: i18nLazyString(UIStrings.workspace),
-  commandPrompt: i18nLazyString(UIStrings.showWorkspace),
-  order: 1,
-  async loadView() {
-    const Persistence = await loadPersistenceModule();
-    return new Persistence.WorkspaceSettingsTab.WorkspaceSettingsTab();
-  },
-  iconName: 'folder',
-});
 
 Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.PERSISTENCE,

@@ -85,8 +85,8 @@ void Log(const char *absl_nonnull str) {
 }
 
 // Maybe writes the `reason` to stderr; then calls _exit. We use this instead of
-// CHECK/RunnerCheck since the fork server runs at the very early stage of the
-// process, where the logging functions used there may not work.
+// FUZZTEST_CHECK/RunnerCheck since the fork server runs at the very early stage
+// of the process, where the logging functions used there may not work.
 void Exit(const char *absl_nonnull reason) {
   Log(reason);
   _exit(0);  // The exit code does not matter, it won't be checked anyway.
@@ -183,13 +183,7 @@ const char *absl_nullable GetOneEnv(const char *absl_nonnull key) {
 // GlobalRunnerState may terminate the process early due to an error,
 // then we never open the fifos and the corresponding opens in centipede
 // hang forever.
-// The priority 150 is chosen on the lower end (higher priority)
-// of the user-available range (101-999) to allow ordering with other
-// constructors and C++ constructors (init_priority). Note: constructors
-// without explicitly specified priority run after all constructors with
-// explicitly specified priority, thus we still run before most
-// "normal" constructors.
-__attribute__((constructor(150))) void ForkServerCallMeVeryEarly() {
+void ForkServerCallMeVeryEarly() {
   // Guard against calling twice.
   static bool called_already = false;
   if (called_already) return;
@@ -338,14 +332,28 @@ __attribute__((constructor(150))) void ForkServerCallMeVeryEarly() {
   __builtin_unreachable();
 }
 
-// If supported, use .preinit_array to call `ForkServerCallMeVeryEarly` even
-// earlier than the `constructor` attribute of the declaration. This helps to
-// avoid potential conflicts with higher-priority constructors.
+// A constructor to call fork server early. Not marking
+// `ForkServerCallMeVeryEarly` as constructor to avoid a potential ASAN false
+// positive of initializtion order fiasco.
+//
+// The priority 150 is chosen on the lower end (higher priority)
+// of the user-available range (101-999) to allow ordering with other
+// constructors and C++ constructors (init_priority). Note: constructors
+// without explicitly specified priority run after all constructors with
+// explicitly specified priority, thus we still run before most
+// "normal" constructors.
+__attribute__((constructor(150))) void CallForkServerEarly() {
+  ForkServerCallMeVeryEarly();
+}
+
+// If supported, use .preinit_array to call `CallForkServerEarly` even earlier
+// than the `constructor` attribute of the declaration. This helps to avoid
+// potential conflicts with higher-priority constructors.
 #ifdef __APPLE__
 // .preinit_array is not supported in MacOS.
 #else   // __APPLE__
 __attribute__((section(".preinit_array"))) auto call_very_early =
-    ForkServerCallMeVeryEarly;
+    CallForkServerEarly;
 #endif  // __APPLE__
 
 }  // namespace fuzztest::internal

@@ -37,6 +37,11 @@
 #include "core/fxcodec/gif/gif_progressive_decoder.h"
 #endif  // PDF_ENABLE_XFA_GIF
 
+#ifdef PDF_ENABLE_XFA_PNG
+#include "core/fxcodec/png/png_decoder.h"
+#include "core/fxcodec/png/png_decoder_delegate.h"
+#endif  // PDF_ENABLE_XFA_PNG
+
 #ifdef PDF_ENABLE_XFA_TIFF
 #include "core/fxcodec/tiff/tiff_decoder.h"
 #endif  // PDF_ENABLE_XFA_TIFF
@@ -48,6 +53,8 @@ namespace {
 constexpr size_t kBlockSize = 4096;
 
 #ifdef PDF_ENABLE_XFA_PNG
+using PngDecodedColorType = fxcodec::PngDecoderDelegate::DecodedColorType;
+using PngEncodedColorType = fxcodec::PngDecoderDelegate::EncodedColorType;
 #if BUILDFLAG(IS_APPLE)
 const double kPngGamma = 1.7;
 #else
@@ -81,31 +88,15 @@ bool ProgressiveDecoder::PngReadHeader(int width,
                                        int height,
                                        int bpc,
                                        int pass,
-                                       int* color_type,
+                                       PngEncodedColorType src_color_type,
+                                       PngDecodedColorType* dst_color_type,
                                        double* gamma) {
   if (!device_bitmap_) {
     src_width_ = width;
     src_height_ = height;
     src_bpc_ = bpc;
     src_pass_number_ = pass;
-    switch (*color_type) {
-      case 0:
-        src_components_ = 1;
-        break;
-      case 4:
-        src_components_ = 2;
-        break;
-      case 2:
-        src_components_ = 3;
-        break;
-      case 3:
-      case 6:
-        src_components_ = 4;
-        break;
-      default:
-        src_components_ = 0;
-        break;
-    }
+    src_components_ = PngDecoderDelegate::GetNumberOfComponents(src_color_type);
     return false;
   }
   switch (device_bitmap_->GetFormat()) {
@@ -116,11 +107,11 @@ bool ProgressiveDecoder::PngReadHeader(int width,
     case FXDIB_Format::k8bppRgb:
       NOTREACHED();
     case FXDIB_Format::kBgr:
-      *color_type = 2;
+      *dst_color_type = DecodedColorType::kBgr;
       break;
     case FXDIB_Format::kBgrx:
     case FXDIB_Format::kBgra:
-      *color_type = 6;
+      *dst_color_type = DecodedColorType::kBgra;
       break;
 #if defined(PDF_USE_SKIA)
     case FXDIB_Format::kBgraPremul:
@@ -146,7 +137,7 @@ uint8_t* ProgressiveDecoder::PngAskScanlineBuf(int line) {
   return decode_buf_.data();
 }
 
-void ProgressiveDecoder::PngFillScanlineBufCompleted(int pass, int line) {
+void ProgressiveDecoder::PngFillScanlineBufCompleted(int line) {
   if (line < 0 || line >= src_height_) {
     return;
   }
@@ -599,15 +590,13 @@ FXCODEC_STATUS ProgressiveDecoder::JpegContinueDecode() {
 }
 
 #ifdef PDF_ENABLE_XFA_PNG
-bool ProgressiveDecoder::PngDetectImageTypeInBuffer(
-    CFX_DIBAttribute* pAttribute) {
+bool ProgressiveDecoder::PngDetectImageTypeInBuffer() {
   png_context_ = PngDecoder::StartDecode(this);
   if (!png_context_) {
     status_ = FXCODEC_STATUS::kError;
     return false;
   }
-  while (PngDecoder::ContinueDecode(png_context_.get(), codec_memory_,
-                                    pAttribute)) {
+  while (PngDecoder::ContinueDecode(png_context_.get(), codec_memory_)) {
     uint32_t remain_size = static_cast<uint32_t>(file_->GetSize()) - offset_;
     uint32_t input_size = std::min<uint32_t>(remain_size, kBlockSize);
     if (input_size == 0) {
@@ -677,8 +666,7 @@ FXCODEC_STATUS ProgressiveDecoder::PngContinueDecode() {
       return status_;
     }
     offset_ += input_size;
-    bResult =
-        PngDecoder::ContinueDecode(png_context_.get(), codec_memory_, nullptr);
+    bResult = PngDecoder::ContinueDecode(png_context_.get(), codec_memory_);
     if (!bResult) {
       device_bitmap_ = nullptr;
       file_ = nullptr;
@@ -759,7 +747,7 @@ bool ProgressiveDecoder::DetectImageType(FXCODEC_IMAGE_TYPE imageType,
 
 #ifdef PDF_ENABLE_XFA_PNG
   if (imageType == FXCODEC_IMAGE_PNG) {
-    return PngDetectImageTypeInBuffer(pAttribute);
+    return PngDetectImageTypeInBuffer();
   }
 #endif  // PDF_ENABLE_XFA_PNG
 

@@ -328,6 +328,7 @@ typedef enum _FcMatcherPriority {
     PRI1 (COLOR),
     PRI1 (FOUNDRY),
     PRI1 (CHARSET),
+    PRI1 (GENERIC_FAMILY),
     PRI_FAMILY_STRONG,
     PRI_POSTSCRIPT_NAME_STRONG,
     PRI1 (LANG),

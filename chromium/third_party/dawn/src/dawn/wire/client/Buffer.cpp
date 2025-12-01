@@ -25,6 +25,11 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/439062058): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "dawn/wire/client/Buffer.h"
 
 #include <functional>
@@ -214,7 +219,7 @@ WGPUBuffer Buffer::Create(Device* device, const WGPUBufferDescriptor* descriptor
     std::unique_ptr<MemoryTransferService::WriteHandle> writeHandle = nullptr;
 
     DeviceCreateBufferCmd cmd;
-    cmd.deviceId = device->GetWireId();
+    cmd.deviceId = device->GetWireHandle(wireClient).id;
     cmd.descriptor = descriptor;
     cmd.readHandleCreateInfoLength = 0;
     cmd.readHandleCreateInfo = nullptr;
@@ -264,7 +269,7 @@ WGPUBuffer Buffer::Create(Device* device, const WGPUBufferDescriptor* descriptor
         buffer->mMappedData = writeHandle->GetData();
     }
 
-    cmd.result = buffer->GetWireHandle();
+    cmd.result = buffer->GetWireHandle(wireClient);
 
     // clang-format off
     // Turning off clang format here because for some reason it does not format the
@@ -308,7 +313,7 @@ WGPUBuffer Buffer::CreateError(Device* device, const WGPUBufferDescriptor* descr
     DeviceCreateErrorBufferCmd cmd;
     cmd.self = ToAPI(device);
     cmd.descriptor = descriptor;
-    cmd.result = buffer->GetWireHandle();
+    cmd.result = buffer->GetWireHandle(client);
     client->SerializeCommand(cmd);
 
     return ReturnToAPI(std::move(buffer));
@@ -359,7 +364,7 @@ WGPUFuture Buffer::APIMapAsync(WGPUMapMode mode,
                                const WGPUBufferMapCallbackInfo& callbackInfo) {
     Client* client = GetClient();
     auto [futureIDInternal, tracked] =
-        GetEventManager().TrackEvent(std::make_unique<MapAsyncEvent>(callbackInfo, this));
+        GetEventManager().TrackEvent(AcquireRef(new MapAsyncEvent(callbackInfo, this)));
     if (!tracked) {
         return {futureIDInternal};
     }
@@ -388,7 +393,7 @@ WGPUFuture Buffer::APIMapAsync(WGPUMapMode mode,
 
     // Serialize the command to send to the server.
     BufferMapAsyncCmd cmd;
-    cmd.bufferId = GetWireId();
+    cmd.bufferId = GetWireHandle(client).id;
     cmd.eventManagerHandle = GetEventManagerHandle();
     cmd.future = {futureIDInternal};
     cmd.mode = mode;
@@ -405,9 +410,8 @@ WireResult Client::DoBufferMapAsyncCallback(ObjectHandle eventManager,
                                             WGPUStringView message,
                                             uint64_t readDataUpdateInfoLength,
                                             const uint8_t* readDataUpdateInfo) {
-    return GetEventManager(eventManager)
-        .SetFutureReady<Buffer::MapAsyncEvent>(future.id, status, message, readDataUpdateInfoLength,
-                                               readDataUpdateInfo);
+    return SetFutureReady<Buffer::MapAsyncEvent>(eventManager, future.id, status, message,
+                                                 readDataUpdateInfoLength, readDataUpdateInfo);
 }
 
 void* Buffer::APIGetMappedRange(size_t offset, size_t size) {
@@ -465,7 +469,7 @@ void Buffer::APIUnmap() {
             mWriteHandle->SizeOfSerializeDataUpdate(mMappedOffset, mMappedSize);
 
         BufferUpdateMappedDataCmd cmd;
-        cmd.bufferId = GetWireId();
+        cmd.bufferId = GetWireHandle(client).id;
         cmd.writeDataUpdateInfoLength = writeDataUpdateInfoLength;
         cmd.writeDataUpdateInfo = nullptr;
         cmd.offset = mMappedOffset;

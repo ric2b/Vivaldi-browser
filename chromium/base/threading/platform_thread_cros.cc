@@ -26,17 +26,11 @@
 
 namespace base {
 
-BASE_FEATURE(kSchedUtilHints,
-             "SchedUtilHints",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kSchedUtilHints, base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kSetThreadBgForBgProcess,
-             "SetThreadBgForBgProcess",
-             FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kSetThreadBgForBgProcess, FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kSetRtForDisplayThreads,
-             "SetRtForDisplayThreads",
-             FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kSetRtForDisplayThreads, FEATURE_DISABLED_BY_DEFAULT);
 namespace {
 
 CrossProcessPlatformThreadDelegate* g_cross_process_platform_thread_delegate =

@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,11 +11,11 @@ import type {MarkdownIssueDescription} from './MarkdownIssueDescription.js';
 
 const UIStrings = {
   /**
-   *@description Title for Partitioning BlobURL explainer url link.
+   * @description Title for Partitioning BlobURL explainer url link.
    */
   partitioningBlobURL: 'Partitioning BlobURL',
   /**
-   *@description Title for Chrome Status Entry url link.
+   * @description Title for Chrome Status Entry url link.
    */
   chromeStatusEntry: 'Chrome Status Entry'
 } as const;

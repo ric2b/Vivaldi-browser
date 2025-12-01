@@ -59,7 +59,6 @@
 #include "src/tint/lang/wgsl/ast/diagnostic_control.h"
 #include "src/tint/lang/wgsl/ast/diagnostic_directive.h"
 #include "src/tint/lang/wgsl/ast/diagnostic_rule_name.h"
-#include "src/tint/lang/wgsl/ast/disable_validation_attribute.h"
 #include "src/tint/lang/wgsl/ast/discard_statement.h"
 #include "src/tint/lang/wgsl/ast/enable.h"
 #include "src/tint/lang/wgsl/ast/float_literal_expression.h"
@@ -83,12 +82,9 @@
 #include "src/tint/lang/wgsl/ast/phony_expression.h"
 #include "src/tint/lang/wgsl/ast/requires.h"
 #include "src/tint/lang/wgsl/ast/return_statement.h"
-#include "src/tint/lang/wgsl/ast/row_major_attribute.h"
 #include "src/tint/lang/wgsl/ast/stage_attribute.h"
-#include "src/tint/lang/wgsl/ast/stride_attribute.h"
 #include "src/tint/lang/wgsl/ast/struct.h"
 #include "src/tint/lang/wgsl/ast/struct_member_align_attribute.h"
-#include "src/tint/lang/wgsl/ast/struct_member_offset_attribute.h"
 #include "src/tint/lang/wgsl/ast/struct_member_size_attribute.h"
 #include "src/tint/lang/wgsl/ast/switch_statement.h"
 #include "src/tint/lang/wgsl/ast/templated_identifier.h"
@@ -99,7 +95,6 @@
 #include "src/tint/lang/wgsl/ast/while_statement.h"
 #include "src/tint/lang/wgsl/ast/workgroup_attribute.h"
 #include "src/tint/lang/wgsl/enums.h"
-#include "src/tint/utils/generation_id.h"
 #include "src/tint/utils/memory/block_allocator.h"
 #include "src/tint/utils/symbol/symbol_table.h"
 #include "src/tint/utils/text/string.h"
@@ -182,12 +177,6 @@ class Builder {
     template <typename... TYPES>
     using DisableIfInferOrAbstract =
         std::enable_if_t<!IsInferOrAbstract<std::decay_t<traits::NthTypeOf<0, TYPES..., void>>>>;
-
-    /// A helper used to enable overloads if the first type in `TYPES` is Infer or an abstract
-    /// numeric.
-    template <typename... TYPES>
-    using EnableIfInferOrAbstract =
-        std::enable_if_t<IsInferOrAbstract<std::decay_t<traits::NthTypeOf<0, TYPES..., void>>>>;
 
     /// VarOptions is a helper for accepting an arbitrary number of order independent options for
     /// constructing an ast::Var.
@@ -306,9 +295,6 @@ class Builder {
     /// @return this builder
     Builder& operator=(Builder&& rhs);
 
-    /// @returns the unique identifier for this program
-    GenerationID ID() const { return id_; }
-
     /// @returns a reference to the program's AST nodes storage
     ASTNodeAllocator& ASTNodes() {
         AssertNotMoved();
@@ -380,7 +366,7 @@ class Builder {
         requires(traits::IsTypeOrDerived<T, ast::Node>)
     T* create(const Source& source, ARGS&&... args) {
         AssertNotMoved();
-        return ast_nodes_.Create<T>(id_, AllocateNodeID(), source, std::forward<ARGS>(args)...);
+        return ast_nodes_.Create<T>(AllocateNodeID(), source, std::forward<ARGS>(args)...);
     }
 
     /// Creates a new ast::Node owned by the Builder, injecting the current
@@ -393,7 +379,7 @@ class Builder {
         requires(traits::IsTypeOrDerived<T, ast::Node>)
     T* create() {
         AssertNotMoved();
-        return ast_nodes_.Create<T>(id_, AllocateNodeID(), source_);
+        return ast_nodes_.Create<T>(AllocateNodeID(), source_);
     }
 
     /// Creates a new ast::Node owned by the Builder, injecting the current
@@ -411,7 +397,7 @@ class Builder {
                      T>*
     create(ARG0&& arg0, ARGS&&... args) {
         AssertNotMoved();
-        return ast_nodes_.Create<T>(id_, AllocateNodeID(), source_, std::forward<ARG0>(arg0),
+        return ast_nodes_.Create<T>(AllocateNodeID(), source_, std::forward<ARG0>(arg0),
                                     std::forward<ARGS>(args)...);
     }
 
@@ -921,101 +907,71 @@ class Builder {
         }
 
         /// @param subtype the array element type
-        /// @param attrs the optional attributes for the array
         /// @return an array of type `T`
-        ast::Type array(ast::Type subtype, VectorRef<const ast::Attribute*> attrs = Empty) const {
-            return array(builder->source_, subtype, std::move(attrs));
-        }
+        ast::Type array(ast::Type subtype) const { return array(builder->source_, subtype); }
 
         /// @param source the Source of the node
         /// @param subtype the array element type
-        /// @param attrs the optional attributes for the array
         /// @return an array of type `T`
-        ast::Type array(const Source& source,
-                        ast::Type subtype,
-                        VectorRef<const ast::Attribute*> attrs = Empty) const {
+        ast::Type array(const Source& source, ast::Type subtype) const {
             return ast::Type{builder->Expr(
                 builder->create<ast::TemplatedIdentifier>(source, builder->Sym("array"),
                                                           Vector{
                                                               subtype.expr,
-                                                          },
-                                                          std::move(attrs)))};
+                                                          }))};
         }
 
         /// @param subtype the array element type
         /// @param n the array size. nullptr represents a runtime-array
-        /// @param attrs the optional attributes for the array
         /// @return an array of size `n` of type `T`
         template <typename COUNT, typename = DisableIfVectorLike<COUNT>>
-        ast::Type array(ast::Type subtype,
-                        COUNT&& n,
-                        VectorRef<const ast::Attribute*> attrs = Empty) const {
-            return array(builder->source_, subtype, std::forward<COUNT>(n), std::move(attrs));
+        ast::Type array(ast::Type subtype, COUNT&& n) const {
+            return array(builder->source_, subtype, std::forward<COUNT>(n));
         }
 
         /// @param source the Source of the node
         /// @param subtype the array element type
         /// @param n the array size. nullptr represents a runtime-array
-        /// @param attrs the optional attributes for the array
         /// @return an array of size `n` of type `T`
         template <typename COUNT, typename = DisableIfVectorLike<COUNT>>
-        ast::Type array(const Source& source,
-                        ast::Type subtype,
-                        COUNT&& n,
-                        VectorRef<const ast::Attribute*> attrs = Empty) const {
+        ast::Type array(const Source& source, ast::Type subtype, COUNT&& n) const {
             return ast::Type{builder->Expr(
                 builder->create<ast::TemplatedIdentifier>(source, builder->Sym("array"),
                                                           Vector{
                                                               subtype.expr,
                                                               builder->Expr(std::forward<COUNT>(n)),
-                                                          },
-                                                          std::move(attrs)))};
+                                                          }))};
         }
 
         /// @param source the Source of the node
-        /// @return a inferred-size or runtime-sized array of type `T`
-        template <typename T, int N = 0, typename = EnableIfInferOrAbstract<T>>
-        ast::Type array(const Source& source) const {
-            static_assert(N == 0, "arrays with a count cannot be inferred");
-            return (*this)(source, "array");
-        }
-
-        /// @return a inferred-size or runtime-sized array of type `T`
-        template <typename T, int N = 0, typename = EnableIfInferOrAbstract<T>>
-        ast::Type array() const {
-            static_assert(N == 0, "arrays with a count cannot be inferred");
-            return array<T>(builder->source_);
-        }
-
-        /// @param source the Source of the node
-        /// @param attrs the optional attributes for the array
         /// @return a inferred-size or runtime-sized array of type `T`
         template <typename T, int N = 0, typename = DisableIfInferOrAbstract<T>>
-        ast::Type array(const Source& source,
-                        VectorRef<const ast::Attribute*> attrs = Empty) const {
+        ast::Type array(const Source& source) const {
             if constexpr (N == 0) {
                 return ast::Type{builder->Expr(
                     builder->create<ast::TemplatedIdentifier>(source, builder->Sym("array"),
                                                               Vector<const ast::Expression*, 1>{
                                                                   Of<T>().expr,
-                                                              },
-                                                              std::move(attrs)))};
+                                                              }))};
             } else {
                 return ast::Type{builder->Expr(builder->create<ast::TemplatedIdentifier>(
                     source, builder->Sym("array"),
                     Vector{
                         Of<T>().expr,
                         builder->Expr(builder->source_, core::u32(N)),
-                    },
-                    std::move(attrs)))};
+                    }))};
             }
         }
 
-        /// @param attrs the optional attributes for the array
         /// @return an array of size `N` of type `T`
-        template <typename T, int N = 0, typename = DisableIfInferOrAbstract<T>>
-        ast::Type array(VectorRef<const ast::Attribute*> attrs = Empty) const {
-            return array<T, N>(builder->source_, std::move(attrs));
+        template <typename T, int N = 0>
+        ast::Type array() const {
+            if constexpr (std::is_same_v<T, core::fluent_types::Infer>) {
+                static_assert(N == 0, "arrays with a count cannot be inferred");
+                return (*this)(builder->source_, "array");
+            } else {
+                return array<T, N>(builder->source_);
+            }
         }
 
         /// Creates an alias type
@@ -1420,7 +1376,7 @@ class Builder {
             return create<ast::Identifier>(source, Sym(std::forward<IDENTIFIER>(identifier)));
         }
         return create<ast::TemplatedIdentifier>(source, Sym(std::forward<IDENTIFIER>(identifier)),
-                                                std::move(arg_exprs), Empty);
+                                                std::move(arg_exprs));
     }
 
     /// @param expr the expression
@@ -2366,23 +2322,6 @@ class Builder {
         return MemberAccessor(source_, std::forward<OBJECT>(object), std::forward<MEMBER>(member));
     }
 
-    /// Creates a ast::StructMemberOffsetAttribute
-    /// @param val the offset expression
-    /// @returns the offset attribute pointer
-    template <typename EXPR>
-    const ast::StructMemberOffsetAttribute* MemberOffset(EXPR&& val) {
-        return create<ast::StructMemberOffsetAttribute>(source_, Expr(std::forward<EXPR>(val)));
-    }
-
-    /// Creates a ast::StructMemberOffsetAttribute
-    /// @param source the source information
-    /// @param val the offset expression
-    /// @returns the offset attribute pointer
-    template <typename EXPR>
-    const ast::StructMemberOffsetAttribute* MemberOffset(const Source& source, EXPR&& val) {
-        return create<ast::StructMemberOffsetAttribute>(source, Expr(std::forward<EXPR>(val)));
-    }
-
     /// Creates a ast::StructMemberSizeAttribute
     /// @param source the source information
     /// @param val the size value
@@ -2415,13 +2354,6 @@ class Builder {
     template <typename EXPR>
     const ast::StructMemberAlignAttribute* MemberAlign(EXPR&& val) {
         return create<ast::StructMemberAlignAttribute>(source_, Expr(std::forward<EXPR>(val)));
-    }
-
-    /// Creates a ast::StrideAttribute
-    /// @param stride the array stride
-    /// @returns the ast::StrideAttribute attribute
-    const ast::StrideAttribute* Stride(uint32_t stride) {
-        return create<ast::StrideAttribute>(source_, stride);
     }
 
     /// Creates the ast::GroupAttribute
@@ -2666,19 +2598,6 @@ class Builder {
                                     VectorRef<const ast::Attribute*> attributes = Empty) {
         return create<ast::StructMember>(source, Ident(std::forward<NAME>(name)), type,
                                          std::move(attributes));
-    }
-
-    /// Creates a ast::StructMember with the given byte offset
-    /// @param offset the offset to use in the StructMemberOffsetAttribute
-    /// @param name the struct member name
-    /// @param type the struct member type
-    /// @returns the struct member pointer
-    template <typename NAME>
-    const ast::StructMember* Member(uint32_t offset, NAME&& name, ast::Type type) {
-        return create<ast::StructMember>(source_, Ident(std::forward<NAME>(name)), type,
-                                         Vector<const ast::Attribute*, 1>{
-                                             MemberOffset(core::AInt(offset)),
-                                         });
     }
 
     /// Creates a ast::BlockStatement with input statements and attributes
@@ -3375,25 +3294,6 @@ class Builder {
                                                Expr(std::forward<EXPR_Z>(z)));
     }
 
-    /// Creates an ast::RowMajorAttribute
-    /// @param source the source information
-    /// @returns the row-major attribute pointer
-    const ast::RowMajorAttribute* RowMajor(const Source& source) {
-        return create<ast::RowMajorAttribute>(source);
-    }
-
-    /// Creates an ast::RowMajorAttribute
-    /// @returns the row-major attribute pointer
-    const ast::RowMajorAttribute* RowMajor() { return create<ast::RowMajorAttribute>(source_); }
-
-    /// Creates an ast::DisableValidationAttribute
-    /// @param validation the validation to disable
-    /// @returns the disable validation attribute pointer
-    const ast::DisableValidationAttribute* Disable(ast::DisabledValidation validation) {
-        return ASTNodes().Create<ast::DisableValidationAttribute>(ID(), AllocateNodeID(),
-                                                                  validation);
-    }
-
     /// Passthrough overload
     /// @param name the diagnostic rule name
     /// @returns @p name
@@ -3570,9 +3470,6 @@ class Builder {
     /// Asserts that the builder has not been moved.
     void AssertNotMoved() const;
 
-    /// The unique identifier for this program
-    GenerationID id_;
-
     /// The last Node identifier
     ast::NodeID last_ast_node_id_ = ast::NodeID{static_cast<decltype(ast::NodeID::value)>(0) - 1};
 
@@ -3583,7 +3480,7 @@ class Builder {
     ast::Module* ast_ = nullptr;
 
     /// The symbol table
-    SymbolTable symbols_{id_};
+    SymbolTable symbols_{};
 
     /// The diagnostic list
     diag::List diagnostics_;
@@ -3668,15 +3565,5 @@ struct CanWrapInStatement<
     : std::true_type {};
 
 }  // namespace tint::ast
-
-namespace tint {
-
-/// @param builder the Builder
-/// @returns the GenerationID of the ast::Builder
-inline GenerationID GenerationIDOf(const ast::Builder* builder) {
-    return builder->ID();
-}
-
-}  // namespace tint
 
 #endif  // SRC_TINT_LANG_WGSL_AST_BUILDER_H_

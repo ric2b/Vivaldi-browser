@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,15 +11,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type * as puppeteer from 'puppeteer-core';
 
-import {platform} from '../conductor/mocha-interface-helpers.js';
 import {SOURCE_ROOT} from '../conductor/paths.js';
+import {platform} from '../conductor/platform.js';
 import {ScreenshotError} from '../conductor/screenshot-error.js';
 import {TestConfig} from '../conductor/test_config.js';
-import {
-  getBrowserAndPages,
-  timeout,
-  waitFor,
-} from '../shared/helper.js';
+import {getBrowserAndPages} from '../shared/helper.js';
 
 /**
  * The goldens screenshot folder is always taken from the source directory (NOT
@@ -343,15 +339,4 @@ function setGeneratedFileAsGolden(golden: string, generated: string) {
   } catch (e) {
     assert.fail(`Error setting golden, ${e}`);
   }
-}
-
-export async function waitForDialogAnimationEnd(root?: puppeteer.ElementHandle) {
-  const ANIMATION_TIMEOUT = 2000;
-  const dialog = await waitFor('dialog[open]', root);
-  const animationPromise = dialog.evaluate(dialog => {
-    return new Promise<void>(resolve => {
-      dialog.addEventListener('animationend', () => resolve(), {once: true});
-    });
-  });
-  await Promise.race([animationPromise, timeout(ANIMATION_TIMEOUT)]);
 }

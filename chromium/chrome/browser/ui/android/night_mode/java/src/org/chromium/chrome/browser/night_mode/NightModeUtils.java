@@ -18,8 +18,6 @@ import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
-import java.util.LinkedHashSet;
-
 // Vivaldi
 import org.chromium.build.BuildConfig;
 
@@ -38,23 +36,21 @@ public class NightModeUtils {
 
     /**
      * Updates configuration for night mode to ensure night mode settings are applied properly.
-     * Should be called anytime the Activity's configuration changes (e.g. from
-     * {@link Activity#onConfigurationChanged(Configuration)}) if uiMode was not overridden on
-     * the configuration during activity initialization
-     * (see {@link #applyOverridesForNightMode(NightModeStateProvider, Configuration)}).
+     * Should be called anytime the Activity's configuration changes (e.g. from {@link
+     * Activity#onConfigurationChanged(Configuration)}) if uiMode was not overridden on the
+     * configuration during activity initialization (see {@link
+     * #applyOverridesForNightMode(NightModeStateProvider, Configuration)}).
+     *
      * @param activity The {@link Activity} that needs to be updated.
      * @param inNightMode Whether night mode should be set on the activity.
-     * @param newConfig The new {@link Configuration} from
-     *                  {@link Activity#onConfigurationChanged(Configuration)}.
-     * @param themeResIds An ordered set of {@link StyleRes} of the themes applied to the activity.
+     * @param newConfig The new {@link Configuration} from {@link
+     *     Activity#onConfigurationChanged(Configuration)}.
      */
     public static void updateConfigurationForNightMode(
-            Activity activity,
-            boolean inNightMode,
-            Configuration newConfig,
-            LinkedHashSet<Integer> themeResIds) {
+            Activity activity, boolean inNightMode, Configuration newConfig) {
         // Vivaldi ref. AUTO-258. Vivaldi for Automotive should ignore system night mode changes.
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return;
+
         final int uiNightMode =
                 inNightMode ? Configuration.UI_MODE_NIGHT_YES : Configuration.UI_MODE_NIGHT_NO;
 
@@ -118,8 +114,7 @@ public class NightModeUtils {
         int userSetting = ChromeSharedPreferences.getInstance().readInt(UI_THEME_SETTING, -1);
         if (userSetting == -1) {
             // Vivaldi
-            if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD &&
-                    !(BuildConfig.IS_OEM_LYNKCO_BUILD || BuildConfig.IS_OEM_GAS_BUILD)) {
+            if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD && !BuildConfig.IS_OEM_LYNKCO_BUILD) {
                 return ThemeType.DARK;
             }
 

@@ -28,7 +28,6 @@
 #include "logging/rtc_event_log/events/rtc_event_dtls_writable_state.h"
 #include "logging/rtc_event_log/events/rtc_event_end_log.h"
 #include "logging/rtc_event_log/events/rtc_event_frame_decoded.h"
-#include "logging/rtc_event_log/events/rtc_event_generic_ack_received.h"
 #include "logging/rtc_event_log/events/rtc_event_generic_packet_received.h"
 #include "logging/rtc_event_log/events/rtc_event_generic_packet_sent.h"
 #include "logging/rtc_event_log/events/rtc_event_ice_candidate_pair.h"
@@ -329,16 +328,6 @@ class TieBreaker<LoggedGenericPacketReceived> {
 };
 
 template <>
-class TieBreaker<LoggedGenericAckReceived> {
- public:
-  static constexpr int type_order = static_cast<int>(TypeOrder::GenericAckIn);
-  static std::optional<uint16_t> transport_seq_num_accessor(
-      const LoggedGenericAckReceived&) {
-    return std::optional<uint16_t>();
-  }
-};
-
-template <>
 class TieBreaker<LoggedGenericPacketSent> {
  public:
   static constexpr int type_order =
@@ -439,6 +428,34 @@ class TieBreaker<LoggedRtcpPacketTransportFeedback> {
 };
 
 template <>
+class TieBreaker<LoggedRtcpCongestionControlFeedback> {
+ public:
+  static constexpr int type_order(PacketDirection direction) {
+    return static_cast<int>(direction == PacketDirection::kIncomingPacket
+                                ? TypeOrder::RtcpIn
+                                : TypeOrder::RtcpOut);
+  }
+  static std::optional<uint16_t> transport_seq_num_accessor(
+      const LoggedRtcpCongestionControlFeedback&) {
+    return std::optional<uint16_t>();
+  }
+};
+
+template <>
+class TieBreaker<LoggedRtcpPacketLossNotification> {
+ public:
+  static constexpr int type_order(PacketDirection direction) {
+    return static_cast<int>(direction == PacketDirection::kIncomingPacket
+                                ? TypeOrder::RtcpIn
+                                : TypeOrder::RtcpOut);
+  }
+  static std::optional<uint16_t> transport_seq_num_accessor(
+      const LoggedRtcpPacketLossNotification&) {
+    return std::optional<uint16_t>();
+  }
+};
+
+template <>
 class TieBreaker<LoggedRtcpPacketSenderReport> {
  public:
   static constexpr int type_order(PacketDirection direction) {
@@ -462,6 +479,90 @@ class TieBreaker<LoggedRtcpPacketReceiverReport> {
   }
   static std::optional<uint16_t> transport_seq_num_accessor(
       const LoggedRtcpPacketReceiverReport&) {
+    return std::optional<uint16_t>();
+  }
+};
+
+template <>
+class TieBreaker<LoggedRtcpPacketExtendedReports> {
+ public:
+  static constexpr int type_order(PacketDirection direction) {
+    return static_cast<int>(direction == PacketDirection::kIncomingPacket
+                                ? TypeOrder::RtcpIn
+                                : TypeOrder::RtcpOut);
+  }
+  static std::optional<uint16_t> transport_seq_num_accessor(
+      const LoggedRtcpPacketExtendedReports&) {
+    return std::optional<uint16_t>();
+  }
+};
+
+template <>
+class TieBreaker<LoggedRtcpPacketNack> {
+ public:
+  static constexpr int type_order(PacketDirection direction) {
+    return static_cast<int>(direction == PacketDirection::kIncomingPacket
+                                ? TypeOrder::RtcpIn
+                                : TypeOrder::RtcpOut);
+  }
+  static std::optional<uint16_t> transport_seq_num_accessor(
+      const LoggedRtcpPacketNack&) {
+    return std::optional<uint16_t>();
+  }
+};
+
+template <>
+class TieBreaker<LoggedRtcpPacketRemb> {
+ public:
+  static constexpr int type_order(PacketDirection direction) {
+    return static_cast<int>(direction == PacketDirection::kIncomingPacket
+                                ? TypeOrder::RtcpIn
+                                : TypeOrder::RtcpOut);
+  }
+  static std::optional<uint16_t> transport_seq_num_accessor(
+      const LoggedRtcpPacketRemb&) {
+    return std::optional<uint16_t>();
+  }
+};
+
+template <>
+class TieBreaker<LoggedRtcpPacketFir> {
+ public:
+  static constexpr int type_order(PacketDirection direction) {
+    return static_cast<int>(direction == PacketDirection::kIncomingPacket
+                                ? TypeOrder::RtcpIn
+                                : TypeOrder::RtcpOut);
+  }
+  static std::optional<uint16_t> transport_seq_num_accessor(
+      const LoggedRtcpPacketFir&) {
+    return std::optional<uint16_t>();
+  }
+};
+
+template <>
+class TieBreaker<LoggedRtcpPacketPli> {
+ public:
+  static constexpr int type_order(PacketDirection direction) {
+    return static_cast<int>(direction == PacketDirection::kIncomingPacket
+                                ? TypeOrder::RtcpIn
+                                : TypeOrder::RtcpOut);
+  }
+  static std::optional<uint16_t> transport_seq_num_accessor(
+      const LoggedRtcpPacketPli&) {
+    return std::optional<uint16_t>();
+  }
+};
+
+template <>
+class TieBreaker<LoggedRtcpPacketBye> {
+ public:
+  static constexpr int type_order(PacketDirection direction) {
+    return static_cast<int>(direction == PacketDirection::kIncomingPacket
+                                ? TypeOrder::RtcpIn
+                                : TypeOrder::RtcpOut);
+  }
+  static std::optional<uint16_t> transport_seq_num_accessor(
+      const LoggedRtcpPacketBye&) {
     return std::optional<uint16_t>();
   }
 };

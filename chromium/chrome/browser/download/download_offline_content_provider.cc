@@ -31,7 +31,7 @@
 #include "ui/display/screen.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
+#include "base/android/android_info.h"
 #include "chrome/browser/download/android/download_controller.h"
 #include "chrome/browser/download/android/download_manager_bridge.h"
 #include "chrome/browser/download/android/download_manager_service.h"
@@ -349,7 +349,7 @@ void DownloadOfflineContentProvider::GetVisualsForItem(
     VisualsCallback callback) {
   // TODO(crbug.com/40581903) Supply thumbnail if item is visible.
   DownloadItem* item = GetDownload(id.id);
-  display::Screen* screen = display::Screen::GetScreen();
+  display::Screen* screen = display::Screen::Get();
   if (!item || !options.get_icon || !screen) {
     // No favicon is available; run the callback without visuals.
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
@@ -531,8 +531,8 @@ void DownloadOfflineContentProvider::AddCompletedDownload(DownloadItem* item) {
   base::OnceCallback<void(int64_t)> cb =
       base::BindOnce(&DownloadOfflineContentProvider::AddCompletedDownloadDone,
                      weak_ptr_factory_.GetWeakPtr(), item->GetGuid());
-  if (base::android::BuildInfo::GetInstance()->sdk_int() <
-      base::android::SDK_VERSION_Q) {
+  if (base::android::android_info::sdk_int() <
+      base::android::android_info::SDK_VERSION_Q) {
     DownloadManagerBridge::AddCompletedDownload(item, std::move(cb));
   } else {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(

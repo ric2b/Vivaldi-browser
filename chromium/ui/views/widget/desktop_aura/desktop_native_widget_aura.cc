@@ -644,8 +644,7 @@ void DesktopNativeWidgetAura::InitNativeWidget(Widget::InitParams params) {
       cursor_manager_ = new wm::CursorManager(
           std::unique_ptr<wm::NativeCursorManager>(native_cursor_manager_));
       cursor_manager_->SetDisplay(
-          display::Screen::GetScreen()->GetDisplayNearestWindow(
-              host_->window()));
+          display::Screen::Get()->GetDisplayNearestWindow(host_->window()));
       if (features::IsSystemCursorSizeSupported()) {
         native_cursor_manager_->InitCursorSizeObserver(cursor_manager_);
       }
@@ -733,9 +732,8 @@ void DesktopNativeWidgetAura::ReparentNativeViewImpl(
                  : gfx::kNullAcceleratedWidget);
 }
 
-std::unique_ptr<NonClientFrameView>
-DesktopNativeWidgetAura::CreateNonClientFrameView() {
-  return desktop_window_tree_host_->CreateNonClientFrameView();
+std::unique_ptr<FrameView> DesktopNativeWidgetAura::CreateFrameView() {
+  return desktop_window_tree_host_->CreateFrameView();
 }
 
 bool DesktopNativeWidgetAura::ShouldUseNativeFrame() const {

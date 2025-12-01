@@ -9,6 +9,10 @@
 #ifndef COMMON_MATHUTIL_H_
 #define COMMON_MATHUTIL_H_
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -1509,6 +1513,15 @@ constexpr T roundDownPow2(const T value, const T alignment)
 {
     ASSERT(gl::isPow2(alignment));
     return value & ~(alignment - 1);
+}
+
+template <typename T>
+angle::CheckedNumeric<T> CheckedRoundUpPow2(const T value, const T alignment)
+{
+    ASSERT(gl::isPow2(alignment));
+    angle::CheckedNumeric<T> checkedValue(value);
+    angle::CheckedNumeric<T> checkedAlignment(alignment);
+    return (checkedValue + checkedAlignment - 1) & ~(checkedAlignment - 1);
 }
 
 template <typename T>

@@ -28,8 +28,6 @@ if (use_blink) {
       "//base",
       "//content/test:test_support",
       "//testing/gtest",
-      "//third_party/blink/public/common",
-      "//url",
     ]
   }
 }

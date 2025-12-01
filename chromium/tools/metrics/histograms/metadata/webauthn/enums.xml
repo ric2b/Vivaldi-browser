@@ -41,6 +41,20 @@ chromium-metrics-reviews@google.com.
              cancellations."/>
 </enum>
 
+<!-- LINT.IfChange(CombinedSelectorAction) -->
+
+<enum name="CombinedSelectorAction">
+  <int value="0"
+      label="Accept button clicked with a single credential available."/>
+  <int value="1"
+      label="Accept button clicked with the default credential selected."/>
+  <int value="2"
+      label="Accept button clicked with a non-default credential selected."/>
+  <int value="3" label="Cancel button clicked."/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/webauthn/webauthn_metrics_util.cc:CombinedSelectorAction) -->
+
 <enum name="CredManCreateRequestEnum">
   <int value="0" label="A createCredential request was sent to the platform."/>
   <int value="1"
@@ -118,6 +132,21 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="Cancelled - PIN create modal"/>
   <int value="5" label="Failure dialog shown"/>
 </enum>
+
+<!-- LINT.IfChange(PasskeyUpgradeResultEnum) -->
+
+<enum name="PasskeyUpgradeResult">
+  <int value="0" label="Success"/>
+  <int value="1" label="GPM disabled"/>
+  <int value="2" label="Passkey upgrades disabled"/>
+  <int value="3" label="GPM Enclave not initialized"/>
+  <int value="4" label="Password store error"/>
+  <int value="5" label="No password with matching username found"/>
+  <int value="6" label="Matching password was not recently used"/>
+  <int value="7" label="GPM Enclave error"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/ui/webauthn/passkey_upgrade_request_controller.h:PasskeyUpgradeResult) -->
 
 <!-- LINT.IfChange(SignalAllAcceptedCredentialsResultEnum) -->
 
@@ -265,6 +294,7 @@ chromium-metrics-reviews@google.com.
   <int value="6" label="Recovery Key Store Downgrade"/>
   <int value="7" label="Failed Transaction"/>
   <int value="8" label="Other Error"/>
+  <int value="9" label="Cohort not yet deprecated"/>
 </enum>
 
 <enum name="WebAuthenticationEnclaveTransactionResult">
@@ -449,6 +479,12 @@ chromium-metrics-reviews@google.com.
   <int value="9" label="Tried to renew but the security domain reports no PIN"/>
   <int value="10"
       label="Renewal failed because the security domain has been reset"/>
+  <int value="11"
+      label="Renewal failed because the enclave reports the cohort hasn't
+             been deprecated yet"/>
+  <int value="12"
+      label="Renewal failed because it would result in downgrading the
+             recovery store"/>
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/webauthn/enclave_manager.h:PinRenewalFailureCause) -->

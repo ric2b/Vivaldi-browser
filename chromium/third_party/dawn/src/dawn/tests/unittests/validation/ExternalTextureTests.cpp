@@ -82,6 +82,42 @@ class ExternalTextureTest : public ValidationTest {
         }
     }
 
+    void SubmitExternalTextureInDefaultRenderBundle(wgpu::ExternalTexture externalTexture,
+                                                    bool success) {
+        // Create a bind group that contains the external texture.
+        wgpu::BindGroupLayout bgl = utils::MakeBindGroupLayout(
+            device, {{0, wgpu::ShaderStage::Fragment, &utils::kExternalTextureBindingLayout}});
+        wgpu::BindGroup bindGroup = utils::MakeBindGroup(device, bgl, {{0, externalTexture}});
+
+        // Create another texture to use as a color attachment.
+        wgpu::TextureDescriptor renderTextureDescriptor = CreateTextureDescriptor();
+        wgpu::Texture renderTexture = device.CreateTexture(&renderTextureDescriptor);
+        wgpu::TextureView renderView = renderTexture.CreateView();
+
+        // Create a RenderBundle using the bindgroup and doing nothing else.
+        wgpu::RenderBundleEncoderDescriptor rbDesc;
+        rbDesc.colorFormatCount = 1;
+        rbDesc.colorFormats = &renderTextureDescriptor.format;
+
+        wgpu::RenderBundleEncoder rbEncoder = device.CreateRenderBundleEncoder(&rbDesc);
+        rbEncoder.SetBindGroup(0, bindGroup);
+        wgpu::RenderBundle bundle = rbEncoder.Finish();
+
+        // Use that render bundle in the render pass.
+        utils::ComboRenderPassDescriptor renderPass({renderView}, nullptr);
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPass);
+        pass.ExecuteBundles(1, &bundle);
+        pass.End();
+        wgpu::CommandBuffer commands = encoder.Finish();
+
+        if (success) {
+            queue.Submit(1, &commands);
+        } else {
+            ASSERT_DEVICE_ERROR(queue.Submit(1, &commands));
+        }
+    }
+
     void SubmitExternalTextureInDefaultComputePass(wgpu::ExternalTexture externalTexture,
                                                    bool success) {
         // Create a bind group that contains the external texture.
@@ -515,11 +551,32 @@ TEST_F(ExternalTextureTest, SubmitExpiredExternalTextureInComputePass) {
     SubmitExternalTextureInDefaultComputePass(externalTexture, false /* success = false */);
 }
 
-// Test that submitting a compute pass that contains an active external texture should success.
+// Test that submitting a compute pass that contains a destroyed external texture should success.
 TEST_F(ExternalTextureTest, SubmitDestroyedExternalTextureInComputePass) {
     wgpu::ExternalTexture externalTexture = CreateDefaultExternalTexture();
     externalTexture.Destroy();
     SubmitExternalTextureInDefaultComputePass(externalTexture, false /* success = false */);
+}
+
+// Test that submitting a render bundle that contains an active external.
+TEST_F(ExternalTextureTest, SubmitActiveExternalTextureInRenderBundle) {
+    wgpu::ExternalTexture externalTexture = CreateDefaultExternalTexture();
+    SubmitExternalTextureInDefaultRenderBundle(externalTexture, true /* success = true */);
+}
+
+// Test that submitting a render bundle that contains an expired external texture results in an
+// error.
+TEST_F(ExternalTextureTest, SubmitExpiredExternalTextureInRenderBundle) {
+    wgpu::ExternalTexture externalTexture = CreateDefaultExternalTexture();
+    externalTexture.Expire();
+    SubmitExternalTextureInDefaultRenderBundle(externalTexture, false /* success = false */);
+}
+
+// Test that submitting a render bundle that contains a destroyed external texture should success.
+TEST_F(ExternalTextureTest, SubmitDestroyedExternalTextureInRenderBundle) {
+    wgpu::ExternalTexture externalTexture = CreateDefaultExternalTexture();
+    externalTexture.Destroy();
+    SubmitExternalTextureInDefaultRenderBundle(externalTexture, false /* success = false */);
 }
 
 // Test that refresh an expired external texture and submit a compute pass with it.
@@ -625,29 +682,6 @@ TEST_F(ExternalTextureTest, BindGroupDoesNotMatchLayout) {
             device, {{0, wgpu::ShaderStage::Fragment, wgpu::BufferBindingType::Uniform}});
         ASSERT_DEVICE_ERROR(utils::MakeBindGroup(device, bgl, {{0, device.CreateSampler()}}));
     }
-}
-
-class ExternalTextureTestEnabledToggle : public ExternalTextureTest {
-  protected:
-    std::vector<const char*> GetEnabledToggles() override {
-        return {"disable_texture_view_binding_used_as_external_texture"};
-    }
-};
-
-// Regression test for crbug.com/1343099 where BindGroup validation let other binding types be used
-// for external texture bindings.
-TEST_F(ExternalTextureTestEnabledToggle, TextureViewBindingDoesntMatch) {
-    wgpu::BindGroupLayout bgl = utils::MakeBindGroupLayout(
-        device, {{0, wgpu::ShaderStage::Fragment, &utils::kExternalTextureBindingLayout}});
-
-    wgpu::TextureDescriptor textureDescriptor = CreateTextureDescriptor();
-    wgpu::Texture texture = device.CreateTexture(&textureDescriptor);
-
-    // The bug was that this passed validation and crashed inside the backends with a null
-    // dereference. It passed validation because the number of bindings matched (1 == 1) and that
-    // the validation didn't check that an external texture binding was required, fell back to
-    // checking for the binding type of entry 0 that had been decayed to be a sampled texture view.
-    ASSERT_DEVICE_ERROR(utils::MakeBindGroup(device, bgl, {{0, texture.CreateView()}}));
 }
 
 // Ensure that bind group validation catches error external textures.

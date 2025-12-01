@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/layout/layout_text_combine.h"
 #include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/text_utils.h"
+#include "third_party/blink/renderer/core/style/computed_style_base_constants.h"
 #include "third_party/blink/renderer/platform/text/character_break_iterator.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 
@@ -57,6 +58,8 @@ bool ShouldAlignCaretRight(ETextAlign text_align, TextDirection direction) {
       return IsRtl(direction);
     case ETextAlign::kEnd:
       return IsLtr(direction);
+    case ETextAlign::kMatchParent:
+      return IsRtl(direction);
   }
   NOTREACHED();
 }
@@ -103,6 +106,11 @@ LogicalRect ComputeNextCharacterLogicalRect(const InlineCursor& cursor,
   if (offset < cursor.Current().TextEndOffset()) {
     cursor_inline_size = ComputeCharacterWidthAtOffset(
         cursor, offset - cursor.Current().TextStartOffset(), style);
+    // Fall back to 1ch.
+    if (cursor_inline_size == LayoutUnit()) {
+      cursor_inline_size =
+          LayoutUnit(style.GetFont()->PrimaryFont()->AvgCharWidth());
+    }
   } else {
     // If the next fragment is text, we need to get the width and height of
     // the first visible character in this fragment.
@@ -118,6 +126,10 @@ LogicalRect ComputeNextCharacterLogicalRect(const InlineCursor& cursor,
           {style_next.GetWritingMode(), ResolvedDirection(next)},
           next.Current().Size());
       cursor_inline_size = ComputeCharacterWidthAtOffset(next, 0, style_next);
+      if (cursor_inline_size == LayoutUnit()) {
+        cursor_inline_size =
+            LayoutUnit(style_next.GetFont()->PrimaryFont()->AvgCharWidth());
+      }
       cursor_block_size =
           converter_next.ToLogical(next.Current().Size()).block_size;
       switch (style.GetWritingMode()) {
@@ -136,11 +148,11 @@ LogicalRect ComputeNextCharacterLogicalRect(const InlineCursor& cursor,
           break;
       }
     } else {
-      // If there is no visible character after the insertion point, the UA must
-      // render the caret after the last visible character.
-      cursor_inline_size = ComputeCharacterWidthAtOffset(
-          cursor, offset - cursor.Current().TextStartOffset() - 1, style);
-    }
+      // The width of the block and underscore carets should be 1ch if
+      // this information is impractical to determine.
+      cursor_inline_size =
+          LayoutUnit(style.GetFont()->PrimaryFont()->AvgCharWidth());
+  }
   }
   caret_rect.offset.block_offset = cursor_block_offset;
 

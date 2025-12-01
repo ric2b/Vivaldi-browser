@@ -441,16 +441,13 @@ MTLPixelFormat MetalPixelFormat(const DeviceBase* device, wgpu::TextureFormat fo
     }
 }
 
-NSRef<NSString> MakeDebugName(DeviceBase* device, const char* prefix, std::string label) {
-    std::ostringstream objectNameStream;
-    objectNameStream << prefix;
-
+NSRef<NSString> MakeDebugName(DeviceBase* device, const char* prefix, std::string_view label) {
+    std::string objectName = prefix;
     if (!label.empty() && device->IsToggleEnabled(Toggle::UseUserDefinedLabelsInBackend)) {
-        objectNameStream << "_" << label;
+        objectName = absl::StrFormat("%s_%s", objectName, label);
     }
-    const std::string debugName = objectNameStream.str();
     NSRef<NSString> nsDebugName =
-        AcquireNSRef([[NSString alloc] initWithUTF8String:debugName.c_str()]);
+        AcquireNSRef([[NSString alloc] initWithUTF8String:objectName.c_str()]);
     return nsDebugName;
 }
 
@@ -833,6 +830,10 @@ id<MTLTexture> CreateTextureMtlForPlane(MTLTextureUsage mtlUsage,
     return [device->GetMTLDevice() newTextureWithDescriptor:mtlDesc
                                                   iosurface:ioSurface
                                                       plane:plane];
+}
+
+bool SupportTextureComponentSwizzle(id<MTLDevice> device) {
+    return [device supportsFamily:MTLGPUFamilyMac2] || [device supportsFamily:MTLGPUFamilyApple2];
 }
 
 }  // namespace dawn::native::metal

@@ -127,6 +127,7 @@ public class AllSiteSettings extends BaseSiteSettingsFragment
             if (mEmptyView == null) return;
 
             mEmptyView.setVisibility(hasEntries ? View.GONE : View.VISIBLE);
+            notifyPreferencesUpdated();
         }
     }
 
@@ -527,7 +528,6 @@ public class AllSiteSettings extends BaseSiteSettingsFragment
                                     getSiteSettingsDelegate(),
                                     entry,
                                     getActivity().getLayoutInflater(),
-                                    /* showRwsMembershipLabels= */ true,
                                     /* isClickable= */ true);
                     preference.setOnDeleteCallback(
                             () -> {

@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include <array>
 #include <memory>
 #include <string_view>
@@ -41,6 +36,7 @@
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
+#include "base/test/test_future.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/default_clock.h"
@@ -72,6 +68,7 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
+#include "chrome/browser/ui/webui/certificate_viewer/certificate_viewer_webui.h"
 #include "chrome/browser/web_applications/test/os_integration_test_override_impl.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
@@ -87,7 +84,6 @@
 #include "components/content_settings/common/content_settings_agent.mojom.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/embedder_support/switches.h"
 #include "components/error_page/content/browser/net_error_auto_reloader.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/network_time/network_time_test_utils.h"
@@ -554,6 +550,21 @@ class SSLUITestBase : public InProcessBrowserTest,
             "window.certificateErrorPageController.reportPhishingError();";
         break;
       }
+      case security_interstitials::CMD_OPEN_HELP_CENTER_IN_NEW_TAB: {
+        javascript =
+            "window.certificateErrorPageController.openHelpCenterInNewTab();";
+        break;
+      }
+      case security_interstitials::CMD_OPEN_REPORTING_PRIVACY_IN_NEW_TAB: {
+        javascript = "window.certificateErrorPageController."
+                     "openReportingPrivacyInNewTab();";
+        break;
+      }
+      case security_interstitials::CMD_OPEN_WHITEPAPER_IN_NEW_TAB: {
+        javascript =
+            "window.certificateErrorPageController.openWhitepaperInNewTab();";
+        break;
+      }
       default: {
         // Other values in the enum are not used by these tests, and don't
         // have a Javascript equivalent that can be called here.
@@ -724,7 +735,7 @@ class SSLUITest : public SSLUITestBase {
  public:
   SSLUITest() : SSLUITestBase() {
     scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{},
+        /*enabled_features=*/{net::features::kVerifyQWACs},
         /*disabled_features=*/{blink::features::kMixedContentAutoupgrade});
   }
 
@@ -6666,7 +6677,8 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, NetworkErrorDoesntRevokeExemptions) {
 // Checks we don't attempt to show an interstitial (or crash) when visiting an
 // SSL error related page in chrome://network-errors. Regression test for
 // crbug.com/953812
-IN_PROC_BROWSER_TEST_F(SSLUITest, NoInterstitialOnNetworkErrorPage) {
+IN_PROC_BROWSER_TEST_F(SSLUITest,
+                       NoInterstitialOnNetworkErrorPage) {
   GURL invalid_cert_url(blink::kChromeUINetworkErrorURL);
   GURL::Replacements replacements;
   replacements.SetPathStr("-207");
@@ -6674,6 +6686,143 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, NoInterstitialOnNetworkErrorPage) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), invalid_cert_url));
   EXPECT_FALSE(chrome_browser_interstitials::IsShowingInterstitial(
       browser()->tab_strip_model()->GetActiveWebContents()));
+}
+
+IN_PROC_BROWSER_TEST_F(SSLUITest, OpenHelpCenterInNewTab) {
+  ASSERT_TRUE(https_server_expired_.Start());
+  WebContents* interstitial_tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_expired_.GetURL("/ssl/google.html")));
+  ASSERT_TRUE(
+      chrome_browser_interstitials::IsShowingSSLInterstitial(interstitial_tab));
+
+  EXPECT_EQ(1, browser()->tab_strip_model()->count());
+
+  content::TestNavigationObserver nav_observer(nullptr);
+  nav_observer.StartWatchingNewWebContents();
+  SendInterstitialCommand(
+      interstitial_tab,
+      security_interstitials::CMD_OPEN_HELP_CENTER_IN_NEW_TAB);
+  nav_observer.Wait();
+
+  EXPECT_EQ(2, browser()->tab_strip_model()->count());
+  WebContents* new_tab = browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(new_tab);
+  EXPECT_NE(new_tab, interstitial_tab);
+  EXPECT_FALSE(chrome_browser_interstitials::IsShowingInterstitial(new_tab));
+}
+
+IN_PROC_BROWSER_TEST_F(SSLUITest, OpenReportingPrivacyInNewTab) {
+  ASSERT_TRUE(https_server_expired_.Start());
+  WebContents* interstitial_tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_expired_.GetURL("/ssl/google.html")));
+  ASSERT_TRUE(
+      chrome_browser_interstitials::IsShowingSSLInterstitial(interstitial_tab));
+
+  EXPECT_EQ(1, browser()->tab_strip_model()->count());
+
+  content::TestNavigationObserver nav_observer(nullptr);
+  nav_observer.StartWatchingNewWebContents();
+  SendInterstitialCommand(
+      interstitial_tab,
+      security_interstitials::CMD_OPEN_REPORTING_PRIVACY_IN_NEW_TAB);
+  nav_observer.Wait();
+
+  EXPECT_EQ(2, browser()->tab_strip_model()->count());
+  WebContents* new_tab = browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(new_tab);
+  EXPECT_NE(new_tab, interstitial_tab);
+  EXPECT_FALSE(chrome_browser_interstitials::IsShowingInterstitial(new_tab));
+}
+
+IN_PROC_BROWSER_TEST_F(SSLUITest, OpenWhitepaperInNewTab) {
+  ASSERT_TRUE(https_server_expired_.Start());
+  WebContents* interstitial_tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_expired_.GetURL("/ssl/google.html")));
+  ASSERT_TRUE(
+      chrome_browser_interstitials::IsShowingSSLInterstitial(interstitial_tab));
+
+  EXPECT_EQ(1, browser()->tab_strip_model()->count());
+
+  content::TestNavigationObserver nav_observer(nullptr);
+  nav_observer.StartWatchingNewWebContents();
+  SendInterstitialCommand(
+      interstitial_tab,
+      security_interstitials::CMD_OPEN_WHITEPAPER_IN_NEW_TAB);
+  nav_observer.Wait();
+
+  EXPECT_EQ(2, browser()->tab_strip_model()->count());
+  WebContents* new_tab = browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(new_tab);
+  EXPECT_NE(new_tab, interstitial_tab);
+  EXPECT_FALSE(chrome_browser_interstitials::IsShowingInterstitial(new_tab));
+}
+
+IN_PROC_BROWSER_TEST_F(SSLUITest, ShowCertificateViewer) {
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  net::EmbeddedTestServer::ServerCertificateConfig cert_config;
+  cert_config.root = net::EmbeddedTestServer::RootType::kUniqueRoot;
+  https_server.SetSSLConfig(cert_config);
+  ASSERT_TRUE(https_server.Start());
+
+  base::HistogramTester histograms;
+  static constexpr std::string_view interaction_histogram =
+      "interstitial.ssl_overridable.interaction";
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server.GetURL("/ssl/google.html")));
+
+  WebContents* interstitial_tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(
+      chrome_browser_interstitials::IsShowingSSLInterstitial(interstitial_tab));
+  EXPECT_EQ(1, browser()->tab_strip_model()->count());
+
+  base::test::TestFuture<std::vector<bssl::UniquePtr<CRYPTO_BUFFER>>,
+                         content::WebContents*>
+      future;
+  CertificateViewerDialog::MockForTesting(future.GetRepeatingCallback());
+
+  // The "view certificate" link is part of the details paragraph that isn't
+  // visible until the details are expanded. (Technically finding the element
+  // in the DOM and calling .click() on it doesn't actually require the element
+  // to be visible, so doing this isn't strictly necessary, but it does verify
+  // more of the expected behavior.)
+  EXPECT_EQ(false, content::EvalJs(interstitial_tab,
+                                   "document.querySelector(\"#view-certificate-"
+                                   "link\").checkVisibility()"));
+
+  EXPECT_EQ(true,
+            content::EvalJs(
+                interstitial_tab,
+                "document.querySelector(\"#details-button\").click(); true"));
+
+  EXPECT_EQ(true, content::EvalJs(interstitial_tab,
+                                  "document.querySelector(\"#view-certificate-"
+                                  "link\").checkVisibility()"));
+
+  ASSERT_EQ(
+      true,
+      content::EvalJs(
+          interstitial_tab,
+          "document.querySelector(\"#view-certificate-link\").click(); true"));
+
+  auto [cert_buffers, web_contents] = future.Take();
+  EXPECT_EQ(1U, cert_buffers.size());
+  EXPECT_TRUE(net::x509_util::CryptoBufferEqual(
+      cert_buffers[0].get(), https_server.GetCertificate()->cert_buffer()));
+  EXPECT_EQ(web_contents, interstitial_tab);
+  histograms.ExpectBucketCount(
+      interaction_histogram,
+      security_interstitials::MetricsHelper::TOTAL_VISITS, 1);
+  histograms.ExpectBucketCount(
+      interaction_histogram,
+      security_interstitials::MetricsHelper::VIEW_CERTIFICATE, 1);
 }
 
 // This SPKI hash is from a self signed certificate generated using the
@@ -7291,7 +7440,7 @@ class SSLUIAutoReloadTest : public SSLUITest {
   SSLUIAutoReloadTest() = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(embedder_support::kEnableAutoReload);
+    command_line->AppendSwitch(switches::kEnableAutoReload);
     SSLUITest::SetUpCommandLine(command_line);
   }
 };

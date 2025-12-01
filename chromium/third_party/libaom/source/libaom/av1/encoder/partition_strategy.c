@@ -1323,12 +1323,14 @@ static void ml_prune_ab_partition(AV1_COMP *const cpi, int part_ctx,
 
 #define FEATURES 18
 #define LABELS 4
+#define NEW_LABELS 3
 // Use a ML model to predict if horz4 and vert4 should be considered.
 void av1_ml_prune_4_partition(AV1_COMP *const cpi, MACROBLOCK *const x,
                               int part_ctx, int64_t best_rd,
                               PartitionSearchState *part_state,
                               int *part4_allowed,
                               unsigned int pb_source_variance) {
+  const AV1_COMMON *const cm = &cpi->common;
   const PartitionBlkParams blk_params = part_state->part_blk_params;
   const int mi_row = blk_params.mi_row;
   const int mi_col = blk_params.mi_col;
@@ -1345,15 +1347,34 @@ void av1_ml_prune_4_partition(AV1_COMP *const cpi, MACROBLOCK *const x,
   if (best_rd >= 1000000000) return;
   int64_t *horz_rd = rect_part_rd[HORZ4];
   int64_t *vert_rd = rect_part_rd[VERT4];
+
+  const int is_720p_or_larger = AOMMIN(cm->width, cm->height) >= 720;
+  const int is_480p_or_larger = AOMMIN(cm->width, cm->height) >= 480;
+  // res_idx is 0 for res < 480p, 1 for 480p, 2 for 720p+
+  const int res_idx = is_480p_or_larger + is_720p_or_larger;
+
+  const int bsize_idx = convert_bsize_to_idx(bsize);
+  if (bsize_idx < 0) return;
+  const float *ml_mean = av1_partition4_nn_mean[bsize_idx];
+  const float *ml_std = av1_partition4_nn_std[bsize_idx];
+
+  int ml_model_index = (cpi->sf.part_sf.ml_4_partition_search_level_index < 3);
+
   const NN_CONFIG *nn_config = NULL;
   // 4-way partitions are only allowed for these three square block sizes.
   switch (bsize) {
-    case BLOCK_16X16: nn_config = &av1_4_partition_nnconfig_16; break;
-    case BLOCK_32X32: nn_config = &av1_4_partition_nnconfig_32; break;
-    case BLOCK_64X64: nn_config = &av1_4_partition_nnconfig_64; break;
+    case BLOCK_16X16:
+      nn_config = &av1_4_partition_nnconfig_16[ml_model_index];
+      break;
+    case BLOCK_32X32:
+      nn_config = &av1_4_partition_nnconfig_32[ml_model_index];
+      break;
+    case BLOCK_64X64:
+      nn_config = &av1_4_partition_nnconfig_64[ml_model_index];
+      break;
     default: assert(0 && "Unexpected bsize.");
   }
-  if (!nn_config) return;
+  if (!nn_config || !ml_mean || !ml_std) return;
 
   // Generate features.
   float features[FEATURES];
@@ -1437,6 +1458,12 @@ void av1_ml_prune_4_partition(AV1_COMP *const cpi, MACROBLOCK *const x,
   }
   assert(feature_index == FEATURES);
 
+  if (ml_model_index) {
+    for (int idx = 0; idx < FEATURES; idx++) {
+      features[idx] = (features[idx] - ml_mean[idx]) / ml_std[idx];
+    }
+  }
+
   // Write features to file
   if (!frame_is_intra_only(&cpi->common)) {
     write_features_to_file(cpi->oxcf.partition_info_path,
@@ -1444,34 +1471,61 @@ void av1_ml_prune_4_partition(AV1_COMP *const cpi, MACROBLOCK *const x,
                            FEATURES, 7, bsize, mi_row, mi_col);
   }
 
-  // Calculate scores using the NN model.
-  float score[LABELS] = { 0.0f };
-  av1_nn_predict(features, nn_config, 1, score);
-  int int_score[LABELS];
-  int max_score = -1000;
-  for (int i = 0; i < LABELS; ++i) {
-    int_score[i] = (int)(100 * score[i]);
-    max_score = AOMMAX(int_score[i], max_score);
-  }
+  if (ml_model_index == 0) {
+    // Calculate scores using the NN model.
+    float score[LABELS] = { 0.0f };
+    av1_nn_predict(features, nn_config, 1, score);
+    int int_score[LABELS];
+    int max_score = -1000;
+    for (int i = 0; i < LABELS; ++i) {
+      int_score[i] = (int)(100 * score[i]);
+      max_score = AOMMAX(int_score[i], max_score);
+    }
 
-  // Make decisions based on the model scores.
-  int thresh = max_score;
-  switch (bsize) {
-    case BLOCK_16X16: thresh -= 500; break;
-    case BLOCK_32X32: thresh -= 500; break;
-    case BLOCK_64X64: thresh -= 200; break;
-    default: break;
-  }
-  av1_zero_array(part4_allowed, NUM_PART4_TYPES);
-  for (int i = 0; i < LABELS; ++i) {
-    if (int_score[i] >= thresh) {
-      if ((i >> 0) & 1) part4_allowed[HORZ4] = 1;
-      if ((i >> 1) & 1) part4_allowed[VERT4] = 1;
+    // Make decisions based on the model scores.
+    int thresh = max_score;
+    switch (bsize) {
+      case BLOCK_16X16: thresh -= 500; break;
+      case BLOCK_32X32: thresh -= 500; break;
+      case BLOCK_64X64: thresh -= 200; break;
+      default: break;
+    }
+    av1_zero_array(part4_allowed, NUM_PART4_TYPES);
+    for (int i = 0; i < LABELS; ++i) {
+      if (int_score[i] >= thresh) {
+        if ((i >> 0) & 1) part4_allowed[HORZ4] = 1;
+        if ((i >> 1) & 1) part4_allowed[VERT4] = 1;
+      }
+    }
+  } else {
+    // Calculate scores using the NN model.
+    float score[NEW_LABELS] = { 0.0f };
+    float probs[NEW_LABELS] = { 0.0f };
+    av1_nn_predict(features, nn_config, 1, score);
+
+    av1_nn_softmax(score, probs, NEW_LABELS);
+
+    // Make decisions based on the model scores.
+    const float search_thresh = av1_partition4_search_thresh
+        [cpi->sf.part_sf.ml_4_partition_search_level_index][res_idx][bsize_idx];
+    const float not_search_thresh = av1_partition4_not_search_thresh
+        [cpi->sf.part_sf.ml_4_partition_search_level_index][res_idx][bsize_idx];
+
+    for (int i = 1; i < NEW_LABELS; ++i) {
+      if (probs[i] >= search_thresh) {
+        if (i == 1) part4_allowed[HORZ4] = 1;
+        if (i == 2) part4_allowed[VERT4] = 1;
+      }
+      if (probs[i] < not_search_thresh) {
+        if (i == 1) part4_allowed[HORZ4] = 0;
+        if (i == 2) part4_allowed[VERT4] = 0;
+      }
     }
   }
 }
 #undef FEATURES
 #undef LABELS
+#undef NEW_LABELS
 
 #define FEATURES 4
 void av1_ml_predict_breakout(AV1_COMP *const cpi, const MACROBLOCK *const x,

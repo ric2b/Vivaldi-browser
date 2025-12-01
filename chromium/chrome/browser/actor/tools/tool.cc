@@ -15,7 +15,6 @@ Tool::~Tool() = default;
 
 mojom::ActionResultPtr Tool::TimeOfUseValidation(
     const optimization_guide::proto::AnnotatedPageContent* last_observation) {
-  // TODO(crbug.com/411462297): This should be made pure-virtual.
   return MakeOkResult();
 }
 
@@ -30,9 +29,10 @@ void Tool::UpdateTaskBeforeInvoke(ActorTask& task,
 }
 
 void Tool::UpdateTaskAfterInvoke(ActorTask& task,
+                                 mojom::ActionResultPtr result,
                                  InvokeCallback callback) const {
   // Do nothing by default, just trigger the callback.
-  std::move(callback).Run(MakeOkResult());
+  std::move(callback).Run(std::move(result));
 }
 
 }  // namespace actor

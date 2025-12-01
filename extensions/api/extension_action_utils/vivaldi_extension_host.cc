@@ -2,6 +2,8 @@
 
 #include "extensions/api/extension_action_utils/vivaldi_extension_host.h"
 
+#include "content/public/browser/navigation_controller.h"
+
 #include "extensions/browser/extension_host_delegate.h"
 #include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/extensions_browser_client.h"

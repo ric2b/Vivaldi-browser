@@ -118,6 +118,7 @@
 #if V8_ENABLE_WEBASSEMBLY
 #include "src/trap-handler/trap-handler.h"
 #include "src/wasm/wasm-code-manager.h"
+#include "src/wasm/wasm-serialization.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
 #ifndef DCHECK
@@ -134,6 +135,8 @@ namespace {
 
 // Set on worker threads to the current Worker instance.
 thread_local Worker* current_worker_ = nullptr;
+
+constexpr v8::EmbedderDataTypeTag kInspectorClientTag = 1;
 
 #ifdef V8_FUZZILLI
 bool fuzzilli_reprl = true;
@@ -1665,11 +1668,13 @@ Maybe<bool> ChainDynamicImportPromise(Isolate* isolate, Local<Context> realm,
 }
 }  // namespace
 
-void Shell::DoHostImportModuleDynamically(void* import_data) {
-  DynamicImportData* import_data_ =
-      static_cast<DynamicImportData*>(import_data);
+void Shell::DoHostImportModuleDynamically(void* data) {
+  Isolate* current_isolate = reinterpret_cast<Isolate*>(i::Isolate::Current());
+  DynamicImportData* import_data =
+      PerIsolateData::Get(current_isolate)->LookupImportData(data);
+  CHECK_EQ(current_isolate, import_data->isolate);
 
-  Isolate* isolate(import_data_->isolate);
+  Isolate* isolate(import_data->isolate);
   Global<Context> global_realm;
   Global<Promise::Resolver> global_resolver;
   Global<Promise> global_result_promise;
@@ -1680,19 +1685,18 @@ void Shell::DoHostImportModuleDynamically(void* import_data) {
 
   {
     HandleScope handle_scope(isolate);
-    Local<Context> realm = import_data_->context.Get(isolate);
-    Local<Value> referrer = import_data_->referrer.Get(isolate);
-    Local<String> v8_specifier = import_data_->specifier.Get(isolate);
-    ModuleImportPhase phase = import_data_->phase;
+    Local<Context> realm = import_data->context.Get(isolate);
+    Local<Value> referrer = import_data->referrer.Get(isolate);
+    Local<String> v8_specifier = import_data->specifier.Get(isolate);
+    ModuleImportPhase phase = import_data->phase;
     Local<FixedArray> import_attributes =
-        import_data_->import_attributes.Get(isolate);
-    Local<Promise::Resolver> resolver = import_data_->resolver.Get(isolate);
+        import_data->import_attributes.Get(isolate);
+    Local<Promise::Resolver> resolver = import_data->resolver.Get(isolate);
 
     global_realm.Reset(isolate, realm);
     global_resolver.Reset(isolate, resolver);
 
-    PerIsolateData* data = PerIsolateData::Get(isolate);
-    data->DeleteDynamicImportData(import_data_);
+    PerIsolateData::Get(isolate)->DeleteDynamicImportData(import_data);
 
     Context::Scope context_scope(realm);
     std::string specifier = ToSTLString(isolate, v8_specifier);
@@ -1715,7 +1719,7 @@ void Shell::DoHostImportModuleDynamically(void* import_data) {
                                  ? module_data->origin
                                  : ToSTLString(isolate, referrer.As<String>());
     std::string dir_name =
-        DirName(NormalizePath(source_url, GetWorkingDirectory()));
+        DirName(NormalizeModuleSpecifier(source_url, GetWorkingDirectory()));
     std::string absolute_path = NormalizeModuleSpecifier(specifier, dir_name);
 
     switch (phase) {
@@ -1779,7 +1783,7 @@ void Shell::DoHostImportModuleDynamically(void* import_data) {
 
   {
     // This method is invoked from a microtask, where in general we may have
-    // an non-trivial stack. Emptying the message queue below may trigger the
+    // a non-trivial stack. Emptying the message queue below may trigger the
     // execution of a stackless GC. We need to override the embedder stack
     // state, to force scanning the stack, if this happens.
     i::Heap* heap = reinterpret_cast<i::Isolate*>(isolate)->heap();
@@ -1957,11 +1961,9 @@ PerIsolateData::~PerIsolateData() {
   if (i::v8_flags.expose_async_hooks) {
     delete async_hooks_wrapper_;  // This uses the isolate
   }
-#if defined(LEAK_SANITIZER)
   for (DynamicImportData* data : import_data_) {
     delete data;
   }
-#endif
 }
 
 void PerIsolateData::RemoveUnhandledPromise(Local<Promise> promise) {
@@ -2007,15 +2009,18 @@ int PerIsolateData::HandleUnhandledPromiseRejections() {
 }
 
 void PerIsolateData::AddDynamicImportData(DynamicImportData* data) {
-#if defined(LEAK_SANITIZER)
+  SBXCHECK_EQ(import_data_.end(), import_data_.find(data));
   import_data_.insert(data);
-#endif
 }
 void PerIsolateData::DeleteDynamicImportData(DynamicImportData* data) {
-#if defined(LEAK_SANITIZER)
+  SBXCHECK_NE(import_data_.end(), import_data_.find(data));
   import_data_.erase(data);
-#endif
   delete data;
+}
+DynamicImportData* PerIsolateData::LookupImportData(void* data) {
+  auto* result = static_cast<DynamicImportData*>(data);
+  SBXCHECK_NE(import_data_.end(), import_data_.find(result));
+  return result;
 }
 
 Local<FunctionTemplate> PerIsolateData::GetTestApiObjectCtor() const {
@@ -2741,10 +2746,9 @@ void Shell::TestVerifySourcePositions(
   i::Handle<i::TrustedByteArray> bytecode_offsets;
   std::unique_ptr<i::baseline::BytecodeOffsetIterator> offset_iterator;
   if (has_baseline) {
-    bytecode_offsets = handle(
-        i::Cast<i::TrustedByteArray>(
-            function->shared()->GetCode(i_isolate)->bytecode_offset_table()),
-        i_isolate);
+    bytecode_offsets =
+        handle(function->shared()->GetCode(i_isolate)->bytecode_offset_table(),
+               i_isolate);
     offset_iterator = std::make_unique<i::baseline::BytecodeOffsetIterator>(
         bytecode_offsets, bytecodes);
     // A freshly initiated BytecodeOffsetIterator points to the prologue.
@@ -2793,12 +2797,6 @@ void Shell::TestVerifySourcePositions(
 void Shell::InstallConditionalFeatures(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   Isolate* isolate = info.GetIsolate();
-  isolate->InstallConditionalFeatures(isolate->GetCurrentContext());
-}
-
-void Shell::EnableJSPI(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  Isolate* isolate = info.GetIsolate();
-  isolate->SetWasmJSPIEnabledCallback([](auto) { return true; });
   isolate->InstallConditionalFeatures(isolate->GetCurrentContext());
 }
 
@@ -2938,6 +2936,102 @@ void Shell::SerializerDeserialize(
   if (!deserializer.ReadValue(context).ToLocal(&result)) return;
   info.GetReturnValue().Set(result);
 }
+
+#if V8_ENABLE_WEBASSEMBLY
+
+void Shell::WasmSerializeModule(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  Isolate* isolate = info.GetIsolate();
+  if (i::v8_flags.fuzzing) {
+    // Serializing modules is "safe", but differential fuzzing will observe
+    // differences in the serialized bytes depending on compiler flags.
+    // Strictly speaking, guarding this block on
+    // v8_flags.correctness_fuzzer_suppressions would be enough; for symmetry
+    // with deserialization we use the more general --fuzzing flag.
+    info.GetReturnValue().Set(Undefined(isolate));
+    return;
+  }
+  HandleScope handle_scope(isolate);
+  if (!info[0]->IsWasmModuleObject()) {
+    ThrowError(isolate, "First argument must be a WasmModuleObject");
+    return;
+  }
+  i::DirectHandle<i::WasmModuleObject> module_obj =
+      i::Cast<i::WasmModuleObject>(Utils::OpenHandle(*info[0]));
+
+  i::wasm::NativeModule* native_module = module_obj->native_module();
+  DCHECK(!native_module->compilation_state()->failed());
+
+  i::wasm::WasmSerializer wasm_serializer(native_module);
+  size_t byte_length = wasm_serializer.GetSerializedNativeModuleSize();
+
+  Local<ArrayBuffer> array_buffer = ArrayBuffer::New(isolate, byte_length);
+
+  bool serialized_successfully = wasm_serializer.SerializeNativeModule(
+      {static_cast<uint8_t*>(array_buffer->GetBackingStore()->Data()),
+       byte_length});
+  CHECK(serialized_successfully || i::v8_flags.fuzzing);
+  info.GetReturnValue().Set(array_buffer);
+}
+
+void Shell::WasmDeserializeModule(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  Isolate* isolate = info.GetIsolate();
+  i::PrintF("NOTE: d8.wasm.deserializeModule() is not VRP eligible.\n");
+  if (i::v8_flags.fuzzing) {
+    // Deserializing random bytes could violate arbitrary invariants. This
+    // function is not fuzzer-safe, so just do nothing.
+    info.GetReturnValue().Set(Undefined(isolate));
+    return;
+  }
+  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
+  HandleScope handle_scope(isolate);
+  if (!info[0]->IsArrayBuffer()) {
+    ThrowError(isolate, "First argument must be an ArrayBuffer");
+    return;
+  }
+  if (!info[1]->IsTypedArray()) {
+    ThrowError(isolate, "Second argument must be a TypedArray");
+    return;
+  }
+  i::DirectHandle<i::JSArrayBuffer> buffer =
+      i::Cast<i::JSArrayBuffer>(Utils::OpenHandle(*info[0]));
+  i::DirectHandle<i::JSTypedArray> wire_bytes =
+      i::Cast<i::JSTypedArray>(Utils::OpenHandle(*info[1]));
+  if (buffer->was_detached()) {
+    ThrowError(isolate, "First argument is detached");
+    return;
+  }
+  if (wire_bytes->WasDetached()) {
+    ThrowError(isolate, "Second argument's buffer is detached");
+    return;
+  }
+
+  i::DirectHandle<i::JSArrayBuffer> wire_bytes_buffer =
+      wire_bytes->GetBuffer(i_isolate);
+  base::Vector<const uint8_t> wire_bytes_vec{
+      reinterpret_cast<const uint8_t*>(wire_bytes_buffer->backing_store()) +
+          wire_bytes->byte_offset(),
+      wire_bytes->byte_length()};
+  base::Vector<uint8_t> buffer_vec{
+      reinterpret_cast<uint8_t*>(buffer->backing_store()),
+      buffer->byte_length()};
+
+  // Note that {wasm::DeserializeNativeModule} will allocate. We assume the
+  // JSArrayBuffer backing store doesn't get relocated.
+  i::wasm::CompileTimeImports compile_imports{};
+  i::MaybeDirectHandle<i::WasmModuleObject> maybe_module_object =
+      i::wasm::DeserializeNativeModule(i_isolate, buffer_vec, wire_bytes_vec,
+                                       compile_imports, {});
+  i::DirectHandle<i::WasmModuleObject> module_object;
+  if (!maybe_module_object.ToHandle(&module_object)) {
+    info.GetReturnValue().Set(Undefined(isolate));
+    return;
+  }
+  info.GetReturnValue().Set(Utils::ToLocal(module_object));
+}
+
+#endif  // V8_ENABLE_WEBASSEMBLY
 
 void Shell::ProfilerSetOnProfileEndListener(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -3146,22 +3240,28 @@ void Shell::CreateWasmMemoryMapDescriptor(
 }
 #endif  // V8_TARGET_OS_LINUX
 
-Local<String> Shell::ReadFromStdin(Isolate* isolate) {
+MaybeLocal<String> Shell::ReadFromStdin(Isolate* isolate) {
   static const int kBufferSize = 256;
   char buffer[kBufferSize];
   Local<String> accumulator = String::NewFromUtf8Literal(isolate, "");
-  int length;
   // Flush stdout before reading stdin, as stdout isn't guaranteed to be flushed
   // automatically.
   fflush(stdout);
   while (true) {
     // Continue reading if the line ends with an escape '\\' or the line has
     // not been fully read into the buffer yet (does not end with '\n').
-    // If fgets gets an error, just give up.
+    // If fgets gets an error, throw and give up.
     char* input = nullptr;
     input = fgets(buffer, kBufferSize, stdin);
-    if (input == nullptr) return Local<String>();
-    length = static_cast<int>(strlen(buffer));
+    if (ferror(stdin)) {
+      ThrowError(isolate, "Error while reading from stdin");
+      return {};
+    }
+    if (input == nullptr) {
+      if (accumulator->Length() == 0) return {};
+      return accumulator;
+    }
+    int length = static_cast<int>(strlen(buffer));
     if (length == 0) {
       return accumulator;
     } else if (buffer[length - 1] != '\n') {
@@ -3182,6 +3282,10 @@ Local<String> Shell::ReadFromStdin(Isolate* isolate) {
           String::NewFromUtf8(isolate, buffer, NewStringType::kNormal,
                               length - 1)
               .ToLocalChecked());
+    }
+    if (accumulator.IsEmpty()) {
+      ThrowError(isolate, "String limit exceeded");
+      return {};
     }
   }
 }
@@ -3319,8 +3423,16 @@ bool Shell::FunctionAndArgumentsToString(Local<Function> function,
   }
   *source = String::NewFromUtf8Literal(isolate, "(");
   *source = String::Concat(isolate, *source, function_string);
+  if (source->IsEmpty()) {
+    ThrowError(isolate, "String limit exceeded");
+    return false;
+  }
   Local<String> middle = String::NewFromUtf8Literal(isolate, ")(");
   *source = String::Concat(isolate, *source, middle);
+  if (source->IsEmpty()) {
+    ThrowError(isolate, "String limit exceeded");
+    return false;
+  }
   if (!arguments.IsEmpty() && !arguments->IsUndefined()) {
     if (!arguments->IsArray()) {
       ThrowError(isolate, "'arguments' must be an array");
@@ -3331,6 +3443,10 @@ bool Shell::FunctionAndArgumentsToString(Local<Function> function,
     for (uint32_t i = 0; i < array->Length(); ++i) {
       if (i > 0) {
         *source = String::Concat(isolate, *source, comma);
+        if (source->IsEmpty()) {
+          ThrowError(isolate, "String limit exceeded");
+          return false;
+        }
       }
       MaybeLocal<Value> maybe_argument = array->Get(context, i);
       Local<Value> argument;
@@ -3344,10 +3460,18 @@ bool Shell::FunctionAndArgumentsToString(Local<Function> function,
         return false;
       }
       *source = String::Concat(isolate, *source, argument_string);
+      if (source->IsEmpty()) {
+        ThrowError(isolate, "String limit exceeded");
+        return false;
+      }
     }
   }
   Local<String> suffix = String::NewFromUtf8Literal(isolate, ")");
   *source = String::Concat(isolate, *source, suffix);
+  if (source->IsEmpty()) {
+    ThrowError(isolate, "String limit exceeded");
+    return false;
+  }
   return true;
 }
 
@@ -4241,11 +4365,6 @@ Local<ObjectTemplate> Shell::CreateD8Template(Isolate* isolate) {
         isolate, "installConditionalFeatures",
         FunctionTemplate::New(isolate, Shell::InstallConditionalFeatures));
 
-    // Enable JavaScript Promise Integration at runtime, to simulate
-    // Origin Trial behavior.
-    test_template->Set(isolate, "enableJSPI",
-                       FunctionTemplate::New(isolate, Shell::EnableJSPI));
-
     test_template->Set(
         isolate, "setFlushDenormals",
         FunctionTemplate::New(isolate, Shell::SetFlushDenormals));
@@ -4283,6 +4402,16 @@ Local<ObjectTemplate> Shell::CreateD8Template(Isolate* isolate) {
                               Local<Signature>(), 1));
     d8_template->Set(isolate, "serializer", serializer_template);
   }
+#if V8_ENABLE_WEBASSEMBLY
+  {
+    Local<ObjectTemplate> wasm_template = ObjectTemplate::New(isolate);
+    wasm_template->Set(isolate, "serializeModule",
+                       FunctionTemplate::New(isolate, WasmSerializeModule));
+    wasm_template->Set(isolate, "deserializeModule",
+                       FunctionTemplate::New(isolate, WasmDeserializeModule));
+    d8_template->Set(isolate, "wasm", wasm_template);
+  }
+#endif  // V8_ENABLE_WEBASSEMBLY
   {
     Local<ObjectTemplate> profiler_template = ObjectTemplate::New(isolate);
     profiler_template->Set(
@@ -4988,7 +5117,13 @@ void Shell::ReadBuffer(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
 void Shell::ReadLine(const v8::FunctionCallbackInfo<v8::Value>& info) {
   DCHECK(i::ValidateCallbackInfo(info));
-  info.GetReturnValue().Set(ReadFromStdin(info.GetIsolate()));
+  Local<v8::String> input;
+  if (!ReadFromStdin(info.GetIsolate()).ToLocal(&input)) {
+    // In case of an error or EOF, the empty handle will set the default return
+    // value.
+    CHECK(input.IsEmpty());
+  }
+  info.GetReturnValue().Set(input);
 }
 
 // Reads a file into a memory blob.
@@ -5047,8 +5182,8 @@ void Shell::RunShell(Isolate* isolate) {
       HandleScope scope(isolate);
       Context::Scope context_scope(context.Get(isolate));
       printf("d8> ");
-      Local<String> input = Shell::ReadFromStdin(isolate);
-      if (input.IsEmpty()) break;
+      Local<String> input;
+      if (!Shell::ReadFromStdin(isolate).ToLocal(&input)) break;
       Local<String> name = String::NewFromUtf8Literal(isolate, "(d8)");
       success = ExecuteString(isolate, input, name, kReportExceptions,
                               &global_result);
@@ -5153,7 +5288,8 @@ class InspectorClient : public v8_inspector::V8InspectorClient {
         inspector_->connect(1, channel_.get(), v8_inspector::StringView(),
                             v8_inspector::V8Inspector::kFullyTrusted,
                             v8_inspector::V8Inspector::kNotWaitingForDebugger);
-    context->SetAlignedPointerInEmbedderData(kInspectorClientIndex, this);
+    context->SetAlignedPointerInEmbedderData(kInspectorClientIndex, this,
+                                             kInspectorClientTag);
     inspector_->contextCreated(v8_inspector::V8ContextInfo(
         context, kContextGroupId, v8_inspector::StringView()));
 
@@ -5203,7 +5339,8 @@ class InspectorClient : public v8_inspector::V8InspectorClient {
  private:
   static v8_inspector::V8InspectorSession* GetSession(Local<Context> context) {
     InspectorClient* inspector_client = static_cast<InspectorClient*>(
-        context->GetAlignedPointerFromEmbedderData(kInspectorClientIndex));
+        context->GetAlignedPointerFromEmbedderData(kInspectorClientIndex,
+                                                   kInspectorClientTag));
     return inspector_client->session_.get();
   }
 
@@ -6338,8 +6475,7 @@ bool ProcessMessages(
   try_catch.SetVerbose(true);
 
   while (true) {
-    bool ran_a_task;
-    ran_a_task =
+    bool ran_a_task =
         v8::platform::PumpMessageLoop(g_default_platform, isolate, behavior());
     if (isolate->IsExecutionTerminating()) return true;
     if (try_catch.HasCaught()) return false;
@@ -6979,13 +7115,19 @@ int Shell::Main(int argc, char* argv[]) {
   Isolate* isolate = Isolate::New(create_params);
 
 #ifdef V8_FUZZILLI
-  // Let the parent process (Fuzzilli) know we are ready.
+
+#ifdef V8_ENABLE_SANDBOX_HARDWARE_SUPPORT
+  sanitizer_cov_prepare_for_hardware_sandbox();
+#endif  // V8_ENABLE_SANDBOX_HARDWARE_SUPPORT
+
   if (options.fuzzilli_enable_builtins_coverage) {
     cov_init_builtins_edges(static_cast<uint32_t>(
         i::BasicBlockProfiler::Get()
             ->GetCoverageBitmap(reinterpret_cast<i::Isolate*>(isolate))
             .size()));
   }
+
+  // Let the parent process (Fuzzilli) know we are ready.
   char helo[] = "HELO";
   if (write(REPRL_CWFD, helo, 4) != 4 || read(REPRL_CRFD, helo, 4) != 4) {
     fuzzilli_reprl = false;

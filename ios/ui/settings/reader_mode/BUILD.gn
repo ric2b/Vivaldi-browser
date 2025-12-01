@@ -4,11 +4,15 @@ import("//build/config/apple/swift_source_set.gni")
 
 source_set("vivaldi_reader_mode") {
   sources = [
-    "vivaldi_reader_mode_floating_ui.h",
-    "vivaldi_reader_mode_floating_ui.mm",
+    "vivaldi_reader_mode_animation.h",
+    "vivaldi_reader_mode_animation.mm",
+    "vivaldi_reader_mode_animator.h",
+    "vivaldi_reader_mode_animator.mm",
     "vivaldi_reader_mode_consumer.h",
     "vivaldi_reader_mode_coordinator.h",
     "vivaldi_reader_mode_coordinator.mm",
+    "vivaldi_reader_mode_floating_ui.h",
+    "vivaldi_reader_mode_floating_ui.mm",
     "vivaldi_reader_mode_mediator.h",
     "vivaldi_reader_mode_mediator.mm",
     "vivaldi_reader_mode_prefs.h",

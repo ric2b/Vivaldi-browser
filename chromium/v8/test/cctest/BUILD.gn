@@ -15,7 +15,7 @@ v8_executable("cctest") {
     "../..:v8_libbase",
     "../..:v8_libplatform",
     "../../tools/debug_helper:v8_debug_helper",
-    "//third_party/simdutf:simdutf",
+    "//third_party/simdutf",
   ]
 
   data_deps = [ "../../tools:v8_testrunner" ]
@@ -44,6 +44,10 @@ v8_executable("cctest") {
   if (current_os == "aix") {
     ldflags = [ "-Wl,-bbigtoc" ]
   }
+
+  # TODO(crbug.com/40031409): Fix code that adds exit-time destructors and
+  # enable the diagnostic by removing this line.
+  configs += [ "//build/config/compiler:no_exit_time_destructors" ]
 }
 
 v8_header_set("cctest_headers") {
@@ -136,7 +140,6 @@ v8_source_set("cctest_sources") {
     "test-mementos.cc",
     "test-orderedhashtable.cc",
     "test-profile-generator.cc",
-    "test-property-details.cc",
     "test-ptr-compr-cage.cc",
     "test-random-number-generator.cc",
     "test-regexp.cc",
@@ -415,4 +418,8 @@ v8_source_set("cctest_sources") {
       "//third_party/perfetto/protos/perfetto/trace:lite",
     ]
   }
+
+  # TODO(crbug.com/40031409): Fix code that adds exit-time destructors and
+  # enable the diagnostic by removing this line.
+  configs += [ "//build/config/compiler:no_exit_time_destructors" ]
 }

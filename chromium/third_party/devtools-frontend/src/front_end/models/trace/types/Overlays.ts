@@ -1,8 +1,6 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
-import type * as Lit from '../../../ui/lit/lit.js';
 
 import type {EntriesLinkState} from './File.js';
 import type {Micro, TraceWindowMicro} from './Timing.js';
@@ -86,7 +84,7 @@ export interface CandyStripedTimeRange {
  */
 export interface TimespanBreakdownEntryBreakdown {
   bounds: TraceWindowMicro;
-  label: string|Lit.LitTemplate;
+  label: string|HTMLElement;
   showDuration: boolean;
 }
 
@@ -123,8 +121,18 @@ export interface TimingsMarkerFieldResult {
   pageScope: 'url'|'origin';
 }
 
+export interface BottomInfoBar {
+  type: 'BOTTOM_INFO_BAR';
+  // In DevTools, this infobar is a UI.Infobar.Infobar but we can't refer to
+  // the type here.
+  infobar: {
+    element: HTMLElement,
+    dispose: () => void,
+  };
+}
+
 /**
  * All supported overlay types.
  */
 export type Overlay = EntrySelected|EntryOutline|TimeRangeLabel|EntryLabel|EntriesLink|TimespanBreakdown|
-    TimestampMarker|CandyStripedTimeRange|TimingsMarker;
+    TimestampMarker|CandyStripedTimeRange|TimingsMarker|BottomInfoBar;

@@ -26,7 +26,7 @@ jobs:
           - 'src'
           - 'tests'
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: clang-format version
       run: clang-format --version
     - name: Run clang-format

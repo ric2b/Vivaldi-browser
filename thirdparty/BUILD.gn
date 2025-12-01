@@ -44,6 +44,8 @@ if (is_mac) {
       "$framework_path/Updater.app",
       "$framework_path/Modules",
       "$framework_path/Resources",
+
+      "$root_out_dir/sparkle_lib/Build/Products/Release/generate_appcast"
     ]
     args = [
       "--project-folder", sparkle_code,
@@ -97,6 +99,7 @@ if (is_ios) {
 
     framework_path = "$output_path/Lottie.xcframework/$platform/Lottie.framework"
     outputs = [
+      "$framework_path",
       "$framework_path/Headers/Lottie-Swift.h",
       "$framework_path/Headers",
       "$framework_path/Lottie",
@@ -111,9 +114,9 @@ if (is_ios) {
     ]
   }
 
-  copy("copy_lottie_framework") {
-    framework_path = "$root_out_dir/lottie_lib/Lottie.xcframework/$platform/Lottie.framework"
+  framework_path = "$root_out_dir/lottie_lib/Lottie.xcframework/$platform/Lottie.framework"
 
+  copy("copy_lottie_framework_files") {
     sources = [
       "$framework_path/Headers",
       "$framework_path/Lottie",
@@ -126,6 +129,20 @@ if (is_ios) {
     ]
 
     deps = [ ":unzip_lottie_framework" ]
+  }
+
+  bundle_data("bundle_lottie_framework") {
+    sources = [ framework_path ]
+    outputs = [ "{{bundle_contents_dir}}/Frameworks/{{source_file_part}}" ]
+    public_deps = [ ":unzip_lottie_framework" ]
+  }
+
+  group("copy_lottie_framework") {
+    public_deps = [
+      ":bundle_lottie_framework",
+      ":copy_lottie_framework_files",
+      ":unzip_lottie_framework",
+    ]
   }
 
   copy("copy_lottie_headers") {

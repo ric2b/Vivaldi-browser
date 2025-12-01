@@ -804,6 +804,90 @@ TEST(ReformatTest, NullCases) {
   avifRGBImageFreePixels(nullptr);
 }
 
+TEST(RGBToYUVTest, 8BitGrayToYUV420) {
+  // 2x2 8-bit image
+  static constexpr uint8_t gray[4] = {4, 3, 2, 1};
+  ImagePtr image(avifImageCreate(2, 2, 8, AVIF_PIXEL_FORMAT_YUV420));
+  ASSERT_NE(image, nullptr);
+  avifRGBImage rgb;
+  avifRGBImageSetDefaults(&rgb, image.get());
+  rgb.format = AVIF_RGB_FORMAT_GRAY;
+  rgb.pixels = const_cast<uint8_t*>(gray);
+  rgb.rowBytes = 2 * sizeof(uint8_t);
+  ASSERT_EQ(avifImageRGBToYUV(image.get(), &rgb), AVIF_RESULT_OK);
+  const uint8_t* y_plane = image->yuvPlanes[AVIF_CHAN_Y];
+  const uint8_t* u_plane = image->yuvPlanes[AVIF_CHAN_U];
+  const uint8_t* v_plane = image->yuvPlanes[AVIF_CHAN_V];
+  EXPECT_EQ(y_plane[0], gray[0]);
+  EXPECT_EQ(y_plane[1], gray[1]);
+  EXPECT_EQ(y_plane[2], gray[2]);
+  EXPECT_EQ(y_plane[3], gray[3]);
+  EXPECT_EQ(u_plane[0], 128);
+  EXPECT_EQ(v_plane[0], 128);
+}
+
+TEST(RGBToYUVTest, HighBitDepthGrayToYUV420) {
+  // 2x2 10-bit, 12-bit, or 16-bit image
+  static constexpr uint16_t gray[4] = {4, 3, 2, 1};
+  static constexpr uint32_t depth[3] = {10, 12, 16};
+  static constexpr uint16_t half[3] = {512, 2048, 32768};
+  for (int i = 0; i < 3; i++) {
+    ImagePtr image(avifImageCreate(2, 2, depth[i], AVIF_PIXEL_FORMAT_YUV420));
+    ASSERT_NE(image, nullptr);
+    avifRGBImage rgb;
+    avifRGBImageSetDefaults(&rgb, image.get());
+    rgb.format = AVIF_RGB_FORMAT_GRAY;
+    rgb.pixels = reinterpret_cast<uint8_t*>(const_cast<uint16_t*>(gray));
+    rgb.rowBytes = 2 * sizeof(uint16_t);
+    ASSERT_EQ(avifImageRGBToYUV(image.get(), &rgb), AVIF_RESULT_OK);
+    const uint16_t* y_plane =
+        reinterpret_cast<uint16_t*>(image->yuvPlanes[AVIF_CHAN_Y]);
+    const uint16_t* u_plane =
+        reinterpret_cast<uint16_t*>(image->yuvPlanes[AVIF_CHAN_U]);
+    const uint16_t* v_plane =
+        reinterpret_cast<uint16_t*>(image->yuvPlanes[AVIF_CHAN_V]);
+    EXPECT_EQ(y_plane[0], gray[0]);
+    EXPECT_EQ(y_plane[1], gray[1]);
+    EXPECT_EQ(y_plane[2], gray[2]);
+    EXPECT_EQ(y_plane[3], gray[3]);
+    EXPECT_EQ(u_plane[0], half[i]);
+    EXPECT_EQ(v_plane[0], half[i]);
+  }
+}
+
+TEST(RGBToYUVTest, 8BitGrayRoundTripWithLift) {
+  for (avifRange range : {AVIF_RANGE_LIMITED, AVIF_RANGE_FULL}) {
+    // 2x2 12-bit temporary image.
+    ImagePtr image(avifImageCreate(2, 2, 12, AVIF_PIXEL_FORMAT_YUV400));
+    ASSERT_NE(image, nullptr);
+    image->yuvRange = range;
+    // 2x2 8-bit original image.
+    static constexpr uint8_t gray[4] = {5, 3, 2, 1};
+    avifRGBImage rgb;
+    avifRGBImageSetDefaults(&rgb, image.get());
+    rgb.format = AVIF_RGB_FORMAT_GRAY;
+    rgb.depth = 8;
+    rgb.pixels = const_cast<uint8_t*>(gray);
+    rgb.rowBytes = 2 * sizeof(uint8_t);
+    // Convert to 12 bits.
+    ASSERT_EQ(avifImageRGBToYUV(image.get(), &rgb), AVIF_RESULT_OK);
+    // Convert back to 8 bits.
+    avifRGBImage rgb_final;
+    avifRGBImageSetDefaults(&rgb_final, image.get());
+    rgb_final.format = AVIF_RGB_FORMAT_GRAY;
+    rgb_final.depth = 8;
+    ASSERT_EQ(avifRGBImageAllocatePixels(&rgb_final), AVIF_RESULT_OK);
+    ASSERT_EQ(avifImageYUVToRGB(image.get(), &rgb_final), AVIF_RESULT_OK);
+    // Compare to the original 8-bit image.
+    const uint8_t* gray_plane = rgb_final.pixels;
+    EXPECT_EQ(gray_plane[0], gray[0]);
+    EXPECT_EQ(gray_plane[1], gray[1]);
+    EXPECT_EQ(gray_plane[2], gray[2]);
+    EXPECT_EQ(gray_plane[3], gray[3]);
+    avifRGBImageFreePixels(&rgb_final);
+  }
+}
+
 }  // namespace
 }  // namespace avif
 

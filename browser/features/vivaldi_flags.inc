@@ -39,6 +39,13 @@
          flags_ui::kOsCrOS,
      FEATURE_VALUE_TYPE(vivaldi_features::kLocationOverride)},
 
+     {vivaldi_flag::kNewAboutPageInternalName,
+     vivaldi_flag::kNewAboutPageName,
+     vivaldi_flag::kNewAboutPageDescription,
+     flags_ui::kOsMac | flags_ui::kOsWin | flags_ui::kOsLinux |
+         flags_ui::kOsCrOS,
+     FEATURE_VALUE_TYPE(vivaldi_features::kNewAboutPage)},
+
     {vivaldi_flag::kNewPrivacyReportInternalName,
      vivaldi_flag::kNewPrivacyReportName,
      vivaldi_flag::kNewPrivacyReportDescription,
@@ -61,12 +68,6 @@
      flags_ui::kOsMac | flags_ui::kOsWin | flags_ui::kOsLinux |
          flags_ui::kOsCrOS,
      FEATURE_VALUE_TYPE(vivaldi_features::kSpeeddialWidgets)},
-
-    {vivaldi_flag::kTabsButtonInternalName, vivaldi_flag::kTabsButtonName,
-     vivaldi_flag::kTabsButtonDescription,
-     flags_ui::kOsMac | flags_ui::kOsWin | flags_ui::kOsLinux |
-         flags_ui::kOsCrOS,
-     FEATURE_VALUE_TYPE(vivaldi_features::kTabsButton)},
 
     {vivaldi_flag::kViewMarkdownAsHTMLInternalName,
      vivaldi_flag::kViewMarkdownAsHTMLName,

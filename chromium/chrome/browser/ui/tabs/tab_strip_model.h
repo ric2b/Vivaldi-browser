@@ -231,8 +231,8 @@ class TabStripModel {
   // is kNoTab is if the tab strip is being initialized or destroyed. Note that
   // tab strip destruction is an asynchronous process.
   int active_index() const {
-    return selection_model_.active().has_value()
-               ? static_cast<int>(selection_model_.active().value())
+    return selection_model_->active().has_value()
+               ? static_cast<int>(selection_model_->active().value())
                : kNoTab;
   }
 
@@ -275,13 +275,6 @@ class TabStripModel {
       std::unique_ptr<content::WebContents> contents,
       int add_types,
       std::optional<tab_groups::TabGroupId> group = std::nullopt);
-
-  // Creates a group object so that group_model can link it with once group
-  // collection owns it.
-  // TODO(crbug.com/392952244): Remove this after replacing callers with
-  // detaching and attaching groups.
-  void AddTabGroup(const tab_groups::TabGroupId group_id,
-                   tab_groups::TabGroupVisualData visual_data);
 
   // Adds a TabModel from another tabstrip at the specified location. See
   // InsertWebContentsAt.
@@ -360,7 +353,8 @@ class TabStripModel {
   // Makes the tab at the specified index the active tab. |gesture_detail.type|
   // contains the gesture type that triggers the tab activation.
   // |gesture_detail.time_stamp| contains the timestamp of the user gesture, if
-  // any.
+  // any. If |index| refers to a tab in a split view, it won't be activated if
+  // the other tab is blocked.
   void ActivateTabAt(
       int index,
       TabStripUserGestureDetails gesture_detail = TabStripUserGestureDetails(
@@ -446,6 +440,8 @@ class TabStripModel {
   // Cause a tab to display a UI indication to the user that it needs their
   // attention.
   void SetTabNeedsAttentionAt(int index, bool attention);
+  void SetTabGroupNeedsAttention(const tab_groups::TabGroupId& group,
+                                 bool attention);
 
   // Close all tabs at once. Code can use closing_all() above to defer
   // operations that might otherwise by invoked by the flurry of detach/select
@@ -502,6 +498,9 @@ class TabStripModel {
 
   // Returns true if the tab at |index| is blocked by a tab modal dialog.
   bool IsTabBlocked(int index) const;
+
+  // Returns true if the tab at |index| is in the foreground.
+  bool IsTabInForeground(int index) const;
 
   // Returns true if the tab at |index| is allowed to be closed.
   bool IsTabClosable(int index) const;
@@ -718,6 +717,11 @@ class TabStripModel {
   // relying on group id.
   std::optional<const tab_groups::TabGroupId> FindGroupIdFor(
       const tabs::TabCollection::Handle& collection_handle,
+      base::PassKey<tabs_api::TabStripModelAdapterImpl>) const;
+
+  tabs::TabCollectionHandle GetPinnedTabsCollectionHandle(
+      base::PassKey<tabs_api::TabStripModelAdapterImpl>) const;
+  tabs::TabCollectionHandle GetUnpinnedTabsCollectionHandle(
       base::PassKey<tabs_api::TabStripModelAdapterImpl>) const;
 
   // View API //////////////////////////////////////////////////////////////////
@@ -1142,9 +1146,10 @@ class TabStripModel {
   void SelectRelativeTab(TabRelativeDirection direction,
                          TabStripUserGestureDetails detail);
 
-  // Moves the active tabs into the next slot (kNext), or the
-  // previous slot (kPrevious). Respects group boundaries and creates
-  // movement slots into and out of groups.
+  // Moves the active tab (or its split if it is in one) into the next slot
+  // (kNext), or the previous slot (kPrevious). Respects group boundaries and
+  // creates movement slots into and out of groups. Treats split tabs as a
+  // single slot.
   void MoveTabRelative(TabRelativeDirection direction);
 
   // Implementation of MoveSelectedTabsTo. Moves |length| of the selected tabs
@@ -1358,6 +1363,10 @@ class TabStripModel {
       const std::optional<tab_groups::TabGroupId> group,
       bool pin);
 
+  // Returns whether a tab is eligible for activation. If a tab is in a split
+  // view then it cannot be activated if the other tab is blocked.
+  bool CanActivateTabAt(int index);
+
   // The WebContents data currently hosted within this TabStripModel. This must
   // be kept in sync with |selection_model_|.
   std::unique_ptr<tabs::TabStripCollection> contents_data_;
@@ -1379,7 +1388,7 @@ class TabStripModel {
   bool closing_all_ = false;
 
   // This must be kept in sync with |contents_data_|.
-  ui::ListSelectionModel selection_model_;
+  std::unique_ptr<ui::ListSelectionModel> selection_model_;
 
   // TabStripModel is not re-entrancy safe. This member is used to guard public
   // methods that mutate state of |selection_model_| or |contents_data_|.

@@ -244,6 +244,8 @@ class BookmarksApiEventsTest : public ExtensionApiTest {
     remove_info.node.date_added =
         node.date_added().InMillisecondsSinceUnixEpoch();
     remove_info.node.id = base::NumberToString(node.id());
+    // Vivaldi
+    remove_info.node.uuid = node.uuid().AsLowercaseString();
     remove_info.node.title = base::UTF16ToUTF8(node.GetTitledUrlNodeTitle());
     remove_info.node.syncing = !model()->IsLocalOnlyNode(node);
     remove_info.parent_id = base::NumberToString(node.parent()->id());

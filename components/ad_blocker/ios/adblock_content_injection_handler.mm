@@ -65,10 +65,8 @@ std::string SourceToTemplatedHexString(std::string_view source) {
   return result;
 }
 
-class ContentInjectionHandlerImpl
-    : public ContentInjectionHandler,
-      public Resources::Observer {
-
+class ContentInjectionHandlerImpl : public ContentInjectionHandler,
+                                    public Resources::Observer {
  public:
   explicit ContentInjectionHandlerImpl(web::BrowserState* browser_state,
                                        Resources* resources);
@@ -97,8 +95,7 @@ class ContentInjectionHandlerImpl
 
   base::WeakPtr<web::WKWebViewConfigurationProvider> config_provider_;
   base::WeakPtr<web::WKWebViewConfigurationProvider> incognito_config_provider_;
-  std::array<std::optional<base::Value::Dict>, kRuleGroupCount>
-      injection_rules_;
+  RuleGroupArray<std::optional<base::Value::Dict>> injection_rules_;
 
   Resources* resources_;
 
@@ -125,18 +122,17 @@ ContentInjectionHandlerImpl::ContentInjectionHandlerImpl(
           web::WKWebViewConfigurationProvider::FromBrowserState(browser_state)
               .AsWeakPtr()),
       resources_(resources) {
-
   // Register callback for configuration changes in the main profile
   if (config_provider_) {
     // Apply for the existing configuration
-    OnNewConfigurationCreated(
-         config_provider_.get(), config_provider_->GetWebViewConfiguration());
+    OnNewConfigurationCreated(config_provider_.get(),
+                              config_provider_->GetWebViewConfiguration());
 
     main_config_subscription_ =
         config_provider_->RegisterConfigurationCreatedCallback(
             base::BindRepeating(
-               &ContentInjectionHandlerImpl::OnNewConfigurationCreated,
-                   weak_ptr_factory_.GetWeakPtr(), config_provider_.get()));
+                &ContentInjectionHandlerImpl::OnNewConfigurationCreated,
+                weak_ptr_factory_.GetWeakPtr(), config_provider_.get()));
   }
 
   if (!resources_->loaded())
@@ -167,9 +163,9 @@ void ContentInjectionHandlerImpl::SetIncognitoBrowserState(
     incognito_config_subscription_ =
         incognito_config_provider_->RegisterConfigurationCreatedCallback(
             base::BindRepeating(
-               &ContentInjectionHandlerImpl::OnNewConfigurationCreated,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   incognito_config_provider_.get()));
+                &ContentInjectionHandlerImpl::OnNewConfigurationCreated,
+                weak_ptr_factory_.GetWeakPtr(),
+                incognito_config_provider_.get()));
   }
 }
 
@@ -200,7 +196,7 @@ void ContentInjectionHandlerImpl::OnNewConfigurationCreated(
 void ContentInjectionHandlerImpl::SetScriptletInjectionRules(
     RuleGroup group,
     base::Value::Dict injection_rules) {
-  injection_rules_[static_cast<size_t>(group)] = std::move(injection_rules);
+  injection_rules_[group] = std::move(injection_rules);
 }
 
 void ContentInjectionHandlerImpl::InjectUserScripts() {
@@ -270,16 +266,15 @@ void ContentInjectionHandlerImpl::HandlePlaceholderRequest(
   std::string abp_argument;
   const auto domain_pieces = base::SplitStringPiece(
       host, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
-    if (!injection_rules_[static_cast<size_t>(group)]) {
+  for (auto [group, injection_rules] : injection_rules_) {
+    if (!injection_rules_[group]) {
       continue;
     }
 
     std::set<const base::Value::List*, ContentInjectionArgumentsCompare>
         selected_arguments_lists;
 
-    base::Value::Dict* subdomain_dict =
-        &injection_rules_[static_cast<size_t>(group)].value();
+    base::Value::Dict* subdomain_dict = &injection_rules_[group].value();
     for (const auto& domain_piece : base::Reversed(domain_pieces)) {
       subdomain_dict = subdomain_dict->FindDict(domain_piece);
       if (!subdomain_dict) {

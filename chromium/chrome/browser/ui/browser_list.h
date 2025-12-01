@@ -24,8 +24,6 @@
 #error This file should only be included on desktop.
 #endif
 
-enum class BrowserClosingStatus;
-
 class Browser;
 class Profile;
 
@@ -93,14 +91,6 @@ class BrowserList {
     return browsers_ordered_by_activation_.rend();
   }
 
-  // Convenience method for iterating over browsers in activation order. I.e.
-  // the most recently used browser will be at the front of the list.
-  // Example:
-  // for (Browser* browser : BrowserList::GetInstance()->OrderedByActivation())
-  BrowsersOrderedByActivationRange OrderedByActivation() const {
-    return {raw_ref(*this)};
-  }
-
   // Returns the set of browsers that are currently in the closing state.
   const BrowserSet& currently_closing_browsers() const {
     return currently_closing_browsers_;
@@ -134,11 +124,6 @@ class BrowserList {
 
   // Notifies the observers when the current active browser becomes not active.
   static void NotifyBrowserNoLongerActive(Browser* browser);
-
-  // Notifies the observers that the attempted closure of `browser` was
-  // cancelled for a certain `reason`.
-  static void NotifyBrowserCloseCancelled(Browser* browser,
-                                          BrowserClosingStatus reason);
 
   // Notifies the observers when browser close was started. This may be called
   // more than once for a particular browser.

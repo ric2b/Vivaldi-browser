@@ -50,9 +50,8 @@ class DetermineAttributeTypesPassKey {
 };
 
 // DetermineAttributeTypes() computes the static and dynamic AttributeType
-// assignments of a form. Note that these methods can only be called from
-// `RationalizeAndDetermineAttributeTypes()` and are exposed here to make
-// testing easier.
+// assignments of a form. For each EntityType, each field has at most one
+// AttributeType. The order of the returned fields is the same as in the form.
 //
 // Static AttributeTypes are determined by the Autofill AI FieldType
 // (AutofillType::GetStaticAutofillAiTypes()).
@@ -66,9 +65,6 @@ class DetermineAttributeTypesPassKey {
 // We only propagate between pairs of fields that are in the same section and
 // whose distance is at most 5.
 //
-// Dynamic types are only determined if `features::kAutofillAiNoTagTypes` is
-// enabled.
-//
 // Invisible non-<select> fields are ignored; they're not assigned any type.
 //
 // The overloads are just specializations of one another for performance
@@ -76,6 +72,10 @@ class DetermineAttributeTypesPassKey {
 // - `DetermineAttributeTypes(fields, section, entity)`
 // - `DetermineAttributeTypes(fields, section)[entity]`
 // - `DetermineAttributeTypes(fields)[section][entity]`
+//
+// These functions can only be called from
+// `RationalizeAndDetermineAttributeTypes()` and are exposed here to make
+// testing easier.
 
 std::vector<AutofillFieldWithAttributeType> DetermineAttributeTypes(
     base::span<const std::unique_ptr<AutofillField>> fields LIFETIME_BOUND,

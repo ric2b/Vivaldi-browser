@@ -22,13 +22,14 @@ import org.jni_zero.NativeMethods;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.build.annotations.EnsuresNonNullIf;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
 import org.chromium.chrome.browser.omnibox.ChromeAutocompleteSchemeClassifier;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
-import org.chromium.chrome.browser.omnibox.SearchEngineUtils;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.paint_preview.TabbedPaintPreview;
@@ -45,7 +46,6 @@ import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.metrics.OmniboxEventProtos.OmniboxEventProto.PageClassification;
 import org.chromium.components.omnibox.AutocompleteSchemeClassifier;
-import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.components.omnibox.OmniboxUrlEmphasizer;
 import org.chromium.components.omnibox.SecurityStatusIcon;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
@@ -98,7 +98,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
             if (this == o) {
                 return true;
             }
-            if (o == null || getClass() != o.getClass()) {
+            if (!(o instanceof SpannableDisplayTextCacheKey)) {
                 return false;
             }
             SpannableDisplayTextCacheKey that = (SpannableDisplayTextCacheKey) o;
@@ -147,6 +147,8 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     private final NewTabPageDelegate mNtpDelegate;
     private final UrlFormatter mUrlFormatter;
     private final OfflineStatus mOfflineStatus;
+    private final ObservableSupplier<@ControlsPosition Integer> mToolbarPositionSupplier;
+
     // Always null if optimizations are disabled. Otherwise, non-null and unchanging following
     // native init. Always tied to the original profile which is safe because no underlying
     // services have an incognito-specific instance.
@@ -195,7 +197,8 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
             Context context,
             NewTabPageDelegate newTabPageDelegate,
             UrlFormatter urlFormatter,
-            OfflineStatus offlineStatus) {
+            OfflineStatus offlineStatus,
+            ObservableSupplier<@ControlsPosition Integer> toolbarPositionSupplier) {
         mContext = context;
         mNtpDelegate = newTabPageDelegate;
         mUrlFormatter = urlFormatter;
@@ -204,6 +207,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
                 SurfaceColorUpdateUtils.getDefaultThemeColor(context, /* isIncognito= */ false);
         mUrlForDisplay = "";
         mFormattedFullUrl = "";
+        mToolbarPositionSupplier = toolbarPositionSupplier;
     }
 
     /** Handle any initialization that must occur after native has been initialized. */
@@ -465,7 +469,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
         final @ColorInt int secureColor =
                 OmniboxResourceProvider.getUrlBarSecureColor(mContext, brandedColorScheme);
 
-        int securityLevel = getSecurityLevel(getTab(), isOfflinePage, isReaderModePage());
+        int securityLevel = getSecurityLevel(getTab(), isOfflinePage);
         SpannableDisplayTextCacheKey cacheKey =
                 new SpannableDisplayTextCacheKey(
                         url.getSpec(),
@@ -600,6 +604,9 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
         for (LocationBarDataProvider.Observer observer : mLocationBarDataObservers) {
             observer.onPrimaryColorChanged();
         }
+        for (ToolbarDataProvider.Observer observer : mToolbarDataObservers) {
+            observer.onPrimaryColorChanged();
+        }
     }
 
     @Override
@@ -621,14 +628,9 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
         return PdfUtils.getPdfPageType(mTab.getNativePage());
     }
 
-    private boolean isReaderModePage() {
-        if (!hasTab()) return false;
-        return DomDistillerUrlUtils.isDistilledPage(assumeNonNull(getTab()).getUrl());
-    }
-
     @Override
     public int getSecurityLevel() {
-        return getSecurityLevel(getTab(), isOfflinePage(), isReaderModePage());
+        return getSecurityLevel(getTab(), isOfflinePage());
     }
 
     @Override
@@ -642,7 +644,6 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     @Override
     public @DrawableRes int getSecurityIconResource(boolean isTablet) {
         boolean isOfflinePage = isOfflinePage();
-        boolean isReaderModePage = isReaderModePage();
 
         if (BuildConfig.IS_VIVALDI && UrlUtilities.isNtpUrl(getCurrentUrl())) {
             return (mNativeLocationBarModelAndroid == 0)
@@ -651,11 +652,10 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
         }
 
         return getSecurityIconResource(
-                getSecurityLevel(getTab(), isOfflinePage, isReaderModePage),
+                getSecurityLevel(getTab(), isOfflinePage),
                 !isTablet,
                 isOfflinePage,
                 isPaintPreview(),
-                isReaderModePage,
                 getPdfPageType());
     }
 
@@ -666,7 +666,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
 
     @VisibleForTesting
     @ConnectionSecurityLevel
-    int getSecurityLevel(@Nullable Tab tab, boolean isOfflinePage, boolean isReaderModePage) {
+    int getSecurityLevel(@Nullable Tab tab, boolean isOfflinePage) {
         if (tab == null || isOfflinePage) {
             return ConnectionSecurityLevel.NONE;
         }
@@ -697,7 +697,6 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
             boolean isSmallDevice,
             boolean isOfflinePage,
             boolean isPaintPreview,
-            boolean isReaderModePage,
             int pdfPageType) {
         // Paint Preview appears on top of WebContents and shows a visual representation of the page
         // that has been previously stored locally.
@@ -707,14 +706,6 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
         // on a slow connection. In this case, the previews UI takes precedence.
         if (isOfflinePage) {
             return R.drawable.ic_offline_pin_24dp;
-        }
-
-        // Reader mode is when chrome is viewing distilled content. In this case, a reader mode icon
-        // is shown.
-        if (isReaderModePage) {
-            // Vivaldi ref. VAB-11657.
-            if (BuildConfig.IS_VIVALDI) return getTrackerBlockerIcon();
-            return R.drawable.ic_reader_mode_24dp;
         }
 
         // Pdf page is a native page used to render downloaded pdf files.
@@ -734,12 +725,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
             return R.drawable.omnibox_info;
         }
 
-        boolean skipIconForNeutralState =
-                (mProfile != null
-                                && !SearchEngineUtils.getForProfile(mProfile)
-                                        .shouldShowSearchEngineLogo()
-                                && !OmniboxFeatures.sOmniboxMobileParityUpdate.isEnabled())
-                        || mNtpDelegate.isCurrentlyVisible();
+        boolean skipIconForNeutralState = mNtpDelegate.isCurrentlyVisible();
 
         return SecurityStatusIcon.getSecurityIconResource(
                 securityLevel,
@@ -915,6 +901,11 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
         }
     }
 
+    @Override
+    public ObservableSupplier<@ControlsPosition Integer> getToolbarPositionSupplier() {
+        return mToolbarPositionSupplier;
+    }
+
     // Vivaldi - Returns the appropriate Shield icon to replace the page info icon in the url bar
     public int getTrackerBlockerIcon() {
         if (!AdblockManager.getInstance().isLoaded())
@@ -942,4 +933,5 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
                 return R.drawable.shield_no_blocking_24dp;
         }
     }
+    // End Vivaldi
 }

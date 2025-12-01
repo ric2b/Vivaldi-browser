@@ -97,9 +97,11 @@ if (ZSTD_LEGACY_SUPPORT)
             ${LIBRARY_LEGACY_DIR}/zstd_v07.h)
 endif ()
 
-if (MSVC)
+if (MSVC AND NOT (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
     set(MSVC_RESOURCE_DIR ${ZSTD_SOURCE_DIR}/build/VS2010/libzstd-dll)
     set(PlatformDependResources ${MSVC_RESOURCE_DIR}/libzstd-dll.rc)
+else()
+    set(PlatformDependResources)
 endif ()
 
 # Explicitly set the language to C for all files, including ASM files.

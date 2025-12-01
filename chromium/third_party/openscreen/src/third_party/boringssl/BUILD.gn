@@ -3,8 +3,6 @@
 # found in the LICENSE file.
 
 import("//build_overrides/build.gni")
-import("BUILD.generated.gni")
-import("BUILD.generated_tests.gni")
 
 if (build_with_chromium) {
   group("boringssl") {
@@ -12,22 +10,19 @@ if (build_with_chromium) {
     public_deps = [ "//third_party/boringssl" ]
   }
 } else {
+  import("src/gen/sources.gni")
+
   # Config for us and everybody else depending on BoringSSL.
   config("external_config") {
     include_dirs = [ "src/include" ]
     cflags = []
-    if (is_clang) {
-      cflags += [ "-Wno-extra-semi" ]
-    }
   }
 
   # Config internal to this build file, shared by boringssl and boringssl_fuzzer.
   config("internal_config") {
     visibility = [ ":*" ]  # Only targets in this file can depend on this.
     defines = [
-      "BORINGSSL_ALLOW_CXX_RUNTIME",
       "BORINGSSL_IMPLEMENTATION",
-      "BORINGSSL_NO_STATIC_INITIALIZER",
       "OPENSSL_SMALL",
     ]
 
@@ -51,14 +46,18 @@ if (build_with_chromium) {
       # All other targets use GAS-compatible assembler. BoringSSL's assembly
       # files are all wrapped in processor checks for the corresponding target,
       # so there is no need to add target conditions in the build.
-      sources = crypto_sources_asm
+      sources = rebase_path(bcm_sources_asm + crypto_sources_asm, ".", "src")
       include_dirs = [ "src/include" ]
     }
   }
 
   source_set("boringssl") {
-    sources = crypto_sources + ssl_sources
-    public = crypto_headers + ssl_headers
+    sources = rebase_path(
+            bcm_internal_headers + bcm_sources + crypto_internal_headers +
+                crypto_sources + ssl_internal_headers + ssl_sources,
+            ".",
+            "src")
+    public = rebase_path(crypto_headers + ssl_headers, ".", "src")
     deps = [
       ":boringssl_asm",
       "src/third_party/fiat:fiat_license",

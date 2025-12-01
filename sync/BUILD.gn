@@ -55,6 +55,7 @@ static_library("factory") {
 
       deps += [
         "//chrome/android:chrome_jni_headers",
+        "//chrome/common:buildflags",
       ]
     }
   }

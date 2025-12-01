@@ -1,0 +1,7 @@
+include "fcp/tracing/tracing_schema_common.fbs";
+
+table OrderWithIds (tag: "ORDI") {
+  fieldz: int (id: 1);
+  fieldy: int (id: 2);
+  fieldx: int (id: 0);
+}

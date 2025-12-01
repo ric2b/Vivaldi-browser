@@ -13,6 +13,7 @@
 #include "gn/ninja_utils.h"
 #include "gn/output_file.h"
 #include "gn/scheduler.h"
+#include "gn/string_output_buffer.h"
 #include "gn/substitution_writer.h"
 #include "gn/target.h"
 #include "gn/toolchain.h"
@@ -144,7 +145,37 @@ std::string NinjaCreateBundleTargetWriter::WritePostProcessingRuleDefinition() {
   out_ << "  restat = 1" << std::endl;
   out_ << std::endl;
 
+  WritePostProcessingManifestFile();
   return custom_rule_name;
+}
+
+void NinjaCreateBundleTargetWriter::WritePostProcessingManifestFile() {
+  const BundleData& bundle_data = target_->bundle_data();
+  const SourceFile& manifest_path = bundle_data.post_processing_manifest();
+  if (manifest_path.is_null()) {
+    return;
+  }
+
+  const BuildSettings* build_settings = settings_->build_settings();
+  const base::FilePath bundle_root_dir = build_settings->GetFullPath(
+      bundle_data.GetBundleRootDirOutputAsDir(settings_));
+
+  StringOutputBuffer storage;
+  std::ostream manifest(&storage);
+
+  std::vector<SourceFile> outputs;
+  bundle_data.GetOutputsAsSourceFiles(settings_, target_, &outputs, nullptr);
+  for (const SourceFile& output_file : outputs) {
+    const base::FilePath full_path = build_settings->GetFullPath(output_file);
+
+    base::FilePath relative_path;
+    if (bundle_root_dir.AppendRelativePath(full_path, &relative_path)) {
+      manifest << relative_path.As8Bit() << "\n";
+    }
+  }
+
+  storage.WriteToFileIfChanged(build_settings->GetFullPath(manifest_path),
+                               nullptr);
 }
 
 void NinjaCreateBundleTargetWriter::WriteCopyBundleDataSteps(

@@ -48,8 +48,8 @@ if (tint_build_unittests) {
     output_name = "tint_unittests"
     sources = [ "main_test.cc" ]
     deps = [
-      "${dawn_root}/src/utils:utils",
-      "${dawn_root}/src/utils/chromium_test_compat:chromium_test_compat",
+      "${dawn_root}/src/utils",
+      "${dawn_root}/src/utils/chromium_test_compat",
       "${tint_src_dir}:gmock_and_gtest",
       "${tint_src_dir}/api",
       "${tint_src_dir}/api:unittests",
@@ -82,7 +82,7 @@ if (tint_build_unittests) {
       "${tint_src_dir}/lang/wgsl/reader/lower:unittests",
       "${tint_src_dir}/lang/wgsl/resolver:unittests",
       "${tint_src_dir}/lang/wgsl/sem:unittests",
-      "${tint_src_dir}/lang/wgsl/writer/ir_to_program",
+      "${tint_src_dir}/lang/wgsl/writer/common",
       "${tint_src_dir}/lang/wgsl/writer/ir_to_program:unittests",
       "${tint_src_dir}/lang/wgsl/writer/raise:unittests",
       "${tint_src_dir}/utils",
@@ -143,15 +143,6 @@ if (tint_build_unittests) {
         "${tint_src_dir}/lang/spirv/reader/common:unittests",
         "${tint_src_dir}/lang/spirv/reader/parser:unittests",
       ]
-    }
-
-    if (tint_build_spv_reader && tint_build_wgsl_reader &&
-        tint_build_wgsl_writer) {
-      deps += [ "${tint_src_dir}/lang/spirv/reader/ast_lower:unittests" ]
-    }
-
-    if (tint_build_spv_reader && tint_build_wgsl_writer) {
-      deps += [ "${tint_src_dir}/lang/spirv/reader/ast_parser:unittests" ]
     }
 
     if (tint_build_spv_reader || tint_build_spv_writer) {

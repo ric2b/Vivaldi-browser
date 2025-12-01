@@ -121,7 +121,7 @@
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/color/color_provider.h"
 #include "ui/color/color_provider_manager.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 #include "ui/native_theme/native_theme_mac.h"
 #include "ui/native_theme/native_theme_observer.h"
 #include "url/gurl.h"
@@ -211,8 +211,7 @@ Browser* ActivateBrowser(Profile* profile) {
 // The profile can be `nullptr` and in that case the last-used profile will be
 // used.
 void LaunchBrowserStartup(Profile* profile) {
-  if (StartupProfileModeFromReason(ProfilePicker::GetStartupModeReason()) ==
-      StartupProfileMode::kProfilePicker) {
+  if (ProfilePicker::GetStartupMode() == StartupProfileMode::kProfilePicker) {
     ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
         ProfilePicker::EntryPoint::kNewSessionOnExistingProcess));
     return;
@@ -385,7 +384,14 @@ void FocusWindowSetOnCurrentSpace(NSSet<NSWindow*>* windows) {
   }
 
   if (frontmost_window) {
-    [frontmost_window makeKeyAndOrderFront:nil];
+    // Use deminiaturize when the window is minimized to avoid the issue where
+    // the window suddenly appears before the animation starts during
+    // restoration.
+    if (frontmost_window.miniaturized) {
+      [frontmost_window deminiaturize:nil];
+    } else {
+      [frontmost_window makeKeyAndOrderFront:nil];
+    }
     [NSApp activateIgnoringOtherApps:YES];
   }
 }
@@ -399,8 +405,7 @@ base::FilePath GetStartupProfilePathMac() {
   StartupProfilePathInfo profile_path_info = GetStartupProfilePath(
       /*cur_dir=*/base::FilePath(), *base::CommandLine::ForCurrentProcess(),
       /*ignore_profile_picker=*/true);
-  DCHECK_EQ(StartupProfileModeFromReason(profile_path_info.reason),
-            StartupProfileMode::kBrowserWindow);
+  DCHECK_EQ(profile_path_info.mode, StartupProfileMode::kBrowserWindow);
   return profile_path_info.path;
 }
 
@@ -1601,6 +1606,12 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
 #endif
 }
 
+- (void)checkForUpdatesInformation {
+#ifndef VIVALDI_SPARKLE_DISABLED
+  [[_sparkle_updater_controller updater] checkForUpdateInformation];
+#endif
+}
+
 - (void)commandDispatch:(id)sender {
   // Drop commands received after shutdown was initiated.
   if (g_browser_process->IsShuttingDown() ||
@@ -1871,9 +1882,9 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
       break;
     case IDC_HELP_PAGE_VIA_MENU:
       if (Browser* browser = ActivateBrowser(profile))
-        chrome::ShowHelp(browser, chrome::HELP_SOURCE_MENU);
+        chrome::ShowHelp(browser, chrome::HelpSource::kMenu);
       else
-        chrome::OpenHelpWindow(profile, chrome::HELP_SOURCE_MENU);
+        chrome::OpenHelpWindow(profile, chrome::HelpSource::kMenu);
       break;
     case IDC_OPTIONS:
       [self showPreferences:sender];
@@ -1971,8 +1982,7 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   }
 
   // Open the profile picker (for multi-profile users) or a new window.
-  if (StartupProfileModeFromReason(ProfilePicker::GetStartupModeReason()) ==
-      StartupProfileMode::kProfilePicker) {
+  if (ProfilePicker::GetStartupMode() == StartupProfileMode::kProfilePicker) {
     ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
         ProfilePicker::EntryPoint::kNewSessionOnExistingProcess));
   } else {

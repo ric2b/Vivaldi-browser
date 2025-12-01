@@ -105,7 +105,7 @@ RequestErrorCode StatusToRequestErrorCode(absl::Status status) {
     case absl::StatusCode::kOutOfRange:
       return RequestErrorCode::kInvalidRange;
     case absl::StatusCode::kInvalidArgument:
-      return RequestErrorCode::kInvalidJoiningSubscribeId;
+      return RequestErrorCode::kInvalidJoiningRequestId;
     case absl::StatusCode::kUnauthenticated:
       return RequestErrorCode::kExpiredAuthToken;
     default:
@@ -132,7 +132,7 @@ absl::StatusCode RequestErrorCodeToStatusCode(RequestErrorCode error_code) {
     case RequestErrorCode::kNoObjects:
       // Equivalently, kRetryTrackAlias.
       return absl::StatusCode::kNotFound;
-    case RequestErrorCode::kInvalidJoiningSubscribeId:
+    case RequestErrorCode::kInvalidJoiningRequestId:
     case RequestErrorCode::kMalformedAuthToken:
       return absl::StatusCode::kInvalidArgument;
     case RequestErrorCode::kExpiredAuthToken:
@@ -161,6 +161,11 @@ MoqtError ValidateSetupParameters(const KeyValuePairList& parameters,
     // Only non-webtrans servers should receive kPath.
     return MoqtError::kInvalidPath;
   }
+  if ((webtrans || perspective == quic::Perspective::IS_CLIENT) &&
+      parameters.contains(SetupParameter::kAuthority)) {
+    // Only non-webtrans servers should receive kAuthority.
+    return MoqtError::kInvalidAuthority;
+  }
   if (!parameters.contains(SetupParameter::kSupportObjectAcks)) {
     return MoqtError::kNoError;
   }
@@ -173,17 +178,23 @@ MoqtError ValidateSetupParameters(const KeyValuePairList& parameters,
   return MoqtError::kNoError;
 }
 
-const std::array<MoqtMessageType, 8> kAllowsAuthorization = {
-    MoqtMessageType::kClientSetup, MoqtMessageType::kServerSetup,
-    MoqtMessageType::kSubscribe,   MoqtMessageType::kSubscribeAnnounces,
-    MoqtMessageType::kAnnounce,    MoqtMessageType::kTrackStatusRequest,
-    MoqtMessageType::kFetch,       MoqtMessageType::kPublish};
-const std::array<MoqtMessageType, 6> kAllowsDeliveryTimeout = {
-    MoqtMessageType::kSubscribe,       MoqtMessageType::kSubscribeOk,
-    MoqtMessageType::kSubscribeUpdate, MoqtMessageType::kTrackStatus,
-    MoqtMessageType::kPublish,         MoqtMessageType::kPublishOk};
+const std::array<MoqtMessageType, 9> kAllowsAuthorization = {
+    MoqtMessageType::kClientSetup,
+    MoqtMessageType::kServerSetup,
+    MoqtMessageType::kPublish,
+    MoqtMessageType::kSubscribe,
+    MoqtMessageType::kSubscribeUpdate,
+    MoqtMessageType::kSubscribeNamespace,
+    MoqtMessageType::kPublishNamespace,
+    MoqtMessageType::kTrackStatus,
+    MoqtMessageType::kFetch};
+const std::array<MoqtMessageType, 7> kAllowsDeliveryTimeout = {
+    MoqtMessageType::kTrackStatus,    MoqtMessageType::kTrackStatusOk,
+    MoqtMessageType::kPublish,        MoqtMessageType::kPublishOk,
+    MoqtMessageType::kSubscribe,      MoqtMessageType::kSubscribeOk,
+    MoqtMessageType::kSubscribeUpdate};
 const std::array<MoqtMessageType, 4> kAllowsMaxCacheDuration = {
-    MoqtMessageType::kSubscribeOk, MoqtMessageType::kTrackStatus,
+    MoqtMessageType::kSubscribeOk, MoqtMessageType::kTrackStatusOk,
     MoqtMessageType::kFetchOk, MoqtMessageType::kPublish};
 bool ValidateVersionSpecificParameters(const KeyValuePairList& parameters,
                                        MoqtMessageType message_type) {
@@ -226,33 +237,35 @@ std::string MoqtMessageTypeToString(const MoqtMessageType message_type) {
       return "SUBSCRIBE_ERROR";
     case MoqtMessageType::kUnsubscribe:
       return "UNSUBSCRIBE";
-    case MoqtMessageType::kSubscribeDone:
+    case MoqtMessageType::kPublishDone:
       return "SUBSCRIBE_DONE";
     case MoqtMessageType::kSubscribeUpdate:
       return "SUBSCRIBE_UPDATE";
-    case MoqtMessageType::kAnnounceCancel:
-      return "ANNOUNCE_CANCEL";
-    case MoqtMessageType::kTrackStatusRequest:
-      return "TRACK_STATUS_REQUEST";
+    case MoqtMessageType::kPublishNamespaceCancel:
+      return "PUBLISH_NAMESPACE_CANCEL";
     case MoqtMessageType::kTrackStatus:
       return "TRACK_STATUS";
-    case MoqtMessageType::kAnnounce:
-      return "ANNOUNCE";
-    case MoqtMessageType::kAnnounceOk:
-      return "ANNOUNCE_OK";
-    case MoqtMessageType::kAnnounceError:
-      return "ANNOUNCE_ERROR";
-    case MoqtMessageType::kUnannounce:
-      return "UNANNOUNCE";
+    case MoqtMessageType::kTrackStatusOk:
+      return "TRACK_STATUS_OK";
+    case MoqtMessageType::kTrackStatusError:
+      return "TRACK_STATUS_ERROR";
+    case MoqtMessageType::kPublishNamespace:
+      return "PUBLISH_NAMESPACE";
+    case MoqtMessageType::kPublishNamespaceOk:
+      return "PUBLISH_NAMESPACE_OK";
+    case MoqtMessageType::kPublishNamespaceError:
+      return "PUBLISH_NAMESPACE_ERROR";
+    case MoqtMessageType::kPublishNamespaceDone:
+      return "PUBLISH_NAMESPACE_DONE";
     case MoqtMessageType::kGoAway:
       return "GOAWAY";
-    case MoqtMessageType::kSubscribeAnnounces:
+    case MoqtMessageType::kSubscribeNamespace:
       return "SUBSCRIBE_NAMESPACE";
-    case MoqtMessageType::kSubscribeAnnouncesOk:
+    case MoqtMessageType::kSubscribeNamespaceOk:
       return "SUBSCRIBE_NAMESPACE_OK";
-    case MoqtMessageType::kSubscribeAnnouncesError:
+    case MoqtMessageType::kSubscribeNamespaceError:
       return "SUBSCRIBE_NAMESPACE_ERROR";
-    case MoqtMessageType::kUnsubscribeAnnounces:
+    case MoqtMessageType::kUnsubscribeNamespace:
       return "UNSUBSCRIBE_NAMESPACE";
     case MoqtMessageType::kMaxRequestId:
       return "MAX_REQUEST_ID";

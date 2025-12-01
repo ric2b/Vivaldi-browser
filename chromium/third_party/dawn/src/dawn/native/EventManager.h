@@ -39,6 +39,7 @@
 #include "dawn/common/MutexProtected.h"
 #include "dawn/common/NonMovable.h"
 #include "dawn/common/Ref.h"
+#include "dawn/common/Time.h"
 #include "dawn/common/WeakRef.h"
 #include "dawn/native/Error.h"
 #include "dawn/native/Forward.h"
@@ -206,13 +207,9 @@ class EventManager::TrackedEvent : public RefCounted {
   private:
     CompletionData mCompletionData;
     const bool mIsProgressing = true;
-    // Whether the callback has been called. Note that this is a MutexProtected<bool> because for
-    // spontaneous events, multiple threads may call |EnsureComplete| and that function should only
-    // return after the actual callback is completed. Without the lock, previous to this change we
-    // just had an std::atomic<bool>, two threads could race, and the thread that does not run the
-    // callback can make forward progress even though the callback hasn't completed on the other
-    // thread yet.
-    MutexProtected<bool> mCompleted;
+
+    // Flag used to ensure that the callback is only completed once.
+    std::once_flag mFlag;
 };
 
 }  // namespace dawn::native

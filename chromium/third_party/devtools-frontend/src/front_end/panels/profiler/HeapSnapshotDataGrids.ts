@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2012 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2012 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
@@ -51,31 +25,31 @@ import type {DataDisplayDelegate} from './ProfileHeader.js';
 
 const UIStrings = {
   /**
-   *@description Text in Heap Snapshot Data Grids of a profiler tool
+   * @description Text in Heap Snapshot Data Grids of a profiler tool
    */
   distanceFromWindowObject: 'Distance from window object',
   /**
-   *@description Text in Heap Snapshot Data Grids of a profiler tool
+   * @description Text in Heap Snapshot Data Grids of a profiler tool
    */
   sizeOfTheObjectItselfInBytes: 'Size of the object itself in bytes',
   /**
-   *@description Text in Heap Snapshot Data Grids of a profiler tool
+   * @description Text in Heap Snapshot Data Grids of a profiler tool
    */
   sizeOfTheObjectPlusTheGraphIt: 'Size of the object plus the graph it retains in bytes',
   /**
-   *@description Text in Heap Snapshot Data Grids of a profiler tool
+   * @description Text in Heap Snapshot Data Grids of a profiler tool
    */
   object: 'Object',
   /**
-   *@description Text in Heap Snapshot Data Grids of a profiler tool
+   * @description Text in Heap Snapshot Data Grids of a profiler tool
    */
   distance: 'Distance',
   /**
-   *@description Text in Heap Snapshot Data Grids of a profiler tool. Shallow size is the size of just this node, not including children/retained size.
+   * @description Text in Heap Snapshot Data Grids of a profiler tool. Shallow size is the size of just this node, not including children/retained size.
    */
   shallowSize: 'Shallow Size',
   /**
-   *@description Text in Heap Snapshot Data Grids of a profiler tool
+   * @description Text in Heap Snapshot Data Grids of a profiler tool
    */
   retainedSize: 'Retained Size',
   /**
@@ -85,20 +59,20 @@ const UIStrings = {
    */
   heapSnapshotRetainment: 'Heap Snapshot Retainment',
   /**
-   *@description Text in Heap Snapshot Data Grids of a profiler tool
+   * @description Text in Heap Snapshot Data Grids of a profiler tool
    */
   constructorString: 'Constructor',
   /**
-   *@description Data grid name for Heap Snapshot Constructors data grids
+   * @description Data grid name for Heap Snapshot Constructors data grids
    */
   heapSnapshotConstructors: 'Heap Snapshot Constructors',
   /**
-   *@description Column header in a table displaying the diff between two Heap Snapshots. This
+   * @description Column header in a table displaying the diff between two Heap Snapshots. This
    * column is number of new objects in snapshot #2 compared to snapshot #1.
    */
   New: '# New',
   /**
-   *@description Column header in a table displaying the diff between two Heap Snapshots. This
+   * @description Column header in a table displaying the diff between two Heap Snapshots. This
    * column is number of deleted objects in snapshot #2 compared to snapshot #1.
    */
   Deleted: '# Deleted',
@@ -108,11 +82,11 @@ const UIStrings = {
    */
   Delta: '# Delta',
   /**
-   *@description Text in Heap Snapshot Data Grids of a profiler tool
+   * @description Text in Heap Snapshot Data Grids of a profiler tool
    */
   allocSize: 'Alloc. Size',
   /**
-   *@description Text in Heap Snapshot Data Grids of a profiler tool
+   * @description Text in Heap Snapshot Data Grids of a profiler tool
    */
   freedSize: 'Freed Size',
   /**
@@ -121,31 +95,31 @@ const UIStrings = {
    */
   sizeDelta: 'Size Delta',
   /**
-   *@description Data grid name for Heap Snapshot Diff data grids
+   * @description Data grid name for Heap Snapshot Diff data grids
    */
   heapSnapshotDiff: 'Heap Snapshot Diff',
   /**
-   *@description Text in Heap Snapshot Data Grids of a profiler tool
+   * @description Text in Heap Snapshot Data Grids of a profiler tool
    */
   liveCount: 'Live Count',
   /**
-   *@description Text in Heap Snapshot Data Grids of a profiler tool
+   * @description Text in Heap Snapshot Data Grids of a profiler tool
    */
   count: 'Count',
   /**
-   *@description Text in Heap Snapshot Data Grids of a profiler tool
+   * @description Text in Heap Snapshot Data Grids of a profiler tool
    */
   liveSize: 'Live Size',
   /**
-   *@description Text for the size of something
+   * @description Text for the size of something
    */
   size: 'Size',
   /**
-   *@description Text for a programming function
+   * @description Text for a programming function
    */
   function: 'Function',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   allocation: 'Allocation',
 } as const;

@@ -10,12 +10,17 @@
 #include "base/functional/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
+#include "base/time/time.h"
 #include "chrome/common/actor.mojom.h"
 #include "chrome/common/actor/action_result.h"
+#include "chrome/common/actor/actor_utils.h"
+#include "chrome/common/actor/journal_details_builder.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/renderer/actor/click_tool.h"
 #include "chrome/renderer/actor/drag_and_release_tool.h"
 #include "chrome/renderer/actor/journal.h"
 #include "chrome/renderer/actor/mouse_move_tool.h"
+#include "chrome/renderer/actor/no_op_tool.h"
 #include "chrome/renderer/actor/script_tool.h"
 #include "chrome/renderer/actor/scroll_tool.h"
 #include "chrome/renderer/actor/select_tool.h"
@@ -54,7 +59,7 @@ void ToolExecutor::InvokeTool(mojom::ToolInvocationPtr invocation,
   CHECK(!completion_callback_);
   completion_callback_ = std::move(callback);
   invoke_journal_entry_ =
-      journal_->CreatePendingAsyncEntry(invocation->task_id, "InvokeTool", "");
+      journal_->CreatePendingAsyncEntry(invocation->task_id, "InvokeTool", {});
 
   WebLocalFrame* web_frame = frame_->GetWebFrame();
 
@@ -65,7 +70,7 @@ void ToolExecutor::InvokeTool(mojom::ToolInvocationPtr invocation,
   if (!web_frame || !web_frame->FrameWidget()) {
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
-        base::BindOnce(&ToolExecutor::PageStabilized,
+        base::BindOnce(&ToolExecutor::OnCompletion,
                        weak_ptr_factory_.GetWeakPtr(),
                        MakeResult(mojom::ActionResultCode::kFrameWentAway)));
     return;
@@ -130,29 +135,51 @@ void ToolExecutor::InvokeTool(mojom::ToolInvocationPtr invocation,
           std::move(invocation->action->get_script_tool()));
       break;
     }
+    case actor::mojom::ToolAction::Tag::kScrollTo: {
+      // This is only used to call `EnsureTargetInView()`.
+      tool_ = std::make_unique<NoOpTool>(
+          frame_.get(), invocation->task_id, journal_.get(),
+          std::move(invocation->target),
+          std::move(invocation->observed_target));
+      break;
+    }
     default:
       NOTREACHED();
   }
 
-  page_stability_monitor_ = std::make_unique<PageStabilityMonitor>(*frame_);
+  // If GeneralPageStabilityMode is kAllEnabled, the monitor is created in a
+  // separate mojo call from the browser.
+  if (!UseGeneralPageStabilityAllTools()) {
+    page_stability_monitor_ = std::make_unique<PageStabilityMonitor>(
+        *frame_, tool_->SupportsPaintStability(), invocation->task_id,
+        *journal_);
+  }
+
+  if (features::kGlicActorScrollTargetIntoView.Get()) {
+    tool_->EnsureTargetInView();
+  }
 
   execute_journal_entry_ = journal_->CreatePendingAsyncEntry(
-      invocation->task_id, "ExecuteTool", tool_->DebugString());
+      invocation->task_id, "ExecuteTool",
+      JournalDetailsBuilder().Add("tool", tool_->DebugString()).Build());
   tool_->Execute(base::BindOnce(&ToolExecutor::ToolFinished,
-                                weak_ptr_factory_.GetWeakPtr(),
-                                invocation->task_id));
+                                weak_ptr_factory_.GetWeakPtr()));
 }
 
-void ToolExecutor::ToolFinished(int32_t task_id,
-                                mojom::ActionResultPtr result) {
+void ToolExecutor::ToolFinished(mojom::ActionResultPtr result) {
   execute_journal_entry_.reset();
-  page_stability_monitor_->WaitForStable(
-      *tool_, task_id, *journal_,
-      base::BindOnce(&ToolExecutor::PageStabilized,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(result)));
+  result->execution_end_time = base::TimeTicks::Now();
+  if (page_stability_monitor_) {
+    page_stability_monitor_->NotifyWhenStable(
+        tool_->ExecutionObservationDelay(),
+        base::BindOnce(&ToolExecutor::OnCompletion,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(result)));
+  } else {
+    OnCompletion(std::move(result));
+  }
 }
 
-void ToolExecutor::PageStabilized(mojom::ActionResultPtr result) {
+void ToolExecutor::OnCompletion(mojom::ActionResultPtr result) {
   CHECK(completion_callback_);
   page_stability_monitor_.reset();
 

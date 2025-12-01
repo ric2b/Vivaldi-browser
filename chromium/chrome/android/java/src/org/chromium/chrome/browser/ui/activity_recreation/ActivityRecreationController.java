@@ -4,14 +4,18 @@
 
 package org.chromium.chrome.browser.ui.activity_recreation;
 
+import static org.chromium.build.NullUtil.assertNonNull;
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.os.Bundle;
 import android.os.Handler;
-
-import androidx.annotation.NonNull;
+import android.view.View;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.layouts.LayoutManager;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider.LayoutStateObserver;
@@ -28,6 +32,7 @@ import org.chromium.chrome.browser.ChromeApplicationImpl;
  * A utility class to handle saving and restoring the UI state across fold transitions, density
  * change or UI mode type change.
  */
+@NullMarked
 public class ActivityRecreationController {
     static final String ACTIVITY_RECREATION_UI_STATE = "activity_recreation_ui_state";
 
@@ -35,10 +40,10 @@ public class ActivityRecreationController {
     private final ObservableSupplier<LayoutManager> mLayoutManagerSupplier;
     private final ActivityTabProvider mActivityTabProvider;
     private final Handler mLayoutStateHandler;
-    private ActivityRecreationUiState mRetainedUiState;
+    private @Nullable ActivityRecreationUiState mRetainedUiState;
 
     /** Vivaldi **/
-    private OneshotSupplierImpl<PanelManager> mPanelManagerOneshotSupplier;
+    private final @Nullable OneshotSupplierImpl<PanelManager> mPanelManagerOneshotSupplier;
     static final String PANEL_OPEN_STATE = "panel_open_state";
     static final String PANEL_URL = "panel_url";
     /** End Vivaldi **/
@@ -52,21 +57,22 @@ public class ActivityRecreationController {
      * @param layoutStateHandler The {@link Handler} to post UI state restoration.
      */
     public ActivityRecreationController(
-            @NonNull OneshotSupplierImpl<ToolbarManager> toolbarManagerSupplier,
-            @NonNull ObservableSupplier<LayoutManager> layoutManagerSupplier,
-            @NonNull ActivityTabProvider activityTabProvider,
+            OneshotSupplierImpl<ToolbarManager> toolbarManagerSupplier,
+            ObservableSupplier<LayoutManager> layoutManagerSupplier,
+            ActivityTabProvider activityTabProvider,
             Handler layoutStateHandler) {
         mToolbarManagerSupplier = toolbarManagerSupplier;
         mLayoutManagerSupplier = layoutManagerSupplier;
         mActivityTabProvider = activityTabProvider;
         mLayoutStateHandler = layoutStateHandler;
+        mPanelManagerOneshotSupplier = null; // Vivaldi
     }
 
     public ActivityRecreationController(
-            @NonNull OneshotSupplierImpl<ToolbarManager> toolbarManagerSupplier,
-            @NonNull ObservableSupplier<LayoutManager> layoutManagerSupplier,
-            @NonNull ActivityTabProvider activityTabProvider,
-            @NonNull OneshotSupplierImpl<PanelManager> panelManagerOneshotSupplier,
+            OneshotSupplierImpl<ToolbarManager> toolbarManagerSupplier,
+            ObservableSupplier<LayoutManager> layoutManagerSupplier,
+            ActivityTabProvider activityTabProvider,
+            OneshotSupplierImpl<PanelManager> panelManagerOneshotSupplier,
             Handler layoutStateHandler) {
         mToolbarManagerSupplier = toolbarManagerSupplier;
         mLayoutManagerSupplier = layoutManagerSupplier;
@@ -83,18 +89,19 @@ public class ActivityRecreationController {
      */
     public void prepareUiState() {
         mRetainedUiState = new ActivityRecreationUiState();
-        if (mToolbarManagerSupplier.hasValue() && mToolbarManagerSupplier.get().isUrlBarFocused()) {
+        var toolbarManager = mToolbarManagerSupplier.get();
+        if (toolbarManager != null && toolbarManager.isUrlBarFocused()) {
             mRetainedUiState.mIsUrlBarFocused = true;
-            mRetainedUiState.mUrlBarEditText =
-                    mToolbarManagerSupplier.get().getUrlBarTextWithoutAutocomplete();
+            mRetainedUiState.mUrlBarEditText = toolbarManager.getUrlBarTextWithoutAutocomplete();
         }
 
         if (getKeyboardVisibilityState()) {
             mRetainedUiState.mIsKeyboardShown = true;
         }
 
-        if (mLayoutManagerSupplier.hasValue()) {
-            if (mLayoutManagerSupplier.get().isLayoutVisible(LayoutType.TAB_SWITCHER)) {
+        var layoutManager = mLayoutManagerSupplier.get();
+        if (layoutManager != null) {
+            if (layoutManager.isLayoutVisible(LayoutType.TAB_SWITCHER)) {
                 mRetainedUiState.mIsTabSwitcherShown = true;
             }
         }
@@ -113,14 +120,14 @@ public class ActivityRecreationController {
         if (mRetainedUiState == null || !mRetainedUiState.shouldRetainState()) return;
         savedInstanceState.putParcelable(ACTIVITY_RECREATION_UI_STATE, mRetainedUiState);
 
-        if (ChromeApplicationImpl.isVivaldi() && mPanelManagerOneshotSupplier.get() != null &&
-                mPanelManagerOneshotSupplier.hasValue()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             savedInstanceState.putBoolean(PANEL_OPEN_STATE, isPanelOpen());
-            if (isPanelOpen()) {
-                savedInstanceState.putString(PANEL_URL,
-                        mPanelManagerOneshotSupplier.get().getCurrentUrl());
-                savedInstanceState.putString(PANEL_URL,
-                        mPanelManagerOneshotSupplier.get().getCurrentUrl());
+            if (mPanelManagerOneshotSupplier != null) {
+                PanelManager panelManager = mPanelManagerOneshotSupplier.get();
+                if (isPanelOpen() && panelManager != null) {
+                    String currentUrl = panelManager.getCurrentUrl();
+                    savedInstanceState.putString(PANEL_URL, currentUrl);
+                }
             }
         } // End Vivaldi
     }
@@ -132,7 +139,8 @@ public class ActivityRecreationController {
      * @param savedInstanceState The {@link Bundle} that is used to restore the UI state.
      */
     public void restoreUiState(Bundle savedInstanceState) {
-        if (savedInstanceState == null || !mLayoutManagerSupplier.hasValue()) {
+        LayoutManager layoutManager = mLayoutManagerSupplier.get();
+        if (savedInstanceState == null || layoutManager == null) {
             return;
         }
 
@@ -143,15 +151,17 @@ public class ActivityRecreationController {
         }
         restoreOmniboxState(
                 uiState,
-                mToolbarManagerSupplier.get(),
-                mLayoutManagerSupplier.get(),
+                assertNonNull(mToolbarManagerSupplier.get()),
+                layoutManager,
                 mLayoutStateHandler);
-        restoreKeyboardState(
-                uiState, mActivityTabProvider, mLayoutManagerSupplier.get(), mLayoutStateHandler);
-        restoreTabSwitcherState(uiState, mLayoutManagerSupplier.get());
+        restoreKeyboardState(uiState, mActivityTabProvider, layoutManager, mLayoutStateHandler);
+        restoreTabSwitcherState(uiState, layoutManager);
 
-        if (ChromeApplicationImpl.isVivaldi() && mPanelManagerOneshotSupplier.get() != null) {
-            restorePanelState(savedInstanceState, mPanelManagerOneshotSupplier.get());
+        if (ChromeApplicationImpl.isVivaldi()) {
+            assumeNonNull(mPanelManagerOneshotSupplier);
+            PanelManager panelManager = mPanelManagerOneshotSupplier.get();
+            if (panelManager != null)
+                restorePanelState(savedInstanceState, panelManager);
         } // End Vivaldi
     }
 
@@ -185,21 +195,24 @@ public class ActivityRecreationController {
      * @param activityTabProvider The current activity tab provider.
      * @return {@code true} if the keyboard is visible, {@code false} otherwise.
      */
-    private static boolean isKeyboardVisible(@NonNull ActivityTabProvider activityTabProvider) {
+    private static boolean isKeyboardVisible(ActivityTabProvider activityTabProvider) {
         if (activityTabProvider.get() == null
                 || activityTabProvider.get().getWebContents() == null
                 || activityTabProvider.get().getWebContents().getViewAndroidDelegate() == null) {
             return false;
         }
 
-        return KeyboardVisibilityDelegate.getInstance()
-                .isKeyboardShowing(
-                        activityTabProvider.get().getContext(),
-                        activityTabProvider
-                                .get()
-                                .getWebContents()
-                                .getViewAndroidDelegate()
-                                .getContainerView());
+        View containerView =
+                activityTabProvider
+                        .get()
+                        .getWebContents()
+                        .getViewAndroidDelegate()
+                        .getContainerView();
+        if (containerView == null) {
+            return false;
+        }
+
+        return KeyboardVisibilityDelegate.getInstance().isKeyboardShowing(containerView);
     }
 
     private static void restoreUiStateOnLayoutDoneShowing(
@@ -236,9 +249,9 @@ public class ActivityRecreationController {
     }
 
     private static void restoreOmniboxState(
-            @NonNull ActivityRecreationUiState uiState,
+            ActivityRecreationUiState uiState,
             ToolbarManager toolbarManager,
-            @NonNull LayoutManager layoutManager,
+            LayoutManager layoutManager,
             Handler layoutStateHandler) {
         if (toolbarManager == null || !uiState.mIsUrlBarFocused) {
             return;
@@ -251,9 +264,9 @@ public class ActivityRecreationController {
     }
 
     private static void restoreKeyboardState(
-            @NonNull ActivityRecreationUiState uiState,
-            @NonNull ActivityTabProvider activityTabProvider,
-            @NonNull LayoutManager layoutManager,
+            ActivityRecreationUiState uiState,
+            ActivityTabProvider activityTabProvider,
+            LayoutManager layoutManager,
             Handler layoutStateHandler) {
         // Restore the keyboard only if the omnibox focus was not restored, because omnibox code
         // is assumed to restore the keyboard on omnibox focus restoration.
@@ -265,19 +278,20 @@ public class ActivityRecreationController {
     }
 
     private static void restoreTabSwitcherState(
-            @NonNull ActivityRecreationUiState uiState, @NonNull LayoutManager layoutManager) {
+            ActivityRecreationUiState uiState, LayoutManager layoutManager) {
         if (!uiState.mIsTabSwitcherShown) {
             return;
         }
         layoutManager.showLayout(LayoutType.TAB_SWITCHER, false);
     }
 
-    private static void setUrlBarFocusAndText(ToolbarManager toolbarManager, String urlBarText) {
+    private static void setUrlBarFocusAndText(
+            ToolbarManager toolbarManager, @Nullable String urlBarText) {
         toolbarManager.setUrlBarFocusAndText(
                 true, OmniboxFocusReason.ACTIVITY_RECREATION_RESTORATION, urlBarText);
     }
 
-    private static void showSoftInput(@NonNull ActivityTabProvider activityTabProvider) {
+    private static void showSoftInput(ActivityTabProvider activityTabProvider) {
         var tab = activityTabProvider.get();
         if (tab == null) {
             return;
@@ -289,12 +303,14 @@ public class ActivityRecreationController {
 
         var containerView = webContents.getViewAndroidDelegate().getContainerView();
         webContents.scrollFocusedEditableNodeIntoView();
-        KeyboardVisibilityDelegate.getInstance().showKeyboard(containerView);
+        if (containerView != null) {
+            KeyboardVisibilityDelegate.getInstance().showKeyboard(containerView);
+        }
     }
 
     /** Vivaldi **/
     private static void restorePanelState(
-            @NonNull Bundle savedInstanceState, PanelManager panelManager) {
+            Bundle savedInstanceState, PanelManager panelManager) {
         boolean open = savedInstanceState.getBoolean(PANEL_OPEN_STATE, false);
         if (open) {
             String url = savedInstanceState.getString(PANEL_URL, "");
@@ -307,7 +323,8 @@ public class ActivityRecreationController {
     }
 
     private boolean isPanelOpen() {
-        if (mPanelManagerOneshotSupplier.get() != null && mPanelManagerOneshotSupplier.hasValue())
+        assertNonNull(mPanelManagerOneshotSupplier);
+        if (mPanelManagerOneshotSupplier.get() != null)
             return mPanelManagerOneshotSupplier.get().isPanelOpen();
         return false;
     }

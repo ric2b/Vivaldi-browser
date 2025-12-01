@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #[allow(warnings)]
+#[cfg(feature = "libsharpyuv")]
 pub mod bindings {
     // Blaze does not support the `OUT_DIR` configuration used by Cargo. Instead, it specifies a
     // complete path to the generated bindings as an environment variable.

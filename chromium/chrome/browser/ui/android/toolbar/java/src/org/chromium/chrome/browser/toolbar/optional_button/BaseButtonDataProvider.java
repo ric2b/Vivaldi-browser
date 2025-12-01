@@ -14,7 +14,6 @@ import androidx.annotation.StringRes;
 
 import org.chromium.base.FeatureList;
 import org.chromium.base.ObserverList;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.Contract;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -25,6 +24,8 @@ import org.chromium.chrome.browser.user_education.IphCommandBuilder;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogManagerObserver;
 import org.chromium.ui.modelutil.PropertyModel;
+
+import java.util.function.Supplier;
 
 // Vivaldi
 import org.chromium.components.embedder_support.util.UrlUtilities;
@@ -115,7 +116,6 @@ public abstract class BaseButtonDataProvider implements ButtonDataProvider, OnCl
      * @param tab Current tab.
      * @return whether the button should be shown for the current tab.
      */
-    @CallSuper
     @Contract("null -> false")
     protected boolean shouldShowButton(@Nullable Tab tab) {
         // Note(david@vivaldi.com): We don't show the button on internal pages.

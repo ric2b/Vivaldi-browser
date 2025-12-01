@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -49,37 +49,37 @@ import {createSpansForNodeTitle, RemoteObjectPreviewFormatter} from './RemoteObj
 
 const UIStrings = {
   /**
-   *@description Text in Object Properties Section
-   *@example {function alert()  [native code] } PH1
+   * @description Text in Object Properties Section
+   * @example {function alert()  [native code] } PH1
    */
   exceptionS: '[Exception: {PH1}]',
   /**
-   *@description Text in Object Properties Section
+   * @description Text in Object Properties Section
    */
   unknown: 'unknown',
   /**
-   *@description Text to expand something recursively
+   * @description Text to expand something recursively
    */
   expandRecursively: 'Expand recursively',
   /**
-   *@description Text to collapse children of a parent group
+   * @description Text to collapse children of a parent group
    */
   collapseChildren: 'Collapse children',
   /**
-   *@description Text in Object Properties Section
+   * @description Text in Object Properties Section
    */
   noProperties: 'No properties',
   /**
-   *@description Element text content in Object Properties Section
+   * @description Element text content in Object Properties Section
    */
   dots: '(...)',
   /**
-   *@description Element title in Object Properties Section
+   * @description Element title in Object Properties Section
    */
   invokePropertyGetter: 'Invoke property getter',
   /**
-   *@description Show all text content in Show More Data Grid Node of a data grid
-   *@example {50} PH1
+   * @description Show all text content in Show More Data Grid Node of a data grid
+   * @example {50} PH1
    */
   showAllD: 'Show all {PH1}',
   /**
@@ -96,11 +96,11 @@ const UIStrings = {
    */
   valueNotAccessibleToTheDebugger: 'Value is not accessible to the debugger',
   /**
-   *@description A context menu item in the Watch Expressions Sidebar Pane of the Sources panel and Network pane request.
+   * @description A context menu item in the Watch Expressions Sidebar Pane of the Sources panel and Network pane request.
    */
   copyValue: 'Copy value',
   /**
-   *@description A context menu item in the Object Properties Section
+   * @description A context menu item in the Object Properties Section
    */
   copyPropertyPath: 'Copy property path',
   /**
@@ -110,17 +110,17 @@ const UIStrings = {
    */
   stringIsTooLargeToEdit: '<string is too large to edit>',
   /**
-   *@description Text of attribute value when text is too long
-   *@example {30 MB} PH1
+   * @description Text of attribute value when text is too long
+   * @example {30 MB} PH1
    */
   showMoreS: 'Show more ({PH1})',
   /**
-   *@description Text of attribute value when text is too long
-   *@example {30 MB} PH1
+   * @description Text of attribute value when text is too long
+   * @example {30 MB} PH1
    */
   longTextWasTruncatedS: 'long text was truncated ({PH1})',
   /**
-   *@description Text for copying
+   * @description Text for copying
    */
   copy: 'Copy',
   /**
@@ -145,7 +145,7 @@ export const getObjectPropertiesSectionFrom = (element: Element): ObjectProperti
 export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow {
   private readonly object: SDK.RemoteObject.RemoteObject;
   editable: boolean;
-  private readonly objectTreeElementInternal: RootElement;
+  readonly #objectTreeElement: RootElement;
   titleElement: Element;
   skipProtoInternal?: boolean;
   constructor(
@@ -155,12 +155,12 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
     this.object = object;
     this.editable = true;
     if (!showOverflow) {
-      this.hideOverflow();
+      this.setHideOverflow(true);
     }
     this.setFocusable(true);
     this.setShowSelectionOnKeyboardFocus(true);
-    this.objectTreeElementInternal = new RootElement(object, linkifier);
-    this.appendChild(this.objectTreeElementInternal);
+    this.#objectTreeElement = new RootElement(object, linkifier);
+    this.appendChild(this.#objectTreeElement);
     if (typeof title === 'string' || !title) {
       this.titleElement = this.element.createChild('span');
       this.titleElement.textContent = title || '';
@@ -368,12 +368,9 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
     }
 
     const memoryIcon = new IconButton.Icon.Icon();
-    memoryIcon.data = {
-      iconName: 'memory',
-      color: 'var(--icon-default)',
-      width: '16px',
-      height: '13px',
-    };
+    memoryIcon.name = 'memory';
+    memoryIcon.style.width = 'var(--sys-size-8)';
+    memoryIcon.style.height = '13px';
     memoryIcon.addEventListener('click', event => {
       event.consume();
       void Common.Revealer.reveal(new SDK.RemoteObject.LinearMemoryInspectable(object, expression));
@@ -543,7 +540,7 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
   }
 
   expand(): void {
-    this.objectTreeElementInternal.expand();
+    this.#objectTreeElement.expand();
   }
 
   setEditable(value: boolean): void {
@@ -551,7 +548,7 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
   }
 
   objectTreeElement(): UI.TreeOutline.TreeElement {
-    return this.objectTreeElementInternal;
+    return this.#objectTreeElement;
   }
 
   enableContextMenu(): void {
@@ -564,20 +561,19 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
     if (this.object instanceof SDK.RemoteObject.LocalJSONObject) {
       contextMenu.viewSection().appendItem(
           i18nString(UIStrings.expandRecursively),
-          this.objectTreeElementInternal.expandRecursively.bind(this.objectTreeElementInternal, EXPANDABLE_MAX_DEPTH),
+          this.#objectTreeElement.expandRecursively.bind(this.#objectTreeElement, EXPANDABLE_MAX_DEPTH),
           {jslogContext: 'expand-recursively'});
       contextMenu.viewSection().appendItem(
           i18nString(UIStrings.collapseChildren),
-          this.objectTreeElementInternal.collapseChildren.bind(this.objectTreeElementInternal),
-          {jslogContext: 'collapse-children'});
+          this.#objectTreeElement.collapseChildren.bind(this.#objectTreeElement), {jslogContext: 'collapse-children'});
     }
     void contextMenu.show();
   }
 
   titleLessMode(): void {
-    this.objectTreeElementInternal.listItemElement.classList.add('hidden');
-    this.objectTreeElementInternal.childrenListElement.classList.add('title-less-mode');
-    this.objectTreeElementInternal.expand();
+    this.#objectTreeElement.listItemElement.classList.add('hidden');
+    this.#objectTreeElement.childrenListElement.classList.add('title-less-mode');
+    this.#objectTreeElement.expand();
   }
 }
 
@@ -1265,7 +1261,7 @@ export class ObjectPropertyTreeElement extends UI.TreeOutline.TreeElement {
 
     if (!expression) {
       // The property was deleted, so remove this tree element.
-      this.parent && this.parent.removeChild(this);
+      this.parent?.removeChild(this);
     } else {
       // Call updateSiblings since their value might be based on the value that just changed.
       const parent = this.parent;
@@ -1648,24 +1644,23 @@ export class Renderer implements UI.UIUtils.Renderer {
     return rendererInstance;
   }
 
-  async render(object: Object, options?: UI.UIUtils.Options): Promise<{
-    node: Node,
-    tree: UI.TreeOutline.TreeOutline|null,
-  }|null> {
+  async render(object: Object, options?: UI.UIUtils.Options): Promise<UI.UIUtils.RenderedObject|null> {
     if (!(object instanceof SDK.RemoteObject.RemoteObject)) {
       throw new Error('Can\'t render ' + object);
     }
-    options = options || {title: undefined, editable: undefined};
-    const title = options.title;
+    const title = options?.title;
     const section = new ObjectPropertiesSection(object, title);
     if (!title) {
       section.titleLessMode();
     }
-    section.editable = Boolean(options.editable);
-    return {node: section.element, tree: section} as {
-      node: Node,
-      tree: UI.TreeOutline.TreeOutline | null,
-    } | null;
+    section.editable = Boolean(options?.editable);
+    if (options?.expand) {
+      section.firstChild()?.expand();
+    }
+    return {
+      element: section.element,
+      forceSelect: section.forceSelect.bind(section),
+    };
   }
 }
 

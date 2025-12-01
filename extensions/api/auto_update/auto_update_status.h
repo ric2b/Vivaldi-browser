@@ -10,7 +10,8 @@ enum class AutoUpdateStatus {
   kWillDownloadUpdate,
   kDidDownloadUpdate,
   kWillInstallUpdateOnQuit,
-  kUpdaterDidRelaunchApplication
+  kUpdaterDidRelaunchApplication,
+  kError,
 };
 
 #endif  // EXTENSIONS_API_AUTO_UPDATE_AUTO_UPDATE_STATUS_H_

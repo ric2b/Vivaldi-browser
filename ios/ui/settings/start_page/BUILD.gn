@@ -34,4 +34,8 @@ source_set("start_page_settings") {
     "Foundation.framework",
     "UIKit.framework"
   ]
+
+  configs += [
+    "//vivaldi/gn/config:release_kind"
+  ]
 }

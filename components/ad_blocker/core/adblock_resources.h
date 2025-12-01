@@ -13,7 +13,7 @@
 #include "base/observer_list.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "components/ad_blocker/public/core/adblock_request_filter_rule.h"
+#include "components/ad_blocker/public/core/adblock_request_filter_rule_types.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -44,7 +44,7 @@ class Resources {
   void RemoveObserver(Observer* observer);
 
   std::optional<std::string> GetRedirect(const std::string& name,
-                                         RequestFilterRule::ResourceType) const;
+                                         ResourceType) const;
 
   std::map<std::string, InjectableResource> GetInjections();
 

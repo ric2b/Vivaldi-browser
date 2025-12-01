@@ -20,7 +20,6 @@
 
 using testing::_;
 using testing::ElementsAreArray;
-using testing::Invoke;
 using testing::Mock;
 using testing::Return;
 
@@ -261,10 +260,10 @@ TEST_F(SenderPacketRouterTest, RoutesRTCPPacketsFromReceivers) {
     Clock::time_point arrival_time{};
     std::vector<uint8_t> received_packet;
     EXPECT_CALL(*audio_sender(), OnReceivedRtcpPacket(_, _))
-        .WillOnce(Invoke([&](Clock::time_point when, ByteView packet) {
+        .WillOnce([&](Clock::time_point when, ByteView packet) {
           arrival_time = when;
           received_packet.assign(packet.begin(), packet.end());
-        }));
+        });
     EXPECT_CALL(*video_sender(), OnReceivedRtcpPacket(_, _)).Times(0);
 
     const Clock::time_point expected_arrival_time = env()->now();
@@ -287,15 +286,15 @@ TEST_F(SenderPacketRouterTest, RoutesRTCPPacketsFromReceivers) {
     Clock::time_point audio_arrival_time{}, video_arrival_time{};
     std::vector<uint8_t> received_audio_packet, received_video_packet;
     EXPECT_CALL(*audio_sender(), OnReceivedRtcpPacket(_, _))
-        .WillOnce(Invoke([&](Clock::time_point when, ByteView packet) {
+        .WillOnce([&](Clock::time_point when, ByteView packet) {
           audio_arrival_time = when;
           received_audio_packet.assign(packet.begin(), packet.end());
-        }));
+        });
     EXPECT_CALL(*video_sender(), OnReceivedRtcpPacket(_, _))
-        .WillOnce(Invoke([&](Clock::time_point when, ByteView packet) {
+        .WillOnce([&](Clock::time_point when, ByteView packet) {
           video_arrival_time = when;
           received_video_packet.assign(packet.begin(), packet.end());
-        }));
+        });
 
     const Clock::time_point expected_audio_arrival_time = env()->now();
     SimulatePacketArrivedNow(kRemoteEndpoint, kValidAudioRtcpPacket);
@@ -329,7 +328,7 @@ TEST_F(SenderPacketRouterTest, SchedulesPeriodicTransmissionOfRTCPPackets) {
   EXPECT_CALL(*audio_sender(), OnReceivedRtcpPacket(_, _)).Times(0);
   EXPECT_CALL(*audio_sender(), GetRtcpPacketForImmediateSend(_, _))
       .Times(kNumIterations)
-      .WillRepeatedly(Invoke(&MakeFakePacket));
+      .WillRepeatedly(&MakeFakePacket);
   EXPECT_CALL(*audio_sender(), GetRtpPacketForImmediateSend(_, _)).Times(0);
   ON_CALL(*audio_sender(), GetRtpResumeTime())
       .WillByDefault(Return(SenderPacketRouter::kNever));
@@ -337,9 +336,9 @@ TEST_F(SenderPacketRouterTest, SchedulesPeriodicTransmissionOfRTCPPackets) {
   // Capture every packet sent for analysis at the end of this test.
   std::vector<std::vector<uint8_t>> packets_sent;
   EXPECT_CALL(*env(), SendPacket(_, _))
-      .WillRepeatedly(Invoke([&](ByteView packet, PacketMetadata metadata) {
+      .WillRepeatedly([&](ByteView packet, PacketMetadata metadata) {
         packets_sent.emplace_back(packet.begin(), packet.end());
-      }));
+      });
 
   const Clock::time_point first_send_time = env()->now();
   router()->RequestRtcpSend(kAudioReceiverSsrc);
@@ -369,9 +368,9 @@ TEST_F(SenderPacketRouterTest, SchedulesAndTransmitsRTPBursts) {
   // Capture every packet sent for analysis at the end of this test.
   std::vector<std::vector<uint8_t>> packets_sent;
   EXPECT_CALL(*env(), SendPacket(_, _))
-      .WillRepeatedly(Invoke([&](ByteView packet, PacketMetadata metadata) {
+      .WillRepeatedly([&](ByteView packet, PacketMetadata metadata) {
         packets_sent.emplace_back(packet.begin(), packet.end());
-      }));
+      });
 
   // Simulate a typical video Sender RTP at-startup sending sequence: First, at
   // t=0ms, the Sender wants to send its large 10-packet key frame. This will
@@ -393,26 +392,25 @@ TEST_F(SenderPacketRouterTest, SchedulesAndTransmitsRTPBursts) {
   int num_get_rtp_calls = 0;
   EXPECT_CALL(*video_sender(), GetRtpPacketForImmediateSend(_, _))
       .Times(14 + 2)
-      .WillRepeatedly(
-          Invoke([&](Clock::time_point send_time, ByteBuffer buffer) {
-            ++num_get_rtp_calls;
+      .WillRepeatedly([&](Clock::time_point send_time, ByteBuffer buffer) {
+        ++num_get_rtp_calls;
 
-            // 14 packets are sent: The first through fourth bursts send three
-            // packets each, and the fifth burst sends two.
-            if (num_get_rtp_calls <= 14) {
-              return MakeFakePacket(send_time, buffer);
-            }
+        // 14 packets are sent: The first through fourth bursts send three
+        // packets each, and the fifth burst sends two.
+        if (num_get_rtp_calls <= 14) {
+          return MakeFakePacket(send_time, buffer);
+        }
 
-            // 2 "done signals" are then sent: One is at the end of the fifth
-            // burst, one is for a "nothing to send" sixth burst.
-            return ToEmptyPacketBuffer(send_time, buffer);
-          }));
+        // 2 "done signals" are then sent: One is at the end of the fifth
+        // burst, one is for a "nothing to send" sixth burst.
+        return ToEmptyPacketBuffer(send_time, buffer);
+      });
   const Clock::time_point kickstart_time =
       start_time + 4 * kBurstInterval + milliseconds(25);
   int num_get_resume_calls = 0;
   EXPECT_CALL(*video_sender(), GetRtpResumeTime())
       .Times(4 + 1 + 1)
-      .WillRepeatedly(Invoke([&] {
+      .WillRepeatedly([&] {
         ++num_get_resume_calls;
 
         // After each of the first through fourth bursts, the Sender wants to
@@ -429,7 +427,7 @@ TEST_F(SenderPacketRouterTest, SchedulesAndTransmitsRTPBursts) {
 
         // After the sixth burst, the Sender pauses RTP sending indefinitely.
         return SenderPacketRouter::kNever;
-      }));
+      });
   router()->RequestRtpSend(kVideoReceiverSsrc);
   // Execute first burst.
   RunTasksUntilIdle();
@@ -444,8 +442,8 @@ TEST_F(SenderPacketRouterTest, SchedulesAndTransmitsRTPBursts) {
   // Now, resume RTP sending for one more 1-packet frame, and then pause RTP
   // sending again.
   EXPECT_CALL(*video_sender(), GetRtpPacketForImmediateSend(_, _))
-      .WillOnce(Invoke(&MakeFakePacket))        // Frame 2, only packet.
-      .WillOnce(Invoke(&ToEmptyPacketBuffer));  // Done for now.
+      .WillOnce(&MakeFakePacket)        // Frame 2, only packet.
+      .WillOnce(&ToEmptyPacketBuffer);  // Done for now.
   // After the seventh burst, the Sender pauses RTP sending again.
   EXPECT_CALL(*video_sender(), GetRtpResumeTime())
       .WillOnce(Return(SenderPacketRouter::kNever));
@@ -495,9 +493,9 @@ TEST_F(SenderPacketRouterTest, SchedulesAndTransmitsAccountingForPriority) {
   // Capture every packet sent for analysis at the end of this test.
   std::vector<std::vector<uint8_t>> packets_sent;
   EXPECT_CALL(*env(), SendPacket(_, _))
-      .WillRepeatedly(Invoke([&](ByteView packet, PacketMetadata metadata) {
+      .WillRepeatedly([&](ByteView packet, PacketMetadata metadata) {
         packets_sent.emplace_back(packet.begin(), packet.end());
-      }));
+      });
 
   // These indicate how often one packet will be sent from each Sender.
   constexpr Clock::duration kAudioRtpInterval = milliseconds(10);
@@ -506,45 +504,41 @@ TEST_F(SenderPacketRouterTest, SchedulesAndTransmitsAccountingForPriority) {
   // Note: The priority flags used in this test ('0'..'3') indicate
   // lowest-to-highest priority.
   EXPECT_CALL(*audio_sender(), GetRtcpPacketForImmediateSend(_, _))
-      .WillRepeatedly(
-          Invoke([](Clock::time_point send_time, ByteBuffer buffer) {
-            return MakeFakePacketWithFlag('3', send_time, buffer);
-          }));
+      .WillRepeatedly([](Clock::time_point send_time, ByteBuffer buffer) {
+        return MakeFakePacketWithFlag('3', send_time, buffer);
+      });
   int num_audio_get_rtp_calls = 0;
   EXPECT_CALL(*audio_sender(), GetRtpPacketForImmediateSend(_, _))
-      .WillRepeatedly(
-          Invoke([&](Clock::time_point send_time, ByteBuffer buffer) {
-            // Alternate between returning a single packet and a "done for now"
-            // signal.
-            ++num_audio_get_rtp_calls;
-            if (num_audio_get_rtp_calls % 2) {
-              return MakeFakePacketWithFlag('1', send_time, buffer);
-            }
-            return buffer.subspan(0, 0);
-          }));
+      .WillRepeatedly([&](Clock::time_point send_time, ByteBuffer buffer) {
+        // Alternate between returning a single packet and a "done for now"
+        // signal.
+        ++num_audio_get_rtp_calls;
+        if (num_audio_get_rtp_calls % 2) {
+          return MakeFakePacketWithFlag('1', send_time, buffer);
+        }
+        return buffer.subspan(0, 0);
+      });
   EXPECT_CALL(*video_sender(), GetRtcpPacketForImmediateSend(_, _))
-      .WillRepeatedly(
-          Invoke([](Clock::time_point send_time, ByteBuffer buffer) {
-            return MakeFakePacketWithFlag('2', send_time, buffer);
-          }));
+      .WillRepeatedly([](Clock::time_point send_time, ByteBuffer buffer) {
+        return MakeFakePacketWithFlag('2', send_time, buffer);
+      });
   int num_video_get_rtp_calls = 0;
   EXPECT_CALL(*video_sender(), GetRtpPacketForImmediateSend(_, _))
-      .WillRepeatedly(
-          Invoke([&](Clock::time_point send_time, ByteBuffer buffer) {
-            // Alternate between returning a single packet and a "done for now"
-            // signal.
-            ++num_video_get_rtp_calls;
-            if (num_video_get_rtp_calls % 2) {
-              return MakeFakePacketWithFlag('0', send_time, buffer);
-            }
-            return buffer.subspan(0, 0);
-          }));
-  EXPECT_CALL(*audio_sender(), GetRtpResumeTime()).WillRepeatedly(Invoke([&] {
+      .WillRepeatedly([&](Clock::time_point send_time, ByteBuffer buffer) {
+        // Alternate between returning a single packet and a "done for now"
+        // signal.
+        ++num_video_get_rtp_calls;
+        if (num_video_get_rtp_calls % 2) {
+          return MakeFakePacketWithFlag('0', send_time, buffer);
+        }
+        return buffer.subspan(0, 0);
+      });
+  EXPECT_CALL(*audio_sender(), GetRtpResumeTime()).WillRepeatedly([&] {
     return env()->now() + kAudioRtpInterval;
-  }));
-  EXPECT_CALL(*video_sender(), GetRtpResumeTime()).WillRepeatedly(Invoke([&] {
+  });
+  EXPECT_CALL(*video_sender(), GetRtpResumeTime()).WillRepeatedly([&] {
     return env()->now() + kVideoRtpInterval;
-  }));
+  });
 
   // Request starting both RTCP and RTP sends for both Senders, in a random
   // order.

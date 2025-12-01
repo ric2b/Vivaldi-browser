@@ -75,13 +75,23 @@ update_target("//components/sessions:shared") {
   sources += [
     "//vivaldi/components/sessions/vivaldi_live_tab_context.cc",
     "//vivaldi/components/sessions/vivaldi_tab_restore_service_client.cc",
-  ]
-}
-
-update_target("//components/sessions:shared") {
-  sources += [
     "//vivaldi/components/sessions/vivaldi_session_service_commands.cc",
     "//vivaldi/components/sessions/vivaldi_session_service_commands.h",
+  ]
+
+  if (!is_ios) {
+    deps += [
+      "//content/public/browser",
+      "//third_party/blink/public/mojom:mojom_core__parser_action",
+    ]
+  }
+}
+
+update_target("//components/os_crypt/sync:sync") {
+  visibility += [
+    "//vivaldi/browser:browser",
+    "//vivaldi/vivaldi_account:vivaldi_account",
+    "//vivaldi/importer:importer",
   ]
 }
 
@@ -114,7 +124,7 @@ update_template_instance("//third_party/search_engines_data:prepopulated_engines
 update_target("//third_party/search_engines_data:prepopulated_engines_action") {
   # change the actual output folder from gen/vivaldi/components/search_engines
   # to gen/components/search_engines
-  args += ["-b", rebase_path("$root_gen_dir/third_party/search_engines_data/")]
+  args += ["-b", rebase_path("$root_gen_dir/third_party/search_engines_data/", root_build_dir)]
 
   # updates the path of the resulting files to be compiled to match the new
   # output folder
@@ -132,7 +142,7 @@ update_template_instance("//third_party/search_engines_data:regional_settings") 
 update_target("//third_party/search_engines_data:regional_settings_action") {
   # change the actual output folder from gen/vivaldi/components/search_engines
   # to gen/components/search_engines
-  args += ["-b", rebase_path("$root_gen_dir/third_party/search_engines_data/")]
+  args += ["-b", rebase_path("$root_gen_dir/third_party/search_engines_data/", root_build_dir)]
 
   # updates the path of the resulting files to be compiled to match the new
   # output folder
@@ -141,6 +151,8 @@ update_target("//third_party/search_engines_data:regional_settings_action") {
     "$root_gen_dir/third_party/search_engines_data/regional_settings.cc",
     "$root_gen_dir/third_party/search_engines_data/regional_settings.h",
   ]
+
+  visibility+=[ "//components/search_engines:search_engine_utils" ]
 }
 
 update_target("//components/search_engines:search_engines") {
@@ -191,6 +203,14 @@ update_target("//components/search_engines:search_engine_utils") {
   ]
 
   deps += [
+    "//components/keyed_service/core:features",
+    "//components/lens/proto/server:proto",
+    "//components/sync/protocol",
+    "//extensions/buildflags",
+    "//third_party/metrics_proto/",
+    "//third_party/omnibox_proto",
+    "//third_party/search_engines_data:regional_settings_action",
+    "//third_party/widevine/cdm:buildflags",
     "//vivaldi/prefs:prefs_files_generated",
     "//vivaldi/components/ad_blocker/public/core",
     "//vivaldi/components:version_utils"

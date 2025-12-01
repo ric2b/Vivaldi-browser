@@ -27,6 +27,13 @@ void WebViewPermissionHelper::RegisterProtocolHandler(
   const GURL& url,
   bool user_gesture) {
 
+  // Check if already decided
+  if (VivaldiBrowserComponentWrapper::GetInstance()
+          ->IsProtocolHandlerAlreadyDecided(web_view_guest()->web_contents(), protocol, url)) {
+    // Already handled by registry - don't show permission dialog
+    return;
+  }
+
   // TODO: Should we keep everything protocolhandler browser side.
   custom_handlers::ProtocolHandler handler =
       custom_handlers::ProtocolHandler::CreateProtocolHandler(

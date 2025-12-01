@@ -38,6 +38,7 @@
 <translation id="4026745073321351206">🙄 Hittat ett problem?</translation>
 <translation id="4216644171369573466">Flikstapel, <ph name="GROUP_TITLE" />, Meny.</translation>
 <translation id="4304713468139749426">Lösenordshanterare</translation>
+<translation id="4439281775431634915">Dina flikstaplar sparas här</translation>
 <translation id="4569525137269575065">Stäng stapel</translation>
 <translation id="473775607612524610">Uppdatera</translation>
 <translation id="4755216899422789286">Öppna webbadresser i Vivaldi</translation>
@@ -50,6 +51,8 @@
               other {{count} flikstaplar stängda och sparade}}</translation>
 <translation id="5019787757991745254">Färg på flikstapeln <ph name="COLOR" /></translation>
 <translation id="5022440170224170365">Flikar i stapel. Kollapsad.</translation>
+<translation id="5132327651247938019">Du kan skrolla åt höger för att bläddra privat.</translation>
+<translation id="5204006339739481307">Du kan skrolla åt vänster för att bläddra privat.</translation>
 <translation id="5217245356412073535">Du kan ändra standardwebbplatsvyn till skrivbordet i Inställningar &gt; Innehållsinställningar</translation>
 <translation id="5271549068863921519">Spara lösenord</translation>
 <translation id="5317780077021120954">Spara</translation>
@@ -63,6 +66,7 @@
 <translation id="5962477178930921574">Klistra in och sök</translation>
 <translation id="6163856768888310791">Avstapla</translation>
 <translation id="6168969409902608220">Namnge stapel</translation>
+<translation id="6192561334825788389">Du kan svepa åt höger för att bläddra privat.</translation>
 <translation id="6233792867654386826">Öppnar de inmatade webbadresserna i Vivaldi.</translation>
 <translation id="6271462272606946663">Dölj begär mobilwebbplats</translation>
 <translation id="6478587527114893588">Stäng stapel.</translation>
@@ -75,6 +79,8 @@
 <translation id="6827597288286078054">Privat sök</translation>
 <translation id="6851516051005285358">Begär skrivbordswebbplats</translation>
 <translation id="6890907822330704077">Flikstapel, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> flikar.</translation>
+<translation id="7004032350256606903">Din organisation kräver att du surfar privat.
+<ph name="BEGIN_LINK" />Läs mer<ph name="END_LINK" /></translation>
 <translation id="7307970171564921489">Lås upp privata flikar med <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Öppna privat?</translation>
 <translation id="7363285031331302144">Skapa flikstaplar för att organisera dina öppna flikar</translation>
@@ -94,6 +100,7 @@
          =1 {Lägg till flik i ny stapel}
          other {Lägg till flikar i ny stapel}}</translation>
 <translation id="8465550436083180511">Kollapsa flik stapeln.</translation>
+<translation id="8499954848910902473">Du kan svepa åt vänster för att bläddra privat.</translation>
 <translation id="8685478989144570078">Flikstaplar</translation>
 <translation id="8756969031206844760">Vill du uppdatera lösenordet?</translation>
 <translation id="8852861335827546438">Ny flikstapel</translation>

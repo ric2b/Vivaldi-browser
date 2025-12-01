@@ -14,6 +14,9 @@
 
 # Domain API tests.
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 package(default_visibility = ["//visibility:private"])
 
 licenses(["notice"])
@@ -44,6 +47,7 @@ cc_test(
         ":domain_testing",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/random",
+        "@abseil-cpp//absl/status",
         "@com_google_fuzztest//fuzztest:domain",
         "@com_google_fuzztest//fuzztest:flatbuffers",
         "@com_google_fuzztest//fuzztest:fuzztest_macros",
@@ -57,13 +61,16 @@ cc_test(
 cc_test(
     name = "arbitrary_domains_protobuf_test",
     srcs = ["arbitrary_domains_protobuf_test.cc"],
+    tags = ["cpu:4"],
     deps = [
         ":domain_testing",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/random",
         "@abseil-cpp//absl/random:bit_gen_ref",
+        "@abseil-cpp//absl/random:seed_sequences",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:string_view",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//fuzztest:domain",
         "@com_google_fuzztest//fuzztest/internal:test_protobuf_cc_proto",
         "@googletest//:gtest_main",
@@ -143,6 +150,7 @@ cc_library(
         "@abseil-cpp//absl/random:bit_gen_ref",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//fuzztest/internal:logging",
         "@com_google_fuzztest//fuzztest/internal:meta",
         "@com_google_fuzztest//fuzztest/internal:serialization",

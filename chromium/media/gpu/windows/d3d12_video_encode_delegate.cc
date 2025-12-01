@@ -75,6 +75,7 @@ bool IsVBRSupported(ID3D12VideoDevice3* video_device,
 VideoEncodeAccelerator::SupportedProfiles
 D3D12VideoEncodeDelegate::GetSupportedProfiles(
     ID3D12VideoDevice3* video_device,
+    const gpu::GpuDriverBugWorkarounds& gpu_workarounds,
     const std::vector<D3D12_VIDEO_ENCODER_CODEC>& codecs) {
   CHECK(video_device);
   VideoEncodeAccelerator::SupportedProfiles supported_profiles;
@@ -125,8 +126,15 @@ D3D12VideoEncodeDelegate::GetSupportedProfiles(
                          : VideoEncodeAccelerator::kNoMode) |
         (cqp.IsSupported ? VideoEncodeAccelerator::kExternalMode
                          : VideoEncodeAccelerator::kNoMode);
-    // TODO(crbug.com/40275246): support L1T2/L1T3.
-    supported_profile.scalability_modes.push_back(SVCScalabilityMode::kL1T1);
+    supported_profile.scalability_modes = {
+        SVCScalabilityMode::kL1T1,
+        SVCScalabilityMode::kL1T2,
+    };
+    if (base::FeatureList::IsEnabled(kD3D12VideoEncodeAcceleratorL1T3) &&
+        !(codec == D3D12_VIDEO_ENCODER_CODEC_AV1 &&
+          gpu_workarounds.disable_d3d12_av1_multi_ref_encoding)) {
+      supported_profile.scalability_modes.push_back(SVCScalabilityMode::kL1T3);
+    }
     supported_profile.is_software_codec = false;
 
     std::vector<std::pair<VideoCodecProfile, std::vector<VideoPixelFormat>>>
@@ -190,8 +198,16 @@ EncoderStatus D3D12VideoEncodeDelegate::Initialize(
 
   output_profile_ = config.output_profile;
 
-  CHECK(!config.HasSpatialLayer() && !config.HasTemporalLayer())
-      << "D3D12VideoEncoder only support L1T1 mode.";
+  if (!config.manual_reference_buffer_control) {
+    svc_layers_.emplace(
+        SVCLayers::Config({config.input_visible_size}, 0, 1,
+                          config.spatial_layers.empty()
+                              ? 1
+                              : config.spatial_layers[0].num_of_temporal_layers,
+                          SVCInterLayerPredMode::kOff));
+  } else {
+    svc_layers_.reset();
+  }
 
   input_size_.Width = config.input_visible_size.width();
   input_size_.Height = config.input_visible_size.height();
@@ -215,6 +231,8 @@ EncoderStatus D3D12VideoEncodeDelegate::Initialize(
     return EncoderStatus::Codes::kEncoderInitializationError;
   }
 
+  config_ = config;
+
   return InitializeVideoEncoder(config);
 }
 
@@ -232,6 +250,8 @@ bool D3D12VideoEncodeDelegate::UpdateRateControl(const Bitrate& bitrate,
     return false;
   }
 
+  config_.bitrate = bitrate;
+  config_.framerate = framerate;
   rate_control_ = rate_control;
   return true;
 }
@@ -278,8 +298,8 @@ D3D12VideoEncodeDelegate::Encode(
 
   auto impl_result = EncodeImpl(input_frame.Get(), input_frame_subresource,
                                 options, output_color_space);
-  if (!impl_result.has_value()) {
-    return std::move(impl_result).error();
+  if (!impl_result.is_ok()) {
+    return std::move(impl_result);
   }
 
   const base::UnsafeSharedMemoryRegion& region = bitstream_buffer.region();
@@ -290,14 +310,19 @@ D3D12VideoEncodeDelegate::Encode(
   if (!payload_size_or_error.has_value()) {
     return std::move(payload_size_or_error).error();
   }
+  metadata_.encoded_color_space = output_color_space;
+  metadata_.payload_size_bytes = std::move(payload_size_or_error).value();
+
   EncodeResult encode_result{
-      .bitstream_buffer_id_ = bitstream_buffer.id(),
-      .metadata_ = std::move(impl_result).value(),
+      .bitstream_buffer_id = bitstream_buffer.id(),
+      .metadata = metadata_,
   };
-  encode_result.metadata_.encoded_color_space = output_color_space;
-  encode_result.metadata_.payload_size_bytes =
-      std::move(payload_size_or_error).value();
   return encode_result;
+}
+
+uint8_t D3D12VideoEncodeDelegate::GetNumTemporalLayers() const {
+  return svc_layers_.has_value() ? svc_layers_->config().num_temporal_layers
+                                 : 1;
 }
 
 D3D12VideoEncodeDelegate::D3D12VideoEncoderRateControl::
@@ -524,36 +549,58 @@ D3D12VideoEncodeDecodedPictureBuffers<
     maxDpbSize>::~D3D12VideoEncodeDecodedPictureBuffers() = default;
 
 template <size_t maxDpbSize>
-bool D3D12VideoEncodeDecodedPictureBuffers<maxDpbSize>::InitializeTextureArray(
-    ID3D12Device* device,
-    gfx::Size texture_size,
-    DXGI_FORMAT format,
-    size_t max_num_ref_frames) {
+bool D3D12VideoEncodeDecodedPictureBuffers<
+    maxDpbSize>::InitializeTextureResources(ID3D12Device* device,
+                                            gfx::Size texture_size,
+                                            DXGI_FORMAT format,
+                                            size_t max_num_ref_frames,
+                                            bool use_texture_array) {
   CHECK_GT(max_num_ref_frames, 0u);
   CHECK_LE(max_num_ref_frames, kMaxDpbSize);
   size_ = max_num_ref_frames;
 
   // We reserve one space in extra for the current frame.
   const size_t array_size = size_ + 1;
-  resources_.resize(array_size);
+  resources_.resize(use_texture_array ? 1 : array_size);
   raw_resources_.resize(array_size);
   subresources_.resize(array_size);
+
   D3D12_RESOURCE_DESC desc = CD3DX12_RESOURCE_DESC::Tex2D(
-      format, texture_size.width(), texture_size.height(), 1, 1);
+      format, texture_size.width(), texture_size.height(),
+      /*arraySize=*/use_texture_array ? array_size : 1, /*mipLevels=*/1);
   desc.Flags = D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE |
                D3D12_RESOURCE_FLAG_VIDEO_ENCODE_REFERENCE_ONLY;
-  for (size_t i = 0; i < array_size; i++) {
+  if (use_texture_array) {
     HRESULT hr = device->CreateCommittedResource(
         &D3D12HeapProperties::kDefault, D3D12_HEAP_FLAG_NONE, &desc,
-        D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&resources_[i]));
+        D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&resources_[0]));
     if (FAILED(hr)) {
       LOG(ERROR) << "Failed to CreateCommittedResource for "
                     "D3D12VideoEncodeReferenceFrameList: "
                  << PrintHr(hr);
       return false;
     }
-    raw_resources_[i] = resources_[i].Get();
-    subresources_[i] = 0;
+    for (size_t i = 0; i < array_size; i++) {
+      raw_resources_[i] = resources_[0].Get();
+      // When texture array is used, this points to the array index of the first
+      // resource plane. Refer to:
+      // https://microsoft.github.io/DirectX-Specs/d3d/D3D12VideoEncoding.html#6112-struct-d3d12_video_encode_reference_frames
+      subresources_[i] = i;
+    }
+  } else {
+    for (size_t i = 0; i < array_size; i++) {
+      HRESULT hr = device->CreateCommittedResource(
+          &D3D12HeapProperties::kDefault, D3D12_HEAP_FLAG_NONE, &desc,
+          D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&resources_[i]));
+      if (FAILED(hr)) {
+        LOG(ERROR) << "Failed to CreateCommittedResource for "
+                      "D3D12VideoEncodeReferenceFrameList: "
+                   << PrintHr(hr);
+        return false;
+      }
+      raw_resources_[i] = resources_[i].Get();
+      subresources_[i] = 0;
+    }
   }
   return true;
 }

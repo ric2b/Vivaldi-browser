@@ -330,6 +330,7 @@ bool TextureFormatSupportsStorageTexture(wgpu::TextureFormat format,
 bool TextureFormatSupportsReadWriteStorageTexture(wgpu::TextureFormat format);
 
 bool IsBCTextureFormat(wgpu::TextureFormat textureFormat);
+bool IsNormalizedUncompressedColorTextureFormat(wgpu::TextureFormat textureFormat);
 bool IsETC2TextureFormat(wgpu::TextureFormat textureFormat);
 bool IsASTCTextureFormat(wgpu::TextureFormat textureFormat);
 bool IsCompressedTextureFormat(wgpu::TextureFormat textureFormat);
@@ -364,10 +365,15 @@ uint32_t GetTexelBlockSizeInBytes(wgpu::TextureFormat textureFormat);
 uint32_t GetTextureFormatBlockWidth(wgpu::TextureFormat textureFormat);
 uint32_t GetTextureFormatBlockHeight(wgpu::TextureFormat textureFormat);
 
-const char* GetWGSLColorTextureComponentType(wgpu::TextureFormat textureFormat);
+enum class WGSLComponentType { Float32, Int32, Uint32 };
+WGSLComponentType GetWGSLColorTextureComponentType(wgpu::TextureFormat textureFormat);
+const char* GetWGSLColorTextureComponentTypeStr(wgpu::TextureFormat textureFormat);
+
 const char* GetWGSLImageFormatQualifier(wgpu::TextureFormat textureFormat);
 uint32_t GetTextureComponentCount(wgpu::TextureFormat textureFormat);
 
+float GetNormalizedFormatMaxComponentValue(wgpu::TextureFormat textureFormat,
+                                           uint32_t componentIndex = 0);
 wgpu::TextureDimension ViewDimensionToTextureDimension(const wgpu::TextureViewDimension dimension);
 }  // namespace dawn::utils
 

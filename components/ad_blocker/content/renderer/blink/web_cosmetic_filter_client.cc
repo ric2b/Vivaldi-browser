@@ -4,7 +4,6 @@
 
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_local_frame.h"
-#include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection_handler.h"
 
 #include "components/ad_blocker/public/content/mojom/adblock_cosmetic_filter.mojom-blink.h"
@@ -27,7 +26,7 @@ void WebCosmeticFilterClient::BlockWebRTCIfNeeded(
   if (!cosmetic_filter)
     return;
 
-  WTF::Vector<KURL> ice_servers;
+  Vector<KURL> ice_servers;
   for (const auto& server : configuration.servers) {
     if (!server.uri.empty())
       ice_servers.push_back(KURL(GURL(server.uri)));

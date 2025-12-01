@@ -203,6 +203,20 @@ static const FcConstant _FcBaseConstants[] = {
     { (FC8) "lcddefault",     "lcdfilter",      FC_LCD_DEFAULT          },
     { (FC8) "lcdlight",       "lcdfilter",      FC_LCD_LIGHT            },
     { (FC8) "lcdlegacy",      "lcdfilter",      FC_LCD_LEGACY           },
+
+    { (FC8) "serif",          "genericfamily",  FC_FAMILY_SERIF         },
+    { (FC8) "sans-serif",     "genericfamily",  FC_FAMILY_SANS          },
+    { (FC8) "monospace",      "genericfamily",  FC_FAMILY_MONO          },
+    { (FC8) "cursive",        "genericfamily",  FC_FAMILY_CURSIVE       },
+    { (FC8) "fantasy",        "genericfamily",  FC_FAMILY_FANTASY       },
+    { (FC8) "system-ui",      "genericfamily",  FC_FAMILY_SYSTEM_UI     },
+    { (FC8) "ui-serif",       "genericfamily",  FC_FAMILY_UI_SERIF      },
+    { (FC8) "ui-sans-serif",  "genericfamily",  FC_FAMILY_UI_SANS       },
+    { (FC8) "ui-monospace",   "genericfamily",  FC_FAMILY_UI_MONO       },
+    { (FC8) "ui-rounded",     "genericfamily",  FC_FAMILY_UI_ROUNDED    },
+    { (FC8) "emoji",          "genericfamily",  FC_FAMILY_EMOJI         },
+    { (FC8) "math",           "genericfamily",  FC_FAMILY_MATH          },
+    { (FC8) "fangsong",       "genericfamily",  FC_FAMILY_FANGSONG      },
 };
 
 #define NUM_FC_CONSTANTS (sizeof _FcBaseConstants / sizeof _FcBaseConstants[0])

@@ -5,7 +5,6 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
 
 
@@ -16,7 +15,7 @@
 @end
 
 // TableViewCell that displays a text label that might contain a link.
-@interface VivaldiTableViewAttributedTextViewCell : TableViewCell
+@interface VivaldiTableViewAttributedTextViewCell : LegacyTableViewCell
 
 @property(nonatomic, readonly, strong) UITextView* textView;
 

@@ -29,7 +29,7 @@ $VerifiedPlatform linux-mips64 linux-mips64le linux-mipsle
 TEST_TIMEOUT_S = 450  # 7m 30s
 
 
-def CheckPylint(input_api, output_api):
+def CheckPylint2(input_api, output_api):
     """Gather all the pylint logic into one place to make it self-contained."""
     files_to_check = [
         r'^[^/]*\.py$',
@@ -37,21 +37,6 @@ def CheckPylint(input_api, output_api):
         r'^tests/[^/]*\.py$',
         r'^recipe_modules/.*\.py$',  # Allow recursive search in recipe modules.
     ]
-    files_to_skip = list(input_api.DEFAULT_FILES_TO_SKIP)
-    if os.path.exists('.gitignore'):
-        with open('.gitignore', encoding='utf-8') as fh:
-            lines = [l.strip() for l in fh.readlines()]
-            files_to_skip.extend([
-                fnmatch.translate(l) for l in lines
-                if l and not l.startswith('#')
-            ])
-    if os.path.exists('.git/info/exclude'):
-        with open('.git/info/exclude', encoding='utf-8') as fh:
-            lines = [l.strip() for l in fh.readlines()]
-            files_to_skip.extend([
-                fnmatch.translate(l) for l in lines
-                if l and not l.startswith('#')
-            ])
     disabled_warnings = [
         'R0401',  # Cyclic import
         'W0613',  # Unused argument
@@ -71,10 +56,47 @@ def CheckPylint(input_api, output_api):
         input_api,
         output_api,
         files_to_check=files_to_check,
-        files_to_skip=files_to_skip,
+        files_to_skip=_GetPylintFilesToSkip(input_api),
         disabled_warnings=disabled_warnings,
         version='2.7'),
                               parallel=False)
+
+
+def CheckPylint3(input_api, output_api):
+    """Like CheckPylint2, but using Pylint 3.X"""
+    files_to_check = [
+        r'^mcp/.*\.py$',
+    ]
+    disabled_warnings = [
+        'duplicate-code',  # Tends to flag false positives.
+    ]
+    return input_api.RunTests(
+        input_api.canned_checks.GetPylint(
+            input_api,
+            output_api,
+            files_to_check=files_to_check,
+            files_to_skip=_GetPylintFilesToSkip(input_api),
+            disabled_warnings=disabled_warnings,
+            version='3.2'))
+
+
+def _GetPylintFilesToSkip(input_api):
+    files_to_skip = list(input_api.DEFAULT_FILES_TO_SKIP)
+    if input_api.os_path.exists('.gitignore'):
+        with open('.gitignore', encoding='utf-8') as fh:
+            lines = [l.strip() for l in fh.readlines()]
+            files_to_skip.extend([
+                fnmatch.translate(l) for l in lines
+                if l and not l.startswith('#')
+            ])
+    if input_api.os_path.exists('.git/info/exclude'):
+        with open('.git/info/exclude', encoding='utf-8') as fh:
+            lines = [l.strip() for l in fh.readlines()]
+            files_to_skip.extend([
+                fnmatch.translate(l) for l in lines
+                if l and not l.startswith('#')
+            ])
+    return files_to_skip
 
 
 def CheckRecipes(input_api, output_api):

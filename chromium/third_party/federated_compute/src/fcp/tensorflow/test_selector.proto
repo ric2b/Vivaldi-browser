@@ -1,0 +1,43 @@
+/*
+ * Copyright 2019 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// Defines TestSelector, TestCriteria and ResumptionToken, for use in
+// ExternalDataset and ExampleSelectorFuser testing.
+
+syntax = "proto3";
+
+package fcp;
+
+message Limit {
+  int64 value = 1;
+}
+
+// Specifies that examples (int64 scalars) in the range [lower_inclusive,
+// upper_inclusive] should be included.
+message TestSelector {
+  Limit lower_inclusive = 1;
+  Limit upper_inclusive = 2;
+}
+
+// Simple example selection criteria which limits the maximum number of examples
+message TestCriteria {
+  // The max number of examples that should be returned by this query.
+  int32 max_examples = 1;
+}
+
+message ResumptionToken {
+  int32 last_index = 1;
+}

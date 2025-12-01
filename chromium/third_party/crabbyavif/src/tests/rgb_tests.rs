@@ -545,3 +545,139 @@ fn sharpyuv_16bit(yuv_depth: u8) -> AvifResult<()> {
         min_psnr: 49.0,
     })
 }
+
+#[test_matrix(
+    [(8, 128), (10, 512), (12, 2048), (16, 32768)],
+    [PixelFormat::Yuv420, PixelFormat::Yuv422, PixelFormat::Yuv444, PixelFormat::Yuv400],
+    [rgb::Format::Gray, rgb::Format::GrayA, rgb::Format::AGray]
+)]
+fn gray_round_trip(
+    depth_and_half: (u8, u16),
+    yuv_format: PixelFormat,
+    rgb_format: rgb::Format,
+) -> AvifResult<()> {
+    let depth = depth_and_half.0;
+    let half = depth_and_half.1;
+    let width = 2;
+    let height = 2;
+
+    let mut rgb = rgb::Image {
+        width,
+        height,
+        depth,
+        format: rgb_format,
+        ..Default::default()
+    };
+    rgb.allocate()?;
+    if depth == 8 {
+        let rgb_row = rgb.row_mut(0)?;
+        rgb_row.copy_from_slice(if rgb_format == rgb::Format::GrayA {
+            &[4, 40, 3, 30]
+        } else if rgb_format == rgb::Format::AGray {
+            &[40, 4, 30, 3]
+        } else {
+            &[4, 3]
+        });
+        let rgb_row = rgb.row_mut(1)?;
+        rgb_row.copy_from_slice(if rgb_format == rgb::Format::GrayA {
+            &[2, 20, 1, 10]
+        } else if rgb_format == rgb::Format::AGray {
+            &[20, 2, 10, 1]
+        } else {
+            &[2, 1]
+        });
+    } else {
+        let rgb_row = rgb.row16_mut(0)?;
+        rgb_row.copy_from_slice(if rgb_format == rgb::Format::GrayA {
+            &[4, 40, 3, 30]
+        } else if rgb_format == rgb::Format::AGray {
+            &[40, 4, 30, 3]
+        } else {
+            &[4, 3]
+        });
+        let rgb_row = rgb.row16_mut(1)?;
+        rgb_row.copy_from_slice(if rgb_format == rgb::Format::GrayA {
+            &[2, 20, 1, 10]
+        } else if rgb_format == rgb::Format::AGray {
+            &[20, 2, 10, 1]
+        } else {
+            &[2, 1]
+        });
+    }
+
+    // Convert to YUV.
+    let mut image = image::Image {
+        width,
+        height,
+        depth,
+        yuv_format,
+        ..Default::default()
+    };
+    image.allocate_planes(Category::Color)?;
+    if rgb_format.has_alpha() {
+        image.allocate_planes(Category::Alpha)?;
+    }
+    rgb.convert_to_yuv(&mut image)?;
+
+    if depth == 8 {
+        assert_eq!(image.row_exact(Plane::Y, 0)?, &[4, 3]);
+        assert_eq!(image.row_exact(Plane::Y, 1)?, &[2, 1]);
+        if yuv_format != PixelFormat::Yuv400 {
+            assert!(image
+                .row_exact(Plane::U, 0)?
+                .iter()
+                .all(|x| *x == half as u8));
+            assert!(image
+                .row_exact(Plane::V, 0)?
+                .iter()
+                .all(|x| *x == half as u8));
+        }
+        if rgb_format.has_alpha() {
+            assert_eq!(image.row_exact(Plane::A, 0)?, &[40, 30]);
+            assert_eq!(image.row_exact(Plane::A, 1)?, &[20, 10]);
+        }
+    } else {
+        assert_eq!(image.row16_exact(Plane::Y, 0)?, &[4, 3]);
+        assert_eq!(image.row16_exact(Plane::Y, 1)?, &[2, 1]);
+        if yuv_format != PixelFormat::Yuv400 {
+            assert!(image.row16_exact(Plane::U, 0)?.iter().all(|x| *x == half));
+            assert!(image.row16_exact(Plane::V, 0)?.iter().all(|x| *x == half));
+        }
+        if rgb_format.has_alpha() {
+            assert_eq!(image.row16_exact(Plane::A, 0)?, &[40, 30]);
+            assert_eq!(image.row16_exact(Plane::A, 1)?, &[20, 10]);
+        }
+    }
+
+    // Convert back to RGB.
+    let mut dst_rgb = rgb::Image {
+        width,
+        height,
+        depth,
+        format: rgb_format,
+        ..Default::default()
+    };
+    dst_rgb.allocate()?;
+    dst_rgb.convert_from_yuv(&image)?;
+
+    if depth == 8 {
+        let src_rgb_row = rgb.row(0)?;
+        let dst_rgb_row = dst_rgb.row(0)?;
+        assert_eq!(src_rgb_row[0], dst_rgb_row[0]);
+        assert_eq!(src_rgb_row[1], dst_rgb_row[1]);
+        let src_rgb_row = rgb.row(1)?;
+        let dst_rgb_row = dst_rgb.row(1)?;
+        assert_eq!(src_rgb_row[0], dst_rgb_row[0]);
+        assert_eq!(src_rgb_row[1], dst_rgb_row[1]);
+    } else {
+        let src_rgb_row = rgb.row16(0)?;
+        let dst_rgb_row = dst_rgb.row16(0)?;
+        assert_eq!(src_rgb_row[0], dst_rgb_row[0]);
+        assert_eq!(src_rgb_row[1], dst_rgb_row[1]);
+        let src_rgb_row = rgb.row16(1)?;
+        let dst_rgb_row = dst_rgb.row16(1)?;
+        assert_eq!(src_rgb_row[0], dst_rgb_row[0]);
+        assert_eq!(src_rgb_row[1], dst_rgb_row[1]);
+    }
+    Ok(())
+}

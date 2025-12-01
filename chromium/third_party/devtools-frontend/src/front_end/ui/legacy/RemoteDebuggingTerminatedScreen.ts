@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,8 +19,8 @@ const UIStrings = {
    */
   debuggingConnectionWasClosed: 'Debugging connection was closed',
   /**
-   *@description Text in a dialog box in DevTools stating the reason for remote debugging being terminated.
-   *@example {target_closed} PH1
+   * @description Text in a dialog box in DevTools stating the reason for remote debugging being terminated.
+   * @example {target_closed} PH1
    */
   connectionClosedReason: 'Reason: {PH1}.',
   /**

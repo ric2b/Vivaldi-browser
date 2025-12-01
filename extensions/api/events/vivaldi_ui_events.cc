@@ -16,6 +16,8 @@
 #include "extensions/vivaldi_browser_component_wrapper.h"
 #include "third_party/blink/renderer/platform/keyboard_codes.h"  //nogncheck
 #include "ui/vivaldi_browser_window.h"
+#include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace extensions {
 
@@ -625,6 +627,16 @@ bool VivaldiUIEvents::DoHandleWheelEventAfterChild(
   if (event.phase & unwanted_phases)
     return false;
 
+
+  if (event.event_action == blink::WebMouseWheelEvent::EventAction::kPageZoom) {
+    // Not synthetic zoom events are coming from touchpad gestures, so do not
+    // override.
+    // See VB-120356.
+    if (!event.has_synthetic_phase) {
+      return false;
+    }
+  }
+
   VivaldiBrowserWindow* window = FindMouseEventWindowFromView(root_view);
   if (!window)
     return false;
@@ -654,12 +666,16 @@ bool VivaldiUIEvents::DoHandleWheelEventAfterChild(
   return true;
 }
 
-bool VivaldiUIEvents::DoHandleDragEnd(content::WebContents* web_contents,
-                                      ui::mojom::DragOperation operation,
-                                      int screen_x,
-                                      int screen_y) {
+void VivaldiUIEvents::DoHandleDragEnd(content::WebContents* web_contents,
+                                      bool outside_or_webview_in_same_window,
+                                      int client_x,
+                                      int client_y) {
   if (!::vivaldi::IsTabDragInProgress())
-    return false;
+    // If call comes from WebContentsViewAura::CompleteDrop() or
+    // WebDragDest::performDragOperation() it will be first and value of
+    // outside_or_webview_in_same_window will be correct. Ignore subsequent
+    // calls.
+    return;
   ::vivaldi::SetTabDragInProgress(false);
 
   bool cancelled = false;
@@ -668,19 +684,19 @@ bool VivaldiUIEvents::DoHandleDragEnd(content::WebContents* web_contents,
     cancelled = true;
   }
 #endif
-  bool outside = VivaldiBrowserComponentWrapper::GetInstance()
-      ->IsOutsideAppWindow(screen_x, screen_y);
-  if (!outside && operation == ui::mojom::DragOperation::kNone) {
-    // None of browser windows accepted the drag and we do not moving tabs out.
-    cancelled = true;
-  }
+
+  using tabs_private::DragEndState;
+  const DragEndState& drag_end_state = cancelled && !outside_or_webview_in_same_window
+      // None of browser windows accepted the drag and we do not moving tabs out.
+      ? DragEndState::kAborted
+      : outside_or_webview_in_same_window
+        ? DragEndState::kOutsideOrWebviewInSameWindow
+        : DragEndState::kInsideOrWebviewInOtherWindow;
 
   ::vivaldi::BroadcastEvent(
       tabs_private::OnDragEnd::kEventName,
-      tabs_private::OnDragEnd::Create(cancelled, outside, screen_x, screen_y),
+      tabs_private::OnDragEnd::Create(drag_end_state, client_x, client_y),
       web_contents->GetBrowserContext());
-
-  return outside;
 }
 
 // static

@@ -17,7 +17,6 @@ import org.chromium.ui.base.WindowAndroid;
 // Vivaldi
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
-import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.url.GURL;
 import org.vivaldi.browser.common.VivaldiUtils;
@@ -27,17 +26,18 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
 @NullMarked
 public class TabThemeColorHelper extends EmptyTabObserver {
     private final Callback<Integer> mUpdateCallback;
+    // Vivaldi VAB-11771
+    private final SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener;
 
     TabThemeColorHelper(Tab tab, Callback<Integer> updateCallback) {
         mUpdateCallback = updateCallback;
         tab.addObserver(this);
 
         // Vivaldi
-        SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener = (sharedPrefs, key) -> {
+        mPrefsListener = (sharedPrefs, key) -> {
             if (VivaldiPreferences.UI_ACCENT_COLOR_SETTING.equals(key)) updateIfNeeded(tab, false);
         };
-        ContextUtils.getAppSharedPreferences()
-                .registerOnSharedPreferenceChangeListener(mPrefsListener);
+        VivaldiPreferences.registerOnSharedPreferenceChangeListener(mPrefsListener);
     }
 
     /** Notifies the listeners of the tab theme color change. */
@@ -80,6 +80,9 @@ public class TabThemeColorHelper extends EmptyTabObserver {
     @Override
     public void onDestroyed(Tab tab) {
         tab.removeObserver(this);
+        if (mPrefsListener != null) { // Vivaldi VAB-11771
+            VivaldiPreferences.unregisterOnSharedPreferenceChangeListener(mPrefsListener);
+        } // End Vivaldi
     }
 
     @Override

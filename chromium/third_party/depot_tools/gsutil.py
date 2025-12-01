@@ -26,7 +26,7 @@ DEFAULT_BIN_DIR = os.path.join(THIS_DIR, 'external_bin', 'gsutil')
 
 IS_WINDOWS = os.name == 'nt'
 
-VERSION = '4.68'
+VERSION = '5.35'
 
 # Google OAuth Context required by gsutil.
 LUCI_AUTH_SCOPES = [

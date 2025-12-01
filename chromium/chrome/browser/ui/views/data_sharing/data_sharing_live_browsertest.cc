@@ -103,9 +103,7 @@ class DataSharingLiveTest : public signin::test::LiveTest {
 
   void SetUp() override {
     scoped_feature_list_.InitWithFeatures(
-        {data_sharing::features::kDataSharingFeature,
-         tab_groups::kTabGroupSyncServiceDesktopMigration},
-        {});
+        {data_sharing::features::kDataSharingFeature}, {});
     constexpr char SYNC_URL[] =
         "https://chrome-sync.sandbox.google.com/chrome-sync/alpha";
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII("sync-url",
@@ -182,9 +180,7 @@ class DataSharingLiveTest : public signin::test::LiveTest {
 
   void WaitForSDKToLoad() {
     content::WebContents* web_contents =
-        browser()
-            ->GetFeatures()
-            .data_sharing_bubble_controller()
+        DataSharingBubbleController::From(browser())
             ->BubbleViewForTesting()
             ->get_contents_wrapper_for_testing()
             ->web_contents();
@@ -213,7 +209,7 @@ IN_PROC_BROWSER_TEST_F(DataSharingLiveTest, ShareUnsharedTabGroup) {
 
   data_sharing::RequestInfo request_info(tab_group_id.value(),
                                          data_sharing::FlowType::kShare);
-  browser()->GetFeatures().data_sharing_bubble_controller()->Show(request_info);
+  DataSharingBubbleController::From(browser())->Show(request_info);
 
   WaitForSDKToLoad();
 }
@@ -232,7 +228,7 @@ IN_PROC_BROWSER_TEST_F(DataSharingLiveTest, ManageSharedTabGroup) {
   // Share the group.
   data_sharing::RequestInfo request_info(tab_group_id.value(),
                                          data_sharing::FlowType::kShare);
-  auto* controller = browser()->GetFeatures().data_sharing_bubble_controller();
+  auto* controller = DataSharingBubbleController::From(browser());
   controller->Show(request_info);
 
   // Manage the group.

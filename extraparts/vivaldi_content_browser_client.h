@@ -5,12 +5,13 @@
 
 #include "build/build_config.h"
 #include "chrome/browser/chrome_content_browser_client.h"
-#include "mojo/public/cpp/bindings/binder_map.h"
 #include "content/public/browser/navigation_throttle_registry.h"
+#include "mojo/public/cpp/bindings/binder_map.h"
 
 namespace content {
 class RenderFrameHost;
-}
+class WebContents;
+}  // namespace content
 
 class VivaldiContentBrowserClient : public ChromeContentBrowserClient {
  public:
@@ -39,6 +40,8 @@ class VivaldiContentBrowserClient : public ChromeContentBrowserClient {
   void RegisterBrowserInterfaceBindersForFrame(
       content::RenderFrameHost* render_frame_host,
       mojo::BinderMapWithContext<content::RenderFrameHost*>* map) override;
+
+  void OnWebContentsCreated(content::WebContents* web_contents) override;
 };
 
 #endif  // EXTRAPARTS_VIVALDI_CONTENT_BROWSER_CLIENT_H_

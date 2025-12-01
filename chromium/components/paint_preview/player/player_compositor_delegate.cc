@@ -33,6 +33,7 @@
 #include "components/version_info/version_info.h"
 #include "mojo/public/cpp/base/proto_wrapper.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -117,13 +118,14 @@ void PlayerCompositorDelegate::Initialize(
     base::TimeDelta timeout_duration,
     std::array<size_t, PressureLevelCount::kLevels> max_requests_map) {
   TRACE_EVENT0("paint_preview", "PlayerCompositorDelegate::Initialize");
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("paint_preview",
-                                    "PlayerCompositorDelegate CreateCompositor",
-                                    TRACE_ID_LOCAL(this));
+  TRACE_EVENT_BEGIN("paint_preview",
+                    "PlayerCompositorDelegate CreateCompositor",
+                    perfetto::Track::FromPointer(this));
   auto* memory_monitor = memory_pressure_monitor();
   // If the device is already under moderate memory pressure abort right away.
   if (memory_monitor &&
-      memory_monitor->GetCurrentPressureLevel() >=
+      memory_monitor->GetCurrentPressureLevel(
+          base::MemoryPressureMonitorTag::kPlayerCompositorDelegate) >=
           base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE) {
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
@@ -192,8 +194,8 @@ void PlayerCompositorDelegate::InitializeInternal(
       base::BindOnce(&PlayerCompositorDelegate::OnCompositorClientDisconnected,
                      weak_factory_.GetWeakPtr()));
 
-  memory_pressure_ = std::make_unique<base::MemoryPressureListener>(
-      FROM_HERE, base::DoNothing(),
+  memory_pressure_ = std::make_unique<base::SyncMemoryPressureListener>(
+      base::MemoryPressureListenerTag::kPlayerCompositorDelegate,
       base::BindRepeating(&PlayerCompositorDelegate::OnMemoryPressure,
                           weak_factory_.GetWeakPtr()));
   if (!timeout_duration.is_inf() && !timeout_duration.is_zero()) {
@@ -345,9 +347,9 @@ void PlayerCompositorDelegate::OnCompositorServiceDisconnected() {
 void PlayerCompositorDelegate::OnCompositorClientCreated(
     const GURL& expected_url,
     const DirectoryKey& key) {
-  TRACE_EVENT_NESTABLE_ASYNC_END0("paint_preview",
-                                  "PlayerCompositorDelegate CreateCompositor",
-                                  TRACE_ID_LOCAL(this));
+  TRACE_EVENT_END("paint_preview",
+                  /* PlayerCompositorDelegate CreateCompositor */
+                  perfetto::Track::FromPointer(this));
   if (!capture_result_) {
     paint_preview_service_->GetFileMixin()->GetCapturedPaintPreviewProto(
         key, std::nullopt,

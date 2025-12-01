@@ -39,6 +39,7 @@
 #include "src/tint/lang/core/type/storage_texture.h"
 #include "src/tint/lang/core/type/u32.h"
 #include "src/tint/lang/core/type/void.h"
+#include "src/tint/lang/spirv/type/explicit_layout_array.h"
 #include "src/tint/lang/spirv/writer/common/helper_test.h"
 
 using namespace tint::core::fluent_types;  // NOLINT
@@ -187,14 +188,20 @@ TEST_F(SpirvWriterTest, Type_Array_DefaultStride) {
 }
 
 TEST_F(SpirvWriterTest, Type_Array_ExplicitStride) {
+    auto* str =
+        ty.Struct(mod.symbols.New("MyStruct"), {
+                                                   {mod.symbols.Register("a"), ty.f32()},
+                                                   {mod.symbols.Register("b"), ty.vec4<i32>()},
+                                               });
     b.Append(b.ir.root_block, [&] {  //
-        auto* v = b.Var("v", ty.ptr<storage>(ty.array<f32, 4>(16)));
+        auto* ex = ty.array(str, 4_u);
+        auto* v = b.Var("v", ty.ptr<storage>(ex));
         v->SetBindingPoint(0, 0);
     });
 
     ASSERT_TRUE(Generate()) << Error() << output_;
-    EXPECT_INST("OpDecorate %_arr_float_uint_4 ArrayStride 16");
-    EXPECT_INST("%_arr_float_uint_4 = OpTypeArray %float %uint_4");
+    EXPECT_INST("OpDecorate %_arr_MyStruct_uint_4 ArrayStride 32");
+    EXPECT_INST("%_arr_MyStruct_uint_4 = OpTypeArray %MyStruct %uint_4");
 }
 
 TEST_F(SpirvWriterTest, Type_Array_NestedArray) {
@@ -222,14 +229,20 @@ TEST_F(SpirvWriterTest, Type_RuntimeArray_DefaultStride) {
 }
 
 TEST_F(SpirvWriterTest, Type_RuntimeArray_ExplicitStride) {
+    auto* str =
+        ty.Struct(mod.symbols.New("MyStruct"), {
+                                                   {mod.symbols.Register("a"), ty.f32()},
+                                                   {mod.symbols.Register("b"), ty.vec4<i32>()},
+                                               });
     b.Append(b.ir.root_block, [&] {  //
-        auto* v = b.Var("v", ty.ptr<storage, read_write>(ty.array<f32>(16)));
+        auto* ex = ty.runtime_array(str);
+        auto* v = b.Var("v", ty.ptr<storage, read_write>(ex));
         v->SetBindingPoint(0, 0);
     });
 
     ASSERT_TRUE(Generate()) << Error() << output_;
-    EXPECT_INST("OpDecorate %_runtimearr_float ArrayStride 16");
-    EXPECT_INST("%_runtimearr_float = OpTypeRuntimeArray %float");
+    EXPECT_INST("OpDecorate %_runtimearr_MyStruct ArrayStride 32");
+    EXPECT_INST("%_runtimearr_MyStruct = OpTypeRuntimeArray %MyStruct");
 }
 
 TEST_F(SpirvWriterTest, Type_BindingArray_SampledTexture) {

@@ -68,7 +68,7 @@ void VivaldiSyncAuthManager::RegisterForAuthNotifications() {
   account_manager_->AddObserver(this);
   registered_for_account_notifications_ = true;
 
-  sync_account_ = ToSyncAccountInfo(account_manager_->account_info());
+  sync_account_.Set(ToSyncAccountInfo(account_manager_->account_info()));
 }
 
 syncer::SyncTokenStatus VivaldiSyncAuthManager::GetSyncTokenStatus() const {
@@ -132,18 +132,18 @@ void VivaldiSyncAuthManager::OnVivaldiAccountUpdated() {
   syncer::SyncAccountInfo new_account =
       ToSyncAccountInfo(account_manager_->account_info());
   if (new_account.account_info.account_id ==
-      sync_account_.account_info.account_id)
+      sync_account_.Get().account_info.account_id)
     return;
 
-  if (!sync_account_.account_info.account_id.empty()) {
-    sync_account_ = syncer::SyncAccountInfo();
+  if (!sync_account_.Get().account_info.account_id.empty()) {
+    sync_account_.Set(syncer::SyncAccountInfo());
     ConnectionClosed();
     SetLastAuthError(GoogleServiceAuthError::AuthErrorNone());
     delegate_->SyncAuthAccountStateChanged();
   }
 
   if (!new_account.account_info.account_id.empty()) {
-    sync_account_ = new_account;
+    sync_account_.Set(new_account);
     delegate_->SyncAuthAccountStateChanged();
   }
 }

@@ -28,6 +28,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -35,7 +36,7 @@
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
-#include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/interaction/browser_elements.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_web_view.h"
@@ -775,12 +776,16 @@ void WebContentsInteractionTestUtil::SendEventOnStateChange(
 }
 
 bool WebContentsInteractionTestUtil::Exists(const DeepQuery& query,
-                                            std::string* not_found) {
+                                            std::string* not_found) const {
   const std::string full_query =
       CreateDeepQuery(query, GetExistsQuery("err.selector", "''"));
-  const std::string result = Evaluate(full_query).GetString();
-  if (not_found)
+  // Const cast is safe as the query cannot modify the WebContents.
+  const std::string result = const_cast<WebContentsInteractionTestUtil*>(this)
+                                 ->Evaluate(full_query)
+                                 .GetString();
+  if (not_found) {
     *not_found = result;
+  }
   return result.empty();
 }
 
@@ -1081,7 +1086,7 @@ ui::ElementContext TabWebContentsInteractionTestUtil::GetElementContext()
     const {
   ui::ElementContext context;
   if (Browser* const browser = chrome::FindBrowserWithTab(web_contents())) {
-    context = browser->window()->GetElementContext();
+    context = BrowserElements::From(browser)->GetContext();
   }
   return context;
 }

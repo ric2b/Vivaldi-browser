@@ -14,10 +14,11 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/send_tab_to_self/send_tab_to_self_toolbar_bubble_controller.h"
 #include "chrome/browser/ui/views/send_tab_to_self/send_tab_to_self_toolbar_bubble_view.h"
-#include "chrome/browser/ui/views/toolbar/pinned_toolbar_actions_container.h"
+#include "chrome/browser/ui/views/toolbar/pinned_toolbar_actions_controller.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "components/send_tab_to_self/metrics_util.h"
 #include "components/send_tab_to_self/send_tab_to_self_entry.h"
@@ -31,8 +32,9 @@ SendTabToSelfToolbarIconController::SendTabToSelfToolbarIconController(
     : profile_(profile) {}
 
 // static
-bool SendTabToSelfToolbarIconController::CanShowOnBrowser(Browser* browser) {
-  return browser->is_type_normal();
+bool SendTabToSelfToolbarIconController::CanShowOnBrowser(
+    BrowserWindowInterface* bwi) {
+  return bwi->GetType() == BrowserWindowInterface::TYPE_NORMAL;
 }
 
 void SendTabToSelfToolbarIconController::DisplayNewEntries(
@@ -117,12 +119,12 @@ void SendTabToSelfToolbarIconController::ShowToolbarButton(
     const SendTabToSelfEntry& entry,
     Browser* browser) {
   CHECK(browser);
-  auto* container = BrowserView::GetBrowserViewForBrowser(browser)
-                        ->toolbar()
-                        ->pinned_toolbar_actions_container();
-  CHECK(container);
-  container->ShowActionEphemerallyInToolbar(kActionSendTabToSelf, true);
-  auto* button = container->GetButtonFor(kActionSendTabToSelf);
+  PinnedToolbarActionsController* controller =
+      browser->GetFeatures().pinned_toolbar_actions_controller();
+  CHECK(controller);
+
+  controller->ShowActionEphemerallyInToolbar(kActionSendTabToSelf, true);
+  auto* button = controller->GetButtonFor(kActionSendTabToSelf);
   CHECK(button);
   browser->browser_window_features()
       ->send_tab_to_self_toolbar_bubble_controller()

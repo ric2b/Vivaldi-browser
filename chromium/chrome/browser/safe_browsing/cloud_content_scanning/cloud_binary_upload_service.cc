@@ -28,7 +28,7 @@
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/enterprise/connectors/core/reporting_utils.h"
 #include "components/policy/core/common/management/management_service.h"
-#include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
+#include "components/safe_browsing/content/browser/web_ui/web_ui_content_info_singleton.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/safebrowsing_switches.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -471,10 +471,24 @@ void CloudBinaryUploadService::OnGetRequestData(Request::Id request_id,
   // upload behaviour.
   bool force_sync_upload =
       request->analysis_connector() == enterprise_connectors::FILE_DOWNLOADED;
-  if (request->IsAuthRequest() || !data.contents.empty()) {
+  if (request->IsAuthRequest()) {
     upload_request = MultipartUploadRequest::CreateStringRequest(
         url_loader_factory_, url, metadata, data.contents, histogram_suffix,
         std::move(traffic_annotation), std::move(callback));
+  } else if (!data.contents.empty()) {
+    upload_request =
+        (enterprise_connectors::IsResumableUpload(*request) &&
+         base::FeatureList::IsEnabled(
+             enterprise_connectors::kDlpScanPastedImages))
+            ? ResumableUploadRequest::CreateStringRequest(
+                  url_loader_factory_, url, metadata, data.contents,
+                  histogram_suffix, std::move(traffic_annotation),
+                  std::move(verdict_received_callback),
+                  std::move(content_uploaded_callback), force_sync_upload)
+            : MultipartUploadRequest::CreateStringRequest(
+                  url_loader_factory_, url, metadata, data.contents,
+                  histogram_suffix, std::move(traffic_annotation),
+                  std::move(callback));
   } else if (!data.path.empty()) {
     upload_request =
         enterprise_connectors::IsResumableUpload(*request)
@@ -507,7 +521,7 @@ void CloudBinaryUploadService::OnGetRequestData(Request::Id request_id,
   }
   upload_request->set_access_token(request->access_token());
 
-  WebUIInfoSingleton::GetInstance()->AddToDeepScanRequests(
+  WebUIContentInfoSingleton::GetInstance()->AddToDeepScanRequests(
       request->per_profile_request(), request->access_token(),
       upload_request->GetUploadInfo(), url.spec(),
       request->content_analysis_request());
@@ -642,10 +656,10 @@ void CloudBinaryUploadService::FinishRequest(
 
   // We add the request here in case we never actually uploaded anything, so
   // it wasn't added in OnGetRequestData
-  WebUIInfoSingleton::GetInstance()->AddToDeepScanRequests(
+  WebUIContentInfoSingleton::GetInstance()->AddToDeepScanRequests(
       request->per_profile_request(), request->access_token(), upload_info,
       request->GetUrlWithParams().spec(), request->content_analysis_request());
-  WebUIInfoSingleton::GetInstance()->AddToDeepScanResponses(
+  WebUIContentInfoSingleton::GetInstance()->AddToDeepScanResponses(
       active_tokens_[request->id()], ResultToString(result), response);
 
   request->FinishRequest(result, response);

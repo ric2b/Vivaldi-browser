@@ -32,10 +32,14 @@ const char kLocationOverrideName[] = "Enable Location Override";
 const char kLocationOverrideDescription[] =
     "Spoof and protect your geolocation with Location Override.";
 
+const char kNewAboutPageInternalName[] = "vivaldi-new-about-page";
+const char kNewAboutPageName[] = "Use new About Page";
+const char kNewAboutPageDescription[] = "Enable the new vivaldi:about page.";
+
 const char kNewPrivacyReportInternalName[] = "vivaldi-new-privacy-report";
 const char kNewPrivacyReportName[] = "Use new Privacy Report";
 const char kNewPrivacyReportDescription[] =
-    "Enable vivaldi:privacy-report page.";
+    "When enabled, the new redesigned privacy report is presented.";
 
 const char kShowNewSpeedDialDialogInternalName[] = "vivaldi-show-new-sd-dialog";
 const char kShowNewSpeedDialDialogName[] = "Enable new speed dial dialog";
@@ -51,10 +55,6 @@ const char kSpeeddialWidgetsInternalName[] = "vivaldi-speeddial-widgets";
 const char kSpeeddialWidgetsName[] = "Enable Widgets on Speed Dial Groups";
 const char kSpeeddialWidgetsDescription[] =
     "Allow dashboard widgets to be added on speed dial groups.";
-
-const char kTabsButtonInternalName[] = "vivaldi-tabs-button";
-const char kTabsButtonName[] = "Enable Tabs Button";
-const char kTabsButtonDescription[] = "Make the Tabs Button available to use.";
 
 const char kViewMarkdownAsHTMLInternalName[] = "vivaldi-view-markdown-as-html";
 const char kViewMarkdownAsHTMLName[] =

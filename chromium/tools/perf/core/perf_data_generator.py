@@ -125,6 +125,8 @@ UPLOAD_SKIA_JSON_BUILDERS = frozenset([
     'android-pixel9-perf',
     'android-pixel9-pro-perf',
     'android-pixel9-pro-xl-perf',
+    'android-pixel25-ultra-perf',
+    'android-pixel25-ultra-xl-perf',
     'android-brya-kano-i5-8gb-perf',
     'android-corsola-steelix-8gb-perf',
     'android-nissa-uldren-8gb-perf',
@@ -876,6 +878,36 @@ BUILDERS = {
             'device_os_flavor': 'google',
         },
     },
+    'android-pixel25-ultra-perf': {
+        'tests': [{
+            'isolate':
+            'performance_test_suite_android_trichrome_chrome_google_64_32_bundle',
+        }],
+        'platform':
+        'android-trichrome-chrome-google-64-32-bundle',
+        'dimension': {
+            'pool': 'chrome.tests.perf',
+            'os': 'Android',
+            'device_type': 'mustang',
+            'device_os': 'B',
+            'device_os_flavor': 'google',
+        },
+    },
+    'android-pixel25-ultra-xl-perf': {
+        'tests': [{
+            'isolate':
+            'performance_test_suite_android_trichrome_chrome_google_64_32_bundle',
+        }],
+        'platform':
+        'android-trichrome-chrome-google-64-32-bundle',
+        'dimension': {
+            'pool': 'chrome.tests.perf',
+            'os': 'Android',
+            'device_type': 'blazer',
+            'device_os': 'B',
+            'device_os_flavor': 'google',
+        },
+    },
     'android-go-processor-perf': {
         'platform': 'linux',
         'perf_processor': True,
@@ -1450,10 +1482,11 @@ GTEST_BENCHMARKS = {
         'enga@chromium.org', 'Dawn',
         'https://dawn.googlesource.com/dawn/+/HEAD/src/tests/perf_tests/README.md'
     ),
-    'tint_benchmark':
-    BenchmarkMetadata(
-        'jrprice@google.com, dsinclair@chromium.org', 'Dawn>Tint',
-        'https://dawn.googlesource.com/dawn/+/HEAD/docs/tint/benchmark.md'),
+    # (crbug.com/445456830) temporarily disabled
+    # 'tint_benchmark':
+    # BenchmarkMetadata(
+    #     'jrprice@google.com, dsinclair@chromium.org', 'Dawn>Tint',
+    #     'https://dawn.googlesource.com/dawn/+/HEAD/docs/tint/benchmark.md'),
 }
 
 RESOURCE_SIZES_METADATA = BenchmarkMetadata(
@@ -2011,9 +2044,14 @@ def validate_all_files():
     for run_updater, src_file in ALL_UPDATERS_AND_FILES:
       real_filepath = _source_filepath(src_file)
       temp_filepath = os.path.join(tempdir, os.path.basename(real_filepath))
-      if not (os.path.exists(real_filepath) and
-              run_updater(temp_filepath) and
-              filecmp.cmp(temp_filepath, real_filepath)):
+      if not os.path.exists(real_filepath):
+        print(f'Error: file {real_filepath} missing')
+        return False
+      if not run_updater(temp_filepath):
+        print(f'Error: updater {run_updater} failed')
+        return False
+      if not filecmp.cmp(temp_filepath, real_filepath):
+        print(f'Error: {run_updater} generated new contents for {src_file}')
         return False
   finally:
     shutil.rmtree(tempdir)

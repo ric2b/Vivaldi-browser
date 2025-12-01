@@ -530,6 +530,20 @@ public class TemplateUrlService {
                                                   TemplateUrlService caller, int type);
         TemplateUrl vivaldiGetSearchEngineForHost(long nativeTemplateUrlServiceAndroid,
                                                   TemplateUrlService caller, String host);
+        void addCustomSearchEngine(long nativeTemplateUrlServiceAndroid, TemplateUrlService caller,
+                String shortName, String nickname, GURL url, GURL suggest_url, String postParams,
+                String imageUrl, String imageUrlPostParams);
+        TemplateUrl getTemplateUrlFromKeywordNative(
+                long nativeTemplateUrlServiceAndroid, TemplateUrlService caller, String keyword);
+        void removeTemplateUrl(
+                long nativeTemplateUrlServiceAndroid, TemplateUrlService caller, String keyword);
+        boolean updateTemplateUrl(long nativeTemplateUrlServiceAndroid, TemplateUrlService caller,
+                String keyword, String newKeyword, String shortName, GURL url, GURL suggestion_url,
+                String postParams, String imageUrl, String imageUrlPostParams);
+        String getUrlToDisplayBridge(
+                long nativeTemplateUrlServiceAndroid, TemplateUrlService caller, String url);
+        String getUrlFromDisplayBridge(
+                long nativeTemplateUrlServiceAndroid, TemplateUrlService caller, String url);
         // End Vivladi
     }
 
@@ -555,6 +569,40 @@ public class TemplateUrlService {
         if (!isLoaded()) return null;
         return TemplateUrlServiceJni.get().vivaldiGetSearchEngineForHost(
                 mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, host);
+    }
+
+    public void addCustomSearchEngine(String shortName, String nickname, GURL url, GURL suggest_url,
+            String postParams, String imageUrl, String imageUrlPostParams) {
+        TemplateUrlServiceJni.get().addCustomSearchEngine(mNativeTemplateUrlServiceAndroid,
+                TemplateUrlService.this, shortName, nickname, url, suggest_url, postParams,
+                imageUrl, imageUrlPostParams);
+    }
+
+    public @Nullable TemplateUrl getTemplateUrlFromKeywordNative(String keyword) {
+        return TemplateUrlServiceJni.get().getTemplateUrlFromKeywordNative(
+                mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, keyword);
+    }
+
+    public void removeTemplateUrl(String keyword) {
+        TemplateUrlServiceJni.get().removeTemplateUrl(
+                mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, keyword);
+    }
+
+    public boolean updateTemplateUrl(String keyword, String newKeyword, String shortName, GURL url,
+            GURL suggestion_url, String postParams, String imageUrl, String imageUrlPostParams) {
+        return TemplateUrlServiceJni.get().updateTemplateUrl(mNativeTemplateUrlServiceAndroid,
+                TemplateUrlService.this, keyword, newKeyword, shortName, url, suggestion_url,
+                postParams, imageUrl, imageUrlPostParams);
+    }
+
+    public String getUrlToDisplayBridge(String url) {
+        return TemplateUrlServiceJni.get().getUrlToDisplayBridge(
+                mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, url);
+    }
+
+    public String getUrlFromDisplayBridge(String url) {
+        return TemplateUrlServiceJni.get().getUrlFromDisplayBridge(
+                mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, url);
     }
     // End Vivaldi
 }

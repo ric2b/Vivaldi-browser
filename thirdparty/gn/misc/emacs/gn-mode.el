@@ -85,15 +85,16 @@ variable name or the '{{' and '}}' which surround it."
     "asmflags" "assert_no_deps" "bundle_deps_filter" "bundle_executable_dir"
     "bundle_resources_dir" "bundle_root_dir" "cflags" "cflags_c" "cflags_cc"
     "cflags_objc" "cflags_objcc" "check_includes" "post_processing_args"
-    "post_processing_outputs" "post_processing_script" "post_processing_sources"
-    "complete_static_lib" "configs" "data" "data_deps" "defines" "depfile"
-    "deps" "framework_dir" "frameworks" "include_dirs" "inputs" "ldflags"
-    "lib_dirs" "libs" "output_dir" "output_extension" "output_name"
-    "output_prefix_override" "outputs" "pool" "precompiled_header"
-    "precompiled_header_type" "precompiled_source" "product_type" "public"
-    "public_configs" "public_deps" "response_file_contents" "script" "sources"
-    "testonly" "visibility" "write_runtime_deps" "bundle_contents_dir"
-    "contents" "output_conversion" "rebase" "data_keys" "walk_keys"))
+    "post_processing_manifest" "post_processing_outputs"
+    "post_processing_script" "post_processing_sources" "complete_static_lib"
+    "configs" "data" "data_deps" "defines" "depfile" "deps" "framework_dir"
+    "frameworks" "include_dirs" "inputs" "ldflags" "lib_dirs" "libs"
+    "output_dir" "output_extension" "output_name" "output_prefix_override"
+    "outputs" "pool" "precompiled_header" "precompiled_header_type"
+    "precompiled_source" "product_type" "public" "public_configs"
+    "public_deps" "response_file_contents" "script" "sources" "testonly"
+    "visibility" "write_runtime_deps" "bundle_contents_dir" "contents"
+    "output_conversion" "rebase" "data_keys" "walk_keys"))
 
 (defconst gn-font-lock-keywords
   `((,(regexp-opt gn-font-lock-reserved-keywords 'words) .

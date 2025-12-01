@@ -240,8 +240,12 @@ SkISize PaintImage::GetSupportedDecodeSize(const SkISize& requested_size,
       }
       return SkISize::Make(width(), height());
     case AuxImage::kGainmap:
-      return gainmap_paint_image_generator_->GetSupportedDecodeSize(
-          requested_size);
+      if (gainmap_paint_image_generator_) {
+        return gainmap_paint_image_generator_->GetSupportedDecodeSize(
+            requested_size);
+      }
+      // Note that this is different from the default image behavior.
+      return SkISize(0, 0);
   }
 }
 
@@ -354,7 +358,7 @@ gfx::ContentColorUsage PaintImage::GetContentColorUsage() const {
   }
 
   // Gainmap images are always HDR.
-  if (HasGainmap()) {
+  if (HasGainmapInfo()) {
     return gfx::ContentColorUsage::kHDR;
   }
 
@@ -461,7 +465,7 @@ std::string PaintImage::ToString() const {
       << " completion_state_: " << static_cast<int>(completion_state_)
       << " is_multipart_: " << is_multipart_
       << " may_be_lcp_candidate_: " << may_be_lcp_candidate_
-      << " has gainmap: " << HasGainmap() << " is YUV: "
+      << " has gainmap: " << HasGainmapInfo() << " is YUV: "
       << IsYuv(SkYUVAPixmapInfo::SupportedDataTypes::All(), AuxImage::kDefault);
   return str.str();
 }

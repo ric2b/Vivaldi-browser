@@ -14,6 +14,7 @@
 #include "chrome/browser/browser_process.h"
 #include "components/language/core/common/language_util.h"
 #include "components/lens/lens_features.h"
+#include "components/lens/lens_url_utils.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/url_search_params.h"
 #include "net/base/url_util.h"
@@ -29,8 +30,6 @@
 
 namespace lens {
 namespace {
-// Query parameter for the search text query.
-inline constexpr char kTextQueryParameterKey[] = "q";
 
 // Query parameter for denoting a search companion request.
 inline constexpr char kChromeSidePanelParameterKey[] = "gsc";
@@ -77,6 +76,8 @@ inline constexpr char kInvocationSourceImageSearchContextMenu[] =
     "chrome.cr.ctxi";
 inline constexpr char kInvocationSourceTextSearchContextMenu[] =
     "chrome.cr.ctxt";
+inline constexpr char kInvocationSourceVideoSearchContextMenu[] =
+    "chrome.cr.ctxv";
 inline constexpr char kInvocationSourceFindInPage[] = "chrome.cr.find";
 inline constexpr char kInvocationSourceToolbarIcon[] = "chrome.cr.tbic";
 inline constexpr char kInvocationSourceOmniboxIcon[] = "chrome.cr.obic";
@@ -136,6 +137,24 @@ inline constexpr char kQuerySubmissionTimeQueryParameter[] = "qsubts";
 // between the user-perceived query submission time and the time when the
 // search request is made (i.e. qsubts).
 inline constexpr char kClientUploadDurationQueryParameter[] = "cud";
+
+// Host for YouTube URLs.
+inline constexpr char kYoutubeHost[] = "www.youtube.com";
+
+// Path denoting a YouTube watch page.
+inline constexpr char kYoutubeWatchPath[] = "/watch";
+
+// Path denoting a YouTube embed page.
+inline constexpr char kYoutubeEmbedPathPrefix[] = "/embed/";
+
+// Query parameter for the video timestamp.
+inline constexpr char kVideoTimestampQueryParameter[] = "t";
+
+// Query parameter for the video ID.
+inline constexpr char kVideoIdQueryParameter[] = "v";
+
+// Character denoting seconds in the "t=" query parameter of a YouTube URL.
+inline constexpr char kVideoTimestampSecondsCharacter = 's';
 
 // Appends the url params from the map to the url.
 GURL AppendUrlParamsFromMap(
@@ -235,6 +254,9 @@ GURL AppendInvocationSourceParamToURL(
       break;
     case lens::LensOverlayInvocationSource::kContentAreaContextMenuText:
       param_value = kInvocationSourceTextSearchContextMenu;
+      break;
+    case lens::LensOverlayInvocationSource::kContentAreaContextMenuVideo:
+      param_value = kInvocationSourceVideoSearchContextMenu;
       break;
     case lens::LensOverlayInvocationSource::kToolbar:
       param_value = kInvocationSourceToolbarIcon;
@@ -444,13 +466,15 @@ bool IsAimQuery(const GURL& url) {
   return param_value == kAimModeParameterValue;
 }
 
-bool ShouldOpenSearchURLInNewTab(const GURL& url) {
+bool ShouldOpenSearchURLInNewTab(const GURL& url, bool is_aim_feature_enabled) {
   std::string param_value;
   net::GetValueForKeyInQuery(url, kModeParameterKey, &param_value);
   const bool is_shopping_mode = param_value == kShoppingModeParameterValue;
+  const bool is_aim_in_side_panel_enabled =
+      is_aim_feature_enabled && lens::features::ShouldShowAimInSidePanel();
   return IsValidSearchResultsUrl(url) &&
          (is_shopping_mode ||
-          (IsAimQuery(url) && !lens::features::ShouldShowAimInSidePanel()));
+          (IsAimQuery(url) && !is_aim_in_side_panel_enabled));
 }
 
 GURL GetSearchResultsUrlFromRedirectUrl(const GURL& url) {
@@ -561,19 +585,56 @@ GURL AddPDFScrollToParametersToUrl(
   return net::AppendOrReplaceRef(url, ref);
 }
 
-std::map<std::string, std::string> GetParametersMapWithoutQuery(
-    const GURL& url) {
-  std::map<std::string, std::string> additional_query_parameters;
-  net::QueryIterator query_iterator(url);
-  while (!query_iterator.IsAtEnd()) {
-    std::string_view key = query_iterator.GetKey();
-    if (kTextQueryParameterKey != key) {
-      additional_query_parameters.insert(std::make_pair(
-          query_iterator.GetKey(), query_iterator.GetUnescapedValue()));
-    }
-    query_iterator.Advance();
+std::optional<base::TimeDelta> ExtractTimeInSecondsFromQueryIfExists(
+    const GURL& target) {
+  // Make sure that the target specifies a t=.
+  std::string t_string;
+  if (!net::GetValueForKeyInQuery(target, kVideoTimestampQueryParameter,
+                                  &t_string)) {
+    return {};
   }
-  return additional_query_parameters;
+
+  // Make sure that the t= parameter is not empty.
+  if (!t_string.length()) {
+    return {};
+  }
+
+  // The t_string may end in "s" to denote seconds.
+  if (t_string.back() == kVideoTimestampSecondsCharacter) {
+    // Pop the last "s" from the string so it can parse correctly.
+    t_string.pop_back();
+  }
+
+  unsigned int t = 0;
+  if (!base::StringToUint(t_string, &t)) {
+    return {};
+  }
+
+  return base::Seconds(t);
+}
+
+std::optional<std::string> ExtractVideoNameIfExists(const GURL& url) {
+  if (url.host() != kYoutubeHost) {
+    return {};
+  }
+
+  // `url` is a link to www.youtube.com.  The video name is either the value of
+  // the `v=` query param if the format is "...youtube.com/watch", or the last
+  // part of the path if it's "...youtube.com/embed/video name here".
+  // Extract it and return it, or else {} if there's no match.
+  std::string video_name;
+  if (url.path() == kYoutubeWatchPath) {
+    if (net::GetValueForKeyInQuery(url, kVideoIdQueryParameter, &video_name) &&
+        !video_name.empty()) {
+      return video_name;
+    }
+  } else if (base::StartsWith(url.path(), kYoutubeEmbedPathPrefix)) {
+    video_name = url.path().substr(strlen(kYoutubeEmbedPathPrefix));
+    if (!video_name.empty()) {
+      return video_name;
+    }
+  }
+  return {};
 }
 
 }  // namespace lens

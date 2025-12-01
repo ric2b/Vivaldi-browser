@@ -1366,5 +1366,4 @@ void RequestFilterProxyingURLLoaderFactory::MaybeRemoveProxy() {
 void RequestFilterProxyingURLLoaderFactory::EnsureAssociatedFactoryBuilt() {
   ShutdownNotifierFactory::GetInstance();
 }
-
 }  // namespace vivaldi

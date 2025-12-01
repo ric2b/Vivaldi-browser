@@ -785,6 +785,24 @@ void UtilitiesSelectFileFunction::OnFileSelected(base::FilePath path,
   Respond(ArgumentList(Results::Create(path.AsUTF8Unsafe())));
 }
 
+ExtensionFunction::ResponseAction UtilitiesOpenFolderFunction::Run() {
+  using vivaldi::utilities::OpenFolder::Params;
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+#if BUILDFLAG(IS_WIN)
+  base::FilePath path(base::UTF8ToWide(params->path));
+#else
+  base::FilePath path(params->path);
+#endif
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  platform_util::OpenItem(profile, path,
+                          platform_util::OpenItemType::OPEN_FOLDER,
+                          platform_util::OpenOperationCallback());
+  return RespondNow(NoArguments());
+}
+
 namespace {
 
 // Common utility to parse JS input into ImagePlace. Return number of set
@@ -2525,7 +2543,7 @@ ExtensionFunction::ResponseAction UtilitiesDownloadsDragFunction::Run() {
   content::DownloadManager* manager =
       profile->GetOriginalProfile()->GetDownloadManager();
 
-  const display::Screen* const screen = display::Screen::GetScreen();
+  const display::Screen* const screen = display::Screen::Get();
   DCHECK(screen);
 
   std::vector<extensions::DraggableDownloadItem> items;
@@ -2721,6 +2739,64 @@ UtilitiesUpdatePrimarySelectionFunction::Run() {
     std::u16string tmp = base::UTF8ToUTF16(params->text);
     scw.WriteText(std::u16string_view(tmp));
   }
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesShowAdditionalStartupPagesFunction::Run() {
+  namespace Results = vivaldi::utilities::ShowAdditionalStartupPages::Results;
+  std::vector<std::string> results;
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  PrefService* prefs = profile->GetPrefs();
+
+  // Deprecation page
+  std::optional<std::string> maybe_deprecation_page;
+#if BUILDFLAG(IS_MAC)
+  // Less than Big Sur, (e.g. Catalina and older)
+  if (base::mac::MacOSVersion() < 11'00'00) {
+    maybe_deprecation_page = "https://vivaldi.com/os-support-notice-10.15/";
+  } else if (base::mac::MacOSVersion() < 12'00'00) {
+    // Less than Monterey (e.g. Big Sur)
+    maybe_deprecation_page = "https://vivaldi.com/os-support-notice-macos-11/";
+  }
+#endif
+
+#if BUILDFLAG(IS_LINUX) && defined(ARCH_CPU_ARM_FAMILY) && \
+    defined(ARCH_CPU_32_BITS)
+  maybe_deprecation_page = "https://vivaldi.com/os-support-notice-linux-arm32/";
+#endif
+
+  if (!(profile->IsIncognitoProfile() || profile->IsGuestSession())) {
+    const auto seen_os_deprecation_page =
+        prefs->GetBoolean(vivaldiprefs::kStartupSeenOsDeprecationPage);
+    if (maybe_deprecation_page && !seen_os_deprecation_page) {
+      // The OS is deprecated, set kStartupSeenOsDeprecationPage to true and
+      // return to JS to show.
+      prefs->SetBoolean(vivaldiprefs::kStartupSeenOsDeprecationPage, true);
+      results.push_back(*maybe_deprecation_page);
+    } else if (!maybe_deprecation_page && seen_os_deprecation_page) {
+      // The OS is not deprecated anymore (it's possible if user updated).
+      prefs->SetBoolean(vivaldiprefs::kStartupSeenOsDeprecationPage, false);
+    }
+  }
+
+  return RespondNow(ArgumentList(Results::Create(std::move(results))));
+}
+
+ExtensionFunction::ResponseAction UtilitiesCopyToClipboardFunction::Run() {
+  using vivaldi::utilities::CopyToClipboard::Params;
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  ui::ScopedClipboardWriter clipboard_writter(ui::ClipboardBuffer::kCopyPaste);
+
+  if (params->options.confidential) {
+    clipboard_writter.MarkAsConfidential();
+  }
+  std::u16string tmp = base::UTF8ToUTF16(params->text);
+  clipboard_writter.WriteText(std::u16string_view(tmp));
+
   return RespondNow(NoArguments());
 }
 

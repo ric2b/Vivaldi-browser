@@ -265,7 +265,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     case AV_CODEC_ID_LSCR:        maxpixels  /= 16;    break;
     case AV_CODEC_ID_MMVIDEO:     maxpixels  /= 256;   break;
     case AV_CODEC_ID_MOTIONPIXELS:maxpixels  /= 256;   break;
-    case AV_CODEC_ID_MP4ALS:      maxsamples /= 65536; break;
+    case AV_CODEC_ID_MP4ALS:      maxsamples /= 65536;
+                                  av_dict_set_int(&opts, "max_order", 15, 0);
+                                  break;
     case AV_CODEC_ID_MSA1:        maxpixels  /= 16384; break;
     case AV_CODEC_ID_MSCC:        maxpixels  /= 4096;  break;
     case AV_CODEC_ID_MSRLE:       maxpixels  /= 16;    break;
@@ -620,7 +622,7 @@ maximums_reached:
             break;
     } while (got_frame == 1 && it++ < maxiteration);
 
-    fprintf(stderr, "pixels decoded: %"PRId64", samples decoded: %"PRId64", iterations: %d\n", ec_pixels, nb_samples, it);
+    // fprintf(stderr, "pixels decoded: %"PRId64", samples decoded: %"PRId64", iterations: %d\n", ec_pixels, nb_samples, it);
 
     av_frame_free(&frame);
     avcodec_free_context(&ctx);

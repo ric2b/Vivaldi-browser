@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,18 +8,9 @@ import * as path from 'path';
 import type * as puppeteer from 'puppeteer-core';
 
 import {GEN_DIR} from '../../conductor/paths.js';
+import {platform} from '../../conductor/platform.js';
 import type {DevToolsPage} from '../../e2e_non_hosted/shared/frontend-helper.js';
 import type {InspectedPage} from '../../e2e_non_hosted/shared/target-helper.js';
-import {
-  $$,
-  click,
-  clickMoreTabsButton,
-  getBrowserAndPages,
-  platform,
-  pressKey,
-  typeText,
-  waitFor,
-} from '../../shared/helper.js';
 import {getBrowserAndPagesWrappers} from '../../shared/non_hosted_wrappers.js';
 
 import {openSoftContextMenuAndClickOnItem} from './context-menu-helpers.js';
@@ -105,27 +96,9 @@ export async function openFileInSourcesPanel(
   await openSourcesPanel(devToolsPage);
 }
 
-export async function openRecorderSubPane() {
-  const root = await waitFor('.navigator-tabbed-pane');
-  await clickMoreTabsButton(root);
-  await click('[aria-label="Recordings"]');
-  await waitFor('[aria-label="Add recording"]');
-}
-
-export async function createNewRecording(recordingName: string) {
-  const {frontend} = getBrowserAndPages();
-
-  await click('[aria-label="Add recording"]');
-  await waitFor('[aria-label^="Recording"]');
-
-  await typeText(recordingName);
-
-  await frontend.keyboard.press('Enter');
-}
-
 export async function openSnippetsSubPane(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   const root = await devToolsPage.waitFor('.navigator-tabbed-pane');
-  await clickMoreTabsButton(root, devToolsPage);
+  await devToolsPage.clickMoreTabsButton(root);
   await devToolsPage.click('[aria-label="Snippets"]');
   await devToolsPage.waitFor('[aria-label="New snippet"]');
 }
@@ -154,17 +127,11 @@ export async function createNewSnippet(
   }
 }
 
-export async function openWorkspaceSubPane() {
-  const root = await waitFor('.navigator-tabbed-pane');
-  await click('[aria-label="Workspace"]', {root});
-  await waitFor('[aria-label="Workspace panel"]');
-}
-
-export async function openOverridesSubPane() {
-  const root = await waitFor('.navigator-tabbed-pane');
-  await clickMoreTabsButton(root);
-  await click('[aria-label="Overrides"]');
-  await waitFor('[aria-label="Overrides panel"]');
+export async function openOverridesSubPane(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const root = await devToolsPage.waitFor('.navigator-tabbed-pane');
+  await devToolsPage.clickMoreTabsButton(root);
+  await devToolsPage.click('[aria-label="Overrides"]');
+  await devToolsPage.waitFor('[aria-label="Overrides panel"]');
 }
 
 export async function openFileInEditor(
@@ -182,19 +149,13 @@ export async function openSourceCodeEditorForFile(
   await openFileInEditor(sourceFile, devToolsPage);
 }
 
-export async function getSelectedSource(): Promise<string> {
-  const sourceTabPane = await waitFor('#sources-panel-sources-view .tabbed-pane');
-  const sourceTabs = await waitFor('.tabbed-pane-header-tab.selected', sourceTabPane);
-  return await (sourceTabs.evaluate(node => node.getAttribute('aria-label')) as Promise<string>);
-}
-
-export async function getBreakpointHitLocation() {
-  const breakpointHitHandle = await waitFor('.breakpoint-item.hit');
-  const locationHandle = await waitFor('.location', breakpointHitHandle);
+export async function getBreakpointHitLocation(devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const breakpointHitHandle = await devToolsPage.waitFor('.breakpoint-item.hit');
+  const locationHandle = await devToolsPage.waitFor('.location', breakpointHitHandle);
   const locationText = await locationHandle.evaluate(location => location.textContent);
 
   const groupHandle = await breakpointHitHandle.evaluateHandle(x => x.parentElement!);
-  const groupHeaderTitleHandle = await waitFor('.group-header-title', groupHandle);
+  const groupHeaderTitleHandle = await devToolsPage.waitFor('.group-header-title', groupHandle);
   const groupHeaderTitle = await groupHeaderTitleHandle?.evaluate(header => header.textContent);
 
   return `${groupHeaderTitle}:${locationText}`;
@@ -222,12 +183,12 @@ export async function waitForHighlightedLine(
   });
 }
 
-export async function getToolbarText() {
-  const toolbar = await waitFor('.sources-toolbar');
+export async function getToolbarText(devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const toolbar = await devToolsPage.waitFor('.sources-toolbar');
   if (!toolbar) {
     return [];
   }
-  const textNodes = await $$('.toolbar-text', toolbar);
+  const textNodes = await devToolsPage.$$('.toolbar-text', toolbar);
   return await Promise.all(textNodes.map(node => node.evaluate(node => node.textContent, node)));
 }
 
@@ -280,8 +241,8 @@ export async function isBreakpointSet(
 }
 
 /**
- * @param lineNumber - 1-based line number
- * @param index - 1-based index of the inline breakpoint in the given line
+ * @param lineNumber 1-based line number
+ * @param index 1-based index of the inline breakpoint in the given line
  */
 export async function enableInlineBreakpointForLine(
     line: number, index: number, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
@@ -293,9 +254,9 @@ export async function enableInlineBreakpointForLine(
 }
 
 /**
- * @param lineNumber - 1-based line number
- * @param index - 1-based index of the inline breakpoint in the given line
- * @param expectNoBreakpoint - If we should wait for the line to not have any inline breakpoints after
+ * @param lineNumber 1-based line number
+ * @param index 1-based index of the inline breakpoint in the given line
+ * @param expectNoBreakpoint If we should wait for the line to not have any inline breakpoints after
  *                           the click instead of a disabled one.
  */
 export async function disableInlineBreakpointForLine(
@@ -657,13 +618,6 @@ export async function inspectMemory(
   );
 }
 
-export async function typeIntoSourcesAndSave(text: string) {
-  const pane = await waitFor('.sources');
-  await pane.type(text);
-
-  await pressKey('s', {control: true});
-}
-
 export async function getScopeNames(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   const scopeElements = await devToolsPage.$$('.scope-chain-sidebar-pane-section-title');
   const scopeNames = await Promise.all(scopeElements.map(nodes => nodes.evaluate(n => n.textContent)));
@@ -691,6 +645,16 @@ export async function getValuesForScope(
     }
     return;
   });
+}
+
+export async function waitValuesForScope(
+    scope: string, expandCount: number, expectedValues: string[],
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage): Promise<string[]> {
+  await devToolsPage.waitForFunction(async () => {
+    const values = await getValuesForScope(scope, expandCount, expectedValues.length, devToolsPage);
+    return values.every((value, i) => value === expectedValues[i]);
+  });
+  return expectedValues;
 }
 
 export async function getPausedMessages(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
@@ -742,11 +706,10 @@ export async function addSelectedTextToWatches(devToolsPage = getBrowserAndPages
   await devToolsPage.pressKey('A', {control: true, shift: true});
 }
 
-export async function enableLocalOverrides() {
-  await clickMoreTabsButton();
-  await click(OVERRIDES_TAB_SELECTOR);
-  await click(ENABLE_OVERRIDES_SELECTOR);
-  await waitFor(CLEAR_CONFIGURATION_SELECTOR);
+export async function enableLocalOverrides(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await openOverridesSubPane(devToolsPage);
+  await devToolsPage.click(ENABLE_OVERRIDES_SELECTOR);
+  await devToolsPage.waitFor(CLEAR_CONFIGURATION_SELECTOR);
 }
 
 export interface LabelMapping {
@@ -762,13 +725,21 @@ export class WasmLocationLabels {
   readonly #mappings: Map<string, LabelMapping[]>;
   readonly #source: string;
   readonly #wasm: string;
-  constructor(source: string, wasm: string, mappings: Map<string, LabelMapping[]>) {
+  readonly #devToolsPage: DevToolsPage;
+  readonly #inspectedPage: InspectedPage;
+
+  constructor(
+      source: string, wasm: string, mappings: Map<string, LabelMapping[]>, devToolsPage: DevToolsPage,
+      inspectedPage: InspectedPage) {
     this.#mappings = mappings;
     this.#source = source;
     this.#wasm = wasm;
+    this.#devToolsPage = devToolsPage;
+    this.#inspectedPage = inspectedPage;
   }
 
-  static load(source: string, wasm: string): WasmLocationLabels {
+  static load(source: string, wasm: string, devToolsPage: DevToolsPage, inspectedPage: InspectedPage):
+      WasmLocationLabels {
     const mapFileName = path.join(GEN_DIR, 'test', 'e2e', 'resources', `${wasm}.map.json`);
     const mapFile = JSON.parse(fs.readFileSync(mapFileName, {encoding: 'utf-8'})) as Array<{
                       source: string,
@@ -807,11 +778,11 @@ export class WasmLocationLabels {
         labelColumn,
       });
     }
-    return new WasmLocationLabels(source, wasm, mappings);
+    return new WasmLocationLabels(source, wasm, mappings, devToolsPage, inspectedPage);
   }
 
   async checkLocationForLabel(label: string) {
-    const pauseLocation = await retrieveTopCallFrameWithoutResuming();
+    const pauseLocation = await retrieveTopCallFrameWithoutResuming(this.#devToolsPage);
     const pausedLine = this.#mappings.get(label)!.find(
         line => pauseLocation === `${path.basename(this.#wasm)}:0x${line.moduleOffset.toString(16)}` ||
             pauseLocation === `${path.basename(this.#source)}:${line.sourceLine}`);
@@ -820,38 +791,37 @@ export class WasmLocationLabels {
   }
 
   async addBreakpointsForLabelInSource(label: string) {
-    await openFileInEditor(path.basename(this.#source));
-    await Promise.all(this.#mappings.get(label)!.map(({sourceLine}) => addBreakpointForLine(sourceLine)));
+    await openFileInEditor(path.basename(this.#source), this.#devToolsPage);
+    await Promise.all(
+        this.#mappings.get(label)!.map(({sourceLine}) => addBreakpointForLine(sourceLine, this.#devToolsPage)));
   }
 
   async addBreakpointsForLabelInWasm(label: string) {
-    await openFileInEditor(path.basename(this.#wasm));
-    const visibleLines = await $$(CODE_LINE_SELECTOR);
+    await openFileInEditor(path.basename(this.#wasm), this.#devToolsPage);
+    const visibleLines = await this.#devToolsPage.$$(CODE_LINE_SELECTOR);
     const lineNumbers = await Promise.all(visibleLines.map(line => line.evaluate(node => node.textContent)));
     const lineNumberLabels = new Map(lineNumbers.map(label => [Number(label), label]));
     await Promise.all(this.#mappings.get(label)!.map(
 
-        ({moduleOffset}) => addBreakpointForLine(lineNumberLabels.get(moduleOffset)!)));
+        ({moduleOffset}) => addBreakpointForLine(lineNumberLabels.get(moduleOffset)!, this.#devToolsPage)));
   }
 
   async setBreakpointInSourceAndRun(label: string, script: string) {
-    const {target} = getBrowserAndPages();
     await this.addBreakpointsForLabelInSource(label);
 
-    void target.evaluate(script);
+    void this.#inspectedPage.evaluate(script);
     await this.checkLocationForLabel(label);
   }
 
   async setBreakpointInWasmAndRun(label: string, script: string) {
-    const {target} = getBrowserAndPages();
     await this.addBreakpointsForLabelInWasm(label);
 
-    void target.evaluate(script);
+    void this.#inspectedPage.evaluate(script);
     await this.checkLocationForLabel(label);
   }
 
   async continueAndCheckForLabel(label: string) {
-    await click(RESUME_BUTTON);
+    await this.#devToolsPage.click(RESUME_BUTTON);
     await this.checkLocationForLabel(label);
   }
 

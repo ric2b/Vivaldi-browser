@@ -148,7 +148,6 @@ ResultOrError<ExecutionSerial> Queue::CheckAndUpdateCompletedSerials() {
             fenceSerial = tentativeSerial;
 
             mUnusedFences->push_back(fence);
-
             fencesInFlight->pop_front();
         }
         return fenceSerial;
@@ -159,19 +158,18 @@ void Queue::ForceEventualFlushOfCommands() {
     mRecordingContext.needsSubmit |= mRecordingContext.used;
 }
 
-MaybeError Queue::WaitForIdleForDestruction() {
+MaybeError Queue::WaitForIdleForDestructionImpl() {
     // Immediately tag the recording context as unused so we don't try to submit it in Tick.
     // Move the mRecordingContext.used to mUnusedCommands so it can be cleaned up in
     // ShutDownImpl
     if (mRecordingContext.used) {
         CommandPoolAndBuffer commands = {mRecordingContext.commandPool,
                                          mRecordingContext.commandBuffer};
-        mUnusedCommands.push_back(commands);
+        mUnusedCommands->push_back(commands);
         mRecordingContext = CommandRecordingContext();
     }
 
     Device* device = ToBackend(GetDevice());
-    VkDevice vkDevice = device->GetVkDevice();
 
     // Ignore the result of QueueWaitIdle: it can return OOM which we can't really do anything
     // about, Device lost, which means workloads running on the GPU are no longer accessible
@@ -179,38 +177,8 @@ MaybeError Queue::WaitForIdleForDestruction() {
     [[maybe_unused]] VkResult waitIdleResult =
         VkResult::WrapUnsafe(device->fn.QueueWaitIdle(mQueue));
 
-    // Make sure all fences are complete by explicitly waiting on them all
-    mFencesInFlight.Use([&](auto fencesInFlight) {
-        while (!fencesInFlight->empty()) {
-            VkFence fence = fencesInFlight->front().first;
-            ExecutionSerial fenceSerial = fencesInFlight->front().second;
-            DAWN_ASSERT(fenceSerial > GetCompletedCommandSerial());
-
-            VkResult result = VkResult::WrapUnsafe(VK_TIMEOUT);
-            do {
-                // If WaitForIdleForDesctruction is called while we are Disconnected, it means that
-                // the device lost came from the ErrorInjector and we need to wait without allowing
-                // any more error to be injected. This is because the device lost was "fake" and
-                // commands might still be running.
-                if (GetDevice()->GetState() == Device::State::Disconnected) {
-                    result = VkResult::WrapUnsafe(
-                        device->fn.WaitForFences(vkDevice, 1, &*fence, true, UINT64_MAX));
-                    continue;
-                }
-
-                result = VkResult::WrapUnsafe(INJECT_ERROR_OR_RUN(
-                    device->fn.WaitForFences(vkDevice, 1, &*fence, true, UINT64_MAX),
-                    VK_ERROR_DEVICE_LOST));
-            } while (result == VK_TIMEOUT);
-            // Ignore errors from vkWaitForFences: it can be either OOM which we can't do anything
-            // about (and we need to keep going with the destruction of all fences), or device
-            // loss, which means the workload on the GPU is no longer accessible and we can
-            // safely destroy the fence.
-
-            device->fn.DestroyFence(vkDevice, fence, nullptr);
-            fencesInFlight->pop_front();
-        }
-    });
+    DAWN_TRY(WaitForQueueSerial(GetLastSubmittedCommandSerial(),
+                                std::numeric_limits<Nanoseconds>::max()));
     return {};
 }
 
@@ -263,16 +231,20 @@ ResultOrError<CommandPoolAndBuffer> Queue::BeginVkCommandBuffer() {
     Device* device = ToBackend(GetDevice());
     VkDevice vkDevice = device->GetVkDevice();
 
-    CommandPoolAndBuffer commands;
-
     // First try to recycle unused command pools.
-    if (!mUnusedCommands.empty()) {
-        commands = mUnusedCommands.back();
-        mUnusedCommands.pop_back();
-        DAWN_TRY_WITH_CLEANUP(
-            CheckVkSuccess(device->fn.ResetCommandPool(vkDevice, commands.pool, 0),
-                           "vkResetCommandPool"),
-            { DestroyCommandPoolAndBuffer(device->fn, vkDevice, commands); });
+    auto result =
+        mUnusedCommands.Use([&](auto unusedCommands) -> std::optional<CommandPoolAndBuffer> {
+            if (!unusedCommands->empty()) {
+                CommandPoolAndBuffer recycledCommands = unusedCommands->back();
+                unusedCommands->pop_back();
+                return recycledCommands;
+            }
+            return std::nullopt;
+        });
+
+    CommandPoolAndBuffer commands;
+    if (result) {
+        commands = *result;
     } else {
         // Create a new command pool for our commands and allocate the command buffer.
         VkCommandPoolCreateInfo createInfo;
@@ -311,13 +283,6 @@ ResultOrError<CommandPoolAndBuffer> Queue::BeginVkCommandBuffer() {
         { DestroyCommandPoolAndBuffer(device->fn, vkDevice, commands); });
 
     return commands;
-}
-
-void Queue::RecycleCompletedCommands(ExecutionSerial completedSerial) {
-    for (auto& commands : mCommandsInFlight.IterateUpTo(completedSerial)) {
-        mUnusedCommands.push_back(commands);
-    }
-    mCommandsInFlight.ClearUpTo(completedSerial);
 }
 
 MaybeError Queue::SubmitPendingCommandsImpl() {
@@ -377,9 +342,22 @@ MaybeError Queue::SubmitPendingCommandsImpl() {
     mFencesInFlight->emplace_back(fence, lastSubmittedSerial);
 
     for (size_t i = 0; i < mRecordingContext.commandBufferList.size(); ++i) {
-        CommandPoolAndBuffer submittedCommands = {mRecordingContext.commandPoolList[i],
-                                                  mRecordingContext.commandBufferList[i]};
-        mCommandsInFlight.Enqueue(submittedCommands, lastSubmittedSerial);
+        CommandPoolAndBuffer commands = {mRecordingContext.commandPoolList[i],
+                                         mRecordingContext.commandBufferList[i]};
+        TrackSerialTask(lastSubmittedSerial, [commands, this]() {
+            Device* device = ToBackend(GetDevice());
+            VkDevice vkDevice = device->GetVkDevice();
+
+            MaybeError result = CheckVkSuccess(
+                device->fn.ResetCommandPool(vkDevice, commands.pool, 0), "vkResetCommandPool");
+            if (result.IsError()) {
+                result.AcquireError();
+                DestroyCommandPoolAndBuffer(device->fn, vkDevice, commands);
+                return;
+            }
+
+            mUnusedCommands->push_back(commands);
+        });
     }
 
     for (auto texture : mRecordingContext.specialSyncTextures) {
@@ -442,15 +420,13 @@ void Queue::DestroyImpl() {
     mRecordingContext.waitSemaphores.clear();
     mRecordingContext.signalSemaphores.clear();
 
-    // Some commands might still be marked as in-flight if we shut down because of a device
-    // loss. Recycle them as unused so that we free them below.
-    RecycleCompletedCommands(kMaxExecutionSerial);
-    DAWN_ASSERT(mCommandsInFlight.Empty());
-
-    for (const CommandPoolAndBuffer& commands : mUnusedCommands) {
-        DestroyCommandPoolAndBuffer(device->fn, vkDevice, commands);
-    }
-    mUnusedCommands.clear();
+    // Free any recycled command pools.
+    mUnusedCommands.Use([&](auto unusedCommands) {
+        for (const CommandPoolAndBuffer& commands : *unusedCommands) {
+            DestroyCommandPoolAndBuffer(device->fn, vkDevice, commands);
+        }
+        unusedCommands->clear();
+    });
 
     // Some fences might still be marked as in-flight if we shut down because of a device loss.
     // Delete them since at this point all commands are complete.
@@ -471,7 +447,8 @@ void Queue::DestroyImpl() {
     QueueBase::DestroyImpl();
 }
 
-ResultOrError<bool> Queue::WaitForQueueSerialImpl(ExecutionSerial serial, Nanoseconds timeout) {
+ResultOrError<ExecutionSerial> Queue::WaitForQueueSerialImpl(ExecutionSerial waitSerial,
+                                                             Nanoseconds timeout) {
     Device* device = ToBackend(GetDevice());
     VkDevice vkDevice = device->GetVkDevice();
     // If the client has passed a finite timeout, the function will eventually return due to
@@ -482,21 +459,32 @@ ResultOrError<bool> Queue::WaitForQueueSerialImpl(ExecutionSerial serial, Nanose
     // TODO(crbug.com/344798087): Handle the issue of timeouts in a more general way further up the
     // stack.
     while (1) {
+        ExecutionSerial completedSerial = kWaitSerialTimeout;
         VkResult waitResult = mFencesInFlight.Use([&](auto fencesInFlight) {
             // Search from for the first fence >= serial.
             VkFence waitFence = VK_NULL_HANDLE;
             for (auto it = fencesInFlight->begin(); it != fencesInFlight->end(); ++it) {
-                if (it->second >= serial) {
+                if (it->second >= waitSerial) {
                     waitFence = it->first;
+                    completedSerial = it->second;
                     break;
                 }
             }
             if (waitFence == VK_NULL_HANDLE) {
                 // Fence not found. This serial must have already completed.
                 // Return a VK_SUCCESS status.
+                completedSerial = waitSerial;
                 return VkResult::WrapUnsafe(VK_SUCCESS);
             }
             // Wait for the fence.
+            if (GetDevice()->GetState() == Device::State::Disconnected) [[unlikely]] {
+                // If WaitForQueueSerialImpl is called while we are Disconnected, it means that
+                // the device lost came from the ErrorInjector and we need to wait without allowing
+                // any more error to be injected. This is because the device lost was "fake" and
+                // commands might still be running.
+                return VkResult::WrapUnsafe(device->fn.WaitForFences(
+                    vkDevice, 1, &*waitFence, true, static_cast<uint64_t>(timeout)));
+            }
             return VkResult::WrapUnsafe(
                 INJECT_ERROR_OR_RUN(device->fn.WaitForFences(vkDevice, 1, &*waitFence, true,
                                                              static_cast<uint64_t>(timeout)),
@@ -516,10 +504,10 @@ ResultOrError<bool> Queue::WaitForQueueSerialImpl(ExecutionSerial serial, Nanose
             if (static_cast<uint64_t>(timeout) == std::numeric_limits<uint64_t>::max()) {
                 continue;
             }
-            return false;
+            return kWaitSerialTimeout;
         }
         DAWN_TRY(CheckVkSuccess(::VkResult(waitResult), "vkWaitForFences"));
-        return true;
+        return completedSerial;
     }
 }
 

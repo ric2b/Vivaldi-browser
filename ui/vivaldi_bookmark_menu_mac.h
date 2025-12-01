@@ -6,6 +6,7 @@
 #define UI_VIVALDI_BOOKMARK_MENU_MAC_H_
 
 #import <Cocoa/Cocoa.h>
+#include <string_view>
 #include <vector>
 #include "ui/base/window_open_disposition.h"
 
@@ -28,15 +29,17 @@ NSMenu* GetBookmarkMenu();
 
 int GetMenuIndex();
 
-void SetContainerState(const std::string& edge, int menu_index);
+void SetContainerState(const std::string_view edge, int menu_index);
 
 void ClearBookmarkMenu();
 
 void GetBookmarkNodes(bookmarks::BookmarkModel* model,
                       const BookmarkParentFolder& folder,
                       std::vector<bookmarks::BookmarkNode*>& nodes);
-void AddExtraBookmarkMenuItems(NSMenu* menu, bookmarks::BookmarkModel* model,
-                               const BookmarkParentFolder& folder, bool on_top);
+void AddExtraBookmarkMenuItems(NSMenu* menu,
+                               bookmarks::BookmarkModel* model,
+                               const BookmarkParentFolder& folder,
+                               bool on_top);
 void OnClearBookmarkMenu(NSMenu* menu, NSMenuItem* item);
 
 WindowOpenDisposition WindowOpenDispositionFromNSEvent(NSEvent* event,

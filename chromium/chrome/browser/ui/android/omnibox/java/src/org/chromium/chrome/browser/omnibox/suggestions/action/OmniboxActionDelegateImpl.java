@@ -9,7 +9,6 @@ import android.content.Context;
 import android.content.Intent;
 
 import org.chromium.base.IntentUtils;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
@@ -20,6 +19,7 @@ import org.chromium.components.omnibox.action.OmniboxActionDelegate;
 import org.chromium.content_public.browser.LoadUrlParams;
 
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /** Handle the events related to {@link OmniboxAction}. */
 @NullMarked
@@ -28,12 +28,12 @@ public class OmniboxActionDelegateImpl implements OmniboxActionDelegate {
     private final Consumer<String> mOpenUrlInExistingTabElseNewTabCb;
     private final Runnable mOpenIncognitoTabCb;
     private final Runnable mOpenPasswordSettingsCb;
-    private final Supplier<Tab> mTabSupplier;
+    private final Supplier<@Nullable Tab> mTabSupplier;
     private final @Nullable Runnable mOpenQuickDeleteCb;
 
     public OmniboxActionDelegateImpl(
             Context context,
-            Supplier<Tab> tabSupplier,
+            Supplier<@Nullable Tab> tabSupplier,
             Consumer<String> openUrlInExistingTabElseNewTabCb,
             Runnable openIncognitoTabCb,
             Runnable openPasswordSettingsCb,

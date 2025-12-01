@@ -26,8 +26,7 @@ enum ImporterTypeMetrics {
   IMPORTER_METRICS_EDGE = 7,
 #endif
   IMPORTER_METRICS_OPERA           = 8,
-  // DEPRECATED
-  // IMPORTER_METRICS_OPERA_BOOKMARK_FILE = 9,
+  IMPORTER_METRICS_OPERA_BOOKMARK_FILE = 9,
   IMPORTER_METRICS_CHROME          = 10,
   IMPORTER_METRICS_VIVALDI         = 11,
   IMPORTER_METRICS_YANDEX          = 12,
@@ -71,6 +70,9 @@ void LogImporterUseToMetrics(const std::string& metric_postfix,
       break;
     case user_data_importer::TYPE_OPERA:
       metrics_type = IMPORTER_METRICS_OPERA;
+      break;
+    case user_data_importer::TYPE_OPERA_BOOKMARK_FILE:
+      metrics_type = IMPORTER_METRICS_OPERA_BOOKMARK_FILE;
       break;
     case user_data_importer::TYPE_CHROME:
     case user_data_importer::TYPE_CHROMIUM:

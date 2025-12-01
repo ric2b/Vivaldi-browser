@@ -2,15 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "components/eye_dropper/eye_dropper_view.h"
 
 #include <utility>
 
+#include "base/compiler_specific.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -28,7 +24,8 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/native_ui_types.h"
 #include "ui/views/widget/widget.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -70,7 +67,7 @@ EyeDropperView::ViewPositionHandler::~ViewPositionHandler() {
 
 void EyeDropperView::ViewPositionHandler::UpdateViewPosition() {
   owner_->OnCursorPositionUpdate(
-      display::Screen::GetScreen()->GetCursorScreenPoint());
+      display::Screen::Get()->GetCursorScreenPoint());
 }
 
 class EyeDropperView::ScreenCapturer
@@ -151,9 +148,11 @@ void EyeDropperView::ScreenCapturer::OnCaptureResult(
     return;
   }
 
+  // TODO(crbug.com/352187279): Support other pixel formats.
+  CHECK_EQ(frame->pixel_format(), webrtc::FOURCC_ARGB);
   frame_.allocN32Pixels(frame->size().width(), frame->size().height(), true);
-  memcpy(frame_.getAddr32(0, 0), frame->data(),
-         frame->size().height() * frame->stride());
+  UNSAFE_TODO(memcpy(frame_.getAddr32(0, 0), frame->data(),
+                     frame->size().height() * frame->stride()));
   frame_.setImmutable();
 
   // The captured frame is in full desktop coordinates. E.g. the top left
@@ -161,15 +160,14 @@ void EyeDropperView::ScreenCapturer::OnCaptureResult(
   // origins.
   original_offset_x_ = 0;
   original_offset_y_ = 0;
-  for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
+  for (const auto& display : display::Screen::Get()->GetAllDisplays()) {
 #if BUILDFLAG(IS_WIN)
     // The window parameter is intentionally passed as nullptr on Windows
     // because a non-null window parameter causes errors when restoring windows
     // to saved positions in variable-DPI situations. See
     // https://crbug.com/1224715 for details.
-    gfx::Rect scaled_bounds =
-        display::Screen::GetScreen()->DIPToScreenRectInWindow(
-            /*window=*/nullptr, display.bounds());
+    gfx::Rect scaled_bounds = display::Screen::Get()->DIPToScreenRectInWindow(
+        /*window=*/nullptr, display.bounds());
 #else
     gfx::Rect scaled_bounds = gfx::ScaleToEnclosingRect(
         display.bounds(), display.device_scale_factor());
@@ -244,7 +242,7 @@ EyeDropperView::EyeDropperView(gfx::NativeView parent,
       std::make_unique<PreEventDispatchHandler>(this, event_handler);
   widget->Show();
   CaptureInput();
-  auto* screen = display::Screen::GetScreen();
+  auto* screen = display::Screen::Get();
   gfx::Point initial_position = screen->GetCursorScreenPoint();
 #if BUILDFLAG(IS_CHROMEOS)
   if (screen->InTabletMode()) {
@@ -317,7 +315,7 @@ void EyeDropperView::OnPaint(gfx::Canvas* view_canvas) {
   // The captured frame is not scaled so we need to use widget's bounds in
   // pixels to have the magnified region match cursor position.
   center_position_px =
-      display::Screen::GetScreen()
+      display::Screen::Get()
           ->DIPToScreenRectInWindow(GetWidget()->GetNativeWindow(),
                                     GetWidget()->GetWindowBoundsInScreen())
           .CenterPoint();
@@ -399,7 +397,7 @@ void EyeDropperView::OnWidgetMove() {
 #if BUILDFLAG(IS_CHROMEOS)
 void EyeDropperView::OnWindowAddedToRootWindow(aura::Window* window) {
   display::Display display =
-      display::Screen::GetScreen()->GetDisplayNearestWindow(window);
+      display::Screen::Get()->GetDisplayNearestWindow(window);
   CaptureScreen(display.id());
 }
 

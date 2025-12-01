@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,6 +58,9 @@ class MODULES_EXPORT AIPageContentAgent final
       const mojom::blink::AIPageContentOptions& options) const;
   // LocalFrameView::LifecycleNotificationObserver overrides.
   void DidFinishPostLifecycleSteps(const LocalFrameView&) override;
+
+  String DumpContentNodeTreeForTest();
+  String DumpContentNodeForTest(Node* node);
 
  private:
   void GetAIPageContentSync(mojom::blink::AIPageContentOptionsPtr options,
@@ -120,7 +123,7 @@ class MODULES_EXPORT AIPageContentAgent final
         mojom::blink::AIPageContentNodeInteractionInfo& interaction_info) const;
     void AddMetaData(
         const LocalFrame& frame,
-        WTF::Vector<mojom::blink::AIPageContentMetaPtr>& meta_data) const;
+        Vector<mojom::blink::AIPageContentMetaPtr>& meta_data) const;
     void AddNodeGeometry(
         const LayoutObject& object,
         mojom::blink::AIPageContentAttributes& attributes) const;
@@ -171,7 +174,7 @@ class MODULES_EXPORT AIPageContentAgent final
   // Already registered for lifetime notifications.
   bool is_registered_ = false;
   // Tasks to run when post lifecycle.
-  WTF::Vector<base::OnceClosure> async_extraction_tasks_;
+  Vector<base::OnceClosure> async_extraction_tasks_;
 };
 
 }  // namespace blink

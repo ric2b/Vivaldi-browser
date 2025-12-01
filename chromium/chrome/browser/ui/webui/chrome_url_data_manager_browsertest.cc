@@ -221,7 +221,8 @@ class ChromeURLDataManagerWebUITrustedTypesTest
     }
 
     const std::string kMessageFilter =
-        "*Refused to create a TrustedTypePolicy*";
+        "*Creating a TrustedTypePolicy * violates the following Content "
+        "Security Policy directive *";
     content::WebContents* content =
         browser()->tab_strip_model()->GetActiveWebContents();
     content::WebContentsConsoleObserver console_observer(content);
@@ -456,7 +457,6 @@ static constexpr const char* const kChromeUrls[] = {
     "chrome://add-supervision/",
     "chrome://app-disabled",
     "chrome://camera-app/views/main.html",
-    "chrome://assistant-optin/",
     "chrome://bluetooth-pairing",
     "chrome://certificate-manager/",
 

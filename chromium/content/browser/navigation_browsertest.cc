@@ -2812,7 +2812,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBaseBrowserTest,
 
   {
     WebContentsConsoleObserver console_observer(web_contents());
-    console_observer.SetPattern("Refused to execute inline script *");
+    console_observer.SetPattern("Executing inline script violates *");
 
     // 1) Load main document with CSP: script-src 'none'
     // 2) Open an about:srcdoc iframe. It inherits the CSP from its parent.
@@ -2843,7 +2843,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBaseBrowserTest,
 
   {
     WebContentsConsoleObserver console_observer(web_contents());
-    console_observer.SetPattern("Refused to execute inline script *");
+    console_observer.SetPattern("Executing inline script violates *");
 
     // 4) The iframe navigates back to about:srcdoc.
     web_contents()->GetController().GoBack();
@@ -2866,7 +2866,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBaseBrowserTest,
 
   {
     WebContentsConsoleObserver console_observer(web_contents());
-    console_observer.SetPattern("Refused to execute inline script *");
+    console_observer.SetPattern("Executing inline script violates *");
 
     // 1) Load main document with CSP: script-src 'none'
     // 2) Open an about:srcdoc iframe. It inherits the CSP from its parent.
@@ -2897,7 +2897,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBaseBrowserTest,
 
   {
     WebContentsConsoleObserver console_observer(web_contents());
-    console_observer.SetPattern("Refused to execute inline script *");
+    console_observer.SetPattern("Executing inline script violates *");
 
     // 4) The iframe navigates back to about:srcdoc.
     web_contents()->GetController().GoBack();
@@ -3886,12 +3886,12 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
 
 class GetEffectiveUrlClient : public ContentBrowserTestContentBrowserClient {
  public:
-  GURL GetEffectiveURL(content::BrowserContext* browser_context,
-                       const GURL& url) override {
+  std::optional<GURL> GetEffectiveURL(content::BrowserContext* browser_context,
+                                      const GURL& url) override {
     if (effective_url_) {
       return *effective_url_;
     }
-    return url;
+    return std::nullopt;
   }
 
   bool IsSuitableHost(RenderProcessHost* process_host,
@@ -4852,7 +4852,6 @@ IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
                                                       "/target.html");
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/target.html"));
-  RenderFrameSubmissionObserver frame_observer(web_contents());
   TestNavigationManager navigation_manager(web_contents(), url);
 
   // Load the document with document policy force-load-at-top set to false.
@@ -4874,9 +4873,12 @@ IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
   EXPECT_TRUE(WaitForLoadStop(web_contents()));
   EXPECT_TRUE(WaitForRenderFrameReady(current_frame_host()));
 
-  // Scroll down the page a bit
-  EXPECT_TRUE(ExecJs(web_contents(), "window.scrollTo(0, 1000)"));
-  frame_observer.WaitForScrollOffsetAtTop(false);
+  {
+    RenderFrameSubmissionObserver frame_observer(web_contents());
+    // Scroll down the page a bit
+    EXPECT_TRUE(ExecJs(web_contents(), "window.scrollTo(0, 1000)"));
+    frame_observer.WaitForScrollOffsetAtTop(false);
+  }
 
   // Navigate away
   EXPECT_TRUE(ExecJs(web_contents(), "window.location = 'about:blank'"));
@@ -4889,9 +4891,10 @@ IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
   EXPECT_TRUE(WaitForRenderFrameReady(current_frame_host()));
 
   // Ensure scroll restoration activated
+  RenderFrameSubmissionObserver frame_observer(web_contents());
   frame_observer.WaitForScrollOffsetAtTop(false);
   const cc::RenderFrameMetadata& last_metadata =
-      RenderFrameSubmissionObserver(web_contents()).LastRenderFrameMetadata();
+      frame_observer.LastRenderFrameMetadata();
   EXPECT_FALSE(last_metadata.is_scroll_offset_at_top);
 }
 
@@ -9838,6 +9841,41 @@ IN_PROC_BROWSER_TEST_F(DeferSpeculativeRFHCreationTest,
   EXPECT_EQ(url_b, results[0].url);
   EXPECT_TRUE(results[1].committed);
   EXPECT_EQ(url_c, results[1].url);
+}
+
+// Verify that navigating from about:blank will defer the creation of the
+// speculative RFH until the network request is sent.
+IN_PROC_BROWSER_TEST_F(DeferSpeculativeRFHCreationTest,
+                       NavigateFromAboutBlankDeferred) {
+  ASSERT_TRUE(NavigateToURL(shell(), GURL("about:blank")));
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+
+  GURL url = embedded_test_server()->GetURL("a.com", "/title1.html");
+  TestNavigationManager nav_manager(web_contents, url);
+  // Navigation from about:blank creates a new render frame host.
+  ASSERT_TRUE(BeginNavigateToURLFromRenderer(web_contents, url));
+  ASSERT_TRUE(nav_manager.WaitForRequestStart());
+  NavigationRequest* navigation_request =
+      NavigationRequest::From(nav_manager.GetNavigationHandle());
+
+  nav_manager.WaitForSpeculativeRenderFrameHostCreation();
+  // The speculative RFH shall be created after sending the request.
+  ASSERT_EQ(navigation_request->state(),
+            NavigationRequest::NavigationState::WILL_START_REQUEST);
+  ASSERT_TRUE(navigation_request->HasLoader());
+  RenderFrameHostImplWrapper speculative_rfh(
+      GetMainFrameSpeculativeRFH(web_contents));
+  ASSERT_TRUE(speculative_rfh);
+  ASSERT_EQ(navigation_request->GetAssociatedRFHType(),
+            NavigationRequest::AssociatedRenderFrameHostType::SPECULATIVE);
+
+  ASSERT_TRUE(nav_manager.WaitForResponse());
+  ASSERT_TRUE(GetMainFrameSpeculativeRFH(web_contents));
+  ASSERT_EQ(navigation_request->GetAssociatedRFHType(),
+            NavigationRequest::AssociatedRenderFrameHostType::SPECULATIVE);
+  ASSERT_TRUE(nav_manager.WaitForNavigationFinished());
+  ASSERT_FALSE(GetMainFrameSpeculativeRFH(web_contents));
 }
 
 class DeferSpeculativeRFHCreationReuseRFHTest : public NavigationBrowserTest {

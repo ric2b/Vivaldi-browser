@@ -306,6 +306,10 @@ bool MailClientBackend::MigrateSearchDB() {
   return true;
 }
 
+int MailClientBackend::CountMailSearchMessages() {
+  return db_->CountMessages();
+}
+
 void MailClientBackend::DatabaseErrorCallback(int error, sql::Statement* stmt) {
   diagnostics_string_ = db_->GetDiagnosticInfo(error, stmt, &diagnostics_);
   LOG(ERROR) << "MailSearchDB error: " << diagnostics_string_;

@@ -119,6 +119,15 @@ template("ios_binary_bundle") {
     bundle_executable_dir = bundle_contents_dir
     bundle_resources_dir = bundle_contents_dir
 
+    post_processing_script = "//build/config/ios/scripts/check-manifest.py"
+    post_processing_manifest = "$target_out_dir/$target_name.manifest"
+    post_processing_outputs = [ "$post_processing_manifest.checked" ]
+    post_processing_args =
+        [
+          rebase_path(bundle_root_dir, root_build_dir),
+          rebase_path(post_processing_manifest, root_build_dir),
+        ] + rebase_path(post_processing_outputs, root_build_dir)
+
     xcode_extra_attributes = {
       CODE_SIGN_IDENTITY = ""
       CODE_SIGNING_REQUIRED = "NO"

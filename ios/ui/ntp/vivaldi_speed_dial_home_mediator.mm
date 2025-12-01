@@ -12,6 +12,7 @@
 #import "components/bookmarks/common/bookmark_pref_names.h"
 #import "components/bookmarks/managed/managed_bookmark_service.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
@@ -85,8 +86,10 @@ using l10n_util::GetNSString;
 // items count is changed due to CRUD operation either initiated by user or sync.
 @property(nonatomic, strong)
     NSMutableArray<VivaldiNTPTopToolbarItem*>* cachedToolbarItems;
-// Bool to keep track of extensive changes.
-@property(nonatomic,assign) BOOL runningExtensiveChanges;
+// Cache to quickly map folder node ids to toolbar items.
+@property(nonatomic, strong)
+    NSMutableDictionary<NSNumber*, VivaldiNTPTopToolbarItem*>*
+        toolbarItemsByPrimaryId;
 @end
 
 @implementation VivaldiSpeedDialHomeMediator {
@@ -99,7 +102,7 @@ using l10n_util::GetNSString;
 @synthesize consumer = _consumer;
 @synthesize toolbarItems = _toolbarItems;
 @synthesize cachedToolbarItems = _cachedToolbarItems;
-@synthesize runningExtensiveChanges = _runningExtensiveChanges;
+@synthesize toolbarItemsByPrimaryId = _toolbarItemsByPrimaryId;
 
 #pragma mark - INITIALIZERS
 - (instancetype)initWithProfile:(ProfileIOS*)profile
@@ -135,7 +138,7 @@ using l10n_util::GetNSString;
     _bottomOmniboxEnabled =
         [[PrefBackedBoolean alloc]
             initWithPrefService:GetApplicationContext()->GetLocalState()
-                 prefName:prefs::kBottomOmnibox];
+                 prefName:omnibox::kIsOmniboxInBottomPosition];
     [_bottomOmniboxEnabled setObserver:self];
     [self booleanDidChange:_bottomOmniboxEnabled];
 
@@ -170,6 +173,7 @@ using l10n_util::GetNSString;
 
     self.toolbarItems = [[NSMutableArray alloc] init];
     self.cachedToolbarItems = [[NSMutableArray alloc] init];
+    self.toolbarItemsByPrimaryId = [[NSMutableDictionary alloc] init];
   }
   return self;
 }
@@ -219,6 +223,9 @@ using l10n_util::GetNSString;
   [_showAddButton stop];
   [_showAddButton setObserver:nil];
   _showAddButton = nil;
+
+  [self.toolbarItemsByPrimaryId removeAllObjects];
+  self.toolbarItemsByPrimaryId = nil;
 }
 
 - (void)setConsumer:(id<SpeedDialHomeConsumer>)consumer {
@@ -319,6 +326,7 @@ using l10n_util::GetNSString;
 
   // Clear old data so we don’t retain stale groups.
   [self.toolbarItems removeAllObjects];
+  [self.toolbarItemsByPrimaryId removeAllObjects];
 
   if ([self showSpeedDials]) {
 
@@ -355,6 +363,7 @@ using l10n_util::GetNSString;
       if (GetSpeeddial(node) && !IsSeparator(node)) {
         VivaldiNTPTopToolbarItem* toolbarItem = [self buildGroupForNode:node];
         [self.toolbarItems addObject:toolbarItem];
+        [self cacheToolbarItemIfNeeded:toolbarItem];
       }
 
       root_nodes.clear();
@@ -455,8 +464,21 @@ using l10n_util::GetNSString;
 - (void)reloadChildrenForBookmarkNode:(const BookmarkNode*)bookmarkNode {
   if (!bookmarkNode)
     return;
-  VivaldiNTPTopToolbarItem* groupItem = [self buildGroupForNode:bookmarkNode];
-  [self.consumer refreshChildItems:groupItem.children parent:groupItem];
+  VivaldiNTPTopToolbarItem* updatedGroup =
+      [self buildGroupForNode:bookmarkNode];
+  VivaldiNTPTopToolbarItem* cachedGroup =
+      [self toolbarItemForBookmarkNode:bookmarkNode];
+
+  if (cachedGroup) {
+    cachedGroup.uuid = updatedGroup.uuid;
+    cachedGroup.title = updatedGroup.title;
+    cachedGroup.children = updatedGroup.children;
+    [self cacheToolbarItemIfNeeded:cachedGroup];
+    [self.consumer refreshChildItems:cachedGroup.children parent:cachedGroup];
+    return;
+  }
+
+  [self.consumer refreshChildItems:updatedGroup.children parent:updatedGroup];
 }
 
 // Reloads only the top site items and notify the consumers.
@@ -564,8 +586,110 @@ using l10n_util::GetNSString;
                           foldersFirst:foldersFirst];
 }
 
+#pragma mark - Toolbar Item Helpers
+
+// Stores the toolbar item in the lookup cache when a primary id is available.
+- (void)cacheToolbarItemIfNeeded:(VivaldiNTPTopToolbarItem*)toolbarItem {
+  if (!toolbarItem || !toolbarItem.primaryId) {
+    return;
+  }
+  self.toolbarItemsByPrimaryId[toolbarItem.primaryId] = toolbarItem;
+}
+
+// Returns the cached toolbar item associated with the provided folder node.
+- (VivaldiNTPTopToolbarItem*)toolbarItemForBookmarkNode:
+    (const BookmarkNode*)bookmarkNode {
+  if (!bookmarkNode) {
+    return nil;
+  }
+
+  NSNumber* primaryId = @(bookmarkNode->id());
+  VivaldiNTPTopToolbarItem* toolbarItem =
+      self.toolbarItemsByPrimaryId[primaryId];
+  if (toolbarItem) {
+    return toolbarItem;
+  }
+
+  for (VivaldiNTPTopToolbarItem* item in self.toolbarItems) {
+    if ([item.primaryId isEqualToNumber:primaryId]) {
+      [self cacheToolbarItemIfNeeded:item];
+      return item;
+    }
+  }
+
+  return nil;
+}
+
+// Mutates the cached speed dial item to reflect the updated bookmark metadata.
+- (BOOL)updateCachedItemForBookmarkNode:(const BookmarkNode*)bookmarkNode
+                                 parent:(const BookmarkNode*)parent {
+  if (!bookmarkNode || !parent) {
+    return NO;
+  }
+
+  VivaldiNTPTopToolbarItem* toolbarItem =
+      [self toolbarItemForBookmarkNode:parent];
+  if (!toolbarItem) {
+    return NO;
+  }
+
+  NSArray<VivaldiSpeedDialItem*>* children = toolbarItem.children;
+  if (children.count == 0) {
+    return NO;
+  }
+
+  VivaldiSpeedDialItem* updatedItem = nil;
+  for (VivaldiSpeedDialItem* item in children) {
+    if (item.bookmarkNode == bookmarkNode ||
+        [item id] == bookmarkNode->id()) {
+      updatedItem = item;
+      break;
+    }
+  }
+
+  if (!updatedItem) {
+    return NO;
+  }
+
+  updatedItem.bookmarkNode = bookmarkNode;
+  updatedItem.title = bookmark_utils_ios::TitleForBookmarkNode(bookmarkNode);
+  updatedItem.url = bookmarkNode->url();
+  updatedItem.isFolder = bookmarkNode->is_folder();
+  updatedItem.isSpeedDial = GetSpeeddial(bookmarkNode);
+  updatedItem.isMoveOutAble =
+      !IsDirectChildOfRoot(_bookmarkModel.get(), parent);
+
+  return YES;
+}
+
+// Returns YES when the current sorting configuration requires a re-sort.
+- (BOOL)shouldResortChildrenForToolbarItem:
+    (VivaldiNTPTopToolbarItem*)toolbarItem {
+  if (!toolbarItem || toolbarItem.children.count <= 1) {
+    return NO;
+  }
+  return self.currentSortingMode != SpeedDialSortingManual;
+}
+
+// Checks whether two child arrays share the same order.
+- (BOOL)children:(NSArray<VivaldiSpeedDialItem*>*)lhs
+ haveSameOrderAs:(NSArray<VivaldiSpeedDialItem*>*)rhs {
+  if (lhs == rhs) {
+    return YES;
+  }
+  if (!lhs || !rhs || lhs.count != rhs.count) {
+    return NO;
+  }
+  for (NSUInteger index = 0; index < lhs.count; ++index) {
+    if (lhs[index] != rhs[index]) {
+      return NO;
+    }
+  }
+  return YES;
+}
+
 - (void)refreshContents {
-  if (self.runningExtensiveChanges)
+  if (_bookmarkModel.get() && _bookmarkModel->IsDoingExtensiveChanges())
     return;
   [self computeSpeedDialFolders];
 }
@@ -585,8 +709,7 @@ using l10n_util::GetNSString;
 /// Returns the intended selected index for toolbar items
 /// depending on user pref and current toolbar items count.
 - (NSInteger)selectedMenuItemIndex {
-
-  if (_runningExtensiveChanges) {
+  if (_bookmarkModel.get() && _bookmarkModel->IsDoingExtensiveChanges()) {
     return [self indexForLastVisitedGroup];
   }
 
@@ -687,18 +810,57 @@ using l10n_util::GetNSString;
 }
 
 - (void)didChangeNode:(const bookmarks::BookmarkNode*)bookmarkNode {
-  // If the node is a group reload the toolbar beceause it can be
+  if (_bookmarkModel.get() && _bookmarkModel->IsDoingExtensiveChanges()) {
+    return;
+  }
+  // If the node is a group reload the toolbar because it can be
   // that a Group is renamed. Otherwise, refresh the node.
   if (bookmarkNode->is_folder() && GetSpeeddial(bookmarkNode)) {
     [self computeTopToolbarItems];
-  } else {
-    [self.consumer refreshNode:bookmarkNode];
+    return;
   }
+
+  const bookmarks::BookmarkNode* parent = bookmarkNode->parent();
+  if (!bookmarkNode->is_url() || !parent || !parent->is_folder()) {
+    return;
+  }
+
+  if (![self updateCachedItemForBookmarkNode:bookmarkNode parent:parent]) {
+    [self reloadChildrenForBookmarkNode:parent];
+    return;
+  }
+
+  VivaldiNTPTopToolbarItem* toolbarItem =
+      [self toolbarItemForBookmarkNode:parent];
+  if (!toolbarItem) {
+    [self reloadChildrenForBookmarkNode:parent];
+    return;
+  }
+
+  [self cacheToolbarItemIfNeeded:toolbarItem];
+
+  if ([self shouldResortChildrenForToolbarItem:toolbarItem]) {
+    NSArray<VivaldiSpeedDialItem*>* currentChildren = toolbarItem.children;
+    NSArray<VivaldiSpeedDialItem*>* resortedChildren =
+        [self sortSpeedDials:currentChildren
+                      byMode:self.currentSortingMode];
+    BOOL orderChanged =
+        ![self children:currentChildren haveSameOrderAs:resortedChildren];
+    toolbarItem.children = resortedChildren;
+    if (orderChanged) {
+      [self.consumer refreshChildItems:toolbarItem.children parent:toolbarItem];
+      return;
+    }
+  }
+
+  [self.consumer refreshNode:bookmarkNode];
 }
 
 - (void)didChangeChildrenForNode:(const bookmarks::BookmarkNode*)bookmarkNode {
-  if (_runningExtensiveChanges)
+  if (_bookmarkModel.get() && _bookmarkModel->IsDoingExtensiveChanges()) {
     return;
+  }
+
   // This method gets called when any item added/removed/or reordered.
   // TODO: @prio: When reordered by user we should skip observing this method.
   if (bookmarkNode->is_folder()) {
@@ -709,6 +871,9 @@ using l10n_util::GetNSString;
 - (void)didMoveNode:(const bookmarks::BookmarkNode*)bookmarkNode
          fromParent:(const bookmarks::BookmarkNode*)oldParent
            toParent:(const bookmarks::BookmarkNode*)newParent {
+  if (_bookmarkModel.get() && _bookmarkModel->IsDoingExtensiveChanges()) {
+    return;
+  }
   // No need to do a full refresh when movement happened within same folder.
   if (oldParent == newParent) {
     return;
@@ -731,8 +896,9 @@ using l10n_util::GetNSString;
 }
 
 - (void)didChangeFaviconForNode:(const bookmarks::BookmarkNode*)bookmarkNode {
-  if (_runningExtensiveChanges)
+  if (_bookmarkModel.get() && _bookmarkModel->IsDoingExtensiveChanges()) {
     return;
+  }
 
   // Only urls have favicons.
   if (!bookmarkNode->is_url())
@@ -750,20 +916,16 @@ using l10n_util::GetNSString;
 }
 
 - (void)bookmarkMetaInfoChanged:(const bookmarks::BookmarkNode*)bookmarkNode {
-  if (_runningExtensiveChanges)
+  if (_bookmarkModel.get() && _bookmarkModel->IsDoingExtensiveChanges()) {
     return;
+  }
 
   if (bookmarkNode->is_folder()) {
     [self refreshContents];
   }
 }
 
-- (void)extensiveBookmarkChangesBeginning {
-  _runningExtensiveChanges = YES;
-}
-
 - (void)extensiveBookmarkChangesEnded {
-  _runningExtensiveChanges = NO;
   [self computeTopToolbarItems];
 }
 

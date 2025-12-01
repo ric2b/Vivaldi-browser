@@ -1,0 +1,63 @@
+name: rust
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+    - name: Setup Ccache
+      uses: hendrikmuhs/ccache-action@63069e3931dedbf3b63792097479563182fe70d1 # v1.2.18
+      with:
+        key: ${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
+    - uses: dtolnay/rust-toolchain@nightly
+    - name: Install Dependencies
+      run: |
+        rustup component add \
+          rust-src \
+          rustfmt \
+          clippy \
+          --toolchain nightly-x86_64-unknown-linux-gnu
+        sudo apt-get update
+        sudo apt-get install \
+          gcc \
+          gobject-introspection \
+          gtk-doc-tools \
+          libcairo2-dev \
+          libfreetype6-dev \
+          libgirepository1.0-dev \
+          libglib2.0-dev \
+          libgraphite2-dev \
+          libicu-dev \
+          pkg-config \
+          bindgen
+    - name: Setup Python
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      with:
+        python-version: '3.12'
+    - name: Install Python Dependencies
+      run: pip3 install -r .ci/requirements.txt --require-hashes
+    - name: Setup Meson
+      run: |
+        ccache --version
+        meson setup build \
+          -Dauto_features=enabled \
+          -Dchafa=disabled \
+          -Dgraphite=enabled \
+          -Doptimization=2 \
+          -Dfontations=enabled \
+          -Dharfrust=enabled
+    - name: Build
+      run: meson compile -Cbuild
+    - name: Test
+      run: RUST_BACKTRACE=1 meson test --print-errorlogs -Cbuild

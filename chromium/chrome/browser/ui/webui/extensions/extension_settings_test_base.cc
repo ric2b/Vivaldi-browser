@@ -28,13 +28,10 @@ ExtensionSettingsTestBase::ExtensionSettingsTestBase()
 ExtensionSettingsTestBase::~ExtensionSettingsTestBase() = default;
 
 void ExtensionSettingsTestBase::InstallGoodExtension() {
-  EXPECT_TRUE(InstallExtension(test_data_dir_.AppendASCII("good.crx")));
+  EXPECT_TRUE(InstallExtension(test_data_dir_.AppendASCII("good_mv3")));
 }
 
 void ExtensionSettingsTestBase::InstallErrorsExtension() {
-  EXPECT_TRUE(
-      InstallExtension(test_data_dir_.AppendASCII("error_console")
-                           .AppendASCII("runtime_and_manifest_errors")));
   EXPECT_TRUE(InstallExtension(test_data_dir_.AppendASCII("error_console")
                                    .AppendASCII("deep_stack_trace")));
 }

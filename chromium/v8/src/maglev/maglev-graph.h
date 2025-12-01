@@ -6,10 +6,12 @@
 #define V8_MAGLEV_MAGLEV_GRAPH_H_
 
 #include "src/compiler/heap-refs.h"
+#include "src/interpreter/bytecode-register.h"
 #include "src/maglev/maglev-basic-block.h"
 #include "src/maglev/maglev-compilation-info.h"
 #include "src/maglev/maglev-graph-labeller.h"
 #include "src/maglev/maglev-ir.h"
+#include "src/zone/zone-containers.h"
 
 namespace v8 {
 namespace internal {
@@ -45,7 +47,10 @@ class Graph final : public ZoneObject {
         uint32_constants_(zone()),
         intptr_constants_(zone()),
         float64_constants_(zone()),
+        heap_number_constants_(zone()),
         parameters_(zone()),
+        eager_deopt_top_frames_(zone()),
+        lazy_deopt_top_frames_(zone()),
         inlineable_calls_(zone()),
         allocations_escape_map_(zone()),
         allocations_elide_map_(zone()),
@@ -53,8 +58,7 @@ class Graph final : public ZoneObject {
         constants_(zone()),
         trusted_constants_(zone()),
         inlined_functions_(zone()),
-        scope_infos_(zone()) {
-  }
+        scope_infos_(zone()) {}
 
   BasicBlock* operator[](int i) { return blocks_[i]; }
   const BasicBlock* operator[](int i) const { return blocks_[i]; }
@@ -140,6 +144,7 @@ class Graph final : public ZoneObject {
   ZoneMap<uint32_t, Uint32Constant*>& uint32() { return uint32_constants_; }
   ZoneMap<intptr_t, IntPtrConstant*>& intptr() { return intptr_constants_; }
   ZoneMap<uint64_t, Float64Constant*>& float64() { return float64_constants_; }
+  ZoneMap<uint64_t, Constant*>& heap_number() { return heap_number_constants_; }
   compiler::ZoneRefMap<compiler::HeapObjectRef, TrustedConstant*>&
   trusted_constants() {
     return trusted_constants_;
@@ -149,6 +154,26 @@ class Graph final : public ZoneObject {
   ZoneVector<InitialValue*>& parameters() { return parameters_; }
 
   MaglevCallSiteCandidates& inlineable_calls() { return inlineable_calls_; }
+
+  const ZoneAbslFlatHashSet<DeoptFrame*>& eager_deopt_top_frames() const {
+    return eager_deopt_top_frames_;
+  }
+  void AddEagerTopFrame(DeoptFrame* frame) {
+    eager_deopt_top_frames_.insert(frame);
+  }
+
+  const ZoneAbslFlatHashMap<DeoptFrame*, std::pair<interpreter::Register, int>>&
+  lazy_deopt_top_frames() const {
+    return lazy_deopt_top_frames_;
+  }
+  void AddLazyTopFrame(DeoptFrame* frame, interpreter::Register result_location,
+                       int result_size) {
+    auto it = lazy_deopt_top_frames_.find(frame);
+    if (it == lazy_deopt_top_frames_.end()) {
+      lazy_deopt_top_frames_.emplace(
+          frame, std::make_pair(result_location, result_size));
+    }
+  }
 
   // Running JS2, 99.99% of the cases, we have less than 2 dependencies.
   using SmallAllocationVector = SmallZoneVector<InlinedAllocation*, 2>;
@@ -240,6 +265,8 @@ class Graph final : public ZoneObject {
     return GetOrAddNewConstantNode(float64_constants_, constant.get_bits());
   }
 
+  Constant* GetHeapNumberConstant(double constant);
+
   RootConstant* GetRootConstant(RootIndex index) {
     return GetOrAddNewConstantNode(root_constants_, index);
   }
@@ -288,7 +315,11 @@ class Graph final : public ZoneObject {
   ZoneMap<intptr_t, IntPtrConstant*> intptr_constants_;
   // Use the bits of the float as the key.
   ZoneMap<uint64_t, Float64Constant*> float64_constants_;
+  ZoneMap<uint64_t, Constant*> heap_number_constants_;
   ZoneVector<InitialValue*> parameters_;
+  ZoneAbslFlatHashSet<DeoptFrame*> eager_deopt_top_frames_;
+  ZoneAbslFlatHashMap<DeoptFrame*, std::pair<interpreter::Register, int>>
+      lazy_deopt_top_frames_;
   MaglevCallSiteCandidates inlineable_calls_;
   ZoneMap<InlinedAllocation*, SmallAllocationVector> allocations_escape_map_;
   ZoneMap<InlinedAllocation*, SmallAllocationVector> allocations_elide_map_;

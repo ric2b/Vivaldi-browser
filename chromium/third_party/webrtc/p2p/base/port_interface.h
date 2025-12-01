@@ -17,8 +17,10 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/strings/string_view.h"
 #include "api/candidate.h"
 #include "api/packet_socket_factory.h"
@@ -55,7 +57,7 @@ class PortInterface {
   virtual ~PortInterface();
 
   virtual IceCandidateType Type() const = 0;
-  virtual const Network* Network() const = 0;
+  virtual const ::webrtc::Network* Network() const = 0;
 
   // Methods to set/get ICE role and tiebreaker values.
   virtual void SetIceRole(IceRole role) = 0;
@@ -110,7 +112,20 @@ class PortInterface {
                    const std::string&,
                    bool>
       SignalUnknownAddress;
+  virtual void SubscribeUnknownAddress(
+      absl::AnyInvocable<void(PortInterface*,
+                              const SocketAddress&,
+                              ProtocolType,
+                              IceMessage*,
+                              const std::string&,
+                              bool)> callback) = 0;
 
+  virtual void NotifyUnknownAddress(PortInterface* port,
+                                    const SocketAddress& address,
+                                    ProtocolType proto,
+                                    IceMessage* msg,
+                                    const std::string& rf,
+                                    bool port_muxed) = 0;
   // Sends a response message (normal or error) to the given request.  One of
   // these methods should be called as a response to SignalUnknownAddress.
   virtual void SendBindingErrorResponse(StunMessage* message,
@@ -124,7 +139,10 @@ class PortInterface {
       std::function<void(PortInterface*)> callback) = 0;
 
   // Signaled when Port discovers ice role conflict with the peer.
+  // TODO: bugs.webrtc.org/42222066 - remove slot.
   sigslot::signal1<PortInterface*> SignalRoleConflict;
+  virtual void SubscribeRoleConflict(absl::AnyInvocable<void()> callback) = 0;
+  virtual void NotifyRoleConflict() = 0;
 
   // Normally, packets arrive through a connection (or they result signaling of
   // unknown address).  Calling this method turns off delivery of packets
@@ -133,9 +151,20 @@ class PortInterface {
   virtual void EnablePortPackets() = 0;
   sigslot::signal4<PortInterface*, const char*, size_t, const SocketAddress&>
       SignalReadPacket;
+  virtual void SubscribeReadPacket(
+      absl::AnyInvocable<
+          void(PortInterface*, const char*, size_t, const SocketAddress&)>
+          callback) = 0;
+  virtual void NotifyReadPacket(PortInterface* port_interface,
+                                const char*,
+                                size_t,
+                                const SocketAddress&) = 0;
 
   // Emitted each time a packet is sent on this port.
   sigslot::signal1<const SentPacketInfo&> SignalSentPacket;
+  virtual void SubscribeSentPacket(
+      absl::AnyInvocable<void(const SentPacketInfo&)> callback) = 0;
+  virtual void NotifySentPacket(const SentPacketInfo& packet) = 0;
 
   virtual std::string ToString() const = 0;
 
@@ -204,6 +233,5 @@ class PortInterface {
 };
 
 }  //  namespace webrtc
-
 
 #endif  // P2P_BASE_PORT_INTERFACE_H_

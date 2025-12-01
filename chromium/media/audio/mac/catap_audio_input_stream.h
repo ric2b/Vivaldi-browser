@@ -7,13 +7,17 @@
 
 #include <CoreAudio/CATapDescription.h>
 
+#include <memory>
 #include <string>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "media/audio/agc_audio_stream.h"
+#include "media/audio/apple/glitch_helper.h"
 #include "media/audio/audio_io.h"
 #include "media/audio/mac/audio_manager_mac.h"
+#include "media/base/audio_glitch_info.h"
 #include "media/base/audio_parameters.h"
 
 @class NSError;
@@ -21,6 +25,7 @@
 namespace media {
 
 class CatapApi;
+class PropertyListenerHelper;
 
 // Implementation of AudioInputStream using the CoreAudio API for macOS 14.2
 // and later. The current implementation supports mono and stereo capture system
@@ -97,8 +102,9 @@ class MEDIA_EXPORT API_AVAILABLE(macos(14.2)) CatapAudioInputStream
   bool IsMuted() override;
   void SetOutputDeviceForAec(const std::string& output_device_id) override;
 
-  void OnCatapSample(const base::span<const AudioBuffer> input_buffers,
+  void OnCatapSample(const AudioBuffer* input_buffer,
                      const AudioTimeStamp* input_time);
+  void OnError();
 
  private:
   // Returns all CoreAudio process audio device IDs that belong to the specified
@@ -107,6 +113,10 @@ class MEDIA_EXPORT API_AVAILABLE(macos(14.2)) CatapAudioInputStream
 
   // Configure the sample rate of the aggregate device according to `params_`.
   bool ConfigureSampleRateOfAggregateDevice();
+
+  // Returns the sample rate of the aggregate device. Returns nullopt if the
+  // sample rate could not be retrieved.
+  std::optional<double> GetSampleRateOfAggregateDevice();
 
   // Configure the frames per buffer of the aggregate device according to
   // `params_`.
@@ -118,8 +128,14 @@ class MEDIA_EXPORT API_AVAILABLE(macos(14.2)) CatapAudioInputStream
   // audio capture permission.
   bool ProbeAudioTapPermissions();
 
+  void ProcessPropertyChange(
+      base::span<const AudioObjectPropertyAddress> property_addresses);
+
   // Send log messages to the stream creator.
   void SendLogMessage(const char* format, ...);
+
+  // Called from the dtor and when the stream is reset.
+  void ReportAndResetStats();
 
   // Interface used to access the CoreAudio framework.
   const std::unique_ptr<CatapApi> catap_api_;
@@ -130,8 +146,16 @@ class MEDIA_EXPORT API_AVAILABLE(macos(14.2)) CatapAudioInputStream
   // The length of time covered by the audio data in a single audio buffer.
   const base::TimeDelta buffer_frames_duration_;
 
+  // Used to detect and report glitches.
+  GlitchHelper glitch_helper_;
+
   // One of AudioDeviceDescription::kLoopback*.
   const std::string device_id_;
+
+  // True if the capturer is configured to capture the default device. In this
+  // case, the stream will be stopped with an error if the default output device
+  // is changed.
+  const bool capture_default_device_;
 
   // Audio bus used to pass audio samples to sink_.
   const std::unique_ptr<AudioBus> audio_bus_;
@@ -164,6 +188,16 @@ class MEDIA_EXPORT API_AVAILABLE(macos(14.2)) CatapAudioInputStream
   // capture has stopped.
   bool recovered_from_missing_host_time_ = false;
 
+  // Total number of callbacks with a channel count mismatch. Incremented from
+  // the capture thread. Used to report statistics of callbacks with channel
+  // count mismatch when the capture has stopped.
+  int total_callbacks_with_channel_count_mismatch_ = 0;
+
+  // Total number of callbacks with a frames mismatch. Incremented from the
+  // capture thread. Used to report statistics of callbacks with frames mismatch
+  // when the capture has stopped.
+  int total_callbacks_with_frames_mismatch_ = 0;
+
   // Callback to send log messages to the client.
   AudioManager::LogCallback log_callback_ GUARDED_BY_CONTEXT(sequence_checker_);
 
@@ -171,6 +205,9 @@ class MEDIA_EXPORT API_AVAILABLE(macos(14.2)) CatapAudioInputStream
   NotifyOnCloseCallback close_callback_ GUARDED_BY_CONTEXT(sequence_checker_);
 
   const std::string default_output_device_id_
+      GUARDED_BY_CONTEXT(sequence_checker_);
+
+  std::unique_ptr<PropertyListenerHelper> property_listener_
       GUARDED_BY_CONTEXT(sequence_checker_);
 
   AudioObjectID aggregate_device_id_ GUARDED_BY_CONTEXT(sequence_checker_) =
@@ -184,6 +221,8 @@ class MEDIA_EXPORT API_AVAILABLE(macos(14.2)) CatapAudioInputStream
   bool is_device_open_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
 
   SEQUENCE_CHECKER(sequence_checker_);
+
+  base::WeakPtrFactory<CatapAudioInputStream> weak_ptr_factory_{this};
 };
 
 API_AVAILABLE(macos(14.2))

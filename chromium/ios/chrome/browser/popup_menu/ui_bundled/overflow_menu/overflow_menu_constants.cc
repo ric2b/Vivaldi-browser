@@ -143,6 +143,8 @@ std::optional<ActionType> ActionTypeForStringName(std::string action) {
     return overflow_menu::ActionType::ReaderMode;
   } else if (action == "AskBWG") {
     return overflow_menu::ActionType::AskBWG;
+  } else if (action == "HideToolbars") {
+    return overflow_menu::ActionType::HideToolbars;
 
 #if defined(VIVALDI_BUILD)
   } else if (action == "Bookmarks") {
@@ -214,6 +216,8 @@ std::string StringNameForActionType(ActionType action) {
       return "ReaderMode";
     case overflow_menu::ActionType::AskBWG:
       return "AskBWG";
+    case overflow_menu::ActionType::HideToolbars:
+      return "HideToolbars";
 
     // Vivaldi
     case overflow_menu::ActionType::vAddPageTo:

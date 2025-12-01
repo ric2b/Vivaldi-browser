@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,10 +12,10 @@ import type {
   '../../../../models/trace/insights/NetworkDependencyTree.js';
 import * as Trace from '../../../../models/trace/trace.js';
 import * as Lit from '../../../../ui/lit/lit.js';
-import {md} from '../../utils/Helpers.js';
 
 import {BaseInsightComponent} from './BaseInsightComponent.js';
 import {eventRef} from './EventRef.js';
+import {md} from './Helpers.js';
 import networkDependencyTreeInsightStyles from './networkDependencyTreeInsight.css.js';
 import type {NodeLinkData} from './NodeLink.js';
 import {renderOthersLabel, type TableData, type TableDataRow} from './Table.js';
@@ -32,6 +32,10 @@ export class NetworkDependencyTree extends BaseInsightComponent<NetworkDependenc
 
   #relatedRequests: Set<Trace.Types.Events.SyntheticNetworkRequest>|null = null;
   #countOfChains = 0;
+
+  protected override hasAskAiSupport(): boolean {
+    return true;
+  }
 
   #createOverlayForChain(requests: Set<Trace.Types.Events.SyntheticNetworkRequest>):
       Trace.Types.Overlays.EntryOutline[] {

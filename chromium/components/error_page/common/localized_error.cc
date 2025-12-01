@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "components/error_page/common/localized_error.h"
 
 #include <stddef.h>
@@ -18,6 +13,7 @@
 
 #include "base/check_op.h"
 #include "base/command_line.h"
+#include "base/containers/span.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
@@ -547,10 +543,15 @@ std::u16string GetStringWithPlaceholder(int resource_id,
   }
 }
 
-const LocalizedErrorMap* FindErrorMapInArray(const LocalizedErrorMap* maps,
-                                                   size_t num_maps,
-                                                   int error_code) {
-  for (size_t i = 0; i < num_maps; ++i) {
+const LocalizedErrorMap* FindErrorMapInArray(
+    base::span<const LocalizedErrorMap> maps,
+    size_t spanification_suspected_redundant_num_maps,
+    int error_code) {
+  // TODO(crbug.com/431824301): Remove unneeded parameter once validated to be
+  // redundant in M143.
+  CHECK(spanification_suspected_redundant_num_maps == maps.size(),
+        base::NotFatalUntil::M143);
+  for (size_t i = 0; i < spanification_suspected_redundant_num_maps; ++i) {
     if (maps[i].error_code == error_code)
       return &maps[i];
   }
@@ -905,7 +906,7 @@ void AddSuggestionsDetails(int error_code,
         l10n_util::GetStringFUTF16(
             IDS_ERRORPAGES_SUGGESTION_PROXY_DISABLE_PLATFORM,
             l10n_util::GetStringUTF16(IDS_SETTINGS_TITLE),
-            l10n_util::GetStringUTF16(IDS_SETTINGS_SHOW_ADVANCED_SETTINGS),
+            l10n_util::GetStringUTF16(IDS_SYSTEM_TITLE),
             l10n_util::GetStringUTF16(IDS_OPTIONS_PROXIES_CONFIGURE_BUTTON));
 #else
         l10n_util::GetStringUTF16(

@@ -24,7 +24,6 @@
 #include "ui/compositor/layer.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/native_theme/common_theme.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/bulleted_label_list/bulleted_label_list_view.h"
@@ -295,11 +294,13 @@ void SadTabView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   title_->SizeToFit(max_width);
 }
 
-SadTab* SadTab::Create(content::WebContents* web_contents, SadTabKind kind) {
+std::unique_ptr<SadTab> SadTab::Create(content::WebContents* web_contents,
+                                       SadTabKind kind) {
   if (vivaldi::IsVivaldiRunning()) {
     return nullptr;
   }
-  return new SadTabView(web_contents, kind);
+
+  return std::make_unique<SadTabView>(web_contents, kind);
 }
 
 BEGIN_METADATA(SadTabView)

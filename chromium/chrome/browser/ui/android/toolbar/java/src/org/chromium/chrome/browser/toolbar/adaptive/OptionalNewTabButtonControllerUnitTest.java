@@ -14,7 +14,6 @@ import static org.mockito.Mockito.verify;
 
 import android.content.Context;
 import android.content.res.Configuration;
-import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 
@@ -29,7 +28,6 @@ import org.mockito.junit.MockitoRule;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
-import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
@@ -44,6 +42,8 @@ import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.url.JUnitTestGURLs;
 
+import java.util.function.Supplier;
+
 /** Unit tests for {@link OptionalNewTabButtonController}. */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
@@ -53,7 +53,6 @@ public final class OptionalNewTabButtonControllerUnitTest {
     @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
     private Context mContext;
 
-    @Mock private Resources mResources;
     @Mock private Tab mTab;
     @Mock private Drawable mDrawable;
     @Mock private ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
@@ -75,7 +74,6 @@ public final class OptionalNewTabButtonControllerUnitTest {
         doReturn(mTab).when(mTabSupplier).get();
 
         mConfiguration.screenWidthDp = AdaptiveToolbarFeatures.DEFAULT_MIN_WIDTH_DP + WIDTH_DELTA;
-        doReturn(mConfiguration).when(mResources).getConfiguration();
 
         doReturn(mTabCreator).when(mTabCreatorManager).getTabCreator(anyBoolean());
 

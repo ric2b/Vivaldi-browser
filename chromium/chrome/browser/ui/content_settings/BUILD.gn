@@ -54,6 +54,7 @@ source_set("impl") {
     "//chrome/browser/media/webrtc",
     "//chrome/browser/permissions",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui:layout_constants",
     "//chrome/browser/ui:ui_features",
     "//chrome/browser/ui:url_identity",
     "//chrome/browser/web_applications",
@@ -115,6 +116,8 @@ source_set("unit_tests") {
       "content_setting_bubble_model_unittest.cc",
       "content_setting_image_model_unittest.cc",
     ]
+
+    deps += [ "//chrome/browser/history" ]
   }
 
   if (is_mac) {

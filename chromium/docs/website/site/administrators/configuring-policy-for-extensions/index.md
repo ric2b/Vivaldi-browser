@@ -151,9 +151,17 @@ key.
 The policies for the extension can be configured via MCX preferences for the
 `com.google.Chrome.extensions.gihmafigllmhbppdfjnfecimiohcljba` bundle, or for the
 `org.chromium.Chromium.extensions.gihmafigllmhbppdfjnfecimiohcljba` bundle if
-using Chromium. This can be done by creating a plist file with the configuration
-and importing it using dscl:
+using Chromium.
 
+There's two methods for configuring the policy. One is using .plist files and
+the other is using .mobileconfig files.
+
+### .plist files
+
+This can be done by creating a plist file with the configuration
+and importing it using `dscl`:
+
+Example .plist file
 ```
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -227,7 +235,103 @@ $ dscl -u admin_username /Local/Default -create /Computers/local_computer ENetAd
 The preferences system can be told to propagate these changes immediately:
 
 ```
-$ sudo mcxrefresh -n username</td>
+$ sudo mcxrefresh -n username
 ```
+
+You will then need to click "Reload policies" at **chrome://policy**.
+
+### .mobileconfig files
+
+A [.mobileconfig file](https://support.apple.com/guide/profile-manager/distribute-profiles-manually-pmdbd71ebc9/mac)
+is also an XML file like a .plist file, but it has a different format.
+A virtually equivalent .mobileconfig for the .plist file above would be:
+
+Example .mobileconfig file
+```
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadContent</key>
+      <dict>
+        <key>com.google.Chrome.extensions.gihmafigllmhbppdfjnfecimiohcljba</key>
+        <dict>
+          <key>Forced</key>
+          <array>
+            <dict>
+              <key>mcx_preference_settings</key>
+              <dict>
+                <key>Bookmarks Bar</key>
+                <array>
+                  <dict>
+                    <key>title</key>
+                    <string>Chromium</string>
+                    <key>url</key>
+                    <string>chromium.org</string>
+                  </dict>
+                  <dict>
+                    <key>title</key>
+                    <string>Videos</string>
+                    <key>children</key>
+                    <array>
+                      <dict>
+                        <key>title</key>
+                        <string>YouTube</string>
+                        <key>url</key>
+                        <string>youtube.com</string>
+                      </dict>
+                    </array>
+                  </dict>
+                </array>
+              </dict>
+            </dict>
+          </array>
+        </dict>
+      </dict>
+    <key>PayloadEnabled</key>
+    <true/>
+    <key>PayloadIdentifier</key>
+    <string>0a3dd694-2aa3-4cbc-a8da-38859c620b75</string>
+    <key>PayloadType</key>
+    <string>com.apple.ManagedClient.preferences</string>
+    <key>PayloadUUID</key>
+    <string>0a3dd694-2aa3-4cbc-a8da-38859c620b75</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+  </dict>
+  </array>
+  <key>PayloadDescription</key>
+  <string>Example policy for server.</string>
+  <key>PayloadDisplayName</key>
+  <string>Managed Storage Example</string>
+  <key>PayloadIdentifier</key>
+  <string>com.example.managedstorage</string>
+  <key>PayloadOrganization</key>
+  <string></string>
+  <key>PayloadRemovalDisallowed</key>
+  <true/>
+  <key>PayloadScope</key>
+  <string>System</string>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadUUID</key>
+  <string>71feadbc-6c9a-49e9-aa6f-d3625ce8639a</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+</dict>
+</plist>
+```
+
+Note: The `PayloadUUID` and `PayloadIdentifier` values in the example above
+should be replaced with unique values for your configuration. You can use an
+online UUID generator to create a new `PayloadUUID`.
+
+To manually test this:
+
+* Double click the file to import the policy.
+* Open the "Device Management" tab in "System Settings" to approve it.
 
 You will then need to click "Reload policies" at **chrome://policy**.

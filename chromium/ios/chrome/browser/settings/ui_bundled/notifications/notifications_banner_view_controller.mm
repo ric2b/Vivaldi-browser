@@ -20,6 +20,7 @@
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_multi_detail_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/content_configuration/table_view_cell_content_configuration.h"
 #import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_styler.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -195,8 +196,8 @@ bool TooNarrowForBanner(UIView* view) {
       UITableViewCell* cell = [_tableView cellForRowAtIndexPath:indexPath];
       // `cell` may be nil if the row is not currently on screen.
       if (cell) {
-        TableViewCell* tableViewCell =
-            base::apple::ObjCCastStrict<TableViewCell>(cell);
+        LegacyTableViewCell* tableViewCell =
+            base::apple::ObjCCastStrict<LegacyTableViewCell>(cell);
         [self configureCell:tableViewCell item:item identifier:itemIdentifier];
       }
     }
@@ -236,7 +237,7 @@ bool TooNarrowForBanner(UIView* view) {
            }];
 
   RegisterTableViewCell<TableViewSwitchCell>(_tableView);
-  RegisterTableViewCell<TableViewMultiDetailTextCell>(_tableView);
+  [TableViewCellContentConfiguration legacyRegisterCellForTableView:_tableView];
 
   [_dataSource applySnapshot:self.snapshot animatingDifferences:NO];
 }
@@ -389,14 +390,13 @@ bool TooNarrowForBanner(UIView* view) {
 // `item`.
 - (UITableViewCell*)detailCellForTableView:(UITableView*)tableView
                                       item:(TableViewItem*)item {
-  TableViewMultiDetailTextCell* cell =
-      DequeueTableViewCell<TableViewMultiDetailTextCell>(tableView);
+  LegacyTableViewCell* cell =
+      [TableViewCellContentConfiguration legacyDequeueTableViewCell:_tableView];
   TableViewMultiDetailTextItem* detailItem =
       base::apple::ObjCCastStrict<TableViewMultiDetailTextItem>(item);
   [detailItem configureCell:cell withStyler:[self tableViewStyler]];
   cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
   cell.accessibilityTraits |= UIAccessibilityTraitButton;
-  cell.accessibilityIdentifier = detailItem.accessibilityIdentifier;
   return cell;
 }
 
@@ -458,7 +458,7 @@ bool TooNarrowForBanner(UIView* view) {
 
 // Configures the `cell` for the `item` with the given `identifier`. A styler
 // is chosed depending on whether the item should be highlighted or not.
-- (void)configureCell:(TableViewCell*)cell
+- (void)configureCell:(LegacyTableViewCell*)cell
                  item:(TableViewItem*)item
            identifier:(NotificationsItemIdentifier)identifier {
   ChromeTableViewStyler* styler = identifier == self.highlightedItem

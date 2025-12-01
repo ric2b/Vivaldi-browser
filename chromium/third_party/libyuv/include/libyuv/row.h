@@ -288,13 +288,10 @@ extern "C" {
     (defined(__x86_64__) || defined(__i386__)) &&         \
     (defined(CLANG_HAS_AVX2) || defined(GCC_HAS_AVX2)) && \
     !defined(LIBYUV_ENABLE_ROWWIN)
-#define HAS_RAWTOYJROW_AVX2
-#define HAS_RGB24TOYJROW_AVX2
-
-#define HAS_ARGBTOYJROW_AVX2
-#define HAS_ARGBTOYROW_AVX2
 #define HAS_AB64TOARGBROW_AVX2
 #define HAS_ABGRTOAR30ROW_AVX2
+#define HAS_ABGRTOUVJROW_AVX2
+#define HAS_ABGRTOUVROW_AVX2
 #define HAS_ABGRTOYJROW_AVX2
 #define HAS_ABGRTOYROW_AVX2
 #define HAS_AR64TOARGBROW_AVX2
@@ -306,6 +303,10 @@ extern "C" {
 #define HAS_ARGBTORGB24ROW_AVX2
 #define HAS_ARGBTOUV444ROW_AVX2
 #define HAS_ARGBTOUVJ444ROW_AVX2
+#define HAS_ARGBTOUVJROW_AVX2
+#define HAS_ARGBTOUVROW_AVX2
+#define HAS_ARGBTOYJROW_AVX2
+#define HAS_ARGBTOYROW_AVX2
 #define HAS_ARGBUNATTENUATEROW_AVX2
 #define HAS_CONVERT16TO8ROW_AVX2
 #define HAS_CONVERT8TO16ROW_AVX2
@@ -339,6 +340,8 @@ extern "C" {
 #define HAS_P210TOARGBROW_AVX2
 #define HAS_P410TOAR30ROW_AVX2
 #define HAS_P410TOARGBROW_AVX2
+#define HAS_RAWTOYJROW_AVX2
+#define HAS_RGB24TOYJROW_AVX2
 #define HAS_RGBATOYJROW_AVX2
 #define HAS_SPLITARGBROW_AVX2
 #define HAS_SPLITRGBROW_AVX2
@@ -346,11 +349,6 @@ extern "C" {
 #define HAS_SPLITXRGBROW_AVX2
 #define HAS_SWAPUVROW_AVX2
 #define HAS_YUY2TONVUVROW_AVX2
-// TODO: Port SSSE3 to AVX2
-// #define HAS_ABGRTOUVJROW_AVX2
-// #define HAS_ABGRTOUVROW_AVX2
-// #define HAS_ARGBTOUVJROW_AVX2
-// #define HAS_ARGBTOUVROW_AVX2
 
 #if defined(__x86_64__) || !defined(__pic__)
 // TODO(fbarchard): fix build error on android_full_debug=1
@@ -907,11 +905,6 @@ extern "C" {
 #define HAS_BGRATOYROW_LASX
 #define HAS_RGB24TOYJROW_LASX
 #define HAS_RAWTOYJROW_LASX
-#endif
-
-#if defined(__riscv_v_intrinsic) && __riscv_v_intrinsic >= 12000 && \
-    !defined(LIBYUV_DISABLE_RVV)
-#define LIBYUV_DISABLE_RVV 1
 #endif
 
 #if !defined(LIBYUV_DISABLE_RVV) && defined(__riscv_vector)

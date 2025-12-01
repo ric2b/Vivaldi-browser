@@ -131,7 +131,7 @@ void HistoryQuickProvider::DoAutocomplete() {
     }
 
     TemplateURL* template_url = // Vivaldi
-        match.GetTemplateURL(template_url_service, true);  // Vivaldi
+        match.GetTemplateURL(template_url_service);  // Vivaldi
     if (!template_url || template_url->search_url_post_params().empty()) // Vivaldi
     matches_.push_back(std::move(match));
     // Mark this max_match_score as being used.

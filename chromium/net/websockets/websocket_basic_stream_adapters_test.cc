@@ -115,7 +115,6 @@ class X509Certificate;
 
 using testing::_;
 using testing::AnyNumber;
-using testing::Invoke;
 using testing::Return;
 using testing::StrictMock;
 using testing::Test;
@@ -1283,11 +1282,12 @@ class WebSocketQuicStreamAdapterTest
         /*server_info=*/nullptr,
         QuicSessionAliasKey(
             url::SchemeHostPort(),
-            QuicSessionKey("mail.example.org", 80, PRIVACY_MODE_DISABLED,
-                           ProxyChain::Direct(), SessionUsage::kDestination,
-                           SocketTag(), NetworkAnonymizationKey(),
-                           SecureDnsPolicy::kAllow,
-                           /*require_dns_https_alpn=*/false)),
+            QuicSessionKey(
+                "mail.example.org", 80, PRIVACY_MODE_DISABLED,
+                ProxyChain::Direct(), SessionUsage::kDestination, SocketTag(),
+                NetworkAnonymizationKey(), SecureDnsPolicy::kAllow,
+                /*require_dns_https_alpn=*/false,
+                /*disable_cert_verification_network_fetches=*/false)),
         /*require_confirmation=*/false,
         /*migrate_session_early_v2=*/false,
         /*migrate_session_on_network_change_v2=*/false,
@@ -1536,9 +1536,9 @@ TEST_P(WebSocketQuicStreamAdapterTest, OnHeadersReceivedThenDisconnect) {
                                             quic::QUIC_STREAM_CANCELLED, 1, 0));
   base::RunLoop run_loop;
   auto quit_closure = run_loop.QuitClosure();
-  EXPECT_CALL(mock_delegate_, OnHeadersReceived(_)).WillOnce(Invoke([&]() {
+  EXPECT_CALL(mock_delegate_, OnHeadersReceived(_)).WillOnce([&]() {
     std::move(quit_closure).Run();
-  }));
+  });
 
   Initialize();
 
@@ -1596,9 +1596,9 @@ TEST_P(WebSocketQuicStreamAdapterTest, Read) {
                                             quic::QUIC_STREAM_CANCELLED, 3, 0));
 
   base::RunLoop run_loop;
-  EXPECT_CALL(mock_delegate_, OnHeadersReceived(_)).WillOnce(Invoke([&]() {
+  EXPECT_CALL(mock_delegate_, OnHeadersReceived(_)).WillOnce([&]() {
     run_loop.Quit();
-  }));
+  });
 
   Initialize();
 
@@ -1680,9 +1680,9 @@ TEST_P(WebSocketQuicStreamAdapterTest, ReadIntoSmallBuffer) {
                                             quic::QUIC_STREAM_CANCELLED, 4, 0));
 
   base::RunLoop run_loop;
-  EXPECT_CALL(mock_delegate_, OnHeadersReceived(_)).WillOnce(Invoke([&]() {
+  EXPECT_CALL(mock_delegate_, OnHeadersReceived(_)).WillOnce([&]() {
     run_loop.Quit();
-  }));
+  });
 
   Initialize();
 

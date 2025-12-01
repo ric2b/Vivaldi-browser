@@ -2,16 +2,6 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="nl">
 <translation id="3830627370375585318">Sta Vivaldi toe via je firewall- of antivirusinstellingen het netwerk te gebruiken.</translation>
-<translation id="4200102020577305737">Ga naar
-          Vivaldi-menu &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          LAN Instellingen
-          en schakel 'Proxyserver gebruiken' uit.</translation>
 <translation id="4932161901409251843">Ga naar
           Vivaldi-menu &gt;
           <ph name="SETTINGS_TITLE" />
@@ -32,4 +22,14 @@
           Als het probleem aanhoudt, adviseren we deze optie weer aan te vinken
           voor betere prestaties.</translation>
 <translation id="7496505986576158197">Vivaldi is mogelijk gemaakt door het <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source project en andere <ph name="BEGIN_LINK_OSS" />open source software<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Ga naar
+          het Vivaldi menu &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Netwerk &amp; internet &gt; Proxy
+          en schakel "Instellingen automatisch detecteren" uit.</translation>
 </translationbundle>

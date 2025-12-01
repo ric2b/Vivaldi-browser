@@ -31,7 +31,7 @@ class SidePanelCoordinator : public SidePanelUI,
 
   void OpenInNewTab() override;
 
-  void UpdatePinState() override;
+  //void UpdatePinState() override;
 
   std::optional<SidePanelEntryId> GetCurrentEntryId() const override;
 

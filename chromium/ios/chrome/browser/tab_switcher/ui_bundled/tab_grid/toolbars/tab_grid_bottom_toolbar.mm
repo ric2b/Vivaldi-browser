@@ -29,35 +29,35 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.h"
 #import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 namespace {
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+
 // Minimal width for text buttons.
 const CGFloat kButtonMinWidth = 44;
-#endif
+
 // Height for text buttons.
 const CGFloat kButtonHeight = 44;
 // Button font size.
 const CGFloat kButtonFontSize = 17;
 // Horizontal padding for buttons in compact mode.
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+
 const CGFloat kCompactButtonHorizontalPadding = 16;
-#endif
+
 const CGFloat kCompactButtonHorizontalPaddingPreiOS26 = 12;
 // Minimum spacing between buttons.
 const CGFloat kCompactMinButtonSpacing = 8;
 
 // Returns the padding depending on the OS version.
 CGFloat CompactButtonHorizontalPadding() {
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     return kCompactButtonHorizontalPadding;
   }
-#endif
+
   return kCompactButtonHorizontalPaddingPreiOS26;
 }
 
@@ -253,7 +253,7 @@ CGFloat CompactButtonHorizontalPadding() {
                              image:(UIImage*)image
                     targetSelector:(SEL)targetSelector {
   UIButton* button;
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+
   if (@available(iOS 26, *)) {
     UIButtonConfiguration* buttonConfiguration;
     if ([UIButtonConfiguration
@@ -263,30 +263,36 @@ CGFloat CompactButtonHorizontalPadding() {
     } else {
       buttonConfiguration = [UIButtonConfiguration glassButtonConfiguration];
     }
+
+    if (IsVivaldiRunning()) {
+      buttonConfiguration =
+          [UIButtonConfiguration glassButtonConfiguration];
+    } // End Vivaldi
+
     buttonConfiguration.title = title;
     buttonConfiguration.image = image;
     button = [UIButton buttonWithConfiguration:buttonConfiguration
                                  primaryAction:nil];
     button.tintColor = TabGridGlassButtonTintColor();
   } else {
-#endif
     button = [UIButton systemButtonWithPrimaryAction:nil];
     button.tintColor = UIColor.whiteColor;
     [button setTitle:title forState:UIControlStateNormal];
     [button setImage:image forState:UIControlStateNormal];
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   }
-#endif
+
+  if (IsVivaldiRunning()) {
+    button.tintColor = [UIColor colorNamed:vBackgroundColor];
+  } // End Vivaldi
 
   button.titleLabel.font = [UIFont systemFontOfSize:kButtonFontSize];
   button.translatesAutoresizingMaskIntoConstraints = NO;
   [button.heightAnchor constraintEqualToConstant:kButtonHeight].active = YES;
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+
   if (@available(iOS 26, *)) {
     [button.widthAnchor constraintGreaterThanOrEqualToConstant:kButtonMinWidth]
         .active = YES;
   }
-#endif
 
   if (targetSelector) {
     [button addTarget:self
@@ -632,11 +638,11 @@ CGFloat CompactButtonHorizontalPadding() {
 // middle/scrolled to the top states.
 - (void)createScrolledBackgrounds {
   _scrolledToEdge = YES;
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+
   if (@available(iOS 26, *)) {
     return;
   }
-#endif
+
   if (IsIOSSoftLockEnabled()) {
     _scrollBackgroundView = [[TabGridToolbarScrollingBackground alloc] init];
     _scrollBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;

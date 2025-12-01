@@ -287,6 +287,22 @@ void Tokenizer::AdvanceToEndOfToken(const Location& location,
         if (IsCurrentStringTerminator(initial)) {
           Advance();  // Skip past last "
           break;
+        } else if (IsCurrentNewline()) {
+          // We don't support newlines in string literals. This is a deliberate
+          // choice to avoid a class of bugs and confusing error messages that
+          // can arise from accidentally unclosed string literals. For example,
+          // a missing quote could cause the lexer to consume subsequent lines
+          // as part of the string, leading to a perplexing error message far
+          // from the actual mistake.
+          //
+          // While supporting multi-line strings could be convenient (e.g., for
+          // asserts), its utility is limited without features like leading
+          // whitespace trimming. The consensus is that the potential for
+          // hard-to-debug errors outweighs the benefits of this feature in its
+          // current simple form. For more context, see the discussion in
+          // https://gn-review.git.corp.google.com/c/gn/+/19361/comments/f029b489_c14ec6de.
+          *err_ = Err(LocationRange(location, GetCurrentLocation()),
+                      "Newline in string constant.");
         }
         Advance();
       }

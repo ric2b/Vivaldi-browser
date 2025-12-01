@@ -31,6 +31,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Responsible for observing local tab model system and notifying sync about tab group changes, tab
  * changes, navigations etc. Also responsible for running the startup routine which 1. Observes the
@@ -240,6 +243,33 @@ public final class TabGroupSyncLocalObserver {
             @Override
             public void didMoveWithinGroup(
                     Tab movedTab, int tabModelOldIndex, int tabModelNewIndex) {
+                // Note(david@vivaldi.com): Temp fix for VAB-11799 with some logging in order to
+                // figure out the real issue.
+                if (BuildConfig.IS_VIVALDI) {
+                    Token groupId = movedTab.getTabGroupId();
+                    LocalTabGroupId localId = TabGroupSyncUtils.getLocalTabGroupId(
+                            mTabGroupModelFilter, movedTab.getTabGroupId());
+                    List<Tab> relatedTabs =
+                            mTabGroupModelFilter.getRelatedTabList(movedTab.getId());
+                    boolean hasGroup = (relatedTabs != null && relatedTabs.size() > 1);
+
+                    Log.w("TabGroupSync",
+                            "didMoveWithinGroup - Tab ID: " + movedTab.getId() + ", Group ID: "
+                                    + (groupId != null ? groupId.toString() : "null")
+                                    + ", LocalTabGroupId: " + localId + ", Related tabs count: "
+                                    + (relatedTabs != null ? relatedTabs.size() : 0)
+                                    + ", Has group: " + hasGroup);
+
+                    if (localId == null) {
+                        Log.w("TabGroupSync", "ERROR: LocalTabGroupId is null for tab in group!");
+                        Log.w("TabGroupSync",
+                                "Tab group state - Group ID present: " + (groupId != null)
+                                        + ", Is in group: "
+                                        + (relatedTabs != null && relatedTabs.size() > 1));
+                        return;
+                    }
+                }
+
                 if (!mIsObserving) return;
 
                 LogUtils.log(

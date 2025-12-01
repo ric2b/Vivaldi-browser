@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -704,7 +704,7 @@ async function getFunctionNameFromScopeStart(
   }
 
   const mappingEntry = sourceMap.findEntry(lineNumber, columnNumber);
-  if (!mappingEntry || !mappingEntry.sourceURL) {
+  if (!mappingEntry?.sourceURL) {
     return null;
   }
 

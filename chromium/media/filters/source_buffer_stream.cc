@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "media/filters/source_buffer_stream.h"
 
 #include <algorithm>
@@ -15,6 +10,7 @@
 #include <sstream>
 #include <string>
 
+#include "base/compiler_specific.h"
 #include "base/functional/bind.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/demuxer_memory_limit.h"
@@ -155,7 +151,7 @@ SourceBufferStream::SourceBufferStream(const AudioDecoderConfig& audio_config,
       highest_output_buffer_timestamp_(kNoTimestamp),
       max_interbuffer_distance_(
           base::Milliseconds(kMinimumInterbufferDistanceInMs)),
-      memory_limit_(GetDemuxerStreamAudioMemoryLimit(&audio_config)) {
+      memory_limit_(GetDemuxerStreamAudioMemoryLimit(&audio_config).InBytes()) {
   DCHECK(audio_config.IsValidConfig());
   audio_configs_.push_back(audio_config);
   DVLOG(2) << __func__ << ": audio_buffer_size= " << memory_limit_;
@@ -171,7 +167,8 @@ SourceBufferStream::SourceBufferStream(const VideoDecoderConfig& video_config,
       max_interbuffer_distance_(
           base::Milliseconds(kMinimumInterbufferDistanceInMs)),
       memory_limit_(GetDemuxerStreamVideoMemoryLimit(DemuxerType::kChunkDemuxer,
-                                                     &video_config)) {
+                                                     &video_config)
+                        .InBytes()) {
   DCHECK(video_config.IsValidConfig());
   video_configs_.push_back(video_config);
   DVLOG(2) << __func__ << ": video_buffer_size= " << memory_limit_;
@@ -342,7 +339,7 @@ void SourceBufferStream::Append(const BufferQueue& buffers) {
       } else if (itr != buffers.begin()) {
         // Copy the first key frame and everything after it into
         // |trimmed_buffers|.
-        trimmed_buffers.assign(itr, buffers.end());
+        UNSAFE_TODO(trimmed_buffers.assign(itr, buffers.end()));
         buffers_for_new_range = &trimmed_buffers;
       }
 
@@ -1818,7 +1815,8 @@ bool SourceBufferStream::UpdateAudioConfig(const AudioDecoderConfig& config,
         << ": Skipping updating memory limit as memory limit was overridden.";
   } else {
     // Dynamically increase |memory_limit_| on audio config changes.
-    size_t new_memory_limit = GetDemuxerStreamAudioMemoryLimit(&config);
+    size_t new_memory_limit =
+        GetDemuxerStreamAudioMemoryLimit(&config).InBytes();
     if (new_memory_limit > memory_limit_) {
       DVLOG(2) << __func__ << ": Increase memory limit from " << memory_limit_
                << " to " << new_memory_limit << ".";
@@ -1868,7 +1866,8 @@ bool SourceBufferStream::UpdateVideoConfig(const VideoDecoderConfig& config,
   } else {
     // Dynamically increase |memory_limit_| on video config changes.
     size_t new_memory_limit =
-        GetDemuxerStreamVideoMemoryLimit(DemuxerType::kChunkDemuxer, &config);
+        GetDemuxerStreamVideoMemoryLimit(DemuxerType::kChunkDemuxer, &config)
+            .InBytes();
     if (new_memory_limit > memory_limit_) {
       DVLOG(2) << __func__ << ": Increase memory limit from " << memory_limit_
                << " to " << new_memory_limit << ".";

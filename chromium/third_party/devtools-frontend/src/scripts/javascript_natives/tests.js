@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -125,9 +125,9 @@ namespace console {
         .parse(`
 // https://html.spec.whatwg.org/C/#the-slot-element
 [
-    Exposed=Window,
-    HTMLConstructor
+    Exposed=Window
 ] interface HTMLSlotElement : HTMLElement {
+    [HTMLConstructor] constructor();
     [CEReactions, Reflect] attribute DOMString name;
     [ImplementedAs=AssignedNodesForBinding] sequence<Node> assignedNodes(optional AssignedNodesOptions options = {});
     [ImplementedAs=AssignedElementsForBinding] sequence<Element> assignedElements(optional AssignedNodesOptions options = {});

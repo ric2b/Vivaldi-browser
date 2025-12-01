@@ -22,7 +22,6 @@
 #include "chrome/browser/net/nss_service.h"
 #include "chrome/browser/net/nss_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/channel_info.h"
 #include "components/ownership/owner_key_util.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/user_manager/user_manager.h"
@@ -34,16 +33,12 @@
 namespace ash {
 
 // Enable storing a newly created owner key in the private slot.
-BASE_FEATURE(kStoreOwnerKeyInPrivateSlot,
-             "StoreOwnerKeyInPrivateSlot",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kStoreOwnerKeyInPrivateSlot, base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enable migration of the owner key from the public to the private slot. This
 // experiment represents the second stage of `kStoreOwnerKeyInPrivateSlot` and
 // is only respected if kStoreOwnerKeyInPrivateSlot is enabled.
-BASE_FEATURE(kMigrateOwnerKeyToPrivateSlot,
-             "MigrateOwnerKeyToPrivateSlot",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kMigrateOwnerKeyToPrivateSlot, base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsStoreOwnerKeyInPrivateSlotEnabled() {
   return base::FeatureList::IsEnabled(kStoreOwnerKeyInPrivateSlot);

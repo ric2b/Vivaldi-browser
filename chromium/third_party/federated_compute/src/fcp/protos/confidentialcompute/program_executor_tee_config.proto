@@ -1,0 +1,45 @@
+// Copyright 2025 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.confidentialcompute;
+
+import "proto/attestation/reference_value.proto";
+
+// Initialization config for a program executor TEE container.
+// Next ID: 9
+message ProgramExecutorTeeInitializeConfig {
+  // A path to the client data directory.
+  string client_data_dir = 1;
+  // A list of client IDs in the data directory. The concatenation of the
+  // `client_data_dir` and a `client_id` is the full path to a client file. This
+  // needs to be sent because the TEE cannot list the files in the path.
+  repeated string client_ids = 2;
+  // The federated program to execute.
+  bytes program = 3;
+  // Deprecated. Use outgoing_server_address instead.
+  int32 outgoing_server_port = 4 [deprecated = true];
+  // Worker bns addresses representing workers that are available to use for
+  // distributed execution of the program. If empty, the program will execute
+  // entirely within the program executor TEE.
+  repeated string worker_bns_addresses = 5;
+  // The ID of the attester for establishing a secure channel with workers.
+  string attester_id = 6;
+  // The reference values for the program executor TEE to set the noise session
+  // config.
+  oak.attestation.v1.ReferenceValues reference_values = 8;
+  // The address of the untrusted server to handle requests from the TEE.
+  string outgoing_server_address = 7;
+}

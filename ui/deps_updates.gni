@@ -12,6 +12,7 @@ update_target("//chrome/browser:browser") {
 update_target("//chrome/browser/ui:ui") {
   public_deps += [
     "//vivaldi/components:tabs",
+    "//vivaldi/prefs:prefs_files_generated",
     "//vivaldi/ui",
     "//vivaldi/vivaldi_account:vivaldi_account_manager_factory"
   ]

@@ -153,18 +153,18 @@ def _tf_repositories():
     # LINT.IfChange(xnnpack)
     tf_http_archive(
         name = "XNNPACK",
-        sha256 = "3560d433b09cc2ca7242078d6b94f1ce47a1eb9b42e0b42a7ebdd9183926c6da",
-        strip_prefix = "XNNPACK-dc684a5034949433f77cdb7043673cacfb422b0a",
-        urls = tf_mirror_urls("https://github.com/google/XNNPACK/archive/dc684a5034949433f77cdb7043673cacfb422b0a.zip"),
+        sha256 = "d6871c9e499924d0efe6c759b976615f8704804d4fda782626db130abe0bc599",
+        strip_prefix = "XNNPACK-dd9be413f1a49957f0c7617caf315b64566c3ed2",
+        urls = tf_mirror_urls("https://github.com/google/XNNPACK/archive/dd9be413f1a49957f0c7617caf315b64566c3ed2.zip"),
     )
     # LINT.ThenChange(//tensorflow/lite/tools/cmake/modules/xnnpack.cmake)
 
     # XNNPack dependency.
     tf_http_archive(
         name = "KleidiAI",
-        sha256 = "b1ba8f690704a37f2ff924f98edfb3d3486a5d07142d0723dd22ff0c0391e2df",
-        strip_prefix = "kleidiai-f362d32fa5f8c8f36da487e13f5b59c911ce6b22",
-        urls = tf_mirror_urls("https://github.com/ARM-software/kleidiai/archive/f362d32fa5f8c8f36da487e13f5b59c911ce6b22.zip"),
+        sha256 = "919683ceeedd6dd9db26c341eef448f9096616dfc4e9270e0209e481921e78e4",
+        strip_prefix = "kleidiai-45bf06030727ce049793ce6749e943cc2ea896fe",
+        urls = tf_mirror_urls("https://github.com/ARM-software/kleidiai/archive/45bf06030727ce049793ce6749e943cc2ea896fe.zip"),
     )
 
     tf_http_archive(
@@ -238,33 +238,26 @@ def _tf_repositories():
         name = "mkl_dnn_acl_compatible",
         build_file = "@local_xla//third_party/mkl_dnn:mkldnn_acl.BUILD",
         patch_file = [
-            "@local_xla//third_party/mkl_dnn:onednn_acl_threadcap.patch",
-            "@local_xla//third_party/mkl_dnn:onednn_acl_reorder.patch",
-            "@local_xla//third_party/mkl_dnn:onednn_acl_thread_local_scheduler.patch",
-            "@local_xla//third_party/mkl_dnn:onednn_acl_fp32_bf16_reorder.patch",
-            "@local_xla//third_party/mkl_dnn:onednn_acl_bf16_capability_detection_for_ubuntu20.04.patch",
-            "@local_xla//third_party/mkl_dnn:onednn_acl_indirect_conv.patch",
-            "@local_xla//third_party/mkl_dnn:onednn_acl_allow_blocked_weight_format_for_matmul_primitive.patch",
-            "@local_xla//third_party/mkl_dnn:onednn_acl_fix_segfault_during_postop_execute.patch",
-            "@local_xla//third_party/mkl_dnn:onednn_acl_add_bf16_platform_support_check.patch",
-            "@local_xla//third_party/mkl_dnn:onednn_acl_add_sbgemm_matmul_primitive_definition.patch",
+            "@local_xla//third_party/mkl_dnn:onednn_acl_lock_fixed_format_matmul.patch",
+            "@local_xla//third_party/mkl_dnn:onednn_acl_threadpool_default_max.patch",
         ],
-        sha256 = "2f76b407ef8893cca71340f88cd800019a1f14f8ac1bbdbb89a84be1370b52e3",
-        strip_prefix = "oneDNN-3.2.1",
-        urls = tf_mirror_urls("https://github.com/oneapi-src/oneDNN/archive/refs/tags/v3.2.1.tar.gz"),
+        sha256 = "5792cbc07764c6e25c459ff68efb5cfcd7f4a0ba66dca6a4a2c681cd7a644596",
+        strip_prefix = "oneDNN-3.7",
+        urls = tf_mirror_urls("https://github.com/oneapi-src/oneDNN/archive/refs/tags/v3.7.zip"),
     )
 
     tf_http_archive(
         name = "compute_library",
         patch_file = [
+            "@local_xla//third_party/compute_library:acl_gemm_scheduling_heuristic.patch",
+            "@local_xla//third_party/compute_library:acl_stateless_gemm_workspace.patch",
             "@local_xla//third_party/compute_library:compute_library.patch",
-            "@local_xla//third_party/compute_library:acl_thread_local_scheduler.patch",
             "@local_xla//third_party/compute_library:exclude_omp_scheduler.patch",
             "@local_xla//third_party/compute_library:include_string.patch",
         ],
-        sha256 = "c4ca329a78da380163b2d86e91ba728349b6f0ee97d66e260a694ef37f0b0d93",
-        strip_prefix = "ComputeLibrary-23.05.1",
-        urls = tf_mirror_urls("https://github.com/ARM-software/ComputeLibrary/archive/v23.05.1.tar.gz"),
+        sha256 = "8273f68cd0bb17e9231a11a6618d245eb6d623884ae681c00e7a4eabca2dad42",
+        strip_prefix = "ComputeLibrary-24.12",
+        urls = tf_mirror_urls("https://github.com/ARM-software/ComputeLibrary/archive/refs/tags/v24.12.tar.gz"),
     )
 
     tf_http_archive(
@@ -398,7 +391,7 @@ def _tf_repositories():
 
     tf_http_archive(
         name = "com_google_protobuf",
-        patch_file = ["@local_xla//third_party/protobuf:protobuf-6.31.1.patch"],
+        patch_file = ["@local_xla//third_party/protobuf:protobuf.patch"],
         sha256 = "6e09bbc950ba60c3a7b30280210cd285af8d7d8ed5e0a6ed101c72aff22e8d88",
         strip_prefix = "protobuf-6.31.1",
         urls = tf_mirror_urls("https://github.com/protocolbuffers/protobuf/archive/refs/tags/v6.31.1.zip"),
@@ -539,9 +532,9 @@ def _tf_repositories():
         name = "nccl_archive",
         build_file = "@local_xla//third_party:nccl/archive.BUILD",
         patch_file = ["@local_xla//third_party/nccl:archive.patch"],
-        sha256 = "0c5199ea56c70beb72a00eaf0d29887ac90243b47ebba048fba33ad86fcc2322",
-        strip_prefix = "nccl-2.26.5-1",
-        urls = tf_mirror_urls("https://github.com/nvidia/nccl/archive/v2.26.5-1.tar.gz"),
+        sha256 = "98e6262bd55932c51e7c8ffc50cc764f019e4b94a8fd6694d839ae828ec8d128",
+        strip_prefix = "nccl-2.27.7-1",
+        urls = tf_mirror_urls("https://github.com/NVIDIA/nccl/archive/refs/tags/v2.27.7-1.tar.gz"),
     )
 
     tf_http_archive(

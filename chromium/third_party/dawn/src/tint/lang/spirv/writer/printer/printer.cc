@@ -91,6 +91,7 @@
 #include "src/tint/lang/spirv/ir/copy_logical.h"
 #include "src/tint/lang/spirv/ir/literal_operand.h"
 #include "src/tint/lang/spirv/type/explicit_layout_array.h"
+#include "src/tint/lang/spirv/type/resource_binding.h"
 #include "src/tint/lang/spirv/type/sampled_image.h"
 #include "src/tint/lang/spirv/writer/common/binary_writer.h"
 #include "src/tint/lang/spirv/writer/common/function.h"
@@ -399,10 +400,14 @@ class Printer {
             case core::BuiltinValue::kClipDistances:
                 module_.PushCapability(SpvCapabilityClipDistance);
                 return SpvBuiltInClipDistance;
-            case core::BuiltinValue::kPrimitiveId:
-                // TODO(dsinclair): This come be others, but use geometry for now.
+            case core::BuiltinValue::kPrimitiveIndex:
+                // TODO(dsinclair): This can be others, but use geometry for now.
                 module_.PushCapability(SpvCapabilityGeometry);
                 return SpvBuiltInPrimitiveId;
+            case core::BuiltinValue::kBarycentricCoord:
+                module_.PushExtension("SPV_KHR_fragment_shader_barycentric");
+                module_.PushCapability(SpvCapabilityFragmentBarycentricKHR);
+                return SpvBuiltInBaryCoordKHR;
             case core::BuiltinValue::kUndefined:
                 return SpvBuiltInMax;
         }
@@ -605,19 +610,21 @@ class Printer {
                         TINT_ASSERT(arr->Count()->Is<core::type::RuntimeArrayCount>());
                         module_.PushType(spv::Op::OpTypeRuntimeArray, {id, Type(arr->ElemType())});
                     }
-                    if (arr->Is<type::ExplicitLayoutArray>()) {
-                        module_.PushAnnot(
-                            spv::Op::OpDecorate,
-                            {id, U32Operand(SpvDecorationArrayStride), arr->Stride()});
+                    if (auto* ex = arr->As<type::ExplicitLayoutArray>()) {
+                        module_.PushAnnot(spv::Op::OpDecorate,
+                                          {id, U32Operand(SpvDecorationArrayStride), ex->Stride()});
                     }
                 },
                 [&](const core::type::BindingArray* arr) {
-                    auto* constant_count = arr->Count()->As<core::type::ConstantArrayCount>();
-                    TINT_ASSERT(constant_count != nullptr);
-
-                    auto* count = b_.ConstantValue(u32(constant_count->value));
+                    auto* count = b_.ConstantValue(
+                        u32(arr->Count()->As<core::type::ConstantArrayCount>()->value));
                     module_.PushType(spv::Op::OpTypeArray,
                                      {id, Type(arr->ElemType()), Constant(count)});
+                },
+                [&](const spirv::type::ResourceBinding* rb) {
+                    module_.PushCapability(SpvCapabilityRuntimeDescriptorArray);
+                    module_.PushExtension("SPV_EXT_descriptor_indexing");
+                    module_.PushType(spv::Op::OpTypeRuntimeArray, {id, Type(rb->GetBindingType())});
                 },
                 [&](const core::type::Pointer* ptr) {
                     module_.PushType(spv::Op::OpTypePointer,

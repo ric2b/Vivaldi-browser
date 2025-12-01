@@ -71,10 +71,27 @@ bool GetDevicesFromDXGI(std::vector<GPUDeviceInfo> *devices)
         device.vendorId      = desc.VendorId;
         device.deviceId      = desc.DeviceId;
         device.driverVersion = o.str();
-        device.systemDeviceId =
-            GetSystemDeviceIdFromParts(desc.AdapterLuid.HighPart, desc.AdapterLuid.LowPart);
 
-        devices->push_back(device);
+        // Skip duplicate devices that have the same vendorId, deviceId, and driverVersion
+        // but different systemDeviceId (can happen with remote desktop connections)
+        bool isDuplicate = false;
+        for (const auto &existingDevice : *devices)
+        {
+            if (existingDevice.vendorId == device.vendorId &&
+                existingDevice.deviceId == device.deviceId &&
+                existingDevice.driverVersion == device.driverVersion)
+            {
+                isDuplicate = true;
+                break;
+            }
+        }
+
+        if (!isDuplicate)
+        {
+            device.systemDeviceId =
+                GetSystemDeviceIdFromParts(desc.AdapterLuid.HighPart, desc.AdapterLuid.LowPart);
+            devices->push_back(device);
+        }
 
         adapter->Release();
     }
@@ -104,6 +121,20 @@ bool GetSystemInfo(SystemInfo *info)
     // Override activeGPUIndex. The first index returned by EnumAdapters is the active GPU. We
     // can override the heuristic to find the active GPU
     info->activeGPUIndex = 0;
+
+    // Special case: if WARP (Microsoft) comes first and there are multiple devices,
+    // set activeGPUIndex to the first non-WARP device
+    if (info->gpus.size() > 1 && IsMicrosoft(info->gpus[0].vendorId))
+    {
+        for (size_t i = 1; i < info->gpus.size(); ++i)
+        {
+            if (!IsMicrosoft(info->gpus[i].vendorId))
+            {
+                info->activeGPUIndex = static_cast<int>(i);
+                break;
+            }
+        }
+    }
 
 #if !defined(ANGLE_ENABLE_WINDOWS_UWP)
     // Override isOptimus. nvd3d9wrap.dll is loaded into all processes when Optimus is enabled.

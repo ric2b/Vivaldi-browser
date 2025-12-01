@@ -9,6 +9,10 @@
 #ifndef LIBANGLE_ANGLETYPES_H_
 #define LIBANGLE_ANGLETYPES_H_
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include <anglebase/sha1.h>
 #include "common/Color.h"
 #include "common/FixedVector.h"
@@ -35,8 +39,9 @@ namespace angle
 template <typename T>
 struct Extents
 {
-    Extents() : width(0), height(0), depth(0) {}
-    Extents(T width_, T height_, T depth_) : width(width_), height(height_), depth(depth_) {}
+    constexpr Extents() : width(0), height(0), depth(0) {}
+    constexpr Extents(T width_, T height_, T depth_) : width(width_), height(height_), depth(depth_)
+    {}
 
     Extents(const Extents &other)            = default;
     Extents &operator=(const Extents &other) = default;
@@ -548,6 +553,7 @@ using VertexArrayBufferBindingMask          = angle::BitSet<kElementArrayBufferI
 
 // Used in Program and VertexArray.
 using AttributesMask = angle::BitSet<MAX_VERTEX_ATTRIBS>;
+using BufferBindingMask = angle::BitSet<MAX_VERTEX_ATTRIB_BINDINGS>;
 
 // Used in Program
 static_assert(IMPLEMENTATION_MAX_SHADER_STORAGE_BUFFER_BINDINGS >

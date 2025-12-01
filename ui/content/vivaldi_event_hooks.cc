@@ -59,12 +59,12 @@ bool VivaldiEventHooks::HandleKeyboardEvent(
   return instance_->DoHandleKeyboardEvent(widget_host, event);
 }
 
-bool VivaldiEventHooks::HandleDragEnd(content::WebContents* web_contents,
-                                      ui::mojom::DragOperation operation,
-                                      int screen_x,
-                                      int screen_y) {
+void VivaldiEventHooks::HandleDragEnd(content::WebContents* web_contents,
+                                      bool outside_or_webview_in_same_window,
+                                      int client_x,
+                                      int client_y) {
   if (!web_contents || !instance_)
-    return false;
-  return instance_->DoHandleDragEnd(web_contents, operation, screen_x,
-                                    screen_y);
+    return;
+  instance_->DoHandleDragEnd(
+      web_contents, outside_or_webview_in_same_window, client_x, client_y);
 }

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -9,51 +9,51 @@ import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as Trace from '../../models/trace/trace.js';
+import * as Tracing from '../../services/tracing/tracing.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as DataGrid from '../../ui/legacy/components/data_grid/data_grid.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import {ActiveFilters} from './ActiveFilters.js';
 import * as Extensions from './extensions/extensions.js';
-import {Tracker} from './FreshRecording.js';
 import {targetForEvent} from './TargetForEvent.js';
 import * as ThirdPartyTreeView from './ThirdPartyTreeView.js';
 import {TimelineRegExp} from './TimelineFilters.js';
 import {rangeForSelection, type TimelineSelection} from './TimelineSelection.js';
 import timelineTreeViewStyles from './timelineTreeView.css.js';
 import {TimelineUIUtils} from './TimelineUIUtils.js';
-import * as Utils from './utils/utils.js';
 
 const UIStrings = {
   /**
-   *@description Text for the performance of something
+   * @description Text for the performance of something
    */
   performance: 'Performance',
   /**
-   *@description Time of a single activity, as opposed to the total time
+   * @description Time of a single activity, as opposed to the total time
    */
   selfTime: 'Self time',
   /**
-   *@description Text for the total time of something
+   * @description Text for the total time of something
    */
   totalTime: 'Total time',
   /**
-   *@description Text in Timeline Tree View of the Performance panel
+   * @description Text in Timeline Tree View of the Performance panel
    */
   activity: 'Activity',
   /**
-   *@description Text of a DOM element in Timeline Tree View of the Performance panel
+   * @description Text of a DOM element in Timeline Tree View of the Performance panel
    */
   selectItemForDetails: 'Select item for details.',
   /**
-   *@description Number followed by percent sign
-   *@example {20} PH1
+   * @description Number followed by percent sign
+   * @example {20} PH1
    */
   percentPlaceholder: '{PH1} %',
   /**
-   *@description Text in Timeline Tree View of the Performance panel
+   * @description Text in Timeline Tree View of the Performance panel
    */
   chromeExtensionsOverhead: '[`Chrome` extensions overhead]',
   /**
@@ -63,47 +63,47 @@ const UIStrings = {
    */
   vRuntime: '[`V8` Runtime]',
   /**
-   *@description Text in Timeline Tree View of the Performance panel
+   * @description Text in Timeline Tree View of the Performance panel
    */
   unattributed: '[unattributed]',
   /**
-   *@description Text that refers to one or a group of webpages
+   * @description Text that refers to one or a group of webpages
    */
   page: 'Page',
   /**
-   *@description Text in Timeline Tree View of the Performance panel
+   * @description Text in Timeline Tree View of the Performance panel
    */
   noGrouping: 'No grouping',
   /**
-   *@description Text in Timeline Tree View of the Performance panel
+   * @description Text in Timeline Tree View of the Performance panel
    */
   groupByActivity: 'Group by activity',
   /**
-   *@description Text in Timeline Tree View of the Performance panel
+   * @description Text in Timeline Tree View of the Performance panel
    */
   groupByCategory: 'Group by category',
   /**
-   *@description Text in Timeline Tree View of the Performance panel
+   * @description Text in Timeline Tree View of the Performance panel
    */
   groupByDomain: 'Group by domain',
   /**
-   *@description Text in Timeline Tree View of the Performance panel
+   * @description Text in Timeline Tree View of the Performance panel
    */
   groupByFrame: 'Group by frame',
   /**
-   *@description Text in Timeline Tree View of the Performance panel
+   * @description Text in Timeline Tree View of the Performance panel
    */
   groupBySubdomain: 'Group by subdomain',
   /**
-   *@description Text in Timeline Tree View of the Performance panel
+   * @description Text in Timeline Tree View of the Performance panel
    */
   groupByUrl: 'Group by URL',
   /**
-   *@description Text in Timeline Tree View of the Performance panel
+   * @description Text in Timeline Tree View of the Performance panel
    */
   groupByThirdParties: 'Group by Third Parties',
   /**
-   *@description Aria-label for grouping combo box in Timeline Details View
+   * @description Aria-label for grouping combo box in Timeline Details View
    */
   groupBy: 'Group by',
   /**
@@ -130,7 +130,7 @@ const UIStrings = {
    */
   heaviestStackHidden: 'Heaviest stack sidebar hidden',
   /**
-   *@description Data grid name for Timeline Stack data grids
+   * @description Data grid name for Timeline Stack data grids
    */
   timelineStack: 'Timeline stack',
   /**
@@ -138,7 +138,7 @@ const UIStrings = {
    */
   matchCase: 'Match case',
   /**
-   *@description Text for searching with regular expression button
+   * @description Text for searching with regular expression button
    */
   useRegularExpression: 'Use regular expression',
   /**
@@ -193,8 +193,8 @@ export class TimelineTreeView extends
   private caseSensitiveButton: UI.Toolbar.ToolbarToggle|undefined;
   private regexButton: UI.Toolbar.ToolbarToggle|undefined;
   private matchWholeWord: UI.Toolbar.ToolbarToggle|undefined;
-  #parsedTrace: Trace.Handlers.Types.ParsedTrace|null = null;
-  #entityMapper: Utils.EntityMapper.EntityMapper|null = null;
+  #parsedTrace: Trace.TraceModel.ParsedTrace|null = null;
+  #entityMapper: Trace.EntityMapper.EntityMapper|null = null;
   #lastHighlightedEvent: HTMLElement|null = null;
   eventToTreeNode = new WeakMap<Trace.Types.Events.Event, Trace.Extras.TraceTree.Node>();
 
@@ -218,7 +218,7 @@ export class TimelineTreeView extends
     if (!this.#parsedTrace) {
       return name;
     }
-    return name + ':@' + Trace.Handlers.Helpers.getNonResolvedURL(event, this.#parsedTrace);
+    return name + ':@' + Trace.Handlers.Helpers.getNonResolvedURL(event, this.#parsedTrace.data);
   }
 
   setSearchableView(searchableView: UI.SearchableView.SearchableView): void {
@@ -227,8 +227,8 @@ export class TimelineTreeView extends
 
   setModelWithEvents(
       selectedEvents: Trace.Types.Events.Event[]|null,
-      parsedTrace: Trace.Handlers.Types.ParsedTrace|null = null,
-      entityMappings: Utils.EntityMapper.EntityMapper|null = null,
+      parsedTrace: Trace.TraceModel.ParsedTrace|null = null,
+      entityMappings: Trace.EntityMapper.EntityMapper|null = null,
       ): void {
     this.#parsedTrace = parsedTrace;
     this.#selectedEvents = selectedEvents;
@@ -236,10 +236,10 @@ export class TimelineTreeView extends
     this.refreshTree();
   }
 
-  entityMapper(): Utils.EntityMapper.EntityMapper|null {
+  entityMapper(): Trace.EntityMapper.EntityMapper|null {
     return this.#entityMapper;
   }
-  parsedTrace(): Trace.Handlers.Types.ParsedTrace|null {
+  parsedTrace(): Trace.TraceModel.ParsedTrace|null {
     return this.#parsedTrace;
   }
 
@@ -678,7 +678,7 @@ export class TimelineTreeView extends
     }
     const searchRegex = searchConfig.toSearchRegex();
     this.searchResults = this.root.searchTree(
-        event => TimelineUIUtils.testContentMatching(event, searchRegex.regex, this.#parsedTrace || undefined));
+        event => TimelineUIUtils.testContentMatching(event, searchRegex.regex, this.#parsedTrace?.data || undefined));
     this.searchableView.updateSearchMatchesCount(this.searchResults.length);
   }
 
@@ -699,6 +699,10 @@ export class TimelineTreeView extends
   }
 
   supportsCaseSensitiveSearch(): boolean {
+    return true;
+  }
+
+  supportsWholeWordSearch(): boolean {
     return true;
   }
 
@@ -794,7 +798,8 @@ export class GridNode extends DataGrid.SortableDataGrid.SortableDataGridNode<Gri
       const parsedTrace = this.treeView.parsedTrace();
       const target = parsedTrace ? targetForEvent(parsedTrace, event) : null;
       const linkifier = this.treeView.linkifier;
-      const isFreshRecording = Boolean(parsedTrace && Tracker.instance().recordingIsFresh(parsedTrace));
+      const isFreshRecording =
+          Boolean(parsedTrace && Tracing.FreshRecording.Tracker.instance().recordingIsFresh(parsedTrace));
       this.linkElement = TimelineUIUtils.linkifyTopCallFrame(event, target, linkifier, isFreshRecording);
       if (this.linkElement) {
         container.createChild('div', 'activity-link').appendChild(this.linkElement);
@@ -829,7 +834,7 @@ export class GridNode extends DataGrid.SortableDataGrid.SortableDataGridNode<Gri
         }
         const timings = event && Trace.Helpers.Timing.eventTimingsMilliSeconds(event);
         const startTime = timings?.startTime ?? 0;
-        value = startTime - Trace.Helpers.Timing.microToMilli(parsedTrace.Meta.traceBounds.min);
+        value = startTime - Trace.Helpers.Timing.microToMilli(parsedTrace.data.Meta.traceBounds.min);
       } break;
       case 'self':
         value = this.profileNode.selfTime;
@@ -979,7 +984,7 @@ export class AggregatedTimelineTreeView extends TimelineTreeView {
     color: string,
     icon: (Element|undefined),
   } {
-    const categories = Utils.EntryStyles.getCategoryStyles();
+    const categories = Trace.Styles.getCategoryStyles();
     const color = TimelineUIUtils.eventColor(node.event);
     const unattributed = i18nString(UIStrings.unattributed);
 
@@ -987,16 +992,20 @@ export class AggregatedTimelineTreeView extends TimelineTreeView {
 
     switch (this.groupBySetting.get()) {
       case AggregatedTimelineTreeView.GroupBy.Category: {
-        const idIsValid = id && Utils.EntryStyles.stringIsEventCategory(id);
+        const idIsValid = id && Trace.Styles.stringIsEventCategory(id);
         const category = idIsValid ? categories[id] || categories['other'] : {title: unattributed, color: unattributed};
-        return {name: category.title, color: category.color, icon: undefined};
+
+        const color = category instanceof Trace.Styles.TimelineCategory ?
+            ThemeSupport.ThemeSupport.instance().getComputedValue(category.cssVariable) :
+            category.color;
+        return {name: category.title, color, icon: undefined};
       }
 
       case AggregatedTimelineTreeView.GroupBy.Domain:
       case AggregatedTimelineTreeView.GroupBy.Subdomain:
       case AggregatedTimelineTreeView.GroupBy.ThirdParties: {
         // This `undefined` is [unattributed]
-        // TODO(paulirish,aixba): Improve attribution to reduce amount of items in [unattributed].
+        // TODO(paulirish): Improve attribution to reduce amount of items in [unattributed].
         const domainName = id ? this.beautifyDomainName(id, node) : undefined;
         return {name: domainName || unattributed, color, icon: undefined};
       }
@@ -1017,7 +1026,7 @@ export class AggregatedTimelineTreeView extends TimelineTreeView {
         break;
 
       case AggregatedTimelineTreeView.GroupBy.Frame: {
-        const frame = id ? this.parsedTrace()?.PageFrames.frames.get(id) : undefined;
+        const frame = id ? this.parsedTrace()?.data.PageFrames.frames.get(id) : undefined;
         const frameName = frame ? TimelineUIUtils.displayNameForFrame(frame) : i18nString(UIStrings.page);
         return {name: frameName, color, icon: undefined};
       }
@@ -1100,12 +1109,12 @@ export class AggregatedTimelineTreeView extends TimelineTreeView {
       case GroupBy.URL:
         return (event: Trace.Types.Events.Event) => {
           const parsedTrace = this.parsedTrace();
-          return parsedTrace ? Trace.Handlers.Helpers.getNonResolvedURL(event, parsedTrace) ?? '' : '';
+          return parsedTrace ? Trace.Handlers.Helpers.getNonResolvedURL(event, parsedTrace.data) ?? '' : '';
         };
       case GroupBy.Frame:
         return (event: Trace.Types.Events.Event) => {
           const frameId = Trace.Helpers.Trace.frameIDForEvent(event);
-          return frameId || this.parsedTrace()?.Meta.mainFrameId || '';
+          return frameId || this.parsedTrace()?.data.Meta.mainFrameId || '';
         };
       default:
         console.assert(false, `Unexpected aggregation setting: ${groupBy}`);
@@ -1121,7 +1130,7 @@ export class AggregatedTimelineTreeView extends TimelineTreeView {
     if (!parsedTrace) {
       return '';
     }
-    const url = Trace.Handlers.Helpers.getNonResolvedURL(event, parsedTrace);
+    const url = Trace.Handlers.Helpers.getNonResolvedURL(event, parsedTrace.data);
     if (!url) {
       // We could have receiveDataEvents (that don't have a url), but that have been
       // attributed to an entity, let's check for these. This is used for ThirdParty grouping.

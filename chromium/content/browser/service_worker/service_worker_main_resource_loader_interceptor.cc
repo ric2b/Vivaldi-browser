@@ -91,8 +91,7 @@ ServiceWorkerMainResourceLoaderInterceptor::CreateForNavigation(
       request_info.isolation_info);
 
   return base::WrapUnique(new ServiceWorkerMainResourceLoaderInterceptor(
-      std::move(navigation_handle),
-      request_info.begin_params->skip_service_worker));
+      std::move(navigation_handle)));
 }
 
 std::unique_ptr<ServiceWorkerMainResourceLoaderInterceptor>
@@ -122,7 +121,7 @@ ServiceWorkerMainResourceLoaderInterceptor::CreateForPrefetch(
       resource_request.trusted_params->isolation_info);
 
   return base::WrapUnique(new ServiceWorkerMainResourceLoaderInterceptor(
-      std::move(navigation_handle), resource_request.skip_service_worker));
+      std::move(navigation_handle)));
 }
 
 std::unique_ptr<ServiceWorkerMainResourceLoaderInterceptor>
@@ -174,7 +173,7 @@ ServiceWorkerMainResourceLoaderInterceptor::CreateForWorker(
   }
 
   return base::WrapUnique(new ServiceWorkerMainResourceLoaderInterceptor(
-      std::move(navigation_handle), resource_request.skip_service_worker));
+      std::move(navigation_handle)));
 }
 
 ServiceWorkerMainResourceLoaderInterceptor::
@@ -225,8 +224,11 @@ void ServiceWorkerMainResourceLoaderInterceptor::MaybeCreateLoader(
     }
   }
 
-  CHECK(handle_->InitializeForRequest(tentative_resource_request,
-                                      /*client_for_prefetch=*/nullptr));
+  CHECK(handle_->InitializeForRequest(
+      tentative_resource_request.url,
+      ServiceWorkerMainResourceHandle::TopFrameOriginForInitializeForRequest(
+          tentative_resource_request),
+      /*client_for_prefetch=*/nullptr));
 
   // If we know there's no service worker for the storage key, let's skip asking
   // the storage to check the existence.
@@ -235,7 +237,7 @@ void ServiceWorkerMainResourceLoaderInterceptor::MaybeCreateLoader(
   // the fake registration initially. If the URL is eligible for
   // SyntheticResponse, do not skip service worker.
   bool skip_service_worker =
-      skip_service_worker_ ||
+      tentative_resource_request.skip_service_worker ||
       !OriginCanAccessServiceWorkers(tentative_resource_request.url) ||
       !(handle_->context_wrapper()->MaybeHasRegistrationForStorageKey(
             handle_->service_worker_client()->key()) ||
@@ -270,9 +272,8 @@ void ServiceWorkerMainResourceLoaderInterceptor::CompleteWithoutLoader(
 
 ServiceWorkerMainResourceLoaderInterceptor::
     ServiceWorkerMainResourceLoaderInterceptor(
-        base::WeakPtr<ServiceWorkerMainResourceHandle> handle,
-        bool skip_service_worker)
-    : handle_(std::move(handle)), skip_service_worker_(skip_service_worker) {
+        base::WeakPtr<ServiceWorkerMainResourceHandle> handle)
+    : handle_(std::move(handle)) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(handle_);
   CHECK(handle_->scoped_service_worker_client());

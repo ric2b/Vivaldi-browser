@@ -382,6 +382,14 @@ public class MockWebContents implements WebContents, WebContentsObserver.Observa
     public void setLongPressLinkSelectText(boolean enabled) {}
 
     @Override
+    public void setCanAcceptLoadDrops(boolean enabled) {}
+
+    @Override
+    public boolean getCanAcceptLoadDropsForTesting() {
+        return true;
+    }
+
+    @Override
     public void updateOffsetTagDefinitions(
             BrowserControlsOffsetTagDefinitions offsetTagDefinitions) {}
 
@@ -397,6 +405,9 @@ public class MockWebContents implements WebContents, WebContentsObserver.Observa
     public int getOriginalWindowOpenDisposition() {
         return 0;
     }
+
+    @Override
+    public void updateWindowControlsOverlay(Rect rect) {}
 
     @Override
     public <T extends UserData> @Nullable T getOrSetUserData(

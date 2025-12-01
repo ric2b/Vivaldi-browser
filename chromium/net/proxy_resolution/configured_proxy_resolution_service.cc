@@ -357,13 +357,6 @@ base::Value::Dict NetLogBadProxyListParams(
   return dict;
 }
 
-// Returns NetLog parameters on a successful proxy resolution.
-base::Value::Dict NetLogFinishedResolvingProxyParams(const ProxyInfo* result) {
-  base::Value::Dict dict;
-  dict.Set("proxy_info", result->ToDebugString());
-  return dict;
-}
-
 // Returns a sanitized copy of |url| which is safe to pass on to a PAC script.
 //
 // PAC scripts are modelled as being controllable by a network-present
@@ -1175,28 +1168,9 @@ void ConfiguredProxyResolutionService::ReportSuccess(const ProxyInfo& result) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   const ProxyRetryInfoMap& new_retry_info = result.proxy_retry_info();
-  if (new_retry_info.empty())
-    return;
-
-  if (proxy_delegate_) {
-    proxy_delegate_->OnSuccessfulRequestAfterFailures(new_retry_info);
-  }
-
-  for (const auto& iter : new_retry_info) {
-    auto existing = proxy_retry_info_.find(iter.first);
-    if (existing == proxy_retry_info_.end()) {
-      proxy_retry_info_[iter.first] = iter.second;
-      if (proxy_delegate_) {
-        const ProxyChain& bad_proxy = iter.first;
-        DCHECK(!bad_proxy.is_direct());
-        const ProxyRetryInfo& proxy_retry_info = iter.second;
-        proxy_delegate_->OnFallback(bad_proxy, proxy_retry_info.net_error);
-      }
-    } else if (existing->second.bad_until < iter.second.bad_until) {
-      existing->second.bad_until = iter.second.bad_until;
-    }
-  }
-  if (net_log_) {
+  ProxyResolutionService::ProcessProxyRetryInfo(
+      new_retry_info, proxy_retry_info_, proxy_delegate_);
+  if (!new_retry_info.empty() && net_log_) {
     net_log_->AddGlobalEntry(NetLogEventType::BAD_PROXY_LIST_REPORTED, [&] {
       return NetLogBadProxyListParams(&new_retry_info);
     });
@@ -1232,17 +1206,13 @@ int ConfiguredProxyResolutionService::DidFinishResolvingProxy(
                                       proxy_retry_info_, result);
 
     net_log.AddEvent(
-        NetLogEventType::PROXY_RESOLUTION_SERVICE_RESOLVED_PROXY_LIST,
-        [&] { return NetLogFinishedResolvingProxyParams(result); });
+        NetLogEventType::PROXY_RESOLUTION_SERVICE_RESOLVED_PROXY_LIST, [&] {
+          base::Value::Dict dict;
+          dict.Set("proxy_info", result->ToDebugString());
+          return dict;
+        });
 
-    // This check is done to only log the NetLog event when necessary, it's
-    // not a performance optimization.
-    if (!proxy_retry_info_.empty()) {
-      result->DeprioritizeBadProxyChains(proxy_retry_info_);
-      net_log.AddEvent(
-          NetLogEventType::PROXY_RESOLUTION_SERVICE_DEPRIORITIZED_BAD_PROXIES,
-          [&] { return NetLogFinishedResolvingProxyParams(result); });
-    }
+    DeprioritizeBadProxyChains(proxy_retry_info_, result, net_log);
   } else {
     net_log.AddEventWithNetErrorCode(
         NetLogEventType::PROXY_RESOLUTION_SERVICE_RESOLVED_PROXY_LIST,
@@ -1379,22 +1349,7 @@ base::Value::Dict ConfiguredProxyResolutionService::GetProxyNetLogValues() {
   }
 
   // Log Bad Proxies.
-  {
-    base::Value::List list;
-
-    for (const auto& it : proxy_retry_info_) {
-      const std::string& proxy_chain_uri = it.first.ToDebugString();
-      const ProxyRetryInfo& retry_info = it.second;
-
-      base::Value::Dict dict;
-      dict.Set("proxy_chain_uri", proxy_chain_uri);
-      dict.Set("bad_until", NetLog::TickCountToString(retry_info.bad_until));
-
-      list.Append(base::Value(std::move(dict)));
-    }
-
-    net_info_dict.Set(kNetInfoBadProxies, std::move(list));
-  }
+  net_info_dict.Set(kNetInfoBadProxies, BuildBadProxiesList(proxy_retry_info_));
 
   return net_info_dict;
 }
@@ -1516,7 +1471,8 @@ void ConfiguredProxyResolutionService::InitializeUsingDecidedConfig(
     OnInitProxyResolverComplete(rv);
 }
 
-void ConfiguredProxyResolutionService::OnIPAddressChanged() {
+void ConfiguredProxyResolutionService::OnIPAddressChanged(
+    NetworkChangeNotifier::IPAddressChangeType change_type) {
   // See the comment block by |kDelayAfterNetworkChangesMs| for info.
   stall_proxy_autoconfig_until_ =
       TimeTicks::Now() + stall_proxy_auto_config_delay_;

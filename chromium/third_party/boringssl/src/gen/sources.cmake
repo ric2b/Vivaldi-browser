@@ -79,6 +79,8 @@ set(
   crypto/fipsmodule/ec/wnaf.cc.inc
   crypto/fipsmodule/ecdh/ecdh.cc.inc
   crypto/fipsmodule/ecdsa/ecdsa.cc.inc
+  crypto/fipsmodule/entropy/jitter.cc.inc
+  crypto/fipsmodule/entropy/sha512.cc.inc
   crypto/fipsmodule/hkdf/hkdf.cc.inc
   crypto/fipsmodule/hmac/hmac.cc.inc
   crypto/fipsmodule/keccak/keccak.cc.inc
@@ -515,7 +517,6 @@ set(
   crypto/x509/x_req.cc
   crypto/x509/x_sig.cc
   crypto/x509/x_spki.cc
-  crypto/x509/x_val.cc
   crypto/x509/x_x509.cc
   crypto/x509/x_x509a.cc
   crypto/xwing/xwing.cc
@@ -566,7 +567,6 @@ set(
   include/openssl/evp.h
   include/openssl/evp_errors.h
   include/openssl/ex_data.h
-  include/openssl/experimental/kyber.h
   include/openssl/hkdf.h
   include/openssl/hmac.h
   include/openssl/hpke.h
@@ -650,6 +650,7 @@ set(
   crypto/fipsmodule/ec/p256-nistz.h
   crypto/fipsmodule/ec/p256_table.h
   crypto/fipsmodule/ecdsa/internal.h
+  crypto/fipsmodule/entropy/internal.h
   crypto/fipsmodule/keccak/internal.h
   crypto/fipsmodule/rand/internal.h
   crypto/fipsmodule/rsa/internal.h
@@ -775,6 +776,7 @@ set(
   crypto/fipsmodule/ec/p256-nistz_test.cc
   crypto/fipsmodule/ec/p256_test.cc
   crypto/fipsmodule/ecdsa/ecdsa_test.cc
+  crypto/fipsmodule/entropy/jitter_test.cc
   crypto/fipsmodule/hkdf/hkdf_test.cc
   crypto/fipsmodule/keccak/keccak_test.cc
   crypto/fipsmodule/rand/ctrdrbg_test.cc
@@ -856,8 +858,13 @@ set(
   crypto/cipher/test/xchacha20_poly1305_tests.txt
   crypto/curve25519/ed25519_tests.txt
   crypto/ecdh/ecdh_tests.txt
-  crypto/evp/evp_tests.txt
-  crypto/evp/scrypt_tests.txt
+  crypto/evp/test/dh_tests.txt
+  crypto/evp/test/ec_tests.txt
+  crypto/evp/test/ed25519_tests.txt
+  crypto/evp/test/evp_tests.txt
+  crypto/evp/test/rsa_tests.txt
+  crypto/evp/test/scrypt_tests.txt
+  crypto/evp/test/x25519_tests.txt
   crypto/fipsmodule/aes/aes_tests.txt
   crypto/fipsmodule/bn/test/exp_tests.txt
   crypto/fipsmodule/bn/test/gcd_tests.txt
@@ -879,6 +886,7 @@ set(
   crypto/fipsmodule/ecdsa/ecdsa_sign_tests.txt
   crypto/fipsmodule/ecdsa/ecdsa_verify_tests.txt
   crypto/fipsmodule/keccak/keccak_tests.txt
+  crypto/fipsmodule/rand/ctrdrbg_df_vectors.txt
   crypto/fipsmodule/rand/ctrdrbg_vectors.txt
   crypto/hmac/hmac_tests.txt
   crypto/hpke/hpke_test_vectors.txt
@@ -1012,6 +1020,7 @@ set(
   crypto/x509/test/pss_sha256_wrong_trailer.pem
   crypto/x509/test/pss_sha384.pem
   crypto/x509/test/pss_sha512.pem
+  crypto/x509/test/rsa_pss_sha256_key.pk8
   crypto/x509/test/some_names1.pem
   crypto/x509/test/some_names2.pem
   crypto/x509/test/some_names3.pem
@@ -1022,6 +1031,16 @@ set(
   crypto/x509/test/trailing_data_leaf_name_constraints.pem
   crypto/x509/test/trailing_data_leaf_subject_alt_name.pem
   crypto/x509/test/trailing_data_leaf_subject_key_identifier.pem
+  crypto/x509/test/unusual_tbs_critical_ber.pem
+  crypto/x509/test/unusual_tbs_critical_false_not_omitted.pem
+  crypto/x509/test/unusual_tbs_empty_extension_not_omitted.pem
+  crypto/x509/test/unusual_tbs_key.pem
+  crypto/x509/test/unusual_tbs_null_sigalg_param.pem
+  crypto/x509/test/unusual_tbs_uid_both.pem
+  crypto/x509/test/unusual_tbs_uid_issuer.pem
+  crypto/x509/test/unusual_tbs_uid_subject.pem
+  crypto/x509/test/unusual_tbs_v1_not_omitted.pem
+  crypto/x509/test/unusual_tbs_wrong_attribute_order.pem
   third_party/wycheproof_testvectors/aes_cbc_pkcs5_test.txt
   third_party/wycheproof_testvectors/aes_cmac_test.txt
   third_party/wycheproof_testvectors/aes_eax_test.txt
@@ -1154,6 +1173,20 @@ set(
 )
 
 set(
+  ENTROPY_MODULEWRAPPER_SOURCES
+
+  util/fipstools/acvp/entropy_modulewrapper/main.cc
+  util/fipstools/acvp/entropy_modulewrapper/modulewrapper.cc
+  util/fipstools/acvp/modulewrapper/proto.cc
+)
+
+set(
+  ENTROPY_MODULEWRAPPER_INTERNAL_HEADERS
+
+  util/fipstools/acvp/modulewrapper/modulewrapper.h
+)
+
+set(
   FUZZ_SOURCES
 
   fuzz/arm_cpuinfo.cc
@@ -1197,6 +1230,7 @@ set(
 
   util/fipstools/acvp/modulewrapper/main.cc
   util/fipstools/acvp/modulewrapper/modulewrapper.cc
+  util/fipstools/acvp/modulewrapper/proto.cc
 )
 
 set(
@@ -2889,6 +2923,7 @@ set(
   TEST_SUPPORT_SOURCES
 
   crypto/test/abi_test.cc
+  crypto/test/der_trailing_data.cc
   crypto/test/file_test.cc
   crypto/test/file_test_gtest.cc
   crypto/test/file_util.cc
@@ -2901,6 +2936,7 @@ set(
   TEST_SUPPORT_INTERNAL_HEADERS
 
   crypto/test/abi_test.h
+  crypto/test/der_trailing_data.h
   crypto/test/file_test.h
   crypto/test/file_util.h
   crypto/test/gtest_main.h

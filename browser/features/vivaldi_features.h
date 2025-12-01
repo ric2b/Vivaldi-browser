@@ -21,6 +21,8 @@ BASE_DECLARE_FEATURE(kInternalPageReaderMode);
 
 BASE_DECLARE_FEATURE(kLocationOverride);
 
+BASE_DECLARE_FEATURE(kNewAboutPage);
+
 BASE_DECLARE_FEATURE(kNewPrivacyReport);
 
 BASE_DECLARE_FEATURE(kNoteEditor);
@@ -32,8 +34,6 @@ BASE_DECLARE_FEATURE(kShowTopSites);
 bool IsTopSitesEnabled();
 
 BASE_DECLARE_FEATURE(kSpeeddialWidgets);
-
-BASE_DECLARE_FEATURE(kTabsButton);
 
 BASE_DECLARE_FEATURE(kViewMarkdownAsHTML);
 bool IsViewMarkdownAsHTMLEnabled();

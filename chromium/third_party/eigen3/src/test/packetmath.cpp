@@ -354,28 +354,28 @@ void packetmath_boolean_mask_ops() {
   for (int i = 0; i < size; ++i) {
     data1[i] = internal::random<Scalar>();
   }
-  CHECK_CWISE1(internal::ptrue, internal::ptrue);
+  CHECK_CWISE1_MASK(internal::ptrue, internal::ptrue);
   CHECK_CWISE2_IF(true, internal::pandnot, internal::pandnot);
   for (int i = 0; i < PacketSize; ++i) {
     data1[i] = Scalar(RealScalar(i));
     data1[i + PacketSize] = internal::random<bool>() ? data1[i] : Scalar(0);
   }
 
-  CHECK_CWISE2_IF(true, internal::pcmp_eq, internal::pcmp_eq);
+  CHECK_CWISE2_MASK(internal::pcmp_eq, internal::pcmp_eq);
 
   // Test (-0) == (0) for signed operations
   for (int i = 0; i < PacketSize; ++i) {
     data1[i] = Scalar(-0.0);
     data1[i + PacketSize] = internal::random<bool>() ? data1[i] : Scalar(0);
   }
-  CHECK_CWISE2_IF(true, internal::pcmp_eq, internal::pcmp_eq);
+  CHECK_CWISE2_MASK(internal::pcmp_eq, internal::pcmp_eq);
 
   // Test NaN
   for (int i = 0; i < PacketSize; ++i) {
     data1[i] = NumTraits<Scalar>::quiet_NaN();
     data1[i + PacketSize] = internal::random<bool>() ? data1[i] : Scalar(0);
   }
-  CHECK_CWISE2_IF(true, internal::pcmp_eq, internal::pcmp_eq);
+  CHECK_CWISE2_MASK(internal::pcmp_eq, internal::pcmp_eq);
 }
 
 template <typename Scalar, typename Packet>
@@ -384,28 +384,27 @@ void packetmath_boolean_mask_ops_real() {
   const int size = 2 * PacketSize;
   EIGEN_ALIGN_MAX Scalar data1[size];
   EIGEN_ALIGN_MAX Scalar data2[size];
-  EIGEN_ALIGN_MAX Scalar ref[size];
 
   for (int i = 0; i < PacketSize; ++i) {
     data1[i] = internal::random<Scalar>();
     data1[i + PacketSize] = internal::random<bool>() ? data1[i] : Scalar(0);
   }
 
-  CHECK_CWISE2_IF(true, internal::pcmp_lt_or_nan, internal::pcmp_lt_or_nan);
+  CHECK_CWISE2_MASK(internal::pcmp_lt_or_nan, internal::pcmp_lt_or_nan);
 
   // Test (-0) <=/< (0) for signed operations
   for (int i = 0; i < PacketSize; ++i) {
     data1[i] = Scalar(-0.0);
     data1[i + PacketSize] = internal::random<bool>() ? data1[i] : Scalar(0);
   }
-  CHECK_CWISE2_IF(true, internal::pcmp_lt_or_nan, internal::pcmp_lt_or_nan);
+  CHECK_CWISE2_MASK(internal::pcmp_lt_or_nan, internal::pcmp_lt_or_nan);
 
   // Test NaN
   for (int i = 0; i < PacketSize; ++i) {
     data1[i] = NumTraits<Scalar>::quiet_NaN();
     data1[i + PacketSize] = internal::random<bool>() ? data1[i] : Scalar(0);
   }
-  CHECK_CWISE2_IF(true, internal::pcmp_lt_or_nan, internal::pcmp_lt_or_nan);
+  CHECK_CWISE2_MASK(internal::pcmp_lt_or_nan, internal::pcmp_lt_or_nan);
 }
 
 template <typename Scalar, typename Packet, typename EnableIf = void>
@@ -422,31 +421,30 @@ struct packetmath_boolean_mask_ops_notcomplex_test<
     const int size = 2 * PacketSize;
     EIGEN_ALIGN_MAX Scalar data1[size];
     EIGEN_ALIGN_MAX Scalar data2[size];
-    EIGEN_ALIGN_MAX Scalar ref[size];
 
     for (int i = 0; i < PacketSize; ++i) {
       data1[i] = internal::random<Scalar>();
       data1[i + PacketSize] = internal::random<bool>() ? data1[i] : Scalar(0);
     }
 
-    CHECK_CWISE2_IF(true, internal::pcmp_le, internal::pcmp_le);
-    CHECK_CWISE2_IF(true, internal::pcmp_lt, internal::pcmp_lt);
+    CHECK_CWISE2_MASK(internal::pcmp_le, internal::pcmp_le);
+    CHECK_CWISE2_MASK(internal::pcmp_lt, internal::pcmp_lt);
 
     // Test (-0) <=/< (0) for signed operations
     for (int i = 0; i < PacketSize; ++i) {
       data1[i] = Scalar(-0.0);
       data1[i + PacketSize] = internal::random<bool>() ? data1[i] : Scalar(0);
     }
-    CHECK_CWISE2_IF(true, internal::pcmp_le, internal::pcmp_le);
-    CHECK_CWISE2_IF(true, internal::pcmp_lt, internal::pcmp_lt);
+    CHECK_CWISE2_MASK(internal::pcmp_le, internal::pcmp_le);
+    CHECK_CWISE2_MASK(internal::pcmp_lt, internal::pcmp_lt);
 
     // Test NaN
     for (int i = 0; i < PacketSize; ++i) {
       data1[i] = NumTraits<Scalar>::quiet_NaN();
       data1[i + PacketSize] = internal::random<bool>() ? data1[i] : Scalar(0);
     }
-    CHECK_CWISE2_IF(true, internal::pcmp_le, internal::pcmp_le);
-    CHECK_CWISE2_IF(true, internal::pcmp_lt, internal::pcmp_lt);
+    CHECK_CWISE2_MASK(internal::pcmp_le, internal::pcmp_le);
+    CHECK_CWISE2_MASK(internal::pcmp_lt, internal::pcmp_lt);
   }
 };
 
@@ -700,7 +698,7 @@ void packetmath() {
     for (int i = 0; i < PacketSize; ++i) {
       data1[i] = internal::random<Scalar>(Scalar(0) - limit, limit);
     }
-  } else if (!NumTraits<Scalar>::IsInteger && !NumTraits<Scalar>::IsComplex) {
+  } else if (!NumTraits<Scalar>::IsInteger && !NumTraits<Scalar>::IsComplex && !std::is_same<Scalar, bool>::value) {
     // Prevent very small product results by adjusting range.  Otherwise,
     // we may end up with multiplying e.g. 32 Eigen::halfs with values < 1.
     for (int i = 0; i < PacketSize; ++i) {

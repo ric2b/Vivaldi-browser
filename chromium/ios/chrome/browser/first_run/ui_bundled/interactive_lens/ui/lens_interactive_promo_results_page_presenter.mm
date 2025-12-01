@@ -96,6 +96,8 @@ const CGFloat kOpacityAnimationDuration = 0.4;
   }
 
   [self resultsPagePresentationWillAppear];
+  [self.interactivePromoDelegate
+      lensInteractivePromoResultsPagePresenterWillPresentResults:self];
 
   auto presentationComplete = ^{
     if (completion) {
@@ -162,7 +164,7 @@ const CGFloat kOpacityAnimationDuration = 0.4;
                    completion:dismissalCompletion];
 }
 
-#pragma mark - LensOverlayBottomSheetPresentationDelegate
+#pragma mark - LensOverlayBottomSheetPresentationCommands
 
 - (void)requestMaximizeBottomSheet {
   // No-op. Sheet size is constant in this presentation.
@@ -172,16 +174,18 @@ const CGFloat kOpacityAnimationDuration = 0.4;
   // No-op. Sheet size is constant in this presentation.
 }
 
-- (void)didLoadSelectionResult {
+- (void)adjustForSelectionResult {
   [self adjustSelectionOcclusionInsets];
 }
 
-- (void)didLoadTranslateResult {
+- (void)adjustForTranslateResult {
   // No-op.
 }
 
 - (void)hideBottomSheetWithCompletion:(void (^)(void))completion {
   [self dismissResultsPageAnimated:YES completion:completion];
+  [self.interactivePromoDelegate
+      lensInteractivePromoResultsPagePresenterDidDismissResults:self];
 }
 
 - (void)showInfoMessage:(LensOverlayBottomSheetInfoMessageType)infoMessageType {
@@ -237,6 +241,8 @@ const CGFloat kOpacityAnimationDuration = 0.4;
         [weakSelf
             handlePresentationAnimationCompletedWithCompletion:completion];
       }];
+
+  _resultViewController.view.userInteractionEnabled = NO;
 }
 
 // Sets up the layout guide that defines the area not obstructed by the results

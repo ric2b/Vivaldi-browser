@@ -1,0 +1,66 @@
+/*
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+syntax = "proto3";
+
+package fcp.client;
+
+import "google/protobuf/duration.proto";
+
+option java_package = "com.google.intelligence.fcp.client";
+option java_multiple_files = true;
+
+/**
+ * This protocol buffer is used to report results and statistics of a Federated
+ * Computation - including checking in with the server, running a plan, and
+ * reporting back results - to the caller. It is a protocol buffer to support
+ * sending it across language boundaries.
+ */
+message FLRunnerResult {
+  reserved 1;
+  // A RetryInfo returned to the caller for consideration in scheduling future
+  // runs of this task.
+  RetryInfo retry_info = 4;
+  // An enum that summarizes whether the client has contributed to an FL/FA
+  // round.
+  enum ContributionResult {
+    UNSPECIFIED = 0;
+    // The client successfully contributed to all of the tasks it was offered by
+    // the server (which could be one or more tasks).
+    SUCCESS = 1;
+    // The client failed to successfully contribute to any task.
+    FAIL = 2;
+    // The client successfully contributed to some but not all of the tasks it
+    // was offered.
+    PARTIAL = 3;
+  }
+
+  ContributionResult contribution_result = 5;
+  // The names of the tasks to which the client successfully contributed.
+  repeated string contributed_task_names = 6;
+  reserved 2, 3;
+}
+
+// A suggestion to the client when to retry the connection to the service next
+// time
+message RetryInfo {
+  // Optional. If set, should be provided back to the next
+  // RunFederatedComputation invocation.
+  string retry_token = 1;
+
+  // The suggested delay duration after which the client should
+  // retry. Clients should ideally not retry any earlier than this.
+  google.protobuf.Duration minimum_delay = 2;
+}

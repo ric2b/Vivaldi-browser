@@ -6,12 +6,21 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 
+#include "base/auto_reset.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "chrome/browser/global_features.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+#include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
+#include "chrome/browser/permissions/system/system_permission_settings.h"
 #include "chrome/browser/ui/browser_window/test/mock_browser_window_interface.h"
 #include "chrome/browser/ui/tabs/alert/tab_alert.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -21,21 +30,15 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
+#include "media/mojo/mojom/display_media_information.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-#if BUILDFLAG(ENABLE_GLIC)
-#include "chrome/browser/glic/glic_profile_manager.h"
-#include "chrome/browser/glic/host/glic_features.mojom-features.h"
-#include "chrome/browser/glic/public/context/glic_sharing_manager.h"
-#include "chrome/browser/glic/public/glic_keyed_service.h"
-#include "chrome/browser/glic/test_support/glic_test_util.h"
-#endif  // BUILDFLAG(ENABLE_GLIC)
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
+#include "ui/base/unowned_user_data/unowned_user_data_host.h"
 
 namespace tabs {
 
@@ -57,47 +60,14 @@ class MockTabAlertControllerSubscriber {
                void(std::optional<TabAlert> new_alert));
 };
 
-#if BUILDFLAG(ENABLE_GLIC)
-class TestGlicKeyedService : public glic::GlicKeyedService {
- public:
-  TestGlicKeyedService(
-      content::BrowserContext* browser_context,
-      signin::IdentityManager* identity_manager,
-      ProfileManager* profile_manager,
-      glic::GlicProfileManager* glic_profile_manager,
-      contextual_cueing::ContextualCueingService* contextual_cueing_service)
-      : GlicKeyedService(Profile::FromBrowserContext(browser_context),
-                         identity_manager,
-                         profile_manager,
-                         glic_profile_manager,
-                         contextual_cueing_service) {}
-};
-#endif  // BUILDFLAG(ENABLE_GLIC)
-
 class TabAlertControllerTest : public testing::Test {
  public:
   void SetUp() override {
-#if BUILDFLAG(ENABLE_GLIC)
-    scoped_feature_list_.InitWithFeatures(
-        {features::kGlic, features::kTabstripComboButton,
-         glic::mojom::features::kGlicMultiTab},
-        {});
-#endif  // BUILDFLAG(ENABLE_GLIC)
-
     testing_profile_manager_ = std::make_unique<TestingProfileManager>(
         TestingBrowserProcess::GetGlobal());
     ASSERT_TRUE(testing_profile_manager_->SetUp());
     TestingBrowserProcess::GetGlobal()->CreateGlobalFeaturesForTesting();
     profile_ = testing_profile_manager_->CreateTestingProfile("profile");
-
-#if BUILDFLAG(ENABLE_GLIC)
-    test_glic_keyed_service_ = std::make_unique<TestGlicKeyedService>(
-        profile_, identity_test_environment.identity_manager(),
-        testing_profile_manager_->profile_manager(), &glic_profile_manager_,
-        /*contextual_cueing_service=*/nullptr);
-    glic::ForceSigninAndModelExecutionCapability(profile_);
-#endif  // BUILDFLAG(ENABLE_GLIC)
-
     browser_window_interface_ =
         std::make_unique<FakeBrowserWindowInterface>(profile_);
     tab_strip_model_delegate_ = std::make_unique<TestTabStripModelDelegate>();
@@ -105,39 +75,28 @@ class TabAlertControllerTest : public testing::Test {
         browser_window_interface_.get());
     tab_strip_model_ = std::make_unique<TabStripModel>(
         tab_strip_model_delegate_.get(), profile_);
-
+    EXPECT_CALL(*browser_window_interface_, GetTabStripModel())
+        .WillRepeatedly(testing::Return(tab_strip_model_.get()));
     std::unique_ptr<content::WebContents> web_contents =
         content::WebContentsTester::CreateTestWebContents(profile_, nullptr);
     tab_model_ = std::make_unique<TabModel>(std::move(web_contents),
                                             tab_strip_model_.get());
-
-#if BUILDFLAG(ENABLE_GLIC)
-    tab_alert_controller_ = std::make_unique<TabAlertController>(
-        *tab_model_.get(), test_glic_keyed_service_.get());
-#else
-    tab_alert_controller_ =
-        std::make_unique<TabAlertController>(*tab_model_.get());
-#endif  // BUILDFLAG(ENABLE_GLIC)
   }
 
   void TearDown() override {
     // Explicitly reset the pointers to prevent them from causing the
     // BrowserTaskEnvironment to time out on destruction.
-    tab_alert_controller_.reset();
     tab_model_.reset();
     tab_strip_model_.reset();
     tab_strip_model_delegate_.reset();
     browser_window_interface_.reset();
-#if BUILDFLAG(ENABLE_GLIC)
-    test_glic_keyed_service_.reset();
-#endif  // BUILDFLAG(ENABLE_GLIC)
     profile_ = nullptr;
     TestingBrowserProcess::GetGlobal()->GetFeatures()->Shutdown();
     testing_profile_manager_.reset();
   }
 
   TabAlertController* tab_alert_controller() {
-    return tab_alert_controller_.get();
+    return tabs::TabAlertController::From(tab_model_.get());
   }
 
   TabInterface* tab_interface() { return tab_model_.get(); }
@@ -151,12 +110,6 @@ class TabAlertControllerTest : public testing::Test {
     return &task_environment_;
   }
 
-#if BUILDFLAG(ENABLE_GLIC)
-  TestGlicKeyedService* test_glic_keyed_service() {
-    return test_glic_keyed_service_.get();
-  }
-#endif  // BUILDFLAG(ENABLE_GLIC)
-
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
   content::BrowserTaskEnvironment task_environment_{
@@ -164,18 +117,10 @@ class TabAlertControllerTest : public testing::Test {
   content::RenderViewHostTestEnabler test_enabler_;
   std::unique_ptr<TestingProfileManager> testing_profile_manager_;
   raw_ptr<Profile> profile_ = nullptr;
-  signin::IdentityTestEnvironment identity_test_environment;
-
-#if BUILDFLAG(ENABLE_GLIC)
-  glic::GlicProfileManager glic_profile_manager_;
-  std::unique_ptr<TestGlicKeyedService> test_glic_keyed_service_;
-#endif  // BUILDFLAG(ENABLE_GLIC)
-
   std::unique_ptr<FakeBrowserWindowInterface> browser_window_interface_;
   std::unique_ptr<TestTabStripModelDelegate> tab_strip_model_delegate_;
   std::unique_ptr<TabStripModel> tab_strip_model_;
   std::unique_ptr<TabModel> tab_model_;
-  std::unique_ptr<TabAlertController> tab_alert_controller_;
 };
 
 TEST_F(TabAlertControllerTest, NotifiedOnAlertShouldShowChanged) {
@@ -287,17 +232,143 @@ TEST_F(TabAlertControllerTest, AudioStateUpdatesAlertController) {
   EXPECT_FALSE(tab_alert_controller()->GetAlertToShow().has_value());
 }
 
-#if BUILDFLAG(ENABLE_GLIC)
-TEST_F(TabAlertControllerTest, GlicSharingUpdatesAlertController) {
+TEST_F(TabAlertControllerTest, MutedStateReliesOnRecentlyAudible) {
   EXPECT_FALSE(tab_alert_controller()->GetAlertToShow().has_value());
-  glic::GlicSharingManager& glic_sharing_manager =
-      test_glic_keyed_service()->sharing_manager();
-  glic_sharing_manager.PinTabs({tab_interface()->GetHandle()});
-  EXPECT_TRUE(tab_alert_controller()->GetAlertToShow().has_value());
-  EXPECT_EQ(tab_alert_controller()->GetAlertToShow().value(),
-            TabAlert::GLIC_SHARING);
-  glic_sharing_manager.UnpinAllTabs();
+  tab_interface()->GetContents()->SetAudioMuted(true);
+  // Even though the tab is muted, since it wasn't recently audible, the muted
+  // tab alert shouldn't be active.
+  EXPECT_FALSE(tab_alert_controller()->GetAlertToShow().has_value());
+
+  // Simulating the tab to be audible should trigger the muted alert to be
+  // active since the tab was already muted.
+  SimulateAudioState(true);
+  EXPECT_EQ(tab_alert_controller()->GetAlertToShow(), TabAlert::AUDIO_MUTING);
+
+  // Turning off the audio state shouldn't immediately deactivate the muted
+  // alert since the tab is still recently audible.
+  SimulateAudioState(false);
+  EXPECT_EQ(tab_alert_controller()->GetAlertToShow(), TabAlert::AUDIO_MUTING);
+
+  // After waiting until the tab is no longer recently audible, the muted alert
+  // state should go away.
+  task_environment()->FastForwardBy(base::Seconds(2));
   EXPECT_FALSE(tab_alert_controller()->GetAlertToShow().has_value());
 }
-#endif  // BUILDFLAG(ENABLE_GLIC)
+
+TEST_F(TabAlertControllerTest, MediaStatesUpdate) {
+#if BUILDFLAG(IS_CHROMEOS)
+  // Need to mock the system settings to allow audio and video capture on
+  // ChromeOS.
+  base::AutoReset<bool> mock_system_settings =
+      system_permission_settings::MockShowSystemSettingsForTesting();
+#endif  // BUILDFLAG(IS_CHROMEOS)
+  scoped_refptr<MediaStreamCaptureIndicator> indicator =
+      MediaCaptureDevicesDispatcher::GetInstance()
+          ->GetMediaStreamCaptureIndicator();
+  EXPECT_FALSE(tab_alert_controller()->GetAlertToShow().has_value());
+
+  // Simulate audio being captured
+  blink::mojom::StreamDevices audio_device;
+  audio_device.audio_device = blink::MediaStreamDevice(
+      blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE, "audio_device",
+      "audio_device");
+  auto audio_stream_ui = indicator->RegisterMediaStream(
+      tab_interface()->GetContents(), audio_device);
+  audio_stream_ui->OnStarted(base::DoNothing(), base::DoNothing(),
+                             std::string(), {}, base::DoNothing());
+  EXPECT_TRUE(tab_alert_controller()->GetAlertToShow().has_value());
+  EXPECT_EQ(tab_alert_controller()->GetAlertToShow().value(),
+            TabAlert::AUDIO_RECORDING);
+
+  // Simulate video also being captured.
+  blink::mojom::StreamDevices video_device;
+  video_device.video_device = blink::MediaStreamDevice(
+      blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE, "video_device",
+      "video_device");
+  ;
+  auto video_stream_ui = indicator->RegisterMediaStream(
+      tab_interface()->GetContents(), video_device);
+  video_stream_ui->OnStarted(base::DoNothing(), base::DoNothing(),
+                             std::string(), {}, base::DoNothing());
+
+  // The tab alert should be MEDIA_RECORDING because the tab's audio and video
+  // is being captured.
+  EXPECT_TRUE(tab_alert_controller()->GetAlertToShow().has_value());
+  EXPECT_EQ(tab_alert_controller()->GetAllActiveAlerts().size(), 1u);
+  EXPECT_EQ(tab_alert_controller()->GetAlertToShow().value(),
+            TabAlert::MEDIA_RECORDING);
+
+  // Resetting the audio capture should leave only the video capture alert as
+  // active.
+  audio_stream_ui.reset();
+  EXPECT_TRUE(tab_alert_controller()->GetAlertToShow().has_value());
+  EXPECT_EQ(tab_alert_controller()->GetAllActiveAlerts().size(), 1u);
+  EXPECT_EQ(tab_alert_controller()->GetAlertToShow().value(),
+            TabAlert::VIDEO_RECORDING);
+
+  video_stream_ui.reset();
+  EXPECT_FALSE(tab_alert_controller()->GetAlertToShow().has_value());
+}
+
+TEST_F(TabAlertControllerTest, DesktopCapturingUpdates) {
+  scoped_refptr<MediaStreamCaptureIndicator> indicator =
+      MediaCaptureDevicesDispatcher::GetInstance()
+          ->GetMediaStreamCaptureIndicator();
+  EXPECT_FALSE(tab_alert_controller()->GetAlertToShow().has_value());
+
+  // Simulate the display monitor being captured.
+  blink::mojom::StreamDevices video_device;
+  blink::MediaStreamDevice display_monitor_video_stream(
+      blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE, "video_device",
+      "video_device");
+  display_monitor_video_stream.display_media_info =
+      media::mojom::DisplayMediaInformation::New(
+          media::mojom::DisplayCaptureSurfaceType::MONITOR, true,
+          media::mojom::CursorCaptureType::NEVER, nullptr, 100);
+  video_device.video_device = display_monitor_video_stream;
+
+  auto video_stream_ui = indicator->RegisterMediaStream(
+      tab_interface()->GetContents(), video_device);
+  video_stream_ui->OnStarted(base::DoNothing(), base::DoNothing(),
+                             std::string(), {}, base::DoNothing());
+
+  EXPECT_TRUE(tab_alert_controller()->GetAlertToShow().has_value());
+  EXPECT_EQ(tab_alert_controller()->GetAllActiveAlerts().size(), 1u);
+  EXPECT_EQ(tab_alert_controller()->GetAlertToShow().value(),
+            TabAlert::DESKTOP_CAPTURING);
+
+  // Start a second stream but capture the window instead.
+  blink::mojom::StreamDevices second_video_device;
+  blink::MediaStreamDevice display_window_video_stream(
+      blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE, "video_device",
+      "video_device");
+  display_window_video_stream.display_media_info =
+      media::mojom::DisplayMediaInformation::New(
+          media::mojom::DisplayCaptureSurfaceType::WINDOW, true,
+          media::mojom::CursorCaptureType::NEVER, nullptr, 100);
+  second_video_device.video_device = display_window_video_stream;
+  auto second_video_stream_ui = indicator->RegisterMediaStream(
+      tab_interface()->GetContents(), second_video_device);
+  second_video_stream_ui->OnStarted(base::DoNothing(), base::DoNothing(),
+                                    std::string(), {}, base::DoNothing());
+
+  EXPECT_TRUE(tab_alert_controller()->GetAlertToShow().has_value());
+  EXPECT_EQ(tab_alert_controller()->GetAllActiveAlerts().size(), 1u);
+  EXPECT_EQ(tab_alert_controller()->GetAlertToShow().value(),
+            TabAlert::DESKTOP_CAPTURING);
+
+  // Even though the first stream has stopped, the desktop capturing alert
+  // should remain active because the is still being captured by the window.
+  video_stream_ui.reset();
+  EXPECT_TRUE(tab_alert_controller()->GetAlertToShow().has_value());
+  EXPECT_EQ(tab_alert_controller()->GetAllActiveAlerts().size(), 1u);
+  EXPECT_EQ(tab_alert_controller()->GetAlertToShow().value(),
+            TabAlert::DESKTOP_CAPTURING);
+
+  // The desktop capturing alert should no longer be active after the second
+  // video stream stopped.
+  second_video_stream_ui.reset();
+  EXPECT_FALSE(tab_alert_controller()->GetAlertToShow().has_value());
+}
+
 }  // namespace tabs

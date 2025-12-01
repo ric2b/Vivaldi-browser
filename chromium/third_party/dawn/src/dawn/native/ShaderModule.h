@@ -188,6 +188,7 @@ using ShaderBindingInfoVariant = std::variant<BufferBindingInfo,
                                               SamplerBindingInfo,
                                               TextureBindingInfo,
                                               StorageTextureBindingInfo,
+                                              TexelBufferBindingInfo,
                                               ExternalTextureBindingInfo,
                                               InputAttachmentBindingInfo>;
 #define SHADER_BINDING_INFO_MEMBER(X)              \
@@ -201,6 +202,15 @@ DAWN_SERIALIZABLE(struct, ShaderBindingInfo, SHADER_BINDING_INFO_MEMBER){};
 
 using BindingGroupInfoMap = absl::flat_hash_map<BindingNumber, ShaderBindingInfo>;
 using BindingInfoArray = ityp::array<BindGroupIndex, BindingGroupInfoMap, kMaxBindGroups>;
+
+// Shader metadata that's the equivalent for the dynamic binding arrays in the BGLs.
+#define GROUP_DYNAMIC_BINDING_ARRAY_INFO_MEMBERS(X) \
+    X(BindingNumber, start)                         \
+    X(wgpu::DynamicBindingKind, kind)
+DAWN_SERIALIZABLE(struct, GroupDynamicBindingArrayInfo, GROUP_DYNAMIC_BINDING_ARRAY_INFO_MEMBERS){};
+#undef GROUP_DYNAMIC_BINDING_ARRAY_INFO_MEMBERS
+
+using DynamicBindingArrayInfo = absl::flat_hash_map<BindGroupIndex, GroupDynamicBindingArrayInfo>;
 
 // Define types for the shader reflection data structures in detail namespaces to prevent messing
 // up dawn::native namespace. These types can be exposed within EntryPointMetadata if needed.
@@ -273,6 +283,9 @@ using OverridesMap = absl::flat_hash_map<std::string, Override>;
     X(std::vector<std::string>, infringedLimitErrors)                                             \
     /* bindings[G][B] is the reflection data for the binding defined with @group(G) @binding(B)*/ \
     X(BindingInfoArray, bindings)                                                                 \
+    /* dynamicBindingArray[G] is the reflection data for the dynamic binding array of @group(G)*/ \
+    /* if one is present in the shader module                                                  */ \
+    X(DynamicBindingArrayInfo, dynamicBindingArrays)                                              \
     /* Contains the reflection information of all sampler and non-sampler texture (storage     */ \
     /* texture not included) usage in the entry point. For non-sampler usage,                  */ \
     /* nonSamplerBindingPoint is used for sampler slot.                                        */ \
@@ -317,11 +330,7 @@ using OverridesMap = absl::flat_hash_map<std::string, Override>;
     X(bool, usesDepthTextureWithNonComparisonSampler)                                             \
     X(bool, usesSubgroupMatrix)                                                                   \
     /* Immediate Data block byte size */                                                          \
-    X(uint32_t, immediateDataRangeByteSize)                                                       \
-    /* Number of texture+sampler combinations, computed as 1 for every texture+sampler         */ \
-    /* combination + 1 for every texture used without a sampler that wasn't previously counted.*/ \
-    /* Note: this is only set in compatibility mode.                                           */ \
-    X(uint32_t, numTextureSamplerCombinations)
+    X(uint32_t, immediateDataRangeByteSize)
 DAWN_SERIALIZABLE(struct, EntryPointMetadata, ENTRY_POINT_METADATA_MEMBER) {
     using SamplerTexturePair = detail::SamplerTexturePair;
     // TODO(crbug.com/409438000): Remove the hack of sampler placeholders for non-sampler texture.
@@ -425,8 +434,9 @@ class ShaderModuleBase : public RefCountedWithExternalCount<ApiObjectBase>,
     void WillDropLastExternalRef() override;
 
     // The original data in the descriptor for caching.
-    enum class Type { Undefined, Spirv, Wgsl };
+    enum class Type : uint8_t { Undefined, Spirv, Wgsl };
     Type mType;
+    bool mAllowSpirvNonUniformDerivitives = false;
     std::vector<uint32_t> mOriginalSpirv;
     std::string mWgsl;
 

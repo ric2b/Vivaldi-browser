@@ -24,6 +24,7 @@
 
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
 #include "third_party/blink/renderer/core/animation/css/css_animations.h"
+#include "third_party/blink/renderer/core/css/css_gradient_value.h"
 #include "third_party/blink/renderer/core/css/css_light_dark_value_pair.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/css/css_uri_value.h"
@@ -135,6 +136,14 @@ const ComputedStyle* StyleResolverState::TakeStyle() {
     return nullptr;
   }
   return style_builder_->TakeStyle();
+}
+
+const ComputedStyle* StyleResolverState::CloneStyle() const {
+  if (had_no_matched_properties_ &&
+      pseudo_request_type_ == StyleRequest::kForRenderer) {
+    return nullptr;
+  }
+  return style_builder_->CloneStyle();
 }
 
 void StyleResolverState::UpdateLengthConversionData() {
@@ -362,6 +371,15 @@ const CSSValue& StyleResolverState::ResolveLightDarkPair(
   return value;
 }
 
+const CSSValue& StyleResolverState::ResolveGradient(const CSSValue& value) {
+  if (const auto* gradient_value =
+          DynamicTo<cssvalue::CSSGradientValue>(&value)) {
+    return *gradient_value->ResolveValuesIfNeeded(
+        css_to_length_conversion_data_);
+  }
+  return value;
+}
+
 void StyleResolverState::UpdateFont() {
   GetFontBuilder().CreateFont(StyleBuilder(), ParentStyle());
   SetConversionFontSizes(CSSToLengthConversionData::FontSizes(
@@ -397,17 +415,11 @@ void StyleResolverState::SetComputedStyleFlagsFromAuthorFlags(
     StyleBuilder().SetHasAuthorBorderRadius();
   }
 
-  if (RuntimeEnabledFeatures::CSSDoNotHideVisitedColorEnabled()) {
-    if (author_flags & CSSProperty::kHighlightColors) {
-      StyleBuilder().SetHasAuthorHighlightColors();
-    }
-  } else {
-    if ((InsideLink() != EInsideLink::kInsideVisitedLink &&
-         (author_flags & CSSProperty::kHighlightColors)) ||
-        (InsideLink() == EInsideLink::kInsideVisitedLink &&
-         (author_flags & CSSProperty::kVisitedHighlightColors))) {
-      StyleBuilder().SetHasAuthorHighlightColors();
-    }
+  if ((InsideLink() != EInsideLink::kInsideVisitedLink &&
+       (author_flags & CSSProperty::kHighlightColors)) ||
+      (InsideLink() == EInsideLink::kInsideVisitedLink &&
+       (author_flags & CSSProperty::kVisitedHighlightColors))) {
+    StyleBuilder().SetHasAuthorHighlightColors();
   }
 }
 

@@ -2,14 +2,15 @@
 
 source_set("types") {
   sources = [
+    "adblock_request_filter_rule_types.cc",
+    "adblock_request_filter_rule_types.h",
     "adblock_types.cc",
     "adblock_types.h",
-    "adblock_request_filter_rule.cc",
-    "adblock_request_filter_rule.h",
   ]
   deps = [
     "//base",
     "//url",
+    "//vivaldi/base",
   ]
 }
 
@@ -26,9 +27,7 @@ source_set("core") {
     "adblock_stats_store.cc",
     "adblock_stats_store.h",
   ]
-  public_deps = [
-    ":types",
-  ]
+  public_deps = [ ":types" ]
   deps = [
     "//base",
     "//url",

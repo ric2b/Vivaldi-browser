@@ -804,7 +804,7 @@ ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
       (params->drag_data.is_from_touch && *params->drag_data.is_from_touch)
           ? ui::mojom::DragEventSource::kTouch
           : ui::mojom::DragEventSource::kMouse;
-  event_info_.location = display::Screen::GetScreen()->GetCursorScreenPoint();
+  event_info_.location = display::Screen::Get()->GetCursorScreenPoint();
 
   image_offset_.set_x(params->drag_data.cursor_x);
   image_offset_.set_y(params->drag_data.cursor_y);

@@ -141,8 +141,8 @@ const char* ComputeMarker(Tagged<SharedFunctionInfo> shared,
       kind == CodeKind::INTERPRETED_FUNCTION) {
     return "";
   }
-  return CodeKindToMarker(
-      kind, IsCode(code) && code->GetCode()->is_context_specialized());
+  return CodeKindToMarker(kind, code->is_context_specialized(cage_base),
+                          code->osr_offset(cage_base));
 }
 
 #if V8_ENABLE_WEBASSEMBLY
@@ -1433,27 +1433,39 @@ void V8FileLogger::LogSourceCodeInformation(
       << V8FileLogger::kNext << script->id() << V8FileLogger::kNext
       << shared->StartPosition() << V8FileLogger::kNext << shared->EndPosition()
       << V8FileLogger::kNext;
-  // TODO(v8:11429): Clean-up baseline-replated code in source position
-  // iteration.
   bool hasInlined = false;
-  if (code->kind(cage_base) != CodeKind::BASELINE) {
-    SourcePositionTableIterator iterator(
-        code->SourcePositionTable(isolate_, *shared));
-    for (; !iterator.done(); iterator.Advance()) {
-      SourcePosition pos = iterator.source_position();
-      msg << "C" << iterator.code_offset() << "O" << pos.ScriptOffset();
-      if (pos.isInlined()) {
-        msg << "I" << pos.InliningId();
-        hasInlined = true;
-      }
+  bool isBaseline = code->kind(cage_base) == CodeKind::BASELINE;
+  std::optional<baseline::BytecodeOffsetIterator> baseline_iterator;
+  if (isBaseline) {
+    Handle<BytecodeArray> bytecodes(shared->GetBytecodeArray(isolate_),
+                                    isolate_);
+    Handle<TrustedByteArray> bytecode_offsets(
+        code->GetCode()->bytecode_offset_table(), isolate_);
+    baseline_iterator.emplace(bytecode_offsets, bytecodes);
+  }
+  Handle<TrustedByteArray> source_position_table(
+      code->SourcePositionTable(isolate_, *shared), isolate_);
+  SourcePositionTableIterator iterator(source_position_table);
+  for (; !iterator.done(); iterator.Advance()) {
+    SourcePosition pos = iterator.source_position();
+    int code_offset = iterator.code_offset();
+    if (isBaseline) {
+      // Use the bytecode offset to calculate pc offset for baseline code.
+      baseline_iterator->AdvanceToBytecodeOffset(code_offset);
+      code_offset =
+          static_cast<int>(baseline_iterator->current_pc_start_offset());
+    }
+    msg << "C" << code_offset << "O" << pos.ScriptOffset();
+    if (pos.isInlined()) {
+      msg << "I" << pos.InliningId();
+      hasInlined = true;
     }
   }
   msg << V8FileLogger::kNext;
   int maxInlinedId = -1;
   if (hasInlined) {
     Tagged<TrustedPodArray<InliningPosition>> inlining_positions =
-        Cast<DeoptimizationData>(Cast<Code>(code)->deoptimization_data())
-            ->InliningPositions();
+        CheckedCast<Code>(*code)->deoptimization_data()->InliningPositions();
     for (int i = 0; i < inlining_positions->length(); i++) {
       InliningPosition inlining_pos = inlining_positions->get(i);
       msg << "F";
@@ -1473,7 +1485,7 @@ void V8FileLogger::LogSourceCodeInformation(
   msg << V8FileLogger::kNext;
   if (hasInlined) {
     Tagged<DeoptimizationData> deopt_data =
-        Cast<DeoptimizationData>(Cast<Code>(code)->deoptimization_data());
+        CheckedCast<Code>(*code)->deoptimization_data();
     msg << std::hex;
     for (int i = 0; i <= maxInlinedId; i++) {
       msg << "S"
@@ -1496,12 +1508,12 @@ void V8FileLogger::LogCodeDisassemble(DirectHandle<AbstractCode> code) {
       << V8FileLogger::kNext;
   {
     std::ostringstream stream;
-    if (IsCode(*code, cage_base)) {
+    if (Tagged<Code> code_as_code; TryCast(*code, &code_as_code)) {
 #ifdef ENABLE_DISASSEMBLER
-      Cast<Code>(*code)->Disassemble(nullptr, stream, isolate_);
+      code_as_code->Disassemble(nullptr, stream, isolate_);
 #endif
     } else {
-      Cast<BytecodeArray>(*code)->Disassemble(stream);
+      CheckedCast<BytecodeArray>(*code)->Disassemble(stream);
     }
     std::string string = stream.str();
     msg.AppendString(string.c_str(), string.length());
@@ -2265,7 +2277,7 @@ void V8FileLogger::LogAllMaps() {
   CombinedHeapObjectIterator iterator(heap);
   for (Tagged<HeapObject> obj = iterator.Next(); !obj.is_null();
        obj = iterator.Next()) {
-    if (!IsMap(obj)) continue;
+    if (IsAnyHole(obj) || !IsMap(obj)) continue;
     Tagged<Map> map = Cast<Map>(obj);
     MapCreate(map);
     MapDetails(map);
@@ -2536,7 +2548,11 @@ void ExistingCodeLogger::LogCodeObject(Tagged<AbstractCode> object) {
     case CodeKind::MAGLEV:
       return;  // We log this later using LogCompiledFunctions.
     case CodeKind::FOR_TESTING:
-      description = "STUB code";
+      description = "Test Code with stub linkage";
+      tag = CodeTag::kStub;
+      break;
+    case CodeKind::FOR_TESTING_JS:
+      description = "Test Code with JS linkage";
       tag = CodeTag::kStub;
       break;
     case CodeKind::REGEXP:
@@ -2573,6 +2589,10 @@ void ExistingCodeLogger::LogCodeObject(Tagged<AbstractCode> object) {
       break;
     case CodeKind::WASM_TO_JS_FUNCTION:
       description = "A Wasm to JavaScript adapter";
+      tag = CodeTag::kStub;
+      break;
+    case CodeKind::WASM_STACK_ENTRY:
+      description = "A Wasm continuation adapter";
       tag = CodeTag::kStub;
       break;
     case CodeKind::C_WASM_ENTRY:
@@ -2646,7 +2666,7 @@ void ExistingCodeLogger::LogCompiledFunctions(
     // objects are also in trusted space. Currently this breaks because we must
     // not compare objects in trusted space with ones inside the sandbox.
     static_assert(!kAllCodeObjectsLiveInTrustedSpace);
-    if (!HeapLayout::InTrustedSpace(*pair.second) &&
+    if (!TrustedHeapLayout::InTrustedSpace(*pair.second) &&
         pair.second.is_identical_to(BUILTIN_CODE(isolate_, CompileLazy))) {
       continue;
     }

@@ -12,6 +12,7 @@
 #include <tuple>
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/containers/flat_map.h"
 #include "base/environment.h"
 #include "base/files/file_util.h"
@@ -133,33 +134,7 @@ PasswordForm GenerateExamplePasswordForm() {
   form.date_last_filled = base::Time::Now();
   form.date_received = base::Time::Now() - base::Hours(1);
   form.sharing_notification_displayed = true;
-  return form;
-}
-
-PasswordForm GenerateBlocklistedForm() {
-  PasswordForm form = GenerateExamplePasswordForm();
-  form.url = GURL("http://accounts.blocklisted.com/LoginAuth");
-  form.action = GURL("http://accounts.blocklisted.com/Login");
-  form.signon_realm = "http://www.blocklisted.com/";
-  form.blocked_by_user = true;
-  return form;
-}
-
-PasswordForm GenerateFederatedCredentialForm() {
-  PasswordForm form = GenerateExamplePasswordForm();
-  form.url = GURL("http://accounts.federated.com/LoginAuth");
-  form.action = GURL("http://accounts.federated.com/Login");
-  form.federation_origin =
-      url::SchemeHostPort(GURL("https://accounts.federated.com/"));
-  return form;
-}
-
-PasswordForm GenerateUsernameOnlyForm() {
-  PasswordForm form = GenerateExamplePasswordForm();
-  form.url = GURL("http://accounts.usernameonly.com/LoginAuth");
-  form.action = GURL("http://accounts.usernameonly.com/Login");
-  form.signon_realm = "http://www.usernameonly.com/";
-  form.scheme = PasswordForm::Scheme::kUsernameOnly;
+  form.actor_login_approved = true;
   return form;
 }
 
@@ -210,7 +185,7 @@ std::vector<T> GetColumnValuesFromDatabase(const base::FilePath& database_path,
   return results;
 }
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
 // Set the new password value for all the rows with the specified username.
 void UpdatePasswordValueForUsername(const base::FilePath& database_path,
                                     const std::u16string& username,
@@ -227,7 +202,7 @@ void UpdatePasswordValueForUsername(const base::FilePath& database_path,
 
   CHECK(s.Run());
 }
-#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 bool AddZeroClickableLogin(LoginDatabase* db,
                            const std::string& unique_string,
@@ -295,7 +270,6 @@ class LoginDatabaseTestBase : public testing::Test {
     OSCryptMocker::SetUp();
 
     db_ = std::make_unique<LoginDatabase>(file_, IsAccountStore(false));
-    db_->SetIsEmptyCb(is_empty_cb_.Get());
     ASSERT_TRUE(
         db_->Init(/*on_undecryptable_passwords_removed=*/base::NullCallback(),
                   /*encryptor=*/nullptr));
@@ -307,7 +281,6 @@ class LoginDatabaseTestBase : public testing::Test {
 
   base::ScopedTempDir temp_dir_;
   base::FilePath file_;
-  NiceMock<base::MockCallback<LoginDatabase::IsEmptyCallback>> is_empty_cb_;
   std::unique_ptr<LoginDatabase> db_;
   // A full TaskEnvironment is required instead of only
   // SingleThreadTaskEnvironment because on iOS,
@@ -326,7 +299,6 @@ class LoginDatabaseTest : public LoginDatabaseTestBase,
     OSCryptMocker::SetUp();
 
     db_ = std::make_unique<LoginDatabase>(file_, IsAccountStore(false));
-    db_->SetIsEmptyCb(is_empty_cb_.Get());
     ASSERT_TRUE(
         db_->Init(/*on_undecryptable_passwords_removed=*/base::NullCallback(),
                   /*encryptor=*/encryptor()));
@@ -1491,6 +1463,7 @@ TEST_P(LoginDatabaseTest, UpdateLogin) {
   form.skip_zero_click = true;
   form.moving_blocked_for_list.push_back(
       GaiaIdHash::FromGaiaId(GaiaId("gaia_id")));
+  form.actor_login_approved = true;
 
   PasswordStoreChangeList changes = db().UpdateLogin(form);
   EXPECT_EQ(UpdateChangeForForm(form, /*password_changed=*/true), changes);
@@ -1731,10 +1704,10 @@ TEST_P(LoginDatabaseTest, ReportMetricsTest) {
 
   histogram_tester.ExpectUniqueSample(
       "PasswordManager.ProfileStore.InaccessiblePasswords3", 0, 1);
-#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_IOS)
   histogram_tester.ExpectUniqueSample(
       "PasswordManager.BubbleSuppression.AccountsInStatisticsTable2", 4, 1);
-#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+#endif  // !BUILDFLAG(IS_IOS)
 }
 
 // This test is mostly a copy of ReportMetricsTest, but covering the account
@@ -2009,8 +1982,8 @@ TEST_P(LoginDatabaseTest, EncryptionEnabled) {
 }
 #endif  // !BUILDFLAG(IS_IOS)
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
-// On Android and ChromeOS there is a mix of plain-text and obfuscated
+#if BUILDFLAG(IS_CHROMEOS)
+// On ChromeOS there is a mix of plain-text and obfuscated
 // passwords. Verify that they can both be accessed. Obfuscated passwords start
 // with "v10". Some password values also start with "v10". Test that both are
 // accessible (this doesn't work for any plain-text value).
@@ -2062,7 +2035,7 @@ TEST_P(LoginDatabaseTest, HandleObfuscationMix) {
                   Field(&PasswordForm::password_value, k_plain_text_pw116),
                   Field(&PasswordForm::password_value, k_plain_text_pw216)));
 }
-#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 // If the database initialisation fails, the initialisation transaction should
 // roll back without crashing.
@@ -2420,8 +2393,6 @@ TEST_F(LoginDatabaseUndecryptableLoginsTest, DeleteUndecryptableLoginsTest) {
                     /*should_be_corrupted=*/true, /*blocklisted=*/true);
 
   LoginDatabase db(database_path(), IsAccountStore(false));
-  NiceMock<base::MockCallback<LoginDatabase::IsEmptyCallback>> is_empty_cb;
-  db.SetIsEmptyCb(is_empty_cb.Get());
   base::HistogramTester histogram_tester;
   ASSERT_TRUE(
       db.Init(/*on_undecryptable_passwords_removed=*/base::NullCallback(),
@@ -2439,12 +2410,6 @@ TEST_F(LoginDatabaseUndecryptableLoginsTest, DeleteUndecryptableLoginsTest) {
   EXPECT_TRUE(result.empty());
 
   // Delete undecryptable logins and make sure we can get valid logins.
-  // `is_empty_cb_` is called more than once because DeleteUndecryptableLogins()
-  // internally calls RemoveLogin() for each form.
-  EXPECT_CALL(is_empty_cb, Run(LoginDatabase::LoginDatabaseEmptinessState{
-                               .no_login_found = false,
-                               .autofillable_credentials_exist = true}))
-      .Times(AnyNumber());
   EXPECT_EQ(DatabaseCleanupResult::kSuccess, db.DeleteUndecryptableLogins());
   EXPECT_TRUE(db.GetAutofillableLogins(&result));
   EXPECT_THAT(result, ElementsAre(HasPrimaryKeyAndEquals(form1)));
@@ -3446,181 +3411,6 @@ TEST_P(LoginDatabaseTest, AddLoginWithNonEmptyInvalidURL) {
   auto error = AddCredentialError::kNone;
   EXPECT_THAT(db().AddLogin(form, &error), IsEmpty());
   EXPECT_EQ(error, AddCredentialError::kConstraintViolation);
-}
-
-TEST_P(LoginDatabaseTest, IsEmptyCb_InitEmpty) {
-  LoginDatabase db(temp_dir_.GetPath().AppendASCII("DbDirectory"),
-                   IsAccountStore(false));
-  NiceMock<base::MockCallback<LoginDatabase::IsEmptyCallback>> is_empty_cb;
-  db.SetIsEmptyCb(is_empty_cb.Get());
-  EXPECT_CALL(is_empty_cb, Run(LoginDatabase::LoginDatabaseEmptinessState{
-                               .no_login_found = true,
-                               .autofillable_credentials_exist = false}));
-  db.Init(/*on_undecryptable_passwords_removed=*/base::NullCallback(),
-          /*encryptor=*/encryptor());
-}
-
-TEST_P(LoginDatabaseTest, IsEmptyCb_InitNonEmpty) {
-  base::FilePath directory = temp_dir_.GetPath().AppendASCII("DbDirectory");
-  {
-    // Simulate the DB being populated in a previous startup.
-    auto db = std::make_unique<LoginDatabase>(directory, IsAccountStore(false));
-    db->Init(/*on_undecryptable_passwords_removed=*/base::NullCallback(),
-             /*encryptor=*/encryptor());
-    std::ignore =
-        db->AddLogin(GenerateExamplePasswordForm(), /*error=*/nullptr);
-    db.reset();
-  }
-
-  LoginDatabase db(directory, IsAccountStore(false));
-  NiceMock<base::MockCallback<LoginDatabase::IsEmptyCallback>> is_empty_cb;
-  db.SetIsEmptyCb(is_empty_cb.Get());
-  EXPECT_CALL(is_empty_cb, Run(LoginDatabase::LoginDatabaseEmptinessState{
-                               .no_login_found = false,
-                               .autofillable_credentials_exist = true}));
-  db.Init(/*on_undecryptable_passwords_removed=*/base::NullCallback(),
-          /*encryptor=*/encryptor());
-}
-
-TEST_P(LoginDatabaseTest, IsEmptyCb_AddLogin) {
-  ASSERT_TRUE(db().IsEmpty().no_login_found &&
-              !db().IsEmpty().autofillable_credentials_exist);
-  EXPECT_CALL(is_empty_cb_, Run(LoginDatabase::LoginDatabaseEmptinessState{
-                                .no_login_found = false,
-                                .autofillable_credentials_exist = true}));
-  std::ignore = db().AddLogin(GenerateExamplePasswordForm(), /*error=*/nullptr);
-}
-
-TEST_P(LoginDatabaseTest,
-       IsEmptyCb_AddBlocklist_NoAutofillableCredentialsExist) {
-  ASSERT_TRUE(db().IsEmpty().no_login_found &&
-              !db().IsEmpty().autofillable_credentials_exist);
-  PasswordForm blocklist = GenerateBlocklistedForm();
-  EXPECT_CALL(is_empty_cb_, Run(LoginDatabase::LoginDatabaseEmptinessState{
-                                .no_login_found = false,
-                                .autofillable_credentials_exist = false}));
-  std::ignore = db().AddLogin(blocklist, /*error=*/nullptr);
-}
-
-TEST_P(LoginDatabaseTest,
-       IsEmptyCb_AddFederatedCredential_NoAutofillableCredentialsExist) {
-  ASSERT_TRUE(db().IsEmpty().no_login_found &&
-              !db().IsEmpty().autofillable_credentials_exist);
-  PasswordForm federated_credential = GenerateFederatedCredentialForm();
-  EXPECT_CALL(is_empty_cb_, Run(LoginDatabase::LoginDatabaseEmptinessState{
-                                .no_login_found = false,
-                                .autofillable_credentials_exist = false}));
-  std::ignore = db().AddLogin(federated_credential, /*error=*/nullptr);
-}
-
-TEST_P(LoginDatabaseTest,
-       IsEmptyCb_AddUsernameOnlyCredential_NoAutofillableCredentialsExist) {
-  ASSERT_TRUE(db().IsEmpty().no_login_found &&
-              !db().IsEmpty().autofillable_credentials_exist);
-  PasswordForm username_only = GenerateUsernameOnlyForm();
-  EXPECT_CALL(is_empty_cb_, Run(LoginDatabase::LoginDatabaseEmptinessState{
-                                .no_login_found = false,
-                                .autofillable_credentials_exist = false}));
-  std::ignore = db().AddLogin(username_only, /*error=*/nullptr);
-}
-
-TEST_P(LoginDatabaseTest, IsEmptyCb_RemoveLogin) {
-  PasswordForm normal_form = GenerateExamplePasswordForm();
-  PasswordForm blocklist_form = GenerateBlocklistedForm();
-  PasswordForm federated_form = GenerateFederatedCredentialForm();
-  PasswordForm username_only_form = GenerateUsernameOnlyForm();
-
-  ASSERT_EQ(db().AddLogin(normal_form, /*error=*/nullptr).size(), 1u);
-  ASSERT_EQ(db().AddLogin(blocklist_form, /*error=*/nullptr).size(), 1u);
-  ASSERT_EQ(db().AddLogin(federated_form, /*error=*/nullptr).size(), 1u);
-  ASSERT_EQ(db().AddLogin(username_only_form, /*error=*/nullptr).size(), 1u);
-  ASSERT_TRUE(!db().IsEmpty().no_login_found &&
-              db().IsEmpty().autofillable_credentials_exist);
-
-  testing::MockFunction<void(int)> check;
-  {
-    testing::InSequence in_sequence;
-    EXPECT_CALL(is_empty_cb_, Run(LoginDatabase::LoginDatabaseEmptinessState{
-                                  .no_login_found = false,
-                                  .autofillable_credentials_exist = false}))
-        .Times(3);
-    EXPECT_CALL(check, Call(1));
-    EXPECT_CALL(is_empty_cb_, Run(LoginDatabase::LoginDatabaseEmptinessState{
-                                  .no_login_found = true,
-                                  .autofillable_credentials_exist = false}));
-  }
-  std::ignore = db().RemoveLogin(normal_form, /*changes=*/nullptr);
-  std::ignore = db().RemoveLogin(blocklist_form, /*changes=*/nullptr);
-  std::ignore = db().RemoveLogin(federated_form, /*changes=*/nullptr);
-  check.Call(1);
-  std::ignore = db().RemoveLogin(username_only_form, /*changes=*/nullptr);
-}
-
-TEST_P(LoginDatabaseTest, IsEmptyCb_RemoveLoginByPrimaryKey) {
-  PasswordForm normal_form = GenerateExamplePasswordForm();
-  PasswordForm blocklist_form = GenerateBlocklistedForm();
-  PasswordForm federated_form = GenerateFederatedCredentialForm();
-  PasswordForm username_only_form = GenerateUsernameOnlyForm();
-
-  PasswordStoreChangeList normal_form_changes = db().AddLogin(normal_form);
-  PasswordStoreChangeList blocklist_form_changes =
-      db().AddLogin(blocklist_form);
-  PasswordStoreChangeList federated_form_changes =
-      db().AddLogin(federated_form);
-  PasswordStoreChangeList username_only_form_changes =
-      db().AddLogin(username_only_form);
-
-  ASSERT_EQ(normal_form_changes.size(), 1u);
-  ASSERT_EQ(blocklist_form_changes.size(), 1u);
-  ASSERT_EQ(federated_form_changes.size(), 1u);
-  ASSERT_EQ(username_only_form_changes.size(), 1u);
-  ASSERT_TRUE(!db().IsEmpty().no_login_found &&
-              db().IsEmpty().autofillable_credentials_exist);
-
-  testing::MockFunction<void(int)> check;
-  {
-    testing::InSequence in_sequence;
-    EXPECT_CALL(is_empty_cb_, Run(LoginDatabase::LoginDatabaseEmptinessState{
-                                  .no_login_found = false,
-                                  .autofillable_credentials_exist = false}))
-        .Times(3);
-    EXPECT_CALL(check, Call(1));
-    EXPECT_CALL(is_empty_cb_, Run(LoginDatabase::LoginDatabaseEmptinessState{
-                                  .no_login_found = true,
-                                  .autofillable_credentials_exist = false}));
-  }
-
-  std::ignore = db().RemoveLoginByPrimaryKey(
-      *normal_form_changes[0].form().primary_key, &normal_form_changes);
-  std::ignore = db().RemoveLoginByPrimaryKey(
-      *blocklist_form_changes[0].form().primary_key, &blocklist_form_changes);
-  std::ignore = db().RemoveLoginByPrimaryKey(
-      *federated_form_changes[0].form().primary_key, &federated_form_changes);
-  check.Call(1);
-  std::ignore = db().RemoveLoginByPrimaryKey(
-      *username_only_form_changes[0].form().primary_key,
-      &username_only_form_changes);
-}
-
-TEST_P(LoginDatabaseTest, IsEmptyCb_RemoveLoginsCreatedBetween) {
-  std::ignore = db().AddLogin(GenerateExamplePasswordForm(), /*error=*/nullptr);
-  ASSERT_TRUE(!db().IsEmpty().no_login_found &&
-              db().IsEmpty().autofillable_credentials_exist);
-  EXPECT_CALL(is_empty_cb_, Run(LoginDatabase::LoginDatabaseEmptinessState{
-                                .no_login_found = true,
-                                .autofillable_credentials_exist = false}));
-  std::ignore = db().RemoveLoginsCreatedBetween(base::Time(), base::Time::Now(),
-                                                /*changes=*/nullptr);
-}
-
-TEST_P(LoginDatabaseTest, IsEmptyCb_DeleteAndRecreateDatabaseFile) {
-  std::ignore = db().AddLogin(GenerateExamplePasswordForm(), /*error=*/nullptr);
-  ASSERT_TRUE(!db().IsEmpty().no_login_found &&
-              db().IsEmpty().autofillable_credentials_exist);
-  EXPECT_CALL(is_empty_cb_, Run(LoginDatabase::LoginDatabaseEmptinessState{
-                                .no_login_found = true,
-                                .autofillable_credentials_exist = false}));
-  db().DeleteAndRecreateDatabaseFile();
 }
 
 class LoginDatabaseForAccountStoreTest : public testing::Test {

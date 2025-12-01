@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "components/page_load_metrics/common/page_load_timing.h"
+
 #include "components/page_load_metrics/common/page_load_metrics.mojom-forward.h"
 #include "third_party/blink/public/web/web_performance_metrics_for_reporting.h"
 
@@ -45,8 +46,7 @@ bool IsEmpty(const page_load_metrics::mojom::InteractiveTiming& timing) {
 }
 
 bool IsEmpty(const page_load_metrics::mojom::InputTiming& timing) {
-  // TODO(sullivan): Adjust this to be based on max_event_durations
-  return !timing.num_interactions;
+  return timing.user_interaction_latencies.empty();
 }
 
 bool IsEmpty(const page_load_metrics::mojom::PaintTiming& timing) {
@@ -69,6 +69,23 @@ bool IsEmpty(const page_load_metrics::mojom::ParseTiming& timing) {
 
 bool IsEmpty(const page_load_metrics::mojom::DomainLookupTiming& timing) {
   return !timing.domain_lookup_start && !timing.domain_lookup_end;
+}
+
+bool IsEmpty(const mojom::LcpResourceLoadTimings& timing) {
+  return !timing.discovery_time && !timing.load_start && !timing.load_end;
+}
+
+bool IsEmpty(const mojom::LargestContentfulPaintTiming& timing) {
+  return !timing.largest_image_paint && !timing.largest_text_paint &&
+         (!timing.resource_load_timings ||
+          IsEmpty(*timing.resource_load_timings));
+}
+
+bool IsEmpty(const mojom::SoftNavigationMetrics& timing) {
+  return !timing.count && timing.start_time.is_zero() &&
+         !timing.navigation_id &&
+         (!timing.largest_contentful_paint ||
+          IsEmpty(*timing.largest_contentful_paint));
 }
 
 bool IsEmpty(const page_load_metrics::mojom::PageLoadTiming& timing) {

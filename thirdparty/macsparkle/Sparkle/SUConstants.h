@@ -31,6 +31,9 @@ extern NSString *const SUAppcastAttributeValueMacOS;
 // -----------------------------------------------------------------------------
 
 extern NSString *const SUTechnicalErrorInformationKey;
+extern NSString *const SUUpdateAutomaticCheckSettingChangedNotification;
+extern NSString *const SUUpdateSettingsNeedsSynchronizationNotification;
+extern NSString *const SUUpdateBundlePathUserInfoKey;
 
 // -----------------------------------------------------------------------------
 //	PList keys::
@@ -48,6 +51,7 @@ extern NSString *const SULastCheckTimeKey;
 extern NSString *const SUPublicDSAKeyKey;
 extern NSString *const SUPublicDSAKeyFileKey;
 extern NSString *const SUPublicEDKeyKey;
+extern NSString *const SUVerifyUpdateBeforeExtractionKey;
 extern NSString *const SUAutomaticallyUpdateKey;
 extern NSString *const SUAllowsAutomaticUpdatesKey;
 extern NSString *const SUEnableAutomaticChecksKey;

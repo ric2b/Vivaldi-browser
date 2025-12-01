@@ -76,7 +76,7 @@ traces at runtime, prefer `--strip-flags=-S`.
 
 ```sh
 # Rebuild example
-(sdk) autoninja -C out_${SDK_BOARD}/Release chrome nacl_helper
+(sdk) autoninja -C out_${SDK_BOARD}/Release chrome
 # Deploy chrome example
 (sdk) deploy_chrome --build-dir=out_${SDK_BOARD}/Release --device=DUT --mount --strip-flags=-S
 ```

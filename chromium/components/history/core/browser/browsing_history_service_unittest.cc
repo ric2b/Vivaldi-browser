@@ -13,12 +13,15 @@
 #include "base/run_loop.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/timer/mock_timer.h"
 #include "base/values.h"
 #include "components/history/core/browser/browsing_history_driver.h"
+#include "components/history/core/browser/features.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/history/core/browser/history_types.h"
 #include "components/history/core/test/fake_web_history_service.h"
 #include "components/history/core/test/history_service_test_util.h"
 #include "components/sync/service/sync_service_observer.h"
@@ -56,6 +59,7 @@ struct TestResult {
   int64_t hour_offset;  // Visit time in hours past the baseline time.
   HistoryEntry::EntryType type;
   std::string remote_icon_url_for_uma;
+  VisitSource visit_source = VisitSource::SOURCE_BROWSED;
 };
 
 class TestBrowsingHistoryDriver : public BrowsingHistoryDriver {
@@ -143,7 +147,7 @@ class ReversedWebHistoryService : public TestWebHistoryService {
       bool* more_results_left) override {
     auto result = FakeWebHistoryService::GetVisitsBetween(begin, end, count,
                                                           more_results_left);
-    std::reverse(result.begin(), result.end());
+    std::ranges::reverse(result);
     return result;
   }
 };
@@ -210,7 +214,7 @@ class BrowsingHistoryServiceTest : public ::testing::Test {
       if (entry.type == kLocal) {
         local_history()->AddPage(GURL(entry.url),
                                  OffsetToTime(entry.hour_offset),
-                                 VisitSource::SOURCE_BROWSED);
+                                 entry.visit_source);
       } else if (entry.type == kRemote) {
         web_history->AddSyncedVisit(entry.url, OffsetToTime(entry.hour_offset),
                                     entry.remote_icon_url_for_uma);
@@ -241,6 +245,8 @@ class BrowsingHistoryServiceTest : public ::testing::Test {
               static_cast<int>(actual.entry_type));
     EXPECT_EQ(GURL(expected.remote_icon_url_for_uma),
               actual.remote_icon_url_for_uma);
+    EXPECT_EQ(expected.visit_source == VisitSource::SOURCE_ACTOR,
+              actual.is_actor_visit);
   }
 
   TestBrowsingHistoryDriver::QueryResult QueryHistory(size_t max_count = 0) {
@@ -283,7 +289,7 @@ class BrowsingHistoryServiceTest : public ::testing::Test {
     EXPECT_EQ(reached_beginning, result.second.reached_beginning);
     EXPECT_EQ(has_synced_results, result.second.has_synced_results);
     EXPECT_FALSE(result.second.sync_timed_out);
-    EXPECT_EQ(expected_entries.size(), result.first.size());
+    ASSERT_EQ(expected_entries.size(), result.first.size());
     for (size_t i = 0; i < expected_entries.size(); ++i) {
       VerifyEntry(expected_entries[i], result.first[i]);
     }
@@ -313,6 +319,29 @@ class BrowsingHistoryServiceTest : public ::testing::Test {
   raw_ptr<base::MockOneShotTimer, DanglingUntriaged> timer_;
   std::unique_ptr<TestBrowsingHistoryService> browsing_history_service_;
 };
+
+TEST_F(BrowsingHistoryServiceTest, QueryHistoryExcludes404s) {
+  // Allow saving 404 visits to History.
+  base::test::ScopedFeatureList scoped_featurelist;
+  scoped_featurelist.InitAndEnableFeature(history::kVisitedLinksOn404);
+
+  // Add a non-404 visit.
+  AddHistory({{kUrl1, 1, kLocal}});
+
+  // Add a 404 visit.
+  HistoryAddPageArgs page_404_args;
+  page_404_args.url = GURL(kUrl2);
+  page_404_args.time = OffsetToTime(2);
+  page_404_args.context_annotations = {.response_code = 404};
+  local_history()->AddPage(page_404_args);
+
+  BlockUntilHistoryProcessesPendingRequests();
+
+  // 404s should be excluded from query results.
+  VerifyQueryResult(/*reached_beginning=*/true,
+                    /*has_synced_results=*/true, {{kUrl1, 1, kLocal}},
+                    QueryHistory());
+}
 
 TEST_F(BrowsingHistoryServiceTest, QueryHistoryNoSources) {
   driver()->SetWebHistory(nullptr);
@@ -776,6 +805,27 @@ TEST_F(BrowsingHistoryServiceTest, RemoveVisitsMetric) {
     histograms.ExpectTotalCount("History.RemoveVisitsFromWebHistory.EntryCount",
                                 0);
   }
+}
+
+TEST_F(BrowsingHistoryServiceTest, ActorVisitPropagated) {
+  AddHistory({
+      {kUrl1, 1, kRemote},
+      {kUrl2, 2, kRemote},
+      {kUrl2, 3, kLocal, "", VisitSource::SOURCE_ACTOR},
+      {kUrl3, 4, kLocal, "", VisitSource::SOURCE_ACTOR},
+      {kUrl3, 5, kLocal},
+  });
+
+  VerifyQueryResult(
+      /*reached_beginning*/ true, /*has_synced_results*/ true,
+      {{kUrl3, 5, kLocal, "",
+        VisitSource::SOURCE_BROWSED},  // Duplicate visits take the latest visit
+                                       // values.
+       {kUrl2, 3, kBoth, "",
+        VisitSource::SOURCE_ACTOR},  // Duplicate visits take the latest visit
+                                     // values.
+       {kUrl1, 1, kRemote}},
+      QueryHistory());
 }
 
 }  // namespace

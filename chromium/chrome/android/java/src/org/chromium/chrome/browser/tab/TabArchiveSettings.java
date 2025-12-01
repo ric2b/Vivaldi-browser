@@ -103,6 +103,7 @@ public class TabArchiveSettings {
         // Turn off the archive feature by default for tests since we can't control when tabs
         // are created, and tabs disappearing from tests is very unexpected. For archive tests,
         // this will need to be turned on manually.
+        if (BuildConfig.IS_VIVALDI) return false; // Vivaldi VAB-11781
         return mPrefsManager.readBoolean(
                 ChromePreferenceKeys.TAB_DECLUTTER_ARCHIVE_ENABLED, !BuildConfig.IS_FOR_TEST);
     }

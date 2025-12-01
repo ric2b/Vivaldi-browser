@@ -124,6 +124,7 @@
 
 class BrowserProcessImpl;
 class BrowserThemePack;
+class ChromeContentRendererClient;
 class ChromeNSSCryptoModuleDelegate;
 class DesktopNotificationBalloon;
 class FirefoxProfileLock;
@@ -301,7 +302,7 @@ bool InitializeStaticGLBindings(GLImplementationParts);
 }
 }  // namespace gl
 namespace gpu {
-class GpuMemoryBufferImplDXGI;
+class MappableBufferDXGI;
 }
 namespace history_report {
 class HistoryReportJniBridge;
@@ -574,6 +575,7 @@ class BASE_EXPORT ScopedAllowBlocking {
   // Sorted by class name (with namespace), #if blocks at the bottom.
   friend class ::BrowserProcessImpl;
   friend class ::BrowserThemePack;  // http://crbug.com/80206
+  friend class ::ChromeContentRendererClient;
   friend class ::DesktopNotificationBalloon;
   friend class ::FirefoxProfileLock;
   friend class ::GaiaConfig;
@@ -840,6 +842,7 @@ class BASE_EXPORT
   // Allowed usage:
   // Sorted by class name (with namespace).
   friend class ::BrowserProcessImpl;  // http://crbug.com/125207
+  friend class ::ChromeContentRendererClient;
   friend class ::KeyStorageLinux;
   friend class ::NativeDesktopMediaList;
   friend class android::JavaHandlerThread;
@@ -871,7 +874,7 @@ class BASE_EXPORT
   friend class content::SynchronousCompositor;
   friend class content::SynchronousCompositorHost;
   friend class content::SynchronousCompositorSyncCallBridge;
-  friend class gpu::GpuMemoryBufferImplDXGI;
+  friend class gpu::MappableBufferDXGI;
   friend class media::AudioInputDevice;
   friend class media::AudioOutputDevice;
   friend class media::MailboxVideoFrameConverter;

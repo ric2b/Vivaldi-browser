@@ -1,11 +1,37 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ru">
+<translation id="1049697408958544531">{NUM_WEEKS, plural,
+          =1 {Созданы <ph name="NUM_WEEKS_ONE" /> неделю назад}
+          other {Созданы <ph name="NUM_WEEKS_MANY" /> недели назад}
+        }</translation>
 <translation id="1062777154504442433">Новая группа</translation>
+<translation id="1092908249939127748">{NUM_MONTHS, plural,
+          =1 {Созданы <ph name="NUM_YEARS_ONE" /> год назад}
+          other {Созданы <ph name="NUM_YEARS_MANY" /> года назад}
+        }</translation>
+<translation id="1329584516321524826">Обновлённые сейчас</translation>
+<translation id="149054111719651807">{NUM_MINS, plural,
+          =1 {Созданы <ph name="NUM_MINS_ONE" /> минуту назад}
+          other {Созданы <ph name="NUM_MINS_MANY" /> минут назад}
+        }</translation>
 <translation id="1625440863545383011">Убрать вкладку и покинуть группу</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Поместить в закладки}
           other {Поместить в закладки}
+        }</translation>
+<translation id="2498435670446402865">Переименовать группу</translation>
+<translation id="2734252994837336591">{NUM_WEEKS, plural,
+          =1 {Обновлены <ph name="NUM_WEEKS_ONE" /> неделю назад}
+          other {Обновлены <ph name="NUM_WEEKS_MANY" /> недели назад}
+        }</translation>
+<translation id="2753877351161418426">{NUM_HOURS, plural,
+          =1 {Обновлены <ph name="NUM_HOURS_ONE" /> час назад}
+          other {Обновлены <ph name="NUM_HOURS_MANY" /> часов назад}
+        }</translation>
+<translation id="2776817246640326047">{NUM_HOURS, plural,
+          =1 {Созданы <ph name="NUM_HOURS_ONE" /> час назад}
+          other {Созданы <ph name="NUM_HOURS_MANY" /> часов назад}
         }</translation>
 <translation id="2947471979790858922">Ваша активность в приватных вкладках будет удалена с устройства</translation>
 <translation id="3298614730029636660">Покинуть группу</translation>
@@ -13,13 +39,41 @@
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Все закрытые вкладки, кроме приватной, вы можете найти в Недавно закрытых в меню Vivaldi.}
         other {Все закрытые вкладки, кроме # приватных, вы можете найти в Недавно закрытых в меню Vivaldi.}}</translation>
+<translation id="4009732926939031387">{NUM_DAYS, plural,
+          =1 {Созданы <ph name="NUM_DAYS_ONE" /> день назад}
+          other {Созданы <ph name="NUM_DAYS_MANY" /> дней назад}
+        }</translation>
+<translation id="4453940245650019914">{NUM_DAYS, plural,
+          =1 {Обновлены <ph name="NUM_DAYS_ONE" /> день назад}
+          other {Обновлены <ph name="NUM_DAYS_MANY" /> дней назад}
+        }</translation>
+<translation id="4686942373615810936">Создана сейчас</translation>
+<translation id="4870911314065352661">Закрыть все вкладки?</translation>
 <translation id="4871187110787939393">Закрыть все приватные вкладки?</translation>
 <translation id="5494920125229734069">Выбрать всё</translation>
 <translation id="6807841890213931603">Убрать вкладку и удалить группу</translation>
 <translation id="750227952939161636">Ваши группы сохранены и обновлены на всех синхронизированных устройствах</translation>
 <translation id="7640137753339219124">Удалить группу</translation>
 <translation id="7653857400289671414">Ваши группы автоматически сохранены</translation>
+<translation id="775668479044571025">{NUM_MONTHS, plural,
+          =1 {Обновлены <ph name="NUM_YEARS_ONE" /> год назад}
+          other {Обновлены <ph name="NUM_YEARS_MANY" /> года назад}
+        }</translation>
+<translation id="7825973332242257878">Группы вкладок</translation>
+<translation id="8207688828622594111">{NUM_MINS, plural,
+          =1 {Обновлены <ph name="NUM_MINS_ONE" /> минуту назад}
+          other {Обновлены <ph name="NUM_MINS_MANY" /> минут назад}
+        }</translation>
+<translation id="8374451057714760401">{NUM_MONTHS, plural,
+                =1 {Обновлены <ph name="NUM_MONTHS_ONE" /> месяц назад}
+                other {Обновлены <ph name="NUM_MONTHS_MANY" /> месяцев назад}
+              }</translation>
 <translation id="8440938071054361204">Сменить имя группы</translation>
 <translation id="8602902357364871325">Закрыть группу</translation>
+<translation id="875848103419578654">{NUM_MONTHS, plural,
+                =1 {Созданы <ph name="NUM_MONTHS_ONE" /> месяц назад}
+                other {Созданы <ph name="NUM_MONTHS_MANY" /> месяцев назад}
+              }</translation>
 <translation id="8851621822786801079">Убрать из группы</translation>
+<translation id="8887921976452567404">Закрытые вкладки и группы можно повторно открыть из раздела Недавно закрытые и раздела Группы вкладок.</translation>
 </translationbundle>

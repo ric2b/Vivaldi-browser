@@ -8,7 +8,8 @@
 #ifndef SkPathRaw_DEFINED
 #define SkPathRaw_DEFINED
 
-#include "include/core/SkPathTypes.h" // IWYU pragma: keep
+#include "include/core/SkPathIter.h"
+#include "include/core/SkPathTypes.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkSpan.h"
@@ -17,6 +18,14 @@
 #include <cstddef>
 #include <optional>
 
+/**
+ *  SkPathRaw is a non-owning, immutable view of the path geometry.
+ *
+ *  It allows us to have stack-allocated paths, see SkPathRawShapes.h
+ *
+ *  It is the responsibility of the creator to ensure that the spans in SkPathRaw point to valid
+ *  data that outlives the SkPathRaw instance.
+ */
 struct SkPathRaw {
     SkSpan<const SkPoint>    fPoints;
     SkSpan<const SkPathVerb> fVerbs;
@@ -24,6 +33,7 @@ struct SkPathRaw {
     SkRect                   fBounds;
     SkPathFillType           fFillType;
     bool                     fIsConvex;
+    // See SkPath::SegmentMask
     uint8_t                  fSegmentMask;
 
     SkSpan<const SkPoint> points() const { return fPoints; }
@@ -37,62 +47,9 @@ struct SkPathRaw {
     bool empty() const { return fVerbs.empty(); }
     bool isInverseFillType() const { return SkPathFillType_IsInverse(fFillType); }
 
-    struct IterRec {
-        SkSpan<const SkPoint> pts;
-        float                 w;
-        SkPathVerb            vrb;
-    };
+    std::optional<SkRect> isRect() const;
 
-    class Iter {
-    public:
-        Iter(const SkPathRaw& p) : fPoints(p.fPoints), fVerbs(p.fVerbs), fConics(p.fConics) {
-            vIndex = pIndex = cIndex = 0;
-        }
-
-        Iter(SkSpan<const SkPoint> pts, SkSpan<const SkPathVerb> vbs, SkSpan<const float> cns)
-            : fPoints(pts), fVerbs(vbs), fConics(cns) {
-            vIndex = pIndex = cIndex = 0;
-        }
-
-        /*  Holds the current verb, and its associated points
-         *  move:  pts[0]
-         *  line:  pts[0..1]
-         *  quad:  pts[0..2]
-         *  conic: pts[0..2] w
-         *  cubic: pts[0..3]
-         *  close: pts[0..1] ... as if close were a line from pts[0] to pts[1]
-         */
-        std::optional<IterRec> next();
-
-    private:
-        size_t                   vIndex, pIndex, cIndex;
-        SkSpan<const SkPoint>    fPoints;
-        SkSpan<const SkPathVerb> fVerbs;
-        SkSpan<const float>      fConics;
-        std::array<SkPoint, 2>   fPointStorage;
-    };
-
-    Iter iter() const {
-        return Iter(*this);
-    }
-
-    struct ContourRec {
-        SkSpan<const SkPoint>    fPoints;
-        SkSpan<const SkPathVerb> fVerbs;
-        SkSpan<const float>      fConics;
-    };
-
-    class ContourIter {
-    public:
-        ContourIter(const SkPathRaw&);
-
-        std::optional<ContourRec> next();
-
-    private:
-        SkSpan<const SkPoint>    fPoints;
-        SkSpan<const SkPathVerb> fVerbs;
-        SkSpan<const float>      fConics;
-    };
+    SkPathIter iter() const { return {fPoints, fVerbs, fConics}; }
 };
 
 #endif

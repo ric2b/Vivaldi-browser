@@ -22,8 +22,12 @@ fn path_buf(inputs: &[&str]) -> PathBuf {
     path
 }
 
-fn main() {
+fn main() -> Result<(), String> {
     println!("cargo:rerun-if-changed=build.rs");
+    if !cfg!(feature = "android_mediacodec") {
+        // The feature is disabled at the top level. Do not build this dependency.
+        return Ok(());
+    }
 
     let build_target = std::env::var("TARGET").unwrap();
     if !build_target.contains("android") {
@@ -37,7 +41,7 @@ fn main() {
                 .join(path_buf(&["src", "empty.rs"]))
                 .display()
         );
-        return;
+        return Ok(());
     };
 
     // Generate bindings.
@@ -106,15 +110,14 @@ fn main() {
     for allowlist_var in allowlist_vars {
         bindings = bindings.allowlist_var(allowlist_var);
     }
-    let bindings = bindings
-        .generate()
-        .unwrap_or_else(|_| panic!("Unable to generate bindings for dav1d."));
+    let bindings = bindings.generate().map_err(|err| err.to_string())?;
     bindings
         .write_to_file(outfile.as_path())
-        .unwrap_or_else(|_| panic!("Couldn't write bindings for dav1d"));
+        .map_err(|err| err.to_string())?;
     println!(
         "cargo:rustc-env=CRABBYAVIF_ANDROID_NDK_MEDIA_BINDINGS_RS={}",
         outfile.display()
     );
     println!("cargo:rustc-link-lib=mediandk");
+    Ok(())
 }

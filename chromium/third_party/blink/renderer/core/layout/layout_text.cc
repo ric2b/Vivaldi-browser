@@ -202,7 +202,8 @@ bool LayoutText::IsWordBreak() const {
 }
 
 void LayoutText::StyleWillChange(StyleDifference diff,
-                                 const ComputedStyle& new_style) {
+                                 const ComputedStyle& new_style,
+                                 StyleChangeContext& style_change_context) {
   NOT_DESTROYED();
 
   if (const ComputedStyle* current_style = Style()) {
@@ -216,8 +217,10 @@ void LayoutText::StyleWillChange(StyleDifference diff,
   }
 }
 
-void LayoutText::StyleDidChange(StyleDifference diff,
-                                const ComputedStyle* old_style) {
+void LayoutText::StyleDidChange(
+    StyleDifference diff,
+    const ComputedStyle* old_style,
+    const StyleChangeContext& style_change_context) {
   NOT_DESTROYED();
   // There is no need to ever schedule paint invalidations from a style change
   // of a text run, since we already did this for the parent of the text run.
@@ -655,11 +658,7 @@ void LayoutText::AbsoluteQuadsForRange(Vector<gfx::QuadF>& quads,
         quad.Scale(1 / scaling_factor, 1 / scaling_factor);
         quad = LocalToAbsoluteQuad(quad);
       } else {
-        if (RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled()) {
-          rect.Move(cursor.CurrentOffsetInFirstContainerFragment());
-        } else {
-          rect.Move(cursor.CurrentOffsetInBlockFlow());
-        }
+        rect.Move(cursor.CurrentOffsetInFirstContainerFragment());
         quad = LocalRectToAbsoluteQuad(rect);
       }
       if (!is_collapsed) {
@@ -689,8 +688,8 @@ PositionWithAffinity LayoutText::PositionForPoint(
   NOT_DESTROYED();
   // NG codepath requires |kPrePaintClean|.
   // |SelectionModifier| calls this only in legacy codepath.
-  DCHECK(!IsLayoutNGObject() || GetDocument().Lifecycle().GetState() >=
-                                    DocumentLifecycle::kPrePaintClean);
+  DCHECK(GetDocument().Lifecycle().GetState() >=
+         DocumentLifecycle::kPrePaintClean);
 
   if (IsInLayoutNGInlineFormattingContext()) {
     // Because of Texts in "position:relative" can be outside of line box, we
@@ -816,7 +815,7 @@ void LayoutText::LogicalStartingPointAndHeight(
       logical_starting_point = {physical_offset.left, physical_offset.top};
       return;
     }
-    PhysicalSize outer_size = ContainingBlock()->Size();
+    PhysicalSize outer_size = ContainingBlock()->StitchedSize();
     logical_starting_point =
         WritingModeConverter(StyleRef().GetWritingDirection(), outer_size)
             .ToLogical(physical_offset, cursor.Current().Size());
@@ -882,9 +881,7 @@ UChar LayoutText::PreviousCharacter() const {
   // find previous text layoutObject if one exists
   const LayoutObject* previous_text = PreviousInPreOrder();
   for (; previous_text; previous_text = previous_text->PreviousInPreOrder()) {
-    if (RuntimeEnabledFeatures::
-            IgnoreOutOfFlowPositionForPreviousTextEnabled() &&
-        previous_text->IsOutOfFlowPositioned()) {
+    if (previous_text->IsOutOfFlowPositioned()) {
       continue;
     }
     if (!IsInlineFlowOrEmptyText(previous_text)) {

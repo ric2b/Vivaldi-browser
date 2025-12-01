@@ -3,9 +3,8 @@
 # found in the LICENSE file.
 
 import collections
+import enum
 import functools
-import hashlib
-import itertools
 import logging
 import pathlib
 import pickle
@@ -14,19 +13,20 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
-from graph import IncludeDir
+import config
+from graph import CompileStatus
 from graph import Header
-from graph import HeaderRef
+from graph import IncludeDir
+from graph import calculate_rdeps
+import modulemap
 
-_MODULE_START = re.compile('^module ([a-z0-9_]+) ', flags=re.I)
-_HEADER = re.compile('( textual)? header "([^"]*)"')
-
-# It doesn't matter if these don't work on all platforms.
-# It'll just print a warning saying it failed to compile.
-# This contains a list of files that aren't depended on by libc++, but we still
-# want to precompile.
-_SYSROOT_PRECOMPILED_HEADERS = ['fcntl.h']
+_FRAMEWORK = ' (framework directory)'
+# Foo.framework/Versions/A/headers/Bar.h -> Foo/Bar.h
+_FRAMEWORK_HEADER = re.compile(
+    r'([^/]+)\.framework/(?:Versions/[^/]+/)?(?:Headers|Modules)/(.*)')
+_LIBCXXABI = '../../third_party/libc++abi/src/include'
 
 
 # Some of these steps are quite slow (O(minutes)).
@@ -34,64 +34,68 @@ _SYSROOT_PRECOMPILED_HEADERS = ['fcntl.h']
 def _maybe_cache(fn):
 
   @functools.wraps(fn)
-  def new_fn(self, *args, **kwargs):
+  def new_fn(self, *args):
     # The results should be solely dependent on the GN out dir (assuming the
     # user doesn't change args.gn)
     gn_rel = str(self.gn_out.resolve()).lstrip('/')
-    cache_path = pathlib.Path(f'/tmp/modularize_cache', gn_rel, fn.__name__)
+    cache_path = pathlib.Path(f'/tmp/modularize_cache', gn_rel, fn.__name__,
+                              *args)
     cache_path.parent.mkdir(exist_ok=True, parents=True)
     if self._use_cache and cache_path.is_file():
-      return pickle.loads(cache_path.read_bytes())
-    result = fn(self, *args, **kwargs)
+      try:
+        return pickle.loads(cache_path.read_bytes())
+      # When attempting to run this without a debugger after pickling from a
+      # debugger it fails to load pathlib._local.
+      except ModuleNotFoundError:
+        logging.info('Failed to unpickle - not using cache')
+    result = fn(self, *args)
     cache_path.write_bytes(pickle.dumps(result))
     return result
 
   return new_fn
 
 
-# We don't need a true parse, just want to determine which modules correspond
-# to which files.
-def _parse_modulemap(path: pathlib.Path) -> dict[str, list[tuple[str, bool]]]:
-  """Parses a modulemap into name -> [(header, textual)]"""
-  modules = collections.defaultdict(list)
-  with path.open() as f:
-    for line in f:
-      mod = _MODULE_START.match(line)
-      if mod is not None:
-        current_module = mod.group(1)
-      header = _HEADER.search(line)
-      if header is not None:
-        modules[current_module].append((header.group(2), bool(header.group(1))))
-  # This is a builtin module with feature requirements.
-  modules.pop('opencl_c', None)
-  return modules
+class Os(str, enum.Enum):
+  Android = 'android'
+  Fuchsia = 'fuchsia'
+  Ios = 'ios'
+  Linux = 'linux'
+  Mac = 'mac'
+  Win = 'win'
+
+  @property
+  def is_apple(self):
+    return self == Os.Mac or self == Os.Ios
+
+
+class Cpu(str, enum.Enum):
+  x86 = 'x86'
+  x64 = 'x64'
+  arm = 'arm'
+  arm64 = 'arm64'
 
 
 class Compiler:
 
   def __init__(self, *, source_root: pathlib.Path, gn_out: pathlib.Path,
-               error_dir: pathlib.Path | None, use_cache: bool):
+               error_dir: pathlib.Path | None, use_cache: bool, os: Os,
+               cpu: Cpu):
     self._error_dir = error_dir
     self._use_cache = use_cache
     self.gn_out = gn_out
     self.source_root = source_root
 
-    self.os = self._get_os()
-    self.cpu = self._get_cpu()
+    self.os = os
+    self.cpu = cpu
+    self.sysroot_dir = IncludeDir.SysrootModule if self.os.is_apple else IncludeDir.Sysroot
+    self.sysroot = None
 
-    if self.os == 'linux':
-      self.sysroot = self.source_root / 'build/linux/debian_bullseye_amd64-sysroot/usr/include'
-    elif self.os == 'android':
-      self.sysroot = self.source_root / 'third_party/android_toolchain/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include'
-    else:
-      self.sysroot = list(
-          source_root.glob(
-              'third_party/depot_tools/win_toolchain/vs_files/*/Windows Kits/10/Include/*'
-          ))[0]
-      self.msvc_dir = list(
-          source_root.glob(
-              'third_party/depot_tools/win_toolchain/vs_files/*/VC/Tools/MSVC/*/include'
-          ))[0]
+  # __eq__ and __hash__ are required for functools.cache to work correctly.
+  def __eq__(self, other):
+    return self.gn_out == other.gn_out
+
+  def __hash__(self):
+    return hash(self.gn_out)
 
   def _parse_depfile(self, content: str) -> list[pathlib.Path]:
     files = []
@@ -102,47 +106,15 @@ class Compiler:
     # So we need [1:] to ensure it doesn't have a dependency on itself.
     for line in content.rstrip().split('\n')[1:]:
       # Remove both the trailing newlines and any escapes in the file names.
-      files.append(
-          pathlib.Path(self.gn_out,
-                       line.replace('\\', '').strip(' ')).resolve())
+      p = pathlib.Path(self.gn_out, line.replace('\\', '').strip(' '))
+      files.append(p.resolve())
     return files
-
-  def _get_gn_arg(self, name: str) -> str:
-    content = (self.gn_out / 'args.gn').read_text()
-    ps = subprocess.run(
-        ['gn', 'args', '.', f'--list={name}', '--short'],
-        text=True,
-        check=False,
-        cwd=self.gn_out,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-    )
-
-    # GN args outputs errors to stdout, so we can't use check=True.
-    if ps.returncode != 0:
-      print(ps.stdout, file=sys.stderr)
-      exit(1)
-
-    # output format: 'target_cpu = "x64"\n'
-    return ps.stdout.rstrip().split(' = ')[1].strip('"')
 
   def _clang_arg(self, arg: str) -> str:
     if self.os == 'win':
       return f'/clang:{arg}'
     else:
       return arg
-
-  @_maybe_cache
-  def _get_cpu(self):
-    # If the target_cpu is not explicitly set, it returns the empty string and
-    # it uses the host_cpu instead.
-    return self._get_gn_arg('target_cpu') or self._get_gn_arg('host_cpu')
-
-  @_maybe_cache
-  def _get_os(self):
-    # If the target_os is not explicitly set, it returns the empty string and
-    # it uses the host_os instead.
-    return self._get_gn_arg('target_os') or self._get_gn_arg('host_os')
 
   def _write_err(self, rel: str, content: bytes):
     if self._error_dir is not None:
@@ -156,7 +128,12 @@ class Compiler:
     assert path.is_absolute()
     for d, include_dir in self.include_dirs:
       if path.is_relative_to(d):
-        return include_dir, str(path.relative_to(d))
+        rel = str(path.relative_to(d))
+        if include_dir == IncludeDir.Framework:
+          framework, hdr = _FRAMEWORK_HEADER.search(rel).groups()
+          rel = f'{framework}/{hdr}'
+        return include_dir, rel
+    raise NotImplementedError(f'Unsupported path {path}')
 
   # Apply two layers of cache here.
   # The _maybe_cache layer caches between runs via a file.
@@ -169,7 +146,7 @@ class Compiler:
         [
             'build/modules/modularize/no_modules_compile_command.sh',
             str(self.gn_out),
-            self.os,
+            str(self.os),
         ],
         check=True,
         text=True,
@@ -179,9 +156,7 @@ class Compiler:
         # Windows requires it to be at the end, otherwise it writes to {output}.obj.
     ).stdout.rstrip().replace('\\', '').split(' ')[:-2]
 
-  # Again, two layers of cache here to cache between runs and within a run.
   @functools.cached_property
-  @_maybe_cache
   def include_dirs(self) -> list[tuple[pathlib.Path, IncludeDir]]:
     cmd = self.base_command() + [
         '-E',
@@ -192,7 +167,7 @@ class Compiler:
         '-o',
         '/dev/null',
     ]
-    cmd.remove('-c')
+    cmd.remove('/c' if self.os == Os.Win else '-c')
     # include dir lines both start and end with whitespace
     lines = [
         line.strip() for line in subprocess.run(
@@ -212,22 +187,29 @@ class Compiler:
     # We don't care about these.
     dirs.remove('../..')
     dirs.remove('gen')
-    dirs.remove('../../third_party/libc++abi/src/include')
+    if _LIBCXXABI in dirs:
+      dirs.remove(_LIBCXXABI)
 
     out = []
     for d in dirs:
-      d = (self.gn_out / d).resolve()
-      if d.is_relative_to(self.sysroot):
-        out.append((d, IncludeDir.Sysroot))
+      is_framework = d.endswith(_FRAMEWORK)
+      d = (self.gn_out / d.removesuffix(_FRAMEWORK)).resolve()
+
+      if is_framework:
+        out.append((d, IncludeDir.Framework))
       elif 'libc++' in d.parts:
         out.append((d, IncludeDir.LibCxx))
       elif 'clang' in d.parts:
         out.append((d, IncludeDir.Builtin))
+      elif config.SYSROOT_DIRS.intersection(d.parts):
+        out.append((d, self.sysroot_dir))
+        self.sysroot = d
       else:
         raise NotImplementedError(f'Unknown include directory {d}')
 
     return out
 
+  @_maybe_cache
   def compile_one(
       self, include: str
   ) -> tuple[subprocess.CompletedProcess, None | list[pathlib.Path]]:
@@ -259,7 +241,7 @@ class Compiler:
       ]
       if logging.getLogger().isEnabledFor(logging.DEBUG):
         logging.debug('Running command: (cd %s && %s)', self.gn_out,
-                      ' '.join(command))
+                      ' '.join(map(str, command)))
       ps = subprocess.run(
           command,
           stderr=subprocess.PIPE,
@@ -271,13 +253,23 @@ class Compiler:
       except FileNotFoundError:
         return ps, None
 
+  @functools.cache
+  def _modules_and_headers(self):
+    return modulemap.calculate_modules(self.include_dirs)
+
+  def modulemaps_for_modules(self) -> dict[str, pathlib.Path]:
+    return self._modules_and_headers()[0]
+
+  def modulemap_headers(self) -> set[Header]:
+    return self._modules_and_headers()[1]
+
   @_maybe_cache
-  def compile_all(self) -> dict[HeaderRef, Header]:
+  def compile_all(self) -> dict[str, Header]:
     """Generates a graph of headers by compiling all files in the sysroot."""
     if self._error_dir is not None:
       shutil.rmtree(self._error_dir, ignore_errors=True)
 
-    graph: dict[HeaderRef, Header] = {}
+    graph: dict[str, Header] = {}
     uncompiled = []
     seen = set()
 
@@ -286,31 +278,27 @@ class Compiler:
         uncompiled.append(include)
         seen.add(include)
 
-    # Use a list as a set because it's tiny.
-    seen_dirs = [IncludeDir.Sysroot]
-
-    def add_to_dfs(kind: IncludeDir, modulemap: pathlib.Path):
-      if kind in seen_dirs:
-        return
-      seen_dirs.append(kind)
-      for mod, files in _parse_modulemap(modulemap).items():
-        for path, textual in files:
-          graph[(kind, path)] = Header(include_dir=kind,
-                                       rel=path,
-                                       root_module=mod,
-                                       textual=textual)
-          visit(path)
+    for hdr in self.modulemap_headers():
+      if hdr.root_module not in config.IGNORED_MODULES:
+        graph[(hdr.include_dir, hdr.rel)] = hdr
+        visit(hdr.rel)
 
     # Populate a list of initial headers to compile.
-    add_to_dfs(
-        IncludeDir.LibCxx,
-        self.source_root / 'third_party/libc++/src/include/module.modulemap.in')
-    for header in _SYSROOT_PRECOMPILED_HEADERS:
-      visit(header)
+    for hdr in config.SYSROOT_PRECOMPILED_HEADERS:
+      visit(hdr)
+
+    logging.info('Starting compilation')
 
     # Could consider making the DFS parallel to improve performance.
     # But it's a lot of effort for a script that's rarely run.
+    i = 0
+    start = time.time()
     while uncompiled:
+      i += 1
+      if i % 100 == 0:
+        rate = i / (time.time() - start)
+        logging.info('Compiled %d/%d, %.2f/s, estimate: %ds', i - 1, len(seen),
+                     rate, (len(seen) - i) / rate)
       rel = uncompiled.pop()
 
       ps, files = self.compile_one(rel)
@@ -321,13 +309,6 @@ class Compiler:
 
       abs_path = files[0]
       kind, _ = self.split_path(abs_path)
-
-      # The first time we come across a builtin header, we use that to find
-      # the builtin modulemap to ensure we compile every module in it.
-      add_to_dfs(
-          kind,
-          abs_path.parents[rel.count('/')] / 'module.modulemap',
-      )
 
       if (kind, rel) not in graph:
         # If we're seeing it for the first time here, but it's from another
@@ -341,22 +322,31 @@ class Compiler:
       for to_abs in files[1:]:
         to_kind, to_rel = self.split_path(to_abs)
         assert (kind, rel) != (to_kind, to_rel)
-        if (to_kind, to_rel) not in graph:
-          graph[(to_kind, to_rel)] = Header(
+        dep = graph.get((to_kind, to_rel), None)
+        if dep is None:
+          dep = Header(
               include_dir=to_kind,
               rel=to_rel,
               abs=to_abs,
               textual=to_kind != IncludeDir.Sysroot,
           )
-        state.deps.append((to_kind, to_rel))
-        visit(to_rel)
+          graph[(to_kind, to_rel)] = dep
+          # Skip compiling textual headers - we'll calculate their dependencies after the fact.
+          if not dep.textual:
+            visit(to_rel)
+        state.deps.append(dep)
 
+      state.compile_status = CompileStatus.Success if ps.returncode == 0 else CompileStatus.Failure
       if ps.returncode == 0:
         logging.debug('Compiled %s', state.pretty_name)
       elif any([
           state.textual,
-          rel.startswith('bits/'), '/bits/' in rel,
-          rel.endswith('intrin.h')
+          rel.startswith('bits/'),
+          '/bits/' in rel,
+          rel.endswith('intrin.h'),
+          b'Do not include this header directly' in ps.stderr,
+          # eg. Please #include <os/workgroup.h> instead of this file directly.
+          b'Please #include' in ps.stderr,
       ]):
         # These things are generally expected to not compile standalone.
         logging.debug('Probably fine: Failed to compile %s', state.pretty_name)
@@ -374,9 +364,12 @@ class Compiler:
       if state.root_module is None and ps.returncode != 0:
         state.textual = True
 
-    assert IncludeDir.Builtin in seen_dirs
+    rdeps = calculate_rdeps(graph.values())
+    includes = collections.defaultdict(list)
 
-    for header in graph.values():
+    logging.info('Inferring dependencies')
+    for header in sorted(graph.values()):
+      includes[header.rel].append(header)
       if header.abs is None:
         for d, kind in self.include_dirs:
           if header.include_dir == kind and (d / header.rel).is_file():
@@ -384,7 +377,30 @@ class Compiler:
             break
       assert header.abs is not None
 
-      for dep in header.deps:
-        assert dep in graph
+      # If we were unable to compile something, calculate what the dependencies
+      # likely are.
+      if header.compile_status == CompileStatus.NotCompiled and rdeps[header]:
+        intersection = set.intersection(
+            *[set(rdep.deps) for rdep in rdeps[header]])
+        # For libcxx/foo.h -> builtin/foo.h -> sysroot/foo.h
+        # Despite the fact that builtin/foo.h should appear all the time, we need
+        # to filter it out for sysroot/foo.h.
+        header.deps = [
+            dep for dep in intersection
+            if dep.rel != header.rel or dep.include_dir > header.include_dir
+        ]
 
-    return graph
+    # Translate it to a mapping from include path to a linked list of headers.
+    out = {}
+    for k, headers in includes.items():
+      headers.sort()
+      for prev, nxt in zip(headers, headers[1:]):
+        # If it didn't #include_next we don't need to worry about it.
+        if nxt not in prev.deps:
+          break
+        prev.next = nxt
+        nxt.prev = prev
+      out[k] = headers[0]
+
+    logging.info('Compilation complete')
+    return out

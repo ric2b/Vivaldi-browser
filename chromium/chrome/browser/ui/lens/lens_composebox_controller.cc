@@ -14,6 +14,8 @@
 #include "chrome/browser/ui/lens/lens_session_metrics_logger.h"
 #include "components/lens/lens_features.h"
 #include "components/lens/lens_overlay_mime_type.h"
+#include "components/lens/lens_payload_construction.h"
+#include "components/tabs/public/tab_interface.h"
 #include "third_party/lens_server_proto/aim_communication.pb.h"
 
 namespace {
@@ -42,12 +44,17 @@ LensComposeboxController::~LensComposeboxController() = default;
 void LensComposeboxController::BindComposebox(
     mojo::PendingReceiver<composebox::mojom::PageHandler> pending_handler,
     mojo::PendingRemote<composebox::mojom::Page> pending_page,
+    mojo::PendingRemote<searchbox::mojom::Page> pending_searchbox_page,
     mojo::PendingReceiver<searchbox::mojom::PageHandler>
         pending_searchbox_handler) {
   composebox_handler_.reset();
   composebox_handler_ = std::make_unique<LensComposeboxHandler>(
-      this, std::move(pending_handler), std::move(pending_page),
+      this, profile_, lens_search_controller_->GetTabInterface()->GetContents(),
+      std::move(pending_handler), std::move(pending_page),
       std::move(pending_searchbox_handler));
+
+  // TODO(crbug.com/435288212): Move searchbox mojom to use factory pattern.
+  composebox_handler_->SetPage(std::move(pending_searchbox_page));
 
   // Record that the composebox was shown. The composebox handler is always
   // bound, so check if the composebox is actually enabled before logging as
@@ -63,9 +70,16 @@ void LensComposeboxController::IssueComposeboxQuery(
   if (!lens::IsAimM3Enabled(profile_)) {
     return;
   }
+
+  // Record that a query was submitted. This should be first in this method to
+  // ensure it is recorded even if the query is queued to be issued later.
+  GetSessionMetricsLogger()->OnAimQuerySubmitted();
+
   // Can only issue a query if the remote UI supports the DEFAULT feature.
   if (remote_ui_capabilities_.empty() ||
       !remote_ui_capabilities_.contains(lens::FeatureCapability::DEFAULT)) {
+    // Store the query and issue it again once the handshake completes.
+    pending_query_text_ = query_text;
     return;
   }
 
@@ -81,6 +95,11 @@ void LensComposeboxController::IssueComposeboxQuery(
   // Send the message to the remote UI.
   lens_search_controller_->lens_overlay_side_panel_coordinator()
       ->SendClientMessageToAim(serialized_message);
+
+  // Focus the iframe in the side panel. This moves screen reader focus to the
+  // results frame so the loading of AIM results are properly announced.
+  lens_search_controller_->lens_overlay_side_panel_coordinator()
+      ->FocusResultsFrame();
 
   // Record that a query was issued.
   GetSessionMetricsLogger()->OnAimQueryIssued();
@@ -109,6 +128,8 @@ void LensComposeboxController::OnFocusChanged(bool focused) {
 }
 
 void LensComposeboxController::CloseUI() {
+  ResetAimHandshake();
+  pending_query_text_.reset();
   composebox_handler_.reset();
 }
 
@@ -138,7 +159,22 @@ void LensComposeboxController::OnAimMessage(
     lens_search_controller_->lens_overlay_side_panel_coordinator()
         ->AimHandshakeReceived();
     GetSessionMetricsLogger()->OnAimHandshakeCompleted();
+
+    // If there was a pending query, issue it now that the handshake is
+    // complete.
+    if (pending_query_text_.has_value()) {
+      IssueComposeboxQuery(pending_query_text_.value());
+      pending_query_text_.reset();
+    }
   }
+}
+
+void LensComposeboxController::ResetAimHandshake() {
+  remote_ui_capabilities_.clear();
+}
+
+void LensComposeboxController::ShowLensSelectionOverlay() {
+  lens_search_controller_->OpenLensOverlayInCurrentSession();
 }
 
 lens::LensSessionMetricsLogger*
@@ -166,11 +202,16 @@ lens::ClientToAimMessage LensComposeboxController::BuildSubmitQueryMessage(
       lens_search_controller_->lens_search_contextualization_controller();
   lens_image_query_data->set_search_session_id(
       query_controller->search_session_id());
+
+  const auto& primary_content_type =
+      contextualization_controller->primary_content_type();
   lens_image_query_data->mutable_request_id()->CopyFrom(
       *query_controller->GetNextRequestId(
-          lens::RequestIdUpdateMode::kSearchUrl));
-  lens_image_query_data->set_visual_input_type(LensMimeTypeToVisualInputType(
-      contextualization_controller->primary_content_type()));
+          lens::RequestIdUpdateMode::kSearchUrl,
+          MimeTypeToMediaType(primary_content_type,
+                              /*has_viewport_screenshot=*/true)));
+  lens_image_query_data->set_visual_input_type(
+      LensMimeTypeToVisualInputType(primary_content_type));
   return client_to_aim_message;
 }
 

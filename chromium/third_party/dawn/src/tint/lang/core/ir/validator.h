@@ -28,6 +28,7 @@
 #ifndef SRC_TINT_LANG_CORE_IR_VALIDATOR_H_
 #define SRC_TINT_LANG_CORE_IR_VALIDATOR_H_
 
+#include <vector>
 #include "src/tint/utils/containers/enum_set.h"
 #include "src/tint/utils/result.h"
 
@@ -81,6 +82,13 @@ enum class Capability : uint8_t {
     kAllowNonCoreTypes,
     /// Allows matrix annotations on structure members
     kAllowStructMatrixDecorations,
+    /// Allows @location on structs, matrices, and arrays that have numeric elements
+    kAllowLocationForNumericElements,
+    // Allows resource_binding to be used. Should not be present after
+    // core::core::ir::transform::ResourceBinding runs
+    kAllowResourceBinding,
+    /// Allows a pointer to a handle type
+    kAllowPointerToHandle,
 };
 
 /// Capabilities is a set of Capability
@@ -102,6 +110,26 @@ Result<SuccessType> ValidateAndDumpIfNeeded(const Module& ir,
                                             const char* msg,
                                             Capabilities capabilities = {},
                                             std::string_view timing = "before");
+
+// Scans the module root block for user-declared immediate data (module-scope
+// `var<immediate>` declarations). Returns Success if there is at most one.
+// On success, the returned uint32_t is the 4-byte rounded-up size of the
+// user-declared immediate data (or 0 if none present). Fails if multiple
+// immediates are declared.
+Result<uint32_t> ValidateSingleUserImmediate(const Module& ir);
+
+// Immediate data validation helpers
+struct ImmediateInfo {
+    uint32_t offset = 0;
+    uint32_t size = 0;
+};
+
+// Validates internal (implementation-provided) immediates. Offsets must not overlap each other
+// or the user-declared immediate data (if present). `user_immediate_data_size` is the 4-byte
+// rounded size of the user immediate block, or 0 if none exists.
+Result<SuccessType> ValidateInternalImmediateOffset(uint32_t max_immediate_block_size,
+                                                    uint32_t user_immediate_data_size,
+                                                    const std::vector<ImmediateInfo>& immediates);
 
 }  // namespace tint::core::ir
 

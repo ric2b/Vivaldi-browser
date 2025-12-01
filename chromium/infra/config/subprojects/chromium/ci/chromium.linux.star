@@ -74,7 +74,6 @@ ci.builder(
             target_bits = 32,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -119,7 +118,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -162,7 +160,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -206,7 +203,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -290,7 +286,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -342,7 +337,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -393,7 +387,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -438,7 +431,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -483,7 +475,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     targets = targets.bundle(
         targets = [
@@ -581,7 +572,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     targets = targets.bundle(
         targets = [
@@ -618,7 +608,7 @@ ci.thin_tester(
                     "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.interactive_ui_tests.filter",
                 ],
                 swarming = targets.swarming(
-                    shards = 10,
+                    shards = 20,
                 ),
             ),
             "leveldb_unittests": targets.mixin(
@@ -691,7 +681,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     targets = targets.bundle(
         targets = [
@@ -796,7 +785,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     targets = targets.bundle(
         targets = [
@@ -829,7 +817,7 @@ ci.thin_tester(
                 swarming = targets.swarming(
                     expiration_sec = 18000,
                     hard_timeout_sec = 14400,
-                    shards = 20,
+                    shards = 46,
                 ),
             ),
             "content_browsertests": targets.mixin(
@@ -840,7 +828,7 @@ ci.thin_tester(
                 swarming = targets.swarming(
                     expiration_sec = 18000,
                     hard_timeout_sec = 14400,
-                    shards = 10,
+                    shards = 8,
                 ),
             ),
             "interactive_ui_tests": targets.mixin(
@@ -851,7 +839,7 @@ ci.thin_tester(
                 swarming = targets.swarming(
                     expiration_sec = 18000,
                     hard_timeout_sec = 14400,
-                    shards = 5,
+                    shards = 12,
                 ),
             ),
         },
@@ -882,7 +870,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -929,7 +916,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     targets = targets.bundle(
         name = "linux_oi_tests",
@@ -1023,7 +1009,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -1075,7 +1060,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -1117,7 +1101,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -1141,9 +1124,9 @@ ci.builder(
 )
 
 ci.builder(
-    name = "linux-modules-compile-fyi-rel",
+    name = "linux-no-modules-compile-rel",
     branch_selector = branches.selector.MAIN,
-    description_html = "Experimental compile with use_clang_modules=true.",
+    description_html = "Experimental compile with use_clang_modules=false.",
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(config = "chromium"),
         chromium_config = builder_config.chromium_config(
@@ -1153,12 +1136,11 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
             "ci/Linux Builder",
-            "clang_modules",
+            "no_clang_modules",
         ],
     ),
     targets = targets.bundle(
@@ -1199,7 +1181,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [

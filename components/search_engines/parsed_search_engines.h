@@ -11,6 +11,8 @@
 #include "components/country_codes/country_codes.h"
 #include "components/search_engines/prepopulated_engines.h"
 
+#include <unordered_map>
+
 class ParsedSearchEngines {
  public:
   using PrepopulateEnginesList =

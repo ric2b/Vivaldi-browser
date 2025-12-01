@@ -27,9 +27,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_DOM_TREE_SCOPE_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_DOM_TREE_SCOPE_H_
 
-#include "third_party/blink/renderer/bindings/core/v8/v8_observable_array_css_style_sheet.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/css/css_style_sheet.h"
 #include "third_party/blink/renderer/core/dom/tree_ordered_map.h"
 #include "third_party/blink/renderer/core/html/forms/radio_button_group_scope.h"
 #include "third_party/blink/renderer/core/layout/hit_test_request.h"
@@ -41,8 +39,8 @@
 namespace blink {
 
 class Animation;
-class ContainerNode;
 class CSSStyleSheet;
+class ContainerNode;
 class CustomElementRegistry;
 class DOMSelection;
 class Document;
@@ -53,7 +51,9 @@ class IdTargetObserverRegistry;
 class Node;
 class SVGTreeScopeResources;
 class ScopedStyleResolver;
+class ScriptState;
 class StyleSheetList;
+class V8ObservableArrayCSSStyleSheet;
 
 // The root node of a document tree (in which case this is a Document) or of a
 // shadow tree (in which case this is a ShadowRoot). Various things, like
@@ -91,7 +91,11 @@ class CORE_EXPORT TreeScope : public GarbageCollectedMixin {
 
   bool IsInclusiveAncestorTreeScopeOf(const TreeScope&) const;
 
-  Element* AdjustedFocusedElement() const;
+  // is_pseudo_allowed:
+  // - if true, PseudoElement can be returned
+  // - if false, PseudoElement will be retargeted to some Element according to
+  // the rules.
+  Element* AdjustedFocusedElement(bool is_pseudo_allowed = true) const;
   // Finds a retargeted element to the given argument, when the retargeted
   // element is in this TreeScope. Returns null otherwise.
   // TODO(kochi): once this algorithm is named in the spec, rename the method
@@ -185,6 +189,8 @@ class CORE_EXPORT TreeScope : public GarbageCollectedMixin {
   // otherwise.
   bool SetCustomElementRegistry(CustomElementRegistry*);
 
+  bool IsWaitingForScopedRegistry() const;
+
   // Given a `node` targeteted by an event, returns the element that this event
   // should be dispatched to.
   Element* ElementForHitTest(Node*, HitTestPointType) const;
@@ -235,6 +241,12 @@ class CORE_EXPORT TreeScope : public GarbageCollectedMixin {
   Member<V8ObservableArrayCSSStyleSheet> adopted_style_sheets_;
 
   Member<CustomElementRegistry> custom_element_registry_;
+  // By default, TreeScope attempts to retrieve the global custom element
+  // registry before it has been explicitly set. In cases where TreeScope is
+  // waiting for registry initialization, we use this flag to indicate that the
+  // registry is currently NULL. This ensures that nullptr is returned instead
+  // of falling back to the default global registry behavior.
+  bool waiting_for_registry_ = false;
 };
 
 inline bool TreeScope::HasElementWithId(const AtomicString& id) const {

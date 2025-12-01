@@ -781,6 +781,8 @@ void BaselineCompiler::VisitLdaContextSlot() {
       context, index, depth,
       BaselineAssembler::CompressionMode::kForceDecompression);
   __ JumpIfSmi(kInterpreterAccumulatorRegister, &done);
+  __ JumpIfRoot(kInterpreterAccumulatorRegister, RootIndex::kTheHoleValue,
+                &done);
   __ JumpIfObjectTypeFast(kNotEqual, kInterpreterAccumulatorRegister,
                           CONTEXT_CELL_TYPE, &done, Label::kNear);
   // TODO(victorgomes): inline trivial constant value read from context cell.
@@ -812,6 +814,8 @@ void BaselineCompiler::VisitLdaCurrentContextSlot() {
   __ LoadTaggedField(kInterpreterAccumulatorRegister, context,
                      Context::OffsetOfElementAt(index));
   __ JumpIfSmi(kInterpreterAccumulatorRegister, &done);
+  __ JumpIfRoot(kInterpreterAccumulatorRegister, RootIndex::kTheHoleValue,
+                &done);
   __ JumpIfObjectTypeFast(kNotEqual, kInterpreterAccumulatorRegister,
                           CONTEXT_CELL_TYPE, &done, Label::kNear);
   // TODO(victorgomes): inline trivial constant value read from context cell.
@@ -1008,6 +1012,25 @@ void BaselineCompiler::VisitStaModuleVariable() {
   __ LoadContext(scratch);
   int depth = Uint(1);
   __ StaModuleVariable(scratch, value, cell_index, depth);
+}
+
+void BaselineCompiler::VisitSetPrototypeProperties() {
+  BaselineAssembler::ScratchRegisterScope scratch_scope(&basm_);
+  Register feedback_array = scratch_scope.AcquireScratch();
+  LoadClosureFeedbackArray(feedback_array);
+
+  CallRuntime(Runtime::kSetPrototypeProperties,
+              // The object upon whose prototype boilerplate shall be applied
+              kInterpreterAccumulatorRegister,
+              // ObjectBoilerplateDescription whose properties will be merged in
+              // to the above object
+              Constant<ObjectBoilerplateDescription>(0),
+              // Array of feedback cells. Needed to instantiate
+              // ShareFunctionInfo(s) from the boilerplate
+              feedback_array,
+              // Index of the feedback cell of the first ShareFunctionInfo. We
+              // may assume all other SFI to be tightly packed.
+              IndexAsSmi(1));
 }
 
 void BaselineCompiler::VisitSetNamedProperty() {
@@ -2444,10 +2467,10 @@ void BaselineCompiler::VisitResumeGenerator() {
 }
 
 void BaselineCompiler::VisitForOfNext() {
+  SaveAccumulatorScope accumulator_scope(this, &basm_);
   CallBuiltin<Builtin::kForOfNextBaseline>(RegisterOperand(0),   // object
                                            RegisterOperand(1));  // next
-
-  __ Move(__ RegisterFrameOperand(RegisterOperand(2)), kReturnRegister1);
+  StoreRegisterPair(2, kReturnRegister0, kReturnRegister1);
 }
 
 void BaselineCompiler::VisitGetIterator() {

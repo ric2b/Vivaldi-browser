@@ -35,6 +35,13 @@ using download::WaitForDownloadButton;
 using download::WaitForOpenInButton;
 using download::WaitForOpenPDFButton;
 
+namespace {
+
+// Accessibility ID of the Activity menu.
+NSString* kActivityMenuIdentifier = @"ActivityListView";
+
+}  // namespace
+
 // Helper to test critical user journeys for Download Manager.
 @interface DownloadManagerTestCaseHelper : NSObject
 
@@ -197,7 +204,13 @@ using download::WaitForOpenPDFButton;
 }
 
 // Tests accessibility on Download Manager UI when download is complete.
+// TODO(crbug.com/438749917): Flaky on iPhone simulators.
 - (void)testAccessibilityOnCompletedDownloadToolbar {
+#if TARGET_IPHONE_SIMULATOR
+  if (![ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_DISABLED(@"Failing on iPhone simulator, crbug.com/438749917");
+  }
+#endif
   [ChromeEarlGrey loadURL:self.testServer->GetURL("/")];
   [ChromeEarlGrey waitForWebStateContainingText:"Download"];
   [ChromeEarlGrey tapWebStateElementWithID:@"download"];
@@ -213,7 +226,13 @@ using download::WaitForOpenPDFButton;
 }
 
 // Tests that filename label and "Open in Downloads" button are showing.
+// TODO(crbug.com/438749917): Flaky on iPhone simulators.
 - (void)testVisibleFileNameAndOpenInDownloads {
+#if TARGET_IPHONE_SIMULATOR
+  if (![ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_DISABLED(@"Failing on iPhone simulator, crbug.com/438749917");
+  }
+#endif
   // Apple is hiding UIActivityViewController's contents from the host app on
   // iPad.
   if ([ChromeEarlGrey isIPadIdiom]) {
@@ -237,16 +256,25 @@ using download::WaitForOpenPDFButton;
       verifyTextVisibleInActivitySheetWithID:l10n_util::GetNSString(
                                                  IDS_IOS_OPEN_IN_DOWNLOADS)];
 
-  // Tests filename label.
-  [[EarlGrey
-      selectElementWithMatcher:grey_allOf(grey_text(@"download-example"),
-                                          grey_sufficientlyVisible(), nil)]
-      assertWithMatcher:grey_notNil()];
+  // Scroll up to find the text if necessary. Verify that the filename label is
+  // visible.
+  [[[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(kActivityMenuIdentifier)]
+         usingSearchAction:grey_scrollInDirection(kGREYDirectionUp, 100)
+      onElementWithMatcher:grey_text(@"download-example")]
+      assertWithMatcher:grey_sufficientlyVisible()];
 }
 
 // Tests that "Open in..." works if the download ended while waiting in a
 // different tab which also contains a download task.
+// TODO(crbug.com/438749917): Flaky on iPhone simulators.
 - (void)testSwitchTabsAndOpenInDownloads {
+#if TARGET_IPHONE_SIMULATOR
+  if (![ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_DISABLED(@"Failing on iPhone simulator, crbug.com/438749917");
+  }
+#endif
+
   // Apple is hiding UIActivityViewController's contents from the host app on
   // iPad.
   if ([ChromeEarlGrey isIPadIdiom]) {
@@ -289,11 +317,14 @@ using download::WaitForOpenPDFButton;
   [ChromeEarlGrey
       verifyTextVisibleInActivitySheetWithID:l10n_util::GetNSString(
                                                  IDS_IOS_OPEN_IN_DOWNLOADS)];
-  // Tests filename label.
-  [[EarlGrey
-      selectElementWithMatcher:grey_allOf(grey_text(@"download-example"),
-                                          grey_sufficientlyVisible(), nil)]
-      assertWithMatcher:grey_notNil()];
+
+  // Scroll up to find the text if necessary. Verify that the filename label is
+  // visible.
+  [[[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(kActivityMenuIdentifier)]
+         usingSearchAction:grey_scrollInDirection(kGREYDirectionUp, 100)
+      onElementWithMatcher:grey_text(@"download-example")]
+      assertWithMatcher:grey_sufficientlyVisible()];
 }
 
 // Tests successful blob download. This also checks that a file can be
@@ -385,7 +416,6 @@ using download::WaitForOpenPDFButton;
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration configuration;
-  configuration.features_enabled.push_back(kDownloadedPDFOpening);
   // TODO(crbug.com/6602213): Fix the test suite for when Auto-deletion is enabled.
   configuration.features_disabled.push_back(
       kDownloadAutoDeletionFeatureEnabled);
@@ -451,26 +481,12 @@ using download::WaitForOpenPDFButton;
 
 // Tests that filename label and "Open in Downloads" button are showing.
 - (void)testVisibleFileNameAndOpenInDownloads {
-// TODO(crbug.com/432003647): Re-enable the test on iOS26.
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
-  if (iOS26_OR_ABOVE()) {
-    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 26.");
-  }
-#endif
-
   [_helper testVisibleFileNameAndOpenInDownloads];
 }
 
 // Tests that "Open in..." works if the download ended while waiting in a
 // different tab which also contains a download task.
 - (void)testSwitchTabsAndOpenInDownloads {
-  // TODO(crbug.com/432003077): Re-enable the test on iOS26.
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
-  if (iOS26_OR_ABOVE()) {
-    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 26.");
-  }
-#endif
-
   [_helper testSwitchTabsAndOpenInDownloads];
 }
 

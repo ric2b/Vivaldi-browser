@@ -23,9 +23,11 @@ limitations under the License.
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include "absl/log/log.h"
+#include "absl/status/status_matchers.h"
 #include "absl/strings/string_view.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
+#include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/hlo/ir/hlo_print_options.h"
 #include "xla/hlo/ir/hlo_schedule.h"
@@ -497,36 +499,6 @@ TEST_F(CallInlinerTest, UseShardManualComputationBodyNotInlined) {
   EXPECT_EQ(call->to_apply()->name(), "xla.sdy.manual_computation_body.4");
 }
 
-// Inline with `inline_shardy_manual_computation` enabled.
-TEST_F(CallInlinerTest, UseShardManualComputationBodyInlined) {
-  const char* const hloString = R"(
-    HloModule jit_f, entry_computation_layout={(f32[8,8]{1,0})->f32[8,8]{1,0}}
-
-    %xla.sdy.manual_computation_body.4 (Arg_0.5: f32[1,8]) -> f32[1,8] {
-      %Arg_0.5 = f32[1,8]{1,0} parameter(0)
-      ROOT %add.6 = f32[1,8]{1,0} add(f32[1,8]{1,0} %Arg_0.5, f32[1,8]{1,0} %Arg_0.5), metadata={source_file="-" source_line=11}
-    }
-
-    ENTRY %main.10 (Arg_0.1: f32[8,8]) -> f32[8,8] {
-      %Arg_0.1 = f32[8,8]{1,0} parameter(0)
-      %custom-call.3 = f32[1,8]{1,0} custom-call(f32[8,8]{1,0} %Arg_0.1), custom_call_target="SPMDFullToShardShape", sharding={manual}, metadata={source_file="-" source_line=4}
-      %call.7 = f32[1,8]{1,0} call(f32[1,8]{1,0} %custom-call.3), to_apply=%xla.sdy.manual_computation_body.4
-      ROOT %custom-call.9 = f32[8,8]{1,0} custom-call(f32[1,8]{1,0} %call.7), custom_call_target="SPMDShardToFullShape", sharding={devices=[8,1]<=[8]}, metadata={source_file="-" source_line=7}
-    })";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hloString));
-  module->mutable_config().set_use_shardy_partitioner(true);
-  TF_ASSERT_OK_AND_ASSIGN(
-      bool changed, CallInliner(
-                        /*single_call_site=*/false, /*update_domain=*/false,
-                        /*composites_to_preserve=*/{},
-                        /*uniquify_channel_ids=*/false,
-                        /*should_inline=*/std::nullopt,
-                        /*inline_shardy_manual_computation=*/true)
-                        .Run(module.get()));
-  EXPECT_TRUE(changed);
-  EXPECT_EQ(FindInstruction(module.get(), xla::HloOpcode::kCall), nullptr);
-}
-
 // Make sure we check the name of the called function contains the string, not
 // just the prefix/suffix.
 TEST_F(CallInlinerTest, UseShardManualComputationBodySurroundedNotInlined) {
@@ -891,6 +863,36 @@ ENTRY main {
   EXPECT_EQ(root->to_apply()->root_instruction()->metadata().op_name(), "");
 }
 
+TEST_F(CallInlinerTest, GetInlinedModule) {
+  const char* hlo = R"(
+
+reducer {
+  x = f32[] parameter(0)
+  y = f32[] parameter(1)
+  ROOT add = f32[] add(x, y)
+}
+
+callee {
+  input = f32[128,32] parameter(0)
+  const = f32[] constant(0)
+  ROOT reduce = f32[128] reduce(input, const), dimensions={1}, to_apply=reducer, metadata={op_name="reduce"}
+}
+
+ENTRY main {
+  input = f32[128,32] parameter(0)
+  ROOT result = f32[128] call(input), to_apply=callee, metadata={op_name="x"}
+})";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> m,
+                          ParseAndReturnVerifiedModule(hlo));
+
+  TF_ASSERT_OK_AND_ASSIGN(auto inlined_module, GetInlinedModule(m.get()));
+  auto root = inlined_module.module->entry_computation()->root_instruction();
+  EXPECT_THAT(root, op::Reduce());
+  EXPECT_EQ(root->metadata().op_name(), "x/reduce");
+  EXPECT_EQ(root->to_apply()->root_instruction()->metadata().op_name(), "");
+}
+
 TEST_F(CallInlinerTest, InliningDoesNotDuplicateLongOpNames) {
   const char* hlo = R"(
 callee {
@@ -951,6 +953,38 @@ ENTRY main {
   ASSERT_THAT(call_inliner.Run(m.get()), ::tsl::testing::IsOkAndHolds(true));
   EXPECT_THAT(m->entry_computation()->root_instruction(),
               op::Subtract(op::Call(op::Parameter(0)), op::Parameter(0)));
+}
+
+TEST_F(CallInlinerTest, HostSendChannelIdNotUniquified) {
+  const char* hlo = R"(
+callee {
+  input = f32[128,32] parameter(0)
+  token.0 = token[] parameter(1)
+  send = (f32[128, 32], token[]) send(input, token.0), channel_id=1, is_host_transfer=true
+  ROOT send-done = token[] send-done(send), channel_id=1, is_host_transfer=true
+}
+
+ENTRY main {
+  input = f32[128,32] parameter(0)
+  token.0 = token[] after-all()
+  call.0 = token[] call(input, token.0), to_apply=callee
+  ROOT call.1 = token[] call(input, call.0), to_apply=callee
+})";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> m,
+                          ParseAndReturnVerifiedModule(hlo));
+  CallInliner call_inliner(/*single_call_site=*/false, /*update_domain=*/false,
+                           /*composites_to_preserve=*/{},
+                           /*uniquify_channel_ids=*/true);
+  ASSERT_THAT(call_inliner.Run(m.get()), absl_testing::IsOkAndHolds(true));
+  HloComputation* entry = m->entry_computation();
+  for (HloInstruction* inst : entry->instructions()) {
+    HloSendRecvInstruction* send_recv =
+        dynamic_cast<HloSendRecvInstruction*>(inst);
+    if (send_recv && send_recv->is_host_transfer()) {
+      EXPECT_EQ(send_recv->channel_id(), 1);
+    }
+  }
 }
 
 }  // namespace

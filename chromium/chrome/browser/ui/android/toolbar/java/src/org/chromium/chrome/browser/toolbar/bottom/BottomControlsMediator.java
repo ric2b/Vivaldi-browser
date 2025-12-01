@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.toolbar.bottom;
 
 import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.browser_controls.BottomControlsLayer;
@@ -24,10 +23,12 @@ import org.chromium.chrome.browser.layouts.LayoutStateProvider.LayoutStateObserv
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.TabObscuringHandler;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
-import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeSupplier.ChangeObserver;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.edge_to_edge.EdgeToEdgeSupplier.ChangeObserver;
 import org.chromium.ui.modelutil.PropertyModel;
+
+import java.util.function.Supplier;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -252,6 +253,8 @@ class BottomControlsMediator
     private void updateCompositedViewVisibility() {
         final boolean isCompositedViewVisible = isCompositedViewVisible();
         mModel.set(BottomControlsProperties.COMPOSITED_VIEW_VISIBLE, isCompositedViewVisible);
+        // Note(david@vivaldi.com): We don't use the |BottomControlsStacker| in Vivaldi.
+        if (!BuildConfig.IS_VIVALDI)
         mBottomControlsStacker.requestLayerUpdate(false);
     }
 
@@ -345,5 +348,22 @@ class BottomControlsMediator
     void simulateEdgeToEdgeChangeForTesting(
             int bottomInset, boolean isDrawingToEdge, boolean isPageOptedIntoEdgeToEdge) {
         onEdgeToEdgeChanged(bottomInset, isDrawingToEdge, isPageOptedIntoEdgeToEdge);
+    }
+
+    /**
+     * Vivaldi: Sets the YOffset when browser controls change. This will make the bottom toolbar
+     * animate while scrolling a page.
+     */
+    @Override
+    public void onControlsOffsetChanged(
+            int topOffset,
+            int topControlsMinHeightOffset,
+            boolean topControlsMinHeightChanged,
+            int bottomOffset,
+            int bottomControlsMinHeightOffset,
+            boolean bottomControlsMinHeightChanged,
+            boolean requestNewFrame,
+            boolean isVisibilityForced) {
+        setYOffset(bottomOffset - getBrowserControls().getBottomControlsMinHeight());
     }
 }

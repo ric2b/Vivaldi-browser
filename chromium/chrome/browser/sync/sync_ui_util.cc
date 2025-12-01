@@ -241,11 +241,10 @@ SyncStatusLabels GetSyncStatusLabels(Profile* profile) {
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(profile);
   CHECK(identity_manager);
-  return GetSyncStatusLabels(
-      SyncServiceFactory::GetForProfile(profile), identity_manager,
-      ChromeSigninClientFactory::GetForProfile(profile)
-          ->IsClearPrimaryAccountAllowed(identity_manager->HasPrimaryAccount(
-              signin::ConsentLevel::kSync)));
+  return GetSyncStatusLabels(SyncServiceFactory::GetForProfile(profile),
+                             identity_manager,
+                             ChromeSigninClientFactory::GetForProfile(profile)
+                                 ->IsClearPrimaryAccountAllowed());
 }
 
 SyncStatusMessageType GetSyncStatusMessageType(Profile* profile) {
@@ -323,7 +322,11 @@ SyncStatusLabels GetAvatarSyncErrorLabelsForSettings(
     case AvatarSyncErrorType::kPassphraseError:
       return {SyncStatusMessageType::kSyncError,
               IDS_SETTINGS_ERROR_PASSPHRASE_USER_ERROR_DESCRIPTION_WITH_EMAIL,
-              IDS_SYNC_STATUS_NEEDS_PASSWORD_BUTTON, IDS_SETTINGS_SIGN_OUT,
+              IDS_SYNC_STATUS_NEEDS_PASSWORD_BUTTON,
+              base::FeatureList::IsEnabled(
+                  syncer::kReplaceSyncPromosWithSignInPromos)
+                  ? IDS_SETTINGS_PEOPLE_SIGN_OUT
+                  : IDS_SETTINGS_SIGN_OUT,
               SyncStatusActionType::kEnterPassphrase};
 
     case AvatarSyncErrorType::
@@ -351,9 +354,7 @@ SyncStatusLabels GetAvatarSyncErrorLabelsForSettings(
     case AvatarSyncErrorType::kUnrecoverableError:
       // Managed users get different labels.
       if (!ChromeSigninClientFactory::GetForProfile(profile)
-               ->IsClearPrimaryAccountAllowed(
-                   IdentityManagerFactory::GetForProfile(profile)
-                       ->HasPrimaryAccount(signin::ConsentLevel::kSync))) {
+               ->IsClearPrimaryAccountAllowed()) {
         return {SyncStatusMessageType::kSyncError,
                 IDS_SYNC_STATUS_UNRECOVERABLE_ERROR_NEEDS_SIGNOUT,
                 IDS_SYNC_RELOGIN_BUTTON, IDS_PROFILES_ACCOUNT_REMOVAL_TITLE,

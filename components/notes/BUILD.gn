@@ -47,6 +47,18 @@ static_library("notes") {
     "//vivaldi/sync/notes:sync_notes",
     "//vivaldi/sync/file_sync",
   ]
+  if(is_android) {
+    deps += [
+      "//chrome/android:chrome_jni_headers",
+    ]
+  }
+  if(!is_ios) {
+    deps += [
+      "//components/keyed_service/content:content",
+      "//content/public/browser",
+      "//vivaldi/app:vivaldi_unscaled_native_resources",
+    ]
+  }
   public_deps = [
     #"//chrome/browser",
     "//components/bookmarks/browser",
@@ -56,13 +68,6 @@ static_library("notes") {
   allow_circular_includes_from = [
     "//vivaldi/sync/notes:sync_notes",
   ]
-  if(!is_ios) {
-    deps += [
-      "//components/keyed_service/content:content",
-      "//content/public/browser",
-      "//vivaldi/app:vivaldi_unscaled_native_resources",
-    ]
-  }
 }
 
 static_library("factory") {

@@ -15,10 +15,12 @@
 #include "android_webview/renderer/aw_content_settings_client.h"
 #include "android_webview/renderer/aw_print_render_frame_helper_delegate.h"
 #include "android_webview/renderer/aw_render_frame_ext.h"
+#include "android_webview/renderer/aw_render_frame_observer.h"
 #include "android_webview/renderer/aw_render_view_ext.h"
 #include "android_webview/renderer/aw_url_loader_throttle_provider.h"
 #include "android_webview/renderer/browser_exposed_renderer_interfaces.h"
 #include "base/android/library_loader/library_prefetcher.h"
+#include "base/android/orderfile/orderfile_buildflags.h"
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
 #include "base/metrics/histogram_macros.h"
@@ -77,10 +79,10 @@ void AwContentRendererClient::RenderThreadStarted() {
 #if BUILDFLAG(SUPPORTS_CODE_ORDERING)
   if (base::FeatureList::IsEnabled(features::kWebViewPrefetchNativeLibrary) &&
       features::kWebViewPrefetchFromRenderer.Get()) {
-    base::ThreadPool::PostTask(FROM_HERE, base::BindOnce([] {
-                                 base::android::NativeLibraryPrefetcher::
-                                     ForkAndPrefetchNativeLibrary();
-                               }));
+    base::ThreadPool::PostTask(
+        FROM_HERE, base::BindOnce([] {
+          base::android::NativeLibraryPrefetcher::PrefetchNativeLibrary();
+        }));
   }
 #endif
 
@@ -184,6 +186,12 @@ void AwContentRendererClient::RenderFrameCreated(
 
   // Owned by |render_frame|.
   new page_load_metrics::MetricsRenderFrameObserver(render_frame);
+  // Currently, AwRenderFrameObserver is only used for orderfile
+  // instrumentation. So we avoid creating the observer unless orderfile
+  // instrumentation is enabled.
+#if BUILDFLAG(ORDERFILE_INSTRUMENTATION)
+  new AwRenderFrameObserver(render_frame);
+#endif
 }
 
 std::unique_ptr<blink::WebPrescientNetworking>
@@ -200,13 +208,10 @@ void AwContentRendererClient::
     blink::WebRuntimeFeatures::EnableSharedAutofill(true);
   }
 
-  if (base::FeatureList::IsEnabled(
-          features::kWebViewMediaIntegrityApiBlinkExtension)) {
-    // Enable the overall android.webview namespace.
-    blink::WebRuntimeFeatures::EnableBlinkExtensionWebView(true);
-    // Enable the android.webview.getExperimentalMediaIntegrityProvider API.
-    blink::WebRuntimeFeatures::EnableBlinkExtensionWebViewMediaIntegrity(true);
-  }
+  // Enable the overall android.webview namespace.
+  blink::WebRuntimeFeatures::EnableBlinkExtensionWebView(true);
+  // Enable the android.webview.getExperimentalMediaIntegrityProvider API.
+  blink::WebRuntimeFeatures::EnableBlinkExtensionWebViewMediaIntegrity(true);
 }
 
 void AwContentRendererClient::WebViewCreated(

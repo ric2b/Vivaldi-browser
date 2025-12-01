@@ -24,14 +24,6 @@
 
 namespace net {
 
-SslSetClearMask::SslSetClearMask() = default;
-
-void SslSetClearMask::ConfigureFlag(long flag, bool state) {
-  (state ? set_mask : clear_mask) |= flag;
-  // Make sure we haven't got any intersection in the set & clear options.
-  DCHECK_EQ(0, set_mask & clear_mask) << flag << ":" << state;
-}
-
 namespace {
 
 class OpenSSLNetErrorLibSingleton {
@@ -231,9 +223,8 @@ int GetNetSSLVersion(SSL* ssl) {
 
 std::vector<CRYPTO_BUFFER*> GetCertChainRawVector(X509Certificate& cert) {
   std::vector<CRYPTO_BUFFER*> chain_raw;
-  chain_raw.reserve(1 + cert.intermediate_buffers().size());
-  chain_raw.push_back(cert.cert_buffer());
-  for (const auto& handle : cert.intermediate_buffers()) {
+  chain_raw.reserve(cert.cert_buffers().size());
+  for (const auto& handle : cert.cert_buffers()) {
     chain_raw.push_back(handle.get());
   }
   return chain_raw;

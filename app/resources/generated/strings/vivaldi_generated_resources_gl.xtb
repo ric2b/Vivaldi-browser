@@ -23,7 +23,6 @@
 <translation id="1451375123200651445">Páxina web, ficheiro único</translation>
 <translation id="1465176863081977902">C&amp;opiar o enderezo do audio</translation>
 <translation id="1476607407192946488">&amp;Configuración do idioma</translation>
-<translation id="1546280085599573572">Esta extensión cambiou como a páxina se amosa cando premes o botón de Inicio.</translation>
 <translation id="1552752544932680961">Xestionar extensión</translation>
 <translation id="15662109988763471">A impresora seleccionada non está dispoñible ou non se instalou correctamente. Revisa a túa impresora ou proba a seleccionar outra.</translation>
 <translation id="1588438908519853928">Normal</translation>
@@ -59,7 +58,6 @@
 <translation id="215753907730220065">Saír da pantalla completa</translation>
 <translation id="2158475082070321257">Copiar ligazón ao texto destacado</translation>
 <translation id="2177950615300672361">Lapela de incógnito: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Módulo Cliente Nativo: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Pegar como texto sen formatar</translation>
 <translation id="2249605167705922988">p.ex. 1-5, 8, 11-13</translation>
 <translation id="2280486287150724112">Marxe dereita</translation>
@@ -72,7 +70,6 @@
 <translation id="2348176352564285430">Aplicativo: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Selecciona o directorio da extensión.</translation>
 <translation id="2379281330731083556">Imprimir usando ao diálogo do sistema... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Complemento descoñecido</translation>
 <translation id="2423578206845792524">Gar&amp;dar imaxe como...</translation>
 <translation id="2439110203301358333">Outro programa do teu equipo engadiu unha extensión que pode cambiar o funcionamento de Vivaldi.</translation>
 <translation id="2443487764245141020">É posible que algúns sitios tamén necesiten recoñecer o teu dispositivo usando un identificador</translation>
@@ -89,7 +86,6 @@
 <translation id="2721037002783622288">&amp;Buscar <ph name="SEARCH_ENGINE" /> por imaxe</translation>
 <translation id="2785873697295365461">Descritores do ficheiro</translation>
 <translation id="2850541429955027218">Engadir tema</translation>
-<translation id="2861941300086904918">Administrador de seguranza do cliente nativo</translation>
 <translation id="2881076733170862447">Cando premas na extensión</translation>
 <translation id="2889064240420137087">Abrir ligazón con…</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> non se puido conectar coa impresora. Comproba que a impresora está enchufada e inténtao de novo.</translation>
@@ -132,7 +128,6 @@
 <translation id="3511307672085573050">Copiar enderezo da &amp;ligazón</translation>
 <translation id="354068948465830244">Isto pode ler e cambiar os datos do sitio</translation>
 <translation id="3560034655160545939">&amp;Corrección ortográfica</translation>
-<translation id="3587482841069643663">Todo</translation>
 <translation id="3627588569887975815">Abrir a li&amp;gazón nunha xanela privada</translation>
 <translation id="3678156199662914018">Extensión: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Solicita pantalla compartida</translation>
@@ -163,7 +158,6 @@
 <translation id="4109898769411476438">Pechar navegador antes de importar</translation>
 <translation id="4131410914670010031">Negro e branco</translation>
 <translation id="4165986682804962316">Configuración do sitio</translation>
-<translation id="4176463684765177261">Desactivada</translation>
 <translation id="4200983522494130825">Nova &amp;lapela</translation>
 <translation id="4225397296022057997">En todos os sitios</translation>
 <translation id="4256316378292851214">Gar&amp;dar vídeo como…</translation>
@@ -177,6 +171,7 @@
 <translation id="4595560905247879544">Só o administrador (<ph name="CUSTODIAN_NAME" />) pode modificar aplicativos e extensións.</translation>
 <translation id="4613271546271159013">Unha extensión cambiou a páxina que se amosa ao abrir unha lapela nova.</translation>
 <translation id="4643612240819915418">&amp;Abrir vídeo na nova lapela</translation>
+<translation id="4654801841330730814">Todo</translation>
 <translation id="4677772697204437347">Memoria GPU</translation>
 <translation id="4681930562518940301">Abrir &amp;imaxe orixinal nunha lapela nova</translation>
 <translation id="4711638718396952945">Restaurar configuración</translation>
@@ -200,10 +195,8 @@
 <translation id="5059526285558225588">Escoller o que se compartirá</translation>
 <translation id="5063480226653192405">Uso</translation>
 <translation id="5116628073786783676">Gar&amp;dar audio como…</translation>
-<translation id="5143374789336132547">A extensión <ph name="EXTENSION_NAME" /> cambiou a páxina que se amosa ao premer no botón de Inicio.</translation>
 <translation id="5154108062446123722">Configuración avanzada para <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5171343362375269016">Memoria trasladada ao espazo de intercambio</translation>
-<translation id="5233019165164992427">Porto de depuración NaCl</translation>
 <translation id="5233231016133573565">ID do proceso</translation>
 <translation id="5233736638227740678">&amp;Pegar</translation>
 <translation id="5256861893479663409">En todos os sitios</translation>
@@ -222,7 +215,6 @@
 <translation id="5485102783864353244">Engadir aplicativo</translation>
 <translation id="5486561344817861625">Simular reinicio do navegador</translation>
 <translation id="5509693895992845810">Gardar &amp;como…</translation>
-<translation id="5521078259930077036">É esta a páxina principal que esperabas?</translation>
 <translation id="5542132724887566711">Perfil</translation>
 <translation id="5556459405103347317">Recargar</translation>
 <translation id="5575473780076478375">Extensión de incógnito: <ph name="EXTENSION_NAME" /></translation>
@@ -231,7 +223,6 @@
 <translation id="5677928146339483299">Bloqueado</translation>
 <translation id="5707185214361380026">Fallou ao cargar a extensión desde:</translation>
 <translation id="5713171467967533494">Abrir no navegador Vivaldi</translation>
-<translation id="5715711091495208045">Axente de complemento: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Gardar como PDF</translation>
 <translation id="5747809636523347288">Pe&amp;gar e ir a <ph name="URL" /></translation>
 <translation id="5759728514498647443">Os documentos que envíes para imprimir por <ph name="APP_NAME" /> pódense ler con <ph name="APP_NAME" />.</translation>
@@ -239,7 +230,6 @@
 <translation id="5780973441651030252">Prioridade do proceso</translation>
 <translation id="5804241973901381774">Permisos</translation>
 <translation id="5828633471261496623">Imprimindo…</translation>
-<translation id="583281660410589416">Descoñecido</translation>
 <translation id="5860491529813859533">Activar</translation>
 <translation id="5910363049092958439">Gar&amp;dar imaxe como…</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> máximo)</translation>
@@ -278,7 +268,6 @@
 <translation id="6639554308659482635">Memoria de SQLite</translation>
 <translation id="666731172850799929">Abrir en <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Gardar o teu contrasinal</translation>
-<translation id="6798954102094737107">Complemento: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Manter cambios</translation>
 <translation id="6824564591481349393">Copiar o enderezo &amp;electrónico</translation>
 <translation id="6840155290835956714">Preguntar antes de enviar</translation>
@@ -308,7 +297,6 @@
 <translation id="7576690715254076113">Agrupar</translation>
 <translation id="7629827748548208700">Lapela: <ph name="TAB_NAME" /></translation>
 <translation id="7659154729610375585">Queres saír do modo de incógnito de todas formas?</translation>
-<translation id="7661259717474717992">Permitir sitios para gardar e ler os datos da cookie</translation>
 <translation id="7663719505383602579">Recibidor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalado polo teu administrador</translation>
 <translation id="7685049629764448582">Memoria de JavaScript</translation>
@@ -346,7 +334,6 @@ Garda o teu ficheiro de clave nun lugar seguro. Necesitaralo para crear versión
 <translation id="8261378640211443080">Esta extensión non aparece en <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> e pódese ter engadido sen o teu coñecemento.</translation>
 <translation id="8351419472474436977">Esta extensión tomou o control da túa configuración do proxy, o que significa que pode cambiar, interromper ou espiar o que fagas en liña. Se non estás seguro de por que ocorreu este cambio, probablemente non o queiras manter.</translation>
 <translation id="8382913212082956454">Copiar o enderezo &amp;electrónico</translation>
-<translation id="8434480141477525001">Porto de depuración NaCl</translation>
 <translation id="8449008133205184768">Pegar adaptando o estilo</translation>
 <translation id="8496717697661868878">Executar este complemento</translation>
 <translation id="8512476990829870887">Rematar proceso</translation>

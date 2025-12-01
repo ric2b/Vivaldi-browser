@@ -5,13 +5,14 @@
 #import <UIKit/UIKit.h>
 #import <XCTest/XCTest.h>
 
+#import "base/ios/ios_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "base/time/time.h"
 #import "components/password_manager/core/browser/features/password_features.h"
 #import "components/password_manager/core/common/password_manager_features.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_ui_test_util.h"
+#import "ios/chrome/browser/authentication/test/signin_earl_grey.h"
+#import "ios/chrome/browser/authentication/test/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/passwords/model/password_manager_app_interface.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/password_manager_egtest_utils.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/password_manager_ui_features.h"
@@ -218,6 +219,11 @@ id<GREYMatcher> ProactivePasswordGenerationUseKeyboardButton() {
 // Tests that the bottom sheet does not show after it has been
 // dismissed three consecutive times.
 - (void)testSilenceProactiveBottomSheet {
+  // TODO(crbug.com/439743829): Re-enable the test on iOS26.
+  if (base::ios::IsRunningOnIOS26OrLater()) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 26.");
+  }
+
   // Dismiss #1
   [self loadSignupPage];
   [self openAndDismissBottomSheet];
@@ -276,42 +282,38 @@ id<GREYMatcher> ProactivePasswordGenerationUseKeyboardButton() {
 
 // Tests dynamic sizing.
 - (void)testProactiveBottomSheetWithDynamicTypeSizing {
-  if (@available(iOS 17.0, *)) {
-    [self loadSignupPage];
+  [self loadSignupPage];
 
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
-        performAction:chrome_test_util::TapWebElementWithId(
-                          kNewPasswordFieldID)];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
+      performAction:chrome_test_util::TapWebElementWithId(kNewPasswordFieldID)];
 
-    [ChromeEarlGrey
-        waitForUIElementToAppearWithMatcher:UseSuggestedPasswordButton()];
+  [ChromeEarlGrey
+      waitForUIElementToAppearWithMatcher:UseSuggestedPasswordButton()];
 
-    // Change trait collection to use accessibility large content size.
-    ScopedTraitOverrider overrider(TopPresentedViewController());
-    overrider.SetContentSizeCategory(UIContentSizeCategoryAccessibilityLarge);
+  // Change trait collection to use accessibility large content size.
+  ScopedTraitOverrider overrider(TopPresentedViewController());
+  overrider.SetContentSizeCategory(UIContentSizeCategoryAccessibilityLarge);
 
-    [ChromeEarlGreyUI waitForAppToIdle];
+  [ChromeEarlGreyUI waitForAppToIdle];
 
-    // Verify that the "Use Suggested Password" and "Use Keyboard" buttons are
-    // still visible.
-    [[EarlGrey selectElementWithMatcher:UseSuggestedPasswordButton()]
-        assertWithMatcher:grey_sufficientlyVisible()];
+  // Verify that the "Use Suggested Password" and "Use Keyboard" buttons are
+  // still visible.
+  [[EarlGrey selectElementWithMatcher:UseSuggestedPasswordButton()]
+      assertWithMatcher:grey_sufficientlyVisible()];
 
-    [[EarlGrey
-        selectElementWithMatcher:ProactivePasswordGenerationUseKeyboardButton()]
-        assertWithMatcher:grey_sufficientlyVisible()];
+  [[EarlGrey
+      selectElementWithMatcher:ProactivePasswordGenerationUseKeyboardButton()]
+      assertWithMatcher:grey_sufficientlyVisible()];
 
-    [[EarlGrey selectElementWithMatcher:UseSuggestedPasswordButton()]
-        performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:UseSuggestedPasswordButton()]
+      performAction:grey_tap()];
 
-    [self verifyNewPasswordFieldsHaveBeenFilled];
-  } else {
-    EARL_GREY_TEST_SKIPPED(@"Not available for under iOS 17.");
-  }
+  [self verifyNewPasswordFieldsHaveBeenFilled];
 }
 
 // Tests that the bottom sheet does not show if the user isn't signed in.
-- (void)testUserSignedOut {
+// TODO(crbug.com/440577394): This test is flaky.
+- (void)FLAKY_testUserSignedOut {
   [ChromeEarlGrey signOutAndClearIdentities];
 
   [self loadSignupPage];

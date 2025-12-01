@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.firstrun;
 
 import static androidx.annotation.VisibleForTesting.PRIVATE;
 
+import static org.chromium.build.NullUtil.assertNonNull;
 import static org.chromium.build.NullUtil.assumeNonNull;
 
 import android.animation.Animator;
@@ -28,7 +29,7 @@ import androidx.viewpager2.widget.ViewPager2;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
-import org.chromium.base.BuildInfo;
+import org.chromium.base.DeviceInfo;
 import org.chromium.base.Promise;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.build.annotations.Initializer;
@@ -49,7 +50,6 @@ import org.chromium.chrome.browser.ui.signin.SigninUtils;
 import org.chromium.chrome.browser.ui.signin.fullscreen_signin.FullscreenSigninMediator;
 import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncHelper;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController;
-import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeSystemBarColorHelper;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.metrics.LowEntropySource;
@@ -57,6 +57,7 @@ import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.LocalizationUtils;
+import org.chromium.ui.edge_to_edge.EdgeToEdgeSystemBarColorHelper;
 import org.chromium.ui.interpolators.Interpolators;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
@@ -80,6 +81,7 @@ import org.vivaldi.browser.adblock.AdblockManager;
 import org.vivaldi.browser.common.VivaldiDefaultBrowserUtils;
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.firstrun.VivaldiFirstRunFragment;
+import org.vivaldi.browser.migration.MigrationUtils;
 import org.vivaldi.browser.prompts.DefaultBrowserNotificationReceiver;
 
 /**
@@ -280,7 +282,9 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         //
         // TODO(b/245912657): explicitly sign in supervised users in {@link
         // FullscreenSigninMediator#handleContinueWithNative} rather than relying on SigninChecker.
-        SigninCheckerProvider.get(getProfileProviderSupplier().get().getOriginalProfile());
+        Profile originalProfile =
+                assumeNonNull(getProfileProviderSupplier().get()).getOriginalProfile();
+        SigninCheckerProvider.get(originalProfile);
 
         assumeNonNull(mFreProperties);
         mFirstRunFlowSequencer.updateFirstRunProperties(mFreProperties);
@@ -300,9 +304,7 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         // fly according to the situation.
         BooleanSupplier showHistorySync = () -> mFreProperties.getBoolean(SHOW_HISTORY_SYNC_PAGE);
         if (!showHistorySync.getAsBoolean()) {
-            HistorySyncHelper historySyncHelper =
-                    HistorySyncHelper.getForProfile(
-                            getProfileProviderSupplier().get().getOriginalProfile());
+            HistorySyncHelper historySyncHelper = HistorySyncHelper.getForProfile(originalProfile);
             historySyncHelper.recordHistorySyncNotShown(SigninAccessPoint.START_PAGE);
         }
         mPages.add(new FirstRunPage<>(HistorySyncFirstRunFragment.class, showHistorySync));
@@ -328,7 +330,7 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         // To solve this, we apply Theme.Chromium.TabbedMode on Tablet and Automotive here, to use
         // the same window background as other tabbed mode activities using the same theme.
         boolean isTabletOrAuto =
-                BuildInfo.getInstance().isAutomotive
+                DeviceInfo.isAutomotive()
                         || DeviceFormFactor.isNonMultiDisplayContextOnTablet(this);
         if (isTabletOrAuto) {
             setTheme(R.style.Theme_Chromium_TabbedMode);
@@ -363,7 +365,8 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
     }
 
     @Override
-    protected @Nullable Bundle transformSavedInstanceStateForOnCreate(Bundle savedInstanceState) {
+    protected @Nullable Bundle transformSavedInstanceStateForOnCreate(
+            @Nullable Bundle savedInstanceState) {
         // We pass null to Activity.onCreate() so that it doesn't automatically restore
         // the FragmentManager state - as that may cause fragments to be loaded that have
         // dependencies on native before native has been loaded (and then crash). Instead,
@@ -416,7 +419,8 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
 
         mFirstRunFlowSequencer =
                 new FirstRunFlowSequencer(
-                        getProfileProviderSupplier(), getChildAccountStatusSupplier()) {
+                        getProfileProviderSupplier(),
+                        assertNonNull(getChildAccountStatusSupplier())) {
                     @Override
                     public void onFlowIsKnown(boolean isChild) {
                         mFreProperties = new Bundle();
@@ -453,7 +457,7 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
 
                     onNativeDependenciesFullyInitialized();
                 };
-        Profile profile = getProfileProviderSupplier().get().getOriginalProfile();
+        Profile profile = assumeNonNull(getProfileProviderSupplier().get()).getOriginalProfile();
         TemplateUrlServiceFactory.getForProfile(profile).runWhenLoaded(onNativeFinished);
         // Notify feature engagement that FRE occurred.
         TrackerFactory.getTrackerForProfile(profile)
@@ -574,7 +578,6 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
     @Override
     public void onStart() {
         super.onStart();
-
         // Vivaldi: Abort the activity if the OS has the wrong version or the build fingerprint
         // is in the blocklist.
         if (BuildConfig.IS_OEM_POLESTAR_BUILD) {
@@ -598,6 +601,15 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
                     activity.finishAndRemoveTask();
                 }
             }
+        }
+
+        // Vivaldi: Migrate from legacy automotive app.
+        if (BuildConfig.IS_OEM_GAS_BUILD && MigrationUtils.shouldRunMigration(this)) {
+            boolean result = MigrationUtils.startMigrationSync(this);
+            if (result)
+                MigrationUtils.markMigrationDone(this);
+            String message = result ? "Profile migration succeeded." : "Profile migration failed!";
+            Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
         }
     }
 
@@ -816,7 +828,7 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
             mAnimator.addUpdateListener(new UpdateListener());
 
             mAnimator.addListener(
-                    new ValueAnimator.AnimatorListener() {
+                    new Animator.AnimatorListener() {
                         @Override
                         public void onAnimationStart(Animator animation) {
                             mPager.beginFakeDrag();

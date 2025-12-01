@@ -1,18 +1,18 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import * as Trace from '../../../models/trace/trace.js';
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {defaultTraceEvent} from '../../../testing/TraceHelpers.js';
-import type * as PerfUI from '../../../ui/legacy/components/perf_ui/perf_ui.js';
+import * as PerfUI from '../../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as Timeline from '../timeline.js';
 
 describeWithEnvironment('AppenderUtils', () => {
   const defaultGroupStyle = {
     padding: 4,
     height: 17,
-    collapsible: true,
+    collapsible: PerfUI.FlameChart.GroupCollapsibleState.ALWAYS,
     // This color is same as --sys-color-on-surface in themeColors.css
     color: 'rgb(31 31 31 / 100%)',
     // This color is same as --sys-color-cdt-base-container in themeColors.css

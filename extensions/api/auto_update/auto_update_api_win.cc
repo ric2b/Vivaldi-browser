@@ -4,6 +4,7 @@
 
 #include <Windows.h>
 
+#include "app/vivaldi_constants.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
@@ -11,17 +12,18 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/vivaldi_switches.h"
+#include "browser/launch_update_notifier.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/webui/version/version_util_win.h"
 #include "chrome/browser/upgrade_detector/build_state.h"
 #include "chrome/browser/upgrade_detector/build_state_observer.h"
 #include "chrome/browser/upgrade_detector/installed_version_poller.h"
+#include "components/version_info/version_info.h"
 #include "extensions/api/auto_update/auto_update_status.h"
 #include "extensions/tools/vivaldi_tools.h"
-
-#include "app/vivaldi_constants.h"
-#include "browser/launch_update_notifier.h"
 #include "installer/util/vivaldi_install_util.h"
+#include "update/update_service_factory.h"
 #include "update_notifier/update_notifier_switches.h"
 
 #include "base/debug/stack_trace.h"
@@ -29,6 +31,9 @@
 namespace extensions {
 
 namespace {
+
+using update::UpdateService;
+using update::UpdateServiceFactory;
 
 void StartManualUpdateCheck() {
   base::CommandLine update_notifier_command =
@@ -109,6 +114,20 @@ void AutoUpdateAPI::InitUpgradeDetection() {
 void AutoUpdateAPI::ShutdownUpgradeDetection() {
   g_browser_process->GetBuildState()->RemoveObserver(
       &AutoUpdateObserver::GetInstance());
+}
+
+// new about page api
+ExtensionFunction::ResponseAction AutoUpdateStartUpdateFunction::Run() {
+  std::optional<vivaldi::auto_update::StartUpdate::Params> params(
+      vivaldi::auto_update::StartUpdate::Params::Create(args()));
+
+  UpdateService* service = UpdateServiceFactory::GetForProfile(GetProfile());
+  service->StartUpdate(
+      params->should_start_update,
+      base::BindOnce(&AutoUpdateStartUpdateFunction::StartUpdateCB, this),
+      &task_tracker_);
+
+  return RespondLater();
 }
 
 ExtensionFunction::ResponseAction AutoUpdateCheckForUpdatesFunction::Run() {
@@ -267,6 +286,11 @@ ExtensionFunction::ResponseAction AutoUpdateNeedsCodecRestartFunction::Run() {
 
 ExtensionFunction::ResponseAction AutoUpdateRunStartupChecksFunction::Run() {
   return RespondNow(NoArguments());
+}
+
+std::string AutoUpdateGetAboutPathsInfoFunction::GetPlatformOSVersion() {
+  return base::StrCat({version_info::GetOSType(), " ",
+                       version_utils::win::GetFullWindowsVersion()});
 }
 
 }  // namespace extensions

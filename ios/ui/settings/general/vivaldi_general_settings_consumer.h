@@ -7,6 +7,7 @@
 
 // A protocol implemented by consumers to general settings
 // preference state change.
+NS_SWIFT_UI_ACTOR
 @protocol VivaldiGeneralSettingsConsumer
 // Updates the state with the homepage preference value.
 - (void)setPreferenceForHomepageSwitch:(BOOL)homepageEnabled;

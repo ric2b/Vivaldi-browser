@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,7 @@ import * as Types from '../types/types.js';
 
 import {data as metaHandlerData, type MetaHandlerData} from './MetaHandler.js';
 import {data as networkRequestsHandlerData} from './NetworkRequestsHandler.js';
-import type {HandlerName} from './types.js';
+import type {FinalizeOptions, HandlerName} from './types.js';
 
 export interface ScriptsData {
   /** Note: this is only populated when the "Enhanced Traces" feature is enabled. */
@@ -26,7 +26,8 @@ export interface Script {
   url?: string;
   sourceUrl?: string;
   content?: string;
-  /** Note: this is the literal text given as the sourceMappingURL value. It has not been resolved relative to the script url.
+  /**
+   * Note: this is the literal text given as the sourceMappingURL value. It has not been resolved relative to the script url.
    * Since M138, data urls are never set here.
    */
   sourceMapUrl?: string;
@@ -42,25 +43,25 @@ type GeneratedFileSizes = {
   errorMessage: string,
 }|{files: Record<string, number>, unmappedBytes: number, totalBytes: number};
 
-const scriptById = new Map<string, Script>();
+let scriptById = new Map<string, Script>();
 
 export function deps(): HandlerName[] {
   return ['Meta', 'NetworkRequests'];
 }
 
 export function reset(): void {
-  scriptById.clear();
+  scriptById = new Map();
 }
 
 export function handleEvent(event: Types.Events.Event): void {
-  const getOrMakeScript = (isolate: string, scriptIdAsNumber: number): Script => {
+  const getOrMakeScript = (isolate: string|number, scriptIdAsNumber: number): Script => {
     const scriptId = String(scriptIdAsNumber) as Protocol.Runtime.ScriptId;
     const key = `${isolate}.${scriptId}`;
     return Platform.MapUtilities.getWithDefault(
-        scriptById, key, () => ({isolate, scriptId, frame: '', ts: 0} as Script));
+        scriptById, key, () => ({isolate, scriptId, frame: '', ts: event.ts} as Script));
   };
 
-  if (Types.Events.isTargetRundownEvent(event) && event.args.data) {
+  if (Types.Events.isRundownScriptCompiled(event) && event.args.data) {
     const {isolate, scriptId, frame} = event.args.data;
     const script = getOrMakeScript(isolate, scriptId);
     script.frame = frame;
@@ -69,10 +70,11 @@ export function handleEvent(event: Types.Events.Event): void {
     return;
   }
 
-  if (Types.Events.isV8SourceRundownEvent(event)) {
+  if (Types.Events.isRundownScript(event)) {
     const {isolate, scriptId, url, sourceUrl, sourceMapUrl, sourceMapUrlElided} = event.args.data;
     const script = getOrMakeScript(isolate, scriptId);
     script.url = url;
+    script.ts = event.ts;
     if (sourceUrl) {
       script.sourceUrl = sourceUrl;
     }
@@ -90,14 +92,14 @@ export function handleEvent(event: Types.Events.Event): void {
     return;
   }
 
-  if (Types.Events.isV8SourceRundownSourcesScriptCatchupEvent(event)) {
+  if (Types.Events.isRundownScriptSource(event)) {
     const {isolate, scriptId, sourceText} = event.args.data;
     const script = getOrMakeScript(isolate, scriptId);
     script.content = sourceText;
     return;
   }
 
-  if (Types.Events.isV8SourceRundownSourcesLargeScriptCatchupEvent(event)) {
+  if (Types.Events.isRundownScriptSourceLarge(event)) {
     const {isolate, scriptId, sourceText} = event.args.data;
     const script = getOrMakeScript(isolate, scriptId);
     script.content = (script.content ?? '') + sourceText;
@@ -253,7 +255,7 @@ function findCachedRawSourceMap(script: Script, options: Types.Configuration.Par
   return;
 }
 
-export async function finalize(options: Types.Configuration.ParseOptions): Promise<void> {
+export async function finalize(options: FinalizeOptions): Promise<void> {
   const meta = metaHandlerData();
   const networkRequests = [...networkRequestsHandlerData().byId.values()];
 

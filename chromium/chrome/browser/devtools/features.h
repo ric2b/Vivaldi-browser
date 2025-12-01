@@ -8,7 +8,6 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
-#include "content/public/common/buildflags.h"
 
 namespace features {
 
@@ -95,12 +94,23 @@ BASE_DECLARE_FEATURE(kDevToolsNewPermissionDialog);
 
 BASE_DECLARE_FEATURE(kDevToolsVerticalDrawer);
 
-#if BUILDFLAG(ENABLE_PWA_INSTALL_ON_CROS_TEST)
-BASE_DECLARE_FEATURE(kDevToolsPwaHandler);
-#endif  // BUILDFLAG(ENABLE_PWA_INSTALL_ON_CROS_TEST)
-
 BASE_DECLARE_FEATURE(kDevToolsAiSubmenuPrompts);
 BASE_DECLARE_FEATURE(kDevToolsAiDebugWithAi);
+
+BASE_DECLARE_FEATURE(kDevToolsGlobalAiButton);
+extern const base::FeatureParam<bool> kDevToolsGlobalAiButtonPromotionEnabled;
+
+BASE_DECLARE_FEATURE(kDevToolsGdpProfiles);
+extern const base::FeatureParam<bool> kDevToolsGdpProfilesBadgesEnabled;
+extern const base::FeatureParam<bool> kDevToolsGdpProfilesStarterBadgeEnabled;
+
+BASE_DECLARE_FEATURE(kDevToolsLiveEdit);
+
+BASE_DECLARE_FEATURE(kDevToolsIndividualRequestThrottling);
+
+BASE_DECLARE_FEATURE(kDevToolsAiPromptApi);
+
+BASE_DECLARE_FEATURE(kDevToolsStartingStyleDebugging);
 
 }  // namespace features
 

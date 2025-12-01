@@ -119,6 +119,7 @@
   E(kActionOpenGuestProfile, IDC_OPEN_GUEST_PROFILE) \
   E(kActionAddNewProfile, IDC_ADD_NEW_PROFILE) \
   E(kActionManageChromeProfiles, IDC_MANAGE_CHROME_PROFILES) \
+  E(kActionShowSignin, IDC_SHOW_SIGNIN) \
   /* Zoom */ \
   E(kActionZoomMenu, IDC_ZOOM_MENU) \
   E(kActionZoomPlus, IDC_ZOOM_PLUS) \
@@ -202,6 +203,8 @@
   E(kActionReadingListMenuAddTab, IDC_READING_LIST_MENU_ADD_TAB) \
   E(kActionRecentTabsLoginForDeviceTabs, \
     IDC_RECENT_TABS_LOGIN_FOR_DEVICE_TABS) \
+  E(kActionRecentTabsSeeDeviceTabs, \
+    IDC_RECENT_TABS_SEE_DEVICE_TABS) \
   E(kActionOpenRecentTab, IDC_OPEN_RECENT_TAB) \
   /* Spell-check */ \
   /* Insert any additional suggestions before _LAST; these have to be */ \
@@ -279,6 +282,8 @@
   E(kActionContentContextLoadImage, IDC_CONTENT_CONTEXT_LOAD_IMAGE) \
   E(kActionContentContextSearchLensForImage, \
     IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE) \
+  E(kActionContentContextGlicShareImage, \
+    IDC_CONTENT_CONTEXT_GLICSHAREIMAGE) \
   E(kActionContentContextTranslateImageWithWeb, \
     IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHWEB) \
   E(kActionContentContextTranslateImageWithLens, \
@@ -503,7 +508,6 @@
   /*Commerce*/ \
   E(kActionCommercePriceInsights) \
   E(kActionCommerceDiscounts) \
-  E(kActionCommerceProductSpecifications) \
 
 #if BUILDFLAG(IS_CHROMEOS)
 #define CHROME_PLATFORM_SPECIFIC_ACTION_IDS \
@@ -538,6 +542,7 @@
   E(kActionSidePanelShowCustomizeChromeFooter) \
   E(kActionSidePanelShowCustomizeChromeToolbar) \
   E(kActionSidePanelShowFeed) \
+  E(kActionSidePanelShowGlic) \
   E(kActionSidePanelShowHistoryCluster) \
   E(kActionSidePanelShowHistory) \
   E(kActionSidePanelShowLens) \

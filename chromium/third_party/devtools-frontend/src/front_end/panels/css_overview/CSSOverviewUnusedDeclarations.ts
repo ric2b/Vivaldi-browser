@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,31 +7,31 @@ import type * as Protocol from '../../generated/protocol.js';
 
 const UIStrings = {
   /**
-   *@description Label to explain why top values are ignored
+   * @description Label to explain why top values are ignored
    */
   topAppliedToAStatically: '`Top` applied to a statically positioned element',
   /**
-   *@description Label to explain why left (opposite to right) values are ignored.
+   * @description Label to explain why left (opposite to right) values are ignored.
    */
   leftAppliedToAStatically: '`Left` applied to a statically positioned element',
   /**
-   *@description Label to explain why right values are ignored
+   * @description Label to explain why right values are ignored
    */
   rightAppliedToAStatically: '`Right` applied to a statically positioned element',
   /**
-   *@description Label to explain why bottom values are ignored
+   * @description Label to explain why bottom values are ignored
    */
   bottomAppliedToAStatically: '`Bottom` applied to a statically positioned element',
   /**
-   *@description Label to explain why width values are ignored
+   * @description Label to explain why width values are ignored
    */
   widthAppliedToAnInlineElement: '`Width` applied to an inline element',
   /**
-   *@description Label to explain why height values are ignored
+   * @description Label to explain why height values are ignored
    */
   heightAppliedToAnInlineElement: '`Height` applied to an inline element',
   /**
-   *@description Label to explain why vertical-align values are ignored
+   * @description Label to explain why vertical-align values are ignored
    */
   verticalAlignmentAppliedTo: 'Vertical alignment applied to element which is neither `inline` nor `table-cell`',
 } as const;

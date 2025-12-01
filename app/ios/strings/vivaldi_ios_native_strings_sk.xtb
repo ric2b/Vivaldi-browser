@@ -66,7 +66,6 @@
 <translation id="1752547299766512813">Uložiť heslá</translation>
 <translation id="1754797958074421486">Podmienky používania</translation>
 <translation id="1755590309862395270">Pre návrhy na automatické dokončovanie, ktoré možno odstrániť.</translation>
-<translation id="1763111582687651119">Povolenie prezývok vyhľadávača</translation>
 <translation id="1771413903824396513">Podľa prezývky</translation>
 <translation id="1771605894228673800">Chcem integrovanú funkciu VPN</translation>
 <translation id="1800685789463945995">Vivaldi stále padá alebo zamŕza</translation>
@@ -375,7 +374,6 @@ blokovaný</translation>
 <translation id="5823830882692559950">Vivaldi.net odmietlo vaše prihlasovanie údaje: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" /> 2)</translation>
 <translation id="5857090052475505287">Nový priečinok</translation>
 <translation id="5859825823508296659">Upraviť doménu</translation>
-<translation id="5867841422488265304">Vyhľadať alebo zadať webovú adresu</translation>
 <translation id="5869217094746242845">Viac informácií o ochrane osobných údajov a bezpečnosti</translation>
 <translation id="5871497086027727873">1 položka presunutá</translation>
 <translation id="5898502570200301364">Heslá, uložené vo Vivaldi správcovi hesiel, môžete používať aj v iných aplikáciách v vašom iPhone.</translation>
@@ -413,7 +411,6 @@ blokovaný</translation>
 <translation id="641394169129472837">Vyberte, ktorá stránka sa má otvoriť po klepnutí na tlačidlo Nový list.</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" />vybraných</translation>
 <translation id="6442584491342758233">Priama zhoda</translation>
-<translation id="6443682944493983866">Prijaté jazyky</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importovať<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Zálohovať šifrovací kľúč</translation>
 <translation id="6527303717912515753">Zdieľať</translation>
@@ -584,7 +581,6 @@ Prekročili ste maximálny limit nesprávnych pokusov. Požiadajte o nový kód 
 <translation id="8515808232153642813">Dešifrovať</translation>
 <translation id="8517852590337319813">Aktivovať svoj účet</translation>
 <translation id="8546963963006468833">Pomocou prehliadača Vivaldi môžete bezproblémovo otvárať odkazy, vyhľadávať z miniaplikácií a automaticky vypĺňať heslá v iných aplikáciách.</translation>
-<translation id="8546995005405883065">Preferované jazyky, ktoré kompatibilné webové stránky akceptujú v uvedenom poradí.</translation>
 <translation id="8562452229998620586">Uložené heslá sa zobrazia tu.</translation>
 <translation id="856439694359429369">Ťuknutím na položku zobrazíte ďalšie možnosti alebo dvojitým ťuknutím na položku otvoríte.</translation>
 <translation id="8591818185775466306">Vymazať <ph name="ITEM_TYPE" /></translation>

@@ -43,7 +43,7 @@ external/wpt/compat/webkit-box-horizontal-rtl-variants.html
 external/wpt/compat/webkit-box-rtl-flex.html
 external/wpt/console/console-log-large-array.any.html
 external/wpt/content-security-policy/report-hash/*
-external/wpt/cookie-store/cookieStore_subscribe_arguments.https.any.html
+external/wpt/cookiestore/cookieStore_subscribe_arguments.https.any.html
 external/wpt/cookies/attributes/attributes-ctl.sub.html
 external/wpt/cookies/attributes/domain.sub.html
 external/wpt/css/compositing/mix-blend-mode/mix-blend-mode-animation.html
@@ -525,8 +525,9 @@ external/wpt/fedcm/fedcm-disconnect-errors.https.html
 external/wpt/fedcm/fedcm-disconnect-iframe.sub.https.html
 external/wpt/fedcm/fedcm-iframe.https.html
 external/wpt/fedcm/fedcm-manifest-not-in-list.https.html
+external/wpt/fedcm/fedcm-multi-idp/fedcm-multi-idp-mediation-optional.https.html
+external/wpt/fedcm/fedcm-multi-idp/fedcm-multi-idp-mediation-silent.https.html
 external/wpt/fedcm/fedcm-not-observed-by-service-worker.https.html
-external/wpt/fedcm/lfedcm-identity.discovery.tentative.sub.https.html
 # https://github.com/web-platform-tests/wpt/issues/48078
 external/wpt/fetch/stale-while-revalidate/stale-css.html
 external/wpt/fetch/stale-while-revalidate/stale-image.html
@@ -611,14 +612,6 @@ external/wpt/html/semantics/forms/the-input-element/focus-dynamic-type-change.ht
 external/wpt/html/semantics/forms/the-input-element/focus-dynamic-type-change-on-blur.html
 external/wpt/html/semantics/forms/the-input-element/range-intrinsic-size.html
 external/wpt/html/semantics/forms/the-option-element/dynamic-content-change-rendering.html
-external/wpt/html/semantics/forms/the-select-element/customizable-select/appearance-base-select-other-elements.tentative.html
-external/wpt/html/semantics/forms/the-select-element/customizable-select/select-events.tentative.html
-external/wpt/html/semantics/forms/the-select-element/customizable-select/select-home-end-pagedown-pageup-detailed.optional.html
-external/wpt/html/semantics/forms/the-select-element/customizable-select/select-home-end-pagedown-pageup.tentative.html
-external/wpt/html/semantics/forms/the-select-element/customizable-select/switch-picker-appearance.tentative.html
-external/wpt/html/semantics/forms/the-select-element/select-pseudo-light-dismiss-invalidation.tentative.html
-external/wpt/html/semantics/forms/the-select-element/select-tabindex-order.tentative.html
-external/wpt/html/semantics/forms/the-select-element/reset-algorithm-rendering.html
 external/wpt/html/semantics/links/links-created-by-a-and-area-elements/target_blank_useractivation*
 external/wpt/html/semantics/interactive-elements/the-dialog-element/dialog-canceling.html
 external/wpt/html/semantics/interactive-elements/the-dialog-element/dialog-closedby.tentative.html
@@ -781,7 +774,6 @@ external/wpt/webcodecs/videoFrame-texImage.any.html
 external/wpt/webcodecs/videoFrame-texImage.any.worker.html
 external/wpt/webrtc/protocol/h264-unidirectional-codec-offer.https.html
 external/wpt/webrtc/RTCDataChannel-close.html
-external/wpt/webrtc/RTCDataChannel-send-close.html
 external/wpt/webrtc/RTCPeerConnection-operations.https.html
 external/wpt/websockets/binary/004.html?wpt_flags=h2
 external/wpt/websockets/Close-1000.any.html?wpt_flags=h2
@@ -891,17 +883,15 @@ virtual/html-anchor-attribute-disabled/external/wpt/html/semantics/popovers/popo
 
 # These are flaky on Mac. Judging by the other focus-related test in this list, I'm assuming
 # there is some kind of headless focus problem.
-external/wpt/html/semantics/the-button-element/interest-for/interestfor-popover-focus.tentative.html
-external/wpt/html/semantics/the-button-element/interest-for/interestfor-invoker-descendants.tentative.html
-external/wpt/html/semantics/the-button-element/interest-for/interestfor-partial-interest.tentative.html
+external/wpt/html/semantics/interestfor/interestfor-popover-focus.tentative.html
+external/wpt/html/semantics/interestfor/interestfor-invoker-descendants.tentative.html
+external/wpt/html/semantics/interestfor/interestfor-partial-interest.tentative.html
 
 virtual/backface-visibility-interop/external/wpt/css/css-transforms/backface-visibility-001.html
 virtual/backface-visibility-interop/external/wpt/css/css-transforms/backface-visibility-hidden-animated-002.html
 virtual/backface-visibility-interop/external/wpt/css/css-transforms/ttwf-css-3d-polygon-cycle.html
 virtual/composite-clip-path-animation/external/wpt/css/css-masking/clip-path/animations/clip-path-animation*
 virtual/composite-clip-path-animation/external/wpt/css/css-masking/clip-path/animations/clip-path-transition*
-virtual/customizable-select-disabled/external/wpt/html/semantics/forms/the-select-element/reset-algorithm-rendering.html
-virtual/customizable-select-disabled/external/wpt/html/semantics/forms/the-select-element/select-tabindex-order.tentative.html
 virtual/dark-color-scheme/external/wpt/css/css-color/system-color-consistency.html
 virtual/dialog-close-when-open-removed-disabled/external/wpt/html/semantics/interactive-elements/the-dialog-element/dialog-canceling.html
 virtual/dialog-close-when-open-removed-disabled/external/wpt/html/semantics/interactive-elements/the-dialog-element/top-layer-stacking.tentative.html
@@ -911,17 +901,10 @@ virtual/direct-sockets/external/wpt/direct-sockets/udp_socket.https.html
 virtual/disable-css-line-clamp/external/wpt/css/css-overflow/line-clamp/webkit-line-clamp-024.html
 virtual/disable-css-line-clamp/external/wpt/css/css-overflow/line-clamp/webkit-line-clamp-025.html
 virtual/disable-css-line-clamp/external/wpt/css/css-overflow/line-clamp/webkit-line-clamp-036.html
-virtual/do-not-hide-visited-color/external/wpt/css/css-color/composited-filters-under-opacity.html
-virtual/do-not-hide-visited-color/external/wpt/css/css-color/deprecated-sameas-010.html
-virtual/do-not-hide-visited-color/external/wpt/css/css-color/filters-under-will-change-opacity.html
-virtual/do-not-hide-visited-color/external/wpt/css/css-color/system-color-consistency.html
-virtual/do-not-hide-visited-color/external/wpt/css/css-color/system-color-hightlights-vs-getSelection-001.html
-virtual/do-not-hide-visited-color/external/wpt/css/css-color/system-color-hightlights-vs-getSelection-002.html
-virtual/do-not-hide-visited-color/external/wpt/css/css-color/system-color-support.html
-virtual/do-not-hide-visited-color/external/wpt/css/css-color/t424-hsl-basic-a.xht
-external/wpt/fedcm/fedcm-multi-idp/fedcm-multi-idp-mediation-optional.https.html
-external/wpt/fedcm/fedcm-multi-idp/fedcm-multi-idp-mediation-silent.https.html
+virtual/fedcm-accounts-push/external/wpt/fedcm/fedcm-accounts-push/fedcm-identity-discovery.tentative.sub.https.html
 virtual/fedcm-register/external/wpt/fedcm/fedcm-register/fedcm-no-registered-idps.https.html
+virtual/fedcm-third-party-iframe/external/wpt/fedcm/third-party-iframe/fedcm-third-party-iframe.https.html
+virtual/fedcm-third-party-iframe/external/wpt/fedcm/third-party-iframe/fedcm-third-party-iframe-active-mode.https.html
 virtual/fenced-frame-mparch/external/wpt/fenced-frame/history-length-fenced-navigations-replace-do-not-contribute-to-joint.https.html
 virtual/fenced-frame-mparch/external/wpt/fenced-frame/history-length-outer-page-navigation-not-reflected-in-fenced.https.html
 virtual/fenced-frame-mparch/external/wpt/fenced-frame/key-scrolling.https.html
@@ -952,15 +935,11 @@ virtual/no-auto-wpt-origin-isolation/external/wpt/html/semantics/embedded-conten
 virtual/no-auto-wpt-origin-isolation/external/wpt/html/semantics/embedded-content/the-iframe-element/iframe_sandbox_window_open_download_allow_downloads.tentative.html
 virtual/no-forced-frame-updates/external/wpt/html/browsers/browsing-the-web/history-traversal/pagereveal/order-in-bfcache-restore-iframe.html
 virtual/no-forced-frame-updates/external/wpt/html/dom/render-blocking/element-render-blocking-036.html
-virtual/pna-navigations-warning/external/wpt/fetch/private-network-access/iframe.tentative.https.window.html?include=from-treat-as-public
-virtual/customizable-select-disabled/external/wpt/html/semantics/forms/the-select-element/customizable-select/select-events.tentative.html
-virtual/select-parser-relaxation/external/wpt/html/semantics/forms/the-select-element/customizable-select/select-events.tentative.html
-virtual/select-parser-relaxation/external/wpt/html/semantics/forms/the-select-element/reset-algorithm-rendering.html
 virtual/produce-compile-hints/external/wpt/html/semantics/scripting-1/the-script-element/module/dynamic-import/delay-load-event.html
 virtual/produce-compile-hints/external/wpt/html/semantics/scripting-1/the-script-element/module/dynamic-import/microtasks/basic.any.html
 virtual/produce-compile-hints/external/wpt/html/semantics/scripting-1/the-script-element/moving-between-documents/after-prepare-*
 virtual/produce-compile-hints/external/wpt/html/semantics/scripting-1/the-script-element/moving-between-documents/ordering/*
-virtual/produce-compile-hints/external/wpt/fetch/fetch-later/new-window.tentative.https.window.html
+virtual/produce-compile-hints/external/wpt/fetch/fetch-later/new-window.https.window.html
 virtual/produce-compile-hints/external/wpt/fetch/stale-while-revalidate/stale-*
 virtual/scalefactor200/external/wpt/css/filter-effects/backdrop-filter*
 virtual/scalefactor200/external/wpt/css/filter-effects/css-filters-animation-opacity.html
@@ -974,7 +953,6 @@ virtual/scalefactor200/external/wpt/largest-contentful-paint/animated/observe-cr
 virtual/scalefactor200/external/wpt/largest-contentful-paint/image-not-fully-visible.html
 virtual/scalefactor200/external/wpt/largest-contentful-paint/multiple-image-same-src.html
 virtual/scalefactor200/external/wpt/largest-contentful-paint/video-data-uri.html
-virtual/select-parser-relaxation/external/wpt/html/semantics/forms/the-select-element/select-tabindex-order.tentative.html
 virtual/shared-storage-fenced-frame-mparch/external/wpt/shared-storage/select-url-saved-query-cross-origin-multi-query.tentative.https.sub.html
 virtual/shared-storage-fenced-frame-mparch/external/wpt/shared-storage/select-url-saved-query-same-origin-multi-query.tentative.https.sub.html
 virtual/speculation-rules-prerender-target-hint/external/wpt/speculation-rules/prerender/restriction-background-sync.https.html?target_hint=_blank

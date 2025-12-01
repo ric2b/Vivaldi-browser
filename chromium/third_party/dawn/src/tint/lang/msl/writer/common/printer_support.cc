@@ -81,8 +81,10 @@ std::string BuiltinToAttribute(core::BuiltinValue builtin) {
             return "threads_per_simdgroup";
         case core::BuiltinValue::kClipDistances:
             return "clip_distance";
-        case core::BuiltinValue::kPrimitiveId:
+        case core::BuiltinValue::kPrimitiveIndex:
             return "primitive_id";
+        case core::BuiltinValue::kBarycentricCoord:
+            return "barycentric_coord";
         default:
             break;
     }
@@ -202,15 +204,11 @@ SizeAndAlign MslPackedTypeSizeAndAlign(const core::type::Type* ty) {
         },
 
         [&](const core::type::Array* arr) {
-            if (DAWN_UNLIKELY(!arr->IsStrideImplicit())) {
-                TINT_ICE()
-                    << "arrays with explicit strides should not exist past the SPIR-V reader";
-            }
             if (arr->Count()->Is<core::type::RuntimeArrayCount>()) {
-                return SizeAndAlign{arr->Stride(), arr->Align()};
+                return SizeAndAlign{arr->ImplicitStride(), arr->Align()};
             }
             if (auto count = arr->ConstantCount()) {
-                return SizeAndAlign{arr->Stride() * count.value(), arr->Align()};
+                return SizeAndAlign{arr->ImplicitStride() * count.value(), arr->Align()};
             }
             TINT_ICE() << core::type::Array::kErrExpectedConstantCount;
         },

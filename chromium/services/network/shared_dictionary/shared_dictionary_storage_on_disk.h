@@ -101,6 +101,7 @@ class SharedDictionaryStorageOnDisk : public SharedDictionaryStorage {
       const std::string& match,
       const std::set<mojom::RequestDestination>& match_dest,
       const std::string& id,
+      const std::optional<base::TimeDelta>& ttl,
       base::Time last_fetch_time) override;
 
   // Called from `SharedDictionaryManagerOnDisk` when dictionary has been
@@ -146,7 +147,7 @@ class SharedDictionaryStorageOnDisk : public SharedDictionaryStorage {
   std::map<base::UnguessableToken, raw_ptr<net::SharedDictionary>>
       dictionaries_;
 
-  std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
+  std::unique_ptr<base::AsyncMemoryPressureListener> memory_pressure_listener_;
   base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level_ =
       base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE;
 

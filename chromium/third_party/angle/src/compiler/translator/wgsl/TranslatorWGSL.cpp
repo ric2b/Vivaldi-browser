@@ -4,6 +4,10 @@
 // found in the LICENSE file.
 //
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "compiler/translator/wgsl/TranslatorWGSL.h"
 
 #include <iostream>
@@ -24,12 +28,14 @@
 #include "compiler/translator/StaticType.h"
 #include "compiler/translator/SymbolUniqueId.h"
 #include "compiler/translator/Types.h"
+#include "compiler/translator/tree_ops/GatherDefaultUniforms.h"
 #include "compiler/translator/tree_ops/MonomorphizeUnsupportedFunctions.h"
 #include "compiler/translator/tree_ops/ReduceInterfaceBlocks.h"
 #include "compiler/translator/tree_ops/RewriteArrayOfArrayOfOpaqueUniforms.h"
 #include "compiler/translator/tree_ops/RewriteStructSamplers.h"
 #include "compiler/translator/tree_ops/SeparateDeclarations.h"
 #include "compiler/translator/tree_ops/SeparateStructFromUniformDeclarations.h"
+#include "compiler/translator/tree_ops/wgsl/RewriteMultielementSwizzleAssignment.h"
 #include "compiler/translator/tree_util/BuiltIn_autogen.h"
 #include "compiler/translator/tree_util/DriverUniform.h"
 #include "compiler/translator/tree_util/FindMain.h"
@@ -54,12 +60,6 @@ struct VarDecl
     const ImmutableString &symbolName;
     const TType &type;
 };
-
-bool IsDefaultUniform(const TType &type)
-{
-    return type.getQualifier() == EvqUniform && type.getInterfaceBlock() == nullptr &&
-           !IsOpaqueType(type.getBasicType());
-}
 
 // When emitting a list of statements, this determines whether a semicolon follows the statement.
 bool RequiresSemicolonTerminator(TIntermNode &node)
@@ -272,7 +272,12 @@ void OutputWGSLTraverser::visitSymbol(TIntermSymbol *symbolNode)
     const TType &type    = var.getType();
     ASSERT(var.symbolType() != SymbolType::Empty);
 
-    if (type.getBasicType() == TBasicType::EbtVoid)
+    // Default uniforms should no longer be referenced--they should all be in an interface block by
+    // now.
+    // TODO(anglebug.com/376553328): gl_DepthRange should be handled by referencing driver
+    // uniforms--then the check for builtin default uniforms can be removed here.
+    if (type.getBasicType() == TBasicType::EbtVoid ||
+        (IsDefaultUniform(type) && var.symbolType() != SymbolType::BuiltIn))
     {
         UNREACHABLE();
     }
@@ -287,11 +292,6 @@ void OutputWGSLTraverser::visitSymbol(TIntermSymbol *symbolNode)
         {
             mSink << kBuiltinOutputStructName << "." << var.name();
         }
-        // Accesses of basic uniforms need to be converted to struct accesses.
-        else if (IsDefaultUniform(type))
-        {
-            mSink << kDefaultUniformBlockVarName << "." << var.name();
-        }
         else
         {
             WriteNameOf(mSink, var);
@@ -302,7 +302,7 @@ void OutputWGSLTraverser::visitSymbol(TIntermSymbol *symbolNode)
             ASSERT(mRewritePipelineVarOutput->IsInputVar(var.uniqueId()) ||
                    mRewritePipelineVarOutput->IsOutputVar(var.uniqueId()) ||
                    var.uniqueId() == BuiltInId::gl_DepthRange);
-            // TODO(anglebug.com/42267100): support gl_DepthRange.
+            // TODO(anglebug.com/376553328): support gl_DepthRange.
             // Match the name of the struct field in `mRewritePipelineVarOutput`.
             mSink << "_";
         }
@@ -409,7 +409,7 @@ const TConstantUnion *OutputWGSLTraverser::emitConstantUnion(const TType &type,
     else
     {
         size_t size = type.getObjectSize();
-        // If the type's size is more than 1, the type needs to be written with parantheses. This
+        // If the type's size is more than 1, the type needs to be written with parentheses. This
         // applies for vectors, matrices, and arrays.
         bool writeType = size > 1;
         if (writeType)
@@ -972,6 +972,7 @@ void OutputWGSLTraverser::emitArrayIndex(TIntermTyped &leftNode, TIntermTyped &r
     // entire array back to the unwrapped type).
     bool needsUnwrapping                  = false;
     bool isUniformMatrixNeedingConversion = false;
+    bool isUniformBoolNeedingConversion   = false;
     TIntermBinary *leftNodeBinary         = leftNode.getAsBinaryNode();
     if (leftNodeBinary && leftNodeBinary->getOp() == TOperator::EOpIndexDirectStruct)
     {
@@ -985,11 +986,14 @@ void OutputWGSLTraverser::emitArrayIndex(TIntermTyped &leftNode, TIntermTyped &r
 
         isUniformMatrixNeedingConversion = isInUniformAddressSpace && IsMatCx2(&leftType);
 
+        isUniformBoolNeedingConversion =
+            isInUniformAddressSpace && leftType.getBasicType() == EbtBool;
+
         ASSERT(!needsUnwrapping || !isUniformMatrixNeedingConversion);
     }
 
     // Emit the left side, which should be of type array.
-    if (needsUnwrapping || isUniformMatrixNeedingConversion)
+    if (needsUnwrapping || isUniformMatrixNeedingConversion || isUniformBoolNeedingConversion)
     {
         if (isUniformMatrixNeedingConversion)
         {
@@ -1003,6 +1007,12 @@ void OutputWGSLTraverser::emitArrayIndex(TIntermTyped &leftNode, TIntermTyped &r
             // Make sure the conversion function referenced here is actually generated in the
             // resulting WGSL.
             mWGSLGenerationMetadataForUniforms->outputMatCx2Conversion.insert(baseType);
+        }
+        else if (isUniformBoolNeedingConversion)
+        {
+            // Convert just this one array element into a bool instead of converting the entire
+            // array into an array of booleans and indexing into that.
+            OutputUniformBoolOrBvecConversion(mSink, leftType);
         }
         emitStructIndexNoUnwrapping(leftNodeBinary);
     }
@@ -1064,7 +1074,8 @@ void OutputWGSLTraverser::emitArrayIndex(TIntermTyped &leftNode, TIntermTyped &r
     {
         mSink << "." << kWrappedStructFieldName;
     }
-    else if (isUniformMatrixNeedingConversion)
+
+    if (isUniformMatrixNeedingConversion || isUniformBoolNeedingConversion)
     {
         // Close conversion function call
         mSink << ")";
@@ -1085,6 +1096,9 @@ void OutputWGSLTraverser::emitStructIndex(TIntermBinary *binaryNode)
 
     bool isUniformMatrixNeedingConversion = isInUniformAddressSpace && IsMatCx2(binaryNodeType);
 
+    bool isUniformBoolNeedingConversion =
+        isInUniformAddressSpace && binaryNode->getBasicType() == EbtBool;
+
     bool needsUnwrapping =
         ElementTypeNeedsUniformWrapperStruct(isInUniformAddressSpace, binaryNodeType);
     if (needsUnwrapping)
@@ -1104,8 +1118,13 @@ void OutputWGSLTraverser::emitStructIndex(TIntermBinary *binaryNode)
         // WGSL.
         mWGSLGenerationMetadataForUniforms->outputMatCx2Conversion.insert(*binaryNodeType);
     }
+    else if (isUniformBoolNeedingConversion)
+    {
+        // Should only trigger in case of a boolean not in an array.
+        OutputUniformBoolOrBvecConversion(mSink, *binaryNodeType);
+    }
     emitStructIndexNoUnwrapping(binaryNode);
-    if (needsUnwrapping || isUniformMatrixNeedingConversion)
+    if (needsUnwrapping || isUniformMatrixNeedingConversion || isUniformBoolNeedingConversion)
     {
         mSink << ")";
     }
@@ -1131,10 +1150,11 @@ bool OutputWGSLTraverser::visitBinary(Visit, TIntermBinary *binaryNode)
     switch (op)
     {
         case TOperator::EOpIndexDirectStruct:
-        case TOperator::EOpIndexDirectInterfaceBlock:
             emitStructIndex(binaryNode);
             break;
-
+        case TOperator::EOpIndexDirectInterfaceBlock:
+            UNREACHABLE();  // Interface blocks should have been converted into structs.
+            break;
         case TOperator::EOpIndexDirect:
         case TOperator::EOpIndexIndirect:
             emitArrayIndex(leftNode, rightNode);
@@ -2053,8 +2073,7 @@ bool OutputWGSLTraverser::visitGlobalQualifierDeclaration(Visit,
 
 void OutputWGSLTraverser::emitStructDeclaration(const TType &type)
 {
-    ASSERT((type.getBasicType() == TBasicType::EbtStruct && type.isStructSpecifier()) ||
-           type.getBasicType() == TBasicType::EbtInterfaceBlock);
+    ASSERT(type.getBasicType() == TBasicType::EbtStruct && type.isStructSpecifier());
 
     mSink << "struct ";
     emitBareTypeName(type);
@@ -2127,7 +2146,8 @@ void OutputWGSLTraverser::emitVariableDeclaration(const VarDecl &decl,
 {
     const TBasicType basicType = decl.type.getBasicType();
 
-    if (decl.type.getQualifier() == EvqUniform || decl.type.getQualifier() == EvqBuffer)
+    if ((decl.type.getQualifier() == EvqUniform || decl.type.getQualifier() == EvqBuffer) &&
+        evdConfig.isGlobalScope)
     {
         // Uniforms/interface blocks are declared in a pre-pass, and don't need to be outputted
         // here.
@@ -2439,8 +2459,14 @@ TranslatorWGSL::TranslatorWGSL(sh::GLenum type, ShShaderSpec spec, ShShaderOutpu
     : TCompiler(type, spec, output)
 {}
 
-bool TranslatorWGSL::preTranslateTreeModifications(TIntermBlock *root)
+bool TranslatorWGSL::preTranslateTreeModifications(TIntermBlock *root,
+                                                   const TVariable **defaultUniformBlockOut)
 {
+    if (!RewriteMultielementSwizzleAssignment(this, root))
+    {
+        return false;
+    }
+
     int aggregateTypesUsedForUniforms = 0;
     for (const auto &uniform : getUniforms())
     {
@@ -2450,6 +2476,8 @@ bool TranslatorWGSL::preTranslateTreeModifications(TIntermBlock *root)
         }
     }
 
+    // TODO(anglebug.com/42267100): just use the struct mode to avoid a rewrite of the interface
+    // block by ReduceInterfaceBlocks into a struct.
     DriverUniform driverUniforms(DriverUniformMode::InterfaceBlock);
     ASSERT(getShaderType() != GL_COMPUTE_SHADER);
     driverUniforms.addGraphicsDriverUniformsToShader(root, &getSymbolTable());
@@ -2511,6 +2539,21 @@ bool TranslatorWGSL::preTranslateTreeModifications(TIntermBlock *root)
         return false;
     }
 
+    // RewriteStructSamplers should have already run at this point so there are not default
+    // uniforms containing samplers, even within a nested struct.
+    gl::ShaderType packedShaderType = gl::FromGLenum<gl::ShaderType>(getShaderType());
+    if (!GatherDefaultUniforms(this, root, &getSymbolTable(), packedShaderType,
+                               ImmutableString(kDefaultUniformBlockVarType),
+                               ImmutableString(kDefaultUniformBlockVarName),
+                               defaultUniformBlockOut))
+    {
+        return false;
+    }
+
+    // Note: It would be possible to to avoid running this AST modification by outputting
+    // interface blocks like structs, with the wrinkle that interface blocks don't need an instance
+    // variable name and so this translator would have to generate a new one and keep a map of
+    // TInterfaceBlock -> WGSLName in order to output field accesses of the interface block.
     int uniqueStructId = 0;
     if (!ReduceInterfaceBlocks(*this, *root, [&uniqueStructId]() -> ImmutableString {
             return BuildConcatenatedImmutableString("ANGLE_unnamed_interface_block_",
@@ -2519,7 +2562,6 @@ bool TranslatorWGSL::preTranslateTreeModifications(TIntermBlock *root)
     {
         return false;
     }
-
     return true;
 }
 
@@ -2539,7 +2581,9 @@ bool TranslatorWGSL::translate(TIntermBlock *root,
         std::cout << treeOut.c_str();
     }
 
-    if (!preTranslateTreeModifications(root))
+    const TVariable *defaultUniformBlock = nullptr;
+
+    if (!preTranslateTreeModifications(root, &defaultUniformBlock))
     {
         return false;
     }
@@ -2566,6 +2610,16 @@ bool TranslatorWGSL::translate(TIntermBlock *root,
     }
 
     TInfoSinkBase &sink = getInfoSink().obj;
+
+    // GLSL allows derivatives to be calculated as long as control flow is dynamically uniform. WGSL
+    // triggers a derivative_uniformity diagnostic whenever it cannot statically determine that
+    // control flow is uniform, which is by default an error. Since this compiler must implement
+    // GLSL semantics, use a global diagnostic filter to turn derivative_uniformity diagnostics into
+    // warnings instead of the default error.
+    // See https://github.com/gpuweb/gpuweb/issues/3479 and the spec:
+    // https://www.w3.org/TR/WGSL/#uniformity
+    sink << "diagnostic(warning,derivative_uniformity);\n";
+
     // Start writing the output structs that will be referred to by the `traverser`'s output.'
     if (!rewritePipelineVarOutput.OutputStructs(sink))
     {
@@ -2573,7 +2627,7 @@ bool TranslatorWGSL::translate(TIntermBlock *root,
         return false;
     }
 
-    if (!OutputUniformBlocksAndSamplers(this, root))
+    if (!OutputUniformBlocksAndSamplers(this, root, defaultUniformBlock))
     {
         ANGLE_LOG(ERR) << "Failed to output uniform blocks and samplers";
         return false;

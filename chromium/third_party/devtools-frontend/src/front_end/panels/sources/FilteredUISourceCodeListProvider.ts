@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,12 +14,12 @@ import {FilePathScoreFunction} from './FilePathScoreFunction.js';
 
 const UIStrings = {
   /**
-   *@description Text in Filtered UISource Code List Provider of the Sources panel
+   * @description Text in Filtered UISource Code List Provider of the Sources panel
    */
   noFilesFound: 'No files found',
   /**
-   *@description Name of an item that is on the ignore list
-   *@example {compile.html} PH1
+   * @description Name of an item that is on the ignore list
+   * @example {compile.html} PH1
    */
   sIgnoreListed: '{PH1} (ignore listed)',
 } as const;

@@ -325,14 +325,12 @@ public class InstanceSwitcherCoordinator {
             PropertyModel itemModel = generateListItem(items.get(i));
             if (UiUtils.isInstanceSwitcherV2Enabled()) {
                 if (isActiveInstance) {
-                    mActiveModelList.add(
-                            new ModelListAdapter.ListItem(EntryType.INSTANCE, itemModel));
+                    mActiveModelList.add(new ListItem(EntryType.INSTANCE, itemModel));
                 } else {
-                    mInactiveModelList.add(
-                            new ModelListAdapter.ListItem(EntryType.INSTANCE, itemModel));
+                    mInactiveModelList.add(new ListItem(EntryType.INSTANCE, itemModel));
                 }
             } else {
-                mModelList.add(new ModelListAdapter.ListItem(EntryType.INSTANCE, itemModel));
+                mModelList.add(new ListItem(EntryType.INSTANCE, itemModel));
             }
         }
         mNewWindowModel = new PropertyModel(InstanceSwitcherItemProperties.ALL_KEYS);
@@ -344,7 +342,7 @@ public class InstanceSwitcherCoordinator {
         } else {
             // Add new window command item to the list for v1.
             enableNewWindowCommand(items.size() < mMaxInstanceCount);
-            mModelList.add(new ModelListAdapter.ListItem(EntryType.COMMAND, mNewWindowModel));
+            mModelList.add(new ListItem(EntryType.COMMAND, mNewWindowModel));
         }
 
         mDialog = createDialog(mDialogView);
@@ -431,7 +429,18 @@ public class InstanceSwitcherCoordinator {
                 buildMoreMenu(builder, item);
             }
         } else {
-            buildMoreMenu(builder, item);
+            if (item.taskId != INVALID_TASK_ID) {
+                buildMoreMenu(builder, item);
+            } else {
+                builder.with(
+                        InstanceSwitcherItemProperties.CLOSE_BUTTON_CLICK_LISTENER,
+                        (view) -> closeWindow(item));
+                builder.with(
+                        InstanceSwitcherItemProperties.CLOSE_BUTTON_CONTENT_DESCRIPTION,
+                        mContext.getString(
+                                R.string.instance_switcher_item_close_content_description,
+                                mUiUtils.getItemTitle(item)));
+            }
             String lastAccessedString =
                     isCurrentWindow
                             ? mContext.getString(R.string.instance_last_accessed_current)
@@ -494,6 +503,11 @@ public class InstanceSwitcherCoordinator {
                     RecordUserAction.record("Android.WindowManager.SecondaryMenu");
                 });
         builder.with(InstanceSwitcherItemProperties.MORE_MENU, () -> listMenu);
+        builder.with(
+                InstanceSwitcherItemProperties.MORE_MENU_CONTENT_DESCRIPTION,
+                mContext.getString(
+                        R.string.instance_switcher_item_more_menu_content_description,
+                        mUiUtils.getItemTitle(item)));
     }
 
     private void closeWindow(InstanceInfo item) {
@@ -711,8 +725,22 @@ public class InstanceSwitcherCoordinator {
         dialog.show();
     }
 
+    @Nullable
+    private ListItem getInstanceListItem(InstanceInfo item) {
+        ModelList list = mIsInactiveListShowing ? mInactiveModelList : mActiveModelList;
+        for (ListItem listItem : list) {
+            if (listItem.model.get(InstanceSwitcherItemProperties.INSTANCE_ID) == item.instanceId) {
+                return listItem;
+            }
+        }
+        return null;
+    }
+
     private void showNameWindowDialog(InstanceInfo item) {
+        RecordUserAction.record("Android.WindowManager.NameWindow");
         int style = R.style.Theme_Chromium_Multiwindow_RenameWindowDialog;
+        ListItem listItem = assumeNonNull(getInstanceListItem(item));
+        String currentTitle = listItem.model.get(InstanceSwitcherItemProperties.TITLE);
         Dialog dialog = new Dialog(mContext, style);
         dialog.setCanceledOnTouchOutside(true);
         dialog.setContentView(R.layout.rename_window_dialog);
@@ -723,7 +751,7 @@ public class InstanceSwitcherCoordinator {
 
         TextInputLayout textInputLayout = dialog.findViewById(R.id.new_window_title);
         TextInputEditText editText = dialog.findViewById(R.id.title_input_text);
-        editText.setText(mUiUtils.getItemTitle(item));
+        editText.setText(currentTitle);
         editText.requestFocus();
         Window window = assumeNonNull(dialog.getWindow());
         window.setSoftInputMode(
@@ -735,15 +763,17 @@ public class InstanceSwitcherCoordinator {
                 v -> {
                     String newTitle = Objects.toString(editText.getText(), "").trim();
                     if (!TextUtils.isEmpty(newTitle)) {
-                        mRenameWindowCallback.onResult(new Pair<>(item.instanceId, newTitle));
-                        ModelList list =
-                                mIsInactiveListShowing ? mInactiveModelList : mActiveModelList;
-                        for (ListItem listItem : list) {
-                            if (listItem.model.get(InstanceSwitcherItemProperties.INSTANCE_ID)
-                                    == item.instanceId) {
-                                listItem.model.set(InstanceSwitcherItemProperties.TITLE, newTitle);
-                                break;
-                            }
+                        RecordUserAction.record("Android.WindowManager.SaveWindowName");
+                        if (!newTitle.equals(currentTitle)) {
+                            listItem.model.set(InstanceSwitcherItemProperties.TITLE, newTitle);
+                            listItem.model.set(
+                                    InstanceSwitcherItemProperties.MORE_MENU_CONTENT_DESCRIPTION,
+                                    mContext.getString(
+                                            R.string
+                                                    .instance_switcher_item_more_menu_content_description,
+                                            newTitle));
+                            RecordUserAction.record("Android.WindowManager.ChangeWindowName");
+                            mRenameWindowCallback.onResult(new Pair<>(item.instanceId, newTitle));
                         }
                         dialog.dismiss();
                     } else {

@@ -23,9 +23,9 @@
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper_factory.h"
+#include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -123,8 +123,7 @@ class TabsApiUnitTest : public ExtensionServiceTestBase {
   }
 
   tab_groups::TabGroupSyncService* sync_service() {
-    return tab_groups::SavedTabGroupUtils::GetServiceForProfile(
-        browser()->profile());
+    return tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile());
   }
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -141,7 +140,7 @@ class TabsApiUnitTest : public ExtensionServiceTestBase {
   void TearDown() override;
 
   // The browser (and accompanying window).
-  std::unique_ptr<TestBrowserWindow> browser_window_;
+  raw_ptr<TestBrowserWindow> browser_window_;
   std::unique_ptr<Browser> browser_;
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -161,10 +160,11 @@ void TabsApiUnitTest::SetUp() {
   ExtensionServiceTestBase::SetUp();
   InitializeEmptyExtensionService();
 
-  browser_window_ = std::make_unique<TestBrowserWindow>();
+  auto browser_window = std::make_unique<TestBrowserWindow>();
+  browser_window_ = browser_window.get();
   Browser::CreateParams params(profile(), true);
   params.type = Browser::TYPE_NORMAL;
-  params.window = browser_window_.get();
+  params.window = browser_window.release();
   browser_ = Browser::DeprecatedCreateOwnedForTesting(params);
 
   tab_groups::TabGroupSyncService* saved_service = sync_service();
@@ -176,8 +176,8 @@ void TabsApiUnitTest::TearDown() {
   // Do this first before resetting `browser_`.
   GetTabStripModel()->CloseAllTabs();
 
+  browser_window_ = nullptr;
   browser_.reset();
-  browser_window_.reset();
   ExtensionServiceTestBase::TearDown();
 #if BUILDFLAG(IS_CHROMEOS)
   test_helper_.TearDown();
@@ -578,8 +578,13 @@ TEST_F(TabsApiUnitTest, TabsUpdateSavedTabGroupTab) {
       u"Initial title", tab_groups::TabGroupColorId::kBlue);
   browser()->tab_strip_model()->ChangeTabGroupVisuals(group, visual_data);
 
-  EXPECT_TRUE(
-      ExtensionTabUtil::TabIsInSavedTabGroup(raw_contents, GetTabStripModel()));
+  // Check that the tab is in a saved tab group.
+  TabStripModel* tab_strip_model = GetTabStripModel();
+  int index = tab_strip_model->GetIndexOfWebContents(raw_contents);
+  std::optional<tab_groups::TabGroupId> tab_group_id =
+      tab_strip_model->GetTabGroupForTab(index);
+  ASSERT_TRUE(tab_group_id.has_value());
+  EXPECT_TRUE(saved_service->GetGroup(tab_group_id.value()).has_value());
 
   {  // Test the active state change for a saved tab.
     GetTabStripModel()->ActivateTabAt(
@@ -812,10 +817,7 @@ TEST_F(TabsApiUnitTest, TabsMoveAcrossWindows) {
   auto window2 = std::make_unique<TestBrowserWindow>();
   Browser::CreateParams params(profile(), /* user_gesture */ true);
   params.type = Browser::TYPE_NORMAL;
-  params.window = window2.get();
-  // TestBrowserWindowOwner handles its own lifetime, and also cleans up
-  // |window2|.
-  new TestBrowserWindowOwner(std::move(window2));
+  params.window = window2.release();
   auto browser2 = Browser::DeprecatedCreateOwnedForTesting(params);
   BrowserList::SetLastActive(browser2.get());
   int window_id2 = ExtensionTabUtil::GetWindowId(browser2.get());
@@ -883,10 +885,7 @@ TEST_F(TabsApiUnitTest, TabsMoveAcrossWindowsShouldRespectGroupContiguity) {
   auto window2 = std::make_unique<TestBrowserWindow>();
   Browser::CreateParams params(profile(), /* user_gesture */ true);
   params.type = Browser::TYPE_NORMAL;
-  params.window = window2.get();
-  // TestBrowserWindowOwner handles its own lifetime, and also cleans up
-  // |window2|.
-  new TestBrowserWindowOwner(std::move(window2));
+  params.window = window2.release();
   auto browser2 = Browser::DeprecatedCreateOwnedForTesting(params);
   BrowserList::SetLastActive(browser2.get());
   int window_id2 = ExtensionTabUtil::GetWindowId(browser2.get());
@@ -1146,10 +1145,7 @@ TEST_F(TabsApiUnitTest, TabsGroupAcrossWindows) {
   auto window2 = std::make_unique<TestBrowserWindow>();
   Browser::CreateParams params(profile(), /* user_gesture */ true);
   params.type = Browser::TYPE_NORMAL;
-  params.window = window2.get();
-  // TestBrowserWindowOwner handles its own lifetime, and also cleans up
-  // |window2|.
-  new TestBrowserWindowOwner(std::move(window2));
+  params.window = window2.release();
   auto browser2 = Browser::DeprecatedCreateOwnedForTesting(params);
 
   constexpr int kNumTabs2 = 3;
@@ -1622,7 +1618,7 @@ TEST_F(TabsApiUnitTest, DontCreateTabsInLockedFullscreenMode) {
   function->set_extension(extension_with_tabs_permission.get());
 
   // In locked fullscreen mode we should not be able to create any tabs.
-  PinWindow(browser_window()->GetNativeWindow(), /*trusted=*/true);
+  ash::PinWindow(browser_window()->GetNativeWindow(), /*trusted=*/true);
 
   EXPECT_EQ(ExtensionTabUtil::kLockedFullscreenModeNewTabError,
             api_test_utils::RunFunctionAndReturnError(
@@ -1652,8 +1648,7 @@ TEST_F(TabsApiUnitTest, ScreenshotDisabledInProfilePreferences) {
   web_contents_tester->NavigateAndCommit(kGoogle);
 
   // Disable screenshot.
-  browser()->profile()->GetPrefs()->SetBoolean(prefs::kDisableScreenshots,
-                                               true);
+  profile()->GetPrefs()->SetBoolean(prefs::kDisableScreenshots, true);
 
   // Run the function and check result.
   std::string error = api_test_utils::RunFunctionAndReturnError(
@@ -1667,7 +1662,7 @@ TEST_F(TabsApiUnitTest, CannotDuplicatePictureInPictureWindows) {
   auto pip_window = std::make_unique<TestBrowserWindow>();
   Browser::CreateParams params(profile(), true);
   params.type = Browser::TYPE_PICTURE_IN_PICTURE;
-  params.window = pip_window.get();
+  params.window = pip_window.release();
   std::unique_ptr<Browser> pip_browser;
   pip_browser = Browser::DeprecatedCreateOwnedForTesting(params);
   std::unique_ptr<content::WebContents> contents(
@@ -1693,7 +1688,6 @@ TEST_F(TabsApiUnitTest, CannotDuplicatePictureInPictureWindows) {
   // Tear down picture-in-picture browser.
   pip_browser->tab_strip_model()->DetachAndDeleteWebContentsAt(0);
   pip_browser.reset();
-  pip_window.reset();
 }
 
 // Tests that calling chrome.tabs.discard discards the tab.

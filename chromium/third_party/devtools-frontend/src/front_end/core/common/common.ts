@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,6 +24,7 @@ import * as Progress from './Progress.js';
 import * as QueryParamHandler from './QueryParamHandler.js';
 import * as ResolverBase from './ResolverBase.js';
 import * as ResourceType from './ResourceType.js';
+import * as ReturnToPanel from './ReturnToPanel.js';
 import * as Revealer from './Revealer.js';
 import * as Runnable from './Runnable.js';
 import * as SegmentedRange from './SegmentedRange.js';
@@ -65,6 +66,7 @@ export {
   QueryParamHandler,
   ResolverBase,
   ResourceType,
+  ReturnToPanel,
   Revealer,
   Runnable,
   SegmentedRange,

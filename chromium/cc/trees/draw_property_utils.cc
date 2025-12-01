@@ -188,7 +188,7 @@ bool ExpandClipForPixelMovingFilter(const PropertyTrees* property_trees,
   SkMatrix filter_draw_matrix =
       SkMatrix::Scale(filter_node->surface_contents_scale.x(),
                       filter_node->surface_contents_scale.y());
-  gfx::RectF mapped_clip_in_mapping_space(filter_node->filters.MapRect(
+  gfx::RectF mapped_clip_in_mapping_space(filter_node->filters.ExpandRect(
       ToEnclosingClipRect(clip_rect_in_mapping_space), filter_draw_matrix));
 
   // Put the expanded clip back into the original target space.
@@ -674,23 +674,20 @@ void SetSurfaceDrawTransform(const PropertyTrees* property_trees,
   ConcatInverseSurfaceContentsScale(effect_node, &render_surface_transform);
 
   gfx::Vector2dF pixel_alignment_offset;
-  if (base::FeatureList::IsEnabled(features::kRenderSurfacePixelAlignment)) {
-    // Adjust render_surface_transform by applying the render target's pixel
-    // alignment before the transform, and de-applying this render surface's
-    // pixel alignment to align it to screen pixels.
-    render_surface_transform.PostTranslate(
-        render_surface->render_target()->pixel_alignment_offset());
-    if (effect_node->render_surface_reason !=
-            RenderSurfaceReason::k2DScaleTransformWithCompositedDescendants &&
-        (base::FeatureList::IsEnabled(
-             features::kViewTransitionFloorTransform) ||
-         !effect_node->view_transition_element_resource_id.IsValid())) {
-      if (auto offset = draw_property_utils::PixelAlignmentOffset(
-              render_surface->screen_space_transform(),
-              render_surface_transform)) {
-        pixel_alignment_offset = *offset;
-        render_surface_transform.Translate(-pixel_alignment_offset);
-      }
+  // Adjust render_surface_transform by applying the render target's pixel
+  // alignment before the transform, and de-applying this render surface's
+  // pixel alignment to align it to screen pixels.
+  render_surface_transform.PostTranslate(
+      render_surface->render_target()->pixel_alignment_offset());
+  if (effect_node->render_surface_reason !=
+          RenderSurfaceReason::k2DScaleTransformWithCompositedDescendants &&
+      (base::FeatureList::IsEnabled(features::kViewTransitionFloorTransform) ||
+       !effect_node->view_transition_element_resource_id.IsValid())) {
+    if (auto offset = draw_property_utils::PixelAlignmentOffset(
+            render_surface->screen_space_transform(),
+            render_surface_transform)) {
+      pixel_alignment_offset = *offset;
+      render_surface_transform.Translate(-pixel_alignment_offset);
     }
   }
   render_surface->SetDrawTransform(render_surface_transform,
@@ -1141,8 +1138,6 @@ void AdjustLayerDrawPropertiesForPixelAlignmentOffset(
   if (offset.IsZero()) {
     return;
   }
-
-  DCHECK(base::FeatureList::IsEnabled(features::kRenderSurfacePixelAlignment));
 
   // Apply the pixel alignment offset to all draw properties that are relative
   // to the render target's space.
@@ -1782,10 +1777,15 @@ void CalculateDrawProperties(
   UpdatePageScaleFactor(property_trees,
                         layer_tree_impl->PageScaleTransformNode(),
                         layer_tree_impl->current_page_scale_factor());
+  const ScrollNode* scroll_node = layer_tree_impl->InnerViewportScrollNode();
+  gfx::Vector2dF elastic_overscroll;
+  if (scroll_node) {
+    elastic_overscroll =
+        property_trees->scroll_tree().GetElasticOverscroll(*scroll_node);
+  }
   UpdateElasticOverscroll(property_trees,
                           layer_tree_impl->OverscrollElasticityTransformNode(),
-                          layer_tree_impl->current_elastic_overscroll(),
-                          layer_tree_impl->InnerViewportScrollNode());
+                          elastic_overscroll, scroll_node);
   // Similarly, the device viewport and device transform are shared
   // by both trees.
   property_trees->clip_tree_mutable().SetViewportClip(

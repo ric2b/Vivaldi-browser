@@ -53,9 +53,9 @@ class TabSearchContainerTest : public ChromeViewsTestBase {
         &tab_strip_model_delegate_, tab_strip_->controller()->GetProfile());
 
     browser_window_interface_ = std::make_unique<MockBrowserWindowInterface>();
-    ON_CALL(*browser_window_interface_, GetTabStripModel)
+    ON_CALL(*browser_window_interface_, GetTabStripModel())
         .WillByDefault(::testing::Return(tab_strip_model_.get()));
-    ON_CALL(*browser_window_interface_, GetProfile)
+    ON_CALL(*browser_window_interface_, GetProfile())
         .WillByDefault(
             ::testing::Return(tab_strip_->controller()->GetProfile()));
 

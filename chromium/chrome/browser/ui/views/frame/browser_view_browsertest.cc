@@ -10,15 +10,11 @@
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/test_future.h"
 #include "base/test/values_test_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
-#include "chrome/browser/enterprise/data_protection/data_protection_navigation_controller.h"
-#include "chrome/browser/enterprise/watermark/watermark_view.h"
 #include "chrome/browser/policy/dm_token_utils.h"
-#include "chrome/browser/preloading/scoped_prewarm_feature_list.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/chrome_enterprise_url_lookup_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -39,6 +35,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
+#include "chrome/browser/ui/views/frame/multi_contents_view_drop_target_controller.h"
 #include "chrome/browser/ui/views/frame/scrim_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel.h"
@@ -49,6 +46,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/branded_strings.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
@@ -64,6 +62,7 @@
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/drop_data.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/scoped_accessibility_mode_override.h"
@@ -72,8 +71,11 @@
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/accessibility/platform/ax_platform_node_test_helper.h"
+#include "ui/base/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ozone_buildflags.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/gfx/geometry/point.h"
 #include "url/url_constants.h"
 
 #if defined(USE_AURA)
@@ -88,9 +90,7 @@
 class BrowserViewTest : public InProcessBrowserTest {
  public:
   BrowserViewTest() : devtools_(nullptr) {
-    // TODO(crbug.com/415071842): Re-enable once DevTools is migrated to
-    // ContentsWebView.
-    scoped_feature_list_.InitWithFeatures({}, {features::kSideBySide});
+    scoped_feature_list_.InitWithFeatures({features::kSideBySide}, {});
   }
 
   BrowserViewTest(const BrowserViewTest&) = delete;
@@ -102,21 +102,35 @@ class BrowserViewTest : public InProcessBrowserTest {
   }
 
   views::WebView* devtools_web_view() {
-    return browser_view()->GetDevToolsWebViewForTest();
-  }
-
-  ContentsContainerView* contents_container_view() {
-    return browser_view()->GetActiveContentsContainerView();
+    return browser_view()
+        ->GetActiveContentsContainerView()
+        ->devtools_web_view();
   }
 
   views::WebView* contents_web_view() {
     return browser_view()->contents_web_view();
   }
 
-  SidePanel* side_panel() { return browser_view()->unified_side_panel(); }
+  content::WebContents* active_web_contents() {
+    return browser()->tab_strip_model()->GetActiveWebContents();
+  }
 
-  views::View* side_panel_rounded_corner() {
-    return browser_view()->GetSidePanelRoundedCornerForTesting();
+  ScrimView* active_contents_scrim_view() {
+    return browser_view()
+        ->GetActiveContentsContainerView()
+        ->contents_scrim_view();
+  }
+
+  ContentsContainerView* active_contents_container_view() {
+    return browser_view()
+        ->multi_contents_view()
+        ->GetActiveContentsContainerView();
+  }
+
+  ContentsContainerView* inactive_contents_container_view() {
+    return browser_view()
+        ->multi_contents_view()
+        ->GetInactiveContentsContainerView();
   }
 
   void OpenDevToolsWindow(bool docked) {
@@ -138,10 +152,27 @@ class BrowserViewTest : public InProcessBrowserTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-namespace {
+class BrowserViewWithoutSideBySideTest : public BrowserViewTest {
+ public:
+  BrowserViewWithoutSideBySideTest() {
+    scoped_feature_list_.InitWithFeatures({}, {features::kSideBySide});
+  }
 
-// Used to simulate scenario in a crash. When WebContentsDestroyed() is invoked
-// updates the navigation state of another tab.
+  SidePanel* side_panel() {
+    return browser_view()->contents_height_side_panel();
+  }
+
+  views::View* side_panel_rounded_corner() {
+    return browser_view()->GetSidePanelRoundedCornerForTesting();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+namespace {
+// Used to simulate scenario in a crash. When WebContentsDestroyed() is
+// invoked updates the navigation state of another tab.
 class TestWebContentsObserver : public content::WebContentsObserver {
  public:
   TestWebContentsObserver(content::WebContents* source,
@@ -162,8 +193,8 @@ class TestWebContentsObserver : public content::WebContentsObserver {
   raw_ptr<content::WebContents, DanglingUntriaged> other_;
 };
 
-// Waits for a different view to claim focus within a widget with the specified
-// name.
+// Waits for a different view to claim focus within a widget with the
+// specified name.
 class TestFocusChangeWaiter : public views::FocusChangeListener {
  public:
   TestFocusChangeWaiter(views::FocusManager* focus_manager,
@@ -274,14 +305,13 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, DevToolsDockedUpdatesBrowserWindow) {
     GTEST_SKIP();
   }
 #endif
-  gfx::Rect full_bounds =
-      browser_view()->GetContentsContainerForTest()->GetLocalBounds();
+  gfx::Rect full_bounds = active_contents_container_view()->GetLocalBounds();
   gfx::Rect small_bounds(10, 20, 30, 40);
 
-  browser_view()->UpdateDevTools();
+  browser_view()->UpdateDevTools(active_web_contents());
   EXPECT_FALSE(devtools_web_view()->web_contents());
   EXPECT_EQ(full_bounds, devtools_web_view()->bounds());
-  EXPECT_EQ(full_bounds, contents_container_view()->bounds());
+  EXPECT_EQ(full_bounds, contents_web_view()->bounds());
 
   // Docked.
   OpenDevToolsWindow(true);
@@ -291,22 +321,22 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, DevToolsDockedUpdatesBrowserWindow) {
   SetDevToolsBounds(small_bounds);
   EXPECT_TRUE(devtools_web_view()->web_contents());
   EXPECT_EQ(full_bounds, devtools_web_view()->bounds());
-  EXPECT_EQ(small_bounds, contents_container_view()->bounds());
+  EXPECT_EQ(small_bounds, contents_web_view()->bounds());
 
-  browser_view()->UpdateDevTools();
+  browser_view()->UpdateDevTools(active_web_contents());
   EXPECT_TRUE(devtools_web_view()->web_contents());
   EXPECT_EQ(full_bounds, devtools_web_view()->bounds());
-  EXPECT_EQ(small_bounds, contents_container_view()->bounds());
+  EXPECT_EQ(small_bounds, contents_web_view()->bounds());
 
   CloseDevToolsWindow();
   EXPECT_FALSE(devtools_web_view()->web_contents());
   EXPECT_EQ(full_bounds, devtools_web_view()->bounds());
-  EXPECT_EQ(full_bounds, contents_container_view()->bounds());
+  EXPECT_EQ(full_bounds, contents_web_view()->bounds());
 
-  browser_view()->UpdateDevTools();
+  browser_view()->UpdateDevTools(active_web_contents());
   EXPECT_FALSE(devtools_web_view()->web_contents());
   EXPECT_EQ(full_bounds, devtools_web_view()->bounds());
-  EXPECT_EQ(full_bounds, contents_container_view()->bounds());
+  EXPECT_EQ(full_bounds, contents_web_view()->bounds());
 }
 
 // Verifies that page and devtools WebViews are being correctly laid out
@@ -319,8 +349,7 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, DevToolsUndockedUpdatesBrowserWindow) {
     GTEST_SKIP();
   }
 #endif
-  gfx::Rect full_bounds =
-      browser_view()->GetContentsContainerForTest()->GetLocalBounds();
+  gfx::Rect full_bounds = active_contents_container_view()->GetLocalBounds();
   gfx::Rect small_bounds(10, 20, 30, 40);
 
   OpenDevToolsWindow(false);
@@ -330,22 +359,22 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, DevToolsUndockedUpdatesBrowserWindow) {
   SetDevToolsBounds(small_bounds);
   EXPECT_TRUE(devtools_web_view()->web_contents());
   EXPECT_EQ(full_bounds, devtools_web_view()->bounds());
-  EXPECT_EQ(small_bounds, contents_container_view()->bounds());
+  EXPECT_EQ(small_bounds, contents_web_view()->bounds());
 
-  browser_view()->UpdateDevTools();
+  browser_view()->UpdateDevTools(active_web_contents());
   EXPECT_TRUE(devtools_web_view()->web_contents());
   EXPECT_EQ(full_bounds, devtools_web_view()->bounds());
-  EXPECT_EQ(small_bounds, contents_container_view()->bounds());
+  EXPECT_EQ(small_bounds, contents_web_view()->bounds());
 
   CloseDevToolsWindow();
   EXPECT_FALSE(devtools_web_view()->web_contents());
   EXPECT_EQ(full_bounds, devtools_web_view()->bounds());
-  EXPECT_EQ(full_bounds, contents_container_view()->bounds());
+  EXPECT_EQ(full_bounds, contents_web_view()->bounds());
 
-  browser_view()->UpdateDevTools();
+  browser_view()->UpdateDevTools(active_web_contents());
   EXPECT_FALSE(devtools_web_view()->web_contents());
   EXPECT_EQ(full_bounds, devtools_web_view()->bounds());
-  EXPECT_EQ(full_bounds, contents_container_view()->bounds());
+  EXPECT_EQ(full_bounds, contents_web_view()->bounds());
 }
 
 void SetDevToolsWindowSizePrefs(Browser* browser,
@@ -433,7 +462,8 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, DevToolsWindowResetsSize) {
 }
 
 // Verifies that the side panel's rounded corner is being correctly layed out.
-IN_PROC_BROWSER_TEST_F(BrowserViewTest, SidePanelRoundedCornerLayout) {
+IN_PROC_BROWSER_TEST_F(BrowserViewWithoutSideBySideTest,
+                       SidePanelRoundedCornerLayout) {
   SidePanelCoordinator* coordinator =
       (browser())->GetFeatures().side_panel_coordinator();
   coordinator->SetNoDelaysForTesting(true);
@@ -614,27 +644,23 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, GetAccessibleTabModalDialogTree) {
 
 // Tests that a content area scrim is shown when a tab modal dialog is active.
 IN_PROC_BROWSER_TEST_F(BrowserViewTest, ScrimForTabModal) {
-  if (!base::FeatureList::IsEnabled(features::KScrimForTabModal)) {
-    GTEST_SKIP();
-  }
-
   content::WebContents* contents = browser_view()->GetActiveWebContents();
   auto delegate = std::make_unique<TestTabModalConfirmDialogDelegate>(contents);
 
   // Showing a tab modal dialog will enable the content scrim.
   TabModalConfirmDialog::Create(std::move(delegate), contents);
-  EXPECT_TRUE(browser_view()->contents_scrim_view()->GetVisible());
+  EXPECT_TRUE(active_contents_scrim_view()->GetVisible());
 
   // Goes to a second tab will disable the content scrim.
   ASSERT_TRUE(
       AddTabAtIndex(1, GURL(url::kAboutBlankURL), ui::PAGE_TRANSITION_LINK));
-  EXPECT_FALSE(browser_view()->contents_scrim_view()->GetVisible());
+  EXPECT_FALSE(active_contents_scrim_view()->GetVisible());
 
   // Switch back to the page that has a modal dialog.
   browser()->tab_strip_model()->ActivateTabAt(
       0, TabStripUserGestureDetails(
              TabStripUserGestureDetails::GestureType::kMouse));
-  EXPECT_TRUE(browser_view()->contents_scrim_view()->GetVisible());
+  EXPECT_TRUE(active_contents_scrim_view()->GetVisible());
 
   // Closing the tab disables the content scrim.
   chrome::CloseWebContents(browser(),
@@ -646,10 +672,6 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, ScrimForTabModal) {
 // (-[NSWindow beginSheet:]), which natively draws a scrim.
 #if !BUILDFLAG(IS_MAC)
 IN_PROC_BROWSER_TEST_F(BrowserViewTest, ScrimForBrowserWindowModal) {
-  if (!base::FeatureList::IsEnabled(features::kScrimForBrowserWindowModal)) {
-    GTEST_SKIP();
-  }
-
   auto child_widget_delegate = std::make_unique<views::WidgetDelegate>();
   auto child_widget = std::make_unique<views::Widget>();
   child_widget_delegate->SetModalType(ui::mojom::ModalType::kWindow);
@@ -673,27 +695,9 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, ScrimForBrowserWindowModal) {
 }
 #endif  // !BUILDFLAG(IS_MAC)
 
-class SideBySideBrowserViewTest : public InProcessBrowserTest {
- public:
-  SideBySideBrowserViewTest() {
-    scoped_feature_list_.InitAndEnableFeature(features::kSideBySide);
-  }
-
-  SideBySideBrowserViewTest(const SideBySideBrowserViewTest&) = delete;
-  SideBySideBrowserViewTest& operator=(const SideBySideBrowserViewTest&) =
-      delete;
-
- protected:
-  BrowserView* browser_view() {
-    return BrowserView::GetBrowserViewForBrowser(browser());
-  }
-
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
 // Tests that GetInactiveSplitTabIndex returns correctly with two adjacent
 // splits.
-IN_PROC_BROWSER_TEST_F(SideBySideBrowserViewTest, SplitViewActiveIndexTest) {
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, SplitViewActiveIndexTest) {
   // Add enough tabs to create two split views.
   chrome::AddTabAt(browser(), GURL(), -1, true);
   chrome::AddTabAt(browser(), GURL(), -1, true);
@@ -726,27 +730,232 @@ IN_PROC_BROWSER_TEST_F(SideBySideBrowserViewTest, SplitViewActiveIndexTest) {
       browser_view()->multi_contents_view()->end_contents_view_for_testing());
 }
 
+// Verifies that page and devtools WebViews are being correctly laid out
+// when DevTools is opened/closed/updated while docked.
+IN_PROC_BROWSER_TEST_F(BrowserViewTest,
+                       DevToolsDockedRemainsOpenInWithFocusInSplit) {
+  // Add enough tabs to create two split views.
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  // Add tabs to splits.
+  browser()->tab_strip_model()->ActivateTabAt(0);
+  browser()->tab_strip_model()->AddToNewSplit(
+      {1}, split_tabs::SplitTabVisualData(),
+      split_tabs::SplitTabCreatedSource::kToolbarButton);
+  browser()->tab_strip_model()->ActivateTabAt(2);
+  browser()->tab_strip_model()->AddToNewSplit(
+      {3}, split_tabs::SplitTabVisualData(),
+      split_tabs::SplitTabCreatedSource::kToolbarButton);
+
+  browser()->tab_strip_model()->ActivateTabAt(0);
+
+  // Verify neither devtools is visible.
+  EXPECT_FALSE(
+      active_contents_container_view()->devtools_web_view()->GetVisible());
+  EXPECT_FALSE(
+      inactive_contents_container_view()->devtools_web_view()->GetVisible());
+
+  // Open devtools for the active side of the split and verify it exists only
+  // for the active side.
+  DevToolsWindowTesting::OpenDevToolsWindowSync(browser(), true);
+  EXPECT_TRUE(
+      active_contents_container_view()->devtools_web_view()->GetVisible());
+  EXPECT_FALSE(
+      inactive_contents_container_view()->devtools_web_view()->GetVisible());
+
+  // Activate to the inactive side and verify it stayed open on the appropriate
+  // side of the split.
+  browser()->tab_strip_model()->ActivateTabAt(1);
+  EXPECT_FALSE(
+      active_contents_container_view()->devtools_web_view()->GetVisible());
+  EXPECT_TRUE(
+      inactive_contents_container_view()->devtools_web_view()->GetVisible());
+
+  // Activate to the other split and verify no devtools are seen.
+  browser()->tab_strip_model()->ActivateTabAt(2);
+  EXPECT_FALSE(
+      active_contents_container_view()->devtools_web_view()->GetVisible());
+  EXPECT_FALSE(
+      inactive_contents_container_view()->devtools_web_view()->GetVisible());
+
+  // Switch back to the split where devtools is open and verify is is still
+  // visible.
+  browser()->tab_strip_model()->ActivateTabAt(1);
+  EXPECT_FALSE(
+      active_contents_container_view()->devtools_web_view()->GetVisible());
+  EXPECT_TRUE(
+      inactive_contents_container_view()->devtools_web_view()->GetVisible());
+
+  // Verify two devtools can be seen at once (one for each side of a split).
+  DevToolsWindowTesting::OpenDevToolsWindowSync(browser(), true);
+  EXPECT_TRUE(
+      active_contents_container_view()->devtools_web_view()->GetVisible());
+  EXPECT_TRUE(
+      inactive_contents_container_view()->devtools_web_view()->GetVisible());
+}
+
+// Verifies that page and devtools WebViews are being correctly laid out
+// when DevTools is opened/closed/updated while docked.
+IN_PROC_BROWSER_TEST_F(BrowserViewTest,
+                       DevToolsRemainsCorrectlyDockedAfterSwappingSplit) {
+  // Add enough tabs to create two split views.
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  // Add tabs to splits.
+  browser()->tab_strip_model()->ActivateTabAt(0);
+  browser()->tab_strip_model()->AddToNewSplit(
+      {1}, split_tabs::SplitTabVisualData(),
+      split_tabs::SplitTabCreatedSource::kToolbarButton);
+
+  browser()->tab_strip_model()->ActivateTabAt(0);
+
+  // Open devtools for the active side of the split and verify it exists only
+  // for the active side.
+  DevToolsWindowTesting::OpenDevToolsWindowSync(browser(), true);
+  EXPECT_TRUE(
+      active_contents_container_view()->devtools_web_view()->GetVisible());
+  EXPECT_FALSE(
+      inactive_contents_container_view()->devtools_web_view()->GetVisible());
+
+  // Reverse the split and verify the correct side has devtools.
+  browser_view()->multi_contents_view()->OnSwap();
+  EXPECT_TRUE(
+      active_contents_container_view()->devtools_web_view()->GetVisible());
+  EXPECT_FALSE(
+      inactive_contents_container_view()->devtools_web_view()->GetVisible());
+}
+
+// TODO(crbug.com/425715421): Re-enable when wayland supports drag and drop
+#if !BUILDFLAG(IS_OZONE_WAYLAND)
+#define MAYBE_DragNotSupportedInFullscreen DragNotSupportedInFullscreen
+#else
+#define MAYBE_DragNotSupportedInFullscreen DISABLED_DragNotSupportedInFullscreen
+#endif
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, MAYBE_DragNotSupportedInFullscreen) {
+  // Add enough tabs to create two split views.
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  // Add tabs to splits.
+  browser()->tab_strip_model()->ActivateTabAt(0);
+  browser()->tab_strip_model()->AddToNewSplit(
+      {1}, split_tabs::SplitTabVisualData(),
+      split_tabs::SplitTabCreatedSource::kToolbarButton);
+
+  // Make fullscreen
+  ui_test_utils::ToggleFullscreenModeAndWait(browser());
+
+  // Attempt to start a drag
+  content::DropData drop_data;
+  drop_data.url = GURL("https://mail.google.com");
+  const gfx::Rect bounds = browser_view()->GetBoundsInScreen();
+  const gfx::PointF point(bounds.left_center().x() + 10,
+                          bounds.left_center().y());
+  browser_view()->PreHandleDragUpdate(drop_data, point);
+
+  EXPECT_FALSE(browser_view()
+                   ->multi_contents_view()
+                   ->drop_target_controller()
+                   .IsDropTimerRunningForTesting());
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, ScrimForTabModalInSplitView) {
+  // Create a split view with two tabs followed by a third that will show the
+  // scrim.
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  browser()->tab_strip_model()->ActivateTabAt(0);
+  browser()->tab_strip_model()->AddToNewSplit(
+      {1}, split_tabs::SplitTabVisualData(),
+      split_tabs::SplitTabCreatedSource::kToolbarButton);
+
+  // Show a tab modal dialog on the third tab (not part of the split).
+  browser()->tab_strip_model()->ActivateTabAt(2);
+  content::WebContents* contents = browser_view()->GetActiveWebContents();
+  auto delegate = std::make_unique<TestTabModalConfirmDialogDelegate>(contents);
+  TabModalConfirmDialog::Create(std::move(delegate), contents);
+  EXPECT_TRUE(
+      active_contents_container_view()->contents_scrim_view()->GetVisible());
+
+  // Activating a tab in the split will cause the scrim to hide.
+  browser()->tab_strip_model()->ActivateTabAt(0);
+  EXPECT_FALSE(
+      active_contents_container_view()->contents_scrim_view()->GetVisible());
+
+  // Swapping the tab with the tab modal dialog into the inactive spot in the
+  // split should make that view active and show the scrim.
+  browser()->tab_strip_model()->UpdateTabInSplit(
+      browser()->tab_strip_model()->GetTabAtIndex(1), 2,
+      TabStripModel::SplitUpdateType::kSwap);
+  EXPECT_EQ(1, browser()->tab_strip_model()->active_index());
+  EXPECT_TRUE(
+      active_contents_container_view()->contents_scrim_view()->GetVisible());
+  EXPECT_FALSE(
+      inactive_contents_container_view()->contents_scrim_view()->GetVisible());
+}
+
+// Tests that GetAccessibleTabLabel correctly labels each tab in a split.
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, AccessibleTabLabel) {
+  // Create a pinned split.
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  browser()->tab_strip_model()->SetTabPinned(0, true);
+  browser()->tab_strip_model()->SetTabPinned(1, true);
+  browser()->tab_strip_model()->ActivateTabAt(0);
+  browser()->tab_strip_model()->AddToNewSplit(
+      {1}, split_tabs::SplitTabVisualData(),
+      split_tabs::SplitTabCreatedSource::kToolbarButton);
+  EXPECT_EQ(l10n_util::GetStringFUTF16(
+                IDS_TAB_AX_LABEL_PINNED_FORMAT,
+                l10n_util::GetStringFUTF16(
+                    IDS_TAB_AX_LABEL_SPLIT_TAB_LEFT_VIEW_FORMAT,
+                    browser()->GetTitleForTab(0))),
+            browser_view()->GetAccessibleTabLabel(0));
+  EXPECT_EQ(l10n_util::GetStringFUTF16(
+                IDS_TAB_AX_LABEL_PINNED_FORMAT,
+                l10n_util::GetStringFUTF16(
+                    IDS_TAB_AX_LABEL_SPLIT_TAB_RIGHT_VIEW_FORMAT,
+                    browser()->GetTitleForTab(1))),
+            browser_view()->GetAccessibleTabLabel(1));
+
+  // Create a split.
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  browser()->tab_strip_model()->ActivateTabAt(2);
+  browser()->tab_strip_model()->AddToNewSplit(
+      {3}, split_tabs::SplitTabVisualData(),
+      split_tabs::SplitTabCreatedSource::kToolbarButton);
+  EXPECT_EQ(
+      l10n_util::GetStringFUTF16(IDS_TAB_AX_LABEL_SPLIT_TAB_LEFT_VIEW_FORMAT,
+                                 browser()->GetTitleForTab(2)),
+      browser_view()->GetAccessibleTabLabel(2));
+  EXPECT_EQ(
+      l10n_util::GetStringFUTF16(IDS_TAB_AX_LABEL_SPLIT_TAB_RIGHT_VIEW_FORMAT,
+                                 browser()->GetTitleForTab(3)),
+      browser_view()->GetAccessibleTabLabel(3));
+
+  // Create a grouped split.
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  browser()->tab_strip_model()->ActivateTabAt(4);
+  browser()->tab_strip_model()->AddToNewSplit(
+      {5}, split_tabs::SplitTabVisualData(),
+      split_tabs::SplitTabCreatedSource::kToolbarButton);
+  browser()->tab_strip_model()->AddToNewGroup({4, 5});
+  EXPECT_EQ(l10n_util::GetStringFUTF16(
+                IDS_TAB_AX_LABEL_UNNAMED_GROUP_FORMAT,
+                l10n_util::GetStringFUTF16(
+                    IDS_TAB_AX_LABEL_SPLIT_TAB_LEFT_VIEW_FORMAT,
+                    browser()->GetTitleForTab(4))),
+            browser_view()->GetAccessibleTabLabel(4));
+  EXPECT_EQ(l10n_util::GetStringFUTF16(
+                IDS_TAB_AX_LABEL_UNNAMED_GROUP_FORMAT,
+                l10n_util::GetStringFUTF16(
+                    IDS_TAB_AX_LABEL_SPLIT_TAB_RIGHT_VIEW_FORMAT,
+                    browser()->GetTitleForTab(5))),
+            browser_view()->GetAccessibleTabLabel(5));
+}
+
 #if BUILDFLAG(IS_MAC)
-class MacSideBySideBrowserViewTest : public InProcessBrowserTest {
- public:
-  MacSideBySideBrowserViewTest() {
-    scoped_feature_list_.InitWithFeatures({features::kSideBySide}, {});
-  }
 
-  MacSideBySideBrowserViewTest(const MacSideBySideBrowserViewTest&) = delete;
-  MacSideBySideBrowserViewTest& operator=(const MacSideBySideBrowserViewTest&) =
-      delete;
-
- protected:
-  BrowserView* browser_view() {
-    return BrowserView::GetBrowserViewForBrowser(browser());
-  }
-
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(MacSideBySideBrowserViewTest,
-                       SplitViewFullscreenLayout) {
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, SplitViewFullscreenLayout) {
   // Disable always show toolbar in fullscreen
   chrome::SetAlwaysShowToolbarInFullscreenForTesting(browser(), false);
 
@@ -776,6 +985,34 @@ IN_PROC_BROWSER_TEST_F(MacSideBySideBrowserViewTest,
   // Verify top_container is re-parented to browser_view after fullscreen exit
   EXPECT_EQ(browser_view(), top_container->parent());
 }
+
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, SplitViewTabRevealFullscreen) {
+  // Disable always show toolbar in fullscreen
+  chrome::SetAlwaysShowToolbarInFullscreenForTesting(browser(), false);
+
+  // Create tabs and add to split
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  browser()->tab_strip_model()->ActivateTabAt(0);
+  browser()->tab_strip_model()->AddToNewSplit(
+      {1}, split_tabs::SplitTabVisualData(),
+      split_tabs::SplitTabCreatedSource::kToolbarButton);
+
+  ASSERT_TRUE(browser()->tab_strip_model()->selection_model().IsSelected(0));
+  ASSERT_TRUE(browser()->tab_strip_model()->selection_model().IsSelected(1));
+
+  ui_test_utils::ToggleFullscreenModeAndWait(browser());
+  ASSERT_FALSE(browser()->window()->IsToolbarShowing());
+
+  // Switching between split tabs does not reveal top container.
+  browser()->tab_strip_model()->ActivateTabAt(1);
+  ASSERT_FALSE(browser()->window()->IsToolbarShowing());
+
+  // Switching to tab not in split should reveal top container.
+  browser()->tab_strip_model()->ActivateTabAt(2);
+  ASSERT_TRUE(browser()->window()->IsToolbarShowing());
+}
 #endif
 
 namespace {
@@ -795,18 +1032,6 @@ class FakeRealTimeUrlLookupService
           referring_app_info,
       bool use_cache) override {
     auto response = std::make_unique<safe_browsing::RTLookupResponse>();
-    safe_browsing::RTLookupResponse::ThreatInfo* new_threat_info =
-        response->add_threat_info();
-    safe_browsing::MatchedUrlNavigationRule* matched_url_navigation_rule =
-        new_threat_info->mutable_matched_url_navigation_rule();
-
-    // Only add a watermark for watermark.com URLs.
-    if (url.host() == "watermark.com") {
-      safe_browsing::MatchedUrlNavigationRule::WatermarkMessage wm;
-      wm.set_watermark_message("custom_messge");
-      wm.mutable_timestamp()->set_seconds(base::Time::Now().ToTimeT());
-      *matched_url_navigation_rule->mutable_watermark_message() = wm;
-    }
 
     callback_task_runner->PostTask(
         FROM_HERE,
@@ -818,7 +1043,9 @@ class FakeRealTimeUrlLookupService
 
 class BrowserViewDataProtectionTest : public InProcessBrowserTest {
  public:
-  BrowserViewDataProtectionTest() = default;
+  BrowserViewDataProtectionTest() {
+    scoped_feature_list_.InitAndEnableFeature(features::kSideBySide);
+  }
   BrowserViewDataProtectionTest(const BrowserViewDataProtectionTest&) = delete;
   BrowserViewDataProtectionTest& operator=(
       const BrowserViewDataProtectionTest&) = delete;
@@ -865,178 +1092,11 @@ class BrowserViewDataProtectionTest : public InProcessBrowserTest {
   }
 
  private:
-  // TODO(https://crbug.com/423465927): Explore a better approach to make the
-  // existing tests run with the prewarm feature enabled.
-  test::ScopedPrewarmFeatureList scoped_prewarm_feature_list_{
-      test::ScopedPrewarmFeatureList::PrewarmState::kDisabled};
   base::CallbackListSubscription create_services_subscription_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 }  // namespace
-
-IN_PROC_BROWSER_TEST_F(BrowserViewDataProtectionTest, Apply_NoWatermark) {
-  NavigateToAndWait(GURL("https://nowatermark.com"));
-  EXPECT_FALSE(BrowserView::GetBrowserViewForBrowser(browser())
-                   ->get_watermark_view_for_testing()
-                   ->has_text_for_testing());
-}
-
-IN_PROC_BROWSER_TEST_F(BrowserViewDataProtectionTest,
-                       Apply_Nav_NoWatermark_Watermark) {
-  auto* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
-
-  // Initial page loaded into the browser view is a chrome:// URL that has no
-  // watermark.
-  EXPECT_FALSE(
-      browser_view->get_watermark_view_for_testing()->has_text_for_testing());
-
-  base::test::TestFuture<void> future;
-  browser()
-      ->GetActiveTabInterface()
-      ->GetTabFeatures()
-      ->data_protection_controller()
-      ->SetCallbackForTesting(future.GetCallback());
-  // Navigate to a page that should show a watermark.  The watermark should
-  // show even while the page loads.
-  auto* web_contents = NavigateAsync(GURL("https://watermark.com"));
-  EXPECT_TRUE(future.Wait());
-  EXPECT_TRUE(
-      browser_view->get_watermark_view_for_testing()->has_text_for_testing());
-
-  // Once the page loads, the watermark should remain.
-  content::WaitForLoadStop(web_contents);
-  EXPECT_TRUE(
-      browser_view->get_watermark_view_for_testing()->has_text_for_testing());
-}
-
-IN_PROC_BROWSER_TEST_F(BrowserViewDataProtectionTest,
-                       Apply_Nav_Watermark_NoWatermark) {
-  // Start on a page that should show a watermark.
-  NavigateToAndWait(GURL("https://watermark.com"));
-  EXPECT_TRUE(BrowserView::GetBrowserViewForBrowser(browser())
-                  ->get_watermark_view_for_testing()
-                  ->has_text_for_testing());
-
-  // Navigate to a page that should not show a watermark.  The watermark should
-  // still show while the page loads.
-  auto* web_contents = NavigateAsync(GURL("https://nowatermark.com"));
-  EXPECT_TRUE(BrowserView::GetBrowserViewForBrowser(browser())
-                  ->get_watermark_view_for_testing()
-                  ->has_text_for_testing());
-
-  // Once the page loads, the watermark should be cleared.
-  content::WaitForLoadStop(web_contents);
-  EXPECT_FALSE(BrowserView::GetBrowserViewForBrowser(browser())
-                   ->get_watermark_view_for_testing()
-                   ->has_text_for_testing());
-}
-
-IN_PROC_BROWSER_TEST_F(BrowserViewDataProtectionTest,
-                       Apply_SwitchTab_ToWatermark) {
-  NavigateToAndWait(GURL("https://watermark.com"));
-
-  // Create a second tab with a page that should not be watermarked.
-  // AddTabAtIndex() waits for the load to finish and activates the tab.
-  ASSERT_TRUE(
-      AddTabAtIndex(1, GURL("chrome://version"), ui::PAGE_TRANSITION_LINK));
-  EXPECT_FALSE(BrowserView::GetBrowserViewForBrowser(browser())
-                   ->get_watermark_view_for_testing()
-                   ->has_text_for_testing());
-
-  // Switch active tabs back to watermarked page.
-  browser()->tab_strip_model()->ActivateTabAt(
-      0, TabStripUserGestureDetails(
-             TabStripUserGestureDetails::GestureType::kMouse));
-  EXPECT_TRUE(BrowserView::GetBrowserViewForBrowser(browser())
-                  ->get_watermark_view_for_testing()
-                  ->has_text_for_testing());
-}
-
-IN_PROC_BROWSER_TEST_F(BrowserViewDataProtectionTest,
-                       Apply_SwitchTab_ToWatermark_NoWait) {
-  NavigateToAndWait(GURL("https://watermark.com"));
-
-  // Create a second tab with a page that should not be watermarked. We
-  // intentionally do not wait for the load to finish. The watermark should
-  // not be showing.
-  NavigateParams params(browser(), GURL("chrome://version"),
-                        ui::PAGE_TRANSITION_LINK);
-  params.tabstrip_index = 1;
-  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  Navigate(&params);
-  EXPECT_FALSE(BrowserView::GetBrowserViewForBrowser(browser())
-                   ->get_watermark_view_for_testing()
-                   ->has_text_for_testing());
-
-  // Switch back to the watermarked tab. The watermark should still be showing.
-  browser()->tab_strip_model()->ActivateTabAt(
-      0, TabStripUserGestureDetails(
-             TabStripUserGestureDetails::GestureType::kMouse));
-  EXPECT_TRUE(BrowserView::GetBrowserViewForBrowser(browser())
-                  ->get_watermark_view_for_testing()
-                  ->has_text_for_testing());
-
-  // Wait for the second (now backgrounded) tab to finish loading. The watermark
-  // should still be showing.
-  content::WaitForLoadStop(params.navigated_or_inserted_contents);
-  EXPECT_TRUE(BrowserView::GetBrowserViewForBrowser(browser())
-                  ->get_watermark_view_for_testing()
-                  ->has_text_for_testing());
-}
-
-IN_PROC_BROWSER_TEST_F(BrowserViewDataProtectionTest,
-                       Apply_SwitchTab_ToWatermark_PartialWait) {
-  // Initial page should be watermarked.
-  NavigateToAndWait(GURL("https://watermark.com"));
-  EXPECT_TRUE(BrowserView::GetBrowserViewForBrowser(browser())
-                  ->get_watermark_view_for_testing()
-                  ->has_text_for_testing());
-
-  // Create a second tab. Navigate to a page that does not have a watermark.
-  // Part way through the navigation, switch to the first tab again.
-  auto* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
-  NavigateParams params(browser(), GURL("https://nowatermark.com"),
-                        ui::PAGE_TRANSITION_LINK);
-  params.tabstrip_index = 1;
-  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  Navigate(&params);
-  EXPECT_FALSE(BrowserView::GetBrowserViewForBrowser(browser())
-                   ->get_watermark_view_for_testing()
-                   ->has_text_for_testing());
-  // Initial page loaded into the browser view is a chrome:// URL that has no
-  // watermark.
-  EXPECT_FALSE(
-      browser_view->get_watermark_view_for_testing()->has_text_for_testing());
-
-  base::test::TestFuture<void> future;
-  browser()
-      ->GetActiveTabInterface()
-      ->GetTabFeatures()
-      ->data_protection_controller()
-      ->SetCallbackForTesting(future.GetCallback());
-
-  // Wait for the navigation to partially complete. The load is not complete but
-  // DataProtectionNavigationController::ApplyDataProtectionSettings has been
-  // called with the verdict to clear the watermark.
-  EXPECT_TRUE(future.Wait());
-  EXPECT_FALSE(
-      browser_view->get_watermark_view_for_testing()->has_text_for_testing());
-
-  // Switch back to the watermarked tab. The watermark should show immediately.
-  browser()->tab_strip_model()->ActivateTabAt(
-      0, TabStripUserGestureDetails(
-             TabStripUserGestureDetails::GestureType::kMouse));
-  EXPECT_TRUE(BrowserView::GetBrowserViewForBrowser(browser())
-                  ->get_watermark_view_for_testing()
-                  ->has_text_for_testing());
-
-  // Wait for the second (now backgrounded) tab to finish loading. The watermark
-  // should still be showing.
-  content::WaitForLoadStop(params.navigated_or_inserted_contents);
-  EXPECT_TRUE(BrowserView::GetBrowserViewForBrowser(browser())
-                  ->get_watermark_view_for_testing()
-                  ->has_text_for_testing());
-}
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 
@@ -1076,6 +1136,7 @@ class BrowserViewScrimPixelTest : public UiBrowserTest {
     ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
     browser()->window()->Show();
     BrowserView::GetBrowserViewForBrowser(browser())
+        ->GetActiveContentsContainerView()
         ->contents_scrim_view()
         ->SetVisible(true);
   }

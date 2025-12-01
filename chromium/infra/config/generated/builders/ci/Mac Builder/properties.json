@@ -10,10 +10,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Mac Builder",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-mac-archive",
               "builder_group": "chromium.mac",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_chromium_config": {
@@ -39,7 +38,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Mac12 Tests",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
               "builder_group": "chromium.mac",
@@ -59,7 +58,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Mac Builder",
-                "project": "chromium-m140"
+                "project": "chromium-m142"
               }
             }
           },
@@ -67,7 +66,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Mac13 Tests",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
               "builder_group": "chromium.mac",
@@ -87,7 +86,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Mac Builder",
-                "project": "chromium-m140"
+                "project": "chromium-m142"
               }
             }
           },
@@ -95,7 +94,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "mac14-tests",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
               "builder_group": "chromium.mac",
@@ -115,7 +114,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Mac Builder",
-                "project": "chromium-m140"
+                "project": "chromium-m142"
               }
             }
           },
@@ -123,7 +122,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "mac15-x64-rel-tests",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
               "builder_group": "chromium.mac",
@@ -143,7 +142,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Mac Builder",
-                "project": "chromium-m140"
+                "project": "chromium-m142"
               }
             }
           }
@@ -153,29 +152,29 @@
         {
           "bucket": "ci",
           "builder": "Mac Builder",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "Mac12 Tests",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         },
         {
           "bucket": "ci",
           "builder": "Mac13 Tests",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         },
         {
           "bucket": "ci",
           "builder": "mac14-tests",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         },
         {
           "bucket": "ci",
           "builder": "mac15-x64-rel-tests",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         }
       ],
       "mirroring_builder_group_and_names": [

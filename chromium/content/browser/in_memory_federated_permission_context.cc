@@ -52,9 +52,6 @@ void InMemoryFederatedPermissionContext::RemoveEmbargoAndResetCounts(
   embargoed_origins_.erase(relying_party_embedder);
 }
 
-void InMemoryFederatedPermissionContext::RecordIgnoreAndEmbargo(
-    const url::Origin& relying_party_embedder) {}
-
 bool InMemoryFederatedPermissionContext::ShouldCompleteRequestImmediately()
     const {
   const base::CommandLine* current_command_line =
@@ -293,7 +290,7 @@ void InMemoryFederatedPermissionContext::SetIdpSigninStatus(
     observer.OnIdpSigninStatusReceived(idp_origin, idp_signin_status);
   }
 
-  if (options && IsFedCmLightweightModeEnabled()) {
+  if (options && webid::IsLightweightModeEnabled()) {
     if (idp_signin_status) {
       idp_login_status_options_[idp_origin.Serialize()] = options.value();
     } else {

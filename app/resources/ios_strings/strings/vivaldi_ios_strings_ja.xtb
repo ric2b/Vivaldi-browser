@@ -38,6 +38,7 @@
 <translation id="4026745073321351206">不具合を報告する</translation>
 <translation id="4216644171369573466">タブスタック、<ph name="GROUP_TITLE" />、メニュー。</translation>
 <translation id="4304713468139749426">パスワードマネージャー</translation>
+<translation id="4439281775431634915">あなたのタブスタックはここに保存されます</translation>
 <translation id="4569525137269575065">スタックを閉じる</translation>
 <translation id="473775607612524610">更新</translation>
 <translation id="4755216899422789286">URL を Vivaldi で開く</translation>
@@ -50,6 +51,8 @@
             other {{count} つのタブスタックが閉じられ保存されました}}</translation>
 <translation id="5019787757991745254">タブスタックの色 <ph name="COLOR" /></translation>
 <translation id="5022440170224170365">タブスタック。折りたたまれています。</translation>
+<translation id="5132327651247938019">右にスワイプするとプライベートタブでブラウジングできます。</translation>
+<translation id="5204006339739481307">左にスワイプするとプライベートタブでブラウジングできます。</translation>
 <translation id="5217245356412073535">設定 &gt; コンテンツの設定で、デフォルトサイトビューをデスクトップに変更できます</translation>
 <translation id="5271549068863921519">パスワードを保存</translation>
 <translation id="5317780077021120954">保存</translation>
@@ -63,6 +66,7 @@
 <translation id="5962477178930921574">貼り付けて検索</translation>
 <translation id="6163856768888310791">スタックを解除する</translation>
 <translation id="6168969409902608220">スタックの名前</translation>
+<translation id="6192561334825788389">右にスワイプするとプライベートタブでブラウジングできます。</translation>
 <translation id="6233792867654386826">入力した URL を Vivaldi で開く。</translation>
 <translation id="6271462272606946663">モバイルサイトのリクエストを非表示にする</translation>
 <translation id="6478587527114893588">スタックを閉じる</translation>
@@ -75,6 +79,8 @@
 <translation id="6827597288286078054">プライベート検索</translation>
 <translation id="6851516051005285358">デスクトップ版サイトをリクエストする</translation>
 <translation id="6890907822330704077">タブスタック、<ph name="GROUP_TITLE" />、<ph name="TABS_NUMBER" /> タブ。</translation>
+<translation id="7004032350256606903">あなたの組織では、プライベート（非公開）ブラウジングでの利用が求められています。
+<ph name="BEGIN_LINK" />詳細はこちら<ph name="END_LINK" /></translation>
 <translation id="7307970171564921489"><ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> でプライベートタブのロックを解除する</translation>
 <translation id="7347289093190902150">プライベートタブで開きますか？</translation>
 <translation id="7363285031331302144">開いているタブを整理するためにタブスタックを作成する</translation>
@@ -94,6 +100,7 @@
         =1 {新しいスタックにタブを追加する}
         other {新しいスタックにタブを追加する}}</translation>
 <translation id="8465550436083180511">タブスタックを折りたたむ</translation>
+<translation id="8499954848910902473">左にスワイプするとプライベートタブでブラウジングできます。</translation>
 <translation id="8685478989144570078">タブスタック</translation>
 <translation id="8756969031206844760">パスワードを更新しますか？</translation>
 <translation id="8852861335827546438">新しいタブスタック</translation>

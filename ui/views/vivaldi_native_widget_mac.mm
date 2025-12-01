@@ -37,7 +37,7 @@ class VivaldiNativeWidgetMac;
 - (void)onWindowDidChangeScreen:(NSNotification*)notification;
 - (void)onWindowDidResize:(NSNotification*)notification;
 - (void)onWindowOccusionStateChanged:(NSNotification*)notification;
-- (void)onSetControlButtonsPadding:(NSNotification*)notification;
+- (void)onSetControlButtonsPosition:(NSNotification*)notification;
 @end
 
 class VivaldiNativeWidgetObserver : public views::WidgetObserver {
@@ -76,6 +76,7 @@ class VivaldiNativeWidgetMac : public views::NativeWidgetMac {
   void OnWindowDidChangeScreen(bool hasNotch);
   bool SetWindowTitle(const std::u16string& title) override;
   enum class TrafficLightPosition {
+    Hidden,
     Native,
     LightPadding,
     MediumPadding,
@@ -189,8 +190,8 @@ bool ScreenHasNotch(NSScreen* screen) {
              object:ns_window];
     [[NSNotificationCenter defaultCenter]
         addObserver:self
-           selector:@selector(onSetControlButtonsPadding:)
-               name:@"VivaldiSetControlButtonsPadding"
+           selector:@selector(onSetControlButtonsPosition:)
+               name:@"VivaldiSetControlButtonsPosition"
              object:ns_window];
   }
   return self;
@@ -235,17 +236,19 @@ bool ScreenHasNotch(NSScreen* screen) {
   native_widget_->RedrawTrafficLight();
 }
 
-- (void)onSetControlButtonsPadding:(NSNotification*)notification {
+- (void)onSetControlButtonsPosition:(NSNotification*)notification {
   NSDictionary* userInfo = notification.userInfo;
-  NSString* padding = userInfo[@"padding"];
+  NSString* position_str = userInfo[@"position"];
 
   VivaldiNativeWidgetMac::TrafficLightPosition position =
       VivaldiNativeWidgetMac::TrafficLightPosition::Native;
-  if ([padding isEqual:@"lightPadding"]) {
+  if ([position_str isEqual:@"hidden"]) {
+    position = VivaldiNativeWidgetMac::TrafficLightPosition::Hidden;
+  } else if ([position_str isEqual:@"lightPadding"]) {
     position = VivaldiNativeWidgetMac::TrafficLightPosition::LightPadding;
-  } else if ([padding isEqual:@"mediumPadding"]) {
+  } else if ([position_str isEqual:@"mediumPadding"]) {
     position = VivaldiNativeWidgetMac::TrafficLightPosition::MediumPadding;
-  } else if ([padding isEqual:@"heavyPadding"]) {
+  } else if ([position_str isEqual:@"heavyPadding"]) {
     position = VivaldiNativeWidgetMac::TrafficLightPosition::HeavyPadding;
   }
   native_widget_->SetTrafficLightPosition(position);
@@ -364,18 +367,37 @@ bool VivaldiNativeWidgetMac::SetWindowTitle(const std::u16string& title) {
 
 void VivaldiNativeWidgetMac::SetTrafficLightPosition(
     TrafficLightPosition position) {
+  // Set padding values for traffic lights
+  // Those are some arbitrary values based on testing.
   switch (position) {
+    case TrafficLightPosition::Hidden:
+    traffic_light_position_ = std::nullopt;
+    break;
+    // Default (native) should be the same as light padding.
     case TrafficLightPosition::Native:
-      traffic_light_position_ = {20, 12};
-      break;
     case TrafficLightPosition::LightPadding:
-      traffic_light_position_ = {7, 12};
+      if (@available(macos 26, *)) {
+        // Adjust padding slightly for macOS 26 (Tahoe).
+        traffic_light_position_ = {9, 9};
+      } else {
+        traffic_light_position_ = {7, 6};
+      }
       break;
     case TrafficLightPosition::MediumPadding:
-      traffic_light_position_ = {12, 25};
+      if (@available(macos 26, *)) {
+        // Adjust padding slightly for macOS 26 (Tahoe).
+        traffic_light_position_ = {14, 14};
+      } else {
+        traffic_light_position_ = {14, 13};
+      }
       break;
     case TrafficLightPosition::HeavyPadding:
-      traffic_light_position_ = {20, 35};
+      if (@available(macos 26, *)) {
+        // Adjust padding slightly for macOS 26 (Tahoe).
+        traffic_light_position_ = {19, 19};
+      } else {
+        traffic_light_position_ = {19, 18};
+      }
       break;
   }
 
@@ -390,50 +412,49 @@ void VivaldiNativeWidgetMac::RedrawTrafficLight() {
   if (!(window.occlusionState & NSWindowOcclusionStateVisible)) {
     return;
   }
-
-  NSButton* close = [window standardWindowButton:NSWindowCloseButton];
-  NSButton* miniaturize =
-      [window standardWindowButton:NSWindowMiniaturizeButton];
-  NSButton* zoom = [window standardWindowButton:NSWindowZoomButton];
-  // Safety check just in case apple changes the view structure in a macOS
-  // update
-  DCHECK(close.superview);
-  DCHECK(close.superview.superview);
-  if (!close.superview || !close.superview.superview)
-    return;
-  NSView* titleBarContainerView = close.superview.superview;
-
-  if (in_fullscreen_transition_ || !traffic_light_position_) {
-    [titleBarContainerView setHidden:YES];
+  NSView* titleBarContainer =
+      [window standardWindowButton:NSWindowCloseButton].superview.superview;
+  if (!titleBarContainer) {
     return;
   }
-  [titleBarContainerView setHidden:NO];
-  CGFloat buttonHeight = [close frame].size.height;
-  CGFloat titleBarFrameHeight = buttonHeight + traffic_light_position_->y();
-  CGRect titleBarRect = titleBarContainerView.frame;
-  CGFloat titleBarWidth = NSWidth(titleBarRect);
-  titleBarRect.size.height = titleBarFrameHeight;
-  titleBarRect.origin.y = window.frame.size.height - titleBarFrameHeight;
-  [titleBarContainerView setFrame:titleBarRect];
 
-  BOOL isRTL = [titleBarContainerView userInterfaceLayoutDirection] ==
-               NSUserInterfaceLayoutDirectionRightToLeft;
-  NSArray* windowButtons = @[ close, miniaturize, zoom ];
-  const CGFloat space_between =
-      [miniaturize frame].origin.x - [close frame].origin.x;
+  const BOOL isRTL = [titleBarContainer userInterfaceLayoutDirection] ==
+                     NSUserInterfaceLayoutDirectionRightToLeft;
+
+  NSButton* left = isRTL ? [window standardWindowButton:NSWindowZoomButton]
+                         : [window standardWindowButton:NSWindowCloseButton];
+  NSButton* middle = [window standardWindowButton:NSWindowMiniaturizeButton];
+  NSButton* right = isRTL ? [window standardWindowButton:NSWindowCloseButton]
+                          : [window standardWindowButton:NSWindowZoomButton];
+
+  if (in_fullscreen_transition_ || !traffic_light_position_) {
+    [titleBarContainer setHidden:YES];
+    return;
+  }
+  [titleBarContainer setHidden:NO];
+
+  CGFloat buttonHeight = NSHeight(left.frame);
+  CGFloat buttonWidth = NSWidth(left.frame);
+  CGFloat padding = NSMinX(middle.frame) - NSMaxX(left.frame);
+  CGFloat start = isRTL
+                      // Width of the window - 3 control buttons - 2 padding
+                      // between buttons - traffic lights padding
+                      ? NSWidth(window.frame) - 3 * buttonWidth - 2 * padding -
+                            traffic_light_position_->x()
+                      : traffic_light_position_->x();
+
+  // Update the container bounds
+  NSRect cbounds = titleBarContainer.frame;
+  cbounds.size.height = buttonHeight + 2 * traffic_light_position_->y();
+  cbounds.origin.y = NSHeight(window.frame) - NSHeight(cbounds);
+  [titleBarContainer setFrame:cbounds];
+
+  // Update the button frames
+  NSArray* windowButtons = @[ left, middle, right ];
   for (NSUInteger i = 0; i < windowButtons.count; i++) {
     NSView* view = [windowButtons objectAtIndex:i];
-    CGRect rect = [view frame];
-    if (isRTL) {
-      CGFloat buttonWidth = NSWidth(rect);
-      // origin is always top-left, even in RTL
-      rect.origin.x = titleBarWidth - traffic_light_position_->x() +
-                      (i * space_between) - buttonWidth;
-    } else {
-      rect.origin.x = traffic_light_position_->x() + (i * space_between);
-    }
-    rect.origin.y = (titleBarFrameHeight - rect.size.height) / 2;
-    [view setFrameOrigin:rect.origin];
+    [view setFrameOrigin:NSMakePoint(start, traffic_light_position_->y())];
+    start += buttonWidth + padding;
   }
 }
 

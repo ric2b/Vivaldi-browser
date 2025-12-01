@@ -1,8 +1,10 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import * as i18n from '../../../core/i18n/i18n.js';
+import type * as Platform from '../../../core/platform/platform.js';
+import type * as Protocol from '../../../generated/protocol.js';
 
 const UIStrings = {
   /**
@@ -535,24 +537,27 @@ const UIStrings = {
   cookieDisabled:
       'Back/forward cache is disabled because cookies are disabled on a page that uses `Cache-Control: no-store`.',
   /**
-   * @description Description text for not restored reason WebRTCSticky.
+   * @description Description text for not restored reason WebRTCUsedWithCCNS.
    */
-  webRTCSticky: 'Back/forward cache is disabled because WebRTC has been used.',
+  webRTCUsedWithCCNS: 'Back/forward cache is disabled because WebRTC has been used.',
   /**
-   * @description Description text for not restored reason WebTransportSticky.
+   * @description Description text for not restored reason WebTransportUsedWithCCNS.
    */
-  webTransportSticky: 'Back/forward cache is disabled because WebTransport has been used.',
+  webTransportUsedWithCCNS: 'Back/forward cache is disabled because WebTransport has been used.',
   /**
-   * @description Description text for not restored reason WebSocketSticky.
+   * @description Description text for not restored reason WebSocketUsedWithCCNS.
    */
-  webSocketSticky: 'Back/forward cache is disabled because WebSocket has been used.',
+  webSocketUsedWithCCNS: 'Back/forward cache is disabled because WebSocket has been used.',
 
 } as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/application/components/BackForwardCacheStrings.ts', UIStrings);
 const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
 
-export const NotRestoredReasonDescription = {
+type NotRestoredReason =
+    Record<Protocol.Page.BackForwardCacheNotRestoredReason, {name: () => Platform.UIString.LocalizedString}>;
+
+export const NotRestoredReasonDescription: NotRestoredReason = {
   NotPrimaryMainFrame: {name: i18nLazyString(UIStrings.notMainFrame)},
   BackForwardCacheDisabled: {name: i18nLazyString(UIStrings.backForwardCacheDisabled)},
   RelatedActiveContentsExist: {name: i18nLazyString(UIStrings.relatedActiveContentsExist)},
@@ -567,6 +572,7 @@ export const NotRestoredReasonDescription = {
   JavaScriptExecution: {name: i18nLazyString(UIStrings.JavaScriptExecution)},
   RendererProcessKilled: {name: i18nLazyString(UIStrings.rendererProcessKilled)},
   RendererProcessCrashed: {name: i18nLazyString(UIStrings.rendererProcessCrashed)},
+  // @ts-expect-error kept for backwards compatibly
   GrantedMediaStreamAccess: {name: i18nLazyString(UIStrings.grantedMediaStreamAccess)},
   CacheFlushed: {name: i18nLazyString(UIStrings.cacheFlushed)},
   ServiceWorkerVersionActivation: {name: i18nLazyString(UIStrings.serviceWorkerVersionActivation)},
@@ -691,9 +697,9 @@ export const NotRestoredReasonDescription = {
       {name: i18nLazyString(UIStrings.jsNetworkRequestReceivedCacheControlNoStoreResource)},
   IndexedDBEvent: {name: i18nLazyString(UIStrings.indexedDBEvent)},
   CookieDisabled: {name: i18nLazyString(UIStrings.cookieDisabled)},
-  WebRTCSticky: {name: i18nLazyString(UIStrings.webRTCSticky)},
-  WebTransportSticky: {name: i18nLazyString(UIStrings.webTransportSticky)},
-  WebSocketSticky: {name: i18nLazyString(UIStrings.webSocketSticky)},
+  WebRTCUsedWithCCNS: {name: i18nLazyString(UIStrings.webRTCUsedWithCCNS)},
+  WebTransportUsedWithCCNS: {name: i18nLazyString(UIStrings.webTransportUsedWithCCNS)},
+  WebSocketUsedWithCCNS: {name: i18nLazyString(UIStrings.webSocketUsedWithCCNS)},
   HTTPAuthRequired: {name: i18n.i18n.lockedLazyString('HTTPAuthRequired')},
   CookieFlushed: {name: i18n.i18n.lockedLazyString('CookieFlushed')},
   SmartCard: {name: i18n.i18n.lockedLazyString('SmartCard')},
@@ -713,4 +719,4 @@ export const NotRestoredReasonDescription = {
       {name: i18n.i18n.lockedLazyString('CacheLimitPrunedOnModerateMemoryPressure')},
   CacheLimitPrunedOnCriticalMemoryPressure:
       {name: i18n.i18n.lockedLazyString('CacheLimitPrunedOnCriticalMemoryPressure')},
-};
+} as const;

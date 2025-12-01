@@ -75,7 +75,6 @@ ci.builder(
             target_bits = 32,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-win-archive",
     ),
     targets = targets.bundle(
         targets = [
@@ -108,7 +107,6 @@ ci.builder(
             target_bits = 32,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-win-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -153,7 +151,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-win-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -195,7 +192,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-win-archive",
     ),
     targets = targets.bundle(
         targets = [
@@ -291,7 +287,6 @@ ci.builder(
             target_bits = 32,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-win-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -341,7 +336,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-win-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -397,7 +391,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-win-archive",
     ),
     targets = targets.bundle(
         targets = [
@@ -498,7 +491,6 @@ ci.thin_tester(
             target_bits = 32,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-win-archive",
     ),
     targets = targets.bundle(
         targets = [
@@ -539,7 +531,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-win-archive",
     ),
     targets = targets.bundle(
         targets = [
@@ -548,11 +539,13 @@ ci.thin_tester(
         ],
         mixins = [
             "x86-64",
-            "win11",
+            "win11-any",
             "isolate_profile_data",
         ],
         per_test_modifications = {
             "blink_web_tests": targets.mixin(
+                # TODO(https://crbug.com/433551587): Fix test failures due to win11-24h2
+                experiment_percentage = 100,
                 swarming = targets.swarming(
                     shards = 12,
                 ),
@@ -635,7 +628,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-win-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -691,7 +683,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-win-archive",
     ),
     builder_config_settings = builder_config.ci_settings(
         retry_failed_shards = True,
@@ -782,7 +773,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-win-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -829,7 +819,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-win-archive",
     ),
     targets = targets.bundle(
         targets = [
@@ -930,7 +919,6 @@ ci.builder(
             target_platform = builder_config.target_platform.WIN,
             host_platform = builder_config.host_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-win-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -955,9 +943,6 @@ ci.builder(
         ],
         per_test_modifications = {
             "blink_web_tests": targets.remove(
-                reason = "TODO: crbug.com/346921029 - fix broken tests.",
-            ),
-            "blink_wpt_tests": targets.remove(
                 reason = "TODO: crbug.com/346921029 - fix broken tests.",
             ),
             "grit_python_unittests": targets.remove(

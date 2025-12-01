@@ -33,7 +33,7 @@
 #include <ole2.h>
 #define _huge
 
-#include <ole2ver.h>
+#include <Ole2Ver.h>
 
 #include <oleauto.h>
 

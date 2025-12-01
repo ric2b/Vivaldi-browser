@@ -26,9 +26,9 @@ class RuleServiceFactory : public ProfileKeyedServiceFactoryIOS {
   RuleServiceFactory(const RuleServiceFactory&) = delete;
   RuleServiceFactory& operator=(const RuleServiceFactory&) = delete;
 
-  // BrowserStateKeyedServiceFactory methods:
+  // ProfileKeyedServiceFactoryIOS methods:
   std::unique_ptr<KeyedService> BuildServiceInstanceFor(
-      web::BrowserState* browser_state) const override;
+      ProfileIOS* profile) const override;
 };
 
 }  // namespace adblock_filter

@@ -1,4 +1,4 @@
-# Copyright 2025 The Chromium Authors. All rights reserved.
+# Copyright 2025 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -8,14 +8,16 @@ import("../../../scripts/build/typescript/typescript.gni")
 import("../visibility.gni")
 
 devtools_module("ai_code_completion") {
-  sources = [ "AiCodeCompletion.ts" ]
+  sources = [
+    "AiCodeCompletion.ts",
+    "debug.ts",
+  ]
 
   deps = [
     "../../core/common:bundle",
     "../../core/host:bundle",
     "../../core/root:bundle",
     "../../ui/components/text_editor:bundle",
-    "../ai_assistance:bundle",
   ]
 }
 
@@ -27,6 +29,7 @@ devtools_entrypoint("bundle") {
   visibility = [
     ":*",
     "../../panels/console/*",
+    "../../panels/sources/*",
   ]
 
   visibility += devtools_models_visibility

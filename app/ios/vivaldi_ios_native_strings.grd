@@ -256,9 +256,6 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_TAB_GRID_RECENT_TABS_EMPTY_DESCRIPTION" desc="Description for the state when recent tabs page contains neither recently closed tabs or synced tabs from other devices.">
         Recently visited tabs will appear here
       </message>
-      <message name="IDS_IOS_TABS_SEARCH_SUGGESTED_ACTION_SEARCH_RECENT_TABS" desc="Title for a suggested action presented at the end of search results to search through recent tabs for the same search term.">
-        Search recent tabs
-      </message>
       <message name="IDS_IOS_TAB_GRID_RECENT_TABS_UNAVAILABLE_MESSAGE" desc="Message shown in the Recent Tabs page of the tab grid when the IncognitoModeAvailability enterprise policy is set to forced. [iOS only]">
         Your organization requires you to browse privately. Tabs aren't saved in Private mode. <ph name="BEGIN_LINK">BEGIN_LINK</ph>Learn more<ph name="END_LINK">END_LINK</ph>
       </message>
@@ -1347,6 +1344,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_RUSSIAN" desc="The origin of the blocking list source file">
         Russian (<ph name="ORIGIN">$1</ph>)
       </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_SERBO_CROATIAN" desc="The origin of the blocking list source file">
+        Serbo-Croatian (<ph name="ORIGIN">$1</ph>)
+      </message>
       <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_SPANISH" desc="The origin of the blocking list source file">
         Spanish (<ph name="ORIGIN">$1</ph>)
       </message>
@@ -1560,12 +1560,6 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_GENERAL_SETTING_TITLE" desc="Title for General settings title">
         General
       </message>
-      <message name="IDS_IOS_GENERAL_ACCEPT_LANGUAGES_TITLE" desc="Title for Accept Language setting option under general settings">
-        Accept Languages
-      </message>
-      <message name="IDS_IOS_GENERAL_ACCEPT_LANGUAGES_DESCRIPTION" desc="Description for Accept Language setting option under general settings">
-        Preferred languages, accepted by compatible websites in given order.
-      </message>
       <message name="IDS_IOS_GENERAL_HOMEPAGE_SETTING_TITLE" desc="Title for Homepage settings on general settings">
         Homepage
       </message>
@@ -1587,7 +1581,10 @@ locale.  The strings in this file are specific to iOS.
       <!--END GENERAL SETTINGS -->
       <!--GENERAL -> LANGUAGE SETTINGS-->
       <message name="IDS_IOS_LANGUAGE_SETTINGS_DISABLE_TRANSLATE_INFOBAR_SWITCH_TITLE" desc="Title for the switch to enable or disable translation infobar banner in the language settings page. [Length: 30em] [iOS only]" meaning="Turning this switch on disables showing translation offer and success banner.">
-        Do not show "Offer to translate" banner
+        Hide Confirmation Banners
+      </message>
+      <message name="IDS_IOS_LANGUAGE_SETTINGS_DISABLE_TRANSLATE_INFOBAR_SWITCH_DESCRIPTION" desc="Description for the switch to enable or disable translation infobar banner in the language settings page. [Length: 30em] [iOS only]" meaning="Turning this switch on disables showing translation offer and success banner.">
+        Do not show banners before or after translation is offered
       </message>
       <!--END GENERAL -> LANGUAGE SETTINGS-->
       <!--PAGEZOOM SETTINGS -->

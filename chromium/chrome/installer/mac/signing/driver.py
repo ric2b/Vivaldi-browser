@@ -230,3 +230,7 @@ def main(args):
             disable_packaging=args.disable_packaging,
             skip_brands=args.skip_brands,
             channels=args.channels))
+
+    if args.vivaldi_release_kind != None:
+      with open("gen/signed_package.done", "wt") as f:
+        print("done", file=f)

@@ -3,16 +3,6 @@
 <translationbundle lang="fr">
 <translation id="3830627370375585318">Autorisez Vivaldi à accéder au réseau dans les paramètres du pare-feu ou
         de l’antivirus.</translation>
-<translation id="4200102020577305737">Accédez au
-          menu Vivaldi &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Paramètres réseau,
-          puis décochez l’option « Utiliser un serveur proxy pour votre réseau local ».</translation>
 <translation id="4932161901409251843">Accédez au
           menu Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@
         Si le problème persiste, nous vous conseillons de réactiver
         cette option pour des performances optimales.</translation>
 <translation id="7496505986576158197">Vivaldi est rendu possible grâce au projet Open Source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> et à d’autres <ph name="BEGIN_LINK_OSS" />logiciels Open Source<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Rendez-vous au
+          menu Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Réseau &gt; Proxy
+          et décochez « Détection automatique du réglage ».</translation>
 </translationbundle>

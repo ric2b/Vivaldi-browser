@@ -3,11 +3,8 @@
 #ifndef COMPONENTS_AD_BLOCKER_CORE_ADBLOCK_RULE_SERVICE_STORAGE_DELEGATE_H_
 #define COMPONENTS_AD_BLOCKER_CORE_ADBLOCK_RULE_SERVICE_STORAGE_DELEGATE_H_
 
-#include <array>
 #include <string>
 
-#include "base/files/file_path.h"
-#include "base/files/important_file_writer.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
 #include "components/ad_blocker/public/core/adblock_rule_manager.h"
@@ -19,26 +16,21 @@ class KnownRuleSourcesHandler;
 class RuleServiceStorageDelegate {
  public:
   struct LoadResult {
-    using CounterGroup =
-        std::array<std::map<std::string, int>, kRuleGroupCount>;
+    using CounterGroup = RuleGroupArray<std::map<std::string, int>>;
 
     LoadResult();
     ~LoadResult();
     LoadResult(LoadResult&& load_result);
     LoadResult& operator=(LoadResult&& load_result);
 
-    std::array<bool, kRuleGroupCount> groups_enabled = {true, true};
-    std::array<ActiveRuleSources, kRuleGroupCount> rule_sources;
-    std::array<std::vector<KnownRuleSource>, kRuleGroupCount> known_sources;
-    std::array<std::set<base::Uuid>, kRuleGroupCount> deleted_presets;
-    std::array<RuleManager::ExceptionsList, kRuleGroupCount>
-        active_exceptions_lists = {RuleManager::kProcessList,
-                                   RuleManager::kProcessList};
-    std::array<
-        std::array<std::set<std::string>, RuleManager::kExceptionListCount>,
-        kRuleGroupCount>
-        exceptions;
-    std::array<std::string, kRuleGroupCount> index_checksums;
+    RuleGroupArray<bool> groups_enabled{true, true};
+    RuleGroupArray<ActiveRuleSources> rule_sources;
+    RuleGroupArray<std::vector<KnownRuleSource>> known_sources;
+    RuleGroupArray<std::set<base::Uuid>> deleted_presets;
+    RuleGroupArray<RuleManager::ExceptionsList> active_exceptions_lists{
+        RuleManager::kProcessList, RuleManager::kProcessList};
+    RuleManager::Exceptions exceptions;
+    RuleGroupArray<std::string> index_checksums;
 
     // Keep for migration
     base::Time blocked_reporting_start;

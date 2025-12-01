@@ -22,6 +22,7 @@
 #include "base/task/thread_pool.h"
 #include "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
 #include "components/autofill/core/browser/geo/country_data.h"
+#include "components/autofill/core/browser/proto/states.pb.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_l10n_util.h"
 #include "components/autofill/core/common/autofill_prefs.h"
@@ -89,9 +90,10 @@ void AlternativeStateNameMapUpdater::PopulateAlternativeStateNameMap(
 
   CountryToStateNamesListMapping country_to_state_names_map;
   for (const AutofillProfile* profile : profiles) {
-    const AlternativeStateNameMap::CountryCode country(base::UTF16ToUTF8(
-        profile->GetInfo(AutofillType(HtmlFieldType::kCountryCode),
-                         address_data_manager_->app_locale())));
+    const AlternativeStateNameMap::CountryCode country(
+        base::UTF16ToUTF8(profile->GetInfo(
+            AutofillType(ADDRESS_HOME_COUNTRY, /*is_country_code=*/true),
+            address_data_manager_->app_locale())));
 
     const AlternativeStateNameMap::StateName state_name(profile->GetInfo(
         ADDRESS_HOME_STATE, address_data_manager_->app_locale()));

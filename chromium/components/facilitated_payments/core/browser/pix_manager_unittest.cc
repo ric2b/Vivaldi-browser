@@ -22,6 +22,7 @@
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/facilitated_payments/core/browser/facilitated_payments_client.h"
+#include "components/facilitated_payments/core/browser/mock_device_delegate.h"
 #include "components/facilitated_payments/core/browser/mock_facilitated_payments_api_client.h"
 #include "components/facilitated_payments/core/browser/mock_facilitated_payments_client.h"
 #include "components/facilitated_payments/core/browser/model/secure_payload.h"
@@ -83,7 +84,7 @@ class PixManagerTest : public testing::Test {
     optimization_guide_decider_ =
         std::make_unique<optimization_guide::MockOptimizationGuideDecider>();
     client_ = std::make_unique<MockFacilitatedPaymentsClient>();
-
+    mock_device_delegate_ = std::make_unique<MockDeviceDelegate>();
     pix_manager_ = std::make_unique<PixManager>(
         client_.get(), /*api_client_creator=*/
         base::BindRepeating(&MockFacilitatedPaymentsApiClient::CreateApiClient),
@@ -99,6 +100,10 @@ class PixManagerTest : public testing::Test {
     ON_CALL(*client_, GetPaymentsDataManager)
         .WillByDefault(testing::Return(payments_data_manager_.get()));
     ON_CALL(*client_, IsInLandscapeMode).WillByDefault(testing::Return(false));
+    // By default, assume that the tab is started in the browser and not a
+    // Chrome custom tab.
+    ON_CALL(*client_, IsInChromeCustomTabMode())
+        .WillByDefault(testing::Return(false));
   }
 
   void TearDown() override {
@@ -124,6 +129,7 @@ class PixManagerTest : public testing::Test {
   std::unique_ptr<PrefService> pref_service_;
   std::unique_ptr<autofill::TestPaymentsDataManager> payments_data_manager_;
   ukm::TestAutoSetUkmRecorder ukm_recorder_;
+  std::unique_ptr<MockDeviceDelegate> mock_device_delegate_;
 
  private:
   syncer::TestSyncService sync_service_;
@@ -160,7 +166,7 @@ TEST_F(PixManagerTestWithAccountLinkingEnabled,
                                           /*is_api_available=*/false);
 }
 
-// If the facilitated payment API is available, then the manager shows the PIX
+// If the facilitated payment API is available, then the manager shows the Pix
 // payment prompt.
 TEST_F(PixManagerTestWithAccountLinkingEnabled,
        ShowsPixPaymentPromptWhenApiClientAvailable) {
@@ -1067,7 +1073,7 @@ TEST_F(PixManagerTestWithAccountLinkingEnabled,
       autofill::test::CreatePixBankAccount(100L)};
   pix_manager_->ShowPixPaymentPrompt(std::move(bank_accounts),
                                      base::DoNothing());
-  pix_manager_->OnUiEvent(UiEvent::kNewScreenShown);
+  pix_manager_->OnUiScreenEvent(UiEvent::kNewScreenShown);
 
   // Verify that when the Pix FOP selector is shown, related metrics are
   // logged.
@@ -1107,6 +1113,46 @@ TEST_F(PixManagerTestWithAccountLinkingEnabled,
 
   // The progress screen should be dismissed after a short delay.
   EXPECT_EQ(pix_manager_->ui_state_, UiState::kHidden);
+}
+
+TEST_F(PixManagerTestWithAccountLinkingEnabled,
+       ChromeCustomTabWithGboardAsDefaultIme_PixFlowNotTriggered) {
+  ON_CALL(*client_, IsInChromeCustomTabMode())
+      .WillByDefault(testing::Return(true));
+  ON_CALL(*client_, GetDeviceDelegate)
+      .WillByDefault(testing::Return(mock_device_delegate_.get()));
+  ON_CALL(*mock_device_delegate_, IsPixSupportAvailableViaGboard)
+      .WillByDefault(testing::Return(true));
+  base::HistogramTester histogram_tester;
+  payments_data_manager_->AddMaskedBankAccountForTest(
+      CreatePixBankAccount(/*instrument_id=*/1));
+
+  pix_manager_->OnPixCodeValidated(/*pix_code=*/std::string(),
+                                   base::TimeTicks::Now(),
+                                   /*is_pix_code_valid=*/true);
+
+  histogram_tester.ExpectUniqueSample(
+      "FacilitatedPayments.Pix.PayflowExitedReason",
+      /*sample=*/PixFlowExitedReason::kCctWithGboardAsDefaultIme,
+      /*expected_bucket_count=*/1);
+}
+
+TEST_F(PixManagerTestWithAccountLinkingEnabled,
+       ChromeCustomTabWithGboardNotAsDefaultIme_PixFlowTriggered) {
+  ON_CALL(*client_, IsInChromeCustomTabMode())
+      .WillByDefault(testing::Return(true));
+  ON_CALL(*client_, GetDeviceDelegate)
+      .WillByDefault(testing::Return(mock_device_delegate_.get()));
+  ON_CALL(*mock_device_delegate_, IsPixSupportAvailableViaGboard)
+      .WillByDefault(testing::Return(false));
+  base::HistogramTester histogram_tester;
+  payments_data_manager_->AddMaskedBankAccountForTest(
+      CreatePixBankAccount(/*instrument_id=*/1));
+  EXPECT_CALL(GetApiClient(), IsAvailable(testing::_));
+
+  pix_manager_->OnPixCodeValidated(/*pix_code=*/std::string(),
+                                   base::TimeTicks::Now(),
+                                   /*is_pix_code_valid=*/true);
 }
 
 TEST_F(PixManagerTestWithAccountLinkingEnabled,
@@ -1179,7 +1225,7 @@ TEST_P(PixManagerTestForUiScreens, NewScreenShown) {
   base::HistogramTester histogram_tester;
 
   // Simulate new screen was shown successfully.
-  pix_manager_->OnUiEvent(UiEvent::kNewScreenShown);
+  pix_manager_->OnUiScreenEvent(UiEvent::kNewScreenShown);
 
   // Verify feature has updated the UI state.
   EXPECT_EQ(pix_manager_->ui_state_, ui_state());
@@ -1201,7 +1247,7 @@ TEST_P(PixManagerTestForUiScreens, NewScreenCouldNotBeShown) {
   base::HistogramTester histogram_tester;
 
   // Simulate new screen could not be shown.
-  pix_manager_->OnUiEvent(UiEvent::kScreenClosedNotByUser);
+  pix_manager_->OnUiScreenEvent(UiEvent::kScreenClosedNotByUser);
 
   // Verify that the UI state is hidden.
   EXPECT_EQ(pix_manager_->ui_state_, UiState::kHidden);
@@ -1218,9 +1264,9 @@ TEST_P(PixManagerTestForUiScreens, ScreenClosedNotByUser) {
   base::HistogramTester histogram_tester;
 
   // Simulate new screen was shown successfully.
-  pix_manager_->OnUiEvent(UiEvent::kNewScreenShown);
+  pix_manager_->OnUiScreenEvent(UiEvent::kNewScreenShown);
   // Simulate UI screen was closed, but it was not due to a user action.
-  pix_manager_->OnUiEvent(UiEvent::kScreenClosedNotByUser);
+  pix_manager_->OnUiScreenEvent(UiEvent::kScreenClosedNotByUser);
 
   // Verify that the UI state is hidden.
   EXPECT_EQ(pix_manager_->ui_state_, UiState::kHidden);
@@ -1237,9 +1283,9 @@ TEST_P(PixManagerTestForUiScreens, ScreenClosedByUser) {
   base::HistogramTester histogram_tester;
 
   // Simulate new screen was shown successfully.
-  pix_manager_->OnUiEvent(UiEvent::kNewScreenShown);
+  pix_manager_->OnUiScreenEvent(UiEvent::kNewScreenShown);
   // Simulate UI screen was closed by the user.
-  pix_manager_->OnUiEvent(UiEvent::kScreenClosedByUser);
+  pix_manager_->OnUiScreenEvent(UiEvent::kScreenClosedByUser);
 
   // Verify that the UI state is hidden.
   EXPECT_EQ(pix_manager_->ui_state_, UiState::kHidden);

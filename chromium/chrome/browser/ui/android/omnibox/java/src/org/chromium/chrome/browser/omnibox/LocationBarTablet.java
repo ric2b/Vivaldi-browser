@@ -39,6 +39,8 @@ import org.chromium.ui.widget.Toast;
     private float mLayoutLeft;
     private float mLayoutRight;
     private int mToolbarStartPaddingDifference;
+
+    @SuppressWarnings("HidingField")
     private UrlBar mUrlBar;
 
     /** Constructor used to inflate from XML. */

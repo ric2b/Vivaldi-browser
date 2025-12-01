@@ -1610,6 +1610,16 @@ static inline const char* string_VkStructureType(VkStructureType input_value) {
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVES_GENERATED_QUERY_FEATURES_EXT";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_RGB_CONVERSION_FEATURES_VALVE:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_RGB_CONVERSION_FEATURES_VALVE";
+        case VK_STRUCTURE_TYPE_VIDEO_ENCODE_RGB_CONVERSION_CAPABILITIES_VALVE:
+            return "VK_STRUCTURE_TYPE_VIDEO_ENCODE_RGB_CONVERSION_CAPABILITIES_VALVE";
+        case VK_STRUCTURE_TYPE_VIDEO_ENCODE_PROFILE_RGB_CONVERSION_INFO_VALVE:
+            return "VK_STRUCTURE_TYPE_VIDEO_ENCODE_PROFILE_RGB_CONVERSION_INFO_VALVE";
+        case VK_STRUCTURE_TYPE_VIDEO_ENCODE_SESSION_RGB_CONVERSION_CREATE_INFO_VALVE:
+            return "VK_STRUCTURE_TYPE_VIDEO_ENCODE_SESSION_RGB_CONVERSION_CREATE_INFO_VALVE";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_MIN_LOD_FEATURES_EXT:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_MIN_LOD_FEATURES_EXT";
         case VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT:
@@ -1696,8 +1706,6 @@ static inline const char* string_VkStructureType(VkStructureType input_value) {
             return "VK_STRUCTURE_TYPE_RENDER_PASS_STRIPE_SUBMIT_INFO_ARM";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_NV:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_NV";
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_NV:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_NV";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_FEATURES_NV:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_FEATURES_NV";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_PROPERTIES_NV:
@@ -1834,6 +1842,12 @@ static inline const char* string_VkStructureType(VkStructureType input_value) {
             return "VK_STRUCTURE_TYPE_ANTI_LAG_DATA_AMD";
         case VK_STRUCTURE_TYPE_ANTI_LAG_PRESENTATION_INFO_AMD:
             return "VK_STRUCTURE_TYPE_ANTI_LAG_PRESENTATION_INFO_AMD";
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DENSE_GEOMETRY_FORMAT_FEATURES_AMDX:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DENSE_GEOMETRY_FORMAT_FEATURES_AMDX";
+        case VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DENSE_GEOMETRY_FORMAT_TRIANGLES_DATA_AMDX:
+            return "VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DENSE_GEOMETRY_FORMAT_TRIANGLES_DATA_AMDX";
+#endif  // VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_PRESENT_ID_2_KHR:
             return "VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_PRESENT_ID_2_KHR";
         case VK_STRUCTURE_TYPE_PRESENT_ID_2_KHR:
@@ -2108,6 +2122,14 @@ static inline const char* string_VkStructureType(VkStructureType input_value) {
             return "VK_STRUCTURE_TYPE_TILE_MEMORY_BIND_INFO_QCOM";
         case VK_STRUCTURE_TYPE_TILE_MEMORY_SIZE_INFO_QCOM:
             return "VK_STRUCTURE_TYPE_TILE_MEMORY_SIZE_INFO_QCOM";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_KHR:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_KHR";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_KHR:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_KHR";
+        case VK_STRUCTURE_TYPE_COPY_MEMORY_INDIRECT_INFO_KHR:
+            return "VK_STRUCTURE_TYPE_COPY_MEMORY_INDIRECT_INFO_KHR";
+        case VK_STRUCTURE_TYPE_COPY_MEMORY_TO_IMAGE_INDIRECT_INFO_KHR:
+            return "VK_STRUCTURE_TYPE_COPY_MEMORY_TO_IMAGE_INDIRECT_INFO_KHR";
         case VK_STRUCTURE_TYPE_DISPLAY_SURFACE_STEREO_CREATE_INFO_NV:
             return "VK_STRUCTURE_TYPE_DISPLAY_SURFACE_STEREO_CREATE_INFO_NV";
         case VK_STRUCTURE_TYPE_DISPLAY_MODE_STEREO_PROPERTIES_NV:
@@ -2258,8 +2280,8 @@ static inline const char* string_VkStructureType(VkStructureType input_value) {
             return "VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_INLINE_SESSION_PARAMETERS_INFO_KHR";
         case VK_STRUCTURE_TYPE_VIDEO_DECODE_AV1_INLINE_SESSION_PARAMETERS_INFO_KHR:
             return "VK_STRUCTURE_TYPE_VIDEO_DECODE_AV1_INLINE_SESSION_PARAMETERS_INFO_KHR";
-        case VK_STRUCTURE_TYPE_OH_SURFACE_CREATE_INFO_OHOS:
-            return "VK_STRUCTURE_TYPE_OH_SURFACE_CREATE_INFO_OHOS";
+        case VK_STRUCTURE_TYPE_SURFACE_CREATE_INFO_OHOS:
+            return "VK_STRUCTURE_TYPE_SURFACE_CREATE_INFO_OHOS";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HDR_VIVID_FEATURES_HUAWEI:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HDR_VIVID_FEATURES_HUAWEI";
         case VK_STRUCTURE_TYPE_HDR_VIVID_DYNAMIC_METADATA_HUAWEI:
@@ -4672,6 +4694,10 @@ static inline const char* string_VkGeometryTypeKHR(VkGeometryTypeKHR input_value
             return "VK_GEOMETRY_TYPE_SPHERES_NV";
         case VK_GEOMETRY_TYPE_LINEAR_SWEPT_SPHERES_NV:
             return "VK_GEOMETRY_TYPE_LINEAR_SWEPT_SPHERES_NV";
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+        case VK_GEOMETRY_TYPE_DENSE_GEOMETRY_FORMAT_TRIANGLES_AMDX:
+            return "VK_GEOMETRY_TYPE_DENSE_GEOMETRY_FORMAT_TRIANGLES_AMDX";
+#endif  // VK_ENABLE_BETA_EXTENSIONS
         default:
             return "Unhandled VkGeometryTypeKHR";
     }
@@ -5228,6 +5254,16 @@ static inline const char* string_VkAntiLagStageAMD(VkAntiLagStageAMD input_value
             return "Unhandled VkAntiLagStageAMD";
     }
 }
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+static inline const char* string_VkCompressedTriangleFormatAMDX(VkCompressedTriangleFormatAMDX input_value) {
+    switch (input_value) {
+        case VK_COMPRESSED_TRIANGLE_FORMAT_DGF1_AMDX:
+            return "VK_COMPRESSED_TRIANGLE_FORMAT_DGF1_AMDX";
+        default:
+            return "Unhandled VkCompressedTriangleFormatAMDX";
+    }
+}
+#endif  // VK_ENABLE_BETA_EXTENSIONS
 static inline const char* string_VkShaderCodeTypeEXT(VkShaderCodeTypeEXT input_value) {
     switch (input_value) {
         case VK_SHADER_CODE_TYPE_BINARY_EXT:
@@ -7874,6 +7910,7 @@ static inline const char* string_VkPipelineStageFlagBits2(uint64_t input_value) 
     if (input_value == VK_PIPELINE_STAGE_2_OPTICAL_FLOW_BIT_NV) return "VK_PIPELINE_STAGE_2_OPTICAL_FLOW_BIT_NV";
     if (input_value == VK_PIPELINE_STAGE_2_CONVERT_COOPERATIVE_VECTOR_MATRIX_BIT_NV) return "VK_PIPELINE_STAGE_2_CONVERT_COOPERATIVE_VECTOR_MATRIX_BIT_NV";
     if (input_value == VK_PIPELINE_STAGE_2_DATA_GRAPH_BIT_ARM) return "VK_PIPELINE_STAGE_2_DATA_GRAPH_BIT_ARM";
+    if (input_value == VK_PIPELINE_STAGE_2_COPY_INDIRECT_BIT_KHR) return "VK_PIPELINE_STAGE_2_COPY_INDIRECT_BIT_KHR";
     return "Unhandled VkPipelineStageFlagBits2";
 }
 
@@ -8068,6 +8105,7 @@ static inline const char* string_VkFormatFeatureFlagBits2(uint64_t input_value) 
     if (input_value == VK_FORMAT_FEATURE_2_OPTICAL_FLOW_VECTOR_BIT_NV) return "VK_FORMAT_FEATURE_2_OPTICAL_FLOW_VECTOR_BIT_NV";
     if (input_value == VK_FORMAT_FEATURE_2_OPTICAL_FLOW_COST_BIT_NV) return "VK_FORMAT_FEATURE_2_OPTICAL_FLOW_COST_BIT_NV";
     if (input_value == VK_FORMAT_FEATURE_2_TENSOR_DATA_GRAPH_BIT_ARM) return "VK_FORMAT_FEATURE_2_TENSOR_DATA_GRAPH_BIT_ARM";
+    if (input_value == VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR) return "VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR";
     if (input_value == VK_FORMAT_FEATURE_2_VIDEO_ENCODE_QUANTIZATION_DELTA_MAP_BIT_KHR) return "VK_FORMAT_FEATURE_2_VIDEO_ENCODE_QUANTIZATION_DELTA_MAP_BIT_KHR";
     if (input_value == VK_FORMAT_FEATURE_2_VIDEO_ENCODE_EMPHASIS_MAP_BIT_KHR) return "VK_FORMAT_FEATURE_2_VIDEO_ENCODE_EMPHASIS_MAP_BIT_KHR";
     return "Unhandled VkFormatFeatureFlagBits2";
@@ -8203,6 +8241,9 @@ static inline const char* string_VkBufferUsageFlagBits2(uint64_t input_value) {
     if (input_value == VK_BUFFER_USAGE_2_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT) return "VK_BUFFER_USAGE_2_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT";
     if (input_value == VK_BUFFER_USAGE_2_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT) return "VK_BUFFER_USAGE_2_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT";
     if (input_value == VK_BUFFER_USAGE_2_MICROMAP_STORAGE_BIT_EXT) return "VK_BUFFER_USAGE_2_MICROMAP_STORAGE_BIT_EXT";
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+    if (input_value == VK_BUFFER_USAGE_2_COMPRESSED_DATA_DGF1_BIT_AMDX) return "VK_BUFFER_USAGE_2_COMPRESSED_DATA_DGF1_BIT_AMDX";
+#endif  // VK_ENABLE_BETA_EXTENSIONS
     if (input_value == VK_BUFFER_USAGE_2_DATA_GRAPH_FOREIGN_DESCRIPTOR_BIT_ARM) return "VK_BUFFER_USAGE_2_DATA_GRAPH_FOREIGN_DESCRIPTOR_BIT_ARM";
     if (input_value == VK_BUFFER_USAGE_2_TILE_MEMORY_BIT_QCOM) return "VK_BUFFER_USAGE_2_TILE_MEMORY_BIT_QCOM";
     if (input_value == VK_BUFFER_USAGE_2_PREPROCESS_BUFFER_BIT_EXT) return "VK_BUFFER_USAGE_2_PREPROCESS_BUFFER_BIT_EXT";
@@ -9464,6 +9505,35 @@ static inline std::string string_VkVideoEncodeAV1RateControlFlagsKHR(VkVideoEnco
     return ret;
 }
 #endif // __cplusplus
+static inline const char* string_VkAddressCopyFlagBitsKHR(VkAddressCopyFlagBitsKHR input_value) {
+    switch (input_value) {
+        case VK_ADDRESS_COPY_DEVICE_LOCAL_BIT_KHR:
+            return "VK_ADDRESS_COPY_DEVICE_LOCAL_BIT_KHR";
+        case VK_ADDRESS_COPY_SPARSE_BIT_KHR:
+            return "VK_ADDRESS_COPY_SPARSE_BIT_KHR";
+        case VK_ADDRESS_COPY_PROTECTED_BIT_KHR:
+            return "VK_ADDRESS_COPY_PROTECTED_BIT_KHR";
+        default:
+            return "Unhandled VkAddressCopyFlagBitsKHR";
+    }
+}
+
+#ifdef __cplusplus
+static inline std::string string_VkAddressCopyFlagsKHR(VkAddressCopyFlagsKHR input_value) {
+    std::string ret;
+    int index = 0;
+    while(input_value) {
+        if (input_value & 1) {
+            if( !ret.empty()) ret.append("|");
+            ret.append(string_VkAddressCopyFlagBitsKHR(static_cast<VkAddressCopyFlagBitsKHR>(1U << index)));
+        }
+        ++index;
+        input_value >>= 1;
+    }
+    if (ret.empty()) ret.append("VkAddressCopyFlagsKHR(0)");
+    return ret;
+}
+#endif // __cplusplus
 static inline const char* string_VkVideoEncodeIntraRefreshModeFlagBitsKHR(VkVideoEncodeIntraRefreshModeFlagBitsKHR input_value) {
     switch (input_value) {
         case VK_VIDEO_ENCODE_INTRA_REFRESH_MODE_NONE_KHR:
@@ -10200,6 +10270,93 @@ static inline std::string string_VkFrameBoundaryFlagsEXT(VkFrameBoundaryFlagsEXT
         input_value >>= 1;
     }
     if (ret.empty()) ret.append("VkFrameBoundaryFlagsEXT(0)");
+    return ret;
+}
+#endif // __cplusplus
+static inline const char* string_VkVideoEncodeRgbModelConversionFlagBitsVALVE(VkVideoEncodeRgbModelConversionFlagBitsVALVE input_value) {
+    switch (input_value) {
+        case VK_VIDEO_ENCODE_RGB_MODEL_CONVERSION_RGB_IDENTITY_BIT_VALVE:
+            return "VK_VIDEO_ENCODE_RGB_MODEL_CONVERSION_RGB_IDENTITY_BIT_VALVE";
+        case VK_VIDEO_ENCODE_RGB_MODEL_CONVERSION_YCBCR_IDENTITY_BIT_VALVE:
+            return "VK_VIDEO_ENCODE_RGB_MODEL_CONVERSION_YCBCR_IDENTITY_BIT_VALVE";
+        case VK_VIDEO_ENCODE_RGB_MODEL_CONVERSION_YCBCR_709_BIT_VALVE:
+            return "VK_VIDEO_ENCODE_RGB_MODEL_CONVERSION_YCBCR_709_BIT_VALVE";
+        case VK_VIDEO_ENCODE_RGB_MODEL_CONVERSION_YCBCR_601_BIT_VALVE:
+            return "VK_VIDEO_ENCODE_RGB_MODEL_CONVERSION_YCBCR_601_BIT_VALVE";
+        case VK_VIDEO_ENCODE_RGB_MODEL_CONVERSION_YCBCR_2020_BIT_VALVE:
+            return "VK_VIDEO_ENCODE_RGB_MODEL_CONVERSION_YCBCR_2020_BIT_VALVE";
+        default:
+            return "Unhandled VkVideoEncodeRgbModelConversionFlagBitsVALVE";
+    }
+}
+
+#ifdef __cplusplus
+static inline std::string string_VkVideoEncodeRgbModelConversionFlagsVALVE(VkVideoEncodeRgbModelConversionFlagsVALVE input_value) {
+    std::string ret;
+    int index = 0;
+    while(input_value) {
+        if (input_value & 1) {
+            if( !ret.empty()) ret.append("|");
+            ret.append(string_VkVideoEncodeRgbModelConversionFlagBitsVALVE(static_cast<VkVideoEncodeRgbModelConversionFlagBitsVALVE>(1U << index)));
+        }
+        ++index;
+        input_value >>= 1;
+    }
+    if (ret.empty()) ret.append("VkVideoEncodeRgbModelConversionFlagsVALVE(0)");
+    return ret;
+}
+#endif // __cplusplus
+static inline const char* string_VkVideoEncodeRgbRangeCompressionFlagBitsVALVE(VkVideoEncodeRgbRangeCompressionFlagBitsVALVE input_value) {
+    switch (input_value) {
+        case VK_VIDEO_ENCODE_RGB_RANGE_COMPRESSION_FULL_RANGE_BIT_VALVE:
+            return "VK_VIDEO_ENCODE_RGB_RANGE_COMPRESSION_FULL_RANGE_BIT_VALVE";
+        case VK_VIDEO_ENCODE_RGB_RANGE_COMPRESSION_NARROW_RANGE_BIT_VALVE:
+            return "VK_VIDEO_ENCODE_RGB_RANGE_COMPRESSION_NARROW_RANGE_BIT_VALVE";
+        default:
+            return "Unhandled VkVideoEncodeRgbRangeCompressionFlagBitsVALVE";
+    }
+}
+
+#ifdef __cplusplus
+static inline std::string string_VkVideoEncodeRgbRangeCompressionFlagsVALVE(VkVideoEncodeRgbRangeCompressionFlagsVALVE input_value) {
+    std::string ret;
+    int index = 0;
+    while(input_value) {
+        if (input_value & 1) {
+            if( !ret.empty()) ret.append("|");
+            ret.append(string_VkVideoEncodeRgbRangeCompressionFlagBitsVALVE(static_cast<VkVideoEncodeRgbRangeCompressionFlagBitsVALVE>(1U << index)));
+        }
+        ++index;
+        input_value >>= 1;
+    }
+    if (ret.empty()) ret.append("VkVideoEncodeRgbRangeCompressionFlagsVALVE(0)");
+    return ret;
+}
+#endif // __cplusplus
+static inline const char* string_VkVideoEncodeRgbChromaOffsetFlagBitsVALVE(VkVideoEncodeRgbChromaOffsetFlagBitsVALVE input_value) {
+    switch (input_value) {
+        case VK_VIDEO_ENCODE_RGB_CHROMA_OFFSET_COSITED_EVEN_BIT_VALVE:
+            return "VK_VIDEO_ENCODE_RGB_CHROMA_OFFSET_COSITED_EVEN_BIT_VALVE";
+        case VK_VIDEO_ENCODE_RGB_CHROMA_OFFSET_MIDPOINT_BIT_VALVE:
+            return "VK_VIDEO_ENCODE_RGB_CHROMA_OFFSET_MIDPOINT_BIT_VALVE";
+        default:
+            return "Unhandled VkVideoEncodeRgbChromaOffsetFlagBitsVALVE";
+    }
+}
+
+#ifdef __cplusplus
+static inline std::string string_VkVideoEncodeRgbChromaOffsetFlagsVALVE(VkVideoEncodeRgbChromaOffsetFlagsVALVE input_value) {
+    std::string ret;
+    int index = 0;
+    while(input_value) {
+        if (input_value & 1) {
+            if( !ret.empty()) ret.append("|");
+            ret.append(string_VkVideoEncodeRgbChromaOffsetFlagBitsVALVE(static_cast<VkVideoEncodeRgbChromaOffsetFlagBitsVALVE>(1U << index)));
+        }
+        ++index;
+        input_value >>= 1;
+    }
+    if (ret.empty()) ret.append("VkVideoEncodeRgbChromaOffsetFlagsVALVE(0)");
     return ret;
 }
 #endif // __cplusplus
@@ -11641,6 +11798,8 @@ static inline const char* string_VkStructureName(VkStructureType input_value) {
             return "VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR:
             return "VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR:
+            return "VkPhysicalDeviceShaderUntypedPointersFeaturesKHR";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MAXIMAL_RECONVERGENCE_FEATURES_KHR:
             return "VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR";
         case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_PRESENT_ID_2_KHR:
@@ -11759,6 +11918,14 @@ static inline const char* string_VkStructureName(VkStructureType input_value) {
             return "VkSetDescriptorBufferOffsetsInfoEXT";
         case VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_BUFFER_EMBEDDED_SAMPLERS_INFO_EXT:
             return "VkBindDescriptorBufferEmbeddedSamplersInfoEXT";
+        case VK_STRUCTURE_TYPE_COPY_MEMORY_INDIRECT_INFO_KHR:
+            return "VkCopyMemoryIndirectInfoKHR";
+        case VK_STRUCTURE_TYPE_COPY_MEMORY_TO_IMAGE_INDIRECT_INFO_KHR:
+            return "VkCopyMemoryToImageIndirectInfoKHR";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_KHR:
+            return "VkPhysicalDeviceCopyMemoryIndirectFeaturesKHR";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_KHR:
+            return "VkPhysicalDeviceCopyMemoryIndirectPropertiesKHR";
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_INTRA_REFRESH_CAPABILITIES_KHR:
             return "VkVideoEncodeIntraRefreshCapabilitiesKHR";
         case VK_STRUCTURE_TYPE_VIDEO_ENCODE_SESSION_INTRA_REFRESH_CREATE_INFO_KHR:
@@ -11801,10 +11968,10 @@ static inline const char* string_VkStructureName(VkStructureType input_value) {
             return "VkPhysicalDeviceLayeredApiPropertiesListKHR";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_VULKAN_PROPERTIES_KHR:
             return "VkPhysicalDeviceLayeredApiVulkanPropertiesKHR";
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR:
-            return "VkPhysicalDeviceMaintenance8FeaturesKHR";
         case VK_STRUCTURE_TYPE_MEMORY_BARRIER_ACCESS_FLAGS_3_KHR:
             return "VkMemoryBarrierAccessFlags3KHR";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR:
+            return "VkPhysicalDeviceMaintenance8FeaturesKHR";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_9_FEATURES_KHR:
             return "VkPhysicalDeviceMaintenance9FeaturesKHR";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_9_PROPERTIES_KHR:
@@ -12471,6 +12638,14 @@ static inline const char* string_VkStructureName(VkStructureType input_value) {
             return "VkPipelineColorWriteCreateInfoEXT";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVES_GENERATED_QUERY_FEATURES_EXT:
             return "VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT";
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_RGB_CONVERSION_FEATURES_VALVE:
+            return "VkPhysicalDeviceVideoEncodeRgbConversionFeaturesVALVE";
+        case VK_STRUCTURE_TYPE_VIDEO_ENCODE_RGB_CONVERSION_CAPABILITIES_VALVE:
+            return "VkVideoEncodeRgbConversionCapabilitiesVALVE";
+        case VK_STRUCTURE_TYPE_VIDEO_ENCODE_PROFILE_RGB_CONVERSION_INFO_VALVE:
+            return "VkVideoEncodeProfileRgbConversionInfoVALVE";
+        case VK_STRUCTURE_TYPE_VIDEO_ENCODE_SESSION_RGB_CONVERSION_CREATE_INFO_VALVE:
+            return "VkVideoEncodeSessionRgbConversionCreateInfoVALVE";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_MIN_LOD_FEATURES_EXT:
             return "VkPhysicalDeviceImageViewMinLodFeaturesEXT";
         case VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT:
@@ -12563,8 +12738,6 @@ static inline const char* string_VkStructureName(VkStructureType input_value) {
             return "VkRenderPassFragmentDensityMapOffsetEndInfoEXT";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_NV:
             return "VkPhysicalDeviceCopyMemoryIndirectFeaturesNV";
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_NV:
-            return "VkPhysicalDeviceCopyMemoryIndirectPropertiesNV";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_FEATURES_NV:
             return "VkPhysicalDeviceMemoryDecompressionFeaturesNV";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_PROPERTIES_NV:
@@ -12699,6 +12872,12 @@ static inline const char* string_VkStructureName(VkStructureType input_value) {
             return "VkAntiLagPresentationInfoAMD";
         case VK_STRUCTURE_TYPE_ANTI_LAG_DATA_AMD:
             return "VkAntiLagDataAMD";
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DENSE_GEOMETRY_FORMAT_FEATURES_AMDX:
+            return "VkPhysicalDeviceDenseGeometryFormatFeaturesAMDX";
+        case VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DENSE_GEOMETRY_FORMAT_TRIANGLES_DATA_AMDX:
+            return "VkAccelerationStructureDenseGeometryFormatTrianglesDataAMDX";
+#endif  // VK_ENABLE_BETA_EXTENSIONS
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT:
             return "VkPhysicalDeviceShaderObjectFeaturesEXT";
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_PROPERTIES_EXT:
@@ -12948,8 +13127,8 @@ static inline const char* string_VkStructureName(VkStructureType input_value) {
         case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLAMP_CONTROL_CREATE_INFO_EXT:
             return "VkPipelineViewportDepthClampControlCreateInfoEXT";
 #ifdef VK_USE_PLATFORM_OHOS
-        case VK_STRUCTURE_TYPE_OH_SURFACE_CREATE_INFO_OHOS:
-            return "VkOHSurfaceCreateInfoOHOS";
+        case VK_STRUCTURE_TYPE_SURFACE_CREATE_INFO_OHOS:
+            return "VkSurfaceCreateInfoOHOS";
 #endif  // VK_USE_PLATFORM_OHOS
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HDR_VIVID_FEATURES_HUAWEI:
             return "VkPhysicalDeviceHdrVividFeaturesHUAWEI";

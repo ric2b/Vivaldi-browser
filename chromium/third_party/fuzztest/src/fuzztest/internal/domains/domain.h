@@ -26,6 +26,7 @@
 #include "absl/functional/function_ref.h"
 #include "absl/random/bit_gen_ref.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "./fuzztest/internal/domains/domain_base.h"
 #include "./fuzztest/internal/domains/domain_type_erasure.h"  // IWYU pragma: export
@@ -64,7 +65,9 @@ struct GenericPrinter {
 // `Domain<T>` is the type-erased domain interface.
 //
 // It can be constructed from any object derived from `DomainBase` that
-// implements the domain methods for the value type `T`.
+// implements the domain methods for the value type `T`. A Domain object is not
+// thread-safe. It's the domain object owner's responsibility to make sure the
+// domain object is not accessed concurrently by multiple threads.
 template <typename T>
 class Domain {
  public:
@@ -369,6 +372,28 @@ class UntypedDomain {
   // The wrapped inner domain.
   std::unique_ptr<internal::UntypedDomainConcept> inner_;
 };
+
+namespace internal {
+
+template <typename DomainT>
+absl::StatusOr<typename DomainT::value_type> ParseOneReproducerValue(
+    absl::string_view data, DomainT domain) {
+  const auto ir_object = IRObject::FromString(data);
+  if (!ir_object) {
+    return absl::InvalidArgumentError("Unexpected reproducer format");
+  }
+  const auto corpus = domain.ParseCorpus(*ir_object);
+  if (!corpus) {
+    return absl::InvalidArgumentError(
+        "Unexpected FuzzTest serialization IR Value.");
+  }
+  absl::Status valid = domain.ValidateCorpusValue(*corpus);
+  if (!valid.ok()) {
+    return valid;
+  }
+  return domain.GetValue(*corpus);
+}
+}  // namespace internal
 
 }  // namespace fuzztest
 

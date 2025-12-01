@@ -7,15 +7,29 @@ in order to make it easier to select or exclude features.
 
 #### Building
 
-`Makefile` script is provided, supporting [Makefile conventions](https://www.gnu.org/prep/standards/html_node/Makefile-Conventions.html#Makefile-Conventions),
+A `Makefile` script is provided, supporting [Makefile conventions](https://www.gnu.org/prep/standards/html_node/Makefile-Conventions.html#Makefile-Conventions),
 including commands variables, staged install, directory variables and standard targets.
 - `make` : generates both static and dynamic libraries
-- `make install` : install libraries and headers in target system directories
+- `make install` : install libraries, headers and pkg-config in local system directories
 
-`libzstd` default scope is pretty large, including compression, decompression, dictionary builder,
-and support for decoding legacy formats >= v0.5.0.
+`libzstd` default scope is extensive, including compression, decompression, dictionary builder,
+and support for decoding legacy formats >= v0.5.0 by default.
 The scope can be reduced on demand (see paragraph _modular build_).
 
+#### Multiarch Support
+
+For multiarch systems (like Debian/Ubuntu), libraries should be installed to architecture-specific directories.
+When creating packages for such systems, use the `LIBDIR` variable to specify the correct multiarch path:
+
+```bash
+# For x86_64 systems on Ubuntu/Debian:
+make install PREFIX=/usr LIBDIR=/usr/lib/x86_64-linux-gnu
+
+# For ARM64 systems on Ubuntu/Debian:
+make install PREFIX=/usr LIBDIR=/usr/lib/aarch64-linux-gnu
+```
+
+This will not only install the files in the correct directories, but also generate the correct paths for `pkg-config`.
 
 #### Multithreading support
 

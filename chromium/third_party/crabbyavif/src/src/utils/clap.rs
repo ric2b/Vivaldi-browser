@@ -39,7 +39,7 @@ impl CleanAperture {
         pixel_format: PixelFormat,
     ) -> AvifResult<Self> {
         if !rect.is_valid(image_width, image_height, pixel_format) {
-            return Err(AvifError::InvalidArgument);
+            return AvifError::invalid_argument();
         }
         let mut cropped_center_x = IFraction::simplified(i32_from_u32(rect.width)?, 2);
         let mut cropped_center_y = IFraction::simplified(i32_from_u32(rect.height)?, 2);
@@ -110,7 +110,7 @@ impl CropRect {
             || !width.is_integer()
             || !height.is_integer()
         {
-            return Err(AvifError::UnknownError("invalid clap".into()));
+            return AvifError::unknown_error("invalid clap");
         }
         let clap_width = width.get_i32();
         let clap_height = height.get_i32();
@@ -121,7 +121,7 @@ impl CropRect {
         crop_y.add(&vert_off)?;
         crop_y.sub(&IFraction::simplified(clap_height, 2))?;
         if !crop_x.is_integer() || !crop_y.is_integer() || crop_x.0 < 0 || crop_y.0 < 0 {
-            return Err(AvifError::UnknownError("".into()));
+            return AvifError::unknown_error("");
         }
         let rect = CropRect {
             x: crop_x.get_u32()?,
@@ -132,7 +132,7 @@ impl CropRect {
         if rect.is_valid(image_width, image_height, pixel_format) {
             Ok(rect)
         } else {
-            Err(AvifError::UnknownError("".into()))
+            AvifError::unknown_error("")
         }
     }
 }

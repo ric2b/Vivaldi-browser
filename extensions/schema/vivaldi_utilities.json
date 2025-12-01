@@ -678,6 +678,18 @@
             "description": "Installation error description, in case installation failed."
           }
         }
+      },
+      {
+        "id": "CopyToClipboardOptions",
+        "type": "object",
+        "description": "Option object for copyToClipboard.",
+        "properties": {
+          "confidential": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Mark copy as confidential."
+          }
+        }
       }
     ],
     "functions": [
@@ -881,6 +893,18 @@
             }
           ]
         }
+      },
+      {
+        "name": "openFolder",
+        "type": "function",
+        "description": "Opens file manager with given folder path.",
+        "parameters": [
+          {
+            "name": "path",
+            "type": "string",
+            "description":  "Folder path to open."
+          }
+        ]
       },
       {
         "name": "selectLocalImage",
@@ -2228,6 +2252,43 @@
           {
             "name": "text",
             "type": "string"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
+        }
+      },
+      {
+        "name": "showAdditionalStartupPages",
+        "type": "function",
+        "description": "Checks whether should show additional startup pages.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "urls",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "copyToClipboard",
+        "type": "function",
+        "description": "Copy text to clipboard using ScopedClipboardWriter.",
+        "parameters": [
+          {
+            "name": "text",
+            "type": "string"
+          },
+          {
+            "$ref": "CopyToClipboardOptions",
+            "name": "options"
           }
         ],
         "returns_async": {

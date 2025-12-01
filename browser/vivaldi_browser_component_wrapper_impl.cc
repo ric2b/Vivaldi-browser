@@ -13,6 +13,7 @@
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/api/tabs/windows_util.h"
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
+#include "chrome/browser/extensions/api/web_navigation/web_navigation_tab_observer.h"
 #include "chrome/browser/extensions/commands/command_service.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/external_install_error_desktop.h"
@@ -46,6 +47,7 @@
 #include "chrome/browser/ui/recently_audible_helper.h"
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
+#include "chrome/browser/ui/tabs/alert/tab_alert_controller.h"
 #include "chrome/browser/ui/tabs/alert/tab_alert.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/views/eye_dropper/eye_dropper.h"
@@ -82,6 +84,7 @@
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/common/api/commands/commands_handler.h"
 #include "extensions/common/api/extension_action/action_info.h"
 
@@ -112,6 +115,9 @@
 // Note; |vivaldi_browser_component_wrapper_impl| needs to be included last
 // because trickery.
 #include "browser/vivaldi_browser_component_wrapper_impl.h"
+
+#include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 /*static*/ VivaldiBrowserComponentWrapperImpl* wrapper_impl_ = nullptr;
 
@@ -679,23 +685,20 @@ int VivaldiBrowserComponentWrapperImpl::WindowPrivateCreate(
     const std::string& viv_ext_data,
     const std::string& tab_url,
     base::OnceCallback<void(VivaldiBrowserWindow* window)> callback) {
-  VivaldiBrowserWindow* window =
-      VivaldiBrowserComponentWrapper::GetInstance()
-          ->WindowRegistryServiceGetNamedWindow(profile, window_key);
-  if (window) {
-    window->Activate();
-    return window->id();
-  } else {
-    window = new VivaldiBrowserWindow();
+
+  VivaldiBrowserWindow* window = nullptr;
+  if (!window_key.empty()) {
+    window = vivaldi::WindowRegistryService::Get(profile)->GetNamedWindow(
+        window_key);
+
+    if (window) {
+      window->Activate();
+      return window->id();
+    }
+
   }
 
-  if (!window_key.empty()) {
-    window->SetWindowKey(window_key);
-    vivaldi::WindowRegistryService::Get(profile)->AddWindow(window, window_key);
-  }
-  // Delay sending the response until the newly created window has finished its
-  // navigation or was closed during that process.
-  window->SetDidFinishNavigationCallback(std::move(callback));
+  window = new VivaldiBrowserWindow();
 
   Browser::Type window_type = Browser::TYPE_NORMAL;
   // Popup and settingswindow should open as popup and not stored in session.
@@ -709,20 +712,37 @@ int VivaldiBrowserComponentWrapperImpl::WindowPrivateCreate(
     window_type = Browser::TYPE_DEVTOOLS;
   }
 
-  Browser::CreateParams create_params(window_type, profile, false);
 
-  create_params.initial_bounds = window_bounds;
-
-  create_params.creation_source = Browser::CreationSource::kStartupCreator;
-  create_params.is_vivaldi = true;
-  create_params.window = window;
-  create_params.viv_ext_data = viv_ext_data;
+  Browser* browser;
+  if (window_type == Browser::TYPE_DEVTOOLS) {
+    Browser::CreateParams create_params =
+        Browser::CreateParams::CreateForDevToolsForVivaldi(profile);
+    create_params.window = window;
+    browser = Browser::Create(create_params);
+  } else {
+    Browser::CreateParams create_params(window_type, profile, true);
+    create_params.is_vivaldi = true;
+    create_params.viv_ext_data = viv_ext_data;
 #if BUILDFLAG(IS_WIN)
-  // see VB-109884
-  create_params.initial_show_state = window_params.state;
+    // see VB-109884
+    create_params.initial_show_state = window_params.state;
 #endif
-  std::unique_ptr<Browser> browser(Browser::Create(create_params));
-  DCHECK(browser->window() == window);
+    create_params.initial_bounds = window_bounds;
+    create_params.window = window;
+    create_params.creation_source = Browser::CreationSource::kStartupCreator;
+
+    browser = Browser::Create(create_params);
+  }
+
+  if (!window_key.empty()) {
+    window->SetWindowKey(window_key);
+    vivaldi::WindowRegistryService::Get(profile)->AddWindow(window, window_key);
+  }
+
+  // Delay sending the response until the newly created window has finished its
+  // navigation or was closed during that process.
+  window->SetDidFinishNavigationCallback(std::move(callback));
+
   window->SetWindowURL(window_params.resource_relative_url);
   window->CreateWebContents(std::move(browser), window_params);
 
@@ -730,12 +750,8 @@ int VivaldiBrowserComponentWrapperImpl::WindowPrivateCreate(
     content::OpenURLParams urlparams(GURL(tab_url), content::Referrer(),
                                      WindowOpenDisposition::NEW_FOREGROUND_TAB,
                                      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
-    window->browser()->OpenURL(urlparams, /* navigation_handle = */ {});
+    window->browser()->OpenURL(urlparams, /*navigation_handle = */ {});
   }
-
-  // TODO(pettern): If we ever need to open unfocused windows, we need to
-  // add a new method for open delayed and unfocused.
-  //  window->Show(focused ? AppWindow::SHOW_ACTIVE : AppWindow::SHOW_INACTIVE);
 
   return 0;  // Not yet ready, will callback later
 }
@@ -743,11 +759,6 @@ int VivaldiBrowserComponentWrapperImpl::WindowPrivateCreate(
 Browser* VivaldiBrowserComponentWrapperImpl::FindBrowserByWindowId(
     int32_t window_id) {
   return ::vivaldi::FindBrowserByWindowId(window_id);
-}
-
-bool VivaldiBrowserComponentWrapperImpl::IsOutsideAppWindow(int screen_x,
-                                                            int screen_y) {
-  return ::vivaldi::ui_tools::IsOutsideAppWindow(screen_x, screen_y);
 }
 
 content::WebContents*
@@ -856,10 +867,11 @@ void VivaldiBrowserComponentWrapperImpl::DoBeforeUnloadFired(
 void VivaldiBrowserComponentWrapperImpl::GetTabPerformanceData(
     content::WebContents* web_contents,
     uint64_t& memory_usage) {
-  auto* tab = tabs::TabInterface::MaybeGetFromContents(web_contents);
-  auto* const resource_tab_helper =
-      tab->GetTabFeatures()->resource_usage_helper();
-  memory_usage = (resource_tab_helper->GetMemoryUsageInBytes());
+  if (auto* tab = tabs::TabInterface::MaybeGetFromContents(web_contents)) {
+    if (auto* const helper = TabResourceUsageTabHelper::From(tab)) {
+      memory_usage = helper->GetMemoryUsage().InBytes();
+    }
+  }
 }
 
 void VivaldiBrowserComponentWrapperImpl::LoadTabContentsIfNecessary(
@@ -884,8 +896,9 @@ void VivaldiBrowserComponentWrapperImpl::LoadTabContentsIfNecessary(
 std::vector<tabs::TabAlert>
 VivaldiBrowserComponentWrapperImpl::GetTabAlertStatesForContents(
     content::WebContents* web_contents) {
-  return ::GetTabAlertStatesForTab(
-      tabs::TabInterface::GetFromContents(web_contents));
+  tabs::TabInterface* const tab_interface =
+      tabs::TabInterface::GetFromContents(web_contents);
+  return tabs::TabAlertController::From(tab_interface)->GetAllActiveAlerts();
 }
 
 std::unique_ptr<translate::TranslateUIDelegate>
@@ -1075,22 +1088,6 @@ void VivaldiBrowserComponentWrapperImpl::AddGuestToTabStripModel(
           tab_strip->GetIndexOfWebContents(existing_tab), 0);
     }
   }
-}
-
-void VivaldiBrowserComponentWrapperImpl::WindowRegistryServiceAddWindow(
-    content::BrowserContext* browser_context,
-    VivaldiBrowserWindow* window,
-    const std::string& window_key) {
-  vivaldi::WindowRegistryService::Get(browser_context)
-      ->AddWindow(window, window_key);
-}
-
-VivaldiBrowserWindow*
-VivaldiBrowserComponentWrapperImpl::WindowRegistryServiceGetNamedWindow(
-    content::BrowserContext* browser_context,
-    const std::string& window_key) {
-  return vivaldi::WindowRegistryService::Get(browser_context)
-      ->GetNamedWindow(window_key);
 }
 
 bool VivaldiBrowserComponentWrapperImpl::ExtensionTabUtilGetTabById(
@@ -1381,6 +1378,32 @@ void VivaldiBrowserComponentWrapperImpl::HandleRegisterHandlerRequest(
   page_content_settings_delegate->set_pending_protocol_handler(*handler);
   page_content_settings_delegate->set_previous_protocol_handler(
       registry->GetHandlerFor(handler->protocol()));
+}
+
+bool VivaldiBrowserComponentWrapperImpl::IsProtocolHandlerAlreadyDecided(
+    content::WebContents* web_contents,
+    const std::string& protocol,
+    const GURL& url) {
+  custom_handlers::ProtocolHandler handler =
+      custom_handlers::ProtocolHandler::CreateProtocolHandler(
+          protocol, url, blink::ProtocolHandlerSecurityLevel::kStrict);
+
+  if (!handler.IsValid()) {
+    return false;
+  }
+
+  // Get the protocol handler registry for this context
+  custom_handlers::ProtocolHandlerRegistry* registry =
+      ProtocolHandlerRegistryFactory::GetForBrowserContext(
+          web_contents->GetBrowserContext());
+
+  if (!registry) {
+    return false;
+  }
+
+  // Check if already registered (allowed) or ignored (denied)
+  return registry->IsHandledProtocol(handler.protocol()) ||
+         registry->HasIgnoredEquivalent(handler);
 }
 
 void VivaldiBrowserComponentWrapperImpl::SetOrRollbackProtocolHandler(

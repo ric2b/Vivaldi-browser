@@ -132,7 +132,8 @@ class FakePasswordAutofillAgent
               FillField,
               (autofill::FieldRendererId,
                const std::u16string&,
-               autofill::AutofillSuggestionTriggerSource),
+               autofill::FieldPropertiesMask,
+               base::OnceCallback<void(bool)>),
               (override));
   MOCK_METHOD(void,
               FillChangePasswordForm,

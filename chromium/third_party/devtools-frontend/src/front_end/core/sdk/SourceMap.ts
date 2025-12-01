@@ -1,36 +1,6 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
-/*
- * Copyright (C) 2012 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the #name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
 
 import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as ScopesCodec from '../../third_party/source-map-scopes-codec/source-map-scopes-codec.js';
@@ -62,8 +32,7 @@ export interface SourceMapV3Object {
   names?: string[];
   ignoreList?: number[];
   scopes?: string;
-  originalScopes?: string[];
-  generatedRanges?: string;
+  debugId?: string;
   x_google_linecount?: number;
   x_google_ignoreList?: number[];
   x_com_bloomberg_sourcesFunctionMappings?: string[];
@@ -98,7 +67,7 @@ export type SourceMapV3 = SourceMapV3Object|{
  * Parses the {@link content} as JSON, ignoring BOM markers in the beginning, and
  * also handling the CORB bypass prefix correctly.
  *
- * @param content - the string representation of a sourcemap.
+ * @param content the string representation of a sourcemap.
  * @returns the {@link SourceMapV3} representation of the {@link content}.
  */
 export function parseSourceMap(content: string): SourceMapV3 {
@@ -111,6 +80,8 @@ export function parseSourceMap(content: string): SourceMapV3 {
   }
   return JSON.parse(content) as SourceMapV3;
 }
+
+export type DebugId = Platform.Brand.Brand<string, 'DebugId'>;
 
 export class SourceMapEntry {
   readonly lineNumber: number;
@@ -152,15 +123,17 @@ export class SourceMap {
   static retainRawSourceMaps = false;
 
   #json: SourceMapV3|null;
-  readonly #compiledURLInternal: Platform.DevToolsPath.UrlString;
+  readonly #compiledURL: Platform.DevToolsPath.UrlString;
   readonly #sourceMappingURL: Platform.DevToolsPath.UrlString;
   readonly #baseURL: Platform.DevToolsPath.UrlString;
-  #mappingsInternal: SourceMapEntry[]|null;
+  #mappings: SourceMapEntry[]|null;
 
   readonly #sourceInfos: SourceInfo[] = [];
   readonly #sourceInfoByURL = new Map<Platform.DevToolsPath.UrlString, SourceInfo>();
 
   #scopesInfo: SourceMapScopesInfo|null = null;
+
+  readonly #debugId?: DebugId;
 
   /**
    * Implements Source Map V3 model. See https://github.com/google/closure-compiler/wiki/Source-Maps
@@ -170,11 +143,12 @@ export class SourceMap {
       compiledURL: Platform.DevToolsPath.UrlString, sourceMappingURL: Platform.DevToolsPath.UrlString,
       payload: SourceMapV3) {
     this.#json = payload;
-    this.#compiledURLInternal = compiledURL;
+    this.#compiledURL = compiledURL;
     this.#sourceMappingURL = sourceMappingURL;
     this.#baseURL = (Common.ParsedURL.schemeIs(sourceMappingURL, 'data:')) ? compiledURL : sourceMappingURL;
+    this.#debugId = 'debugId' in payload ? (payload.debugId as DebugId | undefined) : undefined;
 
-    this.#mappingsInternal = null;
+    this.#mappings = null;
     if ('sections' in this.#json) {
       if (this.#json.sections.find(section => 'url' in section)) {
         Common.Console.Console.instance().warn(
@@ -214,11 +188,15 @@ export class SourceMap {
   }
 
   compiledURL(): Platform.DevToolsPath.UrlString {
-    return this.#compiledURLInternal;
+    return this.#compiledURL;
   }
 
   url(): Platform.DevToolsPath.UrlString {
     return this.#sourceMappingURL;
+  }
+
+  debugId(): DebugId|null {
+    return this.#debugId ?? null;
   }
 
   sourceURLs(): Platform.DevToolsPath.UrlString[] {
@@ -395,7 +373,7 @@ export class SourceMap {
 
   mappings(): SourceMapEntry[] {
     this.#ensureMappingsProcessed();
-    return this.#mappingsInternal ?? [];
+    return this.#mappings ?? [];
   }
 
   private reversedMappings(sourceURL: Platform.DevToolsPath.UrlString): number[] {
@@ -404,19 +382,19 @@ export class SourceMap {
   }
 
   #ensureMappingsProcessed(): void {
-    if (this.#mappingsInternal === null) {
-      this.#mappingsInternal = [];
+    if (this.#mappings === null) {
+      this.#mappings = [];
       try {
         this.eachSection(this.parseMap.bind(this));
       } catch (e) {
         console.error('Failed to parse source map', e);
-        this.#mappingsInternal = [];
+        this.#mappings = [];
       }
 
       // As per spec, mappings are not necessarily sorted.
       this.mappings().sort(SourceMapEntry.compare);
 
-      this.#computeReverseMappings(this.#mappingsInternal);
+      this.#computeReverseMappings(this.#mappings);
     }
 
     if (!SourceMap.retainRawSourceMaps) {
@@ -604,8 +582,8 @@ export class SourceMap {
    * source entity identified by the `url`. If the `url` does not have any reverse mappings
    * within this source map, an empty array is returned.
    *
-   * @param url - the URL of the source entity to query.
-   * @param textRange - the range of text within the entity to check, considered `[start,end[`.
+   * @param url the URL of the source entity to query.
+   * @param textRange the range of text within the entity to check, considered `[start,end[`.
    * @returns the list of ranges in the generated file that map to locations overlapping the
    *          {@link textRange} in the source file identified by the {@link url}, or `[]`
    *          if the {@link url} does not identify an entity in this source map.
@@ -737,8 +715,8 @@ export class SourceMap {
    * Determines whether this and the {@link other} `SourceMap` agree on content and ignore-list hint
    * with respect to the {@link sourceURL}.
    *
-   * @param sourceURL - the URL to test for (might not be provided by either of the sourcemaps).
-   * @param other - the other `SourceMap` to check.
+   * @param sourceURL the URL to test for (might not be provided by either of the sourcemaps).
+   * @param other the other `SourceMap` to check.
    * @returns `true` if both this and the {@link other} `SourceMap` either both have the ignore-list
    *          hint for {@link sourceURL} or neither, and if both of them either provide the same
    *          content for the {@link sourceURL} inline or both provide no `sourcesContent` entry

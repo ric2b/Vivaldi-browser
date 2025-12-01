@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "ash/constants/ash_features.h"
-#include "ash/public/cpp/multi_user_window_manager.h"
+#include "ash/multi_user/multi_user_window_manager.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
@@ -22,7 +22,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "chromeos/ash/components/scalable_iph/scalable_iph.h"
@@ -179,18 +178,6 @@ void ScalableIphBrowserTestBase::SetUpOnMainThread() {
   if (test_environment().user_session_type() ==
       CustomizableTestEnvBrowserTestBase::UserSessionType::kRegularWithOobe) {
     return;
-  }
-
-  if (enable_multi_user_) {
-    // By default, `MultiUserWindowManager` is created with multi profile off.
-    // Re-create for multi profile tests. This has to be done after
-    // `SetUpOnMainThread` of a base class as the original multi-profile-off
-    // `MultiUserWindowManager` is created there.
-    MultiUserWindowManagerHelper::CreateInstanceForTest();
-    auto account_id = GetPrimaryUserContext().GetAccountId();
-    MultiUserWindowManagerHelper::GetWindowManager()->SetPrimaryUser(
-        account_id);
-    MultiUserWindowManagerHelper::GetInstance()->AddUser(account_id);
   }
 
   // If we don't intend to enforce ScalableIph setup (i.e. the user profile

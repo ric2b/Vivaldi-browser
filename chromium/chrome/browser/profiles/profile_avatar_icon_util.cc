@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 
 #include <algorithm>
@@ -24,6 +19,7 @@
 #include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -476,13 +472,6 @@ constexpr size_t kDefaultAvatarIconsCount = 38;
 #endif
 
 #if !BUILDFLAG(IS_ANDROID)
-// The first 8 icons are generic.
-constexpr size_t kGenericAvatarIconsCount = 8;
-#else
-constexpr size_t kGenericAvatarIconsCount = 0;
-#endif
-
-#if !BUILDFLAG(IS_ANDROID)
 // The avatar used as a placeholder.
 constexpr size_t kPlaceholderAvatarIndex = 26;
 #else
@@ -617,11 +606,13 @@ gfx::Image GetAvatarIconForNSMenu(const base::FilePath& profile_path) {
     return gfx::Image();
   }
 
+  // TODO(pkasting): This should use a `ColorProvider` instead.
+  const bool dark_mode =
+      ui::NativeTheme::GetInstanceForNativeUi()->preferred_color_scheme() ==
+      ui::NativeTheme::PreferredColorScheme::kDark;
+  const SkColor bg_color = dark_mode ? SK_ColorBLACK : SK_ColorWHITE;
   PlaceholderAvatarIconParams icon_params =
-      GetPlaceholderAvatarIconParamsVisibleAgainstColor(
-          ui::NativeTheme::GetInstanceForNativeUi()->ShouldUseDarkColors()
-              ? SK_ColorBLACK
-              : SK_ColorWHITE);
+      GetPlaceholderAvatarIconParamsVisibleAgainstColor(bg_color);
   // Get a higher res than 16px so it looks good after cropping to a circle.
   gfx::Image icon = entry->GetAvatarIcon(
       kAvatarIconSize, /*download_high_res=*/false, icon_params);
@@ -635,10 +626,6 @@ gfx::Image GetAvatarIconForNSMenu(const base::FilePath& profile_path) {
 // Helper methods for accessing, transforming and drawing avatar icons.
 size_t GetDefaultAvatarIconCount() {
   return kDefaultAvatarIconsCount;
-}
-
-size_t GetGenericAvatarIconCount() {
-  return kGenericAvatarIconsCount;
 }
 
 size_t GetPlaceholderAvatarIndex() {

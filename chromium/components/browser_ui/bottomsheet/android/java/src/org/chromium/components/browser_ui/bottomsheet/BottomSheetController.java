@@ -224,6 +224,9 @@ public interface BottomSheetController {
     @ColorInt
     @Nullable Integer getSheetBackgroundColor();
 
+    /** Called when the sheet background color override is changed. */
+    void onSheetBackgroundColorOverrideChanged();
+
     /** Vivaldi
      * Set to make sheet swipe only using toolbar
      */

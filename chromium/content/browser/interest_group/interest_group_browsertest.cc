@@ -799,9 +799,6 @@ class InterestGroupBrowserTest : public ContentBrowserTest {
          {blink::features::kFledgeTrustedSignalsKVv2ContextualData, {}},
          {features::kFledgeTextConversionHelpers, {}},
          {network::features::kAdAuctionEventRegistration, {}},
-         // Needed for reliable handling of click ARA (and hence clickiness)
-         // events.
-         {blink::features::kAttributionReportingInBrowserMigration, {}},
          {blink::features::kFledgeClickiness, {}},
          {network::features::kPopulatePermissionsPolicyOnRequest, {}}},
         /*disabled_features=*/
@@ -9436,7 +9433,7 @@ class InterestGroupAuctionReportBuyersEnableDebugModeTest
     // but we register it beforehand so that it is guaranteed to detect when the
     // private aggregation event is sent.
     EXPECT_CALL(mock_private_aggregation_cb_, Run)
-        .WillRepeatedly(testing::Invoke(
+        .WillRepeatedly(
             [=, this](
                 PrivateAggregationHost::ReportRequestGenerator generator,
                 PrivateAggregationPendingContributions::Wrapper contributions,
@@ -9462,7 +9459,7 @@ class InterestGroupAuctionReportBuyersEnableDebugModeTest
                   null_report_behavior,
                   PrivateAggregationHost::NullReportBehavior::kDontSendReport);
               run_loop_->Quit();
-            }));
+            });
   }
 
   void ExpectNoPrivateAggregationCall() {
@@ -9742,7 +9739,7 @@ IN_PROC_BROWSER_TEST_F(InterestGroupAuctionReportBuyersEnableDebugModeTest,
   std::optional<AggregatableReportRequest> request_returned;
 
   EXPECT_CALL(mock_private_aggregation_cb_, Run)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&](PrivateAggregationHost::ReportRequestGenerator generator,
               PrivateAggregationPendingContributions::Wrapper contributions,
               PrivateAggregationBudgetKey budget_key,
@@ -9758,7 +9755,7 @@ IN_PROC_BROWSER_TEST_F(InterestGroupAuctionReportBuyersEnableDebugModeTest,
                 PrivateAggregationHost::NullReportBehavior::kDontSendReport);
 
             run_loop.Quit();
-          }));
+          });
 
   RunAuctionAndWaitForURLAndNavigateIframe(
       JsReplace(
@@ -10726,14 +10723,11 @@ IN_PROC_BROWSER_TEST_F(InterestGroupBrowserTest,
       test_origin,
       embedded_https_test_server().GetURL("a.test",
                                           "/interest_group/decision_logic.js"));
-  int screen_width = static_cast<int>(display::Screen::GetScreen()
-                                          ->GetPrimaryDisplay()
-                                          .GetSizeInPixel()
-                                          .width());
-  int screen_height = static_cast<int>(0.5 * display::Screen::GetScreen()
-                                                 ->GetPrimaryDisplay()
-                                                 .GetSizeInPixel()
-                                                 .height());
+  int screen_width = static_cast<int>(
+      display::Screen::Get()->GetPrimaryDisplay().GetSizeInPixel().width());
+  int screen_height = static_cast<int>(
+      0.5 *
+      display::Screen::Get()->GetPrimaryDisplay().GetSizeInPixel().height());
   GURL expected_url = embedded_https_test_server().GetURL(
       "c.test", base::StringPrintf("/echo?render_cars&size=%ix%i", screen_width,
                                    screen_height));
@@ -10778,14 +10772,11 @@ IN_PROC_BROWSER_TEST_F(
       test_origin,
       embedded_https_test_server().GetURL("a.test",
                                           "/interest_group/decision_logic.js"));
-  int screen_width = static_cast<int>(display::Screen::GetScreen()
-                                          ->GetPrimaryDisplay()
-                                          .GetSizeInPixel()
-                                          .width());
-  int screen_height = static_cast<int>(0.5 * display::Screen::GetScreen()
-                                                 ->GetPrimaryDisplay()
-                                                 .GetSizeInPixel()
-                                                 .height());
+  int screen_width = static_cast<int>(
+      display::Screen::Get()->GetPrimaryDisplay().GetSizeInPixel().width());
+  int screen_height = static_cast<int>(
+      0.5 *
+      display::Screen::Get()->GetPrimaryDisplay().GetSizeInPixel().height());
   GURL expected_url = embedded_https_test_server().GetURL(
       "c.test", base::StringPrintf("/echo?render_cars&size=%ix%i", screen_width,
                                    screen_height));
@@ -12946,14 +12937,11 @@ IN_PROC_BROWSER_TEST_F(InterestGroupFencedFrameBrowserTest,
       RunAuctionAndNavigateFencedFrame(ad_url, auction_config));
 
   // Verify the ad is loaded with the size specified in the winning bid.
-  int screen_width = static_cast<int>(display::Screen::GetScreen()
-                                          ->GetPrimaryDisplay()
-                                          .GetSizeInPixel()
-                                          .width());
-  int screen_height = static_cast<int>(0.5 * display::Screen::GetScreen()
-                                                 ->GetPrimaryDisplay()
-                                                 .GetSizeInPixel()
-                                                 .height());
+  int screen_width = static_cast<int>(
+      display::Screen::Get()->GetPrimaryDisplay().GetSizeInPixel().width());
+  int screen_height = static_cast<int>(
+      0.5 *
+      display::Screen::Get()->GetPrimaryDisplay().GetSizeInPixel().height());
   RenderFrameHost* ad_frame = GetFencedFrameRenderFrameHost(shell());
   EXPECT_TRUE(WaitForLoadStop(web_contents()));
   // Force layout.
@@ -13014,14 +13002,11 @@ IN_PROC_BROWSER_TEST_F(InterestGroupFencedFrameBrowserTest,
   RenderFrameHost* ad_frame = GetFencedFrameRenderFrameHost(shell());
 
   // Verify the ad is loaded with the size specified in the winning bid.
-  int screen_width = static_cast<int>(display::Screen::GetScreen()
-                                          ->GetPrimaryDisplay()
-                                          .GetSizeInPixel()
-                                          .width());
-  int screen_height = static_cast<int>(0.5 * display::Screen::GetScreen()
-                                                 ->GetPrimaryDisplay()
-                                                 .GetSizeInPixel()
-                                                 .height());
+  int screen_width = static_cast<int>(
+      display::Screen::Get()->GetPrimaryDisplay().GetSizeInPixel().width());
+  int screen_height = static_cast<int>(
+      0.5 *
+      display::Screen::Get()->GetPrimaryDisplay().GetSizeInPixel().height());
   EXPECT_TRUE(WaitForLoadStop(web_contents()));
   // Force layout.
   EXPECT_TRUE(
@@ -21221,7 +21206,7 @@ IN_PROC_BROWSER_TEST_F(InterestGroupFencedFrameBrowserTest,
   // so that it is guaranteed to detect when the private aggregation event is
   // sent.
   EXPECT_CALL(mock_callback, Run)
-      .WillRepeatedly(testing::Invoke(
+      .WillRepeatedly(
           [&](PrivateAggregationHost::ReportRequestGenerator generator,
               PrivateAggregationPendingContributions::Wrapper contributions,
               PrivateAggregationBudgetKey budget_key,
@@ -21239,7 +21224,7 @@ IN_PROC_BROWSER_TEST_F(InterestGroupFencedFrameBrowserTest,
                 null_report_behavior,
                 PrivateAggregationHost::NullReportBehavior::kDontSendReport);
             run_loop.Quit();
-          }));
+          });
 
   GURL ad_url = embedded_https_test_server().GetURL(
       "c.test",
@@ -26373,8 +26358,16 @@ class InterestGroupOOPIFBrowserTest : public InterestGroupBrowserTest {
 
 // Test to make sure we don't crash when Page changes with DFSS ad slot pending.
 // https://crbug.com/326085515
+// TODO(crbug.com/446756531): Re-enable this test.
+#if (BUILDFLAG(IS_FUCHSIA) || (BUILDFLAG(IS_WIN) && defined(ADDRESS_SANITIZER)))
+#define MAYBE_PageImplChangeDirectFromSellerSignals \
+  DISABLED_PageImplChangeDirectFromSellerSignals
+#else
+#define MAYBE_PageImplChangeDirectFromSellerSignals \
+  PageImplChangeDirectFromSellerSignals
+#endif
 IN_PROC_BROWSER_TEST_F(InterestGroupOOPIFBrowserTest,
-                       PageImplChangeDirectFromSellerSignals) {
+                       MAYBE_PageImplChangeDirectFromSellerSignals) {
   GURL initial_url(embedded_https_test_server().GetURL(
       "a.test",
       "/cross_site_iframe_factory.html?a.test(b.test{allow-join-ad-interest-"

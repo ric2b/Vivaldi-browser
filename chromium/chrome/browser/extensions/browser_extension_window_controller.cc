@@ -19,6 +19,7 @@
 #include "chrome/common/extensions/api/tabs.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/sessions/core/session_id.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_handlers/incognito_info.h"
@@ -38,6 +39,8 @@
 #include "app/vivaldi_constants.h"
 #include "components/extensions/vivaldi_panel_utils.h"
 #include "ui/vivaldi_browser_ui_data.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace extensions {
 
@@ -61,25 +64,34 @@ constexpr char kShowStateValueLockedFullscreen[] = "locked-fullscreen";
 #endif
 
 api::tabs::WindowType GetTabsWindowType(const BrowserWindowInterface* browser) {
-#if BUILDFLAG(IS_ANDROID)
-  return api::tabs::WindowType::kNormal;
-#else
-  using BrowserType = BrowserWindowInterface::Type;
-  const BrowserType type = browser->GetType();
-  if (type == BrowserType::TYPE_DEVTOOLS) {
-    return api::tabs::WindowType::kDevtools;
-  }
-  // Browser::TYPE_APP_POPUP is considered 'popup' rather than 'app' since
-  // chrome.windows.create({type: 'popup'}) uses
-  // Browser::CreateParams::CreateForAppPopup().
-  if (type == BrowserType::TYPE_POPUP || type == BrowserType::TYPE_APP_POPUP) {
-    return api::tabs::WindowType::kPopup;
-  }
-  if (type == BrowserType::TYPE_APP) {
-    return api::tabs::WindowType::kApp;
-  }
-  return api::tabs::WindowType::kNormal;
+  switch (browser->GetType()) {
+    case BrowserWindowInterface::TYPE_APP:
+      return api::tabs::WindowType::kApp;
+    // Browser::TYPE_APP_POPUP is considered 'popup' rather than 'app' since
+    // chrome.windows.create({type: 'popup'}) uses
+    // Browser::CreateParams::CreateForAppPopup().
+    case BrowserWindowInterface::TYPE_APP_POPUP:
+    case BrowserWindowInterface::TYPE_POPUP:
+      return api::tabs::WindowType::kPopup;
+#if !BUILDFLAG(IS_ANDROID)
+    case BrowserWindowInterface::TYPE_DEVTOOLS:
+      return api::tabs::WindowType::kDevtools;
 #endif
+
+    // All the following are considered "normal".
+    // TODO(https://crbug.com/438514981): This is almost certainly wrong, and
+    // an artifact of not updating this when new types were added. PIP is
+    // closer to a popup, and custom tabs might be app-like (if they can even
+    // reach this point).
+    case BrowserWindowInterface::TYPE_NORMAL:
+#if !BUILDFLAG(IS_ANDROID)
+    case BrowserWindowInterface::TYPE_PICTURE_IN_PICTURE:
+#endif
+#if BUILDFLAG(IS_CHROMEOS)
+    case BrowserWindowInterface::TYPE_CUSTOM_TAB:
+#endif
+      return api::tabs::WindowType::kNormal;
+  }
 }
 
 }  // anonymous namespace
@@ -92,8 +104,8 @@ BrowserExtensionWindowController::BrowserExtensionWindowController(
       browser_(CHECK_DEREF(browser)),
 #if !BUILDFLAG(IS_ANDROID)
       window_(CHECK_DEREF(browser->GetBrowserForMigrationOnly()->window())),
-      tab_list_(CHECK_DEREF(TabListInterface::From(browser))),
 #endif  // !BUILDFLAG(IS_ANDROID)
+      tab_list_(CHECK_DEREF(TabListInterface::From(browser))),
       session_id_(browser->GetSessionID()),
       window_type_(GetTabsWindowType(browser)),
       scoped_data_holder_(browser->GetUnownedUserDataHost(), *this) {
@@ -165,14 +177,9 @@ bool BrowserExtensionWindowController::IsDeleteScheduled() const {
 }
 
 content::WebContents* BrowserExtensionWindowController::GetActiveTab() const {
-#if BUILDFLAG(IS_ANDROID)
-  NOTIMPLEMENTED();
-  return nullptr;
-#else
   // In some situations, especially tests, there may not be an active tab.
   tabs::TabInterface* active_tab = tab_list_->GetActiveTab();
   return active_tab ? active_tab->GetContents() : nullptr;
-#endif
 }
 
 bool BrowserExtensionWindowController::HasEditableTabStrip() const {
@@ -185,22 +192,12 @@ bool BrowserExtensionWindowController::HasEditableTabStrip() const {
 }
 
 int BrowserExtensionWindowController::GetTabCount() const {
-#if BUILDFLAG(IS_ANDROID)
-  NOTIMPLEMENTED();
-  return 0;
-#else
   return tab_list_->GetTabCount();
-#endif
 }
 
 content::WebContents* BrowserExtensionWindowController::GetWebContentsAt(
     int i) const {
-#if BUILDFLAG(IS_ANDROID)
-  NOTIMPLEMENTED();
-  return nullptr;
-#else
   return tab_list_->GetTab(i)->GetContents();
-#endif
 }
 
 bool BrowserExtensionWindowController::IsVisibleToTabsAPIForExtension(
@@ -278,15 +275,25 @@ base::Value::List BrowserExtensionWindowController::CreateTabList(
     const Extension* extension,
     mojom::ContextType context) const {
   base::Value::List tab_list;
-
-#if BUILDFLAG(IS_ANDROID)
-  NOTIMPLEMENTED();
-#else
   const int tab_count = tab_list_->GetTabCount();
 
   for (int i = 0; i < tab_count; ++i) {
     content::WebContents* web_contents = tab_list_->GetTab(i)->GetContents();
+
+#if BUILDFLAG(IS_ANDROID)
+    // TODO(http://crbug.com/444022301): Also CHECK(web_contents) on Android.
+    //
+    // This is a temporary workaround to avoid crashes on Android, where
+    // restored tabs may have null WebContents. The workaround introduces a bug:
+    // restored tabs are visible on the tab strip, but not all of them can be
+    // seen by extensions.
+    if (web_contents == nullptr) {
+      continue;
+    }
+#else
     CHECK(web_contents);
+#endif
+
     const ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
         ExtensionTabUtil::GetScrubTabBehavior(extension, context, web_contents);
 
@@ -301,7 +308,6 @@ base::Value::List BrowserExtensionWindowController::CreateTabList(
                                           extension, &tab_list_.get(), i)
             .ToValue());
   }
-#endif
 
   return tab_list;
 }

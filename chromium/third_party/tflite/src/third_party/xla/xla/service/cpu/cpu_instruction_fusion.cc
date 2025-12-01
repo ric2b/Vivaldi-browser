@@ -38,17 +38,9 @@ namespace cpu {
 namespace {
 
 bool CanBeLoopFused(const HloInstruction& hlo) {
-  const HloModuleConfig& config = hlo.parent()->parent()->config();
-  bool use_new_fusion = options::UseExperimentalLoopFusion(config);
-  if (use_new_fusion && hlo.opcode() == HloOpcode::kDynamicUpdateSlice) {
-    // TODO(willfroom): Remove this once we port DUS emitter.
-    return false;
-  }
-
   // These are the only ones we fuse since we rely on effective elemental IR
   // generation.
-  return hlo.IsElementwise() ||  //
-         hlo.opcode() == HloOpcode::kBitcast ||
+  return hlo.IsElementwise() || hlo.opcode() == HloOpcode::kBitcast ||
          hlo.opcode() == HloOpcode::kBroadcast ||
          hlo.opcode() == HloOpcode::kConcatenate ||
          hlo.opcode() == HloOpcode::kDynamicSlice ||

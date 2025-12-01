@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,11 +14,11 @@ import {Plugin} from './Plugin.js';
 
 const UIStrings = {
   /**
-   *@description Text in Snippets Plugin of the Sources panel
+   * @description Text in Snippets Plugin of the Sources panel
    */
   enter: '⌘+Enter',
   /**
-   *@description Text in Snippets Plugin of the Sources panel
+   * @description Text in Snippets Plugin of the Sources panel
    */
   ctrlenter: 'Ctrl+Enter',
 } as const;

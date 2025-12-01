@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include <stddef.h>
 
 #include <algorithm>
@@ -322,7 +317,6 @@ FormData FindForm(const blink::WebFormControlElement& element) {
   if (auto p = FindFormAndFieldForFormControlElement(
           element, *base::MakeRefCounted<FieldDataManager>(),
           kExtractFormDataCallTimerStateDummy, /*button_titles_cache=*/nullptr,
-          /*extract_options=*/{},
           /*form_cache=*/{})) {
     return p->first;
   }
@@ -376,23 +370,17 @@ class FormAutofillTest : public test::AutofillRendererTest {
     test::AutofillRendererTest::TearDown();
   }
 
-  std::optional<FormData> ExtractFormData(
-      WebFormElement form,
-      DenseSet<ExtractOption> extract_options = {}) {
+  std::optional<FormData> ExtractFormData(WebFormElement form) {
     return form_util::ExtractFormData(
         GetDocument(), form, *base::MakeRefCounted<FieldDataManager>(),
-        kExtractFormDataCallTimerStateDummy, /*button_titles_cache=*/nullptr,
-        extract_options);
+        kExtractFormDataCallTimerStateDummy, /*button_titles_cache=*/nullptr);
   }
 
   std::optional<std::pair<FormData, raw_ref<const FormFieldData>>>
-  FindFormAndFieldForFormControlElement(
-      WebFormControlElement control,
-      DenseSet<ExtractOption> extract_options = {}) {
+  FindFormAndFieldForFormControlElement(WebFormControlElement control) {
     return form_util::FindFormAndFieldForFormControlElement(
         control, *base::MakeRefCounted<FieldDataManager>(),
         kExtractFormDataCallTimerStateDummy, /*button_titles_cache=*/nullptr,
-        extract_options,
         /*form_cache=*/{});
   }
 
@@ -1845,7 +1833,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToFormField) {
 
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(WebFormElement(), element, nullptr,
-                                             /*extract_options=*/{}, &result);
+                                             &result);
 
   FormFieldData expected;
   expected.set_form_control_type(FormControlType::kInputText);
@@ -1866,7 +1854,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToFormFieldAutocompleteOff) {
   WebFormControlElement element = GetFormControlElementById("element");
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(WebFormElement(), element, nullptr,
-                                             {}, &result);
+                                             &result);
 
   FormFieldData expected;
   expected.set_id_attribute(u"element");
@@ -1888,7 +1876,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToFormFieldMaxLength) {
   WebFormControlElement element = GetFormControlElementById("element");
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(WebFormElement(), element, nullptr,
-                                             {}, &result);
+                                             &result);
 
   FormFieldData expected;
   expected.set_id_attribute(u"element");
@@ -1910,7 +1898,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToFormFieldAutofilled) {
   element.SetAutofillState(WebAutofillState::kAutofilled);
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(WebFormElement(), element, nullptr,
-                                             {}, &result);
+                                             &result);
 
   FormFieldData expected;
   expected.set_id_attribute(u"element");
@@ -1935,7 +1923,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToClickableFormField) {
   element.SetAutofillState(WebAutofillState::kAutofilled);
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(WebFormElement(), element, nullptr,
-                                             {}, &result);
+                                             &result);
 
   FormFieldData expected;
   expected.set_id_attribute(u"checkbox");
@@ -1950,7 +1938,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToClickableFormField) {
   element = GetInputElementById("radio");
   element.SetAutofillState(WebAutofillState::kAutofilled);
   WebFormControlElementToFormFieldForTesting(WebFormElement(), element, nullptr,
-                                             {}, &result);
+                                             &result);
   expected.set_id_attribute(u"radio");
   expected.set_name(expected.id_attribute());
   expected.set_value(u"male");
@@ -1974,7 +1962,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToFormFieldSelect) {
   WebFormControlElement element = GetFormControlElementById("element");
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(WebFormElement(), element, nullptr,
-                                             {}, &result);
+                                             &result);
 
   FormFieldData expected;
   expected.set_id_attribute(u"element");
@@ -2009,7 +1997,7 @@ TEST_F(FormAutofillTest,
 
   FormFieldData result1;
   WebFormControlElementToFormFieldForTesting(WebFormElement(), element, nullptr,
-                                             {}, &result1);
+                                             &result1);
 
   FormFieldData expected;
   expected.set_id_attribute(u"element");
@@ -2047,7 +2035,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToFormFieldLongSelect) {
   WebFormControlElement element = GetFormControlElementById("element");
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(WebFormElement(), element, nullptr,
-                                             {}, &result);
+                                             &result);
 
   EXPECT_TRUE(result.options().empty());
 }
@@ -2066,7 +2054,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToFormFieldSelectAriaLabel) {
 
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(WebFormElement(), element, nullptr,
-                                             {}, &result);
+                                             &result);
   ASSERT_EQ(2u, result.options().size());
   EXPECT_EQ(u"usa", result.options()[0].text);
   EXPECT_EQ(u"uk", result.options()[1].text);
@@ -2086,7 +2074,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToFormFieldSelectNestedNodes) {
 
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(WebFormElement(), element, nullptr,
-                                             {}, &result);
+                                             &result);
   ASSERT_EQ(1u, result.options().size());
   EXPECT_EQ(u"+1 (Canada)", result.options()[0].text);
 }
@@ -2102,7 +2090,7 @@ spans multiple lines.</textarea>)");
   WebFormControlElement element = GetFormControlElementById("element");
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(WebFormElement(), element, nullptr,
-                                             {}, &result);
+                                             &result);
 
   FormFieldData expected;
   expected.set_id_attribute(u"element");
@@ -2126,7 +2114,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToFormFieldMonthInput) {
   FormFieldData result_sans_value;
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(WebFormElement(), element, nullptr,
-                                             {}, &result);
+                                             &result);
 
   FormFieldData expected;
   expected.set_id_attribute(u"element");
@@ -2149,7 +2137,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToPasswordFormField) {
   WebFormControlElement element = GetFormControlElementById("password");
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(element.Form(), element, nullptr,
-                                             {}, &result);
+                                             &result);
 
   FormFieldData expected;
   expected.set_max_length(FormFieldData::kDefaultMaxLength);
@@ -2225,8 +2213,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToFormFieldAutocompletetype) {
         GetFormControlElementById(test_case.element_id);
     FormFieldData result;
     WebFormControlElementToFormFieldForTesting(WebFormElement(), element,
-                                               nullptr,
-                                               /*extract_options=*/{}, &result);
+                                               nullptr, &result);
 
     FormFieldData expected;
     expected.set_id_attribute(ASCIIToUTF16(test_case.element_id));
@@ -2259,7 +2246,7 @@ TEST_F(FormAutofillTest, DetectTextDirectionFromDirectStyle) {
   WebFormControlElement element = GetFormControlElementById("element");
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(element.Form(), element, nullptr,
-                                             {}, &result);
+                                             &result);
   EXPECT_EQ(base::i18n::RIGHT_TO_LEFT, result.text_direction());
 }
 
@@ -2274,7 +2261,7 @@ TEST_F(FormAutofillTest, DetectTextDirectionFromDirectDIRAttribute) {
   WebFormControlElement element = GetFormControlElementById("element");
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(element.Form(), element, nullptr,
-                                             {}, &result);
+                                             &result);
   EXPECT_EQ(base::i18n::RIGHT_TO_LEFT, result.text_direction());
 }
 
@@ -2290,7 +2277,7 @@ TEST_F(FormAutofillTest, DetectTextDirectionFromParentStyle) {
   WebFormControlElement element = GetFormControlElementById("element");
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(element.Form(), element, nullptr,
-                                             {}, &result);
+                                             &result);
   EXPECT_EQ(base::i18n::RIGHT_TO_LEFT, result.text_direction());
 }
 
@@ -2305,7 +2292,7 @@ TEST_F(FormAutofillTest, DetectTextDirectionFromParentDIRAttribute) {
   WebFormControlElement element = GetFormControlElementById("element");
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(element.Form(), element, nullptr,
-                                             {}, &result);
+                                             &result);
   EXPECT_EQ(base::i18n::RIGHT_TO_LEFT, result.text_direction());
 }
 
@@ -2321,7 +2308,7 @@ TEST_F(FormAutofillTest, DetectTextDirectionWhenStyleAndDIRAttributeMixed) {
   WebFormControlElement element = GetFormControlElementById("element");
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(element.Form(), element, nullptr,
-                                             {}, &result);
+                                             &result);
   EXPECT_EQ(base::i18n::LEFT_TO_RIGHT, result.text_direction());
 }
 
@@ -2338,7 +2325,7 @@ TEST_F(FormAutofillTest, TextAlignOverridesDirection) {
   WebFormControlElement element = GetFormControlElementById("element");
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(element.Form(), element, nullptr,
-                                             {}, &result);
+                                             &result);
   EXPECT_EQ(base::i18n::RIGHT_TO_LEFT, result.text_direction());
 
   // text-align: left
@@ -2352,7 +2339,7 @@ TEST_F(FormAutofillTest, TextAlignOverridesDirection) {
 
   element = GetFormControlElementById("element");
   WebFormControlElementToFormFieldForTesting(element.Form(), element, nullptr,
-                                             {}, &result);
+                                             &result);
   EXPECT_EQ(base::i18n::LEFT_TO_RIGHT, result.text_direction());
 }
 
@@ -2369,7 +2356,7 @@ TEST_F(FormAutofillTest,
   WebFormControlElement element = GetFormControlElementById("element");
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(element.Form(), element, nullptr,
-                                             {}, &result);
+                                             &result);
   EXPECT_EQ(base::i18n::LEFT_TO_RIGHT, result.text_direction());
 }
 
@@ -2386,7 +2373,7 @@ TEST_F(FormAutofillTest, DetectTextDirectionWhenAncestorHasInlineStyle) {
   WebFormControlElement element = GetFormControlElementById("element");
   FormFieldData result;
   WebFormControlElementToFormFieldForTesting(element.Form(), element, nullptr,
-                                             {}, &result);
+                                             &result);
   EXPECT_EQ(base::i18n::RIGHT_TO_LEFT, result.text_direction());
 }
 

@@ -19,16 +19,13 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />ਮੁਖਤਿਆਰੀ ਤੇ ਫ਼ਾਇਰਵਾਲ ਦੀ ਜਾਂਚ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">ਇਸਨੂੰ ਜਾਰੀ ਕੀਤਾ: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">ਇਹ ਸਾਈਟ ਸੁਰੱਖਿਅਤ ਕਨੈਕਸ਼ਨ ਮੁਹੱਈਆ ਨਹੀਂ ਕਰਵਾ ਸਕਦੀ</translation>
-<translation id="2187317261103489799">ਪਤਾ ਲਾਓ (ਮੂਲ)</translation>
 <translation id="2224337661447660594">ਇੰਟਰਨੈੱਟ ਨਹੀਂ ਹੈ</translation>
 <translation id="2292556288342944218">ਤੁਹਾਡੇ ਇੰਟਰਨੈੱਟ ਵਰਤਣ 'ਤੇ ਰੋਕ ਲੱਗੀ ਹੋਈ ਹੈ</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> ਲਈ ਵਰਤੋਂਕਾਰ-ਨਾਂ ਅਤੇ ਪਾਸਵਰਡ ਚਾਹੀਦਾ ਹੈ।</translation>
 <translation id="2337852623177822836">ਸੈਟਿੰਗਾਂ ਤੁਹਾਡੇ ਪ੍ਰਸ਼ਾਸਕ ਦੇ ਕੰਟਰੋਲ ਵਿੱਚ ਹਨ</translation>
 <translation id="2355395290879513365">ਹਮਲਾਵਰ ਉਹਨਾਂ ਤਸਵੀਰਾਂ ਨੂੰ ਦੇਖ ਸਕਦੇ ਹਨ ਜਿਹਨਾਂ ਨੂੰ ਤੁਸੀਂ ਦੇਖ ਰਹੇ ਹੋ ਅਤੇ ਉਹਨਾਂ ਨੂੰ ਸੋਧ ਕੇ ਤੁਹਾਨੂੰ ਭਰਮਾ ਸਕਦੇ ਹਨ।</translation>
-<translation id="2356070529366658676">ਪੁੱਛੋ</translation>
 <translation id="2359808026110333948">ਜਾਰੀ ਰੱਖੋ</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />ਨੈੱਟਵਰਕ ਰੋਗ-ਜਾਂਚਕ<ph name="END_LINK" /></translation>
-<translation id="2539524384386349900">ਪਤਾ ਲਾਓ</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> ਨੇ ਨਜਾਇਜ਼ ਜਵਾਬ ਭੇਜਿਆ ਹੈ।</translation>
 <translation id="2634124572758952069"><ph name="HOST_NAME" /> ਦੇ ਸਰਵਰ ਦਾ IP ਪਤਾ ਨਹੀਂ ਲੱਭ ਸਕਿਆ।</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -51,9 +48,7 @@
       ਕਿ ਤੁਸੀਂ ਮੁਖਤਿਆਰੀ ਸਰਵਰ ਨਹੀਂ ਵਰਤ ਰਹੇ ਤਾਂ:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">ਪੰਨਾ ਲੋਡ ਕਰਨ ਲਈ ਚਾਹੀਦੇ ਡਾਟੇ ਨੂੰ ਮੁੜ-ਜਮ੍ਹਾ ਕਰਵਾਉਣ ਲਈ 'ਮੁੜ-ਲੋਡ ਕਰੋ' ਬਟਨ ਦਬਾਓ।</translation>
-<translation id="3234666976984236645">ਹਮੇਸ਼ਾ ਇਸ ਸਾਇਟ 'ਤੇ ਜ਼ਰੂਰੀ ਸਮੱਗਰੀ ਦੀ ਪਤਾ ਲਾਓ</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> ਮੌਜੂਦਾ ਸਮੇਂ ਅਪਹੁੰਚਯੋਗ ਹੈ।</translation>
-<translation id="3427092606871434483">ਪ੍ਰਵਾਨ ਕਰੋ (ਮੂਲ)</translation>
 <translation id="3447661539832366887">ਇਸ ਡਿਵਾਇਸ ਦੇ ਮਾਲਕ ਨੇ ਡਾਇਨਾਸੋਰ ਗੇਮ ਨੂੰ ਬੰਦ ਕਰ ਦਿੱਤਾ ਹੈ।</translation>
 <translation id="3447884698081792621">ਸਰਟੀਫਿਕੇਟ ਦਿਖਾਓ (<ph name="ISSUER" /> ਵੱਲੋਂ ਜਾਰੀ ਕੀਤਾ ਗਿਆ ਹੈ)</translation>
 <translation id="3462200631372590220">ਉੱਨਤ ਲੁਕਾਓ</translation>
@@ -73,14 +68,12 @@
 <translation id="4075732493274867456">ਗਾਹਕ ਤੇ ਸਰਵਰ ਆਮ SSL ਪ੍ਰੋਟੋਕਾਲ ਸੰਸਕਰਨ ਜਾਂ ਸਿਫਰ ਸਵੀਟ ਦਾ ਸਮਰਥਨ ਨਹੀਂ ਕਰਦੇ।</translation>
 <translation id="4116663294526079822">ਇਸ ਸਾਇਟ 'ਤੇ ਹਮੇਸ਼ਾ ਪ੍ਰਵਾਨ ਕਰੋ</translation>
 <translation id="4130226655945681476">ਨੈੱਟਵਰਕ ਕੇਬਲਾਂ, ਮੌਡਮ, ਅਤੇ ਰਾਊਟਰ ਦੀ ਜਾਂਚ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ</translation>
-<translation id="4151403195736952345">ਗਲੋਬਲ ਮੂਲ ਵਰਤੋ (ਪਤਾ ਕਰੋ)</translation>
 <translation id="4165986682804962316">ਸਾਇਟ ਦੀਆਂ ਸੈਟਿੰਗਾਂ</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />ਫ਼ਾਇਰਵਾਲ ਅਤੇ ਐਂਟੀਵਾਇਰਸ ਦੀ ਰੂਪ-ਰੇਖਾ ਦੀ ਜਾਂਚ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />ਨੈੱਟਵਰਕ ਰੋਗ-ਜਾਂਚਕ ਵਰਤਕੇ ਦੇਖੋ<ph name="END_LINK" />।</translation>
 <translation id="4235360514405112390">ਜਾਇਜ਼ ਹੈ</translation>
 <translation id="4250431568374086873">ਇਸ ਸਾਇਟ ਨਾਲ ਤੁਹਾਡਾ ਕਨੈਕਸ਼ਨ ਪੂਰੀ ਤਰ੍ਹਾਂ ਸੁਰੱਖਿਅਤ ਨਹੀਂ ਹੈ</translation>
 <translation id="4265872034478892965">ਤੁਹਾਡੇ ਪ੍ਰਸ਼ਾਸਕ ਵੱਲੋਂ ਪ੍ਰਵਾਨਿਤ ਹੈ</translation>
-<translation id="4312866146174492540">ਰੋਕ ਲਾਓ (ਮੂਲ)</translation>
 <translation id="4408413947728134509">ਕੁਕੀਆਂ <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> ਨੇ ਤੁਹਾਡਾ ਦਾਖਲਾ ਸਰਟੀਫਿਕੇਟ ਸਵੀਕਾਰ ਨਹੀਂ ਕੀਤਾ, ਜਾਂ ਸ਼ਾਇਦ ਮੁਹੱਈਆ ਨਹੀਂ ਕਰਵਾਇਆ ਗਿਆ।</translation>
 <translation id="4506599922270137252">ਸਿਸਟਮ ਪ੍ਰਸ਼ਾਸਕ ਨਾਲ ਸੰਪਰਕ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ</translation>
@@ -95,7 +88,6 @@
 <translation id="4764776831041365478"><ph name="URL" /> ਸਥਿੱਤ ਵੈੱਬਪੰਨਾ ਜਾਂ ਤਾਂ ਆਰਜੀ ਤੌਰ 'ਤੇ ਅਣ-ਉਪਲਬਧ ਹੈ ਜਾਂ ਸਦਾ ਲਈ ਕਿਸੇ ਨਵੇਂ ਵੈੱਬ ਪਤੇ 'ਤੇ ਲਿਜਾਇਆ ਜਾ ਚੁੱਕਿਆ ਹੈ।</translation>
 <translation id="4943872375798546930">ਕੋਈ ਨਤੀਜਾ ਨਹੀਂ</translation>
 <translation id="5023310440958281426">ਆਪਣੇ ਪ੍ਰਸ਼ਾਸਕ ਦੀਆਂ ਨੀਤੀਆਂ ਦੀ ਜਾਂਚ ਕਰੋ</translation>
-<translation id="5039804452771397117">ਪ੍ਰਵਾਨ ਕਰੋ</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 ਵਰਤੋਂ ਵਿੱਚ)} other {(# ਵਰਤੋਂ ਵਿੱਚ)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />ਮੁਖਤਿਆਰੀ ਦੇ ਪਤੇ ਦੀ ਜਾਂਚ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-ਬਿੱਟ)</translation>
@@ -137,7 +129,6 @@
 <translation id="6711464428925977395">ਮੁਖਤਿਆਰੀ ਸਰਵਰ ਵਿੱਚ ਕੁਝ ਗਲਤ ਹੋਇਆ ਹੈ, ਜਾਂ ਪਤਾ ਸਹੀ ਨਹੀਂ ਹੈ।</translation>
 <translation id="6757797048963528358">ਤੁਹਾਡੀ ਡਿਵਾਇਸ ਸੌਂ ਗਈ ਸੀ।</translation>
 <translation id="6897140037006041989">ਵਰਤੋਂਕਾਰ ਏਜੰਟ</translation>
-<translation id="7053983685419859001">ਰੋਕ ਲਾਓ</translation>
 <translation id="7108819624672055576">ਵਾਧੜੇ ਵੱਲੋਂ ਪ੍ਰਵਾਨਿਤ ਹੈ</translation>
 <translation id="7111012039238467737">(ਜਾਇਜ਼)</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ਸੁਰੱਖਿਆ ਮਿਆਰਾਂ ਦਾ ਪਾਲਣਾ ਨਹੀਂ ਕਰਦਾ।</translation>
@@ -158,7 +149,6 @@
 <translation id="7834399512844817676"><ph name="SITE" /> ਤੁਹਾਡੀ ਜਾਣਕਾਰੀ ਦੀ ਰੱਖਿਆ ਕਰਨ ਲਈ ਆਮ ਤੌਰ 'ਤੇ ਇਨਕਰਿਪਸ਼ਨ ਵਰਤਦੀ ਹੈ। ਇਸ ਵਾਰ ਜਦੋਂ ਵਿਵਾਲਡੀ ਨੇ <ph name="SITE" /> ਨਾਲ ਜੁੜਨ ਦੀ ਕੋਸ਼ਿਸ਼ ਕੀਤੀ ਤਾਂ ਵੈੱਬਸਾਇਟ ਨੇ ਅਸਧਾਰਨ ਤੇ ਗਲਤ ਪ੍ਰਮਾਣ ਭੇਜੇ। ਅਜਿਹਾ ਉਦੋਂ ਹੁੰਦਾ ਹੈ ਜਦੋਂ ਕੋਈ ਹਮਲਾਵਰ <ph name="SITE" /> ਹੋਣ ਦਾ ਦਿਖਾਵਾ ਕਰਦਾ ਹੈ, ਜਾਂ ਵਾਈ-ਫਾਈ ਦੀ ਦਾਖਲਾ ਸਕਰੀਨ ਕਨੈਕਸ਼ਨ ਵਿੱਚ ਵਿਘਨ ਪਾਉਂਦੀ ਹੈ। ਫਿਰ ਵੀ ਤੁਹਾਡੀ ਜਾਣਕਾਰੀ ਸੁਰੱਖਿਅਤ ਹੈ ਕਿਉਂਕਿ ਵਿਵਾਲਡੀ ਡਾਟੇ ਦੇ ਵਟਾਂਦਰੇ ਤੋਂ ਪਹਿਲਾਂ ਹੀ ਕਨੈਕਸ਼ਨ ਨੂੰ ਰੋਕ ਦਿੱੱਤਾ ਸੀ।</translation>
 <translation id="7878562273885520351">ਤੁਹਾਡੇ ਪਾਸਵਰਡ ਖਤਰੇ ਵਿੱਚ ਪੈ ਸਕਦੇ ਹਨ</translation>
 <translation id="7951415247503192394">(32-ਬਿੱਟ)</translation>
-<translation id="8037357227543935929">ਪੁੱਛੋ (ਮੂਲ)</translation>
 <translation id="8041940743680923270">ਗਲੋਬਲ ਮੂਲ ਵਰਤੋ (ਪੁੱਛੋ)</translation>
 <translation id="808894953321890993">ਪਾਸਵਰਡ ਬਦਲੋ</translation>
 <translation id="8149426793427495338">ਤੁਹਾਡਾ ਕੰਪਿਊਟਰ ਸੌਂ ਗਿਆ ਸੀ।</translation>

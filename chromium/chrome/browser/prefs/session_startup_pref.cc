@@ -8,9 +8,11 @@
 
 #include <string>
 
+#include "base/feature_list.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -75,7 +77,12 @@ SessionStartupPref::Type SessionStartupPref::GetDefaultStartupType() {
 #else
   if (vivaldi::IsVivaldiRunning()) {
     return SessionStartupPref::LAST;
-  } else
+  }
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
+  if (features::kSetDefaultToContinueSession.Get()) {
+    return SessionStartupPref::LAST;
+  }
+#endif
   return SessionStartupPref::DEFAULT;
 #endif
 }

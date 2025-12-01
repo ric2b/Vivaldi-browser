@@ -4,8 +4,6 @@
 
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/grid_cell.h"
 
-#import <MaterialComponents/MaterialActivityIndicator.h>
-
 #import <ostream>
 
 #import "base/check.h"
@@ -13,12 +11,14 @@
 #import "base/debug/dump_without_crashing.h"
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/elements/extended_touch_target_button.h"
 #import "ios/chrome/browser/shared/ui/elements/top_aligned_image_view.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_groups/grid_empty_thumbnail_view.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -38,8 +38,11 @@ namespace {
 // The size of symbol icons.
 NSInteger kIconSymbolPointSize = 13;
 
-// Size of activity indicator replacing fav icon when active.
-const CGFloat kIndicatorSize = 16.0;
+// Scale of activity indicator replacing fav icon when active.
+const CGFloat kIndicatorScale = 0.75;
+
+// Inset between the snapshot view and the cell.
+const CGFloat kSnapshotInset = 4.0f;
 
 // Frame-based layout utilities for GridTransitionCell.
 // Scales the size of `view`'s frame by `factor` in both height and width. This
@@ -63,6 +66,19 @@ void PositionView(UIView* view, CGPoint point) {
   CGRect frame = view.frame;
   frame.origin = point;
   view.frame = frame;
+}
+
+// Returns the accessibility identifier to set on a GridCell when positioned at
+// the given index.
+NSString* GridCellAccessibilityIdentifier(NSUInteger index) {
+  return [NSString stringWithFormat:@"%@%lu", kGridCellIdentifierPrefix, index];
+}
+
+// Returns the accessibility identifier to set on the snapshot view when
+// positioned at the given index.
+NSString* GridCellSnapshotAccessibilityIdentifier(NSUInteger index) {
+  return [NSString
+      stringWithFormat:@"%@%lu", kGridCellSnapshotIdentifierPrefix, index];
 }
 
 }  // namespace
@@ -89,13 +105,14 @@ void PositionView(UIView* view, CGPoint point) {
 @property(nonatomic, weak) UILabel* titleLabel;
 @property(nonatomic, weak) UIImageView* closeIconView;
 @property(nonatomic, weak) UIImageView* selectIconView;
-@property(nonatomic, weak) MDCActivityIndicator* activityIndicator;
+@property(nonatomic, weak) UIActivityIndicatorView* activityIndicator;
 // Since the close icon dimensions are smaller than the recommended tap target
 // size, use an overlaid tap target button.
 @property(nonatomic, weak) UIButton* closeTapTargetButton;
 @property(nonatomic, weak) UIView* border;
 // Whether or not the cell is currently displaying an editing state.
 @property(nonatomic, readonly) BOOL isInSelectionMode;
+@property(nonatomic, weak) GridEmptyThumbnailView* emptyView;
 
 // Vivaldi
 // Whether or not the cell is currently displaying is the selected or
@@ -156,6 +173,10 @@ void PositionView(UIView* view, CGPoint point) {
     UIView* topBar = [self setupTopBar];
     TopAlignedImageView* snapshotView = [[TopAlignedImageView alloc] init];
     snapshotView.translatesAutoresizingMaskIntoConstraints = NO;
+    if (IsTabGridEmptyThumbnailUIEnabled()) {
+      snapshotView.layer.cornerRadius = kGridCellCornerRadius;
+      snapshotView.layer.masksToBounds = YES;
+    }
 
     UIButton* closeTapTargetButton =
         [ExtendedTouchTargetButton buttonWithType:UIButtonTypeCustom];
@@ -167,6 +188,14 @@ void PositionView(UIView* view, CGPoint point) {
         kGridCellCloseButtonIdentifier;
     [contentView addSubview:topBar];
     [contentView addSubview:snapshotView];
+    if (IsTabGridEmptyThumbnailUIEnabled()) {
+      GridEmptyThumbnailView* emptyView = [[GridEmptyThumbnailView alloc]
+          initWithType:EmptyThumbnailTypeGridCell];
+      emptyView.translatesAutoresizingMaskIntoConstraints = NO;
+      [snapshotView addSubview:emptyView];
+      AddSameConstraints(snapshotView, emptyView);
+      _emptyView = emptyView;
+    }
     PriceCardView* priceCardView = [[PriceCardView alloc] init];
     [snapshotView addSubview:priceCardView];
     [contentView addSubview:closeTapTargetButton];
@@ -196,6 +225,7 @@ void PositionView(UIView* view, CGPoint point) {
     self.layer.masksToBounds = NO;
     } // End Vivaldi
 
+    CGFloat margin = IsTabGridEmptyThumbnailUIEnabled() ? kSnapshotInset : 0;
     NSArray* constraints = @[
       [topBar.topAnchor constraintEqualToAnchor:contentView.topAnchor],
       [topBar.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor],
@@ -203,11 +233,14 @@ void PositionView(UIView* view, CGPoint point) {
           constraintEqualToAnchor:contentView.trailingAnchor],
       [snapshotView.topAnchor constraintEqualToAnchor:topBar.bottomAnchor],
       [snapshotView.leadingAnchor
-          constraintEqualToAnchor:contentView.leadingAnchor],
+          constraintEqualToAnchor:contentView.leadingAnchor
+                         constant:margin],
       [snapshotView.trailingAnchor
-          constraintEqualToAnchor:contentView.trailingAnchor],
+          constraintEqualToAnchor:contentView.trailingAnchor
+                         constant:-margin],
       [snapshotView.bottomAnchor
-          constraintEqualToAnchor:contentView.bottomAnchor],
+          constraintEqualToAnchor:contentView.bottomAnchor
+                         constant:-margin],
       [closeTapTargetButton.topAnchor
           constraintEqualToAnchor:contentView.topAnchor],
       [closeTapTargetButton.trailingAnchor
@@ -269,6 +302,7 @@ void PositionView(UIView* view, CGPoint point) {
   self.icon = nil;
   self.snapshot = nil;
   self.snapshotView.image = nil;
+  self.emptyView.hidden = NO;
   self.selected = NO;
   self.priceCardView.hidden = YES;
   self.opacity = 1.0;
@@ -362,31 +396,18 @@ void PositionView(UIView* view, CGPoint point) {
 - (void)setSnapshot:(UIImage*)snapshot {
   self.snapshotView.image = snapshot;
   _snapshot = snapshot;
-}
-
-- (void)fadeInSnapshot:(UIImage*)snapshot {
-  // Do not fade in the same snapshot
-  if ([_snapshot isEqual:snapshot]) {
-    return;
+  if (IsTabGridEmptyThumbnailUIEnabled()) {
+    self.emptyView.hidden = snapshot != nil;
   }
-  // Do not fade in if there is no previous snapshot
-  if (_snapshot != nil) {
-    [UIView transitionWithView:self.snapshotView
-                      duration:0.2f
-                       options:UIViewAnimationOptionTransitionCrossDissolve
-                    animations:^{
-                      self.snapshotView.image = snapshot;
-                    }
-                    completion:nil];
-  } else {
-    self.snapshotView.image = snapshot;
-  }
-  _snapshot = snapshot;
 }
 
 - (void)setPriceDrop:(NSString*)price previousPrice:(NSString*)previousPrice {
   [self.priceCardView setPriceDrop:price previousPrice:previousPrice];
   [self updateAccessibilityLabel];
+}
+
+- (void)hidePriceDrop {
+  self.priceCardView.hidden = YES;
 }
 
 - (void)setTitle:(NSString*)title {
@@ -430,6 +451,18 @@ void PositionView(UIView* view, CGPoint point) {
   [self updateAccessibilityLabel];
 }
 
+- (void)setLayoutType:(EmptyThumbnailLayoutType)layoutType {
+  CHECK(IsTabGridEmptyThumbnailUIEnabled());
+  _layoutType = layoutType;
+  _emptyView.layoutType = layoutType;
+}
+
+- (void)setAccessibilityIdentifiersWithIndex:(NSUInteger)index {
+  self.accessibilityIdentifier = GridCellAccessibilityIdentifier(index);
+  self.snapshotView.accessibilityIdentifier =
+      GridCellSnapshotAccessibilityIdentifier(index);
+}
+
 #pragma mark - Private
 
 // Updates the accessibility label.
@@ -466,16 +499,19 @@ void PositionView(UIView* view, CGPoint point) {
   iconView.tintColor = UIColor.labelColor;
   // End Vivaldi
 
-  CGRect indicatorFrame = CGRectMake(0, 0, kIndicatorSize, kIndicatorSize);
-  MDCActivityIndicator* activityIndicator =
-      [[MDCActivityIndicator alloc] initWithFrame:indicatorFrame];
+  UIActivityIndicatorView* activityIndicator =
+      [[UIActivityIndicatorView alloc] init];
   activityIndicator.translatesAutoresizingMaskIntoConstraints = NO;
-  activityIndicator.cycleColors = @[ [UIColor colorNamed:kBlueColor] ];
-  activityIndicator.radius = ui::AlignValueToUpperPixel(kIndicatorSize / 2);
+  activityIndicator.color = [UIColor colorNamed:kBlueColor];
+  activityIndicator.transform = CGAffineTransformScale(
+      activityIndicator.transform, kIndicatorScale, kIndicatorScale);
 
   UILabel* titleLabel = [[UILabel alloc] init];
   titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-  titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+  titleLabel.font =
+      [UIFont preferredFontForTextStyle:IsTabGridEmptyThumbnailUIEnabled()
+                                            ? UIFontTextStyleSubheadline
+                                            : UIFontTextStyleFootnote];
   titleLabel.adjustsFontForContentSizeCategory = YES;
 
   UIImageView* closeIconView = [[UIImageView alloc] init];
@@ -853,7 +889,14 @@ void PositionView(UIView* view, CGPoint point) {
   [self layoutIfNeeded];
   PositionView(self.topTabView, CGPointMake(0, 0));
   // Position the main view so it's top-aligned with the main cell view.
-  PositionView(self.mainTabView, self.mainCellView.frame.origin);
+  CGPoint mainTabViewOrigin = self.mainCellView.frame.origin;
+  if (IsTabGridEmptyThumbnailUIEnabled()) {
+    // With the snapshot inset horizontally to create containerized feel, need
+    // to shift the view to a zero x position so the animation of it aligns with
+    // the frame of the BVC WKWebView.
+    mainTabViewOrigin.x = 0;
+  }
+  PositionView(self.mainTabView, mainTabViewOrigin);
   if (!self.bottomTabView) {
     return;
   }

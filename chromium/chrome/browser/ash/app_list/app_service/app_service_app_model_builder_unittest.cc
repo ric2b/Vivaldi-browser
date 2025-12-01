@@ -41,7 +41,6 @@
 #include "chrome/browser/ash/plugin_vm/plugin_vm_features.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_test_helper.h"
 #include "chrome/browser/extensions/chrome_app_icon.h"
-#include "chrome/browser/extensions/install_tracker.h"
 #include "chrome/browser/extensions/install_tracker_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
@@ -56,13 +55,21 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/browser_context_helper/annotated_account_id.h"
 #include "chromeos/ash/components/dbus/cicerone/cicerone_client.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/dbus/seneschal/seneschal_client.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "components/account_id/account_id.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/prefs/testing_pref_service.h"
+#include "components/user_manager/fake_user_manager_delegate.h"
+#include "components/user_manager/scoped_user_manager.h"
+#include "components/user_manager/test_helper.h"
+#include "components/user_manager/user_manager_impl.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/app_sorting.h"
 #include "extensions/browser/disable_reason.h"
@@ -71,6 +78,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/image_loader.h"
+#include "extensions/browser/install_tracker.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/manifest.h"
@@ -350,13 +358,13 @@ class WebAppBuilderTest : public AppServiceAppModelBuilderTest {
         web_app::WebAppProvider::GetForTest(GetAppServiceProfile());
     ASSERT_TRUE(web_app_provider);
 
-    base::test::TestFuture<std::map<web_app::SquareSizePx, SkBitmap>>
-        read_icons_future;
+    base::test::TestFuture<web_app::IconMetadataFromDisk> read_icons_future;
     web_app_provider->icon_manager()
         .ReadTrustedIconsWithFallbackToManifestIcons(
             app_id, icon_sizes_in_px, web_app::IconPurpose::ANY,
             read_icons_future.GetCallback());
-    auto icon_bitmaps = read_icons_future.Take();
+    web_app::SizeToBitmap icon_bitmaps =
+        std::move(read_icons_future.Take().icons_map);
     for (auto [scale, size_px] : scale_to_size_in_px) {
       output_image_skia.AddRepresentation(
           gfx::ImageSkiaRep(icon_bitmaps[size_px], scale));
@@ -658,7 +666,17 @@ class CrostiniAppTest : public AppServiceAppModelBuilderTest {
     ash::CiceroneClient::InitializeFake();
     ash::ConciergeClient::InitializeFake();
     ash::SeneschalClient::InitializeFake();
+
+    const AccountId account_id =
+        AccountId::FromUserEmailGaiaId("test@test", GaiaId("12345"));
+    ASSERT_TRUE(user_manager::TestHelper(user_manager::UserManager::Get())
+                    .AddRegularUser(account_id));
+    user_manager::UserManager::Get()->UserLoggedIn(
+        account_id, user_manager::TestHelper::GetFakeUsernameHash(account_id));
+
     AppServiceAppModelBuilderTest::SetUp();
+    ash::AnnotatedAccountId::Set(profile(), account_id);
+
     test_helper_ = std::make_unique<CrostiniTestHelper>(profile());
     test_helper_->ReInitializeAppServiceIntegration();
     CreateBuilder();
@@ -674,6 +692,7 @@ class CrostiniAppTest : public AppServiceAppModelBuilderTest {
     // DBusThreadManager to ensure all keyed services that might rely on DBus
     // clients are destroyed.
     profile_.reset();
+
     ash::SeneschalClient::Shutdown();
     ash::ConciergeClient::Shutdown();
     ash::CiceroneClient::Shutdown();

@@ -328,8 +328,6 @@ class RequestFilterManager : public KeyedService, public RequestFilterRegistry {
 
   // Implementing RequestFilterRegistry
   void AddFilter(std::unique_ptr<RequestFilter> new_filter) override;
-  void RemoveFilter(RequestFilter* filter) override;
-  void ClearCacheOnNavigation() override;
 
  private:
   const raw_ptr<content::BrowserContext> browser_context_;

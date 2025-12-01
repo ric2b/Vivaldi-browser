@@ -42,4 +42,16 @@ bool NtpPromoRegistry::AreAnyPromosRegistered() const {
   return registry_.size() > 0;
 }
 
+void NtpPromoRegistry::ClearPromoForTesting(const NtpPromoIdentifier& id) {
+  registry_.erase(id);
+  std::erase_if(identifiers_, [id](const NtpPromoIdentifier& identifier) {
+    return identifier == id;
+  });
+}
+
+void NtpPromoRegistry::ClearPromosForTesting() {
+  registry_.clear();
+  identifiers_.clear();
+}
+
 }  // namespace user_education

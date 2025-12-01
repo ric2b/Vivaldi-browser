@@ -25,6 +25,9 @@
 #include "app/vivaldi_resources.h"
 #include "importer/chromium_importer.h"
 
+#include "importer/import_error_utils.h"
+#include "importer/viv_import_result.h"
+
 namespace {
 
 const char kNameKey[] = "name";
@@ -41,9 +44,11 @@ class ChromeBookmarkReader {
   ChromeBookmarkReader(const ChromeBookmarkReader&) = delete;
   ChromeBookmarkReader& operator=(const ChromeBookmarkReader&) = delete;
 
-  void LoadFile(const base::FilePath& file);
+  /// @return Success result if ok, Error result with message otherwise.
+  ImportResult LoadFile(const base::FilePath& file);
 
-  const std::vector<user_data_importer::ImportedBookmarkEntry>& Bookmarks() const {
+  const std::vector<user_data_importer::ImportedBookmarkEntry>& Bookmarks()
+      const {
     return bookmarks_;
   }
 
@@ -54,23 +59,23 @@ class ChromeBookmarkReader {
   std::vector<user_data_importer::ImportedBookmarkEntry> bookmarks_;
 };
 
-void ChromeBookmarkReader::LoadFile(const base::FilePath& file) {
-  if (!base::PathExists(file))
-    return;
+ImportResult ChromeBookmarkReader::LoadFile(const base::FilePath& file) {
+  base::Value root_value;
+  auto result = ImportFileOperations::ParseJsonFile(
+      file, &root_value, IDS_IMPORT_ERROR_BOOKMARK_FILE_NOT_FOUND,
+      IDS_IMPORT_ERROR_INVALID_BOOKMARK_FILE,
+      IDS_IMPORT_ERROR_INVALID_BOOKMARK_FILE);
+  if (!result.has_value()) {
+    return result;
+  }
 
-  std::string input;
-  ReadFileToString(file, &input);
-
-  std::optional<base::Value> root_value(base::JSONReader::Read(input));
-  if (!root_value)
-    return;
-  base::Value::Dict* root_dict = root_value->GetIfDict();
+  base::Value::Dict* root_dict = root_value.GetIfDict();
   if (!root_dict)
-    return;
+    return import_result::Error(IDS_IMPORT_ERROR_INVALID_BOOKMARK_FILE);
 
   const base::Value::Dict* roots = root_dict->FindDict("roots");
   if (!roots)
-    return;
+    return import_result::Error(IDS_IMPORT_ERROR_INVALID_BOOKMARK_FILE);
 
   auto decode_named_folder = [&](const base::Value::Dict& parent,
                                  std::string_view folder_name) -> void {
@@ -89,6 +94,8 @@ void ChromeBookmarkReader::LoadFile(const base::FilePath& file) {
     decode_named_folder(*custom_root, "trash");
     decode_named_folder(*custom_root, "userRoot");
   }
+
+  return import_result::Success();
 }
 
 void ChromeBookmarkReader::DecodeNode(const base::Value::Dict& dict) {
@@ -177,16 +184,20 @@ void ChromeBookmarkReader::DecodeNode(const base::Value::Dict& dict) {
 
 }  // namespace
 
-void ChromiumImporter::ImportBookMarks() {
+ImportResult ChromiumImporter::ImportBookMarks() {
   if (bookmarkfilename_.empty()) {
     bridge_->NotifyEnded();
-    return;
+    return import_result::Success();  // nothing to import, but okay.
   }
 
   base::FilePath file(bookmarkfilename_);
   ChromeBookmarkReader reader;
 
-  reader.LoadFile(file);
+  auto result = reader.LoadFile(file);
+
+  if (!result.has_value()) {
+    return result;
+  }
 
   if (!reader.Bookmarks().empty() && !cancelled()) {
     const std::u16string& first_folder_name =
@@ -194,4 +205,6 @@ void ChromiumImporter::ImportBookMarks() {
 
     bridge_->AddBookmarks(reader.Bookmarks(), first_folder_name);
   }
+
+  return import_result::Success();
 }

@@ -183,11 +183,6 @@ public interface SiteSettingsDelegate {
     boolean shouldShowTrackingProtectionUi();
 
     /**
-     * @return whether all 3pcs should be blocked in incognito.
-     */
-    boolean isAlwaysBlock3pcsIncognitoEnabled();
-
-    /**
      * @return true if all third-party cookies are blocked when Tracking Protection is on.
      */
     boolean isBlockAll3pcEnabledInTrackingProtection();
@@ -231,19 +226,19 @@ public interface SiteSettingsDelegate {
     void getBrowsingDataModel(Callback<BrowsingDataModel> callback);
 
     /**
-     * @return whether the Privacy Sandbox Rws UI should be shown in the Settings.
-     */
-    boolean shouldShowPrivacySandboxRwsUi();
-
-    /**
-     * @return whether the Safety Hub is enabled.
-     */
-    boolean isSafetyHubEnabled();
-
-    /**
      * @return whether the unused site permission autorevocation is enabled.
      */
     boolean isPermissionAutorevocationEnabled();
+
+    /**
+     * @return whether the related website sets UI is enabled.
+     */
+    boolean isRelatedWebsiteSetsUiEnabled();
+
+    /**
+     * @return whether the settings containment feature is enabled.
+     */
+    boolean isSettingsContainmentEnabled();
 
     /** Enable/Disable unused site permission autorevocation. */
     void setPermissionAutorevocationEnabled(boolean isEnabled);

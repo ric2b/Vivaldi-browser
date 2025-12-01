@@ -1,0 +1,9 @@
+============== NoTag.fbs ============
+include "${DIR}/tracing_schema_common.fbs";
+
+table NoTag (error) {}
+============== diagnosis ============
+ERROR: ${DIR}/tools/testdata/NoTag.fbs contains table NoTag without a tag. All tables must have a tag defined.
+
+============== result ============
+

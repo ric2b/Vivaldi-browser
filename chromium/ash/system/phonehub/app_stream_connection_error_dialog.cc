@@ -43,7 +43,7 @@
 #include "ui/views/view_class_properties.h"
 #include "ui/views/view_shadow.h"
 #include "ui/views/window/dialog_delegate.h"
-#include "ui/views/window/non_client_view.h"
+#include "ui/views/window/frame_view.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
 namespace ash {
@@ -86,12 +86,12 @@ class ConnectionErrorDialogDelegateView : public views::WidgetDelegateView {
       layer()->SetBackdropFilterQuality(ColorProvider::kBackgroundBlurQuality);
     }
 
+    layer()->SetFillsBoundsOpaquely(false);
     layer()->SetRoundedCornerRadius(
         gfx::RoundedCornersF(kDialogRoundedCornerRadius));
 
-    SetBackground(views::CreateRoundedRectBackground(
-        static_cast<ui::ColorId>(cros_tokens::kCrosSysBaseElevated),
-        kDialogRoundedCornerRadius));
+    SetBackground(views::CreateSolidBackground(
+        static_cast<ui::ColorId>(cros_tokens::kCrosSysBaseElevated)));
     SetBorder(std::make_unique<views::HighlightBorder>(
         kDialogRoundedCornerRadius,
         views::HighlightBorder::Type::kHighlightBorder1));

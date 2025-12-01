@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -17,35 +17,35 @@ import eventSourceMessagesViewStyles from './eventSourceMessagesView.css.js';
 
 const UIStrings = {
   /**
-   *@description Text in Event Source Messages View of the Network panel
+   * @description Text in Event Source Messages View of the Network panel
    */
   id: 'Id',
   /**
-   *@description Text that refers to some types
+   * @description Text that refers to some types
    */
   type: 'Type',
   /**
-   *@description Text in Event Source Messages View of the Network panel
+   * @description Text in Event Source Messages View of the Network panel
    */
   data: 'Data',
   /**
-   *@description Text that refers to the time
+   * @description Text that refers to the time
    */
   time: 'Time',
   /**
-   *@description Data grid name for Event Source data grids
+   * @description Data grid name for Event Source data grids
    */
   eventSource: 'Event Source',
   /**
-   *@description A context menu item in the Resource Web Socket Frame View of the Network panel
+   * @description A context menu item in the Resource Web Socket Frame View of the Network panel
    */
   copyMessage: 'Copy message',
   /**
-   *@description Text to clear everything
+   * @description Text to clear everything
    */
   clearAll: 'Clear all',
   /**
-   *@description Example for placeholder text
+   * @description Example for placeholder text
    */
   filterByRegex: 'Filter using regex (example: https?)',
 } as const;

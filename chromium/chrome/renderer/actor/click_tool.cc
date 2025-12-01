@@ -12,6 +12,7 @@
 #include "base/types/expected.h"
 #include "chrome/common/actor/action_result.h"
 #include "chrome/common/actor/actor_logging.h"
+#include "chrome/common/actor/journal_details_builder.h"
 #include "chrome/renderer/actor/tool_utils.h"
 #include "content/public/renderer/render_frame.h"
 #include "third_party/abseil-cpp/absl/strings/str_format.h"
@@ -38,7 +39,7 @@ using ::blink::WebMouseEvent;
 using ::blink::WebNode;
 
 ClickTool::ClickTool(content::RenderFrame& frame,
-                     Journal::TaskId task_id,
+                     TaskId task_id,
                      Journal& journal,
                      mojom::ClickActionPtr action,
                      mojom::ToolTargetPtr target,
@@ -84,9 +85,8 @@ void ClickTool::Execute(ToolFinishedCallback callback) {
     }
   }
 
-  journal_->Log(
-      task_id_, "ClickTool::Execute",
-      absl::StrFormat("Dispatching click at point %s", click_point.ToString()));
+  journal_->Log(task_id_, "ClickTool::Execute",
+                JournalDetailsBuilder().Add("point", click_point).Build());
 
   mojom::ActionResultPtr result = CreateAndDispatchClick(
       button, click_count, click_point, frame_->GetWebFrame()->FrameWidget());
@@ -97,6 +97,10 @@ std::string ClickTool::DebugString() const {
   return absl::StrFormat("ClickTool[%s;type(%s);count(%s)]",
                          ToDebugString(target_), base::ToString(action_->type),
                          base::ToString(action_->count));
+}
+
+bool ClickTool::SupportsPaintStability() const {
+  return true;
 }
 
 ClickTool::ValidatedResult ClickTool::Validate() const {

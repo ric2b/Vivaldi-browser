@@ -69,6 +69,20 @@
 #include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
 
+#if BUILDFLAG(IS_ANDROID) // Vivaldi VAB-11595
+#include "chrome/browser/bookmarks/bookmark_html_writer.h"
+#include "components/user_data_importer/common/imported_bookmark_entry.h"
+#include "components/user_data_importer/content/content_bookmark_parser_utils.h"
+#include "components/user_data_importer/utility/bookmark_parser.h"
+#include "base/files/file_path.h"
+#include "base/functional/callback.h"
+#include "base/task/thread_pool.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/task_traits.h"
+#include "chrome/browser/importer/profile_writer.h"
+
+#endif // End Vivaldi
 // Must come after all headers that specialize FromJniType() / ToJniType().
 #include "chrome/browser/bookmarks/android/jni_headers/BookmarkBridge_jni.h"
 
@@ -1030,9 +1044,16 @@ void BookmarkBridge::SearchBookmarks(JNIEnv* env,
     query.type = static_cast<power_bookmarks::PowerBookmarkType>(type);
   }
 
+
+  if (!vivaldi::IsVivaldiRunning()) {
   std::vector<const BookmarkNode*> results =
       SearchBookmarksImpl(query, max_results);
   AddBookmarkNodesToBookmarkIdList(env, j_list, results);
+  } else {
+      std::vector<const BookmarkNode *> results =
+              SearchBookmarksImplVivaldi(query, max_results);
+      AddBookmarkNodesToBookmarkIdList(env, j_list, results);
+   }  // End Vivaldi
 }
 
 std::vector<const BookmarkNode*> BookmarkBridge::SearchBookmarksImpl(
@@ -1189,8 +1210,13 @@ void BookmarkBridge::MoveBookmarkImpl(const BookmarkNode* node,
   // Vivaldi uses this for reordering bookmarks, cf VAB-9214
   if (!vivaldi::IsVivaldiRunning())
   if (node->parent() == new_parent_node) {
+
     return;
   }
+  if (vivaldi::IsVivaldiRunning() &&
+        new_parent_node->HasAncestor(node)) {
+      return;
+  } // End Vivaldi
 
   // If the types of the parents don't match or we're dealing with a reading
   // list node, then we can't just defer to bookmark_model.
@@ -1675,7 +1701,7 @@ void BookmarkBridge::BookmarkNodeAdded(const BookmarkNode* parent,
 
   Java_BookmarkBridge_bookmarkNodeAdded(
       AttachCurrentThread(), ScopedJavaLocalRef<jobject>(java_bookmark_model_),
-      CreateJavaBookmark(parent), static_cast<int>(index));
+      CreateJavaBookmark(parent), static_cast<int>(index), added_by_user);
 }
 
 void BookmarkBridge::BookmarkNodeRemoved(const BookmarkNode* parent,

@@ -4,6 +4,10 @@
 // found in the LICENSE file.
 //
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 //
 // Build the intermediate representation.
 //
@@ -1464,7 +1468,7 @@ void TIntermUnary::promote()
 TPrecision TIntermUnary::derivePrecision() const
 {
     // Unary operators generally derive their precision from their operand, except for a few
-    // built-ins where this is overriden.
+    // built-ins where this is overridden.
     switch (mOp)
     {
         case EOpArrayLength:
@@ -4226,7 +4230,7 @@ TConstantUnion *TIntermConstantUnion::FoldAggregateBuiltIn(TIntermAggregate *agg
 // TIntermPreprocessorDirective implementation.
 TIntermPreprocessorDirective::TIntermPreprocessorDirective(PreprocessorDirective directive,
                                                            ImmutableString command)
-    : mDirective(directive), mCommand(std::move(command))
+    : mDirective(directive), mCommand(command)
 {}
 
 TIntermPreprocessorDirective::TIntermPreprocessorDirective(const TIntermPreprocessorDirective &node)

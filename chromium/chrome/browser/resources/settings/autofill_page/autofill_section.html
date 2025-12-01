@@ -16,10 +16,6 @@
       overflow: hidden;
     }
 
-    .dropdown-item.row-item {
-      padding: var(--cr-section-vertical-padding) var(--cr-section-padding);
-    }
-
     #addressSummary {
       display: flex;
       flex: 1;
@@ -28,6 +24,17 @@
 
     #plusAddressSettingsButton {
       margin-top: 16px;
+    }
+
+    .dropdown-item.external-link-style {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+    }
+
+    .dropdown-item.external-link-style cr-icon {
+      --cr-icon-color: var(--cr-secondary-text-color);
     }
   </style>
   <settings-subpage page-title="$i18n{addressesTitle}"
@@ -103,23 +110,24 @@
       </div>
     </div>
     <cr-action-menu id="addressSharedMenu" role-description="$i18n{menu}">
-      <template is="dom-if" if="[[isHomeOrWorkAddress]]" restamp>
-        <cr-link-row
+      <template is="dom-if" if="[[isGoogleProfileAddress]]" restamp>
+        <button
             id="menuEditAddress"
-            label="$i18n{edit}"
+            class="dropdown-item external-link-style"
             on-click="onMenuEditAddressClick_"
-            role-description="$i18n{homeWorkAddressAccessiblityLabel}"
-            external>
-        </cr-link-row>
+            role-description="$i18n{homeWorkAddressAccessiblityLabel}">
+          <span class="label">$i18n{edit}</span>
+          <cr-icon icon="cr:open-in-new" aria-hidden="true"></cr-icon>
+        </button>
 
         <button id="menuRemoveAddress"
-            class="dropdown-item row-item"
+            class="dropdown-item"
             on-click="onMenuRemoveAddressClick_">
           [[getMenuRemoveAddressLabel_(activeAddress)]]
         </button>
       </template>
 
-      <template is="dom-if" if="[[!isHomeOrWorkAddress]]" restamp>
+      <template is="dom-if" if="[[!isGoogleProfileAddress]]" restamp>
         <button id="menuEditAddress" class="dropdown-item"
             on-click="onMenuEditAddressClick_">$i18n{edit}</button>
 

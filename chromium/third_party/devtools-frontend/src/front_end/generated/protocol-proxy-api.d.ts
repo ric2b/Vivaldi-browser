@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,11 +24,11 @@ declare namespace ProtocolProxyApi {
 
     Audits: AuditsApi;
 
-    Extensions: ExtensionsApi;
-
     Autofill: AutofillApi;
 
     BackgroundService: BackgroundServiceApi;
+
+    BluetoothEmulation: BluetoothEmulationApi;
 
     Browser: BrowserApi;
 
@@ -42,21 +42,29 @@ declare namespace ProtocolProxyApi {
 
     DOMDebugger: DOMDebuggerApi;
 
-    EventBreakpoints: EventBreakpointsApi;
-
     DOMSnapshot: DOMSnapshotApi;
 
     DOMStorage: DOMStorageApi;
+
+    DeviceAccess: DeviceAccessApi;
 
     DeviceOrientation: DeviceOrientationApi;
 
     Emulation: EmulationApi;
 
+    EventBreakpoints: EventBreakpointsApi;
+
+    Extensions: ExtensionsApi;
+
+    FedCm: FedCmApi;
+
+    Fetch: FetchApi;
+
+    FileSystem: FileSystemApi;
+
     HeadlessExperimental: HeadlessExperimentalApi;
 
     IO: IOApi;
-
-    FileSystem: FileSystemApi;
 
     IndexedDB: IndexedDBApi;
 
@@ -68,17 +76,23 @@ declare namespace ProtocolProxyApi {
 
     Log: LogApi;
 
+    Media: MediaApi;
+
     Memory: MemoryApi;
 
     Network: NetworkApi;
 
     Overlay: OverlayApi;
 
+    PWA: PWAApi;
+
     Page: PageApi;
 
     Performance: PerformanceApi;
 
     PerformanceTimeline: PerformanceTimelineApi;
+
+    Preload: PreloadApi;
 
     Security: SecurityApi;
 
@@ -94,23 +108,9 @@ declare namespace ProtocolProxyApi {
 
     Tracing: TracingApi;
 
-    Fetch: FetchApi;
-
     WebAudio: WebAudioApi;
 
     WebAuthn: WebAuthnApi;
-
-    Media: MediaApi;
-
-    DeviceAccess: DeviceAccessApi;
-
-    Preload: PreloadApi;
-
-    FedCm: FedCmApi;
-
-    PWA: PWAApi;
-
-    BluetoothEmulation: BluetoothEmulationApi;
 
     Debugger: DebuggerApi;
 
@@ -131,11 +131,11 @@ declare namespace ProtocolProxyApi {
 
     Audits: AuditsDispatcher;
 
-    Extensions: ExtensionsDispatcher;
-
     Autofill: AutofillDispatcher;
 
     BackgroundService: BackgroundServiceDispatcher;
+
+    BluetoothEmulation: BluetoothEmulationDispatcher;
 
     Browser: BrowserDispatcher;
 
@@ -149,21 +149,29 @@ declare namespace ProtocolProxyApi {
 
     DOMDebugger: DOMDebuggerDispatcher;
 
-    EventBreakpoints: EventBreakpointsDispatcher;
-
     DOMSnapshot: DOMSnapshotDispatcher;
 
     DOMStorage: DOMStorageDispatcher;
+
+    DeviceAccess: DeviceAccessDispatcher;
 
     DeviceOrientation: DeviceOrientationDispatcher;
 
     Emulation: EmulationDispatcher;
 
+    EventBreakpoints: EventBreakpointsDispatcher;
+
+    Extensions: ExtensionsDispatcher;
+
+    FedCm: FedCmDispatcher;
+
+    Fetch: FetchDispatcher;
+
+    FileSystem: FileSystemDispatcher;
+
     HeadlessExperimental: HeadlessExperimentalDispatcher;
 
     IO: IODispatcher;
-
-    FileSystem: FileSystemDispatcher;
 
     IndexedDB: IndexedDBDispatcher;
 
@@ -175,17 +183,23 @@ declare namespace ProtocolProxyApi {
 
     Log: LogDispatcher;
 
+    Media: MediaDispatcher;
+
     Memory: MemoryDispatcher;
 
     Network: NetworkDispatcher;
 
     Overlay: OverlayDispatcher;
 
+    PWA: PWADispatcher;
+
     Page: PageDispatcher;
 
     Performance: PerformanceDispatcher;
 
     PerformanceTimeline: PerformanceTimelineDispatcher;
+
+    Preload: PreloadDispatcher;
 
     Security: SecurityDispatcher;
 
@@ -201,23 +215,9 @@ declare namespace ProtocolProxyApi {
 
     Tracing: TracingDispatcher;
 
-    Fetch: FetchDispatcher;
-
     WebAudio: WebAudioDispatcher;
 
     WebAuthn: WebAuthnDispatcher;
-
-    Media: MediaDispatcher;
-
-    DeviceAccess: DeviceAccessDispatcher;
-
-    Preload: PreloadDispatcher;
-
-    FedCm: FedCmDispatcher;
-
-    PWA: PWADispatcher;
-
-    BluetoothEmulation: BluetoothEmulationDispatcher;
 
     Debugger: DebuggerDispatcher;
 
@@ -407,49 +407,6 @@ declare namespace ProtocolProxyApi {
 
   }
 
-  export interface ExtensionsApi {
-    /**
-     * Installs an unpacked extension from the filesystem similar to
-     * --load-extension CLI flags. Returns extension ID once the extension
-     * has been installed. Available if the client is connected using the
-     * --remote-debugging-pipe flag and the --enable-unsafe-extension-debugging
-     * flag is set.
-     */
-    invoke_loadUnpacked(params: Protocol.Extensions.LoadUnpackedRequest): Promise<Protocol.Extensions.LoadUnpackedResponse>;
-
-    /**
-     * Uninstalls an unpacked extension (others not supported) from the profile.
-     * Available if the client is connected using the --remote-debugging-pipe flag
-     * and the --enable-unsafe-extension-debugging.
-     */
-    invoke_uninstall(params: Protocol.Extensions.UninstallRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Gets data from extension storage in the given `storageArea`. If `keys` is
-     * specified, these are used to filter the result.
-     */
-    invoke_getStorageItems(params: Protocol.Extensions.GetStorageItemsRequest): Promise<Protocol.Extensions.GetStorageItemsResponse>;
-
-    /**
-     * Removes `keys` from extension storage in the given `storageArea`.
-     */
-    invoke_removeStorageItems(params: Protocol.Extensions.RemoveStorageItemsRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Clears extension storage in the given `storageArea`.
-     */
-    invoke_clearStorageItems(params: Protocol.Extensions.ClearStorageItemsRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Sets `values` in extension storage in the given `storageArea`. The provided `values`
-     * will be merged with existing values in the storage area.
-     */
-    invoke_setStorageItems(params: Protocol.Extensions.SetStorageItemsRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-  }
-  export interface ExtensionsDispatcher {
-  }
-
   export interface AutofillApi {
     /**
      * Trigger autofill on a form identified by the fieldId.
@@ -517,9 +474,124 @@ declare namespace ProtocolProxyApi {
 
   }
 
+  export interface BluetoothEmulationApi {
+    /**
+     * Enable the BluetoothEmulation domain.
+     */
+    invoke_enable(params: Protocol.BluetoothEmulation.EnableRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Set the state of the simulated central.
+     */
+    invoke_setSimulatedCentralState(params: Protocol.BluetoothEmulation.SetSimulatedCentralStateRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Disable the BluetoothEmulation domain.
+     */
+    invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Simulates a peripheral with |address|, |name| and |knownServiceUuids|
+     * that has already been connected to the system.
+     */
+    invoke_simulatePreconnectedPeripheral(params: Protocol.BluetoothEmulation.SimulatePreconnectedPeripheralRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Simulates an advertisement packet described in |entry| being received by
+     * the central.
+     */
+    invoke_simulateAdvertisement(params: Protocol.BluetoothEmulation.SimulateAdvertisementRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Simulates the response code from the peripheral with |address| for a
+     * GATT operation of |type|. The |code| value follows the HCI Error Codes from
+     * Bluetooth Core Specification Vol 2 Part D 1.3 List Of Error Codes.
+     */
+    invoke_simulateGATTOperationResponse(params: Protocol.BluetoothEmulation.SimulateGATTOperationResponseRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Simulates the response from the characteristic with |characteristicId| for a
+     * characteristic operation of |type|. The |code| value follows the Error
+     * Codes from Bluetooth Core Specification Vol 3 Part F 3.4.1.1 Error Response.
+     * The |data| is expected to exist when simulating a successful read operation
+     * response.
+     */
+    invoke_simulateCharacteristicOperationResponse(params: Protocol.BluetoothEmulation.SimulateCharacteristicOperationResponseRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Simulates the response from the descriptor with |descriptorId| for a
+     * descriptor operation of |type|. The |code| value follows the Error
+     * Codes from Bluetooth Core Specification Vol 3 Part F 3.4.1.1 Error Response.
+     * The |data| is expected to exist when simulating a successful read operation
+     * response.
+     */
+    invoke_simulateDescriptorOperationResponse(params: Protocol.BluetoothEmulation.SimulateDescriptorOperationResponseRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Adds a service with |serviceUuid| to the peripheral with |address|.
+     */
+    invoke_addService(params: Protocol.BluetoothEmulation.AddServiceRequest): Promise<Protocol.BluetoothEmulation.AddServiceResponse>;
+
+    /**
+     * Removes the service respresented by |serviceId| from the simulated central.
+     */
+    invoke_removeService(params: Protocol.BluetoothEmulation.RemoveServiceRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Adds a characteristic with |characteristicUuid| and |properties| to the
+     * service represented by |serviceId|.
+     */
+    invoke_addCharacteristic(params: Protocol.BluetoothEmulation.AddCharacteristicRequest): Promise<Protocol.BluetoothEmulation.AddCharacteristicResponse>;
+
+    /**
+     * Removes the characteristic respresented by |characteristicId| from the
+     * simulated central.
+     */
+    invoke_removeCharacteristic(params: Protocol.BluetoothEmulation.RemoveCharacteristicRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Adds a descriptor with |descriptorUuid| to the characteristic respresented
+     * by |characteristicId|.
+     */
+    invoke_addDescriptor(params: Protocol.BluetoothEmulation.AddDescriptorRequest): Promise<Protocol.BluetoothEmulation.AddDescriptorResponse>;
+
+    /**
+     * Removes the descriptor with |descriptorId| from the simulated central.
+     */
+    invoke_removeDescriptor(params: Protocol.BluetoothEmulation.RemoveDescriptorRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Simulates a GATT disconnection from the peripheral with |address|.
+     */
+    invoke_simulateGATTDisconnection(params: Protocol.BluetoothEmulation.SimulateGATTDisconnectionRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+  }
+  export interface BluetoothEmulationDispatcher {
+    /**
+     * Event for when a GATT operation of |type| to the peripheral with |address|
+     * happened.
+     */
+    gattOperationReceived(params: Protocol.BluetoothEmulation.GattOperationReceivedEvent): void;
+
+    /**
+     * Event for when a characteristic operation of |type| to the characteristic
+     * respresented by |characteristicId| happened. |data| and |writeType| is
+     * expected to exist when |type| is write.
+     */
+    characteristicOperationReceived(params: Protocol.BluetoothEmulation.CharacteristicOperationReceivedEvent): void;
+
+    /**
+     * Event for when a descriptor operation of |type| to the descriptor
+     * respresented by |descriptorId| happened. |data| is expected to exist when
+     * |type| is write.
+     */
+    descriptorOperationReceived(params: Protocol.BluetoothEmulation.DescriptorOperationReceivedEvent): void;
+
+  }
+
   export interface BrowserApi {
     /**
-     * Set permission settings for given origin.
+     * Set permission settings for given requesting and embedding origins.
      */
     invoke_setPermission(params: Protocol.Browser.SetPermissionRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -1035,6 +1107,7 @@ declare namespace ProtocolProxyApi {
      * Returns the root DOM node (and optionally the subtree) to the caller.
      * Deprecated, as it is not designed to work well with the rest of the DOM agent.
      * Use DOMSnapshot.captureSnapshot instead.
+     * @deprecated
      */
     invoke_getFlattenedDocument(params: Protocol.DOM.GetFlattenedDocumentRequest): Promise<Protocol.DOM.GetFlattenedDocumentResponse>;
 
@@ -1320,6 +1393,11 @@ declare namespace ProtocolProxyApi {
     scrollableFlagUpdated(params: Protocol.DOM.ScrollableFlagUpdatedEvent): void;
 
     /**
+     * Fired when a node's starting styles changes.
+     */
+    affectedByStartingStylesFlagUpdated(params: Protocol.DOM.AffectedByStartingStylesFlagUpdatedEvent): void;
+
+    /**
      * Called when a pseudo element is removed from an element.
      */
     pseudoElementRemoved(params: Protocol.DOM.PseudoElementRemovedEvent): void;
@@ -1360,6 +1438,7 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Removes breakpoint on particular native event.
+     * @deprecated
      */
     invoke_removeInstrumentationBreakpoint(params: Protocol.DOMDebugger.RemoveInstrumentationBreakpointRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -1385,6 +1464,7 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Sets breakpoint on particular native event.
+     * @deprecated
      */
     invoke_setInstrumentationBreakpoint(params: Protocol.DOMDebugger.SetInstrumentationBreakpointRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -1395,26 +1475,6 @@ declare namespace ProtocolProxyApi {
 
   }
   export interface DOMDebuggerDispatcher {
-  }
-
-  export interface EventBreakpointsApi {
-    /**
-     * Sets breakpoint on particular native event.
-     */
-    invoke_setInstrumentationBreakpoint(params: Protocol.EventBreakpoints.SetInstrumentationBreakpointRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Removes breakpoint on particular native event.
-     */
-    invoke_removeInstrumentationBreakpoint(params: Protocol.EventBreakpoints.RemoveInstrumentationBreakpointRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Removes all breakpoints
-     */
-    invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
-
-  }
-  export interface EventBreakpointsDispatcher {
   }
 
   export interface DOMSnapshotApi {
@@ -1433,6 +1493,7 @@ declare namespace ProtocolProxyApi {
      * template contents, and imported documents) in a flattened array, as well as layout and
      * white-listed computed style information for the nodes. Shadow DOM in the returned DOM tree is
      * flattened.
+     * @deprecated
      */
     invoke_getSnapshot(params: Protocol.DOMSnapshot.GetSnapshotRequest): Promise<Protocol.DOMSnapshot.GetSnapshotResponse>;
 
@@ -1479,6 +1540,37 @@ declare namespace ProtocolProxyApi {
 
   }
 
+  export interface DeviceAccessApi {
+    /**
+     * Enable events in this domain.
+     */
+    invoke_enable(): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Disable events in this domain.
+     */
+    invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Select a device in response to a DeviceAccess.deviceRequestPrompted event.
+     */
+    invoke_selectPrompt(params: Protocol.DeviceAccess.SelectPromptRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Cancel a prompt in response to a DeviceAccess.deviceRequestPrompted event.
+     */
+    invoke_cancelPrompt(params: Protocol.DeviceAccess.CancelPromptRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+  }
+  export interface DeviceAccessDispatcher {
+    /**
+     * A device request opened a user prompt to select a device. Respond with the
+     * selectPrompt or cancelPrompt command.
+     */
+    deviceRequestPrompted(params: Protocol.DeviceAccess.DeviceRequestPromptedEvent): void;
+
+  }
+
   export interface DeviceOrientationApi {
     /**
      * Clears the overridden Device Orientation.
@@ -1497,6 +1589,7 @@ declare namespace ProtocolProxyApi {
   export interface EmulationApi {
     /**
      * Tells whether emulation is supported.
+     * @deprecated
      */
     invoke_canEmulate(): Promise<Protocol.Emulation.CanEmulateResponse>;
 
@@ -1656,6 +1749,7 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Overrides value returned by the javascript navigator object.
+     * @deprecated
      */
     invoke_setNavigatorOverrides(params: Protocol.Emulation.SetNavigatorOverridesRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -1694,6 +1788,7 @@ declare namespace ProtocolProxyApi {
      * Resizes the frame/viewport of the page. Note that this does not affect the frame's container
      * (e.g. browser window). Can be used to produce screenshots of the specified size. Not supported
      * on Android.
+     * @deprecated
      */
     invoke_setVisibleSize(params: Protocol.Emulation.SetVisibleSizeRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -1723,6 +1818,21 @@ declare namespace ProtocolProxyApi {
      */
     invoke_setSmallViewportHeightDifferenceOverride(params: Protocol.Emulation.SetSmallViewportHeightDifferenceOverrideRequest): Promise<Protocol.ProtocolResponseWithError>;
 
+    /**
+     * Returns device's screen configuration.
+     */
+    invoke_getScreenInfos(): Promise<Protocol.Emulation.GetScreenInfosResponse>;
+
+    /**
+     * Add a new screen to the device. Only supported in headless mode.
+     */
+    invoke_addScreen(params: Protocol.Emulation.AddScreenRequest): Promise<Protocol.Emulation.AddScreenResponse>;
+
+    /**
+     * Remove screen from the device. Only supported in headless mode.
+     */
+    invoke_removeScreen(params: Protocol.Emulation.RemoveScreenRequest): Promise<Protocol.ProtocolResponseWithError>;
+
   }
   export interface EmulationDispatcher {
     /**
@@ -1730,6 +1840,199 @@ declare namespace ProtocolProxyApi {
      */
     virtualTimeBudgetExpired(): void;
 
+  }
+
+  export interface EventBreakpointsApi {
+    /**
+     * Sets breakpoint on particular native event.
+     */
+    invoke_setInstrumentationBreakpoint(params: Protocol.EventBreakpoints.SetInstrumentationBreakpointRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Removes breakpoint on particular native event.
+     */
+    invoke_removeInstrumentationBreakpoint(params: Protocol.EventBreakpoints.RemoveInstrumentationBreakpointRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Removes all breakpoints
+     */
+    invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
+
+  }
+  export interface EventBreakpointsDispatcher {
+  }
+
+  export interface ExtensionsApi {
+    /**
+     * Installs an unpacked extension from the filesystem similar to
+     * --load-extension CLI flags. Returns extension ID once the extension
+     * has been installed. Available if the client is connected using the
+     * --remote-debugging-pipe flag and the --enable-unsafe-extension-debugging
+     * flag is set.
+     */
+    invoke_loadUnpacked(params: Protocol.Extensions.LoadUnpackedRequest): Promise<Protocol.Extensions.LoadUnpackedResponse>;
+
+    /**
+     * Uninstalls an unpacked extension (others not supported) from the profile.
+     * Available if the client is connected using the --remote-debugging-pipe flag
+     * and the --enable-unsafe-extension-debugging.
+     */
+    invoke_uninstall(params: Protocol.Extensions.UninstallRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Gets data from extension storage in the given `storageArea`. If `keys` is
+     * specified, these are used to filter the result.
+     */
+    invoke_getStorageItems(params: Protocol.Extensions.GetStorageItemsRequest): Promise<Protocol.Extensions.GetStorageItemsResponse>;
+
+    /**
+     * Removes `keys` from extension storage in the given `storageArea`.
+     */
+    invoke_removeStorageItems(params: Protocol.Extensions.RemoveStorageItemsRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Clears extension storage in the given `storageArea`.
+     */
+    invoke_clearStorageItems(params: Protocol.Extensions.ClearStorageItemsRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Sets `values` in extension storage in the given `storageArea`. The provided `values`
+     * will be merged with existing values in the storage area.
+     */
+    invoke_setStorageItems(params: Protocol.Extensions.SetStorageItemsRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+  }
+  export interface ExtensionsDispatcher {
+  }
+
+  export interface FedCmApi {
+    invoke_enable(params: Protocol.FedCm.EnableRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
+
+    invoke_selectAccount(params: Protocol.FedCm.SelectAccountRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    invoke_clickDialogButton(params: Protocol.FedCm.ClickDialogButtonRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    invoke_openUrl(params: Protocol.FedCm.OpenUrlRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    invoke_dismissDialog(params: Protocol.FedCm.DismissDialogRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Resets the cooldown time, if any, to allow the next FedCM call to show
+     * a dialog even if one was recently dismissed by the user.
+     */
+    invoke_resetCooldown(): Promise<Protocol.ProtocolResponseWithError>;
+
+  }
+  export interface FedCmDispatcher {
+    dialogShown(params: Protocol.FedCm.DialogShownEvent): void;
+
+    /**
+     * Triggered when a dialog is closed, either by user action, JS abort,
+     * or a command below.
+     */
+    dialogClosed(params: Protocol.FedCm.DialogClosedEvent): void;
+
+  }
+
+  export interface FetchApi {
+    /**
+     * Disables the fetch domain.
+     */
+    invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Enables issuing of requestPaused events. A request will be paused until client
+     * calls one of failRequest, fulfillRequest or continueRequest/continueWithAuth.
+     */
+    invoke_enable(params: Protocol.Fetch.EnableRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Causes the request to fail with specified reason.
+     */
+    invoke_failRequest(params: Protocol.Fetch.FailRequestRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Provides response to the request.
+     */
+    invoke_fulfillRequest(params: Protocol.Fetch.FulfillRequestRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Continues the request, optionally modifying some of its parameters.
+     */
+    invoke_continueRequest(params: Protocol.Fetch.ContinueRequestRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Continues a request supplying authChallengeResponse following authRequired event.
+     */
+    invoke_continueWithAuth(params: Protocol.Fetch.ContinueWithAuthRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Continues loading of the paused response, optionally modifying the
+     * response headers. If either responseCode or headers are modified, all of them
+     * must be present.
+     */
+    invoke_continueResponse(params: Protocol.Fetch.ContinueResponseRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Causes the body of the response to be received from the server and
+     * returned as a single string. May only be issued for a request that
+     * is paused in the Response stage and is mutually exclusive with
+     * takeResponseBodyForInterceptionAsStream. Calling other methods that
+     * affect the request or disabling fetch domain before body is received
+     * results in an undefined behavior.
+     * Note that the response body is not available for redirects. Requests
+     * paused in the _redirect received_ state may be differentiated by
+     * `responseCode` and presence of `location` response header, see
+     * comments to `requestPaused` for details.
+     */
+    invoke_getResponseBody(params: Protocol.Fetch.GetResponseBodyRequest): Promise<Protocol.Fetch.GetResponseBodyResponse>;
+
+    /**
+     * Returns a handle to the stream representing the response body.
+     * The request must be paused in the HeadersReceived stage.
+     * Note that after this command the request can't be continued
+     * as is -- client either needs to cancel it or to provide the
+     * response body.
+     * The stream only supports sequential read, IO.read will fail if the position
+     * is specified.
+     * This method is mutually exclusive with getResponseBody.
+     * Calling other methods that affect the request or disabling fetch
+     * domain before body is received results in an undefined behavior.
+     */
+    invoke_takeResponseBodyAsStream(params: Protocol.Fetch.TakeResponseBodyAsStreamRequest): Promise<Protocol.Fetch.TakeResponseBodyAsStreamResponse>;
+
+  }
+  export interface FetchDispatcher {
+    /**
+     * Issued when the domain is enabled and the request URL matches the
+     * specified filter. The request is paused until the client responds
+     * with one of continueRequest, failRequest or fulfillRequest.
+     * The stage of the request can be determined by presence of responseErrorReason
+     * and responseStatusCode -- the request is at the response stage if either
+     * of these fields is present and in the request stage otherwise.
+     * Redirect responses and subsequent requests are reported similarly to regular
+     * responses and requests. Redirect responses may be distinguished by the value
+     * of `responseStatusCode` (which is one of 301, 302, 303, 307, 308) along with
+     * presence of the `location` header. Requests resulting from a redirect will
+     * have `redirectedRequestId` field set.
+     */
+    requestPaused(params: Protocol.Fetch.RequestPausedEvent): void;
+
+    /**
+     * Issued when the domain is enabled with handleAuthRequests set to true.
+     * The request is paused until client responds with continueWithAuth.
+     */
+    authRequired(params: Protocol.Fetch.AuthRequiredEvent): void;
+
+  }
+
+  export interface FileSystemApi {
+    invoke_getDirectory(params: Protocol.FileSystem.GetDirectoryRequest): Promise<Protocol.FileSystem.GetDirectoryResponse>;
+
+  }
+  export interface FileSystemDispatcher {
   }
 
   export interface HeadlessExperimentalApi {
@@ -1743,11 +2046,13 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Disables headless events for the target.
+     * @deprecated
      */
     invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
      * Enables headless events for the target.
+     * @deprecated
      */
     invoke_enable(): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -1775,13 +2080,6 @@ declare namespace ProtocolProxyApi {
 
   }
   export interface IODispatcher {
-  }
-
-  export interface FileSystemApi {
-    invoke_getDirectory(params: Protocol.FileSystem.GetDirectoryRequest): Promise<Protocol.FileSystem.GetDirectoryResponse>;
-
-  }
-  export interface FileSystemDispatcher {
   }
 
   // eslint thinks this is us prefixing our interfaces but it's not!
@@ -2037,6 +2335,50 @@ declare namespace ProtocolProxyApi {
 
   }
 
+  export interface MediaApi {
+    /**
+     * Enables the Media domain
+     */
+    invoke_enable(): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Disables the Media domain.
+     */
+    invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
+
+  }
+  export interface MediaDispatcher {
+    /**
+     * This can be called multiple times, and can be used to set / override /
+     * remove player properties. A null propValue indicates removal.
+     */
+    playerPropertiesChanged(params: Protocol.Media.PlayerPropertiesChangedEvent): void;
+
+    /**
+     * Send events as a list, allowing them to be batched on the browser for less
+     * congestion. If batched, events must ALWAYS be in chronological order.
+     */
+    playerEventsAdded(params: Protocol.Media.PlayerEventsAddedEvent): void;
+
+    /**
+     * Send a list of any messages that need to be delivered.
+     */
+    playerMessagesLogged(params: Protocol.Media.PlayerMessagesLoggedEvent): void;
+
+    /**
+     * Send a list of any errors that need to be delivered.
+     */
+    playerErrorsRaised(params: Protocol.Media.PlayerErrorsRaisedEvent): void;
+
+    /**
+     * Called whenever a player is created, or when a new agent joins and receives
+     * a list of active players. If an agent is restored, it will receive one
+     * event for each active player.
+     */
+    playerCreated(params: Protocol.Media.PlayerCreatedEvent): void;
+
+  }
+
   export interface MemoryApi {
     /**
      * Retruns current DOM object counters.
@@ -2103,6 +2445,17 @@ declare namespace ProtocolProxyApi {
 
   export interface NetworkApi {
     /**
+     * Returns enum representing if IP Proxy of requests is available
+     * or reason it is not active.
+     */
+    invoke_getIPProtectionProxyStatus(): Promise<Protocol.Network.GetIPProtectionProxyStatusResponse>;
+
+    /**
+     * Sets bypass IP Protection Proxy boolean.
+     */
+    invoke_setIPProtectionProxyBypassEnabled(params: Protocol.Network.SetIPProtectionProxyBypassEnabledRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
      * Sets a list of content encodings that will be accepted. Empty list means no encoding is accepted.
      */
     invoke_setAcceptedEncodings(params: Protocol.Network.SetAcceptedEncodingsRequest): Promise<Protocol.ProtocolResponseWithError>;
@@ -2114,16 +2467,19 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Tells whether clearing browser cache is supported.
+     * @deprecated
      */
     invoke_canClearBrowserCache(): Promise<Protocol.Network.CanClearBrowserCacheResponse>;
 
     /**
      * Tells whether clearing browser cookies is supported.
+     * @deprecated
      */
     invoke_canClearBrowserCookies(): Promise<Protocol.Network.CanClearBrowserCookiesResponse>;
 
     /**
      * Tells whether emulation of network conditions is supported.
+     * @deprecated
      */
     invoke_canEmulateNetworkConditions(): Promise<Protocol.Network.CanEmulateNetworkConditionsResponse>;
 
@@ -2143,6 +2499,7 @@ declare namespace ProtocolProxyApi {
      * fetch occurs as a result which encounters a redirect an additional Network.requestIntercepted
      * event will be sent with the same InterceptionId.
      * Deprecated, use Fetch.continueRequest, Fetch.fulfillRequest and Fetch.failRequest instead.
+     * @deprecated
      */
     invoke_continueInterceptedRequest(params: Protocol.Network.ContinueInterceptedRequestRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -2157,9 +2514,21 @@ declare namespace ProtocolProxyApi {
     invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
-     * Activates emulation of network conditions.
+     * Activates emulation of network conditions. This command is deprecated in favor of the emulateNetworkConditionsByRule
+     * and overrideNetworkState commands, which can be used together to the same effect.
+     * @deprecated
      */
     invoke_emulateNetworkConditions(params: Protocol.Network.EmulateNetworkConditionsRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Activates emulation of network conditions for individual requests using URL match patterns.
+     */
+    invoke_emulateNetworkConditionsByRule(params: Protocol.Network.EmulateNetworkConditionsByRuleRequest): Promise<Protocol.Network.EmulateNetworkConditionsByRuleResponse>;
+
+    /**
+     * Override the state of navigator.onLine and navigator.connection.
+     */
+    invoke_overrideNetworkState(params: Protocol.Network.OverrideNetworkStateRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
      * Enables network tracking, network events will now be delivered to the client.
@@ -2170,6 +2539,7 @@ declare namespace ProtocolProxyApi {
      * Returns all browser cookies. Depending on the backend support, will return detailed cookie
      * information in the `cookies` field.
      * Deprecated. Use Storage.getCookies instead.
+     * @deprecated
      */
     invoke_getAllCookies(): Promise<Protocol.Network.GetAllCookiesResponse>;
 
@@ -2257,6 +2627,7 @@ declare namespace ProtocolProxyApi {
     /**
      * Sets the requests to intercept that match the provided patterns and optionally resource types.
      * Deprecated, please use Fetch.enable instead.
+     * @deprecated
      */
     invoke_setRequestInterception(params: Protocol.Network.SetRequestInterceptionRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -2319,6 +2690,7 @@ declare namespace ProtocolProxyApi {
      * Details of an intercepted HTTP request, which must be either allowed, blocked, modified or
      * mocked.
      * Deprecated, use Fetch.requestPaused instead.
+     * @deprecated
      */
     requestIntercepted(params: Protocol.Network.RequestInterceptedEvent): void;
 
@@ -2562,6 +2934,7 @@ declare namespace ProtocolProxyApi {
      * Deprecated: Doesn't work reliably and cannot be fixed due to process
      * separation (the owner node might be in a different process). Determine
      * the owner node in the client and use highlightNode.
+     * @deprecated
      */
     invoke_highlightFrame(params: Protocol.Overlay.HighlightFrameRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -2578,6 +2951,9 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Highlights given rectangle. Coordinates are absolute with respect to the main frame viewport.
+     * Issue: the method does not handle device pixel ratio (DPR) correctly.
+     * The coordinates currently have to be adjusted by the client
+     * if DPR is not 1 (see crbug.com/437807128).
      */
     invoke_highlightRect(params: Protocol.Overlay.HighlightRectRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -2638,11 +3014,13 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Deprecated, no longer has any effect.
+     * @deprecated
      */
     invoke_setShowHitTestBorders(params: Protocol.Overlay.SetShowHitTestBordersRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
      * Deprecated, no longer has any effect.
+     * @deprecated
      */
     invoke_setShowWebVitals(params: Protocol.Overlay.SetShowWebVitalsRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -2691,9 +3069,99 @@ declare namespace ProtocolProxyApi {
 
   }
 
+  export interface PWAApi {
+    /**
+     * Returns the following OS state for the given manifest id.
+     */
+    invoke_getOsAppState(params: Protocol.PWA.GetOsAppStateRequest): Promise<Protocol.PWA.GetOsAppStateResponse>;
+
+    /**
+     * Installs the given manifest identity, optionally using the given installUrlOrBundleUrl
+     *
+     * IWA-specific install description:
+     * manifestId corresponds to isolated-app:// + web_package::SignedWebBundleId
+     *
+     * File installation mode:
+     * The installUrlOrBundleUrl can be either file:// or http(s):// pointing
+     * to a signed web bundle (.swbn). In this case SignedWebBundleId must correspond to
+     * The .swbn file's signing key.
+     *
+     * Dev proxy installation mode:
+     * installUrlOrBundleUrl must be http(s):// that serves dev mode IWA.
+     * web_package::SignedWebBundleId must be of type dev proxy.
+     *
+     * The advantage of dev proxy mode is that all changes to IWA
+     * automatically will be reflected in the running app without
+     * reinstallation.
+     *
+     * To generate bundle id for proxy mode:
+     * 1. Generate 32 random bytes.
+     * 2. Add a specific suffix at the end following the documentation
+     *    https://github.com/WICG/isolated-web-apps/blob/main/Scheme.md#suffix
+     * 3. Encode the entire sequence using Base32 without padding.
+     *
+     * If Chrome is not in IWA dev
+     * mode, the installation will fail, regardless of the state of the allowlist.
+     */
+    invoke_install(params: Protocol.PWA.InstallRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Uninstalls the given manifest_id and closes any opened app windows.
+     */
+    invoke_uninstall(params: Protocol.PWA.UninstallRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Launches the installed web app, or an url in the same web app instead of the
+     * default start url if it is provided. Returns a page Target.TargetID which
+     * can be used to attach to via Target.attachToTarget or similar APIs.
+     */
+    invoke_launch(params: Protocol.PWA.LaunchRequest): Promise<Protocol.PWA.LaunchResponse>;
+
+    /**
+     * Opens one or more local files from an installed web app identified by its
+     * manifestId. The web app needs to have file handlers registered to process
+     * the files. The API returns one or more page Target.TargetIDs which can be
+     * used to attach to via Target.attachToTarget or similar APIs.
+     * If some files in the parameters cannot be handled by the web app, they will
+     * be ignored. If none of the files can be handled, this API returns an error.
+     * If no files are provided as the parameter, this API also returns an error.
+     *
+     * According to the definition of the file handlers in the manifest file, one
+     * Target.TargetID may represent a page handling one or more files. The order
+     * of the returned Target.TargetIDs is not guaranteed.
+     *
+     * TODO(crbug.com/339454034): Check the existences of the input files.
+     */
+    invoke_launchFilesInApp(params: Protocol.PWA.LaunchFilesInAppRequest): Promise<Protocol.PWA.LaunchFilesInAppResponse>;
+
+    /**
+     * Opens the current page in its web app identified by the manifest id, needs
+     * to be called on a page target. This function returns immediately without
+     * waiting for the app to finish loading.
+     */
+    invoke_openCurrentPageInApp(params: Protocol.PWA.OpenCurrentPageInAppRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Changes user settings of the web app identified by its manifestId. If the
+     * app was not installed, this command returns an error. Unset parameters will
+     * be ignored; unrecognized values will cause an error.
+     *
+     * Unlike the ones defined in the manifest files of the web apps, these
+     * settings are provided by the browser and controlled by the users, they
+     * impact the way the browser handling the web apps.
+     *
+     * See the comment of each parameter.
+     */
+    invoke_changeAppUserSettings(params: Protocol.PWA.ChangeAppUserSettingsRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+  }
+  export interface PWADispatcher {
+  }
+
   export interface PageApi {
     /**
      * Deprecated, please use addScriptToEvaluateOnNewDocument instead.
+     * @deprecated
      */
     invoke_addScriptToEvaluateOnLoad(params: Protocol.Page.AddScriptToEvaluateOnLoadRequest): Promise<Protocol.Page.AddScriptToEvaluateOnLoadResponse>;
 
@@ -2720,16 +3188,19 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Clears the overridden device metrics.
+     * @deprecated
      */
     invoke_clearDeviceMetricsOverride(): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
      * Clears the overridden Device Orientation.
+     * @deprecated
      */
     invoke_clearDeviceOrientationOverride(): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
      * Clears the overridden Geolocation Position and Error.
+     * @deprecated
      */
     invoke_clearGeolocationOverride(): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -2740,6 +3211,7 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Deletes browser cookie with given name, domain and path.
+     * @deprecated
      */
     invoke_deleteCookie(params: Protocol.Page.DeleteCookieRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -2766,6 +3238,7 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Deprecated because it's not guaranteed that the returned icon is in fact the one used for PWA installation.
+     * @deprecated
      */
     invoke_getManifestIcons(): Promise<Protocol.Page.GetManifestIconsResponse>;
 
@@ -2834,6 +3307,7 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Deprecated, please use removeScriptToEvaluateOnNewDocument instead.
+     * @deprecated
      */
     invoke_removeScriptToEvaluateOnLoad(params: Protocol.Page.RemoveScriptToEvaluateOnLoadRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -2876,11 +3350,13 @@ declare namespace ProtocolProxyApi {
      * Overrides the values of device screen dimensions (window.screen.width, window.screen.height,
      * window.innerWidth, window.innerHeight, and "device-width"/"device-height"-related CSS media
      * query results).
+     * @deprecated
      */
     invoke_setDeviceMetricsOverride(params: Protocol.Page.SetDeviceMetricsOverrideRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
      * Overrides the Device Orientation.
+     * @deprecated
      */
     invoke_setDeviceOrientationOverride(params: Protocol.Page.SetDeviceOrientationOverrideRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -2901,12 +3377,14 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Set the behavior when downloading a file.
+     * @deprecated
      */
     invoke_setDownloadBehavior(params: Protocol.Page.SetDownloadBehaviorRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
      * Overrides the Geolocation Position or Error. Omitting any of the parameters emulates position
      * unavailable.
+     * @deprecated
      */
     invoke_setGeolocationOverride(params: Protocol.Page.SetGeolocationOverrideRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -2917,6 +3395,7 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Toggles mouse event-based touch event emulation.
+     * @deprecated
      */
     invoke_setTouchEmulationEnabled(params: Protocol.Page.SetTouchEmulationEnabledRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -3029,6 +3508,7 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Fired when frame no longer has a scheduled navigation.
+     * @deprecated
      */
     frameClearedScheduledNavigation(params: Protocol.Page.FrameClearedScheduledNavigationEvent): void;
 
@@ -3074,6 +3554,7 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Fired when frame schedules a potential navigation.
+     * @deprecated
      */
     frameScheduledNavigation(params: Protocol.Page.FrameScheduledNavigationEvent): void;
 
@@ -3090,12 +3571,14 @@ declare namespace ProtocolProxyApi {
     /**
      * Fired when page is about to start a download.
      * Deprecated. Use Browser.downloadWillBegin instead.
+     * @deprecated
      */
     downloadWillBegin(params: Protocol.Page.DownloadWillBeginEvent): void;
 
     /**
      * Fired when download makes progress. Last call has |done| == true.
      * Deprecated. Use Browser.downloadProgress instead.
+     * @deprecated
      */
     downloadProgress(params: Protocol.Page.DownloadProgressEvent): void;
 
@@ -3180,6 +3663,7 @@ declare namespace ProtocolProxyApi {
      * Sets time domain to use for collecting and reporting duration metrics.
      * Note that this must be called before enabling metrics collection. Calling
      * this method while metrics collection is enabled returns an error.
+     * @deprecated
      */
     invoke_setTimeDomain(params: Protocol.Performance.SetTimeDomainRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -3213,6 +3697,42 @@ declare namespace ProtocolProxyApi {
 
   }
 
+  export interface PreloadApi {
+    invoke_enable(): Promise<Protocol.ProtocolResponseWithError>;
+
+    invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
+
+  }
+  export interface PreloadDispatcher {
+    /**
+     * Upsert. Currently, it is only emitted when a rule set added.
+     */
+    ruleSetUpdated(params: Protocol.Preload.RuleSetUpdatedEvent): void;
+
+    ruleSetRemoved(params: Protocol.Preload.RuleSetRemovedEvent): void;
+
+    /**
+     * Fired when a preload enabled state is updated.
+     */
+    preloadEnabledStateUpdated(params: Protocol.Preload.PreloadEnabledStateUpdatedEvent): void;
+
+    /**
+     * Fired when a prefetch attempt is updated.
+     */
+    prefetchStatusUpdated(params: Protocol.Preload.PrefetchStatusUpdatedEvent): void;
+
+    /**
+     * Fired when a prerender attempt is updated.
+     */
+    prerenderStatusUpdated(params: Protocol.Preload.PrerenderStatusUpdatedEvent): void;
+
+    /**
+     * Send a list of sources for all preloading attempts in a document.
+     */
+    preloadingAttemptSourcesUpdated(params: Protocol.Preload.PreloadingAttemptSourcesUpdatedEvent): void;
+
+  }
+
   export interface SecurityApi {
     /**
      * Disables tracking security state changes.
@@ -3231,12 +3751,14 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Handles a certificate error that fired a certificateError event.
+     * @deprecated
      */
     invoke_handleCertificateError(params: Protocol.Security.HandleCertificateErrorRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
      * Enable/disable overriding certificate errors. If enabled, all certificate error events need to
      * be handled by the DevTools client and should be answered with `handleCertificateError` commands.
+     * @deprecated
      */
     invoke_setOverrideCertificateErrors(params: Protocol.Security.SetOverrideCertificateErrorsRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -3247,6 +3769,7 @@ declare namespace ProtocolProxyApi {
      * handled with the `handleCertificateError` command. Note: this event does not fire if the
      * certificate error has been allowed internally. Only one client per target should override
      * certificate errors at the same time.
+     * @deprecated
      */
     certificateError(params: Protocol.Security.CertificateErrorEvent): void;
 
@@ -3257,6 +3780,7 @@ declare namespace ProtocolProxyApi {
 
     /**
      * The security state of the page changed. No longer being sent.
+     * @deprecated
      */
     securityStateChanged(params: Protocol.Security.SecurityStateChangedEvent): void;
 
@@ -3300,8 +3824,16 @@ declare namespace ProtocolProxyApi {
   export interface StorageApi {
     /**
      * Returns a storage key given a frame id.
+     * Deprecated. Please use Storage.getStorageKey instead.
+     * @deprecated
      */
     invoke_getStorageKeyForFrame(params: Protocol.Storage.GetStorageKeyForFrameRequest): Promise<Protocol.Storage.GetStorageKeyForFrameResponse>;
+
+    /**
+     * Returns storage key for the given frame. If no frame ID is provided,
+     * the storage key of the target executing this command is returned.
+     */
+    invoke_getStorageKey(params: Protocol.Storage.GetStorageKeyRequest): Promise<Protocol.Storage.GetStorageKeyResponse>;
 
     /**
      * Clears storage for origin.
@@ -3649,6 +4181,7 @@ declare namespace ProtocolProxyApi {
      * Sends protocol message over session with given id.
      * Consider using flat mode instead; see commands attachToTarget, setAutoAttach,
      * and crbug.com/991325.
+     * @deprecated
      */
     invoke_sendMessageToTarget(params: Protocol.Target.SendMessageToTargetRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -3793,98 +4326,6 @@ declare namespace ProtocolProxyApi {
      * delivered via dataCollected events.
      */
     tracingComplete(params: Protocol.Tracing.TracingCompleteEvent): void;
-
-  }
-
-  export interface FetchApi {
-    /**
-     * Disables the fetch domain.
-     */
-    invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Enables issuing of requestPaused events. A request will be paused until client
-     * calls one of failRequest, fulfillRequest or continueRequest/continueWithAuth.
-     */
-    invoke_enable(params: Protocol.Fetch.EnableRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Causes the request to fail with specified reason.
-     */
-    invoke_failRequest(params: Protocol.Fetch.FailRequestRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Provides response to the request.
-     */
-    invoke_fulfillRequest(params: Protocol.Fetch.FulfillRequestRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Continues the request, optionally modifying some of its parameters.
-     */
-    invoke_continueRequest(params: Protocol.Fetch.ContinueRequestRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Continues a request supplying authChallengeResponse following authRequired event.
-     */
-    invoke_continueWithAuth(params: Protocol.Fetch.ContinueWithAuthRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Continues loading of the paused response, optionally modifying the
-     * response headers. If either responseCode or headers are modified, all of them
-     * must be present.
-     */
-    invoke_continueResponse(params: Protocol.Fetch.ContinueResponseRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Causes the body of the response to be received from the server and
-     * returned as a single string. May only be issued for a request that
-     * is paused in the Response stage and is mutually exclusive with
-     * takeResponseBodyForInterceptionAsStream. Calling other methods that
-     * affect the request or disabling fetch domain before body is received
-     * results in an undefined behavior.
-     * Note that the response body is not available for redirects. Requests
-     * paused in the _redirect received_ state may be differentiated by
-     * `responseCode` and presence of `location` response header, see
-     * comments to `requestPaused` for details.
-     */
-    invoke_getResponseBody(params: Protocol.Fetch.GetResponseBodyRequest): Promise<Protocol.Fetch.GetResponseBodyResponse>;
-
-    /**
-     * Returns a handle to the stream representing the response body.
-     * The request must be paused in the HeadersReceived stage.
-     * Note that after this command the request can't be continued
-     * as is -- client either needs to cancel it or to provide the
-     * response body.
-     * The stream only supports sequential read, IO.read will fail if the position
-     * is specified.
-     * This method is mutually exclusive with getResponseBody.
-     * Calling other methods that affect the request or disabling fetch
-     * domain before body is received results in an undefined behavior.
-     */
-    invoke_takeResponseBodyAsStream(params: Protocol.Fetch.TakeResponseBodyAsStreamRequest): Promise<Protocol.Fetch.TakeResponseBodyAsStreamResponse>;
-
-  }
-  export interface FetchDispatcher {
-    /**
-     * Issued when the domain is enabled and the request URL matches the
-     * specified filter. The request is paused until the client responds
-     * with one of continueRequest, failRequest or fulfillRequest.
-     * The stage of the request can be determined by presence of responseErrorReason
-     * and responseStatusCode -- the request is at the response stage if either
-     * of these fields is present and in the request stage otherwise.
-     * Redirect responses and subsequent requests are reported similarly to regular
-     * responses and requests. Redirect responses may be distinguished by the value
-     * of `responseStatusCode` (which is one of 301, 302, 303, 307, 308) along with
-     * presence of the `location` header. Requests resulting from a redirect will
-     * have `redirectedRequestId` field set.
-     */
-    requestPaused(params: Protocol.Fetch.RequestPausedEvent): void;
-
-    /**
-     * Issued when the domain is enabled with handleAuthRequests set to true.
-     * The request is paused until client responds with continueWithAuth.
-     */
-    authRequired(params: Protocol.Fetch.AuthRequiredEvent): void;
 
   }
 
@@ -4070,351 +4511,6 @@ declare namespace ProtocolProxyApi {
 
   }
 
-  export interface MediaApi {
-    /**
-     * Enables the Media domain
-     */
-    invoke_enable(): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Disables the Media domain.
-     */
-    invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
-
-  }
-  export interface MediaDispatcher {
-    /**
-     * This can be called multiple times, and can be used to set / override /
-     * remove player properties. A null propValue indicates removal.
-     */
-    playerPropertiesChanged(params: Protocol.Media.PlayerPropertiesChangedEvent): void;
-
-    /**
-     * Send events as a list, allowing them to be batched on the browser for less
-     * congestion. If batched, events must ALWAYS be in chronological order.
-     */
-    playerEventsAdded(params: Protocol.Media.PlayerEventsAddedEvent): void;
-
-    /**
-     * Send a list of any messages that need to be delivered.
-     */
-    playerMessagesLogged(params: Protocol.Media.PlayerMessagesLoggedEvent): void;
-
-    /**
-     * Send a list of any errors that need to be delivered.
-     */
-    playerErrorsRaised(params: Protocol.Media.PlayerErrorsRaisedEvent): void;
-
-    /**
-     * Called whenever a player is created, or when a new agent joins and receives
-     * a list of active players. If an agent is restored, it will receive the full
-     * list of player ids and all events again.
-     */
-    playersCreated(params: Protocol.Media.PlayersCreatedEvent): void;
-
-  }
-
-  export interface DeviceAccessApi {
-    /**
-     * Enable events in this domain.
-     */
-    invoke_enable(): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Disable events in this domain.
-     */
-    invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Select a device in response to a DeviceAccess.deviceRequestPrompted event.
-     */
-    invoke_selectPrompt(params: Protocol.DeviceAccess.SelectPromptRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Cancel a prompt in response to a DeviceAccess.deviceRequestPrompted event.
-     */
-    invoke_cancelPrompt(params: Protocol.DeviceAccess.CancelPromptRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-  }
-  export interface DeviceAccessDispatcher {
-    /**
-     * A device request opened a user prompt to select a device. Respond with the
-     * selectPrompt or cancelPrompt command.
-     */
-    deviceRequestPrompted(params: Protocol.DeviceAccess.DeviceRequestPromptedEvent): void;
-
-  }
-
-  export interface PreloadApi {
-    invoke_enable(): Promise<Protocol.ProtocolResponseWithError>;
-
-    invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
-
-  }
-  export interface PreloadDispatcher {
-    /**
-     * Upsert. Currently, it is only emitted when a rule set added.
-     */
-    ruleSetUpdated(params: Protocol.Preload.RuleSetUpdatedEvent): void;
-
-    ruleSetRemoved(params: Protocol.Preload.RuleSetRemovedEvent): void;
-
-    /**
-     * Fired when a preload enabled state is updated.
-     */
-    preloadEnabledStateUpdated(params: Protocol.Preload.PreloadEnabledStateUpdatedEvent): void;
-
-    /**
-     * Fired when a prefetch attempt is updated.
-     */
-    prefetchStatusUpdated(params: Protocol.Preload.PrefetchStatusUpdatedEvent): void;
-
-    /**
-     * Fired when a prerender attempt is updated.
-     */
-    prerenderStatusUpdated(params: Protocol.Preload.PrerenderStatusUpdatedEvent): void;
-
-    /**
-     * Send a list of sources for all preloading attempts in a document.
-     */
-    preloadingAttemptSourcesUpdated(params: Protocol.Preload.PreloadingAttemptSourcesUpdatedEvent): void;
-
-  }
-
-  export interface FedCmApi {
-    invoke_enable(params: Protocol.FedCm.EnableRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
-
-    invoke_selectAccount(params: Protocol.FedCm.SelectAccountRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    invoke_clickDialogButton(params: Protocol.FedCm.ClickDialogButtonRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    invoke_openUrl(params: Protocol.FedCm.OpenUrlRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    invoke_dismissDialog(params: Protocol.FedCm.DismissDialogRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Resets the cooldown time, if any, to allow the next FedCM call to show
-     * a dialog even if one was recently dismissed by the user.
-     */
-    invoke_resetCooldown(): Promise<Protocol.ProtocolResponseWithError>;
-
-  }
-  export interface FedCmDispatcher {
-    dialogShown(params: Protocol.FedCm.DialogShownEvent): void;
-
-    /**
-     * Triggered when a dialog is closed, either by user action, JS abort,
-     * or a command below.
-     */
-    dialogClosed(params: Protocol.FedCm.DialogClosedEvent): void;
-
-  }
-
-  export interface PWAApi {
-    /**
-     * Returns the following OS state for the given manifest id.
-     */
-    invoke_getOsAppState(params: Protocol.PWA.GetOsAppStateRequest): Promise<Protocol.PWA.GetOsAppStateResponse>;
-
-    /**
-     * Installs the given manifest identity, optionally using the given installUrlOrBundleUrl
-     *
-     * IWA-specific install description:
-     * manifestId corresponds to isolated-app:// + web_package::SignedWebBundleId
-     *
-     * File installation mode:
-     * The installUrlOrBundleUrl can be either file:// or http(s):// pointing
-     * to a signed web bundle (.swbn). In this case SignedWebBundleId must correspond to
-     * The .swbn file's signing key.
-     *
-     * Dev proxy installation mode:
-     * installUrlOrBundleUrl must be http(s):// that serves dev mode IWA.
-     * web_package::SignedWebBundleId must be of type dev proxy.
-     *
-     * The advantage of dev proxy mode is that all changes to IWA
-     * automatically will be reflected in the running app without
-     * reinstallation.
-     *
-     * To generate bundle id for proxy mode:
-     * 1. Generate 32 random bytes.
-     * 2. Add a specific suffix 0x00 at the end.
-     * 3. Encode the entire sequence using Base32 without padding.
-     *
-     * If Chrome is not in IWA dev
-     * mode, the installation will fail, regardless of the state of the allowlist.
-     */
-    invoke_install(params: Protocol.PWA.InstallRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Uninstalls the given manifest_id and closes any opened app windows.
-     */
-    invoke_uninstall(params: Protocol.PWA.UninstallRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Launches the installed web app, or an url in the same web app instead of the
-     * default start url if it is provided. Returns a page Target.TargetID which
-     * can be used to attach to via Target.attachToTarget or similar APIs.
-     */
-    invoke_launch(params: Protocol.PWA.LaunchRequest): Promise<Protocol.PWA.LaunchResponse>;
-
-    /**
-     * Opens one or more local files from an installed web app identified by its
-     * manifestId. The web app needs to have file handlers registered to process
-     * the files. The API returns one or more page Target.TargetIDs which can be
-     * used to attach to via Target.attachToTarget or similar APIs.
-     * If some files in the parameters cannot be handled by the web app, they will
-     * be ignored. If none of the files can be handled, this API returns an error.
-     * If no files are provided as the parameter, this API also returns an error.
-     *
-     * According to the definition of the file handlers in the manifest file, one
-     * Target.TargetID may represent a page handling one or more files. The order
-     * of the returned Target.TargetIDs is not guaranteed.
-     *
-     * TODO(crbug.com/339454034): Check the existences of the input files.
-     */
-    invoke_launchFilesInApp(params: Protocol.PWA.LaunchFilesInAppRequest): Promise<Protocol.PWA.LaunchFilesInAppResponse>;
-
-    /**
-     * Opens the current page in its web app identified by the manifest id, needs
-     * to be called on a page target. This function returns immediately without
-     * waiting for the app to finish loading.
-     */
-    invoke_openCurrentPageInApp(params: Protocol.PWA.OpenCurrentPageInAppRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Changes user settings of the web app identified by its manifestId. If the
-     * app was not installed, this command returns an error. Unset parameters will
-     * be ignored; unrecognized values will cause an error.
-     *
-     * Unlike the ones defined in the manifest files of the web apps, these
-     * settings are provided by the browser and controlled by the users, they
-     * impact the way the browser handling the web apps.
-     *
-     * See the comment of each parameter.
-     */
-    invoke_changeAppUserSettings(params: Protocol.PWA.ChangeAppUserSettingsRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-  }
-  export interface PWADispatcher {
-  }
-
-  export interface BluetoothEmulationApi {
-    /**
-     * Enable the BluetoothEmulation domain.
-     */
-    invoke_enable(params: Protocol.BluetoothEmulation.EnableRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Set the state of the simulated central.
-     */
-    invoke_setSimulatedCentralState(params: Protocol.BluetoothEmulation.SetSimulatedCentralStateRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Disable the BluetoothEmulation domain.
-     */
-    invoke_disable(): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Simulates a peripheral with |address|, |name| and |knownServiceUuids|
-     * that has already been connected to the system.
-     */
-    invoke_simulatePreconnectedPeripheral(params: Protocol.BluetoothEmulation.SimulatePreconnectedPeripheralRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Simulates an advertisement packet described in |entry| being received by
-     * the central.
-     */
-    invoke_simulateAdvertisement(params: Protocol.BluetoothEmulation.SimulateAdvertisementRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Simulates the response code from the peripheral with |address| for a
-     * GATT operation of |type|. The |code| value follows the HCI Error Codes from
-     * Bluetooth Core Specification Vol 2 Part D 1.3 List Of Error Codes.
-     */
-    invoke_simulateGATTOperationResponse(params: Protocol.BluetoothEmulation.SimulateGATTOperationResponseRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Simulates the response from the characteristic with |characteristicId| for a
-     * characteristic operation of |type|. The |code| value follows the Error
-     * Codes from Bluetooth Core Specification Vol 3 Part F 3.4.1.1 Error Response.
-     * The |data| is expected to exist when simulating a successful read operation
-     * response.
-     */
-    invoke_simulateCharacteristicOperationResponse(params: Protocol.BluetoothEmulation.SimulateCharacteristicOperationResponseRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Simulates the response from the descriptor with |descriptorId| for a
-     * descriptor operation of |type|. The |code| value follows the Error
-     * Codes from Bluetooth Core Specification Vol 3 Part F 3.4.1.1 Error Response.
-     * The |data| is expected to exist when simulating a successful read operation
-     * response.
-     */
-    invoke_simulateDescriptorOperationResponse(params: Protocol.BluetoothEmulation.SimulateDescriptorOperationResponseRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Adds a service with |serviceUuid| to the peripheral with |address|.
-     */
-    invoke_addService(params: Protocol.BluetoothEmulation.AddServiceRequest): Promise<Protocol.BluetoothEmulation.AddServiceResponse>;
-
-    /**
-     * Removes the service respresented by |serviceId| from the simulated central.
-     */
-    invoke_removeService(params: Protocol.BluetoothEmulation.RemoveServiceRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Adds a characteristic with |characteristicUuid| and |properties| to the
-     * service represented by |serviceId|.
-     */
-    invoke_addCharacteristic(params: Protocol.BluetoothEmulation.AddCharacteristicRequest): Promise<Protocol.BluetoothEmulation.AddCharacteristicResponse>;
-
-    /**
-     * Removes the characteristic respresented by |characteristicId| from the
-     * simulated central.
-     */
-    invoke_removeCharacteristic(params: Protocol.BluetoothEmulation.RemoveCharacteristicRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Adds a descriptor with |descriptorUuid| to the characteristic respresented
-     * by |characteristicId|.
-     */
-    invoke_addDescriptor(params: Protocol.BluetoothEmulation.AddDescriptorRequest): Promise<Protocol.BluetoothEmulation.AddDescriptorResponse>;
-
-    /**
-     * Removes the descriptor with |descriptorId| from the simulated central.
-     */
-    invoke_removeDescriptor(params: Protocol.BluetoothEmulation.RemoveDescriptorRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-    /**
-     * Simulates a GATT disconnection from the peripheral with |address|.
-     */
-    invoke_simulateGATTDisconnection(params: Protocol.BluetoothEmulation.SimulateGATTDisconnectionRequest): Promise<Protocol.ProtocolResponseWithError>;
-
-  }
-  export interface BluetoothEmulationDispatcher {
-    /**
-     * Event for when a GATT operation of |type| to the peripheral with |address|
-     * happened.
-     */
-    gattOperationReceived(params: Protocol.BluetoothEmulation.GattOperationReceivedEvent): void;
-
-    /**
-     * Event for when a characteristic operation of |type| to the characteristic
-     * respresented by |characteristicId| happened. |data| and |writeType| is
-     * expected to exist when |type| is write.
-     */
-    characteristicOperationReceived(params: Protocol.BluetoothEmulation.CharacteristicOperationReceivedEvent): void;
-
-    /**
-     * Event for when a descriptor operation of |type| to the descriptor
-     * respresented by |descriptorId| happened. |data| is expected to exist when
-     * |type| is write.
-     */
-    descriptorOperationReceived(params: Protocol.BluetoothEmulation.DescriptorOperationReceivedEvent): void;
-
-  }
-
   export interface DebuggerApi {
     /**
      * Continues execution until specific location is reached.
@@ -4460,6 +4556,7 @@ declare namespace ProtocolProxyApi {
 
     /**
      * This command is deprecated. Use getScriptSource instead.
+     * @deprecated
      */
     invoke_getWasmBytecode(params: Protocol.Debugger.GetWasmBytecodeRequest): Promise<Protocol.Debugger.GetWasmBytecodeResponse>;
 
@@ -4473,6 +4570,9 @@ declare namespace ProtocolProxyApi {
      */
     invoke_pause(): Promise<Protocol.ProtocolResponseWithError>;
 
+    /**
+     * @deprecated
+     */
     invoke_pauseOnAsyncCall(params: Protocol.Debugger.PauseOnAsyncCallRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
@@ -4617,6 +4717,7 @@ declare namespace ProtocolProxyApi {
     /**
      * Fired when breakpoint is resolved to an actual script and location.
      * Deprecated in favor of `resolvedBreakpoints` in the `scriptParsed` event.
+     * @deprecated
      */
     breakpointResolved(params: Protocol.Debugger.BreakpointResolvedEvent): void;
 

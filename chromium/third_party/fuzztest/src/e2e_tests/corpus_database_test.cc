@@ -22,26 +22,30 @@
 #include "gtest/gtest.h"
 #include "absl/base/no_destructor.h"
 #include "absl/container/flat_hash_map.h"
-#include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
+#include "./common/logging.h"
 #include "./common/temp_dir.h"
 #include "./e2e_tests/test_binary_util.h"
 #include "./fuzztest/internal/escaping.h"
 #include "./fuzztest/internal/io.h"
-#include "./fuzztest/internal/logging.h"
 #include "./fuzztest/internal/subprocess.h"
+
+#define EXPECT_THAT_LOG(log, matcher)                                  \
+  EXPECT_TRUE(testing::Value(log, matcher))                            \
+      << "Matcher: " << testing::DescribeMatcher<std::string>(matcher) \
+      << "\nContents of " #log ":\n"                                   \
+      << log
 
 namespace fuzztest::internal {
 namespace {
 
 using ::testing::Contains;
 using ::testing::ContainsRegex;
-using ::testing::Eq;
 using ::testing::HasSubstr;
 
 std::string GetCorpusDatabaseTestingBinaryPath() {
@@ -75,11 +79,12 @@ class UpdateCorpusDatabaseTest
   static void SetUpTestSuite() {
 #if defined(__has_feature)
 #if !__has_feature(address_sanitizer)
-    CHECK(false) << "The test binary is not built with ASAN. Please run with "
-                    "--config=asan.";
+    FUZZTEST_LOG(FATAL)
+        << "The test binary is not built with ASAN. Please run with "
+           "--config=asan.";
 #elif !__has_feature(coverage_sanitizer) || !defined(FUZZTEST_USE_CENTIPEDE)
-    CHECK(false) << "The test binary is not built with coverage "
-                    "instrumentation for Centipede. "
+    FUZZTEST_LOG(FATAL) << "The test binary is not built with coverage "
+                           "instrumentation for Centipede. "
     "Please run with --config=fuzztest-experimental.";
 #endif
 #endif
@@ -146,7 +151,7 @@ class UpdateCorpusDatabaseTest
         return RunBinary(CentipedePath(), centipede_options);
       }
     }
-    FUZZTEST_INTERNAL_CHECK(false, "Unsupported execution model!\n");
+    FUZZTEST_LOG(FATAL) << "Unsupported execution model!";
   }
 
  private:
@@ -164,29 +169,25 @@ absl::NoDestructor<
     UpdateCorpusDatabaseTest::run_map_{};
 
 TEST_P(UpdateCorpusDatabaseTest, RunsFuzzTests) {
-  EXPECT_THAT(GetUpdateCorpusDatabaseStdErr(),
-              AllOf(HasSubstr("Fuzzing FuzzTest.FailsInTwoWays"),
-                    HasSubstr("Fuzzing FuzzTest.FailsWithStackOverflow")));
+  EXPECT_THAT_LOG(GetUpdateCorpusDatabaseStdErr(),
+                  AllOf(HasSubstr("Fuzzing FuzzTest.FailsInTwoWays"),
+                        HasSubstr("Fuzzing FuzzTest.FailsWithStackOverflow")));
 }
 
 TEST_P(UpdateCorpusDatabaseTest, UsesMultipleShardsForFuzzingAndDistillation) {
-  const auto &std_err = GetUpdateCorpusDatabaseStdErr();
-  EXPECT_THAT(
-      std_err,
+  EXPECT_THAT_LOG(
+      GetUpdateCorpusDatabaseStdErr(),
       AllOf(HasSubstr("[S0.0] begin-fuzz"), HasSubstr("[S1.0] begin-fuzz"),
             HasSubstr("DISTILL[S.0]: Distilling to output shard 0"),
-            HasSubstr("DISTILL[S.1]: Distilling to output shard 1")))
-      << std_err;
+            HasSubstr("DISTILL[S.1]: Distilling to output shard 1")));
 }
 
 TEST_P(UpdateCorpusDatabaseTest, FindsAllCrashes) {
-  const auto &std_err = GetUpdateCorpusDatabaseStdErr();
-  EXPECT_THAT(
-      std_err,
+  EXPECT_THAT_LOG(
+      GetUpdateCorpusDatabaseStdErr(),
       AllOf(ContainsRegex(R"re(Failure\s*: GoogleTest assertion failure)re"),
             ContainsRegex(R"re(Failure\s*: heap-buffer-overflow)re"),
-            ContainsRegex(R"re(Failure\s*: stack-limit-exceeded)re")))
-      << std_err;
+            ContainsRegex(R"re(Failure\s*: stack-limit-exceeded)re")));
 }
 
 TEST_P(UpdateCorpusDatabaseTest, DeduplicatesCrashes) {
@@ -196,17 +197,35 @@ TEST_P(UpdateCorpusDatabaseTest, DeduplicatesCrashes) {
 }
 
 TEST_P(UpdateCorpusDatabaseTest, ReportsCrashSummary) {
-  EXPECT_THAT(GetUpdateCorpusDatabaseStdErr(),
-              AllOf(ContainsRegex(
-                        R"re((?s)=== Summary of detected crashes ===
+  EXPECT_THAT_LOG(GetUpdateCorpusDatabaseStdErr(),
+                  AllOf(ContainsRegex(
+                            R"re((?s)=== Summary of detected crashes ===
 .*?Fuzz test    : FuzzTest.FailsInTwoWays
 .*?Total crashes: 2
 .*?=== End of summary of detected crashes ===)re"),
-                    ContainsRegex(
-                        R"re((?s)=== Summary of detected crashes ===
+                        ContainsRegex(
+                            R"re((?s)=== Summary of detected crashes ===
 .*?Fuzz test    : FuzzTest.FailsWithStackOverflow
 .*?Total crashes: 1
 .*?=== End of summary of detected crashes ===)re")));
+}
+
+TEST_P(UpdateCorpusDatabaseTest, RunsOnFilteredTests) {
+  TempDir corpus_database;
+
+  RunOptions run_options;
+  run_options.fuzztest_flags = {
+      {"corpus_database", corpus_database.path()},
+      {"fuzz_for", "10s"},
+  };
+  run_options.flags = {{GTEST_FLAG_PREFIX_ "filter", "*StackOverflow*"}};
+  auto [status, std_out, std_err] = RunBinaryMaybeWithCentipede(
+      GetCorpusDatabaseTestingBinaryPath(), run_options);
+
+  EXPECT_THAT_LOG(std_err,
+                  HasSubstr("Fuzzing FuzzTest.FailsWithStackOverflow for 10s"));
+  EXPECT_THAT_LOG(std_err,
+                  Not(HasSubstr("Fuzzing FuzzTest.FailsInTwoWays for 10s")));
 }
 
 TEST_P(UpdateCorpusDatabaseTest, StartsNewFuzzTestRunsWithoutExecutionIds) {
@@ -222,7 +241,8 @@ TEST_P(UpdateCorpusDatabaseTest, StartsNewFuzzTestRunsWithoutExecutionIds) {
   auto [fst_status, fst_std_out, fst_std_err] = RunBinaryMaybeWithCentipede(
       GetCorpusDatabaseTestingBinaryPath(), fst_run_options);
 
-  EXPECT_THAT(fst_std_err, HasSubstr("Fuzzing FuzzTest.FailsInTwoWays for 5m"));
+  EXPECT_THAT_LOG(fst_std_err,
+                  HasSubstr("Fuzzing FuzzTest.FailsInTwoWays for 5m"));
 
   // Adjust the fuzzing time so that only 1s remains.
   const absl::StatusOr<std::string> fuzzing_time_file =
@@ -240,7 +260,8 @@ TEST_P(UpdateCorpusDatabaseTest, StartsNewFuzzTestRunsWithoutExecutionIds) {
   auto [snd_status, snd_std_out, snd_std_err] = RunBinaryMaybeWithCentipede(
       GetCorpusDatabaseTestingBinaryPath(), snd_run_options);
 
-  EXPECT_THAT(snd_std_err, HasSubstr("Fuzzing FuzzTest.FailsInTwoWays for 5m"));
+  EXPECT_THAT_LOG(snd_std_err,
+                  HasSubstr("Fuzzing FuzzTest.FailsInTwoWays for 5m"));
 }
 
 TEST_P(UpdateCorpusDatabaseTest,
@@ -276,14 +297,13 @@ TEST_P(UpdateCorpusDatabaseTest,
   auto [snd_status_unused, snd_std_out_unused, snd_std_err] =
       RunBinaryMaybeWithCentipede(GetCorpusDatabaseTestingBinaryPath(),
                                   snd_run_options);
-  EXPECT_THAT(
+  EXPECT_THAT_LOG(
       snd_std_err,
       // The resumed fuzz test is the first one defined in the binary.
       AllOf(HasSubstr("Resuming running the fuzz test FuzzTest.FailsInTwoWays"),
             HasSubstr("Fuzzing FuzzTest.FailsInTwoWays for 1s"),
             // Make sure that FailsInTwoWays finished.
-            HasSubstr("Fuzzing FuzzTest.FailsWithStackOverflow")))
-      << snd_std_err;
+            HasSubstr("Fuzzing FuzzTest.FailsWithStackOverflow")));
 
   // 3rd run that should skip the test due the test is finished in the 2nd
   // exeuction with the same ID.
@@ -297,11 +317,10 @@ TEST_P(UpdateCorpusDatabaseTest,
   auto [thd_status_unused, thd_std_out_unused, thd_std_err] =
       RunBinaryMaybeWithCentipede(GetCorpusDatabaseTestingBinaryPath(),
                                   thd_run_options);
-  EXPECT_THAT(
+  EXPECT_THAT_LOG(
       thd_std_err,
       // The skipped fuzz test is the first one defined in the binary.
-      HasSubstr("Skipping running the fuzz test FuzzTest.FailsInTwoWays"))
-      << thd_std_err;
+      HasSubstr("Skipping running the fuzz test FuzzTest.FailsInTwoWays"));
 }
 
 TEST_P(UpdateCorpusDatabaseTest,
@@ -332,10 +351,9 @@ TEST_P(UpdateCorpusDatabaseTest,
   auto [snd_status_unused, snd_std_out_unused, snd_std_err] =
       RunBinaryMaybeWithCentipede(GetCorpusDatabaseTestingBinaryPath(),
                                   snd_run_options);
-  EXPECT_THAT(snd_std_err,
-              AllOf(Not(HasSubstr("Resuming running the fuzz test")),
-                    HasSubstr("Starting a new run of the fuzz test")))
-      << snd_std_err;
+  EXPECT_THAT_LOG(snd_std_err,
+                  AllOf(Not(HasSubstr("Resuming running the fuzz test")),
+                        HasSubstr("Starting a new run of the fuzz test")));
 
   // 3rd run that should not skip the test due the different execution ID
   RunOptions thd_run_options;
@@ -348,13 +366,13 @@ TEST_P(UpdateCorpusDatabaseTest,
   auto [thd_status_unused, thd_std_out_unused, thd_std_err] =
       RunBinaryMaybeWithCentipede(GetCorpusDatabaseTestingBinaryPath(),
                                   thd_run_options);
-  EXPECT_THAT(thd_std_err,
-              AllOf(Not(HasSubstr("Skipping running the fuzz test")),
-                    HasSubstr("Starting a new run of the fuzz test")))
-      << thd_std_err;
+  EXPECT_THAT_LOG(thd_std_err,
+                  AllOf(Not(HasSubstr("Skipping running the fuzz test")),
+                        HasSubstr("Starting a new run of the fuzz test")));
 }
 
-TEST_P(UpdateCorpusDatabaseTest, ReplaysFuzzTestsInParallel) {
+TEST_P(UpdateCorpusDatabaseTest,
+       ReplaysFuzzTestsInParallelAndPrintsCrashSummary) {
   RunOptions run_options;
   run_options.fuzztest_flags = {
       {"corpus_database", UpdateCorpusDatabaseAndGetPath()},
@@ -364,11 +382,20 @@ TEST_P(UpdateCorpusDatabaseTest, ReplaysFuzzTestsInParallel) {
   auto [status, std_out, std_err] = RunBinaryMaybeWithCentipede(
       GetCorpusDatabaseTestingBinaryPath(), run_options);
 
-  EXPECT_THAT(
+  EXPECT_THAT_LOG(
       std_err,
       AllOf(HasSubstr("Replaying FuzzTest.FailsInTwoWays"),
             HasSubstr("Replaying FuzzTest.FailsWithStackOverflow"),
             HasSubstr("[S0.0] begin-fuzz"), HasSubstr("[S1.0] begin-fuzz")));
+  EXPECT_THAT_LOG(std_err,
+                  AllOf(ContainsRegex(
+                            R"re((?s)=== Summary of detected crashes ===
+.*?Fuzz test    : FuzzTest.FailsInTwoWays
+.*?=== End of summary of detected crashes ===)re"),
+                        ContainsRegex(
+                            R"re((?s)=== Summary of detected crashes ===
+.*?Fuzz test    : FuzzTest.FailsWithStackOverflow
+.*?=== End of summary of detected crashes ===)re")));
 }
 
 TEST_P(UpdateCorpusDatabaseTest, PrintsErrorsWhenBazelTimeoutIsNotEnough) {
@@ -380,10 +407,10 @@ TEST_P(UpdateCorpusDatabaseTest, PrintsErrorsWhenBazelTimeoutIsNotEnough) {
   run_options.timeout = absl::Seconds(60);
   auto [status, std_out, std_err] = RunBinaryMaybeWithCentipede(
       GetCorpusDatabaseTestingBinaryPath(), run_options);
-  EXPECT_THAT(std_err, AllOf(HasSubstr("Fuzzing FuzzTest.FailsInTwoWays"),
-                             HasSubstr("Not enough time for running the fuzz "
-                                       "test FuzzTest.FailsWithStackOverflow")))
-      << std_err;
+  EXPECT_THAT_LOG(std_err,
+                  AllOf(HasSubstr("Fuzzing FuzzTest.FailsInTwoWays"),
+                        HasSubstr("Not enough time for running the fuzz "
+                                  "test FuzzTest.FailsWithStackOverflow")));
 }
 
 INSTANTIATE_TEST_SUITE_P(

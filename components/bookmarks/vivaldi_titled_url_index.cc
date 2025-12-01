@@ -93,7 +93,7 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchNicknameNodeWithQuery(
   // Clean up the title, URL, and ancestor titles in preparation for string
   // comparisons.
   base::OffsetAdjuster::Adjustments adjustments;
-  const std::u16string clean_url = string_cleaning::CleanUpUrlForMatching(
+  const std::u16string clean_url = omnibox::CleanUpUrlForMatching(
       node->GetTitledUrlNodeUrl(), &adjustments);
 
   const std::u16string nickname =

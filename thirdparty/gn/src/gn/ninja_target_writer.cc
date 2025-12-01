@@ -545,12 +545,16 @@ std::vector<OutputFile> NinjaTargetWriter::WriteInputDepsStampOrPhonyAndGetDep(
   if (num_output_uses == 1u)
     return outs;
 
+  // If outs is empty, we don't need stamp or phony target for this.
+  if (outs.empty()) {
+    return outs;
+  }
+
   OutputFile input_stamp_or_phony;
   std::string tool;
   if (settings_->build_settings()->no_stamp_files()) {
     // Make a phony target. We don't need to worry about an empty phony target,
     // as we would return early if there were no inputs.
-    CHECK(!outs.empty());
     input_stamp_or_phony =
         GetBuildDirForTargetAsOutputFile(target_, BuildDirType::PHONY);
     input_stamp_or_phony.value().append(target_->label().name());

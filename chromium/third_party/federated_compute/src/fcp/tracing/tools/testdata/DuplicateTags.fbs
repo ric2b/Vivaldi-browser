@@ -1,0 +1,11 @@
+include "fcp/tracing/tracing_schema_common.fbs";
+
+table TableWithTag (tag: "TTT0") {
+  field1: int32;
+  field2: int32;
+}
+
+table TableWithSameTag (tag: "TTT0") {
+  field1: int32;
+  field2: string;
+}

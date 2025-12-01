@@ -1,9 +1,12 @@
 import("//chrome/version.gni")
 
+source_set("base") {
+  sources = [ "containers/enum_array.h" ]
 
+  deps = [ "//base" ]
+}
 
 action("edge_version") {
-
   edge_version_file = "edge_versions.json"
   edge_version_header = "$target_gen_dir/base/edge_version.h"
   edge_version_header_template = "//vivaldi/base/edge_version.h.in"
@@ -14,7 +17,7 @@ action("edge_version") {
     edge_version = edge_version_json["v" + chrome_version_major]
     edge_version = "EDGE_VERSION='\"$edge_version\"'"
   } else {
-    not_needed(["edge_version_json"])
+    not_needed([ "edge_version_json" ])
     edge_version = "EDGE_VERSION='CHROME_PRODUCT_VERSION'"
   }
 
@@ -23,16 +26,16 @@ action("edge_version") {
     edge_version_header_template,
   ]
 
-  outputs = [edge_version_header]
+  outputs = [ edge_version_header ]
 
   script = "//build/util/version.py"
 
   args = [
-    "-e", edge_version,
+    "-e",
+    edge_version,
     "-i",
     rebase_path(edge_version_header_template, root_build_dir),
     "-o",
     rebase_path(edge_version_header, root_build_dir),
   ]
-
 }

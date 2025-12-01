@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.toolbar;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
@@ -25,6 +24,9 @@ import org.chromium.components.profile_metrics.BrowserProfileType;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.ui.base.PageTransition;
+
+import java.util.Collections;
+import java.util.function.Supplier;
 
 /** Implementation of {@link ToolbarTabController}. */
 @NullMarked
@@ -111,7 +113,7 @@ public class ToolbarTabControllerImpl implements ToolbarTabController {
             if (newTab == null) return false;
             newTab.goBack();
             if (mMultiInstanceManager == null) return false;
-            mMultiInstanceManager.moveTabToNewWindow(newTab);
+            mMultiInstanceManager.moveTabsToNewWindow(Collections.singletonList(newTab));
             // Don't run mOnSuccessRunnable since nothing happened in the current tab.
             return true;
         }
@@ -150,7 +152,7 @@ public class ToolbarTabControllerImpl implements ToolbarTabController {
             if (newTab == null) return false;
             newTab.goForward();
             if (mMultiInstanceManager == null) return false;
-            mMultiInstanceManager.moveTabToNewWindow(newTab);
+            mMultiInstanceManager.moveTabsToNewWindow(Collections.singletonList(newTab));
             // Don't run mOnSuccessRunnable since nothing happened in the current tab.
             return true;
         }

@@ -51,15 +51,15 @@ void GeolocationServiceImplContext::RequestPermission(
                   CreatePermissionDescriptorForPermissionType(
                       blink::PermissionType::GEOLOCATION),
               user_gesture),
-          base::BindOnce(&GeolocationServiceImplContext::HandlePermissionStatus,
+          base::BindOnce(&GeolocationServiceImplContext::HandlePermissionResult,
                          weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void GeolocationServiceImplContext::HandlePermissionStatus(
+void GeolocationServiceImplContext::HandlePermissionResult(
     PermissionCallback callback,
-    blink::mojom::PermissionStatus permission_status) {
+    PermissionResult permission_result) {
   has_pending_permission_request_ = false;
-  std::move(callback).Run(permission_status);
+  std::move(callback).Run(permission_result);
 }
 
 GeolocationServiceImpl::GeolocationServiceImpl(
@@ -112,18 +112,19 @@ void GeolocationServiceImpl::CreateGeolocation(
       // request finishes. To avoid calling a callback on a destroyed object,
       // use a WeakPtr and skip the callback if the object is invalid.
       base::BindOnce(
-          &GeolocationServiceImpl::CreateGeolocationWithPermissionStatus,
+          &GeolocationServiceImpl::CreateGeolocationWithPermissionResult,
           weak_factory_.GetWeakPtr(), std::move(receiver),
           std::move(scoped_callback)));
 }
 
-void GeolocationServiceImpl::CreateGeolocationWithPermissionStatus(
+void GeolocationServiceImpl::CreateGeolocationWithPermissionResult(
     mojo::PendingReceiver<device::mojom::Geolocation> receiver,
     CreateGeolocationCallback callback,
-    blink::mojom::PermissionStatus permission_status) {
-  std::move(callback).Run(permission_status);
-  if (permission_status != blink::mojom::PermissionStatus::GRANTED)
+    PermissionResult permission_result) {
+  std::move(callback).Run(permission_result.status);
+  if (permission_result.status != blink::mojom::PermissionStatus::GRANTED) {
     return;
+  }
 
   IncrementActivityCount();
 
@@ -138,23 +139,25 @@ void GeolocationServiceImpl::CreateGeolocationWithPermissionStatus(
   subscription_id_ =
       PermissionControllerImpl::FromBrowserContext(
           render_frame_host_->GetBrowserContext())
-          ->SubscribeToPermissionStatusChange(
-              blink::PermissionType::GEOLOCATION,
+          ->SubscribeToPermissionResultChange(
+              PermissionDescriptorUtil::
+                  CreatePermissionDescriptorForPermissionType(
+                      blink::PermissionType::GEOLOCATION),
               /*render_process_host=*/nullptr, render_frame_host_,
               requesting_url,
               /*should_include_device_status=*/false,
               base::BindRepeating(
-                  &GeolocationServiceImpl::HandlePermissionStatusChange,
+                  &GeolocationServiceImpl::HandlePermissionResultChange,
                   weak_factory_.GetWeakPtr()));
 }
 
-void GeolocationServiceImpl::HandlePermissionStatusChange(
-    blink::mojom::PermissionStatus permission_status) {
-  if (permission_status != blink::mojom::PermissionStatus::GRANTED &&
+void GeolocationServiceImpl::HandlePermissionResultChange(
+    PermissionResult permission_result) {
+  if (permission_result.status != blink::mojom::PermissionStatus::GRANTED &&
       subscription_id_.value()) {
     PermissionControllerImpl::FromBrowserContext(
         render_frame_host_->GetBrowserContext())
-        ->UnsubscribeFromPermissionStatusChange(subscription_id_);
+        ->UnsubscribeFromPermissionResultChange(subscription_id_);
     geolocation_context_->OnPermissionRevoked(requesting_origin_);
     DecrementActivityCount();
   }

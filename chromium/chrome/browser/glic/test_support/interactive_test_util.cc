@@ -17,9 +17,9 @@ namespace glic::test {
 namespace internal {
 
 GlicFreShowingDialogObserver::GlicFreShowingDialogObserver(
-    GlicFreController* controller)
+    const GlicFreController& controller)
     : PollingStateObserver(
-          [controller]() { return controller->IsShowingDialog(); }) {}
+          [&controller]() { return controller.IsShowingDialog(); }) {}
 GlicFreShowingDialogObserver::~GlicFreShowingDialogObserver() = default;
 
 DEFINE_STATE_IDENTIFIER_VALUE(GlicFreShowingDialogObserver,
@@ -60,6 +60,12 @@ void GlicAppStateObserver::WebUiStateChanged(mojom::WebUiState state) {
 
 DEFINE_STATE_IDENTIFIER_VALUE(GlicAppStateObserver, kGlicAppState);
 
+WaitingStateObserver::WaitingStateObserver() {
+  OnStateObserverStateChanged(true);
+}
+
+WaitingStateObserver::~WaitingStateObserver() = default;
+
 WebUiStateObserver::WebUiStateObserver(Host* host) : host_(host) {
   observation_.Observe(host);
 }
@@ -73,6 +79,22 @@ mojom::WebUiState WebUiStateObserver::GetStateObserverInitialState() const {
 }
 
 void WebUiStateObserver::WebUiStateChanged(mojom::WebUiState state) {
+  OnStateObserverStateChanged(state);
+}
+
+OnViewChangedObserver::OnViewChangedObserver(Host* host) : host_(host) {
+  observation_.Observe(host);
+}
+
+OnViewChangedObserver::~OnViewChangedObserver() {
+  observation_.Reset();
+}
+
+mojom::CurrentView OnViewChangedObserver::GetStateObserverInitialState() const {
+  return host_->GetPrimaryCurrentView();
+}
+
+void OnViewChangedObserver::OnViewChanged(mojom::CurrentView state) {
   OnStateObserverStateChanged(state);
 }
 

@@ -3,6 +3,7 @@
 #ifndef COMPONENTS_AD_BLOCKER_CORE_ADBLOCK_KNOWN_SOURCES_HANDLER_IMPL_H_
 #define COMPONENTS_AD_BLOCKER_CORE_ADBLOCK_KNOWN_SOURCES_HANDLER_IMPL_H_
 
+#include <array>
 #include <set>
 #include <string>
 #include <vector>
@@ -12,8 +13,6 @@
 #include "base/uuid.h"
 #include "components/ad_blocker/public/core/adblock_known_sources_handler.h"
 #include "components/ad_blocker/public/core/adblock_types.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-#include "url/gurl.h"
 
 namespace adblock_filter {
 class RuleManager;
@@ -24,9 +23,8 @@ class KnownRuleSourcesHandlerImpl : public KnownRuleSourcesHandler {
       RuleManager* rule_manager,
       int storage_version,
       const std::string& locale,
-      const std::array<std::vector<KnownRuleSource>, kRuleGroupCount>&
-          known_sources,
-      std::array<std::set<base::Uuid>, kRuleGroupCount> deleted_presets,
+      const RuleGroupArray<std::vector<KnownRuleSource>>& known_sources,
+      RuleGroupArray<std::set<base::Uuid>> deleted_presets,
       base::RepeatingClosure schedule_save);
   ~KnownRuleSourcesHandlerImpl() override;
   KnownRuleSourcesHandlerImpl(const KnownRuleSourcesHandlerImpl&) = delete;
@@ -71,11 +69,10 @@ class KnownRuleSourcesHandlerImpl : public KnownRuleSourcesHandler {
 
   const raw_ptr<RuleManager> rule_manager_;
 
-  std::array<KnownRuleSources, kRuleGroupCount> known_sources_;
-  std::array<std::set<base::Uuid>, kRuleGroupCount> deleted_presets_;
+  RuleGroupArray<KnownRuleSources> known_sources_;
+  RuleGroupArray<std::set<base::Uuid>> deleted_presets_;
 
-  std::array<std::map<uint32_t, base::Uuid>, kRuleGroupCount>
-      source_id_to_preset_maps_;
+  RuleGroupArray<std::map<uint32_t, base::Uuid>> source_id_to_preset_maps_;
 
   base::ObserverList<Observer> observers_;
 

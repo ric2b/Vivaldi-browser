@@ -5,6 +5,7 @@
 #include "net/disk_cache/sql/sql_backend_impl.h"
 
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "base/barrier_callback.h"
@@ -148,6 +149,38 @@ base::OnceClosure DoNothingWithBoundHandle(
   return base::OnceClosure(base::DoNothingWithBoundArgs(std::move(handle)));
 }
 
+// Retrieves the `ResId` from `res_id_or_error` if it holds a `ResId` value.
+// This function should only be called after the speculative entry creation has
+// completed and `res_id_or_error->data` is populated. The call is sequenced
+// by the ExclusiveOperationCoordinator, which ensures that this function runs
+// only after the handle for the creation operation is released.
+std::optional<SqlPersistentStore::ResId> GetResId(
+    const scoped_refptr<SqlBackendImpl::ResIdOrErrorHolder>& res_id_or_error) {
+  CHECK(res_id_or_error);
+  CHECK(res_id_or_error->data.has_value());
+  if (std::holds_alternative<SqlPersistentStore::ResId>(
+          res_id_or_error->data.value())) {
+    return std::get<SqlPersistentStore::ResId>(res_id_or_error->data.value());
+  }
+  return std::nullopt;
+}
+
+// Retrieves the `Error` from `res_id_or_error` if it holds an `Error` value.
+// This function should only be called after the speculative entry creation has
+// completed and `res_id_or_error->data` is populated. The call is sequenced
+// by the ExclusiveOperationCoordinator, which ensures that this function runs
+// only after the handle for the creation operation is released.
+std::optional<SqlPersistentStore::Error> GetError(
+    const scoped_refptr<SqlBackendImpl::ResIdOrErrorHolder>& res_id_or_error) {
+  CHECK(res_id_or_error);
+  CHECK(res_id_or_error->data.has_value());
+  if (std::holds_alternative<SqlPersistentStore::Error>(
+          res_id_or_error->data.value())) {
+    return std::get<SqlPersistentStore::Error>(res_id_or_error->data.value());
+  }
+  return std::nullopt;
+}
+
 }  // namespace
 
 // IteratorImpl provides an implementation of Backend::Iterator for the
@@ -233,11 +266,14 @@ class SqlBackendImpl::IteratorImpl : public Backend::Iterator {
     // `OpenLatestEntryBeforeResId` will not return it. If the iterator
     // operation runs first, any subsequent doom operation will be queued until
     // the iteration step is complete.
-    DCHECK(std::none_of(
-        backend_->doomed_entries_.begin(), backend_->doomed_entries_.end(),
-        [&](const raw_ref<const SqlEntryImpl>& doomed_entry) {
-          return doomed_entry.get().token() == entry_info.info.token;
-        }));
+    DCHECK(std::none_of(backend_->doomed_entries_.begin(),
+                        backend_->doomed_entries_.end(),
+                        [&](const raw_ref<const SqlEntryImpl>& doomed_entry) {
+                          const auto optional_res_id =
+                              GetResId(doomed_entry.get().res_id_or_error());
+                          return optional_res_id.has_value() &&
+                                 *optional_res_id == entry_info.info.res_id;
+                        }));
 
     // Apply any in-flight modifications (e.g., last_used time updates, header
     // changes) that were queued for this entry while it was not active.
@@ -245,7 +281,8 @@ class SqlBackendImpl::IteratorImpl : public Backend::Iterator {
 
     // If the entry is not active, create a new `SqlEntryImpl`.
     scoped_refptr<SqlEntryImpl> new_entry = base::MakeRefCounted<SqlEntryImpl>(
-        backend_, entry_info.key, entry_info.info.token,
+        backend_, entry_info.key,
+        base::MakeRefCounted<ResIdOrErrorHolder>(entry_info.info.res_id),
         entry_info.info.last_used, entry_info.info.body_end,
         entry_info.info.head);
     new_entry->AddRef();
@@ -261,7 +298,8 @@ class SqlBackendImpl::IteratorImpl : public Backend::Iterator {
   base::WeakPtr<SqlBackendImpl> backend_;
   // The `res_id` of the last entry returned by the iterator. Used to fetch
   // entries with smaller `res_id`s in subsequent calls.
-  int64_t res_id_iterator_ = std::numeric_limits<int64_t>::max();
+  SqlPersistentStore::ResId res_id_iterator_ =
+      SqlPersistentStore::ResId(std::numeric_limits<int64_t>::max());
   EntryResultCallback callback_;
   base::WeakPtrFactory<IteratorImpl> weak_factory_{this};
 };
@@ -383,6 +421,17 @@ void SqlBackendImpl::HandleOpenOrCreateEntryOperation(
     return;
   }
 
+  if (store_->GetIndexStateForHash(entry_key.hash()) ==
+      SqlPersistentStore::IndexState::kHashNotFound) {
+    if (type == OpenOrCreateEntryOperationType::kOpenEntry) {
+      std::move(callback).Run(EntryResult::MakeError(net::ERR_FAILED));
+      return;
+    }
+    std::move(callback).Run(
+        SpeculativeCreateEntry(entry_key, std::move(handle)));
+    return;
+  }
+
   switch (type) {
     case OpenOrCreateEntryOperationType::kOpenOrCreateEntry:
       store_->OpenOrCreateEntry(
@@ -399,9 +448,10 @@ void SqlBackendImpl::HandleOpenOrCreateEntryOperation(
       break;
     case OpenOrCreateEntryOperationType::kCreateEntry:
       store_->CreateEntry(
-          entry_key, base::BindOnce(&SqlBackendImpl::OnEntryOperationFinished,
-                                    base::Unretained(this), entry_key,
-                                    std::move(callback), std::move(handle)));
+          entry_key, base::Time::Now(),
+          base::BindOnce(&SqlBackendImpl::OnEntryOperationFinished,
+                         base::Unretained(this), entry_key, std::move(callback),
+                         std::move(handle)));
       break;
   }
 }
@@ -414,25 +464,22 @@ SqlEntryImpl* SqlBackendImpl::GetActiveEntry(const CacheEntryKey& key) {
   return nullptr;
 }
 
-void SqlBackendImpl::DoomActiveEntry(SqlEntryImpl& entry,
-                                     CompletionOnceCallback callback) {
+void SqlBackendImpl::DoomActiveEntry(SqlEntryImpl& entry) {
   exclusive_operation_coordinator_.PostOrRunNormalOperation(
       entry.cache_key(),
       base::BindOnce(&SqlBackendImpl::HandleDoomActiveEntryOperation,
                      weak_factory_.GetWeakPtr(),
-                     scoped_refptr<SqlEntryImpl>(&entry), std::move(callback)));
+                     scoped_refptr<SqlEntryImpl>(&entry)));
 }
 
 void SqlBackendImpl::HandleDoomActiveEntryOperation(
     scoped_refptr<SqlEntryImpl> entry,
-    CompletionOnceCallback callback,
     std::unique_ptr<ExclusiveOperationCoordinator::OperationHandle> handle) {
   if (entry->doomed()) {
     return;
   }
-  DoomActiveEntryInternal(
-      *entry,
-      std::move(callback).Then(DoNothingWithBoundHandle(std::move(handle))));
+  DoomActiveEntryInternal(*entry,
+                          base::DoNothingWithBoundArgs(std::move(handle)));
 }
 
 void SqlBackendImpl::DoomActiveEntryInternal(SqlEntryImpl& entry,
@@ -443,9 +490,16 @@ void SqlBackendImpl::DoomActiveEntryInternal(SqlEntryImpl& entry,
   ReleaseActiveEntry(entry);
   doomed_entries_.emplace(entry);
 
+  const auto optional_res_id = GetResId(entry.res_id_or_error());
+  if (!optional_res_id) {
+    // Speculative entry creation was failed.
+    CHECK(GetError(entry.res_id_or_error()).has_value());
+    std::move(callback).Run(net::ERR_FAILED);
+    return;
+  }
   // Ask the store to mark the entry as doomed in the database.
   store_->DoomEntry(
-      entry.cache_key(), entry.token(),
+      entry.cache_key(), *optional_res_id,
       base::BindOnce(
           [](base::WeakPtr<SqlBackendImpl> weak_ptr,
              CompletionOnceCallback callback, SqlPersistentStore::Error error) {
@@ -631,19 +685,31 @@ int64_t SqlBackendImpl::CalculateSizeOfEntriesBetween(
     base::Time initial_time,
     base::Time end_time,
     Int64CompletionOnceCallback callback) {
+  exclusive_operation_coordinator_.PostOrRunExclusiveOperation(base::BindOnce(
+      &SqlBackendImpl::HandleCalculateSizeOfEntriesBetweenOperation,
+      weak_factory_.GetWeakPtr(), initial_time, end_time, std::move(callback)));
+  return net::ERR_IO_PENDING;
+}
+
+void SqlBackendImpl::HandleCalculateSizeOfEntriesBetweenOperation(
+    base::Time initial_time,
+    base::Time end_time,
+    Int64CompletionOnceCallback callback,
+    std::unique_ptr<ExclusiveOperationCoordinator::OperationHandle> handle) {
   store_->CalculateSizeOfEntriesBetween(
       initial_time, end_time,
       base::BindOnce(
           [](base::WeakPtr<SqlBackendImpl> weak_ptr,
              Int64CompletionOnceCallback callback,
+             std::unique_ptr<ExclusiveOperationCoordinator::OperationHandle>
+                 handle,
              SqlPersistentStore::Int64OrError result) {
             if (weak_ptr) {
               std::move(callback).Run(result.has_value() ? result.value()
                                                          : net::ERR_FAILED);
             }
           },
-          weak_factory_.GetWeakPtr(), std::move(callback)));
-  return net::ERR_IO_PENDING;
+          weak_factory_.GetWeakPtr(), std::move(callback), std::move(handle)));
 }
 
 std::unique_ptr<Backend::Iterator> SqlBackendImpl::CreateIterator() {
@@ -662,8 +728,7 @@ void SqlBackendImpl::OnExternalCacheHit(const std::string& key) {
     return;
   }
   const base::Time now = base::Time::Now();
-  in_flight_entry_modifications_[entry_key].emplace_back(
-      base::UnguessableToken(), now);
+  in_flight_entry_modifications_[entry_key].emplace_back(nullptr, now);
   exclusive_operation_coordinator_.PostOrRunNormalOperation(
       entry_key,
       base::BindOnce(&SqlBackendImpl::HandleOnExternalCacheHitOperation,
@@ -678,6 +743,10 @@ void SqlBackendImpl::HandleOnExternalCacheHitOperation(
       key, now,
       WrapErrorCallbackToPopInFlightEntryModification(key, base::DoNothing())
           .Then(DoNothingWithBoundHandle(std::move(handle))));
+}
+
+void SqlBackendImpl::OnBrowserIdle() {
+  store_->MaybeRunCheckpoint(base::DoNothing());
 }
 
 void SqlBackendImpl::OnOptionalEntryOperationFinished(
@@ -696,8 +765,9 @@ void SqlBackendImpl::OnOptionalEntryOperationFinished(
 
   // Create a new SqlEntryImpl instance.
   scoped_refptr<SqlEntryImpl> new_entry = base::MakeRefCounted<SqlEntryImpl>(
-      weak_factory_.GetWeakPtr(), key, entry_info.token, entry_info.last_used,
-      entry_info.body_end, entry_info.head);
+      weak_factory_.GetWeakPtr(), key,
+      base::MakeRefCounted<ResIdOrErrorHolder>(entry_info.res_id),
+      entry_info.last_used, entry_info.body_end, entry_info.head);
 
   // Add a reference for passing to the `callback`.
   new_entry->AddRef();
@@ -731,6 +801,46 @@ void SqlBackendImpl::OnEntryOperationFinished(
   }
 }
 
+EntryResult SqlBackendImpl::SpeculativeCreateEntry(
+    const CacheEntryKey& entry_key,
+    std::unique_ptr<ExclusiveOperationCoordinator::OperationHandle> handle) {
+  auto optional_res_id_or_error =
+      base::MakeRefCounted<ResIdOrErrorHolder>(std::nullopt);
+  const auto creation_time = base::Time::Now();
+  store_->CreateEntry(
+      entry_key, creation_time,
+      base::BindOnce(&SqlBackendImpl::OnSpeculativeCreateEntryFinished,
+                     base::Unretained(this), optional_res_id_or_error,
+                     std::move(handle)));
+
+  // Create a new SqlEntryImpl instance.
+  scoped_refptr<SqlEntryImpl> new_entry = base::MakeRefCounted<SqlEntryImpl>(
+      weak_factory_.GetWeakPtr(), entry_key,
+      std::move(optional_res_id_or_error), creation_time, /*body_end=*/0,
+      /*head=*/nullptr);
+
+  // Add a reference for passing to the `callback`.
+  new_entry->AddRef();
+  // Add the new entry to the active_entries_ map.
+  auto insert_result = active_entries_.insert(
+      std::make_pair(entry_key, raw_ref<SqlEntryImpl>(*new_entry.get())));
+  CHECK(insert_result.second);
+
+  return EntryResult::MakeCreated(new_entry.get());
+}
+
+void SqlBackendImpl::OnSpeculativeCreateEntryFinished(
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
+    std::unique_ptr<ExclusiveOperationCoordinator::OperationHandle> handle,
+    SqlPersistentStore::EntryInfoOrError result) {
+  if (result.has_value()) {
+    res_id_or_error->data = result->res_id;
+  } else {
+    res_id_or_error->data = result.error();
+  }
+  MaybeTriggerEviction();
+}
+
 void SqlBackendImpl::ReleaseActiveEntry(SqlEntryImpl& entry) {
   auto it = active_entries_.find(entry.cache_key());
   // The entry must exist in the active_entries_ map.
@@ -748,15 +858,20 @@ void SqlBackendImpl::ReleaseDoomedEntry(SqlEntryImpl& entry) {
       entry.cache_key(),
       base::BindOnce(&SqlBackendImpl::HandleDeleteDoomedEntry,
                      weak_factory_.GetWeakPtr(), entry.cache_key(),
-                     entry.token()));
+                     entry.res_id_or_error()));
 }
 
 void SqlBackendImpl::HandleDeleteDoomedEntry(
     const CacheEntryKey& key,
-    const base::UnguessableToken& token,
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
     std::unique_ptr<ExclusiveOperationCoordinator::OperationHandle> handle) {
+  const auto optional_res_id = GetResId(res_id_or_error);
+  if (!optional_res_id) {
+    // Speculative entry creation was failed.
+    return;
+  }
   store_->DeleteDoomedEntry(
-      key, token,
+      key, *optional_res_id,
       base::BindOnce(
           [](std::unique_ptr<ExclusiveOperationCoordinator::OperationHandle>
                  handle,
@@ -766,60 +881,64 @@ void SqlBackendImpl::HandleDeleteDoomedEntry(
 
 void SqlBackendImpl::UpdateEntryLastUsed(
     const CacheEntryKey& key,
-    const base::UnguessableToken& token,
-    base::Time last_used,
-    SqlPersistentStore::ErrorCallback callback) {
-  in_flight_entry_modifications_[key].emplace_back(token, last_used);
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
+    base::Time last_used) {
+  in_flight_entry_modifications_[key].emplace_back(res_id_or_error, last_used);
   exclusive_operation_coordinator_.PostOrRunNormalOperation(
       key, base::BindOnce(&SqlBackendImpl::HandleUpdateEntryLastUsedOperation,
-                          weak_factory_.GetWeakPtr(), key, token, last_used,
-                          std::move(callback)));
+                          weak_factory_.GetWeakPtr(), key, res_id_or_error,
+                          last_used));
 }
 
 void SqlBackendImpl::HandleUpdateEntryLastUsedOperation(
     const CacheEntryKey& key,
-    const base::UnguessableToken& token,
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
     base::Time last_used,
-    SqlPersistentStore::ErrorCallback callback,
     std::unique_ptr<ExclusiveOperationCoordinator::OperationHandle> handle) {
   store_->UpdateEntryLastUsed(
       key, last_used,
-      WrapErrorCallbackToPopInFlightEntryModification(key, std::move(callback))
-          .Then(DoNothingWithBoundHandle(std::move(handle))));
+      WrapErrorCallbackToPopInFlightEntryModification(
+          key, base::DoNothingWithBoundArgs(std::move(handle))));
 }
 
 void SqlBackendImpl::UpdateEntryHeaderAndLastUsed(
     const CacheEntryKey& key,
-    const base::UnguessableToken& token,
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
     base::Time last_used,
     scoped_refptr<net::GrowableIOBuffer> buffer,
-    int64_t header_size_delta,
-    SqlPersistentStore::ErrorCallback callback) {
-  in_flight_entry_modifications_[key].emplace_back(token, last_used, buffer);
+    int64_t header_size_delta) {
+  in_flight_entry_modifications_[key].emplace_back(res_id_or_error, last_used,
+                                                   buffer);
   exclusive_operation_coordinator_.PostOrRunNormalOperation(
       key, base::BindOnce(
                &SqlBackendImpl::HandleUpdateEntryHeaderAndLastUsedOperation,
-               weak_factory_.GetWeakPtr(), key, token, last_used,
-               std::move(buffer), header_size_delta, std::move(callback)));
+               weak_factory_.GetWeakPtr(), key, res_id_or_error, last_used,
+               std::move(buffer), header_size_delta));
 }
 
 void SqlBackendImpl::HandleUpdateEntryHeaderAndLastUsedOperation(
     const CacheEntryKey& key,
-    const base::UnguessableToken& token,
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
     base::Time last_used,
     scoped_refptr<net::GrowableIOBuffer> buffer,
     int64_t header_size_delta,
-    SqlPersistentStore::ErrorCallback callback,
     std::unique_ptr<ExclusiveOperationCoordinator::OperationHandle> handle) {
+  const auto optional_res_id = GetResId(res_id_or_error);
+  if (!optional_res_id) {
+    // Speculative entry creation was failed.
+    const auto optional_error = GetError(res_id_or_error);
+    CHECK(optional_error.has_value());
+    return;
+  }
   store_->UpdateEntryHeaderAndLastUsed(
-      key, token, last_used, std::move(buffer), header_size_delta,
-      WrapErrorCallbackToPopInFlightEntryModification(key, std::move(callback))
-          .Then(DoNothingWithBoundHandle(std::move(handle))));
+      key, *optional_res_id, last_used, std::move(buffer), header_size_delta,
+      WrapErrorCallbackToPopInFlightEntryModification(
+          key, base::DoNothingWithBoundArgs(std::move(handle))));
 }
 
 void SqlBackendImpl::WriteEntryData(
     const CacheEntryKey& key,
-    const base::UnguessableToken& token,
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
     int64_t old_body_end,
     int64_t body_end,
     int64_t offset,
@@ -827,17 +946,17 @@ void SqlBackendImpl::WriteEntryData(
     int buf_len,
     bool truncate,
     SqlPersistentStore::ErrorCallback callback) {
-  in_flight_entry_modifications_[key].emplace_back(token, body_end);
+  in_flight_entry_modifications_[key].emplace_back(res_id_or_error, body_end);
   exclusive_operation_coordinator_.PostOrRunNormalOperation(
       key, base::BindOnce(&SqlBackendImpl::HandleWriteEntryDataOperation,
-                          weak_factory_.GetWeakPtr(), key, token, old_body_end,
-                          offset, std::move(buffer), buf_len, truncate,
-                          std::move(callback)));
+                          weak_factory_.GetWeakPtr(), key, res_id_or_error,
+                          old_body_end, offset, std::move(buffer), buf_len,
+                          truncate, std::move(callback)));
 }
 
 void SqlBackendImpl::HandleWriteEntryDataOperation(
     const CacheEntryKey& key,
-    const base::UnguessableToken& token,
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
     int64_t old_body_end,
     int64_t offset,
     scoped_refptr<net::IOBuffer> buffer,
@@ -845,15 +964,24 @@ void SqlBackendImpl::HandleWriteEntryDataOperation(
     bool truncate,
     SqlPersistentStore::ErrorCallback callback,
     std::unique_ptr<ExclusiveOperationCoordinator::OperationHandle> handle) {
+  const auto optional_res_id = GetResId(res_id_or_error);
+  if (!optional_res_id) {
+    // Speculative entry creation was failed.
+    const auto optional_error = GetError(res_id_or_error);
+    CHECK(optional_error.has_value());
+    std::move(callback).Run(*optional_error);
+    return;
+  }
   store_->WriteEntryData(
-      key, token, old_body_end, offset, std::move(buffer), buf_len, truncate,
+      key, *optional_res_id, old_body_end, offset, std::move(buffer), buf_len,
+      truncate,
       WrapErrorCallbackToPopInFlightEntryModification(key, std::move(callback))
           .Then(DoNothingWithBoundHandle(std::move(handle))));
 }
 
 void SqlBackendImpl::ReadEntryData(
     const CacheEntryKey& key,
-    const base::UnguessableToken& token,
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
     int64_t offset,
     scoped_refptr<net::IOBuffer> buffer,
     int buf_len,
@@ -862,13 +990,13 @@ void SqlBackendImpl::ReadEntryData(
     SqlPersistentStore::IntOrErrorCallback callback) {
   exclusive_operation_coordinator_.PostOrRunNormalOperation(
       key, base::BindOnce(&SqlBackendImpl::HandleReadEntryDataOperation,
-                          weak_factory_.GetWeakPtr(), token, offset,
+                          weak_factory_.GetWeakPtr(), res_id_or_error, offset,
                           std::move(buffer), buf_len, body_end, sparse_reading,
                           std::move(callback)));
 }
 
 void SqlBackendImpl::HandleReadEntryDataOperation(
-    const base::UnguessableToken& token,
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
     int64_t offset,
     scoped_refptr<net::IOBuffer> buffer,
     int buf_len,
@@ -876,30 +1004,48 @@ void SqlBackendImpl::HandleReadEntryDataOperation(
     bool sparse_reading,
     SqlPersistentStore::IntOrErrorCallback callback,
     std::unique_ptr<ExclusiveOperationCoordinator::OperationHandle> handle) {
+  const auto optional_res_id = GetResId(res_id_or_error);
+  if (!optional_res_id) {
+    // Speculative entry creation was failed.
+    const auto optional_error = GetError(res_id_or_error);
+    CHECK(optional_error.has_value());
+    std::move(callback).Run(net::ERR_FAILED);
+    return;
+  }
   store_->ReadEntryData(
-      token, offset, buffer, buf_len, body_end, sparse_reading,
+      *optional_res_id, offset, buffer, buf_len, body_end, sparse_reading,
       std::move(callback).Then(DoNothingWithBoundHandle(std::move(handle))));
 }
 
-void SqlBackendImpl::GetEntryAvailableRange(const CacheEntryKey& key,
-                                            const base::UnguessableToken& token,
-                                            int64_t offset,
-                                            int len,
-                                            RangeResultCallback callback) {
+void SqlBackendImpl::GetEntryAvailableRange(
+    const CacheEntryKey& key,
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
+    int64_t offset,
+    int len,
+    RangeResultCallback callback) {
   exclusive_operation_coordinator_.PostOrRunNormalOperation(
       key,
       base::BindOnce(&SqlBackendImpl::HandleGetEntryAvailableRangeOperation,
-                     weak_factory_.GetWeakPtr(), token, offset, len,
+                     weak_factory_.GetWeakPtr(), res_id_or_error, offset, len,
                      std::move(callback)));
 }
 
 void SqlBackendImpl::HandleGetEntryAvailableRangeOperation(
-    const base::UnguessableToken& token,
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
     int64_t offset,
     int len,
     RangeResultCallback callback,
     std::unique_ptr<ExclusiveOperationCoordinator::OperationHandle> handle) {
-  store_->GetEntryAvailableRange(token, offset, len, std::move(callback));
+  const auto optional_res_id = GetResId(res_id_or_error);
+  if (!optional_res_id) {
+    // Speculative entry creation was failed.
+    const auto optional_error = GetError(res_id_or_error);
+    CHECK(optional_error.has_value());
+    std::move(callback).Run(RangeResult(net::ERR_FAILED));
+    return;
+  }
+  store_->GetEntryAvailableRange(*optional_res_id, offset, len,
+                                 std::move(callback));
 }
 
 void SqlBackendImpl::ApplyInFlightEntryModifications(
@@ -910,8 +1056,12 @@ void SqlBackendImpl::ApplyInFlightEntryModifications(
     return;
   }
   for (const auto& modification : it->second) {
-    if (modification.token.is_empty() ||
-        modification.token == entry_info.token) {
+    std::optional<SqlPersistentStore::ResId> optional_res_id =
+        modification.res_id_or_error ? GetResId(modification.res_id_or_error)
+                                     : std::nullopt;
+    if (!modification.res_id_or_error ||
+        (optional_res_id.has_value() &&
+         *optional_res_id == entry_info.res_id)) {
       if (modification.last_used.has_value()) {
         entry_info.last_used = *modification.last_used;
       }
@@ -999,6 +1149,10 @@ void SqlBackendImpl::HandleTriggerEvictionOperation(
 }
 
 void SqlBackendImpl::TriggerDeleteDoomedEntries() {
+  // TODO(crbug.com/443171275): Get information on whether a doomed entry
+  // exists when initializing SqlPersistentStore, and if it does not exist, do
+  // not execute TriggerDeleteDoomedEntries.
+  // TODO(crbug.com/443171275): Execute only when the browser is idle.
   exclusive_operation_coordinator_.PostOrRunExclusiveOperation(base::BindOnce(
       base::BindOnce(&SqlBackendImpl::HandleDeleteDoomedEntriesOperation,
                      weak_factory_.GetWeakPtr())));
@@ -1006,16 +1160,19 @@ void SqlBackendImpl::TriggerDeleteDoomedEntries() {
 
 void SqlBackendImpl::HandleDeleteDoomedEntriesOperation(
     std::unique_ptr<ExclusiveOperationCoordinator::OperationHandle> handle) {
-  std::vector<base::UnguessableToken> excluded_tokens_vec;
-  excluded_tokens_vec.reserve(doomed_entries_.size());
+  std::vector<SqlPersistentStore::ResId> excluded_ids_vec;
+  excluded_ids_vec.reserve(doomed_entries_.size());
   for (const auto& entry : doomed_entries_) {
-    excluded_tokens_vec.push_back(entry->token());
+    const auto optional_res_id = GetResId(entry->res_id_or_error());
+    if (optional_res_id.has_value()) {
+      excluded_ids_vec.push_back(*optional_res_id);
+    }
   }
-  std::sort(excluded_tokens_vec.begin(), excluded_tokens_vec.end());
-  base::flat_set<base::UnguessableToken> excluded_tokens(
-      base::sorted_unique, std::move(excluded_tokens_vec));
+  std::sort(excluded_ids_vec.begin(), excluded_ids_vec.end());
+  base::flat_set<SqlPersistentStore::ResId> excluded_ids(
+      base::sorted_unique, std::move(excluded_ids_vec));
   store_->DeleteDoomedEntries(
-      std::move(excluded_tokens),
+      std::move(excluded_ids),
       base::BindOnce([](SqlPersistentStore::Error result) {
       }).Then(DoNothingWithBoundHandle(std::move(handle))));
 }
@@ -1025,18 +1182,20 @@ void SqlBackendImpl::EnableStrictCorruptionCheckForTesting() {
 }
 
 SqlBackendImpl::InFlightEntryModification::InFlightEntryModification(
-    const base::UnguessableToken& token,
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
     base::Time last_used)
-    : token(token), last_used(last_used) {}
+    : res_id_or_error(res_id_or_error), last_used(last_used) {}
 SqlBackendImpl::InFlightEntryModification::InFlightEntryModification(
-    const base::UnguessableToken& token,
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
     base::Time last_used,
     scoped_refptr<net::GrowableIOBuffer> head)
-    : token(token), last_used(last_used), head(std::move(head)) {}
+    : res_id_or_error(res_id_or_error),
+      last_used(last_used),
+      head(std::move(head)) {}
 SqlBackendImpl::InFlightEntryModification::InFlightEntryModification(
-    const base::UnguessableToken& token,
+    const scoped_refptr<ResIdOrErrorHolder>& res_id_or_error,
     int64_t body_end)
-    : token(token), body_end(body_end) {}
+    : res_id_or_error(res_id_or_error), body_end(body_end) {}
 SqlBackendImpl::InFlightEntryModification::~InFlightEntryModification() =
     default;
 SqlBackendImpl::InFlightEntryModification::InFlightEntryModification(

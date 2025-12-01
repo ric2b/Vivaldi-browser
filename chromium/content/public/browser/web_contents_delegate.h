@@ -44,7 +44,7 @@
 #include "ui/base/ui_base_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect_f.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/scoped_java_ref.h"
@@ -93,7 +93,6 @@ class Origin;
 
 namespace blink {
 class WebGestureEvent;
-class WebMouseEvent;
 enum class ProtocolHandlerSecurityLevel;
 }
 
@@ -113,7 +112,6 @@ class SiteInstance;
 class WebContents;
 struct ContextMenuParams;
 struct DropData;
-struct MediaPlayerWatchTime;
 struct OpenURLParams;
 struct Referrer;
 
@@ -223,6 +221,14 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Selects the specified contents, bringing its container to the front.
   virtual void ActivateContents(WebContents* contents) {}
+
+  // A WebContents within a browser is considered active if it is the "active"
+  // tab in the browser's tab strip. A non-active WebContents cannot have focus,
+  // but it is possible for an active WebContents to not be focused if focus is
+  // elsewhere in the browser.Just because a WebContents is visible, doesn't
+  // mean it is active due to the SplitView feature. WebContents outside a
+  // browser are always considered active.
+  virtual bool IsContentsActive(WebContents* contents);
 
   // Notifies the delegate that this contents is starting or is done loading
   // some resource. The delegate should use this notification to represent
@@ -334,12 +340,10 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual bool HandleContextMenu(RenderFrameHost& render_frame_host,
                                  const ContextMenuParams& params);
 
-  // Allows delegates to handle mouse events before sending to the renderer.
-  // Returns true if the event was handled, false otherwise. A true value means
-  // no more processing should happen on the event. The default return value is
-  // false.
-  virtual bool PreHandleMouseEvent(WebContents* source,
-                                   const blink::WebMouseEvent& event);
+  // Allows delegates to handle mouse drag events before sending to the
+  // renderer. Returns true if the event was handled, false otherwise. A true
+  // value means no more processing should happen on the event. The default
+  // return value is false.
   virtual void PreHandleDragUpdate(const DropData& drop_data,
                                    const gfx::PointF& client_pt) {}
   virtual void PreHandleDragExit() {}
@@ -801,9 +805,13 @@ class CONTENT_EXPORT WebContentsDelegate {
   // WebContents::StartPrerendering().
   virtual int AllowedPrerenderingCount(WebContents& web_contents);
 
-  // Returns whether to override user agent for prerendering navigation.
+  // Returns whether to override user agent for prerendering navigation. `url`
+  // is the target URL of the request. This function can be called repeatedly
+  // for each URL in the redirect chain.
+  // TODO(crbug.com/441612842): Rename this function to clarify that this
+  // function can be used for general preloading.
   virtual NavigationController::UserAgentOverrideOption
-  ShouldOverrideUserAgentForPrerender2();
+  ShouldOverrideUserAgentForPrerender2(const GURL& url);
 
   // Returns true if the embedder allows initiator and transition type mismatch
   // for prerender activation navigations that are embedder-initiated and have
@@ -819,9 +827,6 @@ class CONTENT_EXPORT WebContentsDelegate {
   // eviction and displayed until a new frame is generated. If false, a white
   // solid color is displayed instead.
   virtual bool ShouldShowStaleContentOnEviction(WebContents* source);
-
-  // Invoked when media playback is interrupted or completed.
-  virtual void MediaWatchTimeChanged(const MediaPlayerWatchTime& watch_time) {}
 
   // Returns a  InstalledWebappGeolocationContext if this web content is running
   // in a installed webapp and geolocation should be deleagted from the
@@ -907,6 +912,10 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual std::vector<blink::mojom::RelatedApplicationPtr>
   GetSavedRelatedApplications(WebContents* web_contents);
 
+  // If this returns non-null, overrides the behavior of
+  // WebContents::GetResponsibleWebContents.
+  virtual WebContents* GetResponsibleWebContents(WebContents* web_contents);
+
   // Vivaldi
   virtual void CreateSearch(const base::Value::List& search) {}
 
@@ -929,6 +938,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual void VivaldiCanDownload(const GURL& url,
                            const std::string& request_method,
                            base::OnceCallback<void(bool)> callback);
+  virtual bool UsesVivaldiFrame() const { return false; }
  protected:
   virtual ~WebContentsDelegate();
 

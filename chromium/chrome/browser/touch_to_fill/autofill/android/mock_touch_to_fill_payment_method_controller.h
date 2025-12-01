@@ -13,9 +13,11 @@
 #include "base/containers/span.h"
 #include "chrome/browser/touch_to_fill/autofill/android/touch_to_fill_payment_method_controller.h"
 #include "chrome/browser/touch_to_fill/autofill/android/touch_to_fill_payment_method_view.h"
+#include "components/autofill/core/browser/data_model/payments/bnpl_issuer.h"
 #include "components/autofill/core/browser/data_model/payments/iban.h"
 #include "components/autofill/core/browser/data_model/valuables/loyalty_card.h"
 #include "components/autofill/core/browser/integrators/touch_to_fill/touch_to_fill_delegate.h"
+#include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -34,7 +36,7 @@ class MockTouchToFillPaymentMethodController
   ~MockTouchToFillPaymentMethodController() override;
 
   MOCK_METHOD(bool,
-              ShowCreditCards,
+              ShowPaymentMethods,
               (std::unique_ptr<TouchToFillPaymentMethodView>,
                base::WeakPtr<TouchToFillDelegate>,
                base::span<const Suggestion>),
@@ -52,6 +54,21 @@ class MockTouchToFillPaymentMethodController
                base::span<const LoyaltyCard>,
                base::span<const LoyaltyCard>,
                bool),
+              (override));
+  MOCK_METHOD(bool,
+              UpdateBnplPaymentMethod,
+              (std::optional<uint64_t> extracted_amount,
+               bool is_amount_supported_by_any_issuer),
+              (override));
+  MOCK_METHOD(bool,
+              ShowProgressScreen,
+              (std::unique_ptr<TouchToFillPaymentMethodView> view,
+               base::WeakPtr<TouchToFillDelegate> delegate),
+              (override));
+  MOCK_METHOD(bool,
+              ShowBnplIssuers,
+              (base::WeakPtr<TouchToFillDelegate>,
+               base::span<const BnplIssuer>),
               (override));
   MOCK_METHOD(void, OnDismissed, (JNIEnv*, bool), (override));
   MOCK_METHOD(void, ScanCreditCard, (JNIEnv*), (override));

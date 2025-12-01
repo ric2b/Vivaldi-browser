@@ -17,7 +17,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chrome/browser/extensions/install_tracker.h"
+#include "chrome/browser/extensions/install_tracker_factory.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -35,6 +35,7 @@
 #include "extensions/browser/extension_prefs_observer.h"
 #include "extensions/browser/install_flag.h"
 #include "extensions/browser/install_prefs_helper.h"
+#include "extensions/browser/install_tracker.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/browser/pref_types.h"
 #include "extensions/common/extension.h"
@@ -75,7 +76,7 @@ void ExtensionPrefsTest::TearDown() {
   // Shutdown the InstallTracker early, which is a dependency on some
   // ExtensionPrefTests (and depends on PrefService being available in
   // shutdown).
-  InstallTracker::Get(prefs_.profile())->Shutdown();
+  InstallTrackerFactory::GetForBrowserContext(prefs_.profile())->Shutdown();
 
   // Reset ExtensionPrefs, and re-verify.
   prefs_.ResetPrefRegistry();
@@ -147,68 +148,6 @@ class ExtensionPrefsDeprecatedDisableReason : public ExtensionPrefsTest {
 };
 
 TEST_F(ExtensionPrefsDeprecatedDisableReason, MigrateExtensionState) {}
-
-class ExtensionPrefsDisableReasonsBitflagToListMigration
-    : public ExtensionPrefsTest {
- public:
-  void Initialize() override {
-    extension_1_ = prefs_.AddExtension("test1");
-    prefs()->AddDisableReasons(extension_1_->id(),
-                               extension_1_disable_reasons_);
-
-    extension_2_ = prefs_.AddExtension("test2");
-    prefs()->AddDisableReasons(extension_2_->id(),
-                               extension_2_disable_reasons_);
-  }
-
-  void Verify() override {
-    // Verify that the disable reasons are returned correctly.
-    EXPECT_EQ(prefs()->GetDisableReasons(extension_1_->id()),
-              extension_1_disable_reasons_);
-    EXPECT_EQ(prefs()->GetDisableReasons(extension_2_->id()),
-              extension_2_disable_reasons_);
-
-    // Verify() is called twice.
-    // In the first execution, we have the modern state. We wipe out this state
-    // and simulate the legacy state. In the second execution, `ExtensionPrefs`
-    // is re-constructed. It should re-construct the modern state from the
-    // simulated legacy state.
-    SimulateLegacyState();
-  }
-
- private:
-  void SimulateLegacyState() {
-    // Write the disable reasons to the preference as a bitflag.
-    constexpr const char kPrefDisableReasons[] = "disable_reasons";
-    prefs()->UpdateExtensionPref(
-        extension_1_->id(), kPrefDisableReasons,
-        base::Value(DisableReasonSetToBitflag(extension_1_disable_reasons_)));
-    prefs()->UpdateExtensionPref(
-        extension_2_->id(), kPrefDisableReasons,
-        base::Value(DisableReasonSetToBitflag(extension_2_disable_reasons_)));
-  }
-
-  int DisableReasonSetToBitflag(const DisableReasonSet& set) {
-    int flag = 0;
-    for (disable_reason::DisableReason reason : set) {
-      flag |= reason;
-    }
-    return flag;
-  }
-
-  scoped_refptr<Extension> extension_1_;
-  const DisableReasonSet extension_1_disable_reasons_ = {
-      disable_reason::DISABLE_USER_ACTION,
-      disable_reason::DISABLE_BLOCKED_BY_POLICY};
-
-  scoped_refptr<Extension> extension_2_;
-  const DisableReasonSet extension_2_disable_reasons_ = {
-      disable_reason::DISABLE_PERMISSIONS_INCREASE,
-      disable_reason::DISABLE_NOT_VERIFIED,
-      disable_reason::DISABLE_USER_ACTION};
-};
-
-TEST_F(ExtensionPrefsDisableReasonsBitflagToListMigration, TestPrefMigration) {}
 
 class ExtensionPrefsEscalatePermissions : public ExtensionPrefsTest {
  public:
@@ -1366,7 +1305,7 @@ TEST_F(ExtensionPrefsSimpleTest, ProfileExtensionPrefsMapTest) {
   registry->RegisterBooleanPref(kTestBooleanPref.name, false);
   registry->RegisterIntegerPref(kTestIntegerPref.name, 0);
   registry->RegisterStringPref(kTestStringPref.name, std::string());
-  registry->RegisterStringPref(kTestTimePref.name, std::string());
+  registry->RegisterTimePref(kTestTimePref.name, base::Time());
   registry->RegisterStringPref(kTestGURLPref.name, std::string());
   registry->RegisterDictionaryPref(kTestDictPref.name);
 
@@ -1390,79 +1329,6 @@ TEST_F(ExtensionPrefsSimpleTest, ProfileExtensionPrefsMapTest) {
       prefs.prefs()->GetPrefAsDictionary(kTestDictPref).FindString("key");
   EXPECT_TRUE(string_ptr);
   EXPECT_EQ(*string_ptr, "val");
-}
-
-// Tests that the "state" key is removed in per-extension prefs.
-TEST_F(ExtensionPrefsSimpleTest, ExtensionEnabledStateMigration) {
-  content::BrowserTaskEnvironment task_environment;
-  TestExtensionPrefs test_prefs(
-      base::SingleThreadTaskRunner::GetCurrentDefault());
-  ExtensionPrefs* extension_prefs = test_prefs.prefs();
-  constexpr const char kPrefState[] = "state";
-  int state = -1;
-
-  // Possible values for the "state" pref.
-  enum State {
-    DISABLED = 0,
-    ENABLED = 1,
-    DEPRECATED_EXTERNAL_EXTENSION_UNINSTALLED = 2
-  };
-
-  // Extension 1 is disabled with disable reasons. After migration, the state
-  // should be removed and the current disable reasons should be retained.
-  const ExtensionId extension_1 = test_prefs.AddExtensionAndReturnId("test1");
-  extension_prefs->UpdateExtensionPref(extension_1, kPrefState,
-                                       base::Value(State::DISABLED));
-  const DisableReasonSet extension_1_disable_reasons = {
-      disable_reason::DISABLE_EXTERNAL_EXTENSION,
-      disable_reason::DISABLE_PERMISSIONS_INCREASE};
-  extension_prefs->AddDisableReasons(extension_1, extension_1_disable_reasons);
-  EXPECT_TRUE(
-      extension_prefs->ReadPrefAsInteger(extension_1, kPrefState, &state));
-  EXPECT_EQ(state, State::DISABLED);
-
-  // Extension 2 is disabled without disable reasons. After migration, the
-  // state should be removed and DISABLE_USER_ACTION should be added as the
-  // disable reason.
-  const ExtensionId extension_2 = test_prefs.AddExtensionAndReturnId("test2");
-  extension_prefs->UpdateExtensionPref(extension_2, kPrefState,
-                                       base::Value(State::DISABLED));
-  EXPECT_TRUE(
-      extension_prefs->ReadPrefAsInteger(extension_2, kPrefState, &state));
-  EXPECT_EQ(state, State::DISABLED);
-
-  // Extension 3 is enabled. It should remain enabled after the migration.
-  const ExtensionId extension_3 = test_prefs.AddExtensionAndReturnId("test3");
-  extension_prefs->UpdateExtensionPref(extension_3, kPrefState,
-                                       base::Value(State::ENABLED));
-  EXPECT_TRUE(
-      extension_prefs->ReadPrefAsInteger(extension_3, kPrefState, &state));
-  EXPECT_EQ(state, State::ENABLED);
-
-  // Cause the migration.
-  test_prefs.RecreateExtensionPrefs();
-  extension_prefs = test_prefs.prefs();
-
-  // Validate extension 1.
-  EXPECT_FALSE(
-      extension_prefs->ReadPrefAsInteger(extension_1, kPrefState, &state));
-  EXPECT_TRUE(extension_prefs->IsExtensionDisabled(extension_1));
-  EXPECT_EQ(extension_prefs->GetDisableReasons(extension_1),
-            extension_1_disable_reasons);
-
-  // Validate extension 2.
-  EXPECT_FALSE(
-      extension_prefs->ReadPrefAsInteger(extension_2, kPrefState, &state));
-  EXPECT_TRUE(extension_prefs->IsExtensionDisabled(extension_2));
-  EXPECT_THAT(extension_prefs->GetDisableReasons(extension_2),
-              testing::ElementsAre(disable_reason::DISABLE_USER_ACTION));
-
-  // Validate extension 3.
-  EXPECT_FALSE(
-      extension_prefs->ReadPrefAsInteger(extension_3, kPrefState, &state));
-  EXPECT_FALSE(extension_prefs->IsExtensionDisabled(extension_3));
-  EXPECT_THAT(extension_prefs->GetDisableReasons(extension_3),
-              testing::IsEmpty());
 }
 
 TEST_F(ExtensionPrefsSimpleTest, DisableReasonsObserverTest) {

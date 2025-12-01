@@ -159,15 +159,15 @@ extern char *xar_get_safe_path(xar_file_t f) __attribute__((weak_import));
         }
     }
     
-    unsigned char rawExpectedBeforeHash[CC_SHA1_DIGEST_LENGTH] = {0};
+    unsigned char rawExpectedBeforeHash[BINARY_DELTA_HASH_LENGTH] = {0};
     getRawHashFromDisplayHash(rawExpectedBeforeHash, expectedBeforeHash);
     
-    unsigned char rawExpectedAfterHash[CC_SHA1_DIGEST_LENGTH] = {0};
+    unsigned char rawExpectedAfterHash[BINARY_DELTA_HASH_LENGTH] = {0};
     getRawHashFromDisplayHash(rawExpectedAfterHash, expectedAfterHash);
     
     // I wasn't able to figure out how to retrieve the compression options from xar,
     // so we will use default flags to indicate the info isn't available
-    return [[SPUDeltaArchiveHeader alloc] initWithCompression:SPUDeltaCompressionModeDefault compressionLevel:0 fileSystemCompression:false majorVersion:majorDiffVersion minorVersion:minorDiffVersion beforeTreeHash:rawExpectedBeforeHash afterTreeHash:rawExpectedAfterHash];
+    return [[SPUDeltaArchiveHeader alloc] initWithCompression:SPUDeltaCompressionModeDefault compressionLevel:0 fileSystemCompression:false majorVersion:majorDiffVersion minorVersion:minorDiffVersion beforeTreeHash:rawExpectedBeforeHash afterTreeHash:rawExpectedAfterHash bundleCreationDate:nil];
 }
 
 - (void)writeHeader:(SPUDeltaArchiveHeader *)header
@@ -228,7 +228,7 @@ extern char *xar_get_safe_path(xar_file_t f) __attribute__((weak_import));
     xar_subdoc_prop_set(attributes, AFTER_TREE_SHA1_KEY, [displayHashFromRawHash(header.afterTreeHash) UTF8String]);
 }
 
-static xar_file_t _xarAddFile(NSMutableDictionary<NSString *, NSValue *> *fileTable, xar_t x, NSString *relativePath, NSString *filePath)
+static xar_file_t xarAddFile(NSMutableDictionary<NSString *, NSValue *> *fileTable, xar_t x, NSString *relativePath, NSString *filePath)
 {
     NSArray<NSString *> *rootRelativePathComponents = relativePath.pathComponents;
     // Relative path must at least have starting "/" component and one more path component
@@ -285,7 +285,7 @@ static xar_file_t _xarAddFile(NSMutableDictionary<NSString *, NSValue *> *fileTa
     SPUDeltaItemCommands commands = item.commands;
     uint16_t mode = item.mode;
     
-    xar_file_t newFile = _xarAddFile(_fileTable, _x, relativeFilePath, filePath);
+    xar_file_t newFile = xarAddFile(_fileTable, _x, relativeFilePath, filePath);
     if (newFile == NULL) {
         _error = [NSError errorWithDomain:SPARKLE_DELTA_XAR_ARCHIVE_ERROR_DOMAIN code:SPARKLE_DELTA_XAR_ARCHIVE_ERROR_CODE_ADD_FAILURE userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Failed to add xar file entry: %@", relativeFilePath] }];
         return;

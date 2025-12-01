@@ -106,10 +106,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionFunctionalTest,
   GURL extension_url = extension->GetResourceURL("file.html");
 
   // Load the extension in two unrelated tabs.
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), extension_url));
-  ui_test_utils::NavigateToURLWithDisposition(
-      browser(), extension_url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+  ASSERT_TRUE(NavigateToURL(GetActiveWebContents(), extension_url));
+  NavigateToURLInNewTab(extension_url);
 
   // Sanity-check test setup: 2 frames share a renderer process, but are not in
   // a related browsing instance.

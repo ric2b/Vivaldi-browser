@@ -37,6 +37,10 @@ suite('SyncControlsTest', function() {
 
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     syncControls = document.createElement('settings-sync-controls');
+    syncControls.syncStatus = {
+      signedInState: SignedInState.SYNCING,
+      statusAction: StatusAction.NO_ACTION,
+    };
     document.body.appendChild(syncControls);
 
     // Start with Sync All.
@@ -458,62 +462,6 @@ suite('SyncControlsAccountSettingsTest', function() {
   });
 
   test(
-      'DisableToggleAndHidePolicyIndicatorWhenSyncPrefsNotLoaded', async () => {
-        webUIListenerCallback('sync-prefs-changed', undefined);
-        await flushTasks();
-        await waitAfterNextRender(syncControls);
-
-        // Controls are still available when prefs are not loaded.
-        assertFalse(syncControls.hidden);
-
-        // However, they are disabled.
-        assertControlsEnabled(false);
-
-        // Assert that all policy indicators are hidden.
-        assertSyncDisabledPolicyIndicatorShown(false);
-        assertIndividualItemPolicyIndicatorsShown(false);
-      });
-
-  test('DisableToggleAndHidePolicyIndicatorWhenSyncIsDisabled', async () => {
-    setupPrefs();
-
-    syncControls.syncStatus = {
-      disabled: true,
-      hasError: false,
-      signedInState: SignedInState.SIGNED_IN,
-      statusAction: StatusAction.NO_ACTION,
-    };
-    await waitAfterNextRender(syncControls);
-
-    // Controls are still available when sync is disabled.
-    assertFalse(syncControls.hidden);
-
-    // However, they are disabled.
-    assertControlsEnabled(false);
-
-    // Assert that only the sync disabled policy indicator is shown.
-    assertSyncDisabledPolicyIndicatorShown(true);
-    assertIndividualItemPolicyIndicatorsShown(false);
-  });
-
-  test('DisableToggleAndShowPolicyIndicatorWhenDataTypeIsManaged', async () => {
-    // Set all prefs to managed.
-    webUIListenerCallback('sync-prefs-changed', getSyncAllPrefsManaged());
-    await flushTasks();
-    await waitAfterNextRender(syncControls);
-
-    // Controls are still available when data types are managed.
-    assertFalse(syncControls.hidden);
-
-    // However, they are disabled.
-    assertControlsEnabled(false);
-
-    // Assert that only individual items' policy indicators are shown.
-    assertSyncDisabledPolicyIndicatorShown(false);
-    assertIndividualItemPolicyIndicatorsShown(true);
-  });
-
-  test(
       'DisableMergedToggleAndShowPolicyIndicatorWhenHistoryAndTabsManaged',
       async () => {
         // Set history and tabs to managed.
@@ -689,6 +637,28 @@ suite('SyncControlsAccountSettingsTest', function() {
     assertSyncDisabledPolicyIndicatorShown(false);
     assertIndividualItemPolicyIndicatorsShown(true);
   });
+
+  // Before crbug.com/433895051, the toggles were not shown before a syncStatus
+  // update or refresh when the user navigated to the account settings page from
+  // a different settings page. This test verifies they are shown directly upon
+  // navigation.
+  test('TogglesVisibilityUpdatedUponNavigation', async () => {
+    const router = Router.getInstance();
+    router.navigateTo(routes.PEOPLE);
+
+    // Create the sync controls before navigating to the account settings page.
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    syncControls = document.createElement('settings-sync-controls');
+    document.body.appendChild(syncControls);
+    syncControls.syncStatus = {
+      signedInState: SignedInState.SIGNED_IN,
+      statusAction: StatusAction.NO_ACTION,
+    };
+    await waitAfterNextRender(syncControls);
+
+    router.navigateTo(routes.ACCOUNT);
+    assertFalse(syncControls.hidden);
+  });
 });
 // </if>
 
@@ -803,6 +773,10 @@ suite('AutofillAndPaymentsToggles', function() {
 
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     const syncControls = document.createElement('settings-sync-controls');
+    syncControls.syncStatus = {
+      signedInState: SignedInState.SIGNED_IN,
+      statusAction: StatusAction.NO_ACTION,
+    };
     document.body.appendChild(syncControls);
 
     webUIListenerCallback('sync-prefs-changed', getSyncAllPrefs());

@@ -38,6 +38,7 @@
 <translation id="4026745073321351206">🙄 Coś nie działa?</translation>
 <translation id="4216644171369573466">Grupa kart, <ph name="GROUP_TITLE" />, Menu.</translation>
 <translation id="4304713468139749426">Menedżer haseł</translation>
+<translation id="4439281775431634915">Twoje grupy kart są zapisane tutaj</translation>
 <translation id="4569525137269575065">Zamknij grupę kart</translation>
 <translation id="473775607612524610">Aktualizuj</translation>
 <translation id="4755216899422789286">Otwórz adresy URL w Vivaldi</translation>
@@ -52,6 +53,8 @@
             other {{count} grup kart zostało zamkniętych i zapisanych}}</translation>
 <translation id="5019787757991745254">Kolor grupy kart <ph name="COLOR" /></translation>
 <translation id="5022440170224170365">Grupa kart. Zwinięta.</translation>
+<translation id="5132327651247938019">Przewiń w prawo, aby przeglądać w trybie prywatnym.</translation>
+<translation id="5204006339739481307">Przewiń w lewo, aby przeglądać w trybie prywatnym.</translation>
 <translation id="5217245356412073535">Możesz ustawić wersję na komputery jako domyślny widok dla stron wybierając Ustawienia &gt; Ustawienia treści</translation>
 <translation id="5271549068863921519">Zapisz hasło</translation>
 <translation id="5317780077021120954">Zapisz</translation>
@@ -65,6 +68,7 @@
 <translation id="5962477178930921574">Wklej i wyszukaj</translation>
 <translation id="6163856768888310791">Rozgrupuj</translation>
 <translation id="6168969409902608220">Nazwa grupy</translation>
+<translation id="6192561334825788389">Przewiń w prawo, aby przeglądać w trybie prywatnym.</translation>
 <translation id="6233792867654386826">Otwiera wprowadzone adresy URL w Vivaldi.</translation>
 <translation id="6271462272606946663">Ukryj żądanie wersji mobilnej strony</translation>
 <translation id="6478587527114893588">Zamknij grupę kart.</translation>
@@ -77,6 +81,8 @@
 <translation id="6827597288286078054">Prywatne wyszukiwanie</translation>
 <translation id="6851516051005285358">Wersja na komputer</translation>
 <translation id="6890907822330704077">Grupa kart, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> kart.</translation>
+<translation id="7004032350256606903">Twoja organizacja wymaga przeglądania prywatnego.
+<ph name="BEGIN_LINK" />Więcej informacji<ph name="END_LINK" /></translation>
 <translation id="7307970171564921489">Odblokuj prywatne karty używając <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Otworzyć w trybie prywatnym?</translation>
 <translation id="7363285031331302144">Utwórz grupy kart, aby uporządkować otwarte karty</translation>
@@ -96,6 +102,7 @@
         =1 {Dodaj kartę do nowej grupy kart}
         other {Dodaj karty do nowej grupy kart}}</translation>
 <translation id="8465550436083180511">Zwiń grupę kart.</translation>
+<translation id="8499954848910902473">Przewiń w lewo, aby przeglądać w trybie prywatnym.</translation>
 <translation id="8685478989144570078">Grupy kart</translation>
 <translation id="8756969031206844760">Zaktualizować hasło?</translation>
 <translation id="8852861335827546438">Nowa grupa kart</translation>

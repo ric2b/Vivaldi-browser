@@ -24,14 +24,15 @@ ProcessLock ProcessLock::CreateAllowAnySite(
   AgentClusterKey agent_cluster_key =
       cross_origin_isolation_key.has_value()
           ? AgentClusterKey::CreateWithCrossOriginIsolationKey(
-                url::Origin(), cross_origin_isolation_key.value())
-          : AgentClusterKey::CreateSiteKeyed(GURL());
+                SiteInfo::GetOriginForUnlockedProcess(),
+                cross_origin_isolation_key.value(),
+                AgentClusterKey::OACStatus::kSiteKeyedByDefault)
+          : AgentClusterKey::CreateSiteKeyed(
+                GURL(), AgentClusterKey::OACStatus::kSiteKeyedByDefault);
 
   return ProcessLock(SiteInfo(
       agent_cluster_key,
-      /*site_url=*/GURL(), /*process_lock_url=*/GURL(),
-      /*requires_origin_keyed_process=*/false,
-      /*requires_origin_keyed_process_by_default=*/false,
+      /*site_url=*/GURL(),
       /*is_sandboxed=*/false, UrlInfo::kInvalidUniqueSandboxId,
       storage_partition_config, web_exposed_isolation_info,
       web_exposed_isolation_level, /*is_guest=*/false,
@@ -44,16 +45,8 @@ ProcessLock ProcessLock::CreateAllowAnySite(
 ProcessLock ProcessLock::Create(const IsolationContext& isolation_context,
                                 const UrlInfo& url_info) {
   DCHECK(url_info.storage_partition_config.has_value());
-  if (BrowserThread::CurrentlyOn(BrowserThread::UI))
-    return ProcessLock(SiteInfo::Create(isolation_context, url_info));
-
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  // On the IO thread we need to use a special SiteInfo creation method because
-  // we cannot properly compute some SiteInfo fields on that thread.
-  // ProcessLocks must always match no matter which thread they were created on,
-  // but the SiteInfo objects used to create them may not always match.
-  return ProcessLock(SiteInfo::CreateOnIOThread(isolation_context, url_info));
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  return ProcessLock(SiteInfo::Create(isolation_context, url_info));
 }
 
 // static
@@ -71,6 +64,39 @@ ProcessLock& ProcessLock::operator=(const ProcessLock&) = default;
 
 ProcessLock::~ProcessLock() = default;
 
+bool ProcessLock::AllowsAnySite() const {
+  if (!site_info_.has_value()) {
+    return false;
+  }
+
+  if (agent_cluster_key().IsSiteKeyed()) {
+    return agent_cluster_key().GetSite().is_empty();
+  }
+
+  return agent_cluster_key().GetOrigin() ==
+         SiteInfo::GetOriginForUnlockedProcess();
+}
+
+bool ProcessLock::IsLockedToSite() const {
+  if (!site_info_.has_value()) {
+    return false;
+  }
+
+  if (agent_cluster_key().IsSiteKeyed()) {
+    return !agent_cluster_key().GetSite().is_empty();
+  }
+
+  return agent_cluster_key().GetOrigin() !=
+         SiteInfo::GetOriginForUnlockedProcess();
+}
+
+GURL ProcessLock::GetProcessLockURL() const {
+  if (!site_info_.has_value()) {
+    return GURL();
+  }
+  return agent_cluster_key().GetURL();
+}
+
 StoragePartitionConfig ProcessLock::GetStoragePartitionConfig() const {
   DCHECK(site_info_.has_value());
   return site_info_->storage_partition_config();
@@ -87,17 +113,37 @@ WebExposedIsolationLevel ProcessLock::GetWebExposedIsolationLevel() const {
 }
 
 bool ProcessLock::IsASiteOrOrigin() const {
-  const GURL lock_url = ProcessLock::lock_url();
-  return lock_url.has_scheme() && lock_url.has_host() && lock_url.is_valid();
+  if (agent_cluster_key().IsSiteKeyed()) {
+    const GURL lock_url = agent_cluster_key().GetSite();
+    return lock_url.has_scheme() && lock_url.has_host() && lock_url.is_valid();
+  }
+
+  return agent_cluster_key().GetOrigin() !=
+         SiteInfo::GetOriginForUnlockedProcess();
+}
+
+bool ProcessLock::MatchesScheme(const std::string& scheme) const {
+  std::string agent_cluster_key_scheme =
+      agent_cluster_key().IsOriginKeyed()
+          ? agent_cluster_key().GetOrigin().scheme()
+          : agent_cluster_key().GetSite().scheme();
+  return agent_cluster_key_scheme == scheme;
 }
 
 bool ProcessLock::HasOpaqueOrigin() const {
-  DCHECK(is_locked_to_site());
-  return url::Origin::Create(lock_url()).opaque();
+  DCHECK(IsLockedToSite());
+  if (agent_cluster_key().IsOriginKeyed()) {
+    return agent_cluster_key().GetOrigin().opaque();
+  }
+  return url::Origin::Create(agent_cluster_key().GetSite()).opaque();
 }
 
 bool ProcessLock::MatchesOrigin(const url::Origin& origin) const {
-  url::Origin process_lock_origin = url::Origin::Create(lock_url());
+  if (agent_cluster_key().IsOriginKeyed()) {
+    return agent_cluster_key().GetOrigin().IsSameOriginWith(origin);
+  }
+  url::Origin process_lock_origin =
+      url::Origin::Create(agent_cluster_key().GetSite());
   return origin == process_lock_origin;
 }
 
@@ -168,10 +214,10 @@ std::string ProcessLock::ToString() const {
   std::string ret = "{ ";
 
   if (site_info_.has_value()) {
-    ret += lock_url().possibly_invalid_spec();
-
-    if (is_origin_keyed_process())
+    ret += GetProcessLockURL().possibly_invalid_spec();
+    if (agent_cluster_key().IsOriginKeyed()) {
       ret += " origin-keyed";
+    }
 
     if (is_sandboxed()) {
       ret += " sandboxed";

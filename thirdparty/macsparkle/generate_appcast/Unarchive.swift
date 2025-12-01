@@ -25,7 +25,7 @@ func unarchive(itemPath: URL, archiveDestDir: URL, callback: @escaping (Error?) 
             } catch {
                 callback(error)
             }
-        }, progressBlock: nil)
+        }, progressBlock: nil, waitForCleanup: true)
     } else {
         callback(makeError(code: .unarchivingError, "Not a supported archive format: \(itemPath.path)"))
     }
@@ -52,7 +52,7 @@ func unarchiveUpdates(archivesSourceDir: URL, archivesDestDir: URL, disableNeste
         let itemURL = archivesSourceDir.appendingPathComponent(item)
         let fileExtension = itemURL.pathExtension
         // Note: keep this list in sync with SUPipedUnarchiver
-        guard ["zip", "tar", "gz", "tgz", "bz2", "tbz", "xz", "txz", "lzma", "dmg"].contains(fileExtension) else {
+        guard ["zip", "tar", "gz", "tgz", "bz2", "tbz", "xz", "txz", "lzma", "dmg", "aar", "yaa"].contains(fileExtension) else {
             continue
         }
         

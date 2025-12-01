@@ -120,9 +120,21 @@ class SubgraphTester {
   explicit SubgraphTester(uint32_t external_value_ids,
                           uint32_t flags = xnn_test_runtime_flags());
 
+  SubgraphTester& AddInternalDynamicTensor(const TensorShape& shape,
+                                           enum xnn_datatype datatype,
+                                           uint32_t* id_out,
+                                           uint32_t flags = 0);
+
   SubgraphTester& AddInternalDynamicTensorF32(const TensorShape& shape,
                                               uint32_t* id_out,
-                                              uint32_t flags = 0);
+                                              uint32_t flags = 0) {
+    return AddInternalDynamicTensor(shape, xnn_datatype_fp32, id_out, flags);
+  }
+
+  SubgraphTester& AddInternalStaticTensor(const TensorShape& shape,
+                                          enum xnn_datatype datatype,
+                                          uint32_t* id_out, const void* data,
+                                          uint32_t flags = 0);
 
   SubgraphTester& AddInternalDynamicallyQuantizedTensor(
       const TensorShape& shape, xnn_datatype datatype, size_t num_nonbatch_dims,
@@ -151,7 +163,7 @@ class SubgraphTester {
   template <typename T>
   SubgraphTester& ReshapeExternalTensor(const TensorShape& shape, T* data,
                                         uint32_t external_id) {
-    assert(external_id < subgraph_->external_value_ids);
+    assert(external_id < xnn_subgraph_get_num_external_values(subgraph_.get()));
     const xnn_status status = xnn_reshape_external_value(
         runtime_.get(), external_id, shape.Rank(), shape.Dims());
     EXPECT_EQ(status, xnn_status_success);
@@ -162,7 +174,7 @@ class SubgraphTester {
 
   template <typename T>
   SubgraphTester& SetupExternalTensor(T* data, uint32_t external_id) {
-    assert(external_id < subgraph_->external_value_ids);
+    assert(external_id < xnn_subgraph_get_num_external_values(subgraph_.get()));
     external_tensors_[external_id] = data;
     return *this;
   }
@@ -541,20 +553,24 @@ class SubgraphTester {
     return &subgraph_->nodes[node_id];
   }
 
-  size_t NumNodes() const { return subgraph_->num_nodes; }
+  size_t NumNodes() const {
+    return xnn_subgraph_get_num_nodes(subgraph_.get());
+  }
 
-  size_t NumValues() const { return subgraph_->num_values; }
+  size_t NumValues() const {
+    return xnn_subgraph_get_num_values(subgraph_.get());
+  }
 
   xnn_subgraph* Subgraph() const { return subgraph_.get(); }
 
   template <typename T>
   float* GetExternalTensorData(uint32_t external_id) {
-    assert(external_id < subgraph_->external_value_ids);
+    assert(external_id < xnn_subgraph_get_num_external_values(subgraph_.get()));
     return reinterpret_cast<T*>(external_tensors_[external_id]);
   }
 
   float* GetExternalTensorDataF32(uint32_t external_id) {
-    assert(external_id < subgraph_->external_value_ids);
+    assert(external_id < xnn_subgraph_get_num_external_values(subgraph_.get()));
     return GetExternalTensorData<float>(external_id);
   }
 

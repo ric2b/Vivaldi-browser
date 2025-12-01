@@ -61,10 +61,7 @@ const char kExceptionMessageUnableToCloneSession[] =
     "The session cannot be cloned.";
 const char kExceptionMessageUnableToCalculateUsage[] =
     "The usage cannot be calculated.";
-const char kExceptionMessageSystemPromptIsDefinedMultipleTimes[] =
-    "The system prompt should not be defined in both systemPrompt and "
-    "initialPrompts.";
-const char kExceptionMessageSystemPromptIsNotTheFirst[] =
+const char kExceptionMessagePromptWithSystemRoleIsNotTheFirst[] =
     "The prompt with 'system' role must be placed at the first entry of "
     "initialPrompts.";
 const char kExceptionMessageUnsupportedLanguages[] =
@@ -175,7 +172,7 @@ String ValidateAndStringifyObject(const ScriptValue& input,
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
         kExceptionMessageInvalidResponseJsonSchema);
-    return WTF::String();
+    return String();
   }
   return ToBlinkString<String>(script_state->GetIsolate(), value,
                                kDoNotExternalize);
@@ -264,7 +261,7 @@ DOMException* ConvertModelStreamingResponseErrorToDOMException(
 }
 
 // LINT.IfChange(ConvertModelAvailabilityCheckResultToDebugString)
-WTF::String ConvertModelAvailabilityCheckResultToDebugString(
+String ConvertModelAvailabilityCheckResultToDebugString(
     mojom::blink::ModelAvailabilityCheckResult result) {
   switch (result) {
     case mojom::blink::ModelAvailabilityCheckResult::

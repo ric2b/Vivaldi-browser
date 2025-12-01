@@ -4,24 +4,20 @@
 <translation id="1056898198331236512">Amaran</translation>
 <translation id="1165039591588034296">Ralat</translation>
 <translation id="1244303850296295656">Ralat sambungan</translation>
-<translation id="1546280085599573572">Sambungan ini telah menukar halaman yang ditunjukkan apabila anda mengklik butang Laman Utama.</translation>
 <translation id="1588438908519853928">Biasa</translation>
 <translation id="1729533290416704613">Sambungan turut mengawal halaman yang ditunjukkan apabila anda membuat carian dari Kotak Omni.</translation>
 <translation id="2087822576218954668">Cetak: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">Tab Inkognito: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Modul Klien Asli: <ph name="NEXE_NAME" /></translation>
 <translation id="2282146716419988068">Proses GPU</translation>
 <translation id="2301382460326681002">Direktori akar sambungan adalah tidak sah.</translation>
 <translation id="2327492829706409234">Dayakan apl</translation>
 <translation id="2348176352564285430">Apl: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Pilih direktori sambungan.</translation>
-<translation id="241082044617551207">Pemalam tidak diketahui</translation>
 <translation id="2439110203301358333">Program lain pada komputer anda menambah sambungan yang boleh mengubah cara Vivaldi berfungsi.</translation>
 <translation id="2445081178310039857">Direktori akar sambungan adalah diperlukan.</translation>
 <translation id="2662876636500006917">Kedai Web Vivaldi</translation>
 <translation id="2678063897982469759">Dayakan semula</translation>
 <translation id="2850541429955027218">Tambahkan tema</translation>
-<translation id="2861941300086904918">Pengurus keselamatan Klien Asli</translation>
 <translation id="2932883381142163287">Laporkan penyalahgunaan</translation>
 <translation id="2941112035454246133">Rendah</translation>
 <translation id="3080207940057008665">Program lain pada komputer anda menambah tema yang boleh mengubah cara Vivaldi berfungsi.</translation>
@@ -39,7 +35,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4100839878934973028">Program lain pada komputer anda menambah apl yang boleh mengubah cara Vivaldi berfungsi.</translation>
-<translation id="4176463684765177261">Dilumpuhkan</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K langsung)</translation>
 <translation id="4384652540891215547">Aktifkan sambungan</translation>
 <translation id="4595560905247879544">Apl dan sambungan hanya boleh diubah suai oleh pengurus (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -47,17 +42,13 @@
 <translation id="488785315393301722">Tunjukkan Butiran</translation>
 <translation id="5027562294707732951">Tambahkan sambungan</translation>
 <translation id="5039804452771397117">Benarkan</translation>
-<translation id="5143374789336132547">Sambungan "<ph name="EXTENSION_NAME" />" telah menukar halaman yang ditunjukkan apabila anda mengklik butang Laman Utama.</translation>
 <translation id="5233231016133573565">ID Proses</translation>
 <translation id="52912272896845572">Fail penting persendirian adalah tidak sah.</translation>
 <translation id="5362741141255528695">Pilih fail kunci persendirian.</translation>
 <translation id="5485102783864353244">Tambah apl</translation>
-<translation id="5521078259930077036">Adakah ini halaman utama yang anda jangkakan?</translation>
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Muat Semula</translation>
 <translation id="5575473780076478375">Sambungan Inkognito: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5715711091495208045">Broker Pemalam: <ph name="PLUGIN_NAME" /></translation>
-<translation id="583281660410589416">Tidak diketahui</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> puncak)</translation>
 <translation id="6101226222197207147">Apl baharu ditambah (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6196854373336333322">Sambungan "<ph name="EXTENSION_NAME" />" telah mengambil alih kawalan tetapan proksi anda, yang bermakna sambungan ini boleh mengubah, menghentikan atau mencuri dengar apa-apa sahaja yang anda lakukan dalam talian. Jika anda tidak pasti mengapa perubahan ini berlaku, anda mungkin tidak mahukannya.</translation>
@@ -67,7 +58,6 @@
 <translation id="6498249116389603658">&amp;Semua bahasa anda</translation>
 <translation id="6503077044568424649">Paling kerap dilawati</translation>
 <translation id="6508261954199872201">Apl: <ph name="APP_NAME" /></translation>
-<translation id="6798954102094737107">Pemalam: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6900284862687837908">Apl Latar Belakang: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="7287143125007575591">Akses ditolak.</translation>
 <translation id="7427348830195639090">Halaman Latar Belakang: <ph name="BACKGROUND_PAGE_URL" /></translation>

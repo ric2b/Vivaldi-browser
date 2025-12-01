@@ -101,7 +101,6 @@ class ReloadButtonMediator implements ThemeColorProvider.TintObserver {
         mModel.set(ReloadButtonProperties.LONG_CLICK_LISTENER, this::showActionToastOnReloadButton);
 
         updateBackground(mThemeColorProvider.getBrandedColorScheme());
-        mThemeColorProvider.addTintObserver(this);
 
         mNtpLoadingObserver =
                 (isLoading) -> {
@@ -175,6 +174,13 @@ class ReloadButtonMediator implements ThemeColorProvider.TintObserver {
                         mInsets.bottom);
         mBackgroundResForTesting = backgroundRes;
         mModel.set(ReloadButtonProperties.BACKGROUND_HIGHLIGHT, drawable);
+
+        // When setting the background of a view to an `InsetDrawable`, the padding of the view
+        // is automatically set to the insets of the `InsetDrawable`. However, a bug prevents the
+        // padding from being set if the insets are all 0. The workaround is to set the padding
+        // explicitly.
+        // https://crbug.com/442688217
+        mModel.set(ReloadButtonProperties.PADDING, mInsets);
     }
 
     public @DrawableRes int getBackgroundResForTesting() {
@@ -250,7 +256,6 @@ class ReloadButtonMediator implements ThemeColorProvider.TintObserver {
 
         mNtpLoadingSupplier.removeObserver(mNtpLoadingObserver);
         mEnabledSupplier.removeObserver(mEnabledObserver);
-        mThemeColorProvider.removeTintObserver(this);
         mTabObserver.destroy();
     }
 }

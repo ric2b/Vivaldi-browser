@@ -11,9 +11,10 @@ namespace vivaldi {
 class RequestFilterRegistry {
  public:
   virtual ~RequestFilterRegistry();
+
+  static void ClearCacheOnNavigation();
+
   virtual void AddFilter(std::unique_ptr<RequestFilter> new_filter) = 0;
-  virtual void RemoveFilter(RequestFilter* filter) = 0;
-  virtual void ClearCacheOnNavigation() = 0;
 };
 }  // namespace vivaldi
 

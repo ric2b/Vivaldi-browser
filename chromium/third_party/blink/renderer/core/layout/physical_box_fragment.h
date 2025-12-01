@@ -10,7 +10,7 @@
 #include "base/dcheck_is_on.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/block_break_token.h"
-#include "third_party/blink/renderer/core/layout/gap_fragment_data.h"
+#include "third_party/blink/renderer/core/layout/gap/gap_geometry.h"
 #include "third_party/blink/renderer/core/layout/geometry/box_sides.h"
 #include "third_party/blink/renderer/core/layout/geometry/box_strut.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
@@ -111,6 +111,9 @@ class CORE_EXPORT PhysicalBoxFragment final : public PhysicalFragment {
     DCHECK(children_valid_);
     return PostLayoutChildLinkList(base::span(children_));
   }
+
+  void SetChildrenInvalid() const;
+  bool ChildrenValid() const { return children_valid_; }
 
   // This exposes a mutable part of the fragment for |OutOfFlowLayoutPart|.
   class MutableChildrenForOutOfFlow final {
@@ -444,15 +447,15 @@ class CORE_EXPORT PhysicalBoxFragment final : public PhysicalFragment {
     return bit_field_.get<IsMonolithicOverflowPropagationDisabledFlag>();
   }
 
-  // Returns true if we've called moved children in the block direction (for
-  // alignment). See: `BoxFragmentBuilder::MoveChildrenInBlockDirection`.
-  bool HasMovedChildrenInBlockDirection() const {
-    return bit_field_.get<HasMovedChildrenInBlockDirectionFlag>();
+  // Returns true if we've called moved children in the block or inline
+  // direction (for alignment). See:
+  // `BoxFragmentBuilder::MoveChildrenInDirection`.
+  bool HasMovedChildren() const {
+    return bit_field_.get<HasMovedChildrenFlag>();
   }
 
 #if DCHECK_IS_ON()
   void CheckSameForSimplifiedLayout(const PhysicalBoxFragment&,
-                                    bool check_same_block_size,
                                     bool check_no_fragmentation) const;
 #endif
 
@@ -636,7 +639,7 @@ class CORE_EXPORT PhysicalBoxFragment final : public PhysicalFragment {
       IsFragmentationContextRootFlag::DefineNextValue<bool, 1>;
   using IsMonolithicOverflowPropagationDisabledFlag =
       IsMonolithicFlag::DefineNextValue<bool, 1>;
-  using HasMovedChildrenInBlockDirectionFlag =
+  using HasMovedChildrenFlag =
       IsMonolithicOverflowPropagationDisabledFlag::DefineNextValue<bool, 1>;
 
   bool IncludeBorderTop() const {
@@ -693,6 +696,22 @@ class CORE_EXPORT PhysicalBoxFragment final : public PhysicalFragment {
                                    OutlineType include_block_overflows,
                                    bool inline_container_relative,
                                    OutlineRectCollector& collector) const;
+  void AddOutlineRectsForNormalChildren(
+      OutlineRectCollector& collector,
+      PhysicalOffset additional_offset,
+      OutlineType outline_type,
+      const LayoutBoxModelObject* containing_block) const;
+  void AddOutlineRectsForCursor(OutlineRectCollector& collector,
+                                PhysicalOffset additional_offset,
+                                OutlineType outline_type,
+                                const LayoutBoxModelObject* containing_block,
+                                InlineCursor* cursor) const;
+  void AddOutlineRectsForDescendant(
+      const PhysicalFragmentLink& descendant,
+      OutlineRectCollector& collector,
+      PhysicalOffset additional_offset,
+      OutlineType outline_type,
+      const LayoutBoxModelObject* containing_block) const;
 
   PositionWithAffinity PositionForPointByClosestChild(
       PhysicalOffset point_in_contents) const;

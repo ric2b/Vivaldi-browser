@@ -118,7 +118,9 @@
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ui/webui/commerce/product_specifications_ui.h"
-#endif
+#include "components/webapps/isolated_web_apps/scheme.h"
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
     BUILDFLAG(IS_ANDROID)
@@ -167,8 +169,7 @@ WebUIController* NewWebUI(WebUI* web_ui, const GURL& url) {
 // Returns a function that can be used to create the right type of WebUI for a
 // tab, based on its URL. Returns nullptr if the URL doesn't have WebUI
 // associated with it.
-WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
-                                             Profile* profile,
+WebUIFactoryFunction GetWebUIFactoryFunction(Profile* profile,
                                              const GURL& url) {
   // This will get called a lot to check all URLs, so do a quick check of other
   // schemes to filter out most URLs.
@@ -251,8 +252,7 @@ WebUI::TypeID ChromeWebUIControllerFactory::GetWebUIType(
     content::BrowserContext* browser_context,
     const GURL& url) {
   Profile* profile = Profile::FromBrowserContext(browser_context);
-  WebUIFactoryFunction function =
-      GetWebUIFactoryFunction(nullptr, profile, url);
+  WebUIFactoryFunction function = GetWebUIFactoryFunction(profile, url);
   return function ? reinterpret_cast<WebUI::TypeID>(function) : WebUI::kNoWebUI;
 }
 
@@ -265,8 +265,8 @@ bool ChromeWebUIControllerFactory::UseWebUIForURL(
 std::unique_ptr<WebUIController>
 ChromeWebUIControllerFactory::CreateWebUIControllerForURL(WebUI* web_ui,
                                                           const GURL& url) {
-  Profile* profile = Profile::FromWebUI(web_ui);
-  WebUIFactoryFunction function = GetWebUIFactoryFunction(web_ui, profile, url);
+  WebUIFactoryFunction function =
+      GetWebUIFactoryFunction(Profile::FromWebUI(web_ui), url);
   if (!function) {
     return nullptr;
   }
@@ -279,12 +279,14 @@ void ChromeWebUIControllerFactory::GetFaviconForURL(
     const GURL& page_url,
     const std::vector<int>& desired_sizes_in_pixel,
     favicon_base::FaviconResultsCallback callback) const {
-#if !BUILDFLAG(IS_ANDROID)
-  if (page_url.SchemeIs(chrome::kIsolatedAppScheme)) {
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+  if (page_url.SchemeIs(webapps::kIsolatedAppScheme)) {
     ReadIsolatedWebAppFaviconsFromDisk(profile, page_url, std::move(callback));
     return;
   }
-#endif
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
 
   // Before determining whether page_url is an extension url, we must handle
   // overrides. This changes urls in |kChromeUIScheme| to extension urls, and

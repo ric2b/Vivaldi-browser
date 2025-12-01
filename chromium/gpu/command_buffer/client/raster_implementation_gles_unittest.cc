@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
+#include "base/containers/heap_array.h"
 #include "cc/paint/display_item_list.h"
 #include "cc/paint/image_provider.h"
 #include "gpu/GLES2/gl2extchromium.h"
@@ -161,12 +162,13 @@ class ContextSupportStub : public ContextSupport {
       uint32_t texture_id) override {
     return false;
   }
-  void* MapTransferCacheEntry(uint32_t serialized_size) override {
-    mapped_transfer_cache_entry_.reset(new char[serialized_size]);
-    return mapped_transfer_cache_entry_.get();
+  base::span<uint8_t> MapTransferCacheEntry(uint32_t serialized_size) override {
+    mapped_transfer_cache_entry_ =
+        base::HeapArray<uint8_t>::Uninit(serialized_size);
+    return mapped_transfer_cache_entry_;
   }
   void UnmapAndCreateTransferCacheEntry(uint32_t type, uint32_t id) override {
-    mapped_transfer_cache_entry_.reset();
+    mapped_transfer_cache_entry_ = base::HeapArray<uint8_t>();
   }
   bool ThreadsafeLockTransferCacheEntry(uint32_t type, uint32_t id) override {
     return true;
@@ -187,7 +189,7 @@ class ContextSupportStub : public ContextSupport {
   void DidCallGLFromSkia() override {}
 
  private:
-  std::unique_ptr<char[]> mapped_transfer_cache_entry_;
+  base::HeapArray<uint8_t> mapped_transfer_cache_entry_;
 };
 
 class ImageProviderStub : public cc::ImageProvider {
@@ -350,50 +352,6 @@ TEST_F(RasterImplementationGLESTest, GetQueryObjectui64vEXT) {
   EXPECT_CALL(*gl_, GetQueryObjectui64vEXT(kQueryId, kQueryParam, &result))
       .Times(1);
   ri_->GetQueryObjectui64vEXT(kQueryId, kQueryParam, &result);
-}
-
-TEST_F(RasterImplementationGLESTest, CreateAndConsumeForGpuRaster) {
-  const GLuint kTextureId = 23;
-  const auto mailbox = gpu::Mailbox::Generate();
-  EXPECT_CALL(*gl_, CreateAndTexStorage2DSharedImageCHROMIUM(mailbox.name))
-      .WillOnce(Return(kTextureId));
-  GLuint texture_id = ri_->CreateAndConsumeForGpuRaster(mailbox);
-  EXPECT_EQ(kTextureId, texture_id);
-}
-
-TEST_F(RasterImplementationGLESTest, DeleteGpuRasterTexture) {
-  const GLuint kTextureId = 23;
-  EXPECT_CALL(*gl_, DeleteTextures(1, Pointee(Eq(kTextureId)))).Times(1);
-  ri_->DeleteGpuRasterTexture(kTextureId);
-}
-
-TEST_F(RasterImplementationGLESTest, BeginSharedImageAccess) {
-  const GLuint kTextureId = 23;
-  EXPECT_CALL(*gl_,
-              BeginSharedImageAccessDirectCHROMIUM(
-                  kTextureId, GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM))
-      .Times(1);
-  ri_->BeginSharedImageAccessDirectCHROMIUM(
-      kTextureId, GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
-}
-
-TEST_F(RasterImplementationGLESTest, EndSharedImageAccess) {
-  const GLuint kTextureId = 23;
-  EXPECT_CALL(*gl_, EndSharedImageAccessDirectCHROMIUM(kTextureId)).Times(1);
-  ri_->EndSharedImageAccessDirectCHROMIUM(kTextureId);
-}
-
-TEST_F(RasterImplementationGLESTest, BeginGpuRaster) {
-  EXPECT_CALL(*gl_, TraceBeginCHROMIUM(StrEq("BeginGpuRaster"),
-                                       StrEq("GpuRasterization")))
-      .Times(1);
-  ri_->BeginGpuRaster();
-}
-
-TEST_F(RasterImplementationGLESTest, EndGpuRaster) {
-  EXPECT_CALL(*gl_, PixelStorei(GL_UNPACK_ALIGNMENT, 4)).Times(1);
-  EXPECT_CALL(*gl_, TraceEndCHROMIUM()).Times(1);
-  ri_->EndGpuRaster();
 }
 
 }  // namespace raster

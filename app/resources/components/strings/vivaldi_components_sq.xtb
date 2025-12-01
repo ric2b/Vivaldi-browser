@@ -3,16 +3,6 @@
 <translationbundle lang="sq">
 <translation id="3830627370375585318">Lejoni Vivaldin të hapë parametrat e sistemit mbrojtës të rrjetit
           apo të antivirusit.</translation>
-<translation id="4200102020577305737">Shkoni te
-          menuja e Vivaldit &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Parametrat e LAN-it
-          dhe çaktivizoni opsionin "Përdor server proxy për LAN-in".</translation>
 <translation id="4932161901409251843">Shkoni te
           menuja Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -25,7 +15,7 @@
           rrjetin aktiv, klikoni butonin Detajet… dhe shpërzgjidhni çdo proxy
           që mund të jetë përzgjedhur.</translation>
 <translation id="5248344925342018662">Po shihni një faqe të sigurt të Vivaldit</translation>
-<translation id="6690242244468452299">Kjo faqe tregon informacionin mbi problemet që janë regjistruar së fundmi.</translation>
+<translation id="6690242244468452299">Kjo faqe tregon informacionin mbi problemet që janë regjistruar së fundi.</translation>
 <translation id="7023871570427738255">Shkoni te
           menuja Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@
           Nëse problemi nuk zgjidhet, rekomandojmë që opsionin ta
           riaktivizoni për arsye performance.</translation>
 <translation id="7496505986576158197">Vivaldi mundësohet falë projektit <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> dhe <ph name="BEGIN_LINK_OSS" />programeve kompjuterike që përdoren lirisht<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Shkoni te
+          menuja e Vivaldit &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Rrjeti &amp; interneti &gt; Proxy
+          dhe mos e përzgjidhni "Dalloj automatikisht parametrat".</translation>
 </translationbundle>

@@ -46,7 +46,7 @@ class NoteNode;
 
 // TableViewCell that displays NoteFolderItem data.
 @interface TableViewNoteFolderCell
-    : TableViewCell <NoteTableCellTitleEditing>
+    : LegacyTableViewCell <NoteTableCellTitleEditing>
 
 // The leading constraint used to set the cell's leading indentation. The
 // default indentationLevel property doesn't affect any custom Cell subviews,

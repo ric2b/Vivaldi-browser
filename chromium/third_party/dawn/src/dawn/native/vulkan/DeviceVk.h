@@ -144,9 +144,9 @@ class Device final : public DeviceBase {
            Ref<DeviceBase::DeviceLostEvent>&& lostEvent);
 
     ResultOrError<Ref<BindGroupBase>> CreateBindGroupImpl(
-        const BindGroupDescriptor* descriptor) override;
+        const UnpackedPtr<BindGroupDescriptor>& descriptor) override;
     ResultOrError<Ref<BindGroupLayoutInternalBase>> CreateBindGroupLayoutImpl(
-        const BindGroupLayoutDescriptor* descriptor) override;
+        const UnpackedPtr<BindGroupLayoutDescriptor>& descriptor) override;
     ResultOrError<Ref<BufferBase>> CreateBufferImpl(
         const UnpackedPtr<BufferDescriptor>& descriptor) override;
     ResultOrError<Ref<PipelineLayoutBase>> CreatePipelineLayoutImpl(
@@ -217,6 +217,7 @@ class Device final : public DeviceBase {
     Ref<PipelineCache> mMonolithicPipelineCache;
 
     Ref<QuerySetBase> mEmptyPassQuerySet;
+    std::atomic<uint64_t> mNextTextureViewId = 1;
 
     MaybeError ImportExternalImage(const ExternalImageDescriptorVk* descriptor,
                                    ExternalMemoryHandle memoryHandle,

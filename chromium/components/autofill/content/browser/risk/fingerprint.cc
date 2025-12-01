@@ -129,10 +129,10 @@ void AddAcceptLanguagesToFingerprint(
 // into the |machine|.
 void AddScreenInfoToFingerprint(const display::ScreenInfo& screen_info,
                                 Fingerprint::MachineCharacteristics* machine) {
-  machine->set_screen_count(display::Screen::GetScreen()->GetNumDisplays());
+  machine->set_screen_count(display::Screen::Get()->GetNumDisplays());
 
   const gfx::Size screen_size =
-      display::Screen::GetScreen()->GetPrimaryDisplay().GetSizeInPixel();
+      display::Screen::Get()->GetPrimaryDisplay().GetSizeInPixel();
   machine->mutable_screen_size()->set_width(screen_size.width());
   machine->mutable_screen_size()->set_height(screen_size.height());
 
@@ -349,7 +349,7 @@ void FingerprintDataLoader::FillFingerprint() {
   machine->set_browser_language(app_locale_);
   machine->set_charset(charset_);
   machine->set_user_agent(user_agent_);
-  machine->set_ram(base::SysInfo::AmountOfPhysicalMemory());
+  machine->set_ram(base::SysInfo::AmountOfPhysicalMemory().InBytes());
   machine->set_browser_build(version_);
   machine->set_browser_feature(
       Fingerprint::MachineCharacteristics::FEATURE_REQUEST_AUTOCOMPLETE);

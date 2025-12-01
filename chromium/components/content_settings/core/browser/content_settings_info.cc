@@ -67,11 +67,15 @@ bool ContentSettingsInfo::IsDefaultSettingValid(ContentSetting setting) const {
 
 bool ContentSettingsInfo::Delegate::IsValid(
     const PermissionSetting& setting) const {
-  auto* content_setting = std::get_if<ContentSetting>(&setting);
-  if (!content_setting) {
-    return false;
-  }
-  return info_->IsSettingValid(*content_setting);
+  DCHECK(std::holds_alternative<ContentSetting>(setting)) << setting;
+  auto content_setting = std::get<ContentSetting>(setting);
+  return info_->IsSettingValid(content_setting);
+}
+
+bool ContentSettingsInfo::Delegate::IsDefaultSettingValid(
+    const PermissionSetting& setting) const {
+  DCHECK(std::holds_alternative<ContentSetting>(setting)) << setting;
+  return info_->IsDefaultSettingValid(std::get<ContentSetting>(setting));
 }
 
 PermissionSetting ContentSettingsInfo::Delegate::InheritInIncognito(
@@ -98,13 +102,18 @@ bool ContentSettingsInfo::Delegate::ShouldCoalesceEphemeralState() const {
 }
 
 bool ContentSettingsInfo::Delegate::IsAnyPermissionAllowed(
-    PermissionSetting setting) const {
-  return std::get<ContentSetting>(setting) == CONTENT_SETTING_ALLOW;
+    const PermissionSetting& permission_setting) const {
+  auto& setting = std::get<ContentSetting>(permission_setting);
+  return setting == CONTENT_SETTING_ALLOW ||
+         setting == CONTENT_SETTING_SESSION_ONLY;
 }
 
 bool ContentSettingsInfo::Delegate::IsUndecided(
-    PermissionSetting setting) const {
-  return std::get<ContentSetting>(setting) == CONTENT_SETTING_ASK;
+    const PermissionSetting& permission_setting) const {
+  auto& setting = std::get<ContentSetting>(permission_setting);
+  // DEFAULT should be represented as an empty optional PermissionSetting.
+  DCHECK(setting != CONTENT_SETTING_DEFAULT);
+  return setting == CONTENT_SETTING_ASK;
 }
 
 bool ContentSettingsInfo::Delegate::CanTrackLastVisit() const {
@@ -131,7 +140,22 @@ base::Value ContentSettingsInfo::Delegate::ToValue(
 
 std::optional<PermissionSetting> ContentSettingsInfo::Delegate::FromValue(
     const base::Value& value) const {
+  if (value.is_none()) {
+    return std::nullopt;
+  }
   return ParseContentSettingValue(value);
+}
+
+PermissionSetting ContentSettingsInfo::Delegate::ApplyPermissionEmbargo(
+    const PermissionSetting& setting) const {
+  if (info_->website_settings_info()->type() ==
+      ContentSettingsType::FEDERATED_IDENTITY_API) {
+    return CONTENT_SETTING_BLOCK;
+  }
+  if (std::get<ContentSetting>(setting) == CONTENT_SETTING_ASK) {
+    return CONTENT_SETTING_BLOCK;
+  }
+  return setting;
 }
 
 }  // namespace content_settings

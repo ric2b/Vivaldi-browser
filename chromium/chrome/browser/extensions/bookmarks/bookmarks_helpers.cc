@@ -22,6 +22,9 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/common/bookmark_metrics.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
+#include "extensions/buildflags/buildflags.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 
@@ -73,6 +76,8 @@ void PopulateBookmarkTreeNode(
   DCHECK(out_bookmark_tree_node);
 
   out_bookmark_tree_node->id = base::NumberToString(node->id());
+  //Vivaldi VB-121433
+  out_bookmark_tree_node->uuid = node->uuid().AsLowercaseString();
 
   const BookmarkNode* parent = node->parent();
   if (parent) {

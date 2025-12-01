@@ -45,8 +45,8 @@ void AllocateRaw(MaglevAssembler* masm, Isolate* isolate,
   if (v8_flags.single_generation) {
     alloc_type = AllocationType::kOld;
   }
-  ExternalReference top = SpaceAllocationTopAddress(isolate, alloc_type);
-  ExternalReference limit = SpaceAllocationLimitAddress(isolate, alloc_type);
+  IsolateFieldId top = SpaceAllocationTopAddress(alloc_type);
+  IsolateFieldId limit = SpaceAllocationLimitAddress(alloc_type);
   ZoneLabelRef done(masm);
   Register new_top = kScratchRegister;
   // Check if there is enough space.
@@ -59,6 +59,19 @@ void AllocateRaw(MaglevAssembler* masm, Isolate* isolate,
                       size_in_bytes, done);
   // Store new top and tag object.
   __ movq(__ ExternalReferenceAsOperand(top), new_top);
+#if V8_VERIFY_WRITE_BARRIERS
+  if (v8_flags.verify_write_barriers) {
+    ExternalReference last_young_allocation =
+        ExternalReference::last_young_allocation_address(isolate);
+
+    if (alloc_type == AllocationType::kYoung) {
+      __ movq(__ ExternalReferenceAsOperand(last_young_allocation), object);
+    } else {
+      __ movq(__ ExternalReferenceAsOperand(last_young_allocation),
+              Immediate(0));
+    }
+  }
+#endif  // V8_VERIFY_WRITE_BARRIERS
   __ addq(object, Immediate(kHeapObjectTag));
   __ bind(*done);
 }
@@ -625,6 +638,12 @@ void MaglevAssembler::MaybeEmitDeoptBuiltinsCall(size_t eager_deopt_count,
                                                  Label* eager_deopt_entry,
                                                  size_t lazy_deopt_count,
                                                  Label* lazy_deopt_entry) {}
+
+void MaglevAssembler::Move(ExternalReference dst, int32_t imm) {
+  TemporaryRegisterScope temps(this);
+  Register scratch = temps.AcquireScratch();
+  movq(ExternalReferenceAsOperand(dst, scratch), Immediate(imm));
+}
 
 }  // namespace maglev
 }  // namespace internal

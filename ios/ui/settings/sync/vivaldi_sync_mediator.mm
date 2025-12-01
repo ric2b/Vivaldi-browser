@@ -32,6 +32,7 @@
 #import "ios/ui/common/vivaldi_url_constants.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_status_item.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_user_info_item.h"
+#import "ios/ui/settings/sync/cells/vivaldi_table_view_text_item.h"
 #import "ios/ui/settings/sync/manager/vivaldi_account_simplified_state.h"
 #import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager_consumer.h"
 #import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager.h"
@@ -41,7 +42,6 @@
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_view_controller.h"
 #import "ios/ui/table_view/cells/vivaldi_table_view_segmented_control_item.h"
-#import "ios/ui/table_view/cells/vivaldi_table_view_text_button_item.h"
 #import "net/base/network_change_notifier.h"
 #import "prefs/vivaldi_pref_names.h"
 #import "sync/vivaldi_sync_service_impl.h"
@@ -85,13 +85,14 @@ struct PendingRegistration {
 @property(nonatomic, strong) NSArray* syncSelectedItems;
 @property(nonatomic, strong)
     VivaldiTableViewSegmentedControlItem* segmentedControlItem;
-@property(nonatomic, strong) VivaldiTableViewTextButtonItem* startSyncingButton;
-@property(nonatomic, strong) TableViewTextButtonItem* deleteDataButton;
-@property(nonatomic, strong) TableViewTextButtonItem* logOutButton;
+@property(nonatomic, strong) VivaldiTableViewTextItem* startSyncingButton;
+@property(nonatomic, strong) TableViewTextItem* deleteDataButton;
+@property(nonatomic, strong) TableViewTextItem* logOutButton;
 @property(nonatomic, strong) VivaldiTableViewSyncUserInfoItem* userInfoItem;
 @property(nonatomic, strong) VivaldiTableViewSyncStatusItem* syncStatusItem;
 @property(nonatomic, strong) NSDateFormatter* formatter;
 @property(nonatomic, strong) NSString* localDeviceClientName;
+@property(nonatomic, assign) NSInteger startSyncButtonSection;
 
 @property(nonatomic, copy) NSURLSessionDataTask* task;
 
@@ -510,7 +511,11 @@ struct PendingRegistration {
                toSection:SectionIdentifierSyncItems];
       [self updateStartSyncingSection];
       [self.settingsConsumer reloadSection:SectionIdentifierSyncItems];
-      [self.settingsConsumer reloadSection:SectionIdentifierSyncStartSyncing];
+      if ([self.settingsConsumer.tableViewModel
+              hasSectionForSectionIdentifier:
+                  SectionIdentifierSyncStartSyncing]) {
+        [self.settingsConsumer reloadSection:SectionIdentifierSyncStartSyncing];
+      }
     }
                                               completion:nil];
   } else {
@@ -522,7 +527,11 @@ struct PendingRegistration {
                toSection:SectionIdentifierSyncItems];
       [self updateStartSyncingSection];
       [self.settingsConsumer reloadSection:SectionIdentifierSyncItems];
-      [self.settingsConsumer reloadSection:SectionIdentifierSyncStartSyncing];
+      if ([self.settingsConsumer.tableViewModel
+              hasSectionForSectionIdentifier:
+                  SectionIdentifierSyncStartSyncing]) {
+        [self.settingsConsumer reloadSection:SectionIdentifierSyncStartSyncing];
+      }
     }
                                               completion:nil];
   }
@@ -856,18 +865,21 @@ struct PendingRegistration {
 
 - (void)addStartSyncingSection {
   TableViewModel* model = self.settingsConsumer.tableViewModel;
-  self.startSyncingButton = [[VivaldiTableViewTextButtonItem alloc]
+  self.startSyncingButton = [[VivaldiTableViewTextItem alloc]
       initWithType:ItemTypeStartSyncingButton];
-  self.startSyncingButton.buttonText =
+  self.startSyncingButton.text =
       l10n_util::GetNSString(IDS_VIVALDI_START_SYNCING);
-  self.startSyncingButton.textAlignment = NSTextAlignmentNatural;
-  self.startSyncingButton.buttonBackgroundColor =
+  self.startSyncingButton.textAlignment = NSTextAlignmentCenter;
+
+  self.startSyncingButton.backgroundColor =
       [UIColor colorNamed:kBlueColor];
-  self.startSyncingButton.buttonTextColor =
+  self.startSyncingButton.textColor =
       [UIColor colorNamed:kSolidButtonTextColor];
   self.startSyncingButton.enabled = [self getStartSyncingButtonEnabled];
 
-  [model addSectionWithIdentifier:SectionIdentifierSyncStartSyncing];
+  if (![model hasSectionForSectionIdentifier:SectionIdentifierSyncStartSyncing]) {
+    [model addSectionWithIdentifier:SectionIdentifierSyncStartSyncing];
+  }
   [self updateStartSyncingSection];
 }
 
@@ -905,14 +917,13 @@ struct PendingRegistration {
 - (void)addSignOutSection {
   TableViewModel* model = self.settingsConsumer.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierSyncSignOut];
+
   self.logOutButton =
-      [[TableViewTextButtonItem alloc] initWithType:ItemTypeLogOutButton];
-  self.logOutButton.buttonText =
-      l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_LOG_OUT);
-  self.logOutButton.textAlignment = NSTextAlignmentNatural;
-  self.logOutButton.buttonTextColor = [UIColor colorNamed:kBlueColor];
-  self.logOutButton.buttonBackgroundColor = [UIColor clearColor];
-  self.logOutButton.disableButtonIntrinsicWidth = YES;
+      [[TableViewTextItem alloc] initWithType:ItemTypeLogOutButton];
+  self.logOutButton.text = l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_LOG_OUT);
+  self.logOutButton.textAlignment = NSTextAlignmentCenter;
+  self.logOutButton.textColor = [UIColor colorNamed:kBlueColor];
+  self.logOutButton.accessibilityTraits = UIAccessibilityTraitButton;
 
   [model addItem:self.logOutButton
       toSectionWithIdentifier:SectionIdentifierSyncSignOut];
@@ -921,14 +932,14 @@ struct PendingRegistration {
 - (void)addDeleteDataSection {
   TableViewModel* model = self.settingsConsumer.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierSyncDeleteData];
+
   self.deleteDataButton =
-      [[TableViewTextButtonItem alloc] initWithType:ItemTypeDeleteDataButton];
-  self.deleteDataButton.buttonText =
+      [[TableViewTextItem alloc] initWithType:ItemTypeDeleteDataButton];
+  self.deleteDataButton.text =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_CONFIRM_CLEAR_SERVER_DATA_TITLE);
-  self.deleteDataButton.textAlignment = NSTextAlignmentNatural;
-  self.deleteDataButton.disableButtonIntrinsicWidth = YES;
-  self.deleteDataButton.buttonTextColor = [UIColor colorNamed:kRedColor];
-  self.deleteDataButton.buttonBackgroundColor = [UIColor clearColor];
+  self.deleteDataButton.textAlignment = NSTextAlignmentCenter;
+  self.deleteDataButton.textColor = [UIColor colorNamed:kRedColor];
+  self.deleteDataButton.accessibilityTraits = UIAccessibilityTraitButton;
 
   [model addItem:self.deleteDataButton
       toSectionWithIdentifier:SectionIdentifierSyncDeleteData];

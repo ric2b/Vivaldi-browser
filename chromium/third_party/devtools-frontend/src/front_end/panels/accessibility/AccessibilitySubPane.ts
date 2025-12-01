@@ -1,9 +1,8 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
-import type * as Platform from '../../core/platform/platform.js';
 import type * as SDK from '../../core/sdk/sdk.js';
 // eslint-disable-next-line rulesdir/es-modules-import
 import objectValueStyles from '../../ui/legacy/components/object_ui/objectValue.css.js';
@@ -15,8 +14,9 @@ import accessibilityPropertiesStyles from './accessibilityProperties.css.js';
 export class AccessibilitySubPane extends UI.View.SimpleView {
   axNode: SDK.AccessibilityModel.AccessibilityNode|null;
   protected nodeInternal?: SDK.DOMModel.DOMNode|null;
-  constructor(name: Platform.UIString.LocalizedString) {
-    super(name);
+
+  constructor(options: UI.View.SimpleViewOptions) {
+    super(options);
     this.registerRequiredCSS(accessibilityPropertiesStyles);
 
     this.axNode = null;
@@ -33,10 +33,12 @@ export class AccessibilitySubPane extends UI.View.SimpleView {
     this.nodeInternal = node;
   }
 
-  createInfo(textContent: string, className?: string): Element {
-    const info = this.element.createChild('div', className || 'gray-info-message');
-    info.classList.add('info-message-overflow');
-    info.textContent = textContent;
+  createInfo(textContent: string, ...classNames: string[]): UI.Widget.Widget {
+    const info = new UI.EmptyWidget.EmptyWidget(textContent);
+    if (classNames.length === 0) {
+      classNames.push('gray-info-message');
+    }
+    info.element.classList.add(...classNames, 'info-message-overflow');
     return info;
   }
 
@@ -45,7 +47,7 @@ export class AccessibilitySubPane extends UI.View.SimpleView {
     treeOutline.registerRequiredCSS(accessibilityNodeStyles, accessibilityPropertiesStyles, objectValueStyles);
 
     treeOutline.element.classList.add('hidden');
-    treeOutline.hideOverflow();
+    treeOutline.setHideOverflow(true);
     this.element.appendChild(treeOutline.element);
     return treeOutline;
   }

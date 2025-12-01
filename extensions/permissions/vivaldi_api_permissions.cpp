@@ -62,6 +62,7 @@ constexpr APIPermissionInfo::InitInfo permissions_to_register[] = {
     {APIPermissionID::kOmniboxPrivate, "omniboxPrivate"},
     {APIPermissionID::kDirectMatch, "directMatch"},
     {APIPermissionID::kProtonVPN, "protonvpn"},
+    {APIPermissionID::kSitePermissions, "sitePermissions"},
 };
 
 }  // namespace

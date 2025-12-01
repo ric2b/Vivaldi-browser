@@ -16,7 +16,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/task/updateable_sequenced_task_runner.h"
 #include "base/test/run_until.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -82,9 +81,7 @@ class TransactionTest : public testing::Test {
     bucket_context_ = std::make_unique<BucketContext>(
         GetOrCreateBucket(
             storage::BucketInitParams::ForDefaultBucket(storage_key)),
-        temp_dir_.GetPath(), std::move(delegate),
-        scoped_refptr<base::UpdateableSequencedTaskRunner>(),
-        quota_manager_->proxy(),
+        temp_dir_.GetPath(), std::move(delegate), quota_manager_->proxy(),
         /*blob_storage_context=*/mojo::NullRemote(),
         /*file_system_access_context=*/mojo::NullRemote());
 
@@ -300,7 +297,7 @@ TEST_F(TransactionTest, TimeoutPreemptive) {
   // Finish the preemptive task, which unblocks regular tasks.
   transaction->DidCompletePreemptiveEvent();
   // TODO(dmurph): Should this explicit call be necessary?
-  transaction->RunTasks();
+  EXPECT_TRUE(transaction->RunTasks().has_value());
 
   // The task's completion should start the timer.
   EXPECT_FALSE(transaction->HasPendingTasks());

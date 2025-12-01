@@ -38,6 +38,8 @@ inline constexpr char kChromeUIAccessCodeCastHost[] = "access-code-cast";
 inline constexpr char kChromeUIAccessCodeCastURL[] =
     "chrome://access-code-cast/";
 inline constexpr char kChromeUIAccessibilityHost[] = "accessibility";
+inline constexpr char kChromeUIAccountSettingsURL[] =
+    "chrome://settings/account";
 inline constexpr char kChromeUIActivateSafetyCheckSettingsURL[] =
     "chrome://settings/safetyCheck?activateSafetyCheck";
 inline constexpr char kChromeUIActorInternalsHost[] = "actor-internals";
@@ -342,6 +344,8 @@ inline constexpr char kChromeUINativeBookmarksURL[] =
     "chrome-native://bookmarks/";
 inline constexpr char kChromeUINativeExploreURL[] = "chrome-native://explore";
 inline constexpr char kChromeUINativeNewTabURL[] = "chrome-native://newtab/";
+inline constexpr char kChromeUINotificationsInternalsHost[] =
+    "notifications-internals";
 inline constexpr char kChromeUISnippetsInternalsHost[] = "snippets-internals";
 inline constexpr char kChromeUIWebApksHost[] = "webapks";
 #else
@@ -428,9 +432,6 @@ inline constexpr char kChromeUIAppInstallDialogURL[] =
 inline constexpr char kChromeUIArcOverviewTracingHost[] =
     "arc-overview-tracing";
 inline constexpr char kChromeUIArcPowerControlHost[] = "arc-power-control";
-inline constexpr char kChromeUIAssistantOptInHost[] = "assistant-optin";
-inline constexpr char kChromeUIAssistantOptInURL[] =
-    "chrome://assistant-optin/";
 inline constexpr char kChromeUIAudioHost[] = "audio";
 inline constexpr char kChromeUIAudioURL[] = "chrome://audio/";
 inline constexpr char kChromeUIBluetoothPairingHost[] = "bluetooth-pairing";
@@ -440,8 +441,6 @@ inline constexpr char kChromeUIBorealisCreditsHost[] = "borealis-credits";
 inline constexpr char kChromeUIBorealisInstallerHost[] = "borealis-installer";
 inline constexpr char kChromeUIBorealisInstallerUrl[] =
     "chrome://borealis-installer";
-inline constexpr char kChromeUIBorealisMOTDHost[] = "borealis-motd";
-inline constexpr char kChromeUIBorealisMOTDURL[] = "chrome://borealis-motd";
 inline constexpr char kChromeUICloudUploadHost[] = "cloud-upload";
 inline constexpr char kChromeUICloudUploadURL[] = "chrome://cloud-upload/";
 inline constexpr char kChromeUIConfirmPasswordChangeHost[] =
@@ -648,6 +647,8 @@ inline constexpr char kAllSitesSettingsSubpage[] = "content/all";
 inline constexpr char kAppearanceSubPage[] = "appearance";
 inline constexpr char kAutofillSubPage[] = "autofill";
 inline constexpr char kAutofillAiSubPage[] = "enhancedAutofill";
+inline constexpr char kAutoPictureInPictureSubPage[] =
+    "content/autoPictureInPicture";
 inline constexpr char kClearBrowserDataSubPage[] = "clearBrowserData";
 inline constexpr char kContentSettingsSubPage[] = "content";
 inline constexpr char kCookieSettingsSubPage[] = "cookies";
@@ -658,6 +659,7 @@ inline constexpr char kFileSystemSettingsSubpage[] =
     "content/filesystem/siteDetails";
 inline constexpr char kFileSystemSubpage[] = "content/filesystem";
 inline constexpr char kGlicSettingsSubpage[] = "ai/gemini";
+inline constexpr char kGoogleServicesSubpage[] = "googleServices";
 inline constexpr char kHandlerSettingsSubPage[] = "handlers";
 inline constexpr char kHistorySearchSubpage[] = "ai/historySearch";
 inline constexpr char kImportDataSubPage[] = "importData";

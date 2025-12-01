@@ -17,7 +17,6 @@
 #import "components/favicon_base/fallback_icon_style.h"
 #import "components/favicon_base/favicon_callback.h"
 #import "components/favicon_base/favicon_types.h"
-#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "net/traffic_annotation/network_traffic_annotation.h"
 #import "skia/ext/skia_utils_ios.h"
@@ -29,8 +28,6 @@
 // End Vivaldi
 
 namespace {
-
-const CGFloat kFallbackIconDefaultTextColor = 0xAAAAAA;
 
 // NetworkTrafficAnnotationTag for fetching favicon from a Google server.
 const net::NetworkTrafficAnnotationTag kTrafficAnnotation =
@@ -357,7 +354,9 @@ void FaviconLoaderImpl::OnFaviconFetched(
   FaviconAttributes* attributes = [FaviconAttributes
       attributesWithMonogram:base::SysUTF16ToNSString(
                                  favicon::GetFallbackIconText(request.url()))
-                   textColor:UIColorFromRGB(kFallbackIconDefaultTextColor)
+                   textColor:[UIColor colorWithWhite:
+                                          kFallbackIconDefaultTextColorGrayscale
+                                               alpha:1]
              backgroundColor:UIColor.clearColor
       defaultBackgroundColor:result.fallback_icon_style->
                              is_default_background_color];

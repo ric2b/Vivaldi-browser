@@ -16,7 +16,7 @@
 #include "third_party/blink/renderer/core/layout/flex/devtools_flex_info.h"
 #include "third_party/blink/renderer/core/layout/fragment_builder.h"
 #include "third_party/blink/renderer/core/layout/frame_set_layout_data.h"
-#include "third_party/blink/renderer/core/layout/gap_fragment_data.h"
+#include "third_party/blink/renderer/core/layout/gap/gap_geometry.h"
 #include "third_party/blink/renderer/core/layout/geometry/box_sides.h"
 #include "third_party/blink/renderer/core/layout/geometry/box_strut.h"
 #include "third_party/blink/renderer/core/layout/geometry/fragment_geometry.h"
@@ -198,6 +198,11 @@ class CORE_EXPORT BoxFragmentBuilder final : public FragmentBuilder {
     DCHECK(size_.block_size != kIndefiniteSize);
 #endif
     return size_.block_size;
+  }
+
+  LayoutUnit FragmentInlineSize() const {
+    DCHECK(size_.inline_size != kIndefiniteSize);
+    return size_.inline_size;
   }
 
   LogicalSize SizeForAnchorQueries() const {
@@ -423,13 +428,6 @@ class CORE_EXPORT BoxFragmentBuilder final : public FragmentBuilder {
     EnsureBreakTokenData()->consumed_block_size = size;
   }
 
-  // Set how much to adjust |consumed_block_size_| for legacy write-back. See
-  // BlockBreakToken::ConsumedBlockSizeForLegacy() for more details.
-  void SetConsumedBlockSizeLegacyAdjustment(LayoutUnit adjustment) {
-    DCHECK(!RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled());
-    EnsureBreakTokenData()->consumed_block_size_legacy_adjustment = adjustment;
-  }
-
   void ReserveSpaceForMonolithicOverflow(LayoutUnit monolithic_overflow) {
     DCHECK(GetConstraintSpace().IsPaginated());
     auto* data = EnsureBreakTokenData();
@@ -570,6 +568,10 @@ class CORE_EXPORT BoxFragmentBuilder final : public FragmentBuilder {
     is_inflow_bounds_explicitly_set_ = true;
 #endif
     inflow_bounds_ = inflow_bounds;
+  }
+
+  const std::optional<LogicalRect>& InflowBounds() const {
+    return inflow_bounds_;
   }
 
   void SetEarlyBreak(const EarlyBreak* breakpoint) {
@@ -723,9 +725,10 @@ class CORE_EXPORT BoxFragmentBuilder final : public FragmentBuilder {
   void CheckNoBlockFragmentation() const;
 #endif
 
-  // Moves all the children by |offset| in the block-direction. (Ensure that
-  // any baselines, OOFs, etc, are also moved by the appropriate amount).
-  void MoveChildrenInBlockDirection(LayoutUnit offset);
+  // Moves all the children by `offset` in the block or inline direction.
+  // (Ensure that any baselines, OOFs, etc, are also moved by the appropriate
+  // amount).
+  void MoveChildrenInDirection(LayoutUnit offset, bool is_block_direction);
 
   void SetMathItalicCorrection(LayoutUnit italic_correction) {
     math_italic_correction_ = italic_correction;
@@ -806,7 +809,7 @@ class CORE_EXPORT BoxFragmentBuilder final : public FragmentBuilder {
   bool is_at_block_end_ = false;
   bool is_truncated_by_fragmentation_line = false;
   bool use_last_baseline_for_inline_baseline_ = false;
-  bool has_moved_children_in_block_direction_ = false;
+  bool has_moved_children_ = false;
 
   // Whether the `text-box-trim` is effective for block-start/end edges of a
   // node.

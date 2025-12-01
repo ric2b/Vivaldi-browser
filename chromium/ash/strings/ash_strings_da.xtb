@@ -332,10 +332,12 @@ Her er nogle af de ting, du kan prøve for at komme godt i gang.</translation>
 <translation id="2083190527011054446">Hej <ph name="GIVEN_NAME" /></translation>
 <translation id="2086334242442703436">Åbn emojivælger</translation>
 <translation id="2088116547584365419">spil</translation>
+<translation id="2093792000875799555">Nyheder om Steam til Chromebook</translation>
 <translation id="209965399369889474">Der er ingen netværksforbindelse</translation>
 <translation id="2107581415810719320">Anden knap <ph name="BUTTON_NUMBER" /></translation>
 <translation id="2107914222138020205">Dit USB-C-kabel understøtter ikke Thunderbolt. Enhedens ydeevne kan være begrænset.</translation>
 <translation id="2108303511227308752">Tastaturgenvejen Alt+Backspace er blevet ændret. Hvis du vil bruge Delete-knappen, skal du trykke på tasten <ph name="LAUNCHER_KEY_NAME" />+Backspace.</translation>
+<translation id="2115680839221566783">Batteriet er på <ph name="PERCENTAGE" /> %. Opladningen er sat på pause.</translation>
 <translation id="2126242104232412123">Nyt skrivebord</translation>
 <translation id="2132302418721800944">Optag hele skærmen</translation>
 <translation id="2135456203358955318">Fastgjort lupvindue</translation>
@@ -1370,6 +1372,7 @@ Ingen enheder er forbundet.</translation>
 <translation id="5429993543155113935">Inkognitovinduer understøttes ikke i øjeblikket</translation>
 <translation id="5431318178759467895">Farve</translation>
 <translation id="5433020815079095860">Lydindgang</translation>
+<translation id="543584294741034249">Du kan tilslutte op til <ph name="DISPLAY_LIMIT" /> eksterne skærme.</translation>
 <translation id="544691375626129091">Alle tilgængelige brugere er allerede blevet føjet til denne session.</translation>
 <translation id="54609108002486618">Administreret</translation>
 <translation id="5460938382730614333">Tuschen er aktiveret.</translation>
@@ -1386,7 +1389,7 @@ Ingen enheder er forbundet.</translation>
 <translation id="5512042095225963688">Slet forrige ord</translation>
 <translation id="5519005148254860683">Udvid Google Huskeliste</translation>
 <translation id="5519195206574732858">LTE</translation>
-<translation id="5520229639206813572">Din administrator har fjernet alle eSIM-profiler. Kontakt din administrator for at få flere oplysninger.</translation>
+<translation id="5520229639206813572">Din administrator har fjernet alle eSIM-kortprofiler. Kontakt din administrator for at få flere oplysninger.</translation>
 <translation id="5520909879404821039">Hej på fransk</translation>
 <translation id="5523434445161341166"><ph name="FEATURE_NAME" /> opretter forbindelse.</translation>
 <translation id="5529587891732734495">Sæt casting på pause</translation>
@@ -1587,6 +1590,7 @@ Ingen enheder er forbundet.</translation>
 <translation id="612734058257491180">Google Assistent er ikke tilgængelig i en gæstesession.</translation>
 <translation id="6127395413317891856">Du er offline. Tjek din forbindelse, og prøv igen.</translation>
 <translation id="6129953537138746214">Mellemrum</translation>
+<translation id="6136872094979134163">Nyhederne om Steam til Chromebook kunne ikke hentes.</translation>
 <translation id="6137566720514957455">Åbn dialogboksen til fjernelse for <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="6141205840878048728">Hvad vil du gerne fokusere på?</translation>
 <translation id="6141988275892716286">Bekræft download</translation>
@@ -1676,6 +1680,7 @@ Ingen enheder er forbundet.</translation>
 <translation id="6445835306623867477"><ph name="ROUTE_TITLE" /> på <ph name="RECEIVER_NAME" /></translation>
 <translation id="6445915701151710649">cpu</translation>
 <translation id="6447111710783417522"><ph name="DATE" /> – <ph name="NUMBER" /> begivenhed</translation>
+<translation id="6448529022565414427">Opladningen er sat på pause</translation>
 <translation id="6449483711453944360">Linux-apps og inkognitovinduer understøttes ikke i øjeblikket</translation>
 <translation id="6450245544201845082">Genvejen for højreklik er deaktiveret i øjeblikket</translation>
 <translation id="6452181791372256707">Afvis</translation>
@@ -1716,7 +1721,7 @@ Installeret for nylig</translation>
 <translation id="6559158502366839560">Find flere apps og spil</translation>
 <translation id="6559976592393364813">Spørg din administrator</translation>
 <translation id="6562447480759345110">Afslut fokus</translation>
-<translation id="6565007273808762236">eSIM-forbindelse er ikke tilgængelig</translation>
+<translation id="6565007273808762236">eSIM-kortforbindelse er ikke tilgængelig</translation>
 <translation id="6570831796530454248">{0,plural, =1{Genstart enheden inden for en time}one{Genstart enheden inden for # time}other{Genstart enheden inden for # timer}}</translation>
 <translation id="6570902864550063460">Oplader via USB</translation>
 <translation id="6571006437522772306">Søg i Filer</translation>
@@ -1927,7 +1932,7 @@ Installeret for nylig</translation>
 <translation id="7303365578352795231">Besvares på en anden enhed</translation>
 <translation id="7305884605064981971">EDGE</translation>
 <translation id="7311244614769792472">Der blev ikke fundet nogen resultater</translation>
-<translation id="7312210124139670355">Din administrator er ved at nulstille dit eSIM. Dette kan tage et par minutter.</translation>
+<translation id="7312210124139670355">Din administrator er ved at nulstille dit eSIM-kort. Dette kan tage et par minutter.</translation>
 <translation id="7312761820869643657">Opdater enheden til en tidligere version</translation>
 <translation id="7313193732017069507">Udvid kameraet</translation>
 <translation id="73289266812733869">Ikke valgt</translation>
@@ -2404,7 +2409,7 @@ Du kan slukke enheden ved at holde afbryderknappen på enheden nede igen.</trans
 <translation id="8849001918648564819">Skjult</translation>
 <translation id="8855885154700222542">Tast til fuld skærm</translation>
 <translation id="8858369206579825206">Privatlivsindstillinger</translation>
-<translation id="8860366331836346216">Tilføj eSIM</translation>
+<translation id="8860366331836346216">Tilføj eSIM-kort</translation>
 <translation id="8869149849311827122">Er du sikker på, at du vil deaktivere styring via musemarkøren?</translation>
 <translation id="8870509716567206129">Appen understøtter ikke opdelt skærm.</translation>
 <translation id="8873203135446552888">Bekræft, at du vil deaktivere den indbyggede touchplade</translation>

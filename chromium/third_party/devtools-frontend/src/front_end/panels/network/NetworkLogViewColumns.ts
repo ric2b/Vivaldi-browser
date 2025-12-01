@@ -1,10 +1,11 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
+import type * as NetworkTimeCalculator from '../../models/network_time_calculator/network_time_calculator.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as DataGrid from '../../ui/legacy/components/data_grid/data_grid.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
@@ -15,141 +16,142 @@ import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 import {type NetworkNode, NetworkRequestNode} from './NetworkDataGridNode.js';
 import type {NetworkLogView} from './NetworkLogView.js';
 import {NetworkManageCustomHeadersView} from './NetworkManageCustomHeadersView.js';
-import type {
-  NetworkTimeCalculator, NetworkTransferDurationCalculator, NetworkTransferTimeCalculator} from
-  './NetworkTimeCalculator.js';
 import {NetworkWaterfallColumn} from './NetworkWaterfallColumn.js';
 import {RequestInitiatorView} from './RequestInitiatorView.js';
 
 const UIStrings = {
   /**
-   *@description Data grid name for Network Log data grids
+   * @description Data grid name for Network Log data grids
    */
   networkLog: 'Network Log',
   /**
-   *@description Inner element text content in Network Log View Columns of the Network panel
+   * @description Inner element text content in Network Log View Columns of the Network panel
    */
   waterfall: 'Waterfall',
   /**
-   *@description A context menu item in the Network Log View Columns of the Network panel
+   * @description A context menu item in the Network Log View Columns of the Network panel
    */
   responseHeaders: 'Response Headers',
   /**
-   *@description A context menu item in the Network Log View Columns of the Network panel
+   * @description A context menu item in the Network Log View Columns of the Network panel
    */
   requestHeaders: 'Request Headers',
   /**
-   *@description Text in Network Log View Columns of the Network panel
+   * @description Text in Network Log View Columns of the Network panel
    */
   manageHeaderColumns: 'Manage Header Columns…',
   /**
-   *@description Text for the start time of an activity
+   * @description Text for the start time of an activity
    */
   startTime: 'Start Time',
   /**
-   *@description Text in Network Log View Columns of the Network panel
+   * @description Text in Network Log View Columns of the Network panel
    */
   responseTime: 'Response Time',
   /**
-   *@description Text in Network Log View Columns of the Network panel
+   * @description Text in Network Log View Columns of the Network panel
    */
   endTime: 'End Time',
   /**
-   *@description Text in Network Log View Columns of the Network panel
+   * @description Text in Network Log View Columns of the Network panel
    */
   totalDuration: 'Total Duration',
   /**
-   *@description Text for the latency of a task
+   * @description Text for the latency of a task
    */
   latency: 'Latency',
   /**
-   *@description Text for the name of something
+   * @description Text for the name of something
    */
   name: 'Name',
   /**
-   *@description Text that refers to a file path
+   * @description Text that refers to a file path
    */
   path: 'Path',
   /**
-   *@description Text in Timeline UIUtils of the Performance panel
+   * @description Text in Timeline UIUtils of the Performance panel
    */
   url: 'Url',
   /**
-   *@description Text for one or a group of functions
+   * @description Text for one or a group of functions
    */
   method: 'Method',
   /**
-   *@description Text for the status of something
+   * @description Text for the status of something
    */
   status: 'Status',
   /**
-   *@description Generic label for any text
+   * @description Generic label for any text
    */
   text: 'Text',
   /**
-   *@description Text for security or network protocol
+   * @description Text for security or network protocol
    */
   protocol: 'Protocol',
   /**
-   *@description Text in Network Log View Columns of the Network panel
+   * @description Text in Network Log View Columns of the Network panel
    */
   scheme: 'Scheme',
   /**
-   *@description Text for the domain of a website
+   * @description Text for the domain of a website
    */
   domain: 'Domain',
   /**
-   *@description Text in Network Log View Columns of the Network panel
+   * @description Text in Network Log View Columns of the Network panel
    */
   remoteAddress: 'Remote Address',
   /**
-   *@description Text that refers to some types
+   * @description Text that refers to some types
    */
   type: 'Type',
   /**
-   *@description Text for the initiator of something
+   * @description Text for the initiator of something
    */
   initiator: 'Initiator',
   /**
-   *@description Column header in the Network log view of the Network panel
+   * @description Column header in the Network log view of the Network panel
    */
   hasOverrides: 'Has overrides',
   /**
-   *@description Column header in the Network log view of the Network panel
+   * @description Column header in the Network log view of the Network panel
    */
   initiatorAddressSpace: 'Initiator Address Space',
   /**
-   *@description Text for web cookies
+   * @description Text for web cookies
    */
   cookies: 'Cookies',
   /**
-   *@description Text in Network Log View Columns of the Network panel
+   * @description Text in Network Log View Columns of the Network panel
    */
   setCookies: 'Set Cookies',
   /**
-   *@description Text for the size of something
+   * @description Text for the size of something
    */
   size: 'Size',
   /**
-   *@description Text in Network Log View Columns of the Network panel
+   * @description Text in Network Log View Columns of the Network panel
    */
   content: 'Content',
   /**
-   *@description Noun that refers to a duration in milliseconds.
+   * @description Noun that refers to a duration in milliseconds.
    */
   time: 'Time',
   /**
-   *@description Text to show the priority of an item
+   * @description Text to show the priority of an item
    */
   priority: 'Priority',
   /**
-   *@description Text in Network Log View Columns of the Network panel
+   * @description Text in Network Log View Columns of the Network panel
    */
   connectionId: 'Connection ID',
   /**
-   *@description Text in Network Log View Columns of the Network panel
+   * @description Text in Network Log View Columns of the Network panel
    */
   remoteAddressSpace: 'Remote Address Space',
+  /**
+   * @description Text to show whether a request is ad-related
+   */
+  isAdRelated: 'Is Ad-Related',
 } as const;
 const str_ = i18n.i18n.registerUIStrings('panels/network/NetworkLogViewColumns.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -169,9 +171,9 @@ export class NetworkLogViewColumns {
   private waterfallRequestsAreStale: boolean;
   private waterfallScrollerWidthIsStale: boolean;
   private readonly popupLinkifier: Components.Linkifier.Linkifier;
-  private calculatorsMap: Map<string, NetworkTimeCalculator>;
+  private calculatorsMap: Map<string, NetworkTimeCalculator.NetworkTimeCalculator>;
   private lastWheelTime: number;
-  private dataGridInternal!: DataGrid.SortableDataGrid.SortableDataGrid<NetworkNode>;
+  #dataGrid!: DataGrid.SortableDataGrid.SortableDataGrid<NetworkNode>;
   private splitWidget!: UI.SplitWidget.SplitWidget;
   private waterfallColumn!: NetworkWaterfallColumn;
   private activeScroller!: Element;
@@ -185,8 +187,8 @@ export class NetworkLogViewColumns {
   private hasScrollerTouchStarted?: boolean;
   private scrollerTouchStartPos?: number;
   constructor(
-      networkLogView: NetworkLogView, timeCalculator: NetworkTransferTimeCalculator,
-      durationCalculator: NetworkTransferDurationCalculator,
+      networkLogView: NetworkLogView, timeCalculator: NetworkTimeCalculator.NetworkTransferTimeCalculator,
+      durationCalculator: NetworkTimeCalculator.NetworkTransferDurationCalculator,
       networkLogLargeRowsSetting: Common.Settings.Setting<boolean>) {
     this.networkLogView = networkLogView;
 
@@ -271,28 +273,23 @@ export class NetworkLogViewColumns {
     this.popoverHelper = new UI.PopoverHelper.PopoverHelper(
         this.networkLogView.element, this.getPopoverRequest.bind(this), 'network.initiator-stacktrace');
     this.popoverHelper.setTimeout(300, 300);
-    this.dataGridInternal = new DataGrid.SortableDataGrid.SortableDataGrid<NetworkNode>(({
+    this.#dataGrid = new DataGrid.SortableDataGrid.SortableDataGrid<NetworkNode>(({
       displayName: (i18nString(UIStrings.networkLog) as string),
       columns: this.columns.map(NetworkLogViewColumns.convertToDataGridDescriptor),
       deleteCallback: undefined,
       refreshCallback: undefined,
     }));
-    this.dataGridInternal.element.addEventListener('mousedown', event => {
-      if (!this.dataGridInternal.selectedNode && event.button) {
-        event.consume();
-      }
-    }, true);
-    this.dataGridScroller = (this.dataGridInternal.scrollContainer as HTMLDivElement);
+    this.dataGridScroller = (this.#dataGrid.scrollContainer as HTMLDivElement);
 
     this.updateColumns();
-    this.dataGridInternal.addEventListener(DataGrid.DataGrid.Events.SORTING_CHANGED, this.sortHandler, this);
-    this.dataGridInternal.setHeaderContextMenuCallback(this.innerHeaderContextMenu.bind(this));
+    this.#dataGrid.addEventListener(DataGrid.DataGrid.Events.SORTING_CHANGED, this.sortHandler, this);
+    this.#dataGrid.setHeaderContextMenuCallback(this.#headerContextMenu.bind(this));
 
     this.activeWaterfallSortId = WaterfallSortIds.StartTime;
-    this.dataGridInternal.markColumnAsSortedBy(INITIAL_SORT_COLUMN, DataGrid.DataGrid.Order.Ascending);
+    this.#dataGrid.markColumnAsSortedBy(INITIAL_SORT_COLUMN, DataGrid.DataGrid.Order.Ascending);
 
     this.splitWidget = new UI.SplitWidget.SplitWidget(true, true, 'network-panel-split-view-waterfall', 200);
-    const widget = this.dataGridInternal.asWidget();
+    const widget = this.#dataGrid.asWidget();
     widget.setMinimumSize(150, 0);
     this.splitWidget.setMainWidget(widget);
   }
@@ -313,11 +310,11 @@ export class NetworkLogViewColumns {
     this.waterfallScroller = this.waterfallColumn.contentElement.createChild('div', 'network-waterfall-v-scroll');
     this.waterfallScrollerContent = this.waterfallScroller.createChild('div', 'network-waterfall-v-scroll-content');
 
-    this.dataGridInternal.addEventListener(DataGrid.DataGrid.Events.PADDING_CHANGED, () => {
+    this.#dataGrid.addEventListener(DataGrid.DataGrid.Events.PADDING_CHANGED, () => {
       this.waterfallScrollerWidthIsStale = true;
       this.syncScrollers();
     });
-    this.dataGridInternal.addEventListener(
+    this.#dataGrid.addEventListener(
         DataGrid.ViewportDataGrid.Events.VIEWPORT_CALCULATED, this.redrawWaterfallColumn.bind(this));
 
     this.createWaterfallHeader();
@@ -381,7 +378,7 @@ export class NetworkLogViewColumns {
       return;
     }
     this.waterfallScrollerContent.style.height =
-        this.dataGridScroller.scrollHeight - this.dataGridInternal.headerHeight() + 'px';
+        this.dataGridScroller.scrollHeight - this.#dataGrid.headerHeight() + 'px';
     this.updateScrollerWidthIfNeeded();
     this.dataGridScroller.scrollTop = this.waterfallScroller.scrollTop;
   }
@@ -412,7 +409,7 @@ export class NetworkLogViewColumns {
     this.waterfallHeaderElement.addEventListener('click', waterfallHeaderClicked.bind(this));
     this.waterfallHeaderElement.addEventListener('contextmenu', event => {
       const contextMenu = new UI.ContextMenu.ContextMenu(event);
-      this.innerHeaderContextMenu(contextMenu);
+      this.#headerContextMenu(contextMenu);
       void contextMenu.show();
     });
     this.waterfallHeaderElement.createChild('div', 'hover-layer');
@@ -425,15 +422,15 @@ export class NetworkLogViewColumns {
 
     function waterfallHeaderClicked(this: NetworkLogViewColumns): void {
       const sortOrders = DataGrid.DataGrid.Order;
-      const wasSortedByWaterfall = this.dataGridInternal.sortColumnId() === 'waterfall';
-      const wasSortedAscending = this.dataGridInternal.isSortOrderAscending();
+      const wasSortedByWaterfall = this.#dataGrid.sortColumnId() === 'waterfall';
+      const wasSortedAscending = this.#dataGrid.isSortOrderAscending();
       const sortOrder = wasSortedByWaterfall && wasSortedAscending ? sortOrders.Descending : sortOrders.Ascending;
-      this.dataGridInternal.markColumnAsSortedBy('waterfall', sortOrder);
+      this.#dataGrid.markColumnAsSortedBy('waterfall', sortOrder);
       this.sortHandler();
     }
   }
 
-  setCalculator(x: NetworkTimeCalculator): void {
+  setCalculator(x: NetworkTimeCalculator.NetworkTimeCalculator): void {
     this.waterfallColumn.setCalculator(x);
   }
 
@@ -443,8 +440,8 @@ export class NetworkLogViewColumns {
   private updateRowsSize(): void {
     const largeRows = Boolean(this.networkLogLargeRowsSetting.get());
 
-    this.dataGridInternal.element.classList.toggle('small', !largeRows);
-    this.dataGridInternal.scheduleUpdate();
+    this.#dataGrid.element.classList.toggle('small', !largeRows);
+    this.#dataGrid.scheduleUpdate();
 
     this.waterfallScrollerWidthIsStale = true;
     this.waterfallColumn.setRowHeight(largeRows ? 41 : 21);
@@ -470,7 +467,7 @@ export class NetworkLogViewColumns {
   }
 
   dataGrid(): DataGrid.SortableDataGrid.SortableDataGrid<NetworkNode> {
-    return this.dataGridInternal;
+    return this.#dataGrid;
   }
 
   sortByCurrentColumn(): void {
@@ -482,16 +479,16 @@ export class NetworkLogViewColumns {
     // NetworkLogView can be empty until it has been invalidated (see
     // crbug.com/379762016).
     window.requestAnimationFrame(() => {
-      this.dataGridInternal.scheduleUpdate();
+      this.#dataGrid.scheduleUpdate();
     });
   }
 
   private sortHandler(): void {
-    const columnId = this.dataGridInternal.sortColumnId();
+    const columnId = this.#dataGrid.sortColumnId();
     this.networkLogView.removeAllNodeHighlights();
     this.waterfallRequestsAreStale = true;
     if (columnId === 'waterfall') {
-      if (this.dataGridInternal.sortOrder() === DataGrid.DataGrid.Order.Ascending) {
+      if (this.#dataGrid.sortOrder() === DataGrid.DataGrid.Order.Ascending) {
         this.waterfallColumnSortIcon.name = 'triangle-up';
       } else {
         this.waterfallColumnSortIcon.name = 'triangle-down';
@@ -502,7 +499,7 @@ export class NetworkLogViewColumns {
           (NetworkRequestNode.RequestPropertyComparator.bind(null, this.activeWaterfallSortId) as
                (arg0: DataGrid.SortableDataGrid.SortableDataGridNode<NetworkNode>,
                 arg1: DataGrid.SortableDataGrid.SortableDataGridNode<NetworkNode>) => number);
-      this.dataGridInternal.sortNodes(sortFunction, !this.dataGridInternal.isSortOrderAscending());
+      this.#dataGrid.sortNodes(sortFunction, !this.#dataGrid.isSortOrderAscending());
       this.dataGridSortedForTest();
       return;
     }
@@ -521,7 +518,7 @@ export class NetworkLogViewColumns {
     if (!sortingFunction) {
       return;
     }
-    this.dataGridInternal.sortNodes(sortingFunction, !this.dataGridInternal.isSortOrderAscending());
+    this.#dataGrid.sortNodes(sortingFunction, !this.#dataGrid.isSortOrderAscending());
     this.dataGridSortedForTest();
   }
 
@@ -529,7 +526,7 @@ export class NetworkLogViewColumns {
   }
 
   private updateColumns(): void {
-    if (!this.dataGridInternal) {
+    if (!this.#dataGrid) {
       return;
     }
     const visibleColumns = new Set<string>();
@@ -554,7 +551,7 @@ export class NetworkLogViewColumns {
       }
       this.setWaterfallVisibility(false);
     }
-    this.dataGridInternal.setColumnsVisibility(visibleColumns);
+    this.#dataGrid.setColumnsVisibility(visibleColumns);
   }
 
   switchViewMode(gridMode: boolean): void {
@@ -583,12 +580,12 @@ export class NetworkLogViewColumns {
       this.splitWidget.showBoth();
       this.activeScroller = this.waterfallScroller;
       this.waterfallScroller.scrollTop = this.dataGridScroller.scrollTop;
-      this.dataGridInternal.setScrollContainer(this.waterfallScroller);
+      this.#dataGrid.setScrollContainer(this.waterfallScroller);
     } else {
       this.networkLogView.removeAllNodeHighlights();
       this.splitWidget.hideSidebar();
       this.activeScroller = this.dataGridScroller;
-      this.dataGridInternal.setScrollContainer(this.dataGridScroller);
+      this.#dataGrid.setScrollContainer(this.dataGridScroller);
     }
   }
 
@@ -634,7 +631,7 @@ export class NetworkLogViewColumns {
     return fragment;
   }
 
-  private innerHeaderContextMenu(contextMenu: UI.ContextMenu.SubMenu): void {
+  #headerContextMenu(contextMenu: UI.ContextMenu.SubMenu): void {
     const columnConfigs = this.columns.filter(columnConfig => columnConfig.hideable);
     const nonRequestResponseHeaders =
         columnConfigs.filter(columnConfig => !columnConfig.isRequestHeader && !columnConfig.isResponseHeader);
@@ -736,10 +733,10 @@ export class NetworkLogViewColumns {
       if (sortId === waterfallSortIds.Duration || sortId === waterfallSortIds.Latency) {
         calculator = this.calculatorsMap.get(CalculatorTypes.DURATION);
       }
-      this.networkLogView.setCalculator((calculator as NetworkTimeCalculator));
+      this.networkLogView.setCalculator((calculator as NetworkTimeCalculator.NetworkTimeCalculator));
 
       this.activeWaterfallSortId = sortId;
-      this.dataGridInternal.markColumnAsSortedBy('waterfall', DataGrid.DataGrid.Order.Ascending);
+      this.#dataGrid.markColumnAsSortedBy('waterfall', DataGrid.DataGrid.Order.Ascending);
       this.sortHandler();
     }
   }
@@ -796,7 +793,7 @@ export class NetworkLogViewColumns {
     }
 
     this.columns.splice(index, 1);
-    this.dataGridInternal.removeColumn(headerId);
+    this.#dataGrid.removeColumn(headerId);
     this.saveColumnsSettings();
     this.updateColumns();
     return true;
@@ -836,8 +833,8 @@ export class NetworkLogViewColumns {
     const columnConfig = columnConfigBase as Descriptor;
 
     this.columns.splice(index, 0, columnConfig);
-    if (this.dataGridInternal) {
-      this.dataGridInternal.addColumn(NetworkLogViewColumns.convertToDataGridDescriptor(columnConfig), index);
+    if (this.#dataGrid) {
+      this.#dataGrid.addColumn(NetworkLogViewColumns.convertToDataGridDescriptor(columnConfig), index);
     }
     this.saveColumnsSettings();
     this.updateColumns();
@@ -1189,6 +1186,11 @@ const DEFAULT_COLUMNS = [
     isRequestHeader: true,
     title: i18n.i18n.lockedLazyString('User-Agent'),
     sortingFunction: NetworkRequestNode.RequestHeaderStringComparator.bind(null, 'user-agent'),
+  },
+  {
+    id: 'is-ad-related',
+    title: i18nLazyString(UIStrings.isAdRelated),
+    sortingFunction: NetworkRequestNode.IsAdRelatedComparator,
   },
   // This header is a placeholder to let datagrid know that it can be sorted by this column, but never shown.
   {

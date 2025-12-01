@@ -16,6 +16,7 @@ use crate::internal_utils::*;
 use crate::*;
 
 pub mod clap;
+pub mod error;
 pub mod pixels;
 pub mod reader;
 pub mod writer;
@@ -36,7 +37,7 @@ pub struct UFraction(pub u32, pub u32);
 impl Fraction {
     pub(crate) fn is_valid(&self) -> AvifResult<()> {
         match self.1 {
-            0 => Err(AvifError::InvalidArgument),
+            0 => AvifError::invalid_argument(),
             _ => Ok(()),
         }
     }
@@ -50,7 +51,7 @@ impl Fraction {
 impl UFraction {
     pub(crate) fn is_valid(&self) -> AvifResult<()> {
         match self.1 {
-            0 => Err(AvifError::InvalidArgument),
+            0 => AvifError::invalid_argument(),
             _ => Ok(()),
         }
     }
@@ -78,7 +79,7 @@ impl IFraction {
     #[allow(dead_code)]
     pub(crate) fn is_valid(&self) -> AvifResult<()> {
         match self.1 {
-            0 => Err(AvifError::InvalidArgument),
+            0 => AvifError::invalid_argument(),
             _ => Ok(()),
         }
     }

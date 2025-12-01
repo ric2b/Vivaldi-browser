@@ -38,15 +38,16 @@
 namespace dawn::native::metal {
 
 // static
-ResultOrError<Ref<BindGroup>> BindGroup::Create(Device* device,
-                                                const BindGroupDescriptor* descriptor) {
+ResultOrError<Ref<BindGroup>> BindGroup::Create(
+    Device* device,
+    const UnpackedPtr<BindGroupDescriptor>& descriptor) {
     Ref<BindGroup> bindGroup = ToBackend(descriptor->layout->GetInternalBindGroupLayout())
                                    ->AllocateBindGroup(device, descriptor);
     DAWN_TRY(bindGroup->Initialize(descriptor));
     return bindGroup;
 }
 
-BindGroup::BindGroup(Device* device, const BindGroupDescriptor* descriptor)
+BindGroup::BindGroup(Device* device, const UnpackedPtr<BindGroupDescriptor>& descriptor)
     : BindGroupBase(this, device, descriptor) {}
 
 BindGroup::~BindGroup() = default;
@@ -102,7 +103,13 @@ MaybeError BindGroup::InitializeImpl() {
             },
             [&](const TextureBindingInfo&) { HandleTextureBinding(); },
             [&](const StorageTextureBindingInfo&) { HandleTextureBinding(); },
-            [](const InputAttachmentBindingInfo&) { DAWN_CHECK(false); });
+            [&](const TexelBufferBindingInfo&) {
+                // Metal does not support texel buffers.
+                // TODO(crbug/382544164): Prototype texel buffer feature
+                DAWN_CHECK(false);
+            },
+            [](const InputAttachmentBindingInfo&) { DAWN_CHECK(false); },
+            [](const ExternalTextureBindingInfo&) { DAWN_CHECK(false); });
     }
 
     return {};

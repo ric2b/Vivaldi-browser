@@ -239,7 +239,6 @@ class CORE_EXPORT WebFrameWidgetImpl
   void RequestDecode(const cc::DrawImage&,
                      base::OnceCallback<void(bool)>,
                      bool speculative) override;
-  bool SpeculativeDecodeRequestInFlight() const override;
   int GetLayerTreeId() final;
   const cc::LayerTreeSettings* GetLayerTreeSettings() final;
   void UpdateBrowserControlsState(
@@ -595,6 +594,8 @@ class CORE_EXPORT WebFrameWidgetImpl
   // content (only clip it).
   void SetBrowserControlsParams(cc::BrowserControlsParams params);
 
+  void SetLoadProgress(float);
+
   void SetMaxSafeAreaInsets(const gfx::InsetsF& max_safe_area_insets);
 
   // This function provides zooming for find in page results when browsing with
@@ -677,7 +678,9 @@ class CORE_EXPORT WebFrameWidgetImpl
 
   void SetScreenMetricsEmulationParameters(
       bool enabled,
-      const blink::DeviceEmulationParams& params);
+      const blink::DeviceEmulationParams& params,
+      const mojom::blink::DeviceEmulationCacheBehavior& cache_behavior =
+          mojom::blink::DeviceEmulationCacheBehavior::kClearCache);
   void SetScreenInfoAndSize(const display::ScreenInfos& screen_infos,
                             const gfx::Size& widget_size_in_dips,
                             const gfx::Size& visible_viewport_size_in_dips);
@@ -754,6 +757,8 @@ class CORE_EXPORT WebFrameWidgetImpl
 
   void OnDevToolsSessionConnectionChanged(bool attached);
 
+  void OnFirstContentfulPaint(const base::TimeTicks& first_paint_time) override;
+
   // Vivaldi
   void SetImagesEnabled(const bool show_images) override;
   void SetServeResourceFromCacheOnly(const bool only_cache) override;
@@ -781,6 +786,7 @@ class CORE_EXPORT WebFrameWidgetImpl
  private:
   friend class WebViewImpl;
   friend class ReportTimeSwapPromise;
+  friend class WebFrameWidgetScrollContainerHitTest;
 
   void NotifySwapAndPresentationTime(PromiseCallbacks callbacks);
 
@@ -871,7 +877,9 @@ class CORE_EXPORT WebFrameWidgetImpl
   void UpdateRenderThrottlingStatusForSubFrame(bool is_throttled,
                                                bool subtree_throttled,
                                                bool display_locked) override;
-  void EnableDeviceEmulation(const DeviceEmulationParams& parameters) override;
+  void EnableDeviceEmulation(
+      const DeviceEmulationParams& parameters,
+      const mojom::blink::DeviceEmulationCacheBehavior cache_behavior) override;
   void DisableDeviceEmulation() override;
   // Sets the inert bit on an out-of-process iframe, causing it to ignore
   // input.

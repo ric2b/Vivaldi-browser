@@ -103,6 +103,16 @@ FcRuleDestroy (FcRule *rule)
 }
 
 static FcExpr *
+FcExprCreateNil (FcConfig *config)
+{
+    FcExpr *e = FcConfigAllocExpr (config);
+    if (e) {
+        e->op = FcOpNil;
+    }
+    return e;
+}
+
+static FcExpr *
 FcExprCreateInteger (FcConfig *config, int i)
 {
     FcExpr *e = FcConfigAllocExpr (config);
@@ -530,7 +540,8 @@ typedef enum _FcVStackTag {
 
     FcVStackTest,
     FcVStackExpr,
-    FcVStackEdit
+    FcVStackEdit,
+    FcVStackNil,
 } FcVStackTag;
 
 typedef struct _FcVStack {
@@ -579,6 +590,9 @@ typedef enum _FcConfigSeverity {
     FcSevereWarning,
     FcSevereError
 } FcConfigSeverity;
+
+static FcBool
+FcConfigLexBool (FcConfigParse *parse, const FcChar8 *bool_);
 
 static void
 FcConfigMessage (FcConfigParse *parse, FcConfigSeverity severe, const char *fmt, ...)
@@ -859,6 +873,18 @@ FcVStackCreateAndPush (FcConfigParse *parse)
 }
 
 static FcBool
+FcVStackPushNil (FcConfigParse *parse)
+{
+    FcVStack *vstack = FcVStackCreateAndPush (parse);
+
+    if (!vstack)
+        return FcFalse;
+    vstack->tag = FcVStackNil;
+
+    return FcTrue;
+}
+
+static FcBool
 FcVStackPushString (FcConfigParse *parse, FcVStackTag tag, FcChar8 *string)
 {
     FcVStack *vstack = FcVStackCreateAndPush (parse);
@@ -1054,6 +1080,7 @@ FcVStackPopAndDestroy (FcConfigParse *parse)
 	break;
     case FcVStackInteger:
     case FcVStackDouble:
+    case FcVStackNil:
 	break;
     case FcVStackMatrix:
 	FcExprMatrixFreeShallow (vstack->u.matrix);
@@ -1407,6 +1434,23 @@ FcParseRescan (FcConfigParse *parse)
     }
 }
 
+static FcBool
+FcParseNil (FcConfigParse *parse)
+{
+    const FcChar8 *nil;
+
+    if (!parse->pstack)
+	return FcFalse;
+    nil = FcConfigGetAttribute (parse, "xsi:nil");
+    if (!nil)
+	return FcFalse;
+    if (!FcConfigLexBool (parse, nil))
+	return FcFalse;
+    FcVStackPushNil (parse);
+
+    return FcTrue;
+}
+
 static void
 FcParseInt (FcConfigParse *parse)
 {
@@ -1420,12 +1464,15 @@ FcParseInt (FcConfigParse *parse)
 	FcConfigMessage (parse, FcSevereError, "out of memory");
 	return;
     }
+    if (FcParseNil (parse))
+        goto bail;
     end = 0;
     l = (int)strtol ((char *)s, (char **)&end, 0);
     if (end != s + strlen ((char *)s))
 	FcConfigMessage (parse, FcSevereError, "\"%s\": not a valid integer", s);
     else
 	FcVStackPushInteger (parse, l);
+ bail:
     FcStrBufDestroy (&parse->pstack->str);
 }
 
@@ -1506,12 +1553,15 @@ FcParseDouble (FcConfigParse *parse)
 	FcConfigMessage (parse, FcSevereError, "out of memory");
 	return;
     }
+    if (FcParseNil (parse))
+        goto bail;
     end = 0;
     d = FcStrtod ((char *)s, (char **)&end);
     if (end != s + strlen ((char *)s))
 	FcConfigMessage (parse, FcSevereError, "\"%s\": not a valid double", s);
     else
 	FcVStackPushDouble (parse, d);
+ bail:
     FcStrBufDestroy (&parse->pstack->str);
 }
 
@@ -1526,6 +1576,10 @@ FcParseString (FcConfigParse *parse, FcVStackTag tag)
     if (!s) {
 	FcConfigMessage (parse, FcSevereError, "out of memory");
 	return;
+    }
+    if (FcParseNil (parse)) {
+        FcStrFree (s);
+        return;
     }
     if (!FcVStackPushString (parse, tag, s))
 	FcStrFree (s);
@@ -1666,12 +1720,15 @@ FcParseBool (FcConfigParse *parse)
 
     if (!parse->pstack)
 	return;
+    if (FcParseNil (parse))
+        goto bail;
     s = FcStrBufDoneStatic (&parse->pstack->str);
     if (!s) {
 	FcConfigMessage (parse, FcSevereError, "out of memory");
 	return;
     }
     FcVStackPushBool (parse, FcConfigLexBool (parse, s));
+ bail:
     FcStrBufDestroy (&parse->pstack->str);
 }
 
@@ -1683,6 +1740,8 @@ FcParseCharSet (FcConfigParse *parse)
     FcChar32   i, begin, end;
     int        n = 0;
 
+    if (FcParseNil (parse))
+        goto bail;
     while ((vstack = FcVStackPeek (parse))) {
 	switch ((int)vstack->tag) {
 	case FcVStackInteger:
@@ -1710,6 +1769,7 @@ FcParseCharSet (FcConfigParse *parse)
 	}
 	FcVStackPopAndDestroy (parse);
     }
+ bail:
     if (n > 0)
 	FcVStackPushCharSet (parse, charset);
     else
@@ -1723,6 +1783,8 @@ FcParseLangSet (FcConfigParse *parse)
     FcLangSet *langset = FcLangSetCreate();
     int        n = 0;
 
+    if (FcParseNil (parse))
+        goto bail;
     while ((vstack = FcVStackPeek (parse))) {
 	switch ((int)vstack->tag) {
 	case FcVStackString:
@@ -1737,6 +1799,7 @@ FcParseLangSet (FcConfigParse *parse)
 	}
 	FcVStackPopAndDestroy (parse);
     }
+ bail:
     if (n > 0)
 	FcVStackPushLangSet (parse, langset);
     else
@@ -2088,6 +2151,9 @@ FcPopExpr (FcConfigParse *parse)
 	break;
     case FcVStackEdit:
 	break;
+    case FcVStackNil:
+        expr = FcExprCreateNil (parse->config);
+        break;
     default:
 	break;
     }
@@ -2322,8 +2388,7 @@ FcParseInclude (FcConfigParse *parse)
 	goto bail;
     }
     attr = FcConfigGetAttribute (parse, "ignore_missing");
-    if (attr && FcConfigLexBool (parse, (FcChar8 *)attr) == FcTrue)
-	ignore_missing = FcTrue;
+    ignore_missing = attr ? FcConfigLexBool (parse, (FcChar8 *)attr) : FcFalse;
     /* deprecated attribute has ever been used to mark
      * old configuration path as deprecated.
      * We don't have any code for it but just keep it for
@@ -2480,15 +2545,9 @@ FcParseTest (FcConfigParse *parse)
     }
     iblanks_string = FcConfigGetAttribute (parse, "ignore-blanks");
     if (iblanks_string) {
-	FcBool f = FcFalse;
-
-	if (!FcNameBool (iblanks_string, &f)) {
-	    FcConfigMessage (parse,
-	                     FcSevereWarning,
-	                     "invalid test ignore-blanks \"%s\"", iblanks_string);
-	}
-	if (f)
+        if (FcConfigLexBool (parse, iblanks_string)) {
 	    flags |= FcOpFlagIgnoreBlanks;
+        }
     }
     expr = FcPopBinary (parse, FcOpComma);
     if (!expr) {
@@ -3107,7 +3166,7 @@ FcConfigParseAndLoadDir (FcConfig      *config,
 	    }
 	}
     }
-    if (ret) {
+    if (ret && files->num > 0) {
 	int i;
 	qsort (files->strs, files->num, sizeof (FcChar8 *),
 	       (int (*) (const void *, const void *))FcSortCmpStr);
@@ -3267,8 +3326,17 @@ _FcConfigParse (FcConfig      *config,
 
     filename = FcConfigGetFilename (config, name);
     if (!filename) {
-	FcStrBufString (&reason, (FcChar8 *)"No such file: ");
-	FcStrBufString (&reason, name ? name : (FcChar8 *)"(null)");
+	FcStrBufString (&reason, (FcChar8 *)"File not found");
+	if (name) {
+	    FcStrBufString (&reason, (FcChar8 *)": ");
+	    FcStrBufString (&reason, name);
+	} else {
+	    FcChar8 *e = (FcChar8 *)getenv ("FONTCONFIG_FILE");
+	    if (e) {
+	        FcStrBufString (&reason, (FcChar8 *)": ");
+	        FcStrBufString (&reason, e);
+	    }
+	}
 	goto bail0;
     }
     realfilename = FcConfigRealFilename (config, name);

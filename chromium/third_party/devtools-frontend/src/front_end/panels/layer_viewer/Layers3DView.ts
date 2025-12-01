@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2014 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2014 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
@@ -35,6 +9,7 @@ import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import type * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
+import * as Geometry from '../../models/geometry/geometry.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
@@ -52,32 +27,32 @@ import {Events as TransformControllerEvents, TransformController} from './Transf
 
 const UIStrings = {
   /**
-   *@description Text of a DOM element in DView of the Layers panel
+   * @description Text of a DOM element in DView of the Layers panel
    */
   noLayerInformation: 'No layers detected yet',
   /**
-   *@description Text of a DOM element in DView of the Layers panel that explains the panel
+   * @description Text of a DOM element in DView of the Layers panel that explains the panel
    */
   layerExplanation: 'On this page you will be able to view and inspect document layers.',
   /**
-   *@description Accessibility label for canvas view in Layers tool
+   * @description Accessibility label for canvas view in Layers tool
    */
   dLayersView: '3D Layers View',
   /**
-   *@description Text in DView of the Layers panel
+   * @description Text in DView of the Layers panel
    */
   cantDisplayLayers: 'Can\'t display layers',
   /**
-   *@description Text in DView of the Layers panel
+   * @description Text in DView of the Layers panel
    */
   webglSupportIsDisabledInYour: 'WebGL support is disabled in your browser.',
   /**
-   *@description Text in DView of the Layers panel
-   *@example {about:gpu} PH1
+   * @description Text in DView of the Layers panel
+   * @example {about:gpu} PH1
    */
   checkSForPossibleReasons: 'Check {PH1} for possible reasons.',
   /**
-   *@description Text for a checkbox in the toolbar of the Layers panel to show the area of slow scroll rect
+   * @description Text for a checkbox in the toolbar of the Layers panel to show the area of slow scroll rect
    */
   slowScrollRects: 'Slow scroll rects',
   /**
@@ -87,11 +62,11 @@ const UIStrings = {
    */
   paints: 'Paints',
   /**
-   *@description A context menu item in the DView of the Layers panel
+   * @description A context menu item in the DView of the Layers panel
    */
   resetView: 'Reset View',
   /**
-   *@description A context menu item in the DView of the Layers panel
+   * @description A context menu item in the DView of the Layers panel
    */
   showPaintProfiler: 'Show Paint Profiler',
 } as const;
@@ -364,7 +339,7 @@ export class Layers3DView extends Common.ObjectWrapper.eventMixin<EventTypes, ty
 
     let bounds;
     for (let i = 0; i < this.rects.length; ++i) {
-      bounds = UI.Geometry.boundsForTransformedPoints(scaleAndRotationMatrix, this.rects[i].vertices, bounds);
+      bounds = Geometry.boundsForTransformedPoints(scaleAndRotationMatrix, this.rects[i].vertices, bounds);
     }
 
     if (bounds) {
@@ -760,12 +735,12 @@ export class Layers3DView extends Common.ObjectWrapper.eventMixin<EventTypes, ty
       this.updateScheduled = true;
       requestAnimationFrame(() => requestAnimationFrame(() => {
                               this.updateScheduled = false;
-                              this.innerUpdate();
+                              this.#update();
                             }));
     }
   }
 
-  private innerUpdate(): void {
+  #update(): void {
     if (!this.layerTree?.root()) {
       this.failBanner.show(this.contentElement);
       return;
@@ -1222,12 +1197,12 @@ export class Rectangle {
     // Vertices of the quad with transform matrix applied
     const points = [];
     for (i = 0; i < 4; ++i) {
-      points[i] = UI.Geometry.multiplyVectorByMatrixAndNormalize(
-          new UI.Geometry.Vector(this.vertices[i * 3], this.vertices[i * 3 + 1], this.vertices[i * 3 + 2]), matrix);
+      points[i] = Geometry.multiplyVectorByMatrixAndNormalize(
+          new Geometry.Vector(this.vertices[i * 3], this.vertices[i * 3 + 1], this.vertices[i * 3 + 2]), matrix);
     }
     // Calculating quad plane normal
-    const normal = UI.Geometry.crossProduct(
-        UI.Geometry.subtract(points[1], points[0]), UI.Geometry.subtract(points[2], points[1]));
+    const normal =
+        Geometry.crossProduct(Geometry.subtract(points[1], points[0]), Geometry.subtract(points[2], points[1]));
     // General form of the equation of the quad plane: A * x + B * y + C * z + D = 0
     const A = normal.x;
     const B = normal.y;
@@ -1236,14 +1211,13 @@ export class Rectangle {
     // Finding t from the equation
     const t = -(D + A * x0 + B * y0) / C;
     // Point of the intersection
-    const pt = new UI.Geometry.Vector(x0, y0, t);
+    const pt = new Geometry.Vector(x0, y0, t);
     // Vectors from the intersection point to vertices of the quad
-    const tVects = points.map(UI.Geometry.subtract.bind(null, pt));
+    const tVects = points.map(Geometry.subtract.bind(null, pt));
     // Intersection point lies inside of the polygon if scalar products of normal of the plane and
     // cross products of successive tVects are all nonstrictly above or all nonstrictly below zero
     for (i = 0; i < tVects.length; ++i) {
-      const product =
-          UI.Geometry.scalarProduct(normal, UI.Geometry.crossProduct(tVects[i], tVects[(i + 1) % tVects.length]));
+      const product = Geometry.scalarProduct(normal, Geometry.crossProduct(tVects[i], tVects[(i + 1) % tVects.length]));
       if (product < 0) {
         return undefined;
       }

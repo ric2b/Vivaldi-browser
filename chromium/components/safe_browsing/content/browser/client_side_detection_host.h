@@ -18,6 +18,8 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
+#include "components/autofill/core/browser/foundations/autofill_manager.h"
+#include "components/autofill/core/browser/foundations/scoped_autofill_managers_observation.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/safe_browsing/content/browser/async_check_tracker.h"
@@ -55,7 +57,8 @@ using HostInnerTextCallback = base::OnceCallback<void(std::string)>;
 class ClientSideDetectionHost
     : public content::WebContentsObserver,
       public permissions::PermissionRequestManager::Observer,
-      public AsyncCheckTracker::Observer {
+      public AsyncCheckTracker::Observer,
+      public autofill::AutofillManager::Observer {
  public:
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
@@ -105,6 +108,9 @@ class ClientSideDetectionHost
    public:
     // Represents the result of an intelligent scan.
     struct IntelligentScanResult {
+      static constexpr int kModelVersionUnavailable = -1;
+      static IntelligentScanResult Failure(int model_version);
+
       std::string brand;
       std::string intent;
       int model_version;
@@ -126,8 +132,6 @@ class ClientSideDetectionHost
         bool log_failed_eligibility_reason) = 0;
     // Gets the intelligent scan result from the on-device model. The callback
     // will return an empty optional if the on-device model is not available.
-    // Note: The caller is responsible for calling ResetOnDeviceSession before
-    // calling this function again.
     virtual void InquireOnDeviceModel(
         std::string rendered_texts,
         InquireOnDeviceModelDoneCallback callback) = 0;
@@ -135,6 +139,10 @@ class ClientSideDetectionHost
     // the session was reset. Does nothing and returns false if there is no
     // session.
     virtual bool ResetOnDeviceSession() = 0;
+    // Determines if a scam warning should be shown based on the intelligent
+    // scan verdict.
+    virtual bool ShouldShowScamWarning(
+        std::optional<IntelligentScanVerdict> verdict) = 0;
   };
 
   // The caller keeps ownership of the tab object and is responsible for
@@ -185,6 +193,14 @@ class ClientSideDetectionHost
   void OnAsyncSafeBrowsingCheckTrackerDestructed() override;
 
   void RegisterAsyncCheckTracker();
+
+  // autofill::AutofillManager::Observer method:
+  void OnFieldTypesDetermined(
+      autofill::AutofillManager& manager,
+      autofill::FormGlobalId formId,
+      autofill::AutofillManager::Observer::FieldTypeSource source) override;
+
+  void RegisterAutofillManager();
 
  protected:
   explicit ClientSideDetectionHost(
@@ -259,6 +275,21 @@ class ClientSideDetectionHost
                            ClipboardApiTriggersPreclassificationCheck);
   FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionHostClipboardTest,
                            ClipboardApiClassificationTriggersCSPPPing);
+  FRIEND_TEST_ALL_PREFIXES(
+      ClientSideDetectionHostCreditCardFormTest,
+      NonCreditCardFormDoesNotTriggerPreclassificationChecks);
+  FRIEND_TEST_ALL_PREFIXES(
+      ClientSideDetectionHostCreditCardFormTest,
+      FeatureDisabledDoesNotTriggerPreclassificationChecks);
+  FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionHostCreditCardFormTest,
+                           ESBDisabledDoesNotTriggerPreclassificationChecks);
+  FRIEND_TEST_ALL_PREFIXES(
+      ClientSideDetectionHostCreditCardFormTest,
+      EventDoesNotTriggerPreclassificationChecksWhenESBDisabled);
+  FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionHostCreditCardFormTest,
+                           CreditCardFormTriggersPreclassificationCheck);
+  FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionHostCreditCardFormTest,
+                           CreditCardFormClassificationTriggersCSDPing);
 
   // Helper function to create preclassification check once requirements are
   // met.
@@ -308,7 +339,8 @@ class ClientSideDetectionHost
   // last step before sending the ping to the server.
   void MaybeGetAccessToken(
       std::unique_ptr<ClientPhishingRequest> verdict,
-      std::optional<bool> did_match_high_confidence_allowlist);
+      std::optional<bool> did_match_high_confidence_allowlist,
+      bool is_on_device_model_invoked);
 
   // Callback that is called when the server ping back is
   // done. Display an interstitial if |is_phishing| is true.
@@ -368,6 +400,24 @@ class ClientSideDetectionHost
     intelligent_scan_delegate_ = intelligent_scan_delegate;
   }
 
+  // Callbacks for when preclassification is started/done.
+  using PreclassificationStarted =
+      base::RepeatingCallback<void(ClientSideDetectionType)>;
+  using PreclassificationDone =
+      base::RepeatingCallback<void(ClientSideDetectionType)>;
+
+  // Sets a callback to be notified when preclassification is started.
+  void set_preclassification_started_callback_for_testing(
+      const PreclassificationStarted& callback) {
+    preclassification_started_cb_for_testing_ = callback;
+  }
+
+  // Sets a callback to be notified when preclassification is done.
+  void set_preclassification_done_callback_for_testing(
+      const PreclassificationDone& callback) {
+    preclassification_done_cb_for_testing_ = callback;
+  }
+
   // Check if CSD can get an access Token. Should be enabled only for ESB
   // users, who are signed in and not in incognito mode.
   bool CanGetAccessToken();
@@ -381,6 +431,13 @@ class ClientSideDetectionHost
   void OnGotAccessToken(std::unique_ptr<ClientPhishingRequest> verdict,
                         std::optional<bool> did_match_high_confidence_allowlist,
                         const std::string& access_token);
+
+  // Returns true if phishing detection should not proceed beyond
+  // preclassification. The purpose of triggering only preclassification is to
+  // have an initial assessment on how often we'll be hitting the allowlist and
+  // triggering the classification. Detection should not go further than
+  // recording metrics.
+  bool ShouldStopAtPreClassification();
 
   // Check if sample ping can be sent to Safe Browsing.
   bool CanSendSamplePing();
@@ -480,6 +537,19 @@ class ClientSideDetectionHost
 
   base::ScopedObservation<AsyncCheckTracker, AsyncCheckTracker::Observer>
       async_check_observation_{this};
+
+  // Manages lifetime registration of this instance as an
+  // AutofillManager::Observer.
+  autofill::ScopedAutofillManagersObservation autofill_managers_observation_{
+      this};
+
+  // Callback settable by tests for verifying whether
+  // MaybeStartPreClassification resulted in starting preclassification.
+  PreclassificationStarted preclassification_started_cb_for_testing_;
+
+  // Callback settable by tests for verifying whether
+  // OnPhishingPreClassificationDone was called at the end of preclassification.
+  PreclassificationDone preclassification_done_cb_for_testing_;
 
   base::WeakPtrFactory<ClientSideDetectionHost> weak_factory_{this};
 };

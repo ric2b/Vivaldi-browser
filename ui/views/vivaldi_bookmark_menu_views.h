@@ -40,6 +40,7 @@ class VivaldiBookmarkMenuViews : public VivaldiBookmarkMenu,
 
   bool CanShow() override;
   void Show() override;
+  void Close() override;
 
   void set_observer(VivaldiBookmarkMenuObserver* observer) override;
 
@@ -49,8 +50,6 @@ class VivaldiBookmarkMenuViews : public VivaldiBookmarkMenu,
 
  private:
   base::RepeatingCallback<content::PageNavigator*()> GetPageNavigatorGetter();
-
- private:
   const raw_ptr<content::WebContents> web_contents_;
   gfx::Rect button_rect_;
   raw_ptr<BookmarkMenuController> controller_ = nullptr;  // Deletes iself

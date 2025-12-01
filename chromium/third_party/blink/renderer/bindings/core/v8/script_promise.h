@@ -168,7 +168,9 @@ class CORE_EXPORT ThenCallable : public ScriptFunction {
     // Finally: apply exception context and rethrow if needed, and return the
     // result.
     if (try_catch.HasCaught()) [[unlikely]] {
-      ApplyContextToException(script_state, try_catch.Exception(), context_);
+      ApplyContextToException(script_state, try_catch.Exception(),
+                              context_.GetType(), context_.GetClassName(),
+                              context_.GetPropertyName());
       try_catch.ReThrow();
     }
     return return_value;
@@ -271,10 +273,6 @@ class ScriptPromise {
 
   bool operator==(const ScriptPromise<IDLResolvedType>& value) const {
     return promise_ == value.promise_;
-  }
-
-  bool operator!=(const ScriptPromise<IDLResolvedType>& value) const {
-    return !operator==(value);
   }
 
   template <typename ResolveReactType,

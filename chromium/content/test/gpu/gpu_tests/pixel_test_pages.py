@@ -718,6 +718,10 @@ class PixelTestPages():
       # we're effectively just making sure the color is correct.
       fixed_crop = ca.FixedRectCropAction(0, 0, 300, 300)
 
+      # For testing VideoFrame with HDR color space.
+      hdr_params = '?sourceType=hdr_canvas'
+      hdr_args = ['--enable-blink-features=CanvasHDR,WebCodecsHBDFormats']
+
       return [
           PixelTestPage('pixel_webgpu_import_video_frame.html' +
                         video_frame_query_params,
@@ -741,6 +745,10 @@ class PixelTestPages():
               base_name + '_WebGPUImportVideoFrameUnacceleratedOffscreenCanvas',
               crop_action=standard_crop,
               browser_args=webgpu_args + [cba.DISABLE_ACCELERATED_2D_CANVAS]),
+          PixelTestPage('pixel_webgpu_import_video_frame_hdr.html' + hdr_params,
+                        base_name + '_WebGPUImportVideoFrameHDR',
+                        crop_action=standard_crop,
+                        browser_args=webgpu_args + hdr_args),
           PixelTestPage('pixel_webgpu_webgl_teximage2d.html',
                         base_name + '_WebGPUWebGLTexImage2D',
                         crop_action=standard_crop,
@@ -1826,14 +1834,15 @@ class PixelTestPages():
     meet_sample_area_matching = algo.SampleAreaMatchingAlgorithm(
         sample_area_width=5,
         max_different_pixels_per_area=2,
-        sample_area_channel_delta_threshold=5)
+        sample_area_channel_delta_threshold=5,
+        combine_inexact_matches=True)
     # The video is rather large on the page, which can cause a horizontal
     # scrollbar to appear along the bottom. So, crop that first.
     standard_crop = ca.NonWhiteContentCropAction(
         ca.FixedRectCropAction(0, 60, None, -20))
     # Run the tests on CI for a while to see how stable they are with
     # fuzzy matching enabled.
-    grace_period_end = date(2025, 10, 1)
+    grace_period_end = date(2025, 12, 1)
     return [
         PixelTestPage('meet_effects/meet-gpu-tests/index.html?effectId=359',
                       f'{base_name}_MeetEffectsCatOnHead',

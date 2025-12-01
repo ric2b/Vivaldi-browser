@@ -16,6 +16,7 @@ source_set("adverse_adblocking") {
   ]
   deps = [
     "//build:branding_buildflags",
+    "//chrome/common:buildflags",
     "//components/prefs",
     "//components/keyed_service/content",
     "//components/safe_browsing/core/browser/db:v4_protocol_manager_util",

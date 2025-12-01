@@ -20,7 +20,7 @@
 <translation id="2418705169960294134">Nueva pestaña privada</translation>
 <translation id="2565593432251168402">Mantente organizado creando pilas de pestañas</translation>
 <translation id="2783161812871838616">Solicitar modo escritorio</translation>
-<translation id="2806957659107692459">Crear apilable</translation>
+<translation id="2806957659107692459">Crear pila</translation>
 <translation id="2899836479226240291">Si lo configuras como tu navegador predeterminado, podrás abrir enlaces en Vivaldi de forma automática.</translation>
 <translation id="3365529507898144230">Guardar en Fotos</translation>
 <translation id="3434473769478814796">Pegar e ir</translation>
@@ -38,18 +38,21 @@
 <translation id="4026745073321351206">🙄 ¿Has encontrado un error?</translation>
 <translation id="4216644171369573466">Pila de pestañas, <ph name="GROUP_TITLE" />, Menú.</translation>
 <translation id="4304713468139749426">Gestor de contraseñas</translation>
+<translation id="4439281775431634915">Tus pilas de pestañas están aquí</translation>
 <translation id="4569525137269575065">Cerrar apilable</translation>
 <translation id="473775607612524610">Actualizar</translation>
 <translation id="4755216899422789286">Abrir las URL en Vivaldi</translation>
 <translation id="4772190485302020393">Cerrar todas las pestañas y apilables</translation>
 <translation id="4802185666270672526">Ocultar "Solicitar modo escritorio"</translation>
 <translation id="4828571836982833289">¿Desapilar la pila de pestañas?</translation>
-<translation id="4838250035189612538">Cambiar nombre de Pila</translation>
+<translation id="4838250035189612538">Cambiar nombre de la pila</translation>
 <translation id="4873540827942947151">{count, plural,
             =1 {1 pila de pestañas cerrada y guardada}
             other {{count} pilas de pestañas cerradas y guardadas}}</translation>
 <translation id="5019787757991745254">Color de la pila de pestañas <ph name="COLOR" /></translation>
 <translation id="5022440170224170365">Pila de pestañas. Colapsada.</translation>
+<translation id="5132327651247938019">Puedes deslizar hacia la derecha para navegar en modo privado.</translation>
+<translation id="5204006339739481307">Puedes deslizar hacia la izquierda para navegar en modo privado.</translation>
 <translation id="5217245356412073535">Puedes cambiar la vista por defecto de los sitios a escritorio en Ajustes &gt; Ajustes de contenido</translation>
 <translation id="5271549068863921519">Guardar contraseña</translation>
 <translation id="5317780077021120954">Guardar</translation>
@@ -63,6 +66,7 @@
 <translation id="5962477178930921574">Pegar y buscar</translation>
 <translation id="6163856768888310791">Desapilar</translation>
 <translation id="6168969409902608220">Nombre de la Pila</translation>
+<translation id="6192561334825788389">Puedes deslizar hacia la derecha para navegar en modo privado.</translation>
 <translation id="6233792867654386826">Abre las URL introducidas en Vivaldi.</translation>
 <translation id="6271462272606946663">Ocultar solicitud de sitio móvil</translation>
 <translation id="6478587527114893588">Cerrar apilable.</translation>
@@ -75,6 +79,8 @@
 <translation id="6827597288286078054">Búsqueda privada</translation>
 <translation id="6851516051005285358">Solicitar modo escritorio</translation>
 <translation id="6890907822330704077">Pila de pestañas, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> pestañas.</translation>
+<translation id="7004032350256606903">Tu organización exige que navegues de forma privada.
+<ph name="BEGIN_LINK" />Leer más<ph name="END_LINK" /></translation>
 <translation id="7307970171564921489">Desbloquear pestañas privadas con <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">¿Abrir en privado?</translation>
 <translation id="7363285031331302144">Crea pilas de pestañas para organizar tus pestañas abiertas</translation>
@@ -94,6 +100,7 @@
         =1 {Añadir pestaña a nueva pila}
         other {Añadir pestañas a la nueva pila}}</translation>
 <translation id="8465550436083180511">Contraer pila de pestañas.</translation>
+<translation id="8499954848910902473">Puedes deslizar hacia la izquierda para navegar en modo privado.</translation>
 <translation id="8685478989144570078">Pila de pestañas</translation>
 <translation id="8756969031206844760">¿Quieres actualizar la contraseña?</translation>
 <translation id="8852861335827546438">Nueva pila de pestañas</translation>

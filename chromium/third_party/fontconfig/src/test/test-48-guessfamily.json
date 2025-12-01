@@ -1,6 +1,87 @@
 {
-  "fonts": [],
+  "fonts": [
+    {
+      "family": "Liberation Mono",
+      "style": "Regular",
+      "file": "/path/to/LiberationMono-Regular.ttf",
+      "fontversion": 1,
+      "genericfamily": 3
+    },
+    {
+      "family": "Liberation Sans",
+      "style": "Regular",
+      "file": "/path/to/LiberationSans-Regular.ttf",
+      "fontversion": 1,
+      "genericfamily": 2
+    },
+    {
+      "family": "Liberation Serif",
+      "style": "Regular",
+      "file": "/path/to/LiberationSerif-Regular.ttf",
+      "fontversion": 1,
+      "genericfamily": 1
+    },
+    {
+      "family": "Noto Sans Mono",
+      "style": "Regular",
+      "file": "/path/to/NotoSansMono-Regular.ttf",
+      "fontversion": 1,
+      "genericfamily": 3
+    },
+  ],
   "tests": [
+    {
+      "method": "match",
+      "query": {
+        "family": "mono"
+      },
+      "result": {
+        "family": "Liberation Mono",
+        "style": "Regular",
+        "file": "/path/to/LiberationMono-Regular.ttf",
+        "fontversion": 1,
+        "genericfamily": 3
+      }
+    },
+    {
+      "method": "match",
+      "query": {
+        "family": "sans"
+      },
+      "result": {
+        "family": "Liberation Sans",
+        "style": "Regular",
+        "file": "/path/to/LiberationSans-Regular.ttf",
+        "fontversion": 1,
+        "genericfamily": 2
+      }
+    },
+    {
+      "method": "match",
+      "query": {
+        "family": "serif"
+      },
+      "result": {
+        "family": "Liberation Serif",
+        "style": "Regular",
+        "file": "/path/to/LiberationSerif-Regular.ttf",
+        "fontversion": 1,
+        "genericfamily": 1
+      }
+    },
+    {
+      "method": "match",
+      "query": {
+        "genericfamily": "sans-serif"
+      },
+      "result": {
+        "family": "Liberation Sans",
+        "style": "Regular",
+        "file": "/path/to/LiberationSans-Regular.ttf",
+        "fontversion": 1,
+        "genericfamily": 2
+      }
+    },
     {
       "method": "pattern",
       "query": {
@@ -26,6 +107,15 @@
       },
       "result": {
         "family": ["Foo Serif", "serif"]
+      }
+    },
+    {
+      "method": "pattern",
+      "query": {
+        "family": "Noto Sans Mono",
+      },
+      "result": {
+        "family": ["Noto Sans Mono", "monospace"]
       }
     }
   ]

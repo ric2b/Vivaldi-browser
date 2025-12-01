@@ -2,11 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/omnibox/common/omnibox_features.h"
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
+#include "chrome/browser/ui/omnibox/omnibox_view.h"
 
 #include <stddef.h>
 #include <stdio.h>
@@ -16,6 +12,7 @@
 #include <optional>
 #include <string>
 
+#include "base/compiler_specific.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
@@ -39,6 +36,8 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
+#include "chrome/browser/ui/omnibox/omnibox_controller.h"
+#include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
 #include "chrome/browser/ui/omnibox/omnibox_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -55,11 +54,9 @@
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/history_quick_provider.h"
-#include "components/omnibox/browser/omnibox_controller.h"
-#include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_selection.h"
-#include "components/omnibox/browser/omnibox_view.h"
 #include "components/omnibox/browser/test_location_bar_model.h"
+#include "components/omnibox/common/omnibox_features.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/policy_constants.h"
@@ -247,7 +244,7 @@ class OmniboxViewTest : public InProcessBrowserTest {
   }
 
   void SendKeySequence(const ui::KeyboardCode* keys) {
-    for (; *keys != ui::VKEY_UNKNOWN; ++keys) {
+    for (; *keys != ui::VKEY_UNKNOWN; UNSAFE_TODO(++keys)) {
       ASSERT_NO_FATAL_FAILURE(SendKey(*keys, 0));
     }
   }
@@ -817,14 +814,13 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, BasicTextOperations) {
   EXPECT_EQ(url::kAboutBlankURL16, old_text);
   EXPECT_TRUE(omnibox_view->IsSelectAll());
 
-  size_t start, end;
-  omnibox_view->GetSelectionBounds(&start, &end);
+  gfx::Range selection = omnibox_view->GetSelectionBounds();
 #if defined(TOOLKIT_VIEWS)
   // Views textfields select-all in reverse to show the leading text.
-  std::swap(start, end);
+  selection = {selection.end(), selection.start()};
 #endif
-  EXPECT_EQ(0U, start);
-  EXPECT_EQ(old_text.size(), end);
+  EXPECT_EQ(0U, selection.start());
+  EXPECT_EQ(old_text.size(), selection.end());
 
   // Move the cursor to the end.
 #if BUILDFLAG(IS_MAC)
@@ -836,9 +832,9 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, BasicTextOperations) {
   EXPECT_FALSE(omnibox_view->IsSelectAll());
 
   // Make sure the cursor is placed correctly.
-  omnibox_view->GetSelectionBounds(&start, &end);
-  EXPECT_EQ(old_text.size(), start);
-  EXPECT_EQ(old_text.size(), end);
+  selection = omnibox_view->GetSelectionBounds();
+  EXPECT_EQ(old_text.size(), selection.start());
+  EXPECT_EQ(old_text.size(), selection.end());
 
   // Insert one character at the end.
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_A, 0));
@@ -850,20 +846,20 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, BasicTextOperations) {
 
   omnibox_view->SelectAll(true);
   EXPECT_TRUE(omnibox_view->IsSelectAll());
-  omnibox_view->GetSelectionBounds(&start, &end);
+  selection = omnibox_view->GetSelectionBounds();
 #if defined(TOOLKIT_VIEWS)
   // Views textfields select-all in reverse to show the leading text.
-  std::swap(start, end);
+  selection = {selection.end(), selection.start()};
 #endif
-  EXPECT_EQ(0U, start);
-  EXPECT_EQ(old_text.size(), end);
+  EXPECT_EQ(0U, selection.start());
+  EXPECT_EQ(old_text.size(), selection.end());
 
   // Delete the content
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_DELETE, 0));
   EXPECT_FALSE(omnibox_view->IsSelectAll());
-  omnibox_view->GetSelectionBounds(&start, &end);
-  EXPECT_EQ(0U, start);
-  EXPECT_EQ(0U, end);
+  selection = omnibox_view->GetSelectionBounds();
+  EXPECT_EQ(0U, selection.start());
+  EXPECT_EQ(0U, selection.end());
   EXPECT_TRUE(omnibox_view->GetText().empty());
 
   // Add a small amount of text to move the cursor past offset 0.
@@ -875,9 +871,9 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, BasicTextOperations) {
   omnibox_view->RevertAll();
   EXPECT_FALSE(omnibox_view->IsSelectAll());
   EXPECT_EQ(old_text, omnibox_view->GetText());
-  omnibox_view->GetSelectionBounds(&start, &end);
-  EXPECT_EQ(3U, start);
-  EXPECT_EQ(3U, end);
+  selection = omnibox_view->GetSelectionBounds();
+  EXPECT_EQ(3U, selection.start());
+  EXPECT_EQ(3U, selection.end());
 
   // Check that reverting clamps the cursor to the bounds of the new text.
   // Move the cursor to the end.
@@ -892,9 +888,9 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, BasicTextOperations) {
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_A, 0));
   omnibox_view->RevertAll();
   // Cursor should be no further than original text.
-  omnibox_view->GetSelectionBounds(&start, &end);
-  EXPECT_EQ(11U, start);
-  EXPECT_EQ(11U, end);
+  selection = omnibox_view->GetSelectionBounds();
+  EXPECT_EQ(11U, selection.start());
+  EXPECT_EQ(11U, selection.end());
 }
 
 // Make sure the cursor position doesn't get set past the last character of
@@ -1262,10 +1258,9 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, UndoRedo) {
   EXPECT_TRUE(omnibox_view->IsSelectAll());
 
   // The text should be selected.
-  size_t start, end;
-  omnibox_view->GetSelectionBounds(&start, &end);
-  EXPECT_EQ(old_text.size(), start);
-  EXPECT_EQ(0U, end);
+  gfx::Range selection = omnibox_view->GetSelectionBounds();
+  EXPECT_EQ(old_text.size(), selection.start());
+  EXPECT_EQ(0U, selection.end());
 
   // Delete three characters; "about:bl" should not trigger inline autocomplete.
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_END, 0));
@@ -1331,9 +1326,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, DoesNotUpdateAutocompleteOnBlur) {
   ASSERT_NO_FATAL_FAILURE(SendKeySequence(kInlineAutocompleteTextKeys));
   ASSERT_NO_FATAL_FAILURE(WaitForAutocompleteControllerDone());
   ASSERT_TRUE(omnibox_view->model()->PopupIsOpen());
-  size_t start, end;
-  omnibox_view->GetSelectionBounds(&start, &end);
-  EXPECT_TRUE(start != end);
+  gfx::Range selection = omnibox_view->GetSelectionBounds();
+  EXPECT_FALSE(selection.is_empty());
   std::u16string old_autocomplete_text =
       omnibox_view->controller()->autocomplete_controller()->input_.text();
 
@@ -1440,12 +1434,7 @@ namespace {
 
 // Returns the number of characters currently selected in |omnibox_view|.
 size_t GetSelectionSize(OmniboxView* omnibox_view) {
-  size_t start, end;
-  omnibox_view->GetSelectionBounds(&start, &end);
-  if (end >= start) {
-    return end - start;
-  }
-  return start - end;
+  return omnibox_view->GetSelectionBounds().length();
 }
 
 }  // namespace

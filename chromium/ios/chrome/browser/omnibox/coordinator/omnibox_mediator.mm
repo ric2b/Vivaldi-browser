@@ -95,20 +95,21 @@ using base::UserMetricsAction;
   std::unique_ptr<SearchEngineObserverBridge> _searchEngineObserver;
   std::unique_ptr<PlaceholderServiceObserverBridge> _placeholderServiceObserver;
 
-  // Whether it's the lens overlay omnibox.
-  BOOL _isLensOverlay;
+  // The context in which the omnibox is presented.
+  OmniboxPresentationContext _presentationContext;
 }
 
 - (instancetype)initWithIncognito:(BOOL)isIncognito
                           tracker:(feature_engagement::Tracker*)tracker
-                    isLensOverlay:(BOOL)isLensOverlay {
+              presentationContext:
+                  (OmniboxPresentationContext)presentationContext {
   self = [super init];
   if (self) {
     _searchEngineSupportsSearchByImage = NO;
     _searchEngineSupportsLens = NO;
     _isIncognito = isIncognito;
     _tracker = tracker;
-    _isLensOverlay = isLensOverlay;
+    _presentationContext = presentationContext;
 
     if (IsVivaldiRunning()) {
       [self setUpObserverForSearchEngineNicknameSettings];
@@ -602,7 +603,7 @@ using base::UserMetricsAction;
 
 // Returns the size of the favicon.
 - (CGFloat)faviconSize {
-  if (_isLensOverlay) {
+  if (_presentationContext == OmniboxPresentationContext::kLensOverlay) {
     return kDesiredSmallFaviconSizePt;
   } else {
     return kMinFaviconSizePt;

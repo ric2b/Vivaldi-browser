@@ -4,25 +4,19 @@
 
 #include "content/browser/preloading/prefetch/prefetch_url_loader_interceptor.h"
 
-#include <memory>
-
 #include "base/debug/dump_without_crashing.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "content/browser/browser_context_impl.h"
 #include "content/browser/loader/navigation_loader_interceptor.h"
 #include "content/browser/loader/url_loader_factory_utils.h"
 #include "content/browser/preloading/prefetch/prefetch_features.h"
 #include "content/browser/preloading/prefetch/prefetch_match_resolver.h"
 #include "content/browser/preloading/prefetch/prefetch_params.h"
 #include "content/browser/preloading/prefetch/prefetch_service.h"
-#include "content/browser/preloading/prefetch/prefetch_serving_page_metrics_container.h"
 #include "content/browser/preloading/prefetch/prefetch_url_loader_helper.h"
-#include "content/browser/preloading/prerender/prerender_host.h"
-#include "content/browser/preloading/prerender/prerender_host_registry.h"
+#include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_request.h"
-#include "content/browser/service_worker/service_worker_client.h"
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -101,18 +95,37 @@ void PrefetchURLLoaderInterceptor::MaybeCreateLoader(
   // etc. are not called.
   if (tentative_resource_request.method !=
       net::HttpRequestHeaders::kGetMethod) {
-    redirect_reader_ = PrefetchContainer::Reader();
+    redirect_serving_handle_ = PrefetchServingHandle();
     std::move(loader_callback_).Run(std::nullopt);
     return;
   }
 
-  if (redirect_reader_ && redirect_reader_.DoesCurrentURLToServeMatch(
-                              tentative_resource_request.url)) {
-    if (redirect_reader_.HaveDefaultContextCookiesChanged()) {
+  // SW-controlled prefetches shouldn't serve navigation with
+  // `skip_service_worker` == `true`.
+  // TODO(https://crbug.com/438478667): The current serving-time
+  // `skip_service_worker` check here assumes prefetching-time
+  // `skip_service_worker` is always false (see the
+  // `CHECK(!skip_service_worker)` in
+  // `PrefetchContainer::MakeResourceRequest()`). We should revisit the check
+  // when we support prefetch-time `skip_service_worker`. Probably a prefetch
+  // whose request's `skip_service_worker` == `true` shouldn't serve navigation
+  // whose request's `skip_service_worker` == `false`.
+  if (tentative_resource_request.skip_service_worker &&
+      expected_service_worker_state_ ==
+          PrefetchServiceWorkerState::kControlled) {
+    redirect_serving_handle_ = PrefetchServingHandle();
+    std::move(loader_callback_).Run(std::nullopt);
+    return;
+  }
+
+  if (redirect_serving_handle_ &&
+      redirect_serving_handle_.DoesCurrentURLToServeMatch(
+          tentative_resource_request.url)) {
+    if (redirect_serving_handle_.HaveDefaultContextCookiesChanged()) {
       // Cookies have changed for the next redirect hop's URL since the fetch,
       // so we cannot use this prefetch anymore.
       PrefetchContainer* prefetch_container =
-          redirect_reader_.GetPrefetchContainer();
+          redirect_serving_handle_.GetPrefetchContainer();
       CHECK(prefetch_container);
       // Use `std::nullopt` as we need to record the crash key to identify
       // which case in `PrefetchMatchResolver` is the cause.
@@ -124,15 +137,19 @@ void PrefetchURLLoaderInterceptor::MaybeCreateLoader(
           frame_tree_node_id_, tentative_resource_request.url,
           base::BindOnce(&PrefetchURLLoaderInterceptor::OnGetPrefetchComplete,
                          weak_factory_.GetWeakPtr(),
-                         tentative_resource_request),
-          std::move(redirect_reader_));
+
+                         tentative_resource_request.url,
+                         ServiceWorkerMainResourceHandle::
+                             TopFrameOriginForInitializeForRequest(
+                                 tentative_resource_request)),
+          std::move(redirect_serving_handle_));
       return;
     }
   }
 
-  if (redirect_reader_) {
+  if (redirect_serving_handle_) {
     RecordWasFullRedirectChainServedHistogram(false);
-    redirect_reader_ = PrefetchContainer::Reader();
+    redirect_serving_handle_ = PrefetchServingHandle();
   }
 
   FrameTreeNode* frame_tree_node =
@@ -151,14 +168,18 @@ void PrefetchURLLoaderInterceptor::MaybeCreateLoader(
   }
 
   GetPrefetch(
-      tentative_resource_request,
+      tentative_resource_request.url,
       base::BindOnce(&PrefetchURLLoaderInterceptor::OnGetPrefetchComplete,
-                     weak_factory_.GetWeakPtr(), tentative_resource_request));
+                     weak_factory_.GetWeakPtr(), tentative_resource_request.url,
+
+                     ServiceWorkerMainResourceHandle::
+                         TopFrameOriginForInitializeForRequest(
+                             tentative_resource_request)));
 }
 
 void PrefetchURLLoaderInterceptor::GetPrefetch(
-    const network::ResourceRequest& tentative_resource_request,
-    base::OnceCallback<void(PrefetchContainer::Reader)> get_prefetch_callback)
+    const GURL& url,
+    base::OnceCallback<void(PrefetchServingHandle)> get_prefetch_callback)
     const {
   TRACE_EVENT0("loading", "PrefetchURLLoaderInterceptor::GetPrefetch");
   PrefetchService* prefetch_service =
@@ -169,63 +190,45 @@ void PrefetchURLLoaderInterceptor::GetPrefetch(
   }
 
   if (!initiator_document_token_.has_value()) {
-    if (!PrefetchBrowserInitiatedTriggersEnabled()) {
-      std::move(get_prefetch_callback).Run({});
-      return;
-    }
-
     // TODO(crbug.com/40288091): Currently PrefetchServingPageMetricsContainer
     // is created only when the navigation is renderer-initiated and its
     // initiator document has PrefetchDocumentManager.
     CHECK(!serving_page_metrics_container_);
   }
 
-  const GURL tentative_resource_request_url = tentative_resource_request.url;
   auto callback = base::BindOnce(&OnGotPrefetchToServe, frame_tree_node_id_,
-                                 tentative_resource_request_url,
-                                 std::move(get_prefetch_callback));
-  auto key = PrefetchContainer::Key(initiator_document_token_,
-                                    tentative_resource_request_url);
-
-    const bool is_nav_prerender = [&]() -> bool {
-      auto* frame_tree_node =
-          FrameTreeNode::GloballyFindByID(frame_tree_node_id_);
-      if (!frame_tree_node) {
-        return false;
-      }
-
-      return frame_tree_node->frame_tree().is_prerendering();
-    }();
-
-    PrefetchMatchResolver::FindPrefetch(
-        std::move(key), expected_service_worker_state_, is_nav_prerender,
-        *prefetch_service, serving_page_metrics_container_,
-        std::move(callback));
+                                 url, std::move(get_prefetch_callback));
+  auto key = PrefetchKey(initiator_document_token_, url);
+  PrefetchMatchResolver::FindPrefetch(
+      frame_tree_node_id_, *prefetch_service, std::move(key),
+      expected_service_worker_state_, serving_page_metrics_container_,
+      std::move(callback));
 }
 
 void PrefetchURLLoaderInterceptor::OnGetPrefetchComplete(
-    const network::ResourceRequest& tentative_resource_request,
-    PrefetchContainer::Reader reader) {
+    const GURL& url,
+    const std::optional<url::Origin>& top_frame_origin,
+    PrefetchServingHandle serving_handle) {
   TRACE_EVENT0("loading",
                "PrefetchURLLoaderInterceptor::OnGetPrefetchComplete");
   PrefetchRequestHandler request_handler;
   base::WeakPtr<ServiceWorkerClient> client_for_prefetch;
-  if (reader) {
+  if (serving_handle) {
     std::tie(request_handler, client_for_prefetch) =
-        reader.CreateRequestHandler();
+        serving_handle.CreateRequestHandler();
   }
 
   if (expected_service_worker_state_ ==
           PrefetchServiceWorkerState::kControlled &&
       request_handler) {
     // ServiceWorker-controlled prefetch should be always non-redirecting.
-    CHECK(reader.IsEnd());
+    CHECK(serving_handle.IsEnd());
 
     if (!service_worker_handle_for_navigation_ || !client_for_prefetch) {
       // Do not intercept the request.
       request_handler = PrefetchRequestHandler();
     } else if (!service_worker_handle_for_navigation_->InitializeForRequest(
-                   tentative_resource_request, client_for_prefetch.get())) {
+                   url, top_frame_origin, client_for_prefetch.get())) {
       // Make tests fail and report in production builds when
       // `InitializeForRequest()` should fail, i.e. when top frame origin or
       // storage key used for `client_for_prefetch` is wrong/mismatching.
@@ -243,7 +246,7 @@ void PrefetchURLLoaderInterceptor::OnGetPrefetchComplete(
 
   if (!request_handler) {
     // Do not intercept the request.
-    redirect_reader_ = PrefetchContainer::Reader();
+    redirect_serving_handle_ = PrefetchServingHandle();
     if (GetPrefetchCompleteCallbackForTesting()) {
       GetPrefetchCompleteCallbackForTesting().Run(nullptr);  // IN-TEST
     }
@@ -256,19 +259,20 @@ void PrefetchURLLoaderInterceptor::OnGetPrefetchComplete(
           base::MakeRefCounted<network::SingleRequestURLLoaderFactory>(
               std::move(request_handler));
 
-  PrefetchContainer* prefetch_container = reader.GetPrefetchContainer();
+  PrefetchContainer* prefetch_container = serving_handle.GetPrefetchContainer();
 
   // If |prefetch_container| is done serving the prefetch, clear out
-  // |redirect_reader_|, but otherwise cache it in |redirect_reader_|.
-  if (reader.IsEnd()) {
-    if (redirect_reader_) {
+  // |redirect_serving_handle_|, but otherwise cache it in
+  // |redirect_serving_handle_|.
+  if (serving_handle.IsEnd()) {
+    if (redirect_serving_handle_) {
       RecordWasFullRedirectChainServedHistogram(true);
     }
-    redirect_reader_ = PrefetchContainer::Reader();
+    redirect_serving_handle_ = PrefetchServingHandle();
   } else {
     CHECK_EQ(expected_service_worker_state_,
              PrefetchServiceWorkerState::kDisallowed);
-    redirect_reader_ = std::move(reader);
+    redirect_serving_handle_ = std::move(serving_handle);
   }
 
   FrameTreeNode* frame_tree_node =

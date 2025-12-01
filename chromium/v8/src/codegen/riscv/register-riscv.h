@@ -19,7 +19,7 @@ namespace internal {
   V(a6)  V(a7)  V(s2)  V(s3)  V(s4)  V(s5)  V(s6)  V(s7)  V(s8)  V(s9)  \
   V(s10)  V(s11)  V(t3)  V(t4)  V(t5)  V(t6)
 
-// s3: scratch register s4: scratch register 2  used in code-generator-riscv64
+// s3: scratch register s4: scratch register 2 used in code-generator-riscv64
 // s6: roots in Javascript code s7: context register
 // s11: PtrComprCageBaseRegister
 // t3 t5 : scratch register used in scratch_register_list
@@ -328,7 +328,6 @@ constexpr Register kSimulatorBreakArgument = t6;
 constexpr Register kMaglevFlagsRegister = t6;
 constexpr Register kMaglevExtraScratchRegister = t2;
 
-// kSimd128ScratchReg and kSimd128ScratchReg2 can be used as a register group.
 // kSimd128ScratchReg and kSimd128ScratchReg2 can be used as a register group.
 constexpr VRegister kSimd128ScratchReg = v24;
 constexpr VRegister kSimd128ScratchReg2 = v25;

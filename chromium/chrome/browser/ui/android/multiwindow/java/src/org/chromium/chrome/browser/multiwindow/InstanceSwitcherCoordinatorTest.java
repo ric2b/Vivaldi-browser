@@ -19,6 +19,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.isDescendantOfA;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.isEnabled;
 import static androidx.test.espresso.matcher.ViewMatchers.withClassName;
+import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
@@ -792,11 +793,38 @@ public class InstanceSwitcherCoordinatorTest {
         InstanceInfo[] instances =
                 new InstanceInfo[] {
                     new InstanceInfo(
-                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false, 0),
+                            0,
+                            57,
+                            InstanceInfo.Type.CURRENT,
+                            "url0",
+                            "title0",
+                            /* customTitle= */ null,
+                            1,
+                            0,
+                            false,
+                            0),
                     new InstanceInfo(
-                            1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false, 0),
+                            1,
+                            58,
+                            InstanceInfo.Type.OTHER,
+                            "ur11",
+                            "title1",
+                            /* customTitle= */ null,
+                            2,
+                            0,
+                            false,
+                            0),
                     new InstanceInfo(
-                            2, 59, InstanceInfo.Type.OTHER, "url2", "title2", 0, 0, false, 0)
+                            2,
+                            59,
+                            InstanceInfo.Type.OTHER,
+                            "url2",
+                            "title2",
+                            /* customTitle= */ null,
+                            0,
+                            0,
+                            false,
+                            0)
                 };
         final CallbackHelper closeCallbackHelper = new CallbackHelper();
         Callback<InstanceInfo> closeCallback = (item) -> closeCallbackHelper.notifyCalled();
@@ -946,7 +974,7 @@ public class InstanceSwitcherCoordinatorTest {
                 });
 
         // Click on the 'more' button for the second instance.
-        clickMoreButtonAtPosition(1, R.id.active_instance_list);
+        clickMoreButtonAtPosition(1, "title1");
 
         // Check that "Name" is an option and click it.
         onView(withText(R.string.instance_switcher_name_window))
@@ -955,7 +983,6 @@ public class InstanceSwitcherCoordinatorTest {
                 .perform(click());
 
         // Check that the "Name this window" dialog is shown.
-        Thread.sleep(5000);
         onView(withText(R.string.instance_switcher_name_window_confirm_header))
                 .inRoot(isDialog())
                 .check(matches(isDisplayed()));
@@ -968,12 +995,74 @@ public class InstanceSwitcherCoordinatorTest {
                 .check(matches(isDisplayed()))
                 .perform(click());
 
-        Thread.sleep(5000);
-
         // Check that the instance title is updated in the list.
         onView(withId(R.id.active_instance_list))
                 .inRoot(isDialog())
                 .check(matches(atPosition(1, hasDescendant(withText(newName)))));
+
+        // Reopen the name window dialog.
+        clickMoreButtonAtPosition(1, newName);
+        onView(withText(R.string.instance_switcher_name_window))
+                .inRoot(withDecorView(withClassName(containsString("Popup"))))
+                .check(matches(isDisplayed()))
+                .perform(click());
+
+        // Check that the input text field is updated.
+        onView(withId(R.id.title_input_text)).inRoot(isDialog()).check(matches(withText(newName)));
+    }
+
+    @Test
+    @SmallTest
+    @EnableFeatures({
+        ChromeFeatureList.INSTANCE_SWITCHER_V2,
+        ChromeFeatureList.ROBUST_WINDOW_MANAGEMENT
+    })
+    public void testRenameWindow_inactiveInstance() {
+        // Initialize instance list with 2 active instances and 1 inactive instance.
+        InstanceInfo[] instances =
+                createPersistedInstances(
+                        /* numActiveInstances= */ 2, /* numInactiveInstances= */ 1);
+
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    InstanceSwitcherCoordinator.showDialog(
+                            mActivityTestRule.getActivity(),
+                            mModalDialogManager,
+                            mIconBridge,
+                            null, // openCallback
+                            null, // closeCallback
+                            null, // renameCallback
+                            null, // newWindowAction
+                            MAX_INSTANCE_COUNT,
+                            Arrays.asList(instances));
+                });
+
+        onView(withId(R.id.active_instance_list)).inRoot(isDialog()).check(matches(isDisplayed()));
+
+        // Switch to inactive list.
+        onView(allOf(withText("Inactive (1)"), isDescendantOfA(withId(R.id.tabs))))
+                .perform(click());
+
+        onView(withId(R.id.inactive_instance_list))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+
+        // Check to make sure the more button is not visible.
+        onView(allOf(withId(R.id.more), isDescendantOfA(withId(R.id.inactive_instance_list))))
+                .inRoot(isDialog())
+                .check(matches(not(isDisplayed())));
+
+        // Verify content description of the close button on the single inactive instance.
+        onView(withId(R.id.inactive_instance_list))
+                .inRoot(isDialog())
+                .check(
+                        matches(
+                                atPosition(
+                                        0,
+                                        hasDescendant(
+                                                allOf(
+                                                        withId(R.id.close_button),
+                                                        withContentDescription("Close title2"))))));
     }
 
     @Test
@@ -1007,7 +1096,7 @@ public class InstanceSwitcherCoordinatorTest {
                 });
 
         // Click on the 'more' button for the second instance.
-        clickMoreButtonAtPosition(1, R.id.active_instance_list);
+        clickMoreButtonAtPosition(1, "title1");
 
         // Check that "Name" is an option and click it.
         onView(withText(R.string.instance_switcher_name_window))
@@ -1072,7 +1161,7 @@ public class InstanceSwitcherCoordinatorTest {
                 });
 
         // Click on the 'more' button for the second instance.
-        clickMoreButtonAtPosition(1, R.id.active_instance_list);
+        clickMoreButtonAtPosition(1, "title1");
 
         // Check that "Name" is an option and click it.
         onView(withText(R.string.instance_switcher_name_window))
@@ -1081,14 +1170,17 @@ public class InstanceSwitcherCoordinatorTest {
                 .perform(click());
 
         // Check that the "Name this window" dialog is shown.
-        Thread.sleep(500);
         onView(withText(R.string.instance_switcher_name_window_confirm_header))
                 .inRoot(isDialog())
                 .check(matches(isDisplayed()));
 
         // Click the cancel button.
         onView(withText(R.string.cancel)).inRoot(isDialog()).perform(click());
-        Thread.sleep(500);
+
+        // Check that the "Name this window" dialog is dismissed.
+        onView(withText(R.string.instance_switcher_header))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
 
         // Check that the rename callback was not called.
         assertEquals(0, renameCallbackHelper.getCallCount());
@@ -1103,7 +1195,16 @@ public class InstanceSwitcherCoordinatorTest {
         // Set instance0 as the current instance.
         instances[0] =
                 new InstanceInfo(
-                        0, taskId++, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 1, false, 0);
+                        0,
+                        taskId++,
+                        InstanceInfo.Type.CURRENT,
+                        "url0",
+                        "title0",
+                        /* customTitle= */ null,
+                        1,
+                        1,
+                        false,
+                        0);
 
         // Create other active instances.
         for (int i = 1; i < numActiveInstances; i++) {
@@ -1114,6 +1215,7 @@ public class InstanceSwitcherCoordinatorTest {
                             InstanceInfo.Type.OTHER,
                             "url" + i,
                             "title" + i,
+                            /* customTitle= */ null,
                             1,
                             0,
                             false,
@@ -1124,7 +1226,16 @@ public class InstanceSwitcherCoordinatorTest {
         for (int i = numActiveInstances; i < totalInstances; i++) {
             instances[i] =
                     new InstanceInfo(
-                            i, -1, InstanceInfo.Type.OTHER, "url" + i, "title" + i, 1, 0, false, 0);
+                            i,
+                            -1,
+                            InstanceInfo.Type.OTHER,
+                            "url" + i,
+                            "title" + i,
+                            /* customTitle= */ null,
+                            1,
+                            0,
+                            false,
+                            0);
         }
 
         return instances;
@@ -1173,15 +1284,27 @@ public class InstanceSwitcherCoordinatorTest {
 
                                     @Override
                                     public void perform(UiController uiController, View view) {
-                                        View v = view.findViewById(R.id.more);
-                                        v.performClick();
+                                        if (isActiveInstance) {
+                                            View v = view.findViewById(R.id.more);
+                                            v.performClick();
+
+                                        } else {
+                                            View v = view.findViewById(R.id.close_button);
+                                            v.performClick();
+                                        }
                                     }
                                 }));
-        onView(withText(R.string.close))
-                .inRoot(withDecorView(withClassName(containsString("Popup"))))
-                .perform(click());
+
+        if (isActiveInstance) {
+            onView(withText(R.string.close))
+                    .inRoot(withDecorView(withClassName(containsString("Popup"))))
+                    .perform(click());
+        }
+
         onView(withText(R.string.instance_switcher_close_confirm_header))
+                .inRoot(isDialog())
                 .check(matches(isDisplayed()));
+
         onView(withText(R.string.close)).perform(click());
         closeCallbackHelper.waitForCallback(closeCallbackCount);
     }
@@ -1207,8 +1330,21 @@ public class InstanceSwitcherCoordinatorTest {
         };
     }
 
-    private void clickMoreButtonAtPosition(int instanceIndex, int instanceListId) {
-        onView(withId(instanceListId))
+    private void clickMoreButtonAtPosition(int instanceIndex, String itemTitle) {
+        // Verify content description of the more button on the list item.
+        onView(withId(R.id.active_instance_list))
+                .inRoot(isDialog())
+                .check(
+                        matches(
+                                atPosition(
+                                        instanceIndex,
+                                        hasDescendant(
+                                                allOf(
+                                                        withId(R.id.more),
+                                                        withContentDescription(
+                                                                "More options for "
+                                                                        + itemTitle))))));
+        onView(withId(R.id.active_instance_list))
                 .inRoot(isDialog())
                 .perform(
                         actionOnItemAtPosition(

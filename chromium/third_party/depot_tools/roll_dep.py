@@ -108,12 +108,12 @@ def get_gerrit_host(url):
 def get_log_url(upstream_url, head, tot):
     """Returns an URL to read logs via a Web UI if applicable."""
     if get_gerrit_host(upstream_url):
-        return '%s/+log/%s..%s' % (upstream_url, head[:12], tot[:12])
+        return f'{upstream_url}/+log/{head[:12]}..{tot[:12]}'
     if upstream_url.startswith('https://github.com/'):
         upstream_url = upstream_url.rstrip('/')
         if upstream_url.endswith('.git'):
             upstream_url = upstream_url[:-len('.git')]
-        return '%s/compare/%s...%s' % (upstream_url, head[:12], tot[:12])
+        return f'{upstream_url}/compare/{head[:12]}...{tot[:12]}'
     return None
 
 
@@ -135,8 +135,8 @@ def gclient(args):
 def generate_commit_message(full_dir, dependency, head, roll_to, upstream_url,
                             show_log, log_limit):
     """Creates the commit message for this specific roll."""
-    commit_range = '%s..%s' % (head, roll_to)
-    commit_range_for_header = '%s..%s' % (head[:9], roll_to[:9])
+    commit_range = f'{head}..{roll_to}'
+    commit_range_for_header = f'{head[:9]}..{roll_to[:9]}'
     cmd = ['git', 'log', commit_range, '--date=short', '--no-merges']
     logs = check_output(
         # Args with '=' are automatically quoted.
@@ -149,17 +149,16 @@ def generate_commit_message(full_dir, dependency, head, roll_to, upstream_url,
 
     nb_commits = len(lines)
     rolls = nb_commits - len(cleaned_lines)
-    header = 'Roll %s/ %s (%d commit%s%s)\n\n' % (
-        dependency, commit_range_for_header, nb_commits,
-        's' if nb_commits > 1 else '',
-        ('; %s trivial rolls' % rolls) if rolls else '')
+    header = (f'Roll {dependency}/ {commit_range_for_header} '
+              f'({nb_commits} commit{"s" if nb_commits > 1 else ""}'
+              f'{f"; {rolls} trivial rolls" if rolls else ""})\n\n')
     log_section = ''
     if log_url := get_log_url(upstream_url, head, roll_to):
         log_section = log_url + '\n\n'
     # It is important that --no-log continues to work, as it is used by
     # internal -> external rollers. Please do not remove or break it.
     if show_log:
-        log_section += '$ %s ' % ' '.join(cmd)
+        log_section += f'$ {" ".join(cmd)} '
         log_section += '--format=\'%ad %ae %s\'\n'
         log_section = log_section.replace(commit_range, commit_range_for_header)
         if len(cleaned_lines) > log_limit:
@@ -198,7 +197,7 @@ def calculate_roll(full_dir, dependency, roll_to):
     else:
         head = gclient(['getdep', '-r', dependency])
     if not head:
-        raise Error('%s is unpinned.' % dependency)
+        raise Error(f'{dependency} is unpinned.')
     check_call(['git', 'fetch', 'origin', '--quiet'], cwd=full_dir)
     if roll_to == 'origin/HEAD':
         check_output(['git', 'remote', 'set-head', 'origin', '-a'],
@@ -212,11 +211,13 @@ def gen_commit_msg(logs, cmdline, reviewers, bug):
     """Returns the final commit message."""
     commit_msg = ''
     if len(logs) > 1:
-        commit_msg = 'Rolling %d dependencies\n\n' % len(logs)
+        commit_msg = f'Rolling {len(logs)} dependencies\n\n'
     commit_msg += '\n\n'.join(logs)
-    commit_msg += 'Created with:\n  ' + cmdline + '\n'
-    commit_msg += 'R=%s\n' % ','.join(reviewers) if reviewers else ''
-    commit_msg += '\nBug: %s\n' % bug if bug else ''
+    commit_msg += f'Created with:\n  {cmdline}\n'
+    if reviewers:
+        commit_msg += f'R={",".join(reviewers)}\n'
+    if bug:
+        commit_msg += f'\nBug: {bug}\n'
     return commit_msg
 
 
@@ -384,30 +385,29 @@ def main():
         cmdline += ' --no-update-readme'
     try:
         if not args.ignore_dirty_tree and not is_pristine(current_dir):
-            raise Error('Ensure %s is clean first (no non-merged commits).' %
-                        current_dir)
+            raise Error(
+                f'Ensure {current_dir} is clean first (no non-merged commits).')
         # First gather all the information without modifying anything, except
         # for a git fetch.
         rolls = {}
         for dependency in dependencies:
             full_dir = os.path.normpath(os.path.join(gclient_root, dependency))
             if not os.path.isdir(full_dir):
-                print('Dependency %s not found at %s' % (dependency, full_dir))
+                print(f'Dependency {dependency} not found at {full_dir}')
                 full_dir = os.path.normpath(
                     os.path.join(current_dir, dependency))
-                print('Will look for relative dependency at %s' % full_dir)
+                print(f'Will look for relative dependency at {full_dir}')
                 if not os.path.isdir(full_dir):
-                    raise Error('Directory not found: %s (%s)' %
-                                (dependency, full_dir))
+                    raise Error(f'Directory not found: {dependency} ({full_dir})')
 
             head, roll_to = calculate_roll(full_dir, dependency, args.roll_to)
             if roll_to == head:
                 if len(dependencies) == 1:
                     raise AlreadyRolledError('No revision to roll!')
-                print('%s: Already at latest commit %s' % (dependency, roll_to))
+                print(f'{dependency}: Already at latest commit {roll_to}')
             else:
-                print('%s: Rolling from %s to %s' %
-                      (dependency, head[:10], roll_to[:10]))
+                print(
+                    f'{dependency}: Rolling from {head[:10]} to {roll_to[:10]}')
                 rolls[dependency] = (head, roll_to, full_dir)
 
         logs = []
@@ -433,7 +433,7 @@ def main():
         commit_msg = gen_commit_msg(logs, cmdline, reviewers, args.bug)
         finalize(args, commit_msg, current_dir, rolls)
     except Error as e:
-        sys.stderr.write('error: %s\n' % e)
+        sys.stderr.write(f'error: {e}\n')
         return 2 if isinstance(e, AlreadyRolledError) else 1
     except subprocess2.CalledProcessError:
         return 1

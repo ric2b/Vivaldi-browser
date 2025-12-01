@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,8 +13,8 @@ const fs = require('fs');
  * unchanged. This would preserve the original file timestamps and hence GN can correctly conclude
  * the file output hasn't changed.
  *
- * @param generatedFileLocation - Location to write to
- * @param newContents - The contents to write (or noop if unchanged with previous content)
+ * @param generatedFileLocation Location to write to
+ * @param newContents The contents to write (or noop if unchanged with previous content)
  */
 module.exports.writeIfChanged = (generatedFileLocation, newContents) => {
   if (fs.existsSync(generatedFileLocation)) {

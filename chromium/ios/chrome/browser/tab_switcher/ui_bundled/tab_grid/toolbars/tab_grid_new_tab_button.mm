@@ -73,13 +73,11 @@ const CGFloat kLargeSizeIPad = 52;
     _symbol = CustomSymbolWithPointSize(kPlusCircleFillSymbol, symbolSize);
     } // End Vivaldi
 
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
     if (@available(iOS 26, *)) {
       self.configuration = [UIButtonConfiguration glassButtonConfiguration];
       _symbol = DefaultSymbolWithPointSize(kPlusSymbol, symbolSize);
       self.tintColor = UIColor.blackColor;
     }
-#endif
 
     _imageContainer = [[UIImageView alloc] initWithImage:_symbol];
     _imageContainer.translatesAutoresizingMaskIntoConstraints = NO;
@@ -124,38 +122,34 @@ const CGFloat kLargeSizeIPad = 52;
     case TabGridPageIncognitoTabs:
       self.accessibilityLabel =
           l10n_util::GetNSString(IDS_IOS_TAB_GRID_CREATE_NEW_INCOGNITO_TAB);
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+
       if (@available(iOS 26, *)) {
         UIButtonConfiguration* config = self.configuration;
-        config.background.backgroundColor = UIColor.grayColor;
+        config.background.backgroundColor = UIColor.whiteColor;
         self.configuration = config;
       } else {
-#endif
         _imageContainer.image = SymbolWithPalette(_symbol, @[
           UIColor.blackColor,
-          self.enabled ? UIColor.whiteColor : UIColor.grayColor
+          self.enabled ? UIColor.whiteColor : UIColor.whiteColor
         ]);
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
       }
-#endif
+
       break;
     case TabGridPageRegularTabs:
       self.accessibilityLabel =
           l10n_util::GetNSString(IDS_IOS_TAB_GRID_CREATE_NEW_TAB);
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+
       if (@available(iOS 26, *)) {
         UIButtonConfiguration* config = self.configuration;
         config.background.backgroundColor =
             [UIColor colorNamed:kStaticBlue400Color];
         self.configuration = config;
       } else {
-#endif
         _imageContainer.image = SymbolWithPalette(
             _symbol,
             @[ UIColor.blackColor, [UIColor colorNamed:kStaticBlue400Color] ]);
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
       }
-#endif
+
       break;
     case TabGridPageTabGroups:
 

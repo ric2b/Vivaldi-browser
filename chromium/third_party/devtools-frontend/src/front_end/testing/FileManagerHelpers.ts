@@ -1,10 +1,10 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import * as Workspace from '../models/workspace/workspace.js';
 
-type StubbedFileManager = Workspace.FileManager.FileManager&{
+export type StubbedFileManager = Workspace.FileManager.FileManager&{
   save: sinon.SinonStub,
   append: sinon.SinonStub,
   close: sinon.SinonStub,

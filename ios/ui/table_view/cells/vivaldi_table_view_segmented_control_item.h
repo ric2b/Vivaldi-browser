@@ -5,7 +5,6 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
 
 @interface VivaldiTableViewSegmentedControlItem : TableViewItem
@@ -16,7 +15,7 @@
 @end
 
 
-@interface VivaldiTableViewSegmentedControlCell : TableViewCell
+@interface VivaldiTableViewSegmentedControlCell : LegacyTableViewCell
 
 @property(nonatomic, strong) UISegmentedControl* segmentedControl;
 

@@ -142,17 +142,85 @@ void MacroAssembler::PushStandardFrame(Register function_reg) {
   Add_d(fp, sp, Operand(offset));
 }
 
+void MacroAssembler::PreCheckSkippedWriteBarrier(Register object,
+                                                 Register value,
+                                                 Register scratch, Label* ok) {
+  ASM_CODE_COMMENT(this);
+  DCHECK(!AreAliased(object, scratch));
+  DCHECK(!AreAliased(value, scratch));
+
+  // The most common case: Static write barrier elimination is allowed on the
+  // last young allocation.
+  {
+    UseScratchRegisterScope temps(this);
+    Register scratch1 = temps.Acquire();
+    Sub_d(scratch, object, kHeapObjectTag);
+    Ld_d(scratch1, MemOperand(kRootRegister,
+                              IsolateData::last_young_allocation_offset()));
+    Branch(ok, Condition::kEqual, scratch, Operand(scratch1));
+  }
+
+  // Write barier can also be removed if value is in read-only space.
+  CheckPageFlag(value, MemoryChunk::kIsInReadOnlyHeapMask, ne, ok);
+
+  Label not_ok;
+
+  // Handle allocation folding, allow WB removal if:
+  //   LAB start <= last_young_allocation_ < (object address+1) < LAB top
+  // Note that object has tag bit set, so object == object address+1.
+  {
+    UseScratchRegisterScope temps(this);
+    Register scratch1 = temps.Acquire();
+
+    // Check LAB start <= last_young_allocation_.
+    Ld_d(scratch, MemOperand(kRootRegister,
+                             IsolateData::new_allocation_info_start_offset()));
+    Ld_d(scratch1, MemOperand(kRootRegister,
+                              IsolateData::last_young_allocation_offset()));
+    Branch(&not_ok, Condition::kUnsignedGreaterThan, scratch,
+           Operand(scratch1));
+
+    // Check last_young_allocation_ < (object address+1).
+    Branch(&not_ok, Condition::kUnsignedGreaterThanEqual, scratch1,
+           Operand(object));
+
+    // Check (object address+1) < LAB top.
+    Ld_d(scratch, MemOperand(kRootRegister,
+                             IsolateData::new_allocation_info_top_offset()));
+    Branch(ok, Condition::kUnsignedLessThan, object, Operand(scratch));
+  }
+
+  // Slow path: Potentially check more cases in C++.
+  bind(&not_ok);
+}
+
+void MacroAssembler::MaybeJumpIfReadOnlyOrSmallSmi(Register value,
+                                                   Label* dest) {
+#if V8_STATIC_ROOTS_BOOL
+  // Quick check for Read-only and small Smi values.
+  static_assert(StaticReadOnlyRoot::kLastAllocatedRoot < kRegularPageSize);
+  JumpIfUnsignedLessThan(value, kRegularPageSize, dest);
+#endif  // V8_STATIC_ROOTS_BOOL
+}
+
 // Clobbers object, dst, value, and ra, if (ra_status == kRAHasBeenSaved)
 // The register 'object' contains a heap object pointer.  The heap object
 // tag is shifted away.
 void MacroAssembler::RecordWriteField(Register object, int offset,
                                       Register value, RAStatus ra_status,
                                       SaveFPRegsMode save_fp,
-                                      SmiCheck smi_check, SlotDescriptor slot) {
+                                      SmiCheck smi_check,
+                                      ReadOnlyCheck ro_check,
+                                      SlotDescriptor slot) {
   ASM_CODE_COMMENT(this);
+  DCHECK(!AreAliased(object, value));
   // First, check if a write barrier is even needed. The tests below
-  // catch stores of Smis.
+  // catch stores of Smis and read-only objects.
   Label done;
+
+  if (ro_check == ReadOnlyCheck::kInline) {
+    MaybeJumpIfReadOnlyOrSmallSmi(value, &done);
+  }
 
   // Skip barrier if writing a smi.
   if (smi_check == SmiCheck::kInline) {
@@ -176,7 +244,7 @@ void MacroAssembler::RecordWriteField(Register object, int offset,
   }
 
   RecordWrite(object, Operand(offset - kHeapObjectTag), value, ra_status,
-              save_fp, SmiCheck::kOmit, slot);
+              save_fp, SmiCheck::kOmit, ReadOnlyCheck::kOmit, slot);
 
   bind(&done);
 }
@@ -571,6 +639,44 @@ void MacroAssembler::CallRecordWriteStub(Register object, Register slot_address,
   }
 }
 
+void MacroAssembler::CallVerifySkippedWriteBarrierStubSaveRegisters(
+    Register object, Register value, SaveFPRegsMode fp_mode) {
+  ASM_CODE_COMMENT(this);
+  PushCallerSaved(fp_mode);
+  CallVerifySkippedWriteBarrierStub(object, value);
+  PopCallerSaved(fp_mode);
+}
+
+void MacroAssembler::CallVerifySkippedWriteBarrierStub(Register object,
+                                                       Register value) {
+  ASM_CODE_COMMENT(this);
+  UseScratchRegisterScope temps(this);
+  Register scratch = temps.Acquire();
+  PrepareCallCFunction(2, scratch);
+  MovePair(kCArgRegs[0], object, kCArgRegs[1], value);
+  CallCFunction(ExternalReference::verify_skipped_write_barrier(), 2,
+                SetIsolateDataSlots::kNo);
+}
+
+void MacroAssembler::CallVerifySkippedIndirectWriteBarrierStubSaveRegisters(
+    Register object, Register value, SaveFPRegsMode fp_mode) {
+  ASM_CODE_COMMENT(this);
+  PushCallerSaved(fp_mode);
+  CallVerifySkippedIndirectWriteBarrierStub(object, value);
+  PopCallerSaved(fp_mode);
+}
+
+void MacroAssembler::CallVerifySkippedIndirectWriteBarrierStub(Register object,
+                                                               Register value) {
+  ASM_CODE_COMMENT(this);
+  UseScratchRegisterScope temps(this);
+  Register scratch = temps.Acquire();
+  PrepareCallCFunction(2, scratch);
+  MovePair(kCArgRegs[0], object, kCArgRegs[1], value);
+  CallCFunction(ExternalReference::verify_skipped_indirect_write_barrier(), 2,
+                SetIsolateDataSlots::kNo);
+}
+
 void MacroAssembler::MoveObjectAndSlot(Register dst_object, Register dst_slot,
                                        Register object, Operand offset) {
   ASM_CODE_COMMENT(this);
@@ -613,7 +719,7 @@ void MacroAssembler::MoveObjectAndSlot(Register dst_object, Register dst_slot,
 void MacroAssembler::RecordWrite(Register object, Operand offset,
                                  Register value, RAStatus ra_status,
                                  SaveFPRegsMode fp_mode, SmiCheck smi_check,
-                                 SlotDescriptor slot) {
+                                 ReadOnlyCheck ro_check, SlotDescriptor slot) {
   DCHECK(!AreAliased(object, value));
 
   if (v8_flags.slow_debug_code) {
@@ -636,8 +742,13 @@ void MacroAssembler::RecordWrite(Register object, Operand offset,
   }
 
   // First, check if a write barrier is even needed. The tests below
-  // catch stores of smis and stores into the young generation.
+  // catch stores of smis and read-only objects, as well as stores into the
+  // young generation.
   Label done;
+
+  if (ro_check == ReadOnlyCheck::kInline) {
+    MaybeJumpIfReadOnlyOrSmallSmi(value, &done);
+  }
 
   if (smi_check == SmiCheck::kInline) {
     DCHECK_EQ(0, kSmiTag);
@@ -2244,6 +2355,22 @@ void MacroAssembler::BranchFalseF(Label* target, CFRegister cj) {
     bind(&skip);
   } else {
     BranchFalseShortF(target, cj);
+  }
+}
+
+void MacroAssembler::MovePair(Register dst0, Register src0, Register dst1,
+                              Register src1) {
+  DCHECK_NE(dst0, dst1);
+  if (dst0 != src1) {
+    Move(dst0, src0);
+    Move(dst1, src1);
+  } else if (dst1 != src0) {
+    // Swap the order of the moves to resolve the overlap.
+    Move(dst1, src1);
+    Move(dst0, src0);
+  } else {
+    // Worse case scenario, this is a swap.
+    Swap(dst0, src0);
   }
 }
 
@@ -5205,7 +5332,7 @@ void MacroAssembler::ReplaceClosureCodeWithOptimizedCode(
                         FieldMemOperand(closure, JSFunction::kCodeOffset));
   RecordWriteField(closure, JSFunction::kCodeOffset, optimized_code,
                    kRAHasNotBeenSaved, SaveFPRegsMode::kIgnore, SmiCheck::kOmit,
-                   SlotDescriptor::ForCodePointerSlot());
+                   ReadOnlyCheck::kOmit, SlotDescriptor::ForCodePointerSlot());
 }
 
 // Read off the flags in the feedback vector and check if there

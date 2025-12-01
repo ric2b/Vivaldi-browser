@@ -161,7 +161,7 @@ public class EmptyTabObserver implements TabObserver {
             int bottomControlsMinHeightOffsetY) {}
 
     @Override
-    public void onBrowserControlsConstraintsChanged(
+    public void onOffsetTagsInfoChanged(
             Tab tab,
             BrowserControlsOffsetTagsInfo oldOffsetTagsInfo,
             BrowserControlsOffsetTagsInfo offsetTagsInfo,
@@ -190,6 +190,12 @@ public class EmptyTabObserver implements TabObserver {
 
     @Override
     public void onGestureEnd() {}
+
+    @Override
+    public void onTouchDown() {}
+
+    @Override
+    public void onTouchUp() {}
 
     @Override
     public void didBackForwardTransitionAnimationChange(Tab tab) {}

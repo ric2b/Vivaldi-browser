@@ -12,7 +12,7 @@
 
 namespace {
 
-const std::string kAdversAdFilterListConfig(R"(
+const std::string_view kAdversAdFilterListConfig(R"(
 [
     {
         "abusiveStatus": "FAILING",
@@ -34,14 +34,15 @@ const std::string kAdversAdFilterListConfig(R"(
     }
 ])");
 
-const base::FilePath::StringType kAdverseAdFilterJsonFileName =
+const base::FilePath::StringViewType
+    kAdverseAdFilterJsonFileName =
     FILE_PATH_LITERAL("adverse_ad_filter1.json");
 
 GURL CreateURL(const std::string& hostname) {
   return GURL("https://" + hostname);
 }
 
-base::FilePath GetAdfilterPath(const base::FilePath::StringType& filename) {
+base::FilePath GetAdfilterPath(const base::FilePath::StringViewType& filename) {
   base::FilePath test_data_dir;
   if (!base::PathService::Get(vivaldi::DIR_VIVALDI_TEST_DATA, &test_data_dir)) {
     ADD_FAILURE() << "Test Data dir retrieval failed '"

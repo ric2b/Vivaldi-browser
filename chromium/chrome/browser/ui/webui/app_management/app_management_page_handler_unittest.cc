@@ -23,7 +23,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 #include "ui/webui/resources/cr_components/app_management/app_management.mojom.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -89,8 +89,6 @@ class AppManagementPageHandlerTestBase
         page.InitWithNewPipeAndPassRemote(), profile(), *delegate_);
     auto features_and_params =
         apps::test::GetFeaturesToEnableLinkCapturingUX(GetParam());
-    features_and_params.push_back(
-        {blink::features::kWebAppEnableScopeExtensions, {}});
     scoped_feature_list_.InitWithFeaturesAndParameters(features_and_params, {});
 #endif  // !BUILDFLAG(IS_CHROMEOS)
   }

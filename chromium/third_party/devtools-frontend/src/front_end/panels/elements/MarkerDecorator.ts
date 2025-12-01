@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,11 +10,11 @@ import {PseudoStateMarkerDecorator} from './ElementsPanel.js';
 
 const UIStrings = {
   /**
-   *@description Title of the Marker Decorator of Elements
+   * @description Title of the Marker Decorator of Elements
    */
   domBreakpoint: 'DOM Breakpoint',
   /**
-   *@description Title of the Marker Decorator of Elements
+   * @description Title of the Marker Decorator of Elements
    */
   elementIsHidden: 'Element is hidden',
 } as const;

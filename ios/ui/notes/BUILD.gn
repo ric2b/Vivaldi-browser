@@ -65,7 +65,6 @@ source_set("notes") {
     "//ios/chrome/browser/window_activities/model",
     "//ios/chrome/common/ui/colors",
     "//ios/chrome/common/ui/util",
-    "//ios/third_party/material_components_ios",
     "//ui/base",
     "//vivaldi/components/notes:browser",
     "//vivaldi/browser:features",

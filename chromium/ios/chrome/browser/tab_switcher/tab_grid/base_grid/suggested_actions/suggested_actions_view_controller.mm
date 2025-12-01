@@ -8,25 +8,27 @@
 
 #import "base/apple/foundation_util.h"
 #import "base/check_op.h"
+#import "base/format_macros.h"
+#import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_image_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
-#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_tabs_search_suggested_history_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_styler.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/tab_switcher/tab_grid/base_grid/suggested_actions/suggested_actions_delegate.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/grid_constants.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 #import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
-#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -40,14 +42,8 @@ const int kSectionIdentifierSuggestedActions = kSectionIdentifierEnumZero + 1;
 }  // namespace
 
 typedef NS_ENUM(NSInteger, ItemType) {
-#if defined(VIVALDI_BUILD)
-  ItemTypeSuggestedActionSearchRecentTabs = kItemTypeEnumZero,
-  ItemTypeSuggestedActionSearchWeb,
-  ItemTypeSuggestedActionSearchHistory,
-#else
   ItemTypeSuggestedActionSearchWeb = kItemTypeEnumZero,
   ItemTypeSuggestedActionSearchHistory,
-#endif // End Vivaldi
 };
 
 @interface SuggestedActionsViewController ()
@@ -60,7 +56,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 @end
 
-@implementation SuggestedActionsViewController
+@implementation SuggestedActionsViewController {
+  TableViewImageItem* _searchHistoryItem;
+  // Hash of the current search string. Used to know if it updated since it was
+  // searched.
+  NSUInteger _currentSearchHash;
+}
 
 - (instancetype)initWithDelegate:
     (id<SuggestedActionsViewControllerDelegate>)delegate {
@@ -145,59 +146,26 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addItem:searchWebItem
       toSectionWithIdentifier:kSectionIdentifierSuggestedActions];
 
-#if defined(VIVALDI_BUILD)
-  TableViewImageItem* searchRecentTabsItem = [[TableViewImageItem alloc]
-      initWithType:ItemTypeSuggestedActionSearchRecentTabs];
-  searchRecentTabsItem.title = l10n_util::GetNSString(
-      IDS_IOS_TABS_SEARCH_SUGGESTED_ACTION_SEARCH_RECENT_TABS);
-  searchRecentTabsItem.image =
-      [[UIImage imageNamed:vOverflowClearHistory]
-          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-  searchRecentTabsItem.textColor = actionsTextColor;
-  [model addItem:searchRecentTabsItem
-      toSectionWithIdentifier:kSectionIdentifierSuggestedActions];
-#endif // End Vivaldi
-
-  TableViewTabsSearchSuggestedHistoryItem* searchHistoryItem =
-      [[TableViewTabsSearchSuggestedHistoryItem alloc]
-          initWithType:ItemTypeSuggestedActionSearchHistory];
-  searchHistoryItem.textColor = actionsTextColor;
+  _searchHistoryItem = [[TableViewImageItem alloc]
+      initWithType:ItemTypeSuggestedActionSearchHistory];
+  _searchHistoryItem.image = [[UIImage imageNamed:@"suggested_action_history"]
+      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  _searchHistoryItem.title = l10n_util::GetNSString(
+      IDS_IOS_TABS_SEARCH_SUGGESTED_ACTION_SEARCH_HISTORY_UNKNOWN_RESULT_COUNT);
+  _searchHistoryItem.accessibilityIdentifier =
+      kTabGridSearchSuggestedHistoryItemId;
+  _searchHistoryItem.textColor = actionsTextColor;
 
   // Vivaldi
-  searchHistoryItem.image =
+  _searchHistoryItem.image =
       [[UIImage imageNamed:vOverflowHistory]
           imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
   // End Vivaldi
 
-  [model addItem:searchHistoryItem
+  [model addItem:_searchHistoryItem
       toSectionWithIdentifier:kSectionIdentifierSuggestedActions];
-}
 
-#pragma mark - UITableViewDataSource
-
-- (UITableViewCell*)tableView:(UITableView*)tableView
-        cellForRowAtIndexPath:(NSIndexPath*)indexPath {
-  UITableViewCell* cell = [super tableView:tableView
-                     cellForRowAtIndexPath:indexPath];
-  ItemType itemType = static_cast<ItemType>(
-      [self.tableViewModel itemTypeForIndexPath:indexPath]);
-
-  // Update the history search result count once available.
-  if (itemType == ItemTypeSuggestedActionSearchHistory &&
-      self.searchText.length) {
-    __weak TableViewTabsSearchSuggestedHistoryCell* weakCell =
-        base::apple::ObjCCastStrict<TableViewTabsSearchSuggestedHistoryCell>(
-            cell);
-    NSString* currentSearchText = self.searchText;
-    weakCell.searchTerm = currentSearchText;
-    [self.delegate suggestedActionsViewController:self
-           fetchHistoryResultsCountWithCompletion:^(size_t resultCount) {
-             if ([weakCell.searchTerm isEqualToString:currentSearchText]) {
-               [weakCell updateHistoryResultsCount:resultCount];
-             }
-           }];
-  }
-  return cell;
+  [self updateSearchHistoryText];
 }
 
 #pragma mark - UITableViewDelegate
@@ -209,12 +177,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
   NSInteger itemTypeSelected =
       [self.tableViewModel itemTypeForIndexPath:indexPath];
   switch (itemTypeSelected) {
-#if defined(VIVALDI_BUILD)
-    case ItemTypeSuggestedActionSearchRecentTabs:
-      [self.delegate
-          didSelectSearchRecentTabsInSuggestedActionsViewController:self];
-      break;
-#endif // End Vivaldi
     case ItemTypeSuggestedActionSearchWeb:
       [self.delegate didSelectSearchWebInSuggestedActionsViewController:self];
       break;
@@ -228,8 +190,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
 #pragma mark - Public
 
 - (void)setSearchText:(NSString*)searchText {
-  _searchText = searchText;
+  _searchText = [searchText copy];
+  _currentSearchHash = searchText.hash;
   [self.tableView reloadData];
+  [self updateSearchHistoryText];
 }
 
 - (CGFloat)contentHeight {
@@ -244,6 +208,39 @@ typedef NS_ENUM(NSInteger, ItemType) {
     self.allCellsLoaded = YES;
   }
   return self.tableView.contentSize.height;
+}
+
+#pragma mark - Private
+
+// Updates the text of the search history item based on the searched text.
+- (void)updateSearchHistoryText {
+  if (!_searchText || !_searchHistoryItem) {
+    return;
+  }
+
+  __weak __typeof(self) weakSelf = self;
+  NSUInteger requestedHash = _currentSearchHash;
+
+  [self.delegate suggestedActionsViewController:self
+         fetchHistoryResultsCountWithCompletion:^(size_t resultCount) {
+           [weakSelf fetchedHistoryResult:resultCount
+                             originalHash:requestedHash];
+         }];
+}
+
+// Called with the `results` of the number of history match for a search term
+// with `originalHash`.
+- (void)fetchedHistoryResult:(size_t)result
+                originalHash:(NSUInteger)originalHash {
+  if (!_searchHistoryItem || _currentSearchHash != originalHash) {
+    return;
+  }
+  NSString* matches = [NSString stringWithFormat:@"%" PRIuS, result];
+  _searchHistoryItem.title = l10n_util::GetNSStringF(
+      IDS_IOS_TABS_SEARCH_SUGGESTED_ACTION_SEARCH_HISTORY,
+      base::SysNSStringToUTF16(matches));
+
+  [self reconfigureCellsForItems:@[ _searchHistoryItem ]];
 }
 
 @end

@@ -427,4 +427,3 @@ repaint the view repeatedly to simulate a sequence of animation frames.
 
 [`views::Throbber`](https://source.chromium.org/chromium/chromium/src/+/refs/heads/main:ui/views/controls/throbber.cc)
 is a good example of this technique.
-

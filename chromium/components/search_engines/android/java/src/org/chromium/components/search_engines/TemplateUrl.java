@@ -126,6 +126,19 @@ public class TemplateUrl {
         return TemplateUrlJni.get().getStarterPackId(mTemplateUrlPtr);
     }
 
+    public String getPostParams() {
+        return TemplateUrlJni.get().getPostParams(mTemplateUrlPtr);
+    };
+    public String getSuggestUrl() {
+        return TemplateUrlJni.get().getSuggestUrl(mTemplateUrlPtr);
+    }
+    public String getImageURL() {
+        return TemplateUrlJni.get().getImageURL(mTemplateUrlPtr);
+    }
+    public String getImagePostParams() {
+        return TemplateUrlJni.get().getImagePostParams(mTemplateUrlPtr);
+    }
+    // End Vivaldi
     @NativeMethods
     public interface Natives {
         String getShortName(long templateUrlPtr);
@@ -148,5 +161,10 @@ public class TemplateUrl {
 
         // Vivaldi
         int getStarterPackId(long templateUrlPtr);
+        String getPostParams(long templateUrlPtr);
+        String getSuggestUrl(long templateUrlPtr);
+        String getImageURL(long templateUrlPtr);
+        String getImagePostParams(long templateUrlPtr);
+        // End Vivaldi
     }
 }

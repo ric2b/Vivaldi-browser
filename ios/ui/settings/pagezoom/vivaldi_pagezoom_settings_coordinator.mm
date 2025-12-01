@@ -35,7 +35,7 @@
 - (void)start {
   self.viewProvider = [[VivaldiPageZoomSettingsViewProvider alloc] init];
   self.viewController =
-    [VivaldiPageZoomSettingsViewProvider makeViewController];
+    [self.viewProvider makeViewController];
   self.viewController.title =
     l10n_util::GetNSString(IDS_IOS_PAGEZOOM_SETTING_TITLE);
   self.viewController.navigationItem.largeTitleDisplayMode =

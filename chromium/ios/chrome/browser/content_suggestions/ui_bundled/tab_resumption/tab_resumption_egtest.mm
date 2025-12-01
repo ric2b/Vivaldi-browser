@@ -9,12 +9,11 @@
 #import "components/sync/base/features.h"
 #import "components/url_formatter/elide_url.h"
 #import "components/visited_url_ranking/public/features.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_ui_test_util.h"
+#import "ios/chrome/browser/authentication/test/signin_earl_grey.h"
+#import "ios/chrome/browser/authentication/test/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_constants.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/magic_stack/magic_stack_constants.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/new_tab_page_app_interface.h"
-#import "ios/chrome/browser/content_suggestions/ui_bundled/tab_resumption/tab_resumption_app_interface.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/tab_resumption/tab_resumption_constants.h"
 #import "ios/chrome/browser/ntp_tiles/model/tab_resumption/tab_resumption_prefs.h"
 #import "ios/chrome/browser/recent_tabs/ui_bundled/recent_tabs_constants.h"
@@ -101,6 +100,9 @@ NSString* HostnameFromGURL(GURL URL) {
   config.additional_args.push_back(std::string("--") +
                                    kTabResumptionShowItemImmediately);
   config.additional_args.push_back("--test-ios-module-ranker=tab_resumption");
+  config.additional_args.push_back("--mock-shopping-service=is-eligible,"
+                                   "has-empty-price-tracked-bookmarks-results,"
+                                   "has-empty-subscriptions-results");
   // kVisitedURLRankingHistoryVisibilityScoreFilter require the network, keep
   // it disabled for tests.
   config.features_disabled.push_back(
@@ -127,7 +129,7 @@ NSString* HostnameFromGURL(GURL URL) {
   // Relaunching the app undoes the mock setup for shopping_service in setUp
   // For the relaunch cases, explicitly disabling ShopCard so the tests can
   // continue without waiting for the async callback.
-  config.features_disabled.push_back(commerce::kShopCard);
+  config.features_disabled.push_back(commerce::kTabResumptionShopCard);
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
 }
 
@@ -140,7 +142,6 @@ NSString* HostnameFromGURL(GURL URL) {
   SignInAndEnableHistorySync();
   [NewTabPageAppInterface disableSetUpList];
   [[self class] closeAllTabs];
-  [TabResumptionAppInterface setUpMockShoppingService];
   [ChromeEarlGrey openNewTab];
 }
 
@@ -192,7 +193,15 @@ NSString* HostnameFromGURL(GURL URL) {
 }
 
 // Tests that the tab resumption tile is correctly displayed for a local tab.
-- (void)testTabResumptionTileDisplayedForLocalTab {
+// TODO(crbug.com/443707327): Test disabled on simulator.
+#if TARGET_OS_SIMULATOR
+#define MAYBE_testTabResumptionTileDisplayedForLocalTab \
+  DISABLED_testTabResumptionTileDisplayedForLocalTab
+#else
+#define MAYBE_testTabResumptionTileDisplayedForLocalTab \
+  testTabResumptionTileDisplayedForLocalTab
+#endif
+- (void)MAYBE_testTabResumptionTileDisplayedForLocalTab {
   // Check that the tile is not displayed when there is no local tab.
   WaitUntilTabResumptionTileVisibleOrTimeout(false);
 
@@ -300,7 +309,13 @@ NSString* HostnameFromGURL(GURL URL) {
   WaitUntilTabResumptionTileVisibleOrTimeout(false);
 }
 
-- (void)testShowMoreVisible {
+// TODO(crbug.com/443707327): Test disabled on simulator.
+#if TARGET_OS_SIMULATOR
+#define MAYBE_testShowMoreVisible DISABLED_testShowMoreVisible
+#else
+#define MAYBE_testShowMoreVisible testShowMoreVisible
+#endif
+- (void)MAYBE_testShowMoreVisible {
   // Check that the tile is not displayed when there is no local tab.
   WaitUntilTabResumptionTileVisibleOrTimeout(false);
 

@@ -10,61 +10,63 @@
 namespace adblock_filter {
 
 namespace rules_json {
-constexpr char kVersion[] = "version";
-constexpr char kPartnerListAllowedDocuments[] = "partner-list-allowed-documents";
-constexpr char kNetworkRules[] = "network";
-constexpr char kCosmeticRules[] = "cosmetic";
-constexpr char kScriptletRules[] = "scriptlet";
-constexpr char kBlockRules[] = "block";
-constexpr char kAllowRules[] = "allow";
-constexpr char kBlockImportantRules[] = "block-important";
-constexpr char kGeneric[] = "generic";
-constexpr char kSpecific[] = "specific";
-constexpr char kGenericAllowRules[] = "generic-allow";
-constexpr char kBlockAllowPairs[] = "block-allow-pairs";
+inline constexpr char kVersion[] = "version";
+inline constexpr char kPartnerListAllowedDocuments[] =
+    "partner-list-allowed-documents";
+inline constexpr char kNetworkRules[] = "network";
+inline constexpr char kCosmeticRules[] = "cosmetic";
+inline constexpr char kScriptletRules[] = "scriptlet";
+inline constexpr char kBlockRules[] = "block";
+inline constexpr char kAllowRules[] = "allow";
+inline constexpr char kBlockImportantRules[] = "block-important";
+inline constexpr char kGeneric[] = "generic";
+inline constexpr char kSpecific[] = "specific";
+inline constexpr char kGenericAllowRules[] = "generic-allow";
+inline constexpr char kBlockAllowPairs[] = "block-allow-pairs";
 // These names are used in a dict otherwise containing domain name fragments
 // Prefixing them with a dot ensures they won't collide with an actual fragemnt.
-constexpr char kIncluded[] = ".included";
-constexpr char kExcluded[] = ".excluded";
+inline constexpr char kIncluded[] = ".included";
+inline constexpr char kExcluded[] = ".excluded";
 
-constexpr char kTrigger[] = "trigger";
-constexpr char kUrlFilter[] = "url-filter";
-constexpr char kUrlFilterIsCaseSensitive[] = "url-filter-is-case-sensitive";
-constexpr char kResourceType[] = "resource-type";
-constexpr char kLoadType[] = "load-type";
-constexpr char kFirstParty[] = "first-party";
-constexpr char kThirdParty[] = "third-party";
-constexpr char kLoadContext[] = "load-context";
-constexpr char kTopFrame[] = "top-frame";
-constexpr char kChildFrame[] = "child-frame";
-constexpr char kIfTopUrl[] = "if-top-url";
-constexpr char kUnlessTopUrl[] = "unless-top-url";
-constexpr char kTopUrlFilterIsCaseSensitive[] =
+inline constexpr char kTrigger[] = "trigger";
+inline constexpr char kUrlFilter[] = "url-filter";
+inline constexpr char kUrlFilterIsCaseSensitive[] =
+    "url-filter-is-case-sensitive";
+inline constexpr char kResourceType[] = "resource-type";
+inline constexpr char kLoadType[] = "load-type";
+inline constexpr char kFirstParty[] = "first-party";
+inline constexpr char kThirdParty[] = "third-party";
+inline constexpr char kLoadContext[] = "load-context";
+inline constexpr char kTopFrame[] = "top-frame";
+inline constexpr char kChildFrame[] = "child-frame";
+inline constexpr char kIfTopUrl[] = "if-top-url";
+inline constexpr char kUnlessTopUrl[] = "unless-top-url";
+inline constexpr char kTopUrlFilterIsCaseSensitive[] =
     "top-url-filter-is-case-sensitive";
 
-constexpr char kAction[] = "action";
-constexpr char kType[] = "type";
-constexpr char kBlock[] = "block";
-constexpr char kIgnorePrevious[] = "ignore-previous-rules";
-constexpr char kCssHide[] = "css-display-none";
-constexpr char kRedirect[] = "redirect";
-constexpr char kModifyHeaders[] = "modify-headers";
-constexpr char kSelector[] = "selector";
-constexpr char kUrl[] = "url";
-constexpr char kPriority[] = "priority";
-constexpr char kResponseHeaders[] = "response-headers";
-constexpr char kOperation[] = "operation";
-constexpr char kAppend[] = "append";
-constexpr char kHeader[] = "header";
-constexpr char kCsp[] = "Content-Security-Policy";
-constexpr char kValue[] = "value";
+inline constexpr char kAction[] = "action";
+inline constexpr char kType[] = "type";
+inline constexpr char kBlock[] = "block";
+inline constexpr char kIgnorePrevious[] = "ignore-previous-rules";
+inline constexpr char kCssHide[] = "css-display-none";
+inline constexpr char kRedirect[] = "redirect";
+inline constexpr char kModifyHeaders[] = "modify-headers";
+inline constexpr char kSelector[] = "selector";
+inline constexpr char kUrl[] = "url";
+inline constexpr char kPriority[] = "priority";
+inline constexpr char kResponseHeaders[] = "response-headers";
+inline constexpr char kOperation[] = "operation";
+inline constexpr char kAppend[] = "append";
+inline constexpr char kHeader[] = "header";
+inline constexpr char kCsp[] = "Content-Security-Policy";
+inline constexpr char kValue[] = "value";
 
-constexpr char kNonIosRulesAndMetadata [] ="non-ios-rules-and-metadata";
-constexpr char kMetadata [] ="metadata";
-constexpr char kListChecksums [] ="list-checksums";
-constexpr char kExceptionRule [] ="exception-rule";
-constexpr char kIosContentBlockerRules[] = "ios-content-blocker-rules";
-}
+inline constexpr char kNonIosRulesAndMetadata[] = "non-ios-rules-and-metadata";
+inline constexpr char kMetadata[] = "metadata";
+inline constexpr char kListChecksums[] = "list-checksums";
+inline constexpr char kExceptionRule[] = "exception-rule";
+inline constexpr char kIosContentBlockerRules[] = "ios-content-blocker-rules";
+}  // namespace rules_json
 
 int GetIntermediateRepresentationVersionNumber();
 int GetOrganizedRulesVersionNumber();

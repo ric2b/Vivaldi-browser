@@ -1,10 +1,9 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import {renderElementIntoDOM} from '../../testing/DOMHelpers.js';
 import {describeWithEnvironment, updateHostConfig} from '../../testing/EnvironmentHelpers.js';
@@ -12,21 +11,23 @@ import {createViewFunctionStub} from '../../testing/ViewFunctionHelpers.js';
 import * as Snackbars from '../../ui/components/snackbars/snackbars.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
-import * as AiCodeCompletionTeaser from './AiCodeCompletionTeaser.js';
-import * as FreDialog from './FreDialog.js';
+import * as PanelCommon from './common.js';
+
+const {AiCodeCompletionTeaser, FreDialog} = PanelCommon;
 
 describeWithEnvironment('AiCodeCompletionTeaser', () => {
-  let showFreDialogStub: sinon.SinonStub<Parameters<typeof FreDialog.FreDialog.show>, Promise<boolean>>;
+  let showFreDialogStub: sinon.SinonStub<Parameters<typeof FreDialog.show>, Promise<boolean>>;
+  let checkAccessPreconditionsStub: sinon.SinonStub;
 
   beforeEach(() => {
-    showFreDialogStub = sinon.stub(FreDialog.FreDialog, 'show');
-    sinon.stub(Host.AidaClient.AidaClient, 'checkAccessPreconditions')
-        .resolves(Host.AidaClient.AidaAccessPreconditions.AVAILABLE);
+    showFreDialogStub = sinon.stub(FreDialog, 'show');
+    checkAccessPreconditionsStub = sinon.stub(Host.AidaClient.AidaClient, 'checkAccessPreconditions');
+    checkAccessPreconditionsStub.resolves(Host.AidaClient.AidaAccessPreconditions.AVAILABLE);
   });
 
   async function createTeaser() {
-    const view = createViewFunctionStub(AiCodeCompletionTeaser.AiCodeCompletionTeaser);
-    const widget = new AiCodeCompletionTeaser.AiCodeCompletionTeaser({onDetach: sinon.stub()}, view);
+    const view = createViewFunctionStub(AiCodeCompletionTeaser);
+    const widget = new AiCodeCompletionTeaser({onDetach: sinon.stub()}, view);
     widget.markAsRoot();
     renderElementIntoDOM(widget);
     await view.nextInput;
@@ -35,8 +36,7 @@ describeWithEnvironment('AiCodeCompletionTeaser', () => {
 
   afterEach(() => {
     Common.Settings.Settings.instance().settingForTest('ai-code-completion-teaser-dismissed').set(false);
-    Common.Settings.Settings.instance().settingForTest('ai-code-completion-fre-completed').set(false);
-    sinon.restore();
+    Common.Settings.Settings.instance().settingForTest('ai-code-completion-enabled').set(false);
   });
 
   it('should dismiss and open snackbar on dismiss click', async () => {
@@ -44,7 +44,7 @@ describeWithEnvironment('AiCodeCompletionTeaser', () => {
     const showSnackbar = sinon.stub(Snackbars.Snackbar.Snackbar, 'show');
 
     assert.isTrue(widget.isShowing());
-    assertNotNullOrUndefined(view.input.onDismiss);
+    assert.exists(view.input.onDismiss);
     view.input.onDismiss(new Event('click'));
     await widget.updateComplete;
 
@@ -57,28 +57,15 @@ describeWithEnvironment('AiCodeCompletionTeaser', () => {
     const {view, widget} = await createTeaser();
     const showSnackbar = sinon.stub(Snackbars.Snackbar.Snackbar, 'show');
     const showViewStub = sinon.stub(UI.ViewManager.ViewManager.instance(), 'showView');
-    assertNotNullOrUndefined(view.input.onDismiss);
+    assert.exists(view.input.onDismiss);
     view.input.onDismiss(new Event('click'));
 
     sinon.assert.calledOnce(showSnackbar);
     const snackbarOptions = showSnackbar.firstCall.args[0];
-    assertNotNullOrUndefined(snackbarOptions.actionProperties);
+    assert.exists(snackbarOptions.actionProperties);
     snackbarOptions.actionProperties.onClick();
 
     assert.isTrue(showViewStub.calledOnceWith('chrome-ai'));
-    widget.detach();
-  });
-
-  it('should open FRE dialog on ctrl+i', async () => {
-    const {widget} = await createTeaser();
-    const onActionSpy = sinon.spy(widget, 'onAction');
-
-    const event = Host.Platform.isMac() ? new KeyboardEvent('keydown', {key: 'i', metaKey: true}) :
-                                          new KeyboardEvent('keydown', {key: 'i', ctrlKey: true});
-    document.body.dispatchEvent(event);
-
-    sinon.assert.calledOnce(onActionSpy);
-    sinon.assert.called(showFreDialogStub);
     widget.detach();
   });
 
@@ -86,10 +73,8 @@ describeWithEnvironment('AiCodeCompletionTeaser', () => {
     updateHostConfig(
         {aidaAvailability: {enterprisePolicyValue: Root.Runtime.GenAiEnterprisePolicyValue.ALLOW_WITHOUT_LOGGING}});
 
-    const {widget} = await createTeaser();
-    const event = Host.Platform.isMac() ? new KeyboardEvent('keydown', {key: 'i', metaKey: true}) :
-                                          new KeyboardEvent('keydown', {key: 'i', ctrlKey: true});
-    document.body.dispatchEvent(event);
+    const {view, widget} = await createTeaser();
+    view.input.onAction(new Event(''));
 
     sinon.assert.called(showFreDialogStub);
     assert.exists(showFreDialogStub.lastCall.args[0].reminderItems.find(
@@ -101,10 +86,8 @@ describeWithEnvironment('AiCodeCompletionTeaser', () => {
   it('should FRE text not include no logging case when the enterprise policy value is ALLOW', async () => {
     updateHostConfig({aidaAvailability: {enterprisePolicyValue: Root.Runtime.GenAiEnterprisePolicyValue.ALLOW}});
 
-    const {widget} = await createTeaser();
-    const event = Host.Platform.isMac() ? new KeyboardEvent('keydown', {key: 'i', metaKey: true}) :
-                                          new KeyboardEvent('keydown', {key: 'i', ctrlKey: true});
-    document.body.dispatchEvent(event);
+    const {view, widget} = await createTeaser();
+    view.input.onAction(new Event(''));
 
     sinon.assert.called(showFreDialogStub);
     assert.notExists(showFreDialogStub.lastCall.args[0].reminderItems.find(
@@ -113,20 +96,37 @@ describeWithEnvironment('AiCodeCompletionTeaser', () => {
     widget.detach();
   });
 
-  it('should call dismiss on ctrl+x', async () => {
-    const {widget} = await createTeaser();
-    const onDismissSpy = sinon.spy(widget, 'onDismiss');
-    const showSnackbar = sinon.stub(Snackbars.Snackbar.Snackbar, 'show');
+  it('renders when AIDA becomes available', async () => {
+    checkAccessPreconditionsStub.resolves(Host.AidaClient.AidaAccessPreconditions.NO_ACCOUNT_EMAIL);
 
-    assert.isTrue(widget.isShowing());
+    const {view, widget} = await createTeaser();
 
-    const event = Host.Platform.isMac() ? new KeyboardEvent('keydown', {key: 'x', metaKey: true}) :
-                                          new KeyboardEvent('keydown', {key: 'x', ctrlKey: true});
-    document.body.dispatchEvent(event);
-    await widget.updateComplete;
+    assert.strictEqual(view.input.aidaAvailability, Host.AidaClient.AidaAccessPreconditions.NO_ACCOUNT_EMAIL);
 
-    sinon.assert.calledOnce(onDismissSpy);
-    sinon.assert.calledOnce(showSnackbar);
-    assert.isFalse(widget.isShowing());
+    checkAccessPreconditionsStub.resolves(Host.AidaClient.AidaAccessPreconditions.AVAILABLE);
+    Host.AidaClient.HostConfigTracker.instance().dispatchEventToListeners(
+        Host.AidaClient.Events.AIDA_AVAILABILITY_CHANGED);
+
+    await view.nextInput;
+
+    assert.strictEqual(view.input.aidaAvailability, Host.AidaClient.AidaAccessPreconditions.AVAILABLE);
+    widget.detach();
+  });
+
+  it('does not render when AIDA becomes unavailable', async () => {
+    checkAccessPreconditionsStub.resolves(Host.AidaClient.AidaAccessPreconditions.AVAILABLE);
+
+    const {view, widget} = await createTeaser();
+
+    assert.strictEqual(view.input.aidaAvailability, Host.AidaClient.AidaAccessPreconditions.AVAILABLE);
+
+    checkAccessPreconditionsStub.resolves(Host.AidaClient.AidaAccessPreconditions.NO_ACCOUNT_EMAIL);
+    Host.AidaClient.HostConfigTracker.instance().dispatchEventToListeners(
+        Host.AidaClient.Events.AIDA_AVAILABILITY_CHANGED);
+
+    await view.nextInput;
+
+    assert.strictEqual(view.input.aidaAvailability, Host.AidaClient.AidaAccessPreconditions.NO_ACCOUNT_EMAIL);
+    widget.detach();
   });
 });

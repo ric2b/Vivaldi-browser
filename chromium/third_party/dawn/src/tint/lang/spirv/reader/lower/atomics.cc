@@ -555,8 +555,10 @@ struct State {
 Result<SuccessType> Atomics(core::ir::Module& ir) {
     auto result = ValidateAndDumpIfNeeded(ir, "spirv.Atomics",
                                           core::ir::Capabilities{
+                                              core::ir::Capability::kAllowMultipleEntryPoints,
                                               core::ir::Capability::kAllowOverrides,
                                               core::ir::Capability::kAllowNonCoreTypes,
+                                              core::ir::Capability::kAllowPointerToHandle,
                                           });
     if (result != Success) {
         return result.Failure();

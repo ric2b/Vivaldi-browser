@@ -24,6 +24,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HTML_FORMS_HTML_BUTTON_ELEMENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_FORMS_HTML_BUTTON_ELEMENT_H_
 
+#include "third_party/blink/renderer/bindings/core/v8/script_iterator.h"
 #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
 
@@ -53,7 +54,11 @@ class CORE_EXPORT HTMLButtonElement final : public HTMLFormControlElement {
   Element* commandForElement() const;
   AtomicString command() const;
   void setCommand(const AtomicString& type);
-  static CommandEventType GetCommandEventType(const AtomicString& type);
+
+  static CommandEventType GetCommandEventType(
+      const AtomicString& type,
+      ExecutionContext* execution_context);
+  static void HandleCommandForActivation(Event& event, HTMLElement& element);
 
   // Override for inertness in order to make customizable <select> button inert.
   // TODO(crbug.com/1511354): Replace this with interactivity:inert in
@@ -112,6 +117,11 @@ class CORE_EXPORT HTMLButtonElement final : public HTMLFormControlElement {
   bool RecalcWillValidate() const override;
 
   int DefaultTabIndex() const override;
+
+  static Element* RetrieveCommandForTargetElement(const HTMLElement& invoker);
+  static AtomicString GetCommand(const AtomicString& action,
+                                 ExecutionContext* execution_context);
+  bool IsFormAssociatedSubmitButton() const;
 
   static std::optional<Type> TypeFromString(const AtomicString&);
 

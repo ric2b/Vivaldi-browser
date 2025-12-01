@@ -10,10 +10,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Dawn Win11 arm64 DEPS Builder",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-dawn-archive",
               "builder_group": "chromium.dawn",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_chromium_config": {
@@ -37,7 +36,7 @@
         {
           "bucket": "ci",
           "builder": "Dawn Win11 arm64 DEPS Builder",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -69,7 +68,7 @@
     ]
   },
   "builder_group": "chromium.dawn",
-  "dawn_ref": "refs/heads/chromium/7339",
+  "dawn_ref": "refs/heads/chromium/7444",
   "gardener_rotations": [
     "chrome_browser_release"
   ],

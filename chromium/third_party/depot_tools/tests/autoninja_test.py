@@ -75,18 +75,17 @@ class AutoninjaTest(trial_dir.TestCase):
 
     def test_autoninja_reclient(self):
         """
-        Test that when specifying use_remoteexec=true, autoninja delegates to
-        reclient_helper.
+        Test that when specifying use_remoteexec=true use_reclient=true,
+        autoninja delegates to reclient_helper.
         """
         with mock.patch('reclient_helper.run_ninja',
                         return_value=0) as run_ninja:
             out_dir = os.path.join('out', 'dir')
-            write(os.path.join(out_dir, 'args.gn'), 'use_remoteexec=true')
-            write(os.path.join('build', 'toolchain', 'use_reclient_value.py'),
-                  """
-def use_reclient_value(output_dir):
-  return True
-""")
+            write(
+                os.path.join(out_dir, 'args.gn'), """
+                  use_remoteexec=true
+                  use_reclient=true
+                  """)
             write(os.path.join('buildtools', 'reclient_cfgs', 'reproxy.cfg'),
                   'RBE_v=2')
             write(os.path.join('buildtools', 'reclient', 'version.txt'), '0.0')
@@ -136,14 +135,12 @@ def use_reclient_value(output_dir):
         with mock.patch('reclient_helper.build_context', reclient_helper_mock):
             with mock.patch('siso.main', return_value=0) as siso_main:
                 out_dir = os.path.join('out', 'dir')
-                write(os.path.join(out_dir, 'args.gn'),
-                      'use_siso=true\nuse_remoteexec=true')
                 write(
-                    os.path.join('build', 'toolchain', 'use_reclient_value.py'),
-                    """
-def use_reclient_value(output_dir):
-  return True
-""")
+                    os.path.join(out_dir, 'args.gn'), """
+                      use_remoteexec=true
+                      use_siso=true
+                      use_reclient=true
+                      """)
                 write(
                     os.path.join('buildtools', 'reclient_cfgs', 'reproxy.cfg'),
                     'instance=projects/rbe-chromium-untrusted-test/'

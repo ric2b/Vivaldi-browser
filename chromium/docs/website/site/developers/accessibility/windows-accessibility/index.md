@@ -57,7 +57,8 @@ alt and left shift key.)
 All UI drawn by Chromium that's outside of the webpage should either be 100%
 themable, or it should respect the system colors. So when choosing colors for
 text and backgrounds in particular, be sure to use system colors, not hardcoded
-colors. See GetSysSkColor in ui/gfx/color_utils.h as a starting point.
+colors. See the Windows-specific kColorNativeXXX colors in ui/color/color_id.h
+as a starting point.
 
 On Windows, users who have high-contrast mode enabled will see a bubble the
 first time they open Chrome, prompting them to install the [High

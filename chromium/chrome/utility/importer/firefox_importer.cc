@@ -195,6 +195,9 @@ void FirefoxImporter::ImportHistory() {
       "WHERE v.visit_type <= 3";
 
   sql::Statement s(db.GetUniqueStatement(query));
+  if (!s.is_valid()) {
+    return;
+  }
 
   std::vector<user_data_importer::ImporterURLRow> rows;
   while (s.Step() && !cancelled()) {
@@ -461,6 +464,9 @@ void FirefoxImporter::ImportAutofillFormData() {
       "moz_formhistory";
 
   sql::Statement s(db.GetUniqueStatement(query));
+  if (!s.is_valid()) {
+    return;
+  }
 
   std::vector<ImporterAutofillFormDataEntry> form_entries;
   while (s.Step() && !cancelled()) {
@@ -489,6 +495,10 @@ int FirefoxImporter::LoadNodeIDByGUID(sql::Database* db,
       "FROM moz_bookmarks "
       "WHERE guid == ?";
   sql::Statement s(db->GetUniqueStatement(query));
+  if (!s.is_valid()) {
+    return -1;
+  }
+
   s.BindString(0, GUID);
 
   if (!s.Step())
@@ -507,6 +517,10 @@ void FirefoxImporter::LoadLivemarkIDs(sql::Database* db,
       "JOIN moz_items_annos b ON a.id = b.anno_attribute_id "
       "WHERE a.name = ? ";
   sql::Statement s(db->GetUniqueStatement(query));
+  if (!s.is_valid()) {
+    return;
+  }
+
   s.BindString(0, kFeedAnnotation);
 
   while (s.Step() && !cancelled())
@@ -522,6 +536,10 @@ void FirefoxImporter::GetTopBookmarkFolder(sql::Database* db,
       "WHERE b.type = 2 AND b.id = ? "
       "ORDER BY b.position";
   sql::Statement s(db->GetUniqueStatement(query));
+  if (!s.is_valid()) {
+    return;
+  }
+
   s.BindInt(0, folder_id);
 
   if (s.Step()) {
@@ -560,6 +578,10 @@ void FirefoxImporter::GetWholeBookmarkFolder(sql::Database* db,
       "WHERE b.type IN (1,2) AND b.parent = ? "
       "ORDER BY b.position";
   sql::Statement s(db->GetUniqueStatement(query));
+  if (!s.is_valid()) {
+    return;
+  }
+
   s.BindInt(0, (*list)[position]->id);
 
   BookmarkList temp_list;

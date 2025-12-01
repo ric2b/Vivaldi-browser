@@ -1179,6 +1179,14 @@ void ServiceWorkerContextCore::OnClientNavigated(const GURL& script_url,
                          script_url, url);
 }
 
+void ServiceWorkerContextCore::OnPushEventFinished(
+    const GURL& script_url,
+    const std::optional<std::vector<GURL>>& requested_urls) {
+  observer_list_->Notify(FROM_HERE,
+                         &ServiceWorkerContextCoreObserver::OnPushEventFinished,
+                         script_url, requested_urls);
+}
+
 void ServiceWorkerContextCore::OnControlleeAdded(
     ServiceWorkerVersion* version,
     const std::string& client_uuid,
@@ -1349,8 +1357,10 @@ void ServiceWorkerContextCore::OnReportConsoleMessage(
       version->version_id(), version->scope(), version->key(), console_message);
 
   for (auto& observer : sync_observer_list_->observers) {
-    observer.OnReportConsoleMessageSync(version->version_id(), version->scope(),
-                                        console_message);
+    observer.OnReportConsoleMessageSync(
+        version->embedded_worker() ? version->embedded_worker()->process_id()
+                                   : ChildProcessHost::kInvalidUniqueID,
+        version->version_id(), version->scope(), console_message);
   }
 }
 

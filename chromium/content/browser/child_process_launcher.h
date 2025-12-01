@@ -237,6 +237,8 @@ class CONTENT_EXPORT ChildProcessLauncher
 #if BUILDFLAG(IS_ANDROID)
     // Whether the process can use pre-warmed up connection.
     virtual bool CanUseWarmUpConnection();
+    // Whether the process should be set to the priority of a spare renderer.
+    virtual bool HasSpareRendererPriority();
 #endif
 
    protected:
@@ -255,7 +257,7 @@ class CONTENT_EXPORT ChildProcessLauncher
   ChildProcessLauncher(
       std::unique_ptr<SandboxedProcessLauncherDelegate> delegate,
       std::unique_ptr<base::CommandLine> cmd_line,
-      int child_process_id,
+      ChildProcessId child_process_id,
       Client* client,
       mojo::OutgoingInvitation mojo_invitation,
       const mojo::ProcessErrorCallback& process_error_callback,

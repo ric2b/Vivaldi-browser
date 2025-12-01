@@ -1,4 +1,4 @@
-// Copyright (c) 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,7 +31,7 @@ import type * as ProtocolClient from '../protocol_client/protocol_client.js';
 
 import * as EnhancedTraces from './EnhancedTracesParser.js';
 import type {
-  ProtocolMessage, RehydratingExecutionContext, RehydratingScript, RehydratingTarget, ServerMessage, TraceFile} from
+  ProtocolMessage, RehydratingExecutionContext, RehydratingScript, RehydratingTarget, ServerMessage} from
   './RehydratingObject.js';
 import {TraceObject} from './TraceObject.js';
 
@@ -66,11 +66,11 @@ export class RehydratingConnection implements ProtocolClient.InspectorBackend.Co
   rehydratingConnectionState: RehydratingConnectionState = RehydratingConnectionState.UNINITIALIZED;
   onDisconnect: ((arg0: string) => void)|null = null;
   onMessage: ((arg0: Object) => void)|null = null;
-  trace: TraceFile|null = null;
+  trace: TraceObject|null = null;
   sessions = new Map<number, RehydratingSessionBase>();
   #onConnectionLost: (message: Platform.UIString.LocalizedString) => void;
   #rehydratingWindow: Window&typeof globalThis;
-  #onReceiveHostWindowPayloadBound = this.#onReceiveHostWindowPayload.bind(this);
+  #onReceiveHostWindowPayloadBound = this.onReceiveHostWindowPayload.bind(this);
 
   constructor(onConnectionLost: (message: Platform.UIString.LocalizedString) => void) {
     // If we're invoking this class, we're in the rehydrating pop-up window. Rename window for clarity.
@@ -83,6 +83,7 @@ export class RehydratingConnection implements ProtocolClient.InspectorBackend.Co
     this.#rehydratingWindow.addEventListener('message', this.#onReceiveHostWindowPayloadBound);
     if (!this.#rehydratingWindow.opener) {
       this.#onConnectionLost(i18nString(UIStrings.noHostWindow));
+      return;
     }
     this.#rehydratingWindow.opener.postMessage({type: 'REHYDRATING_WINDOW_READY'});
   }
@@ -91,12 +92,12 @@ export class RehydratingConnection implements ProtocolClient.InspectorBackend.Co
    * This is a callback for rehydrated session to receive payload from host window. Payload includes but not limited to
    * the trace event and all necessary data to power a rehydrated session.
    */
-  #onReceiveHostWindowPayload(event: MessageEvent): void {
+  onReceiveHostWindowPayload(event: MessageEvent): void {
     if (event.data.type === 'REHYDRATING_TRACE_FILE') {
       const traceJson = event.data.traceJson as string;
       let trace;
       try {
-        trace = JSON.parse(traceJson) as TraceFile;
+        trace = new TraceObject(JSON.parse(traceJson));
       } catch {
         this.#onConnectionLost(i18nString(UIStrings.errorLoadingLog));
         return;
@@ -106,7 +107,7 @@ export class RehydratingConnection implements ProtocolClient.InspectorBackend.Co
     this.#rehydratingWindow.removeEventListener('message', this.#onReceiveHostWindowPayloadBound);
   }
 
-  async startHydration(trace: TraceFile): Promise<boolean> {
+  async startHydration(trace: TraceObject): Promise<boolean> {
     // OnMessage should've been set before hydration, and the connection should
     // be initialized and not hydrated already.
     if (!this.onMessage || this.rehydratingConnectionState !== RehydratingConnectionState.INITIALIZED) {
@@ -143,10 +144,10 @@ export class RehydratingConnection implements ProtocolClient.InspectorBackend.Co
         },
       });
 
-      // Create new session associated to the target created and send
-      // Target.attachedToTarget to frontend.
       sessionId += 1;
-      this.sessions.set(sessionId, new RehydratingSession(sessionId, target, executionContexts, scripts, this));
+      const session = new RehydratingSession(sessionId, target, executionContexts, scripts, this);
+      this.sessions.set(sessionId, session);
+      session.declareSessionAttachedToTarget();
     }
     await this.#onRehydrated();
     return true;
@@ -159,8 +160,7 @@ export class RehydratingConnection implements ProtocolClient.InspectorBackend.Co
 
     this.rehydratingConnectionState = RehydratingConnectionState.REHYDRATED;
     // Use revealer to load trace into performance panel
-    const trace = new TraceObject(this.trace.traceEvents as object[], this.trace.metadata);
-    await Common.Revealer.reveal(trace);
+    await Common.Revealer.reveal(this.trace);
   }
 
   setOnMessage(onMessage: (arg0: Object|string) => void): void {
@@ -219,10 +219,10 @@ class RehydratingSessionBase {
   }
 
   sendMessageToFrontend(payload: ServerMessage): void {
-    requestAnimationFrame(() => {
-      if (this.connection) {
-        this.connection.postToFrontend(payload);
-      }
+    // The frontend doesn't expect CDP responses within the same synchronous event loop, so it breaks unexpectedly.
+    //  Any async boundary will do, so we use setTimeout.
+    setTimeout(() => {
+      this.connection?.postToFrontend(payload);
     });
   }
 
@@ -249,7 +249,6 @@ export class RehydratingSession extends RehydratingSessionBase {
     this.target = target;
     this.executionContexts = executionContexts;
     this.scripts = scripts;
-    this.sessionAttachToTarget();
   }
 
   override sendMessageToFrontend(payload: ServerMessage, attachSessionId = true): void {
@@ -283,7 +282,7 @@ export class RehydratingSession extends RehydratingSessionBase {
     }
   }
 
-  private sessionAttachToTarget(): void {
+  declareSessionAttachedToTarget(): void {
     this.sendMessageToFrontend(
         {
           method: 'Target.attachedToTarget',

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,15 +13,15 @@ import dialogStyles from './dialog.css.js';
 
 const UIStrings = {
   /**
-   *@description Text in Add Source Map URLDialog of the Sources panel
+   * @description Text in Add Source Map URLDialog of the Sources panel
    */
   sourceMapUrl: 'Source map URL: ',
   /**
-   *@description Text in Add Debug Info URL Dialog of the Sources panel
+   * @description Text in Add Debug Info URL Dialog of the Sources panel
    */
   debugInfoUrl: 'DWARF symbols URL: ',
   /**
-   *@description Text to add something
+   * @description Text to add something
    */
   add: 'Add',
 } as const;

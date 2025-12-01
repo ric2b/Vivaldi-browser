@@ -45,7 +45,15 @@ struct ClickAction {
 };
 
 // Information specific to a mouse move action.
+// Has no members because the target, included in ToolInvocation, is the only
+// needed parameter.
 struct MouseMoveAction {
+};
+
+// Information specific to a scroll-to action.
+// Has no members because the target, included in ToolInvocation, is the only
+// needed parameter.
+struct ScrollToAction {
 };
 
 // Information specific to the type (keyboard input) action.  Note: TypeAction
@@ -122,6 +130,7 @@ union ToolAction {
   SelectAction select;
   TypeAction type;
   ScriptToolAction script_tool;
+  ScrollToAction scroll_to;
 };
 
 
@@ -213,6 +222,10 @@ enum ActionResultCode {
   // The target element from hit test observed page content is different from
   // hit test on the live DOM.
   kObservedTargetElementChanged = 31,
+
+  // The target node's interaction point is obscured by other elements in hit
+  // testing.
+  kTargetNodeInteractionPointObscured = 32,
 
   // Please see the comment above about adding new values.
 
@@ -341,14 +354,38 @@ enum ActionResultCode {
   kHistoryErrorPage = 805,
 
   // Please see the comment above about adding new values.
+
+  ///////////////////////////////////////////////////////////////////////
+  // Codes 900-999: Errors for attempt login.
+
+  // The login attempt failed because no credentials were available.
+  kLoginNoCredentialsAvailable = 900,
+
+  // The login attempt failed because the current page is not a login page.
+  // The caller needs to first navigate to a login page.
+  kLoginNotLoginPage = 901,
+
+  // The login attempt failed because the credentials were entered, but another
+  // action is needed to complete the login.
+  kLoginCredentialsEnteredButAnotherActionNeeded = 902,
+
+  // Neither the username, nor the password field could be filled.
+  kLoginNoFillableFields = 903,
+
+  // Please see the comment above about adding new values.
 };
 
 // LINT.ThenChange(//tools/metrics/histograms/metadata/actor/enums.xml:ActionResultCode)
 
+// The task ID associated with the tool invocation.
+struct TaskId {
+  int32 id;
+};
+
 // All information required to invoke a tool in the renderer.
 struct ToolInvocation {
   // The task ID owning this invocation.
-  int32 task_id;
+  TaskId task_id;
 
   // The action to carry out in this invocation.
   ToolAction action;
@@ -372,6 +409,11 @@ struct ActionResult {
   // If the action is a script tool, provides the result of that execution. This
   // is only populated if the execution was successful.
   string? script_tool_response;
+
+  // Time at which execution of the action was complete and page
+  // stabilization was started. This field may not be available if the action's
+  // execution did not fully complete.
+  mojo_base.mojom.TimeTicks? execution_end_time;
 };
 
 // The type of the journal entry.
@@ -387,6 +429,12 @@ enum JournalTrack {
   kActor,
 };
 
+// Details of a journal entry.
+struct JournalDetails {
+  string key;
+  string value;
+};
+
 // Represents a journal entry. This should only be used for logging and
 // debugging. It should not be used to make logic decisions since a
 // compromised renderer could lie about events (such as mismatched
@@ -396,7 +444,7 @@ struct JournalEntry {
   JournalEntryType type;
 
   // The task ID associated with this entry.
-  int32 task_id;
+  TaskId task_id;
 
   // The track the event should occur on.
   JournalTrack track;
@@ -408,7 +456,7 @@ struct JournalEntry {
   string event;
 
   // Specific details of the event logged.
-  string details;
+  array<JournalDetails> details;
 };
 
 // Use to listen for new journal entries. Lives in the browser process and
@@ -416,4 +464,18 @@ struct JournalEntry {
 interface JournalClient {
   // New log messages are sent in batches to limit the frequency of calls.
   AddEntriesToJournal(array<JournalEntry> entries);
+};
+
+// Used to monitor page stability in the renderer. Implemented by
+// `actor::PageStabilityMonitor` and lives in the renderer process. The browser
+// queries this interface to learn when the current page associated with
+// `actor::PageStabilityMonitor` is stable.
+//
+// We CHECK that only one `NotifyWhenStable()` call is in flight at any given
+// time.
+//
+// `observation_delay` is the amount of time to wait when observing tool
+// execution before starting to wait for page stability.
+interface PageStabilityMonitor {
+  NotifyWhenStable(mojo_base.mojom.TimeDelta observation_delay) => ();
 };

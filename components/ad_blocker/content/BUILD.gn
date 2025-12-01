@@ -6,51 +6,54 @@ static_library("content") {
     "adblock_content_injection_provider.h",
     "adblock_cosmetic_filter.cc",
     "adblock_cosmetic_filter.h",
-    "adblock_document_activations.cc",
-    "adblock_document_activations.h",
+    "adblock_document_state.cc",
+    "adblock_document_state.h",
+    "adblock_navigation_tracker_impl.cc",
+    "adblock_navigation_tracker_impl.h",
     "adblock_request_filter.cc",
     "adblock_request_filter.h",
-    "adblock_rule_pattern_matcher.cc",
-    "adblock_rule_pattern_matcher.h",
     "adblock_rule_service_impl.cc",
     "adblock_rule_service_impl.h",
-    "adblock_rules_index_builder.cc",
-    "adblock_rules_index_builder.h",
-    "adblock_rules_index_manager.cc",
-    "adblock_rules_index_manager.h",
-    "adblock_rules_index.cc",
-    "adblock_rules_index.h",
     "adblock_state_and_logs_impl.cc",
     "adblock_state_and_logs_impl.h",
     "adblock_tab_state_and_logs_impl.cc",
     "adblock_tab_state_and_logs_impl.h",
-    "flat_rules_compiler.cc",
-    "flat_rules_compiler.h",
-    "stylesheet_builder.cc",
-    "stylesheet_builder.h",
-    "utils.cc",
-    "utils.h",
+    "simple_index_base_query.cc",
+    "simple_index_base_query.h",
+    "simple_index_request_query.cc",
+    "simple_index_request_query.h",
   ]
 
   public_deps = [
-    "//vivaldi/components/ad_blocker/content/flat:adblock_rules_list",
-    "//vivaldi/components/ad_blocker/public/content"
+    "//vivaldi/components/ad_blocker/content/index",
+    "//vivaldi/components/ad_blocker/public/content",
   ]
 
   deps = [
+    ":utils",
     "//base",
     "//base:i18n",
     "//components/keyed_service/content",
-    "//components/url_pattern_index",
     "//content/public/browser",
+    "//third_party/blink/public/common",
     "//url",
-    "//third_party/re2",
     "//vivaldi/components/ad_blocker/content/interstitial",
     "//vivaldi/components/ad_blocker/core",
     "//vivaldi/components/ad_blocker/core:parser",
     "//vivaldi/components/ad_blocker/public/content/mojom",
-    "//vivaldi/components/request_filter:request_filter_registry",
     "//vivaldi/components/content_injection",
-    "//third_party/blink/public/common"
+    "//vivaldi/components/request_filter:request_filter_registry",
+  ]
+}
+
+source_set("utils") {
+  sources = [
+    "utils.cc",
+    "utils.h",
+  ]
+
+  deps = [
+    "//base",
+    "//url",
   ]
 }

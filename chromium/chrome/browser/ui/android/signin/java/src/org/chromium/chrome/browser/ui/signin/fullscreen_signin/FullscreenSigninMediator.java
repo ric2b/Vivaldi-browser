@@ -16,7 +16,7 @@ import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.BuildInfo;
+import org.chromium.base.DeviceInfo;
 import org.chromium.base.Log;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -25,6 +25,9 @@ import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.ProfileDataCache;
+import org.chromium.chrome.browser.signin.services.SigninFlowTimestampsLogger;
+import org.chromium.chrome.browser.signin.services.SigninFlowTimestampsLogger.Event;
+import org.chromium.chrome.browser.signin.services.SigninFlowTimestampsLogger.FlowVariant;
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.signin.services.SigninManager.SignInCallback;
 import org.chromium.chrome.browser.signin.services.SigninManager.SignOutCallback;
@@ -100,7 +103,7 @@ public class FullscreenSigninMediator
     private final @SigninAccessPoint int mAccessPoint;
     private final FullscreenSigninConfig mConfig;
     private final PropertyModel mModel;
-    private final ProfileDataCache mProfileDataCache;
+    private @Nullable ProfileDataCache mProfileDataCache;
     private boolean mDestroyed;
 
     /** Whether the initial load phase has been completed. See {@link #onInitialLoadCompleted}. */
@@ -128,7 +131,6 @@ public class FullscreenSigninMediator
         mDelegate = delegate;
         mPrivacyPreferencesManager = privacyPreferencesManager;
         mAccessPoint = accessPoint;
-        mProfileDataCache = ProfileDataCache.createWithDefaultImageSizeAndNoBadge(mContext);
         mConfig = config;
 
         mInitialLoadCompleted =
@@ -144,13 +146,13 @@ public class FullscreenSigninMediator
                         ExternalAuthUtils.getInstance().canUseGooglePlayServices()
                                 && !mConfig.shouldDisableSignin,
                         mConfig.logoId,
-                        R.string.fre_welcome,
-                        mConfig.subtitleId,
-                        mConfig.dismissTextId,
+                        mContext.getString(R.string.fre_welcome),
+                        mConfig.subtitle,
+                        mConfig.dismissText,
                         /* showInitialLoadProgressSpinner= */ !mInitialLoadCompleted);
 
         if (mInitialLoadCompleted) {
-            onInitialLoadCompleted(mDelegate.getPolicyLoadListener().get());
+            onInitialLoadCompleted(assertNonNull(mDelegate.getPolicyLoadListener().get()));
         } else {
             mDelegate
                     .getNativeInitializationPromise()
@@ -164,8 +166,6 @@ public class FullscreenSigninMediator
                     .onAvailable(ignored -> onChildAccountStatusAvailable());
         }
 
-        mProfileDataCache.addObserver(this);
-
         mAccountManagerFacade.addObserver(this);
         updateAccounts(
                 AccountUtils.getAccountsIfFulfilledOrEmpty(mAccountManagerFacade.getAccounts()));
@@ -178,7 +178,9 @@ public class FullscreenSigninMediator
 
     void destroy() {
         assert !mDestroyed;
-        mProfileDataCache.removeObserver(this);
+        if (mProfileDataCache != null) {
+            mProfileDataCache.removeObserver(this);
+        }
         mAccountManagerFacade.removeObserver(this);
         mDestroyed = true;
     }
@@ -247,6 +249,22 @@ public class FullscreenSigninMediator
      *     also means that native has been initialized.
      */
     void onInitialLoadCompleted(boolean hasPolicies) {
+        Profile profile = assumeNonNull(mDelegate.getProfileSupplier().get()).getOriginalProfile();
+        if (mProfileDataCache == null) {
+            IdentityManager identityManager =
+                    IdentityServicesProvider.get().getIdentityManager(profile);
+            mProfileDataCache =
+                    ProfileDataCache.createWithDefaultImageSizeAndNoBadge(
+                            mContext, assertNonNull(identityManager));
+            mProfileDataCache.addObserver(this);
+            updateSelectedAccountData();
+        }
+
+        AccountUtils.checkIsSubjectToParentalControls(
+                mAccountManagerFacade,
+                AccountUtils.getAccountsIfFulfilledOrEmpty(mAccountManagerFacade.getAccounts()),
+                this::onChildAccountStatusReady);
+
         boolean isMetricsReportingDisabledByPolicy = false;
         Log.i(TAG, "#onInitialLoadCompleted() hasPolicies:" + hasPolicies);
         if (hasPolicies) {
@@ -257,7 +275,6 @@ public class FullscreenSigninMediator
                     mDelegate.shouldDisplayManagementNoticeOnManagedDevices());
         }
 
-        Profile profile = mDelegate.getProfileSupplier().get().getOriginalProfile();
         boolean isSigninSupported =
                 ExternalAuthUtils.getInstance().canUseGooglePlayServices()
                         && UserPrefs.get(profile).getBoolean(Pref.SIGNIN_ALLOWED)
@@ -266,7 +283,7 @@ public class FullscreenSigninMediator
         mModel.set(FullscreenSigninProperties.SHOW_INITIAL_LOAD_PROGRESS_SPINNER, false);
 
         if (isSigninSupported) {
-            mModel.set(FullscreenSigninProperties.TITLE_STRING_ID, mConfig.titleId);
+            mModel.set(FullscreenSigninProperties.TITLE_STRING, mConfig.title);
             SyncService syncService = SyncServiceFactory.getForProfile(profile);
             assumeNonNull(syncService);
             boolean isSyncDataManaged = false;
@@ -279,12 +296,12 @@ public class FullscreenSigninMediator
                 }
             }
             mModel.set(
-                    FullscreenSigninProperties.SUBTITLE_STRING_ID,
+                    FullscreenSigninProperties.SUBTITLE_STRING,
                     isSyncDataManaged
-                            ? R.string.signin_fre_subtitle_without_sync
-                            : mConfig.subtitleId);
+                            ? mContext.getString(R.string.signin_fre_subtitle_without_sync)
+                            : mConfig.subtitle);
         } else {
-            mModel.set(FullscreenSigninProperties.SUBTITLE_STRING_ID, 0);
+            mModel.set(FullscreenSigninProperties.SUBTITLE_STRING, null);
         }
 
         mAllowMetricsAndCrashUploading = !isMetricsReportingDisabledByPolicy;
@@ -309,7 +326,10 @@ public class FullscreenSigninMediator
     /** Implements {@link ProfileDataCache.Observer}. */
     @Override
     public void onProfileDataUpdated(String accountEmail) {
-        updateSelectedAccountData(accountEmail);
+        if (mSelectedAccount != null
+                && TextUtils.equals(mSelectedAccount.getEmail(), accountEmail)) {
+            updateSelectedAccountData();
+        }
     }
 
     /** Implements {@link AccountsChangeObserver}. */
@@ -356,8 +376,8 @@ public class FullscreenSigninMediator
         IdentityManager identityManager =
                 IdentityServicesProvider.get()
                         .getIdentityManager(
-                                assertNonNull(
-                                        mDelegate.getProfileSupplier().get().getOriginalProfile()));
+                                assumeNonNull(mDelegate.getProfileSupplier().get())
+                                        .getOriginalProfile());
         mDialogCoordinator =
                 new AccountPickerDialogCoordinator(
                         mContext, this, mModalDialogManager, assertNonNull(identityManager));
@@ -380,7 +400,7 @@ public class FullscreenSigninMediator
             return;
         }
 
-        if (BuildInfo.getInstance().isAutomotive) {
+        if (DeviceInfo.isAutomotive()) {
             mDelegate.displayDeviceLockPage(getSelectedAccount());
             return;
         }
@@ -392,30 +412,26 @@ public class FullscreenSigninMediator
         // This is needed to get metrics/crash reports from the sign-in flow itself.
         mDelegate.acceptTermsOfService(mAllowMetricsAndCrashUploading);
         mDelegate.recordUserSignInHistograms(getSigninPromoAction());
+        SigninFlowTimestampsLogger signinTimestampsLogger =
+                SigninFlowTimestampsLogger.startLogging(FlowVariant.FULLSCREEN);
         // If the user signs into an account on the FRE, goes to the next page and presses
         // back to come back to the welcome screen, then there will already be an account signed in.
+        Profile profile = assumeNonNull(mDelegate.getProfileSupplier().get()).getOriginalProfile();
         @Nullable CoreAccountInfo signedInAccount =
-                assumeNonNull(
-                                IdentityServicesProvider.get()
-                                        .getIdentityManager(
-                                                mDelegate
-                                                        .getProfileSupplier()
-                                                        .get()
-                                                        .getOriginalProfile()))
+                assumeNonNull(IdentityServicesProvider.get().getIdentityManager(profile))
                         .getPrimaryAccountInfo(ConsentLevel.SIGNIN);
         if (signedInAccount != null && Objects.equals(signedInAccount, mSelectedAccount)) {
             mDelegate.advanceToNextPage();
             return;
         }
         final SigninManager signinManager =
-                IdentityServicesProvider.get()
-                        .getSigninManager(
-                                mDelegate.getProfileSupplier().get().getOriginalProfile());
+                IdentityServicesProvider.get().getSigninManager(profile);
         assumeNonNull(signinManager);
         final SignInCallback signInCallback =
                 new SignInCallback() {
                     @Override
                     public void onSignInComplete() {
+                        signinTimestampsLogger.recordTimestamp(Event.SIGNIN_COMPLETED);
                         if (mDestroyed) {
                             // FirstRunActivity was destroyed while we were waiting for sign-in.
                             return;
@@ -425,6 +441,7 @@ public class FullscreenSigninMediator
 
                     @Override
                     public void onSignInAborted() {
+                        signinTimestampsLogger.recordTimestamp(Event.SIGNIN_ABORTED);
                         // TODO(crbug.com/40790332): For now we enable the buttons again to not
                         // block the
                         // users from continuing to the next page. Should show a dialog with the
@@ -446,11 +463,16 @@ public class FullscreenSigninMediator
                 // If there already exists another signed-in account, first sign-out and then
                 // sign-in with the selected account.
                 signOutThenSignInWithSelectedAccount(
-                        mSelectedAccount, signinManager, accessPoint, signInCallback);
+                        mSelectedAccount,
+                        signinManager,
+                        accessPoint,
+                        signinTimestampsLogger,
+                        signInCallback);
             } else {
                 FreManagementNoticeDialogHelper.checkAccountManagementAndSignIn(
                         mSelectedAccount,
                         signinManager,
+                        signinTimestampsLogger,
                         accessPoint,
                         signInCallback,
                         mContext,
@@ -463,12 +485,14 @@ public class FullscreenSigninMediator
             CoreAccountInfo selectedAccount,
             SigninManager signinManager,
             @SigninAccessPoint int accessPoint,
+            SigninFlowTimestampsLogger signinTimestampsLogger,
             @Nullable SignInCallback signInCallback) {
         SignOutCallback signOutCallback =
                 () ->
                         FreManagementNoticeDialogHelper.checkAccountManagementAndSignIn(
                                 selectedAccount,
                                 signinManager,
+                                signinTimestampsLogger,
                                 accessPoint,
                                 signInCallback,
                                 mContext,
@@ -503,7 +527,7 @@ public class FullscreenSigninMediator
         mDelegate.recordSigninDismissedHistograms();
         mDelegate.acceptTermsOfService(mAllowMetricsAndCrashUploading);
         SigninPreferencesManager.getInstance().temporarilySuppressNewTabPagePromos();
-        Profile profile = mDelegate.getProfileSupplier().get().getOriginalProfile();
+        Profile profile = assumeNonNull(mDelegate.getProfileSupplier().get()).getOriginalProfile();
         if (assumeNonNull(IdentityServicesProvider.get().getIdentityManager(profile))
                 .hasPrimaryAccount(ConsentLevel.SIGNIN)) {
             mModel.set(FullscreenSigninProperties.SHOW_SIGNIN_PROGRESS_SPINNER, true);
@@ -540,15 +564,14 @@ public class FullscreenSigninMediator
 
     private void setSelectedAccount(CoreAccountInfo account) {
         mSelectedAccount = account;
-        updateSelectedAccountData(account.getEmail());
+        updateSelectedAccountData();
     }
 
-    private void updateSelectedAccountData(String accountEmail) {
-        if (mSelectedAccount != null
-                && TextUtils.equals(mSelectedAccount.getEmail(), accountEmail)) {
+    private void updateSelectedAccountData() {
+        if (mProfileDataCache != null && mSelectedAccount != null) {
             mModel.set(
                     FullscreenSigninProperties.SELECTED_ACCOUNT_DATA,
-                    mProfileDataCache.getProfileDataOrDefault(accountEmail));
+                    mProfileDataCache.getProfileDataOrDefault(mSelectedAccount.getEmail()));
         }
     }
 
@@ -588,6 +611,9 @@ public class FullscreenSigninMediator
     }
 
     private void onChildAccountStatusReady(boolean isChild, @Nullable CoreAccountInfo childInfo) {
+        if (mProfileDataCache == null) {
+            return;
+        }
         mModel.set(FullscreenSigninProperties.IS_SELECTED_ACCOUNT_SUPERVISED, isChild);
         // Selected account data will be updated in {@link #onProfileDataUpdated}
         mProfileDataCache.setBadge(

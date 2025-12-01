@@ -399,7 +399,7 @@ Node* Node::PseudoAwarePreviousSibling() const {
   // corresponds to the ordering of pseudo-elements in a traversal:
   // ::scroll-marker-group(before), ::marker, ::scroll-marker,
   // ::scroll-button(), ::checkmark,
-  // ::before, non-pseudo Elements, ::after, ::picker-icon,
+  // ::before, non-pseudo Elements, ::after, ::picker-icon, ::interest-hint,
   // ::scroll-marker-group(after), ::view-transition. The fallthroughs ensure
   // this ordering by checking for each kind of node in-turn.
   switch (GetPseudoId()) {
@@ -410,6 +410,11 @@ Node* Node::PseudoAwarePreviousSibling() const {
       }
       [[fallthrough]];
     case kPseudoIdScrollMarkerGroupAfter:
+      if (Node* next = parent->GetPseudoElement(kPseudoIdInterestHint)) {
+        return next;
+      }
+      [[fallthrough]];
+    case kPseudoIdInterestHint:
       if (Node* next = parent->GetPseudoElement(kPseudoIdPickerIcon)) {
         return next;
       }
@@ -602,6 +607,11 @@ Node* Node::PseudoAwareNextSibling() const {
       }
       [[fallthrough]];
     case kPseudoIdPickerIcon:
+      if (Node* next = parent->GetPseudoElement(kPseudoIdInterestHint)) {
+        return next;
+      }
+      [[fallthrough]];
+    case kPseudoIdInterestHint:
       if (Node* next =
               parent->GetPseudoElement(kPseudoIdScrollMarkerGroupAfter)) {
         return next;
@@ -728,6 +738,10 @@ Node* Node::PseudoAwareFirstChild() const {
     if (Node* first = current_element->GetPseudoElement(kPseudoIdPickerIcon)) {
       return first;
     }
+    if (Node* first =
+            current_element->GetPseudoElement(kPseudoIdInterestHint)) {
+      return first;
+    }
     if (Node* first = current_element->GetPseudoElement(
             kPseudoIdScrollMarkerGroupAfter)) {
       return first;
@@ -782,6 +796,9 @@ Node* Node::PseudoAwareLastChild() const {
     }
     if (Node* last = current_element->GetPseudoElement(
             kPseudoIdScrollMarkerGroupAfter)) {
+      return last;
+    }
+    if (Node* last = current_element->GetPseudoElement(kPseudoIdInterestHint)) {
       return last;
     }
     if (Node* last = current_element->GetPseudoElement(kPseudoIdPickerIcon)) {
@@ -1277,7 +1294,8 @@ Node* Node::cloneNode(bool deep, ExceptionState& exception_state) const {
   if (deep) {
     data.Put(CloneOption::kIncludeDescendants);
   }
-  return Clone(GetDocument(), data, /*append_to*/ nullptr);
+  return Clone(GetDocument(), data, /*append_to*/ nullptr,
+               /*fallback_registry*/ nullptr);
 }
 
 Node* Node::cloneNode(bool deep) const {
@@ -1594,26 +1612,6 @@ void Node::SetNeedsStyleRecalc(StyleChangeType change_type,
   // AnimationStyleChange bit may be reset to 'true'.
   if (auto* this_element = DynamicTo<Element>(this)) {
     this_element->SetAnimationStyleChange(false);
-
-    // The style walk for the pseudo tree created for a ViewTransition is
-    // done after resolving style for the author DOM. See
-    // StyleEngine::RecalcTransitionPseudoStyle.
-    // Since the dirty bits from the originating element (root element) are not
-    // propagated to these pseudo-elements during the default walk, we need to
-    // invalidate style for these elements here.
-    bool mark_transition_pseudos =
-        RuntimeEnabledFeatures::ScopedViewTransitionsEnabled()
-            ? this_element->GetPseudoElement(kPseudoIdViewTransition) != nullptr
-            : this_element->IsDocumentElement();
-    if (mark_transition_pseudos) {
-      auto update_style_change = [](PseudoElement* pseudo_element) {
-        pseudo_element->SetNeedsStyleRecalc(
-            kLocalStyleChange, StyleChangeReasonForTracing::Create(
-                                   style_change_reason::kViewTransition));
-      };
-      ViewTransitionUtils::ForEachTransitionPseudo(*this_element,
-                                                   update_style_change);
-    }
   }
 
   if (auto* svg_element = DynamicTo<SVGElement>(this))
@@ -2777,6 +2775,10 @@ static void AppendMarkedTree(const String& base_indent,
         AppendMarkedTree(indent_string, pseudo, marked_node1, marked_label1,
                          marked_node2, marked_label2, builder);
       }
+      if (Element* pseudo = element->GetPseudoElement(kPseudoIdInterestHint)) {
+        AppendMarkedTree(indent_string, pseudo, marked_node1, marked_label1,
+                         marked_node2, marked_label2, builder);
+      }
       if (Element* pseudo =
               element->GetPseudoElement(kPseudoIdScrollMarkerGroupAfter)) {
         AppendMarkedTree(indent_string, pseudo, marked_node1, marked_label1,
@@ -3268,8 +3270,9 @@ void Node::DispatchSimulatedClick(const Event* underlying_event,
 }
 
 void Node::DefaultEventHandler(Event& event) {
-  if (event.target() != this)
+  if (event.RawTarget() != this) {
     return;
+  }
   const AtomicString& event_type = event.type();
   if (event_type == event_type_names::kKeydown ||
       event_type == event_type_names::kKeypress ||

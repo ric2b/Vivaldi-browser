@@ -3,20 +3,15 @@
 #ifndef COMPONENTS_AD_BLOCKER_CONTENT_ADBLOCK_RULE_SERVICE_IMPL_H_
 #define COMPONENTS_AD_BLOCKER_CONTENT_ADBLOCK_RULE_SERVICE_IMPL_H_
 
-#include <array>
-#include <map>
 #include <memory>
-#include <set>
 #include <string>
-#include <vector>
 
-#include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/uuid.h"
 #include "components/ad_blocker/content/adblock_content_injection_provider.h"
-#include "components/ad_blocker/content/adblock_rules_index_manager.h"
 #include "components/ad_blocker/content/adblock_state_and_logs_impl.h"
+#include "components/ad_blocker/content/index/adblock_rules_index_manager.h"
 #include "components/ad_blocker/core/adblock_known_sources_handler_impl.h"
 #include "components/ad_blocker/core/adblock_resources.h"
 #include "components/ad_blocker/core/adblock_rule_manager_impl.h"
@@ -27,8 +22,6 @@
 #include "components/ad_blocker/public/content/adblock_rule_service.h"
 #include "components/ad_blocker/public/core/adblock_stats_store.h"
 #include "components/ad_blocker/public/core/adblock_types.h"
-#include "components/keyed_service/core/keyed_service.h"
-#include "components/prefs/pref_change_registrar.h"
 
 class PrefService;
 
@@ -52,20 +45,22 @@ class RuleServiceImpl : public RuleService,
                         public RuleServiceStorageDelegate,
                         public RuleManager::Observer {
  public:
-  RuleServiceImpl(content::BrowserContext* context,
-                  PrefService* prefs,
-                  vivaldi::RequestFilterRegistry* request_filter_registry,
+  RuleServiceImpl(std::unique_ptr<Client> client,
+                  content::BrowserContext* context,
                   RuleSourceHandler::RulesCompiler rules_compiler,
                   std::string locale);
   ~RuleServiceImpl() override;
   RuleServiceImpl(const RuleServiceImpl&) = delete;
   RuleServiceImpl& operator=(const RuleServiceImpl&) = delete;
 
-  void Load();
+  void Load(vivaldi::RequestFilterRegistry* request_filter_registry,
+            PrefService* prefs);
 
   RulesIndex* GetRuleIndex(RuleGroup group);
   StateAndLogsImpl& GetStateAndLogsImpl();
   Resources& GetResources();
+
+  const std::optional<std::string_view> GetBrowserOwnedFrameUrlPrefix();
 
   // Implementing RuleService
   bool IsLoaded() const override;
@@ -97,17 +92,13 @@ class RuleServiceImpl : public RuleService,
   void MigrateOldStatsData(
       const RuleServiceStorageDelegate::LoadResult* load_result);
 
+  void OnRulesIndexLoaded(RuleGroup group);
   void OnRulesIndexChanged(RuleGroup group);
-
-  void OnEnableDocumentBlockingChanged();
-  void OnPingBlockingChanged();
 
   void AddRequestFilter(RuleGroup group);
 
+  const std::unique_ptr<Client> client_;
   const raw_ptr<content::BrowserContext> context_;
-  const raw_ptr<PrefService> prefs_;
-  const raw_ptr<vivaldi::RequestFilterRegistry> request_filter_registry_;
-  PrefChangeRegistrar pref_change_registrar_;
 
   RuleSourceHandler::RulesCompiler rules_compiler_;
   std::string locale_;
@@ -116,11 +107,6 @@ class RuleServiceImpl : public RuleService,
   // the same resources and we only want to provide one copy of the static
   // injections to the content injection module.
   std::optional<ContentInjectionProvider> content_injection_provider_;
-
-  // Keeps track of the request filters we have set up, to allow tearing them
-  // down if needed. These pointers are not guaranteed to be valid at any time.
-  std::array<AdBlockRequestFilter*, kRuleGroupCount> request_filters_ = {
-      nullptr, nullptr};
 
   std::optional<StateAndLogsImpl> state_and_logs_;
   std::optional<RuleServiceStorage> state_store_;
@@ -131,7 +117,7 @@ class RuleServiceImpl : public RuleService,
   std::optional<RuleManagerImpl> rule_manager_;
   std::optional<KnownRuleSourcesHandlerImpl> known_sources_handler_;
 
-  std::array<std::optional<RulesIndexManager>, kRuleGroupCount> index_managers_;
+  RuleGroupArray<std::optional<RulesIndexManager>> index_managers_;
 
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 

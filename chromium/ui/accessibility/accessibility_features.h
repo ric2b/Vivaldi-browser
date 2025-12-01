@@ -61,6 +61,10 @@ AX_BASE_EXPORT bool IsAccessibilityPruneRedundantInlineConnectivityEnabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityTextFormatting);
 AX_BASE_EXPORT bool IsAccessibilityTextFormattingEnabled();
 
+// Enables the addition of `labeledby` relationships in the accessibility tree.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityLabeledBy);
+AX_BASE_EXPORT bool IsAccessibilityLabeledByEnabled();
+
 // Expose the accessibility tree for views via an AXTree of AXNodes.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityTreeForViews);
 AX_BASE_EXPORT bool IsAccessibilityTreeForViewsEnabled();
@@ -144,6 +148,12 @@ AX_BASE_EXPORT bool IsUseAXPositionForDocumentMarkersEnabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAXRandomizedStressTests);
 AX_BASE_EXPORT bool IsAXRandomizedStressTestsEnabled();
 
+// When enabled, allows the content of <address> tags to be used in
+// calculating their ancestors' accessible names.
+// TODO(crbug.com/443765360): Remove killswitch after stability period.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAXObjectSupportsNameFromAddressContent);
+AX_BASE_EXPORT bool IsAXObjectSupportsNameFromAddressContentEnabled();
+
 // Enable the experimental on-screen AXMode .
 // TODO(accessibility): Only turn on the experimental On-Screen mode for when
 // screen readers are not running. This is an experimental mode for now, so this
@@ -154,6 +164,12 @@ AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityOnScreenMode);
 AX_BASE_EXPORT bool IsAccessibilityOnScreenAXModeEnabled();
 
 #if BUILDFLAG(IS_WIN)
+// This is a killswitch. Controls whether
+// HWNDMessageHandler::GetParentOfAXFragmentRoot returns nullptr (legacy) or
+// delegates to GetParentNativeViewAccessible().
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityWinAXFragmentRootParent);
+AX_BASE_EXPORT bool IsAccessibilityWinAXFragmentRootParentEnabled();
+
 // When enabled, modify the exposed UIA accessibility tree to match Narrator's
 // expectations. This fixes a bug keeping Narrator's cursor contained within
 // the web content.
@@ -190,10 +206,6 @@ AX_BASE_EXPORT bool IsAccessibilityAcceleratorEnabled();
 // Adds option to limit the movement on the screen.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityReducedAnimations);
 AX_BASE_EXPORT bool IsAccessibilityReducedAnimationsEnabled();
-
-// Integrate with FaceGaze.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityFaceGaze);
-AX_BASE_EXPORT bool IsAccessibilityFaceGazeEnabled();
 
 // Adds reduced animations toggle to kiosk quick settings.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityReducedAnimationsInKiosk);
@@ -278,6 +290,12 @@ AX_BASE_EXPORT bool IsAccessibilityManifestV3EnabledForSwitchAccess();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityInlineLineSeparators);
 AX_BASE_EXPORT bool IsAccessibilityInlineLineSeparatorsEnabled();
 
+// Propagate bounding rectangles of input events to the Android platform to
+// allow Magnification to follow them
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(
+    kAccessibilityMagnificationFollowsInputFocus);
+AX_BASE_EXPORT bool IsAccessibilityMagnificationFollowsInputFocusEnabled();
+
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -315,6 +333,10 @@ AX_BASE_EXPORT bool IsReadAnythingReadAloudEnabled();
 // Enable phrase highlighting in Read Anything Read Aloud.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kReadAnythingReadAloudPhraseHighlighting);
 AX_BASE_EXPORT bool IsReadAnythingReadAloudPhraseHighlightingEnabled();
+
+// Enable TypeScript-based text segmentation in Read Anything Read Aloud.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kReadAnythingReadAloudTSTextSegmentation);
+AX_BASE_EXPORT bool IsReadAnythingReadAloudTSTextSegmentationEnabled();
 
 // Enable images to be distilled via algorithm. Should be disabled by
 // default.
@@ -381,6 +403,11 @@ AX_BASE_EXPORT bool IsWasmTtsComponentUpdaterV3Enabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kWasmTtsEngineAutoInstallDisabled);
 AX_BASE_EXPORT bool IsWasmTtsEngineAutoInstallDisabled();
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
+// Killswitch: use per-child copy of point during Views hit testing (prevents
+// coordinate corruption). Enabled by default.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityHitTestPointCopy);
+AX_BASE_EXPORT bool IsAccessibilityHitTestPointCopyEnabled();
 
 }  // namespace features
 

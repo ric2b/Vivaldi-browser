@@ -2,6 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+"""Compile target declarations
+
+Compile targets can be referenced in additional_compile_targets for a builder in
+waterfalls.pyl or as additional_compile_targets in a bundle declaration.
+"""
+
 load("@chromium-luci//targets.star", "targets")
 
 targets.compile_target(
@@ -258,13 +264,6 @@ targets.compile_target(
 targets.compile_target(
     name = "cronet_package_ci",
     label = "//components/cronet/android:cronet_package_ci",
-    # All references have been moved to starlark
-    skip_usage_check = True,
-)
-
-targets.compile_target(
-    name = "cronet_perf_test_apk",
-    label = "//components/cronet/android:cronet_perf_test_apk",
     # All references have been moved to starlark
     skip_usage_check = True,
 )

@@ -26,7 +26,7 @@
 "%1$@ can’t be updated if it’s running from the location it was downloaded to." = "%1$@ ne peut pas être mis à jour s’il est exécuté depuis le dossier dans lequel il a été téléchargé.";
 
 /* No comment provided by engineer. */
-"%1$@ can’t be updated, because it was opened from a read-only or a temporary location." = "%1$@ ne peut pas être mis à jour quand il fonctionne à partir d’un volume en lecture seule, comme une image disque ou un lecteur optique.";
+"%1$@ can’t be updated because it was opened from a read-only or a temporary location." = "%1$@ ne peut pas être mis à jour quand il fonctionne à partir d’un volume en lecture seule, comme une image disque ou un lecteur optique.";
 
 /* No comment provided by engineer. */
 "A new version of %@ is available!" = "Une nouvelle version de %@ est disponible !";
@@ -99,3 +99,36 @@
 
 /* Status message shown when the user checks for updates but is already current or the feed doesn't contain any updates. */
 "You’re up to date!" = "Votre logiciel est à jour !";
+
+/* Software Update title/label */
+"Software Update" = "Mise à jour logiciel";
+
+/* Remind Me Later choice for update alert */
+"Remind Me Later" = "Pas maintenant";
+
+/* Skip This Version choice for update alert */
+"Skip This Version" = "Ignorer cette version";
+
+/* Install Update choice for update alert */
+"Install Update" = "Installer";
+
+/* Automatically download and install updates in the future option for update alert */
+"Automatically download and install updates in the future" = "Télécharger et installer automatiquement les mises à jour";
+
+/* Check for updates automatically response for update permission dialog */
+"Check Automatically" = "Vérifier automatiquement";
+
+/* Don't check for updates automatically response for update permission dialog */
+"Don’t Check" = "Ne pas vérifier";
+
+/* Title question for update permission dialog */
+"Check for updates automatically?" = "Rechercher automatiquement les mises à jour ?";
+
+/* Include anonymous system profile choice for update permission dialog */
+"Include anonymous system profile" = "Avec transmission anonyme de mon profil système";
+
+/* Automatically download and install updates choice for update permission dialog */
+"Automatically download and install updates" = "Télécharger et installer automatiquement les mises à jour";
+
+/* Anonymous system profile information disclosure for update permission dialog */
+"Anonymous system profile information is used to help us plan future development work. Please contact us if you have any questions about this.\n\nThis is the information that would be sent:" = "Les informations anonymes de profil système nous aident à planifier les futurs développements. Contactez-nous pour toute question à ce sujet.\n\nCi-dessous figurent les informations qui seront transmises :";

@@ -150,10 +150,6 @@ StarboardVideoSampleInfo GetStarboardVideoConfig() {
 }
 
 // Some default configs.
-const ::media::AudioDecoderConfig kChromiumAudioConfig =
-    GetChromiumAudioConfig();
-const ::media::VideoDecoderConfig kChromiumVideoConfig =
-    GetChromiumVideoConfig();
 const StarboardAudioSampleInfo kSbAudioConfig = GetStarboardAudioConfig();
 const StarboardVideoSampleInfo kSbVideoConfig = GetStarboardVideoConfig();
 
@@ -168,8 +164,8 @@ class StarboardRendererTest : public ::testing::Test {
   StarboardRendererTest() {
     mojo::core::Init();
 
-    audio_stream_.set_audio_decoder_config(kChromiumAudioConfig);
-    video_stream_.set_video_decoder_config(kChromiumVideoConfig);
+    audio_stream_.set_audio_decoder_config(GetChromiumAudioConfig());
+    video_stream_.set_video_decoder_config(GetChromiumVideoConfig());
 
     ON_CALL(starboard_for_drm_, CreateDrmSystem)
         .WillByDefault(Return(&drm_system_));
@@ -246,7 +242,7 @@ class StarboardRendererTest : public ::testing::Test {
       const auto& audio_buffer = audio_buffers_[i];
       sb_audio_buffers_[i] = StarboardSampleInfo{
           .type = 0,
-          .buffer = audio_buffer->data(),
+          .buffer = base::span(*audio_buffer).data(),
           .buffer_size = static_cast<int>(audio_buffer->size()),
           .timestamp = audio_buffer->timestamp().InMicroseconds(),
           .side_data = base::span<const StarboardSampleSideData>(),
@@ -260,7 +256,7 @@ class StarboardRendererTest : public ::testing::Test {
       const auto& video_buffer = video_buffers_[i];
       sb_video_buffers_[i] = StarboardSampleInfo{
           .type = 1,
-          .buffer = video_buffer->data(),
+          .buffer = base::span(*video_buffer).data(),
           .buffer_size = static_cast<int>(video_buffer->size()),
           .timestamp = video_buffer->timestamp().InMicroseconds(),
           .side_data = base::span<const StarboardSampleSideData>(),

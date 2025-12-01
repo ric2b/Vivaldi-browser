@@ -2200,6 +2200,20 @@ void BytecodeGraphBuilder::BuildNamedStore(NamedStoreMode store_mode) {
   environment()->RecordAfterState(node, Environment::kAttachFrameState);
 }
 
+void BytecodeGraphBuilder::VisitSetPrototypeProperties() {
+  // VisitSetPrototypeProperties <name_index>
+  Node* acc = environment()->LookupAccumulator();
+  ObjectBoilerplateDescriptionRef constant_properties =
+      MakeRefForConstantForIndexOperand<ObjectBoilerplateDescription>(0);
+
+  FeedbackSource source =
+      CreateFeedbackSource(bytecode_iterator().GetIndexOperand(1));
+  const Operator* op =
+      javascript()->SetPrototypeProperties(constant_properties, source);
+  Node* node = NewNode(op, acc);
+  environment()->RecordAfterState(node, Environment::kAttachFrameState);
+}
+
 void BytecodeGraphBuilder::VisitSetNamedProperty() {
   BuildNamedStore(NamedStoreMode::kSet);
 }
@@ -3863,7 +3877,19 @@ void BytecodeGraphBuilder::VisitForInStep() {
   environment()->BindRegister(index_reg, index, Environment::kAttachFrameState);
 }
 
-void BytecodeGraphBuilder::VisitForOfNext() { UNREACHABLE(); }
+void BytecodeGraphBuilder::VisitForOfNext() {
+  PrepareEagerCheckpoint();
+  Node* iterator =
+      environment()->LookupRegister(bytecode_iterator().GetRegisterOperand(0));
+  Node* next_method =
+      environment()->LookupRegister(bytecode_iterator().GetRegisterOperand(1));
+  auto value_done = bytecode_iterator().GetRegisterPairOperand(2);
+
+  Node* result_pair = NewNode(javascript()->ForOfNext(), iterator, next_method);
+
+  environment()->BindRegistersToProjections(value_done.first, result_pair,
+                                            Environment::kAttachFrameState);
+}
 
 void BytecodeGraphBuilder::VisitGetIterator() {
   PrepareEagerCheckpoint();
@@ -4560,7 +4586,7 @@ Node* BytecodeGraphBuilder::MakeNode(const Operator* op, int value_input_count,
 Node* BytecodeGraphBuilder::NewPhi(int count, Node* input, Node* control) {
   const Operator* phi_op = common()->Phi(MachineRepresentation::kTagged, count);
   Node** buffer = EnsureInputBufferSize(count + 1);
-  MemsetPointer(buffer, input, count);
+  Memset(buffer, input, count);
   buffer[count] = control;
   return graph()->NewNode(phi_op, count + 1, buffer, true);
 }
@@ -4569,7 +4595,7 @@ Node* BytecodeGraphBuilder::NewEffectPhi(int count, Node* input,
                                          Node* control) {
   const Operator* phi_op = common()->EffectPhi(count);
   Node** buffer = EnsureInputBufferSize(count + 1);
-  MemsetPointer(buffer, input, count);
+  Memset(buffer, input, count);
   buffer[count] = control;
   return graph()->NewNode(phi_op, count + 1, buffer, true);
 }

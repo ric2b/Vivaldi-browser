@@ -6,13 +6,12 @@ package org.chromium.chrome.test.transit;
 
 import static org.junit.Assert.assertTrue;
 
+import static org.chromium.base.ThreadUtils.runOnUiThreadBlocking;
 import static org.chromium.base.test.transit.Triggers.noopTo;
 import static org.chromium.chrome.test.util.ChromeTabUtils.getTabCountOnUiThread;
 
 import org.chromium.base.Log;
-import org.chromium.base.ThreadUtils;
 import org.chromium.base.Token;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.transit.TravelException;
 import org.chromium.base.test.transit.TripBuilder;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -25,6 +24,7 @@ import org.chromium.chrome.test.transit.hub.NewTabGroupDialogFacility;
 import org.chromium.chrome.test.transit.hub.TabSwitcherGroupCardFacility;
 import org.chromium.chrome.test.transit.hub.TabSwitcherListEditorFacility;
 import org.chromium.chrome.test.transit.hub.TabSwitcherStation;
+import org.chromium.chrome.test.transit.page.BasePageStation;
 import org.chromium.chrome.test.transit.page.CtaPageStation;
 import org.chromium.chrome.test.transit.page.WebPageStation;
 import org.chromium.chrome.test.transit.tabmodel.TabThumbnailCondition;
@@ -35,6 +35,7 @@ import org.chromium.chrome.test.util.tabmodel.TabBinList.TabBinPosition;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /* Helper class for extended multi-stage Trips. */
 public class Journeys {
@@ -57,7 +58,7 @@ public class Journeys {
             int numRegularTabs,
             int numIncognitoTabs,
             String url,
-            Supplier<CtaPageStation.Builder<T>> pageStationFactory) {
+            Supplier<BasePageStation.Builder<T>> pageStationFactory) {
         List<String> regularTabs = getListOfIdenticalUrls(numRegularTabs, url);
         List<String> incognitoTabs = getListOfIdenticalUrls(numIncognitoTabs, url);
 
@@ -78,7 +79,7 @@ public class Journeys {
             int numRegularTabs,
             int numIncognitoTabs,
             String url,
-            Supplier<CtaPageStation.Builder<T>> pageStationFactory) {
+            Supplier<BasePageStation.Builder<T>> pageStationFactory) {
         List<String> regularTabs = getListOfIdenticalUrls(numRegularTabs, url);
         List<String> incognitoTabs = getListOfIdenticalUrls(numIncognitoTabs, url);
 
@@ -121,7 +122,7 @@ public class Journeys {
             final CtaPageStation startingPage,
             List<String> urls,
             boolean isIncognito,
-            Supplier<CtaPageStation.Builder<T>> pageStationFactory) {
+            Supplier<BasePageStation.Builder<T>> pageStationFactory) {
         return doCreateTabs(
                 startingPage,
                 urls,
@@ -136,7 +137,7 @@ public class Journeys {
             int numTabs,
             String url,
             boolean isIncognito,
-            Supplier<CtaPageStation.Builder<T>> pageStationFactory) {
+            Supplier<BasePageStation.Builder<T>> pageStationFactory) {
         List<String> urls = getListOfIdenticalUrls(numTabs, url);
         return doCreateTabs(
                 startingPage, urls, isIncognito, pageStationFactory, /* captureThumbnails= */ true);
@@ -169,7 +170,7 @@ public class Journeys {
             CtaPageStation startingStation,
             List<String> urlsForRegularTabs,
             List<String> urlsForIncognitoTabs,
-            Supplier<CtaPageStation.Builder<T>> pageStationFactory,
+            Supplier<BasePageStation.Builder<T>> pageStationFactory,
             boolean captureThumbnails) {
         assert urlsForRegularTabs.size() >= 1;
         TabModelSelector tabModelSelector = startingStation.getTabModelSelector();
@@ -210,7 +211,7 @@ public class Journeys {
             final CtaPageStation startingPage,
             List<String> urls,
             boolean isIncognito,
-            Supplier<CtaPageStation.Builder<T>> pageStationFactory,
+            Supplier<BasePageStation.Builder<T>> pageStationFactory,
             boolean captureThumbnails) {
         assert !urls.isEmpty();
 
@@ -220,7 +221,7 @@ public class Journeys {
         for (int i = 0; i < urls.size(); i++) {
             String url = urls.get(i);
             CtaPageStation previousPage = currentPage;
-            Tab previousTab = previousPage.loadedTabElement.get();
+            Tab previousTab = previousPage.loadedTabElement.value();
             if (i == 0 && startingPage.isIncognito() && !isIncognito) {
                 currentPage =
                         currentPage
@@ -256,7 +257,7 @@ public class Journeys {
                         i,
                         previousTab.getId());
 
-                Tab tabToComeBackTo = currentPage.loadedTabElement.get();
+                Tab tabToComeBackTo = currentPage.loadedTabElement.value();
                 CtaPageStation previousPageAgain =
                         currentPage.selectTabFast(previousTab, CtaPageStation::newGenericBuilder);
                 currentPage = previousPageAgain.selectTabFast(tabToComeBackTo, pageStationFactory);
@@ -277,8 +278,9 @@ public class Journeys {
      */
     public static TabSwitcherGroupCardFacility mergeAllTabsToNewGroup(
             TabSwitcherStation tabSwitcher) {
-        TabModel tabModel = tabSwitcher.tabModelElement.get();
-        List<Tab> tabs = TabModelUtils.convertTabListToListOfTabs(tabModel);
+        TabModel tabModel = tabSwitcher.tabModelElement.value();
+        List<Tab> tabs =
+                runOnUiThreadBlocking(() -> TabModelUtils.convertTabListToListOfTabs(tabModel));
         return mergeTabsToNewGroup(tabSwitcher, tabs);
     }
 
@@ -293,10 +295,11 @@ public class Journeys {
     public static TabSwitcherGroupCardFacility mergeTabsToNewGroup(
             TabSwitcherStation tabSwitcher, List<Tab> tabs) {
         assert !tabs.isEmpty();
-        TabModel currentModel = tabSwitcher.tabModelElement.get();
+        TabModel currentModel = tabSwitcher.tabModelElement.value();
         TabSwitcherListEditorFacility editor = tabSwitcher.openAppMenu().clickSelectTabs();
 
-        TabBinList tabBinList = TabBinningUtil.binTabsByCard(currentModel);
+        TabBinList tabBinList =
+                runOnUiThreadBlocking(() -> TabBinningUtil.binTabsByCard(currentModel));
         for (Tab tab : tabs) {
             TabBinPosition tabPosition = tabBinList.tabIdToPositionMap.get(tab.getId());
             assert tabPosition != null;
@@ -341,7 +344,7 @@ public class Journeys {
         List<Token> tabGroupIdsOfGroupedTabs = new ArrayList<>();
         for (Tab tab : tabs) {
             int id = tab.getId();
-            Tab tabById = ThreadUtils.runOnUiThreadBlocking(() -> currentModel.getTabById(id));
+            Tab tabById = runOnUiThreadBlocking(() -> currentModel.getTabById(id));
             if (tabById != null) {
                 Token tabGroupId = tabById.getTabGroupId();
                 tabGroupIdsOfGroupedTabs.add(tabGroupId);

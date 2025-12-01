@@ -1202,7 +1202,7 @@ static unsigned HUFv06_isError(size_t code) { return ERR_isError(code); }
 /*-**************************************************************
 *  FSE NCount encoding-decoding
 ****************************************************************/
-static short FSEv06_abs(short a) { return a<0 ? -a : a; }
+static short FSEv06_abs(short a) { return a<0 ? (short)-a : a; }
 
 size_t FSEv06_readNCount (short* normalizedCounter, unsigned* maxSVPtr, unsigned* tableLogPtr,
                  const void* headerBuffer, size_t hbSize)

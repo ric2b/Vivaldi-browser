@@ -4,8 +4,6 @@
 
 #import "ios/chrome/browser/shared/coordinator/scene/scene_controller.h"
 
-#import <MaterialComponents/MaterialSnackbar.h>
-
 #import "base/apple/foundation_util.h"
 #import "base/feature_list.h"
 #import "base/functional/callback_helpers.h"
@@ -32,6 +30,7 @@
 #import "components/prefs/pref_service.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/signin/public/base/signin_pref_names.h"
+#import "components/signin/public/identity_manager/account_info.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/supervised_user/core/browser/kids_management_api_fetcher.h"
 #import "components/supervised_user/core/browser/proto/kidsmanagement_messages.pb.h"
@@ -46,7 +45,6 @@
 #import "ios/chrome/app/application_delegate/url_opener_params.h"
 #import "ios/chrome/app/application_mode.h"
 #import "ios/chrome/app/change_profile_commands.h"
-#import "ios/chrome/app/chrome_overlay_window.h"
 #import "ios/chrome/app/deferred_initialization_runner.h"
 #import "ios/chrome/app/deferred_initialization_task_names.h"
 #import "ios/chrome/app/profile/profile_state.h"
@@ -56,9 +54,9 @@
 #import "ios/chrome/browser/app_store_rating/ui_bundled/app_store_rating_scene_agent.h"
 #import "ios/chrome/browser/app_store_rating/ui_bundled/features.h"
 #import "ios/chrome/browser/appearance/ui_bundled/appearance_customization.h"
-#import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_constants.h"
-#import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_coordinator.h"
-#import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_coordinator_delegate.h"
+#import "ios/chrome/browser/authentication/account_menu/coordinator/account_menu_coordinator.h"
+#import "ios/chrome/browser/authentication/account_menu/coordinator/account_menu_coordinator_delegate.h"
+#import "ios/chrome/browser/authentication/account_menu/public/account_menu_constants.h"
 #import "ios/chrome/browser/authentication/ui_bundled/change_profile/change_profile_authentication_continuation.h"
 #import "ios/chrome/browser/authentication/ui_bundled/change_profile/change_profile_load_url.h"
 #import "ios/chrome/browser/authentication/ui_bundled/change_profile/change_profile_signout_continuation.h"
@@ -110,7 +108,6 @@
 #import "ios/chrome/browser/metrics/model/tab_usage_recorder_browser_agent.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_feature.h"
-#import "ios/chrome/browser/passwords/model/features.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager_factory.h"
 #import "ios/chrome/browser/passwords/model/password_checkup_utils.h"
@@ -128,6 +125,7 @@
 #import "ios/chrome/browser/promos_manager/ui_bundled/utils.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_browser_agent.h"
 #import "ios/chrome/browser/safari_data_import/coordinator/safari_data_import_main_coordinator.h"
+#import "ios/chrome/browser/safari_data_import/public/safari_data_import_entry_point.h"
 #import "ios/chrome/browser/scoped_ui_blocker/ui_bundled/scoped_ui_blocker.h"
 #import "ios/chrome/browser/screenshot/model/screenshot_delegate.h"
 #import "ios/chrome/browser/sessions/model/session_restoration_service.h"
@@ -139,6 +137,7 @@
 #import "ios/chrome/browser/settings/ui_bundled/password/passwords_mediator.h"
 #import "ios/chrome/browser/settings/ui_bundled/settings_navigation_controller.h"
 #import "ios/chrome/browser/settings/ui_bundled/utils/password_utils.h"
+#import "ios/chrome/browser/share_extension/model/share_extension_scene_agent.h"
 #import "ios/chrome/browser/shared/coordinator/default_browser_promo/non_modal_default_browser_promo_scheduler_scene_agent.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_scene_agent.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_ui_provider.h"
@@ -165,6 +164,7 @@
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/credential_exchange_commands.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/commands/open_lens_input_selection_command.h"
@@ -177,7 +177,9 @@
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/prototypes/diamond/utils.h"
-#import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
+#import "ios/chrome/browser/shared/public/snackbar/snackbar_message.h"
+#import "ios/chrome/browser/shared/public/snackbar/snackbar_message_action.h"
+#import "ios/chrome/browser/shared/ui/chrome_overlay_window/chrome_overlay_window.h"
 #import "ios/chrome/browser/shared/ui/util/top_view_controller.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
@@ -195,6 +197,7 @@
 #import "ios/chrome/browser/start_surface/ui_bundled/start_surface_util.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/tab_insertion/model/tab_insertion_browser_agent.h"
+#import "ios/chrome/browser/tab_switcher/tab_grid/base_grid/coordinator/tab_grid_scene_agent.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_coordinator.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_coordinator_delegate.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_utils.h"
@@ -283,15 +286,12 @@ namespace {
 // makeKeyAndVisible before mainCoordinator start. When disabled, this fix
 // resolves a flicker when starting the app in light mode
 BASE_FEATURE(kMakeKeyAndVisibleBeforeMainCoordinatorStart,
-             "MakeKeyAndVisibleBeforeMainCoordinatorStart",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Feature to control whether Search Intents (Widgets, Application
 // Shortcuts menu) forcibly open a new tab, rather than reusing an
 // existing NTP. See http://crbug.com/1363375 for details.
-BASE_FEATURE(kForceNewTabForIntentSearch,
-             "ForceNewTabForIntentSearch",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kForceNewTabForIntentSearch, base::FEATURE_DISABLED_BY_DEFAULT);
 
 // A rough estimate of the expected duration of a view controller transition
 // animation. It's used to temporarily disable mutally exclusive chrome
@@ -652,6 +652,10 @@ void OnListFamilyMembersResponse(
   return self;
 }
 
+- (void)dealloc {
+  CHECK(!_authServiceObserverBridge, base::NotFatalUntil::M145);
+}
+
 - (void)setProfileState:(ProfileState*)profileState {
   DCHECK(!_sceneState.profileState);
 
@@ -671,6 +675,11 @@ void OnListFamilyMembersResponse(
   [_sceneState addAgent:[[StartSurfaceSceneAgent alloc] init]];
   [_sceneState addAgent:[[SessionSavingSceneAgent alloc] init]];
   [_sceneState addAgent:[[LayoutGuideSceneAgent alloc] init]];
+  [_sceneState addAgent:[[TabGridSceneAgent alloc] init]];
+
+  if (IsShareExtensionForMultiprofileEnabled()) {
+    [_sceneState addAgent:[[ShareExtensionSceneAgent alloc] init]];
+  }
 
   // Start observing the ProfileState. This needs to happen after the agents
   // as this may result in creation of the UI which can access to the agents.
@@ -762,22 +771,48 @@ void OnListFamilyMembersResponse(
   }
 }
 
-- (void)handleExternalIntents {
+- (BOOL)handleExternalIntents {
   if (![self canHandleIntents]) {
-    return;
+    return NO;
   }
   UserActivityBrowserAgent* userActivityBrowserAgent =
       UserActivityBrowserAgent::FromBrowser(self.currentInterface.browser);
+
+  NSMutableSet<UIOpenURLContext*>* contexts =
+      [NSMutableSet setWithSet:self.sceneState.connectionOptions.URLContexts];
+  [contexts unionSet:self.sceneState.URLContextsToOpen];
+  self.sceneState.URLContextsToOpen = nil;
+
+  if ([self multipleAccountSwitchesRequired:contexts]) {
+    // If more than one context require a potental account change only open the
+    // first context and discard the others to avoid looping between acocunt
+    // changes.
+    NSEnumerator<UIOpenURLContext*>* enumerator = [contexts objectEnumerator];
+    contexts = [NSMutableSet setWithObject:[enumerator nextObject]];
+    base::UmaHistogramEnumeration(
+        kContextsToOpen, ContextsToOpen::kMoreThanOneContextWithAccountChange);
+  }
+
+  BOOL widgetsForMIMEnabled = BUILDFLAG(ENABLE_WIDGETS_FOR_MIM);
+  if (widgetsForMIMEnabled || IsShareExtensionForMultiprofileEnabled()) {
+    // Find the first context that requires an account change.
+    WidgetContext* context = [self findContextRequiringAccountChange:contexts];
+    // Perform profile switching if needed.
+    if ([self changeProfileForContext:context contexts:contexts openURL:NO]) {
+      return YES;
+    }
+  }
+
   // Handle URL opening from
   // `UIWindowSceneDelegate scene:willConnectToSession:options:`.
-  for (UIOpenURLContext* context in self.sceneState.connectionOptions
-           .URLContexts) {
+  for (UIOpenURLContext* context in contexts) {
     URLOpenerParams* params =
         [[URLOpenerParams alloc] initWithUIOpenURLContext:context];
     [self openTabFromLaunchWithParams:params
                    startupInformation:self.sceneState.profileState.appState
                                           .startupInformation];
   }
+
   if (self.sceneState.connectionOptions.shortcutItem) {
     userActivityBrowserAgent->Handle3DTouchApplicationShortcuts(
         self.sceneState.connectionOptions.shortcutItem);
@@ -843,6 +878,7 @@ void OnListFamilyMembersResponse(
       [self showToastWhenOpenExternalIntentInUnexpectedMode];
     }
   }
+  return NO;
 }
 
 // Handles a tab move activity as part of an intent when launching a
@@ -885,7 +921,10 @@ void OnListFamilyMembersResponse(
 
 - (void)sceneState:(SceneState*)sceneState
     hasPendingURLs:(NSSet<UIOpenURLContext*>*)URLContexts {
-  [self handleURLContextsToOpen];
+  // Only process the event if the profile is ready.
+  if (sceneState.profileState.initStage >= ProfileInitStage::kFinal) {
+    [self handleURLContextsToOpen];
+  }
 }
 
 - (void)performActionForShortcutItem:(UIApplicationShortcutItem*)shortcutItem
@@ -1032,39 +1071,69 @@ void OnListFamilyMembersResponse(
   if (widgetsForMIMEnabled || IsShareExtensionForMultiprofileEnabled()) {
     // Find the first context that requires an account change.
     WidgetContext* context = [self findContextRequiringAccountChange:contexts];
-    if (context) {
-      // Perform profile switching if needed.
-      id<ChangeProfileCommands> changeProfileHandler = HandlerForProtocol(
-          self.sceneState.profileState.appState.appCommandDispatcher,
-          ChangeProfileCommands);
-
-      std::optional<std::string> profileName;
-
-      if ([context.gaiaID isEqualToString:app_group::kNoAccount]) {
-        // Use the personal profile name if there is no GaiaID (this happens in
-        // the sign-out scenario).
-        profileName = GetApplicationContext()
-                          ->GetProfileManager()
-                          ->GetProfileAttributesStorage()
-                          ->GetPersonalProfileName();
-      } else {
-        profileName = GetApplicationContext()
-                          ->GetAccountProfileMapper()
-                          ->FindProfileNameForGaiaID(GaiaId(context.gaiaID));
-      }
-      if (profileName.has_value()) {
-        [changeProfileHandler
-            changeProfile:*profileName
-                 forScene:self.sceneState
-                   reason:ChangeProfileReason::kSwitchAccountsFromWidget
-             continuation:CreateChangeProfileAuthenticationContinuation(
-                              context, contexts)];
-        return;
-      }
+    // Perform profile switching if needed.
+    if ([self changeProfileForContext:context contexts:contexts openURL:YES]) {
+      // Don't open the URLs if the profile was changed.
+      return;
     }
   }
 
   [self openURLContexts:contexts];
+}
+
+// Returns YES if a profile change was triggered.
+- (BOOL)changeProfileForContext:(WidgetContext*)context
+                       contexts:(NSSet<UIOpenURLContext*>*)contexts
+                        openURL:(BOOL)openURL {
+  if (!context) {
+    return NO;
+  }
+
+  // Perform profile switching if needed.
+  id<ChangeProfileCommands> changeProfileHandler = HandlerForProtocol(
+      self.sceneState.profileState.appState.appCommandDispatcher,
+      ChangeProfileCommands);
+
+  std::optional<std::string> profileName;
+
+  if ([context.gaiaID isEqualToString:app_group::kNoAccount]) {
+    // Use the personal profile name if there is no GaiaID (this happens in
+    // the sign-out scenario).
+    profileName = GetApplicationContext()
+                      ->GetProfileManager()
+                      ->GetProfileAttributesStorage()
+                      ->GetPersonalProfileName();
+  } else {
+    profileName = GetApplicationContext()
+                      ->GetAccountProfileMapper()
+                      ->FindProfileNameForGaiaID(GaiaId(context.gaiaID));
+  }
+
+  if (!profileName.has_value()) {
+    return NO;
+  }
+
+  const std::string& oldProfileName =
+      self.sceneState.profileState.profile->GetProfileName();
+  if (oldProfileName == profileName) {
+    // In this case there will be no profile change, just an account change,
+    // always open the URL in the continuation in this scenario.
+    openURL = YES;
+  }
+  ChangeProfileReason reason;
+  if ([self shareExtensionURLEligibleForAccountChange:context.context.URL]) {
+    reason = ChangeProfileReason::kSwitchAccountsFromShareExtension;
+  } else {
+    reason = ChangeProfileReason::kSwitchAccountsFromWidget;
+  }
+
+  [changeProfileHandler
+      changeProfile:*profileName
+           forScene:self.sceneState
+             reason:reason
+       continuation:CreateChangeProfileAuthenticationContinuation(
+                        context, contexts, openURL)];
+  return YES;
 }
 
 - (BOOL)multipleAccountSwitchesRequired:(NSSet<UIOpenURLContext*>*)URLContexts {
@@ -1103,8 +1172,11 @@ void OnListFamilyMembersResponse(
 
 - (WidgetContext*)findContextRequiringAccountChange:
     (NSSet<UIOpenURLContext*>*)URLContexts {
-  NSString* gaiaInApp = nil;
-
+  signin::IdentityManager* identityManager =
+      IdentityManagerFactory::GetForProfile(self.profile->GetOriginalProfile());
+  CoreAccountInfo primaryAccount =
+      identityManager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
+  NSString* gaiaInApp = primaryAccount.gaia.ToNSString();
   for (UIOpenURLContext* context : URLContexts) {
     // Check that this URL is coming from a widget.
     if (!([self widgetURLEligibleForAccountChange:context.URL] ||
@@ -1120,20 +1192,13 @@ void OnListFamilyMembersResponse(
     }
     NSString* newGaiaID = base::SysUTF8ToNSString(newGaia);
 
-    ProfileIOS* profile = self.profile->GetOriginalProfile();
-    AuthenticationService* authService =
-        AuthenticationServiceFactory::GetForProfile(profile);
-    id<SystemIdentity> identityOnDevice =
-        authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
-    gaiaInApp = identityOnDevice.gaiaID;
-
     // Only switch account if the gaia in the widget is different from the gaia
     // in the app.
     if ([gaiaInApp isEqualToString:newGaiaID]) {
       continue;
     }
 
-    if ([newGaiaID isEqualToString:app_group::kNoAccount] && gaiaInApp) {
+    if ([newGaiaID isEqualToString:app_group::kNoAccount] && gaiaInApp.length) {
       return
           [[WidgetContext alloc] initWithContext:context
                                           gaiaID:newGaiaID
@@ -1286,7 +1351,12 @@ void OnListFamilyMembersResponse(
     if (!IsFullscreenSigninPromoManagerMigrationEnabled()) {
       [self tryPresentSigninUpgradePromo];
     }
-    [self handleExternalIntents];
+
+    if ([self handleExternalIntents]) {
+      // handleExternalIntents may change profile, don't execute code below if
+      // profile was changed.
+      return;
+    }
 
     if (IsVivaldiRunning()) {
       ProfileIOS* profile = self.mainInterface.browser->GetProfile();
@@ -1780,10 +1850,10 @@ void OnListFamilyMembersResponse(
                                           completion:nil];
   };
 
-  MDCSnackbarMessageAction* action = [[MDCSnackbarMessageAction alloc] init];
+  SnackbarMessageAction* action = [[SnackbarMessageAction alloc] init];
   action.handler = moreAction;
   action.title = l10n_util::GetNSString(IDS_IOS_NAVIGATION_BAR_MORE_BUTTON);
-  action.accessibilityIdentifier =
+  action.accessibilityHint =
       l10n_util::GetNSString(IDS_IOS_NAVIGATION_BAR_MORE_BUTTON);
 
   NSString* text =
@@ -1791,7 +1861,7 @@ void OnListFamilyMembersResponse(
           ? l10n_util::GetNSString(IDS_IOS_SNACKBAR_MESSAGE_INCOGNITO_FORCED)
           : l10n_util::GetNSString(IDS_IOS_SNACKBAR_MESSAGE_INCOGNITO_DISABLED);
 
-  MDCSnackbarMessage* message = CreateSnackbarMessage(text);
+  SnackbarMessage* message = [[SnackbarMessage alloc] initWithTitle:text];
   message.action = action;
 
   [handler showSnackbarMessage:message
@@ -1916,13 +1986,11 @@ void OnListFamilyMembersResponse(
 }
 
 - (BOOL)isSignedIn {
-  AuthenticationService* authenticationService =
-      AuthenticationServiceFactory::GetForProfile(self.profile);
-  DCHECK(authenticationService);
-  DCHECK(authenticationService->initialized());
+  signin::IdentityManager* identityManager =
+      IdentityManagerFactory::GetForProfile(self.profile);
+  CHECK(identityManager);
 
-  return authenticationService->HasPrimaryIdentity(
-      signin::ConsentLevel::kSignin);
+  return identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin);
 }
 
 - (void)showYoutubeIncognitoWithUrlLoadParams:
@@ -2416,14 +2484,16 @@ using UserFeedbackDataCallback =
   [self startSigninCoordinatorWithCompletion:command.completion];
 }
 
-- (void)showAccountMenuFromAccessPoint:(AccountMenuAccessPoint)accessPoint
-                                   URL:(const GURL&)url {
+- (void)showAccountMenuFromWebWithURL:(const GURL&)url {
   if (![self isTabAvailableToPresentViewController]) {
     return;
   }
-  DCHECK(!self.signinCoordinator)
-      << "self.signinCoordinator: "
-      << base::SysNSStringToUTF8([self.signinCoordinator description]);
+  if (_accountMenuCoordinator) {
+    // In case the account is already opened, no need to open a second one.
+    // It is not clear how it could occur, but it does according to
+    // crbug.com/443698000.
+    return;
+  }
   Browser* browser = self.mainInterface.browser;
   UIViewController* baseViewController = self.mainInterface.viewController;
   _accountMenuCoordinator = [[AccountMenuCoordinator alloc]
@@ -2710,19 +2780,28 @@ using UserFeedbackDataCallback =
     // Currently displaying.
     return;
   }
-  CHECK(ShouldShowSafariImportWorkflow(
+  CHECK(ShouldShowSafariDataImportEntryPoint(
       self.currentInterface.browser->GetProfile()));
+  BOOL presentOverSettings = self.settingsNavigationController &&
+                             entryPoint == SafariDataImportEntryPoint::kSetting;
+  UIViewController* baseViewController = presentOverSettings
+                                             ? self.settingsNavigationController
+                                             : self.activeViewController;
   SafariDataImportMainCoordinator* safariDataImportCoordinator =
       [[SafariDataImportMainCoordinator alloc]
               initFromEntryPoint:entryPoint
-          withBaseViewController:self.activeViewController
+          withBaseViewController:baseViewController
                          browser:self.currentInterface.browser];
   safariDataImportCoordinator.delegate = self;
   safariDataImportCoordinator.UIHandler = UIHandler;
-  [self closePresentedViews:YES
-                 completion:^{
-                   [safariDataImportCoordinator start];
-                 }];
+  if (presentOverSettings) {
+    [safariDataImportCoordinator start];
+  } else {
+    [self closePresentedViews:YES
+                   completion:^{
+                     [safariDataImportCoordinator start];
+                   }];
+  }
   _safariImportCoordinator = safariDataImportCoordinator;
 }
 
@@ -3371,6 +3450,11 @@ using UserFeedbackDataCallback =
       return ^{
         [weakSelf searchShareExtensionImageWithLens];
       };
+    case CREDENTIAL_EXCHANGE_IMPORT:
+      return ^{
+        [weakSelf importCredentials];
+      };
+
 
     // Vivaldi
     case SHOW_UNINSTALL_SURVEY:
@@ -3463,7 +3547,8 @@ using UserFeedbackDataCallback =
   }
 
   // Do not focus omnibox on first run.
-  if (IsVivaldiRunning() && IsFirstRun())
+  if (IsVivaldiRunning() &&
+      self.sceneState.profileState.initStage != ProfileInitStage::kFinal)
     return; // End Vivaldi
 
   id<OmniboxCommands> omniboxCommandsHandler = HandlerForProtocol(
@@ -3601,6 +3686,15 @@ using UserFeedbackDataCallback =
       ReadingListBrowserAgent::FromBrowser(self.currentInterface.browser);
 
   readingListBrowserAgent->BulkAddURLsToReadingListWithViewSnackbar(URLs);
+}
+
+- (void)importCredentials {
+  id<CredentialExchangeCommands> credentialExchangeCommands =
+      HandlerForProtocol(self.currentInterface.browser->GetCommandDispatcher(),
+                         CredentialExchangeCommands);
+  [credentialExchangeCommands
+      showCredentialExchangeImport:self.startupParameters
+                                       .credentialExchangeImportUUID];
 }
 
 #pragma mark - TabOpening implementation.
@@ -4253,17 +4347,21 @@ using UserFeedbackDataCallback =
 // with or without animation. Executes its signinCompletion. It’s expected to be
 // not already executed.
 - (void)stopSigninCoordinatorWithCompletionAnimated:(BOOL)animated {
-  if (!self.signinCoordinator) {
+  // We retain the coordinator until the end of the completion, while ensuring
+  // that when the completion requests `self` to stop the signin coordinator,
+  // `stop` is not called a second time.
+  SigninCoordinator* signinCoordinator = self.signinCoordinator;
+  if (!signinCoordinator) {
     return;
   }
+  self.signinCoordinator = nil;
 
-  [self.signinCoordinator stopAnimated:animated];
+  [signinCoordinator stopAnimated:animated];
   SigninCoordinatorCompletionCallback signinCompletion =
-      self.signinCoordinator.signinCompletion;
-  self.signinCoordinator.signinCompletion = nil;
+      signinCoordinator.signinCompletion;
+  signinCoordinator.signinCompletion = nil;
   CHECK(signinCompletion, base::NotFatalUntil::M142);
   signinCompletion(SigninCoordinatorResultInterrupted, nil);
-  self.signinCoordinator = nil;
 }
 
 // Starts the sign-in coordinator with a default cleanup completion.
@@ -4994,11 +5092,24 @@ using UserFeedbackDataCallback =
 // When focusOmniboxOnNTP and NTP is opened from user action only then focus
 // the omnibox on NTP open.
 - (void)handleNTPInsertEventWithChange:(const WebStateListChange&)change {
-  if ([self focusOmniboxOnNTP] && self.willOpenNTPFromUserAction) {
+  if (self.willOpenNTPFromUserAction) {
     const WebStateListChangeInsert& insertChange =
         change.As<WebStateListChangeInsert>();
-    if (IsVisibleURLNewTabPage(insertChange.inserted_web_state())) {
-      [self focusOmnibox];
+    if (IsVisibleURLNewTabPage(insertChange.inserted_web_state()) &&
+        self.sceneState.profileState.initStage == ProfileInitStage::kFinal) {
+      [self.mainCoordinator setTabGridHidden:NO];
+
+      id<BrowserCoordinatorCommands> handler = HandlerForProtocol(
+          self.currentInterface.browser->GetCommandDispatcher(),
+          BrowserCoordinatorCommands);
+      [handler setToolbarHidden:NO];
+
+      WrangledBrowser* targetInterface =
+          insertChange.inserted_web_state()->GetBrowserState()->IsOffTheRecord()
+              ? self.incognitoInterface
+              : self.mainInterface;
+      [self beginActivatingBrowser:targetInterface.browser
+                      focusOmnibox:[self focusOmniboxOnNTP]];
     }
   }
 
@@ -5031,17 +5142,6 @@ using UserFeedbackDataCallback =
     TabInsertionBrowserAgent::FromBrowser(
         targetInterface.browser)->InsertWebState(
               paramsToLoad.web_params, tabInsertionParams);
-    [weakSelf beginActivatingBrowser:targetInterface.browser
-                    focusOmnibox:[weakSelf focusOmniboxOnNTP]];
-    // Show tab grid once NTP is activated and BVC is visible.
-    [weakSelf.mainCoordinator setTabGridHidden:NO];
-
-    id<BrowserCoordinatorCommands> handler =
-        HandlerForProtocol(
-           weakSelf.currentInterface.browser->GetCommandDispatcher(),
-              BrowserCoordinatorCommands);
-    // Show toolbar once BVC is visible and and omnibox is focused.
-    [handler setToolbarHidden:NO];
   });
   self.willCloseAllTabs = NO;
 }

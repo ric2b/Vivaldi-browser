@@ -196,7 +196,8 @@ void LoadFunctionDataAndWasmInstance(MacroAssembler* masm,
       function_data,
       FieldOperand(shared_function_info,
                    SharedFunctionInfo::kTrustedFunctionDataOffset),
-      kUnknownIndirectPointerTag, kScratchRegister);
+      kWasmFunctionDataIndirectPointerTag, kScratchRegister);
+
   shared_function_info = no_reg;
 
   Register trusted_instance_data = wasm_instance;
@@ -606,8 +607,10 @@ void Builtins::Generate_GenericJSToWasmInterpreterWrapper(
   //  - the receiver
   // and transfer the control to the return address (the return address is
   // expected to be on the top of the stack).
+  // Add 1 to include the receiver in the cleanup count.
   // We cannot use just the ret instruction for this, because we cannot pass the
   // number of slots to remove in a Register as an argument.
+  __ incq(param_count);
   __ DropArguments(param_count, rbx);
   __ ret(0);
 

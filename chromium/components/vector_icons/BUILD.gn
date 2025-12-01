@@ -99,8 +99,10 @@ if (current_toolchain == default_toolchain) {
       "file_download.icon",
       "file_download_chrome_refresh.icon",
       "file_download_off_chrome_refresh.icon",
+      "filter.icon",
       "fingerprint.icon",
       "fingerprint_off.icon",
+      "flight.icon",
       "folder.icon",
       "folder_chrome_refresh.icon",
       "folder_managed_refresh.icon",
@@ -247,6 +249,7 @@ if (current_toolchain == default_toolchain) {
       "sync_off_chrome_refresh.icon",
       "sync_problem_chrome_refresh.icon",
       "sync_saved_locally.icon",
+      "sync_saved_locally_off.icon",
       "tab_search.icon",
       "tenancy.icon",
       "thumb_down.icon",
@@ -294,6 +297,7 @@ if (current_toolchain == default_toolchain) {
     if (is_chrome_branded) {
       sources += [
         "google_chrome/google_agentspace_monochrome_logo.icon",
+        "google_chrome/google_agentspace_monochrome_logo_25.icon",
         "google_chrome/google_calendar.icon",
         "google_chrome/google_chrome_webstore.icon",
         "google_chrome/google_docs.icon",

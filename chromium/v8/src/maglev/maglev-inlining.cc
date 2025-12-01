@@ -33,7 +33,7 @@ bool MaglevInliner::IsSmallWithHeapNumberInputsOutputs(
     MaglevCallSiteInfo* call_site) const {
   bool has_heapnumber_input_output = false;
 
-  if (call_site->generic_call_node->get_uses_repr_hints().contains_any(
+  if (call_site->generic_call_node->use_repr_hints().contains_any(
           UseRepresentationSet{UseRepresentation::kFloat64,
                                UseRepresentation::kHoleyFloat64,
                                UseRepresentation::kTruncatedInt32})) {
@@ -58,7 +58,7 @@ bool MaglevInliner::IsSmallWithHeapNumberInputsOutputs(
 
   if (!has_heapnumber_input_output) {
     TRACE("> Does not have heapnum in/out. Uses: "
-          << call_site->generic_call_node->get_uses_repr_hints());
+          << call_site->generic_call_node->use_repr_hints());
     return false;
   }
 
@@ -66,9 +66,16 @@ bool MaglevInliner::IsSmallWithHeapNumberInputsOutputs(
          max_inlined_bytecode_size_small_with_heapnum_in_out();
 }
 
-void MaglevInliner::Run() {
-  if (graph_->inlineable_calls().empty()) return;
+bool MaglevInliner::CanInlineCall() {
+  return !graph_->inlineable_calls().empty() &&
+         (graph_->total_inlined_bytecode_size() <
+              max_inlined_bytecode_size_cumulative() ||
+          graph_->total_inlined_bytecode_size_small() <
+              max_inlined_bytecode_size_small_total());
+}
 
+bool MaglevInliner::InlineCallSites() {
+  DCHECK(CanInlineCall());
   while (!graph_->inlineable_calls().empty()) {
     MaglevCallSiteInfo* call_site = ChooseNextCallSite();
 
@@ -82,12 +89,17 @@ void MaglevInliner::Run() {
 
     if (graph_->total_inlined_bytecode_size() >
         max_inlined_bytecode_size_cumulative()) {
+      TRACE("> Main budget exhausted ("
+            << graph_->total_inlined_bytecode_size() << " > "
+            << max_inlined_bytecode_size_cumulative() << ")");
       // We ran out of budget. Checking if this is a small-ish function that we
       // can still inline.
       if (graph_->total_inlined_bytecode_size_small() >
           max_inlined_bytecode_size_small_total()) {
         graph_->compilation_info()->set_could_not_inline_all_candidates();
-        TRACE("> Budget exhausted, stopping");
+        TRACE(">> Small budget exhausted ("
+              << graph_->total_inlined_bytecode_size_small() << " > "
+              << max_inlined_bytecode_size_small_total() << "), stopping.");
         break;
       }
 
@@ -95,63 +107,78 @@ void MaglevInliner::Run() {
         graph_->compilation_info()->set_could_not_inline_all_candidates();
         // Not that we don't break just rather just continue: next candidates
         // might be inlineable.
-        TRACE("> !has_heapnumber_input_output or not enough budget, skipping");
+        TRACE(">> !is_small_with_heapnum_input_outputs, skipping");
         continue;
       }
     }
 
-    TRACE("> Inlining!");
-    MaybeReduceResult result =
+    InliningResult result =
         BuildInlineFunction(call_site, is_small_with_heapnum_input_outputs);
-    if (result.IsFail()) continue;
+    if (result == InliningResult::kAbort) return false;
+    if (result == InliningResult::kFail) continue;
+    DCHECK_EQ(result, InliningResult::kDone);
+
+    // Remove unreachable blocks if we have any.
+    if (graph_->may_have_unreachable_blocks()) {
+      graph_->RemoveUnreachableBlocks();
+    }
+
     // If --trace-maglev-inlining-verbose, we print the graph after each
     // inlining step/call.
-    if (V8_UNLIKELY(v8_flags.print_maglev_graphs && is_tracing_enabled())) {
+    if (V8_UNLIKELY(ShouldPrintMaglevGraph())) {
       std::cout << "\nAfter inlining "
                 << call_site->generic_call_node->shared_function_info()
                 << std::endl;
       PrintGraph(std::cout, graph_);
     }
+  }
+  return true;
+}
 
-    // Optimize current graph.
-    {
-      GraphProcessor<MaglevGraphOptimizer, /* visit_identity_nodes */ true>
-          optimizer(graph_);
-      optimizer.ProcessGraph(graph_);
+void MaglevInliner::RunOptimizer() {
+  RecomputeKnownNodeAspectsProcessor kna_processor(graph_);
+  MaglevGraphOptimizer optimizer(graph_, kna_processor);
+  GraphMultiProcessor<MaglevGraphOptimizer&,
+                      RecomputeKnownNodeAspectsProcessor&,
+                      RecomputePhiUseHintsProcessor>
+      optimization_pass(optimizer, kna_processor,
+                        RecomputePhiUseHintsProcessor{graph_->zone()});
+  optimization_pass.ProcessGraph(graph_);
 
-      if (V8_UNLIKELY(v8_flags.print_maglev_graphs && is_tracing_enabled())) {
-        std::cout << "\nAfter optimization "
-                  << call_site->generic_call_node->shared_function_info()
-                  << std::endl;
-        PrintGraph(std::cout, graph_);
-      }
-    }
-
-    // Sweep identities.
-    // TODO(victorgomes): After inlining, the result of the previous inlined
-    // function is an identity. Although we guarantee that all arguments to the
-    // inlined function will not be an identity, their inputs could. However,
-    // the graph builder does not expect identities at any point. We need to
-    // either get rid of the identities before another inline function (either
-    // via the sweeper or the optimizer), or support identities in the graph
-    // builder.
-    {
-      GraphProcessor<SweepIdentityNodes, /* visit_identity_nodes */ true>
-          sweeper;
-      sweeper.ProcessGraph(graph_);
-    }
+  // Remove unreachable blocks if we have any.
+  if (graph_->may_have_unreachable_blocks()) {
+    graph_->RemoveUnreachableBlocks();
   }
 
-  // Otherwise we print just once at the end.
-  if (V8_UNLIKELY(v8_flags.print_maglev_graphs && is_tracing_enabled())) {
-    std::cout << "\nAfter inlining" << std::endl;
+  if (V8_UNLIKELY(ShouldPrintMaglevGraph())) {
+    std::cout << "\nAfter optimization " << std::endl;
     PrintGraph(std::cout, graph_);
   }
 }
 
+bool MaglevInliner::Run() {
+  if (graph_->inlineable_calls().empty()) return true;
+
+  while (CanInlineCall()) {
+    if (!InlineCallSites()) return false;
+    RunOptimizer();
+  }
+
+  // Clear conversion, identities and ReturnedValues uses from deopt frames.
+  for (DeoptFrame* top_frame : graph_->eager_deopt_top_frames()) {
+    EagerDeoptInfo(zone(), top_frame, {}).Unwrap();
+  }
+  for (auto [top_frame, result_location] : graph_->lazy_deopt_top_frames()) {
+    LazyDeoptInfo(zone(), top_frame, result_location.first,
+                  result_location.second, {})
+        .Unwrap();
+  }
+  return true;
+}
+
 int MaglevInliner::max_inlined_bytecode_size_cumulative() const {
   if (graph_->compilation_info()->is_turbolev()) {
-    return v8_flags.max_inlined_bytecode_size_cumulative;
+    return v8_flags.max_turbolev_inlined_bytecode_size_cumulative;
   } else {
     return v8_flags.max_maglev_inlined_bytecode_size_cumulative;
   }
@@ -177,7 +204,7 @@ MaglevCallSiteInfo* MaglevInliner::ChooseNextCallSite() {
   return call_site;
 }
 
-MaybeReduceResult MaglevInliner::BuildInlineFunction(
+MaglevInliner::InliningResult MaglevInliner::BuildInlineFunction(
     MaglevCallSiteInfo* call_site, bool is_small) {
   CallKnownJSFunction* call_node = call_site->generic_call_node;
   BasicBlock* call_block = call_node->owner();
@@ -190,7 +217,7 @@ MaybeReduceResult MaglevInliner::BuildInlineFunction(
   if (!call_block || call_block->is_dead()) {
     // The block containing the call is unreachable, and it was previously
     // removed. Do not try to inline the call.
-    return ReduceResult::Fail();
+    return InliningResult::kFail;
   }
 
   if (V8_UNLIKELY(v8_flags.trace_maglev_inlining && is_tracing_enabled())) {
@@ -214,6 +241,13 @@ MaybeReduceResult MaglevInliner::BuildInlineFunction(
       }
     }
   }
+  // Remove unreachable catch block if no throwable nodes were added during
+  // inlining.
+  // TODO(victorgomes): Improve this: track if we didnt indeed add a throwable
+  // node.
+  if (catch_block_might_be_unreachable) {
+    graph_->set_may_have_unreachable_blocks(true);
+  }
 
   // Remove exception handler info from call block.
   ExceptionHandlerInfo::List rem_handlers_in_call_block;
@@ -230,9 +264,16 @@ MaybeReduceResult MaglevInliner::BuildInlineFunction(
       zone(), caller_unit, shared, call_site->feedback_cell);
 
   if (is_small) {
+    TRACE("> Adding to small budget: " << call_site->bytecode_length
+                                       << " bytes");
     graph_->add_inlined_bytecode_size_small(call_site->bytecode_length);
+    TRACE(">> used small budget: "
+          << graph_->total_inlined_bytecode_size_small());
   } else {
+    TRACE("> Adding to regular budget: " << call_site->bytecode_length
+                                         << " bytes");
     graph_->add_inlined_bytecode_size(call_site->bytecode_length);
+    TRACE(">> used regular budget: " << graph_->total_inlined_bytecode_size());
   }
 
   // This can be invalidated by a previous inlining and it was not propagated to
@@ -240,7 +281,7 @@ MaybeReduceResult MaglevInliner::BuildInlineFunction(
   // TODO(victorgomes): Check if we should maintain this. We could also clear
   // unstable maps here.
   call_site->caller_details.known_node_aspects
-      ->any_map_for_any_node_is_unstable = true;
+      ->MarkAnyMapForAnyNodeIsUnstable();
 
   // Create a new graph builder for the inlined function.
   LocalIsolate* local_isolate = broker()->local_isolate_or_isolate();
@@ -278,9 +319,14 @@ MaybeReduceResult MaglevInliner::BuildInlineFunction(
       call_node->new_target().node()->Unwrap());
 
   if (result.IsDoneWithAbort()) {
+    if (inner_graph_builder.should_abort_compilation()) {
+      return InliningResult::kAbort;
+    }
+
     // Since the rest of the block is dead, these nodes don't belong
     // to any basic block anymore.
     for (auto node : rem_nodes_in_call_block) {
+      if (node == nullptr) continue;
       node->set_owner(nullptr);
     }
     // Restore the rest of the graph.
@@ -291,8 +337,8 @@ MaybeReduceResult MaglevInliner::BuildInlineFunction(
     // TODO(victorgomes): We probably don't need to iterate all the graph to
     // remove unreachable blocks, but only the successors of control_node in
     // saved_bbs.
-    RemoveUnreachableBlocks();
-    return result;
+    graph_->set_may_have_unreachable_blocks(true);
+    return InliningResult::kDone;
   }
 
   DCHECK(result.IsDoneWithValue());
@@ -318,25 +364,8 @@ MaybeReduceResult MaglevInliner::BuildInlineFunction(
   for (auto bb : saved_bb) {
     graph_->Add(bb);
   }
-
-  if (auto alloc = returned_value->TryCast<InlinedAllocation>()) {
-    // TODO(victorgomes): Support eliding VOs.
-    alloc->ForceEscaping();
-#ifdef DEBUG
-    alloc->set_is_returned_value_from_inline_call();
-#endif  // DEBUG
-  }
   call_node->OverwriteWithReturnValue(returned_value);
-
-  // Remove unreachable catch block if no throwable nodes were added during
-  // inlining.
-  // TODO(victorgomes): Improve this: track if we didnt indeed add a throwable
-  // node.
-  if (catch_block_might_be_unreachable) {
-    RemoveUnreachableBlocks();
-  }
-
-  return ReduceResult::Done();
+  return InliningResult::kDone;
 }
 
 std::vector<BasicBlock*> MaglevInliner::TruncateGraphAt(BasicBlock* block) {
@@ -403,13 +432,21 @@ ProcessResult ReturnedValueRepresentationSelector::Process(
       break;
     case ValueRepresentation::kFloat64:
       node->OverwriteWith<Float64ToTagged>();
+      // Note: it's important to use kCanonicalizeSmi here so that CheckSmis can
+      // be replaced by CheckSmiSizedInt32 while having the guarantee that
+      // re-tagged version of this node will indeed be Smis (and not Smi-sized
+      // HeapNumbers).
       node->Cast<Float64ToTagged>()->SetMode(
-          Float64ToTagged::ConversionMode::kForceHeapNumber);
+          Float64ToTagged::ConversionMode::kCanonicalizeSmi);
       break;
     case ValueRepresentation::kHoleyFloat64:
       node->OverwriteWith<HoleyFloat64ToTagged>();
+      // Note: it's important to use kCanonicalizeSmi here so that CheckSmis can
+      // be replaced by CheckSmiSizedInt32 while having the guarantee that
+      // re-tagged version of this node will indeed be Smis (and not Smi-sized
+      // HeapNumbers).
       node->Cast<HoleyFloat64ToTagged>()->SetMode(
-          HoleyFloat64ToTagged::ConversionMode::kForceHeapNumber);
+          HoleyFloat64ToTagged::ConversionMode::kCanonicalizeSmi);
       break;
     case ValueRepresentation::kIntPtr:
       node->OverwriteWith<IntPtrToNumber>();

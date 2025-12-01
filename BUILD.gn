@@ -79,9 +79,13 @@ group("All") {
       "//chrome/installer/mini_installer",
       "//components/zucchini:zucchini",
       "//components/zucchini:zucchini64",
-      "//vivaldi/update_notifier",
       # "//ui/views/examples:views_examples", # example test software for viewing icons
     ]
+    if (!vivaldi_disable_sparkle) {
+      deps += [
+        "//vivaldi/update_notifier",
+      ]
+    }
     if (vivaldi_build_tests) {
       deps += [
         "//components/zucchini:zucchini_unittests",
@@ -162,12 +166,21 @@ group("All") {
       deps += ["//ios/components:all_tests"]
     }
   }
-  if (is_mac || is_linux || is_android) {
+  if (is_mac || is_linux) {
     deps += [
       "//third_party/breakpad:minidump_stackwalk($host_system_allocator_toolchain)",
       "//third_party/breakpad:dump_syms($host_system_allocator_toolchain)",
+      "//third_party/breakpad:minidump_dump($host_system_allocator_toolchain)",
       ":copy_symbol_tools",
     ]
+    if (is_linux) {
+      # Note that minidump-2-core is built in the correct location for the
+      # archive step so we do not need to copy it
+      # see chromium/third_party/breakpad/BUILD.gn
+      deps += [
+        "//third_party/breakpad:minidump-2-core",
+      ]
+    }
   }
 }
 
@@ -181,12 +194,18 @@ group("vivaldi") {
   if (is_android) {
     deps -= [ "//chrome" ]
     deps += [ "//chrome/android:chrome_public_apk" ]
-    deps += [ "//chrome/android:chrome_public_bundle" ]
+    if (!is_debug) {
+      deps += [ "//chrome/android:chrome_public_bundle" ]
+    }
     foreach(t, ["//chrome/android:libchrome"]) {
       deps += [
         "${t}__jni_registration__native_sources",
         "${t}__jni_registration__java_sources",
       ]
+    }
+    if (! is_debug && (is_vivaldi_lynkco || is_vivaldi_mercedes || is_vivaldi_mahindra)) {
+      # Bundle (.aab) is not used for these builds:
+      deps -= [ "//chrome/android:chrome_public_bundle" ]
     }
   }
   if (is_mac || is_win) {
@@ -195,12 +214,16 @@ group("vivaldi") {
 }
 }
 
-if (is_mac || is_linux || is_android) {
+if (is_mac || is_linux) {
   copy("copy_symbol_tools") {
     toolchain_folder = get_label_info("$host_system_allocator_toolchain","name")
 
+    # Note that minidump-2-core is built in the correct location for the
+    # archive step so we do not need to copy it
+    # see chromium/third_party/breakpad/BUILD.gn
     sources = [
-      "$root_build_dir/$toolchain_folder/minidump_stackwalk"
+      "$root_build_dir/$toolchain_folder/minidump_stackwalk",
+      "$root_build_dir/$toolchain_folder/minidump_dump",
     ]
     if (!is_android || !is_official_build) {
       sources += [
@@ -213,6 +236,7 @@ if (is_mac || is_linux || is_android) {
     deps = [
       "//third_party/breakpad:minidump_stackwalk($host_system_allocator_toolchain)",
       "//third_party/breakpad:dump_syms($host_system_allocator_toolchain)",
+      "//third_party/breakpad:minidump_dump($host_system_allocator_toolchain)",
     ]
   }
 }

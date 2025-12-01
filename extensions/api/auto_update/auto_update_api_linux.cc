@@ -2,24 +2,40 @@
 
 #include <string>
 
+#include "app/vivaldi_version_info.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
-
+#include "base/synchronization/waitable_event.h"
+#include "base/task/thread_pool.h"
+#include "components/version_info/version_info.h"
 #include "extensions/api/auto_update/auto_update_api.h"
 #include "extensions/tools/vivaldi_tools.h"
 
-#include "base/task/thread_pool.h"
+#include "extensions/api/auto_update/linux_update_checker.h"
+#include "chrome/browser/profiles/profile.h"
+#include "content/public/browser/storage_partition.h"
 
 namespace extensions {
 
-static const std::string kFFMPEGFuturePath = "VIVALDI_FFMPEG_FUTURE_PATH";
+static constexpr char kFFMPEGFuturePath[] = "VIVALDI_FFMPEG_FUTURE_PATH";
+static constexpr char kVivaldiDistroName[] = "VIVALDI_DISTRO_NAME";
+static constexpr char kVivaldiDistroVersion[] = "VIVALDI_DISTRO_VERSION_NUMBER";
 
 bool getFFMPEGFuturePath(std::string &target) {
   std::unique_ptr<base::Environment> env(base::Environment::Create());
   target = env->GetVar(kFFMPEGFuturePath).value_or(std::string());
   return !target.empty();
+}
+
+bool getLinuxDistroVersion(std::string &distro, std::string &version) {
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
+
+  distro = env->GetVar(kVivaldiDistroName).value_or(std::string());
+  version = env->GetVar(kVivaldiDistroVersion).value_or(std::string());
+
+  return !distro.empty();
 }
 
 bool DetectNeedCodecRestart() {
@@ -100,12 +116,25 @@ void AutoUpdateAPI::InitUpgradeDetection() {
 }
 
 void AutoUpdateAPI::ShutdownUpgradeDetection() {
-  task_runner_->PostTask(FROM_HERE, base::BindOnce(
-                                        [](AutoUpdateAPI* api) {
-                                          api->executable_file_watcher_.reset();
-                                          api->ffmpeg_file_watcher_.reset();
-                                        },
-                                        this));
+  // VB-121593: Cancel and destroy the file watchers on their task runner.
+  // We must wait for this to complete synchronously before Shutdown() returns,
+  // otherwise the Profile's task runner may become invalid while the watchers
+  // are still trying to use it during destruction.
+  base::WaitableEvent done;
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](AutoUpdateAPI* api, base::WaitableEvent* done) {
+            api->executable_file_watcher_.reset();
+            api->ffmpeg_file_watcher_.reset();
+            done->Signal();
+          },
+          this, &done));
+  done.Wait();
+}
+
+ExtensionFunction::ResponseAction AutoUpdateStartUpdateFunction::Run() {
+  return RespondNow(Error("Not implemented"));
 }
 
 ExtensionFunction::ResponseAction AutoUpdateCheckForUpdatesFunction::Run() {
@@ -153,7 +182,45 @@ ExtensionFunction::ResponseAction AutoUpdateGetLastCheckTimeFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction AutoUpdateGetUpdateStatusFunction::Run() {
-  return RespondNow(Error("Not implemented"));
+  // Create update checker and start the check
+  auto update_checker = std::make_unique<LinuxUpdateChecker>();
+
+  // Get the URL loader factory from the browser context
+  auto* profile = Profile::FromBrowserContext(browser_context());
+
+  // Keep the checker alive by capturing it in the callback
+  auto* checker_ptr = update_checker.get();
+
+  // Create a callback that handles the result and cleans up
+  auto callback = base::BindOnce(
+      [](scoped_refptr<AutoUpdateGetUpdateStatusFunction> function,
+         std::unique_ptr<LinuxUpdateChecker> checker,
+         const UpdateResult& result) {
+        // Convert the result to the appropriate format and send it
+        std::optional<AutoUpdateStatus> status;
+
+        switch (result.status) {
+          case AutoUpdateStatus::kDidFindValidUpdate:
+          case AutoUpdateStatus::kNoUpdate:
+          case AutoUpdateStatus::kError:
+            status = result.status;
+            break;
+          default:
+            status = std::nullopt;
+            break;
+        }
+
+        function->SendResult(status, result.version, result.release_notes_url);
+        // checker is automatically destroyed here
+      },
+      scoped_refptr<AutoUpdateGetUpdateStatusFunction>(this),
+      std::move(update_checker));
+
+  checker_ptr->CheckForUpdates(
+      profile->GetDefaultStoragePartition()->GetURLLoaderFactoryForBrowserProcess().get(),
+      std::move(callback));
+
+  return RespondLater();
 }
 
 bool AutoUpdateHasAutoUpdatesFunction::HasAutoUpdates() {
@@ -183,6 +250,21 @@ ExtensionFunction::ResponseAction AutoUpdateRunStartupChecksFunction::Run() {
                            "SystemIsTooOld");
 #endif
   return RespondNow(NoArguments());
+}
+
+std::string AutoUpdateGetAboutPathsInfoFunction::GetPlatformOSVersion() {
+  std::string version(version_info::GetOSType());
+
+  // Also try gather info from env if possible, and append.
+  std::string distro_name, distro_version;
+  if (getLinuxDistroVersion(distro_name, distro_version)) {
+    version += " - " + distro_name;
+    if (!distro_version.empty()) {
+      version += + " " + distro_version;
+    }
+  }
+
+  return version;
 }
 
 }  // namespace extensions

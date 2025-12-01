@@ -113,6 +113,7 @@ export interface SettingsRoutes {
   SYNC_ADVANCED: Route;
   SYSTEM: Route;
   TRIGGERED_RESET_DIALOG: Route;
+  YOUR_SAVED_INFO: Route;
 
   // <if expr="not is_chromeos">
   ACCOUNT: Route;
@@ -120,9 +121,6 @@ export interface SettingsRoutes {
   IMPORT_DATA: Route;
   SIGN_OUT: Route;
   // </if>
-
-  // Vivaldi:
-  SITE_SETTINGS_AUTOPLAY: Route;
 }
 
 /** Class for navigable routes. */
@@ -131,10 +129,6 @@ export class Route {
   parent: Route|null = null;
   depth: number = 0;
   title: string|undefined;
-
-  // Whether this route's contents have migrated to the new Settings plugin
-  // architecture. See crug.com/424223101 for details.
-  hasMigratedToPlugin: boolean = false;
 
   /**
    * Whether this route corresponds to a navigable dialog. Those routes must

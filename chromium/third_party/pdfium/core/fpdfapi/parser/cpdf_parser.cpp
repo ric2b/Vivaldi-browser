@@ -46,7 +46,7 @@ namespace {
 
 // A limit on the size of the xref table. Theoretical limits are higher, but
 // this may be large enough in practice. The max size should always be 1 more
-// than the max object number.
+// than the max object number. Thus the valid range is [1, kMaxXRefSize].
 constexpr int32_t kMaxXRefSize = CPDF_Parser::kMaxObjectNumber + 1;
 
 // "%PDF-1.7\n"
@@ -648,7 +648,7 @@ bool CPDF_Parser::ParseCrossRefTable(
     }
 
     uint32_t start_objnum = FXSYS_atoui(word.c_str());
-    if (start_objnum >= kMaxObjectNumber) {
+    if (start_objnum > kMaxObjectNumber) {
       return false;
     }
 
@@ -809,7 +809,7 @@ bool CPDF_Parser::RebuildCrossRef() {
                 pStream->GetObjNum()));
       }
 
-      if (obj_num < kMaxObjectNumber) {
+      if (obj_num <= kMaxObjectNumber) {
         cross_ref_table->AddNormal(obj_num, gen_num, /*is_object_stream=*/false,
                                    obj_pos);
         const auto object_stream =
@@ -818,7 +818,7 @@ bool CPDF_Parser::RebuildCrossRef() {
           const auto& object_info = object_stream->object_info();
           for (size_t i = 0; i < object_info.size(); ++i) {
             const auto& info = object_info[i];
-            if (info.obj_num < kMaxObjectNumber) {
+            if (info.obj_num <= kMaxObjectNumber) {
               cross_ref_table->AddCompressed(info.obj_num, obj_num, i);
             }
           }
@@ -844,13 +844,19 @@ bool CPDF_Parser::LoadCrossRefStream(FX_FILESIZE* pos, bool is_main_xref) {
   }
 
   RetainPtr<const CPDF_Dictionary> dict = pStream->GetDict();
-  int32_t prev = dict->GetIntegerFor("Prev");
+  const int32_t prev = dict->GetIntegerFor("Prev");
   if (prev < 0) {
     return false;
   }
 
-  int32_t size = dict->GetIntegerFor("Size");
-  if (size < 0) {
+  // If /Size is negative or way too big, then it is obvious wrong.
+  // Immediately reject these cases, so `cross_ref_table_` does not get into a
+  // bad state.
+  //
+  // For a /Size of 0 or other issues, just ignore them. See comments in the
+  // for-loop below.
+  const int32_t size = dict->GetIntegerFor("Size");
+  if (size < 0 || size > kMaxXRefSize) {
     return false;
   }
 
@@ -924,7 +930,7 @@ bool CPDF_Parser::LoadCrossRefStream(FX_FILESIZE* pos, bool is_main_xref) {
 
     for (uint32_t i = 0; i < index.obj_count; ++i) {
       const uint32_t obj_num = index.start_obj_num + i;
-      if (obj_num >= kMaxObjectNumber) {
+      if (obj_num > kMaxObjectNumber) {
         break;
       }
 

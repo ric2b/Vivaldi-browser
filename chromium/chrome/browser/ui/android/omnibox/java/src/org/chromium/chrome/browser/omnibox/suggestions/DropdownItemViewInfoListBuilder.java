@@ -9,10 +9,11 @@ import android.text.TextUtils;
 
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.Initializer;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxImageSupplier;
 import org.chromium.chrome.browser.omnibox.suggestions.answer.AnswerSuggestionProcessor;
@@ -34,11 +35,13 @@ import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.AutocompleteResult;
 import org.chromium.components.omnibox.GroupsProto.GroupConfig;
 import org.chromium.components.omnibox.OmniboxFeatures;
+import org.chromium.components.omnibox.OmniboxSuggestionType;
 import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 // Vivaldi
 import androidx.annotation.NonNull;
@@ -59,13 +62,38 @@ class DropdownItemViewInfoListBuilder {
     private @Nullable Supplier<ShareDelegate> mShareDelegateSupplier;
     private Optional<OmniboxImageSupplier> mImageSupplier;
     private final BookmarkState mBookmarkState;
+    private final Supplier<@ControlsPosition Integer> mToolbarPositionSupplier;
 
     DropdownItemViewInfoListBuilder(
-            Supplier<@Nullable Tab> tabSupplier, BookmarkState bookmarkState) {
+            Supplier<@Nullable Tab> tabSupplier,
+            BookmarkState bookmarkState,
+            Supplier<@ControlsPosition Integer> toolbarPositionSupplier) {
         mPriorityOrderedSuggestionProcessors = new ArrayList<>();
         mActivityTabSupplier = tabSupplier;
         mImageSupplier = Optional.empty();
         mBookmarkState = bookmarkState;
+        mToolbarPositionSupplier = toolbarPositionSupplier;
+    }
+
+    /**
+     * Creates a UI context object containing common dependencies for suggestion processors.
+     *
+     * @param context Current context
+     * @param host Component creating suggestion view delegates and responding to suggestion events
+     * @param textProvider Provider of querying/editing the Omnibox
+     * @return AutocompleteUIContext with all necessary dependencies
+     */
+    private AutocompleteUIContext createUIContext(
+            Context context, SuggestionHost host, UrlBarEditingTextStateProvider textProvider) {
+        return new AutocompleteUIContext(
+                context,
+                host,
+                textProvider,
+                mImageSupplier,
+                mBookmarkState,
+                mActivityTabSupplier,
+                mShareDelegateSupplier,
+                mToolbarPositionSupplier);
     }
 
     /**
@@ -85,31 +113,20 @@ class DropdownItemViewInfoListBuilder {
                         ? Optional.empty()
                         : Optional.of(new OmniboxImageSupplier(context));
 
-        mGroupSeparatorProcessor = new GroupSeparatorProcessor(context);
-        mHeaderProcessor = new HeaderProcessor(context);
-        registerSuggestionProcessor(
-                new EditUrlSuggestionProcessor(
-                        context,
-                        host,
-                        mImageSupplier,
-                        mActivityTabSupplier,
-                        mShareDelegateSupplier));
-        registerSuggestionProcessor(
-                new AnswerSuggestionProcessor(context, host, textProvider, mImageSupplier));
-        registerSuggestionProcessor(
-                new ClipboardSuggestionProcessor(context, host, mImageSupplier));
-        registerSuggestionProcessor(
-                new EntitySuggestionProcessor(
-                        context, host, textProvider, mImageSupplier, mBookmarkState));
-        registerSuggestionProcessor(new TailSuggestionProcessor(context, host));
-        registerSuggestionProcessor(new MostVisitedTilesProcessor(context, host, mImageSupplier));
+        AutocompleteUIContext uiContext = createUIContext(context, host, textProvider);
+
+        mGroupSeparatorProcessor = new GroupSeparatorProcessor(uiContext.context);
+        mHeaderProcessor = new HeaderProcessor(uiContext.context);
+        registerSuggestionProcessor(new EditUrlSuggestionProcessor(uiContext));
+        registerSuggestionProcessor(new AnswerSuggestionProcessor(uiContext));
+        registerSuggestionProcessor(new ClipboardSuggestionProcessor(uiContext));
+        registerSuggestionProcessor(new EntitySuggestionProcessor(uiContext));
+        registerSuggestionProcessor(new TailSuggestionProcessor(uiContext));
+        registerSuggestionProcessor(new MostVisitedTilesProcessor(uiContext));
         if (OmniboxFeatures.sAndroidHubSearchTabGroups.isEnabled()) {
-            registerSuggestionProcessor(
-                    new TabGroupSuggestionProcessor(context, host, mImageSupplier));
+            registerSuggestionProcessor(new TabGroupSuggestionProcessor(uiContext));
         }
-        registerSuggestionProcessor(
-                new BasicSuggestionProcessor(
-                        context, host, textProvider, mImageSupplier, mBookmarkState));
+        registerSuggestionProcessor(new BasicSuggestionProcessor(uiContext));
     }
 
     void destroy() {
@@ -160,7 +177,7 @@ class DropdownItemViewInfoListBuilder {
      *
      * @param shareDelegateSupplier Share facility supplier.
      */
-    void setShareDelegateSupplier(Supplier<ShareDelegate> shareDelegateSupplier) {
+    void setShareDelegateSupplier(@Nullable Supplier<ShareDelegate> shareDelegateSupplier) {
         mShareDelegateSupplier = shareDelegateSupplier;
     }
 
@@ -232,16 +249,26 @@ class DropdownItemViewInfoListBuilder {
             result.add(new DropdownItemViewInfo(mGroupSeparatorProcessor, model, groupDetails));
         }
 
+        boolean toolbarOnBottom =
+                ChromeFeatureList.sAndroidBottomToolbarV2ReverseOrderSuggestionsList.getValue()
+                        && mToolbarPositionSupplier.get() == ControlsPosition.BOTTOM;
+        var roundingStartEdge =
+                toolbarOnBottom
+                        ? DropdownCommonProperties.BG_BOTTOM_CORNER_ROUNDED
+                        : DropdownCommonProperties.BG_TOP_CORNER_ROUNDED;
+        var roundingEndEdge =
+                toolbarOnBottom
+                        ? DropdownCommonProperties.BG_TOP_CORNER_ROUNDED
+                        : DropdownCommonProperties.BG_BOTTOM_CORNER_ROUNDED;
+
         for (int indexInList = 0; indexInList < numGroupMatches; indexInList++) {
             var indexOnList = firstVerticalPosition + indexInList;
             AutocompleteMatch match = groupMatches.get(indexInList);
             var processor = getProcessorForSuggestion(match, indexOnList);
             var model = processor.createModel();
 
-            model.set(DropdownCommonProperties.BG_TOP_CORNER_ROUNDED, indexInList == 0);
-            model.set(
-                    DropdownCommonProperties.BG_BOTTOM_CORNER_ROUNDED,
-                    indexInList == numGroupMatches - 1);
+            model.set(roundingStartEdge, indexInList == 0);
+            model.set(roundingEndEdge, indexInList == numGroupMatches - 1);
             model.set(DropdownCommonProperties.SHOW_DIVIDER, indexInList < numGroupMatches - 1);
             if (BuildConfig.IS_VIVALDI) { // Vivaldi VAB-10000
                 Tab activeTab = mActivityTabSupplier.get();
@@ -350,6 +377,14 @@ class DropdownItemViewInfoListBuilder {
             // Inner loop to populate AutocompleteMatch objects belonging to this group.
             while (index < newMatchesCount) {
                 var match = newMatches.get(index);
+                if (OmniboxFeatures.sRemoveSroIncludingVerbatimMatch.getValue()) {
+                    if (match.getType() == OmniboxSuggestionType.SEARCH_WHAT_YOU_TYPED
+                            || match.getType() == OmniboxSuggestionType.URL_WHAT_YOU_TYPED) {
+                        index++;
+                        continue;
+                    }
+                }
+
                 var matchGroupConfig =
                         groupsInfo.getGroupConfigsOrDefault(
                                 match.getGroupId(), GroupConfig.getDefaultInstance());
@@ -358,13 +393,18 @@ class DropdownItemViewInfoListBuilder {
                 index++;
             }
 
+            // Corner case: if disabling SRO and the verbatim match on the Web, the top group may be
+            // empty.
+            if (currentGroupMatches.isEmpty()) continue;
+
             if(ChromeSharedPreferences.getInstance().readBoolean( // Vivaldi Ref. VAB-9121
                     "reverse_search_suggestion", false)) {
                 @NonNull ArrayList<AutocompleteMatch> reverseCopy = new
                         ArrayList<>(currentGroupMatches);
                 Collections.reverse(reverseCopy);
                 currentGroupMatches = reverseCopy;
-            }
+            } // End Vivaldi
+
             // Append this suggestions group/section to resulting model, following the render type
             // dictated by GroupConfig.
             // The default instance holds safe values, applicable to non-Google DSE.

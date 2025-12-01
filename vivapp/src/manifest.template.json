@@ -31,11 +31,13 @@
       "markdowneditor-bundle.js",
       "richtexteditor-bundle.js",
       "reader-bundle.js",
+      "about-bundle.js",
       "components/notes/richtexteditor/md.css",
       "rss/showfeed.html",
       "rss/hidepage.css",
       "components/reader/reader.html",
-      "components/reader/reader.css"
+      "components/reader/reader.css",
+      "components/about/about.html"
     ],
     "matches": [],
     "extension_ids": []
@@ -104,6 +106,7 @@
     "sessionsPrivate",
     "settings",
     "storage",
+    "sitePermissions",
     "sync",
     "tabs",
     "tabsPrivate",

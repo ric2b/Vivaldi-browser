@@ -56,7 +56,7 @@ void DragDownloadItems(std::vector<DraggableDownloadItem> downloads,
   button_drag_utils::SetDragImage(GURL(), title, drag_icon, nullptr,
                                   data.get());
 
-  gfx::Point location = display::Screen::GetScreen()->GetCursorScreenPoint();
+  gfx::Point location = display::Screen::Get()->GetCursorScreenPoint();
   aura::client::GetDragDropClient(root_window)
       ->StartDragAndDrop(std::move(data), root_window, view, location,
                          ui::DragDropTypes::DRAG_MOVE |

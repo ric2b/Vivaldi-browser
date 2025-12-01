@@ -84,7 +84,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
     v8::LocalVector<v8::Value>& arguments) {
   DCHECK_EQ(1u, arguments.size());
   DCHECK(arguments[0]->IsString());
-  v8::Isolate* isolate = context->GetIsolate();
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
   std::string url_string = gin::V8ToString(isolate, arguments[0]);
 
   GURL url(url_string);
@@ -213,7 +213,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleUrlToThumbnailText(
   constexpr char kChrome[] = "chrome";
   DCHECK_EQ(1u, arguments.size());
   DCHECK(arguments[0]->IsString());
-  v8::Isolate* isolate = context->GetIsolate();
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
   std::string url_string = gin::V8ToString(isolate, arguments[0]);
 
   RequestResult result(RequestResult::HANDLED);
@@ -243,7 +243,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleUrlToThumbnailText(
 RequestResult VivaldiUtilitiesHookDelegate::HandleGetVersion(
     v8::Local<v8::Context> context,
     v8::LocalVector<v8::Value> &arguments) {
-  v8::Isolate* isolate = context->GetIsolate();
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
   v8::Local<v8::Object> version_object = v8::Object::New(isolate);
   version_object
       ->Set(context, gin::StringToV8(isolate, "vivaldiVersion"),
@@ -284,7 +284,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleIsUrlValid(
     v8::LocalVector<v8::Value> &arguments) {
   DCHECK_EQ(1u, arguments.size());
   DCHECK(arguments[0]->IsString());
-  v8::Isolate* isolate = context->GetIsolate();
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
   std::string url_string = gin::V8ToString(isolate, arguments[0]);
 
   GURL url(url_string);
@@ -322,7 +322,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleIsRTL(
     v8::LocalVector<v8::Value>& arguments) {
   bool isRTL = base::i18n::IsRTL();
 
-  v8::Isolate* isolate = context->GetIsolate();
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
 
   RequestResult result(RequestResult::HANDLED);
   result.return_value = v8::Boolean::New(isolate, isRTL);

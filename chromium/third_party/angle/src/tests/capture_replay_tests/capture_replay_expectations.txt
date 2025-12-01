@@ -171,6 +171,8 @@
 
 42265218 : EGLMultiContextTest.ReuseUnterminatedDisplay/* = SKIP_FOR_CAPTURE
 
+434453466 : SimpleOperationTest.NullParameterInGetAttachedShaders/* = SKIP_FOR_CAPTURE
+
 # No support yet for Capture/Replay of External Textures using other attribs
 42266040 : ImageTest.MipLevels/* = SKIP_FOR_CAPTURE
 42266040 : ImageTest.Source2DTarget2D_Colorspace/* = SKIP_FOR_CAPTURE
@@ -236,13 +238,11 @@
 
 # error: duplicate case value '1'
 42264614 : EGLSyncTest.GlobalFenceSync/* = COMPILE_FAIL
+433331119 : ValidationStateChangeTest.RebindBufferShouldPickupBufferChange/* = COMPILE_FAIL
+433331119 : ValidationStateChangeTestES31.RebindVertexBufferShouldPickupBufferChange/* = COMPILE_FAIL
 
 # VVL error
 42264614 LINUX : VulkanExternalImageTestES31.UninitializedOnGLImportAndStorageWrite/* = SKIP_FOR_CAPTURE
-
-# Change to Vulkan spec bans packing arrays in different components of the same location
-404418769 VULKAN : GLSLTest.MaxVaryingVec2Arrays/* = SKIP_FOR_CAPTURE
-404418769 VULKAN : GLSLTest.MaxVaryingVec3ArrayAndOneFloatArray/* = SKIP_FOR_CAPTURE
 
 # CoherentBufferTracker deadlocks and flaky crashes
 42266529 LINUX : BufferDataTestES3.* = SKIP_FOR_CAPTURE
@@ -253,6 +253,8 @@
 381727390 : MultisampleTexture2DTestES31.CopyMultisampleArrayImageEXT/* = SKIP_FOR_CAPTURE
 381727390 : MultisampleTexture2DTestES31.CopyMultisampleArrayImageOES/* = SKIP_FOR_CAPTURE
 
+# Crashes in gl::JoinShaderSources during replay
+447613212 : GLSLTest.EmptyShader/* = SKIP_FOR_CAPTURE
 
 # Crashes on win and linux trace bots
 372059358 : MultisampleTestES3.CopyTexImage2DFromMsaaDefaultFbo/* = SKIP_FOR_CAPTURE

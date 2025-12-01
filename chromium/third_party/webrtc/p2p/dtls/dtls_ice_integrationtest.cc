@@ -161,8 +161,8 @@ class DtlsIceIntegrationTest : public ::testing::TestWithParam<std::tuple<
       ep.allocator->set_flags(ep.allocator->flags() |
                               PORTALLOCATOR_DISABLE_TCP);
       ep.ice = std::make_unique<P2PTransportChannel>(
-          client ? "client_transport" : "server_transport", 0,
-          ep.allocator.get(), &ep.env.field_trials());
+          ep.env, client ? "client_transport" : "server_transport", 0,
+          ep.allocator.get());
       CryptoOptions crypto_options;
       if (ep.pqc) {
         FieldTrials field_trials("WebRTC-EnableDtlsPqc/Enabled/");
@@ -170,8 +170,7 @@ class DtlsIceIntegrationTest : public ::testing::TestWithParam<std::tuple<
             &field_trials);
       }
       ep.dtls = std::make_unique<DtlsTransportInternalImpl>(
-          ep.ice.get(), crypto_options,
-          /*event_log=*/nullptr, std::get<2>(GetParam()));
+          ep.env, ep.ice.get(), crypto_options, std::get<2>(GetParam()));
 
       // Enable(or disable) the dtls_in_stun parameter before
       // DTLS is negotiated.
@@ -193,11 +192,17 @@ class DtlsIceIntegrationTest : public ::testing::TestWithParam<std::tuple<
                                                    : ICEROLE_CONTROLLED);
       }
       if (client) {
-        ep.ice->SignalCandidateGathered.connect(
-            this, &DtlsIceIntegrationTest::CandidateC2S);
+        ep.ice->SubscribeCandidateGathered(
+            [this](IceTransportInternal* transport,
+                   const Candidate& candidate) {
+              CandidateC2S(transport, candidate);
+            });
       } else {
-        ep.ice->SignalCandidateGathered.connect(
-            this, &DtlsIceIntegrationTest::CandidateS2C);
+        ep.ice->SubscribeCandidateGathered(
+            [this](IceTransportInternal* transport,
+                   const Candidate& candidate) {
+              CandidateS2C(transport, candidate);
+            });
       }
 
       // Setup DTLS.

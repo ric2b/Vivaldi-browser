@@ -16,8 +16,11 @@
 #include "include/core/SkSurface.h"
 #include "include/effects/SkColorMatrix.h"
 #include "include/effects/SkImageFilters.h"
-#include "include/gpu/ganesh/SkImageGanesh.h"
 #include "tools/DecodeUtils.h"
+
+#if defined(SK_GANESH)
+#include "include/gpu/ganesh/SkImageGanesh.h"
+#endif
 
 #if defined(SK_GRAPHITE)
 #include "include/gpu/graphite/Image.h"
@@ -70,8 +73,8 @@ protected:
             SkCanvas* c = content->getCanvas();
             c->clear(SkColors::kDkGray);
 
-            SkMatrix toScreenBounds = SkMatrix::RectToRect(SkRect::Make(kFullSize),
-                                                           SkRect::Make(screenBounds));
+            SkMatrix toScreenBounds = SkMatrix::RectToRectOrIdentity(SkRect::Make(kFullSize),
+                                                                     SkRect::Make(screenBounds));
             c->concat(toScreenBounds);
 
             // Now render everything to `c` as if it were a kFullSize image.
@@ -103,8 +106,8 @@ protected:
             // For viewer, the offscreen passes operate at full resolution, but we draw smaller to
             // fit into the window. This lets overall frame times match nanobench, but it looks like
             // what dm produces.
-            SkMatrix toViewBounds = SkMatrix::RectToRect(SkRect::Make(screenBounds),
-                                                         SkRect::Make(kNonBenchSize));
+            SkMatrix toViewBounds = SkMatrix::RectToRectOrIdentity(SkRect::Make(screenBounds),
+                                                                   SkRect::Make(kNonBenchSize));
             canvas->concat(toViewBounds);
         }
 
@@ -126,13 +129,16 @@ protected:
                                             &outSubset, &outOffset);
         } else
 #endif
+#if defined(SK_GANESH)
         if (canvas->recordingContext()) {
             blur = SkImages::MakeWithFilter(canvas->recordingContext(),
                                             input,
                                             fShadeBlur.get(),
                                             screenBounds, screenBounds,
                                             &outSubset, &outOffset);
-        } else {
+        } else
+#endif
+        {
             blur = SkImages::MakeWithFilter(input,
                                             fShadeBlur.get(),
                                             screenBounds, screenBounds,

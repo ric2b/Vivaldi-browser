@@ -27,6 +27,7 @@
 #include "api/audio_codecs/audio_codec_pair_id.h"
 #include "api/audio_options.h"
 #include "api/crypto/crypto_options.h"
+#include "api/environment/environment.h"
 #include "api/jsep.h"
 #include "api/media_types.h"
 #include "api/rtc_error.h"
@@ -113,27 +114,32 @@ TaskQueueBase* GetCurrentTaskQueueOrThread() {
 
 }  // namespace
 
-RtpTransceiver::RtpTransceiver(MediaType media_type,
+RtpTransceiver::RtpTransceiver(const Environment& env,
+                               MediaType media_type,
                                ConnectionContext* context,
                                CodecLookupHelper* codec_lookup_helper)
-    : thread_(GetCurrentTaskQueueOrThread()),
+    : env_(env),
+      thread_(GetCurrentTaskQueueOrThread()),
       unified_plan_(false),
       media_type_(media_type),
       context_(context),
       codec_lookup_helper_(codec_lookup_helper) {
   RTC_DCHECK(media_type == MediaType::AUDIO || media_type == MediaType::VIDEO);
   RTC_DCHECK(context_);
+  RTC_DCHECK(context_->media_engine());
   RTC_DCHECK(codec_lookup_helper_);
 }
 
 RtpTransceiver::RtpTransceiver(
+    const Environment& env,
     scoped_refptr<RtpSenderProxyWithInternal<RtpSenderInternal>> sender,
     scoped_refptr<RtpReceiverProxyWithInternal<RtpReceiverInternal>> receiver,
     ConnectionContext* context,
     CodecLookupHelper* codec_lookup_helper,
     std::vector<RtpHeaderExtensionCapability> header_extensions_to_negotiate,
     std::function<void()> on_negotiation_needed)
-    : thread_(GetCurrentTaskQueueOrThread()),
+    : env_(env),
+      thread_(GetCurrentTaskQueueOrThread()),
       unified_plan_(true),
       media_type_(sender->media_type()),
       context_(context),
@@ -142,6 +148,7 @@ RtpTransceiver::RtpTransceiver(
           std::move(header_extensions_to_negotiate)),
       on_negotiation_needed_(std::move(on_negotiation_needed)) {
   RTC_DCHECK(context_);
+  RTC_DCHECK(context_->media_engine());
   RTC_DCHECK(media_type_ == MediaType::AUDIO ||
              media_type_ == MediaType::VIDEO);
   RTC_DCHECK_EQ(sender->media_type(), receiver->media_type());
@@ -207,12 +214,6 @@ RTCError RtpTransceiver::CreateChannel(
   RTC_DCHECK_RUN_ON(thread_);
   RTC_DCHECK(!channel());
 
-  if (!media_engine()) {
-    // TODO(hta): Must be a better way
-    return RTCError(RTCErrorType::INTERNAL_ERROR,
-                    "No media engine for mid=" + std::string(mid));
-  }
-
   std::unique_ptr<ChannelInterface> new_channel;
   if (media_type() == MediaType::AUDIO) {
     // TODO(bugs.webrtc.org/11992): CreateVideoChannel internally switches to
@@ -229,11 +230,11 @@ RTCError RtpTransceiver::CreateChannel(
 
       std::unique_ptr<VoiceMediaSendChannelInterface> media_send_channel =
           media_engine()->voice().CreateSendChannel(
-              call_ptr, media_config, audio_options, crypto_options,
+              env_, call_ptr, media_config, audio_options, crypto_options,
               codec_pair_id);
       std::unique_ptr<VoiceMediaReceiveChannelInterface> media_receive_channel =
           media_engine()->voice().CreateReceiveChannel(
-              call_ptr, media_config, audio_options, crypto_options,
+              env_, call_ptr, media_config, audio_options, crypto_options,
               codec_pair_id);
       // Note that this is safe because both sending and
       // receiving channels will be deleted at the same time.
@@ -260,11 +261,11 @@ RTCError RtpTransceiver::CreateChannel(
 
       std::unique_ptr<VideoMediaSendChannelInterface> media_send_channel =
           media_engine()->video().CreateSendChannel(
-              call_ptr, media_config, video_options, crypto_options,
+              env_, call_ptr, media_config, video_options, crypto_options,
               video_bitrate_allocator_factory);
       std::unique_ptr<VideoMediaReceiveChannelInterface> media_receive_channel =
           media_engine()->video().CreateReceiveChannel(
-              call_ptr, media_config, video_options, crypto_options);
+              env_, call_ptr, media_config, video_options, crypto_options);
       // Note that this is safe because both sending and
       // receiving channels will be deleted at the same time.
       media_send_channel->SetSsrcListChangedCallback(
@@ -832,8 +833,13 @@ void RtpTransceiver::OnNegotiationUpdate(
     const MediaContentDescription* content) {
   RTC_DCHECK_RUN_ON(thread_);
   RTC_DCHECK(content);
-  if (sdp_type == SdpType::kAnswer)
+  if (sdp_type == SdpType::kAnswer) {
     negotiated_header_extensions_ = content->rtp_header_extensions();
+    if (env_.field_trials().IsEnabled(
+            "WebRTC-HeaderExtensionNegotiateMemory")) {
+      header_extensions_to_negotiate_ = GetNegotiatedHeaderExtensions();
+    }
+  }
 }
 
 void RtpTransceiver::SetPeerConnectionClosed() {

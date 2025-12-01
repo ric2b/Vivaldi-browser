@@ -11,6 +11,7 @@ TODO(crbug.com/388590912): Add more details.
 """
 
 import argparse
+import collections
 import io
 import json
 import re
@@ -37,10 +38,15 @@ def add_kMaxValue(constants):
   constants = list(constants)
   return constants + ['kMaxValue = '+ constants[-1]]
 
-# An expression that creates a DenseSet of attribute type names.
+# An expression that creates a DenseSet of attribute types.
 def attribute_dense_set(entity, attributes):
   names = (attribute_name(entity, attribute) for attribute in attributes)
-  return f'DenseSet{{{", ".join((f"AttributeType({name})" for name in names))}}}'
+  return f'DenseSet<AttributeType>{{{", ".join((f"AttributeType({name})" for name in names))}}}'
+
+# An expression that creates an array of DenseSets of attribute types.
+def attribute_dense_set_array(entity, attributes_sets):
+  dense_sets = [attribute_dense_set(entity, attributes) for attributes in attributes_sets]
+  return f'std::array<DenseSet<AttributeType>, {len(dense_sets)}>{{{", ".join(dense_sets)}}}'
 
 # Generates entity and attribute type name enum definitions.
 def generate_cpp_enums(schema):
@@ -78,7 +84,7 @@ def generate_cpp_functions(schema):
   yield ''
   yield '}  // namespace'
   yield ''
-  yield 'std::optional<EntityType> StringToEntityType(base::PassKey<EntityTable>, std::string_view entity_type_name) {'
+  yield 'std::optional<EntityType> StringToEntityType(std::string_view entity_type_name) {'
   yield '  static constexpr auto kMap = base::MakeFixedFlatMap<std::string_view, EntityType>({'
   yield ',\n'.join('    ' + f'{{EntityTypeNameToString({name}), EntityType({name})}}'
                    for name in (entity_name(entity['name']) for entity in schema))
@@ -87,7 +93,7 @@ def generate_cpp_functions(schema):
   yield '  return it != kMap.end() ? std::optional(it->second) : std::nullopt;'
   yield '}'
   yield ''
-  yield 'std::optional<AttributeType> StringToAttributeType(base::PassKey<EntityTable>, EntityType entity_type, std::string_view attribute_type_name) {'
+  yield 'std::optional<AttributeType> StringToAttributeType(EntityType entity_type, std::string_view attribute_type_name) {'
   yield '  switch (entity_type.name()) {'
   for entity in schema:
     yield f'    case {entity_name(entity["name"])}: {{'
@@ -106,7 +112,7 @@ def generate_cpp_functions(schema):
   yield '  switch (name_) {'
   for entity, attribute in ((entity, attribute) for entity in schema for attribute in entity['attributes']):
     yield f'    case {attribute_name(entity["name"], attribute)}:'
-    is_obfuscated = attribute in entity.get('obfuscated attributes', [])
+    is_obfuscated = attribute in entity['obfuscated attributes']
     yield f'      return {"true" if is_obfuscated else "false"};'
   yield '  }'
   yield '  NOTREACHED();'
@@ -153,7 +159,7 @@ def generate_cpp_functions(schema):
   yield '  switch (name_) {'
   for entity in schema:
     yield f'    case {entity_name(entity["name"])}: {{'
-    yield f'      static constexpr auto as = std::array{{{", ".join(attribute_dense_set(entity["name"], attributes) for attributes in entity["import constraints"])}}};'
+    yield f'      static constexpr auto as = {attribute_dense_set_array(entity["name"], entity["import constraints"])};'
     yield f'      return as;'
     yield f'    }}'
   yield '  }'
@@ -164,12 +170,8 @@ def generate_cpp_functions(schema):
   yield '  switch (name_) {'
   for entity in schema:
     yield f'    case {entity_name(entity["name"])}: {{'
-    strike_keys = entity.get("required fields", [])
-    if strike_keys:
-      yield f'      static constexpr auto as = std::array{{{", ".join(attribute_dense_set(entity["name"], attributes) for attributes in entity["required fields"])}}};'
-      yield f'      return as;'
-    else:
-      yield f'      return {{}};'
+    yield f'      static constexpr auto as = {attribute_dense_set_array(entity["name"], entity["required fields"])};'
+    yield f'      return as;'
     yield f'    }}'
   yield '  }'
   yield '  NOTREACHED();'
@@ -179,12 +181,8 @@ def generate_cpp_functions(schema):
   yield '  switch (name_) {'
   for entity in schema:
     yield f'    case {entity_name(entity["name"])}: {{'
-    merge_constraints = entity.get("merge constraints", [])
-    if merge_constraints:
-      yield f'      static constexpr auto as = std::array{{{", ".join(attribute_dense_set(entity["name"], attributes) for attributes in merge_constraints)}}};'
-      yield f'      return as;'
-    else:
-      yield f'     return {{}};'
+    yield f'      static constexpr auto as = {attribute_dense_set_array(entity["name"], entity["merge constraints"])};'
+    yield f'      return as;'
     yield f'    }}'
   yield '  }'
   yield '  NOTREACHED();'
@@ -193,12 +191,8 @@ def generate_cpp_functions(schema):
   yield '  switch (name_) {'
   for entity in schema:
     yield f'    case {entity_name(entity["name"])}: {{'
-    strike_keys = entity.get("strike keys", [])
-    if strike_keys:
-      yield f'      static constexpr auto as = std::array{{{", ".join(attribute_dense_set(entity["name"], attributes) for attributes in strike_keys)}}};'
-      yield f'      return as;'
-    else:
-      yield f'      return {{}};'
+    yield f'      static constexpr auto as = {attribute_dense_set_array(entity["name"], entity["strike keys"])};'
+    yield f'      return as;'
     yield f'    }}'
   yield '  }'
   yield '  NOTREACHED();'
@@ -213,15 +207,35 @@ def generate_cpp_functions(schema):
   yield '  NOTREACHED();'
   yield '}'
   yield ''
-  yield 'bool EntityType::enabled() const {'
+  yield 'bool EntityType::enabled(base::optional_ref<const GeoIpCountryCode> country_code) const {'
   yield '  switch (name_) {'
   for entity in schema:
-    yield f'    case {entity_name(entity["name"])}:'
+    yield f'    case {entity_name(entity["name"])}: {{'
     feature_name = entity.get('experiment feature', '')
+    excluded_geo_ips = entity.get('excluded geo-ips', [])
     if feature_name:
-      yield f'      return base::FeatureList::IsEnabled(features::k{feature_name});'
+      yield f'      if (!base::FeatureList::IsEnabled(features::k{feature_name})) {{'
+      yield '        return false;'
+      yield '      }'
+    if excluded_geo_ips:
+      ip_string = ', '.join(f'"{ip.upper()}"' for ip in excluded_geo_ips)
+      yield '      static constexpr auto banned_ips = base::MakeFixedFlatSet<std::string_view>({'
+      yield f'          {ip_string}'
+      yield '      });'
+      yield '      return !country_code || !banned_ips.contains(**country_code);'
     else:
-      yield f'      return true;'
+      yield '      return true;'
+    yield '    }'
+  yield '  }'
+  yield '  NOTREACHED();'
+  yield '}'
+  yield ''
+  yield 'bool EntityType::read_only() const {'
+  yield '  switch (name_) {'
+  for entity, read_only in ((entity['name'], entity['read only'])
+                            for entity in schema):
+    yield f'    case {entity_name(entity)}:'
+    yield f'      return {"true" if read_only else "false"};'
   yield '  }'
   yield '  NOTREACHED();'
   yield '}'
@@ -234,7 +248,7 @@ def generate_cpp_functions(schema):
   yield '      for (int& rank : ranks) {'
   yield '        rank = std::numeric_limits<int>::max();'
   yield '      }'
-  for entity, order in ((entity['name'], entity.get('disambiguation order', [])) for entity in schema):
+  for entity, order in ((entity['name'], entity['disambiguation order']) for entity in schema):
     for rank, attribute in enumerate(order):
       yield f'      ranks[base::to_underlying({attribute_name(entity, attribute)})] = {rank+1};'
   yield '      return ranks;'
@@ -270,10 +284,13 @@ def generate_cpp_functions_header(schema, include_guard):
 #include <string>
 
 #include "base/containers/fixed_flat_map.h"
+#include "base/containers/fixed_flat_set.h"
 #include "base/containers/span.h"
 #include "base/notreached.h"
 #include "base/types/cxx23_to_underlying.h"
+#include "base/types/optional_ref.h"
 #include "base/types/pass_key.h"
+#include "components/autofill/core/browser/country_type.h"
 #include "components/autofill/core/browser/data_model/autofill_ai/entity_type.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/dense_set.h"
@@ -283,6 +300,10 @@ namespace autofill {{
   yield from generate_cpp_functions(schema)
   yield f"""
 }}  // namespace autofill"""
+
+REQUIRED_KEYS = {'name', 'attributes', 'obfuscated attributes', 'required fields', 'import constraints', 'merge constraints', 'strike keys', 'disambiguation order', 'syncable', 'read only'}
+OPTIONAL_KEYS = {'experiment feature', 'excluded geo-ips'}
+CONSTRAINTS_KEYS = {'import constraints', 'merge constraints', 'strike keys', 'required fields'}
 
 # For brevity, the schema allows shorthands:
 # - Constraints in the JSON object can refer to each other, e.g.,
@@ -298,20 +319,99 @@ namespace autofill {{
 #   { "import constraints":  [ ["foo"], ["bar"], ["qux"] ],
 #     "merge constraints":   [ ["foo", "bar", "qux"] ] }
 def resolve_shorthands(schema):
-  constraints = ['import constraints', 'merge constraints', 'strike keys', 'required fields']
   for entity in schema:
     # Constraints can be the shorthands 'all' (= all attributes) or 'any' (= at
     # least one attribute):
-    for constraint in constraints:
-      if entity[constraint] == 'all':
-        entity[constraint] = [[attribute for attribute in entity['attributes']]]
-      if entity[constraint] == 'any':
-        entity[constraint] = [[attribute] for attribute in entity['attributes']]
+    for constraints_key in CONSTRAINTS_KEYS:
+      if entity[constraints_key] == 'all':
+        entity[constraints_key] = [[attribute for attribute in entity['attributes']]]
+      if entity[constraints_key] == 'any':
+        entity[constraints_key] = [[attribute] for attribute in entity['attributes']]
 
     # Constraints can refer to one another.
-    for (lhs, rhs) in ((lhs, rhs) for lhs in constraints for rhs in constraints):
+    for (lhs, rhs) in ((lhs, rhs) for lhs in CONSTRAINTS_KEYS for rhs in CONSTRAINTS_KEYS):
       if entity[lhs] == rhs and isinstance(entity[rhs], list):
         entity[lhs] = entity[rhs]
+
+# Runs plausibility checks on the schema.
+# If the schema does not meet them, it aborts the script (which in turn aborts
+# the build).
+def validate_schema(schema):
+  def validate_attribute_list(entity, attributes, allow_empty, report):
+    if not isinstance(attributes, list):
+      report('is not a list')
+    if attributes == [] and not allow_empty:
+      report('is an empty list')
+
+    duplicate_attributes = {a for a, count in collections.Counter(attributes).items() if count > 1}
+    for a in duplicate_attributes:
+      report(f'contains a duplicate attribute {a}')
+
+    unknown_attributes = set(attributes) - set(entity['attributes'])
+    for a in unknown_attributes:
+      report(f'contains an unknown attribute "{a}"')
+
+  def validate_entity(entity, report):
+    missing_keys = REQUIRED_KEYS - entity.keys()
+    for k in missing_keys:
+      report(f'missing key "{k}"')
+    if missing_keys:
+      return  # We'd hit Python errors if we continue this iteration.
+
+    unknown_keys = entity.keys() - (REQUIRED_KEYS | OPTIONAL_KEYS)
+    for k in unknown_keys:
+      report(f'unknown key "{k}"')
+
+    if not isinstance(entity['name'], str):
+      report('"name": value is not a string')
+
+    if entity['name'] == '':
+      report('"name": value is the empty string')
+
+    if entity['read only']:
+      if entity['import constraints'] != []:
+        report('"import constraints": value must be empty if "read only" is true')
+      if entity['merge constraints'] != []:
+        report('"merge constraints": value must be empty if "read only" is true')
+      if entity['strike keys'] != []:
+        report('"strike keys": value must be empty if "read only" is true')
+
+    known_attributes = set(entity['attributes'])
+    for attribute in known_attributes:
+      if not isinstance(attribute, str):
+        report(f'attribute {attribute} is not a string')
+      if attribute == '':
+        report(f'attribute {attribute} is empty')
+
+    def validate_attributes(attributes, prefix, allow_empty=False):
+      validate_attribute_list(entity, attributes, allow_empty, lambda msg: report(prefix +' '+ msg))
+
+    validate_attributes(entity['attributes'], prefix='"attributes"')
+    validate_attributes(entity['obfuscated attributes'], allow_empty=True, prefix='"obfuscated attributes"')
+    validate_attributes(entity['disambiguation order'], allow_empty=True, prefix='"disambiguation order"')
+    for constraints_key in CONSTRAINTS_KEYS:
+      for constraint in entity[constraints_key]:
+        validate_attributes(constraint, prefix=f'"{constraints_key}": some constraint')
+
+    if not isinstance(entity['syncable'], bool):
+      report('"syncable": value is not a Boolean')
+
+    if not isinstance(entity.get('experiment feature', ''), str):
+      report('"experiment feature": value is not a string')
+
+  found_error = False
+
+  def print_error(entity, msg):
+    nonlocal found_error
+    found_error = True
+    name = entity.get('name', '<unnamed>')
+    print(f'Error: Autofill AI schema: entity "{name}": {msg}', file=sys.stderr)
+
+  for entity in schema:
+    validate_entity(entity, report=lambda msg: print_error(entity, msg))
+
+  if found_error:
+    sys.exit(1)
 
 def parse_schema(input_file, output_files):
   schema = {}
@@ -319,6 +419,7 @@ def parse_schema(input_file, output_files):
     schema = json.load(input_handle)
 
   resolve_shorthands(schema)
+  validate_schema(schema)
 
   def write_to_handle(generator, output_file):
     include_guard = re.sub(r'\W', '_', output_file.upper()) +'_'

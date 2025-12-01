@@ -61,7 +61,7 @@
 #include "v8/include/v8-version-string.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
+#include "base/android/apk_info.h"
 #endif
 
 #if BUILDFLAG(ENABLE_DEVTOOLS_FRONTEND)
@@ -399,6 +399,7 @@ DevToolsHttpHandler::~DevToolsHttpHandler() {
   connection_to_client_.clear();
   TerminateOnUI(std::move(thread_), std::move(server_wrapper_),
                 std::move(socket_factory_));
+  delegate_ = nullptr;
 }
 
 static std::string PathWithoutParams(const std::string& path) {
@@ -598,7 +599,7 @@ void DevToolsHttpHandler::OnJsonRequest(
         base::StringPrintf("ws://%s%s", host.c_str(), browser_guid_.c_str()));
 #if BUILDFLAG(IS_ANDROID)
     version.Set("Android-Package",
-                base::android::BuildInfo::GetInstance()->host_package_name());
+                base::android::apk_info::host_package_name());
 #endif
     SendJson(connection_id, net::HTTP_OK, version, std::string());
     return;
@@ -879,8 +880,7 @@ void DevToolsHttpHandler::SendJson(int connection_id,
     base::JSONWriter::WriteWithOptions(
         *value, base::JSONWriter::OPTIONS_PRETTY_PRINT, &json_value);
   }
-  std::string json_message;
-  base::JSONWriter::Write(base::Value(message), &json_message);
+  std::string json_message = base::WriteJson(base::Value(message)).value_or("");
 
   net::HttpServerResponseInfo response(status_code);
   response.AddHeader("Content-Security-Policy", "frame-ancestors 'none'");

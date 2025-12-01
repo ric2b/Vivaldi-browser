@@ -84,7 +84,7 @@ impl Y4MWriter {
                 PixelFormat::Yuv400 => "Cmono12 XYSCSS=400",
             },
             _ => {
-                return Err(AvifError::NotImplemented);
+                return AvifError::not_implemented();
             }
         };
         let y4m_color_range = if image.yuv_range == YuvRange::Limited {
@@ -97,7 +97,7 @@ impl Y4MWriter {
             image.width, image.height
         );
         file.write_all(header.as_bytes())
-            .or(Err(AvifError::IoError))?;
+            .map_err(AvifError::map_io_error)?;
         self.header_written = true;
         Ok(())
     }
@@ -111,7 +111,7 @@ impl Writer for Y4MWriter {
             self.write_header(file, image)?;
             let frame_marker = "FRAME\n";
             file.write_all(frame_marker.as_bytes())
-                .or(Err(AvifError::IoError))?;
+                .map_err(AvifError::map_io_error)?;
         }
         let planes: &[Plane] = if self.write_alpha { &ALL_PLANES } else { &YUV_PLANES };
         for plane in planes {
@@ -123,7 +123,7 @@ impl Writer for Y4MWriter {
                 for y in 0..image.height(plane) {
                     let row = image.row(plane, y as u32)?;
                     let pixels = &row[..image.width(plane)];
-                    file.write_all(pixels).or(Err(AvifError::IoError))?;
+                    file.write_all(pixels).map_err(AvifError::map_io_error)?;
                 }
             } else {
                 for y in 0..image.height(plane) {
@@ -134,7 +134,8 @@ impl Writer for Y4MWriter {
                     for &pixel16 in pixels16 {
                         pixels.extend_from_slice(&pixel16.to_le_bytes());
                     }
-                    file.write_all(&pixels[..]).or(Err(AvifError::IoError))?;
+                    file.write_all(&pixels[..])
+                        .map_err(AvifError::map_io_error)?;
                 }
             }
         }

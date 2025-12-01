@@ -85,17 +85,12 @@ class TypeCanonicalizer {
   V8_EXPORT_PRIVATE const CanonicalArrayType* LookupArray(
       CanonicalTypeIndex index) const;
 
-  // Returns if {canonical_sub_index} is a canonical subtype of
-  // {canonical_super_index}.
+  // Returns if {sub_index} is a canonical subtype of {super_type}, which must
+  // be an indexed type. Interprets {sub_index} as (exact sub_index), which is
+  // appropriate for checking the actual type of a thing against a required
+  // type.
   V8_EXPORT_PRIVATE bool IsCanonicalSubtype(CanonicalTypeIndex sub_index,
-                                            CanonicalTypeIndex super_index);
-
-  // Returns if the type at {sub_index} in {sub_module} is a subtype of the
-  // type at {super_index} in {super_module} after canonicalization.
-  V8_EXPORT_PRIVATE bool IsCanonicalSubtype(ModuleTypeIndex sub_index,
-                                            ModuleTypeIndex super_index,
-                                            const WasmModule* sub_module,
-                                            const WasmModule* super_module);
+                                            CanonicalValueType super_type);
 
   // Deletes recursive groups. Used by fuzzers to avoid accumulating memory, and
   // used by specific tests e.g. for serialization / deserialization.
@@ -122,8 +117,6 @@ class TypeCanonicalizer {
   bool IsHeapSubtype(CanonicalTypeIndex sub, CanonicalTypeIndex super) const;
   bool IsCanonicalSubtype_Locked(CanonicalTypeIndex sub_index,
                                  CanonicalTypeIndex super_index) const;
-
-  CanonicalTypeIndex FindIndex_Slow(const CanonicalSig* sig) const;
 
 #if DEBUG
   // Check whether a supposedly-canonicalized function signature does indeed
@@ -506,27 +499,6 @@ class TypeCanonicalizer {
       }
     }
 
-    const CanonicalTypeIndex FindIndex_Slow(const CanonicalSig* sig) const {
-      for (uint32_t i = 0; i < kNumSegments; ++i) {
-        Segment* segment = segments_[i].load(std::memory_order_relaxed);
-        // If callers have a CanonicalSig* to pass into this function, the
-        // type canonicalizer must know about this sig, hence we must find it
-        // before hitting a `nullptr` segment.
-        DCHECK_NOT_NULL(segment);
-        for (uint32_t k = 0; k < kSegmentSize; ++k) {
-          const CanonicalType* type = (*segment)[k];
-          // Again: We expect to find the signature before hitting uninitialized
-          // slots.
-          DCHECK_NOT_NULL(type);
-          if (type->kind == CanonicalType::kFunction &&
-              type->function_sig == sig) {
-            return CanonicalTypeIndex{i * kSegmentSize + k};
-          }
-        }
-      }
-      UNREACHABLE();
-    }
-
    private:
     class Segment {
      public:
@@ -553,16 +525,14 @@ class TypeCanonicalizer {
   CanonicalTypeIndex FindCanonicalGroup(const CanonicalGroup&) const;
   CanonicalTypeIndex FindCanonicalGroup(const CanonicalSingletonGroup&) const;
 
-  // Canonicalize the module-specific type at `module_type_idx` within the
-  // recursion group starting at `recursion_group_start`, using
-  // `canonical_recgroup_start` as the start offset of types within the
-  // recursion group.
-  CanonicalType CanonicalizeTypeDef(
-      const WasmModule* module, ModuleTypeIndex module_type_idx,
-      ModuleTypeIndex recgroup_start,
-      CanonicalTypeIndex canonical_recgroup_start);
-
-  void CheckMaxCanonicalIndex() const;
+  // Canonicalize the module-specific type at `recgroup_start +
+  // offset_in_recgroup` within the recursion group starting at
+  // `recgroup_start`, using `canonical_recgroup_start` as the start offset of
+  // types within the recursion group.
+  CanonicalType CanonicalizeTypeDef(const WasmModule* module,
+                                    ModuleTypeIndex recgroup_start,
+                                    CanonicalTypeIndex canonical_recgroup_start,
+                                    uint32_t offset_in_recgroup);
 
   std::vector<CanonicalTypeIndex> canonical_supertypes_;
   // Set of all known canonical recgroups of size >=2.

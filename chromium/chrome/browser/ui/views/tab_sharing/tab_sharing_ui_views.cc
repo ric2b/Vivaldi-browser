@@ -51,7 +51,7 @@
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_manager.h"
@@ -74,16 +74,13 @@ using content::WebContents;
 // TabSharingInfoBar.
 // This flag only has an effect if:
 // - the TabCaptureInfobarLinks feature is enabled.
-BASE_FEATURE(kTabSharingBarOmitHttpAndHttps,
-             "TabSharingBarOmitHttpAndHttps",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kTabSharingBarOmitHttpAndHttps, base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Omit cryptographic url-schemes for the shared tab in the TabSharingInfoBar.
 // This flag only has an effect if:
 // - the TabCaptureInfobarLinks feature is enabled, and
 // - the TabSharingBarOmitHttpAndHttps feature is disabled.
 BASE_FEATURE(kTabSharingBarOmitCryptographic,
-             "TabSharingBarOmitCryptographic",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -201,7 +198,8 @@ TabSharingUIViews::TabSharingUIViews(
       shared_tab_scheme_display_(GetSharedTabSchemeDisplay()),
       app_preferred_current_tab_(app_preferred_current_tab),
       capture_type_(capture_type),
-      captured_surface_control_active_(captured_surface_control_active) {
+      captured_surface_control_active_(captured_surface_control_active),
+      uma_logger_(content::DesktopMediaID::Type::TYPE_WEB_CONTENTS) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   Observe(shared_tab_);
@@ -299,6 +297,10 @@ void TabSharingUIViews::StopSharing() {
   UpdateTabCaptureData(shared_tab_, TabCaptureUpdate::kCaptureRemoved);
   tab_capture_indicator_ui_.reset();
   shared_tab_ = nullptr;
+}
+
+ScreensharingControlsHistogramLogger& TabSharingUIViews::GetUmaLogger() {
+  return uma_logger_;
 }
 
 void TabSharingUIViews::OnBrowserAdded(Browser* browser) {
@@ -577,9 +579,12 @@ void TabSharingUIViews::UpdateTabCaptureData(WebContents* contents,
     return;
   }
 
-  TabCaptureContentsBorderHelper::CreateForWebContents(contents);
   auto* const helper =
       TabCaptureContentsBorderHelper::FromWebContents(contents);
+
+  if (!helper) {
+    return;
+  }
 
   switch (update) {
     case TabCaptureUpdate::kCaptureAdded:

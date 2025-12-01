@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,16 +44,16 @@ import type {FrameAssociated} from './FrameAssociated.js';
 import type {PageResourceLoadInitiator} from './PageResourceLoader.js';
 import {ResourceTreeModel} from './ResourceTreeModel.js';
 import type {ExecutionContext} from './RuntimeModel.js';
-import type {SourceMap} from './SourceMap.js';
+import type {DebugId, SourceMap} from './SourceMap.js';
 import type {Target} from './Target.js';
 
 const UIStrings = {
   /**
-   *@description Error message for when a script can't be loaded which had been previously
+   * @description Error message for when a script can't be loaded which had been previously
    */
   scriptRemovedOrDeleted: 'Script removed or deleted.',
   /**
-   *@description Error message when failing to load a script source text
+   * @description Error message when failing to load a script source text
    */
   unableToFetchScriptSource: 'Unable to fetch script source.',
 } as const;
@@ -68,6 +68,10 @@ let scriptCacheInstance: {
 export class Script implements TextUtils.ContentProvider.ContentProvider, FrameAssociated {
   debuggerModel: DebuggerModel;
   scriptId: Protocol.Runtime.ScriptId;
+  /**
+   * The URL of the script. When `hasSourceURL` is true, this value comes from a `//# sourceURL=` directive. Otherwise,
+   * it's the original `src` URL from which the script was loaded.
+   */
   sourceURL: Platform.DevToolsPath.UrlString;
   lineOffset: number;
   columnOffset: number;
@@ -75,17 +79,17 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
   endColumn: number;
   executionContextId: number;
   hash: string;
-  readonly #isContentScriptInternal: boolean;
-  readonly #isLiveEditInternal: boolean;
+  readonly #isContentScript: boolean;
+  readonly #isLiveEdit: boolean;
   sourceMapURL?: string;
   debugSymbols: Protocol.Debugger.DebugSymbols|null;
   hasSourceURL: boolean;
   contentLength: number;
   originStackTrace: Protocol.Runtime.StackTrace|null;
-  readonly #codeOffsetInternal: number|null;
+  readonly #codeOffset: number|null;
   readonly #language: string|null;
   #contentPromise: Promise<TextUtils.ContentData.ContentDataOrError>|null;
-  readonly #embedderNameInternal: Platform.DevToolsPath.UrlString|null;
+  readonly #embedderName: Platform.DevToolsPath.UrlString|null;
   readonly isModule: boolean|null;
   readonly buildId: string|null;
   constructor(
@@ -107,21 +111,21 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
 
     this.executionContextId = executionContextId;
     this.hash = hash;
-    this.#isContentScriptInternal = isContentScript;
-    this.#isLiveEditInternal = isLiveEdit;
+    this.#isContentScript = isContentScript;
+    this.#isLiveEdit = isLiveEdit;
     this.sourceMapURL = sourceMapURL;
     this.debugSymbols = debugSymbols;
     this.hasSourceURL = hasSourceURL;
     this.contentLength = length;
     this.originStackTrace = originStackTrace;
-    this.#codeOffsetInternal = codeOffset;
+    this.#codeOffset = codeOffset;
     this.#language = scriptLanguage;
     this.#contentPromise = null;
-    this.#embedderNameInternal = embedderName;
+    this.#embedderName = embedderName;
   }
 
   embedderName(): Platform.DevToolsPath.UrlString|null {
-    return this.#embedderNameInternal;
+    return this.#embedderName;
   }
 
   target(): Target {
@@ -148,11 +152,11 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
   }
 
   isContentScript(): boolean {
-    return this.#isContentScriptInternal;
+    return this.#isContentScript;
   }
 
   codeOffset(): number|null {
-    return this.#codeOffsetInternal;
+    return this.#codeOffset;
   }
 
   isJavaScript(): boolean {
@@ -172,7 +176,7 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
   }
 
   isLiveEdit(): boolean {
-    return this.#isLiveEditInternal;
+    return this.#isLiveEdit;
   }
 
   contentURL(): Platform.DevToolsPath.UrlString {
@@ -257,7 +261,7 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
   requestContentData(): Promise<TextUtils.ContentData.ContentDataOrError> {
     if (!this.#contentPromise) {
       const fileSizeToCache = 65535;  // We won't bother cacheing files under 64K
-      if (this.hash && !this.#isLiveEditInternal && this.contentLength > fileSizeToCache) {
+      if (this.hash && !this.#isLiveEdit && this.contentLength > fileSizeToCache) {
         // For large files that aren't live edits and have a hash, we keep a content-addressed cache
         // so we don't need to load multiple copies or disassemble wasm modules multiple times.
         if (!scriptCacheInstance) {
@@ -275,25 +279,25 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
           this.columnOffset,
           this.endLine,
           this.endColumn,
-          this.#codeOffsetInternal,
+          this.#codeOffset,
           this.hash,
         ].join(':');
         const cachedContentPromise = scriptCacheInstance.cache.get(fullHash)?.deref();
         if (cachedContentPromise) {
           this.#contentPromise = cachedContentPromise;
         } else {
-          this.#contentPromise = this.requestContentInternal();
+          this.#contentPromise = this.#requestContent();
           scriptCacheInstance.cache.set(fullHash, new WeakRef(this.#contentPromise));
           scriptCacheInstance.registry.register(this.#contentPromise, fullHash);
         }
       } else {
-        this.#contentPromise = this.requestContentInternal();
+        this.#contentPromise = this.#requestContent();
       }
     }
     return this.#contentPromise;
   }
 
-  private async requestContentInternal(): Promise<TextUtils.ContentData.ContentDataOrError> {
+  async #requestContent(): Promise<TextUtils.ContentData.ContentDataOrError> {
     if (!this.scriptId) {
       return {error: i18nString(UIStrings.scriptRemovedOrDeleted)};
     }
@@ -425,6 +429,10 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
     return {target: this.target(), frameId: this.frameId, initiatorUrl: this.embedderName()};
   }
 
+  debugId(): DebugId|null {
+    return this.buildId as (DebugId | null);
+  }
+
   /**
    * Translates the `rawLocation` from line and column number in terms of what V8 understands
    * to a script relative location. Specifically this means that for inline `<script>`'s
@@ -432,7 +440,7 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
    * content is subtracted to make the location within the script independent of the
    * location of the `<script>` tag within the surrounding document.
    *
-   * @param rawLocation - the raw location in terms of what V8 understands.
+   * @param rawLocation the raw location in terms of what V8 understands.
    * @returns the script relative line and column number for the {@link rawLocation}.
    */
   rawLocationToRelativeLocation(rawLocation: {lineNumber: number, columnNumber: number}):
@@ -458,7 +466,7 @@ export class Script implements TextUtils.ContentProvider.ContentProvider, FrameA
    * of the script content is added to make the location relative to the start of the
    * surrounding document.
    *
-   * @param relativeLocation - the script relative location.
+   * @param relativeLocation the script relative location.
    * @returns the raw location in terms of what V8 understands for the {@link relativeLocation}.
    */
   relativeLocationToRawLocation(relativeLocation: {lineNumber: number, columnNumber: number}):

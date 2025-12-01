@@ -71,6 +71,7 @@ static_library("prefs") {
     "//components/pref_registry",
     "//components/prefs",
     "//components/version_info",
+    "//components/safe_browsing:buildflags",
     "//components/search_engines",
     "//vivaldi/components/datasource:resource_reader",
     "//skia",
@@ -82,6 +83,7 @@ static_library("prefs") {
   if(!is_ios) {
     deps += [
       "//chrome/common:constants",
+      "//content/public/browser",
     ]
   }
 }

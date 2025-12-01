@@ -16,7 +16,6 @@
 #include "util/std_util.h"
 
 using testing::_;
-using testing::Invoke;
 using testing::Return;
 using testing::StrictMock;
 

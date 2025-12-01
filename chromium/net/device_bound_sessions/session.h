@@ -63,7 +63,7 @@ class NET_EXPORT Session {
 
   bool ShouldDeferRequest(
       URLRequest* request,
-      const FirstPartySetMetadata& first_party_set_metadata) const;
+      const FirstPartySetMetadata& first_party_set_metadata);
 
   const Id& id() const { return id_; }
 
@@ -110,6 +110,13 @@ class NET_EXPORT Session {
   // enter backoff mode.
   void InformOfRefreshResult(SessionError::ErrorType error_type);
 
+  // Returns whether `request` would be allowed to set any bound
+  // cookies. This is a prerequisite for certain kinds of changes to
+  // session config.
+  bool CanSetBoundCookie(
+      const URLRequest& request,
+      const FirstPartySetMetadata& first_party_set_metadata) const;
+
   const url::Origin& origin() const { return inclusion_rules_.origin(); }
 
   const std::vector<std::string>& allowed_refresh_initiators() {
@@ -120,6 +127,11 @@ class NET_EXPORT Session {
       std::vector<std::string> allowed_refresh_initiators) {
     allowed_refresh_initiators_ = std::move(allowed_refresh_initiators);
   }
+
+  std::optional<base::Time> TakeLastProactiveRefreshOpportunity();
+
+  std::optional<base::TimeDelta>
+  TakeLastProactiveRefreshOpportunityMinimumCookieLifetime();
 
  private:
   Session(Id id, SessionInclusionRules inclusion_rules, GURL refresh);
@@ -173,6 +185,12 @@ class NET_EXPORT Session {
   net::BackoffEntry backoff_;
   // Host patterns for initiators allowed to trigger a refresh.
   std::vector<std::string> allowed_refresh_initiators_;
+
+  // Used for histogram logging related to the value of proactive
+  // refresh.
+  std::optional<base::Time> last_proactive_refresh_opportunity_;
+  std::optional<base::TimeDelta>
+      last_proactive_refresh_opportunity_minimum_cookie_lifetime_;
 };
 
 }  // namespace net::device_bound_sessions

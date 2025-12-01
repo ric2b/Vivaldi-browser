@@ -6,6 +6,7 @@
 
 #import "base/scoped_observation.h"
 #import "base/test/scoped_feature_list.h"
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_controller.h"
 #import "ios/chrome/browser/omnibox/model/omnibox_position/omnibox_position_browser_agent.h"
 #import "ios/chrome/browser/omnibox/model/omnibox_position/omnibox_position_browser_agent_observer.h"
@@ -27,6 +28,7 @@
 #import "ios/chrome/browser/shared/public/commands/quick_delete_commands.h"
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/fullscreen/toolbars_size_browser_agent.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/platform_test.h"
@@ -123,6 +125,9 @@ class ToolbarCoordinatorTest : public PlatformTest {
                                      ContextualPanelEntrypointIPHCommands)];
 
     OmniboxPositionBrowserAgent::CreateForBrowser(browser_.get());
+    // FullscreenController depends on ToolbarsSizeBrowserAgent, so the agent
+    // must be created first. Please maintain this order.
+    ToolbarsSizeBrowserAgent::CreateForBrowser(browser_.get());
     FullscreenController::CreateForBrowser(browser_.get());
   }
 
@@ -158,8 +163,8 @@ TEST_F(ToolbarCoordinatorTest, TestOmniboxPositionBrowserAgentObservation) {
   EXPECT_FALSE(observer.is_bottom_omnibox_);
 
   // Change bottom omnibox pref.
-  GetApplicationContext()->GetLocalState()->SetBoolean(prefs::kBottomOmnibox,
-                                                       true);
+  GetApplicationContext()->GetLocalState()->SetBoolean(
+      omnibox::kIsOmniboxInBottomPosition, true);
 
   EXPECT_TRUE(observer.is_bottom_omnibox_);
 }

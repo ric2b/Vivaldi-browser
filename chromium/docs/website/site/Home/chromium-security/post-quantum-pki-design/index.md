@@ -135,4 +135,3 @@ In order to guide our efforts in this design space, we have compiled a list of d
 #### Non-X.509 PKIs
 
 [Merkle Tree Certificates (MTC)](https://datatracker.ietf.org/doc/draft-davidben-tls-merkle-tree-certs/): A new type of certificate that integrates issuance transparency directly into the certificate issuance process at the cost of increased issuance time, additional complexity at the CA, and the introduction of a new type of transparency service that verifies issuance behavior and communicates fresh, short-lived trust anchor information to relying parties.
-

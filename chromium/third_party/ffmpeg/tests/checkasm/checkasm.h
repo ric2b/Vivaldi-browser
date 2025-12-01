@@ -86,9 +86,11 @@ void checkasm_check_alacdsp(void);
 void checkasm_check_apv_dsp(void);
 void checkasm_check_audiodsp(void);
 void checkasm_check_av_tx(void);
+void checkasm_check_blackdetect(void);
 void checkasm_check_blend(void);
 void checkasm_check_blockdsp(void);
 void checkasm_check_bswapdsp(void);
+void checkasm_check_colordetect(void);
 void checkasm_check_colorspace(void);
 void checkasm_check_diracdsp(void);
 void checkasm_check_exrdsp(void);
@@ -124,6 +126,7 @@ void checkasm_check_pixblockdsp(void);
 void checkasm_check_sbrdsp(void);
 void checkasm_check_rv34dsp(void);
 void checkasm_check_rv40dsp(void);
+void checkasm_check_scene_sad(void);
 void checkasm_check_svq1enc(void);
 void checkasm_check_synth_filter(void);
 void checkasm_check_sw_gbrp(void);
@@ -443,16 +446,18 @@ DECL_CHECKASM_CHECK_FUNC(int32_t);
 #define checkasm_check_pixel_padded_align(...) \
     checkasm_check_pixel2(__VA_ARGS__, 8)
 
-/* This assumes that there is a local variable named "bit_depth".
+/* This assumes that there is a local variable named "bit_depth"
+ * and that the type-specific buffers obey the name ## _BITDEPTH
+ * convention.
  * For tests that don't have that and only operate on a single
  * bitdepth, just call checkasm_check(uint8_t, ...) directly. */
 #define checkasm_check_dctcoef(buf1, stride1, buf2, stride2, ...) \
     ((bit_depth > 8) ?                                        \
-     checkasm_check(int32_t, (const int32_t*)buf1, stride1,   \
-                             (const int32_t*)buf2, stride2,   \
+     checkasm_check(int32_t, buf1 ## _32, stride1,            \
+                             buf2 ## _32, stride2,            \
                              __VA_ARGS__) :                   \
-     checkasm_check(int16_t, (const int16_t*)buf1, stride1,   \
-                             (const int16_t*)buf2, stride2,   \
+     checkasm_check(int16_t, buf1 ## _16, stride1,            \
+                             buf2 ## _16, stride2,            \
                              __VA_ARGS__))
 
 #endif /* TESTS_CHECKASM_CHECKASM_H */

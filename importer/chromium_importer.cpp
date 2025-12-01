@@ -9,36 +9,40 @@
 #include "base/base64.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
-#include "base/functional/bind.h"
-#include "base/json/json_reader.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/importer/importer_list.h"
-#include "chrome/browser/shell_integration.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/importer/importer_bridge.h"
-#include "chrome/common/ini_parser.h"
-#include "chrome/grit/branded_strings.h"
-#include "components/sessions/core/session_types.h"
-#include "components/os_crypt/sync/key_storage_config_linux.h"
 #include "components/os_crypt/sync/os_crypt.h"
-#include "components/password_manager/core/browser/password_form.h"
-#include "components/password_manager/core/browser/password_manager_switches.h"
-#include "components/user_data_importer/common/imported_bookmark_entry.h"
 #include "components/user_data_importer/common/importer_data_types.h"
-#include "importer/chrome_importer_utils.h"
 #include "importer/imported_tab_entry.h"
 #include "sql/statement.h"
-#include "ui/base/l10n/l10n_util.h"
 
+#include "app/vivaldi_resources.h"
+#include "components/sessions/vivaldi_session_service_commands.h"
 #include "importer/chromium_extension_importer.h"
 #include "importer/chromium_session_importer.h"
+#include "importer/import_error_utils.h"
+
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/grit/branded_strings.h"
+#include "components/os_crypt/sync/key_storage_config_linux.h"
+#include "components/password_manager/core/browser/password_manager_switches.h"
+#endif  // IS_LINUX
+
+namespace {
+#if BUILDFLAG(IS_WIN)
+std::string* GetImportEncryptionKey() {
+  static base::NoDestructor<std::string> import_encryption_key;
+  return import_encryption_key.get();
+}
+#endif
+}  // namespace
 
 ChromiumImporter::ChromiumImporter() {}
 
@@ -50,14 +54,18 @@ void ChromiumImporter::StartImport(
     ImporterBridge* bridge) {
   bridge_ = bridge;
   std::string name = source_profile.selected_profile_name;
+  if (name.empty()) {
+    name = "Default";  // Fallback to Default profile if no profile specified
+  }
   profile_dir_ = source_profile.source_path.AppendASCII(name);
 
   bridge_->NotifyStarted();
 
   if ((items & user_data_importer::HISTORY) && !cancelled()) {
     bridge_->NotifyItemStarted(user_data_importer::HISTORY);
-    ImportHistory();
-    bridge_->NotifyItemEnded(user_data_importer::HISTORY);
+    auto res = ImportHistory();
+    import_result::NotifyBridge(res, bridge_.get(),
+                                user_data_importer::HISTORY);
   }
 
   if ((items & user_data_importer::FAVORITES) && !cancelled()) {
@@ -71,35 +79,36 @@ void ChromiumImporter::StartImport(
       bridge_->NotifyItemEnded(user_data_importer::FAVORITES);
     } else {
       bridge_->NotifyItemStarted(user_data_importer::FAVORITES);
-      ImportBookMarks();
-      bridge_->NotifyItemEnded(user_data_importer::FAVORITES);
+      const auto res = ImportBookMarks();
+      import_result::NotifyBridge(res, bridge_.get(),
+                                  user_data_importer::FAVORITES);
     }
   }
 
   if ((items & user_data_importer::PASSWORDS) && !cancelled()) {
     bridge_->NotifyItemStarted(user_data_importer::PASSWORDS);
-    ImportPasswords(source_profile.importer_type);
-    bridge_->NotifyItemEnded(user_data_importer::PASSWORDS);
+
+    const auto res = ImportPasswords(source_profile.importer_type);
+    import_result::NotifyBridge(res, bridge_.get(),
+                                user_data_importer::PASSWORDS);
   }
 
   if ((items & user_data_importer::TABS) && !cancelled()) {
     bridge_->NotifyItemStarted(user_data_importer::TABS);
-    ImportTabs(source_profile.importer_type);
-    bridge_->NotifyItemEnded(user_data_importer::TABS);
+    const auto res = ImportTabs(source_profile.importer_type);
+    import_result::NotifyBridge(res, bridge_.get(), user_data_importer::TABS);
   }
 
   if ((items & user_data_importer::EXTENSIONS) && !cancelled()) {
     bridge_->NotifyItemStarted(user_data_importer::EXTENSIONS);
-    ImportExtensions();
-    bridge_->NotifyItemEnded(user_data_importer::EXTENSIONS);
+    const auto res = ImportExtensions();
+    import_result::NotifyBridge(res, bridge_.get(),
+                                user_data_importer::EXTENSIONS);
   }
   bridge_->NotifyEnded();
 }
 
-#if BUILDFLAG(IS_WIN)
-std::string import_encryption_key;
-#endif  // IS_WIN
-void ChromiumImporter::ImportPasswords(
+ImportResult ChromiumImporter::ImportPasswords(
     user_data_importer::ImporterType importer_type) {
   // Initializes Chrome decryptor
 
@@ -110,36 +119,26 @@ void ChromiumImporter::ImportPasswords(
   // Read encryption key from other browser local state
   base::FilePath local_state_file =
       profile_dir_.DirName().AppendASCII("Local State");
-  if (!base::PathExists(local_state_file)) {
-    LOG(ERROR) << "Unable to find Local State for import browser.";
-    return;
+
+  base::Value local_state;
+  auto result = ImportFileOperations::ParseJsonFile(
+      local_state_file, &local_state, IDS_IMPORT_ERROR_LOCAL_STATE_NOT_FOUND,
+      IDS_IMPORT_ERROR_LOCAL_STATE_READ_FAILED,
+      IDS_IMPORT_ERROR_LOCAL_STATE_PARSE_FAILED);
+  if (!result.has_value()) {
+    return result;
   }
 
-  std::string local_state_string;
-  if (!ReadFileToString(local_state_file, &local_state_string)) {
-    LOG(ERROR) << "Unable to read Local State from disk.";
-    return;
-  }
-
-  std::optional<base::Value> local_state(
-      base::JSONReader::Read(local_state_string));
-  if (!local_state) {
-    LOG(ERROR) << "Unable to parse JSON in Local State.";
-    return;
-  }
-
-  if (local_state->is_dict()) {
-    base::Value* os_crypt_dict = local_state->GetDict().Find("os_crypt");
+  if (local_state.is_dict()) {
+    base::Value* os_crypt_dict = local_state.GetDict().Find("os_crypt");
     if (!os_crypt_dict) {
-      LOG(ERROR) << "Unable to find 'os_cypt' entry for import browser.";
-      return;
+      return import_result::Error(IDS_IMPORT_ERROR_OS_CRYPT_NOT_FOUND);
     }
 
     const std::string* base64_encoded_key =
         os_crypt_dict->GetDict().FindString("encrypted_key");
     if (!base64_encoded_key) {
-      LOG(ERROR) << "Unable to find 'encrypted_key' entry for import browser.";
-      return;
+      return import_result::Error(IDS_IMPORT_ERROR_ENCRYPTED_KEY_NOT_FOUND);
     }
 
     std::string encrypted_key_with_header;
@@ -149,8 +148,7 @@ void ChromiumImporter::ImportPasswords(
     const char kDPAPIKeyPrefix[] = "DPAPI";
     if (!base::StartsWith(encrypted_key_with_header, kDPAPIKeyPrefix,
                           base::CompareCase::SENSITIVE)) {
-      LOG(ERROR) << "Key is not DPAPI key, unable to decrypt.";
-      return;
+      return import_result::Error(IDS_IMPORT_ERROR_NOT_DPAPI_KEY);
     }
 
     std::string dpapi_encrypted_key =
@@ -158,17 +156,28 @@ void ChromiumImporter::ImportPasswords(
 
     // This DPAPI decryption can fail if the user's password has been reset
     // by an Administrator.
-    if (!OSCrypt::DecryptString(dpapi_encrypted_key, &import_encryption_key)) {
-      LOG(ERROR) << "Decryption key invalid.";
-      return;
+    if (!OSCrypt::DecryptString(dpapi_encrypted_key,
+                                GetImportEncryptionKey())) {
+      return import_result::Error(IDS_IMPORT_ERROR_DECRYPTION_KEY_INVALID);
     }
   }
 #endif  // IS_WIN
 
   base::FilePath file = source_path.AppendASCII("Login Data");
-  if (base::PathExists(file)) {
-    ReadAndParseSignons(file, &forms, importer_type);
+  auto file_check = ImportFileOperations::CheckFileExists(
+      file, IDS_IMPORT_ERROR_LOGIN_DATA_NOT_FOUND);
+  if (!file_check.has_value()) {
+    return file_check;
   }
+
+  bool failed_decrypt = false;
+
+  const auto read_result =
+      ReadAndParseSignons(file, &forms, importer_type, &failed_decrypt);
+  if (!read_result.has_value()) {
+    return read_result;
+  }
+
   if (!cancelled()) {
     for (size_t i = 0; i < forms.size(); ++i) {
       if (!forms[i].username_value.empty() ||
@@ -177,24 +186,37 @@ void ChromiumImporter::ImportPasswords(
       }
     }
   }
+
+  if (failed_decrypt) {
+    return import_result::Error(IDS_IMPORT_ERROR_PASSWORD_DECRYPTION_FAILED);
+  }
+
+  return import_result::Success();
 }
 
-bool ChromiumImporter::ReadAndParseSignons(
+ImportResult ChromiumImporter::ReadAndParseSignons(
     const base::FilePath& sqlite_file,
     std::vector<user_data_importer::ImportedPasswordForm>* forms,
-    user_data_importer::ImporterType importer_type) {
+    user_data_importer::ImporterType importer_type,
+    bool* failed_decrypt) {
   sql::Database db("Importer");
-  if (!db.Open(sqlite_file))
-    return false;
+  auto db_result = ImportDatabaseOperations::OpenDatabase(
+      sqlite_file, &db, IDS_IMPORT_ERROR_LOGIN_DATABASE_OPEN_FAILED);
+  if (!db_result.has_value()) {
+    return db_result;
+  }
 
-  const char query2[] =
+  const std::string query =
       "SELECT origin_url, action_url, username_element, username_value, "
       "password_element, password_value, signon_realm "
       "FROM logins";
 
-  sql::Statement s2(db.GetUniqueStatement(query2));
-  if (!s2.is_valid())
-    return false;
+  sql::Statement s2{db.GetUniqueStatement(query)};
+  if (!s2.is_valid()) {
+    return import_result::Error(IDS_IMPORT_ERROR_LOGIN_DATABASE_READ_FAILED);
+  }
+
+  *failed_decrypt = false;
 
   while (s2.Step()) {
     user_data_importer::ImportedPasswordForm form;
@@ -241,9 +263,13 @@ bool ChromiumImporter::ReadAndParseSignons(
       service_name = "Opera GX Safe Storage";
       account_name = "Opera GX";
     }
-    OSCryptImpl::GetInstance()->DecryptImportedString16(cipher_text, &plain_text, service_name,
-                                     account_name);
-#else
+
+    if (!OSCryptImpl::GetInstance()->DecryptImportedString16(
+            cipher_text, &plain_text, service_name, account_name)) {
+      *failed_decrypt = true;
+      continue;
+    }
+#else  // IS_MAC
 #if BUILDFLAG(IS_LINUX)
     // Set up crypt config.
     const base::CommandLine& command_line =
@@ -256,53 +282,85 @@ bool ChromiumImporter::ReadAndParseSignons(
         command_line.HasSwitch(password_manager::kEnableEncryptionSelection);
     chrome::GetDefaultUserDataDirectory(&config->user_data_path);
     OSCryptImpl::GetInstance()->SetConfig(std::move(config));
-    OSCryptImpl::GetInstance()->DecryptString16(cipher_text, &plain_text);
+    if (!OSCryptImpl::GetInstance()->DecryptString16(cipher_text,
+                                                     &plain_text)) {
+      *failed_decrypt = true;
+      continue;
+    }
 #endif  // IS_LINUX
 #if BUILDFLAG(IS_WIN)
-    OSCryptImpl::GetInstance()->DecryptImportedString16(cipher_text, &plain_text,
-                                     import_encryption_key);
+    if (!OSCryptImpl::GetInstance()->DecryptImportedString16(
+            cipher_text, &plain_text, *GetImportEncryptionKey())) {
+      *failed_decrypt = true;
+      continue;
+    }
 #endif  // IS_WIN
-#endif
+#endif  // !IS_MAC
 
     form.password_value = plain_text;
     form.signon_realm = s2.ColumnString(6);
 
     forms->push_back(form);
+
+    // Clear the plaintext password from memory
+    std::fill(plain_text.begin(), plain_text.end(), u'\0');
   }
 #if BUILDFLAG(IS_MAC)
   OSCryptImpl::GetInstance()->ResetImportCache();
 #endif
 
-  return true;
+#if BUILDFLAG(IS_WIN)
+  // Clear the encryption key from memory
+  std::fill(GetImportEncryptionKey()->begin(), GetImportEncryptionKey()->end(),
+            '\0');
+#endif
+
+  return import_result::Success();
 }
 
-void ChromiumImporter::ImportHistory() {
+ImportResult ChromiumImporter::ImportHistory() {
   std::vector<user_data_importer::ImporterURLRow> historyRows;
   base::FilePath source_path = profile_dir_;
 
   base::FilePath file = source_path.AppendASCII("History");
-  if (base::PathExists(file)) {
-    ReadAndParseHistory(file, &historyRows);
+  auto file_check = ImportFileOperations::CheckFileExists(
+      file, IDS_IMPORT_ERROR_HISTORY_FILE_NOT_FOUND);
+  if (!file_check.has_value()) {
+    return file_check;
   }
 
-  if (!historyRows.empty() && !cancelled())
-    bridge_->SetHistoryItems(historyRows, user_data_importer::VISIT_SOURCE_CHROMIUM_IMPORTED);
+  auto res = ReadAndParseHistory(file, &historyRows);
+  if (!res.has_value()) {
+    return res;
+  }
+
+  if (!historyRows.empty() && !cancelled()) {
+    bridge_->SetHistoryItems(
+        historyRows, user_data_importer::VISIT_SOURCE_CHROMIUM_IMPORTED);
+  }
+
+  return import_result::Success();
 }
 
-bool ChromiumImporter::ReadAndParseHistory(const base::FilePath& sqlite_file,
+ImportResult ChromiumImporter::ReadAndParseHistory(
+    const base::FilePath& sqlite_file,
     std::vector<user_data_importer::ImporterURLRow>* forms) {
   sql::Database db("Importer");
-  if (!db.Open(sqlite_file))
-    return false;
+  auto db_result = ImportDatabaseOperations::OpenDatabase(
+      sqlite_file, &db, IDS_IMPORT_ERROR_HISTORY_DATABASE_OPEN_FAILED);
+  if (!db_result.has_value()) {
+    return db_result;
+  }
 
-  const char query2[] =
+  const std::string query =
       "SELECT url, title, visit_count, hidden, typed_count, case when "
       "last_visit_time = 0 then 1 else last_visit_time end as last_visit_time "
       "FROM urls";
 
-  sql::Statement s2(db.GetUniqueStatement(query2));
-  if (!s2.is_valid())
-    return false;
+  sql::Statement s2{db.GetUniqueStatement(query)};
+  if (!s2.is_valid()) {
+    return import_result::Error(IDS_IMPORT_ERROR_HISTORY_DATABASE_QUERY_FAILED);
+  }
 
   while (s2.Step()) {
     user_data_importer::ImporterURLRow row(GURL(s2.ColumnString(0)));
@@ -315,23 +373,25 @@ bool ChromiumImporter::ReadAndParseHistory(const base::FilePath& sqlite_file,
     row.last_visit = t;
     forms->push_back(row);
   }
-  return true;
+  return import_result::Success();
 }
 
-void ChromiumImporter::ImportExtensions() {
+ImportResult ChromiumImporter::ImportExtensions() {
   const auto extensions =
       extension_importer::ChromiumExtensionsImporter::GetImportableExtensions(
           profile_dir_);
   if (!extensions.empty() && !cancelled()) {
     bridge_->AddExtensions(extensions);
   }
+
+  return import_result::Success();
 }
 
-void ChromiumImporter::ImportTabs(
+ImportResult ChromiumImporter::ImportTabs(
     user_data_importer::ImporterType importer_type) {
-  const auto tabs =
-      session_importer::ChromiumSessionImporter::GetOpenTabs(
-          profile_dir_, importer_type);
+  const sessions::IdToSessionTab tabs =
+      session_importer::ChromiumSessionImporter::GetOpenTabs(profile_dir_,
+                                                             importer_type);
 
   std::vector<ImportedTabEntry> imported_tabs;
 
@@ -341,4 +401,6 @@ void ChromiumImporter::ImportTabs(
                  });
 
   bridge_->AddOpenTabs(std::move(imported_tabs));
+
+  return import_result::Success();
 }

@@ -1,4 +1,3 @@
-PYTHON_VERSION_COMPATIBILITY = 'PY3'
 
 DEPS = [
     'depot_tools',
@@ -42,3 +41,6 @@ PROPERTIES = {
 
 # Forward these types so that they can be used without importing api
 from .api import RelativeRoot, Result
+
+from .api import BotUpdateApi as API
+from .test_api import BotUpdateTestApi as TEST_API

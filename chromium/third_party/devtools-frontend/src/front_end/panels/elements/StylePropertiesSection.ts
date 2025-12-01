@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -41,6 +41,7 @@ import * as Platform from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
+import * as Badges from '../../models/badges/badges.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
@@ -59,58 +60,58 @@ import {StylesSidebarPane} from './StylesSidebarPane.js';
 
 const UIStrings = {
   /**
-   *@description Tooltip text that appears when hovering over the largeicon add button in the Styles Sidebar Pane of the Elements panel
+   * @description Tooltip text that appears when hovering over the largeicon add button in the Styles Sidebar Pane of the Elements panel
    */
   insertStyleRuleBelow: 'Insert style rule below',
   /**
-   *@description Text in Styles Sidebar Pane of the Elements panel
+   * @description Text in Styles Sidebar Pane of the Elements panel
    */
   constructedStylesheet: 'constructed stylesheet',
   /**
-   *@description Text in Styles Sidebar Pane of the Elements panel
+   * @description Text in Styles Sidebar Pane of the Elements panel
    */
   userAgentStylesheet: 'user agent stylesheet',
   /**
-   *@description Text in Styles Sidebar Pane of the Elements panel
+   * @description Text in Styles Sidebar Pane of the Elements panel
    */
   injectedStylesheet: 'injected stylesheet',
   /**
-   *@description Text in Styles Sidebar Pane of the Elements panel
+   * @description Text in Styles Sidebar Pane of the Elements panel
    */
   viaInspector: 'via inspector',
   /**
-   *@description Text in Styles Sidebar Pane of the Elements panel
+   * @description Text in Styles Sidebar Pane of the Elements panel
    */
   styleAttribute: '`style` attribute',
   /**
-   *@description Text in Styles Sidebar Pane of the Elements panel
-   *@example {html} PH1
+   * @description Text in Styles Sidebar Pane of the Elements panel
+   * @example {html} PH1
    */
   sattributesStyle: '{PH1}[Attributes Style]',
   /**
-   *@description Show all button text content in Styles Sidebar Pane of the Elements panel
-   *@example {3} PH1
+   * @description Show all button text content in Styles Sidebar Pane of the Elements panel
+   * @example {3} PH1
    */
   showAllPropertiesSMore: 'Show all properties ({PH1} more)',
   /**
-   *@description Text in Elements Tree Element of the Elements panel, copy should be used as a verb
+   * @description Text in Elements Tree Element of the Elements panel, copy should be used as a verb
    */
   copySelector: 'Copy `selector`',
   /**
-   *@description A context menu item in Styles panel to copy CSS rule
+   * @description A context menu item in Styles panel to copy CSS rule
    */
   copyRule: 'Copy rule',
   /**
-   *@description A context menu item in Styles panel to copy all CSS declarations
+   * @description A context menu item in Styles panel to copy all CSS declarations
    */
   copyAllDeclarations: 'Copy all declarations',
   /**
-   *@description Text that is announced by the screen reader when the user focuses on an input field for editing the name of a CSS selector in the Styles panel
+   * @description Text that is announced by the screen reader when the user focuses on an input field for editing the name of a CSS selector in the Styles panel
    */
   cssSelector: '`CSS` selector',
   /**
-   *@description Text displayed in tooltip that shows specificity information.
-   *@example {(0,0,1)} PH1
+   * @description Text displayed in tooltip that shows specificity information.
+   * @example {(0,0,1)} PH1
    */
   specificity: 'Specificity: {PH1}',
 } as const;
@@ -147,7 +148,7 @@ export class StylePropertiesSection {
   navigable: boolean|null|undefined;
   protected readonly selectorRefElement: HTMLElement;
   private hoverableSelectorsMode: boolean;
-  private isHiddenInternal: boolean;
+  #isHidden: boolean;
   protected customPopulateCallback: () => void;
 
   nestingLevel = 0;
@@ -316,7 +317,7 @@ export class StylePropertiesSection {
       this.propertiesTreeOutline.element.classList.add('read-only');
     }
     this.hoverableSelectorsMode = false;
-    this.isHiddenInternal = false;
+    this.#isHidden = false;
     this.markSelectorMatches();
     this.onpopulate();
   }
@@ -543,8 +544,8 @@ export class StylePropertiesSection {
     }
   }
 
-  private onKeyDown(event: Event): void {
-    const keyboardEvent = (event as KeyboardEvent);
+  private onKeyDown(event: KeyboardEvent): void {
+    const keyboardEvent = event;
     if (UI.UIUtils.isEditing() || !this.editable || keyboardEvent.altKey || keyboardEvent.ctrlKey ||
         keyboardEvent.metaKey) {
       return;
@@ -795,6 +796,11 @@ export class StylePropertiesSection {
         case Protocol.CSS.CSSRuleType.StyleRule:
           ancestorRuleElement = this.createNestingElement(rule.nestingSelectors?.[nestingIndex++]);
           break;
+        case Protocol.CSS.CSSRuleType.StartingStyleRule:
+          if (Root.Runtime.hostConfig.devToolsStartingStyleDebugging?.enabled) {
+            ancestorRuleElement = this.createStartingStyleElement();
+          }
+          break;
       }
       if (ancestorRuleElement) {
         this.#ancestorRuleListElement.prepend(ancestorRuleElement);
@@ -916,6 +922,17 @@ export class StylePropertiesSection {
     return scopeElement;
   }
 
+  protected createStartingStyleElement(/* startingStyle: SDK.CSSStartingStyle.CSSStartingStyle*/):
+      ElementsComponents.CSSQuery.CSSQuery|undefined {
+    const startingStyleElement = new ElementsComponents.CSSQuery.CSSQuery();
+    startingStyleElement.data = {
+      queryPrefix: '@starting-style',
+      queryText: '',
+      jslogContext: 'starting-style',
+    };
+    return startingStyleElement;
+  }
+
   protected createSupportsElement(supports: SDK.CSSSupports.CSSSupports): ElementsComponents.CSSQuery.CSSQuery
       |undefined {
     if (!supports.text) {
@@ -958,7 +975,8 @@ export class StylePropertiesSection {
       queryName: containerQuery.name,
       onContainerLinkClick: event => {
         event.preventDefault();
-        void ElementsPanel.instance().revealAndSelectNode(container.containerNode, true, true);
+        void ElementsPanel.instance().revealAndSelectNode(
+            container.containerNode, {showPanel: true, focusNode: true, highlightInOverlay: false});
         void container.containerNode.scrollIntoView();
       },
     };
@@ -1130,7 +1148,7 @@ export class StylePropertiesSection {
 
     const regex = this.parentPane.filterRegex();
     const hideRule = !hasMatchingChild && regex !== null && !regex.test(this.element.deepTextContent());
-    this.isHiddenInternal = hideRule;
+    this.#isHidden = hideRule;
     this.element.classList.toggle('hidden', hideRule);
     if (!hideRule && this.styleInternal.parentRule) {
       this.markSelectorHighlights();
@@ -1139,7 +1157,7 @@ export class StylePropertiesSection {
   }
 
   isHidden(): boolean {
-    return this.isHiddenInternal;
+    return this.#isHidden;
   }
 
   markSelectorMatches(): void {
@@ -1365,12 +1383,12 @@ export class StylePropertiesSection {
   private editingMediaTextCommittedForTest(): void {
   }
 
-  private handleSelectorClick(event: Event): void {
+  private handleSelectorClick(event: MouseEvent): void {
     const target = (event.target as Element | null);
     if (!target) {
       return;
     }
-    if (UI.KeyboardShortcut.KeyboardShortcut.eventHasCtrlEquivalentKey((event as MouseEvent)) && this.navigable &&
+    if (UI.KeyboardShortcut.KeyboardShortcut.eventHasCtrlEquivalentKey(event) && this.navigable &&
         target.classList.contains('simple-selector')) {
       const selectorIndex = this.elementToSelectorIndex.get(target);
       if (selectorIndex) {
@@ -1545,6 +1563,8 @@ export class StylePropertiesSection {
       if (!success) {
         return Promise.resolve();
       }
+
+      Badges.UserBadges.instance().recordAction(Badges.BadgeAction.CSS_RULE_MODIFIED);
       return this.matchedStyles.recomputeMatchingSelectors(rule).then(updateSourceRanges.bind(this, rule));
     }
 

@@ -28,6 +28,7 @@ use crate::*;
 
 use dav1d_sys::bindings::*;
 
+use std::ffi::CStr;
 use std::mem::MaybeUninit;
 
 #[derive(Default)]
@@ -124,9 +125,7 @@ impl Dav1dDataWrapper {
             )
         } {
             0 => Ok(()),
-            res => Err(AvifError::UnknownError(format!(
-                "dav1d_data_wrap returned {res}"
-            ))),
+            res => AvifError::unknown_error(format!("dav1d_data_wrap returned {res}")),
         }
     }
 }
@@ -177,9 +176,7 @@ impl Dav1d {
         // # Safety: Calling a C function with valid parameters.
         let ret = unsafe { dav1d_open(dec.as_mut_ptr(), (&settings) as *const _) };
         if ret != 0 {
-            return Err(AvifError::UnknownError(format!(
-                "dav1d_open returned {ret}"
-            )));
+            return AvifError::unknown_error(format!("dav1d_open returned {ret}"));
         }
         // # Safety: dec was initialized in the C function above.
         self.context = Some(unsafe { dec.assume_init() });
@@ -210,7 +207,7 @@ impl Dav1d {
                         || image.depth != (dav1d_picture.p.bpc as u8))
                 {
                     // Alpha plane does not match the previous alpha plane.
-                    return Err(AvifError::UnknownError("".into()));
+                    return AvifError::unknown_error("");
                 }
                 image.width = dav1d_picture.p.w as u32;
                 image.height = dav1d_picture.p.h as u32;
@@ -238,7 +235,7 @@ impl Dav1d {
                     1 => PixelFormat::Yuv420,
                     2 => PixelFormat::Yuv422,
                     3 => PixelFormat::Yuv444,
-                    _ => return Err(AvifError::UnknownError("".into())), // not reached.
+                    _ => return AvifError::unknown_error(""), // not reached.
                 };
                 // # Safety: seq_hdr is popualated by dav1d and is guaranteed to be valid.
                 let seq_hdr = unsafe { &(*dav1d_picture.seq_hdr) };
@@ -293,18 +290,14 @@ impl Dav1d {
                 // # Safety: Calling a C function with valid parameters.
                 res = unsafe { dav1d_send_data(context, data.mut_ptr()) };
                 if res != 0 && res != DAV1D_EAGAIN {
-                    return Err(AvifError::UnknownError(format!(
-                        "dav1d_send_data returned {res}"
-                    )));
+                    return AvifError::unknown_error(format!("dav1d_send_data returned {res}"));
                 }
             }
             let mut picture = Dav1dPictureWrapper::default();
             // # Safety: Calling a C function with valid parameters.
             res = unsafe { dav1d_get_picture(context, picture.mut_ptr()) };
             if res != 0 && res != DAV1D_EAGAIN {
-                return Err(AvifError::UnknownError(format!(
-                    "dav1d_get_picture returned {res}"
-                )));
+                return AvifError::unknown_error(format!("dav1d_get_picture returned {res}"));
             } else if res == 0 && picture.use_layer(spatial_id) {
                 let mut cell_image = Image::default();
                 self.picture_to_image(picture.get(), &mut cell_image, grid_image_helper.category)?;
@@ -313,9 +306,9 @@ impl Dav1d {
             } else {
                 retries += 1;
                 if retries > max_retries {
-                    return Err(AvifError::UnknownError(format!(
+                    return AvifError::unknown_error(format!(
                         "dav1d_get_picture never returned a frame after {max_retries} calls"
-                    )));
+                    ));
                 }
             }
         }
@@ -329,15 +322,21 @@ impl Dav1d {
             // # Safety: Calling a C function with valid parameters.
             let res = unsafe { dav1d_get_picture(self.context.unwrap(), picture.mut_ptr()) };
             if res < 0 && res != DAV1D_EAGAIN {
-                return Err(AvifError::UnknownError(format!(
-                    "error draining buffered frames {res}"
-                )));
+                return AvifError::unknown_error(format!("error draining buffered frames {res}"));
             }
             if res != 0 {
                 break;
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn version() -> String {
+        let version = match unsafe { CStr::from_ptr(dav1d_version()) }.to_str() {
+            Ok(s) => s.to_owned(),
+            Err(_) => String::new(),
+        };
+        format!("dav1d: {version}")
     }
 }
 
@@ -369,9 +368,7 @@ impl Decoder for Dav1d {
                 // # Safety: Calling a C function with valid parameters.
                 let res = unsafe { dav1d_send_data(self.context.unwrap(), data.mut_ptr()) };
                 if res < 0 && res != DAV1D_EAGAIN {
-                    return Err(AvifError::UnknownError(format!(
-                        "dav1d_send_data returned {res}"
-                    )));
+                    return AvifError::unknown_error(format!("dav1d_send_data returned {res}"));
                 }
             }
 
@@ -382,11 +379,9 @@ impl Decoder for Dav1d {
                 if data.has_data() {
                     continue;
                 }
-                return Err(AvifError::UnknownError("".into()));
+                return AvifError::unknown_error("");
             } else if res < 0 {
-                return Err(AvifError::UnknownError(format!(
-                    "dav1d_send_picture returned {res}"
-                )));
+                return AvifError::unknown_error(format!("dav1d_send_picture returned {res}"));
             } else if picture.use_layer(spatial_id) {
                 // Got a picture.
                 next_picture = Some(picture);
@@ -395,11 +390,11 @@ impl Decoder for Dav1d {
         }
         self.flush()?;
         if next_picture.is_some() {
-            self.picture = Some(next_picture.unwrap());
+            self.picture = next_picture;
         } else if category == Category::Alpha && self.picture.is_some() {
             // Special case for alpha, re-use last frame.
         } else {
-            return Err(AvifError::UnknownError("".into()));
+            return AvifError::unknown_error("");
         }
         self.picture_to_image(self.picture.unwrap_ref().get(), image, category)?;
         Ok(())

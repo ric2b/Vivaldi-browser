@@ -14,9 +14,7 @@ namespace gpu {
 
 namespace {
 
-BASE_FEATURE(kGrCacheLimitsFeature,
-             "GrCacheLimitsFeature",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kGrCacheLimitsFeature, base::FEATURE_ENABLED_BY_DEFAULT);
 
 MIRACLE_PARAMETER_FOR_INT(GetMaxGaneshResourceCacheBytes,
                           kGrCacheLimitsFeature,
@@ -90,7 +88,7 @@ void DetermineGrCacheLimitsFromAvailableMemory(
   if (base::SysInfo::IsLowEndDevice()) {
     *max_resource_cache_bytes = GetMaxLowEndGaneshResourceCacheBytes();
     *max_glyph_cache_texture_bytes = GetMaxLowEndGlyphCacheTextureBytes();
-  } else if (base::SysInfo::AmountOfPhysicalMemoryMB() >=
+  } else if (base::SysInfo::AmountOfPhysicalMemory().InMiB() >=
              GetHighEndMemoryThresholdMB()) {
     *max_resource_cache_bytes = GetMaxHighEndGaneshResourceCacheBytes();
   }

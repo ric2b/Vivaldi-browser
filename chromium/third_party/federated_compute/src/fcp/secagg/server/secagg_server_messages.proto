@@ -1,0 +1,44 @@
+/*
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package fcp.secagg;
+
+import "fcp/secagg/server/secagg_server_enums.proto";
+
+option java_package = "fcp.secagg.server";
+option java_multiple_files = true;
+
+// Specifies the security and robustness requirements for an instance of secure
+// aggregation
+message SecureAggregationRequirements {
+  // The adversary class against which to protect.
+  AdversaryClass adversary_class = 1;
+
+  // Fraction of clients in the population which might be compromised
+  // by an adversary, expressed as a fraction (between 0.0 and 1.0).
+  double adversarial_client_rate = 2;
+
+  // Estimated client dropout rate, expressed as a fraction (between 0.0
+  // and 1.0).
+  double estimated_dropout_rate = 3;
+
+  // The minimum number of (non-adversarial) users' values that must be
+  // aggregated together before the server can gain access to the aggregate,
+  // even transiently (e.g. in RAM).
+  int32 minimum_clients_in_server_visible_aggregate = 4;
+}

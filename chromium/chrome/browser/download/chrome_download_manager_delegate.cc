@@ -75,7 +75,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/browser/safe_browsing_navigation_observer_manager.h"
-#include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
+#include "components/safe_browsing/content/browser/web_ui/web_ui_content_info_singleton.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_search_api/safe_search_util.h"
 #include "components/saved_tab_groups/public/features.h"
@@ -98,7 +98,6 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
 #include "base/android/content_uri_utils.h"
 #include "base/android/path_utils.h"
 #include "base/process/process_handle.h"
@@ -172,6 +171,8 @@
 #include "components/enterprise/connectors/core/reporting_event_router.h"
 #endif  // BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS)
 #endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
+
+#include "base/android/device_info.h"
 
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_internal_handlers.h"
@@ -256,8 +257,8 @@ void CheckDownloadUrlDone(
     const std::vector<GURL>& download_urls,
     bool is_content_check_supported,
     safe_browsing::DownloadCheckResult result) {
-  safe_browsing::WebUIInfoSingleton::GetInstance()->AddToDownloadUrlsChecked(
-      download_urls, result);
+  safe_browsing::WebUIContentInfoSingleton::GetInstance()
+      ->AddToDownloadUrlsChecked(download_urls, result);
   download::DownloadDangerType danger_type;
   if (result == safe_browsing::DownloadCheckResult::SAFE ||
       result == safe_browsing::DownloadCheckResult::UNKNOWN) {
@@ -493,6 +494,9 @@ void MaybeReportDangerousDownloadBlocked(
         enterprise_connectors::kFileDownloadDataTransferEventTrigger,
         /*scan_id=*/"", /*content_transfer_method=*/"",
         download->GetTotalBytes(), referrer_chain,
+        enterprise_connectors::CollectFrameUrls(
+            content::DownloadItemUtils::GetWebContents(download),
+            enterprise_connectors::DeepScanAccessPoint::DOWNLOAD),
         enterprise_connectors::EventResult::BLOCKED);
   }
 #endif  // BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS)
@@ -709,7 +713,7 @@ bool ChromeDownloadManagerDelegate::DetermineDownloadTarget(
   DownloadPathReservationTracker::FilenameConflictAction action =
       kDefaultPlatformConflictAction;
 #if BUILDFLAG(IS_ANDROID)
-  if (base::android::BuildInfo::GetInstance()->is_desktop()) {
+  if (base::android::device_info::is_desktop()) {
     action = DownloadPathReservationTracker::UNIQUIFY;
   }
 
@@ -1091,7 +1095,7 @@ bool ChromeDownloadManagerDelegate::InterceptDownloadIfApplicable(
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
-  if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+  if (base::android::device_info::is_automotive()) {
     if (!blink::IsSupportedMimeType(mime_type) &&
         !IsPdfAndSupported(mime_type, web_contents)) {
       download_message_bridge_->ShowUnsupportedDownloadMessage(web_contents);

@@ -219,7 +219,7 @@ enum aome_enc_control_id {
    */
   AOME_SET_CPUUSED = 13,
 
-  /*!\brief Codec control function to enable automatic set and use alf frames,
+  /*!\brief Codec control function to enable automatic set and use arf frames,
    * unsigned int parameter
    *
    * - 0 = disable
@@ -1407,7 +1407,8 @@ enum aome_enc_control_id {
    */
   AV1E_SET_SVC_REF_FRAME_COMP_PRED = 147,
 
-  /*!\brief Set --deltaq-mode strength.
+  /*!\brief Set --deltaq-mode strength, where the value is a percentage,
+   * unsigned int parameter.
    *
    * Valid range: [0, 1000]
    */

@@ -35,6 +35,7 @@
 #include "ui/display/display_switches.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/image/image_skia.h"
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -145,10 +146,12 @@ class WebContentsViewAuraTest : public RenderViewHostTestHarness {
     GetNativeView()->SetBounds(kBounds);
     GetNativeView()->Show();
     root_window()->AddChild(GetNativeView());
-
-    occluding_window_.reset(aura::test::CreateTestWindowWithDelegateAndType(
-        nullptr, aura::client::WINDOW_TYPE_NORMAL, 0, kBounds, root_window(),
-        false));
+    occluding_window_ = aura::test::CreateTestWindow(
+        {.parent = root_window(),
+         .bounds = kBounds,
+         .window_type = aura::client::WINDOW_TYPE_NORMAL,
+         .window_id = 0,
+         .show = false});
   }
 
   void TearDown() override {

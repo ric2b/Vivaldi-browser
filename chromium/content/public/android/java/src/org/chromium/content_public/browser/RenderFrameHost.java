@@ -83,7 +83,7 @@ public interface RenderFrameHost {
      *
      * @return A list of RenderFramesHosts including the current frame and all descendents.
      */
-    public List<RenderFrameHost> getAllRenderFrameHosts();
+    List<RenderFrameHost> getAllRenderFrameHosts();
 
     /**
      * Returns whether the feature policy allows the feature in this frame.
@@ -242,4 +242,9 @@ public interface RenderFrameHost {
      */
     void executeJavaScriptInIsolatedWorld(
             String script, int worldId, @Nullable JavaScriptCallback callback);
+
+    /**
+     * @return whether hit test data is available for this Frame.
+     */
+    boolean hasHitTestDataForTesting();
 }

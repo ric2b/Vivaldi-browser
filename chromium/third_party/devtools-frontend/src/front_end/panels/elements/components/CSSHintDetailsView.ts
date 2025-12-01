@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -12,7 +12,7 @@ import cssHintDetailsViewStyles from './cssHintDetailsView.css.js';
 
 const UIStrings = {
   /**
-   *@description Text for button that redirects to CSS property documentation.
+   * @description Text for button that redirects to CSS property documentation.
    */
   learnMore: 'Learn More',
 } as const;

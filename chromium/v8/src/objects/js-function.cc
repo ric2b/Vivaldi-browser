@@ -261,6 +261,22 @@ constexpr TieringState TieringStateFor(CodeKind target_kind,
 
 }  // namespace
 
+DirectHandle<Object> JSFunction::GetFunctionPrototype(
+    Isolate* isolate, DirectHandle<JSFunction> function) {
+  if (!function->has_prototype()) {
+    // We lazily allocate .prototype for functions, which confuses debug
+    // evaluate which assumes we can write to temporary objects we allocated
+    // during evaluation. We err on the side of caution here and prevent the
+    // newly allocated prototype from going into the temporary objects set,
+    // which means writes to it will be considered a side effect.
+    DisableTemporaryObjectTracking no_temp_tracking(isolate->debug());
+    DirectHandle<JSObject> proto =
+        isolate->factory()->NewFunctionPrototype(function);
+    JSFunction::SetPrototype(isolate, function, proto);
+  }
+  return DirectHandle<Object>(function->prototype(), isolate);
+}
+
 void JSFunction::RequestOptimization(Isolate* isolate, CodeKind target_kind,
                                      ConcurrencyMode mode) {
   if (!isolate->concurrent_recompilation_enabled() ||
@@ -860,7 +876,7 @@ void JSFunction::SetPrototype(Isolate* isolate,
   // constructor field so it can be accessed.  Also, set the prototype
   // used for constructing objects to the original object prototype.
   // See ECMA-262 13.2.2.
-  if (!IsJSReceiver(*value)) {
+  if (IsTheHole(*value) || !IsJSReceiver(*value)) {
     // Copy the map so this does not affect unrelated functions.
     // Remove map transitions because they point to maps with a
     // different prototype.

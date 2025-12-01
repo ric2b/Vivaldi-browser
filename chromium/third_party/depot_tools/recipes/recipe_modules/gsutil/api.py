@@ -13,6 +13,7 @@ class GSUtilApi(recipe_api.RecipeApi):
     super(GSUtilApi, self).__init__(*args, **kwargs)
     self._boto_config_path = env_properties.BOTO_CONFIG
     self._boto_path = env_properties.BOTO_PATH
+    self._upload_urls = {}
 
   @property
   def gsutil_py_path(self):
@@ -108,8 +109,13 @@ class GSUtilApi(recipe_api.RecipeApi):
 
     if link_name:
       is_dir = '-r' in args or '--recursive' in args
-      result.presentation.links[link_name] = self._http_url(
-          bucket, dest, is_directory=is_dir, is_anonymous=unauthenticated_url)
+      link = self._http_url(bucket,
+                            dest,
+                            is_directory=is_dir,
+                            is_anonymous=unauthenticated_url)
+      result.presentation.links[link_name] = link
+      self._upload_urls[result.name] = full_dest
+      result.presentation.properties['gsutil_urls'] = self._upload_urls
     return result
 
   def download(self, bucket, source, dest, args=None, **kwargs):

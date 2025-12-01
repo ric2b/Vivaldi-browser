@@ -136,17 +136,25 @@ class TabStripActionContainer : public views::View,
 
   // GlicNudgeDelegate:
   void OnTriggerGlicNudgeUI(std::string label) override;
+  void OnHideGlicNudgeUI() override;
   bool GetIsShowingGlicNudge() override;
 
   // GlicButtonControllerDelegate:
   void SetGlicShowState(bool show) override;
-  void SetGlicIcon(const gfx::VectorIcon& icon) override;
+  void SetGlicDetached(bool detached) override;
 
   // UI Controls for the GlicActorTaskIcon:
   void TriggerGlicActorTaskIconCheckTasksNudge();
+  void TriggerGlicActorTaskIconCompleteTasksNudge();
   void ShowGlicActorTaskIcon();
   void HideGlicActorTaskIcon();
   bool GetIsShowingGlicActorTaskIconNudge();
+
+  // UI controls for updating buttons based on the floaty view state:
+  void HighlightGlicActorTaskIcon();
+  void UnhighlightGlicActorTaskIcon();
+  void HighlightGlicButton();
+  void UnhighlightGlicButton();
 
   void UpdateButtonBorders(gfx::Insets button_insets);
 
@@ -171,6 +179,7 @@ class TabStripActionContainer : public views::View,
   void OnGlicButtonDismissed();
   void OnGlicButtonHovered();
   void OnGlicButtonMouseDown();
+  void OnGlicButtonAnimationEnded();
 
   std::unique_ptr<glic::GlicActorTaskIcon> CreateGlicActorTaskIcon(
       TabStripController* tab_strip_controller);
@@ -182,6 +191,9 @@ class TabStripActionContainer : public views::View,
   // active.
   // Adds a toggle-like background.
   std::unique_ptr<views::FlexLayoutView> CreateGlicActorButtonContainer();
+  // Update the Glic and GlicActor button borders when showing or hiding the
+  // task icon container.
+  void UpdateGlicActorButtonContainerBorders();
 #endif
 
   void OnTabDeclutterButtonClicked();
@@ -213,6 +225,8 @@ class TabStripActionContainer : public views::View,
   void ExecuteHideTabStripNudge(TabStripNudgeButton* button);
 
   void OnAnimationSessionEnded();
+
+  bool ButtonOwnsAnimation(const TabStripNudgeButton* button) const;
 
   std::unique_ptr<TabStripNudgeButton> CreateAutoTabGroupButton(
       TabStripController* tab_strip_controller);
@@ -260,6 +274,10 @@ class TabStripActionContainer : public views::View,
   std::list<base::CallbackListSubscription> subscriptions_;
 
   std::unique_ptr<TabStripNudgeAnimationSession> animation_session_;
+
+  // Border insets as passed down from the TabStripRegionView, used to update
+  // button view borders.
+  gfx::Insets border_insets_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TABS_TAB_STRIP_ACTION_CONTAINER_H_

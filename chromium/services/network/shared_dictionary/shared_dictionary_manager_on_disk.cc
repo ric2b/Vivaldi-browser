@@ -493,10 +493,12 @@ SharedDictionaryManagerOnDisk::SharedDictionaryManagerOnDisk(
           base::CommandLine::ForCurrentProcess()->HasSwitch(
               switches::kDisableSharedDictionaryStorageCleanupForTesting)) {
   dictionary_cache_ = base::MakeRefCounted<SharedDictionaryCache>();
-  memory_pressure_listener_ = std::make_unique<base::MemoryPressureListener>(
-      FROM_HERE,
-      base::BindRepeating(&SharedDictionaryManagerOnDisk::OnMemoryPressure,
-                          weak_factory_.GetWeakPtr()));
+  memory_pressure_listener_ =
+      std::make_unique<base::AsyncMemoryPressureListener>(
+          FROM_HERE,
+          base::MemoryPressureListenerTag::kSharedDictionaryManagerOnDisk,
+          base::BindRepeating(&SharedDictionaryManagerOnDisk::OnMemoryPressure,
+                              weak_factory_.GetWeakPtr()));
   disk_cache_.Initialize(cache_directory_path,
 #if BUILDFLAG(IS_ANDROID)
                          app_status_listener_getter,
@@ -700,9 +702,21 @@ void SharedDictionaryManagerOnDisk::OnDictionaryWrittenInDatabase(
 
 void SharedDictionaryManagerOnDisk::UpdateDictionaryLastFetchTime(
     net::SharedDictionaryInfo& info,
-    base::Time last_fetch_time) {
+    base::Time last_fetch_time,
+    const std::optional<base::TimeDelta>& ttl) {
   info.set_last_fetch_time(last_fetch_time);
   CHECK(info.primary_key_in_database());
+  if (ttl) {
+    // If there is an explicit ttl, it is relative to the last time the
+    // resource was fetched so we reset the base time of the response to
+    // be the last fetch.
+    info.set_response_time(last_fetch_time);
+    metadata_store_.UpdateDictionaryResponseTimeAndLastFetchTime(
+        *info.primary_key_in_database(), info.last_fetch_time(),
+        base::BindOnce(
+            [](net::SQLitePersistentSharedDictionaryStore::Error) {}));
+    return;
+  }
   metadata_store_.UpdateDictionaryLastFetchTime(
       *info.primary_key_in_database(), info.last_fetch_time(),
       base::BindOnce([](net::SQLitePersistentSharedDictionaryStore::Error) {}));

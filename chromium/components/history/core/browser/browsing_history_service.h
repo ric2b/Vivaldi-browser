@@ -70,6 +70,7 @@ class BrowsingHistoryService : public HistoryServiceObserver,
                  const GURL& remote_icon_url_for_uma,
                  int visit_count,
                  int typed_count,
+                 bool is_actor_visit,
                  std::optional<std::string> app_id);
     HistoryEntry();
     HistoryEntry(const HistoryEntry& other);
@@ -113,6 +114,9 @@ class BrowsingHistoryService : public HistoryServiceObserver,
 
     // Number of times this URL has been manually entered in the URL bar.
     int typed_count = 0;
+
+    // Whether the visit is actor-initiated.
+    bool is_actor_visit = false;
 
     // ID of the app this entry was generated for. Set to a non-null value
     // on Android only.
@@ -293,11 +297,11 @@ class BrowsingHistoryService : public HistoryServiceObserver,
   // Whether there are other forms of browsing history on the history server.
   bool has_other_forms_of_browsing_history_ = false;
 
-  raw_ptr<BrowsingHistoryDriver> driver_;
+  raw_ptr<BrowsingHistoryDriver, DanglingUntriaged> driver_;
 
-  raw_ptr<HistoryService> local_history_;
+  raw_ptr<HistoryService, DanglingUntriaged> local_history_;
 
-  raw_ptr<syncer::SyncService> sync_service_;
+  raw_ptr<syncer::SyncService, DanglingUntriaged> sync_service_;
 
   // The clock used to vend times.
   std::unique_ptr<base::Clock> clock_;

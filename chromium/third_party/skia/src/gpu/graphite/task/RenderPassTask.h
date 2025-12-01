@@ -53,13 +53,15 @@ public:
 
     Status prepareResources(ResourceProvider*,
                             ScratchResourceManager*,
-                            const RuntimeEffectDictionary*) override;
+                            sk_sp<const RuntimeEffectDictionary>) override;
 
     Status addCommands(Context*, CommandBuffer*, ReplayTargetData) override;
 
     bool visitPipelines(const std::function<bool(const GraphicsPipeline*)>& visitor) override;
 
     bool visitProxies(const std::function<bool(const TextureProxy*)>& visitor) override;
+
+    SK_DUMP_TASKS_CODE(const char* getTaskName() const override { return "RenderPass Task"; })
 
 private:
     RenderPassTask(DrawPassList,

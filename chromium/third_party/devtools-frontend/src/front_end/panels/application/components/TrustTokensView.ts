@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -25,15 +25,15 @@ const {html} = Lit;
 
 const UIStrings = {
   /**
-   *@description Text for the issuer of an item
+   * @description Text for the issuer of an item
    */
   issuer: 'Issuer',
   /**
-   *@description Column header for Trust Token table
+   * @description Column header for Trust Token table
    */
   storedTokenCount: 'Stored token count',
   /**
-   *@description Hover text for an info icon in the Private State Token panel
+   * @description Hover text for an info icon in the Private State Token panel
    */
   allStoredTrustTokensAvailableIn: 'All stored private state tokens available in this browser instance.',
   /**

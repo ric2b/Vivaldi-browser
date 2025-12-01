@@ -988,8 +988,6 @@ TEST_F(SiteSettingsHelperTest, AutomaticFullscreenVisibility) {
   TestingProfile profile;
   profile.SetPermissionControllerDelegate(
       permissions::GetPermissionControllerDelegate(&profile));
-  base::test::ScopedFeatureList feature_list{
-      features::kAutomaticFullscreenContentSetting};
   const ContentSettingsType type = ContentSettingsType::AUTOMATIC_FULLSCREEN;
 
   // Automatic Fullscreen is visible for non-origin-specific lists.
@@ -1158,7 +1156,8 @@ class SiteSettingsHelperChooserExceptionTest : public testing::Test {
                                            *ephemeral_device_info);
 
     // Add the policy granted permissions for testing.
-    auto policy_value = base::JSONReader::Read(kUsbPolicySetting);
+    auto policy_value = base::JSONReader::Read(
+        kUsbPolicySetting, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
     DCHECK(policy_value);
     profile()->GetPrefs()->Set(prefs::kManagedWebUsbAllowDevicesForUrls,
                                std::move(*policy_value));
@@ -1604,8 +1603,6 @@ TEST_F(SiteSettingsHelperIsolatedWebAppTest,
 }
 
 TEST_F(SiteSettingsHelperIsolatedWebAppTest, AutomaticFullscreenVisibility) {
-  base::test::ScopedFeatureList feature_list{
-      features::kAutomaticFullscreenContentSetting};
   const ContentSettingsType type = ContentSettingsType::AUTOMATIC_FULLSCREEN;
   web_app::IsolatedWebAppUrlInfo app_url_info = InstallIsolatedWebApp(kAppName);
 

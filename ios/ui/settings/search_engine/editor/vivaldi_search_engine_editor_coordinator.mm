@@ -33,6 +33,9 @@
 // Whether the user has made unsaved changes
 @property(nonatomic, assign) BOOL hasActiveChanges;
 
+// Whether the edited form data is valid and can be saved
+@property(nonatomic, assign) BOOL isFormDataValid;
+
 @end
 
 @implementation VivaldiSearchEngineEditorCoordinator
@@ -135,6 +138,7 @@
 #pragma mark - Event Handlers
 
 - (void)handleItemStateChange:(VivaldiSearchEngineEditorItem*)item {
+  self.isFormDataValid = item.isFormValid;
   if (self.hasActiveChanges) {
     return;
   }
@@ -163,6 +167,8 @@
 }
 
 - (void)handleSaveButtonTap {
+  if (!self.isFormDataValid)
+    return;
   [self.mediator saveChanges];
 }
 

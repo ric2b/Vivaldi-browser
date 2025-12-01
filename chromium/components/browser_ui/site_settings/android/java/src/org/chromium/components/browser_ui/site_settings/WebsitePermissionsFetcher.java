@@ -15,7 +15,7 @@ import org.chromium.base.CommandLine;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browsing_data.content.BrowsingDataInfo;
-import org.chromium.components.content_settings.ContentSettingValues;
+import org.chromium.components.content_settings.ContentSetting;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.content_settings.SessionModel;
 import org.chromium.components.permissions.PermissionsAndroidFeatureList;
@@ -25,17 +25,16 @@ import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.content_public.browser.HostZoomMap;
 import org.chromium.content_public.common.ContentSwitches;
-import org.chromium.device.DeviceFeatureList;
-import org.chromium.device.DeviceFeatureMap;
 import org.chromium.url.Origin;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 
 /**
@@ -96,9 +95,9 @@ public class WebsitePermissionsFetcher {
             case ContentSettingsType.AUTOPLAY: // Vivaldi
                 return WebsitePermissionsType.CONTENT_SETTING_EXCEPTION;
             case ContentSettingsType.AR:
+            case ContentSettingsType.AUTO_PICTURE_IN_PICTURE:
             case ContentSettingsType.CLIPBOARD_READ_WRITE:
             case ContentSettingsType.FILE_SYSTEM_WRITE_GUARD:
-            case ContentSettingsType.GEOLOCATION:
             case ContentSettingsType.HAND_TRACKING:
             case ContentSettingsType.IDLE_DETECTION:
             case ContentSettingsType.MEDIASTREAM_CAMERA:
@@ -118,6 +117,12 @@ public class WebsitePermissionsFetcher {
             case ContentSettingsType.SERIAL_GUARD:
             case ContentSettingsType.USB_GUARD:
                 return WebsitePermissionsType.CHOSEN_OBJECT_INFO;
+            case ContentSettingsType.GEOLOCATION:
+                if (!PermissionsAndroidFeatureMap.isEnabled(
+                        PermissionsAndroidFeatureList.APPROXIMATE_GEOLOCATION_PERMISSION)) {
+                    return WebsitePermissionsType.PERMISSION_INFO;
+                }
+                break;
             case ContentSettingsType.GEOLOCATION_WITH_OPTIONS:
                 if (PermissionsAndroidFeatureMap.isEnabled(
                         PermissionsAndroidFeatureList.APPROXIMATE_GEOLOCATION_PERMISSION)) {
@@ -349,17 +354,6 @@ public class WebsitePermissionsFetcher {
                 return;
             }
 
-            // The serial guard permission controls access to the Web Serial API, which enables
-            // sites to request access to connect specific serial ports. Users are presented with a
-            // chooser prompt in which they must select the serial port they would like to allow the
-            // site to connect to. Therefore, this permission also displays a list of permitted
-            // serial ports that each site can connect to.
-            // Remove this check after the flag is removed.
-            if (contentSettingsType == ContentSettingsType.SERIAL_GUARD
-                    && !DeviceFeatureMap.isEnabled(DeviceFeatureList.BLUETOOTH_RFCOMM_ANDROID)) {
-                return;
-            }
-
             switch (websitePermissionsType) {
                 case CONTENT_SETTING_EXCEPTION:
                     queue.add(new ExceptionInfoFetcher(contentSettingsType));
@@ -383,7 +377,7 @@ public class WebsitePermissionsFetcher {
         private Website findOrCreateSite(
                 String origin,
                 @Nullable String embedder,
-                @ContentSettingValues @Nullable Integer contentSetting) {
+                @ContentSetting @Nullable Integer contentSetting) {
             // Ensure that the origin parameter is actually an origin or a wildcard.
             // The purpose of the check is to prevent duplicate entries in the list when getting a
             // mix of origins and hosts. Except, in the case of the Zoom category, where we want to
@@ -429,7 +423,7 @@ public class WebsitePermissionsFetcher {
                             mBrowserContextHandle, contentSettingsType)) {
                 String address = exception.getPrimaryPattern();
                 String embedder = exception.getSecondaryPattern();
-                @ContentSettingValues
+                @ContentSetting
                 @Nullable Integer contentSetting = null;
 
                 if (isEmbeddedPermission
@@ -462,7 +456,7 @@ public class WebsitePermissionsFetcher {
                 // convert the embedder to add the scheme or the wildcard to create a
                 // unique key (and thus row) per pattern.
                 if (mSiteSettingsDelegate.isDisplayWildcardInContentSettingsEnabled()
-                        && embedder != null) {
+                        && embedder != null && !embedder.isEmpty()) {
                     embedder =
                             containsPatternWildcards(embedder)
                                     ? embedder
@@ -500,9 +494,18 @@ public class WebsitePermissionsFetcher {
          * A queue used to store the sequence of tasks to run to fetch the website preferences. Each
          * task is run sequentially, and some of the tasks may run asynchronously.
          */
-        private static class TaskQueue extends LinkedList<Task> {
+        private static class TaskQueue {
+            private final Queue<Task> mTasks = new ArrayDeque<>();
+
+            void add(Task task) {
+                mTasks.add(task);
+            }
+
             void next() {
-                if (!isEmpty()) removeFirst().runAsync(this);
+                Task t = mTasks.poll();
+                if (t != null) {
+                    t.runAsync(this);
+                }
             }
         }
 
@@ -722,12 +725,7 @@ public class WebsitePermissionsFetcher {
                 Set<String> originToWebsite = new HashSet<>();
                 Map<String, List<Website>> rwsOwnerToMember = new HashMap<>();
                 for (Website site : mSites.values()) {
-                    // Use the origin when RWS UI feature is enabled to include
-                    // subdomain variations in the members
-                    String rwsMemberHostname =
-                            mSiteSettingsDelegate.shouldShowPrivacySandboxRwsUi()
-                                    ? site.getAddress().getOrigin()
-                                    : site.getAddress().getDomainAndRegistry();
+                    String rwsMemberHostname = site.getAddress().getDomainAndRegistry();
                     String rwsOwnerHostname =
                             mSiteSettingsDelegate.getRelatedWebsiteSetOwner(
                                     site.getAddress().getOrigin());

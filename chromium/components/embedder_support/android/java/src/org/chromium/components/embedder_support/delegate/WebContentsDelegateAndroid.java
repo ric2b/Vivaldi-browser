@@ -4,6 +4,8 @@
 
 package org.chromium.components.embedder_support.delegate;
 
+import static android.view.Display.INVALID_DISPLAY;
+
 import android.graphics.Bitmap;
 import android.view.KeyEvent;
 
@@ -16,6 +18,7 @@ import org.chromium.blink.mojom.DisplayMode;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.navigation_controller.UserAgentOverrideOption;
 import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.url.GURL;
 
@@ -69,15 +72,6 @@ public class WebContentsDelegateAndroid {
     public void rendererResponsive() {}
 
     @CalledByNative
-    public void webContentsCreated(
-            WebContents sourceWebContents,
-            long openerRenderProcessId,
-            long openerRenderFrameId,
-            String frameName,
-            GURL targetUrl,
-            WebContents newWebContents) {}
-
-    @CalledByNative
     public boolean shouldCreateWebContents(GURL targetUrl) {
         return true;
     }
@@ -125,11 +119,17 @@ public class WebContentsDelegateAndroid {
 
     @CalledByNative
     public void enterFullscreenModeForTab(
-            long requestingFrame, boolean prefersNavigationBar, boolean prefersStatusBar) {}
+            long requestingFrame,
+            boolean prefersNavigationBar,
+            boolean prefersStatusBar,
+            long displayId) {}
 
     @CalledByNative
     public void fullscreenStateChangedForTab(
-            boolean prefersNavigationBar, boolean prefersStatusBar) {}
+            long requestingFrame,
+            boolean prefersNavigationBar,
+            boolean prefersStatusBar,
+            long displayId) {}
 
     @CalledByNative
     public void exitFullscreenModeForTab() {}
@@ -137,6 +137,11 @@ public class WebContentsDelegateAndroid {
     @CalledByNative
     public boolean isFullscreenForTabOrPending() {
         return false;
+    }
+
+    @CalledByNative
+    public long getFullscreenTargetDisplay() {
+        return INVALID_DISPLAY;
     }
 
     @CalledByNative
@@ -261,6 +266,17 @@ public class WebContentsDelegateAndroid {
     public void contentsZoomChange(boolean zoomIn) {}
 
     /**
+     * Returns whether to override user agent for prerendering navigation.
+     *
+     * @param url The target URL of the prerendering navigation.
+     */
+    @CalledByNative
+    public @UserAgentOverrideOption int shouldOverrideUserAgentForPrerender2(GURL url) {
+        // Inherit UA override of the last committed navigation regardless of URL as fallback.
+        return UserAgentOverrideOption.INHERIT;
+    }
+
+    /**
      * Capture current visible native view as a bitmap.
      *
      * @param callback Executed asynchronously with the captured screenshot if this returns true.
@@ -307,4 +323,38 @@ public class WebContentsDelegateAndroid {
      */
     @CalledByNative
     public void didChangeCloseSignalInterceptStatus() {}
+
+    /**
+     * Requests that the web contents obtain a pointer lock.
+     *
+     * <p>A pointer lock restricts the mouse cursor to the bounds of the view and provides relative
+     * motion events as the user moves the mouse.
+     *
+     * @param webContents The {@link WebContents} for which to request the pointer lock.
+     * @param userGesture {@code true} if the request is a result of a user gesture, {@code false}
+     *     otherwise. A user gesture is required for the pointer lock to be granted.
+     * @param lastUnlockedByTarget {@code true} if the pointer was previously unlocked by the target
+     *     (website) itself, {@code false} if it was unlocked by the system or user action. This
+     *     flag helps to prevent websites from instantly re-locking the pointer after it has been
+     *     released by the user or system.
+     */
+    public void requestPointerLock(
+            WebContents webContents, boolean userGesture, boolean lastUnlockedByTarget) {}
+
+    /**
+     * Called when the pointer lock is lost, either by a system event, user action or when the
+     * focused view changes.
+     *
+     * <p>This method is invoked when the pointer lock, previously requested via {@link
+     * #requestPointerLock}, is no longer active. This can occur for several reasons:
+     *
+     * <ul>
+     *   <li>The user pressed the escape key or a system-defined key to release the lock.
+     *   <li>The application called {@code document.exitPointerLock()} in JavaScript.
+     *   <li>The window lost focus.
+     *   <li>The view hierarchy capturing the pointer went out of focus.
+     *   <li>The system released the pointer lock for other reasons.
+     * </ul>
+     */
+    public void lostPointerLock() {}
 }

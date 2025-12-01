@@ -25,6 +25,8 @@
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/native_library.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
@@ -473,7 +475,9 @@ EncoderStatus MediaFoundationVideoEncodeAccelerator::Initialize(
     resolution.Transpose();
   }
 
-  encoder_info_.implementation_name = "MediaFoundationVideoEncodeAccelerator";
+  encoder_info_.implementation_name =
+      base::StringPrintf("MediaFoundationVideoEncodeAccelerator (%s)",
+                         hardware_encoder_name_.c_str());
   // Currently, MFVEA does not support odd resolution well. The implementation
   // here reports alignment of 2 in the EncoderInfo, together with simulcast
   // layers applied.
@@ -506,6 +510,19 @@ EncoderStatus MediaFoundationVideoEncodeAccelerator::Initialize(
 
   encoder_info_.supports_frame_size_change =
       !workarounds_.disable_media_foundation_frame_size_change;
+
+  SupportedProfiles supported_profiles = GetSupportedProfiles();
+  auto profile_it = std::ranges::find(supported_profiles, config.output_profile,
+                                      &SupportedProfile::profile);
+  if (profile_it != std::ranges::end(supported_profiles)) {
+    encoder_info_.gpu_supported_pixel_formats =
+        profile_it->gpu_supported_pixel_formats;
+    encoder_info_.supports_gpu_shared_images =
+        profile_it->supports_gpu_shared_images;
+  } else {
+    encoder_info_.supports_gpu_shared_images = false;
+    encoder_info_.gpu_supported_pixel_formats.clear();
+  }
 
   if (state_ == kInitializing) {
     if (!InitializeMFT(nullptr)) {
@@ -1263,8 +1280,13 @@ bool MediaFoundationVideoEncodeAccelerator::ActivateAsyncEncoder(
       UINT32 name_length;
       activate_->GetAllocatedString(MFT_FRIENDLY_NAME_Attribute, &friendly_name,
                                     &name_length);
-      DVLOG(3) << "Selected asynchronous hardware encoder's friendly name: "
-               << friendly_name;
+      std::string friendly_name_str;
+      if (base::WideToUTF8(friendly_name.get(), name_length,
+                           &friendly_name_str)) {
+        hardware_encoder_name_ = std::move(friendly_name_str);
+      } else {
+        hardware_encoder_name_ = "Unknown MFT";
+      }
       // Encoder is successfully activated.
       break;
     } else {
@@ -1741,9 +1763,9 @@ HRESULT MediaFoundationVideoEncodeAccelerator::ProcessInput(
     std::optional<uint8_t> quantizer;
     int temporal_id = 0;
     if (input.options.quantizer.has_value()) {
-      DCHECK(codec_ == VideoCodec::kH264 || codec_ == VideoCodec::kHEVC);
-      quantizer = std::clamp(static_cast<int>(input.options.quantizer.value()),
-                             1, kH26xMaxQp);
+      quantizer = std::clamp(static_cast<int>(AVEncQPtoQindex(
+                                 codec_, input.options.quantizer.value())),
+                             1, max_quantizer);
     } else if (rate_ctrl_ && !input.discard_output) {
       VideoRateControlWrapper::FrameParams frame_params{};
       frame_params.frame_type =

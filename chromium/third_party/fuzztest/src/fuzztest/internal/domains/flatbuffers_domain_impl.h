@@ -16,17 +16,22 @@
 #define FUZZTEST_FUZZTEST_INTERNAL_DOMAINS_FLATBUFFERS_DOMAIN_IMPL_H_
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <initializer_list>
+#include <limits>
 #include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "absl/algorithm/container.h"
 #include "absl/base/nullability.h"
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/random/bit_gen_ref.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -38,13 +43,13 @@
 #include "flatbuffers/string.h"
 #include "flatbuffers/table.h"
 #include "flatbuffers/verifier.h"
+#include "./common/logging.h"
 #include "./fuzztest/domain_core.h"
 #include "./fuzztest/internal/any.h"
 #include "./fuzztest/internal/domains/arbitrary_impl.h"
 #include "./fuzztest/internal/domains/domain_base.h"
 #include "./fuzztest/internal/domains/domain_type_erasure.h"
 #include "./fuzztest/internal/domains/element_of_impl.h"
-#include "./fuzztest/internal/logging.h"
 #include "./fuzztest/internal/meta.h"
 #include "./fuzztest/internal/serialization.h"
 #include "./fuzztest/internal/status.h"
@@ -73,13 +78,15 @@ inline constexpr bool is_flatbuffers_enum_tag_v =
     is_flatbuffers_enum_tag<T>::value;
 
 struct FlatbuffersArrayTag;
-struct FlatbuffersObjTag;
+struct FlatbuffersTableTag;
+struct FlatbuffersStructTag;
 struct FlatbuffersUnionTag;
 struct FlatbuffersVectorTag;
 
 // Dynamic to static dispatch visitor pattern.
 template <typename Visitor>
-auto VisitFlatbufferField(const reflection::Field* absl_nonnull field,
+auto VisitFlatbufferField(const reflection::Schema* absl_nonnull schema,
+                          const reflection::Field* absl_nonnull field,
                           Visitor visitor) {
   auto field_index = field->type()->index();
   switch (field->type()->base_type()) {
@@ -158,9 +165,15 @@ auto VisitFlatbufferField(const reflection::Field* absl_nonnull field,
     case reflection::BaseType::Array:
       visitor.template Visit<FlatbuffersArrayTag>(field);
       break;
-    case reflection::BaseType::Obj:
-      visitor.template Visit<FlatbuffersObjTag>(field);
+    case reflection::BaseType::Obj: {
+      auto sub_object = schema->objects()->Get(field->type()->index());
+      if (sub_object->is_struct()) {
+        visitor.template Visit<FlatbuffersStructTag>(field);
+      } else {
+        visitor.template Visit<FlatbuffersTableTag>(field);
+      }
       break;
+    }
     case reflection::BaseType::Union:
       visitor.template Visit<FlatbuffersUnionTag>(field);
       break;
@@ -168,10 +181,112 @@ auto VisitFlatbufferField(const reflection::Field* absl_nonnull field,
       // Noop
       break;
     default:
-      FUZZTEST_INTERNAL_CHECK(false, absl::StrCat("Unsupported base type: ",
-                                                  field->type()->base_type()));
+      FUZZTEST_LOG(FATAL) << "Unsupported base type: "
+                          << field->type()->base_type();
   }
 }
+
+// Flatbuffers enum domain implementation.
+template <typename Underlaying>
+class FlatbuffersEnumDomainImpl
+    : public domain_implementor::DomainBase<
+          /*Derived=*/FlatbuffersEnumDomainImpl<Underlaying>,
+          /*ValueType=*/Underlaying,
+          /*CorpusType=*/ElementOfImplCorpusType> {
+ public:
+  using typename FlatbuffersEnumDomainImpl::DomainBase::corpus_type;
+  using typename FlatbuffersEnumDomainImpl::DomainBase::value_type;
+
+  explicit FlatbuffersEnumDomainImpl(const reflection::Enum* enum_def)
+      : enum_def_(enum_def), inner_(GetEnumValues(enum_def, {})) {}
+
+  FlatbuffersEnumDomainImpl& WithExcludedValues(
+      std::initializer_list<value_type> excluded_values) {
+    excluded_values_ = {excluded_values.begin(), excluded_values.end()};
+    inner_ =
+        ElementOfImpl<Underlaying>(GetEnumValues(enum_def_, excluded_values));
+    return *this;
+  }
+
+  corpus_type Init(absl::BitGenRef prng) {
+    if (auto seed = this->MaybeGetRandomSeed(prng)) return *seed;
+    return inner_.Init(prng);
+  }
+
+  void Mutate(corpus_type& val, absl::BitGenRef prng,
+              const domain_implementor::MutationMetadata& metadata,
+              bool only_shrink) {
+    inner_.Mutate(val, prng, metadata, only_shrink);
+  }
+
+  value_type GetValue(corpus_type value) const {
+    return inner_.GetValue(value);
+  }
+
+  std::optional<corpus_type> FromValue(const value_type& v) const {
+    return inner_.FromValue(v);
+  }
+
+  std::optional<corpus_type> ParseCorpus(const IRObject& obj) const {
+    return inner_.ParseCorpus(obj);
+  }
+
+  IRObject SerializeCorpus(const corpus_type& v) const {
+    return inner_.SerializeCorpus(v);
+  }
+
+  absl::Status ValidateCorpusValue(const corpus_type& corpus_value) const {
+    for (const auto* value : *enum_def_->values()) {
+      if (excluded_values_.contains(value->value())) continue;
+      if (value->value() == static_cast<size_t>(corpus_value)) {
+        return absl::OkStatus();
+      }
+    }
+    return absl::InvalidArgumentError(absl::StrCat("Enum value ", corpus_value,
+                                                   " is not valid for enum ",
+                                                   enum_def_->name()->str()));
+  }
+
+  auto GetPrinter() const { return Printer{*this}; }
+
+ private:
+  const reflection::Enum* enum_def_;
+  absl::flat_hash_set<value_type> excluded_values_;
+  ElementOfImpl<Underlaying> inner_;
+
+  static std::vector<value_type> GetEnumValues(
+      const reflection::Enum* enum_def,
+      std::initializer_list<value_type> excluded_values) {
+    std::vector<value_type> values;
+    values.reserve(enum_def->values()->size());
+    for (const auto* value : *enum_def->values()) {
+      FUZZTEST_CHECK(value->value() >= std::numeric_limits<value_type>::min() &&
+                     value->value() <= std::numeric_limits<value_type>::max())
+          << "Enum value from reflection is out of range for the target type.";
+      if (std::find(excluded_values.begin(), excluded_values.end(),
+                    value->value()) == excluded_values.end()) {
+        values.push_back(static_cast<value_type>(value->value()));
+      }
+    }
+    return values;
+  }
+
+  struct Printer {
+    const FlatbuffersEnumDomainImpl& self;
+    void PrintCorpusValue(const corpus_type& value,
+                          domain_implementor::RawSink out,
+                          domain_implementor::PrintMode mode) const {
+      if (mode == domain_implementor::PrintMode::kHumanReadable) {
+        auto user_value = self.GetValue(value);
+        absl::Format(
+            out, "%s",
+            self.enum_def_->values()->LookupByKey(user_value)->name()->str());
+      } else {
+        absl::Format(out, "%d", value);
+      }
+    }
+  };
+};
 
 // Forward declaration of the domain factory for flatbuffers fields.
 template <typename T>
@@ -233,8 +348,8 @@ class FlatbuffersTableUntypedDomainImpl
   absl::Status ValidateCorpusValue(const corpus_type& corpus_value) const;
 
   value_type GetValue(const corpus_type& value) const {
-    FUZZTEST_INTERNAL_CHECK(
-        false, "GetValue is not supported for the untyped Flatbuffers domain.");
+    FUZZTEST_LOG(FATAL)
+        << "GetValue is not supported for the untyped Flatbuffers domain.";
     // Untyped domain does not support GetValue since if it is a nested table it
     // would need the top level table corpus value to be able to build it.
     return nullptr;
@@ -265,15 +380,15 @@ class FlatbuffersTableUntypedDomainImpl
   // The domain is cached, and the same instance is returned for the same field.
   template <typename T>
   auto& GetCachedDomain(const reflection::Field* field) const {
-    auto get_opt_domain = [this, field]() {
-      auto opt_domain = OptionalOf(GetDefaultDomain<T>(schema_, field));
+    auto get_optional_domain = [this, field]() {
+      auto optional_domain = OptionalOf(GetDefaultDomain<T>(schema_, field));
       if (!field->optional()) {
-        opt_domain.SetWithoutNull();
+        optional_domain.SetWithoutNull();
       }
-      return Domain<value_type_t<decltype(opt_domain)>>{opt_domain};
+      return Domain<value_type_t<decltype(optional_domain)>>{optional_domain};
     };
 
-    using DomainT = decltype(get_opt_domain());
+    using DomainT = decltype(get_optional_domain());
     // Do the operation under a lock to prevent race conditions in `const`
     // methods.
     absl::MutexLock l(&mutex_);
@@ -281,7 +396,7 @@ class FlatbuffersTableUntypedDomainImpl
     if (it == domains_.end()) {
       it = domains_
                .try_emplace(field->id(), std::in_place_type<DomainT>,
-                            get_opt_domain())
+                            get_optional_domain())
                .first;
     }
     return it->second.template GetAs<DomainT>();
@@ -339,6 +454,13 @@ class FlatbuffersTableUntypedDomainImpl
               user_value->GetPointer<flatbuffers::String*>(field->offset())
                   ->str());
         }
+      } else if constexpr (std::is_same_v<T, FlatbuffersTableTag>) {
+        auto sub_object = self.schema_->objects()->Get(field->type()->index());
+        FUZZTEST_CHECK(base_type == reflection::BaseType::Obj &&
+                       !sub_object->is_struct())
+            << "Field must be a table type.";
+        inner_value =
+            user_value->GetPointer<const flatbuffers::Table*>(field->offset());
       }
 
       auto inner = domain.FromValue(inner_value);
@@ -366,6 +488,21 @@ class FlatbuffersTableUntypedDomainImpl
               builder.CreateString(user_value->data(), user_value->size()).o;
           offsets.insert({field->id(), offset});
         }
+      } else if constexpr (std::is_same_v<T, FlatbuffersTableTag>) {
+        FlatbuffersTableUntypedDomainImpl inner_domain(
+            self.schema_, self.schema_->objects()->Get(field->type()->index()));
+        auto optional_corpus = corpus_value.GetAs<
+            std::variant<std::monostate, fuzztest::GenericDomainCorpusType>>();
+        if (std::holds_alternative<fuzztest::GenericDomainCorpusType>(
+                optional_corpus)) {
+          auto inner_corpus =
+              std::get<fuzztest::GenericDomainCorpusType>(optional_corpus)
+                  .GetAs<corpus_type>();
+          auto offset = inner_domain.BuildTable(inner_corpus, builder);
+          offsets.insert({field->id(), offset});
+        }
+        // Else if the variant is std::monostate the optional field is null and
+        // there is no table to build.
       }
     }
   };
@@ -396,6 +533,13 @@ class FlatbuffersTableUntypedDomainImpl
           builder.AddOffset(
               field->offset(),
               flatbuffers::Offset<flatbuffers::String>(it->second));
+        }
+      } else if constexpr (std::is_same_v<T, FlatbuffersTableTag>) {
+        // "Out-of-line field". Store just offset.
+        if (auto it = offsets.find(field->id()); it != offsets.end()) {
+          builder.AddOffset(
+              field->offset(),
+              flatbuffers::Offset<flatbuffers::Table>(it->second));
         }
       }
     }
@@ -505,7 +649,7 @@ class FlatbuffersTableUntypedDomainImpl
         if (field == nullptr) {
           absl::Format(out, "<unknown field: %d>", id);
         } else {
-          VisitFlatbufferField(field,
+          VisitFlatbufferField(self.schema_, field,
                                PrinterVisitor{self, value.at(id), out, mode});
         }
         first = false;
@@ -541,18 +685,12 @@ auto GetDefaultDomain(const reflection::Schema* absl_nonnull schema,
     return placeholder;
   } else if constexpr (is_flatbuffers_enum_tag_v<T>) {
     auto enum_object = schema->enums()->Get(field->type()->index());
-    // For enums, build the list of valid labels.
-    std::vector<typename T::type> values;
-    values.reserve(enum_object->values()->size());
-    for (const auto* value : *enum_object->values()) {
-      values.push_back(value->value());
-    }
-    // Delay instantiation. The Domain class is not fully defined at this
-    // point yet, and neither is ElementOfImpl.
-    using LazyInt = MakeDependentType<typename T::type, T>;
-    return ElementOfImpl<LazyInt>(std::move(values));
-  } else if constexpr (std::is_same_v<T, FlatbuffersObjTag>) {
-    // TODO: support objects.
+    return FlatbuffersEnumDomainImpl<typename T::type>(enum_object);
+  } else if constexpr (std::is_same_v<T, FlatbuffersTableTag>) {
+    auto table_object = schema->objects()->Get(field->type()->index());
+    return FlatbuffersTableUntypedDomainImpl{schema, table_object};
+  } else if constexpr (std::is_same_v<T, FlatbuffersStructTag>) {
+    // TODO: support structs.
     return placeholder;
   } else if constexpr (std::is_same_v<T, FlatbuffersUnionTag>) {
     // TODO: support unions.
@@ -590,8 +728,8 @@ class FlatbuffersTableDomainImpl
   FlatbuffersTableDomainImpl() {
     flatbuffers::Verifier verifier(T::BinarySchema::data(),
                                    T::BinarySchema::size());
-    FUZZTEST_INTERNAL_CHECK(reflection::VerifySchemaBuffer(verifier),
-                            "Invalid schema for flatbuffers table.");
+    FUZZTEST_CHECK(reflection::VerifySchemaBuffer(verifier))
+        << "Invalid schema for flatbuffers table.";
     auto schema = reflection::GetSchema(T::BinarySchema::data());
     auto table_object =
         schema->objects()->LookupByKey(T::GetFullyQualifiedName());
@@ -624,7 +762,12 @@ class FlatbuffersTableDomainImpl
 
   // Converts corpus value into the exact flatbuffer.
   value_type GetValue(const corpus_type& value) const {
-    value.buffer = BuildBuffer(value.untyped_corpus);
+    flatbuffers::FlatBufferBuilder builder;
+    const uint32_t offset = inner_->BuildTable(value.untyped_corpus, builder);
+    builder.Finish(flatbuffers::Offset<flatbuffers::Table>(offset));
+    value.buffer =
+        std::vector<uint8_t>(builder.GetBufferPointer(),
+                             builder.GetBufferPointer() + builder.GetSize());
     return flatbuffers::GetRoot<T>(value.buffer.data());
   }
 
@@ -632,8 +775,7 @@ class FlatbuffersTableDomainImpl
   std::optional<corpus_type> FromValue(const value_type& value) const {
     auto val = inner_->FromValue((const flatbuffers::Table*)value);
     if (!val.has_value()) return std::nullopt;
-    return std::optional(
-        FlatbuffersTableDomainCorpusType{*val, BuildBuffer(*val)});
+    return std::optional(FlatbuffersTableDomainCorpusType{*val, {}});
   }
 
   // Returns the printer for the table.
@@ -643,8 +785,7 @@ class FlatbuffersTableDomainImpl
   std::optional<corpus_type> ParseCorpus(const IRObject& obj) const {
     auto val = inner_->ParseCorpus(obj);
     if (!val.has_value()) return std::nullopt;
-    return std::optional(
-        FlatbuffersTableDomainCorpusType{*val, BuildBuffer(*val)});
+    return std::optional(FlatbuffersTableDomainCorpusType{*val, {}});
   }
 
   // Returns the serialized corpus value.
@@ -669,17 +810,6 @@ class FlatbuffersTableDomainImpl
       inner.GetPrinter().PrintCorpusValue(value.untyped_corpus, out, mode);
     }
   };
-
-  std::vector<uint8_t> BuildBuffer(
-      const corpus_type_t<FlatbuffersTableUntypedDomainImpl>& val) const {
-    flatbuffers::FlatBufferBuilder builder;
-    auto offset = inner_->BuildTable(val, builder);
-    builder.Finish(flatbuffers::Offset<flatbuffers::Table>(offset));
-    auto buffer =
-        std::vector<uint8_t>(builder.GetBufferPointer(),
-                             builder.GetBufferPointer() + builder.GetSize());
-    return buffer;
-  }
 };
 
 template <typename T>

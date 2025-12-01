@@ -435,25 +435,18 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   if (!_ruleManager)
     return;
 
-  NSString* host = [VivaldiGlobalHelpers hostOfURLString:domain];
-  std::string hostString = base::SysNSStringToUTF8(host);
-
   _ruleManager->
       RemoveExceptionForDomain(RuleGroup::kTrackingRules,
-                               kProcessList,
-                               hostString);
+                               kProcessList, base::SysNSStringToUTF8(domain));
   _ruleManager->
       RemoveExceptionForDomain(RuleGroup::kTrackingRules,
-                               kExemptList,
-                               hostString);
+                               kExemptList, base::SysNSStringToUTF8(domain));
   _ruleManager->
       RemoveExceptionForDomain(RuleGroup::kAdBlockingRules,
-                               kProcessList,
-                               hostString);
+                               kProcessList, base::SysNSStringToUTF8(domain));
   _ruleManager->
       RemoveExceptionForDomain(RuleGroup::kAdBlockingRules,
-                               kExemptList,
-                               hostString);
+                               kExemptList, base::SysNSStringToUTF8(domain));
 }
 
 /// Add rule source for the given source type.
@@ -628,18 +621,15 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   if (!_ruleManager)
     return;
 
-  NSString* host = [VivaldiGlobalHelpers hostOfURLString:domain];
-  std::string hostString = base::SysNSStringToUTF8(host);
-
   _ruleManager->
       RemoveExceptionForDomain(RuleGroup::kTrackingRules,
                                enableBlocking ? kExemptList : kProcessList,
-                               hostString);
+                               base::SysNSStringToUTF8(domain));
 
   _ruleManager->
       AddExceptionForDomain(RuleGroup::kTrackingRules,
                             enableBlocking ? kProcessList : kExemptList,
-                            hostString);
+                            base::SysNSStringToUTF8(domain));
 }
 
 /// Sets ad blocking exceptions for a given domain based
@@ -650,18 +640,15 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   if (!_ruleManager)
     return;
 
-  NSString* host = [VivaldiGlobalHelpers hostOfURLString:domain];
-  std::string hostString = base::SysNSStringToUTF8(host);
-
   _ruleManager->
       RemoveExceptionForDomain(RuleGroup::kAdBlockingRules,
                                enableBlocking ? kExemptList: kProcessList,
-                               hostString);
+                               base::SysNSStringToUTF8(domain));
 
   _ruleManager->
       AddExceptionForDomain(RuleGroup::kAdBlockingRules,
                             enableBlocking ? kProcessList : kExemptList,
-                            hostString);
+                            base::SysNSStringToUTF8(domain));
 }
 
 #pragma mark: - OBSERVERS

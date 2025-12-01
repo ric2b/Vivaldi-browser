@@ -26,6 +26,21 @@
 	<dict>
 		<key>NSExtensionAttributes</key>
 		<dict>
+      <!-- Remove for "VIB-1434 Remove Vivaldi as an Autofill Passkeys provider"
+			<key>ASCredentialProviderExtensionCapabilities</key>
+			<dict>
+				<key>ProvidesPasskeys</key>
+				<true/>
+				<key>ProvidesPasswords</key>
+				<true/>
+				<key>ShowsConfigurationUI</key>
+				<true/>
+				<key>SupportsConditionalPasskeyRegistration</key>
+				<true/>
+				<key>SupportsCredentialUpdate</key>
+				<true/>
+			</dict>
+      End Vivaldi -->
 			<key>ASCredentialProviderExtensionShowsConfigurationUI</key>
 			<true/>
 		</dict>

@@ -1,0 +1,210 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package google.internal.federatedcompute.v1;
+
+import "google/api/annotations.proto";
+import "google/longrunning/operations.proto";
+import "google/rpc/status.proto";
+import "fcp/protos/federatedcompute/common.proto";
+
+option java_package = "com.google.internal.federatedcompute.v1";
+option java_multiple_files = true;
+
+service ConfidentialAggregations {
+  // A request sent by the client after completing local (on-device) task
+  // execution to notify the server that it has Aggregation data to upload. The
+  // server responds with the location at which to upload the data and
+  // encryption key (with attestation) for encrypting that upload. If a client's
+  // result is no longer needed, the server will respond with an ABORTED error
+  // in the operation status.
+  rpc StartConfidentialAggregationDataUpload(
+      StartConfidentialAggregationDataUploadRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v1/confidentialaggregations/{aggregation_id}/clients/{authorization_token}:startdataupload"
+      body: "*"
+    };
+    option (google.longrunning.operation_info) = {
+      response_type: "StartConfidentialAggregationDataUploadResponse"
+      metadata_type: "StartConfidentialAggregationDataUploadMetadata"
+    };
+  }
+
+  // A request sent by the client indicating the successful completion of the
+  // client's aggregation session. If a client's result is not needed for the
+  // aggregation, the server will respond with an ABORTED error.
+  //
+  // Clients should use the `ForwardingInfo` from the
+  // `StartConfidentialAggregationDataUploadResponse.aggregation_protocol_forwarding_info`
+  // response field to construct the URI for this request.
+  rpc SubmitConfidentialAggregationResult(
+      SubmitConfidentialAggregationResultRequest)
+      returns (SubmitConfidentialAggregationResultResponse) {
+    option (google.api.http) = {
+      post: "/v1/confidentialaggregations/{aggregation_id}/clients/{client_token}:submit"
+      body: "*"
+    };
+  }
+
+  // A request sent by the client indicating the client's aggregation session
+  // should be aborted.
+  //
+  // Clients must only call this if they've previously called
+  // `StartConfidentialAggregationDataUpload`.
+  //
+  // Clients should not call this if one of the requests returned an Aborted
+  // status.
+  //
+  // If clients have already received a `StartAggregationDataUploadResponse`
+  // they should use the `ForwardingInfo` from the
+  // `StartAggregationDataUploadResponse.aggregation_protocol_forwarding_info`
+  // response field to construct the URI for this request. Otherwise, clients
+  // should use the same `ForwardingInfo` as was used to construct the
+  // `StartAggregationDataUpload` request URI.
+  rpc AbortConfidentialAggregation(AbortConfidentialAggregationRequest)
+      returns (AbortConfidentialAggregationResponse) {
+    option (google.api.http) = {
+      post: "/v1/confidentialaggregations/{aggregation_id}/clients/{client_token}:abort"
+      body: "*"
+    };
+  }
+
+  // A request sent by the client indicating that a previously uploaded
+  // aggregation result should not be used for future aggregations. Any
+  // already-aggregated uses of the result will not be deleted.
+  //
+  // Revocation is best-effort and not guaranteed or verifiable.
+  rpc RevokeConfidentialAggregationResult(
+      RevokeConfidentialAggregationResultRequest)
+      returns (RevokeConfidentialAggregationResultResponse) {
+    option (google.api.http) = {
+      post: "/v1/confidentialaggregations/{aggregation_id}/uploads/{blob_id}:revoke"
+      body: "*"
+    };
+  }
+}
+
+message StartConfidentialAggregationDataUploadRequest {
+  // The id of the aggregation session this client participates in. This value
+  // was returned by the server when the client was assigned a task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string aggregation_id = 1
+      ;
+
+  // The authorization token returned by the server when the client was assigned
+  // a task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string authorization_token = 2
+      ;
+}
+
+message StartConfidentialAggregationDataUploadMetadata {}
+
+message StartConfidentialAggregationDataUploadResponse {
+  // Information to construct the URI to use for continuing the aggregation
+  // protocol after the data is uploaded.
+  ForwardingInfo aggregation_protocol_forwarding_info = 1;
+
+  // Information about where to upload aggregation result data.
+  ByteStreamResource resource = 2;
+
+  // Unique token that the client must include in the subsequent protocol
+  // requests.
+  string client_token = 3;
+
+  // A resource for a ConfidentialEncryptionConfig message specifying how result
+  // data should be encrypted.
+  Resource encryption_config = 4;
+}
+
+message SubmitConfidentialAggregationResultRequest {
+  // The id of the aggregation session this client participates in. This value
+  // was returned by the server when the client was assigned a task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string aggregation_id = 1
+      ;
+
+  // The client token returned by the server when the client was assigned a
+  // task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string client_token = 2
+      ;
+
+  // Name of the resource to which the aggregration result was uploaded.
+  string resource_name = 3;
+}
+
+message SubmitConfidentialAggregationResultResponse {}
+
+message AbortConfidentialAggregationRequest {
+  // The id of the aggregation session this client participates in. This value
+  // was returned by the server when the client was assigned a task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string aggregation_id = 1
+      ;
+
+  // The client token returned by the server when the client was assigned a
+  // task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string client_token = 2
+      ;
+
+  // Status code and optional message for why the aggregation was aborted.
+  google.rpc.Status status = 3;
+}
+
+message AbortConfidentialAggregationResponse {}
+
+message RevokeConfidentialAggregationResultRequest {
+  // The id of the aggregation session this client participates in. This value
+  // was returned by the server when the client was assigned a task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string aggregation_id = 1
+      ;
+
+  // The id of the public key used to encrypt the blob; see
+  // fcp.confidentialcompute.BlobHeader.public_key_id.
+  fixed32 public_key_id = 2 [deprecated = true];
+
+  // The id of the public key used to encrypt the blob; see
+  // fcp.confidentialcompute.BlobHeader.key_id.
+  bytes key_id = 4;
+
+  // The client-selected identifier for the uploaded data; see
+  // fcp.confidentialcompute.BlobHeader.blob_id.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  bytes blob_id = 3
+      ;
+}
+
+message RevokeConfidentialAggregationResultResponse {}

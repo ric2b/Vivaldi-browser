@@ -26,7 +26,7 @@
     #pragma warning(disable:4091)
 #endif
 
-#include <imagehlp.h>
+#include <ImageHlp.h>
 
 #ifdef __VISUALC__
   #pragma warning(pop)

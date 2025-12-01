@@ -69,9 +69,9 @@
 #include "chrome/browser/crash_upload_list/crash_upload_list.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/ui/webui/ash/settings/pages/storage/device_storage_util.h"
-#include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
+#include "chromeos/ash/components/channel/channel_info.h"
 #include "chromeos/ash/components/dbus/attestation/attestation_client.h"
 #include "chromeos/ash/components/dbus/attestation/interface.pb.h"
 #include "chromeos/ash/components/dbus/hermes/hermes_euicc_client.h"
@@ -398,7 +398,7 @@ em::StatefulPartitionInfo ReadStatefulPartitionInfo() {
 // Collects all the display related information.
 void GetDisplayStatus(em::GraphicsStatus* graphics_status) {
   const std::vector<display::Display> displays =
-      display::Screen::GetScreen()->GetAllDisplays();
+      display::Screen::Get()->GetAllDisplays();
   for (const auto& display : displays) {
     em::DisplayInfo* display_info = graphics_status->add_displays();
     display_info->set_resolution_width(display.GetSizeInPixel().width());
@@ -2338,7 +2338,7 @@ bool DeviceStatusCollector::GetVersionInfo(
     em::DeviceStatusReportRequest* status) {
   status->set_os_version(os_version_);
   status->set_browser_version(std::string(version_info::GetVersionNumber()));
-  status->set_channel(ConvertToProtoChannel(chrome::GetChannel()));
+  status->set_channel(ConvertToProtoChannel(ash::GetChannel()));
 
   // TODO(b/144081278): Remove when resolved.
   // When firmware version is not fetched, report error instead.
@@ -2574,12 +2574,13 @@ bool DeviceStatusCollector::GetUsers(em::DeviceStatusReportRequest* status) {
 bool DeviceStatusCollector::GetMemoryInfo(
     em::DeviceStatusReportRequest* status) {
   status->clear_system_ram_free_infos();
-  status->set_system_ram_total(base::SysInfo::AmountOfPhysicalMemory());
+  status->set_system_ram_total(
+      base::SysInfo::AmountOfPhysicalMemory().InBytes());
 
   for (const MemoryUsage& usage : memory_usage_) {
     em::SystemFreeRamInfo* system_ram_free_info =
         status->add_system_ram_free_infos();
-    system_ram_free_info->set_size_in_bytes(usage.bytes_of_ram_free);
+    system_ram_free_info->set_size_in_bytes(usage.bytes_of_ram_free.InBytes());
     system_ram_free_info->set_timestamp(
         usage.timestamp.InMillisecondsSinceUnixEpoch());
   }

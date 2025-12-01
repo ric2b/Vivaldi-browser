@@ -25,7 +25,8 @@ SyncInvalidationsServiceFactory::GetForProfile(ProfileIOS* profile) {
   if (vivaldi::IsVivaldiRunning())
     return static_cast<syncer::SyncInvalidationsService*>(
         vivaldi::VivaldiSyncInvalidationsServiceFactory::GetInstance()
-            ->GetServiceForBrowserState(profile, /*create=*/true));
+            ->GetServiceForProfileAs<syncer::SyncInvalidationsService>(
+                 profile, /*create=*/true));
 #endif // End Vivaldi
 
   return GetInstance()
@@ -54,9 +55,7 @@ SyncInvalidationsServiceFactory::~SyncInvalidationsServiceFactory() = default;
 
 std::unique_ptr<KeyedService>
 SyncInvalidationsServiceFactory::BuildServiceInstanceFor(
-    web::BrowserState* context) const {
-  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
-
+    ProfileIOS* profile) const {
   gcm::GCMDriver* gcm_driver =
       IOSChromeGCMProfileServiceFactory::GetForProfile(profile)->driver();
   instance_id::InstanceIDDriver* instance_id_driver =

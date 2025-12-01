@@ -14,6 +14,7 @@
 #include "ui/base/unowned_user_data/user_data_factory.h"
 
 class AskBeforeHttpDialogController;
+class CollaborationMessagingPageActionController;
 class FileSystemAccessPageActionController;
 class FromGWSNavigationAndKeepAliveRequestObserver;
 class IntentPickerViewPageActionController;
@@ -24,12 +25,22 @@ class PinnedTranslateActionListener;
 class Profile;
 class PwaInstallPageActionController;
 class ReadAnythingSidePanelController;
+class RollBackModeBInfoBarController;
 class SidePanelRegistry;
 class TabResourceUsageTabHelper;
 class TabUIHelper;
 class TranslatePageActionController;
 class QwacWebContentsObserver;
 class ManagePasswordsPageActionController;
+class BookmarkBarPreloadPipelineManager;
+
+namespace autofill {
+class BubbleManager;
+}  // namespace autofill
+
+namespace actor {
+class ActorTabData;
+}  // namespace actor
 
 namespace actor::ui {
 class ActorUiTabControllerInterface;
@@ -39,8 +50,11 @@ namespace commerce {
 class CommerceUiTabHelper;
 class PriceInsightsPageActionViewController;
 class DiscountsPageActionViewController;
-class ProductSpecificationsPageActionViewController;
 }  // namespace commerce
+
+namespace enterprise_data_protection {
+class DataProtectionNavigationController;
+}  // namespace enterprise_data_protection
 
 namespace content {
 class WebContents;
@@ -54,17 +68,15 @@ namespace customize_chrome {
 class SidePanelController;
 }  // namespace customize_chrome
 
-namespace enterprise_data_protection {
-class DataProtectionNavigationController;
-}  // namespace enterprise_data_protection
-
 namespace extensions {
 class ExtensionSidePanelManager;
 }  // namespace extensions
 
 #if BUILDFLAG(ENABLE_GLIC)
 namespace glic {
+class GlicInstanceHelper;
 class GlicTabIndicatorHelper;
+class GlicSidePanelCoordinator;
 }  // namespace glic
 #endif  // BUILDFLAG(ENABLE_GLIC)
 
@@ -101,6 +113,17 @@ namespace tab_groups {
 class CollaborationMessagingTabData;
 }  // namespace tab_groups
 
+namespace lens {
+class TabContextualizationController;
+}  // namespace lens
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+namespace wallet {
+class ChromeWalletablePassClient;
+}  // namespace wallet
+#endif
+
 namespace tabs {
 
 class TabAlertController;
@@ -122,7 +145,7 @@ class TabFeatures {
 
   enterprise_data_protection::DataProtectionNavigationController*
   data_protection_controller() {
-    return data_protection_controller_.get();
+    return data_protection_tab_controller_.get();
   }
 
   permissions::PermissionIndicatorsTabData* permission_indicators_tab_data() {
@@ -217,13 +240,12 @@ class TabFeatures {
     return commerce_discounts_page_action_view_controller_.get();
   }
 
-  commerce::ProductSpecificationsPageActionViewController*
-  commerce_product_specifications_page_action_view_controller() {
-    return commerce_product_specifications_page_action_view_controller_.get();
-  }
-
   LensOverlayController* lens_overlay_controller();
   const LensOverlayController* lens_overlay_controller() const;
+
+  lens::TabContextualizationController* tab_contextualization_controller() {
+    return tab_contextualization_controller_.get();
+  }
 
   PwaInstallPageActionController* pwa_install_page_action_controller() {
     return pwa_install_page_action_controller_.get();
@@ -233,39 +255,40 @@ class TabFeatures {
     return inactive_window_mouse_event_controller_.get();
   }
 
-  TabResourceUsageTabHelper* resource_usage_helper() {
-    return resource_usage_helper_.get();
-  }
-
   MemorySaverChipTabHelper* memory_saver_chip_helper() {
     return memory_saver_chip_helper_.get();
   }
 
   TabUIHelper* tab_ui_helper() { return tab_ui_helper_.get(); }
 
-  // actor_ui_tab_controller_ is only initialized for normal browser windows
-  actor::ui::ActorUiTabControllerInterface* actor_ui_tab_controller() const {
-    return actor_ui_tab_controller_.get();
-  }
-
-  // Note: Temporary until there is a more uniform way to swap out features for
-  // testing.
-  TabResourceUsageTabHelper* SetResourceUsageHelperForTesting(
-      std::unique_ptr<TabResourceUsageTabHelper> resource_usage_helper);
-
   TabUIHelper* SetTabUIHelperForTesting(
       std::unique_ptr<TabUIHelper> tab_ui_helper);
 
-  TabAlertController* tab_alert_controller() {
-    return tab_alert_controller_.get();
-  }
+  lens::TabContextualizationController*
+  SetTabContextualizationControllerForTesting(
+      std::unique_ptr<lens::TabContextualizationController>
+          tab_contextualization_controller);
 
   TabCreationMetricsController* tab_creation_metrics_controller() {
     return tab_creation_metrics_controller_.get();
   }
 
+  autofill::BubbleManager* autofill_bubble_manager() {
+    return autofill_bubble_manager_.get();
+  }
+
   AskBeforeHttpDialogController* ask_before_http_dialog_controller() {
     return ask_before_http_dialog_controller_.get();
+  }
+
+#if BUILDFLAG(ENABLE_GLIC)
+  glic::GlicSidePanelCoordinator* glic_side_panel_coordinator() {
+    return glic_side_panel_coordinator_.get();
+  }
+#endif  // BUILDFLAG(ENABLE_GLIC)
+
+  BookmarkBarPreloadPipelineManager* bookmarkbar_preload_pipeline_manager() {
+    return bookmarkbar_preload_pipeline_manager_.get();
   }
 
   // Called exactly once to initialize features.
@@ -286,10 +309,6 @@ class TabFeatures {
   void WillDiscardContents(tabs::TabInterface* tab,
                            content::WebContents* old_contents,
                            content::WebContents* new_contents);
-
-  std::unique_ptr<
-      enterprise_data_protection::DataProtectionNavigationController>
-      data_protection_controller_;
 
   std::unique_ptr<permissions::PermissionIndicatorsTabData>
       permission_indicators_tab_data_;
@@ -334,6 +353,10 @@ class TabFeatures {
   // Manages various tab modal dialogs.
   std::unique_ptr<TabDialogManager> tab_dialog_manager_;
 
+  std::unique_ptr<
+      enterprise_data_protection::DataProtectionNavigationController>
+      data_protection_tab_controller_;
+
   // Holds subscriptions for TabInterface callbacks.
   std::vector<base::CallbackListSubscription> tab_subscriptions_;
 
@@ -372,16 +395,18 @@ class TabFeatures {
   std::unique_ptr<commerce::DiscountsPageActionViewController>
       commerce_discounts_page_action_view_controller_;
 
-  // Responsible for managing the commerce "Product Specifications" page action.
-  std::unique_ptr<commerce::ProductSpecificationsPageActionViewController>
-      commerce_product_specifications_page_action_view_controller_;
-
   // Contains the recent collaboration message for a shared tab.
   std::unique_ptr<tab_groups::CollaborationMessagingTabData>
       collaboration_messaging_tab_data_;
 
+  // Responsible for managing the "Show Collaboration History" page action.
+  std::unique_ptr<CollaborationMessagingPageActionController>
+      collaboration_messaging_page_action_controller_;
+
 #if BUILDFLAG(ENABLE_GLIC)
+  std::unique_ptr<glic::GlicInstanceHelper> glic_instance_helper_;
   std::unique_ptr<glic::GlicTabIndicatorHelper> glic_tab_indicator_helper_;
+  std::unique_ptr<glic::GlicSidePanelCoordinator> glic_side_panel_coordinator_;
 #endif  // BUILDFLAG(ENABLE_GLIC)
 
   std::unique_ptr<memory_saver::MemorySaverChipController>
@@ -409,9 +434,26 @@ class TabFeatures {
   std::unique_ptr<TabCreationMetricsController>
       tab_creation_metrics_controller_;
 
+  std::unique_ptr<autofill::BubbleManager> autofill_bubble_manager_;
+
   std::unique_ptr<AskBeforeHttpDialogController>
       ask_before_http_dialog_controller_;
 
+  std::unique_ptr<actor::ActorTabData> actor_tab_data_;
+
+  std::unique_ptr<lens::TabContextualizationController>
+      tab_contextualization_controller_;
+
+  std::unique_ptr<RollBackModeBInfoBarController>
+      roll_back_mode_b_infobar_controller_;
+
+  std::unique_ptr<BookmarkBarPreloadPipelineManager>
+      bookmarkbar_preload_pipeline_manager_;
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+  std::unique_ptr<wallet::ChromeWalletablePassClient> walletable_pass_client_;
+#endif
   // Must be the last member.
   base::WeakPtrFactory<TabFeatures> weak_factory_{this};
 };

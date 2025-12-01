@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "base/allocator/miracle_parameter.h"
 
 #include "base/command_line.h"
@@ -16,21 +11,21 @@
 namespace base::miracle_parameter {
 
 std::string GetParamNameWithSuffix(const std::string& param_name) {
-  // `base::SysInfo::AmountOfPhysicalMemoryMB()` refers to CommandLine
-  // internally. If the CommandLine is not initialized, we return early to avoid
-  // a crash.
+  // `base::SysInfo::AmountOfPhysicalMemory()` refers to CommandLine internally.
+  // If the CommandLine is not initialized, we return early to avoid a crash.
   if (!base::CommandLine::InitializedForCurrentProcess()) {
     return param_name;
   }
-  int physical_memory_mb = base::SysInfo::AmountOfPhysicalMemoryMB();
+  const base::ByteCount physical_memory =
+      base::SysInfo::AmountOfPhysicalMemory();
   const char* suffix =
-      physical_memory_mb < kMiracleParameterMemory512MB  ? "ForLessThan512MB"
-      : physical_memory_mb < kMiracleParameterMemory1GB  ? "For512MBTo1GB"
-      : physical_memory_mb < kMiracleParameterMemory2GB  ? "For1GBTo2GB"
-      : physical_memory_mb < kMiracleParameterMemory4GB  ? "For2GBTo4GB"
-      : physical_memory_mb < kMiracleParameterMemory8GB  ? "For4GBTo8GB"
-      : physical_memory_mb < kMiracleParameterMemory16GB ? "For8GBTo16GB"
-                                                         : "For16GBAndAbove";
+      physical_memory < kMiracleParameterMemory512MB  ? "ForLessThan512MB"
+      : physical_memory < kMiracleParameterMemory1GB  ? "For512MBTo1GB"
+      : physical_memory < kMiracleParameterMemory2GB  ? "For1GBTo2GB"
+      : physical_memory < kMiracleParameterMemory4GB  ? "For2GBTo4GB"
+      : physical_memory < kMiracleParameterMemory8GB  ? "For4GBTo8GB"
+      : physical_memory < kMiracleParameterMemory16GB ? "For8GBTo16GB"
+                                                      : "For16GBAndAbove";
   return base::StrCat({param_name, suffix});
 }
 

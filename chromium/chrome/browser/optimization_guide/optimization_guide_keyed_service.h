@@ -43,10 +43,6 @@ namespace contextual_cueing {
 class ZeroStateSuggestionsPageData;
 }  // namespace contextual_cueing
 
-namespace download {
-class BackgroundDownloadService;
-}  // namespace download
-
 namespace glic {
 class GlicPageContextEligibilityObserver;
 }  // namespace glic
@@ -65,10 +61,8 @@ class ModelQualityLogsUploaderService;
 class ModelValidatorKeyedService;
 class OnDeviceAssetManager;
 class OnDeviceModelAvailabilityObserver;
-class OnDeviceModelComponentStateManager;
 class OptimizationGuideStore;
 class OptimizationGuideKeyedServiceBrowserTest;
-class PredictionManager;
 class PredictionManagerBrowserTestBase;
 class PredictionModelDownloadClient;
 class PredictionModelStoreBrowserTestBase;
@@ -315,12 +309,15 @@ class OptimizationGuideKeyedService
   }
 
   optimization_guide::PredictionManager* GetPredictionManager() {
-    return prediction_manager_.get();
+    return &GetGlobalState().prediction_manager();
   }
 
-  optimization_guide::OnDeviceModelComponentStateManager*
-  GetComponentManager() {
-    return &optimization_guide_global_state_->component_state_manager();
+  optimization_guide::OptimizationGuideGlobalState& GetGlobalState() {
+    if (!optimization_guide_global_state_) {
+      optimization_guide_global_state_ =
+          optimization_guide::OptimizationGuideGlobalState::CreateOrGet();
+    }
+    return *optimization_guide_global_state_;
   }
 
   optimization_guide::ModelExecutionManager* GetModelExecutionManager() {
@@ -357,8 +354,6 @@ class OptimizationGuideKeyedService
       std::optional<optimization_guide::proto::RequestContextMetadata>
           request_context_metadata = std::nullopt) override;
 
-  download::BackgroundDownloadService* BackgroundDownloadServiceProvider();
-
   bool ComponentUpdatesEnabledProvider() const;
 
   // Records synthetic field trial for `feature` with trial name appended with
@@ -380,7 +375,7 @@ class OptimizationGuideKeyedService
   // Gets the possible capabilities that this device can support. This can be
   // used to get all the capabilities this device supports before downloading
   // the model. This will be a superset of GetOnDeviceCapabilities().
-  on_device_model::Capabilities GetPossibleOnDeviceCapabilities() const;
+  on_device_model::Capabilities GetPossibleOnDeviceCapabilities();
 
   raw_ptr<content::BrowserContext> browser_context_;
 
@@ -392,6 +387,9 @@ class OptimizationGuideKeyedService
   raw_ptr<OptimizationGuideLogger> optimization_guide_logger_;
 
   // Keep a reference to this so it stays alive.
+  // Even though this can be obtained from OptimizationGuideGlobalFeature, we
+  // keep a reference here to handle difference in lifetime issues. At least in
+  // tests, the GlobalFeatures is destroyed before the Profile.
   scoped_refptr<optimization_guide::OptimizationGuideGlobalState>
       optimization_guide_global_state_;
 
@@ -407,10 +405,10 @@ class OptimizationGuideKeyedService
   // Manages the storing, loading, and fetching of hints.
   std::unique_ptr<optimization_guide::ChromeHintsManager> hints_manager_;
 
-  // Manages the storing, loading, and evaluating of optimization target
-  // prediction models.
-  std::unique_ptr<optimization_guide::PredictionManager> prediction_manager_;
-
+  // Provides assets to optimization_guide_global_state_ from
+  // prediction_manager_. This *MUST* be destroyed before
+  // `optimization_guide_global_state_`, because it holds raw_ptrs to some of
+  // it's members.
   std::unique_ptr<optimization_guide::OnDeviceAssetManager>
       on_device_asset_manager_;
 

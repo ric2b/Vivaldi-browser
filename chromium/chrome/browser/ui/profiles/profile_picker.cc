@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
+#include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
@@ -27,6 +28,8 @@
 #include "components/prefs/pref_service.h"
 
 namespace {
+
+bool g_open_command_line_urls_in_next_profile_opened = false;
 
 constexpr base::TimeDelta kActiveTimeThreshold = base::Days(28);
 
@@ -144,43 +147,46 @@ bool ProfilePicker::Shown() {
 }
 
 // static
-StartupProfileModeReason ProfilePicker::GetStartupModeReason() {
+StartupProfileMode ProfilePicker::GetStartupMode() {
   AvailabilityOnStartup availability_on_startup = GetAvailabilityOnStartup();
 
   if (availability_on_startup == AvailabilityOnStartup::kDisabled) {
-    return StartupProfileModeReason::kPickerDisabledByPolicy;
+    return StartupProfileMode::kBrowserWindow;
   }
 
   // TODO (crbug/1155158): Move this over the urls check (in
   // startup_browser_creator.cc) once the profile picker can forward urls
   // specified in command line.
   if (availability_on_startup == AvailabilityOnStartup::kForced) {
-    return StartupProfileModeReason::kPickerForcedByPolicy;
+    return StartupProfileMode::kProfilePicker;
   }
 
   ProfileManager* profile_manager = g_browser_process->profile_manager();
 
   // Only launch the profile creation flow at startup if the user has specified
   // both a profile email address and the switch to create a new profile. Only
-  // launch the profile creation flow if and a profile with this email does not already
-  // exist.
+  // launch the profile creation flow if and a profile with this email does not
+  // already exist.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kCreateProfileEmailIfNotExists) &&
-      base::FeatureList::IsEnabled(features::kCreateProfileIfNoneExists)) {
+  if (command_line->HasSwitch(switches::kProfileEmail)) {
     std::string switch_email =
         command_line->GetSwitchValueASCII(switches::kProfileEmail);
-    if (!switch_email.empty() &&
-        profile_manager->GetProfileDirForEmail(switch_email).empty()) {
-      return StartupProfileModeReason::kProfileEmailSwitchCreateProfile;
+    if (!switch_email.empty()) {
+      if (!profile_manager->GetProfileDirForEmail(switch_email).empty()) {
+        return StartupProfileMode::kBrowserWindow;
+      } else if (command_line->HasSwitch(
+                     switches::kCreateProfileEmailIfNotExists) &&
+                 base::FeatureList::IsEnabled(
+                     features::kCreateProfileIfNoneExists)) {
+        return StartupProfileMode::kProfilePicker;
+      }
     }
-    // TODO(crbug.com/432528395): Return kProfileEmailSwitch for instead of
-    // returning kMultipleProfiles or kSingleProfile.
   }
 
   size_t number_of_profiles = profile_manager->GetNumberOfProfiles();
   // Need to consider 0 profiles as this is what happens in some browser-tests.
   if (number_of_profiles <= 1) {
-    return StartupProfileModeReason::kSingleProfile;
+    return StartupProfileMode::kBrowserWindow;
   }
 
   std::vector<ProfileAttributesEntry*> profile_attributes =
@@ -194,14 +200,24 @@ StartupProfileModeReason ProfilePicker::GetStartupModeReason() {
   // active profiles. However, if the user has already seen the profile picker
   // before, respect user's preference.
   if (number_of_active_profiles < 2 && !Shown()) {
-    return StartupProfileModeReason::kInactiveProfiles;
+    return StartupProfileMode::kBrowserWindow;
   }
 
   bool pref_enabled = g_browser_process->local_state()->GetBoolean(
       prefs::kBrowserShowProfilePickerOnStartup);
   base::UmaHistogramBoolean("ProfilePicker.AskOnStartup", pref_enabled);
   if (pref_enabled) {
-    return StartupProfileModeReason::kMultipleProfiles;
+    return StartupProfileMode::kProfilePicker;
   }
-  return StartupProfileModeReason::kUserOptedOut;
+  return StartupProfileMode::kBrowserWindow;
+}
+
+// static
+void ProfilePicker::SetOpenCommandLineUrlsInNextProfileOpened(bool value) {
+  g_open_command_line_urls_in_next_profile_opened = value;
+}
+
+// static
+bool ProfilePicker::GetOpenCommandLineUrlsInNextProfileOpened() {
+  return g_open_command_line_urls_in_next_profile_opened;
 }

@@ -16,6 +16,8 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/layout_constants.h"
@@ -153,6 +155,8 @@ void TabGroupHeader::Init(const tab_groups::TabGroupId& group) {
   SetProperty(views::kDrawFocusRingBackgroundOutline, true);
 
   SetProperty(views::kElementIdentifierKey, kTabGroupHeaderElementId);
+  attention_indicator_->SetProperty(views::kElementIdentifierKey,
+                                    kAttentionIndicatorViewElementId);
 
   SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
 
@@ -244,7 +248,9 @@ void TabGroupHeader::OnMouseReleased(const ui::MouseEvent& event) {
 
     if (open_editor_bubble) {
       editor_bubble_tracker_.Opened(TabGroupEditorBubbleView::Show(
-          tab_slot_controller_->GetBrowser(), group().value(), this));
+          tab_slot_controller_->GetBrowser(), group().value(),
+          /*anchor_view=*/this, /*anchor_rect=*/std::nullopt,
+          /*stop_context_menu_propagation=*/false));
     } else if (toggle_collapse) {
       tab_slot_controller_->ToggleTabGroupCollapsedState(
           group().value(), ToggleTabGroupCollapsedStateOrigin::kMouse);
@@ -276,7 +282,9 @@ void TabGroupHeader::OnGestureEvent(ui::GestureEvent* event) {
       break;
     case ui::EventType::kGestureLongTap: {
       editor_bubble_tracker_.Opened(TabGroupEditorBubbleView::Show(
-          tab_slot_controller_->GetBrowser(), group().value(), this));
+          tab_slot_controller_->GetBrowser(), group().value(),
+          /*anchor_view=*/this, /*anchor_rect=*/std::nullopt,
+          /*stop_context_menu_propagation=*/false));
       break;
     }
     case ui::EventType::kGestureScrollBegin: {
@@ -390,7 +398,7 @@ void TabGroupHeader::ShowContextMenuForViewImpl(
 
   editor_bubble_tracker_.Opened(TabGroupEditorBubbleView::Show(
       tab_slot_controller_->GetBrowser(), group().value(), this, std::nullopt,
-      nullptr, kStopContextMenuPropagation));
+      kStopContextMenuPropagation));
 }
 
 bool TabGroupHeader::DoesIntersectRect(const views::View* target,
@@ -517,7 +525,7 @@ bool TabGroupHeader::ShouldShowHeaderIcon() const {
 
   tab_groups::TabGroupSyncService* tab_group_service =
       tab_slot_controller_->GetBrowser()
-          ? tab_groups::SavedTabGroupUtils::GetServiceForProfile(
+          ? tab_groups::TabGroupSyncServiceFactory::GetForProfile(
                 tab_slot_controller_->GetBrowser()->profile())
           : nullptr;
   if (!tab_group_service) {
@@ -764,3 +772,6 @@ void TabGroupHeader::EditorBubbleTracker::OnWidgetDestroying(
   widget_ = nullptr;
   tab_slot_controller_->NotifyTabstripBubbleClosed();
 }
+
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(TabGroupHeader,
+                                      kAttentionIndicatorViewElementId);

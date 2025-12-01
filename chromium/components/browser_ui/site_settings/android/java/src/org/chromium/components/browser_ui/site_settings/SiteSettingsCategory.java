@@ -6,6 +6,7 @@ package org.chromium.components.browser_ui.site_settings;
 
 import static org.chromium.build.NullUtil.assumeNonNull;
 import static org.chromium.components.content_settings.PrefNames.COOKIE_CONTROLS_MODE;
+import static org.chromium.components.permissions.PermissionUtil.getGeolocationType;
 
 import android.content.Context;
 import android.content.Intent;
@@ -80,6 +81,7 @@ public class SiteSettingsCategory {
         Type.SERIAL_PORT,
         Type.LOCAL_NETWORK_ACCESS,
         Type.WINDOW_MANAGEMENT,
+        Type.AUTO_PICTURE_IN_PICTURE,
 
         Type.AUTOPLAY, // Vivaldi
 
@@ -126,10 +128,11 @@ public class SiteSettingsCategory {
         int SERIAL_PORT = 34;
         int LOCAL_NETWORK_ACCESS = 35;
         int WINDOW_MANAGEMENT = 36;
+        int AUTO_PICTURE_IN_PICTURE = 37;
 
-        int AUTOPLAY = 37; // Vivaldi
+        int AUTOPLAY = 38; // Vivaldi
         /** Number of handled categories used for calculating array sizes. */
-        int NUM_ENTRIES = 38; // Vivaldi
+        int NUM_ENTRIES = 39;
     }
 
     private final BrowserContextHandle mBrowserContextHandle;
@@ -219,6 +222,8 @@ public class SiteSettingsCategory {
                 return ContentSettingsType.AR;
             case Type.AUTO_DARK_WEB_CONTENT:
                 return ContentSettingsType.AUTO_DARK_WEB_CONTENT;
+            case Type.AUTO_PICTURE_IN_PICTURE:
+                return ContentSettingsType.AUTO_PICTURE_IN_PICTURE;
             case Type.AUTOMATIC_DOWNLOADS:
                 return ContentSettingsType.AUTOMATIC_DOWNLOADS;
             case Type.BACKGROUND_SYNC:
@@ -237,7 +242,7 @@ public class SiteSettingsCategory {
             case Type.REQUEST_DESKTOP_SITE:
                 return ContentSettingsType.REQUEST_DESKTOP_SITE;
             case Type.DEVICE_LOCATION:
-                return ContentSettingsType.GEOLOCATION;
+                return getGeolocationType();
             case Type.FILE_EDITING:
                 return ContentSettingsType.FILE_SYSTEM_WRITE_GUARD;
             case Type.FEDERATED_IDENTITY_API:
@@ -319,6 +324,8 @@ public class SiteSettingsCategory {
                 return "augmented_reality";
             case Type.AUTO_DARK_WEB_CONTENT:
                 return "auto_dark_web_content";
+            case Type.AUTO_PICTURE_IN_PICTURE:
+                return "auto_picture_in_picture";
             case Type.ALL_SITES:
                 return "all_sites";
             case Type.AUTOMATIC_DOWNLOADS:

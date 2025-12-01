@@ -843,10 +843,15 @@ void ContentBlockingGetAdBlockingStatsFunction::OnStatsDataLoaded(
   const auto& tracker_entries = data->TrackerEntries();
   const auto reporting_start = data->ReportingStart();
 
-  Respond(ArgumentList(Results::Create(
-      reporting_start.InMillisecondsFSinceUnixEpoch(), data->TotalAdsBlocked(),
-      data->TotalTrackersBlocked(), ToVivaldiBlockedCounter(tracker_entries),
-      ToVivaldiBlockedCounter(website_entries))));
+  vivaldi::content_blocking::AdBlockingStatsData results;
+
+  results.reporting_start = reporting_start.InMillisecondsFSinceUnixEpoch();
+  results.total_ads_blocked = data->TotalAdsBlocked();
+  results.total_trackers_blocked = data->TotalTrackersBlocked();
+  results.blocked_domains = ToVivaldiBlockedCounter(tracker_entries);
+  results.blocked_for_origin = ToVivaldiBlockedCounter(website_entries);
+
+  Respond(ArgumentList(Results::Create(results)));
 }
 
 AdBlockFunction::ResponseAction
@@ -857,8 +862,20 @@ ContentBlockingGetAdBlockingStatsFunction::RunWithService(
     return RespondNow(Error("Stats store invalid."));
   }
 
+  using vivaldi::content_blocking::GetAdBlockingStats::Params;
+  std::optional<Params> params(Params::Create(args()));
+
+  int number_of_days = params->number_of_days;
+  base::Time interval_time;
+
+  if (number_of_days <= 0) {
+    interval_time = base::Time::UnixEpoch();
+  } else {
+    interval_time = base::Time::Now() - base::Days(number_of_days);
+  }
+
   stats_store->GetStatsData(
-      base::Time::UnixEpoch(), base::Time::Now(),
+      interval_time, base::Time::Now(),
       base::BindOnce(
           &ContentBlockingGetAdBlockingStatsFunction::OnStatsDataLoaded, this));
 

@@ -18,6 +18,7 @@ namespace gl
 {
 class Context;
 class PrivateState;
+class PrivateStateCache;
 class ErrorSet;
 
 // GL_AMD_performance_monitor
@@ -242,7 +243,8 @@ bool ValidateDrawElementsInstancedANGLE(const Context *context,
                                         DrawElementsType typePacked,
                                         const void *indices,
                                         GLsizei primcount);
-bool ValidateVertexAttribDivisorANGLE(const Context *context,
+bool ValidateVertexAttribDivisorANGLE(const PrivateState &state,
+                                      ErrorSet *errors,
                                       angle::EntryPoint entryPoint,
                                       GLuint index,
                                       GLuint divisor);
@@ -1028,6 +1030,8 @@ bool ValidateReleaseTexturesANGLE(const Context *context,
 
 // GL_ARM_shader_framebuffer_fetch_depth_stencil
 
+// GL_ARM_texture_unnormalized_coordinates
+
 // GL_CHROMIUM_bind_uniform_location
 bool ValidateBindUniformLocationCHROMIUM(const Context *context,
                                          angle::EntryPoint entryPoint,
@@ -1449,7 +1453,8 @@ bool ValidateFramebufferTextureEXT(const Context *context,
 // GL_EXT_gpu_shader5
 
 // GL_EXT_instanced_arrays
-bool ValidateVertexAttribDivisorEXT(const Context *context,
+bool ValidateVertexAttribDivisorEXT(const PrivateState &state,
+                                    ErrorSet *errors,
                                     angle::EntryPoint entryPoint,
                                     GLuint index,
                                     GLuint divisor);
@@ -2887,11 +2892,13 @@ bool ValidateDeleteVertexArraysOES(const Context *context,
                                    angle::EntryPoint entryPoint,
                                    GLsizei n,
                                    const VertexArrayID *arraysPacked);
-bool ValidateGenVertexArraysOES(const Context *context,
+bool ValidateGenVertexArraysOES(const PrivateState &state,
+                                ErrorSet *errors,
                                 angle::EntryPoint entryPoint,
                                 GLsizei n,
                                 const VertexArrayID *arraysPacked);
-bool ValidateIsVertexArrayOES(const Context *context,
+bool ValidateIsVertexArrayOES(const PrivateState &state,
+                              ErrorSet *errors,
                               angle::EntryPoint entryPoint,
                               VertexArrayID arrayPacked);
 

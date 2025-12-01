@@ -782,6 +782,9 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
     case IrOpcode::kJSCreateLiteralRegExp:
       CheckTypeIs(node, Type::OtherObject());
       break;
+    case IrOpcode::kJSSetPrototypeProperties:
+      CheckNotTyped(node);
+      break;
     case IrOpcode::kJSGetTemplateObject:
       CheckTypeIs(node, Type::Array());
       break;
@@ -899,7 +902,8 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       break;
 
     case IrOpcode::kJSForOfNext:
-      UNREACHABLE();
+      CheckTypeIs(node, Type::Tuple(Type::Any(), Type::Any(), zone));
+      break;
 
     case IrOpcode::kJSLoadMessage:
     case IrOpcode::kJSStoreMessage:
@@ -1313,11 +1317,11 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckTypeIs(node, Type::Boolean());
       break;
     case IrOpcode::kNumberIsFloat64Hole:
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       CheckValueInputIs(node, 0, Type::NumberOrUndefinedOrHole());
 #else
       CheckValueInputIs(node, 0, Type::NumberOrHole());
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
       CheckTypeIs(node, Type::Boolean());
       break;
     case IrOpcode::kNumberIsFinite:
@@ -1447,6 +1451,15 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       // CheckTypeIs(node, to));
       break;
     }
+    case IrOpcode::kChangeNumberOrHoleToFloat64: {
+      // NumberOrHole /\ Tagged -> Number /\ UntaggedFloat64
+      // TODO(neis): Activate once ChangeRepresentation works in typer.
+      // Type from = Type::Intersect(Type::NumberOrHole(), Type::Tagged());
+      // Type to = Type::Intersect(Type::Number(), Type::UntaggedFloat64());
+      // CheckValueInputIs(node, 0, from));
+      // CheckTypeIs(node, to));
+      break;
+    }
     case IrOpcode::kChangeTaggedToTaggedSigned:      // Fall through.
       break;
     case IrOpcode::kTruncateTaggedToFloat64PreserveUndefined:
@@ -1522,7 +1535,16 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       // CheckTypeIs(node, to));
       break;
     }
-    case IrOpcode::kTruncateTaggedToWord32: {
+    case IrOpcode::kTruncateNumberOrOddballToWord32: {
+      // Number /\ Tagged -> Signed32 /\ UntaggedInt32
+      // TODO(neis): Activate once ChangeRepresentation works in typer.
+      // Type from = Type::Intersect(Type::Number(), Type::Tagged());
+      // Type to = Type::Intersect(Type::Number(), Type::UntaggedInt32());
+      // CheckValueInputIs(node, 0, from));
+      // CheckTypeIs(node, to));
+      break;
+    }
+    case IrOpcode::kTruncateNumberOrOddballOrHoleToWord32: {
       // Number /\ Tagged -> Signed32 /\ UntaggedInt32
       // TODO(neis): Activate once ChangeRepresentation works in typer.
       // Type from = Type::Intersect(Type::Number(), Type::Tagged());
@@ -1669,11 +1691,11 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckTypeIs(node, Type::Number());
       break;
     case IrOpcode::kCheckFloat64Hole:
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       CheckValueInputIs(node, 0, Type::NumberOrUndefinedOrHole());
 #else
       CheckValueInputIs(node, 0, Type::NumberOrHole());
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
       CheckTypeIs(node, Type::NumberOrUndefined());
       break;
     case IrOpcode::kChangeFloat64HoleToTagged:
@@ -1681,13 +1703,13 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckTypeIs(node, Type::NumberOrUndefined());
       break;
     case IrOpcode::kChangeFloat64OrUndefinedOrHoleToTagged:
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       CheckValueInputIs(node, 0, Type::NumberOrUndefinedOrHole());
       CheckTypeIs(node, Type::NumberOrUndefinedOrHole());
       break;
 #else
       UNREACHABLE();
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
     case IrOpcode::kCheckNotTaggedHole:
       CheckValueInputIs(node, 0, Type::Any());
       CheckTypeIs(node, Type::NonInternal());
@@ -1773,13 +1795,13 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckNotTyped(node);
       break;
     case IrOpcode::kNumberSilenceNaN:
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       CheckValueInputIs(node, 0, Type::NumberOrUndefined());
       CheckTypeIs(node, Type::NumberOrUndefined());
 #else
       CheckValueInputIs(node, 0, Type::Number());
       CheckTypeIs(node, Type::Number());
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
       break;
     case IrOpcode::kMapGuard:
       CheckNotTyped(node);

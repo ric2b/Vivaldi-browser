@@ -6,24 +6,31 @@
 
 #include <string>
 
-#include "base/command_line.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/version_info/version_info.h"
 #include "chrome/browser/glic/fre/fre_util.h"
 #include "chrome/browser/glic/fre/glic_fre_page_handler.h"
-#include "chrome/browser/glic/glic_enabling.h"
 #include "chrome/browser/glic/glic_net_log.h"
+#include "chrome/browser/glic/public/glic_enabling.h"
 #include "chrome/browser/glic/public/glic_keyed_service_factory.h"
+#include "chrome/browser/glic/resources/glic_resources.h"
+#include "chrome/browser/glic/resources/grit/glic_browser_resources.h"
+#include "chrome/browser/glic/shared/webui_shared.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/glic_fre_resources.h"
 #include "chrome/grit/glic_fre_resources_map.h"
+#include "chrome/grit/glic_resources.h"
+#include "chrome/grit/glic_resources_map.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/webui/webui_allowlist.h"
 #include "ui/webui/webui_util.h"
@@ -42,6 +49,9 @@ bool GlicFreUIConfig::IsWebUIEnabled(content::BrowserContext* browser_context) {
 GlicFreUI::GlicFreUI(content::WebUI* web_ui) : ui::MojoWebUIController(web_ui) {
   static constexpr webui::LocalizedString kStrings[] = {
       {"closeButtonLabel", IDS_GLIC_NOTICE_CLOSE_BUTTON_LABEL},
+      {"disabledByAdminNoticeCloseButton",
+       IDS_GLIC_DISABLED_BY_ADMIN_NOTICE_CLOSE_BUTTON},
+      {"disabledByAdminNoticeHeader", IDS_GLIC_DISABLED_BY_ADMIN_NOTICE_HEADER},
       {"errorNotice", IDS_GLIC_ERROR_NOTICE},
       {"errorNoticeActionButton", IDS_GLIC_ERROR_NOTICE_ACTION_BUTTON},
       {"errorNoticeHeader", IDS_GLIC_ERROR_NOTICE_HEADER},
@@ -56,6 +66,12 @@ GlicFreUI::GlicFreUI(content::WebUI* web_ui) : ui::MojoWebUIController(web_ui) {
   // Set up the chrome://glic-fre source.
   content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
       browser_context, chrome::kChromeUIGlicFreHost);
+  ConfigureSharedWebUISource(*source);
+
+  // Explicitly add source shared with chrome://glic.
+  source->AddResourcePath("glic/glic_request_headers.js",
+      IDR_GLIC_GLIC_REQUEST_HEADERS_JS);
+  source->AddResourcePath("glic_logo.svg", GetResourceID(IDR_GLIC_LOGO));
 
   // Add required resources.
   webui::SetupWebUIDataSource(source, kGlicFreResources, IDR_GLIC_FRE_FRE_HTML);
@@ -63,6 +79,12 @@ GlicFreUI::GlicFreUI(content::WebUI* web_ui) : ui::MojoWebUIController(web_ui) {
   // Add localized strings.
   source->AddLocalizedStrings(kStrings);
 
+  // Add parameterized admin notice string.
+  source->AddString("disabledByAdminNotice",
+                    l10n_util::GetStringFUTF16(
+                        IDS_GLIC_DISABLED_BY_ADMIN_NOTICE_WITH_LINK,
+                        base::UTF8ToUTF16(features::kGlicCaaLinkUrl.Get()),
+                        base::UTF8ToUTF16(features::kGlicCaaLinkText.Get())));
   // Set up FRE URL via cli flag, or default to the finch param value.
   const GURL guest_url =
       GetFreURL(Profile::FromBrowserContext(browser_context));
@@ -72,20 +94,10 @@ GlicFreUI::GlicFreUI(content::WebUI* web_ui) : ui::MojoWebUIController(web_ui) {
   source->AddInteger("freInitialWidth", features::kGlicFreInitialWidth.Get());
   source->AddInteger("freInitialHeight", features::kGlicFreInitialHeight.Get());
 
-  auto* command_line = base::CommandLine::ForCurrentProcess();
-  const bool is_glic_dev = command_line->HasSwitch(::switches::kGlicDev);
-
-  // Set up loading notice timeout values.
-  source->AddInteger("preLoadingTimeMs", features::kGlicPreLoadingTimeMs.Get());
-  source->AddInteger("minLoadingTimeMs", features::kGlicMinLoadingTimeMs.Get());
-  int max_loading_time_ms = features::kGlicMaxLoadingTimeMs.Get();
   int reload_max_loading_time_ms = features::kGlicReloadMaxLoadingTimeMs.Get();
-  if (is_glic_dev) {
-    // Bump up timeout value, as dev server may be slow.
-    max_loading_time_ms *= 100;
-  }
-  source->AddInteger("maxLoadingTimeMs", max_loading_time_ms);
   source->AddInteger("reloadMaxLoadingTimeMs", reload_max_loading_time_ms);
+  source->AddBoolean("caaGuestError", base::FeatureList::IsEnabled(
+                                          features::kGlicCaaGuestError));
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(GlicFreUI)

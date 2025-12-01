@@ -18,7 +18,6 @@
 #import "ios/translate/vivaldi_ios_translate_service.h"
 #import "ios/ui/translate/vivaldi_translate_constants.h"
 #import "ios/ui/translate/vivaldi_translate_consumer.h"
-#import "ios/ui/translate/vivaldi_translate_language_item.h"
 #import "ios/ui/translate/vivaldi_translate_swift.h"
 #import "prefs/vivaldi_pref_names.h"
 #import "translate_history/th_node.h"
@@ -28,19 +27,21 @@ using translate_history::TH_Node;
 
 namespace {
 // Language code mapping - maps various codes to canonical codes for consistency
-const std::unordered_map<std::string, std::string> kLanguageCodeMapping = {
-    {"sr", "sr-Cyrl"}, // Serbian
-    {"zh-CN", "zh-Hans"}, // Chinese (Simplified)
-    {"zh-TW", "zh-Hant"}, // Chinese (Traditional)
-    {"iw", "he"}, // Hebrew
-    {"jw", "jv"}, // Javanese
+constexpr std::pair<std::string_view, std::string_view> kLanguageCodeMapping[] = {
+    {"sr", "sr-Cyrl"},
+    {"zh-CN", "zh-Hans"},
+    {"zh-TW", "zh-Hant"},
+    {"iw", "he"},
+    {"jw", "jv"},
 };
+}  // namespace
 
 // Get canonical code for consistency
 std::string getCanonicalCode(const std::string& code) {
-  auto it = kLanguageCodeMapping.find(code);
-  return (it != kLanguageCodeMapping.end()) ? it->second : code;
-}
+  for (auto&& entry : kLanguageCodeMapping) {
+    if (entry.first == code) return std::string(entry.second);
+  }
+  return code;
 }  // namespace
 
 @interface VivaldiTranslateMediator () <VivaldiIOSTHServiceBridgeObserver> {
@@ -348,13 +349,12 @@ std::string getCanonicalCode(const std::string& code) {
 
 - (VivaldiTranslateLanguageItem*)languageItemFromLanguage:
     (const translate::TranslateLanguageInfo&)language {
-  VivaldiTranslateLanguageItem* languageItem =
-      [[VivaldiTranslateLanguageItem alloc] init];
-  languageItem.languageCode = base::SysUTF8ToNSString(language.code);
-  languageItem.displayName = base::SysUTF8ToNSString(language.display_name);
-  languageItem.nativeDisplayName =
-      base::SysUTF8ToNSString(language.native_display_name);
-  return languageItem;
+  VivaldiTranslateLanguageItem* item = [[VivaldiTranslateLanguageItem alloc]
+      initWithDisplayName:base::SysUTF8ToNSString(language.display_name)
+        nativeDisplayName:base::SysUTF8ToNSString(language.native_display_name)
+             languageCode:base::SysUTF8ToNSString(language.code)
+           targetLanguage:NO];
+  return item;
 }
 
 - (void)splitSourceText:(NSString*)sourceText

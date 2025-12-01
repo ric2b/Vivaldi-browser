@@ -58,8 +58,14 @@ AutocompleteMatch NicknameMatchToAutocompleteMatch(
       match_in_subdomain);
   const std::u16string formatted_url = url_formatter::FormatUrl(
       url, format_types, base::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
-  // Display the nickname.
-  match.contents = formatted_url;
+
+  // Display the nickname. We use an empty url as a key that this is a folder.
+  if (formatted_url.empty()) {
+    match.folder_id = titled_url_match.node->GetId();
+    match.contents = title;
+  } else {
+    match.contents = formatted_url;
+  }
 
   // Bookmark classification diverges from relevance scoring. Specifically,
   // 1) All occurrences of the input contribute to relevance; e.g. for the input

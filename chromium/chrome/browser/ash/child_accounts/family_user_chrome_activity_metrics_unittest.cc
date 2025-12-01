@@ -19,6 +19,7 @@
 #include "chrome/browser/ash/child_accounts/apps/app_test_utils.h"
 #include "chrome/browser/ash/child_accounts/time_limits/app_time_limit_utils.h"
 #include "chrome/browser/ash/child_accounts/time_limits/app_types.h"
+#include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -28,7 +29,9 @@
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/idle.pb.h"
 #include "components/app_constants/constants.h"
+#include "components/custom_handlers/simple_protocol_handler_registry_factory.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
+#include "components/session_manager/core/fake_session_manager_delegate.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/session_manager/session_manager_types.h"
 #include "extensions/browser/extension_registrar.h"
@@ -74,6 +77,10 @@ class FamilyUserChromeActivityMetricsTest
     WaitForAppServiceProxyReady(
         apps::AppServiceProxyFactory::GetForProfile(profile()));
 
+    ProtocolHandlerRegistryFactory::GetInstance()->SetTestingFactory(
+        profile(), custom_handlers::SimpleProtocolHandlerRegistryFactory::
+                       GetDefaultFactory());
+
     extensions::TestExtensionSystem* extension_system(
         static_cast<extensions::TestExtensionSystem*>(
             extensions::ExtensionSystem::Get(profile())));
@@ -102,7 +109,6 @@ class FamilyUserChromeActivityMetricsTest
 
   void TearDown() override {
     test_browser_.reset();
-    browser_window_.reset();
     DestroyFamilyUserChromeActivityMetrics();
     ChromeRenderViewHostTestHarness::TearDown();
     chromeos::PowerManagerClient::Shutdown();
@@ -136,16 +142,15 @@ class FamilyUserChromeActivityMetricsTest
     // This may be called multiple times, we must reset the original test
     // browser and its associated window.
     test_browser_.reset();
-    browser_window_.reset();
 
     std::unique_ptr<aura::Window> window = std::make_unique<aura::Window>(
         nullptr, aura::client::WINDOW_TYPE_NORMAL);
     window->SetId(0);
     window->Init(ui::LAYER_TEXTURED);
     Browser::CreateParams params(profile(), true);
-    browser_window_ =
+    auto browser_window =
         std::make_unique<TestBrowserWindowAura>(std::move(window));
-    params.window = browser_window_.get();
+    params.window = browser_window.release();
     test_browser_ = Browser::DeprecatedCreateOwnedForTesting(params);
   }
 
@@ -160,8 +165,8 @@ class FamilyUserChromeActivityMetricsTest
  private:
   std::unique_ptr<FamilyUserChromeActivityMetrics>
       family_user_chrome_activity_metrics_;
-  std::unique_ptr<TestBrowserWindowAura> browser_window_;
-  session_manager::SessionManager session_manager_;
+  session_manager::SessionManager session_manager_{
+      std::make_unique<session_manager::FakeSessionManagerDelegate>()};
   raw_ptr<extensions::ExtensionService, DanglingUntriaged> extension_service_ =
       nullptr;
 };
@@ -187,7 +192,7 @@ TEST_F(FamilyUserChromeActivityMetricsTest, Basic) {
   Browser::CreateParams params(profile(), true);
   auto another_browser_window =
       std::make_unique<TestBrowserWindowAura>(std::move(window));
-  params.window = another_browser_window.get();
+  params.window = another_browser_window.release();
   auto another_browser = Browser::DeprecatedCreateOwnedForTesting(params);
 
   EXPECT_EQ(2U, BrowserList::GetInstance()->size());

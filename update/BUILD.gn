@@ -1,0 +1,43 @@
+# Copyright (c) 2025 Vivaldi Technologies AS. All rights reserved
+
+static_library("update") {
+  if (!is_android) {
+    sources = [
+      "update_backend.cc",
+      "update_backend.h",
+      "update_backend_notifier.h",
+      "update_model_observer.h",
+      "update_service.cc",
+      "update_service.h",
+      "update_service_factory.cc",
+      "update_service_factory.h",
+    ]
+    if (is_win) {
+      sources += [
+       "win/vivaldi_updater_win.h",
+       "win/vivaldi_updater_win.cc",
+      ]
+    }
+
+    configs += [
+      "//vivaldi/gn/config:release_kind"
+    ]
+
+    deps = [
+      "//chrome/common:buildflags",
+      "//content/public/browser",
+      "//rlz/buildflags",
+      "//vivaldi/app:resources",
+      "//vivaldi/prefs:prefs_strings",
+      "//vivaldi/extensions/schema"
+    ]
+    if (is_win) {
+      deps += [
+        "//extensions/common:mojom",
+        "//vivaldi/browser:init_sparkle",
+        "//vivaldi/update_notifier/thirdparty/winsparkle/src:winsparkle",
+      ]
+    libs = ["comctl32.lib"]
+    }
+  }
+}

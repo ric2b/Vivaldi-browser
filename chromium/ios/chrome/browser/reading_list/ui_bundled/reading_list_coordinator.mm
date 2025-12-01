@@ -27,6 +27,7 @@
 #import "ios/chrome/browser/authentication/ui_bundled/change_profile/change_profile_reading_list_continuation.h"
 #import "ios/chrome/browser/authentication/ui_bundled/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_coordinator.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_presenter.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_promo_view_mediator.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
@@ -50,7 +51,10 @@
 #import "ios/chrome/browser/reading_list/ui_bundled/reading_list_menu_provider.h"
 #import "ios/chrome/browser/reading_list/ui_bundled/reading_list_table_view_controller.h"
 #import "ios/chrome/browser/reminder_notifications/coordinator/reminder_notifications_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -280,7 +284,6 @@ using vivaldi::IsVivaldiRunning;
                                                     completion:nil];
     [self.panelDelegate panelDismissed];
     self.panelDelegate = nil;
-    return;
   } // End Vivaldi
 
   [self stopSigninCoordinator];
@@ -317,13 +320,15 @@ using vivaldi::IsVivaldiRunning;
   _identityManager = nullptr;
   _syncService = nullptr;
   _identityManagerObserverBridge.reset();
+  _authServiceObserverBridge.reset();
 
   [super stop];
   self.started = NO;
 }
 
 - (void)dealloc {
-  DCHECK(!self.mediator);
+  CHECK(!_authServiceObserverBridge, base::NotFatalUntil::M145);
+  CHECK(!self.mediator, base::NotFatalUntil::M145);
 }
 
 #pragma mark - ReadingListListViewControllerAudience
@@ -332,7 +337,7 @@ using vivaldi::IsVivaldiRunning;
   self.navigationController.toolbarHidden = !hasItems;
 }
 
-#pragma mark - ReadingListTableViewControllerDelegate
+#pragma mark - ReadingListListViewControllerDelegate
 
 - (void)dismissReadingListListViewController:(UIViewController*)viewController {
   CHECK_EQ(self.tableViewController, viewController);
@@ -412,7 +417,9 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (BOOL)canDismiss {
-  return !_signinPromoViewMediator.signinInProgress;
+  // In case we don’t know, allow the view to be dismissed in order not to block
+  // the user on a frozen view if sign-in is acciddentally stopped.
+  return _signinPromoViewMediator.signinInProgress != signin::Tribool::kTrue;
 }
 
 #pragma mark - URL Loading Helpers
@@ -634,6 +641,10 @@ using vivaldi::IsVivaldiRunning;
 - (void)showSignin:(SigninPromoViewMediator*)mediator
            command:(ShowSigninCommand*)command {
   CHECK_EQ(mediator, _signinPromoViewMediator);
+  if (_signinCoordinator.viewWillPersist) {
+    return;
+  }
+  [_signinCoordinator stop];
   __weak __typeof(self) weakSelf = self;
   [command addSigninCompletion:^(SigninCoordinatorResult result,
                                  id<SystemIdentity>) {
@@ -641,7 +652,7 @@ using vivaldi::IsVivaldiRunning;
   }];
   _signinCoordinator = [SigninCoordinator
       signinCoordinatorWithCommand:command
-                           browser:self.browser
+                           browser:signin::GetRegularBrowser(self.browser)
                 baseViewController:self.navigationController];
   [_signinCoordinator start];
 }

@@ -24,7 +24,7 @@ impl Image {
             return Ok(());
         }
         if width == 0 || height == 0 {
-            return Err(AvifError::InvalidArgument);
+            return AvifError::invalid_argument();
         }
         let planes = category.planes();
         let src =
@@ -69,7 +69,7 @@ impl Image {
                     )
                 };
                 if ret != 0 {
-                    return Err(AvifError::ReformatFailed);
+                    return AvifError::reformat_failed();
                 }
                 i010
             } else {
@@ -103,7 +103,7 @@ impl Image {
         self.yuv_format = src.yuv_format;
         if src.has_plane(Plane::Y) || src.has_plane(Plane::A) {
             if src.width > 16384 || src.height > 16384 {
-                return Err(AvifError::NotImplemented);
+                return AvifError::not_implemented();
             }
             if src.has_plane(Plane::Y) && category != Category::Alpha {
                 self.allocate_planes(Category::Color)?;
@@ -145,7 +145,7 @@ impl Image {
                 )
             };
             if ret != 0 {
-                return Err(AvifError::ReformatFailed);
+                return AvifError::reformat_failed();
             } else {
                 return Ok(());
             }

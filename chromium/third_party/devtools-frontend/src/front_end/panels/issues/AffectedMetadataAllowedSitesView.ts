@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -11,7 +11,7 @@ import {AffectedResourcesView} from './AffectedResourcesView.js';
 
 const UIStrings = {
   /**
-   *@description Label for the the number of affected `Allowed Sites` associated with a
+   * @description Label for the the number of affected `Allowed Sites` associated with a
    *DevTools issue. In this context, `Allowed` refers to permission to access cookies
    *via the third-party cookie deprecation global metadata, and `Site` is equivalent
    *to eTLD+1.

@@ -12,6 +12,7 @@
 <translation id="1163931534039071049">&amp;Vaata paneeli lähtekoodi</translation>
 <translation id="1165039591588034296">Viga</translation>
 <translation id="1175364870820465910">&amp;Prindi...</translation>
+<translation id="1177548198167638471">Rohkem ei küsita</translation>
 <translation id="1181037720776840403">Eemalda</translation>
 <translation id="1184037892196730210">Ekraani ei õnnestu üle kanda</translation>
 <translation id="1187722533808055681">Jõudeolekust ärkamised</translation>
@@ -28,9 +29,10 @@
 <translation id="1451375123200651445">Veebileht, ühe failina</translation>
 <translation id="1465176863081977902">K&amp;opeeri heli aadress</translation>
 <translation id="1476607407192946488">&amp;Keeleseaded...</translation>
-<translation id="1546280085599573572">See laiendus muutis seda, millist lehte näidatakse avalehe nupul klõpsamisel.</translation>
+<translation id="1478607704480248626">Paigaldamine pole lubatud</translation>
 <translation id="1552752544932680961">Halda laiendust</translation>
 <translation id="15662109988763471">Valitud printer kas pole saadaval või pole õigesti seadistatud. Kontrolli printerit või proovi mõnda teist printerit kasutada.</translation>
+<translation id="1581962803218266616">Näita Finderis</translation>
 <translation id="1588438908519853928">Tavaline</translation>
 <translation id="1588870296199743671">Ava link rakendusega...</translation>
 <translation id="1589055389569595240">Õigekirja ja grammatika näitamine</translation>
@@ -49,14 +51,18 @@
 <translation id="176587472219019965">Uus &amp;aken</translation>
 <translation id="1769104665586091481">Ava link uues aknas</translation>
 <translation id="1779468444204342338">Minimaalsed</translation>
+<translation id="1805822111539868586">Inspekteerimisvaade:</translation>
 <translation id="1815083418640426271">Aseta tavatekstina</translation>
 <translation id="1828901632669367785">Prindi süsteemidialoogi abil...</translation>
+<translation id="1843048149176045210">Kopeeri allalaadimise link</translation>
 <translation id="1850508293116537636">Pööra &amp;päripäeva</translation>
 <translation id="1886996562706621347">Saitidel lubatakse taodelda protokollide vaikekäitlejaks saamist (soovitatav)</translation>
 <translation id="1901303067676059328">Vali &amp;kõik</translation>
+<translation id="1906488504371069394">Rohkem laiendusi ja kujundusi leiad <ph name="BEGIN_LINK" />Chrome’i veebipoest<ph name="END_LINK" /></translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1925021887439448749">Sisesta kohandatud veebiaadress</translation>
 <translation id="1932098463447129402">Alates</translation>
+<translation id="1936157145127842922">Näita kaustas</translation>
 <translation id="1936931585862840749">Sisesta prinditavate koopiate arv (1 kuni <ph name="MAX_COPIES" />).</translation>
 <translation id="2019718679933488176">&amp;Ava heli uuel kaardil</translation>
 <translation id="2050339315714019657">Püstpaigutus</translation>
@@ -70,7 +76,7 @@
 <translation id="215753907730220065">Välju täisekraanirežiimist</translation>
 <translation id="2158475082070321257">Kopeeri link esiletõstu juurde</translation>
 <translation id="2177950615300672361">Privaatne kaart: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Native Clienti moodul: <ph name="NEXE_NAME" /></translation>
+<translation id="2187906491731510095">Laiendusi on uuendatud</translation>
 <translation id="2218515861914035131">Aseta tavatekstina</translation>
 <translation id="2249605167705922988">nt 1-5, 8, 11-13</translation>
 <translation id="2280486287150724112">Paremveeris</translation>
@@ -81,9 +87,12 @@
 <translation id="2326931316514688470">&amp;Laadi rakendus uuesti</translation>
 <translation id="2327492829706409234">Luba rakendus</translation>
 <translation id="2348176352564285430">Rakendus: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="2378602615417849384">{NUM_EXTENSIONS, plural,
+      =1 {Seda laiendust ei pruugita peagi enam toetada}
+      other {Neid laiendusi ei pruugita peagi enam toetada}
+    }</translation>
 <translation id="2378982052244864789">Laienduse kataloogi valimine.</translation>
 <translation id="2379281330731083556">Prindi süsteemidialoogi abil... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Tundmatu plugin</translation>
 <translation id="2423578206845792524">Sa&amp;lvesta pilt nimega...</translation>
 <translation id="2439110203301358333">Teine programm arvutis on lisanud laienduse, mis võib muuta Vivaldi tööd.</translation>
 <translation id="2443487764245141020">Saitidel võib olla tarvis sinu seadet identifikaatori abil tuvastada</translation>
@@ -95,6 +104,7 @@
 <translation id="2550212893339833758">Saalitud mälu</translation>
 <translation id="2553440850688409052">Peida see plugin</translation>
 <translation id="2607101320794533334">Subjekti avaliku võtme teave</translation>
+<translation id="261305050785128654">Võimaldab veebisaitidele teatada, mis keeli sa oskad. Võimaluse korral kuvatakse sisu nendes keeltes.</translation>
 <translation id="26224892172169984">Ühelgi saidil ei lubata protokolle käidelda</translation>
 <translation id="2653275834716714682">Tekstiasendus</translation>
 <translation id="265390580714150011">Välja väärtus</translation>
@@ -102,12 +112,12 @@
 <translation id="2678063897982469759">Luba uuesti</translation>
 <translation id="2719936478972253983">Blokeeriti järgmised küpsised</translation>
 <translation id="2721037002783622288">&amp;Otsi pilti <ph name="SEARCH_ENGINE" />’ist</translation>
+<translation id="2722547199758472013">ID: <ph name="EXTENSION_ID" /></translation>
 <translation id="2738771556149464852">Kuni</translation>
 <translation id="2749881179542288782">Lisaks õigekirjale grammatika kontrollimine</translation>
 <translation id="2785873697295365461">Failideskriptorid</translation>
 <translation id="2825758591930162672">Subjekti avalik võti</translation>
 <translation id="2850541429955027218">Lisa teema</translation>
-<translation id="2861941300086904918">Native Clienti turvahaldur</translation>
 <translation id="2881076733170862447">Laiendusel klõpsamisel</translation>
 <translation id="2889064240420137087">Ava link rakendusega...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> ei saanud printeriga ühendust. Vaata, et printer oleks sisse lülitatud, ning proovi siis uuesti.</translation>
@@ -131,7 +141,11 @@
 <translation id="3129173833825111527">Vasakveeris</translation>
 <translation id="3144647712221361880">Ava link kasutajana</translation>
 <translation id="3222066309010235055">Eelrenderdus: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
-<translation id="3241680850019875542">Vali pakitava laienduse juurkaust. Laienduse värskendamiseks vali taaskasutamiseks ka privaatvõtme fail.</translation>
+<translation id="3228985231489269630">{NUM_EXTENSIONS, plural,
+      =1 {Võid selle eemaldada või asendada mõne sarnase laiendusega <ph name="BEGIN_LINK" />Chrome’i veebipoest<ph name="END_LINK" />.}
+      other {Võid need eemaldada või asendada sarnaste laiendustega <ph name="BEGIN_LINK" />Chrome’i veebipoest<ph name="END_LINK" />.}
+    }</translation>
+<translation id="3241680850019875542">Vali pakitava laienduse juurkaust. Laienduse uuendamiseks vali ka taaskasutatava privaatvõtme fail.</translation>
 <translation id="3275778913554317645">Ava eraldi aknas</translation>
 <translation id="3280237271814976245">Salvesta nimega...</translation>
 <translation id="3285322247471302225">Uus kaart</translation>
@@ -153,12 +167,14 @@
 <translation id="3493881266323043047">Kehtivus</translation>
 <translation id="3511307672085573050">Kopeeri lingi aadress</translation>
 <translation id="354068948465830244">Laiendus võib lugeda ja muuta saidiandmeid</translation>
+<translation id="3555812735919707620">Eemalda laiendus</translation>
 <translation id="3560034655160545939">&amp;Õigekirjakontroll</translation>
-<translation id="3587482841069643663">Kõik</translation>
+<translation id="3581861561942370740">Otsi allalaadimiste ajaloost</translation>
+<translation id="3612673635130633812">Alla laadinud &lt;a href="<ph name="URL" />"&gt;<ph name="EXTENSION" />&lt;/a&gt;</translation>
 <translation id="3627588569887975815">Ava link uues privaatses aknas</translation>
 <translation id="3678156199662914018">Laiendus: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" />: ekraanijagamistaotlus</translation>
-<translation id="3708684582558000260">Suletud saitidel andmete saatmise ja vastuvõtmise keelamine</translation>
+<translation id="3708684582558000260">Kaardi sulgemisel ei lubata saidil andmete saatmist või vastuvõtmist lõpule viia</translation>
 <translation id="3711931198657368127">Aseta ja ava <ph name="URL" /></translation>
 <translation id="3719826155360621982">Koduleht</translation>
 <translation id="3727187387656390258">Inspekteeri hüpikakent</translation>
@@ -170,6 +186,7 @@
 <translation id="3838085852053358637">Laienduse laadimine ebaõnnestus</translation>
 <translation id="383891835335927981">Ühelegi saidile pole suurendusastet määratud</translation>
 <translation id="385051799172605136">Tagasi</translation>
+<translation id="3855441664322950881">Laienduse pakkimine</translation>
 <translation id="3858860766373142691">Nimi</translation>
 <translation id="3861977424605124250">Näidatakse käivitamisel</translation>
 <translation id="3867944738977021751">Sertifikaadi väljad</translation>
@@ -183,6 +200,7 @@
 <translation id="3948116654032448504">&amp;Otsi pilti <ph name="SEARCH_ENGINE" />’ist</translation>
 <translation id="3979395879372752341">Lisati uus laiendus (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">Kopeeri link esiletõstu juurde</translation>
+<translation id="399788104667917863">Hoia tööriistaribal</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Lisa sõnastikku</translation>
 <translation id="4058793769387728514">Kontrolli dokumenti</translation>
@@ -197,7 +215,6 @@
 <translation id="4131410914670010031">Mustvalge</translation>
 <translation id="4165986682804962316">Saidi seaded</translation>
 <translation id="4170314459383239649">Kustuta sulgemisel</translation>
-<translation id="4176463684765177261">Keelatud</translation>
 <translation id="4200983522494130825">Uus kaart</translation>
 <translation id="4225397296022057997">Kõigil saitidel</translation>
 <translation id="4256316378292851214">Sa&amp;lvesta video nimega...</translation>
@@ -221,15 +238,19 @@
 <translation id="4613271546271159013">Laiendus muutis lehte, mida näidatakse uue kaardi avamisel.</translation>
 <translation id="4616405296204756919">Salvestatud paroole saad kasutada igas seadmes. Need salvestatakse <ph name="VIVALDI_PASSWORD_MANAGER" />is.</translation>
 <translation id="4643612240819915418">&amp;Ava video uuel kaardil</translation>
+<translation id="4644205769234414680">Lubatud privaatses aknas</translation>
+<translation id="4654801841330730814">Kõik</translation>
 <translation id="4677772697204437347">GPU mälu</translation>
 <translation id="4681930562518940301">Ava algne &amp;pilt uuel kaardil</translation>
 <translation id="4711638718396952945">Taasta seaded</translation>
 <translation id="4726710629007580002">Seda laiendust paigaldada püüdes anti järgmised hoiatused:</translation>
+<translation id="473775607612524610">Uuenda</translation>
 <translation id="4763408175235639573">Lehe vaatamisel määrati järgmised küpsised</translation>
 <translation id="479536056609751218">Veebileht, ainult HTML</translation>
 <translation id="4827904420700932487">Loo pildile ruutkood</translation>
 <translation id="4839303808932127586">Sa&amp;lvesta video nimega...</translation>
 <translation id="4840096453115567876">Kas soovid privaatsest režiimist siiski väljuda?</translation>
+<translation id="4885692421645694729">Sellel laiendusel pole täiendavat ligipääsu ühelegi saidile</translation>
 <translation id="488785315393301722">Näita üksikasju</translation>
 <translation id="4895799941222633551">Lisa otsetee...</translation>
 <translation id="4912643508233590958">Jõudeolekust ärkamised</translation>
@@ -246,13 +267,13 @@
 <translation id="5059526285558225588">Jagatava sisu valimine</translation>
 <translation id="5063480226653192405">Kasutus</translation>
 <translation id="5116628073786783676">Sa&amp;lvesta heli nimega...</translation>
-<translation id="5143374789336132547">Laiendus „<ph name="EXTENSION_NAME" />” muutis seda, millist lehte näidatakse avalehe nupul klõpsamisel.</translation>
 <translation id="5154108062446123722">Printeri <ph name="PRINTING_DESTINATION" /> täpsemad seaded</translation>
 <translation id="5154702632169343078">Subjekt</translation>
+<translation id="5170568018924773124">Näita kaustas</translation>
 <translation id="5171343362375269016">Saalitud mälu</translation>
-<translation id="5233019165164992427">NaCL-i silumisport</translation>
 <translation id="5233231016133573565">Protsessi-ID</translation>
 <translation id="5233736638227740678">&amp;Aseta</translation>
+<translation id="5244466461749935369">Hoia praegu alles</translation>
 <translation id="5256861893479663409">Kõigil saitidel</translation>
 <translation id="5260334392110301220">Nutikad jutumärgid</translation>
 <translation id="5269977353971873915">Printimine ebaõnnestus</translation>
@@ -273,7 +294,6 @@
 <translation id="5485102783864353244">Lisa rakendus</translation>
 <translation id="5486561344817861625">Simuleeri brauseri taaskäivitust</translation>
 <translation id="5509693895992845810">Salvesta nimega...</translation>
-<translation id="5521078259930077036">Kas see on koduleht, mida ootasid?</translation>
 <translation id="5542132724887566711">Profiil</translation>
 <translation id="5556459405103347317">Laadi uuesti</translation>
 <translation id="5575473780076478375">Privaatne laiendus: <ph name="EXTENSION_NAME" /></translation>
@@ -285,15 +305,14 @@
 <translation id="5677928146339483299">Blokeeritud</translation>
 <translation id="5707185214361380026">Laienduse laadimine järgmisest asukohast ebaõnnestus:</translation>
 <translation id="5713171467967533494">Ava Vivaldi brauseris</translation>
-<translation id="5715711091495208045">Pluginavahendaja: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">PDF-ina salvestamine</translation>
 <translation id="5747809636523347288">Aseta ja ava <ph name="URL" /></translation>
 <translation id="5759728514498647443"><ph name="APP_NAME" /> saab lugeda dokumente, mis selle rakenduse kaudu printimiseks saadetakse.</translation>
 <translation id="5764483294734785780">Sa&amp;lvesta heli nimega...</translation>
+<translation id="577313026359983030">Paigaldatud laiendused</translation>
 <translation id="5780973441651030252">Protsessi prioriteet</translation>
 <translation id="5804241973901381774">Load</translation>
 <translation id="5828633471261496623">Printimine...</translation>
-<translation id="583281660410589416">Tundmatu</translation>
 <translation id="5851868085455377790">Väljaandja</translation>
 <translation id="5860491529813859533">Lülita sisse</translation>
 <translation id="5910363049092958439">Sa&amp;lvesta pilt nimega...</translation>
@@ -329,6 +348,7 @@
 <translation id="6374469231428023295">Proovi uuesti</translation>
 <translation id="6398765197997659313">Välju täisekraanirežiimist</translation>
 <translation id="6406303162637086258">Simuleeri brauseri taaskäivitust</translation>
+<translation id="6419546358665792306">Laadi pakkimata laiendus</translation>
 <translation id="6445450263907939268">Kui need on soovimatud muudatused, saad taastada eelmised seaded.</translation>
 <translation id="6447842834002726250">Küpsised</translation>
 <translation id="6498249116389603658">&amp;Kõik allolevad keeled</translation>
@@ -345,7 +365,6 @@
 <translation id="6691936601825168937">&amp;Edasi</translation>
 <translation id="6786747875388722282">Laiendused</translation>
 <translation id="6787839852456839824">Kiirklahvid</translation>
-<translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Säilita muudatused</translation>
 <translation id="6824564591481349393">Kopeeri meiliaadress</translation>
 <translation id="6840155290835956714">Enne saatmist küsitakse</translation>
@@ -378,10 +397,10 @@
 <translation id="7453008956351770337">Kui valid selle printeri, annad järgmisele laiendusele loa printerile juurde pääseda:</translation>
 <translation id="7564847347806291057">Lõpeta protsess</translation>
 <translation id="7576690715254076113">Õiges järjestuses</translation>
+<translation id="7612050744024016345">Kõik laiendused</translation>
 <translation id="7629827748548208700">Kaart: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Loobu</translation>
 <translation id="7659154729610375585">Kas soovid privaatsest režiimist siiski väljuda?</translation>
-<translation id="7661259717474717992">Saitidel lubatakse küpsiseandmeid salvestada ja lugeda</translation>
 <translation id="7663719505383602579">Saaja: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Administraatori poolt lisatud</translation>
 <translation id="7685038817958445325">Ülekandmine ei õnnestunud</translation>
@@ -415,6 +434,7 @@ Võtmefail: <ph name="KEY_FILE" />
 Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide loomiseks.</translation>
 <translation id="8004582292198964060">Brauser</translation>
 <translation id="8018313076035239964">Määra, millist teavet veebisaidid kasutada tohivad ja millist sisu nad sulle näidata saavad</translation>
+<translation id="8023801379949507775">Uuenda laiendusi</translation>
 <translation id="8071432093239591881">Prinditakse pildina</translation>
 <translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
         =1 {# järjehoidja}
@@ -427,7 +447,6 @@ Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide 
 <translation id="8261378640211443080">Seda laiendust <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />’is ei leidu ja see lisati võibolla ilma sinu loata.</translation>
 <translation id="8351419472474436977">See laiendus on hõivanud puhverserveri seaded, mis tähendab, et see saab muuta, rikkuda või kuulata pealt kogu sinu veebitegevust. Kui sa pole kindel, miks see muudatus toimus, siis tõenäoliselt sa ei taha seda.</translation>
 <translation id="8382913212082956454">Kopeeri meiliaadress</translation>
-<translation id="8434480141477525001">NaCL-i silumisport</translation>
 <translation id="8449008133205184768">Aseta ja ühita stiil</translation>
 <translation id="8477178913400731244">Kustuta andmed</translation>
 <translation id="8477384620836102176">Üldine</translation>
@@ -437,6 +456,7 @@ Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide 
 <translation id="8546306075665861288">Piltide vahemälu</translation>
 <translation id="8569682776816196752">Sihtkohti ei leitud</translation>
 <translation id="8584280235376696778">&amp;Ava video uuel kaardil</translation>
+<translation id="8587660243683137365">Paigalda see leht rakendusena</translation>
 <translation id="8605428685123651449">SQLite’i mälu</translation>
 <translation id="8615618338313291042">Privaatne rakendus: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">CSS-i vahemälu</translation>
@@ -446,6 +466,7 @@ Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide 
 <translation id="8708000541097332489">Kustuta sulgemisel</translation>
 <translation id="8714838604780058252">Taustapildid</translation>
 <translation id="8725066075913043281">Proovi uuesti</translation>
+<translation id="8770406935328356739">Laienduse juurkataloog</translation>
 <translation id="8774934320277480003">Ülaveeris</translation>
 <translation id="8798099450830957504">Vaikimisi</translation>
 <translation id="8808478386290700967">Veebipood</translation>
@@ -456,6 +477,7 @@ Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide 
 <translation id="8899851313684471736">Ava link uues aknas</translation>
 <translation id="8915370057835397490">Soovituse laadimine...</translation>
 <translation id="8916476537757519021">Privaatne alampaneel: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8926389886865778422">Rohkem ei küsita</translation>
 <translation id="8929696694736010839">Ainult praeguses privaatses seansis</translation>
 <translation id="895944840846194039">JavaScripti mälu</translation>
 <translation id="8962083179518285172">Peida üksikasjad</translation>

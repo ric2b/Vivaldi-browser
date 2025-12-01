@@ -5,6 +5,7 @@
 #import "ios/web/public/web_state_delegate.h"
 
 #import "base/containers/contains.h"
+#import "base/notimplemented.h"
 
 namespace web {
 
@@ -37,6 +38,23 @@ void WebStateDelegate::ShowRepostFormWarningDialog(
     WebState*,
     FormWarningType warning_type,
     base::OnceCallback<void(bool)> callback) {
+  std::move(callback).Run(true);
+}
+
+void WebStateDelegate::ShouldAllowCopy(
+    WebState* source,
+    base::OnceCallback<void(bool)> callback) {
+  std::move(callback).Run(true);
+}
+
+void WebStateDelegate::ShouldAllowPaste(
+    WebState* source,
+    base::OnceCallback<void(bool)> callback) {
+  std::move(callback).Run(true);
+}
+
+void WebStateDelegate::ShouldAllowCut(WebState* source,
+                                      base::OnceCallback<void(bool)> callback) {
   std::move(callback).Run(true);
 }
 
@@ -90,5 +108,21 @@ id<CRWResponderInputView> WebStateDelegate::GetResponderInputView(
 }
 
 void WebStateDelegate::OnNewWebViewCreated(WebState* source) {}
+
+bool WebStateDelegate::CanRunOpenPanel(web::WebState* source) const
+    API_AVAILABLE(ios(18.4)) {
+  return false;
+}
+
+void WebStateDelegate::RunOpenPanel(
+    web::WebState* source,
+    WKOpenPanelParameters* parameters,
+    WKFrameInfo* frame,
+    base::OnceCallback<void(NSArray<NSURL*>*)> completion) const
+    API_AVAILABLE(ios(18.4)) {
+  NOTIMPLEMENTED() << "WebStateDelegate::RunOpenPanel() is not implemented.\n"
+                      "If a subclass returns true from CanRunOpenPanel(),"
+                      "then it must override RunOpenPanel().";
+}
 
 }  // namespace web

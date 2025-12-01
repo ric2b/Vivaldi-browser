@@ -3933,12 +3933,17 @@ class DeviceUtils(object):
           '%s is not installed' % package_name, str(self))
     output = self.RunShellCommand(
         ['cmd', 'webviewupdate', 'set-webview-implementation', package_name],
-        single_line=True,
         check_return=False)
+    output = '\n'.join(output)
     if output == 'Success':
       logging.info('WebView provider set to: %s', package_name)
     else:
       dumpsys_output = self.GetWebViewUpdateServiceDump()
+      current_provider = dumpsys_output.get('CurrentWebViewPackage')
+      if current_provider == package_name:
+        # This is actually not an error. This is expected to happen on Android
+        # 14 due to a known issue (https://crbug.com/353572106).
+        return
       webview_packages = dumpsys_output.get('WebViewPackages')
       if webview_packages:
         reason = webview_packages.get(package_name)
@@ -3979,7 +3984,8 @@ class DeviceUtils(object):
               '%s is not signed with release keys (but user builds require '
               'this for WebView providers)' % package_name, str(self))
       raise device_errors.CommandFailedError(
-          'Error setting WebView provider: %s' % output, str(self))
+          'Cannot change WebView provider. Wanted (%s) but current is (%s). '
+          'Error: %s' % (package_name, current_provider, output), str(self))
 
   @decorators.WithTimeoutAndRetriesFromInstance()
   def SetWebViewFallbackLogic(self, enabled, timeout=None, retries=None):

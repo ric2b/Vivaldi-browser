@@ -146,7 +146,10 @@ Reduction JSNativeContextSpecialization::Reduce(Node* node) {
 std::optional<size_t> JSNativeContextSpecialization::GetMaxStringLength(
     JSHeapBroker* broker, Node* node) {
   HeapObjectMatcher matcher(node);
-  if (matcher.HasResolvedValue() && matcher.Ref(broker).IsString()) {
+  if (matcher.HasResolvedValue() &&
+      !matcher.Is(
+          broker->local_isolate_or_isolate()->factory()->the_hole_value()) &&
+      matcher.Ref(broker).IsString()) {
     StringRef input = matcher.Ref(broker).AsString();
     return input.length();
   }
@@ -1477,7 +1480,8 @@ Reduction JSNativeContextSpecialization::ReduceNamedAccess(
 
   // Ensure that {key} matches the specified name (if {key} is given).
   if (key != nullptr) {
-    effect = BuildCheckEqualsName(feedback.name(), key, effect, control);
+    effect = BuildCheckEqualsName(feedback.original_name_maybe_thin(), key,
+                                  effect, control);
   }
 
   // Collect call nodes to rewire exception edges.
@@ -3344,7 +3348,7 @@ JSNativeContextSpecialization::BuildPrototypeProxyElementAccess(
   Node* feedback = jsgraph()->UndefinedConstant();
   // We can use a dummy receiver so long as we only support Wasm functions
   // that disregard the call's receiver anyway.
-  DCHECK(!Cast<WasmExportedFunctionData>(
+  DCHECK(!TrustedCast<WasmExportedFunctionData>(
               Cast<JSFunction>(access_info.accessor().value().object())
                   ->shared()
                   ->GetTrustedData(isolate()))
@@ -3505,12 +3509,12 @@ JSNativeContextSpecialization::BuildElementAccess(
   MachineType element_machine_type = MachineType::AnyTagged();
   if (IsDoubleElementsKind(elements_kind)) {
     element_type = Type::Number();
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
     if (elements_kind == HOLEY_DOUBLE_ELEMENTS) {
       element_type =
           Type::Union(element_type, Type::Undefined(), graph()->zone());
     }
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
     element_machine_type = MachineType::Float64();
   } else if (IsSmiElementsKind(elements_kind)) {
     element_type = Type::SignedSmall();
@@ -3573,13 +3577,13 @@ JSNativeContextSpecialization::BuildElementAccess(
           // Return the signaling NaN hole directly if all uses are
           // truncating.
           if (LoadModeHandlesHoles(keyed_mode.load_mode())) {
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
             vtrue = graph()->NewNode(
                 simplified()->ChangeFloat64OrUndefinedOrHoleToTagged(), vtrue);
 #else
             vtrue = graph()->NewNode(simplified()->ChangeFloat64HoleToTagged(),
                                      vtrue);
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
           } else {
             vtrue = etrue = graph()->NewNode(
                 simplified()->CheckFloat64Hole(
@@ -3628,13 +3632,13 @@ JSNativeContextSpecialization::BuildElementAccess(
           if (LoadModeHandlesHoles(keyed_mode.load_mode())) {
             // Return the signaling NaN hole directly if all uses are
             // truncating.
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
             value = graph()->NewNode(
                 simplified()->ChangeFloat64OrUndefinedOrHoleToTagged(), value);
 #else
             value = graph()->NewNode(simplified()->ChangeFloat64HoleToTagged(),
                                      value);
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
           } else {
             value = effect = graph()->NewNode(
                 simplified()->CheckFloat64Hole(
@@ -3729,7 +3733,7 @@ JSNativeContextSpecialization::BuildElementAccess(
       value = effect = graph()->NewNode(
           simplified()->CheckSmi(FeedbackSource()), value, effect, control);
     } else if (IsDoubleElementsKind(elements_kind)) {
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       if (elements_kind == HOLEY_DOUBLE_ELEMENTS) {
         value = effect = graph()->NewNode(
             simplified()->CheckNumberOrUndefined(FeedbackSource()), value,
@@ -3739,15 +3743,15 @@ JSNativeContextSpecialization::BuildElementAccess(
             simplified()->NumberSilenceNaN(SilenceNanMode::kPreserveUndefined),
             value);
       } else {
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
         value = effect =
             graph()->NewNode(simplified()->CheckNumber(FeedbackSource()), value,
                              effect, control);
         // Make sure we do not store signalling NaNs into double arrays.
         value = graph()->NewNode(simplified()->NumberSilenceNaN(), value);
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       }
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
     }
 
     // Ensure that copy-on-write backing store is writable.

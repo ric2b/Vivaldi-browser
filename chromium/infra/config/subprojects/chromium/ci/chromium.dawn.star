@@ -142,7 +142,6 @@ gpu.ci.linux_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     gn_args = gn_args.config(
@@ -182,7 +181,6 @@ gpu.ci.linux_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     gn_args = gn_args.config(
@@ -225,7 +223,6 @@ gpu.ci.linux_builder(
         android_config = builder_config.android_config(
             config = "base_config",
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     gn_args = gn_args.config(
@@ -267,7 +264,6 @@ gpu.ci.linux_builder(
         android_config = builder_config.android_config(
             config = "base_config",
         ),
-        build_gs_bucket = "chromium-dawn-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -310,7 +306,6 @@ ci.thin_tester(
         android_config = builder_config.android_config(
             config = "base_config",
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -395,7 +390,6 @@ ci.thin_tester(
         android_config = builder_config.android_config(
             config = "base_config",
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -473,7 +467,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -544,7 +537,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -587,7 +579,6 @@ gpu.ci.linux_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     gn_args = gn_args.config(
@@ -648,7 +639,6 @@ gpu.ci.linux_builder(
         android_config = builder_config.android_config(
             config = "base_config",
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     gn_args = gn_args.config(
@@ -691,7 +681,6 @@ gpu.ci.linux_builder(
         android_config = builder_config.android_config(
             config = "base_config",
         ),
-        build_gs_bucket = "chromium-dawn-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -735,7 +724,6 @@ ci.thin_tester(
         android_config = builder_config.android_config(
             config = "base_config",
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -821,7 +809,6 @@ ci.thin_tester(
         android_config = builder_config.android_config(
             config = "base_config",
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -904,7 +891,6 @@ ci.thin_tester(
         android_config = builder_config.android_config(
             config = "base_config",
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -974,6 +960,52 @@ ci.thin_tester(
 )
 
 ci.thin_tester(
+    name = "Dawn Android arm64 Release (Pixel 10)",
+    description_html = "Runs ToT Dawn tests on stable Pixel 10 configs",
+    parent = "ci/Dawn Android arm64 Builder",
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "android",
+                "dawn_top_of_tree",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "main_builder",
+            apply_configs = ["mb"],
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.ANDROID,
+        ),
+        android_config = builder_config.android_config(
+            config = "base_config",
+        ),
+        run_tests_serially = True,
+    ),
+    targets = targets.bundle(
+        targets = [
+            "gpu_noop_sleep_telemetry_test",
+        ],
+        mixins = [
+            "has_native_resultdb_integration",
+            "gpu_pixel_10_stable",
+        ],
+    ),
+    targets_settings = targets.settings(
+        browser_config = targets.browser_config.ANDROID_CHROMIUM,
+        os_type = targets.os_type.ANDROID,
+    ),
+    gardener_rotations = args.ignore_default(None),
+    console_view_entry = consoles.console_view_entry(
+        category = "ToT|Android",
+        short_name = "p10",
+    ),
+)
+
+ci.thin_tester(
     name = "Dawn Android arm64 Release (Samsung S24)",
     description_html = "Runs ToT Dawn tests on stable Samsung S24 configs",
     parent = "ci/Dawn Android arm64 Builder",
@@ -997,7 +1029,6 @@ ci.thin_tester(
         android_config = builder_config.android_config(
             config = "base_config",
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -1028,82 +1059,6 @@ ci.thin_tester(
     ),
 )
 
-gpu.ci.linux_builder(
-    name = "Dawn ChromeOS Skylab Release (volteer)",
-    description_html = "Runs ToT Dawn tests on Skylab-hosted volteer devices",
-    builder_spec = builder_config.builder_spec(
-        gclient_config = builder_config.gclient_config(
-            config = "chromium",
-            apply_configs = [
-                "chromeos",
-            ],
-        ),
-        chromium_config = builder_config.chromium_config(
-            config = "chromium",
-            apply_configs = [
-                "mb",
-            ],
-            build_config = builder_config.build_config.RELEASE,
-            target_arch = builder_config.target_arch.INTEL,
-            target_bits = 64,
-            target_platform = builder_config.target_platform.CHROMEOS,
-            target_cros_boards = [
-                "volteer",
-            ],
-        ),
-        run_tests_serially = True,
-        skylab_upload_location = builder_config.skylab_upload_location(
-            gs_bucket = "chromium-ci-skylab",
-            gs_extra = "chromeos_gpu",
-        ),
-    ),
-    gn_args = gn_args.config(
-        configs = [
-            "dawn_enable_opengles",
-            "gpu_tests",
-            "chromeos_device",
-            "volteer",
-            "ozone_headless",
-            "release_builder",
-            "try_builder",
-            "remoteexec",
-            "dcheck_off",
-            "no_symbols",
-            "is_skylab",
-            "chromeos",
-            "x64",
-        ],
-    ),
-    targets = targets.bundle(
-        targets = [
-            targets.bundle(
-                targets = [
-                    "dawn_chromeos_release_tests_volteer_skylab",
-                    "dawn_chromeos_release_telemetry_tests_volteer_skylab",
-                ],
-            ),
-        ],
-        additional_compile_targets = [
-            "chromiumos_preflight",
-        ],
-    ),
-    targets_settings = targets.settings(
-        browser_config = targets.browser_config.CROS_CHROME,
-        os_type = targets.os_type.CROS,
-        use_android_merge_script_by_default = False,
-        use_swarming = False,
-    ),
-    # TODO(crbug.com/40942991): This config is experimental and currently
-    # is too difficult for gardeners to keep green.
-    gardener_rotations = args.ignore_default(None),
-    console_view_entry = consoles.console_view_entry(
-        category = "ChromeOS|Intel",
-        short_name = "vlt",
-    ),
-    execution_timeout = 6 * time.hour,
-    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CI,
-)
-
 ci.thin_tester(
     name = "Dawn Linux x64 Experimental Release (Intel UHD 630)",
     description_html = "Runs ToT Dawn tests on experimental Linux/Intel UHD 630 configs",
@@ -1122,7 +1077,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -1201,7 +1155,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -1245,7 +1198,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -1314,7 +1266,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -1365,7 +1316,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -1408,7 +1358,6 @@ gpu.ci.mac_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -1445,7 +1394,6 @@ gpu.ci.mac_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -1486,7 +1434,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -1531,7 +1478,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -1580,7 +1526,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -1623,7 +1568,6 @@ gpu.ci.mac_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     gn_args = gn_args.config(
@@ -1662,7 +1606,6 @@ gpu.ci.mac_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     gn_args = gn_args.config(
@@ -1706,7 +1649,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -1761,7 +1703,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -1815,7 +1756,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -1874,7 +1814,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -1933,7 +1872,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -1986,7 +1924,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -2041,7 +1978,6 @@ gpu.ci.windows_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -2087,7 +2023,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -2185,7 +2120,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -2260,7 +2194,6 @@ gpu.ci.windows_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     gn_args = gn_args.config(
@@ -2300,7 +2233,6 @@ gpu.ci.windows_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     gn_args = gn_args.config(
@@ -2344,7 +2276,6 @@ gpu.ci.windows_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -2393,7 +2324,6 @@ gpu.ci.windows_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -2445,7 +2375,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -2508,7 +2437,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -2552,7 +2480,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -2618,7 +2545,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -2679,7 +2605,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -2729,7 +2654,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -2785,7 +2709,6 @@ ci.thin_tester(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -2829,7 +2752,6 @@ gpu.ci.windows_builder(
             target_bits = 32,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     gn_args = gn_args.config(
@@ -2868,7 +2790,6 @@ gpu.ci.windows_builder(
             target_bits = 32,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     gn_args = gn_args.config(
@@ -2912,7 +2833,6 @@ ci.thin_tester(
             target_bits = 32,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -2966,7 +2886,6 @@ ci.thin_tester(
             target_bits = 32,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -3016,7 +2935,6 @@ ci.thin_tester(
             target_bits = 32,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -3082,7 +3000,6 @@ ci.thin_tester(
             target_bits = 32,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -3137,7 +3054,6 @@ ci.thin_tester(
             target_bits = 32,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(
@@ -3189,7 +3105,6 @@ ci.thin_tester(
             target_bits = 32,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-dawn-archive",
         run_tests_serially = True,
     ),
     targets = targets.bundle(

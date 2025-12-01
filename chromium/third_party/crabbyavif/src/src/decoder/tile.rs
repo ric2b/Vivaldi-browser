@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::decoder::*;
+use crate::internal_utils::sampletransform::*;
 use crate::*;
 
 use std::num::NonZero;
@@ -44,7 +45,7 @@ impl DecodeSample {
             None => {
                 let data = io.read(self.offset, size)?;
                 if data.len() != size {
-                    Err(AvifError::TruncatedData)
+                    AvifError::truncated_data()
                 } else {
                     Ok(data)
                 }
@@ -75,44 +76,6 @@ pub struct Overlay {
     pub height: u32,
     pub horizontal_offsets: Vec<i32>,
     pub vertical_offsets: Vec<i32>,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum SampleTransformUnaryOp {
-    // Unary operators. L is the operand.
-    Negation, // S = -L
-    Absolute, // S = |L|
-    Not,      // S = ~L
-    BSR,      // S = L<=0 ? 0 : truncate(log2(L)) (Bit Scan Reverse)
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum SampleTransformBinaryOp {
-    Sum,        // S = L + R
-    Difference, // S = L - R
-    Product,    // S = L * R
-    Quotient,   // S = R==0 ? L : truncate(L / R)
-    And,        // S = L & R
-    Or,         // S = L | R
-    Xor,        // S = L ^ R
-    Pow,        // S = L==0 ? 0 : truncate(pow(L, R))
-    Min,        // S = L<=R ? L : R
-    Max,        // S = L<=R ? R : L
-}
-
-#[derive(Debug)]
-pub enum SampleTransformToken {
-    Constant(i64),
-    ImageItem(usize), // item_idx in source items
-    UnaryOp(SampleTransformUnaryOp),
-    BinaryOp(SampleTransformBinaryOp),
-}
-
-#[derive(Debug, Default)]
-pub struct SampleTransform {
-    pub bit_depth: u8,
-    pub num_inputs: usize, // Number of input images.
-    pub tokens: Vec<SampleTransformToken>,
 }
 
 #[derive(Debug, Default)]
@@ -187,7 +150,7 @@ impl Tile {
         size_hint: u64,
     ) -> AvifResult<Tile> {
         if size_hint != 0 && item.size as u64 > size_hint {
-            return Err(AvifError::BmffParseFailed("exceeded size_hint".into()));
+            return AvifError::bmff_parse_failed("exceeded size_hint");
         }
         let mut tile = Tile {
             width: item.width,
@@ -211,9 +174,9 @@ impl Tile {
                 if a1lx[i] > 0 {
                     // >= instead of > because there must be room for the last layer
                     if a1lx[i] >= remaining_size {
-                        return Err(AvifError::BmffParseFailed(format!(
+                        return AvifError::bmff_parse_failed(format!(
                             "a1lx layer index [{i}] does not fit in item size"
-                        )));
+                        ));
                     }
                     layer_sizes[i] = a1lx[i];
                     remaining_size -= a1lx[i];
@@ -256,9 +219,7 @@ impl Tile {
                 // Optimization: If we're selecting a layer that doesn't require the entire image's
                 // payload (hinted via the a1lx box).
                 if layer_id >= layer_count {
-                    return Err(AvifError::InvalidImageGrid(
-                        "lsel layer index not found in a1lx.".into(),
-                    ));
+                    return AvifError::invalid_image_grid("lsel layer index not found in a1lx.");
                 }
                 let layer_id_plus_1 = layer_id + 1;
                 for layer_size in layer_sizes.iter().take(layer_id_plus_1) {
@@ -281,9 +242,9 @@ impl Tile {
             // user.
             if let Some(limit) = image_count_limit {
                 if layer_count as u32 > limit.get() {
-                    return Err(AvifError::BmffParseFailed(
-                        "exceeded image_count_limit (progressive)".into(),
-                    ));
+                    return AvifError::bmff_parse_failed(
+                        "exceeded image_count_limit (progressive)",
+                    );
                 }
             }
             tile.input.all_layers = true;
@@ -346,14 +307,10 @@ impl Tile {
                 // Figure out how many samples are in this chunk.
                 let sample_count = sample_table.get_sample_count_of_chunk(chunk_index as u32);
                 if sample_count == 0 {
-                    return Err(AvifError::BmffParseFailed(
-                        "chunk with 0 samples found".into(),
-                    ));
+                    return AvifError::bmff_parse_failed("chunk with 0 samples found");
                 }
                 if sample_count > limit {
-                    return Err(AvifError::BmffParseFailed(
-                        "exceeded image_count_limit".into(),
-                    ));
+                    return AvifError::bmff_parse_failed("exceeded image_count_limit");
                 }
                 limit -= sample_count;
             }
@@ -364,9 +321,7 @@ impl Tile {
             // Figure out how many samples are in this chunk.
             let sample_count = sample_table.get_sample_count_of_chunk(chunk_index as u32);
             if sample_count == 0 {
-                return Err(AvifError::BmffParseFailed(
-                    "chunk with 0 samples found".into(),
-                ));
+                return AvifError::bmff_parse_failed("chunk with 0 samples found");
             }
 
             let mut sample_offset = *chunk_offset;
@@ -374,7 +329,7 @@ impl Tile {
                 let sample_size = sample_table.sample_size(sample_size_index)?;
                 let sample_size_hint = checked_add!(sample_offset, sample_size as u64)?;
                 if size_hint != 0 && sample_size_hint > size_hint {
-                    return Err(AvifError::BmffParseFailed("exceeded size_hint".into()));
+                    return AvifError::bmff_parse_failed("exceeded size_hint");
                 }
                 let sample = DecodeSample {
                     item_id: 0,
@@ -395,9 +350,7 @@ impl Tile {
             let index = usize_from_u32(*sync_sample_number)?;
             // sample_table.sync_samples is 1-based.
             if index == 0 || index > tile.input.samples.len() {
-                return Err(AvifError::BmffParseFailed(format!(
-                    "invalid sync sample number {index}"
-                )));
+                return AvifError::bmff_parse_failed(format!("invalid sync sample number {index}"));
             }
             tile.input.samples[index - 1].sync = true;
         }

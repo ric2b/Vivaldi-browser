@@ -192,9 +192,6 @@ class ProfileKeyedServiceBrowserTest : public InProcessBrowserTest {
 #if BUILDFLAG(IS_WIN)
           switches::kEnableBoundSessionCredentials,
 #endif  // BUILDFLAG(IS_WIN)
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-          features::kEnableCertManagementUIV2Write,
-#endif
           network::features::kBrowsingTopics,
           blink::features::kBuiltInAIAPI,
           extensions_features::kForceWebRequestProxyForTest,
@@ -265,6 +262,10 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "LocalPresentationManager",
     "OmniboxInputWatcher",
     "OmniboxSuggestionsWatcher",
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+    "PasswordManagerBlocklist",
+#endif
     "PasswordManagerInternalsService",
     "PasswordRequirementsServiceFactory",
     "PolicyBlocklist",
@@ -311,6 +312,10 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "HasEnrolledInstrumentQuery",
     "OmniboxInputWatcher",
     "OmniboxSuggestionsWatcher",
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+    "PasswordManagerBlocklist",
+#endif
     "PolicyBlocklist",
     "PolicyClipboardRestriction",
 #if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
@@ -379,6 +384,7 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "BluetoothLowEnergyConnectionManager",
     "BluetoothLowEnergyNotifySessionManager",
     "BluetoothSocketEventDispatcher",
+    "BrowserManagerService",
     "BrowsingDataLifetimeManager",
     "BrowsingDataRemover",
     "CookieSettings",
@@ -407,9 +413,6 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
 #endif
     "HidDeviceManager",
     "HostContentSettingsMap",
-#if BUILDFLAG(IS_CHROMEOS)
-    "IsolatedWebAppURLLoaderShutdownNotifierFactory",
-#endif
     "LiveCaptionController",
 #if !BUILDFLAG(IS_CHROMEOS)
     // TODO(crbug.com/374351946): Investigate if this is necessary on CrOS.
@@ -431,6 +434,7 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "PrivacySandboxSettings",
     "ProcessManager",
     "ProfileNetworkContextService",
+    "ReadAnythingServiceFactory",
     "RealtimeReportingClient",
     "ReduceAcceptLanguage",
     "RendererUpdater",
@@ -582,7 +586,6 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "AutofillPrivateEventRouter",
     "AutofillStrikeDatabase",
     "BackgroundContentsService",
-    "BackgroundFetchService",
     "BackgroundSyncService",
     "Blocklist",
     "BluetoothAPI",
@@ -629,7 +632,9 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
 #endif
     "DeveloperPrivateAPI",
     "DeviceInfoSyncService",
+#if !BUILDFLAG(IS_CHROMEOS)
     "DownloadCoreService",
+#endif
     "EventRouter",
     "EnterpriseManagementService",
     "ExtensionActionDispatcher",
@@ -763,6 +768,9 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "ProcessMap",
     "ProcessesAPI",
     "ProfileNetworkContextService",
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+    "ProtocolHandlersManager",
+#endif // BUILDFLAG(ENABLE_EXTENSIONS)
     "ProtocolHandlerRegistry",
     "RealtimeReportingClient",
     "RegionalCapabilitiesService",

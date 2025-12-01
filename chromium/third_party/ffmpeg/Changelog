@@ -2,7 +2,12 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>:
+
+
+version 8.0:
+- Whisper filter
 - Drop support for OpenSSL < 1.1.0
+- Enable TLS peer certificate verification by default (on next major version bump)
 - yasm support dropped, users need to use nasm
 - VVC VAAPI decoder
 - RealVideo 6.0 decoder
@@ -22,7 +27,16 @@ version <next>:
 - G.728 decoder
 - pad_cuda filter
 - Sanyo LD-ADPCM decoder
-- APV in MP4/ISOBMFF demuxing
+- APV in MP4/ISOBMFF muxing and demuxing
+- OpenHarmony hardware decoder/encoder
+- Colordetect filter
+- Add vf_scale_d3d11 filter
+- No longer disabling GCC autovectorization, on X86, ARM and AArch64
+- VP9 Vulkan hwaccel
+- AV1 Vulkan encoder
+- ProRes RAW decoder
+- ProRes RAW Vulkan hwaccel
+- ffprobe -codec option
 
 
 version 7.1:
@@ -153,6 +167,7 @@ version 6.1:
   variable-fields elements within the same parent element
 - ffprobe -output_format option added as an alias of -of
 
+# codespell:off
 
 version 6.0:
 - Radiance HDR image support

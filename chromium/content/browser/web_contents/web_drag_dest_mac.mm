@@ -35,6 +35,7 @@
 #include "ui/gfx/geometry/point.h"
 
 #include "app/vivaldi_apptools.h"
+#include "ui/content/vivaldi_event_hooks.h"
 
 using blink::DragOperationsMask;
 using content::DropData;
@@ -405,6 +406,10 @@ void DropCompletionCallback(WebDragDest* drag_dest,
   }
   _dropDataUnfiltered.reset();
   _dropDataFiltered.reset();
+
+  VivaldiEventHooks::HandleDragEnd(_webContents, false,
+                                   transformedPt.x(),
+                                   transformedPt.y());
 
   return YES;
 }

@@ -271,54 +271,49 @@ void LoadRulesGroup(RuleGroup group,
   if (active_exception_list &&
       active_exception_list >= RuleManager::kFirstExceptionList &&
       active_exception_list <= RuleManager::kLastExceptionList) {
-    load_result.active_exceptions_lists[static_cast<size_t>(group)] =
+    load_result.active_exceptions_lists[group] =
         RuleManager::ExceptionsList(active_exception_list.value());
   }
 
   base::Value::List* process_list = rule_group_dict.FindList(kProcessListKey);
   if (process_list)
-    load_result
-        .exceptions[static_cast<size_t>(group)][RuleManager::kProcessList] =
+    load_result.exceptions[group][RuleManager::kProcessList] =
         LoadStringSetFromList(*process_list);
 
   base::Value::List* exempt_list = rule_group_dict.FindList(kExemptListKey);
   if (exempt_list)
-    load_result
-        .exceptions[static_cast<size_t>(group)][RuleManager::kExemptList] =
+    load_result.exceptions[group][RuleManager::kExemptList] =
         LoadStringSetFromList(*exempt_list);
 
   std::string* index_checksum = rule_group_dict.FindString(kIndexChecksum);
   if (index_checksum)
-    load_result.index_checksums[static_cast<size_t>(group)] =
-        std::move(*index_checksum);
+    load_result.index_checksums[group] = std::move(*index_checksum);
 
   base::Value::List* sources_list = rule_group_dict.FindList(kRuleSourcesKey);
   if (sources_list)
-    load_result.rule_sources[static_cast<size_t>(group)] =
-        LoadSourcesList(*sources_list);
+    load_result.rule_sources[group] = LoadSourcesList(*sources_list);
 
   base::Value::List* known_sources_list =
       rule_group_dict.FindList(kKnownSourcesKey);
   if (known_sources_list)
-    load_result.known_sources[static_cast<size_t>(group)] =
-        LoadKnownSources(*known_sources_list);
+    load_result.known_sources[group] = LoadKnownSources(*known_sources_list);
 
   base::Value::List* deleted_presets_list =
       rule_group_dict.FindList(kDeletedPresetsKey);
   if (deleted_presets_list)
-    load_result.deleted_presets[static_cast<size_t>(group)] =
+    load_result.deleted_presets[group] =
         LoadUuidSetFromList(*deleted_presets_list);
 
   base::Value* blocked_domains_counters =
       rule_group_dict.Find(kBlockedDomainsCountersKey);
   if (blocked_domains_counters)
-    load_result.blocked_domains_counters[static_cast<size_t>(group)] =
+    load_result.blocked_domains_counters[group] =
         LoadCounters(*blocked_domains_counters);
 
   base::Value* blocked_for_origin_counters =
       rule_group_dict.Find(kBlockedForOriginCountersKey);
   if (blocked_for_origin_counters)
-    load_result.blocked_for_origin_counters[static_cast<size_t>(group)] =
+    load_result.blocked_for_origin_counters[group] =
         LoadCounters(*blocked_for_origin_counters);
 }
 

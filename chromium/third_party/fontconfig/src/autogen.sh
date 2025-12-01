@@ -29,8 +29,8 @@ srcdir=`dirname $0`
 test -z "$srcdir" && srcdir=.
 
 case "$1" in
---noconf*) 
-    	AUTOGEN_SUBDIR_MODE="true"
+--noconf*)
+	AUTOGEN_SUBDIR_MODE="true"
 	shift
 	;;
 esac
@@ -60,7 +60,7 @@ DIE=0
 
 have_libtool=false
 if $LIBTOOLIZE --version < /dev/null > /dev/null 2>&1 ; then
-	libtool_version=`$LIBTOOLIZE --version | sed 's/^.* \([0-9][.][0-9.]*\)[^ ]*$/\1/'`
+	libtool_version=`$LIBTOOLIZE --version | sed 's/.*libtool) \([0-9][.][0-9.]*\).*$/\1/'`
 	case $libtool_version in
 	    1.4*|1.5*|1.6*|1.7*|2*)
 		have_libtool=true
@@ -118,9 +118,9 @@ $AUTORECONF $AUTORECONF_FLAGS
 cd $ORIGDIR
 
 if test -z "$AUTOGEN_SUBDIR_MODE" -a -z "$NOCONFIGURE"; then
-	echo Running $srcdir/configure "$@"
+        echo Running $srcdir/configure "$@"
         $srcdir/configure "$@"
 
-        echo 
+        echo
         echo "Now type 'make' to compile $PROJECT."
 fi

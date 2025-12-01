@@ -70,6 +70,7 @@ class ShaderModuleBase;
 class SwapChainBase;
 class TextureBase;
 class TextureViewBase;
+class TexelBufferViewBase;
 
 class DeviceBase;
 

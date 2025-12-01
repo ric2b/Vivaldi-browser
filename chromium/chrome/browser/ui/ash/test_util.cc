@@ -17,7 +17,7 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
-#include "chrome/browser/ui/views/frame/browser_non_client_frame_view_chromeos.h"
+#include "chrome/browser/ui/views/frame/browser_frame_view_chromeos.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_tester.h"
@@ -46,7 +46,7 @@ void ChromeOSBrowserUITest::TearDownOnMainThread() {
 }
 
 bool ChromeOSBrowserUITest::InTabletMode() {
-  return display::Screen::GetScreen()->InTabletMode();
+  return display::Screen::Get()->InTabletMode();
 }
 
 void ChromeOSBrowserUITest::EnterTabletMode() {
@@ -96,7 +96,7 @@ void ChromeOSBrowserUITest::SnapWindow(aura::Window* window,
 }
 
 void ChromeOSBrowserUITest::PinWindow(aura::Window* window, bool trusted) {
-  ::PinWindow(window, trusted);
+  ash::PinWindow(window, trusted);
 }
 
 bool ChromeOSBrowserUITest::IsIsShelfVisibleSupported() {
@@ -162,10 +162,10 @@ void ChromeOSBrowserUITest::ExitTabFullscreenMode(
   waiter.Wait();
 }
 
-BrowserNonClientFrameViewChromeOS* ChromeOSBrowserUITest::GetFrameViewChromeOS(
+BrowserFrameViewChromeOS* ChromeOSBrowserUITest::GetFrameViewChromeOS(
     BrowserView* browser_view) {
   // We know we're using ChromeOS, so static cast.
-  auto* frame_view = static_cast<BrowserNonClientFrameViewChromeOS*>(
+  auto* frame_view = static_cast<BrowserFrameViewChromeOS*>(
       browser_view->GetWidget()->non_client_view()->frame_view());
   DCHECK(frame_view);
   return frame_view;

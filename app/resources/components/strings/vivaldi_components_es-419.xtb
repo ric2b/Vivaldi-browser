@@ -3,16 +3,6 @@
 <translationbundle lang="es-419">
 <translation id="3830627370375585318">Ajusta tu cortafuegos o antivirus para que permitan a Vivaldi
           acceder a la red.</translation>
-<translation id="4200102020577305737">Accede
-          al menú de Vivaldi &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Configuración LAN
-          y desmarca la casilla de verificación "Usar un servidor proxy para tu LAN".</translation>
 <translation id="4932161901409251843">Accede
           al menú de Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />

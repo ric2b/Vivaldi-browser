@@ -5,7 +5,7 @@ copyExternalImageToTexture from ImageData source.
 import { makeTestGroup } from '../../../common/framework/test_group.js';
 import {
   getBaseFormatForRegularTextureFormat,
-  kValidTextureFormatsForCopyE2T,
+  kPossibleValidTextureFormatsForCopyE2T,
 } from '../../format_info.js';
 import { TextureUploadingUtils, kCopySubrectInfo } from '../../util/copy_to_texture.js';
 
@@ -43,7 +43,7 @@ g.test('from_ImageData')
   .params(u =>
     u
       .combine('srcDoFlipYDuringCopy', [true, false])
-      .combine('dstColorFormat', kValidTextureFormatsForCopyE2T)
+      .combine('dstColorFormat', kPossibleValidTextureFormatsForCopyE2T)
       .combine('dstPremultiplied', [true, false])
       .beginSubcases()
       .combine('width', [1, 2, 4, 15, 255, 256])
@@ -55,6 +55,7 @@ g.test('from_ImageData')
   .fn(t => {
     const { width, height, dstColorFormat, dstPremultiplied, srcDoFlipYDuringCopy } = t.params;
     t.skipIfTextureFormatNotSupported(dstColorFormat);
+    t.skipIfTextureFormatPossiblyNotUsableWithCopyExternalImageToTexture(dstColorFormat);
 
     const testColors = kTestColorsAll;
 

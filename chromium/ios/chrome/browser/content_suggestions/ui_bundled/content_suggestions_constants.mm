@@ -57,7 +57,6 @@ bool IsSetUpListModuleType(ContentSuggestionsModuleType type) {
     case ContentSuggestionsModuleType::kInvalid:
     case ContentSuggestionsModuleType::kTabResumption:
     case ContentSuggestionsModuleType::kSafetyCheck:
-    case ContentSuggestionsModuleType::kParcelTracking:
     case ContentSuggestionsModuleType::kMostVisited:
     case ContentSuggestionsModuleType::kShortcuts:
     case ContentSuggestionsModuleType::kPlaceholder:
@@ -66,6 +65,8 @@ bool IsSetUpListModuleType(ContentSuggestionsModuleType type) {
     case ContentSuggestionsModuleType::kTipsWithProductImage:
     case ContentSuggestionsModuleType::kTips:
     case ContentSuggestionsModuleType::kShopCard:
+    case ContentSuggestionsModuleType::kAppBundlePromo:
+    case ContentSuggestionsModuleType::kDefaultBrowser:
       return false;
     case ContentSuggestionsModuleType::kSetUpListDefaultBrowser:
     case ContentSuggestionsModuleType::kSetUpListAutofill:
@@ -84,7 +85,6 @@ bool IsTipsModuleType(ContentSuggestionsModuleType type) {
     case ContentSuggestionsModuleType::kInvalid:
     case ContentSuggestionsModuleType::kTabResumption:
     case ContentSuggestionsModuleType::kSafetyCheck:
-    case ContentSuggestionsModuleType::kParcelTracking:
     case ContentSuggestionsModuleType::kMostVisited:
     case ContentSuggestionsModuleType::kShortcuts:
     case ContentSuggestionsModuleType::kPlaceholder:
@@ -96,6 +96,8 @@ bool IsTipsModuleType(ContentSuggestionsModuleType type) {
     case ContentSuggestionsModuleType::kSendTabPromo:
     case ContentSuggestionsModuleType::kSetUpListAllSet:
     case ContentSuggestionsModuleType::kShopCard:
+    case ContentSuggestionsModuleType::kAppBundlePromo:
+    case ContentSuggestionsModuleType::kDefaultBrowser:
       return false;
   }
 }

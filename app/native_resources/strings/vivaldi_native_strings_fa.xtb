@@ -21,7 +21,6 @@
 <translation id="1759842336958782510">کروم</translation>
 <translation id="1769904678986817931">خواص تصویر...</translation>
 <translation id="1920297417712412573">رونوشت گرفتن در بخش یادداشت‌ها</translation>
-<translation id="1921101374471252440">&amp;بارگذاری مجدد تصویر</translation>
 <translation id="1924750141060565109">چشم‌انداز ۱۵</translation>
 <translation id="19598411548897379">عمومی</translation>
 <translation id="1973351931613083086">پخش خودکار</translation>
@@ -35,7 +34,6 @@
 <translation id="2501278716633472235">بازگشت</translation>
 <translation id="2612127540243995147">آماده‌ی نصب. ویوالدی بسته شده و مجدداً راه‌اندازی خواهد شد.</translation>
 <translation id="2613387515621326337">نمایش وب‌سایت به‌روزرسانی</translation>
-<translation id="2647368062414805334">متأسفانه، تنظیمات Edge در هنگام اجرای مرورگر در دسترس نیست. برای وارد کردن این تنظیمات به ویوالدی، کارهای خود را ذخیره و تمام پنجره‌های Edge را ببندید. سپس بر روی ادامه کلیک کنید.</translation>
 <translation id="2721334646575696520">مرورگر Microsoft Edge</translation>
 <translation id="2848085334714181751">حیوان ۳</translation>
 <translation id="2873951654529031587">زباله</translation>
@@ -44,7 +42,6 @@
 <translation id="2953943267837858202">پخش خودکار ویدیو مجاز نیست</translation>
 <translation id="2977472760057091832">گشودن پیوند در پنجره‌ی خصوصی جدید</translation>
 <translation id="2989805286512600854">در زبانه جدیدی باز کن</translation>
-<translation id="3027988479108856431">متأسفانه، تنظیمات Yandex در هنگام اجرای مرورگر در دسترس نیست. برای وارد کردن این تنظیمات به ویوالدی، کارهای خود را ذخیره و تمام پنجره‌های Yandex را ببندید. سپس بر روی ادامه کلیک کنید.</translation>
 <translation id="3084011186245865060">چشم‌انداز ۶</translation>
 <translation id="3093931836425623631">ویوالدی توسط پروژه منبع باز کرومیوم و سایر نرم‌افزارهای منبع باز تهیه شده است.</translation>
 <translation id="3127383884976966729">حیوان ۷</translation>
@@ -57,6 +54,7 @@
 <translation id="3334610655141903168">(بدون عنوان)</translation>
 <translation id="3372505110412186107">در حال حاضر، ویوالدی <ph name="VERSION" /> جدیدترین نسخه‌ی موجود است.</translation>
 <translation id="3383198080133834965">شما آخرین نسخه را دارید!</translation>
+<translation id="3402602684546832928">انتخاب پرونده‌ی نشانک Opera</translation>
 <translation id="3451317331714872347">چشم‌انداز ۸</translation>
 <translation id="3457498675806041407">تأیید خروج</translation>
 <translation id="3470981972195599598">ویوالدی <ph name="VERSION" /> نصب شده و پس از راه‌اندازی مجدد مرورگر، فعال می‌گردد.</translation>
@@ -72,7 +70,6 @@
 <translation id="3732157130969736834">لینک نشانک</translation>
 <translation id="3732388226447288666">حیوان ۲</translation>
 <translation id="3732439195215136813">حیوان ۵</translation>
-<translation id="3795800845758778870">متأسفانه، تنظیمات Brave در هنگام اجرای مرورگر در دسترس نیست. برای وارد کردن این تنظیمات به ویوالدی، کارهای خود را ذخیره و تمام پنجره‌های Brave را ببندید. سپس بر روی ادامه کلیک کنید.</translation>
 <translation id="3822431842304177896">جدا کننده‌ی جدید</translation>
 <translation id="3832132597516774400">چشم‌انداز ۵</translation>
 <translation id="3894751534882749287">اگر به هر صورت مایل به مشاهده‌ی این صفحه هستید، می‌توانید از طریق پنجره‌ی مسدودساز ردیاب و یا کلیک بر روی دکمه‌ی اجازه، سطح محافظت از ردیابی آن را تغییر دهید</translation>
@@ -119,10 +116,10 @@
 <translation id="5770433027661640693">چشم‌انداز ۱۰</translation>
 <translation id="5857090052475505287">پوشه‌ی جدید</translation>
 <translation id="588258955323874662">تمام صفحه</translation>
-<translation id="5916080360077521750">متأسفانه، تنظیمات کروم در هنگام اجرای مرورگر در دسترس نیست. برای وارد کردن این تنظیمات به ویوالدی، کارهای خود را ذخیره و تمام پنجره‌های کروم را ببندید. سپس بر روی ادامه کلیک کنید.</translation>
 <translation id="6040143037577758943">بستن</translation>
 <translation id="6229528619562190452">برای به‌روزرسانی ویوالدی اینجا کلیک کنید.</translation>
 <translation id="6234173136417926046">استفاده از تصویر به‌عنوان پس‌زمینه‌ی صفحه‌ی آغاز</translation>
+<translation id="630690498669249215">پرونده‌ی نشانک‌های Opera</translation>
 <translation id="6339818817272922368">حساب محلی</translation>
 <translation id="6438786710866753178">چشم‌انداز ۴</translation>
 <translation id="6477028720702061455">انتخاب پوشه‌ی پروفایل اپرا برای وارد کردن</translation>
@@ -163,7 +160,6 @@
 <translation id="8539196077526389150">چشم‌انداز ۱۳</translation>
 <translation id="8562339533180097902">بستن و سپس نصب بلافاصله‌ی ویوالدی</translation>
 <translation id="8567452685425968223">در حال استخراج به‌روزرسانی...</translation>
-<translation id="8624587806981488221">&amp;بارگذاری مجدد تصویر</translation>
 <translation id="8651348004684669199">اضافه کردن زبانه فعال</translation>
 <translation id="8669345741879513971">هیولا ۱۰</translation>
 <translation id="867544375504146191">مرورگر Yandex</translation>

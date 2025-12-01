@@ -5,8 +5,6 @@
 #ifndef COMPONENTS_AD_BLOCKER_CONTENT_INTERSTITIAL_DOCUMENT_BLOCKED_CONTROLLER_CLIENT_H_
 #define COMPONENTS_AD_BLOCKER_CONTENT_INTERSTITIAL_DOCUMENT_BLOCKED_CONTROLLER_CLIENT_H_
 
-#include <memory>
-
 #include "components/security_interstitials/content/security_interstitial_controller_client.h"
 #include "url/gurl.h"
 

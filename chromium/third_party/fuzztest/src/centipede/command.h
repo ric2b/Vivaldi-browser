@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "absl/status/status.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 
 namespace fuzztest::internal {
@@ -124,8 +125,8 @@ class Command final {
   // by the command line, followed by the redirected stdout and stderr read
   // from `options_.out` and `options_.err` files, if any.
   void LogProblemInfo(std::string_view message) const;
-  // Just as `LogCrashInfo()`, but logging occurs only when the VLOG level (set
-  // via `--v` or its equivalents) is >= `min_vlog`.
+  // Just as `LogCrashInfo()`, but logging occurs only when the FUZZTEST_VLOG
+  // level (set via `--v` or its equivalents) is >= `min_vlog`.
   void VlogProblemInfo(std::string_view message, int vlog_level) const;
 
   const std::string path_;
@@ -134,6 +135,12 @@ class Command final {
 
   std::unique_ptr<ForkServerProps> fork_server_;
 };
+
+// Get the shared mutex for execution logging for preventing confusing
+// interlaced logs when multiple threads are logging at the same time. Note that
+// the printing all log content at once is not viable due to the single log line
+// length limit.
+absl::Mutex& GetExecutionLoggingMutex();
 
 }  // namespace fuzztest::internal
 

@@ -24,6 +24,7 @@ enum class SharingScenario {
   OmniboxMostVisitedEntry = 11,
   TabStripItem = 12,
   ShareInWebContextMenu = 13,
+  ShareInReaderMode = 14,
 
   // Vivaldi
   VivaldiNote,

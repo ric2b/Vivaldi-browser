@@ -806,7 +806,7 @@ static void packed16togbra16(const uint8_t *src, int srcStride,
                 }
             }
         }
-        for (i = 0; i < 4; i++)
+        for (i = 0; i < 4 && dst[i]; i++)
             dst[i] += dstStride[i] >> 1;
     }
 }
@@ -878,7 +878,7 @@ static void packed30togbra10(const uint8_t *src, int srcStride,
             }
             break;
         }
-        for (i = 0; i < 4; i++)
+        for (i = 0; i < 4 && dst[i]; i++)
             dst[i] += dstStride[i] >> 1;
     }
 }
@@ -912,7 +912,7 @@ static int Rgb16ToPlanarRgb16Wrapper(SwsInternal *c, const uint8_t *const src[],
         return srcSliceH;
     }
 
-    for(i=0; i<4; i++) {
+    for (i = 0; i < 4 && dst[i]; i++) {
         dst2013[i] += stride2013[i] * srcSliceY / 2;
         dst1023[i] += stride1023[i] * srcSliceY / 2;
     }
@@ -2676,10 +2676,13 @@ void ff_get_unscaled_swscale(SwsInternal *c)
          isSemiPlanarYUV(srcFormat) == isSemiPlanarYUV(dstFormat) &&
          isSwappedChroma(srcFormat) == isSwappedChroma(dstFormat))))
     {
-        if (isPacked(c->opts.src_format))
+        if (isPacked(c->opts.src_format)) {
             c->convert_unscaled = packedCopyWrapper;
-        else /* Planar YUV or gray */
+        } else { /* Planar YUV or gray */
             c->convert_unscaled = planarCopyWrapper;
+            if (c->opts.dither != SWS_DITHER_NONE)
+                c->dst_slice_align = 8 << c->chrDstVSubSample;
+        }
     }
 
 #if ARCH_PPC

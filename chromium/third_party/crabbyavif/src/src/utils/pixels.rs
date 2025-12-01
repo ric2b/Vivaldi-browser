@@ -81,17 +81,17 @@ impl Pixels {
 
     pub(crate) fn resize(&mut self, size: usize, default: u16) -> AvifResult<()> {
         match self {
-            Pixels::Pointer(_) => return Err(AvifError::InvalidArgument),
-            Pixels::Pointer16(_) => return Err(AvifError::InvalidArgument),
+            Pixels::Pointer(_) => return AvifError::invalid_argument(),
+            Pixels::Pointer16(_) => return AvifError::invalid_argument(),
             Pixels::Buffer(buffer) => {
                 if buffer.capacity() < size && buffer.try_reserve_exact(size).is_err() {
-                    return Err(AvifError::OutOfMemory);
+                    return AvifError::out_of_memory();
                 }
                 buffer.resize(size, default as u8);
             }
             Pixels::Buffer16(buffer) => {
                 if buffer.capacity() < size && buffer.try_reserve_exact(size).is_err() {
-                    return Err(AvifError::OutOfMemory);
+                    return AvifError::out_of_memory();
                 }
                 buffer.resize(size, default);
             }
@@ -169,7 +169,7 @@ impl Pixels {
                 let mut cloned_buffer: Vec<u8> = vec![];
                 cloned_buffer
                     .try_reserve_exact(buffer.len())
-                    .or(Err(AvifError::OutOfMemory))?;
+                    .map_err(AvifError::map_out_of_memory)?;
                 cloned_buffer.extend_from_slice(buffer);
                 Ok(Pixels::Buffer(cloned_buffer))
             }
@@ -177,7 +177,7 @@ impl Pixels {
                 let mut cloned_buffer16: Vec<u16> = vec![];
                 cloned_buffer16
                     .try_reserve_exact(buffer16.len())
-                    .or(Err(AvifError::OutOfMemory))?;
+                    .map_err(AvifError::map_out_of_memory)?;
                 cloned_buffer16.extend_from_slice(buffer16);
                 Ok(Pixels::Buffer16(cloned_buffer16))
             }
@@ -192,14 +192,14 @@ impl Pixels {
                 let end = offset.checked_add(size).ok_or(AvifError::NoContent)?;
                 ptr.slice(offset..end)
             }
-            Pixels::Pointer16(_) => Err(AvifError::NoContent),
+            Pixels::Pointer16(_) => AvifError::no_content(),
             Pixels::Buffer(buffer) => {
                 let end = offset.checked_add(size).ok_or(AvifError::NoContent)?;
                 let range = offset..end;
                 check_slice_range(buffer.len(), &range)?;
                 Ok(&buffer[range])
             }
-            Pixels::Buffer16(_) => Err(AvifError::NoContent),
+            Pixels::Buffer16(_) => AvifError::no_content(),
         }
     }
 
@@ -211,14 +211,14 @@ impl Pixels {
                 let end = offset.checked_add(size).ok_or(AvifError::NoContent)?;
                 ptr.slice_mut(offset..end)
             }
-            Pixels::Pointer16(_) => Err(AvifError::NoContent),
+            Pixels::Pointer16(_) => AvifError::no_content(),
             Pixels::Buffer(buffer) => {
                 let end = offset.checked_add(size).ok_or(AvifError::NoContent)?;
                 let range = offset..end;
                 check_slice_range(buffer.len(), &range)?;
                 Ok(&mut buffer[range])
             }
-            Pixels::Buffer16(_) => Err(AvifError::NoContent),
+            Pixels::Buffer16(_) => AvifError::no_content(),
         }
     }
 
@@ -226,12 +226,12 @@ impl Pixels {
         let offset: usize = usize_from_u32(offset)?;
         let size: usize = usize_from_u32(size)?;
         match self {
-            Pixels::Pointer(_) => Err(AvifError::NoContent),
+            Pixels::Pointer(_) => AvifError::no_content(),
             Pixels::Pointer16(ptr) => {
                 let end = offset.checked_add(size).ok_or(AvifError::NoContent)?;
                 ptr.slice(offset..end)
             }
-            Pixels::Buffer(_) => Err(AvifError::NoContent),
+            Pixels::Buffer(_) => AvifError::no_content(),
             Pixels::Buffer16(buffer) => {
                 let end = offset.checked_add(size).ok_or(AvifError::NoContent)?;
                 let range = offset..end;
@@ -245,12 +245,12 @@ impl Pixels {
         let offset: usize = usize_from_u32(offset)?;
         let size: usize = usize_from_u32(size)?;
         match self {
-            Pixels::Pointer(_) => Err(AvifError::NoContent),
+            Pixels::Pointer(_) => AvifError::no_content(),
             Pixels::Pointer16(ptr) => {
                 let end = offset.checked_add(size).ok_or(AvifError::NoContent)?;
                 ptr.slice_mut(offset..end)
             }
-            Pixels::Buffer(_) => Err(AvifError::NoContent),
+            Pixels::Buffer(_) => AvifError::no_content(),
             Pixels::Buffer16(buffer) => {
                 let end = offset.checked_add(size).ok_or(AvifError::NoContent)?;
                 let range = offset..end;

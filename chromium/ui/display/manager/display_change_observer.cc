@@ -173,7 +173,8 @@ std::optional<gfx::RoundedCornersF> ParsePanelRadiiFromCommandLine() {
 
   std::optional<base::Value> display_switch_value = base::JSONReader::Read(
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kDisplayProperties));
+          switches::kDisplayProperties),
+      base::JSON_PARSE_CHROMIUM_EXTENSIONS);
 
   if (!display_switch_value.has_value()) {
     return std::nullopt;
@@ -285,8 +286,7 @@ MultipleDisplayState DisplayChangeObserver::GetStateForDisplayIds(
     return MULTIPLE_DISPLAY_STATE_SINGLE;
   DisplayIdList list =
       GenerateDisplayIdList(display_states, &DisplaySnapshot::display_id);
-  return display_manager_->ShouldSetMirrorModeOn(
-             list, /*should_check_hardware_mirroring=*/true)
+  return display_manager_->ShouldSetMirrorModeOn(list)
              ? MULTIPLE_DISPLAY_STATE_MULTI_MIRROR
              : MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED;
 }

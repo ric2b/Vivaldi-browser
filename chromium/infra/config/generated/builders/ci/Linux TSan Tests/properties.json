@@ -7,10 +7,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux TSan Builder",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-memory-archive",
               "builder_group": "chromium.memory",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_chromium_config": {
@@ -31,10 +30,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux TSan Tests",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-memory-archive",
               "builder_group": "chromium.memory",
               "execution_mode": "TEST",
               "legacy_chromium_config": {
@@ -52,7 +50,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Linux TSan Builder",
-                "project": "chromium-m140"
+                "project": "chromium-m142"
               }
             }
           }
@@ -62,7 +60,7 @@
         {
           "bucket": "ci",
           "builder": "Linux TSan Tests",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         }
       ],
       "mirroring_builder_group_and_names": [

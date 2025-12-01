@@ -10,14 +10,14 @@ import android.view.View;
 import android.view.Window;
 
 import androidx.annotation.ColorInt;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.content.ContextCompat;
 
 import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.base.supplier.OneshotSupplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.layouts.LayoutManager;
@@ -28,6 +28,8 @@ import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.DestroyObserver;
 import org.chromium.chrome.browser.lifecycle.TopResumedActivityChangedObserver;
 import org.chromium.chrome.browser.ntp.NewTabPage;
+import org.chromium.chrome.browser.ntp_customization.NtpCustomizationConfigManager;
+import org.chromium.chrome.browser.ntp_customization.NtpCustomizationUtils.NtpBackgroundImageType;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownScrollListener;
 import org.chromium.chrome.browser.status_indicator.StatusIndicatorCoordinator;
@@ -42,27 +44,28 @@ import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator;
 import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderUtils;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
-import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeSystemBarColorHelper;
 import org.chromium.components.browser_ui.widget.scrim.ScrimProperties;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.edge_to_edge.EdgeToEdgeSystemBarColorHelper;
 import org.chromium.ui.util.ColorUtils;
 
-import org.chromium.chrome.browser.ChromeApplicationImpl;
-import org.vivaldi.browser.common.VivaldiColorUtils;
+// Vivaldi
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.vivaldi.browser.speeddial.SpeedDialPage;
 import org.vivaldi.browser.themes.VivaldiAccentColor;
 
-// Vivaldi
+import org.chromium.build.BuildConfig;
 import org.chromium.components.browser_ui.styles.ChromeColors;
+import org.vivaldi.browser.ui.system.VivaldiSystemBarColorController;
 
 /**
  * Maintains the status bar color for a {@link Window}.
  *
  * <p>TODO(crbug.com/40915553): Prevent initialization of StatusBarColorController for automotive.
  */
+@NullMarked
 public class StatusBarColorController
         implements DestroyObserver,
                 StatusIndicatorCoordinator.StatusIndicatorObserver,
@@ -76,17 +79,16 @@ public class StatusBarColorController
     /** Provides the base status bar color. */
     public interface StatusBarColorProvider {
         /**
-         * @return The base status bar color to override default colors used in the
-         *         {@link StatusBarColorController}. If this returns
-         *         {@link #DEFAULT_STATUS_BAR_COLOR}, {@link StatusBarColorController} will use the
-         *         default status bar color.
-         *         If this returns a color other than {@link #UNDEFINED_STATUS_BAR_COLOR} and
-         *         {@link #DEFAULT_STATUS_BAR_COLOR}, the {@link StatusBarColorController} will
-         *         always use the color provided by this method to adjust the status bar color.
-         *         This color may be used as-is or adjusted due to a scrim overlay.
+         * @return The base status bar color to override default colors used in the {@link
+         *     StatusBarColorController}. If this returns {@link #DEFAULT_STATUS_BAR_COLOR}, {@link
+         *     StatusBarColorController} will use the default status bar color. If this returns a
+         *     color other than {@link #UNDEFINED_STATUS_BAR_COLOR} and {@link
+         *     #DEFAULT_STATUS_BAR_COLOR}, the {@link StatusBarColorController} will always use the
+         *     color provided by this method to adjust the status bar color. This color may be used
+         *     as-is or adjusted due to a scrim overlay.
          */
         @ColorInt
-        int getBaseStatusBarColor(Tab tab);
+        int getBaseStatusBarColor(@Nullable Tab tab);
     }
 
     private final Window mWindow;
@@ -103,11 +105,12 @@ public class StatusBarColorController
     private final @ColorInt int mIncognitoActiveOmniboxColor;
     private final @ColorInt int mStandardScrolledOmniboxColor;
     private final @ColorInt int mIncognitoScrolledOmniboxColor;
-    private final @ColorInt int mBackgroundColorForNtp;
     private final ObservableSupplier<Integer> mOverviewColorSupplier;
     private final Callback<Integer> mOverviewColorObserver = ignored -> updateStatusBarColor();
+    private final @Nullable DesktopWindowStateManager mDesktopWindowStateManager;
     private boolean mToolbarColorChanged;
     private @ColorInt int mToolbarColor;
+    private @ColorInt int mBackgroundColorForNtp;
 
     private @Nullable TabModelSelector mTabModelSelector;
     private CallbackController mCallbackController = new CallbackController();
@@ -129,12 +132,9 @@ public class StatusBarColorController
     private boolean mAllowToolbarColorOnTablets;
 
     // Desktop window states.
-    private DesktopWindowStateManager mDesktopWindowStateManager;
     private boolean mIsTopResumedActivity;
 
-    // Vivaldi
-    private boolean mAnimateTransition;
-    private boolean mIsInOverviewMode;
+    private NtpCustomizationConfigManager.@Nullable HomepageStateListener mHomepageStateListener;
 
     private final LayoutStateObserver mLayoutStateObserver =
             new LayoutStateObserver() {
@@ -143,47 +143,12 @@ public class StatusBarColorController
                     if (layoutType != LayoutType.TAB_SWITCHER) {
                         return;
                     }
-                    mIsInOverviewMode = false;
-                    updateStatusBarColor();
-                    // Note(david@vivaldi.com): After finish hiding turn off the animation.
-                    mAnimateTransition = false;
-                }
-
-                /** Vivaldi */
-                @Override
-                public void onStartedHiding(@LayoutType int layoutType) {
-                    if (layoutType != LayoutType.TAB_SWITCHER) {
-                        return;
-                    }
-                    mAnimateTransition = true;
-                    mIsInOverviewMode = false;
                     updateStatusBarColor();
                 }
-
-                /** Vivaldi */
-                @Override
-                public void onFinishedShowing(@LayoutType int layoutType) {
-                    if (layoutType != LayoutType.TAB_SWITCHER) {
-                        return;
-                    }
-                    // No more animation required once we are done showing the tab switcher.
-                    mAnimateTransition = false;
-                }
-
-                /** Vivaldi */
-                @Override
-                public void onStartedShowing(@LayoutType int layoutType) {
-                    if (layoutType != LayoutType.TAB_SWITCHER) {
-                        return;
-                    }
-                    mIsInOverviewMode = true;
-                    // Note(david@vivaldi.com): We recalculate the status bar color when in overview
-                    // mode. Also indicating that we about to animate the color transition.
-                    mAnimateTransition = true;
-                    updateStatusBarColor();
-                }
-                // End Vivaldi
             };
+
+    // Vivaldi
+    private final VivaldiSystemBarColorController mVivaldiSystemBarColorController;
 
     /**
      * Constructs a StatusBarColorController.
@@ -197,8 +162,9 @@ public class StatusBarColorController
      * @param tabProvider The {@link ActivityTabProvider} to get current tab of the activity.
      * @param topUiThemeColorProvider The {@link ThemeColorProvider} for top UI.
      * @param edgeToEdgeSystemBarColorHelper Draws status bar color for Edge to Edge.
-     * @param desktopWindowStateManagerSupplier Supplier to retrieve desktop window information.
+     * @param desktopWindowStateManager Instance to retrieve desktop window information.
      * @param overviewColorSupplier Notifies when the overview color changes.
+     * @param supportEdgeToEdge Whether to support making NTPs edge-to-edge.
      */
     public StatusBarColorController(
             Window window,
@@ -210,8 +176,9 @@ public class StatusBarColorController
             ActivityTabProvider tabProvider,
             TopUiThemeColorProvider topUiThemeColorProvider,
             EdgeToEdgeSystemBarColorHelper edgeToEdgeSystemBarColorHelper,
-            OneshotSupplier<DesktopWindowStateManager> desktopWindowStateManagerSupplier,
-            ObservableSupplier<Integer> overviewColorSupplier) {
+            @Nullable DesktopWindowStateManager desktopWindowStateManager,
+            ObservableSupplier<Integer> overviewColorSupplier,
+            boolean supportEdgeToEdge) {
         mWindow = window;
         mIsTablet = false; // We change color on tablet as well.
         mStatusBarColorProvider = statusBarColorProvider;
@@ -222,8 +189,11 @@ public class StatusBarColorController
                 SurfaceColorUpdateUtils.getDefaultThemeColor(context, /* isIncognito= */ false);
         mIncognitoDefaultThemeColor =
                 SurfaceColorUpdateUtils.getDefaultThemeColor(context, /* isIncognito= */ true);
+        var ntpCustomizationConfigManager = NtpCustomizationConfigManager.getInstance();
         mBackgroundColorForNtp =
-                ContextCompat.getColor(context, R.color.home_surface_background_color);
+                supportEdgeToEdge
+                        ? ntpCustomizationConfigManager.getBackgroundColor(context)
+                        : ContextCompat.getColor(context, R.color.home_surface_background_color);
         mStatusIndicatorColor = UNDEFINED_STATUS_BAR_COLOR;
 
         // TODO(b/41494931): Share code with LocationBarCoordinator's constructor.
@@ -233,9 +203,11 @@ public class StatusBarColorController
         mIncognitoActiveOmniboxColor = context.getColor(R.color.omnibox_dropdown_bg_incognito);
         // TODO(b/41494931): Share code with ToolbarPhone#getToolbarDefaultColor().
         mStandardScrolledOmniboxColor =
-                SurfaceColorUpdateUtils.getOmniboxBackgroundColor(
-                        context, /* isIncognito= */ false);
+                ContextCompat.getColor(context, R.color.toolbar_text_box_bg_color);
         mIncognitoScrolledOmniboxColor = context.getColor(R.color.omnibox_scrolled_bg_incognito);
+
+        // Vivaldi
+        mVivaldiSystemBarColorController = new VivaldiSystemBarColorController(mWindow);
 
         mStatusBarColorTabObserver =
                 new ActivityTabProvider.ActivityTabTabObserver(tabProvider) {
@@ -283,7 +255,7 @@ public class StatusBarColorController
                     }
 
                     @Override
-                    protected void onObservingDifferentTab(Tab tab, boolean hint) {
+                    protected void onObservingDifferentTab(@Nullable Tab tab, boolean hint) {
                         mCurrentTab = tab;
                         mShouldUpdateStatusBarColorForNtp = isStandardNtp();
 
@@ -312,6 +284,9 @@ public class StatusBarColorController
                                 assert layoutManager != null;
                                 mLayoutStateProvider = layoutManager;
                                 mLayoutStateProvider.addObserver(mLayoutStateObserver);
+                                // Vivaldi
+                                mVivaldiSystemBarColorController.setLayoutStateProvider(
+                                        mLayoutStateProvider);
                             }));
         }
 
@@ -319,18 +294,38 @@ public class StatusBarColorController
         mTopUiThemeColor = topUiThemeColorProvider;
         mToolbarColorChanged = false;
         mEdgeToEdgeSystemBarColorHelper = edgeToEdgeSystemBarColorHelper;
-        desktopWindowStateManagerSupplier.runSyncOrOnAvailable(
-                desktopWindowStateManager -> {
-                    mDesktopWindowStateManager = desktopWindowStateManager;
-                    mIsTopResumedActivity =
-                            !mDesktopWindowStateManager.isInUnfocusedDesktopWindow();
-                    updateStatusBarColor();
-                });
+        mDesktopWindowStateManager = desktopWindowStateManager;
+        if (mDesktopWindowStateManager != null) {
+            mIsTopResumedActivity = !mDesktopWindowStateManager.isInUnfocusedDesktopWindow();
+        }
         mOverviewColorSupplier.addObserver(mOverviewColorObserver);
+
+        if (supportEdgeToEdge) {
+            mHomepageStateListener =
+                    new NtpCustomizationConfigManager.HomepageStateListener() {
+                        @Override
+                        public void onBackgroundColorChanged(
+                                int backgroundColor,
+                                boolean fromInitialization,
+                                @NtpBackgroundImageType int oldType,
+                                @NtpBackgroundImageType int newType) {
+                            if (mBackgroundColorForNtp == backgroundColor) return;
+
+                            mBackgroundColorForNtp = backgroundColor;
+                            updateStatusBarColor();
+                        }
+                    };
+            ntpCustomizationConfigManager.addListener(mHomepageStateListener);
+        }
+
+        // Vivaldi
+        mVivaldiSystemBarColorController.setEdgeToEdgeSystemBarColorHelper(
+                mEdgeToEdgeSystemBarColorHelper);
     }
 
     // DestroyObserver implementation.
     @Override
+    @SuppressWarnings("NullAway")
     public void onDestroy() {
         mStatusBarColorTabObserver.destroy();
         if (mLayoutStateProvider != null) {
@@ -344,6 +339,12 @@ public class StatusBarColorController
             mCallbackController = null;
         }
         mOverviewColorSupplier.removeObserver(mOverviewColorObserver);
+        if (mHomepageStateListener != null) {
+            NtpCustomizationConfigManager.getInstance().removeListener(mHomepageStateListener);
+        }
+
+        // Vivaldi
+        mVivaldiSystemBarColorController.destroy();
     }
 
     // TopResumedActivityChangedObserver implementation.
@@ -380,7 +381,7 @@ public class StatusBarColorController
     public void onUrlFocusChange(boolean hasFocus) {
         mIsOmniboxFocused = hasFocus;
         // Note (david@vivaldi.com): We don't update the status bar color when focus changes.
-        if (!ChromeApplicationImpl.isVivaldi())
+        if (!BuildConfig.IS_VIVALDI)
         updateStatusBarColor();
     }
 
@@ -435,6 +436,7 @@ public class StatusBarColorController
         assert mTabModelSelector == null : "mTabModelSelector should only be set once.";
         mTabModelSelector = tabModelSelector;
         if (mTabModelSelector != null) {
+            mVivaldiSystemBarColorController.setTabModelSelector(mTabModelSelector); // Vivaldi
             mTabModelSelector.getCurrentTabModelSupplier().addObserver(mCurrentTabModelObserver);
             mIsIncognitoBranded = mTabModelSelector.isIncognitoBrandedModelSelected();
             updateStatusBarColor();
@@ -443,22 +445,17 @@ public class StatusBarColorController
 
     /** Calculate and update the status bar's color. */
     public void updateStatusBarColor() {
+        // Vivaldi
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return;
         @ColorInt int statusBarColor = calculateFinalStatusBarColor();
-
-        // Note(david@vivaldi.com): Animate the color transition if applicable.
-        if (mAnimateTransition) {
-            android.animation.ValueAnimator colorAnimation =
-                    android.animation.ValueAnimator.ofObject(new android.animation.ArgbEvaluator(),
-                            mWindow.getStatusBarColor(), statusBarColor);
-            colorAnimation.addUpdateListener(animator
-                    -> setStatusBarColor(mEdgeToEdgeSystemBarColorHelper, mWindow,
-                            (Integer) animator.getAnimatedValue()));
-            colorAnimation.start();
-        } else
+        // Note(david@vivaldi.com): Let the |VivaldiSystemBarColorController| handle the coloring of
+        // the status and navigation bar.
+        if (BuildConfig.IS_VIVALDI) {
+            mVivaldiSystemBarColorController.setStatusBarColor(statusBarColor);
+            mVivaldiSystemBarColorController.updateSystemBarColors();
+            return;
+        }
         setStatusBarColor(mEdgeToEdgeSystemBarColorHelper, mWindow, statusBarColor);
-
-        VivaldiColorUtils.setNavigationBarColor(
-                mWindow, mCurrentTab, mIsInOverviewMode, mAnimateTransition);
     }
 
     /**
@@ -516,25 +513,26 @@ public class StatusBarColorController
 
         // When Omnibox gains focus, we want to clear the status bar theme color.
         // The theme should be restored when Omnibox focus clears.
-        if (!ChromeApplicationImpl.isVivaldi())
+        if (!BuildConfig.IS_VIVALDI)
         if (mIsOmniboxFocused) {
             // If the flag is enabled, we will use the toolbar color.
             if (mToolbarColorChanged) return mToolbarColor;
             return calculateDefaultStatusBarColor();
         }
 
-        if (mIsInOverviewMode)
+        // Note(david@vivaldi.com): When in overview mode get the default theme color.
+        if (mVivaldiSystemBarColorController.isInOverviewMode())
             return ChromeColors.getDefaultThemeColor(
                     mWindow.getContext(), mIsIncognitoBranded);
 
         // Return New Tab Page background color in New Tab Page.
-        if (!ChromeApplicationImpl.isVivaldi()) // Vivaldi VAB-9742
+        if (!BuildConfig.IS_VIVALDI) // Vivaldi VAB-9742
         if (isStandardNtp()) {
             return mBackgroundColorForNtp;
         }
 
         // Return status bar color to match the toolbar.
-        if (ChromeApplicationImpl.isVivaldi()) {
+        if (BuildConfig.IS_VIVALDI) {
             if (!VivaldiUtils.isTopToolbarOn()) return calculateDefaultStatusBarColor();
             // Note(nagamani): Check and apply if a different accent is enabled in Themes settings.
             final int accentColorValue = VivaldiPreferences.getSharedPreferencesManager().readInt(
@@ -579,6 +577,8 @@ public class StatusBarColorController
             @Nullable EdgeToEdgeSystemBarColorHelper edgeToEdgeSystemBarColorHelper,
             Window window,
             @ColorInt int color) {
+        if (BuildConfig.IS_OEM_GAS_BUILD)
+            return;
         final View root = window.getDecorView().getRootView();
         boolean needsDarkStatusBarIcons = !ColorUtils.shouldUseLightForegroundOnBackground(color);
         if (EdgeToEdgeUtils.isEdgeToEdgeEverywhereEnabled()
@@ -642,8 +642,13 @@ public class StatusBarColorController
      * @return Whether or not the current tab is a new tab page in standard mode.
      */
     private boolean isStandardNtp() {
-        if (ChromeApplicationImpl.isVivaldi())
+        if (BuildConfig.IS_VIVALDI)
             return mCurrentTab != null && mCurrentTab.getNativePage() instanceof SpeedDialPage;
         return mCurrentTab != null && mCurrentTab.getNativePage() instanceof NewTabPage;
+    }
+
+    @ColorInt
+    int getBackgroundColorForNtpForTesting() {
+        return mBackgroundColorForNtp;
     }
 }

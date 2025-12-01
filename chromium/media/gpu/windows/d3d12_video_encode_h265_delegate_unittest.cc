@@ -233,7 +233,7 @@ class D3D12VideoEncodeH265DelegateTest
 TEST_F(D3D12VideoEncodeH265ReferenceFrameManagerTest,
        MarkReferenceFrameAndCheckDescriptors) {
   D3D12VideoEncodeH265ReferenceFrameManager reference_manager;
-  ASSERT_TRUE(reference_manager.InitializeTextureArray(
+  ASSERT_TRUE(reference_manager.InitializeTextureResources(
       device_.Get(), {1280, 720}, DXGI_FORMAT_NV12, 4));
   EXPECT_EQ(reference_manager.GetReferenceFrameId(0), std::nullopt);
 
@@ -356,7 +356,7 @@ TEST_F(D3D12VideoEncodeH265DelegateTest, EncodeFrame) {
   ASSERT_TRUE(result_or_error.has_value());
 
   BitstreamBufferMetadata metadata =
-      std::move(result_or_error).value().metadata_;
+      std::move(result_or_error).value().metadata;
   EXPECT_EQ(metadata.key_frame, is_key_frame);
   if (encoder_delegate_->ReportsAverageQp()) {
     EXPECT_GE(metadata.qp, 0);
@@ -370,7 +370,7 @@ TEST_F(D3D12VideoEncodeH265DelegateTest, EncodeFrame) {
   ASSERT_LE(metadata.payload_size_bytes, kBufferSize);
   H265Parser parser;
   base::WritableSharedMemoryMapping map = shared_memory.Map();
-  parser.SetStream(map.data(), map.size());
+  parser.SetStream(map.GetMemoryAsSpan<uint8_t>());
   H265NALU nalu;
   ASSERT_EQ(parser.AdvanceToNextNALU(&nalu), H265Parser::Result::kOk);
   EXPECT_EQ(nalu.nal_unit_type, H265NALU::VPS_NUT);

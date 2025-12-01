@@ -416,6 +416,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
 
   // Unused on this architecture.
   void MaybeEmitOutOfLineConstantPool() {}
+  void ClearInternalState() {}
 
   // Read/Modify the code target in the branch/call instruction at pc.
   // The isolate argument is unused (and may be nullptr) when skipping flushing.
@@ -487,6 +488,8 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void Nop(int bytes = 1);
   // Aligns code to something that's optimal for a jump target for the platform.
   void CodeTargetAlign();
+  void SwitchTargetAlign() { CodeTargetAlign(); }
+  void BranchTargetAlign() {}
   void LoopHeaderAlign() { CodeTargetAlign(); }
 
   // Stack

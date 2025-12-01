@@ -404,6 +404,7 @@ void AutocompleteResult::SortAndCull(
     bool is_lens_active,
     bool can_show_contextual_suggestions,
     bool mia_enabled,
+    bool is_incognito,
     std::optional<AutocompleteMatch> default_match_to_preserve,
     AutocompleteProviderClient* client) {
   SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
@@ -420,7 +421,8 @@ void AutocompleteResult::SortAndCull(
       !is_zero_suggest;
   bool use_grouping = is_zero_suggest || use_grouping_for_non_zps;
 
-  MergeSuggestionGroupsMap(omnibox::BuildDefaultGroupsForInput(input));
+  MergeSuggestionGroupsMap(
+      omnibox::BuildDefaultGroupsForInput(input, is_incognito));
   // Grouping requires all matches have a group ID. To keep providers 'dumb',
   // they only assign IDs when their ID isn't obvious from the match type. Most
   // matches will instead set IDs here to keep providers 'dumb' and the
@@ -531,12 +533,8 @@ void AutocompleteResult::SortAndCull(
               suggestion_groups_map_));
         }
 
-        // Allow secondary zero-prefix suggestions in the NTP realbox or the
-        // WebUI omnibox popup.
-        // TODO(crbug.com/40062053): Disallow secondary zps in the WebUI omnibox
-        // before experimentation.
-        if ((page_classification == OmniboxEventProto::NTP_REALBOX ||
-             base::FeatureList::IsEnabled(omnibox::kWebUIOmniboxPopup))) {
+        // Allow secondary zero-prefix suggestions in the NTP realbox only.
+        if (page_classification == OmniboxEventProto::NTP_REALBOX) {
           sections.push_back(std::make_unique<DesktopSecondaryNTPZpsSection>(
               suggestion_groups_map_));
           // Report whether secondary zero-prefix suggestions were triggered.
@@ -563,6 +561,23 @@ void AutocompleteResult::SortAndCull(
                   suggestion_groups_map_));
         }
 #endif
+      } else if (omnibox::IsComposebox(page_classification)) {
+        auto composebox_suggestion_limit_config =
+            omnibox_feature_configs::ComposeboxSuggestionLimit::Get();
+        size_t composebox_max_suggestions = 8u;
+        size_t max_aim_suggestions = 8u;
+        size_t max_contextual_suggestions = 8u;
+        if (composebox_suggestion_limit_config.enabled) {
+          composebox_max_suggestions =
+              composebox_suggestion_limit_config.max_suggestions;
+          max_aim_suggestions =
+              composebox_suggestion_limit_config.max_aim_suggestions;
+          max_contextual_suggestions =
+              composebox_suggestion_limit_config.max_contextual_suggestions;
+        }
+        sections.push_back(std::make_unique<DesktopComposeboxZpsSection>(
+            suggestion_groups_map_, composebox_max_suggestions,
+            max_aim_suggestions, max_contextual_suggestions));
       } else {
         if (contextual_zps_limit > 0u &&
             omnibox_feature_configs::ContextualSearch::Get()
@@ -758,35 +773,33 @@ void AutocompleteResult::TrimOmniboxActions(bool is_zero_suggest) {
   // Mobile:
   // - First position allow all types of OmniboxActionId (ACTION_IN_SUGGEST and
   //   ANSWER_ACTION are preferred over PEDAL)
-  // - Third slot permits only PEDALs or ANSWER_ACTION.
-  // - Slots 4 and beyond only permit ANSWER_ACTION.
+  // - The 2nd and 3rd slot permit only PEDALs, ANSWER_ACTION, or
+  //   ACTION_IN_SUGGEST (Android only).
+  // - Slots 4 and beyond only permit ANSWER_ACTION or ACTION_IN_SUGGEST
+  //   (Android only)
   // - TAB_SWITCH actions are not considered because they're never attached.
+  //   On Android, the tab switch match is attached as ACTION_IN_SUGGEST.
   if constexpr (is_android || is_ios) {
     static constexpr size_t ACTIONS_IN_SUGGEST_CUTOFF_THRESHOLD = 1;
     static constexpr size_t PEDALS_CUTOFF_THRESHOLD = 3;
     std::vector<OmniboxActionId> include_all{OmniboxActionId::ACTION_IN_SUGGEST,
-                                             OmniboxActionId::ANSWER_ACTION,
                                              OmniboxActionId::PEDAL};
-    std::vector<OmniboxActionId> include_at_most_pedals_or_answers{
-        OmniboxActionId::ANSWER_ACTION, OmniboxActionId::PEDAL};
-    std::vector<OmniboxActionId> include_only_answer_actions{
-        OmniboxActionId::ANSWER_ACTION};
-
-    bool has_url = std::ranges::any_of(matches_, [](const auto& match) {
-      return !AutocompleteMatch::IsSearchType(match.type);
-    });
-    bool hide_answer_actions_when_url_present =
-        !OmniboxFieldTrial::kAnswerActionsShowIfUrlsPresent.Get();
+    std::vector<OmniboxActionId> include_pedals_and_others;
+    std::vector<OmniboxActionId> exclude_pedals;
+    if constexpr (is_android) {
+      if (!is_zero_suggest) {
+        include_pedals_and_others.push_back(OmniboxActionId::ACTION_IN_SUGGEST);
+        exclude_pedals.push_back(OmniboxActionId::ACTION_IN_SUGGEST);
+      }
+    }
+    include_pedals_and_others.push_back(OmniboxActionId::PEDAL);
 
     for (size_t index = 0u; index < matches_.size(); ++index) {
-      if (has_url && hide_answer_actions_when_url_present) {
-        matches_[index].RemoveAnswerActions();
-      }
       matches_[index].FilterOmniboxActions(
           (!is_zero_suggest && index < ACTIONS_IN_SUGGEST_CUTOFF_THRESHOLD)
               ? include_all
-          : index < PEDALS_CUTOFF_THRESHOLD ? include_at_most_pedals_or_answers
-                                            : include_only_answer_actions);
+          : index < PEDALS_CUTOFF_THRESHOLD ? include_pedals_and_others
+                                            : exclude_pedals);
       if (index < ACTIONS_IN_SUGGEST_CUTOFF_THRESHOLD) {
         matches_[index].FilterAndSortActionsInSuggest();
       }
@@ -1051,15 +1064,37 @@ void AutocompleteResult::ConvertOpenTabMatches(
       }
 
       match.has_tab_match = tab_info->second.has_matching_tab;
-      // Do not attach the action for iOS or Android since they have separate
-      // UI treatment for tab matches (no button row as on desktop and realbox).
-      if (!is_android && !is_ios && match.has_tab_match.value()) {
+      // Do not attach the action for iOS since they have separate UI treatment
+      // for tab matches (no button row as on desktop and realbox).
+      if (!is_ios && match.has_tab_match.value()) {
         // The default action for suggestions from the open tab provider in
         // keyword mode is to switch to the open tab so no button is necessary.
         if (!match.from_keyword ||
             match.provider->type() != AutocompleteProvider::TYPE_OPEN_TAB) {
-          match.actions.push_back(
-              base::MakeRefCounted<TabSwitchAction>(match.destination_url));
+          if constexpr (is_android) {
+            // On Android, attach the action as ActionInSuggest that will be
+            // interpreted as either action button or chip per the form factor.
+            // TODO (jianli): Remove the feature param check after Java changes
+            // land.
+#if BUILDFLAG(IS_ANDROID)
+            if (OmniboxFieldTrial::kOmniboxImprovementForLFFSwitchToTabChip
+                    .Get()) {
+#endif
+              omnibox::SuggestTemplateInfo::TemplateAction template_action;
+              template_action.set_action_type(
+                  omnibox::
+                      SuggestTemplateInfo_TemplateAction_ActionType_CHROME_TAB_SWITCH);
+              template_action.set_action_uri(match.destination_url.spec());
+              match.actions.push_back(
+                  base::MakeRefCounted<OmniboxActionInSuggest>(
+                      std::move(template_action), std::nullopt));
+#if BUILDFLAG(IS_ANDROID)
+            }
+#endif
+          } else {
+            match.actions.push_back(
+                base::MakeRefCounted<TabSwitchAction>(match.destination_url));
+          }
         }
       }
 #if BUILDFLAG(IS_ANDROID)
@@ -1327,6 +1362,7 @@ void AutocompleteResult::Reset() {
 void AutocompleteResult::ClearMatches() {
   matches_.clear();
   suggestion_groups_map_.clear();
+  smart_compose_inline_hint_.clear();
 #if BUILDFLAG(IS_ANDROID)
   DestroyJavaObject();
 #endif
@@ -1335,6 +1371,7 @@ void AutocompleteResult::ClearMatches() {
 void AutocompleteResult::SwapMatchesWith(AutocompleteResult* other) {
   matches_.swap(other->matches_);
   suggestion_groups_map_.swap(other->suggestion_groups_map_);
+  smart_compose_inline_hint_.swap(other->smart_compose_inline_hint_);
 
 #if BUILDFLAG(IS_ANDROID)
   DestroyJavaObject();
@@ -1348,6 +1385,7 @@ void AutocompleteResult::CopyMatchesFrom(const AutocompleteResult& other) {
 
   matches_ = other.matches_;
   suggestion_groups_map_ = other.suggestion_groups_map_;
+  smart_compose_inline_hint_ = other.smart_compose_inline_hint_;
 
 #if BUILDFLAG(IS_ANDROID)
   DestroyJavaObject();
@@ -1689,13 +1727,8 @@ void AutocompleteResult::MergeMatchesByProvider(ACMatches* old_matches,
 AutocompleteResult::MatchDedupComparator
 AutocompleteResult::GetMatchComparisonFields(const AutocompleteMatch& match) {
   AutocompleteMatchDedupeType type;
-  if ((match.answer_template.has_value() &&
-       OmniboxFieldTrial::kAnswerActionsShowAboveKeyboard.Get()) ||
-      match.type == AutocompleteMatchType::HISTORY_EMBEDDINGS_ANSWER) {
-    type = AutocompleteMatchDedupeType::kHistoryEmbeddingAnswer;
-  } else if (match.provider != nullptr &&
-             match.provider->type() ==
-                 AutocompleteProvider::TYPE_VERBATIM_MATCH) {
+  if (match.provider != nullptr &&
+      match.provider->type() == AutocompleteProvider::TYPE_VERBATIM_MATCH) {
     type = AutocompleteMatchDedupeType::kVerbatimProvider;
   } else if (match.type == ACMatchType::CALCULATOR) {
     type = AutocompleteMatchDedupeType::kCalculator;

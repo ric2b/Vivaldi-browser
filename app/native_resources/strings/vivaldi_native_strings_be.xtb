@@ -6,7 +6,6 @@
 <translation id="1158503667684816647">Больш не пытацца пацвярджэння</translation>
 <translation id="1222195720020481779">Запуск праграмы ўсталявання…</translation>
 <translation id="1224683873953469764">Атрымаць мабільную версію Vivaldi</translation>
-<translation id="1270785070369717623">Нажаль, налады Opera GX недаступныя для імпарту падчас працы браўзера. Каб імпартаваць налады ў Vivaldi, закрыйце ўсе вокны Opera 15+ і націсніце "Працягнуць".</translation>
 <translation id="1276145862619442150">Старонкі для хуткага адкрыцця</translation>
 <translation id="1281950884873973195">Жывёліна 6</translation>
 <translation id="1411638389238344450">Адправіць спасылку па электроннай пошце</translation>
@@ -24,7 +23,6 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Уласцівасці выявы...</translation>
 <translation id="1920297417712412573">Скапіяваць у нататкі</translation>
-<translation id="1921101374471252440">&amp;Перазагрузіць выяву</translation>
 <translation id="1924750141060565109">Краявід 15</translation>
 <translation id="19598411548897379">Звычайны</translation>
 <translation id="1973351931613083086">аўтаматычнае прайграванне</translation>
@@ -39,8 +37,6 @@
 <translation id="2501278716633472235">Назад</translation>
 <translation id="2612127540243995147">Гатова да ўсталёўкі. Праграма будзе закрытая і перазапушчаная.</translation>
 <translation id="2613387515621326337">Перайсці на сайт</translation>
-<translation id="2645477450146475243">Нажаль, налады Opera недаступныя для імпарту падчас працы браўзера. Каб імпартаваць налады ў Vivaldi, закрыйце ўсе вокны Opera 15+ і націсніце "Працягнуць".</translation>
-<translation id="2647368062414805334">Нажаль, налады Edge недаступныя для імпарту падчас працы браўзера. Каб імпартаваць налады ў Vivaldi, закрыйце ўсе вокны Edge і націсніце "Працягнуць".</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Жывёліна 3</translation>
 <translation id="2873951654529031587">Cметніца</translation>
@@ -50,7 +46,6 @@
 <translation id="2977472760057091832">Адкрыць спасылку ў прыватным акне</translation>
 <translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Адкрыць у новай укладцы</translation>
-<translation id="3027988479108856431">Нажаль, налады Yandex недаступныя для імпарту падчас працы браўзера. Каб імпартаваць налады ў Vivaldi, закрыйце ўсе вокны Yandex і націсніце "Працягнуць".</translation>
 <translation id="3084011186245865060">Краявід 6</translation>
 <translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Браўзер Vivaldi створаны на аснове адкрытага праекта Chromium і іншага праграмнага забеспячэння з адкрытым зыходным кодам.</translation>
@@ -65,6 +60,7 @@
 <translation id="3334610655141903168">(без назвы)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> - найноўшая даступная версія.</translation>
 <translation id="3383198080133834965">У вас найноўшая версія!</translation>
+<translation id="3402602684546832928">Абраць файл закладак Opera</translation>
 <translation id="3451317331714872347">Краявід 8</translation>
 <translation id="3457498675806041407">Пацвердзіце выхад</translation>
 <translation id="3470981972195599598">Версія Vivaldi <ph name="VERSION" /> усталяваная і актывуецца пасля перазапуску браўзера.</translation>
@@ -81,7 +77,6 @@
 <translation id="3732157130969736834">Дадаць у закладкі</translation>
 <translation id="3732388226447288666">Жывёліна 2</translation>
 <translation id="3732439195215136813">Жывёліна 5</translation>
-<translation id="3795800845758778870">Нажаль, налады Brave недаступныя для імпарту падчас працы браўзера. Каб імпартаваць налады ў Vivaldi, закрыйце ўсе вокны Brave і націсніце "Працягнуць".</translation>
 <translation id="3822431842304177896">Новы падзяляльнік</translation>
 <translation id="3832132597516774400">Краявід 5</translation>
 <translation id="3894751534882749287">Калі вы ўсё ж хочаце праглядзець гэтую старонку, змяніце налады блакавання адсочвання і націсніце кнопку "Дазволіць"</translation>
@@ -133,10 +128,10 @@
 <translation id="5770433027661640693">Краявід 10</translation>
 <translation id="5857090052475505287">Новы каталог</translation>
 <translation id="588258955323874662">Поўнаэкранны рэжым</translation>
-<translation id="5916080360077521750">Нажаль, налады Chrome недаступныя для імпарту падчас працы браўзера. Каб імпартаваць налады ў Vivaldi, закрыйце ўсе вокны Chrome і націсніце "Працягнуць".</translation>
 <translation id="6040143037577758943">Закрыць</translation>
 <translation id="6229528619562190452">Націсніце сюды, каб абнавіць Vivaldi.</translation>
 <translation id="6234173136417926046">Зрабіць выяву фонам старонкі</translation>
+<translation id="630690498669249215">Файл закладак Opera</translation>
 <translation id="6339818817272922368">Лакальны акаўнт</translation>
 <translation id="6398710281890660037">Абараніць мой профіль</translation>
 <translation id="6438786710866753178">Краявід 4</translation>
@@ -155,7 +150,6 @@
 <translation id="7099506190679014195">Бяспечнае абнаўленне сховішча ключоў</translation>
 <translation id="7111492742514999492">Краявід 9</translation>
 <translation id="7113310725918019676">Дазволіць <ph name="BLOCKED_TYPE" /> з <ph name="DOMAIN" /></translation>
-<translation id="7208252576848052204">На жаль, вашы налады Arc недаступныя, калі гэты браўзер працуе. Каб імпартаваць гэтыя налады ў Vivaldi, закрыйце ўсе вокны Arc. Затым націсніце "Працягнуць".</translation>
 <translation id="7321500017121629018">Актыўна ўчора</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Падчас запуску сродку абнаўлення адбылася памылка. Праверце, ці хапае памяці і вольнага месца на дыску і паўтарыце спробу.</translation>
@@ -182,7 +176,6 @@
 <translation id="8539196077526389150">Краявід 13</translation>
 <translation id="8562339533180097902">Закрыць Vivaldi і ўсталяваць</translation>
 <translation id="8567452685425968223">Распакоўванне абнаўлення…</translation>
-<translation id="8624587806981488221">&amp;Перазагрузіць выяву</translation>
 <translation id="8651348004684669199">Дадаць актыўную ўкладку</translation>
 <translation id="8669345741879513971">Пачварка 10</translation>
 <translation id="867544375504146191">Yandex</translation>

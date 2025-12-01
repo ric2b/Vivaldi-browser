@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -51,39 +51,39 @@ const UIStrings = {
    */
   sOpcodeS: '{PH1} (Opcode {PH2})',
   /**
-   *@description Op codes continuation frame of map in Resource Web Socket Frame View of the Network panel
+   * @description Op codes continuation frame of map in Resource Web Socket Frame View of the Network panel
    */
   continuationFrame: 'Continuation Frame',
   /**
-   *@description Op codes text frame of map in Resource Web Socket Frame View of the Network panel
+   * @description Op codes text frame of map in Resource Web Socket Frame View of the Network panel
    */
   textMessage: 'Text Message',
   /**
-   *@description Op codes binary frame of map in Resource Web Socket Frame View of the Network panel
+   * @description Op codes binary frame of map in Resource Web Socket Frame View of the Network panel
    */
   binaryMessage: 'Binary Message',
   /**
-   *@description Op codes continuation frame of map in Resource Web Socket Frame View of the Network panel indicating that the web socket connection has been closed.
+   * @description Op codes continuation frame of map in Resource Web Socket Frame View of the Network panel indicating that the web socket connection has been closed.
    */
   connectionCloseMessage: 'Connection Close Message',
   /**
-   *@description Op codes ping frame of map in Resource Web Socket Frame View of the Network panel
+   * @description Op codes ping frame of map in Resource Web Socket Frame View of the Network panel
    */
   pingMessage: 'Ping Message',
   /**
-   *@description Op codes pong frame of map in Resource Web Socket Frame View of the Network panel
+   * @description Op codes pong frame of map in Resource Web Socket Frame View of the Network panel
    */
   pongMessage: 'Pong Message',
   /**
-   *@description Data grid name for Web Socket Frame data grids
+   * @description Data grid name for Web Socket Frame data grids
    */
   webSocketFrame: 'Web Socket Frame',
   /**
-   *@description Text for something not available
+   * @description Text for something not available
    */
   na: 'N/A',
   /**
-   *@description Example for placeholder text
+   * @description Example for placeholder text
    */
   filterUsingRegex: 'Filter using regex (example: (web)?socket)',
 } as const;
@@ -159,8 +159,8 @@ const opCodeDescriptions: Array<() => string> = (function(): Array<() => Common.
 class ResourceFrameNode extends DataGridItem {
   readonly frame: SDK.NetworkRequest.WebSocketFrame;
   private readonly isTextFrame: boolean;
-  private dataTextInternal: string;
-  private binaryViewInternal: BinaryResourceView|null;
+  #dataText: string;
+  #binaryView: BinaryResourceView|null;
 
   constructor(frame: SDK.NetworkRequest.WebSocketFrame) {
     let length = String(frame.text.length);
@@ -194,9 +194,9 @@ class ResourceFrameNode extends DataGridItem {
 
     this.frame = frame;
     this.isTextFrame = isTextFrame;
-    this.dataTextInternal = dataText;
+    this.#dataText = dataText;
 
-    this.binaryViewInternal = null;
+    this.#binaryView = null;
   }
 
   override createCells(element: Element): void {
@@ -214,7 +214,7 @@ class ResourceFrameNode extends DataGridItem {
   }
 
   override dataText(): string {
-    return this.dataTextInternal;
+    return this.#dataText;
   }
 
   override binaryView(): BinaryResourceView|null {
@@ -222,15 +222,15 @@ class ResourceFrameNode extends DataGridItem {
       return null;
     }
 
-    if (!this.binaryViewInternal) {
-      if (this.dataTextInternal.length > 0) {
-        this.binaryViewInternal = new BinaryResourceView(
+    if (!this.#binaryView) {
+      if (this.#dataText.length > 0) {
+        this.#binaryView = new BinaryResourceView(
             TextUtils.StreamingContentData.StreamingContentData.from(
-                new TextUtils.ContentData.ContentData(this.dataTextInternal, true, 'applicaiton/octet-stream')),
+                new TextUtils.ContentData.ContentData(this.#dataText, true, 'applicaiton/octet-stream')),
             Platform.DevToolsPath.EmptyUrlString, Common.ResourceType.resourceTypes.WebSocket);
       }
     }
-    return this.binaryViewInternal;
+    return this.#binaryView;
   }
 
   override getTime(): number {

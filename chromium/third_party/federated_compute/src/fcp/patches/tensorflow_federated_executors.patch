@@ -1,0 +1,23 @@
+# This patch is needed to fix the build error of
+# fcp/confidentialcompute/composing_tee_executor.cc:
+#   "error: ignoring return value of function declared with 'nodiscard'
+#   attribute [-Werror,-Wunused-result]"
+#   in the following code:
+#     thread_pool->Schedule(
+#         [t = std::make_shared<TaskT>(std::move(task))]() { (*t)(); });
+diff --git tensorflow_federated/cc/core/impl/executors/threading.h tensorflow_federated/cc/core/impl/executors/threading.h
+index f7efc6bfa..151837db3 100644
+--- tensorflow_federated/cc/core/impl/executors/threading.h
++++ tensorflow_federated/cc/core/impl/executors/threading.h
+@@ -104,8 +104,9 @@ std::shared_future<ReturnValue> ThreadRun(Func lambda,
+     // be trying to make a _copy_ of the lambda capture values which are not
+     // always copy constructable (especially in the case of ExecutorValue).
+     // Wrapping in a `shared_ptr` makes this possible.
+-    thread_pool->Schedule(
+-        [t = std::make_shared<TaskT>(std::move(task))]() { (*t)(); });
++    thread_pool
++        ->Schedule([t = std::make_shared<TaskT>(std::move(task))]() { (*t)(); })
++        .IgnoreError();
+   } else {
+     std::thread th(std::move(task));
+     th.detach();

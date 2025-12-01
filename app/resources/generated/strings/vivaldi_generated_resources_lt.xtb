@@ -4,24 +4,20 @@
 <translation id="1056898198331236512">Įspėjimas</translation>
 <translation id="1165039591588034296">Klaida</translation>
 <translation id="1244303850296295656">Plėtinio klaida</translation>
-<translation id="1546280085599573572">Šis plėtinys pakeitė puslapį, kuris rodomas spustelėjus pagrindinio puslapio mygtuką.</translation>
 <translation id="1588438908519853928">Įprastas</translation>
 <translation id="1729533290416704613">Ji taip pat kontroliuoja, koks puslapis rodomas, kai ieškote „Omnibox“.</translation>
 <translation id="2087822576218954668">Spausdinti: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">Inkognito skirtukas: „<ph name="TAB_NAME" />“</translation>
-<translation id="219008588003277019">Vietinio kliento modulis: „<ph name="NEXE_NAME" />“</translation>
 <translation id="2282146716419988068">GPU procesas</translation>
 <translation id="2301382460326681002">Plėtinio šakninis katalogas neteisingas.</translation>
 <translation id="2327492829706409234">Įgalinti programą</translation>
 <translation id="2348176352564285430">Programa: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Pasirinkti plėtinio katalogą.</translation>
-<translation id="241082044617551207">Nežinomas papildinys</translation>
 <translation id="2439110203301358333">Kita jūsų kompiuteryje esanti programa pridėjo plėtinį, kuris gali pakeisti „Vivaldi“ veikimo būdą.</translation>
 <translation id="2445081178310039857">Reikalingas plėtinio šakninis katalogas.</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Iš naujo įgalinti</translation>
 <translation id="2850541429955027218">Pridėti temą</translation>
-<translation id="2861941300086904918">„Native Client“ saugos valdytojas</translation>
 <translation id="2932883381142163287">Pranešti apie piktnaudžiavimą</translation>
 <translation id="2941112035454246133">Žema</translation>
 <translation id="3080207940057008665">Kita jūsų kompiuteryje esanti programa pridėjo temą, kuri gali pakeisti „Vivaldi“ veikimo būdą.</translation>
@@ -39,7 +35,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4100839878934973028">Kita jūsų kompiuteryje esanti programa pridėjo programą, kuri gali pakeisti „Vivaldi“ veikimo būdą.</translation>
-<translation id="4176463684765177261">Neleista</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KB (<ph name="NUM_KILOBYTES_LIVE" /> KB tiesiogiai)</translation>
 <translation id="4384652540891215547">Aktyvinti plėtinį</translation>
 <translation id="4595560905247879544">Programas ir plėtinius gali keisti tik valdytojas (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -47,17 +42,13 @@
 <translation id="488785315393301722">Rodyti išsamią informaciją</translation>
 <translation id="5027562294707732951">Pridėti plėtinį</translation>
 <translation id="5039804452771397117">Leisti</translation>
-<translation id="5143374789336132547">Plėtinys „<ph name="EXTENSION_NAME" />“ pakeitė puslapį, kuris rodomas spustelėjus pagrindinio puslapio mygtuką.</translation>
 <translation id="5233231016133573565">Apdoroti ID</translation>
 <translation id="52912272896845572">Asmeninio rakto failas neteisingas.</translation>
 <translation id="5362741141255528695">Pasirinkti asmeninio rakto failą.</translation>
 <translation id="5485102783864353244">Pridėti programą</translation>
-<translation id="5521078259930077036">Ar tai pagrindinis puslapis, kurį tikėjotės išvysti?</translation>
 <translation id="5542132724887566711">Profilis</translation>
 <translation id="5556459405103347317">Įkelti iš naujo</translation>
 <translation id="5575473780076478375">Inkognito plėtinys: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5715711091495208045">Papildinių tarpininkas: „<ph name="PLUGIN_NAME" />“</translation>
-<translation id="583281660410589416">Nežinoma</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (maks. <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="6101226222197207147">Pridėta nauja programa (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6196854373336333322">Plėtinys „<ph name="EXTENSION_NAME" />“ perėmė tarpinio serverio valdymą. Tai reiškia, kad jis gali keisti, nutraukti ar stebėti visus prisijungus atliekamus veiksmus. Jei nesate tikri, kodėl įvyko šis pakeitimas, tikriausiai jūs jo nenorite.</translation>
@@ -67,7 +58,6 @@
 <translation id="6498249116389603658">&amp;Visos jūsų kalbos</translation>
 <translation id="6503077044568424649">Dažniausiai lankomi</translation>
 <translation id="6508261954199872201">Programa: <ph name="APP_NAME" /></translation>
-<translation id="6798954102094737107">Papildinys: „<ph name="PLUGIN_NAME" />“</translation>
 <translation id="6900284862687837908">Foninė programa: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="7287143125007575591">Prieiga atmesta.</translation>
 <translation id="7427348830195639090">Foninis puslapis: <ph name="BACKGROUND_PAGE_URL" /></translation>

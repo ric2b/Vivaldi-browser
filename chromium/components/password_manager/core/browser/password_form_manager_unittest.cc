@@ -2474,6 +2474,20 @@ TEST_P(PasswordFormManagerTest, HasObservedFormChangedFieldsNumber) {
       PasswordFormMetricsRecorder::kFieldsNumber, 1);
 }
 
+TEST_P(PasswordFormManagerTest, HasObservedFormChangedFieldFocusability) {
+  CreateFormManager(observed_form_);
+  base::HistogramTester histogram_tester;
+
+  FormData form = observed_form_;
+  test_api(form).field(kUsernameFieldIndex).set_is_focusable(false);
+  EXPECT_TRUE(HasObservedFormChanged(form, *form_manager_));
+  form_manager_.reset();
+
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.DynamicFormChanges",
+      PasswordFormMetricsRecorder::kFormFieldFocusability, 1);
+}
+
 TEST_P(PasswordFormManagerTest, HasObservedFormChangedCssClasses) {
   CreateFormManager(observed_form_);
   base::HistogramTester histogram_tester;
@@ -2979,8 +2993,7 @@ TEST_P(PasswordFormManagerTest, iOSPresavedGeneratedPassword) {
   // Use |generated_password| different from value in field to test that the
   // generated password is saved.
   const std::u16string generated_password = u"gen_pw";
-  FieldRendererId generation_element = password_field.renderer_id();
-  form_manager_->SetGenerationElement(generation_element);
+  form_manager_->SetGenerationElement(password_field.renderer_id());
 
   PasswordForm saved_form;
   EXPECT_CALL(form_saver, Save(_, IsEmpty(), std::u16string()))
@@ -2990,14 +3003,15 @@ TEST_P(PasswordFormManagerTest, iOSPresavedGeneratedPassword) {
 
   Mock::VerifyAndClearExpectations(&form_saver);
 
-  const std::u16string changed_password = generated_password + u"1";
+  const std::u16string changed_username = generated_password + u"1";
   EXPECT_CALL(form_saver, UpdateReplace(_, _, std::u16string(), _))
       .WillOnce(SaveArg<0>(&saved_form));
 
   form_manager_->UpdateStateOnUserInput(form_to_presave.renderer_id(),
-                                        generation_element, changed_password);
-  EXPECT_EQ(username_field.value(), saved_form.username_value);
-  EXPECT_EQ(changed_password, saved_form.password_value);
+                                        username_field.renderer_id(),
+                                        changed_username);
+  EXPECT_EQ(changed_username, saved_form.username_value);
+  EXPECT_EQ(generated_password, saved_form.password_value);
 }
 
 TEST_P(PasswordFormManagerTest, iOSUpdateStateWithoutPresaving) {
@@ -4777,7 +4791,6 @@ TEST_P(PasswordFormManagerTest, SetCreditCardFieldsAsBanned) {
 
 #endif
 
-#if !BUILDFLAG(IS_IOS)
 TEST_P(PasswordFormManagerTest, NotifiesObservers) {
   MockPasswordFormManagerObserver observer;
   MockPasswordFormManagerObserver observer_2;
@@ -4805,32 +4818,6 @@ TEST_P(PasswordFormManagerTest, DoesNotNotifyAfterObserverRemoved) {
 
   task_environment_.FastForwardUntilNoTasksRemain();
 }
-#else
-TEST_P(PasswordFormManagerTest, NotifiesObserver) {
-  MockPasswordFormManagerObserver observer;
-
-  CreateFormManager(observed_form_);
-  form_manager_->SetObserver(observer.GetWeakPtr());
-
-  EXPECT_CALL(observer, OnPasswordFormParsed(form_manager_.get()));
-  SetNonFederatedAndNotifyFetchCompleted({saved_match_});
-
-  task_environment_.FastForwardUntilNoTasksRemain();
-}
-
-TEST_P(PasswordFormManagerTest, DoesNotNotifyAfterObserverRemoved) {
-  MockPasswordFormManagerObserver observer;
-
-  CreateFormManager(observed_form_);
-  form_manager_->SetObserver(observer.GetWeakPtr());
-  form_manager_->ResetObserver();
-
-  EXPECT_CALL(observer, OnPasswordFormParsed).Times(0);
-  SetNonFederatedAndNotifyFetchCompleted({saved_match_});
-
-  task_environment_.FastForwardUntilNoTasksRemain();
-}
-#endif
 
 INSTANTIATE_TEST_SUITE_P(All, PasswordFormManagerTest, testing::Bool());
 
@@ -4866,6 +4853,7 @@ class MockPasswordSaveManager : public PasswordSaveManager {
                void(autofill::mojom::SubmissionIndicatorEvent));
   MOCK_CONST_METHOD0(IsNewLogin, bool());
   MOCK_CONST_METHOD0(IsPasswordUpdate, bool());
+  MOCK_CONST_METHOD0(IsEqualToSavedMatch, bool());
   MOCK_CONST_METHOD0(HasGeneratedPassword, bool());
   MOCK_METHOD0(UsernameUpdatedInBubble, void());
   std::unique_ptr<PasswordSaveManager> Clone() override {
@@ -4878,6 +4866,10 @@ class MockPasswordSaveManager : public PasswordSaveManager {
               GetPasswordStoreForSaving,
               (const PasswordForm& password_form),
               (const override));
+  MOCK_METHOD(void,
+              UpdateDateLastFilled,
+              (const PasswordForm& password_form),
+              (override));
 };
 
 class PasswordFormManagerTestWithMockedSaver : public PasswordFormManagerTest {

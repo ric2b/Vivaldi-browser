@@ -204,7 +204,7 @@ class FullCardRequestTest : public testing::Test {
 
  private:
   base::test::SingleThreadTaskEnvironment task_environment_;
-  variations::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
+  variations::test::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
       variations::VariationsIdsProvider::Mode::kUseSignedInState};
   syncer::TestSyncService sync_service_;
   MockResultDelegate result_delegate_;
@@ -822,11 +822,13 @@ class FullCardRequestCardBenefitsTest
     if (IsCreditCardBenefitsSourceSyncEnabled()) {
       test::SetUpCreditCardAndBenefitData(
           card_, /*issuer_id=*/"", GetBenefit(), GetBenefitSource(),
-          personal_data(), autofill_client().GetAutofillOptimizationGuide());
+          personal_data(),
+          autofill_client().GetAutofillOptimizationGuideDecider());
     } else {
       test::SetUpCreditCardAndBenefitData(
           card_, GetIssuerId(), GetBenefit(), /*benefit_source=*/"",
-          personal_data(), autofill_client().GetAutofillOptimizationGuide());
+          personal_data(),
+          autofill_client().GetAutofillOptimizationGuideDecider());
     }
   }
 

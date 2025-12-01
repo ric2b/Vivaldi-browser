@@ -9,6 +9,7 @@
 #include "src/compiler/js-heap-broker.h"
 #include "src/compiler/node-matchers.h"
 #include "src/compiler/simplified-operator.h"
+#include "src/compiler/turboshaft/utils.h"
 #include "src/numbers/conversions-inl.h"
 
 namespace v8 {
@@ -138,7 +139,8 @@ JSInliningHeuristic::Candidate JSInliningHeuristic::CollectFunctions(
   out.node = node;
 
   HeapObjectMatcher m(callee);
-  if (m.HasResolvedValue() && m.Ref(broker()).IsJSFunction()) {
+  if (m.HasResolvedValue() && !m.Is(isolate()->factory()->optimized_out()) &&
+      m.Ref(broker()).IsJSFunction()) {
     JSFunctionRef function = m.Ref(broker()).AsJSFunction();
     out.functions[0] = function;
     if (CanConsiderForInlining(broker(), function)) {
@@ -158,7 +160,9 @@ JSInliningHeuristic::Candidate JSInliningHeuristic::CollectFunctions(
     }
     for (int n = 0; n < value_input_count; ++n) {
       HeapObjectMatcher m2(callee->InputAt(n));
-      if (!m2.HasResolvedValue() || !m2.Ref(broker()).IsJSFunction()) {
+      if (!m2.HasResolvedValue() ||
+          m2.Is(isolate()->factory()->optimized_out()) ||
+          !m2.Ref(broker()).IsJSFunction()) {
         out.num_functions = 0;
         return out;
       }
@@ -244,7 +248,8 @@ Reduction JSInliningHeuristic::Reduce(Node* node) {
         candidate.can_inline_function[i],
         shared.IsInlineable(CodeKind::TURBOFAN_JS, broker()) ||
             shared.GetInlineability(CodeKind::TURBOFAN_JS, broker()) ==
-                SharedFunctionInfo::kHasOptimizationDisabled);
+                turboshaft::any_of(SharedFunctionInfo::kHasOptimizationDisabled,
+                                   SharedFunctionInfo::kMayContainBreakPoints));
     // Do not allow direct recursion i.e. f() -> f(). We still allow indirect
     // recursion like f() -> g() -> f(). The indirect recursion is helpful in
     // cases where f() is a small dispatch function that calls the appropriate
@@ -901,7 +906,9 @@ bool JSInliningHeuristic::CandidateCompare::operator()(
 
 void JSInliningHeuristic::PrintCandidates() {
   StdoutStream os;
-  os << candidates_.size() << " candidate(s) for inlining:" << std::endl;
+  os << "Budget used: " << total_inlined_bytecode_size_ << "/"
+     << max_inlined_bytecode_size_cumulative_ << " -- " << candidates_.size()
+     << " candidate(s) for inlining:" << std::endl;
   for (const Candidate& candidate : candidates_) {
     os << "- candidate: " << candidate.node->op()->mnemonic() << " node #"
        << candidate.node->id() << " with frequency " << candidate.frequency

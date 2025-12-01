@@ -208,6 +208,13 @@ IF(PTHREADPOOL_BUILD_TESTS)
   TARGET_LINK_LIBRARIES(pthreadpool-test pthreadpool gtest gtest_main)
   ADD_TEST(pthreadpool pthreadpool-test)
 
+  IF(PTHREADPOOL_SYNC_PRIMITIVE STREQUAL "condvar" OR
+     PTHREADPOOL_SYNC_PRIMITIVE STREQUAL "futex")
+    ADD_EXECUTABLE(pthreadpool-v2-test test/pthreadpool_v2.cc)
+    TARGET_LINK_LIBRARIES(pthreadpool-v2-test pthreadpool gtest gtest_main)
+    ADD_TEST(pthreadpool pthreadpool-v2-test)
+  ENDIF()
+
   ADD_EXECUTABLE(pthreadpool-cxx-test test/pthreadpool-cxx.cc)
   TARGET_LINK_LIBRARIES(pthreadpool-cxx-test pthreadpool gtest gtest_main)
   ADD_TEST(pthreadpool-cxx pthreadpool-cxx-test)

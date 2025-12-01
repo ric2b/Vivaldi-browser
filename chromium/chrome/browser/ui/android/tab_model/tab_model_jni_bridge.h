@@ -18,8 +18,10 @@
 #include "chrome/browser/ui/android/tab_model/tab_model.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tabs/public/tab_interface.h"
+#include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
 #include "url/gurl.h"
 
+class SessionID;
 class TabAndroid;
 class TabModelObserverJniBridge;
 
@@ -44,11 +46,20 @@ class TabModelJniBridge : public TabModel {
 
   ~TabModelJniBridge() override;
 
-  // Called by JNI
+  void AssociateWithBrowserWindow(JNIEnv* env,
+                                  long native_android_browser_window);
   void TabAddedToModel(JNIEnv* env, TabAndroid* tab);
-
-  // Called by JNI
-  void DuplicateTabForTesting(JNIEnv* env, TabAndroid* tab);
+  TabAndroid* DuplicateTabForTesting(JNIEnv* env, TabAndroid* tab);
+  void MoveTabToWindowForTesting(JNIEnv* env,
+                                 TabAndroid* tab,
+                                 long android_browser_window_ptr,
+                                 int new_index);
+  void MoveTabGroupToWindowForTesting(JNIEnv* env,
+                                      const base::Token& group_id,
+                                      long android_browser_window_ptr,
+                                      int new_index);
+  void SetMuteSetting(JNIEnv* env, std::vector<TabAndroid*> tabs, bool mute);
+  jint GetSessionIdForTesting(JNIEnv* env);
 
   // TabModel::
   void AddTabListInterfaceObserver(TabListInterfaceObserver* observer) override;
@@ -95,13 +106,13 @@ class TabModelJniBridge : public TabModel {
   void CloseTabsNavigatedInTimeWindow(const base::Time& begin_time,
                                       const base::Time& end_time) override;
 
-  void DuplicateTab(TabAndroid* tab);
+  tabs::TabInterface* DuplicateTab(TabAndroid* tab);
 
   // TODO(crbug.com/415351293): Implement these.
   // TabListInterface implementation.
   void OpenTab(const GURL& url, int index) override;
   void DiscardTab(tabs::TabHandle tab) override;
-  void DuplicateTab(tabs::TabHandle tab) override;
+  tabs::TabInterface* DuplicateTab(tabs::TabHandle tab) override;
   tabs::TabInterface* GetTab(int index) override;
   int GetIndexOfTab(tabs::TabHandle tab) override;
   void HighlightTabs(tabs::TabHandle tab_to_activate,
@@ -116,6 +127,12 @@ class TabModelJniBridge : public TabModel {
       const std::set<tabs::TabHandle>& tabs) override;
   void Ungroup(const std::set<tabs::TabHandle>& tabs) override;
   void MoveGroupTo(tab_groups::TabGroupId group_id, int index) override;
+  void MoveTabToWindow(tabs::TabHandle tab,
+                       SessionID destination_window_id,
+                       int destination_index) override;
+  void MoveTabGroupToWindow(tab_groups::TabGroupId group_id,
+                            SessionID destination_window_id,
+                            int destination_index) override;
 
   // Returns a corresponding Java Class object.
   static jclass GetClazz(JNIEnv* env);
@@ -123,6 +140,9 @@ class TabModelJniBridge : public TabModel {
   static TabModel* GetArchivedTabModelPtr();
 
  protected:
+  jni_zero::ScopedJavaLocalRef<jobject> GetActivityForWindow(
+      SessionID window_id);
+
   JavaObjectWeakGlobalRef java_object_;
 
   // The observer bridge. This exists as long as there are registered observers.
@@ -131,6 +151,10 @@ class TabModelJniBridge : public TabModel {
   std::unique_ptr<TabModelObserverJniBridge> observer_bridge_;
 
   bool is_archived_tab_model_;
+  // Cannot use a conventional member variable because this is initialized after
+  // the constructor.
+  std::unique_ptr<ui::ScopedUnownedUserData<TabModel>>
+      scoped_unowned_user_data_;
 };
 
 #endif  // CHROME_BROWSER_UI_ANDROID_TAB_MODEL_TAB_MODEL_JNI_BRIDGE_H_

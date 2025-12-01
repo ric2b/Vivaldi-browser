@@ -37,7 +37,6 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
-		1420DF50196247F900203BB0 /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1420DF4F196247F900203BB0 /* Images.xcassets */; };
 		142E0E0019A6954400E4312B /* Sparkle.framework in Copy Frameworks */ = {isa = PBXBuildFile; fileRef = 8DC2EF5B0486A6940098B216 /* Sparkle.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		142E0E0219A6A14700E4312B /* Sparkle.framework in Copy Files */ = {isa = PBXBuildFile; fileRef = 8DC2EF5B0486A6940098B216 /* Sparkle.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		142E0E0919A83AAC00E4312B /* SUBinaryDeltaTest.m in Sources */ = {isa = PBXBuildFile; fileRef = 142E0E0819A83AAC00E4312B /* SUBinaryDeltaTest.m */; };
@@ -106,10 +105,8 @@
 		61EF67560E25B58D00F754E0 /* SUHost.m in Sources */ = {isa = PBXBuildFile; fileRef = 61EF67550E25B58D00F754E0 /* SUHost.m */; };
 		61EF67590E25C5B400F754E0 /* SUHost.h in Headers */ = {isa = PBXBuildFile; fileRef = 61EF67580E25C5B400F754E0 /* SUHost.h */; };
 		654F352529B1548700B10EEB /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 61B5F8F609C4CEB300B25A18 /* Security.framework */; };
-		654F352729B154AE00B10EEB /* ImageIO.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 654F352629B154AE00B10EEB /* ImageIO.framework */; };
 		654F352829B154B500B10EEB /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 55C14F31136EFC2400649790 /* SystemConfiguration.framework */; };
 		654F352929B154BB00B10EEB /* ServiceManagement.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 724BB3B51D35AAC3005D534A /* ServiceManagement.framework */; };
-		654F352C29B154E900B10EEB /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F6D399502814387000A8C0DA /* UniformTypeIdentifiers.framework */; };
 		654F352D29B1551000B10EEB /* CoreServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 721BC20A1D17A5AD002BC71E /* CoreServices.framework */; };
 		7202DC9A269ABD3500737EC4 /* testappcast_phasedRollout.xml in Resources */ = {isa = PBXBuildFile; fileRef = 7202DC99269ABD3500737EC4 /* testappcast_phasedRollout.xml */; };
 		72045CE026FEE535004F96E5 /* Downloader.xpc in Copy XPC Services */ = {isa = PBXBuildFile; fileRef = 726E07EF1CAF37BD001A286B /* Downloader.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -146,10 +143,6 @@
 		720E217B1D0D00BF003A311C /* SPUUpdaterCycle.h in Headers */ = {isa = PBXBuildFile; fileRef = 720E21791D0D00BF003A311C /* SPUUpdaterCycle.h */; };
 		720E217C1D0D00BF003A311C /* SPUUpdaterCycle.m in Sources */ = {isa = PBXBuildFile; fileRef = 720E217A1D0D00BF003A311C /* SPUUpdaterCycle.m */; };
 		7210C7681B9A9A1500EB90AC /* SUUnarchiverTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7210C7671B9A9A1500EB90AC /* SUUnarchiverTest.swift */; };
-		7214B8811D456A8500CB5CED /* SUBundleIcon.h in Headers */ = {isa = PBXBuildFile; fileRef = 7214B87F1D456A8500CB5CED /* SUBundleIcon.h */; };
-		7214B8821D456A8500CB5CED /* SUBundleIcon.m in Sources */ = {isa = PBXBuildFile; fileRef = 7214B8801D456A8500CB5CED /* SUBundleIcon.m */; };
-		7214B8831D456C2400CB5CED /* SUBundleIcon.m in Sources */ = {isa = PBXBuildFile; fileRef = 7214B8801D456A8500CB5CED /* SUBundleIcon.m */; };
-		7214B8841D456C9500CB5CED /* SUBundleIcon.m in Sources */ = {isa = PBXBuildFile; fileRef = 7214B8801D456A8500CB5CED /* SUBundleIcon.m */; };
 		72162B081C82C9600013C1C5 /* SULocalizations.h in Headers */ = {isa = PBXBuildFile; fileRef = 72162B071C82C9600013C1C5 /* SULocalizations.h */; };
 		721BC20E1D1CDE55002BC71E /* SPULocalCacheDirectory.h in Headers */ = {isa = PBXBuildFile; fileRef = 721BC20C1D1CDE55002BC71E /* SPULocalCacheDirectory.h */; };
 		721BC20F1D1CDE55002BC71E /* SPULocalCacheDirectory.m in Sources */ = {isa = PBXBuildFile; fileRef = 721BC20D1D1CDE55002BC71E /* SPULocalCacheDirectory.m */; };
@@ -173,7 +166,6 @@
 		722545B626805FF80036465C /* testappcast_info_updates.xml in Resources */ = {isa = PBXBuildFile; fileRef = 722545B526805FF80036465C /* testappcast_info_updates.xml */; };
 		72266A872946359600645376 /* SUFileManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5E41D3D90AA00D1BF90 /* SUFileManager.m */; };
 		72266A88294635BA00645376 /* SUAppcastDriver.m in Sources */ = {isa = PBXBuildFile; fileRef = 72B767C91C9B707000A07552 /* SUAppcastDriver.m */; };
-		72266A89294636FB00645376 /* SUStandardVersionComparator.m in Sources */ = {isa = PBXBuildFile; fileRef = 61A225A30D1C4AC000430CCD /* SUStandardVersionComparator.m */; };
 		72266A8A2946493C00645376 /* SUCodeSigningVerifier.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5991D3D8A5A00D1BF90 /* SUCodeSigningVerifier.m */; };
 		72266A8B29464CEA00645376 /* SUHost.m in Sources */ = {isa = PBXBuildFile; fileRef = 61EF67550E25B58D00F754E0 /* SUHost.m */; };
 		72266A8C29464D0200645376 /* SUSignatures.m in Sources */ = {isa = PBXBuildFile; fileRef = EA1E286D22B665E8004AA304 /* SUSignatures.m */; };
@@ -185,10 +177,9 @@
 		722C9539286EA68C0033908A /* SPUGentleUserDriverReminders.h in Headers */ = {isa = PBXBuildFile; fileRef = 722C9538286EA54A0033908A /* SPUGentleUserDriverReminders.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		722FB7E5260EE53F00EB571C /* SUNormalization.m in Sources */ = {isa = PBXBuildFile; fileRef = 722FB7E4260EE53F00EB571C /* SUNormalization.m */; };
 		722FB7E6260EE53F00EB571C /* SUNormalization.m in Sources */ = {isa = PBXBuildFile; fileRef = 722FB7E4260EE53F00EB571C /* SUNormalization.m */; };
+		7230BCDE2E22E2BC00B71297 /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7230BCDD2E22E2BC00B71297 /* Images.xcassets */; };
 		72316BD31E0DA8430039EFD9 /* SUUnarchiverNotifier.m in Sources */ = {isa = PBXBuildFile; fileRef = 72316BD21E0DA8430039EFD9 /* SUUnarchiverNotifier.m */; };
 		72316BD41E0DB37E0039EFD9 /* SUUnarchiverNotifier.m in Sources */ = {isa = PBXBuildFile; fileRef = 72316BD21E0DA8430039EFD9 /* SUUnarchiverNotifier.m */; };
-		723ABD38259A9BA500BDB4FA /* SUUpdateAlert.xib in Resources */ = {isa = PBXBuildFile; fileRef = 723ABD36259A9BA500BDB4FA /* SUUpdateAlert.xib */; };
-		723ABD6C259A9CBC00BDB4FA /* SUUpdatePermissionPrompt.xib in Resources */ = {isa = PBXBuildFile; fileRef = 723ABD6A259A9CBB00BDB4FA /* SUUpdatePermissionPrompt.xib */; };
 		723ABDDB259A9E8600BDB4FA /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 723ABDD9259A9E8600BDB4FA /* InfoPlist.strings */; };
 		723ABE02259A9E9E00BDB4FA /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 723ABE00259A9E9E00BDB4FA /* MainMenu.xib */; };
 		723ABF1B259D055E00BDB4FA /* SUReleaseNotesView.h in Headers */ = {isa = PBXBuildFile; fileRef = 723ABF1A259D055E00BDB4FA /* SUReleaseNotesView.h */; };
@@ -206,6 +197,7 @@
 		723C8A551E2D60DB00C14942 /* SUTouchBarButtonGroup.m in Sources */ = {isa = PBXBuildFile; fileRef = 723C8A531E2D60DB00C14942 /* SUTouchBarButtonGroup.m */; };
 		723C8A561E2D60DB00C14942 /* SUTouchBarButtonGroup.m in Sources */ = {isa = PBXBuildFile; fileRef = 723C8A531E2D60DB00C14942 /* SUTouchBarButtonGroup.m */; };
 		723EDC3F26885A8E000BCBA4 /* testappcast_channels.xml in Resources */ = {isa = PBXBuildFile; fileRef = 723EDC3E26885A8E000BCBA4 /* testappcast_channels.xml */; };
+		7240852E2CA11C1400ED2FCD /* libz.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 7240852D2CA11C1400ED2FCD /* libz.tbd */; };
 		72464F701E1F31E000FB341C /* SUOperatingSystem.m in Sources */ = {isa = PBXBuildFile; fileRef = 726F2CE41BC9C33D001971A4 /* SUOperatingSystem.m */; };
 		72464F7C1E2097F600FB341C /* SUOperatingSystem.m in Sources */ = {isa = PBXBuildFile; fileRef = 726F2CE41BC9C33D001971A4 /* SUOperatingSystem.m */; };
 		72464F7E1E21ED8C00FB341C /* SUHost.m in Sources */ = {isa = PBXBuildFile; fileRef = 61EF67550E25B58D00F754E0 /* SUHost.m */; };
@@ -223,6 +215,7 @@
 		724BB3AA1D3347C2005D534A /* SUInstallerStatus.m in Sources */ = {isa = PBXBuildFile; fileRef = 724BB3971D333832005D534A /* SUInstallerStatus.m */; };
 		724BB3B71D35ABA8005D534A /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 61B5F8F609C4CEB300B25A18 /* Security.framework */; };
 		724F76F91D6EAD0D00ECD062 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 525A278F133D6AE900FD8D70 /* Cocoa.framework */; };
+		725453552C04DB3700362123 /* SparkleTestCodeSign_apfs_lzma_aux_files_adhoc.dmg in Resources */ = {isa = PBXBuildFile; fileRef = 725453542C04DB3700362123 /* SparkleTestCodeSign_apfs_lzma_aux_files_adhoc.dmg */; };
 		725602D51C83551C00DAA70E /* SUApplicationInfo.h in Headers */ = {isa = PBXBuildFile; fileRef = 725602D31C83551C00DAA70E /* SUApplicationInfo.h */; };
 		725602D61C83551C00DAA70E /* SUApplicationInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = 725602D41C83551C00DAA70E /* SUApplicationInfo.m */; };
 		725B3A82263FBF0C0041AB8E /* testappcast_minimumAutoupdateVersion.xml in Resources */ = {isa = PBXBuildFile; fileRef = 725B3A81263FBF0C0041AB8E /* testappcast_minimumAutoupdateVersion.xml */; };
@@ -274,7 +267,6 @@
 		7267E5B81D3D8AEE00D1BF90 /* SPUInstallationInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5B51D3D8AEE00D1BF90 /* SPUInstallationInfo.m */; };
 		7267E5C21D3D8B2700D1BF90 /* SUGuidedPackageInstaller.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5BB1D3D8B2700D1BF90 /* SUGuidedPackageInstaller.m */; };
 		7267E5C31D3D8B2700D1BF90 /* SUInstaller.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5BD1D3D8B2700D1BF90 /* SUInstaller.m */; };
-		7267E5C41D3D8B2700D1BF90 /* SUPackageInstaller.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5BF1D3D8B2700D1BF90 /* SUPackageInstaller.m */; };
 		7267E5C51D3D8B2700D1BF90 /* SUPlainInstaller.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5C11D3D8B2700D1BF90 /* SUPlainInstaller.m */; };
 		7267E5C91D3D8C4300D1BF90 /* CoreServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 721BC20A1D17A5AD002BC71E /* CoreServices.framework */; };
 		7267E5CA1D3D8C4800D1BF90 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0867D69BFE84028FC02AAC07 /* Foundation.framework */; };
@@ -293,7 +285,6 @@
 		7267E5E61D3D90AA00D1BF90 /* SUFileManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5E41D3D90AA00D1BF90 /* SUFileManager.m */; };
 		7267E5E71D3D90AA00D1BF90 /* SUFileManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5E41D3D90AA00D1BF90 /* SUFileManager.m */; };
 		7267E5E81D3D90AA00D1BF90 /* SUFileManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5E41D3D90AA00D1BF90 /* SUFileManager.m */; };
-		7267E5EA1D3D90AA00D1BF90 /* SUFileManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5E41D3D90AA00D1BF90 /* SUFileManager.m */; };
 		7267E5EB1D3D90C200D1BF90 /* SUFileManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5E41D3D90AA00D1BF90 /* SUFileManager.m */; };
 		7267E5EC1D3D912900D1BF90 /* SUInstaller.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5BD1D3D8B2700D1BF90 /* SUInstaller.m */; };
 		7267E5ED1D3D912E00D1BF90 /* SUUnarchiver.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5851D3D89B300D1BF90 /* SUUnarchiver.m */; };
@@ -303,7 +294,6 @@
 		7267E5F11D3D917A00D1BF90 /* SUBinaryDeltaUnarchiver.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E57E1D3D896700D1BF90 /* SUBinaryDeltaUnarchiver.m */; };
 		7267E5F21D3D918000D1BF90 /* SUSignatureVerifier.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E59B1D3D8A5A00D1BF90 /* SUSignatureVerifier.m */; };
 		7267E5F41D3D918B00D1BF90 /* SUGuidedPackageInstaller.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5BB1D3D8B2700D1BF90 /* SUGuidedPackageInstaller.m */; };
-		7267E5F51D3D918B00D1BF90 /* SUPackageInstaller.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5BF1D3D8B2700D1BF90 /* SUPackageInstaller.m */; };
 		7267E5F61D3D919000D1BF90 /* SUDiskImageUnarchiver.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5811D3D89B300D1BF90 /* SUDiskImageUnarchiver.m */; };
 		7267E5F71D3D919600D1BF90 /* SUPlainInstaller.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5C11D3D8B2700D1BF90 /* SUPlainInstaller.m */; };
 		7267E5F81D3D91A800D1BF90 /* SUPipedUnarchiver.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5831D3D89B300D1BF90 /* SUPipedUnarchiver.m */; };
@@ -314,6 +304,8 @@
 		7269E496264798200088C213 /* SPUSkippedUpdate.m in Sources */ = {isa = PBXBuildFile; fileRef = 7269E493264798200088C213 /* SPUSkippedUpdate.m */; };
 		7269E4982648D3460088C213 /* SPUSkippedUpdate.m in Sources */ = {isa = PBXBuildFile; fileRef = 7269E493264798200088C213 /* SPUSkippedUpdate.m */; };
 		7269E49A2648F7C00088C213 /* SPUUserUpdateState.m in Sources */ = {isa = PBXBuildFile; fileRef = 7269E4992648F7C00088C213 /* SPUUserUpdateState.m */; };
+		726B20612CF4F1D300E6F7DB /* DevSignedAppVersion2.dmg in Resources */ = {isa = PBXBuildFile; fileRef = 726B20602CF4F1D300E6F7DB /* DevSignedAppVersion2.dmg */; };
+		726BA5132E25F60000CE93C3 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0867D6A5FE840307C02AAC07 /* AppKit.framework */; };
 		726DF88E1C84277600188804 /* SPUUserUpdateState.h in Headers */ = {isa = PBXBuildFile; fileRef = 726DF88D1C84277500188804 /* SPUUserUpdateState.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		726E075C1CA3A6D6001A286B /* SPUSecureCoding.h in Headers */ = {isa = PBXBuildFile; fileRef = 726E075A1CA3A6D6001A286B /* SPUSecureCoding.h */; };
 		726E075D1CA3A6D6001A286B /* SPUSecureCoding.m in Sources */ = {isa = PBXBuildFile; fileRef = 726E075B1CA3A6D6001A286B /* SPUSecureCoding.m */; };
@@ -334,8 +326,9 @@
 		726F2CE51BC9C33D001971A4 /* SUOperatingSystem.h in Headers */ = {isa = PBXBuildFile; fileRef = 726F2CE31BC9C33D001971A4 /* SUOperatingSystem.h */; };
 		726F2CE61BC9C33D001971A4 /* SUOperatingSystem.m in Sources */ = {isa = PBXBuildFile; fileRef = 726F2CE41BC9C33D001971A4 /* SUOperatingSystem.m */; };
 		726F2CE81BC9C48F001971A4 /* SUConstants.m in Sources */ = {isa = PBXBuildFile; fileRef = 61299A5F09CA6EB100B7442F /* SUConstants.m */; };
-		726F2CE91BC9C499001971A4 /* SUOperatingSystem.m in Sources */ = {isa = PBXBuildFile; fileRef = 726F2CE41BC9C33D001971A4 /* SUOperatingSystem.m */; };
 		726F2CEB1BC9C733001971A4 /* SUConstants.m in Sources */ = {isa = PBXBuildFile; fileRef = 61299A5F09CA6EB100B7442F /* SUConstants.m */; };
+		726FC0362C1E787A00177986 /* SparkleTestCodeSignApp.aar in Resources */ = {isa = PBXBuildFile; fileRef = 726FC0352C1E787A00177986 /* SparkleTestCodeSignApp.aar */; };
+		726FC0382C1E96AA00177986 /* SparkleTestCodeSignApp.enc.aar in Resources */ = {isa = PBXBuildFile; fileRef = 726FC0372C1E96AA00177986 /* SparkleTestCodeSignApp.enc.aar */; };
 		727DBAE526B5BBFD00111F0C /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = 727DBAE426B5BBFD00111F0C /* ArgumentParser */; };
 		727DBAE726B5C47800111F0C /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = 727DBAE626B5C47800111F0C /* ArgumentParser */; };
 		727DBAE926B5C48A00111F0C /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = 727DBAE826B5C48A00111F0C /* ArgumentParser */; };
@@ -352,8 +345,12 @@
 		728ED34C277DA23400D9238F /* SPUSparkleDeltaArchive.m in Sources */ = {isa = PBXBuildFile; fileRef = 728ED349277DA23400D9238F /* SPUSparkleDeltaArchive.m */; };
 		728ED34D277DA23400D9238F /* SPUSparkleDeltaArchive.m in Sources */ = {isa = PBXBuildFile; fileRef = 728ED349277DA23400D9238F /* SPUSparkleDeltaArchive.m */; };
 		729051E41DC82AC0003DEA7F /* SUOperatingSystem.m in Sources */ = {isa = PBXBuildFile; fileRef = 726F2CE41BC9C33D001971A4 /* SUOperatingSystem.m */; };
+		7290BF2F2E5A5AFA00D75022 /* SUCodeSigningVerifier.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5991D3D8A5A00D1BF90 /* SUCodeSigningVerifier.m */; };
+		7290BF302E5A5B0F00D75022 /* SUCodeSigningVerifier.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5991D3D8A5A00D1BF90 /* SUCodeSigningVerifier.m */; };
+		7290BF312E5A5B2F00D75022 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 61B5F8F609C4CEB300B25A18 /* Security.framework */; };
 		729743AB279D1BD2009910B2 /* SUCodeSigningVerifier.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5991D3D8A5A00D1BF90 /* SUCodeSigningVerifier.m */; };
 		729924941DF4A45000DBCDF5 /* SUUpdateValidator.m in Sources */ = {isa = PBXBuildFile; fileRef = 729924931DF4A45000DBCDF5 /* SUUpdateValidator.m */; };
+		729C51282E58015600D7365A /* SUUpdatePermissionPrompt.xib in Resources */ = {isa = PBXBuildFile; fileRef = 729C51272E58015600D7365A /* SUUpdatePermissionPrompt.xib */; };
 		729F7EAC27366353004592DC /* test-links.xml in Resources */ = {isa = PBXBuildFile; fileRef = 729F7EAB27366353004592DC /* test-links.xml */; };
 		729F7EAF273F1840004592DC /* SPUUserAgent+Private.h in Headers */ = {isa = PBXBuildFile; fileRef = 729F7EAD273F1840004592DC /* SPUUserAgent+Private.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		729F7EB0273F1840004592DC /* SPUUserAgent+Private.m in Sources */ = {isa = PBXBuildFile; fileRef = 729F7EAE273F1840004592DC /* SPUUserAgent+Private.m */; };
@@ -411,6 +408,8 @@
 		72E45CF81B640DAE005C701A /* SUUpdateSettingsWindowController.xib in Resources */ = {isa = PBXBuildFile; fileRef = 72E45CF61B640DAE005C701A /* SUUpdateSettingsWindowController.xib */; };
 		72E45CFC1B641961005C701A /* sparkletestcast.xml in Resources */ = {isa = PBXBuildFile; fileRef = 72E45CFB1B641961005C701A /* sparkletestcast.xml */; };
 		72E539121D68C3FA0092CE5E /* SPUDownloadData.m in Sources */ = {isa = PBXBuildFile; fileRef = 72F9EC431D5E9ED8004AC8B6 /* SPUDownloadData.m */; };
+		72E6D9712C04DE1A005496E4 /* SparkleTestCodeSign_pkg.dmg in Resources */ = {isa = PBXBuildFile; fileRef = 72E6D9702C04DE19005496E4 /* SparkleTestCodeSign_pkg.dmg */; };
+		72E6D9732C0526DC005496E4 /* SparkleTestCodeSignApp.enc.nolicense.dmg in Resources */ = {isa = PBXBuildFile; fileRef = 72E6D9722C0526DC005496E4 /* SparkleTestCodeSignApp.enc.nolicense.dmg */; };
 		72EB735F29BE981300FBCEE7 /* DevSignedApp.zip in Resources */ = {isa = PBXBuildFile; fileRef = 72EB735E29BE981300FBCEE7 /* DevSignedApp.zip */; };
 		72EB736129BEB36100FBCEE7 /* DevSignedAppVersion2.zip in Resources */ = {isa = PBXBuildFile; fileRef = 72EB736029BEB36100FBCEE7 /* DevSignedAppVersion2.zip */; };
 		72EB87EA1CB8798800C37F42 /* ShowInstallerProgress.m in Sources */ = {isa = PBXBuildFile; fileRef = 72EB87E91CB8798800C37F42 /* ShowInstallerProgress.m */; };
@@ -437,7 +436,6 @@
 		72F0EC4B278A5BB2002A876A /* libxar.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 726E07681CA616A4001A286B /* libxar.tbd */; };
 		72F0EC4C278A5BB9002A876A /* libbz2.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 726E076A1CA616B3001A286B /* libbz2.tbd */; };
 		72F0EC4D278A5BCA002A876A /* libbsdiff.a in Frameworks */ = {isa = PBXBuildFile; fileRef = EA1E280F22B64522004AA304 /* libbsdiff.a */; };
-		72F0EC4E278A73C6002A876A /* SUFileManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 7267E5E41D3D90AA00D1BF90 /* SUFileManager.m */; };
 		72F94F581CC44DE1002DEE68 /* SPUXPCServiceInfo.h in Headers */ = {isa = PBXBuildFile; fileRef = 72F94F561CC44DE1002DEE68 /* SPUXPCServiceInfo.h */; };
 		72F94F591CC44DE1002DEE68 /* SPUXPCServiceInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = 72F94F571CC44DE1002DEE68 /* SPUXPCServiceInfo.m */; };
 		72F94F5A1CC450DE002DEE68 /* SUInstallerLauncher.m in Sources */ = {isa = PBXBuildFile; fileRef = 726E07B11CAF08D6001A286B /* SUInstallerLauncher.m */; };
@@ -448,6 +446,7 @@
 		72F9EC441D5E9ED8004AC8B6 /* SPUDownloadData.h in Headers */ = {isa = PBXBuildFile; fileRef = 72F9EC421D5E9ED8004AC8B6 /* SPUDownloadData.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		72F9EC451D5E9ED8004AC8B6 /* SPUDownloadData.m in Sources */ = {isa = PBXBuildFile; fileRef = 72F9EC431D5E9ED8004AC8B6 /* SPUDownloadData.m */; };
 		72F9EC481D5EA904004AC8B6 /* SPUUpdaterDelegate.h in Headers */ = {isa = PBXBuildFile; fileRef = 72F9EC471D5EA7D3004AC8B6 /* SPUUpdaterDelegate.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		72FE54422E56A14100227A91 /* SUUpdateAlert.xib in Resources */ = {isa = PBXBuildFile; fileRef = 72FE54412E56A14100227A91 /* SUUpdateAlert.xib */; };
 		C23E885B1BE7B24F0050BB73 /* SparkleTestCodeSignApp.enc.dmg in Resources */ = {isa = PBXBuildFile; fileRef = C23E88591BE7AF890050BB73 /* SparkleTestCodeSignApp.enc.dmg */; };
 		EA1E281722B645AE004AA304 /* libbsdiff.a in Frameworks */ = {isa = PBXBuildFile; fileRef = EA1E280F22B64522004AA304 /* libbsdiff.a */; };
 		EA1E281822B645CE004AA304 /* libbsdiff.a in Frameworks */ = {isa = PBXBuildFile; fileRef = EA1E280F22B64522004AA304 /* libbsdiff.a */; };
@@ -484,7 +483,6 @@
 		EA1E287022B66621004AA304 /* SUSignatures.m in Sources */ = {isa = PBXBuildFile; fileRef = EA1E286D22B665E8004AA304 /* SUSignatures.m */; };
 		EA1E287922B666EB004AA304 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA1E287822B666EB004AA304 /* main.swift */; };
 		EA1E287E22B66705004AA304 /* libed25519.a in Frameworks */ = {isa = PBXBuildFile; fileRef = EA1E282D22B660BE004AA304 /* libed25519.a */; };
-		F6D399512814387000A8C0DA /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F6D399502814387000A8C0DA /* UniformTypeIdentifiers.framework */; };
 		F8761EB11ADC5068000C9034 /* SUCodeSigningVerifierTest.m in Sources */ = {isa = PBXBuildFile; fileRef = F8761EB01ADC5068000C9034 /* SUCodeSigningVerifierTest.m */; };
 		F8761EB31ADC50EB000C9034 /* SparkleTestCodeSignApp.zip in Resources */ = {isa = PBXBuildFile; fileRef = F8761EB21ADC50EB000C9034 /* SparkleTestCodeSignApp.zip */; };
 		FA30773D24CBC295007BA37D /* testlocalizedreleasenotesappcast.xml in Resources */ = {isa = PBXBuildFile; fileRef = FA30773C24CBC295007BA37D /* testlocalizedreleasenotesappcast.xml */; };
@@ -918,7 +916,6 @@
 		0263187214FEBB31005EBF43 /* uk */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.strings; name = uk; path = uk.lproj/Sparkle.strings; sourceTree = "<group>"; };
 		0867D69BFE84028FC02AAC07 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		0867D6A5FE840307C02AAC07 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
-		1420DF4F196247F900203BB0 /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Images.xcassets; sourceTree = "<group>"; };
 		142E0E0819A83AAC00E4312B /* SUBinaryDeltaTest.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SUBinaryDeltaTest.m; sourceTree = "<group>"; };
 		14652F7919A93E5F00959E44 /* set-git-version-info.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "set-git-version-info.sh"; sourceTree = "<group>"; };
 		14652F8319A9759F00959E44 /* SUExport.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SUExport.h; sourceTree = "<group>"; };
@@ -944,8 +941,6 @@
 		1EAA4C8A2132C7BF00604473 /* ReleaseNotesColorStyle.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = ReleaseNotesColorStyle.css; sourceTree = "<group>"; };
 		3772FEA813DE0B6B00F79537 /* SUVersionDisplayProtocol.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SUVersionDisplayProtocol.h; sourceTree = "<group>"; };
 		37A5F28528E9219000891504 /* zh_HK */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh_HK; path = zh_HK.lproj/Sparkle.strings; sourceTree = "<group>"; };
-		37A5F28628E9219000891504 /* zh_HK */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh_HK; path = zh_HK.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		37A5F28728E9219000891504 /* zh_HK */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh_HK; path = zh_HK.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
 		37A5F28828E9219000891504 /* zh_HK */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh_HK; path = zh_HK.lproj/MainMenu.strings; sourceTree = "<group>"; };
 		4607BEA21948443800EF8DA4 /* nb */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = nb; path = nb.lproj/Sparkle.strings; sourceTree = "<group>"; };
 		525A278F133D6AE900FD8D70 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
@@ -1050,8 +1045,6 @@
 		720E21791D0D00BF003A311C /* SPUUpdaterCycle.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SPUUpdaterCycle.h; sourceTree = "<group>"; };
 		720E217A1D0D00BF003A311C /* SPUUpdaterCycle.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SPUUpdaterCycle.m; sourceTree = "<group>"; };
 		7210C7671B9A9A1500EB90AC /* SUUnarchiverTest.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SUUnarchiverTest.swift; sourceTree = "<group>"; };
-		7214B87F1D456A8500CB5CED /* SUBundleIcon.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SUBundleIcon.h; sourceTree = "<group>"; };
-		7214B8801D456A8500CB5CED /* SUBundleIcon.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SUBundleIcon.m; sourceTree = "<group>"; };
 		7214B8851D45AD9A00CB5CED /* SPUInstallationType.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SPUInstallationType.h; sourceTree = "<group>"; };
 		72162B071C82C9600013C1C5 /* SULocalizations.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SULocalizations.h; sourceTree = "<group>"; };
 		721652671D3C8FED00FD13D8 /* SUInstallerLauncherStatus.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = SUInstallerLauncherStatus.h; path = InstallerLauncher/SUInstallerLauncherStatus.h; sourceTree = SOURCE_ROOT; };
@@ -1086,71 +1079,12 @@
 		722FB7CA1DD69897001D40CE /* ConfigSwift.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = ConfigSwift.xcconfig; sourceTree = "<group>"; };
 		722FB7E3260EE53F00EB571C /* SUNormalization.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SUNormalization.h; sourceTree = "<group>"; };
 		722FB7E4260EE53F00EB571C /* SUNormalization.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SUNormalization.m; sourceTree = "<group>"; };
+		7230BCDD2E22E2BC00B71297 /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Images.xcassets; sourceTree = "<group>"; };
 		72316BD11E0DA8430039EFD9 /* SUUnarchiverNotifier.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SUUnarchiverNotifier.h; path = Autoupdate/SUUnarchiverNotifier.h; sourceTree = SOURCE_ROOT; };
 		72316BD21E0DA8430039EFD9 /* SUUnarchiverNotifier.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = SUUnarchiverNotifier.m; path = Autoupdate/SUUnarchiverNotifier.m; sourceTree = SOURCE_ROOT; };
 		7235B75E29DFC0120081FE4E /* make-xcframework.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "make-xcframework.sh"; sourceTree = "<group>"; };
+		72366CCC2DC2D1FC003CE62B /* Sparkle.private.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = Sparkle.private.modulemap; sourceTree = "<group>"; };
 		723ABCD7259A9A9D00BDB4FA /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Base; path = Base.lproj/Sparkle.strings; sourceTree = "<group>"; };
-		723ABD37259A9BA500BDB4FA /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/SUUpdateAlert.xib; sourceTree = "<group>"; };
-		723ABD4C259A9BB900BDB4FA /* ar */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ar; path = ar.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD4D259A9BE100BDB4FA /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD4E259A9BEF00BDB4FA /* ca */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ca; path = ca.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD4F259A9BFD00BDB4FA /* zh_CN */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh_CN; path = zh_CN.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD50259A9C0200BDB4FA /* zh_TW */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh_TW; path = zh_TW.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD51259A9C0600BDB4FA /* cs */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = cs; path = cs.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD52259A9C0900BDB4FA /* da */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = da; path = da.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD53259A9C1000BDB4FA /* nl */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = nl; path = nl.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD54259A9C1300BDB4FA /* fi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fi; path = fi.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD55259A9C1500BDB4FA /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD56259A9C1E00BDB4FA /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD57259A9C2100BDB4FA /* el */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = el; path = el.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD58259A9C2400BDB4FA /* he */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = he; path = he.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD59259A9C2C00BDB4FA /* is */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = is; path = is.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD5A259A9C3600BDB4FA /* it */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = it; path = it.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD5B259A9C3900BDB4FA /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD5C259A9C3B00BDB4FA /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ko; path = ko.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD5D259A9C3D00BDB4FA /* nb */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = nb; path = nb.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD5E259A9C4000BDB4FA /* pl */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = pl; path = pl.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD5F259A9C4900BDB4FA /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = "pt-BR.lproj/SUUpdateAlert.strings"; sourceTree = "<group>"; };
-		723ABD60259A9C4B00BDB4FA /* pt-PT */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-PT"; path = "pt-PT.lproj/SUUpdateAlert.strings"; sourceTree = "<group>"; };
-		723ABD61259A9C5400BDB4FA /* ro */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ro; path = ro.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD62259A9C5700BDB4FA /* ru */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ru; path = ru.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD63259A9C5900BDB4FA /* sk */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = sk; path = sk.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD64259A9C5B00BDB4FA /* sl */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = sl; path = sl.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD65259A9C5D00BDB4FA /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD66259A9C5F00BDB4FA /* sv */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = sv; path = sv.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD67259A9C6100BDB4FA /* th */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = th; path = th.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD68259A9C6300BDB4FA /* tr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = tr; path = tr.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD69259A9C6600BDB4FA /* uk */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = uk; path = uk.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
-		723ABD6B259A9CBB00BDB4FA /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/SUUpdatePermissionPrompt.xib; sourceTree = "<group>"; };
-		723ABD80259A9CD600BDB4FA /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD81259A9CDA00BDB4FA /* ar */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ar; path = ar.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD82259A9CEC00BDB4FA /* cs */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = cs; path = cs.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD83259A9CF000BDB4FA /* zh_CN */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh_CN; path = zh_CN.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD84259A9CF400BDB4FA /* zh_TW */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh_TW; path = zh_TW.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD85259A9CF800BDB4FA /* da */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = da; path = da.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD86259A9CFC00BDB4FA /* nl */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = nl; path = nl.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD87259A9CFF00BDB4FA /* fi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fi; path = fi.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD88259A9D0200BDB4FA /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD89259A9D1800BDB4FA /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD8A259A9D1C00BDB4FA /* el */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = el; path = el.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD8D259A9D2700BDB4FA /* hu */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hu; path = hu.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD8E259A9D2A00BDB4FA /* is */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = is; path = is.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD91259A9D3400BDB4FA /* it */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = it; path = it.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD92259A9D3700BDB4FA /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD93259A9D3C00BDB4FA /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ko; path = ko.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD94259A9D3E00BDB4FA /* nb */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = nb; path = nb.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD95259A9D4100BDB4FA /* pl */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = pl; path = pl.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD96259A9D4600BDB4FA /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = "pt-BR.lproj/SUUpdatePermissionPrompt.strings"; sourceTree = "<group>"; };
-		723ABD97259A9D4900BDB4FA /* pt-PT */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-PT"; path = "pt-PT.lproj/SUUpdatePermissionPrompt.strings"; sourceTree = "<group>"; };
-		723ABD98259A9D4C00BDB4FA /* ro */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ro; path = ro.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD99259A9D4F00BDB4FA /* ru */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ru; path = ru.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD9A259A9D5200BDB4FA /* sk */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = sk; path = sk.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD9B259A9D5500BDB4FA /* sl */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = sl; path = sl.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD9C259A9D5700BDB4FA /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD9D259A9D5A00BDB4FA /* sv */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = sv; path = sv.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD9E259A9D5D00BDB4FA /* th */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = th; path = th.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABD9F259A9D6000BDB4FA /* tr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = tr; path = tr.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		723ABDA0259A9D6300BDB4FA /* uk */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = uk; path = uk.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
 		723ABDDA259A9E8600BDB4FA /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Base; path = Base.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		723ABE01259A9E9E00BDB4FA /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
 		723ABE15259A9EB000BDB4FA /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/MainMenu.strings; sourceTree = "<group>"; };
@@ -1202,6 +1136,7 @@
 		723C8A531E2D60DB00C14942 /* SUTouchBarButtonGroup.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SUTouchBarButtonGroup.m; sourceTree = "<group>"; };
 		723DFF962B3DFF6E00628E6C /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
 		723EDC3E26885A8E000BCBA4 /* testappcast_channels.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = testappcast_channels.xml; sourceTree = "<group>"; };
+		7240852D2CA11C1400ED2FCD /* libz.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libz.tbd; path = usr/lib/libz.tbd; sourceTree = SDKROOT; };
 		7246E0A11C83B685003B4E75 /* SPUStandardUpdaterController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SPUStandardUpdaterController.h; sourceTree = "<group>"; };
 		7246E0A21C83B685003B4E75 /* SPUStandardUpdaterController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SPUStandardUpdaterController.m; sourceTree = "<group>"; };
 		724BB36C1D31D0B7005D534A /* InstallerConnection.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = InstallerConnection.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1226,6 +1161,7 @@
 		724BB3A61D33461B005D534A /* SUXPCInstallerStatus.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SUXPCInstallerStatus.h; sourceTree = "<group>"; };
 		724BB3A71D33461B005D534A /* SUXPCInstallerStatus.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SUXPCInstallerStatus.m; sourceTree = "<group>"; };
 		724BB3B51D35AAC3005D534A /* ServiceManagement.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ServiceManagement.framework; path = System/Library/Frameworks/ServiceManagement.framework; sourceTree = SDKROOT; };
+		725453542C04DB3700362123 /* SparkleTestCodeSign_apfs_lzma_aux_files_adhoc.dmg */ = {isa = PBXFileReference; lastKnownFileType = file; path = SparkleTestCodeSign_apfs_lzma_aux_files_adhoc.dmg; sourceTree = "<group>"; };
 		725602D31C83551C00DAA70E /* SUApplicationInfo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SUApplicationInfo.h; sourceTree = "<group>"; };
 		725602D41C83551C00DAA70E /* SUApplicationInfo.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SUApplicationInfo.m; sourceTree = "<group>"; };
 		72563CA9272E1C5400AF39F0 /* .github */ = {isa = PBXFileReference; lastKnownFileType = folder; path = .github; sourceTree = "<group>"; };
@@ -1288,8 +1224,6 @@
 		7267E5BB1D3D8B2700D1BF90 /* SUGuidedPackageInstaller.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = SUGuidedPackageInstaller.m; path = Autoupdate/SUGuidedPackageInstaller.m; sourceTree = SOURCE_ROOT; };
 		7267E5BC1D3D8B2700D1BF90 /* SUInstaller.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SUInstaller.h; path = Autoupdate/SUInstaller.h; sourceTree = SOURCE_ROOT; };
 		7267E5BD1D3D8B2700D1BF90 /* SUInstaller.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = SUInstaller.m; path = Autoupdate/SUInstaller.m; sourceTree = SOURCE_ROOT; };
-		7267E5BE1D3D8B2700D1BF90 /* SUPackageInstaller.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SUPackageInstaller.h; path = Autoupdate/SUPackageInstaller.h; sourceTree = SOURCE_ROOT; };
-		7267E5BF1D3D8B2700D1BF90 /* SUPackageInstaller.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = SUPackageInstaller.m; path = Autoupdate/SUPackageInstaller.m; sourceTree = SOURCE_ROOT; };
 		7267E5C01D3D8B2700D1BF90 /* SUPlainInstaller.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SUPlainInstaller.h; path = Autoupdate/SUPlainInstaller.h; sourceTree = SOURCE_ROOT; };
 		7267E5C11D3D8B2700D1BF90 /* SUPlainInstaller.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = SUPlainInstaller.m; path = Autoupdate/SUPlainInstaller.m; sourceTree = SOURCE_ROOT; };
 		7267E5CF1D3D8C8500D1BF90 /* SecurityFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SecurityFoundation.framework; path = System/Library/Frameworks/SecurityFoundation.framework; sourceTree = SDKROOT; };
@@ -1301,6 +1235,7 @@
 		7269E493264798200088C213 /* SPUSkippedUpdate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SPUSkippedUpdate.m; sourceTree = "<group>"; };
 		7269E4992648F7C00088C213 /* SPUUserUpdateState.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SPUUserUpdateState.m; sourceTree = "<group>"; };
 		7269E49C2648FC6C0088C213 /* SPUUserUpdateState+Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "SPUUserUpdateState+Private.h"; sourceTree = "<group>"; };
+		726B20602CF4F1D300E6F7DB /* DevSignedAppVersion2.dmg */ = {isa = PBXFileReference; lastKnownFileType = file; path = DevSignedAppVersion2.dmg; sourceTree = "<group>"; };
 		726B2B5D1C645FC900388755 /* UI Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "UI Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		726DF88D1C84277500188804 /* SPUUserUpdateState.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SPUUserUpdateState.h; sourceTree = "<group>"; };
 		726E075A1CA3A6D6001A286B /* SPUSecureCoding.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SPUSecureCoding.h; path = Sparkle/SPUSecureCoding.h; sourceTree = SOURCE_ROOT; };
@@ -1328,6 +1263,8 @@
 		726E4A361C89116000C57C6A /* SPUStandardUserDriverDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SPUStandardUserDriverDelegate.h; sourceTree = "<group>"; };
 		726F2CE31BC9C33D001971A4 /* SUOperatingSystem.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SUOperatingSystem.h; sourceTree = "<group>"; };
 		726F2CE41BC9C33D001971A4 /* SUOperatingSystem.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SUOperatingSystem.m; sourceTree = "<group>"; };
+		726FC0352C1E787A00177986 /* SparkleTestCodeSignApp.aar */ = {isa = PBXFileReference; lastKnownFileType = file; path = SparkleTestCodeSignApp.aar; sourceTree = "<group>"; };
+		726FC0372C1E96AA00177986 /* SparkleTestCodeSignApp.enc.aar */ = {isa = PBXFileReference; lastKnownFileType = file; path = SparkleTestCodeSignApp.enc.aar; sourceTree = "<group>"; };
 		726FD2CB25F4BE5F00123BC6 /* fa */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fa; path = fa.lproj/MainMenu.strings; sourceTree = "<group>"; };
 		726FD2CC25F4BE5F00123BC6 /* fa */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fa; path = fa.lproj/Sparkle.strings; sourceTree = "<group>"; };
 		727F340A2605321D00020E85 /* SULog+NSError.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "SULog+NSError.m"; sourceTree = "<group>"; };
@@ -1339,13 +1276,12 @@
 		7286EE5E28CEC84900163C1D /* SUPlainTextReleaseNotesView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SUPlainTextReleaseNotesView.m; sourceTree = "<group>"; };
 		728ED348277DA23400D9238F /* SPUSparkleDeltaArchive.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = SPUSparkleDeltaArchive.h; path = Autoupdate/SPUSparkleDeltaArchive.h; sourceTree = SOURCE_ROOT; };
 		728ED349277DA23400D9238F /* SPUSparkleDeltaArchive.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = SPUSparkleDeltaArchive.m; path = Autoupdate/SPUSparkleDeltaArchive.m; sourceTree = SOURCE_ROOT; };
-		728FBA192BB5013300651EDF /* nn */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = nn; path = nn.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		728FBA1A2BB5013300651EDF /* nn */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = nn; path = nn.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
 		728FBA1B2BB5013300651EDF /* nn */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = nn; path = nn.lproj/MainMenu.strings; sourceTree = "<group>"; };
 		728FBA1C2BB5013300651EDF /* nn */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = nn; path = nn.lproj/Sparkle.strings; sourceTree = "<group>"; };
 		729924921DF4A45000DBCDF5 /* SUUpdateValidator.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SUUpdateValidator.h; path = Sparkle/SUUpdateValidator.h; sourceTree = SOURCE_ROOT; };
 		729924931DF4A45000DBCDF5 /* SUUpdateValidator.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = SUUpdateValidator.m; path = Sparkle/SUUpdateValidator.m; sourceTree = SOURCE_ROOT; };
 		729BB3D11D503826007C4276 /* Downloader.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = Downloader.entitlements; path = Downloader/Downloader.entitlements; sourceTree = SOURCE_ROOT; };
+		729C51272E58015600D7365A /* SUUpdatePermissionPrompt.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = SUUpdatePermissionPrompt.xib; sourceTree = "<group>"; };
 		729F10FD1C65A9B500DFCCC5 /* ConfigUITest.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = ConfigUITest.xcconfig; sourceTree = "<group>"; };
 		729F10FE1C65A9B500DFCCC5 /* ConfigUITestCoverage.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = ConfigUITestCoverage.xcconfig; sourceTree = "<group>"; };
 		729F7EAB27366353004592DC /* test-links.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "test-links.xml"; sourceTree = "<group>"; };
@@ -1411,8 +1347,6 @@
 		72D954B71CBB467F006F28BD /* SPUCommandLineUserDriver.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SPUCommandLineUserDriver.m; sourceTree = "<group>"; };
 		72DBA37B1D60CC34002594A8 /* SPUUpdatePermissionRequest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SPUUpdatePermissionRequest.h; sourceTree = "<group>"; };
 		72DBA37C1D60CC34002594A8 /* SPUUpdatePermissionRequest.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SPUUpdatePermissionRequest.m; sourceTree = "<group>"; };
-		72E1DAB525B3E8AE0001BA6D /* hr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hr; path = hr.lproj/SUUpdatePermissionPrompt.strings; sourceTree = "<group>"; };
-		72E1DAB625B3E8AE0001BA6D /* hr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hr; path = hr.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
 		72E1DAB725B3E8AE0001BA6D /* hr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hr; path = hr.lproj/MainMenu.strings; sourceTree = "<group>"; };
 		72E1DACB25B3E8DF0001BA6D /* hr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hr; path = hr.lproj/Sparkle.strings; sourceTree = "<group>"; };
 		72E45CF11B640CDD005C701A /* SUTestApplicationDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SUTestApplicationDelegate.h; sourceTree = "<group>"; };
@@ -1421,6 +1355,8 @@
 		72E45CF51B640DAE005C701A /* SUUpdateSettingsWindowController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SUUpdateSettingsWindowController.m; sourceTree = "<group>"; };
 		72E45CF61B640DAE005C701A /* SUUpdateSettingsWindowController.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = SUUpdateSettingsWindowController.xib; sourceTree = "<group>"; };
 		72E45CFB1B641961005C701A /* sparkletestcast.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = sparkletestcast.xml; sourceTree = "<group>"; };
+		72E6D9702C04DE19005496E4 /* SparkleTestCodeSign_pkg.dmg */ = {isa = PBXFileReference; lastKnownFileType = file; path = SparkleTestCodeSign_pkg.dmg; sourceTree = "<group>"; };
+		72E6D9722C0526DC005496E4 /* SparkleTestCodeSignApp.enc.nolicense.dmg */ = {isa = PBXFileReference; lastKnownFileType = file; path = SparkleTestCodeSignApp.enc.nolicense.dmg; sourceTree = "<group>"; };
 		72EB735E29BE981300FBCEE7 /* DevSignedApp.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = DevSignedApp.zip; sourceTree = "<group>"; };
 		72EB736029BEB36100FBCEE7 /* DevSignedAppVersion2.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = DevSignedAppVersion2.zip; sourceTree = "<group>"; };
 		72EB87E91CB8798800C37F42 /* ShowInstallerProgress.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = ShowInstallerProgress.m; path = Sparkle/InstallerProgress/ShowInstallerProgress.m; sourceTree = SOURCE_ROOT; };
@@ -1445,6 +1381,7 @@
 		72F9EC421D5E9ED8004AC8B6 /* SPUDownloadData.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SPUDownloadData.h; sourceTree = "<group>"; };
 		72F9EC431D5E9ED8004AC8B6 /* SPUDownloadData.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SPUDownloadData.m; sourceTree = "<group>"; };
 		72F9EC471D5EA7D3004AC8B6 /* SPUUpdaterDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SPUUpdaterDelegate.h; sourceTree = "<group>"; };
+		72FE54412E56A14100227A91 /* SUUpdateAlert.xib */ = {isa = PBXFileReference; lastKnownFileType = file.xib; path = SUUpdateAlert.xib; sourceTree = "<group>"; };
 		8DC2EF5A0486A6940098B216 /* Sparkle-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = "Sparkle-Info.plist"; sourceTree = "<group>"; };
 		8DC2EF5B0486A6940098B216 /* Sparkle.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Sparkle.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		A5BF4F1B1BC7668B007A052A /* SUTestWebServer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SUTestWebServer.h; sourceTree = "<group>"; };
@@ -1487,7 +1424,6 @@
 		EA1E287822B666EB004AA304 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		EA1E287F22B667D8004AA304 /* Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Bridging-Header.h"; sourceTree = "<group>"; };
 		F67C9B7B281410B600740813 /* hu */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hu; path = hu.lproj/Sparkle.strings; sourceTree = "<group>"; };
-		F67C9B7C281410B600740813 /* hu */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hu; path = hu.lproj/SUUpdateAlert.strings; sourceTree = "<group>"; };
 		F6D399502814387000A8C0DA /* UniformTypeIdentifiers.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UniformTypeIdentifiers.framework; path = System/Library/Frameworks/UniformTypeIdentifiers.framework; sourceTree = SDKROOT; };
 		F6E11510281410D10003736C /* ar */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ar; path = ar.lproj/Sparkle.strings; sourceTree = "<group>"; };
 		F8761EB01ADC5068000C9034 /* SUCodeSigningVerifierTest.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SUCodeSigningVerifierTest.m; sourceTree = "<group>"; };
@@ -1569,7 +1505,6 @@
 			files = (
 				721C245A1CB75756005440CB /* Cocoa.framework in Frameworks */,
 				724BB3B71D35ABA8005D534A /* Security.framework in Frameworks */,
-				F6D399512814387000A8C0DA /* UniformTypeIdentifiers.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1598,11 +1533,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				726BA5132E25F60000CE93C3 /* AppKit.framework in Frameworks */,
 				654F352D29B1551000B10EEB /* CoreServices.framework in Frameworks */,
-				654F352C29B154E900B10EEB /* UniformTypeIdentifiers.framework in Frameworks */,
 				654F352929B154BB00B10EEB /* ServiceManagement.framework in Frameworks */,
 				654F352829B154B500B10EEB /* SystemConfiguration.framework in Frameworks */,
-				654F352729B154AE00B10EEB /* ImageIO.framework in Frameworks */,
 				654F352529B1548700B10EEB /* Security.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1611,6 +1545,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7290BF312E5A5B2F00D75022 /* Security.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1626,6 +1561,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7240852E2CA11C1400ED2FCD /* libz.tbd in Frameworks */,
 				EA1E281722B645AE004AA304 /* libbsdiff.a in Frameworks */,
 				7267E5C91D3D8C4300D1BF90 /* CoreServices.framework in Frameworks */,
 				7267E5CA1D3D8C4800D1BF90 /* Foundation.framework in Frameworks */,
@@ -1734,6 +1670,7 @@
 		0867D69AFE84028FC02AAC07 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				7240852D2CA11C1400ED2FCD /* libz.tbd */,
 				654F352629B154AE00B10EEB /* ImageIO.framework */,
 				725B81F92781AEA40041746F /* libcompression.tbd */,
 				0867D6A5FE840307C02AAC07 /* AppKit.framework */,
@@ -1766,8 +1703,8 @@
 				8DC2EF5A0486A6940098B216 /* Sparkle-Info.plist */,
 				61AAE8220A321A7F00D8810D /* Sparkle.strings */,
 				55C14BD8136EF00C00649790 /* SUStatus.xib */,
-				723ABD6A259A9CBB00BDB4FA /* SUUpdatePermissionPrompt.xib */,
-				723ABD36259A9BA500BDB4FA /* SUUpdateAlert.xib */,
+				729C51272E58015600D7365A /* SUUpdatePermissionPrompt.xib */,
+				72FE54412E56A14100227A91 /* SUUpdateAlert.xib */,
 			);
 			name = "Framework Resources";
 			sourceTree = "<group>";
@@ -1811,10 +1748,10 @@
 				61C268090E2DB5D000175E6C /* LICENSE */,
 				14732BC11960F3B200593899 /* Makefile */,
 				147D6D9E1B66DC3C006607AB /* CheckLocalizations.swift */,
-				1420DF4F196247F900203BB0 /* Images.xcassets */,
 				14732BBC1960EFB500593899 /* README.markdown */,
 				14732BB91960EEEE00593899 /* SampleAppcast.xml */,
 				1EAA4C8A2132C7BF00604473 /* ReleaseNotesColorStyle.css */,
+				7230BCDD2E22E2BC00B71297 /* Images.xcassets */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -1832,6 +1769,7 @@
 			isa = PBXGroup;
 			children = (
 				720767D11E2EB86200F9A850 /* AppKitPrevention.h */,
+				72366CCC2DC2D1FC003CE62B /* Sparkle.private.modulemap */,
 				61299B3909CB055000B7442F /* Appcast Support */,
 				55C14BD5136EEFD000649790 /* Autoupdate */,
 				72F9EBE41D519425004AC8B6 /* Deprecated */,
@@ -1853,16 +1791,22 @@
 				14958C6B19AEBC530061B14F /* signed-test-file.txt */,
 				72AC6B2D1B9B218C00F62325 /* SparkleTestCodeSignApp.dmg */,
 				C23E88591BE7AF890050BB73 /* SparkleTestCodeSignApp.enc.dmg */,
+				72E6D9722C0526DC005496E4 /* SparkleTestCodeSignApp.enc.nolicense.dmg */,
 				72AC6B271B9AAD6700F62325 /* SparkleTestCodeSignApp.tar */,
 				72BC6C3C275027BF0083F14B /* SparkleTestCodeSign_apfs.dmg */,
+				725453542C04DB3700362123 /* SparkleTestCodeSign_apfs_lzma_aux_files_adhoc.dmg */,
+				72E6D9702C04DE19005496E4 /* SparkleTestCodeSign_pkg.dmg */,
 				72AC6B291B9AAF3A00F62325 /* SparkleTestCodeSignApp.tar.bz2 */,
 				72AC6B251B9AAC8800F62325 /* SparkleTestCodeSignApp.tar.gz */,
 				72AC6B2B1B9AB0EE00F62325 /* SparkleTestCodeSignApp.tar.xz */,
 				729F7ECD27409076004592DC /* SparkleTestCodeSignApp_bad_extraneous.zip */,
 				72CCDEBD27421FD500B53718 /* SparkleTestCodeSignApp_bad_header.zip */,
 				F8761EB21ADC50EB000C9034 /* SparkleTestCodeSignApp.zip */,
+				726FC0352C1E787A00177986 /* SparkleTestCodeSignApp.aar */,
+				726FC0372C1E96AA00177986 /* SparkleTestCodeSignApp.enc.aar */,
 				72EB735E29BE981300FBCEE7 /* DevSignedApp.zip */,
 				72EB736029BEB36100FBCEE7 /* DevSignedAppVersion2.zip */,
+				726B20602CF4F1D300E6F7DB /* DevSignedAppVersion2.dmg */,
 				14958C6C19AEBC610061B14F /* test-pubkey.pem */,
 				5AF6C74E1AEA46D10014A3AB /* test.pkg */,
 				5AD0FA7E1C73F2E2004BCEFF /* testappcast.xml */,
@@ -2025,8 +1969,6 @@
 				722FB7E3260EE53F00EB571C /* SUNormalization.h */,
 				722FB7E4260EE53F00EB571C /* SUNormalization.m */,
 				7267E5B91D3D8B0B00D1BF90 /* SUInstallerProtocol.h */,
-				7267E5BE1D3D8B2700D1BF90 /* SUPackageInstaller.h */,
-				7267E5BF1D3D8B2700D1BF90 /* SUPackageInstaller.m */,
 				7267E5C01D3D8B2700D1BF90 /* SUPlainInstaller.h */,
 				7267E5C11D3D8B2700D1BF90 /* SUPlainInstaller.m */,
 			);
@@ -2042,8 +1984,6 @@
 				721BC20D1D1CDE55002BC71E /* SPULocalCacheDirectory.m */,
 				729F7EAD273F1840004592DC /* SPUUserAgent+Private.h */,
 				729F7EAE273F1840004592DC /* SPUUserAgent+Private.m */,
-				7214B87F1D456A8500CB5CED /* SUBundleIcon.h */,
-				7214B8801D456A8500CB5CED /* SUBundleIcon.m */,
 				61299A5B09CA6D4500B7442F /* SUConstants.h */,
 				61299A5F09CA6EB100B7442F /* SUConstants.m */,
 				55E6F33219EC9F6C00005E76 /* SUErrors.h */,
@@ -2580,7 +2520,6 @@
 				72B767CA1C9B707000A07552 /* SUAppcastDriver.h in Headers */,
 				61B5FC7009C51F4A00B25A18 /* SUAppcastItem.h in Headers */,
 				725602D51C83551C00DAA70E /* SUApplicationInfo.h in Headers */,
-				7214B8811D456A8500CB5CED /* SUBundleIcon.h in Headers */,
 				55E6F33319EC9F6C00005E76 /* SUErrors.h in Headers */,
 				14652F8419A978C200959E44 /* SUExport.h in Headers */,
 				7267E5E51D3D90AA00D1BF90 /* SUFileManager.h in Headers */,
@@ -2997,7 +2936,7 @@
 			attributes = {
 				CLASSPREFIX = SU;
 				LastSwiftUpdateCheck = 1020;
-				LastUpgradeCheck = 1400;
+				LastUpgradeCheck = 1630;
 				ORGANIZATIONNAME = "Sparkle Project";
 				TargetAttributes = {
 					5D06E8CF0FD68C7C005AE3F6 = {
@@ -3167,13 +3106,16 @@
 				72EB736129BEB36100FBCEE7 /* DevSignedAppVersion2.zip in Resources */,
 				723EDC3F26885A8E000BCBA4 /* testappcast_channels.xml in Resources */,
 				720DC50427A51A6500DFF3EC /* testappcast_minimumAutoupdateVersionSkipping.xml in Resources */,
+				72E6D9712C04DE1A005496E4 /* SparkleTestCodeSign_pkg.dmg in Resources */,
 				72AC6B2E1B9B218C00F62325 /* SparkleTestCodeSignApp.dmg in Resources */,
 				C23E885B1BE7B24F0050BB73 /* SparkleTestCodeSignApp.enc.dmg in Resources */,
 				72AC6B281B9AAD6700F62325 /* SparkleTestCodeSignApp.tar in Resources */,
 				72AC6B2A1B9AAF3A00F62325 /* SparkleTestCodeSignApp.tar.bz2 in Resources */,
+				72E6D9732C0526DC005496E4 /* SparkleTestCodeSignApp.enc.nolicense.dmg in Resources */,
 				72AC6B261B9AAC8800F62325 /* SparkleTestCodeSignApp.tar.gz in Resources */,
 				72AC6B2C1B9AB0EE00F62325 /* SparkleTestCodeSignApp.tar.xz in Resources */,
 				729F7ECE27409077004592DC /* SparkleTestCodeSignApp_bad_extraneous.zip in Resources */,
+				725453552C04DB3700362123 /* SparkleTestCodeSign_apfs_lzma_aux_files_adhoc.dmg in Resources */,
 				5A5DD41D249F116E0045EB3E /* test-relative-urls.xml in Resources */,
 				F8761EB31ADC50EB000C9034 /* SparkleTestCodeSignApp.zip in Resources */,
 				5A5DD40424958B000045EB3E /* SUUpdateValidatorTest in Resources */,
@@ -3181,10 +3123,13 @@
 				5AF6C74F1AEA46D10014A3AB /* test.pkg in Resources */,
 				72EB735F29BE981300FBCEE7 /* DevSignedApp.zip in Resources */,
 				72BC6C3D275027BF0083F14B /* SparkleTestCodeSign_apfs.dmg in Resources */,
+				726FC0382C1E96AA00177986 /* SparkleTestCodeSignApp.enc.aar in Resources */,
+				726B20612CF4F1D300E6F7DB /* DevSignedAppVersion2.dmg in Resources */,
 				720DC50627A62CDC00DFF3EC /* testappcast_minimumAutoupdateVersionSkipping2.xml in Resources */,
 				5AD0FA7F1C73F2E2004BCEFF /* testappcast.xml in Resources */,
 				FA30773D24CBC295007BA37D /* testlocalizedreleasenotesappcast.xml in Resources */,
 				72CCDEBE27421FD500B53718 /* SparkleTestCodeSignApp_bad_header.zip in Resources */,
+				726FC0362C1E787A00177986 /* SparkleTestCodeSignApp.aar in Resources */,
 				722545B626805FF80036465C /* testappcast_info_updates.xml in Resources */,
 				7202DC9A269ABD3500737EC4 /* testappcast_phasedRollout.xml in Resources */,
 				5F1510A21C96E591006E1629 /* testnamespaces.xml in Resources */,
@@ -3196,8 +3141,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				1420DF50196247F900203BB0 /* Images.xcassets in Resources */,
 				723ABDDB259A9E8600BDB4FA /* InfoPlist.strings in Resources */,
+				7230BCDE2E22E2BC00B71297 /* Images.xcassets in Resources */,
 				72E45CFC1B641961005C701A /* sparkletestcast.xml in Resources */,
 				725F97A61C8B304D00265BE4 /* SUInstallUpdateViewController.xib in Resources */,
 				723ABE02259A9E9E00BDB4FA /* MainMenu.xib in Resources */,
@@ -3262,9 +3207,9 @@
 			files = (
 				61AAE8280A321A7F00D8810D /* Sparkle.strings in Resources */,
 				1EAA4C8B2132C7BF00604473 /* ReleaseNotesColorStyle.css in Resources */,
-				723ABD38259A9BA500BDB4FA /* SUUpdateAlert.xib in Resources */,
+				72FE54422E56A14100227A91 /* SUUpdateAlert.xib in Resources */,
 				55C14BEF136EF21700649790 /* SUStatus.xib in Resources */,
-				723ABD6C259A9CBC00BDB4FA /* SUUpdatePermissionPrompt.xib in Resources */,
+				729C51282E58015600D7365A /* SUUpdatePermissionPrompt.xib in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3357,8 +3302,6 @@
 				7267E5781D3D895B00D1BF90 /* SUBinaryDeltaCommon.m in Sources */,
 				7267E57A1D3D895B00D1BF90 /* SUBinaryDeltaCreate.m in Sources */,
 				726F2CE81BC9C48F001971A4 /* SUConstants.m in Sources */,
-				7267E5EA1D3D90AA00D1BF90 /* SUFileManager.m in Sources */,
-				726F2CE91BC9C499001971A4 /* SUOperatingSystem.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3370,7 +3313,6 @@
 				72266A8C29464D0200645376 /* SUSignatures.m in Sources */,
 				72266A8B29464CEA00645376 /* SUHost.m in Sources */,
 				72266A8A2946493C00645376 /* SUCodeSigningVerifier.m in Sources */,
-				72266A89294636FB00645376 /* SUStandardVersionComparator.m in Sources */,
 				72266A88294635BA00645376 /* SUAppcastDriver.m in Sources */,
 				72266A872946359600645376 /* SUFileManager.m in Sources */,
 				725EE488277D398100D820CE /* SPUDeltaArchive.m in Sources */,
@@ -3396,7 +3338,6 @@
 				7267E5EC1D3D912900D1BF90 /* SUInstaller.m in Sources */,
 				5AF6C7541AEA49840014A3AB /* SUInstallerTest.m in Sources */,
 				14652F8219A9746000959E44 /* SULog.m in Sources */,
-				7267E5F51D3D918B00D1BF90 /* SUPackageInstaller.m in Sources */,
 				7267E5F81D3D91A800D1BF90 /* SUPipedUnarchiver.m in Sources */,
 				7267E5F71D3D919600D1BF90 /* SUPlainInstaller.m in Sources */,
 				72BEBFEF1D7287570019146B /* SUSpotlightImporterTest.swift in Sources */,
@@ -3412,7 +3353,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				72F0EC4E278A73C6002A876A /* SUFileManager.m in Sources */,
 				72F0EC48278A5B95002A876A /* SPUDeltaArchive.m in Sources */,
 				72F0EC49278A5B95002A876A /* SPUSparkleDeltaArchive.m in Sources */,
 				72F0EC4A278A5B95002A876A /* SPUXarDeltaArchive.m in Sources */,
@@ -3479,7 +3419,6 @@
 				5AA89BA623FE276A0094DAB8 /* SUSignatures.m in Sources */,
 				7267E5FA1D3DAC3600D1BF90 /* StatusInfo.m in Sources */,
 				720595EF1D700568000572E8 /* SUApplicationInfo.m in Sources */,
-				7214B8831D456C2400CB5CED /* SUBundleIcon.m in Sources */,
 				722FB7E6260EE53F00EB571C /* SUNormalization.m in Sources */,
 				721C245E1CB757DE005440CB /* SUConstants.m in Sources */,
 				7267E5EB1D3D90C200D1BF90 /* SUFileManager.m in Sources */,
@@ -3520,12 +3459,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7290BF302E5A5B0F00D75022 /* SUCodeSigningVerifier.m in Sources */,
 				72464F7E1E21ED8C00FB341C /* SUHost.m in Sources */,
 				726E07B41CAF08D6001A286B /* main.m in Sources */,
 				721D8A7B1D4963190032E472 /* SPULocalCacheDirectory.m in Sources */,
 				7267E5E11D3D901600D1BF90 /* SPUMessageTypes.m in Sources */,
 				5AA89BA523FE27660094DAB8 /* SUSignatures.m in Sources */,
-				7214B8841D456C9500CB5CED /* SUBundleIcon.m in Sources */,
 				726E07BF1CAF0C6C001A286B /* SUConstants.m in Sources */,
 				7267E5E81D3D90AA00D1BF90 /* SUFileManager.m in Sources */,
 				726E07B21CAF08D6001A286B /* SUInstallerLauncher.m in Sources */,
@@ -3537,6 +3476,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7290BF2F2E5A5AFA00D75022 /* SUCodeSigningVerifier.m in Sources */,
 				723B5DA71CF7AB0100365F95 /* main.m in Sources */,
 				72E539121D68C3FA0092CE5E /* SPUDownloadData.m in Sources */,
 				723B5DA91CF7AB0100365F95 /* SPUDownloader.m in Sources */,
@@ -3592,7 +3532,6 @@
 				5A6DD17123FE1FFC000AEF33 /* SUSignatures.m in Sources */,
 				721D5A8525C65D3F00D23BEA /* SUFlatPackageUnarchiver.m in Sources */,
 				7267E5CE1D3D8C7500D1BF90 /* SULog.m in Sources */,
-				7267E5C41D3D8B2700D1BF90 /* SUPackageInstaller.m in Sources */,
 				7267E5871D3D89B300D1BF90 /* SUPipedUnarchiver.m in Sources */,
 				7267E5C51D3D8B2700D1BF90 /* SUPlainInstaller.m in Sources */,
 				7267E5D81D3D8D4400D1BF90 /* SUStandardVersionComparator.m in Sources */,
@@ -3656,7 +3595,6 @@
 				7269E496264798200088C213 /* SPUSkippedUpdate.m in Sources */,
 				7269E49A2648F7C00088C213 /* SPUUserUpdateState.m in Sources */,
 				725602D61C83551C00DAA70E /* SUApplicationInfo.m in Sources */,
-				7214B8821D456A8500CB5CED /* SUBundleIcon.m in Sources */,
 				72DBA37F1D62C23E002594A8 /* SUCodeSigningVerifier.m in Sources */,
 				61299A6009CA6EB100B7442F /* SUConstants.m in Sources */,
 				7267E5E61D3D90AA00D1BF90 /* SUFileManager.m in Sources */,
@@ -3977,88 +3915,6 @@
 				728FBA1C2BB5013300651EDF /* nn */,
 			);
 			name = Sparkle.strings;
-			sourceTree = "<group>";
-		};
-		723ABD36259A9BA500BDB4FA /* SUUpdateAlert.xib */ = {
-			isa = PBXVariantGroup;
-			children = (
-				723ABD37259A9BA500BDB4FA /* Base */,
-				723ABD4C259A9BB900BDB4FA /* ar */,
-				723ABD4D259A9BE100BDB4FA /* en */,
-				723ABD4E259A9BEF00BDB4FA /* ca */,
-				723ABD4F259A9BFD00BDB4FA /* zh_CN */,
-				723ABD50259A9C0200BDB4FA /* zh_TW */,
-				723ABD51259A9C0600BDB4FA /* cs */,
-				723ABD52259A9C0900BDB4FA /* da */,
-				723ABD53259A9C1000BDB4FA /* nl */,
-				723ABD54259A9C1300BDB4FA /* fi */,
-				723ABD55259A9C1500BDB4FA /* fr */,
-				723ABD56259A9C1E00BDB4FA /* de */,
-				723ABD57259A9C2100BDB4FA /* el */,
-				723ABD58259A9C2400BDB4FA /* he */,
-				723ABD59259A9C2C00BDB4FA /* is */,
-				723ABD5A259A9C3600BDB4FA /* it */,
-				723ABD5B259A9C3900BDB4FA /* ja */,
-				723ABD5C259A9C3B00BDB4FA /* ko */,
-				723ABD5D259A9C3D00BDB4FA /* nb */,
-				723ABD5E259A9C4000BDB4FA /* pl */,
-				723ABD5F259A9C4900BDB4FA /* pt-BR */,
-				723ABD60259A9C4B00BDB4FA /* pt-PT */,
-				723ABD61259A9C5400BDB4FA /* ro */,
-				723ABD62259A9C5700BDB4FA /* ru */,
-				723ABD63259A9C5900BDB4FA /* sk */,
-				723ABD64259A9C5B00BDB4FA /* sl */,
-				723ABD65259A9C5D00BDB4FA /* es */,
-				723ABD66259A9C5F00BDB4FA /* sv */,
-				723ABD67259A9C6100BDB4FA /* th */,
-				723ABD68259A9C6300BDB4FA /* tr */,
-				723ABD69259A9C6600BDB4FA /* uk */,
-				72E1DAB625B3E8AE0001BA6D /* hr */,
-				F67C9B7C281410B600740813 /* hu */,
-				37A5F28728E9219000891504 /* zh_HK */,
-				728FBA1A2BB5013300651EDF /* nn */,
-			);
-			name = SUUpdateAlert.xib;
-			sourceTree = "<group>";
-		};
-		723ABD6A259A9CBB00BDB4FA /* SUUpdatePermissionPrompt.xib */ = {
-			isa = PBXVariantGroup;
-			children = (
-				723ABD6B259A9CBB00BDB4FA /* Base */,
-				723ABD80259A9CD600BDB4FA /* en */,
-				723ABD81259A9CDA00BDB4FA /* ar */,
-				723ABD82259A9CEC00BDB4FA /* cs */,
-				723ABD83259A9CF000BDB4FA /* zh_CN */,
-				723ABD84259A9CF400BDB4FA /* zh_TW */,
-				723ABD85259A9CF800BDB4FA /* da */,
-				723ABD86259A9CFC00BDB4FA /* nl */,
-				723ABD87259A9CFF00BDB4FA /* fi */,
-				723ABD88259A9D0200BDB4FA /* fr */,
-				723ABD89259A9D1800BDB4FA /* de */,
-				723ABD8A259A9D1C00BDB4FA /* el */,
-				723ABD8D259A9D2700BDB4FA /* hu */,
-				723ABD8E259A9D2A00BDB4FA /* is */,
-				723ABD91259A9D3400BDB4FA /* it */,
-				723ABD92259A9D3700BDB4FA /* ja */,
-				723ABD93259A9D3C00BDB4FA /* ko */,
-				723ABD94259A9D3E00BDB4FA /* nb */,
-				723ABD95259A9D4100BDB4FA /* pl */,
-				723ABD96259A9D4600BDB4FA /* pt-BR */,
-				723ABD97259A9D4900BDB4FA /* pt-PT */,
-				723ABD98259A9D4C00BDB4FA /* ro */,
-				723ABD99259A9D4F00BDB4FA /* ru */,
-				723ABD9A259A9D5200BDB4FA /* sk */,
-				723ABD9B259A9D5500BDB4FA /* sl */,
-				723ABD9C259A9D5700BDB4FA /* es */,
-				723ABD9D259A9D5A00BDB4FA /* sv */,
-				723ABD9E259A9D5D00BDB4FA /* th */,
-				723ABD9F259A9D6000BDB4FA /* tr */,
-				723ABDA0259A9D6300BDB4FA /* uk */,
-				72E1DAB525B3E8AE0001BA6D /* hr */,
-				37A5F28628E9219000891504 /* zh_HK */,
-				728FBA192BB5013300651EDF /* nn */,
-			);
-			name = SUUpdatePermissionPrompt.xib;
 			sourceTree = "<group>";
 		};
 		723ABDD9259A9E8600BDB4FA /* InfoPlist.strings */ = {

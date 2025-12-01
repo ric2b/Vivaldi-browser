@@ -501,5 +501,15 @@ enum ContentSettingsType {
   // Setting for enabling the Device Attributes API. Spec link:
   // https://wicg.github.io/WebApiDevice/device_attributes/
   DEVICE_ATTRIBUTES,
+
+  // Stores per-origin state for permission heuristics. Currently used for
+  // auto-granting geolocation element permission request after repeated
+  // temporary grants.
+  PERMISSION_ACTIONS_HISTORY,
+
+  // Website setting to indicate whether the user has selected "show original"
+  // when suspicious warning is shown. If the user has selected this, the
+  // notification permission will not be revoked based on suspicious verdict.
+  SUSPICIOUS_NOTIFICATION_SHOW_ORIGINAL,
 };
 // LINT.ThenChange(//components/content_settings/core/browser/content_settings_uma_util.cc:kHistogramValue)

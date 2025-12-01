@@ -29,6 +29,7 @@ cipd_pick_list = [
   "buildtools/mac_arm64-format",
   "buildtools/linux64-format",
   "third_party/test_fonts/test_fonts",
+  "third_party/siso/cipd",
   ]
 
 exclude_cipd = [
@@ -67,6 +68,7 @@ excluded_modules = [
   "third_party/pyelftools",
   "third_party/crossbench",
   "third_party/crossbench-web-tests",
+  "third_party/oak/src",
   ]
 
 include_recursive_deps = [
@@ -77,6 +79,9 @@ def main():
   variables = vivdeps.get_chromium_variables()
   if variables.get("checkout_android", False):
     variables["checkout_android_native_support"] = True
+
+  # Temp override of Siso version, as v138 version does not work
+  # variables["siso_version"] = "git_revision:acfc39d4c923834851300e8676daf8fc47e53a2d"
 
   deps = vivdeps.ChromiumDeps(variables=variables)
 

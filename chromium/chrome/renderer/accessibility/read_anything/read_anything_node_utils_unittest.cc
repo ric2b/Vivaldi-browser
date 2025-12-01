@@ -74,7 +74,7 @@ TEST_F(ReadAnythingNodeUtilsTest, GetTextContent_PDF_FiltersReturnCharacters) {
   node.SetData(std::move(data));
 
   std::u16string text =
-      a11y::GetTextContent(&node, /*is_docs=*/false, /*is_pdf=*/true);
+      a11y::GetTextContent(&node, /*is_pdf=*/true, /*is_docs=*/false);
   EXPECT_EQ(text.length(), sentence.length());
   EXPECT_EQ(text.find('\n'), std::string::npos);
   EXPECT_EQ(text.find('\r'), std::string::npos);
@@ -91,7 +91,7 @@ TEST_F(ReadAnythingNodeUtilsTest,
   node.SetData(std::move(data));
 
   std::u16string text =
-      a11y::GetTextContent(&node, /*is_docs=*/false, /*is_pdf=*/true);
+      a11y::GetTextContent(&node, /*is_pdf=*/true, /*is_docs=*/false);
 
   EXPECT_EQ(text.length(), sentence.length());
   EXPECT_NE(text.find('\n'), std::string::npos);
@@ -109,7 +109,7 @@ TEST_F(ReadAnythingNodeUtilsTest,
   node.SetData(std::move(data));
 
   std::u16string text =
-      a11y::GetTextContent(&node, /*is_docs=*/false, /*is_pdf=*/false);
+      a11y::GetTextContent(&node, /*is_pdf=*/false, /*is_docs=*/false);
   EXPECT_EQ(text.length(), sentence.length());
   EXPECT_NE(text.find('\n'), std::string::npos);
   EXPECT_NE(text.find('\r'), std::string::npos);
@@ -450,15 +450,4 @@ TEST_F(ReadAnythingNodeUtilsTest, GetNameAttributeText_GetsChildText) {
   tree.Unserialize(update);
   EXPECT_EQ(a11y::GetNameAttributeText(tree.root()),
             u"Not like you- You lost your nerve You lost the game");
-}
-
-TEST_F(ReadAnythingNodeUtilsTest, GetImageDataUrl) {
-  std::string image_url = "www.google.com";
-  ui::AXNodeData data = test::TextNode(2);
-  data.AddStringAttribute(ax::mojom::StringAttribute::kImageDataUrl, image_url);
-
-  ui::AXTree tree;
-  ui::AXNode node(&tree, nullptr, 2, 0);
-  node.SetData(std::move(data));
-  EXPECT_EQ(a11y::GetImageDataUrl(&node), image_url);
 }

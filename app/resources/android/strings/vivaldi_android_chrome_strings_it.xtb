@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">Segnalibro salvato nella cartella <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Aspetto</translation>
 <translation id="2501278716633472235">Vai indietro</translation>
+<translation id="2546283357679194313">Cookie e dati del sito</translation>
 <translation id="2633278372998075009">Schede private</translation>
 <translation id="2650751991977523696">Scaricare di nuovo il file?</translation>
 <translation id="265156376773362237">Precaricamento standard</translation>
@@ -54,6 +55,9 @@
 <translation id="4269820728363426813">Copia indirizzo link</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Attiva il blocco schermo nelle impostazioni Android<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Gestore password</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, plural,
+          =1 {Schede e gruppi non utilizzati da 1 giorno o più}
+          other {Schede e gruppi non utilizzati da # giorni o più}}</translation>
 <translation id="451872707440238414">Cerca nei segnalibri</translation>
 <translation id="4526803704855831732">Schede private</translation>
 <translation id="4532845899244822526">Scegli cartella</translation>
@@ -62,6 +66,7 @@
 
 Tocca per cercare è una funzione disponibile solo quando Google è impostato come motore di ricerca predefinito in Vivaldi.</translation>
 <translation id="4759238208242260848">Trasferimenti</translation>
+<translation id="4777866634702576038">Elimina gruppo schede?</translation>
 <translation id="4850886885716139402">Guarda</translation>
 <translation id="4883379392681899581">Esci dalla modalità privata</translation>
 <translation id="4943872375798546930">Nessun risultato</translation>
@@ -77,7 +82,6 @@ Tocca per cercare è una funzione disponibile solo quando Google è impostato co
 <translation id="5375131951310889874">Scopri gli argomenti sui siti Web senza uscire dalla pagina. Tocca per cercare è una funzione disponibile solo quando Google è impostato come motore di ricerca predefinito in Vivaldi. Invia una parola e il contesto circostante a Ricerca di Google, restituendo definizioni, immagini, risultati di ricerca e altri dettagli.
 
 Per modificare il termine di ricerca, premere a lungo per selezionare. Per perfezionare la ricerca, fai scorrere il pannello completamente in alto e tocca la casella di ricerca.</translation>
-<translation id="543338862236136125">Modifica password</translation>
 <translation id="572328651809341494">Schede recenti</translation>
 <translation id="5833984609253377421">Condividi link</translation>
 <translation id="6150320133806434356">Segnalibro salvato</translation>
@@ -85,6 +89,7 @@ Per modificare il termine di ricerca, premere a lungo per selezionare. Per perfe
 <translation id="6336451774241870485">Nuova scheda privata</translation>
 <translation id="6337323516034698937">Per inviare questa scheda a un altro dispositivo, accedi a Sincronizzazione Vivaldi su entrambi i dispositivi. Assicurati di inserire la password di crittografia, se necessario.</translation>
 <translation id="6341580099087024258">Chiedi dove salvare i file</translation>
+<translation id="6364438453358674297">Rimuovere il suggerimento dalla cronologia?</translation>
 <translation id="6404511346730675251">Modifica segnalibro</translation>
 <translation id="650224091954855786">{FILE_COUNT, plural,
           =1 {File scaricato}
@@ -112,6 +117,9 @@ Per modificare il termine di ricerca, premere a lungo per selezionare. Per perfe
 <translation id="8062594758852531064">Precaricamento estesa:</translation>
 <translation id="8073388330009372546">Apri immagine in nuova scheda</translation>
 <translation id="8127542551745560481">Modifica pagina iniziale</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+          =1 {(1) elemento inattivo}
+          other {(#) elementi inattivi}}</translation>
 <translation id="8266862848225348053">Cartella trasferimenti</translation>
 <translation id="8348430946834215779">Usa HTTPS quando possibile e ricevi un avviso prima di caricare i siti che non lo supportano</translation>
 <translation id="8560602726703398413">Trova la tua lista di lettura nei segnalibri</translation>
@@ -121,6 +129,9 @@ Per modificare il termine di ricerca, premere a lungo per selezionare. Per perfe
 <translation id="9042893549633094279">Privacy e Sicurezza</translation>
 <translation id="9063523880881406963">Disattiva Richiedi sito desktop</translation>
 <translation id="9080642952018487277">Entra in modalità privata</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+          =1 {Non usato per 1 giorno o più}
+          other {Non usato per # giorni o più}}</translation>
 <translation id="930124987204876019">Elimina cronologia, cookie, dati dei siti, cache…</translation>
 <translation id="961856697154696964">Elimina dati di navigazione</translation>
 </translationbundle>

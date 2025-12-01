@@ -4,17 +4,29 @@
 
 #include "components/ip_protection/common/probabilistic_reveal_token_test_consumer.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
+
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
+#include "base/types/expected.h"
+#include "components/ip_protection/common/ip_protection_data_types.h"
 #include "components/ip_protection/common/ip_protection_probabilistic_reveal_token_fetcher.h"
 #include "components/ip_protection/common/ip_protection_probabilistic_reveal_token_manager.h"
 #include "components/ip_protection/common/probabilistic_reveal_token_test_issuer.h"
+#include "components/ip_protection/get_probabilistic_reveal_token.pb.h"
 #include "net/base/net_errors.h"
+#include "net/base/schemeful_site.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace ip_protection {
 
@@ -146,8 +158,10 @@ TEST_F(ProbabilisticRevealTokenTestConsumerTest, CreateFailureInvalidPRT) {
 }
 
 TEST_F(ProbabilisticRevealTokenTestConsumerTest, CreateFailureTooLong) {
+  const GURL destination_url("https://thirdparty.com");
+  const net::SchemefulSite top_level_site(GURL("https://toplevel.com"));
   std::optional<std::string> maybe_serialized_prt =
-      manager_->GetToken("a.com", "b.ex");
+      manager_->GetToken(destination_url, top_level_site);
   ASSERT_TRUE(maybe_serialized_prt);
   std::string serialized_prt = std::move(maybe_serialized_prt).value();
   EXPECT_TRUE(
@@ -157,8 +171,10 @@ TEST_F(ProbabilisticRevealTokenTestConsumerTest, CreateFailureTooLong) {
 }
 
 TEST_F(ProbabilisticRevealTokenTestConsumerTest, CreateFailureTooShort) {
+  const GURL destination_url("https://thirdparty.com");
+  const net::SchemefulSite top_level_site(GURL("https://toplevel.com"));
   std::optional<std::string> maybe_serialized_prt =
-      manager_->GetToken("a.com", "b.ex");
+      manager_->GetToken(destination_url, top_level_site);
   ASSERT_TRUE(maybe_serialized_prt);
   std::string serialized_prt = std::move(maybe_serialized_prt).value();
   EXPECT_TRUE(
@@ -168,8 +184,10 @@ TEST_F(ProbabilisticRevealTokenTestConsumerTest, CreateFailureTooShort) {
 }
 
 TEST_F(ProbabilisticRevealTokenTestConsumerTest, CreateFailureWrongUSize) {
+  const GURL destination_url("https://thirdparty.com");
+  const net::SchemefulSite top_level_site(GURL("https://toplevel.com"));
   std::optional<std::string> maybe_serialized_prt =
-      manager_->GetToken("a.com", "b.ex");
+      manager_->GetToken(destination_url, top_level_site);
   ASSERT_TRUE(maybe_serialized_prt);
   std::string serialized_prt = std::move(maybe_serialized_prt).value();
   EXPECT_TRUE(
@@ -186,8 +204,10 @@ TEST_F(ProbabilisticRevealTokenTestConsumerTest, CreateFailureWrongUSize) {
 }
 
 TEST_F(ProbabilisticRevealTokenTestConsumerTest, CreateFailureWrongESize) {
+  const GURL destination_url("https://thirdparty.com");
+  const net::SchemefulSite top_level_site(GURL("https://toplevel.com"));
   std::optional<std::string> maybe_serialized_prt =
-      manager_->GetToken("d.com", "e.ex");
+      manager_->GetToken(destination_url, top_level_site);
   ASSERT_TRUE(maybe_serialized_prt);
   std::string serialized_prt = std::move(maybe_serialized_prt).value();
   EXPECT_TRUE(
@@ -204,8 +224,10 @@ TEST_F(ProbabilisticRevealTokenTestConsumerTest, CreateFailureWrongESize) {
 }
 
 TEST_F(ProbabilisticRevealTokenTestConsumerTest, CreateSuccess) {
+  const GURL destination_url("https://thirdparty.com");
+  const net::SchemefulSite top_level_site(GURL("https://toplevel.com"));
   std::optional<std::string> maybe_serialized_prt =
-      manager_->GetToken("a.com", "b.ex");
+      manager_->GetToken(destination_url, top_level_site);
   ASSERT_TRUE(maybe_serialized_prt);
   std::optional<ProbabilisticRevealTokenTestConsumer> consumer =
       ProbabilisticRevealTokenTestConsumer::MaybeCreate(*maybe_serialized_prt);

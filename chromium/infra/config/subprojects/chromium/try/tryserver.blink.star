@@ -127,6 +127,15 @@ try_.builder(
 )
 
 try_.builder(
+    name = "linux-blink-tracing-rel",
+    mirrors = ["ci/linux-blink-tracing-rel"],
+    gn_args = "ci/linux-blink-tracing-rel",
+    os = os.LINUX_DEFAULT,
+    contact_team_email = "chrome-product-engprod@google.com",
+    main_list_view = "try",
+)
+
+try_.builder(
     name = "win10-wpt-chromium-rel",
     mirrors = ["ci/win10-wpt-chromium-rel"],
     builder_config_settings = builder_config.try_settings(
@@ -154,7 +163,6 @@ _rebaseline_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     builder_config_settings = builder_config.try_settings(
         retry_failed_shards = False,
@@ -302,7 +310,7 @@ _rebaseline_builder(
                     hard_timeout_sec = 900,
                 ),
             ),
-            "win11",
+            "win11-any",
         ],
         per_test_modifications = {
             "blink_wpt_tests": targets.mixin(
@@ -731,7 +739,6 @@ _rebaseline_builder(
         android_config = builder_config.android_config(
             config = "base_config",
         ),
-        build_gs_bucket = "chromium-android-archive",
     ),
     builder_config_settings = builder_config.try_settings(
         retry_failed_shards = False,

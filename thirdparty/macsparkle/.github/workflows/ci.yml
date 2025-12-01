@@ -10,18 +10,18 @@ jobs:
   build:
     strategy:
       matrix:
-        xcode: ['xcode14.3.1', 'xcode15.2']
+        xcode: ['xcode26', 'xcode16.4']
         include:
-            - xcode: 'xcode15.2'
-              xcode-path: '/Applications/Xcode_15.2.app/Contents/Developer'
+            - xcode: 'xcode16.4'
+              xcode-path: '/Applications/Xcode_16.4.app/Contents/Developer'
               upload-dist: true
               run-analyzer: true
-              macos: 'macos-13'
-            - xcode: 'xcode14.3.1'
-              xcode-path: '/Applications/Xcode_14.3.1.app/Contents/Developer'
+              macos: 'macos-15'
+            - xcode: 'xcode26'
+              xcode-path: '/Applications/Xcode_26.0.app'
               upload-dist: false
               run-analyzer: false
-              macos: 'macos-13'
+              macos: 'macos-15'
             
     name: Build and Test Sparkle
     runs-on: ${{ matrix.macos }}
@@ -69,17 +69,21 @@ jobs:
         env:
           DEVELOPER_DIR: ${{ matrix.xcode-path }}
         run: |
-            if grep -q "warning:" analyze_output.txt; then
-                echo '::set-output name=analyzestatus::0'
+            if grep "warning:" analyze_output.txt | grep -q -v "dependency scan of"; then
+                echo "analyzestatus=0" >> $GITHUB_OUTPUT
             else
-                echo '::set-output name=analyzestatus::1'
+                echo "analyzestatus=1" >> $GITHUB_OUTPUT
             fi
         
       - name: Extract Analyzed Warnings
         if: ${{ success() && matrix.run-analyzer && github.event_name == 'pull_request' && steps.findwarnings.outputs.analyzestatus == '0' }}
         id: warnings
         run: |
-            echo ::set-output name=content::$(cat analyze_output.txt)
+            {
+                echo 'content<<EOF'
+                cat analyze_output.txt
+                echo 'EOF'
+            } >> $GITHUB_OUTPUT
       
       - name: Post Analyzed Warnings
         if: ${{ success() && matrix.run-analyzer && github.event_name == 'pull_request' && steps.findwarnings.outputs.analyzestatus == '0' }}
@@ -98,10 +102,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
-          path: build/Logs
+          path: |
+            build/Logs
+            ~/Library/Logs/DiagnosticReports
       - name: Upload Distribution
         if: ${{ success() && matrix.upload-dist }}
         uses: actions/upload-artifact@v4
         with:
           name: Sparkle-distribution-${{ matrix.xcode }}.tar.xz
-          path: build/Build/Products/Release/sparkle-dist.tar.xz
+          path: build/Build/Products/Release/sparkle_dist.tar.xz

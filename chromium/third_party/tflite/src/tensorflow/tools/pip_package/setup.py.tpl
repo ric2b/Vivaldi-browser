@@ -81,7 +81,7 @@ def standard_or_nightly(standard, nightly):
 REQUIRED_PACKAGES = [
     'absl-py >= 1.0.0',
     'astunparse >= 1.6.0',
-    'flatbuffers >= 24.3.25',
+    'flatbuffers >= 25.2.10',
     'gast >=0.2.1,!=0.5.0,!=0.5.1,!=0.5.2',
     'google_pasta >= 0.1.1',
     'libclang >= 13.0.0',
@@ -155,7 +155,7 @@ EXTRA_PACKAGES = {
         'nvidia-curand-cu12 >= 10.3.6.82, < 11.0',
         'nvidia-cusolver-cu12 >= 11.6.3.83, < 12.0',
         'nvidia-cusparse-cu12 >= 12.5.1.3, < 13.0',
-        'nvidia-nccl-cu12 >= 2.26.5, < 3.0',
+        'nvidia-nccl-cu12 >= 2.27.7, < 3.0',
         'nvidia-nvjitlink-cu12 >= 12.5.82, < 13.0',
     ],
     'gcs-filesystem': [

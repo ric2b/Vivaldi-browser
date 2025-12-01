@@ -631,14 +631,12 @@ int ff_match_url_ext(const char *url, const char *extensions);
  * of digits and '%%'.
  *
  * @param buf destination buffer
- * @param buf_size destination buffer size
  * @param path path with substitution template
  * @param number the number to substitute
  * @param flags AV_FRAME_FILENAME_FLAGS_*
- * @return 0 if OK, -1 on format error
+ * @return 0 if OK, <0 on error.
  */
-int ff_get_frame_filename(char *buf, int buf_size, const char *path,
-                          int64_t number, int flags);
+int ff_bprint_get_frame_filename(struct AVBPrint *buf, const char *path, int64_t number, int flags);
 
 /**
  * Set a dictionary value to an ISO-8601 compliant timestamp string.

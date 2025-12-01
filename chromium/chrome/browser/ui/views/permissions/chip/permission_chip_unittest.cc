@@ -7,6 +7,7 @@
 #include "base/containers/to_vector.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/views/content_setting_bubble_contents.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -236,6 +237,10 @@ class PermissionChipUnitTest : public TestWithBrowserView {
   PermissionChipUnitTest& operator=(const PermissionChipUnitTest&) = delete;
 
   void SetUp() override {
+    feature_list_->InitWithFeatures(
+        /*enabledabled_features=*/{},
+        /*disabled_features=*/{
+            permissions::features::kPermissionPromiseLifetimeModulation});
     TestWithBrowserView::SetUp();
 
     AddTab(browser(), GURL("http://a.com"));
@@ -265,6 +270,10 @@ class PermissionChipUnitTest : public TestWithBrowserView {
   base::TimeDelta kNormalChipDismissDuration = base::Seconds(6);
   base::TimeDelta kQuietChipDismissDuration = base::Seconds(18);
   base::TimeDelta kLongerThanAllTimersDuration = base::Seconds(50);
+
+ protected:
+  std::unique_ptr<ScopedFeatureList> feature_list_ =
+      std::make_unique<ScopedFeatureList>();
 };
 
 TEST_F(PermissionChipUnitTest, AlreadyDisplayedRequestTest) {
@@ -327,7 +336,8 @@ TEST_F(PermissionChipUnitTest, AccessibleName) {
   ui::AXNodeData data;
   browser()
       ->GetBrowserView()
-      .tabstrip_->tab_at(0)
+      .tab_strip_view()
+      ->GetTabAnchorViewAt(0)
       ->GetViewAccessibility()
       .GetAccessibleNodeData(&data);
   EXPECT_TRUE(chip_controller->IsPermissionPromptChipVisible());
@@ -338,7 +348,8 @@ TEST_F(PermissionChipUnitTest, AccessibleName) {
   data = ui::AXNodeData();
   browser()
       ->GetBrowserView()
-      .tabstrip_->tab_at(0)
+      .tab_strip_view()
+      ->GetTabAnchorViewAt(0)
       ->GetViewAccessibility()
       .GetAccessibleNodeData(&data);
   EXPECT_FALSE(chip_controller->IsPermissionPromptChipVisible());
@@ -553,12 +564,11 @@ class PermissionPromiseLifetimeModulationTest : public PermissionChipUnitTest {
     feature_list_->InitWithFeatures(
         {permissions::features::kPermissionPromiseLifetimeModulation},
         /*disabled_features=*/{});
-    PermissionChipUnitTest::SetUp();
-  }
+    TestWithBrowserView::SetUp();
 
- private:
-  std::unique_ptr<ScopedFeatureList> feature_list_ =
-      std::make_unique<ScopedFeatureList>();
+    AddTab(browser(), GURL("http://a.com"));
+    web_contents_ = browser()->tab_strip_model()->GetWebContentsAt(0);
+  }
 };
 
 TEST_F(PermissionPromiseLifetimeModulationTest,
@@ -725,6 +735,7 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 TEST_P(InfobarTest, ShowInfobarIfNecessary) {
+  base::HistogramTester histogram_tester;
   InfoBarObserver infobar_observer(web_contents_);
 
   auto& delegate = *test::MockPermissionRequestManager::CreateForWebContents(
@@ -756,4 +767,8 @@ TEST_P(InfobarTest, ShowInfobarIfNecessary) {
   ClickOnAcceptPermissionRequestQuietChip(chip_controller);
   EXPECT_FALSE(delegate.IsRequestInProgress());
   EXPECT_EQ(infobar_observer.info_bar_added_, true);
+  histogram_tester.ExpectBucketCount(
+      "Permissions.QuietPrompt.Preignore.PageReloadInfoBar", true, 1);
+  histogram_tester.ExpectBucketCount(
+      "Permissions.QuietPrompt.Preignore.PageReloadInfoBar", false, 0);
 }

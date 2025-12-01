@@ -232,6 +232,28 @@ class _Authenticator(object):
         """Adds authentication information to the HttpConn."""
         raise NotImplementedError()
 
+    def attempt_authenticate_with_reauth(self, conn: HttpConn,
+                                         context: auth.ReAuthContext) -> bool:
+        """Adds authentication information to satisfy the ReAuth requirement.
+
+        If the Gerrit operation doesn't need to satisfy ReAuth requirement
+        (e.g. querying CLs), use `authenticate()` method instead.
+
+        Returns `True` if an authorization token was added. This includes
+        two scenarios:
+
+        - A ReAuth token for `context` is available.
+        - A ReAuth token for `context` isn't available, and `context` doesn't
+          require ReAuth. In this case, the authentication information doesn't
+          satisfy ReAuth requirements, but still authenticates the user.
+
+        When this method returns `False`, the caller should decide if they want
+        to proceed without ReAuth (i.e. call `authenticate()` method to attach
+        non-ReAuth credential), or fail the operation (e.g. ask the user to
+        complete ReAuth).
+        """
+        return False
+
     def debug_summary_state(self) -> str:
         """If this _Authenticator has any debugging information about its state,
         _WriteGitPushTraces will call this to include in the git push traces.
@@ -568,6 +590,11 @@ class SSOAuthenticator(_Authenticator):
         assert 'Cookie' in conn.req_headers, (
             'sso_info.cookies.add_cookie_header failed to add Cookie.')
 
+    def attempt_authenticate_with_reauth(self, conn: HttpConn,
+                                         context: auth.ReAuthContext) -> bool:
+        self.authenticate(conn)
+        return True  # SSO credential satisfies ReAuth requirement.
+
     def debug_summary_state(self) -> str:
         return ''
 
@@ -810,6 +837,13 @@ class GceAuthenticator(_Authenticator):
         conn.req_headers[
             'Authorization'] = '%(token_type)s %(access_token)s' % token_dict
 
+    def attempt_authenticate_with_reauth(self, conn: HttpConn,
+                                         context: auth.ReAuthContext) -> bool:
+        # GCE bots do not need ReAuth. They implicitly satisfy the requirement if otherwise
+        # trusted.
+        self.authenticate(conn)
+        return True
+
     def debug_summary_state(self) -> str:
         # TODO(b/343230702) - report ambient account name.
         return ''
@@ -834,6 +868,12 @@ class LuciContextAuthenticator(_Authenticator):
         conn.req_headers[
             'Authorization'] = f'Bearer {self._authenticator.get_access_token().token}'
 
+    def attempt_authenticate_with_reauth(self, conn: HttpConn,
+                                         context: auth.ReAuthContext) -> bool:
+        # LUCI context credential satisfies ReAuth requirement.
+        self.authenticate(conn)
+        return True
+
     def debug_summary_state(self) -> str:
         # TODO(b/343230702) - report ambient account name.
         return ''
@@ -856,6 +896,15 @@ class GitCredsAuthenticator(_Authenticator):
     def authenticate(self, conn: HttpConn):
         conn.req_headers[
             'Authorization'] = f'Bearer {self._authenticator.get_access_token()}'
+
+    def attempt_authenticate_with_reauth(self, conn: HttpConn,
+                                         context: auth.ReAuthContext) -> bool:
+        try:
+            header = self._authenticator.get_authorization_header(context)
+            conn.req_headers['Authorization'] = header
+            return True
+        except auth.GitReAuthRequiredError:
+            return False
 
     def debug_summary_state(self) -> str:
         # TODO(b/343230702) - report ambient account name.
@@ -954,6 +1003,15 @@ class ChainedAuthenticator(_Authenticator):
             raise ValueError(
                 f'{self!r} has no applicable authenticator for {conn!r}')
 
+    def attempt_authenticate_with_reauth(self, conn: HttpConn,
+                                         context: auth.ReAuthContext) -> bool:
+        for a in self.authenticators:
+            if a.is_applicable(
+                    conn=conn) and a.attempt_authenticate_with_reauth(
+                        conn, context):
+                return True
+        return False
+
     def debug_summary_state(self) -> str:
         return ''
 
@@ -1032,8 +1090,19 @@ def CreateHttpConn(host: str,
                    body: Optional[Dict] = None,
                    timeout=300,
                    *,
-                   authenticator: Optional[_Authenticator] = None) -> HttpConn:
-    """Opens an HTTPS connection to a Gerrit service, and sends a request."""
+                   authenticator: Optional[_Authenticator] = None,
+                   reauth_context: Optional[auth.ReAuthContext] = None,
+                   reauth_is_optional: bool = False) -> HttpConn:
+    """Opens an HTTPS connection to a Gerrit service, and sends a request.
+
+       If `reauth_context` is provided, creates an HttpConn with authentication
+       information that satisfies ReAuth requirements.
+
+       When ReAuth failed, this method raises an exception to indicate why
+       ReAuth failed. If `reauth_is_optional` is True, this method fallbacks to
+       creating an authenticated, non-ReAuth HttpConn (e.g. using access
+       tokens).
+    """
     headers = headers or {}
     bare_host = host.partition(':')[0]
 
@@ -1063,7 +1132,20 @@ def CreateHttpConn(host: str,
         print('If you\'re on a cloudtop instance, export '
               'SKIP_GCE_AUTH_FOR_GIT=1 in your env.')
 
-    authenticator.authenticate(conn)
+    if reauth_context:
+        reauth_succeed = authenticator.attempt_authenticate_with_reauth(
+            conn, reauth_context)
+        if not reauth_succeed:
+            if reauth_is_optional:
+                LOGGER.debug(
+                    "ReAuth requested, but the authenticator didn't return a token "
+                    "that satisfies ReAuth requirement.")
+                authenticator.authenticate(conn)
+            else:
+                raise auth.GitReAuthRequiredError()
+    else:
+        # ReAuth wasn't requested.
+        authenticator.authenticate(conn)
 
     if 'Authorization' not in conn.req_headers:
         LOGGER.debug('No authorization found for %s.' % bare_host)
@@ -1697,10 +1779,15 @@ def SetReview(host,
               labels=None,
               notify=None,
               ready=None,
-              automatic_attention_set_update: Optional[bool] = None):
+              automatic_attention_set_update: Optional[bool] = None,
+              project: Optional[str] = None):
     """Sets labels and/or adds a message to a code review.
 
     https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#set-review
+
+    We need to check if this change's `project` needs to satisfy ReAuth
+    requirements, and attach an ReAuth credential to the request. `project`
+    can be optionally be provided to save one Gerrit server round-trip.
     """
     if not msg and not labels:
         return
@@ -1717,7 +1804,19 @@ def SetReview(host,
     if automatic_attention_set_update is not None:
         body[
             'ignore_automatic_attention_set_rules'] = not automatic_attention_set_update
-    conn = CreateHttpConn(host, path, reqtype='POST', body=body)
+
+    # ReAuth needed if we set labels (notably Code-Review).
+    reauth_context = None
+    if bool(labels):
+        reauth_context = auth.ReAuthContext(
+            host=host,
+            project=project or GetChangeDetail(host, change)["project"])
+
+    conn = CreateHttpConn(host,
+                          path,
+                          reqtype='POST',
+                          body=body,
+                          reauth_context=reauth_context)
     response = ReadHttpJsonResponse(conn)
     if labels:
         for key, val in labels.items():

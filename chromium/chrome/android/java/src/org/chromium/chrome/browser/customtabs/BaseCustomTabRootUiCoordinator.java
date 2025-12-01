@@ -13,6 +13,7 @@ import android.os.Build;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.view.View;
+import android.widget.RelativeLayout;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
@@ -23,7 +24,6 @@ import androidx.appcompat.content.res.AppCompatResources;
 import androidx.browser.customtabs.ExperimentalOpenInBrowser;
 
 import org.chromium.base.Callback;
-import org.chromium.base.FeatureList;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.TimeUtils;
 import org.chromium.base.metrics.RecordHistogram;
@@ -31,7 +31,6 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneShotCallback;
 import org.chromium.base.supplier.OneshotSupplierImpl;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.base.supplier.SupplierUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
@@ -45,6 +44,7 @@ import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabController;
+import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
 import org.chromium.chrome.browser.customtabs.features.CustomTabNavigationBarController;
 import org.chromium.chrome.browser.customtabs.features.branding.BrandingController;
 import org.chromium.chrome.browser.customtabs.features.branding.MismatchNotificationChecker;
@@ -97,6 +97,7 @@ import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.ui.RootUiCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuBlocker;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
+import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils;
 import org.chromium.chrome.browser.ui.google_bottom_bar.GoogleBottomBarCoordinator;
@@ -107,24 +108,23 @@ import org.chromium.chrome.browser.ui.system.StatusBarColorController.StatusBarC
 import org.chromium.chrome.browser.ui.web_app_header.WebAppHeaderLayoutCoordinator;
 import org.chromium.chrome.browser.ui.web_app_header.WebAppHeaderUtils;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
-import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeManager;
-import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeSupplier;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.page_info.PageInfoController.OpenedFromSource;
-import org.chromium.components.signin.SigninFeatureMap;
-import org.chromium.components.signin.SigninFeatures;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.IntentRequestTracker;
+import org.chromium.ui.edge_to_edge.EdgeToEdgeManager;
+import org.chromium.ui.edge_to_edge.EdgeToEdgeSupplier;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 /** A {@link RootUiCoordinator} variant that controls UI for {@link BaseCustomTabActivity}. */
 public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
-
+    private final CustomTabActivityTabProvider mCustomTabProvider;
     private final Supplier<CustomTabToolbarCoordinator> mToolbarCoordinator;
     private final Supplier<BrowserServicesIntentDataProvider> mIntentDataProvider;
     private final Supplier<CustomTabActivityTabController> mTabController;
@@ -144,9 +144,9 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
 
     private @Nullable EdgeToEdgeSupplier.ChangeObserver mEdgeToEdgeChangeObserver;
     private final @NonNull Runnable mOpenInBrowserRunnable;
-    private final @Nullable DesktopWindowStateManager mDesktopWindowStateManager;
     private @Nullable WebAppHeaderLayoutCoordinator mWebAppHeaderLayoutCoordinator;
     private final Supplier<BrowserServicesThemeColorProvider> mWebAppThemeColorProvider;
+    private boolean mHeaderAsOverlay;
 
     // TODO(crbug.com/402213312): This can be NonNull once the flag is enabled by default.
     private @Nullable CustomTabToolbarButtonsCoordinator mToolbarButtonsCoordinator;
@@ -157,6 +157,7 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
      * @param activity The activity whose UI the coordinator is responsible for.
      * @param shareDelegateSupplier Supplies the {@link ShareDelegate}.
      * @param tabProvider The {@link ActivityTabProvider} to get current tab of the activity.
+     * @param customTabProvider The {@link CustomTabActivityTabProvider} to get current custom tab.
      * @param profileSupplier Supplier of the currently applicable profile.
      * @param bookmarkModelSupplier Supplier of the bookmark bridge for the current profile.
      * @param tabBookmarkerSupplier Supplier of {@link TabBookmarker} for bookmarking a given tab.
@@ -196,6 +197,7 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
             @NonNull AppCompatActivity activity,
             @NonNull ObservableSupplier<ShareDelegate> shareDelegateSupplier,
             @NonNull ActivityTabProvider tabProvider,
+            @NonNull CustomTabActivityTabProvider customTabProvider,
             @NonNull ObservableSupplier<Profile> profileSupplier,
             @NonNull ObservableSupplier<BookmarkModel> bookmarkModelSupplier,
             @NonNull ObservableSupplier<TabBookmarker> tabBookmarkerSupplier,
@@ -273,11 +275,12 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
                 null,
                 new ObservableSupplierImpl<>(Color.TRANSPARENT),
                 edgeToEdgeManager,
-                /* xrSpaceModeObservableSupplier= */ null);
+                /* xrSpaceModeObservableSupplier= */ null,
+                desktopWindowStateManager);
+        mCustomTabProvider = customTabProvider;
         mToolbarCoordinator = customTabToolbarCoordinator;
         mIntentDataProvider = intentDataProvider;
         mCustomTabSearchClient = new SearchActivityClientImpl(activity, IntentOrigin.CUSTOM_TAB);
-        mDesktopWindowStateManager = desktopWindowStateManager;
         mWebAppThemeColorProvider = webAppThemeColorProvider;
 
         boolean isAuthTab = intentDataProvider.get().isAuthTab();
@@ -324,15 +327,7 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
         CustomTabsConnection connection = CustomTabsConnection.getInstance();
         Intent intent = mIntentDataProvider.get().getIntent();
         if (!connection.isAppForAccountMismatchNotification(intent)) return null;
-
-        // MismatchNotificationChecker requires Profile which becomes available after
-        // native init. This method is expected to be called lazily, when it is actually
-        // needed.
-        boolean signInPromptEnabled =
-                appId != null
-                        && FeatureList.isInitialized()
-                        && SigninFeatureMap.isEnabled(SigninFeatures.CCT_SIGN_IN_PROMPT);
-        if (!signInPromptEnabled) return null;
+        if (appId == null) return null;
 
         if (isMismatchNotificationSuppressed()) {
             MismatchNotificationController.recordMismatchNoticeSuppressedHistogram(
@@ -340,11 +335,11 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
             return null;
         }
 
-        if (!mProfileSupplier.hasValue()) {
+        Profile profile = mProfileSupplier.get();
+        if (profile == null) {
             return null;
         }
 
-        Profile profile = mProfileSupplier.get();
         // Exclude incognito and ephemeral sessions.
         if (profile.isOffTheRecord()) {
             MismatchNotificationController.recordMismatchNoticeSuppressedHistogram(
@@ -370,14 +365,6 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
     }
 
     private static boolean isMismatchNotificationSuppressed() {
-        // Skip checking if the cadence is set to zero for easy local testing.
-        // TODO(crbug.com/372609889): Use a dedicated flag param.
-        SigninFeatureMap featureMap = SigninFeatureMap.getInstance();
-        int cadence =
-                featureMap.getFieldTrialParamByFeatureAsInt(
-                        SigninFeatures.CCT_SIGN_IN_PROMPT, "cadence_day", 14);
-        if (cadence == 0) return false;
-
         final long suppressionPeriodStart =
                 SigninPreferencesManager.getInstance().getCctMismatchNoticeSuppressionPeriodStart();
         if (suppressionPeriodStart == 0) return false;
@@ -408,6 +395,9 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
                                         mIntentDataProvider.get()))
                         : null;
 
+        Supplier<AppMenuHandler> appMenuHandler =
+                () -> mAppMenuCoordinator != null ? mAppMenuCoordinator.getAppMenuHandler() : null;
+
         if (ChromeFeatureList.sCctToolbarRefactor.isEnabled()) {
             CustomTabToolbar toolbar = mActivity.findViewById(R.id.toolbar);
             mToolbarButtonsCoordinator =
@@ -415,8 +405,12 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
                             mActivity,
                             toolbar,
                             mIntentDataProvider.get(),
-                            params -> mToolbarCoordinator.get().onCustomButtonClick(params),
+                            params ->
+                                    mToolbarCoordinator
+                                            .get()
+                                            .onCustomButtonClick(mActivity, params),
                             mMinimizeDelegateSupplier.get(),
+                            appMenuHandler,
                             omniboxParams,
                             mActivityLifecycleDispatcher,
                             mActivityTabProvider);
@@ -449,12 +443,9 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
         mToolbarCoordinator.get().onToolbarInitialized(mToolbarManager, null);
 
         CustomTabToolbar toolbar = mActivity.findViewById(R.id.toolbar);
-        toolbar.initVisibilityRule(
-                mActivity,
-                () -> mAppMenuCoordinator != null ? mAppMenuCoordinator.getAppMenuHandler() : null,
-                mIntentDataProvider.get());
+        toolbar.initVisibilityRule(mActivity, appMenuHandler, mIntentDataProvider.get());
         var cpac = getContextualPageActionController();
-        if (cpac != null) cpac.setButtonVisibilitySupplier(toolbar::shouldShowOptionalButton);
+        if (cpac != null) cpac.setButtonVisibilitySupplier(toolbar.getShowOptionalButton());
         View coordinator = mActivity.findViewById(R.id.coordinator);
         mCustomTabHeightStrategy.onToolbarInitialized(
                 coordinator,
@@ -465,8 +456,9 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
             mBrandingController.onToolbarInitialized(toolbar.getBrandingDelegate());
         }
         toolbar.setCloseButtonPosition(mIntentDataProvider.get().getCloseButtonPosition());
-        if (mMinimizeDelegateSupplier.hasValue()) {
-            toolbar.setMinimizeDelegate(mMinimizeDelegateSupplier.get());
+        var minimizeDelegate = mMinimizeDelegateSupplier.get();
+        if (minimizeDelegate != null) {
+            toolbar.setMinimizeDelegate(minimizeDelegate);
         }
         if (!MinimizedFeatureUtils.shouldEnableMinimizedCustomTabs(mIntentDataProvider.get())) {
             toolbar.setMinimizeButtonEnabled(false);
@@ -564,14 +556,16 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
                         ChromeFeatureList.TRACKING_PROTECTION_USER_BYPASS_PWA_TRIGGER)
                 && mActivityType == ActivityType.WEB_APK) {
 
+            Profile profile = mProfileSupplier.get();
+            assert profile != null;
             mTrackingProtectionSnackbarController =
                     new TrackingProtectionSnackbarController(
                             getPageInfoSnackbarOnAction(),
                             mSnackbarManagerSupplier,
                             mActivityTabProvider.get().getWebContents(),
-                            mProfileSupplier.get(),
+                            profile,
                             mActivityType,
-                            mProfileSupplier.get().isIncognitoBranded());
+                            profile.isIncognitoBranded());
         }
     }
 
@@ -693,6 +687,68 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
                         mFullscreenManager,
                         () -> mMinimizeDelegateSupplier.get().isMinimized(),
                         DeviceFormFactor.isWindowOnTablet(mWindowAndroid));
+
+        // Drag drop of files such as an image should not replace the tab contents for CCT, but
+        // should be allowed if the tab is moved to chrome.
+        mCustomTabProvider.addObserver(
+                new CustomTabActivityTabProvider.Observer() {
+                    private @Nullable Tab mTab;
+
+                    private void setCanAcceptLoadDrops(@Nullable Tab tab, boolean enabled) {
+                        if (tab != null && tab.getWebContents() != null) {
+                            tab.getWebContents().setCanAcceptLoadDrops(enabled);
+                        }
+                    }
+
+                    @Override
+                    public void onInitialTabCreated(@NonNull Tab tab, int mode) {
+                        setCanAcceptLoadDrops(tab, false);
+                        mTab = tab;
+                    }
+
+                    @Override
+                    public void onTabSwapped(@NonNull Tab tab) {
+                        setCanAcceptLoadDrops(mTab, true);
+                        setCanAcceptLoadDrops(tab, false);
+                        mTab = tab;
+                    }
+
+                    @Override
+                    public void onAllTabsClosed() {
+                        setCanAcceptLoadDrops(mTab, true);
+                        mTab = null;
+                    }
+                });
+    }
+
+    /**
+     * Controls if the system UI controls (minimize, maximize, etc) should be rendered as an overlay
+     * on top of the web contents. If set to true, the system UI controls will partially occlude the
+     * web contents.
+     */
+    private void setHeaderAsOverlay(boolean headerAsOverlay) {
+        View contentView = mActivity.findViewById(WebAppHeaderUtils.getWebAppHeaderContentId());
+        RelativeLayout.LayoutParams layoutParams =
+                new RelativeLayout.LayoutParams(contentView.getLayoutParams());
+        if (headerAsOverlay) {
+            layoutParams.removeRule(RelativeLayout.BELOW);
+            layoutParams.topMargin =
+                    getDesktopWindowStateManager()
+                            .getAppHeaderState()
+                            .getCaptionControlsTopOffset();
+        } else {
+            layoutParams.addRule(
+                    RelativeLayout.BELOW,
+                    org.chromium.chrome.browser.web_app_header.R.id.web_app_header_layout);
+            layoutParams.topMargin = 0;
+        }
+
+        mHeaderAsOverlay = headerAsOverlay;
+        contentView.setLayoutParams(layoutParams);
+    }
+
+    boolean isShowingHeaderAsOverlay() {
+        return mHeaderAsOverlay;
     }
 
     @Override
@@ -708,7 +764,7 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
                         mIntentDataProvider.get());
 
         final var intentDataProvider = mIntentDataProvider.get();
-        if (WebAppHeaderUtils.isMinimalUiEnabled(intentDataProvider)) {
+        if (WebAppHeaderUtils.isWebAppHeaderEnabled(intentDataProvider)) {
             final var desktopWindowStateManager = getDesktopWindowStateManager();
             assert desktopWindowStateManager != null;
 
@@ -728,14 +784,10 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
                                 fullHistoryIntent.putExtra(IntentHandler.EXTRA_OPEN_HISTORY, true);
                                 IntentUtils.addTrustedIntentExtras(fullHistoryIntent);
                                 mActivity.startActivity(fullHistoryIntent);
-                            });
+                            },
+                            this::setHeaderAsOverlay);
+            mBrowserControlsManager.addObserver(mWebAppHeaderLayoutCoordinator);
         }
-    }
-
-    @Nullable
-    @Override
-    public DesktopWindowStateManager getDesktopWindowStateManager() {
-        return mDesktopWindowStateManager;
     }
 
     @Override
@@ -847,6 +899,7 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
                 && mWebAppHeaderLayoutCoordinator != null) {
+            mBrowserControlsManager.removeObserver(mWebAppHeaderLayoutCoordinator);
             mWebAppHeaderLayoutCoordinator.destroy();
             mWebAppHeaderLayoutCoordinator = null;
         }

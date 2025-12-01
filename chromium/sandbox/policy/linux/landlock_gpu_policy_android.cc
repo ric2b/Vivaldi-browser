@@ -7,12 +7,14 @@
 #include <string>
 #include <vector>
 
+#include "base/android/android_info.h"
 #include "base/command_line.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
 #include "base/threading/thread_id_name_manager.h"
 #include "build/build_config.h"
 #include "sandbox/linux/services/thread_helpers.h"
+#include "sandbox/policy/linux/landlock_util.h"
 #include "sandbox/policy/switches.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -49,6 +51,16 @@ bool AddRulesToPolicy(int ruleset_fd,
 
 bool ApplyLandlock(sandbox::mojom::Sandbox sandbox_type) {
 #if BUILDFLAG(IS_ANDROID)
+  // Don't try to use Landlock if blocked by Seccomp.
+  if (base::android::android_info::sdk_int() <
+      base::android::android_info::SdkVersion::SDK_VERSION_BAKLAVA) {
+    LOG(ERROR)
+        << "Landlock not allowed by Android Seccomp policy, skipping Landlock";
+    return false;
+  }
+  // Report Landlock status via UMA.
+  sandbox::policy::ReportLandlockStatus();
+
   if (sandbox_type != sandbox::mojom::Sandbox::kGpu) {
     LOG(ERROR) << "Sandbox type not GPU, skipping Landlock";
     return false;

@@ -1,10 +1,11 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import type * as Trace from '../../models/trace/trace.js';
 
 let instance: ActiveFilters|null = null;
-/** Singleton class that contains the set of active filters for the given trace
+/**
+ * Singleton class that contains the set of active filters for the given trace
  * file.
  */
 export class ActiveFilters {

@@ -52,6 +52,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
@@ -381,12 +382,18 @@ std::optional<tab_groups::LocalTabGroupID> LocalTabGroupID(
 - (UIMenu*)menuForButtonOfType:(AdaptiveToolbarButtonType)buttonType {
   switch (buttonType) {
     case AdaptiveToolbarButtonTypeBack:
-      return [self menuForNavigationItems:self.webState->GetNavigationManager()
-                                              ->GetBackwardItems()];
+      return self.webState
+                 ? [self menuForNavigationItems:self.webState
+                                                    ->GetNavigationManager()
+                                                    ->GetBackwardItems()]
+                 : nil;
 
     case AdaptiveToolbarButtonTypeForward:
-      return [self menuForNavigationItems:self.webState->GetNavigationManager()
-                                              ->GetForwardItems()];
+      return self.webState
+                 ? [self menuForNavigationItems:self.webState
+                                                    ->GetNavigationManager()
+                                                    ->GetForwardItems()]
+                 : nil;
 
     case AdaptiveToolbarButtonTypeNewTab:
       // Vivaldi
@@ -847,7 +854,7 @@ std::optional<tab_groups::LocalTabGroupID> LocalTabGroupID(
   }
   _bottomOmniboxEnabled =
       [[PrefBackedBoolean alloc] initWithPrefService:prefService
-                                            prefName:prefs::kBottomOmnibox];
+           prefName:omnibox::kIsOmniboxInBottomPosition];
   [_bottomOmniboxEnabled setObserver:self];
 }
 

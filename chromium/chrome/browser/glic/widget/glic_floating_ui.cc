@@ -1,0 +1,81 @@
+// Copyright 2025 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "chrome/browser/glic/widget/glic_floating_ui.h"
+
+#include "base/notimplemented.h"
+#include "chrome/browser/glic/widget/glic_inactive_floating_ui.h"
+
+namespace glic {
+
+GlicFloatingUi::GlicFloatingUi() = default;
+GlicFloatingUi::~GlicFloatingUi() = default;
+
+std::unique_ptr<views::View> GlicFloatingUi::CreateView() {
+  // TODO: implement CreateView. This should set up the contents for the
+  // floating UI and be called from the constructor.
+  NOTIMPLEMENTED();
+  return std::make_unique<views::View>();
+}
+
+Host::EmbedderDelegate* GlicFloatingUi::GetHostEmbedderDelegate() {
+  return this;
+}
+
+const mojom::PanelState& GlicFloatingUi::GetPanelState() const {
+  NOTIMPLEMENTED();
+  return panel_state_;
+}
+
+void GlicFloatingUi::Resize(const gfx::Size& size,
+                            base::TimeDelta duration,
+                            base::OnceClosure callback) {
+  NOTIMPLEMENTED();
+}
+
+void GlicFloatingUi::SetDraggableAreas(
+    const std::vector<gfx::Rect>& draggable_areas) {
+  NOTIMPLEMENTED();
+}
+
+void GlicFloatingUi::EnableDragResize(bool enabled) {
+  NOTIMPLEMENTED();
+}
+
+void GlicFloatingUi::Attach() {
+  NOTIMPLEMENTED();
+}
+
+void GlicFloatingUi::Detach() {
+  NOTIMPLEMENTED();
+}
+
+void GlicFloatingUi::SetMinimumWidgetSize(const gfx::Size& size) {
+  NOTIMPLEMENTED();
+}
+
+bool GlicFloatingUi::IsShowing() const {
+  NOTIMPLEMENTED();
+  return false;
+}
+
+void GlicFloatingUi::Show() {
+  NOTIMPLEMENTED();
+}
+
+void GlicFloatingUi::Close() {
+  NOTIMPLEMENTED();
+}
+
+std::unique_ptr<GlicUiEmbedder> GlicFloatingUi::CreateInactiveEmbedder() const {
+  return GlicInactiveFloatingUi::From(*this);
+}
+
+void GlicFloatingUi::SwitchConversation(
+    glic::mojom::ConversationInfoPtr info,
+    mojom::WebClientHandler::SwitchConversationCallback callback) {
+  NOTIMPLEMENTED();
+}
+
+}  // namespace glic

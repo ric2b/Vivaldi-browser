@@ -10,9 +10,9 @@
 #include "ash/constants/ash_switches.h"
 #include "ash/constants/web_app_id_constants.h"
 #include "ash/game_dashboard/game_dashboard_controller.h"
+#include "ash/multi_user/multi_user_window_manager.h"
 #include "ash/public/cpp/app_list/app_list_controller.h"
 #include "ash/public/cpp/app_list/app_list_metrics.h"
-#include "ash/public/cpp/multi_user_window_manager.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/system/anchored_nudge_manager.h"
 #include "ash/public/cpp/test/app_list_test_api.h"
@@ -20,7 +20,7 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/system/toast/anchored_nudge_manager_impl.h"
-#include "ash/test/test_widget_builder.h"
+#include "ash/test/test_widget_delegates.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/scoped_observation.h"
@@ -45,7 +45,6 @@
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/ash/login/user_adding_screen.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/web_applications/preinstalled_web_apps/preinstalled_web_apps.h"
@@ -82,6 +81,7 @@
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_observer.h"
 #include "ui/message_center/public/cpp/notification.h"
+#include "ui/views/test/test_widget_builder.h"
 
 namespace {
 
@@ -125,12 +125,11 @@ void SendSuspendDone() {
 }
 
 std::unique_ptr<aura::Window> CreateAuraWindow(std::u16string window_title) {
-  ash::TestWidgetBuilder builder;
-  builder.SetWindowTitle(window_title);
-  builder.SetTestWidgetDelegate();
-  builder.SetContext(ash::Shell::GetPrimaryRootWindow());
-  builder.SetBounds(gfx::Rect(0, 0, 600, 400));
-  views::Widget* widget = builder.BuildOwnedByNativeWidget();
+  views::Widget* widget = ash::CreateWidgetBuilderWithDelegate()
+                              .SetWindowTitle(window_title)
+                              .SetContext(ash::Shell::GetPrimaryRootWindow())
+                              .SetBounds(gfx::Rect(0, 0, 600, 400))
+                              .BuildOwnedByNativeWidget();
   return std::unique_ptr<aura::Window>(widget->GetNativeWindow());
 }
 
@@ -1103,8 +1102,8 @@ IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestGameMultiUser,
   window->SetProperty(ash::kAppIDKey,
                       std::string(extension_misc::kGeForceNowAppId));
   ash::MultiUserWindowManager* multi_user_window_manager =
-      MultiUserWindowManagerHelper::GetWindowManager();
-  CHECK(multi_user_window_manager);
+      ash::Shell::Get()->multi_user_window_manager();
+  ASSERT_TRUE(multi_user_window_manager);
   multi_user_window_manager->SetWindowOwner(
       window.get(), GetSecondaryUserContext().GetAccountId());
 }
@@ -1125,8 +1124,8 @@ IN_PROC_BROWSER_TEST_F(ScalableIphBrowserTestGameMultiUser,
 
   std::unique_ptr<aura::Window> window = CreateAuraWindow(kTestGameWindowTitle);
   ash::MultiUserWindowManager* multi_user_window_manager =
-      MultiUserWindowManagerHelper::GetWindowManager();
-  CHECK(multi_user_window_manager);
+      ash::Shell::Get()->multi_user_window_manager();
+  ASSERT_TRUE(multi_user_window_manager);
   multi_user_window_manager->SetWindowOwner(
       window.get(), GetSecondaryUserContext().GetAccountId());
 

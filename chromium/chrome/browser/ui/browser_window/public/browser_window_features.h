@@ -16,19 +16,24 @@
 namespace glic {
 class GlicButtonController;
 class GlicIphController;
+class GlicLegacySidePanelCoordinator;
 }  // namespace glic
+
+namespace tabs {
+class GlicActorTaskIconController;
+}  // namespace tabs
 #endif
 
-namespace actor::ui {
-class ActorOverlayWindowController;
-}  // namespace actor::ui
+class ActorUiWindowController;
 
+class ActorBorderViewController;
 class BookmarkBarController;
 class BookmarksSidePanelCoordinator;
 class BreadcrumbManagerBrowserAgent;
 class Browser;
 class BrowserActions;
 class BrowserContentSettingBubbleModelDelegate;
+class BrowserElements;
 class BrowserInstantController;
 class BrowserLiveTabContext;
 class BrowserLocationBarModelDelegate;
@@ -39,11 +44,16 @@ class BrowserWindowInterface;
 class ChromeLabsCoordinator;
 class ColorProviderBrowserHelper;
 class CommentsSidePanelCoordinator;
+class ContentsBorderController;
 class CookieControlsBubbleCoordinator;
 class DataSharingBubbleController;
 class DesktopBrowserWindowCapabilities;
+class DevtoolsUIController;
+class ExtensionKeybindingRegistryViews;
 class ExclusiveAccessManager;
 class FindBarController;
+class FindBarOwner;
+class FullscreenControlHost;
 class HistoryClustersSidePanelCoordinator;
 class HistorySidePanelCoordinator;
 class IncognitoClearBrowsingDataDialogCoordinator;
@@ -53,27 +63,29 @@ class MemorySaverOptInIPHController;
 class PinnedToolbarActionsController;
 class ProfileMenuCoordinator;
 class ReadingListSidePanelCoordinator;
+class RecentActivityBubbleCoordinator;
+class BrowserSelectFileDialogController;
+class ScrimViewController;
 class SidePanelCoordinator;
 class SidePanelUI;
 class SigninViewController;
+class SplitViewIphController;
 class TabMenuModelDelegate;
 class TabSearchToolbarButtonController;
 class TabListBridge;
 class TabStripModel;
-class TabStripServiceRegister;
+class TabStripServiceFeature;
 class ToastController;
 class ToastService;
 class TranslateBubbleController;
 class UpgradeNotificationController;
+class WebUIBrowserSidePanelUI;
 
 class BrowserWindow; // Vivaldi
 namespace vivaldi {
 class VivaldiBrowserUiData;
 }
 #if BUILDFLAG(IS_WIN)
-namespace default_browser {
-class PinInfoBarController;
-}  // namespace default_browser
 class WindowsTaskbarIconUpdater;
 #endif
 
@@ -81,7 +93,17 @@ class WindowsTaskbarIconUpdater;
 namespace pdf::infobar {
 class PdfInfoBarController;
 }  // namespace pdf::infobar
+namespace default_browser {
+class PinInfoBarController;
+}  // namespace default_browser
 #endif
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+class ProfileCustomizationBubbleSyncController;
+namespace session_restore_infobar {
+class SessionRestoreInfobarController;
+}
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
 #if !BUILDFLAG(IS_CHROMEOS)
 class DownloadToolbarUIController;
@@ -115,8 +137,11 @@ class ProductSpecificationsEntryPointController;
 
 namespace tabs {
 class GlicNudgeController;
-class GlicActorTaskIconController;
-}
+}  // namespace tabs
+
+namespace enterprise_data_protection {
+class DataProtectionUIController;
+}  // namespace enterprise_data_protection
 
 namespace tab_groups {
 class DeletionDialogController;
@@ -150,8 +175,16 @@ class SendTabToSelfToolbarBubbleController;
 }  // namespace send_tab_to_self
 
 namespace split_tabs {
-class SplitTabScrimController;
+class SplitTabHighlightController;
 }  // namespace split_tabs
+
+namespace ui {
+class AcceleratorProvider;
+}  // namespace ui
+
+namespace web_app {
+class AppBrowserController;
+}  // namespace web_app
 
 namespace vivaldi {
   class SidePanelCoordinator;
@@ -189,6 +222,14 @@ class BrowserWindowFeatures {
   void TearDownPreBrowserWindowDestruction();
 
   // Public accessors for features:
+  web_app::AppBrowserController* app_browser_controller() {
+    return app_browser_controller_.get();
+  }
+
+  const web_app::AppBrowserController* app_browser_controller() const {
+    return app_browser_controller_.get();
+  }
+
   BrowserActions* browser_actions() { return browser_actions_.get(); }
 
   chrome::BrowserCommandController* browser_command_controller() {
@@ -220,6 +261,12 @@ class BrowserWindowFeatures {
     return comments_side_panel_coordinator_.get();
   }
 
+#if BUILDFLAG(ENABLE_GLIC)
+  glic::GlicLegacySidePanelCoordinator* glic_side_panel_coordinator() {
+    return glic_side_panel_coordinator_.get();
+  }
+#endif
+
   PinnedToolbarActionsController* pinned_toolbar_actions_controller() {
     return pinned_toolbar_actions_controller_.get();
   }
@@ -228,9 +275,6 @@ class BrowserWindowFeatures {
   pdf::infobar::PdfInfoBarController* pdf_infobar_controller() {
     return pdf_infobar_controller_.get();
   }
-#endif
-
-#if BUILDFLAG(IS_WIN)
   default_browser::PinInfoBarController* pin_infobar_controller() {
     return pin_infobar_controller_.get();
   }
@@ -252,10 +296,6 @@ class BrowserWindowFeatures {
     return lens_overlay_entry_point_controller_.get();
   }
 
-  actor::ui::ActorOverlayWindowController* actor_overlay_window_controller() {
-    return actor_overlay_window_controller_.get();
-  }
-
   lens::LensRegionSearchController* lens_region_search_controller() {
     return lens_region_search_controller_.get();
   }
@@ -270,10 +310,6 @@ class BrowserWindowFeatures {
 
   tabs::GlicNudgeController* glic_nudge_controller() {
     return glic_nudge_controller_.get();
-  }
-
-  tabs::GlicActorTaskIconController* glic_actor_task_icon_controller() {
-    return glic_actor_task_icon_controller_.get();
   }
 
   TabStripModel* tab_strip_model() { return tab_strip_model_; }
@@ -297,6 +333,10 @@ class BrowserWindowFeatures {
     return extension_side_panel_manager_.get();
   }
 
+  ExtensionKeybindingRegistryViews* extension_keybinding_registry() {
+    return extension_keybinding_registry_.get();
+  }
+
 #if !BUILDFLAG(IS_CHROMEOS)
   DownloadToolbarUIController* download_toolbar_ui_controller() {
     return download_toolbar_ui_controller_.get();
@@ -317,16 +357,8 @@ class BrowserWindowFeatures {
     return shared_tab_group_feedback_controller_.get();
   }
 
-  TranslateBubbleController* translate_bubble_controller() {
-    return translate_bubble_controller_.get();
-  }
-
   TabSearchToolbarButtonController* tab_search_toolbar_button_controller() {
     return tab_search_toolbar_button_controller_.get();
-  }
-
-  CookieControlsBubbleCoordinator* cookie_controls_bubble_coordinator() {
-    return cookie_controls_bubble_coordinator_.get();
   }
 
   BrowserSyncedWindowDelegate* synced_window_delegate() {
@@ -341,14 +373,13 @@ class BrowserWindowFeatures {
     return tab_group_deletion_dialog_controller_.get();
   }
 
-
   SigninViewController* signin_view_controller() {
     return signin_view_controller_.get();
   }
 
   // Only fetch the tab_strip_service to register a pending receiver.
-  TabStripServiceRegister* tab_strip_service() {
-    return tab_strip_service_.get();
+  TabStripServiceFeature* tab_strip_service_feature() {
+    return tab_strip_service_feature_.get();
   }
 
   LocationBarModel* location_bar_model() { return location_bar_model_.get(); }
@@ -370,8 +401,16 @@ class BrowserWindowFeatures {
     return new_tab_footer_controller_.get();
   }
 
-  split_tabs::SplitTabScrimController* split_tab_scrim_controller() {
-    return split_tab_scrim_controller_.get();
+  DevtoolsUIController* devtools_ui_controller() {
+    return devtools_ui_controller_.get();
+  }
+
+  split_tabs::SplitTabHighlightController* split_tab_highlight_controller() {
+    return split_tab_highlight_controller_.get();
+  }
+
+  ContentsBorderController* contents_border_controller() {
+    return contents_border_controller_.get();
   }
 
   ProfileMenuCoordinator* profile_menu_coordinator() {
@@ -389,6 +428,18 @@ class BrowserWindowFeatures {
   }
 #endif  // defined(USE_AURA)
 
+  BrowserSelectFileDialogController* browser_select_file_dialog_controller() {
+    return browser_select_file_dialog_controller_.get();
+  }
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  ProfileCustomizationBubbleSyncController*
+  profile_customization_bubble_sync_controller() {
+    return profile_customization_bubble_sync_controller_.get();
+  }
+
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
   // Get the FindBarController for this browser window, creating it if it does
   // not yet exist.
   FindBarController* GetFindBarController();
@@ -396,12 +447,12 @@ class BrowserWindowFeatures {
   // Returns true if a FindBarController exists for this browser window.
   bool HasFindBarController() const;
 
-  DataSharingBubbleController* data_sharing_bubble_controller() {
-    return data_sharing_bubble_controller_.get();
-  }
-
   ExclusiveAccessManager* exclusive_access_manager() {
     return exclusive_access_manager_.get();
+  }
+
+  FullscreenControlHost* fullscreen_control_host() {
+    return fullscreen_control_host_.get();
   }
 
   HistoryClustersSidePanelCoordinator*
@@ -427,6 +478,12 @@ class BrowserWindowFeatures {
 
   BrowserLiveTabContext* live_tab_context() { return live_tab_context_.get(); }
 
+  ui::AcceleratorProvider* accelerator_provider() {
+    return accelerator_provider_;
+  }
+
+  FindBarOwner* find_bar_owner() { return find_bar_owner_.get(); }
+
   static ui::UserDataFactoryWithOwner<BrowserWindowInterface>&
   GetUserDataFactoryForTesting();
 
@@ -434,6 +491,8 @@ class BrowserWindowFeatures {
   BrowserWindow* window() { return browser_window_.get(); }
 
  private:
+  class ExtensionKeybindingRegistryDelegateTabStrip;
+
   static ui::UserDataFactoryWithOwner<BrowserWindowInterface>&
   GetUserDataFactory();
 
@@ -444,9 +503,16 @@ class BrowserWindowFeatures {
   // Features that are per-browser window will each have a controller. e.g.
   // std::unique_ptr<FooFeature> foo_feature_;
 
+  // Helper which handles bookmark app specific browser configuration.
+  // This must be initialized before |command_controller_| to ensure the correct
+  // set of commands are enabled.
+  std::unique_ptr<web_app::AppBrowserController> app_browser_controller_;
+
   std::unique_ptr<BrowserActions> browser_actions_;
 
   std::unique_ptr<chrome::BrowserCommandController> browser_command_controller_;
+
+  std::unique_ptr<BrowserElements> browser_elements_;
 
   std::unique_ptr<BookmarkBarController> bookmark_bar_controller_;
 
@@ -463,6 +529,8 @@ class BrowserWindowFeatures {
   std::unique_ptr<ImmersiveModeController> immersive_mode_controller_;
 
   std::unique_ptr<ExclusiveAccessManager> exclusive_access_manager_;
+
+  std::unique_ptr<FullscreenControlHost> fullscreen_control_host_;
 
   std::unique_ptr<lens::LensOverlayEntryPointController>
       lens_overlay_entry_point_controller_;
@@ -494,14 +562,16 @@ class BrowserWindowFeatures {
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   std::unique_ptr<pdf::infobar::PdfInfoBarController> pdf_infobar_controller_;
-#endif
 
-#if BUILDFLAG(IS_WIN)
   std::unique_ptr<default_browser::PinInfoBarController>
       pin_infobar_controller_;
 #endif
 
+  std::unique_ptr<ScrimViewController> scrim_view_controller_;
+
   std::unique_ptr<SidePanelCoordinator> side_panel_coordinator_;
+
+  std::unique_ptr<WebUIBrowserSidePanelUI> webui_browser_side_panel_ui_;
 
   std::unique_ptr<tab_groups::SessionServiceTabGroupSyncObserver>
       session_service_tab_group_sync_observer_;
@@ -514,23 +584,43 @@ class BrowserWindowFeatures {
   std::unique_ptr<extensions::ExtensionSidePanelManager>
       extension_side_panel_manager_;
 
+  // The class that registers for keyboard shortcuts for extension commands,
+  // and its delegate.
+  std::unique_ptr<ExtensionKeybindingRegistryDelegateTabStrip>
+      extension_keybinding_delegate_;
+  std::unique_ptr<ExtensionKeybindingRegistryViews>
+      extension_keybinding_registry_;
+
   std::unique_ptr<media_router::CastBrowserController> cast_browser_controller_;
 
 #if !BUILDFLAG(IS_CHROMEOS)
   std::unique_ptr<DownloadToolbarUIController> download_toolbar_ui_controller_;
 #endif
 
-  std::unique_ptr<actor::ui::ActorOverlayWindowController>
-      actor_overlay_window_controller_;
+  std::unique_ptr<ActorUiWindowController> actor_ui_window_controller_;
+
+  std::unique_ptr<ActorBorderViewController> actor_border_view_controller_;
+
+  std::unique_ptr<BrowserSelectFileDialogController>
+      browser_select_file_dialog_controller_;
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  std::unique_ptr<ProfileCustomizationBubbleSyncController>
+      profile_customization_bubble_sync_controller_;
+
+  std::unique_ptr<session_restore_infobar::SessionRestoreInfobarController>
+      session_restore_infobar_controller_;
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
   std::unique_ptr<tabs::GlicNudgeController> glic_nudge_controller_;
 
+#if BUILDFLAG(ENABLE_GLIC)
   std::unique_ptr<tabs::GlicActorTaskIconController>
       glic_actor_task_icon_controller_;
-
-#if BUILDFLAG(ENABLE_GLIC)
   std::unique_ptr<glic::GlicButtonController> glic_button_controller_;
   std::unique_ptr<glic::GlicIphController> glic_iph_controller_;
+  std::unique_ptr<glic::GlicLegacySidePanelCoordinator>
+      glic_side_panel_coordinator_;
 #endif
 
   std::unique_ptr<tab_groups::MostRecentSharedTabUpdateStore>
@@ -568,6 +658,11 @@ class BrowserWindowFeatures {
   std::unique_ptr<new_tab_footer::NewTabFooterController>
       new_tab_footer_controller_;
 
+  std::unique_ptr<DevtoolsUIController> devtools_ui_controller_;
+
+  std::unique_ptr<enterprise_data_protection::DataProtectionUIController>
+      data_protection_ui_controller_;
+
   std::unique_ptr<ReadingListSidePanelCoordinator>
       reading_list_side_panel_coordinator_;
 
@@ -583,7 +678,7 @@ class BrowserWindowFeatures {
   std::unique_ptr<ColorProviderBrowserHelper> color_provider_browser_helper_;
 
   // This is an experimental API that interacts with the TabStripModel.
-  std::unique_ptr<TabStripServiceRegister> tab_strip_service_;
+  std::unique_ptr<TabStripServiceFeature> tab_strip_service_feature_;
 
   // The Find Bar. This may be NULL if there is no Find Bar, and if it is
   // non-NULL, it may or may not be visible.
@@ -622,14 +717,28 @@ class BrowserWindowFeatures {
   // TODO(crbug.com/423956131): Remove this.
   raw_ptr<BrowserWindowInterface> browser_ = nullptr;
 
-  std::unique_ptr<split_tabs::SplitTabScrimController>
-      split_tab_scrim_controller_;
+  std::unique_ptr<split_tabs::SplitTabHighlightController>
+      split_tab_highlight_controller_;
+
+  std::unique_ptr<SplitViewIphController> split_view_iph_controller_;
+
+  std::unique_ptr<RecentActivityBubbleCoordinator>
+      recent_activity_bubble_coordinator_;
+
+  std::unique_ptr<ContentsBorderController> contents_border_controller_;
 
 #if BUILDFLAG(IS_WIN)
   std::unique_ptr<WindowsTaskbarIconUpdater> windows_taskbar_icon_updater_;
 #endif
 
   std::unique_ptr<BrowserUserEducationInterface> user_education_;
+
+  // TODO(webium): Current both BrowserView and WebUIBrowserWindow implement
+  // AcceleratorProvider. Consider eliminating this inheritance and composing
+  // this functionality into its own class.
+  raw_ptr<ui::AcceleratorProvider> accelerator_provider_;
+
+  std::unique_ptr<FindBarOwner> find_bar_owner_;
 
   // Vivaldi
   std::unique_ptr<vivaldi::SidePanelCoordinator> vivaldi_side_panel_coordinator_;

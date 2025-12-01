@@ -6,23 +6,29 @@
 #define COMPONENTS_OPTIMIZATION_GUIDE_CORE_MODEL_EXECUTION_ON_DEVICE_MODEL_COMPONENT_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
+#include "base/byte_count.h"
 #include "base/containers/enum_set.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/safe_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
+#include "base/scoped_observation.h"
 #include "base/sequence_checker.h"
 #include "base/types/pass_key.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "components/optimization_guide/core/model_execution/performance_class.h"
+#include "components/optimization_guide/core/model_execution/usage_tracker.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
+#include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/proto/on_device_base_model_metadata.pb.h"
 #include "components/prefs/pref_change_registrar.h"
 
@@ -40,6 +46,7 @@ inline constexpr std::string_view kOnDeviceModelCrxId =
 class OnDeviceModelComponentState;
 
 enum class ModelBasedCapabilityKey;
+class UsageTracker;
 
 // Status of the on-device model.
 //
@@ -105,7 +112,7 @@ struct OnDeviceBaseModelSpec {
 // Manages the state of the on-device component.
 // This object needs to have lifetime equal to the browser process, and outside
 // of tests is created by a static NoDestructor initializer.
-class OnDeviceModelComponentStateManager final {
+class OnDeviceModelComponentStateManager final : public UsageTracker::Observer {
  public:
   class Delegate {
    public:
@@ -118,7 +125,7 @@ class OnDeviceModelComponentStateManager final {
     // and calls `callback`.
     virtual void GetFreeDiskSpace(
         const base::FilePath& path,
-        base::OnceCallback<void(int64_t)> callback) = 0;
+        base::OnceCallback<void(std::optional<base::ByteCount>)> callback) = 0;
 
     // Registers the component installer. Calls
     // `OnDeviceModelComponentStateManager::SetReady` when the component is
@@ -139,25 +146,17 @@ class OnDeviceModelComponentStateManager final {
     // Called whenever the on-device component state changes. `state` is null if
     // the component is not available.
     virtual void StateChanged(const OnDeviceModelComponentState* state) = 0;
-
-    // Called when on-device eligible `feature` was used for the first time.
-    // This is called when at startup the feature was not used, and then gets
-    // used for the first time.
-    virtual void OnDeviceEligibleFeatureFirstUsed(
-        ModelBasedCapabilityKey feature) {}
   };
 
   struct RegistrationCriteria {
     // Requirements for install. Please update `LogInstallCriteria()` when
     // updating this.
-    bool disk_space_available = false;
     bool device_capable = false;
     bool on_device_feature_recently_used = false;
     bool enabled_by_feature = false;
     bool enabled_by_enterprise_policy = false;
 
     // Reasons to uninstall. TODO(302327114): Add UMA for uninstall reason.
-    bool running_out_of_disk_space = false;
     bool out_of_retention = false;
 
     // Current state.
@@ -165,6 +164,19 @@ class OnDeviceModelComponentStateManager final {
     // We've registered the installer in the past, and haven't uninstalled yet.
     // The component may or may not be ready.
     bool is_already_installing = false;
+
+    // Most recently queried disk space available for model install.
+    base::ByteCount disk_space_free;
+
+    bool is_disk_space_available() const {
+      return features::IsFreeDiskSpaceSufficientForOnDeviceModelInstall(
+          disk_space_free);
+    }
+
+    bool is_running_out_of_disk_space() const {
+      return features::IsFreeDiskSpaceTooLowForOnDeviceModelInstall(
+          disk_space_free);
+    }
 
     bool is_model_allowed() const {
       return device_capable && enabled_by_feature &&
@@ -175,13 +187,13 @@ class OnDeviceModelComponentStateManager final {
       if (should_uninstall()) {
         return false;
       }
-      return (disk_space_available && is_model_allowed() &&
+      return (is_disk_space_available() && is_model_allowed() &&
               on_device_feature_recently_used);
     }
 
     bool should_uninstall() const {
       return (is_already_installing &&
-              (running_out_of_disk_space || out_of_retention ||
+              (is_running_out_of_disk_space() || out_of_retention ||
                !enabled_by_enterprise_policy));
     }
   };
@@ -189,8 +201,9 @@ class OnDeviceModelComponentStateManager final {
   OnDeviceModelComponentStateManager(
       PrefService* local_state,
       base::SafeRef<PerformanceClassifier> performance_classifier,
+      UsageTracker& usage_tracker,
       std::unique_ptr<Delegate> delegate);
-  ~OnDeviceModelComponentStateManager();
+  ~OnDeviceModelComponentStateManager() override;
 
   // Returns whether the component installation is valid.
   static bool VerifyInstallation(const base::FilePath& install_dir,
@@ -199,9 +212,6 @@ class OnDeviceModelComponentStateManager final {
   // Called at startup. Triggers install or uninstall of the component if
   // necessary.
   void OnStartup();
-
-  // Should be called whenever an on-device eligible feature was used.
-  void OnDeviceEligibleFeatureUsed(ModelBasedCapabilityKey feature);
 
   // Should be called whenever the device performance class changes.
   void OnPerformanceClassAvailable();
@@ -234,7 +244,7 @@ class OnDeviceModelComponentStateManager final {
 
   // Exposed internal state for chrome://on-device-internals
   struct DebugState {
-    int64_t disk_space_available_;
+    base::ByteCount disk_space_available_;
     raw_ptr<const RegistrationCriteria> criteria_;
     OnDeviceModelStatus status_;
     bool has_override_;
@@ -269,21 +279,25 @@ class OnDeviceModelComponentStateManager final {
   };
 
   RegistrationCriteria ComputeRegistrationCriteria(
-      int64_t disk_space_free_bytes);
+      base::ByteCount disk_space_free_bytes);
 
   DebugState GetDebugState();
 
   // Installs the component installer if it needs installed.
   void BeginUpdateRegistration();
   // Continuation of `UpdateRegistration()` after async work.
-  void CompleteUpdateRegistration(int64_t disk_space_free_bytes);
+  void CompleteUpdateRegistration(
+      std::optional<base::ByteCount> disk_space_free);
+
+  // UsageTracker::Observer:
+  void OnDeviceEligibleFeatureUsed(ModelBasedCapabilityKey feature) override;
+
+  // Uninstalls the component.
+  void UninstallComponent();
 
   void OnGenAILocalFoundationalModelEnterprisePolicyChanged();
 
   void NotifyStateChanged();
-
-  // Notifies the observers of the `feature` used for the first time.
-  void NotifyOnDeviceEligibleFeatureFirstUsed(ModelBasedCapabilityKey feature);
 
   raw_ptr<PrefService> local_state_ GUARDED_BY_CONTEXT(sequence_checker_);
   base::SafeRef<PerformanceClassifier> performance_classifier_
@@ -295,14 +309,16 @@ class OnDeviceModelComponentStateManager final {
   PrefChangeRegistrar pref_change_registrar_
       GUARDED_BY_CONTEXT(sequence_checker_);
 
-  bool is_model_allowed_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
   std::unique_ptr<OnDeviceModelComponentState> state_
       GUARDED_BY_CONTEXT(sequence_checker_);
   // Null until first registration attempt.
   std::unique_ptr<RegistrationCriteria> registration_criteria_
       GUARDED_BY_CONTEXT(sequence_checker_);
-  // Most recently queried disk space available for model install.
-  int64_t disk_space_available_ GUARDED_BY_CONTEXT(sequence_checker_) = 0;
+
+  base::raw_ref<UsageTracker> usage_tracker_
+      GUARDED_BY_CONTEXT(sequence_checker_);
+  base::ScopedObservation<UsageTracker, UsageTracker::Observer>
+      usage_tracker_observation_{this};
 
   SEQUENCE_CHECKER(sequence_checker_);
 

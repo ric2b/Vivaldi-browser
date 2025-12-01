@@ -1,0 +1,825 @@
+/*
+ * Copyright 2019 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package google.internal.federatedml.v2;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+import "google/rpc/code.proto";
+import "fcp/secagg/shared/secagg_messages.proto";
+
+option java_package = "com.google.internal.federatedml.v2";
+option java_multiple_files = true;
+option java_outer_classname = "FederatedProto";
+
+// `FederatedTrainingApi` provides the protocol between a device and
+// cloud servers for federated computations.
+//
+// This API works as follows:
+//
+// 1. Clients are associated with *populations*. A population is
+//    uniquely identified by an opaque string which indicates the
+//    application together with additional information like a specific
+//    flavor within this application.
+//
+// 2. Periodically, clients issue an `EligibilityEvalCheckinRequest` to indicate
+//    they are interested in participating in a computation, followed by a
+//    `CheckinRequest` to actually be assigned one of the available
+//    computations they are compatible with. These requests specify the
+//    population for which the requests are issued.
+//
+// 3. The server decides whether the client shall participate in a computation,
+//    and if so returns the data (a computation description and a checkpoint)
+//    needed for the client to start executing the computation.
+//
+// 4. If the client is selected, it performs local execution. When done, the
+//    client issues a `ReportRequest`, specifying both population and phase id,
+//    and the updated checkpoint.
+service FederatedTrainingApi {
+  // Initiates client-server communication session (bidirectional stream).
+  rpc Session(stream ClientStreamMessage) returns (stream ServerStreamMessage) {
+  }
+}
+
+// Message sent from a client to a server in a bidirectional stream.
+// The message is sent either directly or (for large messages when chunking
+// is supported) split into chunk encapsulated into smaller instances of
+// ClientStreamMessage.
+message ClientStreamMessage {
+  // Different kinds of messages.
+  oneof kind {
+    // Checkin request.
+    CheckinRequest checkin_request = 1;
+
+    // Report request.
+    ReportRequest report_request = 2;
+
+    // Transfer of ClientStreamMessage in multiple chunks
+    ChunkedTransferMessage chunked_transfer = 6;
+
+    // Eligibility evaluation checkin request.
+    EligibilityEvalCheckinRequest eligibility_eval_checkin_request = 7;
+  }
+
+  // Secure Aggregation messages.  These form a parallel stream of
+  // messages, and so are outside the 'kind' oneof.
+  fcp.secagg.ClientToServerWrapperMessage secure_aggregation_client_message = 4;
+
+  repeated google.protobuf.Any serialized_side_channel_event = 5;
+
+  // Internal identifier of the connection to the client. This value isn't set
+  // by the device (ignored if set), but used by the server when forwarding
+  // requests internally within the system.
+  string internal_client_id = 3 [deprecated = true];
+}
+
+// Message sent from a server to a client in a bidirectional stream.
+// The message is sent either directly or (for large messages when chunking
+// is supported) split into chunks encapsulated into smaller instances of
+// ServerStreamMessage.
+message ServerStreamMessage {
+  // Different kinds of messages.
+  oneof kind {
+    // Checkin response.
+    CheckinResponse checkin_response = 1;
+
+    // Report response.
+    ReportResponse report_response = 2;
+
+    // Transfer of ServerStreamMessage in multiple chunks
+    ChunkedTransferMessage chunked_transfer = 4;
+
+    // Ack of a CheckinRequest or an EligibilityEvalCheckinRequest. See {@link
+    // CheckinRequest} for details.
+    CheckinRequestAck checkin_request_ack = 5;
+
+    // Eligibility evaluation checkin response.
+    EligibilityEvalCheckinResponse eligibility_eval_checkin_response = 6;
+
+    // This is expected to be extended in upcoming versions of the protocol
+  }
+
+  // Secure Aggregation messages.  These form a parallel stream of
+  // messages, and so are outside the 'kind' oneof.
+  fcp.secagg.ServerToClientWrapperMessage secure_aggregation_server_message = 3;
+}
+
+// Supported levels of compression for chunked blob transfer.
+enum CompressionLevel {
+  // Compression disabled
+  UNCOMPRESSED = 0;
+  // zlib compression with default settings; this level uses gzip-6
+  // (currently).
+  // 'Z_DEFAULT_COMPRESSION requests a default compromise between speed and
+  // compression (currently equivalent to level 6).'
+  // Source - // http://www.zlib.net/manual.html
+  ZLIB_DEFAULT = 1;
+  // zlib compression optimized for most compression; this level uses gzip-9.
+  // '9 gives best compression' Source - http://www.zlib.net/manual.html
+  ZLIB_BEST_COMPRESSION = 2;
+  // zlib compression optimized for speed; this level uses gzip-1.
+  // '1 gives best speed' Source - http://www.zlib.net/manual.html
+  ZLIB_BEST_SPEED = 3;
+}
+
+// Supported compressed file formats for HTTP downloads.
+enum HttpCompressionFormat {
+  HTTP_COMPRESSION_FORMAT_UNSPECIFIED = 0;
+  // Gzip-compressed data. If data is compressed in this way, then the
+  // "Content-Type" HTTP response header will have a "+gzip" suffix.
+  HTTP_COMPRESSION_FORMAT_GZIP = 1;
+}
+
+// A request, sent by the device to check if it should participate
+// in the current phase.
+message CheckinRequest {
+  // The name of the population this client belongs to.
+  string population_name = 1;
+
+  // Optional. Retry token (opaque to the client) passed by the server when last
+  // participated in the training or rejected. If clients have such a token
+  // available, they should provide it. If not, things are still expected to
+  // work, but providing this gives server better control on organizing
+  // participation.
+  //
+  // Note that an `EligibilityEvalCheckinRequest` and its subsequent
+  // `CheckinRequest` request will both use the same value for this field,
+  // since both requests are considered part of the same logical protocol
+  // session.
+  string retry_token = 2;
+
+  reserved 3;
+
+  // The attestation measurement providing evidence of integrity for this
+  // client. The measurement is bound to the population_name and retry_token
+  // values in this CheckinRequest.
+  //
+  // Note that an `EligibilityEvalCheckinRequest` and its subsequent
+  // `CheckinRequest` request will both use the same value for this field,
+  // since both requests are considered part of the same logical protocol
+  // session.
+  string attestation_measurement = 4;
+
+  // Protocol options supported by the client.
+  ProtocolOptionsRequest protocol_options_request = 5;
+
+  string client_version = 6 ;
+
+  // The client computes this message using the plan returned by a previous
+  // `EligibilityEvalCheckinResponse`.
+  //
+  // If this field is set, it describes to the server which tasks the client is
+  // (in)eligible for, out of the set of tasks currently being served by the
+  // server. The server must only use this information to decide which task to
+  // serve to the client in response to this request, must use this information
+  // only during this specific protocol session, and must not persist this
+  // information in any way.
+  //
+  // If this field is unset, it may indicate that the client previously received
+  // an `EligibilityEvalCheckinResponse` without an
+  // `EligibilityEvalPayload` message (i.e. the population did not
+  // have an eligibility-computing task configured at the time of the request).
+  // It may also indicate a client for which the eligibility-computing task
+  // feature has been disabled, or an old client that does not support this
+  // feature yet.
+  //
+  // If this field is unset but the population has an eligibility-computing task
+  // configured, then the server must reject this client, since the server has
+  // no way to determine which tasks the client is (in)eligible for.
+  //
+  // If this field is unset and the population does not have an
+  // eligibility-computing task configured, then the server may serve this
+  // client any task.
+  //
+  TaskEligibilityInfo task_eligibility_info = 7;
+}
+
+// Describes to the server which tasks a client is eligible for.
+message TaskEligibilityInfo {
+  // A semantic version describing how the set of eligibility descriptors should
+  // be interpreted. This fields enables assigning different semantics for how
+  // the server should interpret the descriptors, without having to change the
+  // wire format (e.g. different ways of interpreting `TaskWeight.weight`).
+  int64 version = 1;
+
+  // A list of task weights, which the server may use when assigning the client
+  // a task in response to the current request.
+  //
+  // If none of the `TaskWeight` messages match a given task, then the client
+  // must be considered ineligible for that task, and the server must not serve
+  // the client that task.
+  //
+  // Therefore, if a `TaskEligibilityInfo` message is provided but this field is
+  // empty then the client should be considered ineligible for all tasks in the
+  // population (although in practice the client will simply close the
+  // connection in that case, rather than issue a `CheckinRequest` with such an
+  // empty list of weights).
+  repeated TaskWeight task_weights = 2;
+}
+
+// Describes a weight that should be assigned to a specific task.
+message TaskWeight {
+  // Name of the task this weight applies to.
+  //
+  // These correspond to the task names provided by server in the
+  // `PopulationEligibilitySpec.TaskInfo.task_name` field (see
+  // fcp/protos/population_eligibility_spec.proto and
+  // fcp/client/eligibility_decider.cc).
+  string task_name = 1;
+
+  // The weight that should be applied to the specified task.
+  //
+  // Must be >0.
+  //
+  // This weight may (or may not) be used by the server to implement some form
+  // of task or client prioritization.
+  //
+  // NOTE: While this is a float field, it is currently only used to convey a
+  // boolean eligibility signal (0.0 = ineligible, 1.0 = eligible). See
+  // fcp/client/eligibility_decider.cc for how this field is used and populated.
+  float weight = 2;
+}
+
+// Response to the checkin request, sent to the device.
+message CheckinResponse {
+  // One of two outcomes, depending on server's decision on participation of the
+  // client.
+  oneof checkin_result {
+    // If the client joined the phase with this call, information how
+    // to proceed.
+    AcceptanceInfo acceptance_info = 1;
+
+    // If the client was not accepted, information how to proceed.
+    RejectionInfo rejection_info = 2;
+  }
+
+  // Instructions from server to the client how to execute protocol.
+  // While, conceptually, chunked transfer is a symmetric protocol with respect
+  // to peers (both server and client act like senders and receivers), the
+  // protocol handshake and configuration part is intentionally skewed towards
+  // the server driving the decisions on how chunking are performed on the wire,
+  // so we have a centralized way of controlling the feature.
+  //
+  // Note that if a client receives more than one `ProtocolOptionsResponse` over
+  // the life of a protocol session (e.g. in
+  // `EligibilityEvalCheckinResponse` as well as `CheckinResponse`)
+  // then the client will use the most recently-received value for further
+  // communications with the server.
+  ProtocolOptionsResponse protocol_options_response = 4;
+
+  reserved 3;
+}
+
+// Acknowledgement for a `CheckinRequest` or an `EligibilityEvalCheckinRequest`
+// from the client. This happens almost instantenously for all clients (that
+// request an ack using ProtocolRequestOptions#should_ack_checkin) as soon as
+// they issue either request, and happens *before* either a `CheckinResponse`
+// or a `EligibilityEvalCheckinResponse` is returned to the client.
+message CheckinRequestAck {
+  // Retry window to use for the next checkin attempt if this attempt ends up
+  // being subsequently accepted by the server, as in the client received a
+  // CheckinResponse with an AcceptanceInfo.
+  RetryWindow retry_window_if_accepted = 1;
+
+  // Retry window to use if this checkin attempt is not accepted by the server,
+  // as in the client doesn't receive a CheckinResponse with an AcceptanceInfo.
+  RetryWindow retry_window_if_rejected = 2;
+}
+
+// A request, sent by the device to request the eligibility-computing plan for
+// the population. This plan is run by the client to generate a
+// `TaskEligibilityInfo` proto result, which is then included with a subsequent
+// `CheckinRequest` (within the same protocol session) to inform the server
+// which tasks the client is eligible for.
+//
+// The use of an `EligibilityEvalCheckinRequest` is optional (i.e. clients
+// may simply issue a `CheckinRequest` without a preceding
+// `EligibilityEvalCheckinRequest`, in which case the
+// `CheckinRequest.task_eligibility_info` field will be left unset).
+message EligibilityEvalCheckinRequest {
+  // The name of the population this client belongs to.
+  string population_name = 1;
+
+  // Optional. This field has the same semantics as
+  // `CheckinRequest.retry_token`, see that field for details.
+  string retry_token = 2;
+
+  // This field has the same semantics as
+  // `CheckinRequest.attestation_measurement`.
+  // See that field for details.
+  string attestation_measurement = 4;
+
+  // Protocol options supported by the client.
+  ProtocolOptionsRequest protocol_options_request = 5;
+
+  // This field has the same semantics as `CheckinRequest.client_version`. See
+  // that field for details.
+  string client_version = 6 ;
+
+  // The client's capabilities when downloading and running Eligibility Eval
+  // tasks.
+  EligibilityEvalTaskCapabilities eligibility_eval_task_capabilities = 7;
+}
+
+// The client's capabilities for determining task eligibility.
+message EligibilityEvalTaskCapabilities {
+  // Whether the client supports multiple task assignment
+  // (/TaskAssignments.PerformMultipleTaskAssignments). If false, the client
+  // will not be provided information about tasks that require multiple task
+  // assignment.
+  bool supports_multiple_task_assignment = 1;
+
+  // Whether the client supports native evaluation of Eligibility Eval Tasks.
+  bool supports_native_eets = 2;
+}
+
+// Response to the `EligibilityEvalCheckinRequest`, sent to the
+// device.
+message EligibilityEvalCheckinResponse {
+  // Each response will contain one of the following results.
+  oneof checkin_result {
+    // If the population has an eligibility-computing plan configured, and if
+    // the client is compatible with that plan, then this field will be set,
+    // containing the plan's payload. The client should run the plan and include
+    // its `TaskEligibilityInfo` result in the subsequent `CheckinRequest`.
+    EligibilityEvalPayload eligibility_eval_payload = 1;
+
+    // If the population does not have an eligibility-computing plan configured,
+    // then this field will be set. The client should continue by issuing a
+    // `CheckinRequest` without the `task_eligibility_info` field set.
+    NoEligibilityEvalConfigured no_eligibility_eval_configured = 2;
+
+    // If the population has an eligibility-computing plan configured, but the
+    // client is incompatible with that plan, then this field will be set.
+    RejectionInfo rejection_info = 3;
+  }
+
+  // This field has the same semantics as
+  // `CheckinResponse.protocol_options_response`. See that field for details.
+  ProtocolOptionsResponse protocol_options_response = 4;
+}
+
+// Contains the eligibility evaluation plan payload.
+message EligibilityEvalPayload {
+  oneof init_checkpoint_type {
+    // A blob representing the checkpoint to start execution from.
+    bytes init_checkpoint = 1;
+
+    // A URI and other metadata of the checkpoint to start execution from.
+    UriResource init_checkpoint_resource = 4;
+  }
+
+  oneof plan_type {
+    // A blob representing the plan to be used for execution.
+    bytes plan = 2;
+
+    // A URI and other metadata of the plan to be used for execution.
+    UriResource plan_resource = 5;
+  }
+
+  oneof population_eligibility_spec_type {
+    // A serialized PopulationEligibilitySpec describing the eligibility
+    // criteria for tasks in the population.
+    bytes population_eligibility_spec = 6;
+
+    // A URI and other metadata of the population eligibility spec to be used.
+    UriResource population_eligibility_spec_resource = 7;
+  }
+
+  // The opaque id of the eligibility evaluation plan payload the client is
+  // being given. This is a string generated by the server and used by the
+  // client for logging purposes. This id MUST NOT contain any information that
+  // could be used to identify a specific device.
+  // Also see the similar `AcceptanceInfo.execution_phase_id`.
+  string execution_id = 3;
+}
+
+// Currently-empty message describing the case where a population does not have
+// an eligibility-computing plan configured.
+message NoEligibilityEvalConfigured {}
+
+// Per-aggregand dynamic configuration information for side channel protocols.
+message SideChannelExecutionInfo {
+  // Dynamic configuration for SecureAggregation side channels.
+  message SecureAggregandExecutionInfo {
+    // Bitwidth for secure-aggregation.  This must be wide enough to
+    // encode the sum of all client inputs, given the current number of clients
+    // participating in the protocol.
+    //
+    // This field is deprecated; use modulus instead.
+    int32 output_bitwidth = 1 [deprecated = true];
+
+    // Modulus for secure aggregation.
+    //
+    // The secure aggregation protocol will compute the sum modulo this modulus.
+    //
+    // To achieve equivalence with non-modular summation, the modulus must be
+    // larger than the sum of all client inputs, given the number of clients
+    // participating in the aggregation shard.
+    //
+    // If modulus is missing but output_bitwidth is specified, modulus will
+    // will be taken to be 2**output_bitwidth (for backwards compatibility).
+    uint64 modulus = 2;
+  }
+
+  // What type of side channel is used.
+  oneof type {
+    // Dynamic configuration for Secure Aggregation side channels.
+    SecureAggregandExecutionInfo secure_aggregand = 1;
+  }
+}
+
+// Per-protocol options information for side channel protocols.
+message SideChannelProtocolOptionsRequest {
+  // Options for SecureAggregation side channels.
+  message SecureAggregation {
+    // Protocol versions available.
+    repeated fcp.secagg.ClientVariant client_variant = 2;
+  }
+
+  // Protocol options for Secure Aggregation side channels.
+  SecureAggregation secure_aggregation = 1;
+}
+
+// Negotiated settings for side channel protocols. Side channel options may not
+// be set for channels which will not be used in the ReportRequest.
+message SideChannelProtocolOptionsResponse {
+  // Server-directed secure aggregation options to apply.
+  message SecureAggregation {
+    // The client variant to use.
+    fcp.secagg.ClientVariant client_variant = 1;
+  }
+
+  // SecureAggregation protocol options.  Only set if a SecureAggregation plan
+  // will be used.
+  SecureAggregation secure_aggregation = 1;
+}
+
+// Per-protocol dynamic configuration information for side channel protocols.
+message SideChannelProtocolExecutionInfo {
+  // Dynamic configuration for SecureAggregation side channels.
+  message SecureAggregationProtocolExecutionInfo {
+    // Number of clients that a client may exchange data with while running
+    // Secure Aggregation protocol. In the case of a full graph SecAgg protocol
+    // this is a total number of clients that started the protocol.
+    // In the case of subgraph SecAgg protocol this is a number of neighbours
+    // that each client has.
+    int32 expected_number_of_clients = 1;
+
+    // Secure Aggregation client completion threshold. This is a parameter
+    // communicated by the server side of Secure Aggregation protocol to each
+    // client to establish Shamir sharing of secrets.
+    // Additionally, at least `minimum_surviving_clients_for_reconstruction` out
+    // of the initial `expected_number_of_clients` must 'survive' in order for
+    // the protocol to continue on the client side; otherwise the client will
+    // abort its connection.
+    int32 minimum_surviving_clients_for_reconstruction = 2;
+
+    // The minimum number of clients' values that must be aggregated together
+    // before the server can gain access to the aggregate,
+    // even transiently (e.g. in RAM).
+    // This isn't needed by Secure Aggregation protocol on the client side but
+    // shared by the server with clients for transparency or policy reasons.
+    int32 minimum_clients_in_server_visible_aggregate = 3;
+  }
+
+  // Dynamic configuration for Secure Aggregation side channels.
+  SecureAggregationProtocolExecutionInfo secure_aggregation = 1;
+}
+
+// When client (device) supports HTTP download of resources, this message
+// is used to carry information about each individual downloadable resource.
+message UriResource {
+  // Resource URI e.g. fully qualified URL.
+  string uri = 1;
+
+  // Stable identifier for this resource, used by the client cache
+  // implementation. If this field is not set, the client should not attempt to
+  // cache the resource referenced by `uri`.
+  string client_cache_id = 2;
+
+  // The maximum duration for how long the resource should be cached by the
+  // client. Not set if `client_cache_id` is not set.
+  google.protobuf.Duration max_age = 3;
+}
+
+// When client (device) is accepted for the current phase, this
+// data structure carries information necessary to begin training.
+message AcceptanceInfo {
+  // The opaque id of the phase the client has joined. This is a string
+  // generated by the server and used by the client for logging purposes.
+  // This id MUST NOT contain any information that could be used to identify
+  // a specific device.
+  string execution_phase_id = 1;
+
+  // The name identifying the task for which the client was accepted.
+  string task_name = 10;
+
+  oneof init_checkpoint_type {
+    // A blob representing the checkpoint to start execution from.
+    bytes init_checkpoint = 2;
+
+    // A URI and other metadata of the checkpoint to start execution from.
+    UriResource init_checkpoint_resource = 8;
+  }
+
+  // Note: Plan fields below should be unset when included in a JoinResponse
+  // from the aggregator to the selector, and then set by the selector before
+  // sending on to the client.
+  oneof plan_type {
+    // A blob representing the plan to be used for execution.
+    bytes plan = 3;
+
+    // A URI and other metadata of the plan to be used for execution.
+    UriResource plan_resource = 9;
+  }
+
+  // Per-aggregand dynamic configuration information for side channel protocols.
+  // The keys in this map are the names of side channels, aligning with
+  // CheckpointOp.side_channel_tensors in plan.proto.
+  map<string, SideChannelExecutionInfo> side_channels = 4;
+
+  // Per-protocol dynamic configuration information for side channel protocols.
+  // This configuration applies to all aggregands configured to use each
+  // protocol.
+  SideChannelProtocolExecutionInfo side_channel_protocol_execution_info = 5;
+
+  reserved 6, 7;
+
+  // Info for how to generate URIs for fetching slices at runtime.
+  FederatedSelectUriInfo federated_select_uri_info = 11;
+
+  reserved 12, 13;
+}
+
+// Info for how to generate URIs for fetching slices that the task might request
+// to be downloaded at runtime.
+//
+// When one or more slices are requested by the task, the template specified
+// here should be used to form a URI from which the client can download the
+// slice data, by replacing the "{served_at_id}" and "{key_base10}" substrings
+// with the `google.internal.federated.plan.SlicesSelector.served_at_id` and the
+// base-10 representation of the `SlicesSelector.keys` value. The client must
+// not perform any URI escaping to the values that the substrings are replaced
+// with.
+message FederatedSelectUriInfo {
+  // The URI template to use for fetching slices.
+  //
+  // This template must always start with "https://".
+  //
+  // This template must contain the following substrings: "{served_at_id}" and
+  // "{key_base10}", as per the above documentation.
+  string uri_template = 1;
+}
+
+// This is sent when client (device) is rejected for the participation.
+message RejectionInfo {
+  // Optional. A suggestion to the client when to retry next connection to the
+  // service
+  // Deprecated in favor of `CheckinRequestAck`. If a client supports
+  // `CheckinRequestAck` then this value is ignored.
+  RetryWindow retry_window = 4 [deprecated = true];
+
+  reserved 1, 2, 3;
+}
+
+// This is sent by the client after the client finishes local (on-device)
+// training.
+//
+// If secure aggregation side channel is used, this must accompany the
+// secure aggregation commit message in the same ClientStreamMessage.
+message ReportRequest {
+  // The name of the population this client belongs to.
+  string population_name = 1;
+
+  // The id of the execution phase this client participates in.
+  string execution_phase_id = 2;
+
+  // The report.
+  Report report = 3;
+}
+
+// This is sent by the server as the final message in the reporting protocol.
+message ReportResponse {
+  // Optional. A suggestion to the client when to retry next connection to the
+  // service
+  // Deprecated in favor of `CheckinRequestAck`. If a client supports
+  // `CheckinRequestAck` then this value is ignored.
+  RetryWindow retry_window = 1 [deprecated = true];
+}
+
+// A report with results of local (on-device) training.
+message Report {
+  // A blob representing the updated checkpoint, if any.  The content
+  // is dependent of the execution method.
+  bytes update_checkpoint = 1;
+
+  // Status code reported by client.
+  // Code.OK indicates that client execution completed successfully and produced
+  // report. Any other code indicates unsuccessful execution and train events
+  // below might contain detailed diagnostic information.
+  google.rpc.Code status_code = 5;
+
+  reserved 3;
+
+  // A serialized ClientExecutionStats field about stats produced during a
+  // client side execution of the plan.
+  repeated google.protobuf.Any serialized_train_event = 4;
+
+  reserved 2;
+
+  reserved 6;
+}
+
+// This message is used to report duration to the server.
+message ClientExecutionStats {
+  // The time spent on running the plan (includes I/O such as reading examples,
+  // but does not include time spent on the network for retrieving the plan
+  // or uploading results).
+  google.protobuf.Duration duration = 2;
+
+  reserved 1;
+}
+
+// A suggestion to the client when to retry the connection to the service next
+// time
+message RetryWindow {
+  // Optional. If set, the server offers the client to call back in
+  // an interval [delay_min .. delay_max].
+  // The client must pass this token back to the server to identify he is
+  // retrying. If this is not set, the client can retry for another phase at a
+  // time of his choosing.
+  string retry_token = 1;
+
+  // Required (if retry_token is set).
+  // The suggested minimal duration after which the client should
+  // retry. If the client retries earlier, it is likely he will be rejected
+  // again.
+  google.protobuf.Duration delay_min = 2;
+
+  // Required. The suggested maximal duration after which the client should
+  // retry, provided scheduling conditions allow. The client is supposed to make
+  // a best effort to callback in the min..max window, and should avoid
+  // calling before min. If he calls after max, the likelihood to be rejected
+  // again is higher.
+  google.protobuf.Duration delay_max = 3;
+}
+
+// Intermediate Representation for checkpoints after side channels and
+// quantization have been applied.  This is the input and post-aggregation
+// output of the transport-and-aggregate protocols.
+message Checkpoint {
+  // An aggregand is a (flattened) collection of checkpoint variables
+  // that will be aggregated using the same transport-and-aggregate protocol.
+  message Aggregand {
+    repeated uint64 values = 1 [packed = true];
+    int32 bitwidth = 2;
+  }
+
+  // Checkpoint variables are partitioned into multiple aggregands,
+  // each of which can use a different transport-and-aggregate protocol.
+  //
+  map<string, Aggregand> aggregands = 1;
+}
+
+// Protocol options sent from client to server inside
+// `EligibilityEvalCheckinRequest` and `CheckinRequest`.
+message ProtocolOptionsRequest {
+  // True if client supports chunked blob transfer protocol.
+  bool supports_chunked_blob_transfer = 1;
+
+  // Chunked blob transfer compression levels supported by this client.
+  repeated CompressionLevel supported_compression_levels = 2;
+
+  // Per-protocol configuration option information for side channel protocols.
+  // These options apply to all aggregands configured to use each protocol.
+  SideChannelProtocolOptionsRequest side_channels = 3;
+
+  // When this is set in a {@link CheckinRequest} or {@link
+  // EligibilityEvalCheckinRequest} message, the server should ack using
+  // a {@link CheckinRequestAck} sent back to the client.
+  //
+  // Note that if a client previously issued a
+  // `EligibilityEvalCheckinRequest` (for which this field is always set
+  // to true), then this field will not be set to true for the subsequent
+  // `CheckinRequest`.
+  bool should_ack_checkin = 4;
+
+  // True if client supports download of resources via HTTP.
+  bool supports_http_download = 5;
+
+  // True if client supports download of Eligibility Eval resources via HTTP.
+  bool supports_eligibility_eval_http_download = 6;
+
+  // HTTP download compression formats supported by this client. All clients
+  // that support HTTP downloads are assumed to support uncompressed payloads.
+  repeated HttpCompressionFormat supported_http_compression_formats = 7;
+}
+
+// Protocol options sent from server to client inside
+// `EligibilityEvalCheckinResponse` and `CheckinResponse`.
+message ProtocolOptionsResponse {
+  // Tells client what chunk size to use for uploading data, default 8192.
+  int32 chunk_size_for_upload = 1;
+
+  // Tells client how many chunks to send ahead of receiving ack, default: 2
+  int32 max_pending_chunks = 2;
+
+  // Indicates desired compression level
+  CompressionLevel compression_level = 4;
+
+  // Negotiated side channel protocol options; side channel options may not
+  // be set for channels which will not be used in the ReportRequest.
+  SideChannelProtocolOptionsResponse side_channels = 5;
+}
+
+// Allows to transmit large ClientStreamMessage or ServerStreamMessage
+// (depending on a direction of a transfer) as a stream of multiple small chunks
+// with optional compression flow control.
+message ChunkedTransferMessage {
+  // Supported types of compression scheme. Deprecated, replaced by
+  // CompressionLevel. Do not add new values.
+  enum CompressionType {
+    // Compression disabled
+    UNCOMPRESSED = 0;
+  }
+
+  // Initiation of the chunked transfer. Transmitting party starts sending
+  // chunks (Data messages) right after sending Start.
+  message Start {
+    // Uncompressed size of the blob, in bytes.
+    int32 uncompressed_size = 2;
+
+    // Level of compression.
+    CompressionLevel compression_level = 3;
+
+    // Size of the blob transferred over the wire, in bytes.
+    // This field may not be set by older clients, so readers should check the
+    // uncompressed_size field if this value is zero.
+    int32 blob_size_bytes = 4;
+
+    reserved 1;
+  }
+
+  // Carries a chunk of data. Receiving party assembles all the chunks to get
+  // a serialized form of a large ClientStreamMessage or ServerStreamMessage
+  // depending on a direction of a transfer.
+  message Data {
+    // 0-based index of the chunk
+    // All chunk messages must be ordered, the index is included for diagnostics
+    // purposes.
+    int32 chunk_index = 1;
+
+    // Next chunk of the blob.
+    bytes chunk_bytes = 2;
+  }
+
+  // Acknowledgement of receiving of Data message.
+  // Must be sent in a response of a successful receiving of a chunk. It is used
+  // for the purposes of the flow control: transmitting party limits number of
+  // of chunks speculatively sent
+  message Ack {
+    // 0-based index of received chunk
+    // All ack messages must be ordered, the index is included for diagnostic
+    // purposes.
+    int32 chunk_index = 1;
+  }
+
+  // Completion of the chunked transfer.
+  message End {
+    // Total number of chunks transferred.
+    int32 chunk_count = 1;
+
+    // TODO(team): Add checksum.
+  }
+
+  // Kind of chunked message.
+  oneof kind {
+    // Start message, sent by transmitter
+    Start start = 1;
+
+    // Data message (a single chunk), sent by transmitter.
+    Data data = 2;
+
+    // Ack of receiving of Data message, sent by receiver.
+    Ack ack = 3;
+
+    // End of the transmission, sent by transmitter.
+    End end = 4;
+  }
+}

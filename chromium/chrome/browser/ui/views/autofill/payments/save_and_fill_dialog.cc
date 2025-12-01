@@ -18,8 +18,15 @@
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/throbber.h"
+#include "ui/views/view_class_properties.h"
 
 namespace autofill {
+
+namespace {
+// Add a top inset for the CVC icon so that when the icon is center aligned
+// vertically, it is aligned with other elements in the same row.
+constexpr int kCvcIconTopInsetDp = 4;
+}  // namespace
 
 SaveAndFillDialog::SaveAndFillDialog(
     base::WeakPtr<SaveAndFillDialogController> controller,
@@ -32,6 +39,8 @@ SaveAndFillDialog::SaveAndFillDialog(
   // default state for widgets.
   SetOwnershipOfNewWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
   SetModalType(ui::mojom::ModalType::kChild);
+  SetAcceptCallbackWithClose(base::BindRepeating(&SaveAndFillDialog::OnAccepted,
+                                                 base::Unretained(this)));
   set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kOk) |
@@ -65,6 +74,7 @@ void SaveAndFillDialog::AddedToWidget() {
     title_view->SetMultiLine(true);
     GetBubbleFrameView()->SetTitleView(std::move(title_view));
   }
+  SetAccessibleTitle(GetWindowTitle());
 }
 
 void SaveAndFillDialog::RemovedFromWidget() {
@@ -72,6 +82,11 @@ void SaveAndFillDialog::RemovedFromWidget() {
     focus_manager_->RemoveFocusChangeListener(this);
     focus_manager_ = nullptr;
   }
+}
+
+void SaveAndFillDialog::OnWidgetInitialized() {
+  views::DialogDelegateView::OnWidgetInitialized();
+  card_number_data_.GetInputTextField().RequestFocus();
 }
 
 std::u16string SaveAndFillDialog::GetWindowTitle() const {
@@ -82,16 +97,13 @@ void SaveAndFillDialog::ContentsChanged(views::Textfield* sender,
                                         const std::u16string& new_contents) {
   if (sender == &card_number_data_.GetInputTextField()) {
     card_number_data_.SetErrorState(
-        /*is_valid=*/controller_->IsValidCreditCardNumber(new_contents),
-        /*error_message=*/controller_->GetInvalidCardNumberErrorMessage());
+        /*is_valid=*/controller_->IsValidCreditCardNumber(new_contents));
   } else if (sender == &cvc_data_.GetInputTextField()) {
     cvc_data_.SetErrorState(
-        /*is_valid=*/controller_->IsValidCvc(new_contents),
-        /*error_message=*/controller_->GetInvalidCvcErrorMessage());
+        /*is_valid=*/controller_->IsValidCvc(new_contents));
   } else if (sender == &name_on_card_data_.GetInputTextField()) {
     name_on_card_data_.SetErrorState(
-        /*is_valid=*/controller_->IsValidNameOnCard(new_contents),
-        /*error_message=*/controller_->GetInvalidNameOnCardErrorMessage());
+        /*is_valid=*/controller_->IsValidNameOnCard(new_contents));
   } else if (sender == &expiration_date_data_.GetInputTextField()) {
     size_t new_cursor_position;
 
@@ -108,8 +120,7 @@ void SaveAndFillDialog::ContentsChanged(views::Textfield* sender,
           gfx::SelectionModel(new_cursor_position, gfx::CURSOR_FORWARD));
     }
     expiration_date_data_.SetErrorState(
-        /*is_valid=*/controller_->IsValidExpirationDate(formatted_input),
-        /*error_message=*/controller_->GetInvalidExpirationDateErrorMessage());
+        /*is_valid=*/controller_->IsValidExpirationDate(formatted_input));
   }
   // Enable the save button iff all textfields are valid.
   SetButtonEnabled(ui::mojom::DialogButton::kOk,
@@ -167,6 +178,10 @@ void SaveAndFillDialog::CreateMainContentView() {
           .SetTextStyle(views::style::STYLE_SECONDARY)
           .SetMultiLine(true)
           .SetHorizontalAlignment(gfx::ALIGN_TO_HEAD)
+          .SetProperty(views::kMarginsKey,
+                       gfx::Insets().set_bottom(
+                           views::LayoutProvider::Get()->GetDistanceMetric(
+                               views::DISTANCE_UNRELATED_CONTROL_VERTICAL)))
           .Build());
 
   card_number_data_ = CreateLabelAndTextfieldView(
@@ -179,7 +194,7 @@ void SaveAndFillDialog::CreateMainContentView() {
 
   expiration_date_data_ = CreateLabelAndTextfieldView(
       /*label_text=*/controller_->GetExpirationDateLabel(),
-      /*error_message=*/std::u16string());
+      /*error_message=*/controller_->GetInvalidExpirationDateErrorMessage());
   expiration_date_data_.GetInputTextField().SetTextInputType(
       ui::TextInputType::TEXT_INPUT_TYPE_DATE);
   expiration_date_data_.GetInputTextField().SetController(this);
@@ -190,7 +205,7 @@ void SaveAndFillDialog::CreateMainContentView() {
 
   cvc_data_ = CreateLabelAndTextfieldView(
       /*label_text=*/controller_->GetCvcLabel(),
-      /*error_message=*/std::u16string());
+      /*error_message=*/controller_->GetInvalidCvcErrorMessage());
   cvc_data_.GetInputTextField().SetTextInputType(
       ui::TextInputType::TEXT_INPUT_TYPE_NUMBER);
   cvc_data_.GetInputTextField().SetController(this);
@@ -199,9 +214,7 @@ void SaveAndFillDialog::CreateMainContentView() {
   cvc_data_.GetInputTextField().SetDefaultWidthInChars(18);
   // CVC is an optional field, so it is considered valid by default when the
   // dialog first appears.
-  cvc_data_.SetErrorState(
-      /*is_valid=*/true,
-      /*error_message=*/std::u16string());
+  cvc_data_.SetErrorState(/*is_valid=*/true);
 
   // Create the horizontal row for expiration date, cvc, and icon.
   main_view_->AddChildView(
@@ -213,10 +226,13 @@ void SaveAndFillDialog::CreateMainContentView() {
           .AddChild(views::Builder<views::View>(
               std::move(expiration_date_data_.container)))
           .AddChild(views::Builder<views::View>(std::move(cvc_data_.container)))
-          .AddChild(views::Builder<views::ImageView>().SetImage(
-              ui::ImageModel::FromImage(
-                  ui::ResourceBundle::GetSharedInstance().GetImageNamed(
-                      IDR_CREDIT_CARD_CVC_HINT_BACK))))
+          .AddChild(
+              views::Builder<views::ImageView>()
+                  .SetImage(ui::ImageModel::FromImage(
+                      ui::ResourceBundle::GetSharedInstance().GetImageNamed(
+                          IDR_CREDIT_CARD_CVC_HINT_BACK)))
+                  .SetProperty(views::kMarginsKey,
+                               gfx::Insets().set_top(kCvcIconTopInsetDp)))
           .Build());
 
   name_on_card_data_ = CreateLabelAndTextfieldView(
@@ -245,7 +261,15 @@ void SaveAndFillDialog::CreatePendingView() {
 }
 
 void SaveAndFillDialog::ToggleThrobberVisibility(bool visible) {
-  visible ? throbber_->Start() : throbber_->Stop();
+  if (visible) {
+    throbber_->Start();
+    throbber_->GetViewAccessibility().AnnouncePolitely(
+        l10n_util::GetStringUTF16(
+            IDS_AUTOFILL_PENDING_DIALOG_LOADING_ACCESSIBILITY_DESCRIPTION));
+    SetButtonEnabled(ui::mojom::DialogButton::kOk, false);
+  } else {
+    throbber_->Stop();
+  }
   main_view_->SetVisible(!visible);
   pending_view_->SetVisible(visible);
 }
@@ -279,13 +303,20 @@ SaveAndFillDialog::GetUserProvidedDataFromInput() const {
 }
 
 void SaveAndFillDialog::OnDialogClosed(views::Widget::ClosedReason reason) {
-  if (reason == views::Widget::ClosedReason::kAcceptButtonClicked) {
-    controller_->OnUserAcceptedDialog(GetUserProvidedDataFromInput());
-  } else if (reason == views::Widget::ClosedReason::kCancelButtonClicked) {
+  CHECK_NE(reason, views::Widget::ClosedReason::kAcceptButtonClicked);
+  if (reason == views::Widget::ClosedReason::kCancelButtonClicked) {
     controller_->OnUserCanceledDialog();
   } else {
     controller_->Dismiss();
   }
+}
+
+bool SaveAndFillDialog::OnAccepted() {
+  ToggleThrobberVisibility(/*visible=*/true);
+  controller_->OnUserAcceptedDialog(GetUserProvidedDataFromInput());
+  // Return false to prevent the dialog from closing. The controller is now
+  // responsible for closing it after the server call is complete.
+  return false;
 }
 
 std::unique_ptr<views::View> SaveAndFillDialog::CreateLegalMessageView() {

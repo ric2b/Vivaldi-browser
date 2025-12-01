@@ -4,7 +4,7 @@
 
 #include "chrome/browser/password_manager/android/all_passwords_bottom_sheet_controller.h"
 
-#include "base/android/build_info.h"
+#include "base/android/device_info.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/mock_callback.h"
@@ -21,14 +21,13 @@
 #include "components/password_manager/core/browser/origin_credential_store.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_store/test_password_store.h"
-#include "components/password_manager/core/browser/split_stores_and_local_upm.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/browser/stub_password_manager_driver.h"
 #include "components/password_manager/core/common/password_manager_features.h"
-#include "components/plus_addresses/fake_plus_address_service.h"
-#include "components/plus_addresses/features.h"
-#include "components/plus_addresses/plus_address_service.h"
-#include "components/plus_addresses/plus_address_test_utils.h"
+#include "components/plus_addresses/core/browser/fake_plus_address_service.h"
+#include "components/plus_addresses/core/browser/plus_address_service.h"
+#include "components/plus_addresses/core/browser/plus_address_test_utils.h"
+#include "components/plus_addresses/core/common/features.h"
 #include "components/safe_browsing/core/browser/password_protection/stub_password_reuse_detection_manager_client.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "content/public/test/browser_task_environment.h"
@@ -147,8 +146,7 @@ class AllPasswordsBottomSheetControllerTest
                                 PlusAddressServiceTestFactory,
                             base::Unretained(this)));
     profile_store_ = CreateAndUseTestPasswordStore(profile());
-    profile_store_->Init(/*prefs=*/nullptr,
-                         /*affiliated_match_helper=*/nullptr);
+    profile_store_->Init(/*affiliated_match_helper=*/nullptr);
     createAllPasswordsController(FocusedFieldType::kFillablePasswordField);
   }
 
@@ -288,7 +286,7 @@ TEST_F(AllPasswordsBottomSheetControllerTest,
 
 TEST_F(AllPasswordsBottomSheetControllerTest, FillsPasswordIfAuthNotAvailable) {
   // Auth is required to fill passwords in Android automotive.
-  if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+  if (base::android::device_info::is_automotive()) {
     GTEST_SKIP();
   }
 
@@ -362,7 +360,7 @@ TEST_F(AllPasswordsBottomSheetControllerTest, OnDismiss) {
 
 TEST_F(AllPasswordsBottomSheetControllerTest,
        OnCredentialSelectedTriggersPhishGuard) {
-  if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+  if (base::android::device_info::is_automotive()) {
     auto authenticator = std::make_unique<MockDeviceAuthenticator>();
     ON_CALL(*authenticator, AuthenticateWithMessage)
         .WillByDefault(
@@ -423,14 +421,10 @@ class AllPasswordsBottomSheetControllerAccountStoreTest
     : public AllPasswordsBottomSheetControllerTest {
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
-    password_manager::SetLegacySplitStoresPrefForTest(profile()->GetPrefs(),
-                                                      true);
     profile_store_ = CreateAndUseTestPasswordStore(profile());
-    profile_store_->Init(/*prefs=*/nullptr,
-                         /*affiliated_match_helper=*/nullptr);
+    profile_store_->Init(/*affiliated_match_helper=*/nullptr);
     account_store_ = CreateAndUseTestAccountPasswordStore(profile());
-    account_store_->Init(/*prefs=*/nullptr,
-                         /*affiliated_match_helper=*/nullptr);
+    account_store_->Init(/*affiliated_match_helper=*/nullptr);
     createAllPasswordsController(FocusedFieldType::kFillablePasswordField);
   }
 };

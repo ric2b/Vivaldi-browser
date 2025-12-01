@@ -9,7 +9,7 @@
 #include <limits>
 #include <utility>
 
-#include "base/android/build_info.h"
+#include "base/android/android_info.h"
 #include "base/android/callback_android.h"
 #include "base/android/jni_string.h"
 #include "base/auto_reset.h"
@@ -32,6 +32,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
+#include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
 #include "cc/slim/layer.h"
 #include "components/input/cursor_manager.h"
@@ -43,6 +44,7 @@
 #include "components/input/web_input_event_builders_android.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/surfaces/frame_sink_id_allocator.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
@@ -81,13 +83,16 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/android/browser_controls_offset_tag_definitions.h"
+#include "ui/android/ui_android_features.h"
 #include "ui/android/view_android_observer.h"
 #include "ui/android/window_android.h"
 #include "ui/android/window_android_compositor.h"
@@ -142,9 +147,8 @@ std::unique_ptr<ui::TouchSelectionController> CreateSelectionController(
   config.enable_longpress_drag_selection =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableLongpressDragSelection);
-  config.hide_active_handle =
-      base::android::BuildInfo::GetInstance()->sdk_int() >=
-      base::android::SDK_VERSION_P;
+  config.hide_active_handle = base::android::android_info::sdk_int() >=
+                              base::android::android_info::SDK_VERSION_P;
   return std::make_unique<ui::TouchSelectionController>(client, config);
 }
 
@@ -487,7 +491,18 @@ bool RenderWidgetHostViewAndroid::ScreenStateChangeHandler::
           // left in a rotation throttle and ending it here.
           end_rotation = true;
         } else {
+          // A standalone non-rotation resize has occurred. For WebView, we sync
+          // immediately. For the browser, schedule a vsync-aligned update to
+          // process it smoothly.
           sync_needed = true;
+          if (base::FeatureList::IsEnabled(features::kFluidResize) &&
+              rwhva_->using_browser_compositor_) {
+            sync_needed = false;
+            if (!rwhva_->visual_properties_update_pending_) {
+              rwhva_->visual_properties_update_pending_ = true;
+              rwhva_->SetNeedsAnimate();
+            }
+          }
         }
       }
     }
@@ -638,6 +653,7 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
       prev_top_controls_translate_(0.f),
       prev_top_controls_min_height_offset_pix_(0.f),
       prev_bottom_shown_pix_(0.f),
+      prev_bottom_controls_pix_(0.f),
       prev_bottom_controls_translate_(0.f),
       prev_bottom_controls_min_height_offset_pix_(0.f),
       page_scale_(1.f),
@@ -649,6 +665,10 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
   // layer is managed by the DelegatedFrameHost.
   view_.SetLayer(cc::slim::Layer::Create());
   view_.set_event_handler(this);
+  if (base::FeatureList::IsEnabled(ui::kCheckHitEligibility)) {
+    view_.SetHitTestCallback(base::BindRepeating(
+        &RenderWidgetHostViewAndroid::IsHitTestReady, base::Unretained(this)));
+  }
 
   // If we're showing at creation time, we won't get a visibility change, so
   // generate our initial LocalSurfaceId here.
@@ -818,15 +838,18 @@ bool RenderWidgetHostViewAndroid::SynchronizeVisualProperties(
     const std::optional<viz::LocalSurfaceId>& child_local_surface_id,
     bool reuse_current_local_surface_id,
     bool ignore_ack) {
-    // Always merge the child_id, even if we cannot sync at this time.
-    if (child_local_surface_id)
-      local_surface_id_allocator_.UpdateFromChild(*child_local_surface_id);
+  // Always merge the child_id, even if we cannot sync at this time.
+  if (child_local_surface_id) {
+    local_surface_id_allocator_.UpdateFromChild(*child_local_surface_id);
+  }
 
-    if (!CanSynchronizeVisualProperties())
-      return false;
+  if (!CanSynchronizeVisualProperties()) {
+    return false;
+  }
 
-    if (!child_local_surface_id && !reuse_current_local_surface_id)
-      local_surface_id_allocator_.GenerateId();
+  if (!child_local_surface_id && !reuse_current_local_surface_id) {
+    local_surface_id_allocator_.GenerateId();
+  }
 
   // If we still have an invalid viz::LocalSurfaceId, then we are hidden and
   // evicted. This will have been triggered by a child acknowledging a previous
@@ -1112,10 +1135,11 @@ void RenderWidgetHostViewAndroid::OnRenderFrameMetadataChangedAfterActivation(
         // time that the Renderer is visible, until the post rotation surface is
         // first displayed.
         auto duration = activation_time - rotation_target.first;
-        TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP1(
-            "viz", "RenderWidgetHostViewAndroid::RotationEmbed",
-            TRACE_ID_LOCAL(rotation_target.second.hash()), activation_time,
-            "duration(ms)", duration.InMillisecondsF());
+        // Corresponds to the "RenderWidgetHostViewAndroid::RotationEmbed"
+        // event.
+        TRACE_EVENT_END("viz", perfetto::Track(rotation_target.second.hash()),
+                        activation_time, "duration(ms)",
+                        duration.InMillisecondsF());
         rotation_metrics_.pop_front();
       } else {
         // The embedded surface may have updated the
@@ -1199,6 +1223,7 @@ void RenderWidgetHostViewAndroid::ShowWithVisibility(
 
   page_visibility_ = page_visibility;
   is_showing_ = true;
+  view_.SetIsHitTestEligible(is_showing_);
   ShowInternal();
 }
 
@@ -1208,6 +1233,7 @@ void RenderWidgetHostViewAndroid::Hide() {
 
   page_visibility_ = PageVisibilityState::kHidden;
   is_showing_ = false;
+  view_.SetIsHitTestEligible(is_showing_);
   HideInternal();
 }
 
@@ -1384,8 +1410,8 @@ void RenderWidgetHostViewAndroid::SendStateOnTouchTransfer(
   const float y_offset_pix =
       host()->delegate()->GetCurrentTouchSequenceYOffset();
   remote->StateOnTouchTransfer(input::mojom::TouchTransferState::New(
-      event.GetDownTime(), GetFrameSinkId(), y_offset_pix, view_.GetDipScale(),
-      browser_would_have_handled));
+      event.GetRawDownTime(), GetFrameSinkId(), y_offset_pix,
+      view_.GetDipScale(), browser_would_have_handled));
 }
 
 bool RenderWidgetHostViewAndroid::IsMojoRIRDelegateConnectionSetup() {
@@ -1444,8 +1470,9 @@ bool RenderWidgetHostViewAndroid::OnGestureEvent(
     float delta = min_page_scale_ / page_scale_;
     web_event = ui::CreateWebGestureEventFromGestureEventAndroid(
         ui::GestureEventAndroid(event.type(), event.location(),
-                                event.screen_location(), event.time(), delta, 0,
-                                0, 0, 0, /*target_viewport*/ false,
+                                event.screen_location(), event.time(),
+                                event.source(), delta, 0, 0, 0, 0,
+                                /*target_viewport*/ false,
                                 /*synthetic_scroll*/ false,
                                 /*prevent_boosting*/ false));
   } else {
@@ -1648,6 +1675,7 @@ void RenderWidgetHostViewAndroid::OnOldViewDidNavigatePreCommit() {
   if (delegated_frame_host_) {
     delegated_frame_host_->DidNavigateMainFramePreCommit();
   }
+  ResetGestureDetection();
 }
 
 void RenderWidgetHostViewAndroid::OnNewViewDidNavigatePostCommit() {
@@ -1878,6 +1906,26 @@ void RenderWidgetHostViewAndroid::CopyFromExactSurfaceWithIpcDelay(
       /*capture_exact_surface_id=*/true, ipc_delay);
 }
 
+void RenderWidgetHostViewAndroid::CopySharedImageFromExactSurface(
+    const gfx::Rect& src_rect,
+    const gfx::Size& output_size,
+    base::OnceCallback<void(scoped_refptr<gpu::ClientSharedImage>)> callback) {
+  CHECK(IsSurfaceAvailableForCopy())
+      << "To copy the exact surface, it must be available for copy (embedded "
+         "via the browser).";
+  CHECK(using_browser_compositor_);
+  CHECK(delegated_frame_host_);
+  auto context_provider = GetRasterContextProvider();
+  if (!context_provider) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
+
+  delegated_frame_host_->CopySharedImageFromCompositingSurface(
+      std::move(context_provider), src_rect, output_size, std::move(callback),
+      /*capture_exact_surface_id=*/true);
+}
+
 void RenderWidgetHostViewAndroid::EnsureSurfaceSynchronizedForWebTest() {
   ++latest_capture_sequence_number_;
   SynchronizeVisualProperties(cc::DeadlinePolicy::UseInfiniteDeadline(),
@@ -1975,6 +2023,21 @@ bool RenderWidgetHostViewAndroid::SupportsAnimation() const {
 }
 
 void RenderWidgetHostViewAndroid::SetNeedsAnimate() {
+  if (base::FeatureList::IsEnabled(features::kFluidResize)) {
+    // The synchronous (WebView) compositor does not have a proper browser
+    // compositor with which to drive animations.
+    CHECK(using_browser_compositor_);
+
+    // No-op if we are not attached to a window, as we are not visible. Visual
+    // properties will be synchronized when the view is shown.
+    if (observing_root_window_) {
+      if (auto* compositor = view_.GetWindowAndroid()->GetCompositor()) {
+        compositor->SetNeedsAnimate();
+      }
+    }
+    return;
+  }
+
   DCHECK(view_.GetWindowAndroid());
   DCHECK(using_browser_compositor_);
   view_.GetWindowAndroid()->SetNeedsAnimate();
@@ -2174,6 +2237,8 @@ bool RenderWidgetHostViewAndroid::UpdateControls(
   float bottom_shown_pix = bottom_controls_pix * bottom_controls_shown_ratio;
   bool bottom_changed = !cc::MathUtil::IsFloatNearlyTheSame(
       bottom_shown_pix, prev_bottom_shown_pix_);
+  bottom_changed |= !cc::MathUtil::IsFloatNearlyTheSame(
+      bottom_controls_pix, prev_bottom_controls_pix_);
   float bottom_translate = bottom_controls_pix - bottom_shown_pix;
 
   float bottom_min_height_offset_pix = bottom_controls_min_height_offset;
@@ -2192,6 +2257,7 @@ bool RenderWidgetHostViewAndroid::UpdateControls(
   prev_bottom_shown_pix_ = bottom_shown_pix;
   prev_bottom_controls_translate_ = bottom_translate;
   prev_bottom_controls_min_height_offset_pix_ = bottom_min_height_offset_pix;
+  prev_bottom_controls_pix_ = bottom_controls_pix;
   controls_initialized_ = true;
   return top_changed || bottom_changed;
 }
@@ -2203,17 +2269,10 @@ void RenderWidgetHostViewAndroid::OnDidUpdateVisualPropertiesComplete(
     SynchronizeVisualProperties(cc::DeadlinePolicy::UseDefaultDeadline(),
                                 metadata.local_surface_id);
 
-  if (using_browser_compositor_) {
-    ui::WindowAndroid* window = view_.GetWindowAndroid();
-    if (!window) {
-      return;
+    auto* compositor = GetCompositorImpl();
+    if (compositor) {
+      compositor->MaybeCompositeNow();
     }
-    ui::WindowAndroidCompositor* compositor = window->GetCompositor();
-    if (!compositor) {
-      return;
-    }
-    static_cast<CompositorImpl*>(compositor)->MaybeCompositeNow();
-  }
 }
 
 void RenderWidgetHostViewAndroid::OnFinishGetContentBitmap(
@@ -2269,6 +2328,10 @@ void RenderWidgetHostViewAndroid::HideInternal() {
   // hidden and the frontbuffer is being cleared. This allows window visibility
   // notifications to eventually clear the frontbuffer.
   bool stop_observing_root_window = !is_showing_ && hide_frontbuffer;
+
+  // Clear any tooltip to help avoid crashes due to android race condition for
+  // tooltips on a backgrounded app. crbug.com/441235003.
+  UpdateTooltip(std::u16string());
 
   if (hide_frontbuffer) {
     view_.GetLayer()->SetHideLayerAndSubtree(true);
@@ -2345,6 +2408,16 @@ bool RenderWidgetHostViewAndroid::Animate(base::TimeTicks frame_time) {
   // an OOPIF client.
   if (touch_selection_controller_)
     needs_animate |= touch_selection_controller_->Animate(frame_time);
+
+  if (visual_properties_update_pending_ &&
+      base::FeatureList::IsEnabled(features::kFluidResize)) {
+    visual_properties_update_pending_ = false;
+    // Use a short deadline for fluid resizing. We don't want to block the
+    // UI thread, but we want the update to happen quickly.
+    SynchronizeVisualProperties(cc::DeadlinePolicy::UseDefaultDeadline(),
+                                std::nullopt);
+  }
+
   return needs_animate;
 }
 
@@ -2363,9 +2436,18 @@ void RenderWidgetHostViewAndroid::TransformPointToRootSurface(
     *point += gfx::Vector2d(0, rvh_delegate_view->GetTopControlsHeight());
 }
 
-// TODO(jrg): Find out the implications and answer correctly here,
-// as we are returning the WebView and not root window bounds.
 gfx::Rect RenderWidgetHostViewAndroid::GetBoundsInRootWindow() {
+  if (base::FeatureList::IsEnabled(ui::kAndroidUseCorrectWindowBounds)) {
+    ui::WindowAndroid* window_android = view_.GetWindowAndroid();
+    if (window_android) {
+      const std::optional<gfx::Rect> bounds =
+          window_android->GetBoundsInScreenCoordinates();
+      if (bounds.has_value()) {
+        return bounds.value();
+      }
+    }
+  }
+
   return GetViewBounds();
 }
 
@@ -2434,9 +2516,12 @@ blink::mojom::PointerLockResult RenderWidgetHostViewAndroid::LockPointer(
     return blink::mojom::PointerLockResult::kWrongDocument;
   }
 
-  JNIEnv* env = base::android::AttachCurrentThread();
-  Java_RenderWidgetHostViewImpl_showPointerLockToast(
-      env, obj_, window_android->GetJavaObject());
+  // ExclusiveAccessManager handles the pointer lock toast.
+  if (!base::FeatureList::IsEnabled(features::kEnableExclusiveAccessManager)) {
+    JNIEnv* env = base::android::AttachCurrentThread();
+    Java_RenderWidgetHostViewImpl_showPointerLockToast(
+        env, GetJavaObject(), window_android->GetJavaObject());
+  }
 
   return blink::mojom::PointerLockResult::kSuccess;
 }
@@ -2478,8 +2563,13 @@ void RenderWidgetHostViewAndroid::UnlockPointer() {
   }
 
   window_android->ReleasePointerLock(view_);
-  JNIEnv* env = base::android::AttachCurrentThread();
-  Java_RenderWidgetHostViewImpl_hidePointerLockToast(env, obj_);
+
+  // ExclusiveAccessManager handles the pointer lock toast.
+  if (!base::FeatureList::IsEnabled(features::kEnableExclusiveAccessManager)) {
+    JNIEnv* env = base::android::AttachCurrentThread();
+    Java_RenderWidgetHostViewImpl_hidePointerLockToast(env, GetJavaObject());
+  }
+
   host_->LostPointerLock();
 }
 
@@ -2489,7 +2579,9 @@ void RenderWidgetHostViewAndroid::OnPointerLockRelease() {
 
 bool RenderWidgetHostViewAndroid::LockKeyboard(
     std::optional<base::flat_set<ui::DomCode>> codes) {
-  CHECK(!keyboard_locked_);
+  if (keyboard_locked_) {
+    return true;
+  }
 
   if (!base::FeatureList::IsEnabled(features::kKeyboardLockApiOnAndroid)) {
     return false;
@@ -2762,8 +2854,8 @@ void RenderWidgetHostViewAndroid::UpdateNativeViewTree(
   bool resize = false;
   if (will_build_tree != has_view_tree) {
     if (has_view_tree) {
-      view_.RemoveObserver(this);
       view_.RemoveFromParent();
+      view_.RemoveObserver(this);
       view_.GetLayer()->RemoveFromParent();
     }
     if (will_build_tree) {
@@ -2934,6 +3026,15 @@ void RenderWidgetHostViewAndroid::OnPhysicalBackingSizeChanged(
         std::nullopt);
 }
 
+void RenderWidgetHostViewAndroid::OnWindowPositionChanged() {
+  RenderWidgetHostDelegate* delegate = host()->delegate();
+  if (!delegate) {
+    return;
+  }
+
+  delegate->SendScreenRects();
+}
+
 void RenderWidgetHostViewAndroid::OnRootWindowVisibilityChanged(bool visible) {
   TRACE_EVENT1("browser",
                "RenderWidgetHostViewAndroid::OnRootWindowVisibilityChanged",
@@ -2986,11 +3087,7 @@ void RenderWidgetHostViewAndroid::OnDetachCompositor() {
   overscroll_controller_.reset();
   if (using_browser_compositor_)
     delegated_frame_host_->DetachFromCompositor();
-  // TODO(440324557): Remove conditional in follow up change adding browser
-  // tests.
-  if (input_transfer_handler_) {
-    DismissTextHandles();
-  }
+  DismissTextHandles();
 }
 
 void RenderWidgetHostViewAndroid::OnAnimate(base::TimeTicks begin_frame_time) {
@@ -3548,6 +3645,15 @@ const cc::slim::SurfaceLayer* RenderWidgetHostViewAndroid::GetSurfaceLayer()
   return delegated_frame_host_->content_layer();
 }
 
+scoped_refptr<viz::RasterContextProvider>
+RenderWidgetHostViewAndroid::GetRasterContextProvider() {
+  auto* compositor = GetCompositorImpl();
+  if (!compositor) {
+    return nullptr;
+  }
+  return compositor->GetRasterContextProvider();
+}
+
 void RenderWidgetHostViewAndroid::RegisterOffsetTags(
     const ui::BrowserControlsOffsetTagDefinitions& tag_definitions) {
   if (delegated_frame_host_) {
@@ -3574,10 +3680,10 @@ void RenderWidgetHostViewAndroid::BeginRotationBatching() {
   // When a rotation begins, a series of calls update different aspects of
   // visual properties. Completing in EndRotationBatching, where the full new
   // set of properties is known. Trace the duration of that.
-  const auto delta = rotation_metrics_.back().first - base::TimeTicks();
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
-      "viz", "RenderWidgetHostViewAndroid::RotationBegin",
-      TRACE_ID_LOCAL(delta.InNanoseconds()), "visible", is_showing_);
+  TRACE_EVENT_BEGIN("viz", "RenderWidgetHostViewAndroid::RotationBegin",
+                    perfetto::NamedTrack("RenderWidgetHostViewAndroid",
+                                         reinterpret_cast<uintptr_t>(this)),
+                    "visible", is_showing_);
 
   if (rotation_timeout_.IsRunning())
     rotation_timeout_.Stop();
@@ -3595,10 +3701,11 @@ void RenderWidgetHostViewAndroid::EndRotationBatching() {
   // still tracking `fullscreen_rotation_`. crbug.com/1302964
   fullscreen_rotation_ = false;
   DCHECK(!rotation_metrics_.empty());
-  const auto delta = rotation_metrics_.back().first - base::TimeTicks();
-  TRACE_EVENT_NESTABLE_ASYNC_END1(
-      "viz", "RenderWidgetHostViewAndroid::RotationBegin",
-      TRACE_ID_LOCAL(delta.InNanoseconds()), "local_surface_id",
+  TRACE_EVENT_END(
+      "viz", /* RenderWidgetHostViewAndroid::RotationBegin */
+      perfetto::NamedTrack("RenderWidgetHostViewAndroid",
+                           reinterpret_cast<uintptr_t>(this)),
+      "local_surface_id",
       local_surface_id_allocator_.GetCurrentLocalSurfaceId().ToString());
 
   if (rotation_timeout_.IsRunning())
@@ -3615,9 +3722,9 @@ void RenderWidgetHostViewAndroid::BeginRotationEmbed() {
   // embedding the new viz::LocalSurfaceId. Tracking how long until a user
   // sees the complete rotation and layout of the page. This completes in
   // OnRenderFrameMetadataChangedAfterActivation.
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1(
+  TRACE_EVENT_BEGIN(
       "viz", "RenderWidgetHostViewAndroid::RotationEmbed",
-      TRACE_ID_LOCAL(
+      perfetto::Track(
           local_surface_id_allocator_.GetCurrentLocalSurfaceId().hash()),
       base::TimeTicks::Now(), "LocalSurfaceId",
       local_surface_id_allocator_.GetCurrentLocalSurfaceId().ToString());
@@ -3645,6 +3752,23 @@ void RenderWidgetHostViewAndroid::EndRotationAndSyncIfNecessary() {
 void RenderWidgetHostViewAndroid::EvictInternal() {
   screen_state_change_handler_.WasEvicted();
   local_surface_id_allocator_.Invalidate();
+}
+
+CompositorImpl* RenderWidgetHostViewAndroid::GetCompositorImpl() {
+  if (!using_browser_compositor_) {
+    return nullptr;
+  }
+  ui::WindowAndroid* window = view_.GetWindowAndroid();
+  if (!window) {
+    return nullptr;
+  }
+  return static_cast<CompositorImpl*>(window->GetCompositor());
+}
+
+bool RenderWidgetHostViewAndroid::IsHitTestReady() {
+  // We do not want to send to a view which is still in prerendering state,
+  // since any event should not be sent to non-active (and showing) view.
+  return !host()->frame_tree()->is_prerendering();
 }
 
 }  // namespace content

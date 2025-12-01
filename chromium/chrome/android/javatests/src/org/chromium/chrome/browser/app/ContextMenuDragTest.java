@@ -60,6 +60,13 @@ public class ContextMenuDragTest {
     private static final int TEST_MIN_DIST = 10;
     private static final String TEST_PATH =
             "/chrome/test/data/android/contextmenu/context_menu_test.html";
+    // LINT.IfChange(PageScaleFactor)
+    // The initial-scale defined in the test html file meta. The setUp function
+    // will check that the page scale factor has been updated to this value.
+    // This ensures the long press/ right click is simulated at the correct
+    // coordinates of the specified element. See crbug.com/432281754.
+    private static final float PAGE_SCALE_FACTOR = 1.0f;
+    // LINT.ThenChange(//chrome/test/data/android/contextmenu/context_menu_test.html:PageScaleFactor)
     private static final String TEST_IMAGE_ID = "testImage";
 
     static TestDragAndDropDelegate sTestDragAndDropDelegate = new TestDragAndDropDelegate();
@@ -91,7 +98,7 @@ public class ContextMenuDragTest {
 
         mPage = mActivityTestRule.startOnBlankPage().loadWebPageProgrammatically(mTestUrl);
         mTab = mPage.getTab();
-        mActivityTestRule.assertWaitForPageScaleFactorMatch(0.5f);
+        mActivityTestRule.assertWaitForPageScaleFactorMatch(PAGE_SCALE_FACTOR);
     }
 
     @After
@@ -168,11 +175,19 @@ public class ContextMenuDragTest {
     }
 
     private void assertContextMenuShowing(boolean showing) {
-        Assert.assertNotNull("Context menu dialog is null.", mContextMenu.getDialogForTest());
-        Assert.assertEquals(
-                "Context menu dialog is not showing.",
-                showing,
-                mContextMenu.getDialogForTest().isShowing());
+        if (showing) {
+            Assert.assertEquals(
+                    "There should be exactly 1 dialog.",
+                    1,
+                    mContextMenu.getDialogsForTest().size());
+            Assert.assertEquals(
+                    "Context menu dialog is not showing.",
+                    showing,
+                    mContextMenu.getDialogsForTest().get(0).popupWindow.isShowing());
+        } else {
+            Assert.assertEquals(
+                    "There should be no dialog.", 0, mContextMenu.getDialogsForTest().size());
+        }
     }
 
     private DropDataAndroid getDropData() {

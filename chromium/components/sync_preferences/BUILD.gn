@@ -4,6 +4,14 @@
 
 import("//build/config/features.gni")
 
+source_set("features") {
+  sources = [
+    "features.cc",
+    "features.h",
+  ]
+  deps = [ "//base" ]
+}
+
 static_library("sync_preferences") {
   sources = [
     "dual_layer_user_pref_store.cc",
@@ -60,11 +68,12 @@ source_set("common_syncable_prefs_database") {
     "//components/omnibox/browser",
     "//components/password_manager/core/common",
     "//components/payments/core",
-    "//components/plus_addresses:prefs",
+    "//components/plus_addresses/core/common:prefs",
     "//components/privacy_sandbox:tracking_protection_prefs",
     "//components/safe_browsing/core/common:safe_browsing_prefs",
     "//components/saved_tab_groups/public",
     "//components/sharing_message",
+    "//components/sync_preferences/cross_device_pref_tracker/prefs",
     "//components/translate/core/browser",
     "//components/variations/service",
   ]

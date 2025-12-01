@@ -375,8 +375,8 @@ export class Profile {
     EXTERNAL: 6,
     ATOMICS_WAIT: 7,
     IDLE: 8,
-    IDLE_EXTERNAL: 9,
-    LOGGING: 10,
+    LOGGING: 9,
+    IDLE_EXTERNAL: 10,
   }
 
   static CodeType = {
@@ -397,9 +397,13 @@ export class Profile {
         return this.CodeState.SPARKPLUG;
       case '+':
       case '+\'':
+      case 'o+':
+      case 'o+\'':
         return this.CodeState.MAGLEV;
       case '*':
       case '*\'':
+      case 'o*':
+      case 'o*\'':
         return this.CodeState.TURBOFAN;
     }
     throw new Error(`unknown code state: ${s}`);

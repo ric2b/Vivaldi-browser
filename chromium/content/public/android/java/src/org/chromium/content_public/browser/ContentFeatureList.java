@@ -7,8 +7,11 @@ package org.chromium.content_public.browser;
 import org.chromium.base.MutableBooleanParamWithSafeDefault;
 import org.chromium.base.MutableFlagWithSafeDefault;
 import org.chromium.build.annotations.NullMarked;
+import org.chromium.components.cached_flags.CachedFlag;
 import org.chromium.content.common.ContentInternalFeatures;
 import org.chromium.content_public.common.ContentFeatures;
+
+import java.util.List;
 
 /** Convenience static methods to access {@link ContentFeatureMap}. */
 @NullMarked
@@ -36,9 +39,15 @@ public class ContentFeatureList {
 
     public static final String ANDROID_CAPTURE_KEY_EVENTS = "AndroidCaptureKeyEvents";
 
+    public static final String ANDROID_DEV_TOOLS_FRONTEND = "AndroidDevToolsFrontend";
+
     public static final String ANDROID_OPEN_PDF_INLINE = "AndroidOpenPdfInline";
 
+    public static final String DESKTOP_UA_ON_CONNECTED_DISPLAY = "DesktopUAOnConnectedDisplay";
+
     public static final String HIDE_PASTE_POPUP_ON_GSB = "HidePastePopupOnGSB";
+
+    public static final String JAVALESS_RENDERERS = "JavalessRenderers";
 
     public static final String INPUT_ON_VIZ = "InputOnViz";
 
@@ -55,9 +64,6 @@ public class ContentFeatureList {
 
     public static final String WEB_IDENTITY_DIGITAL_CREDENTIALS_CREATION =
             "WebIdentityDigitalCredentialsCreation";
-
-    public static final String PREFETCH_BROWSER_INITIATED_TRIGGERS =
-            "PrefetchBrowserInitiatedTriggers";
 
     public static final String DIPS_TTL = "DIPSTtl";
 
@@ -81,12 +87,6 @@ public class ContentFeatureList {
                     ContentInternalFeatures.STRICT_HIGH_RANK_PROCESS_LRU,
                     false);
 
-    public static final MutableFlagWithSafeDefault sGroupRebindingForGroupImportance =
-            new MutableFlagWithSafeDefault(
-                    ContentFeatureMap.getInstance(),
-                    ContentFeatures.GROUP_REBINDING_FOR_GROUP_IMPORTANCE,
-                    false);
-
     public static final MutableFlagWithSafeDefault sSpareRendererProcessPriority =
             new MutableFlagWithSafeDefault(
                     ContentFeatureMap.getInstance(),
@@ -101,4 +101,15 @@ public class ContentFeatureList {
     // Make the spare renderer of the lowest priority so as not to kill other processes during OOM.
     public static final MutableBooleanParamWithSafeDefault sSpareRendererLowestRanking =
             sSpareRendererProcessPriority.newBooleanParam("lowest-ranking", false);
+
+    // Skip the timeout when removing the VISIBLE and STRONG binding for the spare renderer.
+    public static final MutableBooleanParamWithSafeDefault sSpareRendererRemoveBindingNoTimeout =
+            sSpareRendererProcessPriority.newBooleanParam("remove-binding-no-timeout", false);
+
+    // Use a CachedFlag as this is often checked before native is loaded, and must stay consistent
+    // once decided upon.
+    public static final CachedFlag sJavalessRenderers =
+            new CachedFlag(ContentFeatureMap.getInstance(), JAVALESS_RENDERERS, false, false);
+
+    public static final List<CachedFlag> sCachedFlags = List.of(sJavalessRenderers);
 }

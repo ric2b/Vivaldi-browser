@@ -26,6 +26,7 @@
 #include "api/audio_codecs/audio_format.h"
 #include "api/audio_codecs/builtin_audio_decoder_factory.h"
 #include "api/audio_codecs/builtin_audio_encoder_factory.h"
+#include "api/candidate.h"
 #include "api/create_peerconnection_factory.h"
 #include "api/jsep.h"
 #include "api/media_types.h"
@@ -679,7 +680,7 @@ TEST_F(SdpMungingTest, DtlsRole) {
       ElementsAre(Pair(SdpMungingType::kDtlsSetup, 1)));
 }
 
-TEST_F(SdpMungingTest, RemoveContentDefault) {
+TEST_F(SdpMungingTest, RemoveContentRejected) {
   auto pc = CreatePeerConnection();
   pc->AddAudioTrack("audio_track", {});
 
@@ -705,35 +706,6 @@ TEST_F(SdpMungingTest, RemoveContentDefault) {
   EXPECT_THAT(
       metrics::Samples("WebRTC.PeerConnection.SdpMunging.Outcome"),
       ElementsAre(Pair(static_cast<int>(SdpMungingOutcome::kRejected), 1)));
-}
-
-TEST_F(SdpMungingTest, RemoveContentKillswitch) {
-  auto pc =
-      CreatePeerConnection("WebRTC-NoSdpMangleNumberOfContents/Disabled/");
-  pc->AddAudioTrack("audio_track", {});
-
-  std::unique_ptr<SessionDescriptionInterface> offer = pc->CreateOffer();
-  auto& contents = offer->description()->contents();
-  ASSERT_EQ(contents.size(), 1u);
-  auto name = contents[0].mid();
-  EXPECT_TRUE(offer->description()->RemoveContentByName(contents[0].mid()));
-  std::string sdp;
-  offer->ToString(&sdp);
-  auto modified_offer = CreateSessionDescription(
-      SdpType::kOffer,
-      absl::StrReplaceAll(sdp, {{"a=group:BUNDLE " + name, "a=group:BUNDLE"}}));
-
-  RTCError error;
-  EXPECT_TRUE(pc->SetLocalDescription(std::move(modified_offer), &error));
-  EXPECT_THAT(
-      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
-      ElementsAre(Pair(SdpMungingType::kNumberOfContents, 1)));
-  EXPECT_THAT(
-      metrics::Samples("WebRTC.PeerConnection.SdpMunging.SdpOutcome.Accepted"),
-      ElementsAre(Pair(SdpMungingType::kNumberOfContents, 1)));
-  EXPECT_THAT(
-      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Outcome"),
-      ElementsAre(Pair(static_cast<int>(SdpMungingOutcome::kAccepted), 1)));
 }
 
 TEST_F(SdpMungingTest, TransceiverDirection) {
@@ -1455,5 +1427,31 @@ TEST_F(SdpMungingTest, VideoCodecsRtcpReducedSize) {
       metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
       ElementsAre(Pair(SdpMungingType::kVideoCodecsRtcpReducedSize, 1)));
 }
+
+TEST_F(SdpMungingTest, NumberOfCandidates) {
+  auto pc = CreatePeerConnection();
+  pc->AddVideoTrack("video_track", {});
+
+  std::unique_ptr<SessionDescriptionInterface> offer = pc->CreateOffer();
+  IceCandidate candidate("", 0, Candidate());
+  EXPECT_TRUE(offer->AddCandidate(&candidate));
+
+  RTCError error;
+  EXPECT_TRUE(pc->SetLocalDescription(std::move(offer), &error));
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kIceCandidateCount, 1)));
+}
+
+#ifdef WEBRTC_HAVE_SCTP
+TEST_F(SdpMungingTest, NoMungingForDataChannels) {
+  auto pc = CreatePeerConnection();
+  pc->CreateDataChannel("somelabel");
+  EXPECT_TRUE(pc->CreateOfferAndSetAsLocal());
+  EXPECT_THAT(
+      metrics::Samples("WebRTC.PeerConnection.SdpMunging.Offer.Initial"),
+      ElementsAre(Pair(SdpMungingType::kNoModification, 1)));
+}
+#endif  // WEBRTC_HAVE_SCTP
 
 }  // namespace webrtc

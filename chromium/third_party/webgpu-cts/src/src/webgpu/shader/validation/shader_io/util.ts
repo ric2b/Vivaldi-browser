@@ -30,6 +30,9 @@ export function generateShader({
   if (attribute.includes('clip_distances')) {
     code += 'enable clip_distances;\n';
   }
+  if (attribute.includes('primitive_id')) {
+    code += 'enable chromium_experimental_primitive_id;\n';
+  }
 
   if (use_struct) {
     // Generate a struct that wraps the entry point IO variable.

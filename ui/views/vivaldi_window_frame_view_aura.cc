@@ -34,7 +34,7 @@
 
 namespace {
 
-class VivaldiWindowFrameViewAura : public views::NonClientFrameView {
+class VivaldiWindowFrameViewAura : public views::FrameView {
  public:
   // VivaldiWindowFrameViewAura is used to draw frames for app windows when a
   // non standard frame is needed. This occurs if there is no frame needed, or
@@ -63,6 +63,7 @@ class VivaldiWindowFrameViewAura : public views::NonClientFrameView {
       const views::SizeBounds& available_size) const override;
   gfx::Size GetMinimumSize() const override;
   gfx::Size GetMaximumSize() const override;
+  void Layout(PassKey key) override;
 
   raw_ptr<VivaldiBrowserWindow> window_;
 };
@@ -74,6 +75,13 @@ VivaldiWindowFrameViewAura::VivaldiWindowFrameViewAura(
 VivaldiWindowFrameViewAura::~VivaldiWindowFrameViewAura() = default;
 
 // views::NonClientFrameView implementation.
+
+ void VivaldiWindowFrameViewAura::Layout(PassKey key) {
+  // Don't layout when transitioning to and from fullscreen.
+  if (!window_->is_in_fullscreen_transition_) {
+    LayoutSuperclass<views::NonClientFrameView>(this);
+  }
+}
 
 gfx::Rect VivaldiWindowFrameViewAura::GetBoundsForClientView() const {
   return bounds();
@@ -204,7 +212,7 @@ gfx::Size VivaldiWindowFrameViewAura::GetMaximumSize() const {
 
 }  // namespace
 
-std::unique_ptr<views::NonClientFrameView> CreateVivaldiWindowFrameView(
+std::unique_ptr<views::FrameView> CreateVivaldiWindowFrameView(
     VivaldiBrowserWindow* window) {
   return std::make_unique<VivaldiWindowFrameViewAura>(window);
 }

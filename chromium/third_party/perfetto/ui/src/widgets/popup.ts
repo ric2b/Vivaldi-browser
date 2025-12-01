@@ -181,9 +181,13 @@ export class Popup implements m.ClassComponent<PopupAttrs> {
         if (closestPopup) {
           return {container: closestPopup};
         }
-        const closestModal = dom.closest('.modal-dialog');
+        const closestModal = dom.closest('.pf-modal-dialog');
         if (closestModal) {
           return {container: closestModal};
+        }
+        const closestContainer = dom.closest('.pf-overlay-container');
+        if (closestContainer) {
+          return {container: closestContainer};
         }
         return {container: undefined};
       },

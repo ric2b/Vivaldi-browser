@@ -34,7 +34,6 @@
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_action_hover_card_controller.h"
-#include "chrome/browser/ui/views/toolbar/toolbar_actions_bar_bubble_views.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feature_engagement/public/event_constants.h"
@@ -213,7 +212,7 @@ ExtensionsToolbarContainer::~ExtensionsToolbarContainer() {
     widgets.push_back(anchored_widget.widget);
   }
   for (auto* widget : widgets) {
-    widget->Close();
+    widget->CloseNow();
   }
   // The widgets should close synchronously (resulting in OnWidgetClosing()),
   // so |anchored_widgets_| should now be empty.
@@ -471,6 +470,10 @@ bool ExtensionsToolbarContainer::ShouldForceVisibility(
 
 void ExtensionsToolbarContainer::UpdateIconVisibility(
     const std::string& extension_id) {
+  if (!GetWidget() || GetWidget()->IsClosed()) {
+    return;
+  }
+
   ToolbarActionView* const action_view = GetViewForId(extension_id);
   if (!action_view) {
     return;
@@ -653,20 +656,6 @@ bool ExtensionsToolbarContainer::ShowToolbarActionPopupForAPICall(
   action->TriggerPopupForAPI(std::move(callback));
 
   return true;
-}
-
-void ExtensionsToolbarContainer::ShowToolbarActionBubble(
-    std::unique_ptr<ToolbarActionsBarBubbleDelegate> controller) {
-  const std::string extension_id = controller->GetAnchorActionId();
-
-  views::View* const anchor_view = GetViewForId(extension_id);
-
-  views::Widget* const widget = views::BubbleDialogDelegateView::CreateBubble(
-      std::make_unique<ToolbarActionsBarBubbleViews>(
-          anchor_view ? anchor_view : GetExtensionsButton(),
-          anchor_view != nullptr, std::move(controller)));
-
-  ShowWidgetForExtension(widget, extension_id);
 }
 
 void ExtensionsToolbarContainer::ToggleExtensionsMenu() {
@@ -904,7 +893,9 @@ void ExtensionsToolbarContainer::OnWidgetDestroying(views::Widget* widget) {
   iter->widget->RemoveObserver(this);
   const std::string extension_id = std::move(iter->extension_id);
   anchored_widgets_.erase(iter);
-  UpdateIconVisibility(extension_id);
+  if (GetWidget() && !GetWidget()->IsClosed()) {
+    UpdateIconVisibility(extension_id);
+  }
 }
 
 size_t ExtensionsToolbarContainer::WidthToIconCount(int x_offset) {

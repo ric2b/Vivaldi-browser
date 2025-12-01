@@ -4,4 +4,10 @@
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {บุ๊กมาร์ก <ph name="BOOKMARKS_COUNT_ONE" /> รายการ}
           other {บุ๊กมาร์ก <ph name="BOOKMARKS_COUNT_MANY" /> รายการ}}</translation>
+<translation id="5206168361184759344">{FILE_COUNT,plural,
+            =1 {กำลังดาวน์โหลดไฟล์…}
+            other {กำลังดาวน์โหลด # ไฟล์…}}</translation>
+<translation id="650224091954855786">{FILE_COUNT,plural,
+          =1 {ดาวน์โหลดไฟล์แล้ว}
+          other {การดาวน์โหลด # รายการเสร็จสมบูรณ์}}</translation>
 </translationbundle>

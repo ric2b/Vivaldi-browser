@@ -1,0 +1,18 @@
+============== UnsupportedType.fbs ============
+include "${DIR}/tracing_schema_common.fbs";
+
+struct Vec3 {
+  x: float;
+  y: float;
+  z: float;
+}
+
+table Monster(tag: "MONS") {
+  hp: int32;
+  pos: Vec3;
+}
+============== diagnosis ============
+ERROR: ${DIR}/tools/testdata/UnsupportedType.fbs contains unsupported type Obj for field pos in table Monster
+
+============== result ============
+

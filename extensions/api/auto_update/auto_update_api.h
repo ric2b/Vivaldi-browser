@@ -5,6 +5,7 @@
 
 #include <memory>
 
+#include "base/task/cancelable_task_tracker.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "extensions/browser/extension_function.h"
@@ -13,6 +14,8 @@
 #include "base/files/file_path_watcher.h"
 #include "extensions/api/auto_update/auto_update_status.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
+#include "extensions/browser/event_router.h"
+#include "update/update_model_observer.h"
 #include "vivaldi/extensions/schema/autoupdate.h"
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -25,10 +28,44 @@ namespace drm_helper {
 class DRMContentTabHelper;
 }  // namespace drm_helper
 
+class Profile;
+using update::UpdateModelObserver;
+using update::UpdateService;
 namespace extensions {
 
+struct FilePathResult {
+  std::string executable_path;
+  std::string profile_path;
+  std::string full_os_version;
+};
+
+// Observes UpdateModel and then routes notifications as
+// events to the extension system.
+class UpdateEventRouter : public UpdateModelObserver {
+ public:
+  explicit UpdateEventRouter(Profile* profile, UpdateService* update_service);
+  ~UpdateEventRouter() override;
+
+ private:
+  // Helper to actually dispatch an event to extension listeners.
+  void DispatchEvent(Profile* profile,
+                     const std::string& event_name,
+                     base::Value::List event_args);
+
+  // UpdateModelObserver
+  void OnUpdateProgress(UpdateService* service,
+                        const AutoUpdateStatus& status,
+                        const std::string& reason,
+                        const int progress) override;
+
+  const raw_ptr<Profile> profile_;
+  base::ScopedObservation<update::UpdateService, UpdateModelObserver>
+      update_service_observation_{this};
+};
+
 class AutoUpdateAPI : public BrowserContextKeyedAPI,
-                      public update_client::UpdateClient::Observer {
+                      public update_client::UpdateClient::Observer,
+                      public EventRouter::Observer {
  public:
   explicit AutoUpdateAPI(content::BrowserContext* context);
   ~AutoUpdateAPI() override;
@@ -52,7 +89,14 @@ class AutoUpdateAPI : public BrowserContextKeyedAPI,
   static void SendUpdaterDidRelaunchApplication();
   static void SendDidAbortWithError(const std::string& error,
                                     const std::string& reason);
+
+  static void SendUpdateProgress(const AutoUpdateStatus& status,
+                                 const std::string& version,
+                                 const int progress);
   static void SendUpdateFinished();
+
+  // EventRouter::Observer implementation.
+  void OnListenerAdded(const EventListenerInfo& details) override;
 
 #if !BUILDFLAG(IS_ANDROID)
   bool WasWidevineAvailable() { return widevine_was_available_; }
@@ -104,6 +148,18 @@ class AutoUpdateAPI : public BrowserContextKeyedAPI,
   std::unique_ptr<base::FilePathWatcher> ffmpeg_file_watcher_;
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 #endif
+
+  // Created lazily upon OnListenerAdded.
+  std::unique_ptr<UpdateEventRouter> update_event_router_;
+};
+
+class UpdateAsyncFunction : public ExtensionFunction {
+ public:
+  UpdateAsyncFunction() = default;
+
+ protected:
+  Profile* GetProfile() const;
+  ~UpdateAsyncFunction() override {}
 };
 
 class AutoUpdateCheckForUpdatesFunction : public ExtensionFunction {
@@ -253,6 +309,52 @@ class AutoUpdateRunStartupChecksFunction : public ExtensionFunction {
  private:
   ~AutoUpdateRunStartupChecksFunction() override = default;
   ResponseAction Run() override;
+};
+
+class AutoUpdateStartUpdateFunction : public UpdateAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autoUpdate.startUpdate", AUTOUPDATE_STARTUPDATE)
+  AutoUpdateStartUpdateFunction() = default;
+
+ private:
+  ~AutoUpdateStartUpdateFunction() override = default;
+
+  ResponseAction Run() override;
+  void StartUpdateCB();
+  base::CancelableTaskTracker task_tracker_;
+};
+
+class AutoUpdateGetAboutInfoFunction : public UpdateAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autoUpdate.getAboutInfo", AUTOUPDATE_GETABOUTINFO)
+  AutoUpdateGetAboutInfoFunction() = default;
+
+ private:
+  ~AutoUpdateGetAboutInfoFunction() override = default;
+
+  ResponseAction Run() override;
+  base::CancelableTaskTracker task_tracker_;
+};
+
+class AutoUpdateGetAboutPathsInfoFunction : public UpdateAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autoUpdate.getAboutPathsInfo",
+                             AUTOUPDATE_GETABOUTFILEPATHSINFO)
+  AutoUpdateGetAboutPathsInfoFunction() = default;
+
+ private:
+  ~AutoUpdateGetAboutPathsInfoFunction() override = default;
+  void OnFilePathCallback(base::RepeatingClosure done_closure,
+                          const FilePathResult& paths);
+  void OnVersion(base::RepeatingClosure done_closure,
+                 const std::string& version);
+  static std::string GetPlatformOSVersion();
+  void OnDone();
+  FilePathResult paths_result_;
+  std::string os_full_version_;
+
+  ResponseAction Run() override;
+  base::CancelableTaskTracker task_tracker_;
 };
 
 }  // namespace extensions

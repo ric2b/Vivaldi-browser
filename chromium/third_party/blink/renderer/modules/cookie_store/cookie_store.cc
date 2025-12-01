@@ -70,7 +70,8 @@ std::unique_ptr<net::CanonicalCookie> ToCanonicalCookie(
     const KURL& cookie_url,
     const CookieInit* options,
     ExceptionState& exception_state,
-    net::CookieInclusionStatus& status_out) {
+    net::CookieInclusionStatus& status_out,
+    ExecutionContext* execution_context) {
   const String& name = options->name();
   const String& value = options->value();
   if (name.empty() && value.Contains('=')) {
@@ -137,6 +138,12 @@ std::unique_ptr<net::CanonicalCookie> ToCanonicalCookie(
     }
   }
 
+  // If `options` has a supplied `path`, and the `path` is empty, this implies
+  // the caller intentionally set this option to be the empty string.
+  // We log when this happens to see how common it is for scripts to do this.
+  if (options->hasPath() && options->path().empty()) {
+    UseCounter::Count(execution_context, WebFeature::kCookieStoreEmptyPath);
+  }
   String path = options->path();
   if (!path.empty()) {
     if (is_host_prefixed_cookie && path != "/") {
@@ -333,8 +340,8 @@ ScriptPromise<IDLSequence<CookieListItem>> CookieStore::getAll(
           script_state, exception_state.GetContext());
   auto promise = resolver->Promise();
   DoRead(script_state, options,
-         WTF::BindOnce(&CookieStore::GetAllForUrlToGetAllResult,
-                       WrapPersistent(resolver)),
+         BindOnce(&CookieStore::GetAllForUrlToGetAllResult,
+                  WrapPersistent(resolver)),
          exception_state);
   if (exception_state.HadException()) {
     resolver->Detach();
@@ -368,10 +375,10 @@ ScriptPromise<IDLNullable<CookieListItem>> CookieStore::get(
       MakeGarbageCollected<ScriptPromiseResolver<IDLNullable<CookieListItem>>>(
           script_state, exception_state.GetContext());
   auto promise = resolver->Promise();
-  DoRead(script_state, options,
-         WTF::BindOnce(&CookieStore::GetAllForUrlToGetResult,
-                       WrapPersistent(resolver)),
-         exception_state);
+  DoRead(
+      script_state, options,
+      BindOnce(&CookieStore::GetAllForUrlToGetResult, WrapPersistent(resolver)),
+      exception_state);
   if (exception_state.HadException()) {
     resolver->Detach();
     return EmptyPromise();
@@ -571,8 +578,8 @@ ScriptPromise<IDLUndefined> CookieStore::DoWrite(
   }
 
   net::CookieInclusionStatus status;
-  std::unique_ptr<net::CanonicalCookie> canonical_cookie =
-      ToCanonicalCookie(default_cookie_url_, options, exception_state, status);
+  std::unique_ptr<net::CanonicalCookie> canonical_cookie = ToCanonicalCookie(
+      default_cookie_url_, options, exception_state, status, context);
 
   if (!canonical_cookie) {
     DCHECK(exception_state.HadException());
@@ -600,8 +607,8 @@ ScriptPromise<IDLUndefined> CookieStore::DoWrite(
       default_site_for_cookies_, default_top_frame_origin_,
       context->GetStorageAccessApiStatus(), status, is_ad_tagged,
       should_apply_devtools_overrides,
-      WTF::BindOnce(&CookieStore::OnSetCanonicalCookieResult,
-                    WrapPersistent(resolver)));
+      BindOnce(&CookieStore::OnSetCanonicalCookieResult,
+               WrapPersistent(resolver)));
   return resolver->Promise();
 }
 

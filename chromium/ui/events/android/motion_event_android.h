@@ -112,6 +112,7 @@ class EVENTS_EXPORT MotionEventAndroid : public MotionEvent {
   float GetTwist(size_t pointer_index) const override;
   float GetTiltX(size_t pointer_index) const override;
   float GetTiltY(size_t pointer_index) const override;
+  float GetPressure(size_t pointer_index) const override;
   float GetTangentialPressure(size_t pointer_index) const override;
   // TODO(crbug.com/41493853): Cleanup GetEventTime method to have same
   // semantics as Android side of MotionEvent.GetEventTime(). On Android side
@@ -119,7 +120,7 @@ class EVENTS_EXPORT MotionEventAndroid : public MotionEvent {
   // chromium it gives timestamp of the oldest input event for batched inputs.
   base::TimeTicks GetEventTime() const override;
   base::TimeTicks GetLatestEventTime() const override;
-  base::TimeTicks GetDownTime() const override;
+  base::TimeTicks GetRawDownTime() const override;
   size_t GetHistorySize() const override;
   base::TimeTicks GetHistoricalEventTime(
       size_t historical_index) const override;
@@ -144,8 +145,8 @@ class EVENTS_EXPORT MotionEventAndroid : public MotionEvent {
   bool for_touch_handle() const { return for_touch_handle_; }
 
   float GetRawXPix(size_t pointer_index) const;
-  virtual float GetXPix(size_t pointer_index) const = 0;
-  virtual float GetYPix(size_t pointer_index) const = 0;
+  float GetXPix(size_t pointer_index) const;
+  float GetYPix(size_t pointer_index) const;
 
   virtual base::android::ScopedJavaLocalRef<jobject> GetJavaObject() const;
 

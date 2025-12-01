@@ -38,6 +38,7 @@
 <translation id="4026745073321351206">🙄 Opdaget et problem?</translation>
 <translation id="4216644171369573466">Fanestak, <ph name="GROUP_TITLE" />, menu.</translation>
 <translation id="4304713468139749426">Adgangskodeadministrator</translation>
+<translation id="4439281775431634915">Dine fanestakke gemmes her</translation>
 <translation id="4569525137269575065">Luk stak</translation>
 <translation id="473775607612524610">Opdater</translation>
 <translation id="4755216899422789286">Åbn URL’er i Vivaldi</translation>
@@ -50,6 +51,8 @@
             other {{count} fanestakke lukket og gemt}}</translation>
 <translation id="5019787757991745254">Fanestakfarve <ph name="COLOR" /></translation>
 <translation id="5022440170224170365">Fanestak. Minimeret.</translation>
+<translation id="5132327651247938019">Du kan rulle til højre for at browse i Privat.</translation>
+<translation id="5204006339739481307">Du kan rulle til venstre for at browse i Privat.</translation>
 <translation id="5217245356412073535">Du kan ændre standardvisningen af websites til computer i Indstillinger &gt; Indholdsindstillinger</translation>
 <translation id="5271549068863921519">Gem adgangskode</translation>
 <translation id="5317780077021120954">Gem</translation>
@@ -63,6 +66,7 @@
 <translation id="5962477178930921574">Indsæt og søg</translation>
 <translation id="6163856768888310791">Opløs fanestak</translation>
 <translation id="6168969409902608220">Navngiv stak</translation>
+<translation id="6192561334825788389">Du kan stryge til højre for at browse i Privat.</translation>
 <translation id="6233792867654386826">Åbner de indtastede URL’er i Vivaldi.</translation>
 <translation id="6271462272606946663">Skjul anmodning om mobilside</translation>
 <translation id="6478587527114893588">Luk stak.</translation>
@@ -75,6 +79,8 @@
 <translation id="6827597288286078054">Privat søgning</translation>
 <translation id="6851516051005285358">Anmod om computerside</translation>
 <translation id="6890907822330704077">Fanestak, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> faner.</translation>
+<translation id="7004032350256606903">Din organisation kræver du browser privat.
+<ph name="BEGIN_LINK" />Lær mere<ph name="END_LINK" /></translation>
 <translation id="7307970171564921489">Lås private faner op med <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Åbn privat?</translation>
 <translation id="7363285031331302144">Opret fanestakke for at organisere dine åbne faner</translation>
@@ -94,6 +100,7 @@
         =1 {Føj fane til ny stak}
         other {Føj faner til ny stak}}</translation>
 <translation id="8465550436083180511">Minimer fanestak.</translation>
+<translation id="8499954848910902473">Du kan stryge til venstre for at browse i Privat.</translation>
 <translation id="8685478989144570078">Fanestakke</translation>
 <translation id="8756969031206844760">Opdater adgangskode?</translation>
 <translation id="8852861335827546438">Ny fanestak</translation>

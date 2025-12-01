@@ -4,6 +4,8 @@
 
 package org.chromium.android_webview;
 
+import static java.lang.annotation.ElementType.TYPE_USE;
+
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -48,11 +50,9 @@ import org.chromium.content_public.browser.WebContents;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.Collections;
-import java.util.HashSet;
+import java.lang.annotation.Target;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Stores Android WebView specific settings that does not need to be synced to WebKit.
@@ -125,7 +125,32 @@ public class AwSettings {
     public static final int ATTRIBUTION_APP_SOURCE_AND_APP_TRIGGER =
             AttributionBehavior.APP_SOURCE_AND_APP_TRIGGER;
 
-    private Set<String> mRequestedWithHeaderAllowedOriginRules;
+    /**
+     * Do not change these constants. Apps rely on them for compatibility across WebView versions.
+     */
+
+    // LINT.IfChange(AwSettingsHyperlinkContextMenuItems)
+    @IntDef(
+            flag = true,
+            value = {
+                HyperlinkContextMenuItems.DISABLED,
+                HyperlinkContextMenuItems.COPY_LINK_ADDRESS,
+                HyperlinkContextMenuItems.COPY_LINK_TEXT,
+                HyperlinkContextMenuItems.OPEN_LINK
+            })
+    @Retention(RetentionPolicy.SOURCE)
+    @Target(TYPE_USE)
+    public @interface HyperlinkContextMenuItems {
+        int DISABLED = 0;
+        int COPY_LINK_ADDRESS = 1; // 2^0
+        int COPY_LINK_TEXT = 1 << 1; // 2^1
+        int OPEN_LINK = 1 << 2; // 2^2
+    }
+
+    // LINT.ThenChange(/android_webview/support_library/boundary_interfaces/src/org/chromium/support_lib_boundary/WebSettingsBoundaryInterface.java:BoundaryHyperlinkContextMenuItems)
+
+    private @HyperlinkContextMenuItems int mHyperlinkContextMenuItems =
+            HyperlinkContextMenuItems.DISABLED;
 
     private final Context mContext;
     private WebContents mWebContents;
@@ -349,7 +374,7 @@ public class AwSettings {
     }
 
     interface ZoomSupportChangeListener {
-        public void onGestureZoomSupportChanged(
+        void onGestureZoomSupportChanged(
                 boolean supportsDoubleTapZoom, boolean supportsMultiTouchZoom);
     }
 
@@ -413,8 +438,6 @@ public class AwSettings {
             mAllowFileUrlAccess =
                     ContextUtils.getApplicationContext().getApplicationInfo().targetSdkVersion
                             < Build.VERSION_CODES.R;
-            mRequestedWithHeaderAllowedOriginRules =
-                    ManifestMetadataUtil.getXRequestedWithAllowList();
             mIntegrityApiStatusConfig = new AwMediaIntegrityApiStatusConfig();
             mSpeculativeLoadingAllowedFlags =
                     SpeculativeLoadingAllowedFlags.SPECULATIVE_LOADING_DISABLED;
@@ -499,7 +522,6 @@ public class AwSettings {
                 mEventHandler.bindUiThread();
                 mNativeAwSettings = AwSettingsJni.get().init(AwSettings.this, webContents);
                 updateEverythingLocked();
-                setRequestedWithHeaderOriginAllowListLocked(mRequestedWithHeaderAllowedOriginRules);
                 WebauthnModeProvider.getInstance()
                         .setWebauthnModeForWebContents(webContents, mWebauthnMode);
                 flushBackForwardCacheOnUiThreadLocked();
@@ -1331,48 +1353,6 @@ public class AwSettings {
     public int getLayoutAlgorithm() {
         synchronized (mAwSettingsLock) {
             return mLayoutAlgorithm;
-        }
-    }
-
-    public void setRequestedWithHeaderOriginAllowList(Set<String> allowedOriginRules) {
-        // Even though clients shouldn't pass in null, it's better to guard against it
-        allowedOriginRules =
-                allowedOriginRules != null ? allowedOriginRules : Collections.emptySet();
-        AwWebContentsMetricsRecorder.recordRequestedWithHeaderModeAPIUsage(allowedOriginRules);
-        synchronized (mAwSettingsLock) {
-            setRequestedWithHeaderOriginAllowListLocked(allowedOriginRules);
-        }
-    }
-
-    private void setRequestedWithHeaderOriginAllowListLocked(final Set<String> allowedOriginRules) {
-        assert Thread.holdsLock(mAwSettingsLock);
-        if (mNativeAwSettings == 0) {
-            return;
-        }
-
-        // Final set to be updated by the Runnable on the UI thread.
-        final Set<String> rejectedRules = new HashSet<>();
-
-        mEventHandler.runOnUiThreadBlockingAndLocked(
-                () -> {
-                    flushBackForwardCache();
-                    String[] rejected =
-                            AwSettingsJni.get()
-                                    .updateXRequestedWithAllowListOriginMatcher(
-                                            mNativeAwSettings,
-                                            allowedOriginRules.toArray(new String[0]));
-                    rejectedRules.addAll(java.util.Arrays.asList(rejected));
-                });
-
-        if (!rejectedRules.isEmpty()) {
-            throw new IllegalArgumentException("Malformed origin match rules: " + rejectedRules);
-        }
-        mRequestedWithHeaderAllowedOriginRules = allowedOriginRules;
-    }
-
-    public Set<String> getRequestedWithHeaderOriginAllowList() {
-        synchronized (mAwSettingsLock) {
-            return mRequestedWithHeaderAllowedOriginRules;
         }
     }
 
@@ -2303,6 +2283,26 @@ public class AwSettings {
         }
     }
 
+    /**
+     * Sets the hyperlink context menu item flags set on this AwSettings. By default, all items are
+     * disabled.
+     *
+     * @param hyperlinkMenuItems A bitwise combination of flags from {@link
+     *     HyperlinkContextMenuItems}.
+     */
+    public void setHyperlinkContextMenuItems(@HyperlinkContextMenuItems int hyperlinkMenuItems) {
+        synchronized (mAwSettingsLock) {
+            mHyperlinkContextMenuItems = hyperlinkMenuItems;
+        }
+    }
+
+    /** Gets the hyperlink context menu item flags set on this AwSettings. */
+    public @HyperlinkContextMenuItems int getHyperlinkContextMenuItems() {
+        synchronized (mAwSettingsLock) {
+            return mHyperlinkContextMenuItems;
+        }
+    }
+
     @NativeMethods
     interface Natives {
         long init(AwSettings caller, WebContents webContents);
@@ -2353,8 +2353,6 @@ public class AwSettings {
 
         boolean getEnterpriseAuthenticationAppLinkPolicyEnabled(
                 long nativeAwSettings, AwSettings caller);
-
-        String[] updateXRequestedWithAllowListOriginMatcher(long nativeAwSettings, String[] rules);
 
         void updateGeolocationEnabledLocked(long nativeAwSettings, AwSettings caller);
     }

@@ -167,11 +167,6 @@ void LogSuggestionAcceptedMetrics(BOOL is_backup_suggestion,
 
 - (void)viewDidDisappear:(BOOL)animated {
   [super viewDidDisappear:animated];
-  if (self.disableBottomSheetOnExit &&
-      !base::FeatureList::IsEnabled(
-          password_manager::features::kIOSPasswordBottomSheetV2)) {
-    [self.delegate disableBottomSheet];
-  }
   [self.handler viewDidDisappear];
 }
 
@@ -330,11 +325,10 @@ void LogSuggestionAcceptedMetrics(BOOL is_backup_suggestion,
 #pragma mark - UIResponder
 
 - (BOOL)canBecomeFirstResponder {
-  // In V2, allow the sheet to become a first responder to not allow the
-  // keyboard popping over the sheet when there is a focus event on the WebView
+  // Allow the sheet to become a first responder to not allow the keyboard
+  // popping over the sheet when there is a focus event on the WebView
   // underneath the sheet.
-  return base::FeatureList::IsEnabled(
-      password_manager::features::kIOSPasswordBottomSheetV2);
+  return YES;
 }
 
 #pragma mark - Private
@@ -343,7 +337,7 @@ void LogSuggestionAcceptedMetrics(BOOL is_backup_suggestion,
 - (UIView*)setUpTitleView {
   NSString* title = l10n_util::GetNSString(IDS_IOS_PASSWORD_BOTTOM_SHEET_TITLE);
   UIView* titleView = password_manager::CreatePasswordManagerTitleView(title);
-  titleView.backgroundColor = [UIColor colorNamed:kPrimaryBackgroundColor];
+  titleView.backgroundColor = self.mainBackgroundColor;
   titleView.accessibilityLabel = [NSString
       stringWithFormat:@"%@. %@", title,
                        l10n_util::GetNSString(

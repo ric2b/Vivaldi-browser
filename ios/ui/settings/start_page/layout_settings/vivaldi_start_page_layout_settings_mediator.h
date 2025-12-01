@@ -9,6 +9,7 @@
 
 class PrefService;
 
+NS_SWIFT_UI_ACTOR
 @protocol VivaldiStartPageSettingsConsumer;
 
 // The Mediator for start page layout settings.

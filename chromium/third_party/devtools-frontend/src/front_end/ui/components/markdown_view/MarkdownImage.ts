@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -24,7 +24,6 @@ export interface MarkdownImageData {
  * This makes sure that all icons/images are accounted for in markdown.
  */
 export class MarkdownImage extends HTMLElement {
-
   readonly #shadow = this.attachShadow({mode: 'open'});
   #imageData?: ImageData;
   #imageTitle?: string;
@@ -37,9 +36,9 @@ export class MarkdownImage extends HTMLElement {
     this.#render();
   }
 
-  #getIconComponent(): Lit.TemplateResult {
+  #getIconComponent(): Lit.LitTemplate {
     if (!this.#imageData) {
-      return html``;
+      return Lit.nothing;
     }
     const {src, color, width = '100%', height = '100%'} = this.#imageData;
     return html`
@@ -47,9 +46,9 @@ export class MarkdownImage extends HTMLElement {
     `;
   }
 
-  #getImageComponent(): Lit.TemplateResult {
+  #getImageComponent(): Lit.LitTemplate {
     if (!this.#imageData) {
-      return html``;
+      return Lit.nothing;
     }
     const {src, width = '100%', height = '100%'} = this.#imageData;
     return html`

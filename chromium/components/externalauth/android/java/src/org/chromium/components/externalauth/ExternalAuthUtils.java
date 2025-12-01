@@ -106,7 +106,7 @@ public class ExternalAuthUtils {
      *
      * @param packageName The package name to inquire about.
      */
-    public boolean isGoogleSigned(String packageName) {
+    public boolean isGoogleSigned(@Nullable String packageName) {
         return mGoogleDelegate == null ? false : mGoogleDelegate.isGoogleSigned(packageName);
     }
 

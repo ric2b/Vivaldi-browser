@@ -58,10 +58,11 @@ constexpr std::array<autofill::FieldType, 3> kStaticFieldsTypes = {
 @end
 
 @implementation AutofillProfileEditMediator {
-  raw_ptr<autofill::AutofillProfile> _autofillProfile;
+  raw_ptr<autofill::AutofillProfile, DanglingUntriaged> _autofillProfile;
 
   // Used for editing autofill profile.
-  raw_ptr<autofill::PersonalDataManager> _personalDataManager;
+  raw_ptr<autofill::PersonalDataManager, DanglingUntriaged>
+      _personalDataManager;
 
   // This property is for an interface which sends a response about saving the
   // edited profile.
@@ -401,9 +402,9 @@ constexpr std::array<autofill::FieldType, 3> kStaticFieldsTypes = {
   const variations::VariationsService* variations_service =
       GetApplicationContext()->GetVariationsService();
   countryModel.SetCountries(
-      GeoIpCountryCode(variations_service
-                           ? variations_service->GetLatestCountry()
-                           : std::string()),
+      autofill::GeoIpCountryCode(variations_service
+                                     ? variations_service->GetLatestCountry()
+                                     : std::string()),
       GetApplicationContext()->GetApplicationLocaleStorage()->Get());
   const autofill::CountryComboboxModel::CountryVector& countriesVector =
       countryModel.countries();

@@ -13,6 +13,7 @@
 #include "google_apis/gaia/gaia_urls.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "net/base/load_flags.h"
+#include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -138,8 +139,8 @@ void UserInfoFetcher::OnFetchComplete(
   DCHECK(unparsed_data);
   DVLOG_POLICY(1, POLICY_AUTH)
       << "Received UserInfo response: " << *unparsed_data;
-  std::optional<base::Value> parsed_value =
-      base::JSONReader::Read(*unparsed_data);
+  std::optional<base::Value> parsed_value = base::JSONReader::Read(
+      *unparsed_data, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
   if (parsed_value && parsed_value->is_dict()) {
     RecordFetchStatus(EnterpriseUserInfoFetchStatus::kSuccess);
     delegate_->OnGetUserInfoSuccess(parsed_value->GetDict());

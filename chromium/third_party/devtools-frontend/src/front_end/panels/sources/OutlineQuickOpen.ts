@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,15 +13,15 @@ import type {UISourceCodeFrame} from './UISourceCodeFrame.js';
 
 const UIStrings = {
   /**
-   *@description Text in Go To Line Quick Open of the Sources panel
+   * @description Text in Go To Line Quick Open of the Sources panel
    */
   noFileSelected: 'No file selected.',
   /**
-   *@description Text in Outline Quick Open of the Sources panel
+   * @description Text in Outline Quick Open of the Sources panel
    */
   openAJavascriptOrCssFileToSee: 'Open a JavaScript or CSS file to see symbols',
   /**
-   *@description Text to show no results have been found
+   * @description Text to show no results have been found
    */
   noResultsFound: 'No results found',
 } as const;
@@ -44,7 +44,9 @@ export function outline(state: CodeMirror.EditorState): OutlineItem[] {
 
   function subtitleFromParamList(): string {
     while (cursor.name !== 'ParamList') {
-      cursor.nextSibling();
+      if (!cursor.nextSibling()) {
+        break;
+      }
     }
     let parameters = '';
     if (cursor.name === 'ParamList' && cursor.firstChild()) {

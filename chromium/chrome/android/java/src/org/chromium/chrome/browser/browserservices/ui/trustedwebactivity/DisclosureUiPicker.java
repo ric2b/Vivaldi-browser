@@ -11,9 +11,8 @@ import static org.chromium.chrome.browser.notifications.channels.ChromeChannelDe
 
 import android.app.NotificationChannel;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
-import org.chromium.base.supplier.Supplier;
+import org.chromium.base.DeviceInfo;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider.TwaDisclosureUi;
@@ -25,6 +24,8 @@ import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.components.browser_ui.notifications.BaseNotificationManagerProxy;
 import org.chromium.components.browser_ui.notifications.BaseNotificationManagerProxyFactory;
 import org.chromium.components.browser_ui.notifications.NotificationProxyUtils;
+
+import java.util.function.Supplier;
 
 /**
  * Determines which of the versions of the "Running in Chrome" UI is displayed to the user.
@@ -85,7 +86,7 @@ public class DisclosureUiPicker implements NativeInitObserver {
             return;
         }
         // Android Automotive doesn't currently allow heads-up notifications.
-        if (BuildInfo.getInstance().isAutomotive) {
+        if (DeviceInfo.isAutomotive()) {
             callback.onResult(false);
             return;
         }

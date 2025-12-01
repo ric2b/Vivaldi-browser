@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,11 +15,11 @@ import {
 
 const UIStrings = {
   /**
-   *@description Title for HTTP Message Signatures specification url
+   * @description Title for HTTP Message Signatures specification url
    */
   httpMessageSignatures: 'HTTP Message Signatures (RFC9421)',
   /**
-   *@description Title for Signature-based Integrity specification url
+   * @description Title for Signature-based Integrity specification url
    */
   signatureBasedIntegrity: 'Signature-based Integrity',
 } as const;

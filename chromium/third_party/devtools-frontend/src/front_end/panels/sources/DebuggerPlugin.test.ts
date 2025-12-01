@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,7 +44,7 @@ describeWithMockConnection('Inline variable view scope helpers', () => {
       return null;
     }
     const entry = sourceMap.findEntry(location.lineNumber, location.columnNumber);
-    if (!entry || !entry.sourceURL) {
+    if (!entry?.sourceURL) {
       return null;
     }
     const content = sourceMap.embeddedContentByURL(entry.sourceURL);

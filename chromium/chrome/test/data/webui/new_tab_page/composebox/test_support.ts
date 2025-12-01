@@ -14,6 +14,9 @@ export function createComposeboxFile(
         objectUrl: null,
         uuid: `${index}`,
         status: FileUploadStatus.kUploadSuccessful,
+        url: null,
+        file: null,
+        tabId: null,
       },
       override);
 }

@@ -3,15 +3,6 @@
 <translationbundle lang="tr">
 <translation id="3830627370375585318">Güvenlik duvarınızdan ya da anti-virüs ayarlarından,
         Vivaldi'nin ağa erişmesine izin verin.</translation>
-<translation id="4200102020577305737">Vivaldi menüsü &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          LAN Ayarları
-          öğesine gidin ve "LAN için vekil sunucusu kullan" seçeneğinin işaretini kaldırın.</translation>
 <translation id="4932161901409251843">Git
           Vivaldi menüsü &gt;
           <ph name="SETTINGS_TITLE" />

@@ -20,6 +20,10 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import java.util.List;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.tabmodel.TabGroupUtils;
+
 /** Handles the actions for the tab group related menu items in the app menu. */
 @NullMarked
 public class TabGroupMenuActionHandler {
@@ -83,6 +87,11 @@ public class TabGroupMenuActionHandler {
      */
     public void handleAddToGroupAction(Tab tab) {
         if (mFilter.getTabGroupCount() == 0) {
+	    // Note(david@vivaldi.com): We always create a group with two tabs.
+            if (ChromeApplicationImpl.isVivaldi()) {
+                TabGroupUtils.createNewTabGroupWithExistingTab(tab, mFilter);
+                return;
+            }
             mFilter.createSingleTabGroup(tab);
             @Nullable Token groupId = tab.getTabGroupId();
             if (groupId != null) {

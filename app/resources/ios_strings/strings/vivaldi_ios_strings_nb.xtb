@@ -38,6 +38,7 @@
 <translation id="4026745073321351206">🙄 Oppdaget et problem?</translation>
 <translation id="4216644171369573466">Fanestabel, <ph name="GROUP_TITLE" />, Meny.</translation>
 <translation id="4304713468139749426">Passordhåndtering</translation>
+<translation id="4439281775431634915">Dine fanestabler lagres her</translation>
 <translation id="4569525137269575065">Lukk stabel</translation>
 <translation id="473775607612524610">Oppdater</translation>
 <translation id="4755216899422789286">Åpne nettadresser i Vivaldi</translation>
@@ -50,6 +51,8 @@
             other {{count} fanestabler lukket og lagret}}</translation>
 <translation id="5019787757991745254">Farge på fanestabel <ph name="COLOR" /></translation>
 <translation id="5022440170224170365">Fanestabel. Sammenfoldet.</translation>
+<translation id="5132327651247938019">Du kan rulle høyre for å surfe privat.</translation>
+<translation id="5204006339739481307">Du kan rulle til venstre for å surfe privat.</translation>
 <translation id="5217245356412073535">Du kan endre standard nettstedsvisning til datamaskin i Innstillinger &gt; Innholdsinnstillinger</translation>
 <translation id="5271549068863921519">Lagre passord</translation>
 <translation id="5317780077021120954">Lagre</translation>
@@ -63,6 +66,7 @@
 <translation id="5962477178930921574">Lim inn og søk</translation>
 <translation id="6163856768888310791">Løs opp stabel</translation>
 <translation id="6168969409902608220">Gi stabel navn</translation>
+<translation id="6192561334825788389">Du kan sveipe til høyre for å surfe privat.</translation>
 <translation id="6233792867654386826">Åpner angitte nettadresser i Vivaldi.</translation>
 <translation id="6271462272606946663">Skjul Be om mobilversjonen</translation>
 <translation id="6478587527114893588">Lukk stabel.</translation>
@@ -75,6 +79,8 @@
 <translation id="6827597288286078054">Privat søk</translation>
 <translation id="6851516051005285358">Be om datamaskinversjonen</translation>
 <translation id="6890907822330704077">Fanestabel, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> faner.</translation>
+<translation id="7004032350256606903">Organisasjonen din krever at du surfer privat.
+<ph name="BEGIN_LINK" />Lær mer<ph name="END_LINK" /></translation>
 <translation id="7307970171564921489">Lås opp privatfaner med <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Åpne i privatmodus?</translation>
 <translation id="7363285031331302144">Opprett fanestabler for å organisere de åpne fanene dine</translation>
@@ -94,6 +100,7 @@
         =1 {Legg til fane i ny stabel}
         other {Legg til faner i ny stabel}}</translation>
 <translation id="8465550436083180511">Fold sammen fanestabel.</translation>
+<translation id="8499954848910902473">Du kan sveipe til venstre for å surfe privat.</translation>
 <translation id="8685478989144570078">Fanestabler</translation>
 <translation id="8756969031206844760">Vil du oppdatere passordet?</translation>
 <translation id="8852861335827546438">Ny fanestabel</translation>

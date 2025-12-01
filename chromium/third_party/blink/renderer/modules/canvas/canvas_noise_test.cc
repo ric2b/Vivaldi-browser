@@ -10,11 +10,9 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "components/viz/test/test_context_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/fingerprinting_protection/canvas_noise_token.h"
 #include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_float16array_float32array_uint8clampedarray.h"
-#include "third_party/blink/renderer/core/canvas_interventions/canvas_interventions_enums.h"
 #include "third_party/blink/renderer/core/canvas_interventions/canvas_interventions_helper.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -23,48 +21,31 @@
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
 #include "third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
+#include "third_party/blink/renderer/core/workers/dedicated_worker_test.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_style_test_utils.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/path_2d.h"
+#include "third_party/blink/renderer/modules/canvas/canvas_noise_test_util.h"
+#include "third_party/blink/renderer/modules/canvas/htmlcanvas/html_canvas_element_module.h"
 #include "third_party/blink/renderer/modules/canvas/offscreencanvas2d/offscreen_canvas_rendering_context_2d.h"
+#include "third_party/blink/renderer/platform/graphics/canvas_high_entropy_op_type.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/test/gpu_memory_buffer_test_platform.h"
 #include "third_party/blink/renderer/platform/graphics/test/gpu_test_utils.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/runtime_feature_state/runtime_feature_state_override_context.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 
 namespace blink {
 
-// Raster interface that always returns the same randomized image when read
-// back.
-class CanvasNoiseTestRasterInterface : public viz::TestRasterInterface {
- public:
-  CanvasNoiseTestRasterInterface() { set_gpu_rasterization(true); }
-
- private:
-  UNSAFE_BUFFER_USAGE bool ReadbackImagePixels(
-      const gpu::Mailbox& source_mailbox,
-      const SkImageInfo& dst_info,
-      GLuint dst_row_bytes,
-      int src_x,
-      int src_y,
-      int plane_index,
-      void* dst_pixels) override {
-    size_t size = dst_info.computeByteSize(dst_row_bytes);
-    uint8_t* data = static_cast<uint8_t*>(dst_pixels);
-    for (size_t i = 0; i < size; ++i) {
-      data[i] = (i % 4 == 3) ? 255 : i % 256;
-    }
-    return true;
-  }
-};
+namespace {
 
 class CanvasNoiseTest : public PageTestBase {
  public:
   void SetUp() override {
     test_context_provider_ = viz::TestContextProvider::CreateRaster(
-        std::make_unique<CanvasNoiseTestRasterInterface>());
+        CreateCanvasNoiseTestRasterInterface());
     InitializeSharedGpuContextRaster(test_context_provider_.get());
 
     PageTestBase::SetUp();
@@ -81,11 +62,12 @@ class CanvasNoiseTest : public PageTestBase {
     attributes.premultiplied_alpha = false;
     attributes.will_read_frequently =
         CanvasContextCreationAttributesCore::WillReadFrequently::kFalse;
-    canvas_element_->GetCanvasRenderingContext(/*canvas_type=*/"2d",
-                                               attributes);
+    canvas_element_->GetCanvasRenderingContext(
+        GetDocument().GetExecutionContext(), /*canvas_type=*/"2d", attributes);
     static_cast<CanvasRenderingContext2D*>(CanvasElement().RenderingContext())
         ->GetOrCreateCanvas2DResourceProvider();
-    CanvasNoiseToken::Set(0x1234567890123456);
+    GetDocument().GetExecutionContext()->SetCanvasNoiseToken(
+        NoiseToken(0x1234567890123456));
     EnableInterventions();
   }
 
@@ -109,17 +91,13 @@ class CanvasNoiseTest : public PageTestBase {
   }
 
   void DisableInterventions() {
-    GetFrame()
-        .DomWindow()
-        ->GetRuntimeFeatureStateOverrideContext()
-        ->SetCanvasInterventionsForceDisabled();
+    GetFrame().DomWindow()->GetExecutionContext()->SetCanvasNoiseToken(
+        std::nullopt);
   }
 
   void EnableInterventions() {
-    GetFrame()
-        .DomWindow()
-        ->GetRuntimeFeatureStateOverrideContext()
-        ->SetCanvasInterventionsForceEnabled();
+    GetFrame().DomWindow()->GetExecutionContext()->SetCanvasNoiseToken(
+        NoiseToken(0x1234567890123456));
   }
 
   base::span<uint8_t> GetNoisedPixels(ExecutionContext* ec) {
@@ -169,8 +147,11 @@ class CanvasNoiseTest : public PageTestBase {
     base::span<uint8_t> pixels_no_interventions = GetPixels(
         Context2D(), CanvasElement().width(), CanvasElement().height());
     EnableInterventions();
-    EXPECT_TRUE(Context2D()->HasTriggerForIntervention());
-    EXPECT_TRUE(Context2D()->ShouldTriggerIntervention());
+    EXPECT_NE(Context2D()
+                  ->Recorder()
+                  ->getRecordingCanvas()
+                  .HighEntropyCanvasOpTypes(),
+              HighEntropyCanvasOpType::kNone);
     String data_url_with_interventions =
         CanvasElement().toDataURL("image/png", exception_state);
     num_readbacks_++;
@@ -192,8 +173,11 @@ class CanvasNoiseTest : public PageTestBase {
     base::span<uint8_t> pixels_no_interventions = GetPixels(
         Context2D(), CanvasElement().width(), CanvasElement().height());
     EnableInterventions();
-    EXPECT_FALSE(Context2D()->HasTriggerForIntervention());
-    EXPECT_FALSE(Context2D()->ShouldTriggerIntervention());
+    EXPECT_EQ(Context2D()
+                  ->Recorder()
+                  ->getRecordingCanvas()
+                  .HighEntropyCanvasOpTypes(),
+              HighEntropyCanvasOpType::kNone);
     String data_url_with_interventions =
         CanvasElement().toDataURL("image/png", exception_state);
     EXPECT_EQ(data_url_no_interventions, data_url_with_interventions);
@@ -219,63 +203,182 @@ class CanvasNoiseTest : public PageTestBase {
   Persistent<HTMLCanvasElement> canvas_element_;
 };
 
-TEST_F(CanvasNoiseTest, MaybeNoiseSnapshotNoiseWhenCanvasInterventionsEnabled) {
+scoped_refptr<StaticBitmapImage> CreateTriggeringSnapshot() {
+  SkImageInfo info = SkImageInfo::MakeN32Premul(10, 10);
+  SkBitmap bitmap;
+  bitmap.allocPixels(info);
+  auto image = StaticBitmapImage::Create(
+      cc::PaintImageBuilder::WithDefault()
+          .set_id(cc::PaintImage::GetNextId())
+          .set_image(bitmap.asImage(), cc::PaintImage::GetNextContentId())
+          .TakePaintImage());
+
+  // Set the high entropy op types and noise token so that noise is
+  // applied.
+  image->SetHighEntropyCanvasOpTypes(HighEntropyCanvasOpType::kSetShadowBlur |
+                                     HighEntropyCanvasOpType::kSetShadowColor);
+  return image;
+}
+
+enum class ContextType {
+  kWindow,
+  kDedicatedWorker,
+};
+
+class MaybeNoiseSnapshotTest : public DedicatedWorkerTest,
+                               public testing::WithParamInterface<ContextType> {
+ public:
+  MaybeNoiseSnapshotTest() = default;
+  ~MaybeNoiseSnapshotTest() override = default;
+
+  void SetUp() override {
+    DedicatedWorkerTest::SetUp();
+    StartWorker();
+    WaitUntilWorkerIsRunning();
+  }
+
+  std::string GetOperationTriggeredMetricName() {
+    switch (GetParam()) {
+      case ContextType::kWindow:
+        return base::StrCat({kCanvasOperationMetricName, ".Window"});
+      case ContextType::kDedicatedWorker:
+        return base::StrCat({kCanvasOperationMetricName, ".DedicatedWorker"});
+    }
+    NOTREACHED();
+  }
+
+  std::string GetReadbacksPerContextMetricName() {
+    switch (GetParam()) {
+      case ContextType::kWindow:
+        return base::StrCat(
+            {kCanvasNoiseReadbacksPerContextMetricName, ".Window"});
+      case ContextType::kDedicatedWorker:
+        return base::StrCat(
+            {kCanvasNoiseReadbacksPerContextMetricName, ".DedicatedWorker"});
+    }
+    NOTREACHED();
+  }
+
+  void FakeDestroyHelperContext() {
+    auto destroy_context =
+        base::BindOnce([](ExecutionContext* execution_context) {
+          auto* helper = CanvasInterventionsHelper::From(execution_context);
+          helper->ContextDestroyed();
+        });
+
+    switch (GetParam()) {
+      case ContextType::kWindow:
+        std::move(destroy_context).Run(GetFrame().DomWindow());
+        break;
+      case ContextType::kDedicatedWorker:
+        RunOnWorkerThread(CrossThreadBindOnce(std::move(destroy_context)));
+        break;
+    }
+  }
+};
+
+}  // namespace
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    MaybeNoiseSnapshotTest,
+    testing::Values(ContextType::kWindow, ContextType::kDedicatedWorker),
+    [](testing::TestParamInfo<MaybeNoiseSnapshotTest::ParamType> param_info) {
+      switch (param_info.param) {
+        case ContextType::kWindow:
+          return "Window";
+        case ContextType::kDedicatedWorker:
+          return "DedicatedWorker";
+      }
+      NOTREACHED();
+    });
+
+TEST_P(MaybeNoiseSnapshotTest, NoiseWhenCanvasInterventionsEnabled) {
   base::HistogramTester histogram_tester;
 
-  auto* window = GetFrame().DomWindow();
-  // Enable CanvasInterventions.
-  window->GetRuntimeFeatureStateOverrideContext()
-      ->SetCanvasInterventionsForceEnabled();
+  auto test = base::BindOnce([](ExecutionContext* execution_context) {
+    // Enable CanvasInterventions.
+    execution_context->SetCanvasNoiseToken(NoiseToken(0x1234567890123456));
 
-  DrawSomethingWithTrigger();
-  scoped_refptr<StaticBitmapImage> snapshot =
-      Context2D()->GetImage(FlushReason::kTesting);
-  scoped_refptr<StaticBitmapImage> snapshot_copy = snapshot;
+    auto snapshot = CreateTriggeringSnapshot();
+    auto snapshot_copy = snapshot;
+    ASSERT_TRUE(CanvasInterventionsHelper::MaybeNoiseSnapshot(execution_context,
+                                                              snapshot));
+    EXPECT_NE(snapshot, snapshot_copy);
+  });
 
-  EXPECT_TRUE(CanvasInterventionsHelper::MaybeNoiseSnapshot(Context2D(), window,
-                                                            snapshot));
-  num_readbacks_++;
+  switch (GetParam()) {
+    case ContextType::kWindow:
+      std::move(test).Run(GetFrame().DomWindow());
+      break;
+    case ContextType::kDedicatedWorker:
+      RunOnWorkerThread(CrossThreadBindOnce(std::move(test)));
+      break;
+  }
+
   histogram_tester.ExpectUniqueSample(
       kNoiseReasonMetricName,
       static_cast<int>(CanvasNoiseReason::kAllConditionsMet), 1);
   histogram_tester.ExpectTotalCount(kNoiseDurationMetricName, 1);
-  histogram_tester.ExpectUniqueSample(
-      kCanvasSizeMetricName, CanvasElement().width() * CanvasElement().height(),
-      1);
-  EXPECT_NE(snapshot_copy, snapshot);
+  histogram_tester.ExpectUniqueSample(kCanvasSizeMetricName, 10 * 10, 1);
 
-  histogram_tester.ExpectUniqueSample(kCanvasOperationMetricName,
-                                      CanvasOperationType::kSetShadowBlur |
-                                          CanvasOperationType::kSetShadowColor,
-                                      GetNumReadbacksHappened());
-  histogram_tester.ExpectTotalCount(kCanvasOperationMetricName,
-                                    GetNumReadbacksHappened());
+  histogram_tester.ExpectUniqueSample(
+      GetOperationTriggeredMetricName(),
+      HighEntropyCanvasOpType::kSetShadowBlur |
+          HighEntropyCanvasOpType::kSetShadowColor,
+      1);
+  histogram_tester.ExpectUniqueSample(
+      kCanvasOperationMetricName,
+      HighEntropyCanvasOpType::kSetShadowBlur |
+          HighEntropyCanvasOpType::kSetShadowColor,
+      1);
+
+  histogram_tester.ExpectTotalCount(kCanvasOperationMetricName, 1);
+  histogram_tester.ExpectTotalCount(GetOperationTriggeredMetricName(), 1);
+
+  histogram_tester.ExpectTotalCount(kCanvasNoiseReadbacksPerContextMetricName,
+                                    0);
+  histogram_tester.ExpectTotalCount(GetReadbacksPerContextMetricName(), 0);
+
+  FakeDestroyHelperContext();
+  histogram_tester.ExpectTotalCount(kCanvasNoiseReadbacksPerContextMetricName,
+                                    1);
+  histogram_tester.ExpectTotalCount(GetReadbacksPerContextMetricName(), 1);
 }
 
-TEST_F(CanvasNoiseTest,
-       MaybeNoiseSnapshotDoesNotNoiseWhenCanvasInterventionsDisabled) {
+TEST_P(MaybeNoiseSnapshotTest, NoNoiseWhenCanvasInterventionsDisabled) {
   base::HistogramTester histogram_tester;
 
-  auto* window = GetFrame().DomWindow();
-  // Disable CanvasInterventions.
-  window->GetRuntimeFeatureStateOverrideContext()
-      ->SetCanvasInterventionsForceDisabled();
+  auto test = base::BindOnce([](ExecutionContext* execution_context) {
+    // Disable CanvasInterventions.
+    execution_context->SetCanvasNoiseToken(std::nullopt);
 
-  DrawSomethingWithTrigger();
-  scoped_refptr<StaticBitmapImage> snapshot =
-      Context2D()->GetImage(FlushReason::kTesting);
-  scoped_refptr<StaticBitmapImage> snapshot_copy = snapshot;
+    auto snapshot = CreateTriggeringSnapshot();
+    auto snapshot_copy = snapshot;
+    ASSERT_FALSE(CanvasInterventionsHelper::MaybeNoiseSnapshot(
+        execution_context, snapshot));
+    EXPECT_EQ(snapshot, snapshot_copy);
+  });
 
-  EXPECT_FALSE(CanvasInterventionsHelper::MaybeNoiseSnapshot(Context2D(),
-                                                             window, snapshot));
+  switch (GetParam()) {
+    case ContextType::kWindow:
+      std::move(test).Run(GetFrame().DomWindow());
+      break;
+    case ContextType::kDedicatedWorker:
+      RunOnWorkerThread(CrossThreadBindOnce(std::move(test)));
+      break;
+  }
+
   histogram_tester.ExpectUniqueSample(
       kNoiseReasonMetricName,
       static_cast<int>(CanvasNoiseReason::kNotEnabledInMode), 1);
   histogram_tester.ExpectTotalCount(kNoiseDurationMetricName, 0);
   histogram_tester.ExpectTotalCount(kCanvasSizeMetricName, 0);
-  EXPECT_EQ(snapshot_copy, snapshot);
-
+  histogram_tester.ExpectTotalCount(GetOperationTriggeredMetricName(), 0);
   histogram_tester.ExpectTotalCount(kCanvasOperationMetricName, 0);
+  histogram_tester.ExpectTotalCount(GetReadbacksPerContextMetricName(), 0);
+  histogram_tester.ExpectTotalCount(kCanvasNoiseReadbacksPerContextMetricName,
+                                    0);
 }
 
 TEST_F(CanvasNoiseTest, MaybeNoiseSnapshotDoesNotNoiseForCpuCanvas) {
@@ -283,19 +386,17 @@ TEST_F(CanvasNoiseTest, MaybeNoiseSnapshotDoesNotNoiseForCpuCanvas) {
   base::HistogramTester histogram_tester;
 
   auto* window = GetFrame().DomWindow();
-  // Enable CanvasInterventions.
-  window->GetRuntimeFeatureStateOverrideContext()
-      ->SetCanvasInterventionsForceEnabled();
+  EnableInterventions();
 
   DrawSomethingWithTrigger();
   scoped_refptr<StaticBitmapImage> snapshot =
       Context2D()->GetImage(FlushReason::kTesting);
   scoped_refptr<StaticBitmapImage> snapshot_copy = snapshot;
 
-  EXPECT_FALSE(CanvasInterventionsHelper::MaybeNoiseSnapshot(Context2D(),
-                                                             window, snapshot));
+  EXPECT_FALSE(CanvasInterventionsHelper::MaybeNoiseSnapshot(window, snapshot));
   histogram_tester.ExpectUniqueSample(
-      kNoiseReasonMetricName, static_cast<int>(CanvasNoiseReason::kNoGpu), 1);
+      kNoiseReasonMetricName, static_cast<int>(CanvasNoiseReason::kNoTrigger),
+      1);
   histogram_tester.ExpectTotalCount(kNoiseDurationMetricName, 0);
   histogram_tester.ExpectTotalCount(kCanvasSizeMetricName, 0);
   EXPECT_EQ(snapshot_copy, snapshot);
@@ -307,11 +408,10 @@ TEST_F(CanvasNoiseTest, MaybeNoiseSnapshotDifferentNoiseTokenNoiseDiffers) {
   base::HistogramTester histogram_tester;
   NonThrowableExceptionState exception_state;
 
-  auto* window = GetFrame().DomWindow();
-  window->GetRuntimeFeatureStateOverrideContext()
-      ->SetCanvasInterventionsForceEnabled();
+  EnableInterventions();
   DrawSomethingWithTrigger();
 
+  auto* window = GetFrame().DomWindow();
   // Save a copy of the image data to reset.
   base::span<uint8_t> original_noised_pixels = GetNoisedPixels(window);
 
@@ -321,15 +421,16 @@ TEST_F(CanvasNoiseTest, MaybeNoiseSnapshotDifferentNoiseTokenNoiseDiffers) {
   EXPECT_EQ(original_noised_pixels, GetNoisedPixels(window));
 
   // Now change the noise token.
-  CanvasNoiseToken::Set(0xdeadbeef);
+  window->SetCanvasNoiseToken(NoiseToken(0xdeadbeef));
   base::span<uint8_t> updated_noised_pixels = GetNoisedPixels(window);
 
   EXPECT_NE(original_noised_pixels, updated_noised_pixels);
 
-  histogram_tester.ExpectUniqueSample(kCanvasOperationMetricName,
-                                      CanvasOperationType::kSetShadowBlur |
-                                          CanvasOperationType::kSetShadowColor,
-                                      GetNumReadbacksHappened());
+  histogram_tester.ExpectUniqueSample(
+      kCanvasOperationMetricName,
+      HighEntropyCanvasOpType::kSetShadowBlur |
+          HighEntropyCanvasOpType::kSetShadowColor,
+      GetNumReadbacksHappened());
   histogram_tester.ExpectTotalCount(kCanvasOperationMetricName,
                                     GetNumReadbacksHappened());
 }
@@ -352,8 +453,8 @@ TEST_F(CanvasNoiseTest, TriggerOnShadowBlur) {
   // this.
   ExpectInterventionHappened();
   tester.ExpectBucketCount(kCanvasOperationMetricName,
-                           CanvasOperationType::kSetShadowBlur |
-                               CanvasOperationType::kSetShadowColor,
+                           HighEntropyCanvasOpType::kSetShadowBlur |
+                               HighEntropyCanvasOpType::kSetShadowColor,
                            GetNumReadbacksHappened());
   tester.ExpectTotalCount(kCanvasOperationMetricName,
                           GetNumReadbacksHappened());
@@ -367,7 +468,7 @@ TEST_F(CanvasNoiseTest, TriggerOnArc) {
   Context2D()->stroke();
   ExpectInterventionHappened();
   tester.ExpectBucketCount(kCanvasOperationMetricName,
-                           CanvasOperationType::kArc,
+                           HighEntropyCanvasOpType::kArc,
                            GetNumReadbacksHappened());
   tester.ExpectTotalCount(kCanvasOperationMetricName,
                           GetNumReadbacksHappened());
@@ -381,7 +482,7 @@ TEST_F(CanvasNoiseTest, TriggerOnEllipse) {
   Context2D()->fill();
   ExpectInterventionHappened();
   tester.ExpectBucketCount(kCanvasOperationMetricName,
-                           CanvasOperationType::kEllipse,
+                           HighEntropyCanvasOpType::kEllipse,
                            GetNumReadbacksHappened());
   tester.ExpectTotalCount(kCanvasOperationMetricName,
                           GetNumReadbacksHappened());
@@ -395,7 +496,7 @@ TEST_F(CanvasNoiseTest, TriggerOnSetGlobalCompositeOperation) {
   Context2D()->fillRect(0, 0, 10, 10);
   ExpectInterventionHappened();
   tester.ExpectBucketCount(kCanvasOperationMetricName,
-                           CanvasOperationType::kGlobalCompositionOperation,
+                           HighEntropyCanvasOpType::kGlobalCompositionOperation,
                            GetNumReadbacksHappened());
   tester.ExpectTotalCount(kCanvasOperationMetricName,
                           GetNumReadbacksHappened());
@@ -403,10 +504,10 @@ TEST_F(CanvasNoiseTest, TriggerOnSetGlobalCompositeOperation) {
 
 TEST_F(CanvasNoiseTest, TriggerOnFillText) {
   base::HistogramTester tester;
-  Context2D()->fillText("CanvasNoiseTest", 0, 0);
+  Context2D()->fillText("CanvasNoiseTest", 20, 20);
   ExpectInterventionHappened();
   tester.ExpectBucketCount(kCanvasOperationMetricName,
-                           CanvasOperationType::kFillText,
+                           HighEntropyCanvasOpType::kFillText,
                            GetNumReadbacksHappened());
   tester.ExpectTotalCount(kCanvasOperationMetricName,
                           GetNumReadbacksHappened());
@@ -417,7 +518,7 @@ TEST_F(CanvasNoiseTest, TriggerOnStrokeText) {
   Context2D()->strokeText("CanvasNoiseTest", 0, 0);
   ExpectInterventionHappened();
   tester.ExpectBucketCount(kCanvasOperationMetricName,
-                           CanvasOperationType::kStrokeText,
+                           HighEntropyCanvasOpType::kStrokeText,
                            GetNumReadbacksHappened());
   tester.ExpectTotalCount(kCanvasOperationMetricName,
                           GetNumReadbacksHappened());
@@ -431,13 +532,14 @@ TEST_F(CanvasNoiseTest, TriggerOnFillWithPath2DNoNoise) {
   canvas_path->lineTo(15, 15);
   canvas_path->closePath();
   Context2D()->fill(canvas_path);
-  EXPECT_FALSE(canvas_path->HasTriggerForIntervention());
+  EXPECT_EQ(canvas_path->HighEntropyPathOpTypes(),
+            HighEntropyCanvasOpType::kNone);
   scoped_refptr<StaticBitmapImage> snapshot =
       Context2D()->GetImage(FlushReason::kTesting);
   scoped_refptr<StaticBitmapImage> snapshot_copy = snapshot;
 
   EXPECT_FALSE(CanvasInterventionsHelper::MaybeNoiseSnapshot(
-      Context2D(), GetFrame().DomWindow(), snapshot));
+      GetFrame().DomWindow(), snapshot));
   histogram_tester.ExpectUniqueSample(
       kNoiseReasonMetricName, static_cast<int>(CanvasNoiseReason::kNoTrigger),
       1);
@@ -455,15 +557,17 @@ TEST_F(CanvasNoiseTest, TriggerOnFillWithPath2DWithNoise) {
   canvas_path->lineTo(10, 10);
   canvas_path->lineTo(15, 15);
   canvas_path->closePath();
-  EXPECT_FALSE(canvas_path->HasTriggerForIntervention());
+  EXPECT_EQ(canvas_path->HighEntropyPathOpTypes(),
+            HighEntropyCanvasOpType::kNone);
   canvas_path->arc(10, 10, 10, 0, 6, false, exception_state);
-  EXPECT_TRUE(canvas_path->HasTriggerForIntervention());
+  EXPECT_EQ(canvas_path->HighEntropyPathOpTypes(),
+            HighEntropyCanvasOpType::kArc);
   ExpectInterventionDidNotHappen();
   histogram_tester.ExpectTotalCount(kCanvasOperationMetricName, 0);
   Context2D()->fill(canvas_path);
   ExpectInterventionHappened();
   histogram_tester.ExpectBucketCount(kCanvasOperationMetricName,
-                                     CanvasOperationType::kArc,
+                                     HighEntropyCanvasOpType::kArc,
                                      GetNumReadbacksHappened());
   histogram_tester.ExpectTotalCount(kCanvasOperationMetricName,
                                     GetNumReadbacksHappened());
@@ -479,17 +583,15 @@ TEST_F(CanvasNoiseTest, OffscreenCanvasNoise) {
               scope.GetExecutionContext(),
               CanvasRenderingContext::CanvasRenderingAPI::k2D,
               CanvasContextCreationAttributesCore()));
-  context->fillText("CanvasNoiseTest", 0, 0);
-  EXPECT_TRUE(context->HasTriggerForIntervention());
-  EXPECT_TRUE(context->ShouldTriggerIntervention());
-  host->GetExecutionContext()
-      ->GetRuntimeFeatureStateOverrideContext()
-      ->SetCanvasInterventionsForceDisabled();
+  context->fillText("CanvasNoiseTest", 20, 20);
+  EXPECT_EQ(
+      context->Recorder()->getRecordingCanvas().HighEntropyCanvasOpTypes(),
+      HighEntropyCanvasOpType::kFillText);
+  host->GetExecutionContext()->SetCanvasNoiseToken(std::nullopt);
   base::span<uint8_t> pixels_no_interventions =
       GetPixels(context, host->width(), host->height());
-  host->GetExecutionContext()
-      ->GetRuntimeFeatureStateOverrideContext()
-      ->SetCanvasInterventionsForceEnabled();
+  host->GetExecutionContext()->SetCanvasNoiseToken(
+      NoiseToken(0x1234567890123456));
   int num_changed_pixel_values =
       GetNumChangedPixels(pixels_no_interventions,
                           GetPixels(context, host->width(), host->height()),
@@ -497,14 +599,14 @@ TEST_F(CanvasNoiseTest, OffscreenCanvasNoise) {
   EXPECT_GT(num_changed_pixel_values, 0);
   histogram_tester.ExpectUniqueSample(
       kCanvasOperationMetricName,
-      static_cast<int>(CanvasOperationType::kFillText), 1);
+      static_cast<int>(HighEntropyCanvasOpType::kFillText), 1);
   histogram_tester.ExpectTotalCount(kCanvasOperationMetricName, 1);
 }
 
 TEST_F(CanvasNoiseTest, NoiseDiffersPerSite) {
   base::HistogramTester histogram_tester;
 
-  Context2D()->fillText("CanvasNoiseTest", 0, 0);
+  Context2D()->fillText("CanvasNoiseTest", 20, 20);
   base::span<uint8_t> pixels_test_site =
       GetPixels(Context2D(), CanvasElement().width(), CanvasElement().height());
 
@@ -512,8 +614,9 @@ TEST_F(CanvasNoiseTest, NoiseDiffersPerSite) {
 
   // Navigate to a different origin.
   NavigateTo(KURL("https://different.example"));
-  // Need to re-enable after navigating.
-  EnableInterventions();
+  // Need to re-enable with a different noise token after navigating.
+  GetDocument().GetExecutionContext()->SetCanvasNoiseToken(
+      NoiseToken(0x43251612612781));
 
   SetHtmlInnerHTML("<body><canvas id='c' width='300' height='300'></body>");
   UpdateAllLifecyclePhasesForTest();
@@ -526,10 +629,11 @@ TEST_F(CanvasNoiseTest, NoiseDiffersPerSite) {
   attributes.will_read_frequently =
       CanvasContextCreationAttributesCore::WillReadFrequently::kFalse;
   auto* diff_context = static_cast<CanvasRenderingContext2D*>(
-      diff_canvas_element->GetCanvasRenderingContext(/*canvas_type=*/"2d",
-                                                     attributes));
+      diff_canvas_element->GetCanvasRenderingContext(
+          GetDocument().GetExecutionContext(),
+          /*canvas_type=*/"2d", attributes));
 
-  diff_context->fillText("CanvasNoiseTest", 0, 0);
+  diff_context->fillText("CanvasNoiseTest", 20, 20);
   // We're taking 2 canvases with different noise applied to them, so the max
   // difference for per pixel value is 6 (= 2 * max noise per channel).
   // Still need to figure out why the noise is higher than expected.
@@ -542,7 +646,7 @@ TEST_F(CanvasNoiseTest, NoiseDiffersPerSite) {
 
   histogram_tester.ExpectUniqueSample(
       kCanvasOperationMetricName,
-      static_cast<int>(CanvasOperationType::kFillText), 2);
+      static_cast<int>(HighEntropyCanvasOpType::kFillText), 2);
   histogram_tester.ExpectTotalCount(kCanvasOperationMetricName, 2);
 }
 
@@ -556,8 +660,8 @@ TEST_F(CanvasNoiseTest, NumberOfNoisedReadbackPerPage) {
   CanvasRenderingContext::GetCanvasPerformanceMonitor().ResetForTesting();
   // Navigate away from page to destroy the execution context.
   NavigateTo(KURL("https://different.example"));
-  histogram_tester.ExpectUniqueSample(
-      "FingerprintingProtection.CanvasNoise.NoisedReadbacksPerContext", 3, 1);
+  histogram_tester.ExpectUniqueSample(kCanvasNoiseReadbacksPerContextMetricName,
+                                      3, 1);
 }
 
 TEST_F(CanvasNoiseTest, NoisedAfterPattern) {
@@ -572,13 +676,13 @@ TEST_F(CanvasNoiseTest, NoisedAfterPattern) {
 
   CanvasContextCreationAttributesCore attributes;
   auto* context_1 = static_cast<CanvasRenderingContext2D*>(
-      canvas_1->GetCanvasRenderingContext("2d", attributes));
+      canvas_1->GetCanvasRenderingContext(GetDocument().GetExecutionContext(),
+                                          "2d", attributes));
   ASSERT_NE(context_1, nullptr);
   auto* context_2 = static_cast<CanvasRenderingContext2D*>(
-      canvas_2->GetCanvasRenderingContext("2d", attributes));
+      canvas_2->GetCanvasRenderingContext(GetDocument().GetExecutionContext(),
+                                          "2d", attributes));
   ASSERT_NE(context_2, nullptr);
-
-  EXPECT_FALSE(context_1->HasTriggerForIntervention());
 
   CanvasPattern* empty_pattern =
       context_2->createPattern(canvas_1, "repeat", exception_state);
@@ -586,14 +690,22 @@ TEST_F(CanvasNoiseTest, NoisedAfterPattern) {
       GetScriptState()->GetIsolate(),
       ToV8Traits<CanvasPattern>::ToV8(GetScriptState(), empty_pattern),
       exception_state);
-  EXPECT_FALSE(context_2->HasTriggerForIntervention());
+  context_2->fillRect(0, 0, 300, 300);
+  EXPECT_EQ(
+      context_2->Recorder()->getRecordingCanvas().HighEntropyCanvasOpTypes(),
+      HighEntropyCanvasOpType::kNone);
 
   context_1->setShadowBlur(10);
   context_1->setShadowColor("red");
   context_1->fillRect(0, 0, 10, 10);
 
-  EXPECT_TRUE(context_1->HasTriggerForIntervention());
-  EXPECT_FALSE(context_2->HasTriggerForIntervention());
+  EXPECT_EQ(
+      context_1->Recorder()->getRecordingCanvas().HighEntropyCanvasOpTypes(),
+      HighEntropyCanvasOpType::kSetShadowBlur |
+          HighEntropyCanvasOpType::kSetShadowColor);
+  EXPECT_EQ(
+      context_2->Recorder()->getRecordingCanvas().HighEntropyCanvasOpTypes(),
+      HighEntropyCanvasOpType::kNone);
 
   CanvasPattern* to_be_noised_pattern =
       context_2->createPattern(canvas_1, "repeat", exception_state);
@@ -601,7 +713,12 @@ TEST_F(CanvasNoiseTest, NoisedAfterPattern) {
       GetScriptState()->GetIsolate(),
       ToV8Traits<CanvasPattern>::ToV8(GetScriptState(), to_be_noised_pattern),
       exception_state);
-  EXPECT_TRUE(context_2->HasTriggerForIntervention());
+  context_2->fillRect(0, 0, 300, 300);
+  EXPECT_EQ(
+      context_2->Recorder()->getRecordingCanvas().HighEntropyCanvasOpTypes(),
+      HighEntropyCanvasOpType::kSetShadowBlur |
+          HighEntropyCanvasOpType::kSetShadowColor |
+          HighEntropyCanvasOpType::kCopyFromCanvas);
 }
 
 TEST_F(CanvasNoiseTest, NoisedAfterPatternFromOffscreenCanvas) {
@@ -616,24 +733,32 @@ TEST_F(CanvasNoiseTest, NoisedAfterPatternFromOffscreenCanvas) {
               scope.GetExecutionContext(),
               CanvasRenderingContext::CanvasRenderingAPI::k2D,
               CanvasContextCreationAttributesCore()));
-  context->fillText("CanvasNoiseTest", 0, 0);
-  EXPECT_TRUE(context->ShouldTriggerIntervention());
-  EXPECT_FALSE(Context2D()->ShouldTriggerIntervention());
+  context->fillText("CanvasNoiseTest", 20, 20);
+  EXPECT_EQ(
+      context->Recorder()->getRecordingCanvas().HighEntropyCanvasOpTypes(),
+      HighEntropyCanvasOpType::kFillText);
+  EXPECT_EQ(
+      Context2D()->Recorder()->getRecordingCanvas().HighEntropyCanvasOpTypes(),
+      HighEntropyCanvasOpType::kNone);
 
   CanvasPattern* pattern =
       Context2D()->createPattern(host, "repeat", exception_state);
+  EXPECT_EQ(pattern->HighEntropyCanvasOpTypes(),
+            HighEntropyCanvasOpType::kFillText);
   Context2D()->setFillStyle(
       script_state->GetIsolate(),
       ToV8Traits<CanvasPattern>::ToV8(script_state, pattern), exception_state);
   Context2D()->fillRect(0, 0, 10, 10);
-
-  EXPECT_TRUE(Context2D()->ShouldTriggerIntervention());
+  EXPECT_EQ(
+      Context2D()->Recorder()->getRecordingCanvas().HighEntropyCanvasOpTypes(),
+      HighEntropyCanvasOpType::kFillText |
+          HighEntropyCanvasOpType::kCopyFromCanvas);
 }
 
 TEST_F(CanvasNoiseTest, NoisedAfterPatternOnOffscreenCanvas) {
   V8TestingScope scope;
   NonThrowableExceptionState exception_state;
-  DrawSomethingWithTrigger();
+  Context2D()->fillText("CanvasNoiseTest", 20, 20);
 
   auto* host = OffscreenCanvas::Create(scope.GetScriptState(), 300, 300);
   OffscreenCanvasRenderingContext2D* context =
@@ -642,9 +767,6 @@ TEST_F(CanvasNoiseTest, NoisedAfterPatternOnOffscreenCanvas) {
               scope.GetExecutionContext(),
               CanvasRenderingContext::CanvasRenderingAPI::k2D,
               CanvasContextCreationAttributesCore()));
-
-  EXPECT_FALSE(context->ShouldTriggerIntervention());
-
   CanvasPattern* pattern =
       context->createPattern(&CanvasElement(), "repeat", exception_state);
   context->setFillStyle(
@@ -652,7 +774,9 @@ TEST_F(CanvasNoiseTest, NoisedAfterPatternOnOffscreenCanvas) {
       ToV8Traits<CanvasPattern>::ToV8(GetScriptState(), pattern),
       exception_state);
   context->fillRect(0, 0, 10, 10);
-
-  EXPECT_TRUE(context->ShouldTriggerIntervention());
+  EXPECT_EQ(
+      context->Recorder()->getRecordingCanvas().HighEntropyCanvasOpTypes(),
+      HighEntropyCanvasOpType::kFillText |
+          HighEntropyCanvasOpType::kCopyFromCanvas);
 }
 }  // namespace blink

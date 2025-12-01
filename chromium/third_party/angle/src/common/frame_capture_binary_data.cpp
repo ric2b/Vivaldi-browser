@@ -7,6 +7,10 @@
 //   Common code for the ANGLE trace replay large trace binary data definition.
 //
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #define USE_SYSTEM_ZLIB
 #include "compression_utils_portable.h"
 
@@ -573,7 +577,7 @@ int FileStreamSeek(FILE *stream, long long offset, int whence)
 #if defined(ANGLE_PLATFORM_WINDOWS)
     return _fseeki64(stream, offset, whence);
 #else
-    return fseeko(stream, offset, whence);
+    return fseeko(stream, static_cast<off_t>(offset), whence);
 #endif
 }
 
@@ -613,7 +617,7 @@ size_t FileStream::read(uint8_t *buffer, size_t size)
 
 void FileStream::seek(long long offset, int whence)
 {
-    if (FileStreamSeek(mFile, static_cast<off_t>(offset), whence) != 0)
+    if (FileStreamSeek(mFile, offset, whence) != 0)
     {
         FATAL() << "Error seeking in binary data file with offset " << offset << " and whence "
                 << whence;

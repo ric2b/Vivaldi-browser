@@ -32,7 +32,7 @@
 #include <utility>
 
 #include "dawn/common/Assert.h"
-#include "dawn/common/Log.h"
+#include "dawn/common/MatchVariant.h"
 #include "dawn/native/Pipeline.h"
 #include "dawn/native/TintUtils.h"
 #include "dawn/native/d3d/D3DCompilationRequest.h"
@@ -169,143 +169,126 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
     arrayLengthFromUniform.ubo_binding = {layout->GetDynamicStorageBufferLengthsRegisterSpace(),
                                           layout->GetDynamicStorageBufferLengthsShaderRegister()};
 
-    tint::hlsl::writer::Bindings bindings;
+    tint::Bindings bindings;
+    std::vector<BindingPoint> ignored_by_robustness;
 
     const BindingInfoArray& moduleBindingInfo = entryPoint.bindings;
     for (BindGroupIndex group : layout->GetBindGroupLayoutsMask()) {
         const BindGroupLayout* bgl = ToBackend(layout->GetBindGroupLayout(group));
         const BindingGroupInfoMap& moduleGroupBindingInfo = moduleBindingInfo[group];
 
-        // d3d12::BindGroupLayout packs the bindings per HLSL register-space. We modify
-        // the Tint AST to make the "bindings" decoration match the offset chosen by
-        // d3d12::BindGroupLayout so that Tint produces HLSL with the correct registers
-        // assigned to each interface variable.
         for (const auto& [binding, shaderBindingInfo] : moduleGroupBindingInfo) {
             BindingIndex bindingIndex = bgl->GetBindingIndex(binding);
             BindingPoint srcBindingPoint{static_cast<uint32_t>(group),
                                          static_cast<uint32_t>(binding)};
+
+            // Remap the WGSL bindings to the register numbers computed in the
+            // d3d12::BindGroupLayout that packs them per register type. The group decoration stays
+            // the same as HLSL supports register spaces that are a similar concept of a second
+            // dimension of binding indices.
             BindingPoint dstBindingPoint{static_cast<uint32_t>(group),
                                          bgl->GetShaderRegister(bindingIndex)};
 
-            auto* const bufferBindingInfo =
-                std::get_if<BufferBindingInfo>(&shaderBindingInfo.bindingInfo);
+            MatchVariant(
+                shaderBindingInfo.bindingInfo,
+                [&](const BufferBindingInfo& bindingInfo) {
+                    switch (bindingInfo.type) {
+                        case wgpu::BufferBindingType::Uniform:
+                            bindings.uniform.emplace(srcBindingPoint, dstBindingPoint);
+                            break;
+                        case kInternalStorageBufferBinding:
+                        case wgpu::BufferBindingType::Storage:
+                        case wgpu::BufferBindingType::ReadOnlyStorage:
+                        case kInternalReadOnlyStorageBufferBinding:
+                            bindings.storage.emplace(srcBindingPoint, dstBindingPoint);
+                            break;
+                        case wgpu::BufferBindingType::BindingNotUsed:
+                        case wgpu::BufferBindingType::Undefined:
+                            DAWN_UNREACHABLE();
+                            break;
+                    }
+                },
+                [&](const SamplerBindingInfo& bindingInfo) {
+                    bindings.sampler.emplace(srcBindingPoint, dstBindingPoint);
+                },
+                [&](const TextureBindingInfo& bindingInfo) {
+                    bindings.texture.emplace(srcBindingPoint, dstBindingPoint);
+                },
+                [&](const StorageTextureBindingInfo& bindingInfo) {
+                    bindings.storage_texture.emplace(srcBindingPoint, dstBindingPoint);
+                },
+                [&](const TexelBufferBindingInfo& bindingInfo) {
+                    // TODO(crbug/382544164): Prototype texel buffer feature
+                    DAWN_UNREACHABLE();
+                },
+                [&](const ExternalTextureBindingInfo& bindingInfo) {
+                    const auto& bindingMap = bgl->GetExternalTextureBindingExpansionMap();
+                    const auto& expansion = bindingMap.find(binding);
+                    DAWN_ASSERT(expansion != bindingMap.end());
 
-            if (bufferBindingInfo) {
-                switch (bufferBindingInfo->type) {
-                    case wgpu::BufferBindingType::Uniform:
-                        bindings.uniform.emplace(
-                            srcBindingPoint, tint::hlsl::writer::binding::Uniform{
-                                                 dstBindingPoint.group, dstBindingPoint.binding});
-                        break;
-                    case kInternalStorageBufferBinding:
-                    case wgpu::BufferBindingType::Storage:
-                    case wgpu::BufferBindingType::ReadOnlyStorage:
-                    case kInternalReadOnlyStorageBufferBinding:
-                        bindings.storage.emplace(
-                            srcBindingPoint, tint::hlsl::writer::binding::Storage{
-                                                 dstBindingPoint.group, dstBindingPoint.binding});
-                        break;
-                    case wgpu::BufferBindingType::BindingNotUsed:
-                    case wgpu::BufferBindingType::Undefined:
-                        DAWN_UNREACHABLE();
-                        break;
-                }
-            } else if (std::holds_alternative<SamplerBindingInfo>(shaderBindingInfo.bindingInfo)) {
-                bindings.sampler.emplace(
-                    srcBindingPoint, tint::hlsl::writer::binding::Sampler{dstBindingPoint.group,
-                                                                          dstBindingPoint.binding});
-            } else if (std::holds_alternative<TextureBindingInfo>(shaderBindingInfo.bindingInfo)) {
-                bindings.texture.emplace(
-                    srcBindingPoint, tint::hlsl::writer::binding::Texture{dstBindingPoint.group,
-                                                                          dstBindingPoint.binding});
-            } else if (std::holds_alternative<StorageTextureBindingInfo>(
-                           shaderBindingInfo.bindingInfo)) {
-                bindings.storage_texture.emplace(
-                    srcBindingPoint, tint::hlsl::writer::binding::StorageTexture{
-                                         dstBindingPoint.group, dstBindingPoint.binding});
-            } else if (std::holds_alternative<ExternalTextureBindingInfo>(
-                           shaderBindingInfo.bindingInfo)) {
-                const auto& etBindingMap = bgl->GetExternalTextureBindingExpansionMap();
-                const auto& expansion = etBindingMap.find(binding);
-                DAWN_ASSERT(expansion != etBindingMap.end());
+                    const auto& bindingExpansion = expansion->second;
+                    tint::BindingPoint plane0{
+                        static_cast<uint32_t>(group),
+                        bgl->GetShaderRegister(bgl->GetBindingIndex(bindingExpansion.plane0))};
+                    tint::BindingPoint plane1{
+                        static_cast<uint32_t>(group),
+                        bgl->GetShaderRegister(bgl->GetBindingIndex(bindingExpansion.plane1))};
+                    tint::BindingPoint metadata{
+                        static_cast<uint32_t>(group),
+                        bgl->GetShaderRegister(bgl->GetBindingIndex(bindingExpansion.params))};
 
-                const auto& bindingExpansion = expansion->second;
-                tint::hlsl::writer::binding::BindingInfo plane0{
-                    static_cast<uint32_t>(group),
-                    bgl->GetShaderRegister(bgl->GetBindingIndex(bindingExpansion.plane0))};
-                tint::hlsl::writer::binding::BindingInfo plane1{
-                    static_cast<uint32_t>(group),
-                    bgl->GetShaderRegister(bgl->GetBindingIndex(bindingExpansion.plane1))};
-                tint::hlsl::writer::binding::BindingInfo metadata{
-                    static_cast<uint32_t>(group),
-                    bgl->GetShaderRegister(bgl->GetBindingIndex(bindingExpansion.params))};
-                bindings.external_texture.emplace(
-                    srcBindingPoint,
-                    tint::hlsl::writer::binding::ExternalTexture{metadata, plane0, plane1});
+                    bindings.external_texture.emplace(
+                        srcBindingPoint, tint::ExternalTexture{metadata, plane0, plane1});
+                },
+
+                [](const InputAttachmentBindingInfo&) { DAWN_UNREACHABLE(); });
+        }
+
+        // On D3D12 backend all storage buffers without Dynamic Buffer Offset will always be bound
+        // to root descriptor tables, where D3D12 runtime can guarantee that OOB-read will always
+        // return 0 and OOB-write will always take no action, so we don't need to do robustness
+        // transform on them. Note that we still need to do robustness transform on uniform buffers
+        // because only sized array is allowed in uniform buffers, so FXC will report compilation
+        // error when the indexing to the array in a cBuffer is out of bound and can be checked at
+        // compilation time. Storage buffers are OK because they are always translated with
+        // RWByteAddressBuffers, which has no such sized arrays.
+        //
+        // For example below WGSL shader will cause compilation error when we skip robustness
+        // transform on uniform buffers:
+        //
+        // struct TestData {
+        //     data: array<vec4<u32>, 3>,
+        // };
+        // @group(0) @binding(0) var<uniform> s: TestData;
+        //
+        // fn test() -> u32 {
+        //     let index = 1000000u;
+        //     if (s.data[index][0] != 0u) {    // error X3504: array index out of
+        //     bounds
+        //         return 0x1004u;
+        //     }
+        //     return 0u;
+        // }
+        for (BindingIndex index : bgl->GetBufferIndices()) {
+            const auto& bindingInfo = bgl->GetBindingInfo(index);
+            const auto& bufferInfo = std::get<BufferBindingInfo>(bindingInfo.bindingLayout);
+
+            if ((bufferInfo.type == wgpu::BufferBindingType::Storage ||
+                 bufferInfo.type == wgpu::BufferBindingType::ReadOnlyStorage) &&
+                !bufferInfo.hasDynamicOffset) {
+                ignored_by_robustness.emplace_back(tint::BindingPoint{
+                    .group = uint32_t(group), .binding = uint32_t(bindingInfo.binding)});
             }
+        }
 
-            if (bufferBindingInfo) {
-                const auto& bindingLayout =
-                    std::get<BufferBindingInfo>(bgl->GetBindingInfo(bindingIndex).bindingLayout);
-
-                // Declaring a read-only storage buffer in HLSL but specifying a storage
-                // buffer in the BGL produces the wrong output. Force read-only storage
-                // buffer bindings to be treated as UAV instead of SRV. Internal storage
-                // buffer is a storage buffer used in the internal pipeline.
-                const bool forceStorageBufferAsUAV =
-                    ((bufferBindingInfo->type == wgpu::BufferBindingType::ReadOnlyStorage ||
-                      bufferBindingInfo->type == kInternalReadOnlyStorageBufferBinding) &&
-                     (bindingLayout.type == wgpu::BufferBindingType::Storage ||
-                      bindingLayout.type == kInternalStorageBufferBinding));
-                if (forceStorageBufferAsUAV) {
-                    bindings.access_controls.emplace(srcBindingPoint,
-                                                     tint::core::Access::kReadWrite);
-                }
-
-                // On D3D12 backend all storage buffers without Dynamic Buffer Offset will always be
-                // bound to root descriptor tables, where D3D12 runtime can guarantee that OOB-read
-                // will always return 0 and OOB-write will always take no action, so we don't need
-                // to do robustness transform on them. Note that we still need to do robustness
-                // transform on uniform buffers because only sized array is allowed in uniform
-                // buffers, so FXC will report compilation error when the indexing to the array in a
-                // cBuffer is out of bound and can be checked at compilation time. Storage buffers
-                // are OK because they are always translated with RWByteAddressBuffers, which has no
-                // such sized arrays.
-                //
-                // For example below WGSL shader will cause compilation error when we skip
-                // robustness transform on uniform buffers:
-                //
-                // struct TestData {
-                //     data: array<vec4<u32>, 3>,
-                // };
-                // @group(0) @binding(0) var<uniform> s: TestData;
-                //
-                // fn test() -> u32 {
-                //     let index = 1000000u;
-                //     if (s.data[index][0] != 0u) {    // error X3504: array index out of bounds
-                //         return 0x1004u;
-                //     }
-                //     return 0u;
-                // }
-                if ((bufferBindingInfo->type == wgpu::BufferBindingType::Storage ||
-                     bufferBindingInfo->type == wgpu::BufferBindingType::ReadOnlyStorage) &&
-                    !bindingLayout.hasDynamicOffset) {
-                    bindings.ignored_by_robustness_transform.emplace_back(srcBindingPoint);
-                }
-            }
-
-            // Add arrayLengthFromUniform options
-            {
-                for (const auto& bindingAndRegisterOffset :
-                     layout->GetDynamicStorageBufferLengthInfo()[group].bindingAndRegisterOffsets) {
-                    BindingNumber bindingNum = bindingAndRegisterOffset.binding;
-                    uint32_t registerOffset = bindingAndRegisterOffset.registerOffset;
-                    BindingPoint bindingPoint{static_cast<uint32_t>(group),
-                                              static_cast<uint32_t>(bindingNum)};
-                    arrayLengthFromUniform.bindpoint_to_size_index.emplace(bindingPoint,
-                                                                           registerOffset);
-                }
-            }
+        // Add arrayLengthFromUniform options
+        for (const auto& bindingAndRegisterOffset :
+             layout->GetDynamicStorageBufferLengthInfo()[group].bindingAndRegisterOffsets) {
+            BindingNumber bindingNum = bindingAndRegisterOffset.binding;
+            uint32_t registerOffset = bindingAndRegisterOffset.registerOffset;
+            BindingPoint bindingPoint{static_cast<uint32_t>(group),
+                                      static_cast<uint32_t>(bindingNum)};
+            arrayLengthFromUniform.bindpoint_to_size_index.emplace(bindingPoint, registerOffset);
         }
     }
 
@@ -318,6 +301,7 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
     req.hlsl.tintOptions.disable_workgroup_init =
         device->IsToggleEnabled(Toggle::DisableWorkgroupInit);
     req.hlsl.tintOptions.bindings = std::move(bindings);
+    req.hlsl.tintOptions.ignored_by_robustness_transform = std::move(ignored_by_robustness);
 
     req.hlsl.tintOptions.compiler = req.bytecode.compiler == d3d::Compiler::FXC
                                         ? tint::hlsl::writer::Options::Compiler::kFXC
@@ -365,6 +349,8 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
         device->IsToggleEnabled(Toggle::ScalarizeMaxMinClamp);
     req.hlsl.tintOptions.polyfill_pack_unpack_4x8 =
         device->IsToggleEnabled(Toggle::D3D12PolyFillPackUnpack4x8);
+    req.hlsl.tintOptions.polyfill_subgroup_broadcast_f16 =
+        device->IsToggleEnabled(Toggle::EnableSubgroupsIntelGen9);
     req.hlsl.tintOptions.enable_integer_range_analysis =
         device->IsToggleEnabled(Toggle::EnableIntegerRangeAnalysisInRobustness);
 

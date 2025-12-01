@@ -12,6 +12,7 @@
 #include "chrome/browser/command_updater_delegate.h"
 #include "chrome/browser/command_updater_impl.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_enums.h"
 #include "chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_section.h"
 #include "chrome/common/buildflags.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -20,6 +21,10 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/actions/actions.h"
 #include "ui/base/window_open_disposition.h"
+
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/fre/glic_fre.mojom.h"
+#endif
 
 class Browser;
 class BrowserWindow;
@@ -69,6 +74,7 @@ class BrowserCommandController : public CommandUpdater,
   void PrintingStateChanged();
 #if BUILDFLAG(ENABLE_GLIC)
   void GlicWindowActivationChanged(bool active);
+  void GlicFreStateChanged(glic::mojom::FreWebUiState new_state);
 #endif
   void LoadingStateChanged(bool is_loading, bool force);
   void FindBarVisibilityChanged();
@@ -79,6 +85,7 @@ class BrowserCommandController : public CommandUpdater,
   // Helper method to show the customize chrome sidepanel and optionally scroll
   // to a specific section.
   void ShowCustomizeChromeSidePanel(
+      SidePanelOpenTrigger trigger,
       std::optional<CustomizeChromeSection> section = std::nullopt);
 
   // Overriden from CommandUpdater:
@@ -258,6 +265,8 @@ class BrowserCommandController : public CommandUpdater,
   // Callback subscription for listening to changes to the Glic window
   // activation changes.
   base::CallbackListSubscription glic_window_activation_subscription_;
+  // Callback subscription for listening to changes to the Glic FRE
+  base::CallbackListSubscription glic_fre_state_change_subscription_;
 };
 
 }  // namespace chrome

@@ -2,6 +2,7 @@
 
 #import "ios/ui/settings/tabs/vivaldi_tab_settings_mediator.h"
 
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
@@ -44,7 +45,7 @@
     _prefService = originalPrefService;
     _bottomOmniboxEnabled =
         [[PrefBackedBoolean alloc] initWithPrefService:localPrefService
-                                              prefName:prefs::kBottomOmnibox];
+            prefName:omnibox::kIsOmniboxInBottomPosition];
     [_bottomOmniboxEnabled setObserver:self];
 
     _reverseSearchResultsEnabled =

@@ -83,8 +83,10 @@
 }
 
 - (IdentityViewItem*)primaryIdentityViewItem {
-  return [self identityViewItemForIdentity:_authService->GetPrimaryIdentity(
-                                               signin::ConsentLevel::kSignin)];
+  id<SystemIdentity> identity =
+      _authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
+  CHECK(identity, base::NotFatalUntil::M147);
+  return [self identityViewItemForIdentity:identity];
 }
 
 - (std::vector<IdentityViewItem*>)identityViewItems {
@@ -141,19 +143,19 @@
 #pragma mark - Private
 
 - (void)handleIdentityUpdated:(id<SystemIdentity>)identity {
+  CHECK(identity, base::NotFatalUntil::M147);
   [self.consumer
       updateIdentityViewItem:[self identityViewItemForIdentity:identity]];
 }
 
 - (IdentityViewItem*)identityViewItemForIdentity:(id<SystemIdentity>)identity {
+  CHECK(identity, base::NotFatalUntil::M147);
   IdentityViewItem* identityViewItem = [[IdentityViewItem alloc] init];
   identityViewItem.userEmail = identity.userEmail;
   identityViewItem.userFullName = identity.userFullName;
   identityViewItem.gaiaID = identity.gaiaID;
   identityViewItem.managed = [self isIdentityKnownToBeManaged:identity];
-  IdentityAvatarSize avatarSize = IsIdentityDiscAccountMenuEnabled()
-                                      ? IdentityAvatarSize::Regular
-                                      : IdentityAvatarSize::TableViewIcon;
+  IdentityAvatarSize avatarSize = IdentityAvatarSize::Regular;
   identityViewItem.avatar = [self identityAvatarWithSizeForIdentity:identity
                                                                size:avatarSize];
   identityViewItem.accessibilityIdentifier = identity.userEmail;
@@ -167,6 +169,7 @@
 // called asynchronously when the management status if retrieved and the
 // identity is managed.
 - (BOOL)isIdentityKnownToBeManaged:(id<SystemIdentity>)identity {
+  CHECK(identity, base::NotFatalUntil::M147);
   if (std::optional<BOOL> managed = IsIdentityManaged(identity);
       managed.has_value()) {
     return managed.value();
@@ -175,6 +178,7 @@
   __weak __typeof(self) weakSelf = self;
   FetchManagedStatusForIdentity(identity, base::BindOnce(^(bool managed) {
                                   if (managed) {
+                                    CHECK(identity, base::NotFatalUntil::M147);
                                     [weakSelf handleIdentityUpdated:identity];
                                   }
                                 }));

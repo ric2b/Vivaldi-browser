@@ -169,16 +169,13 @@ class WebPrescientNetworking;
 class URLLoader;
 struct BlinkTransferableMessage;
 struct WebScriptSource;
+class WindowControlsOverlayChangedDelegate;
 
 namespace v8_compile_hints {
 class V8LocalCompileHintsProducer;
 }  // namespace v8_compile_hints
 
 enum class BackForwardCacheAware;
-
-#if !BUILDFLAG(IS_ANDROID)
-class WindowControlsOverlayChangedDelegate;
-#endif
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<LocalFrame>;
 
@@ -463,11 +460,11 @@ class CORE_EXPORT LocalFrame final
   String SelectedText() const;
   String SelectedText(const TextIteratorBehavior& behavior) const;
   String SelectedTextForClipboard() const;
-  void TextSelectionChanged(const WTF::String& selection_text,
+  void TextSelectionChanged(const String& selection_text,
                             uint32_t offset,
                             const gfx::Range& range) const;
 
-  void VisibleTextSelectionChanged(const WTF::String& selection_text) const;
+  void VisibleTextSelectionChanged(const String& selection_text) const;
 
   PositionWithAffinityTemplate<EditingAlgorithm<NodeTraversal>>
   PositionForPoint(const PhysicalOffset& frame_point);
@@ -703,13 +700,9 @@ class CORE_EXPORT LocalFrame final
 
   void SetReducedAcceptLanguage(const AtomicString& reduced_accept_language);
 
-  // Overlays a color on top of this LocalFrameView if it is associated with
-  // the main frame. Should not have multiple consumers.
-  void SetMainFrameColorOverlay(SkColor color);
+  // Overlays a color on top of this LocalFrameView.
+  void SetFrameColorOverlay(SkColor color);
 
-  // Overlays a color on top of this LocalFrameView if it is associated with
-  // a subframe. Should not have multiple consumers.
-  void SetSubframeColorOverlay(SkColor color);
   void UpdateFrameColorOverlayPrePaint();
 
   void PaintFrameColorOverlay(GraphicsContext&);
@@ -792,7 +785,6 @@ class CORE_EXPORT LocalFrame final
   void GetCharacterIndexAtPoint(const gfx::Point& point);
 #endif
 
-#if !BUILDFLAG(IS_ANDROID)
   void UpdateWindowControlsOverlay(const gfx::Rect& bounding_rect_in_dips);
   void RegisterWindowControlsOverlayChangedDelegate(
       WindowControlsOverlayChangedDelegate*);
@@ -805,7 +797,6 @@ class CORE_EXPORT LocalFrame final
   bool IsWindowControlsOverlayVisible() const {
     return is_window_controls_overlay_visible_;
   }
-#endif  // !BUILDFLAG(IS_ANDROID)
 
   SystemClipboard* GetSystemClipboard();
 
@@ -864,7 +855,7 @@ class CORE_EXPORT LocalFrame final
   void OnFirstPaint(bool text_painted, bool image_painted);
 
   // Invoked on first contentful paint on this frame.
-  void OnFirstContentfulPaint();
+  void OnFirstContentfulPaint(const base::TimeTicks& first_paint_time);
 
 #if BUILDFLAG(IS_MAC)
   void ResetTextInputHostForTesting();
@@ -881,7 +872,7 @@ class CORE_EXPORT LocalFrame final
   void SetBackgroundColorPaintImageGeneratorForTesting(
       BackgroundColorPaintImageGenerator* generator);
 
-  std::optional<SkColor> GetFrameOverlayColorForTesting() const;
+  std::optional<SkColor> GetFrameOverlayColor() const;
 
   // Returns a PendingRemote resolved via this frame's BrowserInterfaceBroker
   // for use when creating the PublicUrlManager instance in threaded worklets.
@@ -984,6 +975,12 @@ class CORE_EXPORT LocalFrame final
     return frame_visibility_observers_;
   }
 
+  bool IsCaretBrowsingOverridden() { return is_caret_browsing_overridden_; }
+
+  void SetIsCaretBrowsingOverridden(bool overridden) {
+    is_caret_browsing_overridden_ = overridden;
+  }
+
  private:
   friend class FrameNavigationDisabler;
   // LocalFrameMojoHandler is a part of LocalFrame.
@@ -1032,8 +1029,6 @@ class CORE_EXPORT LocalFrame final
   // updating all other frames in the frame tree.
   bool ConsumeTransientUserActivation(UserActivationUpdateSource update_source);
 
-  void SetFrameColorOverlay(SkColor color);
-
   void DidFreeze();
   void DidResume();
   void SetContextPaused(bool);
@@ -1051,10 +1046,8 @@ class CORE_EXPORT LocalFrame final
                                     String& clip_html,
                                     gfx::Rect& clip_rect);
 
-#if !BUILDFLAG(IS_ANDROID)
   void SetTitlebarAreaDocumentStyleEnvironmentVariables() const;
   void MaybeUpdateWindowControlsOverlayWithNewZoomLevel();
-#endif
 
   void EnsureLinkPreviewTriggererInitialized();
 
@@ -1181,7 +1174,6 @@ class CORE_EXPORT LocalFrame final
   // be registered at the actual elements as the references here are weak.
   HeapHashSet<WeakMember<ScrollSnapshotClient>> scroll_snapshot_clients_;
 
-#if !BUILDFLAG(IS_ANDROID)
   bool is_window_controls_overlay_visible_ = false;
   // |layout_zoom_factor_| is asynchronously set sometimes (most prominently
   // seen on mac) in |LocalFrame| via |WebFrameWidgetImpl::SetZoomLevel| on
@@ -1192,7 +1184,6 @@ class CORE_EXPORT LocalFrame final
   gfx::Rect window_controls_overlay_rect_;
   WeakMember<WindowControlsOverlayChangedDelegate>
       window_controls_overlay_changed_delegate_;
-#endif
 
   // The evidence for or against a frame being an ad frame. `std::nullopt` if
   // not yet set or if the frame is a subfiltering root frame. (Only non-root
@@ -1262,6 +1253,9 @@ class CORE_EXPORT LocalFrame final
   std::unique_ptr<WebLinkPreviewTriggerer> link_preview_triggerer_;
 
   HeapHashSet<WeakMember<FrameVisibilityObserver>> frame_visibility_observers_;
+
+  // Whether caret browsing mode has been overridden by the embedder or not.
+  bool is_caret_browsing_overridden_ = false;
 
   void OnStorageAccessCallback(base::OnceCallback<void(bool)> callback,
                                mojom::blink::StorageTypeAccessed storage_type,

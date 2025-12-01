@@ -24,7 +24,7 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab_ui.TabSwitcherIphController;
-import org.chromium.chrome.browser.tasks.tab_management.MessageService.MessageType;
+import org.chromium.chrome.browser.tasks.tab_management.TabSwitcherMessageManager.MessageType;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
 
@@ -85,8 +85,7 @@ public class IphMessageServiceUnitTest {
         mIphMessageService.addObserver(mMessageObserver);
         Assert.assertTrue(
                 mIphMessageService.getObserversForTesting().hasObserver(mMessageObserver));
-        verify(mMessageObserver, times(1))
-                .messageReady(eq(MessageType.IPH), any(IphMessageService.IphMessageData.class));
+        verify(mMessageObserver, times(1)).messageReady(eq(MessageType.IPH), any());
     }
 
     @Test
@@ -98,8 +97,7 @@ public class IphMessageServiceUnitTest {
         mIphMessageService.addObserver(mMessageObserver);
         doReturn(true).when(mTracker).isInitialized();
         mIphMessageService.getInitializedCallbackForTesting().onResult(true);
-        verify(mMessageObserver, times(1))
-                .messageReady(eq(MessageType.IPH), any(IphMessageService.IphMessageData.class));
+        verify(mMessageObserver, times(1)).messageReady(eq(MessageType.IPH), any());
     }
 
     @Test
@@ -109,7 +107,6 @@ public class IphMessageServiceUnitTest {
                 .wouldTriggerHelpUi(eq(FeatureConstants.TAB_GROUPS_DRAG_AND_DROP_FEATURE));
         mIphMessageService.addObserver(mMessageObserver);
         mIphMessageService.getInitializedCallbackForTesting().onResult(true);
-        verify(mMessageObserver, times(0))
-                .messageReady(eq(MessageType.IPH), any(IphMessageService.IphMessageData.class));
+        verify(mMessageObserver, times(0)).messageReady(eq(MessageType.IPH), any());
     }
 }

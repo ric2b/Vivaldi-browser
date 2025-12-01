@@ -6,6 +6,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
@@ -64,7 +65,7 @@ using vivaldi::IsVivaldiRunning;
     CGRect presentedViewStartFrame = presentedViewFinalFrame;
     if (IsVivaldiRunning() &&
         GetApplicationContext()
-            ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox)) {
+            ->GetLocalState()->GetBoolean(omnibox::kIsOmniboxInBottomPosition)) {
       // Start from below the screen when animating from bottom
       presentedViewStartFrame.origin.y = CGRectGetHeight(containerView.bounds);
     } else { // Start from above the screen when animating from top (default)
@@ -80,7 +81,7 @@ using vivaldi::IsVivaldiRunning;
 
     if (IsVivaldiRunning() &&
         GetApplicationContext()
-            ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox)) {
+            ->GetLocalState()->GetBoolean(omnibox::kIsOmniboxInBottomPosition)) {
       // Exit to below the screen when animating from bottom
       // Adding 200 Points to so that the when user drag the banner to dismiss
       // it goes out of the bounds and disappear

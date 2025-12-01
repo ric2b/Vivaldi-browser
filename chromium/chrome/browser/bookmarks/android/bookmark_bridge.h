@@ -36,6 +36,10 @@
 #include "components/reading_list/core/reading_list_model_observer.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "url/android/gurl_android.h"
+// Vivaldi VAB-11595
+#include "components/user_data_importer/content/content_bookmark_parser.h"
+#include "base/files/file_util.h"
+// End Vivaldi
 
 class BookmarkBridgeTest;
 
@@ -65,6 +69,13 @@ enum BookmarkNodeMaskBit {
 
   ACCOUNT_AND_LOCAL_BOOKMARK_BAR = ACCOUNT_BOOKMARK_BAR | BOOKMARK_BAR,
 };
+
+// Vivaldi Struct for the imported bookmarks
+struct ImportedBookmarksData {
+    std::vector<user_data_importer::ImportedBookmarkEntry> bookmarks;
+    std::vector<user_data_importer::SearchEngineInfo> search_engines;
+    favicon_base::FaviconUsageDataList favicons;
+}; // End Vivaldi
 
 // The delegate to fetch bookmarks information for the Android native
 // bookmark page. This fetches the bookmarks, title, urls, folder
@@ -162,6 +173,9 @@ class BookmarkBridge : public ProfileObserver,
   base::android::ScopedJavaLocalRef<jobject> GetReadingListItemForUrl(
       JNIEnv* env,
       const GURL& url);
+  std::vector<const bookmarks::BookmarkNode*> SearchBookmarksImplVivaldi(
+       power_bookmarks::PowerBookmarkQueryFields& query,
+       int max_results);
   // End Vivaldi
 
 
@@ -391,6 +405,22 @@ class BookmarkBridge : public ProfileObserver,
             const base::android::JavaParamRef<jobject>& obj,
             const jlong id);
 
+  // Vivaldi VAB-11595
+  void ExportBookmarks(JNIEnv* env,
+                       const base::android::JavaParamRef<jobject>& obj,
+                       const base::android::JavaParamRef<jstring>& filePath);
+
+  void ImportBookmarks(JNIEnv* env,
+                       const base::android::JavaParamRef<jobject>& obj,
+                       const base::android::JavaParamRef<jstring>& filePath);
+
+  void AddImportedBookmarksToModel(ImportedBookmarksData importedItems);
+
+  ImportedBookmarksData ReadImportedBookmarksForModel(
+      base::FilePath file_path,
+      std::vector<user_data_importer::ImportedBookmarkEntry> bookmarks,
+      std::vector<user_data_importer::SearchEngineInfo> search_engines,
+      favicon_base::FaviconUsageDataList favicons);
   // Vivaldi --->
 
  private:

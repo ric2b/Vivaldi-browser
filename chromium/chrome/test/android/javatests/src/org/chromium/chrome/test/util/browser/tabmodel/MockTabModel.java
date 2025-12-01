@@ -26,6 +26,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabmodel.TabRemover;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 /** Almost empty implementation to mock a TabModel. It only handles tab creation and queries. */
@@ -37,11 +38,12 @@ public class MockTabModel extends EmptyTabModel {
     public interface MockTabModelDelegate {
         /**
          * Creates a Tab.
+         *
          * @param id ID of the Tab.
          * @param incognito Whether the Tab is incognito.
          * @return Tab that is created.
          */
-        public MockTab createTab(int id, boolean incognito);
+        MockTab createTab(int id, boolean incognito);
     }
 
     /**
@@ -65,6 +67,11 @@ public class MockTabModel extends EmptyTabModel {
         @Override
         public Tab getTabAt(int index) {
             return mAllTabs.get(index);
+        }
+
+        @Override
+        public Iterator<Tab> iterator() {
+            return mAllTabs.iterator();
         }
     }
 
@@ -184,6 +191,11 @@ public class MockTabModel extends EmptyTabModel {
         if (position < 0 || position > mTabs.size()) return null;
 
         return mTabs.get(position);
+    }
+
+    @Override
+    public Iterator<Tab> iterator() {
+        return mTabs.iterator();
     }
 
     @Override

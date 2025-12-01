@@ -8,10 +8,10 @@
 class VivaldiBrowserWindow;
 
 namespace views {
-class NonClientFrameView;
+class FrameView;
 }
 
-std::unique_ptr<views::NonClientFrameView> CreateVivaldiWindowFrameView(
+std::unique_ptr<views::FrameView> CreateVivaldiWindowFrameView(
     VivaldiBrowserWindow* window);
 
 #endif  // UI_VIEWS_VIVALDI_WINDOW_FRAME_VIEW_H_

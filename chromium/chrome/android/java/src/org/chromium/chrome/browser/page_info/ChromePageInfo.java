@@ -4,14 +4,14 @@
 
 package org.chromium.chrome.browser.page_info;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.view.Gravity;
 
 import androidx.annotation.GravityInt;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
-import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
 import org.chromium.chrome.browser.ephemeraltab.EphemeralTabCoordinator;
@@ -27,14 +27,18 @@ import org.chromium.components.page_info.PageInfoController.OpenedFromSource;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
+import java.util.Objects;
+import java.util.function.Supplier;
+
 // Vivaldi
 import androidx.appcompat.app.AppCompatActivity;
 import org.chromium.components.page_info.PageInfoContainer;
 import org.vivaldi.browser.adblock.VivaldiTrackerBlockerPopup;
 
 /** Helper class showing page info dialog for Clank. */
+@NullMarked
 public class ChromePageInfo {
-    private final @NonNull Supplier<ModalDialogManager> mModalDialogManagerSupplier;
+    private final Supplier<ModalDialogManager> mModalDialogManagerSupplier;
     private final @Nullable String mPublisher;
     private final @OpenedFromSource int mSource;
     private final @Nullable Supplier<StoreInfoActionHandler> mStoreInfoActionHandlerSupplier;
@@ -42,7 +46,8 @@ public class ChromePageInfo {
     private final @Nullable TabCreator mTabCreator;
 
     // Vivaldi
-    private static VivaldiTrackerBlockerPopup mTrackerBlockerPopup;
+    @SuppressLint("StaticFieldLeak")
+    private static @Nullable VivaldiTrackerBlockerPopup mTrackerBlockerPopup;
 
     /**
      * @param modalDialogManagerSupplier Supplier of modal dialog manager.
@@ -53,7 +58,7 @@ public class ChromePageInfo {
      * @param tabCreator {@link TabCreator} to handle a new tab creation.
      */
     public ChromePageInfo(
-            @NonNull Supplier<ModalDialogManager> modalDialogManagerSupplier,
+            Supplier<ModalDialogManager> modalDialogManagerSupplier,
             @Nullable String publisher,
             @OpenedFromSource int source,
             @Nullable Supplier<StoreInfoActionHandler> storeInfoActionHandlerSupplier,
@@ -88,6 +93,7 @@ public class ChromePageInfo {
         }
 
         Activity activity = TabUtils.getActivity(tab);
+        assert activity != null;
         PageInfoController.show(
                 activity,
                 webContents,
@@ -108,7 +114,8 @@ public class ChromePageInfo {
 
         // Vivaldi - Combined Site prefs and Tracker blocker popup
         PageInfoContainer pageInfoContainer =
-                PageInfoController.getLastPageInfoController().getPageInfoContainer();
+                Objects.requireNonNull(PageInfoController.getLastPageInfoController())
+                        .getPageInfoContainer();
         if (mTrackerBlockerPopup == null) mTrackerBlockerPopup = new VivaldiTrackerBlockerPopup();
         mTrackerBlockerPopup.setCurrentTab(tab);
         mTrackerBlockerPopup.setSitePrefsContainer(pageInfoContainer);
@@ -128,7 +135,7 @@ public class ChromePageInfo {
     }
 
     // Vivaldi
-    public static VivaldiTrackerBlockerPopup getPopupInstance() {
+    public static @Nullable VivaldiTrackerBlockerPopup getPopupInstance() {
         return mTrackerBlockerPopup;
     }
     // End Vivaldi

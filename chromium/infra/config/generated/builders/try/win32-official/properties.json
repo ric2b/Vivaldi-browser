@@ -10,13 +10,14 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "win32-official",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
               "builder_group": "chromium",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_chromium_config": {
                 "apply_configs": [
+                  "clobber",
                   "mb"
                 ],
                 "config": "chromium",
@@ -37,7 +38,7 @@
         {
           "bucket": "ci",
           "builder": "win32-official",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/win32-official/targets"

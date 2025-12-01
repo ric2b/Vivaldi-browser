@@ -1031,7 +1031,6 @@ It's not that [crouton] is bad, it's simply a completely different model.
 [Maitred]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/vm_tools/maitred/
 [MIME]: https://en.wikipedia.org/wiki/MIME
 [multiprofile]: https://support.google.com/chromebook/answer/6088201
-[NaCl]: https://developer.chrome.com/native-client
 [namespaces]: https://man7.org/linux/man-pages/man7/namespaces.7.html
 [QEMU]: https://www.qemu.org/
 [RTF]: https://en.wikipedia.org/wiki/Rich_Text_Format

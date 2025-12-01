@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,14 +10,14 @@ export interface WorkersData {
   workerURLById: Map<Types.Events.WorkerId, string>;
 }
 
-const sessionIdEvents: Types.Events.TracingSessionIdForWorker[] = [];
-const workerIdByThread = new Map<Types.Events.ThreadID, Types.Events.WorkerId>();
-const workerURLById = new Map<Types.Events.WorkerId, string>();
+let sessionIdEvents: Types.Events.TracingSessionIdForWorker[] = [];
+let workerIdByThread = new Map<Types.Events.ThreadID, Types.Events.WorkerId>();
+let workerURLById = new Map<Types.Events.WorkerId, string>();
 
 export function reset(): void {
-  sessionIdEvents.length = 0;
-  workerIdByThread.clear();
-  workerURLById.clear();
+  sessionIdEvents = [];
+  workerIdByThread = new Map();
+  workerURLById = new Map();
 }
 
 export function handleEvent(event: Types.Events.Event): void {

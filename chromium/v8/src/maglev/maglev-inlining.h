@@ -16,9 +16,8 @@
 namespace v8::internal::maglev {
 
 // We assume that we have visited all the deopt infos at this point.
-// SweepIdentities would do that. That means that we don't have any uses of
-// ReturnedValue in deopt infos. If the node has an use > 0, we
-// must create a conversion to tagged.
+// That means that we don't have any uses of ReturnedValue in deopt infos.
+// If the node has an use > 0, we must create a conversion to tagged.
 class ReturnedValueRepresentationSelector {
  public:
   void PreProcessGraph(Graph* graph) {}
@@ -38,25 +37,34 @@ class MaglevInliner {
  public:
   explicit MaglevInliner(Graph* graph) : graph_(graph) {}
 
-  void Run();
+  bool Run();
 
  private:
+  Graph* graph_;
+
   int max_inlined_bytecode_size_cumulative() const;
   int max_inlined_bytecode_size_small_total() const;
   int max_inlined_bytecode_size_small_with_heapnum_in_out() const;
 
   bool IsSmallWithHeapNumberInputsOutputs(MaglevCallSiteInfo* call_site) const;
 
-  Graph* graph_;
-
   compiler::JSHeapBroker* broker() const { return graph_->broker(); }
   Zone* zone() const { return graph_->zone(); }
 
   bool is_tracing_enabled() const { return graph_->is_tracing_enabled(); }
 
+  bool CanInlineCall();
   MaglevCallSiteInfo* ChooseNextCallSite();
-  MaybeReduceResult BuildInlineFunction(MaglevCallSiteInfo* call_site,
-                                        bool is_small);
+  bool InlineCallSites();
+  void RunOptimizer();
+
+  enum class InliningResult {
+    kDone,
+    kFail,
+    kAbort,
+  };
+  InliningResult BuildInlineFunction(MaglevCallSiteInfo* call_site,
+                                     bool is_small);
 
   // Truncates the graph at the given basic block `block`.  All blocks
   // following `block` (exclusive) are removed from the graph and returned.
@@ -69,14 +77,16 @@ class MaglevInliner {
     }
   }
 
+  bool ShouldPrintMaglevGraph() const {
+    if (graph_->compilation_info()->is_turbolev()) {
+      return v8_flags.trace_turbo_graph || v8_flags.print_turbolev_frontend;
+    }
+    return v8_flags.print_maglev_graphs && is_tracing_enabled();
+  }
+
   static void UpdatePredecessorsOf(BasicBlock* block, BasicBlock* prev_pred,
                                    BasicBlock* new_pred);
   void RemovePredecessorFollowing(ControlNode* control, BasicBlock* call_block);
-
-  void RemoveUnreachableBlocks() {
-    graph_->set_may_have_unreachable_blocks();
-    graph_->RemoveUnreachableBlocks();
-  }
 };
 
 }  // namespace v8::internal::maglev

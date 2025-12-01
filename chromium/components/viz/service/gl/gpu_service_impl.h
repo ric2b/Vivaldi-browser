@@ -51,7 +51,7 @@
 #include "skia/buildflags.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/gpu_extra_info.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "ui/gl/direct_composition_support.h"
@@ -59,7 +59,6 @@
 
 namespace gpu {
 class DawnContextProvider;
-class GpuMemoryBufferFactory;
 class GpuWatchdogThread;
 class ImageDecodeAcceleratorWorker;
 class Scheduler;
@@ -172,6 +171,12 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
   void SetChannelDiskCacheHandle(
       int32_t client_id,
       const gpu::GpuDiskCacheHandle& handle) override;
+  void SetChannelPersistentCacheFile(
+      int32_t client_id,
+      const gpu::GpuDiskCacheHandle& handle,
+      base::File db_file,
+      base::File journal_file,
+      base::UnsafeSharedMemoryRegion shared_lock) override;
   void OnDiskCacheHandleDestoyed(
       const gpu::GpuDiskCacheHandle& handle) override;
   void CloseChannel(int32_t client_id) override;
@@ -203,9 +208,6 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
 
   void GetVideoMemoryUsageStats(
       GetVideoMemoryUsageStatsCallback callback) override;
-  void AddVideoMemoryUsageStatsOnCompositorGpu(
-      GetVideoMemoryUsageStatsCallback callback,
-      gpu::VideoMemoryUsageStats video_memory_usage_stats);
 
   // These methods can be called from the CrBrowserMain thread and the
   // VizCompositorThread (with InputVizard) for PeakGpuMemory tracking.
@@ -219,7 +221,7 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
                   const std::string& key,
                   const std::string& data) override;
   void WakeUpGpu() override;
-  void GpuSwitched(gl::GpuPreference active_gpu_heuristic) override;
+  void GpuSwitched() override;
   void DisplayAdded() override;
   void DisplayRemoved() override;
   void DisplayMetricsChanged() override;
@@ -298,10 +300,6 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
 
   CompositorGpuThread* compositor_gpu_thread() {
     return compositor_gpu_thread_.get();
-  }
-
-  gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory() {
-    return gpu_memory_buffer_factory_.get();
   }
 
   gpu::SharedImageManager* shared_image_manager() {
@@ -530,8 +528,6 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
 #endif
 
   std::unique_ptr<webnn::WebNNContextProviderImpl> webnn_context_provider_;
-
-  std::unique_ptr<gpu::GpuMemoryBufferFactory> gpu_memory_buffer_factory_;
 
   // An event that will be signalled when we shutdown. On some platforms it
   // comes from external sources.

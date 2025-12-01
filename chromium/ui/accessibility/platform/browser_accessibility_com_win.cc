@@ -37,26 +37,23 @@
 #include "ui/base/win/accessibility_ids_win.h"
 #include "ui/base/win/atl_module.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace ui {
 
 //
 // BrowserAccessibilityComWin::WinAttributes
 //
 
-BrowserAccessibilityComWin::WinAttributes::WinAttributes()
-    : ignored(false), ia_role(0), ia_state(0), ia2_role(0), ia2_state(0) {}
+BrowserAccessibilityComWin::WinAttributes::WinAttributes() = default;
 
-BrowserAccessibilityComWin::WinAttributes::~WinAttributes() {}
+BrowserAccessibilityComWin::WinAttributes::~WinAttributes() = default;
 
 //
 // BrowserAccessibilityComWin::UpdateState
 //
 
-BrowserAccessibilityComWin::UpdateState::UpdateState(
-    std::unique_ptr<WinAttributes> old_win_attributes,
-    AXLegacyHypertext old_hypertext)
-    : old_win_attributes(std::move(old_win_attributes)),
-      old_hypertext(std::move(old_hypertext)) {}
+BrowserAccessibilityComWin::UpdateState::UpdateState() = default;
 
 BrowserAccessibilityComWin::UpdateState::~UpdateState() = default;
 
@@ -550,6 +547,13 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_hyperlink(
   int32_t id = hypertext_.hyperlinks[index];
   AXPlatformNode* node = AXPlatformNodeWin::GetFromUniqueId(id);
   if (!node) {
+    // NOTE(andre@vivaldi.com) : Certain screen-readers can call this in a state
+    // where the AXTree is out of sync and GetFromUniqueId returns null.
+    // AXTree::DeleteOldChildren might be batched and this is expected.
+    // VB-101331
+    if (vivaldi::IsVivaldiRunning()) {
+      return E_FAIL;
+    }
     // TODO(https://crbug.com/id=1164043) Fix illegal hyperlink of iframes.
     // Based on information received from DumpWithoutCrashing() reports, this
     // is still sometimes occurring when get_hyperlink() is called on an
@@ -1665,17 +1669,23 @@ void BrowserAccessibilityComWin::ComputeStylesIfNeeded() {
 // Private methods.
 //
 
-void BrowserAccessibilityComWin::UpdateStep1ComputeWinAttributes() {
+void BrowserAccessibilityComWin::UpdateStep1ComputeWinAttributes(
+    UpdateState* update_state) {
   DCHECK(!update_state_);
   DCHECK(win_attributes_);
 
   BrowserAccessibilityWin* const owner = GetOwner();
 
-  // Move win_attributes_ and hypertext_ into update_state_, allowing us to see
-  // exactly what changed and fire appropriate events. Note that update_state_
-  // is destroyed at the end of UpdateStep3FireEvents.
-  update_state_ = std::make_unique<UpdateState>(std::move(win_attributes_),
-                                                std::move(hypertext_));
+  // Move win_attributes_ and hypertext_ into update_state, allowing us to see
+  // exactly what changed and fire appropriate events. Note that update_state is
+  // destroyed after UpdateStep3FireEvents.
+  update_state->old_win_attributes = std::move(win_attributes_);
+  update_state->old_hypertext = std::move(hypertext_);
+
+  // Hold a pointer to this node's update state (which the caller of this
+  // function shall keep valid) until the end of UpdateStep3FireEvents.
+  update_state_ = update_state;
+
   hypertext_ = AXLegacyHypertext();
 
   win_attributes_ = std::make_unique<WinAttributes>();
@@ -1715,7 +1725,7 @@ void BrowserAccessibilityComWin::UpdateStep3FireEvents() {
   if (ignored || (old_win_attributes.ignored != ignored &&
                   !owner->GetData().IsContainedInActiveLiveRegion() &&
                   !owner->GetData().IsActiveLiveRegionRoot())) {
-    update_state_.reset();
+    update_state_ = nullptr;
     return;
   }
 
@@ -1760,7 +1770,7 @@ void BrowserAccessibilityComWin::UpdateStep3FireEvents() {
     }
   }
 
-  update_state_.reset();
+  update_state_ = nullptr;
 }
 
 BrowserAccessibilityWin* BrowserAccessibilityComWin::GetOwner() const {

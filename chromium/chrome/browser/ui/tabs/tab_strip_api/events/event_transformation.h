@@ -18,14 +18,19 @@ namespace tabs_api::events {
 // some of the conversions are not covered by unit tests and must be covered in
 // integration tests.
 
-mojom::OnTabsCreatedEventPtr ToEvent(const TabStripModelChange::Insert& insert,
-                                     TabStripModel* tab_strip_model);
+mojom::OnTabsCreatedEventPtr ToEvent(
+    const TabStripModelChange::Insert& insert,
+    const tabs_api::TabStripModelAdapter* adapter);
 mojom::OnTabsClosedEventPtr ToEvent(const TabStripModelChange::Remove& remove);
-mojom::OnTabMovedEventPtr ToEvent(const TabStripModelChange::Move& move);
-mojom::OnTabDataChangedEventPtr ToEvent(
+mojom::OnNodeMovedEventPtr ToEvent(
+    const TabStripModelChange::Move& move,
+    const tabs_api::TabStripModelAdapter* adapter);
+mojom::OnDataChangedEventPtr ToEvent(
     const tabs_api::TabStripModelAdapter* adapter,
     size_t index,
     TabChangeType change_type);
+std::vector<Event> ToEvent(const TabStripSelectionChange& selection,
+                           const tabs_api::TabStripModelAdapter* adapter);
 
 // When a tab group is opened, there're multiple events fired from
 // TabStripModelObserver. The following functions convert them to TabStripAPI
@@ -36,20 +41,24 @@ mojom::OnTabDataChangedEventPtr ToEvent(
 // 2. TabGroupChange with type kVisualsChanged => OnTabGroupVisualsChangedEvent
 //    This event is fired when the visual data (color, title, etc.) of a tab
 //    group is changed.
-// 3. TabGroupedStateChanged() => OnTabMovedEvent
+// 3. TabGroupedStateChanged() => OnNodeMovedEvent
 //    this event updates the affiliation of a tab with a group.
-mojom::OnTabGroupCreatedEventPtr ToTabGroupCreatedEvent(
+mojom::OnCollectionCreatedEventPtr FromTabGroupToDataCreatedEvent(
     const TabGroupChange& tab_group_change);
 
-mojom::OnTabMovedEventPtr FromTabGroupedStateChangedToTabMovedEvent(
+mojom::OnNodeMovedEventPtr FromTabGroupedStateChangedToNodeMovedEvent(
     TabStripModel* tab_strip_model,
     std::optional<tab_groups::TabGroupId> old_group,
     std::optional<tab_groups::TabGroupId> new_group,
     tabs::TabInterface* tab,
     int index);
+mojom::OnDataChangedEventPtr ToEvent(const TabGroupChange& tab_group_change);
 
-mojom::OnTabGroupVisualsChangedEventPtr ToTabGroupVisualsChangedEvent(
+mojom::OnNodeMovedEventPtr ToTabGroupMovedEvent(
     const TabGroupChange& tab_group_change);
+
+mojom::OnCollectionCreatedEventPtr FromSplitTabToDataCreatedEvent(
+    const SplitTabChange& split_tab_change);
 
 }  // namespace tabs_api::events
 

@@ -117,6 +117,17 @@ void FakeTabGroupSyncService::UpdateGroupPosition(
   NotifyObserversOfTabGroupUpdated(group);
 }
 
+void FakeTabGroupSyncService::UpdateBookmarkNodeId(
+    const base::Uuid& sync_id,
+    std::optional<base::Uuid> bookmark_node_id) {
+  std::optional<int> index = GetIndexOf(sync_id);
+  if (index.has_value()) {
+    SavedTabGroup& group = groups_[index.value()];
+    group.SetBookmarkNodeId(bookmark_node_id);
+    NotifyObserversOfTabGroupUpdated(group);
+  }
+}
+
 void FakeTabGroupSyncService::AddTab(const LocalTabGroupID& group_id,
                                      const LocalTabID& tab_id,
                                      const std::u16string& title,
@@ -235,6 +246,11 @@ void FakeTabGroupSyncService::MakeTabGroupSharedForTesting(
   // No op.
 }
 
+void FakeTabGroupSyncService::MakeTabGroupUnsharedForTesting(
+    const LocalTabGroupID& local_group_id) {
+  // No op.
+}
+
 void FakeTabGroupSyncService::AboutToUnShareTabGroup(
     const LocalTabGroupID& local_group_id,
     base::OnceClosure on_complete_callback) {
@@ -324,7 +340,7 @@ std::vector<LocalTabGroupID> FakeTabGroupSyncService::GetDeletedGroupIds()
 
 std::optional<std::u16string>
 FakeTabGroupSyncService::GetTitleForPreviouslyExistingSharedTabGroup(
-    const CollaborationId& collaboration_id) const {
+    const syncer::CollaborationId& collaboration_id) const {
   return std::nullopt;
 }
 

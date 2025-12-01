@@ -250,7 +250,7 @@ class TurboshaftInstructionSelectorTest : public TestWithNativeContextAndZone {
 
       return zone->New<CallDescriptor>(  // --
           CallDescriptor::kCallAddress,  // kind
-          kDefaultCodeEntrypointTag,     // tag
+          kCodeEntrypointTagForTesting,  // tag
           target_type,                   // target MachineType
           target_loc,                    // target location
           locations.Get(),               // location_sig
@@ -396,7 +396,7 @@ class TurboshaftInstructionSelectorTest : public TestWithNativeContextAndZone {
     using Assembler::Projection;
     OpIndex Projection(OpIndex input, int index) {
       const Operation& input_op = output_graph().Get(input);
-      if (const TupleOp* tuple = input_op.TryCast<TupleOp>()) {
+      if (const MakeTupleOp* tuple = input_op.TryCast<MakeTupleOp>()) {
         DCHECK_LT(index, tuple->input_count);
         return tuple->input(index);
       }

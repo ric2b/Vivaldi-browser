@@ -46,6 +46,7 @@
 #include "src/tint/lang/core/type/texture.h"
 #include "src/tint/lang/spirv/ir/builtin_call.h"
 #include "src/tint/lang/spirv/ir/literal_operand.h"
+#include "src/tint/lang/spirv/type/resource_binding.h"
 #include "src/tint/lang/spirv/type/sampled_image.h"
 #include "src/tint/utils/ice/ice.h"
 #include "src/tint/utils/internal_limits.h"
@@ -153,6 +154,12 @@ const core::type::Type* ReplacementType(core::type::Manager& ty, const core::typ
             }
             return nullptr;
         },
+        [&](const spirv::type::ResourceBinding* rb) -> const core::type::Type* {
+            if (auto* replacement = ReplacementType(ty, rb->GetBindingType())) {
+                return ty.Get<spirv::type::ResourceBinding>(replacement);
+            }
+            return nullptr;
+        },
         [&](const core::type::Texture* tex) { return ImageFromTexture(ty, tex); },
         [&](Default) { return nullptr; });
 }
@@ -213,6 +220,9 @@ struct State {
                     case core::BuiltinFn::kSelect:
                     case core::BuiltinFn::kSubgroupBroadcast:
                     case core::BuiltinFn::kSubgroupShuffle:
+                    case core::BuiltinFn::kSubgroupShuffleDown:
+                    case core::BuiltinFn::kSubgroupShuffleUp:
+                    case core::BuiltinFn::kSubgroupShuffleXor:
                     case core::BuiltinFn::kTextureDimensions:
                     case core::BuiltinFn::kTextureGather:
                     case core::BuiltinFn::kTextureGatherCompare:
@@ -281,6 +291,9 @@ struct State {
                     SubgroupBroadcast(builtin);
                     break;
                 case core::BuiltinFn::kSubgroupShuffle:
+                case core::BuiltinFn::kSubgroupShuffleDown:
+                case core::BuiltinFn::kSubgroupShuffleUp:
+                case core::BuiltinFn::kSubgroupShuffleXor:
                     SubgroupShuffle(builtin, config.subgroup_shuffle_clamped);
                     break;
                 case core::BuiltinFn::kTextureDimensions:
@@ -1092,20 +1105,22 @@ struct State {
         builtin->Destroy();
     }
 
-    /// Handle a SubgroupShuffle() builtin.
+    /// Handles SubgroupShuffle(), SubgroupShuffleDown(), SubgroupShuffleUp(), SubgroupShuffleXor()
+    /// builtins.
     /// @param builtin the builtin call instruction
     void SubgroupShuffle(core::ir::CoreBuiltinCall* builtin, bool clamp_subgroup_shuffle) {
         TINT_ASSERT(builtin->Args().Length() == 2);
-        auto* id = builtin->Args()[1];
-
-        // Id must be an unsigned integer scalar, so bitcast if necessary.
-        if (id->Type()->IsSignedIntegerScalar()) {
-            auto* cast = b.Bitcast(ty.u32(), id);
+        // The second argument is either 'id' , 'delta', or 'mask'.
+        // All must be bound by [0, 128)
+        auto* arg2 = builtin->Args()[1];
+        // arg2 must be an unsigned integer scalar, so bitcast if necessary.
+        if (arg2->Type()->IsSignedIntegerScalar()) {
+            auto* cast = b.Bitcast(ty.u32(), arg2);
             cast->InsertBefore(builtin);
             builtin->SetArg(1, cast->Result());
         }
 
-        /// Polyfill a `subgroupShuffle()` builtin call with one that has clamped the 'id' param
+        /// Polyfill a `subgroupShuffleX` builtin call with one that has clamped the arg2 param
         if (clamp_subgroup_shuffle) {
             auto* shuffle_id = builtin->Args()[1];
             auto* mask_max_subgroup_size =
@@ -1300,7 +1315,12 @@ struct State {
 }  // namespace
 
 Result<SuccessType> BuiltinPolyfill(core::ir::Module& ir, PolyfillConfig config) {
-    auto result = ValidateAndDumpIfNeeded(ir, "spirv.BuiltinPolyfill");
+    auto result = ValidateAndDumpIfNeeded(ir, "spirv.BuiltinPolyfill",
+                                          core::ir::Capabilities{
+                                              core::ir::Capability::kAllow8BitIntegers,
+                                              core::ir::Capability::kAllowDuplicateBindings,
+                                              core::ir::Capability::kAllowNonCoreTypes,
+                                          });
     if (result != Success) {
         return result.Failure();
     }

@@ -11,6 +11,7 @@
 #include "base/test/bind.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
+#include "chrome/browser/ui/interaction/browser_elements.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
@@ -46,7 +47,7 @@ class HelpBubbleFactoryViewsBrowsertest : public DialogBrowserTest {
 
  protected:
   ui::ElementContext context() {
-    return browser()->window()->GetElementContext();
+    return BrowserElements::From(browser())->GetContext();
   }
 
   user_education::HelpBubbleFactoryRegistry* registry() {
@@ -118,7 +119,7 @@ IN_PROC_BROWSER_TEST_F(HelpBubbleFactoryViewsBrowsertest, GetAndUpdateBounds) {
       << "\n  Direction (should be LTR): "
       << (base::i18n::IsRTL() ? "RTL" : "LTR")
       << "\n  Display dimensions (should hold browser window comfortably): "
-      << display::Screen::GetScreen()
+      << display::Screen::Get()
              ->GetDisplayMatching(initial_bounds)
              .bounds()
              .ToString()

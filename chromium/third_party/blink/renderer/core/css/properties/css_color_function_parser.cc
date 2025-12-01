@@ -235,37 +235,6 @@ bool ColorFunctionParser::ConsumeColorSpaceAndOriginColor(
 
   if (unresolved_origin_color_) {
     origin_color_ = TryResolveAtParseTime(*unresolved_origin_color_);
-    if (origin_color_.has_value() &&
-        !RuntimeEnabledFeatures::CSSRelativeColorLateResolveAlwaysEnabled()) {
-      origin_color_->ConvertToColorSpace(color_space_);
-      // Relative color syntax requires "channel keyword" substitutions for
-      // color channels. Each color space has three "channel keywords", plus
-      // "alpha", that correspond to the three parameters stored on the origin
-      // color. This function generates a map between the channel keywords and
-      // the stored values in order to make said substitutions. e.g. color(from
-      // magenta srgb r g b) will need to generate srgb keyword values for the
-      // origin color "magenta". This will produce a map like: {CSSValueID::kR:
-      // 1, CSSValueID::kG: 0, CSSValueID::kB: 1, CSSValueID::kAlpha: 1}.
-      std::array<double, 3> channel_values = {origin_color_->Param0(),
-                                              origin_color_->Param1(),
-                                              origin_color_->Param2()};
-
-      // Convert from the [0 1] range to the [0 100] range for hsl() and
-      // hwb(). This is the inverse of the transform in
-      // MakePerColorSpaceAdjustments().
-      if (color_space_ == Color::ColorSpace::kHSL ||
-          color_space_ == Color::ColorSpace::kHWB) {
-        channel_values[1] *= 100;
-        channel_values[2] *= 100;
-      }
-
-      color_channel_map_ = {
-          {function_metadata_->channel_name[0], channel_values[0]},
-          {function_metadata_->channel_name[1], channel_values[1]},
-          {function_metadata_->channel_name[2], channel_values[2]},
-          {CSSValueID::kAlpha, origin_color_->Alpha()},
-      };
-    } else {
       // If the origin color is not resolvable at parse time, fill out the map
       // with just the valid channel names. We still need that information to
       // parse the remainder of the color function.
@@ -275,7 +244,6 @@ bool ColorFunctionParser::ConsumeColorSpaceAndOriginColor(
           {function_metadata_->channel_name[2], std::nullopt},
           {CSSValueID::kAlpha, std::nullopt},
       };
-    }
   }
   return true;
 }
@@ -441,11 +409,17 @@ void ColorFunctionParser::MakePerColorSpaceAdjustments(
     for (int i : {1, 2}) {
       // Raw numbers are interpreted as percentages in these color spaces.
       if (channels[i].has_value()) {
-        channels[i] = channels[i].value() / 100.0;
+        double val = channels[i].value() / 100.0;
 
         if (is_legacy_syntax) {
-          channels[i] = ClampTo<double>(channels[i].value(), 0.0, 1.0);
+          val = ClampTo<double>(val, 0.0, 1.0);
+        } else if (!is_relative_color) {
+          // In absolute colors, S/L/W/B are non-negative.
+          val = std::max(0.0, val);
         }
+        // Relative colors preserve out-of-gamut values for use in calculations.
+
+        channels[i] = val;
       }
     }
   }
@@ -559,7 +533,8 @@ bool ColorFunctionParser::IsRelativeColor() const {
   return !!unresolved_origin_color_;
 }
 
-static bool ChannelIsResolvable(const CSSValue* channel) {
+static bool ChannelIsResolvable(const CSSValue* channel,
+                                Color::ColorSpace color_space) {
   if (IsA<CSSIdentifierValue>(channel)) {
     // Channel identifiers for relative colors (e.g. “r”).
     return true;
@@ -569,6 +544,14 @@ static bool ChannelIsResolvable(const CSSValue* channel) {
   if (color && color->IsNumericLiteralValue()) {
     // Numeric literals.
     return true;
+  }
+
+  // Lab/OkLab/Lch/OkLch preserve calc().
+  if (color_space == Color::ColorSpace::kLab ||
+      color_space == Color::ColorSpace::kOklab ||
+      color_space == Color::ColorSpace::kLch ||
+      color_space == Color::ColorSpace::kOklch) {
+    return false;
   }
 
   const CSSMathFunctionValue* calc = DynamicTo<CSSMathFunctionValue>(channel);
@@ -585,13 +568,13 @@ static bool ChannelIsResolvable(const CSSValue* channel) {
 
 bool ColorFunctionParser::AllChannelsAreResolvable() const {
   for (int i = 0; i < 3; i++) {
-    if (!ChannelIsResolvable(unresolved_channels_[i])) {
+    if (!ChannelIsResolvable(unresolved_channels_[i], color_space_)) {
       return false;
     }
   }
 
   if (unresolved_alpha_) {
-    return ChannelIsResolvable(unresolved_alpha_);
+    return ChannelIsResolvable(unresolved_alpha_, color_space_);
   }
 
   return true;
@@ -721,14 +704,8 @@ CSSValue* ColorFunctionParser::ConsumeFunctionalSyntaxColor(
   stream.ConsumeWhitespace();
 
   // For non-relative colors, resolve channel values at parse time.
-  // For relative colors:
-  // - (Legacy behavior) Resolve channel values at parse time if the origin
-  //   color is resolvable at parse time.
-  // - (WPT-compliant behavior) Always defer resolution until used-value time.
-  if (AllChannelsAreResolvable() &&
-      (!IsRelativeColor() ||
-       (origin_color_.has_value() &&
-        !RuntimeEnabledFeatures::CSSRelativeColorLateResolveAlwaysEnabled()))) {
+  // For relative colors, always defer resolution until used-value time.
+  if (AllChannelsAreResolvable() && !IsRelativeColor()) {
     // Resolve channel values.
     std::array<std::optional<double>, 3> channels;
     for (int i = 0; i < 3; i++) {

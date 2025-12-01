@@ -62,7 +62,6 @@
 <translation id="1751280147639351837">දැන්වීම් සහ ට්‍රැකර් අවහිර කරන්නා</translation>
 <translation id="1752547299766512813">මුරපද සුරකින්න</translation>
 <translation id="1754797958074421486">භාවිත නියම</translation>
-<translation id="1763111582687651119">සෙවුම් යන්ත්‍ර අන්වර්ථ නාම සක්‍රීය කරන්න</translation>
 <translation id="1771413903824396513">අන්වර්ථ නාමයෙන්</translation>
 <translation id="1771605894228673800">මට බිල්ට්-ඉන් VPN විශේෂාංගයක් අවශ්‍යයි.</translation>
 <translation id="1800685789463945995">විවාල්ඩි දිගටම කඩා වැටෙමින් හෝ කැටි වෙමින් පවතී</translation>
@@ -358,7 +357,6 @@
 <translation id="5823830882692559950">Vivaldi.net ඔබගේ අක්තපත්‍ර ප්‍රතික්ෂේප කළේය: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">නව ෆෝල්ඩරය</translation>
 <translation id="5859825823508296659">වසම සංස්කරණය කරන්න</translation>
-<translation id="5867841422488265304">වෙබ් ලිපිනය සොයන්න හෝ ටයිප් කරන්න</translation>
 <translation id="5869217094746242845">පෞද්ගලිකත්වය සහ ආරක්ෂාව පිළිබඳ තව දැන ගන්න</translation>
 <translation id="5871497086027727873">අයිතම 1ක් ගෙන යන ලදී</translation>
 <translation id="5898502570200301364">ඔබ Vivaldi මුරපද කළමනාකරු වෙත සුරකින ලද මුරපද ඔබගේ iPhone හි අනෙකුත් යෙදුම්වල භාවිතා කළ හැක.</translation>
@@ -391,7 +389,6 @@
 <translation id="641394169129472837">නව ටැබ් බොත්තම තට්ටු කළ විට විවෘත කළ යුතු පිටුව තෝරන්න.</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> තෝරා ගන්නා ලදී</translation>
 <translation id="6442584491342758233">සෘජු ගැළපීම</translation>
-<translation id="6443682944493983866">භාෂා පිළිගන්න</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />ආයාත කරන්න<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">උපස්ථ සංකේතන යතුර</translation>
 <translation id="6527303717912515753">බෙදාගන්න</translation>
@@ -558,7 +555,6 @@
 <translation id="8515808232153642813">විකේතනය කරන්න</translation>
 <translation id="8517852590337319813">ඔබගේ ගිණුම සක්‍රිය කරන්න</translation>
 <translation id="8546963963006468833">Vivaldi සමඟින්, ඔබට සබැඳි බාධාවකින් තොරව විවෘත කිරීමට, විජට් වලින් සෙවීමට සහ වෙනත් යෙදුම්වල මුරපද ස්වයංක්‍රීයව පුරවා ගැනීමට හැකිය.</translation>
-<translation id="8546995005405883065">දී ඇති අනුපිළිවෙලට අනුකූල වෙබ් අඩවි විසින් පිළිගනු ලබන කැමති භාෂා.</translation>
 <translation id="8562452229998620586">සුරකින ලද මුරපද මෙහි දිස්වනු ඇත.</translation>
 <translation id="856439694359429369">තවත් විකල්ප සඳහා තට්ටු කරන්න හෝ විවෘත කිරීමට දෙවරක් තට්ටු කරන්න.</translation>
 <translation id="8591818185775466306"><ph name="ITEM_TYPE" />මකන්න</translation>

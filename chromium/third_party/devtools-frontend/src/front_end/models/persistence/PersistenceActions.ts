@@ -1,4 +1,4 @@
-// Copyright (c) 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,8 @@ import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
+// TODO(crbug.com/442509324): remove UI dependency
+// eslint-disable-next-line rulesdir/no-imports-in-directory
 import * as UI from '../../ui/legacy/legacy.js';
 import * as Bindings from '../bindings/bindings.js';
 import * as TextUtils from '../text_utils/text_utils.js';
@@ -17,32 +19,32 @@ import {PersistenceImpl} from './PersistenceImpl.js';
 
 const UIStrings = {
   /**
-   *@description Text to save content as a specific file type
+   * @description Text to save content as a specific file type
    */
   saveAs: 'Save as…',
   /**
-   *@description Context menu item for saving an image
+   * @description Context menu item for saving an image
    */
   saveImage: 'Save image',
   /**
-   *@description Context menu item for showing all overridden files
+   * @description Context menu item for showing all overridden files
    */
   showOverrides: 'Show all overrides',
   /**
-   *@description A context menu item in the Persistence Actions of the Workspace settings in Settings
+   * @description A context menu item in the Persistence Actions of the Workspace settings in Settings
    */
   overrideContent: 'Override content',
   /**
-   *@description A context menu item in the Persistence Actions of the Workspace settings in Settings
+   * @description A context menu item in the Persistence Actions of the Workspace settings in Settings
    */
   openInContainingFolder: 'Open in containing folder',
   /**
-   *@description A message in a confirmation dialog in the Persistence Actions
+   * @description A message in a confirmation dialog in the Persistence Actions
    * @example {bundle.min.js} PH1
    */
   overrideSourceMappedFileWarning: 'Override ‘{PH1}’ instead?',
   /**
-   *@description A message in a confirmation dialog to explain why the action is failed in the Persistence Actions
+   * @description A message in a confirmation dialog to explain why the action is failed in the Persistence Actions
    * @example {index.ts} PH1
    */
   overrideSourceMappedFileExplanation: '‘{PH1}’ is a source mapped file and cannot be overridden.',

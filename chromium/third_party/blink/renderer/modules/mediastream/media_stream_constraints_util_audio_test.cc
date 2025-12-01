@@ -22,6 +22,7 @@
 #include "media/webrtc/constants.h"
 #include "media/webrtc/webrtc_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/mediastream/media_stream_controls.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_platform_media_stream_source.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
@@ -73,13 +74,11 @@ const std::array<bool, 2> kBoolValues = {true, false};
 
 const int kMinChannels = 1;
 
-using AudioSettingsBoolMembers =
-    WTF::Vector<bool (AudioCaptureSettings::*)() const>;
-using AudioPropertiesBoolMembers =
-    WTF::Vector<bool AudioProcessingProperties::*>;
+using AudioSettingsBoolMembers = Vector<bool (AudioCaptureSettings::*)() const>;
+using AudioPropertiesBoolMembers = Vector<bool AudioProcessingProperties::*>;
 
 template <typename T>
-static bool Contains(const WTF::Vector<T>& vector, T value) {
+static bool Contains(const Vector<T>& vector, T value) {
   return base::Contains(vector, value);
 }
 
@@ -382,7 +381,7 @@ class MediaStreamConstraintsUtilAudioTestBase : public SimTest {
   raw_ptr<const AudioDeviceCaptureCapability> variable_latency_device_ =
       nullptr;
   std::unique_ptr<ProcessedLocalAudioSource> system_echo_canceller_source_;
-  const WTF::Vector<media::Point> kMicPositions = {{8, 8, 8}, {4, 4, 4}};
+  const Vector<media::Point> kMicPositions = {{8, 8, 8}, {4, 4, 4}};
 
  private:
   ScopedTestingPlatformSupport<IOTaskRunnerTestingPlatformSupport> platform_;
@@ -552,7 +551,7 @@ TEST_P(MediaStreamConstraintsUtilAudioTest, SingleBoolConstraint) {
       &AudioCaptureSettings::disable_local_echo,
       &AudioCaptureSettings::render_to_associated_sink};
 
-  const WTF::Vector<blink::BooleanConstraint MediaTrackConstraintSetPlatform::*>
+  const Vector<blink::BooleanConstraint MediaTrackConstraintSetPlatform::*>
       kMainBoolConstraints = {
           &MediaTrackConstraintSetPlatform::disable_local_echo,
           &MediaTrackConstraintSetPlatform::render_to_associated_sink};
@@ -582,7 +581,7 @@ TEST_P(MediaStreamConstraintsUtilAudioTest, SingleBoolConstraint) {
     }
   }
 
-  const WTF::Vector<blink::BooleanConstraint MediaTrackConstraintSetPlatform::*>
+  const Vector<blink::BooleanConstraint MediaTrackConstraintSetPlatform::*>
       kAudioProcessingConstraints = {
           &MediaTrackConstraintSetPlatform::auto_gain_control,
           &MediaTrackConstraintSetPlatform::noise_suppression,
@@ -1350,7 +1349,7 @@ TEST_P(MediaStreamConstraintsUtilAudioTest, EchoCancellationWithSystem) {
 // default value set by the echoCancellation constraint.
 TEST_P(MediaStreamConstraintsUtilAudioTest,
        EchoCancellationAndSingleBoolConstraint) {
-  const WTF::Vector<blink::BooleanConstraint MediaTrackConstraintSetPlatform::*>
+  const Vector<blink::BooleanConstraint MediaTrackConstraintSetPlatform::*>
       kAudioProcessingConstraints = {
           &MediaTrackConstraintSetPlatform::auto_gain_control,
           &MediaTrackConstraintSetPlatform::noise_suppression,
@@ -1540,6 +1539,12 @@ TEST_P(MediaStreamConstraintsUtilAudioTest, NoDevicesWithConstraints) {
 // sources that have no audio processing.
 TEST_P(MediaStreamConstraintsUtilAudioTest, SourceWithNoAudioProcessing) {
   for (bool enable_properties : {true, false}) {
+    if (enable_properties && media::IsSystemLoopbackAsAecReferenceEnabled()) {
+      // LocalMediaStreamAudioSource is never created with system echo canceller
+      // when loopback AEC is enabled.
+      continue;
+    }
+
     SCOPED_TRACE(enable_properties);
     std::unique_ptr<blink::LocalMediaStreamAudioSource> source =
         GetLocalMediaStreamAudioSource(
@@ -1548,8 +1553,7 @@ TEST_P(MediaStreamConstraintsUtilAudioTest, SourceWithNoAudioProcessing) {
             enable_properties /* render_to_associated_sink */);
 
     // These constraints are false in |source|.
-    const WTF::Vector<
-        blink::BooleanConstraint MediaTrackConstraintSetPlatform::*>
+    const Vector<blink::BooleanConstraint MediaTrackConstraintSetPlatform::*>
         kConstraints = {
             &MediaTrackConstraintSetPlatform::disable_local_echo,
             &MediaTrackConstraintSetPlatform::render_to_associated_sink,
@@ -1606,8 +1610,7 @@ TEST_P(MediaStreamConstraintsUtilAudioTest, SourceWithAudioProcessing) {
         GetProcessedLocalAudioSource(
             properties, use_defaults /* disable_local_echo */,
             use_defaults /* render_to_associated_sink */);
-    const WTF::Vector<
-        blink::BooleanConstraint MediaTrackConstraintSetPlatform::*>
+    const Vector<blink::BooleanConstraint MediaTrackConstraintSetPlatform::*>
         kAudioProcessingConstraints = {
             &MediaTrackConstraintSetPlatform::auto_gain_control,
             &MediaTrackConstraintSetPlatform::noise_suppression,
@@ -1676,8 +1679,7 @@ TEST_P(MediaStreamConstraintsUtilAudioTest, SourceWithAudioProcessing) {
     EXPECT_TRUE(result.HasValue());
 
     // These constraints are false in |source|.
-    const WTF::Vector<
-        blink::BooleanConstraint MediaTrackConstraintSetPlatform::*>
+    const Vector<blink::BooleanConstraint MediaTrackConstraintSetPlatform::*>
         kAudioBrowserConstraints = {
             &MediaTrackConstraintSetPlatform::disable_local_echo,
             &MediaTrackConstraintSetPlatform::render_to_associated_sink,
@@ -1963,7 +1965,14 @@ TEST_F(MediaStreamConstraintsEchoCancellationModeTest, ExactAll) {
   EXPECT_TRUE(settings.HasValue());
   EXPECT_EQ(settings.audio_processing_properties().echo_cancellation_mode,
             EchoCancellationMode::kAll);
-  CheckDevice(*system_echo_canceller_device_, settings);
+  // If loopback AEC is enabled, it can be used to provide system AEC for the
+  // default device. Otherwise, the device that supports system AEC will be
+  // selected.
+  const AudioDeviceCaptureCapability* expected_device =
+      media::IsSystemLoopbackAsAecReferenceEnabled()
+          ? default_device_
+          : system_echo_canceller_device_;
+  CheckDevice(*expected_device, settings);
 }
 
 TEST_F(MediaStreamConstraintsEchoCancellationModeTest, IdealAll) {
@@ -1973,29 +1982,46 @@ TEST_F(MediaStreamConstraintsEchoCancellationModeTest, IdealAll) {
   EXPECT_TRUE(settings.HasValue());
   EXPECT_EQ(settings.audio_processing_properties().echo_cancellation_mode,
             EchoCancellationMode::kAll);
-  CheckDevice(*system_echo_canceller_device_, settings);
+  // If loopback AEC is enabled, it can be used to provide system AEC for the
+  // default device. Otherwise, the device that supports system AEC will be
+  // selected.
+  const AudioDeviceCaptureCapability* expected_device =
+      media::IsSystemLoopbackAsAecReferenceEnabled()
+          ? default_device_
+          : system_echo_canceller_device_;
+  CheckDevice(*expected_device, settings);
 }
 
 TEST_F(MediaStreamConstraintsEchoCancellationModeTest,
        ExactAllUnsupportedDevice) {
   constraint_factory_.Reset();
   constraint_factory_.basic().echo_cancellation.SetExactString("all");
+  // Exclude the device with system AEC from consideration.
   constraint_factory_.basic().device_id.SetExact(default_device_->DeviceID());
   AudioCaptureSettings settings = SelectSettings(true, capabilities_);
-  EXPECT_FALSE(settings.HasValue());
-  EXPECT_THAT(settings.failed_constraint_name(),
-              testing::MatchesRegex("echoCancellation|deviceId"));
+  if (media::IsSystemLoopbackAsAecReferenceEnabled()) {
+    CheckDevice(*default_device_, settings);
+  } else {
+    EXPECT_FALSE(settings.HasValue());
+    EXPECT_THAT(settings.failed_constraint_name(),
+                testing::MatchesRegex("echoCancellation|deviceId"));
+  }
 }
 
 TEST_F(MediaStreamConstraintsEchoCancellationModeTest,
        IdealAllUnsupportedDevice) {
   constraint_factory_.Reset();
   constraint_factory_.basic().echo_cancellation.SetIdealString("all");
+  // Exclude the device with system AEC from consideration.
   constraint_factory_.basic().device_id.SetExact(default_device_->DeviceID());
   AudioCaptureSettings settings = SelectSettings(true, capabilities_);
   EXPECT_TRUE(settings.HasValue());
+  // If loopback AEC is available, we use it to provide All AEC. Otherwise, fall
+  // back to BrowserDecides AEC.
   EXPECT_EQ(settings.audio_processing_properties().echo_cancellation_mode,
-            EchoCancellationMode::kBrowserDecides);
+            media::IsSystemLoopbackAsAecReferenceEnabled()
+                ? EchoCancellationMode::kAll
+                : EchoCancellationMode::kBrowserDecides);
   CheckDevice(*default_device_, settings);
 }
 
@@ -2050,6 +2076,30 @@ TEST_F(MediaStreamConstraintsEchoCancellationModeTest, ExactTrue) {
   EXPECT_EQ(settings.audio_processing_properties().echo_cancellation_mode,
             EchoCancellationMode::kBrowserDecides);
 }
+
+#if BUILDFLAG(SYSTEM_LOOPBACK_AS_AEC_REFERENCE)
+TEST_F(MediaStreamConstraintsEchoCancellationModeTest,
+       AecRequiresApmOrSystemAec) {
+  // Enable system loopback as AEC reference, to simulate the conditions of
+  // http://crbug.com/441029775
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      media::kSystemLoopbackAsAecReference);
+  constraint_factory_.Reset();
+  // APM does not support this sample rate, so this rules out APM.
+  constraint_factory_.basic().sample_rate.SetExact(
+      media::AudioParameters::kAudioCDSampleRate);
+  // Delete the device that supports system AEC. It is no longer possible to
+  // provide AEC, because both system AEC and APM are ruled out.
+  capabilities_.pop_back();
+  // Demand AEC.
+  constraint_factory_.basic().echo_cancellation.SetExactBoolean(true);
+  AudioCaptureSettings settings = SelectSettings(true, capabilities_);
+  // We have demanded an impossible combination of sample rate and AEC, so
+  // constraint matching will fail.
+  EXPECT_FALSE(settings.HasValue());
+}
+#endif  // BUILDFLAG(SYSTEM_LOOPBACK_AS_AEC_REFERENCE)
 
 TEST_F(MediaStreamConstraintsEchoCancellationModeTest, IdealTrue) {
   constraint_factory_.Reset();
@@ -2149,6 +2199,15 @@ class MediaStreamConstraintsEchoCancellationModeScreenCaptureTest
   }
 };
 
+TEST_F(MediaStreamConstraintsEchoCancellationModeScreenCaptureTest,
+       Unconstrained) {
+  constraint_factory_.Reset();
+  AudioCaptureSettings settings = SelectSettings(true, capabilities_);
+  EXPECT_TRUE(settings.HasValue());
+  EXPECT_EQ(settings.audio_processing_properties().echo_cancellation_mode,
+            EchoCancellationMode::kBrowserDecides);
+}
+
 TEST_F(MediaStreamConstraintsEchoCancellationModeScreenCaptureTest, ExactAll) {
   constraint_factory_.Reset();
   constraint_factory_.basic().echo_cancellation.SetExactString("all");
@@ -2162,7 +2221,7 @@ TEST_F(MediaStreamConstraintsEchoCancellationModeScreenCaptureTest, IdealAll) {
   AudioCaptureSettings settings = SelectSettings(true, capabilities_);
   EXPECT_TRUE(settings.HasValue());
   EXPECT_EQ(settings.audio_processing_properties().echo_cancellation_mode,
-            EchoCancellationMode::kDisabled);
+            EchoCancellationMode::kBrowserDecides);
 }
 
 TEST_F(MediaStreamConstraintsEchoCancellationModeScreenCaptureTest,
@@ -2180,7 +2239,31 @@ TEST_F(MediaStreamConstraintsEchoCancellationModeScreenCaptureTest,
   AudioCaptureSettings settings = SelectSettings(true, capabilities_);
   EXPECT_TRUE(settings.HasValue());
   EXPECT_EQ(settings.audio_processing_properties().echo_cancellation_mode,
-            EchoCancellationMode::kDisabled);
+            EchoCancellationMode::kBrowserDecides);
+}
+
+TEST_F(MediaStreamConstraintsEchoCancellationModeScreenCaptureTest,
+       MediaStreamSourceEmpty) {
+  constraint_factory_.Reset();
+  constraint_factory_.basic().media_stream_source.SetExact("");
+  AudioCaptureSettings settings = SelectSettings(true, capabilities_);
+  EXPECT_TRUE(settings.HasValue());
+  EXPECT_EQ(settings.audio_processing_properties().echo_cancellation_mode,
+            EchoCancellationMode::kBrowserDecides);
+}
+
+TEST_F(MediaStreamConstraintsEchoCancellationModeScreenCaptureTest,
+       MediaStreamSourceNonEmpty) {
+  for (const auto& source :
+       {kMediaStreamSourceTab, kMediaStreamSourceScreen,
+        kMediaStreamSourceDesktop, kMediaStreamSourceSystem}) {
+    constraint_factory_.Reset();
+    constraint_factory_.basic().media_stream_source.SetExact(source);
+    AudioCaptureSettings settings = SelectSettings(true, capabilities_);
+    EXPECT_TRUE(settings.HasValue());
+    EXPECT_EQ(settings.audio_processing_properties().echo_cancellation_mode,
+              EchoCancellationMode::kDisabled);
+  }
 }
 
 }  // namespace blink

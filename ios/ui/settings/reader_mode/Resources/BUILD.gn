@@ -5,7 +5,10 @@ import("//build/config/ios/rules.gni")
 bundle_data_xcassets("assets") {
   catalog = "Assets.xcassets"
   sources = [
+    # readerview_settings_icon
     "Assets.xcassets/readerview_settings.imageset/Contents.json",
     "Assets.xcassets/readerview_settings.imageset/readerview_settings.pdf",
+    # reader_view_animation_color
+    "Assets.xcassets/reader_view_animation.colorset/Contents.json",
   ]
 }

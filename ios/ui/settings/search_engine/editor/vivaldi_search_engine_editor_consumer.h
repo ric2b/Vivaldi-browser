@@ -9,6 +9,7 @@
 @class VivaldiSearchEngineNicknameModel;
 
 // A protocol implemented by consumers to observe view and mediator changes.
+NS_SWIFT_UI_ACTOR
 @protocol VivaldiSearchEngineEditorConsumer
 - (void)searchEngineEditorItemDidChange:(VivaldiSearchEngineEditorItem*)item;
 

@@ -2,16 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "media/filters/audio_renderer_algorithm.h"
 
 #include <algorithm>
 #include <cmath>
 
+#include "base/compiler_specific.h"
+#include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -160,8 +157,9 @@ void AudioRendererAlgorithm::Initialize(const AudioParameters& params,
 void AudioRendererAlgorithm::SetChannelMask(std::vector<bool> channel_mask) {
   DCHECK_EQ(channel_mask.size(), static_cast<size_t>(channels_));
   channel_mask_ = std::move(channel_mask);
-  if (ola_window_)
+  if (!ola_window_.empty()) {
     CreateSearchWrappers();
+  }
 }
 
 void AudioRendererAlgorithm::OnResamplerRead(int frame_delay,
@@ -243,13 +241,12 @@ int AudioRendererAlgorithm::RunWsolaAndFill(AudioBus* dest,
                                             double playback_rate) {
   // Allocate structures on first non-1.0 playback rate; these can eat a fair
   // chunk of memory. ~56kB for stereo 48kHz, up to ~765kB for 7.1 192kHz.
-  if (!ola_window_) {
-    ola_window_.reset(new float[ola_window_size_]);
-    internal::GetPeriodicHanningWindow(ola_window_size_, ola_window_.get());
+  if (ola_window_.empty()) {
+    ola_window_ = base::HeapArray<float>::Uninit(ola_window_size_);
+    internal::GetPeriodicHanningWindow(ola_window_);
 
-    transition_window_.reset(new float[ola_window_size_ * 2]);
-    internal::GetPeriodicHanningWindow(2 * ola_window_size_,
-                                       transition_window_.get());
+    transition_window_ = base::HeapArray<float>::Uninit(ola_window_size_ * 2);
+    internal::GetPeriodicHanningWindow(transition_window_);
 
     // Initialize for overlap-and-add of the first block.
     wsola_output_ =
@@ -524,17 +521,19 @@ bool AudioRendererAlgorithm::RunOneWsolaIteration(double playback_rate) {
     if (!channel_mask_[k])
       continue;
 
-    const float* const ch_opt_frame = optimal_block_->channel_span(k).data();
-    float* ch_output =
-        wsola_output_->channel_span(k).data() + num_complete_frames_;
+    const base::span<const float> ch_opt_frame =
+        optimal_block_->channel_span(k);
+    float* ch_output = UNSAFE_TODO(wsola_output_->channel_span(k).data() +
+                                   num_complete_frames_);
     for (int n = 0; n < ola_hop_size_; ++n) {
-      ch_output[n] = ch_output[n] * ola_window_[ola_hop_size_ + n] +
-                     ch_opt_frame[n] * ola_window_[n];
+      UNSAFE_TODO(ch_output[n]) =
+          UNSAFE_TODO(ch_output[n]) * ola_window_[ola_hop_size_ + n] +
+          ch_opt_frame[n] * ola_window_[n];
     }
 
     // Copy the second half to the output.
-    memcpy(&ch_output[ola_hop_size_], &ch_opt_frame[ola_hop_size_],
-           sizeof(*ch_opt_frame) * ola_hop_size_);
+    UNSAFE_TODO(memcpy(&ch_output[ola_hop_size_], &ch_opt_frame[ola_hop_size_],
+                       sizeof(ch_opt_frame[0]) * ola_hop_size_));
   }
 
   num_complete_frames_ += ola_hop_size_;
@@ -583,8 +582,11 @@ int AudioRendererAlgorithm::WriteCompletedFramesTo(
   for (int k = 0; k < channels_; ++k) {
     if (!channel_mask_[k])
       continue;
-    float* ch = wsola_output_->channel_span(k).data();
-    memmove(ch, &ch[rendered_frames], sizeof(*ch) * frames_to_move);
+    base::span<float> ch = wsola_output_->channel_span(k);
+    UNSAFE_TODO(
+        memmove(ch.data(),
+                ch.subspan(base::checked_cast<size_t>(rendered_frames)).data(),
+                sizeof(ch[0]) * frames_to_move));
   }
   num_complete_frames_ -= rendered_frames;
   return rendered_frames;
@@ -639,8 +641,8 @@ void AudioRendererAlgorithm::GetOptimalBlock() {
     for (int k = 0; k < channels_; ++k) {
       if (!channel_mask_[k])
         continue;
-      float* ch_opt = optimal_block_->channel_span(k).data();
-      const float* const ch_target = target_block_->channel_span(k).data();
+      base::span<float> ch_opt = optimal_block_->channel_span(k);
+      const base::span<const float> ch_target = target_block_->channel_span(k);
       for (int n = 0; n < ola_window_size_; ++n) {
         ch_opt[n] = ch_opt[n] * transition_window_[n] +
                     ch_target[n] * transition_window_[ola_window_size_ + n];

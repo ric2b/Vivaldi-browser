@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <numeric>
+#include <string>
 
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
@@ -28,6 +29,8 @@ namespace {
 
 constexpr char kHistogramIsHeaderConsistent[] =
     "ServiceWorker.SyntheticResponse.IsHeaderConsistent";
+constexpr char kHistogramIsHeaderStored[] =
+    "ServiceWorker.SyntheticResponse.IsHeaderStored";
 constexpr char kHistogramSyntheticResponseReloadReason[] =
     "ServiceWorker.SyntheticResponse.ReloadReason";
 
@@ -38,7 +41,8 @@ constexpr char kHistogramSyntheticResponseReloadReason[] =
 enum class SyntheticResponseReloadReason {
   kCachedResponseHeadCleared = 0,
   kHeaderInconsistent = 1,
-  kMaxValue = kHeaderInconsistent,
+  kRedirect = 2,
+  kMaxValue = kRedirect,
 };
 // LINT.ThenChange(//tools/metrics/histograms/metadata/service/enums.xml:SyntheticResponseReloadReason)
 
@@ -46,13 +50,12 @@ enum class SyntheticResponseReloadReason {
 // responses even if there is no opt-in header in its response. This is for
 // local development and testing.
 BASE_FEATURE(kServiceWorkerBypassSyntheticResponseHeaderCheck,
-             "ServiceWorkerBypassSyntheticResponseHeaderCheck",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 const base::FeatureParam<std::string>
     kServiceWorkerBypassSyntheticResponseIgnoredHeaders{
-        &kServiceWorkerBypassSyntheticResponseHeaderCheck, "ignored_headers",
-        ""};
+        &kServiceWorkerBypassSyntheticResponseHeaderCheck,
+        "ignored_headers_for_bypass", ""};
 
 bool IsBypassSyntheticResponseHeaderCheckEnabled() {
   static const bool kIsEnabled = base::FeatureList::IsEnabled(
@@ -64,6 +67,22 @@ const std::string& GetIgnoredHeadersForBypass() {
   static const base::NoDestructor<std::string> ignored_headers(
       kServiceWorkerBypassSyntheticResponseIgnoredHeaders.Get());
   return *ignored_headers;
+}
+
+const base::flat_set<std::string>& GetIgnoredHeadersForSyntheticResponse() {
+  static const base::NoDestructor<base::flat_set<std::string>>
+      ignored_headers_set([]() {
+        const std::string ignored_headers_str(
+            blink::features::kServiceWorkerSyntheticResponseIgnoredHeaders
+                .Get());
+        const std::vector<std::string_view> ignored_headers_sv =
+            base::SplitStringPiece(ignored_headers_str, ",",
+                                   base::TRIM_WHITESPACE,
+                                   base::SPLIT_WANT_NONEMPTY);
+        return base::flat_set<std::string>(ignored_headers_sv.begin(),
+                                           ignored_headers_sv.end());
+      }());
+  return *ignored_headers_set;
 }
 
 void RecordReloadReason(SyntheticResponseReloadReason reason) {
@@ -181,8 +200,10 @@ class ServiceWorkerSyntheticResponseManager::SyntheticResponseURLLoaderClient
  public:
   SyntheticResponseURLLoaderClient(
       OnReceiveResponseCallback receive_response_callback,
+      OnReceiveRedirectCallback receive_redirect_callback,
       OnCompleteCallback complete_callback)
       : receive_response_callback_(std::move(receive_response_callback)),
+        receive_redirect_callback_(std::move(receive_redirect_callback)),
         complete_callback_(std::move(complete_callback)) {}
   SyntheticResponseURLLoaderClient(const SyntheticResponseURLLoaderClient&) =
       delete;
@@ -205,7 +226,10 @@ class ServiceWorkerSyntheticResponseManager::SyntheticResponseURLLoaderClient
   }
   void OnReceiveRedirect(
       const net::RedirectInfo& redirect_info,
-      network::mojom::URLResponseHeadPtr response_head) override {}
+      network::mojom::URLResponseHeadPtr response_head) override {
+    std::move(receive_redirect_callback_)
+        .Run(redirect_info, std::move(response_head));
+  }
   void OnUploadProgress(int64_t current_position,
                         int64_t total_size,
                         OnUploadProgressCallback ack_callback) override {}
@@ -215,6 +239,7 @@ class ServiceWorkerSyntheticResponseManager::SyntheticResponseURLLoaderClient
   }
 
   OnReceiveResponseCallback receive_response_callback_;
+  OnReceiveRedirectCallback receive_redirect_callback_;
   OnCompleteCallback complete_callback_;
 
   mojo::Receiver<network::mojom::URLLoaderClient> receiver_{this};
@@ -242,29 +267,20 @@ void ServiceWorkerSyntheticResponseManager::StartRequest(
     uint32_t options,
     const network::ResourceRequest& request,
     OnReceiveResponseCallback receive_response_callback,
+    OnReceiveRedirectCallback receive_redirect_callback,
     OnCompleteCallback complete_callback) {
   TRACE_EVENT("ServiceWorker",
               "ServiceWorkerSyntheticResponseManager::StartRequest");
-  // Always decode on the network service side, since the renderer is not
-  // involved with processing the synthetic response.
-  //
-  // TODO(crbug.com/352578800): When the renderer side decoding is enabled, we
-  // need to plumb `client_side_content_decoding_types` in `URLResponseHead`
-  // from `response_head` in `OnReceiveResponse()` to `response_head_` in
-  // `ServiceWorkerMainResourceLoader`. To achieve that,
-  // `ServiceWorkerSyntheticResponseManager` should be updated not to use
-  // `blink::mojom::FetchAPIResponse` to handle the response, because
-  // `blink::mojom::FetchAPIResponse` doesn't have a corresponding field of
-  // `client_side_content_decoding_types`. The necessary field for decoding will
-  // be lost under the current implementation.
-  network::ResourceRequest request_for_synthetic_response(request);
-  request_for_synthetic_response.client_side_content_decoding_enabled = false;
-
+  CHECK(!request.client_side_content_decoding_enabled);
   response_callback_ = std::move(receive_response_callback);
+  redirect_callback_ = std::move(receive_redirect_callback);
   complete_callback_ = std::move(complete_callback);
   client_ = std::make_unique<SyntheticResponseURLLoaderClient>(
       base::BindRepeating(
           &ServiceWorkerSyntheticResponseManager::OnReceiveResponse,
+          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(
+          &ServiceWorkerSyntheticResponseManager::OnReceiveRedirect,
           weak_factory_.GetWeakPtr()),
       base::BindOnce(&ServiceWorkerSyntheticResponseManager::OnComplete,
                      weak_factory_.GetWeakPtr()));
@@ -277,7 +293,7 @@ void ServiceWorkerSyntheticResponseManager::StartRequest(
   // TODO(crbug.com/352578800): Create and use own traffic_annotation tag.
   url_loader_factory_->CreateLoaderAndStart(
       url_loader_.InitWithNewPipeAndPassReceiver(), request_id, options,
-      request_for_synthetic_response, std::move(client_to_pass),
+      request, std::move(client_to_pass),
       net::MutableNetworkTrafficAnnotationTag(
           ServiceWorkerRaceNetworkRequestURLLoaderClient::
               NetworkTrafficAnnotationTag()));
@@ -304,24 +320,25 @@ void ServiceWorkerSyntheticResponseManager::StartSyntheticResponse(
       ServiceWorkerFetchDispatcher::FetchEventResult::kGotResponse,
       std::move(response), std::move(stream_handle), std::move(timing),
       version_);
+  did_start_synthetic_response = true;
 }
 
 void ServiceWorkerSyntheticResponseManager::MaybeSetResponseHead(
     const network::mojom::URLResponseHead& response_head) {
-  if (!network::IsSuccessfulStatus(response_head.headers->response_code())) {
-    // If the response is not successful, do not update the response head.
-    return;
+  bool is_header_stored = false;
+  // If the response is not successful or there is no opt-in header, do not
+  // update the response head.
+  if (network::IsSuccessfulStatus(response_head.headers->response_code()) &&
+      (IsBypassSyntheticResponseHeaderCheckEnabled() ||
+       response_head.headers->HasHeaderValue(kOptInHeaderName,
+                                             kOptInHeaderValue))) {
+    version_->SetMainScriptResponse(
+        std::make_unique<ServiceWorkerVersion::MainScriptResponse>(
+            response_head));
+    version_->SetResponseHeadForSyntheticResponse(response_head.Clone());
+    is_header_stored = true;
   }
-  if (!IsBypassSyntheticResponseHeaderCheckEnabled() &&
-      !response_head.headers->HasHeaderValue(kOptInHeaderName,
-                                             kOptInHeaderValue)) {
-    // If there is no opt-in header, do not update the response head.
-    return;
-  }
-  version_->SetMainScriptResponse(
-      std::make_unique<ServiceWorkerVersion::MainScriptResponse>(
-          response_head));
-  version_->SetResponseHeadForSyntheticResponse(response_head.Clone());
+  base::UmaHistogramBoolean(kHistogramIsHeaderStored, is_header_stored);
 }
 
 void ServiceWorkerSyntheticResponseManager::OnReceiveResponse(
@@ -375,6 +392,23 @@ void ServiceWorkerSyntheticResponseManager::OnReceiveResponse(
   }
 }
 
+void ServiceWorkerSyntheticResponseManager::OnReceiveRedirect(
+    const net::RedirectInfo& redirect_info,
+    network::mojom::URLResponseHeadPtr response_head) {
+  if (did_start_synthetic_response) {
+    // If the response is already returned from the stored data, that means the
+    // renderer may already have received `OnReceiveResponse`. Sending
+    // `OnReceiveRedirect` after `OnReceiveResponse` brings errors in that case.
+    // Instead, we reload the navigation as a fallback. In the next navigation,
+    // the synthetic response is not enabled because it's a reload navigation.
+    version_->ResetResponseHeadForSyntheticResponse();
+    NotifyReloading();
+    RecordReloadReason(SyntheticResponseReloadReason::kRedirect);
+    return;
+  }
+  std::move(redirect_callback_).Run(redirect_info, std::move(response_head));
+}
+
 void ServiceWorkerSyntheticResponseManager::OnComplete(
     const network::URLLoaderCompletionStatus& status) {
   TRACE_EVENT("ServiceWorker",
@@ -394,8 +428,8 @@ bool ServiceWorkerSyntheticResponseManager::CheckHeaderConsistency(
     scoped_refptr<net::HttpResponseHeaders> headers) {
   const auto& response_head = version_->GetResponseHeadForSyntheticResponse();
   CHECK(response_head);
-  // TODO(crbug.com/352578800): Handle other necessary headers e.g. encoding.
-  base::flat_set<std::string> ignored_headers = {"date", "alt-svc", "p3p"};
+  base::flat_set<std::string> ignored_headers =
+      GetIgnoredHeadersForSyntheticResponse();
   if (IsBypassSyntheticResponseHeaderCheckEnabled()) {
     const std::string& ignored_headers_str = GetIgnoredHeadersForBypass();
     std::vector<std::string_view> testing_ignored_headers =
@@ -438,4 +472,13 @@ void ServiceWorkerSyntheticResponseManager::NotifyReloading() {
   }
   OnCloneCompleted();
 }
+
+bool ServiceWorkerSyntheticResponseManager::dry_run_mode_for_testing_ = false;
+void ServiceWorkerSyntheticResponseManager::SetDryRunMode(bool enabled) {
+  dry_run_mode_for_testing_ = enabled;
+}
+bool ServiceWorkerSyntheticResponseManager::IsDryRunModeEnabledForTesting() {
+  return dry_run_mode_for_testing_;
+}
+
 }  // namespace content

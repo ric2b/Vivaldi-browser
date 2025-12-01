@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">Järjehoidja salvestatud kausta „<ph name="FOLDER_NAME" />”</translation>
 <translation id="2433507940547922241">Välimus</translation>
 <translation id="2501278716633472235">Mine tagasi</translation>
+<translation id="2546283357679194313">Küpsised ja saidiandmed</translation>
 <translation id="2633278372998075009">Privaatsed kaardid</translation>
 <translation id="2650751991977523696">Kas laadida fail uuesti alla?</translation>
 <translation id="265156376773362237">Tavaline eellaadimine</translation>
@@ -62,6 +63,7 @@
 
 Puute peale otsimise funktsioon on saadaval vaid siis, kui Vivaldi vaikimisi otsingumootor on Google.</translation>
 <translation id="4759238208242260848">Allalaadimised</translation>
+<translation id="4777866634702576038">Kaardirühma kustutamine</translation>
 <translation id="4850886885716139402">Näita</translation>
 <translation id="4883379392681899581">Välju privaatsest režiimist</translation>
 <translation id="4943872375798546930">Tulemusi pole</translation>
@@ -77,7 +79,6 @@ Puute peale otsimise funktsioon on saadaval vaid siis, kui Vivaldi vaikimisi ots
 <translation id="5375131951310889874">Võimaldab veebisaitide sisu kohta lisateavet saada ilma lehelt lahkumata. Puute peale otsimise funktsioon on saadaval vaid siis, kui Vivaldi vaikimisi otsingumootor on Google. Funktsioon saadab sõna ja seda ümbritseva konteksti Google’i otsingule, saades vastu definitsioone, pilte, otsingutulemusi jm.
 
 Otsimiseks puuduta pikalt mõnd sõna. Otsingu täpsustamiseks libista paneel täiesti üles ja puuduta otsingukasti.</translation>
-<translation id="543338862236136125">Muuda parooli</translation>
 <translation id="572328651809341494">Viimatised kaardid</translation>
 <translation id="5833984609253377421">Jaga linki</translation>
 <translation id="6150320133806434356">Järjehoidja lisatud</translation>

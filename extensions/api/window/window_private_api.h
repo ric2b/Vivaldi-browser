@@ -7,7 +7,7 @@
 #include "extensions/schema/window_private.h"
 #include "ui/base/mojom/window_show_state.mojom-forward.h"
 #include "ui/base/ui_base_types.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 
 class Browser;
 class Profile;
@@ -119,21 +119,22 @@ class WindowPrivateIsOnScreenWithNotchFunction : public ExtensionFunction {
   bool IsWindowOnScreenWithNotch(VivaldiBrowserWindow* window);
 };
 
-class WindowPrivateSetControlButtonsPaddingFunction : public ExtensionFunction {
+class WindowPrivateSetControlButtonsPositionFunction
+    : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("windowPrivate.setControlButtonsPadding",
-                             WINDOW_PRIVATE_SET_CONTROL_BUTTONS_PADDING)
+  DECLARE_EXTENSION_FUNCTION("windowPrivate.setControlButtonsPosition",
+                             WINDOW_PRIVATE_SET_CONTROL_BUTTONS_POSITION)
 
-  WindowPrivateSetControlButtonsPaddingFunction() = default;
+  WindowPrivateSetControlButtonsPositionFunction() = default;
 
  protected:
-  ~WindowPrivateSetControlButtonsPaddingFunction() override = default;
+  ~WindowPrivateSetControlButtonsPositionFunction() override = default;
 
  private:
   ResponseAction Run() override;
 
   void RequestChange(gfx::NativeWindow window,
-                     vivaldi::window_private::ControlButtonsPadding padding);
+                     vivaldi::window_private::ControlButtonsPosition padding);
 };
 
 class WindowPrivatePerformHapticFeedbackFunction : public ExtensionFunction {

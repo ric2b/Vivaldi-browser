@@ -8,7 +8,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.text.TextUtils;
 
-import org.chromium.base.BuildInfo;
+import org.chromium.base.DeviceInfo;
+import org.chromium.base.TimeUtils;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.preferences.Pref;
@@ -52,18 +53,23 @@ public final class FullscreenSigninPromoLauncher {
         }
 
         FullscreenSigninAndHistorySyncConfig config =
-                new FullscreenSigninAndHistorySyncConfig.Builder().build();
-        @Nullable
-        Intent intent =
+                new FullscreenSigninAndHistorySyncConfig.Builder(
+                                context.getString(R.string.signin_fre_title),
+                                context.getString(R.string.signin_fre_subtitle),
+                                context.getString(R.string.signin_fre_dismiss_button),
+                                context.getString(R.string.history_sync_title),
+                                context.getString(R.string.history_sync_subtitle))
+                        .build();
+        @Nullable Intent intent =
                 signinAndHistorySyncActivityLauncher.createFullscreenSigninIntent(
-                        context, profile, config, SigninAccessPoint.SIGNIN_PROMO);
+                        context, profile, config, SigninAccessPoint.FULLSCREEN_SIGNIN_PROMO);
         if (intent == null) {
             return false;
         }
 
         context.startActivity(intent);
         prefManager.setSigninPromoNextShowTime(
-                System.currentTimeMillis()
+                TimeUtils.currentTimeMillis()
                         + TimeUnit.DAYS.toMillis(getDurationBetweenPromoTriggers()));
         prefManager.setSigninPromoLastShownVersion(currentMajorVersion);
         var accounts =
@@ -80,7 +86,7 @@ public final class FullscreenSigninPromoLauncher {
             return true;
         }
 
-        if (BuildInfo.getInstance().isAutomotive) {
+        if (DeviceInfo.isAutomotive()) {
             return false;
         }
 
@@ -89,7 +95,7 @@ public final class FullscreenSigninPromoLauncher {
         // See crbug.com/408962000.
         if (nextShowTime == 0) {
             prefManager.setSigninPromoNextShowTime(
-                    System.currentTimeMillis()
+                    TimeUtils.currentTimeMillis()
                             + TimeUnit.DAYS.toMillis(getDurationBetweenPromoTriggers()));
         }
 

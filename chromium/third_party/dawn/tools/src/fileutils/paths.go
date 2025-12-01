@@ -100,15 +100,11 @@ func NodePath(fsReader oswrapper.FilesystemReader) string {
 		node := filepath.Join(dawnRoot, "third_party", "node")
 		if info, err := fsReader.Stat(node); err == nil && info.IsDir() {
 			path := ""
-			switch fmt.Sprintf("%v/%v", runtime.GOOS, runtime.GOARCH) { // See `go tool dist list`
-			case "darwin/amd64":
-				path = filepath.Join(node, "node-darwin-x64/bin/node")
-			case "darwin/arm64":
-				path = filepath.Join(node, "node-darwin-arm64/bin/node")
-			case "linux/amd64":
-				path = filepath.Join(node, "node-linux-x64/bin/node")
-			case "windows/amd64":
+			switch runtime.GOOS { // See `go tool dist list`
+			case "windows":
 				path = filepath.Join(node, "node.exe")
+			default:
+				path = filepath.Join(node, "bin", "node")
 			}
 			if _, err := fsReader.Stat(path); err == nil {
 				return path
@@ -183,7 +179,6 @@ func CommonRootDir(pathA, pathB string) string {
 // subdirectories. Returns an error if the path does not exist or is not a
 // directory.
 func IsEmptyDir(dir string, fsReader oswrapper.FilesystemReader) (bool, error) {
-	// First, check if the path exists and is a directory.
 	info, err := fsReader.Stat(dir)
 	if err != nil {
 		return false, fmt.Errorf("failed to stat '%s': %w", dir, err)
@@ -192,8 +187,7 @@ func IsEmptyDir(dir string, fsReader oswrapper.FilesystemReader) (bool, error) {
 		return false, fmt.Errorf("path is not a directory: %s", dir)
 	}
 
-	// Now, read the directory's contents.
-	entries, err := fsReader.Readdir(dir)
+	entries, err := fsReader.ReadDir(dir)
 	if err != nil {
 		return false, fmt.Errorf("failed to read directory '%s': %w", dir, err)
 	}

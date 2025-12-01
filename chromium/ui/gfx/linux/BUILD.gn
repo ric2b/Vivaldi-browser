@@ -16,6 +16,7 @@ source_set("drm") {
   deps = [
     "//base",
     "//build/config/linux/libdrm",
+    "//components/viz/common:shared_image_format",
     "//ui/gfx:buffer_types",
   ]
 }
@@ -37,11 +38,13 @@ source_set("gbm") {
     ":drm",
     "//base",
     "//build/config/linux/libdrm",
+    "//components/viz/common:shared_image_format",
     "//skia",
     "//third_party/minigbm",
     "//ui/gfx:buffer_types",
     "//ui/gfx:memory_buffer",
     "//ui/gfx/geometry",
+    "//ui/ozone:native_pixmap_usage",
   ]
 }
 

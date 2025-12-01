@@ -996,6 +996,7 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
     const int dc_h = td->ysize >> 3;
     GetByteContext gb, agb;
     int skip, ret;
+    int have_rle = 0;
 
     if (compressed_size <= 88)
         return AVERROR_INVALIDDATA;
@@ -1019,6 +1020,11 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
         || ac_count > (uint64_t)INT_MAX/2
     )
         return AVERROR_INVALIDDATA;
+
+    if ((uint64_t)rle_raw_size > INT_MAX) {
+        avpriv_request_sample(s->avctx, "Too big rle_raw_size");
+        return AVERROR_INVALIDDATA;
+    }
 
     bytestream2_init(&gb, src + 88, compressed_size - 88);
     skip = bytestream2_get_le16(&gb);
@@ -1090,6 +1096,9 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
     if (rle_raw_size > 0 && rle_csize > 0 && rle_usize > 0) {
         unsigned long dest_len = rle_usize;
 
+        if (2LL * td->xsize * td->ysize > rle_raw_size)
+            return AVERROR_INVALIDDATA;
+
         av_fast_padded_malloc(&td->rle_data, &td->rle_size, rle_usize);
         if (!td->rle_data)
             return AVERROR(ENOMEM);
@@ -1106,6 +1115,8 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
         if (ret < 0)
             return ret;
         bytestream2_skip(&gb, rle_csize);
+
+        have_rle = 1;
     }
 
     bytestream2_init(&agb, td->ac_data, ac_count * 2);
@@ -1116,6 +1127,8 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
             float *yb = td->block[0];
             float *ub = td->block[1];
             float *vb = td->block[2];
+            int bw = FFMIN(8, td->xsize - x);
+            int bh = FFMIN(8, td->ysize - y);
 
             memset(td->block, 0, sizeof(td->block));
 
@@ -1140,8 +1153,8 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
                 uint16_t *ro = ((uint16_t *)td->uncompressed_data) +
                     y * td->xsize * s->nb_channels + td->xsize * (o + 2) + x;
 
-                for (int yy = 0; yy < 8; yy++) {
-                    for (int xx = 0; xx < 8; xx++) {
+                for (int yy = 0; yy < bh; yy++) {
+                    for (int xx = 0; xx < bw; xx++) {
                         const int idx = xx + yy * 8;
                         float b, g, r;
 
@@ -1164,8 +1177,8 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
                 float *ro = ((float *)td->uncompressed_data) +
                     y * td->xsize * s->nb_channels + td->xsize * (o + 2) + x;
 
-                for (int yy = 0; yy < 8; yy++) {
-                    for (int xx = 0; xx < 8; xx++) {
+                for (int yy = 0; yy < bh; yy++) {
+                    for (int xx = 0; xx < bw; xx++) {
                         const int idx = xx + yy * 8;
 
                         convert(yb[idx], ub[idx], vb[idx], &bo[xx], &go[xx], &ro[xx]);
@@ -1187,7 +1200,7 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
         return 0;
 
     if (s->pixel_type == EXR_HALF) {
-        for (int y = 0; y < td->ysize && td->rle_raw_data; y++) {
+        for (int y = 0; y < td->ysize && have_rle; y++) {
             uint16_t *ao = ((uint16_t *)td->uncompressed_data) + y * td->xsize * s->nb_channels;
             uint8_t *ai0 = td->rle_raw_data + y * td->xsize;
             uint8_t *ai1 = td->rle_raw_data + y * td->xsize + rle_raw_size / 2;
@@ -1196,7 +1209,7 @@ static int dwa_uncompress(const EXRContext *s, const uint8_t *src, int compresse
                 ao[x] = ai0[x] | (ai1[x] << 8);
         }
     } else {
-        for (int y = 0; y < td->ysize && td->rle_raw_data; y++) {
+        for (int y = 0; y < td->ysize && have_rle; y++) {
             uint32_t *ao = ((uint32_t *)td->uncompressed_data) + y * td->xsize * s->nb_channels;
             uint8_t *ai0 = td->rle_raw_data + y * td->xsize;
             uint8_t *ai1 = td->rle_raw_data + y * td->xsize + rle_raw_size / 2;
@@ -2072,6 +2085,17 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *picture,
 
     if ((ret = decode_header(s, picture)) < 0)
         return ret;
+
+    if (s->compression == EXR_DWAA ||
+        s->compression == EXR_DWAB) {
+        for (int i = 0; i<s->nb_channels; i++) {
+            EXRChannel *channel = &s->channels[i];
+            if (channel->pixel_type != s->pixel_type) {
+                avpriv_request_sample(s->avctx, "mixed pixel type DWA");
+                return AVERROR_PATCHWELCOME;
+            }
+        }
+    }
 
     switch (s->pixel_type) {
     case EXR_HALF:

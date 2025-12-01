@@ -5,6 +5,8 @@
 #include "chrome/browser/autocomplete/chrome_aim_eligibility_service.h"
 
 #include <algorithm>
+#include <memory>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -25,7 +27,6 @@
 #include "chrome/test/base/scoped_browser_locale.h"
 #include "chrome/test/base/search_test_utils.h"
 #include "components/omnibox/browser/aim_eligibility_service.h"
-#include "components/omnibox/browser/aim_eligibility_service_observer.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/prefs/pref_service.h"
 #include "components/search/search.h"
@@ -76,8 +77,19 @@ class IdentityManagerObserverHelper : public signin::IdentityManager::Observer {
     }
   }
 
+  void OnPrimaryAccountChanged(
+      const signin::PrimaryAccountChangeEvent& event) override {
+    if (!primary_account_changed_future_.IsReady()) {
+      primary_account_changed_future_.SetValue();
+    }
+  }
+
   bool WaitForAccountsInCookieUpdated() {
     return accounts_updated_future_.Wait();
+  }
+
+  bool WaitForPrimaryAccountChanged() {
+    return primary_account_changed_future_.Wait();
   }
 
  private:
@@ -85,49 +97,20 @@ class IdentityManagerObserverHelper : public signin::IdentityManager::Observer {
                           signin::IdentityManager::Observer>
       identity_manager_observation_{this};
   base::test::TestFuture<void> accounts_updated_future_;
-};
-
-// Helper class to observe AimEligibilityService.
-class AimEligibilityServiceObserverHelper
-    : public AimEligibilityServiceObserver {
- public:
-  explicit AimEligibilityServiceObserverHelper(AimEligibilityService* service) {
-    aim_eligibility_service_observation_.Observe(service);
-  }
-
-  ~AimEligibilityServiceObserverHelper() override = default;
-
-  // AimEligibilityServiceObserver:
-  void OnAimEligibilityChanged() override {
-    if (!eligibility_changed_future_.IsReady()) {
-      eligibility_changed_future_.SetValue();
-    }
-  }
-
-  bool WaitForEligibilityChanged() {
-    return eligibility_changed_future_.Wait();
-  }
-
-  bool IsReady() const { return eligibility_changed_future_.IsReady(); }
-
-  void Clear() { eligibility_changed_future_.Clear(); }
-
- private:
-  base::ScopedObservation<AimEligibilityService, AimEligibilityServiceObserver>
-      aim_eligibility_service_observation_{this};
-  base::test::TestFuture<void> eligibility_changed_future_;
+  base::test::TestFuture<void> primary_account_changed_future_;
 };
 
 // Friend class to access private members of AimEligibilityService for testing.
 class AimEligibilityServiceFriend {
  public:
-  using ServerRequestStatus = AimEligibilityService::ServerRequestStatus;
+  using EligibilityRequestStatus =
+      AimEligibilityService::EligibilityRequestStatus;
 };
 
 class ChromeAimEligibilityServiceBrowserTest
     : public InProcessBrowserTest,
       public ::testing::WithParamInterface<
-          std::tuple<std::string, std::string, bool, bool, bool, bool>> {
+          std::tuple<std::string, std::string, bool, bool, bool, bool, bool>> {
  public:
   ChromeAimEligibilityServiceBrowserTest() = default;
   ~ChromeAimEligibilityServiceBrowserTest() override = default;
@@ -142,26 +125,40 @@ class ChromeAimEligibilityServiceBrowserTest
 
  protected:
   void SetUp() override {
-    auto [locale, country, server_eligibility_enabled, allowed_by_policy,
-          is_google_dse, is_server_eligible] = GetParam();
+    auto [locale, country, server_eligibility_enabled_all, allowed_by_policy,
+          is_google_dse, is_server_eligible, is_pdf_upload_eligible] =
+        GetParam();
 
-    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRefAndParams> enabled_features;
     std::vector<base::test::FeatureRef> disabled_features;
 
-    if (server_eligibility_enabled) {
-      enabled_features.push_back(kAimServerEligibilityEnabled);
+    // Needed for bots with field trial testing configs explicitly disabled.
+    enabled_features.push_back(
+        {omnibox::kAimServerEligibilityChangedNotification, {}});
+    enabled_features.push_back({omnibox::kAimServerEligibilityEnabledEn, {}});
+    enabled_features.push_back(
+        {omnibox::kAimServerRequestOnStartupEnabled, {}});
+    enabled_features.push_back(
+        {omnibox::kAimServerRequestOnIdentityChangeEnabled,
+         {{"request_on_cookie_jar_changes", "true"},
+          {"request_on_primary_account_changes", "false"}}});
+
+    if (server_eligibility_enabled_all) {
+      enabled_features.push_back({omnibox::kAimServerEligibilityEnabled, {}});
     } else {
-      disabled_features.push_back(kAimServerEligibilityEnabled);
+      disabled_features.push_back(omnibox::kAimServerEligibilityEnabled);
     }
 
-    feature_list_.InitWithFeatures(enabled_features, disabled_features);
+    feature_list_.InitWithFeaturesAndParameters(enabled_features,
+                                                disabled_features);
 
     InProcessBrowserTest::SetUp();
   }
 
   void SetUpOnMainThread() override {
-    auto [locale, country, server_eligibility_enabled, allowed_by_policy,
-          is_google_dse, is_server_eligible] = GetParam();
+    auto [locale, country, server_eligibility_enabled_all, allowed_by_policy,
+          is_google_dse, is_server_eligible, is_pdf_upload_eligible] =
+        GetParam();
 
     // Set up locale and country.
     scoped_browser_locale_ = std::make_unique<ScopedBrowserLocale>(locale);
@@ -248,86 +245,247 @@ INSTANTIATE_TEST_SUITE_P(,
                              // Values for Google DSE.
                              ::testing::Values(true, false),
                              // Values for server response eligibility.
+                             ::testing::Values(true, false),
+                             // Values for Pdf server response eligibility.
                              ::testing::Values(true, false)));
 
 IN_PROC_BROWSER_TEST_P(ChromeAimEligibilityServiceBrowserTest,
                        ComprehensiveEligibilityTest) {
-  auto [locale, country, server_eligibility_enabled, allowed_by_policy,
-        is_google_dse, is_server_eligible] = GetParam();
+  auto [locale, country, server_eligibility_enabled_all, allowed_by_policy,
+        is_google_dse, is_server_eligible, is_pdf_upload_eligible] = GetParam();
 
+  // Enabling `AimServerEligibilityEnabledEn` overrides server eligibility for
+  // English locales
+  const bool server_eligibility_enabled =
+      server_eligibility_enabled_all ||
+      base::StartsWith(locale, "en", base::CompareCase::SENSITIVE);
+
+  // Handle the eligibility request on startup with a custom response.
   omnibox::AimEligibilityResponse response;
   response.set_is_eligible(is_server_eligible);
-  content::URLLoaderInterceptor url_loader_interceptor(
+  response.set_is_pdf_upload_eligible(is_pdf_upload_eligible);
+  auto url_loader_interceptor = std::make_unique<content::URLLoaderInterceptor>(
       base::BindRepeating(&OnRequest, response));
 
-  base::HistogramTester histogram_tester;
+  // Test service startup.
+  {
+    base::HistogramTester histogram_tester;
 
-  auto* service =
-      AimEligibilityServiceFactory::GetForProfile(browser()->profile());
-  AimEligibilityServiceObserverHelper service_observer_helper(service);
+    auto* service =
+        AimEligibilityServiceFactory::GetForProfile(browser()->profile());
+    base::test::TestFuture<void> eligibility_changed_future;
+    auto eligibility_subscription = service->RegisterEligibilityChangedCallback(
+        eligibility_changed_future.GetRepeatingCallback());
 
-  // The service may make a network request on construction, if applicable.
-  if (is_google_dse) {
-    // Wait for the observer to be notified of potential eligibility changes.
-    EXPECT_TRUE(service_observer_helper.WaitForEligibilityChanged());
+    // Test country and locale detection.
+    EXPECT_TRUE(service->IsCountry(country));
+    EXPECT_TRUE(service->IsLanguage(locale.substr(0, 2)));
 
-    // Verify histograms were recorded.
-    histogram_tester.ExpectTotalCount(
-        "Omnibox.AimEligibility.ServerRequestStatus", 2);
-    histogram_tester.ExpectBucketCount(
-        "Omnibox.AimEligibility.ServerRequestStatus",
-        AimEligibilityServiceFriend::ServerRequestStatus::kSent, 1);
-    histogram_tester.ExpectBucketCount(
-        "Omnibox.AimEligibility.ServerRequestStatus",
-        AimEligibilityServiceFriend::ServerRequestStatus::kSuccess, 1);
-    histogram_tester.ExpectTotalCount(
-        "Omnibox.AimEligibility.ServerEligibility.is_eligible", 1);
-    histogram_tester.ExpectUniqueSample(
-        "Omnibox.AimEligibility.ServerEligibility.is_eligible",
-        is_server_eligible, 1);
-  } else {
-    EXPECT_FALSE(service_observer_helper.IsReady());
+    // Test IsServerEligibilityEnabled().
+    EXPECT_EQ(service->IsServerEligibilityEnabled(),
+              server_eligibility_enabled);
 
-    // Verify no histogram were recorded.
-    histogram_tester.ExpectTotalCount(
-        "Omnibox.AimEligibility.ServerRequestStatus", 0);
-    histogram_tester.ExpectTotalCount(
-        "Omnibox.AimEligibility.ServerEligibility.is_eligible", 0);
+    // Wait for the eligibility change callback to be invoked, if applicable.
+    if (is_google_dse) {
+      EXPECT_TRUE(eligibility_changed_future.Wait());
+    } else {
+      EXPECT_FALSE(eligibility_changed_future.IsReady());
+    }
+
+    // Test IsAimLocallyEligible().
+    bool expected_local_eligibility = is_google_dse && allowed_by_policy;
+    EXPECT_EQ(service->IsAimLocallyEligible(), expected_local_eligibility);
+
+    // Test IsAimEligible().
+    bool expected_eligible =
+        expected_local_eligibility &&
+        (!server_eligibility_enabled || is_server_eligible);
+    EXPECT_EQ(service->IsAimEligible(), expected_eligible);
+
+    // Test IsPdfUploadEligible().
+    bool expected_pdf_upload_eligible =
+        expected_eligible &&
+        (!server_eligibility_enabled || is_pdf_upload_eligible);
+    EXPECT_EQ(service->IsPdfUploadEligible(), expected_pdf_upload_eligible);
+
+    // Verify histograms for the request on startup.
+    if (is_google_dse) {
+      // Startup sliced histograms.
+      histogram_tester.ExpectTotalCount(
+          "Omnibox.AimEligibility.EligibilityRequestStatus.Startup", 2);
+      histogram_tester.ExpectBucketCount(
+          "Omnibox.AimEligibility.EligibilityRequestStatus.Startup",
+          AimEligibilityServiceFriend::EligibilityRequestStatus::kSent, 1);
+      histogram_tester.ExpectBucketCount(
+          "Omnibox.AimEligibility.EligibilityRequestStatus.Startup",
+          AimEligibilityServiceFriend::EligibilityRequestStatus::kSuccess, 1);
+
+      histogram_tester.ExpectTotalCount(
+          "Omnibox.AimEligibility.EligibilityResponseCode.Startup", 1);
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponseCode.Startup", 200, 1);
+
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponse.Startup.is_eligible",
+          is_server_eligible, 1);
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponse.Startup.is_pdf_upload_"
+          "eligible",
+          is_pdf_upload_eligible, 1);
+
+      // Unsliced histograms.
+      histogram_tester.ExpectTotalCount(
+          "Omnibox.AimEligibility.EligibilityRequestStatus", 2);
+      histogram_tester.ExpectBucketCount(
+          "Omnibox.AimEligibility.EligibilityRequestStatus",
+          AimEligibilityServiceFriend::EligibilityRequestStatus::kSent, 1);
+      histogram_tester.ExpectBucketCount(
+          "Omnibox.AimEligibility.EligibilityRequestStatus",
+          AimEligibilityServiceFriend::EligibilityRequestStatus::kSuccess, 1);
+
+      histogram_tester.ExpectTotalCount(
+          "Omnibox.AimEligibility.EligibilityResponseCode", 1);
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponseCode", 200, 1);
+
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponse.is_eligible",
+          is_server_eligible, 1);
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponse.is_pdf_upload_eligible",
+          is_pdf_upload_eligible, 1);
+
+      // Response change histograms.
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponseChange.is_eligible",
+          is_server_eligible, 1);
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponseChange.is_pdf_upload_"
+          "eligible",
+          is_pdf_upload_eligible, 1);
+
+    } else {
+      histogram_tester.ExpectTotalCount(
+          "Omnibox.AimEligibility.EligibilityRequestStatus.Startup", 0);
+      histogram_tester.ExpectTotalCount(
+          "Omnibox.AimEligibility.EligibilityResponseCode.Startup", 0);
+    }
   }
 
-  // Test country and locale detection.
-  EXPECT_TRUE(service->IsCountry(country));
-  EXPECT_TRUE(service->IsLanguage(locale.substr(0, 2)));
-
-  // Test IsServerEligibilityEnabled.
-  EXPECT_EQ(service->IsServerEligibilityEnabled(), server_eligibility_enabled);
-
-  // Test IsAimLocallyEligible.
-  bool expected_local_eligibility = is_google_dse && allowed_by_policy;
-  EXPECT_EQ(service->IsAimLocallyEligible(), expected_local_eligibility);
-
-  // Test IsAimEligible.
-  bool expected_enabled = expected_local_eligibility &&
-                          (!server_eligibility_enabled || is_server_eligible);
-  EXPECT_EQ(service->IsAimEligible(), expected_enabled);
-
-  service_observer_helper.Clear();
+  url_loader_interceptor.reset();
 
   // Test changes to the accounts in the cookie jar.
-  auto* identity_manager = identity_test_env()->identity_manager();
-  IdentityManagerObserverHelper identity_observer(identity_manager);
-  signin::MakeAccountAvailable(
-      identity_manager,
-      signin::AccountAvailabilityOptionsBuilder(test_url_loader_factory())
-          .WithCookie()
-          .AsPrimary(signin::ConsentLevel::kSignin)
-          .Build("test@email.com"));
-  EXPECT_TRUE(identity_observer.WaitForAccountsInCookieUpdated());
+  {
+    base::HistogramTester histogram_tester;
 
-  if (is_google_dse) {
-    // Wait for the observer to be notified of potential eligibility changes.
-    EXPECT_TRUE(service_observer_helper.WaitForEligibilityChanged());
-  } else {
-    EXPECT_FALSE(service_observer_helper.IsReady());
+    // Handle the eligibility request with a custom response.
+    response.set_is_eligible(!is_server_eligible);
+    response.set_is_pdf_upload_eligible(!is_pdf_upload_eligible);
+    url_loader_interceptor = std::make_unique<content::URLLoaderInterceptor>(
+        base::BindRepeating(&OnRequest, response));
+
+    auto* service =
+        AimEligibilityServiceFactory::GetForProfile(browser()->profile());
+    base::test::TestFuture<void> eligibility_changed_future;
+    auto eligibility_subscription = service->RegisterEligibilityChangedCallback(
+        eligibility_changed_future.GetRepeatingCallback());
+
+    // Simulate a change to the account in the cookie jar.
+    auto* identity_manager = identity_test_env()->identity_manager();
+    IdentityManagerObserverHelper identity_observer(identity_manager);
+    signin::MakeAccountAvailable(
+        identity_manager,
+        signin::AccountAvailabilityOptionsBuilder(test_url_loader_factory())
+            .WithCookie()
+            .AsPrimary(signin::ConsentLevel::kSignin)
+            .Build("test@email.com"));
+    EXPECT_TRUE(identity_observer.WaitForAccountsInCookieUpdated());
+    EXPECT_TRUE(identity_observer.WaitForPrimaryAccountChanged());
+
+    // Wait for the eligibility change callback to be invoked, if applicable.
+    if (is_google_dse) {
+      EXPECT_TRUE(eligibility_changed_future.Wait());
+    } else {
+      EXPECT_FALSE(eligibility_changed_future.IsReady());
+    }
+
+    // Test IsAimLocallyEligible().
+    bool expected_local_eligibility = is_google_dse && allowed_by_policy;
+    EXPECT_EQ(service->IsAimLocallyEligible(), expected_local_eligibility);
+
+    // Test IsAimEligible().
+    bool expected_eligible =
+        expected_local_eligibility &&
+        (!server_eligibility_enabled || !is_server_eligible);
+    EXPECT_EQ(service->IsAimEligible(), expected_eligible);
+
+    // Test IsPdfUploadEligible().
+    bool expected_pdf_upload_eligible =
+        expected_eligible &&
+        (!server_eligibility_enabled || !is_pdf_upload_eligible);
+    EXPECT_EQ(service->IsPdfUploadEligible(), expected_pdf_upload_eligible);
+    // Verify histograms.
+    if (is_google_dse) {
+      // CookieChange sliced histograms.
+      histogram_tester.ExpectTotalCount(
+          "Omnibox.AimEligibility.EligibilityRequestStatus.CookieChange", 2);
+      histogram_tester.ExpectBucketCount(
+          "Omnibox.AimEligibility.EligibilityRequestStatus.CookieChange",
+          AimEligibilityServiceFriend::EligibilityRequestStatus::kSent, 1);
+      histogram_tester.ExpectBucketCount(
+          "Omnibox.AimEligibility.EligibilityRequestStatus.CookieChange",
+          AimEligibilityServiceFriend::EligibilityRequestStatus::kSuccess, 1);
+
+      histogram_tester.ExpectTotalCount(
+          "Omnibox.AimEligibility.EligibilityResponseCode.CookieChange", 1);
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponseCode.CookieChange", 200,
+          1);
+
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponse.CookieChange.is_eligible",
+          !is_server_eligible, 1);
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponse.CookieChange.is_pdf_"
+          "upload_eligible",
+          !is_pdf_upload_eligible, 1);
+
+      // Unsliced histograms.
+      histogram_tester.ExpectTotalCount(
+          "Omnibox.AimEligibility.EligibilityRequestStatus", 2);
+      histogram_tester.ExpectBucketCount(
+          "Omnibox.AimEligibility.EligibilityRequestStatus",
+          AimEligibilityServiceFriend::EligibilityRequestStatus::kSent, 1);
+      histogram_tester.ExpectBucketCount(
+          "Omnibox.AimEligibility.EligibilityRequestStatus",
+          AimEligibilityServiceFriend::EligibilityRequestStatus::kSuccess, 1);
+
+      histogram_tester.ExpectTotalCount(
+          "Omnibox.AimEligibility.EligibilityResponseCode", 1);
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponseCode", 200, 1);
+
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponse.is_eligible",
+          !is_server_eligible, 1);
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponse.is_pdf_upload_eligible",
+          !is_pdf_upload_eligible, 1);
+
+      // Response change histograms.
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponseChange.is_eligible", true,
+          1);
+      histogram_tester.ExpectUniqueSample(
+          "Omnibox.AimEligibility.EligibilityResponseChange.is_pdf_upload_"
+          "eligible",
+          true, 1);
+
+    } else {
+      histogram_tester.ExpectTotalCount(
+          "Omnibox.AimEligibility.EligibilityRequestStatus.CookieChange", 0);
+      histogram_tester.ExpectTotalCount(
+          "Omnibox.AimEligibility.EligibilityResponseCode.CookieChange", 0);
+    }
   }
 }

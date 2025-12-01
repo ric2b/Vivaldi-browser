@@ -437,22 +437,28 @@ void BookmarkMenuDelegate::ExecuteCommand(int id, int mouse_event_flags) {
     return;
   }
 
-  DCHECK(menu_id_to_node_map_.find(id) != menu_id_to_node_map_.end());
-
   if (vivaldi::IsVivaldiRunning()) {
-    BookmarkFolderOrURL& fu = menu_id_to_node_map_.find(id)->second;
-    const BookmarkNode *node = fu.GetIfBookmarkURL()
-      ? fu.GetIfBookmarkURL()
-            : (fu.GetIfBookmarkFolder()
-                   ? vivaldi::GetNodeByFolder(
-                         GetBookmarkMergedSurfaceService()->bookmark_model(),
-            *fu.GetIfBookmarkFolder()) : nullptr);
-    if (node) {
-      vivaldi::ExecuteBookmarkMenuCommand(browser_, id, node->id(),
-                                          mouse_event_flags);
+    if (menu_id_to_node_map_.find(id) == menu_id_to_node_map_.end()) {
+      // This is for the 'Add Active Tab' entry. It is not present in the map
+      // but known in our setup.
+      vivaldi::ExecuteBookmarkMenuCommand(browser_, id, -1, mouse_event_flags);
+    } else {
+      BookmarkFolderOrURL& fu = menu_id_to_node_map_.find(id)->second;
+      const BookmarkNode *node = fu.GetIfBookmarkURL()
+        ? fu.GetIfBookmarkURL()
+              : (fu.GetIfBookmarkFolder()
+                    ? vivaldi::GetNodeByFolder(
+                           GetBookmarkMergedSurfaceService()->bookmark_model(),
+              *fu.GetIfBookmarkFolder()) : nullptr);
+      if (node) {
+        vivaldi::ExecuteBookmarkMenuCommand(browser_, id, node->id(),
+                                            mouse_event_flags);
+      }
     }
     return;
   }
+
+  DCHECK(menu_id_to_node_map_.find(id) != menu_id_to_node_map_.end());
 
   RecordBookmarkLaunch(location_,
                        profile_metrics::GetBrowserProfileType(profile_));
@@ -517,6 +523,25 @@ bool BookmarkMenuDelegate::CanDrop(MenuItemView* menu,
     return false;
   }
 
+  bool fallback_from_vivaldi = true;
+  if (vivaldi::IsVivaldiRunning()) {
+    // Allows DnD move when dragging a bookmark/folder from JS.
+    std::vector<raw_ptr<const BookmarkNode, VectorExperimental>> nodes;
+    vivaldi::GetDraggedNodes(
+        GetBookmarkMergedSurfaceService()->bookmark_model(),
+        nodes);
+    if (nodes.size()) {
+      fallback_from_vivaldi = false;
+      drop_data_.ReadFromVector(nodes);
+      // Profile path is imporant. It will prevent attempts to move from another
+      // profile (falls back to a copy).
+      drop_data_.SetOriginatingProfilePath(vivaldi::GetDraggedPath());
+      if (drop_data_.size() != 1) {
+        return false;
+      }
+    }
+  }
+  if (fallback_from_vivaldi) {
   // Only accept drops of 1 node, which is the case for all data dragged from
   // bookmark bar and menus.
   if (!drop_data_.Read(data) || drop_data_.size() != 1 ||
@@ -524,6 +549,7 @@ bool BookmarkMenuDelegate::CanDrop(MenuItemView* menu,
           bookmarks::prefs::kEditBookmarksEnabled)) {
     return false;
   }
+  } // vivaldi
 
   if (drop_data_.has_single_url()) {
     return true;
@@ -653,6 +679,11 @@ void BookmarkMenuDelegate::WriteDragData(MenuItemView* sender,
 
   const BookmarkNode* node = menu_id_to_node_map_.find(sender->GetCommand())
                                  ->second.GetIfNonPermanentNode();
+  if (vivaldi::IsVivaldiRunning() && node) {
+    // Report id of dragged element to UI so that we can handle a drop-move
+    // event there (drag from menu, drop on bookmark bar etc).
+    vivaldi::HandleStartDrag(node->id());
+  }
   // Permanent nodes can't be dragged.
   CHECK(node);
   BookmarkNodeData drag_data(node);
@@ -1401,7 +1432,7 @@ void BookmarkMenuDelegate::BuildOtherNodeMenuHeader(MenuItemView* menu) {
     menu->AppendSeparator();
     other_node_menu_separator_ = menu->GetSubmenu()->children().back().get();
   }
-} 
+}
 
 // Added by vivaldi
 void BookmarkMenuDelegate::VivaldiSelectionChanged(views::MenuItemView* menu) {

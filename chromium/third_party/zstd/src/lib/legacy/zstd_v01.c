@@ -430,7 +430,7 @@ static unsigned FSE_isError(size_t code) { return (code > (size_t)(-FSE_ERROR_ma
 
 static short FSE_abs(short a)
 {
-    return a<0? -a : a;
+    return a<0? (short)-a : a;
 }
 
 

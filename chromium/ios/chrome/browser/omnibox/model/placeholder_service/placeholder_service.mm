@@ -61,13 +61,17 @@ PlaceholderService::PlaceholderService(FaviconLoader* favicon_loader,
 }
 #endif  // End Vivaldi
 
-PlaceholderService::~PlaceholderService() {
+// Vivaldi
+PlaceholderService::~PlaceholderService() = default;
+
+void PlaceholderService::Shutdown() {
   for (auto& observer : model_observers_) {
     observer.OnPlaceholderServiceShuttingDown();
   }
   template_url_service_->RemoveObserver(this);
   icon_cache_ = nil;
 }
+// End Vivaldi
 
 void PlaceholderService::FetchDefaultSearchEngineIcon(
     CGFloat icon_point_size,

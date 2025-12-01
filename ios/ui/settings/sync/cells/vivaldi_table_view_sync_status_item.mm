@@ -8,10 +8,6 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 const CGFloat kStackMargin = 13.0;
 const CGFloat kStackViewSpacing = 13.0;
@@ -35,7 +31,7 @@ const UIFontTextStyle fontTextStyle = UIFontTextStyleSubheadline;
   return self;
 }
 
-- (void)configureCell:(TableViewCell*)tableCell
+- (void)configureCell:(LegacyTableViewCell*)tableCell
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:tableCell withStyler:styler];
   VivaldiTableViewSyncStatusCell* cell =
@@ -127,7 +123,11 @@ const UIFontTextStyle fontTextStyle = UIFontTextStyleSubheadline;
 - (void)updateLabelCornerRadius {
   [_syncStatusView layoutIfNeeded];
   CGFloat height = CGRectGetHeight(_syncStatusView.bounds);
-  _syncStatusView.layer.cornerRadius = height/2.0;
+  CGFloat divider = 2.0;
+  if (@available(iOS 26, *)) {
+    divider = 3.0;
+  }
+  _syncStatusView.layer.cornerRadius = height/divider;
 }
 
 - (void)prepareForReuse {

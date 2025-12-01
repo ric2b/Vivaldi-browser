@@ -51,8 +51,6 @@ IRToProgramTest::Result IRToProgramTest::Run() {
 
     result.ir = str();
 
-    ProgramOptions options;
-    options.allowed_features = AllowedFeatures::Everything();
     auto output_program = IRToProgram(mod, options);
     if (!output_program.IsValid()) {
         result.err = output_program.Diagnostics().Str();
@@ -60,7 +58,7 @@ IRToProgramTest::Result IRToProgramTest::Run() {
         return result;
     }
 
-    auto output = wgsl::writer::Generate(output_program, {});
+    auto output = wgsl::writer::Generate(output_program);
     if (output != Success) {
         std::stringstream ss;
         ss << "wgsl::Generate() errored: " << output.Failure();
@@ -329,15 +327,17 @@ TEST_F(IRToProgramTest, EntryPoint_ParameterAttribute_Fragment) {
         MakeBuiltinParam(b, ty.u32(), core::BuiltinValue::kSampleIndex),
         MakeBuiltinParam(b, ty.u32(), core::BuiltinValue::kSampleMask),
         MakeBuiltinParam(b, ty.u32(), core::BuiltinValue::kSubgroupSize),
+        MakeBuiltinParam(b, ty.u32(), core::BuiltinValue::kPrimitiveIndex),
     });
 
     fn->Block()->Append(b.Return(fn));
 
     EXPECT_WGSL(R"(
 enable subgroups;
+enable primitive_index;
 
 @fragment
-fn f(@builtin(front_facing) v : bool, @builtin(sample_index) v_1 : u32, @builtin(sample_mask) v_2 : u32, @builtin(subgroup_size) v_3 : u32) {
+fn f(@builtin(front_facing) v : bool, @builtin(sample_index) v_1 : u32, @builtin(sample_mask) v_2 : u32, @builtin(subgroup_size) v_3 : u32, @builtin(primitive_index) v_4 : u32) {
 }
 )");
 }
@@ -416,7 +416,6 @@ TEST_F(IRToProgramTest, TypeWords) {
         Var("u32", true);
         Var("f32", true);
         Var("f16", true);
-        Var("vec", true);
         Var("vec2", true);
         Var("vec3", true);
         Var("vec4", true);
@@ -557,7 +556,6 @@ fn f() {
   var v_67 : bool = true;
   var v_68 : bool = true;
   var v_69 : bool = true;
-  var v_70 : bool = true;
 }
 )");
 }
@@ -985,8 +983,12 @@ TEST_F(IRToProgramTest, RenameStructAndStructMembers) {
 
     auto* fn = b.Function("f", ty.void_(), core::ir::Function::PipelineStage::kFragment);
     b.Append(fn->Block(), [&] {
-        b.Var("s0", ty.ref<function>(s0));
-        b.Var("s1", ty.ref<function>(s1));
+        auto* s0_var = b.Var("s0", ty.ref<function>(s0));
+        auto* s1_var = b.Var("s1", ty.ref<function>(s1));
+        b.Let("s0_0", b.Load(b.Access(ty.ref<function, i32>(), s0_var, 0_u)));
+        b.Let("s0_1", b.Load(b.Access(ty.ref<function, u32>(), s0_var, 1_u)));
+        b.Let("s0_2", b.Load(b.Access(ty.ref<function, u32>(), s0_var, 2_u)));
+        b.Let("s1_0", b.Load(b.Access(ty.ref<function, i32>(), s1_var, 0_u)));
         b.Return(fn);
     });
 
@@ -1005,6 +1007,10 @@ struct S {
 fn f() {
   var s0 : MyStruct;
   var s1 : S;
+  let s0_0 = s0.safe;
+  let s0_1 = s0.m;
+  let s0_2 = s0.m_1;
+  let s1_0 = s1.a;
 }
 )");
 }
@@ -1319,7 +1325,7 @@ fn f(i : i32) {
 
 TEST_F(IRToProgramTest, TypeConstruct_u32) {
     auto* fn = b.Function("f", ty.void_());
-    auto* i = b.FunctionParam("i", ty.i32());
+    auto* i = b.FunctionParam("i", ty.u32());
     fn->SetParams({i});
 
     b.Append(fn->Block(), [&] {
@@ -1328,7 +1334,7 @@ TEST_F(IRToProgramTest, TypeConstruct_u32) {
     });
 
     EXPECT_WGSL(R"(
-fn f(i : i32) {
+fn f(i : u32) {
   var v : u32 = u32(i);
 }
 )");
@@ -1336,7 +1342,7 @@ fn f(i : i32) {
 
 TEST_F(IRToProgramTest, TypeConstruct_f32) {
     auto* fn = b.Function("f", ty.void_());
-    auto* i = b.FunctionParam("i", ty.i32());
+    auto* i = b.FunctionParam("i", ty.f32());
     fn->SetParams({i});
 
     b.Append(fn->Block(), [&] {
@@ -1345,7 +1351,7 @@ TEST_F(IRToProgramTest, TypeConstruct_f32) {
     });
 
     EXPECT_WGSL(R"(
-fn f(i : i32) {
+fn f(i : f32) {
   var v : f32 = f32(i);
 }
 )");
@@ -1353,7 +1359,7 @@ fn f(i : i32) {
 
 TEST_F(IRToProgramTest, TypeConstruct_bool) {
     auto* fn = b.Function("f", ty.void_());
-    auto* i = b.FunctionParam("i", ty.i32());
+    auto* i = b.FunctionParam("i", ty.bool_());
     fn->SetParams({i});
 
     b.Append(fn->Block(), [&] {
@@ -1362,7 +1368,7 @@ TEST_F(IRToProgramTest, TypeConstruct_bool) {
     });
 
     EXPECT_WGSL(R"(
-fn f(i : i32) {
+fn f(i : bool) {
   var v : bool = bool(i);
 }
 )");
@@ -1488,12 +1494,12 @@ fn f(i : f32) {
 
 TEST_F(IRToProgramTest, TypeConstruct_Inlining) {
     auto* fn = b.Function("f", ty.void_());
-    auto* i0 = b.FunctionParam("i0", ty.i32());
-    auto* i1 = b.FunctionParam("i1", ty.i32());
-    auto* i2 = b.FunctionParam("i2", ty.i32());
-    auto* i3 = b.FunctionParam("i3", ty.i32());
-    auto* i4 = b.FunctionParam("i4", ty.i32());
-    auto* i5 = b.FunctionParam("i5", ty.i32());
+    auto* i0 = b.FunctionParam("i0", ty.f32());
+    auto* i1 = b.FunctionParam("i1", ty.f32());
+    auto* i2 = b.FunctionParam("i2", ty.f32());
+    auto* i3 = b.FunctionParam("i3", ty.f32());
+    auto* i4 = b.FunctionParam("i4", ty.f32());
+    auto* i5 = b.FunctionParam("i5", ty.f32());
     fn->SetParams({i0, i1, i2, i3, i4, i5});
 
     b.Append(fn->Block(), [&] {
@@ -1508,7 +1514,7 @@ TEST_F(IRToProgramTest, TypeConstruct_Inlining) {
     });
 
     EXPECT_WGSL(R"(
-fn f(i0 : i32, i1 : i32, i2 : i32, i3 : i32, i4 : i32, i5 : i32) {
+fn f(i0 : f32, i1 : f32, i2 : f32, i3 : f32, i4 : f32, i5 : f32) {
   var v : mat2x3<f32> = mat2x3<f32>(f32(i0), f32(i1), f32(i2), f32(i3), f32(i4), f32(i5));
 }
 )");
@@ -2076,8 +2082,6 @@ TEST_F(IRToProgramTest, Load_Reused) {
     });
 
     EXPECT_WGSL(R"(
-diagnostic(off, derivative_uniformity);
-
 @group(0u) @binding(0u) var im : texture_2d<f32>;
 
 @group(0u) @binding(1u) var v : sampler;
@@ -2400,23 +2404,23 @@ TEST_F(IRToProgramTest, If_Else_Chain) {
     b.Append(fn->Block(), [&] {
         auto if1 = b.If(pa);
         b.Append(if1->True(), [&] {
-            b.Call(ty.void_(), x, 0_i);
+            b.Call(ty.bool_(), x, 0_i);
             b.ExitIf(if1);
         });
         b.Append(if1->False(), [&] {
             auto* if2 = b.If(pb);
             b.Append(if2->True(), [&] {
-                b.Call(ty.void_(), x, 1_i);
+                b.Call(ty.bool_(), x, 1_i);
                 b.ExitIf(if2);
             });
             b.Append(if2->False(), [&] {
                 auto* if3 = b.If(pc);
                 b.Append(if3->True(), [&] {
-                    b.Call(ty.void_(), x, 2_i);
+                    b.Call(ty.bool_(), x, 2_i);
                     b.ExitIf(if3);
                 });
                 b.Append(if3->False(), [&] {
-                    b.Call(ty.void_(), x, 3_i);
+                    b.Call(ty.bool_(), x, 3_i);
                     b.ExitIf(if3);
                 });
                 b.ExitIf(if2);
@@ -3598,6 +3602,80 @@ struct S {
 }
 
 fn f(x : S) {
+}
+)");
+}
+
+TEST_F(IRToProgramTest, AllowNonUniformDerivatives) {
+    auto im = b.Var(
+        "im",
+        ty.ref(handle, ty.sampled_texture(core::type::TextureDimension::k2d, ty.f32()), read));
+    im->SetBindingPoint(0, 0);
+    auto sampler = b.Var("sampler", ty.ref(handle, ty.sampler(), read));
+    sampler->SetBindingPoint(0, 1);
+    auto non_uniform = Var<private_, bool>();
+
+    b.ir.root_block->Append(im);
+    b.ir.root_block->Append(sampler);
+    b.ir.root_block->Append(non_uniform);
+
+    auto* fn = b.Function("f", ty.void_());
+    b.Append(fn->Block(), [&] {  //
+        auto* if_ = b.If(b.Load(non_uniform));
+        b.Append(if_->True(), [&] {
+            auto* tl = b.Load(im);
+            auto* sl = b.Load(sampler);
+            b.Phony(b.Call<wgsl::ir::BuiltinCall>(ty.vec4<f32>(), wgsl::BuiltinFn::kTextureSample,
+                                                  tl, sl, b.Splat(ty.vec2<f32>(), 0_f)));
+            b.ExitIf(if_);
+        });
+        b.Return(fn);
+    });
+
+    options.allow_non_uniform_derivatives = true;
+    EXPECT_WGSL(R"(
+diagnostic(off, derivative_uniformity);
+
+@group(0u) @binding(0u) var im : texture_2d<f32>;
+
+@group(0u) @binding(1u) var v : sampler;
+
+var<private> v_1 : bool;
+
+fn f() {
+  if (v_1) {
+    _ = textureSample(im, v, vec2<f32>());
+  }
+}
+)");
+}
+
+TEST_F(IRToProgramTest, AllowNonUniformSubgroups) {
+    auto non_uniform = Var<private_, bool>();
+    b.ir.root_block->Append(non_uniform);
+
+    auto* fn = b.Function("f", ty.void_());
+    b.Append(fn->Block(), [&] {  //
+        auto* if_ = b.If(b.Load(non_uniform));
+        b.Append(if_->True(), [&] {
+            b.Phony(b.Call<wgsl::ir::BuiltinCall>(ty.vec4<u32>(), wgsl::BuiltinFn::kSubgroupBallot,
+                                                  true));
+            b.ExitIf(if_);
+        });
+        b.Return(fn);
+    });
+
+    options.allow_non_uniform_subgroup_operations = true;
+    EXPECT_WGSL(R"(
+enable subgroups;
+diagnostic(off, subgroup_uniformity);
+
+var<private> v : bool;
+
+fn f() {
+  if (v) {
+    _ = subgroupBallot(true);
+  }
 }
 )");
 }

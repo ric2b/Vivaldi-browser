@@ -560,7 +560,7 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
               "Variance Boost all intra); requires --enable-tpl-model=1"),
   .deltaq_strength = ARG_DEF(NULL, "deltaq-strength", 1,
                              "Deltaq strength for"
-                             " --deltaq-mode=4 (%)"),
+                             " --deltaq-mode=4 and --deltaq-mode=6 (%)"),
   .deltalf_mode = ARG_DEF(NULL, "delta-lf-mode", 1,
                           "Enable delta-lf-mode (0: off (default), 1: on)"),
   .frame_periodic_boost =
@@ -709,9 +709,11 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
       ARG_DEF(NULL, "sb-qp-sweep", 1,
               "When set to 1, enable the superblock level qp sweep for a "
               "given lambda to minimize the rdcost."),
-  .enable_low_complexity_decode =
-      ARG_DEF(NULL, "enable-low-complexity-decode", 1,
-              "Enable low complexity decode (0: false (default), 1: true)"),
+  .enable_low_complexity_decode = ARG_DEF(
+      NULL, "enable-low-complexity-decode", 1,
+      "Enable low complexity decode (0: false (default), 1: true). As of now, "
+      "this only supports good-quality encoding (speed 1 to 3) for vertical "
+      "videos between 608p and 720p."),
   .screen_detection_mode =
       ARG_DEF(NULL, "screen-detection-mode", 1,
               "Screen content detection mode (1: standard (default), "

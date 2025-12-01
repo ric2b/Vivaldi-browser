@@ -1,3 +1,83 @@
+# 2.8.0
+
+* UI modernization and macOS Tahoe support
+  * Modernize update alert and release notes UI (#2737) (Zorg, Noah Nuebling, Cykelero, Daniel Jalkut, Peter Nowell)
+  * Update retrieving app icon to work better in Tahoe (#2742) (Zorg)
+  * Improve retrieval of main app icon for authorization dialog (#2743) (Zorg)
+* Delta updates
+  * Improve bsdiff performance by preventing excessive iterations when processing similar data blocks (#2693) (Will Fairclough)
+  * Fix an issue while searching a cloneable file for delta updates (#2748, #2753) (Vincent Bénony, Zorg)
+  * Add support for relative URLs for delta updates (#2741) (jj)
+* Localization
+  * Set STRINGS_FILE_OUTPUT_ENCODING build setting to "binary" (#2712) (Nicolas Kick)
+  * Move all localizations to main Sparkle.strings (#2760) (Zorg)
+* Synchronize updater settings with user defaults to fix out-of-sync UI state (#2728) (Zorg)
+* Document and better enforce main thread only requirement for using Sparkle methods (#2746, #2754, #2768)) (Sebastien Marchand, Zorg)
+* Make -[SPUUserDriver showUpdateInFocus] optional (#2717) (Zorg)
+* Add private module map for framework (#2722) (Zorg)
+* Workaround a corner case in which the bundle path of a running application contains Contents/MacOS/Executable (#2726, #2747) (Jeremy Huddleston Sequoia, Zorg)
+* Disable false dependency scan analysis warnings when building Sparkle from source (#2762) (Daniel Jalkut)
+* Refactor the logic for avoiding re-sending the system profile more frequently than once a week (#2720) (Daniel Jalkut)
+* Remove deprecated interactive package installer type (#2767) (Zorg)
+
+# 2.7.3
+
+* Double quote team identifiers in requirement strings to fix crash if Team ID starts with number (#2766) (Zorg)
+
+# 2.7.2
+
+* Harden policy on what operations clients are allowed to take (#2763) (Zorg)
+
+# 2.7.1
+
+* Fix typo in NN localisation (#2694) (Sjur N Moshagen)
+* Fix compiler warnings for Xcode 16.3 (#2709) (Zorg)
+* Fix Sparkle not building when SPARKLE_COPY_LOCALIZATIONS=0 (#2707) (Zorg)
+* Fix release notes constraints when compiled with macOS 26 SDK (#2730) (Zorg)
+* Fix reserved identifier warnings for Xcode 26 (#2729) (Zorg)
+
+# 2.7.0
+
+* Unarchiver / validation improvements (Zorg)
+  * Remove old checksum verification checks for dmg archives to improve extraction speed (#2568) (Zorg)
+  * Skip extracting auxiliary files and improve extraction progress for disk images (#2569) (Zorg)
+  * Improve robustness around extracting dmg's with passwords (#2627, #2571) (Zorg)
+  * Randomize the download archive name the installer extracts/executes (#2584) (Zorg)
+  * Retry extracting zip file without piping if extraction fails to workaround bug prior to macOS 15 (#2616) (Zorg)
+  * Add opt-in SUVerifyUpdateBeforeExtraction option to force verification of updates before extraction (#2667) (Zorg)
+  * Add support for extracting Apple Archives (.aar files; requires SUVerifyUpdateBeforeExtraction, macOS 10.15+) (#2586, #2588, #2590) (Zorg)
+  * Don't allow removal of signing keys more strictly (#2647) (Zorg)
+  * Remove SPARKLE_BUILD_DMG_SUPPORT option (#2690) (Zorg)
+* Add new BinaryDelta format (version 4) (Zorg)
+  * Preserve bundle creation date when creating and applying delta updates (#2583) (Zorg)
+  * Use faster crc32 hashes for binary delta version 4 (#2638) (Zorg)
+  * Make binary delta version 4 the default (#2668) (Zorg)
+* Language / layout improvements
+  * Fix recovery error suggestion not shown when app is translocated or on read-only mount (#2689) (Zorg)
+  * Fix typo in Dutch localisation (#2642) (Eitot)
+  * Add baseline alignment to status text in SUStatus dialog (#2587) (Eitot)
+  * Make horizontal hugging priority required for status text field (#2614) (Zorg)
+  * Adjust the layout of anonymous system profile info to align better with the rest of the panel's UI (#2564) (Daniel Jalkut)
+  * Fix typo in Dutch localisation (#2642) (Eitot)
+  * Internationalize system profile display keys (#2577) (Zorg)
+  * Update hebrew locale and add right-to-left characters (#2573, #2576, #2578, #2579) (Shlomo)
+  * Update localisations for Dutch and German (#2582) (Eitot)
+  * Add unlocalized strings in Japanese (#2589) (1024jp)
+  * Fix typo in LICENSE (#2648) (fujisoft)
+* Deprecate custom version comparators  (#2639) (Zorg)
+* Skip preflight update check in sparkle-cli if user is root (#2645) (Zorg)
+* Avoid assert/crash when app is moved before update alert shows (#2658) (Zorg)
+* Use default NSURLRequest timeoutInterval for the downloader (currently 60s) (#2673) (Zorg)
+* Fix process substitution failing to work for providing the private key as file argument (#2615) (Zorg)
+* Improve unable decode private key error messages in generate_appcast (#2675) (Zorg)
+* Clarify that default channel must be in allowed channels set in API documentation (#2676) (Zorg)
+* Call update permission prompt delegate method only when needed (#2622) (Zorg)
+* Resolve duplicate class definitions from BinaryDelta, Sparkle Test App, and unit tests (#2570, #2629) (Zorg)
+
+# 2.6.4
+
+* Fix app modification prompt from appearing when downloaded update overrides NSUpdateSecurityPolicy (#2593)
+
 # 2.6.3
 
 * Guard update timer update check against sessionInProgress to fix rare crash when checking for updates (#2561)

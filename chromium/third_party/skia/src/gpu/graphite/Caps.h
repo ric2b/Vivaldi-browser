@@ -119,15 +119,15 @@ public:
                                                         Discardable) const = 0;
 
     virtual TextureInfo getDefaultSampledTextureInfo(SkColorType,
-                                                     Mipmapped mipmapped,
+                                                     Mipmapped,
                                                      Protected,
                                                      Renderable) const = 0;
 
-    virtual TextureInfo getTextureInfoForSampledCopy(const TextureInfo& textureInfo,
-                                                     Mipmapped mipmapped) const = 0;
+    virtual TextureInfo getTextureInfoForSampledCopy(const TextureInfo&,
+                                                     Mipmapped) const = 0;
 
     virtual TextureInfo getDefaultCompressedTextureInfo(SkTextureCompressionType,
-                                                        Mipmapped mipmapped,
+                                                        Mipmapped,
                                                         Protected) const = 0;
 
     virtual TextureInfo getDefaultStorageTextureInfo(SkColorType) const = 0;
@@ -207,7 +207,7 @@ public:
      * If this returns false then the caller should implement a fallback where a temporary texture
      * is created, pixels are written to it, and then that is copied or drawn into the the surface.
      */
-    virtual bool supportsWritePixels(const TextureInfo& textureInfo) const = 0;
+    virtual bool supportsWritePixels(const TextureInfo&) const = 0;
 
     /**
      * Backends may have restrictions on what types of textures support Device::readPixels().
@@ -215,7 +215,7 @@ public:
      * is created, the original texture is copied or drawn into it, and then pixels read from
      * the temporary texture.
      */
-    virtual bool supportsReadPixels(const TextureInfo& textureInfo) const = 0;
+    virtual bool supportsReadPixels(const TextureInfo&) const = 0;
 
     /**
      * Given a dst pixel config and a src color type what color type must the caller coax the
@@ -312,6 +312,11 @@ public:
     /* Returns whether multisampled render to single sampled is supported. */
     bool msaaRenderToSingleSampledSupport() const { return fMSAARenderToSingleSampledSupport; }
 
+    /* Returns whether multisampled render to single sampled is supported for a given texture. */
+    virtual bool msaaTextureRenderToSingleSampledSupport(const TextureInfo& info) const {
+        return this->msaaRenderToSingleSampledSupport();
+    }
+
     /**
      * Returns whether a render pass can have MSAA/depth/stencil attachments and a resolve
      * attachment with mismatched sizes. Note: the MSAA attachment and the depth/stencil attachment
@@ -406,6 +411,8 @@ public:
      * the shaders pipeline, avoid unnecessary cache look ups, and more.  (skbug.com/414645289)
      */
     bool usePipelineLibraries() const { return fUsePipelineLibraries; }
+
+    bool supportsHostImageCopy() const { return fSupportsHostImageCopy; }
 
     skgpu::ShaderErrorHandler* shaderErrorHandler() const { return fShaderErrorHandler; }
 
@@ -575,6 +582,11 @@ protected:
     bool fUseBasicDynamicState = false;
     bool fUseVertexInputDynamicState = false;
     bool fUsePipelineLibraries = false;
+
+    // Whether it's possible to upload data to images using the CPU (host) instead of the device.
+    // Under certain circumstances, it's more efficient to upload data in this way instead of
+    // through a staging buffer.
+    bool fSupportsHostImageCopy = false;
 
 private:
     virtual bool onIsTexturable(const TextureInfo&) const = 0;

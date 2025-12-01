@@ -106,9 +106,9 @@ export class SettingsAutofillSectionElement extends
       showAddressDialog_: Boolean,
       showAddressRemoveConfirmationDialog_: Boolean,
 
-      isHomeOrWorkAddress: {
+      isGoogleProfileAddress: {
         type: Boolean,
-        computed: 'computeIsHomeOrWorkAddress_(activeAddress)',
+        computed: 'computeIsGoogleProfileAddress_(activeAddress)',
       },
 
       isPlusAddressEnabled_: {
@@ -124,7 +124,7 @@ export class SettingsAutofillSectionElement extends
   declare private accountInfo_: chrome.autofillPrivate.AccountInfo|null;
   declare private showAddressDialog_: boolean;
   declare private showAddressRemoveConfirmationDialog_: boolean;
-  declare private isHomeOrWorkAddress: boolean;
+  declare private isGoogleProfileAddress: boolean;
   declare private isPlusAddressEnabled_: boolean;
   private autofillManager_: AutofillManagerProxy =
       AutofillManagerImpl.getInstance();
@@ -187,11 +187,12 @@ export class SettingsAutofillSectionElement extends
    */
   private getMenuRemoveAddressLabel_(
       address: chrome.autofillPrivate.AddressEntry): string {
-    const isHomeOrWorkAddress = this.isAccountHomeAddress_(address) ||
-        this.isAccountWorkAddress_(address);
+    const isGoogleProfileAddress = this.isAccountHomeAddress_(address) ||
+        this.isAccountWorkAddress_(address) ||
+        this.isAccountNameEmailAddress_(address);
 
     return this.i18n(
-        isHomeOrWorkAddress ? 'removeFromChrome' : 'removeAddress');
+        isGoogleProfileAddress ? 'removeFromChrome' : 'removeAddress');
   }
 
   /**
@@ -230,6 +231,8 @@ export class SettingsAutofillSectionElement extends
       this.onAccountHomeAddressClick_();
     } else if (this.isAccountWorkAddress_(this.activeAddress!)) {
       this.onAccountWorkAddressClick_();
+    } else if (this.isAccountNameEmailAddress_(this.activeAddress!)) {
+      this.onAccountNameEmailAddressClick_();
     } else {
       this.showAddressDialog_ = true;
     }
@@ -307,14 +310,21 @@ export class SettingsAutofillSectionElement extends
         chrome.autofillPrivate.AddressRecordType.ACCOUNT_WORK;
   }
 
-  private computeIsHomeOrWorkAddress_(
+  private isAccountNameEmailAddress_(
+      address: chrome.autofillPrivate.AddressEntry) {
+    return address.metadata?.recordType ===
+        chrome.autofillPrivate.AddressRecordType.ACCOUNT_NAME_EMAIL;
+  }
+
+  private computeIsGoogleProfileAddress_(
       address: chrome.autofillPrivate.AddressEntry): boolean {
     if (!address) {
       return false;
     }
 
     return this.isAccountHomeAddress_(address) ||
-        this.isAccountWorkAddress_(address);
+        this.isAccountWorkAddress_(address) ||
+        this.isAccountNameEmailAddress_(address);
   }
 
   private onAccountHomeAddressClick_() {
@@ -325,6 +335,11 @@ export class SettingsAutofillSectionElement extends
   private onAccountWorkAddressClick_() {
     OpenWindowProxyImpl.getInstance().openUrl(
         this.i18n('googleAccountWorkAddressUrl'));
+  }
+
+  private onAccountNameEmailAddressClick_() {
+    OpenWindowProxyImpl.getInstance().openUrl(
+        this.i18n('googleAccountNameEmailAddressEditUrl'));
   }
 
   private isCloudOffVisible_(
@@ -358,8 +373,7 @@ export class SettingsAutofillSectionElement extends
   private shouldShowAddressIcon_(
       address: chrome.autofillPrivate.AddressEntry,
       accountInfo: chrome.autofillPrivate.AccountInfo|null): boolean {
-    return this.isCloudOffVisible_(address, accountInfo) ||
-        loadTimeData.getBoolean('enableSupportForHomeAndWork');
+    return this.getAddressIcon_(address, accountInfo).length > 0;
   }
 
   /**
@@ -370,17 +384,18 @@ export class SettingsAutofillSectionElement extends
   private getAddressIcon_(
       address: chrome.autofillPrivate.AddressEntry,
       accountInfo: chrome.autofillPrivate.AccountInfo|null): string {
-    if (this.isAccountHomeAddress_(address)) {
-      return 'settings20:home';
-    }
-    if (this.isAccountWorkAddress_(address)) {
-      return 'settings20:work';
+    if (loadTimeData.getBoolean('enableSupportForHomeAndWork')) {
+      if (this.isAccountHomeAddress_(address)) {
+        return 'settings20:home';
+      }
+      if (this.isAccountWorkAddress_(address)) {
+        return 'settings20:work';
+      }
     }
     if (this.isCloudOffVisible_(address, accountInfo)) {
       return 'cr20:cloud-off';
     }
-
-    return 'settings20:location-on';
+    return '';
   }
 
   /**

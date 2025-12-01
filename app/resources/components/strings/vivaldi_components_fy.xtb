@@ -2,16 +2,6 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fy">
 <translation id="3830627370375585318">Vivaldi tastean tagong ta jo netwurk yn jo brânmuorre of antyfirus te brûken.</translation>
-<translation id="4200102020577305737">Gean nei
-          it Vivaldi menu &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          LAN ynstellingen
-          and set "Proksy tsjinner foar jo LAN" út.</translation>
 <translation id="4932161901409251843">Gean nei
           it Vivaldi menu &gt;
           <ph name="SETTINGS_TITLE" />
@@ -32,4 +22,14 @@
           As dit net de swierrigens oplost, riede wie oan dizze opsje wer te selektearjen
           foar ferbettere prestaasjes.</translation>
 <translation id="7496505986576158197">Vivaldi is mooglik makke troch <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> iepen boarne projek en oare <ph name="BEGIN_LINK_OSS" />iepen boarne sofware<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Gean nei
+          it Vivaldi menu &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Netwurk &amp; ynternet &gt; Proksy
+          en skeakelje "ynstellingen automatysk ûntdekke" ût.</translation>
 </translationbundle>

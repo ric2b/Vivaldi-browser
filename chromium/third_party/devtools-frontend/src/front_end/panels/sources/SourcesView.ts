@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -32,23 +32,23 @@ import {Events as UISourceCodeFrameEvents, UISourceCodeFrame} from './UISourceCo
 
 const UIStrings = {
   /**
-   *@description Text to open a file
+   * @description Text to open a file
    */
   openFile: 'Open file',
   /**
-   *@description Text to run commands
+   * @description Text to run commands
    */
   runCommand: 'Run command',
   /**
-   *@description Text in Sources View of the Sources panel. This sentence follows by a list of actions.
+   * @description Text in Sources View of the Sources panel. This sentence follows by a list of actions.
    */
   workspaceDropInAFolderToSyncSources: 'To sync edits to the workspace, drop a folder with your sources here or',
   /**
-   *@description Text in Sources View of the Sources panel.
+   * @description Text in Sources View of the Sources panel.
    */
   selectFolder: 'Select folder',
   /**
-   *@description Accessible label for Sources placeholder view actions list
+   * @description Accessible label for Sources placeholder view actions list
    */
   sourceViewActions: 'Source View Actions',
 
@@ -58,12 +58,12 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typeof UI.Widget.VBox>(UI.Widget.VBox)
     implements TabbedEditorContainerDelegate, UI.SearchableView.Searchable, UI.SearchableView.Replaceable {
-  private readonly searchableViewInternal: UI.SearchableView.SearchableView;
+  readonly #searchableView: UI.SearchableView.SearchableView;
   private readonly sourceViewByUISourceCode: Map<Workspace.UISourceCode.UISourceCode, UI.Widget.Widget>;
   editorContainer: TabbedEditorContainer;
   private readonly historyManager: EditingLocationHistoryManager;
   readonly #scriptViewToolbar: UI.Toolbar.Toolbar;
-  private readonly bottomToolbarInternal: UI.Toolbar.Toolbar;
+  readonly #bottomToolbar: UI.Toolbar.Toolbar;
   private toolbarChangedListener: Common.EventTarget.EventDescriptor|null;
   private readonly focusedPlaceholderElement?: HTMLElement;
   private searchView?: UISourceCodeFrame;
@@ -78,16 +78,16 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
 
     const workspace = Workspace.Workspace.WorkspaceImpl.instance();
 
-    this.searchableViewInternal = new UI.SearchableView.SearchableView(this, this, 'sources-view-search-config');
-    this.searchableViewInternal.setMinimalSearchQuerySize(0);
-    this.searchableViewInternal.show(this.element);
+    this.#searchableView = new UI.SearchableView.SearchableView(this, this, 'sources-view-search-config');
+    this.#searchableView.setMinimalSearchQuerySize(0);
+    this.#searchableView.show(this.element);
 
     this.sourceViewByUISourceCode = new Map();
 
     this.editorContainer = new TabbedEditorContainer(
         this, Common.Settings.Settings.instance().createLocalSetting('previously-viewed-files', []),
         this.placeholderElement(), this.focusedPlaceholderElement);
-    this.editorContainer.show(this.searchableViewInternal.element);
+    this.editorContainer.show(this.#searchableView.element);
     this.editorContainer.addEventListener(TabbedEditorContainerEvents.EDITOR_SELECTED, this.editorSelected, this);
     this.editorContainer.addEventListener(TabbedEditorContainerEvents.EDITOR_CLOSED, this.editorClosed, this);
 
@@ -97,7 +97,7 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
     toolbarContainerElementInternal.setAttribute('jslog', `${VisualLogging.toolbar('bottom')}`);
     this.#scriptViewToolbar = toolbarContainerElementInternal.createChild('devtools-toolbar');
     this.#scriptViewToolbar.style.flex = 'auto';
-    this.bottomToolbarInternal = toolbarContainerElementInternal.createChild('devtools-toolbar');
+    this.#bottomToolbar = toolbarContainerElementInternal.createChild('devtools-toolbar');
 
     this.toolbarChangedListener = null;
 
@@ -224,7 +224,7 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
   }
 
   bottomToolbar(): UI.Toolbar.Toolbar {
-    return this.bottomToolbarInternal;
+    return this.#bottomToolbar;
   }
 
   scriptViewToolbar(): UI.Toolbar.Toolbar {
@@ -242,7 +242,7 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
   }
 
   searchableView(): UI.SearchableView.SearchableView {
-    return this.searchableViewInternal;
+    return this.#searchableView;
   }
 
   visibleView(): UI.Widget.Widget|null {
@@ -474,7 +474,7 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
     // SourcesNavigator does not need to update on EditorClosed.
     this.removeToolbarChangedListener();
     this.updateScriptViewToolbarItems();
-    this.searchableViewInternal.resetSearch();
+    this.#searchableView.resetSearch();
 
     const data = {
       uiSourceCode,
@@ -490,11 +490,11 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
     }
     const currentSourceFrame = event.data.currentView instanceof UISourceCodeFrame ? event.data.currentView : null;
     if (currentSourceFrame) {
-      currentSourceFrame.setSearchableView(this.searchableViewInternal);
+      currentSourceFrame.setSearchableView(this.#searchableView);
     }
 
-    this.searchableViewInternal.setReplaceable(Boolean(currentSourceFrame?.canEditSource()));
-    this.searchableViewInternal.refreshSearch();
+    this.#searchableView.setReplaceable(Boolean(currentSourceFrame?.canEditSource()));
+    this.#searchableView.refreshSearch();
     this.updateToolbarChangedListener();
     this.updateScriptViewToolbarItems();
 
@@ -572,6 +572,10 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
   }
 
   supportsCaseSensitiveSearch(): boolean {
+    return true;
+  }
+
+  supportsWholeWordSearch(): boolean {
     return true;
   }
 

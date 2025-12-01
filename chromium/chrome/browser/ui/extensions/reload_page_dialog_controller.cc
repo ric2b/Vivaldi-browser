@@ -10,11 +10,14 @@
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/ui/extensions/extension_dialog_utils.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_icon_placeholder.h"
 #include "extensions/browser/image_loader.h"
 #include "extensions/common/extension.h"
@@ -23,7 +26,16 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/dialog_model.h"
 
+#if BUILDFLAG(IS_ANDROID)
+#include "components/messages/android/message_dispatcher_bridge.h"
+#include "components/messages/android/message_enums.h"
+#include "components/messages/android/message_wrapper.h"
+#endif  // BUILDFLAG(IS_ANDROID)
+
 namespace {
+
+// Whether the dialog should be accepted without showing it on tests.
+std::optional<bool> g_accept_bubble_for_testing_ = std::nullopt;
 
 std::u16string GetTitle(
     const std::vector<extensions::ReloadPageDialogController::ExtensionInfo>&
@@ -56,16 +68,23 @@ DEFINE_ELEMENT_IDENTIFIER_VALUE(kReloadPageDialogOkButtonElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kReloadPageDialogCancelButtonElementId);
 
 ReloadPageDialogController::ReloadPageDialogController(
-    gfx::NativeWindow parent,
-    content::BrowserContext* browser_context,
-    base::OnceClosure callback)
-    : parent_(parent),
-      browser_context_(browser_context),
-      on_dialog_accepted_(std::move(callback)) {}
+    content::WebContents* web_contents,
+    content::BrowserContext* browser_context)
+    : web_contents_(web_contents), browser_context_(browser_context) {}
+
 ReloadPageDialogController::~ReloadPageDialogController() = default;
 
 void ReloadPageDialogController::TriggerShow(
     const std::vector<const Extension*>& extensions) {
+  // For testing, callers can use AcceptDialogForTesting() to pre-determine
+  // the dialog's result. This bypasses showing the dialog.
+  if (g_accept_bubble_for_testing_.has_value()) {
+    if (*g_accept_bubble_for_testing_) {
+      OnAcceptSelected();
+    }
+    return;
+  }
+
   if (!base::FeatureList::IsEnabled(
           extensions_features::kExtensionsMenuAccessControl)) {
     for (const Extension* extension : extensions) {
@@ -107,10 +126,47 @@ void ReloadPageDialogController::TriggerShow(
   }
 }
 
+// static
+base::AutoReset<std::optional<bool>>
+ReloadPageDialogController::AcceptDialogForTesting(bool accept_dialog) {
+  return base::AutoReset<std::optional<bool>>(&g_accept_bubble_for_testing_,
+                                              accept_dialog);
+}
+
 void ReloadPageDialogController::Show() {
+#if BUILDFLAG(IS_ANDROID)
+  message_ = std::make_unique<messages::MessageWrapper>(
+      messages::MessageIdentifier::RELOAD_PAGE,
+      base::BindOnce(&ReloadPageDialogController::OnAcceptSelected,
+                     weak_ptr_factory_.GetWeakPtr()),
+      base::DoNothing());
+
+  message_->SetTitle(GetTitle(extensions_info_));
+  message_->SetPrimaryButtonText(
+      l10n_util::GetStringUTF16(IDS_EXTENSION_RELOAD_PAGE_BUBBLE_OK_BUTTON));
+
+  if (base::FeatureList::IsEnabled(
+          extensions_features::kExtensionsMenuAccessControl)) {
+    int extensions_count = extensions_info_.size();
+    if (extensions_count == 1 && !extensions_info_[0].icon.IsEmpty()) {
+      message_->SetIcon(extensions_info_[0].icon.AsBitmap());
+    } else if (extensions_count > 1) {
+      // TODO (crbug.com/424012380): The message UI on Android doesn't support
+      // displaying a list of extensions like the desktop dialog. This case
+      // needs to be handled differently for Android. For now, no icon will be
+      // shown for multiple extensions.
+    }
+  }
+
+  messages::MessageDispatcherBridge::Get()->EnqueueMessage(
+      message_.get(), web_contents_, messages::MessageScopeType::NAVIGATION,
+      messages::MessagePriority::kNormal);
+
+#else
   ui::DialogModel::Builder dialog_builder;
   dialog_builder.SetTitle(GetTitle(extensions_info_))
-      .AddOkButton(base::BindOnce(std::move(on_dialog_accepted_)),
+      .AddOkButton(base::BindOnce(&ReloadPageDialogController::OnAcceptSelected,
+                                  weak_ptr_factory_.GetWeakPtr()),
                    ui::DialogModel::Button::Params()
                        .SetLabel(l10n_util::GetStringUTF16(
                            IDS_EXTENSION_RELOAD_PAGE_BUBBLE_OK_BUTTON))
@@ -143,7 +199,9 @@ void ReloadPageDialogController::Show() {
     extension_ids.push_back(info.id);
   }
 
-  ShowDialog(parent_, extension_ids, dialog_builder.Build());
+  ShowDialog(web_contents_->GetTopLevelNativeWindow(), extension_ids,
+             dialog_builder.Build());
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 void ReloadPageDialogController::OnExtensionIconLoaded(
@@ -157,6 +215,10 @@ void ReloadPageDialogController::OnExtensionIconLoaded(
   extension_info.icon = icon;
   extensions_info_.push_back(extension_info);
   std::move(done_callback).Run();
+}
+
+void ReloadPageDialogController::OnAcceptSelected() {
+  web_contents_->GetController().Reload(content::ReloadType::NORMAL, false);
 }
 
 }  // namespace extensions

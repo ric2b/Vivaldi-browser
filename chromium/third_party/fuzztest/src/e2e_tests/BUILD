@@ -14,6 +14,10 @@
 
 # End-to-end tests with microbenchmarks.
 
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 package(default_visibility = ["//visibility:private"])
 
 licenses(["notice"])
@@ -25,10 +29,10 @@ cc_library(
     hdrs = ["test_binary_util.h"],
     deps = [
         "@abseil-cpp//absl/container:flat_hash_map",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:string_view",
         "@abseil-cpp//absl/time",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//fuzztest/internal:flag_name",
         "@com_google_fuzztest//fuzztest/internal:subprocess",
     ],
@@ -65,6 +69,7 @@ cc_test(
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/time",
         "@com_google_fuzztest//centipede:weak_sancov_stubs",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:temp_dir",
         "@com_google_fuzztest//fuzztest/internal:escaping",
         "@com_google_fuzztest//fuzztest/internal:io",
@@ -91,7 +96,7 @@ cc_binary(
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/time",
-        "@com_google_fuzztest//fuzztest/internal:logging",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//fuzztest/internal:subprocess",
         "@re2",
     ],
@@ -146,16 +151,15 @@ cc_test(
         ":test_binary_util",
         "@abseil-cpp//absl/base:no_destructor",
         "@abseil-cpp//absl/container:flat_hash_map",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/time",
         "@com_google_fuzztest//centipede:weak_sancov_stubs",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:temp_dir",
         "@com_google_fuzztest//fuzztest/internal:escaping",
         "@com_google_fuzztest//fuzztest/internal:io",
-        "@com_google_fuzztest//fuzztest/internal:logging",
         "@com_google_fuzztest//fuzztest/internal:subprocess",
         "@googletest//:gtest_main",
     ],

@@ -23,7 +23,7 @@
 "%1$@ %2$@ has been downloaded and is ready to use! Would you like to install it and relaunch %1$@ now?" = "%1$@ %2$@ je preuzeta i spremna za upotrebu! Želiš li je sada instalirati, te ponovo pokrenuti %1$@?";
 
 /* No comment provided by engineer. */
-"%1$@ can’t be updated, because it was opened from a read-only or a temporary location." = "%1$@ nije moguće aktualizirati, jer je pokrenuta s lokacije bez korisničkih prava pisanja, npr. dmg.";
+"%1$@ can’t be updated because it was opened from a read-only or a temporary location." = "%1$@ nije moguće aktualizirati, jer je pokrenuta s lokacije bez korisničkih prava pisanja, npr. dmg.";
 
 /* No comment provided by engineer. */
 "A new version of %@ is available!" = "Dostupna je nova verzija za %@!";
@@ -90,3 +90,36 @@
 
 /* Status message shown when the user checks for updates but is already current or the feed doesn't contain any updates. */
 "You’re up to date!" = "Koristiš najnoviju verziju!";
+
+/* Software Update title/label */
+"Software Update" = "Aktualiziranje softvera";
+
+/* Remind Me Later choice for update alert */
+"Remind Me Later" = "Podsjeti me kasnije";
+
+/* Skip This Version choice for update alert */
+"Skip This Version" = "Zanemari ovu verziju";
+
+/* Install Update choice for update alert */
+"Install Update" = "Instaliraj nadogradnju";
+
+/* Automatically download and install updates in the future option for update alert */
+"Automatically download and install updates in the future" = "Ubuduće preuzmi i instaliraj nadogradnje automatski";
+
+/* Check for updates automatically response for update permission dialog */
+"Check Automatically" = "Provjeri automatski";
+
+/* Don't check for updates automatically response for update permission dialog */
+"Don’t Check" = "Nemoj provjeravati";
+
+/* Title question for update permission dialog */
+"Check for updates automatically?" = "Automatski provjeriti nadogradnje?";
+
+/* Include anonymous system profile choice for update permission dialog */
+"Include anonymous system profile" = "Uključi anonimizirane podatke o profilu sustava";
+
+/* Automatically download and install updates choice for update permission dialog */
+"Automatically download and install updates" = "Preuzmi i instaliraj nadogradnje automatski";
+
+/* Anonymous system profile information disclosure for update permission dialog */
+"Anonymous system profile information is used to help us plan future development work. Please contact us if you have any questions about this.\n\nThis is the information that would be sent:" = "Anonimizirani podaci profila susatava pomažu nam planirati budući razvoj. Kontaktiraj nas, ako imaš pitanja o tome.\n\nŠalju se sljedeći podaci:";

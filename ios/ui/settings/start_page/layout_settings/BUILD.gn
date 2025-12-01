@@ -23,6 +23,9 @@ source_set("layout_settings") {
     "Foundation.framework",
     "UIKit.framework"
   ]
+  configs += [
+    "//vivaldi/gn/config:release_kind"
+  ]
 }
 
 swift_source_set("layout_settings_swift") {

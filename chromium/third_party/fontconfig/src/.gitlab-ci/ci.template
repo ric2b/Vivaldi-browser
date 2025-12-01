@@ -12,7 +12,7 @@
 # and run ci-fairy generate-template. For details, see
 # https://freedesktop.pages.freedesktop.org/ci-templates/ci-fairy.html#templating-gitlab-ci-yml
 
-.templates_sha: &template_sha 32afe5644697e503af18a736587c8619fa036a72
+.templates_sha: &template_sha aec7a6ce7bb38902c70641526f6611e27141784a
 
 include:
   {% for distro in distributions|sort(attribute="name")|unique(attribute="name") %}
@@ -253,6 +253,7 @@ check-ci-script:
       [ $FC_BUILD_NO_INSTALL -eq 1 ] && buildopt+=(-I)
       [ $FC_BUILD_NO_CHECK -eq 1 ] && buildopt+=(-C)
       [ $FC_BUILD_SUBPROJECT -eq 1 ] && buildopt+=(-S)
+      [ -n "$FC_BUILD_ASAN" ] && buildopt+=(-A $FC_BUILD_ASAN)
       buildopt+=(-s $FC_BUILDSYS)
       buildopt+=(-t $FC_BUILD_TYPE)
       buildopt+=(-X $FC_XML_BACKEND)
@@ -282,6 +283,8 @@ check-ci-script:
       - build*/meson-logs/*
       - build*/meson-dist/*
       - prefix*
+    reports:
+      junit: build*/meson-logs/testlog.junit.xml
 
 .upload:
   rules:

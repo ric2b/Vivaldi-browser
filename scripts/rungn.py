@@ -17,6 +17,9 @@ is_ios = os.access(os.path.join(sourcedir, ".enable_ios"), os.F_OK)
 use_gn_ide_all = os.access(os.path.join(sourcedir, ".enable_gn_all_ide"), os.F_OK)
 use_gn_unique_name = os.access(os.path.join(sourcedir, ".enable_gn_unique_name"), os.F_OK)
 use_gn_reclient = os.access(os.path.join(sourcedir, ".enable_gn_reclient"), os.F_OK)
+use_gn_siso = os.access(os.path.join(sourcedir, ".enable_gn_siso"), os.F_OK)
+
+assert not (use_gn_reclient and use_gn_siso), "Use either Reclient mode, or Siso mode, not both"
 
 # Check python version
 #try:
@@ -220,8 +223,10 @@ if args.no_hermetic:
   gn_defines += " use_hermetic_toolchain=false"
 
 if use_gn_reclient:
-  # Temporary disabling of reclient on Windows, because problems with Linux clang 20 cross-compile
   gn_defines += ' vivaldi_enable_reclient=true'
+
+if use_gn_siso:
+  gn_defines += ' vivaldi_enable_siso=true'
 
 if args.refresh or not args.args:
   is_builder = os.environ.get("CHROME_HEADLESS", 0) != 0
@@ -256,21 +261,28 @@ if args.refresh or not args.args:
     platform_target=""
 
   def include_arg(mode):
+    def gn_abspath(p):
+      p = os.path.abspath(p)
+      if not p.startswith("/"):
+        p= "/"+p
+      return p
+
     user_arg_files = []
-    user_arg_files.append(os.path.expanduser("~/.gn/args.gn"))
+    user_arg_files.append(gn_abspath(os.path.expanduser("~/.gn/args.gn")))
     if args.args_gn:
-      user_arg_files.append(args.args_gn)
-    user_arg_files.append(os.path.abspath("args.gn"))
-    user_arg_files.append(os.path.abspath("args.{}.gn".format(mode)))
+      user_arg_files.append(gn_abspath(args.args_gn))
+    user_arg_files.append(gn_abspath("args.gn"))
+    user_arg_files.append(gn_abspath("args.{}.gn".format(mode)))
 
     tmp_args = []
     for f in user_arg_files:
-      if f and os.access(f, os.F_OK):
+      f1 = f
+      if is_windows:
+        f1 = f1[1:]
+      if f1 and os.access(f1, os.F_OK):
         if is_windows:
            # convert to gn absolute file system label
           f = f.replace("\\", "/")
-          if not args.args_gn:
-            f= "/"+f
         tmp_args.append(f)
     user_arg_files = tmp_args
 
@@ -302,6 +314,7 @@ if args.refresh or not args.args:
       name = ide_profile_name+"_"+os.path.basename(target)
       if ide_kind.startswith("vs"):
         ide_args.append("--sln="+name)
+        ide_args.append('--ninja-executable=vs_autoninja.bat')
       elif ide_kind == "xcode":
         ide_args.append("--workspace="+name)
     if subprocess.call([gn_path,

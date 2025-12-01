@@ -40,7 +40,7 @@
 #include "url/scheme_host_port.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
+#include "base/android/android_info.h"
 #include "net/android/network_library.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -50,7 +50,6 @@ namespace {
 
 // The experiment settings of features::kUseDnsHttpsSvcb. See the comments in
 // net/base/features.h for more details.
-const char kUseDnsHttpsSvcbEnable[] = "enable";
 const char kUseDnsHttpsSvcbInsecureExtraTimeMax[] = "insecure_extra_time_max";
 const char kUseDnsHttpsSvcbInsecureExtraTimePercent[] =
     "insecure_extra_time_percent";
@@ -254,8 +253,6 @@ HostResolver::HttpsSvcbOptions::~HttpsSvcbOptions() = default;
 HostResolver::HttpsSvcbOptions HostResolver::HttpsSvcbOptions::FromDict(
     const base::Value::Dict& dict) {
   net::HostResolver::HttpsSvcbOptions options;
-  options.enable =
-      dict.FindBool(kUseDnsHttpsSvcbEnable).value_or(options.enable);
   GetTimeDeltaFromDictString(dict, kUseDnsHttpsSvcbInsecureExtraTimeMax,
                              &options.insecure_extra_time_max);
 
@@ -280,7 +277,6 @@ HostResolver::HttpsSvcbOptions HostResolver::HttpsSvcbOptions::FromDict(
 // static
 HostResolver::HttpsSvcbOptions HostResolver::HttpsSvcbOptions::FromFeatures() {
   net::HostResolver::HttpsSvcbOptions options;
-  options.enable = base::FeatureList::IsEnabled(features::kUseDnsHttpsSvcb);
   options.insecure_extra_time_max =
       features::kUseDnsHttpsSvcbInsecureExtraTimeMax.Get();
   options.insecure_extra_time_percent =
@@ -486,8 +482,8 @@ HostResolver::CreateStandaloneNetworkBoundResolver(
   // Support the use of the built-in resolver when possible.
   bool is_builtin_resolver_supported =
       manager_options.insecure_dns_client_enabled &&
-      base::android::BuildInfo::GetInstance()->sdk_int() >=
-          base::android::SDK_VERSION_P;
+      base::android::android_info::sdk_int() >=
+          base::android::android_info::SDK_VERSION_P;
   if (is_builtin_resolver_supported) {
     // Pre-existing DnsConfigOverrides is currently ignored, consider extending
     // if a use case arises.

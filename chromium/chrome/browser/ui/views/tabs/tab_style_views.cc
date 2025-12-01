@@ -21,7 +21,7 @@
 #include "chrome/browser/ui/tabs/tab_style.h"
 #include "chrome/browser/ui/tabs/tab_types.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
+#include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/top_container_background.h"
 #include "chrome/browser/ui/views/tabs/glow_hover_controller.h"
@@ -53,16 +53,6 @@ Tab* GetLeftTab(const Tab* tab) {
 
 Tab* GetRightTab(const Tab* tab) {
   return tab->controller()->GetAdjacentTab(tab, base::i18n::IsRTL() ? -1 : 1);
-}
-
-// Updates a target value, returning true if it changed.
-template <class T>
-bool UpdateValue(T* dest, const T& src) {
-  if (*dest == src) {
-    return false;
-  }
-  *dest = src;
-  return true;
 }
 
 class TabStyleViewsImpl : public TabStyleViews {
@@ -161,7 +151,6 @@ class TabStyleViewsImpl : public TabStyleViews {
   bool ShouldCompactLeadingEdge(TabStyle::PathType path_type) const;
 
   // Painting helper functions:
-  void PaintInactiveTabBackground(gfx::Canvas* canvas) const;
   void PaintTabBackground(gfx::Canvas* canvas,
                           TabStyle::TabSelectionState selection_state,
                           bool hovered,
@@ -230,6 +219,10 @@ SkPath TabStyleViewsImpl::GetPath(TabStyle::PathType path_type,
       GetTopCornerRadiusForWidth(tab()->width()) * scale;
   float extension_corner_radius = tab_style()->GetBottomCornerRadius() * scale;
 
+  const float separator_overlap = (tab_style()->GetSeparatorMargins().width() +
+                                   tab_style()->GetSeparatorSize().width()) *
+                                  scale;
+
   // Selected, hover, and inactive tab fills are a detached squarcle tab.
   if ((path_type == TabStyle::PathType::kFill &&
        state != TabStyle::TabSelectionState::kActive) ||
@@ -257,9 +250,9 @@ SkPath TabStyleViewsImpl::GetPath(TabStyle::PathType path_type,
       bottom_right_corner_radius = 0;
     }
 
-    int left = aligned_bounds.x() + extension_corner_radius;
+    float left = aligned_bounds.x() + extension_corner_radius;
     int top = aligned_bounds.y() + GetLayoutConstant(TAB_STRIP_PADDING) * scale;
-    int right = aligned_bounds.right() - extension_corner_radius;
+    float right = aligned_bounds.right() - extension_corner_radius;
     const int bottom = top + tab_height;
 
     // For maximized and full screen windows, extend the tab hit test to the top
@@ -285,27 +278,16 @@ SkPath TabStyleViewsImpl::GetPath(TabStyle::PathType path_type,
         limited_tab_space || path_type == TabStyle::PathType::kHitTest ||
         IsLeftSplitTab(tab());
     if (expand_into_previous_separator || expand_into_next_separator) {
-      // Take the entire size of the separator. in odd separator size cases, the
-      // right side will take the remaining space.
-      const int left_separator_overlap =
-          tab_style()->GetSeparatorSize().width() / 2;
-      const int right_separator_overlap =
-          tab_style()->GetSeparatorSize().width() - left_separator_overlap;
-
       // If there is a tab before this one, then expand into its overlap.
       const Tab* const previous_tab = GetLeftTab(tab());
       if (expand_into_previous_separator && previous_tab) {
-        left -= std::round((tab_style()->GetSeparatorMargins().right() +
-                            left_separator_overlap) *
-                           scale);
+        left -= separator_overlap / 2.0;
       }
 
       // If there is a tab after this one, then expand into its overlap.
       const Tab* const next_tab = GetRightTab(tab());
       if (expand_into_next_separator && next_tab) {
-        right += std::round((tab_style()->GetSeparatorMargins().left() +
-                             right_separator_overlap) *
-                            scale);
+        right += separator_overlap / 2.0;
       }
     }
 
@@ -394,11 +376,11 @@ SkPath TabStyleViewsImpl::GetPath(TabStyle::PathType path_type,
   if (IsLeftSplitTab(tab())) {
     top_right_corner_radius = 0;
     // Assign half of the tab overlap to each of the split tabs.
-    tab_right = tab_right + extension - tab_style()->GetTabOverlap() / 2;
+    tab_right = tab_right + extension - separator_overlap / 2.0;
     extension_corner_radius = 0;
   } else if (IsRightSplitTab(tab())) {
     top_left_corner_radius = 0;
-    tab_left = tab_left - extension + tab_style()->GetTabOverlap() / 2;
+    tab_left = tab_left - extension + separator_overlap / 2.0;
     left_extension_corner_radius = 0;
   }
 

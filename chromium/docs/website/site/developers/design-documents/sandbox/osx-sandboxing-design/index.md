@@ -63,8 +63,6 @@ The following profiles are defined (paths relative to root of source directory):
 *   content/browser/worker.sb - used by the worker process. Most
             restrictive - no file system access apart from loading system
             libraries.
-*   chrome/browser/nacl_loader.sb - used for running Native Client
-            untrusted (i.e., "user") code.
 
 One sticky point we run into is that the sandboxed process calls through to OS X
 system APIs. There is no documentation available about which privileges each API

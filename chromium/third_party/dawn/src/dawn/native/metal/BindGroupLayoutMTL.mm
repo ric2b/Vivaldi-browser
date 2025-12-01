@@ -37,12 +37,14 @@
 namespace dawn::native::metal {
 
 // static
-Ref<BindGroupLayout> BindGroupLayout::Create(DeviceBase* device,
-                                             const BindGroupLayoutDescriptor* descriptor) {
+Ref<BindGroupLayout> BindGroupLayout::Create(
+    DeviceBase* device,
+    const UnpackedPtr<BindGroupLayoutDescriptor>& descriptor) {
     return AcquireRef(new BindGroupLayout(device, descriptor));
 }
 
-BindGroupLayout::BindGroupLayout(DeviceBase* device, const BindGroupLayoutDescriptor* descriptor)
+BindGroupLayout::BindGroupLayout(DeviceBase* device,
+                                 const UnpackedPtr<BindGroupLayoutDescriptor>& descriptor)
     : BindGroupLayoutInternalBase(device, descriptor),
       mBindGroupAllocator(MakeFrontendBindGroupAllocator<BindGroup>(4096)) {
     if (!device->IsToggleEnabled(Toggle::MetalUseArgumentBuffers)) {
@@ -74,7 +76,9 @@ BindGroupLayout::BindGroupLayout(DeviceBase* device, const BindGroupLayoutDescri
             },
             [&](const TextureBindingInfo&) { desc.dataType = MTLDataTypeTexture; },
             [&](const StorageTextureBindingInfo&) { DAWN_CHECK(false); },
-            [](const InputAttachmentBindingInfo&) { DAWN_CHECK(false); });
+            [&](const TexelBufferBindingInfo&) { DAWN_CHECK(false); },
+            [](const InputAttachmentBindingInfo&) { DAWN_CHECK(false); },
+            [](const ExternalTextureBindingInfo&) { DAWN_CHECK(false); });
 
         descriptors.push_back(desc);
     }
@@ -88,8 +92,9 @@ BindGroupLayout::BindGroupLayout(DeviceBase* device, const BindGroupLayoutDescri
 
 BindGroupLayout::~BindGroupLayout() = default;
 
-Ref<BindGroup> BindGroupLayout::AllocateBindGroup(Device* device,
-                                                  const BindGroupDescriptor* descriptor) {
+Ref<BindGroup> BindGroupLayout::AllocateBindGroup(
+    Device* device,
+    const UnpackedPtr<BindGroupDescriptor>& descriptor) {
     return AcquireRef(mBindGroupAllocator->Allocate(device, descriptor));
 }
 

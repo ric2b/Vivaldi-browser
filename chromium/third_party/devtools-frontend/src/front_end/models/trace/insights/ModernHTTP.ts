@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,7 +50,7 @@ export type ModernHTTPInsightModel = InsightModel<typeof UIStrings, {
   http1Requests: Types.Events.SyntheticNetworkRequest[],
 }>;
 
-export function isModernHTTP(model: InsightModel): model is ModernHTTPInsightModel {
+export function isModernHTTPInsight(model: InsightModel): model is ModernHTTPInsightModel {
   return model.insightKey === InsightKeys.MODERN_HTTP;
 }
 
@@ -227,15 +227,14 @@ function finalize(partialModel: PartialInsightModel<ModernHTTPInsightModel>): Mo
   };
 }
 
-export function generateInsight(
-    parsedTrace: Handlers.Types.ParsedTrace, context: InsightSetContext): ModernHTTPInsightModel {
+export function generateInsight(data: Handlers.Types.HandlerData, context: InsightSetContext): ModernHTTPInsightModel {
   const isWithinContext = (event: Types.Events.Event): boolean => Helpers.Timing.eventIsInBounds(event, context.bounds);
 
-  const contextRequests = parsedTrace.NetworkRequests.byTime.filter(isWithinContext);
+  const contextRequests = data.NetworkRequests.byTime.filter(isWithinContext);
 
-  const entityMappings = parsedTrace.NetworkRequests.entityMappings;
-  const firstPartyUrl = context.navigation?.args.data?.documentLoaderURL ?? parsedTrace.Meta.mainFrameURL;
-  const firstPartyEntity = Handlers.Helpers.getEntityForUrl(firstPartyUrl, entityMappings.createdEntityCache);
+  const entityMappings = data.NetworkRequests.entityMappings;
+  const firstPartyUrl = context.navigation?.args.data?.documentLoaderURL ?? data.Meta.mainFrameURL;
+  const firstPartyEntity = Handlers.Helpers.getEntityForUrl(firstPartyUrl, entityMappings);
   const http1Requests = determineHttp1Requests(contextRequests, entityMappings, firstPartyEntity ?? null);
 
   return finalize({

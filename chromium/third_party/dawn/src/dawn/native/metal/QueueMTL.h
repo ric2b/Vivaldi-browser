@@ -54,8 +54,8 @@ class Queue final : public QueueBase {
     ResultOrError<Ref<SharedFence>> GetOrCreateSharedFence();
 
     Ref<WaitListEvent> CreateWorkDoneEvent(ExecutionSerial serial);
-    ResultOrError<bool> WaitForQueueSerialImpl(ExecutionSerial serial,
-                                               Nanoseconds timeout) override;
+    ResultOrError<ExecutionSerial> WaitForQueueSerialImpl(ExecutionSerial waitSerial,
+                                                          Nanoseconds timeout) override;
 
   private:
     Queue(Device* device, const QueueDescriptor* descriptor);
@@ -69,7 +69,7 @@ class Queue final : public QueueBase {
     MaybeError SubmitPendingCommandsImpl() override;
     ResultOrError<ExecutionSerial> CheckAndUpdateCompletedSerials() override;
     void ForceEventualFlushOfCommands() override;
-    MaybeError WaitForIdleForDestruction() override;
+    MaybeError WaitForIdleForDestructionImpl() override;
     void DestroyImpl() override;
 
     NSPRef<id<MTLCommandQueue>> mCommandQueue;

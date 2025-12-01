@@ -1,17 +1,12 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import type {DevToolsPage} from '../../e2e_non_hosted/shared/frontend-helper.js';
-import {
-  $$,
-  click,
-  getTestServerPort,
-  waitFor,
-} from '../../shared/helper.js';
 import {getBrowserAndPagesWrappers} from '../../shared/non_hosted_wrappers.js';
 
 import {getDataGridRows} from './datagrid-helpers.js';
+import {openCommandMenu} from './quick_open-helpers.js';
 import {expectVeEvents, veChange, veClick, veImpression, veImpressionsUnder} from './visual-logging-helpers.js';
 
 export async function navigateToApplicationTab(
@@ -22,12 +17,13 @@ export async function navigateToApplicationTab(
   await inspectedPage.bringToFront();
   await inspectedPage.goToResource(`application/${testName}.html`);
   await devToolsPage.bringToFront();
-  await devToolsPage.click('#tab-resources');
+  await openCommandMenu(devToolsPage);
+  await devToolsPage.typeText('Application');
+  await devToolsPage.page.keyboard.press('Enter');
+  await devToolsPage.waitFor('#tab-resources');
   // Make sure the application navigation list is shown
   await devToolsPage.waitFor('.storage-group-list-item');
-  await expectVeEvents(
-      [veClick('Toolbar: main > PanelTabHeader: resources'), veImpressionForApplicationPanel()], undefined,
-      devToolsPage);
+  await expectVeEvents([veImpressionForApplicationPanel()], undefined, devToolsPage);
 }
 
 export async function navigateToServiceWorkers(devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
@@ -42,19 +38,15 @@ export async function navigateToServiceWorkers(devToolsPage = getBrowserAndPages
       undefined, devToolsPage);
 }
 
-export async function navigateToFrame(name: string) {
-  await doubleClickTreeItem(`[aria-label="${name}"]`);
-  await waitFor('[title="Click to open in Sources panel"]');
-  await expectVeEvents([
-    veClick('Panel: resources > Pane: sidebar > Tree > TreeItem: frames > TreeItem: frame'),
-    veImpressionsUnder('Panel: resources', [veImpressionForFrameDetails()]),
-  ]);
-}
-
-export async function navigateToManifestInApplicationTab(testName: string) {
-  const MANIFEST_SELECTOR = '[aria-label="Manifest"]';
-  await navigateToApplicationTab(testName);
-  await click(MANIFEST_SELECTOR);
+export async function navigateToFrame(name: string, devToolsPage: DevToolsPage) {
+  await doubleClickTreeItem(`[aria-label="${name}"]`, devToolsPage);
+  await devToolsPage.waitFor('[title="Click to open in Sources panel"]');
+  await expectVeEvents(
+      [
+        veClick('Panel: resources > Pane: sidebar > Tree > TreeItem: frames > TreeItem: frame'),
+        veImpressionsUnder('Panel: resources', [veImpressionForFrameDetails()]),
+      ],
+      undefined, devToolsPage);
 }
 
 export async function navigateToStorage(devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
@@ -69,43 +61,54 @@ export async function navigateToStorage(devToolsPage = getBrowserAndPagesWrapper
       undefined, devToolsPage);
 }
 
-export async function navigateToOpenedWindows() {
-  await doubleClickTreeItem('[aria-label="Opened Windows"]');
-  await waitFor('.empty-state');
-  await expectVeEvents([
-    veClick('Panel: resources > Pane: sidebar > Tree > TreeItem: frames > TreeItem: frame > TreeItem: opened-windows'),
-    veImpressionsUnder(
-        'Panel: resources', [veImpression('Pane', 'opened-windows', [veImpression('Section', 'empty-view')])]),
-  ]);
+export async function navigateToOpenedWindows(devToolsPage: DevToolsPage) {
+  await doubleClickTreeItem('[aria-label="Opened Windows"]', devToolsPage);
+  await devToolsPage.waitFor('.empty-state');
+  await expectVeEvents(
+      [
+        veClick(
+            'Panel: resources > Pane: sidebar > Tree > TreeItem: frames > TreeItem: frame > TreeItem: opened-windows'),
+        veImpressionsUnder(
+            'Panel: resources', [veImpression('Pane', 'opened-windows', [veImpression('Section', 'empty-view')])]),
+      ],
+      undefined, devToolsPage);
 }
 
-export async function navigateToWebWorkers() {
+export async function navigateToWebWorkers(devToolsPage: DevToolsPage) {
   const WEB_WORKERS_SELECTOR = '[aria-label="Web Workers"]';
-  await expectVeEvents([veImpressionsUnder(
-      'Panel: resources > Pane: sidebar > Tree > TreeItem: frames > TreeItem: frame',
-      [veImpression('TreeItem', 'web-workers')])]);
-  await doubleClickTreeItem(WEB_WORKERS_SELECTOR);
-  await waitFor(`${WEB_WORKERS_SELECTOR} + ol li:first-child`);
-  await waitFor('.empty-state');
-  await expectVeEvents([
-    veClick('Panel: resources > Pane: sidebar > Tree > TreeItem: frames > TreeItem: frame > TreeItem: web-workers'),
-    veImpressionsUnder(
-        'Panel: resources', [veImpression('Pane', 'web-workers', [veImpression('Section', 'empty-view')])]),
-  ]);
+  await expectVeEvents(
+      [veImpressionsUnder(
+          'Panel: resources > Pane: sidebar > Tree > TreeItem: frames > TreeItem: frame',
+          [veImpression('TreeItem', 'web-workers')])],
+      undefined, devToolsPage);
+  await doubleClickTreeItem(WEB_WORKERS_SELECTOR, devToolsPage);
+  await devToolsPage.waitFor(`${WEB_WORKERS_SELECTOR} + ol li:first-child`);
+  await devToolsPage.waitFor('.empty-state');
+  await expectVeEvents(
+      [
+        veClick('Panel: resources > Pane: sidebar > Tree > TreeItem: frames > TreeItem: frame > TreeItem: web-workers'),
+        veImpressionsUnder(
+            'Panel: resources', [veImpression('Pane', 'web-workers', [veImpression('Section', 'empty-view')])]),
+      ],
+      undefined, devToolsPage);
 }
 
-export async function navigateToFrameServiceWorkers(frameName: string) {
-  await navigateToFrame(frameName);
+export async function navigateToFrameServiceWorkers(frameName: string, devToolsPage: DevToolsPage) {
+  await navigateToFrame(frameName, devToolsPage);
   const SERVICE_WORKERS_SELECTOR = `[aria-label="${frameName}"] ~ ol [aria-label="Service workers"]`;
 
-  await doubleClickTreeItem(SERVICE_WORKERS_SELECTOR);
-  await waitFor(`${SERVICE_WORKERS_SELECTOR} + ol li:first-child`);
-  await waitFor('.empty-state');
-  await expectVeEvents([
-    veClick('Panel: resources > Pane: sidebar > Tree > TreeItem: frames > TreeItem: frame > TreeItem: service-workers'),
-    veImpressionsUnder(
-        'Panel: resources', [veImpression('Pane', 'service-workers', [veImpression('Section', 'empty-view')])]),
-  ]);
+  await doubleClickTreeItem(SERVICE_WORKERS_SELECTOR, devToolsPage);
+  await devToolsPage.waitFor(`${SERVICE_WORKERS_SELECTOR} + ol li:first-child`);
+  const emptyState = devToolsPage.waitFor('.empty-state');
+  const veEvents = expectVeEvents(
+      [
+        veClick(
+            'Panel: resources > Pane: sidebar > Tree > TreeItem: frames > TreeItem: frame > TreeItem: service-workers'),
+        veImpressionsUnder(
+            'Panel: resources', [veImpression('Pane', 'service-workers', [veImpression('Section', 'empty-view')])]),
+      ],
+      undefined, devToolsPage);
+  await Promise.all([emptyState, veEvents]);
 }
 
 export async function navigateToCookiesForTopDomain(
@@ -166,33 +169,38 @@ export async function navigateToSessionStorageForTopDomain(
 
 const SHARED_STORAGE_SELECTOR = '[aria-label="Shared storage"].parent';
 
-export async function navigateToSharedStorage() {
-  await doubleClickTreeItem(SHARED_STORAGE_SELECTOR);
-  await waitFor('devtools-shared-storage-access-grid');
-  // await new Promise(resolve => setTimeout(resolve, 1000));
-  await expectVeEvents([
-    veClick('Panel: resources > Pane: sidebar > Tree > TreeItem: storage > TreeItem: shared-storage'),
-    veImpressionsUnder(
-        'Panel: resources', [veImpression('Pane', 'shared-storage-events', [veImpression('Section', 'events-table')])]),
-  ]);
+export async function navigateToSharedStorage(devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await doubleClickTreeItem(SHARED_STORAGE_SELECTOR, devToolsPage);
+  await devToolsPage.waitFor('.empty-state');
+
+  await expectVeEvents(
+      [
+        veImpressionsUnder(
+            'Panel: resources', [veImpression('Pane', 'manifest', [veImpression('Section', 'empty-view')])]),
+      ],
+      undefined, devToolsPage);
 }
 
-export async function navigateToSharedStorageForTopDomain() {
-  await navigateToSharedStorage();
-  const DOMAIN_SELECTOR = `${SHARED_STORAGE_SELECTOR} + ol > [aria-label="https://localhost:${getTestServerPort()}"]`;
-  await doubleClickTreeItem(DOMAIN_SELECTOR);
-  // await new Promise(resolve => setTimeout(resolve, 1000));
-  await expectVeEvents([
-    veClick(
-        'Panel: resources > Pane: sidebar > Tree > TreeItem: storage > TreeItem: shared-storage > TreeItem: shared-storage-instance'),
-    veImpressionsUnder('Panel: resources', [veImpressionForSharedStorageView()]),
-  ]);
+export async function navigateToSharedStorageForTopDomain(
+    devToolsPage = getBrowserAndPagesWrappers().devToolsPage,
+    inspectedPage = getBrowserAndPagesWrappers().inspectedPage,
+) {
+  await navigateToSharedStorage(devToolsPage);
+  const DOMAIN_SELECTOR = `${SHARED_STORAGE_SELECTOR} + ol > [aria-label="${inspectedPage.domain()}"]`;
+  await doubleClickTreeItem(DOMAIN_SELECTOR, devToolsPage);
+  await expectVeEvents(
+      [
+        veClick(
+            'Panel: resources > Pane: sidebar > Tree > TreeItem: storage > TreeItem: shared-storage > TreeItem: shared-storage-instance'),
+        veImpressionsUnder('Panel: resources', [veImpressionForSharedStorageView()]),
+      ],
+      undefined, devToolsPage);
 }
 
 async function doubleClickTreeItem(selector: string, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   const element = await devToolsPage.waitFor(selector);
   await element.evaluate(el => el.scrollIntoView(true));
-  await devToolsPage.click(selector, {clickOptions: {clickCount: 2}});
+  await devToolsPage.click(selector, {clickOptions: {count: 2}});
 }
 
 export async function getDataGridData(
@@ -221,15 +229,15 @@ export async function getTrimmedTextContent(
   })));
 }
 
-export async function getFrameTreeTitles() {
-  const treeTitles = await $$('[aria-label="Resources Section"] ~ ol .tree-element-title');
+export async function getFrameTreeTitles(devToolsPage: DevToolsPage) {
+  const treeTitles = await devToolsPage.$$('[aria-label="Resources Section"] ~ ol .tree-element-title');
   return await Promise.all(treeTitles.map(node => node.evaluate(e => e.textContent)));
 }
 
 export async function getStorageItemsData(
     columns: string[], leastExpected = 1, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   const gridData = await devToolsPage.waitForFunction(async () => {
-    const values = await getDataGridData('.storage-view table', columns, devToolsPage);
+    const values = await getDataGridData('.data-grid table', columns, devToolsPage);
     if (values.length >= leastExpected) {
       return values;
     }
@@ -470,7 +478,7 @@ function veImpressionForSharedStorageView() {
     veImpression('TableHeader', 'key'),
     veImpression('TableHeader', 'value'),
     veImpression('Action', 'reset-entropy-budget'),
-    veImpression('Pane', 'preview', [veImpression('Section', 'json-view')]),
+    veImpression('Pane', 'preview', [veImpression('Section', 'empty-view')]),
   ]);
 }
 

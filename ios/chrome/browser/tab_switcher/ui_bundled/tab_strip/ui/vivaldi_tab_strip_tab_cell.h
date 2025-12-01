@@ -12,11 +12,12 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_cell.h"
+#import "ios/chrome/browser/tab_switcher/tab_strip/ui/tab_strip_cell.h"
 
 @class VivaldiTabStripTabCell;
 
 // Informs the receiver of actions on the cell.
+NS_SWIFT_UI_ACTOR
 @protocol VivaldiTabStripTabCellDelegate
 // Informs the receiver that the close button on the cell was tapped.
 - (void)closeButtonTappedForCell:(VivaldiTabStripTabCell*)cell;

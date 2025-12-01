@@ -20,6 +20,7 @@
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "net/base/pickle.h"
 #include "net/base/pickle_base_types.h"
 #include "net/http/http_cache.h"
@@ -355,11 +356,20 @@ NoVarySearchCache::~NoVarySearchCache() {
 
 std::optional<NoVarySearchCache::LookupResult> NoVarySearchCache::Lookup(
     const HttpRequestInfo& request) {
-  SCOPED_UMA_HISTOGRAM_TIMER_MICROS("HttpCache.NoVarySearch.LookupTime");
+  bool unused;
+  return Lookup(request, /*out_base_url_matched=*/unused);
+}
+
+std::optional<NoVarySearchCache::LookupResult> NoVarySearchCache::Lookup(
+    const HttpRequestInfo& request,
+    bool& out_base_url_matched) {
+  out_base_url_matched = false;
   const GURL& url = request.url;
   if (!URLIsAcceptable(url)) {
     return std::nullopt;
   }
+
+  TRACE_EVENT("net", "NoVarySearchCache::Lookup");
   // TODO(https://crbug.com/388956603): Try to avoid allocating memory for the
   // base url.
   const GURL base_url = ExtractBaseURL(url);
@@ -375,6 +385,7 @@ std::optional<NoVarySearchCache::LookupResult> NoVarySearchCache::Lookup(
   if (it == map_.end()) {
     return std::nullopt;
   }
+  out_base_url_matched = true;
   // We have a match, so we need to create a real URL now.
   QueryString* best_match = nullptr;
   GURL original_url;

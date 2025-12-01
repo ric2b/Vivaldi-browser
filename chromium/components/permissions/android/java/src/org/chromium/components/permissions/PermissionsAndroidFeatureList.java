@@ -5,7 +5,6 @@
 package org.chromium.components.permissions;
 
 import org.chromium.build.annotations.NullMarked;
-import org.chromium.components.cached_flags.BooleanCachedFeatureParam;
 import org.chromium.components.cached_flags.CachedFeatureParam;
 import org.chromium.components.cached_flags.IntCachedFeatureParam;
 
@@ -45,9 +44,7 @@ public abstract class PermissionsAndroidFeatureList {
     public static final String APPROXIMATE_GEOLOCATION_PERMISSION =
             "ApproximateGeolocationPermission";
 
-    public static final BooleanCachedFeatureParam APPROXIMATE_GEOLOCATION_SAMPLE_DATA =
-            PermissionsAndroidFeatureMap.newBooleanCachedFeatureParam(
-                    APPROXIMATE_GEOLOCATION_PERMISSION, "sample_data", false);
+    public static final String AUTO_PICTURE_IN_PICTURE_ANDROID = "AutoPictureInPictureAndroid";
 
     public static final IntCachedFeatureParam APPROXIMATE_GEOLOCATION_PROMPT_ARM =
             PermissionsAndroidFeatureMap.newIntCachedFeatureParam(

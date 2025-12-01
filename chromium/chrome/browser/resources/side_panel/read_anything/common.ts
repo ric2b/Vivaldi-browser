@@ -5,12 +5,18 @@
 import type {CrActionMenuElement} from '//resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import {AnchorAlignment} from '//resources/cr_elements/cr_action_menu/cr_action_menu.js';
 
+import {TextSegmenter} from './read_aloud/text_segmenter.js';
+
 // Determined by experimentation - can be adjusted to fine tune for different
 // platforms.
 export const minOverflowLengthToScroll = 75;
 export const spinnerDebounceTimeout = 150;
 export const playFromSelectionTimeout = spinnerDebounceTimeout + 25;
 export const toastDurationMs = 10000;
+
+// How long to delay before logging the empty state. If it's only shown briefly,
+// no need to log.
+export const LOG_EMPTY_DELAY_MS = 500;
 
 // Events emitted from the toolbar to the app
 export enum ToolbarEvent {
@@ -47,10 +53,10 @@ export interface SettingsPrefs {
 }
 
 const ACTIVE_CSS_CLASS = 'active';
-
-export function getCurrentSpeechRate(): number {
-  return parseFloat(chrome.readingMode.speechRate.toFixed(1));
-}
+// The percent of a view that must be visible to be considered "mostly visible"
+// for the purpose of determining what's likely being actually read in the
+// reading mode panel.
+export const MOSTLY_VISIBLE_PERCENT = 0.8;
 
 // Propagates a custom event with the given name and any details.
 export function emitEvent(
@@ -97,11 +103,27 @@ export function openMenu(
   });
 }
 
-// Returns true is the given string can be considered whitespace.
-export function isWhitespace(s: string): boolean {
-  return /\s+/g.test(s);
+// Estimate the word count of the given text using the TextSegmenter class.
+export function getWordCount(text: string): number {
+  return TextSegmenter.getInstance().getWordCount(text);
 }
 
+// Returns true if the given rect is mostly within the visible window.
+export function isRectMostlyVisible(rect: DOMRect): boolean {
+  if (rect.height <= 0) {
+    return false;
+  }
+  const isTopMostlyVisible = isPointVisible(rect.top) &&
+      isPointVisible(rect.top + (rect.height * MOSTLY_VISIBLE_PERCENT));
+  const isBottomMostlyVisible = isPointVisible(rect.bottom) &&
+      isPointVisible(rect.bottom - (rect.height * MOSTLY_VISIBLE_PERCENT));
+  const isMiddleMostlyVisible = rect.top < 0 &&
+      rect.bottom > window.innerHeight &&
+      (rect.height * MOSTLY_VISIBLE_PERCENT) < window.innerHeight;
+  return isTopMostlyVisible || isBottomMostlyVisible || isMiddleMostlyVisible;
+}
+
+// Returns true if any part of the given rect is within the visible window.
 export function isRectVisible(rect: DOMRect): boolean {
   return (rect.height > 0) &&
       ((rect.top <= 0 && rect.bottom >= window.innerHeight) ||

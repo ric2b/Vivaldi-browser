@@ -4,8 +4,6 @@
 
 #import <stdint.h>
 
-#import <MaterialComponents/MaterialSnackbar.h>
-
 #import "base/apple/foundation_util.h"
 #import "base/check_op.h"
 #import "base/notreached.h"
@@ -333,9 +331,7 @@ enum class PresentedState {
 
 - (void)dismissSnackbar {
    //Dismiss any note related snackbar this controller could have presented.
-  [MDCSnackbarManager.defaultManager
-      dismissAndCallCompletionBlocksWithCategory:
-          note_utils_ios::kNotesSnackbarCategory];
+  [self.snackbarCommandsHandler dismissAllSnackbars];
 }
 
 #pragma mark - NoteAddEditViewControllerDelegate

@@ -90,6 +90,13 @@ wheel: <
 >
 
 # Used by:
+#   web-tests PRESUBMIT.py
+wheel: <
+  name: "infra/python/wheels/sqlparse-py3"
+  version: "version:0.4.4"
+>
+
+# Used by:
 #   tools/win/DebugVisualizers/PRESUBMIT.py
 wheel: <
   name: "infra/python/wheels/lxml/${vpython_platform}"

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -17,11 +17,11 @@ import type {Widget} from './Widget.js';
 
 const UIStrings = {
   /**
-   *@description Text on a button to close the infobar and never show the infobar in the future
+   * @description Text on a button to close the infobar and never show the infobar in the future
    */
   dontShowAgain: 'Don\'t show again',
   /**
-   *@description Text to close something
+   * @description Text to close something
    */
   close: 'Close',
 } as const;

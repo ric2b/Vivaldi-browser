@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "components/webauthn/json/value_conversions.h"
 
 #include <cstdint>
@@ -15,6 +10,9 @@
 #include <string_view>
 #include <vector>
 
+#include "base/compiler_specific.h"
+#include "base/containers/span.h"
+#include "base/containers/to_vector.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -58,7 +56,8 @@ using blink::mojom::RemoteDesktopClientOverridePtr;
 constexpr bool kUpdateRobolectricTests = false;
 
 void PrintJava(const char* name, base::span<const uint8_t> data) {
-  fprintf(stderr, "private static final byte[] %s = new byte[] {", name);
+  UNSAFE_TODO(
+      fprintf(stderr, "private static final byte[] %s = new byte[] {", name));
   for (size_t i = 0; i < data.size(); i++) {
     const uint8_t byte = data[i];
     if (i) {
@@ -74,8 +73,7 @@ void PrintJava(const char* name, base::span<const uint8_t> data) {
 }
 
 std::vector<uint8_t> ToByteVector(std::string_view in) {
-  const uint8_t* in_ptr = reinterpret_cast<const uint8_t*>(in.data());
-  return std::vector<uint8_t>(in_ptr, in_ptr + in.size());
+  return base::ToVector(base::as_byte_span(in));
 }
 
 constexpr char kAppId[] = "https://example.test/appid.json";
@@ -171,7 +169,6 @@ TEST(WebAuthenticationJSONConversionTest,
 
   // Exercise all supported fields.
   auto options = PublicKeyCredentialRequestOptions::New(
-      blink::mojom::Mediation::MODAL, /*requested_credential_type_flags=*/0,
       kChallenge, std::nullopt, kTimeout, kRpId, GetCredentialList(),
       /*hints=*/
       std::vector<blink::mojom::Hint>({

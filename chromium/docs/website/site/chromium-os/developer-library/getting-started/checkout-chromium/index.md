@@ -80,31 +80,6 @@ Note that in this example we've specified the boards `eve`, `puff`, and
 `scarlet` separated by colons. Whenever you get a new test device be sure to add
 or set the board name here and re-sync.
 
-### Authenticate to the internal repository
-
-Navigate to the <a href="https://chrome-internal-review.googlesource.com/"
-target="_blank">Chrome internal review page</a> and login **with your
-access-enabled account** (@google.com for Googlers). Then authenticate to the
-internal repository by navigating to the <a
-href="https://chrome-internal.googlesource.com/new-password"
-target="_blank">googlesource.com authentication portal</a>, authenticating
-**with your access-enabled account**, and executing the provided command in your
-shell. This command creates an authentication cookie for Git such that you do
-not need to continually provide authentication to access these resources.
-
-### Authenticate to CIPD
-
-<a
-href="https://chromium.googlesource.com/chromium/src/+/89.0.4389.114/docs/cipd.md"
-target="_blank">CIPD</a> (Chrome Infrastructure Package Deployment) is a
-repository which hosts versioned binaries. The ChromeOS source checkout includes
-several dependencies hosted on CIPD. Authenticate to CIPD using the following
-command (provided by depot_tools):
-
-```
-$ cipd auth-login
-```
-
 ## Initial `gclient sync`
 
 `gclient sync` downloads the external dependencies that chromium (public and

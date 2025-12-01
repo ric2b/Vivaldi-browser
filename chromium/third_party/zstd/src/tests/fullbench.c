@@ -890,6 +890,7 @@ static int benchMem(unsigned scenarioID,
             if (!BMK_isSuccessful_runOutcome(bOutcome)) {
                 DISPLAY("ERROR: Scenario %u: %s \n", scenarioID, ZSTD_getErrorName(BMK_extract_errorResult(bOutcome)));
                 errorcode = 1;
+                BMK_freeTimedFnState(tfs);
                 goto _cleanOut;
             }
 

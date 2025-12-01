@@ -9,6 +9,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/task/sequenced_task_runner.h"
 #import "components/application_locale_storage/application_locale_storage.h"
+#import "components/prefs/pref_service.h"
 #import "components/signin/public/identity_manager/account_info.h"
 #import "components/sync/service/sync_service.h"
 #import "components/user_data_importer/ios/ios_bookmark_parser.h"
@@ -61,6 +62,7 @@
                       bookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel
                    readingListModel:(ReadingListModel*)readingListModel
                         syncService:(syncer::SyncService*)syncService
+                        prefService:(PrefService*)prefService
                       faviconLoader:(FaviconLoader*)faviconLoader {
   self = [super init];
   if (self) {
@@ -81,7 +83,7 @@
     _importer = std::make_unique<user_data_importer::SafariDataImporter>(
         _importClient.get(), _savedPasswordsPresenter.get(),
         paymentsDataManager, historyService, bookmarkModel, readingListModel,
-        syncService, std::move(bookmarkParser), locale);
+        syncService, prefService, std::move(bookmarkParser), locale);
     _faviconLoader = faviconLoader;
   }
   return self;
@@ -143,7 +145,17 @@
                                             faviconLoadedBlock);
   } else {
     /// If the URL does not exist, return the monogram for the username.
-    faviconLoadedBlock([FaviconAttributes attributesWithDefaultImage]);
+    CHECK(item.username.length > 0);
+    NSString* monogram =
+        [[item.username substringToIndex:1] localizedUppercaseString];
+    faviconLoadedBlock([FaviconAttributes
+        attributesWithMonogram:monogram
+                     textColor:[UIColor
+                                   colorWithWhite:
+                                       kFallbackIconDefaultTextColorGrayscale
+                                            alpha:1]
+               backgroundColor:UIColor.clearColor
+        defaultBackgroundColor:YES]);
   }
   return YES;
 }

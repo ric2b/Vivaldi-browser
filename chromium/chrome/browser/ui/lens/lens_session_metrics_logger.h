@@ -82,6 +82,9 @@ class LensSessionMetricsLogger {
   // Called when a query is issued in the AIM searchbox.
   void OnAimQueryIssued();
 
+  // Called when a query is submitted in the AIM searchbox.
+  void OnAimQuerySubmitted();
+
   // Records Lens invocation.
   void RecordInvocation();
 
@@ -107,6 +110,9 @@ class LensSessionMetricsLogger {
 
   // Returns the time at which the overlay was invoked.
   void GetInvocationTime();
+
+  // Returns the invocation source for the lens session.
+  lens::LensOverlayInvocationSource GetInvocationSource();
 
  private:
   // Invocation source for the lens overlay.

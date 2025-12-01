@@ -509,7 +509,7 @@ bool LayoutView::ShouldUsePaginatedLayout(const Document& document) {
 PhysicalRect LayoutView::ViewRect() const {
   NOT_DESTROYED();
   if (GetDocument().Printing()) {
-    return PhysicalRect(PhysicalOffset(), Size());
+    return PhysicalRect(PhysicalOffset(), StitchedSize());
   }
 
   if (!frame_view_)
@@ -918,10 +918,12 @@ void LayoutView::UpdateFromStyle() {
     SetHasBoxDecorationBackground(true);
 }
 
-void LayoutView::StyleDidChange(StyleDifference diff,
-                                const ComputedStyle* old_style) {
+void LayoutView::StyleDidChange(
+    StyleDifference diff,
+    const ComputedStyle* old_style,
+    const StyleChangeContext& style_change_context) {
   NOT_DESTROYED();
-  LayoutBlockFlow::StyleDidChange(diff, old_style);
+  LayoutBlockFlow::StyleDidChange(diff, old_style, style_change_context);
 
   LocalFrame& frame = GetFrameView()->GetFrame();
   VisualViewport& visual_viewport = frame.GetPage()->GetVisualViewport();

@@ -5,6 +5,7 @@
 #include "base/win/win_util.h"
 
 #include <windows.h>
+#include <winternl.h>
 
 #include <aclapi.h>
 #include <combaseapi.h>
@@ -364,6 +365,55 @@ CSecurityDesc GetAdminDaclSecurityDescriptor(ACCESS_MASK accessmask) {
   sd.SetDacl(dacl);
   sd.MakeAbsolute();
   return sd;
+}
+
+std::optional<std::wstring> AddCurrentUserAllowedAce(
+    const std::wstring& sddl,
+    ACCESS_MASK required_permissions,
+    UINT8 required_ace_flags) {
+  CAccessToken token;
+  CSid sid;
+  if (!token.GetEffectiveToken(TOKEN_QUERY) || !token.GetUser(&sid)) {
+    VLOG(2) << "Failed to get current user sid: " << std::hex
+            << HRESULTFromLastError();
+    return {};
+  }
+
+  CSecurityDesc sd;
+  if (!sd.FromString(sddl.c_str())) {
+    return {};
+  }
+  CDacl dacl;
+  if (!sd.GetDacl(&dacl)) {
+    VLOG(2) << "Failed to get dacl: " << std::hex << HRESULTFromLastError();
+    return {};
+  }
+
+  int ace_count = dacl.GetAceCount();
+  for (int i = 0; i < ace_count; ++i) {
+    CSid sid_entry;
+    ACCESS_MASK existing_permissions = 0;
+    BYTE existing_ace_flags = 0;
+    dacl.GetAclEntry(i, &sid_entry, &existing_permissions, NULL,
+                     &existing_ace_flags);
+    if (sid_entry == sid &&
+        required_permissions == (existing_permissions & required_permissions) &&
+        required_ace_flags == (existing_ace_flags & ~INHERITED_ACE)) {
+      return sddl;
+    }
+  }
+
+  if (!dacl.AddAllowedAce(sid, required_permissions, required_ace_flags)) {
+    VLOG(2) << "Failed to add ace: " << std::hex << HRESULTFromLastError();
+    return {};
+  }
+
+  sd.SetDacl(dacl);
+  CString new_sddl;
+  if (!sd.ToString(&new_sddl)) {
+    return {};
+  }
+  return std::wstring(new_sddl);
 }
 
 std::wstring GetAppClientsKey(const std::string& app_id) {
@@ -1224,10 +1274,10 @@ bool MigrateLegacyUpdaters(
         continue;
       }
 
-      registration.version = base::Version(base::SysWideToUTF8(pv));
-      if (!registration.version.IsValid()) {
+      if (!base::Version(base::SysWideToUTF8(pv)).IsValid()) {
         continue;
       }
+      registration.version = base::SysWideToUTF8(pv);
 
       base::win::RegKey client_state_key;
       if (client_state_key.Open(root, GetAppClientStateKey(app_id).c_str(),
@@ -1281,9 +1331,8 @@ bool MigrateLegacyUpdaters(
                 ERROR_SUCCESS) {
               registration.cohort_hint = base::SysWideToUTF8(cohort_hint);
             }
-            VLOG(2) << "Cohort values: " << registration.cohort << ", "
-                    << registration.cohort_name << ", "
-                    << registration.cohort_hint;
+            VLOG(2) << "Cohort values: " << cohort << ", " << cohort_name
+                    << ", " << cohort_hint;
           }
         }
       }
@@ -1556,6 +1605,66 @@ std::optional<base::FilePath> GetBundledEnterpriseCompanionExecutablePath(
          (service_config->dwStartType != SERVICE_DISABLED);
 }
 
+HResultOr<std::wstring> GetCommandLineForPid(DWORD process_id) {
+  CHECK(process_id);
+
+  base::win::ScopedHandle process_handle(::OpenProcess(
+      PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, process_id));
+  if (!process_handle.IsValid()) {
+    return base::unexpected(HRESULTFromLastError());
+  }
+
+  static const auto nt_query_information_process =
+      reinterpret_cast<decltype(&::NtQueryInformationProcess)>(::GetProcAddress(
+          ::GetModuleHandle(L"ntdll.dll"), "NtQueryInformationProcess"));
+  if (!nt_query_information_process) {
+    return base::unexpected(HRESULTFromLastError());
+  }
+
+  // Get the PEB address.
+  // https://learn.microsoft.com/en-us/windows/win32/api/winternl/ns-winternl-peb
+  PROCESS_BASIC_INFORMATION info = {};
+  if (!NT_SUCCESS(nt_query_information_process(process_handle.Get(),
+                                               ProcessBasicInformation, &info,
+                                               sizeof(info), nullptr))) {
+    return base::unexpected(E_FAIL);
+  }
+  BYTE* peb = reinterpret_cast<BYTE*>(info.PebBaseAddress);
+  if (!peb) {
+    return base::unexpected(E_FAIL);
+  }
+  SIZE_T bytes_read = 0;
+  DWORD_PTR dw = 0;
+
+  // Get the address of the process parameters.
+  // SAFETY: the `ProcessParameters` offset into the PEB is always valid.
+  if (!::ReadProcessMemory(
+          process_handle.Get(),
+          UNSAFE_BUFFERS(peb + offsetof(PEB, ProcessParameters)), &dw,
+          sizeof(dw), &bytes_read)) {
+    return base::unexpected(HRESULTFromLastError());
+  }
+
+  // Read all the parameters.
+  RTL_USER_PROCESS_PARAMETERS params = {};
+  if (!::ReadProcessMemory(process_handle.Get(), reinterpret_cast<PVOID>(dw),
+                           &params, sizeof(params), &bytes_read)) {
+    return base::unexpected(HRESULTFromLastError());
+  }
+
+  // Read the command line parameter.
+  const int max_cmd_line_len =
+      std::min(static_cast<int>(params.CommandLine.MaximumLength), 4096);
+  std::wstring cmd_line(max_cmd_line_len, L'\0');
+  if (!::ReadProcessMemory(process_handle.Get(), params.CommandLine.Buffer,
+                           cmd_line.data(), max_cmd_line_len, &bytes_read)) {
+    return base::unexpected(HRESULTFromLastError());
+  }
+  cmd_line.resize(bytes_read / sizeof(wchar_t));
+
+  return cmd_line;
+}
+
 void LogComCaller(base::cstring_view caller_func) {
   Microsoft::WRL::ComPtr<ICallingProcessInfo> calling_proc_info;
   HRESULT hr = ::CoGetCallContext(IID_PPV_ARGS(&calling_proc_info));
@@ -1586,7 +1695,12 @@ void LogComCaller(base::cstring_view caller_func) {
   }
 
   VLOG(2) << caller_func
-          << ": COM client pid for this COM server: " << process.Pid();
+          << ": COM client for this COM server has PID: " << process.Pid()
+          << ", and has command line: " << [&] {
+               const HResultOr<std::wstring> cmd_line =
+                   GetCommandLineForPid(process.Pid());
+               return cmd_line.has_value() ? *cmd_line : std::wstring();
+             }();
 }
 
 }  // namespace updater

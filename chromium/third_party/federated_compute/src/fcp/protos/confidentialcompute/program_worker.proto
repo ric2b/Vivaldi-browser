@@ -1,0 +1,43 @@
+// Copyright 2025 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.confidentialcompute;
+
+import "google/protobuf/any.proto";
+
+// API for executing a computation in a federated program worker.
+service ProgramWorker {
+  // Executes a computation in the worker.
+  // If the server is running in untrusted space, the request will be forwarded
+  // to the trusted worker application running in the TEE.
+  // If the server is running in trusted space, the request will be executed
+  // inside the TEE.
+  rpc Execute(ComputationRequest) returns (ComputationResponse) {}
+}
+
+// Request providing a computation to execute.
+// Next ID: 2
+message ComputationRequest {
+  // The computation to be executed in the worker.
+  google.protobuf.Any computation = 1;
+}
+
+// Response from executing a computation.
+// Next ID: 2
+message ComputationResponse {
+  // The result of the computation execution.
+  google.protobuf.Any result = 1;
+}

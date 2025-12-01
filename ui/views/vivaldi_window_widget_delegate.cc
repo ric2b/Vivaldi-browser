@@ -198,20 +198,19 @@ const views::Widget* VivaldiWindowWidgetDelegate::GetWidget() const {
   return window_->GetWidget();
 }
 
-std::unique_ptr<views::NonClientFrameView>
-VivaldiWindowWidgetDelegate::CreateNonClientFrameView(views::Widget* widget) {
+std::unique_ptr<views::FrameView> VivaldiWindowWidgetDelegate::CreateFrameView(views::Widget* widget) {
   DCHECK_EQ(widget, window_->GetWidget());
 #if defined(USE_AURA)
   // On Mac Vivaldi Frame view handles both frameless and with-native-frame
   // cases.
   if (window_->with_native_frame())
-    return views::WidgetDelegate::CreateNonClientFrameView(widget);
+    return views::WidgetDelegate::CreateFrameView(widget);
 #endif
   return CreateVivaldiWindowFrameView(window_);
 }
 
 ui::ImageModel VivaldiWindowWidgetDelegate::GetWindowAppIcon() {
-  if (window_->browser()->is_type_popup()) {
+  if (window_->browser() && window_->browser()->is_type_popup()) {
     content::WebContents* web_contents =
         window_->browser()->tab_strip_model()->GetActiveWebContents();
     if (web_contents) {
@@ -272,8 +271,8 @@ views::ClientView* VivaldiWindowWidgetDelegate::CreateClientView(
     background_color_bottom = background_color_top;
     text_color = SkColorSetRGB(0x5B, 0x66, 0x7f);
   } else {
-    if (theme && theme->GetDefaultSystemColorScheme() ==
-                     ui::NativeTheme::ColorScheme::kDark) {
+    if (theme && theme->preferred_color_scheme() ==
+                     ui::NativeTheme::PreferredColorScheme::kDark) {
       // Dark: 292929
       background_color_top = SkColorSetRGB(0x29, 0x29, 0x29);
       background_color_bottom = background_color_top;
@@ -293,8 +292,8 @@ views::ClientView* VivaldiWindowWidgetDelegate::CreateClientView(
       icon_color = SkColorSetRGB(0x57, 0x55, 0x8D);
       icon = &kVivaldiSplashGhostIcon;
     } else {
-      if (theme && theme->GetDefaultSystemColorScheme() ==
-                       ui::NativeTheme::ColorScheme::kDark) {
+      if (theme && theme->preferred_color_scheme() ==
+                       ui::NativeTheme::PreferredColorScheme::kDark) {
         // Dark FFFFFF1A
         icon_color = SkColorSetARGB(0x1a, 0xff, 0xff, 0xff);
       } else {
@@ -444,18 +443,4 @@ bool VivaldiWindowWidgetDelegate::ExecuteWindowsCommand(int command_id) {
 }
 
 void VivaldiWindowWidgetDelegate::WindowClosing() {
-  Browser* browser = window_->browser();
-  if (!browser)
-    return;
-
-  if (browser->profile()->IsIncognitoProfile()) {
-    // Delete the thumbnails created by the private Window.
-    VivaldiImageStore::ScheduleRemovalOfUnusedUrlData(browser->profile(), 0);
-  }
-
-  int id = browser->session_id().id();
-  ::vivaldi::BroadcastEvent(
-      extensions::vivaldi::window_private::OnWindowClosed::kEventName,
-      extensions::vivaldi::window_private::OnWindowClosed::Create(id),
-      browser->profile());
 }

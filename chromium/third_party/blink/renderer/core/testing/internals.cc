@@ -45,6 +45,7 @@
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
+#include "third_party/blink/public/web/web_content_extraction.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -94,6 +95,7 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/test_report_body.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
+#include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/geometry/dom_point.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect_list.h"
@@ -441,7 +443,7 @@ class TestWritableStreamSink final : public UnderlyingSinkBase {
       PostCrossThreadTask(*task_runner_, FROM_HERE, std::move(error_callback_));
     }
 
-    // We don't use WTF::String because this object can be accessed from
+    // We don't use blink::String because this object can be accessed from
     // multiple threads.
     std::string result_;
 
@@ -649,6 +651,9 @@ static std::optional<DocumentMarker::MarkerType> MarkerTypeFrom(
     return DocumentMarker::kActiveSuggestion;
   if (EqualIgnoringASCIICase(marker_type, "Suggestion"))
     return DocumentMarker::kSuggestion;
+  if (EqualIgnoringASCIICase(marker_type, "Glic")) {
+    return DocumentMarker::kGlic;
+  }
   return std::nullopt;
 }
 
@@ -697,7 +702,8 @@ void Internals::ResetToConsistentState(Page* page) {
 
   LocalFrame* frame = page->DeprecatedLocalMainFrame();
   frame->View()->LayoutViewport()->SetScrollOffset(
-      ScrollOffset(), mojom::blink::ScrollType::kProgrammatic);
+      ScrollOffset(), mojom::blink::ScrollType::kProgrammatic,
+      cc::ScrollSourceType::kNone);
   OverrideUserPreferredLanguagesForTesting(Vector<AtomicString>());
 
   KeyboardEventManager::SetCurrentCapsLockState(
@@ -937,8 +943,8 @@ ScriptPromise<IDLLong> Internals::getInitialResourcePriority(
   auto promise = resolver->Promise();
   KURL resource_url = url_test_helpers::ToKURL(url.Utf8());
 
-  auto callback = WTF::BindOnce(&Internals::ResolveResourcePriority,
-                                WrapPersistent(this), WrapPersistent(resolver));
+  auto callback = BindOnce(&Internals::ResolveResourcePriority,
+                           WrapPersistent(this), WrapPersistent(resolver));
   document->Fetcher()->AddPriorityObserverForTesting(
       resource_url, std::move(callback), new_load_only);
 
@@ -1334,20 +1340,30 @@ void Internals::setMarker(Document* document,
     return;
   }
 
-  if (type != DocumentMarker::kSpelling && type != DocumentMarker::kGrammar) {
+  if (type != DocumentMarker::kSpelling && type != DocumentMarker::kGrammar &&
+      type != DocumentMarker::kGlic) {
     exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError,
                                       "internals.setMarker() currently only "
-                                      "supports spelling and grammar markers; "
-                                      "attempted to add marker of type '" +
+                                      "supports spelling, grammar and glic "
+                                      " markers; attempted to add marker of "
+                                      " type '" +
                                           marker_type + "'.");
     return;
   }
 
   document->UpdateStyleAndLayout(DocumentUpdateReason::kTest);
-  if (type == DocumentMarker::kSpelling)
+  if (type == DocumentMarker::kSpelling) {
     document->Markers().AddSpellingMarker(EphemeralRange(range));
-  else
+  } else if (type == DocumentMarker::kGrammar) {
     document->Markers().AddGrammarMarker(EphemeralRange(range));
+  } else {
+    // GLIC markers animate their color and start off transparent. So
+    // we need to start the animation and update it to the end in order to
+    // see the marker appearance.
+    document->Markers().AddGlicMarker(EphemeralRange(range));
+    document->Markers().StartGlicMarkerAnimationIfNeeded();
+    document->Markers().ContinueGlicMarkerAnimation(base::TimeTicks());
+  }
 }
 
 void Internals::removeMarker(Document* document,
@@ -2567,6 +2583,46 @@ String Internals::layerTreeAsText(Document* document,
   return document->GetFrame()->GetLayerTreeAsTextForTesting(flags);
 }
 
+String Internals::dumpContentNodeTree(Document* document,
+                                      ExceptionState& exception_state) const {
+  DCHECK(document);
+  if (!document->GetFrame()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
+                                      "The document provided is invalid.");
+    return String();
+  }
+
+  LocalFrame* frame = DynamicTo<LocalFrame>(document->GetFrame());
+  if (!frame) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
+                                      "The document must be in a local frame.");
+    return String();
+  }
+
+  return DumpContentNodeTreeForTest(WebLocalFrameImpl::FromFrame(frame));
+}
+
+String Internals::dumpContentNode(Node* node,
+                                  ExceptionState& exception_state) const {
+  DCHECK(node);
+  Document* document = &node->GetDocument();
+  if (!document->GetFrame()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
+                                      "The node's document is invalid.");
+    return String();
+  }
+
+  LocalFrame* frame = DynamicTo<LocalFrame>(document->GetFrame());
+  if (!frame) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidAccessError,
+        "The node's document must be in a local frame.");
+    return String();
+  }
+
+  return DumpContentNodeForTest(WebLocalFrameImpl::FromFrame(frame), node);
+}
+
 String Internals::mainThreadScrollingReasons(
     Document* document,
     ExceptionState& exception_state) const {
@@ -3331,6 +3387,8 @@ void Internals::setForcedColorsAndDarkPreferredColorScheme(Document* document) {
   color_scheme_helper_.emplace(*document);
   color_scheme_helper_->SetPreferredColorScheme(
       mojom::blink::PreferredColorScheme::kDark);
+  color_scheme_helper_->SetPreferredContrast(
+      mojom::blink::PreferredContrast::kMore);
   color_scheme_helper_->SetInForcedColors(*document, /*in_forced_colors=*/true);
   color_scheme_helper_->SetEmulatedForcedColors(*document,
                                                 /*is_dark_theme=*/false);
@@ -3975,7 +4033,7 @@ ScriptPromise<IDLString> Internals::LCPPrediction(ScriptState* script_state,
   LCPCriticalPathPredictor* lcpp = document->GetFrame()->GetLCPP();
   CHECK(lcpp);
   lcpp->AddLCPPredictedCallback(
-      WTF::BindOnce(&OnLCPPredicted, WrapPersistent(resolver)));
+      BindOnce(&OnLCPPredicted, WrapPersistent(resolver)));
   return promise;
 }
 
@@ -4008,8 +4066,8 @@ ScriptPromise<IDLUndefined> Internals::exemptUrlFromNetworkRevocation(
   auto promise = resolver->Promise();
   frame->GetLocalFrameHostRemote().ExemptUrlFromNetworkRevocationForTesting(
       url_test_helpers::ToKURL(url.Utf8()),
-      WTF::BindOnce(&ExemptUrlFromNetworkRevocationComplete,
-                    WrapPersistent(resolver)));
+      BindOnce(&ExemptUrlFromNetworkRevocationComplete,
+               WrapPersistent(resolver)));
   return promise;
 }
 

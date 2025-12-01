@@ -14,6 +14,7 @@ executable("update_notifier") {
       "//base/version_info:generate_version_info",
       "//build/win:default_exe_manifest",
       "//chrome/common:constants",
+      "//chrome/installer/util:constants",
       "//chrome/installer/util:with_no_strings",
       "//chrome/install_static:install_static_util",
       "//components/language/core/browser",

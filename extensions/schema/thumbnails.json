@@ -202,13 +202,7 @@
         ],
         "returns_async": {
           "name": "callback",
-          "does_not_support_promises": "vivaldi",
           "parameters": [
-            {
-              "name": "success",
-              "type": "boolean",
-              "description": "true if the image was succesfully captured"
-            },
             {
               "name": "image",
               "type": "string",

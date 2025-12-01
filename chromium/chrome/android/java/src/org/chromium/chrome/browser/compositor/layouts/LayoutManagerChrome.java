@@ -16,7 +16,6 @@ import org.chromium.base.Callback;
 import org.chromium.base.lifetime.DestroyChecker;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.Initializer;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -37,14 +36,15 @@ import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.toolbar.ToolbarPositionController;
-import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.ScrollDirection;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.SwipeHandler;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
+import org.chromium.ui.util.AccessibilityUtil;
 import org.chromium.ui.util.XrUtils;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 // Vivaldi
 import androidx.annotation.NonNull;
@@ -61,8 +61,7 @@ import org.vivaldi.browser.common.VivaldiUtils;
  * of {@link LayoutManagerImpl}.
  */
 @NullMarked
-public class LayoutManagerChrome extends LayoutManagerImpl
-        implements ChromeAccessibilityUtil.Observer {
+public class LayoutManagerChrome extends LayoutManagerImpl implements AccessibilityUtil.Observer {
     // Layouts
     /** A {@link Layout} that should be used when the user is swiping sideways on the toolbar. */
     protected ToolbarSwipeLayout mToolbarSwipeLayout;
@@ -145,8 +144,9 @@ public class LayoutManagerChrome extends LayoutManagerImpl
                         hubLayoutDependencyHolder,
                         mTabModelSelectorSupplier,
                         mDesktopWindowStateManager);
-        if (mTabContentManagerSupplier.hasValue()) {
-            mHubLayout.setTabContentManager(mTabContentManagerSupplier.get());
+        TabContentManager content = mTabContentManagerSupplier.get();
+        if (content != null) {
+            mHubLayout.setTabContentManager(content);
         }
         if (getTabModelSelector() != null) {
             mHubLayout.setTabModelSelector(getTabModelSelector());
@@ -238,7 +238,8 @@ public class LayoutManagerChrome extends LayoutManagerImpl
      * switcher is shown on tablets and phones.
      */
     private void initTabSwitcher() {
-        if (mTabSwitcherSupplier.hasValue()) {
+        var tabSwitcher = mTabSwitcherSupplier.get();
+        if (tabSwitcher != null) {
             return;
         }
 

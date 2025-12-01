@@ -17,7 +17,6 @@
 #include "src/heap/memory-pool.h"
 #include "src/heap/read-only-heap.h"
 #include "src/heap/read-only-spaces.h"
-#include "src/heap/trusted-range.h"
 #include "src/sandbox/code-pointer-table-inl.h"
 #include "src/sandbox/sandbox.h"
 #include "src/utils/memcopy.h"
@@ -78,11 +77,9 @@ void IsolateGroup::MemoryChunkMetadataTableEntry::SetMetadata(
     MemoryChunkMetadata* metadata, Isolate* isolate) {
   metadata_ = metadata;
   // Read-only and shared pages can be accessed from any isolate, mark the entry
-  // with the sentinel. Check the RO flag directly here (not calling
-  // IsReadOnlySpace()), because the latter will try to access not yet
-  // initialized (i.e. this) metadata table entry.
-  if (metadata && (metadata->Chunk()->IsFlagSet(MemoryChunk::READ_ONLY_HEAP) ||
-                   metadata->Chunk()->InWritableSharedSpace())) {
+  // with the sentinel.
+  if (metadata &&
+      (metadata->IsReadOnlyPageMetadata() || metadata->is_writable_shared())) {
     isolate_ =
         reinterpret_cast<Isolate*>(kReadOnlyOrSharedEntryIsolateSentinel);
     return;
@@ -140,6 +137,7 @@ IsolateGroup::~IsolateGroup() {
 
 #ifdef V8_ENABLE_SANDBOX
   code_pointer_table_.TearDown();
+  trusted_range_.Free();
 #endif  // V8_ENABLE_SANDBOX
 
   // Reset before `reservation_` for pointer compression but disabled external
@@ -180,8 +178,32 @@ void IsolateGroup::Initialize(bool process_wide, Sandbox* sandbox) {
   }
   page_allocator_ = reservation_.page_allocator();
   pointer_compression_cage_ = &reservation_;
-  trusted_pointer_compression_cage_ =
-      TrustedRange::EnsureProcessWideTrustedRange(kMaximalTrustedRangeSize);
+
+#if COMPRESS_POINTERS_IN_SHARED_CAGE_BOOL
+  CHECK_IMPLIES(CONTIGUOUS_COMPRESSED_READ_ONLY_SPACE_BOOL,
+                v8_flags.reserve_contiguous_compressed_read_only_space);
+  if (v8_flags.reserve_contiguous_compressed_read_only_space) {
+    void* cage_base = reinterpret_cast<void*>(reservation_.base());
+    const void* read_only_reservation_start = page_allocator_->AllocatePages(
+        cage_base, kContiguousReadOnlyReservationSize,
+        MemoryChunk::GetAlignmentForAllocation(),
+        PageAllocator::Permission::kNoAccess);
+    CHECK_EQ(read_only_reservation_start, cage_base);
+    read_only_page_allocator_ =
+        std::make_unique<v8::base::BoundedPageAllocator>(
+            page_allocator_,
+            reinterpret_cast<Address>(read_only_reservation_start),
+            kContiguousReadOnlyReservationSize, kRegularPageSize,
+            base::PageInitializationMode::kAllocatedPagesCanBeUninitialized,
+            base::PageFreeingMode::kMakeInaccessible);
+  }
+#endif  // COMPRESS_POINTERS_IN_SHARED_CAGE_BOOL
+
+  if (!trusted_range_.InitReservation(kMaximalTrustedRangeSize)) {
+    V8::FatalProcessOutOfMemory(
+        nullptr, "Failed to reserve virtual memory for TrustedRange");
+  }
+  trusted_pointer_compression_cage_ = &trusted_range_;
   sandbox_ = sandbox;
 
   code_pointer_table()->Initialize();
@@ -208,6 +230,27 @@ void IsolateGroup::Initialize(bool process_wide) {
         "pointer compression cage");
   }
   page_allocator_ = reservation_.page_allocator();
+
+#if COMPRESS_POINTERS_IN_SHARED_CAGE_BOOL
+  CHECK_IMPLIES(CONTIGUOUS_COMPRESSED_READ_ONLY_SPACE_BOOL,
+                v8_flags.reserve_contiguous_compressed_read_only_space);
+  if (v8_flags.reserve_contiguous_compressed_read_only_space) {
+    void* cage_base = reinterpret_cast<void*>(reservation_.base());
+    const void* read_only_reservation_start = page_allocator_->AllocatePages(
+        cage_base, kContiguousReadOnlyReservationSize,
+        MemoryChunk::GetAlignmentForAllocation(),
+        PageAllocator::Permission::kNoAccess);
+    CHECK_EQ(read_only_reservation_start, cage_base);
+    read_only_page_allocator_ =
+        std::make_unique<v8::base::BoundedPageAllocator>(
+            page_allocator_,
+            reinterpret_cast<Address>(read_only_reservation_start),
+            kContiguousReadOnlyReservationSize, kRegularPageSize,
+            base::PageInitializationMode::kAllocatedPagesCanBeUninitialized,
+            base::PageFreeingMode::kMakeInaccessible);
+  }
+#endif  // COMPRESS_POINTERS_IN_SHARED_CAGE_BOOL
+
   pointer_compression_cage_ = &reservation_;
   trusted_pointer_compression_cage_ = &reservation_;
   optimizing_compile_task_executor_ =
@@ -247,6 +290,9 @@ void IsolateGroup::InitializeOncePerProcess() {
 #ifdef V8_COMPRESS_POINTERS
   V8HeapCompressionScheme::InitBase(group->GetPtrComprCageBase());
 #endif  // V8_COMPRESS_POINTERS
+#ifdef V8_ENABLE_SANDBOX
+  TrustedSpaceCompressionScheme::InitBase(group->GetTrustedPtrComprCageBase());
+#endif
 #ifdef V8_EXTERNAL_CODE_SPACE
   // Speculatively set the code cage base to the same value in case jitless
   // mode will be used. Once the process-wide CodeRange instance is created
@@ -543,6 +589,10 @@ class PABackedSandboxedArrayBufferAllocator::Impl final {
     }
     // The V8 sandbox is guaranteed to be large enough to host the pool.
     CHECK(pool_base);
+    // Call PartitionAddressSpace::Init() first just to make sure metadata
+    // region start is initialized and the configurable pool allocations do have
+    // out-of-line metadata.
+    partition_alloc::internal::PartitionAddressSpace::Init();
     partition_alloc::internal::PartitionAddressSpace::InitConfigurablePool(
         pool_base, pool_size);
 

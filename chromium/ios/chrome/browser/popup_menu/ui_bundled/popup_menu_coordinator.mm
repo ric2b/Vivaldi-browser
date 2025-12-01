@@ -4,8 +4,6 @@
 
 #import "ios/chrome/browser/popup_menu/ui_bundled/popup_menu_coordinator.h"
 
-#import <MaterialComponents/MaterialSnackbar.h>
-
 #import "base/check.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
@@ -222,11 +220,6 @@ using base::UserMetricsAction;
   id<BrowserCommands> callableDispatcher =
       HandlerForProtocol(self.browser->GetCommandDispatcher(), BrowserCommands);
   [callableDispatcher dismissSoftKeyboard];
-
-  id<FindInPageCommands> findInPageCommandsHandler = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), FindInPageCommands);
-  // Dismiss Find in Page focus.
-  [findInPageCommandsHandler defocusFindInPage];
 
   // Dismiss all snackbars.
   id<SnackbarCommands> snackbarHandler = HandlerForProtocol(

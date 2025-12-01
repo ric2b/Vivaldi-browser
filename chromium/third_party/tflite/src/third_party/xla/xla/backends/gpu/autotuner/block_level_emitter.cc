@@ -30,7 +30,6 @@ limitations under the License.
 #include "absl/types/span.h"
 #include "xla/autotuning.pb.h"
 #include "xla/backends/autotuner/codegen_backend.h"
-#include "xla/backends/gpu/codegen/triton/tma_utils.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/service/gpu/backend_configs.pb.h"
@@ -38,6 +37,7 @@ limitations under the License.
 #include "xla/shape.h"
 #include "xla/stream_executor/cuda/cuda_compute_capability.h"
 #include "xla/stream_executor/device_description.h"
+#include "xla/stream_executor/gpu/tma_metadata.h"
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
 #include "xla/xla.pb.h"
@@ -242,6 +242,17 @@ void ExtendConfigsWithTma(
 
 absl::StatusOr<std::vector<std::unique_ptr<BackendConfig>>>
 BlockLevelEmitterBackend::GetSupportedConfigs(const HloInstruction& instr) {
+  // When use_default_config_ is true, we only return a single config for the
+  // autotuner to use. It is expected that the default config exists already
+  // in the HLO fusion and therefore fails if a default config cannot be
+  // constructed.
+  if (use_default_config_) {
+    TF_ASSIGN_OR_RETURN(auto config, GetDefaultConfig(instr));
+    std::vector<std::unique_ptr<BackendConfig>> configs;
+    configs.push_back(std::move(config));
+    return configs;
+  }
+
   if (!IsSupported(instr)) {
     return std::vector<std::unique_ptr<BackendConfig>>();
   }
@@ -308,7 +319,8 @@ BlockLevelEmitterBackend::GetSupportedConfigs(const HloInstruction& instr) {
   // Allow TMA tuning for Hopper+ devices when TMA flag is passed.
   bool autotune_tma =
       debug_options().xla_gpu_experimental_enable_triton_tma() &&
-      IsTmaEnabledForDevice(target_config().device_description);
+      stream_executor::gpu::IsTmaAvailableForDevice(
+          target_config().device_description);
   if (autotune_tma) {
     ExtendConfigsWithTma(configs);
   }

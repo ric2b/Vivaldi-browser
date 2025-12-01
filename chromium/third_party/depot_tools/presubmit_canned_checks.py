@@ -553,16 +553,14 @@ def CheckChangeHasNoTabs(input_api, output_api, source_file_filter=None):
 
 
 def CheckChangeTodoHasOwner(input_api, output_api, source_file_filter=None):
-    """Checks that the user didn't add `TODO(name)` or `TODO: name -` without
-    an owner.
-    """
+    """Checks that TODO comments have the issue number."""
     legacyTODO = '\\s*\\(.+\\)\\s*:'
     modernTODO = ':\\s*[^\\s]+\\s*\\-'
     unowned_todo = input_api.re.compile('TODO(?!(%s|%s))' %
                                         (legacyTODO, modernTODO))
     errors = _FindNewViolationsOfRule(lambda _, x: not unowned_todo.search(x),
                                       input_api, source_file_filter)
-    errors = ['Found TODO with no owner in ' + x for x in errors]
+    errors = ['Found TODO with no issue number in ' + x for x in errors]
     if errors:
         return [output_api.PresubmitPromptWarning('\n'.join(errors))]
     return []
@@ -624,6 +622,11 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
     PY_FILE_EXTS = ('py', )
     PY_EXCEPTIONS = ('import', 'from', '# ' + LINT_THEN_CHANGE_EXCEPTION)
 
+    # Uncap star files. For more info, see:
+    # https://bazel.build/build/style-guide#differences-python-style-guide
+    STAR_FILE_EXTS = ('star', )
+    STAR_EXCEPTIONS = ('', )
+
     LANGUAGE_EXCEPTIONS = [
         (CPP_FILE_EXTS, CPP_EXCEPTIONS),
         (HTML_FILE_EXTS, HTML_EXCEPTIONS),
@@ -632,6 +635,7 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
         (TS_FILE_EXTS, TS_EXCEPTIONS),
         (OBJC_FILE_EXTS, OBJC_EXCEPTIONS),
         (PY_FILE_EXTS, PY_EXCEPTIONS),
+        (STAR_FILE_EXTS, STAR_EXCEPTIONS),
     ]
 
     def no_long_lines(file_extension, line):
@@ -740,6 +744,8 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
     return []
 
 
+_BYPASS_CHECK_LICENSE_FOOTER = 'Bypass-Check-License'
+
 def CheckLicense(input_api,
                  output_api,
                  license_re_param=None,
@@ -747,6 +753,20 @@ def CheckLicense(input_api,
                  source_file_filter=None,
                  accept_empty_files=True):
     """Verifies the license header."""
+    # The CL is ignoring the license check
+    reasons = input_api.change.GitFootersFromDescription().get(
+        _BYPASS_CHECK_LICENSE_FOOTER, [])
+
+    if len(reasons):
+        if ''.join(reasons).strip() == '':
+            return [
+                output_api.PresubmitError(
+                    '{key} is specified without the reason. Please provide the reason '
+                    'in "{key}: <reason>"'.format(
+                        key=_BYPASS_CHECK_LICENSE_FOOTER))
+            ]
+        input_api.logging.info('License check is being ignored')
+        return []
 
     # Early-out if the license_re is guaranteed to match everything.
     if license_re_param and license_re_param == '.*':
@@ -826,12 +846,22 @@ def CheckLicense(input_api,
         elif not license_re.search(contents):
             bad_files.append(f.LocalPath())
     results = []
+
+    # Don't report errors when on the presubmit --all bot or when testing with
+    # presubmit --files.
+    if input_api.no_diffs:
+        report_type = output_api.PresubmitPromptWarning
+    else:
+        report_type = output_api.PresubmitError
+
     if bad_new_files:
-        # We can't distinguish between Google and thirty-party files, so this has to be a
-        # warning rather than an error.
         if license_re_param:
-            warning_message = ('License on new files must match:\n\n%s\n' %
-                               license_re_param)
+            error_message = (
+                'License on new files must match:\n\n{lp}\n\n'
+                'To bypass this check, add {k}: <reason> in the description.\n'
+                'If this check fails for non-exceptional cases, consider '
+                'tuning the PRESUBMIT.py instead.').format(
+                    lp=license_re_param, k=_BYPASS_CHECK_LICENSE_FOOTER)
         else:
             # Verbatim text that can be copy-pasted into new files (possibly
             # adjusting the leading comment delimiter).
@@ -843,31 +873,29 @@ def CheckLicense(input_api,
                     'project': project_name,
                     'key_line': key_line,
                 }
-            warning_message = (
+            error_message = (
                 'License on new files must be:\n\n%s\n' % new_license_text +
                 '(adjusting the comment delimiter accordingly).\n\n' +
                 'If this is a moved file, then update the license but do not ' +
                 'update the year.\n\n' +
-                'If this is a third-party file then ignore this warning.\n\n')
-        warning_message += 'Found a bad license header in these new or moved files:'
-        results.append(
-            output_api.PresubmitPromptWarning(warning_message,
-                                              items=bad_new_files))
+                'If this is a third-party file, then add a footer ' +
+                'with "{key}: <reason>" to skip this check.'.format(
+                    key=_BYPASS_CHECK_LICENSE_FOOTER))
+        error_message += 'Found a bad license header in these new or moved files:'
+        results.append(report_type(error_message, items=bad_new_files))
     if wrong_year_new_files:
-        # We can't distinguish between new and moved files, so this has to be a
-        # warning rather than an error.
         results.append(
-            output_api.PresubmitPromptWarning(
+            report_type(
                 'License doesn\'t list the current year. If this is a new file, '
-                'use the current year. If this is a moved file then ignore this '
-                'warning.',
+                'use the current year. If this is a moved file, then add '
+                'a footer with "{key}: <reason>" to skip this check.'.format(
+                    key=_BYPASS_CHECK_LICENSE_FOOTER),
                 items=wrong_year_new_files))
     if bad_files:
         results.append(
-            output_api.PresubmitPromptWarning(
-                'License must match:\n%s\n' % license_re.pattern +
-                'Found a bad license header in these files:',
-                items=bad_files))
+            report_type('License must match:\n%s\n' % license_re.pattern +
+                        'Found a bad license header in these files:',
+                        items=bad_files))
     return results
 
 
@@ -1769,10 +1797,6 @@ def PanProjectChecks(input_api,
             # the tree. Skipping these saves a bit of time and avoids having
             # redundant output. This was initially designed for use by
             # third_party/blink/PRESUBMIT.py.
-            snapshot("checking was uploaded")
-            results.extend(
-                input_api.canned_checks.CheckChangeWasUploaded(
-                    input_api, output_api))
             snapshot("checking description")
             results.extend(
                 input_api.canned_checks.CheckChangeHasDescription(
@@ -1814,6 +1838,10 @@ def CheckPatchFormatted(input_api,
                         result_factory=None):
     result_factory = result_factory or output_api.PresubmitPromptWarning
     import git_cl
+    affected_files = input_api.AffectedFiles(include_deletes=False)
+    with input_api.CreateTemporaryFile() as diff_file:
+        for f in affected_files:
+            diff_file.write(f.GenerateScmDiff().encode('utf-8'))
 
     display_args = []
     if not check_clang_format:
@@ -1833,8 +1861,13 @@ def CheckPatchFormatted(input_api,
 
     cmd = [
         '-C',
-        input_api.change.RepositoryRoot(), 'cl', 'format', '--dry-run',
-        '--presubmit'
+        input_api.change.RepositoryRoot(),
+        'cl',
+        'format',
+        '--dry-run',
+        '--presubmit',
+        '--input_diff_file',
+        diff_file.name,
     ] + display_args
 
     # Make sure the passed --upstream branch is applied to a dry run.
@@ -1861,11 +1894,13 @@ def CheckPatchFormatted(input_api,
         else:
             short_path = input_api.basename(input_api.change.RepositoryRoot())
         display_args.append(presubmit_subdir)
-        return [
-            result_factory('The %s directory requires source formatting. '
-                           'Please run: git cl format %s' %
-                           (short_path, ' '.join(display_args)))
-        ]
+        msg = (
+            'The %s directory requires source formatting. '
+            'Please run: git cl format %s. Or, if you are in CiderG, '
+            'please use the "Format Modified Lines in All Files '
+            '(git cl format)" functionality in the command palette.' % (
+                short_path, ' '.join(display_args)))
+        return [result_factory(msg)]
     return []
 
 

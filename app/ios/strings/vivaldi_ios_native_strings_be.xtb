@@ -61,7 +61,6 @@
 <translation id="1751280147639351837">Блакаванне сачэння і рэкламы</translation>
 <translation id="1752547299766512813">Захаваць паролі</translation>
 <translation id="1754797958074421486">Умовы выкарыстання</translation>
-<translation id="1763111582687651119">Уключыць скарочаныя назвы сістэм пошуку</translation>
 <translation id="1771413903824396513">Па скарочанай назве</translation>
 <translation id="1771605894228673800">Мне патрэбны ўбудаваны VPN</translation>
 <translation id="1800685789463945995">Vivaldi аварыйна закрываецца або завісае</translation>
@@ -344,7 +343,6 @@
 <translation id="5823830882692559950">Vivaldi.net адхіліў вашыя ўліковыя даныя: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">Новы каталог</translation>
 <translation id="5859825823508296659">Рэдагаваць дамен</translation>
-<translation id="5867841422488265304">Увядзіце адрас або запыт на пошук</translation>
 <translation id="5869217094746242845">Падрабязней пра прыватнасць і бяспеку</translation>
 <translation id="5871497086027727873">Перамешчана 1 нататка</translation>
 <translation id="5898502570200301364">Вы можаце выкарыстоўваць паролі, захаваныя ў кіраўніку пароляў Vivaldi, у іншых праграмах на вашым iPhone.</translation>
@@ -374,7 +372,6 @@
 <translation id="641394169129472837">Абярыце, якую старонку трэба адкрываць пры націскання кнопкі "Новая ўкладка".</translation>
 <translation id="6438416544409849235">Абрана <ph name="NUMBER_OF_SELECTED_NOTES" /></translation>
 <translation id="6442584491342758233">Дакладнае супадзенне</translation>
-<translation id="6443682944493983866">Пажаданыя Мовы</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Імпартаванне<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Рэзервовы ключ шыфравання</translation>
 <translation id="6527303717912515753">Падзяліцца</translation>
@@ -535,7 +532,6 @@
 <translation id="8515808232153642813">Расшыфраваць</translation>
 <translation id="8517852590337319813">Актывуйце свой акаўнт</translation>
 <translation id="8546963963006468833">З дапамогай Vivaldi вы можаце адкрываць спасылкі, шукаць з віджэтаў і аўтаматычна запаўняць паролі ў іншых праграмах.</translation>
-<translation id="8546995005405883065">Пераважныя мовы ў вызначаным парадку, якія ўжываюцца сайтамі, каторыя гэта падтрымліваюць.</translation>
 <translation id="8562452229998620586">Тут будуць з'яўляцца захаваныя паролі.</translation>
 <translation id="8591818185775466306">Выдаліць <ph name="ITEM_TYPE" /></translation>
 <translation id="8605953154325672921">Патрабуецца імя карыстальніка</translation>

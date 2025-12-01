@@ -27,7 +27,6 @@ namespace ui {
 // Used at callsites, to lower thread priority to background while compression
 // is happening.
 BASE_FEATURE(kCompressBitmapAtBackgroundPriority,
-             "CompressBitmapAtBackgroundPriority",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 namespace {
@@ -310,7 +309,7 @@ bool Etc1::ReadFromFile(base::File* file,
   // than the max display size of the screen.  We also can't have etc1 texture
   // data larger than the next power of 2 up from that.
   gfx::Size display_size =
-      display::Screen::GetScreen()->GetPrimaryDisplay().GetSizeInPixel();
+      display::Screen::Get()->GetPrimaryDisplay().GetSizeInPixel();
   int max_dimension = std::max(display_size.width(), display_size.height());
 
   if (content_width > max_dimension || content_height > max_dimension ||

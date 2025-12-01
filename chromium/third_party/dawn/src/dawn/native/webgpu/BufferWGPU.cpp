@@ -116,6 +116,8 @@ MaybeError Buffer::MapAsyncImpl(wgpu::MapMode mode, size_t offset, size_t size) 
     return {};
 }
 
+void Buffer::FinalizeMapImpl() {}
+
 void* Buffer::GetMappedPointerImpl() {
     // The mapping offset has already been removed.
     return mMappedData;
@@ -126,6 +128,12 @@ void Buffer::UnmapImpl() {
         ToBackend(GetDevice())->wgpu.bufferUnmap(mInnerHandle);
     }
     mMappedData = nullptr;
+}
+
+void Buffer::DestroyImpl() {
+    BufferBase::DestroyImpl();
+    auto& wgpu = ToBackend(GetDevice())->wgpu;
+    wgpu.bufferDestroy(mInnerHandle);
 }
 
 }  // namespace dawn::native::webgpu

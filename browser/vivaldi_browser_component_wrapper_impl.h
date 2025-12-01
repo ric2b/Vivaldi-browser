@@ -243,7 +243,6 @@ class VivaldiBrowserComponentWrapperImpl
       base::OnceCallback<void(VivaldiBrowserWindow* window)> callback) override;
 
   Browser* FindBrowserByWindowId(int32_t window_id) override;
-  bool IsOutsideAppWindow(int screen_x, int screen_y) override;
   content::WebContents* FindActiveTabContentsInThisProfile(
       content::BrowserContext* context) override;
   void UpdateMuting(content::WebContents* active_web_contents,
@@ -279,14 +278,6 @@ class VivaldiBrowserComponentWrapperImpl
                                bool activePage,
                                bool inherit_opener,
                                bool is_extension_host) override;
-
-  void WindowRegistryServiceAddWindow(
-      content::BrowserContext* browser_context,
-      VivaldiBrowserWindow* window,
-      const std::string& window_key) override;
-  VivaldiBrowserWindow* WindowRegistryServiceGetNamedWindow(
-      content::BrowserContext* browser_context,
-      const std::string& window_key) override;
 
   bool ExtensionTabUtilGetTabById(int tab_id,
                                   content::BrowserContext* browser_context,
@@ -368,6 +359,9 @@ class VivaldiBrowserComponentWrapperImpl
   void HandleRegisterHandlerRequest(
       content::WebContents* web_contents,
       custom_handlers::ProtocolHandler* handler) override;
+  bool IsProtocolHandlerAlreadyDecided(content::WebContents* web_contents,
+                                       const std::string& protocol,
+                                       const GURL& url) override;
   void SetOrRollbackProtocolHandler(content::WebContents* web_contents,
                                     bool allow) override;
   std::string GetShortcutText(content::BrowserContext* browser_context,

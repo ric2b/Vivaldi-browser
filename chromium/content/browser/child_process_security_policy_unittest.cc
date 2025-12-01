@@ -327,13 +327,14 @@ class ChildProcessSecurityPolicyTest
   }
 
   BrowserContext* browser_context() { return &browser_context_; }
+  base::test::ScopedFeatureList& feature_list() { return feature_list_; }
 
  private:
+  base::test::ScopedFeatureList feature_list_;
   BrowserTaskEnvironment task_environment_;
   TestBrowserContext browser_context_;
   ChildProcessSecurityPolicyTestBrowserClient test_browser_client_;
   raw_ptr<ContentBrowserClient> old_browser_client_;
-  base::test::ScopedFeatureList feature_list_;
 };
 
 // A test class that forces kOriginKeyedProcessesByDefault off in
@@ -343,12 +344,10 @@ class ChildProcessSecurityPolicyTest_NoOriginKeyedProcessesByDefault
     : public ChildProcessSecurityPolicyTest {
  public:
   ChildProcessSecurityPolicyTest_NoOriginKeyedProcessesByDefault() {
-    feature_list_.InitAndDisableFeature(
+    feature_list().Reset();
+    feature_list().InitAndDisableFeature(
         features::kOriginKeyedProcessesByDefault);
   }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
 };
 
 TEST_P(ChildProcessSecurityPolicyTest, ChildID) {
@@ -2799,73 +2798,6 @@ TEST_P(ChildProcessSecurityPolicyTest, WildcardDefaultPort) {
   EXPECT_THAT(p->GetIsolatedOrigins(), testing::IsEmpty());
 }
 
-TEST_P(ChildProcessSecurityPolicyTest, ProcessLockMatching) {
-  GURL nonapp_url("https://bar.com/");
-  GURL app_url("https://some.app.foo.com/");
-  GURL app_effective_url("https://app.com/");
-  EffectiveURLContentBrowserClient modified_client(
-      app_url, app_effective_url, /* requires_dedicated_process */ true);
-  ContentBrowserClient* original_client =
-      SetBrowserClientForTesting(&modified_client);
-
-  IsolationContext isolation_context(browser_context());
-
-  auto nonapp_urlinfo = UrlInfo::CreateForTesting(
-      nonapp_url, CreateStoragePartitionConfigForTesting());
-  auto ui_nonapp_url_siteinfo =
-      SiteInfo::Create(isolation_context, nonapp_urlinfo);
-  auto ui_nonapp_url_lock =
-      ProcessLock::Create(isolation_context, nonapp_urlinfo);
-
-  auto app_urlinfo = UrlInfo::CreateForTesting(
-      app_url, CreateStoragePartitionConfigForTesting());
-  auto ui_app_url_lock = ProcessLock::Create(isolation_context, app_urlinfo);
-  auto ui_app_url_siteinfo = SiteInfo::Create(isolation_context, app_urlinfo);
-
-  SiteInfo io_nonapp_url_siteinfo(browser_context());
-  ProcessLock io_nonapp_url_lock;
-  SiteInfo io_app_url_siteinfo(browser_context());
-  ProcessLock io_app_url_lock;
-
-  base::WaitableEvent io_locks_set_event;
-
-  // Post a task that will compute ProcessLocks for the same URLs in the
-  // IO thread.
-  GetIOThreadTaskRunner({})->PostTask(
-      FROM_HERE, base::BindLambdaForTesting([&]() {
-        io_nonapp_url_siteinfo =
-            SiteInfo::CreateOnIOThread(isolation_context, nonapp_urlinfo);
-        io_nonapp_url_lock =
-            ProcessLock::Create(isolation_context, nonapp_urlinfo);
-
-        io_app_url_siteinfo =
-            SiteInfo::CreateOnIOThread(isolation_context, app_urlinfo);
-        io_app_url_lock = ProcessLock::Create(isolation_context, app_urlinfo);
-
-        // Tell the UI thread have computed the locks.
-        io_locks_set_event.Signal();
-      }));
-
-  io_locks_set_event.Wait();
-
-  // Expect URLs with effective URLs that match the original URL to have
-  // matching SiteInfos and matching ProcessLocks.
-  EXPECT_EQ(ui_nonapp_url_siteinfo, io_nonapp_url_siteinfo);
-  EXPECT_EQ(ui_nonapp_url_lock, io_nonapp_url_lock);
-
-  // Expect hosted app URLs where the effective URL does not match the original
-  // URL to have different SiteInfos but matching process locks. The SiteInfos,
-  // are expected to be different because the effective URL cannot be computed
-  // from the IO thread. This means the site_url fields will differ.
-  EXPECT_NE(ui_app_url_siteinfo, io_app_url_siteinfo);
-  EXPECT_NE(ui_app_url_siteinfo.site_url(), io_app_url_siteinfo.site_url());
-  EXPECT_EQ(ui_app_url_siteinfo.process_lock_url(),
-            io_app_url_siteinfo.process_lock_url());
-  EXPECT_EQ(ui_app_url_lock, io_app_url_lock);
-
-  SetBrowserClientForTesting(original_client);
-}
-
 // Verify the mechanism that allows non-origin-keyed isolated origins to be
 // associated with a single BrowsingInstance.
 TEST_P(ChildProcessSecurityPolicyTest,
@@ -3135,12 +3067,12 @@ TEST_P(ChildProcessSecurityPolicyTest, NoBrowsingInstanceIDs_OriginKeyed) {
   // Create a SiteInstance for sub.foo.com in a new BrowsingInstance.
   TestBrowserContext context;
   {
-    auto origin_isolation_request = static_cast<
-        UrlInfo::OriginIsolationRequest>(
-        UrlInfo::OriginIsolationRequest::kOriginAgentClusterByHeader |
-        UrlInfo::OriginIsolationRequest::kRequiresOriginKeyedProcessByHeader);
-    UrlInfo url_info(UrlInfoInit(foo.GetURL())
-                         .WithOriginIsolationRequest(origin_isolation_request));
+    auto oac_header_request =
+        OriginAgentClusterIsolationState::CreateForOriginAgentCluster(
+            /*had_oac_request=*/true,
+            /*requires_origin_keyed_process=*/true);
+    UrlInfo url_info(
+        UrlInfoInit(foo.GetURL()).WithOACHeaderRequest(oac_header_request));
     scoped_refptr<SiteInstanceImpl> foo_instance =
         SiteInstanceImpl::CreateForUrlInfo(
             &context, url_info,
@@ -3154,16 +3086,19 @@ TEST_P(ChildProcessSecurityPolicyTest, NoBrowsingInstanceIDs_OriginKeyed) {
                    ProcessLock::FromSiteInfo(foo_instance->GetSiteInfo()));
     p->AddCommittedOrigin(kRendererID, foo);
 
-    EXPECT_TRUE(p->GetProcessLock(kRendererID).is_locked_to_site());
-    EXPECT_TRUE(p->GetProcessLock(kRendererID).is_origin_keyed_process());
-    EXPECT_EQ(foo.GetURL(), p->GetProcessLock(kRendererID).lock_url());
+    EXPECT_TRUE(p->GetProcessLock(kRendererID).IsLockedToSite());
+    EXPECT_TRUE(
+        p->GetProcessLock(kRendererID).agent_cluster_key().IsOriginKeyed());
+    EXPECT_EQ(foo.GetURL(), p->GetProcessLock(kRendererID).GetProcessLockURL());
 
     EXPECT_TRUE(ProcessLock::FromSiteInfo(foo_instance->GetSiteInfo())
-                    .is_origin_keyed_process());
-    EXPECT_TRUE(p->DetermineOriginAgentClusterIsolation(
-                     foo_instance->GetIsolationContext(), foo,
-                     OriginAgentClusterIsolationState::CreateNonIsolated())
-                    .requires_origin_keyed_process());
+                    .agent_cluster_key()
+                    .IsOriginKeyed());
+    EXPECT_TRUE(
+        p->DetermineOriginAgentClusterIsolation(
+             foo_instance->GetIsolationContext(), foo,
+             OriginAgentClusterIsolationState::CreateNonIsolatedByDefault())
+            .requires_origin_keyed_process());
   }
   // At this point foo_instance has gone away, and all BrowsingInstanceIDs
   // associated with kRendererID have been cleaned up.
@@ -3215,17 +3150,22 @@ TEST_P(ChildProcessSecurityPolicyTest_NoOriginKeyedProcessesByDefault,
                    ProcessLock::FromSiteInfo(foo_instance->GetSiteInfo()));
     p->AddCommittedOrigin(kRendererID, sub_foo_origin);
 
-    EXPECT_TRUE(p->GetProcessLock(kRendererID).is_locked_to_site());
-    EXPECT_FALSE(p->GetProcessLock(kRendererID).is_origin_keyed_process());
+    EXPECT_TRUE(p->GetProcessLock(kRendererID).IsLockedToSite());
+    // Note: This might become true in the future if we convert legacy isolated
+    // origins to create origin-keyed AgentClusterKeys instead of site-keyed.
+    EXPECT_FALSE(
+        p->GetProcessLock(kRendererID).agent_cluster_key().IsOriginKeyed());
     EXPECT_EQ(SiteInfo::GetSiteForOrigin(sub_foo_origin),
-              p->GetProcessLock(kRendererID).lock_url());
+              p->GetProcessLock(kRendererID).agent_cluster_key().GetSite());
 
     EXPECT_FALSE(ProcessLock::FromSiteInfo(foo_instance->GetSiteInfo())
-                     .is_origin_keyed_process());
-    EXPECT_FALSE(p->DetermineOriginAgentClusterIsolation(
-                      foo_instance->GetIsolationContext(), sub_foo_origin,
-                      OriginAgentClusterIsolationState::CreateNonIsolated())
-                     .requires_origin_keyed_process());
+                     .agent_cluster_key()
+                     .IsOriginKeyed());
+    EXPECT_FALSE(
+        p->DetermineOriginAgentClusterIsolation(
+             foo_instance->GetIsolationContext(), sub_foo_origin,
+             OriginAgentClusterIsolationState::CreateNonIsolatedByDefault())
+            .requires_origin_keyed_process());
   }
   // At this point foo_instance has gone away, and all BrowsingInstanceIDs
   // associated with kRendererID have been cleaned up.
@@ -3316,7 +3256,7 @@ TEST_P(ChildProcessSecurityPolicyTest, NoBrowsingInstanceIDs_UnlockedProcess) {
   EXPECT_EQ(static_cast<size_t>(0),
             p->BrowsingInstanceIdCountForTesting(kRendererID));
 
-  EXPECT_FALSE(p->GetProcessLock(kRendererID).is_locked_to_site());
+  EXPECT_FALSE(p->GetProcessLock(kRendererID).IsLockedToSite());
   // Ensure that we don't allow the process to keep accessing data for foo after
   // all of the BrowsingInstances are gone, since that would require checking
   // whether foo itself requires a dedicated process.
@@ -3345,8 +3285,8 @@ TEST_P(ChildProcessSecurityPolicyTest, CannotLockUsedProcessToSite) {
                      StoragePartitionConfig::CreateDefault(&context),
                      WebExposedIsolationInfo::CreateNonIsolated(),
                      /*cross_origin_isolation_key=*/std::nullopt));
-  EXPECT_TRUE(p->GetProcessLock(kRendererID).allows_any_site());
-  EXPECT_FALSE(p->GetProcessLock(kRendererID).is_locked_to_site());
+  EXPECT_TRUE(p->GetProcessLock(kRendererID).AllowsAnySite());
+  EXPECT_FALSE(p->GetProcessLock(kRendererID).IsLockedToSite());
 
   // If the process is then considered used (e.g., by loading content), it
   // should not be possible to lock it to another site.

@@ -14,10 +14,10 @@ import org.jni_zero.CalledByNative;
 import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.CollectionUtil;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.DeviceInfo;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
@@ -56,7 +56,6 @@ import org.chromium.components.signin.identitymanager.IdentityMutator;
 import org.chromium.components.signin.identitymanager.PrimaryAccountError;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.metrics.SignoutReason;
-import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.google_apis.gaia.CoreAccountId;
 
 import java.lang.annotation.Retention;
@@ -125,15 +124,21 @@ class SigninManagerImpl implements SigninManager, AccountsChangeObserver {
     static SigninManager create(
             long nativeSigninManagerAndroid,
             @JniType("Profile*") Profile profile,
+            @JniType("PrefService*") PrefService prefService,
             @JniType("signin::IdentityManager*") IdentityManager identityManager,
             IdentityMutator identityMutator) {
         assert nativeSigninManagerAndroid != 0;
         assert profile != null;
+        assert prefService != null;
         assert identityManager != null;
         assert identityMutator != null;
         final SigninManagerImpl signinManager =
                 new SigninManagerImpl(
-                        nativeSigninManagerAndroid, profile, identityManager, identityMutator);
+                        nativeSigninManagerAndroid,
+                        profile,
+                        prefService,
+                        identityManager,
+                        identityMutator);
 
         AccountInfoServiceProvider.init(identityManager);
 
@@ -143,11 +148,13 @@ class SigninManagerImpl implements SigninManager, AccountsChangeObserver {
     private SigninManagerImpl(
             long nativeSigninManagerAndroid,
             Profile profile,
+            PrefService prefService,
             IdentityManager identityManager,
             IdentityMutator identityMutator) {
         ThreadUtils.assertOnUiThread();
         mNativeSigninManagerAndroid = nativeSigninManagerAndroid;
         mProfile = profile;
+        mPrefService = prefService;
         mIdentityManager = identityManager;
         mIdentityMutator = identityMutator;
 
@@ -161,7 +168,6 @@ class SigninManagerImpl implements SigninManager, AccountsChangeObserver {
                     CoreAccountInfo.getIdFrom(
                             identityManager.getPrimaryAccountInfo(ConsentLevel.SIGNIN)));
         }
-        mPrefService = UserPrefs.get(profile);
         mPrefChangeRegistrar = new PrefChangeRegistrar(mPrefService);
         mPrefChangeRegistrar.addObserver(Pref.SIGNIN_ALLOWED, this::notifySignInAllowedChanged);
     }
@@ -270,7 +276,7 @@ class SigninManagerImpl implements SigninManager, AccountsChangeObserver {
         // Vivaldi
         if (ChromeApplicationImpl.isVivaldi()) return false;
 
-        if (ApiCompatibilityUtils.isDemoUser()) {
+        if (DeviceInfo.isRetailDemoMode()) {
             return false;
         }
         if (requireUpdatedPlayServices) {
@@ -496,7 +502,7 @@ class SigninManagerImpl implements SigninManager, AccountsChangeObserver {
     @Override
     public void revokeSyncConsent(
             @SignoutReason int signoutSource,
-            SignOutCallback signOutCallback,
+            @Nullable SignOutCallback signOutCallback,
             boolean forceWipeUserData) {
         // Only one signOut at a time!
         assert mSignOutState == null;

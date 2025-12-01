@@ -18,7 +18,7 @@
 #import "components/autofill/ios/form_util/form_activity_params.h"
 #import "components/autofill/ios/form_util/test_form_activity_tab_helper.h"
 #import "components/feature_engagement/public/feature_constants.h"
-#import "components/plus_addresses/features.h"
+#import "components/plus_addresses/core/common/features.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/browser/autofill/model/features.h"
 #import "ios/chrome/browser/autofill/ui_bundled/form_input_accessory/form_input_accessory_consumer.h"
@@ -26,7 +26,6 @@
 #import "ios/chrome/browser/autofill/ui_bundled/form_input_accessory/form_input_accessory_mediator_handler.h"
 #import "ios/chrome/browser/autofill/ui_bundled/form_input_accessory/form_suggestion_view.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
-#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
@@ -789,9 +788,6 @@ TEST_P(FormSuggestionControllerTest, AutofillSuggestionIPH) {
 
 // Tests that password generation suggestions always have an icon.
 TEST_P(FormSuggestionControllerTest, CopyAndAdjustSuggestions) {
-  base::test::ScopedFeatureList feature_list(
-      kIOSKeyboardAccessoryUpgradeForIPad);
-
   SetUpController(@[ [TestSuggestionProvider providerWithSuggestions] ]);
 
   NSMutableArray<FormSuggestion*>* suggestions = [NSMutableArray array];

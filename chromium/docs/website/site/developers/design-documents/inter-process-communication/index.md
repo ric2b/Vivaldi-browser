@@ -270,7 +270,7 @@ parameters being given to the constructor. For example:
 ```cpp
 const GURL input_param("https://www.google.com/");
 std::string result;
-content::RenderThread::Get()-&gt;Send(new MyMessage(input_param, &result));
+content::RenderThread::Get()->Send(new MyMessage(input_param, &result));
 printf("The result is %s\\n", result.c_str());
 ```
 

@@ -175,7 +175,8 @@ bool WriteBookmarkData(const base::Value::Dict& value,
                        BookmarkWriteFunc write_func,
                        BookmarkWriteFunc write_func_att);
 
-typedef base::RepeatingCallback<bool(const std::string&, std::string*)>
+typedef base::RepeatingCallback<std::optional<std::string>(
+    std::string_view attribute)>
     BookmarkAttributeReadFunc;
 typedef base::FunctionRef<void(const std::string&, std::u16string*)>
     CodePagetoUTF16Func;

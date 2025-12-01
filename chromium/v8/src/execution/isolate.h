@@ -256,7 +256,7 @@ class WaiterQueueNode;
  */
 #define RETURN_RESULT_OR_FAILURE(isolate, call)      \
   do {                                               \
-    DirectHandle<Object> __result__;                 \
+    decltype((call).ToHandleChecked()) __result__;   \
     Isolate* __isolate__ = (isolate);                \
     if (!(call).To(&__result__)) {                   \
       DCHECK(__isolate__->has_exception());          \
@@ -503,9 +503,8 @@ using DebugObjectCache = std::vector<Handle<HeapObject>>;
   V(WasmAsyncResolvePromiseCallback, wasm_async_resolve_promise_callback,   \
     DefaultWasmAsyncResolvePromiseCallback)                                 \
   V(WasmLoadSourceMapCallback, wasm_load_source_map_callback, nullptr)      \
-  V(WasmImportedStringsEnabledCallback,                                     \
-    wasm_imported_strings_enabled_callback, nullptr)                        \
-  V(WasmJSPIEnabledCallback, wasm_jspi_enabled_callback, nullptr)           \
+  V(WasmCustomDescriptorsEnabledCallback,                                   \
+    wasm_custom_descriptors_enabled_callback, nullptr)                      \
   V(IsJSApiWrapperNativeErrorCallback,                                      \
     is_js_api_wrapper_native_error_callback, nullptr)                       \
   /* State for Relocatable. */                                              \
@@ -810,13 +809,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   bool IsSharedArrayBufferConstructorEnabled(
       DirectHandle<NativeContext> context);
 
-  bool IsWasmStringRefEnabled(DirectHandle<NativeContext> context);
-  bool IsWasmImportedStringsEnabled(DirectHandle<NativeContext> context);
-  // Has the JSPI flag been requested?
-  // Used only during initialization of contexts.
-  bool IsWasmJSPIRequested(DirectHandle<NativeContext> context);
-  // Has JSPI been enabled successfully?
-  bool IsWasmJSPIEnabled(DirectHandle<NativeContext> context);
+  bool IsWasmCustomDescriptorsEnabled(DirectHandle<NativeContext> context);
   bool IsCompileHintsMagicEnabled(Handle<NativeContext> context);
 
   THREAD_LOCAL_TOP_ADDRESS(Tagged<Context>, pending_handler_context)
@@ -1208,6 +1201,12 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
     return cage_base();
 #endif  // V8_EXTERNAL_CODE_SPACE
   }
+
+#ifdef V8_ENABLE_SANDBOX
+  Address trusted_cage_base() const {
+    return isolate_data()->trusted_cage_base_;
+  }
+#endif  // V8_ENABLE_SANDBOX
 
   IsolateGroup* isolate_group() const { return isolate_group_; }
 
@@ -1734,8 +1733,6 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   void DumpAndResetStats();
   void DumpAndResetBuiltinsProfileData();
 
-  uint64_t* stress_deopt_count_address() { return &stress_deopt_count_; }
-
   void set_force_slow_path(bool v) { force_slow_path_ = v; }
   bool force_slow_path() const { return force_slow_path_; }
   bool* force_slow_path_address() { return &force_slow_path_; }
@@ -2175,7 +2172,6 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   Isolate* GetMainThreadIsolateUnsafe() { return this; }
 
   LocalHeap* main_thread_local_heap();
-  LocalHeap* CurrentLocalHeap();
 
 #ifdef V8_COMPRESS_POINTERS
   ExternalPointerTable& external_pointer_table() {
@@ -2321,7 +2317,9 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
     return wasm_stacks_;
   }
 
-  // Updates the stack limit, parent pointer and central stack info.
+  // Centralizes all the shared logic for switching stacks: saving the register
+  // state, updating the active stack, the stack pointer, the stack limit, the
+  // central stack info, ...
   template <wasm::JumpBuffer::StackState new_state_of_old_stack,
             wasm::JumpBuffer::StackState expected_target_state>
   void SwitchStacks(wasm::StackMemory* from, wasm::StackMemory* to, Address sp,
@@ -2346,7 +2344,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
                                DirectHandle<ScopeInfo> outer_scope_info,
                                DirectHandle<StringSet> locals_blocklist);
   // Returns either `TheHole` or `StringSet`.
-  Tagged<Object> LocalsBlockListCacheGet(DirectHandle<ScopeInfo> scope_info);
+  Tagged<UnionOf<TheHole, StringSet>> LocalsBlockListCacheGet(
+      DirectHandle<ScopeInfo> scope_info);
 
   void VerifyStaticRoots();
 
@@ -2733,9 +2732,6 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   OptimizingCompileDispatcher* optimizing_compile_dispatcher_ = nullptr;
 
   std::unique_ptr<PersistentHandlesList> persistent_handles_list_;
-
-  // Counts deopt points if deopt_every_n_times is enabled.
-  uint64_t stress_deopt_count_ = 0;
 
   bool force_slow_path_ = false;
 

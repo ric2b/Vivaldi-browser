@@ -69,6 +69,7 @@
 #include "src/heap/heap-inl.h"
 #include "src/heap/heap-verifier.h"
 #include "src/heap/local-heap-inl.h"
+#include "src/heap/local-heap.h"
 #include "src/heap/parked-scope.h"
 #include "src/heap/read-only-heap.h"
 #include "src/heap/safepoint.h"
@@ -90,6 +91,7 @@
 #include "src/objects/call-site-info.h"
 #include "src/objects/elements.h"
 #include "src/objects/feedback-vector.h"
+#include "src/objects/field-type.h"
 #include "src/objects/hash-table-inl.h"
 #include "src/objects/instance-type-inl.h"
 #include "src/objects/js-array-buffer-inl.h"
@@ -637,11 +639,11 @@ void Isolate::Iterate(RootVisitor* v, ThreadLocalTop* thread) {
   v->VisitRootPointer(
       Root::kStackRoots, nullptr,
       FullObjectSlot(continuation_preserved_embedder_data_address()));
+#if V8_ENABLE_WEBASSEMBLY
   v->VisitRootPointer(Root::kStackRoots, nullptr,
                       FullObjectSlot(&isolate_data()->active_suspender_));
 
   // Iterate over pointers on native execution stack.
-#if V8_ENABLE_WEBASSEMBLY
   wasm::WasmCodeRefScope wasm_code_ref_scope;
 
   for (const std::unique_ptr<wasm::StackMemory>& stack : wasm_stacks_) {
@@ -843,7 +845,9 @@ MaybeDirectHandle<WasmSuspenderObject> TryGetWasmSuspender(
     Tagged<SharedFunctionInfo> shared = Cast<JSFunction>(handler)->shared();
     if (shared->HasWasmResumeData()) {
       return direct_handle(
-          shared->wasm_resume_data()->trusted_suspender(isolate), isolate);
+          TrustedCast<WasmSuspenderObject>(
+              shared->wasm_resume_data()->trusted_suspender(isolate)),
+          isolate);
     }
   }
   return MaybeDirectHandle<WasmSuspenderObject>();
@@ -1312,7 +1316,7 @@ MaybeDirectHandle<JSPromise> TryGetCurrentTaskPromise(Isolate* isolate) {
       if (TryGetWasmSuspender(isolate, promise_reaction_job_task->handler())
               .ToHandle(&suspender)) {
         // The {promise_reaction_job_task} belongs to a suspended Wasm stack
-        return direct_handle(suspender->promise(), isolate);
+        return direct_handle(Cast<JSPromise>(suspender->promise()), isolate);
       }
 #endif  // V8_ENABLE_WEBASSEMBLY
 
@@ -1328,6 +1332,12 @@ MaybeDirectHandle<JSPromise> TryGetCurrentTaskPromise(Isolate* isolate) {
         return promise;
       }
     }
+  } else if (IsPromiseResolveThenableJobTask(*current_microtask)) {
+    auto promise_resolve_thenable_job_task =
+        Cast<PromiseResolveThenableJobTask>(current_microtask);
+    DirectHandle<JSPromise> promise(
+        promise_resolve_thenable_job_task->promise_to_resolve(), isolate);
+    return promise;
   }
   return MaybeDirectHandle<JSPromise>();
 }
@@ -1805,7 +1815,7 @@ void Isolate::PrintStack(StringStream* accumulator, PrintStackMode mode) {
   DCHECK(accumulator->IsMentionedObjectCacheClear(this));
 
   // Avoid printing anything if there are no frames.
-  if (c_entry_fp(thread_local_top()) == 0) return;
+  if (c_entry_fp(thread_local_top()) == 0 && !InFastCCall()) return;
 
   accumulator->Add(
       "\n==== JS stack trace =========================================\n\n");
@@ -2299,23 +2309,19 @@ Tagged<Object> Isolate::UnwindAndFindHandler() {
     wasm::StackMemory* active_stack = isolate_data_.active_stack();
     if (active_stack != nullptr) {
       wasm::StackMemory* parent = nullptr;
-      Tagged<Object> maybe_suspender = isolate_data()->active_suspender();
+      Tagged<WasmSuspenderObject> suspender =
+          isolate_data()->active_suspender();
       while (active_stack != iter.wasm_stack()) {
         parent = active_stack->jmpbuf()->parent;
         SBXCHECK_EQ(parent->jmpbuf()->state, wasm::JumpBuffer::Inactive);
+        if (v8_flags.trace_wasm_stack_switching) {
+          PrintF("Switch from stack %d to %d (throw)\n", active_stack->id(),
+                 parent->id());
+        }
         SwitchStacks<wasm::JumpBuffer::Retired, wasm::JumpBuffer::Inactive>(
             active_stack, parent, kNullAddress, kNullAddress, kNullAddress);
-        // Unconditionally update the active suspender as well. This assumes
-        // that suspenders contain exactly one stack each.
-        // Note: this is only needed for --stress-wasm-stack-switching.
-        // Otherwise the exception should have been caught by the JSPI builtin.
-        // TODO(388533754): Revisit this for core stack-switching when the
-        // suspender can encapsulate multiple stacks.
-        auto suspender = Tagged<WasmSuspenderObject>::cast(maybe_suspender);
-        if (suspender->has_parent()) {
-          maybe_suspender = suspender->parent();
-        } else {
-          maybe_suspender = Smi::zero();
+        if (suspender->has_parent() && parent == suspender->parent()->stack()) {
+          suspender = suspender->parent();
         }
         RetireWasmStack(active_stack);
         active_stack = parent;
@@ -2323,7 +2329,7 @@ Tagged<Object> Isolate::UnwindAndFindHandler() {
       if (parent) {
         // We switched at least once, update the active continuation.
         isolate_data_.set_active_stack(active_stack);
-        isolate_data()->set_active_suspender(maybe_suspender);
+        isolate_data()->set_active_suspender(suspender);
       }
     }
     // The unwinder is running on the central stack. If the target frame is in a
@@ -2377,7 +2383,7 @@ Tagged<Object> Isolate::UnwindAndFindHandler() {
       continue;
     }
 #if V8_ENABLE_WEBASSEMBLY
-    if (iter.frame()->type() == StackFrame::STACK_SWITCH) {
+    if (iter.frame()->type() == StackFrame::WASM_JSPI) {
       if (catchable_by_js && iter.frame()->LookupCode()->builtin_id() !=
                                  Builtin::kJSToWasmStressSwitchStacksAsm) {
         Tagged<Code> code =
@@ -3009,6 +3015,7 @@ bool Isolate::ComputeLocation(MessageLocation* target) {
 
 bool Isolate::ComputeLocationFromException(MessageLocation* target,
                                            DirectHandle<Object> exception) {
+  if (IsAnyHole(*exception)) return false;
   if (!IsJSObject(*exception)) return false;
 
   DirectHandle<Name> start_pos_symbol = factory()->error_start_pos_symbol();
@@ -3035,6 +3042,7 @@ bool Isolate::ComputeLocationFromException(MessageLocation* target,
 
 bool Isolate::ComputeLocationFromSimpleStackTrace(
     MessageLocation* target, DirectHandle<Object> exception) {
+  if (IsAnyHole(*exception)) return false;
   if (!IsJSReceiver(*exception)) {
     return false;
   }
@@ -3052,6 +3060,7 @@ bool Isolate::ComputeLocationFromSimpleStackTrace(
 
 bool Isolate::ComputeLocationFromDetailedStackTrace(
     MessageLocation* target, DirectHandle<Object> exception) {
+  if (IsAnyHole(*exception)) return false;
   if (!IsJSReceiver(*exception)) return false;
 
   DirectHandle<StackTraceInfo> stack_trace =
@@ -3070,7 +3079,7 @@ Handle<JSMessageObject> Isolate::CreateMessage(DirectHandle<Object> exception,
                                                MessageLocation* location) {
   DirectHandle<StackTraceInfo> stack_trace;
   if (capture_stack_trace_for_uncaught_exceptions_) {
-    if (IsJSObject(*exception)) {
+    if (!IsAnyHole(*exception) && IsJSObject(*exception)) {
       // First, check whether a stack trace is already present on this object.
       // It maybe an Error, or the embedder may have stored a stack trace using
       // Exception::CaptureStackTrace().
@@ -3101,7 +3110,7 @@ Handle<JSMessageObject> Isolate::CreateMessage(DirectHandle<Object> exception,
 Handle<JSMessageObject> Isolate::CreateMessageFromException(
     DirectHandle<Object> exception) {
   DirectHandle<StackTraceInfo> stack_trace;
-  if (IsJSError(*exception)) {
+  if (!IsAnyHole(*exception) && IsJSError(*exception)) {
     stack_trace = GetDetailedStackTrace(Cast<JSObject>(exception));
   }
 
@@ -3318,7 +3327,8 @@ bool WalkPromiseTreeInternal(
         // If in the future we support Wasm exceptions or ignore listing in
         // Wasm, we will need to iterate through these frames. For now, we
         // only care about the resulting promise.
-        DirectHandle<JSPromise> next_promise(suspender->promise(), isolate);
+        DirectHandle<JSPromise> next_promise(
+            Cast<JSPromise>(suspender->promise()), isolate);
         bool caught = WalkPromiseTreeInternal(isolate, next_promise, callback);
         any_caught = any_caught || caught;
         any_uncaught = any_uncaught || !caught;
@@ -3557,9 +3567,9 @@ bool CallsCatchMethod(const StackFrameSummaryIterator& iterator) {
   }
   if (iterator.frame_summary().IsJavaScript()) {
     auto& js_summary = iterator.frame_summary().AsJavaScript();
-    if (IsBytecodeArray(*js_summary.abstract_code())) {
-      if (CallsCatchMethod(iterator.isolate(),
-                           Cast<BytecodeArray>(js_summary.abstract_code()),
+    if (Handle<BytecodeArray> bytecode_array;
+        TryCast(js_summary.abstract_code(), &bytecode_array)) {
+      if (CallsCatchMethod(iterator.isolate(), bytecode_array,
                            js_summary.code_offset())) {
         return true;
       }
@@ -3738,59 +3748,18 @@ bool Isolate::IsSharedArrayBufferConstructorEnabled(
   return false;
 }
 
-bool Isolate::IsWasmStringRefEnabled(DirectHandle<NativeContext> context) {
-#ifdef V8_ENABLE_WEBASSEMBLY
-  // If Wasm imported strings are explicitly enabled via a callback, also enable
-  // stringref.
-  v8::WasmImportedStringsEnabledCallback callback_imported_strings =
-      wasm_imported_strings_enabled_callback();
-  if (callback_imported_strings) {
-    v8::Local<v8::Context> api_context = v8::Utils::ToLocal(context);
-    if (callback_imported_strings(api_context)) return true;
-  }
-  // Otherwise use the runtime flag.
-  return v8_flags.experimental_wasm_stringref;
-#else
-  return false;
-#endif
-}
 
-bool Isolate::IsWasmJSPIRequested(DirectHandle<NativeContext> context) {
-#ifdef V8_ENABLE_WEBASSEMBLY
-  if (v8_flags.wasm_jitless) return false;
 
-  v8::WasmJSPIEnabledCallback jspi_callback = wasm_jspi_enabled_callback();
-  if (jspi_callback) {
-    v8::Local<v8::Context> api_context = v8::Utils::ToLocal(context);
-    if (jspi_callback(api_context)) return true;
-  }
-
-  // Otherwise use the runtime flag.
-  return v8_flags.experimental_wasm_jspi;
-#else
-  return false;
-#endif
-}
-
-bool Isolate::IsWasmJSPIEnabled(DirectHandle<NativeContext> context) {
-#ifdef V8_ENABLE_WEBASSEMBLY
-  return IsWasmJSPIRequested(context) &&
-         context->is_wasm_jspi_installed() != Smi::zero();
-#else
-  return false;
-#endif
-}
-
-bool Isolate::IsWasmImportedStringsEnabled(
+bool Isolate::IsWasmCustomDescriptorsEnabled(
     DirectHandle<NativeContext> context) {
 #ifdef V8_ENABLE_WEBASSEMBLY
-  v8::WasmImportedStringsEnabledCallback callback =
-      wasm_imported_strings_enabled_callback();
+  v8::WasmCustomDescriptorsEnabledCallback callback =
+      wasm_custom_descriptors_enabled_callback();
   if (callback) {
     v8::Local<v8::Context> api_context = v8::Utils::ToLocal(context);
     if (callback(api_context)) return true;
   }
-  return v8_flags.experimental_wasm_imported_strings;
+  return v8_flags.experimental_wasm_custom_descriptors;
 #else
   return false;
 #endif
@@ -3934,14 +3903,17 @@ template <wasm::JumpBuffer::StackState new_state_of_old_stack,
           wasm::JumpBuffer::StackState expected_target_state>
 void Isolate::SwitchStacks(wasm::StackMemory* from, wasm::StackMemory* to,
                            Address sp, Address fp, Address pc) {
-  // Synchronize the stack limit with the active continuation for
-  // stack-switching. This can be done before or after changing the stack
-  // pointer itself, as long as we update both before the next stack check.
-  // {StackGuard::SetStackLimitForStackSwitching} doesn't update the value of
-  // the jslimit if it contains a sentinel value, and it is also thread-safe. So
-  // if an interrupt is requested before, during or after this call, it will be
-  // preserved and handled at the next stack check.
   SBXCHECK_EQ(from->jmpbuf()->state, wasm::JumpBuffer::Active);
+  DCHECK_EQ(from, isolate_data()->active_stack());
+  constexpr bool is_resume =
+      expected_target_state == wasm::JumpBuffer::Suspended;
+#if DEBUG
+  constexpr bool is_return =
+      new_state_of_old_stack == wasm::JumpBuffer::Retired;
+  constexpr bool is_suspend =
+      new_state_of_old_stack == wasm::JumpBuffer::Suspended;
+#endif
+
   from->jmpbuf()->state = new_state_of_old_stack;
   if constexpr (new_state_of_old_stack != wasm::JumpBuffer::Retired) {
     from->jmpbuf()->sp = sp;
@@ -3949,38 +3921,70 @@ void Isolate::SwitchStacks(wasm::StackMemory* from, wasm::StackMemory* to,
     from->jmpbuf()->pc = pc;
     from->jmpbuf()->stack_limit =
         reinterpret_cast<void*>(stack_guard()->real_jslimit());
+
+    from->jmpbuf()->is_on_central_stack =
+        thread_local_top()->is_on_central_stack_flag_;
   }
   SBXCHECK_EQ(to->jmpbuf()->state, expected_target_state);
   to->jmpbuf()->state = wasm::JumpBuffer::Active;
+  isolate_data()->set_active_stack(to);
   DisallowGarbageCollection no_gc;
-  if constexpr (expected_target_state == wasm::JumpBuffer::Suspended) {
-    to->jmpbuf()->parent = from;
+  if constexpr (is_resume) {
+    // To resume multiple stacks at once, we have to update the parent of the
+    // tail of the list:
+    wasm::StackMemory* tail = to;
+    while (tail->jmpbuf()->parent != nullptr) {
+      tail = tail->jmpbuf()->parent;
+    }
+    tail->jmpbuf()->parent = from;
   } else {
+    // Return or suspend.
     static_assert(expected_target_state == wasm::JumpBuffer::Inactive);
-    // TODO(388533754): This check won't hold anymore with core stack-switching.
-    // Instead, we will need to validate all the intermediate stacks and also
-    // check that they don't hold central stack frames.
-    SBXCHECK_EQ(from->jmpbuf()->parent, to);
+    wasm::StackMemory* prev = from;
+    wasm::StackMemory* skipped = from->jmpbuf()->parent;
+    while (skipped != to) {
+      // Should have been checked already.
+      DCHECK(!skipped->jmpbuf()->is_on_central_stack);
+      prev = skipped;
+      skipped = skipped->jmpbuf()->parent;
+    }
+    // Clear the parent to mark the end of the suspended stack chain.
+    prev->jmpbuf()->parent = nullptr;
   }
   uintptr_t limit = reinterpret_cast<uintptr_t>(to->jmpbuf()->stack_limit);
+  // Synchronize the stack limit with the active continuation for
+  // stack-switching. This can be done before or after changing the stack
+  // pointer itself, as long as we update both before the next stack check.
+  // {StackGuard::SetStackLimitForStackSwitching} doesn't update the value of
+  // the jslimit if it contains a sentinel value, and it is also thread-safe. So
+  // if an interrupt is requested before, during or after this call, it will be
+  // preserved and handled at the next stack check.
   stack_guard()->SetStackLimitForStackSwitching(limit);
+
   // Update the central stack info.
-  if constexpr (expected_target_state == wasm::JumpBuffer::Inactive) {
-    // When returning/suspending from a stack, the parent must be on
-    // the central stack.
-    // TODO(388533754): This assumption will not hold anymore with core
-    // stack-switching, so we will need to revisit this.
-    DCHECK(IsOnCentralStack(to->jmpbuf()->sp));
+  if (!thread_local_top()->is_on_central_stack_flag_ &&
+      to->jmpbuf()->is_on_central_stack) {
+    DCHECK(is_suspend || is_return);
+    DCHECK_EQ(expected_target_state, wasm::JumpBuffer::Inactive);
     thread_local_top()->is_on_central_stack_flag_ = true;
-    thread_local_top()->central_stack_sp_ = to->jmpbuf()->sp;
+    thread_local_top()->central_stack_sp_ = to->central_stack_sp();
+#if DEBUG
+    from->set_central_stack_sp(kNullAddress);
+#endif
     thread_local_top()->central_stack_limit_ =
         reinterpret_cast<Address>(to->jmpbuf()->stack_limit);
-  } else {
-    // A suspended stack cannot hold central stack frames.
+  } else if (thread_local_top()->is_on_central_stack_flag_ &&
+             !to->jmpbuf()->is_on_central_stack) {
     thread_local_top()->is_on_central_stack_flag_ = false;
-    thread_local_top()->central_stack_sp_ = from->jmpbuf()->sp;
-    thread_local_top()->central_stack_limit_ =
-        reinterpret_cast<Address>(from->jmpbuf()->stack_limit);
+    if (is_resume) {
+      // Record the current central stack SP, we will switch back to it for
+      // non-wasm calls. Save the previous value to restore it when we return to
+      // this stack.
+      from->set_central_stack_sp(thread_local_top()->central_stack_sp_);
+      thread_local_top()->central_stack_sp_ = from->jmpbuf()->sp;
+      thread_local_top()->central_stack_limit_ =
+          reinterpret_cast<Address>(from->jmpbuf()->stack_limit);
+    }
   }
 }
 
@@ -4334,7 +4338,7 @@ Isolate::Isolate(IsolateGroup* isolate_group)
   // TODO(ahaas): The code of the landing pad does not have to be a builtin,
   // we could also just move it to the trap handler, and implement it e.g. with
   // inline assembly. It's not clear if that's worth it.
-  if (Isolate::CurrentEmbeddedBlobCodeSize()) {
+  if (Isolate::CurrentEmbeddedBlobCodeSize() && !v8_flags.wasm_jitless) {
     Address landing_pad =
         Builtins::EmbeddedEntryOf(Builtin::kWasmTrapHandlerLandingPad);
     i::trap_handler::SetLandingPad(landing_pad);
@@ -4575,7 +4579,7 @@ void Isolate::Deinit() {
 
   if (v8_flags.print_deopt_stress) {
     PrintF(stdout, "=== Stress deopt counter: %" PRIu64 "\n",
-           stress_deopt_count_);
+           isolate_data_.stress_deopt_count_);
   }
 
   // We must stop the logger before we tear down other components.
@@ -4773,11 +4777,17 @@ void Isolate::Deinit() {
 void Isolate::SetIsolateThreadLocals(Isolate* isolate,
                                      PerIsolateThreadData* data) {
   Isolate::SetCurrent(isolate);
+  LocalHeap::SetCurrent(isolate && isolate->main_thread_local_isolate()
+                            ? isolate->main_thread_local_heap()
+                            : nullptr);
   g_current_per_isolate_thread_data_ = data;
 
 #ifdef V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES
   V8HeapCompressionScheme::InitBase(isolate ? isolate->cage_base()
                                             : kNullAddress);
+  TrustedSpaceCompressionScheme::InitBase(
+      isolate ? isolate->isolate_group()->GetTrustedPtrComprCageBase()
+              : kNullAddress);
   IsolateGroup::set_current(isolate ? isolate->isolate_group() : nullptr);
 #ifdef V8_EXTERNAL_CODE_SPACE
   ExternalCodeCompressionScheme::InitBase(isolate ? isolate->code_cage_base()
@@ -4915,8 +4925,8 @@ bool Isolate::PropagateExceptionToExternalTryCatch(
     SetTerminationOnExternalTryCatch();
   } else {
     v8::TryCatch* handler = try_catch_handler();
-    DCHECK(IsJSMessageObject(pending_message()) ||
-           IsTheHole(pending_message(), this));
+    DCHECK(IsAnyHole(pending_message()) ||
+           IsJSMessageObject(pending_message()));
     handler->can_continue_ = true;
     handler->exception_ = reinterpret_cast<void*>(exception.ptr());
     // Propagate to the external try-catch only if we got an actual message.
@@ -5098,8 +5108,10 @@ void Isolate::ReportExceptionFunctionCallback(
   DCHECK_NOT_NULL(exception_propagation_callback_);
 
   // Ignore exceptions that we can't extend.
-  if (!IsJSReceiver(this->exception())) return;
-  DirectHandle<JSReceiver> exception(Cast<JSReceiver>(this->exception()), this);
+  if (IsAnyHole(this->exception())) return;
+  Tagged<JSReceiver> raw_exception;
+  if (!TryCast<JSReceiver>(this->exception(), &raw_exception)) return;
+  DirectHandle<JSReceiver> exception(raw_exception, this);
 
   DirectHandle<Object> maybe_message(pending_message(), this);
 
@@ -5496,6 +5508,7 @@ void Isolate::VerifyStaticRoots() {
   // sorted list of addresses) or remove the offending entry from the list.
   for (idx = RootIndex::kFirstRoot; idx <= RootIndex::kLastRoot; ++idx) {
     Tagged<Object> obj = roots_table().slot(idx).load(this);
+    if (RootsTable::IsReadOnly(idx) && IsAnyHole(obj)) continue;
     if (obj.ptr() == kNullAddress || !IsMap(obj)) continue;
     Tagged<Map> map = Cast<Map>(obj);
 
@@ -5591,7 +5604,6 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
 
   CHECK_IMPLIES(is_shared_space_isolate(), V8_CAN_CREATE_SHARED_HEAP_BOOL);
 
-  stress_deopt_count_ = v8_flags.deopt_every_n_times;
   force_slow_path_ = v8_flags.force_slow_path;
 
   flush_denormals_ = base::FPU::GetFlushDenormals();
@@ -5622,7 +5634,7 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
   define_own_stub_cache_ = new StubCache(this);
   materialized_object_store_ = new MaterializedObjectStore(this);
   regexp_stack_ = RegExpStack::New();
-  isolate_data()->set_regexp_static_result_offsets_vector(
+  isolate_data_.set_regexp_static_result_offsets_vector(
       jsregexp_static_offsets_vector());
   date_cache_ = new DateCache();
   interpreter_ = new interpreter::Interpreter(this);
@@ -5690,6 +5702,8 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
   isolate_data_.is_shared_space_isolate_flag_ = is_shared_space_isolate();
   isolate_data_.uses_shared_heap_flag_ = has_shared_space();
 
+  isolate_data_.stress_deopt_count_ = v8_flags.deopt_every_n_times;
+
   if (use_shared_space_isolate && !is_shared_space_isolate() &&
       use_shared_space_isolate->heap()
           ->incremental_marking()
@@ -5731,9 +5745,16 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
     trusted_pointer_table().InitializeSpace(heap()->trusted_pointer_space());
 #endif  // V8_ENABLE_SANDBOX
   }
-  isolate_group()->SetupReadOnlyHeap(this, read_only_snapshot_data, can_rehash);
-  heap_.SetUpSpaces(isolate_data_.new_allocation_info_,
-                    isolate_data_.old_allocation_info_);
+
+  {
+    // LocalHeap initialization requires the TLS variable to be set already.
+    // However, we can't move SetIsolateThreadLocals here because the marking
+    // barrier isn't setup yet.
+    SetCurrentLocalHeapScope local_heap_scope(this);
+    isolate_group()->SetupReadOnlyHeap(this, read_only_snapshot_data,
+                                       can_rehash);
+    heap_.SetUpSpaces();
+  }
 
   DCHECK_EQ(this, Isolate::Current());
   PerIsolateThreadData* const current_data = CurrentPerIsolateThreadData();
@@ -6002,9 +6023,18 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
 #if V8_STATIC_ROOTS_BOOL
   // Protect the payload of wasm null.
   if (!page_allocator()->DecommitPages(
-          reinterpret_cast<void*>(factory()->wasm_null()->payload()),
-          WasmNull::kSize - kTaggedSize)) {
+          reinterpret_cast<void*>(factory()->wasm_null()->first_payload()),
+          WasmNull::kFirstPayloadSize)) {
     V8::FatalProcessOutOfMemory(this, "decommitting WasmNull payload");
+  }
+  if (v8_flags.unmap_holes) {
+    // Protect the second payload of wasm null, containing the holes.
+    if (!page_allocator()->DecommitPages(
+            reinterpret_cast<void*>(factory()->wasm_null()->second_payload()),
+            WasmNull::kSecondPayloadSize)) {
+      V8::FatalProcessOutOfMemory(
+          this, "decommitting second WasmNull payload (holes)");
+    }
   }
 #endif  // V8_STATIC_ROOTS_BOOL
 #endif  // V8_ENABLE_WEBASSEMBLY
@@ -6592,6 +6622,9 @@ void Isolate::WasmInitJSPIFeature() {
   if (v8_flags.wasm_jitless) return;
 
   if (isolate_data_.active_stack() == nullptr) {
+    // Add a sentinel active stack and active suspender object to represent the
+    // initial stack. This ensures that other stacks/suspenders created via
+    // WasmFX/JSPI always have a parent to suspend to.
     wasm::StackMemory* stack(wasm::StackMemory::GetCentralStackView(this));
     stack->jmpbuf()->state = wasm::JumpBuffer::Active;
     this->wasm_stacks().emplace_back(stack);
@@ -6601,6 +6634,10 @@ void Isolate::WasmInitJSPIFeature() {
              stack->jslimit(), reinterpret_cast<void*>(stack->base()));
     }
     HandleScope scope(this);
+    DirectHandle<WasmSuspenderObject> suspender =
+        factory()->NewWasmSuspenderObject();
+    suspender->set_stack(this, stack);
+    isolate_data_.set_active_suspender(*suspender);
     isolate_data_.set_active_stack(stack);
   }
 }
@@ -7322,7 +7359,7 @@ void Isolate::SetPriority(v8::Isolate::Priority priority) {
   priority_ = priority;
   heap()->tracer()->UpdateCurrentEventPriority(priority_);
   if (priority_ == v8::Isolate::Priority::kBestEffort) {
-    heap()->NotifyBackgrounded();
+    heap()->ActivateMemoryReducerIfNeeded();
   }
 }
 
@@ -7661,13 +7698,6 @@ LocalHeap* Isolate::main_thread_local_heap() {
   return main_thread_local_isolate()->heap();
 }
 
-LocalHeap* Isolate::CurrentLocalHeap() {
-  LocalHeap* local_heap = LocalHeap::Current();
-  if (local_heap) return local_heap;
-  DCHECK_EQ(ThreadId::Current(), thread_id());
-  return main_thread_local_heap();
-}
-
 // |chunk| is either a Page or an executable LargePage.
 void Isolate::RemoveCodeMemoryChunk(MutablePageMetadata* chunk) {
   // We only keep track of individual code pages/allocations if we are on arm32,
@@ -7771,7 +7801,7 @@ void Isolate::LocalsBlockListCacheSet(
   heap()->set_locals_block_list_cache(*cache);
 }
 
-Tagged<Object> Isolate::LocalsBlockListCacheGet(
+Tagged<UnionOf<TheHole, StringSet>> Isolate::LocalsBlockListCacheGet(
     DirectHandle<ScopeInfo> scope_info) {
   DisallowGarbageCollection no_gc;
 
@@ -7782,10 +7812,13 @@ Tagged<Object> Isolate::LocalsBlockListCacheGet(
   Tagged<Object> maybe_value =
       Cast<EphemeronHashTable>(heap()->locals_block_list_cache())
           ->Lookup(scope_info);
-  if (IsTuple2(maybe_value)) return Cast<Tuple2>(maybe_value)->value2();
+  if (IsTheHole(maybe_value)) return Cast<TheHole>(maybe_value);
+  if (Tagged<Tuple2> tuple; TryCast<Tuple2>(maybe_value, &tuple)) {
+    return Cast<StringSet>(tuple->value2());
+  }
 
-  CHECK(IsStringSet(maybe_value) || IsTheHole(maybe_value));
-  return maybe_value;
+  CHECK(IsStringSet(maybe_value));
+  return Cast<StringSet>(maybe_value);
 }
 
 std::list<std::unique_ptr<detail::WaiterQueueNode>>&

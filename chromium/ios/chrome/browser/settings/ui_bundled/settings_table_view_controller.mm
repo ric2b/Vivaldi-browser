@@ -21,6 +21,7 @@
 #import "components/feature_engagement/public/feature_constants.h"
 #import "components/feature_engagement/public/tracker.h"
 #import "components/keyed_service/core/service_access_type.h"
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "components/password_manager/core/browser/manage_passwords_referrer.h"
 #import "components/password_manager/core/browser/ui/password_check_referrer.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
@@ -58,7 +59,6 @@
 #import "ios/chrome/browser/language/model/language_model_manager_factory.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_feature.h"
-#import "ios/chrome/browser/passwords/model/features.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager_factory.h"
 #import "ios/chrome/browser/passwords/model/password_check_observer_bridge.h"
@@ -68,6 +68,7 @@
 #import "ios/chrome/browser/push_notification/model/push_notification_client_id.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_settings_util.h"
 #import "ios/chrome/browser/safari_data_import/public/safari_data_import_entry_point.h"
+#import "ios/chrome/browser/safari_data_import/public/safari_data_import_ui_handler.h"
 #import "ios/chrome/browser/search_engines/model/search_engine_observer_bridge.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/settings/model/sync/utils/identity_error_util.h"
@@ -77,6 +78,7 @@
 #import "ios/chrome/browser/settings/ui_bundled/autofill/autofill_credit_card_table_view_controller.h"
 #import "ios/chrome/browser/settings/ui_bundled/autofill/autofill_profile_table_view_controller.h"
 #import "ios/chrome/browser/settings/ui_bundled/bandwidth/bandwidth_management_table_view_controller.h"
+#import "ios/chrome/browser/settings/ui_bundled/button_catalog_view_controller.h"
 #import "ios/chrome/browser/settings/ui_bundled/bwg/coordinator/bwg_settings_coordinator.h"
 #import "ios/chrome/browser/settings/ui_bundled/cells/account_sign_in_item.h"
 #import "ios/chrome/browser/settings/ui_bundled/cells/enhanced_safe_browsing_inline_promo_item.h"
@@ -195,7 +197,7 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 #if BUILDFLAG(IOS_USE_BRANDED_SYMBOLS)
   return CustomSettingsRootMulticolorSymbol(kGoogleIconSymbol);
 #else
-  return DefaultSettingsRootSymbol(@"gearshape.2");
+  return DefaultSettingsRootSymbol(kGearshape2Symbol);
 #endif
 }
 
@@ -249,6 +251,7 @@ struct EnhancedSafeBrowsingActivePromoData
     PrefObserverDelegate,
     NotificationsCoordinatorDelegate,
     PrivacyCoordinatorDelegate,
+    SafariDataImportUIHandler,
     SafetyCheckCoordinatorDelegate,
     SearchEngineObserving,
     SyncObserverModelBridge,
@@ -303,7 +306,8 @@ struct EnhancedSafeBrowsingActivePromoData
   PasswordsCoordinator* _passwordsCoordinator;
 
   // Feature engagement tracker for the signin IPH.
-  raw_ptr<feature_engagement::Tracker> _featureEngagementTracker;
+  raw_ptr<feature_engagement::Tracker, DanglingUntriaged>
+      _featureEngagementTracker;
   // Presenter for the signin IPH.
   BubbleViewControllerPresenter* _bubblePresenter;
 
@@ -403,7 +407,7 @@ struct EnhancedSafeBrowsingActivePromoData
 - (instancetype)initWithBrowser:(Browser*)browser
        hasDefaultBrowserBlueDot:(BOOL)hasDefaultBrowserBlueDot {
   DCHECK(browser);
-  DCHECK(!browser->GetProfile()->IsOffTheRecord());
+  DCHECK_EQ(browser->type(), Browser::Type::kRegular);
 
   self = [super initWithStyle:ChromeTableViewStyle()];
   if (self) {
@@ -452,9 +456,9 @@ struct EnhancedSafeBrowsingActivePromoData
     _allowChromeSigninPreference.observer = self;
 
     if (!IsVivaldiRunning()) {
-    _bottomOmniboxEnabled =
-        [[PrefBackedBoolean alloc] initWithPrefService:localState
-                                              prefName:prefs::kBottomOmnibox];
+    _bottomOmniboxEnabled = [[PrefBackedBoolean alloc]
+        initWithPrefService:localState
+                   prefName:omnibox::kIsOmniboxInBottomPosition];
     [_bottomOmniboxEnabled setObserver:self];
     } // End Vivaldi
 
@@ -513,6 +517,15 @@ struct EnhancedSafeBrowsingActivePromoData
   // Vivaldi
   // setting delegate for UIAdaptivePresentationControllerDelegate
   self.navigationController.presentationController.delegate = self;
+  // VIB-1458: Fix for large title glitch issue for iOS 26
+  if (@available(iOS 26, *)) {
+    UINavigationBarAppearance* transparentAppearance =
+        [[UINavigationBarAppearance alloc] init];
+    [transparentAppearance configureWithTransparentBackground];
+    self.navigationItem.standardAppearance = transparentAppearance;
+    self.navigationItem.compactAppearance = transparentAppearance;
+    self.navigationItem.scrollEdgeAppearance = transparentAppearance;
+  }
   // End Vivaldi
 
   [self loadModel];
@@ -672,7 +685,7 @@ struct EnhancedSafeBrowsingActivePromoData
     [model addItem:[self downloadsSettingsDetailItem]
         toSectionWithIdentifier:SettingsSectionIdentifierInfo];
   }
-  if (ShouldShowSafariImportWorkflow(_profile)) {
+  if (ShouldShowSafariDataImportEntryPoint(_profile)) {
     [model addItem:[self safariDataImportSettingsDetailItem]
         toSectionWithIdentifier:SettingsSectionIdentifierInfo];
   }
@@ -696,6 +709,8 @@ struct EnhancedSafeBrowsingActivePromoData
   [model addItem:[self viewSourceSwitchItem]
       toSectionWithIdentifier:SettingsSectionIdentifierDebug];
   [model addItem:[self tableViewCatalogDetailItem]
+      toSectionWithIdentifier:SettingsSectionIdentifierDebug];
+  [model addItem:[self buttonCatalogDetailItem]
       toSectionWithIdentifier:SettingsSectionIdentifierDebug];
 #endif  // BUILDFLAG(CHROMIUM_BRANDING) && !defined(NDEBUG)
   } // End Vivaldi
@@ -1314,6 +1329,16 @@ struct EnhancedSafeBrowsingActivePromoData
             symbolBackgroundColor:[UIColor colorNamed:kGrey400Color]
           accessibilityIdentifier:nil];
 }
+
+- (TableViewDetailIconItem*)buttonCatalogDetailItem {
+  return [self detailItemWithType:SettingsItemTypeButtonCatalog
+                             text:@"Button Catalog"
+                       detailText:nil
+                           symbol:DefaultSettingsRootSymbol(kCartSymbol)
+            symbolBackgroundColor:[UIColor colorNamed:kGrey400Color]
+          accessibilityIdentifier:nil];
+}
+
 #endif  // BUILDFLAG(CHROMIUM_BRANDING) && !defined(NDEBUG)
 
 #pragma mark Item Constructors
@@ -1601,13 +1626,13 @@ struct EnhancedSafeBrowsingActivePromoData
       [self showTabsSettings];
       break;
     case SettingsItemTypeSafariDataImport: {
-      CHECK(ShouldShowSafariImportWorkflow(_profile));
+      CHECK(ShouldShowSafariDataImportEntryPoint(_profile));
       base::RecordAction(base::UserMetricsAction("Settings.SafariImport"));
       id<ApplicationCommands> handler = HandlerForProtocol(
           _browser->GetCommandDispatcher(), ApplicationCommands);
       [handler displaySafariDataImportFromEntryPoint:
                    SafariDataImportEntryPoint::kSetting
-                                       withUIHandler:nil];
+                                       withUIHandler:self];
       break;
     }
     case SettingsItemTypeBandwidth:
@@ -1630,6 +1655,11 @@ struct EnhancedSafeBrowsingActivePromoData
     case SettingsItemTypeTableCellCatalog:
       [self.navigationController
           pushViewController:[[TableCellCatalogViewController alloc] init]
+                    animated:YES];
+      break;
+    case SettingsItemTypeButtonCatalog:
+      [self.navigationController
+          pushViewController:[[ButtonCatalogViewController alloc] init]
                     animated:YES];
       break;
     case SettingsItemTypeBWGSettings:
@@ -2427,12 +2457,10 @@ struct EnhancedSafeBrowsingActivePromoData
 #pragma mark - Sign in
 
 - (void)showSignIn {
-  if (_signinAndHistorySyncCoordinator) {
-    // According to crbug.com/1498153, it is possible for the user to tap twice
-    // on the sign-in cell from the settings to open the sign-in dialog.
-    // If this happens, the second tap should ignored.
+  if (_signinAndHistorySyncCoordinator.viewWillPersist) {
     return;
   }
+  [_signinAndHistorySyncCoordinator stop];
   __weak __typeof(self) weakSelf = self;
   ChangeProfileContinuationProvider provider =
       base::BindRepeating(&CreateChangeProfileSettingsContinuation);
@@ -2816,6 +2844,16 @@ struct EnhancedSafeBrowsingActivePromoData
   [_googleServicesSettingsCoordinator stop];
   _googleServicesSettingsCoordinator.delegate = nil;
   _googleServicesSettingsCoordinator = nil;
+}
+
+#pragma mark - SafariDataImportUIHandler
+
+- (void)safariDataImportDidDismiss {
+  NSIndexPath* indexPath = [self.tableView indexPathForSelectedRow];
+  if (indexPath && [self.tableViewModel itemTypeForIndexPath:indexPath] ==
+                       SettingsItemTypeSafariDataImport) {
+    [self.tableView deselectRowAtIndexPath:indexPath animated:YES];
+  }
 }
 
 #pragma mark - SafetyCheckCoordinatorDelegate

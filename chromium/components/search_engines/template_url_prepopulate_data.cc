@@ -167,11 +167,10 @@ std::vector<std::unique_ptr<TemplateURLData>> GetLocalPrepopulatedEngines(
     return std::vector<std::unique_ptr<TemplateURLData>>();
   }
 
-  return base::ToVector(
-      regional_capabilities::GetPrepopulatedEngines(
-          country_id, prefs,
-          regional_capabilities::SearchEngineListType::kTopFive),
-      &PrepopulatedEngineToTemplateURLData);
+  return base::ToVector(regional_capabilities::GetPrepopulatedEngines(
+                            country_id, prefs,
+                            regional_capabilities::SearchEngineListType::kTopN),
+                        &PrepopulatedEngineToTemplateURLData);
 }
 
 #endif
@@ -197,6 +196,32 @@ const PrepopulatedEngine* GetPrepopulatedEngineFromBuiltInData(
   // In case of IDs shared across multiple entries, we might be returning
   // the wrong one for the profile country. We can look into better
   // heuristics in future work.
+  if (auto iter = std::ranges::find_if(kAllEngines, engine_matcher);
+      iter != kAllEngines.end()) {
+    return *iter;
+  }
+
+  return nullptr;
+}
+
+const PrepopulatedEngine* GetPrepopulatedEngineFromBuiltInData(
+    std::u16string_view keyword,
+    const std::vector<const PrepopulatedEngine*>&
+        regional_prepopulated_engines) {
+  auto engine_matcher = [&](const PrepopulatedEngine* engine) {
+    return keyword == engine->keyword;
+  };
+
+  // Locate region-specific search engine first to avoid more thorough
+  // scanning. In most cases this should offer the correct match.
+  if (auto iter =
+          std::ranges::find_if(regional_prepopulated_engines, engine_matcher);
+      iter != regional_prepopulated_engines.end()) {
+    return *iter;
+  }
+
+  // Fallback: just grab the first matching entry from the complete list.
+  // This is fine as keywords are unique.
   if (auto iter = std::ranges::find_if(kAllEngines, engine_matcher);
       iter != kAllEngines.end()) {
     return *iter;

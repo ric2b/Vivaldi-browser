@@ -65,7 +65,7 @@ RtpParameters CreateRtpParametersWithEncodings(StreamParams sp) {
   }
 
   const std::vector<RidDescription>& rids = sp.rids();
-  RTC_DCHECK(rids.size() == 0 || rids.size() == encoding_count);
+  RTC_DCHECK(rids.empty() || rids.size() == encoding_count);
   for (size_t i = 0; i < rids.size(); ++i) {
     encodings[i].rid = rids[i].rid;
   }
@@ -77,9 +77,11 @@ RtpParameters CreateRtpParametersWithEncodings(StreamParams sp) {
 }
 
 std::vector<RtpExtension> GetDefaultEnabledRtpHeaderExtensions(
-    const RtpHeaderExtensionQueryInterface& query_interface) {
+    const RtpHeaderExtensionQueryInterface& query_interface,
+    const webrtc::FieldTrialsView* field_trials) {
   std::vector<RtpExtension> extensions;
-  for (const auto& entry : query_interface.GetRtpHeaderExtensions()) {
+  for (const auto& entry :
+       query_interface.GetRtpHeaderExtensions(field_trials)) {
     if (entry.direction != RtpTransceiverDirection::kStopped)
       extensions.emplace_back(entry.uri, *entry.preferred_id);
   }

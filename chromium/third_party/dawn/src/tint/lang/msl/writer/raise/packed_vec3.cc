@@ -98,7 +98,9 @@ struct State {
 
         // Find all function parameters that contain vec3 types in host-shareable address spaces and
         // update them to use packed vec3 types instead.
-        for (auto func : ir.functions) {
+        // Take a copy of the function list as we may add new functions when updating usages.
+        auto functions = ir.functions;
+        for (auto func : functions) {
             for (auto* param : func->Params()) {
                 auto* ptr = param->Type()->As<core::type::Pointer>();
                 if (!ptr || !AddressSpaceNeedsPacking(ptr->AddressSpace())) {
@@ -229,11 +231,7 @@ struct State {
 
         // Create a new struct with the rewritten members.
         auto* new_str = ty.Get<core::type::Struct>(sym.New(str->Name().Name() + "_packed_vec3"),
-                                                   std::move(new_members), str->Align(),
-                                                   str->Size(), str->SizeNoPadding());
-
-        // There are no struct flags that are valid for the MSL backend.
-        TINT_ASSERT(str->StructFlags().Empty());
+                                                   std::move(new_members), str->Size());
 
         return new_str;
     }
@@ -315,7 +313,7 @@ struct State {
                 // Packed vectors support component access so there is usually nothing to do.
                 // For vectors that were originally booleans we need to convert the u32 that we load
                 // to a bool.
-                if (unpacked_type->IsBoolVector()) {
+                if (unpacked_type->UnwrapPtr()->IsBoolVector()) {
                     auto* u32_load = b.InstructionResult<u32>();
                     auto* converted_to_bool = b.ConvertWithResult(lve->DetachResult(), u32_load);
                     converted_to_bool->InsertAfter(lve);
@@ -330,7 +328,7 @@ struct State {
                 // Packed vectors support component access so there is usually nothing to do.
                 // For vectors that were originally booleans we need to convert the bool to a u32
                 // before we store it.
-                if (unpacked_type->IsBoolVector()) {
+                if (unpacked_type->UnwrapPtr()->IsBoolVector()) {
                     auto* converted_to_u32 = b.Convert<u32>(sve->Value());
                     converted_to_u32->InsertBefore(sve);
                     sve->SetOperand(core::ir::StoreVectorElement::kValueOperandOffset,

@@ -26,7 +26,6 @@ constexpr TraceId kEmptyId = TraceId{0};
 using ::testing::_;
 using ::testing::AtLeast;
 using ::testing::DoAll;
-using ::testing::Invoke;
 
 MATCHER_P(EqAsyncEndEvent, expected, "") {
   return arg.ids.current == expected.ids.current &&
@@ -97,8 +96,8 @@ TEST(TraceLoggingTest, ExpectTimestampsReflectDelay) {
   EXPECT_CALL(platform, IsTraceLoggingEnabled(TraceCategory::kAny))
       .Times(AtLeast(1));
   EXPECT_CALL(platform, LogTrace(_, _))
-      .WillOnce(DoAll(Invoke(ValidateTraceTimestampDiff<delay_in_ms>),
-                      Invoke(ValidateTraceErrorCode<Error::Code::kNone>)));
+      .WillOnce(DoAll(ValidateTraceTimestampDiff<delay_in_ms>,
+                      ValidateTraceErrorCode<Error::Code::kNone>));
 #endif
 
   {
@@ -114,7 +113,7 @@ TEST(TraceLoggingTest, ExpectErrorsPassedToResult) {
   EXPECT_CALL(platform, IsTraceLoggingEnabled(TraceCategory::kAny))
       .Times(AtLeast(1));
   EXPECT_CALL(platform, LogTrace(_, _))
-      .WillOnce(Invoke(ValidateTraceErrorCode<result_code>));
+      .WillOnce(ValidateTraceErrorCode<result_code>);
 #endif
 
   {
@@ -151,10 +150,9 @@ TEST(TraceLoggingTest, ExpectCreationWithIdsToWork) {
   EXPECT_CALL(platform, IsTraceLoggingEnabled(TraceCategory::kAny))
       .Times(AtLeast(1));
   EXPECT_CALL(platform, LogTrace(_, _))
-      .WillOnce(
-          DoAll(Invoke(ValidateTraceErrorCode<Error::Code::kNone>),
-                Invoke(ValidateTraceIdHierarchyOnSyncTrace<current, parent,
-                                                           root, kAllParts>)));
+      .WillOnce(DoAll(ValidateTraceErrorCode<Error::Code::kNone>,
+                      ValidateTraceIdHierarchyOnSyncTrace<current, parent, root,
+                                                          kAllParts>));
 #endif
 
   {
@@ -182,14 +180,13 @@ TEST(TraceLoggingTest, ExpectHierarchyToBeApplied) {
   EXPECT_CALL(platform, IsTraceLoggingEnabled(TraceCategory::kAny))
       .Times(AtLeast(1));
   EXPECT_CALL(platform, LogTrace(_, _))
-      .WillOnce(DoAll(
-          Invoke(ValidateTraceErrorCode<Error::Code::kNone>),
-          Invoke(ValidateTraceIdHierarchyOnSyncTrace<kEmptyId, current, root,
-                                                     kParentAndRoot>)))
       .WillOnce(
-          DoAll(Invoke(ValidateTraceErrorCode<Error::Code::kNone>),
-                Invoke(ValidateTraceIdHierarchyOnSyncTrace<current, parent,
-                                                           root, kAllParts>)));
+          DoAll(ValidateTraceErrorCode<Error::Code::kNone>,
+                ValidateTraceIdHierarchyOnSyncTrace<kEmptyId, current, root,
+                                                    kParentAndRoot>))
+      .WillOnce(DoAll(ValidateTraceErrorCode<Error::Code::kNone>,
+                      ValidateTraceIdHierarchyOnSyncTrace<current, parent, root,
+                                                          kAllParts>));
 #endif
 
   {
@@ -221,10 +218,10 @@ TEST(TraceLoggingTest, ExpectHierarchyToEndAfterScopeWhenSetWithSetter) {
   EXPECT_CALL(platform, IsTraceLoggingEnabled(TraceCategory::kAny))
       .Times(AtLeast(1));
   EXPECT_CALL(platform, LogTrace(_, _))
-      .WillOnce(DoAll(
-          Invoke(ValidateTraceErrorCode<Error::Code::kNone>),
-          Invoke(ValidateTraceIdHierarchyOnSyncTrace<kEmptyId, current, root,
-                                                     kParentAndRoot>)));
+      .WillOnce(
+          DoAll(ValidateTraceErrorCode<Error::Code::kNone>,
+                ValidateTraceIdHierarchyOnSyncTrace<kEmptyId, current, root,
+                                                    kParentAndRoot>));
 #endif
 
   {
@@ -258,14 +255,13 @@ TEST(TraceLoggingTest, ExpectHierarchyToEndAfterScope) {
   EXPECT_CALL(platform, IsTraceLoggingEnabled(TraceCategory::kAny))
       .Times(AtLeast(1));
   EXPECT_CALL(platform, LogTrace(_, _))
-      .WillOnce(DoAll(
-          Invoke(ValidateTraceErrorCode<Error::Code::kNone>),
-          Invoke(ValidateTraceIdHierarchyOnSyncTrace<kEmptyId, current, root,
-                                                     kParentAndRoot>)))
       .WillOnce(
-          DoAll(Invoke(ValidateTraceErrorCode<Error::Code::kNone>),
-                Invoke(ValidateTraceIdHierarchyOnSyncTrace<current, parent,
-                                                           root, kAllParts>)));
+          DoAll(ValidateTraceErrorCode<Error::Code::kNone>,
+                ValidateTraceIdHierarchyOnSyncTrace<kEmptyId, current, root,
+                                                    kParentAndRoot>))
+      .WillOnce(DoAll(ValidateTraceErrorCode<Error::Code::kNone>,
+                      ValidateTraceIdHierarchyOnSyncTrace<current, parent, root,
+                                                          kAllParts>));
 #endif
 
   {
@@ -299,10 +295,10 @@ TEST(TraceLoggingTest, ExpectSetHierarchyToApply) {
   EXPECT_CALL(platform, IsTraceLoggingEnabled(TraceCategory::kAny))
       .Times(AtLeast(1));
   EXPECT_CALL(platform, LogTrace(_, _))
-      .WillOnce(DoAll(
-          Invoke(ValidateTraceErrorCode<Error::Code::kNone>),
-          Invoke(ValidateTraceIdHierarchyOnSyncTrace<kEmptyId, current, root,
-                                                     kParentAndRoot>)));
+      .WillOnce(
+          DoAll(ValidateTraceErrorCode<Error::Code::kNone>,
+                ValidateTraceIdHierarchyOnSyncTrace<kEmptyId, current, root,
+                                                    kParentAndRoot>));
 #endif
 
   {
@@ -439,9 +435,8 @@ TEST(TraceLoggingTest, CheckTraceAsyncStartSetsHierarchy) {
   EXPECT_CALL(platform, IsTraceLoggingEnabled(TraceCategory::kAny))
       .Times(AtLeast(1));
   EXPECT_CALL(platform, LogAsyncStart(_))
-      .WillOnce(
-          Invoke(ValidateTraceIdHierarchyOnAsyncTrace<kEmptyId, current, root,
-                                                      kParentAndRoot>));
+      .WillOnce(ValidateTraceIdHierarchyOnAsyncTrace<kEmptyId, current, root,
+                                                     kParentAndRoot>);
 #endif
 
   {

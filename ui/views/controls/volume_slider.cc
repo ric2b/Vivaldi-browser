@@ -3,6 +3,7 @@
 #include "ui/views/controls/volume_slider.h"
 
 #include "content/public/browser/picture_in_picture_window_controller.h"
+#include "ui/base/cursor/cursor.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"

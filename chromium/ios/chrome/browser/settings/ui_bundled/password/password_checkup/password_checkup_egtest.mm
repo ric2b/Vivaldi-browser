@@ -5,8 +5,8 @@
 #import "base/strings/string_number_conversions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_ui_test_util.h"
+#import "ios/chrome/browser/authentication/test/signin_earl_grey.h"
+#import "ios/chrome/browser/authentication/test/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/password_checkup/password_checkup_constants.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/password_details/password_details_table_view_constants.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/password_manager_egtest_utils.h"
@@ -345,9 +345,9 @@ NSString* LeakedPasswordDescription() {
   [PasswordSettingsAppInterface mockReauthenticationModuleReturnMockedResult];
 
   // Password Manager UI should be dismissed leaving the Settings UI Visible.
+  [ChromeEarlGrey
+      waitForUIElementToDisappearWithMatcher:ReauthenticationController()];
   [[EarlGrey selectElementWithMatcher:PasswordCheckupTableView()]
-      assertWithMatcher:grey_notVisible()];
-  [[EarlGrey selectElementWithMatcher:ReauthenticationController()]
       assertWithMatcher:grey_notVisible()];
 
   [[EarlGrey selectElementWithMatcher:SettingsCollectionView()]
@@ -957,7 +957,14 @@ NSString* LeakedPasswordDescription() {
 
 // Validates that the Password Manager UI is dismissed when local authentication
 // fails while in the Password Issues UI.
-- (void)testPasswordIssuesWithFailedAuth {
+// TODO(crbug.com/437856519): Test is flaky on simulator. Reenable the test.
+#if TARGET_OS_SIMULATOR
+#define MAYBE_testPasswordIssuesWithFailedAuth \
+  FLAKY_testPasswordIssuesWithFailedAuth
+#else
+#define MAYBE_testPasswordIssuesWithFailedAuth testPasswordIssuesWithFailedAuth
+#endif
+- (void)MAYBE_testPasswordIssuesWithFailedAuth {
   SaveWeakPasswordFormToProfileStore();
 
   OpenPasswordCheckupHomepage(

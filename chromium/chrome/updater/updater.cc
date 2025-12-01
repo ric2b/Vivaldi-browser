@@ -29,7 +29,9 @@
 #include "chrome/updater/app/app_server.h"
 #include "chrome/updater/app/app_uninstall.h"
 #include "chrome/updater/app/app_uninstall_self.h"
+#include "chrome/updater/app/app_unzip_worker.h"
 #include "chrome/updater/app/app_update.h"
+#include "chrome/updater/app/app_update_apps.h"
 #include "chrome/updater/app/app_wake.h"
 #include "chrome/updater/app/app_wakeall.h"
 #include "chrome/updater/configurator.h"
@@ -47,7 +49,11 @@
 #include "third_party/crashpad/crashpad/client/settings.h"
 
 #if BUILDFLAG(IS_WIN)
+#include <sysinfoapi.h>
+
+#include "base/cpu.h"
 #include "base/debug/alias.h"
+#include "base/strings/to_string.h"
 #include "base/win/process_startup_helper.h"
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/windows_version.h"
@@ -112,12 +118,20 @@ int HandleUpdaterCommands(UpdaterScope updater_scope,
 
   InitializeCrashReporting(updater_scope);
 
-  // Make the process more resilient to memory allocation issues.
-  base::EnableTerminationOnHeapCorruption();
-  base::EnableTerminationOnOutOfMemory();
-  logging::RegisterAbslAbortHook();
 #if BUILDFLAG(IS_WIN)
-  partition_alloc::SetRetryOnCommitFailure(true);
+  base::win::ScopedCOMInitializer com_initializer(
+      base::win::ScopedCOMInitializer::kMTA);
+  if (!com_initializer.Succeeded()) {
+    PLOG(ERROR) << "Failed to initialize COM";
+    return kErrorComInitializationFailed;
+  }
+
+  // Failing to disable COM exception handling is a critical error.
+  CHECK(SUCCEEDED(DisableCOMExceptionHandling()))
+      << "Failed to disable COM exception handling.";
+
+  base::win::RegisterInvalidParamHandler();
+  VLOG(1) << GetUACState();
 #endif
 
   InitializeThreadPool("updater");
@@ -133,21 +147,6 @@ int HandleUpdaterCommands(UpdaterScope updater_scope,
     thread_pool->JoinForTesting();  // IN-TEST
     base::ThreadPoolInstance::Set(nullptr);
   }));
-
-#if BUILDFLAG(IS_WIN)
-  base::win::ScopedCOMInitializer com_initializer(
-      base::win::ScopedCOMInitializer::kMTA);
-  if (!com_initializer.Succeeded()) {
-    PLOG(ERROR) << "Failed to initialize COM";
-    return kErrorComInitializationFailed;
-  }
-
-  // Failing to disable COM exception handling is a critical error.
-  CHECK(SUCCEEDED(DisableCOMExceptionHandling()))
-      << "Failed to disable COM exception handling.";
-  base::win::RegisterInvalidParamHandler();
-  VLOG(1) << GetUACState();
-#endif
 
   // Records a backtrace in the log, crashes the program, saves a crash dump,
   // and reports the crash.
@@ -183,6 +182,10 @@ int HandleUpdaterCommands(UpdaterScope updater_scope,
     return MakeAppUpdate()->Run();
   }
 
+  if (command_line->HasSwitch(kUpdateAppsSwitch)) {
+    return MakeAppUpdateApps()->Run();
+  }
+
 #if BUILDFLAG(IS_WIN)
   if (command_line->HasSwitch(kWindowsServiceSwitch)) {
     return UpdaterServiceDelegate::RunWindowsService();
@@ -213,6 +216,10 @@ int HandleUpdaterCommands(UpdaterScope updater_scope,
 
   if (command_line->HasSwitch(kWakeAllSwitch)) {
     return MakeAppWakeAll()->Run();
+  }
+
+  if (command_line->HasSwitch(kUnzipWorkerSwitch)) {
+    return MakeAppUnzipWorker()->Run();
   }
 
 #if BUILDFLAG(IS_MAC)
@@ -246,6 +253,7 @@ const char* GetUpdaterCommand(const base::CommandLine* command_line) {
       kHealthCheckSwitch,
       kHandoffSwitch,
       kNetWorkerSwitch,
+      kUnzipWorkerSwitch,
   };
   const auto it = std::ranges::find_if(commands, [command_line](auto cmd) {
     return command_line->HasSwitch(cmd);
@@ -298,13 +306,97 @@ void EnableLoggingByDefault() {
   }
 }
 
+#if BUILDFLAG(IS_WIN)
+std::string MemoryStatus() {
+  MEMORYSTATUSEX memory_status = {};
+  memory_status.dwLength = sizeof(memory_status);
+  return ::GlobalMemoryStatusEx(&memory_status)
+             ? base::StringPrintf("available: %dK, total: %dK",
+                                  memory_status.ullAvailPageFile / 1024,
+                                  memory_status.ullTotalPageFile / 1024)
+             : std::string("n/a");
+}
+
+// Assumes that 10MB of available memory is needed for the process to run.
+// Windows may extend its page file when the total memory commitment gets
+// close to the commit limit. Tries a large allocation, and keeps looping
+// if the memory allocator returns an error indicating that the page file
+// is too small.
+void EnsureEnoughMemory() {
+  VLOG(1) << MemoryStatus();
+
+  MEMORYSTATUSEX memory_status = {};
+  memory_status.dwLength = sizeof(memory_status);
+  if (!::GlobalMemoryStatusEx(&memory_status)) {
+    VLOG(1) << "Can't memory stat: " << std::hex << ::GetLastError();
+    return;
+  }
+  constexpr SIZE_T kMinMemoryNeeded = 10'000'000;  // 10MB.
+  if (memory_status.ullAvailPageFile >= kMinMemoryNeeded) {
+    return;
+  }
+  if (void* alloc = []() -> void* {
+        constexpr int kMaxTries = 25;
+        constexpr int kDelayMs = 50;
+        for (int tries = 0; tries < kMaxTries; ++tries) {
+          void* ret = ::VirtualAlloc(NULL, kMinMemoryNeeded,
+                                     MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+          if (ret || [] {
+                switch (::GetLastError()) {
+                  case ERROR_COMMITMENT_MINIMUM:
+                  case ERROR_COMMITMENT_LIMIT:
+                  case ERROR_NOT_ENOUGH_MEMORY:
+                  case ERROR_PAGEFILE_QUOTA:
+                    return false;  // Retry on page file related errors.
+                  default:
+                    return true;  // Don't retry.
+                }
+              }()) {
+            return ret;
+          }
+          ::Sleep(kDelayMs);
+        }
+        return nullptr;
+      }();
+      alloc) {
+    ::VirtualFree(alloc, 0, MEM_RELEASE);
+  } else {
+    VLOG(1) << "Allocation failed: " << kMinMemoryNeeded / 1024 << "K, "
+            << std::hex << ::GetLastError();
+  }
+
+  VLOG(1) << MemoryStatus();
+}
+
+void RecordCpuFeaturesForCrash() {
+#if defined(ARCH_CPU_X86_FAMILY)
+  base::CPU cpu;
+  static crash_reporter::CrashKeyString<6> crash_key_aesni("aesni");
+  crash_key_aesni.Set(base::ToString(cpu.has_aesni()));
+  static crash_reporter::CrashKeyString<6> crash_key_avx512f("avx512f");
+  crash_key_avx512f.Set(base::ToString(cpu.has_avx512_f()));
+  static crash_reporter::CrashKeyString<6> crash_key_in_vm("invm");
+  crash_key_in_vm.Set(base::ToString(cpu.is_running_in_vm()));
+#endif
+}
+
+#endif  // IS_WIN
+
 }  // namespace
 
 int UpdaterMain(int argc, const char* const* argv) {
 #if BUILDFLAG(IS_WIN)
   CHECK(EnableSecureDllLoading());
-  EnableProcessHeapMetadataProtection();
 #endif
+
+  // Make the process more resilient to memory allocation issues.
+#if BUILDFLAG(IS_WIN)
+  EnableProcessHeapMetadataProtection();
+  partition_alloc::SetRetryOnCommitFailure(true);
+#endif
+  base::EnableTerminationOnHeapCorruption();
+  base::EnableTerminationOnOutOfMemory();
+  logging::RegisterAbslAbortHook();
 
   base::PlatformThread::SetName("UpdaterMain");
   base::AtExitManager exit_manager;
@@ -324,6 +416,10 @@ int UpdaterMain(int argc, const char* const* argv) {
           << ", System uptime (seconds): "
           << base::SysInfo::Uptime().InSeconds() << ", parent pid: "
           << base::GetParentProcessId(base::GetCurrentProcessHandle());
+#if BUILDFLAG(IS_WIN)
+  EnsureEnoughMemory();
+  RecordCpuFeaturesForCrash();  // TODO(crbug.com/441591130): remove when fixed.
+#endif  // IS_WIN
   const int exit_code = HandleUpdaterCommands(updater_scope, command_line);
   VLOG(1) << __func__ << " (--" << GetUpdaterCommand(command_line) << ")"
           << " returned " << exit_code << ".";

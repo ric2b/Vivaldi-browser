@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -66,6 +66,7 @@ export const ResultsDBReporter = function(
     const testId = ResultsDb.sanitizedTestId([...suite, description].join('/'));
     const expected = success || skipped;
     const status = skipped ? 'SKIP' : success ? 'PASS' : 'FAIL';
+    console.error(`\n${testId} ${status}\n`);
     let duration = '.001s';
     if (startTime < endTime) {
       duration = ((endTime - startTime) * .001).toFixed(3) + 's';

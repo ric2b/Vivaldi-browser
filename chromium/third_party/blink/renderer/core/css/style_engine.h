@@ -37,6 +37,7 @@
 #include "base/gtest_prod_util.h"
 #include "third_party/blink/public/common/css/forced_colors.h"
 #include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/css/preferred_contrast.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink-forward.h"
 #include "third_party/blink/public/web/web_css_origin.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -47,6 +48,7 @@
 #include "third_party/blink/renderer/core/css/invalidation/pending_invalidations.h"
 #include "third_party/blink/renderer/core/css/invalidation/style_invalidator.h"
 #include "third_party/blink/renderer/core/css/layout_tree_rebuild_root.h"
+#include "third_party/blink/renderer/core/css/mixin_map.h"
 #include "third_party/blink/renderer/core/css/pending_sheet_type.h"
 #include "third_party/blink/renderer/core/css/resolver/match_request.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_utils.h"
@@ -83,7 +85,6 @@ class CSSPropertyValueSet;
 class CSSStyleSheet;
 class CSSValue;
 class Document;
-class DocumentStyleSheetCollection;
 class ElementRuleCollector;
 class Font;
 class FontSelector;
@@ -93,7 +94,6 @@ class MediaQuerySet;
 class Node;
 class ReferenceFilterOperation;
 class RuleFeatureSet;
-class ShadowTreeStyleSheetCollection;
 class DocumentStyleEnvironmentVariables;
 class CascadeLayerMap;
 class SpaceSplitString;
@@ -108,7 +108,7 @@ class StyleSheet;
 class StyleSheetContents;
 class StyleInitialData;
 class TextTrack;
-class TreeScopeStyleSheetCollection;
+class StyleSheetCollection;
 class ViewportStyleResolver;
 class SelectorFilter;
 struct LogicalSize;
@@ -293,30 +293,13 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
     return global_rule_set_->DocumentRulesSelectorsRuleSet();
   }
 
-  // Helper class for making sure RuleSets that are ensured when collecting
-  // sheets for a TreeScope are not shared between two equal sheets which
-  // contain @layer rules since anonymous layers need to be unique.
-  class RuleSetScope {
-    STACK_ALLOCATED();
+  RuleSet* RuleSetForSheet(CSSStyleSheet&, const MixinMap& mixins) const;
 
-   public:
-    RuleSetScope() = default;
-
-    // Ensure a RuleSet for the passed in css_sheet
-    RuleSet* RuleSetForSheet(StyleEngine& engine, CSSStyleSheet* css_sheet);
-
-   private:
-    // Keep track of ensured RuleSets with @layer rules to detect
-    // StyleSheetContents sharing.
-    HeapHashSet<Member<const RuleSet>> layer_rule_sets_;
-  };
-
-  RuleSet* RuleSetForSheet(CSSStyleSheet&);
   // See StyleSheetContents::CreateUnconnectedRuleSet.
   //
   // Note that this can return nullptr when the associated media query
   // does not match.
-  RuleSet* CreateUnconnectedRuleSet(CSSStyleSheet&);
+  RuleSet* CreateUnconnectedRuleSet(CSSStyleSheet&, const MixinMap& mixins);
 
   // A functional @media query is evaluated as a part of some function
   // during value resolution. This is different from regular media queries,
@@ -594,7 +577,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void EnvironmentVariableChanged();
   void InvalidateEnvDependentStylesIfNeeded();
 
-  bool HasComplexSafaAreaConstraints();
+  bool HasComplexSafeAreaConstraints();
   void SetNeedsToUpdateComplexSafeAreaConstraints();
 
   void MarkAllElementsForStyleRecalc(const StyleChangeReasonForTracing& reason);
@@ -622,6 +605,9 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
     anchored_element_dirty_set_.insert(&element);
   }
   void MarkForDefaultAnchorScrollShift(Element& element) {
+    anchored_element_dirty_set_.insert(&element);
+  }
+  void MarkAnchorRememberedOffsetsChanged(Element& element) {
     anchored_element_dirty_set_.insert(&element);
   }
 
@@ -745,8 +731,11 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   void SetPageColorSchemes(const CSSValue* color_scheme);
   ColorSchemeFlags GetPageColorSchemes() const { return page_color_schemes_; }
-  mojom::PreferredColorScheme GetPreferredColorScheme() const {
+  mojom::blink::PreferredColorScheme GetPreferredColorScheme() const {
     return preferred_color_scheme_;
+  }
+  mojom::blink::PreferredContrast GetPreferredContrast() const {
+    return preferred_contrast_;
   }
   bool GetForceDarkModeEnabled() const { return force_dark_mode_enabled_; }
   ForcedColors GetForcedColors() const { return forced_colors_; }
@@ -788,11 +777,17 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void RevisitStyleSheetForInspector(StyleSheetContents* contents,
                                      const RuleFeatureSet* features) const;
 
+  // Call when @route rules may need to be re-evaluated, because the current URL
+  // has changed.
+  void RoutesMayHaveChanged() { SetNeedsActiveStyleUpdate(GetDocument()); }
+
  private:
   void UpdateCounters(const Element& element,
                       CountersAttachmentContext& context);
   // FontSelectorClient implementation.
   void FontsNeedUpdate(FontSelector*, FontInvalidationReason) override;
+  mojom::blink::ColorScheme AdjustAboutBlankColorScheme(
+      mojom::blink::ColorScheme root_color_scheme) const;
 
   AncestorAnalysis AnalyzeInclusiveAncestor(const Node&);
   AncestorAnalysis AnalyzeExclusiveAncestor(const Node&);
@@ -804,8 +799,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
            dirty_tree_scopes_.size() || user_style_dirty_;
   }
 
-  TreeScopeStyleSheetCollection& EnsureStyleSheetCollectionFor(TreeScope&);
-  TreeScopeStyleSheetCollection* StyleSheetCollectionFor(TreeScope&);
+  StyleSheetCollection& EnsureStyleSheetCollectionFor(TreeScope&);
+  StyleSheetCollection* StyleSheetCollectionFor(TreeScope&);
   bool ShouldUpdateDocumentStyleSheetCollection() const;
   bool ShouldUpdateShadowTreeStyleSheetCollection() const;
 
@@ -839,19 +834,20 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                             TextPosition start_position,
                             RenderBlockingBehavior render_blocking_behavior);
 
-  const DocumentStyleSheetCollection& GetDocumentStyleSheetCollection() const {
+  const StyleSheetCollection& GetDocumentStyleSheetCollection() const {
     DCHECK(document_style_sheet_collection_);
     return *document_style_sheet_collection_;
   }
 
-  DocumentStyleSheetCollection& GetDocumentStyleSheetCollection() {
+  StyleSheetCollection& GetDocumentStyleSheetCollection() {
     DCHECK(document_style_sheet_collection_);
     return *document_style_sheet_collection_;
   }
 
-  void UpdateActiveStyleSheetsInShadow(
+  void PrepareUpdateActiveStyleSheetsInShadow(
       TreeScope*,
-      UnorderedTreeScopeSet& tree_scopes_removed);
+      UnorderedTreeScopeSet& tree_scopes_removed,
+      const MediaQueryEvaluator& medium);
 
   bool ShouldSkipInvalidationFor(const Element&) const;
   bool IsSubtreeAndSiblingsStyleDirty(const Element&) const;
@@ -880,7 +876,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
       global_rule_set_->Update(GetDocument());
     }
   }
-  const MediaQueryEvaluator& EnsureMediaQueryEvaluator();
+  const MediaQueryEvaluator& EnsureMediaQueryEvaluator() const;
   void UpdateStyleSheetList(TreeScope&);
 
   // Returns true if any @font-face rules are added or removed.
@@ -928,9 +924,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                                               const StyleRecalcChange,
                                               const StyleRecalcContext&);
 
-  void RecalcTransitionPseudoStyle();
-  void RebuildTransitionPseudoLayoutTrees();
-
   // We may need to update whitespaces in the layout tree after a flat tree
   // removal which caused a layout subtree to be detached.
   void MarkForLayoutTreeChangesAfterDetach();
@@ -975,6 +968,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // See EvaluateFunctionalMediaQuery
   void InvalidateFunctionalMediaDependentStylesIfNeeded();
 
+  MixinMap EffectiveMixinsForTreeScope(TreeScope& tree_scope);
+
   Member<Document> document_;
 
   // Tree of style containment scopes. Is in charge of the document's quotes.
@@ -997,13 +992,12 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // Stylesheets inserted by DevTools.
   HeapVector<Member<CSSStyleSheet>> inspector_style_sheet_list_;
 
-  Member<DocumentStyleSheetCollection> document_style_sheet_collection_;
+  Member<StyleSheetCollection> document_style_sheet_collection_;
 
   Member<StyleRuleUsageTracker> tracker_;
 
   using StyleSheetCollectionMap =
-      HeapHashMap<WeakMember<TreeScope>,
-                  Member<ShadowTreeStyleSheetCollection>>;
+      HeapHashMap<WeakMember<TreeScope>, Member<StyleSheetCollection>>;
   StyleSheetCollectionMap style_sheet_collection_map_;
 
   bool document_scope_dirty_{true};
@@ -1085,7 +1079,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   Member<StyleResolver> resolver_;
   Member<ViewportStyleResolver> viewport_resolver_;
-  Member<MediaQueryEvaluator> media_query_evaluator_;
+  mutable Member<MediaQueryEvaluator> media_query_evaluator_;
   Member<CSSGlobalRuleSet> global_rule_set_;
 
   PendingInvalidations pending_invalidations_;
@@ -1167,6 +1161,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   // The color of the canvas backdrop for the used color-scheme.
   Color color_scheme_background_;
+
+  // This data member should be initialized in the constructor in order to avoid
+  // including full mojom headers from this header.
+  mojom::blink::PreferredContrast preferred_contrast_;
 
   // Forced colors is set in WebThemeEngine.
   ForcedColors forced_colors_{ForcedColors::kNone};

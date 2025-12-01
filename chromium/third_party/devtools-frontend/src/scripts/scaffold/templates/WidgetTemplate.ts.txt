@@ -1,4 +1,4 @@
-// Copyright {{DATE}} The Chromium Authors. All rights reserved.
+// Copyright {{DATE}} The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@ const {render, html} = Lit;
 
 const UIStrings = {
   /**
-   *@description Example string description
+   * @description Example string description
    */
   exampleI18nString: 'Example string, please remove',
 } as const;

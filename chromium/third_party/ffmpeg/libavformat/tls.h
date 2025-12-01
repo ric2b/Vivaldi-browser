@@ -25,6 +25,7 @@
 
 #include "libavutil/bprint.h"
 #include "libavutil/opt.h"
+#include "version.h"
 
 #include "url.h"
 
@@ -62,6 +63,7 @@ typedef struct TLSShared {
     URLContext *tcp;
 
     int is_dtls;
+    int use_srtp;
 
     enum DTLSState state;
 
@@ -78,10 +80,16 @@ typedef struct TLSShared {
 
 #define TLS_OPTFL (AV_OPT_FLAG_DECODING_PARAM | AV_OPT_FLAG_ENCODING_PARAM)
 
+#if FF_API_NO_DEFAULT_TLS_VERIFY
+#define TLS_VERIFY_DEFAULT 0
+#else
+#define TLS_VERIFY_DEFAULT 1
+#endif
+
 #define FF_TLS_CLIENT_OPTIONS(pstruct, options_field) \
     {"ca_file",    "Certificate Authority database file", offsetof(pstruct, options_field . ca_file),   AV_OPT_TYPE_STRING, .flags = TLS_OPTFL }, \
     {"cafile",     "Certificate Authority database file", offsetof(pstruct, options_field . ca_file),   AV_OPT_TYPE_STRING, .flags = TLS_OPTFL }, \
-    {"tls_verify", "Verify the peer certificate",         offsetof(pstruct, options_field . verify),    AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, .flags = TLS_OPTFL }, \
+    {"tls_verify", "Verify the peer certificate",         offsetof(pstruct, options_field . verify),    AV_OPT_TYPE_INT, { .i64 = TLS_VERIFY_DEFAULT }, 0, 1, .flags = TLS_OPTFL }, \
     {"cert_file",  "Certificate file",                    offsetof(pstruct, options_field . cert_file), AV_OPT_TYPE_STRING, .flags = TLS_OPTFL }, \
     {"key_file",   "Private key file",                    offsetof(pstruct, options_field . key_file),  AV_OPT_TYPE_STRING, .flags = TLS_OPTFL }, \
     {"verifyhost", "Verify against a specific hostname",  offsetof(pstruct, options_field . host),      AV_OPT_TYPE_STRING, .flags = TLS_OPTFL }
@@ -90,6 +98,7 @@ typedef struct TLSShared {
     {"listen",     "Listen for incoming connections",     offsetof(pstruct, options_field . listen),    AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, .flags = TLS_OPTFL }, \
     {"http_proxy", "Set proxy to tunnel through",         offsetof(pstruct, options_field . http_proxy), AV_OPT_TYPE_STRING, .flags = TLS_OPTFL }, \
     {"external_sock", "Use external socket",              offsetof(pstruct, options_field . external_sock), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, .flags = TLS_OPTFL }, \
+    {"use_srtp",   "Enable use_srtp DTLS extension",      offsetof(pstruct, options_field . use_srtp), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, .flags = TLS_OPTFL }, \
     {"mtu", "Maximum Transmission Unit", offsetof(pstruct, options_field . mtu), AV_OPT_TYPE_INT,  { .i64 = 0 }, 0, INT_MAX, .flags = TLS_OPTFL}, \
     {"cert_pem",   "Certificate PEM string",              offsetof(pstruct, options_field . cert_buf),  AV_OPT_TYPE_STRING, .flags = TLS_OPTFL }, \
     {"key_pem",    "Private key PEM string",              offsetof(pstruct, options_field . key_buf),   AV_OPT_TYPE_STRING, .flags = TLS_OPTFL }, \

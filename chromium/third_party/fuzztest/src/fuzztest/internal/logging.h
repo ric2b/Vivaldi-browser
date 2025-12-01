@@ -20,13 +20,21 @@
 
 #include "absl/strings/str_cat.h"
 
+// TODO(b/422182911): Remove this library.
 namespace fuzztest::internal {
+
+// Returns a dup-ed file descriptor pointing to the original stderr if possible.
+// Otherwise returns -1 (in which case the original stderr may be used, while it
+// can be silenced - see below).
+//
+// This function is signal-safe.
+int GetStderrFdDup();
 
 // Returns the current FILE pointing to the original stderr.
 FILE* GetStderr();
 
 // Silences all output sent to stdout and stderr, except the fuzzer's own log.
-// Fuzzer should log to GetStderr().
+// Fuzzer should log to GetStderrFdDup()/GetStderr().
 void SilenceTargetStdoutAndStderr();
 
 // Revive the silenced stdout and stderr of target.
@@ -35,21 +43,6 @@ void RestoreTargetStdoutAndStderr();
 
 // Check if FUZZTEST_SILENCE_TARGET env set.
 bool IsSilenceTargetEnabled();
-
-[[noreturn]] void Abort(const char* file, int line, const std::string& message);
-
-#define FUZZTEST_INTERNAL_CHECK_PRECONDITION(P, ...) \
-  ((P) ? (void)0                                     \
-       : ::fuzztest::internal::Abort(                \
-             __FILE__, __LINE__,                     \
-             absl::StrCat("Failed precondition (", #P, "): ", __VA_ARGS__)))
-
-#define FUZZTEST_INTERNAL_CHECK(cond, ...)                     \
-  ((cond) ? (void)0                                            \
-          : ::fuzztest::internal::Abort(                       \
-                __FILE__, __LINE__,                            \
-                absl::StrCat("Internal error! Check (", #cond, \
-                             ") failed: ", __VA_ARGS__)))
 
 // This Abort function will inject `message` into the signal handler's output
 // along with the file, line and test name of the currently running test.

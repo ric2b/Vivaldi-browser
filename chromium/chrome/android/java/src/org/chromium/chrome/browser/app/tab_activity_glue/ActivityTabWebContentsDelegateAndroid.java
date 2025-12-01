@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.app.tab_activity_glue;
 
+import static android.view.Display.INVALID_DISPLAY;
+
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.ActivityManager.AppTask;
@@ -17,17 +19,13 @@ import android.util.Pair;
 import android.view.KeyEvent;
 import android.view.View;
 
-import androidx.collection.ArrayMap;
-
 import org.chromium.base.AconfigFlaggedApiDelegate;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
-import org.chromium.base.ServiceLoaderUtil;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.blink.mojom.DisplayMode;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -56,6 +54,7 @@ import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter.MergeNotificationType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
@@ -80,13 +79,10 @@ import org.chromium.url.GURL;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
-import org.chromium.chrome.browser.night_mode.SystemNightModeMonitor;
-import org.chromium.chrome.browser.night_mode.ThemeType;
-import org.chromium.chrome.browser.night_mode.settings.ThemeSettingsFragment;
-import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 /**
  * {@link WebContentsDelegateAndroid} that interacts with {@link Activity} and those of the lifetime
@@ -95,8 +91,6 @@ import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 @NullMarked
 public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegateAndroid {
     private static final String TAG = "ActivityTabWCDA";
-
-    private final ArrayMap<WebContents, GURL> mWebContentsUrlMapping = new ArrayMap<>();
 
     private final Tab mTab;
 
@@ -180,19 +174,6 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
     }
 
     @Override
-    public void webContentsCreated(
-            WebContents sourceWebContents,
-            long openerRenderProcessId,
-            long openerRenderFrameId,
-            String frameName,
-            GURL targetUrl,
-            WebContents newWebContents) {
-        // The URL can't be taken from the WebContents if it's paused.  Save it for later.
-        assert !mWebContentsUrlMapping.containsKey(newWebContents);
-        mWebContentsUrlMapping.put(newWebContents, targetUrl);
-    }
-
-    @Override
     public boolean isFullscreenForTabOrPending() {
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.ENABLE_EXCLUSIVE_ACCESS_MANAGER)) {
             // It may happen that the tab does not have valid WebContents object. In Android
@@ -207,6 +188,17 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
                     ? mFullscreenManager.getPersistentFullscreenMode()
                     : false;
         }
+    }
+
+    @Override
+    public long getFullscreenTargetDisplay() {
+        if (ChromeFeatureList.isEnabled(
+                ChromeFeatureList.ENABLE_FULLSCREEN_TO_ANY_SCREEN_ANDROID)) {
+            if (mFullscreenManager != null) {
+                return mFullscreenManager.getFullscreenTargetDisplay();
+            }
+        }
+        return INVALID_DISPLAY;
     }
 
     @Override
@@ -250,17 +242,12 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
     protected boolean addNewContents(
             WebContents sourceWebContents,
             WebContents webContents,
+            GURL targetUrl,
             int disposition,
             WindowFeatures windowFeatures,
             boolean userGesture) {
-        assert mWebContentsUrlMapping.containsKey(webContents);
-
         TabCreator tabCreator = mTabCreatorManager.getTabCreator(mTab.isIncognito());
         assert tabCreator != null;
-
-        // Grab the URL, which might not be available via the Tab.
-        GURL url = mWebContentsUrlMapping.remove(webContents);
-        if (url == null) return false;
 
         // Skip opening a new Tab if it doesn't make sense.
         if (mTab.isClosing()) return false;
@@ -288,7 +275,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
                 navigationTabHelper != null
                         && navigationTabHelper
                                 .getInterceptNavigationDelegate()
-                                .shouldReparentTab(webContents);
+                                .shouldReparentTab(targetUrl);
 
         Tab tab =
                 tabCreator.createTabWithWebContents(
@@ -296,7 +283,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
                         /* shouldPin= */ false,
                         webContents,
                         TabLaunchType.FROM_LONGPRESS_FOREGROUND,
-                        url,
+                        targetUrl,
                         !openingPopup && !willReparentTab);
         if (tab == null) return false;
 
@@ -313,7 +300,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
                 auditor.notifyAuditEvent(
                         ContextUtils.getApplicationContext(),
                         AuditEvent.OPEN_POPUP_URL_SUCCESS,
-                        url.getSpec(),
+                        targetUrl.getSpec(),
                         "");
             }
         }
@@ -343,7 +330,9 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
                     && tabGroupModelFilter.isTabInTabGroup(sourceTab)
                     && tabGroupModelFilter.isTabModelRestored()) {
                 tabGroupModelFilter.mergeListOfTabsToGroup(
-                        Arrays.asList(newTab), sourceTab, /* notify= */ false);
+                        Arrays.asList(newTab),
+                        sourceTab,
+                        /* notify= */ MergeNotificationType.DONT_NOTIFY);
                 if (mChromeActivityNativeDelegate != null) {
                     assert Objects.equals(newTab.getTabGroupId(), sourceTab.getTabGroupId());
                     assert tabGroupModelFilter
@@ -369,8 +358,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
             return;
         }
 
-        final AconfigFlaggedApiDelegate delegate =
-                ServiceLoaderUtil.maybeCreate(AconfigFlaggedApiDelegate.class);
+        final AconfigFlaggedApiDelegate delegate = AconfigFlaggedApiDelegate.getInstance();
         if (delegate == null) {
             return;
         }
@@ -386,7 +374,10 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
         if (window == null) return;
         final Pair<Integer, Rect> localCoordinatesPx =
                 DisplayUtil.getLocalCoordinatesPx(new RectF(bounds), window.getDisplay());
-        delegate.moveTaskTo(appTask, localCoordinatesPx.first, localCoordinatesPx.second);
+        delegate.moveTaskTo(
+                appTask,
+                localCoordinatesPx.first,
+                DisplayUtil.clampWindowToDisplay(localCoordinatesPx.second, window.getDisplay()));
     }
 
     @Override
@@ -545,8 +536,9 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
 
     @Override
     protected void setOverlayMode(boolean useOverlayMode) {
-        if (mCompositorViewHolderSupplier.hasValue()) {
-            mCompositorViewHolderSupplier.get().setOverlayMode(useOverlayMode);
+        var compositorViewHolder = mCompositorViewHolderSupplier.get();
+        if (compositorViewHolder != null) {
+            compositorViewHolder.setOverlayMode(useOverlayMode);
         }
     }
 
@@ -586,7 +578,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
 
     @Override
     public boolean controlsResizeView() {
-        return mCompositorViewHolderSupplier.hasValue()
+        return mCompositorViewHolderSupplier.get() != null
                 && mCompositorViewHolderSupplier.get().controlsResizeView();
     }
 
@@ -602,31 +594,52 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
 
     @Override
     public void enterFullscreenModeForTab(
-            long requestingFrame, boolean prefersNavigationBar, boolean prefersStatusBar) {
+            long requestingFrame,
+            boolean prefersNavigationBar,
+            boolean prefersStatusBar,
+            long displayId) {
+        if (!ChromeFeatureList.isEnabled(
+                ChromeFeatureList.ENABLE_FULLSCREEN_TO_ANY_SCREEN_ANDROID)) {
+            displayId = INVALID_DISPLAY;
+        }
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.ENABLE_EXCLUSIVE_ACCESS_MANAGER)) {
             if (mExclusiveAccessManager != null) {
                 mExclusiveAccessManager.enterFullscreenModeForTab(
                         requestingFrame,
-                        new FullscreenOptions(prefersNavigationBar, prefersStatusBar));
+                        new FullscreenOptions(prefersNavigationBar, prefersStatusBar, displayId));
             }
         } else {
             if (mFullscreenManager != null) {
                 // Vivaldi: We never show the navigation bar in fullscreen.
                 prefersNavigationBar = false;
                 mFullscreenManager.onEnterFullscreen(
-                        mTab, new FullscreenOptions(prefersNavigationBar, prefersStatusBar));
+                        mTab,
+                        new FullscreenOptions(prefersNavigationBar, prefersStatusBar, displayId));
             }
         }
     }
 
     @Override
     public void fullscreenStateChangedForTab(
-            boolean prefersNavigationBar, boolean prefersStatusBar) {
-        // State-only changes are useful for recursive fullscreen activation. Early out if
-        // fullscreen mode is not on.
-        if (mFullscreenManager == null || !mFullscreenManager.getPersistentFullscreenMode()) return;
-        mFullscreenManager.onEnterFullscreen(
-                mTab, new FullscreenOptions(prefersNavigationBar, prefersStatusBar));
+            long requestingFrame,
+            boolean prefersNavigationBar,
+            boolean prefersStatusBar,
+            long displayId) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.ENABLE_EXCLUSIVE_ACCESS_MANAGER)) {
+            if (mExclusiveAccessManager != null) {
+                mExclusiveAccessManager.enterFullscreenModeForTab(
+                        requestingFrame,
+                        new FullscreenOptions(prefersNavigationBar, prefersStatusBar, displayId));
+            }
+        } else {
+            // State-only changes are useful for recursive fullscreen activation. Early out if
+            // fullscreen mode is not on.
+            if (mFullscreenManager == null || !mFullscreenManager.getPersistentFullscreenMode()) {
+                return;
+            }
+            mFullscreenManager.onEnterFullscreen(
+                    mTab, new FullscreenOptions(prefersNavigationBar, prefersStatusBar, displayId));
+        }
     }
 
     @Override
@@ -667,23 +680,12 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
         if (webContents == null) {
             return false;
         }
-        if (BuildConfig.IS_VIVALDI) {
-            int websiteThemeAppearance = ChromeSharedPreferences.getInstance().readInt(
-                    ThemeSettingsFragment.PREF_WEBSITE_THEME_APPEARANCE);
-            boolean systemNightModeOn = SystemNightModeMonitor.getInstance().isSystemNightModeOn();
-            switch (websiteThemeAppearance) {
-                case ThemeType.DARK -> {
-                    return true;
-                }
-                case ThemeType.SYSTEM_DEFAULT -> {
-                    return systemNightModeOn;
-                }
-                default -> {
-                    return false;
-                }
-            }
-        }
         Profile profile = mTab.getProfile();
+        // Vivaldi
+        if (BuildConfig.IS_VIVALDI) {
+            return WebContentsDarkModeController.isEnabledForUrl(
+                            profile, webContents.getVisibleUrl());
+        }
         return isNightModeEnabled()
                 && WebContentsDarkModeController.isEnabledForUrl(
                         profile, webContents.getVisibleUrl());
@@ -767,6 +769,19 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
     protected boolean isDynamicSafeAreaInsetsEnabled() {
         if (mActivity == null) return false;
         return EdgeToEdgeUtils.isEdgeToEdgeBottomChinEnabled(mActivity);
+    }
+
+    @Override
+    public void requestPointerLock(
+            WebContents webContents, boolean userGesture, boolean lastUnlockedByTarget) {
+        assert mExclusiveAccessManager != null;
+        mExclusiveAccessManager.requestPointerLock(webContents, userGesture, lastUnlockedByTarget);
+    }
+
+    @Override
+    public void lostPointerLock() {
+        assert mExclusiveAccessManager != null;
+        mExclusiveAccessManager.lostPointerLock();
     }
 
     protected @Nullable TabGroupModelFilter getTabGroupModelFilter(Tab tab) {

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,7 +60,7 @@ row4.appendChild(iconDescription4);
 const icon4 = document.createElement('td');
 Lit.render(
     html`
-        <devtools-icon name="select-element" class="custom-size-and-color"></devtools-icon>
+        <devtools-icon name="select-element" class="custom-color small"></devtools-icon>
       `,
     icon4);
 row4.appendChild(icon4);

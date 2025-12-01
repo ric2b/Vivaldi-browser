@@ -1,7 +1,6 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../core/common/common.js';
 import type * as Platform from '../../core/platform/platform.js';
@@ -27,8 +26,8 @@ export type FormatToken = {
  * are only concerned with performing the actual substitutions and dealing
  * with generic and optimal object formatting as well as styling.
  *
- * @param fmt - the format string.
- * @param args - the substitution arguments for `fmt`.
+ * @param fmt the format string.
+ * @param args the substitution arguments for `fmt`.
  * @returns a list of `FormatToken`s as well as the unused arguments.
  */
 export const format = (fmt: string, args: SDK.RemoteObject.RemoteObject[]): {
@@ -207,6 +206,10 @@ export const updateStyle = (currentStyle: Map<string, {value: string, priority: 
   const URL_REGEX = /url\([\'\"]?([^\)]*)/g;
 
   currentStyle.clear();
+  /* eslint-disable-next-line rulesdir/no-imperative-dom-api --
+   * We're not mutating the DOM here, but just need a temporary
+   * `<span>` to parse `styleToAdd` into a `CSSStyleDeclaration`.
+   **/
   const buffer = document.createElement('span');
   buffer.setAttribute('style', styleToAdd);
   for (const property of buffer.style) {

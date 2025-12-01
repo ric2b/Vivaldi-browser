@@ -7,6 +7,7 @@
 #import "base/memory/raw_ptr.h"
 #import "base/metrics/field_trial_params.h"
 #import "base/metrics/histogram_functions.h"
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "components/segmentation_platform/embedder/default_model/device_switcher_result_dispatcher.h"
 #import "components/segmentation_platform/public/result.h"
 #import "ios/chrome/browser/first_run/model/first_run.h"
@@ -126,7 +127,7 @@ using vivaldi::IsVivaldiRunning;
 
       _bottomOmniboxEnabled = [[PrefBackedBoolean alloc]
           initWithPrefService:GetApplicationContext()->GetLocalState()
-                     prefName:prefs::kBottomOmnibox];
+                     prefName:omnibox::kIsOmniboxInBottomPosition];
       [_bottomOmniboxEnabled setObserver:self];
       // Initialize to the correct value.
       [self booleanDidChange:_bottomOmniboxEnabled];
@@ -185,6 +186,10 @@ using vivaldi::IsVivaldiRunning;
 
   [self.omniboxConsumer
       steadyStateOmniboxMovedToToolbar:self.steadyStateOmniboxPosition];
+}
+
+- (void)setBottomOmniboxOffsetForPopup:(CGFloat)bottomOffset {
+  [self.omniboxConsumer setBottomOmniboxOffsetForPopup:bottomOffset];
 }
 
 - (void)didNavigateToNTPOnActiveWebState {
@@ -306,7 +311,9 @@ using vivaldi::IsVivaldiRunning;
     return [self steadyStateOmniboxPositionInCurrentState];
   } // End Vivaldi
 
-  if (_locationBarFocused) {
+  BOOL followSteadyState =
+      omnibox::ShouldFocusedOmniboxFollowSteadyStatePosition();
+  if (_locationBarFocused && !followSteadyState) {
     return ToolbarType::kPrimary;
   } else {
     return [self steadyStateOmniboxPositionInCurrentState];
@@ -319,6 +326,9 @@ using vivaldi::IsVivaldiRunning;
     [self.delegate transitionOmniboxToToolbarType:ToolbarType::kPrimary];
     return;
   }
+
+  [self.omniboxConsumer setKeyboardAttachedBottomOmniboxHeight:
+                            self.delegate.keyboardAttachedBottomOmniboxHeight];
 
   self.omniboxPosition = [self omniboxPositionInCurrentState];
   self.steadyStateOmniboxPosition =
@@ -353,7 +363,7 @@ using vivaldi::IsVivaldiRunning;
             kBottomOmniboxDefaultSetting, kBottomOmniboxDefaultSettingParam);
         if (featureParam == kBottomOmniboxDefaultSettingParamSafariSwitcher) {
           PrefService* localState = GetApplicationContext()->GetLocalState();
-          localState->SetDefaultPrefValue(prefs::kBottomOmnibox,
+          localState->SetDefaultPrefValue(omnibox::kIsOmniboxInBottomPosition,
                                           base::Value(YES));
           localState->SetBoolean(prefs::kBottomOmniboxByDefault, YES);
         }
@@ -414,7 +424,7 @@ using vivaldi::IsVivaldiRunning;
   // This only needs to be executed once and deviceSwitcherResult are not
   // available in incognito.
   if (!self.deviceSwitcherResultDispatcher ||
-      localState->GetUserPrefValue(prefs::kBottomOmnibox)) {
+      localState->GetUserPrefValue(omnibox::kIsOmniboxInBottomPosition)) {
     return;
   }
 
@@ -445,7 +455,7 @@ using vivaldi::IsVivaldiRunning;
     localState->SetBoolean(prefs::kBottomOmniboxByDefault, YES);
   }
 
-  localState->SetDefaultPrefValue(prefs::kBottomOmnibox,
+  localState->SetDefaultPrefValue(omnibox::kIsOmniboxInBottomPosition,
                                   base::Value(bottomOmniboxEnabledByDefault));
 }
 
@@ -454,14 +464,15 @@ using vivaldi::IsVivaldiRunning;
   static dispatch_once_t once;
   dispatch_once(&once, ^{
     PrefService* localState = GetApplicationContext()->GetLocalState();
-    const BOOL isBottomOmnibox = localState->GetBoolean(prefs::kBottomOmnibox);
+    const BOOL isBottomOmnibox =
+        localState->GetBoolean(omnibox::kIsOmniboxInBottomPosition);
     OmniboxPositionType positionType = isBottomOmnibox
                                            ? OmniboxPositionType::kBottom
                                            : OmniboxPositionType::kTop;
     base::UmaHistogramEnumeration(kOmniboxSteadyStatePositionAtStartup,
                                   positionType);
 
-    if (localState->GetUserPrefValue(prefs::kBottomOmnibox)) {
+    if (localState->GetUserPrefValue(omnibox::kIsOmniboxInBottomPosition)) {
       base::UmaHistogramEnumeration(
           kOmniboxSteadyStatePositionAtStartupSelected, positionType);
     }

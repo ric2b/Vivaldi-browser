@@ -93,6 +93,7 @@ class TurnPort : public Port {
                       .network = args.network,
                       .ice_username_fragment = args.username,
                       .ice_password = args.password,
+                      .content_name = args.content_name,
                       .lna_permission_factory = args.lna_permission_factory},
                      socket, *args.server_address, args.config->credentials,
                      args.relative_priority, args.config->tls_alpn_protocols,
@@ -116,6 +117,7 @@ class TurnPort : public Port {
          .network = args.network,
          .ice_username_fragment = args.username,
          .ice_password = args.password,
+         .content_name = args.content_name,
          .lna_permission_factory = args.lna_permission_factory},
         min_port, max_port, *args.server_address, args.config->credentials,
         args.relative_priority, args.config->tls_alpn_protocols,
@@ -324,6 +326,7 @@ class TurnPort : public Port {
   AttemptedServerSet attempted_server_addresses_;
 
   AsyncPacketSocket* socket_;
+  std::unique_ptr<AsyncPacketSocket> owned_socket_;
   SocketOptionsMap socket_options_;
   std::unique_ptr<AsyncDnsResolverInterface> resolver_;
   int error_;

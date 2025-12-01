@@ -32,6 +32,7 @@
 #import "ios/chrome/browser/authentication/ui_bundled/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/authentication/ui_bundled/cells/table_view_signin_promo_item.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_coordinator.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_storage_type.h"
@@ -64,7 +65,10 @@
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -489,11 +493,9 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   if (!IsVivaldiRunning()) {
   // Place the search bar in the navigation bar.
   self.navigationItem.searchController = self.searchController;
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     self.navigationItem.searchBarPlacementAllowsToolbarIntegration = NO;
   }
-#endif
   self.navigationItem.hidesSearchBarWhenScrolling = NO;
   } // End Vivaldi
 
@@ -505,10 +507,8 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
     [self showLoadingSpinnerBackground];
   }
 
-  if (@available(iOS 17, *)) {
-    [self registerForTraitChanges:TraitCollectionSetForTraits(nil)
-                       withAction:@selector(stopEdittingBookmarkOnTraitChange)];
-  }
+  [self registerForTraitChanges:TraitCollectionSetForTraits(nil)
+                     withAction:@selector(stopEdittingBookmarkOnTraitChange)];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -580,17 +580,6 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
 - (BOOL)prefersStatusBarHidden {
   return NO;
 }
-
-#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  if (@available(iOS 17, *)) {
-    return;
-  }
-
-  [self stopEdittingBookmarkOnTraitChange];
-}
-#endif
 
 - (UIStatusBarStyle)preferredStatusBarStyle {
   return UIStatusBarStyleDefault;
@@ -776,6 +765,10 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
 }
 
 - (void)showSignin:(ShowSigninCommand*)command {
+  if (_signinCoordinator.viewWillPersist) {
+    return;
+  }
+  [_signinCoordinator stop];
   __weak __typeof(self) weakSelf = self;
   [command addSigninCompletion:^(SigninCoordinatorResult result,
                                  id<SystemIdentity>) {
@@ -783,7 +776,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   }];
   _signinCoordinator = [SigninCoordinator
       signinCoordinatorWithCommand:command
-                           browser:_browser.get()
+                           browser:signin::GetRegularBrowser(_browser.get())
                 baseViewController:self.navigationController];
   [_signinCoordinator start];
 }
@@ -1371,6 +1364,9 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
 #pragma mark - BookmarkTableCellTitleEditDelegate
 
 - (void)textDidChangeTo:(NSString*)newName {
+  if (!_bookmarkModel) {
+    return;
+  }
   DCHECK(self.mediator.editingFolderNode);
   self.mediator.addingNewFolder = NO;
   if (newName.length > 0) {
@@ -2365,16 +2361,16 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
 }
 
 - (void)setBookmarksContextBarButtonsDefaultState {
-
-  // Set Context Menu button for sorting and new folder
-  UIImage* dotsIcon = [UIImage imageNamed:vPanelMoreAction];
-  UIBarButtonItem* contextMenu =
-      [[UIBarButtonItem alloc]
-           initWithImage:dotsIcon
-                   style:UIBarButtonItemStyleDone
-                  target:self
-                  action:nil];
-  contextMenu.menu = [self contextMenuForBookmarksSortButton];
+  // Set New Folder button
+  NSString* titleString = GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_NEW_FOLDER);
+  UIBarButtonItem* newFolderButton =
+      [[UIBarButtonItem alloc] initWithTitle:titleString
+                                       style:UIBarButtonItemStylePlain
+                                      target:self
+                                      action:@selector(leadingButtonClicked)];
+  newFolderButton.accessibilityIdentifier =
+      kBookmarksHomeLeadingButtonIdentifier;
+  newFolderButton.enabled = [self allowsNewFolder];
 
   // Spacer button.
   UIBarButtonItem* spaceButton = [[UIBarButtonItem alloc]
@@ -2383,7 +2379,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
                            action:nil];
 
   // Set Edit button.
-  NSString* titleString = GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_EDIT);
+  titleString = GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_EDIT);
   UIBarButtonItem* editButton =
       [[UIBarButtonItem alloc] initWithTitle:titleString
                                        style:UIBarButtonItemStylePlain
@@ -2399,18 +2395,32 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
                        [self isNodeEditableByUser:self.mediator.displayedNode];
 
   if (vivaldi::IsVivaldiRunning()) {
+    UIBarButtonItemStyle buttonStyle = UIBarButtonItemStyleDone;
+    if (@available(iOS 26, *)) {
+      buttonStyle = UIBarButtonItemStylePlain;
+    }
+    // Set Context Menu button for sorting and new folder
+    UIImage* dotsIcon = [UIImage imageNamed:vPanelMoreAction];
+    UIBarButtonItem* contextMenu =
+        [[UIBarButtonItem alloc]
+              initWithImage:dotsIcon
+                      style:buttonStyle
+                     target:self
+                     action:nil];
+    contextMenu.menu = [self contextMenuForBookmarksSortButton];
+
     if (vivaldi_bookmark_kit::IsTrash(self.displayedFolderNode)) {
       // Set empty trash button.
       titleString = GetNSString(IDS_IOS_NOTE_CONTEXT_BAR_EMPTY_TRASH);
-       UIBarButtonItem* emptyTrashButton =
-           [[UIBarButtonItem alloc] initWithTitle:titleString
-                                   style:UIBarButtonItemStylePlain
-                                  target:self
-                                  action:@selector(emptyTrashButtonClicked)];
+      UIBarButtonItem* emptyTrashButton =
+        [[UIBarButtonItem alloc]
+              initWithTitle:titleString
+                      style:UIBarButtonItemStylePlain
+                     target:self
+                     action:@selector(emptyTrashButtonClicked)];
       emptyTrashButton.accessibilityIdentifier =
-        kBookmarksHomeTrailingButtonIdentifier;
+          kBookmarksHomeTrailingButtonIdentifier;
       emptyTrashButton.enabled = [self hasBookmarksOrFolders];
-
       [self setToolbarItems:@[ spaceButton, spaceButton,
                                spaceButton, spaceButton, emptyTrashButton]
                    animated:NO];
@@ -2418,18 +2428,19 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
     } else {
       UIImage* image = [UIImage systemImageNamed:@"plus"];
       UIBarButtonItem* plusButton =
-        [[UIBarButtonItem alloc]
-         initWithImage:image
-         style:UIBarButtonItemStyleDone
-         target:self
-         action:@selector(handleAddBarButtonTap)];
-        [self setToolbarItems:@[ contextMenu, spaceButton,
-                                 plusButton, spaceButton, editButton ]
-                     animated:NO];
-        return;
+          [[UIBarButtonItem alloc]
+              initWithImage:image
+                      style:buttonStyle
+                     target:self
+                     action:@selector(handleAddBarButtonTap)];
+      [self setToolbarItems:@[ contextMenu, spaceButton,
+                               plusButton, spaceButton, editButton ]
+                   animated:NO];
+      return;
     }
   }// End Vivaldi
-  [self setToolbarItems:@[ contextMenu, spaceButton, editButton ]
+
+  [self setToolbarItems:@[ newFolderButton, spaceButton, editButton ]
                animated:NO];
 }
 
@@ -3249,11 +3260,19 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
 #pragma mark - Vivaldi
 
 - (UIBarButtonItem*)customizedDoneTextButton {
-    UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
+    UIBarButtonItem* doneButton;
+    if (@available(iOS 26, *)) {
+      doneButton = [[UIBarButtonItem alloc]
+          initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+                              target:self
+                              action:@selector(navigationBarCancel:)];
+    } else {
+      doneButton = [[UIBarButtonItem alloc]
         initWithTitle:GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)
                 style:UIBarButtonItemStyleDone
                target:self
                action:@selector(navigationBarCancel:)];
+    }
     doneButton.accessibilityLabel =
         GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON);
     doneButton.accessibilityIdentifier =

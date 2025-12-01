@@ -7,6 +7,9 @@
 #include <algorithm>
 
 #include "base/containers/span.h"
+#include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -15,12 +18,16 @@
 #include "base/no_destructor.h"
 #include "base/task/thread_pool.h"
 #include "base/timer/elapsed_timer.h"
+#include "base/trace_event/typed_macros.h"
+#include "base/version_info/channel.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/hash.h"
 #include "extensions/browser/content_hash_reader.h"
 #include "extensions/browser/content_verifier/content_hash.h"
 #include "extensions/browser/content_verifier/content_verifier.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/extension_features.h"
+#include "extensions/common/features/feature_channel.h"
 
 namespace extensions {
 
@@ -41,29 +48,151 @@ bool IsIgnorableReadError(MojoResult read_result) {
   return read_result == MOJO_RESULT_ABORTED;
 }
 
+base::debug::CrashKeyString* GetContentHashExtensionVersionFromRootCrashKey() {
+  static auto* crash_key = base::debug::AllocateCrashKeyString(
+      "ext_content_hash_root_version", base::debug::CrashKeySize::Size256);
+  return crash_key;
+}
+
+base::debug::CrashKeyString*
+GetContentVerifyJobExtensionVersionFromRootCrashKey() {
+  static auto* crash_key = base::debug::AllocateCrashKeyString(
+      "ext_verify_job_root_version", base::debug::CrashKeySize::Size256);
+  return crash_key;
+}
+
+base::debug::CrashKeyString* GetContentHashExtensionIdCrashKey() {
+  static auto* crash_key = base::debug::AllocateCrashKeyString(
+      "ext_content_hash_id", base::debug::CrashKeySize::Size256);
+  return crash_key;
+}
+
+base::debug::CrashKeyString* GetContentVerifyJobExtensionIdCrashKey() {
+  static auto* crash_key = base::debug::AllocateCrashKeyString(
+      "ext_verify_job_id", base::debug::CrashKeySize::Size256);
+  return crash_key;
+}
+
+base::debug::CrashKeyString* GetContentHashExtensionVersionCrashKey() {
+  static auto* crash_key = base::debug::AllocateCrashKeyString(
+      "ext_content_hash_ext_version", base::debug::CrashKeySize::Size256);
+  return crash_key;
+}
+
+base::debug::CrashKeyString* GetContentVerifyJobExtensionVersionCrashKey() {
+  static auto* crash_key = base::debug::AllocateCrashKeyString(
+      "ext_verify_job_ext_version", base::debug::CrashKeySize::Size256);
+  return crash_key;
+}
+
+// Returns the last path component of the extension root filepath, which should
+// be the extension version.
+std::string GetExtensionVersionFromExtensionRoot(
+    const base::FilePath& extension_root) {
+  return extension_root.BaseName().MaybeAsASCII();
+}
+
 }  // namespace
 
+namespace debug {
+
+// Helper for adding a crash keys when extension roots don't match during
+// content verification.
+//
+// It is only created at the start of the verification process when the process
+// is provided content verification hashes *and* the extension roots for the
+// content verification hash and the verification job don't match.
+//
+// All keys are logged every time this class is instantiated.
+class ScopedContentVerifyJobCrashKey {
+ public:
+  explicit ScopedContentVerifyJobCrashKey(
+      const base::FilePath& content_hash_extension_root,
+      const base::FilePath& verify_job_extension_root,
+      const ExtensionId& content_hash_extension_id,
+      const ExtensionId& verify_job_extension_id,
+      const base::Version& content_hash_extension_version,
+      const base::Version& verify_job_extension_version)
+      : content_hash_ext_root_version_crash_key_(
+            GetContentHashExtensionVersionFromRootCrashKey(),
+            GetExtensionVersionFromExtensionRoot(content_hash_extension_root)),
+        verify_job_ext_root_version_crash_key_(
+            GetContentVerifyJobExtensionVersionFromRootCrashKey(),
+            GetExtensionVersionFromExtensionRoot(verify_job_extension_root)),
+        content_hash_ext_id_crash_key_(GetContentHashExtensionIdCrashKey(),
+                                       content_hash_extension_id),
+        verify_job_ext_id_crash_key_(GetContentVerifyJobExtensionIdCrashKey(),
+                                     verify_job_extension_id),
+        content_hash_ext_version_crash_key_(
+            GetContentHashExtensionVersionCrashKey(),
+            content_hash_extension_version.GetString()),
+        verify_job_ext_version_crash_key_(
+            GetContentVerifyJobExtensionVersionCrashKey(),
+            verify_job_extension_version.GetString())
+
+  {}
+  ~ScopedContentVerifyJobCrashKey() = default;
+
+ private:
+  // These record the extension's version from the extension root of ContentHash
+  // and ContentVerify Job. E.g. from:
+  //   "/path/to/chromium/<profile_name>/Extensions/<ext_id>/<ext_version>/""
+  //
+  // We record <ext_version>.
+  base::debug::ScopedCrashKeyString content_hash_ext_root_version_crash_key_;
+  base::debug::ScopedCrashKeyString verify_job_ext_root_version_crash_key_;
+
+  // The ExtensionId for ContentHash and ContentVerify Job.
+  base::debug::ScopedCrashKeyString content_hash_ext_id_crash_key_;
+  base::debug::ScopedCrashKeyString verify_job_ext_id_crash_key_;
+
+  // These extension version recorded when the content hash was created and when
+  // the verification job was created.
+  base::debug::ScopedCrashKeyString content_hash_ext_version_crash_key_;
+  base::debug::ScopedCrashKeyString verify_job_ext_version_crash_key_;
+};
+
+}  // namespace debug
+
 ContentVerifyJob::ContentVerifyJob(const ExtensionId& extension_id,
+                                   const base::Version& extension_version,
                                    const base::FilePath& extension_root,
                                    const base::FilePath& relative_path)
     : extension_id_(extension_id),
       extension_root_(extension_root),
-      relative_path_(relative_path) {}
+      relative_path_(relative_path),
+      extension_version_(extension_version) {}
 
 ContentVerifyJob::~ContentVerifyJob() = default;
 
 void ContentVerifyJob::Start(ContentVerifier* verifier,
-                             const base::Version& extension_version,
+                             const base::Version& current_extension_version,
                              int manifest_version,
                              FailureCallback failure_callback) {
+  TRACE_EVENT("extensions.content_verifier.debug", "ContentVerifyJob::Start",
+              "job_extension_version", extension_version_.GetString(),
+              "current_extension_version",
+              current_extension_version.GetString(), "job_root",
+              extension_root_);
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+
+  if (base::FeatureList::IsEnabled(
+          extensions_features::kContentVerifyJobUseJobVersionForHashing) &&
+      current_extension_version != extension_version_) {
+    // The version should have been checked in ContentVerifier::StartJob(), so
+    // we should never reach here.
+    NOTREACHED() << "Content verification job was started for an extension "
+                    "version other than the currently loaded extension. "
+                    "Hashing errors could occur if the job continued.";
+  }
+
   base::AutoLock auto_lock(lock_);
   manifest_version_ = manifest_version;
   failure_callback_ = std::move(failure_callback);
 
   // The content verification hashes are most likely already cached.
   auto content_hash = verifier->GetCachedContentHash(
-      extension_id_, extension_version,
+      extension_id_, extension_version_,
       /*force_missing_computed_hashes_creation=*/true);
   if (content_hash) {
     StartWithContentHash(std::move(content_hash));
@@ -71,13 +200,17 @@ void ContentVerifyJob::Start(ContentVerifier* verifier,
   }
 
   verifier->CreateContentHash(
-      extension_id_, extension_root_, extension_version,
+      extension_id_, extension_root_, extension_version_,
       /*force_missing_computed_hashes_creation=*/true,
       base::BindOnce(&ContentVerifyJob::DidCreateContentHashOnIO, this));
 }
 
 void ContentVerifyJob::DidCreateContentHashOnIO(
     scoped_refptr<const ContentHash> content_hash) {
+  TRACE_EVENT("extensions.content_verifier.debug",
+              "ContentVerifyJob::DidCreateContentHashOnIO", "hash_extension_id",
+              content_hash->extension_id(), "hash_extension_root",
+              content_hash->extension_root());
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   base::AutoLock auto_lock(lock_);
   StartWithContentHash(std::move(content_hash));
@@ -85,7 +218,39 @@ void ContentVerifyJob::DidCreateContentHashOnIO(
 
 void ContentVerifyJob::StartWithContentHash(
     scoped_refptr<const ContentHash> content_hash) {
+  TRACE_EVENT("extensions.content_verifier.debug",
+              "ContentVerifyJob::StartWithContentHash", "job_root",
+              extension_root_, "hash_root", content_hash->extension_root());
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+
+  if (base::FeatureList::IsEnabled(
+          extensions_features::kContentVerifyJobUseJobVersionForHashing) &&
+      content_hash->extension_version() != extension_version_) {
+    // TODO(crbug.com/416484593): Remove crash keys once we're confident the
+    // issue is fixed.
+    debug::ScopedContentVerifyJobCrashKey crash_keys(
+        content_hash->extension_root(), extension_root_,
+        content_hash->extension_id(), extension_id_,
+        content_hash->extension_version(), extension_version_);
+    // The version should have been checked in ContentVerifierJob::Start(), so
+    // we should never reach here.
+    NOTREACHED() << "Content verification job was started with a hash for a "
+                    "different extension version. Hashing errors could occur "
+                    "if the job continued.";
+  }
+
+  // If the hash and the verify jobs' roots don't match then the hash comparison
+  // done later will match against the wrong files.
+  if ((GetCurrentChannel() == version_info::Channel::CANARY ||
+       GetCurrentChannel() == version_info::Channel::DEV) &&
+      content_hash->extension_root() != extension_root_) {
+    debug::ScopedContentVerifyJobCrashKey crash_keys(
+        content_hash->extension_root(), extension_root_,
+        content_hash->extension_id(), extension_id_,
+        content_hash->extension_version(), extension_version_);
+    base::debug::DumpWithoutCrashing();
+  }
+
   // Build |hash_reader_|.
   hash_reader_ = ContentHashReader::Create(relative_path_, content_hash);
 

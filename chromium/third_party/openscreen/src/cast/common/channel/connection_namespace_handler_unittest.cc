@@ -26,7 +26,6 @@ namespace openscreen::cast {
 namespace {
 
 using ::testing::_;
-using ::testing::Invoke;
 using ::testing::NiceMock;
 
 using proto::CastMessage;
@@ -93,7 +92,7 @@ class ConnectionNamespaceHandlerTest : public ::testing::Test {
 
     ON_CALL(vc_policy_, IsConnectionAllowed(_))
         .WillByDefault(
-            Invoke([](const VirtualConnection& virtual_conn) { return true; }));
+            [](const VirtualConnection& virtual_conn) { return true; });
   }
 
  protected:
@@ -101,15 +100,15 @@ class ConnectionNamespaceHandlerTest : public ::testing::Test {
                           const std::string& source_id,
                           const std::string& destination_id) {
     EXPECT_CALL(*mock_client, OnMessage(_, _))
-        .WillOnce(Invoke([&source_id, &destination_id](CastSocket* socket,
-                                                       CastMessage message) {
+        .WillOnce([&source_id, &destination_id](CastSocket* socket,
+                                                CastMessage message) {
           VerifyConnectionMessage(message, source_id, destination_id);
           Json::Value value = ParseConnectionMessage(message);
           std::optional<std::string_view> type = MaybeGetString(
               value, JSON_EXPAND_FIND_CONSTANT_ARGS(kMessageKeyType));
           ASSERT_TRUE(type) << message.payload_utf8();
           EXPECT_EQ(type.value(), kMessageTypeClose) << message.payload_utf8();
-        }));
+        });
   }
 
   void ExpectConnectedMessage(
@@ -118,8 +117,8 @@ class ConnectionNamespaceHandlerTest : public ::testing::Test {
       const std::string& destination_id,
       std::optional<CastMessage_ProtocolVersion> version = std::nullopt) {
     EXPECT_CALL(*mock_client, OnMessage(_, _))
-        .WillOnce(Invoke([&source_id, &destination_id, version](
-                             CastSocket* socket, CastMessage message) {
+        .WillOnce([&source_id, &destination_id, version](CastSocket* socket,
+                                                         CastMessage message) {
           VerifyConnectionMessage(message, source_id, destination_id);
           Json::Value value = ParseConnectionMessage(message);
           std::optional<std::string_view> type = MaybeGetString(
@@ -134,7 +133,7 @@ class ConnectionNamespaceHandlerTest : public ::testing::Test {
             ASSERT_TRUE(message_version) << message.payload_utf8();
             EXPECT_EQ(message_version.value(), version.value());
           }
-        }));
+        });
   }
 
   FakeCastSocketPair fake_cast_socket_pair_;
@@ -161,8 +160,7 @@ TEST_F(ConnectionNamespaceHandlerTest, Connect) {
 
 TEST_F(ConnectionNamespaceHandlerTest, PolicyDeniesConnection) {
   EXPECT_CALL(vc_policy_, IsConnectionAllowed(_))
-      .WillOnce(
-          Invoke([](const VirtualConnection& virtual_conn) { return false; }));
+      .WillOnce([](const VirtualConnection& virtual_conn) { return false; });
   ExpectCloseMessage(&fake_cast_socket_pair_.mock_peer_client, receiver_id_,
                      sender_id_);
   connection_namespace_handler_.OnMessage(

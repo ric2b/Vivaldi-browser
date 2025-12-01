@@ -14,6 +14,8 @@
 
 # Tools.
 
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+
 package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])
@@ -29,7 +31,7 @@ cc_binary(
     deps = [
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
-        "@com_google_fuzztest//fuzztest/internal:logging",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//grammar_codegen:code_generation",
     ],
 )

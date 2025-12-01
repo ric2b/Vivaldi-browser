@@ -273,8 +273,6 @@ inline CSSIdentifierValue::CSSIdentifierValue(AppearanceValue e)
       value_id_ = CSSValueID::kTextarea;
       break;
     case AppearanceValue::kBaseSelect:
-      // This can't check for origin trials, unfortunately.
-      DCHECK(HTMLSelectElement::CustomizableSelectEnabledNoDocument());
       value_id_ = CSSValueID::kBaseSelect;
       break;
   }
@@ -2193,6 +2191,9 @@ inline CSSIdentifierValue::CSSIdentifierValue(PositionAreaRegion region)
     case PositionAreaRegion::kYSelfEnd:
       value_id_ = CSSValueID::kYSelfEnd;
       break;
+    case PositionAreaRegion::kAny:
+      value_id_ = CSSValueID::kAny;
+      break;
   }
 }
 
@@ -2253,6 +2254,8 @@ inline PositionAreaRegion CSSIdentifierValue::ConvertTo() const {
       return PositionAreaRegion::kYSelfStart;
     case CSSValueID::kYSelfEnd:
       return PositionAreaRegion::kYSelfEnd;
+    case CSSValueID::kAny:
+      return PositionAreaRegion::kAny;
     default:
       NOTREACHED();
   };

@@ -14,11 +14,13 @@
 #import "components/feature_engagement/public/tracker.h"
 #import "components/lens/lens_overlay_metrics.h"
 #import "components/omnibox/browser/omnibox_field_trial.h"
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "components/omnibox/common/omnibox_features.h"
 #import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "components/prefs/pref_service.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_animator.h"
+#import "ios/chrome/browser/intelligence/bwg/metrics/bwg_metrics.h"
 #import "ios/chrome/browser/intelligence/bwg/utils/bwg_constants.h"
 #import "ios/chrome/browser/intelligence/features/features.h"
 #import "ios/chrome/browser/intelligence/page_action_menu/ui/page_action_menu_entrypoint_view.h"
@@ -332,6 +334,8 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   [self.locationBarSteadyView setBadgeView:self.badgeView];
   if (self.readerModeChipView) {
     [self.locationBarSteadyView setReaderModeChipView:self.readerModeChipView];
+    [self.layoutGuideCenter referenceView:self.readerModeChipView
+                                underName:kReaderModeOptionsEntrypointGuide];
   }
 
   if (IsPageActionMenuEnabled()) {
@@ -405,20 +409,6 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   [self setUpLeadingButton];
   // End Vivaldi
 
-}
-
-- (void)viewWillDisappear:(BOOL)animated {
-  [super viewWillDisappear:animated];
-
-  [NSNotificationCenter.defaultCenter
-      removeObserver:self
-                name:UIPasteboardChangedNotification
-              object:nil];
-
-  [NSNotificationCenter.defaultCenter
-      removeObserver:self
-                name:UIApplicationDidBecomeActiveNotification
-              object:nil];
 }
 
 #if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
@@ -1057,7 +1047,7 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
       UIImage* image = nil;
       ToolbarType targetToolbarType;
       if (GetApplicationContext()->GetLocalState()->GetBoolean(
-              prefs::kBottomOmnibox)) {
+             omnibox::kIsOmniboxInBottomPosition)) {
         title = l10n_util::GetNSString(IDS_IOS_TOOLBAR_MENU_TOP_OMNIBOX);
         image =
             [[UIImage imageNamed:vToolbarMoveToTop]
@@ -1095,7 +1085,7 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
     UIImage* image = nil;
     ToolbarType targetToolbarType;
     if (GetApplicationContext()->GetLocalState()->GetBoolean(
-            prefs::kBottomOmnibox)) {
+            omnibox::kIsOmniboxInBottomPosition)) {
       title = l10n_util::GetNSString(IDS_IOS_TOOLBAR_MENU_TOP_OMNIBOX);
       image = DefaultSymbolWithPointSize(kMovePlatterToTopPhoneSymbol,
                                          kSymbolActionPointSize);
@@ -1237,7 +1227,8 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 /// Set the preferred omnibox position to `toolbarType`.
 - (void)moveOmniboxToToolbarType:(ToolbarType)toolbarType {
   GetApplicationContext()->GetLocalState()->SetBoolean(
-      prefs::kBottomOmnibox, toolbarType == ToolbarType::kSecondary);
+      omnibox::kIsOmniboxInBottomPosition,
+      toolbarType == ToolbarType::kSecondary);
 
   if (toolbarType == ToolbarType::kPrimary) {
     RecordAction(
@@ -1259,9 +1250,15 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 
 - (void)handlePageActionMenuEntrypointTapped {
   // TODO(crbug.com/402827015): Log opens.
+  if (_pageActionMenuEntrypointView.newBadgeVisible) {
+    RecordAIHubNewBadgeTapped();
+    [self.delegate locationBarDidTapAIHubNewBadge];
+    _pageActionMenuEntrypointView.newBadgeVisible = NO;
+  }
   if (IsDirectBWGEntryPoint()) {
     [self.BWGHandler startBWGFlowWithEntryPoint:bwg::EntryPoint::OmniboxChip];
   } else {
+    RecordAIHubIconTapped();
     [self.pageActionMenuHandler showPageActionMenu];
   }
 }
@@ -1309,9 +1306,17 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
       CHECK(IsPageActionMenuEnabled());
       self.locationBarSteadyView.placeholderView =
           _pageActionMenuEntrypointView;
+      if (!_pageActionMenuEntrypointView.newBadgeVisible) {
+        _pageActionMenuEntrypointView.newBadgeVisible =
+            [self.delegate shouldShowAIHubNewFeatureBadge];
+      }
       break;
     case LocationBarPlaceholderType::kDefaultSearchEngineIcon:
+      if (IsVivaldiRunning()) {
+        self.locationBarSteadyView.placeholderView = nil;
+      } else  {
       self.locationBarSteadyView.placeholderView = _defaultSearchEngineIconView;
+      } // End Vivaldi
       break;
   }
 }
@@ -1380,6 +1385,7 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   colorScheme.trailingButtonColor = tintColor;
 
   self.locationBarSteadyView.colorScheme = colorScheme;
+  [self.delegate locationBarContentsTintColorDidChange:tintColor];
 }
 
 - (void)updateLocationText:(NSString*)text

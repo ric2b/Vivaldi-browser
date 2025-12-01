@@ -15,9 +15,10 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_types.h"
-#include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/views/frame/browser_root_view.h"
 #include "chrome/browser/ui/views/tabs/dragging/tab_drag_context.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
@@ -232,16 +233,8 @@ class TabStrip : public views::View,
 
   TabDragContext* GetDragContext();
 
-  // Returns true if Tabs in this TabStrip are currently changing size or
-  // position.
-  bool IsAnimating() const;
-
-  // Stops any ongoing animations. If `layout` is true and an animation is
-  // ongoing this does a layout.
-  void StopAnimating(bool layout);
-
-  // Returns the index of the focused tab, if any.
-  std::optional<int> GetFocusedTabIndex() const;
+  // Stops any ongoing animations and lays out the tabstrip.
+  void StopAnimating();
 
   // Returns a view for anchoring an in-product help promo. `index_hint`
   // indicates at which tab the promo should be displayed, but is not

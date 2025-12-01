@@ -1,36 +1,6 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
-/*
- * Copyright (C) 2011 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the #name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
 
 import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
 import * as Protocol from '../../generated/protocol.js';
@@ -62,76 +32,76 @@ import {type SDKModelObserver, TargetManager} from './TargetManager.js';
 
 const UIStrings = {
   /**
-   *@description Explanation why no content is shown for WebSocket connection.
+   * @description Explanation why no content is shown for WebSocket connection.
    */
   noContentForWebSocket: 'Content for WebSockets is currently not supported',
   /**
-   *@description Explanation why no content is shown for redirect response.
+   * @description Explanation why no content is shown for redirect response.
    */
   noContentForRedirect: 'No content available because this request was redirected',
   /**
-   *@description Explanation why no content is shown for preflight request.
+   * @description Explanation why no content is shown for preflight request.
    */
   noContentForPreflight: 'No content available for preflight request',
   /**
-   *@description Text to indicate that network throttling is disabled
+   * @description Text to indicate that network throttling is disabled
    */
   noThrottling: 'No throttling',
   /**
-   *@description Text to indicate the network connectivity is offline
+   * @description Text to indicate the network connectivity is offline
    */
   offline: 'Offline',
   /**
-   *@description Text in Network Manager representing the "3G" throttling preset.
+   * @description Text in Network Manager representing the "3G" throttling preset.
    */
   slowG: '3G',  // Named `slowG` for legacy reasons and because this value
                 // is serialized locally on the user's machine: if we
                 // change it we break their stored throttling settings.
                 // (See crrev.com/c/2947255)
   /**
-   *@description Text in Network Manager representing the "Slow 4G" throttling preset
+   * @description Text in Network Manager representing the "Slow 4G" throttling preset
    */
   fastG: 'Slow 4G',  // Named `fastG` for legacy reasons and because this value
                      // is serialized locally on the user's machine: if we
                      // change it we break their stored throttling settings.
                      // (See crrev.com/c/2947255)
   /**
-   *@description Text in Network Manager representing the "Fast 4G" throttling preset
+   * @description Text in Network Manager representing the "Fast 4G" throttling preset
    */
   fast4G: 'Fast 4G',
   /**
-   *@description Text in Network Manager
-   *@example {https://example.com} PH1
+   * @description Text in Network Manager
+   * @example {https://example.com} PH1
    */
   requestWasBlockedByDevtoolsS: 'Request was blocked by DevTools: "{PH1}"',
   /**
-   *@description Message in Network Manager
-   *@example {XHR} PH1
-   *@example {GET} PH2
-   *@example {https://example.com} PH3
+   * @description Message in Network Manager
+   * @example {XHR} PH1
+   * @example {GET} PH2
+   * @example {https://example.com} PH3
    */
   sFailedLoadingSS: '{PH1} failed loading: {PH2} "{PH3}".',
   /**
-   *@description Message in Network Manager
-   *@example {XHR} PH1
-   *@example {GET} PH2
-   *@example {https://example.com} PH3
+   * @description Message in Network Manager
+   * @example {XHR} PH1
+   * @example {GET} PH2
+   * @example {https://example.com} PH3
    */
   sFinishedLoadingSS: '{PH1} finished loading: {PH2} "{PH3}".',
   /**
-   *@description One of direct socket connection statuses
+   * @description One of direct socket connection statuses
    */
   directSocketStatusOpening: 'Opening',
   /**
-   *@description One of direct socket connection statuses
+   * @description One of direct socket connection statuses
    */
   directSocketStatusOpen: 'Open',
   /**
-   *@description One of direct socket connection statuses
+   * @description One of direct socket connection statuses
    */
   directSocketStatusClosed: 'Closed',
   /**
-   *@description One of direct socket connection statuses
+   * @description One of direct socket connection statuses
    */
   directSocketStatusAborted: 'Aborted',
 } as const;
@@ -409,6 +379,14 @@ export class NetworkManager extends SDKModel<EventTypes> {
     return result.status;
   }
 
+  async getIpProtectionProxyStatus(): Promise<Protocol.Network.IpProxyStatus|null> {
+    const result = await this.#networkAgent.invoke_getIPProtectionProxyStatus();
+    if (result.getError()) {
+      return null;
+    }
+    return result.status;
+  }
+
   async enableReportingApi(enable = true): Promise<Promise<Protocol.ProtocolResponseWithError>> {
     return await this.#networkAgent.invoke_enableReportingApi({enable});
   }
@@ -619,6 +597,7 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
     networkRequest.mixedContentType = request.mixedContentType || Protocol.Security.MixedContentType.None;
     networkRequest.setReferrerPolicy(request.referrerPolicy);
     networkRequest.setIsSameSite(request.isSameSite || false);
+    networkRequest.setIsAdRelated(request.isAdRelated || false);
   }
 
   private updateNetworkRequestWithResponse(networkRequest: NetworkRequest, response: Protocol.Network.Response): void {
@@ -2404,4 +2383,51 @@ export interface RequestUpdateDroppedEventData {
   resourceType: Protocol.Network.ResourceType;
   mimeType: string;
   lastModified: Date|null;
+}
+
+/**
+ * For the given Round Trip Time (in MilliSeconds), return the best throttling conditions.
+ */
+export function getRecommendedNetworkPreset(rtt: number): Conditions|null {
+  const RTT_COMPARISON_THRESHOLD = 200;
+  const RTT_MINIMUM = 60;
+
+  if (!Number.isFinite(rtt)) {
+    return null;
+  }
+
+  if (rtt < RTT_MINIMUM) {
+    return null;
+  }
+
+  // We pick from the set of presets in the panel but do not want to allow
+  // the "No Throttling" option to be picked.
+  const presets = THROTTLING_CONDITIONS_LOOKUP.values()
+                      .filter(condition => {
+                        return condition !== NoThrottlingConditions;
+                      })
+                      .toArray();
+
+  let closestPreset: Conditions|null = null;
+  let smallestDiff = Infinity;
+  for (const preset of presets) {
+    const {targetLatency} = preset;
+    if (!targetLatency) {
+      continue;
+    }
+
+    const diff = Math.abs(targetLatency - rtt);
+    if (diff > RTT_COMPARISON_THRESHOLD) {
+      continue;
+    }
+
+    if (smallestDiff < diff) {
+      continue;
+    }
+
+    closestPreset = preset;
+    smallestDiff = diff;
+  }
+
+  return closestPreset;
 }

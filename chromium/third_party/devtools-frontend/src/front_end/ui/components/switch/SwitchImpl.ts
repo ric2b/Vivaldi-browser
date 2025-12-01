@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -21,6 +21,7 @@ export class Switch extends HTMLElement {
   #checked = false;
   #disabled = false;
   #jslogContext = '';
+  #label = '';
 
   connectedCallback(): void {
     this.#render();
@@ -53,6 +54,15 @@ export class Switch extends HTMLElement {
     this.#render();
   }
 
+  get label(): string {
+    return this.#label;
+  }
+
+  set label(label: string) {
+    this.#label = label;
+    this.#render();
+  }
+
   #handleChange = (ev: Event): void => {
     this.#checked = (ev.target as HTMLInputElement).checked;
     this.dispatchEvent(new SwitchChangeEvent(this.#checked));
@@ -64,8 +74,9 @@ export class Switch extends HTMLElement {
     // clang-format off
     render(html`
     <style>${switchStyles}</style>
-    <label role="button" jslog=${jslog || nothing}>
+    <label jslog=${jslog || nothing}>
       <input type="checkbox"
+        aria-label=${this.#label || nothing}
         @change=${this.#handleChange}
         ?disabled=${this.#disabled}
         .checked=${this.#checked}

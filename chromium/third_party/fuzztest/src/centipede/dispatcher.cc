@@ -333,6 +333,12 @@ int DispatcherDoMutate(const FuzzTestDispatcherCallbacks& callbacks) {
   {
     TestCallbackGuard guard;
     fprintf(stderr, "calling custom mutator\n");
+    // We ensure that:
+    //  * `inputs` is a valid pointer to an array of
+    //    `FuzzTestDispatcherInputForMutate` objects with length `num_inputs`.
+    //  * Each object of the array contains a valid `input` pointer to
+    //    `input_size` bytes, and a valid `metadata` pointer to `metadata_size`
+    //    bytes.
     callbacks.mutate(inputs.data(), inputs.size(), num_mutants,
                      /*shrink=*/0);
   }
@@ -367,6 +373,7 @@ int DispatcherDoExecute(const FuzzTestDispatcherCallbacks& callbacks) {
     }
     {
       TestCallbackGuard guard;
+      // We ensure that `input` is a valid pointer to an array of `size` bytes.
       callbacks.execute(data.data(), data.size());
     }
     if (!BatchResult::WriteInputEnd(*outputs_blobseq)) {
@@ -545,6 +552,20 @@ void FuzzTestDispatcherEmitFeedbackAs32BitFeatures(const uint32_t* features,
   DispatcherCheck(BatchResult::WriteDispatcher32BitFeatures(
                       features, num_features, *output),
                   "failed to write feedback");
+}
+
+void FuzzTestDispatcherEmitFeedbackAsRawFeatures(const uint64_t* features,
+                                                 size_t num_features) {
+  DispatcherCheck(GetDispatcherAction() == DispatcherAction::kTestExecute &&
+                      in_test_callback,
+                  "must be called inside test callback of executing");
+  DispatcherCheck(num_features > 0 && features != nullptr,
+                  "feature array must be non-empty with a valid pointer");
+  auto* output = GetOutputsBlobSequence();
+  DispatcherCheck(output != nullptr, "outputs blob sequence must exist");
+  DispatcherCheck(
+      BatchResult::WriteOneFeatureVec(features, num_features, *output),
+      "failed to write feedback");
 }
 
 void FuzzTestDispatcherEmitExecutionMetadata(const void* metadata,

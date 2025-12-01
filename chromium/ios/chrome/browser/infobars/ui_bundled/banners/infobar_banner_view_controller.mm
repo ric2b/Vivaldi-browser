@@ -22,6 +22,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
@@ -598,7 +599,7 @@ constexpr base::TimeDelta kLongPressTimeDuration = base::Milliseconds(400);
 
     if (IsVivaldiRunning() &&
         GetApplicationContext()
-            ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox)) {
+            ->GetLocalState()->GetBoolean(omnibox::kIsOmniboxInBottomPosition)) {
       // For bottom banners, allow dragging down from original position
       if (newYPosition > self.originalCenter.y) {
         self.view.center = CGPointMake(self.view.center.x, newYPosition);
@@ -621,7 +622,7 @@ constexpr base::TimeDelta kLongPressTimeDuration = base::Milliseconds(400);
     BOOL dragExceededThreshold = NO;
     if (IsVivaldiRunning() &&
         GetApplicationContext()
-            ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox)) {
+            ->GetLocalState()->GetBoolean(omnibox::kIsOmniboxInBottomPosition)) {
       // For bottom banners, check if dragged down enough
       dragExceededThreshold = (self.view.center.y - self.originalCenter.y >
                                   -kChangeInPositionForDismissal);

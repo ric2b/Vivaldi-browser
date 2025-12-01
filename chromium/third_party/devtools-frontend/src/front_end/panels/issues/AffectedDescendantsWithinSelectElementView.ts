@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -11,11 +11,11 @@ import {AffectedElementsView} from './AffectedElementsView.js';
 
 const UIStrings = {
   /**
-   *@description Noun for singular or plural number of affected descendant nodes indication in issue view.
+   * @description Noun for singular or plural number of affected descendant nodes indication in issue view.
    */
   nDescendants: '{n, plural, =1 { descendant} other { descendants}}',
   /**
-   *@description Label for the disallowed node link in the issue view.
+   * @description Label for the disallowed node link in the issue view.
    */
   disallowedNode: 'Disallowed descendant',
 } as const;

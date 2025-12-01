@@ -126,7 +126,7 @@ the last one takes effect.
     This setting overwrites compression level if one was set previously.
     Similarly, if a compression level is set after `--fast`, it overrides it.
 * `-T#`, `--threads=#`:
-    Compress using `#` working threads (default: 1).
+    Compress using `#` working threads (default: between 1 and 4 depending on physical CPU cores; see `ZSTD_NBTHREADS` below).
     If `#` is 0, attempt to detect and use the number of physical CPU cores.
     In all cases, the nb of threads is capped to `ZSTDMT_NBWORKERS_MAX`,
     which is either 64 in 32-bit mode, or 256 for 64-bit environments.

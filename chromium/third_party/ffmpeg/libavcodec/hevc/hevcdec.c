@@ -152,10 +152,10 @@ static int pic_arrays_init(HEVCLayerContext *l, const HEVCSPS *sps)
             int w = sps->width >> sps->hshift[c_idx];
             int h = sps->height >> sps->vshift[c_idx];
             l->sao_pixel_buffer_h[c_idx] =
-                av_malloc((w * 2 * sps->ctb_height) <<
+                av_mallocz((w * 2 * sps->ctb_height) <<
                           sps->pixel_shift);
             l->sao_pixel_buffer_v[c_idx] =
-                av_malloc((h * 2 * sps->ctb_width) <<
+                av_mallocz((h * 2 * sps->ctb_width) <<
                           sps->pixel_shift);
             if (!l->sao_pixel_buffer_h[c_idx] ||
                 !l->sao_pixel_buffer_v[c_idx])
@@ -3546,7 +3546,7 @@ static int decode_slice(HEVCContext *s, unsigned nal_idx, GetBitContext *gb)
 
     ret = hls_slice_header(&s->sh, s, gb);
     if (ret < 0) {
-        // hls_slice_header() does not cleanup on failure thus the state now is inconsistant so we cannot use it on depandant slices
+        // hls_slice_header() does not cleanup on failure thus the state now is inconsistent so we cannot use it on dependent slices
         s->slice_initialized = 0;
         return ret;
     }
@@ -3749,8 +3749,10 @@ static int decode_nal_units(HEVCContext *s, const uint8_t *buf, int length)
         }
 
         s->rpu_buf = av_buffer_alloc(nal->raw_size - 2);
-        if (!s->rpu_buf)
-            return AVERROR(ENOMEM);
+        if (!s->rpu_buf) {
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
         memcpy(s->rpu_buf->data, nal->raw_data + 2, nal->raw_size - 2);
 
         ret = ff_dovi_rpu_parse(&s->dovi_ctx, nal->data + 2, nal->size - 2,
@@ -4206,7 +4208,7 @@ static void hevc_decode_flush(AVCodecContext *avctx)
 static const AVOption options[] = {
     { "apply_defdispwin", "Apply default display window from VUI", OFFSET(apply_defdispwin),
         AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, PAR },
-    { "strict-displaywin", "stricly apply default display window size", OFFSET(apply_defdispwin),
+    { "strict-displaywin", "strictly apply default display window size", OFFSET(apply_defdispwin),
         AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, PAR },
     { "view_ids", "Array of view IDs that should be decoded and output; a single -1 to decode all views",
         .offset = OFFSET(view_ids), .type = AV_OPT_TYPE_INT | AV_OPT_TYPE_FLAG_ARRAY,

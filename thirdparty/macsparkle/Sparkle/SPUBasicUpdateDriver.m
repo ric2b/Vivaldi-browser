@@ -77,7 +77,7 @@
         if ([_host isRunningTranslocated]) {
             [delegate basicDriverIsRequestingAbortUpdateWithError:[NSError errorWithDomain:SUSparkleErrorDomain code:SURunningTranslocated userInfo:@{ NSLocalizedRecoverySuggestionErrorKey: [NSString stringWithFormat:SULocalizedStringFromTableInBundle(@"Quit %1$@, move it into your Applications folder, relaunch it from there and try again.", SPARKLE_TABLE, sparkleBundle, nil), hostName], NSLocalizedDescriptionKey: [NSString stringWithFormat:SULocalizedStringFromTableInBundle(@"%1$@ can’t be updated if it’s running from the location it was downloaded to.", SPARKLE_TABLE, sparkleBundle, nil), hostName], }]];
         } else {
-            [delegate basicDriverIsRequestingAbortUpdateWithError:[NSError errorWithDomain:SUSparkleErrorDomain code:SURunningFromDiskImageError userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:SULocalizedStringFromTableInBundle(@"%1$@ can’t be updated, because it was opened from a read-only or a temporary location.", SPARKLE_TABLE, sparkleBundle, nil), hostName], NSLocalizedRecoverySuggestionErrorKey: [NSString stringWithFormat:SULocalizedStringFromTableInBundle(@"Use Finder to copy %1$@ to the Applications folder, relaunch it from there, and try again.", SPARKLE_TABLE, sparkleBundle, nil), hostName] }]];
+            [delegate basicDriverIsRequestingAbortUpdateWithError:[NSError errorWithDomain:SUSparkleErrorDomain code:SURunningFromDiskImageError userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:SULocalizedStringFromTableInBundle(@"%1$@ can’t be updated because it was opened from a read-only or a temporary location.", SPARKLE_TABLE, sparkleBundle, nil), hostName], NSLocalizedRecoverySuggestionErrorKey: [NSString stringWithFormat:SULocalizedStringFromTableInBundle(@"Use Finder to copy %1$@ to the Applications folder, relaunch it from there, and try again.", SPARKLE_TABLE, sparkleBundle, nil), hostName] }]];
         }
     } else {
         [_appcastDriver loadAppcastFromURL:appcastURL userAgent:userAgent httpHeaders:httpHeaders inBackground:background];
@@ -148,21 +148,12 @@
         id updater = _updater;
         
         if (!resuming) {
-#if SPARKLE_BUILD_PACKAGE_SUPPORT
-            // interactive pkg based updates are not supported under root user
-            if ([updateItem.installationType isEqualToString:SPUInstallationTypeInteractivePackage] && geteuid() == 0) {
-                [delegate basicDriverIsRequestingAbortUpdateWithError:[NSError errorWithDomain:SUSparkleErrorDomain code:SUInstallationRootInteractiveError userInfo:@{ NSLocalizedDescriptionKey: SULocalizedStringFromTableInBundle(@"Interactive based packages cannot be installed as the root user.", SPARKLE_TABLE, SUSparkleBundle(), nil) }]];
+            // Give the delegate a chance to bail
+            
+            NSError *shouldNotProceedError = nil;
+            if ([updaterDelegate respondsToSelector:@selector(updater:shouldProceedWithUpdate:updateCheck:error:)] && ![updaterDelegate updater:updater shouldProceedWithUpdate:updateItem updateCheck:_updateCheck error:&shouldNotProceedError]) {
+                [delegate basicDriverIsRequestingAbortUpdateWithError:shouldNotProceedError];
                 return;
-            } else
-#endif
-            {
-                // Give the delegate a chance to bail
-                
-                NSError *shouldNotProceedError = nil;
-                if ([updaterDelegate respondsToSelector:@selector(updater:shouldProceedWithUpdate:updateCheck:error:)] && ![updaterDelegate updater:updater shouldProceedWithUpdate:updateItem updateCheck:_updateCheck error:&shouldNotProceedError]) {
-                    [delegate basicDriverIsRequestingAbortUpdateWithError:shouldNotProceedError];
-                    return;
-                }
             }
         }
         

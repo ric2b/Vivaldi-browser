@@ -10,6 +10,7 @@
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_button_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/common/vivaldi_url_constants.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
@@ -67,6 +68,35 @@
   }
 }
 
+- (void)tableView:(UITableView*)tableView
+    didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
+  [super tableView:tableView didSelectRowAtIndexPath:indexPath];
+
+  TableViewModel* model = self.tableViewModel;
+  ItemType itemType =
+      static_cast<ItemType>([model itemTypeForIndexPath:indexPath]);
+  UITableViewCell* cell = [super tableView:tableView
+                cellForRowAtIndexPath:indexPath];
+  switch (itemType) {
+    case ItemTypeStartSyncingButton: {
+      [self startSyncingAllButtonPressed];
+      break;
+    }
+    case ItemTypeLogOutButton: {
+      [self logOutButtonPressed];
+      break;
+    }
+    case ItemTypeDeleteDataButton: {
+      [self deleteDataButtonPressed];
+      break;
+    }
+    default: {
+      cell.selectionStyle = UITableViewCellSelectionStyleNone;
+      break;
+    }
+  }
+}
+
 #pragma mark - UITableViewDataSource
 
 - (UITableViewCell*)tableView:(UITableView*)tableView
@@ -77,6 +107,9 @@
       [self.tableViewModel itemTypeForIndexPath:indexPath]);
 
   switch (itemType) {
+    case ItemTypeLogOutButton:
+    case ItemTypeDeleteDataButton:
+    case ItemTypeStartSyncingButton:
     case ItemTypeHeaderItem:
     case ItemTypeSyncUserInfo:
     case ItemTypeSyncStatus:
@@ -176,16 +209,6 @@
           [self.serviceDelegate getSyncStatusFor:itemType];
       break;
     }
-    case ItemTypeStartSyncingButton: {
-      TableViewTextButtonCell* tableViewTextButtonCell =
-          base::apple::ObjCCastStrict<TableViewTextButtonCell>(cell);
-      [self clearExistingTarget:tableViewTextButtonCell.button];
-      [tableViewTextButtonCell.button
-                 addTarget:self
-                    action:@selector(startSyncingAllButtonPressed:)
-          forControlEvents:UIControlEventTouchUpInside];
-      break;
-    }
     case ItemTypeEncryptionPasswordButton: {
       cell.selectionStyle = UITableViewCellSelectionStyleNone;
       TableViewDetailTextCell* tableViewDetailTextCell =
@@ -217,26 +240,6 @@
           action:@selector(backupEncryptionKeyButtonPressed)];
       [tableViewDetailTextCell.accessoryView addGestureRecognizer:tap];
       [tableViewDetailTextCell.accessoryView setUserInteractionEnabled:YES];
-      break;
-    }
-    case ItemTypeLogOutButton: {
-      TableViewTextButtonCell* tableViewTextButtonCell =
-          base::apple::ObjCCastStrict<TableViewTextButtonCell>(cell);
-      [self clearExistingTarget:tableViewTextButtonCell.button];
-      [tableViewTextButtonCell.button
-                 addTarget:self
-                    action:@selector(logOutButtonPressed:)
-          forControlEvents:UIControlEventTouchUpInside];
-      break;
-    }
-    case ItemTypeDeleteDataButton: {
-      TableViewTextButtonCell* tableViewTextButtonCell =
-          base::apple::ObjCCastStrict<TableViewTextButtonCell>(cell);
-      [self clearExistingTarget:tableViewTextButtonCell.button];
-      [tableViewTextButtonCell.button
-                 addTarget:self
-                    action:@selector(deleteDataButtonPressed:)
-          forControlEvents:UIControlEventTouchUpInside];
       break;
     }
   }
@@ -397,11 +400,11 @@
   [self.applicationCommandsHandler closePresentedViewsAndOpenURL:command];
 }
 
-- (void)logOutButtonPressed:(UIButton*)sender {
+- (void)logOutButtonPressed {
   [self.serviceDelegate logOutButtonPressed];
 }
 
-- (void)deleteDataButtonPressed:(UIButton*)sender {
+- (void)deleteDataButtonPressed {
   UIAlertController* alertController = [UIAlertController
       alertControllerWithTitle:l10n_util::GetNSString(
           IDS_VIVALDI_SYNC_CONFIRM_CLEAR_SERVER_DATA_TITLE)
@@ -428,7 +431,7 @@
   [self presentViewController:alertController animated:YES completion:nil];
 }
 
-- (void)startSyncingAllButtonPressed:(UIButton*)sender {
+- (void)startSyncingAllButtonPressed {
   [self.serviceDelegate startSyncingAllButtonPressed];
 }
 

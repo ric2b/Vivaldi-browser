@@ -18,7 +18,7 @@
 @end
 
 // Cell class associated to VivaldiInputErrorItem.
-@interface VivaldiInputErrorCell : TableViewCell
+@interface VivaldiInputErrorCell : LegacyTableViewCell
 
 // Label for the error text.
 @property(nonatomic, readonly, strong) UILabel* textLabel;

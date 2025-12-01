@@ -27,11 +27,31 @@
 package {{ kotlin_package }}
 {% from 'art/api_kotlin_types.kt' import kotlin_declaration with context %}
 
+{% set callbackName = 'on' + function_pointer.name.chunks[:-1] | map('title') | join %}
+
 public fun interface {{ function_pointer.name.CamelCase() }} {
     @Suppress("INAPPLICABLE_JVM_NAME")  //* Required for @JvmName on global function.
-    @JvmName("callback")  //* Required to access Inline Value Class parameters via JNI.
-    public fun callback(
+    @JvmName("{{ callbackName }}")  //* Required to access Inline Value Class parameters via JNI.
+    public fun {{ callbackName }}(
     {%- for arg in kotlin_record_members(function_pointer.arguments) -%}
         {{ as_varName(arg.name) }}: {{ kotlin_declaration(arg) }},{{ ' ' }}
     {%- endfor -%});
+}
+
+{% set args_list = kotlin_record_members(function_pointer.arguments) | list %}
+
+internal class {{ function_pointer.name.CamelCase() }}Runnable(
+private val callback: {{ function_pointer.name.CamelCase() }},
+{% for arg in args_list %}
+    private val {{ as_varName(arg.name) }}: {{ kotlin_declaration(arg) }}{{ ','
+    if not loop.last }}
+{% endfor %}
+) : Runnable {
+    override fun run() {
+        callback.{{ callbackName }}(
+            {%- for arg in args_list -%}
+            {{ as_varName(arg.name) }}{{ ', ' if not loop.last }}
+            {%- endfor -%}
+        )
+    }
 }

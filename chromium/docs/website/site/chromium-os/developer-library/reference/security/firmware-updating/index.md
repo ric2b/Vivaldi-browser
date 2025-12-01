@@ -59,7 +59,7 @@ To verify integrity of firmware stored in flash, the firmware must be verified
 against some trust anchor. This is typically achieved by cryptographically
 signing the firmware image and then having the hardware do a signature
 verification against a public key indicated by a trustworthy origin (typically
-ROM or fuses). As per [Cryptographic Right Answers], NaCl/[libsodium] or Ed25519
+ROM or fuses). As per [Cryptographic Right Answers], [libsodium] or Ed25519
 are decent choices.
 
 Firmware integrity verification via signatures hinges on protecting the private

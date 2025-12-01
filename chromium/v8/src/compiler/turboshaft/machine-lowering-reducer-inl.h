@@ -218,11 +218,11 @@ class MachineLoweringReducer : public Next {
           __ DeoptimizeIf(__ Word32Equal(__ Float64ExtractHighWord32(f64_input),
                                          kHoleNanUpper32),
                           frame_state, DeoptimizeReason::kHole, feedback);
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
           __ DeoptimizeIf(__ Word32Equal(__ Float64ExtractHighWord32(f64_input),
                                          kUndefinedNanUpper32),
                           frame_state, DeoptimizeReason::kHole, feedback);
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
         }
 
         return input;
@@ -524,10 +524,7 @@ class MachineLoweringReducer : public Next {
         GOTO_IF(__ Word32Equal(instance_type, ODDBALL_TYPE), done, 1);
 
 #if V8_STATIC_ROOTS_BOOL
-        GOTO(done,
-             __ Uint32LessThanOrEqual(
-                 __ TruncateWordPtrToWord32(__ BitcastHeapObjectToWordPtr(map)),
-                 __ Word32Constant(InstanceTypeChecker::kStringMapUpperBound)));
+        GOTO(done, __ IsStringMap(map));
 #else
         GOTO(done, __ Uint32LessThan(instance_type, FIRST_NONSTRING_TYPE));
 #endif  // V8_STATIC_ROOTS_BOOL
@@ -546,10 +543,7 @@ class MachineLoweringReducer : public Next {
         }
 
         V<Map> map = __ LoadMapField(input);
-        GOTO(done,
-             __ Uint32LessThanOrEqual(
-                 __ TruncateWordPtrToWord32(__ BitcastHeapObjectToWordPtr(map)),
-                 __ Word32Constant(InstanceTypeChecker::kStringMapUpperBound)));
+        GOTO(done, __ IsStringMap(map));
 
         BIND(done, result);
         return result;
@@ -676,7 +670,7 @@ class MachineLoweringReducer : public Next {
         BIND(done, result);
         return result;
       }
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       case NumericKind::kFloat64Undefined: {
         Label<Word32> done(this);
         // First check whether {value} is a NaN at all...
@@ -700,7 +694,7 @@ class MachineLoweringReducer : public Next {
         BIND(done, result);
         return result;
       }
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
       case NumericKind::kFinite: {
         V<Float64> diff = __ Float64Sub(value, value);
         return __ Float64Equal(diff, diff);
@@ -802,10 +796,10 @@ class MachineLoweringReducer : public Next {
         GOTO_IF(__ IsSmi(input), done, 0);
         break;
       case NumericKind::kFloat64Hole:
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       case NumericKind::kFloat64Undefined:
       case NumericKind::kFloat64UndefinedOrHole:
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
         // ObjectIsFloat64Hole is not used, but can be implemented when needed.
         UNREACHABLE();
     }
@@ -827,21 +821,22 @@ class MachineLoweringReducer : public Next {
     switch (to) {
       case ConvertOp::Kind::kNumber: {
         if (from == ConvertOp::Kind::kPlainPrimitive) {
-          return __ CallBuiltin_PlainPrimitiveToNumber(
-              isolate_, V<PlainPrimitive>::Cast(input));
+          return __ template CallBuiltin<builtin::PlainPrimitiveToNumber>(
+              {.input = V<PlainPrimitive>::Cast(input)});
         } else {
           DCHECK_EQ(from, ConvertOp::Kind::kString);
-          return __ CallBuiltin_StringToNumber(isolate_,
-                                               V<String>::Cast(input));
+          return __ template CallBuiltin<builtin::StringToNumber>(
+              {.input = V<String>::Cast(input)});
         }
       }
       case ConvertOp::Kind::kBoolean: {
         DCHECK_EQ(from, ConvertOp::Kind::kObject);
-        return __ CallBuiltin_ToBoolean(isolate_, input);
+        return __ template CallBuiltin<builtin::ToBoolean>({.input = input});
       }
       case ConvertOp::Kind::kString: {
         DCHECK_EQ(from, ConvertOp::Kind::kNumber);
-        return __ CallBuiltin_NumberToString(isolate_, V<Number>::Cast(input));
+        return __ template CallBuiltin<builtin::NumberToString>(
+            {.input = V<Number>::Cast(input)});
       }
       case ConvertOp::Kind::kSmi: {
         DCHECK_EQ(from, ConvertOp::Kind::kNumberOrOddball);
@@ -849,7 +844,7 @@ class MachineLoweringReducer : public Next {
         GOTO_IF(LIKELY(__ ObjectIsSmi(input)), done, V<Smi>::Cast(input));
 
         V<Float64> value = __ template LoadField<Float64>(
-            input, AccessBuilder::ForHeapNumberOrOddballOrHoleValue());
+            input, AccessBuilder::ForHeapNumberOrOddballValue());
         GOTO(done, __ TagSmi(__ ReversibleFloat64ToInt32(value)));
 
         BIND(done, result);
@@ -1044,7 +1039,7 @@ class MachineLoweringReducer : public Next {
                 kDoubleOrHole:
               need_hole_check = true;
               break;
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
             case ConvertUntaggedToJSPrimitiveOp::InputInterpretation::
                 kDoubleOrUndefinedOrHole:
               need_hole_check = true;
@@ -1053,7 +1048,7 @@ class MachineLoweringReducer : public Next {
                 kDoubleOrUndefined:
               need_undefined_check = true;
               break;
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
             default:
               UNREACHABLE();
           }
@@ -1065,13 +1060,13 @@ class MachineLoweringReducer : public Next {
                     __ HeapConstant(factory_->undefined_value()));
           }
           if (need_undefined_check) {
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
             if (!high_word.has_value()) {
               high_word = __ Float64ExtractHighWord32(input_f64);
             }
             GOTO_IF(__ Word32Equal(high_word.value(), kUndefinedNanUpper32),
                     done, __ HeapConstant(factory_->undefined_value()));
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
           }
         }
         GOTO(done, AllocateHeapNumber(input_f64));
@@ -1199,7 +1194,7 @@ class MachineLoweringReducer : public Next {
             GOTO(done, __ UntagSmi(V<Smi>::Cast(object)));
           } ELSE {
             V<Float64> value = __ template LoadField<Float64>(
-                object, AccessBuilder::ForHeapNumberOrOddballOrHoleValue());
+                object, AccessBuilder::ForHeapNumberOrOddballValue());
             GOTO(done, __ ReversibleFloat64ToInt32(value));
           }
 
@@ -1235,7 +1230,7 @@ class MachineLoweringReducer : public Next {
                  __ ChangeInt32ToInt64(__ UntagSmi(V<Smi>::Cast(object))));
           } ELSE {
             V<Float64> value = __ template LoadField<Float64>(
-                object, AccessBuilder::ForHeapNumberOrOddballOrHoleValue());
+                object, AccessBuilder::ForHeapNumberOrOddballValue());
             GOTO(done, __ ReversibleFloat64ToInt64(value));
           }
 
@@ -1253,7 +1248,7 @@ class MachineLoweringReducer : public Next {
           GOTO(done, __ UntagSmi(V<Smi>::Cast(object)));
         } ELSE {
           V<Float64> value = __ template LoadField<Float64>(
-              object, AccessBuilder::ForHeapNumberOrOddballOrHoleValue());
+              object, AccessBuilder::ForHeapNumberOrOddballValue());
           GOTO(done, __ ReversibleFloat64ToUint32(value));
         }
 
@@ -1274,9 +1269,25 @@ class MachineLoweringReducer : public Next {
                  __ ChangeInt32ToFloat64(__ UntagSmi(V<Smi>::Cast(object))));
           } ELSE {
             V<Float64> value = __ template LoadField<Float64>(
-                object, AccessBuilder::ForHeapNumberOrOddballOrHoleValue());
+                object, AccessBuilder::ForHeapNumberOrOddballValue());
             GOTO(done, value);
           }
+
+          BIND(done, result);
+          return result;
+        } else if (input_assumptions == ConvertJSPrimitiveToUntaggedOp::
+                                            InputAssumptions::kNumberOrHole) {
+          Label<Float64> done(this);
+          GOTO_IF(__ ObjectIsSmi(object), done,
+                  __ ChangeInt32ToFloat64(__ UntagSmi(V<Smi>::Cast(object))));
+          GOTO_IF(LIKELY(__ TaggedEqual(
+                      object, __ HeapConstant(factory_->the_hole_value()))),
+                  done,
+                  __ Float64Constant(i::Float64::FromBits(kHoleNanInt64)));
+
+          V<Float64> value = __ template LoadField<Float64>(
+              object, AccessBuilder::ForHeapNumberValue());
+          GOTO(done, value);
 
           BIND(done, result);
           return result;
@@ -1296,7 +1307,7 @@ class MachineLoweringReducer : public Next {
           return result;
         }
       }
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       case ConvertJSPrimitiveToUntaggedOp::UntaggedKind::kHoleyFloat64: {
         DCHECK_EQ(
             input_assumptions,
@@ -1317,7 +1328,7 @@ class MachineLoweringReducer : public Next {
           }
 
           V<Float64> value = __ template LoadField<Float64>(
-              object, AccessBuilder::ForHeapNumberOrOddballOrHoleValue());
+              object, AccessBuilder::ForHeapNumberOrOddballValue());
           V<Float64> silenced_value = __ Float64SilenceNaN(value);
           GOTO(done, silenced_value);
         }
@@ -1325,7 +1336,7 @@ class MachineLoweringReducer : public Next {
         BIND(done, result);
         return result;
       }
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
     }
     UNREACHABLE();
   }
@@ -1431,7 +1442,7 @@ class MachineLoweringReducer : public Next {
         BIND(done, result);
         return result;
       }
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       // TODO(nicohartmann): Consider merging this into
       // ConvertHeapObjectToFloat64OrDeopt.
       case ConvertJSPrimitiveToUntaggedOrDeoptOp::UntaggedKind::kHoleyFloat64: {
@@ -1468,7 +1479,7 @@ class MachineLoweringReducer : public Next {
         BIND(done, result);
         return result;
       }
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
 
       case ConvertJSPrimitiveToUntaggedOrDeoptOp::UntaggedKind::kArrayIndex: {
         DCHECK_EQ(from_kind, ConvertJSPrimitiveToUntaggedOrDeoptOp::
@@ -1519,9 +1530,7 @@ class MachineLoweringReducer : public Next {
             }
           } ELSE {
 #if V8_STATIC_ROOTS_BOOL
-            V<Word32> is_string_map = __ Uint32LessThanOrEqual(
-                __ TruncateWordPtrToWord32(__ BitcastHeapObjectToWordPtr(map)),
-                __ Word32Constant(InstanceTypeChecker::kStringMapUpperBound));
+            V<Word32> is_string_map = __ IsStringMap(map);
 #else
             V<Word32> instance_type = __ LoadInstanceTypeField(map);
             V<Word32> is_string_map =
@@ -1562,15 +1571,26 @@ class MachineLoweringReducer : public Next {
       TruncateJSPrimitiveToUntaggedOp::InputAssumptions input_assumptions) {
     switch (kind) {
       case TruncateJSPrimitiveToUntaggedOp::UntaggedKind::kInt32: {
-        DCHECK_EQ(input_assumptions, TruncateJSPrimitiveToUntaggedOp::
-                                         InputAssumptions::kNumberOrOddball);
+        DCHECK_EQ(input_assumptions,
+                  any_of(TruncateJSPrimitiveToUntaggedOp::InputAssumptions::
+                             kNumberOrOddball,
+                         TruncateJSPrimitiveToUntaggedOp::InputAssumptions::
+                             kNumberOrOddballOrHole));
         Label<Word32> done(this);
 
         IF (LIKELY(__ ObjectIsSmi(object))) {
           GOTO(done, __ UntagSmi(V<Smi>::Cast(object)));
         } ELSE {
+          if (input_assumptions ==
+              TruncateJSPrimitiveToUntaggedOp::InputAssumptions::
+                  kNumberOrOddballOrHole) {
+            IF (LIKELY(__ IsTheHole(object))) {
+              // Hole -> undefined -> NaN -> truncates to zero.
+              GOTO(done, 0);
+            }
+          }
           V<Float64> number_value = __ template LoadField<Float64>(
-              object, AccessBuilder::ForHeapNumberOrOddballOrHoleValue());
+              object, AccessBuilder::ForHeapNumberOrOddballValue());
           GOTO(done, __ JSTruncateFloat64ToWord32(number_value));
         }
 
@@ -1785,7 +1805,8 @@ class MachineLoweringReducer : public Next {
                         value, __ HeapConstant(factory_->null_value()))),
                     done, global_proxy);
           }
-          GOTO(done, __ CallBuiltin_ToObject(isolate_, native_context, value));
+          GOTO(done, __ template CallBuiltin<builtin::ToObject>(
+                         native_context, {.input = value}));
         }
 
         BIND(done, result);
@@ -1893,9 +1914,8 @@ class MachineLoweringReducer : public Next {
         access = {kTaggedBase, OFFSET_OF_DATA_START(FixedDoubleArray),
                   compiler::Type::NumberOrHole(), MachineType::Float64(),
                   kNoWriteBarrier};
-        the_hole_value = __ template LoadField<Float64>(
-            __ HeapConstant(factory_->the_hole_value()),
-            AccessBuilder::ForHeapNumberOrOddballOrHoleValue());
+        the_hole_value =
+            __ Float64Constant(i::Float64::FromBits(kHoleNanInt64));
         break;
       }
       case NewArrayOp::Kind::kObject: {
@@ -2606,19 +2626,21 @@ class MachineLoweringReducer : public Next {
 
   V<Smi> REDUCE(StringIndexOf)(V<String> string, V<String> search,
                                V<Smi> position) {
-    return __ CallBuiltin_StringIndexOf(isolate_, string, search, position);
+    return __ template CallBuiltin<builtin::StringIndexOf>(
+        {.s = string, .search_string = search, .start = position});
   }
 
   V<String> REDUCE(StringFromCodePointAt)(V<String> string, V<WordPtr> index) {
-    return __ CallBuiltin_StringFromCodePointAt(isolate_, string, index);
+    return __ template CallBuiltin<builtin::StringFromCodePointAt>(
+        {.receiver = string, .position = index});
   }
 
 #ifdef V8_INTL_SUPPORT
   V<String> REDUCE(StringToCaseIntl)(V<String> string,
                                      StringToCaseIntlOp::Kind kind) {
     if (kind == StringToCaseIntlOp::Kind::kLower) {
-      return __ CallBuiltin_StringToLowerCaseIntl(
-          isolate_, __ NoContextConstant(), string);
+      return __ template CallBuiltin<builtin::StringToLowerCaseIntl>(
+          __ NoContextConstant(), {.string = string});
     } else {
       DCHECK_EQ(kind, StringToCaseIntlOp::Kind::kUpper);
       return __ CallRuntime_StringToUpperCaseIntl(
@@ -2631,14 +2653,15 @@ class MachineLoweringReducer : public Next {
                                     V<Word32> end) {
     V<WordPtr> s = __ ChangeInt32ToIntPtr(start);
     V<WordPtr> e = __ ChangeInt32ToIntPtr(end);
-    return __ CallBuiltin_StringSubstring(isolate_, string, s, e);
+    return __ template CallBuiltin<builtin::StringSubstring>(
+        {.string = string, .from = s, .to = e});
   }
 
   V<String> REDUCE(StringConcat)(V<Smi> length, V<String> left,
                                  V<String> right) {
     // TODO(nicohartmann@): Port StringBuilder once it is stable.
-    return __ CallBuiltin_StringAdd_CheckNone(isolate_, __ NoContextConstant(),
-                                              left, right);
+    return __ template CallBuiltin<builtin::StringAdd_CheckNone>(
+        __ NoContextConstant(), {.left = left, .right = right});
   }
 
   V<Boolean> REDUCE(StringComparison)(V<String> left, V<String> right,
@@ -2656,9 +2679,11 @@ class MachineLoweringReducer : public Next {
         return result;
       }
       case StringComparisonOp::Kind::kLessThan:
-        return __ CallBuiltin_StringLessThan(isolate_, left, right);
+        return __ template CallBuiltin<builtin::StringLessThan>(
+            {.left = left, .right = right});
       case StringComparisonOp::Kind::kLessThanOrEqual:
-        return __ CallBuiltin_StringLessThanOrEqual(isolate_, left, right);
+        return __ template CallBuiltin<builtin::StringLessThanOrEqual>(
+            {.left = left, .right = right});
     }
   }
 
@@ -2697,9 +2722,10 @@ class MachineLoweringReducer : public Next {
     V<Word32> right_length =
         __ template LoadField<Word32>(right, AccessBuilder::ForStringLength());
     IF (__ Word32Equal(left_length, right_length)) {
-      GOTO(*done,
-           __ CallBuiltin_StringEqual(isolate_, left, right,
-                                      __ ChangeInt32ToIntPtr(left_length)));
+      GOTO(*done, __ template CallBuiltin<builtin::StringEqual>(
+                      {.left = left,
+                       .right = right,
+                       .length = __ ChangeInt32ToIntPtr(left_length)}));
     } ELSE {
       GOTO(*done, __ HeapConstant(factory_->false_value()));
     }
@@ -2737,14 +2763,20 @@ class MachineLoweringReducer : public Next {
     V<WordPtr> p_count = __ IntPtrConstant(formal_parameter_count);
     switch (type) {
       case CreateArgumentsType::kMappedArguments:
-        return __ CallBuiltin_NewSloppyArgumentsElements(
-            isolate_, frame, p_count, arguments_count);
+        return __ template CallBuiltin<builtin::NewSloppyArgumentsElements>(
+            {.frame = frame,
+             .formal_parameter_count = p_count,
+             .arguments_count = arguments_count});
       case CreateArgumentsType::kUnmappedArguments:
-        return __ CallBuiltin_NewStrictArgumentsElements(
-            isolate_, frame, p_count, arguments_count);
+        return __ template CallBuiltin<builtin::NewStrictArgumentsElements>(
+            {.frame = frame,
+             .formal_parameter_count = p_count,
+             .arguments_count = arguments_count});
       case CreateArgumentsType::kRestParameter:
-        return __ CallBuiltin_NewRestArgumentsElements(isolate_, frame, p_count,
-                                                       arguments_count);
+        return __ template CallBuiltin<builtin::NewRestArgumentsElements>(
+            {.frame = frame,
+             .formal_parameter_count = p_count,
+             .arguments_count = arguments_count});
     }
   }
 
@@ -3409,9 +3441,11 @@ class MachineLoweringReducer : public Next {
                                SameValueOp::Mode mode) {
     switch (mode) {
       case SameValueOp::Mode::kSameValue:
-        return __ CallBuiltin_SameValue(isolate_, left, right);
+        return __ template CallBuiltin<builtin::SameValue>(
+            {.left = left, .right = right});
       case SameValueOp::Mode::kSameValueNumbersOnly:
-        return __ CallBuiltin_SameValueNumbersOnly(isolate_, left, right);
+        return __ template CallBuiltin<builtin::SameValueNumbersOnly>(
+            {.left = left, .right = right});
     }
   }
 
@@ -3456,7 +3490,8 @@ class MachineLoweringReducer : public Next {
 
     // We need to take a copy of the {elements} and set them up for {object}.
     V<Object> copy =
-        __ CallBuiltin_CopyFastSmiOrObjectElements(isolate_, object);
+        __ template CallBuiltin<builtin::CopyFastSmiOrObjectElements>(
+            {.object = object});
     GOTO(done, copy);
 
     BIND(done, result);
@@ -3476,12 +3511,13 @@ class MachineLoweringReducer : public Next {
     V<Object> new_elements;
     switch (mode) {
       case GrowFastElementsMode::kDoubleElements:
-        new_elements = __ CallBuiltin_GrowFastDoubleElements(isolate_, object,
-                                                             __ TagSmi(index));
+        new_elements = __ template CallBuiltin<builtin::GrowFastDoubleElements>(
+            {.object = object, .size = __ TagSmi(index)});
         break;
       case GrowFastElementsMode::kSmiOrObjectElements:
-        new_elements = __ CallBuiltin_GrowFastSmiOrObjectElements(
-            isolate_, object, __ TagSmi(index));
+        new_elements =
+            __ template CallBuiltin<builtin::GrowFastSmiOrObjectElements>(
+                {.object = object, .size = __ TagSmi(index)});
         break;
     }
 
@@ -3568,8 +3604,8 @@ class MachineLoweringReducer : public Next {
                                        FindOrderedHashEntryOp::Kind kind) {
     switch (kind) {
       case FindOrderedHashEntryOp::Kind::kFindOrderedHashMapEntry:
-        return __ CallBuiltin_FindOrderedHashMapEntry(
-            isolate_, __ NoContextConstant(), data_structure, key);
+        return __ template CallBuiltin<builtin::FindOrderedHashMapEntry>(
+            __ NoContextConstant(), {.table = data_structure, .key = key});
       case FindOrderedHashEntryOp::Kind::kFindOrderedHashMapEntryForInt32Key: {
         // Compute the integer hash code.
         V<WordPtr> hash = __ ChangeUint32ToUintPtr(ComputeUnseededHash(key));
@@ -3628,8 +3664,8 @@ class MachineLoweringReducer : public Next {
         return result;
       }
       case FindOrderedHashEntryOp::Kind::kFindOrderedHashSetEntry:
-        return __ CallBuiltin_FindOrderedHashSetEntry(
-            isolate_, __ NoContextConstant(), data_structure, key);
+        return __ template CallBuiltin<builtin::FindOrderedHashSetEntry>(
+            __ NoContextConstant(), {.table = data_structure, .key = key});
     }
   }
 
@@ -3969,7 +4005,7 @@ class MachineLoweringReducer : public Next {
       }
     }
     return __ template LoadField<Float64>(
-        heap_object, AccessBuilder::ForHeapNumberOrOddballOrHoleValue());
+        heap_object, AccessBuilder::ForHeapNumberOrOddballValue());
   }
 
   V<Word32> LoadFromSeqString(V<Object> receiver, V<WordPtr> position,

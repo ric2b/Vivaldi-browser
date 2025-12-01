@@ -13,10 +13,12 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <utility>
 
+#include "absl/base/nullability.h"
+#include "api/environment/environment.h"
 #include "api/sequence_checker.h"
 #include "api/units/time_delta.h"
-#include "api/units/timestamp.h"
 #include "rtc_base/async_packet_socket.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
@@ -25,30 +27,30 @@
 #include "rtc_base/socket.h"
 #include "rtc_base/socket_address.h"
 #include "rtc_base/socket_factory.h"
-#include "rtc_base/time_utils.h"
 
 namespace webrtc {
 
-AsyncUDPSocket* AsyncUDPSocket::Create(Socket* socket,
-                                       const SocketAddress& bind_address) {
-  std::unique_ptr<Socket> owned_socket(socket);
+absl_nullable std::unique_ptr<AsyncUDPSocket> AsyncUDPSocket::Create(
+    const Environment& env,
+    const SocketAddress& bind_address,
+    SocketFactory& factory) {
+  std::unique_ptr<Socket> socket =
+      factory.Create(bind_address.family(), SOCK_DGRAM);
+  if (socket == nullptr) {
+    return nullptr;
+  }
   if (socket->Bind(bind_address) < 0) {
     RTC_LOG(LS_ERROR) << "Bind() failed with error " << socket->GetError();
     return nullptr;
   }
-  return new AsyncUDPSocket(owned_socket.release());
+  return std::make_unique<AsyncUDPSocket>(env, std::move(socket));
 }
 
-AsyncUDPSocket* AsyncUDPSocket::Create(SocketFactory* factory,
-                                       const SocketAddress& bind_address) {
-  Socket* socket = factory->CreateSocket(bind_address.family(), SOCK_DGRAM);
-  if (!socket)
-    return nullptr;
-  return Create(socket, bind_address);
-}
-
-AsyncUDPSocket::AsyncUDPSocket(Socket* socket) : socket_(socket) {
-  sequence_checker_.Detach();
+AsyncUDPSocket::AsyncUDPSocket(const Environment& env,
+                               absl_nonnull std::unique_ptr<Socket> socket)
+    : env_(env),
+      sequence_checker_(SequenceChecker::kDetached),
+      socket_(std::move(socket)) {
   // The socket should start out readable but not writable.
   socket_->SignalReadEvent.connect(this, &AsyncUDPSocket::OnReadEvent);
   socket_->SignalWriteEvent.connect(this, &AsyncUDPSocket::OnWriteEvent);
@@ -65,7 +67,8 @@ SocketAddress AsyncUDPSocket::GetRemoteAddress() const {
 int AsyncUDPSocket::Send(const void* pv,
                          size_t cb,
                          const AsyncSocketPacketOptions& options) {
-  SentPacketInfo sent_packet(options.packet_id, TimeMillis(),
+  SentPacketInfo sent_packet(options.packet_id,
+                             env_.clock().TimeInMilliseconds(),
                              options.info_signaled_after_sent);
   CopySocketInformationToPacketInfo(cb, *this, &sent_packet.info);
   int ret = socket_->Send(pv, cb);
@@ -77,16 +80,17 @@ int AsyncUDPSocket::SendTo(const void* pv,
                            size_t cb,
                            const SocketAddress& addr,
                            const AsyncSocketPacketOptions& options) {
-  SentPacketInfo sent_packet(options.packet_id, TimeMillis(),
+  SentPacketInfo sent_packet(options.packet_id,
+                             env_.clock().TimeInMilliseconds(),
                              options.info_signaled_after_sent);
   CopySocketInformationToPacketInfo(cb, *this, &sent_packet.info);
-  if (has_set_ect1_options_ != options.ecn_1) {
+  if (has_set_ect1_options_ != options.ect_1) {
     // It is unclear what is most efficient, setting options on every sent
     // packet or when changed. Potentially, can separate send sockets be used?
     // This is the easier implementation.
     if (socket_->SetOption(Socket::Option::OPT_SEND_ECN,
-                           options.ecn_1 ? 1 : 0) == 0) {
-      has_set_ect1_options_ = options.ecn_1;
+                           options.ect_1 ? 1 : 0) == 0) {
+      has_set_ect1_options_ = options.ect_1;
     }
   }
   int ret = socket_->SendTo(pv, cb, addr);
@@ -141,12 +145,12 @@ void AsyncUDPSocket::OnReadEvent(Socket* socket) {
 
   if (!receive_buffer.arrival_time) {
     // Timestamp from socket is not available.
-    receive_buffer.arrival_time = Timestamp::Micros(TimeMicros());
+    receive_buffer.arrival_time = env_.clock().CurrentTime();
   } else {
     if (!socket_time_offset_) {
       // Estimate timestamp offset from first packet arrival time.
       socket_time_offset_ =
-          Timestamp::Micros(TimeMicros()) - *receive_buffer.arrival_time;
+          env_.clock().CurrentTime() - *receive_buffer.arrival_time;
     }
     *receive_buffer.arrival_time += *socket_time_offset_;
   }

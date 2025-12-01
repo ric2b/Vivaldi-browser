@@ -15,8 +15,9 @@ namespace vivaldi {
 // static
 VivaldiAccountManager* VivaldiAccountManagerFactory::GetForProfile(
   ProfileIOS* profile) {
-  return static_cast<VivaldiAccountManager*>(
-      GetInstance()->GetServiceForBrowserState(profile, true));
+  return GetInstance()->GetServiceForProfileAs<VivaldiAccountManager>(
+      profile,
+      /*create=*/true);
 }
 
 // static
@@ -26,9 +27,7 @@ VivaldiAccountManagerFactory* VivaldiAccountManagerFactory::GetInstance() {
 }
 
 VivaldiAccountManagerFactory::VivaldiAccountManagerFactory()
-    : BrowserStateKeyedServiceFactory(
-          "VivaldiAccountManager",
-          BrowserStateDependencyManager::GetInstance()) {
+    : ProfileKeyedServiceFactoryIOS("VivaldiAccountManager") {
   DependsOn(IOSChromeProfilePasswordStoreFactory::GetInstance());
 }
 
@@ -36,9 +35,7 @@ VivaldiAccountManagerFactory::~VivaldiAccountManagerFactory() {}
 
 std::unique_ptr<KeyedService>
 VivaldiAccountManagerFactory::BuildServiceInstanceFor(
-    web::BrowserState* context) const {
-  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
-
+    ProfileIOS* profile) const {
   auto url_loader_factory = profile->GetSharedURLLoaderFactory();
   auto password_store = IOSChromeProfilePasswordStoreFactory::GetForProfile(
       profile, ServiceAccessType::IMPLICIT_ACCESS);

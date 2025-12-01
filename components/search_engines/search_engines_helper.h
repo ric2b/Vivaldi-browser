@@ -45,4 +45,8 @@ const PrepopulatedEngine* GetFallbackEngine(
 
 }  // namespace TemplateURLPrepopulateData
 
+// Vivaldi functions to manage TemplateURL URLs display in front.
+std::string GetUrlFromDisplay(std::string url);
+std::string GetUrlToDisplay(const std::string& url);
+
 #endif  // COMPONENTS_SEARCH_ENGINES_SEARCH_ENGINES_HELPER_H_

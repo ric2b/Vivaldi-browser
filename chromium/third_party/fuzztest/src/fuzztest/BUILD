@@ -15,6 +15,7 @@
 # FuzzTest: a coverage-guided fuzzing / property-based testing framework.
 
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -79,6 +80,7 @@ cc_library(
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:string_view",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//fuzztest/internal:logging",
         "@com_google_fuzztest//fuzztest/internal:registration",
         "@com_google_fuzztest//fuzztest/internal:registry",
@@ -91,9 +93,9 @@ cc_test(
     srcs = ["fuzztest_macros_test.cc"],
     deps = [
         ":fuzztest_macros",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:temp_dir",
         "@googletest//:gtest_main",
     ],
@@ -104,6 +106,8 @@ cc_library(
     testonly = 1,
     srcs = ["fuzztest_gtest_main.cc"],
     deps = [
+        "@abseil-cpp//absl/debugging:failure_signal_handler",
+        "@abseil-cpp//absl/debugging:symbolize",
         "@com_google_fuzztest//fuzztest:init_fuzztest",
         "@googletest//:gtest",
     ],
@@ -124,11 +128,11 @@ cc_library(
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/time",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//fuzztest/internal:configuration",
         "@com_google_fuzztest//fuzztest/internal:flag_name",
         "@com_google_fuzztest//fuzztest/internal:googletest_adaptor",
         "@com_google_fuzztest//fuzztest/internal:io",
-        "@com_google_fuzztest//fuzztest/internal:logging",
         "@com_google_fuzztest//fuzztest/internal:registry",
         "@com_google_fuzztest//fuzztest/internal:runtime",
         "@googletest//:gtest",
@@ -160,12 +164,11 @@ cc_library(
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/base:no_destructor",
         "@abseil-cpp//absl/flags:flag",
-        "@abseil-cpp//absl/log:absl_check",
         "@abseil-cpp//absl/random",
         "@abseil-cpp//absl/random:bit_gen_ref",
         "@abseil-cpp//absl/synchronization",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//fuzztest/internal:io",
-        "@com_google_fuzztest//fuzztest/internal:logging",
         "@com_google_fuzztest//fuzztest/internal/domains:core_domains_impl",
     ],
     alwayslink = True,
@@ -191,8 +194,10 @@ cc_library(
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/random:bit_gen_ref",
         "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:string_view",
         "@abseil-cpp//absl/types:span",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//fuzztest/internal:any",
         "@com_google_fuzztest//fuzztest/internal:logging",
         "@com_google_fuzztest//fuzztest/internal:meta",

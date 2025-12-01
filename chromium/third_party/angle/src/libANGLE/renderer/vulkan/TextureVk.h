@@ -243,11 +243,12 @@ class TextureVk : public TextureImpl, public angle::ObserverInterface
                                 const vk::Format *imageUniformFormat,
                                 const gl::SamplerBinding *samplerBinding,
                                 bool isImage,
-                                const vk::BufferView **viewOut);
+                                const vk::BufferView **viewOut,
+                                VkFormat *viewVkFormatOut);
 
     // A special view used for texture copies that shouldn't perform swizzle.
     const vk::ImageView &getCopyImageView() const;
-    angle::Result getStorageImageView(vk::ErrorContext *context,
+    angle::Result getStorageImageView(ContextVk *contextVk,
                                       const gl::ImageUnit &binding,
                                       const vk::ImageView **imageViewOut);
 
@@ -563,7 +564,7 @@ class TextureVk : public TextureImpl, public angle::ObserverInterface
                                               gl::LevelIndex level,
                                               GLuint layerIndex,
                                               GLuint layerCount);
-    angle::Result getLevelLayerImageView(vk::ErrorContext *context,
+    angle::Result getLevelLayerImageView(ContextVk *contextVk,
                                          gl::LevelIndex levelGL,
                                          size_t layer,
                                          const vk::ImageView **imageViewOut);
@@ -624,7 +625,7 @@ class TextureVk : public TextureImpl, public angle::ObserverInterface
     void handleImmutableSamplerTransition(const vk::ImageHelper *previousImage,
                                           const vk::ImageHelper *nextImage);
 
-    vk::ImageAccess getRequiredImageAccess() const { return mRequiredImageAccess; }
+    vk::ImageFormatSupport getRequiredFormatSupport() const { return mRequiredFormatSupport; }
 
     void stageSelfAsSubresourceUpdates(ContextVk *contextVk);
 
@@ -651,7 +652,7 @@ class TextureVk : public TextureImpl, public angle::ObserverInterface
     UniqueSerial mImageSiblingSerial;
 
     bool mRequiresMutableStorage;
-    vk::ImageAccess mRequiredImageAccess;
+    vk::ImageFormatSupport mRequiredFormatSupport;
     bool mImmutableSamplerDirty;
 
     // Only valid if this texture is an "EGLImage target" and the associated EGL Image was

@@ -195,6 +195,9 @@ using SpellCheckerCompletionHandlerType = void (
   return _lastAssignedSequenceNumber;
 }
 
+- (void)dismissCorrectionIndicatorForView:(NSView*)view {
+}
+
 @end
 
 namespace content {
@@ -421,8 +424,7 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
             std::move(site_instance_group),
             routing_id,
             /*hidden=*/false,
-            /*renderer_initiated_creation=*/false,
-            std::make_unique<FrameTokenMessageQueue>()) {
+            /*renderer_initiated_creation=*/false) {
     SetupMockRenderInputRouter();
 
     mojo::AssociatedRemote<blink::mojom::WidgetHost> widget_host;

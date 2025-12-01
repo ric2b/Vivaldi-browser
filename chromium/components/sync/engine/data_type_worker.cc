@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <map>
 #include <set>
 #include <utility>
@@ -27,11 +28,11 @@
 #include "base/time/time.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/uuid.h"
+#include "components/autofill/core/browser/webdata/payments/payments_sync_util.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/base/data_type.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/features.h"
-#include "components/sync/base/hash_util.h"
 #include "components/sync/base/sync_invalidation_adapter.h"
 #include "components/sync/base/time.h"
 #include "components/sync/engine/bookmark_update_preprocessing.h"
@@ -53,10 +54,6 @@ namespace syncer {
 
 namespace {
 
-const char kUndecryptablePendingUpdatesDroppedHistogramName[] =
-    "Sync.DataTypeUndecryptablePendingUpdatesDropped";
-const char kBlockedByUndecryptableUpdateHistogramName[] =
-    "Sync.DataTypeBlockedDueToUndecryptableUpdate";
 const char kPasswordNotesStateHistogramName[] =
     "Sync.PasswordNotesStateInUpdate";
 constexpr char kEntityEncryptionResultHistogramName[] =
@@ -147,18 +144,21 @@ void AdaptClientTagForFullUpdateData(DataType data_type,
   if (data_type == AUTOFILL_WALLET_DATA) {
     CHECK(data->specifics.has_autofill_wallet());
     data->client_tag_hash = ClientTagHash::FromUnhashed(
-        AUTOFILL_WALLET_DATA, GetUnhashedClientTagFromAutofillWalletSpecifics(
-                                  data->specifics.autofill_wallet()));
+        AUTOFILL_WALLET_DATA,
+        autofill::GetUnhashedClientTagFromAutofillWalletSpecifics(
+            data->specifics.autofill_wallet()));
   } else if (data_type == AUTOFILL_WALLET_OFFER) {
     CHECK(data->specifics.has_autofill_offer());
     data->client_tag_hash = ClientTagHash::FromUnhashed(
-        AUTOFILL_WALLET_OFFER, GetUnhashedClientTagFromAutofillOfferSpecifics(
-                                   data->specifics.autofill_offer()));
+        AUTOFILL_WALLET_OFFER,
+        autofill::GetUnhashedClientTagFromAutofillOfferSpecifics(
+            data->specifics.autofill_offer()));
   } else if (data_type == AUTOFILL_VALUABLE) {
     CHECK(data->specifics.has_autofill_valuable());
     data->client_tag_hash = ClientTagHash::FromUnhashed(
-        AUTOFILL_VALUABLE, GetUnhashedClientTagFromAutofillValuableSpecifics(
-                               data->specifics.autofill_valuable()));
+        AUTOFILL_VALUABLE,
+        autofill::GetUnhashedClientTagFromAutofillValuableSpecifics(
+            data->specifics.autofill_valuable()));
   } else {
     NOTREACHED();
   }
@@ -353,27 +353,26 @@ DataTypeWorker::DataTypeWorker(DataType type,
     // DataTypeWorker::ctor(), but sync cycle is not scheduled. New sync
     // cycle has to be triggered right after we loaded persisted
     // invalidations.
-    for (int i = 0; i < data_type_state_.invalidations_size(); ++i) {
+    for (const sync_pb::DataTypeState::Invalidation& invalidation :
+         data_type_state_.invalidations()) {
       // Do not populate `received_time` on load from the disk because it is not
       // persisted.
       pending_invalidations_.emplace_back(
           std::make_unique<SyncInvalidationAdapter>(
-              data_type_state_.invalidations(i).hint(),
-              data_type_state_.invalidations(i).has_version()
-                  ? std::optional<int64_t>(
-                        data_type_state_.invalidations(i).version())
+              invalidation.hint(),
+              invalidation.has_version()
+                  ? std::optional<int64_t>(invalidation.version())
                   : std::nullopt),
           /*is_processed=*/false,
           /*received_time=*/std::nullopt);
     }
 
-    bool is_version_order_correct = true;
-    for (size_t i = 1; i < pending_invalidations_.size(); ++i) {
-      is_version_order_correct &= (SyncInvalidation::LessThanByVersion(
-          *pending_invalidations_[i - 1].pending_invalidation,
-          *pending_invalidations_[i].pending_invalidation));
-    }
-    if (!is_version_order_correct) {
+    if (!std::is_sorted(
+            pending_invalidations_.begin(), pending_invalidations_.end(),
+            [](const PendingInvalidation& a, const PendingInvalidation& b) {
+              return SyncInvalidation::LessThanByVersion(
+                  *a.pending_invalidation, *b.pending_invalidation);
+            })) {
       DVLOG(1) << "Cleaning invalidations in `data_type_state` due to "
                   "incorrect version order.";
       pending_invalidations_.clear();
@@ -617,12 +616,6 @@ void DataTypeWorker::ProcessGetUpdatesResponse(
   // Some updates pending decryption might have been overwritten by decryptable
   // ones. So some encryption keys may no longer fit the definition of unknown.
   RemoveKeysNoLongerUnknown();
-
-  if (!entries_pending_decryption_.empty() &&
-      (!encryption_enabled_ || cryptographer_->CanEncrypt())) {
-    base::UmaHistogramEnumeration(kBlockedByUndecryptableUpdateHistogramName,
-                                  DataTypeHistogramValue(type_));
-  }
 
   // Usually, updates must only be applied at the end of a sync cycle, once all
   // updates have been downloaded. This is mostly important during initial sync,
@@ -1192,22 +1185,9 @@ void DataTypeWorker::MaybeDropPendingUpdatesEncryptedWith(
     return;
   }
 
-  size_t updates_before_dropping = entries_pending_decryption_.size();
   std::erase_if(entries_pending_decryption_, [&](const auto& id_and_update) {
     return key_name == GetEncryptionKeyName(id_and_update.second);
   });
-
-  // If updates were dropped, record how many.
-  const size_t dropped_updates =
-      updates_before_dropping - entries_pending_decryption_.size();
-  if (dropped_updates > 0) {
-    base::UmaHistogramCounts1000(
-        kUndecryptablePendingUpdatesDroppedHistogramName, dropped_updates);
-    base::UmaHistogramCounts1000(
-        base::StrCat({kUndecryptablePendingUpdatesDroppedHistogramName, ".",
-                      DataTypeToHistogramSuffix(type_)}),
-        dropped_updates);
-  }
 }
 
 void DataTypeWorker::RemoveKeysNoLongerUnknown() {

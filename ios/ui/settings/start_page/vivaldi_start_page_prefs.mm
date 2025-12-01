@@ -114,8 +114,10 @@ static PrefService *_localPrefService = nil;
       return VivaldiStartPageLayoutStyleSmall;
     case 3:
       return VivaldiStartPageLayoutStyleList;
+#if defined(VIVALDI_RELEASE_KIND) && VIVALDI_RELEASE_KIND != 2 // Not final
     case 4:
       return VivaldiStartPageLayoutStyleIcon;
+#endif
     default:
       return VivaldiStartPageLayoutStyleSmall;
   }

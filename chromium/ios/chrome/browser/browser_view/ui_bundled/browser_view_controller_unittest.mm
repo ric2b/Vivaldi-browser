@@ -73,10 +73,11 @@
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/model/fake_authentication_service_delegate.h"
 #import "ios/chrome/browser/start_surface/ui_bundled/start_surface_recent_tab_browser_agent.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/coordinator/tab_strip_coordinator.h"
+#import "ios/chrome/browser/tab_switcher/tab_strip/coordinator/tab_strip_coordinator.h"
 #import "ios/chrome/browser/tabs/model/tab_helper_util.h"
 #import "ios/chrome/browser/tabs/ui_bundled/foreground_tab_animation_view.h"
 #import "ios/chrome/browser/tips_manager/model/tips_manager_ios_factory.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/fullscreen/toolbars_size_browser_agent.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/toolbar_coordinator.h"
 #import "ios/chrome/browser/url_loading/model/new_tab_animation_tab_helper.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_notifier_browser_agent.h"
@@ -108,7 +109,7 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     test_profile_builder.AddTestingFactory(
         commerce::ShoppingServiceFactory::GetInstance(),
         base::BindRepeating(
-            [](web::BrowserState*) -> std::unique_ptr<KeyedService> {
+            [](ProfileIOS* profile) -> std::unique_ptr<KeyedService> {
               return commerce::MockShoppingService::Build();
             }));
     test_profile_builder.AddTestingFactory(
@@ -160,6 +161,9 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     StartSurfaceRecentTabBrowserAgent::CreateForBrowser(browser_.get());
     OmniboxPositionBrowserAgent::CreateForBrowser(browser_.get());
     BrowserViewVisibilityNotifierBrowserAgent::CreateForBrowser(browser_.get());
+    // FullscreenController depends on ToolbarsSizeBrowserAgent, so the agent
+    // must be created first. Please maintain this order.
+    ToolbarsSizeBrowserAgent::CreateForBrowser(browser_.get());
     FullscreenController::CreateForBrowser(browser_.get());
     DiscoverFeedVisibilityBrowserAgent::CreateForBrowser(browser_.get());
 
@@ -335,6 +339,7 @@ class BrowserViewControllerTest : public BlockCleanupTest {
 
   void TearDown() override {
     [tab_events_mediator_ disconnect];
+    window_.rootViewController = nil;
     [[bvc_ view] removeFromSuperview];
     [bvc_ shutdown];
     [bookmarks_coordinator_ stop];
@@ -383,12 +388,10 @@ class BrowserViewControllerTest : public BlockCleanupTest {
   void LoadNTP(web::WebState* web_state) {
     web::FakeWebState fake_web_state;
     fake_web_state.SetVisibleURL(GURL("chrome://newtab/"));
-    web::WebStateObserver* NTPHelper =
-        (web::WebStateObserver*)NewTabPageTabHelper::FromWebState(web_state);
     // Use the fake_web_state to fake the NTPHelper into believing that the NTP
     // has been loaded.
-    NTPHelper->PageLoaded(&fake_web_state,
-                          web::PageLoadCompletionStatus::SUCCESS);
+    NewTabPageTabHelper::FromWebState(web_state)->PageLoaded(
+        &fake_web_state, web::PageLoadCompletionStatus::SUCCESS);
   }
 
   void ExpectNewTabInsertionAnimation(bool animated, ProceduralBlock block) {

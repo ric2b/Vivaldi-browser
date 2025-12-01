@@ -15,6 +15,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "quiche/quic/core/crypto/proof_source.h"
+#include "quiche/quic/core/quic_time.h"
 #include "quiche/quic/moqt/moqt_live_relay_queue.h"
 #include "quiche/quic/moqt/moqt_messages.h"
 #include "quiche/quic/moqt/moqt_priority.h"
@@ -25,32 +26,34 @@
 
 namespace moqt::moq_chat {
 
-std::optional<MoqtAnnounceErrorReason>
-ChatServer::ChatServerSessionHandler::OnIncomingAnnounce(
+std::optional<MoqtPublishNamespaceErrorReason>
+ChatServer::ChatServerSessionHandler::OnIncomingPublishNamespace(
     const moqt::TrackNamespace& track_namespace,
     std::optional<VersionSpecificParameters> parameters) {
   if (track_name_.has_value() &&
       GetUserNamespace(*track_name_) != track_namespace) {
     // ChatServer only supports one track per client session at a time. Return
-    // ANNOUNCE_OK and exit.
+    // PUBLISH_NAMESPACE_OK and exit.
     return std::nullopt;
   }
-  // Accept the ANNOUNCE regardless of the chat_id.
+  // Accept the PUBLISH_NAMESPACE regardless of the chat_id.
   track_name_ = ConstructTrackNameFromNamespace(track_namespace,
                                                 GetChatId(track_namespace));
   if (!track_name_.has_value()) {
-    std::cout << "Malformed ANNOUNCE namespace\n";
-    return MoqtAnnounceErrorReason(RequestErrorCode::kTrackDoesNotExist,
-                                   "Not a valid namespace for this chat.");
+    std::cout << "Malformed PUBLISH_NAMESPACE namespace\n";
+    return MoqtPublishNamespaceErrorReason(
+        RequestErrorCode::kTrackDoesNotExist,
+        "Not a valid namespace for this chat.");
   }
   if (!parameters.has_value()) {
-    std::cout << "Received UNANNOUNCE for " << track_namespace.ToString()
-              << "\n";
+    std::cout << "Received PUBLISH_NAMESPACE_DONE for "
+              << track_namespace.ToString() << "\n";
     server_->DeleteUser(*track_name_);
     track_name_.reset();
     return std::nullopt;
   }
-  std::cout << "Received ANNOUNCE for " << track_namespace.ToString() << "\n";
+  std::cout << "Received PUBLISH_NAMESPACE for " << track_namespace.ToString()
+            << "\n";
   session_->SubscribeCurrentObject(*track_name_,
                                    server_->remote_track_visitor(),
                                    moqt::VersionSpecificParameters());
@@ -58,11 +61,11 @@ ChatServer::ChatServerSessionHandler::OnIncomingAnnounce(
   return std::nullopt;
 }
 
-void ChatServer::ChatServerSessionHandler::OnOutgoingAnnounceReply(
+void ChatServer::ChatServerSessionHandler::OnOutgoingPublishNamespaceReply(
     TrackNamespace track_namespace,
-    std::optional<MoqtAnnounceErrorReason> error_message) {
+    std::optional<MoqtPublishNamespaceErrorReason> error_message) {
   // Log the result; the server doesn't really care.
-  std::cout << "ANNOUNCE for " << track_namespace.ToString();
+  std::cout << "PUBLISH_NAMESPACE for " << track_namespace.ToString();
   if (error_message.has_value()) {
     std::cout << " failed with error: " << error_message->reason_phrase << "\n";
   } else {
@@ -73,8 +76,8 @@ void ChatServer::ChatServerSessionHandler::OnOutgoingAnnounceReply(
 ChatServer::ChatServerSessionHandler::ChatServerSessionHandler(
     MoqtSession* session, ChatServer* server)
     : session_(session), server_(server) {
-  session_->callbacks().incoming_announce_callback = absl::bind_front(
-      &ChatServer::ChatServerSessionHandler::OnIncomingAnnounce, this);
+  session_->callbacks().incoming_publish_namespace_callback = absl::bind_front(
+      &ChatServer::ChatServerSessionHandler::OnIncomingPublishNamespace, this);
   session_->callbacks().session_terminated_callback =
       [this](absl::string_view error_message) {
         std::cout << "Session terminated, reason = " << error_message << "\n";
@@ -83,15 +86,15 @@ ChatServer::ChatServerSessionHandler::ChatServerSessionHandler(
           server_->DeleteUser(*track_name_);
         }
       };
-  session_->callbacks().incoming_subscribe_announces_callback =
+  session_->callbacks().incoming_subscribe_namespace_callback =
       [this](const moqt::TrackNamespace& chat_namespace,
              std::optional<VersionSpecificParameters> parameters) {
         if (parameters.has_value()) {
           subscribed_namespaces_.insert(chat_namespace);
-          std::cout << "Received SUBSCRIBE_ANNOUNCES for ";
+          std::cout << "Received SUBSCRIBE_NAMESPACE for ";
         } else {
           subscribed_namespaces_.erase(chat_namespace);
-          std::cout << "Received UNSUBSCRIBE_ANNOUNCES for ";
+          std::cout << "Received UNSUBSCRIBE_NAMESPACE for ";
         }
         std::cout << chat_namespace.ToString() << "\n";
         if (!IsValidChatNamespace(chat_namespace)) {
@@ -103,19 +106,19 @@ ChatServer::ChatServerSessionHandler::ChatServerSessionHandler(
         if (!parameters.has_value()) {
           return std::optional<MoqtSubscribeErrorReason>();
         }
-        // Send all ANNOUNCE.
+        // Send all PUBLISH_NAMESPACE.
         for (auto& [track_name, queue] : server_->user_queues_) {
-          std::cout << "Sending ANNOUNCE for "
+          std::cout << "Sending PUBLISH_NAMESPACE for "
                     << GetUserNamespace(track_name).ToString() << "\n";
           if (track_name_.has_value() &&
               GetUsername(*track_name_) == GetUsername(track_name)) {
-            // Don't ANNOUNCE a client to itself.
+            // Don't PUBLISH_NAMESPACE a client to itself.
             continue;
           }
-          session_->Announce(
+          session_->PublishNamespace(
               GetUserNamespace(track_name),
               absl::bind_front(&ChatServer::ChatServerSessionHandler::
-                                   OnOutgoingAnnounceReply,
+                                   OnOutgoingPublishNamespaceReply,
                                this),
               moqt::VersionSpecificParameters());
         }
@@ -197,10 +200,11 @@ ChatServer::~ChatServer() {
 void ChatServer::AddUser(FullTrackName track_name) {
   // Add a local track.
   user_queues_[track_name] = std::make_shared<MoqtLiveRelayQueue>(
-      track_name, MoqtForwardingPreference::kSubgroup);
+      track_name, MoqtForwardingPreference::kSubgroup,
+      MoqtDeliveryOrder::kAscending, quic::QuicTime::Infinite());
   publisher_.Add(user_queues_[track_name]);
   for (auto& session : sessions_) {
-    session.AnnounceIfSubscribed(track_name.track_namespace());
+    session.PublishNamespaceIfSubscribed(track_name.track_namespace());
   }
 }
 
@@ -214,7 +218,7 @@ void ChatServer::DeleteUser(FullTrackName track_name) {
   publisher_.Delete(track_name);
   TrackNamespace track_namespace = GetUserNamespace(track_name);
   for (auto& session : sessions_) {
-    session.UnannounceIfSubscribed(track_namespace);
+    session.PublishNamespaceDoneIfSubscribed(track_namespace);
   }
   if (user_queues_.empty()) {
     std::cout << "No more users!\n";

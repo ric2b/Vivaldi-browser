@@ -3,16 +3,6 @@
 <translationbundle lang="id">
 <translation id="3830627370375585318">Izinkan Vivaldi mengakses jaringan di pengaturan firewall atau antivirus
           Anda.</translation>
-<translation id="4200102020577305737">Buka
-          menu Vivaldi &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Pengaturan LAN
-          dan batalkan pilihan "Gunakan server proxy untuk LAN".</translation>
 <translation id="4932161901409251843">Go to
           menu Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@
           Jika hal ini tidak menyelesaikan masalah, sebaiknya pilih lagi opsi ini
           untuk meningkatkan kinerja.</translation>
 <translation id="7496505986576158197">Vivaldi dibuat dengan proyek sumber terbuka <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> dan <ph name="BEGIN_LINK_OSS" />software sumber terbuka lain<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Ke
+          menu Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Jaringan &amp; Internet &gt; Proksi
+          dan hapus pilihan "Otomatis deteksi pengaturan".</translation>
 </translationbundle>

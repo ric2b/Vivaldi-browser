@@ -74,6 +74,7 @@
 #include "components/signin/public/identity_manager/accounts_mutator.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
+#include "components/sync/base/features.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_ui.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
@@ -337,7 +338,7 @@ void InlineSigninHelper::OnClientOAuthSuccess(const ClientOAuthResult& result) {
         base::IgnoreArgs<Browser*>(base::BindOnce(
             &InlineSigninHelper::OnClientOAuthSuccessAndBrowserOpened,
             base::Unretained(this), result)),
-        true, false, profile_);
+        true, false, false, profile_);
   } else {
     OnClientOAuthSuccessAndBrowserOpened(result);
   }
@@ -460,6 +461,13 @@ void InlineSigninHelper::CreateSyncStarter(const std::string& refresh_token) {
           signin_metrics::AccessPoint::kForcedSignin,
           signin_metrics::SourceForRefreshTokenOperation::
               kInlineLoginHandler_Signin);
+
+  // TODO(crbug.com/419539610): Reconsider if we want to show the history sync
+  // promo instead of stopping here.
+  if (base::FeatureList::IsEnabled(
+          syncer::kReplaceSyncPromosWithSignInPromos)) {
+    return;
+  }
 
   std::unique_ptr<TurnSyncOnHelper::Delegate> delegate =
       std::make_unique<ForcedSigninTurnSyncOnHelperDelegate>(browser);
@@ -712,7 +720,9 @@ void InlineLoginHandlerImpl::FinishCompleteLogin(
   switch (reason) {
     case HandlerSigninReason::kReauthentication:
     case HandlerSigninReason::kForcedSigninPrimaryAccount:
-      can_offer_error = CanOfferSignin(profile, params.gaia_id, params.email);
+      can_offer_error =
+          CanOfferSignin(profile, params.gaia_id, params.email,
+                         /*allow_account_from_other_profile=*/false);
       break;
     case HandlerSigninReason::kFetchLstOnly:
       break;

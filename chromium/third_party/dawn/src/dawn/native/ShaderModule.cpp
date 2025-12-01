@@ -29,7 +29,6 @@
 
 #include <algorithm>
 #include <limits>
-#include <set>
 #include <sstream>
 #include <utility>
 
@@ -90,6 +89,9 @@ BindingInfoType TintResourceTypeToBindingInfoType(
         case tint::inspector::ResourceBinding::ResourceType::kReadOnlyStorageTexture:
         case tint::inspector::ResourceBinding::ResourceType::kReadWriteStorageTexture:
             return BindingInfoType::StorageTexture;
+        case tint::inspector::ResourceBinding::ResourceType::kReadOnlyTexelBuffer:
+        case tint::inspector::ResourceBinding::ResourceType::kReadWriteTexelBuffer:
+            return BindingInfoType::TexelBuffer;
         case tint::inspector::ResourceBinding::ResourceType::kExternalTexture:
             return BindingInfoType::ExternalTexture;
         case tint::inspector::ResourceBinding::ResourceType::kInputAttachment:
@@ -292,6 +294,19 @@ ResultOrError<wgpu::StorageTextureAccess> TintResourceTypeToStorageTextureAccess
     DAWN_UNREACHABLE();
 }
 
+ResultOrError<wgpu::TexelBufferAccess> TintResourceTypeToTexelBufferAccess(
+    tint::inspector::ResourceBinding::ResourceType resource_type) {
+    switch (resource_type) {
+        case tint::inspector::ResourceBinding::ResourceType::kReadOnlyTexelBuffer:
+            return wgpu::TexelBufferAccess::ReadOnly;
+        case tint::inspector::ResourceBinding::ResourceType::kReadWriteTexelBuffer:
+            return wgpu::TexelBufferAccess::ReadWrite;
+        default:
+            return DAWN_VALIDATION_ERROR("Attempted to convert non-texel buffer resource type");
+    }
+    DAWN_UNREACHABLE();
+}
+
 ResultOrError<InterStageComponentType> TintComponentTypeToInterStageComponentType(
     tint::inspector::ComponentType type) {
     switch (type) {
@@ -420,6 +435,42 @@ ResultOrError<PixelLocalMemberType> FromTintPixelLocalMemberType(
     DAWN_UNREACHABLE();
 }
 
+ResultOrError<wgpu::DynamicBindingKind> FromArrayResourceType(tint::ResourceType type) {
+    switch (type) {
+        case tint::ResourceType::kTexture1d_f32:
+        case tint::ResourceType::kTexture1d_i32:
+        case tint::ResourceType::kTexture1d_u32:
+        case tint::ResourceType::kTexture2d_f32:
+        case tint::ResourceType::kTexture2d_i32:
+        case tint::ResourceType::kTexture2d_u32:
+        case tint::ResourceType::kTexture2dArray_f32:
+        case tint::ResourceType::kTexture2dArray_i32:
+        case tint::ResourceType::kTexture2dArray_u32:
+        case tint::ResourceType::kTexture3d_f32:
+        case tint::ResourceType::kTexture3d_i32:
+        case tint::ResourceType::kTexture3d_u32:
+        case tint::ResourceType::kTextureCube_f32:
+        case tint::ResourceType::kTextureCube_i32:
+        case tint::ResourceType::kTextureCube_u32:
+        case tint::ResourceType::kTextureCubeArray_f32:
+        case tint::ResourceType::kTextureCubeArray_i32:
+        case tint::ResourceType::kTextureCubeArray_u32:
+        case tint::ResourceType::kTextureMultisampled2d_f32:
+        case tint::ResourceType::kTextureMultisampled2d_i32:
+        case tint::ResourceType::kTextureMultisampled2d_u32:
+        case tint::ResourceType::kTextureDepth2d:
+        case tint::ResourceType::kTextureDepth2dArray:
+        case tint::ResourceType::kTextureDepthCube:
+        case tint::ResourceType::kTextureDepthCubeArray:
+        case tint::ResourceType::kTextureDepthMultisampled2d:
+            return wgpu::DynamicBindingKind::SampledTexture;
+        case tint::ResourceType::kEmpty:
+            return DAWN_VALIDATION_ERROR(
+                "Attempted to convert 'None' array resource type from Tint.");
+    }
+    DAWN_UNREACHABLE();
+}
+
 // Validation errors, if any, are stored within outputParseResult instead of get returned as
 // ErrorData.
 MaybeError ParseWGSL(std::unique_ptr<tint::Source::File> file,
@@ -457,24 +508,33 @@ MaybeError ParseSPIRV(const std::vector<uint32_t>& spirv,
                       const WGSLAllowedFeatures& allowedFeatures,
                       ShaderModuleParseResult* outputParseResult,
                       bool allowNonUniformDerivatives) {
-    tint::spirv::reader::Options options;
+    tint::Result<tint::core::ir::Module> irResult = tint::spirv::reader::ReadIR(spirv);
+    if (irResult != tint::Success) {
+        outputParseResult->SetValidationError(
+            DAWN_VALIDATION_ERROR("Error while parsing SPIR-V: %s\n", irResult.Failure().reason));
+        DAWN_ASSERT(!outputParseResult->HasTintProgram() && outputParseResult->HasError());
+        return {};
+    }
+
+    tint::wgsl::writer::Options options;
     options.allow_non_uniform_derivatives = allowNonUniformDerivatives;
     options.allowed_features = allowedFeatures.ToTint();
+    auto wgslResult = tint::wgsl::writer::ProgramFromIR(irResult.Get(), options);
 
-    tint::Program program = tint::spirv::reader::Read(spirv, options);
+    // If WGSL generation succeeded, store the generated Tint program with no validation error.
+    if (wgslResult == tint::Success) {
+        tint::Program program = wgslResult.Move();
 
-    // Store the compilation messages into outputParseResult.
-    DAWN_TRY(outputParseResult->compilationMessages.AddMessages(program.Diagnostics()));
+        // Store the compilation messages into outputParseResult.
+        DAWN_TRY(outputParseResult->compilationMessages.AddMessages(program.Diagnostics()));
 
-    // If SpirV parsing succeed, store the generated Tint program with no validation error.
-    if (program.IsValid()) {
         outputParseResult->tintProgram = UnsafeUnserializedValue<std::optional<Ref<TintProgram>>>(
             AcquireRef(new TintProgram(std::move(program), nullptr)));
         DAWN_ASSERT(outputParseResult->HasTintProgram() && !outputParseResult->HasError());
     } else {
         // Otherwise, store the validation error messages to outputParseResult.
-        outputParseResult->SetValidationError(
-            DAWN_VALIDATION_ERROR("Error while parsing SPIR-V: %s\n", program.Diagnostics().Str()));
+        outputParseResult->SetValidationError(DAWN_VALIDATION_ERROR(
+            "Error while generating WGSL: %s\n", wgslResult.Failure().reason));
         DAWN_ASSERT(!outputParseResult->HasTintProgram() && outputParseResult->HasError());
     }
 
@@ -487,11 +547,11 @@ std::vector<uint64_t> GetBindGroupMinBufferSizes(const BindingGroupInfoMap& shad
     std::vector<uint64_t> requiredBufferSizes(layout->GetUnverifiedBufferCount());
     uint32_t packedIdx = 0;
 
-    for (BindingIndex bindingIndex{0}; bindingIndex < layout->GetBufferCount(); ++bindingIndex) {
+    for (BindingIndex bindingIndex : layout->GetBufferIndices()) {
         const BindingInfo& bindingInfo = layout->GetBindingInfo(bindingIndex);
-        const auto* bufferBindingLayout =
-            std::get_if<BufferBindingInfo>(&bindingInfo.bindingLayout);
-        if (bufferBindingLayout == nullptr || bufferBindingLayout->minBindingSize > 0) {
+        const auto& bufferBindingLayout = std::get<BufferBindingInfo>(bindingInfo.bindingLayout);
+
+        if (bufferBindingLayout.minBindingSize > 0) {
             // Skip bindings that have minimum buffer size set in the layout
             continue;
         }
@@ -532,6 +592,7 @@ BindingInfoType GetShaderBindingType(const ShaderBindingInfo& shaderInfo) {
         [](const SamplerBindingInfo&) { return BindingInfoType::Sampler; },
         [](const TextureBindingInfo&) { return BindingInfoType::Texture; },
         [](const StorageTextureBindingInfo&) { return BindingInfoType::StorageTexture; },
+        [](const TexelBufferBindingInfo&) { return BindingInfoType::TexelBuffer; },
         [](const ExternalTextureBindingInfo&) { return BindingInfoType::ExternalTexture; },
         [](const InputAttachmentBindingInfo&) { return BindingInfoType::InputAttachment; });
 }
@@ -653,6 +714,23 @@ MaybeError ValidateCompatibilityOfSingleBindingWithLayout(const DeviceBase* devi
                             bindingLayout.viewDimension, bindingInfo.viewDimension);
             return {};
         },
+        [&](const TexelBufferBindingInfo& bindingInfo) -> MaybeError {
+            const TexelBufferBindingInfo& bindingLayout =
+                std::get<TexelBufferBindingInfo>(layoutInfo.bindingLayout);
+            DAWN_ASSERT(bindingLayout.format != wgpu::TextureFormat::Undefined);
+            DAWN_ASSERT(bindingInfo.format != wgpu::TextureFormat::Undefined);
+
+            DAWN_INVALID_IF(bindingLayout.access != bindingInfo.access,
+                            "The layout's binding access (%s) doesn't match the shader's binding "
+                            "access (%s).",
+                            bindingLayout.access, bindingInfo.access);
+
+            DAWN_INVALID_IF(bindingLayout.format != bindingInfo.format,
+                            "The layout's binding format (%s) doesn't match the shader's binding "
+                            "format (%s).",
+                            bindingLayout.format, bindingInfo.format);
+            return {};
+        },
         [&](const BufferBindingInfo& bindingInfo) -> MaybeError {
             const BufferBindingInfo& bindingLayout =
                 std::get<BufferBindingInfo>(layoutInfo.bindingLayout);
@@ -707,6 +785,30 @@ MaybeError ValidateCompatibilityOfSingleBindingWithLayout(const DeviceBase* devi
         });
 }
 
+MaybeError ValidateCompatibilityOfDynamicBindingArrayWithLayout(
+    DeviceBase* device,
+    const BindGroupLayoutInternalBase* layout,
+    const GroupDynamicBindingArrayInfo& shaderDynamicArray) {
+    DAWN_INVALID_IF(!layout->HasDynamicArray(), "%s doesn't contain a dynamic binding array.",
+                    layout);
+
+    DAWN_INVALID_IF(layout->GetAPIDynamicArrayStart() != shaderDynamicArray.start,
+                    "@binding for the dynamic array in the shader (%u) doesn't match the start "
+                    "(%u) defined in %s.",
+                    shaderDynamicArray.start, layout->GetAPIDynamicArrayStart(), layout);
+
+    // If the dynamic binding array is never accessed with any type in the shader, it is valid to
+    // use with any DynamicArrayKind.
+    if (shaderDynamicArray.kind != wgpu::DynamicBindingKind::Undefined) {
+        DAWN_INVALID_IF(shaderDynamicArray.kind != layout->GetDynamicArrayKind(),
+                        "Shader dynamic binding array is used with types (of kind %s) incompatible "
+                        "with %s's kind of dynamic binding array (%s).",
+                        shaderDynamicArray.kind, layout, layout->GetDynamicArrayKind());
+    }
+
+    return {};
+}
+
 MaybeError ValidateCompatibilityWithBindGroupLayout(DeviceBase* device,
                                                     BindGroupIndex group,
                                                     const EntryPointMetadata& entryPoint,
@@ -719,6 +821,15 @@ MaybeError ValidateCompatibilityWithBindGroupLayout(DeviceBase* device,
                          "validating that the entry-point's declaration for @group(%u) "
                          "@binding(%u) matches %s",
                          group, bindingId, layout);
+    }
+
+    // Check that the dynamic binding array, if any in the shader, matches the BindGroupLayout.
+    if (entryPoint.dynamicBindingArrays.contains(group)) {
+        DAWN_TRY_CONTEXT(
+            ValidateCompatibilityOfDynamicBindingArrayWithLayout(
+                device, layout, entryPoint.dynamicBindingArrays.at(group)),
+            "validating that the entry-point's dynamic binding array for @group(%u) matches %s",
+            group, layout);
     }
 
     return {};
@@ -1126,6 +1237,16 @@ ResultOrError<std::unique_ptr<EntryPointMetadata>> ReflectEntryPointUsingTint(
                 break;
             }
 
+            case BindingInfoType::TexelBuffer: {
+                TexelBufferBindingInfo bindingInfo = {};
+                DAWN_TRY_ASSIGN(bindingInfo.access,
+                                TintResourceTypeToTexelBufferAccess(resource.resource_type));
+                bindingInfo.format = TintImageFormatToTextureFormat(resource.image_format);
+
+                info.bindingInfo = bindingInfo;
+                break;
+            }
+
             case BindingInfoType::ExternalTexture: {
                 info.bindingInfo.emplace<ExternalTextureBindingInfo>();
                 break;
@@ -1166,6 +1287,51 @@ ResultOrError<std::unique_ptr<EntryPointMetadata>> ReflectEntryPointUsingTint(
                         resource.binding, resource.bind_group);
     }
 
+    // Dynamic binding array reflection
+    for (const tint::inspector::ResourceBindingInfo& array :
+         inspector->GetResourceBindingInfo(entryPoint.name)) {
+        BindGroupIndex group(array.group);
+        if (DelayedInvalidIf(group >= kMaxBindGroupsTyped,
+                             "The entry-point uses a binding with a group decoration (%u) "
+                             "that exceeds maxBindGroups (%u) - 1.",
+                             group, kMaxBindGroups)) {
+            continue;
+        }
+
+        BindingNumber binding(array.binding);
+        if (DelayedInvalidIf(
+                binding >= kMaxBindingsPerBindGroupTyped,
+                "Binding number (%u) exceeds the maxBindingsPerBindGroup limit (%u) - 1.",
+                uint32_t(binding), kMaxBindingsPerBindGroup)) {
+            continue;
+        }
+
+        // Check that all the uses of the dynamic binding array have compatible DynamicArrayKind.
+        wgpu::DynamicBindingKind kind = wgpu::DynamicBindingKind::Undefined;
+        for (const auto& type : array.type_info) {
+            wgpu::DynamicBindingKind kindForType;
+            DAWN_TRY_ASSIGN(kindForType, FromArrayResourceType(type));
+
+            // This is the first kind that we compute, just store it.
+            if (kind == wgpu::DynamicBindingKind::Undefined) {
+                kind = kindForType;
+                continue;
+            }
+
+            DAWN_INVALID_IF(kindForType != kind,
+                            "Dynamic binding array for @group(%u) used with two incompatible kinds "
+                            "of types %s vs. %s",
+                            group, kind, kindForType);
+        }
+
+        DAWN_INVALID_IF(metadata->dynamicBindingArrays.contains(group),
+                        "Duplicate dynamic binding array for group: %u.", group);
+        metadata->dynamicBindingArrays[group] = {{
+            .start = binding,
+            .kind = kind,
+        }};
+    }
+
     // Sampler binding point placeholder for non-sampler texture usage. Make it
     // ToTint(EntryPointMetadata::nonSamplerBindingPoint), so that we have
     // FromTint(tintNonSamplerBindingPoint) == EntryPointMetadata::nonSamplerBindingPoint, and we
@@ -1200,44 +1366,6 @@ ResultOrError<std::unique_ptr<EntryPointMetadata>> ReflectEntryPointUsingTint(
                    std::back_inserter(metadata->textureQueries), FromTintLevelSampleInfo);
 
     metadata->usesSubgroupMatrix = entryPoint.uses_subgroup_matrix;
-
-    // Compute the texture+sampler combination count.
-    if (deviceInfo.isCompatibilityMode) {
-        // separate sampled from non-sampled and put sampled in set
-        std::set<tint::BindingPoint> sampledTextures;
-        std::set<tint::BindingPoint> sampledExternalTextures;
-        std::vector<tint::BindingPoint> nonSampled;
-        uint32_t numSamplerTexturePairs = 0;
-        uint32_t numSamplerExternalTexturePairs = 0;
-
-        for (const auto& pair : samplerAndNonSamplerTextureUses) {
-            const auto& bindingGroupInfoMap =
-                metadata->bindings[BindGroupIndex(pair.texture_binding_point.group)];
-            const auto it =
-                bindingGroupInfoMap.find(BindingNumber(pair.texture_binding_point.binding));
-            auto isExternalTexture =
-                std::holds_alternative<ExternalTextureBindingInfo>(it->second.bindingInfo);
-            if (isExternalTexture) {
-                ++numSamplerExternalTexturePairs;
-                sampledExternalTextures.insert(pair.texture_binding_point);
-            } else if (pair.sampler_binding_point == tintNonSamplerBindingPoint) {
-                nonSampled.push_back(pair.texture_binding_point);
-            } else {
-                ++numSamplerTexturePairs;
-                sampledTextures.insert(pair.texture_binding_point);
-            }
-        }
-
-        // count the number of non-sampled that are not referenced by sampled pairs.
-        auto numNonSampled =
-            std::count_if(nonSampled.begin(), nonSampled.end(),
-                          [&](const tint::BindingPoint& nonSampledBindingPoint) {
-                              return !sampledTextures.contains(nonSampledBindingPoint);
-                          });
-        metadata->numTextureSamplerCombinations = numSamplerTexturePairs + numNonSampled +
-                                                  numSamplerExternalTexturePairs * 3 +
-                                                  sampledExternalTextures.size();
-    }
 
 #undef DelayedInvalidIf
     return std::move(metadata);
@@ -1407,7 +1535,7 @@ void DumpShaderFromDescriptor(LogEmitter* logEmitter,
     }
 #else   // TINT_BUILD_SPV_READER
     // SPIR-V is not enabled, so the descriptor should not contain it.
-    DAWN_ASSERT(shaderModuleDesc.Get<ShaderSourceSPIRV>() == nullptr);
+    DAWN_ASSERT(!shaderModuleDesc.Has<ShaderSourceSPIRV>());
 #endif  // TINT_BUILD_SPV_READER
 
     // Dump WGSL.
@@ -1502,7 +1630,11 @@ MaybeError ValidateCompatibilityWithPipelineLayout(DeviceBase* device,
     for (BindGroupIndex group : ~layout->GetBindGroupLayoutsMask()) {
         DAWN_INVALID_IF(entryPoint.bindings[group].size() > 0,
                         "The entry-point uses bindings in group %u but %s doesn't have a "
-                        "BindGroupLayout for this index",
+                        "BindGroupLayout for this index.",
+                        group, layout);
+        DAWN_INVALID_IF(entryPoint.dynamicBindingArrays.contains(group),
+                        "The entry-point uses a dynamic binding array in group %u but %s doesn't "
+                        "have a BindGroupLayout for this index.",
                         group, layout);
     }
 
@@ -1624,6 +1756,10 @@ ShaderModuleBase::ShaderModuleBase(DeviceBase* device,
         mOriginalSpirv.assign(spirvDesc->code, spirvDesc->code + spirvDesc->codeSize);
         shaderCodeByteSize = mOriginalSpirv.size() * sizeof(decltype(mOriginalSpirv)::value_type);
         shaderCode = reinterpret_cast<uint8_t*>(mOriginalSpirv.data());
+        if (auto* spirvOptions = descriptor.Get<DawnShaderModuleSPIRVOptionsDescriptor>()) {
+            mAllowSpirvNonUniformDerivitives =
+                static_cast<bool>(spirvOptions->allowNonUniformDerivatives);
+        }
     } else if (auto* wgslDesc = descriptor.Get<ShaderSourceWGSL>()) {
         mType = Type::Wgsl;
         mWgsl = std::string(wgslDesc->code);
@@ -1640,6 +1776,7 @@ ShaderModuleBase::ShaderModuleBase(DeviceBase* device,
     ShaderModuleHasher hasher;
     // Hash the metadata.
     hasher.Update(mType);
+    hasher.Update(mAllowSpirvNonUniformDerivitives);
     // mStrictMath is a std::optional<bool>, and the bool value might not get initialized by default
     // constructor and thus contains dirty data.
     bool strictMathAssigned = mStrictMath.has_value();
@@ -1761,9 +1898,14 @@ Ref<TintProgram> ShaderModuleBase::GetTintProgram() {
         ShaderModuleDescriptor descriptor;
         ShaderSourceWGSL wgslDescriptor;
         ShaderSourceSPIRV spirvDescriptor;
+        DawnShaderModuleSPIRVOptionsDescriptor spirvOptionsDescriptor;
 
         switch (mType) {
             case Type::Spirv:
+                spirvOptionsDescriptor.allowNonUniformDerivatives =
+                    mAllowSpirvNonUniformDerivitives;
+                spirvDescriptor.nextInChain = &spirvOptionsDescriptor;
+
                 spirvDescriptor.codeSize = mOriginalSpirv.size();
                 spirvDescriptor.code = mOriginalSpirv.data();
                 descriptor.nextInChain = &spirvDescriptor;

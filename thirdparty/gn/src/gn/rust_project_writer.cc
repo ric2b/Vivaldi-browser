@@ -4,10 +4,10 @@
 
 #include "gn/rust_project_writer.h"
 
-#include <fstream>
+#include <algorithm>
 #include <optional>
-#include <sstream>
-#include <tuple>
+#include <ranges>
+#include <vector>
 
 #include "base/json/string_escape.h"
 #include "base/strings/string_split.h"
@@ -195,9 +195,33 @@ void AddTarget(const BuildSettings* build_settings,
     edition = FindArgValue("--edition", compiler_args);
   }
 
-  auto gen_dir = GetBuildDirForTargetAsOutputFile(target, BuildDirType::GEN);
+  auto source_root = build_settings->root_path();
+  // Generated sources also need to be added to include dirs. However, we can't
+  // naively add the top-level build dir for this target as an include dir.
+  // It's possible to define multiple crates in the same buildfile, and the
+  // default build dir corresponds to the buildfile's containing directory.
+  // Hence they would incorrectly share the same include dir, despite being
+  // separate crates.
+  // Unfortunately this doesn't help if the buildfile author places unrelated
+  // generated sources for multiple crates in the same directory, but that's
+  // impossible to solve anyway.
+  auto gen_dir = GetBuildDirForTargetAsSourceDir(target, BuildDirType::GEN)
+                     .Resolve(source_root, false);
+  std::vector<SourceDir> include_dirs;
+  for (const SourceFile& source : target->sources()) {
+    if (gen_dir.IsParent(source.Resolve(source_root, false))) {
+      include_dirs.push_back(source.GetDir());
+    }
+  }
+  // Remove duplicates. We could use a set-like structure, but chances are
+  // there's very few elements.
+  std::ranges::sort(include_dirs, [](const auto& lhs, const auto& rhs) {
+    return lhs.value() < rhs.value();
+  });
+  include_dirs.erase(std::ranges::unique(include_dirs).begin(),
+                     include_dirs.end());
 
-  Crate crate = Crate(crate_root, gen_dir, crate_id, crate_label,
+  Crate crate = Crate(crate_root, include_dirs, crate_id, crate_label,
                       edition.value_or("2015"));
 
   crate.SetCompilerArgs(compiler_args);
@@ -284,16 +308,12 @@ void WriteCrates(const BuildSettings* build_settings,
                  << FilePathToUTF8(
                         build_settings->GetFullPath(crate.root().GetDir()))
                  << "\"";
-    auto gen_dir = crate.gen_dir();
-    if (gen_dir.has_value()) {
-      auto gen_dir_path = FilePathToUTF8(
-          build_settings->GetFullPath(gen_dir->AsSourceDir(build_settings)));
-      rust_project << "," NEWLINE << "               \"" << gen_dir_path
-                   << "\"" NEWLINE;
-    } else {
-      rust_project << NEWLINE;
+
+    for (const auto& include_dir : crate.extra_include_dirs()) {
+      auto path = FilePathToUTF8(build_settings->GetFullPath(include_dir));
+      rust_project << "," << NEWLINE << "               \"" << path << "\"";
     }
-    rust_project << "          ]," NEWLINE
+    rust_project << NEWLINE "          ]," NEWLINE
                  << "          \"exclude_dirs\": []" NEWLINE
                  << "      }," NEWLINE;
 

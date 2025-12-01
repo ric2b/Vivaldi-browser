@@ -1,107 +1,96 @@
-/*
- * Copyright (C) 2012 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-/* eslint-disable rulesdir/no-imperative-dom-api */
+// Copyright 2012 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 import type * as Common from '../../core/common/common.js';
 
 import progressIndicatorStyles from './progressIndicator.css.js';
 import {createShadowRootWithCoreStyles} from './UIUtils.js';
 
-export class ProgressIndicator implements Common.Progress.Progress {
-  element: HTMLDivElement;
-  private readonly shadowRoot: ShadowRoot;
-  private readonly contentElement: Element;
-  private labelElement: Element;
-  private progressElement: HTMLProgressElement;
-  private readonly stopButton?: Element;
-  private isCanceledInternal: boolean;
-  private worked: number;
-  private isDone?: boolean;
+export class ProgressIndicator extends HTMLElement implements Common.Progress.Progress {
+  readonly #shadowRoot: ShadowRoot;
+  readonly #contentElement: Element;
+  #labelElement: Element;
+  #progressElement: HTMLProgressElement;
+  #stopButton?: Element;
+  #isCanceled = false;
+  #worked = 0;
+  #isDone = false;
 
-  constructor(options = {showStopButton: true}) {
-    this.element = document.createElement('div');
-    this.element.classList.add('progress-indicator');
-    this.shadowRoot = createShadowRootWithCoreStyles(this.element, {cssFile: progressIndicatorStyles});
-    this.contentElement = this.shadowRoot.createChild('div', 'progress-indicator-shadow-container');
+  constructor() {
+    super();
+    this.#shadowRoot = createShadowRootWithCoreStyles(this, {cssFile: progressIndicatorStyles});
+    this.#contentElement = this.#shadowRoot.createChild('div', 'progress-indicator-shadow-container');
 
-    this.labelElement = this.contentElement.createChild('div', 'title');
-    this.progressElement = this.contentElement.createChild('progress');
-    this.progressElement.value = 0;
+    this.#labelElement = this.#contentElement.createChild('div', 'title');
+    this.#progressElement = this.#contentElement.createChild('progress');
+    this.#progressElement.value = 0;
+  }
 
-    if (options.showStopButton) {
-      this.stopButton = this.contentElement.createChild('button', 'progress-indicator-shadow-stop-button');
-      this.stopButton.addEventListener('click', this.cancel.bind(this));
+  connectedCallback(): void {
+    this.classList.add('progress-indicator');
+    // By default we show the stop button, but this can be controlled by
+    // using the 'no-stop-button' attribute on the element.
+    if (!this.hasAttribute('no-stop-button')) {
+      this.#stopButton = this.#contentElement.createChild('button', 'progress-indicator-shadow-stop-button');
+      this.#stopButton.addEventListener('click', () => {
+        this.canceled = true;
+      });
     }
-
-    this.isCanceledInternal = false;
-    this.worked = 0;
   }
 
-  show(parent: Element): void {
-    parent.appendChild(this.element);
-  }
-
-  done(): void {
-    if (this.isDone) {
+  set done(done: boolean) {
+    if (this.#isDone === done) {
       return;
     }
-    this.isDone = true;
-    this.element.remove();
-  }
-
-  cancel(): void {
-    this.isCanceledInternal = true;
-  }
-
-  isCanceled(): boolean {
-    return this.isCanceledInternal;
-  }
-
-  setTitle(title: string): void {
-    this.labelElement.textContent = title;
-  }
-
-  setTotalWork(totalWork: number): void {
-    this.progressElement.max = totalWork;
-  }
-
-  setWorked(worked: number, title?: string): void {
-    this.worked = worked;
-    this.progressElement.value = worked;
-    if (title) {
-      this.setTitle(title);
+    this.#isDone = done;
+    if (done) {
+      this.remove();
     }
   }
 
-  incrementWorked(worked?: number): void {
-    this.setWorked(this.worked + (worked || 1));
+  get done(): boolean {
+    return this.#isDone;
+  }
+
+  set canceled(value: boolean) {
+    this.#isCanceled = value;
+  }
+
+  get canceled(): boolean {
+    return this.#isCanceled;
+  }
+
+  override set title(title: string) {
+    this.#labelElement.textContent = title;
+  }
+
+  override get title(): string {
+    return this.#labelElement.textContent ?? '';
+  }
+
+  set totalWork(totalWork: number) {
+    this.#progressElement.max = totalWork;
+  }
+
+  get totalWork(): number {
+    return this.#progressElement.max;
+  }
+
+  set worked(worked: number) {
+    this.#worked = worked;
+    this.#progressElement.value = worked;
+  }
+
+  get worked(): number {
+    return this.#worked;
+  }
+}
+
+customElements.define('devtools-progress', ProgressIndicator);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'devtools-progress': ProgressIndicator;
   }
 }

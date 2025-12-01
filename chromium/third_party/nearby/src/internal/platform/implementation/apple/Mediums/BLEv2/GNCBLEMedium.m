@@ -34,6 +34,7 @@ NS_ASSUME_NONNULL_BEGIN
 static char *const kBLEMediumQueueLabel = "com.nearby.GNCBLEMedium";
 // TODO: b/762454867 - Make this a flag.
 static const NSTimeInterval kPeripheralConnectTimeout = 10.0;  // 10 seconds timeout
+static const NSTimeInterval kStopTimeout = 5.0;
 
 static NSError *AlreadyScanningError() {
   return [NSError errorWithDomain:GNCBLEErrorDomain code:GNCBLEErrorAlreadyScanning userInfo:nil];
@@ -96,11 +97,11 @@ static GNCBLEL2CAPServer *_Nonnull CreateL2CapServer(
 }
 
 - (instancetype)init {
+  dispatch_queue_t queue = dispatch_queue_create(kBLEMediumQueueLabel, DISPATCH_QUEUE_SERIAL);
   CBCentralManager *centralManager =
       [[CBCentralManager alloc] initWithDelegate:self
-                                           queue:_queue
+                                           queue:queue
                                          options:@{CBCentralManagerOptionShowPowerAlertKey : @NO}];
-  dispatch_queue_t queue = dispatch_queue_create(kBLEMediumQueueLabel, DISPATCH_QUEUE_SERIAL);
   return [self initWithCentralManager:centralManager queue:queue];
 }
 
@@ -122,8 +123,17 @@ static GNCBLEL2CAPServer *_Nonnull CreateL2CapServer(
   return self;
 }
 
-- (void)dealloc {
-  [self cancelConnectionTimeout];
+- (void)stop {
+  dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+  dispatch_async(_queue, ^{
+    [self cancelConnectionTimeout];
+    dispatch_semaphore_signal(semaphore);
+  });
+  dispatch_time_t timeout =
+      dispatch_time(DISPATCH_TIME_NOW, kStopTimeout * NSEC_PER_SEC);  // 5 seconds timeout
+  if (dispatch_semaphore_wait(semaphore, timeout) != 0) {
+    GNCLoggerError(@"GNCBLEMedium stop timeout.");
+  }
 }
 
 - (BOOL)supportsExtendedAdvertisements {
@@ -506,43 +516,33 @@ static GNCBLEL2CAPServer *_Nonnull CreateL2CapServer(
 #pragma mark - CBCentralManagerDelegate
 
 - (void)centralManagerDidUpdateState:(CBCentralManager *)central {
-  dispatch_async(_queue, ^{
-    [self gnc_centralManagerDidUpdateState:central];
-  });
+  [self gnc_centralManagerDidUpdateState:central];
 }
 
 - (void)centralManager:(CBCentralManager *)central
     didDiscoverPeripheral:(CBPeripheral *)peripheral
         advertisementData:(NSDictionary<NSString *, id> *)advertisementData
                      RSSI:(NSNumber *)RSSI {
-  dispatch_async(_queue, ^{
-    [self gnc_centralManager:central
-        didDiscoverPeripheral:peripheral
-            advertisementData:advertisementData
-                         RSSI:RSSI];
-  });
+  [self gnc_centralManager:central
+      didDiscoverPeripheral:peripheral
+          advertisementData:advertisementData
+                       RSSI:RSSI];
 }
 
 - (void)centralManager:(CBCentralManager *)central didConnectPeripheral:(CBPeripheral *)peripheral {
-  dispatch_async(_queue, ^{
-    [self gnc_centralManager:central didConnectPeripheral:peripheral];
-  });
+  [self gnc_centralManager:central didConnectPeripheral:peripheral];
 }
 
 - (void)centralManager:(CBCentralManager *)central
     didFailToConnectPeripheral:(CBPeripheral *)peripheral
                          error:(nullable NSError *)error {
-  dispatch_async(_queue, ^{
-    [self gnc_centralManager:central didFailToConnectPeripheral:peripheral error:error];
-  });
+  [self gnc_centralManager:central didFailToConnectPeripheral:peripheral error:error];
 }
 
 - (void)centralManager:(CBCentralManager *)central
     didDisconnectPeripheral:(CBPeripheral *)peripheral
                       error:(nullable NSError *)error {
-  dispatch_async(_queue, ^{
-    [self gnc_centralManager:central didDisconnectPeripheral:peripheral error:error];
-  });
+  [self gnc_centralManager:central didDisconnectPeripheral:peripheral error:error];
 }
 
 @end

@@ -1,0 +1,128 @@
+// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+
+#ifndef COMPONENTS_AD_BLOCKER_CONTENT_ADBLOCK_RULES_INDEX_MANAGER_H_
+#define COMPONENTS_AD_BLOCKER_CONTENT_ADBLOCK_RULES_INDEX_MANAGER_H_
+
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "base/functional/callback.h"
+#include "components/ad_blocker/public/core/adblock_rule_manager.h"
+#include "components/ad_blocker/public/core/adblock_types.h"
+#include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
+
+namespace content {
+class BrowserContext;
+}
+
+namespace flatbuffers {
+struct String;
+}
+
+namespace re2 {
+class RE2;
+}
+
+namespace adblock_filter {
+namespace flat {
+struct RulesList;
+}
+class RulesIndex;
+class RuleService;
+
+class RuleBufferHolder {
+ public:
+  RuleBufferHolder(uint32_t source_id,
+                   std::string rule_buffer,
+                   const std::string& checksum);
+  ~RuleBufferHolder();
+  RuleBufferHolder(const RuleBufferHolder&) = delete;
+  RuleBufferHolder& operator=(const RuleBufferHolder&) = delete;
+
+  uint32_t source_id() const { return source_id_; }
+  const flat::RulesList* rules_list() const { return rules_list_; }
+  const std::string& checksum() const { return checksum_; }
+
+  const re2::RE2& GetRegexForPattern(
+      const flatbuffers::String* flat_string) const;
+
+ private:
+  uint32_t source_id_;
+  std::string rule_buffer_;
+  std::string checksum_;
+  raw_ptr<const flat::RulesList> rules_list_;
+
+  mutable absl::flat_hash_map<const flatbuffers::String*,
+                              std::unique_ptr<re2::RE2>>
+      regex_cache_;
+};
+
+class RulesIndexManager : public RuleManager::Observer {
+ public:
+  using RulesIndexChangedCallback = base::RepeatingClosure;
+  using RulesIndexLoadedCallback = base::RepeatingClosure;
+  using RulesBufferReadFailCallback =
+      base::RepeatingCallback<void(RuleGroup rule_group, uint32_t source_id)>;
+
+  RulesIndexManager(content::BrowserContext* context,
+                    RuleManager* rule_manager,
+                    RuleGroup group,
+                    const std::string& index_checksum,
+                    RulesIndexChangedCallback rules_index_change_callback,
+                    RulesIndexLoadedCallback rules_index_loaded_callback,
+                    RulesBufferReadFailCallback rule_buffer_read_fail_callback,
+                    scoped_refptr<base::SequencedTaskRunner> file_task_runner);
+  ~RulesIndexManager() override;
+  RulesIndexManager(const RulesIndexManager&) = delete;
+  RulesIndexManager& operator=(const RulesIndexManager&) = delete;
+
+  void Shutdown();
+
+  std::string index_checksum() const { return index_checksum_; }
+
+  RulesIndex* rules_index() const { return rules_index_.get(); }
+
+ private:
+  // Implementing RuleManager::Observer
+  void OnRuleSourceUpdated(RuleGroup group,
+                           const ActiveRuleSource& rule_source) override;
+  void OnRuleSourceDeleted(uint32_t source_id, RuleGroup group) override;
+
+  void ReadRules(const ActiveRuleSource& rule_source);
+  void OnRulesRead(uint32_t source_id,
+                   const std::string& checksum,
+                   std::string rules_buffer);
+
+  void RebuildIndex();
+  void ReadIndex(const std::string& checksum);
+  void OnIndexRead(std::string index_buffer);
+
+  RuleGroup group_;
+  bool reload_in_progress_;
+
+  base::raw_ptr<RuleManager> rule_manager_;
+
+  std::map<uint32_t, ActiveRuleSource> rule_sources_;
+  base::FilePath rules_list_folder_;
+
+  std::map<uint32_t, std::unique_ptr<RuleBufferHolder>> rules_buffers_;
+  std::vector<std::unique_ptr<RuleBufferHolder>> old_rules_buffers_;
+
+  std::string index_checksum_;
+  std::unique_ptr<RulesIndex> rules_index_;
+  int index_read_fail_count_ = 0;
+
+  RulesIndexChangedCallback rules_index_change_callback_;
+  RulesIndexLoadedCallback rules_index_loaded_callback_;
+  RulesBufferReadFailCallback rule_buffer_read_fail_callback_;
+
+  scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
+
+  base::WeakPtrFactory<RulesIndexManager> weak_factory_{this};
+};
+
+}  // namespace adblock_filter
+
+#endif  // COMPONENTS_AD_BLOCKER_CONTENT_ADBLOCK_RULES_INDEX_MANAGER_H_

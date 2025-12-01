@@ -1,0 +1,399 @@
+// Copyright 2025 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.confidentialcompute;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
+import "proto/attestation/endorsement.proto";
+import "proto/attestation/evidence.proto";
+import "proto/crypto/crypto.proto";
+import "proto/session/session.proto";
+
+option java_multiple_files = true;
+
+// The Confidential Federated Compute Key Management Service (CFC KMS) is
+// responsible for ensuring that accesses to encrypted blobs of data conform to
+// data access policies defining the sequence of TEE-based transforms that may
+// access that data. In addition to provide decryption keys to authorized
+// TEE-based transforms, the KMS also provides rollback-protected storage for
+// the pipeline state needed to ensure outputs are privacy-preserving (e.g. blob
+// usage information so that a pipeline doesn't incorporate the same input
+// twice). This service also ensures crypto erasure of the blobs by rotating the
+// keypairs used to encrypt them. This service is intended to replace the Ledger
+// service defined in ledger.proto.
+//
+// This file defines the API for the KMS's Oak enclave app. For an
+// implementation, see
+// https://github.com/google-parfait/confidential-federated-compute/tree/main/containers/kms.
+//
+// To use this service:
+//   1. Create one or more keysets (RotateKeyset).
+//   2. Derive per-AuthorizedLogicalPipelines public keys (DeriveKeys).
+//   3. Encrypt a blob using one of the public keys.
+//   4. Register a pipeline invocation (RegisterPipelineInvocation).
+//   5. Request the authorized decryption keys for each of the pipeline's
+//      transforms (AuthorizeConfidentialTransform) and process the encrypted
+//      blob. Emit any results encrypted with the intermediates key provided by
+//      the KMS. If a result is a final result (i.e., not an intermediate),
+//      additionally create a "release token" describing the update to
+//      the KMS-tracked pipeline state that should occur (e.g., marking inputs
+//      as used).
+//   6. Update the KMS-tracked pipeline state and obtain the decryption key for
+//      each result (ReleaseResults).
+service KeyManagementService {
+  // Returns a per-TCP-job public key used to distinguish different KMS
+  // clusters. This key is automatically created as part of server setup, so
+  // checking job public key for changes is one way to detect if the job has
+  // been restarted (and state has been lost).
+  rpc GetClusterPublicKey(GetClusterPublicKeyRequest)
+      returns (ClusterPublicKey) {}
+
+  // Returns information about a keyset; useful for verifying keyset existence
+  // or checking if rotation is needed.
+  rpc GetKeyset(GetKeysetRequest) returns (Keyset) {}
+
+  // Adds a new key to a keysets. Creates a new keyset if one didn't previously
+  // exist.
+  rpc RotateKeyset(RotateKeysetRequest) returns (RotateKeysetResponse) {}
+
+  // Derives the per-AuthorizedLogicalPipelines HPKE public keys used for
+  // encrypting client uploads. Derivation uses the most recently created key in
+  // the keyset.
+  rpc DeriveKeys(DeriveKeysRequest) returns (DeriveKeysResponse) {}
+
+  // Returns the current state associated with a logical pipeline.
+  rpc GetLogicalPipelineState(GetLogicalPipelineStateRequest)
+      returns (LogicalPipelineState) {}
+
+  // Registers a pipeline invocation, creating an encryption key for pipeline
+  // intermediates and performing some common validation steps.
+  rpc RegisterPipelineInvocation(RegisterPipelineInvocationRequest)
+      returns (RegisterPipelineInvocationResponse) {}
+
+  // Provides a confidential transform with the decryption keys needed to access
+  // all inputs authorized by the PipelineVariantPolicy provided when the
+  // pipeline invocation was registered.
+  rpc AuthorizeConfidentialTransform(AuthorizeConfidentialTransformRequest)
+      returns (AuthorizeConfidentialTransformResponse) {}
+
+  // Releases one or more pipeline results by returning their decryption keys to
+  // the untrusted space. Results may only be released if the logical pipelines'
+  // states can be updated to the desired values via a compare-and-set
+  // operation.
+  //
+  // When releasing multiple results, decryption keys will only be returned if
+  // ALL results can be released. To accomodate pipelines that release multiple
+  // results, the KMS will combine state updates (e.g. if the logical pipeline
+  // has state A and the releasable results require (B -> C) and (A -> B), the
+  // logical pipeline state will be updated to C).
+  rpc ReleaseResults(ReleaseResultsRequest) returns (ReleaseResultsResponse) {}
+}
+
+message GetClusterPublicKeyRequest {}
+
+message ClusterPublicKey {
+  // The serialized bytes of the cluster's public key. This COSE Key (RFC 9052)
+  // will contain at least the following parameters:
+  //
+  // COSE Key Parameters (https://www.iana.org/assignments/cose/cose.xhtml)
+  //        1: Key Type (int)
+  //        2: Key ID (bstr)
+  //        3: Algorithm (int)
+  //
+  // Supported COSE Algorithms:
+  //       -7: ES256 (ECDSA w/ SHA-256)
+  bytes public_key = 1;
+}
+
+message GetKeysetRequest {
+  // The keyset's id.
+  uint64 keyset_id = 1;
+}
+
+message Keyset {
+  // The keyset's id.
+  uint64 keyset_id = 1;
+
+  // The active keys in the keyset.
+  repeated Key keys = 2;
+
+  message Key {
+    // The key's id.
+    bytes key_id = 1;
+
+    // The time the key was created.
+    google.protobuf.Timestamp created = 2;
+
+    // The time the key expires.
+    google.protobuf.Timestamp expiration = 3;
+  }
+}
+
+message RotateKeysetRequest {
+  // The keyset's id.
+  uint64 keyset_id = 1;
+
+  // The TTL of the new key.
+  google.protobuf.Duration ttl = 2;
+}
+
+message RotateKeysetResponse {}
+
+message DeriveKeysRequest {
+  uint64 keyset_id = 1;
+
+  // SHA-256 hashes of the AuthorizedLogicalPipelines messages for which keys
+  // should be derived.
+  repeated bytes authorized_logical_pipeline_policies_hashes = 2;
+}
+
+message DeriveKeysResponse {
+  // The serialized CBOR Web Tokens (CWTs; RFC 8392) containing the public
+  // encryption keys for each logical pipeline. The CWT and COSE key will
+  // contain at least the following claims and parameters:
+  //
+  // CWT Claims (https://www.iana.org/assignments/cwt/cwt.xhtml)
+  //   -65543: SHA-256 hash of the access policy used to derive the key
+  //   -65537: COSE_Key containing the public key parameters (bstr)
+  //        4: Expiration Time (int)
+  //        5: Not Before (int)
+  //        6: Issued At (int)
+  //
+  // COSE Key Parameters (https://www.iana.org/assignments/cose/cose.xhtml)
+  //        1: Key Type (int)
+  //        2: Key ID (bstr)
+  //        3: Algorithm (int)
+  //
+  // Supported COSE Algorithms:
+  //   -65537: HPKE-Base-X25519-SHA256-AES128GCM
+  repeated bytes public_keys = 1;
+}
+
+message GetLogicalPipelineStateRequest {
+  // The name of the logical pipeline.
+  string name = 1;
+}
+
+message LogicalPipelineState {
+  // The name of the pipeline.
+  string name = 1;
+
+  // The pipeline's current state.
+  bytes value = 2;
+
+  // The time the pipeline state expires, or unset if no expiration. The state
+  // is guaranteed to expire after all inputs whose processing contributed to
+  // the state. In other words, the expiration will be at least as large as the
+  // expiration time of all keys (including for intermediate results) shared
+  // with any pipeline invocation that updated the state.
+  google.protobuf.Timestamp expiration = 3;
+}
+
+message RegisterPipelineInvocationRequest {
+  // The name of the logical pipeline. This should match one of the map keys in
+  // `DataAccessPolicy.pipelines`.
+  string logical_pipeline_name = 1;
+
+  // The serialized PipelineVariantPolicy message describing the pipeline being
+  // run.
+  bytes pipeline_variant_policy = 2 [ctype = CORD];
+
+  // The TTL of the intermediates produced by the pipeline, measured from the
+  // time the pipeline is registered. The pipeline will not be able to access
+  // any keys that expire before this TTL has elapsed.
+  google.protobuf.Duration intermediates_ttl = 3;
+
+  // The keyset(s) used to encrypt client uploads.
+  repeated uint64 keyset_ids = 4;
+
+  // The serialized DataAccessPolicy messages for data that will be accessed by
+  // the pipeline.
+  repeated bytes authorized_logical_pipeline_policies = 5 [ctype = CORD];
+}
+
+message RegisterPipelineInvocationResponse {
+  // A unique identifier for the pipeline invocation.
+  bytes invocation_id = 1;
+
+  // The current state of the logical pipeline. Note that this state may change
+  // while the pipeline is running if multiple variants are running
+  // concurrently.
+  LogicalPipelineState logical_pipeline_state = 2;
+}
+
+message AuthorizeConfidentialTransformRequest {
+  // The invocation id returned by RegisterPipelineInvocation.
+  bytes invocation_id = 1;
+
+  // The serialized PipelineVariantPolicy message describing the pipeline being
+  // run.
+  bytes pipeline_variant_policy = 2;
+
+  // The attestation evidence for the transform requesting access.
+  oak.attestation.v1.Evidence evidence = 3;
+
+  // The attestation endorsements for the transform requesting access.
+  oak.attestation.v1.Endorsements endorsements = 5;
+
+  // Optional tag to disambiguate between otherwise identical accesses in the
+  // policy. This field is an orchestration-level hint, not something attested
+  // by the sealed application.
+  string tag = 4;
+}
+
+message AuthorizeConfidentialTransformResponse {
+  // Serialized and encrypted ProtectedResponse, encrypted using the transform
+  // TEE's application encryption key and therefore only accessible to the
+  // transform.
+  oak.crypto.v1.EncryptedRequest protected_response = 1;
+
+  // An endorsement of the transform TEE's application signing key using the
+  // KMS's cluster key. This endorsement proves provenance for signed outputs
+  // produced by the transform.
+  //
+  // The signing key endorsement is a CWT (RFC 8392) signed by the cluster
+  // signing key and containing at least the following claims and parameters:
+  //
+  // CWT Claims (https://www.iana.org/assignments/cwt/cwt.xhtml)
+  //   -65542: Transform's authorized output node ids ([+ uint])
+  //   -65541: Transform index in the access policy (uint)
+  //   -65540: Pipeline Invocation ID (bstr)
+  //   -65539: Logical Pipeline Name (tstr)
+  //   -65537: COSE_Key containing the public key parameters (bstr)
+  //        4: Expiration Time (int)
+  //        5: Not Before (int)
+  //        6: Issued At (int)
+  //
+  // COSE Key Parameters (https://www.iana.org/assignments/cose/cose.xhtml)
+  //        1: Key Type (int)
+  //        3: Algorithm (int)
+  bytes signing_key_endorsement = 2;
+
+  message ProtectedResponse {
+    // COSE Keys for decrypting inputs. The COSE Keys will contain at least the
+    // following parameters:
+    //
+    // COSE Key Parameters (https://www.iana.org/assignments/cose/cose.xhtml)
+    //        1: Key Type (int)
+    //        2: Key ID (bstr)
+    //        3: Algorithm (int)
+    //
+    // Supported COSE Algorithms:
+    //   -65537: HPKE-Base-X25519-SHA256-AES128GCM
+    repeated bytes decryption_keys = 1;
+
+    // COSE Keys containing the public keys to use to encrypt outputs. There
+    // will be one key per destination node id in the access policy, and keys
+    // will be returned in the same order. Pipelines with multiple outputs
+    // should use the access policy's config constraints to attach semantic
+    // meaning to each key. While these are public keys, they are not sent in
+    // the clear to make it more difficult for an attacker to fake an
+    // intermediate result. Nevertheless, a transform that's sensitive to such
+    // an attack should additionally verify the provenance of its inputs. The
+    // COSE Keys will contain at least the following parameters:
+    //
+    // COSE Key Parameters (https://www.iana.org/assignments/cose/cose.xhtml)
+    //        1: Key Type (int)
+    //        2: Key ID (bstr)
+    //        3: Algorithm (int)
+    //
+    // Supported COSE Algorithms:
+    //   -65537: HPKE-Base-X25519-SHA256-AES128GCM
+    repeated bytes result_encryption_keys = 2;
+  }
+
+  message AssociatedData {
+    // The KMS's cluster public key (see ClusterPublicKey).
+    bytes cluster_public_key = 1;
+
+    // Application-specific constraints on transform configuration, such as
+    // (delta, epsilon) bounds. The transform must verify these constraints
+    // before using any of the associated decryption keys. The constraints must
+    // be considered to be unsatisfied if the message type is not known to the
+    // transform or if the message contains any unknown fields.
+    google.protobuf.Any config_constraints = 2;
+
+    // SHA-256 hashes of all the AuthorizedLogicalPipelinePolicies authorizing
+    // this pipeline invocation.
+    repeated bytes authorized_logical_pipeline_policies_hashes = 3;
+  }
+}
+
+message ReleaseResultsRequest {
+  // The results to attempt to release.
+  repeated ReleasableResult releasable_results = 1;
+
+  message ReleasableResult {
+    // A COSE_Sign1 structure signed by a transform TEE's application signing
+    // key and containing the blob's (encrypted) decryption key and the required
+    // initial and updated logical pipeline states. The decryption key is
+    // encrypted using result_encryption_key from the
+    // AuthorizeConfidentialTransformResponse.
+    //
+    // The COSE_Sign1 structure's payload should be a serialized CoseEncrypt0
+    // structure containing the decryption key and claims describing the
+    // required changes to the logical pipeline state. The KMS does not inspect
+    // the plaintext, but transforms are encourages to use a COSE_Key or some
+    // other self-describing structure to hold the decryption key. At least the
+    // following parameters must be present:
+    //
+    // COSE_Sign1 Parameters (https://www.iana.org/assignments/cose/cose.xhtml)
+    //        3: Algorithm (int)
+    //
+    // Supported COSE_Sign1 Algorithms:
+    //       -7: ES256 (ECDSA w/ SHA-256)
+    //
+    // COSE_Encrypt0 Parameters
+    //   -65539: Updated Logical Pipeline State (bstr)
+    //   -65538: Initial Logical Pipeline State (bstr / null)
+    //   -65537: HPKE Encapsulated Key (bstr)
+    //        3: Algorithm (int)
+    //        4: Key ID (bstr)
+    //
+    // Supported COSE_Encrypt0 Algorithms:
+    //   -65537: HPKE-Base-X25519-SHA256-AES128GCM
+    bytes release_token = 1;
+
+    // The signing_key_endorsement for the transform TEE that produced the
+    // release token, used to prove that the release token was created by a
+    // trusted transform.
+    bytes signing_key_endorsement = 2;
+  }
+}
+
+message ReleaseResultsResponse {
+  // The decryption key for each blob, returned in the same order as the
+  // releasable_results in the request.
+  repeated bytes decryption_keys = 1;
+
+  // The updated state of the pipeline(s).
+  repeated LogicalPipelineState logical_pipeline_states = 2;
+}
+
+// A oak.session.v1.SessionResponse wrapper to allow application-level failures
+// to be returned from the TCP Actor. This message is not part of the public
+// KMS API.
+message SessionResponseWithStatus {
+  // The status of the response. If not OK, `response` should be ignored.
+  google.rpc.Status status = 1;
+
+  // The session response. If the request did not result in a response, which is
+  // possible for some handshake messages, this field will not be set.
+  oak.session.v1.SessionResponse response = 2;
+}

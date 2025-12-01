@@ -27,7 +27,6 @@ namespace openscreen::discovery {
 
 using testing::_;
 using testing::Args;
-using testing::Invoke;
 using testing::Return;
 using testing::StrictMock;
 using testing::WithArgs;

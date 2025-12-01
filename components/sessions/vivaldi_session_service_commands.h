@@ -7,8 +7,7 @@
 #include <memory>
 #include <string>
 
-#include "base/token.h"
-#include "components/page_actions/page_actions_service.h"
+#include "components/sessions/core/session_types.h"
 #include "components/sessions/core/session_id.h"
 #include "components/sessions/core/sessions_export.h"
 #include "components/tab_groups/tab_group_id.h"

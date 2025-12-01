@@ -110,9 +110,10 @@ TF_BUILTIN(DebugBreakTrampoline, CodeStubAssembler) {
 
   BIND(&tailcall_to_shared);
   // Tail call into code object on the SharedFunctionInfo.
-  // TODO(saelo): this is not safe. We either need to validate the parameter
-  // count here or obtain the code from the dispatch table.
   TNode<Code> code = GetSharedFunctionInfoCode(shared);
+
+  // TailCallJSCode will take care of parameter count validation between the
+  // code and dispatch handle.
   TailCallJSCode(code, context, function, new_target, arg_count,
                  dispatch_handle);
 }
@@ -162,7 +163,7 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
                                SaveFPRegsMode fp_mode) {
     Label slow_path(this), next(this);
     TNode<IntPtrT> chunk = MemoryChunkFromAddress(object);
-    TNode<IntPtrT> page = PageMetadataFromMemoryChunk(chunk);
+    TNode<IntPtrT> page = MemoryChunkMetadataFromMemoryChunk(chunk);
 
     // Load address of SlotSet
     TNode<IntPtrT> slot_set = LoadSlotSet(page, &slow_path);
@@ -381,7 +382,8 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
 
   void InYoungGeneration(TNode<IntPtrT> object, Label* true_label,
                          Label* false_label) {
-    if (v8_flags.sticky_mark_bits) {
+    if constexpr (v8_flags.sticky_mark_bits.value()) {
+#if V8_ENABLE_STICKY_MARK_BITS_BOOL
       // This method is currently only used when marking is disabled. Checking
       // markbits while marking is active may result in unexpected results.
       CSA_DCHECK(this, Word32Equal(IsMarking(), BoolConstant(false)));
@@ -394,6 +396,7 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
 
       BIND(&not_read_only);
       Branch(IsUnmarked(object), true_label, false_label);
+#endif
     } else {
       TNode<BoolT> object_is_young =
           IsPageFlagSet(object, MemoryChunk::kIsInYoungGenerationMask);
@@ -1418,11 +1421,6 @@ void Builtins::Generate_CEntry_Return1_ArgvInRegister_NoBuiltinExit(
 void Builtins::Generate_CEntry_Return2_ArgvOnStack_NoBuiltinExit(
     MacroAssembler* masm) {
   Generate_CEntry(masm, 2, ArgvMode::kStack, false, false);
-}
-
-void Builtins::Generate_CEntry_Return2_ArgvOnStack_BuiltinExit(
-    MacroAssembler* masm) {
-  Generate_CEntry(masm, 2, ArgvMode::kStack, true, false);
 }
 
 void Builtins::Generate_CEntry_Return2_ArgvInRegister_NoBuiltinExit(

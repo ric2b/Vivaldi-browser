@@ -22,6 +22,7 @@
 #include "third_party/blink/renderer/core/html/html_permission_icon_element.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer.h"
 #include "third_party/blink/renderer/core/scroll/scroll_snapshot_client.h"
+#include "third_party/blink/renderer/platform/geometry/length_size.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver_set.h"
@@ -35,6 +36,9 @@ namespace blink {
 class Page;
 class V8PermissionState;
 
+// For more information, see the explainer here:
+// https://github.com/WICG/PEPC/blob/main/explainer.md
+// and the design doc here: docs/permissions/pepc.md.
 class CORE_EXPORT HTMLPermissionElement
     : public HTMLElement,
       public mojom::blink::EmbeddedPermissionControlClient,
@@ -105,7 +109,30 @@ class CORE_EXPORT HTMLPermissionElement
   bool IsHTMLPermissionElement() const final { return true; }
 
  protected:
-  void setType(const AtomicString& type) { type_ = type; }
+  // blink::HTMLElement:
+  void AttributeChanged(const AttributeModificationParams& params) override;
+
+  void setType(const AtomicString& type);
+  uint16_t GetTranslatedMessageID(uint16_t message_id,
+                                  const AtomicString& language_string);
+  virtual void UpdateText();
+
+  // Update permission statuses and appearance based on the current statuses.
+  virtual void UpdatePermissionStatusAndAppearance();
+
+  virtual mojom::blink::EmbeddedPermissionRequestDescriptorPtr
+  CreateEmbeddedPermissionRequestDescriptor();
+
+  // Called when the |permission_status_map_| is updated to
+  // - Ensure that |aggregated_permission_status_| and
+  //   |initial_aggregated_permission_status_| are updated.
+  void UpdatePermissionStatus();
+
+  HTMLSpanElement* permission_text_span() const {
+    return permission_text_span_.Get();
+  }
+
+  bool is_precise_location() const { return is_precise_location_; }
 
  private:
   // TODO(crbug.com/1315595): remove this friend class once migration
@@ -115,6 +142,14 @@ class CORE_EXPORT HTMLPermissionElement
   friend class HTMLPermissionElementIntersectionTest;
   friend class HTMLPermissionElementLayoutChangeTest;
 
+  FRIEND_TEST_ALL_PREFIXES(HTMLGeolocationElementTestBase, GetTypeAttribute);
+  FRIEND_TEST_ALL_PREFIXES(HTMLGeolocationElementTest,
+                           GeolocationTranslateInnerText);
+  FRIEND_TEST_ALL_PREFIXES(HTMLGeolocationElementTest,
+                           GeolocationSetInnerTextAfterRegistration);
+  FRIEND_TEST_ALL_PREFIXES(HTMLGeolocationElementTest, GeolocationStatusChange);
+  FRIEND_TEST_ALL_PREFIXES(HTMLGeolocationElementSimTest,
+                           GeolocationInitializeGrantedText);
   FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementClickingEnabledTest,
                            UnclickableBeforeRegistered);
   FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementIntersectionTest,
@@ -272,9 +307,8 @@ class CORE_EXPORT HTMLPermissionElement
     void Fired() final { (element_->*function_)(this); }
 
     base::OnceClosure BindTimerClosure() final {
-      return WTF::BindOnce(&DisableReasonExpireTimer::RunInternalTrampoline,
-                           WTF::Unretained(this),
-                           WrapWeakPersistent(element_.Get()));
+      return BindOnce(&DisableReasonExpireTimer::RunInternalTrampoline,
+                      Unretained(this), WrapWeakPersistent(element_.Get()));
     }
 
    private:
@@ -323,7 +357,6 @@ class CORE_EXPORT HTMLPermissionElement
   void EnsureUnregisterPageEmbeddedPermissionControl();
 
   // blink::Element implements
-  void AttributeChanged(const AttributeModificationParams& params) override;
   void DidAddUserAgentShadowRoot(ShadowRoot&) override;
   void AdjustStyle(ComputedStyleBuilder& builder) override;
   void DidRecalcStyle(const StyleRecalcChange change) override;
@@ -440,14 +473,6 @@ class CORE_EXPORT HTMLPermissionElement
   //   alive temporary disabling reason".
   void RefreshDisableReasonsAndUpdateTimer();
 
-  // Called when the |permission_status_map_| is updated to
-  // - Ensure that |aggregated_permission_status_| and
-  //   |initial_aggregated_permission_status_| are updated.
-  // - Update appearance based on the current statuses.
-  void UpdatePermissionStatusAndAppearance();
-
-  void UpdateText();
-
   void AddConsoleError(String error);
   void AddConsoleWarning(String warning);
 
@@ -455,6 +480,7 @@ class CORE_EXPORT HTMLPermissionElement
       const HeapVector<Member<IntersectionObserverEntry>>& entries);
 
   bool IsStyleValid();
+  bool IsMaskedByAncestor() const;
 
   // A wrapper method which keeps track of logging console messages before
   // calling the HTMLPermissionElementUtils::AdjustedBoundedLength method.
@@ -462,6 +488,12 @@ class CORE_EXPORT HTMLPermissionElement
                                       std::optional<float> lower_bound,
                                       std::optional<float> upper_bound,
                                       bool should_multiply_by_content_size);
+
+  // A method which bounds the specified radius on the width and height sides
+  // using the provided percentage bounds.
+  LengthSize AdjustedPercentBoundedRadius(const LengthSize& length_size,
+                                          float width_percent_bound,
+                                          float height_percent_bound);
 
   // LocalFrameView::LifecycleNotificationObserver
   void DidFinishLifecycleUpdate(const LocalFrameView&) override;

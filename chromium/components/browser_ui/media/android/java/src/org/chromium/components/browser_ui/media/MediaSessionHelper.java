@@ -431,7 +431,7 @@ public class MediaSessionHelper implements MediaImageCallback {
          * Creates a {@link MediaNotificationInfo.Builder} with basic embedder-specific
          * initialization.
          */
-        public MediaNotificationInfo.Builder createMediaNotificationInfoBuilder();
+        MediaNotificationInfo.Builder createMediaNotificationInfoBuilder();
 
         /** Shows a notification with the given metadata. */
         void showMediaNotification(MediaNotificationInfo notificationInfo);

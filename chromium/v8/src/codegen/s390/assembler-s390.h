@@ -231,6 +231,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
 
   // Unused on this architecture.
   void MaybeEmitOutOfLineConstantPool() {}
+  void ClearInternalState() {}
 
   // Label operations & relative jumps (PPUM Appendix D)
   //
@@ -1047,6 +1048,8 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void DataAlign(int m);
   // Aligns code to something that's optimal for a jump target for the platform.
   void CodeTargetAlign();
+  void SwitchTargetAlign() { CodeTargetAlign(); }
+  void BranchTargetAlign() {}
   void LoopHeaderAlign() { CodeTargetAlign(); }
 
   void breakpoint(bool do_print) {

@@ -19,7 +19,7 @@
 #include "ui/base/ime/mojom/virtual_keyboard_types.mojom-forward.h"
 #include "ui/display/screen_infos.h"
 #include "ui/gfx/geometry/point_conversions.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 #include "ui/gfx/range/range.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -100,6 +100,13 @@ class CONTENT_EXPORT RenderWidgetHostView {
     return gfx::ToRoundedPoint(
         TransformPointToRootCoordSpaceF(gfx::PointF(point)));
   }
+
+  // Coordinate points received from root frame need to be transformed
+  // to the renderer frame's coordinate space. For same site renderer frame this
+  // is a no-op; however, coordinate in an out-of-process iframe renderer
+  // process require transformation.
+  virtual gfx::PointF TransformRootPointToViewCoordSpace(
+      const gfx::PointF& point) = 0;
 
   // Retrieves the native view used to contain plugins and identify the
   // renderer in IPC messages.
@@ -283,7 +290,7 @@ class CONTENT_EXPORT RenderWidgetHostView {
   virtual void ShowSharePicker(
       const std::string& title,
       const std::string& text,
-      const std::string& url,
+      const GURL& url,
       const std::vector<std::string>& file_paths,
       blink::mojom::ShareService::ShareCallback callback) = 0;
 

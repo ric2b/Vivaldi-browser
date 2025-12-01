@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2010 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2010 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
@@ -34,6 +8,7 @@ import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
+import type * as NetworkTimeCalculator from '../../models/network_time_calculator/network_time_calculator.js';
 import * as NetworkForward from '../../panels/network/forward/forward.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as LegacyWrapper from '../../ui/components/legacy_wrapper/legacy_wrapper.js';
@@ -43,7 +18,6 @@ import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import * as NetworkComponents from './components/components.js';
 import {EventSourceMessagesView} from './EventSourceMessagesView.js';
-import type {NetworkTimeCalculator} from './NetworkTimeCalculator.js';
 import {RequestCookiesView} from './RequestCookiesView.js';
 import {RequestInitiatorView} from './RequestInitiatorView.js';
 import {RequestPayloadView} from './RequestPayloadView.js';
@@ -55,56 +29,56 @@ import {ResourceWebSocketFrameView} from './ResourceWebSocketFrameView.js';
 
 const UIStrings = {
   /**
-   *@description Text for network request headers
+   * @description Text for network request headers
    */
   headers: 'Headers',
   /**
-   *@description Text for network connection info. In case the request is not made over http.
+   * @description Text for network connection info. In case the request is not made over http.
    */
   connectionInfo: 'Connection Info',
   /**
-   *@description Text in Network Item View of the Network panel
+   * @description Text in Network Item View of the Network panel
    */
   payload: 'Payload',
   /**
-   *@description Text in Network Item View of the Network panel
+   * @description Text in Network Item View of the Network panel
    */
   messages: 'Messages',
   /**
-   *@description Text in Network Item View of the Network panel
+   * @description Text in Network Item View of the Network panel
    */
   websocketMessages: 'WebSocket messages',
   /**
-   *@description Text in Network Item View of the Network panel
+   * @description Text in Network Item View of the Network panel
    */
   directsocketMessages: 'DirectSocket messages',
   /**
-   *@description Text in Network Item View of the Network panel
+   * @description Text in Network Item View of the Network panel
    */
   eventstream: 'EventStream',
   /**
-   *@description Text for previewing items
+   * @description Text for previewing items
    */
   preview: 'Preview',
   /**
-   *@description Text in Network Item View of the Network panel
+   * @description Text in Network Item View of the Network panel
    */
   responsePreview: 'Response preview',
   /**
-   *@description Icon title in Network Item View of the Network panel
+   * @description Icon title in Network Item View of the Network panel
    */
   signedexchangeError: 'SignedExchange error',
   /**
-   *@description Title of a tab in the Network panel. A Network response refers to the act of acknowledging a
+   * @description Title of a tab in the Network panel. A Network response refers to the act of acknowledging a
    * network request. Should not be confused with answer.
    */
   response: 'Response',
   /**
-   *@description Text in Network Item View of the Network panel
+   * @description Text in Network Item View of the Network panel
    */
   rawResponseData: 'Raw response data',
   /**
-   *@description Text for the initiator of something
+   * @description Text for the initiator of something
    */
   initiator: 'Initiator',
   /**
@@ -114,40 +88,40 @@ const UIStrings = {
    */
   requestInitiatorCallStack: 'Request initiator call stack',
   /**
-   *@description Title of a tab in Network Item View of the Network panel.
+   * @description Title of a tab in Network Item View of the Network panel.
    *The tab displays the duration breakdown of a network request.
    */
   timing: 'Timing',
   /**
-   *@description Text in Network Item View of the Network panel
+   * @description Text in Network Item View of the Network panel
    */
   requestAndResponseTimeline: 'Request and response timeline',
   /**
-   *@description Tooltip to explain the warning icon of the Cookies panel
+   * @description Tooltip to explain the warning icon of the Cookies panel
    */
   thirdPartyPhaseout: 'Cookies blocked due to third-party cookie phaseout.',
   /**
-   *@description Label of a tab in the network panel. Previously known as 'Trust Tokens'.
+   * @description Label of a tab in the network panel. Previously known as 'Trust Tokens'.
    */
   trustTokens: 'Private state tokens',
   /**
-   *@description Title of the Private State Token tab in the Network panel. Previously known as 'Trust Token tab'.
+   * @description Title of the Private State Token tab in the Network panel. Previously known as 'Trust Token tab'.
    */
   trustTokenOperationDetails: 'Private State Token operation details',
   /**
-   *@description Text for web cookies
+   * @description Text for web cookies
    */
   cookies: 'Cookies',
   /**
-   *@description Text in Network Item View of the Network panel
+   * @description Text in Network Item View of the Network panel
    */
   requestAndResponseCookies: 'Request and response cookies',
   /**
-   *@description Tooltip text explaining that DevTools has overridden the response's headers
+   * @description Tooltip text explaining that DevTools has overridden the response's headers
    */
   containsOverriddenHeaders: 'This response contains headers which are overridden by DevTools',
   /**
-   *@description Tooltip text explaining that DevTools has overridden the response
+   * @description Tooltip text explaining that DevTools has overridden the response
    */
   responseIsOverridden: 'This response is overridden by DevTools',
 } as const;
@@ -168,7 +142,7 @@ export class NetworkItemView extends UI.TabbedPane.TabbedPane {
   readonly #firstTab: NetworkForward.UIRequestLocation.UIRequestTabs;
 
   constructor(
-      request: SDK.NetworkRequest.NetworkRequest, calculator: NetworkTimeCalculator,
+      request: SDK.NetworkRequest.NetworkRequest, calculator: NetworkTimeCalculator.NetworkTimeCalculator,
       initialTab?: NetworkForward.UIRequestLocation.UIRequestTabs) {
     super();
     this.#request = request;
@@ -235,7 +209,8 @@ export class NetworkItemView extends UI.TabbedPane.TabbedPane {
       const signedExchangeInfo = request.signedExchangeInfo();
       if (signedExchangeInfo?.errors?.length) {
         const icon = new IconButton.Icon.Icon();
-        icon.data = {iconName: 'cross-circle-filled', color: 'var(--icon-error)', width: '14px', height: '14px'};
+        icon.name = 'cross-circle-filled';
+        icon.classList.add('small');
         UI.Tooltip.Tooltip.install(icon, i18nString(UIStrings.signedexchangeError));
         this.setTabIcon(NetworkForward.UIRequestLocation.UIRequestTabs.PREVIEW, icon);
       }
@@ -287,7 +262,7 @@ export class NetworkItemView extends UI.TabbedPane.TabbedPane {
     // the selected tab in the mean time. Show the previously selected tab in that
     // case instead, by simply doing nothing.
     if (this.#initialTab) {
-      this.selectTabInternal(this.#initialTab);
+      this.#selectTab(this.#initialTab);
       this.#initialTab = undefined;
     }
   }
@@ -317,7 +292,8 @@ export class NetworkItemView extends UI.TabbedPane.TabbedPane {
     }
     if (this.#request.hasThirdPartyCookiePhaseoutIssue()) {
       const icon = new IconButton.Icon.Icon();
-      icon.data = {iconName: 'warning-filled', color: 'var(--icon-warning)', width: '14px', height: '14px'};
+      icon.name = 'warning-filled';
+      icon.classList.add('small');
       icon.title = i18nString(UIStrings.thirdPartyPhaseout);
       this.setTrailingTabIcon(NetworkForward.UIRequestLocation.UIRequestTabs.COOKIES, icon);
     }
@@ -341,12 +317,13 @@ export class NetworkItemView extends UI.TabbedPane.TabbedPane {
     if (trustTokenResult &&
         !NetworkComponents.RequestTrustTokensView.statusConsideredSuccess(trustTokenResult.status)) {
       const icon = new IconButton.Icon.Icon();
-      icon.data = {iconName: 'cross-circle-filled', color: 'var(--icon-error)', width: '14px', height: '14px'};
+      icon.name = 'cross-circle-filled';
+      icon.classList.add('small');
       this.setTabIcon(NetworkForward.UIRequestLocation.UIRequestTabs.TRUST_TOKENS, icon);
     }
   }
 
-  private selectTabInternal(tabId: NetworkForward.UIRequestLocation.UIRequestTabs): void {
+  #selectTab(tabId: NetworkForward.UIRequestLocation.UIRequestTabs): void {
     if (!this.selectTab(tabId)) {
       // maybeAppendPayloadPanel might cause payload tab to appear asynchronously, so
       // it makes sense to retry on the next tick
@@ -370,12 +347,12 @@ export class NetworkItemView extends UI.TabbedPane.TabbedPane {
   }
 
   async revealResponseBody(position: SourceFrame.SourceFrame.RevealPosition): Promise<void> {
-    this.selectTabInternal(NetworkForward.UIRequestLocation.UIRequestTabs.RESPONSE);
+    this.#selectTab(NetworkForward.UIRequestLocation.UIRequestTabs.RESPONSE);
     await this.#responseView?.revealPosition(position);
   }
 
   revealHeader(section: NetworkForward.UIRequestLocation.UIHeaderSection, header: string|undefined): void {
-    this.selectTabInternal(NetworkForward.UIRequestLocation.UIRequestTabs.HEADERS_COMPONENT);
+    this.#selectTab(NetworkForward.UIRequestLocation.UIRequestTabs.HEADERS_COMPONENT);
     this.#headersViewComponent?.revealHeader(section, header);
   }
 

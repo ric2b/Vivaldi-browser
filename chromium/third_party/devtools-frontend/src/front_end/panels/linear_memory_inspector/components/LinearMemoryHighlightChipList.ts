@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -14,12 +14,12 @@ import type {HighlightInfo} from './LinearMemoryViewerUtils.js';
 
 const UIStrings = {
   /**
-   *@description Tooltip text that appears when hovering over an inspected variable's button in the Linear Memory Highlight Chip List.
+   * @description Tooltip text that appears when hovering over an inspected variable's button in the Linear Memory Highlight Chip List.
    * Clicking the button changes the displayed slice of computer memory in the Linear Memory inspector to contain the inspected variable's bytes.
    */
   jumpToAddress: 'Jump to this memory',
   /**
-   *@description Tooltip text that appears when hovering over an inspected variable's delete button in the Linear Memory Highlight Chip List.
+   * @description Tooltip text that appears when hovering over an inspected variable's delete button in the Linear Memory Highlight Chip List.
    * Clicking the delete button stops highlighting the variable's memory in the Linear Memory inspector.
    * 'Memory' is a slice of bytes in the computer memory.
    */
@@ -108,11 +108,7 @@ export class LinearMemoryHighlightChipList extends HTMLElement {
           <button class="delete-highlight-button" title=${i18nString(UIStrings.deleteHighlight)}
               jslog=${VisualLogging.action('linear-memory-inspector.delete-highlight').track({click:true})}
               @click=${():void => this.#onDeleteHighlightClick(highlightInfo)}>
-            <devtools-icon .data=${{
-              iconName: 'cross',
-              color: 'var(--icon-default-hover)',
-              width: '16px',
-              }}>
+            <devtools-icon name="cross" class="medium">
             </devtools-icon>
           </button>
         </div>

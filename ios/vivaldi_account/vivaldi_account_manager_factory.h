@@ -4,7 +4,7 @@
 #define IOS_VIVALDI_ACCOUNT_VIVALDI_ACCOUNT_MANAGER_FACTORY_H_
 
 #include "base/no_destructor.h"
-#include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#include "ios/chrome/browser/shared/model/profile/profile_keyed_service_factory_ios.h"
 
 class ProfileIOS;
 
@@ -12,7 +12,7 @@ namespace vivaldi {
 
 class VivaldiAccountManager;
 
-class VivaldiAccountManagerFactory : public BrowserStateKeyedServiceFactory {
+class VivaldiAccountManagerFactory : public ProfileKeyedServiceFactoryIOS {
  public:
   static VivaldiAccountManager* GetForProfile(ProfileIOS* profile);
   static VivaldiAccountManagerFactory* GetInstance();
@@ -23,9 +23,9 @@ class VivaldiAccountManagerFactory : public BrowserStateKeyedServiceFactory {
   VivaldiAccountManagerFactory();
   ~VivaldiAccountManagerFactory() override;
 
-  // BrowserContextKeyedBaseFactory methods:
+  // ProfileKeyedServiceFactoryIOS methods:
   std::unique_ptr<KeyedService> BuildServiceInstanceFor(
-      web::BrowserState* context) const override;
+      ProfileIOS* profile) const override;
 };
 
 }  // namespace vivaldi

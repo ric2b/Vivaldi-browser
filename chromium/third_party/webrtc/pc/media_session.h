@@ -51,7 +51,7 @@ class MediaSessionDescriptionFactory {
   // The TransportDescriptionFactory, the UniqueRandomIdGenerator, and the
   // PayloadTypeSuggester are not owned by MediaSessionDescriptionFactory, so
   // they must be kept alive by the user of this class.
-  MediaSessionDescriptionFactory(MediaEngineInterface* media_engine,
+  MediaSessionDescriptionFactory(const MediaEngineInterface* media_engine,
                                  bool rtx_enabled,
                                  UniqueRandomIdGenerator* ssrc_generator,
                                  const TransportDescriptionFactory* factory,
@@ -173,6 +173,10 @@ class MediaSessionDescriptionFactory {
     return ssrc_generator_.get();
   }
 
+  // Feedback format according to RFC-8888 will be offered if true.
+  const bool offer_rfc_8888_;
+  // Feedback format according to RFC-8888 will be accepted if offered.
+  const bool accept_offer_with_rfc_8888_;
   bool is_unified_plan_ = false;
   // This object may or may not be owned by this class.
   AlwaysValidPointer<UniqueRandomIdGenerator> const ssrc_generator_;

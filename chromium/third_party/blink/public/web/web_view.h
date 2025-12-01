@@ -35,6 +35,7 @@
 
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "third_party/blink/public/common/fenced_frame/redacted_fenced_frame_config.h"
+#include "third_party/blink/public/common/fingerprinting_protection/noise_token.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom-shared.h"
@@ -139,6 +140,10 @@ class BLINK_EXPORT WebView {
   // |history_index| and |history_length| are information about the frame tree's
   // history list at the point when this view was created. These values are
   // updated again at navigation commit time.
+  // |canvas_noise_token| is the seed token used for canvas noising on canvas
+  // elements in each frame, which should be constant per page. If the
+  // canvas_noise_token value is nullopt, this indicates the page should not
+  // enable canvas noising.
   static WebView* Create(
       WebViewClient*,
       bool is_hidden,
@@ -157,7 +162,8 @@ class BLINK_EXPORT WebView {
       const ColorProviderColorMaps* color_provider_colors,
       blink::mojom::PartitionedPopinParamsPtr partitioned_popin_params,
       int32_t history_index,
-      int32_t history_length);
+      int32_t history_length,
+      const std::optional<NoiseToken>& canvas_noise_token);
 
   // Destroys the WebView synchronously.
   virtual void Close() = 0;
@@ -474,6 +480,10 @@ class BLINK_EXPORT WebView {
   // https://github.com/WICG/attribution-reporting-api/blob/main/app_to_web.md
   virtual void SetPageAttributionSupport(
       network::mojom::AttributionSupport support) = 0;
+
+  // Returns the canvas noise token assigned in the WebView's blink::Page, used
+  // for testing.
+  virtual std::optional<NoiseToken> CanvasNoiseTokenForTesting() = 0;
 
   // Vivaldi start
   // Set image visibility for the page. Loading is blocked if disabled.

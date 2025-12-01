@@ -1340,7 +1340,7 @@ EIGEN_DECLARE_TEST(array_cwise) {
     CALL_SUBTEST_3(array_generic(Array44d()));
     CALL_SUBTEST_4(array_generic(
         ArrayXXcf(internal::random<int>(1, EIGEN_TEST_MAX_SIZE), internal::random<int>(1, EIGEN_TEST_MAX_SIZE))));
-    CALL_SUBTEST_7(array_generic(
+    CALL_SUBTEST_5(array_generic(
         ArrayXXf(internal::random<int>(1, EIGEN_TEST_MAX_SIZE), internal::random<int>(1, EIGEN_TEST_MAX_SIZE))));
     CALL_SUBTEST_8(array_generic(
         ArrayXXi(internal::random<int>(1, EIGEN_TEST_MAX_SIZE), internal::random<int>(1, EIGEN_TEST_MAX_SIZE))));

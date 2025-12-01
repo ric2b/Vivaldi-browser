@@ -30,7 +30,6 @@
 #include "src/wasm/compilation-environment-inl.h"
 #include "src/wasm/function-body-decoder-impl.h"
 #include "src/wasm/function-compiler.h"
-#include "src/wasm/memory-tracing.h"
 #include "src/wasm/object-access.h"
 #include "src/wasm/simd-shuffle.h"
 #include "src/wasm/wasm-code-coverage.h"
@@ -39,6 +38,7 @@
 #include "src/wasm/wasm-linkage.h"
 #include "src/wasm/wasm-objects.h"
 #include "src/wasm/wasm-opcodes-inl.h"
+#include "src/wasm/wasm-tracing.h"
 
 namespace v8::internal::wasm {
 
@@ -496,7 +496,7 @@ class PrototypeSetupSequenceDetector : public Decoder {
     // global.get $constructors
     if (!ExpectGlobalGetImportedImmutableExternref()) return false;
     // call $configureAll
-    final_call_position_ = pc_offset();
+    final_call_position_ = position();
     final_call_pc_ = pc();
     if (!ExpectCallWellKnownImport(WellKnownImport::kConfigureAllPrototypes)) {
       return false;
@@ -3250,6 +3250,9 @@ class LiftoffCompiler {
                                                           &base, &offset);
         __ LoadTaggedPointer(base, base, offset, 0);
         __ PushRegister(kind, LiftoffRegister(base));
+        if (V8_UNLIKELY(v8_flags.trace_wasm_globals)) {
+          TraceGlobalOperation(imm.index, false, decoder->position());
+        }
         return;
       }
 
@@ -3263,6 +3266,9 @@ class LiftoffCompiler {
                            wasm::ObjectAccess::ElementOffsetInTaggedFixedArray(
                                imm.global->offset));
       __ PushRegister(kind, LiftoffRegister(value));
+      if (V8_UNLIKELY(v8_flags.trace_wasm_globals)) {
+        TraceGlobalOperation(imm.index, false, decoder->position());
+      }
       return;
     }
     LiftoffRegList pinned;
@@ -3273,6 +3279,10 @@ class LiftoffCompiler {
     LoadType type = LoadType::ForValueKind(kind);
     __ Load(value, addr, no_reg, offset, type, nullptr, false);
     __ PushRegister(kind, value);
+
+    if (V8_UNLIKELY(v8_flags.trace_wasm_globals)) {
+      TraceGlobalOperation(imm.index, false, decoder->position());
+    }
   }
 
   void GlobalSet(FullDecoder* decoder, const Value&,
@@ -3292,6 +3302,10 @@ class LiftoffCompiler {
         GetBaseAndOffsetForImportedMutableExternRefGlobal(global, &pinned,
                                                           &base, &offset);
         __ StoreTaggedPointer(base, offset, 0, value, pinned);
+
+        if (V8_UNLIKELY(v8_flags.trace_wasm_globals)) {
+          TraceGlobalOperation(imm.index, true, decoder->position());
+        }
         return;
       }
 
@@ -3305,6 +3319,10 @@ class LiftoffCompiler {
                             wasm::ObjectAccess::ElementOffsetInTaggedFixedArray(
                                 imm.global->offset),
                             value, pinned);
+
+      if (V8_UNLIKELY(v8_flags.trace_wasm_globals)) {
+        TraceGlobalOperation(imm.index, true, decoder->position());
+      }
       return;
     }
     LiftoffRegList pinned;
@@ -3313,6 +3331,10 @@ class LiftoffCompiler {
     LiftoffRegister reg = pinned.set(__ PopToRegister(pinned));
     StoreType type = StoreType::ForValueKind(kind);
     __ Store(addr, no_reg, offset, reg, type, {}, nullptr, false);
+
+    if (V8_UNLIKELY(v8_flags.trace_wasm_globals)) {
+      TraceGlobalOperation(imm.index, true, decoder->position());
+    }
   }
 
   void TableGet(FullDecoder* decoder, const Value&, Value*,
@@ -3811,6 +3833,40 @@ class LiftoffCompiler {
       __ emit_cond_jump(kNotEqual, trap.label(), kI32, address, no_reg,
                         trap.frozen());
     }
+  }
+
+  void TraceGlobalOperation(uint32_t global_index, bool is_store,
+                            WasmCodePosition position) {
+    __ SpillAllRegisters();
+
+    LiftoffRegList pinned;
+
+    LiftoffRegister info = pinned.set(__ GetUnusedRegister(kGpReg, pinned));
+    __ AllocateStackSlot(info.gp(), sizeof(GlobalTracingInfo));
+
+    LiftoffRegister data = pinned.set(__ GetUnusedRegister(kGpReg, pinned));
+
+    __ LoadConstant(data, WasmValue(global_index));
+    __ Store(info.gp(), no_reg, offsetof(GlobalTracingInfo, global_index), data,
+             StoreType::kI32Store, pinned);
+    __ LoadConstant(data, WasmValue(is_store ? 1 : 0));
+    __ Store(info.gp(), no_reg, offsetof(GlobalTracingInfo, is_store), data,
+             StoreType::kI32Store8, pinned);
+
+    WasmTraceGlobalDescriptor descriptor;
+    DCHECK_EQ(0, descriptor.GetStackParameterCount());
+    DCHECK_EQ(1, descriptor.GetRegisterParameterCount());
+    Register param_reg = descriptor.GetRegisterParameter(0);
+    if (info.gp() != param_reg) {
+      __ Move(param_reg, info.gp(), kIntPtrKind);
+    }
+
+    source_position_table_builder_.AddPosition(__ pc_offset(),
+                                               SourcePosition(position), false);
+    __ CallBuiltin(Builtin::kWasmTraceGlobal);
+    DefineSafepoint();
+
+    __ DeallocateStackSlot(sizeof(GlobalTracingInfo));
   }
 
   void TraceMemoryOperation(bool is_store, uint32_t mem_index,
@@ -7392,9 +7448,8 @@ class LiftoffCompiler {
   VarState GetFirstFieldIfPrototype(const StructType* struct_type,
                                     bool initial_values_on_stack,
                                     LiftoffRegList pinned) {
-    // If the first field might be a DescriptorOptions containing a
-    // JS prototype, we must pass it along. Otherwise, to satisfy the
-    // parameter count, we pass Smi(0).
+    // If the first field might be a JS prototype, we must pass it along.
+    // Otherwise, to satisfy the parameter count, we pass Smi(0).
     if (initial_values_on_stack &&
         struct_type->first_field_can_be_prototype()) {
       int slot = -struct_type->field_count();
@@ -7935,11 +7990,16 @@ class LiftoffCompiler {
               wasm::ObjectAccess::ElementOffsetInTaggedFixedArray(
                   matcher.global_offset()));
 
+          // The {matcher} started at the current position, so the positions
+          // it reports are relative to that. Here we translate them to being
+          // relative to the start of the function.
+          uint32_t position =
+              decoder->position() + matcher.final_call_position();
           CallBuiltin(
               Builtin::kWasmConfigureAllPrototypesOpt,
               MakeSig::Params(kIntPtrKind, kRef),
               {VarState{kIntPtrKind, buffer, 0}, VarState{kRef, global, 0}},
-              matcher.final_call_position());
+              position);
           __ DeallocateStackSlot(kBufferSize);
           static constexpr int kNumDroppedConstants = 2;
           __ DropValues(kNumDroppedConstants);
@@ -8084,7 +8144,8 @@ class LiftoffCompiler {
     __ PushRegister(kI32, dst);
   }
 
-  void RefGetDesc(FullDecoder* decoder, const Value& ref_val, Value* desc_val) {
+  void RefGetDesc(FullDecoder* decoder, ModuleTypeIndex struct_index,
+                  const Value& ref_val, Value* desc_val) {
     LiftoffRegList pinned;
     LiftoffRegister ref = pinned.set(__ PopToRegister());
 
@@ -8396,6 +8457,7 @@ class LiftoffCompiler {
 
   void RefCastAbstract(FullDecoder* decoder, const Value& obj, HeapType type,
                        Value* result_val, bool null_succeeds) {
+    if (v8_flags.experimental_wasm_assume_ref_cast_succeeds) return;
     switch (type.representation()) {
       case HeapType::kEq:
         if (v8_flags.experimental_wasm_shared &&
@@ -9067,8 +9129,7 @@ class LiftoffCompiler {
     MaybeEmitNullCheck(decoder, string_reg.gp(), pinned, str.type);
     LiftoffRegister value = __ GetUnusedRegister(kGpReg, pinned);
     LoadObjectField(decoder, value, string_reg.gp(), no_reg,
-                    wasm::ObjectAccess::ToTagged(
-                        compiler::AccessBuilder::ForStringLength().offset),
+                    wasm::ObjectAccess::ToTagged(offsetof(String, length_)),
                     ValueKind::kI32, false /* is_signed */,
                     false /* trapping */, pinned);
     __ PushRegister(kI32, value);

@@ -28,17 +28,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer.h"
 
 #include <algorithm>
 #include <memory>
 #include <utility>
 
+#include "base/compiler_specific.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/read_only_shared_memory_region.h"
@@ -90,7 +86,6 @@ namespace {
 // also be defined on al platforms even though it also will be used only on
 // Windows.
 BASE_FEATURE(kUseSingleSIForLowLatencyWebGLOnWindows,
-             "UseSingleSIForLowLatencyWebGLOnWindows",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 const float kResourceAdjustedRatio = 0.5;
@@ -103,11 +98,12 @@ void FlipVertically(base::span<uint8_t> framebuffer,
   DCHECK_EQ(framebuffer.size(), num_rows * row_bytes);
   std::vector<uint8_t> scanline(row_bytes);
   for (size_t i = 0; i < num_rows / 2; i++) {
-    uint8_t* row_a = framebuffer.data() + i * row_bytes;
-    uint8_t* row_b = framebuffer.data() + (num_rows - i - 1) * row_bytes;
-    memcpy(scanline.data(), row_b, row_bytes);
-    memcpy(row_b, row_a, row_bytes);
-    memcpy(row_a, scanline.data(), row_bytes);
+    uint8_t* row_a = UNSAFE_TODO(framebuffer.data() + i * row_bytes);
+    uint8_t* row_b =
+        UNSAFE_TODO(framebuffer.data() + (num_rows - i - 1) * row_bytes);
+    UNSAFE_TODO(memcpy(scanline.data(), row_b, row_bytes));
+    UNSAFE_TODO(memcpy(row_b, row_a, row_bytes));
+    UNSAFE_TODO(memcpy(row_a, scanline.data(), row_bytes));
   }
 }
 
@@ -169,7 +165,7 @@ void ForceNextDrawingBufferCreationToFailForTest() {
 
 scoped_refptr<DrawingBuffer> DrawingBuffer::Create(
     std::unique_ptr<WebGraphicsContext3DProvider> context_provider,
-    const Platform::GraphicsInfo& graphics_info,
+    const Platform::WebGLContextInfo& context_info,
     bool using_swap_chain,
     Client* client,
     const gfx::Size& size,
@@ -180,7 +176,7 @@ scoped_refptr<DrawingBuffer> DrawingBuffer::Create(
     bool want_antialiasing,
     bool desynchronized,
     PreserveDrawingBuffer preserve,
-    WebGLVersion webgl_version,
+    Platform::WebGLContextType webgl_version,
     ChromiumImageUsage chromium_image_usage,
     PredefinedColorSpace color_space,
     gl::GpuPreference gpu_preference) {
@@ -235,7 +231,7 @@ scoped_refptr<DrawingBuffer> DrawingBuffer::Create(
 
   scoped_refptr<DrawingBuffer> drawing_buffer =
       base::AdoptRef(new DrawingBuffer(
-          std::move(context_provider), graphics_info, using_swap_chain,
+          std::move(context_provider), context_info, using_swap_chain,
           desynchronized, std::move(extensions_util), client,
           discard_framebuffer_supported, texture_storage_enabled,
           want_alpha_channel, premultiplied_alpha, preserve, webgl_version,
@@ -250,7 +246,7 @@ scoped_refptr<DrawingBuffer> DrawingBuffer::Create(
 
 DrawingBuffer::DrawingBuffer(
     std::unique_ptr<WebGraphicsContext3DProvider> context_provider,
-    const Platform::GraphicsInfo& graphics_info,
+    const Platform::WebGLContextInfo& context_info,
     bool using_swap_chain,
     bool desynchronized,
     std::unique_ptr<Extensions3DUtil> extensions_util,
@@ -260,7 +256,7 @@ DrawingBuffer::DrawingBuffer(
     bool want_alpha_channel,
     bool premultiplied_alpha,
     PreserveDrawingBuffer preserve,
-    WebGLVersion webgl_version,
+    Platform::WebGLContextType webgl_version,
     bool want_depth,
     bool want_stencil,
     ChromiumImageUsage chromium_image_usage,
@@ -280,7 +276,7 @@ DrawingBuffer::DrawingBuffer(
                                                        : kUnpremul_SkAlphaType)
                                 : kOpaque_SkAlphaType),
       requested_format_(want_alpha_channel ? GL_RGBA8 : GL_RGB8),
-      graphics_info_(graphics_info),
+      context_info_(context_info),
       using_swap_chain_(using_swap_chain),
       low_latency_enabled_(desynchronized),
       want_depth_(want_depth),
@@ -549,7 +545,7 @@ DrawingBuffer::ExportSharedImageFromBackBuffer(
     gpu::SyncToken& sync_token,
     viz::ReleaseCallback* out_release_callback) {
   DCHECK(state_restorer_);
-  if (webgl_version_ > kWebGL1) {
+  if (webgl_version_ != Platform::kWebGL1ContextType) {
     state_restorer_->SetPixelUnpackBufferBindingDirty();
     gl_->BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
   }
@@ -765,8 +761,7 @@ scoped_refptr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage() {
   DCHECK(release_callback);
 
   return AcceleratedStaticBitmapImage::CreateFromCanvasSharedImage(
-      std::move(shared_image), sync_token,
-      /*shared_image_texture_id=*/0, kPremul_SkAlphaType,
+      std::move(shared_image), sync_token, kPremul_SkAlphaType,
       context_provider_->GetWeakPtr(), base::PlatformThread::CurrentRef(),
       ThreadScheduler::Current()->CleanupTaskRunner(),
       std::move(release_callback));
@@ -1297,7 +1292,8 @@ bool DrawingBuffer::ReallocateDefaultFramebuffer(const gfx::Size& size,
     // universally can cause issues with BGRA formats.
     // See: crbug.com/1443160#c38
     bool use_tex_image = !texture_storage_enabled_;
-    if (webgl_version_ == kWebGL1 && requested_format_ == GL_SRGB8_ALPHA8) {
+    if (webgl_version_ == Platform::kWebGL1ContextType &&
+        requested_format_ == GL_SRGB8_ALPHA8) {
       // On GLES2:
       //   * SRGB_ALPHA_EXT is not a valid internal format for TexStorage2DEXT.
       //   * SRGB8_ALPHA8 is not a renderable texture internal format.
@@ -1823,7 +1819,7 @@ void DrawingBuffer::ReadBackFramebuffer(
 
   state_restorer_->SetPixelPackParametersDirty();
   gl_->PixelStorei(GL_PACK_ALIGNMENT, 1);
-  if (webgl_version_ > kWebGL1) {
+  if (webgl_version_ != Platform::kWebGL1ContextType) {
     gl_->PixelStorei(GL_PACK_SKIP_ROWS, 0);
     gl_->PixelStorei(GL_PACK_SKIP_PIXELS, 0);
     gl_->PixelStorei(GL_PACK_ROW_LENGTH, 0);
@@ -1836,7 +1832,9 @@ void DrawingBuffer::ReadBackFramebuffer(
 
   base::CheckedNumeric<size_t> row_bytes = 4;
   if (destination_format == viz::SinglePlaneFormat::kRGBA_F16) {
-    data_type = (webgl_version_ > kWebGL1) ? GL_HALF_FLOAT : GL_HALF_FLOAT_OES;
+    data_type = (webgl_version_ != Platform::kWebGL1ContextType)
+                    ? GL_HALF_FLOAT
+                    : GL_HALF_FLOAT_OES;
     row_bytes *= 2;
   }
   row_bytes *= Size().width();
@@ -1979,12 +1977,13 @@ scoped_refptr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateColorBuffer(
   // format matches shared image format. This is necessary for Graphite where
   // IOSurfaces are always used to allow sharing between ANGLE and Dawn.
   if (color_buffer_format_ == viz::SinglePlaneFormat::kRGBA_8888 &&
-      gpu::IsImageFromGpuMemoryBufferFormatSupported(
-          gfx::BufferFormat::BGRA_8888, ContextProvider()->GetCapabilities())) {
+      gpu::IsFormatSupportedForSIWithNativeBuffer(
+          viz::SinglePlaneFormat::kBGRA_8888,
+          ContextProvider()->GetCapabilities())) {
     color_buffer_format_ = viz::SinglePlaneFormat::kBGRA_8888;
   } else if (color_buffer_format_ == viz::SinglePlaneFormat::kRGBX_8888 &&
-             gpu::IsImageFromGpuMemoryBufferFormatSupported(
-                 gfx::BufferFormat::BGRX_8888,
+             gpu::IsFormatSupportedForSIWithNativeBuffer(
+                 viz::SinglePlaneFormat::kBGRX_8888,
                  ContextProvider()->GetCapabilities())) {
     color_buffer_format_ = viz::SinglePlaneFormat::kBGRX_8888;
   }
@@ -2028,17 +2027,15 @@ scoped_refptr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateColorBuffer(
       // Intel GPUs (i8xx) don't support RGBX overlays.
       if (color_buffer_format_ == viz::SinglePlaneFormat::kRGBX_8888 &&
           allow_bgrx &&
-          gpu::IsImageFromGpuMemoryBufferFormatSupported(
-              gfx::BufferFormat::BGRX_8888,
+          gpu::IsFormatSupportedForSIWithNativeBuffer(
+              viz::SinglePlaneFormat::kBGRX_8888,
               ContextProvider()->GetCapabilities())) {
         color_buffer_format_ = viz::SinglePlaneFormat::kBGRX_8888;
       }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-      if (gpu::IsImageFromGpuMemoryBufferFormatSupported(
-              viz::SinglePlaneSharedImageFormatToBufferFormat(
-                  color_buffer_format_),
-              ContextProvider()->GetCapabilities())) {
+      if (gpu::IsFormatSupportedForSIWithNativeBuffer(
+              color_buffer_format_, ContextProvider()->GetCapabilities())) {
         usage = usage | gpu::SHARED_IMAGE_USAGE_SCANOUT;
         if (low_latency_enabled()) {
           usage = usage | gpu::SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE;
@@ -2207,14 +2204,6 @@ bool DrawingBuffer::ShouldUseChromiumImage() {
   if (chromium_image_usage_ != kAllowChromiumImage) {
     return false;
   }
-#if BUILDFLAG(IS_ANDROID)
-  if (ContextProvider()
-          ->GetGpuFeatureInfo()
-          .status_values[gpu::GPU_FEATURE_TYPE_ANDROID_SURFACE_CONTROL] !=
-      gpu::kGpuFeatureStatusEnabled) {
-    return false;
-  }
-#endif
   if (RuntimeEnabledFeatures::WebGLImageChromiumEnabled()) {
     return true;
   }

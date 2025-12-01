@@ -13,6 +13,8 @@
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
                     =1 {Encuentra tus pestañas cerradas en pestañas recientes en el menú principal de Vivaldi. Tu pestaña privada no estará disponible.}
                     other {Encuentra tus pestañas cerradas en pestañas recientes en el menú principal de Vivaldi. Tus # pestañas privadas no estarán disponibles.}}</translation>
+<translation id="4686942373615810936">Creado ahora mismo</translation>
+<translation id="4870911314065352661">¿Cerrar todas las pestañas?</translation>
 <translation id="4871187110787939393">¿Quieres cerrar todas las pestañas privadas?</translation>
 <translation id="5494920125229734069">Seleccionar todo</translation>
 <translation id="6807841890213931603">Suprimir pestaña y borrar pila</translation>

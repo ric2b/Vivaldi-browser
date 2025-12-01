@@ -20,7 +20,7 @@
 "%1$@ %2$@ has been downloaded and is ready to use! Would you like to install it and relaunch %1$@ now?" = "%1$@ %2$@ er lasta ned og er klar til bruk! Ynskjer du å installera og starta om att %1$@ no?";
 
 /* No comment provided by engineer. */
-"%1$@ can’t be updated, because it was opened from a read-only or a temporary location." = "%1$@ kan ikkje oppdaterast frå ei eining som berre kan lesast, t.d. frå ein cd";
+"%1$@ can’t be updated because it was opened from a read-only or a temporary location." = "%1$@ kan ikkje oppdaterast frå ei eining som berre kan lesast, t.d. frå ein cd";
 
 /* No comment provided by engineer. */
 "A new version of %@ is available!" = "Ein ny versjon av %@ er tilgjengeleg!";
@@ -88,3 +88,35 @@
 /* Status message shown when the user checks for updates but is already current or the feed doesn't contain any updates. */
 "You’re up to date!" = "Ingen nye oppdateringar";
 
+/* Software Update title/label; */
+"Software Update" = "Programoppdatering";
+
+/* Remind Me Later choice for update alert */
+"Remind Me Later" = "Utsett";
+
+/* Skip This Version choice for update alert */
+"Skip This Version" = "Hopp over";
+
+/* Install Update choice for update alert */
+"Install Update" = "Installer";
+
+/* Automatically download and install updates in the future option for update alert */
+"Automatically download and install updates in the future" = "Last ned og installer automatisk i framtida";
+
+/* Check for updates automatically response for update permission dialog */
+"Check Automatically" = "Sjå etter automatisk";
+
+/* Don't check for updates automatically response for update permission dialog */
+"Don’t Check" = "Ikkje sjå etter";
+
+/* Title question for update permission dialog */
+"Check for updates automatically?" = "Sjå etter etter oppdateringar automatisk?";
+
+/* Include anonymous system profile choice for update permission dialog */
+"Include anonymous system profile" = "Inkluder anonym systemprofil";
+
+/* Automatically download and install updates choice for update permission dialog */
+"Automatically download and install updates" = "Last ned og installer automatisk";
+
+/* Anonymous system profile information disclosure for update permission dialog */
+"Anonymous system profile information is used to help us plan future development work. Please contact us if you have any questions about this.\n\nThis is the information that would be sent:" = "Den anonyme systemprofilen hjelper oss med å planleggja framtidig utviklingsarbeid. Ta gjerne kontakt med oss om du har spørsmål om dette. \nFølgjande innhald vil bli sendt:";

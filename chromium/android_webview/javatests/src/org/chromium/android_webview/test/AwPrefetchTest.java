@@ -4,6 +4,8 @@
 
 package org.chromium.android_webview.test;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import android.os.Bundle;
 import android.os.SystemClock;
 
@@ -33,8 +35,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.Features;
-import org.chromium.content_public.browser.ContentFeatureList;
+import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.net.test.ServerCertificate;
 
@@ -57,7 +58,8 @@ public class AwPrefetchTest extends AwParameterizedTest {
 
     // Current tests doesn't require a complex webpage to test. Later on we may need to add specific
     // page with different resources in it.
-    private static final String BASIC_PREFETCH_URL = "/android_webview/test/data/hello_world.html";
+    private static final String BASIC_PREFETCH_RELATIVE_PATH =
+            "/android_webview/test/data/hello_world.html";
 
     private final TestAwContentsClient mContentsClient;
     private AwEmbeddedTestServer mTestServer;
@@ -79,7 +81,7 @@ public class AwPrefetchTest extends AwParameterizedTest {
                         InstrumentationRegistry.getInstrumentation().getContext(),
                         ServerCertificate.CERT_TEST_NAMES);
 
-        mPrefetchUrl = mTestServer.getURLWithHostName("a.test", BASIC_PREFETCH_URL);
+        mPrefetchUrl = getUrl(BASIC_PREFETCH_RELATIVE_PATH);
     }
 
     @Test
@@ -133,35 +135,6 @@ public class AwPrefetchTest extends AwParameterizedTest {
                 IllegalArgumentException.class, callback.getOnErrorHelper().getError().getClass());
         Assert.assertEquals(
                 "URL must have HTTPS scheme for prefetch.",
-                callback.getOnErrorHelper().getError().getMessage());
-        Assert.assertNull(callback.getOnStatusUpdatedHelper().mExtras);
-    }
-
-    @Test
-    @LargeTest
-    @Feature({"AndroidWebView"})
-    @Features.DisableFeatures({ContentFeatureList.PREFETCH_BROWSER_INITIATED_TRIGGERS})
-    public void testPrefetchRequestFlagCheck() throws Throwable {
-        // Prepare PrefetchParameters
-        Map<String, String> additionalHeaders = new HashMap<>();
-        additionalHeaders.put("foo", "bar");
-        additionalHeaders.put("lorem", "ipsum");
-        AwNoVarySearchData expectedNoVarySearch =
-                new AwNoVarySearchData(false, false, new String[] {"ts", "uid"}, null);
-        AwPrefetchParameters prefetchParameters =
-                new AwPrefetchParameters(additionalHeaders, expectedNoVarySearch, true);
-
-        // Do the prefetch request.
-        TestAwPrefetchCallback callback =
-                startPrefetchingAndWait("https://www.example.com", prefetchParameters);
-
-        // wait then do the checks
-        callback.mOnErrorHelper.waitForNext();
-        Assert.assertEquals(1, callback.getOnErrorHelper().getCallCount());
-        Assert.assertEquals(
-                IllegalStateException.class, callback.getOnErrorHelper().getError().getClass());
-        Assert.assertEquals(
-                "WebView initiated prefetching feature is not enabled.",
                 callback.getOnErrorHelper().getError().getMessage());
         Assert.assertNull(callback.getOnStatusUpdatedHelper().mExtras);
     }
@@ -513,10 +486,102 @@ public class AwPrefetchTest extends AwParameterizedTest {
         // wait then do the checks
         callback.mOnStatusUpdatedHelper.waitForNext();
         HashMap<String, String> prefetchHeaders =
-                mTestServer.getRequestHeadersForUrl(BASIC_PREFETCH_URL);
+                mTestServer.getRequestHeadersForUrl(BASIC_PREFETCH_RELATIVE_PATH);
         String secPurposeHeaderValue = prefetchHeaders.get("Sec-Purpose");
         Assert.assertNotNull(secPurposeHeaderValue);
         Assert.assertTrue(AwPrefetchManager.isSecPurposeForPrefetch(secPurposeHeaderValue));
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({ContentSwitches.HOST_RESOLVER_RULES + "=MAP * 127.0.0.1"})
+    public void testPrefetchAfterNavigationLogging() throws Throwable {
+        mActivityTestRule.startBrowserProcess();
+
+        final String url = getUrl(BASIC_PREFETCH_RELATIVE_PATH);
+
+        // Do a navigation and wait for it to complete.
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    AwTestContainerView testView =
+                            mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
+                    final AwContents awContents = testView.getAwContents();
+
+                    AwActivityTestRule.enableJavaScriptOnUiThread(awContents);
+                    awContents.loadUrl(url);
+                });
+
+        try (var histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectAnyRecord(
+                                "Prefetch.PrefetchContainer.PrefetchMatchMissedToPrefetchStarted.Embedder_WebView")
+                        .build()) {
+
+            // Make a prefetch request with the exact same URL as the navigation.
+            TestAwPrefetchCallback callback =
+                    startPrefetchingAndWait(url, getAwPrefetchParameters());
+            callback.mOnStatusUpdatedHelper.waitForNext();
+
+            // Cancel the prefetch so that the histogram is logged.
+            ThreadUtils.runOnUiThreadBlocking(
+                    () -> {
+                        final int prefetchKey = callback.getPrefetchKey();
+                        mActivityTestRule
+                                .getAwBrowserContext()
+                                .getPrefetchManager()
+                                .cancelPrefetch(prefetchKey);
+                    });
+            histogramWatcher.pollInstrumentationThreadUntilSatisfied();
+        }
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({ContentSwitches.HOST_RESOLVER_RULES + "=MAP * 127.0.0.1"})
+    public void testPrefetchAfterNavigationLogging_notLoggedScenario() throws Throwable {
+        mActivityTestRule.startBrowserProcess();
+
+        // Do a navigation and wait for it to complete.
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    final String url = getUrl(BASIC_PREFETCH_RELATIVE_PATH + "/1");
+                    AwTestContainerView testView =
+                            mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
+                    final AwContents awContents = testView.getAwContents();
+
+                    AwActivityTestRule.enableJavaScriptOnUiThread(awContents);
+                    awContents.loadUrl(url);
+                });
+
+        try (var histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectNoRecords(
+                                "Prefetch.PrefetchContainer.PrefetchMatchMissedToPrefetchStarted.Embedder_WebView")
+                        .build()) {
+
+            // Make a prefetch request with the exact same URL as the navigation.
+            final String url = getUrl(BASIC_PREFETCH_RELATIVE_PATH);
+            TestAwPrefetchCallback callback =
+                    startPrefetchingAndWait(url, getAwPrefetchParameters());
+            callback.mOnStatusUpdatedHelper.waitForNext();
+
+            // Cancel the prefetch so that the histogram is logged.
+            ThreadUtils.runOnUiThreadBlocking(
+                    () -> {
+                        final int prefetchKey = callback.getPrefetchKey();
+                        mActivityTestRule
+                                .getAwBrowserContext()
+                                .getPrefetchManager()
+                                .cancelPrefetch(prefetchKey);
+                    });
+            histogramWatcher.pollInstrumentationThreadUntilSatisfied();
+        }
+    }
+
+    private String getUrl(final String relativePath) {
+        return mTestServer.getURLWithHostName("a.test", relativePath);
     }
 
     private static AwPrefetchParameters getAwPrefetchParameters() {
@@ -560,14 +625,14 @@ public class AwPrefetchTest extends AwParameterizedTest {
             private @Nullable Bundle mExtras;
 
             public int getStatusCode() {
-                assert getCallCount() > 0;
+                assertThat(getCallCount()).isGreaterThan(0);
                 return mStatusCode;
             }
 
             @Keep
             @Nullable
             public Bundle getExtras() {
-                assert getCallCount() > 0;
+                assertThat(getCallCount()).isGreaterThan(0);
                 return mExtras;
             }
 
@@ -582,7 +647,7 @@ public class AwPrefetchTest extends AwParameterizedTest {
             private Throwable mError;
 
             public Throwable getError() {
-                assert getCallCount() > 0;
+                assertThat(getCallCount()).isGreaterThan(0);
                 return mError;
             }
 

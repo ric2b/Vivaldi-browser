@@ -242,8 +242,16 @@ bool StructTraits<blink::mojom::WebPreferencesDataView,
       data.api_based_fingerprinting_interventions_enabled();
   out->content_based_fingerprinting_protection_enabled =
       data.content_based_fingerprinting_protection_enabled();
+  out->ai_prompt_api_enabled = data.ai_prompt_api_enabled();
+
+#if BUILDFLAG(IS_ANDROID)
+  out->increment_local_surface_id_for_mainframe_same_doc_navigation =
+      data.increment_local_surface_id_for_mainframe_same_doc_navigation();
+#endif  // BUILDFLAG(IS_ANDROID)
 
   // Vivaldi
+  CHECK(!out->ai_prompt_api_enabled)
+      << "AI prompt enabled without permission";
   out->allow_tab_cycle_from_webpage_into_ui =
       data.allow_tab_cycle_from_webpage_into_ui();
   out->allow_access_keys = data.allow_access_keys();

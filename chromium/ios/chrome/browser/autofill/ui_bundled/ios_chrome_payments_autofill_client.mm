@@ -32,8 +32,12 @@
 #import "components/autofill/core/browser/payments/payments_network_interface.h"
 #import "components/autofill/core/browser/payments/virtual_card_enroll_metrics_logger.h"
 #import "components/autofill/core/browser/payments/virtual_card_enrollment_manager.h"
+#import "components/autofill/core/browser/ui/payments/autofill_progress_dialog_controller.h"
 #import "components/autofill/core/browser/ui/payments/autofill_progress_dialog_controller_impl.h"
 #import "components/autofill/core/browser/ui/payments/card_unmask_authentication_selection_dialog_controller_impl.h"
+#import "components/autofill/core/browser/ui/payments/card_unmask_otp_input_dialog_controller.h"
+#import "components/autofill/core/browser/ui/payments/card_unmask_otp_input_dialog_controller_impl.h"
+#import "components/autofill/core/browser/ui/payments/card_unmask_prompt_controller_impl.h"
 #import "components/autofill/core/browser/ui/payments/card_unmask_prompt_view.h"
 #import "components/autofill/core/browser/ui/payments/virtual_card_enroll_ui_model.h"
 #import "components/autofill/core/common/autofill_payments_features.h"
@@ -58,9 +62,9 @@ using PaymentsRpcResult = PaymentsAutofillClient::PaymentsRpcResult;
 
 // Creates and returns an infobar for saving credit cards.
 std::unique_ptr<infobars::InfoBar> CreateSaveCardInfoBarMobile(
-    std::unique_ptr<AutofillSaveCardInfoBarDelegateIOS> delegate) {
-  return std::make_unique<InfoBarIOS>(InfobarType::kInfobarTypeSaveCard,
-                                      std::move(delegate));
+    std::unique_ptr<AutofillSaveCardInfoBarDelegateIOS> delegate,
+    InfobarType infobar_type) {
+  return std::make_unique<InfoBarIOS>(infobar_type, std::move(delegate));
 }
 }  // namespace
 
@@ -101,6 +105,10 @@ void IOSChromePaymentsAutofillClient::ShowSaveCreditCardLocally(
   ShowSaveCreditCard(
       AutofillSaveCardUiInfo::CreateForLocalSave(options, card),
       std::make_unique<AutofillSaveCardDelegate>(std::move(callback), options));
+}
+
+bool IOSChromePaymentsAutofillClient::LocalCardSaveIsSupported() {
+  return true;
 }
 
 void IOSChromePaymentsAutofillClient::ShowSaveCreditCardToCloud(
@@ -426,6 +434,21 @@ PaymentsDataManager& IOSChromePaymentsAutofillClient::GetPaymentsDataManager() {
   return client_->GetPersonalDataManager().payments_data_manager();
 }
 
+std::unique_ptr<AutofillProgressDialogController>
+IOSChromePaymentsAutofillClient::ExtractProgressDialogModel() {
+  return std::move(progress_dialog_controller_);
+}
+
+std::unique_ptr<CardUnmaskOtpInputDialogController>
+IOSChromePaymentsAutofillClient::ExtractOtpInputDialogModel() {
+  return std::move(otp_input_dialog_controller_);
+}
+
+CardUnmaskPromptController*
+IOSChromePaymentsAutofillClient::GetCardUnmaskPromptModel() {
+  return unmask_controller_.get();
+}
+
 void IOSChromePaymentsAutofillClient::ShowSaveCreditCard(
     AutofillSaveCardUiInfo ui_info,
     std::unique_ptr<AutofillSaveCardDelegate> save_card_delegate) {
@@ -445,22 +468,33 @@ void IOSChromePaymentsAutofillClient::ShowSaveCreditCard(
     bottom_sheet_tab_helper->ShowSaveCardBottomSheet(std::move(model));
     return;
   }
+  const bool is_cvc_save_only =
+      save_card_delegate->GetSaveCreditCardOptions().card_save_type ==
+      CardSaveType::kCvcSaveOnly;
+
   if (save_card_delegate->is_for_upload()
           ? base::FeatureList::IsEnabled(features::kAutofillSaveCardBottomSheet)
           : base::FeatureList::IsEnabled(
                 features::kAutofillLocalSaveCardBottomSheet)) {
-    // Logs the decision to not show the bottomsheet for users with flag
-    // enabled.
-    autofill_metrics::LogSaveCreditCardPromptResultIOS(
-        autofill::autofill_metrics::SaveCreditCardPromptResultIOS::kNotShown,
-        save_card_delegate->is_for_upload(),
-        save_card_delegate->GetSaveCreditCardOptions(),
-        autofill::autofill_metrics::SaveCreditCardPromptOverlayType::
-            kBottomSheet);
+    if (!is_cvc_save_only) {
+      // Logs the decision to not show the bottomsheet for users with flag
+      // enabled.
+      autofill_metrics::LogSaveCreditCardPromptResultIOS(
+          autofill::autofill_metrics::SaveCreditCardPromptResultIOS::kNotShown,
+          save_card_delegate->is_for_upload(),
+          save_card_delegate->GetSaveCreditCardOptions(),
+          autofill::autofill_metrics::SaveCreditCardPromptOverlayType::
+              kBottomSheet);
+    }
   }
+  InfobarType infobar_type = is_cvc_save_only
+                                 ? InfobarType::kInfobarTypeSaveCvc
+                                 : InfobarType::kInfobarTypeSaveCard;
+
   infobar_manager_->AddInfoBar(CreateSaveCardInfoBarMobile(
       std::make_unique<AutofillSaveCardInfoBarDelegateIOS>(
-          std::move(ui_info), std::move(save_card_delegate))));
+          std::move(ui_info), std::move(save_card_delegate)),
+      infobar_type));
 }
 
 bool IOSChromePaymentsAutofillClient::IsRiskBasedAuthEffectivelyAvailable()

@@ -78,7 +78,7 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
     {Toggle::TurnOffVsync,
      {"turn_off_vsync",
       "Turn off vsync when rendering. In order to do performance test or run perf tests, turn off "
-      "vsync so that the fps can exeed 60.",
+      "vsync so that the fps can exceed 60.",
       "https://crbug.com/dawn/237", ToggleStage::Device}},
     {Toggle::UseTemporaryBufferInCompressedTextureToTextureCopy,
      {"use_temporary_buffer_in_texture_to_texture_copy",
@@ -173,10 +173,6 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
     {Toggle::MetalEnableVertexPulling,
      {"metal_enable_vertex_pulling", "Uses vertex pulling to protect out-of-bounds reads on Metal",
       "https://crbug.com/dawn/480", ToggleStage::Device}},
-    {Toggle::DisableTextureViewBindingUsedAsExternalTexture,
-     {"disable_texture_view_binding_used_as_external_texture",
-      "Disable using a texture view for an externalTexture binding.", "http://crbug.com/398752857",
-      ToggleStage::Device}},
     {Toggle::AllowUnsafeAPIs,
      {"allow_unsafe_apis",
       "Suppresses validation errors on API entry points or parameter combinations that aren't "
@@ -383,6 +379,10 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
       "subresource are completely initialized, and StoreOp::Discard is always translated as a "
       "Store.",
       "https://crbug.com/dawn/838", ToggleStage::Device}},
+    {Toggle::MetalPolyfillUnpack2x16snorm,
+     {"metal_polyfill_unpack_2x16_snorm",
+      "Polyfill unpack2x16snorm for MSL due to CTS failures on Mac AMD devices.",
+      "https://crbug.com/407109055", ToggleStage::Device}},
     {Toggle::MetalFillEmptyOcclusionQueriesWithZero,
      {"metal_fill_empty_occlusion_queries_with_zero",
       "Apple GPUs leave stale results in the visibility result buffer instead of writing zero if "
@@ -543,6 +543,10 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
       "workaround issues where FXC can miscompile code that depends on special float values (NaN, "
       "INF, etc).",
       "https://crbug.com/tint/976", ToggleStage::Device}},
+    {Toggle::D3DSkipShaderOptimizations,
+     {"d3d_skip_shader_optimizations",
+      "Sets the D3DCOMPILE_SKIP_OPTIMIZATION compilation flag when compiling HLSL code.",
+      "https://crbug.com/439845637", ToggleStage::Device}},
     {Toggle::PolyFillPacked4x8DotProduct,
      {"polyfill_packed_4x8_dot_product",
       "Always use the polyfill version of dot4I8Packed() and dot4U8Packed().",
@@ -552,12 +556,20 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
       "Always use the polyfill version of pack4x8snorm, pack4x8unorm, unpack4x8snorm, "
       "unpack4x8unorm.",
       "https://crbug.com/379551588", ToggleStage::Device}},
+    {Toggle::EnableSubgroupsIntelGen9,
+     {"enable_subgroups_intel_gen9",
+      "Enables subgroups on Intel Gen9 by polyfilling subgroupBroadcast(f16).",
+      "https://crbug.com/42251286", ToggleStage::Adapter}},
     {Toggle::D3D12PolyFillPackUnpack4x8,
      {"d3d12_polyfill_pack_unpack_4x8",
       "Always use the polyfill version of pack4xI8(), pack4xU8(), pack4xI8Clamp(), unpack4xI8() "
       "and unpack4xU8() on D3D12 backends. Note that these functions are always polyfilled on all "
       "other backends right now.",
       "https://crbug.com/tint/1497", ToggleStage::Device}},
+    {Toggle::VulkanPolyfillSwitchWithIf,
+     {"vulkan_polyfill_switch_with_if",
+      "Polyfill switch statements with if/else statements on Vulkan.",
+      "https://crbug.com/443906252", ToggleStage::Device}},
     {Toggle::ExposeWGSLTestingFeatures,
      {"expose_wgsl_testing_features",
       "Make the Instance expose the ChromiumTesting* features for testing of "
@@ -575,6 +587,9 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
     {Toggle::ScalarizeMaxMinClamp,
      {"scalarize_max_min_clamp", "Scalarize max, min, and clamp builtins.",
       "https://crbug.com/422144514", ToggleStage::Device}},
+    {Toggle::MetalPolyfillClampFloat,
+     {"metal_polyfill_clamp_float", "Polyfill clamp function for floating point (metal).",
+      "https://crbug.com/407109056", ToggleStage::Device}},
     {Toggle::SubgroupShuffleClamped,
      {"subgroup_shuffle_clamped",
       "Polyfill subgroupShuffle by clamping the id param to within maximum possible subgroup size.",
@@ -675,6 +690,15 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
     {Toggle::EnableShaderPrint,
      {"enable_shader_print", "Enable print functions to produce output on supported devices.",
       "https://crbug.com/433534277", ToggleStage::Device}},
+    {Toggle::BlobCacheHashValidation,
+     {"blob_cache_hash_validation",
+      "Enable hash validation when loading/storing from/to the blob cache",
+      "https://crbug.com/429938352", ToggleStage::Device}},
+    {Toggle::WaitIsThreadSafe,
+     {"wait_is_thread_safe",
+      "WaitFor* functions are thread-safe and can be called without the device-lock if implicit "
+      "synchronization is enabled.",
+      "https://crbug.com/412761228", ToggleStage::Device}},
     {Toggle::NoWorkaroundSampleMaskBecomesZeroForAllButLastColorTarget,
      {"no_workaround_sample_mask_becomes_zero_for_all_but_last_color_target",
       "MacOS 12.0+ Intel has a bug where the sample mask is only applied for the last color "

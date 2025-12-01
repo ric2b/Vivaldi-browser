@@ -20,7 +20,6 @@
 #include "ash/capture_mode/test_capture_mode_delegate.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
-#include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "ash/public/cpp/capture_mode/capture_mode_api.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/root_window_controller.h"
@@ -40,9 +39,6 @@
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "chromeos/ash/services/assistant/public/cpp/assistant_enums.h"
-#include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
-#include "chromeos/ash/services/assistant/public/cpp/features.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -218,6 +214,11 @@ class HomeButtonWithQuickAppAccess : public HomeButtonTestBase {
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+class HomeButtonNoSessionTest : public HomeButtonTest {
+ public:
+  HomeButtonNoSessionTest() { set_start_session(false); }
 };
 
 // Test that setting an existing app item as the quick app shows a working
@@ -684,6 +685,7 @@ class HomeButtonVisibilityWithAccessibilityFeaturesTest
 // The parameter indicates whether the kHideShelfControlsInTabletMode feature
 // is enabled.
 INSTANTIATE_TEST_SUITE_P(All, HomeButtonTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, HomeButtonNoSessionTest, testing::Bool());
 
 // Tests that the shelf navigation widget clip rect is not clipping the intended
 // home button bounds.
@@ -1028,7 +1030,7 @@ TEST_F(HomeButtonAnimationTest, NonAnimatedLayoutDuringAnimation) {
 
 inline constexpr LoginInfo k2ndRegularUserLoginInfo = {"user1@tray"};
 
-TEST_P(HomeButtonTest, LongPressGestureSunfishScanner) {
+TEST_P(HomeButtonNoSessionTest, LongPressGestureSunfishScanner) {
   // Simulate two users with primary user as active.
   auto primary = SimulateUserLogin(kRegularUserLoginInfo);
   SimulateUserLogin(k2ndRegularUserLoginInfo);
@@ -1063,10 +1065,10 @@ TEST_P(HomeButtonTest, LongPressGestureSunfishScanner) {
             BehaviorType::kSunfish);
 }
 
-TEST_P(HomeButtonTest, LongPressGestureInTabletModeSunfishScanner) {
+TEST_P(HomeButtonNoSessionTest, LongPressGestureInTabletModeSunfishScanner) {
   // Simulate two users with primary user as active.
-  auto primary = SimulateUserLogin({kDefaultUserEmail});
-  SimulateUserLogin({kDefaultUserEmail});
+  auto primary = SimulateUserLogin(kRegularUserLoginInfo);
+  SimulateUserLogin(k2ndRegularUserLoginInfo);
   SwitchActiveUser(primary);
 
   // Sunfish / Scanner should already be enabled.
@@ -1162,7 +1164,7 @@ TEST_P(HomeButtonTest, ClickOnCornerPixel) {
   // that a click on the bottom-left corner (or bottom-right corner in RTL)
   // can trigger the home button.
   gfx::Point corner(
-      0, display::Screen::GetScreen()->GetPrimaryDisplay().bounds().height());
+      0, display::Screen::Get()->GetPrimaryDisplay().bounds().height());
 
   ShelfNavigationWidget::TestApi test_api(
       GetPrimaryShelf()->navigation_widget());

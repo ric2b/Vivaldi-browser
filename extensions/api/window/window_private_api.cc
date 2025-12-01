@@ -122,6 +122,7 @@ class VivaldiBrowserObserver : public BrowserListObserver,
   void OnBrowserRemoved(Browser* browser) override;
   void OnBrowserAdded(Browser* browser) override;
   void OnBrowserSetLastActive(Browser* browser) override;
+  void OnBrowserClosing(Browser* browser) override;
 
   // TabStripModelObserver implementation
   void TabChangedAt(content::WebContents* contents,
@@ -172,6 +173,11 @@ void VivaldiBrowserObserver::OnBrowserAdded(Browser* browser) {
   if (browser->is_vivaldi()) {
     ZoomAPI::AddZoomObserver(browser);
   }
+}
+
+void VivaldiBrowserObserver::OnBrowserClosing(Browser* browser) {
+  // All unloads has fired and all tab-webcontents will be destroyed.
+  browser->window()->Hide();
 }
 
 void VivaldiBrowserObserver::OnBrowserRemoved(Browser* browser) {
@@ -577,8 +583,8 @@ ExtensionFunction::ResponseAction WindowPrivateIsOnScreenWithNotchFunction::Run(
 }
 
 ExtensionFunction::ResponseAction
-WindowPrivateSetControlButtonsPaddingFunction::Run() {
-  using vivaldi::window_private::SetControlButtonsPadding::Params;
+WindowPrivateSetControlButtonsPositionFunction::Run() {
+  using vivaldi::window_private::SetControlButtonsPosition::Params;
 
   std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -596,7 +602,7 @@ WindowPrivateSetControlButtonsPaddingFunction::Run() {
     return RespondNow(Error("No window for browser."));
   }
 
-  RequestChange(window->GetNativeWindow(), params->padding);
+  RequestChange(window->GetNativeWindow(), params->position);
   return RespondNow(NoArguments());
 }
 

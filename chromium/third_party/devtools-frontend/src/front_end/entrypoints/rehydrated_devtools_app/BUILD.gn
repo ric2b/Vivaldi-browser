@@ -1,4 +1,4 @@
-# Copyright 2024 The Chromium Authors. All rights reserved.
+# Copyright 2024 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 import("../../../scripts/build/ninja/devtools_entrypoint.gni")
@@ -15,6 +15,7 @@ devtools_entrypoint("entrypoint") {
     "../../models/logs:meta",
     "../../models/persistence:meta",
     "../../panels/browser_debugger:meta",
+    "../../panels/developer_resources:meta",
     "../../panels/mobile_throttling:meta",
     "../../panels/protocol_monitor:meta",
     "../../panels/sensors:meta",

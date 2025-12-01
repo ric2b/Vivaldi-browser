@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -36,15 +36,14 @@ const DUMMY_COLUMN_ID = 'dummy';  // SortableDataGrid.create requires at least o
  * Under the hood it uses SortableDataGrid, which extends ViewportDataGrid so only
  * visible rows are layed out and sorting is provided out of the box.
  *
- * @attr striped
- * @attr displayName
  * @property filters
+ * @attribute striped
+ * @attribute displayName
  */
-class DataGridElement extends HTMLElement {
+class DataGridElement extends UI.UIUtils.HTMLElementWithLightDOMTemplate {
   static readonly observedAttributes = ['striped', 'name', 'inline'];
 
   #dataGrid = SortableDataGrid.create([DUMMY_COLUMN_ID], [], '') as SortableDataGrid<DataGridElementNode>;
-  #mutationObserver = new MutationObserver(this.#onChange.bind(this));
   #resizeObserver = new ResizeObserver(() => {
     if (!this.inline) {
       this.#dataGrid.onResize();
@@ -94,10 +93,9 @@ class DataGridElement extends HTMLElement {
       }
     });
 
-    this.#mutationObserver.observe(this, {childList: true, attributes: true, subtree: true, characterData: true});
     this.#resizeObserver.observe(this);
     this.#updateColumns();
-    this.#addNodes(this.querySelectorAll('tr'));
+    this.addNodes(this.templateRoot.querySelectorAll('tr'));
   }
 
   attributeChangedCallback(name: string, oldValue: string|null, newValue: string|null): void {
@@ -157,7 +155,7 @@ class DataGridElement extends HTMLElement {
     this.#hideableColumns.clear();
     this.#columns = [];
     let hasEditableColumn = false;
-    for (const column of this.querySelectorAll('th[id]') || []) {
+    for (const column of this.templateRoot.querySelectorAll('th[id]') || []) {
       const id = column.id as Lowercase<string>;
       let title = column.textContent?.trim() || '';
       const titleDOMFragment = column.firstElementChild ? document.createDocumentFragment() : undefined;
@@ -248,7 +246,7 @@ class DataGridElement extends HTMLElement {
     return null;
   }
 
-  #addNodes(nodes: NodeList): void {
+  override addNodes(nodes: NodeList): void {
     for (const element of this.#getDataRows(nodes)) {
       const parentNode = this.#dataGrid.rootNode();  // TODO(dsv): support nested nodes
       const nextNode = this.#findNextExistingNode(element);
@@ -270,7 +268,7 @@ class DataGridElement extends HTMLElement {
     }
   }
 
-  #removeNodes(nodes: NodeList): void {
+  override removeNodes(nodes: NodeList): void {
     for (const element of this.#getDataRows(nodes)) {
       const node = DataGridElementNode.get(element);
       if (node) {
@@ -279,7 +277,7 @@ class DataGridElement extends HTMLElement {
     }
   }
 
-  #updateNode(node: Node, attributeName: string|null): void {
+  override updateNode(node: Node, attributeName: string|null): void {
     while (node?.parentNode && !(node instanceof HTMLElement)) {
       node = node.parentNode;
     }
@@ -310,7 +308,7 @@ class DataGridElement extends HTMLElement {
       this.#usedCreationNode = null;
       this.#dataGrid.creationNode = undefined;
     }
-    const placeholder = this.querySelector('tr[placeholder]');
+    const placeholder = this.templateRoot.querySelector('tr[placeholder]');
     if (!placeholder) {
       this.#dataGrid.creationNode?.remove();
       this.#dataGrid.creationNode = undefined;
@@ -322,17 +320,11 @@ class DataGridElement extends HTMLElement {
     }
   }
 
-  #onChange(mutationList: MutationRecord[]): void {
+  override onChange(mutationList: MutationRecord[]): void {
     if (this.#needUpdateColumns(mutationList)) {
       this.#updateColumns();
     }
     this.#updateCreationNode();
-
-    for (const mutation of mutationList) {
-      this.#removeNodes(mutation.removedNodes);
-      this.#addNodes(mutation.addedNodes);
-      this.#updateNode(mutation.target, mutation.attributeName);
-    }
   }
 
   #editCallback(
@@ -407,7 +399,7 @@ class DataGridElementNode extends SortableDataGridNode<DataGridElementNode> {
       const cell = cells[i];
       const column = this.#dataGridElement.columns[i];
       if (column.dataType === DataType.BOOLEAN) {
-        this.data[column.id] = hasBooleanAttribute(cell, 'data-value');
+        this.data[column.id] = hasBooleanAttribute(cell, 'data-value') || cell.textContent === 'true';
       } else {
         this.data[column.id] = cell.dataset.value ?? cell.textContent ?? '';
       }
@@ -480,7 +472,9 @@ class DataGridElementNode extends SortableDataGridNode<DataGridElementNode> {
   override createCell(columnId: string): HTMLElement {
     const index = this.#dataGridElement.columns.findIndex(({id}) => id === columnId);
     if (this.#dataGridElement.columns[index].dataType === DataType.BOOLEAN) {
-      return super.createCell(columnId);
+      const cell = super.createCell(columnId);
+      cell.setAttribute('part', `${columnId}-column`);
+      return cell;
     }
     const cell = this.createTD(columnId);
     cell.setAttribute('part', `${columnId}-column`);

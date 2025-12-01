@@ -35,6 +35,11 @@ enum SessionErrorCodes {
   kErrorNoContent,
   kErrorWrongProfile,
   kErrorEmpty,
+  kErrorNoBrowser,
+  kErrorRestoreInIncognito,
+  kErrorTabStripNotEditable,
+  kErrorNoSyncId,
+  kErrorNoTabSync
 };
 
 struct SessionContent {

@@ -315,6 +315,9 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
   std::optional<password_manager::CredentialUIEntry> _mostRecentlyUpdatedCred;
   // Stores an email address of a user.
   std::u16string _userEmail;
+  // Whether the VC is currently reloading data. Used to avoid modifying the
+  // content while it is reloading.
+  BOOL _isReloadingData;
 }
 
 @synthesize manageAccountLinkItem = _manageAccountLinkItem;
@@ -597,6 +600,12 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
   }
 
   [self filterItems:self.searchTerm];
+}
+
+- (void)reloadData {
+  _isReloadingData = YES;
+  [super reloadData];
+  _isReloadingData = NO;
 }
 
 // Returns YES if the array of index path contains a saved password. This is to
@@ -1579,7 +1588,9 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
   self.widgetPromoItem.promoImage =
       [UIImage imageNamed:enabled ? WidgetPromoImageName()
                                   : WidgetPromoDisabledImageName()];
-  [self reconfigureCellsForItems:@[ self.widgetPromoItem ]];
+  if (!_isReloadingData) {
+    [self reconfigureCellsForItems:@[ self.widgetPromoItem ]];
+  }
 }
 
 // Enables or disables the `trustedVaultWidgetPromoItem`.
@@ -1593,7 +1604,9 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
       imageNamed:enabled
                      ? kPasswordManagerTrustedVaultWidgetPromoImage
                      : kPasswordManagerTrustedVaultWidgetPromoDisabledImage];
-  [self reconfigureCellsForItems:@[ self.trustedVaultWidgetPromoItem ]];
+  if (!_isReloadingData) {
+    [self reconfigureCellsForItems:@[ self.trustedVaultWidgetPromoItem ]];
+  }
 }
 
 // Enables or disables the `checkForProblemsItem` and sets it up accordingly.
@@ -1619,7 +1632,9 @@ bool AreIssuesEqual(const std::vector<password_manager::AffiliatedGroup>& lhs,
     self.addPasswordItem.textColor = [UIColor colorNamed:kTextSecondaryColor];
     self.addPasswordItem.accessibilityTraits |= UIAccessibilityTraitNotEnabled;
   }
-  [self reconfigureCellsForItems:@[ self.addPasswordItem ]];
+  if (!_isReloadingData) {
+    [self reconfigureCellsForItems:@[ self.addPasswordItem ]];
+  }
 }
 
 // Removes the given section if it exists.

@@ -5,6 +5,7 @@
 #define BROWSER_MENUS_DEVELOPERTOOLS_MENU_CONTROLLER_H_
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "ui/gfx/geometry/point.h"
 
 class Browser;
@@ -46,7 +47,7 @@ class DeveloperToolsMenuController {
   const extensions::Extension* GetExtension() const;
 
   const raw_ptr<content::WebContents> web_contents_;
-  const raw_ptr<Browser> browser_;
+  const base::WeakPtr<Browser> browser_;
   gfx::Point location_;
   bool enabled_;
   // Tweak for the vivadi render view menu. We let this controller set up the

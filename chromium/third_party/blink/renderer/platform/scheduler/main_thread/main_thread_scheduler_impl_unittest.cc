@@ -93,7 +93,7 @@ std::unique_ptr<FrameSchedulerImpl> CreateFrameScheduler(
     bool is_in_embedded_frame_tree,
     FrameScheduler::FrameType frame_type) {
   auto frame_scheduler = page_scheduler->CreateFrameScheduler(
-      delegate, is_in_embedded_frame_tree, frame_type);
+      delegate, LocalFrameToken(), is_in_embedded_frame_tree, frame_type);
   std::unique_ptr<FrameSchedulerImpl> frame_scheduler_impl(
       static_cast<FrameSchedulerImpl*>(frame_scheduler.release()));
   return frame_scheduler_impl;
@@ -3414,11 +3414,11 @@ TEST_F(MainThreadSchedulerImplTest, MicrotaskCheckpointTiming) {
   const base::TimeDelta kMicrotaskTime = base::Milliseconds(200);
   default_task_runner_->PostTask(
       FROM_HERE,
-      WTF::BindOnce(&MainThreadSchedulerImplTest::AdvanceMockTickClockBy,
-                    base::Unretained(this), kTaskTime));
+      blink::BindOnce(&MainThreadSchedulerImplTest::AdvanceMockTickClockBy,
+                      base::Unretained(this), kTaskTime));
   scheduler_->on_microtask_checkpoint_ =
-      WTF::BindOnce(&MainThreadSchedulerImplTest::AdvanceMockTickClockBy,
-                    base::Unretained(this), kMicrotaskTime);
+      blink::BindOnce(&MainThreadSchedulerImplTest::AdvanceMockTickClockBy,
+                      base::Unretained(this), kMicrotaskTime);
 
   scheduler_->AddTaskTimeObserver(&observer);
   base::RunLoop().RunUntilIdle();
@@ -3476,27 +3476,6 @@ TEST_F(MainThreadSchedulerImplTest, NonWakingTaskQueue) {
                std::make_pair("regular (immediate)", start),
                std::make_pair("non-waking", start + base::Seconds(5)),
                std::make_pair("regular (delayed)", start + base::Seconds(5))));
-}
-
-class BestEffortPriorityForFindInPageExperimentTest
-    : public MainThreadSchedulerImplTest {
- public:
-  BestEffortPriorityForFindInPageExperimentTest()
-      : MainThreadSchedulerImplTest({kBestEffortPriorityForFindInPage}, {}) {}
-};
-
-TEST_F(BestEffortPriorityForFindInPageExperimentTest,
-       FindInPageTasksAreBestEffortPriorityUnderExperiment) {
-  Vector<String> run_order;
-  PostTestTasks(&run_order, "F1 D1 F2 D2 F3 D3");
-  EnableIdleTasks();
-  EXPECT_EQ(scheduler_->find_in_page_priority(),
-            TaskPriority::kBestEffortPriority);
-  base::RunLoop().RunUntilIdle();
-  // Find-in-page tasks have "best-effort" priority, so they will be done after
-  // the default tasks (which have normal priority).
-  EXPECT_THAT(run_order,
-              testing::ElementsAre("D1", "D2", "D3", "F1", "F2", "F3"));
 }
 
 TEST_F(MainThreadSchedulerImplTest, FindInPageTasksAreVeryHighPriority) {

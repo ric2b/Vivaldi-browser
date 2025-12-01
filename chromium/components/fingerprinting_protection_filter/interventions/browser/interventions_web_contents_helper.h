@@ -16,17 +16,14 @@ class WebContents;
 
 namespace fingerprinting_protection_interventions {
 
-// The InterventionsWebContentsHelper facilitates browser-side decisions such as
-// propagating and determining blink::RuntimeFeature enabled state overrides to
-// subsequent navigations. This is used primarily to ensure Navigations receive
-// the correct enablement state of the RuntimeFeature, with regard to other
-// factors such as URL-level exceptions and incognito.
+// The InterventionsWebContentsHelper is used to control the BlockCanvasReadback
+// Runtime Enabled Feature for the navigations, based on whether the
+// browser-level feature is enabled and the user is in Incognito.
+
 class InterventionsWebContentsHelper
     : public content::WebContentsUserData<InterventionsWebContentsHelper>,
       public content::WebContentsObserver {
  public:
-  // TODO(https://crbug.com/380458351): Add incognito bool upon creation of this
-  // WebContentsHelper.
   static void CreateForWebContents(content::WebContents* web_contents,
                                    bool is_incognito);
 

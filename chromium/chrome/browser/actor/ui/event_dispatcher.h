@@ -7,8 +7,8 @@
 
 #include "base/functional/callback.h"
 #include "chrome/browser/actor/actor_task.h"
-#include "chrome/browser/actor/task_id.h"
 #include "chrome/common/actor.mojom-forward.h"
+#include "chrome/common/actor/task_id.h"
 #include "components/tabs/public/tab_interface.h"
 
 namespace actor {
@@ -16,6 +16,27 @@ namespace actor {
 class ToolRequest;
 
 namespace ui {
+// LINT.IfChange(ModelPageTargetType)
+// These enum values are persisted to logs.  Do not renumber or reuse numeric
+// values.
+enum class ModelPageTargetType {
+  kDomNode = 0,
+  kPoint = 1,
+  kMaxValue = kPoint,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/actor/enums.xml:ModelPageTargetType)
+
+// LINT.IfChange(ComputedTargetResult)
+// These enum values are persisted to logs.  Do not renumber or reuse numeric
+// values.
+enum class ComputedTargetResult {
+  kSuccess = 0,
+  kMissingActorTabData = 1,
+  kMissingAnnotatedPageContent = 2,
+  kTargetNotResolvedInApc = 3,
+  kMaxValue = kTargetNotResolvedInApc,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/actor/enums.xml:ComputedTargetResult)
 
 class ActorUiStateManagerInterface;
 
@@ -24,10 +45,6 @@ class UiEventDispatcher {
  public:
   using UiCompleteCallback =
       base::OnceCallback<void(::actor::mojom::ActionResultPtr)>;
-  struct FirstActInfo {
-    TaskId task_id;
-    std::optional<tabs::TabInterface::Handle> tab_handle;
-  };
   struct AddTab {
     TaskId task_id;
     tabs::TabInterface::Handle handle;
@@ -57,13 +74,6 @@ class UiEventDispatcher {
   // once the UI has completed its post-tool.
   virtual void OnPostTool(const ToolRequest& tool_request,
                           UiCompleteCallback callback) = 0;
-
-  // Should be called before the first ToolRequest is processed.  Callback will
-  // be made once the UI has initialized.
-  // TODO(crbug.com/425784083): remove this in favor of
-  // AddTab/OnActorTaskSyncChange
-  virtual void OnPreFirstAct(const FirstActInfo& first_act_info,
-                             UiCompleteCallback callback) = 0;
 
   // Should be called when a Tool changes the ActorTask.
   virtual void OnActorTaskAsyncChange(const ActorTaskAsyncChange& change,

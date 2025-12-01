@@ -156,7 +156,6 @@ def ci_builder(
         executable = luci.recipe(
             name = recipe,
             cipd_package = RECIPE_BUNDLE,
-            use_python3 = True,
         ),
         service_account = "boringssl-ci-builder@chops-service-accounts.iam.gserviceaccount.com",
         dimensions = dimensions,
@@ -202,7 +201,6 @@ def cq_builder(
         executable = luci.recipe(
             name = recipe,
             cipd_package = RECIPE_BUNDLE,
-            use_python3 = True,
         ),
         service_account = "boringssl-try-builder@chops-service-accounts.iam.gserviceaccount.com",
         dimensions = dimensions,
@@ -589,10 +587,7 @@ both_builders(
             "CMAKE_ASM_FLAGS": "-m32 -msse2",
             "CMAKE_CXX_FLAGS": "-m32 -msse2",
             "CMAKE_C_FLAGS": "-m32 -msse2",
-            "RUST_BINDINGS": "i686-unknown-linux-gnu",
         },
-        # Also build and test the Rust code.
-        "rust": True,
     },
 )
 both_builders(

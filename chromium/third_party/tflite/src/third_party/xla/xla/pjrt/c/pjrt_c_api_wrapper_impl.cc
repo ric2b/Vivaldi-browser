@@ -48,6 +48,7 @@ limitations under the License.
 #include "xla/pjrt/c/pjrt_c_api.h"
 #include "xla/pjrt/c/pjrt_c_api_helpers.h"
 #include "xla/pjrt/c/pjrt_c_api_layouts_extension.h"
+#include "xla/pjrt/c/pjrt_c_api_memory_descriptions_extension.h"
 #include "xla/pjrt/distributed/key_value_store_interface.h"
 #include "xla/pjrt/mlir_to_hlo.h"
 #include "xla/pjrt/pjrt_client.h"
@@ -58,6 +59,7 @@ limitations under the License.
 #include "xla/pjrt/pjrt_future.h"
 #include "xla/pjrt/pjrt_layout.h"
 #include "xla/pjrt/proto/compile_options.pb.h"
+#include "xla/pjrt/proto/topology_description.pb.h"
 #include "xla/service/computation_placer.h"
 #include "xla/service/hlo.pb.h"
 #include "xla/shape.h"
@@ -69,7 +71,6 @@ limitations under the License.
 #include "xla/util.h"
 #include "xla/xla.pb.h"
 #include "xla/xla_data.pb.h"
-#include "tsl/platform/casts.h"
 #include "tsl/profiler/lib/connected_traceme.h"
 #include "tsl/profiler/lib/context_types.h"
 
@@ -2480,6 +2481,36 @@ PJRT_Error* PJRT_Compile(PJRT_Compile_Args* args) {
   return nullptr;
 }
 
+PJRT_Error* PJRT_TopologyDescription_Deserialize(
+    PJRT_TopologyDescription_Deserialize_Args* args) {
+  PJRT_RETURN_IF_ERROR(ActualStructSizeIsGreaterOrEqual(
+      "PJRT_TopologyDescription_Attributes_Args",
+      PJRT_TopologyDescription_Attributes_Args_STRUCT_SIZE, args->struct_size));
+
+  xla::PjRtTopologyDescriptionProto proto;
+  if (!proto.ParseFromArray(args->serialized_topology,
+                            args->serialized_topology_size)) {
+    return new PJRT_Error{xla::InvalidArgument(
+        "Failed to parse PjRtTopologyDescriptionProto at the C API level, "
+        "from binary string of size: %d",
+        args->serialized_topology_size)};
+  }
+
+  PJRT_ASSIGN_OR_RETURN(xla::PjRtCompiler * compiler,
+                        xla::GetPjRtCompiler(proto.platform_name()));
+  std::string serialized_topology_str(args->serialized_topology,
+                                      args->serialized_topology_size);
+  PJRT_ASSIGN_OR_RETURN(
+      std::unique_ptr<xla::PjRtTopologyDescription> deserialized_topology,
+      compiler->DeserializePjRtTopologyDescription(serialized_topology_str));
+
+  args->topology =
+      pjrt::CreateWrapperDeviceTopology(std::move(deserialized_topology));
+  return nullptr;
+}
+
+// ---------------------------------- Layouts ----------------------------------
+
 PJRT_Error* PJRT_Layouts_MemoryLayout_Destroy(
     PJRT_Layouts_MemoryLayout_Destroy_Args* args) {
   PJRT_RETURN_IF_ERROR(ActualStructSizeIsGreaterOrEqual(
@@ -2529,6 +2560,23 @@ PJRT_Error* PJRT_Layouts_PJRT_Buffer_MemoryLayout(
       args->struct_size));
 
   args->layout = new PJRT_Layouts_MemoryLayout{args->buffer->buffer->layout()};
+  return nullptr;
+}
+
+PJRT_Error* PJRT_Layouts_PJRT_Topology_GetDefaultLayout(
+    PJRT_Layouts_PJRT_Topology_GetDefaultLayout_Args* args) {
+  PJRT_RETURN_IF_ERROR(ActualStructSizeIsGreaterOrEqual(
+      "PJRT_Layouts_PJRT_Topology_GetDefaultLayout_Args",
+      PJRT_Layouts_PJRT_Topology_GetDefaultLayout_Args_STRUCT_SIZE,
+      args->struct_size));
+
+  PJRT_ASSIGN_OR_RETURN(xla::Layout xla_layout,
+                        args->topology_description->topology->GetDefaultLayout(
+                            ConvertFromPjRtBufferType(args->type),
+                            absl::MakeSpan(args->dims, args->num_dims)));
+
+  auto pjrt_xla_layout = std::make_shared<xla::PjRtLayout>(xla_layout);
+  args->layout = new PJRT_Layouts_MemoryLayout{std::move(pjrt_xla_layout)};
   return nullptr;
 }
 
@@ -2918,6 +2966,8 @@ PJRT_Api CreatePjrtApi(PJRT_Client_Create* create_fn,
       pjrt::PJRT_Client_CreateUninitializedBuffer,
       /*PJRT_Client_UpdateGlobalProcessInfo=*/
       pjrt::PJRT_Client_UpdateGlobalProcessInfo,
+      /*PJRT_TopologyDescription_Deserialize=*/
+      pjrt::PJRT_TopologyDescription_Deserialize,
   };
 }
 
@@ -2936,6 +2986,8 @@ PJRT_Layouts_Extension CreateLayoutsExtension(PJRT_Extension_Base* next) {
       pjrt::PJRT_Layouts_PJRT_Client_GetDefaultLayout,
       /*PJRT_Layouts_PJRT_Buffer_MemoryLayout=*/
       pjrt::PJRT_Layouts_PJRT_Buffer_MemoryLayout,
+      /*PJRT_Layouts_PJRT_Topology_GetDefaultLayout=*/
+      &PJRT_Layouts_PJRT_Topology_GetDefaultLayout,
   };
 }
 

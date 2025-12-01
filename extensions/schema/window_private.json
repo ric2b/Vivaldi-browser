@@ -149,10 +149,13 @@
         }
       },
       {
-        "id": "ControlButtonsPadding",
+        "id": "ControlButtonsPosition",
         "type": "string",
-        "description": "The padding type used for drawing control buttons (macOS only)",
+        "description": "The control buttons position. (used only on macOS for 'traffic lights')",
         "enum": [
+          {
+            "name": "hidden"
+          },
           {
             "name": "native"
           },
@@ -323,7 +326,7 @@
         }
       },
       {
-        "name": "setControlButtonsPadding",
+        "name": "setControlButtonsPosition",
         "type": "function",
         "description": "Request a new control buttons position.",
         "parameters": [
@@ -332,8 +335,8 @@
             "name": "windowId"
           },
           {
-            "name": "padding",
-            "$ref": "ControlButtonsPadding"
+            "name": "position",
+            "$ref": "ControlButtonsPosition"
           }
         ]
       },

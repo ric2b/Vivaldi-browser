@@ -60,6 +60,7 @@
 #include "third_party/blink/renderer/core/layout/layout_image.h"
 #include "third_party/blink/renderer/core/lcp_critical_path_predictor/element_locator.h"
 #include "third_party/blink/renderer/core/lcp_critical_path_predictor/lcp_critical_path_predictor.h"
+#include "third_party/blink/renderer/core/loader/resource/image_resource.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
 #include "third_party/blink/renderer/core/media_type_names.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
@@ -111,7 +112,6 @@ HTMLImageElement::HTMLImageElement(Document& document, bool created_by_parser)
       element_created_by_parser_(created_by_parser),
       is_fallback_image_(false),
       is_legacy_format_or_unoptimized_image_(false),
-      is_ad_related_(false),
       is_lcp_element_(false),
       is_auto_sized_(false),
       is_predicted_lcp_element_(false) {
@@ -131,6 +131,7 @@ void HTMLImageElement::Trace(Visitor* visitor) const {
   visitor->Trace(image_loader_);
   visitor->Trace(listener_);
   visitor->Trace(form_);
+  visitor->Trace(display_ad_element_monitor_);
   visitor->Trace(source_);
 
   HTMLElement::Trace(visitor);
@@ -543,6 +544,10 @@ void HTMLImageElement::AttachLayoutTree(AttachContext& context) {
 
 Node::InsertionNotificationRequest HTMLImageElement::InsertedInto(
     ContainerNode& insertion_point) {
+  if (display_ad_element_monitor_) {
+    display_ad_element_monitor_->EnsureStarted();
+  }
+
   if (!form_was_set_by_parser_ ||
       NodeTraversal::HighestAncestorOrSelf(insertion_point) !=
           NodeTraversal::HighestAncestorOrSelf(*form_.Get()))
@@ -597,11 +602,8 @@ Node::InsertionNotificationRequest HTMLImageElement::InsertedInto(
 }
 
 void HTMLImageElement::RemovedFrom(ContainerNode& insertion_point) {
-  if (InActiveDocument() && !last_reported_ad_rect_.IsEmpty()) {
-    gfx::Rect empty_rect;
-    GetDocument().GetFrame()->Client()->OnMainFrameImageAdRectangleChanged(
-        this->GetDomNodeId(), empty_rect);
-    last_reported_ad_rect_ = empty_rect;
+  if (display_ad_element_monitor_) {
+    display_ad_element_monitor_->OnElementRemovedOrUntagged();
   }
 
   if (!form_ || NodeTraversal::HighestAncestorOrSelf(*form_.Get()) !=
@@ -756,62 +758,41 @@ bool HTMLImageElement::HasLegalLinkAttribute(const QualifiedName& name) const {
 }
 
 void HTMLImageElement::SetIsAdRelated() {
-  if (!is_ad_related_ && GetDocument().View()) {
-    GetDocument().View()->RegisterForLifecycleNotifications(this);
+  if (!display_ad_element_monitor_) {
+    display_ad_element_monitor_ =
+        MakeGarbageCollected<DisplayAdElementMonitor>(this);
   }
-
-  is_ad_related_ = true;
 }
 
 void HTMLImageElement::DidFinishLayout() {
   if (base::FeatureList::IsEnabled(features::kSpeculativeImageDecodes)) {
     if (LayoutImage* layout_image = DynamicTo<LayoutImage>(GetLayoutObject())) {
-      // Populate cached values for load priority and speculative decode
-      // parameters.
-      layout_image->ComputeResourcePriority();
-      layout_image->ComputeSpeculativeDecodeSize();
-      layout_image->ComputeSpeculativeDecodeQuality();
-      // Once the image has a source ResourceFetcher will take over the updates.
-      if (!is_ad_related_ && GetImageLoader().GetContent()) {
+      // Populate cached values for speculative decode parameters.
+      // ComputeResourcePriority is expensive; only call it if the image is big
+      // enough to qualify for speculative decode.
+      bool should_compute_priority = false;
+      gfx::Size layout_size = layout_image->ComputeSpeculativeDecodeSize();
+      ImageResourceContent* content = GetImageLoader().GetContent();
+      if (content && content->IsSizeAvailable()) {
+        should_compute_priority =
+            ImageResource::IsAboveSpeculativeDecodeSizeThreshold(
+                content->GetImage()->Size());
+      } else {
+        // Intrinsic size isn't available, so use the layout size as an
+        // approximation.
+        should_compute_priority =
+            ImageResource::IsAboveSpeculativeDecodeSizeThreshold(layout_size);
+      }
+      if (should_compute_priority) {
+        layout_image->ComputeResourcePriority();
+        layout_image->ComputeSpeculativeDecodeQuality();
+      }
+      // Once the image has a source, ResourceFetcher will take over the
+      // updates.
+      if (content) {
         GetDocument().View()->UnregisterFromLifecycleNotifications(this);
       }
     }
-  }
-}
-
-void HTMLImageElement::DidFinishLifecycleUpdate(
-    const LocalFrameView& local_frame_view) {
-  if (!is_ad_related_) {
-    return;
-  }
-
-  // Scope to the outermost frame to avoid counting image ads that are (likely)
-  // already in ad iframes.
-  LocalFrame* frame = GetDocument().GetFrame();
-  if (!frame || !frame->View() || !frame->IsOutermostMainFrame()) {
-    return;
-  }
-
-  gfx::Rect rect_to_report;
-  if (LayoutObject* r = GetLayoutObject()) {
-    gfx::Rect rect_in_viewport = r->AbsoluteBoundingBoxRect();
-
-    // Exclude image ads that are invisible or too small (e.g. tracking pixels).
-    if (rect_in_viewport.width() > 1 && rect_in_viewport.height() > 1) {
-      if (!image_ad_use_counter_recorded_) {
-        UseCounter::Count(GetDocument(), WebFeature::kImageAd);
-        image_ad_use_counter_recorded_ = true;
-      }
-
-      rect_to_report =
-          rect_in_viewport + frame->View()->LayoutViewport()->ScrollOffsetInt();
-    }
-  }
-
-  if (last_reported_ad_rect_ != rect_to_report) {
-    frame->Client()->OnMainFrameImageAdRectangleChanged(this->GetDomNodeId(),
-                                                        rect_to_report);
-    last_reported_ad_rect_ = rect_to_report;
   }
 }
 

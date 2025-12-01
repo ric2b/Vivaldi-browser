@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">Marcador guardado en la carpeta <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Apariencia</translation>
 <translation id="2501278716633472235">Regresar</translation>
+<translation id="2546283357679194313">Datos de las cookies y del sitio</translation>
 <translation id="2633278372998075009">Pestañas privadas</translation>
 <translation id="2650751991977523696">¿Deseas volver a descargar el archivo?</translation>
 <translation id="265156376773362237">Precarga estándar</translation>
@@ -62,6 +63,7 @@
 
 La función Tocar para buscar solo está disponible cuando Google ha sido establecido como buscador por defecto en Vivaldi.</translation>
 <translation id="4759238208242260848">Descargas</translation>
+<translation id="4777866634702576038">¿Borrar el grupo de pestañas?</translation>
 <translation id="4850886885716139402">Ver</translation>
 <translation id="4883379392681899581">Salir del modo privado</translation>
 <translation id="4943872375798546930">Sin resultados</translation>
@@ -77,7 +79,6 @@ La función Tocar para buscar solo está disponible cuando Google ha sido establ
 <translation id="5375131951310889874">La función Tocar para buscar solo está disponible cuando Google ha sido establecido como buscador por defecto en Vivaldi. Esta envía una palabra y su contexto al buscador de Google para mostrarte definiciones, imágenes, resultados de búsqueda y otros detalles.
 
 Para modificar el término de búsqueda, mantén presionado cualquier texto para seleccionarlo. Para afinar la búsqueda, desliza el panel hacia arriba y luego toca el cuadro de búsqueda.</translation>
-<translation id="543338862236136125">Editar contraseña</translation>
 <translation id="572328651809341494">Pestañas recientes</translation>
 <translation id="5833984609253377421">Compartir enlace</translation>
 <translation id="6150320133806434356">Marcador guardado</translation>

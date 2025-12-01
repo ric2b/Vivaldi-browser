@@ -179,6 +179,18 @@ group("make_platform_generated") {
   ]
 }
 
+rust_static_library("font_format_check") {
+  allow_unsafe = true  # Needed for FFI that underpins the `cxx` crate.
+  crate_root = "fonts/opentype/format_check.rs"
+  sources = [ crate_root ]
+  cxx_bindings = [ crate_root ]
+  deps = [
+    "//third_party/rust/font_types/v0_10:lib",
+    "//third_party/rust/read_fonts/v0_35:lib",
+    "//third_party/rust/skrifa/v0_37:lib",
+  ]
+}
+
 import("//build/config/pch.gni")
 
 config("blink_platform_config") {
@@ -224,7 +236,6 @@ group("blink_platform_public_deps") {
     "//third_party/blink/renderer/platform/network:make_generated",
     "//third_party/blink/renderer/platform/wtf",
     "//third_party/boringssl",
-    "//third_party/libpng",
     "//third_party/libwebp",
     "//third_party/ots",
     "//ui/gfx/animation/keyframe",
@@ -481,6 +492,8 @@ component("platform") {
     "bindings/frozen_array_base.h",
     "bindings/idl_member_installer.cc",
     "bindings/idl_member_installer.h",
+    "bindings/lazy_source_location.cc",
+    "bindings/lazy_source_location.h",
     "bindings/name_client.h",
     "bindings/observable_array.cc",
     "bindings/observable_array.h",
@@ -845,8 +858,6 @@ component("platform") {
     "geometry/geometry_as_json.h",
     "geometry/geometry_hash_traits.h",
     "geometry/infinite_int_rect.h",
-    "geometry/layout_point.cc",
-    "geometry/layout_point.h",
     "geometry/layout_unit.cc",
     "geometry/layout_unit.h",
     "geometry/length.cc",
@@ -890,10 +901,13 @@ component("platform") {
     "graphics/blend_mode.h",
     "graphics/box_reflection.cc",
     "graphics/box_reflection.h",
+    "graphics/canvas_2d_color_params.cc",
+    "graphics/canvas_2d_color_params.h",
     "graphics/canvas_deferred_paint_record.cc",
     "graphics/canvas_deferred_paint_record.h",
     "graphics/canvas_hibernation_handler.cc",
     "graphics/canvas_hibernation_handler.h",
+    "graphics/canvas_high_entropy_op_type.h",
     "graphics/canvas_resource.cc",
     "graphics/canvas_resource.h",
     "graphics/canvas_resource_dispatcher.cc",
@@ -1039,6 +1053,8 @@ component("platform") {
     "graphics/gpu/webgl_image_conversion.h",
     "graphics/gpu/webgpu_callback.h",
     "graphics/gpu/webgpu_cpp.h",
+    "graphics/gpu/webgpu_mailbox_buffer.cc",
+    "graphics/gpu/webgpu_mailbox_buffer.h",
     "graphics/gpu/webgpu_mailbox_texture.cc",
     "graphics/gpu/webgpu_mailbox_texture.h",
     "graphics/gpu/webgpu_resource_provider_cache.cc",
@@ -1784,12 +1800,14 @@ component("platform") {
     "//ui/native_theme/features",
   ]
   deps = [
+    ":font_format_check",
     "//base:base_static",
     "//base/allocator:buildflags",
     "//build:chromecast_buildflags",
     "//cc",
     "//cc/ipc",
     "//cc/mojo_embedder",
+    "//components/input",
     "//components/language_detection/content/common",
     "//components/language_detection/content/common:common_blink",
     "//components/language_detection/content/renderer",
@@ -2445,6 +2463,7 @@ source_set("blink_platform_unittests_sources") {
     "//base/test:test_support",
     "//cc",
     "//cc:test_support",
+    "//components/input",
     "//components/viz/common:shared_image_format",
     "//gin",
     "//media:test_support",
@@ -2704,7 +2723,7 @@ source_set("blink_image_decoder_fuzzer_test_support") {
   deps = [ ":platform" ]
 }
 
-# Fuzzer for WTF::unicode::MathVariant.
+# Fuzzer for blink::unicode::MathVariant.
 fuzzer_test("math_transform_fuzzer") {
   sources = [ "math_transform_fuzzer.cc" ]
   deps = [
@@ -2857,7 +2876,6 @@ fuzzer_test("blink_png_decoder_fuzzer") {
     ":blink_fuzzer_test_support",
     ":blink_image_decoder_fuzzer_test_support",
     ":platform",
-    "//third_party/libpng",
   ]
   dict = "//testing/libfuzzer/fuzzers/dicts/png.dict"
   seed_corpuses = [

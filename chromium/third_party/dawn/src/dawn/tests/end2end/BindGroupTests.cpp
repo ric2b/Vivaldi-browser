@@ -1718,7 +1718,8 @@ DAWN_INSTANTIATE_TEST(BindGroupTests,
                       MetalBackend(),
                       OpenGLBackend(),
                       OpenGLESBackend(),
-                      VulkanBackend());
+                      VulkanBackend(),
+                      WebGPUBackend());
 
 }  // namespace
 }  // namespace dawn

@@ -1,15 +1,15 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import stylisticPlugin from '@stylistic/eslint-plugin';
-import { defineConfig, globalIgnores } from 'eslint/config';
 import eslintPlugin from 'eslint-plugin-eslint-plugin';
 import importPlugin from 'eslint-plugin-import';
 import jsdocPlugin from 'eslint-plugin-jsdoc';
 import mochaPlugin from 'eslint-plugin-mocha';
+import {defineConfig, globalIgnores} from 'eslint/config';
 import globals from 'globals';
-import { join } from 'path';
+import {join} from 'path';
 import typescriptEslint from 'typescript-eslint';
 
 import rulesdirPlugin from './scripts/eslint_rules/rules-dir.mjs';
@@ -93,7 +93,7 @@ export default defineConfig([
         'single',
         {
           avoidEscape: true,
-          allowTemplateLiterals: false,
+          allowTemplateLiterals: 'always',
         },
       ],
 
@@ -285,16 +285,33 @@ export default defineConfig([
       'rulesdir/no-commented-out-console': 'error',
       // Prevent imports being commented out rather than deleted.
       'rulesdir/no-commented-out-import': 'error',
-      'rulesdir/check-license-header': 'error',
       /**
        * Enforce some consistency and usefulness of JSDoc comments, to make sure
        * we actually benefit from them.
        */
       'jsdoc/check-alignment': 'error',
+      'jsdoc/check-tag-names': [
+        'error',
+        {
+          definedTags: [
+            'attribute',  // @attribute is used by lit-analyzer (through web-component-analyzer)
+            'meaning',    // @meaning is used by localization
+          ],
+        },
+      ],
       'jsdoc/empty-tags': 'error',
+      'jsdoc/multiline-blocks': 'error',
+      'jsdoc/no-bad-blocks': 'error',
+      'jsdoc/no-blank-blocks': [
+        'error',
+        {
+          enableFixer: true,
+        },
+      ],
       'jsdoc/require-asterisk-prefix': 'error',
       'jsdoc/require-param-name': 'error',
-      'jsdoc/require-hyphen-before-param-description': 'error',
+      'jsdoc/require-hyphen-before-param-description': ['error', 'never'],
+      'jsdoc/sort-tags': 'error',
     },
   },
   {
@@ -573,6 +590,7 @@ export default defineConfig([
       // Disallow redundant (and potentially conflicting) type information
       // within JSDoc comments.
       'jsdoc/no-types': 'error',
+      'jsdoc/require-returns-description': 'error',
     },
   },
   {
@@ -676,7 +694,7 @@ export default defineConfig([
       // errors on {describe, it}.only
       'mocha/no-exclusive-tests': 'error',
 
-      'mocha/no-async-suite': 'error',
+      'mocha/no-async-describe': 'error',
       'mocha/no-global-tests': 'error',
       'mocha/no-nested-tests': 'error',
 
@@ -702,6 +720,7 @@ export default defineConfig([
       'rulesdir/no-assert-deep-strict-equal': 'error',
       'rulesdir/no-assert-equal': 'error',
       'rulesdir/no-assert-equal-boolean-null-undefined': 'error',
+      'rulesdir/no-capture-screenshot': 'error',
       'rulesdir/no-imperative-dom-api': 'off',
       'rulesdir/no-lit-render-outside-of-view': 'off',
       'rulesdir/prefer-assert-instance-of': 'error',
@@ -720,22 +739,22 @@ export default defineConfig([
         {
           name: 'describeWithDevtoolsExtension',
           type: 'suite',
-          interface: 'BDD',
+          interfaces: ['BDD', 'TDD'],
         },
         {
           name: 'describeWithEnvironment',
           type: 'suite',
-          interface: 'BDD',
+          interfaces: ['BDD', 'TDD'],
         },
         {
           name: 'describeWithLocale',
           type: 'suite',
-          interface: 'BDD',
+          interfaces: ['BDD', 'TDD'],
         },
         {
           name: 'describeWithMockConnection',
           type: 'suite',
-          interface: 'BDD',
+          interfaces: ['BDD', 'TDD'],
         },
       ],
     },
@@ -800,7 +819,7 @@ export default defineConfig([
     },
   },
   {
-    name: 'No SDK in models/trace',
+    name: 'Keep models/trace isolated',
     files: ['front_end/models/trace/**/*.ts'],
     ignores: ['front_end/models/trace/**/*.test.ts'],
     rules: {
@@ -817,6 +836,50 @@ export default defineConfig([
                   'sdk.js',
                   ),
               allowTypeImports: true,
+            },
+            {
+              bannedPath: join(
+                  import.meta.dirname,
+                  'front_end',
+                  'ui',
+                  'legacy',
+                  'legacy.js',
+                  ),
+              allowTypeImports: false,
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    name: 'No UI in models',
+    files: ['front_end/models/**/*.ts'],
+    ignores: ['front_end/models/**/*.test.ts'],
+    rules: {
+      'rulesdir/no-imports-in-directory': [
+        'error',
+        {
+          bannedImportPaths: [
+            {
+              bannedPath: join(
+                  import.meta.dirname,
+                  'front_end',
+                  'ui',
+                  'legacy',
+                  'legacy.js',
+                  ),
+              allowTypeImports: false,
+            },
+            {
+              bannedPath: join(
+                  import.meta.dirname,
+                  'front_end',
+                  'ui',
+                  'lit',
+                  'lit.js',
+                  ),
+              allowTypeImports: false,
             },
           ],
         },

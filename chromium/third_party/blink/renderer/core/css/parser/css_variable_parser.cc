@@ -505,9 +505,6 @@ static bool ConsumeUnparsedValue(CSSParserTokenStream& stream,
           has_references = true;
           continue;
         case CSSValueID::kAttr:
-          if (!RuntimeEnabledFeatures::CSSAdvancedAttrFunctionEnabled()) {
-            break;
-          }
           if (!ConsumeAttributeReference(
                   stream, has_references, has_font_units, has_root_font_units,
                   has_line_height_units, has_dashed_functions, context)) {
@@ -802,6 +799,49 @@ void CSSVariableParser::CollectDashedFunctions(CSSParserTokenStream& stream,
         return;
     }
   }
+}
+
+template <CSSParserTokenType... Types>
+StringView ConsumeUntilPeekedTypeIs(CSSParserTokenStream& stream) {
+  wtf_size_t value_start_offset = stream.LookAheadOffset();
+  stream.SkipUntilPeekedTypeIs<Types...>();
+  wtf_size_t value_end_offset = stream.LookAheadOffset();
+  return stream.StringRangeAt(value_start_offset,
+                              value_end_offset - value_start_offset);
+}
+
+HeapVector<String> CSSVariableParser::ConsumeFunctionArguments(
+    CSSParserTokenStream& stream,
+    unsigned max_arguments) {
+  HeapVector<String> arguments;
+
+  while (arguments.size() < max_arguments) {
+    stream.ConsumeWhitespace();
+
+    if (!stream.AtEnd() &&
+        (arguments.empty() || stream.Peek().GetType() == kCommaToken)) {
+      if (stream.Peek().GetType() == kCommaToken) {
+        stream.ConsumeIncludingWhitespace();
+      }
+      StringView argument_string;
+      // Handle {}-wrapper.
+      // https://drafts.csswg.org/css-values-5/#component-function-commas
+      if (stream.Peek().GetType() == kLeftBraceToken) {
+        CSSParserTokenStream::BlockGuard guard(stream);
+        stream.ConsumeWhitespace();
+        DCHECK(!stream.AtEnd());
+        argument_string = ConsumeUntilPeekedTypeIs<>(stream);
+      } else {
+        argument_string = ConsumeUntilPeekedTypeIs<kCommaToken>(stream);
+      }
+      DCHECK(!argument_string.empty());  // Handled parse-time.
+      arguments.push_back(argument_string.ToString());
+    } else {
+      break;
+    }
+  }
+
+  return arguments;
 }
 
 }  // namespace blink

@@ -22,18 +22,15 @@
 <translation id="2119505898009119320">Выдадзена: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">З гэтым сайтам немагчыма наладзіць бяспечнае злучэнне</translation>
 <translation id="2178904466768126352">На сайце, які вы спрабавалі наведаць, дзейнічаюць зламыснікі. Яны могуць усталяваць шкоднае праграмнае забеспячэнне, якое выкрадае або выдаляе вашы даныя, напрыклад паролі, фота, паведамленні ці нумары крэдытных картак.</translation>
-<translation id="2187317261103489799">Выяўляць (прадвызначана)</translation>
 <translation id="2224337661447660594">Няма злучэння з інтэрнэтам</translation>
 <translation id="2292556288342944218">Доступ у інтэрнэт заблакаваны</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> патрабуе імя карыстальніка і пароль.</translation>
 <translation id="2337852623177822836">Параметр кантралюецца адміністратарам</translation>
 <translation id="2355395290879513365">Злачынцы могуць бачыць выявы, якія бачыце вы, і змяняць іх у злачынных мэтах.</translation>
-<translation id="2356070529366658676">Пытацца</translation>
 <translation id="2359808026110333948">Працягнуць</translation>
 <translation id="2388886110302389394">Адкрыць старонку ў новым прыватным акне(Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Запуск дыягностыкі сеткі<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Старонка была заблакаваная пашырэннем</translation>
-<translation id="2539524384386349900">Выяўляць</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> адправіў хібны адказ.</translation>
 <translation id="2634124572758952069">Не ўдалося знайсці IP-адрас сервера <ph name="HOST_NAME" /> .</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -57,10 +54,8 @@
        проксі-сервер:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Каб паўторна ўвесці даныя, неабходныя для загрузкі старонкі, неабходна яе перазагрузіць.</translation>
-<translation id="3234666976984236645">Заўседы выяўляць важнае змесціва на гэтым сайце</translation>
 <translation id="3384522979010096022">Ваша арганізацыя не дазваляе вам праглядаць гэты сайт</translation>
 <translation id="3422472998109090673">Старонка <ph name="HOST_NAME" /> недаступная.</translation>
-<translation id="3427092606871434483">Дазваляць (прадвызначана)</translation>
 <translation id="3447661539832366887">Уладальнік гэтай прылады адключыў гульню з дыназаўрам.</translation>
 <translation id="3447884698081792621">Паказаць сертыфікат (выдавец <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Схаваць падрабязнасці</translation>
@@ -82,7 +77,6 @@
 <translation id="4075732493274867456">Кліент і сервер не падтрымліваюць агульнай версіі пратакола SSL або шыфравання.</translation>
 <translation id="4116663294526079822">Заўсёды дазваляць на гэтым сайце</translation>
 <translation id="4130226655945681476">Праверце правады, мадэм і роўтар</translation>
-<translation id="4151403195736952345">Выкарыстоўаць глабальна (вызначаць)</translation>
 <translation id="4165986682804962316">Налады сайта</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Праверце налады брандмаўэра і антывіруса<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Паспрабуйце запусціць дыягностыку сеткі<ph name="END_LINK" />.</translation>
@@ -91,7 +85,6 @@
 <translation id="4250431568374086873">Злучэнне з гэтым сайтам слаба абаронена</translation>
 <translation id="4265872034478892965">Дазволена адміністратарам</translation>
 <translation id="4305666528087210886">Не ўдалося атрымаць доступ да файла</translation>
-<translation id="4312866146174492540">Блакаваць (прадвызначана)</translation>
 <translation id="4408413947728134509">Cookie <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> адхіліў ваш сертыфікат, або ён не быў выдадзены.</translation>
 <translation id="4506599922270137252">Звярніцеся да адміністратара</translation>
@@ -107,7 +100,6 @@
 <translation id="483241715238664915">Уключыць папярэджанні</translation>
 <translation id="4943872375798546930">Нічога не знойдзена</translation>
 <translation id="5023310440958281426">Праверце правілы, прызначаныя адміністратарам</translation>
-<translation id="5039804452771397117">Дазволіць</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(выкарыстоўваецца 1 файл cookie)}one{(выкарыстоўваецца # файл cookie)}few{(выкарыстоўваецца # файлы cookie)}many{(выкарыстоўваецца # файлаў cookie)}other{(выкарыстоўваецца # файлаў cookie)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Праверце адрас проксі-сервера<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 бітны)</translation>
@@ -154,7 +146,6 @@
 <translation id="6890956352250146925">Ппраметры файлаў cookie і даных сайтаў</translation>
 <translation id="6897140037006041989">Агент карыстальніка</translation>
 <translation id="6957624206566198865">Адкрыць старонку ў новай прыватнай укладцы</translation>
-<translation id="7053983685419859001">Заблакаваць</translation>
 <translation id="7096937462164235847">Сапраўднасць гэтага вэб-сайта не спраўджаная.</translation>
 <translation id="7108819624672055576">Дазволена пашырэннем</translation>
 <translation id="7111012039238467737">(Дзейны)</translation>
@@ -178,7 +169,6 @@
 <translation id="7878562273885520351">Злачынцы могуць даведацца ваш пароль</translation>
 <translation id="7951415247503192394">(32 бітны)</translation>
 <translation id="7953236668995583915">Каб ужыць абноўленыя налады на гэтым сайце, абнавіце старонку</translation>
-<translation id="8037357227543935929">Пытацца (прадвызначана)</translation>
 <translation id="8041940743680923270">Выкарыстоўваць глабальна (пытацца)</translation>
 <translation id="808894953321890993">Змяніць пароль</translation>
 <translation id="8149426793427495338">Ваш камп'ютар перайшоў у рэжым сну.</translation>

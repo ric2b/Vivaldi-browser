@@ -334,13 +334,16 @@ void V8Initializer::ExceptionPropagationCallback(
     return;
   }
 
+  ScriptState* script_state =
+      ScriptState::MaybeFrom(isolate, isolate->GetCurrentContext());
+  if (!script_state) {
+    return;
+  }
+
   v8::Local<v8::Object> exception = v8_message.GetException();
 
   v8::ExceptionContext context_type = v8_message.GetExceptionContext();
   String class_name = ToCoreString(isolate, v8_message.GetInterfaceName());
-  if (class_name == "global") {
-    class_name = "Window";
-  }
   String property_name = ToCoreString(isolate, v8_message.GetPropertyName());
   if ((context_type == v8::ExceptionContext::kAttributeGet &&
        property_name.StartsWith("get ")) ||
@@ -362,15 +365,14 @@ void V8Initializer::ExceptionPropagationCallback(
            V8PerIsolateData::From(isolate)->TopOfDictionaryStack();
        dictionary_context;
        dictionary_context = dictionary_context->Previous()) {
-    ApplyContextToException(isolate, isolate->GetCurrentContext(), exception,
+    ApplyContextToException(script_state, exception,
                             v8::ExceptionContext::kAttributeGet,
                             dictionary_context->DictionaryName(),
                             dictionary_context->PropertyName());
   }
 
-  ApplyContextToException(isolate, isolate->GetCurrentContext(), exception,
-                          context_type, class_name.Utf8().data(),
-                          property_name);
+  ApplyContextToException(script_state, exception, context_type,
+                          class_name.Utf8().data(), property_name);
 }
 
 static void PromiseRejectHandlerInWorker(v8::PromiseRejectMessage data) {
@@ -461,6 +463,19 @@ std::pair<bool, v8::MaybeLocal<v8::String>> TrustedTypesCodeGenerationCheck(
     return {false, v8::MaybeLocal<v8::String>()};
   }
 
+  if (RuntimeEnabledFeatures::TrustedTypesHTMLEnabled()) {
+    // This check implements steps 1.2.8 of
+    // https://w3c.github.io/webappsec-csp/#can-compile-strings
+    bool has_changed =
+        stringified_source !=
+        (string_or_trusted_script->IsString()
+             ? string_or_trusted_script->GetAsString()
+             : string_or_trusted_script->GetAsTrustedScript()->toString());
+    if (has_changed) {
+      return {false, v8::MaybeLocal<v8::String>()};
+    }
+  }
+
   return {true, V8String(isolate, stringified_source)};
 }
 
@@ -499,7 +514,7 @@ V8Initializer::CodeGenerationCheckCallbackInMainThread(
   return {true, std::move(stringified_source)};
 }
 
-bool V8Initializer::WasmCodeGenerationCheckCallbackInMainThread(
+bool V8Initializer::WasmCodeGenerationCheckCallback(
     v8::Local<v8::Context> context,
     v8::Local<v8::String> source) {
   ExecutionContext* execution_context = ToExecutionContext(context);
@@ -517,8 +532,11 @@ bool V8Initializer::WasmCodeGenerationCheckCallbackInMainThread(
 
   // Set a crash key so we know if a crash report could have been caused by
   // Wasm.
-  static crash_reporter::CrashKeyString<1> has_wasm_key("has-wasm");
-  has_wasm_key.Set("1");
+  [[maybe_unused]] static bool crash_key_set = [] {
+    static crash_reporter::CrashKeyString<1> has_wasm_key("has-wasm");
+    has_wasm_key.Set("1");
+    return true;
+  }();
   return true;
 }
 
@@ -567,7 +585,6 @@ void ThrowRangeException(v8::Isolate* isolate, const char* message) {
 }
 
 BASE_FEATURE(kWebAssemblyUnlimitedSyncCompilation,
-             "WebAssemblyUnlimitedSyncCompilation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool WasmModuleOverride(const v8::FunctionCallbackInfo<v8::Value>& args) {
@@ -620,21 +637,12 @@ bool WasmInstanceOverride(const v8::FunctionCallbackInfo<v8::Value>& args) {
   return false;
 }
 
-bool WasmJSStringBuiltinsEnabledCallback(v8::Local<v8::Context> context) {
+bool WasmCustomDescriptorsEnabledCallback(v8::Local<v8::Context> context) {
   ExecutionContext* execution_context = ToExecutionContext(context);
   if (!execution_context) {
     return false;
   }
-  return RuntimeEnabledFeatures::WebAssemblyJSStringBuiltinsEnabled(
-      execution_context);
-}
-
-bool WasmJSPromiseIntegrationEnabledCallback(v8::Local<v8::Context> context) {
-  ExecutionContext* execution_context = ToExecutionContext(context);
-  if (!execution_context) {
-    return false;
-  }
-  return RuntimeEnabledFeatures::WebAssemblyJSPromiseIntegrationEnabled(
+  return RuntimeEnabledFeatures::WebAssemblyCustomDescriptorsEnabled(
       execution_context);
 }
 
@@ -796,9 +804,8 @@ void V8Initializer::InitializeV8Common(v8::Isolate* isolate) {
   isolate->SetUseCounterCallback(&UseCounterCallback);
   isolate->SetWasmModuleCallback(WasmModuleOverride);
   isolate->SetWasmInstanceCallback(WasmInstanceOverride);
-  isolate->SetWasmImportedStringsEnabledCallback(
-      WasmJSStringBuiltinsEnabledCallback);
-  isolate->SetWasmJSPIEnabledCallback(WasmJSPromiseIntegrationEnabledCallback);
+  isolate->SetWasmCustomDescriptorsEnabledCallback(
+      WasmCustomDescriptorsEnabledCallback);
   isolate->SetSharedArrayBufferConstructorEnabledCallback(
       SharedArrayBufferConstructorEnabledCallback);
   isolate->SetHostImportModuleDynamicallyCallback(HostImportModuleDynamically);
@@ -966,8 +973,7 @@ v8::Isolate* V8Initializer::InitializeMainThread() {
       V8Initializer::FailedAccessCheckCallbackInMainThread);
   isolate->SetModifyCodeGenerationFromStringsCallback(
       CodeGenerationCheckCallbackInMainThread);
-  isolate->SetAllowWasmCodeGenerationCallback(
-      WasmCodeGenerationCheckCallbackInMainThread);
+  isolate->SetAllowWasmCodeGenerationCallback(WasmCodeGenerationCheckCallback);
   isolate->SetWasmAsyncResolvePromiseCallback(WasmAsyncResolvePromiseCallback);
   if (RuntimeEnabledFeatures::V8IdleTasksEnabled()) {
     V8PerIsolateData::EnableIdleTasks(
@@ -1020,8 +1026,7 @@ void V8Initializer::InitializeWorker(v8::Isolate* isolate) {
   isolate->SetExceptionPropagationCallback(ExceptionPropagationCallback);
   isolate->SetModifyCodeGenerationFromStringsCallback(
       CodeGenerationCheckCallbackInMainThread);
-  isolate->SetAllowWasmCodeGenerationCallback(
-      WasmCodeGenerationCheckCallbackInMainThread);
+  isolate->SetAllowWasmCodeGenerationCallback(WasmCodeGenerationCheckCallback);
   isolate->SetWasmAsyncResolvePromiseCallback(WasmAsyncResolvePromiseCallback);
   isolate->SetHostCreateShadowRealmContextCallback(
       OnCreateShadowRealmV8Context);

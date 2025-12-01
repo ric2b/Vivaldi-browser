@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -67,7 +67,8 @@ const UIStrings = {
    * grouped together or not. In Computed Style Widget of the Elements panel.
    */
   group: 'Group',
-  /** [
+  /**
+   * [
    * @description Text shown to the user when a filter is applied to the computed CSS properties, but
    * no properties matched the filter and thus no results were returned.
    */
@@ -204,7 +205,6 @@ class ColorRenderer extends rendererBase(SDK.CSSPropertyParserMatchers.ColorMatc
     swatch.renderColor(color);
     const valueElement = document.createElement('span');
     valueElement.textContent = match.text;
-    swatch.append(valueElement);
 
     swatch.addEventListener(
         InlineEditor.ColorSwatch.ColorChangedEvent.eventName, (event: InlineEditor.ColorSwatch.ColorChangedEvent) => {
@@ -213,7 +213,7 @@ class ColorRenderer extends rendererBase(SDK.CSSPropertyParserMatchers.ColorMatc
         });
 
     context.addControl('color', swatch);
-    return [swatch];
+    return [swatch, valueElement];
   }
 
   matcher(): SDK.CSSPropertyParserMatchers.ColorMatcher {

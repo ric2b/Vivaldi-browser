@@ -6,11 +6,11 @@ package org.chromium.chrome.browser.feedback;
 
 import android.os.Build;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.DeviceInfo;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.util.XrUtils;
 
 import java.util.Map;
 
@@ -23,6 +23,7 @@ class DeviceInfoFeedbackSource implements FeedbackSource {
     private static final String TYPE_TABLET = "tablet";
     private static final String TYPE_AUTO = "automotive";
     private static final String TYPE_DESKTOP = "desktop";
+    private static final String TYPE_XR = "xr";
 
     @Override
     public Map<String, String> getFeedback() {
@@ -32,8 +33,10 @@ class DeviceInfoFeedbackSource implements FeedbackSource {
         // via android.os.Build.DEVICE.
         String name = Build.DEVICE;
         String type;
-        if (BuildInfo.getInstance().isAutomotive) {
+        if (DeviceInfo.isAutomotive()) {
             type = TYPE_AUTO;
+        } else if (XrUtils.isXrDevice()) {
+            type = TYPE_XR;
         } else if (DeviceInfo.isDesktop()) {
             type = TYPE_DESKTOP;
         } else if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(

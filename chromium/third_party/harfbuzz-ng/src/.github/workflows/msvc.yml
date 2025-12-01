@@ -1,0 +1,60 @@
+name: msvc
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  msvc:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: msvc-2025-x86
+            os: windows-2025
+            ARCH: x86
+          - name: msvc-2025-amd64
+            os: windows-2025
+            ARCH: amd64
+    name: ${{ matrix.name }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+    - name: Setup Ccache
+      uses: hendrikmuhs/ccache-action@63069e3931dedbf3b63792097479563182fe70d1 # v1.2.18
+      with:
+        variant: sccache
+        key: ${{ github.job }}-${{ matrix.os }}-${{ matrix.ARCH }}
+    - name: Setup Python
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      with:
+        python-version: '3.12'
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+      with:
+        arch : ${{ matrix.ARCH }}
+    - name: Install Python Dependencies
+      run: |
+        pip3 install -r .ci/requirements.txt --require-hashes
+    - name: Setup Meson
+      run: |
+          sccache --version
+          meson setup build `
+            --wrap-mode=forcefallback `
+            --buildtype=release `
+            -Dglib=enabled `
+            -Dfreetype=enabled `
+            -Dgdi=enabled `
+            -Ddirectwrite=enabled
+    - name: Build
+      run: meson compile -Cbuild
+    - name: Test
+      run: meson test --print-errorlogs --suite=harfbuzz -Cbuild

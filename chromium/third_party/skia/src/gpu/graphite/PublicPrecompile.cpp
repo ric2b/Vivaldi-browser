@@ -15,8 +15,10 @@
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/GraphicsPipeline.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
+#include "src/gpu/graphite/GraphicsPipelineHandle.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/Log.h"
+#include "src/gpu/graphite/PipelineCreationTask.h"
 #include "src/gpu/graphite/PipelineData.h"
 #include "src/gpu/graphite/PrecompileContextPriv.h"
 #include "src/gpu/graphite/PrecompileInternal.h"
@@ -41,6 +43,7 @@ void compile(const RendererProvider* rendererProvider,
              const RenderPassDesc& renderPassDesc,
              bool withPrimitiveBlender,
              Coverage coverage) {
+
     for (const Renderer* r : rendererProvider->renderers()) {
         if (!(r->drawTypes() & drawTypes)) {
             continue;
@@ -64,15 +67,11 @@ void compile(const RendererProvider* rendererProvider,
             UniquePaintParamsID paintID = s->performsShading() ? uniqueID
                                                                : UniquePaintParamsID::Invalid();
 
-            sk_sp<GraphicsPipeline> pipeline = resourceProvider->findOrCreateGraphicsPipeline(
-                    keyContext.rtEffectDict(),
+            GraphicsPipelineHandle handle = resourceProvider->createGraphicsPipelineHandle(
                     { s->renderStepID(), paintID },
                     renderPassDesc,
                     PipelineCreationFlags::kForPrecompilation);
-            if (!pipeline) {
-                SKGPU_LOG_W("Failed to create GraphicsPipeline in precompile!");
-                return;
-            }
+            resourceProvider->startPipelineCreationTask(keyContext.rtEffectDict(), handle);
         }
     }
 }
@@ -91,7 +90,7 @@ void Precompile(PrecompileContext* precompileContext,
     ResourceProvider* resourceProvider = precompileContext->priv().resourceProvider();
     const Caps* caps = precompileContext->priv().caps();
 
-    auto rtEffectDict = std::make_unique<RuntimeEffectDictionary>();
+    sk_sp<RuntimeEffectDictionary> rtEffectDict = sk_make_sp<RuntimeEffectDictionary>();
 
     for (const RenderPassProperties& rpp : renderPassProperties) {
         // TODO: Allow the client to pass in mipmapping and protection too?
@@ -131,7 +130,15 @@ void Precompile(PrecompileContext* precompileContext,
                                          caps->getDstReadStrategy());
 
             SkColorInfo ci(rpp.fDstCT, kPremul_SkAlphaType, rpp.fDstCS);
-            KeyContext keyContext(caps, dict, rtEffectDict.get(), ci);
+
+            // The PipelineDataGatherer and FloatStorageManager are only used to accumulate uniform
+            // data. In the pre-compile case we don't need to record the uniform data but the
+            // process of generating it is required to create the correct key.
+            FloatStorageManager floatStorageManager;
+            PipelineDataGatherer gatherer(Layout::kMetal);
+            PaintParamsKeyBuilder builder(dict);
+            KeyContext keyContext(caps, &floatStorageManager, &builder, &gatherer, dict,
+                                  rtEffectDict, ci);
 
             for (Coverage coverage : { Coverage::kNone, Coverage::kSingleChannel }) {
                 PrecompileCombinations(
@@ -154,15 +161,12 @@ void Precompile(PrecompileContext* precompileContext,
                 // pipelines.
                 const RenderStep* renderStep =
                     rendererProvider->lookup(RenderStep::RenderStepID::kCoverBounds_InverseCover);
-                sk_sp<GraphicsPipeline> pipeline = resourceProvider->findOrCreateGraphicsPipeline(
-                        keyContext.rtEffectDict(),
+
+                GraphicsPipelineHandle handle = resourceProvider->createGraphicsPipelineHandle(
                         { renderStep->renderStepID(), UniquePaintParamsID::Invalid() },
                         renderPassDesc,
                         PipelineCreationFlags::kForPrecompilation);
-                if (!pipeline) {
-                    SKGPU_LOG_W("Failed to create \"CoverBoundsRenderStep[InverseCover] + (empty)\""
-                                " precompile Pipeline!");
-                }
+                resourceProvider->startPipelineCreationTask(keyContext.rtEffectDict(), handle);
             }
 
             if (drawTypes & DrawTypeFlags::kBitmapText_Color) {
@@ -271,13 +275,8 @@ void PrecompileCombinations(const RendererProvider* rendererProvider,
         return;
     }
 
-    // Since the precompilation path's uniforms aren't used and don't change the key,
-    // the exact layout doesn't matter
-    PipelineDataGatherer gatherer(Layout::kMetal);
-
     options.priv().buildCombinations(
         keyContext,
-        &gatherer,
         drawTypes,
         withPrimitiveBlender,
         coverage,

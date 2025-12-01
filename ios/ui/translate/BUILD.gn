@@ -10,8 +10,6 @@ source_set("vivaldi_translate") {
     "vivaldi_translate_coordinator.h",
     "vivaldi_translate_coordinator.mm",
     "vivaldi_translate_entry_point.h",
-    "vivaldi_translate_language_item.h",
-    "vivaldi_translate_language_item.mm",
     "vivaldi_translate_mediator.h",
     "vivaldi_translate_mediator.mm",
     "vivaldi_translate_view_delegate.h",

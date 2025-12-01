@@ -21,8 +21,8 @@
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_screen_provider.h"
 #import "ios/chrome/browser/first_run/ui_bundled/guided_tour/guided_tour_coordinator.h"
 #import "ios/chrome/browser/first_run/ui_bundled/guided_tour/guided_tour_promo_coordinator.h"
-#import "ios/chrome/browser/safari_data_import/coordinator/safari_data_import_ui_handler.h"
 #import "ios/chrome/browser/safari_data_import/public/safari_data_import_entry_point.h"
+#import "ios/chrome/browser/safari_data_import/public/safari_data_import_ui_handler.h"
 #import "ios/chrome/browser/scoped_ui_blocker/ui_bundled/scoped_ui_blocker.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_observer.h"
@@ -224,8 +224,6 @@ const char kGuidedTourStepDidFinishHistogram[] = "IOS.GuidedTour.DidFinishStep";
   // UI.
   DCHECK(_presentingSceneState);
 
-  id<BrowserProvider> presentingInterface =
-      _presentingSceneState.browserProviderInterface.currentBrowserProvider;
   ProfileIOS* profile = [self originalProfile];
 
   DCHECK(!_firstRunUIBlocker);
@@ -237,11 +235,15 @@ const char kGuidedTourStepDidFinishHistogram[] = "IOS.GuidedTour.DidFinishStep";
 
   FirstRunScreenProvider* provider =
       [[FirstRunScreenProvider alloc] initForProfile:profile];
-
-  _firstRunCoordinator = [[FirstRunCoordinator alloc]
-      initWithBaseViewController:presentingInterface.viewController
-                         browser:presentingInterface.browser
-                  screenProvider:provider];
+  UIViewController* baseViewController =
+      _presentingSceneState.browserProviderInterface.currentBrowserProvider
+          .viewController;
+  Browser* mainBrowser = _presentingSceneState.browserProviderInterface
+                             .mainBrowserProvider.browser;
+  _firstRunCoordinator =
+      [[FirstRunCoordinator alloc] initWithBaseViewController:baseViewController
+                                                      browser:mainBrowser
+                                               screenProvider:provider];
   _firstRunCoordinator.delegate = self;
   [_firstRunCoordinator start];
 }

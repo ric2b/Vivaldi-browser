@@ -27,7 +27,7 @@
 #include "wx/private/jsscriptwrapper.h"
 
 #include <initguid.h>
-#include <exdispid.h>
+#include <ExDispid.h>
 #include <mshtml.h>
 
 /* These GUID definitions are our own implementation to support interfaces

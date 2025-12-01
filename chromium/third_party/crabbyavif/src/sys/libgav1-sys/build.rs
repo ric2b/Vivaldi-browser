@@ -23,8 +23,11 @@ fn path_buf(inputs: &[&str]) -> PathBuf {
     path
 }
 
-fn main() {
+fn main() -> Result<(), String> {
     println!("cargo:rerun-if-changed=build.rs");
+    if !cfg!(feature = "libgav1") {
+        return Ok(());
+    }
 
     let build_target = std::env::var("TARGET").unwrap();
     let build_dir = if build_target.contains("android") {
@@ -37,7 +40,9 @@ fn main() {
         } else if build_target.contains("arm") {
             "build.android/arm"
         } else {
-            panic!("Unknown target_arch for android. Must be one of x86, x86_64, arm, aarch64.");
+            return Err(
+                "Unknown target_arch for android. Must be one of x86, x86_64, arm, aarch64.".into(),
+            );
         }
     } else {
         "build"
@@ -52,7 +57,11 @@ fn main() {
         "libgav1.a"
     });
     if !Path::new(&library_file).exists() {
-        panic!("libgav1 not found. Run libgav1.cmd.");
+        return Err(
+            "libgav1 binaries could not be found locally. Disable the libgav1 feature or \
+            build the dependency locally by running libgav1.cmd from sys/libgav1-sys."
+                .into(),
+        );
     }
     println!("cargo:rustc-link-search={}", abs_object_dir.display());
     let library_name = if cfg!(target_os = "windows") { "libgav1" } else { "gav1" };
@@ -80,10 +89,9 @@ fn main() {
     for allowlist_item in allowlist_items {
         bindings = bindings.allowlist_item(allowlist_item);
     }
-    let bindings = bindings
-        .generate()
-        .unwrap_or_else(|_| panic!("Unable to generate bindings for libgav1."));
+    let bindings = bindings.generate().map_err(|err| err.to_string())?;
     bindings
         .write_to_file(outfile.as_path())
-        .unwrap_or_else(|_| panic!("Couldn't write bindings for libgav1"));
+        .map_err(|err| err.to_string())?;
+    Ok(())
 }

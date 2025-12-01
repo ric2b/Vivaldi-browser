@@ -1,11 +1,10 @@
 /*
- * Copyright 2014 The Chromium Authors. All rights reserved.
+ * Copyright 2014 The Chromium Authors
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
 
 .search-drawer-header {
-  align-items: center;
   flex-shrink: 0;
   overflow: hidden;
   display: inline-flex;
@@ -14,7 +13,6 @@
   .search-container {
     border-bottom: 1px solid var(--sys-color-divider);
     display: flex;
-    height: 100%;
     align-items: center;
     flex-grow: 1;
   }
@@ -107,12 +105,12 @@
   overflow: hidden;
 }
 
-.search-view .search-results {
+.search-results {
   overflow-y: auto;
   display: flex;
   flex: auto;
 }
 
-.search-view .search-results > div {
+.search-results > div {
   flex: auto;
 }

@@ -10,12 +10,11 @@
 
 #include "base/containers/span.h"
 #include "base/uuid.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
 #include "chrome/browser/ui/tabs/tab_group_deletion_dialog_controller.h"
-#include "chrome/browser/ui/views/tabs/recent_activity_bubble_dialog_view.h"
 #include "components/data_sharing/public/group_data.h"
 #include "components/saved_tab_groups/public/saved_tab_group.h"
 #include "components/saved_tab_groups/public/types.h"
+#include "components/sync/base/collaboration_id.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/user_education/common/help_bubble/help_bubble_params.h"
 #include "ui/base/interaction/element_tracker.h"
@@ -37,7 +36,6 @@ struct ActivityLogItem;
 namespace tab_groups {
 
 class SavedTabGroupTab;
-class TabGroupSyncService;
 
 enum class GroupDeletionReason {
   ClosedLastTab,
@@ -52,14 +50,6 @@ class SavedTabGroupUtils {
 
   // Helper method for checking whether the feature can be used.
   static bool IsEnabledForProfile(Profile* profile);
-
-  // TODO(crbug.com/350514491): Default to using the TabGroupSyncService when
-  // crbug.com/350514491 is complete.
-  // When IsTabGroupSyncServiceDesktopMigrationEnabled() is true use the
-  // TabGroupSyncService. Otherwise, use SavedTabGroupKeyedService::proxy. This
-  // function will only return nullptr when the services cannot be created, or
-  // the profile is non-regular (Ex: incognito or guest mode).
-  static TabGroupSyncService* GetServiceForProfile(Profile* profile);
 
   static void RemoveGroupFromTabstrip(
       const Browser* browser,
@@ -167,7 +157,7 @@ class SavedTabGroupUtils {
   // is missing or not accessible.
   static std::vector<data_sharing::GroupMember> GetMembersOfSharedTabGroup(
       Profile* profile,
-      const tab_groups::CollaborationId& collaboration_id);
+      const syncer::CollaborationId& collaboration_id);
 
   // Returns the GroupId for this tab group's collaboration.
   static std::optional<data_sharing::GroupId> GetDataSharingGroupId(

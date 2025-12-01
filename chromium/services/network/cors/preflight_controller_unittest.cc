@@ -11,12 +11,14 @@
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "base/unguessable_token.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/isolation_info.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/site_for_cookies.h"
 #include "net/http/http_request_headers.h"
+#include "net/http/http_response_headers.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_source_type.h"
 #include "net/log/net_log_with_source.h"
@@ -375,7 +377,9 @@ class MockDevToolsObserver : public mojom::DevToolsObserver {
       std::vector<network::mojom::HttpRawHeaderPairPtr> headers,
       const base::TimeTicks timestamp,
       network::mojom::ClientSecurityStatePtr client_security_state,
-      network::mojom::OtherPartitionInfoPtr other_partition_info) override {
+      network::mojom::OtherPartitionInfoPtr other_partition_info,
+      const std::optional<base::UnguessableToken>&
+          applied_network_conditions_id) override {
     on_raw_request_called_ = true;
   }
   void OnRawResponse(
@@ -958,53 +962,6 @@ TEST_F(PreflightControllerTest,
 
   PerformPreflightCheck(request, /*tainted=*/false, net::IsolationInfo(),
                         PrivateNetworkAccessPreflightBehavior::kWarn,
-                        /*client_security_state=*/nullptr,
-                        PreflightMode{PreflightType::kPrivateNetworkAccess});
-  EXPECT_EQ(net::OK, net_error());
-}
-
-class PreflightControllerNoPNAPreflightShortTimeoutTest
-    : public PreflightControllerTest {
- public:
-  PreflightControllerNoPNAPreflightShortTimeoutTest() {
-    feature_list_.InitAndDisableFeature(
-        features::kPrivateNetworkAccessPreflightShortTimeout);
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-TEST_F(PreflightControllerNoPNAPreflightShortTimeoutTest,
-       CheckPrivateNetworkAccessRequestTimeoutBehaviorWarnWithTimeout) {
-  net::EmbeddedTestServer delayed_server;
-  delayed_server.RegisterRequestHandler(
-      base::BindRepeating(&AllowPrivateNetworkAccess));
-  ASSERT_TRUE(delayed_server.Start());
-  ResourceRequest request;
-  request.method = std::string("GET");
-  GURL url = delayed_server.GetURL("/");
-  request.url = url;
-  request.request_initiator = url::Origin::Create(url);
-  request.mode = mojom::RequestMode::kCors;
-  request.credentials_mode = mojom::CredentialsMode::kOmit;
-  request.target_ip_address_space = network::mojom::IPAddressSpace::kLoopback;
-
-  mojom::ClientSecurityStatePtr client_security_state =
-      ClientSecurityStateBuilder()
-          .WithPrivateNetworkRequestPolicy(
-              mojom::PrivateNetworkRequestPolicy::kPreflightWarn)
-          .Build();
-
-  // Set the client security state in the request's trusted params, because the
-  // test uses a shared factory with no client security state in its factory
-  // params, and URLLoader expects requests with a target IP address space to
-  // carry a client security state.
-  request.trusted_params = ResourceRequest::TrustedParams();
-  request.trusted_params->client_security_state = client_security_state.Clone();
-
-  PerformPreflightCheck(request, /*tainted=*/false, net::IsolationInfo(),
-                        PrivateNetworkAccessPreflightBehavior::kWarnWithTimeout,
                         /*client_security_state=*/nullptr,
                         PreflightMode{PreflightType::kPrivateNetworkAccess});
   EXPECT_EQ(net::OK, net_error());

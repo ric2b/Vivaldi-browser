@@ -129,26 +129,24 @@ class TabLifecycleUnitSource::TabLifecycleUnit
 
   // Creates or updates the existing PreDiscardResourceUsage tab helper for the
   // tab's `web_contents` with `discard_reason` and
-  // `tab_resident_set_size_estimate`.
+  // `tab_resident_set_size_estimate`. `tab_resident_set_size_estimate` is in
+  // KiB.
   void UpdatePreDiscardResourceUsage(content::WebContents* web_contents,
                                      LifecycleUnitDiscardReason discard_reason,
                                      uint64_t tab_resident_set_size_estimate);
 
   // Finishes a tab discard, invoked by Discard().
+  // `tab_resident_set_size_estimate` is in KiB.
   void FinishDiscard(LifecycleUnitDiscardReason discard_reason,
                      uint64_t tab_resident_set_size_estimate);
 
   // Finishes a tab discard and preserves the associated web contents. Used only
-  // when kWebContentsDiscard is enabled.
+  // when kWebContentsDiscard is enabled. `tab_resident_set_size_estimate` is in
+  // KiB.
   void FinishDiscardAndPreserveWebContents(
       LifecycleUnitDiscardReason discard_reason,
       uint64_t tab_resident_set_size_estimate,
       base::TimeTicks discard_start_time);
-
-  // Attempts to fast kill the process hosting the main frame of `web_contents`
-  // if only hosting the main frame.
-  void AttemptFastKillForDiscard(content::WebContents* web_contents,
-                                 LifecycleUnitDiscardReason discard_reason);
 
   // content::WebContentsObserver:
   void DidStartLoading() override;
@@ -159,7 +157,7 @@ class TabLifecycleUnitSource::TabLifecycleUnit
   void CheckDeviceUsage(DecisionDetails* decision_details) const;
 
   // TabStripModel to which this tab belongs.
-  raw_ptr<TabStripModel, DanglingUntriaged> tab_strip_model_;
+  raw_ptr<TabStripModel> tab_strip_model_;
 
   // Last time ticks at which this tab was focused, or TimeTicks::Max() if it is
   // currently focused. For tabs that aren't currently focused this is

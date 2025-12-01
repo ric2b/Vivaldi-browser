@@ -135,6 +135,7 @@
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/ipc/client/client_shared_image_interface.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 #include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_latency_info.pbzero.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/ganesh/GrDirectContext.h"
@@ -159,6 +160,13 @@ namespace {
 const size_t kAssumeOverlapThreshold = 100;
 
 constexpr auto kHasInputResetDelay = base::Milliseconds(250);
+
+// Threshold for accumulated scroll delta to trigger flash of scrollbars.
+constexpr float kScrollDeltaThreshold = 25.f;
+
+// Threshold for intersection area of scrollable content and viewport to trigger
+// flash of scrollbars. The value is chosen after testing different values.
+constexpr float kIntersectionThresholdAreaPercentage = 5.f / 100.f;
 
 // gfx::DisplayColorSpaces stores up to 3 different color spaces. This should be
 // updated to match any size changes in DisplayColorSpaces.
@@ -194,14 +202,14 @@ bool IsMobileOptimized(LayerTreeImpl* active_tree) {
 
 void DidVisibilityChange(LayerTreeHostImpl* id, bool visible) {
   if (visible) {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
-        "cc,benchmark", "LayerTreeHostImpl::SetVisible", TRACE_ID_LOCAL(id),
-        "LayerTreeHostImpl", static_cast<void*>(id));
+    TRACE_EVENT_BEGIN("cc,benchmark", "LayerTreeHostImpl::SetVisible",
+                      perfetto::Track::FromPointer(id), "LayerTreeHostImpl",
+                      static_cast<void*>(id));
     return;
   }
 
-  TRACE_EVENT_NESTABLE_ASYNC_END0(
-      "cc,benchmark", "LayerTreeHostImpl::SetVisible", TRACE_ID_LOCAL(id));
+  TRACE_EVENT_END("cc,benchmark", /*"LayerTreeHostImpl::SetVisible"*/
+                  perfetto::Track::FromPointer(id));
 }
 
 void PopulateMetadataContentColorUsage(
@@ -248,8 +256,7 @@ class LayerTreeHostImpl::ImageDecodeCacheHolder {
     if (raster_caps.use_gpu_rasterization) {
       auto color_type = viz::ToClosestSkColorType(raster_caps.tile_format);
       image_decode_cache_ = std::make_unique<GpuImageDecodeCache>(
-          worker_context_provider.get(),
-          /*use_transfer_cache=*/true, color_type,
+          worker_context_provider.get(), color_type,
           decoded_image_working_set_budget_bytes, raster_caps.max_texture_size,
           dark_mode_filter);
     } else {
@@ -344,6 +351,13 @@ void LayerTreeHostImpl::DidEndScroll() {
     render_frame_metadata_observer_->DidEndScroll();
   }
 #endif
+}
+
+void LayerTreeHostImpl::DidMouseEnterNonViewportScroller(ElementId element_id) {
+  if (ScrollbarAnimationController* animation_controller =
+          ScrollbarAnimationControllerForElementId(element_id)) {
+    animation_controller->DidScrollUpdate();
+  }
 }
 
 void LayerTreeHostImpl::DidMouseLeave() {
@@ -469,7 +483,9 @@ LayerTreeHostImpl::LayerTreeHostImpl(
               /*should_report_histograms=*/!settings
                   .single_thread_proxy_scheduler,
               /*should_report_ukm=*/!settings.single_thread_proxy_scheduler,
-              id)),
+              id,
+              /*is_trees_in_viz_client=*/
+              settings_.TreesInVizInClientProcess())),
       frame_trackers_(settings.single_thread_proxy_scheduler),
       lcd_text_metrics_reporter_(LCDTextMetricsReporter::CreateIfNeeded(this)),
       has_input_resetter_(
@@ -478,6 +494,14 @@ LayerTreeHostImpl::LayerTreeHostImpl(
                               base::Unretained(this)),
           kHasInputResetDelay),
       contains_srgb_cache_(kContainsSrgbCacheSize) {
+  CHECK(!(settings.scrollbar_flash_once_after_scroll_update &&
+          settings.scrollbar_flash_after_any_scroll_update))
+      << "Only one of "
+      << "scrollbar_flash_once_after_scroll_update "
+      << "or "
+      << "scrollbar_flash_after_any_scroll_update "
+      << "can be enabled";
+
   resource_provider_ = std::make_unique<viz::ClientResourceProvider>(
       task_runner_provider_->MainThreadTaskRunner(),
       task_runner_provider_->HasImplThread()
@@ -495,7 +519,7 @@ LayerTreeHostImpl::LayerTreeHostImpl(
   // LTHI always has an active tree.
   active_tree_ = std::make_unique<LayerTreeImpl>(
       *this, viz::BeginFrameArgs(), new SyncedScale, new SyncedBrowserControls,
-      new SyncedBrowserControls, new SyncedElasticOverscroll);
+      new SyncedBrowserControls);
   active_tree_->property_trees()->set_is_active(true);
 
   viewport_ = Viewport::Create(this);
@@ -506,12 +530,16 @@ LayerTreeHostImpl::LayerTreeHostImpl(
   browser_controls_offset_manager_ = BrowserControlsOffsetManager::Create(
       this, settings.top_controls_show_threshold,
       settings.top_controls_hide_threshold);
+  progress_bar_offset_manager_ =
+      base::WrapUnique(new ProgressBarOffsetManager());
 
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableLayerTreeHostMemoryPressure)) {
-    memory_pressure_listener_ = std::make_unique<base::MemoryPressureListener>(
-        FROM_HERE, base::BindRepeating(&LayerTreeHostImpl::OnMemoryPressure,
-                                       base::Unretained(this)));
+    memory_pressure_listener_ =
+        std::make_unique<base::AsyncMemoryPressureListener>(
+            FROM_HERE, base::MemoryPressureListenerTag::kLayerTreeHostImpl,
+            base::BindRepeating(&LayerTreeHostImpl::OnMemoryPressure,
+                                base::Unretained(this)));
   }
 
   SetDebugState(settings.initial_debug_state);
@@ -525,8 +553,8 @@ LayerTreeHostImpl::LayerTreeHostImpl(
 
 #if BUILDFLAG(IS_CHROMEOS)
     frame_sorter_.EnableReportForUI();
-    frame_trackers_.StartSequence(
-        FrameSequenceTrackerType::kCompositorAnimation);
+    frame_trackers_.UpdateSmoothThreadHistory(
+        FrameInfo::SmoothEffectDrivingThread::kMain, /*modifier-*/1);
 #endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
@@ -1027,8 +1055,7 @@ bool LayerTreeHostImpl::CanDraw() const {
 
   // Do not draw while evicted. Await the activation of a tree containing a
   // newer viz::Surface
-  if (base::FeatureList::IsEnabled(features::kEvictionThrottlesDraw) &&
-      evicted_local_surface_id_.is_valid()) {
+  if (evicted_local_surface_id_.is_valid()) {
     TRACE_EVENT_INSTANT0(
         "cc",
         "LayerTreeHostImpl::CanDraw viz::Surface evicted and not recreated",
@@ -1206,6 +1233,10 @@ std::string LayerTreeHostImpl::FrameData::ToString() const {
   base::trace_event::TracedValueJSON value;
   AsValueInto(&value);
   return value.ToFormattedJSON();
+}
+void LayerTreeHostImpl::FrameData::set_trees_in_viz_timestamps(
+    const viz::TreesInVizTiming& timing_details) {
+  trees_in_viz_timing_details = timing_details;
 }
 
 DrawMode LayerTreeHostImpl::GetDrawMode() const {
@@ -1865,8 +1896,7 @@ void LayerTreeHostImpl::ResetTreesForTesting() {
   active_tree_ = std::make_unique<LayerTreeImpl>(
       *this, CurrentBeginFrameArgs(), active_tree()->page_scale_factor(),
       active_tree()->top_controls_shown_ratio(),
-      active_tree()->bottom_controls_shown_ratio(),
-      active_tree()->elastic_overscroll());
+      active_tree()->bottom_controls_shown_ratio());
   active_tree_->property_trees()->set_is_active(true);
   active_tree_->property_trees()->clear();
   if (pending_tree_)
@@ -2025,11 +2055,6 @@ TargetColorParams LayerTreeHostImpl::GetTargetColorParams(
     return params;
 
   gfx::DisplayColorSpaces display_cs = GetDisplayColorSpaces();
-
-  if (settings_.prefer_raster_in_srgb &&
-      content_color_usage == gfx::ContentColorUsage::kSRGB) {
-    return params;
-  }
 
   auto raster_color_space =
       display_cs.GetRasterAndCompositeColorSpace(content_color_usage);
@@ -2437,9 +2462,10 @@ void LayerTreeHostImpl::OnSurfaceEvicted(
 }
 
 void LayerTreeHostImpl::ReportEventLatency(
+    const viz::BeginFrameArgs& args,
     std::vector<EventLatencyTracker::LatencyData> latencies) {
   if (auto* recorder = CustomMetricRecorder::Get())
-    recorder->ReportEventLatency(std::move(latencies));
+    recorder->ReportEventLatency(args, std::move(latencies));
 }
 
 void LayerTreeHostImpl::OnCanDrawStateChangedForTree() {
@@ -2877,18 +2903,23 @@ std::optional<SubmitInfo> LayerTreeHostImpl::DrawLayers(FrameData* frame) {
                        compositor_frame.render_pass_list);
 
   base::TimeTicks submit_time = base::TimeTicks::Now();
+  base::TimeTicks trees_in_viz_submit_time;
 
   if (settings_.TreesInVizInClientProcess()) {
-    UpdateDisplayTree(*frame);
+    send_frame_token_to_embedder_ =
+        compositor_frame.metadata.send_frame_token_to_embedder;
+    trees_in_viz_submit_time = UpdateDisplayTree(*frame);
 
     layer_tree_frame_sink_->ExportFrameTiming();
 
-    // For the display compositor we should have already submitted at display
-    // Immediately queue a DidReceiveCompositorFrameAck.
-    GetTaskRunner()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&LayerTreeHostImpl::DidReceiveCompositorFrameAck,
-                       weak_factory_.GetWeakPtr()));
+    if (!base::FeatureList::IsEnabled(features::kNoCompositorFrameAcks)) {
+      // For the display compositor we should have already submitted at display
+      // Immediately queue a DidReceiveCompositorFrameAck.
+      GetTaskRunner()->PostTask(
+          FROM_HERE,
+          base::BindOnce(&LayerTreeHostImpl::DidReceiveCompositorFrameAck,
+                         weak_factory_.GetWeakPtr()));
+    }
   } else {
     TRACE_EVENT(
         "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
@@ -3023,15 +3054,19 @@ std::optional<SubmitInfo> LayerTreeHostImpl::DrawLayers(FrameData* frame) {
     }
   }
 
-  return SubmitInfo{frame_token,
-                    submit_time,
-                    frame->checkerboarded_needs_raster,
-                    frame->checkerboarded_needs_record,
-                    top_controls_moved,
-                    std::move(events_metrics),
-                    drawn_with_new_layer_tree,
-                    active_tree_->did_raster_inducing_scroll(),
-                    normalized_invalidated_area};
+  return SubmitInfo{
+      frame_token,
+      submit_time,  // submit time for CFs; branch time in TreesInViz mode.
+      frame->checkerboarded_needs_raster,
+      frame->checkerboarded_needs_record,
+      top_controls_moved,
+      std::move(events_metrics),
+      drawn_with_new_layer_tree,
+      active_tree_->did_raster_inducing_scroll(),
+      normalized_invalidated_area,
+      trees_in_viz_submit_time  // submit time for UpdateLayerTree in TreesInViz
+                                // mode, empty otherwise.
+  };
 }
 
 viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
@@ -3201,6 +3236,13 @@ viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
     frame->damage_reasons.Remove(DamageReason::kScrollbarFadeOutAnimation);
   }
 
+  // Propagate optioal timestamps for TreesInViz stages
+  if (frame->trees_in_viz_timing_details.has_value() &&
+      settings_.trees_in_viz_in_viz_process) {
+    metadata.trees_in_viz_timing_details =
+        std::move(frame->trees_in_viz_timing_details.value());
+  }
+
   // If all RedrawReasons have been recorded in `content_interval_info` and
   // removed, then can set `has_only_content_frame_interval_updates`.
   metadata.frame_interval_inputs.has_only_content_frame_interval_updates =
@@ -3235,9 +3277,15 @@ viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
 
     // TODO(zmo): Consider plumbing the observer to viz as well.
     if (render_frame_metadata_observer_) {
+      // Make sure we don't recompute and overwrite metadata's
+      // send_frame_token_to_embedder in viz.
+      DCHECK(!settings_.trees_in_viz_in_viz_process);
       render_frame_metadata_observer_->OnRenderFrameSubmission(
           *last_draw_render_frame_metadata_, &metadata,
           active_tree()->TakeForceSendMetadataRequest());
+    }
+    if (settings_.trees_in_viz_in_viz_process) {
+      metadata.send_frame_token_to_embedder = send_frame_token_to_embedder_;
     }
   }
 
@@ -3313,11 +3361,11 @@ void LayerTreeHostImpl::DidDrawAllLayers(const FrameData& frame) {
   }
 }
 
-void LayerTreeHostImpl::UpdateDisplayTree(FrameData& frame) {
+base::TimeTicks LayerTreeHostImpl::UpdateDisplayTree(FrameData& frame) {
   DCHECK(settings_.TreesInVizInClientProcess());
   DCHECK(layer_context_);
 
-  layer_context_->UpdateDisplayTreeFrom(
+  return layer_context_->UpdateDisplayTreeFrom(
       *active_tree(), *resource_provider(),
       *layer_tree_frame_sink_->context_provider(), viewport_damage_rect_,
       target_local_surface_id_);
@@ -3574,11 +3622,13 @@ void LayerTreeHostImpl::DidNotProduceFrame(const viz::BeginFrameAck& ack,
     layer_tree_frame_sink_->DidNotProduceFrame(ack, reason);
   }
   // While scrolling, we save all event metrics. It is possible that this
-  // results in a 0 delta scroll, which has no damage. We take the metrics here
+  // results in a 0 delta scroll, which has no damage. We drop the metrics here
   // so that they are terminated now. This prevents them from being incorrectly
   // associated with a future produced frame. So that jank measurements have
-  // accurate deltas.
-  events_metrics_manager_.TakeSavedEventsMetrics();
+  // accurate deltas. The only exception are scroll end metrics, which we keep
+  // around to  ensure `ScrollJankDroppedFrameReporter` emits per-scroll
+  // metrics.
+  events_metrics_manager_.DropSavedEventMetricsExceptScrollEnds();
 }
 
 void LayerTreeHostImpl::OnBeginImplFrameDeadline() {
@@ -3822,15 +3872,15 @@ void LayerTreeHostImpl::CreatePendingTree() {
     pending_tree_ = std::make_unique<LayerTreeImpl>(
         *this, CurrentBeginFrameArgs(), active_tree()->page_scale_factor(),
         active_tree()->top_controls_shown_ratio(),
-        active_tree()->bottom_controls_shown_ratio(),
-        active_tree()->elastic_overscroll());
+        active_tree()->bottom_controls_shown_ratio());
   }
   pending_tree_fully_painted_ = false;
 
   client_->OnCanDrawStateChanged(CanDraw());
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
-      "cc", "PendingTree:waiting", TRACE_ID_LOCAL(pending_tree_.get()),
-      "active_lsid", active_tree()->local_surface_id_from_parent().ToString());
+  TRACE_EVENT_BEGIN("cc", "PendingTree:waiting",
+                    perfetto::Track::FromPointer(pending_tree_.get()),
+                    "active_lsid",
+                    active_tree()->local_surface_id_from_parent().ToString());
 }
 
 void LayerTreeHostImpl::PushScrollbarOpacitiesFromActiveToPending() {
@@ -3873,10 +3923,10 @@ void LayerTreeHostImpl::ActivateSyncTree() {
             perfetto::protos::pbzero::MainFramePipeline::Step::ACTIVATE);
       });
   if (pending_tree_) {
-    TRACE_EVENT_NESTABLE_ASYNC_END1(
-        "cc", "PendingTree:waiting", TRACE_ID_LOCAL(pending_tree_.get()),
-        "pending_lsid",
-        pending_tree_->local_surface_id_from_parent().ToString());
+    TRACE_EVENT_END("cc", /*"PendingTree:waiting"*/
+                    perfetto::Track::FromPointer(pending_tree_.get()),
+                    "pending_lsid",
+                    pending_tree_->local_surface_id_from_parent().ToString());
     active_tree_->lifecycle().AdvanceTo(LayerTreeLifecycle::kBeginningSync);
 
     // Process any requests in the UI resource queue.  The request queue is
@@ -4684,13 +4734,16 @@ void LayerTreeHostImpl::SetRenderFrameObserver(
 
 void LayerTreeHostImpl::WillScrollContent(ElementId element_id) {
   // Flash the overlay scrollbar even if the scroll delta is 0.
-  if (settings().scrollbar_flash_after_any_scroll_update) {
-    FlashAllScrollbars(false);
-  } else {
+
+  // If the given |element_id| was flashed along with other scrollbars, we don't
+  // need to flash it again.
+  if (!MaybeFlashAllScrollbars(element_id, /*did_scroll=*/false)) {
     if (ScrollbarAnimationController* animation_controller =
-            ScrollbarAnimationControllerForElementId(element_id))
+            ScrollbarAnimationControllerForElementId(element_id)) {
       animation_controller->WillUpdateScroll();
+    }
   }
+
   // Whenever we are scrolling, we want to save the metrics. It is possible for
   // the event to result in a 0 delta change. However we want to associate it
   // with the subsequent frame. Otherwise this event will be attributed to jank.
@@ -4705,13 +4758,18 @@ void LayerTreeHostImpl::DidScrollContent(ElementId element_id,
   scroll_accumulated_this_frame_ += scroll_delta;
   frame_max_scroll_delta_ =
       std::max(std::abs(scroll_delta.x()), std::abs(scroll_delta.y()));
-  if (settings().scrollbar_flash_after_any_scroll_update) {
-    FlashAllScrollbars(true);
-  } else {
+
+  // If the given |element_id| was flashed along with other scrollbars, we don't
+  // need to flash it again.
+  if (!MaybeFlashAllScrollbars(element_id, /*did_scroll=*/true)) {
     if (ScrollbarAnimationController* animation_controller =
-            ScrollbarAnimationControllerForElementId(element_id))
+            ScrollbarAnimationControllerForElementId(element_id)) {
       animation_controller->DidScrollUpdate();
+    }
   }
+
+  // Also flash the scrollbars that became visible due to this scroll update.
+  MaybeFlashEnteredViewportScrollbars(element_id, scroll_delta);
 
   // We may wish to prioritize smoothness over raster when the user is
   // interacting with content, but this needs to be evaluated only for direct
@@ -5024,9 +5082,6 @@ LayerTreeHostImpl::ProcessCompositorDeltas(
   commit_data->bottom_controls_delta =
       active_tree()->bottom_controls_shown_ratio()->PullDeltaForMainThread(
           main_thread_mutator_host);
-  commit_data->elastic_overscroll_delta =
-      active_tree_->elastic_overscroll()->PullDeltaForMainThread(
-          main_thread_mutator_host);
   commit_data->swap_promises.swap(swap_promises_for_main_thread_scroll_update_);
 
   commit_data->ongoing_scroll_animation =
@@ -5216,6 +5271,15 @@ void LayerTreeHostImpl::RegisterScrollbarAnimationController(
   scrollbar_animation_controllers_[scroll_element_id] =
       active_tree_->CreateScrollbarAnimationController(scroll_element_id,
                                                        scrollbar_opacity);
+  // There mustn't be a scrollbar for this element id that has been flashed.
+  if (settings().scrollbar_flash_once_visible_on_viewport) {
+    CHECK(flashed_scrollbars_.find(scroll_element_id) ==
+          flashed_scrollbars_.end());
+  }
+  if (settings().scrollbar_flash_once_visible_on_viewport) {
+    CHECK(previously_visible_scrollable_elements_.find(scroll_element_id) ==
+          previously_visible_scrollable_elements_.end());
+  }
 }
 
 void LayerTreeHostImpl::DidRegisterScrollbarLayer(
@@ -5228,8 +5292,13 @@ void LayerTreeHostImpl::DidRegisterScrollbarLayer(
 void LayerTreeHostImpl::DidUnregisterScrollbarLayer(
     ElementId scroll_element_id,
     ScrollbarOrientation orientation) {
-  if (ScrollbarsFor(scroll_element_id).empty())
+  if (ScrollbarsFor(scroll_element_id).empty()) {
     scrollbar_animation_controllers_.erase(scroll_element_id);
+    // Clean up the flashed state when removing scrollbar controller
+    flashed_scrollbars_.erase(scroll_element_id);
+    previously_visible_scrollable_elements_.erase(scroll_element_id);
+    accumulated_scroll_deltas_by_element_id_.erase(scroll_element_id);
+  }
   if (input_delegate_)
     input_delegate_->DidUnregisterScrollbar(scroll_element_id, orientation);
 }
@@ -5264,13 +5333,12 @@ LayerTreeHostImpl::ScrollbarAnimationControllerForElementId(
   return i->second.get();
 }
 
-void LayerTreeHostImpl::FlashAllScrollbars(bool did_scroll) {
-  for (auto& pair : scrollbar_animation_controllers_) {
-    if (did_scroll)
-      pair.second->DidScrollUpdate();
-    else
-      pair.second->WillUpdateScroll();
+void LayerTreeHostImpl::OnPageScaleUpdated() {
+  if (settings().scrollbar_flash_once_after_scroll_update) {
+    EraseFlashedScrollbars();
   }
+  MaybeFlashAllScrollbars(/*tracking_element_id=*/ElementId(),
+                          /*did_scroll=*/false);
 }
 
 void LayerTreeHostImpl::PostDelayedScrollbarAnimationTask(
@@ -5488,7 +5556,7 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
 
     client_shared_image = sii->CreateSharedImageForSoftwareCompositor(
         {format, upload_size, color_space, shared_image_usage,
-         "LayerTreeHostUIResource"});
+         "LayerTreeHostUIResourceSoftware"});
     CHECK(client_shared_image);
     shared_mapping = client_shared_image->Map();
   }
@@ -5502,7 +5570,7 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
       auto* sii = context_provider->SharedImageInterface();
       client_shared_image = sii->CreateSharedImage(
           {format, upload_size, color_space, shared_image_usage,
-           "LayerTreeHostUIResource"},
+           "LayerTreeHostUIResourceBitmap"},
           bitmap.GetPixels());
       CHECK(client_shared_image);
     } else {
@@ -5570,7 +5638,7 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
       auto* sii = context_provider->SharedImageInterface();
       client_shared_image = sii->CreateSharedImage(
           {format, upload_size, color_space, shared_image_usage,
-           "LayerTreeHostUIResource"},
+           "LayerTreeHostUIResourceScaledBitmap"},
           gfx::SkPixmapToSpan(pixmap));
       CHECK(client_shared_image);
     }
@@ -5968,6 +6036,12 @@ void LayerTreeHostImpl::ScrollOffsetAnimationFinished(ElementId element_id) {
     input_delegate_->ScrollOffsetAnimationFinished(element_id);
 }
 
+void LayerTreeHostImpl::ElasticOverscrollAnimationFinished() {
+  if (input_delegate_) {
+    input_delegate_->ElasticOverscrollAnimationFinished();
+  }
+}
+
 void LayerTreeHostImpl::NotifyAnimationWorkletStateChange(
     AnimationWorkletMutationState state,
     ElementListType tree_type) {
@@ -6022,15 +6096,17 @@ void LayerTreeHostImpl::SetContextVisibility(bool is_visible) {
 }
 
 void LayerTreeHostImpl::ShowScrollbarsForImplScroll(ElementId element_id) {
-  if (settings_.scrollbar_flash_after_any_scroll_update) {
-    FlashAllScrollbars(true);
+  // If the element id was flashed along with other scrollbars or there is no
+  // element id, skip further steps.
+  if (!element_id ||
+      !MaybeFlashAllScrollbars(element_id, /*did_scroll=*/true)) {
     return;
   }
-  if (!element_id)
-    return;
+
   if (ScrollbarAnimationController* animation_controller =
-          ScrollbarAnimationControllerForElementId(element_id))
+          ScrollbarAnimationControllerForElementId(element_id)) {
     animation_controller->DidScrollUpdate();
+  }
 }
 
 void LayerTreeHostImpl::InitializeUkm(
@@ -6154,6 +6230,139 @@ bool LayerTreeHostImpl::RunningOnRendererProcess() const {
 
 void LayerTreeHostImpl::ResetHasInputForFrameInterval() {
   has_input_for_frame_interval_ = false;
+}
+
+bool LayerTreeHostImpl::MaybeFlashAllScrollbars(ElementId tracking_element_id,
+                                                bool did_scroll) {
+  bool has_tracking_element_id_flashed = false;
+  if (settings_.scrollbar_flash_after_any_scroll_update) {
+    FlashAllScrollbars(did_scroll);
+    // Always assume that the given |element_id| was flashed (along with the
+    // other scrollbars) since we are flashing all scrollbars.
+    has_tracking_element_id_flashed = true;
+  } else if (settings_.scrollbar_flash_once_after_scroll_update) {
+    // This call will flash all the scrollbars including the given |element_id|
+    // if it has not flashed them before.
+    has_tracking_element_id_flashed =
+        MaybeFlashAllScrollbarsOnce(tracking_element_id, did_scroll);
+  }
+  return has_tracking_element_id_flashed;
+}
+
+void LayerTreeHostImpl::FlashAllScrollbars(bool did_scroll) {
+  CHECK(settings().scrollbar_flash_after_any_scroll_update);
+  for (auto& pair : scrollbar_animation_controllers_) {
+    if (did_scroll) {
+      pair.second->DidScrollUpdate();
+    } else {
+      pair.second->WillUpdateScroll();
+    }
+  }
+}
+
+void LayerTreeHostImpl::EraseFlashedScrollbars() {
+  CHECK(settings().scrollbar_flash_once_after_scroll_update);
+  flashed_scrollbars_.clear();
+}
+
+bool LayerTreeHostImpl::MaybeFlashAllScrollbarsOnce(
+    ElementId tracking_element_id,
+    bool did_scroll) {
+  CHECK(settings().scrollbar_flash_once_after_scroll_update);
+  bool flashed_tracking_element_id = false;
+  for (auto& pair : scrollbar_animation_controllers_) {
+    ElementId element_id = pair.first;
+
+    // Skip if this scrollbar has already been flashed
+    if (flashed_scrollbars_.find(element_id) != flashed_scrollbars_.end()) {
+      continue;
+    }
+
+    // Flash the scrollbar and mark it as flashed
+    if (did_scroll) {
+      pair.second->DidScrollUpdate();
+    } else {
+      pair.second->WillUpdateScroll();
+    }
+    flashed_scrollbars_.insert(element_id);
+    flashed_tracking_element_id = element_id == tracking_element_id;
+  }
+  return flashed_tracking_element_id;
+}
+
+void LayerTreeHostImpl::MaybeFlashEnteredViewportScrollbars(
+    ElementId element_id,
+    const gfx::Vector2dF& scroll_delta) {
+  if (!settings().scrollbar_flash_once_visible_on_viewport) {
+    return;
+  }
+
+  // First check that scrolling delta is larger than the threshold.
+  const gfx::Vector2dF last_scroll_delta =
+      accumulated_scroll_deltas_by_element_id_[element_id];
+  const gfx::Vector2dF new_scroll_delta = last_scroll_delta + scroll_delta;
+  // If length of last scroll vector is smaller than new scroll vector, reset
+  // them, the scroll direction has changed. Reset it. Otherwise, accumulate.
+  if (last_scroll_delta.Length() > new_scroll_delta.Length()) {
+    accumulated_scroll_deltas_by_element_id_[element_id] = scroll_delta;
+  } else {
+    accumulated_scroll_deltas_by_element_id_[element_id] = new_scroll_delta;
+  }
+
+  if (std::abs(accumulated_scroll_deltas_by_element_id_[element_id].x()) <
+          kScrollDeltaThreshold &&
+      std::abs(accumulated_scroll_deltas_by_element_id_[element_id].y()) <
+          kScrollDeltaThreshold) {
+    return;
+  }
+
+  accumulated_scroll_deltas_by_element_id_[element_id] = gfx::Vector2dF();
+
+  const gfx::Rect visible_viewport_rect = active_tree_->GetDeviceViewport();
+  for (const auto& [scroll_element_id, controller] :
+       scrollbar_animation_controllers_) {
+    // Skip the scrollbar that is being scrolled.
+    if (scroll_element_id == element_id) {
+      continue;
+    }
+
+    ScrollbarSet scrollbars = ScrollbarsFor(scroll_element_id);
+    if (scrollbars.empty()) {
+      continue;
+    }
+
+    gfx::Rect combined_bounds_in_screen;
+    for (ScrollbarLayerImplBase* scrollbar_layer : scrollbars) {
+      gfx::Rect scrollbar_bounds_in_screen = MathUtil::MapEnclosingClippedRect(
+          scrollbar_layer->ScreenSpaceTransform(),
+          gfx::Rect(scrollbar_layer->bounds()));
+
+      if (combined_bounds_in_screen.IsEmpty()) {
+        combined_bounds_in_screen = scrollbar_bounds_in_screen;
+      } else {
+        combined_bounds_in_screen.Union(scrollbar_bounds_in_screen);
+      }
+    }
+
+    bool was_visible =
+        previously_visible_scrollable_elements_.count(scroll_element_id);
+
+    const gfx::Rect intersection =
+        gfx::IntersectRects(visible_viewport_rect, combined_bounds_in_screen);
+    // If intersection area is threshold of combined bounds area, consider it
+    // as visible.
+    const bool is_visible = (intersection.width() * intersection.height() >=
+                             combined_bounds_in_screen.width() *
+                                 combined_bounds_in_screen.height() *
+                                 kIntersectionThresholdAreaPercentage);
+
+    if (is_visible && !was_visible) {
+      controller->DidScrollUpdate();
+      previously_visible_scrollable_elements_.insert(scroll_element_id);
+    } else if (!is_visible && was_visible) {
+      previously_visible_scrollable_elements_.erase(scroll_element_id);
+    }
+  }
 }
 
 }  // namespace cc

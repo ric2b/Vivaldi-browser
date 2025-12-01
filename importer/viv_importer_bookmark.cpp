@@ -25,6 +25,7 @@
 #include "importer/viv_importer.h"
 #include "importer/viv_importer_utils.h"
 #include "importer/viv_opera_reader.h"
+#include "importer/viv_import_result.h"
 
 class OperaBookmarkReader : public OperaAdrFileReader {
  public:
@@ -107,22 +108,20 @@ void OperaBookmarkReader::AddBookmark(
   bookmarks_.push_back(std::move(entry));
 }
 
-bool OperaImporter::ImportBookMarks(std::string* error) {
+ImportResult OperaImporter::ImportBookMarks() {
   if (bookmarkfilename_.empty()) {
-    *error = "No bookmark filename provided.";
-    return false;
+    return import_result::Error(IDS_IMPORT_ERROR_OPERA_BOOKMARKS_FILE_NOT_FOUND);
   }
   base::FilePath file(bookmarkfilename_);
   OperaBookmarkReader reader;
 
   if (!reader.LoadFile(file)) {
-    *error = "Bookmark file does not exist.";
-    return false;
+    return import_result::Error(IDS_IMPORT_ERROR_OPERA_BOOKMARKS_FILE_NOT_FOUND);
   }
   if (!reader.Bookmarks().empty() && !cancelled()) {
     const std::u16string& first_folder_name =
         bridge_->GetLocalizedString(IDS_BOOKMARK_GROUP_FROM_OPERA);
     bridge_->AddBookmarks(reader.Bookmarks(), first_folder_name);
   }
-  return true;
+  return import_result::Success();
 }

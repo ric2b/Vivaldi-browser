@@ -132,22 +132,27 @@ void MoveAllChildren(NoteModelView* model,
     return;
   }
 
-  // This code relies on the underlying type to store children in the
-  // NotesModel which is vector. It moves the last child from |old_parent| to
-  // the end of |new_parent| step by step (which reverses the order of
-  // children). After that all children must be reordered to keep the original
-  // order in |new_parent|.
+    // This code relies on the underlying type to store children in the
+  // NotesModel which is vector. It moves children from |old_parent| to
+  // the end of |new_parent| one by one, from last to first (which reverses the
+  // order of children). After that all children must be reordered to keep the
+  // original order in |new_parent|.
   // This algorithm is used because of performance reasons.
-  std::vector<const vivaldi::NoteNode*> children_order(
-      old_parent->children().size(), nullptr);
-  for (size_t i = old_parent->children().size(); i > 0; --i) {
-    const size_t old_index = i - 1;
-    const vivaldi::NoteNode* child_to_move =
-        old_parent->children()[old_index].get();
-    children_order[old_index] = child_to_move;
-    model->Move(child_to_move, new_parent, new_parent->children().size());
+  std::vector<const vivaldi::NoteNode*> children_in_original_order;
+  children_in_original_order.reserve(old_parent->children().size());
+  for (const auto& child : old_parent->children()) {
+    children_in_original_order.push_back(child.get());
   }
-  model->ReorderChildren(new_parent, children_order);
+
+  // Move children one by one, from last to first, to avoid O(n^2) performance.
+  while (!old_parent->children().empty()) {
+    model->Move(old_parent->children().back().get(), new_parent,
+                new_parent->children().size());
+  }
+
+  // The children are now in reversed order in `new_parent`. Restore original
+  // order.
+  model->ReorderChildren(new_parent, children_in_original_order);
 }
 
 }  // namespace

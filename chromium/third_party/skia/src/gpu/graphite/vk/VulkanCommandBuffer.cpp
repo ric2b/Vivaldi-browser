@@ -16,6 +16,7 @@
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/DescriptorData.h"
 #include "src/gpu/graphite/Log.h"
+#include "src/gpu/graphite/PipelineData.h"
 #include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/Surface_Graphite.h"
 #include "src/gpu/graphite/TextureProxy.h"
@@ -268,7 +269,6 @@ void VulkanCommandBuffer::prepareSurfaceForStateUpdate(SkSurface* targetSurface,
                                          newLayout,
                                          dstAccess,
                                          dstStage,
-                                         false,
                                          newQueueFamilyIndex);
 }
 
@@ -299,16 +299,32 @@ static VkResult submit_to_queue(const VulkanSharedContext* sharedContext,
                                 const VkCommandBuffer* commandBuffers,
                                 uint32_t signalCount,
                                 const VkSemaphore* signalSemaphores,
-                                Protected protectedContext) {
+                                Protected protectedContext,
+                                MarkFrameBoundary markFrameBoundary,
+                                uint64_t frameID) {
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
     VkProtectedSubmitInfo protectedSubmitInfo = {};
     if (protectedContext == Protected::kYes) {
         protectedSubmitInfo.sType = VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO;
         protectedSubmitInfo.protectedSubmit = VK_TRUE;
+
+        AddToPNextChain(&submitInfo, &protectedSubmitInfo);
     }
 
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.pNext = protectedContext == Protected::kYes ? &protectedSubmitInfo : nullptr;
+
+    VkFrameBoundaryEXT frameBoundary;
+    if (markFrameBoundary == MarkFrameBoundary::kYes &&
+        sharedContext->vulkanCaps().supportsFrameBoundary()) {
+        memset(&frameBoundary, 0, sizeof(VkFrameBoundaryEXT));
+        frameBoundary.sType = VK_STRUCTURE_TYPE_FRAME_BOUNDARY_EXT;
+        frameBoundary.flags = VK_FRAME_BOUNDARY_FRAME_END_BIT_EXT;
+        frameBoundary.frameID = frameID;
+
+        AddToPNextChain(&submitInfo, &frameBoundary);
+    }
+
     submitInfo.waitSemaphoreCount = waitCount;
     submitInfo.pWaitSemaphores = waitSemaphores;
     submitInfo.pWaitDstStageMask = waitStages;
@@ -316,12 +332,13 @@ static VkResult submit_to_queue(const VulkanSharedContext* sharedContext,
     submitInfo.pCommandBuffers = commandBuffers;
     submitInfo.signalSemaphoreCount = signalCount;
     submitInfo.pSignalSemaphores = signalSemaphores;
+
     VkResult result;
     VULKAN_CALL_RESULT(sharedContext, result, QueueSubmit(queue, 1, &submitInfo, fence));
     return result;
 }
 
-bool VulkanCommandBuffer::submit(VkQueue queue) {
+bool VulkanCommandBuffer::submit(VkQueue queue, const SubmitInfo& submitInfo) {
     this->end();
 
     auto device = fSharedContext->device();
@@ -360,7 +377,9 @@ bool VulkanCommandBuffer::submit(VkQueue queue) {
                                             &fPrimaryCommandBuffer,
                                             fSignalSemaphores.size(),
                                             fSignalSemaphores.data(),
-                                            this->isProtected());
+                                            this->isProtected(),
+                                            submitInfo.fMarkBoundary,
+                                            submitInfo.fFrameID);
     fWaitSemaphores.clear();
     fSignalSemaphores.clear();
     if (submitResult != VK_SUCCESS) {
@@ -456,8 +475,7 @@ bool VulkanCommandBuffer::onAddRenderPass(const RenderPassDesc& rpDesc,
             vulkanTexture->setImageLayout(this,
                                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                           VK_ACCESS_SHADER_READ_BIT,
-                                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                          false);
+                                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
         }
     }
     if (fDstCopy.first) {
@@ -466,8 +484,7 @@ bool VulkanCommandBuffer::onAddRenderPass(const RenderPassDesc& rpDesc,
         vulkanTexture->setImageLayout(this,
                                       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                       VK_ACCESS_SHADER_READ_BIT,
-                                      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                      false);
+                                      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
     }
     this->setViewport(viewport);
 
@@ -482,7 +499,10 @@ bool VulkanCommandBuffer::onAddRenderPass(const RenderPassDesc& rpDesc,
             viewport, rpDesc.fDstReadStrategy == DstReadStrategy::kReadFromInput);
 
     for (const auto& drawPass : drawPasses) {
-        this->addDrawPass(drawPass.get());
+        if (!this->addDrawPass(drawPass.get())) SK_UNLIKELY {
+            this->endRenderPass();
+            return false;
+        }
     }
 
     this->endRenderPass();
@@ -510,9 +530,6 @@ void VulkanCommandBuffer::performOncePerRPUpdates(SkIRect viewport, bool bindDst
     this->pushConstants(pushConstantInfo, fResourceProvider->mockPipelineLayout());
 
     if (bindDstAsInputAttachment) {
-        // TODO(b/390458117): This assert can be removed once the sample loading shader supports
-        // sample counts > 1.
-        SkASSERT(fTargetTexture && fTargetTexture->numSamples() == 1);
         this->updateAndBindInputAttachment(*fTargetTexture,
                                             VulkanGraphicsPipeline::kDstAsInputDescSetIndex,
                                             fResourceProvider->mockPipelineLayout());
@@ -656,7 +673,7 @@ void assign_color_texture_layout(VulkanCommandBuffer* cmdBuf,
         access |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
     }
 
-    colorTexture->setImageLayout(cmdBuf, layout, access, stageFlags, /*byRegion=*/false);
+    colorTexture->setImageLayout(cmdBuf, layout, access, stageFlags);
 }
 
 void assign_resolve_texture_layout(VulkanCommandBuffer* cmdBuf,
@@ -680,7 +697,7 @@ void assign_resolve_texture_layout(VulkanCommandBuffer* cmdBuf,
         access |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     }
 
-    resolveTexture->setImageLayout(cmdBuf, layout, access, stageFlags, /*byRegion=*/false);
+    resolveTexture->setImageLayout(cmdBuf, layout, access, stageFlags);
 }
 
 void setup_texture_layouts(VulkanCommandBuffer* cmdBuf,
@@ -703,8 +720,7 @@ void setup_texture_layouts(VulkanCommandBuffer* cmdBuf,
                                             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
                                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-                                            /*byRegion=*/false);
+                                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
     }
 }
 
@@ -946,8 +962,17 @@ void VulkanCommandBuffer::endRenderPass() {
     fTargetTexture = nullptr;
 }
 
-void VulkanCommandBuffer::addDrawPass(const DrawPass* drawPass) {
-    drawPass->addResourceRefs(this);
+bool VulkanCommandBuffer::addDrawPass(DrawPass* drawPass) {
+    // If there is gradient data to bind, it must be done prior to draws.
+    if (drawPass->floatStorageManager()->hasData()) {
+        this->recordBufferBindingInfo(drawPass->floatStorageManager()->getBufferInfo(),
+                                      UniformSlot::kGradient);
+    }
+
+    if (!drawPass->addResourceRefs(fResourceProvider, this)) SK_UNLIKELY {
+        return false;
+    }
+
     for (auto [type, cmdPtr] : drawPass->commands()) {
         switch (type) {
             case DrawPassCommands::Type::kBindGraphicsPipeline: {
@@ -1046,6 +1071,8 @@ void VulkanCommandBuffer::addDrawPass(const DrawPass* drawPass) {
             }
         }
     }
+
+    return true;
 }
 
 void VulkanCommandBuffer::bindGraphicsPipeline(const GraphicsPipeline* graphicsPipeline) {
@@ -1063,15 +1090,6 @@ void VulkanCommandBuffer::bindGraphicsPipeline(const GraphicsPipeline* graphicsP
     // then descriptor sets do not need to be re-bound. For now, simply force a re-binding of
     // descriptor sets with any new bindGraphicsPipeline DrawPassCommand.
     fBindUniformBuffers = true;
-
-    if (graphicsPipeline->dstReadStrategy() == DstReadStrategy::kTextureCopy &&
-        graphicsPipeline->numFragTexturesAndSamplers() == 1) {
-        // The only texture-sampler that the pipeline declares must be the dstCopy, which means
-        // there are no other textures that will trigger BindTextureAndSampler commands in a
-        // DrawPass (e.g. solid-color + dst-read-requiring blend). Configure the texture binding
-        // up front in this case.
-        this->recordTextureAndSamplerDescSet(/*drawPass=*/nullptr, /*command=*/nullptr);
-    }
 
     fActiveGraphicsPipeline->updateDynamicState(
             fSharedContext, fPrimaryCommandBuffer, previousGraphicsPipeline);
@@ -1605,8 +1623,7 @@ bool VulkanCommandBuffer::onCopyTextureToBuffer(const Texture* texture,
     const_cast<VulkanTexture*>(srcTexture)->setImageLayout(this,
                                                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                                            VK_ACCESS_TRANSFER_READ_BIT,
-                                                           VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                                           false);
+                                                           VK_PIPELINE_STAGE_TRANSFER_BIT);
     // Set current access mask for buffer
     const_cast<VulkanBuffer*>(dstBuffer)->setBufferAccess(this,
                                                           VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -1660,8 +1677,7 @@ bool VulkanCommandBuffer::onCopyBufferToTexture(const Buffer* buffer,
     const_cast<VulkanTexture*>(dstTexture)->setImageLayout(this,
                                                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                                            VK_ACCESS_TRANSFER_WRITE_BIT,
-                                                           VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                                           false);
+                                                           VK_PIPELINE_STAGE_TRANSFER_BIT);
 
     this->submitPipelineBarriers();
 
@@ -1694,14 +1710,12 @@ bool VulkanCommandBuffer::onCopyTextureToTexture(const Texture* src,
     const_cast<VulkanTexture*>(srcTexture)->setImageLayout(this,
                                                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                                            VK_ACCESS_TRANSFER_READ_BIT,
-                                                           VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                                           false);
+                                                           VK_PIPELINE_STAGE_TRANSFER_BIT);
     // Enable editing of the destination texture so we can change its layout so it can be copied to.
     const_cast<VulkanTexture*>(dstTexture)->setImageLayout(this,
                                                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                                            VK_ACCESS_TRANSFER_WRITE_BIT,
-                                                           VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                                           false);
+                                                           VK_PIPELINE_STAGE_TRANSFER_BIT);
 
     this->submitPipelineBarriers();
 

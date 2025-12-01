@@ -125,8 +125,9 @@ NetworkServiceClient::NetworkServiceClient()
   if (IsOutOfProcessNetworkService()) {
     net::CertDatabase::GetInstance()->AddObserver(this);
     memory_pressure_listener_ = std::make_unique<base::MemoryPressureListener>(
-        FROM_HERE, base::BindRepeating(&NetworkServiceClient::OnMemoryPressure,
-                                       base::Unretained(this)));
+        FROM_HERE, base::MemoryPressureListenerTag::kNetworkServiceClient,
+        base::BindRepeating(&NetworkServiceClient::OnMemoryPressure,
+                            base::Unretained(this)));
   }
 
   webrtc_connections_observer_ =
@@ -181,7 +182,8 @@ void NetworkServiceClient::OnApplicationStateChange(
 void NetworkServiceClient::OnConnectionTypeChanged(
     net::NetworkChangeNotifier::ConnectionType type) {
   network_change_manager_->OnNetworkChanged(
-      false /* dns_changed */, false /* ip_address_changed */,
+      false /* dns_changed */,
+      network::mojom::IPAddressChangeType::IP_ADDRESS_CHANGE_NONE,
       true /* connection_type_changed */, network::mojom::ConnectionType(type),
       false /* connection_subtype_changed */,
       network::mojom::ConnectionSubtype(
@@ -194,16 +196,18 @@ void NetworkServiceClient::OnMaxBandwidthChanged(
   // The connection subtype change will trigger a max bandwidth change in the
   // network service notifier.
   network_change_manager_->OnNetworkChanged(
-      false /* dns_changed */, false /* ip_address_changed */,
+      false /* dns_changed */,
+      network::mojom::IPAddressChangeType::IP_ADDRESS_CHANGE_NONE,
       false /* connection_type_changed */, network::mojom::ConnectionType(type),
       true /* connection_subtype_changed */,
       network::mojom::ConnectionSubtype(
           net::NetworkChangeNotifier::GetConnectionSubtype()));
 }
 
-void NetworkServiceClient::OnIPAddressChanged() {
+void NetworkServiceClient::OnIPAddressChanged(
+    net::NetworkChangeNotifier::IPAddressChangeType change_type) {
   network_change_manager_->OnNetworkChanged(
-      false /* dns_changed */, true /* ip_address_changed */,
+      false /* dns_changed */, network::mojom::IPAddressChangeType(change_type),
       false /* connection_type_changed */,
       network::mojom::ConnectionType(
           net::NetworkChangeNotifier::GetConnectionType()),
@@ -350,6 +354,7 @@ void NetworkServiceClient::Clone(
 }
 
 void NetworkServiceClient::OnWebSocketConnectedToPrivateNetwork(
+    const GURL& request_url,
     network::mojom::IPAddressSpace ip_address_space) {}
 
 void NetworkServiceClient::OnUrlLoaderConnectedToPrivateNetwork(

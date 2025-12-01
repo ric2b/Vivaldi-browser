@@ -7,7 +7,7 @@ import {
   assertReject,
   unreachable,
 } from '../../common/util/util.js';
-import { getDefaultLimits, kLimits } from '../capability_info.js';
+import { getDefaultLimits, kPossibleLimits } from '../capability_info.js';
 
 // MUST_NOT_BE_IMPORTED_BY_DATA_CACHE
 // This file should not be transitively imported by .cache.ts files
@@ -283,9 +283,9 @@ function canonicalizeDescriptor(
   assert(featureLevel === 'compatibility' || featureLevel === 'core');
   const defaultLimits = getDefaultLimits(featureLevel);
   if (desc.requiredLimits) {
-    for (const limit of kLimits) {
+    for (const limit of kPossibleLimits) {
       const requestedValue = desc.requiredLimits[limit];
-      const defaultValue = defaultLimits[limit].default;
+      const defaultValue = defaultLimits[limit]?.default;
       // Skip adding a limit to limitsCanonicalized if it is the same as the default.
       if (requestedValue !== undefined && requestedValue !== defaultValue) {
         limitsCanonicalized[limit] = requestedValue;

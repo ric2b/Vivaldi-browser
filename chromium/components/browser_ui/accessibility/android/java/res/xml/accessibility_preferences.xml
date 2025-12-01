@@ -22,10 +22,6 @@ found in the LICENSE file.
         android:title="@string/prefs_vivaldi_reset_zoom"
         android:summary="@string/prefs_vivaldi_reset_zoom_summary"/>
 
-    <org.chromium.components.browser_ui.accessibility.PageZoomPreference
-        android:key="page_zoom_default_zoom"
-        android:selectable="false" />
-
     <Preference
         android:key="zoom_info"
         android:title="@string/zoom_info_preference_title"/>

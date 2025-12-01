@@ -33,10 +33,12 @@
 #include "ash/test/ash_test_views_delegate.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/app_mode/kiosk_chrome_app_manager.h"
+#include "chrome/browser/ash/app_mode/kiosk_cryptohome_remover.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #else
 #include "ui/views/test/scoped_views_test_helper.h"
 #endif
@@ -146,10 +148,8 @@ class BrowserWithTestWindowTest : public testing::Test, public ProfileObserver {
   BrowserWindow* window() const { return window_.get(); }
 
   Browser* browser() const { return browser_.get(); }
-  void set_browser(std::unique_ptr<Browser> browser) {
-    browser_ = std::move(browser);
-  }
-  std::unique_ptr<Browser> release_browser() { return std::move(browser_); }
+
+  std::unique_ptr<Browser> release_browser();
 
   TestingProfile* profile() const { return profile_.get(); }
 
@@ -165,13 +165,15 @@ class BrowserWithTestWindowTest : public testing::Test, public ProfileObserver {
     return &test_url_loader_factory_;
   }
 
-  std::unique_ptr<BrowserWindow> release_browser_window() {
-    return std::move(window_);
-  }
-
 #if BUILDFLAG(IS_CHROMEOS)
   ash::AshTestHelper* ash_test_helper() { return &ash_test_helper_.value(); }
   user_manager::FakeUserManager* user_manager() { return user_manager_.Get(); }
+  // NOTE: `KioskCryptohomeRemover` is owned by `KioskControllerImpl` in
+  // production.
+  ash::KioskCryptohomeRemover* kiosk_cryptohome_remover() {
+    return kiosk_cryptohome_remover_.get();
+  }
+  virtual void OnAshTestHelperCreated();
 #endif
 
   // The context to help determine desktop type when creating new Widgets.
@@ -237,6 +239,12 @@ class BrowserWithTestWindowTest : public testing::Test, public ProfileObserver {
                                                  bool hosted_app,
                                                  BrowserWindow* browser_window);
 
+  // Creates the browser given `profile`, `browser_type` and `hosted_app` and
+  // a window created via `CreateBrowserWindow()`.
+  virtual std::unique_ptr<Browser> CreateBrowser(Profile* profile,
+                                                 Browser::Type browser_type,
+                                                 bool hosted_app);
+
 #if defined(TOOLKIT_VIEWS)
   views::TestViewsDelegate* test_views_delegate() {
 #if BUILDFLAG(IS_CHROMEOS)
@@ -290,6 +298,7 @@ class BrowserWithTestWindowTest : public testing::Test, public ProfileObserver {
       std::unique_ptr<base::ScopedObservation<Profile, ProfileObserver>>>
       profile_observations_;
   std::unique_ptr<crosapi::CrosapiManager> manager_;
+  std::unique_ptr<ash::KioskCryptohomeRemover> kiosk_cryptohome_remover_;
   std::unique_ptr<ash::KioskChromeAppManager> kiosk_chrome_app_manager_;
 #endif
 
@@ -300,7 +309,8 @@ class BrowserWithTestWindowTest : public testing::Test, public ProfileObserver {
   network::TestURLLoaderFactory test_url_loader_factory_;
 
   std::unique_ptr<TestingProfileManager> profile_manager_;
-  std::unique_ptr<BrowserWindow> window_;  // Usually a TestBrowserWindow.
+  // Usually a TestBrowserWindow, owned by Browser.
+  raw_ptr<BrowserWindow> window_;
   std::unique_ptr<Browser> browser_;
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -327,7 +337,7 @@ class BrowserWithTestWindowTest : public testing::Test, public ProfileObserver {
   const bool hosted_app_;
 
   // Initialize the variations provider.
-  variations::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
+  variations::test::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
       variations::VariationsIdsProvider::Mode::kUseSignedInState};
 
   // Some of the UI elements in top chrome need to observe the

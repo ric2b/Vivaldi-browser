@@ -39,7 +39,7 @@ Status TaskList::visitTasks(Fn fn) {
 
 Status TaskList::prepareResources(ResourceProvider* resourceProvider,
                                   ScratchResourceManager* scratchManager,
-                                  const RuntimeEffectDictionary* runtimeDict) {
+                                  sk_sp<const RuntimeEffectDictionary> runtimeDict) {
     TRACE_EVENT1("skia.gpu", TRACE_FUNC, "# tasks", fTasks.size());
     scratchManager->pushScope();
     Status status = this->visitTasks([&](Task* task) {
@@ -75,5 +75,24 @@ bool TaskList::visitProxies(const std::function<bool(const TextureProxy*)>& visi
     // pipelines were visited).
     return status != Status::kFail;
 }
+
+#if defined(SK_DUMP_TASKS)
+void TaskList::visit(const std::function<void(const Task* task, bool isLast)>& visitor) const {
+    // Find the last non-null task so we know when to draw the corner branch.
+    const Task* lastNonNullTask = nullptr;
+    for (int i = fTasks.size() - 1; i >= 0; --i) {
+        if (fTasks[i]) {
+            lastNonNullTask = fTasks[i].get();
+            break;
+        }
+    }
+
+    for (const sk_sp<Task>& task : fTasks) {
+        if (task) {
+            visitor(task.get(), task.get() == lastNonNullTask);
+        }
+    }
+}
+#endif
 
 } // namespace skgpu::graphite

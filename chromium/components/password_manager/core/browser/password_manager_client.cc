@@ -187,9 +187,6 @@ PasswordManagerClient::GetWebAuthnCredManDelegateForDriver(
 
 void PasswordManagerClient::MarkSharedCredentialsAsNotified(const GURL& url) {}
 
-SmsOtpBackend* PasswordManagerClient::GetSmsOtpBackend() const {
-  return nullptr;
-}
 #endif  // BUILDFLAG(IS_ANDROID)
 
 version_info::Channel PasswordManagerClient::GetChannel() const {
@@ -207,5 +204,11 @@ UndoPasswordChangeController*
 PasswordManagerClient::GetUndoPasswordChangeController() {
   return nullptr;
 }
+
+#if !BUILDFLAG(IS_ANDROID)
+bool PasswordManagerClient::IsActorTaskActive() {
+  return false;
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace password_manager

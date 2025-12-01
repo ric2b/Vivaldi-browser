@@ -257,6 +257,11 @@ LikelyFormFilling SendFillInformationToRenderer(
         WaitForUsernameReason::kAcceptsWebAuthnCredentials;
   } else if (observed_form.IsSingleUsername()) {
     wait_for_username_reason = WaitForUsernameReason::kSingleUsernameForm;
+  } else if (client->IsActorTaskActive() &&
+             base::FeatureList::IsEnabled(features::kActorLogin)) {
+    wait_for_username_reason = WaitForUsernameReason::kActorTaskOngoing;
+  } else if (client->IsPasswordChangeOngoing()) {
+    wait_for_username_reason = WaitForUsernameReason::kPasswordChangeOngoing;
   }
 
   // Record no "FirstWaitForUsernameReason" metrics for a form that is not meant
@@ -273,13 +278,9 @@ LikelyFormFilling SendFillInformationToRenderer(
 #endif  // !BUILDFLAG(IS_IOS) && !defined(ANDROID)
 
   if (wait_for_username) {
-    metrics_recorder->SetManagerAction(
-        PasswordFormMetricsRecorder::kManagerActionNone);
     metrics_recorder->RecordFillEvent(
         PasswordFormMetricsRecorder::kManagerFillEventBlockedOnInteraction);
   } else {
-    metrics_recorder->SetManagerAction(
-        PasswordFormMetricsRecorder::kManagerActionAutofilled);
     metrics_recorder->RecordFillEvent(
         PasswordFormMetricsRecorder::kManagerFillEventAutofilled);
     base::RecordAction(base::UserMetricsAction("PasswordManager_Autofilled"));

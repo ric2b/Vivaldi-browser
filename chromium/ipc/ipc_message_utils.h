@@ -34,7 +34,9 @@
 #include "base/types/id_type.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "ipc/ipc_mojo_param_traits.h"
 #include "ipc/ipc_param_traits.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 #include "third_party/abseil-cpp/absl/container/inlined_vector.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -62,33 +64,10 @@ struct FileDescriptor;
 namespace IPC {
 
 class Message;
-struct ChannelHandle;
 
 #if BUILDFLAG(IS_WIN)
 class PlatformFileForTransit;
 #endif
-
-// -----------------------------------------------------------------------------
-// How we send IPC message logs across channels.
-struct COMPONENT_EXPORT(IPC) LogData {
-  LogData();
-  LogData(const LogData& other);
-  ~LogData();
-
-  std::string channel;
-  int32_t routing_id;
-  uint32_t type;  // "User-defined" message type, from ipc_message.h.
-  std::string flags;
-  int64_t sent;  // Time that the message was sent (i.e. at Send()).
-  int64_t receive;  // Time before it was dispatched (i.e. before calling
-                    // OnMessageReceived).
-  int64_t dispatch;  // Time after it was dispatched (i.e. after calling
-                     // OnMessageReceived).
-  std::string message_name;
-  std::string params;
-};
-
-//-----------------------------------------------------------------------------
 
 // A dummy struct to place first just to allow leading commas for all
 // members in the macro-generated constructor initializer lists.
@@ -123,12 +102,6 @@ template <class P>
   return ParamTraits<Type>::Read(m, iter, reinterpret_cast<Type* >(p));
 }
 
-template <class P>
-inline void LogParam(const P& p, std::string* l) {
-  typedef typename SimilarTypeTraits<P>::Type Type;
-  ParamTraits<Type>::Log(static_cast<const Type& >(p), l);
-}
-
 // Primitive ParamTraits -------------------------------------------------------
 
 template <>
@@ -140,7 +113,6 @@ struct ParamTraits<bool> {
                    param_type* r) {
     return iter->ReadBool(r);
   }
-  COMPONENT_EXPORT(IPC) static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -150,7 +122,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<signed char> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -160,7 +131,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<unsigned char> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -170,7 +140,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<unsigned short> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -182,7 +151,6 @@ struct ParamTraits<int> {
                    param_type* r) {
     return iter->ReadInt(r);
   }
-  COMPONENT_EXPORT(IPC) static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -196,7 +164,6 @@ struct ParamTraits<unsigned int> {
                    param_type* r) {
     return iter->ReadInt(reinterpret_cast<int*>(r));
   }
-  COMPONENT_EXPORT(IPC) static void Log(const param_type& p, std::string* l);
 };
 
 // long isn't safe to send over IPC because it's 4 bytes on 32 bit builds but
@@ -224,7 +191,6 @@ struct ParamTraits<long> {
                    param_type* r) {
     return iter->ReadLong(r);
   }
-  COMPONENT_EXPORT(IPC) static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -238,7 +204,6 @@ struct ParamTraits<unsigned long> {
                    param_type* r) {
     return iter->ReadLong(reinterpret_cast<long*>(r));
   }
-  COMPONENT_EXPORT(IPC) static void Log(const param_type& p, std::string* l);
 };
 #endif
 
@@ -253,7 +218,6 @@ struct ParamTraits<long long> {
                    param_type* r) {
     return iter->ReadInt64(reinterpret_cast<int64_t*>(r));
   }
-  COMPONENT_EXPORT(IPC) static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -267,7 +231,6 @@ struct ParamTraits<unsigned long long> {
                    param_type* r) {
     return iter->ReadInt64(reinterpret_cast<int64_t*>(r));
   }
-  COMPONENT_EXPORT(IPC) static void Log(const param_type& p, std::string* l);
 };
 
 // Note that the IPC layer doesn't sanitize NaNs and +/- INF values.  Clients
@@ -282,7 +245,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<float> {
                    param_type* r) {
     return iter->ReadFloat(r);
   }
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -292,7 +254,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<double> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <class P, size_t Size>
@@ -311,15 +272,6 @@ struct ParamTraits<P[Size]> {
     }
     return true;
   }
-  static void Log(const param_type& p, std::string* l) {
-    l->append("[");
-    for (const P& element : p) {
-      if (&element != &p[0])
-        l->append(" ");
-      LogParam(element, l);
-    }
-    l->append("]");
-  }
 };
 
 // STL ParamTraits -------------------------------------------------------------
@@ -333,7 +285,6 @@ struct ParamTraits<std::string> {
                    param_type* r) {
     return iter->ReadString(r);
   }
-  COMPONENT_EXPORT(IPC) static void Log(const param_type& p, std::string* l);
 };
 
 // Allow calling `WriteParam()` directly with a `std::string_view` argument
@@ -355,7 +306,6 @@ struct ParamTraits<std::u16string> {
                    param_type* r) {
     return iter->ReadString16(r);
   }
-  COMPONENT_EXPORT(IPC) static void Log(const param_type& p, std::string* l);
 };
 
 // Allow calling `WriteParam()` directly with a `std::u16string_view` argument
@@ -376,7 +326,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<std::wstring> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 #endif
 
@@ -387,7 +336,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<std::vector<char>> {
   static bool Read(const base::Pickle*,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -397,7 +345,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<std::vector<unsigned char>> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -407,7 +354,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<std::vector<bool>> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <class P>
@@ -435,13 +381,6 @@ struct ParamTraits<std::vector<P>> {
     }
     return true;
   }
-  static void Log(const param_type& p, std::string* l) {
-    for (size_t i = 0; i < p.size(); ++i) {
-      if (i != 0)
-        l->append(" ");
-      LogParam((p[i]), l);
-    }
-  }
 };
 
 template <class P>
@@ -466,9 +405,6 @@ struct ParamTraits<std::set<P> > {
       r->insert(item);
     }
     return true;
-  }
-  static void Log(const param_type& p, std::string* l) {
-    l->append("<std::set>");
   }
 };
 
@@ -498,9 +434,6 @@ struct ParamTraits<std::map<K, V, C, A> > {
     }
     return true;
   }
-  static void Log(const param_type& p, std::string* l) {
-    l->append("<std::map>");
-  }
 };
 
 template <class K, class V, class C, class A>
@@ -529,9 +462,6 @@ struct ParamTraits<std::unordered_map<K, V, C, A>> {
     }
     return true;
   }
-  static void Log(const param_type& p, std::string* l) {
-    l->append("<std::unordered_map>");
-  }
 };
 
 template <class A, class B>
@@ -546,13 +476,6 @@ struct ParamTraits<std::pair<A, B> > {
                    param_type* r) {
     return ReadParam(m, iter, &r->first) && ReadParam(m, iter, &r->second);
   }
-  static void Log(const param_type& p, std::string* l) {
-    l->append("(");
-    LogParam(p.first, l);
-    l->append(", ");
-    LogParam(p.second, l);
-    l->append(")");
-  }
 };
 
 // Base ParamTraits ------------------------------------------------------------
@@ -564,7 +487,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::Value::Dict> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 #if BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
@@ -590,7 +512,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::FileDescriptor> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -600,7 +521,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::ScopedFD> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 #endif  // BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
@@ -613,7 +533,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::win::ScopedHandle> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 #endif
 
@@ -625,7 +544,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<zx::vmo> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -635,7 +553,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<zx::channel> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
@@ -648,7 +565,6 @@ struct COMPONENT_EXPORT(IPC)
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 #endif
 
@@ -659,7 +575,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::ReadOnlySharedMemoryRegion> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -669,7 +584,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::WritableSharedMemoryRegion> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -679,7 +593,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::UnsafeSharedMemoryRegion> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -690,7 +603,6 @@ struct COMPONENT_EXPORT(IPC)
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -701,7 +613,6 @@ struct COMPONENT_EXPORT(IPC)
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 #if BUILDFLAG(IS_WIN)
@@ -712,7 +623,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<PlatformFileForTransit> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 #endif  // BUILDFLAG(IS_WIN)
 
@@ -723,7 +633,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::FilePath> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -733,7 +642,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::Value::List> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -743,7 +651,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::Value> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -753,7 +660,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::File::Info> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -775,7 +681,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::Time> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -785,7 +690,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::TimeDelta> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -795,7 +699,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::TimeTicks> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -805,7 +708,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::UnguessableToken> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -816,8 +718,6 @@ struct ParamTraits<std::tuple<>> {
                    base::PickleIterator* iter,
                    param_type* r) {
     return true;
-  }
-  static void Log(const param_type& p, std::string* l) {
   }
 };
 
@@ -833,13 +733,6 @@ struct TupleParamTraitsHelper {
   static bool Read(const base::Pickle* m, base::PickleIterator* iter, T* r) {
     return ReadParam(m, iter, &std::get<index>(*r)) && Next::Read(m, iter, r);
   }
-
-  static void Log(const T& p, std::string* l) {
-    LogParam(std::get<index>(p), l);
-    if (index < count - 1)
-      l->append(", ");
-    Next::Log(p, l);
-  }
 };
 
 template <typename T, int index>
@@ -848,7 +741,6 @@ struct TupleParamTraitsHelper<T, index, index> {
   static bool Read(const base::Pickle* m, base::PickleIterator* iter, T* r) {
     return true;
   }
-  static void Log(const T& p, std::string* l) {}
 };
 
 template <typename... Args>
@@ -867,7 +759,6 @@ struct ParamTraits<std::tuple<Args...>> {
     return Helper::Read(m, iter, r);
   }
 
-  static void Log(const param_type& p, std::string* l) { Helper::Log(p, l); }
 };
 
 template <class P, size_t stack_capacity>
@@ -898,14 +789,6 @@ struct ParamTraits<absl::InlinedVector<P, stack_capacity>> {
       r->push_back(value);
     }
     return true;
-  }
-  static void Log(const param_type& p, std::string* l) {
-    for (size_t i = 0; i < p.size(); ++i) {
-      if (i != 0) {
-        l->append(" ");
-      }
-      LogParam((p[i]), l);
-    }
   }
 };
 
@@ -942,9 +825,6 @@ struct ParamTraits<base::flat_map<Key, Mapped, Compare>> {
     *r = param_type(std::move(vect));
     return true;
   }
-  static void Log(const param_type& p, std::string* l) {
-    l->append("<base::flat_map>");
-  }
 };
 
 template <class P>
@@ -975,12 +855,6 @@ struct ParamTraits<std::unique_ptr<P>> {
     r->swap(temp);
     return true;
   }
-  static void Log(const param_type& p, std::string* l) {
-    if (p)
-      LogParam(*p, l);
-    else
-      l->append("NULL");
-  }
 };
 
 // absl types ParamTraits
@@ -1008,12 +882,6 @@ struct ParamTraits<std::optional<P>> {
     }
     return true;
   }
-  static void Log(const param_type& p, std::string* l) {
-    if (p)
-      LogParam(p.value(), l);
-    else
-      l->append("(unset)");
-  }
 };
 
 template <>
@@ -1025,7 +893,6 @@ struct ParamTraits<std::monostate> {
                    param_type* r) {
     return true;
   }
-  static void Log(const param_type& p, std::string* l) { l->append("()"); }
 };
 
 // base/util types ParamTraits
@@ -1045,9 +912,6 @@ struct ParamTraits<base::IdType<TypeMarker, WrappedType, kInvalidValue>> {
     *r = param_type::FromUnsafeValue(value);
     return true;
   }
-  static void Log(const param_type& p, std::string* l) {
-    LogParam(p.GetUnsafeValue(), l);
-  }
 };
 
 template <typename TagType, typename UnderlyingType>
@@ -1065,35 +929,9 @@ struct ParamTraits<base::StrongAlias<TagType, UnderlyingType>> {
     *r = param_type(value);
     return true;
   }
-  static void Log(const param_type& p, std::string* l) {
-    LogParam(p.value(), l);
-  }
 };
 
 // IPC types ParamTraits -------------------------------------------------------
-
-// A ChannelHandle is basically a platform-inspecific wrapper around the
-// fact that IPC endpoints are handled specially on POSIX.  See above comments
-// on FileDescriptor for more background.
-template <>
-struct COMPONENT_EXPORT(IPC) ParamTraits<IPC::ChannelHandle> {
-  typedef ChannelHandle param_type;
-  static void Write(base::Pickle* m, const param_type& p);
-  static bool Read(const base::Pickle* m,
-                   base::PickleIterator* iter,
-                   param_type* r);
-  static void Log(const param_type& p, std::string* l);
-};
-
-template <>
-struct COMPONENT_EXPORT(IPC) ParamTraits<LogData> {
-  typedef LogData param_type;
-  static void Write(base::Pickle* m, const param_type& p);
-  static bool Read(const base::Pickle* m,
-                   base::PickleIterator* iter,
-                   param_type* r);
-  static void Log(const param_type& p, std::string* l);
-};
 
 template <>
 struct COMPONENT_EXPORT(IPC) ParamTraits<Message> {
@@ -1101,7 +939,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<Message> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    Message* r);
-  static void Log(const Message& p, std::string* l);
 };
 
 // Windows ParamTraits ---------------------------------------------------------
@@ -1114,7 +951,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<HANDLE> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 
 template <>
@@ -1124,20 +960,8 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<MSG> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  static void Log(const param_type& p, std::string* l);
 };
 #endif  // BUILDFLAG(IS_WIN)
-
-//-----------------------------------------------------------------------------
-// Generic message subclasses
-
-inline void AddOutputParamsToLog(const Message* msg, std::string* l) {}
-
-template <class ReplyParamType>
-inline void LogReplyParamsToMessage(const ReplyParamType& reply_params,
-                                    const Message* msg) {}
-
-inline void ConnectMessageAndReply(const Message* msg, Message* reply) {}
 
 }  // namespace IPC
 

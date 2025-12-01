@@ -227,11 +227,6 @@ bool LayoutTable::HasBackgroundForPaint() const {
 void LayoutTable::AddChild(LayoutObject* child, LayoutObject* before_child) {
   NOT_DESTROYED();
   TableGridStructureChanged();
-  // Only TablesNG table parts are allowed.
-  // TODO(1229581): Change this DCHECK to caption || column || section.
-  DCHECK(child->IsLayoutNGObject() ||
-         (!child->IsTableCaption() && !child->IsLayoutTableCol() &&
-          !child->IsTableSection()));
 
   const bool can_be_direct_child = child->IsTableCaption() ||
                                    child->IsLayoutTableCol() ||
@@ -287,8 +282,10 @@ void LayoutTable::RemoveChild(LayoutObject* child) {
   LayoutBlock::RemoveChild(child);
 }
 
-void LayoutTable::StyleDidChange(StyleDifference diff,
-                                 const ComputedStyle* old_style) {
+void LayoutTable::StyleDidChange(
+    StyleDifference diff,
+    const ComputedStyle* old_style,
+    const StyleChangeContext& style_change_context) {
   NOT_DESTROYED();
   // StyleDifference handles changes in table-layout, border-spacing.
   if (old_style) {
@@ -302,7 +299,7 @@ void LayoutTable::StyleDidChange(StyleDifference diff,
     if (borders_changed || collapse_changed)
       GridBordersChanged();
   }
-  LayoutBlock::StyleDidChange(diff, old_style);
+  LayoutBlock::StyleDidChange(diff, old_style, style_change_context);
 }
 
 LayoutBox* LayoutTable::CreateAnonymousBoxWithSameTypeAs(
@@ -317,7 +314,7 @@ PhysicalRect LayoutTable::OverflowClipRect(
   NOT_DESTROYED();
   PhysicalRect clip_rect;
   if (StyleRef().BorderCollapse() == EBorderCollapse::kCollapse) {
-    clip_rect = PhysicalRect(location, Size());
+    clip_rect = PhysicalRect(location, StitchedSize());
     const auto overflow_clip = GetOverflowClipAxes();
     gfx::Rect infinite_rect = InfiniteIntRect();
     if ((overflow_clip & kOverflowClipX) == kNoOverflowClip) {
@@ -344,7 +341,7 @@ PhysicalRect LayoutTable::OverflowClipRect(
   while (child) {
     if (child->IsTableCaption()) {
       // If there are captions, we cannot clip to content box.
-      clip_rect.Unite(PhysicalRect(location, Size()));
+      clip_rect.Unite(PhysicalRect(location, StitchedSize()));
       break;
     }
     child = child->NextSiblingBox();

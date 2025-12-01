@@ -13,5 +13,6 @@
 // limitations under the License.
 
 pub mod exif;
+pub mod mini;
 pub mod mp4box;
 pub mod obu;

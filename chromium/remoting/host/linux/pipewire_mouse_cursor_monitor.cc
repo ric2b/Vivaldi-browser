@@ -7,6 +7,8 @@
 #include <memory>
 #include <optional>
 
+#include "base/containers/flat_map.h"
+#include "remoting/host/linux/pipewire_capture_stream.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 #include "third_party/webrtc/modules/desktop_capture/mouse_cursor.h"
 #include "third_party/webrtc/modules/desktop_capture/mouse_cursor_monitor.h"
@@ -14,37 +16,25 @@
 namespace remoting {
 
 PipewireMouseCursorMonitor::PipewireMouseCursorMonitor(
-    base::WeakPtr<PipewireCaptureStream> stream)
-    : stream_(std::move(stream)) {}
+    base::WeakPtr<PipewireMouseCursorCapturer> capturer)
+    : capturer_(capturer) {}
 
-PipewireMouseCursorMonitor::~PipewireMouseCursorMonitor() = default;
+PipewireMouseCursorMonitor::~PipewireMouseCursorMonitor() {
+  if (capturer_) {
+    // Prevent `callback` from being called.
+    capturer_->SetCallback(nullptr, Mode::SHAPE_AND_POSITION);
+  }
+}
 
 void PipewireMouseCursorMonitor::Init(Callback* callback, Mode mode) {
-  callback_ = callback;
-  report_position_ = mode == SHAPE_AND_POSITION;
+  if (capturer_) {
+    capturer_->SetCallback(callback, mode);
+  }
 }
 
 void PipewireMouseCursorMonitor::Capture() {
-  if (!stream_) {
-    return;
-  }
-
-  std::optional<webrtc::DesktopVector> mouse_cursor_position =
-      stream_->CaptureCursorPosition();
-  // Invalid cursor or position
-  if (!mouse_cursor_position.has_value()) {
-    callback_->OnMouseCursor(nullptr);
-    return;
-  }
-
-  std::unique_ptr<webrtc::MouseCursor> mouse_cursor = stream_->CaptureCursor();
-
-  if (mouse_cursor && mouse_cursor->image()->data()) {
-    callback_->OnMouseCursor(mouse_cursor.release());
-  }
-
-  if (report_position_) {
-    callback_->OnMouseCursorPosition(*mouse_cursor_position);
+  if (capturer_) {
+    capturer_->Capture();
   }
 }
 

@@ -99,6 +99,15 @@ gpu_android_builder(
 )
 
 gpu_android_builder(
+    name = "gpu-fyi-try-android-pixel-10-64",
+    mirrors = [
+        "ci/GPU FYI Android arm64 Builder",
+        "ci/Android FYI Release (Pixel 10)",
+    ],
+    gn_args = "ci/GPU FYI Android arm64 Builder",
+)
+
+gpu_android_builder(
     name = "gpu-fyi-try-android-a13-32",
     description_html = "Runs GPU tests on Samsung A13 phones",
     mirrors = [
@@ -157,15 +166,6 @@ gpu_chromeos_builder(
     gn_args = "ci/ChromeOS FYI Release (amd64-generic)",
 )
 
-gpu_chromeos_builder(
-    name = "gpu-fyi-try-chromeos-skylab-volteer",
-    description_html = "Runs standard GPU tests on Skylab-hosted volteer devices",
-    mirrors = [
-        "ci/ChromeOS FYI Release Skylab (volteer)",
-    ],
-    gn_args = "ci/ChromeOS FYI Release Skylab (volteer)",
-)
-
 def gpu_linux_builder(*, name, **kwargs):
     return try_.builder(
         name = name,
@@ -215,6 +215,34 @@ gpu_linux_builder(
         "ci/Linux FYI Release (AMD RX 7600)",
     ],
     gn_args = "ci/GPU FYI Linux Builder",
+)
+
+gpu_linux_builder(
+    name = "gpu-fyi-try-linux-amd-780m-exp",
+    mirrors = [
+        "ci/GPU FYI Linux Builder",
+        "ci/Linux FYI Experimental Release (AMD 780M)",
+    ],
+    gn_args = "ci/GPU FYI Linux Builder",
+)
+
+gpu_linux_builder(
+    name = "gpu-fyi-try-linux-amd-890m-exp",
+    mirrors = [
+        "ci/GPU FYI Linux Builder",
+        "ci/Linux FYI Experimental Release (AMD 890M)",
+    ],
+    gn_args = "ci/GPU FYI Linux Builder",
+)
+
+gpu_linux_builder(
+    name = "gpu-fyi-try-linux-intel-arc-140v-exp",
+    mirrors = [
+        "ci/GPU FYI Linux Builder",
+        "ci/Linux FYI Experimental Release (Intel Arc 140V)",
+    ],
+    gn_args = "ci/GPU FYI Linux Builder",
+    execution_timeout = 12 * time.hour,
 )
 
 gpu_linux_builder(
@@ -586,6 +614,26 @@ gpu_win_builder(
 )
 
 gpu_win_builder(
+    name = "gpu-fyi-try-win11-x64-amd-780m-exp",
+    description_html = "Runs release GPU tests on experimental Win/AMD 780M configs",
+    mirrors = [
+        "ci/GPU FYI Win x64 Builder",
+        "ci/Win11 FYI x64 Experimental Release (AMD 780M)",
+    ],
+    gn_args = "ci/GPU FYI Win x64 Builder",
+)
+
+gpu_win_builder(
+    name = "gpu-fyi-try-win11-x64-amd-890m-exp",
+    description_html = "Runs release GPU tests on experimental Win/AMD 890M configs",
+    mirrors = [
+        "ci/GPU FYI Win x64 Builder",
+        "ci/Win11 FYI x64 Experimental Release (AMD 890M)",
+    ],
+    gn_args = "ci/GPU FYI Win x64 Builder",
+)
+
+gpu_win_builder(
     name = "gpu-fyi-try-win11-x64-intel-arc-140v-exp",
     mirrors = [
         "ci/GPU FYI Win x64 Builder",
@@ -593,6 +641,16 @@ gpu_win_builder(
     ],
     gn_args = "ci/GPU FYI Win x64 Builder",
     execution_timeout = 12 * time.hour,
+)
+
+gpu_win_builder(
+    name = "gpu-fyi-try-win11-nvidia-4070-exp-64",
+    description_html = "Runs GPU tests on NVIDIA RTX 4070 Super GPUs with experimental OS/drivers",
+    mirrors = [
+        "ci/GPU FYI Win x64 Builder",
+        "ci/Win11 FYI x64 Experimental Release (NVIDIA RTX 4070 Super)",
+    ],
+    gn_args = "ci/GPU FYI Win x64 Builder",
 )
 
 gpu_win_builder(

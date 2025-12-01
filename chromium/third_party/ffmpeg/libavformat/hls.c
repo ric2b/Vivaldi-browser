@@ -462,9 +462,10 @@ static struct segment *new_init_section(struct playlist *pls,
     return sec;
 }
 
-static void handle_init_section_args(struct init_section_info *info, const char *key,
-                                           int key_len, char **dest, int *dest_len)
+static void handle_init_section_args(void *context, const char *key,
+                                     int key_len, char **dest, int *dest_len)
 {
+    struct init_section_info *info = context;
     if (!strncmp(key, "URI=", key_len)) {
         *dest     =        info->uri;
         *dest_len = sizeof(info->uri);
@@ -756,8 +757,8 @@ static int test_segment(AVFormatContext *s, const AVInputFormat *in_fmt, struct 
                      + 2*(ff_match_url_ext(seg->url, in_fmt->extensions) > 0);
             // Youtube uses aac files with .ts extension
             if(av_match_name("mp4", in_fmt->name) || av_match_name("aac", in_fmt->name)) {
-                matchF |=      av_match_ext(    seg->url, "ts,m2t,m2ts,mts,mpg,m4s,mpeg,mpegts")
-                          + 2*(ff_match_url_ext(seg->url, "ts,m2t,m2ts,mts,mpg,m4s,mpeg,mpegts") > 0);
+                matchF |=      av_match_ext(    seg->url, "ts,m2t,m2ts,mts,mpg,m4s,mpeg,mpegts,cmfv,cmfa")
+                          + 2*(ff_match_url_ext(seg->url, "ts,m2t,m2ts,mts,mpg,m4s,mpeg,mpegts,cmfv,cmfa") > 0);
             }
         } else if (!strcmp(in_fmt->name, "mpegts")) {
             const char *str = "ts,m2t,m2ts,mts,mpg,m4s,mpeg,mpegts"
@@ -916,8 +917,7 @@ static int parse_playlist(HLSContext *c, const char *url,
             ret = ensure_playlist(c, &pls, url);
             if (ret < 0)
                 goto fail;
-            ff_parse_key_value(ptr, (ff_parse_key_val_cb) handle_init_section_args,
-                               &info);
+            ff_parse_key_value(ptr, handle_init_section_args, &info);
             cur_init_section = new_init_section(pls, &info, url);
             if (!cur_init_section) {
                 ret = AVERROR(ENOMEM);
@@ -2726,7 +2726,7 @@ static int hls_read_seek(AVFormatContext *s, int stream_index,
         if (pls->is_subtitle)
             avformat_close_input(&pls->ctx);
 
-        /* Reset the init segment so it's re-fetched and served appropiately */
+        /* Reset the init segment so it's re-fetched and served appropriately */
         pls->cur_init_section = NULL;
 
         pls->seek_timestamp = seek_timestamp;

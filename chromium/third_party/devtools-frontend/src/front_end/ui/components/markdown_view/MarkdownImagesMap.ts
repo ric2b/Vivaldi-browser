@@ -1,13 +1,13 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/*
+/**
  * To use images in markdown, add key in markdownImages with the image data and
  * use the added key in markdown.
  * @example markdown
  * Give feedback by clicking ![Feedback icon](feedbackIcon)
-*/
+ */
 export interface ImageData {
   src: string;
   isIcon: boolean;
@@ -16,7 +16,7 @@ export interface ImageData {
   height?: string;
 }
 
-/*
+/**
  * src for image is relative url for image location.
  * @example icon
  * [
@@ -30,7 +30,7 @@ export interface ImageData {
  *   },
  * ]
  *
-*/
+ */
 
 // NOTE: This is only exported for tests, and it should not be
 // imported in any component, instead add image data in map and

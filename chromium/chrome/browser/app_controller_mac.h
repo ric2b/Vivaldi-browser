@@ -172,6 +172,7 @@ class ColorProvider;
 - (void) CreateBrowserAndExecuteCommand:(int)tag withProfile:(Profile*) profile;
 - (void)checkForUpdates:(id)sender;
 - (void)checkForUpdatesInBackground;
+- (void)checkForUpdatesInformation;
 - (void)installUpdateAndRestart;
 - (AutoUpdateStatus)getUpdateStatus;
 - (std::string)getUpdateVersion;

@@ -163,6 +163,9 @@ enum avifRGBFormat {
     AVIF_RGB_FORMAT_ABGR,
     AVIF_RGB_FORMAT_RGB565,
     AVIF_RGB_FORMAT_RGBA1010102,
+    AVIF_RGB_FORMAT_GRAY,
+    AVIF_RGB_FORMAT_GRAY_A,
+    AVIF_RGB_FORMAT_A_GRAY,
 };
 
 enum avifMatrixCoefficients : uint16_t {
@@ -256,11 +259,6 @@ enum avifCodecChoice {
 enum avifCodecFlag {
     AVIF_CODEC_FLAG_CAN_DECODE = (1 << 0),
     AVIF_CODEC_FLAG_CAN_ENCODE = (1 << 1),
-};
-
-enum avifHeaderFormat {
-    AVIF_HEADER_FULL,
-    AVIF_HEADER_REDUCED,
 };
 
 enum avifPlanesFlag {
@@ -469,6 +467,7 @@ struct avifDecoder {
     avifBool imageSequenceTrackPresent;
     AndroidMediaCodecOutputColorFormat androidMediaCodecOutputColorFormat;
     CompressionFormat compressionFormat;
+    avifBool allowSampleTransform;
     Box<Decoder> rust_decoder;
     avifImage image_object;
     avifGainMap gainmap_object;
@@ -1016,6 +1015,15 @@ void *crabby_avifAlloc(size_t size);
 /// Used by the C API with the following pre-conditions:
 /// - if p is not null, it has to point to a buffer allocated by crabby_avifAlloc.
 void crabby_avifFree(void *p);
+
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if outBuffer is not null, it has to be point a valid char buffer of size at least 256.
+void crabby_avifCodecVersions(char *outBuffer);
+
+/// # Safety
+/// C API function that does not perform any unsafe operations.
+unsigned int crabby_avifLibYUVVersion();
 
 } // extern "C"
 

@@ -32,12 +32,13 @@
 #import "ios/chrome/browser/first_run/ui_bundled/interactive_lens/coordinator/interactive_lens_promo_coordinator.h"
 #import "ios/chrome/browser/screen/ui_bundled/screen_provider.h"
 #import "ios/chrome/browser/screen/ui_bundled/screen_type.h"
-#import "ios/chrome/browser/search_engine_choice/ui_bundled/search_engine_choice_coordinator.h"
+#import "ios/chrome/browser/search_engine_choice/coordinator/search_engine_choice_coordinator.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/new_tab_page_commands.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/public/provider/chrome/browser/signin/choice_api.h"
 
 // Vivaldi
@@ -86,7 +87,6 @@ class FirstRunCoordinatorMetricsHelper final {
 
 @property(nonatomic, strong) ScreenProvider* screenProvider;
 @property(nonatomic, strong) ChromeCoordinator* childCoordinator;
-@property(nonatomic, strong) UINavigationController* navigationController;
 
 // Vivaldi
 @property(strong,nonatomic)
@@ -98,13 +98,18 @@ class FirstRunCoordinatorMetricsHelper final {
 
 @end
 
-@implementation FirstRunCoordinator
+@implementation FirstRunCoordinator {
+  // First Run navigation controller.
+  UINavigationController* _navigationController;
+}
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser
                             screenProvider:(ScreenProvider*)screenProvider {
   self = [super initWithBaseViewController:viewController browser:browser];
   if (self) {
+    CHECK_EQ(browser->type(), Browser::Type::kRegular,
+             base::NotFatalUntil::M145);
     _screenProvider = screenProvider;
     _navigationController =
         [[UINavigationController alloc] initWithNavigationBarClass:nil
@@ -134,8 +139,8 @@ class FirstRunCoordinatorMetricsHelper final {
   if (vivaldi::IsVivaldiRunning()) {
     [self presentOnboarding];
   } else {
-  [self.navigationController setNavigationBarHidden:YES animated:NO];
-  [self.baseViewController presentViewController:self.navigationController
+  [_navigationController setNavigationBarHidden:YES animated:NO];
+  [self.baseViewController presentViewController:_navigationController
                                         animated:NO
                                       completion:completion];
   } // End Vivaldi
@@ -205,9 +210,15 @@ class FirstRunCoordinatorMetricsHelper final {
     WriteFirstRunSentinel();
     [self.delegate didFinishFirstRun];
 
-    // Present feed swipe IPH.
-    [HandlerForProtocol(self.browser->GetCommandDispatcher(),
-                        NewTabPageCommands) presentFeedSwipeFirstRunBubble];
+    if (IsBestOfAppLensAnimatedPromoEnabled()) {
+      // Present the Lens entrypoint IPH.
+      [HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                          NewTabPageCommands) presentLensIconBubble];
+    } else {
+      // Present feed swipe IPH.
+      [HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                          NewTabPageCommands) presentFeedSwipeFirstRunBubble];
+    }
 
     return;
   }
@@ -220,7 +231,7 @@ class FirstRunCoordinatorMetricsHelper final {
   switch (type) {
     case kSignIn:
       return [[FullscreenSigninScreenCoordinator alloc]
-           initWithBaseNavigationController:self.navigationController
+           initWithBaseNavigationController:_navigationController
                                     browser:self.browser
                                    delegate:self
                                contextStyle:SigninContextStyle::kDefault
@@ -231,7 +242,7 @@ class FirstRunCoordinatorMetricsHelper final {
           changeProfileContinuationProvider:DoNothingContinuationProvider()];
     case kHistorySync:
       return [[HistorySyncCoordinator alloc]
-          initWithBaseNavigationController:self.navigationController
+          initWithBaseNavigationController:_navigationController
                                    browser:self.browser
                                   delegate:self
                                   firstRun:YES
@@ -242,28 +253,28 @@ class FirstRunCoordinatorMetricsHelper final {
                                                kStartPage];
     case kDefaultBrowserPromo:
       return [[DefaultBrowserScreenCoordinator alloc]
-          initWithBaseNavigationController:self.navigationController
+          initWithBaseNavigationController:_navigationController
                                    browser:self.browser
                                   delegate:self];
     case kChoice:
       return [[SearchEngineChoiceCoordinator alloc]
-          initForFirstRunWithBaseNavigationController:self.navigationController
+          initForFirstRunWithBaseNavigationController:_navigationController
                                               browser:self.browser
                                      firstRunDelegate:self];
     case kDockingPromo:
       return [[DockingPromoCoordinator alloc]
-          initWithBaseNavigationController:self.navigationController
+          initWithBaseNavigationController:_navigationController
                                    browser:self.browser
                                   delegate:self];
     case kBestFeatures:
       return [[BestFeaturesScreenCoordinator alloc]
-          initWithBaseNavigationController:self.navigationController
+          initWithBaseNavigationController:_navigationController
                                    browser:self.browser
                                   delegate:self];
     case kLensInteractivePromo: {
       InteractiveLensPromoCoordinator* lensInteractivePromoCoordinator =
           [[InteractiveLensPromoCoordinator alloc]
-              initWithBaseNavigationController:self.navigationController
+              initWithBaseNavigationController:_navigationController
                                        browser:self.browser];
       lensInteractivePromoCoordinator.firstRunDelegate = self;
       return lensInteractivePromoCoordinator;
@@ -271,7 +282,7 @@ class FirstRunCoordinatorMetricsHelper final {
     case kLensAnimatedPromo: {
       AnimatedLensPromoCoordinator* lensAnimatedPromoCoordinator =
           [[AnimatedLensPromoCoordinator alloc]
-              initWithBaseNavigationController:self.navigationController
+              initWithBaseNavigationController:_navigationController
                                        browser:self.browser];
       lensAnimatedPromoCoordinator.firstRunDelegate = self;
       return lensAnimatedPromoCoordinator;

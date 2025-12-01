@@ -57,9 +57,7 @@ impl Decoder for Libgav1 {
             let mut dec = MaybeUninit::uninit();
             let ret = Libgav1DecoderCreate(&settings, dec.as_mut_ptr());
             if ret != Libgav1StatusCode_kLibgav1StatusOk {
-                return Err(AvifError::UnknownError(format!(
-                    "Libgav1DecoderCreate returned {ret}"
-                )));
+                return AvifError::unknown_error(format!("Libgav1DecoderCreate returned {ret}"));
             }
             self.decoder = Some(dec.assume_init());
         }
@@ -85,18 +83,18 @@ impl Decoder for Libgav1 {
                 std::ptr::null_mut(),
             );
             if ret != Libgav1StatusCode_kLibgav1StatusOk {
-                return Err(AvifError::UnknownError(format!(
+                return AvifError::unknown_error(format!(
                     "Libgav1DecoderEnqueueFrame returned {ret}"
-                )));
+                ));
             }
             self.image = None;
             let mut next_frame: *const Libgav1DecoderBuffer = std::ptr::null_mut();
             loop {
                 let ret = Libgav1DecoderDequeueFrame(self.decoder.unwrap(), &mut next_frame);
                 if ret != Libgav1StatusCode_kLibgav1StatusOk {
-                    return Err(AvifError::UnknownError(format!(
+                    return AvifError::unknown_error(format!(
                         "Libgav1DecoderDequeueFrame returned {ret}"
-                    )));
+                    ));
                 }
                 if !next_frame.is_null()
                     && spatial_id != 0xFF
@@ -112,7 +110,7 @@ impl Decoder for Libgav1 {
                 if category == Category::Alpha {
                     // Special case for alpha, re-use last frame.
                 } else {
-                    return Err(AvifError::UnknownError("".into()));
+                    return AvifError::unknown_error("");
                 }
             } else {
                 self.image = Some(*next_frame);
@@ -128,7 +126,7 @@ impl Decoder for Libgav1 {
                             || image.depth != (gav1_image.bitdepth as u8))
                     {
                         // Alpha plane does not match the previous alpha plane.
-                        return Err(AvifError::UnknownError("".into()));
+                        return AvifError::unknown_error("");
                     }
                     image.width = gav1_image.displayed_width[0] as u32;
                     image.height = gav1_image.displayed_height[0] as u32;
@@ -200,7 +198,7 @@ impl Decoder for Libgav1 {
         _spatial_id: u8,
         _grid_image_helper: &mut GridImageHelper,
     ) -> AvifResult<()> {
-        Err(AvifError::NotImplemented)
+        AvifError::not_implemented()
     }
 }
 

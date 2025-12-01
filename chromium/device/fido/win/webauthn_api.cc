@@ -26,7 +26,7 @@
 #include "device/fido/fido_types.h"
 #include "device/fido/win/logging.h"
 #include "device/fido/win/type_conversions.h"
-#include "third_party/microsoft_webauthn/webauthn.h"
+#include "third_party/microsoft_webauthn/src/webauthn.h"
 
 namespace device {
 
@@ -317,11 +317,7 @@ WinWebAuthnApi::WinWebAuthnApi() = default;
 WinWebAuthnApi::~WinWebAuthnApi() = default;
 
 bool WinWebAuthnApi::SupportsHybrid() {
-  const int min_version =
-      base::FeatureList::IsEnabled(kWebAuthnSkipHybridConfigIfSystemSupported)
-          ? WEBAUTHN_API_VERSION_7
-          : WEBAUTHN_API_VERSION_6;
-  return IsAvailable() && Version() >= min_version;
+  return IsAvailable() && Version() >= WEBAUTHN_API_VERSION_7;
 }
 
 std::pair<MakeCredentialStatus,

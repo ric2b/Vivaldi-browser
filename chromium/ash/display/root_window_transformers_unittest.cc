@@ -16,6 +16,7 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/cursor_manager_test_api.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "base/memory/raw_ptr.h"
 #include "base/synchronization/waitable_event.h"
 #include "ui/aura/env.h"
@@ -142,7 +143,7 @@ class RootWindowTransformersTest : public AshTestBase {
             display_manager()->GetMirroringDestinationDisplayIdList()[0]);
     const display::ManagedDisplayInfo& source_display_info =
         display_manager()->GetDisplayInfo(
-            display::Screen::GetScreen()->GetPrimaryDisplay().id());
+            display::Screen::Get()->GetPrimaryDisplay().id());
     return CreateRootWindowTransformerForMirroredDisplay(source_display_info,
                                                          mirror_display_info);
   }
@@ -167,7 +168,7 @@ TEST_F(RootWindowTransformersTest, RotateAndMagnify) {
 
   UpdateDisplay("120x200,300x400*2");
   display::test::DisplayManagerTestApi display_manager_test(display_manager());
-  display::Display display1 = display::Screen::GetScreen()->GetPrimaryDisplay();
+  display::Display display1 = display::Screen::Get()->GetPrimaryDisplay();
   int64_t display2_id = display_manager_test.GetSecondaryDisplay().id();
 
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
@@ -268,7 +269,7 @@ TEST_F(RootWindowTransformersTest, ScaleAndMagnify) {
 
   UpdateDisplay("600x400*1.6,500x300");
 
-  display::Display display1 = display::Screen::GetScreen()->GetPrimaryDisplay();
+  display::Display display1 = display::Screen::Get()->GetPrimaryDisplay();
   display::test::ScopedSetInternalDisplayId set_internal(display_manager(),
                                                          display1.id());
   display::test::DisplayManagerTestApi display_manager_test(display_manager());
@@ -292,7 +293,7 @@ TEST_F(RootWindowTransformersTest, ScaleAndMagnify) {
   magnifier->SetEnabled(false);
 
   display_manager()->UpdateZoomFactor(display1.id(), 1.f / 1.2f);
-  display1 = display::Screen::GetScreen()->GetPrimaryDisplay();
+  display1 = display::Screen::Get()->GetPrimaryDisplay();
   display2 = display_manager_test.GetSecondaryDisplay();
   magnifier->SetEnabled(true);
   EXPECT_EQ(2.0f, magnifier->GetScale());
@@ -311,7 +312,7 @@ TEST_F(RootWindowTransformersTest, TouchScaleAndMagnify) {
   Shell::Get()->AddPreTargetHandler(&event_handler);
 
   UpdateDisplay("300x200*2");
-  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
+  display::Display display = display::Screen::Get()->GetPrimaryDisplay();
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   aura::Window* root_window = root_windows[0];
   ui::test::EventGenerator generator(root_window);
@@ -350,7 +351,7 @@ TEST_F(RootWindowTransformersTest, ConvertHostToRootCoords) {
   // Test 1
   UpdateDisplay("600x400*2/r@0.8");
 
-  display::Display display1 = display::Screen::GetScreen()->GetPrimaryDisplay();
+  display::Display display1 = display::Screen::Get()->GetPrimaryDisplay();
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   EXPECT_EQ(gfx::Rect(0, 0, 250, 375), display1.bounds());
   EXPECT_EQ(gfx::Rect(0, 0, 250, 375), root_windows[0]->bounds());
@@ -376,7 +377,7 @@ TEST_F(RootWindowTransformersTest, ConvertHostToRootCoords) {
 
   // Test 2
   UpdateDisplay("600x400*2/u@0.8");
-  display1 = display::Screen::GetScreen()->GetPrimaryDisplay();
+  display1 = display::Screen::Get()->GetPrimaryDisplay();
   root_windows = Shell::GetAllRootWindows();
   EXPECT_EQ(gfx::Rect(0, 0, 375, 250), display1.bounds());
   EXPECT_EQ(gfx::Rect(0, 0, 375, 250), root_windows[0]->bounds());
@@ -401,7 +402,7 @@ TEST_F(RootWindowTransformersTest, ConvertHostToRootCoords) {
 
   // Test 3
   UpdateDisplay("600x400*2/l@0.8");
-  display1 = display::Screen::GetScreen()->GetPrimaryDisplay();
+  display1 = display::Screen::Get()->GetPrimaryDisplay();
   root_windows = Shell::GetAllRootWindows();
   EXPECT_EQ(gfx::Rect(0, 0, 250, 375), display1.bounds());
   EXPECT_EQ(gfx::Rect(0, 0, 250, 375), root_windows[0]->bounds());
@@ -454,13 +455,49 @@ TEST_F(RootWindowTransformersTest, MirrorWithRotation) {
         display::Display::ROTATE_180, display::Display::ROTATE_270}) {
     SCOPED_TRACE(::testing::Message() << "Rotation: " << rotation);
     display_manager()->SetDisplayRotation(
-        display::Screen::GetScreen()->GetPrimaryDisplay().id(), rotation,
+        display::Screen::Get()->GetPrimaryDisplay().id(), rotation,
         display::Display::RotationSource::ACTIVE);
     std::unique_ptr<RootWindowTransformer> transformer(
         CreateCurrentRootWindowTransformerForMirroring());
 
     const bool need_transpose = rotation == display::Display::ROTATE_90 ||
                                 rotation == display::Display::ROTATE_270;
+
+    // Y margin is (400 - 500/400 * 200) / 2 = 75 for no rotation. Transposed
+    // on 90/270 degree.
+    gfx::Insets expected_insets =
+        need_transpose ? gfx::Insets::VH(0, 75) : gfx::Insets::VH(75, 0);
+    EXPECT_EQ(expected_insets, transformer->GetHostInsets());
+
+    // Expected rect in mirror of the source root.
+    gfx::RectF expected_rect = need_transpose ? gfx::RectF(75, 0, 250, 500)
+                                              : gfx::RectF(0, 75, 500, 250);
+
+    gfx::RectF rect = transformer->GetTransform().MapRect(
+        gfx::RectF(transformer->GetRootWindowBounds(gfx::Size())));
+    EXPECT_EQ(expected_rect, rect);
+  }
+}
+
+TEST_F(RootWindowTransformersTest, MirrorWithRotationTabletMode) {
+  MirrorWindowTestApi test_api;
+  UpdateDisplay("400x200,500x400");
+  display_manager()->SetMirrorMode(display::MirrorMode::kNormal, std::nullopt);
+  ash::TabletModeControllerTestApi().EnterTabletMode();
+
+  for (auto rotation :
+       {display::Display::ROTATE_0, display::Display::ROTATE_90,
+        display::Display::ROTATE_180, display::Display::ROTATE_270}) {
+    SCOPED_TRACE(::testing::Message() << "Rotation: " << rotation);
+    display_manager()->SetDisplayRotation(
+        display::Screen::Get()->GetPrimaryDisplay().id(), rotation,
+        display::Display::RotationSource::ACCELEROMETER);
+    std::unique_ptr<RootWindowTransformer> transformer(
+        CreateCurrentRootWindowTransformerForMirroring());
+
+    const bool need_transpose = rotation == display::Display::ROTATE_90 ||
+                                rotation == display::Display::ROTATE_270;
+
     // X margin is (500 - 200) / 2 = 150 for with rotation.
     // Y margin is (400 - 500/400 * 200) / 2 = 75 for without rotation.
     gfx::Insets expected_insets =

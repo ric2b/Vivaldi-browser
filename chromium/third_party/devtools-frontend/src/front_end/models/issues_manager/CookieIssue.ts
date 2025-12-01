@@ -1,5 +1,5 @@
 
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,11 +19,11 @@ import {
 
 const UIStrings = {
   /**
-   *@description Label for the link for SameSiteCookies Issues
+   * @description Label for the link for SameSiteCookies Issues
    */
   samesiteCookiesExplained: 'SameSite cookies explained',
   /**
-   *@description Label for the link for Schemeful Same-Site Issues
+   * @description Label for the link for Schemeful Same-Site Issues
    */
   howSchemefulSamesiteWorks: 'How Schemeful Same-Site Works',
   /**

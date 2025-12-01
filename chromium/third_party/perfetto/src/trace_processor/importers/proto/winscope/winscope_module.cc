@@ -21,19 +21,18 @@
 
 #include "perfetto/base/status.h"
 #include "perfetto/ext/base/base64.h"
-#include "perfetto/ext/base/flat_hash_map.h"
 #include "perfetto/ext/base/string_view.h"
 #include "perfetto/protozero/field.h"
 #include "perfetto/trace_processor/ref_counted.h"
 #include "protos/perfetto/trace/android/winscope_extensions.pbzero.h"
 #include "protos/perfetto/trace/android/winscope_extensions_impl.pbzero.h"
+#include "protos/perfetto/trace/trace_packet.pbzero.h"
 #include "src/trace_processor/importers/common/args_tracker.h"
 #include "src/trace_processor/importers/common/parser_types.h"
 #include "src/trace_processor/importers/proto/args_parser.h"
 #include "src/trace_processor/importers/proto/packet_sequence_state_generation.h"
 #include "src/trace_processor/importers/proto/proto_importer_module.h"
 #include "src/trace_processor/importers/proto/winscope/shell_transitions_tracker.h"
-#include "src/trace_processor/importers/proto/winscope/viewcapture_args_parser.h"
 #include "src/trace_processor/importers/proto/winscope/winscope.descriptor.h"
 #include "src/trace_processor/storage/stats.h"
 #include "src/trace_processor/tables/winscope_tables_py.h"
@@ -44,26 +43,27 @@ namespace perfetto::trace_processor {
 using perfetto::protos::pbzero::TracePacket;
 using perfetto::protos::pbzero::WinscopeExtensionsImpl;
 
-WinscopeModule::WinscopeModule(TraceProcessorContext* context)
-    : context_{context},
+WinscopeModule::WinscopeModule(ProtoImporterModuleContext* module_context,
+                               TraceProcessorContext* context)
+    : ProtoImporterModule(module_context),
+      context_{context},
       args_parser_{*context->descriptor_pool_},
       surfaceflinger_layers_parser_(&context_),
       surfaceflinger_transactions_parser_(context),
       shell_transitions_parser_(&context_),
       protolog_parser_(&context_),
       android_input_event_parser_(context),
-      viewcapture_parser_(context) {
+      viewcapture_parser_(&context_),
+      windowmanager_parser_(&context_) {
   context->descriptor_pool_->AddFromFileDescriptorSet(
       kWinscopeDescriptor.data(), kWinscopeDescriptor.size());
-  RegisterForField(TracePacket::kSurfaceflingerLayersSnapshotFieldNumber,
-                   context);
-  RegisterForField(TracePacket::kSurfaceflingerTransactionsFieldNumber,
-                   context);
-  RegisterForField(TracePacket::kShellTransitionFieldNumber, context);
-  RegisterForField(TracePacket::kShellHandlerMappingsFieldNumber, context);
-  RegisterForField(TracePacket::kProtologMessageFieldNumber, context);
-  RegisterForField(TracePacket::kProtologViewerConfigFieldNumber, context);
-  RegisterForField(TracePacket::kWinscopeExtensionsFieldNumber, context);
+  RegisterForField(TracePacket::kSurfaceflingerLayersSnapshotFieldNumber);
+  RegisterForField(TracePacket::kSurfaceflingerTransactionsFieldNumber);
+  RegisterForField(TracePacket::kShellTransitionFieldNumber);
+  RegisterForField(TracePacket::kShellHandlerMappingsFieldNumber);
+  RegisterForField(TracePacket::kProtologMessageFieldNumber);
+  RegisterForField(TracePacket::kProtologViewerConfigFieldNumber);
+  RegisterForField(TracePacket::kWinscopeExtensionsFieldNumber);
 }
 
 ModuleResult WinscopeModule::TokenizePacket(
@@ -147,7 +147,7 @@ void WinscopeModule::ParseWinscopeExtensionsData(protozero::ConstBytes blob,
   } else if (field =
                  decoder.Get(WinscopeExtensionsImpl::kWindowmanagerFieldNumber);
              field.valid()) {
-    ParseWindowManagerData(timestamp, field.as_bytes());
+    windowmanager_parser_.Parse(timestamp, field.as_bytes());
   }
 }
 
@@ -233,33 +233,6 @@ void WinscopeModule::ParseInputMethodServiceData(int64_t timestamp,
   if (!status.ok()) {
     trace_processor_context->storage->IncrementStats(
         stats::winscope_inputmethod_service_parse_errors);
-  }
-}
-
-void WinscopeModule::ParseWindowManagerData(int64_t timestamp,
-                                            protozero::ConstBytes blob) {
-  auto* trace_processor_context = context_.trace_processor_context_;
-  tables::WindowManagerTable::Row row;
-  row.ts = timestamp;
-  row.base64_proto_id = trace_processor_context->storage->mutable_string_pool()
-                            ->InternString(base::StringView(
-                                base::Base64Encode(blob.data, blob.size)))
-                            .raw_id();
-  auto rowId = trace_processor_context->storage->mutable_windowmanager_table()
-                   ->Insert(row)
-                   .id;
-
-  ArgsTracker tracker(trace_processor_context);
-  auto inserter = tracker.AddArgsTo(rowId);
-  ArgsParser writer(timestamp, inserter, *trace_processor_context->storage);
-  base::Status status =
-      args_parser_.ParseMessage(blob,
-                                *util::winscope_proto_mapping::GetProtoName(
-                                    tables::WindowManagerTable::Name()),
-                                nullptr /* parse all fields */, writer);
-  if (!status.ok()) {
-    trace_processor_context->storage->IncrementStats(
-        stats::winscope_windowmanager_parse_errors);
   }
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,7 @@ import * as ThirdPartyWeb from '../../../third_party/third-party-web/third-party
 import * as Types from '../types/types.js';
 
 import type {TraceEventsForNetworkRequest} from './NetworkRequestsHandler.js';
-import type {ParsedTrace} from './types.js';
+import type {HandlerData} from './types.js';
 
 export type Entity = typeof ThirdPartyWeb.ThirdPartyWeb.entities[number]&{
   isUnrecognized?: boolean,
@@ -16,27 +16,32 @@ export type Entity = typeof ThirdPartyWeb.ThirdPartyWeb.entities[number]&{
 export interface EntityMappings {
   createdEntityCache: Map<string, Entity>;
   entityByEvent: Map<Types.Events.Event, Entity>;
-  /**
-   * This holds the entities that had to be created, because they were not found using the
-   * ThirdPartyWeb database.
-   */
   eventsByEntity: Map<Entity, Types.Events.Event[]>;
+  entityByUrlCache: Map<string, Entity>;
 }
 
-export function getEntityForEvent(event: Types.Events.Event, entityCache: Map<string, Entity>): Entity|undefined {
+export function getEntityForEvent(event: Types.Events.Event, entityMappings: EntityMappings): Entity|undefined {
   const url = getNonResolvedURL(event);
   if (!url) {
     return;
   }
-  return getEntityForUrl(url, entityCache);
+  return getEntityForUrl(url, entityMappings);
 }
 
-export function getEntityForUrl(url: string, entityCache: Map<string, Entity>): Entity|undefined {
-  return ThirdPartyWeb.ThirdPartyWeb.getEntity(url) ?? makeUpEntity(entityCache, url);
+export function getEntityForUrl(url: string, entityMappings: EntityMappings): Entity|undefined {
+  const cachedByUrl = entityMappings.entityByUrlCache.get(url);
+  if (cachedByUrl) {
+    return cachedByUrl;
+  }
+  const entity = ThirdPartyWeb.ThirdPartyWeb.getEntity(url) ?? makeUpEntity(entityMappings.createdEntityCache, url);
+  if (entity) {
+    entityMappings.entityByUrlCache.set(url, entity);
+  }
+  return entity;
 }
 
 export function getNonResolvedURL(
-    entry: Types.Events.Event, parsedTrace?: ParsedTrace): Platform.DevToolsPath.UrlString|null {
+    entry: Types.Events.Event, handlerData?: HandlerData): Platform.DevToolsPath.UrlString|null {
   if (Types.Events.isProfileCall(entry)) {
     return entry.callFrame.url as Platform.DevToolsPath.UrlString;
   }
@@ -58,17 +63,17 @@ export function getNonResolvedURL(
     return entry.args.beginData.url as Platform.DevToolsPath.UrlString;
   }
 
-  if (parsedTrace) {
+  if (handlerData) {
     // DecodeImage events use the URL from the relevant PaintImage event.
     if (Types.Events.isDecodeImage(entry)) {
-      const paintEvent = parsedTrace.ImagePainting.paintImageForEvent.get(entry);
-      return paintEvent ? getNonResolvedURL(paintEvent, parsedTrace) : null;
+      const paintEvent = handlerData.ImagePainting.paintImageForEvent.get(entry);
+      return paintEvent ? getNonResolvedURL(paintEvent, handlerData) : null;
     }
 
     // DrawLazyPixelRef events use the URL from the relevant PaintImage event.
     if (Types.Events.isDrawLazyPixelRef(entry) && entry.args?.LazyPixelRef) {
-      const paintEvent = parsedTrace.ImagePainting.paintImageByDrawLazyPixelRef.get(entry.args.LazyPixelRef);
-      return paintEvent ? getNonResolvedURL(paintEvent, parsedTrace) : null;
+      const paintEvent = handlerData.ImagePainting.paintImageByDrawLazyPixelRef.get(entry.args.LazyPixelRef);
+      return paintEvent ? getNonResolvedURL(paintEvent, handlerData) : null;
     }
   }
 
@@ -80,8 +85,8 @@ export function getNonResolvedURL(
   // Many events don't have a url, but are associated with a request. Use the
   // request's url.
   const requestId = (entry.args?.data as {requestId?: string})?.requestId;
-  if (parsedTrace && requestId) {
-    const url = parsedTrace.NetworkRequests.byId.get(requestId)?.args.data.url;
+  if (handlerData && requestId) {
+    const url = handlerData.NetworkRequests.byId.get(requestId)?.args.data.url;
     if (url) {
       return url as Platform.DevToolsPath.UrlString;
     }
@@ -159,14 +164,14 @@ function makeUpChromeExtensionEntity(entityCache: Map<string, Entity>, url: stri
 }
 
 export function addEventToEntityMapping(event: Types.Events.Event, entityMappings: EntityMappings): void {
-  const entity = getEntityForEvent(event, entityMappings.createdEntityCache);
-  if (!entity) {
-    return;
-  }
-
   // As we share the entityMappings between Network and Renderer... We can have ResourceSendRequest events passed in here
   // that were already mapped in Network. So, to avoid mapping twice, we always check that we didn't yet.
   if (entityMappings.entityByEvent.has(event)) {
+    return;
+  }
+
+  const entity = getEntityForEvent(event, entityMappings);
+  if (!entity) {
     return;
   }
 
@@ -183,7 +188,7 @@ export function addEventToEntityMapping(event: Types.Events.Event, entityMapping
 export function addNetworkRequestToEntityMapping(
     networkRequest: Types.Events.SyntheticNetworkRequest, entityMappings: EntityMappings,
     requestTraceEvents: TraceEventsForNetworkRequest): void {
-  const entity = getEntityForEvent(networkRequest, entityMappings.createdEntityCache);
+  const entity = getEntityForEvent(networkRequest, entityMappings);
   if (!entity) {
     return;
   }

@@ -66,7 +66,6 @@
 #include "chromecast/media/cma/backend/cma_backend_factory_impl.h"
 #include "chromecast/media/common/media_pipeline_backend_manager.h"
 #include "chromecast/media/common/media_resource_tracker.h"
-#include "chromecast/media/service/cast_renderer.h"
 #include "chromecast/media/service/mojom/video_geometry_setter.mojom.h"
 #include "chromecast/public/media/media_pipeline_backend.h"
 #include "components/prefs/pref_service.h"
@@ -115,7 +114,7 @@
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
+#include "base/android/device_info.h"
 #include "chromecast/media/audio/cast_audio_manager_android.h"  // nogncheck
 #include "components/crash/core/app/crashpad.h"
 #include "media/audio/android/audio_manager_android.h"
@@ -169,7 +168,7 @@ CastContentBrowserClient::CastContentBrowserClient(
   extra_enable_features.push_back(
       &::media::kUseTaskRunnerForMojoAudioDecoderService);
 
-  if (base::android::BuildInfo::GetInstance()->is_tv()) {
+  if (base::android::device_info::is_tv()) {
     // Use the software decoder provided by MediaCodec instead of the built in
     // software decoder. This can improve av sync quality.
     extra_enable_features.push_back(&::media::kAllowMediaCodecSoftwareDecoder);
@@ -448,7 +447,7 @@ void CastContentBrowserClient::AppendExtraCommandLineSwitches(
     };
     command_line->CopySwitchesFrom(*browser_command_line, kForwardSwitches);
 
-    auto display = display::Screen::GetScreen()->GetPrimaryDisplay();
+    auto display = display::Screen::Get()->GetPrimaryDisplay();
     gfx::Size res = display.GetSizeInPixel();
     if (display.rotation() == display::Display::ROTATE_90 ||
         display.rotation() == display::Display::ROTATE_270) {
@@ -876,26 +875,6 @@ void CastContentBrowserClient::CreateGeneralAudienceBrowsingService() {
       std::make_unique<GeneralAudienceBrowsingService>(
           browser_main_parts()->connector(),
           cast_network_contexts_->GetSystemSharedURLLoaderFactory());
-}
-
-void CastContentBrowserClient::BindMediaRenderer(
-    mojo::PendingReceiver<::media::mojom::Renderer> receiver) {
-  auto media_task_runner = GetMediaTaskRunner();
-  if (!media_task_runner->BelongsToCurrentThread()) {
-    media_task_runner->PostTask(
-        FROM_HERE, base::BindOnce(&CastContentBrowserClient::BindMediaRenderer,
-                                  base::Unretained(this), std::move(receiver)));
-    return;
-  }
-
-  ::media::MojoRendererService::Create(
-      nullptr /* mojo_cdm_service_context */,
-      std::make_unique<media::CastRenderer>(
-          GetCmaBackendFactory(), std::move(media_task_runner),
-          GetVideoModeSwitcher(), GetVideoResolutionPolicy(),
-          base::UnguessableToken::Create(), nullptr /* frame_interfaces */,
-          true /* is_buffering_enabled */),
-      std::move(receiver));
 }
 
 }  // namespace shell

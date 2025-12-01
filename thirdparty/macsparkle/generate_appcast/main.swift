@@ -26,11 +26,11 @@ func loadPrivateKeys(_ account: String, _ privateDSAKey: SecKey?, _ privateEdStr
                 print("Error: specifying private key as the argument is no longer supported.")
                 return nil
             } else {
-                print("Error: Private key not found in decoded argument, which has \(data.count) bytes. Please provide a valid key.")
+                print("Error: Private key not decoded from the argument, which has \(data.count) bytes. Please provide a valid key and confirm the contents of the key are correct.")
                 return nil
             }
         } else {
-            print("Error: Private key not found in the argument. Please provide a valid key.")
+            print("Error: Private key not decoded from the argument because it isn't base64 encoded. Please provide a valid key and confirm the contents of the key are correct.")
             return nil
         }
     }
@@ -288,19 +288,22 @@ struct GenerateAppcast: ParsableCommand {
             allowNewPrivateKey = false
         } else if let privateEdKeyPath = privateEdKeyPath {
             do {
-                let privateKeyString: String
                 if privateEdKeyPath == "-" && !FileManager.default.fileExists(atPath: privateEdKeyPath) {
                     if let line = readLine(strippingNewline: true) {
-                        privateKeyString = line
+                        privateEdKeyString = line
                     } else {
                         print("Unable to read EdDSA private key from standard input")
                         throw ExitCode(1)
                     }
                 } else {
-                    privateKeyString = try String(contentsOf: URL(fileURLWithPath: privateEdKeyPath))
+                    do {
+                        privateEdKeyString = try decodeSecretString(filePath: privateEdKeyPath)
+                    } catch {
+                        print(error.localizedDescription)
+                        throw ExitCode(1)
+                    }
                 }
                 
-                privateEdKeyString = privateKeyString
                 allowNewPrivateKey = true
             } catch {
                 print("Unable to load EdDSA private key from", privateEdKeyPath, "\n", error)

@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,11 +10,11 @@ import * as UI from '../../ui/legacy/legacy.js';
 
 const UIStrings = {
   /**
-   *@description Text to show an item is empty
+   * @description Text to show an item is empty
    */
   empty: '(empty)',
   /**
-   *@description Text in isolate selector in Performance panel
+   * @description Text in isolate selector in Performance panel
    */
   selectJavascriptVmInstance: 'Select JavaScript VM instance',
 } as const;

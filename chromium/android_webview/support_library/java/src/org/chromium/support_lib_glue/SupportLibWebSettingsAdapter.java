@@ -24,14 +24,13 @@ import org.chromium.support_lib_glue.SupportLibWebViewChromiumFactory.ApiCall;
 import java.lang.reflect.InvocationHandler;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 
 /** Adapter between WebSettingsBoundaryInterface and AwSettings. */
 class SupportLibWebSettingsAdapter implements WebSettingsBoundaryInterface {
     private static final String TAG = "SupportWebSettings";
     private final AwSettings mAwSettings;
 
-    public SupportLibWebSettingsAdapter(AwSettings awSettings) {
+    /*package*/ SupportLibWebSettingsAdapter(AwSettings awSettings) {
         mAwSettings = awSettings;
     }
 
@@ -258,26 +257,6 @@ class SupportLibWebSettingsAdapter implements WebSettingsBoundaryInterface {
                 default:
                     return WebauthnSupport.NONE;
             }
-        }
-    }
-
-    @Override
-    public void setRequestedWithHeaderOriginAllowList(Set<String> allowedOriginRules) {
-        try (TraceEvent event =
-                TraceEvent.scoped(
-                        "WebView.APICall.AndroidX.WEB_SETTINGS_SET_REQUESTED_WITH_HEADER_ORIGIN_ALLOWLIST")) {
-            recordApiCall(ApiCall.WEB_SETTINGS_SET_REQUESTED_WITH_HEADER_ORIGIN_ALLOWLIST);
-            mAwSettings.setRequestedWithHeaderOriginAllowList(allowedOriginRules);
-        }
-    }
-
-    @Override
-    public Set<String> getRequestedWithHeaderOriginAllowList() {
-        try (TraceEvent event =
-                TraceEvent.scoped(
-                        "WebView.APICall.AndroidX.WEB_SETTINGS_GET_REQUESTED_WITH_HEADER_ORIGIN_ALLOWLIST")) {
-            recordApiCall(ApiCall.WEB_SETTINGS_GET_REQUESTED_WITH_HEADER_ORIGIN_ALLOWLIST);
-            return mAwSettings.getRequestedWithHeaderOriginAllowList();
         }
     }
 
@@ -572,6 +551,28 @@ class SupportLibWebSettingsAdapter implements WebSettingsBoundaryInterface {
                 TraceEvent.scoped("WebView.APICall.AndroidX.GET_INCLUDE_COOKIES_ON_INTERCEPT")) {
             recordApiCall(ApiCall.GET_INCLUDE_COOKIES_ON_INTERCEPT);
             return mAwSettings.getIncludeCookiesOnIntercept();
+        }
+    }
+
+    @Override
+    public void setHyperlinkContextMenuItems(@HyperlinkContextMenuItems int hyperlinkMenuItems) {
+        try (TraceEvent ignored =
+                TraceEvent.scoped("WebView.APICall.AndroidX.SET_HYPERLINK_CONTEXT_MENU_ITEMS")) {
+            recordApiCall(ApiCall.SET_HYPERLINK_CONTEXT_MENU_ITEMS);
+
+            int awMenuItems = AwSettings.HyperlinkContextMenuItems.DISABLED;
+
+            if ((hyperlinkMenuItems & HyperlinkContextMenuItems.COPY_LINK_ADDRESS) != 0) {
+                awMenuItems |= AwSettings.HyperlinkContextMenuItems.COPY_LINK_ADDRESS;
+            }
+            if ((hyperlinkMenuItems & HyperlinkContextMenuItems.COPY_LINK_TEXT) != 0) {
+                awMenuItems |= AwSettings.HyperlinkContextMenuItems.COPY_LINK_TEXT;
+            }
+            if ((hyperlinkMenuItems & HyperlinkContextMenuItems.OPEN_LINK) != 0) {
+                awMenuItems |= AwSettings.HyperlinkContextMenuItems.OPEN_LINK;
+            }
+
+            mAwSettings.setHyperlinkContextMenuItems(awMenuItems);
         }
     }
 }

@@ -1,11 +1,43 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="uk">
+<translation id="1049697408958544531">{NUM_WEEKS, plural,
+          =1 {Створено <ph name="NUM_WEEKS_ONE" /> тиждень тому}
+          few {Створено <ph name="NUM_WEEKS_MANY" /> тижні тому}
+          other {Створено <ph name="NUM_WEEKS_MANY" /> тижнів тому}
+        }</translation>
 <translation id="1062777154504442433">Нова група вкладок</translation>
+<translation id="1092908249939127748">{NUM_MONTHS, plural,
+          =1 {Створено <ph name="NUM_YEARS_ONE" /> рік тому}
+          few {Створено <ph name="NUM_YEARS_MANY" /> роки тому}
+          other {Створено <ph name="NUM_YEARS_MANY" /> років тому}
+        }</translation>
+<translation id="1329584516321524826">Оновлено щойно</translation>
+<translation id="149054111719651807">{NUM_MINS, plural,
+          =1 {Створено <ph name="NUM_MINS_ONE" /> хвилину тому}
+          few {Створено <ph name="NUM_MINS_MANY" /> хвилини тому}
+          other {Створено <ph name="NUM_MINS_MANY" /> хвилин тому}
+        }</translation>
 <translation id="1625440863545383011">Видалити вкладку з групи та покинути групу вкладок</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Вкладку в закладки}
           other {Вкладки в закладки}
+        }</translation>
+<translation id="2498435670446402865">Перейменувати групу вкладок</translation>
+<translation id="2734252994837336591">{NUM_WEEKS, plural,
+          =1 {Оновлено <ph name="NUM_WEEKS_ONE" /> тиждень тому}
+          few {Оновлено <ph name="NUM_WEEKS_MANY" /> тижні тому}
+          other {Оновлено <ph name="NUM_WEEKS_MANY" /> тижнів тому}
+        }</translation>
+<translation id="2753877351161418426">{NUM_HOURS, plural,
+          =1 {Оновлено <ph name="NUM_HOURS_ONE" /> годину тому}
+          few {Оновлено <ph name="NUM_HOURS_MANY" /> години тому}
+          other {Оновлено <ph name="NUM_HOURS_MANY" /> годин тому}
+        }</translation>
+<translation id="2776817246640326047">{NUM_HOURS, plural,
+          =1 {Створено <ph name="NUM_HOURS_ONE" /> годину тому}
+          few {Створено <ph name="NUM_HOURS_MANY" /> години тому}
+          other {Створено <ph name="NUM_HOURS_MANY" /> годин тому}
         }</translation>
 <translation id="2947471979790858922">Вашу активність в приватних вкладках буде видалено з пристрою</translation>
 <translation id="3298614730029636660">Покинути групу вкладок</translation>
@@ -13,13 +45,47 @@
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Усі закриті вкладки, окрім приватних, ви знайдете в Нещодавно закритих в меню Vivaldi.}
         other {Усі закриті вкладки, окрім # приватних, ви знайдете в Нещодавно закритих в меню Vivaldi.}}</translation>
+<translation id="4009732926939031387">{NUM_DAYS, plural,
+          =1 {Створено <ph name="NUM_DAYS_ONE" /> день тому}
+          few {Створено <ph name="NUM_DAYS_MANY" /> дні тому}
+          other {Створено <ph name="NUM_DAYS_MANY" /> днів тому}
+        }</translation>
+<translation id="4453940245650019914">{NUM_DAYS, plural,
+          =1 {Оновлено <ph name="NUM_DAYS_ONE" /> день тому}
+          few {Оновлено <ph name="NUM_DAYS_MANY" /> дні тому}
+          other {Оновлено <ph name="NUM_DAYS_MANY" /> днів тому}
+        }</translation>
+<translation id="4686942373615810936">Щойно створено</translation>
+<translation id="4870911314065352661">Закрити усі вкладки?</translation>
 <translation id="4871187110787939393">Закрити усі приватні вкладки?</translation>
 <translation id="5494920125229734069">Вибрати все</translation>
 <translation id="6807841890213931603">Видалити вкладку з групи та видалити групу вкладок</translation>
 <translation id="750227952939161636">Ваші групи вкладок автоматично зберігаються та оновлюються на всіх ваших пристроях</translation>
 <translation id="7640137753339219124">Видалити групу вкладок</translation>
 <translation id="7653857400289671414">Ваша група вкладок автоматично збережена</translation>
+<translation id="775668479044571025">{NUM_MONTHS, plural,
+          =1 {Оновлено <ph name="NUM_YEARS_ONE" /> рік тому}
+          few {Оновлено <ph name="NUM_YEARS_MANY" /> роки тому}
+          other {Оновлено <ph name="NUM_YEARS_MANY" /> років тому}
+        }</translation>
+<translation id="7825973332242257878">Групи вкладок</translation>
+<translation id="8207688828622594111">{NUM_MINS, plural,
+          =1 {Оновлено <ph name="NUM_MINS_ONE" /> хвилину тому}
+          few {Оновлено <ph name="NUM_MINS_MANY" /> хвилини тому}
+          other {Оновлено <ph name="NUM_MINS_MANY" /> хвилин тому}
+        }</translation>
+<translation id="8374451057714760401">{NUM_MONTHS, plural,
+                =1 {Оновлено <ph name="NUM_MONTHS_ONE" /> місяць тому}
+                few {Оновлено <ph name="NUM_MONTHS_MANY" /> місяці тому}
+                other {Оновлено <ph name="NUM_MONTHS_MANY" /> місяців тому}
+              }</translation>
 <translation id="8440938071054361204">Редагувати назву групи вкладок</translation>
 <translation id="8602902357364871325">Закрити групу вкладок</translation>
+<translation id="875848103419578654">{NUM_MONTHS, plural,
+                =1 {Створено <ph name="NUM_MONTHS_ONE" /> місяць тому}
+                few {Створено <ph name="NUM_MONTHS_MANY" /> місяці тому}
+                other {Створено <ph name="NUM_MONTHS_MANY" /> місяців тому}
+              }</translation>
 <translation id="8851621822786801079">Видалити з групи вкладок</translation>
+<translation id="8887921976452567404">Закриті вкладки та групи можна знову відкрити в розділах «Нещодавні вкладки» та «Групи вкладок».</translation>
 </translationbundle>

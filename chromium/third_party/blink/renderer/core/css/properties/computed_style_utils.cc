@@ -60,6 +60,7 @@
 #include "third_party/blink/renderer/core/layout/grid/layout_grid.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
+#include "third_party/blink/renderer/core/layout/masonry/layout_masonry.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_viewport_container.h"
 #include "third_party/blink/renderer/core/layout/svg/transform_helper.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
@@ -1247,7 +1248,7 @@ CSSValue* ComputedStyleUtils::ValueForFontVariantAlternates(
 
   if (!variant_alternates->Styleset().empty()) {
     CSSValueList* aliases_list = CSSValueList::CreateCommaSeparated();
-    for (auto alias : variant_alternates->Styleset()) {
+    for (const auto& alias : variant_alternates->Styleset()) {
       aliases_list->Append(*MakeGarbageCollected<CSSCustomIdentValue>(alias));
     }
     value_list->Append(*MakeGarbageCollected<cssvalue::CSSAlternateValue>(
@@ -1256,7 +1257,7 @@ CSSValue* ComputedStyleUtils::ValueForFontVariantAlternates(
   }
   if (!variant_alternates->CharacterVariant().empty()) {
     CSSValueList* aliases_list = CSSValueList::CreateCommaSeparated();
-    for (auto alias : variant_alternates->CharacterVariant()) {
+    for (const auto& alias : variant_alternates->CharacterVariant()) {
       aliases_list->Append(*MakeGarbageCollected<CSSCustomIdentValue>(alias));
     }
     value_list->Append(*MakeGarbageCollected<cssvalue::CSSAlternateValue>(
@@ -1452,6 +1453,15 @@ const CSSValue* ComputedStyleUtils::ValueForFontPalette(
   return ConvertFontPaletteToCSSValue(*palette);
 }
 
+CSSValue* ComputedStyleUtils::ValueForFontLanguageOverride(
+    const ComputedStyle& style) {
+  if (!style.GetFontDescription().FontLanguageOverride()) {
+    return CSSIdentifierValue::Create(CSSValueID::kNormal);
+  }
+  return MakeGarbageCollected<CSSStringValue>(
+      style.GetFontDescription().FontLanguageOverride());
+}
+
 CSSValue* ComputedStyleUtils::ValueForFont(const ComputedStyle& style) {
   auto AppendIfNotNormal = [](CSSValueList* list, const CSSValue& value) {
     auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
@@ -1496,6 +1506,16 @@ CSSValue* ComputedStyleUtils::ValueForFont(const ComputedStyle& style) {
                               static_cast<CSSValue*>(CSSIdentifierValue::Create(
                                   CSSValueID::kNormal)))) {
     return nullptr;
+  }
+
+  if (RuntimeEnabledFeatures::FontLanguageOverrideEnabled()) {
+    CSSValue* language_override = ValueForFontLanguageOverride(style);
+    if (!base::ValuesEquivalent(
+            language_override,
+            static_cast<CSSValue*>(
+                CSSIdentifierValue::Create(CSSValueID::kNormal)))) {
+      return nullptr;
+    }
   }
 
   FontDescription::Kerning kerning = style.GetFontDescription().GetKerning();
@@ -1703,7 +1723,7 @@ void OrderedNamedLinesCollector::AppendLines(
     return;
   }
 
-  for (auto named_grid_line : iter->value) {
+  for (const auto& named_grid_line : iter->value) {
     // For layout grids, insert all values. For non-layout grids, in order to
     // round-trip repeaters, we need to prevent inserting certain line names.
     // In particular, don't insert lines from repeaters if we're not in a
@@ -2036,34 +2056,35 @@ void PopulateGridTrackListComputedValues(CSSValueList* list,
   }
 }
 
-CSSValue* ComputedStyleUtils::ValueForGridTrackList(
-    GridTrackSizingDirection direction,
-    const LayoutObject* layout_object,
-    const ComputedStyle& style,
-    bool force_computed_value) {
+template <typename T>
+typename std::enable_if<std::is_same<T, LayoutGrid>::value ||
+                            std::is_same<T, LayoutMasonry>::value,
+                        CSSValue*>::type
+ValueForGridTrackList(GridTrackSizingDirection direction,
+                      const LayoutObject* layout_object,
+                      const ComputedStyle& style,
+                      bool force_computed_value) {
   const bool is_for_columns = direction == kForColumns;
   const ComputedGridTrackList& computed_grid_track_list =
       is_for_columns ? style.GridTemplateColumns() : style.GridTemplateRows();
   const bool is_masonry = style.IsDisplayMasonryBox();
-  // TODO(almaher): Update this in some way for Masonry (perhaps make
-  // LayoutMasonry a subclass of LayoutGrid).
-  const auto* grid = DynamicTo<LayoutGrid>(layout_object);
+  auto* container = DynamicTo<T>(layout_object);
 
   // Handle the 'none' case.
   bool is_track_list_empty =
       !computed_grid_track_list.GetTrackList().RepeaterCount();
-  if (grid && is_track_list_empty) {
+  if (container && is_track_list_empty) {
     // For grids we should consider every listed track, whether implicitly or
     // explicitly created. Empty grids have a sole grid line per axis.
     const Vector<LayoutUnit>& positions =
-        is_for_columns ? grid->ColumnPositions() : grid->RowPositions();
+        container->GridTrackPositions(direction);
     is_track_list_empty = positions.size() == 1;
   }
 
   const bool is_subgrid_specified = computed_grid_track_list.IsSubgriddedAxis();
   const bool is_subgrid_valid =
-      grid && grid->HasCachedPlacementData() &&
-      grid->CachedPlacementData().SubgridSpanSize(direction) != kNotFound;
+      container && container->HasCachedPlacementData() &&
+      container->CachedPlacementData().SubgridSpanSize(direction) != kNotFound;
   const bool is_subgrid = is_subgrid_specified && is_subgrid_valid;
 
   // Standalone grids with empty track lists should compute to `none`, but
@@ -2075,7 +2096,7 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
   // Interestingly, specifying `subgrid` on a non-grid *will* compute to
   // `subgrid` syntax.
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
-  if (is_subgrid || (is_subgrid_specified && !grid)) {
+  if (is_subgrid || (is_subgrid_specified && !container)) {
     list->Append(
         *MakeGarbageCollected<CSSIdentifierValue>(CSSValueID::kSubgrid));
   } else if (!is_subgrid_specified && is_track_list_empty) {
@@ -2086,10 +2107,8 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
       computed_grid_track_list.GetAutoRepeatInsertionPoint();
   const GridTrackList& track_list = computed_grid_track_list.GetTrackList();
 
-  // Treat repeat(auto-fill, auto) as none in Grid.
-  //
-  // TODO(almaher): Change this depending on if we allow this syntax in Grid.
-  if (!is_masonry && track_list.HasAutoSizedRepeater()) {
+  // Treat repeat(auto-fill, <intrinsic-track-size>) as none in Grid.
+  if (!is_masonry && track_list.HasIntrinsicSizedRepeater()) {
     return CSSIdentifierValue::Create(CSSValueID::kNone);
   }
 
@@ -2103,10 +2122,7 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
   // Default to the used value if it's a layout grid, unless
   // `force_computed_value` is set (which is used for `grid-template`). Non
   // layout-grids will always report the computed value.
-  //
-  // TODO(almaher): Consider if we should force repeat(auto-fill, auto) to the
-  // computed value instead of used value.
-  if (grid && !force_computed_value) {
+  if (container && !force_computed_value) {
     // The number of auto repeat tracks. For 'repeat(auto-fill, [x][y])' this
     // will be 2, regardless of what auto-fill computes to. For subgrids, use
     // the number of grid line names specified on the track definition. For
@@ -2117,15 +2133,15 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
 
     // Standalone grids will report the track sizes in the computed style
     // string, so base the start and end indices on it.
-    auto track_sizes = grid->TrackSizesForComputedStyle(direction);
+    auto track_sizes = container->TrackSizesForComputedStyle(direction);
     wtf_size_t start_index = 0;
     wtf_size_t end_index = track_sizes.size();
     if (is_subgrid) {
       // For subgrids, track sizes are not supported. Instead, calculate the end
       // index by subtracting the grid end from its start.
-      start_index = grid->ExplicitGridStartForDirection(direction);
-      end_index = grid->ExplicitGridEndForDirection(direction) -
-                  grid->ExplicitGridStartForDirection(direction) + 1;
+      start_index = container->ExplicitGridStartForDirection(direction);
+      end_index = container->ExplicitGridEndForDirection(direction) -
+                  container->ExplicitGridStartForDirection(direction) + 1;
     }
     // If the element is a grid container, the resolved value is the used value,
     // specifying track sizes in pixels (if it's a standalone grid), and
@@ -2134,14 +2150,14 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
         computed_grid_track_list.GetOrderedNamedGridLines(),
         computed_grid_track_list.GetOrderedAutoRepeatNamedGridLines(),
         auto_repeat_insertion_point,
-        grid->AutoRepeatCountForDirection(direction),
+        container->AutoRepeatCountForDirection(direction),
         auto_repeat_track_list_length, is_subgrid);
     // Named grid line indices are relative to the explicit grid, but we are
     // including all tracks. So we need to subtract the number of leading
     // implicit tracks in order to get the proper line index. This is ignored
     // for subgrids because they only have explicit tracks.
     int offset = -base::checked_cast<int>(
-        grid->ExplicitGridStartForDirection(direction));
+        container->ExplicitGridStartForDirection(direction));
 
     // If `subgrid` is specified in `grid-template-rows/columns`, but the
     // element is not a valid subgrid, computed style should behave as if it's a
@@ -2149,7 +2165,7 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
     // invalid subgrid rows/column definitions. See
     // https://github.com/w3c/csswg-drafts/issues/9015.
     const bool discard_line_names =
-        grid && is_subgrid_specified && !is_subgrid_valid;
+        container && is_subgrid_specified && !is_subgrid_valid;
     PopulateGridTrackListUsedValues(list, collector, track_sizes, style,
                                     start_index, end_index, offset,
                                     discard_line_names);
@@ -2159,9 +2175,22 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
   OrderedNamedLinesCollector collector(
       computed_grid_track_list.GetOrderedNamedGridLines(),
       computed_grid_track_list.GetOrderedAutoRepeatNamedGridLines(),
-      is_subgrid_specified, !!grid);
+      is_subgrid_specified, !!container);
   PopulateGridTrackListComputedValues(list, collector, track_list, style);
   return list;
+}
+
+CSSValue* ComputedStyleUtils::ValueForGridTrackList(
+    GridTrackSizingDirection direction,
+    const LayoutObject* layout_object,
+    const ComputedStyle& style,
+    bool force_computed_value) {
+  if (style.IsDisplayMasonryBox()) {
+    return ValueForGridTrackList<LayoutMasonry>(direction, layout_object, style,
+                                                force_computed_value);
+  }
+  return ValueForGridTrackList<LayoutGrid>(direction, layout_object, style,
+                                           force_computed_value);
 }
 
 CSSValue* ComputedStyleUtils::ValueForGridPosition(
@@ -2319,21 +2348,11 @@ CSSValue* ComputedStyleUtils::ValueForTextOverflow(
 CSSValue* ComputedStyleUtils::TouchActionFlagsToCSSValue(
     TouchAction touch_action) {
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
-  // Until handwriting is a web exposed feature, the combination of
-  // non-handwriting bits should result in values of auto / manipulation in the
-  // exposed CSS value.
-  // TODO(crbug.com/382525574): Launch or clean up kHandwriting.
-  const static auto kHandwritingTouchAction =
-      TouchAction::kInternalHandwriting |
-      TouchAction::kInternalHandwritingPanningRules;
-  touch_action &= ~kHandwritingTouchAction;
-
-  if (touch_action == (TouchAction::kAuto & ~kHandwritingTouchAction)) {
+  if (touch_action == TouchAction::kAuto) {
     list->Append(*CSSIdentifierValue::Create(CSSValueID::kAuto));
   } else if (touch_action == TouchAction::kNone) {
     list->Append(*CSSIdentifierValue::Create(CSSValueID::kNone));
-  } else if (touch_action ==
-             (TouchAction::kManipulation & ~kHandwritingTouchAction)) {
+  } else if (touch_action == TouchAction::kManipulation) {
     list->Append(*CSSIdentifierValue::Create(CSSValueID::kManipulation));
   } else {
     if ((touch_action & TouchAction::kPanX) == TouchAction::kPanX) {
@@ -2820,9 +2839,9 @@ CSSValue* ComputedStyleUtils::ValueForTimelineTriggerTimelineList(
     const ComputedStyle& style) {
   return CreateAnimationValueList(
       animation_data
-          ? animation_data->TimelineTriggerTimelineList()
+          ? animation_data->TimelineTriggerSourceList()
           : Vector<StyleTimeline>{CSSAnimationData::
-                                      InitialTimelineTriggerTimeline()},
+                                      InitialTimelineTriggerSource()},
       &ValueForAnimationTimeline, style);
 }
 
@@ -4643,97 +4662,148 @@ CSSValue* ComputedStyleUtils::ValueForScrollStart(const ComputedStyle& style,
 
 namespace {
 
-CSSIdentifierValue* PositionAreaSpanToCSSIdentifierValue(
-    PositionAreaRegion span_start,
-    PositionAreaRegion span_end) {
+CSSValueID PositionAreaSpanToCSSValueID(PositionAreaRegion span_start,
+                                        PositionAreaRegion span_end) {
   if (span_start == span_end) {
-    return CSSIdentifierValue::Create(span_start);
+    return PlatformEnumToCSSValueID(span_start);
   }
   CHECK(span_start == PositionAreaRegion::kCenter ||
         span_end == PositionAreaRegion::kCenter);
   PositionAreaRegion span_towards =
       span_start == PositionAreaRegion::kCenter ? span_end : span_start;
-  CSSValueID value_id = CSSValueID::kSpanAll;
   switch (span_towards) {
     case PositionAreaRegion::kLeft:
-      value_id = CSSValueID::kSpanLeft;
-      break;
+      return CSSValueID::kSpanLeft;
     case PositionAreaRegion::kRight:
-      value_id = CSSValueID::kSpanRight;
-      break;
+      return CSSValueID::kSpanRight;
     case PositionAreaRegion::kXStart:
-      value_id = CSSValueID::kSpanXStart;
-      break;
+      return CSSValueID::kSpanXStart;
     case PositionAreaRegion::kXEnd:
-      value_id = CSSValueID::kSpanXEnd;
-      break;
+      return CSSValueID::kSpanXEnd;
     case PositionAreaRegion::kXSelfStart:
-      value_id = CSSValueID::kSpanXSelfStart;
-      break;
+      return CSSValueID::kSpanXSelfStart;
     case PositionAreaRegion::kXSelfEnd:
-      value_id = CSSValueID::kSpanXSelfEnd;
-      break;
+      return CSSValueID::kSpanXSelfEnd;
     case PositionAreaRegion::kTop:
-      value_id = CSSValueID::kSpanTop;
-      break;
+      return CSSValueID::kSpanTop;
     case PositionAreaRegion::kBottom:
-      value_id = CSSValueID::kSpanBottom;
-      break;
+      return CSSValueID::kSpanBottom;
     case PositionAreaRegion::kYStart:
-      value_id = CSSValueID::kSpanYStart;
-      break;
+      return CSSValueID::kSpanYStart;
     case PositionAreaRegion::kYEnd:
-      value_id = CSSValueID::kSpanYEnd;
-      break;
+      return CSSValueID::kSpanYEnd;
     case PositionAreaRegion::kYSelfStart:
-      value_id = CSSValueID::kSpanYSelfStart;
-      break;
+      return CSSValueID::kSpanYSelfStart;
     case PositionAreaRegion::kYSelfEnd:
-      value_id = CSSValueID::kSpanYSelfEnd;
-      break;
+      return CSSValueID::kSpanYSelfEnd;
     case PositionAreaRegion::kBlockStart:
-      value_id = CSSValueID::kSpanBlockStart;
-      break;
+      return CSSValueID::kSpanBlockStart;
     case PositionAreaRegion::kBlockEnd:
-      value_id = CSSValueID::kSpanBlockEnd;
-      break;
+      return CSSValueID::kSpanBlockEnd;
     case PositionAreaRegion::kSelfBlockStart:
-      value_id = CSSValueID::kSpanSelfBlockStart;
-      break;
+      return CSSValueID::kSpanSelfBlockStart;
     case PositionAreaRegion::kSelfBlockEnd:
-      value_id = CSSValueID::kSpanSelfBlockEnd;
-      break;
+      return CSSValueID::kSpanSelfBlockEnd;
     case PositionAreaRegion::kInlineStart:
-      value_id = CSSValueID::kSpanInlineStart;
-      break;
+      return CSSValueID::kSpanInlineStart;
     case PositionAreaRegion::kInlineEnd:
-      value_id = CSSValueID::kSpanInlineEnd;
-      break;
+      return CSSValueID::kSpanInlineEnd;
     case PositionAreaRegion::kSelfInlineStart:
-      value_id = CSSValueID::kSpanSelfInlineStart;
-      break;
+      return CSSValueID::kSpanSelfInlineStart;
     case PositionAreaRegion::kSelfInlineEnd:
-      value_id = CSSValueID::kSpanSelfInlineEnd;
-      break;
+      return CSSValueID::kSpanSelfInlineEnd;
     case PositionAreaRegion::kStart:
-      value_id = CSSValueID::kSpanStart;
-      break;
+      return CSSValueID::kSpanStart;
     case PositionAreaRegion::kEnd:
-      value_id = CSSValueID::kSpanEnd;
-      break;
+      return CSSValueID::kSpanEnd;
     case PositionAreaRegion::kSelfStart:
-      value_id = CSSValueID::kSpanSelfStart;
-      break;
+      return CSSValueID::kSpanSelfStart;
     case PositionAreaRegion::kSelfEnd:
-      value_id = CSSValueID::kSpanSelfEnd;
-      break;
+      return CSSValueID::kSpanSelfEnd;
     case PositionAreaRegion::kNone:
     case PositionAreaRegion::kAll:
     case PositionAreaRegion::kCenter:
+    case PositionAreaRegion::kAny:
       // Should have been handled above
       NOTREACHED();
   }
-  return CSSIdentifierValue::Create(value_id);
+}
+
+CSSValueID SimplifyPositionAreaValueID(CSSValueID value) {
+  switch (value) {
+    case CSSValueID::kBlockStart:
+    case CSSValueID::kInlineStart:
+      return CSSValueID::kStart;
+    case CSSValueID::kBlockEnd:
+    case CSSValueID::kInlineEnd:
+      return CSSValueID::kEnd;
+    case CSSValueID::kSpanBlockStart:
+    case CSSValueID::kSpanInlineStart:
+      return CSSValueID::kSpanStart;
+    case CSSValueID::kSpanBlockEnd:
+    case CSSValueID::kSpanInlineEnd:
+      return CSSValueID::kSpanEnd;
+    case CSSValueID::kSelfBlockStart:
+    case CSSValueID::kSelfInlineStart:
+      return CSSValueID::kSelfStart;
+    case CSSValueID::kSelfBlockEnd:
+    case CSSValueID::kSelfInlineEnd:
+      return CSSValueID::kSelfEnd;
+    case CSSValueID::kSpanSelfBlockStart:
+    case CSSValueID::kSpanSelfInlineStart:
+      return CSSValueID::kSpanSelfStart;
+    case CSSValueID::kSpanSelfBlockEnd:
+    case CSSValueID::kSpanSelfInlineEnd:
+      return CSSValueID::kSpanSelfEnd;
+    default:
+      return value;
+  }
+}
+
+CSSValueID ToUnambiguousBlock(CSSValueID value) {
+  switch (value) {
+    case CSSValueID::kStart:
+      return CSSValueID::kBlockStart;
+    case CSSValueID::kEnd:
+      return CSSValueID::kBlockEnd;
+    case CSSValueID::kSpanStart:
+      return CSSValueID::kSpanBlockStart;
+    case CSSValueID::kSpanEnd:
+      return CSSValueID::kSpanBlockEnd;
+    case CSSValueID::kSelfStart:
+      return CSSValueID::kSelfBlockStart;
+    case CSSValueID::kSelfEnd:
+      return CSSValueID::kSelfBlockEnd;
+    case CSSValueID::kSpanSelfStart:
+      return CSSValueID::kSpanSelfBlockStart;
+    case CSSValueID::kSpanSelfEnd:
+      return CSSValueID::kSpanSelfBlockEnd;
+    default:
+      return value;
+  }
+}
+
+CSSValueID ToUnambiguousInline(CSSValueID value) {
+  switch (value) {
+    case CSSValueID::kStart:
+      return CSSValueID::kInlineStart;
+    case CSSValueID::kEnd:
+      return CSSValueID::kInlineEnd;
+    case CSSValueID::kSpanStart:
+      return CSSValueID::kSpanInlineStart;
+    case CSSValueID::kSpanEnd:
+      return CSSValueID::kSpanInlineEnd;
+    case CSSValueID::kSelfStart:
+      return CSSValueID::kSelfInlineStart;
+    case CSSValueID::kSelfEnd:
+      return CSSValueID::kSelfInlineEnd;
+    case CSSValueID::kSpanSelfStart:
+      return CSSValueID::kSpanSelfInlineStart;
+    case CSSValueID::kSpanSelfEnd:
+      return CSSValueID::kSpanSelfInlineEnd;
+    default:
+      return value;
+  }
 }
 
 }  // namespace
@@ -4743,22 +4813,47 @@ CSSValue* ComputedStyleUtils::ValueForPositionArea(
   if (area.FirstStart() == PositionAreaRegion::kNone) {
     return CSSIdentifierValue::Create(CSSValueID::kNone);
   }
-  CSSIdentifierValue* first_value =
-      PositionAreaSpanToCSSIdentifierValue(area.FirstStart(), area.FirstEnd());
-  CSSIdentifierValue* second_value = PositionAreaSpanToCSSIdentifierValue(
-      area.SecondStart(), area.SecondEnd());
+  CSSValueID first_keyword =
+      PositionAreaSpanToCSSValueID(area.FirstStart(), area.FirstEnd());
+  CSSValueID second_keyword =
+      PositionAreaSpanToCSSValueID(area.SecondStart(), area.SecondEnd());
 
-  CSSValueID second_default = CSSValueID::kSpanAll;
-  CSSValueID first_value_id = first_value->GetValueID();
-
-  if (css_parsing_utils::IsRepeatedPositionAreaValue(first_value_id)) {
-    second_default = first_value_id;
+  if (css_parsing_utils::IsRepeatedPositionAreaValue(first_keyword) ||
+      css_parsing_utils::IsRepeatedPositionAreaValue(second_keyword)) {
+    if (first_keyword == second_keyword) {
+      return CSSIdentifierValue::Create(first_keyword);
+    }
+    if (first_keyword == CSSValueID::kSpanAll ||
+        second_keyword == CSSValueID::kSpanAll) {
+      // An ambiguous keyword in combination with span-all may be serialized as
+      // a single keyword by making it an unambiguous one.
+      // E.g. "end span-all" -> "block-end".
+      first_keyword = ToUnambiguousBlock(first_keyword);
+      second_keyword = ToUnambiguousInline(second_keyword);
+    }
   }
-  if (second_value->GetValueID() == second_default) {
-    return first_value;
+  // An unambiguous keyword can be serialized to a single keyword if the other
+  // keyword is span-all.
+  if (second_keyword == CSSValueID::kSpanAll &&
+      !css_parsing_utils::IsRepeatedPositionAreaValue(first_keyword)) {
+    return CSSIdentifierValue::Create(first_keyword);
   }
-  return MakeGarbageCollected<CSSValuePair>(first_value, second_value,
-                                            CSSValuePair::kDropIdenticalValues);
+  if (first_keyword == CSSValueID::kSpanAll &&
+      !css_parsing_utils::IsRepeatedPositionAreaValue(second_keyword)) {
+    return CSSIdentifierValue::Create(second_keyword);
+  }
+  if (first_keyword != CSSValueID::kSpanAll &&
+      second_keyword != CSSValueID::kSpanAll) {
+    // Both keywords need to be serialized. Simplify to shorter ambiguous
+    // variants if possible.
+    // E.g. "self-block-start center" -> "self-start center".
+    first_keyword = SimplifyPositionAreaValueID(first_keyword);
+    second_keyword = SimplifyPositionAreaValueID(second_keyword);
+  }
+  return MakeGarbageCollected<CSSValuePair>(
+      CSSIdentifierValue::Create(first_keyword),
+      CSSIdentifierValue::Create(second_keyword),
+      CSSValuePair::kDropIdenticalValues);
 }
 
 std::unique_ptr<CrossThreadStyleValue>

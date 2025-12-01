@@ -23,7 +23,9 @@
 #include "content/public/common/content_features.h"
 #include "skia/ext/skia_utils_base.h"
 #include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/android/accessibility_state.h"
 #include "ui/accessibility/ax_assistant_structure.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -149,7 +151,8 @@ void PopulateStyleData(const content::BrowserAccessibilityAndroid& node,
     AXStyleData::AddRange(style_data->links, node.GetTargetUrl(), start, end);
   }
 
-  if (node.GetRole() == ax::mojom::Role::kStaticText) {
+  if (node.GetRole() == ax::mojom::Role::kStaticText ||
+      node.IsAtomicTextField()) {
     if (node.HasFloatAttribute(ax::mojom::FloatAttribute::kFontSize)) {
       // Zero font size is valid in CSS, which makes the text invisible.
       if (float size = node.GetTextSize(); size >= 0) {
@@ -368,10 +371,22 @@ bool BrowserAccessibilityAndroid::IsEnabled() const {
     case ax::mojom::Restriction::kNone:
       return true;
     case ax::mojom::Restriction::kReadOnly:
+      // Mark applicable types as editable, not disabled.
+      return ShouldExposeEditableValue();
     case ax::mojom::Restriction::kDisabled:
-      // On Android, both Disabled and ReadOnly are treated the same.
-      // For both of them, we set AccessibilityNodeInfo.IsEnabled to false
-      // and we don't expose certain actions like SET_VALUE and PASTE.
+      return false;
+  }
+
+  NOTREACHED();
+}
+
+bool BrowserAccessibilityAndroid::IsEditable() const {
+  switch (GetData().GetRestriction()) {
+    case ax::mojom::Restriction::kNone:
+      // Mark applicable types as editable.
+      return ShouldExposeEditableValue();
+    case ax::mojom::Restriction::kReadOnly:
+    case ax::mojom::Restriction::kDisabled:
       return false;
   }
 
@@ -501,15 +516,21 @@ bool BrowserAccessibilityAndroid::IsInterestingOnAndroid() const {
   // children of a link as not interesting to prevent double utterances.
   const BrowserAccessibility* parent = PlatformGetParent();
 
-  // Should not read options in a multiselect combobox as it is invisible.
-  // Adding IsFocusable() to handle an edge case in crbug.com/395134019 to allow
-  // select options in aria list box. This is also able to handle edge case in
-  // crbug.com/358195473 to not allow TalkBack to read out collapsed
-  // multi-selectable options.
-  if (parent && parent->GetRole() == ax::mojom::Role::kListBox &&
-      parent->HasState(ax::mojom::State::kMultiselectable) &&
-      GetRole() == ax::mojom::Role::kListBoxOption && IsFocusable()) {
-    return false;
+  // When SelectMobileDesktopParity is enabled, ListBox selects are supported on
+  // android in addition to combobox/MenuList selects, in which case ListBox
+  // options should be interesting or else they can't be selected or toggled.
+  if (!base::FeatureList::IsEnabled(
+          blink::features::kSelectMobileDesktopParity)) {
+    // Should not read options in a multiselect combobox as it is invisible.
+    // Adding IsFocusable() to handle an edge case in crbug.com/395134019 to
+    // allow select options in aria list box. This is also able to handle edge
+    // case in crbug.com/358195473 to not allow TalkBack to read out collapsed
+    // multi-selectable options.
+    if (parent && parent->GetRole() == ax::mojom::Role::kListBox &&
+        parent->HasState(ax::mojom::State::kMultiselectable) &&
+        GetRole() == ax::mojom::Role::kListBoxOption && IsFocusable()) {
+      return false;
+    }
   }
 
   // Allows users to select options in a listbox with touch interaction.
@@ -921,10 +942,8 @@ void BrowserAccessibilityAndroid::AccumulateSubstringTextContentUTF16(
     return;
   }
 
-  // In the case of accessible name from kAttribute, the aria-label will be
-  // mapped to one of the container title, content description or supplemental
-  // description, we should exclude aria-label from mapping to text.
-  if (!IsAccessibleNameFromAttribute() && !is_non_atomic_text_field) {
+  if (ComputeAndroidNameTo() == AndroidNameTo::kText &&
+      !is_non_atomic_text_field) {
     text = GetNameAsString16();
   }
   if (ui::IsRangeValueSupported(GetRole())) {
@@ -1059,13 +1078,9 @@ std::u16string BrowserAccessibilityAndroid::GetHint() const {
 
   // If we're returning the value as the main text, the name needs to be
   // part of the hint.
-  if (ShouldExposeValueAsName(GetValueForControl())) {
-    // In the case of accessible name from kAttribute, the name will be
-    // mapped to one of the container title, content description or supplemental
-    // description, we should exclude name from mapping to hint.
-    std::u16string name =
-        IsAccessibleNameFromAttribute() ? u"" : GetNameAsString16();
-    if (!name.empty()) {
+  if (ShouldExposeValueAsName(GetValueForControl()) &&
+      ComputeAndroidNameTo() == AndroidNameTo::kText) {
+    if (std::u16string name = GetNameAsString16(); !name.empty()) {
       strings.push_back(name);
     }
   }
@@ -1152,51 +1167,52 @@ std::u16string BrowserAccessibilityAndroid::GetStateDescription() const {
 }
 
 std::u16string BrowserAccessibilityAndroid::GetContainerTitle() const {
-  // Accessible name from kAttribute, is Android container role.
-  if (IsAccessibleNameFromAttribute() && ui::IsContainerOnAndroid(GetRole())) {
+  if (ComputeAndroidNameTo() == AndroidNameTo::kContainerTitle) {
     return GetNameAsString16();
   }
   return u"";
 }
 
 std::u16string BrowserAccessibilityAndroid::GetContentDescription() const {
-  // Accessible name from kAttribute, is not Android container role, supports
-  // naming from child content.
-  if (IsAccessibleNameFromAttribute() && !ui::IsContainerOnAndroid(GetRole()) &&
-      ui::SupportsNamingWithChildContent(GetRole())) {
+  if (ComputeAndroidNameTo() == AndroidNameTo::kContentDescription) {
     return GetNameAsString16();
   }
   return u"";
 }
 
 std::u16string BrowserAccessibilityAndroid::GetSupplementalDescription() const {
-  // Accessible name from kAttribute, is not Android container role, does not
-  // support naming from child content.
-  if (IsAccessibleNameFromAttribute() && !ui::IsContainerOnAndroid(GetRole()) &&
-      !ui::SupportsNamingWithChildContent(GetRole())) {
+  if (ComputeAndroidNameTo() == AndroidNameTo::kSupplementalDescription) {
     return GetNameAsString16();
   }
   return u"";
 }
 
-bool BrowserAccessibilityAndroid::IsAccessibleNameFromAttribute() const {
-  return base::FeatureList::IsEnabled(
-             features::kAccessibilityPopulateSupplementalDescriptionApi) &&
-         HasIntAttribute(ax::mojom::IntAttribute::kNameFrom) &&
-         GetNameFrom() == ax::mojom::NameFrom::kAttribute;
-}
-
 std::u16string BrowserAccessibilityAndroid::GetAccessibleNameUTF16() const {
+  // 1. The primary source for an accessible name is the direct text content.
+  // If it's available, we use it immediately.
   std::u16string name = GetTextContentUTF16();
-  if (name.empty()) {
-    name = GetContainerTitle();
+  if (!name.empty()) {
+    return name;
   }
+
+  // 2. If text content is empty, check if the name is *supposed* to map to the
+  // text property anyway. If so, it means the accessible name is intentionally
+  // empty, and we should not check any fallback sources.
+  if (ComputeAndroidNameTo() == AndroidNameTo::kText) {
+    return {};  // Return an empty string.
+  }
+
+  // 3. If the name doesn't map to the text property (e.g., it comes from an
+  //    attribute like `aria-label`), we check a chain of fallback sources in
+  //    order of priority.
+  name = GetContainerTitle();
   if (name.empty()) {
     name = GetContentDescription();
   }
   if (name.empty()) {
     name = GetSupplementalDescription();
   }
+
   return name;
 }
 
@@ -2420,6 +2436,7 @@ void BrowserAccessibilityAndroid::OnDataChanged() {
   auto* manager =
       static_cast<BrowserAccessibilityManagerAndroid*>(this->manager());
   manager->ClearNodeInfoCacheForGivenId(GetUniqueId());
+  name_to_cache_.reset();
 
   if (BrowserAccessibilityAndroid* parent =
           static_cast<BrowserAccessibilityAndroid*>(PlatformGetParent())) {
@@ -2507,6 +2524,75 @@ std::u16string BrowserAccessibilityAndroid::GetContentInvalidErrorMessage()
   return base::JoinString(error_messages, u" ");
 }
 
+BrowserAccessibilityAndroid::AndroidNameTo
+BrowserAccessibilityAndroid::ComputeAndroidNameTo() const {
+  if (name_to_cache_.has_value()) {
+    return name_to_cache_.value();
+  }
+
+  switch (GetNameFrom()) {
+    case ax::mojom::NameFrom::kAttribute:
+      // A non-visible name from an attribute must *not* be mapped to the
+      // visible text property.
+
+      if (ui::IsContainerOnAndroid(GetRole())) {
+        name_to_cache_ = AndroidNameTo::kContainerTitle;
+      } else if (ui::IsImage(GetRole())) {
+        // An image's alt text is its contentDescription.
+        name_to_cache_ = AndroidNameTo::kContentDescription;
+      } else if (ui::SupportsNamingWithChildContent(GetRole())) {
+        // TODO(crbug.com/438478760): Revisit kNameFromAttribute mapping to
+        // contentDescription logic.
+        name_to_cache_ = AndroidNameTo::kContentDescription;
+      } else if (base::FeatureList::IsEnabled(
+                     features::
+                         kAccessibilityPopulateSupplementalDescriptionApi)) {
+        name_to_cache_ = AndroidNameTo::kSupplementalDescription;
+      } else {
+        // TODO(accessibility): remove this path once we roll out supplemental
+        // descriptions.
+        name_to_cache_ = AndroidNameTo::kText;
+      }
+      break;
+    case ax::mojom::NameFrom::kRelatedElement:
+      // TODO(crbug.com/447426033): Map all kRelatedElement accessible names for
+      // android.
+      if (::features::IsAccessibilityLabeledByEnabled() &&
+          GetData().HasIntListAttribute(
+              ax::mojom::IntListAttribute::kLabelledbyIds)) {
+        name_to_cache_ = AndroidNameTo::kLabeledBy;
+      } else {
+        name_to_cache_ = AndroidNameTo::kText;
+      }
+      break;
+    case ax::mojom::NameFrom::kCssAltText:
+    case ax::mojom::NameFrom::kPopoverTarget:
+    case ax::mojom::NameFrom::kInterestFor:
+      name_to_cache_ = AndroidNameTo::kContentDescription;
+      break;
+    case ax::mojom::NameFrom::kNone:
+    case ax::mojom::NameFrom::kAttributeExplicitlyEmpty:
+    case ax::mojom::NameFrom::kCaption:
+    case ax::mojom::NameFrom::kContents:
+    case ax::mojom::NameFrom::kPlaceholder:
+    case ax::mojom::NameFrom::kProhibited:
+    case ax::mojom::NameFrom::kProhibitedAndRedundant:
+    case ax::mojom::NameFrom::kTitle:
+    case ax::mojom::NameFrom::kValue:
+      // If the accessible name comes from the node's content (e.g., inner
+      // text)
+      //    and not a specific attribute (like aria-label), it's considered
+      //    part of the main text.
+      // TODO(accessibility): Revisit the logic of mapping attributes to text.
+      // For example, relatedElement's name may not be appropriate for the text
+      // property and needs to be fixed. For now, let them fall through the
+      // default case and return to map to the text property.
+      name_to_cache_ = AndroidNameTo::kText;
+      break;
+  }
+  return name_to_cache_.value();
+}
+
 std::u16string
 BrowserAccessibilityAndroid::GenerateAccessibilityNodeInfoString() const {
   auto* manager =
@@ -2515,11 +2601,32 @@ BrowserAccessibilityAndroid::GenerateAccessibilityNodeInfoString() const {
 }
 
 int BrowserAccessibilityAndroid::GetPaintOrder() const {
-  if (HasIntAttribute(ax::mojom::IntAttribute::kPaintOrder)) {
-    return GetData().GetPaintOrder();
-  } else {
-    return 0;
+  return GetIntAttribute(ax::mojom::IntAttribute::kPaintOrder);
+}
+
+const std::vector<int> BrowserAccessibilityAndroid::GetLabelledByAndroidIds()
+    const {
+  if (!::features::IsAccessibilityLabeledByEnabled()) {
+    return std::vector<int>();
   }
+  const std::vector<int32_t>& ids = GetData().GetIntListAttribute(
+      ax::mojom::IntListAttribute::kLabelledbyIds);
+  std::vector<int32_t> android_ids;
+  android_ids.reserve(ids.size());
+  for (const auto& id : ids) {
+    // Convert AX ID to Android ID.
+    ui::BrowserAccessibility* node = this->manager()->GetFromID(id);
+    CHECK(node);
+    android_ids.push_back(
+        static_cast<BrowserAccessibilityAndroid*>(node)->GetUniqueId());
+  }
+  return android_ids;
+}
+
+bool BrowserAccessibilityAndroid::ShouldExposeEditableValue() const {
+  // For now, only expose editable value for text field since talkback
+  // only uses the editable value for `EditText`.
+  return IsTextField();
 }
 
 }  // namespace content

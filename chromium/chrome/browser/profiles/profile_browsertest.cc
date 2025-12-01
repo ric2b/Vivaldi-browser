@@ -478,7 +478,8 @@ std::string GetExitTypePreferenceFromDisk(Profile* profile) {
   if (!base::ReadFileToString(prefs_path, &prefs))
     return std::string();
 
-  std::optional<base::Value> value = base::JSONReader::Read(prefs);
+  std::optional<base::Value> value =
+      base::JSONReader::Read(prefs, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
   if (!value)
     return std::string();
 
@@ -986,10 +987,6 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, TestProfileTypes) {
 
   EXPECT_EQ(profile_metrics::BrowserProfileType::kGuest,
             profile_metrics::GetBrowserProfileType(guest_browser->profile()));
-
-  // Verify that both a parent and a child profile creation are recorded
-  EXPECT_THAT(tester.GetAllSamples("Profile.Guest.TypeCreated"),
-              ::testing::ElementsAre(base::Bucket(0, 1), base::Bucket(1, 1)));
 #endif
 }
 

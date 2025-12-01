@@ -117,17 +117,9 @@ void VivaldiReaderModeJavaScriptFeature::CheckReaderModeAvailability(
     return;
   }
 
-  // Get all frames
-  auto frames = web_state->GetPageWorldWebFramesManager()->GetAllWebFrames();
-  if (frames.empty()) {
-    if (observer_) {
-      observer_->OnReaderModeAvailabilityResult(web_state, false);
-    }
-    return;
-  }
-
-  // Get the main frame (first frame in the set)
-  web::WebFrame* mainFrame = *frames.begin();
+  // Target the main frame to ensure message arrives from main frame.
+  web::WebFrame* mainFrame =
+      web_state->GetPageWorldWebFramesManager()->GetMainWebFrame();
   if (!mainFrame) {
     if (observer_) {
       observer_->OnReaderModeAvailabilityResult(web_state, false);
@@ -150,17 +142,9 @@ void VivaldiReaderModeJavaScriptFeature::CheckReaderModeEnabledState(
     return;
   }
 
-  // Get all frames
-  auto frames = web_state->GetPageWorldWebFramesManager()->GetAllWebFrames();
-  if (frames.empty()) {
-    if (observer_) {
-      observer_->OnReaderModeEnabledStateResult(web_state, false);
-    }
-    return;
-  }
-
-  // Get the main frame (first frame in the set)
-  web::WebFrame* mainFrame = *frames.begin();
+  // Target the main frame to ensure message arrives from main frame.
+  web::WebFrame* mainFrame =
+      web_state->GetPageWorldWebFramesManager()->GetMainWebFrame();
   if (!mainFrame) {
     if (observer_) {
       observer_->OnReaderModeEnabledStateResult(web_state, false);

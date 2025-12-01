@@ -1,10 +1,6 @@
 [submodule "third_party/clang-format/script"]
 	path = third_party/clang-format/script
 	url = ../../external/github.com/llvm/llvm-project/clang/tools/clang-format.git
-[submodule "chrome/installer/mac/third_party/xz/xz"]
-	path = chrome/installer/mac/third_party/xz/xz
-	url = ../deps/xz.git
-	gclient-condition = checkout_mac
 [submodule "third_party/compiler-rt/src"]
 	path = third_party/compiler-rt/src
 	url = ../../external/github.com/llvm/llvm-project/compiler-rt.git
@@ -108,6 +104,9 @@
 [submodule "third_party/fast_float/src"]
 	path = third_party/fast_float/src
 	url = ../../external/github.com/fastfloat/fast_float.git
+[submodule "third_party/federated_compute/src"]
+	path = third_party/federated_compute/src
+	url = ../../external/github.com/google-parfait/federated-compute.git
 [submodule "third_party/ffmpeg"]
 	path = third_party/ffmpeg
 	url = ../third_party/ffmpeg.git
@@ -385,3 +384,9 @@
 [submodule "v8"]
 	path = v8
 	url = ../../v8/v8.git
+[submodule "third_party/microsoft_webauthn/src"]
+	path = third_party/microsoft_webauthn/src
+	url = ../../external/github.com/microsoft/webauthn.git
+[submodule "third_party/libpfm4/src"]
+	path = third_party/libpfm4/src
+	url = ../../external/git.code.sf.net/p/perfmon2/libpfm4.git

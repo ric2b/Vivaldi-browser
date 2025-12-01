@@ -8,34 +8,16 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <variant>
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
+#include "absl/base/nullability.h"
 #include "quiche/quic/core/quic_time.h"
+#include "quiche/quic/moqt/moqt_fetch_task.h"
 #include "quiche/quic/moqt/moqt_messages.h"
+#include "quiche/quic/moqt/moqt_object.h"
 #include "quiche/quic/moqt/moqt_priority.h"
-#include "quiche/common/quiche_callbacks.h"
-#include "quiche/common/quiche_mem_slice.h"
 #include "quiche/web_transport/web_transport.h"
 
 namespace moqt {
-
-struct PublishedObjectMetadata {
-  Location location;
-  uint64_t subgroup;  // Equal to object_id for datagrams.
-  MoqtObjectStatus status;
-  MoqtPriority publisher_priority;
-  quic::QuicTime arrival_time = quic::QuicTime::Zero();
-};
-
-// PublishedObject is a description of an object that is sufficient to publish
-// it on a given track.
-struct PublishedObject {
-  PublishedObjectMetadata metadata;
-  quiche::QuicheMemSlice payload;
-  bool fin_after_this = false;
-};
 
 // MoqtObjectListener is an interface for any entity that is listening for
 // incoming objects for a given track.
@@ -49,14 +31,13 @@ class MoqtObjectListener {
   virtual void OnSubscribeAccepted() = 0;
   // Called when the publisher is sure that it cannot serve the subscription.
   // This could happen synchronously or asynchronously.
-  virtual void OnSubscribeRejected(
-      MoqtSubscribeErrorReason reason,
-      std::optional<uint64_t> track_alias = std::nullopt) = 0;
+  virtual void OnSubscribeRejected(MoqtSubscribeErrorReason reason) = 0;
 
   // Notifies that a new object is available on the track.  The object payload
   // itself may be retrieved via GetCachedObject method of the associated track
   // publisher.
-  virtual void OnNewObjectAvailable(Location sequence, uint64_t subgroup) = 0;
+  virtual void OnNewObjectAvailable(Location sequence, uint64_t subgroup,
+                                    MoqtPriority publisher_priority) = 0;
   // Notifies that a pure FIN has arrived following |sequence|. Should not be
   // called unless all objects have already been delivered. If not delivered,
   // instead set the fin_after_this flag in the PublishedObject.
@@ -75,54 +56,6 @@ class MoqtObjectListener {
   // Notifies that the Publisher is being destroyed, so no more objects are
   // coming.
   virtual void OnTrackPublisherGone() = 0;
-};
-
-// A handle representing a fetch in progress.  The fetch in question can be
-// cancelled by deleting the object.
-class MoqtFetchTask {
- public:
-  using ObjectsAvailableCallback = quiche::MultiUseCallback<void()>;
-  // If the fields are not correct (e.g. end_of_track is less than start) it
-  // will result in QUICHE_BUG. The request_id field will be ignored.
-  using FetchResponseCallback = quiche::SingleUseCallback<void(
-      std::variant<MoqtFetchOk, MoqtFetchError>)>;
-
-  virtual ~MoqtFetchTask() = default;
-
-  // Potential results of a GetNextObject() call.
-  enum GetNextObjectResult {
-    // The next object is available, and is placed into the reference specified
-    // by the caller.
-    kSuccess,
-    // The next object is not yet available (equivalent of EAGAIN).
-    kPending,
-    // The end of fetch has been reached.
-    kEof,
-    // The fetch has failed; the error is available via GetStatus().
-    kError,
-  };
-
-  // Returns the next object received via the fetch, if available. MUST NOT
-  // return an object with status kObjectDoesNotExist.
-  virtual GetNextObjectResult GetNextObject(PublishedObject& output) = 0;
-
-  // Sets the callback that is called when GetNextObject() has previously
-  // returned kPending, but now a new object (or potentially an error or an
-  // end-of-fetch) is available. The application is responsible for calling
-  // GetNextObject() until it gets kPending; no further callback will occur
-  // until then.
-  // If an object is available immediately, the callback will be called
-  // immediately.
-  virtual void SetObjectAvailableCallback(
-      ObjectsAvailableCallback callback) = 0;
-  // One of these callbacks is called as soon as the data publisher has enough
-  // information for either FETCH_OK or FETCH_ERROR.
-  // If the appropriate response is already available, the callback will be
-  // called immediately.
-  virtual void SetFetchResponseCallback(FetchResponseCallback callback) = 0;
-
-  // Returns the error if fetch has completely failed, and OK otherwise.
-  virtual absl::Status GetStatus() = 0;
 };
 
 // MoqtTrackPublisher is an application-side API for an MoQT publisher
@@ -159,28 +92,44 @@ class MoqtTrackPublisher {
   virtual void AddObjectListener(MoqtObjectListener* listener) = 0;
   virtual void RemoveObjectListener(MoqtObjectListener* listener) = 0;
 
-  virtual absl::StatusOr<MoqtTrackStatusCode> GetTrackStatus() const = 0;
-
-  // Returns the largest (group, object) pair that has been published so far.
-  // This method may only be called if
-  // DoesTrackStatusImplyHavingData(GetTrackStatus()) is true.
-  virtual Location GetLargestLocation() const = 0;
-
-  // Returns the forwarding preference of the track.
-  // This method may only be called if
-  // DoesTrackStatusImplyHavingData(GetTrackStatus()) is true.
-  virtual MoqtForwardingPreference GetForwardingPreference() const = 0;
-
-  // Returns the current forwarding priority of the track.
-  virtual MoqtPriority GetPublisherPriority() const = 0;
-
-  // Returns the publisher-preferred delivery order for the track.
-  virtual MoqtDeliveryOrder GetDeliveryOrder() const = 0;
+  // Methods to return various track properties. Returns nullopt if the value is
+  // not yet available. Guaranteed to be non-null if an object is available
+  // and/or OnSubscribeAccepted() has been called.
+  // Track alias is not present because MoqtSession always uses locally
+  // generated values.
+  virtual std::optional<Location> largest_location() const = 0;
+  virtual std::optional<MoqtForwardingPreference> forwarding_preference()
+      const = 0;
+  virtual std::optional<MoqtDeliveryOrder> delivery_order() const = 0;
+  virtual std::optional<quic::QuicTimeDelta> expiration() const = 0;
 
   // Performs a fetch for the specified range of objects.
-  virtual std::unique_ptr<MoqtFetchTask> Fetch(
-      Location start, uint64_t end_group, std::optional<uint64_t> end_object,
-      MoqtDeliveryOrder order) = 0;
+  virtual std::unique_ptr<MoqtFetchTask> StandaloneFetch(
+      Location start, Location end, std::optional<MoqtDeliveryOrder> order) = 0;
+  virtual std::unique_ptr<MoqtFetchTask> RelativeFetch(
+      uint64_t group_diff, std::optional<MoqtDeliveryOrder> order) = 0;
+  virtual std::unique_ptr<MoqtFetchTask> AbsoluteFetch(
+      uint64_t group, std::optional<MoqtDeliveryOrder> order) = 0;
+};
+
+// MoqtSession delivers a NamespaceListener to a TrackPublisher to receive
+// notifications that sub-namespaces are available, and receive tracks that
+// are published within that namespace. This generally occurs when the session
+// receives a SUBSCRIBE_NAMESPACE message.
+class NamespaceListener {
+ public:
+  virtual ~NamespaceListener() = default;
+  // Called when a namespace is published. Will generally result in the
+  // receiving session sending a PUBLISH_NAMESPACE message.
+  virtual void OnNamespacePublished(const TrackNamespace& track_namespace) = 0;
+  // Called when a namespace is no longer available. Will generally result in
+  // the receiving session sending a PUBLISH_NAMESPACE_DONE message.
+  virtual void OnNamespaceDone(const TrackNamespace& track_namespace) = 0;
+  // Called when a track is published within the namespace. Will generally
+  // result in the receiving session sending a PUBLISH message. Track APIs are
+  // available in |publisher|.
+  virtual void OnTrackPublished(
+      std::shared_ptr<MoqtTrackPublisher> publisher) = 0;
 };
 
 // MoqtPublisher is an interface to a publisher that allows it to publish
@@ -189,8 +138,11 @@ class MoqtPublisher {
  public:
   virtual ~MoqtPublisher() = default;
 
-  virtual absl::StatusOr<std::shared_ptr<MoqtTrackPublisher>> GetTrack(
+  // These are all called by MoqtSession based on messages arriving on the wire.
+  virtual absl_nullable std::shared_ptr<MoqtTrackPublisher> GetTrack(
       const FullTrackName& track_name) = 0;
+  virtual void AddNamespaceListener(NamespaceListener* listener) = 0;
+  virtual void RemoveNamespaceListener(NamespaceListener* listener) = 0;
 };
 
 }  // namespace moqt

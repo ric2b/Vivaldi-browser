@@ -30,7 +30,6 @@
 #import "ios/chrome/browser/crash_report/model/crash_keys_helper.h"
 #import "ios/chrome/browser/default_promo/ui_bundled/default_promo_non_modal_presentation_delegate.h"
 #import "ios/chrome/browser/discover_feed/model/feed_constants.h"
-#import "ios/chrome/browser/find_in_page/model/util.h"
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_util.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_animator.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_reason.h"
@@ -47,6 +46,7 @@
 #import "ios/chrome/browser/main_content/ui_bundled/web_scroll_view_main_content_ui_forwarder.h"
 #import "ios/chrome/browser/metrics/model/tab_usage_recorder_browser_agent.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
+#import "ios/chrome/browser/ntp/ui_bundled/logo_animation_controller.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_coordinator.h"
 #import "ios/chrome/browser/omnibox/public/omnibox_ui_features.h"
 #import "ios/chrome/browser/popup_menu/ui_bundled/overflow_menu/feature_flags.h"
@@ -74,10 +74,12 @@
 #import "ios/chrome/browser/side_swipe/ui_bundled/side_swipe_ui_controller_delegate.h"
 #import "ios/chrome/browser/side_swipe/ui_bundled/swipe_view.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
+#import "ios/chrome/browser/snapshots/model/snapshot_browser_agent.h"
+#import "ios/chrome/browser/snapshots/model/snapshot_kind.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/coordinator/tab_strip_coordinator.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/swift_constants_for_objective_c.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_utils.h"
+#import "ios/chrome/browser/tab_switcher/tab_strip/coordinator/tab_strip_coordinator.h"
+#import "ios/chrome/browser/tab_switcher/tab_strip/ui/swift_constants_for_objective_c.h"
+#import "ios/chrome/browser/tab_switcher/tab_strip/ui/tab_strip_utils.h"
 #import "ios/chrome/browser/tabs/ui_bundled/background_tab_animation_view.h"
 #import "ios/chrome/browser/tabs/ui_bundled/foreground_tab_animation_view.h"
 #import "ios/chrome/browser/tabs/ui_bundled/switch_to_tab_animation_view.h"
@@ -89,6 +91,7 @@
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/browser/voice/ui_bundled/voice_search_notification_names.h"
+#import "ios/chrome/browser/web/model/page_placeholder_browser_agent.h"
 #import "ios/chrome/browser/web/model/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/web/model/web_navigation_util.h"
 #import "ios/chrome/browser/web_state_list/model/web_usage_enabler/web_usage_enabler_browser_agent.h"
@@ -111,6 +114,7 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "base/strings/utf_string_conversions.h"
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
@@ -125,6 +129,7 @@
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
 #import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_constants.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/secondary_toolbar_view.h"
 #import "ios/chrome/browser/ui/whats_new/vivaldi_whats_new_util.h"
 #import "ios/in_app_rating/vivaldi_in_app_rating_manager_swift.h"
@@ -221,6 +226,7 @@ const double kDelayForRatingPrompt = 10.0;
 // Note other delegates defined in the Delegates category header.
 @interface BrowserViewController () <CardSwipeViewDelegate,
                                      FullscreenUIElement,
+                                     LogoAnimationControllerOwnerOwner,
                                      MainContentUI,
                                      SideSwipeUIControllerDelegate,
                                      UIGestureRecognizerDelegate,
@@ -291,10 +297,14 @@ const double kDelayForRatingPrompt = 10.0;
   UIView* _topBackgroundView;
 
   // The service used to load url parameters in current or new tab.
-  raw_ptr<UrlLoadingBrowserAgent> _urlLoadingBrowserAgent;
+  raw_ptr<UrlLoadingBrowserAgent, DanglingUntriaged> _urlLoadingBrowserAgent;
 
   // Used to report usage of a single Browser's tab.
-  raw_ptr<TabUsageRecorderBrowserAgent> _tabUsageRecorderBrowserAgent;
+  raw_ptr<TabUsageRecorderBrowserAgent, DanglingUntriaged>
+      _tabUsageRecorderBrowserAgent;
+
+  // Used to fetch snapshots.
+  raw_ptr<SnapshotBrowserAgent> _snapshotBrowserAgent;
 
   // Used to get the layout guide center.
   LayoutGuideCenter* _layoutGuideCenter;
@@ -442,6 +452,8 @@ const double kDelayForRatingPrompt = 10.0;
 // Height constraint for the secondaryToolbarAccentColorContainer.
 @property(nonatomic, strong) NSLayoutConstraint*
     secondaryToolbarAccentColorContainerHeightConstraint;
+// Whether keyboard is currently active.
+@property(nonatomic, assign) BOOL isKeyboardVisible;
 // End Vivaldi
 
 @end
@@ -504,6 +516,7 @@ const double kDelayForRatingPrompt = 10.0;
     _visibilityState = BrowserViewVisibilityState::kNotInViewHierarchy;
     _urlLoadingBrowserAgent = dependencies.urlLoadingBrowserAgent;
     _tabUsageRecorderBrowserAgent = dependencies.tabUsageRecorderBrowserAgent;
+    _snapshotBrowserAgent = dependencies.snapshotBrowserAgent;
     _layoutGuideCenter = dependencies.layoutGuideCenter;
     _webStateList = dependencies.webStateList;
     _voiceSearchController = dependencies.voiceSearchController;
@@ -901,7 +914,6 @@ const double kDelayForRatingPrompt = 10.0;
 - (void)clearPresentedStateWithCompletion:(ProceduralBlock)completion
                            dismissOmnibox:(BOOL)dismissOmnibox {
   [_bookmarksCoordinator dismissBookmarkModalControllerAnimated:NO];
-  [_bookmarksCoordinator dismissSnackbar];
 
   // Vivaldi
   [self dismissNoteController];
@@ -1021,6 +1033,11 @@ const double kDelayForRatingPrompt = 10.0;
   [_voiceSearchController disconnect];
   [[NSNotificationCenter defaultCenter] removeObserver:self];
   _bookmarksCoordinator = nil;
+
+  // Clears the pointer to C++ objects.
+  _urlLoadingBrowserAgent = nullptr;
+  _tabUsageRecorderBrowserAgent = nullptr;
+  _snapshotBrowserAgent = nullptr;
 
   // Vivaldi
   [self shutdownNoteController];
@@ -1333,8 +1350,6 @@ const double kDelayForRatingPrompt = 10.0;
     }
   }
 
-  [_bookmarksCoordinator dismissSnackbar];
-
   // Vivaldi
   [self dismissNoteSnackbar];
   // End Vivaldi
@@ -1365,16 +1380,6 @@ const double kDelayForRatingPrompt = 10.0;
     _sideSwipeCoordinator = nil;
   }
 }
-
-#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  if (@available(iOS 17, *)) {
-    return;
-  }
-  [self updateUIOnTraitChange:previousTraitCollection];
-}
-#endif
 
 - (void)viewWillTransitionToSize:(CGSize)size
        withTransitionCoordinator:
@@ -1491,7 +1496,10 @@ const double kDelayForRatingPrompt = 10.0;
       // view controller uses information that it should not know or care about:
       // this BVC is contained and its parent bounds to the full screen.
       launchScreenView.frame = self.parentViewController.view.bounds;
+      [self.parentViewController addChildViewController:launchScreenController];
       [self.parentViewController.view addSubview:launchScreenView];
+      [launchScreenController
+          didMoveToParentViewController:self.parentViewController];
       [launchScreenView setNeedsLayout];
       [launchScreenView layoutIfNeeded];
 
@@ -1653,21 +1661,9 @@ const double kDelayForRatingPrompt = 10.0;
       self.toolbarCoordinator.primaryToolbarViewController.view;
   UIView* topmostHeader = [self.headerViews firstObject].view;
 
-  if (IsVivaldiRunning() && primaryToolbar != topmostHeader) {
-    BOOL splitToolbarMode = IsSplitToolbarMode(self);
-    BOOL bottomOmniboxEnabled = [self isBottomOmniboxEnabled];
-    BOOL canShowSidePanel =
-        [VivaldiGlobalHelpers canShowSidePanelForTrait:self.traitCollection];
-    if (canShowSidePanel || !splitToolbarMode || bottomOmniboxEnabled) {
-      return height;
-    } else {
-      return height + vLocationBarTopPaddingDesktopTab;
-    }
-  } else {
   if (primaryToolbar != topmostHeader) {
     return height;
   }
-  } // End Vivaldi
 
   // If the primary toolbar is topmost, subtract the height of the portion of
   // the unsafe area.
@@ -1754,8 +1750,11 @@ const double kDelayForRatingPrompt = 10.0;
   // area height.
   UIView* toolbarView =
       self.toolbarCoordinator.secondaryToolbarViewController.view;
+  CGFloat secondaryToolbarBaseHeight = [self secondaryToolbarHeightWithInset];
   self.secondaryToolbarHeightConstraint = [toolbarView.heightAnchor
-      constraintEqualToConstant:[self secondaryToolbarHeightWithInset]];
+      constraintEqualToConstant:secondaryToolbarBaseHeight];
+  [self.toolbarCoordinator
+      setBottomOmniboxOffsetForPopup:secondaryToolbarBaseHeight];
   // The bottom toolbar can be constraint to the keyboard in some cases.
   self.secondaryToolbarHeightConstraint.priority = UILayoutPriorityRequired - 1;
   self.secondaryToolbarHeightConstraint.active = YES;
@@ -1798,15 +1797,17 @@ const double kDelayForRatingPrompt = 10.0;
 
   if (initialLayout) {
     // Add the toolbars as child view controllers.
-    [self addChildViewController:self.toolbarCoordinator
-                                     .primaryToolbarViewController];
-    [self addChildViewController:self.toolbarCoordinator
-                                     .secondaryToolbarViewController];
+    UIViewController* primaryToolbarViewController =
+        self.toolbarCoordinator.primaryToolbarViewController;
+    [self addChildViewController:primaryToolbarViewController];
+
+    UIViewController* secondaryToolbarViewController =
+        self.toolbarCoordinator.secondaryToolbarViewController;
+    [self addChildViewController:secondaryToolbarViewController];
 
     // Add the primary toolbar. On iPad, it should be in front of the tab strip
     // because the tab strip slides behind it when showing the thumb strip.
-    UIView* primaryToolbarView =
-        self.toolbarCoordinator.primaryToolbarViewController.view;
+    UIView* primaryToolbarView = primaryToolbarViewController.view;
 
     if (IsVivaldiRunning()) {
       UIViewController* tabStripViewController =
@@ -1851,9 +1852,11 @@ const double kDelayForRatingPrompt = 10.0;
       [self.view addSubview:primaryToolbarView];
     }
     } // End Vivaldi
-    [self.view insertSubview:self.toolbarCoordinator
-                                 .secondaryToolbarViewController.view
+    [self.view insertSubview:secondaryToolbarViewController.view
                 aboveSubview:primaryToolbarView];
+
+    [primaryToolbarViewController didMoveToParentViewController:self];
+    [secondaryToolbarViewController didMoveToParentViewController:self];
 
     // TODO(crbug.com/40270239): Migrate kContentAreaGuide to LayoutGuideCenter.
     // Add guide kContentAreaGuide to the browser view.
@@ -1909,15 +1912,6 @@ const double kDelayForRatingPrompt = 10.0;
     }
 
     AddSameConstraintsToSides(self.view, contentAreaGuide, contentSides);
-
-    // Complete child UIViewController containment flow now that the views are
-    // finished being added.
-    [self.tabStripCoordinator.viewController
-        didMoveToParentViewController:self];
-    [self.toolbarCoordinator.primaryToolbarViewController
-        didMoveToParentViewController:self];
-    [self.toolbarCoordinator.secondaryToolbarViewController
-        didMoveToParentViewController:self];
   }
 
   // Resize the typing shield to cover the entire browser view and bring it to
@@ -2221,15 +2215,6 @@ const double kDelayForRatingPrompt = 10.0;
 
   self.fullscreenController->BrowserTraitCollectionChangedBegin();
 
-#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
-  // TODO(crbug.com/41198852): - traitCollectionDidChange: is not always
-  // forwarded because in some cases the presented view controller isn't a child
-  // of the BVC in the view controller hierarchy (some intervening object isn't
-  // a view controller).
-  [self.presentedViewController
-      traitCollectionDidChange:previousTraitCollection];
-#endif
-
   if (self.currentWebState) {
     UIEdgeInsets contentPadding =
         self.currentWebState->GetWebViewProxy().contentInset;
@@ -2254,9 +2239,6 @@ const double kDelayForRatingPrompt = 10.0;
   // updateToobar];
   if (ShouldShowCompactToolbar(previousTraitCollection) !=
       ShouldShowCompactToolbar(self)) {
-    if (!IsNativeFindInPageAvailable()) {
-      [self.findInPageCommandsHandler hideFindUI];
-    }
     [self.textZoomHandler hideTextZoomUI];
   }
 
@@ -2332,7 +2314,6 @@ const double kDelayForRatingPrompt = 10.0;
 
 // On iOS 26, returns the top inset with corner adapation, otherwise returns 0.
 - (CGFloat)topInsetWithCornerAdaptation {
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     UIViewLayoutRegion* safeAreaRegion =
         [UIViewLayoutRegion safeAreaLayoutRegionWithCornerAdaptation:
@@ -2341,7 +2322,7 @@ const double kDelayForRatingPrompt = 10.0;
         directionalEdgeInsetsForLayoutRegion:safeAreaRegion];
     return calculatedInsets.top;
   }
-#endif
+
   return 0;
 }
 
@@ -2349,7 +2330,6 @@ const double kDelayForRatingPrompt = 10.0;
 // of the tab strip. This is needed on iPad when the app is windowed and pinned
 // to the top with fullscreen is enabled.
 - (void)configureTopBackgroundView {
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     if (self.tabStripView) {
       _topBackgroundView = [[UIView alloc] init];
@@ -2371,7 +2351,6 @@ const double kDelayForRatingPrompt = 10.0;
       ]];
     }
   }
-#endif
 }
 
 #pragma mark - Private Methods: Tap handling
@@ -2676,14 +2655,12 @@ const double kDelayForRatingPrompt = 10.0;
     }
     [self updateToolbarViewsStateWithProgress:progress atOffset:offset];
   } else { // Vivaldi
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     if (self.tabStripView) {
       self.tabStripView.alpha = progress;
       _fakeStatusBarView.alpha = progress;
     }
   }
-#endif
 
   CGFloat offset =
       AlignValueToPixel((1.0 - progress) * [self primaryToolbarHeightDelta]);
@@ -2723,11 +2700,18 @@ const double kDelayForRatingPrompt = 10.0;
   DUMP_WILL_BE_CHECK(height >= (0.0 - FLT_EPSILON) &&
                      height <= (expandedToolbarHeight + FLT_EPSILON));
 
-  self.secondaryToolbarHeightConstraint.constant = height;
-
-  // Vivaldi
-  self.secondaryToolbarAccentColorContainerHeightConstraint.constant = height;
-  // End Vivaldi
+  if (IsVivaldiRunning()) {
+    if (!self.isKeyboardVisible) {
+      if (![self.toolbarCoordinator showingOmniboxPopup]) {
+        self.secondaryToolbarHeightConstraint.constant = height;
+      }
+    }
+    self.secondaryToolbarAccentColorContainerHeightConstraint.constant = height;
+  } else {
+  if (![self.toolbarCoordinator showingOmniboxPopup]) {
+    self.secondaryToolbarHeightConstraint.constant = height;
+  }
+  } // End Vivaldi
 
 }
 
@@ -2941,7 +2925,6 @@ const double kDelayForRatingPrompt = 10.0;
 
 - (void)switchToTabWithWebState:(web::WebState*)webState
               animationPosition:(SwitchToTabAnimationPosition)position
-             willAddPlaceholder:(BOOL)willAddPlaceholder
                 topToolbarImage:(UIImage*)topToolbarImage
              bottomToolbarImage:(UIImage*)bottomToolbarImage {
 
@@ -2965,10 +2948,15 @@ const double kDelayForRatingPrompt = 10.0;
   [swipeView setTopToolbarImage:topToolbarImage];
   [swipeView setBottomToolbarImage:bottomToolbarImage];
 
-  auto* snapshotTabHelper = SnapshotTabHelper::FromWebState(webState);
-  snapshotTabHelper->RetrieveColorSnapshot(^(UIImage* image) {
-    willAddPlaceholder ? [swipeView setImage:nil] : [swipeView setImage:image];
-  });
+  const BOOL willAddPlaceholder =
+      PagePlaceholderBrowserAgent::IsPagePlaceholderPlannedForWebState(
+          webState);
+
+  _snapshotBrowserAgent->RetrieveSnapshotWithID(
+      SnapshotID(webState->GetUniqueIdentifier()), SnapshotKindColor,
+      ^(UIImage* image) {
+        [swipeView setImage:(willAddPlaceholder ? nil : image)];
+      });
 
   SwitchToTabAnimationView* animationView =
       [[SwitchToTabAnimationView alloc] initWithFrame:self.view.bounds];
@@ -3395,15 +3383,60 @@ const double kDelayForRatingPrompt = 10.0;
   self.secondaryToolbarHeightConstraint.priority = UILayoutPriorityRequired - 1;
 
   // Vivaldi: Reset toolbar state after keyboard is closed.
+  self.isKeyboardVisible = NO;
+  self.secondaryToolbarHeightConstraint.constant =
+      [self secondaryToolbarHeightWithInset];
+  self.toolbarCoordinator.secondaryToolbarViewController.view.hidden = NO;
+  self.vivaldiStickyToolbarView.alpha = 0;
   self.bottomOmniboxSteadyViewTopAnchor.constant =
     vBottomToolbarSteadyViewTopPadding;
-  // (VIB-887) - Reset the color
-  if ([self canShowTabStrip] && [self isBottomOmniboxEnabled]) {
+  if ([self isBottomOmniboxEnabled]) {
     [self.vivaldiStickyToolbarView updateBackgroundColor:UIColor.clearColor];
   }
   [self.view layoutIfNeeded];
   // End Vivaldi
 
+}
+
+- (void)adjustSecondaryToolbarForKeyboardHeight:(CGFloat)keyboardHeight
+                                       duration:(NSTimeInterval)duration
+                                          curve:(UIViewAnimationCurve)curve {
+  if (!IsVivaldiRunning()) {
+  CHECK(ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET);
+  } // End Vivaldi
+
+  CGFloat keyboardAttachedOffset =
+      keyboardHeight +
+      self.toolbarCoordinator.keyboardAttachedBottomOmniboxHeight;
+  CGFloat baseHeight = [self secondaryToolbarHeightWithInset];
+  CGFloat offsetRequired = MAX(keyboardAttachedOffset, baseHeight);
+
+  // No need to start an animation when the offset is already set.
+  BOOL alreadyInPosition =
+      self.secondaryToolbarHeightConstraint.constant == offsetRequired;
+  // Always animate when keyboard is being hidden. When showing the keyboard,
+  // make sure to check editing to avoid manipulating the toolbar when other
+  // textfield is focused.
+  if (alreadyInPosition) {
+    [self.toolbarCoordinator setBottomOmniboxOffsetForPopup:offsetRequired];
+    return;
+  }
+
+  // The shift converts an animation curve to animation options.
+  // Shifting by 16 is a result of Apple reserving 4 bits in
+  // `UIViewAnimationOptions` for the type of curve.
+  UIViewAnimationOptions animationOptions = curve << 16;
+  [UIView animateWithDuration:duration
+                        delay:0.0
+                      options:animationOptions
+                   animations:^{
+                     self.secondaryToolbarHeightConstraint.constant =
+                         offsetRequired;
+                     [self.toolbarCoordinator
+                         setBottomOmniboxOffsetForPopup:offsetRequired];
+                     [self.view layoutIfNeeded];
+                   }
+                   completion:nil];
 }
 
 - (void)diamondToolbarTypeChanged:(ToolbarType)type {
@@ -3426,37 +3459,8 @@ const double kDelayForRatingPrompt = 10.0;
 #pragma mark - LogoAnimationControllerOwnerOwner (Public)
 
 - (id<LogoAnimationControllerOwner>)logoAnimationControllerOwner {
+  // This is required to enable voice search in the NTP.
   return nil;
-}
-
-#pragma mark - FindBarPresentationDelegate
-
-- (void)setHeadersForFindBarCoordinator:
-    (FindBarCoordinator*)findBarCoordinator {
-  [self setFramesForHeaders:[self headerViews]
-                   atOffset:[self currentHeaderOffset]];
-}
-
-- (void)findBarDidAppearForFindBarCoordinator:
-    (FindBarCoordinator*)findBarCoordinator {
-  _findBarVisible = YES;
-  // When the Find bar is presented, hide underlying elements from VoiceOver.
-  self.contentArea.accessibilityElementsHidden = self.contentAreaObstructed;
-  self.toolbarCoordinator.primaryToolbarViewController.view
-      .accessibilityElementsHidden = YES;
-  self.toolbarCoordinator.secondaryToolbarViewController.view
-      .accessibilityElementsHidden = YES;
-}
-
-- (void)findBarDidDisappearForFindBarCoordinator:
-    (FindBarCoordinator*)findBarCoordinator {
-  _findBarVisible = NO;
-  // When the Find bar is dismissed, show underlying elements to VoiceOver.
-  self.contentArea.accessibilityElementsHidden = self.contentAreaObstructed;
-  self.toolbarCoordinator.primaryToolbarViewController.view
-      .accessibilityElementsHidden = NO;
-  self.toolbarCoordinator.secondaryToolbarViewController.view
-      .accessibilityElementsHidden = NO;
 }
 
 #pragma mark - LensPresentationDelegate
@@ -3502,7 +3506,7 @@ const double kDelayForRatingPrompt = 10.0;
 }
 
 - (NSDirectionalEdgeInsets)presentationInsetsForLensOverlay {
-  if (CanShowTabStrip(self)) {
+  if (IsRegularXRegularSizeClass(self)) {
     return NSDirectionalEdgeInsetsMake([self expandedTopToolbarHeight], 0, 0,
                                        0);
   }
@@ -3521,7 +3525,7 @@ const double kDelayForRatingPrompt = 10.0;
   _bottomOmniboxEnabled =
       [[PrefBackedBoolean alloc]
           initWithPrefService:GetApplicationContext()->GetLocalState()
-                     prefName:prefs::kBottomOmnibox];
+                     prefName:omnibox::kIsOmniboxInBottomPosition];
   [_bottomOmniboxEnabled setObserver:self];
   // Initialize to the correct value.
   [self booleanDidChange:_bottomOmniboxEnabled];
@@ -3947,7 +3951,7 @@ const double kDelayForRatingPrompt = 10.0;
 
 - (BOOL)isBottomOmniboxEnabled {
   return GetApplicationContext()
-      ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox);
+      ->GetLocalState()->GetBoolean(omnibox::kIsOmniboxInBottomPosition);
 }
 
 - (BOOL)showDynamicAccentColor {
@@ -4137,6 +4141,7 @@ const double kDelayForRatingPrompt = 10.0;
     setSecurityLevelAccessibilityString:statusText];
   [self updateUIElementsWithThemeColor];
   [self updateWebsiteAppearance];
+  [self updateForFullscreenProgress:self.fullscreenController->GetProgress()];
 }
 
 - (void)updateAfterNavigatingToNTP {

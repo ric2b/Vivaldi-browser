@@ -12,7 +12,6 @@
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/translate/vivaldi_translate_consumer.h"
 #import "ios/ui/translate/vivaldi_translate_entry_point.h"
-#import "ios/ui/translate/vivaldi_translate_language_item.h"
 #import "ios/ui/translate/vivaldi_translate_view_delegate.h"
 #import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
 #import "ui/base/l10n/l10n_util_mac_bridge.h"

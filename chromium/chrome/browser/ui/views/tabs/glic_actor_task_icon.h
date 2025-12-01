@@ -28,8 +28,11 @@ class GlicActorTaskIcon : public TabStripNudgeButton {
   // TabStripNudgeButton:
   void SetIsShowingNudge(bool is_showing) override;
 
-  // Set the default tooltip text on the task icon.
-  void SetDefaultTooltipText();
+  // Set the task icon tooltip text when the floaty is open.
+  void SetFloatyOpenTooltipText();
+
+  // Set the task icon tooltip text when the floaty is closed.
+  void SetFloatyClosedTooltipText();
 
   // Sets the task icon back to its default colors.
   void SetDefaultColors();
@@ -39,6 +42,9 @@ class GlicActorTaskIcon : public TabStripNudgeButton {
 
   // Sets the task icon to the task needs assistance state.
   void ShowCheckTasksLabel();
+
+  // Sets the task icon to the task complete state.
+  void ShowCompleteTasksLabel();
 
   // Sets the task icon to its default colors, label, and tooltip text.
   void SetTaskIconToDefault();

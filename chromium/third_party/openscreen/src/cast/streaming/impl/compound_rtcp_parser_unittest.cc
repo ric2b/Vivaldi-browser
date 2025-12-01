@@ -16,7 +16,6 @@
 #include "util/chrono_helpers.h"
 
 using testing::_;
-using testing::Invoke;
 using testing::Mock;
 using testing::SaveArg;
 using testing::StrictMock;

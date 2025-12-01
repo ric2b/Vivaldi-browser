@@ -456,6 +456,14 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   // Whether fingerprinting protection based on page content is enabled.
   bool content_based_fingerprinting_protection_enabled = false;
 
+  bool ai_prompt_api_enabled = false; // Vivaldi Keep disabled
+
+#if BUILDFLAG(IS_ANDROID)
+  // Whether every traversable mainframe same-doc navigation will increment the
+  // `viz::LocalSurfaceId` from the impl thread.
+  bool increment_local_surface_id_for_mainframe_same_doc_navigation = true;
+#endif  // BUILDFLAG(IS_ANDROID)
+
   // Vivaldi specific preferences:
   // Maps to the Cycle focus setting in Vivaldi.
   bool allow_tab_cycle_from_webpage_into_ui = false;

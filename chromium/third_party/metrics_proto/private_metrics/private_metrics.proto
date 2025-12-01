@@ -47,7 +47,7 @@ message EncryptedPrivateMetricReport {
   // be provided in addition to `report_header` field due to protocol buffer
   // serialization not being deterministic. See:
   // go/proto-serialization-not-canonical
-  optional string serialized_report_header = 2;
+  optional bytes serialized_report_header = 2;
 
   // The PrivateMetricReportHeader protocol buffer provided as a non-serialized
   // form. This field is provided to be prevent `serialized_report_header` from
@@ -62,6 +62,7 @@ message EncryptedPrivateMetricReport {
   enum ReportType {
     REPORT_TYPE_INVALID = 0;
     DWA = 1;
+    DKM = 2;
   }
 
   optional ReportType report_type = 4;
@@ -69,7 +70,7 @@ message EncryptedPrivateMetricReport {
 
 // A report containing unencrypted private metrics data. The unencrypted report
 // does not leave the client.
-// Next tag: 3
+// Next tag: 4
 message PrivateMetricReport {
   // A temporary unique identifier that changes every epoch. One epoch is a
   // period of 24 hours. This is generated and managed by the Private Metrics
@@ -96,4 +97,8 @@ message PrivateMetricReport {
 
   // Each report is composed of a collection of events.
   repeated Event events = 2;
+
+  // The epoch the report is associated with. Reports may only be processed with
+  // other reports from the same epoch.
+  optional fixed64 epoch_id = 3;
 }

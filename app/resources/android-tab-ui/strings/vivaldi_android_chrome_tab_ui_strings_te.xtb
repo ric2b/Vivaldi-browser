@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="te">
+<translation id="2330212241471632770">{TABS_COUNT,plural,
+          =1 {ట్యాబ్‌ను బుక్‌మార్క్ చేయండి}
+          other {ట్యాబ్‌లను బుక్‌మార్క్ చేయండి}
+        }</translation>
 </translationbundle>

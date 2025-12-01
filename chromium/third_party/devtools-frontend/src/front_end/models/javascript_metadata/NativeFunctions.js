@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 // Generated from javascript_natives/helpers.js
@@ -20,7 +20,13 @@ export const NativeFunctions = [
   },
   {
     name: "isNaN",
-    signatures: [["number"]]
+    signatures: [["number"]],
+    receivers: ["Window","NumberConstructor"]
+  },
+  {
+    name: "isNaN",
+    signatures: [["x","?options"]],
+    receivers: ["MLGraphBuilder"]
   },
   {
     name: "isFinite",
@@ -60,6 +66,11 @@ export const NativeFunctions = [
     name: "toString",
     signatures: [["?radix"]],
     receivers: ["Number","BigInt"]
+  },
+  {
+    name: "get",
+    signatures: [["name"],["?options"]],
+    receivers: ["CookieStore"]
   },
   {
     name: "get",
@@ -108,8 +119,8 @@ export const NativeFunctions = [
   },
   {
     name: "get",
-    signatures: [["name"],["?options"]],
-    receivers: ["CookieStore"]
+    signatures: [["entry"]],
+    receivers: ["RouteMap"]
   },
   {
     name: "set",
@@ -120,6 +131,11 @@ export const NativeFunctions = [
     name: "set",
     signatures: [["array","?offset"]],
     receivers: ["Int8Array","Uint8Array","Uint8ClampedArray","Int16Array","Uint16Array","Int32Array","Uint32Array","Float32Array","Float64Array","Float16Array","BigInt64Array","BigUint64Array"]
+  },
+  {
+    name: "set",
+    signatures: [["options"],["cookieInit"],["name","value"]],
+    receivers: ["CookieStore"]
   },
   {
     name: "set",
@@ -160,11 +176,6 @@ export const NativeFunctions = [
     name: "set",
     signatures: [["featureValueName","values"]],
     receivers: ["CSSFontFeatureValuesMap"]
-  },
-  {
-    name: "set",
-    signatures: [["cookieInit"],["name","value"]],
-    receivers: ["CookieStore"]
   },
   {
     name: "toLocaleString",
@@ -997,7 +1008,7 @@ export const NativeFunctions = [
   {
     name: "addEventListener",
     signatures: [["type","listener","?options"]],
-    receivers: ["AbortSignal","SharedWorker","Worker","ServiceWorker","Animation","AudioBufferSourceNode","AudioContext","AudioDecoder","AudioEncoder","AudioScheduledSourceNode","AudioWorkletNode","BaseAudioContext","BroadcastChannel","CSSAnimation","CSSTransition","CanvasCaptureMediaStreamTrack","ConstantSourceNode","Document","Element","EventSource","FileReader","FontFaceSet","Window","HTMLElement","MathMLElement","SVGElement","HTMLAnchorElement","HTMLAreaElement","HTMLAudioElement","HTMLBRElement","HTMLBaseElement","HTMLBodyElement","HTMLButtonElement","HTMLCanvasElement","HTMLDListElement","HTMLDataElement","HTMLDataListElement","HTMLDetailsElement","HTMLDialogElement","HTMLDirectoryElement","HTMLDivElement","HTMLDocument","HTMLEmbedElement","HTMLFieldSetElement","HTMLFontElement","HTMLFormElement","HTMLFrameElement","HTMLFrameSetElement","HTMLHRElement","HTMLHeadElement","HTMLHeadingElement","HTMLHtmlElement","HTMLIFrameElement","HTMLImageElement","HTMLInputElement","HTMLLIElement","HTMLLabelElement","HTMLLegendElement","HTMLLinkElement","HTMLMapElement","HTMLMarqueeElement","HTMLMediaElement","HTMLMenuElement","HTMLMetaElement","HTMLMeterElement","HTMLModElement","HTMLOListElement","HTMLObjectElement","HTMLOptGroupElement","HTMLOptionElement","HTMLOutputElement","HTMLParagraphElement","HTMLParamElement","HTMLPictureElement","HTMLPreElement","HTMLProgressElement","HTMLQuoteElement","HTMLScriptElement","HTMLSelectElement","HTMLSlotElement","HTMLSourceElement","HTMLSpanElement","HTMLStyleElement","HTMLTableCaptionElement","HTMLTableCellElement","HTMLTableColElement","HTMLTableDataCellElement","HTMLTableElement","HTMLTableHeaderCellElement","HTMLTableRowElement","HTMLTableSectionElement","HTMLTemplateElement","HTMLTextAreaElement","HTMLTimeElement","HTMLTitleElement","HTMLTrackElement","HTMLUListElement","HTMLUnknownElement","HTMLVideoElement","IDBDatabase","IDBOpenDBRequest","IDBRequest","IDBTransaction","MIDIAccess","MIDIInput","MIDIOutput","MIDIPort","MediaDevices","MediaKeySession","MediaQueryList","MediaRecorder","MediaSource","MediaStream","MediaStreamTrack","MessageEventTarget","MessagePort","NavigationHistoryEntry","Notification","OfflineAudioContext","OffscreenCanvas","OscillatorNode","PaymentRequest","PaymentResponse","Performance","PermissionStatus","PictureInPictureWindow","RTCDTMFSender","RTCDataChannel","RTCDtlsTransport","RTCIceTransport","RTCPeerConnection","RTCSctpTransport","RemotePlayback","SVGAElement","SVGAnimateElement","SVGAnimateMotionElement","SVGAnimateTransformElement","SVGAnimationElement","SVGCircleElement","SVGClipPathElement","SVGComponentTransferFunctionElement","SVGDefsElement","SVGDescElement","SVGEllipseElement","SVGFEBlendElement","SVGFEColorMatrixElement","SVGFEComponentTransferElement","SVGFECompositeElement","SVGFEConvolveMatrixElement","SVGFEDiffuseLightingElement","SVGFEDisplacementMapElement","SVGFEDistantLightElement","SVGFEDropShadowElement","SVGFEFloodElement","SVGFEFuncAElement","SVGFEFuncBElement","SVGFEFuncGElement","SVGFEFuncRElement","SVGFEGaussianBlurElement","SVGFEImageElement","SVGFEMergeElement","SVGFEMergeNodeElement","SVGFEMorphologyElement","SVGFEOffsetElement","SVGFEPointLightElement","SVGFESpecularLightingElement","SVGFESpotLightElement","SVGFETileElement","SVGFETurbulenceElement","SVGFilterElement","SVGForeignObjectElement","SVGGElement","SVGGeometryElement","SVGGradientElement","SVGGraphicsElement","SVGImageElement","SVGLineElement","SVGLinearGradientElement","SVGMPathElement","SVGMarkerElement","SVGMaskElement","SVGMetadataElement","SVGPathElement","SVGPatternElement","SVGPolygonElement","SVGPolylineElement","SVGRadialGradientElement","SVGRectElement","SVGSVGElement","SVGScriptElement","SVGSetElement","SVGStopElement","SVGStyleElement","SVGSwitchElement","SVGSymbolElement","SVGTSpanElement","SVGTextContentElement","SVGTextElement","SVGTextPathElement","SVGTextPositioningElement","SVGTitleElement","SVGUseElement","SVGViewElement","ScreenOrientation","ScriptProcessorNode","ServiceWorkerContainer","ServiceWorkerRegistration","ShadowRoot","SourceBuffer","SourceBufferList","SpeechSynthesis","SpeechSynthesisUtterance","TextTrack","TextTrackCue","TextTrackList","VTTCue","VideoDecoder","VideoEncoder","VisualViewport","WakeLockSentinel","WebSocket","XMLDocument","XMLHttpRequest","XMLHttpRequestEventTarget","XMLHttpRequestUpload","DedicatedWorkerGlobalScope","ServiceWorkerGlobalScope","SharedWorkerGlobalScope","WorkerGlobalScope","Highlight"]
+    receivers: ["AbortSignal","SharedWorker","Worker","ServiceWorker","Animation","AudioBufferSourceNode","AudioContext","AudioDecoder","AudioEncoder","AudioScheduledSourceNode","AudioWorkletNode","BaseAudioContext","BroadcastChannel","CSSAnimation","CSSTransition","CanvasCaptureMediaStreamTrack","ConstantSourceNode","CookieStore","Document","Element","EventSource","FileReader","FontFaceSet","Window","HTMLElement","MathMLElement","SVGElement","HTMLAnchorElement","HTMLAreaElement","HTMLAudioElement","HTMLBRElement","HTMLBaseElement","HTMLBodyElement","HTMLButtonElement","HTMLCanvasElement","HTMLDListElement","HTMLDataElement","HTMLDataListElement","HTMLDetailsElement","HTMLDialogElement","HTMLDirectoryElement","HTMLDivElement","HTMLDocument","HTMLEmbedElement","HTMLFieldSetElement","HTMLFontElement","HTMLFormElement","HTMLFrameElement","HTMLFrameSetElement","HTMLHRElement","HTMLHeadElement","HTMLHeadingElement","HTMLHtmlElement","HTMLIFrameElement","HTMLImageElement","HTMLInputElement","HTMLLIElement","HTMLLabelElement","HTMLLegendElement","HTMLLinkElement","HTMLMapElement","HTMLMarqueeElement","HTMLMediaElement","HTMLMenuElement","HTMLMetaElement","HTMLMeterElement","HTMLModElement","HTMLOListElement","HTMLObjectElement","HTMLOptGroupElement","HTMLOptionElement","HTMLOutputElement","HTMLParagraphElement","HTMLParamElement","HTMLPictureElement","HTMLPreElement","HTMLProgressElement","HTMLQuoteElement","HTMLScriptElement","HTMLSelectElement","HTMLSlotElement","HTMLSourceElement","HTMLSpanElement","HTMLStyleElement","HTMLTableCaptionElement","HTMLTableCellElement","HTMLTableColElement","HTMLTableDataCellElement","HTMLTableElement","HTMLTableHeaderCellElement","HTMLTableRowElement","HTMLTableSectionElement","HTMLTemplateElement","HTMLTextAreaElement","HTMLTimeElement","HTMLTitleElement","HTMLTrackElement","HTMLUListElement","HTMLUnknownElement","HTMLVideoElement","IDBDatabase","IDBOpenDBRequest","IDBRequest","IDBTransaction","MIDIAccess","MIDIInput","MIDIOutput","MIDIPort","MediaDevices","MediaKeySession","MediaQueryList","MediaRecorder","MediaSource","MediaStream","MediaStreamTrack","MessageEventTarget","MessagePort","NavigationHistoryEntry","Notification","OfflineAudioContext","OffscreenCanvas","OscillatorNode","PaymentRequest","PaymentResponse","Performance","PermissionStatus","PictureInPictureWindow","RTCDTMFSender","RTCDataChannel","RTCDtlsTransport","RTCIceTransport","RTCPeerConnection","RTCSctpTransport","RemotePlayback","SVGAElement","SVGAnimateElement","SVGAnimateMotionElement","SVGAnimateTransformElement","SVGAnimationElement","SVGCircleElement","SVGClipPathElement","SVGComponentTransferFunctionElement","SVGDefsElement","SVGDescElement","SVGEllipseElement","SVGFEBlendElement","SVGFEColorMatrixElement","SVGFEComponentTransferElement","SVGFECompositeElement","SVGFEConvolveMatrixElement","SVGFEDiffuseLightingElement","SVGFEDisplacementMapElement","SVGFEDistantLightElement","SVGFEDropShadowElement","SVGFEFloodElement","SVGFEFuncAElement","SVGFEFuncBElement","SVGFEFuncGElement","SVGFEFuncRElement","SVGFEGaussianBlurElement","SVGFEImageElement","SVGFEMergeElement","SVGFEMergeNodeElement","SVGFEMorphologyElement","SVGFEOffsetElement","SVGFEPointLightElement","SVGFESpecularLightingElement","SVGFESpotLightElement","SVGFETileElement","SVGFETurbulenceElement","SVGFilterElement","SVGForeignObjectElement","SVGGElement","SVGGeometryElement","SVGGradientElement","SVGGraphicsElement","SVGImageElement","SVGLineElement","SVGLinearGradientElement","SVGMPathElement","SVGMarkerElement","SVGMaskElement","SVGMetadataElement","SVGPathElement","SVGPatternElement","SVGPolygonElement","SVGPolylineElement","SVGRadialGradientElement","SVGRectElement","SVGSVGElement","SVGScriptElement","SVGSetElement","SVGStopElement","SVGStyleElement","SVGSwitchElement","SVGSymbolElement","SVGTSpanElement","SVGTextContentElement","SVGTextElement","SVGTextPathElement","SVGTextPositioningElement","SVGTitleElement","SVGUseElement","SVGViewElement","ScreenOrientation","ScriptProcessorNode","ServiceWorkerContainer","ServiceWorkerRegistration","ShadowRoot","SourceBuffer","SourceBufferList","SpeechSynthesis","SpeechSynthesisUtterance","TextTrack","TextTrackCue","TextTrackList","VTTCue","VideoDecoder","VideoEncoder","VisualViewport","WakeLockSentinel","WebSocket","XMLDocument","XMLHttpRequest","XMLHttpRequestEventTarget","XMLHttpRequestUpload","DedicatedWorkerGlobalScope","ServiceWorkerGlobalScope","SharedWorkerGlobalScope","WorkerGlobalScope","Highlight"]
   },
   {
     name: "addEventListener",
@@ -1007,7 +1018,7 @@ export const NativeFunctions = [
   {
     name: "removeEventListener",
     signatures: [["type","listener","?options"]],
-    receivers: ["AbortSignal","SharedWorker","Worker","ServiceWorker","Animation","AudioBufferSourceNode","AudioContext","AudioDecoder","AudioEncoder","AudioScheduledSourceNode","AudioWorkletNode","BaseAudioContext","BroadcastChannel","CSSAnimation","CSSTransition","CanvasCaptureMediaStreamTrack","ConstantSourceNode","Document","Element","EventSource","FileReader","FontFaceSet","Window","HTMLElement","MathMLElement","SVGElement","HTMLAnchorElement","HTMLAreaElement","HTMLAudioElement","HTMLBRElement","HTMLBaseElement","HTMLBodyElement","HTMLButtonElement","HTMLCanvasElement","HTMLDListElement","HTMLDataElement","HTMLDataListElement","HTMLDetailsElement","HTMLDialogElement","HTMLDirectoryElement","HTMLDivElement","HTMLDocument","HTMLEmbedElement","HTMLFieldSetElement","HTMLFontElement","HTMLFormElement","HTMLFrameElement","HTMLFrameSetElement","HTMLHRElement","HTMLHeadElement","HTMLHeadingElement","HTMLHtmlElement","HTMLIFrameElement","HTMLImageElement","HTMLInputElement","HTMLLIElement","HTMLLabelElement","HTMLLegendElement","HTMLLinkElement","HTMLMapElement","HTMLMarqueeElement","HTMLMediaElement","HTMLMenuElement","HTMLMetaElement","HTMLMeterElement","HTMLModElement","HTMLOListElement","HTMLObjectElement","HTMLOptGroupElement","HTMLOptionElement","HTMLOutputElement","HTMLParagraphElement","HTMLParamElement","HTMLPictureElement","HTMLPreElement","HTMLProgressElement","HTMLQuoteElement","HTMLScriptElement","HTMLSelectElement","HTMLSlotElement","HTMLSourceElement","HTMLSpanElement","HTMLStyleElement","HTMLTableCaptionElement","HTMLTableCellElement","HTMLTableColElement","HTMLTableDataCellElement","HTMLTableElement","HTMLTableHeaderCellElement","HTMLTableRowElement","HTMLTableSectionElement","HTMLTemplateElement","HTMLTextAreaElement","HTMLTimeElement","HTMLTitleElement","HTMLTrackElement","HTMLUListElement","HTMLUnknownElement","HTMLVideoElement","IDBDatabase","IDBOpenDBRequest","IDBRequest","IDBTransaction","MIDIAccess","MIDIInput","MIDIOutput","MIDIPort","MediaDevices","MediaKeySession","MediaQueryList","MediaRecorder","MediaSource","MediaStream","MediaStreamTrack","MessageEventTarget","MessagePort","NavigationHistoryEntry","Notification","OfflineAudioContext","OffscreenCanvas","OscillatorNode","PaymentRequest","PaymentResponse","Performance","PermissionStatus","PictureInPictureWindow","RTCDTMFSender","RTCDataChannel","RTCDtlsTransport","RTCIceTransport","RTCPeerConnection","RTCSctpTransport","RemotePlayback","SVGAElement","SVGAnimateElement","SVGAnimateMotionElement","SVGAnimateTransformElement","SVGAnimationElement","SVGCircleElement","SVGClipPathElement","SVGComponentTransferFunctionElement","SVGDefsElement","SVGDescElement","SVGEllipseElement","SVGFEBlendElement","SVGFEColorMatrixElement","SVGFEComponentTransferElement","SVGFECompositeElement","SVGFEConvolveMatrixElement","SVGFEDiffuseLightingElement","SVGFEDisplacementMapElement","SVGFEDistantLightElement","SVGFEDropShadowElement","SVGFEFloodElement","SVGFEFuncAElement","SVGFEFuncBElement","SVGFEFuncGElement","SVGFEFuncRElement","SVGFEGaussianBlurElement","SVGFEImageElement","SVGFEMergeElement","SVGFEMergeNodeElement","SVGFEMorphologyElement","SVGFEOffsetElement","SVGFEPointLightElement","SVGFESpecularLightingElement","SVGFESpotLightElement","SVGFETileElement","SVGFETurbulenceElement","SVGFilterElement","SVGForeignObjectElement","SVGGElement","SVGGeometryElement","SVGGradientElement","SVGGraphicsElement","SVGImageElement","SVGLineElement","SVGLinearGradientElement","SVGMPathElement","SVGMarkerElement","SVGMaskElement","SVGMetadataElement","SVGPathElement","SVGPatternElement","SVGPolygonElement","SVGPolylineElement","SVGRadialGradientElement","SVGRectElement","SVGSVGElement","SVGScriptElement","SVGSetElement","SVGStopElement","SVGStyleElement","SVGSwitchElement","SVGSymbolElement","SVGTSpanElement","SVGTextContentElement","SVGTextElement","SVGTextPathElement","SVGTextPositioningElement","SVGTitleElement","SVGUseElement","SVGViewElement","ScreenOrientation","ScriptProcessorNode","ServiceWorkerContainer","ServiceWorkerRegistration","ShadowRoot","SourceBuffer","SourceBufferList","SpeechSynthesis","SpeechSynthesisUtterance","TextTrack","TextTrackCue","TextTrackList","VTTCue","VideoDecoder","VideoEncoder","VisualViewport","WakeLockSentinel","WebSocket","XMLDocument","XMLHttpRequest","XMLHttpRequestEventTarget","XMLHttpRequestUpload","DedicatedWorkerGlobalScope","ServiceWorkerGlobalScope","SharedWorkerGlobalScope","WorkerGlobalScope","Highlight"]
+    receivers: ["AbortSignal","SharedWorker","Worker","ServiceWorker","Animation","AudioBufferSourceNode","AudioContext","AudioDecoder","AudioEncoder","AudioScheduledSourceNode","AudioWorkletNode","BaseAudioContext","BroadcastChannel","CSSAnimation","CSSTransition","CanvasCaptureMediaStreamTrack","ConstantSourceNode","CookieStore","Document","Element","EventSource","FileReader","FontFaceSet","Window","HTMLElement","MathMLElement","SVGElement","HTMLAnchorElement","HTMLAreaElement","HTMLAudioElement","HTMLBRElement","HTMLBaseElement","HTMLBodyElement","HTMLButtonElement","HTMLCanvasElement","HTMLDListElement","HTMLDataElement","HTMLDataListElement","HTMLDetailsElement","HTMLDialogElement","HTMLDirectoryElement","HTMLDivElement","HTMLDocument","HTMLEmbedElement","HTMLFieldSetElement","HTMLFontElement","HTMLFormElement","HTMLFrameElement","HTMLFrameSetElement","HTMLHRElement","HTMLHeadElement","HTMLHeadingElement","HTMLHtmlElement","HTMLIFrameElement","HTMLImageElement","HTMLInputElement","HTMLLIElement","HTMLLabelElement","HTMLLegendElement","HTMLLinkElement","HTMLMapElement","HTMLMarqueeElement","HTMLMediaElement","HTMLMenuElement","HTMLMetaElement","HTMLMeterElement","HTMLModElement","HTMLOListElement","HTMLObjectElement","HTMLOptGroupElement","HTMLOptionElement","HTMLOutputElement","HTMLParagraphElement","HTMLParamElement","HTMLPictureElement","HTMLPreElement","HTMLProgressElement","HTMLQuoteElement","HTMLScriptElement","HTMLSelectElement","HTMLSlotElement","HTMLSourceElement","HTMLSpanElement","HTMLStyleElement","HTMLTableCaptionElement","HTMLTableCellElement","HTMLTableColElement","HTMLTableDataCellElement","HTMLTableElement","HTMLTableHeaderCellElement","HTMLTableRowElement","HTMLTableSectionElement","HTMLTemplateElement","HTMLTextAreaElement","HTMLTimeElement","HTMLTitleElement","HTMLTrackElement","HTMLUListElement","HTMLUnknownElement","HTMLVideoElement","IDBDatabase","IDBOpenDBRequest","IDBRequest","IDBTransaction","MIDIAccess","MIDIInput","MIDIOutput","MIDIPort","MediaDevices","MediaKeySession","MediaQueryList","MediaRecorder","MediaSource","MediaStream","MediaStreamTrack","MessageEventTarget","MessagePort","NavigationHistoryEntry","Notification","OfflineAudioContext","OffscreenCanvas","OscillatorNode","PaymentRequest","PaymentResponse","Performance","PermissionStatus","PictureInPictureWindow","RTCDTMFSender","RTCDataChannel","RTCDtlsTransport","RTCIceTransport","RTCPeerConnection","RTCSctpTransport","RemotePlayback","SVGAElement","SVGAnimateElement","SVGAnimateMotionElement","SVGAnimateTransformElement","SVGAnimationElement","SVGCircleElement","SVGClipPathElement","SVGComponentTransferFunctionElement","SVGDefsElement","SVGDescElement","SVGEllipseElement","SVGFEBlendElement","SVGFEColorMatrixElement","SVGFEComponentTransferElement","SVGFECompositeElement","SVGFEConvolveMatrixElement","SVGFEDiffuseLightingElement","SVGFEDisplacementMapElement","SVGFEDistantLightElement","SVGFEDropShadowElement","SVGFEFloodElement","SVGFEFuncAElement","SVGFEFuncBElement","SVGFEFuncGElement","SVGFEFuncRElement","SVGFEGaussianBlurElement","SVGFEImageElement","SVGFEMergeElement","SVGFEMergeNodeElement","SVGFEMorphologyElement","SVGFEOffsetElement","SVGFEPointLightElement","SVGFESpecularLightingElement","SVGFESpotLightElement","SVGFETileElement","SVGFETurbulenceElement","SVGFilterElement","SVGForeignObjectElement","SVGGElement","SVGGeometryElement","SVGGradientElement","SVGGraphicsElement","SVGImageElement","SVGLineElement","SVGLinearGradientElement","SVGMPathElement","SVGMarkerElement","SVGMaskElement","SVGMetadataElement","SVGPathElement","SVGPatternElement","SVGPolygonElement","SVGPolylineElement","SVGRadialGradientElement","SVGRectElement","SVGSVGElement","SVGScriptElement","SVGSetElement","SVGStopElement","SVGStyleElement","SVGSwitchElement","SVGSymbolElement","SVGTSpanElement","SVGTextContentElement","SVGTextElement","SVGTextPathElement","SVGTextPositioningElement","SVGTitleElement","SVGUseElement","SVGViewElement","ScreenOrientation","ScriptProcessorNode","ServiceWorkerContainer","ServiceWorkerRegistration","ShadowRoot","SourceBuffer","SourceBufferList","SpeechSynthesis","SpeechSynthesisUtterance","TextTrack","TextTrackCue","TextTrackList","VTTCue","VideoDecoder","VideoEncoder","VisualViewport","WakeLockSentinel","WebSocket","XMLDocument","XMLHttpRequest","XMLHttpRequestEventTarget","XMLHttpRequestUpload","DedicatedWorkerGlobalScope","ServiceWorkerGlobalScope","SharedWorkerGlobalScope","WorkerGlobalScope","Highlight"]
   },
   {
     name: "removeEventListener",
@@ -1048,6 +1059,11 @@ export const NativeFunctions = [
     name: "finish",
     signatures: [["?descriptor"]],
     receivers: ["GPUCommandEncoder","GPURenderBundleEncoder"]
+  },
+  {
+    name: "pause",
+    signatures: [["?n"]],
+    receivers: ["Atomics"]
   },
   {
     name: "updatePlaybackRate",
@@ -1533,6 +1549,11 @@ export const NativeFunctions = [
   },
   {
     name: "delete",
+    signatures: [["name"],["options"]],
+    receivers: ["CookieStore"]
+  },
+  {
+    name: "delete",
     signatures: [["name"]],
     receivers: ["FormData","StorageBucketManager"]
   },
@@ -1570,11 +1591,6 @@ export const NativeFunctions = [
     name: "delete",
     signatures: [["id"]],
     receivers: ["ContentIndex"]
-  },
-  {
-    name: "delete",
-    signatures: [["name"],["options"]],
-    receivers: ["CookieStore"]
   },
   {
     name: "matchAll",
@@ -1759,7 +1775,7 @@ export const NativeFunctions = [
   },
   {
     name: "createImageData",
-    signatures: [["imagedata"],["sw","sh","?settings"]],
+    signatures: [["imageData"],["sw","sh","?settings"]],
     receivers: ["CanvasImageData"]
   },
   {
@@ -1779,7 +1795,13 @@ export const NativeFunctions = [
   },
   {
     name: "putImageData",
-    signatures: [["imagedata","dx","dy","?dirtyX","?dirtyY","?dirtyWidth","?dirtyHeight"]]
+    signatures: [["imageData","dx","dy","?dirtyX","?dirtyY","?dirtyWidth","?dirtyHeight"]],
+    receivers: ["CanvasImageData"]
+  },
+  {
+    name: "putImageData",
+    signatures: [["imagedata","dx","dy","?dirtyX","?dirtyY","?dirtyWidth","?dirtyHeight"]],
+    receivers: ["CanvasRenderingContext2D","OffscreenCanvasRenderingContext2D"]
   },
   {
     name: "arc",
@@ -2007,7 +2029,7 @@ export const NativeFunctions = [
   },
   {
     name: "read",
-    signatures: [["?formats"]],
+    signatures: [["?options"]],
     receivers: ["Clipboard"]
   },
   {
@@ -2058,6 +2080,46 @@ export const NativeFunctions = [
     signatures: [["typeArg","?bubblesArg","?cancelableArg","?viewArg","?dataArg"],["type","?bubbles","?cancelable","?view","?data"]]
   },
   {
+    name: "getAll",
+    signatures: [["name"],["?options"]],
+    receivers: ["CookieStore"]
+  },
+  {
+    name: "getAll",
+    signatures: [["name"]],
+    receivers: ["FormData","URLSearchParams"]
+  },
+  {
+    name: "getAll",
+    signatures: [["?query","?count"],["?query_or_options","?count"]],
+    receivers: ["IDBIndex","IDBObjectStore"]
+  },
+  {
+    name: "getAll",
+    signatures: [["property"]],
+    receivers: ["StylePropertyMapReadOnly"]
+  },
+  {
+    name: "subscribe",
+    signatures: [["subscriptions"]],
+    receivers: ["CookieStoreManager"]
+  },
+  {
+    name: "subscribe",
+    signatures: [["?options"]],
+    receivers: ["PushManager"]
+  },
+  {
+    name: "subscribe",
+    signatures: [["?observer","?options"]],
+    receivers: ["Observable"]
+  },
+  {
+    name: "unsubscribe",
+    signatures: [["subscriptions"]],
+    receivers: ["CookieStoreManager"]
+  },
+  {
     name: "store",
     signatures: [["credential"]],
     receivers: ["CredentialsContainer"]
@@ -2097,7 +2159,7 @@ export const NativeFunctions = [
   },
   {
     name: "createDocumentType",
-    signatures: [["qualifiedName","publicId","systemId"]]
+    signatures: [["name","publicId","systemId"],["qualifiedName","publicId","systemId"]]
   },
   {
     name: "createHTMLDocument",
@@ -2368,7 +2430,7 @@ export const NativeFunctions = [
   },
   {
     name: "importNode",
-    signatures: [["node","?subtree"],["node","?deep"],["node","options"]]
+    signatures: [["node","?options"],["node","?deep"]]
   },
   {
     name: "queryCommandEnabled",
@@ -2607,7 +2669,13 @@ export const NativeFunctions = [
   },
   {
     name: "readAsText",
-    signatures: [["blob","?encoding"],["blob","?label"]]
+    signatures: [["blob","?encoding"]],
+    receivers: ["FileReader"]
+  },
+  {
+    name: "readAsText",
+    signatures: [["blob","?encoding"],["blob","?label"]],
+    receivers: ["FileReaderSync"]
   },
   {
     name: "getDirectory",
@@ -2754,26 +2822,6 @@ export const NativeFunctions = [
     receivers: ["StylePropertyMap"]
   },
   {
-    name: "getAll",
-    signatures: [["name"]],
-    receivers: ["FormData","URLSearchParams"]
-  },
-  {
-    name: "getAll",
-    signatures: [["?query","?count"],["?query_or_options","?count"]],
-    receivers: ["IDBIndex","IDBObjectStore"]
-  },
-  {
-    name: "getAll",
-    signatures: [["property"]],
-    receivers: ["StylePropertyMapReadOnly"]
-  },
-  {
-    name: "getAll",
-    signatures: [["name"],["?options"]],
-    receivers: ["CookieStore"]
-  },
-  {
     name: "playEffect",
     signatures: [["type","?params"]]
   },
@@ -2819,6 +2867,11 @@ export const NativeFunctions = [
   {
     name: "toDataURL",
     signatures: [["?type","?quality"]]
+  },
+  {
+    name: "requestClose",
+    signatures: [["?returnValue"]],
+    receivers: ["HTMLDialogElement"]
   },
   {
     name: "show",
@@ -3067,6 +3120,10 @@ export const NativeFunctions = [
     signatures: [["bitmap"]]
   },
   {
+    name: "takePhoto",
+    signatures: [["?photoSettings"]]
+  },
+  {
     name: "observe",
     signatures: [["target"]],
     receivers: ["IntersectionObserver"]
@@ -3217,6 +3274,14 @@ export const NativeFunctions = [
     signatures: [["action","handler"]]
   },
   {
+    name: "setCameraActive",
+    signatures: [["active"]]
+  },
+  {
+    name: "setMicrophoneActive",
+    signatures: [["active"]]
+  },
+  {
     name: "setPositionState",
     signatures: [["?state"]]
   },
@@ -3347,6 +3412,10 @@ export const NativeFunctions = [
   {
     name: "registerProtocolHandler",
     signatures: [["scheme","url"]]
+  },
+  {
+    name: "setStatus",
+    signatures: [["status","?options"]]
   },
   {
     name: "appendChild",
@@ -3539,26 +3608,6 @@ export const NativeFunctions = [
   {
     name: "permissionState",
     signatures: [["?options"]]
-  },
-  {
-    name: "subscribe",
-    signatures: [["?options"]],
-    receivers: ["PushManager"]
-  },
-  {
-    name: "subscribe",
-    signatures: [["?observer","?options"]],
-    receivers: ["Observable"]
-  },
-  {
-    name: "subscribe",
-    signatures: [["subscriptions"]],
-    receivers: ["CookieStoreManager"]
-  },
-  {
-    name: "unsubscribe",
-    signatures: [["subscriptions"]],
-    receivers: ["CookieStoreManager"]
   },
   {
     name: "insertDTMF",
@@ -3818,6 +3867,11 @@ export const NativeFunctions = [
   },
   {
     name: "initialize",
+    signatures: [["length"]],
+    receivers: ["CrashReportStorage"]
+  },
+  {
+    name: "initialize",
     signatures: [["root"]],
     receivers: ["CustomElementRegistry"]
   },
@@ -3944,6 +3998,10 @@ export const NativeFunctions = [
   {
     name: "extend",
     signatures: [["node","?offset"]]
+  },
+  {
+    name: "getComposedRanges",
+    signatures: [["?options"]]
   },
   {
     name: "getRangeAt",
@@ -5759,6 +5817,10 @@ export const NativeFunctions = [
     signatures: [["byteOffset","value","?littleEndian"]]
   },
   {
+    name: "isError",
+    signatures: [["error"]]
+  },
+  {
     name: "addInitializer",
     signatures: [["initializer"]]
   },
@@ -6025,12 +6087,8 @@ export const NativeFunctions = [
     receivers: ["Navigation"]
   },
   {
-    name: "AnimationTrigger",
-    signatures: [["?options"]]
-  },
-  {
     name: "addAnimation",
-    signatures: [["animation"]]
+    signatures: [["animation","action","behavior"]]
   },
   {
     name: "removeAnimation",
@@ -6045,11 +6103,19 @@ export const NativeFunctions = [
     signatures: [["?options"]]
   },
   {
+    name: "EventTrigger",
+    signatures: [["?options"]]
+  },
+  {
     name: "KeyframeEffect",
     signatures: [["source"],["target","keyframes","?options"]]
   },
   {
     name: "ScrollTimeline",
+    signatures: [["?options"]]
+  },
+  {
+    name: "TimelineTrigger",
     signatures: [["?options"]]
   },
   {
@@ -6550,6 +6616,10 @@ export const NativeFunctions = [
     signatures: [["type","?eventInitDict"]]
   },
   {
+    name: "setFormControlRange",
+    signatures: [["element","start","end"]]
+  },
+  {
     name: "MutationObserver",
     signatures: [["callback"]]
   },
@@ -6672,10 +6742,6 @@ export const NativeFunctions = [
     signatures: [["type","?options"]]
   },
   {
-    name: "getComposedRanges",
-    signatures: [["?options"]]
-  },
-  {
     name: "AnimationEvent",
     signatures: [["type","?eventInitDict"]]
   },
@@ -6697,6 +6763,10 @@ export const NativeFunctions = [
   },
   {
     name: "DragEvent",
+    signatures: [["type","?eventInitDict"]]
+  },
+  {
+    name: "EmailVerifiedEvent",
     signatures: [["type","?eventInitDict"]]
   },
   {
@@ -6952,11 +7022,6 @@ export const NativeFunctions = [
     signatures: [["?options"]]
   },
   {
-    name: "requestClose",
-    signatures: [["?returnValue"]],
-    receivers: ["HTMLDialogElement"]
-  },
-  {
     name: "reportEvent",
     signatures: [["event"]]
   },
@@ -7157,6 +7222,10 @@ export const NativeFunctions = [
     signatures: [["callback"]]
   },
   {
+    name: "RouteEvent",
+    signatures: [["type"]]
+  },
+  {
     name: "Sanitizer",
     signatures: [["?configuration"]]
   },
@@ -7207,6 +7276,10 @@ export const NativeFunctions = [
   {
     name: "unregisterTool",
     signatures: [["tool_name"]]
+  },
+  {
+    name: "provideContext",
+    signatures: [["params"]]
   },
   {
     name: "SnapEvent",
@@ -7537,7 +7610,11 @@ export const NativeFunctions = [
   },
   {
     name: "drawElement",
-    signatures: [["element","x","y","?options"],["element","x","y","dwidth","dheight","?options"]]
+    signatures: [["element","x","y","?dwidth","?dheight"]]
+  },
+  {
+    name: "drawElementImage",
+    signatures: [["element","x","y","?dwidth","?dheight"]]
   },
   {
     name: "setHitTestRegions",
@@ -7582,10 +7659,6 @@ export const NativeFunctions = [
   {
     name: "getUserInfo",
     signatures: [["config"]]
-  },
-  {
-    name: "setStatus",
-    signatures: [["status","?options"]]
   },
   {
     name: "PasswordCredential",
@@ -7786,10 +7859,6 @@ export const NativeFunctions = [
     signatures: [["track"]]
   },
   {
-    name: "takePhoto",
-    signatures: [["?photoSettings"]]
-  },
-  {
     name: "getAllRecords",
     signatures: [["?options"]]
   },
@@ -7838,14 +7907,6 @@ export const NativeFunctions = [
   {
     name: "MediaMetadata",
     signatures: [["?init"]]
-  },
-  {
-    name: "setMicrophoneActive",
-    signatures: [["active"]]
-  },
-  {
-    name: "setCameraActive",
-    signatures: [["active"]]
   },
   {
     name: "appendEncodedChunks",
@@ -7992,11 +8053,19 @@ export const NativeFunctions = [
     signatures: [["x","?options"]]
   },
   {
+    name: "roundEven",
+    signatures: [["x","?options"]]
+  },
+  {
     name: "erf",
     signatures: [["x","?options"]]
   },
   {
     name: "identity",
+    signatures: [["x","?options"]]
+  },
+  {
+    name: "isInfinite",
     signatures: [["x","?options"]]
   },
   {
@@ -8360,28 +8429,20 @@ export const NativeFunctions = [
     signatures: [["worker","?options","?transfer"]]
   },
   {
-    name: "sendRtp",
-    signatures: [["packet","options"]]
-  },
-  {
     name: "setHeaderExtensionsToNegotiate",
     signatures: [["extensions"]]
   },
   {
-    name: "createProcessor",
-    signatures: [["worker","?options","?transfer"]]
-  },
-  {
-    name: "readReceivedAcks",
-    signatures: [["maxCount"]]
-  },
-  {
-    name: "readSentRtp",
-    signatures: [["maxCount"]]
-  },
-  {
     name: "RTCSessionDescription",
     signatures: [["?descriptionInitDict"]]
+  },
+  {
+    name: "RtcTransport",
+    signatures: [["name"]]
+  },
+  {
+    name: "sendPackets",
+    signatures: [["packets"]]
   },
   {
     name: "revoke",
@@ -8412,12 +8473,8 @@ export const NativeFunctions = [
     signatures: [["id"]]
   },
   {
-    name: "printJob",
-    signatures: [["job_name","document","attributes"]]
-  },
-  {
-    name: "getEncryptedMatchKey",
-    signatures: [["reportCollector","options"]]
+    name: "submitPrintJob",
+    signatures: [["job_name","document_data","attributes"]]
   },
   {
     name: "PushEvent",
@@ -8838,6 +8895,10 @@ export const NativeFunctions = [
     signatures: [["provokeMode"]]
   },
   {
+    name: "texElementImage2D",
+    signatures: [["target","level","internalformat","format","type","element"]]
+  },
+  {
     name: "texElement2D",
     signatures: [["target","level","internalformat","format","type","element"]]
   },
@@ -9122,10 +9183,6 @@ export const NativeFunctions = [
     signatures: [["?init"]]
   },
   {
-    name: "WebTransport",
-    signatures: [["url","?options"]]
-  },
-  {
     name: "USBAlternateInterface",
     signatures: [["deviceInterface","alternateSetting"]]
   },
@@ -9227,6 +9284,10 @@ export const NativeFunctions = [
   },
   {
     name: "XRInputSourcesChangeEvent",
+    signatures: [["type","eventInitDict"]]
+  },
+  {
+    name: "XRLayerEvent",
     signatures: [["type","eventInitDict"]]
   },
   {

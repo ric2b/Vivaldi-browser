@@ -26,10 +26,10 @@
 namespace blink {
 
 PropertyTreeManager::EffectState::EffectState(const CurrentEffectState& other)
-    : effect_id(other.effect_id),
-      effect(other.effect),
+    : effect(other.effect),
       clip(other.clip),
       transform(other.transform),
+      effect_id(other.effect_id),
       may_be_2d_axis_misaligned_to_render_surface(
           other.may_be_2d_axis_misaligned_to_render_surface),
       contained_by_non_render_surface_synthetic_rounded_clip(
@@ -37,10 +37,10 @@ PropertyTreeManager::EffectState::EffectState(const CurrentEffectState& other)
 
 PropertyTreeManager::CurrentEffectState::CurrentEffectState(
     const EffectState& other)
-    : effect_id(other.effect_id),
-      effect(other.effect),
+    : effect(other.effect),
       clip(other.clip),
       transform(other.transform),
+      effect_id(other.effect_id),
       may_be_2d_axis_misaligned_to_render_surface(
           other.may_be_2d_axis_misaligned_to_render_surface),
       contained_by_non_render_surface_synthetic_rounded_clip(
@@ -1359,8 +1359,7 @@ void PropertyTreeManager::UpdateConditionalRenderSurfaceReasons(
   for (int id = tree_size - 1; id > cc::kSecondaryRootPropertyNodeId; id--) {
     auto* effect = effect_tree_.Node(id);
 
-    if (RuntimeEnabledFeatures::RenderSurfaceFor2DScaleTransformEnabled() &&
-        effect->render_surface_reason == cc::RenderSurfaceReason::kNone &&
+    if (effect->render_surface_reason == cc::RenderSurfaceReason::kNone &&
         effect->needs_effect_for_2d_scale_transform &&
         effect_layer_counts[id] >= 2 && !has_text[id]) {
       effect->render_surface_reason =

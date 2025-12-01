@@ -1,0 +1,9 @@
+============== TagTooLong.fbs ============
+include "${DIR}/tracing_schema_common.fbs";
+
+table TagTooLong (tag: "LONGT") {}
+============== diagnosis ============
+ERROR: ${DIR}/tools/testdata/TagTooLong.fbs contains table TagTooLong with tag LONGT of length 5. All tables must have a tag of length 4.
+
+============== result ============
+

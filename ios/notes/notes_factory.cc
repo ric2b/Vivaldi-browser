@@ -47,16 +47,12 @@ NotesModelFactory* NotesModelFactory::GetInstance() {
 }
 
 std::unique_ptr<KeyedService> NotesModelFactory::BuildServiceInstanceFor(
-    web::BrowserState* context) const {
-  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
+    ProfileIOS* profile) const {
   auto notes_model = std::make_unique<NotesModel>(
       NoteSyncServiceFactory::GetForProfile(profile),
       SyncedFileStoreFactory::GetForProfile(profile));
   notes_model->Load(profile->GetStatePath());
   return notes_model;
 }
-
-void NotesModelFactory::RegisterBrowserStatePrefs(
-    user_prefs::PrefRegistrySyncable* registry) {}
 
 }  // namespace vivaldi

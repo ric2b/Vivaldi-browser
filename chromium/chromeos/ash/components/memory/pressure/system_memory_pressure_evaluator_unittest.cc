@@ -5,12 +5,13 @@
 #include "chromeos/ash/components/memory/pressure/system_memory_pressure_evaluator.h"
 
 #include <unistd.h>
+
 #include <string>
 
+#include "base/byte_count.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
-#include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/system/sys_info.h"
 #include "base/test/task_environment.h"
@@ -67,8 +68,9 @@ TEST(ChromeOSSystemMemoryPressureEvaluatorTest, CheckMemoryPressure) {
   // expected.
   std::vector<base::MemoryPressureListener::MemoryPressureLevel>
       pressure_events;
-  auto listener = std::make_unique<base::MemoryPressureListener>(
-      FROM_HERE, base::BindRepeating(&PressureCallback, &pressure_events));
+  auto listener = std::make_unique<base::SyncMemoryPressureListener>(
+      base::MemoryPressureListenerTag::kTest,
+      base::BindRepeating(&PressureCallback, &pressure_events));
 
   memory_pressure::MultiSourceMemoryPressureMonitor monitor;
 
@@ -80,37 +82,36 @@ TEST(ChromeOSSystemMemoryPressureEvaluatorTest, CheckMemoryPressure) {
             evaluator->current_vote());
 
   // Moderate Pressure.
-  evaluator->OnMemoryPressure(PressureLevel::MODERATE,
-                              memory_pressure::ReclaimTarget(1000));
-  base::RunLoop().RunUntilIdle();
+  evaluator->OnMemoryPressure(
+      PressureLevel::MODERATE,
+      memory_pressure::ReclaimTarget(base::ByteCount(1000)));
   ASSERT_EQ(base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE,
             evaluator->current_vote());
 
   // Critical Pressure.
-  evaluator->OnMemoryPressure(PressureLevel::CRITICAL,
-                              memory_pressure::ReclaimTarget(1000));
-  base::RunLoop().RunUntilIdle();
+  evaluator->OnMemoryPressure(
+      PressureLevel::CRITICAL,
+      memory_pressure::ReclaimTarget(base::ByteCount(1000)));
   ASSERT_EQ(base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL,
             evaluator->current_vote());
 
   // Moderate Pressure.
-  evaluator->OnMemoryPressure(PressureLevel::MODERATE,
-                              memory_pressure::ReclaimTarget(1000));
-  base::RunLoop().RunUntilIdle();
+  evaluator->OnMemoryPressure(
+      PressureLevel::MODERATE,
+      memory_pressure::ReclaimTarget(base::ByteCount(1000)));
   ASSERT_EQ(base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE,
             evaluator->current_vote());
 
   // No pressure, note: this will not cause any event.
-  evaluator->OnMemoryPressure(PressureLevel::NONE,
-                              memory_pressure::ReclaimTarget(0));
-  base::RunLoop().RunUntilIdle();
+  evaluator->OnMemoryPressure(
+      PressureLevel::NONE, memory_pressure::ReclaimTarget(base::ByteCount(0)));
   ASSERT_EQ(base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE,
             evaluator->current_vote());
 
   // Back into moderate.
-  evaluator->OnMemoryPressure(PressureLevel::MODERATE,
-                              memory_pressure::ReclaimTarget(1000));
-  base::RunLoop().RunUntilIdle();
+  evaluator->OnMemoryPressure(
+      PressureLevel::MODERATE,
+      memory_pressure::ReclaimTarget(base::ByteCount(1000)));
   ASSERT_EQ(base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE,
             evaluator->current_vote());
 

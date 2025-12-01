@@ -168,7 +168,7 @@ static UNUSED_ATTR const U32 OF_defaultNormLog = OF_DEFAULTNORMLOG;
 *  Shared functions to include for inlining
 *********************************************/
 static void ZSTD_copy8(void* dst, const void* src) {
-#if defined(ZSTD_ARCH_ARM_NEON)
+#if defined(ZSTD_ARCH_ARM_NEON) && !defined(__aarch64__)
     vst1_u8((uint8_t*)dst, vld1_u8((const uint8_t*)src));
 #else
     ZSTD_memcpy(dst, src, 8);

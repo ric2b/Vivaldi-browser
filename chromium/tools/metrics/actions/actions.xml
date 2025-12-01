@@ -33,6 +33,17 @@ should be able to be added at any place in this file.
 
 <actions>
 
+<variants name="Toast_Type">
+  <variant name="" summary="aggregated"/>
+  <variant name=".AddedToComparisonTable" summary="Added to comparison table"/>
+  <variant name=".AddedToReadingList" summary="Added to reading list"/>
+  <variant name=".DiceUserMigrated" summary="DICe user migrated"/>
+  <variant name=".SyncEsbOff"
+      summary="Enhanced Protection setting has been synced to Off"/>
+  <variant name=".SyncEsbOn"
+      summary="Enhanced Protection setting has been synced to On"/>
+</variants>
+
 <action name="AboutChrome">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -139,12 +150,6 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="AboutFlags_disable-pnacl">
-  <obsolete>This flag no longer exists.</obsolete>
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
-</action>
-
 <action name="AboutFlags_disable-print-preview">
   <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
@@ -206,36 +211,12 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
-<action name="AboutFlags_enable-nacl">
-  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
-</action>
-
-<action name="AboutFlags_enable-nacl-debug">
-  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
-</action>
-
-<action name="AboutFlags_enable-nacl-exception-handling">
-  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
-</action>
-
 <action name="AboutFlags_enable-native-cups">
   <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
   <owner>skau@chromium.org</owner>
   <description>
     Records if native cups printing is enabled in chrome://flags
   </description>
-</action>
-
-<action name="AboutFlags_enable-pnacl">
-  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
 </action>
 
 <action name="AboutFlags_enable-pointer-events">
@@ -339,24 +320,6 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="AboutFlags_my-special-feature">
-  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
-</action>
-
-<action name="AboutFlags_nacl-debug-mask">
-  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
-</action>
-
-<action name="AboutFlags_nacl-gdb">
-  <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
-</action>
-
-<action name="AboutFlags_nacl-gdb-script">
   <obsolete>Deprecated in favor of AboutFlags.Seen histogram.</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -2462,7 +2425,6 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Actions.CustomizeToolbarSidePanel.OpenedFromCustomizeChrome">
-  <owner>tbergquist@chromium.org</owner>
   <owner>corising@chromium.org</owner>
   <owner>top-chrome-desktop-ui@google.com</owner>
   <description>
@@ -2473,7 +2435,6 @@ should be able to be added at any place in this file.
 
 <action
     name="Actions.CustomizeToolbarSidePanel.OpenedFromOutsideCustomizeChrome">
-  <owner>tbergquist@chromium.org</owner>
   <owner>corising@chromium.org</owner>
   <owner>top-chrome-desktop-ui@google.com</owner>
   <description>
@@ -2553,6 +2514,35 @@ should be able to be added at any place in this file.
 <action name="ActiveTabChanged" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="Actor.Ui.HandoffButton.GiveControl.Clicked">
+  <owner>chrstne@google.com</owner>
+  <owner>kenok@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded when the user clicks the Handoff Button when in an actuating tab to
+    give control from the client to the actor.
+  </description>
+</action>
+
+<action name="Actor.Ui.HandoffButton.TakeControl.Clicked">
+  <owner>chrstne@google.com</owner>
+  <owner>kenok@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded when the user clicks the Handoff Button when in an actuating tab to
+    take control from the actor to the client.
+  </description>
+</action>
+
+<action name="Actor.Ui.TaskIcon.Click">
+  <owner>chrstne@google.com</owner>
+  <owner>kenok@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded when the user clicks the Task Icon during/after actuation.
+  </description>
 </action>
 
 <action name="AddAddressManually_AddressSaved">
@@ -3731,12 +3721,31 @@ should be able to be added at any place in this file.
   <description>The survey infobar was displayed.</description>
 </action>
 
+<action name="Android.WindowManager.ChangeWindowName">
+  <owner>aishwaryarj@google.com</owner>
+  <owner>rathomas@google.com</owner>
+  <description>
+    User tapped 'Save' on the dialog opened via the 3-dot menu on the in-app
+    window manager to successfully save and change the name of a Chrome window
+    and dismiss the dialog.
+  </description>
+</action>
+
 <action name="Android.WindowManager.CloseWindow">
   <owner>jinsukkim@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <description>
     User tapped Close in the 3-dot menu from the in-app window manager to remove
     a Chrome window.
+  </description>
+</action>
+
+<action name="Android.WindowManager.NameWindow">
+  <owner>aishwaryarj@google.com</owner>
+  <owner>rathomas@google.com</owner>
+  <description>
+    User tapped 'Name' on the 3-dot menu on the in-app window manager to name a
+    Chrome window.
   </description>
 </action>
 
@@ -3764,6 +3773,16 @@ should be able to be added at any place in this file.
   <description>
     User tapped on 'Restore' in Chrome's in-app window manager to restore an
     inactive Window and bring it to the foreground.
+  </description>
+</action>
+
+<action name="Android.WindowManager.SaveWindowName">
+  <owner>aishwaryarj@google.com</owner>
+  <owner>rathomas@google.com</owner>
+  <description>
+    User tapped 'Save' on the dialog opened via the 3-dot menu on the in-app
+    window manager to successfully save the name of a Chrome window and dismiss
+    the dialog.
   </description>
 </action>
 
@@ -4684,6 +4703,13 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Autofill_ParsedOtpForm">
+  <owner>koerber@google.com</owner>
+  <description>
+    The browser parsed a form containing a one-time password field.
+  </description>
+</action>
+
 <action name="Autofill_ParsedProfileForm" not_user_triggered="true">
   <owner>battre@chromium.org</owner>
   <description>
@@ -4692,6 +4718,9 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Autofill_PolledCreditCardSuggestions">
+  <obsolete>
+    Deprecated as of 09/2025. All suggestions generators always poll the data
+  </obsolete>
   <owner>battre@chromium.org</owner>
   <description>
     This user action is logged when the user interacts with an autofillable
@@ -4700,6 +4729,9 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Autofill_PolledLoyaltyCardSuggestions">
+  <obsolete>
+    Deprecated as of 09/2025. All suggestions generators always poll the data
+  </obsolete>
   <owner>vizcay@google.com</owner>
   <description>
     This user action is logged when the user interacts with an autofillable
@@ -4708,6 +4740,9 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Autofill_PolledProfileSuggestions">
+  <obsolete>
+    Deprecated as of 09/2025. All suggestions generators always poll the data
+  </obsolete>
   <owner>battre@chromium.org</owner>
   <description>
     This user action is logged when the user interacts with an autofillable
@@ -4807,8 +4842,7 @@ should be able to be added at any place in this file.
   <owner>battre@chromium.org</owner>
   <description>
     This user action is logged when the user is shown some credit card
-    suggestions. This should always happen after a
-    Autofill_PolledCreditCardSuggestion.
+    suggestions.
   </description>
 </action>
 
@@ -4830,11 +4864,17 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Autofill_ShowedOtpSuggestions">
+  <owner>koerber@google.com</owner>
+  <description>
+    The browser showed a one-time password suggestion to the user.
+  </description>
+</action>
+
 <action name="Autofill_ShowedProfileSuggestions">
   <owner>battre@chromium.org</owner>
   <description>
     This user action is logged when the user is shown some profile suggestions.
-    This should always happen after a Autofill_PolledProfileSuggestion.
   </description>
 </action>
 
@@ -6246,6 +6286,60 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="BookmarkTabGroupConversion_ConvertToBookmarkConfirmed">
+  <owner>yuhengh@google.com</owner>
+  <description>
+    User selects the save button from the bookmark editor dialog to complete
+    converting a tab group to bookmark folder.
+  </description>
+</action>
+
+<action name="BookmarkTabGroupConversion_ConvertToBookmarkSelected">
+  <owner>yuhengh@google.com</owner>
+  <description>
+    User selected the menu item to convert a tab group to bookmark folder
+  </description>
+</action>
+
+<action name="BookmarkTabGroupConversion_ShowGroupAlreadyCreatedDialog">
+  <owner>yuhengh@google.com</owner>
+  <description>
+    The user tries to open a bookmark folder as group but the bookmark folder is
+    already connected to an existing group. A dialog is shown to prompt user to
+    make a choice.
+  </description>
+</action>
+
+<action name="BookmarkTabGroupConversion_UserSelectCancel">
+  <owner>yuhengh@google.com</owner>
+  <description>
+    The user tries to open a bookmark folder as group but the bookmark folder is
+    already connected to an existing group. A dialog is shown to prompt user to
+    make a choice. User dismisses the dialog without selecting either the create
+    new group button or the replace old group button.
+  </description>
+</action>
+
+<action name="BookmarkTabGroupConversion_UserSelectCreateNewGroup">
+  <owner>yuhengh@google.com</owner>
+  <description>
+    The user tries to open a bookmark folder as group but the bookmark folder is
+    already connected to an existing group. A dialog is shown to prompt user to
+    make a choice. User selects the create new group button. This action is used
+    for logging user selection, it's not equivalent to creating new group.
+  </description>
+</action>
+
+<action name="BookmarkTabGroupConversion_UserSelectReplaceOldGroup">
+  <owner>yuhengh@google.com</owner>
+  <description>
+    The user tries to open a bookmark folder as group but the bookmark folder is
+    already connected to an existing group. A dialog is shown to prompt user to
+    make a choice. User selects the replace old group button. This action is
+    used for logging user selection, it's not equivalent to replacing old group.
+  </description>
+</action>
+
 <action name="BottomSheet_CreditCard_SuggestionAccepted">
   <owner>noemies@google.com</owner>
   <owner>sugoi@google.com</owner>
@@ -6773,6 +6867,14 @@ should be able to be added at any place in this file.
   <description>
     Recorded when a user clicks on the settings button in Network view within
     systems tray.
+  </description>
+</action>
+
+<action name="ChromeSchemePage.OverrideTriggered">
+  <owner>mfiaz@google.com</owner>
+  <owner>clank-tab-dev@google.com</owner>
+  <description>
+    Recorded when a native page is not generated for a chrome:// scheme page.
   </description>
 </action>
 
@@ -8779,6 +8881,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="ContextMenu.ExtensionItemClicked">
+  <owner>jhimawan@google.com</owner>
+  <owner>clank-app-team@google.com</owner>
+  <description>
+    From a context menu on Android, the user clicked an item which was
+    registered by an extension.
+  </description>
+</action>
+
 <action name="ContextualSearch.BackPressClose">
   <owner>donnd@chromium.org</owner>
   <description>
@@ -10376,6 +10487,16 @@ should be able to be added at any place in this file.
     Recorded when a user started reader mode through an interaction with a
     message or the magic toolbar button. This doesn't record when the actual
     viewer appears, but rather when the viewer is requested.
+  </description>
+</action>
+
+<action name="DomDistiller.Android.OnStoppedReaderMode">
+  <owner>wylieb@google.com</owner>
+  <owner>evanluo@google.com</owner>
+  <owner>chrome-reader-mode-team@google.com</owner>
+  <description>
+    Recorded when a user stopped reader mode. This could be because of a
+    navigation away from the page, switching tabs, or closing the browser.
   </description>
 </action>
 
@@ -12525,6 +12646,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Glic.DisabledByAdminPanelLinkClicked">
+  <owner>dewittj@chromium.org</owner>
+  <owner>glic@google.com</owner>
+  <description>
+    Recorded whenever the user clicked a link to follow up about why the Glic
+    feature was blocked by admin.
+  </description>
+</action>
+
 <action name="Glic.Enabled">
   <owner>iwells@google.com</owner>
   <owner>erikchen@chromium.org</owner>
@@ -12601,6 +12731,15 @@ should be able to be added at any place in this file.
   <owner>birnie@google.com</owner>
   <description>
     User clicked the 'X' button to close the Glic First Run Experience dialog.
+  </description>
+</action>
+
+<action name="Glic.Fre.DisabledByAdminPanelClosed">
+  <owner>dewittj@google.com</owner>
+  <owner>glic@google.com</owner>
+  <description>
+    User closed the disabled by admin panel in the FRE by clicking the
+    confirmation button.
   </description>
 </action>
 
@@ -12742,6 +12881,24 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Glic.Settings.DefaultTabContext.Disabled">
+  <owner>birnie@google.com</owner>
+  <owner>harringtond@google.com</owner>
+  <description>
+    Logged when a user disables the default tab context setting on the Glic
+    settings page.
+  </description>
+</action>
+
+<action name="Glic.Settings.DefaultTabContext.Enabled">
+  <owner>birnie@google.com</owner>
+  <owner>harringtond@google.com</owner>
+  <description>
+    Logged when a user enables the default tab context setting on the Glic
+    settings page.
+  </description>
+</action>
+
 <action name="Glic.Settings.Geolocation.Disabled">
   <owner>tommasin@chromium.org</owner>
   <owner>erikchen@chromium.org</owner>
@@ -12833,6 +12990,24 @@ should be able to be added at any place in this file.
   <owner>birnie@google.com</owner>
   <description>
     Logged when the user enables closed captioning in glic.
+  </description>
+</action>
+
+<action name="GlicContextUploadCompleted" not_user_triggered="true">
+  <owner>harringtond@chromium.org</owner>
+  <owner>carlosk@chromium.org</owner>
+  <description>
+    Reported when completing the upload of context necessary to answer a Glic
+    query.
+  </description>
+</action>
+
+<action name="GlicContextUploadStarted" not_user_triggered="true">
+  <owner>harringtond@chromium.org</owner>
+  <owner>carlosk@chromium.org</owner>
+  <description>
+    Reported when starting to upload the context necessary to answer a Glic
+    query.
   </description>
 </action>
 
@@ -12989,6 +13164,35 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="GlicReactionCanned" not_user_triggered="true">
+  <owner>harringtond@chromium.org</owner>
+  <owner>carlosk@chromium.org</owner>
+  <description>
+    Recorded when a reaction was rendered in response to a Glic user query, and
+    the reaction type is 'Canned'. Canned reactions are pre-defined reactions
+    that can be rendered without delay.
+  </description>
+</action>
+
+<action name="GlicReactionModelled" not_user_triggered="true">
+  <owner>harringtond@chromium.org</owner>
+  <owner>carlosk@chromium.org</owner>
+  <description>
+    Recorded when a reaction was rendered in response to a Glic user query, and
+    the reaction type is 'Model'. Model reactions show output from a model to
+    explain work on the response.
+  </description>
+</action>
+
+<action name="GlicReactionUnknown" not_user_triggered="true">
+  <owner>harringtond@chromium.org</owner>
+  <owner>carlosk@chromium.org</owner>
+  <description>
+    Recorded when a reaction was rendered in response to a Glic user query, and
+    the reaction type is unknown.
+  </description>
+</action>
+
 <action name="GlicRemoveHighlight">
   <owner>adithyas@chromium.org</owner>
   <owner>liuwilliam@chromium.org</owner>
@@ -13027,6 +13231,36 @@ should be able to be added at any place in this file.
   <owner>harringtond@chromium.org</owner>
   <owner>erikchen@chromium.org</owner>
   <description>Tracks a single response stop in glic.</description>
+</action>
+
+<action name="GlicResponseStopByUser">
+  <owner>carlosk@chromium.org</owner>
+  <owner>harringtond@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>
+    Tracks a single response stop in glic, initiated by the user.
+  </description>
+</action>
+
+<action name="GlicResponseStopOther" not_user_triggered="true">
+  <owner>carlosk@chromium.org</owner>
+  <owner>harringtond@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>
+    Tracks a single response stop in glic that was not caused by a user or
+    normal completion.
+  </description>
+</action>
+
+<action name="GlicResponseStopUnknownCause">
+  <owner>carlosk@chromium.org</owner>
+  <owner>harringtond@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>
+    Tracks a single response stop in glic, the cause is unspecified. This is
+    reported for all stops in older server versions, and only successful
+    completions in newer server versions.
+  </description>
 </action>
 
 <action name="GlicSessionBegin">
@@ -13395,6 +13629,24 @@ should be able to be added at any place in this file.
 <action name="HistoryPage_SearchResultRemove">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="HistoryPage_SideBarFooterGeminiAppsActivityClick">
+  <owner>lamzin@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <description>
+    User clicked the &quot;Gemini Apps Activity&quot; link in the footer of the
+    history page sidebar.
+  </description>
+</action>
+
+<action name="HistoryPage_SideBarFooterGoogleMyActivityClick">
+  <owner>lamzin@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <description>
+    User clicked the &quot;My Activity&quot; link in the footer of the history
+    page sidebar.
+  </description>
 </action>
 
 <action name="Home">
@@ -15493,7 +15745,67 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="IOS.HomeCustomization.Background.PickerActionSheet.Color.Tapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>bling-mony-pod@google.com</owner>
+  <description>
+    User tapped the color option in the background picker action sheet on the
+    customization main menu on iOS.
+  </description>
+</action>
+
+<action
+    name="IOS.HomeCustomization.Background.PickerActionSheet.Gallery.Tapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>bling-mony-pod@google.com</owner>
+  <description>
+    User tapped the gallery option in the background picker action sheet on the
+    customization main menu on iOS.
+  </description>
+</action>
+
+<action name="IOS.HomeCustomization.Background.PickerActionSheet.Tapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>bling-mony-pod@google.com</owner>
+  <description>
+    User tapped the entry point to open the background picker action sheet on
+    the customization main menu on iOS.
+  </description>
+</action>
+
+<action
+    name="IOS.HomeCustomization.Background.PickerActionSheet.UserUploaded.Tapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>bling-mony-pod@google.com</owner>
+  <description>
+    User tapped the user uploaded image option in the background picker action
+    sheet on the customization main menu on iOS.
+  </description>
+</action>
+
+<action name="IOS.HomeCustomization.Background.RecentlyUsed.Tapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>bling-mony-pod@google.com</owner>
+  <description>
+    User tapped on any recently used background image on the customization main
+    menu on iOS.
+  </description>
+</action>
+
+<action name="IOS.HomeCustomization.Background.ResetDefault.Tapped">
+  <owner>cheickcisse@google.com</owner>
+  <owner>bling-mony-pod@google.com</owner>
+  <description>
+    User tapped the option to reset the background to the default on the
+    customization main menu on iOS.
+  </description>
+</action>
+
 <action name="IOS.HomeCustomization.MagicStackPage.ParcelTracking.Toggled">
+  <obsolete>
+    Unused as of 08/2025, as ParcelTracking code has been turned down and
+    removed from the codebase
+  </obsolete>
   <owner>adamta@google.com</owner>
   <owner>bling-pandamonium@google.com</owner>
   <description>
@@ -15533,6 +15845,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="IOS.HomeCustomization.MagicStackPage.ShopCardReviews.Toggled">
+  <obsolete>Deprecated as of 09/2025.</obsolete>
   <owner>davidjm@chromium.org</owner>
   <owner>gloriafang@google.com</owner>
   <owner>thegreenfrog@chromium.org</owner>
@@ -16412,6 +16725,10 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="IOSMagicStackParcelTrackingFreshSignal" not_user_triggered="true">
+  <obsolete>
+    Unused as of 08/2025, as ParcelTracking code has been turned down and
+    removed from the codebase
+  </obsolete>
   <owner>thegreenfrog@google.com</owner>
   <owner>bling-team@google.com</owner>
   <description>
@@ -22929,6 +23246,18 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileAIHubIconTapped">
+  <owner>joemerramos@google.com</owner>
+  <owner>bling-alchemy@google.com</owner>
+  <description>Reported when the user taps the AI Hub icon.</description>
+</action>
+
+<action name="MobileAIHubNewBadgeTapped">
+  <owner>joemerramos@google.com</owner>
+  <owner>bling-alchemy@google.com</owner>
+  <description>Reported when the user taps the New Feature Badge</description>
+</action>
+
 <action name="MobileBandwidthSettingsBack">
   <owner>gambard@chromium.org</owner>
   <owner>sczs@chromium.org</owner>
@@ -24185,6 +24514,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileGeminiPromptSent">
+  <owner>kanouche@google.com</owner>
+  <owner>bling-alchemy@google.com</owner>
+  <description>
+    Reported when the user sends a prompt in a Gemini session. This includes
+    both the first prompt and subsequent prompts in a conversation. iOS only.
+  </description>
+</action>
+
 <action name="MobileGeminiResponseReceived">
   <owner>kanouche@google.com</owner>
   <owner>bling-alchemy@google.com</owner>
@@ -25195,6 +25533,13 @@ should be able to be added at any place in this file.
   <owner>basiaz@google.com</owner>
   <owner>iwells@chromium.org</owner>
   <description>User pressed 'Listen to this page' in the app menu.</description>
+</action>
+
+<action name="MobileMenuReaderMode">
+  <owner>fernandex@google.com</owner>
+  <description>
+    User pressed 'Show/Hide Reading Mode' in the app menu.
+  </description>
 </action>
 
 <action name="MobileMenuReadingList">
@@ -28401,6 +28746,14 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileToolbarPinnedOnlyTabStrip">
+  <owner>zheliooo@google.com</owner>
+  <description>
+    User entered a state where pinned tabs occupy the entire visible area of
+    tablet tab strip; record at most once per session. Android only.
+  </description>
+</action>
+
 <action name="MobileToolbarReload">
   <owner>tedchoc@chromium.org</owner>
   <description>
@@ -28425,6 +28778,25 @@ should be able to be added at any place in this file.
   <description>
     User long-pressed on a tab with in a group, dragged and dropped it outside
     of the group in the tablet tab strip. Android Only.
+  </description>
+</action>
+
+<action name="MobileToolbarReorderTab.TabsAddedToGroup">
+  <owner>clank-app-team@google.com</owner>
+  <owner>hitarthkothari@google.com</owner>
+  <description>
+    User long-pressed on a tab part of a multi-tab selection, dragged and
+    dropped it within a tab group in the tablet tab strip. Android Only.
+  </description>
+</action>
+
+<action name="MobileToolbarReorderTab.TabsRemovedFromGroup">
+  <owner>clank-app-team@google.com</owner>
+  <owner>hitarthkothari@google.com</owner>
+  <description>
+    User long-pressed on a tab part of a multi-tab selection with in a group,
+    dragged and dropped it outside of the group in the tablet tab strip. Android
+    Only.
   </description>
 </action>
 
@@ -28455,6 +28827,14 @@ should be able to be added at any place in this file.
 <action name="MobileToolbarShowMenu">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="MobileToolbarShowMenuFromReaderMode">
+  <owner>fernandex@google.com</owner>
+  <description>
+    User pressed the toolbar's button to open the app menu from Reader Mode. iOS
+    only.
+  </description>
 </action>
 
 <action name="MobileToolbarShowNewTabMenu">
@@ -28533,6 +28913,14 @@ should be able to be added at any place in this file.
 <action name="MobileToolbarStackViewNewTab">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="MobileToolbarStartMultiTabReorder">
+  <owner>clank-app-team@google.com</owner>
+  <owner>hitarthkothari@google.org</owner>
+  <description>
+    User started to drag a multi-tab re-order in tablet tab strip. Android only.
+  </description>
 </action>
 
 <action name="MobileToolbarStartReorderGroup">
@@ -28690,65 +29078,87 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
-<action name="MobileToolbarTabMenu.AddToTabGroup">
+<action name="MobileToolbarTabMenu{ActionType}">
   <owner>jhimawan@google.com</owner>
+  <owner>hitarthkothari@google.com</owner>
   <owner>clank-large-form-factors@google.com</owner>
   <description>
-    User opened the bottom sheet to add a tab to a new or existing tab group,
-    via the tab context menu on tab strip on Android.
+    Recorded when the user interacts with the tab menu on the tab strip on
+    Android. {ActionType}
   </description>
-</action>
-
-<action name="MobileToolbarTabMenu.CloseTab">
-  <owner>jhimawan@google.com</owner>
-  <owner>clank-large-form-factors@google.com</owner>
-  <description>
-    User closed a tab via the tab context menu on tab strip on Android.
-  </description>
-</action>
-
-<action name="MobileToolbarTabMenu.MoveTabToNewWindow">
-  <owner>jhimawan@google.com</owner>
-  <owner>clank-large-form-factors@google.com</owner>
-  <description>
-    User moved a tab to a new window via the tab context menu on tab strip on
-    Android.
-  </description>
-</action>
-
-<action name="MobileToolbarTabMenu.MoveTabToOtherWindow">
-  <owner>jhimawan@google.com</owner>
-  <owner>clank-large-form-factors@google.com</owner>
-  <description>
-    User moved a tab to another window via the tab context menu on tab strip on
-    Android.
-  </description>
-</action>
-
-<action name="MobileToolbarTabMenu.RemoveFromTabGroup">
-  <owner>jhimawan@google.com</owner>
-  <owner>clank-large-form-factors@google.com</owner>
-  <description>
-    User removed a tab from its tab group via the tab context menu on tab strip
-    on Android.
-  </description>
-</action>
-
-<action name="MobileToolbarTabMenu.ShareTab">
-  <owner>jhimawan@google.com</owner>
-  <owner>clank-large-form-factors@google.com</owner>
-  <description>
-    User shared the URL open in a tab, via the tab context menu on tab strip on
-    Android.
-  </description>
-</action>
-
-<action name="MobileToolbarTabMenu.Shown">
-  <owner>jhimawan@google.com</owner>
-  <owner>clank-large-form-factors@google.com</owner>
-  <description>
-    User opened the tab context menu via long-press on tab strip on Android.
-  </description>
+  <token key="ActionType">
+    <variant name="" summary="aggregated"/>
+    <variant name=".AddToTabGroup"
+        summary="User opened the bottom sheet to add a tab to a new or
+                 existing tab group, via the tab context menu on tab strip on
+                 Android."/>
+    <variant name=".AddToTabGroup.MultiTab"
+        summary="User opened the bottom sheet to add multiple tabs to a new
+                 or existing tab group, via the tab context menu on tab strip
+                 on Android."/>
+    <variant name=".CloseTab"
+        summary="User closed a tab via the tab context menu on tab strip on
+                 Android."/>
+    <variant name=".CloseTab.MultiTab"
+        summary="User closed multiple tabs via the tab context menu on tab
+                 strip on Android."/>
+    <variant name=".MoveTabToGroup"
+        summary="User moved a tab to a synced tab group via the tab context
+                 menu on tab strip on Android."/>
+    <variant name=".MoveTabToGroup.MultiTab"
+        summary="User moved multiple tabs to a synced tab group via the tab
+                 context menu on tab strip on Android."/>
+    <variant name=".MoveTabToIncognitoGroup"
+        summary="User moved a tab to an incognito tab group via the tab
+                 context menu on tab strip on Android."/>
+    <variant name=".MoveTabToIncognitoGroup.MultiTab"
+        summary="User moved multiple tabs to an incognito tab group via the
+                 tab context menu on tab strip on Android."/>
+    <variant name=".MoveTabToNewWindow"
+        summary="User moved a tab to a new window via the tab context menu on
+                 tab strip on Android."/>
+    <variant name=".MoveTabToNewWindow.MultiTab"
+        summary="User moved multiple tabs to a new window via the tab context
+                 menu on tab strip on Android."/>
+    <variant name=".MoveTabToOtherWindow"
+        summary="User moved a tab to another window via the tab context menu
+                 on tab strip on Android."/>
+    <variant name=".MoveTabToOtherWindow.MultiTab"
+        summary="User moved multiple tabs to another window via the tab
+                 context menu on tab strip on Android."/>
+    <variant name=".NewGroup"
+        summary="User created a new tab group via the tab context menu on tab
+                 strip on Android."/>
+    <variant name=".NewGroup.MultiTab"
+        summary="User created a new tab group with multiple tabs via the tab
+                 context menu on tab strip on Android."/>
+    <variant name=".PinTab"
+        summary="User pinned a tab via the tab context menu on tab strip on
+                 Android."/>
+    <variant name=".PinTab.MultiTab"
+        summary="User pinned multiple tabs via the tab context menu on tab
+                 strip on Android."/>
+    <variant name=".RemoveTabFromTabGroup"
+        summary="User removed a tab from its tab group via the tab context
+                 menu on tab strip on Android."/>
+    <variant name=".RemoveTabFromTabGroup.MultiTab"
+        summary="User removed multiple tabs from their tab group via the tab
+                 context menu on tab strip on Android."/>
+    <variant name=".ShareTab"
+        summary="User shared the URL open in a tab, via the tab context menu
+                 on tab strip on Android."/>
+    <variant name=".Shown"
+        summary="Recorded when the tab context menu is shown."/>
+    <variant name=".Shown.MultiTab"
+        summary="Recorded when the tab context menu is shown with multiple
+                 tabs selected."/>
+    <variant name=".UnpinTab"
+        summary="User unpinned a tab via the tab context menu on tab strip on
+                 Android."/>
+    <variant name=".UnpinTab.MultiTab"
+        summary="User unpinned multiple tabs via the tab context menu on tab
+                 strip on Android."/>
+  </token>
 </action>
 
 <action name="MobileToolbarToggleBookmark">
@@ -33042,6 +33452,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="PageInfo.CookiesSubpage.RwsSiteSettingsOpened">
+  <obsolete>Deprecated. Never launched.</obsolete>
   <owner>mjenn@google.com</owner>
   <owner>koilos@google.com</owner>
   <description>
@@ -36596,12 +37007,49 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action
+    name="Settings.AiPage.GlicShortcuts.DefaultTabAccessToggleLearnMoreClicked">
+  <owner>birnie@google.com</owner>
+  <owner>harringtond@google.com</owner>
+  <description>
+    Logged when the user clicks on the 'Learn more' link associated with the
+    Default Tab Access Toggle in chrome://settings/ai/gemini.
+  </description>
+</action>
+
+<action name="Settings.AiPage.GlicShortcuts.LauncherToggleLearnMoreClicked">
+  <owner>birnie@google.com</owner>
+  <owner>harringtond@google.com</owner>
+  <description>
+    Logged when the user clicks on the 'Learn more' link associated with the
+    Glic Shortcuts Launcher Toggle in chrome://settings/ai/gemini.
+  </description>
+</action>
+
 <action name="Settings.AiPage.GlicShortcuts.LearnMoreClicked">
   <owner>sanaakbani@google.com</owner>
   <owner>iwells@chromium.org</owner>
   <description>
     Logged when the user clicks on the 'Learn more about shortcuts' link inside
     the keyboard shortcuts description from chrome://settings.
+  </description>
+</action>
+
+<action name="Settings.AiPage.GlicShortcuts.LocationToggleLearnMoreClicked">
+  <owner>birnie@google.com</owner>
+  <owner>harringtond@google.com</owner>
+  <description>
+    Logged when the user clicks on the 'Learn more' link associated with the
+    Location Toggle in chrome://settings/ai/gemini.
+  </description>
+</action>
+
+<action name="Settings.AiPage.GlicShortcuts.TabAccessToggleLearnMoreClicked">
+  <owner>birnie@google.com</owner>
+  <owner>harringtond@google.com</owner>
+  <description>
+    Logged when the user clicks on the 'Learn more' link associated with the Tab
+    Access Toggle in chrome://settings/ai/gemini.
   </description>
 </action>
 
@@ -36762,6 +37210,16 @@ should be able to be added at any place in this file.
     User clicks on the &quot;Sign out&quot; link within the sub-label of the
     &quot;Cookies and other site data&quot; checkbox in the Clear Browsing Data
     dialog.
+  </description>
+</action>
+
+<action name="Settings.DeleteBrowsingData.GeminiAppsActivityLinkClick">
+  <owner>rainhard@chromium.com</owner>
+  <owner>zalmashni@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    User clicks on the &quot;Gemini Apps Activity&quot; link in the &quot;Other
+    Google data&quot; dialog.
   </description>
 </action>
 
@@ -39436,6 +39894,12 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="SidePanel.Glic.Shown">
+  <owner>perrier@chromium.org</owner>
+  <owner>dewittj@google.com</owner>
+  <description>Recorded when the Glic side panel entry is shown.</description>
+</action>
+
 <action name="SidePanel.Hide">
   <owner>corising@chromium.org</owner>
   <owner>top-chrome-desktop-ui@google.com</owner>
@@ -40390,9 +40854,10 @@ should be able to be added at any place in this file.
   <owner>myuu@google.com</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>chrome-signin-mobile-team@google.com</owner>
+  <owner>chrome-signin-team@google.com</owner>
   <description>
     Recorded when user takes an action on the History Sync Opt-In screen.
-    Recorded on iOS only.
+    Recorded on iOS and Desktop.
   </description>
 </action>
 
@@ -41677,7 +42142,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::kSigninPromo.
+    signin_metrics::AccessPoint::kFullscreenSigninPromo.
   </description>
 </action>
 
@@ -44858,8 +45323,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabContextMenu_AddToExistingGroup">
-  <owner>bsep@google.com</owner>
-  <owner>tbergquist@google.com</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>top-chrome-desktop-ui@google.com</owner>
   <description>
     User selected an entry in the Add to existing group submenu from the tab
@@ -44877,8 +45341,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabContextMenu_AddToNewGroup">
-  <owner>bsep@google.com</owner>
-  <owner>tbergquist@google.com</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>top-chrome-desktop-ui@google.com</owner>
   <description>
     User selected Add to new group from the tab context menu.
@@ -44906,7 +45369,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabContextMenu_CloseOtherTabs">
-  <owner>tbergquist@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>top-chrome-desktop-ui@google.com</owner>
   <description>
     User selected Close Other Tabs from the tab context menu. Temporarily
@@ -44915,7 +45378,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabContextMenu_CloseTab">
-  <owner>tbergquist@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>top-chrome-desktop-ui@google.com</owner>
   <description>User selected Close Tabs from tab context menu.</description>
 </action>
@@ -44927,7 +45390,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabContextMenu_CloseTabsToRight">
-  <owner>tbergquist@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>top-chrome-desktop-ui@google.com</owner>
   <description>
     User selected Close Tabs to the Right from tab context menu.
@@ -44947,7 +45410,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabContextMenu_Duplicate">
-  <owner>tbergquist@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>top-chrome-desktop-ui@google.com</owner>
   <description>User selected Duplicate from tab context menu.</description>
 </action>
@@ -44977,7 +45440,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabContextMenu_NewTab">
-  <owner>tbergquist@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>top-chrome-desktop-ui@google.com</owner>
   <description>
     User selected New Tab to the Right from the tabstrip context menu.
@@ -45012,14 +45475,13 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabContextMenu_Reload">
-  <owner>tbergquist@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>top-chrome-desktop-ui@google.com</owner>
   <description>User selected Reload from tab context menu.</description>
 </action>
 
 <action name="TabContextMenu_RemoveFromGroup">
-  <owner>bsep@google.com</owner>
-  <owner>tbergquist@google.com</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>top-chrome-desktop-ui@google.com</owner>
   <description>
     User selected Remove from group from the tab context menu.
@@ -45073,7 +45535,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabContextMenu_TogglePinned">
-  <owner>tbergquist@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>top-chrome-desktop-ui@google.com</owner>
   <description>User selected Pin/Unpin from tab context menu.</description>
 </action>
@@ -45732,6 +46194,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="TabGroups_GroupAllUngroupedTabs">
+  <owner>dominicaustria@google.com</owner>
+  <owner>top-chrome-desktop-ui@google.com</owner>
+  <description>
+    User created a tab group by opening the system menu and selecting the group
+    all ungrouped tabs button.
+  </description>
+</action>
+
 <action name="TabGroups_SavedTabGroups_Closed">
   <owner>dljames@chromium.org</owner>
   <owner>top-chrome-desktop-ui@google.com</owner>
@@ -46269,6 +46740,26 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Tabs.SplitView.NudgeShown">
+  <owner>agale@chromium.org</owner>
+  <owner>edwardjung@chromium.org</owner>
+  <owner>top-chrome-desktop-ui@google.com</owner>
+  <description>
+    Recorded when the nudge is shown for the split tab drop target during a link
+    drag operation.
+  </description>
+</action>
+
+<action name="Tabs.SplitView.NudgeUsed">
+  <owner>agale@chromium.org</owner>
+  <owner>edwardjung@chromium.org</owner>
+  <owner>top-chrome-desktop-ui@google.com</owner>
+  <description>
+    Recorded when the user drops a link into the split tab drop target if the
+    nudge had previously been shown during the drag.
+  </description>
+</action>
+
 <action name="TabsSearch.SuggestedActions.OpenTabs">
   <owner>michaeldo@chromium.org</owner>
   <owner>mrefaat@chromium.org</owner>
@@ -46421,6 +46912,10 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabSwitcher.GroupSuggest">
+  <obsolete>
+    Switched to using enum histogram. See
+    &quot;GroupSuggestionService.SuggestionUiEvent&quot;.
+  </obsolete>
   <owner>mfiaz@google.com</owner>
   <owner>clank-tab-dev@google.com</owner>
   <description>
@@ -46660,22 +47155,24 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
-<action name="Toast.ActionButtonClicked">
+<action name="Toast.ActionButtonClicked{Toast_Type}">
   <owner>agale@chromium.org</owner>
   <owner>stluong@chromium.org</owner>
   <owner>chrome-performance-ui-sea@google.com</owner>
   <description>
-    Recorded when the user clicks on toast's action button.
+    Recorded when the user clicks on toast's action button. {Toast_Type}
   </description>
+  <token key="Toast_Type" variants="Toast_Type"/>
 </action>
 
-<action name="Toast.CloseButtonClicked">
+<action name="Toast.CloseButtonClicked{Toast_Type}">
   <owner>agale@chromium.org</owner>
   <owner>stluong@chromium.org</owner>
   <owner>chrome-performance-ui-sea@google.com</owner>
   <description>
-    Recorded when the user clicks on the toast's close button.
+    Recorded when the user clicks on the toast's close button. {Toast_Type}
   </description>
+  <token key="Toast_Type" variants="Toast_Type"/>
 </action>
 
 <action name="TodayExtension.ExtensionDismissed">
@@ -47774,6 +48271,18 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="UserEducation.WhatsNew.CarouselScrollButtonClick">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <description>The user clicked on a carousel scroll button.</description>
+</action>
+
+<action name="UserEducation.WhatsNew.CtaClick">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <description>The user clicked on a CTA.</description>
+</action>
+
 <action name="UserEducation.WhatsNew.EditionShown">
   <owner>mickeyburks@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
@@ -47781,6 +48290,12 @@ should be able to be added at any place in this file.
     A What's New edition page was shown to the user, either by automatically
     opening on startup or by direct user navigation.
   </description>
+</action>
+
+<action name="UserEducation.WhatsNew.FeatureTileNavigation">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <description>The user clicked on a feature tile.</description>
 </action>
 
 <action name="UserEducation.WhatsNew.ModuleLinkClicked">
@@ -47797,6 +48312,18 @@ should be able to be added at any place in this file.
   <description>
     A module on the What's New page was visible to the user.
   </description>
+</action>
+
+<action name="UserEducation.WhatsNew.NavClick">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <description>The user clicked any navigation.</description>
+</action>
+
+<action name="UserEducation.WhatsNew.NextButtonClick">
+  <owner>mickeyburks@chromium.org</owner>
+  <owner>frizzle-team@google.com</owner>
+  <description>The user clicked on the next button.</description>
 </action>
 
 <action name="UserEducation.WhatsNew.PauseClicked">
@@ -47880,11 +48407,6 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="ViewAboutFlash">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
-</action>
-
-<action name="ViewAboutNaCl">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -49996,6 +50518,7 @@ should be able to be added at any place in this file.
   <suffix name="SafetySafetycheck" label="Safety Check"/>
   <suffix name="SaveTabGroups" label="Saved Tab Groups"/>
   <suffix name="SearchBoxSuggestions" label="Search Box Suggestions"/>
+  <suffix name="SideBySide" label="Split View"/>
   <suffix name="SidePanelPinning" label="Side Panel Pinning"/>
   <suffix name="TabGroupsSync" label="Tab Groups Sync"/>
   <suffix name="TabOrganizer" label="Tab Organizer"/>
@@ -50066,6 +50589,7 @@ should be able to be added at any place in this file.
       label="For AddToHomescreen IPH feature."/>
   <suffix name="AddToHomescreenTextBubble"
       label="For AddToHomescreen IPH feature using text bubble (obsolete)."/>
+  <suffix name="AIHubNewBadge" label="For AI Hub New Badge feature."/>
   <suffix name="AndroidTabDeclutter" label="For archived tabs on android."/>
   <suffix name="AppSpecificHistory" label="For App Specific History feature."/>
   <suffix name="AutoDarkOptOut" label="For AutoDarkOptOut dialog feature."/>
@@ -50073,6 +50597,8 @@ should be able to be added at any place in this file.
       label="For AutoDarkUserEducationMessage feature."/>
   <suffix name="AutoDarkUserEducationMessageOptIn"
       label="For AutoDarkUserEducationMessageOptIn feature."/>
+  <suffix name="AutofillAccountNameEmailSuggestion"
+      label="For AutofillAccountNameEmailSuggestion feature."/>
   <suffix name="AutofillAiOptIn" label="For AutofillAiOptIn feature."/>
   <suffix name="AutofillBnplAffirmOrZipSuggestion"
       label="For AutofillBnplAffirmOrZipSuggestion IPH feature."/>
@@ -50095,11 +50621,14 @@ should be able to be added at any place in this file.
   <suffix name="AutofillVirtualCardSuggestion"
       label="For AutofillVirtualCardSuggestion feature."/>
   <suffix name="BackNavigationMenu" label="For BackNavigationMenu feature."/>
+  <suffix name="BadgedReaderMode"
+      label="For What's New badge in Reading Mode feature."/>
   <suffix name="BadgedReadingList" label="For BadgedReadingList feature."/>
   <suffix name="BadgedTranslateManualTrigger"
       label="For BadgedTranslateManualTrigger feature."/>
   <suffix name="BatterySaverMode" label="For BatterySaverMode feature."/>
   <suffix name="Bookmark" label="For Bookmark feature."/>
+  <suffix name="BookmarksBar" label="For Bookmarks Bar feature."/>
   <suffix name="BottomToolbarTip" label="For BottomToolbarTip feature."/>
   <suffix name="CCTHistory" label="For CCT History feature."/>
   <suffix name="CCTMinimized" label="For Minimized CCT feature."/>
@@ -50164,8 +50693,6 @@ should be able to be added at any place in this file.
   <suffix name="DesktopCustomizeChrome" label="For Customize Chrome feature."/>
   <suffix name="DesktopCustomizeChromeRefresh"
       label="For Customize Chrome refresh feature."/>
-  <suffix name="DesktopNewTabPageModulesCustomize"
-      label="For Desktop NTP modules customize feature."/>
   <suffix name="DesktopPwaInstall" label="For desktop PWA install icon."/>
   <suffix name="DesktopPWAsLinkCapturingLaunch"
       label="For desktop PWAs launched via Link Capturing."/>
@@ -50292,6 +50819,8 @@ should be able to be added at any place in this file.
       label="For iOSDockingPromoRemindMeLater feature"/>
   <suffix name="iOSDownloadAutoDeletion"
       label="For iOS Auto-deletion half-sheet IPH."/>
+  <suffix name="iOSEnhancedBrowsingDesktop"
+      label="For iOSEnhancedBrowsingDesktop feature"/>
   <suffix name="iOSFeedSwipeAnimatedFeature"
       label="For iOSFeedSwipeAnimatedFeature feature"/>
   <suffix name="iOSFeedSwipeStaticFeature"
@@ -50308,6 +50837,7 @@ should be able to be added at any place in this file.
       label="For iOSLensOverlayEntrypoint IPH feature"/>
   <suffix name="iOSLensOverlayEscapeHatchTip"
       label="For iOSLensOverlayEscapeHatchTip IPH feature"/>
+  <suffix name="iOSLensPromoDesktop" label="For iOSLensPromoDesktop feature"/>
   <suffix name="iOSOneTimeDefaultBrowserNotification"
       label="For iOSOneTimeDefaultBrowserNotification feature"/>
   <suffix name="iOSOverflowMenuCustomization"
@@ -50358,6 +50888,8 @@ should be able to be added at any place in this file.
   <suffix name="iOSPromoWhatsNew" label="For iOSPromoWhatsNew feature"/>
   <suffix name="iOSPullToRefreshFeature"
       label="For iOSPullToRefreshFeature feature"/>
+  <suffix name="iOSReaderModeOptionsFeature"
+      label="For Reader Mode options IPH."/>
   <suffix name="iOSReminderNotificationsOverflowMenuBubbleFeature"
       label="For iOSReminderNotificationsOverflowMenuBubbleFeature feature"/>
   <suffix name="iOSReminderNotificationsOverflowMenuNewBadgeFeature"
@@ -50578,6 +51110,10 @@ should be able to be added at any place in this file.
       label="For ShoppingListMenuItem feature."/>
   <suffix name="ShoppingListSaveFlow"
       label="For ShoppingListSaveFlow feature."/>
+  <suffix name="SideBySidePinnableFeature"
+      label="For side by side split view pinning feature."/>
+  <suffix name="SideBySideTabSwitchFeature"
+      label="For switching between tabs many times for split view feature."/>
   <suffix name="SidePanelGenericPinnableFeature"
       label="For Side Panel Pinning pin feature."/>
   <suffix name="SidePanelLensOverlayPinnableFeature"
@@ -50589,6 +51125,7 @@ should be able to be added at any place in this file.
       label="For side search feature automatic triggering."/>
   <suffix name="SideSearchPageActionLabel"
       label="For side search feature page action label triggering."/>
+  <suffix name="SignInBenefits" label="For sign-in benefits IPH feature."/>
   <suffix name="SignoutWebIntercept" label="For web signout IPH feature."/>
   <suffix name="SupervisedUserProfileSignin"
       label="For displaying the supervised user sign-in IPH."/>
@@ -50694,6 +51231,8 @@ should be able to be added at any place in this file.
       label="Move a custom item to the previous position."/>
   <suffix name="OpenItemInIncognitoTab"
       label="Open a suggested item in an incognito tab."/>
+  <suffix name="OpenItemInIncognitoWindow"
+      label="Open a suggested item in an incognito window."/>
   <suffix name="OpenItemInNewTab" label="Open a suggested item in a new tab."/>
   <suffix name="OpenItemInNewTabInGroup"
       label="Open a suggested item in a new tab in group."/>
@@ -51235,6 +51774,7 @@ should be able to be added at any place in this file.
       label="Pinned clear browsing data button"/>
   <suffix name="PinnedCopyLinkButton" label="Pinned copy link button"/>
   <suffix name="PinnedDevToolsButton" label="Pinned developer tools button"/>
+  <suffix name="PinnedGlicButton" label="Pinned glic button"/>
   <suffix name="PinnedNewIncognitoWindowButton"
       label="Pinned new incognito window button"/>
   <suffix name="PinnedPrintButton" label="Pinned print button"/>
@@ -51316,38 +51856,6 @@ should be able to be added at any place in this file.
 </action-suffix>
 
 <action-suffix separator="." ordering="suffix">
-  <suffix name="AddedToReadingList" label="Added to reading list"/>
-  <affected-action name="Toast.ActionButtonClicked"/>
-  <affected-action name="Toast.CloseButtonClicked"/>
-</action-suffix>
-
-<action-suffix separator="." ordering="suffix">
-  <suffix name="AddedToComparisonTable" label="Added to comparison table"/>
-  <affected-action name="Toast.ActionButtonClicked"/>
-  <affected-action name="Toast.CloseButtonClicked"/>
-</action-suffix>
-
-<action-suffix separator="." ordering="suffix">
-  <suffix name="DiceUserMigrated" label="DICe user migrated"/>
-  <affected-action name="Toast.ActionButtonClicked"/>
-  <affected-action name="Toast.CloseButtonClicked"/>
-</action-suffix>
-
-<action-suffix separator="." ordering="suffix">
-  <suffix name="SyncEsbOn"
-      label="Enhanced Protection setting has been synced to On"/>
-  <affected-action name="Toast.ActionButtonClicked"/>
-  <affected-action name="Toast.CloseButtonClicked"/>
-</action-suffix>
-
-<action-suffix separator="." ordering="suffix">
-  <suffix name="SyncEsbOff"
-      label="Enhanced Protection setting has been synced to Off"/>
-  <affected-action name="Toast.ActionButtonClicked"/>
-  <affected-action name="Toast.CloseButtonClicked"/>
-</action-suffix>
-
-<action-suffix separator="." ordering="suffix">
   <suffix name="FamiliarSite" label="Recorded on a familiar site."/>
   <affected-action name="MerchantTrust.BubbleClosed"/>
   <affected-action name="MerchantTrust.BubbleOpenedFromLocationBarChip"/>
@@ -51404,11 +51912,17 @@ should be able to be added at any place in this file.
   <suffix name="MoveToGroup"
       label="Recorded when the 'Move to group' option in the context menu is
              selected."/>
+  <suffix name="PinTab"
+      label="Recorded when the 'Pin Tab' option in the context menu is
+             selected."/>
   <suffix name="SelectTabs"
       label="Recorded when the 'Select tabs' option in the context menu is
              selected."/>
   <suffix name="ShareTab"
       label="Recorded when the 'Share' option in the context menu is
+             selected."/>
+  <suffix name="UnpinTab"
+      label="Recorded when the 'Unpin Tab' option in the context menu is
              selected."/>
   <affected-action name="TabSwitcher.ContextMenu"/>
 </action-suffix>

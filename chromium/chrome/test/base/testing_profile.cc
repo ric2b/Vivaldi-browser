@@ -255,7 +255,6 @@ TestingProfile::TestingProfile(
       prefs_(std::move(prefs)),
       original_profile_(parent),
       guest_session_(guest_session),
-      allows_browser_windows_(allows_browser_windows),
       is_new_profile_(is_new_profile),
 #if BUILDFLAG(ENABLE_EXTENSIONS)
       extension_special_storage_policy_(extension_policy),
@@ -267,6 +266,7 @@ TestingProfile::TestingProfile(
           override_policy_connector_is_managed),
       policy_service_(std::move(policy_service)),
       url_loader_factory_(url_loader_factory) {
+  set_allows_browser_windows_for_testing(allows_browser_windows);
 #if BUILDFLAG(IS_CHROMEOS)
   user_cloud_policy_manager_ = std::move(policy_manager);
 #else
@@ -354,7 +354,7 @@ void TestingProfile::Init(bool is_supervised_profile, CreateMode create_mode) {
   }
 
 #if BUILDFLAG(IS_ANDROID)
-  signin::SetUpMockAccountManagerFacade();
+  signin::SetUpFakeAccountManagerFacade();
 #endif
 
   // Normally this would happen during browser startup, but for tests
@@ -580,10 +580,6 @@ void TestingProfile::SetIsNewProfile(bool is_new_profile) {
   is_new_profile_ = is_new_profile;
 }
 
-base::FilePath TestingProfile::GetPath() {
-  return profile_path_;
-}
-
 base::FilePath TestingProfile::GetPath() const {
   return profile_path_;
 }
@@ -703,10 +699,6 @@ void TestingProfile::SetIsSupervisedProfile(bool is_supervised_profile) {
 
 bool TestingProfile::IsChild() const {
   return supervised_user::IsSubjectToParentalControls(*GetPrefs());
-}
-
-bool TestingProfile::AllowsBrowserWindows() const {
-  return allows_browser_windows_;
 }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)

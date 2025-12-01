@@ -143,6 +143,12 @@
         }
       },
       {
+        "id": "DragEndState",
+        "type": "string",
+        "enum": ["aborted", "outsideOrWebviewInSameWindow", "insideOrWebviewInOtherWindow"],
+        "description": "Tells if drag was aborted (using ESC or similar), or if the drop was valid outside or inside the app window."
+      },
+      {
         "id": "NavigationRect",
         "type": "object",
         "description": "Rect struct for spatial navigation.",
@@ -833,24 +839,18 @@
         "description": "Fires when tab dragging ends.",
         "parameters": [
           {
-            "name": "dragAborted",
-            "type": "boolean",
-            "description": "This is an aborted drag (using ESC or similar)."
-          },
-          {
-            "name": "dropOutsideWindow",
-            "type": "boolean",
-            "description": "This is a valid drop outside any app window."
+            "name": "dragEndState",
+            "$ref": "DragEndState"
           },
           {
             "name": "posX",
             "type": "integer",
-            "description": "X position of the drop in screen coordinates."
+            "description": "X position of the drop relative to drag source client."
           },
           {
             "name": "posY",
             "type": "integer",
-            "description": "Y position of the drop in screen coordinates."
+            "description": "Y position of the drop relative to drag source client."
           }
         ]
       },

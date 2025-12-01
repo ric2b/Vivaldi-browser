@@ -15,7 +15,7 @@
 
 class ProfileIOS;
 class GURL;
-@class MDCSnackbarMessage;
+@class SnackbarMessage;
 
 namespace vivaldi {
 class NotesModel;
@@ -60,7 +60,7 @@ NSDate* lastModificationTimeForNoteNode(const vivaldi::NoteNode* node);
 #pragma mark - Updating Notes
 
 // A Snackbar helper to show toast messages.
-MDCSnackbarMessage* CreateToastWithWrapper(NSString* text);
+SnackbarMessage* CreateToastWithWrapper(NSString* text);
 
 // Creates the note if |node| is NULL. Otherwise updates |node|.
 // |folder| is the intended parent of |node|.
@@ -68,7 +68,7 @@ MDCSnackbarMessage* CreateToastWithWrapper(NSString* text);
 // successful or there's nothing to undo.
 // TODO(crbug.com/1099901): Refactor to include position and replace two
 // functions below.
-MDCSnackbarMessage* CreateOrUpdateNoteWithToast(
+SnackbarMessage* CreateOrUpdateNoteWithToast(
     const vivaldi::NoteNode* node,
     NSString* title,
     const GURL& url,
@@ -79,7 +79,7 @@ MDCSnackbarMessage* CreateOrUpdateNoteWithToast(
 // Creates a new note with |title|, |url|, at |position| under parent
 // |folder|. Returns a snackbar with an undo action. Returns nil if operation
 // failed or there's nothing to undo.
-MDCSnackbarMessage* CreateNoteAtPositionWithToast(
+SnackbarMessage* CreateNoteAtPositionWithToast(
     NSString* title,
     const GURL& url,
     const vivaldi::NoteNode* folder,
@@ -89,7 +89,7 @@ MDCSnackbarMessage* CreateNoteAtPositionWithToast(
 
 // Updates a note node position, and returns a snackbar with an undo action.
 // Returns nil if the operation wasn't successful or there's nothing to undo.
-MDCSnackbarMessage* UpdateNotePositionWithToast(
+SnackbarMessage* UpdateNotePositionWithToast(
     const vivaldi::NoteNode* node,
     const vivaldi::NoteNode* folder,
     size_t position,
@@ -99,7 +99,7 @@ MDCSnackbarMessage* UpdateNotePositionWithToast(
 // Deletes all notes in |model| that are in |notes|, and returns a
 // snackbar with an undo action. Returns nil if the operation wasn't successful
 // or there's nothing to undo.
-MDCSnackbarMessage* DeleteNotesWithToast(
+SnackbarMessage* DeleteNotesWithToast(
     const std::set<const vivaldi::NoteNode*>& notes,
     vivaldi::NotesModel* model,
     ProfileIOS* profile);
@@ -111,7 +111,7 @@ void DeleteNotes(const std::set<const vivaldi::NoteNode*>& notes,
 // Move all |notes| to the given |folder|, and returns a snackbar with an
 // undo action. Returns nil if the operation wasn't successful or there's
 // nothing to undo.
-MDCSnackbarMessage* MoveNotesWithToast(
+SnackbarMessage* MoveNotesWithToast(
     const std::set<const vivaldi::NoteNode*>& notes,
     vivaldi::NotesModel* model,
     const vivaldi::NoteNode* folder,

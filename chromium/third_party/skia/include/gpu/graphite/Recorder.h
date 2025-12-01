@@ -16,6 +16,7 @@
 #include "include/private/base/SingleOwner.h"
 #include "include/private/base/SkAPI.h"
 #include "include/private/base/SkTArray.h"
+#include "include/private/base/SkTDArray.h"
 
 #include <chrono>
 #include <cstddef>
@@ -51,6 +52,7 @@ class BackendTexture;
 class Context;
 class Device;
 class DrawBufferManager;
+class FloatStorageManager;
 class ImageProvider;
 class ProxyReadCountMap;
 class RecorderPriv;
@@ -276,7 +278,8 @@ private:
     sk_sp<SharedContext> fSharedContext;
     ResourceProvider* fResourceProvider; // May point to the Context's resource provider
     std::unique_ptr<ResourceProvider> fOwnedResourceProvider; // May be null
-    std::unique_ptr<RuntimeEffectDictionary> fRuntimeEffectDict;
+
+    sk_sp<RuntimeEffectDictionary> fRuntimeEffectDict;
 
     // NOTE: These are stored by pointer to allow them to be forward declared.
     std::unique_ptr<TaskList> fRootTaskList;
@@ -285,6 +288,7 @@ private:
 
     std::unique_ptr<DrawBufferManager> fDrawBufferManager;
     std::unique_ptr<UploadBufferManager> fUploadBufferManager;
+    sk_sp<FloatStorageManager> fFloatStorageManager;
     std::unique_ptr<ProxyReadCountMap> fProxyReadCounts;
 
     // Iterating over tracked devices in flushTrackedDevices() needs to be re-entrant and support
@@ -318,6 +322,14 @@ private:
 #if defined(GPU_TEST_UTILS)
     // For testing use only -- the Context used to create this Recorder
     Context* fContext = nullptr;
+#endif
+
+#if defined(SK_DUMP_TASKS)
+    // Traverses and dumps the task list at Recorder::snap()
+    void dumpTasks(TaskList*) const;
+
+    // Log of all callers of RecorderPriv::flushTrackedDevices
+    SkTDArray<const char*> fFlushSources;
 #endif
 };
 

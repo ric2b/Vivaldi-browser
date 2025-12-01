@@ -1,0 +1,139 @@
+// Copyright (c) 2015-2025 Vivaldi Technologies AS. All rights reserved.
+
+[
+  {
+    "namespace": "sitePermissions",
+    "description": "API for handling per-site permissions in Chrome Extensions.",
+    "compiler_options": {
+      "implemented_in": "extensions/api/site_permissions/site_permissions_api.h"
+    },
+    "types": [
+      {
+        "id": "PermissionSetting",
+        "type": "string",
+        "enum": ["allow", "block", "ask", "sessionOnly"]
+      },
+      {
+        "id": "Permission",
+        "type": "object",
+        "properties": {
+          "origin": { "type": "string" },
+          "permission": { "type": "string" },
+          "setting": { "$ref": "PermissionSetting" }
+        },
+        "required": ["origin", "permission", "setting"]
+      },
+      {
+        "id": "PermissionOptions",
+        "type": "object",
+        "properties": {
+          "permission": { "type": "string" },
+          "options": {
+            "type": "array",
+            "items": { "$ref": "PermissionSetting" }
+          },
+          "default": { "$ref": "PermissionSetting" }
+        },
+        "required": ["permission", "options", "default"]
+      },
+      {
+        "id": "PermissionChangeEvent",
+        "type": "object",
+        "description": "Fired when site permission changes.",
+        "properties": {
+          "origin" : { "type": "string" },
+          "permission" : { "type": "string" }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "getAvailablePermissions",
+        "type": "function",
+        "description": "Returns all available site permissions and their possible settings, including the default.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "permissions",
+              "type": "array",
+              "items": { "$ref": "PermissionOptions" }
+            }
+          ]
+        }
+      },
+      {
+        "name": "getOverriddenSites",
+        "type": "function",
+        "description": "Returns a list of all sites with overridden permissions.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "origins",
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          ]
+        }
+      },
+      {
+        "name": "getOverridesForSite",
+        "type": "function",
+        "description": "Returns a list of permission overrides for a specific site.",
+        "parameters": [
+          { "name": "origin", "type": "string" }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            { "name": "result",
+              "type": "array",
+              "items": { "$ref": "Permission" }
+            }
+          ]
+        }
+      },
+      {
+        "name": "setSitePermission",
+        "type": "function",
+        "description": "Sets the permission override for a given site.",
+        "parameters": [
+          { "name": "origin", "type": "string" },
+          { "name": "permission", "type": "string" },
+          { "name": "setting", "$ref": "PermissionSetting" }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+          ]
+        }
+      },
+      {
+        "name": "resetSitePermissions",
+        "type": "function",
+        "description" : "Resets all site permissions to default.",
+        "parameters": [
+          { "name": "origin", "type": "string" }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+          ]
+        }
+      }
+    ],
+    "events": [
+      {
+        "name": "onPermissionChanged",
+        "type": "function",
+        "description": "Fired when a site permission changes.",
+        "parameters": [
+          { "name": "event", "$ref": "PermissionChangeEvent" }
+        ]
+      }
+    ]
+  }
+]

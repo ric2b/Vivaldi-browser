@@ -18,13 +18,14 @@
 #include "src/base/SkArenaAlloc.h"
 #include "src/core/SkColorData.h"
 #include "src/core/SkTHash.h"
-#include "src/gpu/graphite/Caps.h"
+#include "src/gpu/graphite/BufferManager.h"
 #include "src/gpu/graphite/DrawList.h"
 #include "src/gpu/graphite/DrawTypes.h"
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/gpu/graphite/UniformManager.h"
 #include "src/shaders/gradients/SkGradientBaseShader.h"
 
+#include <optional>
 #include <type_traits>
 #include <variant>
 
@@ -164,7 +165,8 @@ template <typename K,                  // Initial type inserted into the map fro
 class DenseBiMap {
 public:
     using Index = uint32_t;
-    static constexpr Index kInvalidIndex = 4096;// 1 << SkNextLog2_portable(DrawList::kMaxRenderSteps);
+    // 1 << SkNextLog2_portable(DrawList::kMaxRenderSteps);
+    static constexpr Index kInvalidIndex = 4096;
 
     Index insert(K data) {
         Index* index = fDataToIndex.find(data);
@@ -334,31 +336,36 @@ public:
 
 class PipelineDataGatherer {
 public:
-    PipelineDataGatherer(Layout layout) : fUniformManager(layout) {}
+    PipelineDataGatherer(Layout layout)
+            : fPaintUniformManager(layout)
+            , fRenderStepUniformManager(layout)
+            , fActiveManager(&fPaintUniformManager) {}
 
-    // Fully resets uniforms and textures, but does not reset gradient storage.
+    // Fully resets both uniforms (paint and renderstep)and textures
     void resetForDraw() {
-        fUniformManager.reset();
+        fPaintUniformManager.reset();
+        fRenderStepUniformManager.reset();
         fTextures.clear();
         fPaintTextureCount = 0;
+        fActiveManager = &fPaintUniformManager;
     }
 
 #if defined(SK_DEBUG)
     // Check that the gatherer has been reset to its initial state prior to collecting new data.
     void checkReset() const {
+        SkASSERT(fActiveManager == &fPaintUniformManager);
         SkASSERT(fTextures.empty());
-        SkASSERT(fUniformManager.isReset());
+        SkASSERT(fPaintUniformManager.isReset());
+        SkASSERT(fRenderStepUniformManager.isReset());
         SkASSERT(fPaintTextureCount == 0);
     }
 
     void checkRewind() const {
+        SkASSERT(fActiveManager == &fRenderStepUniformManager);
         SkASSERT(fTextures.size() == fPaintTextureCount);
-        SkASSERT(fUniformManager.isReset());
+        SkASSERT(fRenderStepUniformManager.isReset());
     }
 #endif // SK_DEBUG
-
-    // All accumulated gradient data or empty if no draw requires this feature.
-    SkSpan<const float> gradientBufferData() const { return fGradientStorage; }
 
     // Mark the end of extracting paint uniforms and textures from the current draw's PaintParams.
     UniformDataBlock endPaintData() {
@@ -367,7 +374,7 @@ public:
         // TODO: Once paint and renderstep uniforms are combined, endPaintData() will return void
         // and this will just save the state of the UniformManager to rewind to.
         fPaintTextureCount = fTextures.size();
-        return UniformDataBlock::Wrap(&fUniformManager);
+        return UniformDataBlock::Wrap(&fPaintUniformManager);
     }
 
     // Mark the end of extract uniforms and textures from the RenderStep that will be combined with
@@ -386,7 +393,7 @@ public:
         if (!performsShading) {
             textures = textures.subspan(fPaintTextureCount);
         }
-        return {UniformDataBlock::Wrap(&fUniformManager), TextureDataBlock(textures)};
+        return {UniformDataBlock::Wrap(&fRenderStepUniformManager), TextureDataBlock(textures)};
     }
 
     // Rewind the PipelineDataGatherer to collect new uniforms and textures for another RenderStep
@@ -395,7 +402,7 @@ public:
         fTextures.resize_back(fPaintTextureCount);
         // TODO: Eventually this will not reset the uniform manager, but set its current byte offset
         // and required alignment to what was saved in endPaintData().
-        fUniformManager.reset();
+        fRenderStepUniformManager.reset();
     }
 
     // Append a sampled texture that will be bound with a sampler matching `samplerDesc`. Textures
@@ -404,48 +411,25 @@ public:
         fTextures.push_back({std::move(proxy), samplerDesc});
     }
 
+    // A depth only draw precludes setting the renderstep manager in endPaintData()
+    void setRenderStepManagerActive() { fActiveManager = &fRenderStepUniformManager; }
+
     // Mimic the type-safe API available in UniformManager
-    template <typename T> void write(const T& t) { fUniformManager.write(t); }
-    template <typename T> void writeHalf(const T& t) { fUniformManager.writeHalf(t); }
-    template <typename T> void writeArray(SkSpan<const T> t) { fUniformManager.writeArray(t); }
+    template <typename T> void write(const T& t) { fActiveManager->write(t); }
+    template <typename T> void writeHalf(const T& t) { fActiveManager->writeHalf(t); }
+    template <typename T> void writeArray(SkSpan<const T> t) { fActiveManager->writeArray(t); }
     template <typename T> void writeHalfArray(SkSpan<const T> t) {
-        fUniformManager.writeHalfArray(t);
+        fActiveManager->writeHalfArray(t);
     }
 
-    void write(const Uniform& u, const void* data) { fUniformManager.write(u, data); }
+    void write(const Uniform& u, const void* data) { fActiveManager->write(u, data); }
 
-    void writePaintColor(const SkPMColor4f& color) { fUniformManager.writePaintColor(color); }
+    void writePaintColor(const SkPMColor4f& color) { fActiveManager->writePaintColor(color); }
 
-    void beginStruct(int baseAligment) { fUniformManager.beginStruct(baseAligment); }
-    void endStruct() { fUniformManager.endStruct(); }
-
-    // Checks if data already exists for the requested gradient shader, and returns a nullptr
-    // and the offset the data begins at. If it doesn't exist, it allocates the data for the
-    // required number of stops and caches the start index, returning the data pointer
-    // and index offset the data will begin at.
-    std::pair<float*, int> allocateGradientData(int numStops, const SkGradientBaseShader* shader) {
-        int* existingOfffset = fGradientOffsetCache.find(shader);
-        if (existingOfffset) {
-            return std::make_pair(nullptr, *existingOfffset);
-        }
-
-        auto dataPair = this->allocateFloatData(numStops * 5);
-        fGradientOffsetCache.set(shader, dataPair.second);
-
-        return dataPair;
-    }
+    void beginStruct(int baseAligment) { fActiveManager->beginStruct(baseAligment); }
+    void endStruct() { fActiveManager->endStruct(); }
 
 private:
-    // Allocates the data for the requested number of bytes and returns the
-    // pointer and buffer index offset the data will begin at.
-    std::pair<float*, int> allocateFloatData(int size) {
-        int lastSize = fGradientStorage.size();
-        fGradientStorage.resize(lastSize + size);
-        float* startPtr = fGradientStorage.begin() + lastSize;
-
-        return std::make_pair(startPtr, lastSize);
-    }
-
     SkDEBUGCODE(friend class UniformExpectationsValidator;)
 
     // Uniforms and textures are reset between draws but the PipelineDataGatherer is responsible
@@ -453,17 +437,11 @@ private:
     // and textures.
     // TODO: Right now paint uniforms and renderstep uniforms are bound separately so rewind() only
     // applies to the textures.
-    UniformManager fUniformManager;
+    UniformManager fPaintUniformManager;
+    UniformManager fRenderStepUniformManager;
+    UniformManager* fActiveManager;
     skia_private::TArray<TextureDataBlock::SampledTexture> fTextures;
     int fPaintTextureCount = 0;
-
-    // NOTE: This storage aggregates all data required by all draws within a DrawPass so that its
-    // storage buffer can be bound once and accessed at random. It is not reset between draws like
-    // the regular uniform manager or texture list.
-    SkTDArray<float>  fGradientStorage;
-    // Storing the address of the shader as a proxy for comparing the colors and offsets arrays to
-    // keep lookup fast.
-    skia_private::THashMap<const SkGradientBaseShader*, int> fGradientOffsetCache;
 };
 
 #ifdef SK_DEBUG
@@ -473,11 +451,11 @@ public:
                                  SkSpan<const Uniform> expectedUniforms,
                                  bool isSubstruct=false)
             : fGatherer(gatherer) {
-        fGatherer->fUniformManager.setExpectedUniforms(expectedUniforms, isSubstruct);
+        fGatherer->fActiveManager->setExpectedUniforms(expectedUniforms, isSubstruct);
     }
 
     ~UniformExpectationsValidator() {
-        fGatherer->fUniformManager.doneWithExpectedUniforms();
+        fGatherer->fActiveManager->doneWithExpectedUniforms();
     }
 
 private:
@@ -489,6 +467,77 @@ private:
     UniformExpectationsValidator &operator=(const UniformExpectationsValidator &) = delete;
 };
 #endif // SK_DEBUG
+
+/**
+ * Aggregates gradient color and stop information into a single buffer to be bound once for a
+ * DrawPass. It de-duplicates gradient data by caching based on the SkGradientBaseShader pointer.
+ */
+class FloatStorageManager : public SkRefCnt {
+public:
+    FloatStorageManager() = default;
+
+    void reset() {
+        fGradientStorage.clear();
+        fGradientOffsetCache.reset();
+    }
+
+    // Checks if data already exists for the requested gradient shader. If so, it returns
+    // a nullptr and the existing offset. If not, it allocates space, caches the offset,
+    // and returns a pointer to the start of the new data and the calculated offset.
+    std::pair<float*, int> allocateGradientData(int numStops, const SkGradientBaseShader* shader) {
+        SkASSERT(!this->isFinalized());
+        int* existingOffset = fGradientOffsetCache.find(shader->uniqueID());
+        if (existingOffset) {
+            return {nullptr, *existingOffset};
+        }
+        auto [ptr, offset] = this->allocateFloatData(numStops * 5); // 4 for color, 1 for offset
+        fGradientOffsetCache.set(shader->uniqueID(), offset);
+
+        return {ptr, offset};
+    }
+
+    bool finalize(DrawBufferManager* bufferMgr) {
+        SkASSERT(!this->isFinalized());
+        if (!fGradientStorage.empty()) {
+            auto [writer, bufferInfo] = bufferMgr->getSsboWriter(fGradientStorage.size(),
+                                                                 sizeof(float));
+            if (writer) {
+                writer.write(fGradientStorage.data(), fGradientStorage.size_bytes());
+                fBufferInfo = bufferInfo;
+                this->reset();
+            } else {
+                return false;
+            }
+        } else {
+            fBufferInfo = BindBufferInfo();
+        }
+        return true;
+    }
+
+    BindBufferInfo getBufferInfo() { return fBufferInfo.value(); }
+    bool hasData() const { return fBufferInfo.has_value() &&
+                                  fBufferInfo.value().fBuffer != nullptr; }
+    SkDEBUGCODE(bool isFinalized() const { return fBufferInfo.has_value(); })
+private:
+    // Allocates space for a given number of floats and returns a pointer to the start
+    // of the new allocation and its offset from the beginning of the buffer.
+    std::pair<float*, int> allocateFloatData(int floatCount) {
+        int currentSize = fGradientStorage.size();
+        fGradientStorage.resize(currentSize + floatCount);
+        float* startPtr = fGradientStorage.begin() + currentSize;
+
+        return {startPtr, currentSize};
+    }
+
+    // NOTE: This storage aggregates all data required by all draws within a DrawPass so that its
+    // storage buffer can be bound once and accessed at random.
+    SkTDArray<float> fGradientStorage;
+
+    // We use the shader's unique ID as a key to de-duplicate gradient data.
+    skia_private::THashMap<uint32_t, int> fGradientOffsetCache;
+
+    std::optional<BindBufferInfo> fBufferInfo = std::nullopt;
+};
 
 } // namespace skgpu::graphite
 

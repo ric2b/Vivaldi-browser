@@ -1442,28 +1442,11 @@ class ReauthEndpointWebviewLoginOwnerTest
   ReauthEndpointWebviewLoginOwnerTest() = default;
   ~ReauthEndpointWebviewLoginOwnerTest() override = default;
 
-  void SetUp() override {
-    ReauthEndpointWebviewLoginTest::SetUp();
-
-    auto user_manager = std::make_unique<ash::FakeChromeUserManager>();
-    scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
-        std::move(user_manager));
-  }
-
   void SetUpOnMainThread() override {
     ReauthEndpointWebviewLoginTest::SetUpOnMainThread();
-
-    GetFakeUserManager().SetOwnerId(AccountId::FromUserEmailGaiaId(
+    user_manager::UserManager::Get()->SetOwnerId(AccountId::FromUserEmailGaiaId(
         FakeGaiaMixin::kFakeUserEmail, FakeGaiaMixin::kFakeUserGaiaId));
   }
-
- private:
-  ash::FakeChromeUserManager& GetFakeUserManager() {
-    return CHECK_DEREF(static_cast<ash::FakeChromeUserManager*>(
-        user_manager::UserManager::Get()));
-  }
-
-  std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
 };
 
 IN_PROC_BROWSER_TEST_F(ReauthEndpointWebviewLoginOwnerTest, SupervisedUser) {
@@ -1642,9 +1625,9 @@ class WebviewClientCertsLoginTestBase : public WebviewLoginTest {
         BuildDeviceOncDictForUntrustedAuthority(x509_contents);
 
     em::ChromeDeviceSettingsProto& proto(device_policy_builder_.payload());
-    base::JSONWriter::Write(onc_dict,
-                            proto.mutable_open_network_configuration()
-                                ->mutable_open_network_configuration());
+    *(proto.mutable_open_network_configuration()
+          ->mutable_open_network_configuration()) =
+        base::WriteJson(onc_dict).value_or("");
 
     device_policy_builder_.Build();
 

@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "chrome/browser/ui/views/web_apps/web_app_integration_test_driver.h"
 
 #include <cstddef>
@@ -20,6 +15,7 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/containers/contains.h"
 #include "base/containers/extend.h"
 #include "base/containers/flat_map.h"
@@ -57,12 +53,14 @@
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/intent_picker_tab_helper.h"
+#include "chrome/browser/ui/page_action/page_action_icon_type.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/web_app_startup_utils.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -97,9 +95,8 @@
 #include "chrome/browser/web_applications/commands/run_on_os_login_command.h"
 #include "chrome/browser/web_applications/externally_managed_app_manager.h"
 #include "chrome/browser/web_applications/isolated_web_apps/commands/install_isolated_web_app_command.h"
-#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_install_source.h"
+#include "chrome/browser/web_applications/isolated_web_apps/install/isolated_web_app_install_source.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_trust_checker.h"
-#include "chrome/browser/web_applications/isolated_web_apps/test/test_signed_web_bundle_builder.h"
 #include "chrome/browser/web_applications/link_capturing_features.h"
 #include "chrome/browser/web_applications/manifest_update_manager.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
@@ -141,6 +138,7 @@
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "components/webapps/browser/uninstall_result_code.h"
 #include "components/webapps/common/web_app_id.h"
+#include "components/webapps/isolated_web_apps/test_support/test_signed_web_bundle_builder.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -161,12 +159,14 @@
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/boringssl/src/include/openssl/curve25519.h"
 #include "third_party/re2/src/re2/re2.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/test/dialog_test.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_interactive_uitest_utils.h"
 #include "ui/webui/resources/cr_components/app_management/app_management.mojom-forward.h"
 #include "url/gurl.h"
 
@@ -1118,11 +1118,10 @@ void WebAppIntegrationTestDriver::ClosePwa() {
   }
   ASSERT_TRUE(app_browser()) << "No current app browser";
 
-  ui_test_utils::BrowserChangeObserver close_observer(
-      app_browser(),
-      ui_test_utils::BrowserChangeObserver::ChangeType::kRemoved);
+  ui_test_utils::BrowserDestroyedObserver browser_destroyed_observer(
+      app_browser());
   app_browser()->window()->Close();
-  close_observer.Wait();
+  browser_destroyed_observer.Wait();
   app_browser_ = nullptr;
 
   AfterStateChangeAction();
@@ -1353,10 +1352,23 @@ void WebAppIntegrationTestDriver::InstallOmniboxIcon(InstallableSite site) {
       web_app::SetDontCloseOnDeactivateForTesting();
 
   BrowserAddedWaiter browser_added_waiter;
+  views::test::PropertyWaiter(
+      base::BindRepeating(&views::View::GetVisible,
+                          base::Unretained(pwa_install_view())),
+      /*expected_value=*/true)
+      .Wait();
   ASSERT_TRUE(pwa_install_view()->GetVisible());
   WebAppTestInstallWithOsHooksObserver install_observer(profile());
   install_observer.BeginListening();
-  pwa_install_view()->ExecuteForTesting();
+  if (IsPageActionMigrated(PageActionIconType::kPwaInstall)) {
+    actions::ActionManager::Get()
+        .FindAction(kActionInstallPwa,
+                    browser()->GetActions()->root_action_item())
+        ->InvokeAction();
+  } else {
+    browser()->window()->ExecutePageActionIconForTesting(
+        PageActionIconType::kPwaInstall);
+  }
 
   WaitForAndAcceptInstallDialogForSite(InstallableSiteToSite(site));
 
@@ -1453,7 +1465,7 @@ void WebAppIntegrationTestDriver::InstallIsolatedApp(Site site) {
         IsolatedWebAppInstallSource::FromGraphicalInstaller(
             IwaSourceBundleProdModeWithFileOp(
                 bundle_path, IwaSourceBundleProdFileOp::kCopy)),
-        base::Version("1.0.0"),
+        *IwaVersion::Create("1.0.0"),
         /*optional_keep_alive=*/nullptr,
         /*optional_profile_keep_alive=*/nullptr, future.GetCallback());
     auto install_result = future.Take();
@@ -2169,8 +2181,8 @@ void WebAppIntegrationTestDriver::SyncAndInstallPreinstalledAppConfig(
           test_config_dir);
 
   base::Value::List app_configs;
-  auto json_parse_result =
-      base::JSONReader::ReadAndReturnValueWithError(app_config_string);
+  auto json_parse_result = base::JSONReader::ReadAndReturnValueWithError(
+      app_config_string, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
   EXPECT_TRUE(json_parse_result.has_value())
       << "JSON parse error: " << json_parse_result.error().message;
   if (!json_parse_result.has_value()) {
@@ -2265,11 +2277,8 @@ void WebAppIntegrationTestDriver::ManifestUpdateIcon(
           views::test::AnyWidgetTestPasskey{},
           "WebAppIdentityUpdateConfirmationView");
 
-  // The kLauncherIcon size is used here, as it is guaranteed to be written to
-  // the shortcut on all platforms, as opposed to kInstallIconSize, for example,
-  // which, on ChromeOS, is not written to the shortcut because it is not within
-  // the intersection between `kDesiredIconSizesForShortcut` (which is platform-
-  // dependent) and `SizesToGenerate()` (which is fixed on all platforms).
+  // After launching the trusted icon architecture, the icon of largest size of
+  // purpose any is going to be preferred.
   GURL url = GetUrlForSite(
       site, base::StringPrintf("?manifest=manifest_icon_red_%u.json",
                                kLauncherIconSize));
@@ -2696,7 +2705,7 @@ void WebAppIntegrationTestDriver::UninstallFromOs(Site site) {
   command_line.AppendSwitchASCII(switches::kUninstallAppId, app_id);
   StartupBrowserCreator::ProcessCommandLineAlreadyRunning(
       command_line, {},
-      {profile()->GetPath(), StartupProfileModeReason::kAppRequested});
+      {profile()->GetPath(), StartupProfileMode::kBrowserWindow});
 
   uninstall_waiter.Wait();
   site_remember_deny_open_file_.erase(site);
@@ -3260,6 +3269,11 @@ void WebAppIntegrationTestDriver::CheckInstallIconShown() {
         webapps::TestAppBannerManagerDesktop::FromWebContents(web_contents);
     app_banner_manager->WaitForInstallableCheck();
   }
+  views::test::PropertyWaiter(
+      base::BindRepeating(&views::View::GetVisible,
+                          base::Unretained(pwa_install_view())),
+      /*expected_value=*/true)
+      .Wait();
   EXPECT_TRUE(pwa_install_view()->GetVisible());
   AfterStateCheckAction();
 }
@@ -4019,7 +4033,7 @@ void WebAppIntegrationTestDriver::AfterStateChangeAction() {
 }
 
 bool WebAppIntegrationTestDriver::BeforeStateCheckAction(const char* function) {
-  CHECK(strstr(function, "Check") != nullptr) << function;
+  UNSAFE_TODO(CHECK(strstr(function, "Check") != nullptr)) << function;
   if (testing::Test::HasFatalFailure() && !in_tear_down_) {
     return false;
   }
@@ -4713,11 +4727,11 @@ std::vector<Profile*> WebAppIntegrationTestDriver::GetAllProfiles() {
   return profiles;
 }
 
-PageActionIconView* WebAppIntegrationTestDriver::pwa_install_view() {
-  PageActionIconView* pwa_install_view =
+IconLabelBubbleView* WebAppIntegrationTestDriver::pwa_install_view() {
+  IconLabelBubbleView* pwa_install_view =
       BrowserView::GetBrowserViewForBrowser(browser())
           ->toolbar_button_provider()
-          ->GetPageActionIconView(PageActionIconType::kPwaInstall);
+          ->GetPageActionView(kActionInstallPwa);
   CHECK(pwa_install_view);
   return pwa_install_view;
 }
@@ -4761,6 +4775,7 @@ WebAppIntegrationTest::WebAppIntegrationTest() : helper_(this) {
   enabled_features.push_back(features::kIsolatedWebApps);
   enabled_features.push_back(features::kPwaUpdateDialogForIcon);
   enabled_features.push_back(features::kRecordWebAppDebugInfo);
+  enabled_features.push_back(features::kWebAppUsePrimaryIcon);
 #if !BUILDFLAG(IS_CHROMEOS)
   // TODO(b/313492499): Update test driver to work with new intent picker UI.
   enabled_features.push_back(features::kPwaNavigationCapturing);

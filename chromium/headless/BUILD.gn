@@ -207,6 +207,8 @@ inspector_protocol_generate("protocol_sources") {
   outputs = [
     "lib/browser/protocol/browser.cc",
     "lib/browser/protocol/browser.h",
+    "lib/browser/protocol/emulation.cc",
+    "lib/browser/protocol/emulation.h",
     "lib/browser/protocol/headless_experimental.cc",
     "lib/browser/protocol/headless_experimental.h",
     "lib/browser/protocol/page.cc",
@@ -277,6 +279,8 @@ component("headless_non_renderer") {
     "lib/browser/protocol/browser_handler.cc",
     "lib/browser/protocol/browser_handler.h",
     "lib/browser/protocol/domain_handler.h",
+    "lib/browser/protocol/emulation_handler.cc",
+    "lib/browser/protocol/emulation_handler.h",
     "lib/browser/protocol/headless_devtools_session.cc",
     "lib/browser/protocol/headless_devtools_session.h",
     "lib/browser/protocol/headless_handler.cc",
@@ -363,6 +367,7 @@ component("headless_non_renderer") {
     "//components/embedder_support/origin_trials",
     "//components/headless/clipboard",
     "//components/headless/command_handler:switches",
+    "//components/headless/console_message_logger",
     "//components/headless/display_util",
     "//components/headless/screen_info",
     "//components/headless/select_file_dialog",
@@ -540,7 +545,11 @@ component("headless_non_renderer") {
   }
 
   if (use_dbus) {
-    deps += [ "//device/bluetooth" ]
+    deps += [
+      "//components/dbus",
+      "//dbus",
+      "//device/bluetooth",
+    ]
   }
 
   configs += [ ":inside_headless_component" ]
@@ -705,6 +714,7 @@ test("headless_browsertests") {
   deps = [
     ":headless_shell_lib",
     "//base",
+    "//build/config/linux/dbus:buildflags",
     "//cc:test_support",
     "//components/devtools/simple_devtools_protocol_client",
     "//components/embedder_support:user_agent",

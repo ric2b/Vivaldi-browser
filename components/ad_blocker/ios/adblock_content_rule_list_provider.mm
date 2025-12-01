@@ -15,6 +15,7 @@
 #import "base/strings/string_number_conversions.h"
 #import "base/time/time.h"
 #import "components/ad_blocker/ios/utils.h"
+#import "components/ad_blocker/public/core/adblock_types.h"
 #import "ios/web/public/browser_state.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
 
@@ -25,12 +26,11 @@ namespace {
 constexpr char kListNamePrefix[] = "Vivaldi_";
 constexpr char kTrackerListNamePrefix[] = "Trackers_";
 constexpr char kAdsListNamePrefix[] = "Ads_";
-constexpr std::string_view kListNameGroupPrefix[2] = {kTrackerListNamePrefix,
-                                                       kAdsListNamePrefix};
+constexpr RuleGroupArray<std::string_view> kListNameGroupPrefix{
+    kTrackerListNamePrefix, kAdsListNamePrefix};
 
 class AdBlockerContentRuleListProviderImpl
     : public AdBlockerContentRuleListProvider {
-
  public:
   explicit AdBlockerContentRuleListProviderImpl(
       web::BrowserState* browser_state,
@@ -91,17 +91,17 @@ AdBlockerContentRuleListProviderImpl::AdBlockerContentRuleListProviderImpl(
               .AsWeakPtr()),
       group_(group),
       on_done_applying_rules_(std::move(on_done_applying_rules)) {
-
   // Register callback for configuration changes in the main profile
   if (config_provider_) {
     main_config_subscription_ =
         config_provider_->RegisterConfigurationCreatedCallback(
-            base::BindRepeating(
-               &AdBlockerContentRuleListProviderImpl::OnNewConfigurationCreated,
-                   weak_ptr_factory_.GetWeakPtr(), config_provider_.get()));
+            base::BindRepeating(&AdBlockerContentRuleListProviderImpl::
+                                    OnNewConfigurationCreated,
+                                weak_ptr_factory_.GetWeakPtr(),
+                                config_provider_.get()));
     // Apply for the existing configuration
-    OnNewConfigurationCreated(
-         config_provider_.get(), config_provider_->GetWebViewConfiguration());
+    OnNewConfigurationCreated(config_provider_.get(),
+                              config_provider_->GetWebViewConfiguration());
   }
 
   base::WeakPtr<AdBlockerContentRuleListProviderImpl> weak_this =
@@ -110,8 +110,7 @@ AdBlockerContentRuleListProviderImpl::AdBlockerContentRuleListProviderImpl(
   [WKContentRuleListStore.defaultStore getAvailableContentRuleListIdentifiers:^(
                                            NSArray<NSString*>* identifiers) {
     std::string list_prefix(kListNamePrefix);
-    list_prefix.append(
-        std::string(kListNameGroupPrefix[static_cast<size_t>(group_)]));
+    list_prefix.append(std::string(kListNameGroupPrefix[group_]));
     std::vector<NSString*> relevant_identifiers;
     for (NSString* identifier in identifiers) {
       if ([identifier
@@ -164,10 +163,10 @@ void AdBlockerContentRuleListProviderImpl::SetIncognitoBrowserState(
   if (incognito_config_provider_) {
     incognito_config_subscription_ =
         incognito_config_provider_->RegisterConfigurationCreatedCallback(
-            base::BindRepeating(
-               &AdBlockerContentRuleListProviderImpl::OnNewConfigurationCreated,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   incognito_config_provider_.get()));
+            base::BindRepeating(&AdBlockerContentRuleListProviderImpl::
+                                    OnNewConfigurationCreated,
+                                weak_ptr_factory_.GetWeakPtr(),
+                                incognito_config_provider_.get()));
     // Apply for the existing configuration
     OnNewConfigurationCreated(
         incognito_config_provider_.get(),
@@ -199,8 +198,7 @@ void AdBlockerContentRuleListProviderImpl::InstallContentRuleLists(
   for (const auto& list : lists) {
     DCHECK(list.is_string());
     std::string list_name(kListNamePrefix);
-    list_name.append(
-        std::string(kListNameGroupPrefix[static_cast<size_t>(group_)]));
+    list_name.append(std::string(kListNameGroupPrefix[group_]));
 
     list_name.append(string_timestamp);
     list_name.append("_");

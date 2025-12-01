@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -15,15 +15,15 @@ import requestInitiatorViewTreeStyles from './requestInitiatorViewTree.css.js';
 
 const UIStrings = {
   /**
-   *@description Text in Request Initiator View of the Network panel if the request has no initiator data
+   * @description Text in Request Initiator View of the Network panel if the request has no initiator data
    */
   noInitiator: 'No initiator data',
   /**
-   *@description Title of a section in Request Initiator view of the Network Panel
+   * @description Title of a section in Request Initiator view of the Network Panel
    */
   requestCallStack: 'Request call stack',
   /**
-   *@description Title of a section in Request Initiator view of the Network Panel
+   * @description Title of a section in Request Initiator view of the Network Panel
    */
   requestInitiatorChain: 'Request initiator chain',
 } as const;

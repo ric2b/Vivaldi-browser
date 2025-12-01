@@ -13,6 +13,7 @@ const CGFloat vBlockedCountBgCornerRadius = 6.f;
 const CGFloat tableFooterHeight = 64.f;
 // Corner radius for the action button used on the footer.
 const CGFloat actionButtonCornerRadius = 8.f;
+const CGFloat iOS26ActionButtonCornerRadius = 28.f;
 // Padding for the action button used on the footer.
 const UIEdgeInsets actionButtonPadding = UIEdgeInsetsMake(4.f, 20.f, 4.f, 20.f);
 // Common container view padding for the cells

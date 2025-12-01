@@ -147,6 +147,9 @@ class CredentialProviderService
   // Syncs whether or not PRF is enabled.
   void UpdatePasskeyPRFSetting();
 
+  // Syncs whether or not Large Blob is enabled.
+  void UpdatePasskeyLargeBlobSetting();
+
   // Syncs whether or not signal API is enabled.
   void UpdateSignalAPISetting();
 
@@ -170,6 +173,7 @@ class CredentialProviderService
 
   // syncer::SyncServiceObserver:
   void OnStateChanged(syncer::SyncService* sync) override;
+  void OnSyncShutdown(syncer::SyncService* sync) override;
 
   // Observer for change in enabled or managed state of prefs that govern the
   // CPE.

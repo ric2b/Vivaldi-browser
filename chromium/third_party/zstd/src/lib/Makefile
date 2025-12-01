@@ -128,7 +128,7 @@ $(ZSTD_STATICLIB): $(ZSTD_STATICLIB_OBJ)
 	$(AR) $(ARFLAGS) $@ $^
 
 libzstd.a: $(ZSTD_STATICLIB)
-	cp -f $< $@
+	$(CP) $< $@
 
 endif
 
@@ -168,11 +168,11 @@ $(ZSTD_DYNLIB): $(ZSTD_DYNLIB_OBJ)
     @echo compiling single-threaded dynamic library $(LIBVER))
 	$(CC) $(FLAGS) $^ $(SONAME_FLAGS) -o $@
 	@echo creating versioned links
-	ln -sf $@ libzstd.$(SHARED_EXT_MAJOR)
-	ln -sf $@ libzstd.$(SHARED_EXT)
+	$(LN) -sf $@ libzstd.$(SHARED_EXT_MAJOR)
+	$(LN) -sf $@ libzstd.$(SHARED_EXT)
 
 $(LIBZSTD): $(ZSTD_DYNLIB)
-	cp -f $< $@
+	$(CP) $< $@
 
 endif  # ifndef BUILD_DIR
 endif  # if windows
@@ -268,7 +268,7 @@ clean:
 #-----------------------------------------------------------------------------
 # make install is validated only for below listed environments
 #-----------------------------------------------------------------------------
-ifneq (,$(filter Linux Darwin GNU/kFreeBSD GNU OpenBSD FreeBSD NetBSD DragonFly SunOS Haiku AIX MSYS_NT% CYGWIN_NT%,$(UNAME)))
+ifneq (,$(filter $(INSTALL_OS_LIST),$(UNAME)))
 
 lib: libzstd.pc
 
@@ -363,8 +363,8 @@ install-shared:
 	[ -e $(DESTDIR)$(LIBDIR) ] || $(INSTALL) -d -m 755 $(DESTDIR)$(LIBDIR)/
 	@echo Installing shared library
 	$(INSTALL_PROGRAM) $(LIBZSTD) $(DESTDIR)$(LIBDIR)
-	ln -sf $(LIBZSTD) $(DESTDIR)$(LIBDIR)/libzstd.$(SHARED_EXT_MAJOR)
-	ln -sf $(LIBZSTD) $(DESTDIR)$(LIBDIR)/libzstd.$(SHARED_EXT)
+	$(LN) -sf $(LIBZSTD) $(DESTDIR)$(LIBDIR)/libzstd.$(SHARED_EXT_MAJOR)
+	$(LN) -sf $(LIBZSTD) $(DESTDIR)$(LIBDIR)/libzstd.$(SHARED_EXT)
 
 .PHONY: install-includes
 install-includes:

@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+#include "chrome/browser/ui/views/frame/tab_strip_view_interface.h"
 #include "chrome/browser/ui/views/tabs/alert_indicator_button.h"
 #include "chrome/browser/ui/views/tabs/glic_button.h"
 #include "chrome/common/chrome_features.h"
@@ -38,6 +39,8 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/switches.h"
 #include "ui/views/test/widget_activation_waiter.h"
+#include "ui/views/view.h"
+#include "ui/views/view_utils.h"
 
 namespace glic {
 
@@ -63,9 +66,9 @@ class TesterImpl : public GlicTabUnderlineView::Tester {
     animation_started_ = true;
     wait_for_animation_started_.Quit();
   }
-  void EmphasisRestarted() override {
-    emphasis_restarted_ = true;
-    wait_for_emphasis_restarted_.Quit();
+  void AnimationReset() override {
+    animation_reset_ = true;
+    wait_for_animation_reset_.Quit();
   }
   void RampDownStarted() override {
     ramp_down_started_ = true;
@@ -85,12 +88,12 @@ class TesterImpl : public GlicTabUnderlineView::Tester {
     wait_for_animation_started_.Run();
   }
 
-  void WaitForEmphasisRestarted() {
-    if (emphasis_restarted_) {
+  void WaitForAnimationReset() {
+    if (animation_reset_) {
       return;
     }
-    SCOPED_TRACE("WaitForEmphasisRestarted");
-    wait_for_emphasis_restarted_.Run();
+    SCOPED_TRACE("WaitForAnimationReset");
+    wait_for_animation_reset_.Run();
   }
 
   void WaitForRampDownStarted() {
@@ -123,8 +126,8 @@ class TesterImpl : public GlicTabUnderlineView::Tester {
   bool animation_started_ = false;
   base::RunLoop wait_for_animation_started_;
 
-  bool emphasis_restarted_ = false;
-  base::RunLoop wait_for_emphasis_restarted_;
+  bool animation_reset_ = false;
+  base::RunLoop wait_for_animation_reset_;
 
   bool ramp_down_started_ = false;
   base::RunLoop wait_for_ramp_down_started_;
@@ -215,9 +218,15 @@ class GlicTabUnderlineViewUiTest : public test::InteractiveGlicTest {
   GURL Title2() const { return embedded_test_server()->GetURL("/title2.html"); }
 
   GlicTabUnderlineView* GetUnderlineOfActiveTab() {
-    auto* tabstrip = static_cast<BrowserView*>(browser()->window())->tabstrip();
-    return tabstrip->tab_at(tabstrip->GetActiveIndex().value())
-        ->glic_underline();
+    TabStripViewInterface* tab_strip_view =
+        browser()->window()->AsBrowserView()->tab_strip_view();
+    views::View* underline =
+        tab_strip_view
+            ->GetTabAnchorViewAt(browser()->tab_strip_model()->active_index())
+            ->GetViewByElementId(
+                GlicTabUnderlineView::kGlicTabUnderlineElementId);
+    CHECK(underline);
+    return views::AsViewClass<GlicTabUnderlineView>(underline);
   }
 
   content::WebContents* GetActiveWebContents() {
@@ -243,9 +252,13 @@ class GlicTabUnderlineViewUiTest : public test::InteractiveGlicTest {
   }
 
   AlertIndicatorButton* GetAlertIndicatorButtonOfActiveTab() {
-    auto* tabstrip = static_cast<BrowserView*>(browser()->window())->tabstrip();
-    return tabstrip->tab_at(tabstrip->GetActiveIndex().value())
-        ->alert_indicator_button_for_testing();
+    TabStripViewInterface* tab_strip_view =
+        static_cast<BrowserView*>(browser()->window())->tab_strip_view();
+    views::View* button =
+        tab_strip_view
+            ->GetTabAnchorViewAt(browser()->tab_strip_model()->active_index())
+            ->GetViewByElementId(kTabAlertIndicatorButtonElementId);
+    return views::AsViewClass<AlertIndicatorButton>(button);
   }
 
  private:
@@ -276,8 +289,6 @@ IN_PROC_BROWSER_TEST_F(GlicTabUnderlineViewUiTest, SmokeTest) {
   // T=0s.
   tester->AdvanceTimeAndTickAnimation(base::TimeDelta());
   EXPECT_NEAR(underline->opacity_for_testing(), 0.f, kFloatComparisonTolerance);
-  EXPECT_NEAR(underline->emphasis_for_testing(), 0.f,
-              kFloatComparisonTolerance);
   EXPECT_NEAR(underline->progress_for_testing(), 0.f,
               kFloatComparisonTolerance);
 
@@ -285,9 +296,6 @@ IN_PROC_BROWSER_TEST_F(GlicTabUnderlineViewUiTest, SmokeTest) {
   tester->AdvanceTimeAndTickAnimation(base::Seconds(0.333));
   // 0.333/0.5.
   EXPECT_NEAR(underline->opacity_for_testing(), 0.666,
-              kFloatComparisonTolerance);
-  // 0.333/0.5=0.666, 1-(1-0.666)**2~=0.888
-  EXPECT_NEAR(underline->emphasis_for_testing(), 0.888,
               kFloatComparisonTolerance);
   // 0.333/3
   EXPECT_NEAR(underline->progress_for_testing(), 0.111f,
@@ -297,9 +305,6 @@ IN_PROC_BROWSER_TEST_F(GlicTabUnderlineViewUiTest, SmokeTest) {
   tester->AdvanceTimeAndTickAnimation(base::Seconds(1));
   // Opacity ramp up is 0.5s.
   EXPECT_NEAR(underline->opacity_for_testing(), 1.f, kFloatComparisonTolerance);
-  // clamped 1.333/0.5 -> 1.0, 1-(1-1.0.667)**2=1.0
-  EXPECT_NEAR(underline->emphasis_for_testing(), 1.f,
-              kFloatComparisonTolerance);
   // 1.333/3
   EXPECT_NEAR(underline->progress_for_testing(), 0.444f,
               kFloatComparisonTolerance);
@@ -307,11 +312,6 @@ IN_PROC_BROWSER_TEST_F(GlicTabUnderlineViewUiTest, SmokeTest) {
   // T=2.433s
   tester->AdvanceTimeAndTickAnimation(base::Seconds(1.1));
   EXPECT_NEAR(underline->opacity_for_testing(), 1.f, kFloatComparisonTolerance);
-  // (2.433-2)/1.0=0.433
-  EXPECT_NEAR(
-      underline->emphasis_for_testing(),
-      1.f - gfx::Tween::CalculateValue(gfx::Tween::Type::EASE_IN_OUT_2, 0.433),
-      kFloatComparisonTolerance);
   // 2.433/3
   EXPECT_NEAR(underline->progress_for_testing(), 0.811,
               kFloatComparisonTolerance);
@@ -514,6 +514,15 @@ IN_PROC_BROWSER_TEST_F(GlicTabUnderlineViewUiTest,
 
   // The pinned tab should not have a visible tab alert indicator.
   EXPECT_FALSE(GetAlertIndicatorButtonOfActiveTab()->GetVisible());
+}
+
+// Ensure basic incognito window doesn't cause a crash. Simply opens an
+// incognito window and navigates, test passes if it doesn't crash.
+IN_PROC_BROWSER_TEST_F(GlicTabUnderlineViewUiTest, IncognitoModeCrash) {
+  Browser* incognito_browser = CreateIncognitoBrowser();
+
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(incognito_browser, GURL("about:blank")));
 }
 
 namespace {

@@ -53,7 +53,6 @@
 #import "ios/chrome/app/blocking_scene_commands.h"
 #import "ios/chrome/app/change_profile_animator.h"
 #import "ios/chrome/app/change_profile_commands.h"
-#import "ios/chrome/app/chrome_overlay_window.h"
 #import "ios/chrome/app/deferred_initialization_runner.h"
 #import "ios/chrome/app/deferred_initialization_task_names.h"
 #import "ios/chrome/app/enterprise_app_agent.h"
@@ -129,6 +128,7 @@
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
+#import "ios/chrome/browser/shared/ui/chrome_overlay_window/chrome_overlay_window.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/signin/model/account_profile_mapper.h"
 #import "ios/chrome/browser/signin/model/system_identity_manager.h"
@@ -177,9 +177,7 @@ namespace {
 
 #if BUILDFLAG(FAST_APP_TERMINATE_ENABLED)
 // Skip chromeMain.reset() on shutdown, see crbug.com/1328891 for details.
-BASE_FEATURE(kFastApplicationWillTerminate,
-             "FastApplicationWillTerminate",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kFastApplicationWillTerminate, base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(FAST_APP_TERMINATE_ENABLED)
 
 // Constants for deferring memory debugging tools startup.
@@ -251,7 +249,8 @@ void RegisterComponentsForUpdate() {
                                   GetApplicationContext()->GetLocalState());
   RegisterOptimizationHintsComponent(cus);
   RegisterPlusAddressBlocklistComponent(cus);
-  RegisterAntiFingerprintingContentRuleListComponent(cus);
+  component_updater::AntiFingerprintingContentRuleListComponentInstallerPolicy::
+      Register(cus);
 }
 
 // The delay before beginning memory experimentation.
@@ -1179,6 +1178,7 @@ std::string GetProfileNameForChoice(ProfileChoice choice,
   BackgroundRefreshAppAgent* refreshAgent =
       [[BackgroundRefreshAppAgent alloc] init];
   refreshAgent.startupInformation = self;
+  refreshAgent.audience = _appState;
   [_appState addAgent:refreshAgent];
   // Register background refresh providers.
   [refreshAgent addAppRefreshProvider:[[TestRefresher alloc]

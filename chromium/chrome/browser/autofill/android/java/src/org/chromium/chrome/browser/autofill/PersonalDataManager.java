@@ -597,9 +597,9 @@ public class PersonalDataManager implements Destroyable {
 
         @Override
         public boolean equals(Object obj) {
-            if (obj == null) return false;
+
             if (this == obj) return true;
-            if (getClass() != obj.getClass()) return false;
+            if (!(obj instanceof Iban)) return false;
 
             Iban otherIban = (Iban) obj;
 
@@ -687,6 +687,47 @@ public class PersonalDataManager implements Destroyable {
                         mRecordType,
                         assumeNonNull(mValue));
             }
+        }
+    }
+
+    /** Autofill BNPL issuer information. */
+    public static class BnplIssuer {
+        private final String mDisplayName;
+        private final int mIconId;
+        private final boolean mIsLinked;
+
+        /**
+         * Constructs a new BnplIssuer.
+         *
+         * @param displayName The name of the issuer to be displayed.
+         * @param iconId The resource ID of the issuer's icon.
+         * @param isLinked Whether the issuer is linked or not.
+         */
+        public BnplIssuer(String displayName, int iconId, boolean isLinked) {
+            mDisplayName = displayName;
+            mIconId = iconId;
+            mIsLinked = isLinked;
+        }
+
+        /** Returns the name of the issuer to be displayed. */
+        public String getDisplayName() {
+            return mDisplayName;
+        }
+
+        /** Returns the resource ID of the issuer's icon. */
+        public int getIconId() {
+            return mIconId;
+        }
+
+        /** Returns {@code true} if the issuer is linked. */
+        public boolean isLinked() {
+            return mIsLinked;
+        }
+
+        @CalledByNative("BnplIssuer")
+        private static BnplIssuer createBnplIssuer(
+                @JniType("std::u16string") String displayName, int iconId, boolean isLinked) {
+            return new BnplIssuer(displayName, iconId, isLinked);
         }
     }
 

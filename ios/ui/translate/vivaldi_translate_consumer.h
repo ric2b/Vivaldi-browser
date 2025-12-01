@@ -3,12 +3,14 @@
 #ifndef IOS_UI_TRANSLATE_VIVALDI_TRANSLATE_CONSUMER_H_
 #define IOS_UI_TRANSLATE_VIVALDI_TRANSLATE_CONSUMER_H_
 
-#import "ios/ui/translate/vivaldi_translate_language_item.h"
+#import <Foundation/Foundation.h>
 
 @class VivaldiTranslateHistoryItem;
+@class VivaldiTranslateLanguageItem;
 
 /// A protocol implemented by translate view to observe changes
 /// from mediator.
+NS_SWIFT_UI_ACTOR
 @protocol VivaldiTranslateConsumer
 
 - (void)translateHistoryDidLoad:

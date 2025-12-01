@@ -27,6 +27,7 @@
 #include "src/gpu/AtlasTypes.h"
 #include "src/gpu/GpuTypesPriv.h"
 #include "src/gpu/RefCntedCallback.h"
+#include "src/gpu/Token.h"
 #include "src/gpu/graphite/AtlasProvider.h"
 #include "src/gpu/graphite/BufferManager.h"
 #include "src/gpu/graphite/Caps.h"
@@ -34,6 +35,7 @@
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/Device.h"
 #include "src/gpu/graphite/Log.h"
+#include "src/gpu/graphite/PipelineData.h"
 #include "src/gpu/graphite/ProxyCache.h"
 #include "src/gpu/graphite/QueueManager.h"
 #include "src/gpu/graphite/RecorderPriv.h"
@@ -111,9 +113,10 @@ Recorder::Recorder(sk_sp<SharedContext> sharedContext,
                    const RecorderOptions& options,
                    const Context* context)
         : fSharedContext(std::move(sharedContext))
-        , fRuntimeEffectDict(std::make_unique<RuntimeEffectDictionary>())
+        , fRuntimeEffectDict(sk_make_sp<RuntimeEffectDictionary>())
         , fRootTaskList(new TaskList)
         , fRootUploads(new UploadList)
+        , fFloatStorageManager(sk_make_sp<FloatStorageManager>())
         , fProxyReadCounts(new ProxyReadCountMap)
         , fUniqueID(next_id())
         , fRequireOrderedRecordings(options.fRequireOrderedRecordings.has_value()
@@ -195,7 +198,7 @@ std::unique_ptr<Recording> Recorder::snap() {
         fTargetProxyCanvas.reset();
     }
     // Collect all pending tasks on the deferred recording canvas and any other tracked device.
-    this->priv().flushTrackedDevices();
+    this->priv().flushTrackedDevices(SK_DUMP_TASKS_CODE("Recorder::Snap"));
 
     // The scratch resources only need to be tracked until prepareResources() is finished, so
     // Recorder doesn't hold a persistent manager and it can be deleted when snap() returns.
@@ -207,25 +210,35 @@ std::unique_ptr<Recording> Recorder::snap() {
                                                        std::move(fFinishedProcs)));
     // Allow the buffer managers to add any collected tasks for data transfer or initialization
     // before moving the root task list to the Recording.
-    bool valid = fDrawBufferManager->transferToRecording(recording.get());
+    bool valid = fFloatStorageManager->finalize(fDrawBufferManager.get());
+    valid &= fDrawBufferManager->transferToRecording(recording.get());
 
     // We create the Recording's full task list even if the DrawBufferManager failed because it is
     // a convenient way to ensure everything else is unmapped and reset for the next Recording.
     fUploadBufferManager->transferToRecording(recording.get());
     // Add one task for all root uploads before the rest of the rendering tasks might depend on them
     if (fRootUploads->size() > 0) {
-        recording->priv().taskList()->add(UploadTask::Make(fRootUploads.get()));
+        sk_sp<Task> uploadTask = UploadTask::Make(fRootUploads.get());
+
+        // If we are dumping tasks, we want to be able to associate each task with the current flush
+        // count, so each task gets a flushToken---just an int---to track this.
+        SK_DUMP_TASKS_CODE(uploadTask->fFlushToken =
+                this->priv().tokenTracker()->currentFlushToken();)
+
+        recording->priv().taskList()->add(std::move(uploadTask));
         SkASSERT(fRootUploads->size() == 0); // Drained by the newly added task
     }
     recording->priv().taskList()->add(std::move(*fRootTaskList));
     SkASSERT(!fRootTaskList->hasTasks());
+
+    SK_DUMP_TASKS_CODE(this->dumpTasks(recording->priv().taskList()));
 
     // In both the "task failed" case and the "everything is discarded" case, there's no work that
     // needs to be done in insertRecording(). However, we use nullptr as a failure signal, so
     // kDiscard will return a non-null Recording that has no tasks in it.
     valid &= recording->priv().prepareResources(fResourceProvider,
                                                 &scratchManager,
-                                                fRuntimeEffectDict.get());
+                                                fRuntimeEffectDict);
     if (!valid) {
         recording = nullptr;
         fAtlasProvider->invalidateAtlases();
@@ -236,8 +249,9 @@ std::unique_ptr<Recording> Recorder::snap() {
     fResourceProvider->forceProcessReturnedResources();
 
     // Remaining cleanup that must always happen regardless of success or failure
-    fRuntimeEffectDict->reset();
+    fRuntimeEffectDict = sk_make_sp<RuntimeEffectDictionary>();
     fProxyReadCounts = std::make_unique<ProxyReadCountMap>();
+    fFloatStorageManager = sk_make_sp<FloatStorageManager>();
     if (!fRequireOrderedRecordings) {
         fAtlasProvider->invalidateAtlases();
     }
@@ -350,8 +364,7 @@ bool Recorder::updateBackendTexture(const BackendTexture& backendTex,
     // If the texture has MIP levels then we require that the full set is overwritten.
     int numExpectedLevels = 1;
     if (backendTex.info().mipmapped() == Mipmapped::kYes) {
-        numExpectedLevels = SkMipmap::ComputeLevelCount(backendTex.dimensions().width(),
-                                                        backendTex.dimensions().height()) + 1;
+        numExpectedLevels = SkMipmap::ComputeLevelCount(backendTex.dimensions()) + 1;
     }
     if (numLevels != numExpectedLevels) {
         return false;
@@ -369,8 +382,6 @@ bool Recorder::updateBackendTexture(const BackendTexture& backendTex,
     }
     texture->setReleaseCallback(std::move(releaseHelper));
 
-    sk_sp<TextureProxy> proxy = TextureProxy::Wrap(std::move(texture));
-
     std::vector<MipLevel> mipLevels;
     mipLevels.resize(numLevels);
 
@@ -382,14 +393,31 @@ bool Recorder::updateBackendTexture(const BackendTexture& backendTex,
         mipLevels[i].fRowBytes = srcData[i].rowBytes();
     }
 
+    sk_sp<TextureProxy> proxy = TextureProxy::Wrap(std::move(texture));
+
     // Src and dst colorInfo are the same
     const SkColorInfo& colorInfo = srcData[0].info().colorInfo();
+
+    const SkIRect dimensions = SkIRect::MakeSize(backendTex.dimensions());
+    UploadSource uploadSource = UploadSource::Make(
+            this->priv().caps(), *proxy, colorInfo, colorInfo, mipLevels, dimensions);
+    if (!uploadSource.isValid()) {
+        SKGPU_LOG_E("Recorder::updateBackendTexture: Could not create UploadSource");
+        return false;
+    }
+
+    // Attempt to update the texture directly on the host if possible.
+    if (uploadSource.canUploadOnHost()) {
+        return proxy->texture()->uploadDataOnHost(uploadSource, dimensions);
+    }
+
     // Add UploadTask to Recorder
     UploadInstance upload = UploadInstance::Make(this,
                                                  std::move(proxy),
-                                                 colorInfo, colorInfo,
-                                                 mipLevels,
-                                                 SkIRect::MakeSize(backendTex.dimensions()),
+                                                 colorInfo,
+                                                 colorInfo,
+                                                 uploadSource,
+                                                 dimensions,
                                                  std::make_unique<ImageUploadContext>());
     if (!upload.isValid()) {
         SKGPU_LOG_E("Recorder::updateBackendTexture: Could not create UploadInstance");
@@ -398,7 +426,8 @@ bool Recorder::updateBackendTexture(const BackendTexture& backendTex,
     sk_sp<Task> uploadTask = UploadTask::Make(std::move(upload));
 
     // Need to flush any pending work in case it depends on this texture
-    this->priv().flushTrackedDevices();
+    this->priv().flushTrackedDevices(
+        SK_DUMP_TASKS_CODE("Recorder::updateBackendTexture: Update Backend Texture"));
 
     this->priv().add(std::move(uploadTask));
 
@@ -430,19 +459,30 @@ bool Recorder::updateCompressedBackendTexture(const BackendTexture& backendTex,
 
     sk_sp<TextureProxy> proxy = TextureProxy::Wrap(std::move(texture));
 
+    UploadSource uploadSource =
+            UploadSource::MakeCompressed(this->priv().caps(), *proxy, data, dataSize);
+    if (!uploadSource.isValid()) {
+        SKGPU_LOG_E("Recorder::updateBackendTexture: Could not create compressed UploadSource");
+        return false;
+    }
+
+    // Attempt to update the texture directly on the host if possible.
+    if (uploadSource.canUploadOnHost()) {
+        return proxy->texture()->uploadDataOnHost(uploadSource,
+                                                  SkIRect::MakeSize(proxy->dimensions()));
+    }
+
     // Add UploadTask to Recorder
-    UploadInstance upload = UploadInstance::MakeCompressed(this,
-                                                           std::move(proxy),
-                                                           data,
-                                                           dataSize);
+    UploadInstance upload = UploadInstance::MakeCompressed(this, std::move(proxy), uploadSource);
     if (!upload.isValid()) {
-        SKGPU_LOG_E("Recorder::updateBackendTexture: Could not create UploadInstance");
+        SKGPU_LOG_E("Recorder::updateBackendTexture: Could not create compressed UploadInstance");
         return false;
     }
     sk_sp<Task> uploadTask = UploadTask::Make(std::move(upload));
 
     // Need to flush any pending work in case it depends on this texture
-    this->priv().flushTrackedDevices();
+    this->priv().flushTrackedDevices(SK_DUMP_TASKS_CODE(
+            "Recorder::updateCompressedBackendTexture Update Compressed Backend Texture"));
 
     this->priv().add(std::move(uploadTask));
 
@@ -518,6 +558,31 @@ void Recorder::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
     // used bytes here (see Ganesh implementation).
 }
 
+#if defined(SK_DUMP_TASKS)
+void Recorder::dumpTasks(TaskList* taskList) const {
+    ASSERT_SINGLE_OWNER
+    SkDebugf("\n=========== RECORDING %u ===========\n", fUniqueID);
+    int taskIndex = 0;
+    uint64_t lastToken = skgpu::Token::InvalidToken().value();
+    taskList->visit([&](const Task* task, bool isLast) {
+        if (!task) {
+            return;
+        }
+        uint64_t currToken = task->fFlushToken.value();
+        if (currToken != lastToken) {
+            SkDebugf("**** FLUSH TOKEN %llu %s ****\n", currToken, fFlushSources[currToken - 1]);
+            lastToken = currToken;
+        }
+        task->dump(taskIndex++, "");
+    });
+    SkDebugf("--------------- END ---------------\n");
+}
+#endif
+
+sk_sp<RuntimeEffectDictionary> RecorderPriv::runtimeEffectDictionary() {
+    return fRecorder->fRuntimeEffectDict;
+}
+
 void RecorderPriv::addPendingRead(const TextureProxy* proxy) {
     ASSERT_SINGLE_OWNER_PRIV
     fRecorder->fProxyReadCounts->increment(proxy);
@@ -525,10 +590,12 @@ void RecorderPriv::addPendingRead(const TextureProxy* proxy) {
 
 void RecorderPriv::add(sk_sp<Task> task) {
     ASSERT_SINGLE_OWNER_PRIV
+    // Associate each task with current flush count.
+    SK_DUMP_TASKS_CODE(task->fFlushToken = fRecorder->fTokenTracker->nextFlushToken();)
     fRecorder->fRootTaskList->add(std::move(task));
 }
 
-void RecorderPriv::flushTrackedDevices() {
+void RecorderPriv::flushTrackedDevices(SK_DUMP_TASKS_CODE(const char* flushSource)) {
     ASSERT_SINGLE_OWNER_PRIV
 
     // If this is the initial flushTrackedDevices() call, fFlushingTrackedDevicesIndex will be -1
@@ -560,6 +627,11 @@ void RecorderPriv::flushTrackedDevices() {
     // always uses this method. Calling in Device::flushPendingWorkToRecorder may
     // miss parent device flushes, increment too often, and lead to atlas corruption.
     this->tokenTracker()->issueFlushToken();
+#if defined(SK_DUMP_TASKS)
+    fRecorder->fFlushSources.push_back(flushSource);
+    SkASSERT(this->tokenTracker()->currentFlushToken().value() ==
+             static_cast<uint64_t>(fRecorder->fFlushSources.size()));
+#endif
 
     if (startingIndex < 0) {
         // Initial call to flushTrackedDevices() so cleanup null/immutable devices and reset the
@@ -618,8 +690,6 @@ void RecorderPriv::setContext(Context* context) {
 void RecorderPriv::issueFlushToken() {
     fRecorder->fTokenTracker->issueFlushToken();
 }
-
 #endif
-
 
 } // namespace skgpu::graphite

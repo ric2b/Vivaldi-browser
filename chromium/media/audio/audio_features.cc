@@ -13,9 +13,7 @@ namespace features {
 #if BUILDFLAG(IS_WIN)
 // Enables application audio capture for getDisplayMedia (gDM) window capture in
 // Windows.
-BASE_FEATURE(kApplicationAudioCaptureWin,
-             "ApplicationAudioCaptureWin",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kApplicationAudioCaptureWin, base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
@@ -25,7 +23,6 @@ BASE_FEATURE(kApplicationAudioCaptureWin,
 //
 // TODO(crbug.com/401365323): Remove this feature in the future.
 BASE_FEATURE(kUseAAudioDriver,
-             "UseAAudioDriver",
 #if defined(OEM_MERCEDES_BUILD)
              base::FEATURE_DISABLED_BY_DEFAULT);
 #else
@@ -34,18 +31,29 @@ BASE_FEATURE(kUseAAudioDriver,
 
 // Enables loading and using AAudio instead of OpenSLES on compatible devices,
 // for audio input streams.
-BASE_FEATURE(kUseAAudioInput,
-             "UseAAudioInput",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kUseAAudioInput, base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables selection of audio devices for each individual AAudio stream instead
 // of using communication streams and managing the system-wide communication
 // route. This is not fully reliable on all Android devices.
 //
-// Requires `UseAAudioDriver`, `UseAAudioInput`, and an Android API level >=
-// `AAUDIO_MIN_API`, otherwise it will have no effect.
+// Requires `UseAAudioDriver` and `UseAAudioInput`, otherwise it will have no
+// effect.
 BASE_FEATURE(kAAudioPerStreamDeviceSelection,
-             "AAudioPerStreamDeviceSelection",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Use buffer size from AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER for
+// optimal output frame size.
+BASE_FEATURE(kAlwaysUseAudioManagerOutputFramesPerBuffer,
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables the AudioDeviceListener, which listens for changes to the list of
+// audio devices exposed by the OS.
+BASE_FEATURE(kAndroidAudioDeviceListener, base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Use stereo channel layout for input stream parameters.
+// TODO(crbug.com/440210010): Remove when the experiment is done.
+BASE_FEATURE(kAudioStereoInputStreamParameters,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
@@ -55,12 +63,20 @@ BASE_FEATURE(kAAudioPerStreamDeviceSelection,
 // the WebAudio destination node is skipped. This allows the AudioService to
 // handle any necessary resampling, potentially reducing latency and overhead.
 BASE_FEATURE(kWebAudioRemoveAudioDestinationResampler,
-             "WebAudioRemoveAudioDestinationResampler",
 #if BUILDFLAG(IS_ANDROID)
              base::FEATURE_DISABLED_BY_DEFAULT);
 #else
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(IS_MAC)
+// Enabling this feature will allow AudioManagerMac to generate AVFoundation
+// AudioOutputStreams instead of AUHALStreams in cases of multichannel audio.
+// MacOS will then "Spatialize" the audio for users on compatible Airpods. The
+// end result will give users the option to change modes on their Airpods (Off,
+// Fixed, Head Tracking).
+BASE_FEATURE(kMacAVFoundationPlayback, base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 }  // namespace features
 

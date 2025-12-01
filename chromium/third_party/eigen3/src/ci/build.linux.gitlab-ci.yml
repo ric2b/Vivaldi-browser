@@ -7,9 +7,7 @@
   script:
     - . ci/scripts/build.linux.script.sh
   tags:
-    - linux
-    - eigen-runner
-    - cross-compiler
+    - saas-linux-2xlarge-amd64
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $CI_PROJECT_NAMESPACE == "libeigen"
     - if: $CI_PIPELINE_SOURCE == "web" && $CI_PROJECT_NAMESPACE == "libeigen"
@@ -244,11 +242,13 @@ build:linux:rocm-latest:gcc-10:
     EIGEN_CI_CROSS_TARGET_TRIPLE: arm-linux-gnueabihf
     EIGEN_CI_ADDITIONAL_ARGS: >
       -DEIGEN_TEST_CUSTOM_CXX_FLAGS=-march=armv7-a;-mfpu=neon-vfpv4
+      -DCMAKE_SYSTEM_NAME=Linux
+      -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-arm-static;-L;/usr/arm-linux-gnueabihf
 
 build:linux:cross:arm:gcc-10:default:
   extends: .build:linux:cross:arm
   variables:
-    EIGEN_CI_CROSS_INSTALL: g++-10-arm-linux-gnueabihf
+    EIGEN_CI_CROSS_INSTALL: g++-10-arm-linux-gnueabihf qemu-user-static
     EIGEN_CI_CROSS_C_COMPILER: arm-linux-gnueabihf-gcc-10
     EIGEN_CI_CROSS_CXX_COMPILER: arm-linux-gnueabihf-g++-10
 
@@ -258,7 +258,7 @@ build:linux:cross:arm:clang-12:default:
     EIGEN_CI_INSTALL: clang-12
     EIGEN_CI_C_COMPILER: clang-12
     EIGEN_CI_CXX_COMPILER: clang++-12
-    EIGEN_CI_CROSS_INSTALL: g++-10-arm-linux-gnueabihf clang-12
+    EIGEN_CI_CROSS_INSTALL: g++-10-arm-linux-gnueabihf clang-12 qemu-user-static
 
 ######## aarch64 ###############################################################
 
@@ -268,6 +268,8 @@ build:linux:cross:arm:clang-12:default:
     EIGEN_CI_TARGET_ARCH: aarch64
     EIGEN_CI_CROSS_TARGET_TRIPLE: aarch64-linux-gnu
     EIGEN_CI_ADDITIONAL_ARGS: -DEIGEN_TEST_CUSTOM_CXX_FLAGS=-march=armv8.2-a+fp16
+  tags:
+    - saas-linux-large-arm64
 
 build:linux:cross:aarch64:gcc-10:default:
   extends: .build:linux:cross:aarch64
@@ -290,28 +292,27 @@ build:linux:cross:aarch64:clang-12:default:
 
 .build:linux:cross:ppc64le:
   extends: .build:linux:cross
+  image: ubuntu:24.04
   variables:
     EIGEN_CI_TARGET_ARCH: ppc64le
     EIGEN_CI_CROSS_TARGET_TRIPLE: powerpc64le-linux-gnu
+    EIGEN_CI_ADDITIONAL_ARGS: >-
+      -DCMAKE_SYSTEM_NAME=Linux
+      -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-ppc64le-static;-L;/usr/powerpc64le-linux-gnu
 
-build:linux:cross:ppc64le:gcc-10:default:
+build:linux:cross:ppc64le:gcc-14:default:
   extends: .build:linux:cross:ppc64le
   variables:
-    EIGEN_CI_C_COMPILER: gcc-10
-    EIGEN_CI_CXX_COMPILER: g++-10
-    EIGEN_CI_CROSS_INSTALL: g++-10-powerpc64le-linux-gnu
-    EIGEN_CI_CROSS_C_COMPILER: powerpc64le-linux-gnu-gcc-10
-    EIGEN_CI_CROSS_CXX_COMPILER: powerpc64le-linux-gnu-g++-10
-    # Temporarily disable MMA until #2457 is resolved.
-    EIGEN_CI_ADDITIONAL_ARGS: "-DEIGEN_ALTIVEC_DISABLE_MMA=1"
+    EIGEN_CI_CROSS_INSTALL: g++-14-powerpc64le-linux-gnu qemu-user-static
+    EIGEN_CI_CROSS_C_COMPILER: powerpc64le-linux-gnu-gcc-14
+    EIGEN_CI_CROSS_CXX_COMPILER: powerpc64le-linux-gnu-g++-14
 
-build:linux:cross:ppc64le:clang-12:default:
+build:linux:cross:ppc64le:clang-16:default:
   extends: .build:linux:cross:ppc64le
   variables:
-    EIGEN_CI_INSTALL: clang-12
-    EIGEN_CI_C_COMPILER: clang-12
-    EIGEN_CI_CXX_COMPILER: clang++-12
-    EIGEN_CI_CROSS_INSTALL: g++-10-powerpc64le-linux-gnu clang-12
+    EIGEN_CI_C_COMPILER: clang-16
+    EIGEN_CI_CXX_COMPILER: clang++-16
+    EIGEN_CI_CROSS_INSTALL: g++-14-powerpc64le-linux-gnu clang-16 qemu-user-static
 
 ######## loongarch64 #################################################
 
@@ -320,17 +321,13 @@ build:linux:cross:ppc64le:clang-12:default:
   variables:
     EIGEN_CI_TARGET_ARCH: loongarch64
     EIGEN_CI_CROSS_TARGET_TRIPLE: loongarch64-linux-gnu
-  tags:
-    - eigen-runner
-    - linux
-    - cross-compiler
 
 # GCC-14 (minimum on Ubuntu 24)
 build:linux:cross:loongarch64:gcc-14:default:
   extends: .build:linux:cross:loongarch64
   image: ubuntu:24.04
   variables:
-    EIGEN_CI_CROSS_INSTALL: g++-14-loongarch64-linux-gnu
+    EIGEN_CI_CROSS_INSTALL: g++-14-loongarch64-linux-gnu qemu-user-static
     EIGEN_CI_CROSS_C_COMPILER: loongarch64-linux-gnu-gcc-14
     EIGEN_CI_CROSS_CXX_COMPILER: loongarch64-linux-gnu-g++-14
     EIGEN_CI_ADDITIONAL_ARGS: >-

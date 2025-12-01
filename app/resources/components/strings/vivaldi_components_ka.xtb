@@ -3,16 +3,6 @@
 <translationbundle lang="ka">
 <translation id="3830627370375585318">მიეცით Vivaldi-ის ქსელთან წვდომა თქვენი ბრანდმაუერის
        ან ანტივირუსის პარამეტრებში.</translation>
-<translation id="4200102020577305737">გადადით
-          Vivaldi-ის მენიუში &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          LAN-ის მორგება
-          და ჩართეთ "თქვენი ლოკალური ქსელისთვის პროქსი სერვერის გამოყენება.</translation>
 <translation id="4932161901409251843">გადადით
           Vivaldi მენიუ &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@
           თუ ამან პრობლეა არ მოაგვარა, გირჩევთ, ეს პარამეტრი ისევ ჩართოთ,
           რადგან ის წარმადობას საგრძნობლად ზრდის.</translation>
 <translation id="7496505986576158197">Vivaldi-ის დაბადება <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> ღია კოდის მქონე პროექტისა და სხვა <ph name="BEGIN_LINK_OSS" />ღია კოდის მქონე პროგრამების გარეშე <ph name="END_LINK_OSS" /> შეუძლებელი იქნებოდა.</translation>
+<translation id="89559930087159128">გადადით
+          Vivaldi-ის მენიუში&gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          ქსელი &amp; ინტერნეტი &gt; პროქსი
+          და გამორთეთ "პარამეტრების ავტომატური აღმოჩენა".</translation>
 </translationbundle>

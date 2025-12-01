@@ -17,6 +17,7 @@
 #include "components/performance_manager/public/graph/page_node.h"
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
 
 namespace performance_manager::policies {
@@ -131,21 +132,25 @@ void MaybeFlushBFCacheImpl(content::WebContents* contents,
 
 }  // namespace
 
+BFCachePolicy::BFCachePolicy()
+    : memory_pressure_listener_(
+          FROM_HERE,
+          base::MemoryPressureListenerTag::kBFCachePolicy,
+          base::BindRepeating(&BFCachePolicy::OnMemoryPressure,
+                              base::Unretained(this))) {}
+
+BFCachePolicy::~BFCachePolicy() = default;
+
+void BFCachePolicy::OnPassedToGraph(Graph* graph) {}
+
+void BFCachePolicy::OnTakenFromGraph(Graph* graph) {}
+
 void BFCachePolicy::MaybeFlushBFCache(
     const PageNode* page_node,
     MemoryPressureLevel memory_pressure_level) {
   DCHECK(page_node);
   MaybeFlushBFCacheImpl(page_node->GetWebContents().get(),
                         memory_pressure_level);
-}
-
-void BFCachePolicy::OnPassedToGraph(Graph* graph) {
-  DCHECK(graph->HasOnlySystemNode());
-  graph->AddSystemNodeObserver(this);
-}
-
-void BFCachePolicy::OnTakenFromGraph(Graph* graph) {
-  graph->RemoveSystemNodeObserver(this);
 }
 
 void BFCachePolicy::OnMemoryPressure(MemoryPressureLevel new_level) {

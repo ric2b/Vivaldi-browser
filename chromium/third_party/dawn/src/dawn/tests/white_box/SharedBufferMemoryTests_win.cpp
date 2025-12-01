@@ -84,10 +84,10 @@ void CopyD3D12Resource(ID3D12Device* device, ID3D12Resource* source, ID3D12Resou
     }
 }
 
-class Backend : public SharedBufferMemoryTestBackend {
+class D3D12ResourceBackend : public SharedBufferMemoryTestBackend {
   public:
-    static Backend* GetInstance() {
-        static Backend b;
+    static Backend GetInstance() {
+        static D3D12ResourceBackend b;
         return &b;
     }
 
@@ -169,9 +169,17 @@ class Backend : public SharedBufferMemoryTestBackend {
     ComPtr<ID3D12Resource> CreateD3D12Buffer(ID3D12Device* device,
                                              D3D12_HEAP_TYPE heapType,
                                              uint32_t bufferSize = kBufferSize) {
+        D3D12_HEAP_PROPERTIES heapProperties = {heapType, D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+                                                D3D12_MEMORY_POOL_UNKNOWN, 0, 0};
+        return CreateD3D12Buffer(device, heapProperties, bufferSize);
+    }
+
+    ComPtr<ID3D12Resource> CreateD3D12Buffer(ID3D12Device* device,
+                                             D3D12_HEAP_PROPERTIES heapProperties,
+                                             uint32_t bufferSize = kBufferSize) {
         D3D12_RESOURCE_STATES initialResourceState;
         D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE;
-        switch (heapType) {
+        switch (heapProperties.Type) {
             case D3D12_HEAP_TYPE_UPLOAD:
                 initialResourceState = D3D12_RESOURCE_STATE_GENERIC_READ;
                 break;
@@ -182,9 +190,6 @@ class Backend : public SharedBufferMemoryTestBackend {
                 initialResourceState = D3D12_RESOURCE_STATE_COMMON;
                 resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
         }
-
-        D3D12_HEAP_PROPERTIES heapProperties = {heapType, D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
-                                                D3D12_MEMORY_POOL_UNKNOWN, 0, 0};
 
         D3D12_RESOURCE_DESC descriptor;
         descriptor.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -207,7 +212,7 @@ class Backend : public SharedBufferMemoryTestBackend {
     }
 
   private:
-    Backend() {}
+    D3D12ResourceBackend() {}
 };
 
 // Ensure that importing a nullptr ID3D12Resource results in error.
@@ -224,10 +229,10 @@ TEST_P(SharedBufferMemoryTests, nullResourceFailure) {
 TEST_P(SharedBufferMemoryTests, CrossDeviceResourceImportFailure) {
     DAWN_TEST_UNSUPPORTED_IF(IsWARP());
     ComPtr<ID3D12Device> warpDevice =
-        static_cast<Backend*>(GetParam().mBackend)->CreateD3D12Device(device, true);
+        static_cast<D3D12ResourceBackend*>(GetParam().mBackend)->CreateD3D12Device(device, true);
     ComPtr<ID3D12Resource> d3d12Resource =
-        static_cast<Backend*>(GetParam().mBackend)
-            ->CreateD3D12Buffer(warpDevice.Get(), D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_FLAG_NONE);
+        static_cast<D3D12ResourceBackend*>(GetParam().mBackend)
+            ->CreateD3D12Buffer(warpDevice.Get(), D3D12_HEAP_TYPE_UPLOAD);
     wgpu::SharedBufferMemoryDescriptor desc;
     native::d3d12::SharedBufferMemoryD3D12ResourceDescriptor sharedD3d12ResourceDesc;
     sharedD3d12ResourceDesc.resource = d3d12Resource.Get();
@@ -236,10 +241,48 @@ TEST_P(SharedBufferMemoryTests, CrossDeviceResourceImportFailure) {
     ASSERT_DEVICE_ERROR(device.ImportSharedBufferMemory(&desc));
 }
 
+// Validate that importing an ID3D12Resource allocated on a CUSTOM heap that is equivalent to UPLOAD
+// works correctly.
+TEST_P(SharedBufferMemoryTests, CustomUploadHeapImport) {
+    ComPtr<ID3D12Device> d3d12Device =
+        static_cast<D3D12ResourceBackend*>(GetParam().mBackend)->CreateD3D12Device(device, false);
+    D3D12_HEAP_PROPERTIES heapProperties =
+        d3d12Device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_UPLOAD);
+    wgpu::SharedBufferMemoryDescriptor desc;
+    ComPtr<ID3D12Resource> d3d12Resource =
+        static_cast<D3D12ResourceBackend*>(GetParam().mBackend)
+            ->CreateD3D12Buffer(d3d12Device.Get(), heapProperties);
+    native::d3d12::SharedBufferMemoryD3D12ResourceDescriptor sharedD3d12ResourceDesc;
+    sharedD3d12ResourceDesc.resource = d3d12Resource.Get();
+    desc.nextInChain = &sharedD3d12ResourceDesc;
+
+    wgpu::SharedBufferMemory sharedBufferMemory = device.ImportSharedBufferMemory(&desc);
+    ASSERT_TRUE(sharedBufferMemory.CreateBuffer().Get());
+}
+
+// Validate that importing an ID3D12Resource allocated on a CUSTOM heap that is equivalent to
+// READBACK works correctly.
+TEST_P(SharedBufferMemoryTests, CustomReadbackHeapImport) {
+    ComPtr<ID3D12Device> d3d12Device =
+        static_cast<D3D12ResourceBackend*>(GetParam().mBackend)->CreateD3D12Device(device, false);
+    D3D12_HEAP_PROPERTIES heapProperties =
+        d3d12Device->GetCustomHeapProperties(0, D3D12_HEAP_TYPE_READBACK);
+    wgpu::SharedBufferMemoryDescriptor desc;
+    ComPtr<ID3D12Resource> d3d12Resource =
+        static_cast<D3D12ResourceBackend*>(GetParam().mBackend)
+            ->CreateD3D12Buffer(d3d12Device.Get(), heapProperties);
+    native::d3d12::SharedBufferMemoryD3D12ResourceDescriptor sharedD3d12ResourceDesc;
+    sharedD3d12ResourceDesc.resource = d3d12Resource.Get();
+    desc.nextInChain = &sharedD3d12ResourceDesc;
+
+    wgpu::SharedBufferMemory sharedBufferMemory = device.ImportSharedBufferMemory(&desc);
+    ASSERT_TRUE(sharedBufferMemory.CreateBuffer().Get());
+}
+
 DAWN_INSTANTIATE_PREFIXED_TEST_P(D3D12,
                                  SharedBufferMemoryTests,
                                  {D3D12Backend()},
-                                 {Backend::GetInstance()});
+                                 {D3D12ResourceBackend::GetInstance()});
 
 }  // anonymous namespace
 }  // namespace dawn

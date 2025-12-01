@@ -15,9 +15,11 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/interaction/browser_elements.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/browser/ui/views/bubble/webui_bubble_dialog_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/interaction/browser_elements_views.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
 #include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
@@ -40,7 +42,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/webview/webview.h"
@@ -166,8 +168,7 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest, TestNameAndDrag) {
       Check(base::BindLambdaForTesting([&]() {
         gfx::Rect rect(p1, gfx::Size());
         rect.Inset(-1);
-        const gfx::Point point =
-            display::Screen::GetScreen()->GetCursorScreenPoint();
+        const gfx::Point point = display::Screen::Get()->GetCursorScreenPoint();
         if (!rect.Contains(point)) {
           LOG(ERROR) << "Expected cursor pos " << point.ToString()
                      << " to be roughly " << p1.ToString();
@@ -182,8 +183,7 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest, TestNameAndDrag) {
       Check(base::BindLambdaForTesting([&]() {
         gfx::Rect rect(p2, gfx::Size());
         rect.Inset(-1);
-        const gfx::Point point =
-            display::Screen::GetScreen()->GetCursorScreenPoint();
+        const gfx::Point point = display::Screen::Get()->GetCursorScreenPoint();
         if (!rect.Contains(point)) {
           LOG(ERROR) << "Expected cursor pos " << point.ToString()
                      << " to be roughly " << p2.ToString();
@@ -198,35 +198,31 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest, TestNameAndDrag) {
 IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest,
                        MouseToNewWindowAndDoActionsInSameContext) {
   Browser* const incognito = CreateIncognitoBrowser();
+  const auto context = BrowserElements::From(incognito)->GetContext();
 
-  RunTestSequence(
-      InContext(incognito->window()->GetElementContext(),
-                WaitForShow(kBrowserViewElementId)),
-      InSameContext(
-          ActivateSurface(kBrowserViewElementId),
-          MoveMouseTo(kToolbarAppMenuButtonElementId), ClickMouse(),
-          SelectMenuItem(AppMenuModel::kDownloadsMenuItem),
-          WaitForHide(AppMenuModel::kDownloadsMenuItem),
-          // These two types of actions use PostTask() internally and bounce off
-          // the pivot element. Make sure they still work in a "InSameContext".
-          EnsureNotPresent(AppMenuModel::kDownloadsMenuItem),
-          // Make sure this picks up the correct button, since it was after a
-          // string of non-element-specific actions.
-          WithElement(kToolbarAppMenuButtonElementId,
-                      base::BindOnce(base::BindLambdaForTesting(
-                          [incognito](ui::TrackedElement* el) {
-                            EXPECT_EQ(incognito->window()->GetElementContext(),
-                                      el->context());
-                          })))));
+  RunTestSequenceInContext(
+      context, WaitForShow(kBrowserViewElementId),
+      ActivateSurface(kBrowserViewElementId),
+      MoveMouseTo(kToolbarAppMenuButtonElementId), ClickMouse(),
+      SelectMenuItem(AppMenuModel::kDownloadsMenuItem),
+      WaitForHide(AppMenuModel::kDownloadsMenuItem),
+      // These two types of actions use PostTask() internally and bounce off
+      // the pivot element. Make sure they still work in a "InSameContext".
+      EnsureNotPresent(AppMenuModel::kDownloadsMenuItem),
+      // Make sure this picks up the correct button, since it was after a
+      // string of non-element-specific actions.
+      CheckElement(
+          kToolbarAppMenuButtonElementId,
+          [](ui::TrackedElement* el) { return el->context(); }, context));
 }
 
 IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest,
                        MouseToNewWindowAndDoActionsInSpecificContext) {
   auto* const incognito = CreateIncognitoBrowser();
+  const auto context = BrowserElements::From(incognito)->GetContext();
 
-  RunTestSequence(InContext(
-      incognito->window()->GetElementContext(),
-      ActivateSurface(kBrowserViewElementId),
+  RunTestSequenceInContext(
+      context, ActivateSurface(kBrowserViewElementId),
       MoveMouseTo(kToolbarAppMenuButtonElementId), ClickMouse(),
       SelectMenuItem(AppMenuModel::kDownloadsMenuItem),
       WaitForHide(AppMenuModel::kDownloadsMenuItem),
@@ -236,26 +232,23 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest,
       EnsureNotPresent(AppMenuModel::kDownloadsMenuItem),
       // Make sure this picks up the correct button, since it was
       // after a string of non-element-specific actions.
-      WithElement(kToolbarAppMenuButtonElementId,
-                  base::BindOnce(base::BindLambdaForTesting(
-                      [incognito](ui::TrackedElement* el) {
-                        EXPECT_EQ(incognito->window()->GetElementContext(),
-                                  el->context());
-                      })))));
+      CheckElement(
+          kToolbarAppMenuButtonElementId,
+          [](ui::TrackedElement* el) { return el->context(); }, context));
 }
 
 // Tests whether ActivateSurface() can correctly bring a browser window to the
 // front so that mouse input can be sent to it.
 IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest, ActivateMultipleSurfaces) {
   auto* const incognito = CreateIncognitoBrowser();
+  const auto context = BrowserElements::From(incognito)->GetContext();
 
   RunTestSequence(
       SetOnIncompatibleAction(OnIncompatibleAction::kHaltTest,
                               "Some Linux window managers do not allow "
                               "programmatically raising/activating windows. "
                               "This invalidates the rest of the test."),
-      InContext(incognito->window()->GetElementContext(),
-                ActivateSurface(kBrowserViewElementId),
+      InContext(context, ActivateSurface(kBrowserViewElementId),
                 MoveMouseTo(kToolbarAppMenuButtonElementId), ClickMouse(),
                 SelectMenuItem(AppMenuModel::kDownloadsMenuItem),
                 WaitForHide(AppMenuModel::kDownloadsMenuItem)),
@@ -269,6 +262,7 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest, ActivateMultipleSurfaces) {
 IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest,
                        WatchForBrowserActivation) {
   auto* const incognito = CreateIncognitoBrowser();
+  const auto context = BrowserElements::From(incognito)->GetContext();
 
   RunTestSequence(
       SetOnIncompatibleAction(OnIncompatibleAction::kHaltTest,
@@ -276,8 +270,7 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest,
                               "programmatically raising/activating windows. "
                               "This invalidates the rest of the test."),
       ObserveState(views::test::kCurrentWidgetFocus),
-      InContext(incognito->window()->GetElementContext(),
-                ActivateSurface(kBrowserViewElementId),
+      InContext(context, ActivateSurface(kBrowserViewElementId),
                 MoveMouseTo(kToolbarAppMenuButtonElementId), ClickMouse(),
                 SelectMenuItem(AppMenuModel::kDownloadsMenuItem),
                 WaitForHide(AppMenuModel::kDownloadsMenuItem)),
@@ -293,6 +286,7 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest,
                        WatchForTabWebContentsActivation) {
   DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kWebContentsElementId);
   auto* const incognito = CreateIncognitoBrowser();
+  const auto context = BrowserElements::From(incognito)->GetContext();
 
   RunTestSequence(
       SetOnIncompatibleAction(OnIncompatibleAction::kHaltTest,
@@ -300,8 +294,7 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest,
                               "programmatically raising/activating windows. "
                               "This invalidates the rest of the test."),
       ObserveState(views::test::kCurrentWidgetFocus),
-      InContext(incognito->window()->GetElementContext(),
-                ActivateSurface(kBrowserViewElementId),
+      InContext(context, ActivateSurface(kBrowserViewElementId),
                 MoveMouseTo(kToolbarAppMenuButtonElementId), ClickMouse(),
                 SelectMenuItem(AppMenuModel::kDownloadsMenuItem),
                 WaitForHide(AppMenuModel::kDownloadsMenuItem)),
@@ -339,6 +332,7 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest,
   DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kWebContentsElementId);
   constexpr char kWebViewName[] = "Web View";
   auto* const incognito = CreateIncognitoBrowser();
+  const auto context = BrowserElements::From(incognito)->GetContext();
 
   views::Widget* expected_widget = nullptr;
 
@@ -348,8 +342,7 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest,
                               "programmatically raising/activating windows. "
                               "This invalidates the rest of the test."),
       ObserveState(views::test::kCurrentWidgetFocus),
-      InContext(incognito->window()->GetElementContext(),
-                ActivateSurface(kBrowserViewElementId),
+      InContext(context, ActivateSurface(kBrowserViewElementId),
                 MoveMouseTo(kToolbarAppMenuButtonElementId), ClickMouse(),
                 SelectMenuItem(AppMenuModel::kDownloadsMenuItem),
                 WaitForHide(AppMenuModel::kDownloadsMenuItem)),
@@ -407,8 +400,7 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest,
             BrowserView::GetBrowserViewForBrowser(browser());
         const gfx::Rect web_contents_bounds =
             browser_view->contents_web_view()->GetBoundsInScreen();
-        const gfx::Point point =
-            display::Screen::GetScreen()->GetCursorScreenPoint();
+        const gfx::Point point = display::Screen::Get()->GetCursorScreenPoint();
         if (!web_contents_bounds.Contains(point)) {
           LOG(ERROR) << "Expected cursor pos " << point.ToString() << " to in "
                      << web_contents_bounds.ToString();
@@ -423,11 +415,12 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest,
   DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kBrowserPageId);
   DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kIncognitoPageId);
 
-  Browser* const incognito_browser = this->CreateIncognitoBrowser();
+  Browser* const incognito = this->CreateIncognitoBrowser();
+  const auto context = BrowserElements::From(incognito)->GetContext();
 
   // Run the test in the context of the incognito browser.
   RunTestSequenceInContext(
-      incognito_browser->window()->GetElementContext(),
+      context,
       // Instrument the tabs but do not force them to load.
       InstrumentTab(kIncognitoPageId, std::nullopt, CurrentBrowser(),
                     /* wait_for_ready =*/false),
@@ -738,10 +731,8 @@ class InteractiveBrowserTestHoverUiTest : public InteractiveBrowserTestUiTest {
             gfx::Vector2d(10, 10)));
 
     // Create and show the bubble.
-    auto* const anchor_view =
-        views::ElementTrackerViews::GetInstance()->GetFirstMatchingView(
-            kToolbarAppMenuButtonElementId,
-            browser()->window()->GetElementContext());
+    auto* const anchor_view = BrowserElementsViews::From(browser())->GetView(
+        kToolbarAppMenuButtonElementId);
     CHECK(anchor_view);
     auto bubble_view = std::make_unique<HoverDetectionBubbleView>(anchor_view);
     bubble_view_ = bubble_view.get();

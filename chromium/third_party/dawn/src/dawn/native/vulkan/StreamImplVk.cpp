@@ -118,11 +118,19 @@ void stream::Stream<VkDescriptorSetLayoutBinding>::Write(stream::Sink* sink,
 }
 
 template <>
+void stream::Stream<VkDescriptorSetLayoutBindingFlagsCreateInfo>::Write(
+    stream::Sink* sink,
+    const VkDescriptorSetLayoutBindingFlagsCreateInfo& t) {
+    StreamIn(sink, Iterable(t.pBindingFlags, t.bindingCount));
+    SerializePnext(sink, &t);
+}
+
+template <>
 void stream::Stream<VkDescriptorSetLayoutCreateInfo>::Write(
     stream::Sink* sink,
     const VkDescriptorSetLayoutCreateInfo& t) {
     StreamIn(sink, t.flags, Iterable(t.pBindings, t.bindingCount));
-    SerializePnext(sink, &t);
+    SerializePnext<VkDescriptorSetLayoutBindingFlagsCreateInfo>(sink, &t);
 }
 
 template <>
@@ -315,6 +323,14 @@ void stream::Stream<VkPipelineDynamicStateCreateInfo>::Write(
 }
 
 template <>
+void stream::Stream<VkPipelineRobustnessCreateInfo>::Write(
+    stream::Sink* sink,
+    const VkPipelineRobustnessCreateInfo& t) {
+    StreamIn(sink, t.vertexInputs, t.images, t.storageBuffers, t.uniformBuffers);
+    SerializePnext(sink, &t);
+}
+
+template <>
 void stream::Stream<vulkan::RenderPassCacheQuery>::Write(stream::Sink* sink,
                                                          const vulkan::RenderPassCacheQuery& t) {
     StreamIn(sink, t.colorMask.to_ulong(), t.resolveTargetMask.to_ulong(), t.sampleCount);
@@ -346,7 +362,7 @@ void stream::Stream<VkGraphicsPipelineCreateInfo>::Write(stream::Sink* sink,
              t.pInputAssemblyState, t.pTessellationState, t.pViewportState, t.pRasterizationState,
              t.pMultisampleState, t.pDepthStencilState, t.pColorBlendState, t.pDynamicState,
              t.subpass);
-    SerializePnext(sink, &t);
+    SerializePnext<VkPipelineRobustnessCreateInfo>(sink, &t);
 }
 
 }  // namespace dawn::native

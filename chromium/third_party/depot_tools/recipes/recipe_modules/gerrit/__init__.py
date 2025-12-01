@@ -1,4 +1,3 @@
-PYTHON_VERSION_COMPATIBILITY = 'PY3'
 
 DEPS = [
     'recipe_engine/context',
@@ -9,3 +8,6 @@ DEPS = [
     'recipe_engine/step',
     'recipe_engine/time',
 ]
+
+from .api import GerritApi as API
+from .test_api import GerritTestApi as TEST_API

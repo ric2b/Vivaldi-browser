@@ -16,6 +16,7 @@
 #include "google_apis/credentials_mode.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "net/base/load_flags.h"
+#include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -27,8 +28,6 @@ namespace password_manager {
 
 namespace {
 
-constexpr char kPasswordSharingRecipientsOAuthConsumerName[] =
-    "PasswordSharingRecipients";
 constexpr char kPasswordSharingRecipientsEndpoint[] =
     "password_sharing_recipients";
 constexpr base::TimeDelta kRequestTimeout = base::Seconds(10);
@@ -100,10 +99,6 @@ void PasswordSharingRecipientsDownloader::AccessTokenFetched(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(1) << "Access token fetch complete, error state: "
            << static_cast<int>(error.state());
-
-  base::UmaHistogramEnumeration(
-      "PasswordManager.PasswordSharingRecipients.FetchAccessTokenResult",
-      error.state(), GoogleServiceAuthError::NUM_STATES);
 
   CHECK(ongoing_access_token_fetch_);
   ongoing_access_token_fetch_.reset();
@@ -250,8 +245,8 @@ void PasswordSharingRecipientsDownloader::StartFetchingAccessToken() {
   CHECK(!ongoing_access_token_fetch_);
   ongoing_access_token_fetch_ =
       std::make_unique<signin::PrimaryAccountAccessTokenFetcher>(
-          kPasswordSharingRecipientsOAuthConsumerName, identity_manager_,
-          signin::ScopeSet{GaiaConstants::kChromeSyncOAuth2Scope},
+          signin::OAuthConsumerId::kPasswordSharingRecipientsDownloader,
+          identity_manager_,
           base::BindOnce(
               &PasswordSharingRecipientsDownloader::AccessTokenFetched,
               base::Unretained(this)),

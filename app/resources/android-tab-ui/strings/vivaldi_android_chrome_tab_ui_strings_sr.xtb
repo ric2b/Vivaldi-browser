@@ -1,11 +1,42 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sr">
+<translation id="1049697408958544531">{NUM_WEEKS, plural,
+          =1 {Креирано пре <ph name="NUM_WEEKS_ONE" /> седмице}
+          few {Креирано пре <ph name="NUM_WEEKS_MANY" /> седмице}
+          other {Креирано пре <ph name="NUM_WEEKS_MANY" /> седмица}
+        }</translation>
 <translation id="1062777154504442433">Нова група картица</translation>
+<translation id="1092908249939127748">{NUM_MONTHS, plural,
+          =1 {Креирано пре <ph name="NUM_YEARS_ONE" /> године}
+          few {Креирано пре <ph name="NUM_YEARS_MANY" /> године}
+          other {Креирано пре <ph name="NUM_YEARS_MANY" /> година}
+        }</translation>
+<translation id="1329584516321524826">Ажурирано управо сада</translation>
+<translation id="149054111719651807">{NUM_MINS, plural,
+          =1 {Креирано пре <ph name="NUM_MINS_ONE" /> минут}
+          other {Креирано пре <ph name="NUM_MINS_MANY" /> минута}
+        }</translation>
 <translation id="1625440863545383011">Уклони картицу и напусти групу</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Додај у обележиваче}
           other {Додај у обележиваче}
+        }</translation>
+<translation id="2498435670446402865">Преименовање групе картица</translation>
+<translation id="2734252994837336591">{NUM_WEEKS, plural,
+          =1 {Ажурирано пре <ph name="NUM_WEEKS_ONE" /> седмице}
+          few {Ажурирано пре <ph name="NUM_WEEKS_MANY" /> седмице}
+          other {Ажурирано пре <ph name="NUM_WEEKS_MANY" /> седмица}
+        }</translation>
+<translation id="2753877351161418426">{NUM_HOURS, plural,
+          =1 {Ажурирано пре <ph name="NUM_HOURS_ONE" /> сат}
+          few {Ажурирано пре <ph name="NUM_HOURS_MANY" /> сата}
+          other {Ажурирано пре <ph name="NUM_HOURS_MANY" /> сати}
+        }</translation>
+<translation id="2776817246640326047">{NUM_HOURS, plural,
+          =1 {Креирано пре <ph name="NUM_HOURS_ONE" /> сат}
+          few {Креирано пре <ph name="NUM_HOURS_MANY" /> сата}
+          other {Креирано пре <ph name="NUM_HOURS_MANY" /> сати}
         }</translation>
 <translation id="2947471979790858922">Ваше активности у овим приватним картицама ће бити уклоњене са овог уређаја</translation>
 <translation id="3298614730029636660">Напусти групу</translation>
@@ -14,13 +45,44 @@
         =1 {Затворене картице можете пронаћи у недавним картицама у главном Vivaldi менију. Ваша приватна картица неће бити доступна.}
         few {Затворене картице можете пронаћи у недавним картицама у главном Vivaldi менију. Ваше # приватне картице неће бити доступне.}
         other {Затворене картице можете пронаћи у недавним картицама у главном Vivaldi менију. Ваших # приватних картица неће бити доступно.}}</translation>
+<translation id="4009732926939031387">{NUM_DAYS, plural,
+          =1 {Креирано пре <ph name="NUM_DAYS_ONE" /> дан}
+          other {Креирано пре <ph name="NUM_DAYS_MANY" /> дана}
+        }</translation>
+<translation id="4453940245650019914">{NUM_DAYS, plural,
+          =1 {Ажурирано пре <ph name="NUM_DAYS_ONE" /> дан}
+          other {Ажурирано пре <ph name="NUM_DAYS_MANY" /> дана}
+        }</translation>
+<translation id="4686942373615810936">Креирано управо сада</translation>
+<translation id="4870911314065352661">Затворити све картице?</translation>
 <translation id="4871187110787939393">Затворити све приватне картице?</translation>
 <translation id="5494920125229734069">Изабери све</translation>
 <translation id="6807841890213931603">Уклони картицу и избриши групу</translation>
 <translation id="750227952939161636">Ваше групе картица се аутоматски чувају и ажурирају на свим уређајима на којима сте пријављени</translation>
 <translation id="7640137753339219124">Избриши групу</translation>
 <translation id="7653857400289671414">Ваше групе картица се аутоматски чувају</translation>
+<translation id="775668479044571025">{NUM_MONTHS, plural,
+          =1 {Ажурирано пре <ph name="NUM_YEARS_ONE" /> године}
+          few {Ажурирано пре <ph name="NUM_YEARS_MANY" /> године}
+          other {Ажурирано пре <ph name="NUM_YEARS_MANY" /> година}
+        }</translation>
+<translation id="7825973332242257878">Групе картица</translation>
+<translation id="8207688828622594111">{NUM_MINS, plural,
+          =1 {Ажурирано пре <ph name="NUM_MINS_ONE" /> минут}
+          other {Ажурирано пре <ph name="NUM_MINS_MANY" /> минута}
+        }</translation>
+<translation id="8374451057714760401">{NUM_MONTHS, plural,
+                =1 {Ажурирано пре <ph name="NUM_MONTHS_ONE" /> месец}
+                few {Ажурирано пре <ph name="NUM_MONTHS_MANY" /> месеца}
+                other {Ажурирано пре <ph name="NUM_MONTHS_MANY" /> месеци}
+              }</translation>
 <translation id="8440938071054361204">Уреди име групе</translation>
 <translation id="8602902357364871325">Затвори групу</translation>
+<translation id="875848103419578654">{NUM_MONTHS, plural,
+                =1 {Креирано пре <ph name="NUM_MONTHS_ONE" /> месец}
+                few {Креирано пре <ph name="NUM_MONTHS_MANY" /> месеца}
+                other {Креирано пре <ph name="NUM_MONTHS_MANY" /> месеци}
+              }</translation>
 <translation id="8851621822786801079">Уклони из групе</translation>
+<translation id="8887921976452567404">Затворене картице и групе можете поново отворити из одељка ’Недавне картице’ и одељка ’Групе картица’.</translation>
 </translationbundle>

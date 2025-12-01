@@ -33,6 +33,9 @@ class FakeTabGroupSyncService : public TabGroupSyncService {
   void UpdateGroupPosition(const base::Uuid& sync_id,
                            std::optional<bool> is_pinned,
                            std::optional<int> new_index) override;
+  void UpdateBookmarkNodeId(
+      const base::Uuid& sync_id,
+      std::optional<base::Uuid> bookmark_node_id) override;
   void AddTab(const LocalTabGroupID& group_id,
               const LocalTabID& tab_id,
               const std::u16string& title,
@@ -63,6 +66,8 @@ class FakeTabGroupSyncService : public TabGroupSyncService {
   void MakeTabGroupSharedForTesting(
       const LocalTabGroupID& local_group_id,
       const syncer::CollaborationId& collaboration_id) override;
+  void MakeTabGroupUnsharedForTesting(
+      const LocalTabGroupID& local_group_id) override;
   void AboutToUnShareTabGroup(const LocalTabGroupID& local_group_id,
                               base::OnceClosure on_complete_callback) override;
   void OnTabGroupUnShareComplete(const LocalTabGroupID& local_group_id,
@@ -78,7 +83,7 @@ class FakeTabGroupSyncService : public TabGroupSyncService {
       const EitherGroupID& either_id) const override;
   std::vector<LocalTabGroupID> GetDeletedGroupIds() const override;
   std::optional<std::u16string> GetTitleForPreviouslyExistingSharedTabGroup(
-      const CollaborationId& collaboration_id) const override;
+      const syncer::CollaborationId& collaboration_id) const override;
   std::optional<LocalTabGroupID> OpenTabGroup(
       const base::Uuid& sync_group_id,
       std::unique_ptr<TabGroupActionContext> context) override;

@@ -27,6 +27,7 @@
 #include "mojo/public/cpp/bindings/features.h"
 #include "net/base/features.h"
 #include "services/network/public/cpp/features.h"
+#include "services/tracing/public/cpp/tracing_features.h"
 #include "storage/browser/blob/features.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/features_generated.h"
@@ -60,6 +61,11 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
   aw_feature_overrides.DisableFeature(
       ::features::kBlockCrossPartitionBlobUrlFetching);
 
+  // TODO(crbug.com/445202443): There are some test cases need to be
+  // fixed before enabling this feature flag for android.
+  aw_feature_overrides.DisableFeature(
+      blink::features::kAboutBlankPageRespectsDarkModeOnUserAction);
+
   // Disable enforcing `noopener` on Blob URL navigations on WebView.
   aw_feature_overrides.DisableFeature(
       blink::features::kEnforceNoopenerOnBlobURLNavigation);
@@ -84,6 +90,7 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
   aw_feature_overrides.DisableFeature(blink::features::kFencedFrames);
 
   // Disable FLEDGE on WebView.
+  aw_feature_overrides.DisableFeature(network::features::kInterestGroupStorage);
   aw_feature_overrides.DisableFeature(blink::features::kAdInterestGroupAPI);
   aw_feature_overrides.DisableFeature(blink::features::kFledge);
 
@@ -155,8 +162,6 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
   // on WebView.
   aw_feature_overrides.DisableFeature(::features::kDigitalGoodsApi);
 
-  aw_feature_overrides.DisableFeature(::features::kDynamicColorGamut);
-
   // COOP is not supported on WebView yet. See:
   // https://groups.google.com/a/chromium.org/forum/#!topic/blink-dev/XBKAGb2_7uAi.
   aw_feature_overrides.DisableFeature(
@@ -195,6 +200,10 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
   // FedCM is not yet supported on WebView.
   aw_feature_overrides.DisableFeature(::features::kFedCm);
 
+  // Disable Digital Credentials API on WebView.
+  aw_feature_overrides.DisableFeature(::features::kWebIdentityDigitalCredentials);
+  aw_feature_overrides.DisableFeature(::features::kWebIdentityDigitalCredentialsCreation);
+
   // TODO(crbug.com/40272633): Web MIDI permission prompt for all usage.
   aw_feature_overrides.DisableFeature(blink::features::kBlockMidiByDefault);
 
@@ -208,11 +217,9 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
   // enabling site isolation. See crbug.com/356170748.
   aw_feature_overrides.DisableFeature(blink::features::kPaintHoldingForIframes);
 
-  // Since Default Nav Transition does not support WebView yet, disable the
-  // LocalSurfaceId increment flag. TODO(crbug.com/361600214): Re-enable for
-  // WebView when we start introducing this feature.
-  aw_feature_overrides.DisableFeature(
-      blink::features::kIncrementLocalSurfaceIdForMainframeSameDocNavigation);
+  // Default Nav Transition does not support WebView.
+  // TODO(crbug.com/434928245): cleanup this feature gate in M141.
+  aw_feature_overrides.DisableFeature(blink::features::kBackForwardTransitions);
 
   // Disabling this feature for WebView, since it can switch focus when scrolled
   // in cases with multiple views which can trigger HTML focus changes that
@@ -284,11 +291,6 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
   // handled correctly when WebView is drawing edge-to-edge.
   aw_feature_overrides.DisableFeature(features::kDrawCutoutEdgeToEdge);
 
-  // This is enabled for WebView to improve crbug.com/418159642.
-  // TODO(crbug.com/422161917): Revert this for the ablation study.
-  aw_feature_overrides.EnableFeature(
-      features::kServiceWorkerBackgroundUpdateForRegisteredStorageKeys);
-
   // Explicitly disable PrefetchProxy instead of relying only on passing an
   // empty URL.
   aw_feature_overrides.DisableFeature(features::kPrefetchProxy);
@@ -300,4 +302,13 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
   // AAudio per-stream device selection is not supported on WebView.
   aw_feature_overrides.DisableFeature(
       features::kAAudioPerStreamDeviceSelection);
+
+  // Local Network Access restrictions should not be enforced in WebView.
+  // The LNA permission is auto-granted in WebView, but the permission
+  // policy currently blocks iframes from using it. crbug.com/442879527
+  aw_feature_overrides.DisableFeature(
+      network::features::kLocalNetworkAccessChecks);
+
+  // SystemTracing is enabled by default only in WebView for now.
+  aw_feature_overrides.EnableFeature(features::kEnablePerfettoSystemTracing);
 }

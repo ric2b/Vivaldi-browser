@@ -51,6 +51,8 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/native_theme/mock_os_settings_provider.h"
+#include "ui/native_theme/native_theme.h"
 #include "ui/views/accessibility/ax_update_notifier.h"
 #include "ui/views/accessibility/ax_update_observer.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -197,10 +199,12 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest, ThemeIntegration) {
   UseDefaultTheme();
   SetUseDeviceTheme(false);
 
-  SetUseDarkColor(true);
+  os_settings_provider().SetPreferredColorScheme(
+      ui::NativeTheme::PreferredColorScheme::kDark);
   const SkColor selection_color_dark = GetSelectedColor(browser());
 
-  SetUseDarkColor(false);
+  os_settings_provider().SetPreferredColorScheme(
+      ui::NativeTheme::PreferredColorScheme::kLight);
   const SkColor selection_color_light = GetSelectedColor(browser());
 
   // Unthemed, non-incognito always has a white background. Exceptions: Inverted
@@ -246,12 +250,14 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest, ThemeIntegrationInIncognito) {
   UseDefaultTheme();
   SetUseDeviceTheme(false);
 
-  SetUseDarkColor(true);
+  os_settings_provider().SetPreferredColorScheme(
+      ui::NativeTheme::PreferredColorScheme::kDark);
   SetIsGrayscale(true);
 
   const SkColor selection_color_dark = GetSelectedColor(browser());
 
-  SetUseDarkColor(false);
+  os_settings_provider().SetPreferredColorScheme(
+      ui::NativeTheme::PreferredColorScheme::kLight);
   SetIsGrayscale(false);
 
   // Install a theme (in both browsers, since it's the same profile).
@@ -618,7 +624,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest,
   results.SortAndCull(input, /*template_url_service=*/nullptr,
                       triggered_feature_service(), /*is_lens_active=*/false,
                       /*can_show_contextual_suggestions=*/false,
-                      /*mia_enabled*/ false);
+                      /*mia_enabled=*/false, /*is_incognito=*/false);
   controller()->autocomplete_controller()->NotifyChanged();
 
   // Check that arrowing up and down emits the event.

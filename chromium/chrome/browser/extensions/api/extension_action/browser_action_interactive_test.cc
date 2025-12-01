@@ -19,10 +19,9 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/extensions/extension_action_test_helper.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
@@ -341,7 +340,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest,
 #endif
   // Incognito window should have a popup.
   auto test_util = ExtensionActionTestHelper::Create(
-      BrowserList::GetInstance()->GetLastActive());
+      GetLastActiveBrowserWindowInterfaceWithAnyProfile()
+          ->GetBrowserForMigrationOnly());
   EXPECT_TRUE(test_util->HasPopup());
   test_util->HidePopup();
 }
@@ -468,8 +468,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionInteractiveTest,
   EXPECT_TRUE(HasPopupNativeView());
 
   // Then, find the extension that created it.
-  content::WebContents* active_web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
+  content::WebContents* active_web_contents = GetActiveWebContents();
   ASSERT_TRUE(active_web_contents);
   GURL url = active_web_contents->GetLastCommittedURL();
   const Extension* extension = ExtensionRegistry::Get(browser()->profile())->

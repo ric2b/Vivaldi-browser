@@ -34,9 +34,10 @@ NavigationEntryScreenshotManager::NavigationEntryScreenshotManager()
       NavigationTransitionConfig::ComputeCacheSizeInBytes();
   listener_ = std::make_unique<base::MemoryPressureListener>(
       FROM_HERE,
+      base::MemoryPressureListenerTag::kNavigationEntryScreenshotManager,
       base::BindRepeating(&NavigationEntryScreenshotManager::OnMemoryPressure,
                           base::Unretained(this)));
-  if (auto* screen = display::Screen::GetScreen()) {
+  if (auto* screen = display::Screen::Get()) {
     screen->AddObserver(this);
   }
 
@@ -45,7 +46,7 @@ NavigationEntryScreenshotManager::NavigationEntryScreenshotManager()
 }
 
 NavigationEntryScreenshotManager::~NavigationEntryScreenshotManager() {
-  if (auto* screen = display::Screen::GetScreen()) {
+  if (auto* screen = display::Screen::Get()) {
     screen->RemoveObserver(this);
   }
 }

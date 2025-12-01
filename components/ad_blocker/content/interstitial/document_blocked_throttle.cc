@@ -35,24 +35,18 @@ DocumentBlockedThrottle::WillFailRequest() {
   auto* service = RuleServiceFactory::GetForBrowserContext(
       web_contents->GetBrowserContext());
 
-  std::array<std::optional<TabStateAndLogs::RuleData>, kRuleGroupCount>
-      blocking_rules =
-          service->GetStateAndLogs()->WasNavigationBlocked(navigation_handle());
-  std::optional<TabStateAndLogs::RuleData> blocking_rule;
-  std::optional<RuleGroup> blocking_group;
-  for (auto group : {RuleGroup::kAdBlockingRules, RuleGroup::kTrackingRules}) {
-    blocking_rule = std::move(blocking_rules[static_cast<size_t>(group)]);
-    if (blocking_rule != std::nullopt) {
-      blocking_group = group;
-      break;
-    }
-  }
-  if (blocking_rule == std::nullopt || blocking_group == std::nullopt)
+  std::optional<std::pair<RuleGroup, RequestFilterRuleStub>>
+      blocking_rule_and_group = service->GetStateAndLogs()
+                                    ->GetNavigationTracker(*navigation_handle())
+                                    ->GetBlockedByRule();
+  if (!blocking_rule_and_group)
     return content::NavigationThrottle::PROCEED;
 
+  auto [blocking_group, blocking_rule] = *blocking_rule_and_group;
+
   std::optional<ActiveRuleSource> rule_source =
-      service->GetRuleManager()->GetRuleSource(*blocking_group,
-                                               blocking_rule->rule_source_id);
+      service->GetRuleManager()->GetRuleSource(blocking_group,
+                                               blocking_rule.rule_source_id);
 
   std::string rule_source_name = "Unloaded rule source";
   GURL rule_source_link = GURL("#");
@@ -81,7 +75,7 @@ DocumentBlockedThrottle::WillFailRequest() {
 
   std::unique_ptr<DocumentBlockedInterstitial> blocking_page(
       new DocumentBlockedInterstitial(
-          web_contents, url, *blocking_group, blocking_rule->rule_text,
+          web_contents, url, blocking_group, blocking_rule.original_rule_text,
           rule_source_name, rule_source_link, std::move(controller)));
 
   std::optional<std::string> error_page_contents =

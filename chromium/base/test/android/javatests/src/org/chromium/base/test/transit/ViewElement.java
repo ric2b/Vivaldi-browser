@@ -159,7 +159,9 @@ public class ViewElement<ViewT extends View> extends Element<ViewT> {
                 .withTrigger(
                         () ->
                                 KeyUtils.typeTextIntoView(
-                                        InstrumentationRegistry.getInstrumentation(), get(), text));
+                                        InstrumentationRegistry.getInstrumentation(),
+                                        value(),
+                                        text));
     }
 
     /** Start a Transition by performing an Espresso ViewAction on this View. */
@@ -172,6 +174,11 @@ public class ViewElement<ViewT extends View> extends Element<ViewT> {
     /** Trigger an Espresso ViewAssertion on this View. */
     public void check(ViewAssertion assertion) {
         Espresso.onView(mViewSpec.getViewMatcher()).check(assertion);
+    }
+
+    /** Creates a Condition fulfilled if the View matches the |matcher|. */
+    public Condition matches(Matcher<View> matcher) {
+        return new ViewElementMatchesCondition(this, matcher);
     }
 
     /** Extra options for declaring ViewElements. */

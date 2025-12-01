@@ -1,0 +1,248 @@
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+include "fcp/tracing/tracing_schema_common.fbs";
+
+enum SecAggServerTraceState : short {
+  UnknownState,
+  R0AdvertiseKeys,
+  R1ShareKeys,
+  R2MaskedInputCollection,
+  R3Unmasking,
+  PrngRunning,
+  Completed,
+  Aborted,
+}
+
+enum ServerToClientMessageType : short {
+  Abort,
+  ShareKeysRequest,
+  MaskedInputRequest,
+  UnmaskingRequest,
+  MessageContentNotSet,
+}
+
+enum ClientToServerMessageType: short {
+  Abort,
+  AdvertiseKeys,
+  ShareKeysResponse,
+  MaskedInputResponse,
+  UnmaskingResponse,
+  MessageContentNotSet,
+  }
+
+enum TracingClientStatus : short {
+  ReadyToStart,
+  DeadBeforeSendingAnything,
+  AdvertiseKeysReceived,
+  DeadAfterAdvertiseKeysReceived,
+  ShareKeysReceived,
+  DeadAfterShareKeysReceived,
+  MaskedInputResponseReceived,
+  DeadAfterMaskedInputResponseReceived,
+  UnmaskingResponseReceived,
+  DeadAfterUnmaskingResponseReceived,
+  Unknown,
+}
+
+enum TracingClientDropReason : short {
+  SentAbortMessage,
+  UnexpectedMessageType,
+  UnknownMessageType,
+  AdvertiseKeysUnexpected,
+  EmptyPublicKey,
+  NoAdvertiseKeys,
+  ShareKeysUnexpected,
+  WrongNumberOfKeyShares,
+  MissingKeyShare,
+  ExtraKeyShare,
+  NoShareKeys,
+  MaskedInputUnexpected,
+  InvalidMaskedInput,
+  NoMaskedInput,
+  UnmaskingResponseUnexpected,
+  InvalidUnmaskingResponse,
+  NoUnmaskingResponse,
+  InvalidPublicKey,
+  ServerProtocolAbortClient,
+  EarlySuccess,
+  ConnectionClosed,
+  InvalidShareKeys,
+  Unknown,
+}
+
+enum TracingSecAggServerOutcome : short {
+  ExternalRequest,
+  NotEnoughClientsRemaining,
+  UnhandledError,
+  Success,
+  Unknown,
+}
+
+// Spans
+// Span that records the lifetime of SecAggServer i.e from starting the SecAgg
+// protocol to its termination.
+table SecureAggServerSession(tag: "SASS", span) {}
+
+// Span that records the lifetime of each state within SecAggServer.
+table SecureAggServerState(tag: "SAST", span) {
+ // Name of the current SecAggServerState.
+ name: SecAggServerTraceState;
+}
+
+// Span that records the duration of SecAggServer::Create method.
+table CreateSecAggServer(tag: "CSAS", span) {}
+
+// Metric that records the parameters of the complete graph SecAggServer
+// instance.
+table FullGraphServerParameters(tag: "FGSP") {
+ number_of_clients: uint64;
+ minimum_number_of_clients_to_proceed: uint64;
+ is_r2_async_aggregation_enabled: bool;
+}
+
+// Metric that records the parameters of the SubGraph SecAggServer instance.
+table SubGraphServerParameters(tag: "SGSP") {
+ number_of_clients: uint64;
+ degree: uint64;
+ threshold: uint64;
+ minimum_number_of_clients_to_proceed: uint64;
+ is_r2_async_aggregation_enabled: bool;
+}
+
+// Span that records the duration of an external abort call to the SecAggServer.
+table AbortSecAggServer(tag: "ABSR", span) {
+ // Reason why the server is being aborted.
+ reason: string;
+}
+
+// Span that records the duration of an external abort client call.
+table AbortSecAggClient(tag: "ABCL", span) {
+ // Client id that needs to be aborted.
+ client_id: uint32;
+ // Reason why the client is being aborted.
+ reason: string;
+}
+
+// Span that records the duration of an external ProceedToNextRound call.
+table ProceedToNextSecAggRound(tag: "PTNR", span) {}
+
+// Span that records the duration of an external ReceiveMessage call.
+table ReceiveSecAggMessage(tag: "RCMS", span) {
+ // Client id that sent the message.
+ client_id: uint32;
+}
+
+// Span that records the duration of an external StartPrng call.
+table StartPrngForSecAgg(tag: "STPR", span) {}
+
+// Metrics
+// Metric that records the message sent by the SecAgg server to an individual
+// user.
+table IndividualMessageSent(tag: "IMSG") {
+ // Client id of the client receiving this message.
+ client_id: uint32;
+ // Type of message such as abort etc.
+ message_type: ServerToClientMessageType;
+ // Size of the message in bytes.
+ size: uint64;
+}
+
+// Metric that records the message broadcasted by the SecAgg server.
+table BroadcastMessageSent(tag: "BMSG") {
+ // Type of message such as abort etc.
+ message_type: ServerToClientMessageType;
+ // Size of the message in bytes.
+ size: uint64;
+}
+
+// Metric that records the message received by the SecAgg server from a user.
+table ClientMessageReceived(tag: "CMSG") {
+ // Type of message such as abort etc.
+ message_type: ClientToServerMessageType;
+ // Size of the message in bytes.
+ size: uint64;
+ // True, if message was expected from the client, false otherwise.
+ expected: bool;
+ // Elapsed time since the round started. 0, if the message was not expected.
+ elapsed_millis: uint64;
+}
+
+table Round2AsyncWorkScheduled(tag: "R2WS") {}
+
+// Metric that records the event of a queue of round 2 client messages being
+// taken by an asynchronous task.
+table Round2MessageQueueTaken(tag: "R2MT") {
+ // Queue length
+ queue_length: uint64;
+}
+
+// Metric that records the time taken to execute the PRF expansion step.
+table PrngExpansion(tag: "PRNG") {
+ // Time taken to complete the step (in milliseconds).
+ elapsed_millis: uint64;
+}
+
+// Metric that records the time taken to reconstruct all users' keys from their
+// Shamir secret shares.
+table ShamirReconstruction(tag: "SHRC") {
+ // Time taken to complete the step (in milliseconds).
+ elapsed_millis: uint64;
+}
+
+// Metric that records details about client drops during an execution of the
+// SecAgg protocol.
+table ClientsDropped(tag: "CLDR") {
+ // Status of the client when it was aborted.
+ client_status: TracingClientStatus;
+ // Reason for abort.
+ reason: TracingClientDropReason;
+ // Elapsed time since the round started.
+ elapsed_millis: uint64;
+ // Optional error message for the client to be aborted.
+ message: string;
+}
+
+// Metric that records the outcome of the SecAgg protocol
+table SecAggProtocolOutcome(tag: "SAPO") {
+ // Outcome of the protocol e.g SUCCESS means the protocol ran through all
+ // phases and completed.
+ outcome: TracingSecAggServerOutcome;
+}
+
+// Metric that records details about each state of the SecAgg protocol.
+table StateCompletion(tag: "ROCP") {
+ // Current SecAggServerState that the protocol was running within.
+ state: SecAggServerTraceState;
+ // True if current state successfully transitioned to the next state, false
+ // otherwise.
+ is_success: bool;
+ // E2E time (in milliseconds) spent in current state, starting from
+ // transitioning to that state and including waiting for the client messages
+ // necessary to transition to a next state.
+ elapsed_millis: uint64;
+ // Number of clients at the end of current state.
+ number_of_surviving_clients: uint64;
+}
+
+table ClientCountsPerState(tag: "CLPS") {
+ // Current SecAggServerState that the protocol was running within.
+ state: SecAggServerTraceState;
+ // Client status.
+ client_status: TracingClientStatus;
+ // Number of clients corresponding to the status above.
+ count: uint64;
+ // Fraction of clients corresponding to client_status above.
+ fraction: double;
+}

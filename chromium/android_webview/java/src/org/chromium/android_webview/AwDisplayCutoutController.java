@@ -12,12 +12,17 @@ import android.view.WindowManager;
 import android.view.WindowMetrics;
 
 import androidx.annotation.VisibleForTesting;
+import androidx.core.graphics.Insets;
 import androidx.core.view.WindowInsetsCompat;
 
 import org.chromium.android_webview.common.AwFeatureMap;
 import org.chromium.android_webview.common.AwFeatures;
 import org.chromium.android_webview.common.Lifetime;
 import org.chromium.base.Log;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
+
+import java.lang.ref.WeakReference;
 
 /**
  * Display cutout controller for WebView.
@@ -61,64 +66,42 @@ public class AwDisplayCutoutController {
     }
 
     /**
-     * A placeholder for insets.
-     *
-     * android.graphics.Insets is available from Q, while we support display cutout from P and
-     * above, so adding a new class.
+     * This listener is a separate, static class as the listener will be added to the
+     * ViewTreeObserver and may outlive the WebView. It should therefore not hold any strong
+     * references to the WebView or the Delegate which would prevent the WebView from being garbage
+     * collected.
      */
-    public static final class Insets {
-        public int left;
-        public int top;
-        public int right;
-        public int bottom;
+    private static class Listener implements ViewPositionObserver.Listener {
+        // The minimum amount of time between subsequent calls to mDelegate.bottomImeInsetChanged()
+        // when invoked from this listener.
+        private static final long MIN_VIEWPORT_UPDATE_TIME_MILLIS = 200;
 
-        public Insets(int left, int top, int right, int bottom) {
-            set(left, top, right, bottom);
-        }
+        private final WeakReference<Delegate> mDelegate;
+        private boolean mUpdatePending;
 
-        public Insets(androidx.core.graphics.Insets insets) {
-            set(insets.left, insets.top, insets.right, insets.bottom);
-        }
-
-        public Rect toRect(Rect rect) {
-            rect.set(left, top, right, bottom);
-            return rect;
-        }
-
-        public void set(Insets insets) {
-            left = insets.left;
-            top = insets.top;
-            right = insets.right;
-            bottom = insets.bottom;
-        }
-
-        public void set(int left, int top, int right, int bottom) {
-            this.left = left;
-            this.top = top;
-            this.right = right;
-            this.bottom = bottom;
+        private Listener(Delegate delegate) {
+            mDelegate = new WeakReference<>(delegate);
         }
 
         @Override
-        public boolean equals(Object o) {
-            if (!(o instanceof Insets)) return false;
-            Insets i = (Insets) o;
-            return left == i.left && top == i.top && right == i.right && bottom == i.bottom;
-        }
-
-        @Override
-        public String toString() {
-            return "Insets: (" + left + ", " + top + ")-(" + right + ", " + bottom + ")";
-        }
-
-        @Override
-        public int hashCode() {
-            return 3 * left + 5 * top + 7 * right + 11 * bottom;
+        public void onPositionChanged(int positionX, int positionY) {
+            Delegate delegate = mDelegate.get();
+            if (delegate == null || mUpdatePending) return;
+            mUpdatePending = true;
+            PostTask.postDelayedTask(
+                    TaskTraits.UI_DEFAULT,
+                    () -> {
+                        mUpdatePending = false;
+                        delegate.bottomImeInsetChanged();
+                    },
+                    MIN_VIEWPORT_UPDATE_TIME_MILLIS);
         }
     }
 
     private final Delegate mDelegate;
+    private final Listener mViewMovedListener;
     private View mContainerView;
+    private ViewPositionObserver mPositionObserver;
     private final boolean mIncludeSystemBars;
     // The amount the IME is currently imposing into the parent Window.
     private int mBottomImeInset;
@@ -137,6 +120,11 @@ public class AwDisplayCutoutController {
         mIncludeSystemBars =
                 AwFeatureMap.isEnabled(AwFeatures.WEBVIEW_SAFE_AREA_INCLUDES_SYSTEM_BARS);
         registerContainerView(containerView);
+        mViewMovedListener = new Listener(mDelegate);
+        if (AwFeatureMap.isEnabled(AwFeatures.WEBVIEW_USE_VIEW_POSITION_OBSERVER_FOR_INSETS)) {
+            mPositionObserver = new ViewPositionObserver(mContainerView);
+            mPositionObserver.addListener(mViewMovedListener);
+        }
     }
 
     /**
@@ -176,6 +164,11 @@ public class AwDisplayCutoutController {
     public void setCurrentContainerView(View containerView) {
         if (DEBUG) Log.i(TAG, "setCurrentContainerView: " + containerView);
         mContainerView = containerView;
+        if (AwFeatureMap.isEnabled(AwFeatures.WEBVIEW_USE_VIEW_POSITION_OBSERVER_FOR_INSETS)) {
+            mPositionObserver.removeListener(mViewMovedListener);
+            mPositionObserver = new ViewPositionObserver(mContainerView);
+            mPositionObserver.addListener(mViewMovedListener);
+        }
         // Ensure that we get new insets for the new container view.
         mContainerView.requestApplyInsets();
     }
@@ -186,7 +179,7 @@ public class AwDisplayCutoutController {
      * @see View#onApplyWindowInsets(WindowInsets)
      * @param insets The window (display) insets.
      */
-    @VisibleForTesting
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     public WindowInsets onApplyWindowInsets(final WindowInsets insets) {
         if (DEBUG) Log.i(TAG, "onApplyWindowInsets: " + insets.toString());
 
@@ -196,13 +189,11 @@ public class AwDisplayCutoutController {
         }
 
         // TODO(crbug.com/40699457): add a throttling logic.
-        Insets safeArea =
-                new Insets(WindowInsetsCompat.toWindowInsetsCompat(insets).getInsets(insetTypes));
+        Insets safeArea = WindowInsetsCompat.toWindowInsetsCompat(insets).getInsets(insetTypes);
         onApplyWindowInsetsInternal(safeArea);
         calculateBottomImeInsetsInternal(
-                new Insets(
-                        WindowInsetsCompat.toWindowInsetsCompat(insets)
-                                .getInsets(WindowInsetsCompat.Type.ime())));
+                WindowInsetsCompat.toWindowInsetsCompat(insets)
+                        .getInsets(WindowInsetsCompat.Type.ime()));
 
         return insets;
     }
@@ -215,10 +206,10 @@ public class AwDisplayCutoutController {
      * @param displayCutoutInsets Insets to store left, top, right, bottom insets.
      */
     @VisibleForTesting
-    public void onApplyWindowInsetsInternal(final Insets displayCutoutInsets) {
+    public void onApplyWindowInsetsInternal(Insets displayCutoutInsets) {
         float dipScale = mDelegate.getDipScale();
         // We only apply this logic when webview is occupying the entire screen.
-        adjustInsetsForScale(displayCutoutInsets, dipScale);
+        displayCutoutInsets = adjustInsetsForScale(displayCutoutInsets, dipScale);
 
         if (DEBUG) {
             Log.i(
@@ -271,6 +262,11 @@ public class AwDisplayCutoutController {
         // WebView that is visible in the Window.
         int result =
                 Math.max(0, (viewRectInWindow.bottom - (windowBounds.height() - mBottomImeInset)));
+        if (AwFeatureMap.isEnabled(AwFeatures.WEBVIEW_USE_VIEW_POSITION_OBSERVER_FOR_INSETS)) {
+            return result;
+        }
+        // If not using the new listener, we still need this workaround.
+        // TODO(crbug.com/441480125): Clean this up once we're certain the new listener works.
         if (result != mLastBottomImeInset) {
             mLastBottomImeInset = result;
             mDelegate.bottomImeInsetChanged();
@@ -297,13 +293,26 @@ public class AwDisplayCutoutController {
     public void onAttachedToWindow() {
         if (DEBUG) Log.i(TAG, "onAttachedToWindow");
         onUpdateWindowInsets();
+        if (AwFeatureMap.isEnabled(AwFeatures.WEBVIEW_USE_VIEW_POSITION_OBSERVER_FOR_INSETS)) {
+            mPositionObserver.addListener(mViewMovedListener);
+        }
     }
 
-    private static void adjustInsetsForScale(Insets insets, float dipScale) {
-        insets.left = adjustOneInsetForScale(insets.left, dipScale);
-        insets.top = adjustOneInsetForScale(insets.top, dipScale);
-        insets.right = adjustOneInsetForScale(insets.right, dipScale);
-        insets.bottom = adjustOneInsetForScale(insets.bottom, dipScale);
+    /**
+     * @see View#onDetachedFromWindow()
+     */
+    public void onDetachedFromWindow() {
+        if (AwFeatureMap.isEnabled(AwFeatures.WEBVIEW_USE_VIEW_POSITION_OBSERVER_FOR_INSETS)) {
+            mPositionObserver.removeListener(mViewMovedListener);
+        }
+    }
+
+    private static Insets adjustInsetsForScale(Insets insets, float dipScale) {
+        return Insets.of(
+                adjustOneInsetForScale(insets.left, dipScale),
+                adjustOneInsetForScale(insets.top, dipScale),
+                adjustOneInsetForScale(insets.right, dipScale),
+                adjustOneInsetForScale(insets.bottom, dipScale));
     }
 
     /**

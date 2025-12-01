@@ -7,6 +7,7 @@
 #import <UIKit/UIAccessibility.h>
 
 #import "base/task/sequenced_task_runner.h"
+#import "base/time/time.h"
 #import "components/dom_distiller/core/mojom/distilled_page_prefs.mojom.h"
 #import "ios/chrome/browser/reader_mode/ui/constants.h"
 #import "ios/chrome/browser/reader_mode/ui/reader_mode_options_mutator.h"
@@ -48,8 +49,6 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(2);
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
   if (self) {
-    self.layer.cornerRadius = kCornerRadius;
-
     _fontFamilyButton = [self createFontFamilyButton];
     _decreaseFontSizeButton = [self createDecreaseFontSizeButton];
     _increaseFontSizeButton = [self createIncreaseFontSizeButton];
@@ -158,8 +157,34 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(2);
   firstRowStack.spacing = kSpacing;
   firstRowStack.distribution = UIStackViewDistributionFillEqually;
 
-  [firstRowStack addArrangedSubview:_fontFamilyButton];
-  [firstRowStack addArrangedSubview:[self createFontSizeStack]];
+  UIView* fontFamilyButton = _fontFamilyButton;
+  UIView* fontFamilyButtonContainer = [[UIView alloc] init];
+  fontFamilyButtonContainer.clipsToBounds = YES;
+  fontFamilyButtonContainer.translatesAutoresizingMaskIntoConstraints = NO;
+  [fontFamilyButtonContainer addSubview:fontFamilyButton];
+  AddSameConstraints(fontFamilyButtonContainer, fontFamilyButton);
+
+  if (@available(iOS 26, *)) {
+    fontFamilyButtonContainer.cornerConfiguration = [UICornerConfiguration
+        configurationWithUniformRadius:[UICornerRadius
+                                           containerConcentricRadius]];
+  } else {
+    fontFamilyButtonContainer.layer.cornerRadius = kCornerRadius;
+  }
+
+  [firstRowStack addArrangedSubview:fontFamilyButtonContainer];
+
+  UIView* fontSizeStack = [self createFontSizeStack];
+
+  if (@available(iOS 26, *)) {
+    fontSizeStack.cornerConfiguration = [UICornerConfiguration
+        configurationWithUniformRadius:[UICornerRadius
+                                           containerConcentricRadius]];
+  } else {
+    fontSizeStack.layer.cornerRadius = kCornerRadius;
+  }
+
+  [firstRowStack addArrangedSubview:fontSizeStack];
 
   NSLayoutConstraint* heightConstraint = [firstRowStack.heightAnchor
       constraintGreaterThanOrEqualToConstant:kFirstRowHeight];
@@ -194,7 +219,6 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(2);
   fontSizeStack.axis = UILayoutConstraintAxisHorizontal;
   fontSizeStack.spacing = kFontSizeStackSpacing;
   fontSizeStack.distribution = UIStackViewDistributionFillEqually;
-  fontSizeStack.layer.cornerRadius = kCornerRadius;
   fontSizeStack.clipsToBounds = YES;
 
   [fontSizeStack addArrangedSubview:_decreaseFontSizeButton];
@@ -208,14 +232,15 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(2);
 // Returns the font family selection button.
 - (UIButton*)createFontFamilyButton {
   UIButtonConfiguration* configuration =
-      [UIButtonConfiguration plainButtonConfiguration];
+      [UIButtonConfiguration grayButtonConfiguration];
   configuration.titleAlignment = UIButtonConfigurationTitleAlignmentLeading;
   configuration.baseForegroundColor = [UIColor colorNamed:kTextPrimaryColor];
-  configuration.background.backgroundColor =
+  configuration.baseBackgroundColor =
       [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
-  configuration.background.cornerRadius = kCornerRadius;
+  configuration.background.cornerRadius = 0;
   UIButton* button = [UIButton buttonWithConfiguration:configuration
                                          primaryAction:nil];
+  button.translatesAutoresizingMaskIntoConstraints = NO;
   button.maximumContentSizeCategory = UIContentSizeCategoryExtraExtraLarge;
   button.contentHorizontalAlignment =
       UIControlContentHorizontalAlignmentLeading;
@@ -251,7 +276,7 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(2);
   return [UIMenu
       menuWithTitle:l10n_util::GetNSString(
                         IDS_IOS_READER_MODE_OPTIONS_FONT_FAMILY_MENU_TITLE)
-           children:@[ sansSerifAction, serifAction, monospaceAction ]];
+           children:@[ monospaceAction, sansSerifAction, serifAction ]];
 }
 
 // Returns the action to select the Sans-serif font family.
@@ -337,8 +362,8 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(2);
 - (UIButton*)createFontSizeButtonWithTitle:(NSString*)title
                                   fontSize:(CGFloat)fontSize {
   UIButtonConfiguration* configuration =
-      [UIButtonConfiguration plainButtonConfiguration];
-  configuration.background.backgroundColor =
+      [UIButtonConfiguration grayButtonConfiguration];
+  configuration.baseBackgroundColor =
       [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
   configuration.baseForegroundColor = [UIColor colorNamed:kTextPrimaryColor];
   configuration.background.cornerRadius = 0;
@@ -440,17 +465,17 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(2);
                                  textColor:(UIColor*)textColor
                            backgroundColor:(UIColor*)backgroundColor {
   UIButtonConfiguration* configuration =
-      [UIButtonConfiguration plainButtonConfiguration];
+      [UIButtonConfiguration filledButtonConfiguration];
   configuration.title = l10n_util::GetNSString(
       IDS_IOS_READER_MODE_OPTIONS_COLOR_THEME_BUTTON_LABEL);
   configuration.baseForegroundColor = textColor;
-  configuration.background.backgroundColor = backgroundColor;
+  configuration.baseBackgroundColor = backgroundColor;
   configuration.background.strokeColor =
       selected ? [UIColor colorNamed:kBlue600Color]
                : [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
   configuration.background.strokeWidth =
       selected ? kSelectedThemeBorderWidth : kUnselectedThemeBorderWidth;
-  configuration.background.cornerRadius = kSecondRowHeight / 2.0;
+  configuration.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
   return configuration;
 }
 

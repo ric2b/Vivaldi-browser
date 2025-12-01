@@ -4,6 +4,7 @@
 
 assert(is_win || is_mac || is_linux || is_chromeos)
 
+import("//chrome/common/features.gni")
 import("//extensions/buildflags/buildflags.gni")
 
 source_set("side_panel_enums") {
@@ -49,8 +50,8 @@ source_set("side_panel") {
     "read_anything/read_anything_side_panel_navigation_throttle.h",
     "read_anything/read_anything_side_panel_web_view.cc",
     "read_anything/read_anything_side_panel_web_view.h",
-    "read_later_side_panel_web_view.cc",
-    "read_later_side_panel_web_view.h",
+    "reading_list/read_later_side_panel_web_view.cc",
+    "reading_list/read_later_side_panel_web_view.h",
     "reading_list/reading_list_side_panel_coordinator.cc",
     "reading_list/reading_list_side_panel_coordinator.h",
     "side_panel.cc",
@@ -70,27 +71,33 @@ source_set("side_panel") {
     "side_panel_entry_observer.h",
     "side_panel_entry_scope.cc",
     "side_panel_entry_scope.h",
+    "side_panel_entry_waiter.cc",
+    "side_panel_entry_waiter.h",
     "side_panel_enums.h",
     "side_panel_header.cc",
     "side_panel_header.h",
-    "side_panel_model.cc",
-    "side_panel_model.h",
-    "side_panel_model_host.cc",
-    "side_panel_model_host.h",
     "side_panel_prefs.cc",
     "side_panel_prefs.h",
     "side_panel_registry.cc",
     "side_panel_registry.h",
     "side_panel_resize_area.cc",
     "side_panel_resize_area.h",
-    "side_panel_rounded_corner.cc",
-    "side_panel_rounded_corner.h",
     "side_panel_ui.h",
+    "side_panel_ui_base.cc",
+    "side_panel_ui_base.h",
     "side_panel_util.cc",
     "side_panel_util.h",
     "side_panel_web_ui_view.cc",
     "side_panel_web_ui_view.h",
   ]
+  if (enable_glic) {
+    sources += [
+      "glic/glic_legacy_side_panel_coordinator.cc",
+      "glic/glic_legacy_side_panel_coordinator.h",
+      "glic/glic_side_panel_coordinator.cc",
+      "glic/glic_side_panel_coordinator.h",
+    ]
+  }
   public_deps = [
     "//base",
     "//chrome/browser:browser_public_dependencies",
@@ -142,6 +149,7 @@ source_set("side_panel") {
     "//chrome/browser/search",
     "//chrome/browser/search/background",
     "//chrome/browser/search_engines",
+    "//chrome/browser/tab_group_sync:factories",
     "//chrome/browser/themes",
     "//chrome/browser/ui:browser_element_identifiers",
     "//chrome/browser/ui:ui_features",
@@ -151,10 +159,12 @@ source_set("side_panel") {
     "//chrome/browser/ui/extensions",
     "//chrome/browser/ui/tabs:tab_strip",
     "//chrome/browser/ui/tabs:tabs_public",
+    "//chrome/browser/ui/tabs/saved_tab_groups",
     "//chrome/browser/ui/user_education",
     "//chrome/browser/ui/views/toolbar",
     "//chrome/browser/ui/webui:webui_util",
     "//chrome/browser/ui/webui/top_chrome",
+    "//chrome/browser/ui/webui_browser:feature_flag",
     "//chrome/common",
     "//chrome/common:constants",
     "//components/accessibility:reading",
@@ -188,7 +198,6 @@ source_set("side_panel") {
     "//third_party/blink/public/common",
     "//ui/accessibility:ax_base",
     "//ui/accessibility/mojom",
-    "//ui/accessibility/mojom",
     "//ui/base",
     "//ui/compositor",
     "//ui/gfx:color_utils",
@@ -202,6 +211,10 @@ source_set("side_panel") {
       "//extensions/common",
     ]
     deps += [ "//chrome/common/extensions/api" ]
+  }
+
+  if (enable_glic) {
+    deps += [ "//chrome/browser/glic" ]
   }
 
   allow_circular_includes_from = [

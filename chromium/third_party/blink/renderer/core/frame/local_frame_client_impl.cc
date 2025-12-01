@@ -458,26 +458,35 @@ void LocalFrameClientImpl::DidFinishSameDocumentNavigation(
       if (!should_skip_screenshot && commit_type != kWebHistoryInertCommit &&
           !web_frame_->GetFrame()->GetSettings()->GetPrefersReducedMotion()) {
         navigation_with_screenshot = true;
-        if (RuntimeEnabledFeatures::
-                IncrementLocalSurfaceIdForMainframeSameDocNavigationEnabled()) {
+#if BUILDFLAG(IS_ANDROID)
+        if (web_frame_->View()
+                ->GetWebPreferences()
+                .increment_local_surface_id_for_mainframe_same_doc_navigation) {
           frame_widget->RequestNewLocalSurfaceId();
           if (RuntimeEnabledFeatures::BackForwardTransitionsEnabled()) {
             screenshot_destination = base::UnguessableToken::Create();
             frame_widget->RequestViewportScreenshot(screenshot_destination);
           }
         }
+#endif  // BUILDFLAG(IS_ANDROID)
 
-        frame_widget->NotifyPresentationTime(WTF::BindOnce(
-            [](base::TimeTicks start,
-               const viz::FrameTimingDetails& frame_timing_details) {
-              base::TimeDelta duration =
-                  frame_timing_details.presentation_feedback.timestamp - start;
-              base::UmaHistogramTimes(
-                  "Navigation."
-                  "MainframeSameDocumentNavigationCommitToPresentFirstFrame",
-                  duration);
-            },
-            base::TimeTicks::Now()));
+        if (LocalFrame* frame = web_frame_->GetFrame();
+            frame && frame->View()) {
+          frame->View()->RequestSameDocumentNavigationPresentationTime(
+              blink::BindOnce(
+                  [](base::TimeTicks start,
+                     const viz::FrameTimingDetails& frame_timing_details) {
+                    base::TimeDelta duration =
+                        frame_timing_details.presentation_feedback.timestamp -
+                        start;
+                    base::UmaHistogramTimes(
+                        "Navigation."
+                        "MainframeSameDocumentNavigationCommitToPresentFirstFra"
+                        "me",
+                        duration);
+                  },
+                  base::TimeTicks::Now()));
+        }
       }
     }
     base::UmaHistogramBoolean("Navigation.SameDocumentNavigationWithScreenshot",
@@ -1185,12 +1194,11 @@ void LocalFrameClientImpl::OnMainFrameViewportRectangleChanged(
       main_frame_viewport_rect);
 }
 
-void LocalFrameClientImpl::OnMainFrameImageAdRectangleChanged(
+void LocalFrameClientImpl::OnMainFrameAdRectangleChanged(
     DOMNodeId element_id,
-    const gfx::Rect& image_ad_rect) {
+    const gfx::Rect& ad_rect) {
   DCHECK(web_frame_->Client());
-  web_frame_->Client()->OnMainFrameImageAdRectangleChanged(element_id,
-                                                           image_ad_rect);
+  web_frame_->Client()->OnMainFrameAdRectangleChanged(element_id, ad_rect);
 }
 
 void LocalFrameClientImpl::OnOverlayPopupAdDetected() {

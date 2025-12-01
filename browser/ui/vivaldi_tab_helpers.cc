@@ -6,7 +6,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/subresource_filter/chrome_content_subresource_filter_web_contents_helper_factory.h"
 
-#include "browser/ad_blocker/adblock_rule_service_factory.h"
 #include "components/ad_blocker/public/content/adblock_rule_service.h"
 #include "components/ad_blocker/public/content/adblock_state_and_logs.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
@@ -56,13 +55,6 @@ void VivaldiAttachTabHelpers(WebContents* web_contents) {
 #if !BUILDFLAG(IS_ANDROID)
     drm_helper::DRMContentTabHelper::CreateForWebContents(web_contents);
 #endif
-  }
-
-  if (vivaldi::IsVivaldiRunning()) {
-    adblock_filter::RuleServiceFactory::GetForBrowserContext(
-        web_contents->GetBrowserContext())
-        ->GetStateAndLogs()
-        ->CreateTabHelper(web_contents);
   }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)

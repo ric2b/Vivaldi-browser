@@ -324,6 +324,12 @@ constexpr char kChromeReportingServiceName[] =
     "org.chromium.ChromeReportingService";
 constexpr char kChromeReportingServiceUploadEncryptedRecordMethod[] =
     "UploadEncryptedRecord";
+
+constexpr char kFjordOobeServiceName[] = "org.chromium.FjordOobeService";
+constexpr char kFjordOobeServicePath[] = "/org/chromium/FjordOobeService";
+constexpr char kFjordOobeServiceInterface[] =
+    "org.chromium.FjordOobeServiceInterface";
+constexpr char kFjordOobeServiceExitTcSetupMethod[] = "ExitTcSetup";
 }  // namespace chromeos
 
 namespace media_perception {

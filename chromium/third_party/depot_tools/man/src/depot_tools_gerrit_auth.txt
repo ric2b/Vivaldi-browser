@@ -36,6 +36,7 @@ You need to add the following lines to your Git config:
 [credential "https://chromium.googlesource.com"]
 helper =
 helper = luci
+useHttpPath = yes
 ----
 
 This tells Git to use `git-credential-luci`.  The first empty value

@@ -8,6 +8,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "components/translate/core/browser/translate_pref_names.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/test/fullscreen_app_interface.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
@@ -118,7 +119,8 @@ std::unique_ptr<net::test_server::HttpResponse> CreateHttpResponse(
   [ChromeEarlGrey setBoolValue:NO
                    forUserPref:translate::prefs::kOfferTranslateEnabled];
 
-  [ChromeEarlGrey setBoolValue:NO forLocalStatePref:prefs::kBottomOmnibox];
+  [ChromeEarlGrey setBoolValue:NO
+             forLocalStatePref:omnibox::kIsOmniboxInBottomPosition];
 }
 
 - (void)tearDownHelper {
@@ -421,7 +423,13 @@ std::unique_ptr<net::test_server::HttpResponse> CreateHttpResponse(
 
 // Tests that the header is shown when loading an error page in a native view
 // even if fullscreen was enabled previously.
-- (void)testShowHeaderOnErrorPage {
+// TODO(crbug.com/437072563): Test flaky on device.
+#if !TARGET_IPHONE_SIMULATOR
+#define MAYBE_testShowHeaderOnErrorPage DISABLED_testShowHeaderOnErrorPage
+#else
+#define MAYBE_testShowHeaderOnErrorPage testShowHeaderOnErrorPage
+#endif
+- (void)MAYBE_testShowHeaderOnErrorPage {
   GURL errorURL = ErrorPageResponseProvider::GetDnsFailureUrl();
 
   self.testServer->RegisterRequestHandler(base::BindRepeating(
@@ -532,7 +540,8 @@ std::unique_ptr<net::test_server::HttpResponse> CreateHttpResponse(
 
 - (void)setUp {
   [super setUp];
-  [ChromeEarlGrey setBoolValue:YES forLocalStatePref:prefs::kBottomOmnibox];
+  [ChromeEarlGrey setBoolValue:YES
+             forLocalStatePref:omnibox::kIsOmniboxInBottomPosition];
 }
 
 // This is currently needed to prevent this test case from being ignored.

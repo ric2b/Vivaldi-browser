@@ -109,20 +109,11 @@ class NearbySharingService {
     virtual void OnStartAdvertisingFailure() {}
     virtual void OnStartDiscoveryResult(bool success) {}
 
-    virtual void OnFastInitiationDevicesDetected() {}
-    virtual void OnFastInitiationDevicesNotDetected() {}
-    virtual void OnFastInitiationScanningStopped() {}
-
     virtual void OnBluetoothStatusChanged(AdapterState state) {}
-    virtual void OnWifiStatusChanged(AdapterState state) {}
     virtual void OnLanStatusChanged(AdapterState state) {}
     virtual void OnIrrecoverableHardwareErrorReported() {}
 
     virtual void OnCredentialError() {}
-
-    // Called during the |KeyedService| shutdown, but before everything has been
-    // cleaned up. It is safe to remove any observers on this event.
-    virtual void OnShutdown() = 0;
   };
 
   static std::string StatusCodeToString(StatusCodes status_code);
@@ -131,7 +122,6 @@ class NearbySharingService {
 
   virtual void AddObserver(Observer* observer) = 0;
   virtual void RemoveObserver(Observer* observer) = 0;
-  virtual bool HasObserver(Observer* observer) = 0;
 
   // Shutdown the Nearby Sharing service, and cleanup.
   virtual void Shutdown(
@@ -193,12 +183,6 @@ class NearbySharingService {
 
   // Returns true if the PC is connected to LAN (wifi/ethernet).
   virtual bool IsLanConnected() const = 0;
-
-  // Returns true if the Wi-Fi adapter is present.
-  virtual bool IsWifiPresent() const = 0;
-
-  // Returns true if the Wi-Fi adapter is powered.
-  virtual bool IsWifiPowered() const = 0;
 
   // Returns the QR Code Url.
   virtual std::string GetQrCodeUrl() const = 0;

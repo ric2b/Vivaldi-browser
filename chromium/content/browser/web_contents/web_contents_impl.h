@@ -57,7 +57,6 @@
 #include "content/public/browser/fullscreen_types.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/media_stream_request.h"
-#include "content/public/browser/mhtml_generation_result.h"
 #include "content/public/browser/preloading.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_capability_type.h"
@@ -73,6 +72,7 @@
 #include "services/device/public/mojom/geolocation_context.mojom.h"
 #include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "services/network/public/mojom/fetch_api.mojom-forward.h"
+#include "third_party/blink/public/common/page/color_provider_color_maps.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/choosers/color_chooser.mojom.h"
@@ -90,15 +90,14 @@
 #include "ui/accessibility/ax_mode.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/platform/inspect/ax_event_recorder.h"
+#include "ui/base/clipboard/clipboard_metadata.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 #include "ui/base/ime/mojom/virtual_keyboard_types.mojom.h"
 #include "ui/base/mojom/window_show_state.mojom-forward.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/base/window_open_disposition.h"
-#include "ui/color/color_provider_key.h"
 #include "ui/color/color_provider_source_observer.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/native_theme/native_theme.h"
 #include "ui/native_theme/native_theme_observer.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -133,7 +132,8 @@ class InterfaceProvider;
 
 namespace ui {
 struct AXUpdatesAndEvents;
-}
+class NativeTheme;
+}  // namespace ui
 
 namespace content {
 class JavaScriptDialogDismissNotifier;
@@ -175,6 +175,7 @@ class CreateNewWindowParams;
 
 #if BUILDFLAG(IS_ANDROID)
 class WebContentsAndroid;
+class SelectionPopupDelegate;
 #endif
 
 // CreatedWindow holds the WebContentsImpl and target url between IPC calls to
@@ -371,10 +372,14 @@ class CONTENT_EXPORT WebContentsImpl
   // A notification is then propagated to observers.
   void DidCapturedSurfaceControl();
 
+#if BUILDFLAG(IS_ANDROID)
   // Let long press on links select the link text instead of triggering
   // the context menu.
-#if BUILDFLAG(IS_ANDROID)
   void SetLongPressLinkSelectText(bool enabled);
+
+  // Allow drag-drop of files such as an image to load and replace contents.
+  void SetCanAcceptLoadDrops(bool enabled);
+  bool GetCanAcceptLoadDropsForTesting();
 #endif
 
   // WebContents ------------------------------------------------------
@@ -412,8 +417,6 @@ class CONTENT_EXPORT WebContentsImpl
   WebUI* GetWebUI() override;
   void SetUserAgentOverride(const blink::UserAgentOverride& ua_override,
                             bool override_in_new_tabs) override;
-  void SetRendererInitiatedUserAgentOverrideOption(
-      NavigationController::UserAgentOverrideOption option) override;
   const blink::UserAgentOverride& GetUserAgentOverride() override;
   bool ShouldOverrideUserAgentForRendererInitiatedNavigation() override;
   void SetAlwaysSendSubresourceNotifications() override;
@@ -546,9 +549,6 @@ class CONTENT_EXPORT WebContentsImpl
                             bool is_subresource) override;
   void GenerateMHTML(const MHTMLGenerationParams& params,
                      base::OnceCallback<void(int64_t)> callback) override;
-  void GenerateMHTMLWithResult(
-      const MHTMLGenerationParams& params,
-      MHTMLGenerationResult::GenerateMHTMLCallback callback) override;
   const std::string& GetContentsMimeType() override;
   blink::RendererPreferences* GetMutableRendererPrefs() override;
   void Close() override;
@@ -632,8 +632,11 @@ class CONTENT_EXPORT WebContentsImpl
   void SetPrimaryPageImportance(
       ChildProcessImportance main_frame_importance,
       ChildProcessImportance subframe_importance) override;
+  void SetSelectionPopupDelegate(
+      std::unique_ptr<SelectionPopupDelegate> delegate) override;
 #endif
   bool HasRecentInteraction() override;
+  base::TimeTicks GetLastInteractionTimeTicks() override;
   [[nodiscard]] ScopedIgnoreInputEvents IgnoreInputEvents(
       std::optional<WebInputEventAuditCallback> audit_callback) override;
   bool ShouldIgnoreInputEventsForTesting() override;
@@ -872,7 +875,7 @@ class CONTENT_EXPORT WebContentsImpl
   void IsClipboardPasteAllowedByPolicy(
       const ClipboardEndpoint& source,
       const ClipboardEndpoint& destination,
-      const ClipboardMetadata& metadata,
+      const ui::ClipboardMetadata& metadata,
       ClipboardPasteData clipboard_paste_data,
       IsClipboardPasteAllowedCallback callback) override;
   void OnTextCopiedToClipboard(RenderFrameHostImpl* render_frame_host,
@@ -997,7 +1000,7 @@ class CONTENT_EXPORT WebContentsImpl
       std::optional<PrefetchPriority> priority,
       scoped_refptr<PreloadPipelineInfo> preload_pipeline_info,
       base::WeakPtr<PreloadingAttempt> attempt,
-      std::optional<PreloadingHoldbackStatus> holdback_status_override,
+      PreloadingHoldbackStatus holdback_status_override,
       std::optional<base::TimeDelta> ttl) override;
   std::unique_ptr<PrerenderHandle> StartPrerendering(
       const GURL& prerendering_url,
@@ -1107,7 +1110,6 @@ class CONTENT_EXPORT WebContentsImpl
 
   double GetPendingZoomLevel(RenderWidgetHostImpl* rwh) override;
 
-  bool PreHandleMouseEvent(const blink::WebMouseEvent& event) override;
   void PreHandleDragUpdate(const DropData& drop_data,
                            const gfx::PointF& client_pt);
   void PreHandleDragExit();
@@ -2092,6 +2094,11 @@ class CONTENT_EXPORT WebContentsImpl
   // always return a valid ColorProvider instance.
   const ui::ColorProvider& GetColorProvider() const override;
 
+  // Called whenever color-related state may have changed, e.g. the
+  // `NativeTheme` or `ColorProviderSource` are updated. Updates color maps
+  // and/or calls `NotifyPreferencesChanged()` as needed.
+  void HandleColorRelatedStateChanges();
+
   // implements SlowWebPreferenceCacheObserver
   void OnSlowWebPreferenceChanged() override;
 
@@ -2598,12 +2605,6 @@ class CONTENT_EXPORT WebContentsImpl
   // Whether we should override user agent in new tabs.
   bool should_override_user_agent_in_new_tabs_ = false;
 
-  // Used to determine the value of is-user-agent-overriden for renderer
-  // initiated navigations.
-  NavigationController::UserAgentOverrideOption
-      renderer_initiated_user_agent_override_option_ =
-          NavigationController::UA_OVERRIDE_INHERIT;
-
   // Gets notified about changes in viewport fit events.
   std::unique_ptr<SafeAreaInsetsHost> safe_area_insets_host_;
 
@@ -2637,14 +2638,9 @@ class CONTENT_EXPORT WebContentsImpl
                           SlowWebPreferenceCacheObserver>
       slow_web_preference_cache_observation_{this};
 
-  bool using_dark_colors_ = false;
-  bool in_forced_colors_ = false;
-  ui::NativeTheme::PreferredColorScheme preferred_color_scheme_ =
-      ui::NativeTheme::PreferredColorScheme::kLight;
-  ui::NativeTheme::PreferredContrast preferred_contrast_ =
-      ui::NativeTheme::PreferredContrast::kNoPreference;
   bool prefers_reduced_transparency_ = false;
   bool inverted_colors_ = false;
+  blink::ColorProviderColorMaps color_maps_;
 
   // Tracks clients who want to be notified when a JavaScript dialog is
   // dismissed.

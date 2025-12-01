@@ -2,7 +2,7 @@
 
 #include "prefs/vivaldi_prefs_definitions.h"
 
-#include <Shobjidl.h>
+#include <ShObjIdl.h>
 #include <wrl/client.h>
 
 #include "components/prefs/pref_service.h"

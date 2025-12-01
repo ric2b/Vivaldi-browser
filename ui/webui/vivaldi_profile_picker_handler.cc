@@ -33,6 +33,8 @@
 #include "net/base/mime_sniffer.h"
 #include "net/base/mime_util.h"
 
+#include "content/public/browser/web_contents_delegate.h"
+
 // This is defined in nuke_profile_directory_utils.inc
 bool IsProfileDirectoryScheduledForDeletion(const base::FilePath& profile_path);
 
@@ -354,6 +356,34 @@ void VivaldiProfilePickerHandler::RegisterMessages() {
       "chooseFile",
       base::BindRepeating(&VivaldiProfilePickerHandler::HandleChooseFile,
                           base::Unretained(this)));
+
+  web_ui()->RegisterMessageCallback(
+      "closeProfilePicker",
+      base::BindRepeating(&VivaldiProfilePickerHandler::HandleCloseProfilePicker,
+                          base::Unretained(this)));
+}
+
+bool VivaldiProfilePickerHandler::UseCSD() {
+#if BUILDFLAG(IS_MAC)
+        // Mac always uses the native decorations, don't show ours!
+        return false;
+#else
+        // The chrome://profile-picker can be open also as tab. In this case,
+        // we want the artifical window-bar to be hidden.
+        if (!ProfilePicker::IsOpen())
+          return false;
+
+        auto* web_contents = web_ui()->GetWebContents();
+        if (web_contents) {
+          auto * delegate = web_contents->GetDelegate();
+          if (delegate) {
+            // Vivaldi Frame draws the decorations by itself.
+            return delegate->UsesVivaldiFrame();
+          }
+        }
+        // Should not be reached.
+        return false;
+#endif
 }
 
 void VivaldiProfilePickerHandler::HandleSetShowOnStartup(
@@ -568,6 +598,7 @@ void VivaldiProfilePickerHandler::HandleGetProfilesInfo(
                      base::FilePathToValue(this_profile->GetPath()));
         }
 
+        result.Set("enableCSD", self->UseCSD());
         result.Set("profiles", std::move(profiles_list));
         result.Set("showOnStartup",
                    g_browser_process->local_state()->GetBoolean(
@@ -575,7 +606,7 @@ void VivaldiProfilePickerHandler::HandleGetProfilesInfo(
         helper->SendResponse(base::Value(std::move(result)));
       },
       std::move(helper));
-  // ...callback }
+  // ...callback
 
   // Read the custom icons on background thread.
   base::ThreadPool::PostTask(
@@ -714,4 +745,15 @@ void VivaldiProfilePickerHandler::HandleModifyProfile(
                                         avatar_icon_path,
                                         profile_path->AsUTF8Unsafe());
   }
+}
+
+void VivaldiProfilePickerHandler::HandleCloseProfilePicker(
+    const base::Value::List& args) {
+  Helper helper(this, args);
+  if (!helper.IsValid()) {
+    return;
+  }
+
+  ProfilePicker::Hide();
+  helper.SendResponse(base::Value());
 }

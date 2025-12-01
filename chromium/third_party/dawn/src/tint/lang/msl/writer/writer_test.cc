@@ -276,10 +276,9 @@ TEST_F(MslWriterTest, VertexPulling) {
     array_length_config.buffer_sizes_offset = 64u;
     array_length_config.bindpoint_to_size_index.insert({BindingPoint{0u, 1u}, 0u});
     Options options;
-    options.bindings.storage.emplace(BindingPoint{4u, 0u},
-                                     tint::msl::writer::binding::Storage{0u, 1u});
+    options.bindings.storage.emplace(BindingPoint{4u, 0u}, BindingPoint{0u, 1u});
     options.vertex_pulling_config = std::move(vertex_pulling_config);
-    options.immediate_binding_point = tint::BindingPoint{0, 30};
+    options.immediate_binding_point = BindingPoint{0, 30};
     options.array_length_from_constants = std::move(array_length_config);
 
     ASSERT_TRUE(Generate(options)) << err_ << output_.msl;
@@ -327,6 +326,18 @@ vertex main_outputs v(uint tint_vertex_index [[vertex_id]], const device tint_ar
   return tint_wrapper_result;
 }
 )");
+}
+
+TEST_F(MslWriterTest, CanGenerate_TexelBufferUnsupported) {
+    auto* buffer_ty = ty.texel_buffer(core::TexelFormat::kRgba8Unorm, core::Access::kRead);
+    auto* var = b.Var("buf", ty.ptr<handle>(buffer_ty));
+    mod.root_block->Append(var);
+
+    Options options;
+    auto result = CanGenerate(mod, options);
+    ASSERT_NE(result, Success);
+    EXPECT_THAT(result.Failure().reason,
+                testing::HasSubstr("texel buffers are not supported by the MSL backend"));
 }
 
 }  // namespace

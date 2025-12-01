@@ -1,5 +1,5 @@
 
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,7 @@ describe('ImagePaintingHandler', () => {
       Trace.Handlers.ModelHandlers.ImagePainting.handleEvent(event);
     }
     await Trace.Handlers.ModelHandlers.Meta.finalize();
-    await Trace.Handlers.ModelHandlers.ImagePainting.finalize({});
+    await Trace.Handlers.ModelHandlers.ImagePainting.finalize({allTraceEvents: events});
 
     const drawLazyPixelRefEvent = events.find(Trace.Types.Events.isDrawLazyPixelRef);
     assert.isOk(drawLazyPixelRefEvent);
@@ -41,7 +41,7 @@ describe('ImagePaintingHandler', () => {
       Trace.Handlers.ModelHandlers.ImagePainting.handleEvent(event);
     }
     await Trace.Handlers.ModelHandlers.Meta.finalize();
-    await Trace.Handlers.ModelHandlers.ImagePainting.finalize({});
+    await Trace.Handlers.ModelHandlers.ImagePainting.finalize({allTraceEvents: events});
 
     const decodeImage = events.find(Trace.Types.Events.isDecodeImage);
     assert.isOk(decodeImage);
@@ -64,6 +64,7 @@ describe('ImagePaintingHandler', () => {
     await Trace.Handlers.ModelHandlers.Meta.finalize();
     await Trace.Handlers.ModelHandlers.ImagePainting.finalize({
       metadata: {hostDPR: 2},
+      allTraceEvents: events,
     });
 
     const decodeImage = events.find(Trace.Types.Events.isDecodeImage);

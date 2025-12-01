@@ -22,7 +22,6 @@
 #include <vector>
 
 #include "absl/base/nullability.h"
-#include "absl/log/check.h"
 #include "absl/status/statusor.h"
 #include "./centipede/binary_info.h"
 #include "./centipede/byte_array_mutator.h"
@@ -54,9 +53,9 @@ class CentipedeCallbacks {
         outputs_blobseq_(shmem_name2_.c_str(), env.shmem_size_mb << 20,
                          env.use_posix_shmem) {
     if (env.use_legacy_default_mutator)
-      CHECK(byte_array_mutator_.set_max_len(env.max_len));
+      FUZZTEST_CHECK(byte_array_mutator_.set_max_len(env.max_len));
     else
-      CHECK(fuzztest_mutator_.set_max_len(env.max_len));
+      FUZZTEST_CHECK(fuzztest_mutator_.set_max_len(env.max_len));
   }
   virtual ~CentipedeCallbacks() {}
 
@@ -93,6 +92,10 @@ class CentipedeCallbacks {
   // Returns the configuration from the test target in the serialized form.
   // Returns an empty string if the test target doesn't provide configuration.
   virtual absl::StatusOr<std::string> GetSerializedTargetConfig() { return ""; }
+
+  // Requests any commands that are executing in persistent mode to
+  // end the execution and waits for them.
+  void CleanUpPersistentMode();
 
  protected:
   // Helpers that the user-defined class may use if needed.
@@ -158,9 +161,17 @@ class CentipedeCallbacks {
   FuzzTestMutator fuzztest_mutator_;
 
  private:
-  // Returns a Command object with matching `binary` from commands_,
-  // creates one if needed.
-  Command &GetOrCreateCommandForBinary(std::string_view binary);
+  class PersistentModeServer;
+  struct CommandContext {
+    Command cmd;
+    // Opaque server for persistent mode. Nullptr if persistent mode is
+    // disabled.
+    std::unique_ptr<PersistentModeServer> persistent_mode_server;
+    ~CommandContext();
+  };
+
+  // Returns a CommandContext with matching `binary`. Creates one if needed.
+  CommandContext& GetOrCreateCommandContextForBinary(std::string_view binary);
   // Runs a batch with the command `binary` and returns the exit code.
   int RunBatchForBinary(std::string_view binary);
 
@@ -184,8 +195,9 @@ class CentipedeCallbacks {
   SharedMemoryBlobSequence inputs_blobseq_;
   SharedMemoryBlobSequence outputs_blobseq_;
 
-  // Need unique_ptr indirection because Command is not movable/copyable.
-  std::vector<std::unique_ptr<Command>> commands_;
+  // Need unique_ptr indirection because CommandContext is not movable/copyable
+  // due to Command.
+  std::vector<std::unique_ptr<CommandContext>> command_contexts_;
 };
 
 // Abstract class for creating/destroying CentipedeCallbacks objects.

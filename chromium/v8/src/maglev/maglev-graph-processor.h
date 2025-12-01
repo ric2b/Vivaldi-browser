@@ -41,7 +41,7 @@ namespace maglev {
 //   // overloading as appropriate to group node processing.
 //   void Process(FooNode* node, const ProcessingState& state) {}
 //
-template <typename NodeProcessor, bool visit_identity_nodes = false>
+template <typename NodeProcessor>
 class GraphProcessor;
 template <typename NodeProcessor>
 class GraphBackwardProcessor;
@@ -52,13 +52,18 @@ enum class BlockProcessResult {
 };
 
 enum class ProcessResult {
-  kContinue,   // Process exited normally, and the following processors will be
-               // called on the node.
-  kRemove,     // Remove the current node from the graph (and do not call the
-               // following processors).
-  kHoist,      // Hoist the current instruction to the parent basic block
-               // and reset the current instruction to the beginning of the
-               // block. Parent block must be dominating.
+  kContinue,  // Process exited normally, and the following processors will be
+              // called on the node.
+  kRemove,    // Remove the current node from the graph (and do not call the
+              // following processors).
+  kRevisit,   // Process this node again. Note that the node is allowed to have
+              // changed.
+  kTruncateBlock,  // Remove all nodes from this point from the basic block
+                   // (including the current node) and do not call the following
+                   // processors.
+  kHoist,          // Hoist the current instruction to the parent basic block
+                   // and reset the current instruction to the beginning of the
+                   // block. Parent block must be dominating.
   kAbort,      // Stop processing now, do not process subsequent nodes/blocks.
                // Should not be used when processing Constants.
   kSkipBlock,  // Stop processing this block and skip the remaining nodes (no
@@ -67,9 +72,14 @@ enum class ProcessResult {
 
 class ProcessingState {
  public:
+  static constexpr int kNoNodeIndex = -1;
+
   explicit ProcessingState(BlockConstIterator block_end,
-                           BlockConstIterator block_it)
-      : block_end_(block_end), block_it_(block_it) {}
+                           BlockConstIterator block_it,
+                           int node_index = kNoNodeIndex)
+      : block_end_(block_end), block_it_(block_it), node_index_(node_index) {
+    DCHECK_IMPLIES(node_index != kNoNodeIndex, node_index >= 0);
+  }
 
   // Disallow copies, since the underlying frame states stay mutable.
   ProcessingState(const ProcessingState&) = delete;
@@ -82,12 +92,18 @@ class ProcessingState {
     return *next_block_it;
   }
 
+  int node_index() const {
+    DCHECK_GE(node_index_, 0);
+    return node_index_;
+  }
+
  private:
   BlockConstIterator block_end_;
   BlockConstIterator block_it_;
+  const int node_index_;  // Index inside the basic block.
 };
 
-template <typename NodeProcessor, bool visit_identity_nodes>
+template <typename NodeProcessor>
 class GraphProcessor {
  public:
   template <typename... Args>
@@ -102,14 +118,17 @@ class GraphProcessor {
     auto process_constants = [&](auto& map) {
       for (auto it = map.begin(); it != map.end();) {
         ProcessResult result =
-            node_processor_.Process(it->second, GetCurrentState());
+            node_processor_.Process(it->second, GetCurrentState(0));
         switch (result) {
           [[likely]] case ProcessResult::kContinue:
             ++it;
             break;
+          case ProcessResult::kRevisit:
+            break;
           case ProcessResult::kRemove:
             it = map.erase(it);
             break;
+          case ProcessResult::kTruncateBlock:
           case ProcessResult::kHoist:
           case ProcessResult::kAbort:
           case ProcessResult::kSkipBlock:
@@ -125,9 +144,11 @@ class GraphProcessor {
     process_constants(graph->uint32());
     process_constants(graph->intptr());
     process_constants(graph->float64());
+    process_constants(graph->heap_number());
     process_constants(graph->trusted_constants());
 
     for (block_it_ = graph->begin(); block_it_ != graph->end(); ++block_it_) {
+      bool process_control_block = true;
       BasicBlock* block = *block_it_;
       if (V8_UNLIKELY(block->is_dead())) continue;
 
@@ -150,6 +171,8 @@ class GraphProcessor {
             [[likely]] case ProcessResult::kContinue:
               ++it;
               break;
+            case ProcessResult::kRevisit:
+              break;
             case ProcessResult::kRemove:
               it = phis.RemoveAt(it);
               break;
@@ -157,6 +180,7 @@ class GraphProcessor {
               return;
             case ProcessResult::kSkipBlock:
               goto skip_block;
+            case ProcessResult::kTruncateBlock:
             case ProcessResult::kHoist:
               UNREACHABLE();
           }
@@ -165,22 +189,34 @@ class GraphProcessor {
 
       node_processor_.PostPhiProcessing();
 
-      for (node_it_ = block->nodes().begin(); node_it_ != block->nodes().end();
-           ++node_it_) {
+      for (node_it_ = block->nodes().begin();
+           node_it_ != block->nodes().end();) {
         Node* node = *node_it_;
-        if (node == nullptr) continue;
-        ProcessResult result = ProcessNodeBase(node, GetCurrentState());
+        if (node == nullptr) {
+          ++node_it_;
+          continue;
+        }
+        ProcessResult result = ProcessNodeBase(
+            node, GetCurrentState(node_it_ - block->nodes().begin()));
         switch (result) {
           [[likely]] case ProcessResult::kContinue:
+            ++node_it_;
+            break;
+          case ProcessResult::kRevisit:
             break;
           case ProcessResult::kRemove:
             *node_it_ = nullptr;
+            ++node_it_;
+            break;
+          case ProcessResult::kTruncateBlock:
+            block->nodes().resize(node_it_ - block->nodes().begin());
+            node_it_ = block->nodes().end();
             break;
           case ProcessResult::kHoist: {
             DCHECK(block->predecessor_count() == 1 ||
                    (block->predecessor_count() == 2 && block->is_loop()));
             BasicBlock* target = block->predecessor_at(0);
-            DCHECK(target->successors().size() == 1);
+            DCHECK_EQ(target->successors().size(), 1);
             Node* cur = *node_it_;
             cur->set_owner(target);
             *node_it_ = nullptr;
@@ -195,16 +231,22 @@ class GraphProcessor {
         }
       }
 
-      {
+      while (process_control_block) {
         ProcessResult control_result =
             ProcessNodeBase(block->control_node(), GetCurrentState());
+        process_control_block = false;
         switch (control_result) {
           [[likely]] case ProcessResult::kContinue:
+            break;
+          case ProcessResult::kRevisit:
+            process_control_block = true;
+            break;
           case ProcessResult::kSkipBlock:
             break;
           case ProcessResult::kAbort:
             return;
           case ProcessResult::kRemove:
+          case ProcessResult::kTruncateBlock:
           case ProcessResult::kHoist:
             UNREACHABLE();
         }
@@ -221,18 +263,16 @@ class GraphProcessor {
   const NodeProcessor& node_processor() const { return node_processor_; }
 
  private:
-  ProcessingState GetCurrentState() {
-    return ProcessingState(graph_->end(), block_it_);
+  ProcessingState GetCurrentState(
+      size_t node_index = ProcessingState::kNoNodeIndex) {
+    return ProcessingState(graph_->end(), block_it_,
+                           static_cast<int>(node_index));
   }
 
   ProcessResult ProcessNodeBase(NodeBase* node, const ProcessingState& state) {
     switch (node->opcode()) {
 #define CASE(OPCODE)                                        \
   case Opcode::k##OPCODE:                                   \
-    if constexpr (!visit_identity_nodes &&                  \
-                  Opcode::k##OPCODE == Opcode::kIdentity) { \
-      return ProcessResult::kContinue;                      \
-    }                                                       \
     PreProcess(node->Cast<OPCODE>(), state);                \
     return node_processor_.Process(node->Cast<OPCODE>(), state);
 
@@ -267,7 +307,9 @@ class GraphBackwardProcessor {
             break;
           case ProcessResult::kAbort:
             return;
+          case ProcessResult::kRevisit:
           case ProcessResult::kRemove:
+          case ProcessResult::kTruncateBlock:
           case ProcessResult::kHoist:
           case ProcessResult::kSkipBlock:
             UNREACHABLE();
@@ -275,13 +317,16 @@ class GraphBackwardProcessor {
       }
 
       for (Node* node : base::Reversed(block->nodes())) {
+        if (node == nullptr) continue;
         ProcessResult result = ProcessNodeBase(node);
         switch (result) {
           [[likely]] case ProcessResult::kContinue:
             break;
           case ProcessResult::kAbort:
             return;
+          case ProcessResult::kRevisit:
           case ProcessResult::kRemove:
+          case ProcessResult::kTruncateBlock:
           case ProcessResult::kHoist:
           case ProcessResult::kSkipBlock:
             UNREACHABLE();
@@ -302,6 +347,8 @@ class GraphBackwardProcessor {
               break;
             case ProcessResult::kAbort:
               return;
+            case ProcessResult::kTruncateBlock:
+            case ProcessResult::kRevisit:
             case ProcessResult::kSkipBlock:
             case ProcessResult::kHoist:
               UNREACHABLE();
@@ -322,8 +369,10 @@ class GraphBackwardProcessor {
           case ProcessResult::kRemove:
             it = map.erase(it);
             break;
+          case ProcessResult::kRevisit:
           case ProcessResult::kHoist:
           case ProcessResult::kAbort:
+          case ProcessResult::kTruncateBlock:
           case ProcessResult::kSkipBlock:
             UNREACHABLE();
         }
@@ -337,6 +386,7 @@ class GraphBackwardProcessor {
     process_constants(graph->uint32());
     process_constants(graph->intptr());
     process_constants(graph->float64());
+    process_constants(graph->heap_number());
     process_constants(graph->trusted_constants());
 
     node_processor_.PostProcessGraph(graph);
@@ -397,8 +447,10 @@ class NodeMultiProcessor<Processor, Processors...>
     switch (res) {
       [[likely]] case ProcessResult::kContinue:
         return Base::Process(node, state);
+      case ProcessResult::kRevisit:
       case ProcessResult::kAbort:
       case ProcessResult::kRemove:
+      case ProcessResult::kTruncateBlock:
         return res;
       case ProcessResult::kHoist:
       case ProcessResult::kSkipBlock:
@@ -440,12 +492,6 @@ class NodeMultiProcessor<Processor, Processors...>
 
 template <typename... Processors>
 using GraphMultiProcessor = GraphProcessor<NodeMultiProcessor<Processors...>>;
-
-// TODO(victorgomes): Remove this visit_identity_nodes flag, ideally all
-// processors should visit it.
-template <typename... Processors>
-using GraphMultiProcessorWithIdentities =
-    GraphProcessor<NodeMultiProcessor<Processors...>, true>;
 
 }  // namespace maglev
 }  // namespace internal

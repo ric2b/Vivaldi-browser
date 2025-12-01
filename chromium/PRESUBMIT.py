@@ -26,9 +26,6 @@ _EXCLUDED_PATHS = (
      r"client_variations.js"),
     # These are video files, not typescript.
     r"^media/test/data/.*.ts",
-    r"^native_client_sdksrc/build_tools/make_rules.py",
-    r"^native_client_sdk/src/build_tools/make_simple.py",
-    r"^native_client_sdk/src/tools/.*.mk",
     r"^net/tools/spdyshark/.*",
     r"^skia/.*",
     r"^third_party/blink/.*",
@@ -166,8 +163,8 @@ _BANNED_JAVA_IMPORTS: Sequence[BanRule] = (
     ),
     BanRule(
         'import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;',
-        ('Do not use VectorDrawableCompat, use getResources().getDrawable() to '
-         'avoid extra indirections. Please also add trace event as the call '
+        ('Do not use VectorDrawableCompat, use getResources().getDrawable() '
+         'to avoid extra indirections. Please also add trace event as the call '
          'might take more than 20 ms to complete.', ),
     ),
 )
@@ -193,8 +190,8 @@ _BANNED_JAVA_FUNCTIONS: Sequence[BanRule] = (
     ),
     BanRule(
         r'/(?<!\bsuper\.)(?<!\bIntent )\bregisterReceiver\(',
-        ('Do not call android.content.Context.registerReceiver (or an override) '
-         'directly. Use one of the wrapper methods defined in '
+        ('Do not call android.content.Context.registerReceiver (or an '
+         'override) directly. Use one of the wrapper methods defined in '
          'org.chromium.base.ContextUtils, such as '
          'registerProtectedBroadcastReceiver, '
          'registerExportedBroadcastReceiver, or '
@@ -236,16 +233,16 @@ _BANNED_JAVA_FUNCTIONS: Sequence[BanRule] = (
     BanRule(
         r'/(ResourcesCompat|getResources\(\))\.getDrawable\(\)',
         ('getDrawable() can be expensive. If you have a lot of calls to '
-         'GetDrawable() or your code may introduce janks, please put your calls '
-         'inside a trace().', ),
+         'GetDrawable() or your code may introduce janks, please put your '
+         'calls inside a trace().', ),
         False,
         excluded_paths=(r'.*Test[A-Z]?.*\.java', ),
     ),
     BanRule(
         r'/RecordHistogram\.getHistogram(ValueCount|TotalCount|Samples)ForTesting\(',
-        ('Raw histogram counts are easy to misuse; for example they don\'t reset '
-         'between batched tests. Use HistogramWatcher to check histogram records '
-         'instead.', ),
+        ('Raw histogram counts are easy to misuse; for example they don\'t '
+         'reset between batched tests. Use HistogramWatcher to check histogram '
+         'records instead.', ),
         False,
         excluded_paths=(
             'base/android/javatests/src/org/chromium/base/metrics/RecordHistogramTest.java',
@@ -264,14 +261,15 @@ _BANNED_JAVA_FUNCTIONS: Sequence[BanRule] = (
     BanRule(
         pattern=(r'/((DeviceInfo\.isDesktop\()|IS_DESKTOP_ANDROID|PackageManager\.FEATURE_PC)'),
         explanation=(
-            'Do not add new uses of IS_DESKTOP_ANDROID build flag or '
-            'DeviceInfo.isDesktop() until you have the approval of tedchoc@ '
-            'or twellington@.',
-            'Once approved, please use centralized util DeviceInfo.isDesktop() '
-            'instead of direct build flag or PackageManager.FEATURE_PC checks.',
-            'See https://source.chromium.org/chromium/chromium/src/+/main:docs/ui/android/device_form_factor.md for guidelines.'
+            'Usage of IS_DESKTOP_ANDROID build flag or DeviceInfo.isDesktop() '
+            'is discouraged. Use system affordances to determine feature '
+            'availablility. Refer to https://chromium.googlesource.com/chromium/src/+/HEAD/docs/ui/android/device_form_factor.md for guidelines. '
+            'To request an exception, file a bug at '
+            'https://b.corp.google.com/issues/new?component=1753515&template=2172655'
+            'Once approved, use centralized util DeviceInfo.isDesktop() '
+            'instead of direct build flag or PackageManager.FEATURE_PC checks. '
             'Allowances may be granted to only the directories below: '
-            '[build/, chrome/, components/, extensions/, infra/, tools/]',
+            '[build/, chrome/, components/, extensions/, infra/, tools/] '
             'Note: in particular we need to avoid components shared with '
             'WebView.',
         ),
@@ -1004,6 +1002,10 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
             r'components/ip_protection/.*',
 
             # Needed to integrate with //third_party/nearby
+            r'chrome/services/sharing/nearby/platform/input_file.cc',
+            r'chrome/services/sharing/nearby/platform/input_file.h',
+            r'chrome/services/sharing/nearby/platform/output_file.cc',
+            r'chrome/services/sharing/nearby/platform/output_file.h',
             r'components/cross_device/nearby/system_clock.cc',
             _THIRD_PARTY_EXCEPT_BLINK  # Not an error in third_party folders.
         ],
@@ -1929,7 +1931,7 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
         ('WIDGET_OWNS_NATIVE_WIDGET and NATIVE_WIDGET_OWNS_WIDGET are in the '
          'process of being deprecated. Consider using the new '
          'CLIENT_OWNS_WIDGET ownership model. Eventually, this will be the only '
-         'available ownership model available and the associated enumeration'
+         'available ownership model available and the associated enumeration '
          'will be removed.', ),
         treat_as_error=False,
     ),
@@ -2034,8 +2036,8 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
       explanation=(
           'Do not use TestBrowserWindow. See '
           'docs/chrome_browser_design_principles.md for details. If you want '
-          'to write a test that has a Browser, create a browser_test. If you'
-          'want to write a unit_test, your code should not reference Browser'
+          'to write a test that has a Browser, create a browser_test. If you '
+          'want to write a unit_test, your code should not reference Browser '
           'or BrowserWindow.',
       ),
       treat_as_error=False,
@@ -2130,12 +2132,15 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
     BanRule(
         pattern=(r'IS_DESKTOP_ANDROID'),
         explanation=(
-            'Do not add new uses of IS_DESKTOP_ANDROID build flag until you '
-            'have the approval of tedchoc@ or twellington@. '
-            'Background: it is highly important to reduce the divergence of '
-            'features across platforms. '
+            'Usage of IS_DESKTOP_ANDROID build flag '
+            'is discouraged. Use system affordances to determine feature '
+            'availablility. Refer to https://chromium.googlesource.com/chromium/src/+/HEAD/docs/ui/android/device_form_factor.md for guidelines. '
+            'To request an exception, file a bug at '
+            'https://b.corp.google.com/issues/new?component=1753515&template=2172655'
+            'Once approved, use centralized util DeviceInfo.isDesktop() '
+            'instead of direct build flag or PackageManager.FEATURE_PC checks. '
             'Allowances may be granted to only the directories below: '
-            '[build/, chrome/, components/, extensions/, infra/, tools/] ',
+            '[build/, chrome/, components/, extensions/, infra/, tools/] '
             'Note: in particular we need to avoid components shared with '
             'WebView.',
         ),
@@ -2334,7 +2339,7 @@ _GENERIC_PYDEPS_FILES = [
     'chrome/android/monochrome/scripts/monochrome_python_tests.pydeps',
     'chrome/test/chromedriver/log_replay/client_replay_unittest.pydeps',
     'chrome/test/chromedriver/test/run_py_tests.pydeps',
-    'chrome/test/media_router/performance/performance_test.pydeps',
+    'chrome/test/media_router/performance/openscreen_cast_performance_test.pydeps',
     'chromecast/resource_sizes/chromecast_resource_sizes.pydeps',
     'components/cronet/tools/check_combined_proguard_file.pydeps',
     'components/cronet/tools/generate_proguard_file.pydeps',
@@ -2381,6 +2386,9 @@ _KNOWN_ROBOTS = set() | set('%s@appspot.gserviceaccount.com' % s for s in (
         ) | set(
             '%s@skia-public.iam.gserviceaccount.com' % s
             for s in ('chromium-autoroll', 'chromium-release-autoroll')) | set(
+            '%s@skia-infra-corp.iam.gserviceaccount.com' % s
+            for s in ('pinpoint-worker',)
+            ) | set(
                 '%s@skia-corp.google.com.iam.gserviceaccount.com' % s
                 for s in ('chromium-internal-autoroll', )
             ) | set(
@@ -3385,13 +3393,10 @@ def CheckChromeOsSyncedPrefRegistration(input_api, output_api):
 
 def CheckNoAbbreviationInPngFileName(input_api, output_api):
     """Makes sure there are no abbreviations in the name of PNG files.
-    The native_client_sdk directory is excluded because it has auto-generated PNG
-    files for documentation.
     """
     errors = []
     files_to_check = [r'.*\.png$']
     files_to_skip = [
-        r'^native_client_sdk/',
         r'^services/test/',
         r'^third_party/blink/web_tests/',
     ]
@@ -3828,7 +3833,7 @@ def CheckSpamLogging(input_api, output_api):
             r"^fuchsia_web/shell/.*\.cc$",
             r"^headless/app/headless_shell\.cc$",
             r"^ipc/ipc_logging\.cc$",
-            r"^native_client_sdk/",
+            r"^ios/chrome/app/perf_tests_hook_logging\.mm$",
             r"^remoting/base/logging\.h$",
             r"^remoting/host/.*",
             r"^sandbox/linux/.*",
@@ -3881,7 +3886,6 @@ def CheckForAnonymousVariables(input_api, output_api):
     destroyed)."""
     they_who_must_be_named = [
         'base::AutoLock',
-        'base::AutoReset',
         'base::AutoUnlock',
         'SkAutoAlphaRestore',
         'SkAutoBitmapShaderInstall',
@@ -5363,10 +5367,10 @@ def CheckNoDeprecatedCss(input_api, output_api):
             r"^chrome/browser/resources/chromeos/arc_support/cr_overlay.css$",
             r"^chrome/common/extensions/docs",
             r"^chrome/docs",
-            r"^native_client_sdk",
             # The NTP team prefers reserving -webkit-line-clamp for
             # ellipsis effect which can only be used with -webkit-box.
-            r"ui/webui/resources/cr_components/most_visited/.*\.css$"))
+            r"ui/webui/resources/cr_components/most_visited/.*\.css$",
+            r"ui/webui/resources/cr_components/searchbox/searchbox_match.css$"))
     file_filter = lambda f: input_api.FilterSourceFile(
         f, files_to_check=file_inclusion_pattern, files_to_skip=files_to_skip)
     for fpath in input_api.AffectedFiles(file_filter=file_filter):
@@ -7011,7 +7015,7 @@ def CheckStrings(input_api, output_api):
             results.append(
                 output_api.PresubmitError(
                     'Do not include actual screenshots in the changelist. Run '
-                    'tools/translate/upload_screenshots.py to upload them instead:',
+                    'tools/translation/upload_screenshots.py to upload them instead:',
                     sorted(unnecessary_screenshots)))
 
         if missing_sha1:
@@ -7027,7 +7031,7 @@ def CheckStrings(input_api, output_api):
                 output_api.PresubmitError(
                     'The following files do not seem to contain valid sha1 hashes. '
                     'Make sure they contain hashes created by '
-                    'tools/translate/upload_screenshots.py:',
+                    'tools/translation/upload_screenshots.py:',
                     sorted(invalid_sha1)))
 
         if missing_sha1_modified:
@@ -7871,3 +7875,58 @@ def CheckNoBrowserStarInUnittests(input_api, output_api):
     or determine if a browser_test is more appropriate.
     """
     return [output_api.PresubmitPromptWarning(WARNING_MSG, items=problems)]
+
+
+def CheckBaseFeatureMacro(input_api, output_api):
+    """Checks for correct usage of the BASE_FEATURE macro."""
+    pattern = input_api.re.compile(
+        r'\bBASE_FEATURE\s*\(\s*([^,]+)\s*,\s*([^,)]+)')
+    warnings = []
+
+    for f in input_api.AffectedFiles():
+        if not f.LocalPath().endswith(('.cc', '.mm')):
+            continue
+
+        # Create a set of changed line numbers.
+        changed_line_numbers = {line_num for line_num, _ in f.ChangedContents()}
+        if not changed_line_numbers:
+            continue
+
+        lines = list(f.NewContents())
+        contents = '\n'.join(lines)
+        for match in pattern.finditer(contents):
+            # Determine the line numbers that the match spans.
+            start_line = contents.count('\n', 0, match.start()) + 1
+            end_line = contents.count('\n', 0, match.end()) + 1
+
+            # Check if any line in the match is in the set of changed lines.
+            if not changed_line_numbers.intersection(
+                    range(start_line, end_line + 1)):
+                continue
+
+            # Heuristic to ignore commented out macros.
+            if lines[start_line - 1].strip().startswith('//'):
+                continue
+
+            param1 = match.group(1).strip()
+            param2 = match.group(2).strip()
+
+            if param2.startswith('"') and param2.endswith('"'):
+                warnings.append(
+                    '    %s:%d: The 3-argument BASE_FEATURE macro with a '
+                    'string literal is discouraged. Use the 2-argument '
+                    'version instead.' % (f.LocalPath(), start_line))
+
+            if not input_api.re.match(r'^k[A-Z]', param1):
+                warnings.append(
+                    '    %s:%d: Feature identifier "%s" should start with "k" '
+                    'followed by an uppercase letter.' %
+                    (f.LocalPath(), start_line, param1))
+
+    if not warnings:
+        return []
+
+    return [
+        output_api.PresubmitPromptWarning('BASE_FEATURE() macro naming:',
+                                          warnings)
+    ]

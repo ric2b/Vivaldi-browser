@@ -8,7 +8,6 @@ from recipe_engine.recipe_api import Property
 from PB.recipe_modules.depot_tools.presubmit import properties
 
 
-PYTHON_VERSION_COMPATIBILITY = 'PY3'
 
 DEPS = [
     'bot_update',
@@ -30,3 +29,6 @@ DEPS = [
 
 
 PROPERTIES = properties.InputProperties
+
+from .api import PresubmitApi as API
+from .test_api import PresubmitTestApi as TEST_API

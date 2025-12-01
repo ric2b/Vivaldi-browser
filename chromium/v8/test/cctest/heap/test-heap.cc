@@ -1502,49 +1502,6 @@ TEST(TestOptimizeAfterBytecodeFlushingCandidate) {
 }
 #endif  // !defined(V8_LITE_MODE) && defined(V8_ENABLE_TURBOFAN)
 
-TEST(TestUseOfIncrementalBarrierOnCompileLazy) {
-  if (!v8_flags.incremental_marking) return;
-  v8_flags.allow_natives_syntax = true;
-  CcTest::InitializeVM();
-  Isolate* isolate = CcTest::i_isolate();
-  Factory* factory = isolate->factory();
-  Heap* heap = isolate->heap();
-  v8::HandleScope scope(CcTest::isolate());
-
-  CompileRun(
-      "function make_closure(x) {"
-      "  return function() { return x + 3 };"
-      "}"
-      "var f = make_closure(5);"
-      "%PrepareFunctionForOptimization(f); f();"
-      "var g = make_closure(5);");
-
-  // Check f is compiled.
-  DirectHandle<String> f_name = factory->InternalizeUtf8String("f");
-  DirectHandle<Object> f_value =
-      Object::GetProperty(isolate, isolate->global_object(), f_name)
-          .ToHandleChecked();
-  DirectHandle<JSFunction> f_function = Cast<JSFunction>(f_value);
-  CHECK(f_function->is_compiled(isolate));
-
-  // Check g is not compiled.
-  DirectHandle<String> g_name = factory->InternalizeUtf8String("g");
-  DirectHandle<Object> g_value =
-      Object::GetProperty(isolate, isolate->global_object(), g_name)
-          .ToHandleChecked();
-  DirectHandle<JSFunction> g_function = Cast<JSFunction>(g_value);
-  CHECK(!g_function->is_compiled(isolate));
-
-  heap::SimulateIncrementalMarking(heap);
-  CompileRun("%OptimizeFunctionOnNextCall(f); f();");
-
-  // g should now have available an optimized function, unmarked by gc. The
-  // CompileLazy built-in will discover it and install it in the closure, and
-  // the incremental write barrier should be used.
-  CompileRun("g();");
-  CHECK(g_function->is_compiled(isolate));
-}
-
 void CompilationCacheCachingBehavior(bool retain_script) {
   // If we do not have the compilation cache turned off, this test is invalid.
   if (!v8_flags.compilation_cache) {
@@ -2245,13 +2202,14 @@ static Tagged<HeapObject> OldSpaceAllocateAligned(
 
 // Get old space allocation into the desired alignment.
 static Address AlignOldSpace(AllocationAlignment alignment, int offset) {
-  Address* top_addr = CcTest::heap()->OldSpaceAllocationTopAddress();
-  int fill = Heap::GetFillToAlign(*top_addr, alignment);
+  LinearAllocationArea* old_space =
+      &CcTest::i_isolate()->isolate_data()->old_allocation_info();
+  int fill = Heap::GetFillToAlign(old_space->top(), alignment);
   int allocation = fill + offset;
   if (allocation) {
     OldSpaceAllocateAligned(allocation, kTaggedAligned);
   }
-  Address top = *top_addr;
+  Address top = old_space->top();
   // Now force the remaining allocation onto the free list.
   CcTest::heap()->FreeMainThreadLinearAllocationAreas();
   return top;
@@ -5118,6 +5076,7 @@ TEST(AddInstructionChangesNewSpacePromotion) {
   v8_flags.allow_natives_syntax = true;
   v8_flags.expose_gc = true;
   v8_flags.stress_compaction = true;
+  FlagList::EnforceFlagImplications();
   HeapAllocator::SetAllocationGcInterval(1000);
   CcTest::InitializeVM();
   if (!v8_flags.allocation_site_pretenuring) return;
@@ -5976,7 +5935,8 @@ TEST(Regress598319) {
 
   CHECK_EQ(arr.get()->length(), kNumberOfObjects);
   CHECK(heap->lo_space()->Contains(arr.get()));
-  LargePageMetadata* page = LargePageMetadata::FromHeapObject(arr.get());
+  LargePageMetadata* page =
+      LargePageMetadata::FromHeapObject(isolate, arr.get());
   CHECK_NOT_NULL(page);
 
   // GC to cleanup state
@@ -6295,7 +6255,7 @@ TEST(RightTrimFixedArrayWithBlackAllocatedPages) {
   Address start_address = array->address();
   Address end_address = start_address + array->Size();
   PageMetadata* page = PageMetadata::FromHeapObject(*array);
-  CHECK(page->Chunk()->IsFlagSet(MemoryChunk::BLACK_ALLOCATED));
+  CHECK(page->Chunk()->IsBlackAllocatedPage());
   CHECK(heap->old_space()->Contains(*array));
 
   // Trim it once by one word, which shouldn't affect the BLACK_ALLOCATED flag.
@@ -6304,11 +6264,10 @@ TEST(RightTrimFixedArrayWithBlackAllocatedPages) {
 
   Tagged<HeapObject> filler = HeapObject::FromAddress(previous);
   CHECK(IsFreeSpaceOrFiller(filler));
-  CHECK(page->Chunk()->IsFlagSet(MemoryChunk::BLACK_ALLOCATED));
+  CHECK(page->Chunk()->IsBlackAllocatedPage());
 
   heap::InvokeAtomicMajorGC(heap);
-  CHECK(!PageMetadata::FromHeapObject(*array)->Chunk()->IsFlagSet(
-      MemoryChunk::BLACK_ALLOCATED));
+  CHECK(!PageMetadata::FromHeapObject(*array)->Chunk()->IsBlackAllocatedPage());
 
   heap->StartIncrementalMarking(i::GCFlag::kNoFlags,
                                 i::GarbageCollectionReason::kTesting);
@@ -6316,12 +6275,10 @@ TEST(RightTrimFixedArrayWithBlackAllocatedPages) {
   // Allocate the large fixed array that will be trimmed later.
   array = isolate->factory()->NewFixedArray(200000, AllocationType::kOld);
   CHECK(heap->lo_space()->Contains(*array));
-  CHECK(!PageMetadata::FromHeapObject(*array)->Chunk()->IsFlagSet(
-      MemoryChunk::BLACK_ALLOCATED));
+  CHECK(!PageMetadata::FromHeapObject(*array)->Chunk()->IsBlackAllocatedPage());
 
   heap::InvokeAtomicMajorGC(heap);
-  CHECK(!PageMetadata::FromHeapObject(*array)->Chunk()->IsFlagSet(
-      MemoryChunk::BLACK_ALLOCATED));
+  CHECK(!PageMetadata::FromHeapObject(*array)->Chunk()->IsBlackAllocatedPage());
 }
 
 TEST(Regress618958) {
@@ -6361,7 +6318,7 @@ TEST(YoungGenerationLargeObjectAllocationScavenge) {
   MemoryChunkMetadata* metadata = chunk->Metadata(isolate);
   CHECK_EQ(NEW_LO_SPACE, MutablePageMetadata::cast(metadata)->owner_identity());
   CHECK(metadata->is_large());
-  CHECK(chunk->IsFlagSet(MemoryChunk::TO_PAGE));
+  CHECK(chunk->IsToPage());
 
   DirectHandle<Object> number = isolate->factory()->NewHeapNumber(123.456);
   array_small->set(0, *number);
@@ -6394,7 +6351,7 @@ TEST(YoungGenerationLargeObjectAllocationMarkCompact) {
   MemoryChunkMetadata* metadata = chunk->Metadata(isolate);
   CHECK_EQ(NEW_LO_SPACE, MutablePageMetadata::cast(metadata)->owner_identity());
   CHECK(metadata->is_large());
-  CHECK(chunk->IsFlagSet(MemoryChunk::TO_PAGE));
+  CHECK(chunk->IsToPage());
 
   DirectHandle<Object> number = isolate->factory()->NewHeapNumber(123.456);
   array_small->set(0, *number);
@@ -6427,7 +6384,7 @@ TEST(YoungGenerationLargeObjectAllocationReleaseScavenger) {
       MemoryChunk* chunk = MemoryChunk::FromHeapObject(*array_small);
       CHECK_EQ(NEW_LO_SPACE,
                MutablePageMetadata::cast(chunk->Metadata())->owner_identity());
-      CHECK(chunk->IsFlagSet(MemoryChunk::TO_PAGE));
+      CHECK(chunk->IsToPage());
     }
   }
 
@@ -6473,7 +6430,7 @@ TEST(UncommitUnusedLargeObjectMemory) {
 template <RememberedSetType direction>
 static size_t GetRememberedSetSize(Tagged<HeapObject> obj) {
   size_t count = 0;
-  auto chunk = MutablePageMetadata::FromHeapObject(obj);
+  auto chunk = MutablePageMetadata::FromHeapObject(CcTest::i_isolate(), obj);
   RememberedSet<direction>::Iterate(
       chunk,
       [&count](MaybeObjectSlot slot) {
@@ -6641,7 +6598,8 @@ TEST(RememberedSetRemoveRange) {
 
   DirectHandle<FixedArray> array = isolate->factory()->NewFixedArray(
       PageMetadata::kPageSize / kTaggedSize, AllocationType::kOld);
-  MutablePageMetadata* chunk = MutablePageMetadata::FromHeapObject(*array);
+  MutablePageMetadata* chunk =
+      MutablePageMetadata::FromHeapObject(isolate, *array);
   CHECK_EQ(chunk->owner_identity(), LO_SPACE);
   Address start = array->address();
   // Maps slot to boolean indicator of whether the slot should be in the set.
@@ -7276,18 +7234,18 @@ TEST(CodeObjectRegistry) {
     DirectHandle<InstructionStream> code2 = DummyOptimizedCode(isolate);
     code2_address = code2->address();
 
-    CHECK_EQ(MutablePageMetadata::FromHeapObject(*code1),
-             MutablePageMetadata::FromHeapObject(*code2));
-    CHECK(MutablePageMetadata::FromHeapObject(*code1)->Contains(
-        code1->address()));
-    CHECK(MutablePageMetadata::FromHeapObject(*code2)->Contains(
-        code2->address()));
+    CHECK_EQ(MutablePageMetadata::FromHeapObject(isolate, *code1),
+             MutablePageMetadata::FromHeapObject(isolate, *code2));
+    CHECK(MutablePageMetadata::FromHeapObject(isolate, *code1)
+              ->Contains(code1->address()));
+    CHECK(MutablePageMetadata::FromHeapObject(isolate, *code2)
+              ->Contains(code2->address()));
   }
   heap::InvokeMemoryReducingMajorGCs(heap);
-  CHECK(
-      MutablePageMetadata::FromHeapObject(*code1)->Contains(code1->address()));
-  CHECK(
-      MutablePageMetadata::FromAddress(code2_address)->Contains(code2_address));
+  CHECK(MutablePageMetadata::FromHeapObject(isolate, *code1)
+            ->Contains(code1->address()));
+  CHECK(MutablePageMetadata::FromAddress(isolate, code2_address)
+            ->Contains(code2_address));
 }
 
 TEST(Regress9701) {
@@ -7422,7 +7380,7 @@ HEAP_TEST(CodeLargeObjectSpace) {
     heap->CreateFillerObjectAt(obj.address(), size_in_bytes);
   }
 
-  CHECK(Heap::IsLargeObject(obj));
+  CHECK(HeapLayout::InAnyLargeSpace(obj));
   heap->RemoveHeapObjectAllocationTracker(&allocation_tracker);
 }
 
@@ -7458,7 +7416,7 @@ UNINITIALIZED_HEAP_TEST(CodeLargeObjectSpace64k) {
       heap->CreateFillerObjectAt(obj.address(), size_in_bytes);
     }
 
-    CHECK(!Heap::IsLargeObject(obj));
+    CHECK(!HeapLayout::InAnyLargeSpace(obj));
     heap->RemoveHeapObjectAllocationTracker(&allocation_tracker);
   }
 
@@ -7482,7 +7440,7 @@ UNINITIALIZED_HEAP_TEST(CodeLargeObjectSpace64k) {
       heap->CreateFillerObjectAt(obj.address(), size_in_bytes);
     }
 
-    CHECK(Heap::IsLargeObject(obj));
+    CHECK(HeapLayout::InAnyLargeSpace(obj));
     heap->RemoveHeapObjectAllocationTracker(&allocation_tracker);
   }
 

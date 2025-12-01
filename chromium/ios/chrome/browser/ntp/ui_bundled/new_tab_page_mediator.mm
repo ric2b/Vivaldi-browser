@@ -4,18 +4,23 @@
 
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_mediator.h"
 
+#import <Foundation/Foundation.h>
+
 #import <memory>
 
 #import "base/apple/foundation_util.h"
+#import "base/cancelable_callback.h"
 #import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
+#import "base/strings/sys_string_conversions.h"
 #import "base/time/time.h"
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/tracker.h"
 #import "components/image_fetcher/core/image_fetcher.h"
 #import "components/image_fetcher/core/image_fetcher_service.h"
+#import "components/image_fetcher/core/request_metadata.h"
 #import "components/omnibox/browser/omnibox_prefs.h"
 #import "components/omnibox/common/omnibox_features.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
@@ -33,8 +38,13 @@
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service_factory.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_visibility_browser_agent.h"
+#import "ios/chrome/browser/home_customization/coordinator/home_customization_data_conversion.h"
 #import "ios/chrome/browser/home_customization/model/home_background_customization_service.h"
 #import "ios/chrome/browser/home_customization/model/home_background_customization_service_observer_bridge.h"
+#import "ios/chrome/browser/home_customization/model/home_background_data.h"
+#import "ios/chrome/browser/home_customization/model/user_uploaded_image_manager.h"
+#import "ios/chrome/browser/home_customization/ui/home_customization_framing_coordinates.h"
+#import "ios/chrome/browser/home_customization/utils/home_customization_constants.h"
 #import "ios/chrome/browser/metrics/model/new_tab_page_uma.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_state.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
@@ -113,6 +123,38 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
   base::UmaHistogramEnumeration(kNTPLensButtonNewBadgeShownHistogram, result);
 }
 
+// Key for Image Fetcher UMA metrics.
+constexpr char kImageFetcherUmaClient[] = "NtpBackground";
+
+// NetworkTrafficAnnotationTag for fetching ntp background image from Google
+// server.
+const net::NetworkTrafficAnnotationTag kTrafficAnnotation =
+    net::DefineNetworkTrafficAnnotation("ntp_background_custom_image",
+                                        R"(
+        semantics {
+        sender: "NtpBackground"
+        description:
+            "Sends a request to a Google server to load the ntp's custom "
+            "background."
+        trigger:
+            "A request will be sent when the user opens a new NTP and has a "
+            "custom background."
+        data: "Only image url, no user data"
+        destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+        cookies_allowed: NO
+        setting:
+            "This feature cannot be disabled by settings. However, the "
+            "request will only be made if the user has a custom NTP background."
+        chrome_policy: {
+          NTPCustomBackgroundEnabled {
+            NTPCustomBackgroundEnabled: false
+          }
+        }
+        }
+        )");
+
 }  // namespace
 
 @interface NewTabPageMediator () <BrowserViewVisibilityObserving,
@@ -144,22 +186,22 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
   std::unique_ptr<signin::IdentityManagerObserverBridge>
       _identityObserverBridge;
   // Observes changes of the browser view visibility state.
-  raw_ptr<BrowserViewVisibilityNotifierBrowserAgent>
+  raw_ptr<BrowserViewVisibilityNotifierBrowserAgent, DanglingUntriaged>
       _browserViewVisibilityNotifierBrowserAgent;
   // Observes changes of the feed visibility state.
-  raw_ptr<DiscoverFeedVisibilityBrowserAgent>
+  raw_ptr<DiscoverFeedVisibilityBrowserAgent, DanglingUntriaged>
       _discoverFeedVisibilityBrowserAgent;
   std::unique_ptr<BrowserViewVisibilityObserverBridge>
       _browserViewVisibilityObserverBridge;
   // Used to load URLs.
-  raw_ptr<UrlLoadingBrowserAgent> _URLLoader;
+  raw_ptr<UrlLoadingBrowserAgent, DanglingUntriaged> _URLLoader;
   raw_ptr<PrefService> _prefService;
   // Pref observer to track changes to prefs.
   std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
   // Registrar for pref changes notifications.
   std::unique_ptr<PrefChangeRegistrar> _prefChangeRegistrar;
   // The current default search engine.
-  raw_ptr<const TemplateURL> _defaultSearchEngine;
+  raw_ptr<const TemplateURL, DanglingUntriaged> _defaultSearchEngine;
   // Sync Service.
   raw_ptr<syncer::SyncService> _syncService;
   // Used to check feed configuration based on the country.
@@ -172,13 +214,17 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
       _backgroundCustomizationServiceObserverBridge;
   // Used to fetch and cache images for the background.
   raw_ptr<image_fetcher::ImageFetcherService> _imageFetcherService;
+  raw_ptr<UserUploadedImageManager, DanglingUntriaged>
+      _userUploadedImageManager;
   // Observer to keep track of the syncing status.
   std::unique_ptr<SyncObserverBridge> _syncObserver;
   raw_ptr<signin::IdentityManager> _identityManager;
   id<SystemIdentity> _signedInIdentity;
   std::unique_ptr<PlaceholderServiceObserverBridge> _placeholderServiceObserver;
   // Feature engagement tracker for handling "new" badge IPH.
-  raw_ptr<feature_engagement::Tracker> _tracker;
+  raw_ptr<feature_engagement::Tracker, DanglingUntriaged> _tracker;
+  // Tracks whether the NTP was ever in landscape.
+  BOOL _wasNTPInLandscape;
 }
 
 // Synthesized from NewTabPageMutator.
@@ -203,6 +249,8 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
             (HomeBackgroundCustomizationService*)backgroundCustomizationService
                    imageFetcherService:
                        (image_fetcher::ImageFetcherService*)imageFetcherService
+              userUploadedImageManager:
+                  (UserUploadedImageManager*)userUploadedImageManager
          browserViewVisibilityNotifier:
              (BrowserViewVisibilityNotifierBrowserAgent*)
                  browserViewVisibilityNotifierBrowserAgent
@@ -240,6 +288,7 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
     _regionalCapabilitiesService = regionalCapabilitiesService;
     _backgroundCustomizationService = backgroundCustomizationService;
     _imageFetcherService = imageFetcherService;
+    _userUploadedImageManager = userUploadedImageManager;
     _signedInIdentity =
         _authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
     _tracker = tracker;
@@ -249,6 +298,10 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
 }
 
 #pragma mark - NewTabPageMutator
+
+- (void)notifyNtpDisplayedInLandscape {
+  _wasNTPInLandscape = YES;
+}
 
 - (void)checkNewBadgeEligibility {
   // Notify the badge holdback period has been satisfied if this is not the
@@ -350,6 +403,7 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
       base::FeatureList::IsEnabled(omnibox::kOmniboxMobileParityUpdateV2)) {
     self.placeholderService = nullptr;
   }
+  base::UmaHistogramBoolean("IOS.NTP.LandscapeMode", _wasNTPInLandscape);
 }
 
 - (void)saveNTPStateForWebState:(web::WebState*)webState {
@@ -396,57 +450,7 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
 }
 
 - (void)updateBackground {
-  std::optional<sync_pb::NtpCustomBackground> background =
-      _backgroundCustomizationService->GetCurrentCustomBackground();
-
-  std::optional<sync_pb::UserColorTheme> colorTheme =
-      _backgroundCustomizationService->GetCurrentColorTheme();
-
-  CustomUITraitAccessor* traitAccessor = [[CustomUITraitAccessor alloc]
-      initWithMutableTraits:self.consumer.traitOverrides];
-
-  if (colorTheme && colorTheme->color()) {
-    // Sets the New Tab Page trait to a color palette generated from the current
-    // theme.
-    NewTabPageColorPalette* colorPalette = CreateColorPaletteFromSeedColor(
-        skia::UIColorFromSkColor(colorTheme->color()),
-        ProtoEnumToSchemeVariant(colorTheme->browser_color_variant()));
-
-    [traitAccessor setObjectForNewTabPageTrait:colorPalette];
-    [self.consumer setBackgroundImage:nil];
-    [self.headerConsumer updateLogoColor:colorPalette.tintColor];
-    [traitAccessor setBoolForNewTabPageImageBackgroundTrait:NO];
-    return;
-  }
-
-  // Clears the color palette associated with the New Tab Page trait,
-  // reverting to the default colors defined by the trait.
-  [traitAccessor setObjectForNewTabPageTrait:[NewTabPageTrait defaultValue]];
-
-  [traitAccessor
-      setBoolForNewTabPageImageBackgroundTrait:background.has_value()];
-
-  if (!background) {
-    [self.consumer setBackgroundImage:nil];
-    [self.headerConsumer updateLogoColor:nil];
-    return;
-  }
-
-  GURL imageURL = GURL(background->url());
-
-  image_fetcher::ImageFetcher* imageFetcher =
-      _imageFetcherService->GetImageFetcher(
-          image_fetcher::ImageFetcherConfig::kDiskCacheOnly);
-
-  __weak __typeof(self) weakSelf = self;
-  imageFetcher->FetchImage(
-      imageURL,
-      base::BindOnce(^(const gfx::Image& image,
-                       const image_fetcher::RequestMetadata& metadata) {
-        [weakSelf handleBackgroundImageFetch:image];
-      }),
-      // TODO (crbug.com/417234848): Add annotation.
-      image_fetcher::ImageFetcherParams(NO_TRAFFIC_ANNOTATION_YET, "Test"));
+  [self updateBackgroundForInitialLoad:YES];
 }
 
 #pragma mark - BrowserViewVisibilityObserving
@@ -551,7 +555,7 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
 #pragma mark - HomeBackgroundCustomizationServiceObserving
 
 - (void)onBackgroundChanged {
-  [self updateBackground];
+  [self updateBackgroundForInitialLoad:NO];
 }
 
 #pragma mark - Private
@@ -626,8 +630,160 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
 // Helper method to handle the image response after fetching the background
 // image for the new tab page.
 - (void)handleBackgroundImageFetch:(const gfx::Image&)image {
-  [self.consumer setBackgroundImage:image.ToUIImage()];
-  [self.headerConsumer updateLogoColor:UIColor.whiteColor];
+  [self.consumer setBackgroundImage:image.ToUIImage() framingCoordinates:nil];
+}
+
+// Helper method to handle displaying a user-uploaded background image
+// with the specified framing coordinates.
+- (void)handleUserUploadedImage:(UIImage*)image
+             framingCoordinates:
+                 (HomeCustomizationFramingCoordinates*)framingCoordinates {
+  if (!image) {
+    // Clear the corrupted data.
+    _backgroundCustomizationService->ClearCurrentUserUploadedBackground();
+    _backgroundCustomizationService->StoreCurrentTheme();
+    [self.consumer setBackgroundImage:nil framingCoordinates:nil];
+    return;
+  }
+
+  [self.consumer setBackgroundImage:image
+                 framingCoordinates:framingCoordinates];
+}
+
+// Updates the background based on the current customization settings.
+// `initialLoad` is YES if this is the first time the background is being set.
+- (void)updateBackgroundForInitialLoad:(BOOL)initialLoad {
+  CustomUITraitAccessor* traitAccessor = [[CustomUITraitAccessor alloc]
+      initWithMutableTraits:self.consumer.traitOverrides];
+
+  std::optional<HomeCustomBackground> customBackground =
+      _backgroundCustomizationService->GetCurrentCustomBackground();
+
+  if (customBackground) {
+    if (std::holds_alternative<sync_pb::NtpCustomBackground>(
+            customBackground.value())) {
+      sync_pb::NtpCustomBackground background =
+          std::get<sync_pb::NtpCustomBackground>(customBackground.value());
+
+      GURL imageURL = GURL(background.url());
+      GURL thumbnailURL = AddOptionsToImageURL(
+          RemoveOptionsFromImageURL(imageURL.spec()).spec(),
+          GetThumbnailImageOptions());
+
+      image_fetcher::ImageFetcher* imageFetcher =
+          _imageFetcherService->GetImageFetcher(
+              image_fetcher::ImageFetcherConfig::kDiskCacheOnly);
+
+      __weak __typeof(self) weakSelf = self;
+
+      auto cancelable_thumbnail_callback =
+          std::make_shared<base::CancelableOnceCallback<void(
+              const gfx::Image&, const image_fetcher::RequestMetadata&)>>();
+
+      cancelable_thumbnail_callback->Reset(
+          base::BindOnce(^(const gfx::Image& image,
+                           const image_fetcher::RequestMetadata& metadata) {
+            if (!image.IsEmpty()) {
+              // Temporarily sets the thumbnail as the background until the
+              // high-resolution image is loaded.
+              [weakSelf handleBackgroundImageFetch:image];
+              return;
+            }
+          }));
+
+      // Retrieving the thumbnail URL should hit the cache, so it returns almost
+      // instantly.
+      imageFetcher->FetchImage(thumbnailURL,
+                               cancelable_thumbnail_callback->callback(),
+                               image_fetcher::ImageFetcherParams(
+                                   kTrafficAnnotation, kImageFetcherUmaClient));
+
+      imageFetcher->FetchImage(
+          imageURL,
+          base::BindOnce(^(const gfx::Image& image,
+                           const image_fetcher::RequestMetadata& metadata) {
+            // Cancel the thumbnail URL fetch if the high-resolution fetch
+            // finished first.
+            if (cancelable_thumbnail_callback) {
+              cancelable_thumbnail_callback->Cancel();
+            }
+            if (!image.IsEmpty()) {
+              [weakSelf handleBackgroundImageFetch:image];
+              [traitAccessor setBoolForNewTabPageImageBackgroundTrait:YES];
+              [traitAccessor
+                  setObjectForNewTabPageTrait:[NewTabPageTrait defaultValue]];
+            } else {
+              base::UmaHistogramSparse(
+                  "IOS.HomeCustomization.Background.Ntp.ImageDownloadErrorCode",
+                  metadata.http_response_code);
+            }
+          }),
+          image_fetcher::ImageFetcherParams(kTrafficAnnotation,
+                                            kImageFetcherUmaClient));
+      if (initialLoad) {
+        base::UmaHistogramEnumeration(
+            "IOS.HomeCustomization.Background.Ntp.Loaded",
+            HomeCustomizationBackgroundStyle::kPreset);
+      }
+    } else {
+      HomeUserUploadedBackground userBackground =
+          std::get<HomeUserUploadedBackground>(customBackground.value());
+      HomeCustomizationFramingCoordinates* framingCoordinates =
+          HomeCustomizationFramingCoordinatesFromFramingCoordinates(
+              userBackground.framing_coordinates);
+
+      __weak __typeof(self) weakSelf = self;
+      _userUploadedImageManager->LoadUserUploadedImage(
+          base::FilePath(userBackground.image_path),
+          base::BindOnce(^(UIImage* image, UserUploadedImageError error) {
+            [weakSelf handleUserUploadedImage:image
+                           framingCoordinates:framingCoordinates];
+            [traitAccessor setBoolForNewTabPageImageBackgroundTrait:YES];
+            [traitAccessor
+                setObjectForNewTabPageTrait:[NewTabPageTrait defaultValue]];
+            if (!image) {
+              base::UmaHistogramEnumeration("IOS.HomeCustomization.Background."
+                                            "Ntp.ImageUserUploadedFetchError",
+                                            error);
+            }
+          }));
+      if (initialLoad) {
+        base::UmaHistogramEnumeration(
+            "IOS.HomeCustomization.Background.Ntp.Loaded",
+            HomeCustomizationBackgroundStyle::kUserUploaded);
+      }
+    }
+    return;
+  } else {
+    [self.consumer setBackgroundImage:nil framingCoordinates:nil];
+  }
+
+  std::optional<sync_pb::UserColorTheme> colorTheme =
+      _backgroundCustomizationService->GetCurrentColorTheme();
+
+  if (colorTheme && colorTheme->color()) {
+    // Sets the New Tab Page trait to a color palette generated from the current
+    // theme.
+    NewTabPageColorPalette* colorPalette = CreateColorPaletteFromSeedColor(
+        skia::UIColorFromSkColor(colorTheme->color()),
+        ProtoEnumToSchemeVariant(colorTheme->browser_color_variant()));
+
+    [traitAccessor setObjectForNewTabPageTrait:colorPalette];
+    [traitAccessor setBoolForNewTabPageImageBackgroundTrait:NO];
+    if (initialLoad) {
+      base::UmaHistogramEnumeration(
+          "IOS.HomeCustomization.Background.Ntp.Loaded",
+          HomeCustomizationBackgroundStyle::kColor);
+    }
+    return;
+  }
+
+  // Clears the color palette associated with the New Tab Page trait,
+  // reverting to the default colors defined by the trait.
+  [traitAccessor setObjectForNewTabPageTrait:[NewTabPageTrait defaultValue]];
+  [traitAccessor setBoolForNewTabPageImageBackgroundTrait:NO];
+  base::UmaHistogramEnumeration("IOS.HomeCustomization.Background.Ntp.Loaded",
+                                HomeCustomizationBackgroundStyle::kDefault);
 }
 
 @end

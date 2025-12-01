@@ -1,18 +1,12 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {assert} from 'chai';
 import type * as puppeteer from 'puppeteer-core';
 
 import type {DevToolsPage} from '../../e2e_non_hosted/shared/frontend-helper.js';
 import type {InspectedPage} from '../../e2e_non_hosted/shared/target-helper.js';
-import {
-  $,
-  goToResource,
-  setCheckBox,
-  waitFor,
-  waitForFunction,
-} from '../../shared/helper.js';
 import {getBrowserAndPagesWrappers} from '../../shared/non_hosted_wrappers.js';
 
 import {veImpression} from './visual-logging-helpers.js';
@@ -37,14 +31,14 @@ export async function openNetworkTab(devToolsPage: DevToolsPage = getBrowserAndP
 export async function navigateToNetworkTab(
     testName: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage,
     inspectedPage: InspectedPage = getBrowserAndPagesWrappers().inspectedPage) {
-  await goToResource(`network/${testName}`, {inspectedPage});
+  await inspectedPage.goToResource(`network/${testName}`);
   await openNetworkTab(devToolsPage);
 }
 
 /**
  * Wait until a certain number of requests are shown in the request list.
- * @param numberOfRequests - The expected number of requests to wait for.
- * @param selector - Optional. The selector to use to get the list of requests.
+ * @param numberOfRequests The expected number of requests to wait for.
+ * @param selector Optional. The selector to use to get the list of requests.
  */
 export async function waitForSomeRequestsToAppear(
     numberOfRequests: number, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
@@ -61,12 +55,12 @@ export async function getAllRequestNames(devToolsPage: DevToolsPage = getBrowser
           r => [...r.childNodes].find(({nodeType}) => nodeType === Node.TEXT_NODE)?.textContent ?? '')));
 }
 
-export async function getNumberOfRequests() {
-  return (await getAllRequestNames()).length;
+export async function getNumberOfRequests(devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  return (await getAllRequestNames(devToolsPage)).length;
 }
 
-export async function getSelectedRequestName() {
-  const request = await $(REQUEST_LIST_SELECTOR + ' tr.selected .name-column');
+export async function getSelectedRequestName(devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const request = await devToolsPage.$(REQUEST_LIST_SELECTOR + ' tr.selected .name-column');
   if (!request) {
     return null;
   }
@@ -103,9 +97,10 @@ export async function selectRequestByName(
   }
 }
 
-export async function waitForSelectedRequestChange(initialRequestName: string|null) {
-  await waitForFunction(async () => {
-    const name = await getSelectedRequestName();
+export async function waitForSelectedRequestChange(
+    initialRequestName: string|null, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await devToolsPage.waitForFunction(async () => {
+    const name = await getSelectedRequestName(devToolsPage);
     return name !== initialRequestName;
   });
 }
@@ -120,17 +115,17 @@ export async function setCacheDisabled(
   await devToolsPage.setCheckBox('[title^="Disable cache"]', disabled);
 }
 
-export async function setInvert(invert: boolean) {
-  await setCheckBox('[title="Invert"]', invert);
+export async function setInvert(invert: boolean, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await devToolsPage.setCheckBox('[title="Invert"]', invert);
 }
 
-export async function setTimeWindow(): Promise<void> {
-  const overviewGridCursorArea = await waitFor('.overview-grid-cursor-area');
+export async function setTimeWindow(devToolsPage = getBrowserAndPagesWrappers().devToolsPage): Promise<void> {
+  const overviewGridCursorArea = await devToolsPage.waitFor('.overview-grid-cursor-area');
   await overviewGridCursorArea.click({offset: {x: 0, y: 10}});
 }
 
-export async function clearTimeWindow(): Promise<void> {
-  const overviewGridCursorArea = await waitFor('.overview-grid-cursor-area');
+export async function clearTimeWindow(devToolsPage = getBrowserAndPagesWrappers().devToolsPage): Promise<void> {
+  const overviewGridCursorArea = await devToolsPage.waitFor('.overview-grid-cursor-area');
   await overviewGridCursorArea.click({count: 2});
 }
 
@@ -160,15 +155,20 @@ export async function clearTextFilter(devToolsPage: DevToolsPage = getBrowserAnd
   }
 }
 
-export async function getTextFromHeadersRow(row: puppeteer.ElementHandle<Element>) {
-  const headerNameElement = await waitFor('.header-name', row);
+export async function getTextFromHeadersRow(
+    row: puppeteer.ElementHandle<Element>, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const headerNameElement = await row.waitForSelector('.header-name');
+  assert.isOk(headerNameElement);
   const headerNameText = await headerNameElement.evaluate(el => el.textContent || '');
 
-  const headerValueElement = await waitFor('.header-value', row);
+  const headerValueElement = await row.waitForSelector('.header-value');
+  assert.isOk(headerValueElement);
   let headerValueText = (await headerValueElement.evaluate(el => el.textContent || '')).trim();
   if (headerValueText === '') {
-    const headerValueEditableSpanComponent = await waitFor('.header-value devtools-editable-span', row);
-    const editableSpan = await waitFor('.editable', headerValueEditableSpanComponent);
+    const headerValueEditableSpanComponent = await devToolsPage.waitFor('.header-value devtools-editable-span', row);
+    assert.isOk(headerValueEditableSpanComponent);
+    const editableSpan = await devToolsPage.waitFor('.editable', headerValueEditableSpanComponent);
+    assert.isOk(editableSpan);
     headerValueText = (await editableSpan.evaluate(el => el.textContent || '')).trim();
   }
 
@@ -243,4 +243,13 @@ export function veImpressionForNetworkPanel(options?: {newFilterBar?: boolean}) 
     veImpression('TableHeader', 'size'),
     veImpression('TableHeader', 'time'),
   ]);
+}
+
+export async function clickInfobarButton(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const infoBar = await devToolsPage.waitForAria('Select a folder to store override files in');
+  // Allow time for infobar to animate in before clicking the button
+  await devToolsPage.timeout(550);
+  await devToolsPage.click('.infobar-main-row .infobar-button', {
+    root: infoBar,
+  });
 }

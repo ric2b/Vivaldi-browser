@@ -35,8 +35,20 @@ class SessionTest : public ::testing::Test, public WithTaskEnvironment {
 class SessionTestWithOriginTrialFeedback : public SessionTest {
  protected:
   SessionTestWithOriginTrialFeedback() {
-    feature_list_.InitAndEnableFeature(
-        features::kDeviceBoundSessionsOriginTrialFeedback);
+    feature_list_.InitAndEnableFeatureWithParameters(
+        features::kDeviceBoundSessions,
+        {{features::kDeviceBoundSessionsOriginTrialFeedback.name, "true"}});
+  }
+
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class SessionTestWithoutOriginTrialFeedback : public SessionTest {
+ protected:
+  SessionTestWithoutOriginTrialFeedback() {
+    feature_list_.InitAndEnableFeatureWithParameters(
+        features::kDeviceBoundSessions,
+        {{features::kDeviceBoundSessionsOriginTrialFeedback.name, "false"}});
   }
 
   base::test::ScopedFeatureList feature_list_;
@@ -114,7 +126,7 @@ TEST_F(SessionTest, RelativeServiceRefreshUrlEscaped) {
 
 TEST_F(SessionTest, InvalidServiceRefreshUrl) {
   auto params = CreateValidParams();
-  params.refresh_url = "";
+  params.refresh_url = "http://?not-a-valid=url";
   auto session_or_error = Session::CreateIfValid(params);
   ASSERT_FALSE(session_or_error.has_value());
   EXPECT_EQ(session_or_error.error().type,
@@ -128,6 +140,44 @@ TEST_F(SessionTest, InvalidScopeOrigin) {
   ASSERT_FALSE(session_or_error.has_value());
   EXPECT_EQ(session_or_error.error().type,
             SessionError::ErrorType::kInvalidScopeOrigin);
+}
+
+TEST_F(SessionTestWithOriginTrialFeedback, InvalidScopeOriginWithPath) {
+  auto params = CreateValidParams();
+  params.scope.origin = "https://example.test/path";
+  auto session_or_error = Session::CreateIfValid(params);
+  ASSERT_FALSE(session_or_error.has_value());
+  EXPECT_EQ(session_or_error.error().type,
+            SessionError::ErrorType::kInvalidScopeOrigin);
+}
+
+// This test should be deleted once kDeviceBoundSessionsOriginTrialFeedback is
+// enabled by default.
+TEST_F(SessionTestWithoutOriginTrialFeedback, ValidScopeOriginWithPath) {
+  auto params = CreateValidParams();
+  params.scope.origin = "https://example.test/path";
+  auto session_or_error = Session::CreateIfValid(params);
+  EXPECT_TRUE(session_or_error.has_value());
+}
+
+TEST_F(SessionTestWithOriginTrialFeedback,
+       InvalidScopeOriginWithTrailingSlash) {
+  auto params = CreateValidParams();
+  params.scope.origin = "https://example.test/";
+  auto session_or_error = Session::CreateIfValid(params);
+  ASSERT_FALSE(session_or_error.has_value());
+  EXPECT_EQ(session_or_error.error().type,
+            SessionError::ErrorType::kInvalidScopeOrigin);
+}
+
+// This test should be deleted once kDeviceBoundSessionsOriginTrialFeedback is
+// enabled by default.
+TEST_F(SessionTestWithoutOriginTrialFeedback,
+       ValidScopeOriginWithTrailingSlash) {
+  auto params = CreateValidParams();
+  params.scope.origin = "https://example.test/";
+  auto session_or_error = Session::CreateIfValid(params);
+  EXPECT_TRUE(session_or_error.has_value());
 }
 
 TEST_F(SessionTest, ScopeOriginSameSiteMismatch) {
@@ -348,6 +398,9 @@ TEST_F(SessionTest, NotDeferredAsExcluded) {
   std::unique_ptr<URLRequest> request =
       context_->CreateRequest(kTestUrl, IDLE, &delegate, kDummyAnnotation);
   request->set_site_for_cookies(SiteForCookies::FromUrl(kTestUrl));
+  // The SessionService typically sets this once it starts looking for a
+  // session on the same site as `request`.
+  request->set_device_bound_session_usage(SessionUsage::kNoUsage);
 
   bool is_deferred =
       session->ShouldDeferRequest(request.get(), FirstPartySetMetadata());
@@ -367,6 +420,9 @@ TEST_F(SessionTest, NotDeferredSubdomain) {
   std::unique_ptr<URLRequest> request =
       context_->CreateRequest(url_subdomain, IDLE, &delegate, kDummyAnnotation);
   request->set_site_for_cookies(SiteForCookies::FromUrl(url_subdomain));
+  // The SessionService typically sets this once it starts looking for a
+  // session on the same site as `request`.
+  request->set_device_bound_session_usage(SessionUsage::kNoUsage);
 
   bool is_deferred =
       session->ShouldDeferRequest(request.get(), FirstPartySetMetadata());
@@ -441,6 +497,9 @@ TEST_F(SessionTest, NotDeferredInsecure) {
   std::unique_ptr<URLRequest> request = context_->CreateRequest(
       test_insecure_url, IDLE, &delegate, kDummyAnnotation);
   request->set_site_for_cookies(SiteForCookies::FromUrl(kTestUrl));
+  // The SessionService typically sets this once it starts looking for a
+  // session on the same site as `request`.
+  request->set_device_bound_session_usage(SessionUsage::kNoUsage);
 
   bool is_deferred =
       session->ShouldDeferRequest(request.get(), FirstPartySetMetadata());
@@ -501,6 +560,9 @@ TEST_F(SessionTest, NotDeferredNarrowerScopeOrigin) {
   std::unique_ptr<URLRequest> request =
       context_->CreateRequest(kTestUrl, IDLE, &delegate, kDummyAnnotation);
   request->set_site_for_cookies(SiteForCookies::FromUrl(kTestUrl));
+  // The SessionService typically sets this once it starts looking for a
+  // session on the same site as `request`.
+  request->set_device_bound_session_usage(SessionUsage::kNoUsage);
 
   bool is_deferred =
       session->ShouldDeferRequest(request.get(), FirstPartySetMetadata());
@@ -527,7 +589,8 @@ TEST_F(SessionTest, DeferredMissingScopeOrigin) {
   EXPECT_EQ(request->device_bound_session_usage(), SessionUsage::kDeferred);
 }
 
-TEST_F(SessionTest, DeferredAllowedRefreshInitiators) {
+TEST_F(SessionTestWithoutOriginTrialFeedback,
+       DeferredAllowedRefreshInitiators) {
   auto params = CreateValidParams();
   params.allowed_refresh_initiators = {"*.not-example.test"};
   // We need a third-party cookie to be included on requests from other
@@ -816,7 +879,7 @@ TEST_F(SessionTest, NetLogNoRefresh) {
             "refresh_not_required");
 }
 
-TEST_F(SessionTest, NetLogWrongInitiator) {
+TEST_F(SessionTestWithoutOriginTrialFeedback, NetLogWrongInitiator) {
   auto params = CreateValidParams();
   params.allowed_refresh_initiators = {};
   // We need a third-party cookie to be included on requests from other

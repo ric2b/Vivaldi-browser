@@ -202,6 +202,10 @@ class Resolver {
     /// the identifier is not templated.
     const core::type::Type* Array(const ast::Identifier* ident);
 
+    /// @returns a resource_binding, if the `chromium_experimental_dynamic_binding` extension is
+    /// enabled, otherwise nullptr
+    const core::type::ResourceBinding* ResourceBinding(const ast::Identifier* ident);
+
     /// @returns a binding_array resolved from the templated identifier @p ident.
     const core::type::BindingArray* BindingArray(const ast::Identifier* ident);
 
@@ -453,14 +457,6 @@ class Resolver {
     /// @returns true on success, false on failure
     bool InvariantAttribute(const ast::InvariantAttribute*);
 
-    /// Resolves the `@stride` attribute @p attr
-    /// @returns true on success, false on failure
-    bool StrideAttribute(const ast::StrideAttribute*);
-
-    /// Resolves the internal attribute @p attr
-    /// @returns true on success, false on failure
-    bool InternalAttribute(const ast::InternalAttribute* attr);
-
     /// @param control the diagnostic control
     /// @returns true on success, false on failure
     bool DiagnosticControl(const ast::DiagnosticControl& control);
@@ -482,15 +478,6 @@ class Resolver {
     /// @returns the number of elements in the array.
     const core::type::ArrayCount* ArrayCount(const ast::Expression* count_expr);
 
-    /// Resolves and validates the attributes on an array.
-    /// @param attributes the attributes on the array type.
-    /// @param el_ty the element type of the array.
-    /// @param explicit_stride assigned the specified stride of the array in bytes.
-    /// @returns true on success, false on failure
-    bool ArrayAttributes(VectorRef<const ast::Attribute*> attributes,
-                         const core::type::Type* el_ty,
-                         uint32_t& explicit_stride);
-
     /// Builds and returns the semantic information for an array.
     /// @returns the semantic Array information, or nullptr if an error is raised.
     /// @param array_source the source of the array
@@ -500,13 +487,11 @@ class Resolver {
     ///        locally-declared element AST node.
     /// @param el_ty the Array element type
     /// @param el_count the number of elements in the array.
-    /// @param explicit_stride the explicit byte stride of the array. Zero means implicit stride.
     sem::Array* Array(const Source& array_source,
                       const Source& el_source,
                       const Source& count_source,
                       const core::type::Type* el_ty,
-                      const core::type::ArrayCount* el_count,
-                      uint32_t explicit_stride);
+                      const core::type::ArrayCount* el_count);
 
     /// Builds and returns the semantic information for the alias `alias`.
     /// This method does not mark the ast::Alias node, nor attach the generated

@@ -1260,6 +1260,186 @@ TEST_F(HloEvaluatorTest, RaggedDotNonContractingWithBatchDimensions) {
   EXPECT_TRUE(LiteralTestUtil::Equal(expected, result));
 }
 
+HloInstruction* BF16Array2D(HloComputation::Builder& b, int rows, int cols,
+                            float value) {
+  auto array = std::make_unique<Array2D<float>>(rows, cols);
+  array->FillUnique(value);
+  auto literal = LiteralUtil::CreateR2FromArray2D<float>(*array);
+  auto bf16_literal = LiteralUtil::ConvertF32ToBF16(literal);
+  return b.AddInstruction(
+      HloInstruction::CreateConstant(std::move(bf16_literal)));
+}
+
+HloInstruction* BF16Array3D(HloComputation::Builder& b, int batch, int rows,
+                            int cols, float value) {
+  auto array = std::make_unique<Array3D<float>>(batch, rows, cols);
+  array->FillUnique(value);
+  auto literal = LiteralUtil::CreateR3FromArray3D<float>(*array);
+  auto bf16_literal = LiteralUtil::ConvertF32ToBF16(literal);
+  return b.AddInstruction(
+      HloInstruction::CreateConstant(std::move(bf16_literal)));
+}
+
+TEST_F(HloEvaluatorTest, ScaledDot) {
+  HloComputation::Builder b(TestName());
+
+  auto lhs_instr = BF16Array2D(b, 1, 4, 1.0f);
+  auto lhs_scale_instr = BF16Array2D(b, 1, 2, 2.0f);
+  auto rhs_instr = BF16Array2D(b, 4, 1, 1.0f);
+  auto rhs_scale_instr = BF16Array2D(b, 2, 1, 3.0f);
+
+  Shape shape = ShapeUtil::MakeShape(BF16, {1, 1});
+  DotDimensionNumbers dot_dnums;
+  dot_dnums.add_lhs_contracting_dimensions(1);
+  dot_dnums.add_rhs_contracting_dimensions(0);
+  b.AddInstruction(HloInstruction::CreateScaledDot(
+      shape, lhs_instr, lhs_scale_instr, rhs_instr, rhs_scale_instr, dot_dnums,
+      DefaultPrecisionConfig(4)));
+  m_->AddEntryComputation(b.Build());
+
+  TF_ASSERT_OK_AND_ASSIGN(Literal result, Evaluate());
+
+  // lhs[1,4] = {{1, 2, 3, 4}}
+  // lhs_scale[1,2] = {{2, 3}}
+  // rhs[4,1] = {
+  //   {1},
+  //   {2},
+  //   {3},
+  //   {4}
+  // }
+  // rhs_scale[2,1] = {
+  //   {3},
+  //   {4}
+  // }
+
+  // lhs * lhs_scale * rhs * rhs_scale
+  // 1 * 2 * 1 * 3 = 6
+  // 2 * 2 * 2 * 3 = 24
+  // 3 * 3 * 3 * 4 = 108
+  // 4 * 3 * 4 * 4 = 192
+  //           sum = 330
+  auto expected_array = Array2D<float>({{330.f}});
+  auto expected = LiteralUtil::CreateR2FromArray2D<float>(expected_array);
+  auto expected_bf16 = LiteralUtil::ConvertF32ToBF16(expected);
+  EXPECT_TRUE(LiteralTestUtil::Equal(expected_bf16, result));
+}
+
+TEST_F(HloEvaluatorTest, ScaledDotWithOneMissingScale) {
+  HloComputation::Builder b(TestName());
+
+  auto lhs_instr = BF16Array2D(b, 1, 4, 1.0f);
+  auto lhs_scale_instr = b.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0(BF16, 1.0f)));
+  auto rhs_instr = BF16Array2D(b, 4, 1, 1.0f);
+  auto rhs_scale_instr = BF16Array2D(b, 2, 1, 3.0f);
+
+  Shape shape = ShapeUtil::MakeShape(BF16, {1, 1});
+  DotDimensionNumbers dot_dnums;
+  dot_dnums.add_lhs_contracting_dimensions(1);
+  dot_dnums.add_rhs_contracting_dimensions(0);
+  b.AddInstruction(HloInstruction::CreateScaledDot(
+      shape, lhs_instr, lhs_scale_instr, rhs_instr, rhs_scale_instr, dot_dnums,
+      DefaultPrecisionConfig(4)));
+  m_->AddEntryComputation(b.Build());
+
+  TF_ASSERT_OK_AND_ASSIGN(Literal result, Evaluate());
+
+  // lhs[1,4] = {{1, 2, 3, 4}}
+  // lhs_scal = 1.0f
+  // rhs[4,1] = {
+  //   {1},
+  //   {2},
+  //   {3},
+  //   {4}
+  // }
+  // rhs_scale[2,1] = {
+  //   {3},
+  //   {4}
+  // }
+
+  // lhs * lhs_scale * rhs * rhs_scale
+  // 1 * 1 * 1 * 3 = 3
+  // 2 * 1 * 2 * 3 = 12
+  // 3 * 1 * 3 * 4 = 36
+  // 4 * 1 * 4 * 4 = 64
+  //           sum = 115
+  auto expected_array = Array2D<float>({{115.f}});
+  auto expected = LiteralUtil::CreateR2FromArray2D<float>(expected_array);
+  auto expected_bf16 = LiteralUtil::ConvertF32ToBF16(expected);
+  EXPECT_TRUE(LiteralTestUtil::Equal(expected_bf16, result));
+}
+
+TEST_F(HloEvaluatorTest, ScaledDotWithBatchDim) {
+  HloComputation::Builder b(TestName());
+
+  auto lhs_instr = BF16Array3D(b, 2, 1, 4, 1.0f);
+  auto lhs_scale_instr = b.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0(BF16, 1.0f)));
+  auto rhs_instr = BF16Array3D(b, 2, 4, 1, 1.0f);
+  auto rhs_scale_instr = BF16Array3D(b, 1, 2, 1, 3.0f);
+
+  Shape shape = ShapeUtil::MakeShape(BF16, {2, 1, 1});
+  DotDimensionNumbers dot_dnums;
+  dot_dnums.add_lhs_batch_dimensions(0);
+  dot_dnums.add_rhs_batch_dimensions(0);
+
+  dot_dnums.add_lhs_contracting_dimensions(2);
+  dot_dnums.add_rhs_contracting_dimensions(1);
+  b.AddInstruction(HloInstruction::CreateScaledDot(
+      shape, lhs_instr, lhs_scale_instr, rhs_instr, rhs_scale_instr, dot_dnums,
+      DefaultPrecisionConfig(4)));
+  m_->AddEntryComputation(b.Build());
+
+  TF_ASSERT_OK_AND_ASSIGN(Literal result, Evaluate());
+  // lhs[2,1,4] = {
+  //   {{ 1, 2, 3, 4 }},
+  //   {{ 5, 6, 7, 8 }}
+  // }
+
+  // rhs[2,4,1] = {
+  //   {
+  //     {1},
+  //     {5},
+  //     {9},
+  //     {13}
+  //   },
+  //   {
+  //     {5},
+  //     {5},
+  //     {13},
+  //     {13}
+  //   }
+  // }
+  // rhs_scale[2,2,1] = {
+  //   {
+  //     {3},
+  //     {5}
+  //   },
+  //   {
+  //     {3},
+  //     {5}
+  //   }
+  // }
+  // 1 * 1 * 1 * 3 = 3
+  // 2 * 1 * 5 * 3 = 30
+  // 3 * 1 * 9 * 5 = 135
+  // 4 * 1 * 13 * 5 = 260
+  // result_val: 428
+  //
+  // 5 * 1 * 5 * 3 = 75
+  // 6 * 1 * 5 * 3 = 90
+  // 7 * 1 * 13 * 5 = 455
+  // 8 * 1 * 13 * 5 = 520
+  // result_val: 1140
+
+  // The expectation does not match exact value the result due to the rounding
+  // to bf16.
+  auto expected_array = Array3D<float>({{{428.f}}, {{1136.f}}});
+  auto expected = LiteralUtil::CreateR3FromArray3D<float>(expected_array);
+  auto expected_bf16 = LiteralUtil::ConvertF32ToBF16(expected);
+  EXPECT_TRUE(LiteralTestUtil::Equal(expected_bf16, result));
+}
+
 TEST_P(HloEvaluatorBf16Test, DotRank2AndRank1) {
   HloComputation::Builder b(TestName());
 
@@ -6399,6 +6579,74 @@ TEST_F(PatternMatchParseWhileLoopTest, BooleanCond) {
   EXPECT_EQ(parsed_while_loop->static_while_loop->induction_var_init_value, 0);
   EXPECT_EQ(parsed_while_loop->static_while_loop->step_size, 1);
   EXPECT_EQ(parsed_while_loop->static_while_loop->loop_bound, 1);
+}
+
+TEST_F(PatternMatchParseWhileLoopTest, DynamicLoopDependentDynamicLoop) {
+  constexpr absl::string_view kHloModule = R"(
+    HloModule accumulated_all_reduce
+
+    %while_condition.1 {
+      %param = (s32[], s32[], f32[1024, 1024], f32[1024, 1024]) parameter(0)
+      %gte.0 = s32[] get-tuple-element(%param), index=0
+      %gte.1 = s32[] get-tuple-element(%param), index=1
+      ROOT result = pred[] compare(%gte.0, %gte.1), direction=LT
+    }
+
+    %while_body.1 {
+      %param = (s32[], s32[], f32[1024, 1024], f32[1024, 1024]) parameter(0)
+      %gte.0 = s32[] get-tuple-element(%param), index=0
+      %gte.1 = s32[] get-tuple-element(%param), index=1
+      %gte.2 = f32[1024, 1024] get-tuple-element(%param), index=2
+      %gte.3 = f32[1024, 1024] get-tuple-element(%param), index=3
+      %accumulation = f32[1024, 1024] add(f32[1024, 1024] %gte.2, f32[1024, 1024] %gte.3)
+      %constant = s32[] constant(1)
+      %increment_iteration = s32[] add(s32[] %gte.0, s32[] %constant)
+      ROOT %loop_result = (s32[], s32[], f32[1024, 1024], f32[1024, 1024]) tuple(%increment_iteration, %gte.1, %gte.2, %accumulation)
+    }
+
+    %while_condition {
+      %param = (s32[], s32[], f32[1024, 1024], f32[1024, 1024]) parameter(0)
+      %gte.0 = s32[] get-tuple-element(%param), index=0
+      %gte.1 = s32[] get-tuple-element(%param), index=1
+      ROOT result = pred[] compare(%gte.0, %gte.1), direction=LT
+    }
+
+    %while_body {
+      %param = (s32[], s32[], f32[1024, 1024], f32[1024, 1024]) parameter(0)
+      %gte.0 = s32[] get-tuple-element(%param), index=0
+      %gte.1 = s32[] get-tuple-element(%param), index=1
+      %gte.2 = f32[1024, 1024] get-tuple-element(%param), index=2
+      %gte.3 = f32[1024, 1024] get-tuple-element(%param), index=3
+      %accumulation = f32[1024, 1024] add(f32[1024, 1024] %gte.2, f32[1024, 1024] %gte.3)
+      %constant = s32[] constant(1)
+      %increment_iteration = s32[] add(s32[] %gte.0, s32[] %constant)
+      ROOT %loop_result = (s32[], s32[], f32[1024, 1024], f32[1024, 1024]) tuple(%increment_iteration, %gte.1, %gte.2, %accumulation)
+    }
+
+    ENTRY main {
+      %param.1 = f32[1024, 1024] parameter(0)
+      %param.2 = s32[] parameter(1)
+      %constant.0 = s32[] constant(0)
+      %accumulation_buffer_init = f32[] constant(0)
+      %accumulation_buffer = f32[1024, 1024] broadcast(f32[] %accumulation_buffer_init), dimensions={}
+      %while_init = (s32[], s32[], f32[1024, 1024], f32[1024, 1024]) tuple(s32[] %constant.0, s32[] %param.2, f32[1024, 1024] %param.1, f32[1024, 1024] %accumulation_buffer)
+      %while = (s32[], s32[], f32[1024, 1024], f32[1024, 1024]) while(%while_init), condition=%while_condition, body=%while_body
+      %result = f32[1024, 1024] get-tuple-element((s32[], s32[], f32[1024, 1024], f32[1024, 1024]) %while), index=3
+      %new_loop_bound = s32[] get-tuple-element((s32[], s32[], f32[1024, 1024], f32[1024, 1024]) %while), index=1
+      %while_init.1 = (s32[], s32[], f32[1024, 1024], f32[1024, 1024]) tuple(s32[] %constant.0, s32[] %new_loop_bound, f32[1024, 1024] %accumulation_buffer, f32[1024, 1024] %result)
+      %while.1 = (s32[], s32[], f32[1024, 1024], f32[1024, 1024]) while(%while_init.1), condition=%while_condition.1, body=%while_body.1
+      ROOT %result.1 = f32[1024, 1024] get-tuple-element((s32[], s32[], f32[1024, 1024], f32[1024, 1024]) %while.1), index=3
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> hlo_module,
+                          ParseAndReturnVerifiedModule(kHloModule));
+  auto* while_op =
+      hlo_module->entry_computation()->GetInstructionWithName("while.1");
+  EXPECT_NE(while_op, nullptr);
+  std::optional<ParsedWhileLoop> parsed_while_loop =
+      PatternMatchParseWhileLoop(while_op);
+  ASSERT_TRUE(parsed_while_loop.has_value());
+  EXPECT_TRUE(parsed_while_loop->is_dynamic());
 }
 
 TEST_F(PatternMatchParseWhileLoopTest, NestedLoop) {

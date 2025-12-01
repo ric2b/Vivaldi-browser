@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #![deny(unsafe_op_in_unsafe_fn)]
-#![cfg_attr(feature = "disable_cfi", feature(no_sanitize))]
+#![cfg_attr(feature = "disable_cfi", feature(sanitize))]
 
 #[macro_use]
 mod internal_utils;
@@ -49,6 +49,19 @@ impl std::hash::BuildHasher for NonRandomHasherState {
 
 pub type HashMap<K, V> = std::collections::HashMap<K, V, NonRandomHasherState>;
 pub type HashSet<K> = std::collections::HashSet<K, NonRandomHasherState>;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum HeaderFormat {
+    #[default]
+    Default,
+    // AVIF file with a "mif3" brand and a MinimizedImageBox to reduce the encoded file size.
+    // This is based on the w24144 "Low-overhead image file format" MPEG proposal for HEIF.
+    // WARNING: Experimental feature. Produces files that are incompatible with older decoders.
+    // If this flag is omitted or if MinimizedImageBox cannot be used at encoding, falls back to an
+    // AVIF file with an "avif" brand, a MetaBox and all its required boxes for maximum compatibility.
+    Mini,
+}
 
 /// cbindgen:enum-trailing-values=[Count]
 #[repr(C)]
@@ -529,4 +542,26 @@ impl RepetitionCount {
             _ => i32::MAX as u64,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SampleTransformRecipe {
+    None,
+    // Encode the 8 most significant bits of each input image sample losslessly
+    // into a base image. The remaining 8 least significant bits are encoded in
+    // a separate hidden image item. The two are combined at decoding into one
+    // image with the same bit depth as the original image. It is backward
+    // compatible in the sense that it is possible to decode only the base image
+    // (ignoring the hidden image item), leading to a valid image but with
+    // precision loss (16-bit samples truncated to the 8 most significant bits).
+    BitDepthExtension8b8b,
+}
+
+pub fn codec_versions() -> String {
+    let versions = &[
+        decoder::CodecChoice::versions(),
+        #[cfg(feature = "aom")]
+        codecs::aom::Aom::version(),
+    ];
+    versions.join(", ")
 }

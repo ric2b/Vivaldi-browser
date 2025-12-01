@@ -33,11 +33,6 @@ public class ThemeSettingsFragment extends ChromeBaseSettingsFragment
     static final String PREF_UI_THEME_PREF = "ui_theme_pref";
 
     public static final String KEY_THEME_SETTINGS_ENTRY = "theme_settings_entry";
-
-    // Vivaldi
-    public static final String KEY_DARK_MODE_FOR_WEBPAGES = "dark_mode_for_webpages";
-    public static final String PREF_WEBSITE_THEME_APPEARANCE = "website_theme_appearance";
-
     private final ObservableSupplierImpl<String> mPageTitle = new ObservableSupplierImpl<>();
 
     @Override

@@ -15,6 +15,10 @@
 #import "ios/web/public/web_state.h"
 #import "ios/web/public/web_state_observer_bridge.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 @interface LinkPreviewMediator () <CRWWebStateObserver>
 
 // The current web state associated with the preview.
@@ -65,6 +69,9 @@
   if (success && !self.restorationHasFinished) {
     self.restorationHasFinished = YES;
 
+    // Note: (prio@vivaldi.com) - Skip loading the URL twice since we load it
+    // in coordinator already when setting up preview web state.
+    if (!vivaldi::IsVivaldiRunning()) {
     // Load the preview page using the copied web state.
     web::NavigationManager::WebLoadParams loadParams(self.URL);
     loadParams.referrer = self.referrer;
@@ -73,6 +80,7 @@
     // triggering the preview page loads.
     _webState->SetKeepRenderProcessAlive(true);
     _webState->GetNavigationManager()->LoadURLWithParams(loadParams);
+    } // End Vivaldi
   }
   [self updateLoadingState];
 }

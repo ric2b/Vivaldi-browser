@@ -27,7 +27,6 @@
 #include "chrome/browser/ash/login/screens/account_selection_screen.h"
 #include "chrome/browser/ash/login/screens/add_child_screen.h"
 #include "chrome/browser/ash/login/screens/ai_intro_screen.h"
-#include "chrome/browser/ash/login/screens/assistant_optin_flow_screen.h"
 #include "chrome/browser/ash/login/screens/categories_selection_screen.h"
 #include "chrome/browser/ash/login/screens/choobe_screen.h"
 #include "chrome/browser/ash/login/screens/consolidated_consent_screen.h"
@@ -261,6 +260,9 @@ class WizardController : public OobeUI::Observer {
   // Show Cryptohome recovery screen.
   void ShowCryptohomeRecoveryScreen(std::unique_ptr<UserContext> user_context);
 
+  // Exits Fjord touch controller screen if it's showing.
+  bool ExitFjordTouchControllerScreen();
+
   // Set pref value for first run.
   void PrepareFirstRunPrefs();
 
@@ -321,7 +323,6 @@ class WizardController : public OobeUI::Observer {
   void ShowEncryptionMigrationScreen();
   void ShowManagementTransitionScreen();
   void ShowUpdateRequiredScreen();
-  void ShowAssistantOptInFlowScreen();
   void ShowMultiDeviceSetupScreen();
   void ShowGestureNavigationScreen();
   void ShowPinSetupScreenAsSecondaryFactor();
@@ -360,6 +361,7 @@ class WizardController : public OobeUI::Observer {
   void ShowAccountSelectionScreen();
   void ShowAppLaunchSplashScreen();
   void ShowFjordTouchControllerScreen();
+  void ShowFjordStationSetupScreen();
 
   // Shows images login screen.
   void ShowLoginScreen();
@@ -432,7 +434,7 @@ class WizardController : public OobeUI::Observer {
   void OnAppDownloadingScreenExit();
   void OnAiIntroScreenExit(AiIntroScreen::Result result);
   void OnGeminiIntroScreenExit(GeminiIntroScreen::Result result);
-  void OnAssistantOptInFlowScreenExit(AssistantOptInFlowScreen::Result result);
+
   void OnMultiDeviceSetupScreenExit(MultiDeviceSetupScreen::Result result);
   void OnGestureNavigationScreenExit(GestureNavigationScreen::Result result);
   void OnMarketingOptInScreenExit(MarketingOptInScreen::Result result);
@@ -477,6 +479,7 @@ class WizardController : public OobeUI::Observer {
       PersonalizedRecommendAppsScreen::Result result);
   void OnPerksDiscoveryScreenExit(PerksDiscoveryScreen::Result result);
   void OnAppLaunchSplashScreenExit();
+  void OnFjordStationSetupScreenExit();
 
   // Callback invoked once it has been determined whether the device is disabled
   // or not.

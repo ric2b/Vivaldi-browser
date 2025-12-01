@@ -44,8 +44,7 @@ DirectMatchServiceFactory::DirectMatchServiceFactory()
 DirectMatchServiceFactory::~DirectMatchServiceFactory() {}
 
 std::unique_ptr<KeyedService> DirectMatchServiceFactory::BuildServiceInstanceFor(
-  web::BrowserState* browser_state) const {
-  ProfileIOS* profile = ProfileIOS::FromBrowserState(browser_state);
+  ProfileIOS* profile) const {
   auto direct_match_service = std::make_unique<DirectMatchService>();
   auto URLLoaderFactory = GetApplicationContext()->GetSharedURLLoaderFactory();
   direct_match_service->Load(URLLoaderFactory, profile->GetPrefs());

@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/android/build_info.h"
+#include "base/android/android_info.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -21,6 +21,7 @@
 #include "components/autofill/android/touch_to_fill_keyboard_suppressor.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
+#include "components/autofill/core/browser/autofill_server_prediction.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/autocomplete_parsing_util.h"
 #include "components/autofill/core/common/autofill_constants.h"
@@ -52,7 +53,7 @@ using FieldInfo = ::autofill::AndroidAutofillProviderBridge::FieldInfo;
 using RequestPasswords = WebAuthnCredManDelegate::RequestPasswords;
 
 constexpr int kMinimumSdkVersionForPrefillRequests =
-    base::android::SdkVersion::SDK_VERSION_U;
+    base::android::android_info::SDK_VERSION_U;
 
 constexpr base::TimeDelta kKeyboardSuppressionTimeout = base::Seconds(1);
 
@@ -62,11 +63,11 @@ std::unique_ptr<PasswordForm> ParseToPasswordForm(
   // and parse the form.
   FormData form_data = form_structure.ToFormData();
   auto autofill_predictions =
-      base::MakeFlatMap<FieldGlobalId, AutofillType::ServerPrediction>(
+      base::MakeFlatMap<FieldGlobalId, AutofillServerPrediction>(
           form_structure, /*comp=*/{},
           /*proj=*/[](const std::unique_ptr<AutofillField>& field) {
             return std::make_pair(field->global_id(),
-                                  AutofillType::ServerPrediction(*field));
+                                  AutofillServerPrediction(*field));
           });
   password_manager::FormDataParser parser;
   // The driver id is irrelevant here because it would only be used by password
@@ -109,10 +110,7 @@ WebAuthnCredManDelegate* GetCredManDelegate(AutofillManager* manager) {
 bool AllowCredManOnField(const FormFieldData& field) {
   // TODO(crbug.com/380405846): Carefully clean up this check when the feature
   // is launched such that it doesn't accidentally get launched for WebView.
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillVirtualViewStructureAndroid)) {
-    return false;
-  }
+
   return field.parsed_autocomplete() && field.parsed_autocomplete()->webauthn;
 }
 
@@ -542,10 +540,9 @@ void AndroidAutofillProvider::MaybeFireFormFieldDidChange(
   bridge_->OnFormFieldDidChange(field_info);
 }
 
-void AndroidAutofillProvider::OnDidFillAutofillFormData(
-    AndroidAutofillManager* manager,
-    const FormData& form,
-    base::TimeTicks timestamp) {
+void AndroidAutofillProvider::OnDidAutofillForm(AndroidAutofillManager* manager,
+                                                const FormData& form,
+                                                base::TimeTicks timestamp) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (manager != manager_.get() || !IsIdOfLinkedForm(form.global_id())) {
     return;
@@ -553,7 +550,7 @@ void AndroidAutofillProvider::OnDidFillAutofillFormData(
   // TODO(crbug.com/40760916): Investigate passing the actually filled fields,
   // in case the passed fields to be filled are different from the fields that
   // were actually filled.
-  bridge_->OnDidFillAutofillFormData();
+  bridge_->OnDidAutofillForm();
 }
 
 void AndroidAutofillProvider::OnHidePopup(AndroidAutofillManager* manager) {
@@ -615,9 +612,7 @@ bool AndroidAutofillProvider::IntendsToShowBottomSheet(
 
 bool AndroidAutofillProvider::WasBottomSheetJustShown(
     AutofillManager& manager) {
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillVirtualViewStructureAndroid) &&
-      credman_sheet_status_ == CredManBottomSheetLifecycle::kIsShowing) {
+  if (credman_sheet_status_ == CredManBottomSheetLifecycle::kIsShowing) {
     return true;
   }
   // TODO(crbug.com/40284788) Remove the timer once a fix is landed on the
@@ -689,12 +684,6 @@ bool AndroidAutofillProvider::ShowCredManSheet(
 }
 
 void AndroidAutofillProvider::MaybeInitKeyboardSuppressor() {
-  // Return early if prefill requests are not supported.
-  if (!ArePrefillRequestsSupported() &&
-      !base::FeatureList::IsEnabled(
-          features::kAutofillVirtualViewStructureAndroid)) {
-    return;
-  }
   keyboard_suppressor_ = std::make_unique<TouchToFillKeyboardSuppressor>(
       ContentAutofillClient::FromWebContents(web_contents()),
       base::BindRepeating(&AndroidAutofillProvider::WasBottomSheetJustShown,
@@ -724,9 +713,7 @@ gfx::RectF AndroidAutofillProvider::ToClientAreaBound(
 }
 
 void AndroidAutofillProvider::Reset() {
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillVirtualViewStructureAndroid) &&
-      manager_) {
+  if (manager_) {
     if (WebAuthnCredManDelegate* delegate =
             GetCredManDelegate(manager_.get())) {
       delegate->SetRequestCompletionCallback(base::DoNothing());
@@ -763,7 +750,7 @@ SessionId AndroidAutofillProvider::CreateSessionId() {
 }
 
 bool AndroidAutofillProvider::ArePrefillRequestsSupported() const {
-  return base::android::BuildInfo::GetInstance()->sdk_int() >=
+  return base::android::android_info::sdk_int() >=
          kMinimumSdkVersionForPrefillRequests;
 }
 

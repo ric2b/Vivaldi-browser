@@ -13,12 +13,15 @@ import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
+import org.chromium.base.DeviceInfo;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.signin.services.ProfileDataCache;
+import org.chromium.chrome.browser.signin.services.SigninFlowTimestampsLogger;
+import org.chromium.chrome.browser.signin.services.SigninFlowTimestampsLogger.Event;
+import org.chromium.chrome.browser.signin.services.SigninFlowTimestampsLogger.FlowVariant;
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.signin.services.SigninMetricsUtils;
 import org.chromium.chrome.browser.signin.services.SigninPreferencesManager;
@@ -68,6 +71,7 @@ public class AccountPickerBottomSheetMediator
     private final boolean mIsWebSignin;
     private final @SigninAccessPoint int mSigninAccessPoint;
 
+    private @Nullable SigninFlowTimestampsLogger mSigninTimestampsLogger;
     private @Nullable CoreAccountInfo mSelectedAccount;
     private @Nullable CoreAccountInfo mDefaultAccount;
     private @Nullable CoreAccountInfo mAddedAccount;
@@ -161,15 +165,18 @@ public class AccountPickerBottomSheetMediator
         }
 
         final WindowAndroid.IntentCallback onAddAccountCompleted =
-                (int resultCode, Intent data) -> {
+                (int resultCode, @Nullable Intent data) -> {
                     @Nullable String addedAccountEmail =
-                            data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
+                            data == null
+                                    ? null
+                                    : data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
                     if (resultCode != Activity.RESULT_OK || addedAccountEmail == null) {
                         return;
                     }
                     onAccountAddedInternal(addedAccountEmail);
                 };
         mAccountManagerFacade.createAddAccountIntent(
+                null,
                 intent -> {
                     if (intent == null) {
                         // AccountManagerFacade couldn't create intent, use SigninUtils to open
@@ -241,6 +248,7 @@ public class AccountPickerBottomSheetMediator
     /** Implements {@link AccountPickerDelegate.SigninStateController controller}. */
     @Override
     public void showGenericError() {
+        assertNonNull(mSigninTimestampsLogger).recordTimestamp(Event.SIGNIN_ABORTED);
         // Switches the bottom sheet to the general error view that allows the user to try again.
         if (mAcceptedAccountManagement) {
             // Clear acceptance on failed signin, but do not clear |mAcceptedAccountManagement| so
@@ -254,12 +262,19 @@ public class AccountPickerBottomSheetMediator
     @Override
     public void showAuthError() {
         // Switches the bottom sheet to the auth error view that asks the user to reauth.
+        assertNonNull(mSigninTimestampsLogger).recordTimestamp(Event.SIGNIN_ABORTED);
         if (mAcceptedAccountManagement) {
             // Clear acceptance on failed signin.
             mAcceptedAccountManagement = false;
             mSigninManager.setUserAcceptedAccountManagement(false);
         }
         mModel.set(AccountPickerBottomSheetProperties.VIEW_STATE, ViewState.SIGNIN_AUTH_ERROR);
+    }
+
+    /** Implements {@link AccountPickerDelegate.ResultHandler}. */
+    @Override
+    public void onSigninComplete() {
+        assertNonNull(mSigninTimestampsLogger).recordTimestamp(Event.SIGNIN_COMPLETED);
     }
 
     PropertyModel getModel() {
@@ -396,6 +411,7 @@ public class AccountPickerBottomSheetMediator
             if (mAcceptedAccountManagement) {
                 // User already accepted account management and is re-trying login, so the
                 // management status check & confirmation sheet can be skipped.
+                startSigninTimestampLogging();
                 signInAfterCheckingManagement();
             } else {
                 launchDeviceLockIfNeededAndSignIn();
@@ -406,6 +422,7 @@ public class AccountPickerBottomSheetMediator
             updateCredentials();
         } else if (viewState == ViewState.CONFIRM_MANAGEMENT) {
             mAcceptedAccountManagement = true;
+            assertNonNull(mSigninTimestampsLogger).onManagementNoticeAccepted();
             SigninMetricsUtils.logAccountConsistencyPromoAction(
                     AccountConsistencyPromoAction.CONFIRM_MANAGEMENT_ACCEPTED, mSigninAccessPoint);
             signInAfterCheckingManagement();
@@ -413,7 +430,7 @@ public class AccountPickerBottomSheetMediator
     }
 
     private void launchDeviceLockIfNeededAndSignIn() {
-        if (BuildInfo.getInstance().isAutomotive) {
+        if (DeviceInfo.isAutomotive()) {
             mDeviceLockActivityLauncher.launchDeviceLockActivity(
                     mActivity,
                     CoreAccountInfo.getEmailFrom(mSelectedAccount),
@@ -439,10 +456,13 @@ public class AccountPickerBottomSheetMediator
             return;
         }
 
+        startSigninTimestampLogging();
         mModel.set(AccountPickerBottomSheetProperties.VIEW_STATE, ViewState.SIGNIN_IN_PROGRESS);
         mSigninManager.isAccountManaged(
                 mSelectedAccount,
                 (Boolean isAccountManaged) -> {
+                    assertNonNull(mSigninTimestampsLogger)
+                            .recordTimestamp(Event.MANAGEMENT_STATUS_LOADED);
                     if (isAccountManaged) {
                         SigninMetricsUtils.logAccountConsistencyPromoAction(
                                 AccountConsistencyPromoAction.CONFIRM_MANAGEMENT_SHOWN,
@@ -450,6 +470,7 @@ public class AccountPickerBottomSheetMediator
                         mModel.set(
                                 AccountPickerBottomSheetProperties.VIEW_STATE,
                                 ViewState.CONFIRM_MANAGEMENT);
+                        assertNonNull(mSigninTimestampsLogger).onManagementNoticeShown();
                     } else {
                         signInAfterCheckingManagement();
                     }
@@ -527,5 +548,10 @@ public class AccountPickerBottomSheetMediator
                 CoreAccountInfo.getAndroidAccountFrom(mSelectedAccount),
                 mActivity,
                 onUpdateCredentialsCompleted);
+    }
+
+    private void startSigninTimestampLogging() {
+        @FlowVariant String flowVariant = mAccountPickerDelegate.getSigninFlowVariant();
+        mSigninTimestampsLogger = SigninFlowTimestampsLogger.startLogging(flowVariant);
     }
 }

@@ -64,6 +64,7 @@ message Type {
         TypeBuiltinStruct builtin_struct = 19;
         TypeBindingArray binding_array = 20;
         TypeTexelBuffer texel_buffer = 21;
+        TypeResourceBinding resource_binding = 22;
     }
 }
 
@@ -91,8 +92,9 @@ message TypeMatrix {
 }
 
 message TypeArray {
+    reserved 2;          // TODO(422199551): Remove in v2
+    reserved "stride";   // TODO(422199551): Remove in v2
     uint32 element = 1;  // Module.types
-    uint32 stride = 2;
     uint32 count = 3;
 }
 
@@ -147,6 +149,8 @@ message TypeStorageTexture {
     TexelFormat texel_format = 2;
     AccessControl access = 3;
 }
+
+message TypeResourceBinding {}
 
 message TypeExternalTexture {}
 
@@ -578,7 +582,8 @@ enum BuiltinValue {
     clip_distances = 15;
     cull_distance = 16;
     subgroup_id = 17;
-    primitive_id = 18;
+    primitive_index = 18;
+    barycentric_coord = 19;
 }
 
 enum BuiltinFn {
@@ -732,4 +737,6 @@ enum BuiltinFn {
     subgroup_matrix_multiply = 147;
     subgroup_matrix_multiply_accumulate = 148;
     print = 149;
+    has_binding = 150;
+    get_binding = 151;
 }

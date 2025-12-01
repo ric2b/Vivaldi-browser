@@ -1,0 +1,54 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.confidentialcompute;
+
+import "tensorflow_federated/proto/v0/executor.proto";
+
+option java_package = "com.google.intelligence.fcp.confidentialcompute";
+option java_multiple_files = true;
+
+// Initialization config for a TFF container that implements the Confidential
+// Transform API.
+message TffContainerInitializeConfig {}
+
+// Configuration for a TFF Computation to be run in a Confidential Compute
+// environment using the Confidential Transform API.
+message TffSessionConfig {
+  // The TFF computation to be run.
+  tensorflow_federated.v0.Value function = 1;
+  // Optional initial argument to the TFF computation.
+  tensorflow_federated.v0.Value initial_arg = 2;
+  int32 num_clients = 3;
+  // The numerical identifier for the result of the TFF session.
+  // This field is only used by trusted services.
+  uint32 output_access_policy_node_id = 4;
+  // Max concurrent computation calls in TensorFlow executor. When set to -1,
+  // the number will be determined by the number of CPUs.
+  int32 max_concurrent_computation_calls = 5;
+}
+
+// Configuration for the initial WriteRequest of each blob to be stored in the
+// first_request_configuration field.
+message TffSessionWriteConfig {
+  // The uri from which the data was fetched before being written to the
+  // container session.
+  bytes uri = 1;
+  // True if the data came from a client upload, false otherwise.
+  bool client_upload = 2;
+}
+
+message TffSessionFinalizeConfig {}

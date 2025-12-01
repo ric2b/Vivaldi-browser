@@ -97,6 +97,7 @@ tint_add_target(tint_lang_wgsl_resolver_test test
   lang/wgsl/resolver/atomics_test.cc
   lang/wgsl/resolver/atomics_validation_test.cc
   lang/wgsl/resolver/attribute_validation_test.cc
+  lang/wgsl/resolver/barycentric_coord_extension_test.cc
   lang/wgsl/resolver/binding_array_test.cc
   lang/wgsl/resolver/bitcast_validation_test.cc
   lang/wgsl/resolver/builtin_enum_test.cc
@@ -139,15 +140,15 @@ tint_add_target(tint_lang_wgsl_resolver_test test
   lang/wgsl/resolver/materialize_test.cc
   lang/wgsl/resolver/override_test.cc
   lang/wgsl/resolver/pixel_local_extension_test.cc
-  lang/wgsl/resolver/primitive_id_extension_test.cc
+  lang/wgsl/resolver/primitive_index_extension_test.cc
   lang/wgsl/resolver/ptr_ref_test.cc
   lang/wgsl/resolver/ptr_ref_validation_test.cc
   lang/wgsl/resolver/resolver_behavior_test.cc
   lang/wgsl/resolver/resolver_helper_test.cc
   lang/wgsl/resolver/resolver_helper_test.h
   lang/wgsl/resolver/resolver_test.cc
+  lang/wgsl/resolver/resource_binding_test.cc
   lang/wgsl/resolver/root_identifier_test.cc
-  lang/wgsl/resolver/side_effects_test.cc
   lang/wgsl/resolver/struct_address_space_use_test.cc
   lang/wgsl/resolver/struct_layout_test.cc
   lang/wgsl/resolver/struct_pipeline_stage_use_test.cc

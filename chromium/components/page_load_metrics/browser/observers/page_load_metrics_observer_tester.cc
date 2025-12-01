@@ -66,6 +66,8 @@ class TestPageLoadMetricsEmbedderInterface
     return std::move(timer);
   }
 
+  bool HasWebUIConfig(const GURL& url) override { return false; }
+
   bool IsNoStatePrefetch(content::WebContents* web_contents) override {
     return false;
   }
@@ -75,6 +77,8 @@ class TestPageLoadMetricsEmbedderInterface
   bool IsNonTabWebUI(const GURL& url) override {
     return test_->is_non_tab_webui();
   }
+
+  bool IsInternalWebUI(const GURL& url) override { return true; }
 
   bool ShouldObserveScheme(std::string_view scheme) override { return false; }
 
@@ -385,9 +389,9 @@ void PageLoadMetricsObserverTester::RegisterObservers(
 
 void PageLoadMetricsObserverTester::SimulateMemoryUpdate(
     content::RenderFrameHost* render_frame_host,
-    int64_t delta_bytes) {
+    base::ByteCount delta_bytes) {
   DCHECK(render_frame_host);
-  if (delta_bytes != 0) {
+  if (!delta_bytes.is_zero()) {
     std::vector<MemoryUpdate> update(
         {MemoryUpdate(render_frame_host->GetGlobalId(), delta_bytes)});
     metrics_web_contents_observer_->OnV8MemoryChanged(update);

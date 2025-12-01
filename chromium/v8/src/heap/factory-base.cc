@@ -85,7 +85,7 @@ Handle<Code> FactoryBase<Impl>::NewCode(const NewCodeOptions& options) {
   DirectHandle<CodeWrapper> wrapper = NewCodeWrapper();
   Tagged<Map> map = read_only_roots().code_map();
   int size = map->instance_size();
-  Tagged<Code> code = Cast<Code>(
+  Tagged<Code> code = TrustedCast<Code>(
       AllocateRawWithImmortalMap(size, AllocationType::kTrusted, map));
   DisallowGarbageCollection no_gc;
   code->init_self_indirect_pointer(isolate());
@@ -104,9 +104,7 @@ Handle<Code> FactoryBase<Impl>::NewCode(const NewCodeOptions& options) {
   code->set_jump_table_info_offset(options.jump_table_info_offset);
   code->set_unwinding_info_offset(options.unwinding_info_offset);
   code->set_parameter_count(options.parameter_count);
-#ifdef V8_ENABLE_LEAPTIERING
   code->set_js_dispatch_handle(kNullJSDispatchHandle);
-#endif  // V8_ENABLE_LEAPTIERING
 
   // Set bytecode/interpreter data or deoptimization data.
   if (CodeKindUsesBytecodeOrInterpreterData(options.kind)) {
@@ -178,8 +176,9 @@ DirectHandle<CodeWrapper> FactoryBase<Impl>::NewCodeWrapper() {
 
 template <typename Impl>
 Handle<FixedArray> FactoryBase<Impl>::NewFixedArray(int length,
-                                                    AllocationType allocation) {
-  return FixedArray::New(isolate(), length, allocation);
+                                                    AllocationType allocation,
+                                                    AllocationHint hint) {
+  return FixedArray::New(isolate(), length, allocation, hint);
 }
 
 template <typename Impl>
@@ -317,13 +316,15 @@ Handle<TrustedByteArray> FactoryBase<Impl>::NewTrustedByteArray(
 template <typename Impl>
 DirectHandle<DeoptimizationLiteralArray>
 FactoryBase<Impl>::NewDeoptimizationLiteralArray(int length) {
-  return Cast<DeoptimizationLiteralArray>(NewTrustedWeakFixedArray(length));
+  return TrustedCast<DeoptimizationLiteralArray>(
+      NewTrustedWeakFixedArray(length));
 }
 
 template <typename Impl>
 DirectHandle<DeoptimizationFrameTranslation>
 FactoryBase<Impl>::NewDeoptimizationFrameTranslation(int length) {
-  return Cast<DeoptimizationFrameTranslation>(NewTrustedByteArray(length));
+  return TrustedCast<DeoptimizationFrameTranslation>(
+      NewTrustedByteArray(length));
 }
 
 template <typename Impl>
@@ -343,7 +344,7 @@ Handle<BytecodeArray> FactoryBase<Impl>::NewBytecodeArray(
   Tagged<HeapObject> result = AllocateRawWithImmortalMap(
       size, allocation, read_only_roots().bytecode_array_map());
   DisallowGarbageCollection no_gc;
-  Tagged<BytecodeArray> instance = Cast<BytecodeArray>(result);
+  Tagged<BytecodeArray> instance = TrustedCast<BytecodeArray>(result);
   instance->init_self_indirect_pointer(isolate());
   instance->set_length(length);
   instance->set_frame_size(frame_size);
@@ -488,8 +489,9 @@ DirectHandle<SharedFunctionInfoWrapper>
 FactoryBase<Impl>::NewSharedFunctionInfoWrapper(
     DirectHandle<SharedFunctionInfo> sfi) {
   Tagged<Map> map = read_only_roots().shared_function_info_wrapper_map();
-  Tagged<SharedFunctionInfoWrapper> wrapper = Cast<SharedFunctionInfoWrapper>(
-      NewWithImmortalMap(map, AllocationType::kTrusted));
+  Tagged<SharedFunctionInfoWrapper> wrapper =
+      TrustedCast<SharedFunctionInfoWrapper>(
+          NewWithImmortalMap(map, AllocationType::kTrusted));
 
   wrapper->set_shared_info(*sfi);
 
@@ -520,7 +522,7 @@ FactoryBase<Impl>::NewUncompiledDataWithoutPreparseData(
   Tagged<Map> map =
       read_only_roots().uncompiled_data_without_preparse_data_map();
   Tagged<UncompiledDataWithoutPreparseData> result =
-      Cast<UncompiledDataWithoutPreparseData>(
+      TrustedCast<UncompiledDataWithoutPreparseData>(
           AllocateRawWithImmortalMap(size, AllocationType::kTrusted, map));
   DisallowGarbageCollection no_gc;
   result->init_self_indirect_pointer(isolate());
@@ -538,7 +540,7 @@ FactoryBase<Impl>::NewUncompiledDataWithPreparseData(
   int size = sizeof(UncompiledDataWithPreparseData);
   Tagged<Map> map = read_only_roots().uncompiled_data_with_preparse_data_map();
   Tagged<UncompiledDataWithPreparseData> result =
-      Cast<UncompiledDataWithPreparseData>(
+      TrustedCast<UncompiledDataWithPreparseData>(
           AllocateRawWithImmortalMap(size, AllocationType::kTrusted, map));
   DisallowGarbageCollection no_gc;
   result->init_self_indirect_pointer(isolate());
@@ -558,7 +560,7 @@ FactoryBase<Impl>::NewUncompiledDataWithoutPreparseDataWithJob(
   Tagged<Map> map =
       read_only_roots().uncompiled_data_without_preparse_data_with_job_map();
   Tagged<UncompiledDataWithoutPreparseDataWithJob> result =
-      Cast<UncompiledDataWithoutPreparseDataWithJob>(
+      TrustedCast<UncompiledDataWithoutPreparseDataWithJob>(
           AllocateRawWithImmortalMap(size, AllocationType::kTrusted, map));
   DisallowGarbageCollection no_gc;
   result->init_self_indirect_pointer(isolate());
@@ -578,7 +580,7 @@ FactoryBase<Impl>::NewUncompiledDataWithPreparseDataAndJob(
   Tagged<Map> map =
       read_only_roots().uncompiled_data_with_preparse_data_and_job_map();
   Tagged<UncompiledDataWithPreparseDataAndJob> result =
-      Cast<UncompiledDataWithPreparseDataAndJob>(
+      TrustedCast<UncompiledDataWithPreparseDataAndJob>(
           AllocateRawWithImmortalMap(size, AllocationType::kTrusted, map));
   DisallowGarbageCollection no_gc;
   result->init_self_indirect_pointer(isolate());
@@ -618,7 +620,7 @@ Handle<SharedFunctionInfo> FactoryBase<Impl>::NewSharedFunctionInfo(
     DCHECK(!IsInstructionStream(*function_data));
     DCHECK(!IsCode(*function_data));
     if (IsExposedTrustedObject(*function_data)) {
-      raw->SetTrustedData(Cast<ExposedTrustedObject>(*function_data));
+      raw->SetTrustedData(TrustedCast<ExposedTrustedObject>(*function_data));
     } else {
       raw->SetUntrustedData(*function_data);
     }
@@ -873,7 +875,7 @@ MaybeHandle<SeqStringT> FactoryBase<Impl>::NewRawStringWithMap(
 
 template <typename Impl>
 MaybeHandle<SeqOneByteString> FactoryBase<Impl>::NewRawOneByteString(
-    int length, AllocationType allocation, AllocationHint hint) {
+    uint32_t length, AllocationType allocation, AllocationHint hint) {
   Tagged<Map> map = read_only_roots().seq_one_byte_string_map();
   return NewRawStringWithMap<SeqOneByteString>(
       length, map,
@@ -883,7 +885,7 @@ MaybeHandle<SeqOneByteString> FactoryBase<Impl>::NewRawOneByteString(
 
 template <typename Impl>
 MaybeHandle<SeqTwoByteString> FactoryBase<Impl>::NewRawTwoByteString(
-    int length, AllocationType allocation, AllocationHint hint) {
+    uint32_t length, AllocationType allocation, AllocationHint hint) {
   Tagged<Map> map = read_only_roots().seq_two_byte_string_map();
   return NewRawStringWithMap<SeqTwoByteString>(
       length, map,
@@ -1003,11 +1005,11 @@ Handle<String> FactoryBase<Impl>::NewConsString(DirectHandle<String> left,
                      read_only_roots().cons_two_byte_string_map(), allocation));
 
   DisallowGarbageCollection no_gc;
-  WriteBarrierMode mode = result->GetWriteBarrierMode(no_gc);
+  WriteBarrierModeScope mode = result->GetWriteBarrierMode(no_gc);
   result->set_raw_hash_field(String::kEmptyHashField);
   result->set_length(length);
-  result->set_first(*left, mode);
-  result->set_second(*right, mode);
+  result->set_first(*left, *mode);
+  result->set_second(*right, *mode);
   return handle(result, isolate());
 }
 
@@ -1319,12 +1321,14 @@ FactoryBase<Impl>::AllocateRawTwoByteInternalizedString(
 
 template <typename Impl>
 Tagged<HeapObject> FactoryBase<Impl>::AllocateRawArray(
-    int size, AllocationType allocation) {
-  Tagged<HeapObject> result = AllocateRaw(size, allocation);
+    int size, AllocationType allocation, AllocationHint hint) {
+  Tagged<HeapObject> result =
+      AllocateRaw(size, allocation, AllocationAlignment::kTaggedAligned, hint);
   if ((size >
        isolate()->heap()->AsHeap()->MaxRegularHeapObjectSize(allocation)) &&
       v8_flags.use_marking_progress_bar) {
-    LargePageMetadata::FromHeapObject(result)
+    LargePageMetadata::FromHeapObject(isolate()->GetMainThreadIsolateUnsafe(),
+                                      result)
         ->marking_progress_tracker()
         .Enable(size);
   }
@@ -1475,7 +1479,6 @@ FactoryBase<Impl>::RefineAllocationTypeForInPlaceInternalizableString(
   return impl()->AllocationTypeForInPlaceInternalizableString();
 }
 
-#ifdef V8_ENABLE_LEAPTIERING
 template <typename Impl>
 JSDispatchHandle FactoryBase<Impl>::NewJSDispatchHandle(
     uint16_t parameter_count, DirectHandle<Code> code,
@@ -1489,7 +1492,6 @@ JSDispatchHandle FactoryBase<Impl>::NewJSDispatchHandle(
   auto allocator = isolate()->heap()->allocator();
   return allocator->CustomAllocateWithRetryOrFail(Allocate, type);
 }
-#endif  // V8_ENABLE_LEAPTIERING
 
 // Instantiate FactoryBase for the two variants we want.
 template class EXPORT_TEMPLATE_DEFINE(V8_EXPORT_PRIVATE) FactoryBase<Factory>;

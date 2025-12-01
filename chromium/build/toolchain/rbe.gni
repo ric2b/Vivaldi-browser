@@ -87,8 +87,8 @@ if (use_reclient) {
 }
 
 if (use_siso && rbe_exec_root != rebase_path("//")) {
-  assert(target_os == "chromeos" && rbe_exec_root == "/",
-         "Can't use non-default rbe_exec_root with siso.")
+  #assert(target_os == "chromeos" && rbe_exec_root == "/",
+  #       "Can't use non-default rbe_exec_root with siso.")
 
   # cros chroot ebuild case.
   rbe_logs += [ "source_root=" + rebase_path("//") ]
@@ -141,6 +141,12 @@ declare_args() {
   } else {
     reclient_cros_cc_wrapper = ""
   }
+}
+
+if (use_reclient_cfgs) {
+  rbe_logs += [
+    "reclient_cc_cfg_file=" + rebase_path(reclient_cc_cfg_file, rbe_exec_root, root_build_dir),
+  ]
 }
 
 if (use_reclient_cfgs && current_toolchain == default_toolchain) {

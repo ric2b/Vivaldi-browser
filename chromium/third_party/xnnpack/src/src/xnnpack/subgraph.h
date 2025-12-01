@@ -517,7 +517,8 @@ struct xnn_runtime {
 #ifdef XNN_SLINKY_AVAILABLE
   // Fields used by Slinky -- unused unless XNN_FLAG_SLINKY_ENABLED is set
   slinky_pipeline_t slinky_pipeline;
-  xnn_scheduler_t scheduler;
+  xnn_threadpool_t xnn_threadpool;
+  xnn_threadpool_t owned_xnn_threadpool;
 #endif  // XNN_SLINKY_AVAILABLE
 };
 
@@ -538,6 +539,8 @@ uint32_t xnn_subgraph_get_value_flags(xnn_subgraph_t subgraph,
                                       uint32_t value_id);
 size_t xnn_subgraph_get_value_size(xnn_subgraph_t subgraph, uint32_t value_id);
 uint32_t xnn_subgraph_get_num_external_values(xnn_subgraph_t subgraph);
+uint32_t xnn_subgraph_get_num_nodes(xnn_subgraph_t subgraph);
+uint32_t xnn_subgraph_get_num_values(xnn_subgraph_t subgraph);
 
 // Get size of the tensor in bytes (based on dimensions of tensor).
 size_t xnn_tensor_get_size(const struct xnn_value* value);
@@ -578,6 +581,9 @@ size_t xnn_shape_multiply_leading_dims(const struct xnn_shape* shape,
 // Product of trailing dimensions starting from start_dim.
 size_t xnn_shape_multiply_trailing_dims(const struct xnn_shape* shape,
                                         size_t start_dim);
+
+// The size of the given dimension, which can also be a negative index.
+size_t xnn_shape_get_dim(const struct xnn_shape* shape, int64_t dim);
 
 // Get the size in bytes to hold dynamic quant params
 size_t xnn_tensor_get_dynamic_quant_param_size(enum xnn_datatype datatype,

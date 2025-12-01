@@ -32,7 +32,7 @@ public:
 
     bool setNewCommandBufferResources() override;
 
-    bool submit(VkQueue);
+    bool submit(VkQueue, const SubmitInfo&);
 
     bool isFinished();
 
@@ -94,7 +94,7 @@ private:
 
     void endRenderPass();
 
-    void addDrawPass(const DrawPass*);
+    [[nodiscard]] bool addDrawPass(DrawPass*);
 
     // Track descriptor changes for binding prior to draw calls
     void recordBufferBindingInfo(const BindBufferInfo& info, UniformSlot);

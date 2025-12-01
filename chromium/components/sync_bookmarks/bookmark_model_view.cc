@@ -9,6 +9,9 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/common/bookmark_metrics.h"
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#include "components/sync_bookmarks/initial_account_bookmark_deduplicator.h"
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
 #include "app/vivaldi_apptools.h"
 
@@ -205,6 +208,9 @@ void BookmarkModelViewUsingLocalOrSyncableNodes::RemoveAllSyncableNodes() {
   underlying_model()->EndExtensiveChanges();
 }
 
+void BookmarkModelViewUsingLocalOrSyncableNodes::
+    MaybeRemoveUnderlyingModelDuplicatesUponInitialSync() {}
+
 const bookmarks::BookmarkNode*
 BookmarkModelViewUsingLocalOrSyncableNodes::GetNodeByUuid(
     const base::Uuid& uuid) const {
@@ -245,6 +251,15 @@ void BookmarkModelViewUsingAccountNodes::EnsurePermanentNodesExist() {
 
 void BookmarkModelViewUsingAccountNodes::RemoveAllSyncableNodes() {
   underlying_model()->RemoveAccountPermanentFolders();
+}
+
+void BookmarkModelViewUsingAccountNodes::
+    MaybeRemoveUnderlyingModelDuplicatesUponInitialSync() {
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  InitialAccountBookmarkDeduplicator initial_account_bookmark_deduplicator(
+      underlying_model());
+  initial_account_bookmark_deduplicator.Deduplicate();
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 }
 
 const bookmarks::BookmarkNode*

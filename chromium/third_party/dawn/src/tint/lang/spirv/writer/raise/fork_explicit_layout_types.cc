@@ -195,11 +195,8 @@ struct State {
 
         // Create a new struct with the rewritten members.
         auto name = sym.New(original_struct->Name().Name() + "_tint_explicit_layout");
-        auto* new_str = ty.Get<core::type::Struct>(name,                      //
-                                                   std::move(new_members),    //
-                                                   original_struct->Align(),  //
-                                                   original_struct->Size(),   //
-                                                   original_struct->SizeNoPadding());
+        auto* new_str =
+            ty.Get<core::type::Struct>(name, std::move(new_members), original_struct->Size());
         new_str->SetStructFlag(core::type::kExplicitLayout);
         for (auto flag : original_struct->StructFlags()) {
             new_str->SetStructFlag(flag);
@@ -217,11 +214,16 @@ struct State {
             // The element type was not forked, so just use the original element type.
             new_element_type = original_array->ElemType();
         }
+
+        uint32_t stride = original_array->ImplicitStride();
+        if (auto* ex = original_array->As<type::ExplicitLayoutArray>()) {
+            stride = ex->Stride();
+        }
+
         return ty.Get<type::ExplicitLayoutArray>(new_element_type,         //
                                                  original_array->Count(),  //
-                                                 original_array->Align(),  //
                                                  original_array->Size(),   //
-                                                 original_array->Stride());
+                                                 stride);
     }
 
     /// Update the store type of an instruction result to use the forked version if needed.

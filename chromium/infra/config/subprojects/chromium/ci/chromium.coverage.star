@@ -109,7 +109,6 @@ coverage_builder(
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(config = "base_config"),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -176,7 +175,6 @@ coverage_webview_builder(
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(config = "base_config"),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -245,7 +243,6 @@ coverage_builder(
         android_config = builder_config.android_config(
             config = "base_config",
         ),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -466,7 +463,6 @@ coverage_builder(
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(config = "base_config"),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     # No symbols to prevent linker file too large error on
     # android_webview_unittests target.
@@ -593,7 +589,6 @@ coverage_webview_builder(
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(config = "base_config"),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     # No symbols to prevent linker file too large error on
     # android_webview_unittests target.
@@ -676,7 +671,6 @@ coverage_builder(
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(config = "base_config"),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     # No symbols to prevent linker file too large error on
     # android_webview_unittests target.
@@ -745,7 +739,6 @@ coverage_builder(
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(config = "base_config"),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     # No symbols to prevent linker file too large error on
     # android_webview_unittests target.
@@ -809,7 +802,6 @@ coverage_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.FUCHSIA,
         ),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -962,15 +954,14 @@ coverage_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.IOS,
         ),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     gn_args = gn_args.config(
         configs = [
             "use_clang_coverage",
             "debug_static_builder",
             "remoteexec",
-            "x64",
-            "ios",
+            "arm64",
+            "ios_simulator",
             "xctest",
         ],
     ),
@@ -983,10 +974,10 @@ coverage_builder(
             "has_native_resultdb_integration",
             "ios_output_disabled_tests",
             "isolate_profile_data",
-            "mac_default_x64",
+            "mac_default_arm64",
             "mac_toolchain",
             "out_dir_arg",
-            "xcode_16_main",
+            "xcode_26_main",
             "xctest",
         ],
     ),
@@ -1025,7 +1016,6 @@ coverage_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.CHROMEOS,
         ),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -1101,7 +1091,6 @@ coverage_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -1154,7 +1143,6 @@ coverage_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.CHROMEOS,
         ),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -1221,6 +1209,7 @@ coverage_builder(
             "release",
             "linux",
             "x64",
+            "no_clang_modules",
         ],
     ),
     builderless = True,
@@ -1359,7 +1348,6 @@ coverage_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.LINUX,
         ),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -1500,7 +1488,6 @@ coverage_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -1576,7 +1563,6 @@ coverage_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
         ),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -1602,6 +1588,11 @@ coverage_builder(
             "win10",
         ],
         per_test_modifications = {
+            "blink_unittests": targets.mixin(
+                swarming = targets.swarming(
+                    shards = 4,
+                ),
+            ),
             "browser_tests": targets.mixin(
                 swarming = targets.swarming(
                     dimensions = {
@@ -1683,11 +1674,6 @@ coverage_builder(
             ),
             "webgpu_cts_shared_worker_tests": targets.remove(
                 reason = "Dedicated worker tests are probably sufficient.",
-            ),
-            "webkit_unit_tests": targets.mixin(
-                swarming = targets.swarming(
-                    shards = 4,
-                ),
             ),
         },
     ),

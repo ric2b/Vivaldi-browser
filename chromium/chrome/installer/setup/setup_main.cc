@@ -1488,7 +1488,7 @@ int SetupMain(HINSTANCE instance) {
 
   if (!installer::kVivaldi) {
     // clang-format off
-  installer::ConfigureCrashReporting(installer_state);
+  installer::ConfigureCrashReporting(prefs, installer_state);
   installer::SetInitialCrashKeys(installer_state);
   installer::SetCrashKeysFromCommandLine(cmd_line);
     // clang-format on

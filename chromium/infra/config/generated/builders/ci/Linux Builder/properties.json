@@ -10,10 +10,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux Builder",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-linux-archive",
               "builder_group": "chromium.linux",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_chromium_config": {
@@ -38,10 +37,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux Tests",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-linux-archive",
               "builder_group": "chromium.linux",
               "execution_mode": "TEST",
               "legacy_chromium_config": {
@@ -62,7 +60,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Linux Builder",
-                "project": "chromium-m140"
+                "project": "chromium-m142"
               }
             }
           }
@@ -72,14 +70,14 @@
         {
           "bucket": "ci",
           "builder": "Linux Builder",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "Linux Tests",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         }
       ],
       "mirroring_builder_group_and_names": [

@@ -135,7 +135,6 @@ GetPreinstalledWebAppsMappingForTesting() {
 namespace web_app {
 
 BASE_FEATURE(kDesktopPWAsForceUnregisterOSIntegration,
-             "DesktopPWAsForceUnregisterOSIntegration",
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
@@ -368,6 +367,11 @@ void WebAppPolicyManager::InitChangeRegistrarAndRefreshPolicy() {
   RefreshPolicyInstalledApps(
       /*allow_close_and_relaunch=*/base::FeatureList::IsEnabled(
           features::kForcedAppRelaunchOnPlaceholderUpdate));
+  pref_change_registrar_.Add(
+      prefs::kDefaultHandlersForFileExtensions,
+      base::BindRepeating(
+          &WebAppPolicyManager::SynchronizeOsWithPolicyDefinedFileHandlers,
+          weak_ptr_factory_.GetWeakPtr()));
 #else
   RefreshPolicyInstalledApps(/*allow_close_and_relaunch=*/false);
 #endif
@@ -552,6 +556,11 @@ void WebAppPolicyManager::ParsePolicySettings() {
 void WebAppPolicyManager::RefreshPolicySettings() {
   ParsePolicySettings();
   ApplyPolicySettings();
+}
+
+void WebAppPolicyManager::SynchronizeOsWithPolicyDefinedFileHandlers() {
+  provider_->scheduler().SynchronizeOsIntegrationForAllApps(
+      WebAppFilter::InstalledInChrome(), base::DoNothing());
 }
 
 void WebAppPolicyManager::ApplyPolicySettings() {

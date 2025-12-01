@@ -43,7 +43,7 @@ Aspectos que debes tener en cuenta:
 <translation id="1830634592642484976">Actualmente, esta dirección se guarda en Chrome. Para usarla en todos los productos de Google, guárdala en tu Cuenta de Google, <ph name="USER_EMAIL" />.</translation>
 <translation id="1891812034154776216">Ocultar las pestañas de incógnito abiertas cuando salgas de Chrome</translation>
 <translation id="1894434821386148799">Aquí puedes encontrar la configuración de Chrome y mucho más</translation>
-<translation id="1917964099031477364">Se quitará esta cuenta y todos los datos sin guardar de Chrome y otras apps de Google que haya en este dispositivo.</translation>
+<translation id="1917964099031477364">Esta cuenta y todos los datos sin guardar se quitarán de Chrome y otras apps de Google que haya en este dispositivo.</translation>
 <translation id="1919130412786645364">Permitir el acceso a Chrome</translation>
 <translation id="1965935827552890526">Completa las tareas que tenías en curso en otra ventana abierta de Chrome.</translation>
 <translation id="1966638102563776885">Sugerencia para Chrome: Obtén tus contraseñas en cualquier app</translation>
@@ -193,6 +193,7 @@ Espera unos minutos antes de cambiar de cuenta. Si cambias de cuenta ahora, se b
 <translation id="6145223986912084844">chrome</translation>
 <translation id="6177442314419606057">Buscar en Chrome</translation>
 <translation id="6181652351336379338">Busca elementos visuales en Chrome.</translation>
+<translation id="6187085551300363958">Sugerencia de Chrome: Guardar contraseñas</translation>
 <translation id="6200694931081795166">Para establecer Chrome como navegador predeterminado:
   1. Abre Configuración.
   2. Presiona App del navegador predeterminado.
@@ -264,6 +265,7 @@ Si quieres ver más parámetros de configuración que usan datos para mejorar tu
 <translation id="7599894504325210080">Vista expandida de Autocompletar de Chrome</translation>
 <translation id="7617512710641355143">Chrome está administrado</translation>
 <translation id="7626032353295482388">Te damos la bienvenida a Chrome</translation>
+<translation id="7641448682796883218">Sugerencia de Chrome: Navegación segura mejorada</translation>
 <translation id="7642373780953416937">Recibe alertas sobre cualquier problema de privacidad o seguridad que Chrome detecte automáticamente.</translation>
 <translation id="7660356333829433649">Vuelve a consultar esta información para obtener más sugerencias útiles y aprovechar Chrome al máximo.</translation>
 <translation id="7662994914830945754">Para ver tus pestañas donde sea que uses Chrome, accede a tu cuenta y activa la sincronización</translation>

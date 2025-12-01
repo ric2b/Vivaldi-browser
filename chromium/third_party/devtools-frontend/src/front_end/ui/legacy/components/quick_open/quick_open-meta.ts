@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,11 +9,11 @@ import type * as QuickOpen from './quick_open.js';
 
 const UIStrings = {
   /**
-   *@description Title of action that opens a file
+   * @description Title of action that opens a file
    */
   openFile: 'Open file',
   /**
-   *@description Title of command that runs a Quick Open command
+   * @description Title of command that runs a Quick Open command
    */
   runCommand: 'Run command',
 } as const;

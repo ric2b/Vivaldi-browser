@@ -47,12 +47,15 @@
 #include "app/vivaldi_constants.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 
+using vivaldi::IsVivaldiApp;
+using vivaldi::kVivaldiReservedApiError;
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
+
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 using bookmarks::BookmarkPermanentNode;
 using bookmarks::ManagedBookmarkService;
-using vivaldi::IsVivaldiApp;
-using vivaldi::kVivaldiReservedApiError;
 
 namespace extensions {
 

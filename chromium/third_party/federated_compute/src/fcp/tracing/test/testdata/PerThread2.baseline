@@ -1,0 +1,9 @@
+${TIME} ${ID}: BEGIN
+${TIME} ${ID}: BEGIN SpanWithId { id: 2 } parent: 0
+${TIME} ${ID}: INFO EventFoo{ first: 22, second: 222 }
+${TIME} ${ID}: INFO EventFoo{ first: 22, second: 222 }
+${TIME} ${ID}: INFO EventFoo{ first: 22, second: 222 }
+${TIME} ${ID}: INFO EventFoo{ first: 22, second: 222 }
+${TIME} ${ID}: INFO EventFoo{ first: 22, second: 222 }
+${TIME} ${ID}: END SpanWithId { id: 2 }
+${TIME} ${ID}: END

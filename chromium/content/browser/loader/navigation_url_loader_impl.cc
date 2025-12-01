@@ -50,6 +50,7 @@
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
 #include "content/browser/service_worker/service_worker_main_resource_loader_interceptor.h"
 #include "content/browser/storage_partition_impl.h"
+#include "content/browser/url_loader_factory_params_helper.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_package/prefetched_signed_exchange_cache.h"
 #include "content/browser/web_package/signed_exchange_consts.h"
@@ -83,6 +84,7 @@
 #include "media/media_buildflags.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "net/base/features.h"
 #include "net/base/load_flags.h"
 #include "net/base/load_timing_info.h"
 #include "net/cert/sct_status_flags.h"
@@ -291,6 +293,11 @@ std::unique_ptr<network::ResourceRequest> CreateResourceRequest(
     load_flags |= net::LOAD_CAN_USE_RESTRICTED_PREFETCH_FOR_MAIN_FRAME;
   }
 
+  if (URLLoaderFactoryParamsHelper::IsMainFrameOriginRecentlyAccessed(
+          request_info.isolation_info)) {
+    load_flags |= net::LOAD_IS_MAIN_FRAME_ORIGIN_RECENTLY_ACCESSED;
+  }
+
   // Sync loads should have maximum priority and should be the only
   // requests that have the ignore limits flag set.
   DCHECK(!(load_flags & net::LOAD_IGNORE_LIMITS));
@@ -337,6 +344,9 @@ std::unique_ptr<network::ResourceRequest> CreateResourceRequest(
   new_request->shared_storage_writable_eligible =
       request_info.shared_storage_writable_eligible;
   new_request->is_ad_tagged = request_info.is_ad_tagged;
+
+  new_request->skip_service_worker =
+      request_info.begin_params->skip_service_worker;
 
   // TODO(crbug.com/382291442): Remove feature guarding once launched.
   if (base::FeatureList::IsEnabled(
@@ -389,6 +399,57 @@ void LogQueueTimeHistogram(std::string_view name,
 
 void LogAcceptCHFrameStatus(AcceptCHFrameRestart status) {
   base::UmaHistogramEnumeration("ClientHints.AcceptCHFrame", status);
+}
+
+void RecordEnabledClientHintsMismatchHistograms(
+    const network::ResourceRequest::TrustedParams::EnabledClientHints&
+        old_hints,
+    const network::ResourceRequest::TrustedParams::EnabledClientHints&
+        new_hints) {
+  constexpr std::string_view kEnabledClientHintsMatch =
+      "Navigation.URLLoader.OnAcceptCHFrameReceived.EnabledClientHintsMatch";
+
+  const bool enabled_client_hints_match = (new_hints == old_hints);
+  base::UmaHistogramBoolean(kEnabledClientHintsMatch,
+                            enabled_client_hints_match);
+
+  if (enabled_client_hints_match) {
+    return;
+  }
+
+  base::UmaHistogramBoolean(base::StrCat({kEnabledClientHintsMatch, ".Origin"}),
+                            new_hints.origin == old_hints.origin);
+  base::UmaHistogramBoolean(
+      base::StrCat({kEnabledClientHintsMatch, ".IsOutermostMainFrame"}),
+      new_hints.is_outermost_main_frame == old_hints.is_outermost_main_frame);
+
+  // See services/network/public/mojom/web_client_hints_types.mojom for the
+  // full list of client hints. As of 2025-08-19, there are 23 non-deprecated
+  // entries.
+  std::vector<network::mojom::WebClientHintsType> old_hints_vector =
+      old_hints.hints;
+  std::vector<network::mojom::WebClientHintsType> new_hints_vector =
+      new_hints.hints;
+  std::sort(old_hints_vector.begin(), old_hints_vector.end());
+  std::sort(new_hints_vector.begin(), new_hints_vector.end());
+
+  const bool are_equal = (old_hints_vector == new_hints_vector);
+  base::UmaHistogramBoolean(base::StrCat({kEnabledClientHintsMatch, ".Hints"}),
+                            are_equal);
+
+  if (are_equal) {
+    return;
+  }
+
+  std::vector<network::mojom::WebClientHintsType> diff;
+  std::set_symmetric_difference(
+      old_hints_vector.begin(), old_hints_vector.end(),
+      new_hints_vector.begin(), new_hints_vector.end(),
+      std::back_inserter(diff));
+  for (const auto& hint : diff) {
+    base::UmaHistogramEnumeration(
+        "Navigation.URLLoader.OnAcceptCHFrameReceived.HintsMismatch", hint);
+  }
 }
 
 bool IsSameOriginRedirect(const std::vector<GURL>& url_chain) {
@@ -1409,6 +1470,9 @@ void NavigationURLLoaderImpl::OnReceiveResponse(
         head_update_params_.load_timing_info
             .service_worker_router_evaluation_start;
   }
+  if (head_update_params_.is_synthetic_response_dry_run_mode) {
+    head->from_synthetic_response = true;
+  }
 
   // If the default loader (network) was used to handle the URL load request
   // we need to see if the interceptors want to potentially create a new
@@ -1654,6 +1718,12 @@ void RecordOnAcceptCHFrameReceivedReturnLocation(
       "Navigation.URLLoader.OnAcceptCHFrameReceived.ReturnLocation", location);
 }
 
+void RecordCriticalHintsMissingStatus(CriticalHintsMissingStatus status) {
+  base::UmaHistogramEnumeration(
+      "Navigation.URLLoader.OnAcceptCHFrameReceived.CriticalHintsMissingStatus",
+      status);
+}
+
 }  // namespace
 
 void NavigationURLLoaderImpl::OnAcceptCHFrameReceived(
@@ -1700,6 +1770,16 @@ void NavigationURLLoaderImpl::OnAcceptCHFrameReceived(
     return;
   }
 
+  if (resource_request_->trusted_params->enabled_client_hints) {
+    network::ResourceRequest::TrustedParams::EnabledClientHints
+        current_hints_obj = GetEnabledClientHints(origin, frame_tree_node,
+                                                  client_hint_delegate);
+    network::ResourceRequest::TrustedParams::EnabledClientHints& old_hints_obj =
+        *resource_request_->trusted_params->enabled_client_hints;
+    RecordEnabledClientHintsMismatchHistograms(old_hints_obj,
+                                               current_hints_obj);
+  }
+
   // Filter out hints that are disabled by features and the like.
   blink::EnabledClientHints filtered_enabled_hints;
   for (const auto& hint : accept_ch_frame) {
@@ -1708,9 +1788,15 @@ void NavigationURLLoaderImpl::OnAcceptCHFrameReceived(
   const std::vector<network::mojom::WebClientHintsType>& filtered_hints =
       filtered_enabled_hints.GetEnabledHints();
 
-  if (!AreCriticalHintsMissing(origin, frame_tree_node, client_hint_delegate,
-                               filtered_hints)) {
+  CriticalHintsMissingStatus status = GetCriticalHintsMissingStatus(
+      origin, frame_tree_node, client_hint_delegate, filtered_hints);
+  RecordCriticalHintsMissingStatus(status);
+
+  if (status != CriticalHintsMissingStatus::kMissing) {
     std::move(callback).Run(net::OK);
+    // This block is entered if GetCriticalHintsMissingStatus returns that
+    // hints are not missing, meaning either all critical hints were already
+    // present, or some were not allowed by the permissions policy.
     RecordOnAcceptCHFrameReceivedReturnLocation(
         OnAcceptCHFrameReceivedReturnLocation::kNoCriticalHintsMissing);
     return;
@@ -2024,10 +2110,10 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
                          TRACE_ID_LOCAL(this), TRACE_EVENT_FLAG_FLOW_OUT);
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1(
-      "navigation", "Navigation timeToResponseStarted", TRACE_ID_LOCAL(this),
-      request_info_->common_params->navigation_start, "FrameTreeNode id",
-      frame_tree_node_id_);
+  TRACE_EVENT_BEGIN("navigation", "Navigation timeToResponseStarted",
+                    perfetto::Track::FromPointer(this),
+                    request_info_->common_params->navigation_start,
+                    "FrameTreeNode id", frame_tree_node_id_);
 
   mojo::PendingRemote<network::mojom::AcceptCHFrameObserver>
       accept_ch_frame_observer;
@@ -2322,9 +2408,10 @@ void NavigationURLLoaderImpl::NotifyResponseStarted(
     const GlobalRequestID& global_request_id,
     bool is_download,
     network::mojom::URLResponseHeadPtr response_head) {
-  TRACE_EVENT_NESTABLE_ASYNC_END2(
-      "navigation", "Navigation timeToResponseStarted", TRACE_ID_LOCAL(this),
-      "&NavigationURLLoaderImpl", static_cast<void*>(this), "success", true);
+  // End "Navigation timeToResponseStarted" trace event.
+  TRACE_EVENT_END("navigation", perfetto::Track::FromPointer(this),
+                  "&NavigationURLLoaderImpl", static_cast<void*>(this),
+                  "success", true);
 
   NavigationURLLoaderDelegate::EarlyHints early_hints;
   if (early_hints_manager_) {
@@ -2367,9 +2454,10 @@ void NavigationURLLoaderImpl::NotifyRequestRedirected(
 
 void NavigationURLLoaderImpl::NotifyRequestFailed(
     const network::URLLoaderCompletionStatus& status) {
-  TRACE_EVENT_NESTABLE_ASYNC_END2(
-      "navigation", "Navigation timeToResponseStarted", TRACE_ID_LOCAL(this),
-      "&NavigationURLLoaderImpl", static_cast<void*>(this), "success", false);
+  // End "Navigation timeToResponseStarted" trace event.
+  TRACE_EVENT_END("navigation", perfetto::Track::FromPointer(this),
+                  "&NavigationURLLoaderImpl", static_cast<void*>(this),
+                  "success", false);
   delegate_->OnRequestFailed(status);
 }
 

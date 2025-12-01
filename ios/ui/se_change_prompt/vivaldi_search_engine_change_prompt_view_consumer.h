@@ -9,6 +9,7 @@
 @class VivaldiSearchEngineChangePromptPartnerItem;
 
 // A protocol implemented by consumers to handle search engine preference.
+NS_SWIFT_UI_ACTOR
 @protocol VivaldiSearchEngineChangePromptViewConsumer
 
 // Updates the consumer with recommended search engines

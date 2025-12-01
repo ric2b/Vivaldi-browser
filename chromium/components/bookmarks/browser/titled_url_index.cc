@@ -65,7 +65,7 @@ void TitledUrlIndex::Remove(const TitledUrlNode* node) {
 
   // Vivaldi
   for (const std::u16string& term :
-       ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()))) {
+       ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()), true)) {
     UnregisterNicknameNode(term, node);
   }
 }
@@ -74,6 +74,12 @@ void TitledUrlIndex::AddPath(const TitledUrlNode* node) {
   for (const std::u16string& term :
        ExtractQueryWords(Normalize(node->GetTitledUrlNodeTitle()), true)) {
     path_index_[term]++;
+  }
+
+  // Vivaldi
+  for (const std::u16string& term :
+       ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()), true)) {
+    nickname_index_[term].insert(node);
   }
 }
 
@@ -85,6 +91,12 @@ void TitledUrlIndex::RemovePath(const TitledUrlNode* node) {
     // fully load bookmarks so it's not `DCHECK`ed.
     if (path_index_.count(term) && !--path_index_[term])
       path_index_.erase(term);
+  }
+
+  // Vivaldi
+  for (const std::u16string& term :
+       ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()), true)) {
+    UnregisterNicknameNode(term, node);
   }
 }
 
@@ -202,8 +214,8 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
   const std::u16string lower_title =
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeTitle()));
   base::OffsetAdjuster::Adjustments adjustments;
-  const std::u16string clean_url = string_cleaning::CleanUpUrlForMatching(
-      node->GetTitledUrlNodeUrl(), &adjustments);
+  const std::u16string clean_url =
+      omnibox::CleanUpUrlForMatching(node->GetTitledUrlNodeUrl(), &adjustments);
   std::vector<std::u16string> lower_ancestor_titles;
   std::ranges::transform(
       node->GetTitledUrlNodeAncestorTitles(),
@@ -465,7 +477,7 @@ std::vector<std::u16string> TitledUrlIndex::ExtractIndexTerms(
   }
 
   for (const std::u16string& term :
-       ExtractQueryWords(string_cleaning::CleanUpUrlForMatching(
+       ExtractQueryWords(omnibox::CleanUpUrlForMatching(
            node->GetTitledUrlNodeUrl(), /*adjustments=*/nullptr),
                          true)) {
     terms.push_back(term);

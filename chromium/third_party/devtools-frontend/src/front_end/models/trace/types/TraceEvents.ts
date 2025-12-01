@@ -1,11 +1,11 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import type * as Platform from '../../../core/platform/platform.js';
+import type * as SDK from '../../../core/sdk/sdk.js';
 import type * as Protocol from '../../../generated/protocol.js';
 
-import type {ExtensionTrackEntryPayloadDeeplink} from './Extensions.js';
 import type {Micro, Milli, Seconds, TraceWindowMicro} from './Timing.js';
 
 // Trace Events.
@@ -208,7 +208,7 @@ export interface RunTask extends Complete {
   name: Name.RUN_TASK;
 }
 export function isRunTask(event: Event): event is RunTask {
-  return event.name === Name.RUN_TASK;
+  return event.name === Name.RUN_TASK && event.ph === Phase.COMPLETE;
 }
 
 export interface FireIdleCallback extends Complete {
@@ -389,7 +389,7 @@ export interface SyntheticNetworkRequest extends Complete, SyntheticBased<Phase.
        *
        * Note, this is not the same as URL.protocol.
        *
-       * Example values (not exhaustive): http/0.9, http/1.0, http/1.1, http, h2, h3-Q050, data, blob
+       * Example values (not exhaustive): http/0.9, http/1.0, http/1.1, http, h2, h3-Q050, data, blob, file
        */
       protocol: string,
       redirects: SyntheticNetworkRedirect[],
@@ -997,10 +997,10 @@ export const NO_NAVIGATION = 'NO_NAVIGATION';
 export type NavigationId = string|typeof NO_NAVIGATION;
 
 /**
- * This is a synthetic Layout shift cluster. Not based on a raw event as there's no concept
- * of this as a trace event.
+ * This is a synthetic Layout shift cluster. The rawSourceEvent is the worst layout shift event
+ * in the cluster.
  */
-export interface SyntheticLayoutShiftCluster {
+export interface SyntheticLayoutShiftCluster extends SyntheticBased<Phase.COMPLETE> {
   name: 'SyntheticLayoutShiftCluster';
   clusterWindow: TraceWindowMicro;
   clusterCumulativeScore: number;
@@ -1115,7 +1115,8 @@ interface ResourceReceiveResponseTimingData {
   pushEnd: Milli;
   pushStart: Milli;
   receiveHeadersEnd: Milli;
-  receiveHeadersStart: Milli;
+  /** M116. */
+  receiveHeadersStart?: Milli;
   /** When the network service is about to handle a request, ie. just before going to the HTTP cache or going to the network for DNS/connection setup. */
   requestTime: Seconds;
   sendEnd: Milli;
@@ -1357,6 +1358,15 @@ export interface PairableAsyncInstant extends PairableAsync {
 export interface PairableAsyncEnd extends PairableAsync {
   ph: Phase.ASYNC_NESTABLE_END;
 }
+export function isPairableAsyncBegin(e: Event): e is PairableAsyncBegin {
+  return e.ph === Phase.ASYNC_NESTABLE_START;
+}
+export function isPairableAsyncEnd(e: Event): e is PairableAsyncEnd {
+  return e.ph === Phase.ASYNC_NESTABLE_END;
+}
+export function isPairableAsyncInstant(e: Event): e is PairableAsyncInstant {
+  return e.ph === Phase.ASYNC_NESTABLE_INSTANT;
+}
 
 export interface AnimationFrame extends PairableAsync {
   name: Name.ANIMATION_FRAME;
@@ -1480,9 +1490,7 @@ export interface ConsoleTimeStamp extends Event {
       track?: string|number,
       trackGroup?: string|number,
       color?: string|number,
-      devtools?: {
-        link: ExtensionTrackEntryPayloadDeeplink,
-      },
+      devtools?: string,
       sampleTraceId?: number,
     },
   };
@@ -1503,7 +1511,8 @@ export interface UserTimingMeasure extends Event {
   };
 }
 
-/** ChromeFrameReporter args for PipelineReporter event.
+/**
+ * ChromeFrameReporter args for PipelineReporter event.
  * Matching proto: https://source.chromium.org/chromium/chromium/src/+/main:third_party/perfetto/protos/perfetto/trace/track_event/chrome_frame_reporter.proto
  */
 /* eslint-disable @typescript-eslint/naming-convention */
@@ -1513,11 +1522,15 @@ interface ChromeFrameReporter {
   /** The reason is set only if |state| is not |STATE_UPDATED_ALL|. */
   reason: FrameDropReason;
   frame_source: number;
-  /**  Identifies a BeginFrameArgs (along with the source_id).
-       See comments in components/viz/common/frame_sinks/begin_frame_args.h. */
+  /**
+   * Identifies a BeginFrameArgs (along with the source_id).
+   * See comments in components/viz/common/frame_sinks/begin_frame_args.h.
+   */
   frame_sequence: number;
-  /**  If this is a dropped frame (i.e. if |state| is set to |STATE_DROPPED| or
-       |STATE_PRESENTED_PARTIAL|), then indicates whether this frame impacts smoothness. */
+  /**
+   * If this is a dropped frame (i.e. if |state| is set to |STATE_DROPPED| or
+   * |STATE_PRESENTED_PARTIAL|), then indicates whether this frame impacts smoothness.
+   */
   affects_smoothness: boolean;
   /** The type of active scroll. */
   scroll_state: ScrollState;
@@ -1527,49 +1540,67 @@ interface ChromeFrameReporter {
   has_compositor_animation: boolean;
   /** If any touch-driven UX (not scroll) is active during this frame. */
   has_smooth_input_main: boolean;
-  /**  Whether the frame contained any missing content (i.e. whether there was
-       checkerboarding in the frame). */
+  /**
+   * Whether the frame contained any missing content (i.e. whether there was
+   * checkerboarding in the frame).
+   */
   has_missing_content: boolean;
   /** The id of layer_tree_host that the frame has been produced for. */
   layer_tree_host_id: number;
   /** If total latency of PipelineReporter exceeds a certain limit. */
   has_high_latency: boolean;
-  /**  Indicate if the frame is "FORKED" (i.e. a PipelineReporter event starts at
+  /**
+   *  Indicate if the frame is "FORKED" (i.e. a PipelineReporter event starts at
    * the same frame sequence as another PipelineReporter) or "BACKFILL"
-       (i.e. dropped frames when there are no partial compositor updates). */
+   * (i.e. dropped frames when there are no partial compositor updates).
+   */
   frame_type: FrameType;
-  /**  The breakdown stage of PipelineReporter that is most likely accountable for
-       high latency. */
+  /**
+   * The breakdown stage of PipelineReporter that is most likely accountable for
+   * high latency.
+   */
   high_latency_contribution_stage: string[];
 }
 const enum State {
   /** The frame did not have any updates to present. **/
   STATE_NO_UPDATE_DESIRED = 'STATE_NO_UPDATE_DESIRED',
-  /**  The frame presented all the desired updates (i.e. any updates requested
-       from both the compositor thread and main-threads were handled). **/
+  /**
+   * The frame presented all the desired updates (i.e. any updates requested
+   * from both the compositor thread and main-threads were handled). *
+   */
   STATE_PRESENTED_ALL = 'STATE_PRESENTED_ALL',
-  /**  The frame was presented with some updates, but also missed some updates
+  /**
+   *  The frame was presented with some updates, but also missed some updates
    * (e.g. missed updates from the main-thread, but included updates from the
-        compositor thread). **/
+   * compositor thread). *
+   */
   STATE_PRESENTED_PARTIAL = 'STATE_PRESENTED_PARTIAL',
-  /**  The frame was dropped, i.e. some updates were desired for the frame, but
-       was not presented. **/
+  /**
+   * The frame was dropped, i.e. some updates were desired for the frame, but
+   * was not presented. *
+   */
   STATE_DROPPED = 'STATE_DROPPED',
 }
 
 const enum FrameDropReason {
   REASON_UNSPECIFIED = 'REASON_UNSPECIFIED',
-  /**  Frame was dropped by the display-compositor.
+  /**
+   *  Frame was dropped by the display-compositor.
    * The display-compositor may drop a frame some times (e.g. the frame missed
-        the deadline, or was blocked on surface-sync, etc.) **/
+   * the deadline, or was blocked on surface-sync, etc.) *
+   */
   REASON_DISPLAY_COMPOSITOR = 'REASON_DISPLAY_COMPOSITOR',
-  /**  Frame was dropped because of the main-thread.
+  /**
+   *  Frame was dropped because of the main-thread.
    * The main-thread may cause a frame to be dropped, e.g. if the main-thread
-        is running expensive javascript, or doing a lot of layout updates, etc. **/
+   * is running expensive javascript, or doing a lot of layout updates, etc. *
+   */
   REASON_MAIN_THREAD = 'REASON_MAIN_THREAD',
-  /**  Frame was dropped by the client compositor.
+  /**
+   *  Frame was dropped by the client compositor.
    * The client compositor can drop some frames too (e.g. attempting to
-         recover latency, missing the deadline, etc.). **/
+   * recover latency, missing the deadline, etc.). *
+   */
   REASON_CLIENT_COMPOSITOR = 'REASON_CLIENT_COMPOSITOR',
 }
 
@@ -1928,8 +1959,8 @@ export function isSelectorStats(event: Event): event is SelectorStats {
   return event.name === Name.SELECTOR_STATS;
 }
 
-export interface UpdateLayoutTree extends Complete {
-  name: Name.UPDATE_LAYOUT_TREE;
+export interface RecalcStyle extends Complete {
+  name: Name.RECALC_STYLE;
   args: Args&{
     elementCount: number,
     beginData?: {
@@ -1939,8 +1970,10 @@ export interface UpdateLayoutTree extends Complete {
     },
   };
 }
-export function isUpdateLayoutTree(event: Event): event is UpdateLayoutTree {
-  return event.name === Name.UPDATE_LAYOUT_TREE;
+
+/** The real trace event is called 'UpdateLayoutTree' but we've aliased it for convenience. */
+export function isRecalcStyle(event: Event): event is RecalcStyle {
+  return event.name === Name.RECALC_STYLE;
 }
 
 export interface Layout extends Complete {
@@ -2049,7 +2082,7 @@ export function isEnd(event: Event): event is End {
 }
 
 export function isDispatch(event: Event): event is Dispatch {
-  return event.name === 'EventDispatch';
+  return event.name === 'EventDispatch' && event.ph === Phase.COMPLETE;
 }
 
 export function isInstant(event: Event): event is Instant {
@@ -2061,7 +2094,7 @@ export function isRendererEvent(event: Event): event is RendererEvent {
 }
 
 export function isFireIdleCallback(event: Event): event is FireIdleCallback {
-  return event.name === 'FireIdleCallback';
+  return event.name === 'FireIdleCallback' && event.ph === Phase.COMPLETE;
 }
 
 export function isSchedulePostMessage(event: Event): event is SchedulePostMessage {
@@ -2069,7 +2102,7 @@ export function isSchedulePostMessage(event: Event): event is SchedulePostMessag
 }
 
 export function isHandlePostMessage(event: Event): event is HandlePostMessage {
-  return event.name === Name.HANDLE_POST_MESSAGE;
+  return event.name === Name.HANDLE_POST_MESSAGE && event.ph === Phase.COMPLETE;
 }
 
 export function isUpdateCounters(event: Event): event is UpdateCounters {
@@ -2190,7 +2223,7 @@ export function isProfile(event: Event): event is Profile {
 }
 
 export function isSyntheticCpuProfile(event: Event): event is SyntheticCpuProfile {
-  return event.name === Name.CPU_PROFILE;
+  return event.name === Name.CPU_PROFILE && event.ph === Phase.COMPLETE;
 }
 
 export function isProfileChunk(event: Event): event is ProfileChunk {
@@ -2285,7 +2318,7 @@ export interface DidCommitSameDocumentNavigation extends Complete {
 }
 
 export function isDidCommitSameDocumentNavigation(event: Event): event is DidCommitSameDocumentNavigation {
-  return event.name === 'RenderFrameHostImpl::DidCommitSameDocumentNavigation';
+  return event.name === 'RenderFrameHostImpl::DidCommitSameDocumentNavigation' && event.ph === Phase.COMPLETE;
 }
 
 export function isMainFrameViewport(
@@ -2377,7 +2410,7 @@ export function isProfileCall(event: Event): event is SyntheticProfileCall {
   return 'callFrame' in event;
 }
 
-export interface Paint extends Complete {
+export interface Paint extends Event {
   name: Name.PAINT;
   args: Args&{
     data: ArgsData & {
@@ -2421,7 +2454,7 @@ export interface PaintImage extends Complete {
   };
 }
 export function isPaintImage(event: Event): event is PaintImage {
-  return event.name === Name.PAINT_IMAGE;
+  return event.name === Name.PAINT_IMAGE && event.ph === Phase.COMPLETE;
 }
 
 export interface ScrollLayer extends Complete {
@@ -2434,7 +2467,7 @@ export interface ScrollLayer extends Complete {
   };
 }
 export function isScrollLayer(event: Event): event is ScrollLayer {
-  return event.name === Name.SCROLL_LAYER;
+  return event.name === Name.SCROLL_LAYER && event.ph === Phase.COMPLETE;
 }
 
 export interface SetLayerTreeId extends Instant {
@@ -2449,7 +2482,7 @@ export interface SetLayerTreeId extends Instant {
 export function isSetLayerId(event: Event): event is SetLayerTreeId {
   return event.name === Name.SET_LAYER_TREE_ID;
 }
-export interface UpdateLayer extends Complete {
+export interface UpdateLayer extends Event {
   name: Name.UPDATE_LAYER;
   args: Args&{
     layerId: number,
@@ -2548,7 +2581,7 @@ export interface FireAnimationFrame extends Complete {
 }
 
 export function isFireAnimationFrame(event: Event): event is FireAnimationFrame {
-  return event.name === Name.FIRE_ANIMATION_FRAME;
+  return event.name === Name.FIRE_ANIMATION_FRAME && event.ph === Phase.COMPLETE;
 }
 
 export interface RequestAnimationFrame extends Instant {
@@ -2588,7 +2621,7 @@ export interface TimerFire extends Complete {
   };
 }
 export function isTimerFire(event: Event): event is TimerFire {
-  return event.name === Name.TIMER_FIRE;
+  return event.name === Name.TIMER_FIRE && event.ph === Phase.COMPLETE;
 }
 
 export interface RequestIdleCallback extends Instant {
@@ -2597,7 +2630,7 @@ export interface RequestIdleCallback extends Instant {
     data: {
       frame: string,
       id: number,
-      timeout: number,
+      timeout: Milli,
       stackTrace?: CallFrame,
     },
 
@@ -2750,7 +2783,7 @@ export interface V8Compile extends Complete {
   };
 }
 export function isV8Compile(event: Event): event is V8Compile {
-  return event.name === Name.COMPILE;
+  return event.name === Name.COMPILE && event.ph === Phase.COMPLETE;
 }
 
 export interface FunctionCall extends Complete {
@@ -2758,11 +2791,12 @@ export interface FunctionCall extends Complete {
   args: Args&{
     data?: Partial<CallFrame>& {
       frame?: string,
+      isolate?: number,
     },
   };
 }
 export function isFunctionCall(event: Event): event is FunctionCall {
-  return event.name === Name.FUNCTION_CALL;
+  return event.name === Name.FUNCTION_CALL && event.ph === Phase.COMPLETE;
 }
 
 export interface SchedulePostTaskCallback extends Instant {
@@ -2793,7 +2827,7 @@ export interface RunPostTaskCallback extends Complete {
   };
 }
 export function isRunPostTaskCallback(event: Event): event is RunPostTaskCallback {
-  return event.name === Name.RUN_POST_TASK_CALLBACK;
+  return event.name === Name.RUN_POST_TASK_CALLBACK && event.ph === Phase.COMPLETE;
 }
 
 export interface AbortPostTaskCallback extends Complete {
@@ -2807,7 +2841,7 @@ export interface AbortPostTaskCallback extends Complete {
   };
 }
 export function isAbortPostTaskCallback(event: Event): event is RunPostTaskCallback {
-  return event.name === Name.ABORT_POST_TASK_CALLBACK;
+  return event.name === Name.ABORT_POST_TASK_CALLBACK && event.ph === Phase.COMPLETE;
 }
 
 /**
@@ -2871,7 +2905,7 @@ export interface ParseAuthorStyleSheet extends Complete {
 }
 
 export function isParseAuthorStyleSheetEvent(event: Event): event is ParseAuthorStyleSheet {
-  return event.name === Name.PARSE_AUTHOR_STYLE_SHEET;
+  return event.name === Name.PARSE_AUTHOR_STYLE_SHEET && event.ph === Phase.COMPLETE;
 }
 
 /**
@@ -2963,7 +2997,8 @@ export const enum Name {
   /* Layout */
   SCHEDULE_STYLE_RECALCULATION = 'ScheduleStyleRecalculation',
   LAYOUT = 'Layout',
-  UPDATE_LAYOUT_TREE = 'UpdateLayoutTree',
+  /** The real trace event is called 'UpdateLayoutTree' but we've aliased it for convenience. */
+  RECALC_STYLE = 'UpdateLayoutTree',
   INVALIDATE_LAYOUT = 'InvalidateLayout',
   LAYOUT_INVALIDATION_TRACKING = 'LayoutInvalidationTracking',
   COMPUTE_INTERSECTION = 'ComputeIntersections',
@@ -3153,75 +3188,51 @@ export interface LegacyLayerPaintEventPicture {
   serializedPicture: string;
 }
 
-export interface TargetRundownEvent extends Event {
+/** Same as `TraceEventTargetRundown` in `EnhancedTracesParser` */
+export interface RundownScriptCompiled extends Event {
   cat: 'disabled-by-default-devtools.target-rundown';
-  name: 'ScriptCompiled';
+  name: SDK.EnhancedTracesParser.RundownScriptCompiled['name'];
   args: Args&{
-    data?: {
-      frame: Protocol.Page.FrameId,
-      frameType: string,
-      url: string,
-      isolate: string,
-      v8context: string,
-      origin: string,
-      scriptId: number,
-      isDefault?: boolean,
-      contextType?: string,
-    },
+    data?: SDK.EnhancedTracesParser.RundownScriptCompiled['args']['data'],
   };
 }
 
-export function isTargetRundownEvent(event: Event): event is TargetRundownEvent {
-  return event.cat === 'disabled-by-default-devtools.target-rundown' && event.name === 'ScriptCompiled';
+export function isRundownScriptCompiled(event: Event): event is RundownScriptCompiled {
+  return event.cat === 'disabled-by-default-devtools.target-rundown';
 }
 
-export interface V8SourceRundownEvent extends Event {
+/** Same as `TraceEventScriptRundown` in `EnhancedTracesParser` */
+export interface RundownScript extends Event {
   cat: 'disabled-by-default-devtools.v8-source-rundown';
-  name: 'ScriptCatchup';
+  name: SDK.EnhancedTracesParser.RundownScript['name'];
   args: Args&{
-    data: {
-      isolate: string,
-      executionContextId: Protocol.Runtime.ExecutionContextId,
-      scriptId: number,
-      hash: string,
-      isModule: boolean,
-      hasSourceUrl: boolean,
-      url?: string,
-      sourceUrl?: string,
-      sourceMapUrl?: string,
-      sourceMapUrlElided?: boolean,
-    },
+    data: SDK.EnhancedTracesParser.RundownScript['args']['data'],
   };
 }
 
-export function isV8SourceRundownEvent(event: Event): event is V8SourceRundownEvent {
+export function isRundownScript(event: Event): event is RundownScript {
   return event.cat === 'disabled-by-default-devtools.v8-source-rundown' && event.name === 'ScriptCatchup';
 }
 
-export interface V8SourceRundownSourcesScriptCatchupEvent extends Event {
+/** Same as `TraceEventScriptRundownSource` in `EnhancedTracesParser` */
+export interface RundownScriptSource extends Event {
   cat: 'disabled-by-default-devtools.v8-source-rundown-sources';
   name: 'ScriptCatchup';
   args: Args&{
-    data: {
-      isolate: string,
-      scriptId: number,
-      length: number,
-      sourceText: string,
-    },
+    data: SDK.EnhancedTracesParser.RundownScriptSource['args']['data'],
   };
 }
 
-export function isV8SourceRundownSourcesScriptCatchupEvent(event: Event):
-    event is V8SourceRundownSourcesScriptCatchupEvent {
+export function isRundownScriptSource(event: Event): event is RundownScriptSource {
   return event.cat === 'disabled-by-default-devtools.v8-source-rundown-sources' && event.name === 'ScriptCatchup';
 }
 
-export interface V8SourceRundownSourcesLargeScriptCatchupEvent extends Event {
+export interface RundownScriptSourceLarge extends Event {
   cat: 'disabled-by-default-devtools.v8-source-rundown-sources';
   name: 'LargeScriptCatchup';
   args: Args&{
     data: {
-      isolate: string,
+      isolate: number,
       scriptId: number,
       splitIndex: number,
       splitCount: number,
@@ -3230,23 +3241,22 @@ export interface V8SourceRundownSourcesLargeScriptCatchupEvent extends Event {
   };
 }
 
-export function isV8SourceRundownSourcesLargeScriptCatchupEvent(event: Event):
-    event is V8SourceRundownSourcesLargeScriptCatchupEvent {
+export function isRundownScriptSourceLarge(event: Event): event is RundownScriptSourceLarge {
   return event.cat === 'disabled-by-default-devtools.v8-source-rundown-sources' && event.name === 'LargeScriptCatchup';
 }
 
-export interface V8SourceRundownSourcesStubScriptCatchupEvent extends Event {
+export interface RundownScriptStub extends Event {
   cat: 'disabled-by-default-devtools.v8-source-rundown-sources';
   name: 'StubScriptCatchup';
   args: Args&{
     data: {
-      isolate: string,
+      isolate: number,
       scriptId: number,
     },
   };
 }
 
-export function isAnyScriptCatchupEvent(event: Event): event is V8SourceRundownSourcesScriptCatchupEvent|
-    V8SourceRundownSourcesLargeScriptCatchupEvent|V8SourceRundownSourcesStubScriptCatchupEvent {
+export function isAnyScriptSourceEvent(event: Event): event is RundownScriptSource|RundownScriptSourceLarge|
+    RundownScriptStub {
   return event.cat === 'disabled-by-default-devtools.v8-source-rundown-sources';
 }

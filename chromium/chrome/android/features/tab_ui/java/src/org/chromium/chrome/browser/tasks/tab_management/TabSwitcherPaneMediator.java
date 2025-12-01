@@ -32,7 +32,6 @@ import org.chromium.chrome.browser.tasks.tab_management.PriceMessageService.Pric
 import org.chromium.chrome.browser.tasks.tab_management.TabGridDialogMediator.DialogController;
 import org.chromium.chrome.browser.tasks.tab_management.TabListEditorCoordinator.TabListEditorController;
 import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.GridCardOnClickListenerProvider;
-import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActionListener;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
@@ -81,14 +80,9 @@ public class TabSwitcherPaneMediator
                 }
 
                 @Override
-                public void tabPendingClosure(Tab tab, @TabClosingSource int closingSource) {
-                    notifyBackPressStateChangedInternal();
-                }
-
-                @Override
                 public void onFinishingTabClosure(Tab tab, @TabClosingSource int closingSource) {
                     // If tab is closed by the site itself rather than user's input,
-                    // tabPendingClosure & tabClosureCommitted won't be called.
+                    // onTabClosePending & tabClosureCommitted won't be called.
                     notifyBackPressStateChangedInternal();
                 }
 
@@ -98,7 +92,7 @@ public class TabSwitcherPaneMediator
                 }
 
                 @Override
-                public void multipleTabsPendingClosure(
+                public void onTabClosePending(
                         List<Tab> tabs, boolean isAllTabs, @TabClosingSource int closingSource) {
                     notifyBackPressStateChangedInternal();
                 }

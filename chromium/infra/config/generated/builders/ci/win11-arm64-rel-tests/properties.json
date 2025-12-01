@@ -7,10 +7,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "win-arm64-rel",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-win-archive",
               "builder_group": "chromium.win",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_chromium_config": {
@@ -36,10 +35,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "win11-arm64-rel-tests",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-win-archive",
               "builder_group": "chromium.win",
               "execution_mode": "TEST",
               "legacy_chromium_config": {
@@ -61,7 +59,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "win-arm64-rel",
-                "project": "chromium-m140"
+                "project": "chromium-m142"
               }
             }
           }
@@ -71,7 +69,7 @@
         {
           "bucket": "ci",
           "builder": "win11-arm64-rel-tests",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         }
       ],
       "mirroring_builder_group_and_names": [

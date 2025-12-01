@@ -131,6 +131,9 @@ struct SpmdPartitionerOptions {
   // This combines sizes in bytes of both operands.
   // When it's set, it will override threshold_for_windowed_einsum_mib.
   std::optional<int64_t> total_bytes_windowed_einsum_threshold = std::nullopt;
+
+  // The maximum number of iterations for windowed einsum.
+  int64_t max_windowed_einsum_iteration = 32;
 };
 
 // Class to wrap the computation builder to capture information during SPMD
@@ -396,6 +399,12 @@ class SpmdPartitioner : public HloModulePass {
       HloModule* module,
       const absl::flat_hash_set<absl::string_view>& execution_threads);
 
+  // Replaces unreduced sharding type with replicated type to decouple unreduced
+  // with other sharding types.
+  absl::Status ConvertUnreducedSharding(
+      HloModule* module,
+      const absl::flat_hash_set<absl::string_view>& execution_threads);
+
   // Returns if the given side-effecting instruction is allowed to have
   // replicated sharding.
   virtual bool CanSideEffectingHaveReplicatedSharding(
@@ -414,6 +423,13 @@ class SpmdPartitioner : public HloModulePass {
   // pad->slice into a single pad with potentially negative padding to avoid
   // multiple halo exchanges.
   absl::Status PreprocessHlos(
+      HloModule* module,
+      const absl::flat_hash_set<absl::string_view>& execution_threads);
+
+  // Preprocesses the graph to make sure that computations called in
+  // control-flow contexts (call, while, conditional) have matching sharding
+  // annotations on callee parameters and the caller arguments.
+  absl::StatusOr<bool> PreprocessCallSites(
       HloModule* module,
       const absl::flat_hash_set<absl::string_view>& execution_threads);
 
@@ -695,11 +711,7 @@ class SpmdPartitioningVisitor : public DfsHloVisitorWithDefault {
 
   // Sets the PartitionedHlo for the original hlo.
   void SetPartitionedHlo(const HloInstruction* hlo,
-                         PartitionedHlo&& partitioned_hlo) {
-    CHECK_EQ(partitioned_instructions_.count(hlo), 0);
-    partitioned_instructions_.emplace(hlo, partitioned_hlo);
-    changed_ = true;
-  }
+                         PartitionedHlo&& partitioned_hlo);
 
   // Convenient wrapper that creates PartitionedHlo from the result of the func
   // and maps it to the given original hlo.

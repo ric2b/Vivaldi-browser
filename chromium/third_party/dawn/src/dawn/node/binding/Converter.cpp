@@ -543,11 +543,33 @@ bool Converter::Convert(wgpu::TextureFormat& out, const interop::GPUTextureForma
             out = wgpu::TextureFormat::ASTC12x12UnormSrgb;
             requiredFeature = wgpu::FeatureName::TextureCompressionASTC;
             break;
-
-        default:
-            std::stringstream err;
-            err << "unknown GPUTextureFormat(" << static_cast<int>(in) << ")";
-            return Throw(err.str());
+        case interop::GPUTextureFormat::kR16Unorm:
+            out = wgpu::TextureFormat::R16Unorm;
+            requiredFeature = wgpu::FeatureName::TextureFormatsTier1;
+            break;
+        case interop::GPUTextureFormat::kR16Snorm:
+            out = wgpu::TextureFormat::R16Snorm;
+            requiredFeature = wgpu::FeatureName::TextureFormatsTier1;
+            break;
+        case interop::GPUTextureFormat::kRg16Unorm:
+            out = wgpu::TextureFormat::RG16Unorm;
+            requiredFeature = wgpu::FeatureName::TextureFormatsTier1;
+            break;
+        case interop::GPUTextureFormat::kRg16Snorm:
+            out = wgpu::TextureFormat::RG16Snorm;
+            requiredFeature = wgpu::FeatureName::TextureFormatsTier1;
+            break;
+        case interop::GPUTextureFormat::kRgba16Unorm:
+            out = wgpu::TextureFormat::RGBA16Unorm;
+            requiredFeature = wgpu::FeatureName::TextureFormatsTier1;
+            break;
+        case interop::GPUTextureFormat::kRgba16Snorm:
+            out = wgpu::TextureFormat::RGBA16Snorm;
+            requiredFeature = wgpu::FeatureName::TextureFormatsTier1;
+            break;
+            // default is left off intentionally so we get an error if
+            // new formats are added and they are not handled here.
+            // Note: they need to be added below as well.
     }
 
     assert(requiredFeature != wgpu::FeatureName(0u));
@@ -662,10 +684,14 @@ bool Converter::Convert(interop::GPUTextureFormat& out, wgpu::TextureFormat in) 
         CASE(RGBA8Unorm, kRgba8Unorm);
         CASE(RGBA8UnormSrgb, kRgba8UnormSrgb);
         CASE(Stencil8, kStencil8);
+        CASE(R16Snorm, kR16Snorm);
+        CASE(R16Unorm, kR16Unorm);
+        CASE(RG16Snorm, kRg16Snorm);
+        CASE(RG16Unorm, kRg16Unorm);
+        CASE(RGBA16Snorm, kRgba16Snorm);
+        CASE(RGBA16Unorm, kRgba16Unorm);
 #undef CASE
 
-        case wgpu::TextureFormat::R16Snorm:
-        case wgpu::TextureFormat::R16Unorm:
         case wgpu::TextureFormat::R8BG8Biplanar420Unorm:
         case wgpu::TextureFormat::R8BG8Biplanar422Unorm:
         case wgpu::TextureFormat::R8BG8Biplanar444Unorm:
@@ -673,10 +699,6 @@ bool Converter::Convert(interop::GPUTextureFormat& out, wgpu::TextureFormat in) 
         case wgpu::TextureFormat::R10X6BG10X6Biplanar420Unorm:
         case wgpu::TextureFormat::R10X6BG10X6Biplanar422Unorm:
         case wgpu::TextureFormat::R10X6BG10X6Biplanar444Unorm:
-        case wgpu::TextureFormat::RG16Snorm:
-        case wgpu::TextureFormat::RG16Unorm:
-        case wgpu::TextureFormat::RGBA16Snorm:
-        case wgpu::TextureFormat::RGBA16Unorm:
         case wgpu::TextureFormat::External:
 
         case wgpu::TextureFormat::Undefined:
@@ -691,35 +713,39 @@ bool Converter::Convert(wgpu::TextureUsage& out, const interop::GPUTextureUsageF
     return true;
 }
 
-bool Converter::Convert(wgpu::TextureComponentSwizzle& out,
-                        const interop::GPUTextureComponentSwizzle& in) {
-    return Convert(out.r, in.r) && Convert(out.g, in.g) && Convert(out.b, in.b) &&
-           Convert(out.a, in.a);
+bool Converter::Convert(wgpu::TextureComponentSwizzle& out, const std::string& in) {
+    if (in.length() != 4) {
+        return Throw(Napi::TypeError::New(
+            env, "TextureComponentSwizzle must be exactly a four-character string."));
+    }
+
+    return Convert(out.r, in[0]) && Convert(out.g, in[1]) && Convert(out.b, in[2]) &&
+           Convert(out.a, in[3]);
 }
 
-bool Converter::Convert(wgpu::ComponentSwizzle& out, const interop::GPUComponentSwizzle& in) {
+bool Converter::Convert(wgpu::ComponentSwizzle& out, const char& in) {
     out = wgpu::ComponentSwizzle::Undefined;
     switch (in) {
-        case interop::GPUComponentSwizzle::kZero:
-            out = wgpu::ComponentSwizzle::Zero;
-            return true;
-        case interop::GPUComponentSwizzle::kOne:
-            out = wgpu::ComponentSwizzle::One;
-            return true;
-        case interop::GPUComponentSwizzle::kR:
+        case 'r':
             out = wgpu::ComponentSwizzle::R;
             return true;
-        case interop::GPUComponentSwizzle::kG:
+        case 'g':
             out = wgpu::ComponentSwizzle::G;
             return true;
-        case interop::GPUComponentSwizzle::kB:
+        case 'b':
             out = wgpu::ComponentSwizzle::B;
             return true;
-        case interop::GPUComponentSwizzle::kA:
+        case 'a':
             out = wgpu::ComponentSwizzle::A;
             return true;
+        case '0':
+            out = wgpu::ComponentSwizzle::Zero;
+            return true;
+        case '1':
+            out = wgpu::ComponentSwizzle::One;
+            return true;
     }
-    return Throw("invalid value for ComponentSwizzle");
+    return Throw(Napi::TypeError::New(env, "invalid value for ComponentSwizzle."));
 }
 
 bool Converter::Convert(interop::GPUTextureUsageFlags& out, wgpu::TextureUsage in) {
@@ -1627,8 +1653,8 @@ bool Converter::Convert(wgpu::FeatureName& out, interop::GPUFeatureName in) {
         case interop::GPUFeatureName::kTextureComponentSwizzle:
             out = wgpu::FeatureName::TextureComponentSwizzle;
             return true;
-        case interop::GPUFeatureName::kChromiumExperimentalPrimitiveId:
-            out = wgpu::FeatureName::ChromiumExperimentalPrimitiveId;
+        case interop::GPUFeatureName::kPrimitiveIndex:
+            out = wgpu::FeatureName::PrimitiveIndex;
             return true;
     }
     return false;
@@ -1664,7 +1690,7 @@ bool Converter::Convert(interop::GPUFeatureName& out, wgpu::FeatureName in) {
         CASE(TextureFormatsTier1, kTextureFormatsTier1);
         CASE(TextureFormatsTier2, kTextureFormatsTier2);
         CASE(TextureComponentSwizzle, kTextureComponentSwizzle);
-        CASE(ChromiumExperimentalPrimitiveId, kChromiumExperimentalPrimitiveId);
+        CASE(PrimitiveIndex, kPrimitiveIndex);
 
 #undef CASE
 
@@ -1723,6 +1749,7 @@ bool Converter::Convert(interop::GPUFeatureName& out, wgpu::FeatureName in) {
         case wgpu::FeatureName::DawnPartialLoadResolveTexture:
         case wgpu::FeatureName::DawnTexelCopyBufferRowAlignment:
         case wgpu::FeatureName::FlexibleTextureViews:
+        case wgpu::FeatureName::ChromiumExperimentalBindless:
             return false;
     }
     return false;

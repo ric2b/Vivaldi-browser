@@ -139,8 +139,14 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
         [&](const StorageTextureBindingInfo& layout) {
             s->Append(absl::StrFormat("%s: %s ", BindingInfoType::StorageTexture, layout));
         },
+        [&](const TexelBufferBindingInfo& layout) {
+            s->Append(absl::StrFormat("%s: %s ", BindingInfoType::TexelBuffer, layout));
+        },
         [&](const InputAttachmentBindingInfo& layout) {
             s->Append(absl::StrFormat("%s: %s ", BindingInfoType::InputAttachment, layout));
+        },
+        [&](const ExternalTextureBindingInfo&) {
+            s->Append(absl::StrFormat("%s: {} ", BindingInfoType::ExternalTexture));
         });
 
     s->Append(absl::StrFormat("}"));
@@ -195,6 +201,22 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
     const absl::FormatConversionSpec& spec,
     absl::FormatSink* s) {
     auto info = StorageTextureBindingInfo::From(value);
+    return AbslFormatConvert(info, spec, s);
+}
+
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const TexelBufferBindingInfo& value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s) {
+    s->Append(absl::StrFormat("{format: %s, access: %s}", value.format, value.access));
+    return {true};
+}
+
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const TexelBufferBindingLayout& value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s) {
+    auto info = TexelBufferBindingInfo::From(value);
     return AbslFormatConvert(info, spec, s);
 }
 
@@ -356,8 +378,7 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
 
         s->Append(absl::StrFormat("%d={format:%s", i, value->GetColorAttachmentFormat(i)));
 
-        if (value->GetDevice()->HasFeature(Feature::DawnLoadResolveTexture) &&
-            value->GetExpandResolveInfo().attachmentsToExpandResolve.any()) {
+        if (value->GetExpandResolveInfo().attachmentsToExpandResolve.any()) {
             s->Append(
                 absl::StrFormat(", resolve:%v, expandResolve:%v",
                                 value->GetExpandResolveInfo().resolveTargetsMask.test(i),
@@ -544,6 +565,9 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
             break;
         case BindingInfoType::ExternalTexture:
             s->Append("externalTexture");
+            break;
+        case BindingInfoType::TexelBuffer:
+            s->Append("texelBuffer");
             break;
         case BindingInfoType::StaticSampler:
             s->Append("staticSampler");

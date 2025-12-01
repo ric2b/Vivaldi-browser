@@ -13,10 +13,11 @@ import android.graphics.drawable.Drawable;
 import android.view.View;
 
 import androidx.annotation.ColorInt;
-import androidx.annotation.NonNull;
 
 import org.chromium.base.Callback;
-import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.Initializer;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.tab.TabObscuringHandler;
 import org.chromium.components.browser_ui.widget.animation.CancelAwareAnimatorListener;
@@ -24,10 +25,13 @@ import org.chromium.ui.interpolators.Interpolators;
 import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.HashSet;
+import java.util.function.Supplier;
+
 
 // Vivaldi
 import org.vivaldi.browser.common.VivaldiUtils;
 
+@NullMarked
 class StatusIndicatorMediator
         implements BrowserControlsStateProvider.Observer,
                 View.OnLayoutChangeListener,
@@ -42,17 +46,17 @@ class StatusIndicatorMediator
             new HashSet<>();
     private final TabObscuringHandler mTabObscuringHandler;
     private final Supplier<Integer> mStatusBarWithoutIndicatorColorSupplier;
-    private Runnable mOnShowAnimationEnd;
+    private @Nullable Runnable mOnShowAnimationEnd;
     private Runnable mRegisterResource;
     private Runnable mUnregisterResource;
     private final Supplier<Boolean> mCanAnimateNativeBrowserControls;
-    private Callback<Runnable> mInvalidateCompositorView;
+    private Callback<@Nullable Runnable> mInvalidateCompositorView;
     private Runnable mRequestLayout;
 
-    private ValueAnimator mStatusBarAnimation;
-    private ValueAnimator mTextFadeInAnimation;
-    private AnimatorSet mUpdateAnimatorSet;
-    private AnimatorSet mHideAnimatorSet;
+    private @Nullable ValueAnimator mStatusBarAnimation;
+    private @Nullable ValueAnimator mTextFadeInAnimation;
+    private @Nullable AnimatorSet mUpdateAnimatorSet;
+    private @Nullable AnimatorSet mHideAnimatorSet;
 
     private int mIndicatorHeight;
     private int mJavaLayoutHeight;
@@ -91,11 +95,12 @@ class StatusIndicatorMediator
      * @param invalidateCompositorView Callback to invalidate the compositor texture.
      * @param requestLayout Runnable to request layout for the view.
      */
+    @Initializer
     void initialize(
             PropertyModel model,
             Runnable registerResource,
             Runnable unregisterResource,
-            Callback<Runnable> invalidateCompositorView,
+            Callback<@Nullable Runnable> invalidateCompositorView,
             Runnable requestLayout) {
         mModel = model;
         mRegisterResource = registerResource;
@@ -180,8 +185,8 @@ class StatusIndicatorMediator
      * @param iconTint Compound drawable tint.
      */
     void animateShow(
-            @NonNull String statusText,
-            Drawable statusIcon,
+            String statusText,
+            @Nullable Drawable statusIcon,
             @ColorInt int backgroundColor,
             @ColorInt int textColor,
             @ColorInt int iconTint) {
@@ -285,8 +290,8 @@ class StatusIndicatorMediator
      * @param animationCompleteCallback Callback to run after the animation is done.
      */
     void animateUpdate(
-            @NonNull String statusText,
-            Drawable statusIcon,
+            String statusText,
+            @Nullable Drawable statusIcon,
             @ColorInt int backgroundColor,
             @ColorInt int textColor,
             @ColorInt int iconTint,

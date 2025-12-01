@@ -34,7 +34,7 @@ BASE_DECLARE_FEATURE(kNtpBackgroundImageErrorDetection);
 BASE_DECLARE_FEATURE(kNtpCalendarModule);
 BASE_DECLARE_FEATURE(kNtpChromeCartModule);
 BASE_DECLARE_FEATURE(kNtpDriveModule);
-BASE_DECLARE_FEATURE(kNtpDriveModuleNoSyncRequirement);
+BASE_DECLARE_FEATURE(kNtpDriveModuleHistorySyncRequirement);
 BASE_DECLARE_FEATURE(kNtpDriveModuleSegmentation);
 BASE_DECLARE_FEATURE(kNtpDriveModuleShowSixFiles);
 #if !defined(OFFICIAL_BUILD)
@@ -81,6 +81,7 @@ BASE_DECLARE_FEATURE(kNtpMicrosoftAuthenticationModule);
 BASE_DECLARE_FEATURE(kNtpOneGoogleBarAsyncBarParts);
 BASE_DECLARE_FEATURE(kNtpFooter);
 BASE_DECLARE_FEATURE(kNtpTabGroupsModule);
+BASE_DECLARE_FEATURE(kNtpTabGroupsModuleZeroState);
 
 // Parameter for controlling the luminosity difference for NTP elements on light
 // backgrounds.
@@ -229,6 +230,11 @@ extern const base::FeatureParam<int>
 // that are associated with local tabs.
 extern const base::FeatureParam<bool>
     kNtpMostRelevantTabResumptionModuleFilterLocalTabsParam;
+// Parameter determining the time range of events.
+extern const base::FeatureParam<base::TimeDelta>
+    kNtpTabGroupsModuleWindowEndDeltaParam;
+// Parameter determing the max number of tab groups to show in the module.
+extern const base::FeatureParam<size_t> kNtpTabGroupsModuleMaxGroupCountParam;
 
 // Returns the timeout after which the load of a module should be aborted.
 base::TimeDelta GetModulesLoadTimeout();

@@ -7,7 +7,6 @@
 <translation id="1159983379553246472">Por favor, actualiza esta pestaña para solucionar los problemas de reproducción de multimedia.</translation>
 <translation id="1222195720020481779">Iniciando el instalador...</translation>
 <translation id="1224683873953469764">Obtén Vivaldi para Celular</translation>
-<translation id="1270785070369717623">Por desgracia, tus ajustes de Opera GX no están disponibles mientras el navegador está abierto. Para importar aquellos ajustes a Vivaldi, guarda tu trabajo y cierra todas las ventanas de Opera GX. Luego, pincha en Continuar.</translation>
 <translation id="1276145862619442150">Accesos rápidos</translation>
 <translation id="1281950884873973195">Animal 6</translation>
 <translation id="1411638389238344450">Enviar enlace por Mail</translation>
@@ -25,7 +24,6 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Propiedades de la imagen…</translation>
 <translation id="1920297417712412573">Copiar a nota</translation>
-<translation id="1921101374471252440">&amp;Recargar imagen</translation>
 <translation id="1924750141060565109">Paisaje 15</translation>
 <translation id="19598411548897379">Genérico</translation>
 <translation id="1973351931613083086">reproducción automática</translation>
@@ -41,8 +39,6 @@
 <translation id="2501278716633472235">Regresar</translation>
 <translation id="2612127540243995147">Listo pata instalar. Vivaldi se cerrará y abrirá nuevamente.</translation>
 <translation id="2613387515621326337">Mostrar el sitio web de actualización</translation>
-<translation id="2645477450146475243">Por desgracia, tus ajustes de Opera no están disponibles mientras el navegador está abierto. Para importar aquellos ajustes a Vivaldi, guarda tu trabajo y cierra todas las ventanas de Opera. Luego, pincha en Continuar.</translation>
-<translation id="2647368062414805334">Por desgracia, tus ajustes de Edge no están disponibles mientras el navegador está abierto. Para importar aquellos ajustes a Vivaldi, guarda tu trabajo y cierra todas las ventanas de Edge. Luego, pincha en Continuar.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Animal 3</translation>
 <translation id="2873951654529031587">Papelera</translation>
@@ -52,7 +48,6 @@
 <translation id="2977472760057091832">Abrir el enlace en una ventana privada</translation>
 <translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Abrir en una pestaña nueva</translation>
-<translation id="3027988479108856431">Por desgracia, sus preferencias de Yandex no estarán disponibles mientras lo mantenga en ejecución. Para importarlas a Vivaldi, guarde su trabajo y cierre todas las ventanas de Yandex. Después haga clic en Continuar.</translation>
 <translation id="3084011186245865060">Paisaje 6</translation>
 <translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Vivaldi es posible gracias al proyecto de Chromium de código abierto y otros software de código abierto.</translation>
@@ -67,6 +62,7 @@
 <translation id="3334610655141903168">(sin título)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> es la última versión disponible.</translation>
 <translation id="3383198080133834965">¡Vivaldi está actualizado!</translation>
+<translation id="3402602684546832928">Seleccionar marcadores Opera</translation>
 <translation id="3451317331714872347">Paisaje 8</translation>
 <translation id="3457498675806041407">Confirmar la salida</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> ya se encuentra instalada y se activará después de reiniciar el navegador.</translation>
@@ -84,9 +80,9 @@
 <translation id="3732157130969736834">Guardar enlace en marcadores</translation>
 <translation id="3732388226447288666">Animal 2</translation>
 <translation id="3732439195215136813">Animal 5</translation>
-<translation id="3795800845758778870">Por desgracia, tus ajustes de Brave no están disponibles mientras el navegador está abierto. Para importar aquellos ajustes a Vivaldi, guarda tu trabajo y cierra todas las ventanas de Brave. Luego, pincha en Continuar.</translation>
 <translation id="3822431842304177896">Nuevo Separador</translation>
 <translation id="3832132597516774400">Paisaje 5</translation>
+<translation id="3861977424605124250">Mostrar al inicio</translation>
 <translation id="3894751534882749287">Si deseas ver la página de todas formas, puedes cambiar su nivel de protección de rastreo en la pantalla emergente de Bloqueador de Rastreo o al hacer click en el botón de Permitir</translation>
 <translation id="3914946330804881301">Importado desde Opera</translation>
 <translation id="3921292902397893431">Monstruo 8</translation>
@@ -137,11 +133,11 @@
 <translation id="5770433027661640693">Paisaje 10</translation>
 <translation id="5857090052475505287">Nueva carpeta</translation>
 <translation id="588258955323874662">Pantalla completa</translation>
-<translation id="5916080360077521750">Por desgracia, tus ajustes de Chrome no están disponibles mientras tu navegador está abierto. Para importar esos ajustes a Vivaldi, guarda tu trabajo y cierra todas las ventanas de Chrome. Después, haz click en Continuar.</translation>
 <translation id="6040143037577758943">Cerrar</translation>
 <translation id="6140948187512243695">Mostrar detalles</translation>
 <translation id="6229528619562190452">Clic aquí para actualizar Vivaldi.</translation>
 <translation id="6234173136417926046">Utilizar imagen como fondo de la Página de Inicio</translation>
+<translation id="630690498669249215">Archivo de marcadores de Opera</translation>
 <translation id="6339818817272922368">Cuenta Local</translation>
 <translation id="6376435169746695498">La página no se terminó de cargar debido a una coincidencia en <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Asegurar mi perfil</translation>
@@ -152,16 +148,17 @@
 <translation id="6551219277044048123">Añadir como motor de búsqueda...</translation>
 <translation id="6630781781151951863">Paisaje 18</translation>
 <translation id="6635049669875534328">Notas de la última versión:</translation>
+<translation id="6653655836861174026">Con los perfiles de Vivaldi, puedes separar todas tus cosas en el navegador. Crea perfiles para amigos y familia, o divídelos entre trabajo y diversión.</translation>
 <translation id="6693585104974197539">Seleccionar el archivo del perfil de Edge para importar</translation>
 <translation id="6726279523566323394">Seleccionar el archivo de perfil de Brave para importar</translation>
 <translation id="6892812721183419409">Abrir Link como <ph name="USER" /></translation>
 <translation id="6896758677409633944">Copiar</translation>
 <translation id="6960139763942959188">Este perfil está almacenado de manera no segura en un formato no encriptado. Vivaldi está a punto de actualizar tu perfil a un formato encriptado más seguro. Deberías salir ahora y hacer un respaldo de tu perfil antes de continuar.</translation>
+<translation id="7066262000446496119">¿Quién está usando Vivaldi?</translation>
 <translation id="7086554968911045110">Paisaje 7</translation>
 <translation id="7099506190679014195">Actualización del repositorio de claves</translation>
 <translation id="7111492742514999492">Paisaje 9</translation>
 <translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
-<translation id="7208252576848052204">Por desgracia, tus ajustes de Arc no están disponibles mientras el navegador está abierto. Para importar aquellos ajustes a Vivaldi, guarda tu trabajo y cierra todas las ventanas de Arc. Luego, pincha en Continuar.</translation>
 <translation id="7321500017121629018">Activo ayer</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Error al iniciar el instalador de actualizaciones. Por favor, revisa que el equipo tenga suficiente memoria o espacio en disco y vuelve a intentar más tarde.</translation>
@@ -189,7 +186,6 @@
 <translation id="8539196077526389150">Paisaje 13</translation>
 <translation id="8562339533180097902">Cerrar Vivaldi e instalar ahora</translation>
 <translation id="8567452685425968223">Extrayendo actualización...</translation>
-<translation id="8624587806981488221">&amp;Recargar la imagen</translation>
 <translation id="8651348004684669199">Añadir la pestaña activa</translation>
 <translation id="8669345741879513971">Monstruo 10</translation>
 <translation id="867544375504146191">Yandex</translation>

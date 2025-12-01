@@ -2,13 +2,9 @@
 
 #include "components/ad_blocker/ios/adblock_rule_service_impl.h"
 
-#include <algorithm>
-#include <bitset>
 #include <memory>
 #include <utility>
-#include <vector>
 
-#include "base/barrier_closure.h"
 #include "base/base_paths.h"
 #include "base/containers/enum_set.h"
 #include "base/files/file_enumerator.h"
@@ -48,8 +44,8 @@ void DeleteLeakedCompilationResult() {
 class Loader {
  public:
   using LoadedCallback = base::OnceCallback<void(
-      std::array<std::unique_ptr<AdBlockerContentRuleListProvider>,
-                 kRuleGroupCount> loaded_content_rule_list_providers,
+      RuleGroupArray<std::unique_ptr<AdBlockerContentRuleListProvider>>
+          loaded_content_rule_list_providers,
       RuleServiceStorageDelegate::LoadResult load_result)>;
   using DoneApplyingRulesCallback = base::RepeatingCallback<void(RuleGroup)>;
 
@@ -57,9 +53,9 @@ class Loader {
          LoadedCallback on_loaded,
          DoneApplyingRulesCallback on_done_applying_rules)
       : on_loaded_(std::move(on_loaded)) {
-    for (auto group :
-         {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
-      loading_content_rule_list_providers_[static_cast<size_t>(group)] =
+    for (auto [group, loading_content_rule_list_providers] :
+         loading_content_rule_list_providers_) {
+      loading_content_rule_list_providers =
           AdBlockerContentRuleListProvider::Create(
               browser_state, group,
               base::BindOnce(&Loader::OnContentRuleListProviderLoaded,
@@ -118,7 +114,7 @@ class Loader {
   base::EnumSet<LoadedFlags, kLoadedFlagsMin, kLoadedFlagsMax> loaded_flags_;
   base::EnumSet<RuleGroup, RuleGroup::kFirst, RuleGroup::kLast> loaded_groups_;
   LoadedCallback on_loaded_;
-  std::array<std::unique_ptr<AdBlockerContentRuleListProvider>, kRuleGroupCount>
+  RuleGroupArray<std::unique_ptr<AdBlockerContentRuleListProvider>>
       loading_content_rule_list_providers_;
   RuleServiceStorageDelegate::LoadResult load_result_;
 };
@@ -190,10 +186,8 @@ void RuleServiceImpl::SetIncognitoBrowserState(
     web::BrowserState* browser_state) {
   incognito_browser_state_ = browser_state;
   if (is_loaded_) {
-    for (auto group :
-         {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
-      organized_rules_manager_[static_cast<size_t>(group)]
-          ->SetIncognitoBrowserState(browser_state);
+    for (auto [group, organized_rules_manager] : organized_rules_manager_) {
+      organized_rules_manager->SetIncognitoBrowserState(browser_state);
     }
   }
 
@@ -202,8 +196,7 @@ void RuleServiceImpl::SetIncognitoBrowserState(
 
 bool RuleServiceImpl::IsPartnerListAllowedDocument(RuleGroup group, GURL url) {
   const base::Value::List& partner_list_allowed_documents =
-      organized_rules_manager_[static_cast<size_t>(group)]
-          ->partner_list_allowed_documents();
+      organized_rules_manager_[group]->partner_list_allowed_documents();
 
   for (const auto& partner_list_allowed_document :
        partner_list_allowed_documents) {
@@ -229,8 +222,8 @@ bool RuleServiceImpl::IsPartnerListAllowedDocument(RuleGroup group, GURL url) {
 }
 
 void RuleServiceImpl::OnFullyLoaded(
-    std::array<std::unique_ptr<AdBlockerContentRuleListProvider>,
-               kRuleGroupCount> loaded_content_rule_list_providers,
+    RuleGroupArray<std::unique_ptr<AdBlockerContentRuleListProvider>>
+        loaded_content_rule_list_providers,
     RuleServiceStorageDelegate::LoadResult load_result) {
   // All cases of base::Unretained here are safe. We are generally passing
   // callbacks to objects that we own, calling to either this or other objects
@@ -258,13 +251,12 @@ void RuleServiceImpl::OnFullyLoaded(
       base::BindRepeating(&RuleServiceStorage::ScheduleSave,
                           base::Unretained(&state_store_.value())));
 
-  for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
-    organized_rules_manager_[static_cast<size_t>(group)].emplace(
+  for (auto [group, organized_rules_manager] : organized_rules_manager_) {
+    organized_rules_manager.emplace(
         &rule_manager_.value(),
-        std::move(
-            loaded_content_rule_list_providers[static_cast<size_t>(group)]),
+        std::move(loaded_content_rule_list_providers[group]),
         content_injection_handler_.get(), group, browser_state_->GetStatePath(),
-        load_result.index_checksums[static_cast<size_t>(group)],
+        load_result.index_checksums[group],
         base::BindRepeating(&RuleServiceImpl::OnRulesIndexChanged,
                             base::Unretained(this), group),
         base::BindRepeating(&RuleManager::OnCompiledRulesReadFailCallback,
@@ -273,8 +265,7 @@ void RuleServiceImpl::OnFullyLoaded(
                             base::Unretained(this), group),
         file_task_runner_);
 
-    organized_rules_manager_[static_cast<size_t>(group)]
-        ->SetIncognitoBrowserState(incognito_browser_state_);
+    organized_rules_manager->SetIncognitoBrowserState(incognito_browser_state_);
   }
 
   is_loaded_ = true;
@@ -283,22 +274,20 @@ void RuleServiceImpl::OnFullyLoaded(
 }
 
 bool RuleServiceImpl::IsApplyingRules(RuleGroup group) {
-  return organized_rules_manager_[static_cast<size_t>(group)]
-      ->IsApplyingRules();
+  return organized_rules_manager_[group]->IsApplyingRules();
 }
 
 std::string RuleServiceImpl::GetRulesIndexChecksum(RuleGroup group) {
   CHECK(is_loaded_);
-  CHECK(organized_rules_manager_[static_cast<size_t>(group)]);
-  return organized_rules_manager_[static_cast<size_t>(group)]
-      ->organized_rules_checksum();
+  CHECK(organized_rules_manager_[group]);
+  return organized_rules_manager_[group]->organized_rules_checksum();
 }
 
 RuleService::IndexBuildResult RuleServiceImpl::GetRulesIndexBuildResult(
     RuleGroup group) {
   CHECK(is_loaded_);
-  CHECK(organized_rules_manager_[static_cast<size_t>(group)]);
-  return organized_rules_manager_[static_cast<size_t>(group)]->build_result();
+  CHECK(organized_rules_manager_[group]);
+  return organized_rules_manager_[group]->build_result();
 }
 
 RuleManager* RuleServiceImpl::GetRuleManager() {

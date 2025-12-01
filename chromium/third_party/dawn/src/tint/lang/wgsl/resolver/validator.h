@@ -194,15 +194,6 @@ class Validator {
     /// @returns true on success, false otherwise.
     bool Array(const sem::Array* arr, const Source& el_source) const;
 
-    /// Validates an array stride attribute
-    /// @param attr the stride attribute to validate
-    /// @param el_size the element size
-    /// @param el_align the element alignment
-    /// @returns true on success, false otherwise
-    bool ArrayStrideAttribute(const ast::StrideAttribute* attr,
-                              uint32_t el_size,
-                              uint32_t el_align) const;
-
     /// Validates an atomic type
     /// @param a the atomic ast node
     /// @param s the atomic sem node
@@ -463,6 +454,12 @@ class Validator {
                                        const core::type::Type* type,
                                        const Source& source) const;
 
+    /// Validates a resource buffer type
+    /// @param t the resource buffer to validate
+    /// @param source the source of the resource buffer type
+    /// @returns true on success, false otherwise
+    bool ResourceBinding(const core::type::ResourceBinding* t, const Source& source) const;
+
     /// Validates a binding array type
     /// @param t the binding array to validate
     /// @param source the source of the binding array type
@@ -608,22 +605,6 @@ class Validator {
     bool AddressSpaceLayout(const core::type::Type* type,
                             core::AddressSpace sc,
                             Source source) const;
-
-    /// @returns true if the attribute list contains a
-    /// ast::DisableValidationAttribute with the validation mode equal to
-    /// `validation`
-    /// @param attributes the attribute list to check
-    /// @param validation the validation mode to check
-    bool IsValidationDisabled(VectorRef<const ast::Attribute*> attributes,
-                              ast::DisabledValidation validation) const;
-
-    /// @returns true if the attribute list does not contains a
-    /// ast::DisableValidationAttribute with the validation mode equal to
-    /// `validation`
-    /// @param attributes the attribute list to check
-    /// @param validation the validation mode to check
-    bool IsValidationEnabled(VectorRef<const ast::Attribute*> attributes,
-                             ast::DisabledValidation validation) const;
 
   private:
     /// @param ty the type to check

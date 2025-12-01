@@ -18,7 +18,7 @@
 #include "components/bookmarks/browser/base_bookmark_model_observer.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/user_data_importer/common/importer_data_types.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 
 #include "importer/chromium_profile_lock.h"
 

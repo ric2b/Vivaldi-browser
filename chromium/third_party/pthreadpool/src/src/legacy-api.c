@@ -20,44 +20,37 @@
 #include "threadpool-common.h"
 #include "threadpool-utils.h"
 
-void PTHREADPOOL_IMPL(pthreadpool_compute_1d)(
-    pthreadpool_t threadpool, pthreadpool_function_1d_t function,
-    void* argument, size_t range) {
+void pthreadpool_compute_1d(pthreadpool_t threadpool,
+                            pthreadpool_function_1d_t function, void* argument,
+                            size_t range) {
   pthreadpool_parallelize_1d(threadpool, (pthreadpool_task_1d_t)function,
                              argument, range, 0 /* flags */);
 }
 
-PTHREADPOOL_WEAK_ALIAS(pthreadpool_compute_1d)
-
-void PTHREADPOOL_IMPL(pthreadpool_compute_1d_tiled)(
-    pthreadpool_t threadpool, pthreadpool_function_1d_tiled_t function,
-    void* argument, size_t range, size_t tile) {
+void pthreadpool_compute_1d_tiled(pthreadpool_t threadpool,
+                                  pthreadpool_function_1d_tiled_t function,
+                                  void* argument, size_t range, size_t tile) {
   pthreadpool_parallelize_1d_tile_1d(threadpool,
                                      (pthreadpool_task_1d_tile_1d_t)function,
                                      argument, range, tile, 0 /* flags */);
 }
 
-PTHREADPOOL_WEAK_ALIAS(pthreadpool_compute_1d_tiled)
-
-void PTHREADPOOL_IMPL(pthreadpool_compute_2d)(
-    pthreadpool_t threadpool, pthreadpool_function_2d_t function,
-    void* argument, size_t range_i, size_t range_j) {
+void pthreadpool_compute_2d(pthreadpool_t threadpool,
+                            pthreadpool_function_2d_t function, void* argument,
+                            size_t range_i, size_t range_j) {
   pthreadpool_parallelize_2d(threadpool, (pthreadpool_task_2d_t)function,
                              argument, range_i, range_j, 0 /* flags */);
 }
 
-PTHREADPOOL_WEAK_ALIAS(pthreadpool_compute_2d)
-
-void PTHREADPOOL_IMPL(pthreadpool_compute_2d_tiled)(
-    pthreadpool_t threadpool, pthreadpool_function_2d_tiled_t function,
-    void* argument, size_t range_i, size_t range_j, size_t tile_i,
-    size_t tile_j) {
+void pthreadpool_compute_2d_tiled(pthreadpool_t threadpool,
+                                  pthreadpool_function_2d_tiled_t function,
+                                  void* argument, size_t range_i,
+                                  size_t range_j, size_t tile_i,
+                                  size_t tile_j) {
   pthreadpool_parallelize_2d_tile_2d(
       threadpool, (pthreadpool_task_2d_tile_2d_t)function, argument, range_i,
       range_j, tile_i, tile_j, 0 /* flags */);
 }
-
-PTHREADPOOL_WEAK_ALIAS(pthreadpool_compute_2d_tiled)
 
 struct compute_3d_tiled_context {
   pthreadpool_function_3d_tiled_t function;
@@ -93,10 +86,11 @@ static void compute_3d_tiled(const struct compute_3d_tiled_context* context,
                     tile_j, tile_k);
 }
 
-void PTHREADPOOL_IMPL(pthreadpool_compute_3d_tiled)(
-    pthreadpool_t threadpool, pthreadpool_function_3d_tiled_t function,
-    void* argument, size_t range_i, size_t range_j, size_t range_k,
-    size_t tile_i, size_t tile_j, size_t tile_k) {
+void pthreadpool_compute_3d_tiled(pthreadpool_t threadpool,
+                                  pthreadpool_function_3d_tiled_t function,
+                                  void* argument, size_t range_i,
+                                  size_t range_j, size_t range_k, size_t tile_i,
+                                  size_t tile_j, size_t tile_k) {
   if (pthreadpool_get_threads_count(threadpool) <= 1) {
     /* No thread pool used: execute function sequentially on the calling thread
      */
@@ -129,8 +123,6 @@ void PTHREADPOOL_IMPL(pthreadpool_compute_3d_tiled)(
         tile_range_i * tile_range_j * tile_range_k, 0 /* flags */);
   }
 }
-
-PTHREADPOOL_WEAK_ALIAS(pthreadpool_compute_3d_tiled)
 
 struct compute_4d_tiled_context {
   pthreadpool_function_4d_tiled_t function;
@@ -175,11 +167,12 @@ static void compute_4d_tiled(const struct compute_4d_tiled_context* context,
                     tile_i, tile_j, tile_k, tile_l);
 }
 
-void PTHREADPOOL_IMPL(pthreadpool_compute_4d_tiled)(
-    pthreadpool_t threadpool, pthreadpool_function_4d_tiled_t function,
-    void* argument, size_t range_i, size_t range_j, size_t range_k,
-    size_t range_l, size_t tile_i, size_t tile_j, size_t tile_k,
-    size_t tile_l) {
+void pthreadpool_compute_4d_tiled(pthreadpool_t threadpool,
+                                  pthreadpool_function_4d_tiled_t function,
+                                  void* argument, size_t range_i,
+                                  size_t range_j, size_t range_k,
+                                  size_t range_l, size_t tile_i, size_t tile_j,
+                                  size_t tile_k, size_t tile_l) {
   if (pthreadpool_get_threads_count(threadpool) <= 1) {
     /* No thread pool used: execute function sequentially on the calling thread
      */
@@ -220,5 +213,3 @@ void PTHREADPOOL_IMPL(pthreadpool_compute_4d_tiled)(
         0 /* flags */);
   }
 }
-
-PTHREADPOOL_WEAK_ALIAS(pthreadpool_compute_4d_tiled)

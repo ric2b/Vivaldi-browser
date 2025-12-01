@@ -438,6 +438,9 @@
          You must reload the page for the options to take effect.</p>
     </details>
     <p>
+      <div id="device"></div>
+    </p>
+    <p>
       <input type=button id=expandall value="Expand All (slow!)">
       <label><input type=checkbox id=autoCloseOnPass> Auto-close each subtree when it passes</label>
     </p>
@@ -446,13 +449,18 @@
     <div id="resultsVis"></div>
     <div id="progress" style="display: none;"><button type="button">stop</button><div class="progress-test-name"></div></div>
 
-    <p>
-      <input type="button" id="copyResultsJSON" value="Copy results as JSON">
-    </p>
-
-    <p>
-      <input type="button" id="saveResultsJSON" value="Save results to JSON file">
-    </p>
+    <fieldset>
+      <legend>Serialize results:</legend>
+      <p>
+        <label><input type="checkbox" id="saveOnlyFailures">Only result failures</label>
+      </p>
+      <p>
+         <input type="button" id="copyResultsJSON" value="Copy results as JSON">
+      </p>
+      <p>
+         <input type="button" id="saveResultsJSON" value="Save results to JSON file">
+      </p>
+    </fieldset>
 
     <script type="module" src="../out/common/runtime/standalone.js"></script>
   </body>

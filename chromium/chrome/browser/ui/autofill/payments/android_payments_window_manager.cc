@@ -4,19 +4,27 @@
 
 #include "chrome/browser/ui/autofill/payments/android_payments_window_manager.h"
 
+#include <memory>
+
 #include "base/check_deref.h"
+#include "base/memory/weak_ptr.h"
 #include "base/notimplemented.h"
 #include "base/time/time.h"
+#include "chrome/browser/ui/android/autofill/payments/payments_window_bridge.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/core/browser/metrics/payments/bnpl_metrics.h"
 #include "components/autofill/core/browser/payments/payments_window_manager_util.h"
+#include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
 
 namespace autofill::payments {
 
 AndroidPaymentsWindowManager::AndroidPaymentsWindowManager(
     ContentAutofillClient* client)
-    : client_(CHECK_DEREF(client)) {}
+    : client_(CHECK_DEREF(client)) {
+  payments_window_bridge_ =
+      std::make_unique<PaymentsWindowBridge>(/*payments_window_delegate=*/this);
+}
 
 AndroidPaymentsWindowManager::~AndroidPaymentsWindowManager() = default;
 
@@ -26,7 +34,8 @@ void AndroidPaymentsWindowManager::InitBnplFlow(BnplContext context) {
 
   flow_state_->flow_type = FlowType::kBnpl;
   flow_state_->bnpl_context = std::move(context);
-  CreateTab(flow_state_->bnpl_context->initial_url);
+  CreateTab(flow_state_->bnpl_context->initial_url,
+            BnplIssuerIdToDisplayName(flow_state_->bnpl_context->issuer_id));
   autofill_metrics::LogBnplPopupWindowShown(
       flow_state_->bnpl_context->issuer_id);
 }
@@ -59,20 +68,17 @@ void AndroidPaymentsWindowManager::OnDidFinishNavigationForBnpl(
   BnplPopupStatus status =
       ParseUrlForBnpl(flow_state_->most_recent_url_navigation,
                       flow_state_->bnpl_context.value());
-  if (status != BnplPopupStatus::kNotFinished) {
-    // TODO(crbug.com/430582871): Once PaymentsWindowManagerBridge::Close is
-    // implemented, call it here.
+  if (status == BnplPopupStatus::kNotFinished) {
     return;
   }
+  payments_window_bridge_->CloseEphemeralTab();
 }
 
-void AndroidPaymentsWindowManager::CreateTab(const GURL& url) {
+void AndroidPaymentsWindowManager::CreateTab(const GURL& url,
+                                             const std::u16string& title) {
   CHECK(flow_state_.has_value());
-
-  // TODO((crbug.com/430582871): Once
-  // PaymentsWindowManagerBridge::OpenInEphemeralTab is implemented, call it
-  // here.
-
+  payments_window_bridge_->OpenEphemeralTab(url, title,
+                                            client_->GetWebContents());
   switch (flow_state_->flow_type) {
     case FlowType::kBnpl:
       flow_state_->bnpl_popup_shown_timestamp = base::TimeTicks::Now();

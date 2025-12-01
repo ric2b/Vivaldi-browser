@@ -126,9 +126,8 @@ Most browser shortcuts also apply:
 Google ChromeOS is a web-centric system, so all applications are web
 applications; this provides powerful and simple manageability and security. To
 write applications that will benefit from native code execution we recommend
-using NativeClient, an open source project that allows web apps to run native
-code securely within a browser. See
-<http://code.google.com/chrome/nativeclient/> for more details.
+using WebAssembly, an open source project that allows web apps to run native
+code securely within a browser. See https://webassembly.org/ for more details.
 
 Of course ChromiumOS is open source, and it's Linux. This means that as a
 developer you can do pretty much anything you want, including installing any

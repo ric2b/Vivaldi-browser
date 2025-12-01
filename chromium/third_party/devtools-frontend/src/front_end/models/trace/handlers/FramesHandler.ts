@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,47 +24,8 @@ import type {HandlerName} from './types.js';
  * In time we expect to migrate this code to a more "typical" handler.
  */
 
-const allEvents: Types.Events.Event[] = [];
 let model: TimelineFrameModel|null = null;
-
-export function reset(): void {
-  allEvents.length = 0;
-}
-
-export function handleEvent(event: Types.Events.Event): void {
-  allEvents.push(event);
-}
-
-export async function finalize(): Promise<void> {
-  // Snapshot events can be emitted out of order, so we need to sort before
-  // building the frames model.
-  Helpers.Trace.sortTraceEventsInPlace(allEvents);
-
-  const modelForTrace = new TimelineFrameModel(
-      allEvents,
-      rendererHandlerData(),
-      auctionWorkletsData(),
-      metaHandlerData(),
-      layerTreeHandlerData(),
-  );
-  model = modelForTrace;
-}
-
-export interface FramesData {
-  frames: readonly Types.Events.LegacyTimelineFrame[];
-  framesById: Readonly<Record<number, Types.Events.LegacyTimelineFrame|undefined>>;
-}
-
-export function data(): FramesData {
-  return {
-    frames: model ? Array.from(model.frames()) : [],
-    framesById: model ? {...model.framesById()} : {},
-  };
-}
-
-export function deps(): HandlerName[] {
-  return ['Meta', 'Renderer', 'AuctionWorklets', 'LayerTree'];
-}
+let relevantFrameEvents: Types.Events.Event[] = [];
 
 type FrameEvent = Types.Events.BeginFrame|Types.Events.DroppedFrame|Types.Events.RequestMainThreadFrame|
                   Types.Events.BeginMainThreadFrame|Types.Events.Commit|Types.Events.CompositeLayers|
@@ -86,6 +47,61 @@ function isFrameEvent(event: Types.Events.Event): event is FrameEvent {
 function entryIsTopLevel(entry: Types.Events.Event): boolean {
   const devtoolsTimelineCategory = 'disabled-by-default-devtools.timeline';
   return entry.name === Types.Events.Name.RUN_TASK && entry.cat.includes(devtoolsTimelineCategory);
+}
+
+const MAIN_FRAME_MARKERS = new Set<Types.Events.Name>([
+  Types.Events.Name.SCHEDULE_STYLE_RECALCULATION,
+  Types.Events.Name.INVALIDATE_LAYOUT,
+  Types.Events.Name.BEGIN_MAIN_THREAD_FRAME,
+  Types.Events.Name.SCROLL_LAYER,
+]);
+
+export function reset(): void {
+  model = null;
+  relevantFrameEvents = [];
+}
+export function handleEvent(event: Types.Events.Event): void {
+  // This might seem like a wide set of events to filter for, but these are all
+  // the types of events that we care about in the TimelineFrameModel class at
+  // the bottom of this file. Previously we would take a copy of an array of
+  // all trace events, but on a few test traces, this set of filtered events
+  // accounts for about 10% of the total events, so it's a big performance win
+  // to deal with a much smaller subset of the data.
+  if (isFrameEvent(event) || Types.Events.isLayerTreeHostImplSnapshot(event) || entryIsTopLevel(event) ||
+      MAIN_FRAME_MARKERS.has(event.name as Types.Events.Name) || Types.Events.isPaint(event)) {
+    relevantFrameEvents.push(event);
+  }
+}
+
+export async function finalize(): Promise<void> {
+  // We have to sort the events by timestamp, because the model code expects to
+  // process events in order.
+  Helpers.Trace.sortTraceEventsInPlace(relevantFrameEvents);
+
+  const modelForTrace = new TimelineFrameModel(
+      relevantFrameEvents,
+      rendererHandlerData(),
+      auctionWorkletsData(),
+      metaHandlerData(),
+      layerTreeHandlerData(),
+  );
+  model = modelForTrace;
+}
+
+export interface FramesData {
+  frames: readonly Types.Events.LegacyTimelineFrame[];
+  framesById: Readonly<Record<number, Types.Events.LegacyTimelineFrame|undefined>>;
+}
+
+export function data(): FramesData {
+  return {
+    frames: model?.frames() ?? [],
+    framesById: model?.framesById() ?? {},
+  };
+}
+
+export function deps(): HandlerName[] {
+  return ['Meta', 'Renderer', 'AuctionWorklets', 'LayerTree'];
 }
 
 export class TimelineFrameModel {
@@ -362,13 +378,6 @@ export class TimelineFrameModel {
     }
   }
 }
-
-const MAIN_FRAME_MARKERS = new Set<Types.Events.Name>([
-  Types.Events.Name.SCHEDULE_STYLE_RECALCULATION,
-  Types.Events.Name.INVALIDATE_LAYOUT,
-  Types.Events.Name.BEGIN_MAIN_THREAD_FRAME,
-  Types.Events.Name.SCROLL_LAYER,
-]);
 
 /**
  * Legacy class that represents TimelineFrames that was ported from the old SDK.

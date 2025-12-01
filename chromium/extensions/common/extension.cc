@@ -58,9 +58,7 @@ namespace errors = manifest_errors;
 
 namespace {
 
-BASE_FEATURE(kValidateGetResourceURLPath,
-             "ValidateGetResourceURLPath",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kValidateGetResourceURLPath, base::FEATURE_ENABLED_BY_DEFAULT);
 
 constexpr int kMinimumSupportedManifestVersion = 2;
 constexpr int kMaximumSupportedManifestVersion = 3;
@@ -503,12 +501,10 @@ Extension::ManifestData* Extension::GetManifestData(
 
 void Extension::SetManifestData(std::string_view key,
                                 std::unique_ptr<Extension::ManifestData> data) {
-  DCHECK(!finished_parsing_manifest_ && thread_checker_.CalledOnValidThread());
-  // TODO(crbug.com/376532871): This helper avoids creating a temporary string
-  // to lookup `key` in `manifest_data_`, if key is already present. The helper
-  // can be removed with C++26, where std::map supports heterogenous key args
-  // on `std::map::operator[]()` and `std::map::insert_or_assign()`.
-  base::InsertOrAssign(manifest_data_, key, std::move(data));
+  DCHECK(!finished_parsing_manifest_);
+  DCHECK(thread_checker_.CalledOnValidThread());
+  bool inserted = manifest_data_.emplace(key, std::move(data)).second;
+  DCHECK(inserted);
 }
 
 void Extension::SetGUID(const ExtensionGuid& guid) {
@@ -843,8 +839,7 @@ bool Extension::LoadManifestVersion(std::u16string* error) {
   std::string warning;
   if (!IsManifestSupported(manifest_version_, GetType(), location(),
                            creation_flags_, &warning)) {
-    std::string json;
-    base::JSONWriter::Write(*manifest_->value(), &json);
+    std::string json = base::WriteJson(*manifest_->value()).value_or("");
     LOG(WARNING) << "Failed to load extension.  Manifest JSON: " << json;
     *error = InvalidManifestVersionError(
         key_exists ? errors::kInvalidManifestVersionUnsupported

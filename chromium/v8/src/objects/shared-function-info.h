@@ -338,9 +338,10 @@ class SharedFunctionInfo
 
   // [outer scope info | feedback metadata] Shared storage for outer scope info
   // (on uncompiled functions) and feedback metadata (on compiled functions).
-  DECL_ACCESSORS(raw_outer_scope_info_or_feedback_metadata, Tagged<HeapObject>)
+  DECL_ACCESSORS(raw_outer_scope_info_or_feedback_metadata,
+                 Tagged<UnionOf<ScopeInfo, FeedbackMetadata, TheHole>>)
   DECL_ACQUIRE_GETTER(raw_outer_scope_info_or_feedback_metadata,
-                      Tagged<HeapObject>)
+                      Tagged<UnionOf<ScopeInfo, FeedbackMetadata, TheHole>>)
  private:
   using TorqueGeneratedSharedFunctionInfo::
       outer_scope_info_or_feedback_metadata;
@@ -479,8 +480,7 @@ class SharedFunctionInfo
   DECL_GETTER(HasBaselineCode, bool)
   DECL_RELEASE_ACQUIRE_ACCESSORS(baseline_code, Tagged<Code>)
   inline void FlushBaselineCode();
-  inline Tagged<BytecodeArray> GetActiveBytecodeArray(
-      IsolateForSandbox isolate) const;
+  inline Tagged<BytecodeArray> GetActiveBytecodeArray(Isolate* isolate) const;
   inline void SetActiveBytecodeArray(Tagged<BytecodeArray> bytecode,
                                      IsolateForSandbox isolate);
 
@@ -879,7 +879,7 @@ class SharedFunctionInfo
 
   // [outer scope info] The outer scope info, needed to lazily parse this
   // function.
-  DECL_ACCESSORS(outer_scope_info, Tagged<HeapObject>)
+  DECL_ACCESSORS(outer_scope_info, Tagged<UnionOf<ScopeInfo, TheHole>>)
 
   // [properties_are_final]: This bit is used to track if we have finished
   // parsing its properties. The properties final bit is only used by

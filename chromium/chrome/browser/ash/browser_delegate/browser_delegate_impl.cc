@@ -6,9 +6,13 @@
 
 #include "base/check_deref.h"
 #include "base/check_is_test.h"
+#include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/ash/browser_delegate/browser_type.h"
 #include "chrome/browser/ash/browser_delegate/browser_type_conversion.h"
+#include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -72,6 +76,19 @@ content::WebContents* BrowserDelegateImpl::GetWebContentsAt(
   return browser_->tab_strip_model()->GetWebContentsAt(index);
 }
 
+content::WebContents* BrowserDelegateImpl::GetInspectedWebContents() const {
+  if (GetType() != BrowserType::kDevTools) {
+    return nullptr;
+  }
+
+  content::WebContents* target_tab = nullptr;
+  if (auto* dev_tools_window = DevToolsWindow::AsDevToolsWindow(&*browser_)) {
+    target_tab = dev_tools_window->GetInspectedWebContents();
+  }
+
+  return target_tab;
+}
+
 aura::Window* BrowserDelegateImpl::GetNativeWindow() const {
   return browser_->window()->GetNativeWindow();
 }
@@ -88,12 +105,20 @@ bool BrowserDelegateImpl::IsWebApp() const {
   return web_app::AppBrowserController::IsWebApp(&*browser_);
 }
 
+bool BrowserDelegateImpl::IsAttemptingToClose() const {
+  return browser_->IsAttemptingToCloseBrowser();
+}
+
 bool BrowserDelegateImpl::IsClosing() const {
   return browser_->IsBrowserClosing();
 }
 
 bool BrowserDelegateImpl::IsActive() const {
   return browser_->window()->IsActive();
+}
+
+bool BrowserDelegateImpl::IsMinimized() const {
+  return browser_->window()->IsMinimized();
 }
 
 void BrowserDelegateImpl::Show() {
@@ -171,6 +196,10 @@ void BrowserDelegateImpl::MoveTab(size_t tab_index,
   target_tab_strip->InsertDetachedTabAt(
       TabStripModel::kNoTab, std::move(detached_tab),
       was_pinned ? AddTabTypes::ADD_PINNED : AddTabTypes::ADD_ACTIVE);
+}
+
+bool BrowserDelegateImpl::CreateWebAppFromActiveWebContents() {
+  return chrome::ExecuteCommand(&*browser_, IDC_INSTALL_PWA);
 }
 
 }  // namespace ash

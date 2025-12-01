@@ -76,6 +76,7 @@ using content_settings::PermissionSettingsRegistry;
 using content_settings::SettingSource;
 using content_settings::WebsiteSettingsInfo;
 using content_settings::WebsiteSettingsRegistry;
+using content_settings::mojom::SessionModel;
 
 namespace {
 typedef std::vector<content_settings::Rule> Rules;
@@ -489,7 +490,7 @@ PermissionSetting HostContentSettingsMap::GetPermissionSetting(
 
 ContentSettingsForOneType HostContentSettingsMap::GetSettingsForOneType(
     ContentSettingsType content_type,
-    std::optional<content_settings::mojom::SessionModel> session_model) const {
+    std::optional<SessionModel> session_model) const {
   ContentSettingsForOneType settings;
   UsedContentSettingsProviders();
 
@@ -509,17 +510,23 @@ ContentSettingsForOneType HostContentSettingsMap::GetSettingsForOneType(
 void HostContentSettingsMap::SetDefaultContentSetting(
     ContentSettingsType content_type,
     ContentSetting setting) {
-  base::Value value;
+  std::optional<PermissionSetting> value;
   // A value of CONTENT_SETTING_DEFAULT implies deleting the content setting.
   if (setting != CONTENT_SETTING_DEFAULT) {
     DCHECK(content_settings::ContentSettingsRegistry::GetInstance()
                ->Get(content_type)
                ->IsDefaultSettingValid(setting));
-    value = base::Value(setting);
+    value = setting;
   }
-  SetWebsiteSettingCustomScope(ContentSettingsPattern::Wildcard(),
-                               ContentSettingsPattern::Wildcard(), content_type,
-                               std::move(value));
+  SetDefaultPermissionSetting(content_type, std::move(value));
+}
+
+void HostContentSettingsMap::SetDefaultPermissionSetting(
+    ContentSettingsType content_type,
+    std::optional<PermissionSetting> setting) {
+  SetPermissionSettingCustomScope(ContentSettingsPattern::Wildcard(),
+                                  ContentSettingsPattern::Wildcard(),
+                                  content_type, setting);
 }
 
 void HostContentSettingsMap::SetWebsiteSettingDefaultScope(
@@ -572,7 +579,11 @@ void HostContentSettingsMap::SetWebsiteSettingCustomScope(
 
     // Ensure that the value is unmodified until accepted by a provider.
 #if DCHECK_IS_ON()
-    DCHECK_EQ(value, clone);
+    if (!(value.is_none() &&
+          constraints.session_model() == SessionModel::ONE_TIME &&
+          provider_pair.first == ProviderType::kOneTimePermissionProvider)) {
+      DCHECK_EQ(value, clone) << provider_pair.first;
+    }
 #endif
   }
   NOTREACHED();
@@ -601,7 +612,7 @@ void HostContentSettingsMap::SetNarrowestContentSetting(
     const GURL& primary_url,
     const GURL& secondary_url,
     ContentSettingsType type,
-    PermissionSetting setting,
+    std::optional<PermissionSetting> setting,
     const content_settings::ContentSettingConstraints& constraints) {
   content_settings::PatternPair patterns =
       GetNarrowestPatterns(primary_url, secondary_url, type);
@@ -697,8 +708,7 @@ void HostContentSettingsMap::SetPermissionSettingCustomScope(
     std::optional<PermissionSetting> setting,
     const content_settings::ContentSettingConstraints& constraints) {
   // Convert CONTENT_SETTING_DEFAULT to nullopt.
-  if (setting && std::holds_alternative<ContentSetting>(*setting) &&
-      std::get<ContentSetting>(*setting) == CONTENT_SETTING_DEFAULT) {
+  if (setting == PermissionSetting{CONTENT_SETTING_DEFAULT}) {
     setting.reset();
   }
   base::Value value;
@@ -1016,7 +1026,7 @@ void HostContentSettingsMap::AddSettingsForOneType(
     ContentSettingsType content_type,
     ContentSettingsForOneType* settings,
     bool incognito,
-    std::optional<content_settings::mojom::SessionModel> session_model) const {
+    std::optional<SessionModel> session_model) const {
   std::unique_ptr<content_settings::RuleIterator> rule_iterator(
       provider->GetRuleIterator(
           content_type, incognito,
@@ -1150,6 +1160,10 @@ base::Value HostContentSettingsMap::GetWebsiteSettingInternal(
 
     if (!current_value.is_none()) {
       if (!found_value && info) {
+        // Apply metadata for the first found setting.
+        primary_pattern = nullptr;
+        secondary_pattern = nullptr;
+        metadata = nullptr;
         info->source = content_settings::GetSettingSourceFromProviderType(
             current_provider_type);
       }

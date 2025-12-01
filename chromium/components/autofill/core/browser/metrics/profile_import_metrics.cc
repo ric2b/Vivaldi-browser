@@ -4,12 +4,15 @@
 
 #include "components/autofill/core/browser/metrics/profile_import_metrics.h"
 
+#include <string_view>
+
 #include "base/containers/contains.h"
 #include "base/i18n/char_iterator.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "components/autofill/core/browser/data_manager/addresses/address_data_cleaner.h"
 #include "components/autofill/core/browser/data_quality/addresses/profile_requirement_utils.h"
+#include "components/autofill/core/browser/form_import/addresses/autofill_profile_import_process.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
@@ -92,6 +95,40 @@ AddressValidZipCodeSeparatorMetric GetAddressValidZipCodeSeparatorMetric(
       return AddressValidZipCodeSeparatorMetric::kOther;
   }
 }
+
+// LINT.IfChange(GetImportTypeMetricsString)
+
+std::string_view GetImportTypeEditedMetricsString(
+    AutofillProfileImportType type) {
+  switch (type) {
+    case AutofillProfileImportType::kNewProfile:
+      return "NewProfile";
+    case AutofillProfileImportType::kConfirmableMerge:
+    case AutofillProfileImportType::kConfirmableMergeAndSilentUpdate:
+      return "UpdateProfile";
+    case AutofillProfileImportType::kProfileMigration:
+    case AutofillProfileImportType::kProfileMigrationAndSilentUpdate:
+      return "MigrateProfile";
+    case AutofillProfileImportType::kHomeAndWorkSuperset:
+      return "HomeAndWorkSuperset";
+    case AutofillProfileImportType::kNameEmailSuperset:
+      return "NameEmailSuperset";
+    case AutofillProfileImportType::kHomeWorkNameEmailMerge:
+      return "HomeWorkNameEmailMerge";
+    // Those import types do not cause save/update/migrate/merge bubble to be
+    // displayed, thus they will never lead to emission of this metric.
+    case AutofillProfileImportType::kDuplicateImport:
+    case AutofillProfileImportType::kSilentUpdate:
+    case AutofillProfileImportType::kSuppressedNewProfile:
+    case AutofillProfileImportType::kSuppressedConfirmableMergeAndSilentUpdate:
+    case AutofillProfileImportType::kSuppressedConfirmableMerge:
+    case AutofillProfileImportType::kImportTypeUnspecified:
+      NOTREACHED();
+  }
+  NOTREACHED();
+}
+
+// LINT.ThenChange(//tools/metrics/histograms/metadata/autofill/histograms.xml:Autofill.ProfileImport.EditedType.ImportTypes)
 
 }  // namespace
 
@@ -201,6 +238,12 @@ void LogNewProfileImportDecision(
   }
 }
 
+void LogHomeWorkNameEmailMergeImportDecision(
+    AutofillClient::AddressPromptUserDecision decision) {
+  base::UmaHistogramEnumeration(
+      "Autofill.ProfileImport.HomeOrWorkAndNameEmailMergeDecision", decision);
+}
+
 void LogNewProfileStorageLocation(const AutofillProfile& import_candidate) {
   base::UmaHistogramEnumeration(
       "Autofill.ProfileImport.StorageNewAddressIsSavedTo",
@@ -227,10 +270,31 @@ void LogProfileUpdateImportDecision(
   }
 }
 
+void LogNameEmailSupersetImportDecision(
+    AutofillClient::AddressPromptUserDecision decision) {
+  base::UmaHistogramEnumeration(
+      "Autofill.ProfileImport.NameEmailSupersetProfileDecision", decision);
+}
+
 void LogHomeAndWorkSupersetImportDecision(
     AutofillClient::AddressPromptUserDecision decision) {
   base::UmaHistogramEnumeration(
       "Autofill.ProfileImport.HomeAndWorkSupersetProfileDecision", decision);
+}
+
+void LogHomeAndWorkSupersetAffectedType(FieldType affected_type) {
+  base::UmaHistogramEnumeration(
+      "Autofill.ProfileImport.HomeAndWorkSupersetAffectedType",
+      ConvertSettingsVisibleFieldTypeForMetrics(affected_type));
+}
+
+void LogProfileImportTypeEditedType(AutofillProfileImportType import_type,
+                                    FieldType edited_type) {
+  base::UmaHistogramEnumeration(
+      base::StrCat({"Autofill.ProfileImport.",
+                    GetImportTypeEditedMetricsString(import_type),
+                    "EditedType"}),
+      ConvertSettingsVisibleFieldTypeForMetrics(edited_type));
 }
 
 // static
@@ -252,12 +316,6 @@ void LogPhoneNumberImportParsingResult(bool parsed_successfully) {
                             parsed_successfully);
 }
 
-void LogNewProfileEditedType(FieldType edited_type) {
-  base::UmaHistogramEnumeration(
-      "Autofill.ProfileImport.NewProfileEditedType",
-      ConvertSettingsVisibleFieldTypeForMetrics(edited_type));
-}
-
 void LogProfileUpdateAffectedType(
     FieldType affected_type,
     AutofillClient::AddressPromptUserDecision decision) {
@@ -271,12 +329,6 @@ void LogProfileUpdateAffectedType(
   base::UmaHistogramEnumeration(
       "Autofill.ProfileImport.UpdateProfileAffectedType.Any",
       ConvertSettingsVisibleFieldTypeForMetrics(affected_type));
-}
-
-void LogProfileUpdateEditedType(FieldType edited_type) {
-  base::UmaHistogramEnumeration(
-      "Autofill.ProfileImport.UpdateProfileEditedType",
-      ConvertSettingsVisibleFieldTypeForMetrics(edited_type));
 }
 
 void LogUpdateProfileNumberOfAffectedFields(
@@ -299,12 +351,6 @@ void LogProfileMigrationImportDecision(
     AutofillClient::AddressPromptUserDecision decision) {
   base::UmaHistogramEnumeration("Autofill.ProfileImport.MigrateProfileDecision",
                                 decision);
-}
-
-void LogProfileMigrationEditedType(FieldType edited_type) {
-  base::UmaHistogramEnumeration(
-      "Autofill.ProfileImport.MigrateProfileEditedType",
-      ConvertSettingsVisibleFieldTypeForMetrics(edited_type));
 }
 
 void LogZipCodeLengthMetric(std::u16string_view zip) {

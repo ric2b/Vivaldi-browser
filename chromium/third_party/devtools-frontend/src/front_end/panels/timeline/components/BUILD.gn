@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -11,6 +11,7 @@ generate_css("css_files") {
   sources = [
     "breadcrumbsUI.css",
     "cpuThrottlingSelector.css",
+    "exportTraceOptions.css",
     "fieldSettingsDialog.css",
     "ignoreListSetting.css",
     "interactionBreakdown.css",
@@ -36,6 +37,7 @@ devtools_module("components") {
     "BreadcrumbsUI.ts",
     "CPUThrottlingSelector.ts",
     "DetailsView.ts",
+    "ExportTraceOptions.ts",
     "FieldSettingsDialog.ts",
     "IgnoreListSetting.ts",
     "InteractionBreakdown.ts",
@@ -112,6 +114,7 @@ ts_library("unittests") {
   sources = [
     "BreadcrumbsUI.test.ts",
     "CPUThrottlingSelector.test.ts",
+    "ExportTraceOptions.test.ts",
     "FieldSettingsDialog.test.ts",
     "IgnoreListSetting.test.ts",
     "InteractionBreakdown.test.ts",

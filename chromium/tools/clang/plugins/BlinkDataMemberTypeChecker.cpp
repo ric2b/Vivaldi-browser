@@ -83,16 +83,6 @@ void BlinkDataMemberTypeChecker::CheckField(const FieldDecl* field) {
       type = array->getElementType().getTypePtr();
       continue;
     }
-    if (auto* elaborated = dyn_cast<ElaboratedType>(type)) {
-      // Find the underlying type of the elaborated type. E.g. for
-      // |TypeName v;| where |TypeName| is not a built-in type, v's type is an
-      // elaborated type enclosing the actual type named |TypeName|. Though
-      // getAsCXXRecordDecl() of this type can return the record decl of the
-      // root underlying type directly, we want to desugar the types
-      // step-by-step to check the intermediate typedef types.
-      type = elaborated->getNamedType().getTypePtr();
-      continue;
-    }
 
     const NamedDecl* decl = nullptr;
     if (auto* type_def = dyn_cast<TypedefType>(type)) {

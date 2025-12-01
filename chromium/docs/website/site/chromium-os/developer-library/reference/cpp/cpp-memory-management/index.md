@@ -369,4 +369,3 @@ bugs. It should be used in place of a C-style pointer `T*` whenever raw pointers
 are stored as member variables. See
 [the docs](https://chromium.googlesource.com/chromium/src/+/HEAD/base/memory/raw_ptr.md)
 for more info.
-

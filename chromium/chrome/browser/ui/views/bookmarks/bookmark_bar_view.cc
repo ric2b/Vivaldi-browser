@@ -45,6 +45,7 @@
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
+#include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/bookmarks/bookmark_drag_drop.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
@@ -154,7 +155,7 @@
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/tooltip_manager.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/window/non_client_view.h"
+#include "ui/views/window/frame_view.h"
 
 namespace {
 
@@ -1337,6 +1338,8 @@ void BookmarkBarView::ExtensiveBookmarkChangesEnded() {
     // so that the next layout creates the buttons in the expected order.
     RemoveAllBookmarkButtons();
 
+    UpdateOtherAndManagedButtonsVisibility();
+
     LayoutAndPaint();
     drop_weak_ptr_factory_.InvalidateWeakPtrs();
   }
@@ -2109,7 +2112,7 @@ void BookmarkBarView::UpdateAppearanceForTheme() {
   overflow_button_->SetImageModel(
       views::Button::STATE_DISABLED,
       ui::GetDefaultDisabledIconFromImageModel(overflow_button_icon,
-                                               GetColorProvider()));
+                                               color_provider));
 
   // Redraw the background.
   SchedulePaint();
@@ -2285,7 +2288,8 @@ const views::View* BookmarkBarView::GetSavedTabGroupsSeparatorViewForTesting()
 void BookmarkBarView::MaybeShowSavedTabGroupsIntroPromo() const {
   // Check whether to show the synced, or unsyned version of the promo.
   tab_groups::TabGroupSyncService* tab_group_service =
-      tab_groups::SavedTabGroupUtils::GetServiceForProfile(browser_->profile());
+      tab_groups::TabGroupSyncServiceFactory::GetForProfile(
+          browser_->profile());
   if (!tab_group_service) {
     return;
   }

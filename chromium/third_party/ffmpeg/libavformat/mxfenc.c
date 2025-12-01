@@ -988,7 +988,9 @@ static void mxf_write_common_fields(AVFormatContext *s, AVStream *st)
     if (st == mxf->timecode_track)
         avio_write(pb, smpte_12m_timecode_track_data_ul, 16);
     else {
-        const MXFCodecUL *data_def_ul = mxf_get_codec_ul_by_id(ff_mxf_data_definition_uls, st->codecpar->codec_type);
+        const MXFCodecUL* data_def_ul = mxf_get_codec_ul_by_id(
+            ff_mxf_data_definition_uls,
+            st->codecpar->codec_id == AV_CODEC_ID_EIA_608 ? AVMEDIA_TYPE_DATA : st->codecpar->codec_type);
         avio_write(pb, data_def_ul->uid, 16);
     }
 
@@ -1062,7 +1064,7 @@ static void mxf_write_structural_component(AVFormatContext *s, AVStream *st, MXF
     AVIOContext *pb = s->pb;
 
     mxf_write_metadata_key(pb, 0x011100);
-    PRINT_KEY(s, "sturctural component key", pb->buf_ptr - 16);
+    PRINT_KEY(s, "structural component key", pb->buf_ptr - 16);
     klv_encode_ber_length(pb, 108);
 
     // write uid
@@ -1983,7 +1985,19 @@ static unsigned klv_fill_size(uint64_t size)
         return pad & (KAG_SIZE-1);
 }
 
-static void mxf_write_index_table_segment(AVFormatContext *s)
+static int mxf_check_frame_offset(AVFormatContext *s, int offset)
+{
+    if (offset >= INT8_MIN && offset <= INT8_MAX)
+        return 0;
+
+    av_log(s, AV_LOG_ERROR, "Current implementation requires frame offset (%d) "
+            "to be within the range of [%d,%d]. Please reduce encoder GOP size, "
+            "or add support for wider frame offset ranges.\n",
+            offset, INT8_MIN, INT8_MAX);
+    return AVERROR_PATCHWELCOME;
+}
+
+static int mxf_write_index_table_segment(AVFormatContext *s)
 {
     MXFContext *mxf = s->priv_data;
     AVIOContext *pb = s->pb;
@@ -1992,11 +2006,12 @@ static void mxf_write_index_table_segment(AVFormatContext *s)
     int prev_non_b_picture = 0;
     int audio_frame_size = 0;
     int64_t pos;
+    int err;
 
     av_log(s, AV_LOG_DEBUG, "edit units count %d\n", mxf->edit_units_count);
 
     if (!mxf->edit_units_count && !mxf->edit_unit_byte_count)
-        return;
+        return 0;
 
     avio_write(pb, index_table_segment_key, 16);
 
@@ -2095,15 +2110,26 @@ static void mxf_write_index_table_segment(AVFormatContext *s)
                     if (j == mxf->edit_units_count)
                         av_log(s, AV_LOG_WARNING, "missing frames\n");
                     temporal_offset = j - key_index - pic_num_in_gop;
+                    err = mxf_check_frame_offset(s, temporal_offset);
+                    if (err < 0)
+                        return err;
                 }
             }
             avio_w8(pb, temporal_offset);
 
             if ((mxf->index_entries[i].flags & 0x30) == 0x30) { // back and forward prediction
+                int offset = mxf->last_key_index - i;
+                err = mxf_check_frame_offset(s, offset);
+                if (err < 0)
+                    return err;
                 sc->b_picture_count = FFMAX(sc->b_picture_count, i - prev_non_b_picture);
-                avio_w8(pb, mxf->last_key_index - i);
+                avio_w8(pb, offset);
             } else {
-                avio_w8(pb, key_index - i); // key frame offset
+                int offset = key_index - i;
+                err = mxf_check_frame_offset(s, offset);
+                if (err < 0)
+                    return err;
+                avio_w8(pb, offset); // key frame offset
                 if ((mxf->index_entries[i].flags & 0x20) == 0x20) // only forward
                     mxf->last_key_index = key_index;
                 prev_non_b_picture = i;
@@ -2127,6 +2153,8 @@ static void mxf_write_index_table_segment(AVFormatContext *s)
     }
 
     mxf_update_klv_size(pb, pos);
+
+    return 0;
 }
 
 static void mxf_write_klv_fill(AVFormatContext *s)
@@ -3046,9 +3074,11 @@ static int mxf_init(AVFormatContext *s)
             ret = ff_stream_add_bitstream_filter(st, "pcm_rechunk", bsf_arg);
             if (ret < 0)
                 return ret;
-        } else if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
-            AVDictionaryEntry *e = av_dict_get(st->metadata, "data_type", NULL, 0);
-            if (e && !strcmp(e->value, "vbi_vanc_smpte_436M")) {
+        } else if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA || st->codecpar->codec_id == AV_CODEC_ID_EIA_608) {
+            AVDictionaryEntry* e = av_dict_get(st->metadata, "data_type", NULL, 0);
+            if ((e && !strcmp(e->value, "vbi_vanc_smpte_436M")) ||
+                st->codecpar->codec_id == AV_CODEC_ID_SMPTE_436M_ANC ||
+                st->codecpar->codec_id == AV_CODEC_ID_EIA_608) {
                 sc->index = INDEX_S436M;
             } else {
                 av_log(s, AV_LOG_ERROR, "track %d: unsupported data type\n", i);
@@ -3057,6 +3087,16 @@ static int mxf_init(AVFormatContext *s)
             if (st->index != s->nb_streams - 1) {
                 av_log(s, AV_LOG_ERROR, "data track must be placed last\n");
                 return -1;
+            }
+            if (st->codecpar->codec_id == AV_CODEC_ID_EIA_608) {
+                char bsf_arg[64] = "";
+                if (mxf->time_base.num != 0 && mxf->time_base.den != 0) {
+                    // frame rate is reciprocal of time base
+                    snprintf(bsf_arg, sizeof(bsf_arg), "cdp_frame_rate=%d/%d", mxf->time_base.den, mxf->time_base.num);
+                }
+                ret = ff_stream_add_bitstream_filter(st, "eia608_to_smpte436m", bsf_arg);
+                if (ret < 0)
+                    return ret;
             }
         }
 
@@ -3139,7 +3179,8 @@ static void mxf_write_system_item(AVFormatContext *s)
     for (i = 0; i < s->nb_streams; i++) {
         if (s->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
             system_item_bitmap |= 0x4;
-        else if (s->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_DATA)
+        else if (s->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_DATA ||
+                 s->streams[i]->codecpar->codec_id == AV_CODEC_ID_EIA_608)
             system_item_bitmap |= 0x2;
     }
     avio_w8(pb, system_item_bitmap);
@@ -3354,7 +3395,9 @@ static int mxf_write_packet(AVFormatContext *s, AVPacket *pkt)
             if ((err = mxf_write_partition(s, 1, 2, header_open_partition_key, 1)) < 0)
                 return err;
             mxf_write_klv_fill(s);
-            mxf_write_index_table_segment(s);
+            err = mxf_write_index_table_segment(s);
+            if (err < 0)
+                return err;
         } else {
             if ((err = mxf_write_partition(s, 0, 0, header_open_partition_key, 1)) < 0)
                 return err;
@@ -3370,7 +3413,9 @@ static int mxf_write_packet(AVFormatContext *s, AVPacket *pkt)
             if ((err = mxf_write_partition(s, 1, 2, body_partition_key, 0)) < 0)
                 return err;
             mxf_write_klv_fill(s);
-            mxf_write_index_table_segment(s);
+            err = mxf_write_index_table_segment(s);
+            if (err < 0)
+                return err;
         }
 
         mxf_write_klv_fill(s);
@@ -3455,7 +3500,9 @@ static int mxf_write_footer(AVFormatContext *s)
         if ((err = mxf_write_partition(s, 0, 2, footer_partition_key, 0)) < 0)
             return err;
         mxf_write_klv_fill(s);
-        mxf_write_index_table_segment(s);
+        err = mxf_write_index_table_segment(s);
+        if (err < 0)
+            return err;
     }
 
     mxf_write_klv_fill(s);
@@ -3474,7 +3521,9 @@ static int mxf_write_footer(AVFormatContext *s)
             if ((err = mxf_write_partition(s, 1, 2, header_closed_partition_key, 1)) < 0)
                 return err;
             mxf_write_klv_fill(s);
-            mxf_write_index_table_segment(s);
+            err = mxf_write_index_table_segment(s);
+            if (err < 0)
+                return err;
         } else {
             if ((err = mxf_write_partition(s, 0, 0, header_closed_partition_key, 1)) < 0)
                 return err;
@@ -3656,6 +3705,7 @@ const FFOutputFormat ff_mxf_muxer = {
     .priv_data_size    = sizeof(MXFContext),
     .p.audio_codec     = AV_CODEC_ID_PCM_S16LE,
     .p.video_codec     = AV_CODEC_ID_MPEG2VIDEO,
+    .p.subtitle_codec  = AV_CODEC_ID_EIA_608,
     .init              = mxf_init,
     .write_packet      = mxf_write_packet,
     .write_trailer     = mxf_write_footer,
@@ -3690,6 +3740,7 @@ const FFOutputFormat ff_mxf_opatom_muxer = {
     .priv_data_size    = sizeof(MXFContext),
     .p.audio_codec     = AV_CODEC_ID_PCM_S16LE,
     .p.video_codec     = AV_CODEC_ID_DNXHD,
+    .p.subtitle_codec  = AV_CODEC_ID_EIA_608,
     .init              = mxf_init,
     .write_packet      = mxf_write_packet,
     .write_trailer     = mxf_write_footer,

@@ -1525,6 +1525,32 @@ TEST_F(TemplateURLTest, SuggestClient) {
 #endif
 }
 
+TEST_F(TemplateURLTest, ComposeboxSuggestClient) {
+  base::test::ScopedFeatureList features;
+  const std::string base_url_str("http://google.com/?");
+  const std::string query_params_str("client={google:suggestClient}");
+  const std::string full_url_str = base_url_str + query_params_str;
+  search_terms_data_.set_google_base_url(base_url_str);
+
+  TemplateURLData data;
+  data.SetURL(full_url_str);
+  TemplateURL url(data);
+  EXPECT_TRUE(url.url_ref().IsValid(search_terms_data_));
+  ASSERT_FALSE(url.url_ref().SupportsReplacement(search_terms_data_));
+  TemplateURLRef::SearchTermsArgs search_terms_args;
+
+  search_terms_args.request_source = RequestSource::NTP_COMPOSEBOX;
+  // Check that the URL is correct for `RequestSource::NTP_COMPOSEBOX`.
+  GURL result(
+      url.url_ref().ReplaceSearchTerms(search_terms_args, search_terms_data_));
+  ASSERT_TRUE(result.is_valid());
+  EXPECT_EQ("http://google.com/?client=chrome-omni", result.spec());
+  features.InitAndEnableFeature(omnibox::kComposeboxUsesChromeComposeClient);
+  result = GURL(
+      url.url_ref().ReplaceSearchTerms(search_terms_args, search_terms_data_));
+  EXPECT_EQ("http://google.com/?client=chrome-compose", result.spec());
+}
+
 TEST_F(TemplateURLTest, SuggestRequestIdentifier) {
   const std::string base_url_str("http://google.com/?");
   const std::string query_params_str("gs_ri={google:suggestRid}");
@@ -1551,6 +1577,13 @@ TEST_F(TemplateURLTest, SuggestRequestIdentifier) {
 #else
   EXPECT_EQ("http://google.com/?gs_ri=chrome-ext-ansg", result.spec());
 #endif
+
+  search_terms_args.request_source = RequestSource::NTP_COMPOSEBOX;
+  // Check that the URL is correct for `RequestSource::NTP_COMPOSEBOX`.
+  result = GURL(
+      url.url_ref().ReplaceSearchTerms(search_terms_args, search_terms_data_));
+  ASSERT_TRUE(result.is_valid());
+  EXPECT_EQ("http://google.com/?gs_ri=", result.spec());
 }
 
 TEST_F(TemplateURLTest, ZeroSuggestCacheDuration) {
@@ -3059,6 +3092,16 @@ TEST_F(TemplateURLTest, GetBuiltinImageResourceId_FromCustomEngine) {
   EXPECT_EQ(t_url.GetBuiltinImageResourceId(), "IDR_DEFAULT_FAVICON");
 }
 #endif // !defined(VIVALDI_BUILD)
+
+TEST_F(TemplateURLTest, GetMarketingSnippet_Custom) {
+  std::u16string engine_name = u"My Custom Engine";
+  TemplateURLData custom_data;
+  custom_data.SetShortName(engine_name);
+  custom_data.SetKeyword(u"custom.com");
+  TemplateURL custom_url(custom_data);
+  EXPECT_NE(custom_url.GetMarketingSnippet().find(engine_name),
+            std::u16string::npos);
+}
 
 struct IsBetterThanEngineTestEngine {
   std::u16string keyword;

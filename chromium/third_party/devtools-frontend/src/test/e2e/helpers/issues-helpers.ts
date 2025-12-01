@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,7 +8,6 @@ import type * as puppeteer from 'puppeteer-core';
 import type {DevToolsPage} from '../../e2e_non_hosted/shared/frontend-helper.js';
 import {
   matchStringTable,
-  waitFor,
 } from '../../shared/helper.js';
 import {getBrowserAndPagesWrappers} from '../../shared/non_hosted_wrappers.js';
 
@@ -269,8 +268,9 @@ export async function getGroupByKindChecked(devToolsPage: DevToolsPage = getBrow
   return await categoryCheckbox.evaluate(node => (node as HTMLInputElement).checked);
 }
 
-export async function revealNodeInElementsPanel() {
-  const revealIcon = await waitFor(ELEMENT_REVEAL_ICON);
+export async function revealNodeInElementsPanel(
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const revealIcon = await devToolsPage.waitFor(ELEMENT_REVEAL_ICON);
   await revealIcon.click();
 }
 

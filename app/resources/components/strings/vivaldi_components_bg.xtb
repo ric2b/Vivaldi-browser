@@ -3,16 +3,6 @@
 <translationbundle lang="bg">
 <translation id="3830627370375585318">Разрешете достъпа на Vivaldi до мрежата от настройките на защитната стена
           или антивирусния софтуер.</translation>
-<translation id="4200102020577305737">преминете към 
-          меню на Vivaldi &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          LAN настройки
-          и снемете отметката пред „Използвайте прокси сървър за вашата локална мрежа“.</translation>
 <translation id="4932161901409251843">преминете към 
           меню на Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@
           В случай че това не го отстрани, препоръчваме да поставите отметката
             отново за подобряване на производителността.</translation>
 <translation id="7496505986576158197">Vivaldi е създаден на основата на проекта <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> и на друг <ph name="BEGIN_LINK_OSS" />софтуер с отворен код<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">преминете към 
+          меню на Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Мрежа и интернет &gt; Сървър-посредник
+          и снемете отметката пред „Откривай настройките автоматично“.</translation>
 </translationbundle>

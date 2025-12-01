@@ -169,11 +169,6 @@ class FragmentTreeDumper {
         }
       }
       if (flags_ & PhysicalFragment::DumpSubtree) {
-        if (flags_ & PhysicalFragment::DumpLegacyDescendants && layout_object &&
-            !layout_object->IsLayoutNGObject() && box->Children().empty()) {
-          AppendLegacySubtree(*layout_object, indent);
-          return;
-        }
         for (auto& child : box->Children()) {
           if (has_fragment_items && child->IsLineBox())
             continue;
@@ -183,20 +178,14 @@ class FragmentTreeDumper {
       return;
     }
 
-    if (const auto* line_box = DynamicTo<PhysicalLineBoxFragment>(fragment)) {
+    if (fragment->IsLineBox()) {
       if (flags_ & PhysicalFragment::DumpType) {
         builder_->Append("LineBox");
         has_content = true;
       }
       has_content = AppendOffsetAndSize(fragment, fragment_offset, has_content);
       builder_->Append("\n");
-
-      if (flags_ & PhysicalFragment::DumpSubtree) {
-        for (auto& child : line_box->Children()) {
-          Append(child.get(), child.Offset(), indent + 2);
-        }
-        return;
-      }
+      return;
     }
 
     if (flags_ & PhysicalFragment::DumpType) {
@@ -209,52 +198,10 @@ class FragmentTreeDumper {
 
   void AppendAttributes(const Vector<String>& attributes) {
     if (!attributes.empty()) {
-      String separator = " (";
-      for (const String& attribute : attributes) {
-        builder_->Append(separator);
-        builder_->Append(attribute);
-        separator = ")(";
-      }
+      builder_->Append(" (");
+      builder_->AppendRange(attributes, ")(");
       builder_->Append(")");
     }
-  }
-
-  void AppendLegacySubtree(const LayoutObject& layout_object, unsigned indent) {
-    for (const LayoutObject* descendant = &layout_object; descendant;) {
-      if (!IsNGRootWithFragments(*descendant)) {
-        if (descendant->IsOutOfFlowPositioned() && descendant != &layout_object)
-          descendant = descendant->NextInPreOrderAfterChildren(&layout_object);
-        else
-          descendant = descendant->NextInPreOrder(&layout_object);
-        continue;
-      }
-      AppendNGRootInLegacySubtree(*descendant, indent);
-      descendant = descendant->NextInPreOrderAfterChildren(&layout_object);
-    }
-  }
-
-  void AppendLegacySubtree(const LayoutObject& layout_object) {
-    AppendLegacySubtree(layout_object, 0);
-    if (target_fragment_ && !target_fragment_found_) {
-      if (flags_ & PhysicalFragment::DumpHeaderText) {
-        builder_->Append("(Fragment not found when searching the subtree)\n");
-        builder_->Append("(Dumping detached fragment tree now:)\n");
-      }
-      Append(target_fragment_, std::nullopt);
-    }
-  }
-
-  void AppendNGRootInLegacySubtree(const LayoutObject& layout_object,
-                                   unsigned indent) {
-    DCHECK(IsNGRootWithFragments(layout_object));
-    if (flags_ & PhysicalFragment::DumpHeaderText) {
-      AppendIndentation(indent + 2);
-      builder_->Append(
-          "(NG fragment root inside fragment-less or legacy subtree:)\n");
-    }
-    const LayoutBox& box_descendant = To<LayoutBox>(layout_object);
-    DCHECK_EQ(box_descendant.PhysicalFragmentCount(), 1u);
-    Append(box_descendant.GetPhysicalFragment(0), std::nullopt, indent + 4);
   }
 
  private:
@@ -339,21 +286,6 @@ class FragmentTreeDumper {
     }
   }
 
-  // Check if the object is an NG root ready to be traversed. If layout of the
-  // object hasn't finished yet, there'll be no fragment, and false will be
-  // returned.
-  bool IsNGRootWithFragments(const LayoutObject& object) const {
-    if (!object.IsLayoutNGObject())
-      return false;
-    const LayoutBox* box = DynamicTo<LayoutBox>(&object);
-    if (!box)
-      return false;
-    // A root should only have at most one fragment, or zero if it hasn't been
-    // laid out yet.
-    DCHECK_LE(box->PhysicalFragmentCount(), 1u);
-    return box->PhysicalFragmentCount();
-  }
-
   StringBuilder* builder_;
   const PhysicalFragment* target_fragment_ = nullptr;
   PhysicalFragment::DumpFlags flags_;
@@ -418,11 +350,13 @@ PhysicalFragment::PhysicalFragment(FragmentBuilder* builder,
       has_out_of_flow_in_fragmentainer_subtree_(
           builder->HasOutOfFlowInFragmentainerSubtree()),
       propagated_data_((builder->sticky_descendants_ || builder->snap_areas_ ||
-                        builder->scroll_start_target_)
+                        builder->scroll_start_target_ ||
+                        builder->named_triggers_)
                            ? MakeGarbageCollected<PropagatedData>(
                                  builder->sticky_descendants_,
                                  builder->snap_areas_,
-                                 builder->scroll_start_target_)
+                                 builder->scroll_start_target_,
+                                 builder->named_triggers_)
                            : nullptr),
       break_token_(std::move(builder->break_token_)),
       oof_data_(builder->oof_positioned_descendants_.empty() &&
@@ -665,7 +599,7 @@ bool PhysicalFragment::IsMonolithic() const {
 
 bool PhysicalFragment::IsImplicitAnchor() const {
   if (Element* element = DynamicTo<Element>(GetNode())) {
-    return element->HasImplicitlyAnchoredElement();
+    return element->MayBeImplicitAnchor();
   }
   return false;
 }
@@ -771,20 +705,9 @@ String PhysicalFragment::DumpFragmentTree(
 String PhysicalFragment::DumpFragmentTree(const LayoutObject& root,
                                           DumpFlags flags,
                                           const PhysicalFragment* target) {
-  if (root.IsLayoutNGObject()) {
-    const LayoutBox& root_box = To<LayoutBox>(root);
-    DCHECK_EQ(root_box.PhysicalFragmentCount(), 1u);
-    return root_box.GetPhysicalFragment(0)->DumpFragmentTree(flags, target);
-  }
-  StringBuilder string_builder;
-  if (flags & DumpHeaderText) {
-    string_builder.Append(
-        ".:: LayoutNG Physical Fragment Tree at legacy root ");
-    string_builder.Append(root.DebugName());
-    string_builder.Append(" ::.\n");
-  }
-  FragmentTreeDumper(&string_builder, flags, target).AppendLegacySubtree(root);
-  return string_builder.ToString();
+  const LayoutBox& root_box = To<LayoutBox>(root);
+  DCHECK_EQ(root_box.PhysicalFragmentCount(), 1u);
+  return root_box.GetPhysicalFragment(0)->DumpFragmentTree(flags, target);
 }
 
 void PhysicalFragment::Trace(Visitor* visitor) const {
@@ -805,191 +728,6 @@ void PhysicalFragment::TraceAfterDispatch(Visitor* visitor) const {
   visitor->Trace(propagated_data_);
   visitor->Trace(break_token_);
   visitor->Trace(oof_data_);
-}
-
-// TODO(dlibby): remove `Children` and `PostLayoutChildren` and move the
-// casting and/or branching to the callers.
-base::span<const PhysicalFragmentLink> PhysicalFragment::Children() const {
-  if (Type() == kFragmentBox)
-    return static_cast<const PhysicalBoxFragment*>(this)->Children();
-  return {};
-}
-
-PhysicalFragment::PostLayoutChildLinkList PhysicalFragment::PostLayoutChildren()
-    const {
-  if (Type() == kFragmentBox) {
-    return static_cast<const PhysicalBoxFragment*>(this)->PostLayoutChildren();
-  }
-  return PostLayoutChildLinkList(base::span<const PhysicalFragmentLink>());
-}
-
-void PhysicalFragment::SetChildrenInvalid() const {
-  if (!children_valid_)
-    return;
-
-  for (const PhysicalFragmentLink& child : Children()) {
-    const_cast<PhysicalFragmentLink&>(child).fragment = nullptr;
-  }
-  children_valid_ = false;
-}
-
-// additional_offset must be offset from the containing_block.
-void PhysicalFragment::AddOutlineRectsForNormalChildren(
-    OutlineRectCollector& collector,
-    const PhysicalOffset& additional_offset,
-    OutlineType outline_type,
-    const LayoutBoxModelObject* containing_block) const {
-  if (const auto* box = DynamicTo<PhysicalBoxFragment>(this)) {
-    DCHECK_EQ(box->PostLayout(), box);
-    if (const FragmentItems* items = box->Items()) {
-      InlineCursor cursor(*box, *items);
-      AddOutlineRectsForCursor(collector, additional_offset, outline_type,
-                               containing_block, &cursor);
-      // Don't add |Children()|. If |this| has |FragmentItems|, children are
-      // either line box, which we already handled in items, or OOF, which we
-      // should ignore.
-      DCHECK(std::ranges::all_of(
-          PostLayoutChildren(), [](const PhysicalFragmentLink& child) {
-            return child->IsLineBox() || child->IsOutOfFlowPositioned();
-          }));
-      return;
-    }
-  }
-
-  for (const auto& child : PostLayoutChildren()) {
-    // Outlines of out-of-flow positioned descendants are handled in
-    // PhysicalBoxFragment::AddSelfOutlineRects().
-    if (child->IsOutOfFlowPositioned())
-      continue;
-    AddOutlineRectsForDescendant(child, collector, additional_offset,
-                                 outline_type, containing_block);
-  }
-}
-
-void PhysicalFragment::AddOutlineRectsForCursor(
-    OutlineRectCollector& collector,
-    const PhysicalOffset& additional_offset,
-    OutlineType outline_type,
-    const LayoutBoxModelObject* containing_block,
-    InlineCursor* cursor) const {
-  const auto* const text_combine =
-      DynamicTo<LayoutTextCombine>(containing_block);
-  while (*cursor) {
-    DCHECK(cursor->Current().Item());
-    const FragmentItem& item = *cursor->Current().Item();
-    if (item.IsLayoutObjectDestroyedOrMoved()) [[unlikely]] {
-      cursor->MoveToNext();
-      continue;
-    }
-    switch (item.Type()) {
-      case FragmentItem::kLine: {
-        if (item.LineBoxFragment()) {
-          AddOutlineRectsForDescendant(
-              {item.LineBoxFragment(), item.OffsetInContainerFragment()},
-              collector, additional_offset, outline_type, containing_block);
-        }
-        break;
-      }
-      case FragmentItem::kGeneratedText:
-      case FragmentItem::kText: {
-        if (!item.IsSvgText() && !ShouldIncludeBlockInkOverflow(outline_type)) {
-          break;
-        }
-        PhysicalRect rect =
-            item.IsSvgText() ? PhysicalRect::EnclosingRect(
-                                   cursor->Current().ObjectBoundingBox(*cursor))
-                             : item.RectInContainerFragment();
-        if (text_combine) [[unlikely]] {
-          rect = text_combine->AdjustRectForBoundingBox(rect);
-        }
-        rect.Move(additional_offset);
-        collector.AddRect(rect);
-        break;
-      }
-      case FragmentItem::kBox: {
-        if (const PhysicalBoxFragment* child_box =
-                item.PostLayoutBoxFragment()) {
-          DCHECK(!child_box->IsOutOfFlowPositioned());
-          AddOutlineRectsForDescendant(
-              {child_box, item.OffsetInContainerFragment()}, collector,
-              additional_offset, outline_type, containing_block);
-          // Skip descendants as they were already added.
-          DCHECK(item.IsInlineBox() || item.DescendantsCount() == 1);
-          cursor->MoveToNextSkippingChildren();
-          continue;
-        }
-        break;
-      }
-      case FragmentItem::kInvalid:
-        NOTREACHED();
-    }
-    cursor->MoveToNext();
-  }
-}
-
-// additional_offset must be offset from the containing_block because
-// LocalToAncestorRect returns rects wrt containing_block.
-void PhysicalFragment::AddOutlineRectsForDescendant(
-    const PhysicalFragmentLink& descendant,
-    OutlineRectCollector& collector,
-    const PhysicalOffset& additional_offset,
-    OutlineType outline_type,
-    const LayoutBoxModelObject* containing_block) const {
-  DCHECK(!descendant->IsLayoutObjectDestroyedOrMoved());
-  if (descendant->IsListMarker())
-    return;
-
-  if (const auto* descendant_box =
-          DynamicTo<PhysicalBoxFragment>(descendant.get())) {
-    DCHECK_EQ(descendant_box->PostLayout(), descendant_box);
-    const LayoutObject* descendant_layout_object =
-        descendant_box->GetLayoutObject();
-
-    // TODO(layoutng): Explain this check. I assume we need it because layers
-    // may have transforms and so we have to go through LocalToAncestorRects?
-    if (descendant_box->HasLayer()) {
-      DCHECK(descendant_layout_object);
-      std::unique_ptr<OutlineRectCollector> descendant_collector =
-          collector.ForDescendantCollector();
-      descendant_box->AddOutlineRects(PhysicalOffset(), outline_type,
-                                      *descendant_collector);
-      collector.Combine(descendant_collector.get(), *descendant_layout_object,
-                        containing_block, additional_offset);
-      return;
-    }
-
-    if (!descendant_box->IsInlineBox()) {
-      descendant_box->AddSelfOutlineRects(
-          additional_offset + descendant.Offset(), outline_type, collector,
-          nullptr);
-      return;
-    }
-
-    DCHECK(descendant_layout_object);
-    const auto* descendant_layout_inline =
-        To<LayoutInline>(descendant_layout_object);
-    // As an optimization, an ancestor has added rects for its line boxes
-    // covering descendants' line boxes, so descendants don't need to add line
-    // boxes again. For example, if the parent is a LayoutBlock, it adds rects
-    // for its line box which cover the line boxes of this LayoutInline. So
-    // the LayoutInline needs to add rects for children and continuations
-    // only.
-    if (descendant_box->IsOutlineOwner()) {
-      // We don't pass additional_offset here because the function requires
-      // additional_offset to be the offset from the containing block.
-      descendant_layout_inline->AddOutlineRectsForNormalChildren(
-          collector, PhysicalOffset(), outline_type);
-    }
-    return;
-  }
-
-  if (const auto* descendant_line_box =
-          DynamicTo<PhysicalLineBoxFragment>(descendant.get())) {
-    descendant_line_box->AddOutlineRectsForNormalChildren(
-        collector, additional_offset + descendant.Offset(), outline_type,
-        containing_block);
-    // We don't add the line box itself. crbug.com/1203247.
-  }
 }
 
 bool PhysicalFragment::DependsOnPercentageBlockSize(
@@ -1048,6 +786,13 @@ PhysicalAnchorQuery& PhysicalFragment::OofData::EnsureAnchorQuery() {
     anchor_query_ = MakeGarbageCollected<PhysicalAnchorQuery>();
   }
   return *anchor_query_;
+}
+
+void PhysicalFragment::PropagatedData::Trace(Visitor* visitor) const {
+  visitor->Trace(sticky_descendants);
+  visitor->Trace(snap_areas);
+  visitor->Trace(scroll_initial_target);
+  visitor->Trace(named_triggers);
 }
 
 std::ostream& operator<<(std::ostream& out, const PhysicalFragment& fragment) {

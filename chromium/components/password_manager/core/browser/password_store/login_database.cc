@@ -68,7 +68,7 @@ using signin::GaiaIdHash;
 namespace password_manager {
 
 // The current version number of the login database schema.
-constexpr int kCurrentVersionNumber = 42;
+constexpr int kCurrentVersionNumber = 43;
 // The oldest version of the schema such that a legacy Chrome client using that
 // version can still read/write the current database.
 constexpr int kCompatibleVersionNumber = 40;
@@ -181,6 +181,7 @@ enum LoginDatabaseTableColumns {
   COLUMN_KEYCHAIN_IDENTIFIER,
   COLUMN_SENDER_PROFILE_IMAGE_URL,
   COLUMN_DATE_LAST_FILLED,
+  COLUMN_ACTOR_LOGIN_APPROVED,
   COLUMN_NUM  // Keep this last.
 };
 
@@ -198,7 +199,7 @@ enum DatabaseInitError {
   MIGRATION_ERROR = 7,
   COMMIT_TRANSACTION_ERROR = 8,
   INIT_COMPROMISED_CREDENTIALS_ERROR = 9,
-  INIT_FIELD_INFO_ERROR = 10,  // Deprecated.
+  // Deprecated: INIT_FIELD_INFO_ERROR = 10,
   FOREIGN_KEY_ERROR = 11,
   INIT_PASSWORD_NOTES_ERROR = 12,
 
@@ -290,6 +291,7 @@ void BindAddStatement(const PasswordForm& form,
   s->BindBool(COLUMN_SHARING_NOTIFICATION_DISPLAYED,
               form.sharing_notification_displayed);
   s->BindTime(COLUMN_DATE_LAST_FILLED, form.date_last_filled);
+  s->BindBool(COLUMN_ACTOR_LOGIN_APPROVED, form.actor_login_approved);
 }
 
 // Output parameter is the first one because of binding order.
@@ -601,7 +603,12 @@ void InitializeBuilders(SQLTableBuilders builders) {
   builders.logins->AddColumn("date_last_filled", "INTEGER NOT NULL DEFAULT 0");
   SealVersion(builders, /*expected_version=*/42u);
 
-  static_assert(kCurrentVersionNumber == 42, "Seal the recent version");
+  // Version 43. Introduce actor_login_approved column.
+  builders.logins->AddColumn("actor_login_approved",
+                             "INTEGER NOT NULL DEFAULT 0");
+  SealVersion(builders, /*expected_version=*/43u);
+
+  static_assert(kCurrentVersionNumber == 43, "Seal the recent version");
   CHECK_EQ(static_cast<size_t>(COLUMN_NUM), builders.logins->NumberOfColumns())
       << "Adjust LoginDatabaseTableColumns if you change column definitions "
          "here.";
@@ -1282,7 +1289,6 @@ bool LoginDatabase::Init(
     return false;
   }
 
-  TriggerIsEmptyCb();
   LogDatabaseInitError(INIT_OK);
 
   // Keep the database open if everything went well.
@@ -1292,11 +1298,11 @@ bool LoginDatabase::Init(
 }
 
 void LoginDatabase::ReportBubbleSuppressionMetrics() {
-#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_IOS)
   base::UmaHistogramCustomCounts(
       "PasswordManager.BubbleSuppression.AccountsInStatisticsTable2",
       stats_table_.GetNumAccounts(), 0, 1000, 100);
-#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+#endif  // !BUILDFLAG(IS_IOS)
 }
 
 void LoginDatabase::ReportInaccessiblePasswordsMetrics() {
@@ -1348,7 +1354,6 @@ void LoginDatabase::ReportMetrics() {
 PasswordStoreChangeList LoginDatabase::AddLogin(const PasswordForm& form,
                                                 AddCredentialError* error) {
   TRACE_EVENT0("passwords", "LoginDatabase::AddLogin");
-  absl::Cleanup is_empty_runner = [this] { TriggerIsEmptyCb(); };
   if (error) {
     *error = AddCredentialError::kNone;
   }
@@ -1523,6 +1528,7 @@ PasswordStoreChangeList LoginDatabase::UpdateLogin(
                                  ? form.sender_profile_image_url.spec()
                                  : "");
   s.BindTime(next_param++, form.date_last_filled);
+  s.BindBool(next_param++, form.actor_login_approved);
   // NOTE: Add new fields here unless the field is a part of the unique key.
   // If so, add new field below.
 
@@ -1586,7 +1592,6 @@ PasswordStoreChangeList LoginDatabase::UpdateLogin(
 bool LoginDatabase::RemoveLogin(const PasswordForm& form,
                                 PasswordStoreChangeList* changes) {
   TRACE_EVENT0("passwords", "LoginDatabase::RemoveLogin");
-  absl::Cleanup is_empty_runner = [this] { TriggerIsEmptyCb(); };
   if (changes) {
     changes->clear();
   }
@@ -1604,18 +1609,8 @@ bool LoginDatabase::RemoveLogin(const PasswordForm& form,
   s.BindString16(2, form.username_value);
   s.BindString16(3, form.password_element);
   s.BindString(4, form.signon_realm);
-  ScopedDbErrorHandler db_error_handler(&db_);
 
-  if (!s.Run()) {
-    std::string_view suffix_for_store =
-        is_account_store_.value() ? ".AccountStore" : ".ProfileStore";
-    sql::UmaHistogramSqliteResult(
-        base::StrCat(
-            {kPasswordManager, suffix_for_store, ".RemoveLoginDBError"}),
-        db_error_handler.get_error_code());
-    return false;
-  }
-  if (db_.GetLastChangeCount() == 0) {
+  if (!s.Run() || db_.GetLastChangeCount() == 0) {
     return false;
   }
   if (changes) {
@@ -1634,7 +1629,6 @@ bool LoginDatabase::RemoveLoginByPrimaryKey(FormPrimaryKey primary_key,
   TRACE_EVENT0("passwords", "LoginDatabase::RemoveLoginByPrimaryKey");
   CHECK(changes);
 
-  absl::Cleanup is_empty_runner = [this] { TriggerIsEmptyCb(); };
   changes->clear();
   sql::Statement s1(db_.GetCachedStatement(
       SQL_FROM_HERE, "SELECT * FROM logins WHERE id = ?"));
@@ -1668,7 +1662,6 @@ bool LoginDatabase::RemoveLoginsCreatedBetween(
     base::Time delete_end,
     PasswordStoreChangeList* changes) {
   TRACE_EVENT0("passwords", "LoginDatabase::RemoveLoginsCreatedBetween");
-  absl::Cleanup is_empty_runner = [this] { TriggerIsEmptyCb(); };
   if (changes) {
     changes->clear();
   }
@@ -1786,6 +1779,7 @@ PasswordForm LoginDatabase::GetFormWithoutPasswordFromStatement(
   form.date_received = s.ColumnTime(COLUMN_DATE_RECEIVED);
   form.sharing_notification_displayed =
       s.ColumnBool(COLUMN_SHARING_NOTIFICATION_DISPLAYED);
+  form.actor_login_approved = s.ColumnBool(COLUMN_ACTOR_LOGIN_APPROVED);
 
   CHECK(form.primary_key.has_value());
   form.password_issues = GetPasswordIssues(form.primary_key.value());
@@ -1919,25 +1913,6 @@ bool LoginDatabase::GetAllLoginsWithBlocklistSetting(
   return true;
 }
 
-LoginDatabase::LoginDatabaseEmptinessState LoginDatabase::IsEmpty() {
-  sql::Statement count_all_logins(db_.GetCachedStatement(
-      SQL_FROM_HERE, "SELECT EXISTS(SELECT 1 FROM logins)"));
-  // `blacklisted_by_user = 0` means the entry is not a blocklisted entry.
-  // `LENGTH(federation_url) = 0` means the entry is not a federated credential.
-  // `scheme <> 4` means the entry is not a username-only credential.
-  sql::Statement count_autofillable_credentials(db_.GetCachedStatement(
-      SQL_FROM_HERE,
-      "SELECT EXISTS(SELECT 1 FROM logins WHERE blacklisted_by_user = 0 AND "
-      "LENGTH(federation_url) = 0 AND scheme <> 4)"));
-
-  return LoginDatabase::LoginDatabaseEmptinessState{
-      .no_login_found =
-          (count_all_logins.Step() && count_all_logins.ColumnInt(0) == 0),
-      .autofillable_credentials_exist =
-          (count_autofillable_credentials.Step() &&
-           count_autofillable_credentials.ColumnInt(0) > 0)};
-}
-
 bool LoginDatabase::DeleteAndRecreateDatabaseFile() {
   TRACE_EVENT0("passwords", "LoginDatabase::DeleteAndRecreateDatabaseFile");
   DCHECK(db_.is_open());
@@ -1964,7 +1939,6 @@ bool LoginDatabase::DeleteAndRecreateDatabaseFile() {
 
 DatabaseCleanupResult LoginDatabase::DeleteUndecryptableLogins() {
   TRACE_EVENT0("passwords", "LoginDatabase::DeleteUndecryptableLogins");
-  absl::Cleanup is_empty_runner = [this] { TriggerIsEmptyCb(); };
   // If the Keychain in MacOS or the real secret key in Linux is unavailable,
   // don't delete any logins.
   if (!OSCrypt::IsEncryptionAvailable()) {
@@ -2025,10 +1999,6 @@ void LoginDatabase::RollbackTransaction() {
 bool LoginDatabase::CommitTransaction() {
   TRACE_EVENT0("passwords", "LoginDatabase::CommitTransaction");
   return db_.CommitTransactionDeprecated();
-}
-
-void LoginDatabase::SetIsEmptyCb(IsEmptyCallback is_empty_cb) {
-  is_empty_cb_ = std::move(is_empty_cb);
 }
 
 LoginDatabase::SyncMetadataStore::SyncMetadataStore(sql::Database* db)
@@ -2541,12 +2511,6 @@ bool LoginDatabase::UpdatePasswordNotes(
     password_notes_table_.InsertOrReplace(primary_key, note);
   }
   return true;
-}
-
-void LoginDatabase::TriggerIsEmptyCb() {
-  if (is_empty_cb_) {
-    is_empty_cb_.Run(IsEmpty());
-  }
 }
 
 }  // namespace password_manager

@@ -59,8 +59,10 @@ WasmCompilationResult WasmCompilationUnit::ExecuteCompilation(
     // - eager compilation mode,
     // - with lazy validation,
     // - with PGO (which compiles some functions eagerly), or
+    // - with compilation hints (which compiles some functions eagerly).
     DCHECK(!v8_flags.wasm_lazy_compilation || v8_flags.wasm_lazy_validation ||
-           v8_flags.experimental_wasm_pgo_from_file);
+           v8_flags.experimental_wasm_pgo_from_file ||
+           v8_flags.experimental_wasm_compilation_hints);
     Zone validation_zone{GetWasmEngine()->allocator(), ZONE_NAME};
     if (ValidateFunctionBody(&validation_zone, env->enabled_features,
                              env->module, detected, func_body)
@@ -133,6 +135,7 @@ WasmCompilationResult WasmCompilationUnit::ExecuteCompilation(
       [[fallthrough]];
     }
     case ExecutionTier::kTurbofan: {
+#ifdef V8_ENABLE_TURBOFAN
       compiler::WasmCompilationData data(func_body);
       data.func_index = func_index_;
       data.wire_bytes_storage = wire_bytes_storage;
@@ -144,6 +147,7 @@ WasmCompilationResult WasmCompilationUnit::ExecuteCompilation(
       // set. In that case we set the for_debugging field for the TurboFan
       // result to match the requested for_debugging_.
       result.for_debugging = for_debugging_;
+#endif
       break;
     }
   }
@@ -195,11 +199,9 @@ void WasmCompilationUnit::CompileWasmFunction(Counters* counters,
 }
 
 JSToWasmWrapperCompilationUnit::JSToWasmWrapperCompilationUnit(
-    Isolate* isolate, const CanonicalSig* sig, CanonicalTypeIndex sig_index,
-    bool receiver_is_first_param)
+    Isolate* isolate, const CanonicalSig* sig, bool receiver_is_first_param)
     : isolate_(isolate),
       sig_(sig),
-      sig_index_(sig_index),
       receiver_is_first_param_(receiver_is_first_param),
       job_(v8_flags.wasm_jitless ? nullptr
                                  : compiler::NewJSToWasmCompilationJob(
@@ -248,7 +250,7 @@ DirectHandle<Code> JSToWasmWrapperCompilationUnit::Finalize() {
                                       Cast<AbstractCode>(code), name));
   }
   // Install the compiled wrapper in the cache now.
-  WasmExportWrapperCache::Put(isolate_, sig_index_, receiver_is_first_param_,
+  WasmExportWrapperCache::Put(isolate_, sig_->index(), receiver_is_first_param_,
                               code);
   Counters* counters = isolate_->counters();
   counters->wasm_generated_code_size()->Increment(code->body_size());
@@ -259,11 +261,9 @@ DirectHandle<Code> JSToWasmWrapperCompilationUnit::Finalize() {
 
 // static
 DirectHandle<Code> JSToWasmWrapperCompilationUnit::CompileJSToWasmWrapper(
-    Isolate* isolate, const CanonicalSig* sig, CanonicalTypeIndex sig_index,
-    bool receiver_is_first_param) {
+    Isolate* isolate, const CanonicalSig* sig, bool receiver_is_first_param) {
   // Run the compilation unit synchronously.
-  JSToWasmWrapperCompilationUnit unit(isolate, sig, sig_index,
-                                      receiver_is_first_param);
+  JSToWasmWrapperCompilationUnit unit(isolate, sig, receiver_is_first_param);
   unit.Execute();
   return unit.Finalize();
 }

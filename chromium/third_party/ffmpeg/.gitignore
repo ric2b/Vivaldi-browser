@@ -46,6 +46,7 @@
 /libavcodec/vulkan/*.c
 /libavfilter/vulkan/*.c
 /.*/
+!/.forgejo/
 
 # Chromium stuff.
 /build.*

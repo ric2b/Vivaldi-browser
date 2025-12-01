@@ -144,10 +144,13 @@ clean:
 	$(Q)$(RM) -r lz4 cmakebuild mesonbuild install
 	@echo Cleaning completed
 
+LIBZSTD_MK_DIR = $(ZSTDDIR)
+include $(LIBZSTD_MK_DIR)/install_oses.mk # UNAME, INSTALL_OS_LIST
+
 #------------------------------------------------------------------------------
 # make install is validated only for Linux, macOS, Hurd and some BSD targets
 #------------------------------------------------------------------------------
-ifneq (,$(filter Linux Darwin GNU/kFreeBSD GNU OpenBSD FreeBSD DragonFly NetBSD MSYS_NT% CYGWIN_NT% Haiku AIX,$(shell sh -c 'MSYSTEM="MSYS" uname') ))
+ifneq (,$(filter $(INSTALL_OS_LIST),$(UNAME)))
 
 HOST_OS = POSIX
 

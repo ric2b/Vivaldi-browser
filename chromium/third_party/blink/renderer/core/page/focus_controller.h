@@ -42,7 +42,6 @@ class Document;
 class Element;
 class FocusChangedObserver;
 class Frame;
-class HTMLElement;
 class HTMLFrameOwnerElement;
 class InputDeviceCapabilities;
 class LocalFrame;
@@ -86,8 +85,9 @@ class CORE_EXPORT FocusController final
       RemoteFrame* from,
       LocalFrame* to,
       InputDeviceCapabilities* source_capabilities = nullptr);
-  static Element* FindFocusableElementInShadowHost(const Element& shadow_host);
-  static HTMLElement* FindScopeOwnerSlotOrReadingFlowContainer(const Element&);
+
+  static Element* FindScopeOwnerSlotOrScrollMarkerOrReadingFlowContainer(
+      const Element&);
 
   // Returns the next focusable element (likely an <input> field) after the
   // given element in focus traversal and within the enclosing <form> that
@@ -114,6 +114,8 @@ class CORE_EXPORT FocusController final
   bool IsFocused() const { return is_focused_ || is_emulating_focus_; }
 
   void SetFocusEmulationEnabled(bool);
+
+  void UpdateFocusOnNavigationCommit(Frame*, bool was_focused);
 
   void RegisterFocusChangedObserver(FocusChangedObserver*);
 

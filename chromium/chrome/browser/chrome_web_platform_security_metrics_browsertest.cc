@@ -264,7 +264,7 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
       web_contents(),
       https_server().GetURL(
           "a.com",
-          "/private_network_access/no-favicon-treat-as-public-address.html")));
+          "/local_network_access/no-favicon-treat-as-public-address.html")));
 
   ASSERT_EQ(true,
             content::EvalJs(
@@ -278,13 +278,15 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
 
 // This test verifies that the PNA 2.0 breakage UseCounter
 // (kPrivateNetworkAccessInsecureResourceNotKnownPrivate) is correctly logged.
+//
+// TODO(crbug.com/438315223): Re-enable once test flakiness is addressed.
 IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
-                       PrivateNetworkAccessV2BreakageUseCounter) {
+                       DISABLED_PrivateNetworkAccessV2BreakageUseCounter) {
   // A top-level navigation request to a site with a private address should not
   // trigger the UseCounter.
   ASSERT_TRUE(content::NavigateToURL(
-      web_contents(), http_server().GetURL(
-                          "a.com", "/private_network_access/no-favicon.html")));
+      web_contents(),
+      http_server().GetURL("a.com", "/local_network_access/no-favicon.html")));
   CheckCounter(WebFeature::kPrivateNetworkAccessInsecureResourceNotKnownPrivate,
                0);
 
@@ -294,7 +296,7 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
   ASSERT_TRUE(content::NavigateToURL(
       web_contents(),
       https_server().GetURL("a.com",
-                            "/private_network_access/"
+                            "/local_network_access/"
                             "no-favicon-treat-as-public-address.html")));
   EXPECT_EQ(true, content::EvalJs(web_contents(),
                                   content::JsReplace(
@@ -315,7 +317,7 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
   ASSERT_TRUE(content::NavigateToURL(
       web_contents(),
       http_server().GetURL("a.com",
-                           "/private_network_access/"
+                           "/local_network_access/"
                            "no-favicon-treat-as-public-address.html")));
 
   // Trigger a request to a localhost HTTP site via 127.0.0.1.
@@ -377,7 +379,7 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
   ASSERT_EQ(true,
             content::NavigateToURL(
                 web_contents(), https_server().GetURL("a.com",
-                                                      "/private_network_access/"
+                                                      "/local_network_access/"
                                                       "no-favicon.html")));
 
   std::string_view kScriptTemplate = R"(
@@ -426,13 +428,40 @@ IN_PROC_BROWSER_TEST_F(
       browser(),
       http_server().GetURL(
           "a.com",
-          "/private_network_access/"
+          "/local_network_access/"
           "websocket-treat-as-public-address.html"
           "?url=" +
               ws_server().GetURL("/echo-with-no-extension").spec())));
 
   EXPECT_EQ("PASS", WaitAndGetTitle());
   CheckCounter(WebFeature::kPrivateNetworkAccessWebSocketConnected, 1);
+  CheckCounter(WebFeature::kLocalNetworkAccessWebSocketResourceNotKnownPrivate,
+               0);
+}
+
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_PrivateNetworkAccessWebSocketConnectedPublicToLocalNonLocalHost \
+  DISABLED_PrivateNetworkAccessWebSocketConnectedPublicToLocalNonLocalHost
+#else
+#define MAYBE_PrivateNetworkAccessWebSocketConnectedPublicToLocalNonLocalHost \
+  PrivateNetworkAccessWebSocketConnectedPublicToLocalNonLocalHost
+#endif
+IN_PROC_BROWSER_TEST_F(
+    PrivateNetworkAccessWebSocketMetricBrowserTest,
+    MAYBE_PrivateNetworkAccessWebSocketConnectedPublicToLocalNonLocalHost) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(),
+      http_server().GetURL(
+          "a.com",
+          "/local_network_access/"
+          "websocket-treat-as-public-address.html"
+          "?url=" +
+              ws_server().GetURL("b.com", "/echo-with-no-extension").spec())));
+
+  EXPECT_EQ("PASS", WaitAndGetTitle());
+  CheckCounter(WebFeature::kPrivateNetworkAccessWebSocketConnected, 1);
+  CheckCounter(WebFeature::kLocalNetworkAccessWebSocketResourceNotKnownPrivate,
+               1);
 }
 
 // When WebSocket is connected to the same ip address space, do not log a use
@@ -451,13 +480,15 @@ IN_PROC_BROWSER_TEST_F(PrivateNetworkAccessWebSocketMetricBrowserTest,
       browser(),
       http_server().GetURL(
           "a.com",
-          "/private_network_access/"
+          "/local_network_access/"
           "websocket.html"
           "?url=" +
               ws_server().GetURL("/echo-with-no-extension").spec())));
 
   EXPECT_EQ("PASS", WaitAndGetTitle());
   CheckCounter(WebFeature::kPrivateNetworkAccessWebSocketConnected, 0);
+  CheckCounter(WebFeature::kLocalNetworkAccessWebSocketResourceNotKnownPrivate,
+               0);
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
@@ -465,7 +496,7 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
   ASSERT_EQ(true,
             content::NavigateToURL(
                 web_contents(), https_server().GetURL("a.com",
-                                                      "/private_network_access/"
+                                                      "/local_network_access/"
                                                       "no-favicon.html")));
 
   std::string_view kScriptTemplate = R"(

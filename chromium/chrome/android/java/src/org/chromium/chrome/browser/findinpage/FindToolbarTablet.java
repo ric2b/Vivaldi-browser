@@ -12,7 +12,6 @@ import android.content.res.Resources;
 import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.view.View;
-import android.widget.FrameLayout;
 
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -176,15 +175,15 @@ public class FindToolbarTablet extends FindToolbar {
 
         if (show && getVisibility() != View.VISIBLE && mCurrentAnimation != mAnimationEnter) {
             View anchorView = getRootView().findViewById(R.id.toolbar);
-            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) getLayoutParams();
+            var lp = (MarginLayoutParams) getLayoutParams();
+
             // Note(david@vivaldi.com): When toolbar is at the bottom we need to reparent the
             // find-toolbar in order to make it visible on top of the address-bar.
             if (!VivaldiUtils.isTopToolbarOn()) {
             VivaldiUtils.reparentView(this, (android.view.ViewGroup) anchorView.getParent());
-            lp.gravity = (android.view.Gravity.END | android.view.Gravity.BOTTOM);
-            } else {
+            } else { // Vivaldi
             lp.topMargin = anchorView.getBottom() - mYInsetPx;
-            }
+            } // End Vivaldi
             setLayoutParams(lp);
             nextAnimator = mAnimationEnter;
         } else if (!show && getVisibility() != View.GONE && mCurrentAnimation != mAnimationLeave) {

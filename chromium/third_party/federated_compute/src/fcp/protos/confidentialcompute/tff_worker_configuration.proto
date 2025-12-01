@@ -1,0 +1,101 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.confidentialcompute;
+
+import "tensorflow/core/framework/types.proto";
+
+// Configuration for a sealed worker application that executes TensorFlow
+// Federated computations.
+message TffWorkerConfiguration {
+  oneof role {
+    ClientWork client_work = 1;
+    Aggregation aggregation = 2;
+  }
+
+  // A worker job that executes a transformation on a individual client upload.
+  message ClientWork {
+    // A serialized `tff.v0.Computation` proto that encodes work to be performed
+    // separately for each client input.
+    //
+    // This proto is produced by compiling a federated computation into
+    // `tff.backends.mapreduce.DistributeAggregateForm` and serializing the
+    // client_work computation.
+    //
+    // The computation should take 2 inputs (client data and broadcasted data)
+    // and produce an output of arbitrary length that represents the data to
+    // aggregate. It should contain only CLIENTS placements.
+    bytes serialized_client_work_computation = 1;
+    // A serialized `tff.v0.Value` proto representing the data to broadcast to
+    // each client, which will be fed as the second argument to the
+    // federated_language.Computation serialized as
+    // serialized_client_work_computation.
+    //
+    // This value is produced as the first output of the server_prepare
+    // computation in the `tff.backends.mapreduce.DistributeAggregateForm`.
+    bytes serialized_broadcasted_data = 2;
+
+    // Specification of the input format uploaded by clients. This informs the
+    // worker job of how to decode the client blob bytes into a structure that
+    // can be passed as input to the TFF computation encoded by
+    // `serialized_client_work_computation`.
+    oneof client_input_format {
+      FedSqlTensorflowCheckpoint fed_sql_tensorflow_checkpoint = 3;
+    }
+
+    // A TensorFlow checkpoint in columnar format encoding the output of a
+    // SQL query executied on the client.
+    // The checkpoint contains a tensor for each column in the SQL query output.
+    // Each column contains `n` scalars where `n` is the number of rows in the
+    // SQL query output.
+    // `n` varies between clients and is not known in advance.
+    message FedSqlTensorflowCheckpoint {
+      message FedSqlColumn {
+        // Name of the tensor in the TensorFlow checkpoint.
+        string name = 1;
+        // The data type of the tensor representing the column.
+        tensorflow.DataType data_type = 2;
+      }
+      repeated FedSqlColumn fed_sql_columns = 1;
+    }
+  }
+
+  // A worker job that aggregates together data derived fronm client uploads.
+  message Aggregation {
+    // A serialized `tff.v0.Computation` proto that encodes an aggregation step
+    // to be performed across data derived from client uploads.
+    //
+    // This proto is produced by compiling a federated computation into
+    // `tff.backends.mapreduce.DistributeAggregateForm` and serializing the
+    // client_work computation.
+    //
+    // The client_to_server_aggregation function should take 2 inputs (temporary
+    // state and the output of a client_work computation) and produce an output
+    // of arbitrary length that represents the aggregated data.
+    bytes serialized_client_to_server_aggregation_computation = 1;
+    // A serialized `tff.v0.Value` proto representing the temporary server
+    // state, which will be fed as the first argument to the
+    // federated_language.Computation serialized as
+    // serialized_client_to_server_aggregation_computation.
+    //
+    // This value is produced as the second output of the server_prepare
+    // computation in the `tff.backends.mapreduce.DistributeAggregateForm`.
+    bytes serialized_temporary_state = 2;
+    // The minimum number of client-derived data records that must be aggregated
+    // together before the application will output an unencrypted aggregate.
+    int32 min_clients_in_aggregate = 3;
+  }
+}

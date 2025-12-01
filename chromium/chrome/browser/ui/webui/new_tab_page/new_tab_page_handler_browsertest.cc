@@ -17,9 +17,9 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/chrome_test_utils.h"
-#include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/prefs/pref_service.h"
 #include "components/search/ntp_features.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
@@ -163,8 +163,7 @@ IN_PROC_BROWSER_TEST_P(NewTabPageHandlerManagedTest, SetNoticePolicyPref) {
   bool visible;
   EXPECT_CALL(*mock_page(), FooterVisibilityUpdated)
       .Times(2)
-      .WillRepeatedly(testing::Invoke(
-          [&visible](bool visible_arg) { visible = visible_arg; }));
+      .WillRepeatedly([&visible](bool visible_arg) { visible = visible_arg; });
 
   local_state()->SetBoolean(prefs::kNTPFooterManagementNoticeEnabled, false);
   mock_page()->FlushForTesting();
@@ -183,8 +182,7 @@ IN_PROC_BROWSER_TEST_P(NewTabPageHandlerManagedTest, SetCustomFooterLabel) {
   bool visible;
   EXPECT_CALL(*mock_page(), FooterVisibilityUpdated)
       .Times(3)
-      .WillRepeatedly(testing::Invoke(
-          [&visible](bool visible_arg) { visible = visible_arg; }));
+      .WillRepeatedly([&visible](bool visible_arg) { visible = visible_arg; });
 
   profile()->GetPrefs()->SetBoolean(prefs::kNtpFooterVisible, false);
   mock_page()->FlushForTesting();
@@ -209,8 +207,7 @@ IN_PROC_BROWSER_TEST_P(NewTabPageHandlerManagedTest, SetCustomFooterLogo) {
   bool visible;
   EXPECT_CALL(*mock_page(), FooterVisibilityUpdated)
       .Times(3)
-      .WillRepeatedly(testing::Invoke(
-          [&visible](bool visible_arg) { visible = visible_arg; }));
+      .WillRepeatedly([&visible](bool visible_arg) { visible = visible_arg; });
 
   profile()->GetPrefs()->SetBoolean(prefs::kNtpFooterVisible, false);
   mock_page()->FlushForTesting();

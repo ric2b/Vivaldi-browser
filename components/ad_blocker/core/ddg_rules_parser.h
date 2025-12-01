@@ -3,10 +3,11 @@
 #ifndef COMPONENTS_AD_BLOCKER_CORE_DDG_RULES_PARSER_H_
 #define COMPONENTS_AD_BLOCKER_CORE_DDG_RULES_PARSER_H_
 
+#include <set>
+
 #include "base/memory/raw_ptr.h"
 #include "base/values.h"
-#include "components/ad_blocker/public/core/adblock_request_filter_rule.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "components/ad_blocker/public/core/adblock_request_filter_rule_types.h"
 
 namespace adblock_filter {
 struct ParseResult;
@@ -27,7 +28,7 @@ class DuckDuckGoRulesParser {
                  const std::string& domain,
                  bool default_ignore,
                  const base::Value::List* excluded_origins);
-  std::optional<std::bitset<RequestFilterRule::kTypeCount>> GetTypes(
+  std::optional<RegularResourceTypes> GetTypes(
       const base::Value* rule_properties);
   std::optional<std::set<std::string>> GetDomains(
       const base::Value* rule_properties);

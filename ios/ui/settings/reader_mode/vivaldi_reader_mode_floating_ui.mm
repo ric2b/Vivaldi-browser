@@ -3,6 +3,7 @@
 #import "ios/ui/settings/reader_mode/vivaldi_reader_mode_floating_ui.h"
 
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/ui/settings/reader_mode/vivaldi_reader_mode_animator.h"
 #import "ios/ui/settings/reader_mode/vivaldi_reader_mode_coordinator.h"
 
 namespace {

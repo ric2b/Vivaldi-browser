@@ -13,6 +13,7 @@
 // limitations under the License.
 
 pub mod io;
+pub mod sampletransform;
 pub mod stream;
 
 use crate::parser::mp4box::*;
@@ -25,7 +26,7 @@ use std::ops::Range;
 macro_rules! conversion_function {
     ($func:ident, $to: ident, $from:ty) => {
         pub(crate) fn $func(value: $from) -> AvifResult<$to> {
-            $to::try_from(value).or(Err(AvifError::BmffParseFailed("".into())))
+            $to::try_from(value).map_err(AvifError::map_unknown_error)
         }
     };
 }
@@ -33,7 +34,6 @@ macro_rules! conversion_function {
 conversion_function!(usize_from_u64, usize, u64);
 conversion_function!(usize_from_u32, usize, u32);
 conversion_function!(usize_from_u16, usize, u16);
-#[cfg(feature = "sample_transform")]
 conversion_function!(usize_from_u8, usize, u8);
 #[cfg(feature = "android_mediacodec")]
 conversion_function!(usize_from_isize, usize, isize);
@@ -106,9 +106,7 @@ pub(crate) fn find_nclx(properties: &[ItemProperty]) -> AvifResult<Option<&Nclx>
     for property in properties {
         if let ItemProperty::ColorInformation(ColorInformation::Nclx(nclx)) = property {
             if single_nclx.is_some() {
-                return Err(AvifError::BmffParseFailed(
-                    "multiple nclx were found".into(),
-                ));
+                return AvifError::bmff_parse_failed("multiple nclx were found");
             }
             single_nclx = Some(nclx);
         }
@@ -122,7 +120,7 @@ pub(crate) fn find_icc(properties: &[ItemProperty]) -> AvifResult<Option<&Vec<u8
     for property in properties {
         if let ItemProperty::ColorInformation(ColorInformation::Icc(icc)) = property {
             if single_icc.is_some() {
-                return Err(AvifError::BmffParseFailed("multiple icc were found".into()));
+                return AvifError::bmff_parse_failed("multiple icc were found");
             }
             single_icc = Some(icc);
         }
@@ -182,10 +180,10 @@ pub(crate) fn create_vec_exact<T>(size: usize) -> AvifResult<Vec<T>> {
     // Requesting an allocation larger than this value will cause the fuzzers to crash instead of
     // returning null. Remove this check once that behavior is fixed.
     if u64_from_usize(allocation_size)? >= 2_145_386_496 {
-        return Err(AvifError::OutOfMemory);
+        return AvifError::out_of_memory();
     }
     if v.try_reserve_exact(size).is_err() {
-        return Err(AvifError::OutOfMemory);
+        return AvifError::out_of_memory();
     }
     Ok(v)
 }
@@ -200,53 +198,53 @@ pub(crate) fn assert_eq_f32_array(a: &[f32], b: &[f32]) {
 
 pub(crate) fn check_slice_range(len: usize, range: &Range<usize>) -> AvifResult<()> {
     if range.start >= len || range.end > len {
-        return Err(AvifError::NoContent);
+        return AvifError::no_content();
     }
     Ok(())
 }
 
+pub(crate) const AUXI_ALPHA_URN: &str = "urn:mpeg:mpegB:cicp:systems:auxiliary:alpha";
+
 pub(crate) fn is_auxiliary_type_alpha(aux_type: &str) -> bool {
-    aux_type == "urn:mpeg:mpegB:cicp:systems:auxiliary:alpha"
-        || aux_type == "urn:mpeg:hevc:2015:auxid:1"
+    aux_type == AUXI_ALPHA_URN || aux_type == "urn:mpeg:hevc:2015:auxid:1"
 }
 
 pub(crate) fn validate_grid_image_dimensions(image: &Image, grid: &Grid) -> AvifResult<()> {
     if checked_mul!(image.width, grid.columns)? < grid.width
         || checked_mul!(image.height, grid.rows)? < grid.height
     {
-        return Err(AvifError::InvalidImageGrid(
-                        "Grid image tiles do not completely cover the image (HEIF (ISO/IEC 23008-12:2017), Section 6.6.2.3.1)".into(),
-                    ));
+        return AvifError::invalid_image_grid(
+            "Grid image tiles do not completely cover the image (HEIF (ISO/IEC 23008-12:2017), \
+                        Section 6.6.2.3.1)",
+        );
     }
     if checked_mul!(image.width, grid.columns)? < grid.width
         || checked_mul!(image.height, grid.rows)? < grid.height
     {
-        return Err(AvifError::InvalidImageGrid(
+        return AvifError::invalid_image_grid(
             "Grid image tiles do not completely cover the image (HEIF (ISO/IEC 23008-12:2017), \
-                    Section 6.6.2.3.1)"
-                .into(),
-        ));
+                    Section 6.6.2.3.1)",
+        );
     }
     if checked_mul!(image.width, grid.columns - 1)? >= grid.width
         || checked_mul!(image.height, grid.rows - 1)? >= grid.height
     {
-        return Err(AvifError::InvalidImageGrid(
+        return AvifError::invalid_image_grid(
             "Grid image tiles in the rightmost column and bottommost row do not overlap the \
                      reconstructed image grid canvas. See MIAF (ISO/IEC 23000-22:2019), Section \
-                     7.3.11.4.2, Figure 2"
-                .into(),
-        ));
+                     7.3.11.4.2, Figure 2",
+        );
     }
     // ISO/IEC 23000-22:2019, Section 7.3.11.4.2:
     //   - the tile_width shall be greater than or equal to 64, and should be a multiple of 64
     //   - the tile_height shall be greater than or equal to 64, and should be a multiple of 64
     // The "should" part is ignored here.
     if image.width < 64 || image.height < 64 {
-        return Err(AvifError::InvalidImageGrid(format!(
+        return AvifError::invalid_image_grid(format!(
             "Grid image tile width ({}) or height ({}) cannot be smaller than 64. See MIAF \
                      (ISO/IEC 23000-22:2019), Section 7.3.11.4.2",
             image.width, image.height
-        )));
+        ));
     }
     // ISO/IEC 23000-22:2019, Section 7.3.11.4.2:
     //   - when the images are in the 4:2:2 chroma sampling format the horizontal tile offsets
@@ -262,12 +260,12 @@ pub(crate) fn validate_grid_image_dimensions(image: &Image, grid: &Grid) -> Avif
             || (image.yuv_format == PixelFormat::Yuv420
                 && (grid.height % 2 != 0 || image.height % 2 != 0)))
     {
-        return Err(AvifError::InvalidImageGrid(format!(
+        return AvifError::invalid_image_grid(format!(
             "Grid image width ({}) or height ({}) or tile width ({}) or height ({}) shall be \
                     even if chroma is subsampled in that dimension. See MIAF \
                     (ISO/IEC 23000-22:2019), Section 7.3.11.4.2",
             grid.width, grid.height, image.width, image.height
-        )));
+        ));
     }
     Ok(())
 }
@@ -299,7 +297,7 @@ impl<T> PointerSlice<T> {
     /// struct. It must point to a memory region of at least `size` elements.
     pub unsafe fn create(ptr: *mut T, size: usize) -> AvifResult<Self> {
         if ptr.is_null() || size == 0 {
-            return Err(AvifError::NoContent);
+            return AvifError::no_content();
         }
         // Ensure that size does not exceed isize::MAX.
         let _ = isize_from_usize(size)?;

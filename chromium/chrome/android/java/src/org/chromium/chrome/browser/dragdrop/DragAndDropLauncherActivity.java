@@ -26,11 +26,14 @@ import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.MultiTabMetadata;
 import org.chromium.chrome.browser.tabmodel.TabGroupMetadata;
 import org.chromium.chrome.browser.tabwindow.TabWindowManager;
 import org.chromium.ui.dragdrop.DragDropMetricUtils;
 import org.chromium.ui.dragdrop.DragDropMetricUtils.DragDropType;
 import org.chromium.ui.dragdrop.DragDropMetricUtils.UrlIntentSource;
+
+import java.util.List;
 
 /** A helper activity for routing Chrome tab, tab group and link drag & drop launcher intents. */
 // TODO (crbug/331865433): Consider removing use of this trampoline activity.
@@ -39,6 +42,8 @@ public class DragAndDropLauncherActivity extends Activity {
     static final String ACTION_DRAG_DROP_VIEW = "org.chromium.chrome.browser.dragdrop.action.VIEW";
     static final String LAUNCHED_FROM_LINK_USER_ACTION = "MobileNewInstanceLaunchedFromDraggedLink";
     static final String LAUNCHED_FROM_TAB_USER_ACTION = "MobileNewInstanceLaunchedFromDraggedTab";
+    static final String LAUNCHED_FROM_MULTI_TAB_USER_ACTION =
+            "MobileNewInstanceLaunchedFromDraggedMultiTab";
     static final String LAUNCHED_FROM_TAB_GROUP_USER_ACTION =
             "MobileNewInstanceLaunchedFromDraggedTabGroup";
 
@@ -83,8 +88,8 @@ public class DragAndDropLauncherActivity extends Activity {
     }
 
     /**
-     * Creates an intent from a tab or tab group dragged out of Chrome to move it to a new Chrome
-     * window.
+     * Creates an intent from a tab, list of tabs or tab group dragged out of Chrome to move it to a
+     * new Chrome window.
      *
      * @param chromeDropDataAndroid The drop data containing either a single tab or tab group
      *     metadata.
@@ -105,7 +110,11 @@ public class DragAndDropLauncherActivity extends Activity {
         if (chromeDropDataAndroid instanceof ChromeTabDropDataAndroid tabDropData) {
             intent = getTabIntent(intent, tabDropData.tab);
         } else if (chromeDropDataAndroid instanceof ChromeTabGroupDropDataAndroid groupDropData) {
+            assert groupDropData.tabGroupMetadata != null;
             intent = getTabGroupIntent(intent, groupDropData.tabGroupMetadata);
+        } else if (chromeDropDataAndroid
+                instanceof ChromeMultiTabDropDataAndroid multiTabDropData) {
+            intent = getMultiTabIntent(intent, multiTabDropData.tabs);
         }
         intent.putExtra(IntentHandler.EXTRA_DRAGDROP_TAB_WINDOW_ID, sourceWindowId);
         DragAndDropLauncherActivity.setIntentCreationTimestampMs(SystemClock.elapsedRealtime());
@@ -142,7 +151,23 @@ public class DragAndDropLauncherActivity extends Activity {
     static Intent getTabIntent(Intent intent, @Nullable Tab tab) {
         intent.putExtra(IntentHandler.EXTRA_URL_DRAG_SOURCE, UrlIntentSource.TAB_IN_STRIP);
         intent.putExtra(IntentHandler.EXTRA_DRAGGED_TAB_ID, assumeNonNull(tab).getId());
+        IntentHandler.setPinnedState(intent, tab.getIsPinned());
         intent.setData(Uri.parse(tab.getUrl().getSpec()));
+        return intent;
+    }
+
+    /**
+     * Creates an intent from a list of tabs dragged out of Chrome to move it to a new Chrome
+     * window.
+     *
+     * @param intent The intent to be configured for moving tabs to a new window.
+     * @param tabs The list of dragged tabs.
+     * @return The intent that will be used to move dragged tabs to a new Chrome instance.
+     */
+    @VisibleForTesting
+    static Intent getMultiTabIntent(Intent intent, @Nullable List<Tab> tabs) {
+        intent.putExtra(IntentHandler.EXTRA_URL_DRAG_SOURCE, UrlIntentSource.MULTI_TAB_IN_STRIP);
+        IntentHandler.setMultiTabMetadata(intent, MultiTabMetadata.create(tabs));
         return intent;
     }
 
@@ -154,7 +179,7 @@ public class DragAndDropLauncherActivity extends Activity {
      * @return The intent that will be used to move a dragged tab group to a new Chrome instance.
      */
     @VisibleForTesting
-    static Intent getTabGroupIntent(Intent intent, @Nullable TabGroupMetadata tabGroupMetadata) {
+    static Intent getTabGroupIntent(Intent intent, TabGroupMetadata tabGroupMetadata) {
         intent.putExtra(IntentHandler.EXTRA_URL_DRAG_SOURCE, UrlIntentSource.TAB_GROUP_IN_STRIP);
         IntentHandler.setTabGroupMetadata(intent, tabGroupMetadata);
         return intent;
@@ -218,6 +243,7 @@ public class DragAndDropLauncherActivity extends Activity {
         ResettersForTesting.register(() -> sDropTimeoutForTesting = null);
     }
 
+    // TODO(crbug.com/432760135): Add metrics for multi-tab drag/drop.
     private static void recordLaunchMetrics(Intent intent) {
         @UrlIntentSource
         int intentSource =

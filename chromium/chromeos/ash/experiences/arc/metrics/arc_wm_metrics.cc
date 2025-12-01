@@ -119,7 +119,7 @@ class ArcWmMetrics::WindowStateChangeObserver
   void RecordWindowStateChangeDelay(ash::WindowState* state) {
     const chromeos::AppType app_type =
         window_->GetProperty(chromeos::kAppTypeKey);
-    if (display::Screen::GetScreen()->InTabletMode()) {
+    if (display::Screen::Get()->InTabletMode()) {
       // When entering tablet mode, we only collect the data of visible window.
       if (state->IsMaximized() && window_->IsVisible()) {
         base::UmaHistogramCustomTimes(
@@ -180,6 +180,7 @@ class ArcWmMetrics::WindowCloseObserver : public aura::WindowObserver {
   // aura::WindowObserver:
   void OnWindowDestroyed(aura::Window* window) override {
     RecordWindowCloseDelay();
+    window_observation_.Reset();
     std::move(window_close_completed_callback_).Run();
   }
 
@@ -224,6 +225,9 @@ class ArcWmMetrics::WindowRotationObserver : public aura::WindowObserver {
       RecordWindowRotateDelay();
       std::move(window_bounds_changed_completed_callback_).Run();
     }
+  }
+  void OnWindowDestroying(aura::Window* window) override {
+    window_observation_.Reset();
   }
 
  private:
@@ -337,7 +341,7 @@ void ArcWmMetrics::OnWindowPropertyChanged(aura::Window* window,
     return;
   }
 
-  if (display::Screen::GetScreen()->InTabletMode()) {
+  if (display::Screen::Get()->InTabletMode()) {
     return;
   }
 
@@ -440,7 +444,7 @@ void ArcWmMetrics::OnDisplayTabletStateChanged(display::TabletState state) {
 }
 
 void ArcWmMetrics::OnScreenCopiedBeforeRotation() {
-  if (!display::Screen::GetScreen()->InTabletMode()) {
+  if (!display::Screen::Get()->InTabletMode()) {
     return;
   }
 

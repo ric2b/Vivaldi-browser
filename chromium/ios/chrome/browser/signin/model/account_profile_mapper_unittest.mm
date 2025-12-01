@@ -51,7 +51,7 @@ using testing::UnorderedElementsAre;
 @end
 
 @implementation FakeChangeProfileCommands {
-  raw_ptr<ProfileManagerIOS> _manager;
+  raw_ptr<ProfileManagerIOS, DanglingUntriaged> _manager;
 }
 
 - (instancetype)initWithProfileManager:(ProfileManagerIOS*)manager {
@@ -296,6 +296,10 @@ class FakeProfileManagerIOS : public ProfileManagerIOS {
 
   ProfileAttributesStorageIOS* GetProfileAttributesStorage() override {
     return &profile_attributes_storage_;
+  }
+
+  base::FilePath GetProfilePath(std::string_view name) override {
+    NOTREACHED();
   }
 
  private:

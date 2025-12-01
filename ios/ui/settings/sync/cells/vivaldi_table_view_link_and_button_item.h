@@ -5,7 +5,6 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
 
 // VivaldiTableViewLinkAndButtonItem contains the model for
@@ -48,7 +47,7 @@
 
 // VivaldiTableViewLinkAndButtonCell contains a textLabel and a UIbutton
 // laid out horizontally in a stackview and centered.
-@interface VivaldiTableViewLinkAndButtonCell : TableViewCell
+@interface VivaldiTableViewLinkAndButtonCell : LegacyTableViewCell
 
 // Cell text information.
 @property(nonatomic, strong) UITextView* label;

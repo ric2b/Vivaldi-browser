@@ -13,7 +13,6 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Proprietăți imagine...</translation>
 <translation id="1920297417712412573">Copiază într-o notiță</translation>
-<translation id="1921101374471252440">&amp;Reîncarcă imaginea</translation>
 <translation id="2079036669923635404">Clic aici pentru a actualiza Vivaldi la versiunea <ph name="VERSION" />.</translation>
 <translation id="2441056087170876076">Monstrul 2</translation>
 <translation id="2444387452209867610">Inserează o notiță</translation>
@@ -24,13 +23,13 @@
 <translation id="292258461174562431">Monstrul 4</translation>
 <translation id="2977472760057091832">Deschide linkul într-o fereastră privată</translation>
 <translation id="2989805286512600854">Deschide într-o filă nouă</translation>
-<translation id="3027988479108856431">Din păcate, setările Yandex nu sunt disponibile în timp ce acel browser încă rulează. Pentru a importa acele setări în Vivaldi, salvați la ceea ce lucrați și închideți toate ferestrele Yandex. Apoi dați clic pe Continuă.</translation>
 <translation id="3127383884976966729">Animal 7</translation>
 <translation id="3156398087075132709">Semn de carte nou</translation>
 <translation id="3255747772218936245">Instalează actualizarea</translation>
 <translation id="3259769196742189631">Validează această pagină (W3C)</translation>
 <translation id="3302905971452834934">Monstrul 1</translation>
 <translation id="3334610655141903168">(fără titlu)</translation>
+<translation id="3402602684546832928">Selectați fișierul cu semnele de carte Opera</translation>
 <translation id="3457498675806041407">Confirmare ieșire</translation>
 <translation id="3521635864657970829">Sigur vreți să închideți această fereastră?</translation>
 <translation id="3540597690227428180">Animal 9</translation>
@@ -71,9 +70,9 @@
 <translation id="5648110075441906505">Deschide imaginea într-o fereastră nouă</translation>
 <translation id="5857090052475505287">Dosar nou</translation>
 <translation id="588258955323874662">Pe tot ecranul</translation>
-<translation id="5916080360077521750">Din păcate, setările Chrome nu sunt disponibile în timp ce acel browser încă rulează. Pentru a importa acele setări în Vivaldi, salvați la ceea ce lucrați și închideți toate ferestrele Chrome. Apoi dați clic pe Continuă.</translation>
 <translation id="6229528619562190452">Clic aici pentru a actualiza Vivaldi.</translation>
 <translation id="6234173136417926046">Folosește imaginea ca fundal pentru pagina de start</translation>
+<translation id="630690498669249215">Fișier cu semne de carte Opera</translation>
 <translation id="6339818817272922368">Cont local</translation>
 <translation id="6477028720702061455">Selectați dosarul profilului Opera de importat</translation>
 <translation id="6510706699590490869">Act&amp;ualizează Vivaldi</translation>
@@ -89,7 +88,6 @@
 <translation id="8197810018650377191">Adaugă pagina la semnele de carte</translation>
 <translation id="8261506727792406068">Șterge</translation>
 <translation id="8331671104904436324">Deschide într-o filă în fundal</translation>
-<translation id="8624587806981488221">&amp;Reîncarcă imaginea</translation>
 <translation id="8651348004684669199">Adaugă fila activă</translation>
 <translation id="8669345741879513971">Monstrul 10</translation>
 <translation id="867544375504146191">Yandex</translation>

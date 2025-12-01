@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -54,7 +54,8 @@ export class AccessibilityTreeView extends UI.Widget.VBox implements
         deferredNode.resolve(domNode => {
           if (domNode) {
             this.inspectedDOMNode = domNode;
-            void ElementsPanel.instance().revealAndSelectNode(domNode, true, false);
+            void ElementsPanel.instance().revealAndSelectNode(
+                domNode, {showPanel: true, focusNode: true, highlightInOverlay: true});
           }
         });
       }

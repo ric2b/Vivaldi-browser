@@ -44,6 +44,7 @@
 #include "third_party/blink/renderer/core/css/media_feature_overrides.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatch_forbidden_scope.h"
+#include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
 #include "third_party/blink/renderer/core/exported/web_settings_impl.h"
@@ -68,6 +69,7 @@
 #include "third_party/blink/renderer/core/page/page_animator.h"
 #include "third_party/blink/renderer/core/page/page_popup_client.h"
 #include "third_party/blink/renderer/core/page/page_popup_controller.h"
+#include "third_party/blink/renderer/core/scroll/scrollbar.h"
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
@@ -346,8 +348,8 @@ WebPagePopupImpl::WebPagePopupImpl(
           /*is_embedded=*/false,
           /*is_for_scalable_page=*/true)) {
   DCHECK(popup_client_);
-  popup_widget_host_.set_disconnect_handler(WTF::BindOnce(
-      &WebPagePopupImpl::WidgetHostDisconnected, WTF::Unretained(this)));
+  popup_widget_host_.set_disconnect_handler(blink::BindOnce(
+      &WebPagePopupImpl::WidgetHostDisconnected, blink::Unretained(this)));
   if (auto* main_frame_widget = opener_web_view->MainFrameViewWidget()) {
     if (auto* device_emulator = main_frame_widget->DeviceEmulator()) {
       opener_widget_screen_origin_ = device_emulator->ViewRectOrigin();
@@ -419,9 +421,9 @@ WebPagePopupImpl::WebPagePopupImpl(
 
   popup_owner_client_rect_ =
       popup_client_->OwnerElement().GetBoundingClientRect();
-  popup_widget_host_->ShowPopup(
-      initial_rect_, GetAnchorRectInScreen(),
-      WTF::BindOnce(&WebPagePopupImpl::DidShowPopup, WTF::Unretained(this)));
+  popup_widget_host_->ShowPopup(initial_rect_, GetAnchorRectInScreen(),
+                                blink::BindOnce(&WebPagePopupImpl::DidShowPopup,
+                                                blink::Unretained(this)));
   should_defer_setting_window_rect_ = false;
   widget_base_->SetPendingWindowRect(initial_rect_);
 
@@ -633,8 +635,8 @@ void WebPagePopupImpl::SetWindowRect(const gfx::Rect& rect_in_screen) {
   if (!should_defer_setting_window_rect_) {
     widget_base_->SetPendingWindowRect(window_rect);
     popup_widget_host_->SetPopupBounds(
-        window_rect,
-        WTF::BindOnce(&WebPagePopupImpl::DidSetBounds, WTF::Unretained(this)));
+        window_rect, blink::BindOnce(&WebPagePopupImpl::DidSetBounds,
+                                     blink::Unretained(this)));
   } else {
     initial_rect_ = window_rect;
   }
@@ -784,7 +786,11 @@ WebInputEventResult WebPagePopupImpl::HandleGestureEvent(
     }
     ScrollOffset scroll_offset(-event.data.scroll_update.delta_x,
                                -event.data.scroll_update.delta_y);
+    // TODO(crbug.com/414556050) We might have absolute scroll event types here,
+    // like scrollbar drag or panning touch gesture scroll. Need to add a way to
+    // identify them and pass correct `ScrollSourceType` below.
     scrollable->UserScroll(event.data.scroll_update.delta_units, scroll_offset,
+                           cc::ScrollSourceType::kRelativeScroll,
                            ScrollableArea::ScrollCallback());
     return WebInputEventResult::kHandledSystem;
   }
@@ -1078,6 +1084,13 @@ void WebPagePopupImpl::EmulatedToScreenRect(gfx::Rect& screen_rect) {
 std::unique_ptr<cc::LayerTreeFrameSink>
 WebPagePopupImpl::AllocateNewLayerTreeFrameSink() {
   return nullptr;
+}
+
+void WebPagePopupImpl::ExecuteEditCommand(const String& command,
+                                          const String& value) {
+  if (LocalFrame* frame = page_->GetFocusController().FocusedFrame()) {
+    frame->GetEditor().ExecuteCommand(command, value);
+  }
 }
 
 // WebPagePopup ----------------------------------------------------------------

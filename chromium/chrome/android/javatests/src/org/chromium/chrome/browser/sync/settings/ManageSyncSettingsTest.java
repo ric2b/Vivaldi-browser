@@ -31,14 +31,12 @@ import static org.chromium.ui.test.util.ViewUtils.onViewWaiting;
 import static java.util.Map.entry;
 
 import android.app.Dialog;
-import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 
-import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.app.AlertDialog;
 import androidx.preference.Preference;
@@ -70,13 +68,13 @@ import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.device_reauth.BiometricStatus;
 import org.chromium.chrome.browser.device_reauth.ReauthenticatorBridge;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.password_manager.PasswordManagerUtilBridge;
 import org.chromium.chrome.browser.password_manager.PasswordManagerUtilBridgeJni;
-import org.chromium.chrome.browser.password_manager.account_storage_toggle.AccountStorageToggleFragmentArgs;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.regional_capabilities.RegionalCapabilitiesServiceFactory;
 import org.chromium.chrome.browser.settings.SettingsActivity;
@@ -110,12 +108,14 @@ import org.chromium.components.sync.DataType;
 import org.chromium.components.sync.LocalDataDescription;
 import org.chromium.components.sync.SyncService;
 import org.chromium.components.sync.TransportState;
+import org.chromium.components.sync.UserActionableError;
 import org.chromium.components.sync.UserSelectableType;
 import org.chromium.components.sync.internal.SyncPrefNames;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.google_apis.gaia.GoogleServiceAuthError;
 import org.chromium.google_apis.gaia.GoogleServiceAuthErrorState;
 import org.chromium.ui.modaldialog.ModalDialogManagerHolder;
+import org.chromium.ui.test.util.GmsCoreVersionRestriction;
 import org.chromium.ui.test.util.ViewUtils;
 
 import java.io.IOException;
@@ -131,6 +131,9 @@ import java.util.Set;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @DoNotBatch(reason = "TODO(crbug.com/40743432): SyncTestRule doesn't support batching.")
+// Avoids UserActionableError.NEEDS_UPM_BACKEND_UPGRADE for most tests. Specific tests can still
+// trigger the error by overriding getUserActionableError()
+@Restriction(GmsCoreVersionRestriction.RESTRICTION_TYPE_VERSION_GE_24W15)
 public class ManageSyncSettingsTest {
     private static final int RENDER_TEST_REVISION = 7;
 
@@ -325,6 +328,7 @@ public class ManageSyncSettingsTest {
     public void testSignInWithManagedDataTypes() {
         mSyncTestRule.setUpAccountAndSignInForTesting();
         ManageSyncSettings fragment = startManageSyncPreferences();
+        onViewWaiting(allOf(is(fragment.getView()), isDisplayed()));
 
         Map<Integer, ChromeSwitchPreference> dataTypes = getAccountDataTypes(fragment);
         // When one or more sync types are managed, the respective preference should be disabled and
@@ -1342,7 +1346,9 @@ public class ManageSyncSettingsTest {
     @Feature({"Sync"})
     @DisabledTest(message = "crbug.com/386744084")
     public void testSyncErrorCardForUpmBackendOutdatedUpdatedDynamically() {
-        when(mPasswordManagerUtilBridgeJniMock.isGmsCoreUpdateRequired(any())).thenReturn(true);
+        setupMockSyncService();
+        when(mSyncService.getUserActionableError())
+                .thenReturn(UserActionableError.NEEDS_UPM_BACKEND_UPGRADE);
 
         mSyncTestRule.setUpAccountAndSignInForTesting();
 
@@ -1357,8 +1363,8 @@ public class ManageSyncSettingsTest {
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    when(mPasswordManagerUtilBridgeJniMock.isGmsCoreUpdateRequired(any()))
-                            .thenReturn(false);
+                    when(mSyncService.getUserActionableError())
+                            .thenReturn(UserActionableError.NONE);
                     // TODO(crbug.com/327623232): Observe such changes instead.
                     preference.syncStateChanged();
                 });
@@ -1412,41 +1418,6 @@ public class ManageSyncSettingsTest {
 
         // The error card is now hidden.
         Assert.assertFalse(preference.isShown());
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Sync"})
-    public void testPasswordsToggleWithHighlighting() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
-
-        Bundle args = new Bundle();
-        args.putBoolean(AccountStorageToggleFragmentArgs.HIGHLIGHT, true);
-        mSettingsActivityTestRule.startSettingsActivity(args);
-
-        ChromeSwitchPreference toggle =
-                (ChromeSwitchPreference)
-                        mSettingsActivityTestRule
-                                .getFragment()
-                                .findPreference(
-                                        ManageSyncSettings.PREF_ACCOUNT_SECTION_PASSWORDS_TOGGLE);
-        @Nullable Integer backgroundColor = toggle.getBackgroundColor();
-        Assert.assertNotNull(backgroundColor);
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Sync"})
-    public void testPasswordsToggleWithoutHighlighting() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
-
-        ManageSyncSettings settings = startManageSyncPreferences();
-
-        ChromeSwitchPreference toggle =
-                (ChromeSwitchPreference)
-                        settings.findPreference(
-                                ManageSyncSettings.PREF_ACCOUNT_SECTION_PASSWORDS_TOGGLE);
-        Assert.assertNull(toggle.getBackgroundColor());
     }
 
     @Test

@@ -12,22 +12,17 @@ import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.view.TouchDelegate;
 import android.view.View;
-import android.widget.FrameLayout;
 
 import org.chromium.base.TraceEvent;
 import org.chromium.build.annotations.NullMarked;
-import org.chromium.components.omnibox.OmniboxFeatures;
-
-// Vivaldi
-import org.chromium.build.BuildConfig;
 
 /** A location bar implementation specific for smaller/phone screens. */
 @NullMarked
 /*Vivaldi*/ public class LocationBarPhone extends LocationBarLayout {
     private static final int ACTION_BUTTON_TOUCH_OVERFLOW_LEFT = 15;
 
+    @SuppressWarnings("HidingField")
     private View mUrlBar;
-    private View mStatusView;
 
     /** Constructor used to inflate from XML. */
     public LocationBarPhone(Context context, AttributeSet attrs) {
@@ -39,7 +34,6 @@ import org.chromium.build.BuildConfig;
         super.onFinishInflate();
 
         mUrlBar = findViewById(R.id.url_bar);
-        mStatusView = findViewById(R.id.location_bar_status);
 
         Rect delegateArea = new Rect();
         mUrlActionContainer.getHitRect(delegateArea);
@@ -91,25 +85,17 @@ import org.chromium.build.BuildConfig;
     }
 
     /**
-     * Returns {@link FrameLayout.LayoutParams} of the LocationBar view.
+     * Returns {@link MarginLayoutParams} of the LocationBar view.
      *
      * <p>TODO(crbug.com/40151029): Hide this View interaction if possible.
      *
      * @see View#getLayoutParams()
      */
-    public FrameLayout.LayoutParams getFrameLayoutParams() {
-        return (FrameLayout.LayoutParams) getLayoutParams();
+    public MarginLayoutParams getMarginLayoutParams() {
+        return (MarginLayoutParams) getLayoutParams();
     }
 
     int getOffsetOfFirstVisibleFocusedView() {
-        // Vivaldi: We should always make space for the status view, to show the dse icon.
-        if (!BuildConfig.IS_VIVALDI)
-        if (!OmniboxFeatures.sOmniboxMobileParityUpdate.isEnabled()
-                && mLocationBarDataProvider.isIncognito()
-                && mStatusView.getVisibility() != View.GONE) {
-            return mStatusView.getMeasuredWidth();
-        }
-
         return 0;
     }
 }

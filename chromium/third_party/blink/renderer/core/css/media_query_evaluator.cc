@@ -137,6 +137,13 @@ void MediaQueryEvaluator::Trace(Visitor* visitor) const {
   visitor->Trace(media_values_);
 }
 
+const Document* MediaQueryEvaluator::GetDocument() const {
+  if (!media_values_) {
+    return nullptr;
+  }
+  return media_values_->GetDocument();
+}
+
 const String MediaQueryEvaluator::MediaType() const {
   // If a static mediaType was given by the constructor, we use it here.
   if (!media_type_.empty()) {
@@ -327,7 +334,7 @@ static bool ColorMediaFeatureEval(const MediaQueryExpValue& value,
                                bits_per_component);
   if (value.IsValid()) {
     return NumberValue(value, number, media_values) &&
-           CompareValue(bits_per_component, static_cast<int>(number), op);
+           CompareValue(bits_per_component, ClampTo<int>(number), op);
   }
 
   return bits_per_component != 0;
@@ -347,7 +354,7 @@ static bool ColorIndexMediaFeatureEval(const MediaQueryExpValue& value,
   // value is zero.
   float number;
   return NumberValue(value, number, media_values) &&
-         CompareValue(0, static_cast<int>(number), op);
+         CompareValue(0, ClampTo<int>(number), op);
 }
 
 static bool MonochromeMediaFeatureEval(const MediaQueryExpValue& value,
@@ -360,7 +367,7 @@ static bool MonochromeMediaFeatureEval(const MediaQueryExpValue& value,
       bits_per_component);
   if (value.IsValid()) {
     return NumberValue(value, number, media_values) &&
-           CompareValue(bits_per_component, static_cast<int>(number), op);
+           CompareValue(bits_per_component, ClampTo<int>(number), op);
   }
   return bits_per_component != 0;
 }
@@ -640,7 +647,7 @@ static bool GridMediaFeatureEval(const MediaQueryExpValue& value,
   // assume we have bitmap device
   float number;
   if (value.IsValid() && NumberValue(value, number, media_values)) {
-    return CompareValue(static_cast<int>(number), 0, op);
+    return CompareValue(ClampTo<int>(number), 0, op);
   }
   return false;
 }
@@ -949,7 +956,7 @@ static bool Transform3dMediaFeatureEval(const MediaQueryExpValue& value,
   if (value.IsValid()) {
     float number;
     return NumberValue(value, number, media_values) &&
-           CompareValue(have3d_rendering, static_cast<int>(number), op);
+           CompareValue(have3d_rendering, ClampTo<int>(number), op);
   }
   return return_value_if_no_parameter;
 }
@@ -1336,8 +1343,7 @@ static bool HorizontalViewportSegmentsMediaFeatureEval(
 
   float number;
   return NumberValue(value, number, media_values) &&
-         CompareValue(horizontal_viewport_segments, static_cast<int>(number),
-                      op);
+         CompareValue(horizontal_viewport_segments, ClampTo<int>(number), op);
 }
 
 static bool VerticalViewportSegmentsMediaFeatureEval(
@@ -1360,7 +1366,7 @@ static bool VerticalViewportSegmentsMediaFeatureEval(
 
   float number;
   return NumberValue(value, number, media_values) &&
-         CompareValue(vertical_viewport_segments, static_cast<int>(number), op);
+         CompareValue(vertical_viewport_segments, ClampTo<int>(number), op);
 }
 
 static bool OverflowInlineMediaFeatureEval(const MediaQueryExpValue& value,
@@ -1707,7 +1713,8 @@ static bool FallbackMediaFeatureEval(const MediaQueryExpValue& value,
   StyleResolverState state(container->GetDocument(), *container);
   PositionTryFallback query_fallback =
       StyleBuilderConverter::ConvertSinglePositionTryFallback(
-          state, value.GetCSSValue());
+          state, value.GetCSSValue(),
+          /*allow_any_keyword_in_position_area=*/true);
   query_fallback = ToPhysicalFallback(query_fallback, media_values);
   fallback = ToPhysicalFallback(fallback, media_values);
   return fallback.Matches(query_fallback);
@@ -1963,6 +1970,18 @@ KleeneValue MediaQueryEvaluator::EvalStyleRange(const CSSValue& reference_value,
       DynamicTo<CSSNumericLiteralValue>(reference_value);
   const CSSNumericLiteralValue* query_numeric =
       DynamicTo<CSSNumericLiteralValue>(query_value);
+
+  if (reference_numeric->IsNumber() && !reference_numeric->DoubleValue() &&
+      query_numeric->IsLength()) {
+    reference_numeric =
+        CSSNumericLiteralValue::Create(0, query_numeric->GetType());
+  }
+
+  if (query_numeric->IsNumber() && !query_numeric->DoubleValue() &&
+      reference_numeric->IsLength()) {
+    query_numeric =
+        CSSNumericLiteralValue::Create(0, reference_numeric->GetType());
+  }
 
   if (!reference_numeric || !query_numeric ||
       !TypesMatch(*reference_numeric, *query_numeric)) {

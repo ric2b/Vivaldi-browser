@@ -17,6 +17,7 @@
 #include <openssl/ssl.h>
 
 #include <algorithm>
+#include <iterator>
 
 #include <assert.h>
 #include <limits.h>
@@ -450,6 +451,10 @@ SSL_CTX *SSL_CTX_new(const SSL_METHOD *method) {
       !SSL_CTX_set_max_proto_version(ret.get(), method->version) ||
       !SSL_CTX_set_min_proto_version(ret.get(), method->version)) {
     OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
+    return nullptr;
+  }
+
+  if (!ret->supported_group_list.CopyFrom(DefaultSupportedGroupIds())) {
     return nullptr;
   }
 
@@ -1814,6 +1819,21 @@ int SSL_CTX_set_tlsext_ticket_key_cb(
   return 1;
 }
 
+static bool check_no_duplicates(Span<const uint16_t> list) {
+  if (list.size() < 2) {
+    return true;
+  }
+  for (size_t i = 0; i < list.size() - 1; ++i) {
+    for (size_t j = i + 1; j < list.size(); ++j) {
+      if (list[i] == list[j]) {
+        OPENSSL_PUT_ERROR(SSL, SSL_R_DUPLICATE_GROUP);
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 static bool check_group_ids(Span<const uint16_t> group_ids) {
   for (uint16_t group_id : group_ids) {
     if (ssl_group_id_to_nid(group_id) == NID_undef) {
@@ -1821,12 +1841,46 @@ static bool check_group_ids(Span<const uint16_t> group_ids) {
       return false;
     }
   }
-  return true;
+  return check_no_duplicates(group_ids);
+}
+
+// validate_key_shares returns whether the `requested_key_shares` are free of
+// duplicates and are a (correctly ordered) subsequence of the supported
+// `groups`.
+static bool validate_key_shares(Span<const uint16_t> requested_key_shares,
+                                Span<const uint16_t> groups) {
+  if (!check_no_duplicates(requested_key_shares)) {
+    return false;
+  }
+  if (requested_key_shares.size() > groups.size()) {
+    return false;
+  }
+  size_t key_shares_idx = 0u, groups_idx = 0u;
+  while (key_shares_idx < requested_key_shares.size() &&
+         groups_idx < groups.size()) {
+    if (requested_key_shares[key_shares_idx] == groups[groups_idx++]) {
+      ++key_shares_idx;
+    }
+  }
+  return key_shares_idx == requested_key_shares.size();
+}
+
+static void clear_key_shares_if_invalid(SSL_CONFIG *config) {
+  if (!config->client_key_share_selections) {
+    return;
+  }
+  if (!validate_key_shares(*(config->client_key_share_selections),
+                           config->supported_group_list)) {
+    config->client_key_share_selections.reset();
+  }
 }
 
 int SSL_CTX_set1_group_ids(SSL_CTX *ctx, const uint16_t *group_ids,
                            size_t num_group_ids) {
   auto span = Span(group_ids, num_group_ids);
+  if (span.empty()) {
+    span = DefaultSupportedGroupIds();
+  }
   return check_group_ids(span) && ctx->supported_group_list.CopyFrom(span);
 }
 
@@ -1836,12 +1890,22 @@ int SSL_set1_group_ids(SSL *ssl, const uint16_t *group_ids,
     return 0;
   }
   auto span = Span(group_ids, num_group_ids);
-  return check_group_ids(span) &&
-         ssl->config->supported_group_list.CopyFrom(span);
+  if (span.empty()) {
+    span = DefaultSupportedGroupIds();
+  }
+  if (check_group_ids(span) &&
+      ssl->config->supported_group_list.CopyFrom(span)) {
+    clear_key_shares_if_invalid(ssl->config.get());
+    return 1;
+  }
+  return 0;
 }
 
 static bool ssl_nids_to_group_ids(Array<uint16_t> *out_group_ids,
                                   Span<const int> nids) {
+  if (nids.empty()) {
+    return out_group_ids->CopyFrom(DefaultSupportedGroupIds());
+  }
   Array<uint16_t> group_ids;
   if (!group_ids.InitForOverwrite(nids.size())) {
     return false;
@@ -1852,6 +1916,9 @@ static bool ssl_nids_to_group_ids(Array<uint16_t> *out_group_ids,
       OPENSSL_PUT_ERROR(SSL, SSL_R_UNSUPPORTED_ELLIPTIC_CURVE);
       return false;
     }
+  }
+  if (!check_no_duplicates(group_ids)) {
+    return false;
   }
 
   *out_group_ids = std::move(group_ids);
@@ -1867,8 +1934,12 @@ int SSL_set1_groups(SSL *ssl, const int *groups, size_t num_groups) {
   if (!ssl->config) {
     return 0;
   }
-  return ssl_nids_to_group_ids(&ssl->config->supported_group_list,
-                               Span(groups, num_groups));
+  if (ssl_nids_to_group_ids(&ssl->config->supported_group_list,
+                            Span(groups, num_groups))) {
+    clear_key_shares_if_invalid(ssl->config.get());
+    return 1;
+  }
+  return 0;
 }
 
 static bool ssl_str_to_group_ids(Array<uint16_t> *out_group_ids,
@@ -1904,6 +1975,9 @@ static bool ssl_str_to_group_ids(Array<uint16_t> *out_group_ids,
   } while (col);
 
   assert(i == count);
+  if (!check_no_duplicates(group_ids)) {
+    return false;
+  }
   *out_group_ids = std::move(group_ids);
   return true;
 }
@@ -1916,7 +1990,11 @@ int SSL_set1_groups_list(SSL *ssl, const char *groups) {
   if (!ssl->config) {
     return 0;
   }
-  return ssl_str_to_group_ids(&ssl->config->supported_group_list, groups);
+  if (ssl_str_to_group_ids(&ssl->config->supported_group_list, groups)) {
+    clear_key_shares_if_invalid(ssl->config.get());
+    return 1;
+  }
+  return 0;
 }
 
 uint16_t SSL_get_group_id(const SSL *ssl) {
@@ -1934,6 +2012,23 @@ int SSL_get_negotiated_group(const SSL *ssl) {
     return NID_undef;
   }
   return ssl_group_id_to_nid(group_id);
+}
+
+int SSL_set1_client_key_shares(SSL *ssl, const uint16_t *group_ids,
+                               size_t num_group_ids) {
+  if (!ssl->config) {
+    return 0;
+  }
+  auto requested_key_shares = Span(group_ids, num_group_ids);
+  if (!validate_key_shares(requested_key_shares,
+                           ssl->config->supported_group_list)) {
+    return 0;
+  }
+
+  assert(requested_key_shares.size() <= kNumNamedGroups);
+  ssl->config->client_key_share_selections.emplace();
+  ssl->config->client_key_share_selections->CopyFrom(requested_key_shares);
+  return 1;
 }
 
 int SSL_CTX_set_tmp_dh(SSL_CTX *ctx, const DH *dh) { return 1; }
@@ -3273,11 +3368,9 @@ static int Configure(SSL_CTX *ctx) {
       // Encrypt-then-MAC extension is required for all CBC cipher suites and so
       // it's easier to drop them.
       SSL_CTX_set_strict_cipher_list(ctx, kTLS12Ciphers) &&
-      SSL_CTX_set1_group_ids(ctx, kGroups, OPENSSL_ARRAY_SIZE(kGroups)) &&
-      SSL_CTX_set_signing_algorithm_prefs(ctx, kSigAlgs,
-                                          OPENSSL_ARRAY_SIZE(kSigAlgs)) &&
-      SSL_CTX_set_verify_algorithm_prefs(ctx, kSigAlgs,
-                                         OPENSSL_ARRAY_SIZE(kSigAlgs));
+      SSL_CTX_set1_group_ids(ctx, kGroups, std::size(kGroups)) &&
+      SSL_CTX_set_signing_algorithm_prefs(ctx, kSigAlgs, std::size(kSigAlgs)) &&
+      SSL_CTX_set_verify_algorithm_prefs(ctx, kSigAlgs, std::size(kSigAlgs));
 }
 
 static int Configure(SSL *ssl) {
@@ -3287,11 +3380,9 @@ static int Configure(SSL *ssl) {
   return SSL_set_min_proto_version(ssl, TLS1_2_VERSION) &&
          SSL_set_max_proto_version(ssl, TLS1_3_VERSION) &&
          SSL_set_strict_cipher_list(ssl, kTLS12Ciphers) &&
-         SSL_set1_group_ids(ssl, kGroups, OPENSSL_ARRAY_SIZE(kGroups)) &&
-         SSL_set_signing_algorithm_prefs(ssl, kSigAlgs,
-                                         OPENSSL_ARRAY_SIZE(kSigAlgs)) &&
-         SSL_set_verify_algorithm_prefs(ssl, kSigAlgs,
-                                        OPENSSL_ARRAY_SIZE(kSigAlgs));
+         SSL_set1_group_ids(ssl, kGroups, std::size(kGroups)) &&
+         SSL_set_signing_algorithm_prefs(ssl, kSigAlgs, std::size(kSigAlgs)) &&
+         SSL_set_verify_algorithm_prefs(ssl, kSigAlgs, std::size(kSigAlgs));
 }
 
 }  // namespace fips202205
@@ -3320,11 +3411,10 @@ static int Configure(SSL_CTX *ctx) {
   return SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION) &&
          SSL_CTX_set_max_proto_version(ctx, TLS1_3_VERSION) &&
          SSL_CTX_set_strict_cipher_list(ctx, kTLS12Ciphers) &&
-         SSL_CTX_set1_group_ids(ctx, kGroups, OPENSSL_ARRAY_SIZE(kGroups)) &&
+         SSL_CTX_set1_group_ids(ctx, kGroups, std::size(kGroups)) &&
          SSL_CTX_set_signing_algorithm_prefs(ctx, kSigAlgs,
-                                             OPENSSL_ARRAY_SIZE(kSigAlgs)) &&
-         SSL_CTX_set_verify_algorithm_prefs(ctx, kSigAlgs,
-                                            OPENSSL_ARRAY_SIZE(kSigAlgs));
+                                             std::size(kSigAlgs)) &&
+         SSL_CTX_set_verify_algorithm_prefs(ctx, kSigAlgs, std::size(kSigAlgs));
 }
 
 static int Configure(SSL *ssl) {
@@ -3333,11 +3423,9 @@ static int Configure(SSL *ssl) {
   return SSL_set_min_proto_version(ssl, TLS1_2_VERSION) &&
          SSL_set_max_proto_version(ssl, TLS1_3_VERSION) &&
          SSL_set_strict_cipher_list(ssl, kTLS12Ciphers) &&
-         SSL_set1_group_ids(ssl, kGroups, OPENSSL_ARRAY_SIZE(kGroups)) &&
-         SSL_set_signing_algorithm_prefs(ssl, kSigAlgs,
-                                         OPENSSL_ARRAY_SIZE(kSigAlgs)) &&
-         SSL_set_verify_algorithm_prefs(ssl, kSigAlgs,
-                                        OPENSSL_ARRAY_SIZE(kSigAlgs));
+         SSL_set1_group_ids(ssl, kGroups, std::size(kGroups)) &&
+         SSL_set_signing_algorithm_prefs(ssl, kSigAlgs, std::size(kSigAlgs)) &&
+         SSL_set_verify_algorithm_prefs(ssl, kSigAlgs, std::size(kSigAlgs));
 }
 
 }  // namespace wpa202304

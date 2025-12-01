@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "absl/strings/string_view.h"
-#include "api/environment/environment_factory.h"
+#include "api/environment/environment.h"
 #include "api/jsep.h"
 #include "api/make_ref_counted.h"
 #include "api/media_types.h"
@@ -48,6 +48,7 @@
 #include "pc/test/mock_rtp_receiver_internal.h"
 #include "pc/test/mock_rtp_sender_internal.h"
 #include "rtc_base/thread.h"
+#include "test/create_test_environment.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
 
@@ -68,12 +69,13 @@ namespace {
 class RtpTransceiverTest : public testing::Test {
  public:
   RtpTransceiverTest()
-      : dependencies_(MakeDependencies()),
-        context_(
-            ConnectionContext::Create(CreateEnvironment(), &dependencies_)),
-        codec_lookup_helper_(context_.get()) {}
+      : env_(CreateTestEnvironment()),
+        dependencies_(MakeDependencies()),
+        context_(ConnectionContext::Create(env_, &dependencies_)),
+        codec_lookup_helper_(context_.get(), env_.field_trials()) {}
 
  protected:
+  const Environment& env() const { return env_; }
   FakeMediaEngine* media_engine() {
     // We know this cast is safe because we supplied the fake implementation
     // in MakeDependencies().
@@ -97,6 +99,7 @@ class RtpTransceiverTest : public testing::Test {
     return d;
   }
 
+  Environment env_;
   PeerConnectionFactoryDependencies dependencies_;
   scoped_refptr<ConnectionContext> context_;
   FakeCodecLookupHelper codec_lookup_helper_;
@@ -106,7 +109,7 @@ class RtpTransceiverTest : public testing::Test {
 TEST_F(RtpTransceiverTest, CannotSetChannelOnStoppedTransceiver) {
   const std::string content_name("my_mid");
   auto transceiver = make_ref_counted<RtpTransceiver>(
-      MediaType::AUDIO, context(), codec_lookup_helper());
+      env(), MediaType::AUDIO, context(), codec_lookup_helper());
   auto channel1 = std::make_unique<NiceMock<MockChannelInterface>>();
   EXPECT_CALL(*channel1, media_type()).WillRepeatedly(Return(MediaType::AUDIO));
   EXPECT_CALL(*channel1, mid()).WillRepeatedly(ReturnRef(content_name));
@@ -140,7 +143,7 @@ TEST_F(RtpTransceiverTest, CannotSetChannelOnStoppedTransceiver) {
 TEST_F(RtpTransceiverTest, CanUnsetChannelOnStoppedTransceiver) {
   const std::string content_name("my_mid");
   auto transceiver = make_ref_counted<RtpTransceiver>(
-      MediaType::VIDEO, context(), codec_lookup_helper());
+      env(), MediaType::VIDEO, context(), codec_lookup_helper());
   auto channel = std::make_unique<NiceMock<MockChannelInterface>>();
   EXPECT_CALL(*channel, media_type()).WillRepeatedly(Return(MediaType::VIDEO));
   EXPECT_CALL(*channel, mid()).WillRepeatedly(ReturnRef(content_name));
@@ -184,12 +187,13 @@ class RtpTransceiverUnifiedPlanTest : public RtpTransceiverTest {
       scoped_refptr<RtpSenderInternal> sender,
       scoped_refptr<RtpReceiverInternal> receiver) {
     return make_ref_counted<RtpTransceiver>(
+        env(),
         RtpSenderProxyWithInternal<RtpSenderInternal>::Create(
             Thread::Current(), std::move(sender)),
         RtpReceiverProxyWithInternal<RtpReceiverInternal>::Create(
             Thread::Current(), Thread::Current(), std::move(receiver)),
         context(), codec_lookup_helper(),
-        media_engine()->voice().GetRtpHeaderExtensions(),
+        media_engine()->voice().GetRtpHeaderExtensions(&env().field_trials()),
         /* on_negotiation_needed= */ [] {});
   }
 
@@ -572,6 +576,7 @@ class RtpTransceiverTestForHeaderExtensions
                                           4,
                                           RtpTransceiverDirection::kSendRecv)}),
         transceiver_(make_ref_counted<RtpTransceiver>(
+            env(),
             RtpSenderProxyWithInternal<RtpSenderInternal>::Create(
                 Thread::Current(),
                 sender_),
@@ -589,6 +594,7 @@ class RtpTransceiverTestForHeaderExtensions
     transceiver_->ClearChannel();
   }
 
+ protected:
   scoped_refptr<MockRtpReceiverInternal> receiver_ =
       MockReceiver(MediaType::AUDIO);
   scoped_refptr<MockRtpSenderInternal> sender_ = MockSender(MediaType::AUDIO);
@@ -847,6 +853,7 @@ TEST_F(RtpTransceiverTestForHeaderExtensions,
   // Default is stopped.
   auto sender = make_ref_counted<NiceMock<MockRtpSenderInternal>>();
   auto transceiver = make_ref_counted<RtpTransceiver>(
+      env(),
       RtpSenderProxyWithInternal<RtpSenderInternal>::Create(Thread::Current(),
                                                             sender),
       RtpReceiverProxyWithInternal<RtpReceiverInternal>::Create(
@@ -868,6 +875,7 @@ TEST_F(RtpTransceiverTestForHeaderExtensions,
   EXPECT_CALL(*simulcast_sender, GetParametersInternal())
       .WillRepeatedly(Return(simulcast_parameters));
   auto simulcast_transceiver = make_ref_counted<RtpTransceiver>(
+      env(),
       RtpSenderProxyWithInternal<RtpSenderInternal>::Create(Thread::Current(),
                                                             simulcast_sender),
       RtpReceiverProxyWithInternal<RtpReceiverInternal>::Create(
@@ -895,6 +903,7 @@ TEST_F(RtpTransceiverTestForHeaderExtensions,
   EXPECT_CALL(*svc_sender, GetParametersInternal())
       .WillRepeatedly(Return(svc_parameters));
   auto svc_transceiver = make_ref_counted<RtpTransceiver>(
+      env(),
       RtpSenderProxyWithInternal<RtpSenderInternal>::Create(Thread::Current(),
                                                             svc_sender),
       RtpReceiverProxyWithInternal<RtpReceiverInternal>::Create(

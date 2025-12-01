@@ -74,6 +74,7 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/webrtc/webrtc_video_utils.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
+#include "third_party/blink/renderer/platform/wtf/text/strcat.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "third_party/webrtc/api/audio_codecs/audio_format.h"
 #include "third_party/webrtc/api/video_codecs/sdp_video_format.h"
@@ -582,26 +583,24 @@ void ParseDynamicRangeConfigurations(
 bool IsAudioCodecValid(const String& mime_type,
                        const String& codec,
                        String* console_warning) {
-  media::AudioCodec audio_codec = media::AudioCodec::kUnknown;
-  bool is_audio_codec_ambiguous = true;
+  std::optional<media::AudioType> result =
+      media::ParseAudioCodecString(mime_type.Ascii(), codec.Ascii(),
+                                   /*allow_ambiguous_matches=*/false);
+  if (result) {
+    return true;
+  }
 
-  if (!media::ParseAudioCodecString(mime_type.Ascii(), codec.Ascii(),
-                                    &is_audio_codec_ambiguous, &audio_codec)) {
-    *console_warning = StringView("Failed to parse audio contentType: ") +
-                       String{mime_type} + StringView("; codecs=") +
-                       String{codec};
-
+  if (media::ParseAudioCodecString(mime_type.Ascii(), codec.Ascii(),
+                                   /*allow_ambiguous_matches=*/true)) {
+    *console_warning =
+        StrCat({"Invalid (ambiguous) audio codec string: ", mime_type,
+                "; codecs=", codec});
     return false;
   }
 
-  if (is_audio_codec_ambiguous) {
-    *console_warning = StringView("Invalid (ambiguous) audio codec string: ") +
-                       String{mime_type} + StringView("; codecs=") +
-                       String{codec};
-    return false;
-  }
-
-  return true;
+  *console_warning = StrCat(
+      {"Failed to parse audio contentType: ", mime_type, "; codecs=", codec});
+  return false;
 }
 
 // Returns whether the video codec associated with the video configuration is
@@ -615,8 +614,9 @@ bool IsVideoCodecValid(const String& mime_type,
                        media::VideoCodec* out_video_codec,
                        media::VideoCodecProfile* out_video_profile,
                        String* console_warning) {
-  auto result = media::ParseVideoCodecString(mime_type.Ascii(), codec.Ascii(),
-                                             /*allow_ambiguous_matches=*/false);
+  std::optional<media::VideoType> result =
+      media::ParseVideoCodecString(mime_type.Ascii(), codec.Ascii(),
+                                   /*allow_ambiguous_matches=*/false);
   if (result) {
     *out_video_codec = result->codec;
     *out_video_profile = result->profile;
@@ -625,15 +625,14 @@ bool IsVideoCodecValid(const String& mime_type,
 
   if (media::ParseVideoCodecString(mime_type.Ascii(), codec.Ascii(),
                                    /*allow_ambiguous_matches=*/true)) {
-    *console_warning = StringView("Invalid (ambiguous) video codec string: ") +
-                       String{mime_type} + StringView("; codecs=") +
-                       String{codec};
+    *console_warning =
+        StrCat({"Invalid (ambiguous) video codec string: ", mime_type,
+                "; codecs=", codec});
     return false;
   }
 
-  *console_warning = StringView("Failed to parse video contentType: ") +
-                     String{mime_type} + StringView("; codecs=") +
-                     String{codec};
+  *console_warning = StrCat(
+      {"Failed to parse video contentType: ", mime_type, "; codecs=", codec});
   return false;
 }
 
@@ -643,22 +642,16 @@ bool IsAudioConfigurationSupported(
     const blink::AudioConfiguration* audio_config,
     const String& mime_type,
     const String& codec) {
-  media::AudioCodec audio_codec = media::AudioCodec::kUnknown;
-  media::AudioCodecProfile audio_profile = media::AudioCodecProfile::kUnknown;
-  bool is_audio_codec_ambiguous = true;
-  bool is_spatial_rendering = false;
-
   // Must succeed as IsAudioCodecValid() should have been called before.
-  bool parsed =
+  std::optional<media::AudioType> audio_type =
       media::ParseAudioCodecString(mime_type.Ascii(), codec.Ascii(),
-                                   &is_audio_codec_ambiguous, &audio_codec);
-  DCHECK(parsed && !is_audio_codec_ambiguous);
+                                   /*allow_ambiguous_matches=*/false);
+  DCHECK(audio_type);
 
   if (audio_config->hasSpatialRendering())
-    is_spatial_rendering = audio_config->spatialRendering();
+    audio_type->spatial_rendering = audio_config->spatialRendering();
 
-  return media::IsDecoderSupportedAudioType(
-      {audio_codec, audio_profile, is_spatial_rendering});
+  return media::IsDecoderSupportedAudioType(*audio_type);
 }
 
 // Returns whether the VideoConfiguration is supported.
@@ -668,8 +661,9 @@ bool IsVideoConfigurationSupported(const String& mime_type,
                                    media::VideoColorSpace video_color_space,
                                    gfx::HdrMetadataType hdr_metadata_type) {
   // Must succeed as IsVideoCodecValid() should have been called before.
-  auto result = media::ParseVideoCodecString(mime_type.Ascii(), codec.Ascii(),
-                                             /*allow_ambiguous_matches=*/false);
+  std::optional<media::VideoType> result =
+      media::ParseVideoCodecString(mime_type.Ascii(), codec.Ascii(),
+                                   /*allow_ambiguous_matches=*/false);
   DCHECK(result);
 
   // ParseVideoCodecString will fill in a default of REC709 for every codec, but
@@ -868,9 +862,9 @@ ScriptPromise<MediaCapabilitiesDecodingInfo> MediaCapabilities::decodingInfo(
 
       handler->DecodingInfo(
           sdp_audio_format, sdp_video_format, spatial_scalability,
-          WTF::BindOnce(&MediaCapabilities::OnWebrtcSupportInfo,
-                        WrapPersistent(this), callback_id, std::move(features),
-                        frames_per_second, OperationType::kDecoding));
+          BindOnce(&MediaCapabilities::OnWebrtcSupportInfo,
+                   WrapPersistent(this), callback_id, std::move(features),
+                   frames_per_second, OperationType::kDecoding));
 
       return promise;
     }
@@ -1100,9 +1094,9 @@ ScriptPromise<MediaCapabilitiesInfo> MediaCapabilities::encodingInfo(
 
       handler->EncodingInfo(
           sdp_audio_format, sdp_video_format, scalability_mode,
-          WTF::BindOnce(&MediaCapabilities::OnWebrtcSupportInfo,
-                        WrapPersistent(this), callback_id, std::move(features),
-                        frames_per_second, OperationType::kEncoding));
+          BindOnce(&MediaCapabilities::OnWebrtcSupportInfo,
+                   WrapPersistent(this), callback_id, std::move(features),
+                   frames_per_second, OperationType::kEncoding));
 
       return promise;
     }
@@ -1124,11 +1118,11 @@ ScriptPromise<MediaCapabilitiesInfo> MediaCapabilities::encodingInfo(
   if (auto* handler = MakeGarbageCollected<MediaRecorderHandler>(
           task_runner, KeyFrameRequestProcessor::Configuration())) {
     task_runner->PostTask(
-        FROM_HERE,
-        WTF::BindOnce(&MediaRecorderHandler::EncodingInfo, WrapPersistent(handler),
-                      ToWebMediaConfiguration(config),
-                      WTF::BindOnce(&OnMediaCapabilitiesEncodingInfo,
-                                    WrapPersistent(resolver))));
+        FROM_HERE, blink::BindOnce(&MediaRecorderHandler::EncodingInfo,
+                                   WrapPersistent(handler),
+                                   ToWebMediaConfiguration(config),
+                                   BindOnce(&OnMediaCapabilitiesEncodingInfo,
+                                            WrapPersistent(resolver))));
 
     return promise;
   }
@@ -1302,9 +1296,9 @@ ScriptPromise<MediaCapabilitiesDecodingInfo> MediaCapabilities::GetEmeSupport(
       MakeGarbageCollected<MediaCapabilitiesKeySystemAccessInitializer>(
           execution_context, resolver, key_system_config->keySystem(),
           config_vector,
-          WTF::BindOnce(&MediaCapabilities::GetPerfInfo, WrapPersistent(this),
-                        video_codec, video_profile, video_color_space,
-                        WrapPersistent(configuration), request_time));
+          blink::BindOnce(&MediaCapabilities::GetPerfInfo, WrapPersistent(this),
+                          video_codec, video_profile, video_color_space,
+                          WrapPersistent(configuration), request_time));
 
   // IMPORTANT: Acquire the promise before potentially synchronously resolving
   // it in the code that follows. Otherwise the promise returned to JS will be
@@ -1375,8 +1369,8 @@ void MediaCapabilities::GetPerfInfo(
           video_config->framerate(), key_system, use_hw_secure_codecs);
 
   decode_history_service_->GetPerfInfo(
-      std::move(features), WTF::BindOnce(&MediaCapabilities::OnPerfHistoryInfo,
-                                         WrapPersistent(this), callback_id));
+      std::move(features), BindOnce(&MediaCapabilities::OnPerfHistoryInfo,
+                                    WrapPersistent(this), callback_id));
 
   if (UseGpuFactoriesForPowerEfficient(execution_context, access)) {
     GetGpuFactoriesSupport(callback_id, video_codec, video_profile,
@@ -1421,10 +1415,10 @@ void MediaCapabilities::GetGpuFactoriesSupport(
   }
 
   if (!gpu_factories->IsDecoderSupportKnown()) {
-    gpu_factories->NotifyDecoderSupportKnown(WTF::BindOnce(
-        &MediaCapabilities::GetGpuFactoriesSupport, WrapPersistent(this),
-        callback_id, video_codec, video_profile, video_color_space,
-        WrapPersistent(decoding_config)));
+    gpu_factories->NotifyDecoderSupportKnown(
+        BindOnce(&MediaCapabilities::GetGpuFactoriesSupport,
+                 WrapPersistent(this), callback_id, video_codec, video_profile,
+                 video_color_space, WrapPersistent(decoding_config)));
     return;
   }
 
@@ -1596,8 +1590,8 @@ void MediaCapabilities::OnWebrtcSupportInfo(
 
   webrtc_history_service_->GetPerfInfo(
       std::move(features), frames_per_second,
-      WTF::BindOnce(&MediaCapabilities::OnWebrtcPerfHistoryInfo,
-                    WrapPersistent(this), callback_id, type));
+      BindOnce(&MediaCapabilities::OnWebrtcPerfHistoryInfo,
+               WrapPersistent(this), callback_id, type));
 }
 
 void MediaCapabilities::OnWebrtcPerfHistoryInfo(int callback_id,
@@ -1639,7 +1633,7 @@ void MediaCapabilities::OnWebrtcPerfHistoryInfo(int callback_id,
 
 int MediaCapabilities::CreateCallbackId() {
   // Search for the next available callback ID. 0 and -1 are reserved by
-  // wtf::HashMap (meaning "empty" and "deleted").
+  // HashMap (meaning "empty" and "deleted").
   do {
     ++last_callback_id_;
   } while (last_callback_id_ == 0 || last_callback_id_ == -1 ||

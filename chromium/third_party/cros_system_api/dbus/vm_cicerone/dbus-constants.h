@@ -12,45 +12,50 @@ const char kVmCiceroneInterface[] = "org.chromium.VmCicerone";
 const char kVmCiceroneServicePath[] = "/org/chromium/VmCicerone";
 const char kVmCiceroneServiceName[] = "org.chromium.VmCicerone";
 
+// LINT.IfChange
 // Methods to be called from vm_concierge.
-const char kNotifyVmStartedMethod[] = "NotifyVmStarted";
-const char kNotifyVmStoppingMethod[] = "NotifyVmStopping";
-const char kNotifyVmStoppedMethod[] = "NotifyVmStopped";
+// keep-sorted start
 const char kGetContainerTokenMethod[] = "GetContainerToken";
+const char kNotifyVmStartedMethod[] = "NotifyVmStarted";
+const char kNotifyVmStoppedMethod[] = "NotifyVmStopped";
+const char kNotifyVmStoppingMethod[] = "NotifyVmStopping";
+// keep-sorted end
 
 // Methods to be called from Chrome.
-const char kLaunchContainerApplicationMethod[] = "LaunchContainerApplication";
-const char kGetContainerAppIconMethod[] = "GetContainerAppIcon";
-const char kLaunchVshdMethod[] = "LaunchVshd";
-const char kGetLinuxPackageInfoMethod[] = "GetLinuxPackageInfo";
-const char kInstallLinuxPackageMethod[] = "InstallLinuxPackage";
-const char kUninstallPackageOwningFileMethod[] = "UninstallPackageOwningFile";
-const char kCreateLxdContainerMethod[] = "CreateLxdContainer";
-const char kDeleteLxdContainerMethod[] = "DeleteLxdContainer";
-const char kStartLxdContainerMethod[] = "StartLxdContainer";
-const char kStopLxdContainerMethod[] = "StopLxdContainer";
-const char kSetTimezoneMethod[] = "SetTimezone";
-const char kGetLxdContainerUsernameMethod[] = "GetLxdContainerUsername";
-const char kSetUpLxdContainerUserMethod[] = "SetUpLxdContainerUser";
-const char kExportLxdContainerMethod[] = "ExportLxdContainer";
-const char kImportLxdContainerMethod[] = "ImportLxdContainer";
+// keep-sorted start
+const char kAddFileWatchMethod[] = "AddFileWatch";
+const char kApplyAnsiblePlaybookMethod[] = "ApplyAnsiblePlaybook";
+const char kAttachUsbToContainerMethod[] = "AttachUsbToContainer";
 const char kCancelExportLxdContainerMethod[] = "CancelExportLxdContainer";
 const char kCancelImportLxdContainerMethod[] = "CancelImportLxdContainer";
-const char kApplyAnsiblePlaybookMethod[] = "ApplyAnsiblePlaybook";
-const char kUpgradeContainerMethod[] = "UpgradeContainer";
 const char kCancelUpgradeContainerMethod[] = "CancelUpgradeContainer";
 const char kConfigureForArcSideloadMethod[] = "ConfigureForArcSideload";
-const char kStartLxdMethod[] = "StartLxd";
-const char kAddFileWatchMethod[] = "AddFileWatch";
-const char kRemoveFileWatchMethod[] = "RemoveFileWatch";
-const char kRegisterVshSessionMethod[] = "RegisterVshSession";
-const char kGetVshSessionMethod[] = "GetVshSession";
-const char kFileSelectedMethod[] = "FileSelected";
-const char kAttachUsbToContainerMethod[] = "AttachUsbToContainer";
+const char kCreateLxdContainerMethod[] = "CreateLxdContainer";
+const char kDeleteLxdContainerMethod[] = "DeleteLxdContainer";
 const char kDetachUsbFromContainerMethod[] = "DetachUsbFromContainer";
-const char kListRunningContainersMethod[] = "ListRunningContainers";
+const char kExportLxdContainerMethod[] = "ExportLxdContainer";
+const char kFileSelectedMethod[] = "FileSelected";
+const char kGetContainerAppIconMethod[] = "GetContainerAppIcon";
 const char kGetGarconSessionInfoMethod[] = "GetGarconSessionInfo";
+const char kGetLinuxPackageInfoMethod[] = "GetLinuxPackageInfo";
+const char kGetLxdContainerUsernameMethod[] = "GetLxdContainerUsername";
+const char kGetVshSessionMethod[] = "GetVshSession";
+const char kImportLxdContainerMethod[] = "ImportLxdContainer";
+const char kInstallLinuxPackageMethod[] = "InstallLinuxPackage";
+const char kLaunchContainerApplicationMethod[] = "LaunchContainerApplication";
+const char kLaunchVshdMethod[] = "LaunchVshd";
+const char kListRunningContainersMethod[] = "ListRunningContainers";
+const char kRegisterVshSessionMethod[] = "RegisterVshSession";
+const char kRemoveFileWatchMethod[] = "RemoveFileWatch";
+const char kSetTimezoneMethod[] = "SetTimezone";
+const char kSetUpLxdContainerUserMethod[] = "SetUpLxdContainerUser";
+const char kStartLxdContainerMethod[] = "StartLxdContainer";
+const char kStartLxdMethod[] = "StartLxd";
+const char kStopLxdContainerMethod[] = "StopLxdContainer";
+const char kUninstallPackageOwningFileMethod[] = "UninstallPackageOwningFile";
 const char kUpdateContainerDevicesMethod[] = "UpdateContainerDevices";
+const char kUpgradeContainerMethod[] = "UpgradeContainer";
+// keep-sorted end
 
 // Methods to be called from chunneld.
 const char kConnectChunnelMethod[] = "ConnectChunnel";
@@ -59,27 +64,30 @@ const char kConnectChunnelMethod[] = "ConnectChunnel";
 const char kGetDebugInformationMethod[] = "GetDebugInformation";
 
 // Signals.
-const char kContainerStartedSignal[] = "ContainerStarted";
+// keep-sorted start
+const char kApplyAnsiblePlaybookProgressSignal[] =
+    "ApplyAnsiblePlaybookProgress";
 const char kContainerShutdownSignal[] = "ContainerShutdown";
+const char kContainerStartedSignal[] = "ContainerStarted";
+const char kExportLxdContainerProgressSignal[] = "ExportLxdContainerProgress";
+const char kFileWatchTriggeredSignal[] = "FileWatchTriggered";
+const char kImportLxdContainerProgressSignal[] = "ImportLxdContainerProgress";
+const char kInhibitScreensaverSignal[] = "InhibitScreensaver";
 const char kInstallLinuxPackageProgressSignal[] = "InstallLinuxPackageProgress";
-const char kUninstallPackageProgressSignal[] = "UninstallPackageProgress";
+const char kLowDiskSpaceTriggeredSignal[] = "LowDiskSpaceTriggered";
 const char kLxdContainerCreatedSignal[] = "LxdContainerCreated";
 const char kLxdContainerDeletedSignal[] = "LxdContainerDeleted";
 const char kLxdContainerDownloadingSignal[] = "LxdContainerDownloading";
 const char kLxdContainerStartingSignal[] = "LxdContainerStarting";
 const char kLxdContainerStoppingSignal[] = "LxdContainerStopping";
-const char kTremplinStartedSignal[] = "TremplinStarted";
-const char kExportLxdContainerProgressSignal[] = "ExportLxdContainerProgress";
-const char kImportLxdContainerProgressSignal[] = "ImportLxdContainerProgress";
 const char kPendingAppListUpdatesSignal[] = "PendingAppListUpdates";
-const char kApplyAnsiblePlaybookProgressSignal[] =
-    "ApplyAnsiblePlaybookProgress";
-const char kUpgradeContainerProgressSignal[] = "UpgradeContainerProgress";
 const char kStartLxdProgressSignal[] = "StartLxdProgress";
-const char kFileWatchTriggeredSignal[] = "FileWatchTriggered";
-const char kLowDiskSpaceTriggeredSignal[] = "LowDiskSpaceTriggered";
-const char kInhibitScreensaverSignal[] = "InhibitScreensaver";
+const char kTremplinStartedSignal[] = "TremplinStarted";
 const char kUninhibitScreensaverSignal[] = "UninhibitScreensaver";
+const char kUninstallPackageProgressSignal[] = "UninstallPackageProgress";
+const char kUpgradeContainerProgressSignal[] = "UpgradeContainerProgress";
+// keep-sorted end
+// LINT.ThenChange(/vm_tools/dbus_bindings/org.chromium.VmCicerone.xml)
 
 }  // namespace cicerone
 }  // namespace vm_tools

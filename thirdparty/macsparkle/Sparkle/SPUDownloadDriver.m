@@ -81,7 +81,9 @@
                     if (strongSelf != nil && !strongSelf->_retrievedDownloadResult && !strongSelf->_cleaningUp) {
                         strongSelf->_downloader = nil;
                         
-                        SULog(SULogLevelError, @"Connection to update downloader was invalidated");
+                        // We can't enforce com.apple.security.network.client == NO or it being absent for sandboxed clients,
+                        // but we should warn about it anyway
+                        SULog(SULogLevelError, @"Error: Connection to update downloader was invalidated. If your app is not sandboxed or has com.apple.security.network.client set to YES, please remove %@ from your Info.plist. Otherwise please check Console logs for "@DOWNLOADER_NAME" if there are any additional details.", SUEnableDownloaderServiceKey);
                         
                         NSDictionary *userInfo =
                         @{
@@ -112,7 +114,8 @@
         _delegate = delegate;
         _inBackground = background;
         
-        NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:requestURL cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:30.0];
+        NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:requestURL];
+        request.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
         
         if (userAgent != nil) {
             [request setValue:(NSString * _Nonnull)userAgent forHTTPHeaderField:@"User-Agent"];
@@ -147,6 +150,8 @@
 
 - (void)downloadFile
 {
+    assert(NSThread.isMainThread);
+    
     id<SPUDownloadDriverDelegate> delegate = _delegate;
     if ([delegate respondsToSelector:@selector(downloadDriverWillBeginDownload)]) {
         [delegate downloadDriverWillBeginDownload];

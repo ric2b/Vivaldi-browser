@@ -37,10 +37,9 @@ If you want to integrate with our infrastructure, please follow these steps:
     *   [Android][toggles_android]
     *   [iOS][toggles_ios]
 1.  Register a [`DataTypeController`][DataTypeController] in
-    [`CommonControllerBuilder`][CommonControllerBuilder] or platform-specific
-    equivalent in the //chrome or //ios implementations of
-    [`SyncClient::CreateDataTypeControllers`][CreateDataTypeControllers]. Use a
-    trivial implementation of [`DataTypeSyncBridge`][Bridge] for now.
+    [`CommonControllerBuilder`][CommonControllerBuilder] or, for non-iOS
+    platforms, [`ChromeSyncControllerBuilder`][ChromeSyncControllerBuilder]. Use
+    a trivial implementation of [`DataTypeSyncBridge`][Bridge] for now.
     *   Add the sync team as co-owners of the bridge (and any associated
         helpers, if appropriate), by adding something like `per-file
         *sync_bridge*=file://components/sync/OWNERS` to your OWNERS file. This
@@ -64,7 +63,7 @@ If you want to integrate with our infrastructure, please follow these steps:
 [EntitySpecifics]: https://source.chromium.org/chromium/chromium/src/+/main:components/sync/protocol/entity_specifics.proto
 [DataTypeController]: https://cs.chromium.org/chromium/src/components/sync/service/data_type_controller.h
 [CommonControllerBuilder ]: https://source.chromium.org/chromium/chromium/src/+/main:components/browser_sync/common_controller_builder.h
-[CreateDataTypeControllers]: https://cs.chromium.org/search/?q="SyncClient::CreateDataTypeControllers"
+[ChromeSyncControllerBuilder]: https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/sync/chrome_sync_controller_builder.h
 [SyncServiceFactory]: https://cs.chromium.org/search/?q=:SyncServiceFactory%5C(%5C)
 [Bridge]: https://source.chromium.org/search?q=DataTypeSyncBridge
 [NigoriSpecifics]: https://cs.chromium.org/chromium/src/components/sync/protocol/nigori_specifics.proto

@@ -8,7 +8,7 @@ import("//third_party/jni_zero/jni_zero.gni")
 android_library("java") {
   srcjar_deps = [
     ":jni_headers",
-    "//components/plus_addresses:plus_address_java_enums",
+    "//components/plus_addresses/core/browser:plus_address_java_enums",
   ]
   sources = [
     "java/src/org/chromium/chrome/browser/ui/plus_addresses/AllPlusAddressesBottomSheetBridge.java",
@@ -39,7 +39,7 @@ android_library("java") {
     "//chrome/browser/ui/android/layouts:java",
     "//components/browser_ui/bottomsheet/android:java",
     "//components/browser_ui/widget/android:java",
-    "//components/plus_addresses/resources/strings:strings_grd",
+    "//components/plus_addresses/core/browser/resources/strings:strings_grd",
     "//content/public/android:content_java",
     "//third_party/androidx:androidx_annotation_annotation_java",
     "//third_party/androidx:androidx_appcompat_appcompat_resources_java",

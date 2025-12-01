@@ -15,11 +15,11 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "quiche/quic/core/quic_clock.h"
 #include "quiche/quic/core/quic_default_clock.h"
-#include "quiche/quic/moqt/moqt_cached_object.h"
+#include "quiche/quic/core/quic_time.h"
 #include "quiche/quic/moqt/moqt_messages.h"
+#include "quiche/quic/moqt/moqt_object.h"
 #include "quiche/quic/moqt/moqt_priority.h"
 #include "quiche/quic/moqt/moqt_publisher.h"
 #include "quiche/common/quiche_circular_deque.h"
@@ -63,20 +63,26 @@ class MoqtOutgoingQueue : public MoqtTrackPublisher {
   void RemoveObjectListener(MoqtObjectListener* listener) override {
     listeners_.erase(listener);
   }
-  absl::StatusOr<MoqtTrackStatusCode> GetTrackStatus() const override;
-  Location GetLargestLocation() const override;
-  MoqtForwardingPreference GetForwardingPreference() const override {
+
+  std::optional<Location> largest_location() const override;
+  std::optional<MoqtForwardingPreference> forwarding_preference()
+      const override {
     return forwarding_preference_;
   }
-  MoqtPriority GetPublisherPriority() const override {
-    return publisher_priority_;
-  }
-  MoqtDeliveryOrder GetDeliveryOrder() const override {
+  std::optional<MoqtDeliveryOrder> delivery_order() const override {
     return delivery_order_;
   }
-  std::unique_ptr<MoqtFetchTask> Fetch(Location start, uint64_t end_group,
-                                       std::optional<uint64_t> end_object,
-                                       MoqtDeliveryOrder order) override;
+  std::optional<quic::QuicTimeDelta> expiration() const override {
+    return quic::QuicTimeDelta::Zero();
+  }
+
+  std::unique_ptr<MoqtFetchTask> StandaloneFetch(
+      Location start, Location end,
+      std::optional<MoqtDeliveryOrder> order) override;
+  std::unique_ptr<MoqtFetchTask> RelativeFetch(
+      uint64_t group_diff, std::optional<MoqtDeliveryOrder> order) override;
+  std::unique_ptr<MoqtFetchTask> AbsoluteFetch(
+      uint64_t group, std::optional<MoqtDeliveryOrder> order) override;
 
   bool HasSubscribers() const { return !listeners_.empty(); }
   void SetDeliveryOrder(MoqtDeliveryOrder order) {
@@ -98,6 +104,9 @@ class MoqtOutgoingQueue : public MoqtTrackPublisher {
 
   std::vector<Location> GetCachedObjectsInRange(Location start,
                                                 Location end) const;
+
+ protected:
+  MoqtPriority publisher_priority() const { return publisher_priority_; }
 
  private:
   // The number of recent groups to keep around for newly joined subscribers.
@@ -141,7 +150,7 @@ class MoqtOutgoingQueue : public MoqtTrackPublisher {
         ok.end_location = *(objects_.cbegin());
       }
       ok.end_of_track =
-          queue_->closed_ && ok.end_location == queue_->GetLargestLocation();
+          queue_->closed_ && ok.end_location == queue_->largest_location();
       std::move(callback)(ok);
     }
 

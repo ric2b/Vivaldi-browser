@@ -69,12 +69,19 @@ u16string BnplTosControllerImpl::GetCancelButtonLabel() const {
 }
 
 u16string BnplTosControllerImpl::GetTitle() const {
-  return GetStringFUTF16(IDS_AUTOFILL_BNPL_TOS_TITLE,
+  if (model_.issuer.payment_instrument() &&
+      model_.issuer.payment_instrument()->action_required().contains(
+          autofill::PaymentInstrument::ActionRequired::kAcceptTos)) {
+    return GetStringFUTF16(IDS_AUTOFILL_BNPL_TOS_LINKED_TITLE,
+                           model_.issuer.GetDisplayName());
+  }
+
+  return GetStringFUTF16(IDS_AUTOFILL_BNPL_TOS_UNLINKED_TITLE,
                          model_.issuer.GetDisplayName());
 }
 
 u16string BnplTosControllerImpl::GetReviewText() const {
-  return GetStringFUTF16(IDS_AUTOFILL_BNPL_TOS_REVIEW_TEXT_V2,
+  return GetStringFUTF16(IDS_AUTOFILL_BNPL_TOS_REVIEW_TEXT,
                          model_.issuer.GetDisplayName());
 }
 

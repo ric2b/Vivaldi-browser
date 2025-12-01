@@ -64,6 +64,7 @@
 #include "third_party/blink/renderer/platform/scheduler/main_thread/widget_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 #include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_renderer_scheduler_state.pbzero.h"
 #include "third_party/perfetto/protos/perfetto/trace/track_event/track_event.pbzero.h"
 #include "v8/include/v8.h"
@@ -176,6 +177,15 @@ BASE_FEATURE_PARAM(base::TimeDelta,
                    &kBusyLoopOnRendererMain,
                    "busy_loop_for",
                    base::Milliseconds(2));
+
+// Use PerformanceScenario instead of UseCase to compute the current RAILMode.
+BASE_FEATURE(kComputeCurrentRailModeFromPerformanceScenario,
+             base::FEATURE_DISABLED_BY_DEFAULT);
+// Treat "input" as "loading when computing the current RAILMode.
+BASE_FEATURE(kRAILInputAsLoading, base::FEATURE_DISABLED_BY_DEFAULT);
+// Do not call |SetIsLoading|. This is used for a holdback experiment to
+// determine the impact of |SetIsLoading|.
+BASE_FEATURE(kSetIsLoadingAblation, base::FEATURE_DISABLED_BY_DEFAULT);
 
 void MaybeSetBusyLoop(raw_ptr<base::MessagePump> message_pump,
                       double scale_factor) {
@@ -391,9 +401,7 @@ MainThreadSchedulerImpl::MainThreadOnly::MainThreadOnly(
           &main_thread_scheduler_impl->tracing_controller_,
           YesNoStateToString),
       background_status_changed_at(now),
-      metrics_helper(main_thread_scheduler_impl,
-                     now,
-                     kLaunchingProcessIsBackgrounded),
+      metrics_helper(now, kLaunchingProcessIsBackgrounded),
       task_description_for_tracing(
           std::nullopt,
           MakeNamedTrack("Scheduler.MainThreadTask", this),
@@ -772,7 +780,7 @@ void MainThreadSchedulerImpl::ShutdownEmptyDetachedTaskQueues() {
   if (main_thread_only().detached_task_queues.empty()) {
     return;
   }
-  WTF::Vector<scoped_refptr<MainThreadTaskQueue>> queues_to_delete;
+  Vector<scoped_refptr<MainThreadTaskQueue>> queues_to_delete;
   for (auto& queue : main_thread_only().detached_task_queues) {
     if (queue->IsEmpty()) {
       queues_to_delete.push_back(queue);
@@ -1481,7 +1489,8 @@ void MainThreadSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
   new_policy.should_prioritize_ipc_tasks =
       num_pending_urgent_ipc_messages_.load(std::memory_order_relaxed) > 0;
 
-  new_policy.should_freeze_compositor_task_queue = AllPagesFrozen();
+  const bool are_all_pages_frozen = AllPagesFrozen();
+  new_policy.should_freeze_compositor_task_queue = are_all_pages_frozen;
 
   // Tracing is done before the early out check, because it's quite possible we
   // will otherwise miss this information in traces.
@@ -1502,7 +1511,9 @@ void MainThreadSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
 
   if (new_policy.rail_mode != main_thread_only().current_policy.rail_mode) {
     if (isolate()) {
-      isolate()->SetIsLoading(new_policy.rail_mode == RAILMode::kLoad);
+      if (!base::FeatureList::IsEnabled(kSetIsLoadingAblation)) {
+        isolate()->SetIsLoading(new_policy.rail_mode == RAILMode::kLoad);
+      }
     }
     for (auto& observer : main_thread_only().rail_mode_observers) {
       observer.OnRAILModeChanged(new_policy.rail_mode);
@@ -1513,10 +1524,56 @@ void MainThreadSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
   main_thread_only().current_policy = new_policy;
 
   UpdateStateForAllTaskQueues(old_policy);
+
+  if (are_all_pages_frozen) {
+    if (!main_thread_only().renderer_frozen_metadata.has_value()) {
+      main_thread_only().renderer_frozen_metadata.emplace(
+          "MainThreadSchedulerImpl.RendererFrozen2", /* is_frozen */ 1,
+          base::SampleMetadataScope::kProcess);
+    }
+  } else {
+    main_thread_only().renderer_frozen_metadata.reset();
+  }
+}
+
+RAILMode ComputeCurrentRAILModeFromPerformanceScenario() {
+  using performance_scenarios::LoadingScenario;
+  using performance_scenarios::ScenarioScope;
+  auto loading_state = GetLoadingScenario(ScenarioScope::kCurrentProcess)
+                           ->load(std::memory_order_relaxed);
+  switch (loading_state) {
+    case LoadingScenario::kFocusedPageLoading:
+    case LoadingScenario::kVisiblePageLoading:
+      return RAILMode::kLoad;
+    case LoadingScenario::kBackgroundPageLoading:
+    case LoadingScenario::kNoPageLoading:
+      break;
+  }
+
+  if (base::FeatureList::IsEnabled(kRAILInputAsLoading)) {
+    using performance_scenarios::InputScenario;
+    auto input_state = GetInputScenario(ScenarioScope::kCurrentProcess)
+                           ->load(std::memory_order_relaxed);
+    switch (input_state) {
+      case InputScenario::kTyping:
+      case InputScenario::kTap:
+      case InputScenario::kScroll:
+        return RAILMode::kLoad;
+      case InputScenario::kNoInput:
+        break;
+    }
+  }
+
+  return RAILMode::kDefault;
 }
 
 RAILMode MainThreadSchedulerImpl::ComputeCurrentRAILMode(
     UseCase use_case) const {
+  if (base::FeatureList::IsEnabled(
+          kComputeCurrentRailModeFromPerformanceScenario)) {
+    return ComputeCurrentRAILModeFromPerformanceScenario();
+  }
+
   switch (use_case) {
     case UseCase::kDiscreteInputResponse:
       // TODO(crbug.com/350540984): This really should be `RAILMode::kDefault`,
@@ -1529,8 +1586,14 @@ RAILMode MainThreadSchedulerImpl::ComputeCurrentRAILMode(
     case UseCase::kCompositorGesture:
     case UseCase::kSynchronizedGesture:
     case UseCase::kMainThreadGesture:
-    case UseCase::kNone:
     case UseCase::kMainThreadCustomInputHandling:
+      // TODO(crbug.com/444705203): Don't ship this as-is. Likely want to
+      // update the RAILModes if we decide to ship.
+      return base::FeatureList::IsEnabled(kRAILInputAsLoading)
+                 ? RAILMode::kLoad
+                 : RAILMode::kDefault;
+
+    case UseCase::kNone:
       return RAILMode::kDefault;
 
     case UseCase::kEarlyLoading:
@@ -1964,7 +2027,9 @@ void MainThreadSchedulerImpl::DidCommitProvisionalLoad(
         isolate()) {
       // V8 was already informed that the load started, but now that the load is
       // committed, update the start timestamp.
-      isolate()->SetIsLoading(true);
+      if (!base::FeatureList::IsEnabled(kSetIsLoadingAblation)) {
+        isolate()->SetIsLoading(true);
+      }
     }
   }
 }
@@ -2013,10 +2078,10 @@ void MainThreadSchedulerImpl::RemoveRAILModeObserver(
 }
 
 void MainThreadSchedulerImpl::ForEachMainThreadIsolate(
-    base::RepeatingCallback<void(v8::Isolate* isolate)> callback) {
-  // TODO(dtapuska): For each AgentGroupScheduler's isolate invoke the callback.
+    base::FunctionRef<void(v8::Isolate* isolate)> function) {
+  // TODO(dtapuska): For each AgentGroupScheduler's isolate invoke the function.
   if (v8::Isolate* isolate = Isolate()) {
-    callback.Run(isolate);
+    function(isolate);
   }
 }
 
@@ -2126,10 +2191,11 @@ void MainThreadSchedulerImpl::BeginAgentGroupSchedulerScope(
     trace_event_scope_id = this;
   }
 
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
-      TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), trace_event_scope_name,
-      trace_event_scope_id, "agent_group_scheduler",
-      static_cast<void*>(next_agent_group_scheduler));
+  TRACE_EVENT_BEGIN(
+      TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
+      perfetto::StaticString(trace_event_scope_name),
+      perfetto::Track(reinterpret_cast<uint64_t>(trace_event_scope_id)),
+      "agent_group_scheduler", static_cast<void*>(next_agent_group_scheduler));
 
   AgentGroupScheduler* previous_agent_group_scheduler =
       current_agent_group_scheduler_;
@@ -2185,10 +2251,10 @@ void MainThreadSchedulerImpl::EndAgentGroupSchedulerScope() {
   current_agent_group_scheduler_ =
       agent_group_scheduler_scope.previous_agent_group_scheduler;
 
-  TRACE_EVENT_NESTABLE_ASYNC_END1(
+  TRACE_EVENT_END(
       TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
-      agent_group_scheduler_scope.trace_event_scope_name,
-      agent_group_scheduler_scope.trace_event_scope_id.get(),
+      perfetto::Track(reinterpret_cast<uint64_t>(
+          agent_group_scheduler_scope.trace_event_scope_id.get())),
       "agent_group_scheduler",
       static_cast<void*>(
           agent_group_scheduler_scope.current_agent_group_scheduler));
@@ -2295,13 +2361,9 @@ void MainThreadSchedulerImpl::OnPageFrozen(
 #endif
   memory_purge_manager_.OnPageFrozen(called_from);
   UpdatePolicy();
-  main_thread_only().renderer_frozen_metadata.emplace(
-      "MainThreadSchedulerImpl.RendererFrozen", /* is_frozen */ 1,
-      base::SampleMetadataScope::kProcess);
 }
 
 void MainThreadSchedulerImpl::OnPageResumed() {
-  main_thread_only().renderer_frozen_metadata.reset();
   memory_purge_manager_.OnPageResumed();
   UpdatePolicy();
 }
@@ -2729,7 +2791,7 @@ const char* MainThreadSchedulerImpl::TimeDomainTypeToString(
   }
 }
 
-WTF::Vector<base::OnceClosure>&
+Vector<base::OnceClosure>&
 MainThreadSchedulerImpl::GetOnTaskCompletionCallbacks() {
   return main_thread_only().on_task_completion_callbacks;
 }

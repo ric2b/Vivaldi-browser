@@ -20,8 +20,12 @@ use std::path::PathBuf;
 
 extern crate pkg_config;
 
-fn main() {
+fn main() -> Result<(), String> {
     println!("cargo:rerun-if-changed=build.rs");
+    if !cfg!(feature = "aom") {
+        // The feature is disabled at the top level. Do not build this dependency.
+        return Ok(());
+    }
 
     let build_target = std::env::var("TARGET").unwrap();
     let build_dir = if build_target.contains("android") {
@@ -34,7 +38,9 @@ fn main() {
         } else if build_target.contains("arm") {
             "build.android/arm"
         } else {
-            panic!("Unknown target_arch for android. Must be one of x86, x86_64, arm, aarch64.");
+            return Err(
+                "Unknown target_arch for android. Must be one of x86, x86_64, arm, aarch64.".into(),
+            );
         }
     } else {
         "build.libavif"
@@ -56,21 +62,26 @@ fn main() {
         let include_dir = PathBuf::from(&abs_library_dir);
         include_paths.push(format!("-I{}", include_dir.display()));
     } else {
-        let library = pkg_config::Config::new().probe("aom");
-        if library.is_err() {
-            println!(
-                "aom could not be found with pkg-config. Install the system library or run aom.cmd"
-            );
-        }
-        let library = library.unwrap();
-        for lib in &library.libs {
-            println!("cargo:rustc-link-lib={lib}");
-        }
-        for link_path in &library.link_paths {
-            println!("cargo:rustc-link-search={}", link_path.display());
-        }
-        for include_path in &library.include_paths {
-            include_paths.push(format!("-I{}", include_path.display()));
+        match pkg_config::Config::new().probe("aom") {
+            Ok(library) => {
+                for lib in &library.libs {
+                    println!("cargo:rustc-link-lib={lib}");
+                }
+                for link_path in &library.link_paths {
+                    println!("cargo:rustc-link-search={}", link_path.display());
+                }
+                for include_path in &library.include_paths {
+                    include_paths.push(format!("-I{}", include_path.display()));
+                }
+            }
+            Err(_) => {
+                return Err(
+                    "aom binaries could not be found locally or with pkg-config. \
+                    Disable the aom feature, install the libaom-dev system library, \
+                    or build the dependency locally by running aom.cmd from sys/aom-sys."
+                        .into(),
+                );
+            }
         }
     }
 
@@ -84,14 +95,13 @@ fn main() {
         .layout_tests(false)
         .generate_comments(false);
     // TODO: b/402941742 - Add an allowlist to only generate bindings for necessary items.
-    let bindings = bindings
-        .generate()
-        .unwrap_or_else(|_| panic!("Unable to generate bindings for aom."));
+    let bindings = bindings.generate().map_err(|err| err.to_string())?;
     bindings
         .write_to_file(outfile.as_path())
-        .unwrap_or_else(|_| panic!("Couldn't write bindings for aom"));
+        .map_err(|err| err.to_string())?;
     println!(
         "cargo:rustc-env=CRABBYAVIF_AOM_BINDINGS_RS={}",
         outfile.display()
     );
+    Ok(())
 }

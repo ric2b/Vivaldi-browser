@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -96,7 +96,7 @@ export function formatMicroSecondsAsMillisFixedExpanded(time: Platform.Timing.Mi
 }
 
 /**
- * @param higherResolution - if true, the output may show as microsends or as milliseconds with a fractional component
+ * @param higherResolution if true, the output may show as microsends or as milliseconds with a fractional component
  */
 export function millisToString(ms: number, higherResolution?: boolean): string {
   if (!isFinite(ms)) {

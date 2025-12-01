@@ -35,10 +35,8 @@ import org.chromium.chrome.browser.tab_ui.TabCardThemeUtil;
 import org.chromium.chrome.browser.tab_ui.TabListFaviconProvider.TabFavicon;
 import org.chromium.chrome.browser.tab_ui.TabListFaviconProvider.TabFaviconFetcher;
 import org.chromium.chrome.browser.tab_ui.TabThumbnailView;
+import org.chromium.chrome.browser.tasks.tab_management.TabActionButtonData.TabActionButtonType;
 import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.ShoppingPersistedTabDataFetcher;
-import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActionButtonData;
-import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActionButtonData.TabActionButtonType;
-import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActionListener;
 import org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.TabActionState;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.TabCardHighlightState;
@@ -226,6 +224,9 @@ class TabGridViewBinder {
         } else if (TabProperties.TAB_LONG_CLICK_LISTENER == propertyKey) {
             setNullableLongClickListener(
                     model.get(TabProperties.TAB_LONG_CLICK_LISTENER), view, model);
+        } else if (TabProperties.TAB_CONTEXT_CLICK_LISTENER == propertyKey) {
+            setNullableContextClickListener(
+                    model.get(TabProperties.TAB_CONTEXT_CLICK_LISTENER), view, model);
         } else if (TabProperties.MEDIA_INDICATOR == propertyKey) {
             ((TabGridView) view).setMediaIndicator(model.get(TabProperties.MEDIA_INDICATOR));
         }
@@ -360,6 +361,22 @@ class TabGridViewBinder {
             view.setOnLongClickListener(null);
         } else {
             view.setOnLongClickListener(
+                    v -> {
+                        runTabActionListener(
+                                listener, v, propertyModel, /* triggeringMotion= */ null);
+                        return true;
+                    });
+        }
+    }
+
+    static void setNullableContextClickListener(
+            @Nullable TabActionListener listener, View view, PropertyModel propertyModel) {
+        if (listener == null) {
+            view.setContextClickable(false);
+            view.setOnContextClickListener(null);
+        } else {
+            view.setContextClickable(true);
+            view.setOnContextClickListener(
                     v -> {
                         runTabActionListener(
                                 listener, v, propertyModel, /* triggeringMotion= */ null);

@@ -22,8 +22,10 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.blink.mojom.DisplayMode;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.back_button.BackButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.reload_button.ReloadButtonCoordinator;
@@ -51,7 +53,9 @@ import java.util.concurrent.TimeUnit;
 @NullMarked
 @RequiresApi(api = Build.VERSION_CODES.VANILLA_ICE_CREAM)
 public class WebAppHeaderLayoutCoordinator
-        implements DesktopWindowStateManager.AppHeaderObserver, WebAppHeaderDelegate {
+        implements DesktopWindowStateManager.AppHeaderObserver,
+                WebAppHeaderDelegate,
+                BrowserControlsStateProvider.Observer {
 
     // 48dp * 2 (back and reload button) + 4dp (start padding).
     static final int MIN_HEADER_WIDTH_DP = 100;
@@ -65,6 +69,7 @@ public class WebAppHeaderLayoutCoordinator
     private final ObservableSupplier<@Nullable Tab> mTabSupplier;
     private final ScrimManager mScrimManager;
     private final ThemeColorProvider mThemeColorProvider;
+    private final IncognitoStateProvider mIncognitoStateProvider;
     private final @DisplayMode.EnumType int mDisplayMode;
     private final NavigationPopup.HistoryDelegate mHistoryDelegate;
     private int mMinUIControlsMinWidthPx;
@@ -74,6 +79,7 @@ public class WebAppHeaderLayoutCoordinator
     private final TokenHolder mDisabledControlsHolder;
     private boolean mShowButtons;
     private long mLastButtonVisibilityChangeTime;
+    private final Callback<Boolean> mSetHeaderAsOverlayCallback;
 
     /**
      * Creates an instance of {@link WebAppHeaderLayoutCoordinator}.
@@ -88,7 +94,8 @@ public class WebAppHeaderLayoutCoordinator
             ThemeColorProvider themeColorProvider,
             BrowserServicesIntentDataProvider browserServicesIntentDataProvider,
             ScrimManager scrimManager,
-            NavigationPopup.HistoryDelegate historyDelegate) {
+            NavigationPopup.HistoryDelegate historyDelegate,
+            Callback<Boolean> setHeaderAsOverlayCallback) {
         assert browserServicesIntentDataProvider.isWebApkActivity()
                 || browserServicesIntentDataProvider.isTrustedWebActivity();
 
@@ -97,6 +104,7 @@ public class WebAppHeaderLayoutCoordinator
         mControlsEnabledSupplier = new ObservableSupplierImpl<>(true);
         mDisabledControlsHolder = new TokenHolder(this::updateControlsEnabledState);
         mScrimManager = scrimManager;
+        mSetHeaderAsOverlayCallback = setHeaderAsOverlayCallback;
 
         mViewStub = viewStub;
         mViewStub.setLayoutResource(R.layout.web_app_header_layout);
@@ -106,6 +114,7 @@ public class WebAppHeaderLayoutCoordinator
 
         mTabSupplier = tabSupplier;
         mThemeColorProvider = themeColorProvider;
+        mIncognitoStateProvider = new IncognitoStateProvider();
 
         mOnUnoccludedWidthCallback = this::onUnoccludedWidthChanged;
         mMinUIControlsMinWidthPx = 0;
@@ -143,11 +152,12 @@ public class WebAppHeaderLayoutCoordinator
                         mDesktopWindowStateManager,
                         mScrimManager,
                         mTabSupplier,
-                        this::collectNonDraggableAreas,
+                        this::collectControlPositions,
                         mThemeColorProvider,
                         headerMinHeight,
                         headerButtonHeight,
-                        mDisplayMode);
+                        mDisplayMode,
+                        mSetHeaderAsOverlayCallback);
         PropertyModelChangeProcessor.create(model, mView, WebAppHeaderLayoutViewBinder::bind);
 
         mMediator.getUnoccludedWidthSupplier().addObserver(mOnUnoccludedWidthCallback);
@@ -171,6 +181,7 @@ public class WebAppHeaderLayoutCoordinator
                         new ObservableSupplierImpl<>(),
                         mControlsEnabledSupplier,
                         mThemeColorProvider,
+                        mIncognitoStateProvider,
                         /* isWebApp= */ true);
 
         final ChromeImageButton backButton = mView.findViewById(R.id.back_button);
@@ -181,6 +192,7 @@ public class WebAppHeaderLayoutCoordinator
                             if (mMediator != null) mMediator.goBack();
                         },
                         mThemeColorProvider,
+                        mIncognitoStateProvider,
                         mTabSupplier,
                         mControlsEnabledSupplier,
                         () -> {
@@ -229,7 +241,7 @@ public class WebAppHeaderLayoutCoordinator
     }
 
     @VisibleForTesting
-    List<Rect> collectNonDraggableAreas() {
+    List<Rect> collectControlPositions() {
         final var areas = new ArrayList<Rect>();
         if (mReloadButtonCoordinator != null && mReloadButtonCoordinator.isVisibile()) {
             areas.add(mReloadButtonCoordinator.getHitRect());
@@ -310,5 +322,11 @@ public class WebAppHeaderLayoutCoordinator
     @VisibleForTesting
     public @Nullable View getWebAppHeaderLayout() {
         return mView;
+    }
+
+    @Override
+    public void onAndroidControlsVisibilityChanged(int visibility) {
+        if (mMediator == null) return;
+        mMediator.setBrowserControlsVisible(visibility == View.VISIBLE);
     }
 }

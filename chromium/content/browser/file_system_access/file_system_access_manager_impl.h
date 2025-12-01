@@ -46,6 +46,7 @@
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_file_writer.mojom.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_manager.mojom.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_observer_host.mojom.h"
+#include "third_party/blink/public/mojom/file_system_access/file_system_access_permission_mode.mojom.h"
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom.h"
 
 namespace blink {
@@ -350,6 +351,19 @@ class CONTENT_EXPORT FileSystemAccessManagerImpl
     auto_file_picker_result_for_test_ = result_entry;
   }
 
+  // A callback used to create SharedHandleState instances for testing.
+  using SharedHandleStateCallback = base::RepeatingCallback<SharedHandleState(
+      scoped_refptr<FileSystemAccessPermissionGrant> read_grant,
+      scoped_refptr<FileSystemAccessPermissionGrant> write_grant)>;
+
+  // Sets a callback to be used to create SharedHandleState instances for
+  // testing.
+  void SetSharedHandleStateCallbackForTesting(
+      SharedHandleStateCallback callback) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    shared_handle_state_callback_for_test_ = std::move(callback);
+  }
+
   // Remove `writer` from `writer_receivers_`. It is an error to try to remove
   // a writer that doesn't exist.
   void RemoveFileWriter(FileSystemAccessFileWriterImpl* writer);
@@ -388,6 +402,13 @@ class CONTENT_EXPORT FileSystemAccessManagerImpl
   // correspond to a "real" file path and not a virtual path in a sandboxed file
   // system.
   storage::FileSystemURL CreateFileSystemURLFromPath(const PathInfo& path_info);
+
+  // Returns the effective permission mode for operations that require write
+  // access. This currently returns kReadWrite, but will switch to kWrite only
+  // when the FileSystemAccessWriteMode feature is fully rolled out.
+  // See https://crbug.com/40276567.
+  static blink::mojom::FileSystemAccessPermissionMode
+  GetEffectiveWritePermissionMode();
 
   void Shutdown();
 
@@ -705,6 +726,12 @@ class CONTENT_EXPORT FileSystemAccessManagerImpl
       GUARDED_BY_CONTEXT(sequence_checker_);
 
   std::optional<PathInfo> auto_file_picker_result_for_test_
+      GUARDED_BY_CONTEXT(sequence_checker_);
+
+  // An optional callback to be used to create SharedHandleState instances for
+  // testing. If this is null, the default SharedHandleState creation logic is
+  // used.
+  SharedHandleStateCallback shared_handle_state_callback_for_test_
       GUARDED_BY_CONTEXT(sequence_checker_);
 
   // The shared lock type for SyncAccessHandle's `readonly` mode.

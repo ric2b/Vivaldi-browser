@@ -193,6 +193,79 @@ const kLoadValueFromStorageInfo: Partial<{
       )
     `,
   },
+  r16unorm: {
+    storageType: 'u32',
+    texelType: 'vec4f',
+    unpackWGSL: `
+    let raw = extractBits(getSrc(byteOffset / 4), (byteOffset % 4 / 2) * 16, 16);
+    return vec4f(f32(raw) / 65535.0, 0.123, 0.123, 0.123);
+  `,
+  },
+  r16snorm: {
+    storageType: 'i32',
+    texelType: 'vec4f',
+    unpackWGSL: `
+    let raw = extractBits(getSrc(byteOffset / 4), (byteOffset % 4 / 2) * 16, 16);
+    let signedVal = i32(raw);
+    return vec4f(f32(signedVal) / 32767.0, 0.123, 0.123, 0.123);
+  `,
+  },
+  rg16unorm: {
+    storageType: 'u32',
+    texelType: 'vec4f',
+    unpackWGSL: `
+    let v = getSrc(byteOffset / 4);
+    let r = extractBits(v, 0, 16);
+    let g = extractBits(v, 16, 16);
+    return vec4f(f32(r) / 65535.0, f32(g) / 65535.0, 0.123, 0.123);
+  `,
+  },
+  rg16snorm: {
+    storageType: 'i32',
+    texelType: 'vec4f',
+    unpackWGSL: `
+    let v = getSrc(byteOffset / 4);
+    let r = i32(extractBits(v, 0, 16));
+    let g = i32(extractBits(v, 16, 16));
+    return vec4f(f32(r) / 32767.0, f32(g) / 32767.0, 0.123, 0.123);
+  `,
+  },
+  rgba16unorm: {
+    storageType: 'u32',
+    texelType: 'vec4f',
+    unpackWGSL: `
+    let v0 = getSrc(byteOffset / 4);
+    let v1 = getSrc(byteOffset / 4 + 1);
+    let r = extractBits(v0, 0, 16);
+    let g = extractBits(v0, 16, 16);
+    let b = extractBits(v1, 0, 16);
+    let a = extractBits(v1, 16, 16);
+    return vec4f(
+      f32(r) / 65535.0,
+      f32(g) / 65535.0,
+      f32(b) / 65535.0,
+      f32(a) / 65535.0
+    );
+  `,
+  },
+  rgba16snorm: {
+    storageType: 'i32',
+    texelType: 'vec4f',
+    unpackWGSL: `
+    let v0 = getSrc(byteOffset / 4);
+    let v1 = getSrc(byteOffset / 4 + 1);
+    let r = i32(extractBits(v0, 0, 16));
+    let g = i32(extractBits(v0, 16, 16));
+    let b = i32(extractBits(v1, 0, 16));
+    let a = i32(extractBits(v1, 16, 16));
+    return vec4f(
+      f32(r) / 32767.0,
+      f32(g) / 32767.0,
+      f32(b) / 32767.0,
+      f32(a) / 32767.0
+    );
+  `,
+  },
   r32float: {
     storageType: 'f32',
     texelType: 'vec4f',

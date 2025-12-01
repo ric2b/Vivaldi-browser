@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "base/byte_count.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/time/time.h"
@@ -236,6 +237,9 @@ class CONTENT_EXPORT RenderFrameObserver {
   // Notification when the renderer uses subresources.
   // It is called when there is a subresouce load. The reported values via
   // arguments are cumulative. They are NOT a difference from the previous call.
+  //
+  // TODO(crbug.com/404425954): `DidObserveSubresourceLoad()` is going to be
+  // deprecated. Use `SetSubresourceLoadCallback()` in `RenderFrame` instead.
   virtual void DidObserveSubresourceLoad(
       const blink::SubresourceLoadMetrics& subresource_load_metrics) {}
 
@@ -283,18 +287,24 @@ class CONTENT_EXPORT RenderFrameObserver {
   // Reports that a resource was loaded from the blink memory cache.
   // |request_id| uniquely identifies this resource within this render frame.
   // |from_archive| indicates if the resource originated from a MHTML archive.
-  virtual void DidLoadResourceFromMemoryCache(const GURL& response_url,
-                                              int request_id,
-                                              int64_t encoded_body_length,
-                                              const std::string& mime_type,
-                                              bool from_archive) {}
+  //
+  // TODO(crbug.com/404425954): `DidLoadResourceFromMemoryCache()` is going to
+  // be deprecated. Use `SetLoadFromMemoryCacheCallback()` in `RenderFrame`
+  // instead.
+  virtual void DidLoadResourceFromMemoryCache(
+      const GURL& response_url,
+      int request_id,
+      base::ByteCount encoded_body_length,
+      const std::string& mime_type,
+      bool from_archive) {}
 
   // Notification when the renderer observes data used during the page load.
   // This is used for page load metrics. |received_data_length| is the received
   // network bytes. |resource_id| uniquely identifies the resource within this
   // render frame.
-  virtual void DidReceiveTransferSizeUpdate(int resource_id,
-                                            int received_data_length) {}
+  virtual void DidReceiveTransferSizeUpdate(
+      int resource_id,
+      base::ByteCount received_data_length) {}
 
   // Called when the focused element has changed to |element|.
   virtual void FocusedElementChanged(const blink::WebElement& element) {}
@@ -326,11 +336,10 @@ class CONTENT_EXPORT RenderFrameObserver {
   virtual void OnMainFrameViewportRectangleChanged(
       const gfx::Rect& main_frame_viewport_rect) {}
 
-  // Called when an image ad rectangle changed. An empty `image_ad_rect` is used
-  // to signal the removal of the rectangle. Only invoked on the main frame.
-  virtual void OnMainFrameImageAdRectangleChanged(
-      int element_id,
-      const gfx::Rect& image_ad_rect) {}
+  // Called when an ad element's geometry changed. An empty `ad_rect` is used to
+  // signal the removal of the element. Only invoked on the main frame.
+  virtual void OnMainFrameAdRectangleChanged(int element_id,
+                                             const gfx::Rect& ad_rect) {}
 
   // Overlay-popup-ad violates The Better Ads Standards
   // (https://www.betterads.org/standards/). This method will be called when an

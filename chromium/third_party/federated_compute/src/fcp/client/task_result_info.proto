@@ -1,0 +1,43 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.client;
+
+import "google/protobuf/any.proto";
+import "fcp/client/selector_context.proto";
+
+option java_package = "com.google.intelligence.fcp.client";
+option java_multiple_files = true;
+
+// Describes an example iterator query.
+message SingleExampleIteratorQuery {
+  string collection_uri = 1;
+  google.protobuf.Any criteria = 2;
+  int32 example_count = 3;
+}
+
+// Describes the example iterator queries during a task run.
+message ExampleIteratorQueries {
+  fcp.client.SelectorContext selector_context = 1;
+  repeated SingleExampleIteratorQuery query = 2;
+}
+
+// Results from a task, including whether the task succeeded or not, and
+// (optional) the example iterator queries that are used during the task.
+message TaskResultInfo {
+  bool result = 1;
+  ExampleIteratorQueries example_iterator_queries = 2;
+}

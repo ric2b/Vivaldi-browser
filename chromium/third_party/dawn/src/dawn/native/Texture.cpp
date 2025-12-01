@@ -41,6 +41,7 @@
 #include "dawn/native/ChainUtils.h"
 #include "dawn/native/CommandValidation.h"
 #include "dawn/native/Device.h"
+#include "dawn/native/DynamicArrayState.h"
 #include "dawn/native/EnumMaskIterator.h"
 #include "dawn/native/ObjectType_autogen.h"
 #include "dawn/native/PassResourceUsage.h"
@@ -711,6 +712,26 @@ wgpu::TextureUsage AddInternalUsages(const DeviceBase* device,
     return internalUsage;
 }
 
+wgpu::ComponentSwizzle ComposeSwizzleComponent(wgpu::TextureComponentSwizzle swizzle,
+                                               wgpu::ComponentSwizzle component) {
+    switch (component) {
+        case wgpu::ComponentSwizzle::Zero:
+            return wgpu::ComponentSwizzle::Zero;
+        case wgpu::ComponentSwizzle::One:
+            return wgpu::ComponentSwizzle::One;
+        case wgpu::ComponentSwizzle::R:
+            return swizzle.r;
+        case wgpu::ComponentSwizzle::G:
+            return swizzle.g;
+        case wgpu::ComponentSwizzle::B:
+            return swizzle.b;
+        case wgpu::ComponentSwizzle::A:
+            return swizzle.a;
+        case wgpu::ComponentSwizzle::Undefined:
+            return wgpu::ComponentSwizzle::Undefined;
+    }
+}
+
 }  // anonymous namespace
 
 MaybeError ValidateTextureDescriptor(
@@ -966,6 +987,28 @@ bool IsValidSampleCount(uint32_t sampleCount) {
     }
 }
 
+wgpu::TextureComponentSwizzle ComposeSwizzle(wgpu::TextureComponentSwizzle firstSwizzle,
+                                             wgpu::TextureComponentSwizzle secondSwizzle) {
+    return {
+        .r = ComposeSwizzleComponent(firstSwizzle, secondSwizzle.r),
+        .g = ComposeSwizzleComponent(firstSwizzle, secondSwizzle.g),
+        .b = ComposeSwizzleComponent(firstSwizzle, secondSwizzle.b),
+        .a = ComposeSwizzleComponent(firstSwizzle, secondSwizzle.a),
+    };
+}
+
+bool AreSwizzleEquivalent(wgpu::TextureComponentSwizzle lhs, wgpu::TextureComponentSwizzle rhs) {
+    // TODO(414312052): Refine this condition. A view might not be strictly necessary
+    // in case of the given swizzle works identically to default with the original
+    // format, e.g. a R8Unorm texture with swizzle.r set to R and swizzle.g set to One.
+    // This current check provides a correct, though potentially overly broad,
+    // first approximation.
+    if (lhs.r == rhs.r && lhs.g == rhs.g && lhs.b == rhs.b && lhs.a == rhs.a) {
+        return true;
+    }
+    return false;
+}
+
 // TextureBase
 
 TextureBase::TextureState::TextureState() : hasAccess(true), destroyed(false) {}
@@ -1031,6 +1074,11 @@ void TextureBase::DestroyImpl() {
     // - It may be called when the last ref to the texture is dropped and the texture
     //   is implicitly destroyed. This case is thread-safe because there are no
     //   other threads using the texture since there are no other live refs.
+
+    // Destroying the texture implicitly unpins it so it can no longer be used via a dynamic binding
+    // array.
+    Unpin();
+
     mState.destroyed = true;
 
     // Drop all the cache references to TextureViews.
@@ -1208,6 +1256,18 @@ wgpu::TextureUsage TextureBase::GetInternalUsage() const {
     DAWN_ASSERT(!IsError());
     return mInternalUsage;
 }
+
+bool TextureBase::HasPinnedUsage() const {
+    DAWN_ASSERT(!IsError());
+    return mPinnedUsage != wgpu::TextureUsage::None;
+}
+
+wgpu::TextureUsage TextureBase::GetPinnedUsage() const {
+    DAWN_ASSERT(!IsError());
+    DAWN_ASSERT(HasPinnedUsage());
+    return mPinnedUsage;
+}
+
 void TextureBase::AddInternalUsage(wgpu::TextureUsage usage) {
     DAWN_ASSERT(!IsError());
     mInternalUsage |= usage;
@@ -1227,6 +1287,11 @@ void TextureBase::SetInitialized(bool initialized) {
 }
 
 ExecutionSerial TextureBase::OnEndAccess() {
+    // Ending access on the texture implicitly unpins it such that before it can be used in a
+    // dynamic array again, it must be re-pinned (which requires the access to have been restarted
+    // as well).
+    Unpin();
+
     mState.hasAccess = false;
     ExecutionSerial lastUsageSerial = mLastSharedTextureMemoryUsageSerial;
     mLastSharedTextureMemoryUsageSerial = kBeginningOfGPUTime;
@@ -1518,6 +1583,153 @@ wgpu::TextureUsage TextureBase::APIGetUsage() const {
     return mUsage;
 }
 
+void TextureBase::APIPin(wgpu::TextureUsage usage) {
+    // There is no status to return so we don't need to handle the case where an error has been
+    // consumed.
+    [[maybe_unused]] bool hadError = GetDevice()->ConsumedError(
+        [&]() -> MaybeError {
+            if (GetDevice()->IsValidationEnabled()) {
+                DAWN_TRY(ValidatePin(usage));
+            }
+            return Pin(usage);
+        }(),
+        "calling %s.Pin(%u)", this, usage);
+}
+
+MaybeError TextureBase::Pin(wgpu::TextureUsage usage) {
+    // Ensure backends only see useful and balanced Pin/Unpin pairs.
+    if (mPinnedUsage == usage) {
+        return {};
+    }
+    if (HasPinnedUsage()) {
+        Unpin();
+    }
+    DAWN_ASSERT(!HasPinnedUsage());
+
+    DAWN_TRY(PinImpl(usage));
+
+    // Update the frontend state.
+    mPinnedUsage = usage;
+
+    // Call OnPinned for each of the slots. We would like to prune the entries to now destroyed
+    // DynamicArrayStates using the `it = set.erase(it)` std:: idiom, but that's not possible with
+    // absl::flat_hash_set. Instead track a list of entries to prune and do it in a second pass.
+    std::vector<DynamicArraySlot> slotsToPrune;
+    for (const auto& slot : mDynamicArraySlots) {
+        if (Ref<DynamicArrayState> dynamicArray = slot.dynamicArray.Promote()) {
+            dynamicArray->OnPinned(slot.slot, this);
+        } else {
+            slotsToPrune.push_back(slot);
+        }
+    }
+    for (const auto& slot : slotsToPrune) {
+        mDynamicArraySlots.erase(slot);
+    }
+
+    return {};
+}
+
+MaybeError TextureBase::PinImpl(wgpu::TextureUsage usage) {
+    DAWN_UNREACHABLE();
+}
+
+void TextureBase::APIUnpin() {
+    if (GetDevice()->IsValidationEnabled() &&
+        GetDevice()->ConsumedError(ValidateUnpin(), "calling %s.Unpin()", this)) {
+        return;
+    }
+
+    Unpin();
+}
+
+void TextureBase::Unpin() {
+    // Ensure backends only see useful and balanced Pin/Unpin pairs.
+    if (!HasPinnedUsage()) {
+        return;
+    }
+
+    UnpinImpl();
+
+    // Update the frontend state.
+    mPinnedUsage = wgpu::TextureUsage::None;
+
+    // Call OnUnpinned for each of the slots. We would like to prune the entries to now destroyed
+    // DynamicArrayStates using the `it = set.erase(it)` std:: idiom, but that's not possible with
+    // absl::flat_hash_set. Instead track a list of entries to prune and do it in a second pass.
+    std::vector<DynamicArraySlot> slotsToPrune;
+    for (const auto& slot : mDynamicArraySlots) {
+        if (Ref<DynamicArrayState> dynamicArray = slot.dynamicArray.Promote()) {
+            dynamicArray->OnUnpinned(slot.slot, this);
+        } else {
+            slotsToPrune.push_back(slot);
+        }
+    }
+    for (const auto& slot : slotsToPrune) {
+        mDynamicArraySlots.erase(slot);
+    }
+}
+
+void TextureBase::AddDynamicArraySlot(DynamicArrayState* dynamicArray, BindingIndex i) {
+    DAWN_ASSERT(!IsError());
+    // Note that this can be called after the texture is destroyed.
+    DynamicArraySlot slot = {dynamicArray, i};
+    auto [_, inserted] = mDynamicArraySlots.insert(slot);
+    DAWN_ASSERT(inserted);
+}
+
+void TextureBase::RemoveDynamicArraySlot(DynamicArrayState* dynamicArray, BindingIndex i) {
+    DAWN_ASSERT(!IsError());
+    // Note that this can be called after the texture is destroyed.
+    DynamicArraySlot slot = {dynamicArray, i};
+    bool removed = mDynamicArraySlots.erase(slot);
+    DAWN_ASSERT(removed);
+}
+
+size_t TextureBase::DynamicArraySlot::HashFuncs::operator()(const DynamicArraySlot& query) const {
+    size_t hash = 0;
+    HashCombine(&hash, query.dynamicArray, query.slot);
+    return hash;
+}
+
+bool TextureBase::DynamicArraySlot::HashFuncs::operator()(const DynamicArraySlot& a,
+                                                          const DynamicArraySlot& b) const {
+    return std::tie(a.dynamicArray, a.slot) == std::tie(b.dynamicArray, b.slot);
+}
+
+void TextureBase::UnpinImpl() {
+    DAWN_UNREACHABLE();
+}
+
+MaybeError TextureBase::ValidatePin(wgpu::TextureUsage usage) const {
+    DAWN_INVALID_IF(!GetDevice()->HasFeature(Feature::ChromiumExperimentalBindless),
+                    "Texture pinning used without %s enabled.",
+                    wgpu::FeatureName::ChromiumExperimentalBindless);
+
+    DAWN_INVALID_IF(mState.destroyed || !mState.hasAccess,
+                    "Texture is destroyed or without access.");
+
+    DAWN_TRY(ValidateTextureUsage(usage));
+    DAWN_INVALID_IF(!IsSubset(usage, mUsage),
+                    "Pinned usages %s are not a subset of %s's usages (%u).", usage, this, mUsage);
+    DAWN_INVALID_IF(!IsSubset(usage, kShaderTextureUsages),
+                    "Pinned usages %s contain non-shader usages.", usage);
+
+    // TODO(https://crbug.com/435317394): Support pinning for readonly storage and storage as well.
+    // This might require adding readonly storage in the API so it can be specified.
+    DAWN_INVALID_IF(
+        usage != wgpu::TextureUsage::TextureBinding,
+        "Pinned usages %s is not %s (which is required in the current bindless prototype).", usage,
+        wgpu::TextureUsage::TextureBinding);
+    return {};
+}
+
+MaybeError TextureBase::ValidateUnpin() const {
+    DAWN_INVALID_IF(!GetDevice()->HasFeature(Feature::ChromiumExperimentalBindless),
+                    "Texture unpinning used without %s enabled.",
+                    wgpu::FeatureName::ChromiumExperimentalBindless);
+    return {};
+}
+
 // TextureViewQuery
 
 TextureViewQuery::TextureViewQuery(const UnpackedPtr<TextureViewDescriptor>& desc) {
@@ -1699,6 +1911,15 @@ wgpu::TextureUsage TextureViewBase::GetInternalUsage() const {
     return mInternalUsage;
 }
 
+wgpu::TextureComponentSwizzle TextureViewBase::GetSwizzle() const {
+    return {
+        .r = mSwizzleRed,
+        .g = mSwizzleGreen,
+        .b = mSwizzleBlue,
+        .a = mSwizzleAlpha,
+    };
+}
+
 wgpu::ComponentSwizzle TextureViewBase::GetSwizzleRed() const {
     return mSwizzleRed;
 }
@@ -1713,16 +1934,6 @@ wgpu::ComponentSwizzle TextureViewBase::GetSwizzleBlue() const {
 
 wgpu::ComponentSwizzle TextureViewBase::GetSwizzleAlpha() const {
     return mSwizzleAlpha;
-}
-
-bool TextureViewBase::UsesNonDefaultSwizzle() const {
-    // TODO(414312052): Refine this condition. A view might not be strictly necessary
-    // in case of the given swizzle works identically to default with the original
-    // format, e.g. a R8Unorm texture with swizzle.r set to R and swizzle.g set to One.
-    // This current check provides a correct, though potentially overly broad,
-    // first approximation.
-    return mSwizzleRed != wgpu::ComponentSwizzle::R || mSwizzleGreen != wgpu::ComponentSwizzle::G ||
-           mSwizzleBlue != wgpu::ComponentSwizzle::B || mSwizzleAlpha != wgpu::ComponentSwizzle::A;
 }
 
 bool TextureViewBase::IsYCbCr() const {

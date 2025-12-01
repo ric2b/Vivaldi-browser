@@ -36,8 +36,8 @@
 #include "src/tint/lang/core/ir/disassembler.h"
 #include "src/tint/lang/core/ir/ir_helper_test.h"
 #include "src/tint/lang/core/number.h"
+#include "src/tint/lang/wgsl/writer/common/options.h"
 #include "src/tint/lang/wgsl/writer/ir_to_program/ir_to_program.h"
-#include "src/tint/lang/wgsl/writer/ir_to_program/program_options.h"
 #include "src/tint/lang/wgsl/writer/raise/raise.h"
 #include "src/tint/utils/text/string.h"
 
@@ -77,7 +77,7 @@ class WgslIRWriterTest : public core::ir::IRTestHelper {
 
         result.ir_post_raise = str();
 
-        writer::ProgramOptions program_options;
+        writer::Options program_options;
         program_options.allowed_features = AllowedFeatures::Everything();
         auto output_program = wgsl::writer::IRToProgram(mod, program_options);
         if (!output_program.IsValid()) {
@@ -86,7 +86,7 @@ class WgslIRWriterTest : public core::ir::IRTestHelper {
             return result;
         }
 
-        auto output = wgsl::writer::Generate(output_program, {});
+        auto output = wgsl::writer::Generate(output_program);
         if (output != Success) {
             std::stringstream ss;
             ss << "wgsl::Generate() errored: " << output.Failure();

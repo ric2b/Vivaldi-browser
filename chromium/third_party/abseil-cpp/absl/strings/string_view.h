@@ -34,7 +34,9 @@
 #include <iosfwd>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <string>
+#include <type_traits>
 
 #include "absl/base/attributes.h"
 #include "absl/base/nullability.h"
@@ -207,6 +209,16 @@ class ABSL_ATTRIBUTE_VIEW string_view {
       : ptr_(data), length_(CheckLengthInternal(len)) {
     ABSL_ASSERT(data != nullptr || len == 0);
   }
+
+#if ABSL_INTERNAL_CPLUSPLUS_LANG >= 202002L
+  template <std::contiguous_iterator It, std::sized_sentinel_for<It> End>
+    requires(std::is_same_v<std::iter_value_t<It>, value_type> &&
+             !std::is_convertible_v<End, size_type>)
+  constexpr string_view(It begin, End end)
+      : ptr_(std::to_address(begin)), length_(end - begin) {
+    ABSL_HARDENING_ASSERT(end >= begin);
+  }
+#endif  // ABSL_INTERNAL_CPLUSPLUS_LANG >= 202002L
 
   constexpr string_view(const string_view&) noexcept = default;
   string_view& operator=(const string_view&) noexcept = default;
@@ -749,8 +761,8 @@ ABSL_NAMESPACE_BEGIN
 //
 // Like `s.substr(pos, n)`, but clips `pos` to an upper bound of `s.size()`.
 // Provided because std::string_view::substr throws if `pos > size()`
-inline string_view ClippedSubstr(string_view s, size_t pos,
-                                 size_t n = string_view::npos) {
+inline string_view ClippedSubstr(string_view s ABSL_ATTRIBUTE_LIFETIME_BOUND,
+                                 size_t pos, size_t n = string_view::npos) {
   pos = (std::min)(pos, static_cast<size_t>(s.size()));
   return s.substr(pos, n);
 }

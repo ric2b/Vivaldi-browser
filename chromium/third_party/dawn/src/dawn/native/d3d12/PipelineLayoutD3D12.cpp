@@ -72,6 +72,7 @@ D3D12_ROOT_PARAMETER_TYPE RootParameterType(wgpu::BufferBindingType type) {
             return D3D12_ROOT_PARAMETER_TYPE_SRV;
         case wgpu::BufferBindingType::BindingNotUsed:
         case wgpu::BufferBindingType::Undefined:
+        default:
             DAWN_UNREACHABLE();
     }
 }
@@ -134,7 +135,7 @@ HRESULT SerializeRootParameter1_0(Device* device,
     }
 
     D3D12_ROOT_SIGNATURE_DESC rootSignatureDescriptor;
-    rootSignatureDescriptor.NumParameters = rootParameters1_0.size();
+    rootSignatureDescriptor.NumParameters = static_cast<uint32_t>(rootParameters1_0.size());
     rootSignatureDescriptor.pParameters = rootParameters1_0.data();
     rootSignatureDescriptor.NumStaticSamplers = 0;
     rootSignatureDescriptor.pStaticSamplers = nullptr;
@@ -192,7 +193,7 @@ MaybeError PipelineLayout::Initialize() {
             D3D12_ROOT_PARAMETER1 rootParameter = {};
             rootParameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
             rootParameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-            rootParameter.DescriptorTable.NumDescriptorRanges = rangeCount;
+            rootParameter.DescriptorTable.NumDescriptorRanges = static_cast<uint32_t>(rangeCount);
             rootParameter.DescriptorTable.pDescriptorRanges = &ranges[rangeIndex];
 
             for (auto& range : descriptorRanges) {
@@ -208,10 +209,10 @@ MaybeError PipelineLayout::Initialize() {
         };
 
         if (SetRootDescriptorTable(bindGroupLayout->GetCbvUavSrvDescriptorRanges())) {
-            mCbvUavSrvRootParameterInfo[group] = rootParameters.size() - 1;
+            mCbvUavSrvRootParameterInfo[group] = static_cast<uint32_t>(rootParameters.size() - 1u);
         }
         if (SetRootDescriptorTable(bindGroupLayout->GetSamplerDescriptorRanges())) {
-            mSamplerRootParameterInfo[group] = rootParameters.size() - 1;
+            mSamplerRootParameterInfo[group] = static_cast<uint32_t>(rootParameters.size() - 1u);
         }
 
         // Combine the static samplers from the all of the bind group layouts to one vector.
@@ -223,9 +224,7 @@ MaybeError PipelineLayout::Initialize() {
         // Init root descriptors in root signatures for dynamic buffer bindings.
         // These are packed at the beginning of the layout binding info.
         mDynamicRootParameterIndices[group].resize(bindGroupLayout->GetDynamicBufferCount());
-        for (BindingIndex dynamicBindingIndex{0};
-             dynamicBindingIndex < bindGroupLayout->GetDynamicBufferCount();
-             ++dynamicBindingIndex) {
+        for (BindingIndex dynamicBindingIndex : bindGroupLayout->GetDynamicBufferIndices()) {
             const BindingInfo& bindingInfo = bindGroupLayout->GetBindingInfo(dynamicBindingIndex);
 
             if (bindingInfo.visibility == wgpu::ShaderStage::None) {
@@ -278,8 +277,8 @@ MaybeError PipelineLayout::Initialize() {
         kRenderOrComputeInternalRegisterSpace;
     renderOrComputeInternalConstants.Constants.ShaderRegister =
         kRenderOrComputeInternalBaseRegister;
-    mFirstIndexOffsetParameterIndex = rootParameters.size();
-    mNumWorkgroupsParameterIndex = rootParameters.size();
+    mFirstIndexOffsetParameterIndex = static_cast<uint32_t>(rootParameters.size());
+    mNumWorkgroupsParameterIndex = static_cast<uint32_t>(rootParameters.size());
     // NOTE: We should consider moving this entry to earlier in the root signature since offsets
     // would need to be updated often
     rootParameters.emplace_back(renderOrComputeInternalConstants);
@@ -302,8 +301,7 @@ MaybeError PipelineLayout::Initialize() {
         mDynamicStorageBufferLengthInfo[group].bindingAndRegisterOffsets.reserve(
             bgl->GetDynamicStorageBufferCount());
 
-        for (BindingIndex bindingIndex(0); bindingIndex < bgl->GetDynamicBufferCount();
-             ++bindingIndex) {
+        for (BindingIndex bindingIndex : bgl->GetDynamicBufferIndices()) {
             if (bgl->IsStorageBufferBinding(bindingIndex)) {
                 mDynamicStorageBufferLengthInfo[group].bindingAndRegisterOffsets.push_back(
                     {bgl->GetBindingInfo(bindingIndex).binding,
@@ -326,7 +324,7 @@ MaybeError PipelineLayout::Initialize() {
             kDynamicStorageBufferLengthsRegisterSpace;
         dynamicStorageBufferLengthConstants.Constants.ShaderRegister =
             kDynamicStorageBufferLengthsBaseRegister;
-        mDynamicStorageBufferLengthsParameterIndex = rootParameters.size();
+        mDynamicStorageBufferLengthsParameterIndex = static_cast<uint32_t>(rootParameters.size());
         rootParameters.emplace_back(dynamicStorageBufferLengthConstants);
     } else {
         mDynamicStorageBufferLengthsParameterIndex =
@@ -349,9 +347,11 @@ MaybeError PipelineLayout::Initialize() {
 
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC versionedRootSignatureDescriptor = {};
     versionedRootSignatureDescriptor.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
-    versionedRootSignatureDescriptor.Desc_1_1.NumParameters = rootParameters.size();
+    versionedRootSignatureDescriptor.Desc_1_1.NumParameters =
+        static_cast<uint32_t>(rootParameters.size());
     versionedRootSignatureDescriptor.Desc_1_1.pParameters = rootParameters.data();
-    versionedRootSignatureDescriptor.Desc_1_1.NumStaticSamplers = staticSamplers.size();
+    versionedRootSignatureDescriptor.Desc_1_1.NumStaticSamplers =
+        static_cast<uint32_t>(staticSamplers.size());
     versionedRootSignatureDescriptor.Desc_1_1.pStaticSamplers = staticSamplers.data();
     versionedRootSignatureDescriptor.Desc_1_1.Flags =
         D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;

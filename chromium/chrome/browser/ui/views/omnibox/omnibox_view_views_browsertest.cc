@@ -19,8 +19,10 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/autocomplete/aim_eligibility_service_factory.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/interstitials/security_interstitial_page_test_utils.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ssl/typed_navigation_upgrade_throttle.h"
 #include "chrome/browser/ui/browser.h"
@@ -32,6 +34,8 @@
 #include "chrome/browser/ui/hats/mock_hats_service.h"
 #include "chrome/browser/ui/hats/survey_config.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
+#include "chrome/browser/ui/omnibox/omnibox_controller.h"
+#include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
@@ -44,15 +48,18 @@
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/keyed_service/core/keyed_service.h"
+#include "components/lens/lens_features.h"
 #include "components/omnibox/browser/autocomplete_match.h"
-#include "components/omnibox/browser/omnibox_controller.h"
-#include "components/omnibox/browser/omnibox_edit_model.h"
+#include "components/omnibox/browser/mock_aim_eligibility_service.h"
+#include "components/omnibox/browser/omnibox_pref_names.h"
 #include "components/omnibox/browser/omnibox_triggered_feature_service.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "components/omnibox/common/omnibox_feature_configs.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/security_interstitials/core/omnibox_https_upgrade_metrics.h"
 #include "components/unified_consent/pref_names.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test.h"
@@ -567,7 +574,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, CloseOmniboxPopupOnTextDrag) {
   results.SortAndCull(
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()),
       triggered_feature_service(), /*is_lens_active=*/false,
-      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false);
+      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false,
+      /*is_incognito=*/false);
 
   // The omnibox popup should open with suggestions displayed.
   autocomplete_controller->NotifyChanged();
@@ -616,7 +624,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, MaintainCursorAfterFocusCycle) {
   results.SortAndCull(
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()),
       triggered_feature_service(), /*is_lens_active=*/false,
-      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false);
+      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false,
+      /*is_incognito=*/false);
 
   // The omnibox popup should open with suggestions displayed.
   autocomplete_controller->NotifyChanged();
@@ -630,8 +639,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, MaintainCursorAfterFocusCycle) {
   EXPECT_FALSE(omnibox_view->IsSelectAll());
 
   // Save cursor position, before blur.
-  size_t prev_start, end;
-  omnibox_view->GetSelectionBounds(&prev_start, &end);
+  size_t prev_start = omnibox_view->GetSelectionBounds().start();
 
   chrome::FocusAppMenu(browser());
   EXPECT_FALSE(omnibox_view->model()->PopupIsOpen());
@@ -640,9 +648,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, MaintainCursorAfterFocusCycle) {
   chrome::FocusLocationBar(browser());
 
   // Make sure cursor is restored.
-  size_t start;
-  omnibox_view->GetSelectionBounds(&start, &end);
-  EXPECT_EQ(prev_start, start);
+  EXPECT_EQ(prev_start, omnibox_view->GetSelectionBounds().start());
 }
 
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, BackgroundIsOpaque) {
@@ -722,7 +728,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, FriendlyAccessibleLabel) {
   results.SortAndCull(
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()),
       triggered_feature_service(), /*is_lens_active=*/false,
-      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false);
+      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false,
+      /*is_incognito=*/false);
 
   // The omnibox popup should open with suggestions displayed.
   chrome::FocusLocationBar(browser());
@@ -798,7 +805,10 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, AccessiblePopup) {
   match.description = u"Google";
   match.allowed_to_be_default_match = true;
 
-  OmniboxPopupView* popup_view = omnibox_view_views->GetPopupViewForTesting();
+  OmniboxPopupView* popup_view =
+      BrowserView::GetBrowserViewForBrowser(browser())
+          ->GetLocationBarView()
+          ->GetOmniboxPopupView();
   ui::AXNodeData popup_node_data_1;
   popup_view->GetPopupAccessibleNodeData(&popup_node_data_1);
   EXPECT_FALSE(popup_node_data_1.HasState(ax::mojom::State::kExpanded));
@@ -823,7 +833,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, AccessiblePopup) {
   results.SortAndCull(
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()),
       triggered_feature_service(), /*is_lens_active=*/false,
-      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false);
+      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false,
+      /*is_incognito=*/false);
 
   // The omnibox popup should open with suggestions displayed.
   autocomplete_controller->NotifyChanged();
@@ -982,7 +993,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsUIATest, AccessibleOmnibox) {
   results.SortAndCull(
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()),
       triggered_feature_service(), /*is_lens_active=*/false,
-      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false);
+      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false,
+      /*is_incognito=*/false);
 
   // The omnibox popup should open with suggestions displayed.
   autocomplete_controller->NotifyChanged();
@@ -1363,7 +1375,7 @@ class OmniboxViewViewsOnFocusZpsTest : public OmniboxViewViewsTest {
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsOnFocusZpsTest, ShowHatsSurvey) {
   EXPECT_CALL(*mock_hats_service(), LaunchSurvey(_, _, _, _, _, _, _))
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [](const std::string& trigger, base::OnceClosure success_callback,
              base::OnceClosure failure_callback,
              const SurveyBitsData& product_specific_bits_data,
@@ -1373,7 +1385,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsOnFocusZpsTest, ShowHatsSurvey) {
             EXPECT_TRUE(
                 trigger == kHatsSurveyTriggerOnFocusZpsSuggestionsHappiness ||
                 trigger == kHatsSurveyTriggerOnFocusZpsSuggestionsUtility);
-          }));
+          });
 
   ASSERT_TRUE(
       ui_test_utils::NavigateToURL(browser(), GURL("https://test.com/")));
@@ -1408,4 +1420,191 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsOnFocusZpsTest,
   // On the fifth focus of the omnibox, the HaTS survey should not show since
   // the omnibox is still focused.
   location_bar->omnibox_view()->RequestFocus();
+}
+
+class OmniboxViewViewsHintTextLimitingBrowserTest
+    : public OmniboxViewViewsTest {
+ public:
+  OmniboxViewViewsHintTextLimitingBrowserTest() {
+    scoped_feature_list_.InitWithFeaturesAndParameters(
+        {
+            {omnibox::kAiModeOmniboxEntryPoint,
+             {{"AimHintImpressionLimitDaily", "2"},
+              {"AimHintImpressionLimitTotal", "5"},
+              {"EnableHintImpressionLimits", "true"}}},
+        },
+        {lens::features::kLensOverlay});
+  }
+
+  void SetUpOnMainThread() override {
+    ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
+  }
+
+  void SetUpBrowserContextKeyedServices(
+      content::BrowserContext* context) override {
+    OmniboxViewViewsTest::SetUpBrowserContextKeyedServices(context);
+    SetUpAimEligibilityService(context,
+                               /*is_locally_eligible=*/true,
+                               /*is_server_eligible=*/true,
+                               /*server_eligibility_enabled=*/true);
+  }
+
+ protected:
+  void SetUpAimEligibilityService(content::BrowserContext* context,
+                                  bool is_locally_eligible,
+                                  bool is_server_eligible,
+                                  bool server_eligibility_enabled) {
+    AimEligibilityServiceFactory::GetInstance()->SetTestingFactory(
+        Profile::FromBrowserContext(context),
+        base::BindLambdaForTesting([=](content::BrowserContext* context) {
+          Profile* profile = Profile::FromBrowserContext(context);
+          auto mock_service = std::make_unique<MockAimEligibilityService>(
+              *profile->GetPrefs(),
+              TemplateURLServiceFactory::GetForProfile(profile),
+              /*url_loader_factory=*/nullptr,
+              /*identity_manager=*/nullptr);
+          ON_CALL(*mock_service, IsAimLocallyEligible())
+              .WillByDefault(Return(is_locally_eligible));
+          ON_CALL(*mock_service, IsServerEligibilityEnabled())
+              .WillByDefault(Return(server_eligibility_enabled));
+          ON_CALL(*mock_service, IsAimEligible())
+              .WillByDefault(
+                  Return(is_locally_eligible &&
+                         (!server_eligibility_enabled || is_server_eligible)));
+          return static_cast<std::unique_ptr<KeyedService>>(
+              std::move(mock_service));
+        }));
+  }
+
+  void FocusAndPaint() {
+    omnibox()->SetUserText(u"");
+    OmniboxViewViews* view = static_cast<OmniboxViewViews*>(omnibox());
+    view->RequestFocus();
+    ui_test_utils::WaitForViewFocus(browser(), VIEW_ID_OMNIBOX, true);
+    gfx::Canvas canvas(gfx::Size(200, 200), 1.0f, true);
+    view->OnPaint(&canvas);
+  }
+
+  PrefService* prefs() { return browser()->profile()->GetPrefs(); }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsHintTextLimitingBrowserTest,
+                       HintTextPrefsStartAtZero) {
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintTotalImpressions), 0);
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintDailyImpressionsCount), 0);
+}
+
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsHintTextLimitingBrowserTest,
+                       HintTextPrefsIncrementOnFirstImpression) {
+  FocusAndPaint();
+
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintTotalImpressions), 1);
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintDailyImpressionsCount), 1);
+  const int today = (base::Time::Now() - base::Time::UnixEpoch()).InDays();
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintLastImpressionDay), today);
+}
+
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsHintTextLimitingBrowserTest,
+                       HintTextPrefsIncrementOnSecondImpressionSameDay) {
+  // TODO(crbug.com/452108887): Make timing deterministic.
+  const int today = (base::Time::Now() - base::Time::UnixEpoch()).InDays();
+  prefs()->SetInteger(omnibox::kAimHintLastImpressionDay, today);
+
+  // First impression.
+  FocusAndPaint();
+
+  // Blur and refocus for a second impression on the same day.
+  ClickBrowserWindowCenter();
+  FocusAndPaint();
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintTotalImpressions), 2);
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintDailyImpressionsCount), 2);
+}
+
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsHintTextLimitingBrowserTest,
+                       HintTextPrefsResetDailyCountOnNewDay) {
+  const int today = (base::Time::Now() - base::Time::UnixEpoch()).InDays();
+
+  // Simulate a new day.
+  const int yesterday = today - 1;
+  prefs()->SetInteger(omnibox::kAimHintLastImpressionDay, yesterday);
+  // Daily count is high, but should be ignored because the day is old.
+  prefs()->SetInteger(omnibox::kAimHintDailyImpressionsCount, 5);
+
+  // First impression on a new day. Daily count should reset to 1.
+  FocusAndPaint();
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintTotalImpressions), 1);
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintDailyImpressionsCount), 1);
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintLastImpressionDay), today);
+}
+
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsHintTextLimitingBrowserTest,
+                       HintTextPrefsRespectDailyLimit) {
+  const int today = (base::Time::Now() - base::Time::UnixEpoch()).InDays();
+  prefs()->SetInteger(omnibox::kAimHintLastImpressionDay, today);
+
+  // Hit the daily limit.
+  prefs()->SetInteger(omnibox::kAimHintDailyImpressionsCount, 2);
+
+  // Try to record another impression. Prefs should not change.
+  FocusAndPaint();
+  // Total impressions should not increment beyond 0 since the hint was never
+  // shown due to daily limit.
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintTotalImpressions), 0);
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintDailyImpressionsCount), 2);
+}
+
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsHintTextLimitingBrowserTest,
+                       HintTextPrefsRespectTotalLimit) {
+  const int today = (base::Time::Now() - base::Time::UnixEpoch()).InDays();
+  prefs()->SetInteger(omnibox::kAimHintLastImpressionDay, today);
+
+  // Hit the total limit.
+  prefs()->SetInteger(omnibox::kAimHintTotalImpressions, 5);
+
+  // Try to record another impression. Prefs should not change.
+  FocusAndPaint();
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintTotalImpressions), 5);
+  // Daily count should not have been reset or incremented.
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintDailyImpressionsCount), 0);
+}
+
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsHintTextLimitingBrowserTest,
+                       HintTextPrefsIncrementOncePerFocusSession) {
+  // Second paint in the same focus session should NOT increment prefs.
+  FocusAndPaint();
+  FocusAndPaint();
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintTotalImpressions), 1);
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintDailyImpressionsCount), 1);
+
+  // Blur and re-focus should now increment prefs.
+  ClickBrowserWindowCenter();
+  FocusAndPaint();
+
+  // Prefs should still not have changed.
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintTotalImpressions), 2);
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintDailyImpressionsCount), 2);
+}
+
+class OmniboxViewViewsHintTextLimitingDisabledBrowserTest
+    : public OmniboxViewViewsHintTextLimitingBrowserTest {
+ public:
+  OmniboxViewViewsHintTextLimitingDisabledBrowserTest() {
+    scoped_feature_list_.InitWithFeaturesAndParameters(
+        {{omnibox::kAiModeOmniboxEntryPoint,
+          {{"EnableHintImpressionLimits", "false"}}}},
+        {lens::features::kLensOverlay});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsHintTextLimitingDisabledBrowserTest,
+                       HintTextPrefsNoIncrementWhenDisabled) {
+  FocusAndPaint();
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintTotalImpressions), 0);
+  EXPECT_EQ(prefs()->GetInteger(omnibox::kAimHintDailyImpressionsCount), 0);
 }

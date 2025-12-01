@@ -482,10 +482,10 @@ void Trace::PerformDeferredActions(RegExpMacroAssembler* assembler,
     if (undo_action == RESTORE) {
       pushes++;
       RegExpMacroAssembler::StackCheckFlag stack_check =
-          RegExpMacroAssembler::kNoStackLimitCheck;
+          RegExpMacroAssembler::StackCheckFlag::kNoStackLimitCheck;
       DCHECK_GT(assembler->stack_limit_slack_slot_count(), 0);
       if (pushes == assembler->stack_limit_slack_slot_count()) {
-        stack_check = RegExpMacroAssembler::kCheckStackLimit;
+        stack_check = RegExpMacroAssembler::StackCheckFlag::kCheckStackLimit;
         pushes = 0;
       }
 
@@ -2313,6 +2313,7 @@ void AssertionNode::BacktrackIfPrevious(
   // If we've already checked that we are not at the start of input, it's okay
   // to load the previous character without bounds checks.
   const bool can_skip_bounds_check = !may_be_at_or_before_subject_string_start;
+  static_assert(Trace::kCPOffsetSlack == 1);
   assembler->LoadCurrentCharacter(new_trace.cp_offset() - 1, non_word,
                                   can_skip_bounds_check);
   EmitWordCheck(assembler, word, non_word, backtrack_if_previous == kIsNonWord);
@@ -2567,6 +2568,7 @@ void TextNode::Emit(RegExpCompiler* compiler, Trace* trace) {
   }
 
   bool first_elt_done = false;
+  static_assert(Trace::kCPOffsetSlack == 1);
   int bound_checked_to = trace->cp_offset() - 1;
   bound_checked_to += trace->bound_checked_up_to();
 
@@ -2611,7 +2613,10 @@ void Trace::AdvanceCurrentPositionInTrace(int by, RegExpCompiler* compiler) {
   // characters by means of mask and compare.
   quick_check_performed_.Advance(by, compiler->one_byte());
   cp_offset_ += by;
-  if (cp_offset_ > RegExpMacroAssembler::kMaxCPOffset) {
+  static_assert(RegExpMacroAssembler::kMaxCPOffset ==
+                -RegExpMacroAssembler::kMinCPOffset);
+  if (std::abs(cp_offset_) + kCPOffsetSlack >
+      RegExpMacroAssembler::kMaxCPOffset) {
     compiler->SetRegExpTooBig();
     cp_offset_ = 0;
   }
@@ -3074,8 +3079,10 @@ void BoyerMooreLookahead::EmitSkipInstructions(RegExpMacroAssembler* masm) {
   GetSkipTable(min_lookahead, max_lookahead, boolean_skip_table, nibble_table);
   DCHECK_NE(0, skip_distance);
 
+  Label cont;
   masm->SkipUntilBitInTable(max_lookahead, boolean_skip_table, nibble_table,
-                            skip_distance);
+                            skip_distance, &cont, &cont);
+  masm->Bind(&cont);
 }
 
 /* Code generation for choice nodes.

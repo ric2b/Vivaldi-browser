@@ -20,18 +20,15 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Checking the proxy and the firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Issued to: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">This site can’t provide a secure connection</translation>
-<translation id="2187317261103489799">Detect (default)</translation>
 <translation id="2224337661447660594">No internet</translation>
 <translation id="2292556288342944218">Your Internet access is blocked</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> requires a username and password.</translation>
 <translation id="2337852623177822836">Setting controlled by your administrator</translation>
 <translation id="2355395290879513365">Attackers might be able to see the images you’re looking at on this site and trick you by modifying them.</translation>
-<translation id="2356070529366658676">Ask</translation>
 <translation id="2359808026110333948">Continue</translation>
 <translation id="2388886110302389394">Open page in a new Private window (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Running Network Diagnostics<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">This page has been blocked by an extension</translation>
-<translation id="2539524384386349900">Detect</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sent an invalid response.</translation>
 <translation id="2634124572758952069"><ph name="HOST_NAME" />’s server IP address could not be found.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -54,10 +51,8 @@
       be using a proxy server:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Press the reload button to resubmit the data needed to load the page.</translation>
-<translation id="3234666976984236645">Always detect important content on this site</translation>
 <translation id="3384522979010096022">Your organization doesn’t allow you to view this site</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> is currently unreachable.</translation>
-<translation id="3427092606871434483">Allow (default)</translation>
 <translation id="3447661539832366887">The owner of this device turned off the dinosaur game.</translation>
 <translation id="3447884698081792621">Show certificate (issued by <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Hide advanced</translation>
@@ -79,7 +74,6 @@
 <translation id="4075732493274867456">The client and server don't support a common SSL protocol version or cipher suite.</translation>
 <translation id="4116663294526079822">Always allow on this site</translation>
 <translation id="4130226655945681476">Checking the network cables, modem and router</translation>
-<translation id="4151403195736952345">Use global default (Detect)</translation>
 <translation id="4165986682804962316">Site settings</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Checking firewall and antivirus configurations<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Try running Network Diagnostics<ph name="END_LINK" />.</translation>
@@ -87,7 +81,6 @@
 <translation id="4250431568374086873">Your connection to this site is not fully secure</translation>
 <translation id="4265872034478892965">Allowed by your administrator</translation>
 <translation id="4305666528087210886">Your file couldn’t be accessed</translation>
-<translation id="4312866146174492540">Block (default)</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> didn’t accept your login certificate, or one may not have been provided.</translation>
 <translation id="4506599922270137252">Contacting the system admin</translation>
@@ -103,7 +96,6 @@
 <translation id="483241715238664915">Turn on warnings</translation>
 <translation id="4943872375798546930">No results</translation>
 <translation id="5023310440958281426">Check your administrator's policies</translation>
-<translation id="5039804452771397117">Allow</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 in use)} other {(# in use)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Checking the proxy address<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
@@ -150,7 +142,6 @@
 <translation id="6890956352250146925">Options for cookies and site data</translation>
 <translation id="6897140037006041989">User Agent</translation>
 <translation id="6957624206566198865">Open page in a new Private tab</translation>
-<translation id="7053983685419859001">Block</translation>
 <translation id="7096937462164235847">The identity of this website isn't verified.</translation>
 <translation id="7108819624672055576">Allowed by an extension</translation>
 <translation id="7111012039238467737">(Valid)</translation>
@@ -174,7 +165,6 @@
 <translation id="7878562273885520351">Your password may be compromised</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="7953236668995583915">Reload this page to apply your updated settings on this site</translation>
-<translation id="8037357227543935929">Ask (default)</translation>
 <translation id="8041940743680923270">Use global default (Ask)</translation>
 <translation id="808894953321890993">Change password</translation>
 <translation id="8149426793427495338">Your computer went to sleep.</translation>

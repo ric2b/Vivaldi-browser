@@ -278,7 +278,17 @@ class Trace {
   };
   void Flush(RegExpCompiler* compiler, RegExpNode* successor,
              FlushMode mode = kFlushFull);
+
+  // Some callers add/subtract 1 from cp_offset, assuming that the result is
+  // still valid. That's obviously not the case when our `cp_offset` is only
+  // checked against kMinCPOffset/kMaxCPOffset, so we need to apply the some
+  // slack.
+  // TODO(jgruber): It would be better if all callers checked against limits
+  // themselves when doing so; but unfortunately not all callers have
+  // abort-compilation mechanisms.
+  static constexpr int kCPOffsetSlack = 1;
   int cp_offset() const { return cp_offset_; }
+
   // Does any trace in the chain have an action?
   bool has_any_actions() const { return has_any_actions_; }
   // Does this particular trace object have an action?
@@ -574,7 +584,7 @@ class RegExpCompiler {
   // TODO(jgruber): This is super hacky and should be replaced by an abort
   // mechanism or iterative node generation.
   void ToNodeMaybeCheckForStackOverflow() {
-    if ((to_node_overflow_check_ticks_++ % 16 == 0)) {
+    if ((to_node_overflow_check_ticks_++ % 64 == 0)) {
       ToNodeCheckForStackOverflow();
     }
   }

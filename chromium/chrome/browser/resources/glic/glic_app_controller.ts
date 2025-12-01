@@ -50,6 +50,7 @@ interface PageElementTypes {
   disabledByAdminCloseButton: HTMLButtonElement;
   signInButton: HTMLButtonElement;
   unresponsiveOverlay: HTMLElement;
+  reload: HTMLButtonElement;
 }
 
 const $: PageElementTypes = new Proxy({}, {
@@ -152,8 +153,14 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
     $.profilePickerButton.addEventListener('click', () => {
       this.openProfilePicker();
     });
+    $.reload.addEventListener('click', () => {
+      this.reload();
+    });
     $.disabledByAdminCloseButton.addEventListener('click', () => {
       this.browserProxy.handler.closePanel();
+    });
+    $.disabledByAdminPanel.querySelector('a')?.addEventListener('click', () => {
+      this.openDisabledByAdminLink();
     });
     $.signInButton.addEventListener('click', () => {
       this.signIn();
@@ -240,7 +247,16 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
           this.setState(WebUiState.kBeginLoad);
         }
         break;
+      case 'loadError':
+        this.setState(WebUiState.kError);
+        break;
     }
+  }
+
+  webviewDeniedByAdmin() {
+    $.disabledByAdminPanel.classList.toggle(
+        'show-disabled-by-admin-link', true);
+    this.setState(WebUiState.kDisabledByAdmin);
   }
 
   private setState(newState: WebUiState): void {
@@ -425,6 +441,8 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
         this.setState(WebUiState.kUnavailable);
         return;
       case ProfileReadyState.kDisabledByAdmin:
+        $.disabledByAdminPanel.classList.toggle(
+            'show-disabled-by-admin-link', false);
         this.setState(WebUiState.kDisabledByAdmin);
         return;
       case ProfileReadyState.kSignInRequired:
@@ -649,8 +667,15 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
         $.guestPanel.classList.contains('debug')) {
       $.guestPanel.classList.toggle('debug', false);
       this.setState(WebUiState.kError);
-    } else {
+    } else if (this.state === WebUiState.kReady) {
       this.browserProxy.handler.closePanel();
+    } else {
+      // Reload in the background if user closes window while web client is not
+      // ready. This is an escape hatch for situation where we're stuck in a
+      // loading state caused by an error.
+      this.browserProxy.handler.closePanel().then(() => {
+        this.reload();
+      });
     }
   }
 
@@ -696,6 +721,8 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
           this.setState(WebUiState.kUnavailable);
           break;
         case ProfileReadyState.kDisabledByAdmin:
+          $.disabledByAdminPanel.classList.toggle(
+              'show-disabled-by-admin-link', false);
           this.setState(WebUiState.kDisabledByAdmin);
           break;
         case ProfileReadyState.kSignInRequired:
@@ -708,5 +735,9 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
           break;
       }
     }
+  }
+
+  openDisabledByAdminLink(): void {
+    this.browserProxy.handler.openDisabledByAdminLinkAndClosePanel();
   }
 }

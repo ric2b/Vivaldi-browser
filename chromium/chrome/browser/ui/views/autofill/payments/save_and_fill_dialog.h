@@ -33,6 +33,7 @@ class SaveAndFillDialog : public views::DialogDelegateView,
   // DialogDelegateView:
   void AddedToWidget() override;
   void RemovedFromWidget() override;
+  void OnWidgetInitialized() override;
 
   std::u16string GetWindowTitle() const override;
 
@@ -50,8 +51,10 @@ class SaveAndFillDialog : public views::DialogDelegateView,
   // dialog.
   payments::PaymentsAutofillClient::UserProvidedCardSaveAndFillDetails
   GetUserProvidedDataFromInput() const;
-  // Callback that is triggered when the dialog is accepted or canceled.
+  // Callback that is triggered when the dialog is canceled.
   void OnDialogClosed(views::Widget::ClosedReason reason);
+  // Callback for when the accept button is clicked.
+  bool OnAccepted();
   // Create a view with a legal message.
   std::unique_ptr<views::View> CreateLegalMessageView();
 

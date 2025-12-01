@@ -264,4 +264,3 @@ crashes will not be logged.
 Great job! You now know the basics of debugging a crash multiple ways! Go ahead
 and delete this branch. Feel free to come back to this code lab when you are
 debugging a real crash!
-

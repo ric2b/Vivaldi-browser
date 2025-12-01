@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,7 +61,7 @@ export class IOModel extends SDKModel<void> {
     return strings.join('');
   }
 
-  async readToBuffer(handle: Protocol.IO.StreamHandle): Promise<Uint8Array> {
+  async readToBuffer(handle: Protocol.IO.StreamHandle): Promise<Uint8Array<ArrayBuffer>> {
     const items: Uint8Array[] = [];
     for (;;) {
       const data = await this.read(handle, 1024 * 1024);

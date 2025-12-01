@@ -485,6 +485,7 @@
     "right",
     "center",
     "justify",
+    "match-parent",
     "-webkit-left",
     "-webkit-right",
     "-webkit-center",
@@ -1291,7 +1292,7 @@
     "hanging",
     "mathematical",
 
-    // gap-rule-paint-order
+    // gap-rule-overlap
     "row-over-column",
     "column-over-row",
 
@@ -1375,6 +1376,7 @@
     // inherit
     "revert",
     "revert-layer",
+    "revert-rule",
     "unset",
 
     // background-image, etc.
@@ -2033,5 +2035,11 @@
 
     // continue
     "-webkit-legacy",
+
+    // block-ellipsis
+    "no-ellipsis",
+
+    // animation-trigger
+    "trigger",
   ],
 }

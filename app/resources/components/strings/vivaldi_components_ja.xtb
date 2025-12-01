@@ -3,16 +3,6 @@
 <translationbundle lang="ja">
 <translation id="3830627370375585318">ファイアウォールやウイルス対策の設定で、Vivaldi からネットワークへのアクセスを
         許可します。</translation>
-<translation id="4200102020577305737">このオプションを無効にするには:
-          Vivaldi メニュー &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          [LAN の設定]
-          の順に移動して、[LAN にプロキシサーバーを使用する] チェックボックスをオフにします。</translation>
 <translation id="4932161901409251843">このオプションを無効にするには:
           Vivaldi メニュー &gt;
           <ph name="SETTINGS_TITLE" />
@@ -34,4 +24,14 @@
           上記を行っても問題が解決しない場合は、パフォーマンス向上のため
           このオプションを再びオンにすることをおすすめします。</translation>
 <translation id="7496505986576158197">Vivaldi は、<ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> オープンソースプロジェクトおよびその他の <ph name="BEGIN_LINK_OSS" />オープンソースソフトウェア<ph name="END_LINK_OSS" />をベースに開発されています。</translation>
+<translation id="89559930087159128">Vivaldi
+          メニュー &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          ネットワークとインターネット &gt; プロキシ の順に開き、
+          「設定を自動的に検出する」のチェックを外してください。</translation>
 </translationbundle>

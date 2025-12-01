@@ -14,8 +14,8 @@
 
 #include "base/compiler_specific.h"
 #include "base/containers/flat_set.h"
+#include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
-#include "base/metrics/field_trial.h"
 #include "base/time/time.h"
 #include "base/version_info/channel.h"
 #include "build/build_config.h"
@@ -27,6 +27,7 @@
 #include "components/variations/service/safe_seed_manager.h"
 #include "components/variations/service/ui_string_overrider.h"
 #include "components/variations/service/variations_service_client.h"
+#include "components/variations/sticky_activation_manager.h"
 #include "components/variations/variations_seed_store.h"
 #include "components/version_info/channel.h"
 
@@ -38,16 +39,17 @@ namespace variations {
 
 class EntropyProviders;
 
+// A testing feature that forces a crash during field trial creation
+// on developer and test builds.
+BASE_DECLARE_FEATURE(kForceFieldTrialSetupCrashForTesting);
+
 // TODO(crbug.com/424154785): Clean this up if low entropy source values are no
 // longer transmitted with VariationIDs.
 struct CreateTrialsResult {
   bool applied_seed = false;
-  std::optional<bool> seed_has_limited_layer;
+  std::optional<bool> seed_has_active_limited_layer;
+  bool AppliedSeedHasActiveLimitedLayer() const;
 };
-
-// Just maps one set of enum values to another. Nothing to see here.
-Study::Channel ConvertProductChannelToStudyChannel(
-    version_info::Channel product_channel);
 
 // Denotes whether Chrome used a variations seed. Also captures (a) the kind of
 // seed and (b) the conditions under which the seed was used or failed to be
@@ -70,7 +72,9 @@ enum class SeedUsage {
   kSafeSeedForFutureMilestoneNotUsed = 10,
   kUnloadableSafeSeedNotUsed = 11,
   kNullSeedUsed = 12,
-  kMaxValue = kNullSeedUsed,
+  kMisconfiguredRegularSeedNotUsed = 13,
+  kMisconfiguredSafeSeedNotUsed = 14,
+  kMaxValue = kMisconfiguredSafeSeedNotUsed,
 };
 
 // Denotes a variations seed's expiry state. Exposed for testing.
@@ -100,7 +104,6 @@ enum LoadPermanentConsistencyCountryResult {
 };
 
 class PlatformFieldTrials;
-class SafeSeedManagerBase;
 class VariationsServiceClient;
 
 // Used to set up field trials based on stored variations seed data.
@@ -166,7 +169,7 @@ class VariationsFieldTrialCreator {
       std::unique_ptr<base::FeatureList> feature_list,
       metrics::MetricsStateManager* metrics_state_manager,
       PlatformFieldTrials* platform_field_trials,
-      SafeSeedManagerBase* safe_seed_manager,
+      SafeSeedManager* safe_seed_manager,
       bool add_entropy_source_to_variations_ids,
       const EntropyProviders& entropy_providers);
 
@@ -277,7 +280,7 @@ class VariationsFieldTrialCreator {
   CreateTrialsResult CreateTrialsFromSeed(
       const EntropyProviders& entropy_providers,
       base::FeatureList* feature_list,
-      SafeSeedManagerBase* safe_seed_manager,
+      SafeSeedManager* safe_seed_manager,
       std::unique_ptr<ClientFilterableState> client_state);
 
   // Reads a seed's data and signature from the file at |json_seed_path| and
@@ -326,12 +329,10 @@ class VariationsFieldTrialCreator {
   // These strings are cached before the resource bundle is initialized.
   std::unordered_map<int, std::u16string> overridden_strings_map_;
 
+  StickyActivationManager sticky_activation_manager_;
+
   SEQUENCE_CHECKER(sequence_checker_);
 };
-
-// A testing feature that forces a crash during field trial creation
-// on developer and test builds.
-BASE_DECLARE_FEATURE(kForceFieldTrialSetupCrashForTesting);
 
 }  // namespace variations
 

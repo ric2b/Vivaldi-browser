@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -47,7 +47,6 @@ devtools_module("elements") {
     "ElementsPanel.ts",
     "ElementsSidebarPane.ts",
     "ElementsTreeElement.ts",
-    "ElementsTreeElementHighlighter.ts",
     "ElementsTreeOutline.ts",
     "ElementsTreeOutlineRenderer.ts",
     "EventListenersWidget.ts",
@@ -82,6 +81,7 @@ devtools_module("elements") {
     "../../core/root:bundle",
     "../../core/sdk:bundle",
     "../../generated",
+    "../../models/badges:bundle",
     "../../models/bindings:bundle",
     "../../models/elements:bundle",
     "../../models/extensions:bundle",
@@ -91,6 +91,7 @@ devtools_module("elements") {
     "../../panels/emulation:bundle",
     "../../panels/event_listeners:bundle",
     "../../panels/issues:bundle",
+    "../../panels/media:bundle",
     "../../panels/mobile_throttling:bundle",
     "../../panels/utils:bundle",
     "../../ui/components/adorners:bundle",
@@ -98,6 +99,7 @@ devtools_module("elements") {
     "../../ui/components/code_highlighter:bundle",
     "../../ui/components/copy_to_clipboard:bundle",
     "../../ui/components/highlighting:bundle",
+    "../../ui/components/icon_button:bundle",
     "../../ui/components/text_editor:bundle",
     "../../ui/components/tooltips:bundle",
     "../../ui/components/tree_outline:bundle",
@@ -169,11 +171,12 @@ ts_library("unittests") {
     "ComputedStyleModel.test.ts",
     "ComputedStyleWidget.test.ts",
     "DOMLinkifier.test.ts",
+    "DOMTreeWidget.test.ts",
     "ElementStatePaneWidget.test.ts",
     "ElementsPanel.test.ts",
     "ElementsTreeElement.test.ts",
-    "ElementsTreeElementHighlighter.test.ts",
     "ElementsTreeOutline.test.ts",
+    "EventListenersWidget.test.ts",
     "InspectElementModeController.test.ts",
     "LayoutPane.test.ts",
     "PlatformFontsWidget.test.ts",

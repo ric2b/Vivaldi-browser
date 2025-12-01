@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,8 +6,7 @@ import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {getFirstOrError, getInsightOrError, processTrace} from '../../../testing/InsightHelpers.js';
 import * as Trace from '../trace.js';
 
-import * as ModernHTTP from './ModernHTTP.js';
-const {determineHttp1Requests: determineNonHttp2Resources} = ModernHTTP;
+const {determineHttp1Requests: determineNonHttp2Resources} = Trace.Insights.ModernHTTP;
 
 describeWithEnvironment('Cache', function() {
   describe('determineNonHttp2Resources', () => {
@@ -35,6 +34,7 @@ describeWithEnvironment('Cache', function() {
         createdEntityCache: new Map(),
         entityByEvent: new Map(),
         eventsByEntity: new Map(),
+        entityByUrlCache: new Map(),
       };
       for (const event of events) {
         Trace.Handlers.Helpers.addEventToEntityMapping(event, entityMappings);
@@ -324,7 +324,7 @@ describeWithEnvironment('Cache', function() {
     });
   });
 
-  it('identifies HTTP/1.1 requests in a real trace', async () => {
+  it('identifies HTTP/1.1 requests in a real trace', async function() {
     const {data, insights} = await processTrace(this, 'http1.1.json.gz');
     const insight =
         getInsightOrError('ModernHTTP', insights, getFirstOrError(data.Meta.navigationsByNavigationId.values()));

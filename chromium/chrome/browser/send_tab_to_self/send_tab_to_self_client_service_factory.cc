@@ -68,7 +68,7 @@ SendTabToSelfClientServiceFactory::SendTabToSelfClientServiceFactory()
 SendTabToSelfClientServiceFactory::~SendTabToSelfClientServiceFactory() =
     default;
 
-// BrowserStateKeyedServiceFactory implementation.
+// BrowserContextKeyedServiceFactory implementation.
 std::unique_ptr<KeyedService>
 SendTabToSelfClientServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {

@@ -23,19 +23,16 @@
 <translation id="2119505898009119320">Air fhoillseachadh dha: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Chan urrainn dhan làrach ceangal tèarainte a thoirt seachad</translation>
 <translation id="2178904466768126352">Dh’fhaoidte gun stàlaich luchd-ionnsaigh air an làrach a dh’fheuch thu ri tadhal oirre air bathar-bog cronail a ghoideas rudan ort no a sguabas às rudan mar na faclan-faire, na dealbhan, na teachdaireachdan no àireamhan nan cairtean-creideis agad.</translation>
-<translation id="2187317261103489799">Mothaich (bun-roghainn)</translation>
 <translation id="2224337661447660594">Chan eil ceangal ris an eadar-lìon</translation>
 <translation id="2283340219607151381">Sàbail is lìon seòlaidhean</translation>
 <translation id="2292556288342944218">Chaidh d’ inntrigeadh dhan lìon a bhacadh</translation>
 <translation id="2317259163369394535">Feumaidh <ph name="DOMAIN" /> ainm-cleachdaiche agus facal-faire.</translation>
 <translation id="2337852623177822836">Tha an roghainn fo smachd an rianaire agad</translation>
 <translation id="2355395290879513365">Dh’fhaoidte gum faic luchd-ionnsaigh na dealbhan air an coimhead thu air an làrach seo agus gun atharraich iad iad gus do mhealladh.</translation>
-<translation id="2356070529366658676">Faighnich</translation>
 <translation id="2359808026110333948">Air adhart</translation>
 <translation id="2388886110302389394">Fosgail an duilleag ann an uinneag phrìobhaideach ùr (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />A’ ruith diagnosachd air an lìonra<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Chaidh an duilleag seo a bhacadh le leudachan</translation>
-<translation id="2539524384386349900">Mothaich</translation>
 <translation id="255002559098805027">Chuir <ph name="HOST_NAME" /> freagairt mhì-dhligheach.</translation>
 <translation id="2634124572758952069">Cha b’ urrainn dhuinn an seòladh IP aig frithealaiche <ph name="HOST_NAME" /> a lorg.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -60,10 +57,8 @@
       Ma tha thu dhen bheachd nach bu chòir dhut a bhith a’ cleachdadh frithealaiche progsaidh:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Briog air a’ phutan “Ath-luchdaich” gus an dàta air a bheil feum gus an duilleag a luchdadh a chur às ùr.</translation>
-<translation id="3234666976984236645">Mothaich do shusbaint chudromach air an làrach seo an-còmhnaidh</translation>
 <translation id="3384522979010096022">Cha tug am buidheann agad cead dhut gus an làrach seo a shealltainn</translation>
 <translation id="3422472998109090673">Cha ruig sinn <ph name="HOST_NAME" /> an-dràsta fhèin.</translation>
-<translation id="3427092606871434483">Ceadaich (bun-roghainn)</translation>
 <translation id="3447661539832366887">Chuir an neach aig a bheil an t-uidheam seo dheth geama nan dìneasaran.</translation>
 <translation id="3447884698081792621">Seall an teisteanas (air fhoillseachadh le <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Falaich na roghainnean adhartach</translation>
@@ -85,7 +80,6 @@
 <translation id="4075732493274867456">Chan eil tionndadh no sifir pròtacal SSL an cumantas aig a’ chliant is aig an fhrithealaiche.</translation>
 <translation id="4116663294526079822">Ceadaich air an làrach seo an-còmhnaidh</translation>
 <translation id="4130226655945681476">Thoir sùil air na càball lìonraidh, air a’ mhòdam no an rùtar</translation>
-<translation id="4151403195736952345">Cleachd a’ bhun-roghainn uile-choitcheann (Mothaich)</translation>
 <translation id="4165986682804962316">Roghainnean na làraich</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />A’ sgrùdadh na cachaileith-theine agus rèiteachadh a’ phrògraim an aghaidh bhìorasan<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Feuch is ruith diagnosachd air an lìonra<ph name="END_LINK" />.</translation>
@@ -94,7 +88,6 @@
 <translation id="4250431568374086873">Chan eil an ceangal ris an làrach seo buileach tèarainte</translation>
 <translation id="4265872034478892965">Chaidh a cheadachadh leis an rianaire agad</translation>
 <translation id="4305666528087210886">Cha d’fhuair sinn cothrom air an fhaidhle agad</translation>
-<translation id="4312866146174492540">Bac (bun-roghainn)</translation>
 <translation id="4408413947728134509">Briosgaidean <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544">Cha do ghabh <ph name="HOST_NAME" /> ris an teisteanas agad airson clàradh a-steach no dh’fhaoidte nach deach gin a thoirt seachad.</translation>
 <translation id="4506599922270137252">A’ cur fios gu rianaire an t-siostaim</translation>
@@ -112,7 +105,6 @@
 <translation id="4943872375798546930">Chan eil toradh ann</translation>
 <translation id="5017554619425969104">Teacsa a rinn thu lethbhreac dheth</translation>
 <translation id="5023310440958281426">Thoir sùil air poileasaidhean an rianaire agad</translation>
-<translation id="5039804452771397117">Ceadaich</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(# ga chleachdadh)} other {(# gan cleachdadh)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />A’ sgrùdadh seòladh a’ phrogsaidh<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
@@ -161,7 +153,6 @@ Cuir fios gu rianaire an t-siostaim agad.</translation>
 <translation id="6897140037006041989">Àidseant-cleachdaiche</translation>
 <translation id="6935179587384421592"><ph name="SIZE" />. Dh’fhaoidte gum bi cuid a làraichean nas fhaide gan luchdadh an ath-thuras a thadhlas tu orra.</translation>
 <translation id="6957624206566198865">Fosgail an duilleag ann an taba prìobhaideach ùr</translation>
-<translation id="7053983685419859001">Bac</translation>
 <translation id="7096937462164235847">Cha deach dearbh-aithne na làraich-lìn seo a dhearbhadh.</translation>
 <translation id="7108819624672055576">Chaidh a cheadachadh le leudachan</translation>
 <translation id="7111012039238467737">(Dligheach)</translation>
@@ -187,7 +178,6 @@ Cuir fios gu rianaire an t-siostaim agad.</translation>
 <translation id="7878562273885520351">Dh’fhaoidte gu bheil am facal-faire agad ann an cunnart</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="7953236668995583915">Ath-luchdaich an duilleag seo airson na roghainnean ùra a chur an gnìomh air an làrach seo</translation>
-<translation id="8037357227543935929">Faighnich (bun-roghainn)</translation>
 <translation id="8041940743680923270">Cleachd a’ bhun-roghainn uile-choitcheann (Faighnich)</translation>
 <translation id="808894953321890993">Atharraich am facal-faire</translation>
 <translation id="8149426793427495338">Thuit an coimpiutair agad na chadal.</translation>

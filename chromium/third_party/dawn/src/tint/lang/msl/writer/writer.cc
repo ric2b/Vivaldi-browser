@@ -27,12 +27,17 @@
 
 #include "src/tint/lang/msl/writer/writer.h"
 
+#include <vector>
+
 #include "src/tint/lang/core/ir/module.h"
+#include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/core/ir/var.h"
+#include "src/tint/lang/core/type/binding_array.h"
 #include "src/tint/lang/core/type/f16.h"
 #include "src/tint/lang/core/type/f32.h"
 #include "src/tint/lang/core/type/input_attachment.h"
 #include "src/tint/lang/core/type/pointer.h"
+#include "src/tint/lang/core/type/texel_buffer.h"
 #include "src/tint/lang/msl/writer/common/option_helpers.h"
 #include "src/tint/lang/msl/writer/printer/printer.h"
 #include "src/tint/lang/msl/writer/raise/raise.h"
@@ -49,10 +54,17 @@ Result<SuccessType> CanGenerate(const core::ir::Module& ir, const Options& optio
             if (m->Columns() != 8 || m->Rows() != 8) {
                 return Failure("the MSL backend only supports 8x8 subgroup matrices");
             }
+        } else if (ty->Is<core::type::TexelBuffer>()) {
+            // TODO(crbug/382544164): Prototype texel buffer feature
+            return Failure("texel buffers are not supported by the MSL backend");
+        }
+        if (ty->Is<core::type::ResourceBinding>()) {
+            return Failure("resource_binding not supported by the MSL backend");
         }
     }
 
-    // Check for unsupported module-scope variable address spaces and types.
+    // Check for unsupported module-scope variable address spaces and types and ensure at most one
+    // user-declared immediate data.
     for (auto* inst : *ir.root_block) {
         auto* var = inst->As<core::ir::Var>();
         auto* ptr = var->Result()->Type()->As<core::type::Pointer>();
@@ -61,6 +73,30 @@ Result<SuccessType> CanGenerate(const core::ir::Module& ir, const Options& optio
         }
         if (ptr->StoreType()->Is<core::type::InputAttachment>()) {
             return Failure("input attachments are not supported by the MSL backend");
+        }
+    }
+
+    auto user_immediate_res = core::ir::ValidateSingleUserImmediate(ir);
+    if (user_immediate_res != Success) {
+        return user_immediate_res.Failure();
+    }
+
+    uint32_t user_immediate_size = user_immediate_res.Get();
+
+    // Buffer sizes uses vec4 array which requires 16 bytes alignment. Validate general
+    // constraints with shared helper first (size 16 here to reflect vec4 requirement for
+    // alignment checking later) then enforce 16-byte requirement.
+    if (options.array_length_from_constants.buffer_sizes_offset) {
+        std::vector<core::ir::ImmediateInfo> immediates = {
+            {*options.array_length_from_constants.buffer_sizes_offset, 16u},
+        };
+        if (auto res =
+                core::ir::ValidateInternalImmediateOffset(0x1000, user_immediate_size, immediates);
+            res != Success) {
+            return res.Failure();
+        }
+        if ((*options.array_length_from_constants.buffer_sizes_offset) & 0xF) {
+            return Failure("invalid offsets for buffer sizes offset in immediate block");
         }
     }
 

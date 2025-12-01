@@ -25,6 +25,7 @@ type="shared"
 arch=""
 buildopt=()
 optimization=""
+sanitize=""
 SRCDIR=$MyPWD
 export MAKE=${MAKE:-make}
 export BUILD_ID=${BUILD_ID:-fontconfig-$$}
@@ -44,10 +45,11 @@ if [ "x$FC_DISTRO_NAME" = "x" ]; then
     sleep 3
 fi
 
-while getopts a:cCe:d:hINO:s:St:X: OPT
+while getopts a:A:cCe:d:hINO:s:St:X: OPT
 do
     case $OPT in
         'a') arch=$OPTARG ;;
+        'A') sanitize=$OPTARG ; optimization="g" ;;
         'c') distcheck=1 ;;
         'C') disable_check=1 ;;
         'e') enable+=($OPTARG) ;;
@@ -61,9 +63,10 @@ do
         'X') backend=$OPTARG ;;
         'h')
             set +x
-            echo "Usage: $0 [-a ARCH] [-c] [-C] [-e OPT] [-d OPT] [-h] [-I] [-N] [-O N] [-s BUILDSYS] [-S] [-t BUILDTYPE] [-X XMLBACKEND]"
+            echo "Usage: $0 [-a ARCH] [-A SANITIZER] [-c] [-C] [-e OPT] [-d OPT] [-h] [-I] [-N] [-O N] [-s BUILDSYS] [-S] [-t BUILDTYPE] [-X XMLBACKEND]"
             echo "Options:"
             echo "  -a ARCH        Use ARCH for cross-compile. Depends on BUILDSYS"
+            echo "  -A SANITIZER   Use the address sanitizer. Take effect on meson only"
             echo "  -c             Run distcheck"
             echo "  -C             Do not run unit tests"
             echo "  -e OPT         Enable OPT feature to build"
@@ -155,13 +158,13 @@ if [ x"$buildsys" == "xautotools" ]; then
     ../autogen.sh --prefix="$PREFIX" --disable-cache-build ${buildopt[*]} 2>&1 | tee /tmp/fc-build.log
     TASK="make"
     $MAKE V=1 2>&1 | tee -a /tmp/fc-build.log
-    if [ $disable_check -eq 0 ]; then
-        TASK="make check"
-        $MAKE check V=1 2>&1 | tee -a /tmp/fc-build.log
-    fi
     if [ $enable_install -eq 1 ]; then
         TASK="make install"
         $MAKE install V=1 2>&1 | tee -a /tmp/fc-build.log
+    fi
+    if [ $disable_check -eq 0 ]; then
+        TASK="make check"
+        $MAKE check V=1 2>&1 | tee -a /tmp/fc-build.log
     fi
     if [ $distcheck -eq 1 ]; then
         TASK="make distcheck"
@@ -197,7 +200,7 @@ elif [ x"$buildsys" == "xmeson" ]; then
             rm -rf fc-ci-meson-subproject
         fi
         TASK="git clone"
-        git clone https://gitlab.freedesktop.org/fontconfig/fc-ci-meson-subproject.git
+        git clone https://gitlab.freedesktop.org/fontconfig/fontconfig-ci/fc-ci-meson-subproject.git
         cd fc-ci-meson-subproject
         pushd subprojects
         git clone ${CI_MERGE_REQUEST_PROJECT_URL}.git
@@ -242,6 +245,11 @@ elif [ x"$buildsys" == "xmeson" ]; then
         fi
     fi
     buildopt+=(--default-library=$type)
+    if [ -n "$sanitize" ]; then
+        buildopt+=(-Db_sanitize=$sanitize)
+        # for memory sanitizer
+        buildopt+=(-Db_lundef=false)
+    fi
     if [ $clean_build -eq 1 ]; then
         rm -rf "$BUILDDIR" "$PREFIX" || :
     fi
@@ -249,13 +257,13 @@ elif [ x"$buildsys" == "xmeson" ]; then
     meson setup --prefix="$PREFIX" -D${subprojectname}nls=enabled -D${subprojectname}cache-build=disabled -D${subprojectname}iconv=enabled ${buildopt[*]} "$BUILDDIR" 2>&1 | tee /tmp/fc-build.log
     TASK="meson compile"
     meson compile -v -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log
-    if [ $disable_check -eq 0 ]; then
-        TASK="meson test"
-        meson test -v -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log
-    fi
     if [ $enable_install -eq 1 ]; then
         TASK="meson install"
         meson install -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log
+    fi
+    if [ $disable_check -eq 0 ]; then
+        TASK="meson test"
+        meson test -v -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log
     fi
     if [ $distcheck -eq 1 ]; then
         TASK="meson dist"

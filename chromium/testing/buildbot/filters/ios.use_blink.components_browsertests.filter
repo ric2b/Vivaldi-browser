@@ -1,7 +1,10 @@
 # TODO(crbug.com/335001216): These tests are failing due to the duplicate
 # resource assertion.
+-DistilledPageJsTest.AddClassesToYTIFramesTest
+-DistilledPageJsTest.ImageClassifierTest
 -DistilledPageJsTest.SettingsDialogTest
 -DistillerPageWebContentsTest.BasicDistillationWorks
+-DistillerPageWebContentsTest.DistillerContentsIgnoreRedirects
 -DistillerPageWebContentsTest.HandlesRelativeImages
 -DistillerPageWebContentsTest.HandlesRelativeLinks
 -DistillerPageWebContentsTest.HandlesRelativeVideos
@@ -15,6 +18,7 @@
 -DomDistillerDistillablePageUtilsTest.TestIsDistillablePage
 -DomDistillerDistillablePageUtilsTest.TestIsNotDistillablePage
 -DomDistillerJsTest.RunJsTests
+-ViewerJsTest.SanitizeLinks
 
 # These tests are hitting a NOTREACHED() in WebContentsImpl::GetSize().
 -All/PageContentProtoProviderBrowserTestMultiProcess.*

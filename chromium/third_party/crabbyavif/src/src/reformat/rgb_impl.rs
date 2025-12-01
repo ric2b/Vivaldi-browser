@@ -23,9 +23,13 @@ use crate::*;
 
 use std::cmp::min;
 
-fn identity_yuv8_to_rgb8_full_range(image: &image::Image, rgb: &mut rgb::Image) -> AvifResult<()> {
+// Copies GBR samples to YUV samples. Returns Ok(None) if not implemented.
+fn identity_yuv8_to_rgb8_full_range(
+    image: &image::Image,
+    rgb: &mut rgb::Image,
+) -> AvifResult<Option<()>> {
     if image.yuv_format != PixelFormat::Yuv444 || rgb.format == Format::Rgb565 {
-        return Err(AvifError::NotImplemented);
+        return Ok(None); // Not implemented.
     }
 
     let r_offset = rgb.format.r_offset();
@@ -43,7 +47,34 @@ fn identity_yuv8_to_rgb8_full_range(image: &image::Image, rgb: &mut rgb::Image) 
             rgb_pixels[(j * channel_count) + b_offset] = u[j];
         }
     }
-    Ok(())
+    Ok(Some(()))
+}
+
+// Copies GBR samples to YUV samples. Returns Ok(None) if not implemented.
+fn identity_yuv16_to_rgb16_full_range(
+    image: &image::Image,
+    rgb: &mut rgb::Image,
+) -> AvifResult<Option<()>> {
+    if image.yuv_format != PixelFormat::Yuv444 {
+        return Ok(None); // Not implemented.
+    }
+
+    let r_offset = rgb.format.r_offset();
+    let g_offset = rgb.format.g_offset();
+    let b_offset = rgb.format.b_offset();
+    let channel_count = rgb.channel_count() as usize;
+    for i in 0..image.height {
+        let y = image.row16(Plane::Y, i)?;
+        let u = image.row16(Plane::U, i)?;
+        let v = image.row16(Plane::V, i)?;
+        let rgb_pixels = rgb.row16_mut(i)?;
+        for j in 0..image.width as usize {
+            rgb_pixels[(j * channel_count) + r_offset] = v[j];
+            rgb_pixels[(j * channel_count) + g_offset] = y[j];
+            rgb_pixels[(j * channel_count) + b_offset] = u[j];
+        }
+    }
+    Ok(Some(()))
 }
 
 // This is a macro and not a function because this is invoked per-pixel and there is a non-trivial
@@ -406,20 +437,21 @@ fn yuv8_to_rgb16_monochrome(
     Ok(())
 }
 
-pub(crate) fn yuv_to_rgb_fast(image: &image::Image, rgb: &mut rgb::Image) -> AvifResult<()> {
+// Converts RGB samples to YUV samples. Returns Ok(None) if not implemented.
+pub(crate) fn yuv_to_rgb_fast(
+    image: &image::Image,
+    rgb: &mut rgb::Image,
+) -> AvifResult<Option<()>> {
     let mode: Mode = image.into();
-    match mode {
-        Mode::Identity => {
-            if image.depth == 8 && rgb.depth == 8 && image.yuv_range == YuvRange::Full {
-                identity_yuv8_to_rgb8_full_range(image, rgb)
-            } else {
-                // TODO: Add more fast paths for identity.
-                Err(AvifError::NotImplemented)
-            }
-        }
+    Ok(match mode {
+        Mode::Identity => match (image.depth, rgb.depth, image.yuv_range) {
+            (8, 8, YuvRange::Full) => identity_yuv8_to_rgb8_full_range(image, rgb)?,
+            (16, 16, YuvRange::Full) => identity_yuv16_to_rgb16_full_range(image, rgb)?,
+            _ => None,
+        },
         Mode::YuvCoefficients(kr, kg, kb) => {
             let has_color = image.yuv_format != PixelFormat::Yuv400;
-            match (image.depth == 8, rgb.depth == 8, has_color) {
+            Some(match (image.depth == 8, rgb.depth == 8, has_color) {
                 (true, true, true) => yuv8_to_rgb8_color(image, rgb, kr, kg, kb),
                 (false, false, true) => yuv16_to_rgb16_color(image, rgb, kr, kg, kb),
                 (false, true, true) => yuv16_to_rgb8_color(image, rgb, kr, kg, kb),
@@ -428,10 +460,10 @@ pub(crate) fn yuv_to_rgb_fast(image: &image::Image, rgb: &mut rgb::Image) -> Avi
                 (false, false, false) => yuv16_to_rgb16_monochrome(image, rgb, kr, kg, kb),
                 (false, true, false) => yuv16_to_rgb8_monochrome(image, rgb, kr, kg, kb),
                 (true, false, false) => yuv8_to_rgb16_monochrome(image, rgb, kr, kg, kb),
-            }
+            }?)
         }
-        Mode::Ycgco | Mode::YcgcoRe | Mode::YcgcoRo => Err(AvifError::NotImplemented),
-    }
+        Mode::Ycgco | Mode::YcgcoRe | Mode::YcgcoRo => None, // Not implemented
+    })
 }
 
 fn bias_and_range_y(image: &image::Image) -> (f32, f32) {
@@ -565,9 +597,10 @@ pub(crate) fn yuv_to_rgb_any(
     let rgb_channel_count = rgb.channel_count() as usize;
     let rgb_depth = rgb.depth;
     let chroma_upsampling = rgb.chroma_upsampling;
-    let has_color = image.has_plane(Plane::U)
+    let yuv_has_color = image.has_plane(Plane::U)
         && image.has_plane(Plane::V)
         && image.yuv_format != PixelFormat::Yuv400;
+    let rgb_has_color = !rgb.format.is_gray();
     let yuv_max_channel = image.max_channel();
     let rgb_max_channel = rgb.max_channel();
     let rgb_max_channel_f = rgb.max_channel_f();
@@ -583,7 +616,7 @@ pub(crate) fn yuv_to_rgb_any(
             let y = table_y[clamped_y as usize];
             let mut cb = 0.5;
             let mut cr = 0.5;
-            if has_color {
+            if yuv_has_color {
                 let u_row = u_row.unwrap();
                 let v_row = v_row.unwrap();
                 let uv_i = (i >> chroma_shift.0) << chroma_shift.1;
@@ -597,7 +630,7 @@ pub(crate) fn yuv_to_rgb_any(
                     cr = unorm_value(v_row, uv_i, yuv_max_channel, table_uv);
                 } else {
                     if image.chroma_sample_position != ChromaSamplePosition::CENTER {
-                        return Err(AvifError::NotImplemented);
+                        return AvifError::not_implemented();
                     }
 
                     // Bilinear filtering with weights. See
@@ -642,17 +675,21 @@ pub(crate) fn yuv_to_rgb_any(
                         + (unorm_v[1][1] * (1.0 / 16.0));
                 }
             }
-            let (mut rc, mut gc, mut bc) = compute_rgb(
-                y,
-                cb,
-                cr,
-                has_color,
-                mode,
-                clamped_y,
-                yuv_max_channel,
-                rgb_max_channel,
-                rgb_max_channel_f,
-            );
+            let (mut rc, mut gc, mut bc) = if rgb_has_color {
+                compute_rgb(
+                    y,
+                    cb,
+                    cr,
+                    yuv_has_color,
+                    mode,
+                    clamped_y,
+                    yuv_max_channel,
+                    rgb_max_channel,
+                    rgb_max_channel_f,
+                )
+            } else {
+                (clamp_f32(y, 0.0, 1.0), 0.0, 0.0)
+            };
             if alpha_multiply_mode != AlphaMultiplyMode::NoOp {
                 let unorm_a = clamped_pixel(a_row.unwrap(), i, yuv_max_channel);
                 let ac = clamp_f32((unorm_a as f32) / (yuv_max_channel as f32), 0.0, 1.0);
@@ -679,13 +716,21 @@ pub(crate) fn yuv_to_rgb_any(
             if rgb_depth == 8 {
                 let dst = rgb.row_mut(j)?;
                 dst[(i * rgb_channel_count) + r_offset] = (0.5 + (rc * rgb_max_channel_f)) as u8;
-                dst[(i * rgb_channel_count) + g_offset] = (0.5 + (gc * rgb_max_channel_f)) as u8;
-                dst[(i * rgb_channel_count) + b_offset] = (0.5 + (bc * rgb_max_channel_f)) as u8;
+                if rgb_has_color {
+                    dst[(i * rgb_channel_count) + g_offset] =
+                        (0.5 + (gc * rgb_max_channel_f)) as u8;
+                    dst[(i * rgb_channel_count) + b_offset] =
+                        (0.5 + (bc * rgb_max_channel_f)) as u8;
+                }
             } else {
                 let dst16 = rgb.row16_mut(j)?;
                 dst16[(i * rgb_channel_count) + r_offset] = (0.5 + (rc * rgb_max_channel_f)) as u16;
-                dst16[(i * rgb_channel_count) + g_offset] = (0.5 + (gc * rgb_max_channel_f)) as u16;
-                dst16[(i * rgb_channel_count) + b_offset] = (0.5 + (bc * rgb_max_channel_f)) as u16;
+                if rgb_has_color {
+                    dst16[(i * rgb_channel_count) + g_offset] =
+                        (0.5 + (gc * rgb_max_channel_f)) as u16;
+                    dst16[(i * rgb_channel_count) + b_offset] =
+                        (0.5 + (bc * rgb_max_channel_f)) as u16;
+                }
             }
         }
     }
@@ -694,6 +739,38 @@ pub(crate) fn yuv_to_rgb_any(
 
 #[derive(Debug, Default, Copy, Clone)]
 struct YUVBlock(f32, f32, f32);
+
+pub(crate) fn rgb_gray_to_yuv(rgb: &rgb::Image, image: &mut image::Image) -> AvifResult<()> {
+    let rgb_channel_count = rgb.channel_count() as usize;
+    let gray_offset = rgb.format.r_offset();
+    let rgb_max_channel_f = rgb.max_channel_f();
+    let (bias_y, range_y) = bias_and_range_y(image);
+    let yuv_max_channel = image.max_channel();
+    for j in 0..image.height {
+        for i in 0..image.width as usize {
+            let gray_pixel = if rgb.depth == 8 {
+                let src = rgb.row(j)?;
+                src[(i * rgb_channel_count) + gray_offset] as f32 / rgb_max_channel_f
+            } else {
+                let src = rgb.row16(j)?;
+                src[(i * rgb_channel_count) + gray_offset] as f32 / rgb_max_channel_f
+            };
+            // TODO: b/410088660 - handle alpha multiply/unmultiply.
+            let gray_pixel = to_unorm(bias_y, range_y, yuv_max_channel, gray_pixel);
+            if image.depth == 8 {
+                let dst_y = image.row_mut(Plane::Y, j)?;
+                dst_y[i] = gray_pixel as u8;
+            } else {
+                let dst_y = image.row16_mut(Plane::Y, j)?;
+                dst_y[i] = gray_pixel;
+            }
+        }
+    }
+    let chroma_value = (image.max_channel() / 2) + 1;
+    image.fill_plane_with_value(Plane::U, chroma_value)?;
+    image.fill_plane_with_value(Plane::V, chroma_value)?;
+    Ok(())
+}
 
 pub(crate) fn rgb_to_yuv(rgb: &rgb::Image, image: &mut image::Image) -> AvifResult<()> {
     let r_offset = rgb.format.r_offset();

@@ -12,7 +12,6 @@ import android.graphics.RectF;
 
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.cc.input.BrowserControlsState;
@@ -43,6 +42,7 @@ import org.chromium.ui.resources.ResourceManager;
 import org.chromium.url.GURL;
 
 import java.util.Collections;
+import java.util.function.Supplier;
 
 // Vivaldi
 import org.vivaldi.browser.preferences.VivaldiPreferences;
@@ -81,7 +81,7 @@ public class StaticLayout extends Layout {
 
     private boolean mIsShowing;
 
-
+    @SuppressWarnings("HidingField")
     private final float mPxToDp;
 
     /**
@@ -176,7 +176,7 @@ public class StaticLayout extends Layout {
         mBrowserControlsStateProviderObserver =
                 new BrowserControlsStateProvider.Observer() {
                     @Override
-                    public void onControlsConstraintsChanged(
+                    public void onOffsetTagsInfoChanged(
                             BrowserControlsOffsetTagsInfo oldOffsetTagsInfo,
                             BrowserControlsOffsetTagsInfo offsetTagsInfo,
                             @BrowserControlsState int constraints,

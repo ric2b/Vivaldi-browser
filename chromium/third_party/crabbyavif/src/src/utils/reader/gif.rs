@@ -31,15 +31,13 @@ pub struct GifReader {
 
 impl GifReader {
     pub fn create(filename: &str) -> AvifResult<Self> {
-        let input = File::open(filename).or(Err(AvifError::UnknownError(
-            "unable to open input file".into(),
-        )))?;
+        let input = File::open(filename).map_err(AvifError::map_unknown_error)?;
         let mut options = gif::DecodeOptions::new();
         options.set_color_output(gif::ColorOutput::Indexed);
         Ok(Self {
-            decoder: options.read_info(input).or(Err(AvifError::UnknownError(
-                "error creating gif decoder".into(),
-            )))?,
+            decoder: options
+                .read_info(input)
+                .map_err(AvifError::map_unknown_error)?,
             frame: None,
             screen: None,
         })
@@ -51,7 +49,7 @@ impl Reader for GifReader {
         if self.frame.is_none() {
             self.frame = Some(match self.decoder.read_next_frame() {
                 Ok(Some(frame)) => frame.clone(),
-                _ => return Err(AvifError::UnknownError("error reading gif frame".into())),
+                _ => return AvifError::unknown_error("error reading gif frame"),
             });
         }
         if self.screen.is_none() {
@@ -60,15 +58,13 @@ impl Reader for GifReader {
         self.screen
             .unwrap_mut()
             .blit_frame(self.frame.unwrap_ref())
-            .or(Err(AvifError::UnknownError(
-                "error disposing gif frame".into(),
-            )))?;
+            .map_err(AvifError::map_unknown_error)?;
         let (rgba_pixels, width, height) =
             self.screen.unwrap_mut().pixels_rgba().to_contiguous_buf();
         if width != self.decoder.width() as usize || height != self.decoder.height() as usize {
-            return Err(AvifError::UnknownError(
-                "width/height mismatch between gif decoder and screen".into(),
-            ));
+            return AvifError::unknown_error(
+                "width/height mismatch between gif decoder and screen",
+            );
         }
         let mut rgba_buffer: Vec<u8> = Vec::new();
         for rgba in rgba_pixels.iter() {

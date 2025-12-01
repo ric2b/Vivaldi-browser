@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,7 @@ import type {MarkdownIssueDescription} from './MarkdownIssueDescription.js';
 
 const UIStrings = {
   /**
-   *@description Title for Bounce Tracking Mitigation explainer url link.
+   * @description Title for Bounce Tracking Mitigation explainer url link.
    */
   bounceTrackingMitigations: 'Bounce tracking mitigations',
 } as const;

@@ -110,7 +110,7 @@ def CreateExpectedTestResult(
                 'fileName': '//some/test.py',
                 'line': FAKE_TEST_LINE,
             }
-        }
+        },
     }
     if primary_error_message:
         result['failureReason'] = {
@@ -846,6 +846,24 @@ class ResultSinkReporterTest(unittest.TestCase):
         self.assertEqual(GetTestResultFromPostedJson(rsr._post.args[1]),
                          expected_results)
 
+    def testReportIndividualTestResultWithProperties(self):
+        self.setLuciContextWithContent(DEFAULT_LUCI_CONTEXT)
+        rsr = ResultSinkReporterWithFakeSrc(self._host)
+        result = CreateResult({
+            'name': 'test_name',
+            'actual': json_results.ResultType.Pass,
+        })
+        rsr._post = StubWithRetval(2)
+        properties = {'key': 'value'}
+        retval = rsr.report_individual_test_result(
+                result, ARTIFACT_DIR, CreateTestExpectations(), FAKE_TEST_PATH,
+                FAKE_TEST_LINE, 'test_name_prefix.', properties=properties)
+        self.assertEqual(retval, 2)
+        expected_result = CreateExpectedTestResult()
+        expected_result['properties'] = properties
+        self.assertEqual(GetTestResultFromPostedJson(rsr._post.args[1]),
+                         expected_result)
+
     def testReportResultEarlyReturnIfNotSupported(self):
         self.setLuciContextWithContent({})
         rsr = result_sink.ResultSinkReporter(self._host)
@@ -857,7 +875,8 @@ class ResultSinkReporterTest(unittest.TestCase):
         try:
             self.assertEqual(rsr._report_result(
                     'test_id', json_results.ResultType.Pass, True, {}, {},
-                    '<pre>summary</pre>', 1, {}, None), 0, {})
+                    '<pre>summary</pre>', 1, {}, failure_reason=None,
+                    properties=None), 0, {})
         finally:
             result_sink._create_json_test_result = original_function
 
@@ -914,6 +933,34 @@ class ResultSinkReporterTest(unittest.TestCase):
             {'artifact': {'filePath': 'somepath'}},
             [('tag_key', 'tag_value')], '<pre>summary</pre>', 1e+16, {}, None)
         self.assertEqual(retval['duration'], '10000000000000000.000000000s')
+
+    def testStructureTestIdPyunit(self):
+        retval = result_sink._create_json_test_result(
+            'blinkpy.wpt_tests.wpt_adapter_unittest.WPTAdapterTest.test_env_var',
+            json_results.ResultType.Pass, True,
+            {'artifact': {'filePath': 'somepath'}},
+            [('tag_key', 'tag_value')], '<pre>summary</pre>', 1e-10, {}, None,
+            module_scheme=result_sink.ModuleScheme.PYUNIT)
+        struct_test_dict = {
+          'coarseName': 'blinkpy.wpt_tests.wpt_adapter_unittest',
+          'fineName': 'WPTAdapterTest',
+          'caseNameComponents': ['test_env_var'],
+        }
+        self.assertEqual(retval['testIdStructured'], struct_test_dict)
+
+    def testStructureTestIdWebtest(self):
+        retval = result_sink._create_json_test_result(
+            'external/wpt/worker-src-wildcard/worklet-animation.https.html',
+            json_results.ResultType.Pass, True,
+            {'artifact': {'filePath': 'somepath'}},
+            [('tag_key', 'tag_value')], '<pre>summary</pre>', 1e-10, {}, None,
+            module_scheme=result_sink.ModuleScheme.WEBTEST)
+        struct_test_dict = {
+          'coarseName': None,
+          'fineName': 'external/wpt/worker-src-wildcard',
+          'caseNameComponents': ['worklet-animation.https.html'],
+        }
+        self.assertEqual(retval['testIdStructured'], struct_test_dict)
 
     def testTruncateBasicCase(self):
         input = 'a' * 1050

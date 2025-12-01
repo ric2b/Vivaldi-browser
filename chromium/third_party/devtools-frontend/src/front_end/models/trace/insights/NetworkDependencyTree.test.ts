@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -88,7 +88,7 @@ describeWithEnvironment('NetworkDependencyTree', function() {
     assert.isTrue(insight.fail);
   });
 
-  it('Does not fail the audit when there is only main doc request', async () => {
+  it('Does not fail the audit when there is only main doc request', async function() {
     // Need to load a file with only main doc in the the critical requests chains.
     const {data, insights} = await processTrace(this, 'image-delivery.json.gz');
     const firstNav = getFirstOrError(data.Meta.navigationsByNavigationId.values());
@@ -132,7 +132,7 @@ describe('generatePreconnectedOrigins', () => {
         linkPreconnectEvents: [] as Trace.Types.Events.LinkPreconnect[],
         byId: new Map<string, Trace.Types.Events.SyntheticNetworkRequest>(),
       },
-    } as Trace.Handlers.Types.ParsedTrace;
+    } as Trace.Handlers.Types.HandlerData;
 
     const mockContext = {} as InsightSetContextWithNavigation;
 
@@ -393,7 +393,7 @@ describeWithEnvironment('generatePreconnectCandidates', () => {
       byId: new Map<string, Trace.Types.Events.SyntheticNetworkRequest>(),
       linkPreconnectEvents: [] as Trace.Types.Events.LinkPreconnect[],
     },
-  } as Trace.Handlers.Types.ParsedTrace;
+  } as Trace.Handlers.Types.HandlerData;
 
   const mockContext = {
     // This is not need to calculate the data of this insight, but is needed to check this is a context with lantern data.

@@ -42,12 +42,12 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
 import androidx.customview.widget.ExploreByTouchHelper;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
+import org.chromium.base.DeviceInfo;
 import org.chromium.base.InputHintChecker;
 import org.chromium.base.ObserverList;
-import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.build.annotations.EnsuresNonNullIf;
@@ -77,9 +77,9 @@ import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
+import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
-import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.widget.TouchEventObserver;
 import org.chromium.components.browser_ui.widget.TouchEventProvider;
 import org.chromium.components.content_capture.OnscreenContentProvider;
@@ -100,6 +100,7 @@ import org.chromium.ui.mojom.VirtualKeyboardMode;
 import org.chromium.ui.resources.AndroidResourceType;
 import org.chromium.ui.resources.ResourceManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
+import org.chromium.ui.util.AccessibilityUtil;
 import org.chromium.ui.util.MotionEventUtils;
 import org.chromium.url.GURL;
 
@@ -130,18 +131,19 @@ public class CompositorViewHolder extends FrameLayout
                 LayoutRenderHost,
                 TouchEventProvider,
                 BrowserControlsStateProvider.Observer,
-                ChromeAccessibilityUtil.Observer,
+                AccessibilityUtil.Observer,
                 TabObscuringHandler.Observer,
                 ViewGroup.OnHierarchyChangeListener {
     private static final long SYSTEM_UI_VIEWPORT_UPDATE_DELAY_MS = 500;
+    private static final long BACKGROUND_REMOVAL_TIMEOUT_MS = 2500;
 
     // Vivaldi
     @SuppressWarnings("NullAway.Init")
     private GestureDetector mGestureDetector;
 
     /**
-     * Initializer interface used to decouple initialization from the class that owns
-     * the CompositorViewHolder.
+     * Initializer interface used to decouple initialization from the class that owns the
+     * CompositorViewHolder.
      */
     public interface Initializer {
         /**
@@ -161,7 +163,7 @@ public class CompositorViewHolder extends FrameLayout
 
     /** Interface for the observer of frame requests. */
     public interface FrameRequestObserver {
-        public void onFrameRequested();
+        void onFrameRequested();
     }
 
     private final ObserverList<TouchEventObserver> mTouchEventObservers = new ObserverList<>();
@@ -219,6 +221,7 @@ public class CompositorViewHolder extends FrameLayout
 
     private boolean mControlsResizeView;
     private boolean mInGesture;
+    private boolean mInTouch;
     private boolean mContentViewScrolling;
     // The number of active touch pointers. We are sending a gesture begin
     // event for every added touch point, and a gesnture end event for every
@@ -330,6 +333,11 @@ public class CompositorViewHolder extends FrameLayout
                 }
 
                 @Override
+                public void onCrash(Tab tab) {
+                    mNumGestureActiveTouches = 0;
+                }
+
+                @Override
                 public void onDidFinishNavigationInPrimaryMainFrame(
                         Tab tab, NavigationHandle navigation) {
                     if (!navigation.isSameDocument() && navigation.hasCommitted()) {
@@ -349,8 +357,26 @@ public class CompositorViewHolder extends FrameLayout
 
                 @Override
                 public void onGestureEnd() {
-                    mNumGestureActiveTouches--;
+                    mNumGestureActiveTouches = Math.max(mNumGestureActiveTouches - 1, 0);
                     updateInMotion();
+                }
+
+                @Override
+                public void onTouchDown() {
+                    if (ChromeFeatureList.isEnabled(
+                            ChromeFeatureList.TOOLBAR_STALE_CAPTURE_BUG_FIX)) {
+                        mInTouch = true;
+                        updateInMotion();
+                    }
+                }
+
+                @Override
+                public void onTouchUp() {
+                    if (ChromeFeatureList.isEnabled(
+                            ChromeFeatureList.TOOLBAR_STALE_CAPTURE_BUG_FIX)) {
+                        mInTouch = false;
+                        updateInMotion();
+                    }
                 }
             };
 
@@ -468,7 +494,7 @@ public class CompositorViewHolder extends FrameLayout
         // [1] -
         // https://developer.android.com/reference/android/view/WindowManager.LayoutParams.html#FLAG_FULLSCREEN
         if (mShowingFullscreen
-                && KeyboardVisibilityDelegate.getInstance().isKeyboardShowing(getContext(), this)) {
+                && KeyboardVisibilityDelegate.getInstance().isKeyboardShowing(this)) {
             getWindowVisibleDisplayFrame(mCacheRect);
 
             // On certain devices, getWindowVisibleDisplayFrame is larger than the screen size, so
@@ -518,9 +544,9 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     private static boolean isFullscreenApiMigrationEnabled() {
-        return ChromeFeatureList.sFullscreenInsetsApiMigration.isEnabled()
-                || (BuildInfo.getInstance().isAutomotive
-                        && ChromeFeatureList.sFullscreenInsetsApiMigrationOnAutomotive.isEnabled());
+        if (ChromeFeatureList.sFullscreenInsetsApiMigration.isEnabled()) return true;
+        return DeviceInfo.isAutomotive()
+                && ChromeFeatureList.sFullscreenInsetsApiMigrationOnAutomotive.isEnabled();
     }
 
     private boolean isInFullscreenMode(int uiVisibility, View view) {
@@ -601,8 +627,32 @@ public class CompositorViewHolder extends FrameLayout
 
         mSetBackgroundRunnable = this::removeTempBackground;
         // Request a render. The temporary background will be removed once we are confident that the
-        // composited frame has been drawn.
-        requestRender();
+        // composited frame has been drawn. We'll also post a runnable to remove the background
+        // after a timeout, if the requested render is still not yet effective.
+        requestRender(this::runSetBackgroundRunnable);
+        new Handler()
+                .postDelayed(this::timeoutRunSetBackgroundRunnable, BACKGROUND_REMOVAL_TIMEOUT_MS);
+    }
+
+    private void timeoutRunSetBackgroundRunnable() {
+        if (mSetBackgroundRunnable == null) {
+            // The background was already removed, so mark that we did not time out.
+            RecordHistogram.recordBooleanHistogram(
+                    "Android.TabStrip.TempBackgroundTimedOut", false);
+            return;
+        }
+        // The background has not yet been removed, so mark that we timed out and remove the
+        // background now.
+        RecordHistogram.recordBooleanHistogram("Android.TabStrip.TempBackgroundTimedOut", true);
+        runSetBackgroundRunnable();
+    }
+
+    private void runSetBackgroundRunnable() {
+        // This runnable should only be run once.
+        if (mSetBackgroundRunnable == null) return;
+
+        new Handler().post(mSetBackgroundRunnable);
+        mSetBackgroundRunnable = null;
     }
 
     private void removeTempBackground() {
@@ -667,8 +717,7 @@ public class CompositorViewHolder extends FrameLayout
             TabContentManager tabContentManager,
             PrefService prefService) {
         mActivity = assumeNonNull(windowAndroid.getActivity().get());
-        mCompositorView.initNativeCompositor(
-                SysUtils.isLowEndDevice(), windowAndroid, tabContentManager);
+        mCompositorView.initNativeCompositor(windowAndroid, tabContentManager);
 
         if (mControlContainer != null) {
             mCompositorView
@@ -735,10 +784,10 @@ public class CompositorViewHolder extends FrameLayout
         }
         // Note(david@vivaldi.com): Don't let events through if we are in fullscreen mode and the
         // toolbar is at the bottom.
-        if (!VivaldiUtils.isTopToolbarOn() && getFullscreenManager() != null &&
-                getFullscreenManager().getPersistentFullscreenMode())
+        if (!VivaldiUtils.isTopToolbarOn() && mBrowserControlsManager != null
+                && getFullscreenManager() != null
+                && getFullscreenManager().getPersistentFullscreenMode())
             return false;
-
 
         if (mLayoutManager == null) return false;
 
@@ -784,7 +833,9 @@ public class CompositorViewHolder extends FrameLayout
     private void updateInMotion() {
         // TODO(crbug.com/40244051): Track fling as well.
         boolean inMotion = mContentViewScrolling;
-        if (ChromeFeatureList.sSuppressToolbarCapturesAtGestureEnd.isEnabled()) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.TOOLBAR_STALE_CAPTURE_BUG_FIX)) {
+            inMotion |= mInTouch;
+        } else if (ChromeFeatureList.sSuppressToolbarCapturesAtGestureEnd.isEnabled()) {
             inMotion |= mNumGestureActiveTouches > 0;
         } else {
             inMotion |= mInGesture;
@@ -876,7 +927,7 @@ public class CompositorViewHolder extends FrameLayout
     /**
      * @return The SurfaceView proxy used by the Compositor.
      */
-    public @Nullable CompositorView getCompositorView() {
+    public CompositorView getCompositorView() {
         return mCompositorView;
     }
 
@@ -916,8 +967,7 @@ public class CompositorViewHolder extends FrameLayout
         if (mTabModelSelector == null) return;
 
         for (TabModel tabModel : mTabModelSelector.getModels()) {
-            for (int i = 0; i < tabModel.getCount(); ++i) {
-                Tab tab = tabModel.getTabAt(i);
+            for (Tab tab : tabModel) {
                 if (tab == null) continue;
                 updateWebContentsSize(tab);
             }
@@ -1319,7 +1369,6 @@ public class CompositorViewHolder extends FrameLayout
         TraceEvent.instant("didSwapFrame");
 
         mHasDrawnOnce = true;
-        if (mSetBackgroundRunnable != null) requestRender();
 
         mDidSwapBuffersCallbacks.addAll(mDidSwapFrameCallbacks);
         mDidSwapFrameCallbacks.clear();
@@ -1328,31 +1377,11 @@ public class CompositorViewHolder extends FrameLayout
 
     @Override
     public void didSwapBuffers(boolean swappedCurrentSize, int framesUntilHideBackground) {
-        // Wait until the second frame to turn off the placeholder background for the CompositorView
-        // and the tab strip, to ensure the compositor frame has been drawn.
-        if (mSetBackgroundRunnable != null) {
-            if (mHasDrawnOnce && framesUntilHideBackground == 0) {
-                // Remove temporary background if tab state is ready.
-                runSetBackgroundRunnable();
-            } else {
-                // If tab state is not yet ready, request another render.
-                requestRender();
-            }
-        }
-
         for (Runnable runnable : mDidSwapBuffersCallbacks) {
             runnable.run();
         }
         mDidSwapBuffersCallbacks.clear();
         updateNeedsSwapBuffersCallback();
-    }
-
-    private void runSetBackgroundRunnable() {
-        // This runnable should only be run once.
-        if (mSetBackgroundRunnable == null) return;
-
-        new Handler().post(mSetBackgroundRunnable);
-        mSetBackgroundRunnable = null;
     }
 
     @Override
@@ -1372,8 +1401,7 @@ public class CompositorViewHolder extends FrameLayout
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        mIsKeyboardShowing =
-                KeyboardVisibilityDelegate.getInstance().isKeyboardShowing(getContext(), this);
+        mIsKeyboardShowing = KeyboardVisibilityDelegate.getInstance().isKeyboardShowing(this);
     }
 
     @Override
@@ -1463,7 +1491,7 @@ public class CompositorViewHolder extends FrameLayout
         if (hasFocus()) {
             KeyboardVisibilityDelegate keyboardVisibilityDelegate =
                     KeyboardVisibilityDelegate.getInstance();
-            wasVisible = keyboardVisibilityDelegate.isKeyboardShowing(getContext(), this);
+            wasVisible = keyboardVisibilityDelegate.isKeyboardShowing(this);
             if (wasVisible) {
                 keyboardVisibilityDelegate.hideKeyboard(this);
             }
@@ -1628,6 +1656,7 @@ public class CompositorViewHolder extends FrameLayout
             mHasKeyboardGeometryChangeFired = false;
             if (mTabVisible != null) mTabVisible.removeObserver(mTabObserver);
             if (tab != null) {
+                mNumGestureActiveTouches = 0;
                 tab.addObserver(mTabObserver);
                 mCompositorView.onTabChanged();
             }
@@ -1812,6 +1841,20 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     @Override
+    public void requestKeyboardFocus(SceneOverlay sceneOverlay, VirtualView view) {
+        mSceneOverlay = sceneOverlay;
+        mKeyboardFocusIndex = 0; // Focus on the first item by default
+        List<VirtualView> virtualViews = getVirtualViewsForCurrentSceneOverlay();
+        for (int i = 0; i < virtualViews.size(); i++) {
+            if (view.equals(virtualViews.get(i))) {
+                mKeyboardFocusIndex = i;
+                break;
+            }
+        }
+        updateKeyboardFocus(virtualViews);
+    }
+
+    @Override
     public boolean containsKeyboardFocus(SceneOverlay sceneOverlay) {
         return sceneOverlay.equals(mSceneOverlay)
                 && (isA11ySetUp() ? mAccessibilityView.hasFocus() : hasFocus());
@@ -1847,7 +1890,7 @@ public class CompositorViewHolder extends FrameLayout
             return true;
         }
         if (isButtonActivate(event)
-                && 0 < mKeyboardFocusIndex
+                && 0 <= mKeyboardFocusIndex
                 && mKeyboardFocusIndex < keyboardFocusableViews.size()) {
             keyboardFocusableViews
                     .get(mKeyboardFocusIndex)

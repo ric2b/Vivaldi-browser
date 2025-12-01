@@ -42,8 +42,10 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/random/bit_gen_ref.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "./common/logging.h"
 #include "./fuzztest/internal/any.h"
 #include "./fuzztest/internal/domains/aggregate_of_impl.h"
 #include "./fuzztest/internal/domains/arbitrary_impl.h"
@@ -83,18 +85,18 @@ class DomainBuilder {
   // values it can handle until we call Set on the name.
   template <typename T>
   Domain<T> Get(std::string_view name) {
-    FUZZTEST_INTERNAL_CHECK(domain_lookup_table_ != nullptr,
-                            "Finalize() has been called!");
+    FUZZTEST_CHECK(domain_lookup_table_ != nullptr)
+        << "Finalize() has been called!";
     return IndirectDomain<T>(GetIndirect<T>(name));
   }
 
   template <typename T>
   void Set(std::string_view name, const Domain<T>& domain) {
-    FUZZTEST_INTERNAL_CHECK(domain_lookup_table_ != nullptr,
-                            "Finalize() has been called!");
+    FUZZTEST_CHECK(domain_lookup_table_ != nullptr)
+        << "Finalize() has been called!";
     auto* indirect = GetIndirect<T>(name);
-    FUZZTEST_INTERNAL_CHECK(!indirect->has_value(),
-                            "Cannot set the same domain twice!");
+    FUZZTEST_CHECK(!indirect->has_value())
+        << "Cannot set the same domain twice!";
     *indirect = internal::MoveOnlyAny(std::in_place_type<Domain<T>>, domain);
   }
 
@@ -105,18 +107,13 @@ class DomainBuilder {
   // anymore.
   template <typename T>
   Domain<T> Finalize(std::string_view name) && {
-    FUZZTEST_INTERNAL_CHECK(domain_lookup_table_ != nullptr,
-                            "Finalize() has been called!");
-    FUZZTEST_INTERNAL_CHECK(
-        GetIndirect<T>(name)->has_value(),
-        // FUZZTEST_INTERNAL_CHECK uses absl::StrCat, which does not accept
-        // std::string_view in iOS builds, so convert to absl::string_view.
-        "Finalize() has been called with an unknown name: ",
-        absl::string_view{name.data(), name.size()});
+    FUZZTEST_CHECK(domain_lookup_table_ != nullptr)
+        << "Finalize() has been called!";
+    FUZZTEST_CHECK(GetIndirect<T>(name)->has_value())
+        << "Finalize() has been called with an unknown name: " << name;
     for (auto& iter : *domain_lookup_table_) {
-      FUZZTEST_INTERNAL_CHECK(
-          iter.second != nullptr && iter.second->has_value(),
-          "Some domain is not set yet!");
+      FUZZTEST_CHECK(iter.second != nullptr && iter.second->has_value())
+          << "Some domain is not set yet!";
     }
     auto domain = GetIndirect<T>(name)->template GetAs<Domain<T>>();
     return OwningDomain<T>(std::move(domain), std::move(domain_lookup_table_));
@@ -140,9 +137,8 @@ class DomainBuilder {
     if (!indirection) {
       indirection = std::make_unique<internal::MoveOnlyAny>();
     }
-    FUZZTEST_INTERNAL_CHECK(
-        !indirection->has_value() || indirection->Has<Domain<T>>(),
-        "The indirection must either be empty or hold a value of Domain<T>");
+    FUZZTEST_CHECK(!indirection->has_value() || indirection->Has<Domain<T>>())
+        << "The indirection must either be empty or hold a value of Domain<T>";
     return indirection.get();
   }
 
@@ -1063,6 +1059,39 @@ inline auto Utf8String() {
       .WithSerializationDomain(0);
 }
 
+// UNSTABLE APIs.
+//
+// IMPORTANT: These functions are internal-facing utility functions and are NOT
+// part of the stable public API. They may be changed or removed in a future
+// release without notice.
+namespace unstable {
+
+// **UNSABLE API**: Parses raw reproducer data back into the original typed
+// input values.
+//
+// This function can be useful when you need to deserialize the raw byte
+// contents of a reproducer file to analyze a failing input with external tools.
+//
+// Note that the `domains` provided to this function must be identical to those
+// used in the `WithDomains(...)` clause of the original FUZZ_TEST. This
+// includes the type, order, and configuration of each domain. This function
+// cannot verify this condition; any mismatch will lead to garbage output. Any
+// change to the version of FuzzTest or the underlying types of the fuzzed
+// values may also cause garbage output.
+//
+// Futhermore 'T' must be a value (not reference) type in passed in
+// `Domain<T>`-s and be copyable or movable. This is because unlike with normal
+// fuzztest the returned value has a longer lifetime then the fuzztest values
+// used to create it.
+template <typename... DomainT,
+          typename ReturnT = std::tuple<typename DomainT::value_type...>>
+absl::StatusOr<ReturnT> ParseReproducerValue(std::string_view data,
+                                             DomainT... domains) {
+  return internal::ParseOneReproducerValue(
+      data, TupleOf(std::forward<DomainT>(domains)...));
+}
+
+}  // namespace unstable
 }  // namespace internal_no_adl
 
 // Inject the names from internal_no_adl into fuzztest, without allowing for

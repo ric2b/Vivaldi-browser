@@ -77,10 +77,6 @@ extern "C" {
 // V_ASN1_ANY is used by the ASN.1 templates to indicate an ANY type.
 #define V_ASN1_ANY (-4)
 
-// V_ASN1_ANY_AS_STRING is used by the ASN.1 templates to indicate an ANY type
-// represented with |ASN1_STRING| instead of |ASN1_TYPE|.
-#define V_ASN1_ANY_AS_STRING (-5)
-
 // The following constants are tag numbers for universal types.
 #define V_ASN1_EOC 0
 #define V_ASN1_BOOLEAN 1
@@ -335,8 +331,10 @@ OPENSSL_EXPORT void *ASN1_item_d2i_bio(const ASN1_ITEM *it, BIO *in, void *out);
 //
 // These functions may not be used with |ASN1_ITEM|s whose C type is
 // |ASN1_BOOLEAN|.
-OPENSSL_EXPORT int ASN1_item_i2d_fp(const ASN1_ITEM *it, FILE *out, void *in);
-OPENSSL_EXPORT int ASN1_item_i2d_bio(const ASN1_ITEM *it, BIO *out, void *in);
+OPENSSL_EXPORT int ASN1_item_i2d_fp(const ASN1_ITEM *it, FILE *out,
+                                    const void *in);
+OPENSSL_EXPORT int ASN1_item_i2d_bio(const ASN1_ITEM *it, BIO *out,
+                                     const void *in);
 
 // ASN1_item_unpack parses |oct|'s contents as |it|'s ASN.1 type. It returns a
 // newly-allocated instance of |it|'s C type on success, or NULL on error.
@@ -801,10 +799,6 @@ OPENSSL_EXPORT ASN1_STRING *d2i_DIRECTORYSTRING(ASN1_STRING **out,
 // 5280), as described in |i2d_SAMPLE|.
 OPENSSL_EXPORT int i2d_DIRECTORYSTRING(const ASN1_STRING *in, uint8_t **outp);
 
-// DIRECTORYSTRING is an |ASN1_ITEM| whose ASN.1 type is X.509 DirectoryString
-// (RFC 5280) and C type is |ASN1_STRING*|.
-DECLARE_ASN1_ITEM(DIRECTORYSTRING)
-
 // B_ASN1_DISPLAYTEXT is a bitmask of types allowed in an X.509 DisplayText (RFC
 // 5280).
 #define B_ASN1_DISPLAYTEXT                                      \
@@ -833,10 +827,6 @@ OPENSSL_EXPORT ASN1_STRING *d2i_DISPLAYTEXT(ASN1_STRING **out,
 // i2d_DISPLAYTEXT marshals |in| as a DER-encoded X.509 DisplayText (RFC 5280),
 // as described in |i2d_SAMPLE|.
 OPENSSL_EXPORT int i2d_DISPLAYTEXT(const ASN1_STRING *in, uint8_t **outp);
-
-// DISPLAYTEXT is an |ASN1_ITEM| whose ASN.1 type is X.509 DisplayText (RFC
-// 5280) and C type is |ASN1_STRING*|.
-DECLARE_ASN1_ITEM(DISPLAYTEXT)
 
 
 // Bit strings.
@@ -1257,10 +1247,6 @@ OPENSSL_EXPORT ASN1_TIME *d2i_ASN1_TIME(ASN1_TIME **out, const uint8_t **inp,
 // i2d_ASN1_TIME marshals |in| as a DER-encoded X.509 Time (RFC 5280), as
 // described in |i2d_SAMPLE|.
 OPENSSL_EXPORT int i2d_ASN1_TIME(const ASN1_TIME *in, uint8_t **outp);
-
-// ASN1_TIME is an |ASN1_ITEM| whose ASN.1 type is X.509 Time (RFC 5280) and C
-// type is |ASN1_TIME*|.
-DECLARE_ASN1_ITEM(ASN1_TIME)
 
 // ASN1_TIME_diff computes |to| - |from|. On success, it sets |*out_days| to the
 // difference in days, rounded towards zero, sets |*out_seconds| to the

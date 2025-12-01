@@ -89,7 +89,7 @@ TestRenderWidgetHostView::TestRenderWidgetHostView(RenderWidgetHost* rwh)
 TestRenderWidgetHostView::~TestRenderWidgetHostView() {
   viz::HostFrameSinkManager* manager = GetHostFrameSinkManager();
   if (manager)
-    manager->InvalidateFrameSinkId(frame_sink_id_, this);
+    manager->InvalidateFrameSinkId(frame_sink_id_, this, {});
 }
 
 gfx::NativeView TestRenderWidgetHostView::GetNativeView() {
@@ -188,7 +188,7 @@ void TestRenderWidgetHostView::SetWindowFrameInScreen(const gfx::Rect& rect) {}
 void TestRenderWidgetHostView::ShowSharePicker(
     const std::string& title,
     const std::string& text,
-    const std::string& url,
+    const GURL& url,
     const std::vector<std::string>& file_paths,
     blink::mojom::ShareService::ShareCallback callback) {}
 

@@ -197,7 +197,7 @@ static void VisitRRIR(InstructionSelector* selector, ArchOpcode opcode,
   const turboshaft::Simd128ReplaceLaneOp& op =
       selector->Get(node).template Cast<turboshaft::Simd128ReplaceLaneOp>();
   selector->Emit(opcode, g.DefineAsRegister(node), g.UseRegister(op.input(0)),
-                 g.UseImmediate(op.lane), g.UseUniqueRegister(op.input(1)));
+                 g.UseImmediate(op.lane), g.UseRegister(op.input(1)));
 }
 
 void VisitRRR(InstructionSelector* selector, InstructionCode opcode,
@@ -209,16 +209,6 @@ void VisitRRR(InstructionSelector* selector, InstructionCode opcode,
   DCHECK_EQ(op.input_count, 2);
   selector->Emit(opcode, g.DefineAsRegister(node), g.UseRegister(op.input(0)),
                  g.UseRegister(op.input(1), kind));
-}
-
-static void VisitUniqueRRR(InstructionSelector* selector, ArchOpcode opcode,
-                           OpIndex node) {
-  RiscvOperandGenerator g(selector);
-  const Operation& op = selector->Get(node);
-  DCHECK_EQ(op.input_count, 2);
-  selector->Emit(opcode, g.DefineAsRegister(node),
-                 g.UseUniqueRegister(op.input(0)),
-                 g.UseUniqueRegister(op.input(1)));
 }
 
 void VisitRRRR(InstructionSelector* selector, ArchOpcode opcode, OpIndex node) {
@@ -269,7 +259,15 @@ static void VisitBinop(InstructionSelector* selector, OpIndex node,
 
   if (TryMatchImmediate(selector, &opcode, right_node, &input_count,
                         &inputs[1])) {
-    inputs[0] = g.UseRegisterOrImmediateZero(left_node);
+    // If right node is an immediate, we will use left to check overflow
+    // so we hope left isn't overlapped by output.
+    if (!cont->IsNone() &&
+        (cont->condition() == FlagsCondition::kOverflow ||
+         cont->condition() == FlagsCondition::kNotOverflow)) {
+      inputs[0] = g.UseUniqueRegister(left_node);
+    } else {
+      inputs[0] = g.UseRegisterOrImmediateZero(left_node);
+    }
     input_count++;
   } else if (has_reverse_opcode &&
              TryMatchImmediate(selector, &reverse_opcode, left_node,
@@ -282,14 +280,7 @@ static void VisitBinop(InstructionSelector* selector, OpIndex node,
     inputs[input_count++] = g.UseOperand(right_node, opcode);
   }
 
-  if (cont->IsDeoptimize()) {
-    // If we can deoptimize as a result of the binop, we need to make sure that
-    // the deopt inputs are not overwritten by the binop result. One way
-    // to achieve that is to declare the output register as same-as-first.
-    outputs[output_count++] = g.DefineSameAsFirst(node);
-  } else {
-    outputs[output_count++] = g.DefineAsRegister(node);
-  }
+  outputs[output_count++] = g.DefineAsRegister(node);
 
   DCHECK_NE(0u, input_count);
   DCHECK_EQ(1u, output_count);
@@ -882,54 +873,34 @@ void InstructionSelector::VisitWord32Sar(OpIndex node) {
 
 void InstructionSelector::VisitI32x4ExtAddPairwiseI16x8S(OpIndex node) {
   RiscvOperandGenerator g(this);
-  InstructionOperand src1 = g.TempSimd128Register();
-  InstructionOperand src2 = g.TempSimd128Register();
   const Operation& op = this->Get(node);
   DCHECK_EQ(op.input_count, 1);
-  InstructionOperand src = g.UseUniqueRegister(op.input(0));
-  InstructionOperand temps[] = {src1, src2};
-  size_t temps_count = arraysize(temps);
   InstructionCode opcode = kRiscvExtAddPairwiseS | EncodeElementWidth(E16);
-  Emit(opcode, g.DefineAsRegister(node), src, temps_count, temps);
+  Emit(opcode, g.DefineAsRegister(node), g.UseRegister(op.input(0)));
 }
 
 void InstructionSelector::VisitI32x4ExtAddPairwiseI16x8U(OpIndex node) {
   RiscvOperandGenerator g(this);
-  InstructionOperand src1 = g.TempSimd128Register();
-  InstructionOperand src2 = g.TempSimd128Register();
   const Operation& op = this->Get(node);
   DCHECK_EQ(op.input_count, 1);
-  InstructionOperand src = g.UseUniqueRegister(op.input(0));
-  InstructionOperand temps[] = {src1, src2};
-  size_t temps_count = arraysize(temps);
   InstructionCode opcode = kRiscvExtAddPairwiseU | EncodeElementWidth(E16);
-  Emit(opcode, g.DefineAsRegister(node), src, temps_count, temps);
+  Emit(opcode, g.DefineAsRegister(node), g.UseRegister(op.input(0)));
 }
 
 void InstructionSelector::VisitI16x8ExtAddPairwiseI8x16S(OpIndex node) {
   RiscvOperandGenerator g(this);
-  InstructionOperand src1 = g.TempSimd128Register();
-  InstructionOperand src2 = g.TempSimd128Register();
   const Operation& op = this->Get(node);
   DCHECK_EQ(op.input_count, 1);
-  InstructionOperand src = g.UseUniqueRegister(op.input(0));
-  InstructionOperand temps[] = {src1, src2};
-  size_t temps_count = arraysize(temps);
   InstructionCode opcode = kRiscvExtAddPairwiseS | EncodeElementWidth(E8);
-  Emit(opcode, g.DefineAsRegister(node), src, temps_count, temps);
+  Emit(opcode, g.DefineAsRegister(node), g.UseRegister(op.input(0)));
 }
 
 void InstructionSelector::VisitI16x8ExtAddPairwiseI8x16U(OpIndex node) {
   RiscvOperandGenerator g(this);
-  InstructionOperand src1 = g.TempSimd128Register();
-  InstructionOperand src2 = g.TempSimd128Register();
   const Operation& op = this->Get(node);
   DCHECK_EQ(op.input_count, 1);
-  InstructionOperand src = g.UseUniqueRegister(op.input(0));
-  InstructionOperand temps[] = {src1, src2};
-  size_t temps_count = arraysize(temps);
   InstructionCode opcode = kRiscvExtAddPairwiseU | EncodeElementWidth(E8);
-  Emit(opcode, g.DefineAsRegister(node), src, temps_count, temps);
+  Emit(opcode, g.DefineAsRegister(node), g.UseRegister(op.input(0)));
 }
 
 #define SIMD_INT_TYPE_LIST(V) \
@@ -1403,14 +1374,24 @@ void InstructionSelector::VisitI16x8SConvertI32x4(OpIndex node) {
   const Operation& op = this->Get(node);
   DCHECK_EQ(op.input_count, 2);
   InstructionCode opcode = kRiscvI16x8SConvertI32x4;
-  // Request a register group (two adjacent registers starting at an even
-  // index). There is nothing special about the registers, as long as they
-  // are adjacent and start at an even index.
-  // Fixed registers also ensure that the inputs don't overlap with the output.
-  auto input0 = g.UseFixed(op.input(0), v28);
-  auto input1 = g.UseFixed(op.input(1), v29);
-  opcode |= EncodeRegisterConstraint(
-      RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  InstructionOperand input0;
+  InstructionOperand input1;
+  if (CpuFeatures::vlen() > 128) {
+    // No need for register groups, as one register is big enough to hold
+    // 256 bits.
+    input0 = g.UseRegister(op.input(0));
+    input1 = g.UseRegister(op.input(1));
+  } else {
+    // Request a register group (two adjacent registers starting at an even
+    // index). There is nothing special about the registers, as long as they
+    // are adjacent and start at an even index.
+    // Fixed registers also ensure that the inputs don't overlap with the
+    // output.
+    input0 = g.UseFixed(op.input(0), v28);
+    input1 = g.UseFixed(op.input(1), v29);
+    opcode |= EncodeRegisterConstraint(
+        RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  }
   Emit(opcode, g.DefineAsRegister(node), input0, input1);
 }
 
@@ -1419,14 +1400,24 @@ void InstructionSelector::VisitI16x8UConvertI32x4(OpIndex node) {
   const Operation& op = this->Get(node);
   DCHECK_EQ(op.input_count, 2);
   InstructionCode opcode = kRiscvI16x8UConvertI32x4;
-  // Request a register group (two adjacent registers starting at an even
-  // index). There is nothing special about the registers, as long as they
-  // are adjacent and start at an even index.
-  // Fixed registers also ensure that the inputs don't overlap with the output.
-  auto input0 = g.UseFixed(op.input(0), v28);
-  auto input1 = g.UseFixed(op.input(1), v29);
-  opcode |= EncodeRegisterConstraint(
-      RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  InstructionOperand input0;
+  InstructionOperand input1;
+  if (CpuFeatures::vlen() > 128) {
+    // No need for register groups, as one register is big enough to hold
+    // 256 bits.
+    input0 = g.UseRegister(op.input(0));
+    input1 = g.UseRegister(op.input(1));
+  } else {
+    // Request a register group (two adjacent registers starting at an even
+    // index). There is nothing special about the registers, as long as they
+    // are adjacent and start at an even index.
+    // Fixed registers also ensure that the inputs don't overlap with the
+    // output.
+    input0 = g.UseFixed(op.input(0), v28);
+    input1 = g.UseFixed(op.input(1), v29);
+    opcode |= EncodeRegisterConstraint(
+        RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  }
   Emit(opcode, g.DefineAsRegister(node), input0, input1);
 }
 
@@ -1443,14 +1434,24 @@ void InstructionSelector::VisitI8x16SConvertI16x8(OpIndex node) {
   const Operation& op = this->Get(node);
   DCHECK_EQ(op.input_count, 2);
   InstructionCode opcode = kRiscvI8x16SConvertI16x8;
-  // Request a register group (two adjacent registers starting at an even
-  // index). There is nothing special about the registers, as long as they
-  // are adjacent and start at an even index.
-  // Fixed registers also ensure that the inputs don't overlap with the output.
-  auto input0 = g.UseFixed(op.input(0), v28);
-  auto input1 = g.UseFixed(op.input(1), v29);
-  opcode |= EncodeRegisterConstraint(
-      RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  InstructionOperand input0;
+  InstructionOperand input1;
+  if (CpuFeatures::vlen() > 128) {
+    // No need for register groups, as one register is big enough to hold
+    // 256 bits.
+    input0 = g.UseRegister(op.input(0));
+    input1 = g.UseRegister(op.input(1));
+  } else {
+    // Request a register group (two adjacent registers starting at an even
+    // index). There is nothing special about the registers, as long as they
+    // are adjacent and start at an even index.
+    // Fixed registers also ensure that the inputs don't overlap with the
+    // output.
+    input0 = g.UseFixed(op.input(0), v28);
+    input1 = g.UseFixed(op.input(1), v29);
+    opcode |= EncodeRegisterConstraint(
+        RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  }
   Emit(opcode, g.DefineAsRegister(node), input0, input1);
 }
 
@@ -1459,14 +1460,24 @@ void InstructionSelector::VisitI8x16UConvertI16x8(OpIndex node) {
   const Operation& op = this->Get(node);
   DCHECK_EQ(op.input_count, 2);
   InstructionCode opcode = kRiscvI8x16UConvertI16x8;
-  // Request a register group (two adjacent registers starting at an even
-  // index). There is nothing special about the registers, as long as they
-  // are adjacent and start at an even index.
-  // Fixed registers also ensure that the inputs don't overlap with the output.
-  auto input0 = g.UseFixed(op.input(0), v28);
-  auto input1 = g.UseFixed(op.input(1), v29);
-  opcode |= EncodeRegisterConstraint(
-      RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  InstructionOperand input0;
+  InstructionOperand input1;
+  if (CpuFeatures::vlen() > 128) {
+    // No need for register groups, as one register is big enough to hold
+    // 256 bits.
+    input0 = g.UseRegister(op.input(0));
+    input1 = g.UseRegister(op.input(1));
+  } else {
+    // Request a register group (two adjacent registers starting at an even
+    // index). There is nothing special about the registers, as long as they
+    // are adjacent and start at an even index.
+    // Fixed registers also ensure that the inputs don't overlap with the
+    // output.
+    input0 = g.UseFixed(op.input(0), v28);
+    input1 = g.UseFixed(op.input(1), v29);
+    opcode |= EncodeRegisterConstraint(
+        RiscvRegisterConstraint::kRegisterGroupNoOverlap);
+  }
   Emit(opcode, g.DefineAsRegister(node), input0, input1);
 }
 
@@ -1538,8 +1549,12 @@ void InstructionSelector::VisitI8x16Shuffle(OpIndex node) {
   //        g.UseImmediate(wasm::SimdShuffle::Pack4Lanes(shuffle32x4)));
   //   return;
   // }
-  Emit(kRiscvI8x16Shuffle, g.DefineAsRegister(node), g.UseRegister(input0),
-       g.UseRegister(input1),
+  InstructionCode opcode = kRiscvI8x16Shuffle;
+  auto input0_reg = g.UseUniqueRegister(input0);
+  auto input1_reg = g.UseUniqueRegister(input1);
+  opcode |= EncodeRegisterConstraint(
+      RiscvRegisterConstraint::kNoDestinationSourceOverlap);
+  Emit(opcode, g.DefineAsRegister(node), input0_reg, input1_reg,
        g.UseImmediate(wasm::SimdShuffle::Pack4Lanes(shuffle)),
        g.UseImmediate(wasm::SimdShuffle::Pack4Lanes(shuffle + 4)),
        g.UseImmediate(wasm::SimdShuffle::Pack4Lanes(shuffle + 8)),
@@ -1685,19 +1700,19 @@ VISIT_EXT_MUL(I16x8, I8x16, 8)
 #undef VISIT_EXT_MUL
 
 void InstructionSelector::VisitF32x4Pmin(OpIndex node) {
-  VisitUniqueRRR(this, kRiscvF32x4Pmin, node);
+  VisitRRR(this, kRiscvF32x4Pmin, node);
 }
 
 void InstructionSelector::VisitF32x4Pmax(OpIndex node) {
-  VisitUniqueRRR(this, kRiscvF32x4Pmax, node);
+  VisitRRR(this, kRiscvF32x4Pmax, node);
 }
 
 void InstructionSelector::VisitF64x2Pmin(OpIndex node) {
-  VisitUniqueRRR(this, kRiscvF64x2Pmin, node);
+  VisitRRR(this, kRiscvF64x2Pmin, node);
 }
 
 void InstructionSelector::VisitF64x2Pmax(OpIndex node) {
-  VisitUniqueRRR(this, kRiscvF64x2Pmax, node);
+  VisitRRR(this, kRiscvF64x2Pmax, node);
 }
 
 void InstructionSelector::VisitTruncateFloat64ToFloat16RawBits(OpIndex node) {

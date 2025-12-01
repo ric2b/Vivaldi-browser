@@ -4,10 +4,13 @@
 
 #include "chrome/browser/actor/tools/navigate_tool_request.h"
 
+#include <optional>
+
 #include "chrome/browser/actor/tools/navigate_tool.h"
 #include "chrome/browser/actor/tools/tool_request_visitor_functor.h"
 #include "chrome/common/actor.mojom.h"
 #include "chrome/common/actor/action_result.h"
+#include "chrome/common/actor/actor_utils.h"
 
 namespace actor {
 
@@ -32,12 +35,30 @@ ToolRequest::CreateToolResult NavigateToolRequest::CreateTool(
           MakeOkResult()};
 }
 
+bool NavigateToolRequest::RequiresUrlCheckInCurrentTab() const {
+  // A navigate tool is tab scoped but navigates *away* from the current URL.
+  return false;
+}
+
 void NavigateToolRequest::Apply(ToolRequestVisitorFunctor& f) const {
   f.Apply(*this);
 }
 
 std::string NavigateToolRequest::JournalEvent() const {
   return "Navigate";
+}
+
+std::optional<url::Origin> NavigateToolRequest::AssociatedOriginGrant() const {
+  return url::Origin::Create(url_);
+}
+
+std::optional<ObservationDelayController::PageStabilityConfig>
+NavigateToolRequest::GetObservationPageStabilityConfig() const {
+  if (UseGeneralPageStabilityNavigationTools()) {
+    return ObservationDelayController::PageStabilityConfig();
+  } else {
+    return std::nullopt;
+  }
 }
 
 }  // namespace actor

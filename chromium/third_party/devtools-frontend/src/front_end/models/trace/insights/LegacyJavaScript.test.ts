@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,7 @@ import {getFirstOrError, getInsightOrError, processTrace} from '../../../testing
 import type * as Trace from '../trace.js';
 
 describeWithEnvironment('LegacyJavaScript', function() {
-  it('has no results when savings are too small', async () => {
+  it('has no results when savings are too small', async function() {
     const {data, insights} = await processTrace(this, 'dupe-js.json.gz');
     assert.strictEqual(insights.size, 1);
     const insight =

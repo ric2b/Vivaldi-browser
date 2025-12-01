@@ -2,7 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="et">
 <translation id="1127811143501539442">{DAYS, plural, =1 {1 päev tagasi} other {# päeva tagasi}}</translation>
-<translation id="1156623771253174079">{SECONDS, plural, =1 {1 minut tagasi} other {# minutit tagasi}}</translation>
+<translation id="1156623771253174079">{SECONDS, plural, =1 {minut aega tagasi} other {# minutit tagasi}}</translation>
 <translation id="1368832886055348810">Vasakult paremale</translation>
 <translation id="1591184457164800433">{MINUTES, plural, =1 {1 minut ja } other {# minutit ja }}</translation>
 <translation id="1752946267035950200">{MINUTES, plural, =1 {1 minut} other {# minutit}}</translation>
@@ -33,7 +33,7 @@
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
 <translation id="6397363302884558537">Lõpeta ettelugemine</translation>
 <translation id="6404817160109697034">{SECONDS, plural, =1 {1 s tagasi} other {# s tagasi}}</translation>
-<translation id="6483402905448010557">{SECONDS, plural, =1 {1 sekund tagasi} other {# sekundit tagasi}}</translation>
+<translation id="6483402905448010557">{SECONDS, plural, =1 {sekund aega tagasi} other {# sekundit tagasi}}</translation>
 <translation id="6863590663815976734">{HOURS, plural, =1 {1 tund jäänud} other {# tundi jäänud}}</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6974053822202609517">Paremalt vasakule</translation>
@@ -41,7 +41,7 @@
 <translation id="7365057348334984696">{MINUTES, plural, =1 {1 min tagasi} other {# min tagasi}}</translation>
 <translation id="7410957453383678442">{MINUTES, plural, =1 {1 minut jäänud} other {# minutit jäänud}}</translation>
 <translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
-<translation id="8106081041558092062">{HOURS, plural, =1 {1 tund tagasi} other {# tundi tagasi}}</translation>
+<translation id="8106081041558092062">{HOURS, plural, =1 {tund aega tagasi} other {# tundi tagasi}}</translation>
 <translation id="8131263257437993507">{SECONDS, plural, =1 {1 s jäänud} other {# s jäänud}}</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> KB/s</translation>
 <translation id="8798099450830957504">Vaikimisi</translation>

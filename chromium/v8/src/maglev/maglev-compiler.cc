@@ -60,8 +60,7 @@ void PrintGraph(Graph* graph, bool condition, const char* message,
 
 void VerifyGraph(Graph* graph) {
 #ifdef DEBUG
-  GraphProcessor<MaglevGraphVerifier, /* visit_identity_nodes */ true> verifier(
-      graph->compilation_info());
+  GraphProcessor<MaglevGraphVerifier> verifier(graph->compilation_info());
   verifier.ProcessGraph(graph);
 #endif  // DEBUG
 }
@@ -75,7 +74,8 @@ bool MaglevCompiler::Compile(LocalIsolate* local_isolate,
   Graph* graph = Graph::New(compilation_info);
 
   if (V8_UNLIKELY(ALWAYS_MAGLEV_GRAPH_LABELLER_BOOL ||
-                  compilation_info->is_tracing_enabled())) {
+                  compilation_info->is_tracing_enabled() ||
+                  compilation_info->collect_source_positions())) {
     compilation_info->set_graph_labeller(new MaglevGraphLabeller());
     graph_labeller_scope.emplace(compilation_info->graph_labeller());
   }
@@ -101,7 +101,7 @@ bool MaglevCompiler::Compile(LocalIsolate* local_isolate,
                    "V8.Maglev.GraphBuilding");
       MaglevGraphBuilder graph_builder(
           local_isolate, compilation_info->toplevel_compilation_unit(), graph);
-      graph_builder.Build();
+      if (!graph_builder.Build()) return false;
       PrintGraph(graph, v8_flags.print_maglev_graphs, "After graph building");
       VerifyGraph(graph);
     }
@@ -110,13 +110,7 @@ bool MaglevCompiler::Compile(LocalIsolate* local_isolate,
       TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
                    "V8.Maglev.Inlining");
       MaglevInliner inliner(graph);
-      inliner.Run();
-      // TODO(victorgomes): We need to remove all identity nodes before
-      // PhiRepresentationSelector. Since Identity has different semantics
-      // there. Check if we can remove the identity nodes during
-      // PhiRepresentationSelector instead.
-      GraphProcessor<SweepIdentityNodes, /* visit_identity_nodes */ true> sweep;
-      sweep.ProcessGraph(graph);
+      if (!inliner.Run()) return false;
       VerifyGraph(graph);
     }
 
@@ -127,12 +121,8 @@ bool MaglevCompiler::Compile(LocalIsolate* local_isolate,
       propagate.ProcessGraph(graph);
       PrintGraph(graph, v8_flags.print_maglev_graphs,
                  "After propagating truncation");
-
-      // TODO(victorgomes): Support identities to flow to next passes?
-      GraphMultiProcessor<TruncationProcessor, SweepIdentityNodes> truncate(
-          TruncationProcessor{graph});
+      GraphProcessor<TruncationProcessor> truncate(graph);
       truncate.ProcessGraph(graph);
-
       PrintGraph(graph, v8_flags.print_maglev_graphs, "After truncation");
       VerifyGraph(graph);
     }
@@ -169,11 +159,13 @@ bool MaglevCompiler::Compile(LocalIsolate* local_isolate,
     if (graph->may_have_unreachable_blocks()) {
       graph->RemoveUnreachableBlocks();
     }
-    GraphMultiProcessorWithIdentities<ReturnedValueRepresentationSelector,
-                                      AnyUseMarkingProcessor>
+    GraphMultiProcessor<ReturnedValueRepresentationSelector,
+                        AnyUseMarkingProcessor,
+                        RegallocNodeInfoAllocationProcessor>
         processor;
     processor.ProcessGraph(graph);
-    PrintGraph(graph, v8_flags.print_maglev_graphs, "After use marking");
+    PrintGraph(graph, v8_flags.print_maglev_graphs, "After use marking",
+               /* has_regalloc_data */ true);
     VerifyGraph(graph);
   }
 
@@ -189,10 +181,10 @@ bool MaglevCompiler::Compile(LocalIsolate* local_isolate,
       TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
                    "V8.Maglev.NodeProcessing");
       UnparkedScopeIfOnBackground unparked_scope(local_isolate->heap());
-      GraphMultiProcessor<
-          DeadNodeSweepingProcessor, RegallocNodeInfoAllocationProcessor,
-          ValueLocationConstraintProcessor, MaxCallDepthProcessor,
-          LiveRangeAndNextUseProcessor, DecompressedUseMarkingProcessor>
+      GraphMultiProcessor<DeadNodeSweepingProcessor,
+                          ValueLocationConstraintProcessor,
+                          MaxCallDepthProcessor, LiveRangeAndNextUseProcessor,
+                          DecompressedUseMarkingProcessor>
           processor(LiveRangeAndNextUseProcessor{compilation_info, graph,
                                                  &regalloc_info});
       processor.ProcessGraph(graph);

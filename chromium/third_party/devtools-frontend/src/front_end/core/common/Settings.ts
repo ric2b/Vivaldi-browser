@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2009 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2009 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 import * as Platform from '../platform/platform.js';
 import * as Root from '../root/root.js';
@@ -159,7 +133,6 @@ export class Settings {
    * If you are creating a setting that you expect the user to control, and
    * sync, prefer {@see createSetting}
    */
-  // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   moduleSetting<T = any>(settingName: string): Setting<T> {
     const setting = this.moduleSettings.get(settingName) as Setting<T>;
@@ -179,9 +152,9 @@ export class Settings {
 
   /**
    * Get setting via key, and create a new setting if the requested setting does not exist.
-   * @param key - kebab-case string ID
+   * @param key kebab-case string ID
    * @param defaultValue
-   * @param storageType - If not specified, SettingStorageType.GLOBAL is used.
+   * @param storageType If not specified, SettingStorageType.GLOBAL is used.
    */
   createSetting<T>(key: string, defaultValue: T, storageType?: SettingStorageType): Setting<T> {
     const storage = this.storageFromType(storageType);
@@ -354,7 +327,7 @@ export class Deprecation {
 
 export class Setting<V> {
   #titleFunction?: () => Platform.UIString.LocalizedString;
-  #titleInternal!: Platform.UIString.LocalizedString;
+  #title!: Platform.UIString.LocalizedString;
   #registration: SettingRegistration|null = null;
   #requiresUserAction?: boolean;
   #value?: V;
@@ -387,8 +360,8 @@ export class Setting<V> {
   }
 
   title(): Platform.UIString.LocalizedString {
-    if (this.#titleInternal) {
-      return this.#titleInternal;
+    if (this.#title) {
+      return this.#title;
     }
     if (this.#titleFunction) {
       return this.#titleFunction();
@@ -403,7 +376,7 @@ export class Setting<V> {
   }
 
   setTitle(title: Platform.UIString.LocalizedString): void {
-    this.#titleInternal = title;
+    this.#title = title;
   }
 
   setRequiresUserAction(requiresUserAction: boolean): void {
@@ -615,7 +588,6 @@ export class Setting<V> {
   }
 }
 
-// TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export class RegExpSetting extends Setting<any> {
   #regexFlags: string|undefined;
@@ -669,6 +641,9 @@ export class RegExpSetting extends Setting<any> {
   }
 }
 
+// The VersionController does a lot of mapping and restructuring which often need
+// typecasting to any, allow it in there
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export class VersionController {
   static readonly GLOBAL_VERSION_SETTING_NAME = 'inspectorVersion';
   static readonly SYNCED_VERSION_SETTING_NAME = 'syncedInspectorVersion';
@@ -824,16 +799,16 @@ export class VersionController {
 
       const newSetting = Settings.instance().createSetting(newName, {});
       const newValue = newSetting.get() || {};
-      // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
+
       // @ts-expect-error
       newValue.vertical = newValue.vertical || {};
-      // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
+
       // @ts-expect-error
       newValue.vertical.showMode = showMode;
-      // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
+
       // @ts-expect-error
       newValue.horizontal = newValue.horizontal || {};
-      // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
+
       // @ts-expect-error
       newValue.horizontal.showMode = showMode;
       newSetting.set(newValue);
@@ -914,7 +889,7 @@ export class VersionController {
     const newList = [];
     for (let i = 0; i < list.length; ++i) {
       const value = list[i];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const device: Record<string, any> = {};
       device['title'] = value['title'];
       device['type'] = 'unknown';
@@ -956,8 +931,6 @@ export class VersionController {
   }
 
   updateVersionFrom14To15(): void {
-    // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const setting = Settings.instance().createLocalSetting<any>('workspaceExcludedFolders', {});
     const oldValue = setting.get();
     const newValue: Record<string, string[]> = {};
@@ -971,8 +944,6 @@ export class VersionController {
   }
 
   updateVersionFrom15To16(): void {
-    // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const setting = Settings.instance().createSetting<any>('InspectorView.panelOrder', {});
     const tabOrders = setting.get();
     for (const key of Object.keys(tabOrders)) {
@@ -982,8 +953,6 @@ export class VersionController {
   }
 
   updateVersionFrom16To17(): void {
-    // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const setting = Settings.instance().createSetting<any>('networkConditionsCustomProfiles', []);
     const oldValue = setting.get();
     const newValue = [];
@@ -1002,8 +971,6 @@ export class VersionController {
   }
 
   updateVersionFrom17To18(): void {
-    // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const setting = Settings.instance().createLocalSetting<any>('workspaceExcludedFolders', {});
     const oldValue = setting.get();
     const newValue: Record<string, string> = {};
@@ -1023,8 +990,6 @@ export class VersionController {
 
   updateVersionFrom18To19(): void {
     const defaultColumns = {status: true, type: true, initiator: true, size: true, time: true};
-    // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const visibleColumnSettings = Settings.instance().createSetting<any>('networkLogColumnsVisibility', defaultColumns);
     const visibleColumns = visibleColumnSettings.get();
     visibleColumns.name = true;
@@ -1060,8 +1025,6 @@ export class VersionController {
   }
 
   updateVersionFrom21To22(): void {
-    // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const breakpointsSetting = Settings.instance().createLocalSetting<any>('breakpoints', []);
     const breakpoints = breakpointsSetting.get();
     for (const breakpoint of breakpoints) {
@@ -1084,8 +1047,7 @@ export class VersionController {
 
   updateVersionFrom24To25(): void {
     const defaultColumns = {status: true, type: true, initiator: true, size: true, time: true};
-    // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const networkLogColumnsSetting = Settings.instance().createSetting<any>('networkLogColumns', defaultColumns);
     const columns = networkLogColumnsSetting.get();
     delete columns.product;
@@ -1097,8 +1059,6 @@ export class VersionController {
     const urls = Object.keys(oldSetting.get());
     const textFilter = urls.map(url => `-url:${url}`).join(' ');
     if (textFilter) {
-      // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const textFilterSetting = Settings.instance().createSetting<any>('console.textFilter', '');
       const suffix = textFilterSetting.get() ? ` ${textFilterSetting.get()}` : '';
       textFilterSetting.set(`${textFilter}${suffix}`);
@@ -1108,8 +1068,6 @@ export class VersionController {
 
   updateVersionFrom26To27(): void {
     function renameKeyInObjectSetting(settingName: string, from: string, to: string): void {
-      // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const setting = Settings.instance().createSetting<any>(settingName, {});
       const value = setting.get();
       if (from in value) {
@@ -1141,8 +1099,6 @@ export class VersionController {
 
   updateVersionFrom28To29(): void {
     function renameKeyInObjectSetting(settingName: string, from: string, to: string): void {
-      // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const setting = Settings.instance().createSetting<any>(settingName, {});
       const value = setting.get();
       if (from in value) {
@@ -1197,7 +1153,6 @@ export class VersionController {
     // know on which resource type the given breakpoint was set, we just assume
     // 'script' here to keep things simple.
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const breakpointsSetting = Settings.instance().createLocalSetting<any>('breakpoints', []);
     const breakpoints = breakpointsSetting.get();
     for (const breakpoint of breakpoints) {
@@ -1207,12 +1162,11 @@ export class VersionController {
   }
 
   updateVersionFrom32To33(): void {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const previouslyViewedFilesSetting = Settings.instance().createLocalSetting<any>('previouslyViewedFiles', []);
     let previouslyViewedFiles = previouslyViewedFilesSetting.get();
 
     // Discard old 'previouslyViewedFiles' items that don't have a 'url' property.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     previouslyViewedFiles = previouslyViewedFiles.filter((previouslyViewedFile: any) => 'url' in previouslyViewedFile);
 
     // Introduce the new 'resourceTypeName' property on previously viewed files.
@@ -1239,7 +1193,6 @@ export class VersionController {
     const logpointPrefix = '/** DEVTOOLS_LOGPOINT */ console.log(';
     const logpointSuffix = ')';
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const breakpointsSetting = Settings.instance().createLocalSetting<any>('breakpoints', []);
     const breakpoints = breakpointsSetting.get();
     for (const breakpoint of breakpoints) {
@@ -1260,7 +1213,6 @@ export class VersionController {
     const logpointPrefix = '/** DEVTOOLS_LOGPOINT */ console.log(';
     const logpointSuffix = ')';
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const breakpointsSetting = Settings.instance().createLocalSetting<any>('breakpoints', []);
     const breakpoints = breakpointsSetting.get();
     for (const breakpoint of breakpoints) {
@@ -1492,17 +1444,22 @@ export class VersionController {
     }
   }
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export const enum SettingStorageType {
   /** Persists with the active Chrome profile but also syncs the settings across devices via Chrome Sync. */
   SYNCED = 'Synced',
-  /** Persists with the active Chrome profile, but not synchronized to other devices.
-   * The default SettingStorageType of createSetting(). */
+  /**
+   * Persists with the active Chrome profile, but not synchronized to other devices.
+   * The default SettingStorageType of createSetting().
+   */
   GLOBAL = 'Global',
   /** Uses Window.localStorage. Not recommended, legacy. */
   LOCAL = 'Local',
-  /** Session storage dies when DevTools window closes. Useful for atypical conditions that should be reverted when the
-   * user is done with their task. (eg Emulation modes, Debug overlays). These are also not carried into/out of incognito */
+  /**
+   * Session storage dies when DevTools window closes. Useful for atypical conditions that should be reverted when the
+   * user is done with their task. (eg Emulation modes, Debug overlays). These are also not carried into/out of incognito
+   */
   SESSION = 'Session',
 }
 

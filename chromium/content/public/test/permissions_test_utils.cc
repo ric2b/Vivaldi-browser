@@ -4,8 +4,10 @@
 
 #include "content/public/test/permissions_test_utils.h"
 
+#include "base/test/test_future.h"
 #include "content/browser/permissions/permission_controller_impl.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
+#include "third_party/blink/public/mojom/permissions/permission.mojom-forward.h"
 
 namespace content {
 
@@ -14,10 +16,14 @@ void SetPermissionControllerOverrideForDevTools(
     const std::optional<url::Origin>& origin,
     blink::PermissionType permission,
     const blink::mojom::PermissionStatus& status) {
+  base::test::TestFuture<PermissionControllerImpl::OverrideStatus> future;
+
   PermissionControllerImpl* permission_controller_impl =
       static_cast<PermissionControllerImpl*>(permission_controller);
-  permission_controller_impl->SetOverrideForDevTools(origin, permission,
-                                                     status);
+  permission_controller_impl->SetOverrideForDevTools(
+      origin, origin, permission, status, future.GetCallback());
+  ASSERT_EQ(future.Get(),
+            PermissionControllerImpl::OverrideStatus::kOverrideSet);
 }
 
 void AddNotifyListenerObserver(PermissionController* permission_controller,
@@ -28,20 +34,20 @@ void AddNotifyListenerObserver(PermissionController* permission_controller,
       std::move(callback));
 }
 
-PermissionController::SubscriptionId SubscribeToPermissionStatusChange(
+PermissionController::SubscriptionId SubscribeToPermissionResultChange(
     PermissionController* permission_controller,
-    PermissionType permission,
+    blink::mojom::PermissionDescriptorPtr permission_descriptor,
     RenderProcessHost* render_process_host,
     RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
     bool should_include_device_status,
-    const base::RepeatingCallback<void(PermissionStatus)>& callback) {
+    const base::RepeatingCallback<void(PermissionResult)>& callback) {
   PermissionControllerImpl* permission_controller_impl =
       static_cast<PermissionControllerImpl*>(permission_controller);
 
-  return permission_controller_impl->SubscribeToPermissionStatusChange(
-      permission, render_process_host, render_frame_host, requesting_origin,
-      should_include_device_status, callback);
+  return permission_controller_impl->SubscribeToPermissionResultChange(
+      std::move(permission_descriptor), render_process_host, render_frame_host,
+      requesting_origin, should_include_device_status, callback);
 }
 
 }  // namespace content

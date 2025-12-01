@@ -9,6 +9,10 @@
 // behavior.
 //
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "compiler/translator/hlsl/TextureFunctionHLSL.h"
 
 #include "compiler/translator/ImmutableStringBuilder.h"
@@ -1549,13 +1553,6 @@ ImmutableString TextureFunctionHLSL::useTextureFunction(const ImmutableString &n
         {
             textureFunction.method = TextureFunction::BIAS;
         }
-    }
-
-    if (IsShadowSampler(textureFunction.sampler) &&
-        textureFunction.method == TextureFunction::LOD &&
-        lod0)  // This prevents accidentally emitting SampleCmp inside discontinuous loops
-    {
-        textureFunction.method = TextureFunction::LOD0;
     }
 
     mUsesTexture.insert(textureFunction);

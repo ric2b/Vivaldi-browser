@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,11 +9,11 @@ import type * as CSSOverview from './css_overview.js';
 
 const UIStrings = {
   /**
-   *@description Title of the CSS overview panel
+   * @description Title of the CSS overview panel
    */
   cssOverview: 'CSS overview',
   /**
-   *@description Title of the CSS overview panel
+   * @description Title of the CSS overview panel
    */
   showCssOverview: 'Show CSS overview',
 } as const;

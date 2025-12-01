@@ -84,8 +84,7 @@ class V8_NODISCARD SharedStringAccessGuardIfNeeded {
 
   static bool IsNeeded(Tagged<String> str, bool check_local_heap = true) {
     if (check_local_heap) {
-      LocalHeap* local_heap = LocalHeap::Current();
-      if (!local_heap || local_heap->is_main_thread()) {
+      if (LocalHeap::Current()->is_main_thread()) {
         // Don't acquire the lock for the main thread.
         return false;
       }
@@ -117,12 +116,10 @@ class V8_NODISCARD SharedStringAccessGuardIfNeeded {
   static Isolate* GetIsolateIfNeeded(Tagged<String> str) {
     if (!IsNeeded(str)) return nullptr;
 
-    Isolate* isolate;
-    if (!GetIsolateFromHeapObject(str, &isolate)) {
-      // If we can't get the isolate from the String, it must be read-only.
-      DCHECK(ReadOnlyHeap::Contains(str));
-      return nullptr;
-    }
+    DCHECK(!ReadOnlyHeap::Contains(str));
+    Isolate* isolate = Isolate::Current();
+    if (str->IsShared()) isolate = isolate->shared_space_isolate();
+    DCHECK_EQ(isolate->heap(), Heap::FromWritableHeapObject(str));
     return isolate;
   }
 

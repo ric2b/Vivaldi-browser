@@ -20,19 +20,25 @@ namespace tflite {
 // for creating a `GraphImplTflite` which uses TFLite for inference.
 class ContextImplTflite final : public WebNNContextImpl {
  public:
-  ContextImplTflite(mojo::PendingReceiver<mojom::WebNNContext> receiver,
-                    WebNNContextProviderImpl* context_provider,
-                    mojom::CreateContextOptionsPtr options);
+  ContextImplTflite(
+      mojo::PendingAssociatedReceiver<mojom::WebNNContext> receiver,
+      WebNNContextProviderImpl* context_provider,
+      mojom::CreateContextOptionsPtr options,
+      mojo::ScopedDataPipeConsumerHandle write_tensor_consumer,
+      mojo::ScopedDataPipeProducerHandle read_tensor_producer,
+      gpu::CommandBufferId command_buffer_id,
+      std::unique_ptr<ScopedSequence> sequence,
+      scoped_refptr<gpu::SchedulerTaskRunner> task_runner);
 
   ContextImplTflite(const WebNNContextImpl&) = delete;
   ContextImplTflite& operator=(const ContextImplTflite&) = delete;
-
-  ~ContextImplTflite() override;
 
   // WebNNContextImpl:
   base::WeakPtr<WebNNContextImpl> AsWeakPtr() override;
 
  private:
+  ~ContextImplTflite() override;
+
   void CreateGraphImpl(
       mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
       mojom::GraphInfoPtr graph_info,
@@ -42,16 +48,15 @@ class ContextImplTflite final : public WebNNContextImpl {
       base::flat_map<OperandId, WebNNTensorImpl*> constant_tensor_operands,
       CreateGraphImplCallback callback) override;
 
-  void CreateTensorImpl(
-      mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
-      mojom::TensorInfoPtr tensor_info,
-      CreateTensorImplCallback callback) override;
+  base::expected<scoped_refptr<WebNNTensorImpl>, mojom::ErrorPtr>
+  CreateTensorImpl(mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
+                   mojom::TensorInfoPtr tensor_info) override;
 
-  void CreateTensorFromMailboxImpl(
+  base::expected<scoped_refptr<WebNNTensorImpl>, mojom::ErrorPtr>
+  CreateTensorFromSharedImageImpl(
       mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
       mojom::TensorInfoPtr tensor_info,
-      gpu::Mailbox mailbox,
-      CreateTensorImplCallback callback) override;
+      std::unique_ptr<gpu::WebNNTensorRepresentation> representation) override;
 
   base::WeakPtrFactory<ContextImplTflite> weak_factory_{this};
 };

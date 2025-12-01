@@ -1787,9 +1787,15 @@ FcConfigAdd (FcValueListPtr *head,
              FcObject        object,
              FamilyTable    *table)
 {
-    FcValueListPtr *prev, l, last, v;
+    FcValueListPtr *prev, l, last;
     FcValueBinding  sameBinding;
 
+    if (!newp)
+	return FcFalse;
+    if (position)
+	sameBinding = position->binding;
+    else
+	sameBinding = FcValueBindingWeak;
     /*
      * Make sure the stored type is valid for built-in objects
      */
@@ -1806,19 +1812,14 @@ FcConfigAdd (FcValueListPtr *head,
 
 	    return FcFalse;
 	}
+	if (l->binding == FcValueBindingSame)
+	    l->binding = sameBinding;
     }
 
     if (object == FC_FAMILY_OBJECT && table) {
 	FamilyTableAdd (table, newp);
     }
 
-    if (position)
-	sameBinding = position->binding;
-    else
-	sameBinding = FcValueBindingWeak;
-    for (v = newp; v != NULL; v = FcValueListNext (v))
-	if (v->binding == FcValueBindingSame)
-	    v->binding = sameBinding;
     if (append) {
 	if (position)
 	    prev = &position->next;
@@ -2032,7 +2033,7 @@ FcConfigSubstituteWithPat (FcConfig   *config,
     }
 
     if (FcDebug() & FC_DBG_EDIT) {
-	printf ("FcConfigSubstitute ");
+	printf ("FcConfigSubstitute(%s) ", kind == FcMatchPattern ? "Pattern" : kind == FcMatchFont ? "Font" : kind == FcMatchScan ? "Scan" : "Unknown");
 	FcPatternPrint (p);
     }
 

@@ -7,6 +7,7 @@
 
 #include <optional>
 
+#include "base/functional/function_ref.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/stack_allocated.h"
 #include "third_party/blink/public/common/features.h"
@@ -20,10 +21,7 @@
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 
 namespace blink {
-namespace scheduler {
-class TaskAttributionInfo;
-}  // namespace scheduler
-
+class InteractionEffectsMonitor;
 class HTMLVideoElement;
 class SoftNavigationContext;
 class SoftNavigationPaintAttributionTracker;
@@ -31,8 +29,7 @@ class SoftNavigationPaintAttributionTracker;
 // This class contains the logic for calculating Single-Page-App soft navigation
 // heuristics. See https://github.com/WICG/soft-navigations
 class CORE_EXPORT SoftNavigationHeuristics
-    : public GarbageCollected<SoftNavigationHeuristics>,
-      public scheduler::TaskAttributionTracker::Observer {
+    : public GarbageCollected<SoftNavigationHeuristics> {
  public:
   FRIEND_TEST_ALL_PREFIXES(SoftNavigationHeuristicsTest,
                            EarlyReturnOnInvalidPendingInteractionTimestamp);
@@ -59,19 +56,16 @@ class CORE_EXPORT SoftNavigationHeuristics
     EventScope& operator=(EventScope&&);
 
    private:
-    using ObserverScope = scheduler::TaskAttributionTracker::ObserverScope;
     using TaskScope = scheduler::TaskAttributionTracker::TaskScope;
 
     friend class SoftNavigationHeuristics;
 
     EventScope(SoftNavigationHeuristics*,
-               std::optional<ObserverScope>,
                std::optional<TaskScope>,
                Type,
                bool is_nested);
 
     SoftNavigationHeuristics* heuristics_;
-    std::optional<ObserverScope> observer_scope_;
     std::optional<TaskScope> task_scope_;
     Type type_;
     bool is_nested_;
@@ -99,7 +93,7 @@ class CORE_EXPORT SoftNavigationHeuristics
   static void OnVideoSrcChanged(HTMLVideoElement*);
 
   // GarbageCollected boilerplate.
-  void Trace(Visitor*) const override;
+  void Trace(Visitor*) const;
 
   void Shutdown();
 
@@ -107,9 +101,6 @@ class CORE_EXPORT SoftNavigationHeuristics
                                        SoftNavigationContext*);
   bool ModifiedDOM(Node* node);
   uint32_t SoftNavigationCount() { return soft_navigation_count_; }
-
-  // TaskAttributionTracker::Observer's implementation.
-  void OnCreateTaskScope(scheduler::TaskAttributionInfo&) override;
 
   SoftNavigationContext* MaybeGetSoftNavigationContextForTiming(Node* node);
   void OnPaintFinished();
@@ -127,9 +118,9 @@ class CORE_EXPORT SoftNavigationHeuristics
     return CreateEventScope(EventScope::Type::kNavigate);
   }
 
-  // Returns an `EventScope` for the given `Event` if the event is relevant to
-  // soft navigation tracking, otherwise it returns nullopt.
-  std::optional<EventScope> MaybeCreateEventScopeForEvent(const Event&);
+  // Returns an `EventScope` for the given input `Event` if the event is
+  // relevant to soft navigation tracking, otherwise it returns nullopt.
+  std::optional<EventScope> MaybeCreateEventScopeForInputEvent(const Event&);
 
   SoftNavigationPaintAttributionTracker* GetPaintAttributionTracker() {
     CHECK_EQ(IsPrePaintBasedAttributionEnabled(), !!paint_attribution_tracker_);
@@ -143,6 +134,11 @@ class CORE_EXPORT SoftNavigationHeuristics
   bool IsTrackingSoftNavigationsForTest() const {
     return !potential_soft_navigations_.empty();
   }
+
+  void RegisterInteractionEffectsMonitor(InteractionEffectsMonitor*);
+  void UnregisterInteractionEffectsMonitor(InteractionEffectsMonitor*);
+  void ForEachInteractionEffectsMonitor(
+      base::FunctionRef<void(InteractionEffectsMonitor&)>);
 
  private:
   void ReportSoftNavigationToMetrics(SoftNavigationContext*) const;
@@ -225,6 +221,8 @@ class CORE_EXPORT SoftNavigationHeuristics
   // Used to map DOM modifications to `SoftNavigationContext`s for paint
   // attribution. Only set when `IsPrePaintBasedAttributionEnabled()` is true.
   Member<SoftNavigationPaintAttributionTracker> paint_attribution_tracker_;
+
+  HeapHashSet<Member<InteractionEffectsMonitor>> interaction_effects_monitors_;
 
   uint32_t soft_navigation_count_ = 0;
   bool has_active_event_scope_ = false;

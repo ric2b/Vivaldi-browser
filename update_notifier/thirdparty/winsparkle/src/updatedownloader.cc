@@ -50,7 +50,7 @@
 // it with other headers by using blank lines around it.
 #include <Windows.h>
 
-#include <Softpub.h>
+#include <SoftPub.h>
 #include <WinTrust.h>
 #include <io.h>
 #include <lmcons.h>
@@ -76,6 +76,11 @@ const wchar_t kExpandExe[] = L"expand.exe";
 const wchar_t kChromeArchive[] = L"vivaldi.7z";
 
 const wchar_t kSetupExe[] = L"setup.exe";
+
+// Copied from v140 util_constants.cc after upstream removed them
+const char kSwitchUpdateSetupExe[] = "update-setup-exe";
+const char kSwitchNewSetupExe[] = "new-setup-exe";
+const char kSwitchPreviousVersion[] = "previous-version";
 
 #ifndef OFFICIAL_BUILD
 // To avoid asking for a HTTP password for Soprano builds we download them from
@@ -575,8 +580,8 @@ void ExpandDeltaArchive(const base::FilePath& file_path,
   }
 
   cmdline = base::CommandLine(setup_exe);
-  cmdline.AppendSwitchPath(installer::switches::kUpdateSetupExe, setup_delta);
-  cmdline.AppendSwitchPath(installer::switches::kNewSetupExe, new_setup_exe);
+  cmdline.AppendSwitchPath(kSwitchUpdateSetupExe, setup_delta);
+  cmdline.AppendSwitchPath(kSwitchNewSetupExe, new_setup_exe);
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           installer::switches::kEnableLogging)) {
     cmdline.AppendSwitch(installer::switches::kVerboseLogging);
@@ -659,7 +664,7 @@ std::unique_ptr<InstallerLaunchData> TryDeltaDownload(
   LOG(INFO) << "Delta was downloaded and successfully extracted.";
   base::CommandLine cmdline(setup_exe);
   AddInstallArguments(cmdline);
-  cmdline.AppendSwitchASCII(installer::switches::kPreviousVersion,
+  cmdline.AppendSwitchASCII(kSwitchPreviousVersion,
                             g_app_version.GetString());
   cmdline.AppendSwitchPath(installer::switches::kInstallArchive, vivaldi_delta);
   return std::make_unique<InstallerLaunchData>(true, appcast.Version,

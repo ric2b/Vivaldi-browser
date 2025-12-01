@@ -3,15 +3,12 @@
 #ifndef COMPONENTS_AD_BLOCKER_CORE_ADBLOCK_RULE_SERVICE_STORAGE_H_
 #define COMPONENTS_AD_BLOCKER_CORE_ADBLOCK_RULE_SERVICE_STORAGE_H_
 
-#include <memory>
 #include <string>
 
 #include "base/files/file_path.h"
 #include "base/files/important_file_writer.h"
-#include "base/uuid.h"
 #include "components/ad_blocker/core/adblock_rule_service_storage_delegate.h"
 #include "components/ad_blocker/public/core/adblock_rule_manager.h"
-#include "components/ad_blocker/public/core/adblock_types.h"
 
 namespace base {
 class SequencedTaskRunner;

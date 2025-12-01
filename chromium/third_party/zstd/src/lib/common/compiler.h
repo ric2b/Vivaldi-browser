@@ -218,6 +218,23 @@
 #  if defined(__ARM_NEON) || defined(_M_ARM64)
 #    define ZSTD_ARCH_ARM_NEON
 #  endif
+#  if defined(__ARM_FEATURE_SVE)
+#    define ZSTD_ARCH_ARM_SVE
+#  endif
+#  if defined(__ARM_FEATURE_SVE2)
+#    define ZSTD_ARCH_ARM_SVE2
+#  endif
+#if defined(__riscv) && defined(__riscv_vector)
+    #if defined(__GNUC__)
+        #if (__GNUC__ > 14 || (__GNUC__ == 14 && __GNUC_MINOR__ >= 1))
+            #define ZSTD_ARCH_RISCV_RVV
+        #endif
+    #elif defined(__clang__)
+        #if __clang_major__ > 18 || (__clang_major__ == 18 && __clang_minor__ >= 1)
+            #define ZSTD_ARCH_RISCV_RVV
+        #endif
+    #endif
+#endif
 #
 #  if defined(ZSTD_ARCH_X86_AVX2)
 #    include <immintrin.h>
@@ -226,6 +243,12 @@
 #    include <emmintrin.h>
 #  elif defined(ZSTD_ARCH_ARM_NEON)
 #    include <arm_neon.h>
+#  endif
+#  if defined(ZSTD_ARCH_ARM_SVE) || defined(ZSTD_ARCH_ARM_SVE2)
+#    include <arm_sve.h>
+#  endif
+#  if defined(ZSTD_ARCH_RISCV_RVV)
+#    include <riscv_vector.h>
 #  endif
 #endif
 

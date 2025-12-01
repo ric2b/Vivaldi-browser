@@ -370,14 +370,31 @@ void DOMSelection::setBaseAndExtent(Node* base_node,
 
   // TODO(editing-dev): Behavior on where base or extent is null is still
   // under discussion: https://github.com/w3c/selection-api/issues/72
-  if (!base_node) {
-    UseCounter::Count(DomWindow(), WebFeature::kSelectionSetBaseAndExtentNull);
-    Selection().Clear();
-    return;
-  }
-  if (!extent_node) {
-    UseCounter::Count(DomWindow(), WebFeature::kSelectionSetBaseAndExtentNull);
-    extent_offset = 0;
+  if (RuntimeEnabledFeatures::SelectionSetBaseAndExtentNonNullNodeEnabled()) {
+    if (!base_node) {
+      UseCounter::Count(DomWindow(),
+                        WebFeature::kSelectionSetBaseAndExtentNull);
+      exception_state.ThrowTypeError("anchorNode is null");
+      return;
+    }
+    if (!extent_node) {
+      UseCounter::Count(DomWindow(),
+                        WebFeature::kSelectionSetBaseAndExtentNull);
+      exception_state.ThrowTypeError("focusNode is null");
+      return;
+    }
+  } else {
+    if (!base_node) {
+      UseCounter::Count(DomWindow(),
+                        WebFeature::kSelectionSetBaseAndExtentNull);
+      Selection().Clear();
+      return;
+    }
+    if (!extent_node) {
+      UseCounter::Count(DomWindow(),
+                        WebFeature::kSelectionSetBaseAndExtentNull);
+      extent_offset = 0;
+    }
   }
 
   // 1. If anchorOffset is longer than anchorNode's length or if focusOffset is
@@ -761,24 +778,12 @@ void DOMSelection::deleteFromDocument() {
   DomWindow()->document()->UpdateStyleAndLayout(
       DocumentUpdateReason::kSelection);
 
-  if (!RuntimeEnabledFeatures::
-          SelectionDeleteFromDocumentUaShadowFixEnabled()) {
-    // The following code is necessary for
-    // editing/selection/deleteFromDocument-crash.html, which assumes
-    // deleteFromDocument() for text selection in a TEXTAREA deletes the
-    // TEXTAREA value.
-    if (Selection().ComputeVisibleSelectionInDOMTree().IsNone()) {
-      return;
-    }
-  }
-
   Range* selected_range = CreateRange(Selection()
                                           .ComputeVisibleSelectionInDOMTree()
                                           .ToNormalizedEphemeralRange());
   if (!selected_range)
     return;
-  if (RuntimeEnabledFeatures::SelectionDeleteFromDocumentUaShadowFixEnabled() &&
-      selected_range->startContainer()->IsInUserAgentShadowRoot()) {
+  if (selected_range->startContainer()->IsInUserAgentShadowRoot()) {
     return;
   }
 

@@ -26,6 +26,7 @@ static_library("sessions") {
     "//chrome/common:constants",
     "//components/keyed_service/core:core",
     "//components/keyed_service/content:content",
+    "//components/paint_preview/buildflags",
     "//content/public/browser",
     "//skia",
     "//third_party/icu",

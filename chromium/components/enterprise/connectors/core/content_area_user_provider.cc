@@ -19,6 +19,11 @@ namespace enterprise_connectors {
 
 namespace {
 
+const std::set<std::string_view>& GoogleDomains() {
+  static const std::set<std::string_view> kDomains = {"google.com"};
+  return kDomains;
+}
+
 const std::set<std::string_view>& TabWorkspaceDomains() {
   static const std::set<std::string_view> kDomains = {
       "mail.google.com",        "meet.google.com",
@@ -26,7 +31,7 @@ const std::set<std::string_view>& TabWorkspaceDomains() {
       "docs.google.com",        "sites.google.com",
       "keep.google.com",        "script.google.com",
       "cloudsearch.google.com", "console.cloud.google.com",
-      "datastudio.google.com",
+      "datastudio.google.com",  "gemini.google.com",
   };
   return kDomains;
 }
@@ -95,9 +100,17 @@ std::string GetEmailFromUrl(signin::IdentityManager* im, const GURL& url) {
 
 }  // namespace
 
-// static
 std::string GetActiveContentAreaUser(signin::IdentityManager* im,
                                      const GURL& tab_url) {
+  if (!IncludeContentAreaAccountEmail(tab_url, GoogleDomains())) {
+    return "";
+  }
+
+  return GetEmailFromUrl(im, tab_url);
+}
+
+std::string GetURLFActiveContentAreaUser(signin::IdentityManager* im,
+                                         const GURL& tab_url) {
   if (!IncludeContentAreaAccountEmail(tab_url, TabWorkspaceDomains())) {
     return "";
   }
@@ -114,6 +127,10 @@ std::string GetActiveFrameUser(signin::IdentityManager* im,
   }
 
   return GetEmailFromUrl(im, frame_url);
+}
+
+bool CanRetrieveActiveUser(const GURL& tab_url) {
+  return IncludeContentAreaAccountEmail(tab_url, GoogleDomains());
 }
 
 }  // namespace enterprise_connectors

@@ -127,19 +127,19 @@ When your system allows it, prefer using `make` to build `zstd` and `libzstd`.
 
 ### Makefile
 
-If your system is compatible with standard `make` (or `gmake`),
+Assuming your system supports standard `make` (or `gmake`),
 invoking `make` in root directory will generate `zstd` cli in root directory.
 It will also create `libzstd` into `lib/`.
 
-Other available options include:
+Other standard targets include:
 - `make install` : create and install zstd cli, library and man pages
 - `make check` : create and run `zstd`, test its behavior on local platform
 
 The `Makefile` follows the [GNU Standard Makefile conventions](https://www.gnu.org/prep/standards/html_node/Makefile-Conventions.html),
-allowing staged install, standard flags, directory variables and command variables.
+allowing staged install, standard compilation flags, directory variables and command variables.
 
-For advanced use cases, specialized compilation flags which control binary generation
-are documented in [`lib/README.md`](lib/README.md#modular-build) for the `libzstd` library
+For advanced use cases, specialized flags which control binary generation and installation paths are documented
+in [`lib/README.md`](lib/README.md#modular-build) for the `libzstd` library
 and in [`programs/README.md`](programs/README.md#compilation-variables) for the `zstd` CLI.
 
 ### cmake

@@ -5,18 +5,23 @@
 <translation id="1118377629180821201">風景１２</translation>
 <translation id="1158503667684816647">もう聞かんといて</translation>
 <translation id="1159983379553246472">メディア再生の問題直すためにこのタブもっかい読み込んで。</translation>
+<translation id="1204778305310783648">「インターネットを監視経済に変えるんは間違うとる」: ヨン・フォン・テッツナー、Web Summit 2023にて。</translation>
 <translation id="1222195720020481779">インストーラー起動するわ...</translation>
 <translation id="1224683873953469764">モバイルにVivaldi入れようや</translation>
-<translation id="1270785070369717623">ごめん、Opera GX起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存してOpera GXのウィンドウ全部閉じてからやってみて。</translation>
 <translation id="1276145862619442150">スピードダイヤル</translation>
 <translation id="1281950884873973195">動物６</translation>
 <translation id="1411638389238344450">リンクをメールで送る</translation>
 <translation id="1454726940098520109">分かったからもうええわ</translation>
 <translation id="1462666970065907900">このウィンドウほんまに閉じんの？</translation>
 <translation id="1480046233931937785">クレジット</translation>
+<translation id="1489123210863708132">トラッカー・広告ブロッカー有効にして、自分のブラウジング守って、プライバシー統計作ろうや。</translation>
 <translation id="1490502035430975848">ポータルドキュメント検査する</translation>
+<translation id="1500787357908295021">あんたのプライバシー統計</translation>
 <translation id="1521774566618522728">今日アクティブ</translation>
 <translation id="1526344461589023948">ダウンロードした更新ファイル、保存できへんかったわ。コンピューターの空きが十分あるか確認して、もう一回試してみて。</translation>
+<translation id="16328381871867323">議員さんはようやく、うちらのデジタルデータがどうやって追跡、収集、保存されてるか注目し始めたわ。
+
+形成が一変する判決の意味と、うちらにどんな影響があるか、確認してみて。</translation>
 <translation id="1635542496948266458">プロファイル切り替え</translation>
 <translation id="1657174850639146440">怪獣９</translation>
 <translation id="1676595396635191120">さらのプライベートウィンドウ</translation>
@@ -25,14 +30,16 @@
 <translation id="1756026472674246267">さらのタブで開く</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">この画像もうちょい詳しく...</translation>
+<translation id="1919345977826869612">広告</translation>
 <translation id="1920297417712412573">メモへコピー</translation>
-<translation id="1921101374471252440">画像もっかい読み込む (&amp;R)</translation>
 <translation id="1924750141060565109">風景１５</translation>
 <translation id="19598411548897379">一般</translation>
+<translation id="1970180444859658569">‘Do-Not-Track’ プライバシー設定はドイツで法的支援あるで</translation>
 <translation id="1973351931613083086">自動再生</translation>
 <translation id="1985669426322966465">ソフトウェアアップデート</translation>
 <translation id="2079036669923635404">新しいVivaldi、バージョン<ph name="VERSION" />もう出てるで。</translation>
 <translation id="2141974047387702305">更新ファイルのダウンロード中にエラー出たわ。インターネット接続確認して、後でもう一回やってみて。</translation>
+<translation id="2225863440766607138">トラッカー</translation>
 <translation id="2226825946708954262">⚠ データ損失あるけど続行</translation>
 <translation id="2339641773402824483">アップデートあるかな...</translation>
 <translation id="2429571091666452569">リストから：</translation>
@@ -42,24 +49,29 @@
 <translation id="2501278716633472235">戻る</translation>
 <translation id="2612127540243995147">インストール準備できたわ。Vivaldi閉じて再起動するで。</translation>
 <translation id="2613387515621326337">アップデートサイト出す</translation>
-<translation id="2645477450146475243">ごめん、Opera起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存してOperaのウィンドウ全部閉じてからやってみて。</translation>
-<translation id="2647368062414805334">ごめん、Edge起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存してEdgeのウィンドウ全部閉じてからやってみて。</translation>
+<translation id="2690699652723742414">直近30日</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
+<translation id="2741210449864955442">https://vivaldi.com/blog/technology/vivaldi-browser-at-the-web-summit/</translation>
+<translation id="2765309692777226484">トラッカー・広告ブロッカーが無効になってるで。</translation>
 <translation id="2848085334714181751">動物３</translation>
 <translation id="2873951654529031587">ごみ箱</translation>
+<translation id="2902312830803030883">その他</translation>
 <translation id="292258461174562431">怪獣４</translation>
 <translation id="2923448633003185837">貼り付けて移動</translation>
 <translation id="2953943267837858202">動画の自動再生、許可されてへん</translation>
 <translation id="2977472760057091832">プライベートウィンドウで開く</translation>
 <translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">さらのタブで開く</translation>
-<translation id="3027988479108856431">ごめん、Yandex起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存してYandexのウィンドウ全部閉じてからやってみて。</translation>
 <translation id="3084011186245865060">風景６</translation>
 <translation id="3085906383264247940">Opera (ベータ)</translation>
 <translation id="3093931836425623631">Vivaldiは、Chromiumオープンソースプロジェクトと、他のオープンソースソフトウェアで構築されてるねん。</translation>
+<translation id="3119245580849443327">Vivaldiプライバシーレポート</translation>
+<translation id="3126903660515914763">https://vivaldi.com/blog/news/alert-no-google-topics-in-vivaldi/</translation>
 <translation id="3127383884976966729">動物７</translation>
 <translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">さらのブックマーク</translation>
+<translation id="3156779787905856989">Manifest V3、webRequestと広告ブロッカーについて</translation>
+<translation id="3191389212681074619">https://help.vivaldi.com/android/android-privacy/android-tracker-and-ad-blocker/</translation>
 <translation id="3255747772218936245">アップデートをインストール</translation>
 <translation id="3259769196742189631">W3Cサービスで検証</translation>
 <translation id="3291915639428159043">自動再生、ブロックされてるで</translation>
@@ -68,6 +80,7 @@
 <translation id="3334610655141903168">（無名）</translation>
 <translation id="3372505110412186107"><ph name="VERSION" /> は最新版のVivaldiやで。</translation>
 <translation id="3383198080133834965">ばっちり最新版や！</translation>
+<translation id="3402602684546832928">Operaのブックマークファイルどれにするん</translation>
 <translation id="3451317331714872347">風景８</translation>
 <translation id="3457498675806041407">終了の確認</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> インストールできたわ。ブラウザ再起動して。</translation>
@@ -82,13 +95,15 @@
 <translation id="3650023731264842343">次のページ読み込み中：</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">新しいVivaldiあるわ！</translation>
+<translation id="3694122362646626770">ウェブサイト</translation>
 <translation id="3708982624815781692">ダウンロード、キャンセルされたわ。</translation>
+<translation id="3716128635228495027">Vivaldiに戻る</translation>
 <translation id="3732157130969736834">リンク先をブックマークに入れとく</translation>
 <translation id="3732388226447288666">動物２</translation>
 <translation id="3732439195215136813">動物５</translation>
-<translation id="3795800845758778870">ごめん、Brave起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存してBraveのウィンドウ全部閉じてからやってみて。</translation>
 <translation id="3822431842304177896">さらの区切り線</translation>
 <translation id="3832132597516774400">風景５</translation>
+<translation id="3861977424605124250">起動時に出す</translation>
 <translation id="3894751534882749287">ページ見たいんやったら、トラッカーブロッカーポップアップで許可ボタンを押したらトラッキング保護レベル変えれるで</translation>
 <translation id="3914946330804881301">Operaからインポート</translation>
 <translation id="3921292902397893431">怪獣８</translation>
@@ -101,6 +116,7 @@
 <translation id="4074744496918018786">プライベートウィンドウで画像開く</translation>
 <translation id="410351446219883937">自動再生</translation>
 <translation id="4281844954008187215">利用規約</translation>
+<translation id="430967081421617822">全期間</translation>
 <translation id="4324492550286218827">風景２</translation>
 <translation id="4406101500523955324">プライベートウィンドウで開く</translation>
 <translation id="4420816922321010053">ほんまにVivaldi終了すんの？</translation>
@@ -108,6 +124,10 @@
 <translation id="443008484043213881">便利なやつ</translation>
 <translation id="4456211719108566931">怪獣６</translation>
 <translation id="4459169140545916303"><ph name="DEVICE_LAST_ACTIVATED_TIME" /> 日前アクティブ</translation>
+<translation id="4474776280324528449">https://vivaldi.com/blog/do-no-track-gets-legal-backing-in-germany/</translation>
+<translation id="4510781427281143276">プロファイルほかす</translation>
+<translation id="4511738570787012048">Vivaldiのゼロトラッキング宣言に参加して、オンラインプライバシー取り戻そ。
+		下の記事で、うちらがユーザーの権利守るためにどんな取り組みしてるか見てみて。</translation>
 <translation id="4512900838580567989">バックグラウンドのタブで開く</translation>
 <translation id="4545097004879999966">Opera</translation>
 <translation id="4548358047305717967">バックグラウンドのタブで画像開く</translation>
@@ -127,23 +147,29 @@
 <translation id="5238244642230426581">インポートしたブックマーク</translation>
 <translation id="527605719918376753">ミュート</translation>
 <translation id="5305569355661722298">ウィンドウ閉じる確認</translation>
+<translation id="5317780077021120954">保存</translation>
 <translation id="5322922669477407077">Opera（開発者向け）</translation>
 <translation id="5388358297987318779">画像開く</translation>
+<translation id="5398772614898833570">ブロックした広告数</translation>
 <translation id="5416008465899576639">Vivaldi更新できるで。</translation>
 <translation id="5497042274492038489">ウィンドウ閉じる確認</translation>
 <translation id="5556459405103347317">リロード</translation>
+<translation id="5583322400766491358">パーソナルインサイトのデータはあんたのデバイスに安全に保存されて、第三者と共有されることはないで。</translation>
 <translation id="5594602170491763400">怪獣５</translation>
 <translation id="5648110075441906505">さらのウィンドウで画像開く</translation>
+<translation id="5648166631817621825">直近7日</translation>
 <translation id="5656371807944747581">アップデートエラー！</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> 出てるで（今使てんのは <ph name="OLD_VERSION" />）。ダウンロードする？</translation>
+<translation id="5741670635761443575">言うとくけど、VivaldiにはGoogle Topicsないで。</translation>
 <translation id="5770433027661640693">風景１０</translation>
 <translation id="5857090052475505287">さらのフォルダー</translation>
 <translation id="588258955323874662">全画面表示</translation>
-<translation id="5916080360077521750">ごめん、Chrome起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存してChromeのウィンドウ全部閉じてからやってみて。</translation>
 <translation id="6040143037577758943">閉じる</translation>
 <translation id="6140948187512243695">詳細出す</translation>
+<translation id="6165508094623778733">もっと詳しく</translation>
 <translation id="6229528619562190452">クリックしてVivaldiを更新。</translation>
 <translation id="6234173136417926046">画像をスタートページの背景に使う</translation>
+<translation id="630690498669249215">Operaのブックマークファイル</translation>
 <translation id="6339818817272922368">ローカルアカウント</translation>
 <translation id="6376435169746695498">このページの読み込みは<ph name="BLOCKER_NAME" /> にブロックされたで</translation>
 <translation id="6398710281890660037">プロファイル保護</translation>
@@ -154,33 +180,47 @@
 <translation id="6551219277044048123">検索エンジンに追加... (&amp;G)</translation>
 <translation id="6630781781151951863">風景１８</translation>
 <translation id="6635049669875534328">リリースノート:</translation>
+<translation id="6653655836861174026">プロファイル使えば、Vivaldiのデータ分けて管理できるで。家族や友人用にプロファイル作ったり、仕事用とプライベート用で使い分けたりできるで。</translation>
 <translation id="6693585104974197539">どのEdgeプロファイルフォルダインポートするか選んで</translation>
 <translation id="6726279523566323394">どのBraveプロファイルフォルダインポートするか選んで</translation>
+<translation id="6736243959894955139">アドレス</translation>
 <translation id="6892812721183419409"><ph name="USER" />でリンク開く</translation>
 <translation id="6896758677409633944">コピー</translation>
+<translation id="6951961820678531655">プロファイル “__1” ほかしてもええの？</translation>
 <translation id="6960139763942959188">このプロファルは今のところ安全に保存されてへんわ。Vivaldiはあんたのプロフィールを、今より安全な、暗号化された形式にアップグレードするところやねんけど、続行する前に、今すぐ終了してプロファイルをバックアップしてほうがええで。</translation>
+<translation id="7013466836883158999">ユーザー監視せんでも、持続可能な製品作れんの？ブラウジングの未来ってどんな感じ？2023年のウェブサミットでVivaldiのCEO、ヨン・フォン・テッツナーがそんな質問に答えてるで。</translation>
+<translation id="7066262000446496119">誰がVivaldi使うてんの？</translation>
 <translation id="7086554968911045110">風景７</translation>
 <translation id="7099506190679014195">安全なキーストアアップグレード</translation>
 <translation id="7111492742514999492">風景９</translation>
 <translation id="7113310725918019676"><ph name="DOMAIN" />からの<ph name="BLOCKED_TYPE" />はOKする</translation>
-<translation id="7208252576848052204">ごめん、Arc起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存してArcのウィンドウ全部閉じてからやってみて。</translation>
+<translation id="7277237102285741596">https://vivaldi.com/blog/manifest-v3-webrequest-and-ad-blockers/</translation>
+<translation id="7283555985781738399">ゲストモード</translation>
 <translation id="7321500017121629018">昨日アクティブ</translation>
 <translation id="7337881442233988129">Chromium</translation>
+<translation id="7421665776469827022">保存したデータ</translation>
+<translation id="7454640759045234067">ブロックしたトラッカー数</translation>
+<translation id="7515032462649518126">個人設定のアバター画像選ぶ</translation>
 <translation id="7581266044164103589">更新インストーラー、起動できへんかったわ。コンピューターにメモリとストレージの空きが十分あるか確認して、後でもう一回試してみて。</translation>
 <translation id="7658239707568436148">やんぴ</translation>
+<translation id="7698231949697067951">オンラインで何するかはあんたの自由や！下で、うちらがどうやってあんたの保護に貢献してきたか見てみて。</translation>
 <translation id="7724603315864178912">切り取り</translation>
 <translation id="7727481996062361502">アップデート検証するわ...</translation>
 <translation id="7793738202466490491">カレンダーイベントとして追加</translation>
 <translation id="7834693436815575883">自動再生、許可されてるで</translation>
 <translation id="7848222781052558334">ダウンロードされたファイルのデジタル署名認証に失敗したわ。</translation>
 <translation id="7865983598101744945">終了の確認</translation>
+<translation id="788493840831967104">節約できた時間</translation>
 <translation id="7957213167373139414">カレンダー</translation>
+<translation id="7981965265950405093">Vivaldiには自前の広告・トラッカーブロッカー、多彩なカスタマイズオプション、内蔵型メール・カレンダー機能などが入ってるねん。それがGoogleのManifest V3に合うとるか？Vivaldiの開発者、ジュリアン・ピカラウサがこの問題について解説するで。</translation>
 <translation id="8027581147000338959">さらのウィンドウで開く</translation>
+<translation id="8034402064393340023">みんなのプライバシーに対するうちらの取り組み</translation>
 <translation id="8044382196220116469">サイトに自動で動画再生できへんようにする</translation>
 <translation id="8099620695029051217">アドレスをコピー</translation>
 <translation id="8119307142152921512">トラッカーと広告</translation>
 <translation id="8197810018650377191">ブックマークに追加</translation>
-<translation id="8261506727792406068">消す</translation>
+<translation id="8248593573177859437">プライバシーレポート</translation>
+<translation id="8261506727792406068">ほかす</translation>
 <translation id="8331671104904436324">バックグラウンドのタブで開く</translation>
 <translation id="8373293945112511707">風景１</translation>
 <translation id="8388552048012645975">アップデートとってくるわ...</translation>
@@ -191,7 +231,6 @@
 <translation id="8539196077526389150">風景１３</translation>
 <translation id="8562339533180097902">Vivaldi閉じてインストールする</translation>
 <translation id="8567452685425968223">アップデート抽出するわ...</translation>
-<translation id="8624587806981488221">画像もっかい読み込む (&amp;R)</translation>
 <translation id="8651348004684669199">今出てるタブ追加</translation>
 <translation id="8669345741879513971">怪獣１０</translation>
 <translation id="867544375504146191">Yandex</translation>
@@ -211,10 +250,13 @@
 <translation id="9065203028668620118">編集</translation>
 <translation id="9090254883741610153">続ける</translation>
 <translation id="910680796491389880">Thunderbird</translation>
+<translation id="9118360612142967597">ユーザーの行動監視してプロファイリングするんは間違うとるわ。せやから、VivaldiブラウザではGoogleのTopicsを二重に無効化してるねん。</translation>
 <translation id="912022491595344261"><ph name="USER" />で画像開く</translation>
+<translation id="9149866541089851383">編集...</translation>
 <translation id="9157539936604258187">リンク開く</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
 <translation id="9180553614777056266">広告ブロッカー</translation>
+<translation id="9188210215803842004">ウェブサイトとトラッカーの詳細</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">風景１６</translation>
 </translationbundle>

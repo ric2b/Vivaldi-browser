@@ -586,8 +586,10 @@ inline constexpr char kInvalidStartupOverrideURL[] =
 inline constexpr char16_t kInvalidTheme[] = u"Invalid value for 'theme'.";
 inline constexpr char16_t kInvalidThemeColors[] =
     u"Invalid value for theme colors - colors must be integers";
-inline constexpr char16_t kInvalidThemeImages[] =
+inline constexpr char16_t kInvalidThemeImagesValueType[] =
     u"Invalid value for theme images - images must be strings.";
+inline constexpr char16_t kInvalidThemeImagesPath[] =
+    u"Invalid path for theme images.";
 inline constexpr char kInvalidThemeImageMimeType[] =
     "Invalid mime type for theme image '*'.";
 inline constexpr char kThemeImageMissingFileExtension[] =
@@ -601,6 +603,8 @@ inline constexpr char16_t kInvalidThemeTints[] =
 inline constexpr char16_t kInvalidThemeTabGroupColorPalette[] =
     u"Invalid value for theme tab group color palette - tab group color "
     u"palette values must be integers.";
+inline constexpr char kInvalidThemeDictImagePath[] =
+    "Invalid path for theme image: entry '*', scale '*', path '*'.";
 inline constexpr char kInvalidTrialTokensNonEmptyList[] =
     "Invalid value for 'trial_tokens'. Must be a non-empty list.";
 inline constexpr char kInvalidTrialTokensValue[] =
@@ -739,7 +743,10 @@ inline constexpr char kRulesetCountExceeded[] =
 inline constexpr char16_t kSandboxPagesCSPKeyNotAllowed[] =
     u"The Content Security Policy for sandboxed pages should be specified in "
     "'content_security_policy.sandbox'.";
-inline constexpr char kSidePanelManifestDefaultPathError[] =
+inline constexpr char16_t kSidePanelManifestDefaultPathInvalid[] =
+    u"Side panel file path must be a relative URL to a valid extension "
+    u"resource.";
+inline constexpr char kSidePanelManifestDefaultPathDoesNotExist[] =
     "Side panel file path must exist.";
 inline constexpr char16_t
     kTransientBackgroundConflictsWithPersistentBackground[] =

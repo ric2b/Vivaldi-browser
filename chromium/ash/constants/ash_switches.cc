@@ -30,11 +30,6 @@ constexpr char kCampbellHashKey[] =
     "\x78\xb6\xa7\x59\x06\x11\xc7\xea\x09\x7e\x92\xe3\xe9\xff\xa6\x01\x4c"
     "\x03\x18\x32";
 
-// The hash value for the secret key of the mantis feature.
-constexpr char kMantisHashKey[] =
-    "\x7c\x8c\x82\x6f\x3e\xcd\x16\xf0\xfb\xfe\xfc\x9c\x2a\x48\x07\x75\x7e\xea"
-    "\x46\xf2";
-
 }  // namespace
 
 // Please keep the order of these switches synchronized with the header file
@@ -490,6 +485,11 @@ const char kEnableArcVm[] = "enable-arcvm";
 // Enables ARCVM DLC.
 const char kEnableArcVmDlc[] = "enable-arcvm-dlc";
 
+// This flag is set when the device's hardware meets the hardware requirements
+// for the ARCVM DLC.
+const char kArcVmDlcHardwareRequirementSatisfied[] =
+    "arcvm-dlc-hardware-satisfied";
+
 // Enables ARCVM realtime VCPU feature.
 const char kEnableArcVmRtVcpu[] = "enable-arcvm-rt-vcpu";
 
@@ -782,9 +782,6 @@ const char kBrowserDataMigrationForUser[] = "browser-data-migration-for-user";
 const char kBrowserDataBackwardMigrationForUser[] =
     "browser-data-backward-migration-for-user";
 
-// Supply secret key for Mantis feature.
-const char kMantisFeatureKey[] = "mantis-feature-key";
-
 // Tells Chrome to forcefully trigger backward data migration.
 extern const char kForceBrowserDataBackwardMigration[] =
     "force-browser-data-backward-migration";
@@ -800,9 +797,6 @@ const char kBrowserDataBackwardMigrationMode[] =
 // Force skip or force migration. Should only be used for testing.
 const char kForceBrowserDataMigrationForTesting[] =
     "force-browser-data-migration-for-testing";
-
-// The base URL for the App Mall.
-const char kMallUrl[] = "mall-url";
 
 // Determines the URL to be used when calling the backend.
 const char kMarketingOptInUrl[] = "marketing-opt-in-url";
@@ -1275,23 +1269,6 @@ bool IsCampbellSecretKeyMatched() {
   if (!key_matched) {
     LOG(ERROR)
         << "Provided campbel secrey key does not match the expected one.";
-  }
-
-  return key_matched;
-}
-
-bool IsMantisSecretKeyMatched() {
-  // Commandline looks like:
-  //  out/Default/chrome --user-data-dir=/tmp/tmp123
-  //  --mantis-feature-key="INSERT KEY HERE"
-  //  --enable-features=MediaAppImageMantis
-  const std::string provided_key_hash = base::SHA1HashString(
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          kMantisFeatureKey));
-
-  const bool key_matched = (provided_key_hash == kMantisHashKey);
-  if (!key_matched) {
-    LOG(ERROR) << "Provided secret key does not match the expected one.";
   }
 
   return key_matched;

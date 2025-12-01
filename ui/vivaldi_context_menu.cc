@@ -84,4 +84,24 @@ MenubarMenuEntry* MenubarMenuParams::GetSibling(int id) {
   return nullptr;
 }
 
+VivaldiBookmarkMenu* VivaldiBookmarkMenu::active_ = nullptr;
+
+// static
+VivaldiBookmarkMenu* VivaldiBookmarkMenu::GetActive() {
+  return active_;
+}
+
+VivaldiBookmarkMenu::VivaldiBookmarkMenu() {
+  if (active_) {
+    LOG(WARNING) << "Menu not deleted before new is created";
+  }
+  active_ = this;
+}
+
+VivaldiBookmarkMenu::~VivaldiBookmarkMenu() {
+  if (active_ == this) {
+    active_ = nullptr;
+  }
+}
+
 }  // namespace vivaldi

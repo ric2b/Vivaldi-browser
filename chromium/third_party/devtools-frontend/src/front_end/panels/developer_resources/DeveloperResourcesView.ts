@@ -1,4 +1,4 @@
-// Copyright (c) 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,7 @@ const {bindToSetting} = UI.SettingsUI;
 
 const UIStrings = {
   /**
-   *@description Placeholder for a search field in a toolbar
+   * @description Placeholder for a search field in a toolbar
    */
   filterByText: 'Filter by URL and error',
   /**
@@ -38,9 +38,9 @@ const UIStrings = {
    */
   enableLoadingThroughTarget: 'Load through website',
   /**
-   *@description Text for resources load status
-   *@example {1} PH1
-   *@example {1} PH2
+   * @description Text for resources load status
+   * @example {1} PH1
+   * @example {1} PH2
    */
   resourcesCurrentlyLoading: '{PH1} resources, {PH2} currently loading',
   /**

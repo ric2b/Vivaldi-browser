@@ -15,6 +15,7 @@
 #include "browser/translate/vivaldi_translate_client.h"
 #include "build/build_config.h"
 #include "calendar/calendar_service_factory.h"
+#include "update/update_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
@@ -68,7 +69,9 @@
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "browser/vivaldi_browser_component_wrapper_impl.h"
 #include "browser/vivaldi_extension_handover_impl.h"
+#ifndef VIVALDI_SPARKLE_DISABLED
 #include "extensions/api/auto_update/auto_update_api.h"
+#endif
 #include "extensions/api/bookmark_context_menu/bookmark_context_menu_api.h"
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/api/calendar/calendar_api.h"
@@ -91,6 +94,7 @@
 #include "extensions/api/search_engines/search_engines_api.h"
 #include "extensions/api/sessions/vivaldi_sessions_api.h"
 #include "extensions/api/settings/settings_api.h"
+#include "extensions/api/site_permissions/site_permissions_api.h"
 #include "extensions/api/sync/sync_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/api/theme/theme_private_api.h"
@@ -145,6 +149,9 @@ void VivaldiBrowserMainExtraParts::
 #if !BUILDFLAG(IS_ANDROID)
   vivaldi::NotesModelFactory::GetInstance();
   calendar::CalendarServiceFactory::GetInstance();
+#ifndef VIVALDI_SPARKLE_DISABLED
+  update::UpdateServiceFactory::GetInstance();
+#endif
   vivaldi_omnibox::OmniboxServiceFactory::GetInstance();
   contact::ContactServiceFactory::GetInstance();
   mail_client::MailClientServiceFactory::GetInstance();
@@ -165,7 +172,9 @@ void VivaldiBrowserMainExtraParts::
   VivaldiImageStore::InitFactory();
   vivaldi_status::VivaldiStatusFactory::GetInstance();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#ifndef VIVALDI_SPARKLE_DISABLED
   extensions::AutoUpdateAPI::GetFactoryInstance();
+#endif
   extensions::BookmarkContextMenuAPI::GetFactoryInstance();
   extensions::CalendarAPI::GetFactoryInstance();
   extensions::MailAPI::GetFactoryInstance();
@@ -197,6 +206,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::OmniboxPrivateAPI::GetFactoryInstance();
   extensions::TranslateHistoryAPI::GetFactoryInstance();
   extensions::DirectMatchAPI::GetFactoryInstance();
+  extensions::SitePermissionsAPI::GetFactoryInstance();
 
   extensions::VivaldiRootDocumentHandlerFactory::GetInstance();
   vivaldi::WindowRegistryServiceFactory::GetInstance();
@@ -331,7 +341,7 @@ void VivaldiBrowserMainExtraParts::PostMainMessageLoopRun() {
 }
 
 void VivaldiBrowserMainExtraParts::PostDestroyThreads() {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS) && !defined(VIVALDI_SPARKLE_DISABLED)
   // this has to be done after threads are destroyed,
   // as there is an ENV variable manipulation code inside
   extensions::AutoUpdateAPI::HandleRestartPreconditions();

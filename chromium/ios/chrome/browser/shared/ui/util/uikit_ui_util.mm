@@ -245,16 +245,10 @@ bool CanShowTabStrip(UITraitCollection* traitCollection) {
   if (IsRegularXRegularSizeClass(traitCollection)) {
     return true;
   }
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
-#if defined(VIVALDI_BUILD)
-    // We show tab strip on iPhone too.
-    return true;
-#else
     return ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET;
-#endif // End Vivaldi
   }
-#endif
+
   return false;
 }
 
@@ -421,7 +415,9 @@ NSAttributedString* TextForTabGroupCount(int count, CGFloat font_size) {
   if (count <= 0) {
     string = @"";
   } else if (count < 100) {
-    string = [NSString stringWithFormat:@"+%d", count];
+    string = IsTabGridEmptyThumbnailUIEnabled()
+                 ? [NSString stringWithFormat:@"%d", count]
+                 : [NSString stringWithFormat:@"+%d", count];
   } else {
     string = @"99+";
   }
@@ -520,11 +516,9 @@ NSArray<UITrait>* TraitCollectionSetForTraits(NSArray<UITrait>* traits) {
       UITraitVerticalSizeClass.class
     ] mutableCopy];
 
-#if defined(__IPHONE_18_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_18_0
     if (@available(iOS 18, *)) {
       [mutableTraits addObject:UITraitListEnvironment.class];
     }
-#endif
 
     everyUIMutableTrait = [NSArray arrayWithArray:mutableTraits];
   });

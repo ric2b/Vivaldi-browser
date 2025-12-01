@@ -41,6 +41,13 @@ std::string_view SaveCreditCardPromptFixFlowSuffix(
   return ".NoFixFlow";
 }
 
+// Returns the histogram suffix stating if the save destination is `Upload` or
+// `Local`.
+std::string SaveCvcPromptSaveDestinationSuffix(std::string_view base_name,
+                                               bool is_uploading) {
+  return base::StrCat({base_name, is_uploading ? ".Upload" : ".Local"});
+}
+
 }  // namespace
 
 void LogSaveCreditCardPromptResultIOS(
@@ -61,6 +68,23 @@ void LogSaveCreditCardPromptResultIOS(
 
   std::string_view destination = is_uploading ? ".Server" : ".Local";
 
+  // Determine the metric suffix based on the card save type.
+  const std::string_view save_type_suffix = [&]() {
+    switch (options.card_save_type) {
+      case payments::PaymentsAutofillClient::CardSaveType::kCardSaveWithCvc:
+        return ".SavingWithCvc";
+      case payments::PaymentsAutofillClient::CardSaveType::kCardSaveOnly:
+        // The kCardSaveOnly metric does not have a suffix, to preserve
+        // continuity with data logged prior to the introduction of CVC saving
+        // features.
+        return "";
+      case payments::PaymentsAutofillClient::CardSaveType::kCvcSaveOnly:
+        // This flow is now logged via LogSaveCvcPromptResultIOS.
+        break;
+    }
+    NOTREACHED();
+  }();
+
   base::UmaHistogramEnumeration(
       base::StrCat({"Autofill.SaveCreditCardPromptResult.IOS", destination,
                     SaveCreditCardPromptOverlayTypeToMetricSuffix(overlay_type),
@@ -68,7 +92,25 @@ void LogSaveCreditCardPromptResultIOS(
                     base::NumberToString(options.num_strikes.value()),
                     SaveCreditCardPromptFixFlowSuffix(
                         options.should_request_name_from_user,
-                        options.should_request_expiration_date_from_user)}),
+                        options.should_request_expiration_date_from_user),
+                    save_type_suffix}),
+      metric);
+}
+
+void LogSaveCvcPromptOfferedIOS(bool is_uploading) {
+  base::UmaHistogramEnumeration(
+      SaveCvcPromptSaveDestinationSuffix("Autofill.SaveCvcPromptOffer",
+                                         is_uploading),
+      SaveCardPromptOffer::kShown);
+}
+
+void LogSaveCvcPromptResultIOS(
+    SaveCvcPromptResultIOS metric,
+    bool is_uploading,
+    const payments::PaymentsAutofillClient::SaveCreditCardOptions& options) {
+  base::UmaHistogramEnumeration(
+      SaveCvcPromptSaveDestinationSuffix("Autofill.SaveCvcPromptResult",
+                                         is_uploading),
       metric);
 }
 

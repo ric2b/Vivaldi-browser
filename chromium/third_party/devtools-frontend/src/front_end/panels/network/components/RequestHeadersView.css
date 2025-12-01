@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The Chromium Authors. All rights reserved.
+ * Copyright 2022 The Chromium Authors
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
@@ -134,7 +134,7 @@ div.raw-headers-row {
 .header-grid-container {
   display: inline-grid;
   grid-template-columns: 156px 50px 1fr;
-  grid-gap: 4px;
+  gap: 4px;
   /* Make this fit into the same line as the summary marker */
   width: calc(100% - 15px);
 }

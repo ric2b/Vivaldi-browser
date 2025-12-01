@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -13,7 +13,7 @@ import elementsTreeExpandButtonStyles from './elementsTreeExpandButton.css.js';
 
 const UIStrings = {
   /**
-   *@description Aria label for a button expanding collapsed subtree
+   * @description Aria label for a button expanding collapsed subtree
    */
   expand: 'Expand',
 } as const;

@@ -8,7 +8,10 @@ import androidx.annotation.IntDef;
 
 import org.chromium.base.Callback;
 import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.NullUnmarked;
 import org.chromium.build.annotations.Nullable;
+
+import java.util.function.Supplier;
 
 /**
  * ObservableSupplier wraps an asynchronously provided object E, notifying observers when the
@@ -26,7 +29,7 @@ import org.chromium.build.annotations.Nullable;
  * @param <E> The type of the wrapped object.
  */
 @NullMarked
-public interface ObservableSupplier<E extends @Nullable Object> extends Supplier<@Nullable E> {
+public interface ObservableSupplier<E extends @Nullable Object> extends Supplier<E> {
     /**
      * A bitmask of flags that control the notification behavior of {@link #addObserver(Callback,
      * int)}.
@@ -124,4 +127,15 @@ public interface ObservableSupplier<E extends @Nullable Object> extends Supplier
      * @param obs The observer to remove.
      */
     void removeObserver(Callback<E> obs);
+
+    /**
+     * This should be @Nullable even for non-@Nullable T, since the constructor does not guarantee
+     * the value is set.
+     *
+     * <p>For now, this is marked with @NullUnmarked in order to suppress warnings.
+     * https://crbug.com/430320400 will track figuring out the nullability properly.
+     */
+    @Override
+    @NullUnmarked
+    E get();
 }

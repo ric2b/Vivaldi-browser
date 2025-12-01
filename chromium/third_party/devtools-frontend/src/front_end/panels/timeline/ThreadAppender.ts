@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import * as Common from '../../core/common/common.js';
@@ -9,6 +9,7 @@ import * as SDK from '../../core/sdk/sdk.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Trace from '../../models/trace/trace.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
+import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
 
 import {
   addDecorationToEvent,
@@ -36,7 +37,7 @@ const UIStrings = {
   onIgnoreList: 'On ignore list ({rule})',
   /**
    * @description Refers to the "Main frame", meaning the top level frame. See https://www.w3.org/TR/html401/present/frames.html
-   * @example{example.com} PH1
+   * @example {example.com} PH1
    */
   mainS: 'Main — {PH1}',
   /**
@@ -49,83 +50,83 @@ const UIStrings = {
    */
   frameS: 'Frame — {PH1}',
   /**
-   *@description A web worker in the page. See https://developer.mozilla.org/en-US/docs/Web/API/Worker
-   *@example {https://google.com} PH1
+   * @description A web worker in the page. See https://developer.mozilla.org/en-US/docs/Web/API/Worker
+   * @example {https://google.com} PH1
    */
   workerS: '`Worker` — {PH1}',
   /**
-   *@description A web worker in the page. See https://developer.mozilla.org/en-US/docs/Web/API/Worker
-   *@example {FormatterWorker} PH1
-   *@example {https://google.com} PH2
+   * @description A web worker in the page. See https://developer.mozilla.org/en-US/docs/Web/API/Worker
+   * @example {FormatterWorker} PH1
+   * @example {https://google.com} PH2
    */
   workerSS: '`Worker`: {PH1} — {PH2}',
   /**
-   *@description Label for a web worker exclusively allocated for a purpose.
+   * @description Label for a web worker exclusively allocated for a purpose.
    */
   dedicatedWorker: 'Dedicated `Worker`',
   /**
-   *@description A generic name given for a thread running in the browser (sequence of programmed instructions).
+   * @description A generic name given for a thread running in the browser (sequence of programmed instructions).
    * The placeholder is an enumeration given to the thread.
-   *@example {1} PH1
+   * @example {1} PH1
    */
   threadS: 'Thread {PH1}',
   /**
-   *@description Rasterization in computer graphics.
+   * @description Rasterization in computer graphics.
    */
   raster: 'Raster',
   /**
-   *@description Threads used for background tasks.
+   * @description Threads used for background tasks.
    */
   threadPool: 'Thread pool',
   /**
-   *@description Name for a thread that rasterizes graphics in a website.
-   *@example {2} PH1
+   * @description Name for a thread that rasterizes graphics in a website.
+   * @example {2} PH1
    */
   rasterizerThreadS: 'Rasterizer thread {PH1}',
   /**
-   *@description Text in Timeline Flame Chart Data Provider of the Performance panel
-   *@example {2} PH1
+   * @description Text in Timeline Flame Chart Data Provider of the Performance panel
+   * @example {2} PH1
    */
   threadPoolThreadS: 'Thread pool worker {PH1}',
   /**
-   *@description Title of a bidder auction worklet with known URL in the timeline flame chart of the Performance panel
-   *@example {https://google.com} PH1
+   * @description Title of a bidder auction worklet with known URL in the timeline flame chart of the Performance panel
+   * @example {https://google.com} PH1
    */
   bidderWorkletS: 'Bidder Worklet — {PH1}',
   /**
-   *@description Title of a bidder auction worklet in the timeline flame chart of the Performance panel with an unknown URL
+   * @description Title of a bidder auction worklet in the timeline flame chart of the Performance panel with an unknown URL
    */
   bidderWorklet: 'Bidder Worklet',
 
   /**
-   *@description Title of a seller auction worklet in the timeline flame chart of the Performance panel with an unknown URL
+   * @description Title of a seller auction worklet in the timeline flame chart of the Performance panel with an unknown URL
    */
   sellerWorklet: 'Seller Worklet',
 
   /**
-   *@description Title of an auction worklet in the timeline flame chart of the Performance panel with an unknown URL
+   * @description Title of an auction worklet in the timeline flame chart of the Performance panel with an unknown URL
    */
   unknownWorklet: 'Auction Worklet',
 
   /**
-   *@description Title of control thread of a service process for an auction worklet in the timeline flame chart of the Performance panel with an unknown URL
+   * @description Title of control thread of a service process for an auction worklet in the timeline flame chart of the Performance panel with an unknown URL
    */
   workletService: 'Auction Worklet service',
 
   /**
-   *@description Title of a seller auction worklet with known URL in the timeline flame chart of the Performance panel
-   *@example {https://google.com} PH1
+   * @description Title of a seller auction worklet with known URL in the timeline flame chart of the Performance panel
+   * @example {https://google.com} PH1
    */
   sellerWorkletS: 'Seller Worklet — {PH1}',
 
   /**
-   *@description Title of an auction worklet with known URL in the timeline flame chart of the Performance panel
-   *@example {https://google.com} PH1
+   * @description Title of an auction worklet with known URL in the timeline flame chart of the Performance panel
+   * @example {https://google.com} PH1
    */
   unknownWorkletS: 'Auction Worklet — {PH1}',
 
   /**
-   *@description Title of control thread of a service process for an auction worklet with known URL in the timeline flame chart of the Performance panel
+   * @description Title of control thread of a service process for an auction worklet with known URL in the timeline flame chart of the Performance panel
    * @example {https://google.com} PH1
    */
   workletServiceS: 'Auction Worklet service — {PH1}',
@@ -144,7 +145,7 @@ export class ThreadAppender implements TrackAppender {
 
   #colorGenerator: Common.Color.Generator;
   #compatibilityBuilder: CompatibilityTracksAppender;
-  #parsedTrace: Trace.Handlers.Types.ParsedTrace;
+  #parsedTrace: Trace.TraceModel.ParsedTrace;
 
   #entries: readonly Trace.Types.Events.Event[] = [];
   #tree: Trace.Helpers.TreeHelpers.TraceEntryTree;
@@ -159,7 +160,7 @@ export class ThreadAppender implements TrackAppender {
   #url = '';
   #headerNestingLevel: number|null = null;
   constructor(
-      compatibilityBuilder: CompatibilityTracksAppender, parsedTrace: Trace.Handlers.Types.ParsedTrace,
+      compatibilityBuilder: CompatibilityTracksAppender, parsedTrace: Trace.TraceModel.ParsedTrace,
       processId: Trace.Types.Events.ProcessID, threadId: Trace.Types.Events.ThreadID, threadName: string|null,
       type: Trace.Handlers.Threads.ThreadType, entries: readonly Trace.Types.Events.Event[],
       tree: Trace.Helpers.TreeHelpers.TraceEntryTree) {
@@ -184,15 +185,15 @@ export class ThreadAppender implements TrackAppender {
     this.#entries = entries;
     this.#tree = tree;
     this.#threadDefaultName = threadName || i18nString(UIStrings.threadS, {PH1: threadId});
-    this.isOnMainFrame = Boolean(this.#parsedTrace.Renderer?.processes.get(processId)?.isOnMainFrame);
+    this.isOnMainFrame = Boolean(this.#parsedTrace.data.Renderer?.processes.get(processId)?.isOnMainFrame);
     this.threadType = type;
     // AuctionWorklets are threads, so we re-use this appender rather than
     // duplicate it, but we change the name because we want to render these
     // lower down than other threads.
-    if (this.#parsedTrace.AuctionWorklets.worklets.has(processId)) {
+    if (this.#parsedTrace.data.AuctionWorklets.worklets.has(processId)) {
       this.appenderName = 'Thread_AuctionWorklet';
     }
-    this.#url = this.#parsedTrace.Renderer?.processes.get(this.#processId)?.url || '';
+    this.#url = this.#parsedTrace.data.Renderer?.processes.get(this.#processId)?.url || '';
   }
 
   processId(): Trace.Types.Events.ProcessID {
@@ -206,9 +207,9 @@ export class ThreadAppender implements TrackAppender {
   /**
    * Appends into the flame chart data the data corresponding to the
    * this thread.
-   * @param trackStartLevel - the horizontal level of the flame chart events where
+   * @param trackStartLevel the horizontal level of the flame chart events where
    * the track's events will start being appended.
-   * @param expanded - wether the track should be rendered expanded.
+   * @param expanded whether the track should be rendered expanded.
    * @returns the first available level to append more data after having
    * appended the track's events.
    */
@@ -256,12 +257,16 @@ export class ThreadAppender implements TrackAppender {
    * chart data. A group has a predefined style and a reference to the
    * definition of the legacy track (which should be removed in the
    * future).
-   * @param currentLevel - the flame chart level at which the header is
+   * @param currentLevel the flame chart level at which the header is
    * appended.
    */
   #appendTrackHeaderAtLevel(currentLevel: number): void {
     const trackIsCollapsible = this.#entries.length > 0;
-    const style = buildGroupStyle({shareHeaderLine: false, collapsible: trackIsCollapsible});
+    const style = buildGroupStyle({
+      shareHeaderLine: false,
+      collapsible: trackIsCollapsible ? PerfUI.FlameChart.GroupCollapsibleState.ALWAYS :
+                                        PerfUI.FlameChart.GroupCollapsibleState.NEVER,
+    });
     if (this.#headerNestingLevel !== null) {
       style.nestingLevel = this.#headerNestingLevel;
     }
@@ -303,7 +308,11 @@ export class ThreadAppender implements TrackAppender {
     const currentTrackCount = this.#compatibilityBuilder.getCurrentTrackCountForThreadType(threadType);
     if (currentTrackCount === 0) {
       const trackIsCollapsible = this.#entries.length > 0;
-      const headerStyle = buildGroupStyle({shareHeaderLine: false, collapsible: trackIsCollapsible});
+      const headerStyle = buildGroupStyle({
+        shareHeaderLine: false,
+        collapsible: trackIsCollapsible ? PerfUI.FlameChart.GroupCollapsibleState.ALWAYS :
+                                          PerfUI.FlameChart.GroupCollapsibleState.NEVER,
+      });
 
       // Don't set any jslogcontext (first argument) because this is a shared
       // header group. Each child will have its context set.
@@ -314,7 +323,8 @@ export class ThreadAppender implements TrackAppender {
 
     // Nesting is set to 1 because the track is appended inside the
     // header for all raster threads.
-    const titleStyle = buildGroupStyle({padding: 2, nestingLevel: 1, collapsible: false});
+    const titleStyle =
+        buildGroupStyle({padding: 2, nestingLevel: 1, collapsible: PerfUI.FlameChart.GroupCollapsibleState.NEVER});
     const rasterizerTitle = this.threadType === Trace.Handlers.Threads.ThreadType.RASTERIZER ?
         i18nString(UIStrings.rasterizerThreadS, {PH1: currentTrackCount + 1}) :
         i18nString(UIStrings.threadPoolThreadS, {PH1: currentTrackCount + 1});
@@ -353,7 +363,7 @@ export class ThreadAppender implements TrackAppender {
         return Platform.assertNever(this.threadType, `Unknown thread type: ${this.threadType}`);
     }
     let suffix = '';
-    if (this.#parsedTrace.Meta.traceIsGeneric) {
+    if (this.#parsedTrace.data.Meta.traceIsGeneric) {
       suffix = suffix + ` (${this.threadId()})`;
     }
     return (threadTypeLabel || this.#threadDefaultName) + suffix;
@@ -368,7 +378,7 @@ export class ThreadAppender implements TrackAppender {
   }
 
   #buildNameForAuctionWorklet(): string {
-    const workletMetadataEvent = this.#parsedTrace.AuctionWorklets.worklets.get(this.#processId);
+    const workletMetadataEvent = this.#parsedTrace.data.AuctionWorklets.worklets.get(this.#processId);
     // We should always have this event - if we do not, we were instantiated with invalid data.
     if (!workletMetadataEvent) {
       return i18nString(UIStrings.unknownWorklet);
@@ -422,9 +432,9 @@ export class ThreadAppender implements TrackAppender {
   }
 
   #buildNameForWorker(): string {
-    const url = this.#parsedTrace.Renderer?.processes.get(this.#processId)?.url || '';
-    const workerId = this.#parsedTrace.Workers.workerIdByThread.get(this.#threadId);
-    const workerURL = workerId ? this.#parsedTrace.Workers.workerURLById.get(workerId) : url;
+    const url = this.#parsedTrace.data.Renderer?.processes.get(this.#processId)?.url || '';
+    const workerId = this.#parsedTrace.data.Workers.workerIdByThread.get(this.#threadId);
+    const workerURL = workerId ? this.#parsedTrace.data.Workers.workerURLById.get(workerId) : url;
     // Try to create a name using the worker url if present. If not, use a generic label.
     let workerName =
         workerURL ? i18nString(UIStrings.workerS, {PH1: workerURL}) : i18nString(UIStrings.dedicatedWorker);
@@ -440,7 +450,7 @@ export class ThreadAppender implements TrackAppender {
   /**
    * Adds into the flame chart data the entries of this thread, which
    * includes trace events and JS calls.
-   * @param currentLevel - the flame chart level from which entries will
+   * @param currentLevel the flame chart level from which entries will
    * be appended.
    * @returns the next level after the last occupied by the appended
    * entries (the first available level to append more data).
@@ -514,7 +524,7 @@ export class ThreadAppender implements TrackAppender {
       addDecorationToEvent(
           flameChartData, index, {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW});
     }
-    const warnings = this.#parsedTrace.Warnings.perEvent.get(entry);
+    const warnings = this.#parsedTrace.data.Warnings.perEvent.get(entry);
     if (!warnings) {
       return;
     }
@@ -539,28 +549,31 @@ export class ThreadAppender implements TrackAppender {
    * Gets the color an event added by this appender should be rendered with.
    */
   colorForEvent(event: Trace.Types.Events.Event): string {
-    if (this.#parsedTrace.Meta.traceIsGeneric) {
+    if (this.#parsedTrace.data.Meta.traceIsGeneric) {
       return event.name ? `hsl(${Platform.StringUtilities.hashCode(event.name) % 300 + 30}, 40%, 70%)` : '#ccc';
     }
 
     if (Trace.Types.Events.isProfileCall(event)) {
       if (event.callFrame.functionName === '(idle)') {
-        return Utils.EntryStyles.getCategoryStyles().idle.getComputedColorValue();
+        return categoryColorValue(Trace.Styles.getCategoryStyles().idle);
       }
       if (event.callFrame.functionName === '(program)') {
-        return Utils.EntryStyles.getCategoryStyles().other.getComputedColorValue();
+        return categoryColorValue(Trace.Styles.getCategoryStyles().other);
       }
       if (event.callFrame.scriptId === '0') {
         // If we can not match this frame to a script, return the
         // generic "scripting" color.
-        return Utils.EntryStyles.getCategoryStyles().scripting.getComputedColorValue();
+        return categoryColorValue(Trace.Styles.getCategoryStyles().scripting);
       }
       // Otherwise, return a color created based on its URL.
       return this.#colorGenerator.colorForID(event.callFrame.url);
     }
-    const defaultColor =
-        Utils.EntryStyles.getEventStyle(event.name as Trace.Types.Events.Name)?.category.getComputedColorValue();
-    return defaultColor || Utils.EntryStyles.getCategoryStyles().other.getComputedColorValue();
+    const eventStyles = Trace.Styles.getEventStyle(event.name as Trace.Types.Events.Name);
+    if (eventStyles) {
+      return categoryColorValue(eventStyles.category);
+    }
+
+    return categoryColorValue(Trace.Styles.getCategoryStyles().other);
   }
 
   /**
@@ -571,7 +584,7 @@ export class ThreadAppender implements TrackAppender {
       const rule = Utils.IgnoreList.getIgnoredReasonString(entry);
       return i18nString(UIStrings.onIgnoreList, {rule});
     }
-    return Utils.EntryName.nameForEntry(entry, this.#parsedTrace);
+    return Trace.Name.forEntry(entry, this.#parsedTrace);
   }
 
   setPopoverInfo(event: Trace.Types.Events.Event, info: PopoverInfo): void {
@@ -583,7 +596,11 @@ export class ThreadAppender implements TrackAppender {
       const range = (endLine !== -1 || endLine === startLine) ? `${startLine}...${endLine}` : startLine;
       info.title += ` - ${url} [${range}]`;
     }
-    const selfTime = this.#parsedTrace.Renderer.entryToNode.get(event)?.selfTime;
+    const selfTime = this.#parsedTrace.data.Renderer.entryToNode.get(event)?.selfTime;
     info.formattedTime = getDurationString(event.dur, selfTime);
   }
+}
+
+function categoryColorValue(category: Trace.Styles.TimelineCategory): string {
+  return ThemeSupport.ThemeSupport.instance().getComputedValue(category.cssVariable);
 }

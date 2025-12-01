@@ -1,0 +1,3 @@
+include "fcp/tracing/tracing_schema_common.fbs";
+
+table DoesntContainFields (tag: "EMPT", span) {}

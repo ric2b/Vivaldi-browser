@@ -9,8 +9,6 @@
 #include <string_view>
 #include <tuple>
 
-#include "ash/constants/ash_features.h"
-#include "base/functional/bind.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
@@ -19,14 +17,11 @@
 #include "chrome/browser/ash/app_mode/test/kiosk_mixin.h"
 #include "chrome/browser/ash/app_mode/test/kiosk_test_utils.h"
 #include "chrome/browser/ash/login/test/scoped_policy_update.h"
-#include "chrome/browser/ash/login/test/test_predicate_waiter.h"
 #include "chrome/browser/ash/policy/core/device_policy_cros_test_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_server_mixin.h"
 #include "chrome/browser/web_applications/isolated_web_apps/test/isolated_web_app_builder.h"
-#include "chrome/browser/web_applications/isolated_web_apps/test/test_signed_web_bundle_builder.h"
-#include "chrome/common/url_constants.h"
+#include "chrome/browser/web_applications/isolated_web_apps/test/isolated_web_app_test_update_server.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/ash/components/system/fake_statistics_provider.h"
@@ -34,14 +29,17 @@
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
+#include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
-#include "components/prefs/pref_service.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
+#include "components/webapps/isolated_web_apps/scheme.h"
+#include "components/webapps/isolated_web_apps/test_support/signing_keys.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/base/host_port_pair.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features_generated.h"
 #include "url/gurl.h"
@@ -94,23 +92,6 @@ KioskMixin::Config GetKioskIwaManualLaunchConfig(
   return kiosk_iwa_config;
 }
 
-// Waits until a `js_name` is defined. Is used to prevent API calls before the
-// test web page has loaded.
-void WaitForJsObject(content::WebContents* web_contents,
-                     const std::string& js_name) {
-  ash::test::TestPredicateWaiter(
-      base::BindRepeating(
-          [](content::WebContents* web_contents, const std::string& js_name) {
-            return content::EvalJs(
-                       web_contents,
-                       base::ReplaceStringPlaceholders(
-                           "typeof $1 !== 'undefined'", {js_name}, nullptr))
-                .ExtractBool();
-          },
-          web_contents, js_name))
-      .Wait();
-}
-
 content::EvalJsResult CallDeviceAttributesApi(
     content::WebContents* web_contents,
     const std::string& attribute_name) {
@@ -141,7 +122,7 @@ class KioskIwaDeviceAttributesApiTest
  public:
   KioskIwaDeviceAttributesApiTest() {
     InitFeatureList();
-    iwa_server_mixin_.AddBundle(
+    iwa_test_update_server_.AddBundle(
         web_app::IsolatedWebAppBuilder(GetIwaManifestBuilder())
             .BuildBundle(web_app::test::GetDefaultEd25519KeyPair()));
   }
@@ -209,13 +190,12 @@ class KioskIwaDeviceAttributesApiTest
   void InitFeatureList() {
     if (IsDeviceAttributesPermissionPolicyFeatureFlagEnabled()) {
       feature_list_.InitWithFeatures(
-          /*enabled_features=*/{ash::features::kIsolatedWebAppKiosk,
-                                blink::features::
+          /*enabled_features=*/{blink::features::
                                     kDeviceAttributesPermissionPolicy},
           /*disabled_features=*/{});
     } else {
       feature_list_.InitWithFeatures(
-          /*enabled_features=*/{ash::features::kIsolatedWebAppKiosk},
+          /*enabled_features=*/{},
           /*disabled_features=*/{
               blink::features::kDeviceAttributesPermissionPolicy});
     }
@@ -240,7 +220,7 @@ class KioskIwaDeviceAttributesApiTest
     kiosk_.Configure(
         scoped_update,
         GetKioskIwaManualLaunchConfig(
-            iwa_server_mixin_.GetUpdateManifestUrl(kTestWebBundleId)));
+            iwa_test_update_server_.GetUpdateManifestUrl(kTestWebBundleId)));
 
     scoped_update.policy_data()->set_annotated_asset_id(
         kDeviceAnnotatedAssetId);
@@ -262,15 +242,16 @@ class KioskIwaDeviceAttributesApiTest
     SelectFirstBrowser();
     ASSERT_NE(web_contents(), nullptr);
     ASSERT_EQ(web_contents()->GetVisibleURL(), kAppOrigin.GetURL());
+    ASSERT_TRUE(WaitForLoadStop(web_contents()));
   }
 
   const url::Origin kAppOrigin =
-      url::Origin::CreateFromNormalizedTuple(chrome::kIsolatedAppScheme,
+      url::Origin::CreateFromNormalizedTuple(webapps::kIsolatedAppScheme,
                                              kTestWebBundleId.id(),
                                              /*port=*/0);
 
   base::test::ScopedFeatureList feature_list_;
-  web_app::IsolatedWebAppUpdateServerMixin iwa_server_mixin_{&mixin_host_};
+  web_app::IsolatedWebAppTestUpdateServer iwa_test_update_server_;
   KioskMixin kiosk_{&mixin_host_};
   policy::DevicePolicyCrosTestHelper policy_helper_;
   ash::system::ScopedFakeStatisticsProvider fake_statistics_provider_;
@@ -284,8 +265,6 @@ IN_PROC_BROWSER_TEST_P(KioskIwaDeviceAttributesApiTest,
           ? !IsBlockPolicySet() && IsPermissionsPolicyGranted()
           : IsAllowPolicySet();
   MaybeSetEnterprisePoliciesForIwaOrigin();
-
-  WaitForJsObject(web_contents(), "navigator.managed");
 
   ASSERT_EQ(kDeviceAttributeNames.size(),
             kExpectedDeviceAttributeValues.size());

@@ -124,6 +124,10 @@ bool IsTargetsList(std::string_view ident) {
   return ident.ends_with("deps") || ident == "visibility";
 }
 
+bool IsSourcesList(std::string_view ident) {
+  return ident.ends_with("sources") || ident == "public";
+}
+
 class Printer {
  public:
   Printer();
@@ -181,6 +185,10 @@ class Printer {
   //   followed by global targets, each internally sorted alphabetically.
   // 'visibility': same as 'deps'.
   void SortIfApplicable(const BinaryOpNode* binop);
+
+  // Remove duplicates. Applies to 'visibility', 'deps' or ends in 'deps',
+  // 'sources' or ends in 'sources', or 'public'.
+  void DeduplicateIfApplicable(const BinaryOpNode* binop);
 
   // Traverse a binary op node tree and apply a callback to each leaf node.
   void TraverseBinaryOpNode(const ParseNode* node,
@@ -442,7 +450,7 @@ void Printer::SortIfApplicable(const BinaryOpNode* binop) {
   }
 
   const std::string_view lhs = ident->value().value();
-  if (lhs.ends_with("sources") || lhs == "public") {
+  if (IsSourcesList(lhs)) {
     TraverseBinaryOpNode(binop->right(), [](const ParseNode* node) {
       const ListNode* list = node->AsList();
       if (list)
@@ -453,6 +461,31 @@ void Printer::SortIfApplicable(const BinaryOpNode* binop) {
       const ListNode* list = node->AsList();
       if (list)
         const_cast<ListNode*>(list)->SortAsTargetsList();
+    });
+  }
+}
+
+void Printer::DeduplicateIfApplicable(const BinaryOpNode* binop) {
+  if (const Comments* comments = binop->comments()) {
+    const std::vector<Token>& before = comments->before();
+    if (!before.empty() && (before.front().value() == "# KEEPDUPS" ||
+                            before.back().value() == "# KEEPDUPS")) {
+      // Allow disabling of deduplication for specific actions that might
+      // want duplicate sources.
+      return;
+    }
+  }
+  const IdentifierNode* ident = binop->left()->AsIdentifier();
+  if (!ident || !IsAssignment(binop->op().value())) {
+    return;
+  }
+
+  const std::string_view lhs = ident->value().value();
+  if (IsSourcesList(lhs) || IsTargetsList(lhs)) {
+    TraverseBinaryOpNode(binop->right(), [](const ParseNode* node) {
+      const ListNode* list = node->AsList();
+      if (list)
+        const_cast<ListNode*>(list)->DeduplicateList();
     });
   }
 }
@@ -790,6 +823,7 @@ int Printer::Expr(const ParseNode* root,
     // Shorten before sorting, since the shortening may affect the ordering.
     ShortenIfApplicable(binop);
     SortIfApplicable(binop);
+    DeduplicateIfApplicable(binop);
 
     Precedence prec = precedence_[binop->op().value()];
 

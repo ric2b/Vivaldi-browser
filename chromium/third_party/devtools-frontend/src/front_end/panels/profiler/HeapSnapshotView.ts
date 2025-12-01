@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2011 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2011 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
@@ -75,208 +49,208 @@ import {instance} from './ProfileTypeRegistry.js';
 
 const UIStrings = {
   /**
-   *@description Text to find an item
+   * @description Text to find an item
    */
   find: 'Find',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   containment: 'Containment',
   /**
-   *@description Retaining paths title text content in Heap Snapshot View of a profiler tool
+   * @description Retaining paths title text content in Heap Snapshot View of a profiler tool
    */
   retainers: 'Retainers',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   allocationStack: 'Allocation stack',
   /**
-   *@description Screen reader label for a select box that chooses the perspective in the Memory panel when viewing a Heap Snapshot
+   * @description Screen reader label for a select box that chooses the perspective in the Memory panel when viewing a Heap Snapshot
    */
   perspective: 'Perspective',
   /**
-   *@description Screen reader label for a select box that chooses the snapshot to use as a base in the Memory panel when viewing a Heap Snapshot
+   * @description Screen reader label for a select box that chooses the snapshot to use as a base in the Memory panel when viewing a Heap Snapshot
    */
   baseSnapshot: 'Base snapshot',
   /**
-   *@description Text to filter result items
+   * @description Text to filter result items
    */
   filter: 'Filter',
   /**
-   *@description Placeholder text in the filter bar to filter by JavaScript class names for a heap
+   * @description Placeholder text in the filter bar to filter by JavaScript class names for a heap
    */
   filterByClass: 'Filter by class',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   code: 'Code',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   strings: 'Strings',
   /**
-   *@description Label on a pie chart in the statistics view for the Heap Snapshot tool
+   * @description Label on a pie chart in the statistics view for the Heap Snapshot tool
    */
   jsArrays: 'JS arrays',
   /**
-   *@description Label on a pie chart in the statistics view for the Heap Snapshot tool
+   * @description Label on a pie chart in the statistics view for the Heap Snapshot tool
    */
   typedArrays: 'Typed arrays',
   /**
-   *@description Label on a pie chart in the statistics view for the Heap Snapshot tool
+   * @description Label on a pie chart in the statistics view for the Heap Snapshot tool
    */
   systemObjects: 'System objects',
   /**
-   *@description Label on a pie chart in the statistics view for the Heap Snapshot tool
+   * @description Label on a pie chart in the statistics view for the Heap Snapshot tool
    */
   otherJSObjects: 'Other JS objects',
   /**
-   *@description Label on a pie chart in the statistics view for the Heap Snapshot tool
+   * @description Label on a pie chart in the statistics view for the Heap Snapshot tool
    */
   otherNonJSObjects: 'Other non-JS objects (such as HTML and CSS)',
   /**
-   *@description The reported total size used in the selected time frame of the allocation sampling profile
-   *@example {3 MB} PH1
+   * @description The reported total size used in the selected time frame of the allocation sampling profile
+   * @example {3 MB} PH1
    */
   selectedSizeS: 'Selected size: {PH1}',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   allObjects: 'All objects',
   /**
-   *@description Title in Heap Snapshot View of a profiler tool
-   *@example {Profile 2} PH1
+   * @description Title in Heap Snapshot View of a profiler tool
+   * @example {Profile 2} PH1
    */
   objectsAllocatedBeforeS: 'Objects allocated before {PH1}',
   /**
-   *@description Title in Heap Snapshot View of a profiler tool
-   *@example {Profile 1} PH1
-   *@example {Profile 2} PH2
+   * @description Title in Heap Snapshot View of a profiler tool
+   * @example {Profile 1} PH1
+   * @example {Profile 2} PH2
    */
   objectsAllocatedBetweenSAndS: 'Objects allocated between {PH1} and {PH2}',
   /**
-   *@description An option which will filter the heap snapshot to show only
+   * @description An option which will filter the heap snapshot to show only
    * strings which exactly match at least one other string
    */
   duplicatedStrings: 'Duplicated strings',
   /**
-   *@description An option which will filter the heap snapshot to show only
+   * @description An option which will filter the heap snapshot to show only
    * detached DOM nodes and other objects kept alive by detached DOM nodes
    */
   objectsRetainedByDetachedDomNodes: 'Objects retained by detached DOM nodes',
   /**
-   *@description An option which will filter the heap snapshot to show only
+   * @description An option which will filter the heap snapshot to show only
    * objects kept alive by the DevTools console
    */
   objectsRetainedByConsole: 'Objects retained by DevTools Console',
   /**
-   *@description Text for the summary view
+   * @description Text for the summary view
    */
   summary: 'Summary',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   comparison: 'Comparison',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   allocation: 'Allocation',
   /**
-   *@description Title text content in Heap Snapshot View of a profiler tool
+   * @description Title text content in Heap Snapshot View of a profiler tool
    */
   liveObjects: 'Live objects',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   statistics: 'Statistics',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   heapSnapshot: 'Heap snapshot',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   takeHeapSnapshot: 'Take heap snapshot',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   heapSnapshots: 'Heap snapshots',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   heapSnapshotProfilesShowMemory: 'See the memory distribution of JavaScript objects and related DOM nodes',
   /**
-   *@description Label for a checkbox in the heap snapshot view of the profiler tool. The "heap snapshot" contains the
+   * @description Label for a checkbox in the heap snapshot view of the profiler tool. The "heap snapshot" contains the
    * current state of JavaScript memory. With this checkbox enabled, the snapshot also includes internal data that is
    * specific to Chrome (hence implementation-specific).
    */
   exposeInternals: 'Internals with implementation details',
   /**
-   *@description Progress update that the profiler is capturing a snapshot of the heap
+   * @description Progress update that the profiler is capturing a snapshot of the heap
    */
   snapshotting: 'Snapshotting…',
   /**
-   *@description Profile title in Heap Snapshot View of a profiler tool
-   *@example {1} PH1
+   * @description Profile title in Heap Snapshot View of a profiler tool
+   * @example {1} PH1
    */
   snapshotD: 'Snapshot {PH1}',
   /**
-   *@description Text for a percentage value
-   *@example {13.0} PH1
+   * @description Text for a percentage value
+   * @example {13.0} PH1
    */
   percentagePlaceholder: '{PH1}%',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   allocationInstrumentationOn: 'Allocations on timeline',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   stopRecordingHeapProfile: 'Stop recording heap profile',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   startRecordingHeapProfile: 'Start recording heap profile',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool.
+   * @description Text in Heap Snapshot View of a profiler tool.
    * A stack trace is a list of functions that were called.
    * This option turns on recording of a stack trace at each allocation.
    * The recording itself is a somewhat expensive operation, so turning this option on, the website's performance may be affected negatively (e.g. everything becomes slower).
    */
   recordAllocationStacksExtra: 'Allocation stack traces (more overhead)',
   /**
-   *@description Text in CPUProfile View of a profiler tool
+   * @description Text in CPUProfile View of a profiler tool
    */
   recording: 'Recording…',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   allocationTimelines: 'Allocation timelines',
   /**
-   *@description Description for the 'Allocation timeline' tool in the Memory panel.
+   * @description Description for the 'Allocation timeline' tool in the Memory panel.
    */
   AllocationTimelinesShowInstrumented:
       'Record memory allocations over time and isolate memory leaks by selecting intervals with allocations that are still alive',
   /**
-   *@description Text when something is loading
+   * @description Text when something is loading
    */
   loading: 'Loading…',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
-   *@example {30} PH1
+   * @description Text in Heap Snapshot View of a profiler tool
+   * @example {30} PH1
    */
   savingD: 'Saving… {PH1}%',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool
+   * @description Text in Heap Snapshot View of a profiler tool
    */
   heapMemoryUsage: 'Heap memory usage',
   /**
-   *@description Text of a DOM element in Heap Snapshot View of a profiler tool
+   * @description Text of a DOM element in Heap Snapshot View of a profiler tool
    */
   stackWasNotRecordedForThisObject:
       'Stack wasn\'t recorded for this object because it had been allocated before this profile recording started.',
   /**
-   *@description Text in Heap Snapshot View of a profiler tool.
+   * @description Text in Heap Snapshot View of a profiler tool.
    * This text is on a button to undo all previous "Ignore this retainer" actions.
    */
   restoreIgnoredRetainers: 'Restore ignored retainers',
@@ -329,9 +303,22 @@ export class HeapSnapshotView extends UI.View.SimpleView implements DataDisplayD
   baseProfile!: HeapProfileHeader|null;
   trackingOverviewGrid?: HeapTimelineOverview;
   currentSearchResultIndex = -1;
-  currentQuery?: HeapSnapshotModel.HeapSnapshotModel.SearchConfig;
+  currentSearch?: HeapSnapshotModel.HeapSnapshotModel.SearchConfig;
+
+  get currentQuery(): string|undefined {
+    return this.currentSearch?.query;
+  }
+  set currentQuery(value: string) {
+    if (this.currentSearch) {
+      this.currentSearch.query = value;
+    }
+  }
+
   constructor(dataDisplayDelegate: DataDisplayDelegate, profile: HeapProfileHeader) {
-    super(i18nString(UIStrings.heapSnapshot));
+    super({
+      title: i18nString(UIStrings.heapSnapshot),
+      viewId: 'heap-snapshot',
+    });
 
     this.searchResults = [];
 
@@ -554,7 +541,7 @@ export class HeapSnapshotView extends UI.View.SimpleView implements DataDisplayD
       return null;
     }
     const script = rawLocation.script();
-    const sourceURL = script && script.sourceURL;
+    const sourceURL = script?.sourceURL;
     return sourceURL && this.linkifier ? this.linkifier.linkifyRawLocation(rawLocation, sourceURL) : null;
   }
 
@@ -645,6 +632,10 @@ export class HeapSnapshotView extends UI.View.SimpleView implements DataDisplayD
     return true;
   }
 
+  supportsWholeWordSearch(): boolean {
+    return false;
+  }
+
   supportsRegexSearch(): boolean {
     return false;
   }
@@ -662,8 +653,13 @@ export class HeapSnapshotView extends UI.View.SimpleView implements DataDisplayD
 
   performSearch(searchConfig: UI.SearchableView.SearchConfig, shouldJump: boolean, jumpBackwards?: boolean): void {
     const nextQuery = new HeapSnapshotModel.HeapSnapshotModel.SearchConfig(
-        searchConfig.query.trim(), searchConfig.caseSensitive, searchConfig.isRegex, shouldJump,
-        jumpBackwards || false);
+        searchConfig.query.trim(),
+        searchConfig.caseSensitive,
+        searchConfig.wholeWord,
+        searchConfig.isRegex,
+        shouldJump,
+        jumpBackwards || false,
+    );
 
     void this.searchThrottler.schedule(this.performSearchInternal.bind(this, nextQuery));
   }
@@ -676,7 +672,7 @@ export class HeapSnapshotView extends UI.View.SimpleView implements DataDisplayD
       return;
     }
 
-    this.currentQuery = nextQuery;
+    this.currentSearch = nextQuery;
     const query = nextQuery.query.trim();
 
     if (!query) {
@@ -701,7 +697,7 @@ export class HeapSnapshotView extends UI.View.SimpleView implements DataDisplayD
     }
 
     const filter = this.dataGrid.nodeFilter();
-    this.searchResults = filter ? await this.profile.snapshotProxy.search(this.currentQuery, filter) : [];
+    this.searchResults = filter ? await this.profile.snapshotProxy.search(this.currentSearch, filter) : [];
 
     this.searchableViewInternal.updateSearchMatchesCount(this.searchResults.length);
     if (this.searchResults.length) {
@@ -743,10 +739,10 @@ export class HeapSnapshotView extends UI.View.SimpleView implements DataDisplayD
     if (!this.dataGrid) {
       return;
     }
-    let child: (HeapSnapshotGridNode|null) = (this.dataGrid.rootNode().children[0] as HeapSnapshotGridNode | null);
+    let child: DataGrid.DataGrid.DataGridNode<HeapSnapshotGridNode>|null = this.dataGrid.rootNode().children[0];
     while (child) {
       child.refresh();
-      child = (child.traverseNextNode(false, null, true) as HeapSnapshotGridNode | null);
+      child = child.traverseNextNode(false, null, true);
     }
   }
 
@@ -754,28 +750,28 @@ export class HeapSnapshotView extends UI.View.SimpleView implements DataDisplayD
     if (this.baseProfile === this.profiles()[this.baseSelect.selectedIndex()]) {
       return;
     }
-    this.baseProfile = (this.profiles()[this.baseSelect.selectedIndex()] as HeapProfileHeader);
+    this.baseProfile = this.profiles()[this.baseSelect.selectedIndex()];
     const dataGrid = (this.dataGrid as HeapSnapshotDiffDataGrid);
     // Change set base data source only if main data source is already set.
     if (dataGrid.snapshot) {
       void this.baseProfile.loadPromise.then(dataGrid.setBaseDataSource.bind(dataGrid));
     }
 
-    if (!this.currentQuery || !this.searchResults) {
+    if (!this.currentSearch || !this.searchResults) {
       return;
     }
 
     // The current search needs to be performed again. First negate out previous match
     // count by calling the search finished callback with a negative number of matches.
     // Then perform the search again with the same query and callback.
-    this.performSearch(this.currentQuery, false);
+    this.performSearch(this.currentSearch, false);
   }
 
-  static readonly ALWAYS_AVAILABLE_FILTERS = [
+  static readonly ALWAYS_AVAILABLE_FILTERS: ReadonlyArray<{uiName: string, filterName: string}> = [
     {uiName: i18nString(UIStrings.duplicatedStrings), filterName: 'duplicatedStrings'},
     {uiName: i18nString(UIStrings.objectsRetainedByDetachedDomNodes), filterName: 'objectsRetainedByDetachedDomNodes'},
     {uiName: i18nString(UIStrings.objectsRetainedByConsole), filterName: 'objectsRetainedByConsole'},
-  ] as ReadonlyArray<{uiName: string, filterName: string}>;
+  ];
 
   changeFilter(): void {
     let selectedIndex = this.filterSelect.selectedIndex();
@@ -792,19 +788,19 @@ export class HeapSnapshotView extends UI.View.SimpleView implements DataDisplayD
       return;
     }
     (this.dataGrid as HeapSnapshotConstructorsDataGrid)
-        .filterSelectIndexChanged((this.profiles() as HeapProfileHeader[]), profileIndex, filterName);
+        .filterSelectIndexChanged(this.profiles(), profileIndex, filterName);
 
-    if (!this.currentQuery || !this.searchResults) {
+    if (!this.currentSearch || !this.searchResults) {
       return;
     }
 
     // The current search needs to be performed again. First negate out previous match
     // count by calling the search finished callback with a negative number of matches.
     // Then perform the search again with the same query and callback.
-    this.performSearch(this.currentQuery, false);
+    this.performSearch(this.currentSearch, false);
   }
 
-  profiles(): ProfileHeader[] {
+  profiles(): HeapProfileHeader[] {
     return this.profile.profileType().getProfiles();
   }
 
@@ -885,7 +881,7 @@ export class HeapSnapshotView extends UI.View.SimpleView implements DataDisplayD
       return;
     }
     if (!this.baseProfile) {
-      this.baseProfile = (this.profiles()[this.baseSelect.selectedIndex()] as HeapProfileHeader);
+      this.baseProfile = this.profiles()[this.baseSelect.selectedIndex()];
     }
 
     const baseSnapshotProxy = await this.baseProfile.loadPromise;
@@ -919,14 +915,14 @@ export class HeapSnapshotView extends UI.View.SimpleView implements DataDisplayD
 
     void this.updateDataSourceAndView();
 
-    if (!this.currentQuery || !this.searchResults) {
+    if (!this.currentSearch || !this.searchResults) {
       return;
     }
 
     // The current search needs to be performed again. First negate out previous match
     // count by calling the search finished callback with a negative number of matches.
     // Then perform the search again the with same query and callback.
-    this.performSearch(this.currentQuery, false);
+    this.performSearch(this.currentSearch, false);
   }
 
   async selectLiveObject(perspectiveName: string, snapshotObjectId: string): Promise<void> {

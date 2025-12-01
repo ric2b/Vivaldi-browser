@@ -142,7 +142,7 @@ class BindGroupValidationTest : public ValidationTest {
 };
 
 // Test the validation of BindGroupDescriptor::nextInChain
-TEST_F(BindGroupValidationTest, NextInChainNullptr) {
+TEST_F(BindGroupValidationTest, InvalidChain) {
     wgpu::BindGroupLayout layout = utils::MakeBindGroupLayout(device, {});
 
     wgpu::BindGroupDescriptor descriptor;

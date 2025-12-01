@@ -31,6 +31,9 @@ NSString *const SUBundleIdentifier = @SPARKLE_BUNDLE_IDENTIFIER;
 NSString *const SUAppcastAttributeValueMacOS = @"macos";
 
 NSString *const SUTechnicalErrorInformationKey = @"SUTechnicalErrorInformation";
+NSString *const SUUpdateAutomaticCheckSettingChangedNotification = @"SUUpdateAutomaticCheckSettingChanged";
+NSString *const SUUpdateSettingsNeedsSynchronizationNotification = @"SUUpdateSettingsNeedsSynchronization";
+NSString *const SUUpdateBundlePathUserInfoKey = @"SUBundlePath";
 
 NSString *const SUFeedURLKey = @"SUFeedURL";
 NSString *const SUHasLaunchedBeforeKey = @"SUHasLaunchedBefore";
@@ -44,6 +47,7 @@ NSString *const SULastCheckTimeKey = @"SULastCheckTime";
 NSString *const SUPublicDSAKeyKey = @"SUPublicDSAKey";
 NSString *const SUPublicDSAKeyFileKey = @"SUPublicDSAKeyFile";
 NSString *const SUPublicEDKeyKey = @"SUPublicEDKey";
+NSString *const SUVerifyUpdateBeforeExtractionKey = @"SUVerifyUpdateBeforeExtraction";
 NSString *const SUAutomaticallyUpdateKey = @"SUAutomaticallyUpdate";
 NSString *const SUAllowsAutomaticUpdatesKey = @"SUAllowsAutomaticUpdates";
 NSString *const SUEnableSystemProfilingKey = @"SUEnableSystemProfiling";

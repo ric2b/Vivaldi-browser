@@ -1,4 +1,4 @@
-// Copyright (c) 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -17,101 +17,108 @@ import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import {CoverageDecorationManager} from './CoverageDecorationManager.js';
-import {CoverageListView} from './CoverageListView.js';
-import {type CoverageInfo, CoverageModel, CoverageType, Events, type URLCoverageInfo} from './CoverageModel.js';
+import {type CoverageListItem, CoverageListView} from './CoverageListView.js';
+import {
+  type CoverageInfo,
+  CoverageModel,
+  CoverageType,
+  Events,
+  SourceURLCoverageInfo,
+  type URLCoverageInfo,
+} from './CoverageModel.js';
 import coverageViewStyles from './coverageView.css.js';
 
 const UIStrings = {
   /**
-   *@description Tooltip in Coverage List View of the Coverage tab for selecting JavaScript coverage mode
+   * @description Tooltip in Coverage List View of the Coverage tab for selecting JavaScript coverage mode
    */
   chooseCoverageGranularityPer:
       'Choose coverage granularity: Per function has low overhead, per block has significant overhead.',
   /**
-   *@description Text in Coverage List View of the Coverage tab
+   * @description Text in Coverage List View of the Coverage tab
    */
   perFunction: 'Per function',
   /**
-   *@description Text in Coverage List View of the Coverage tab
+   * @description Text in Coverage List View of the Coverage tab
    */
   perBlock: 'Per block',
   /**
-   *@description Text in Coverage View of the Coverage tab
+   * @description Text in Coverage View of the Coverage tab
    */
   filterByUrl: 'Filter by URL',
   /**
-   *@description Label for the type filter in the Coverage Panel
+   * @description Label for the type filter in the Coverage Panel
    */
   filterCoverageByType: 'Filter coverage by type',
   /**
-   *@description Text for everything
+   * @description Text for everything
    */
   all: 'All',
   /**
-   *@description Text that appears on a button for the css resource type filter.
+   * @description Text that appears on a button for the css resource type filter.
    */
   css: 'CSS',
   /**
-   *@description Text in Timeline Tree View of the Performance panel
+   * @description Text in Timeline Tree View of the Performance panel
    */
   javascript: 'JavaScript',
   /**
-   *@description Tooltip text that appears on the setting when hovering over it in Coverage View of the Coverage tab
+   * @description Tooltip text that appears on the setting when hovering over it in Coverage View of the Coverage tab
    */
   includeExtensionContentScripts: 'Include extension content scripts',
   /**
-   *@description Title for a type of source files
+   * @description Title for a type of source files
    */
   contentScripts: 'Content scripts',
   /**
-   *@description Message in Coverage View of the Coverage tab
+   * @description Message in Coverage View of the Coverage tab
    */
   noCoverageData: 'No coverage data',
   /**
-   *@description Message in Coverage View of the Coverage tab
+   * @description Message in Coverage View of the Coverage tab
    */
   reloadPage: 'Reload page',
   /**
-   *@description Message in Coverage View of the Coverage tab
+   * @description Message in Coverage View of the Coverage tab
    */
   startRecording: 'Start recording',
 
   /**
-   *@description Message in Coverage View of the Coverage tab
-   *@example {Reload page} PH1
+   * @description Message in Coverage View of the Coverage tab
+   * @example {Reload page} PH1
    */
   clickTheReloadButtonSToReloadAnd: 'Click the "{PH1}" button to reload and start capturing coverage.',
   /**
-   *@description Message in Coverage View of the Coverage tab
-   *@example {Start recording} PH1
+   * @description Message in Coverage View of the Coverage tab
+   * @example {Start recording} PH1
    */
   clickTheRecordButtonSToStart: 'Click the "{PH1}" button to start capturing coverage.',
   /**
-   *@description Message in the Coverage View explaining that DevTools could not capture coverage.
+   * @description Message in the Coverage View explaining that DevTools could not capture coverage.
    */
   bfcacheNoCapture: 'Could not capture coverage info because the page was served from the back/forward cache.',
   /**
-   *@description  Message in the Coverage View explaining that DevTools could not capture coverage.
+   * @description  Message in the Coverage View explaining that DevTools could not capture coverage.
    */
   activationNoCapture: 'Could not capture coverage info because the page was prerendered in the background.',
   /**
-   *@description  Message in the Coverage View prompting the user to reload the page.
-   *@example {reload button icon} PH1
+   * @description  Message in the Coverage View prompting the user to reload the page.
+   * @example {reload button icon} PH1
    */
   reloadPrompt: 'Click the reload button {PH1} to reload and get coverage.',
 
   /**
-   *@description Footer message in Coverage View of the Coverage tab
-   *@example {300k used, 600k unused} PH1
-   *@example {500k used, 800k unused} PH2
+   * @description Footer message in Coverage View of the Coverage tab
+   * @example {300k used, 600k unused} PH1
+   * @example {500k used, 800k unused} PH2
    */
   filteredSTotalS: 'Filtered: {PH1}  Total: {PH2}',
   /**
-   *@description Footer message in Coverage View of the Coverage tab
-   *@example {1.5 MB} PH1
-   *@example {2.1 MB} PH2
-   *@example {71%} PH3
-   *@example {29%} PH4
+   * @description Footer message in Coverage View of the Coverage tab
+   * @example {1.5 MB} PH1
+   * @example {2.1 MB} PH2
+   * @example {71%} PH3
+   * @example {29%} PH4
    */
   sOfSSUsedSoFarSUnused: '{PH1} of {PH2} ({PH3}%) used so far, {PH4} unused.',
 } as const;
@@ -254,7 +261,7 @@ export class CoverageView extends UI.Widget.VBox {
     this.bfcacheReloadPromptPage = this.buildReloadPromptPage(i18nString(UIStrings.bfcacheNoCapture), 'bfcache-page');
     this.activationReloadPromptPage =
         this.buildReloadPromptPage(i18nString(UIStrings.activationNoCapture), 'prerender-page');
-    this.listView = new CoverageListView(this.isVisible.bind(this, false));
+    this.listView = new CoverageListView();
 
     this.statusToolbarElement = this.contentElement.createChild('div', 'coverage-toolbar-summary');
     this.statusMessageElement = this.statusToolbarElement.createChild('div', 'coverage-message');
@@ -435,7 +442,29 @@ export class CoverageView extends UI.Widget.VBox {
   }
 
   private updateListView(): void {
-    this.listView.update(this.model?.entries() || []);
+    const entries =
+        (this.model?.entries() || [])
+            .map(entry => this.toCoverageListItem(entry))
+            .filter(info => this.isVisible(info))
+            .map(
+                (entry: CoverageListItem) =>
+                    ({...entry, sources: entry.sources.filter((entry: CoverageListItem) => this.isVisible(entry))}));
+    this.listView.update(entries, this.textFilterRegExp);
+  }
+
+  private toCoverageListItem(info: URLCoverageInfo): CoverageListItem {
+    return {
+      url: info.url(),
+      type: info.type(),
+      size: info.size(),
+      usedSize: info.usedSize(),
+      unusedSize: info.unusedSize(),
+      usedPercentage: info.usedPercentage(),
+      unusedPercentage: info.unusedPercentage(),
+      sources: [...info.sourcesURLCoverageInfo.values()].map(this.toCoverageListItem, this),
+      isContentScript: info.isContentScript(),
+      generatedUrl: info instanceof SourceURLCoverageInfo ? info.generatedURLCoverageInfo.url() : undefined,
+    };
   }
 
   async stopRecording(): Promise<void> {
@@ -507,16 +536,16 @@ export class CoverageView extends UI.Widget.VBox {
     }
 
     this.model.reset();
-    this.decorationManager && this.decorationManager.reset();
+    this.decorationManager?.reset();
     this.listView.reset();
     void this.model.startPolling();
   }
 
   private updateViews(updatedEntries: CoverageInfo[]): void {
     this.updateStats();
-    this.listView.update(this.model?.entries() || []);
+    this.updateListView();
     this.exportAction.setEnabled(this.model !== null && this.model.entries().length > 0);
-    this.decorationManager && this.decorationManager.update(updatedEntries);
+    this.decorationManager?.update(updatedEntries);
   }
 
   private updateStats(): void {
@@ -527,14 +556,15 @@ export class CoverageView extends UI.Widget.VBox {
       for (const info of this.model.entries()) {
         all.total += info.size();
         all.unused += info.unusedSize();
-        if (this.isVisible(false, info)) {
+        const listItem = this.toCoverageListItem(info);
+        if (this.isVisible(listItem)) {
           if (this.textFilterRegExp?.test(info.url())) {
             filtered.total += info.size();
             filtered.unused += info.unusedSize();
           } else {
             // If it doesn't match the filter, calculate the stats from visible children if there are any
             for (const childInfo of info.sourcesURLCoverageInfo.values()) {
-              if (this.isVisible(false, childInfo)) {
+              if (this.isVisible(this.toCoverageListItem(childInfo))) {
                 filtered.total += childInfo.size();
                 filtered.unused += childInfo.unusedSize();
               }
@@ -565,7 +595,7 @@ export class CoverageView extends UI.Widget.VBox {
     }
     const text = this.filterInput.value();
     this.textFilterRegExp = text ? Platform.StringUtilities.createPlainTextSearchRegex(text, 'i') : null;
-    this.listView.updateFilterAndHighlight(this.textFilterRegExp);
+    this.updateListView();
     this.updateStats();
   }
 
@@ -579,31 +609,31 @@ export class CoverageView extends UI.Widget.VBox {
     const option = this.filterByTypeComboBox.selectedOption();
     const type = option?.value;
     this.typeFilterValue = parseInt(type || '', 10) || null;
-    this.listView.updateFilterAndHighlight(this.textFilterRegExp);
+    this.updateListView();
     this.updateStats();
   }
 
-  private isVisible(ignoreTextFilter: boolean, coverageInfo: URLCoverageInfo): boolean {
-    const url = coverageInfo.url();
+  private isVisible(coverageInfo: CoverageListItem): boolean {
+    const url = coverageInfo.url;
     if (url.startsWith(CoverageView.EXTENSION_BINDINGS_URL_PREFIX)) {
       return false;
     }
-    if (coverageInfo.isContentScript() && !this.showContentScriptsSetting.get()) {
+    if (coverageInfo.isContentScript && !this.showContentScriptsSetting.get()) {
       return false;
     }
-    if (this.typeFilterValue && !(coverageInfo.type() & this.typeFilterValue)) {
+    if (this.typeFilterValue && !(coverageInfo.type & this.typeFilterValue)) {
       return false;
     }
     // If it's a parent, check if any children are visible
-    if (coverageInfo.sourcesURLCoverageInfo.size > 0) {
-      for (const sourceURLCoverageInfo of coverageInfo.sourcesURLCoverageInfo.values()) {
-        if (this.isVisible(ignoreTextFilter, sourceURLCoverageInfo)) {
+    if (coverageInfo.sources.length > 0) {
+      for (const sourceURLCoverageInfo of coverageInfo.sources) {
+        if (this.isVisible(sourceURLCoverageInfo)) {
           return true;
         }
       }
     }
 
-    return ignoreTextFilter || !this.textFilterRegExp || this.textFilterRegExp.test(url);
+    return !this.textFilterRegExp || this.textFilterRegExp.test(url);
   }
 
   async exportReport(): Promise<void> {
@@ -618,7 +648,7 @@ export class CoverageView extends UI.Widget.VBox {
   }
 
   selectCoverageItemByUrl(url: string): void {
-    this.listView.selectByUrl(url);
+    this.listView.selectByUrl(url as Platform.DevToolsPath.UrlString);
   }
 
   static readonly EXTENSION_BINDINGS_URL_PREFIX = 'extensions::';
@@ -643,12 +673,12 @@ export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
           const view = UI.ViewManager.ViewManager.instance().view(coverageViewId);
           return view?.widget();
         })
-        .then(widget => this.innerHandleAction(widget as CoverageView, actionId));
+        .then(widget => this.#handleAction(widget as CoverageView, actionId));
 
     return true;
   }
 
-  private innerHandleAction(coverageView: CoverageView, actionId: string): void {
+  #handleAction(coverageView: CoverageView, actionId: string): void {
     switch (actionId) {
       case 'coverage.toggle-recording':
         coverageView.toggleRecording();

@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2013 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2013 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
@@ -49,20 +23,20 @@ import {
 
 const UIStrings = {
   /**
-   *@description Text in Layer Details View of the Layers panel
+   * @description Text in Layer Details View of the Layers panel
    */
   selectALayerToSeeItsDetails: 'Select a layer to see its details',
   /**
-   *@description Text in Layer Details View of the Layers panel if no layer is selected for viewing its content
+   * @description Text in Layer Details View of the Layers panel if no layer is selected for viewing its content
    */
   noLayerSelected: 'No layer selected',
   /**
-   *@description Element text content in Layer Details View of the Layers panel
-   *@example {Touch event handler} PH1
-   *@example {10} PH2
-   *@example {10} PH3
-   *@example {10} PH4
-   *@example {10} PH5
+   * @description Element text content in Layer Details View of the Layers panel
+   * @example {Touch event handler} PH1
+   * @example {10} PH2
+   * @example {10} PH3
+   * @example {10} PH4
+   * @example {10} PH5
    */
   scrollRectangleDimensions: '{PH1} {PH2} × {PH3} (at {PH4}, {PH5})',
   /**
@@ -71,27 +45,27 @@ const UIStrings = {
    */
   unnamed: '<unnamed>',
   /**
-   *@description Text in Layer Details View of the Layers panel
-   *@example {Nearest Layer Shifting Sticky Box} PH1
-   *@example {&lt;unnamed&gt;} PH2
-   *@example {5} PH3
+   * @description Text in Layer Details View of the Layers panel
+   * @example {Nearest Layer Shifting Sticky Box} PH1
+   * @example {&lt;unnamed&gt;} PH2
+   * @example {5} PH3
    */
   stickyAncestorLayersS: '{PH1}: {PH2} ({PH3})',
   /**
-   *@description Sticky box rect element text content in Layer Details View of the Layers panel
-   *@example {10} PH1
-   *@example {10} PH2
-   *@example {10} PH3
-   *@example {10} PH4
+   * @description Sticky box rect element text content in Layer Details View of the Layers panel
+   * @example {10} PH1
+   * @example {10} PH2
+   * @example {10} PH3
+   * @example {10} PH4
    */
   stickyBoxRectangleDimensions: 'Sticky Box {PH1} × {PH2} (at {PH3}, {PH4})',
   /**
    * @description Containing block rect element text content in Layer Details View of the Layers panel.
    * The placeholder are width, height, x position, and y position respectively.
-   *@example {10} PH1
-   *@example {10} PH2
-   *@example {10} PH3
-   *@example {10} PH4
+   * @example {10} PH1
+   * @example {10} PH2
+   * @example {10} PH3
+   * @example {10} PH4
    */
   containingBlocRectangleDimensions: 'Containing Block {PH1} × {PH2} (at {PH3}, {PH4})',
   /**
@@ -105,51 +79,51 @@ const UIStrings = {
    */
   nearestLayerShiftingContaining: 'Nearest Layer Shifting Containing Block',
   /**
-   *@description Size cell text content in Layer Details View of the Layers panel
-   *@example {10} PH1
-   *@example {10} PH2
-   *@example {10} PH3
-   *@example {10} PH4
+   * @description Size cell text content in Layer Details View of the Layers panel
+   * @example {10} PH1
+   * @example {10} PH2
+   * @example {10} PH3
+   * @example {10} PH4
    */
   updateRectangleDimensions: '{PH1} × {PH2} (at {PH3}, {PH4})',
   /**
-   *@description Text for the size of something
+   * @description Text for the size of something
    */
   size: 'Size',
   /**
-   *@description Text in Layer Details View of the Layers panel
+   * @description Text in Layer Details View of the Layers panel
    */
   compositingReasons: 'Compositing Reasons',
   /**
-   *@description Text in Layer Details View of the Layers panel
+   * @description Text in Layer Details View of the Layers panel
    */
   memoryEstimate: 'Memory estimate',
   /**
-   *@description Text in Layer Details View of the Layers panel
+   * @description Text in Layer Details View of the Layers panel
    */
   paintCount: 'Paint count',
   /**
-   *@description Text in Layer Details View of the Layers panel
+   * @description Text in Layer Details View of the Layers panel
    */
   slowScrollRegions: 'Slow scroll regions',
   /**
-   *@description Text in Layer Details View of the Layers panel
+   * @description Text in Layer Details View of the Layers panel
    */
   stickyPositionConstraint: 'Sticky position constraint',
   /**
-   *@description Title of the paint profiler, old name of the performance pane
+   * @description Title of the paint profiler, old name of the performance pane
    */
   paintProfiler: 'Paint Profiler',
   /**
-   *@description Text in Layer Details View of the Layers panel
+   * @description Text in Layer Details View of the Layers panel
    */
   nonFastScrollable: 'Non fast scrollable',
   /**
-   *@description Text in Layer Details View of the Layers panel
+   * @description Text in Layer Details View of the Layers panel
    */
   touchEventHandler: 'Touch event handler',
   /**
-   *@description Text in Layer Details View of the Layers panel
+   * @description Text in Layer Details View of the Layers panel
    */
   wheelEventHandler: 'Wheel event handler',
   /**
@@ -159,7 +133,7 @@ const UIStrings = {
    */
   repaintsOnScroll: 'Repaints on scroll',
   /**
-   *@description Text in Layer Details View of the Layers panel
+   * @description Text in Layer Details View of the Layers panel
    */
   mainThreadScrollingReason: 'Main thread scrolling reason',
 } as const;

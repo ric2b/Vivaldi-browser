@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -31,6 +32,7 @@
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/browser/suggestion_group_util.h"
 #include "components/omnibox/common/omnibox_feature_configs.h"
+#include "components/omnibox/common/omnibox_features.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
@@ -216,26 +218,28 @@ void FeaturedSearchProvider::Start(const AutocompleteInput& input,
     }
     return;
   }
-  if (is_history_scope) {
-    if (ShouldShowHistoryEmbeddingsDisclaimerIphMatch()) {
-      AddHistoryEmbeddingsDisclaimerIphMatch();
-    } else if (ShouldShowHistoryEmbeddingsSettingsPromoIphMatch()) {
-      AddHistoryEmbeddingsSettingsPromoIphMatch();
+  if (!base::FeatureList::IsEnabled(omnibox::kWebUIOmniboxPopup)) {
+    if (is_history_scope) {
+      if (ShouldShowHistoryEmbeddingsDisclaimerIphMatch()) {
+        AddHistoryEmbeddingsDisclaimerIphMatch();
+      } else if (ShouldShowHistoryEmbeddingsSettingsPromoIphMatch()) {
+        AddHistoryEmbeddingsSettingsPromoIphMatch();
+      }
+      return;
     }
-    return;
-  }
 
-  if (input.IsZeroSuggest()) {
-    if (ShouldShowEnterpriseSearchAggregatorIPHMatch()) {
-      AddEnterpriseSearchAggregatorIPHMatch();
-    } else if (ShouldShowFeaturedEnterpriseSiteSearchIPHMatch()) {
-      AddFeaturedEnterpriseSiteSearchIPHMatch();
-    } else if (ShouldShowGeminiIPHMatch()) {
-      AddGeminiIPHMatch();
-    } else if (ShouldShowHistoryScopePromoIphMatch()) {
-      AddHistoryScopePromoIphMatch();
-    } else if (ShouldShowHistoryEmbeddingsScopePromoIphMatch()) {
-      AddHistoryEmbeddingsScopePromoIphMatch();
+    if (input.IsZeroSuggest()) {
+      if (ShouldShowEnterpriseSearchAggregatorIPHMatch()) {
+        AddEnterpriseSearchAggregatorIPHMatch();
+      } else if (ShouldShowFeaturedEnterpriseSiteSearchIPHMatch()) {
+        AddFeaturedEnterpriseSiteSearchIPHMatch();
+      } else if (ShouldShowGeminiIPHMatch()) {
+        AddGeminiIPHMatch();
+      } else if (ShouldShowHistoryScopePromoIphMatch()) {
+        AddHistoryScopePromoIphMatch();
+      } else if (ShouldShowHistoryEmbeddingsScopePromoIphMatch()) {
+        AddHistoryEmbeddingsScopePromoIphMatch();
+      }
     }
   }
 
@@ -314,9 +318,8 @@ void FeaturedSearchProvider::AddFeaturedKeywordMatches(
       }
       // Skip @aimode if feature disabled.
       if (turl->starter_pack_id() == template_url_starter_pack_data::kAiMode &&
-          (!omnibox_feature_configs::Toolbelt::Get().enabled ||
-           !client_->GetAimEligibilityService() ||
-           !client_->GetAimEligibilityService()->IsAimEligible())) {
+          !OmniboxFieldTrial::IsAimStarterPackEnabled(
+              client_->GetAimEligibilityService())) {
         continue;
       }
       // The history starter pack engine is disabled in incognito mode.
@@ -381,6 +384,7 @@ void FeaturedSearchProvider::AddIPHMatch(IphType iph_type,
                                          const GURL& iph_link_url,
                                          int relevance,
                                          bool deletable) {
+  CHECK(!base::FeatureList::IsEnabled(omnibox::kWebUIOmniboxPopup));
   AutocompleteMatch match(this, relevance, deletable,
                           AutocompleteMatchType::NULL_RESULT_MESSAGE);
 

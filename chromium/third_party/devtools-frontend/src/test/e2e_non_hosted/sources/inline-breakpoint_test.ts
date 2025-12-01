@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,7 @@ import {
 // https://crsrc.org/c/third_party/blink/web_tests/http/tests/devtools/sources/debugger/source-frame-inline-breakpoint-decorations.js;drc=74dacd13f4b89f64ebe1aa99d4b5d80480a8d3b4
 describe('The Sources Tab', () => {
   /**
-   * @param line - 1-based line number
+   * @param line 1-based line number
    * @returns the text of the line but for every inline breakpoint decorator we add a '@' or '%' for
    *          enabled or disabled breakpoints respectively.
    */

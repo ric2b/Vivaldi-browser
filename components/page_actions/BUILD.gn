@@ -29,6 +29,7 @@ source_set("page_actions") {
 
     deps += [
       "//chrome/android:jni_headers",
+      "//chrome/common:buildflags",
     ]
   }
 }

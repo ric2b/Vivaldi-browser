@@ -182,17 +182,22 @@ viz::SharedImageFormat GetRGBSharedImageFormat(VideoPixelFormat format) {
 // provided output shared image format.
 bool HasCompatibleRGBFormat(VideoPixelFormat input_format,
                             viz::SharedImageFormat output_format) {
-  if (input_format == PIXEL_FORMAT_XBGR)
-    return output_format == viz::SinglePlaneFormat::kRGBA_8888 ||
-           output_format == viz::SinglePlaneFormat::kRGBX_8888;
-  if (input_format == PIXEL_FORMAT_ABGR)
-    return output_format == viz::SinglePlaneFormat::kRGBA_8888;
-  if (input_format == PIXEL_FORMAT_XRGB)
-    return output_format == viz::SinglePlaneFormat::kBGRA_8888 ||
-           output_format == viz::SinglePlaneFormat::kBGRX_8888;
-  if (input_format == PIXEL_FORMAT_ARGB)
-    return output_format == viz::SinglePlaneFormat::kBGRA_8888;
-  return false;
+  switch (input_format) {
+    case PIXEL_FORMAT_XBGR:
+      return output_format == viz::SinglePlaneFormat::kRGBA_8888 ||
+             output_format == viz::SinglePlaneFormat::kRGBX_8888;
+    case PIXEL_FORMAT_ABGR:
+      return output_format == viz::SinglePlaneFormat::kRGBA_8888;
+    case PIXEL_FORMAT_XRGB:
+      return output_format == viz::SinglePlaneFormat::kBGRA_8888 ||
+             output_format == viz::SinglePlaneFormat::kBGRX_8888;
+    case PIXEL_FORMAT_ARGB:
+      return output_format == viz::SinglePlaneFormat::kBGRA_8888;
+    case PIXEL_FORMAT_RGBAF16:
+      return output_format == viz::SinglePlaneFormat::kRGBA_F16;
+    default:
+      return false;
+  }
 }
 
 bool IsFrameFormat32BitRGB(VideoPixelFormat frame_format) {
@@ -866,7 +871,9 @@ viz::SharedImageFormat VideoResourceUpdater::GetSoftwareOutputFormat(
   if (IsFrameFormat32BitRGB(input_frame_format)) {
     return GetRGBSharedImageFormat(input_frame_format);
   }
-
+  if (input_frame_format == PIXEL_FORMAT_RGBAF16) {
+    return viz::SinglePlaneFormat::kRGBA_F16;
+  }
   if (input_frame_format == PIXEL_FORMAT_Y16) {
     // Unable to display directly as yuv planes so convert it to RGB.
     return PaintCanvasVideoRenderer::GetRGBPixelsOutputFormat();
@@ -940,7 +947,6 @@ bool VideoResourceUpdater::WriteRGBPixelsToTexture(
   viz::SharedImageFormat resource_format = hardware_resource->format();
   size_t bytes_per_row = viz::ResourceSizes::CheckedWidthInBytes<size_t>(
       video_frame->coded_size().width(), resource_format);
-  // Note: Strides may be negative in case of bottom-up layouts.
   const int stride = video_frame->stride(VideoFrame::Plane::kARGB);
   const bool has_compatible_stride =
       stride > 0 && static_cast<size_t>(stride) == bytes_per_row;
@@ -972,8 +978,13 @@ bool VideoResourceUpdater::WriteRGBPixelsToTexture(
         hardware_resource->shared_image()->alpha_type() == kPremul_SkAlphaType
             ? true
             : false;
+
     PaintCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
-        video_frame.get(), dest_ptr, bytes_per_row, premultiply_alpha);
+        video_frame.get(), dest_ptr, bytes_per_row,
+        resource_format == viz::SinglePlaneFormat::kRGBA_F16
+            ? kRGBA_F16_SkColorType
+            : kN32_SkColorType,
+        premultiply_alpha);
     source_pixels = upload_pixels_[0].get();
   }
 
@@ -1168,6 +1179,7 @@ VideoFrameExternalResource VideoResourceUpdater::CreateForSoftwareFrame(
   size_t bits_per_channel = video_frame->BitDepth();
   DCHECK(IsYuvPlanar(input_frame_format) ||
          input_frame_format == PIXEL_FORMAT_Y16 ||
+         input_frame_format == PIXEL_FORMAT_RGBAF16 ||
          IsFrameFormat32BitRGB(input_frame_format));
 
   viz::SharedImageFormat output_si_format =
@@ -1188,7 +1200,8 @@ VideoFrameExternalResource VideoResourceUpdater::CreateForSoftwareFrame(
   // YUV planes directly and needs RGB conversion.
   if (output_si_format.is_single_plane()) {
     DCHECK(output_si_format == viz::SinglePlaneFormat::kBGRA_8888 ||
-           output_si_format == viz::SinglePlaneFormat::kRGBA_8888);
+           output_si_format == viz::SinglePlaneFormat::kRGBA_8888 ||
+           output_si_format == viz::SinglePlaneFormat::kRGBA_F16);
     // The YUV to RGB conversion will be performed when we convert
     // from single-channel textures to an RGBA texture via
     // ConvertVideoFrameToRGBPixels below.

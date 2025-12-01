@@ -19,7 +19,6 @@
 <translation id="1451375123200651445">Pagină web, un singur fișier</translation>
 <translation id="1465176863081977902">C&amp;opiază adresa audioului</translation>
 <translation id="1476607407192946488">Setări de &amp;limbă</translation>
-<translation id="1546280085599573572">Această extensie a modificat pagina care este afișată la clic pe butonul Pagina inițială.</translation>
 <translation id="1552752544932680961">Gestionare extensie</translation>
 <translation id="15662109988763471">Imprimanta selectată nu este disponibilă sau nu este instalată corect. Verificați imprimanta sau încercați să selectați altă imprimantă.</translation>
 <translation id="1588438908519853928">Normal</translation>
@@ -43,7 +42,6 @@
 <translation id="2150139952286079145">Căutați destinații</translation>
 <translation id="215753907730220065">Ieșire din modul ecran complet</translation>
 <translation id="2177950615300672361">Filă incognito: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Modúl de client nativ: <ph name="NEXE_NAME" /></translation>
 <translation id="2249605167705922988">de ex. 1-5, 8, 11-13</translation>
 <translation id="2280486287150724112">Marginea din dreapta</translation>
 <translation id="2282146716419988068">Proces GPU</translation>
@@ -55,17 +53,15 @@
 <translation id="2348176352564285430">Aplicație: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Selectați directorul extensiei.</translation>
 <translation id="2379281330731083556">Tipărește folosind caseta de dialog a sistemului... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Plugin necunoscut</translation>
 <translation id="2439110203301358333">Un alt program de pe calculator a adăugat o extensie care poate schimba modul în care funcționează Vivaldi.</translation>
 <translation id="2445081178310039857">Este necesar directorul rădăcină pentru extensie.</translation>
 <translation id="2498539833203011245">Minimizează</translation>
 <translation id="2509495747794740764">Valoarea de scalare trebuie să fie un număr între 10 și 200.</translation>
 <translation id="26224892172169984">Nu permite niciunui site web să gestioneze protocoale</translation>
-<translation id="2662876636500006917">Magazinul web Vivaldi</translation>
+<translation id="2662876636500006917">Magazinul web Chrome</translation>
 <translation id="2678063897982469759">Reactivează</translation>
 <translation id="2721037002783622288">&amp;Caută imaginea cu <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2850541429955027218">Adaugă o temă</translation>
-<translation id="2861941300086904918">Manager de securitate pentru clientul nativ</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> nu a putut comunica cu imprimanta. Asigurați-vă că imprimanta este conectată și încercați din nou.</translation>
 <translation id="2932883381142163287">Raportați un abuz</translation>
 <translation id="2941112035454246133">Redus</translation>
@@ -94,7 +90,6 @@
 <translation id="3378572629723696641">Este posibil ca această extensie să fie deteriorată.</translation>
 <translation id="3390013585654699824">Detalii despre aplicație</translation>
 <translation id="3560034655160545939">&amp;Verificare ortografică</translation>
-<translation id="3587482841069643663">Toate</translation>
 <translation id="3678156199662914018">Extensie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Solicitare de partajare a ecranului de către <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Nu permite site-urilor închise să finalizeze trimiterea sau primirea datelor</translation>
@@ -121,7 +116,6 @@
 <translation id="4109898769411476438">Închide browserul înainte de a importa</translation>
 <translation id="4131410914670010031">Alb-negru</translation>
 <translation id="4165986682804962316">Setări pentru site-ul web</translation>
-<translation id="4176463684765177261">Dezactivat</translation>
 <translation id="4278390842282768270">Permis</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KiB (<ph name="NUM_KILOBYTES_LIVE" /> KiB live)</translation>
 <translation id="431076611119798497">&amp;Detalii</translation>
@@ -135,6 +129,7 @@
 <translation id="4595560905247879544">Aplicațiile și extensiile pot fi modificate numai de administrator (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">O extensie a modificat pagina care este afișată la deschiderea unei file noi.</translation>
 <translation id="4643612240819915418">Deschide vide&amp;oul într-o filă nouă</translation>
+<translation id="4654801841330730814">Toate</translation>
 <translation id="4711638718396952945">Restaurează setările</translation>
 <translation id="4726710629007580002">Au fost avertismente la încercarea de instalare a acestei extensii:</translation>
 <translation id="479536056609751218">Pagină web, numai HTML</translation>
@@ -146,7 +141,6 @@
 <translation id="5027562294707732951">Adaugă o extensie</translation>
 <translation id="5039804452771397117">Permite</translation>
 <translation id="5063480226653192405">Utilizare</translation>
-<translation id="5143374789336132547">Extensia „<ph name="EXTENSION_NAME" />” a modificat pagina care este afișată la clic pe butonul Pagina inițială.</translation>
 <translation id="5154108062446123722">Setări avansate pentru <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5233231016133573565">ID proces</translation>
 <translation id="5233736638227740678">Li&amp;pește</translation>
@@ -161,7 +155,6 @@
 <translation id="5423753908060469325">Creează o &amp;comandă rapidă...</translation>
 <translation id="5431318178759467895">Color</translation>
 <translation id="5485102783864353244">Adaugă o aplicație</translation>
-<translation id="5521078259930077036">Aceasta este pagina inițială la care vă așteptați?</translation>
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Reîncarcă</translation>
 <translation id="5575473780076478375">Extensie incognito: <ph name="EXTENSION_NAME" /></translation>
@@ -172,12 +165,10 @@
 <translation id="5677928146339483299">Blocat</translation>
 <translation id="5707185214361380026">Extensia nu a putut fi încărcată de la:</translation>
 <translation id="5713171467967533494">Deschide în browserul Vivaldi</translation>
-<translation id="5715711091495208045">Broker de plugin-uri: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Salvează ca PDF</translation>
 <translation id="5759728514498647443">Documentele pe care le trimiteți prin <ph name="APP_NAME" /> pentru a fi tipărite pot fi citite de <ph name="APP_NAME" />.</translation>
 <translation id="5804241973901381774">Permisiuni</translation>
 <translation id="5828633471261496623">Se tipărește...</translation>
-<translation id="583281660410589416">Necunoscut</translation>
 <translation id="5851868085455377790">Emitent</translation>
 <translation id="5914724413750400082">Modul (<ph name="MODULUS_NUM_BITS" /> biți):
   <ph name="MODULUS_HEX_DUMP" />
@@ -210,7 +201,6 @@
 <translation id="6550675742724504774">Opțiuni</translation>
 <translation id="6686817083349815241">Salvați parola</translation>
 <translation id="6691936601825168937">Îna&amp;inte</translation>
-<translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Păstrează modificările</translation>
 <translation id="6840155290835956714">Întreabă înainte de a trimite</translation>
 <translation id="6878862640969460273">Peisaj</translation>
@@ -234,7 +224,6 @@
 <translation id="7453008956351770337">Selectând această imprimantă, acordați următoarei extensii permisiunea de a accesa imprimanta:</translation>
 <translation id="7576690715254076113">Colaționează</translation>
 <translation id="7629827748548208700">Filă: <ph name="TAB_NAME" /></translation>
-<translation id="7661259717474717992">Permite site-urilor web să salveze și să citească datele asociate cookie-urilor</translation>
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalată de administrator</translation>
 <translation id="7685049629764448582">Memorie JavaScript</translation>

@@ -25,8 +25,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/tab_helpers.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_group_deletion_dialog_controller.h"
@@ -40,6 +38,7 @@
 #include "components/reading_list/core/reading_list_model.h"
 #include "components/saved_tab_groups/internal/saved_tab_group_model.h"
 #include "components/saved_tab_groups/public/features.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/saved_tab_groups/public/types.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/sessions/content/content_live_tab.h"
@@ -54,6 +53,10 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/gfx/range/range.h"
+
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/public/glic_keyed_service.h"
+#endif  // BUILDFLAG(ENABLE_GLIC)
 
 namespace chrome {
 
@@ -169,8 +172,9 @@ bool BrowserTabStripModelDelegate::IsTabStripEditable() {
   return browser_->window()->IsTabStripEditable();
 }
 
-void BrowserTabStripModelDelegate::DuplicateContentsAt(int index) {
-  DuplicateTabAt(browser_, index);
+content::WebContents* BrowserTabStripModelDelegate::DuplicateContentsAt(
+    int index) {
+  return DuplicateTabAt(browser_, index);
 }
 
 void BrowserTabStripModelDelegate::DuplicateSplit(
@@ -181,14 +185,16 @@ void BrowserTabStripModelDelegate::DuplicateSplit(
 void BrowserTabStripModelDelegate::MoveToExistingWindow(
     const std::vector<int>& indices,
     int browser_index) {
-  std::vector<Browser*> existing_browsers =
+  std::vector<BrowserWindowInterface*> existing_browsers =
       browser_->GetFeatures().tab_menu_model_delegate()->GetOtherBrowserWindows(
           web_app::AppBrowserController::IsWebApp(browser_));
   size_t existing_browser_count = existing_browsers.size();
   if (static_cast<size_t>(browser_index) < existing_browser_count &&
       existing_browsers[browser_index]) {
-    chrome::MoveTabsToExistingWindow(browser_, existing_browsers[browser_index],
-                                     indices);
+    chrome::MoveTabsToExistingWindow(
+        browser_,
+        existing_browsers[browser_index]->GetBrowserForMigrationOnly(),
+        indices);
   }
 }
 
@@ -247,48 +253,12 @@ void BrowserTabStripModelDelegate::CreateHistoricalGroup(
 }
 
 void BrowserTabStripModelDelegate::GroupAdded(
-    const tab_groups::TabGroupId& group) {
-  if (tab_groups::IsTabGroupSyncServiceDesktopMigrationEnabled()) {
-    return;
-  }
-
-  tab_groups::SavedTabGroupKeyedService* saved_tab_group_service =
-      tab_groups::SavedTabGroupServiceFactory::GetForProfile(
-          browser_->profile());
-  if (!saved_tab_group_service) {
-    return;
-  }
-
-  if (saved_tab_group_service->model()->Contains(group)) {
-    return;
-  }
-
-  saved_tab_group_service->SaveGroup(
-      group,
-      /*is_pinned=*/tab_groups::SavedTabGroupUtils::ShouldAutoPinNewTabGroups(
-          browser_->profile()));
-}
+    const tab_groups::TabGroupId& group) {}
 
 void BrowserTabStripModelDelegate::WillCloseGroup(
     const tab_groups::TabGroupId& group) {
-  // First the saved group must be stored in tab restore so that it keeps the
-  // SavedTabGroup/TabIDs
+  // Store updated information about the tab group in TabRestore.
   CreateHistoricalGroup(group);
-
-  if (tab_groups::IsTabGroupSyncServiceDesktopMigrationEnabled()) {
-    return;
-  }
-
-  // When closing, the group should stay available in revisit UIs so disconnect
-  // the group to prevent deletion.
-  tab_groups::SavedTabGroupKeyedService* saved_tab_group_service =
-      tab_groups::SavedTabGroupServiceFactory::GetForProfile(
-          browser_->profile());
-
-  if (saved_tab_group_service &&
-      saved_tab_group_service->model()->Contains(group)) {
-    saved_tab_group_service->DisconnectLocalTabGroup(group);
-  }
 }
 
 void BrowserTabStripModelDelegate::GroupCloseStopped(

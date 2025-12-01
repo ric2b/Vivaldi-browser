@@ -21,6 +21,7 @@ class ExclusiveAccessManagerAndroid {
   ExclusiveAccessManagerAndroid(
       JNIEnv* env,
       const jni_zero::JavaRef<jobject>& jeam,
+      const jni_zero::JavaRef<jobject>& j_activity,
       const jni_zero::JavaRef<jobject>& j_fullscreen_manager,
       const jni_zero::JavaRef<jobject>& j_activity_tab_provider);
   ~ExclusiveAccessManagerAndroid();
@@ -30,7 +31,8 @@ class ExclusiveAccessManagerAndroid {
   void EnterFullscreenModeForTab(JNIEnv* env,
                                  jlong requesting_frame,
                                  bool prefersNavigationBar,
-                                 bool prefersStatusBar);
+                                 bool prefersStatusBar,
+                                 jlong displayId);
 
   void ExitFullscreenModeForTab(
       JNIEnv* env,
@@ -49,6 +51,24 @@ class ExclusiveAccessManagerAndroid {
   void CancelKeyboardLockRequest(
       JNIEnv* env,
       const jni_zero::JavaRef<jobject>& jweb_contents);
+
+  void RequestPointerLock(JNIEnv* env,
+                          const jni_zero::JavaRef<jobject>& jweb_contents,
+                          bool user_gesture,
+                          bool last_unlocked_by_target);
+
+  void LostPointerLock(JNIEnv* env);
+
+  void ExitExclusiveAccess(JNIEnv* env);
+
+  void OnTabDeactivated(JNIEnv* env,
+                        const jni_zero::JavaRef<jobject>& jweb_contents);
+
+  void OnTabDetachedFromView(JNIEnv* env,
+                             const jni_zero::JavaRef<jobject>& jweb_contents);
+
+  void OnTabClosing(JNIEnv* env,
+                    const jni_zero::JavaRef<jobject>& jweb_contents);
 
  private:
   // Our global reference to the Java ExclusiveAccessManagerAndroid.

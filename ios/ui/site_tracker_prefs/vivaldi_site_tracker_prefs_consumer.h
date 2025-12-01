@@ -10,6 +10,7 @@
 
 // A protocol implemented by consumers to handle changes in Site and Tracker
 // Prefs page.
+NS_SWIFT_UI_ACTOR
 @protocol VivaldiSiteTrackerPrefsConsumer
 - (void)setActiveWebStateDomain:(NSString*)domain;
 - (void)setActiveWebStateFavicon:(UIImage*)favicon;

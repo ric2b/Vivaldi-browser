@@ -68,11 +68,12 @@ class DrawingBufferTest : public Test {
         std::make_unique<WebGraphicsContext3DProviderForTests>(std::move(gl));
     GLES2InterfaceForTests* gl_ =
         static_cast<GLES2InterfaceForTests*>(provider->ContextGL());
-    Platform::GraphicsInfo graphics_info;
-    graphics_info.using_gpu_compositing = true;
+    Platform::WebGLContextInfo context_info;
+    context_info.using_gpu_compositing = true;
     drawing_buffer_ = DrawingBufferForTests::Create(
-        std::move(provider), /*sii_provider_for_sw=*/nullptr, graphics_info,
-        gl_, initial_size, DrawingBuffer::kPreserve, use_multisampling);
+        std::move(provider), /*shared_image_interface_provider_for_sw=*/nullptr,
+        context_info, gl_, initial_size, DrawingBuffer::kPreserve,
+        use_multisampling);
     CHECK(drawing_buffer_);
     SetAndSaveRestoreState(false);
   }
@@ -355,10 +356,6 @@ class DrawingBufferImageChromiumTest : public DrawingBufferTest,
     auto provider =
         std::make_unique<WebGraphicsContext3DProviderForTests>(std::move(gl));
 
-    provider->GetMutableGpuFeatureInfo()
-        .status_values[gpu::GPU_FEATURE_TYPE_ANDROID_SURFACE_CONTROL] =
-        gpu::kGpuFeatureStatusEnabled;
-
     // DrawingBuffer requests MappableSharedImages with usage SCANOUT, whereas
     // TestSII by default creates backing SharedMemory GMBs that don't support
     // this usage. Configure the TestSII to instead use test GMBs that have
@@ -369,10 +366,10 @@ class DrawingBufferImageChromiumTest : public DrawingBufferTest,
     GLES2InterfaceForTests* gl_ =
         static_cast<GLES2InterfaceForTests*>(provider->ContextGL());
     EXPECT_CALL(*gl_, CreateAndTexStorage2DSharedImageCHROMIUMMock(_)).Times(1);
-    Platform::GraphicsInfo graphics_info;
-    graphics_info.using_gpu_compositing = true;
+    Platform::WebGLContextInfo context_info;
+    context_info.using_gpu_compositing = true;
     drawing_buffer_ = DrawingBufferForTests::Create(
-        std::move(provider), /*sii_provider_for_sw=*/nullptr, graphics_info,
+        std::move(provider), /*sii_provider_for_sw=*/nullptr, context_info,
         gl_, initial_size, DrawingBuffer::kPreserve, kDisableMultisampling);
     CHECK(drawing_buffer_);
     SetAndSaveRestoreState(true);
@@ -602,8 +599,8 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported) {
         std::make_unique<WebGraphicsContext3DProviderForTests>(std::move(gl));
     DrawingBuffer::PreserveDrawingBuffer preserve = DrawingBuffer::kPreserve;
 
-    Platform::GraphicsInfo graphics_info;
-    graphics_info.using_gpu_compositing = true;
+    Platform::WebGLContextInfo context_info;
+    context_info.using_gpu_compositing = true;
     bool premultiplied_alpha = false;
     bool want_alpha_channel = true;
     bool want_depth_buffer = cases[i].request_depth;
@@ -612,10 +609,10 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported) {
     bool using_swap_chain = false;
     bool desynchronized = false;
     scoped_refptr<DrawingBuffer> drawing_buffer = DrawingBuffer::Create(
-        std::move(provider), graphics_info, using_swap_chain, nullptr,
+        std::move(provider), context_info, using_swap_chain, nullptr,
         gfx::Size(10, 10), premultiplied_alpha, want_alpha_channel,
         want_depth_buffer, want_stencil_buffer, want_antialiasing,
-        desynchronized, preserve, DrawingBuffer::kWebGL1,
+        desynchronized, preserve, Platform::kWebGL1ContextType,
         DrawingBuffer::kAllowChromiumImage, PredefinedColorSpace::kSRGB,
         gl::GpuPreference::kHighPerformance);
 
@@ -692,14 +689,14 @@ TEST_F(DrawingBufferTest,
   static_assert(size_t{kWidth} * kHeight > kMaxSize);
 
   gfx::Size too_big_size(kWidth, kHeight);
-  Platform::GraphicsInfo graphics_info;
-  graphics_info.using_gpu_compositing = true;
+  Platform::WebGLContextInfo context_info;
+  context_info.using_gpu_compositing = true;
   scoped_refptr<DrawingBuffer> too_big_drawing_buffer = DrawingBuffer::Create(
-      nullptr, graphics_info, false /* using_swap_chain */, nullptr,
+      nullptr, context_info, false /* using_swap_chain */, nullptr,
       too_big_size, false, false, false, false, false,
-      /*desynchronized=*/false, DrawingBuffer::kDiscard, DrawingBuffer::kWebGL1,
-      DrawingBuffer::kAllowChromiumImage, PredefinedColorSpace::kSRGB,
-      gl::GpuPreference::kHighPerformance);
+      /*desynchronized=*/false, DrawingBuffer::kDiscard,
+      Platform::kWebGL1ContextType, DrawingBuffer::kAllowChromiumImage,
+      PredefinedColorSpace::kSRGB, gl::GpuPreference::kHighPerformance);
   EXPECT_EQ(too_big_drawing_buffer, nullptr);
   drawing_buffer_->BeginDestruction();
 }
@@ -711,20 +708,16 @@ TEST_F(DrawingBufferImageChromiumTest,
   auto provider =
       std::make_unique<WebGraphicsContext3DProviderForTests>(std::move(gl));
 
-  provider->GetMutableGpuFeatureInfo()
-      .status_values[gpu::GPU_FEATURE_TYPE_ANDROID_SURFACE_CONTROL] =
-      gpu::kGpuFeatureStatusEnabled;
-
   GLES2InterfaceForTests* gl_ =
       static_cast<GLES2InterfaceForTests*>(provider->ContextGL());
 
-  Platform::GraphicsInfo graphics_info;
-  graphics_info.using_gpu_compositing = true;
+  Platform::WebGLContextInfo context_info;
+  context_info.using_gpu_compositing = true;
 
   scoped_refptr<DrawingBufferForTests> drawing_buffer =
       DrawingBufferForTests::Create(
           std::move(provider),
-          /*shared_image_interface_provider_for_sw=*/nullptr, graphics_info,
+          /*shared_image_interface_provider_for_sw=*/nullptr, context_info,
           gl_, initial_size, DrawingBuffer::kPreserve, kDisableMultisampling,
           /*desynchronized=*/true);
 

@@ -19,8 +19,10 @@
     <module name="EmptyStatement"/>
     <module name="InnerAssignment"/>
     <module name="OneStatementPerLine"/>
+    <module name="RedundantModifier">
+      <property name="tokens" value="INTERFACE_DEF, METHOD_DEF"/>
+    </module>
     <module name="StringLiteralEquality"/>
-    <module name="UnusedLocalVariable"/>
     <module name="AvoidStarImport">
       <property name="severity" value="error"/>
     </module>
@@ -258,7 +260,7 @@
       <property name="severity" value="warning"/>
       <property name="format" value="[Ww]indow(Compat)?.setDecorFitsSystemWindows"/>
       <property name="ignoreComments" value="true"/>
-      <property name="message" value="setDecorFitsSystemWindows will change the window flag at activity level, and requires coordination. Use org.chromium.browser_ui.edge_to_edge.EdgeToEdgeStateProvider if possible. (crbug.com/41492646)"/>
+      <property name="message" value="setDecorFitsSystemWindows will change the window flag at activity level, and requires coordination. Use org.chromium.ui.edge_to_edge.EdgeToEdgeStateProvider if possible. (crbug.com/41492646)"/>
     </module>
     <module name="RegexpSinglelineJava">
       <property name="id" value="ElevationOverlayProvider"/>

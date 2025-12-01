@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -128,6 +128,7 @@ group("unittests") {
     "models/ai_assistance:unittests",
     "models/ai_code_completion:unittests",
     "models/autofill_manager:unittests",
+    "models/badges:unittests",
     "models/bindings:unittests",
     "models/breakpoints:unittests",
     "models/cpu_profile:unittests",
@@ -135,6 +136,7 @@ group("unittests") {
     "models/emulation:unittests",
     "models/extensions:unittests",
     "models/formatter:unittests",
+    "models/geometry:unittests",
     "models/har:unittests",
     "models/heap_snapshot_model:unittests",
     "models/issues_manager:unittests",
@@ -143,6 +145,7 @@ group("unittests") {
     "models/persistence:unittests",
     "models/project_settings:unittests",
     "models/source_map_scopes:unittests",
+    "models/stack_trace:unittests",
     "models/text_utils:unittests",
     "models/trace:unittests",
     "models/trace/extras:unittests",
@@ -154,6 +157,7 @@ group("unittests") {
     "models/trace/lantern/metrics:unittests",
     "models/trace/lantern/simulation:unittests",
     "models/trace/types:unittests",
+    "models/trace_source_maps_resolver:unittests",
     "models/workspace:unittests",
     "models/workspace_diff:unittests",
     "panels/accessibility:unittests",
@@ -219,6 +223,7 @@ group("unittests") {
     "panels/webauthn:unittests",
     "panels/whats_new:unittests",
     "services/trace_bounds:unittests",
+    "services/tracing:unittests",
     "testing",
     "third_party/chromium/client-variations:unittests",
     "third_party/i18n:unittests",

@@ -29,6 +29,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/unguessable_token.h"
 #include "content/browser/background_sync/background_sync_manager.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
 #include "content/browser/devtools/devtools_io_context.h"
@@ -104,6 +105,7 @@
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "services/network/public/mojom/devtools_observer.mojom.h"
 #include "services/network/public/mojom/http_raw_headers.mojom.h"
+#include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "services/network/public/mojom/service_worker_router_info.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/loader/referrer_utils.h"
@@ -194,6 +196,7 @@ std::unique_ptr<Network::CookiePartitionKey> BuildCookiePartitionKey(
 
 std::unique_ptr<Network::Cookie> BuildCookie(
     const net::CanonicalCookie& cookie) {
+  DCHECK(cookie.ExpiryDate().is_null() || !cookie.ExpiryDate().is_inf());
   std::unique_ptr<Network::Cookie> devtools_cookie =
       Network::Cookie::Create()
           .SetName(cookie.Name())
@@ -1462,20 +1465,41 @@ Response NetworkHandler::Enable(
     std::optional<int> max_total_size,
     std::optional<int> max_resource_size,
     std::optional<int> max_post_data_size,
-    std::optional<bool> report_direct_socket_traffic) {
+    std::optional<bool> report_direct_socket_traffic,
+    std::optional<bool> enable_durable_messages) {
   enabled_ = true;
+  network::mojom::NetworkDurableMessageConfigPtr durable_messages_config;
+  if (enable_durable_messages.value_or(false)) {
+    if (!storage_partition_ || devtools_token_.is_empty()) {
+      return Response::ServerError(
+          "Durable messages cannot be enabled without a valid "
+          "storage partition and devtools token");
+    }
+    if (!max_total_size.has_value()) {
+      return Response::InvalidParams(
+          "maxTotalBufferSize is required with enableDurableMessages");
+    }
+    durable_messages_config =
+        network::mojom::NetworkDurableMessageConfig::New();
+    durable_messages_config->http_storage_max_size = max_total_size.value();
+    ConfigureDurableMessageCollector(std::move(durable_messages_config));
+  } else {
+    durable_message_collector_.reset();
+  }
   return Response::FallThrough();
 }
 
 Response NetworkHandler::Disable() {
   enabled_ = false;
   url_loader_interceptor_.reset();
-  SetNetworkConditions(nullptr);
+  SetNetworkConditions({}, /*offline=*/false);
+  durable_message_collector_.reset();
   extra_headers_.clear();
   ClearAcceptedEncodingsOverride();
   enable_third_party_cookie_restriction_ = false;
   disable_third_party_cookie_metadata_ = false;
   disable_third_party_cookie_heuristics_ = false;
+  SetIPProtectionProxyBypassEnabled(false);
   return Response::FallThrough();
 }
 
@@ -1942,21 +1966,63 @@ Response NetworkHandler::EmulateNetworkConditions(
     std::optional<double> packet_loss,
     std::optional<int> packet_queue_length,
     std::optional<bool> packet_reordering) {
-  network::mojom::NetworkConditionsPtr network_conditions;
+  std::vector<network::mojom::MatchedNetworkConditionsPtr> network_conditions;
   bool throttling_enabled = offline || latency > 0 || download_throughput > 0 ||
                             upload_throughput > 0;
   if (throttling_enabled) {
-    network_conditions = network::mojom::NetworkConditions::New();
-    network_conditions->offline = offline;
-    network_conditions->latency = base::Milliseconds(latency);
-    network_conditions->download_throughput = download_throughput;
-    network_conditions->upload_throughput = upload_throughput;
-    network_conditions->packet_loss = packet_loss.value_or(0.);
-    network_conditions->packet_queue_length = packet_queue_length.value_or(0);
-    network_conditions->packet_reordering = packet_reordering.value_or(false);
+    network_conditions.push_back(
+        network::mojom::MatchedNetworkConditions::New());
+    network_conditions.back()->conditions =
+        network::mojom::NetworkConditions::New();
+    network_conditions.back()->conditions->offline = offline;
+    network_conditions.back()->conditions->latency =
+        base::Milliseconds(latency);
+    network_conditions.back()->conditions->download_throughput =
+        download_throughput;
+    network_conditions.back()->conditions->upload_throughput =
+        upload_throughput;
+    network_conditions.back()->conditions->packet_loss =
+        packet_loss.value_or(0.);
+    network_conditions.back()->conditions->packet_queue_length =
+        packet_queue_length.value_or(0);
+    network_conditions.back()->conditions->packet_reordering =
+        packet_reordering.value_or(false);
   }
-  SetNetworkConditions(std::move(network_conditions));
+  SetNetworkConditions(std::move(network_conditions), offline);
   return Response::FallThrough();
+}
+
+Response NetworkHandler::EmulateNetworkConditionsByRule(
+    bool offline,
+    std::unique_ptr<protocol::Array<protocol::Network::NetworkConditions>>
+        matched_network_conditions,
+    std::unique_ptr<protocol::Array<String>>* rule_ids_result) {
+  std::vector<network::mojom::MatchedNetworkConditionsPtr> matched_conditions;
+  *rule_ids_result = std::make_unique<protocol::Array<String>>();
+  for (auto& matched_condition : *matched_network_conditions) {
+    auto rule_id = base::UnguessableToken::Create();
+    network::mojom::MatchedNetworkConditionsPtr conditions =
+        network::mojom::MatchedNetworkConditions::New();
+    conditions->pattern = matched_condition->GetUrlPattern();
+    conditions->conditions = network::mojom::NetworkConditions::New();
+    conditions->conditions->offline = offline;
+    conditions->conditions->latency =
+        base::Milliseconds(matched_condition->GetLatency());
+    conditions->conditions->download_throughput =
+        matched_condition->GetDownloadThroughput();
+    conditions->conditions->upload_throughput =
+        matched_condition->GetUploadThroughput();
+    conditions->conditions->packet_loss = matched_condition->GetPacketLoss(0.);
+    conditions->conditions->packet_queue_length =
+        matched_condition->GetPacketQueueLength(0);
+    conditions->conditions->packet_reordering =
+        matched_condition->GetPacketReordering(false);
+    conditions->conditions->rule_id = rule_id;
+    rule_ids_result->get()->push_back(rule_id.ToString());
+    matched_conditions.emplace_back(std::move(conditions));
+  }
+  SetNetworkConditions(std::move(matched_conditions), offline);
+  return Response::Success();
 }
 
 Response NetworkHandler::SetBypassServiceWorker(bool bypass) {
@@ -2385,6 +2451,25 @@ String GetTrustTokenRefreshPolicy(
   }
 }
 
+String BuildIpProxyStatus(ip_protection::IpProxyStatus status) {
+  switch (status) {
+    case ip_protection::IpProxyStatus::kOk:
+      return protocol::Network::IpProxyStatusEnum::Available;
+    case ip_protection::IpProxyStatus::kFeatureNotEnabled:
+      return protocol::Network::IpProxyStatusEnum::FeatureNotEnabled;
+    case ip_protection::IpProxyStatus::kMaskedDomainListNotEnabled:
+      return protocol::Network::IpProxyStatusEnum::MaskedDomainListNotEnabled;
+    case ip_protection::IpProxyStatus::kMaskedDomainListNotPopulated:
+      return protocol::Network::IpProxyStatusEnum::MaskedDomainListNotPopulated;
+    case ip_protection::IpProxyStatus::kAuthTokensUnavailable:
+      return protocol::Network::IpProxyStatusEnum::AuthTokensUnavailable;
+    case ip_protection::IpProxyStatus::kUnavailable:
+      return protocol::Network::IpProxyStatusEnum::Unavailable;
+    case ip_protection::IpProxyStatus::kBypassedByDevTools:
+      return protocol::Network::IpProxyStatusEnum::BypassedByDevTools;
+  }
+}
+
 std::unique_ptr<protocol::Network::TrustTokenParams> BuildTrustTokenParams(
     const network::mojom::TrustTokenParams& params) {
   auto protocol_params =
@@ -2440,6 +2525,10 @@ void NetworkHandler::PrefetchRequestWillBeSent(
           .SetReferrerPolicy(referrerPolicy(request.referrer_policy))
           .Build();
 
+  if (request.is_ad_tagged) {
+    request_info->SetIsAdRelated(true);
+  }
+
   frontend_->RequestWillBeSent(
       request_id, request_id, url, std::move(request_info), current_ticks,
       current_wall_time, std::move(initiator), redirect_emitted_extra_info,
@@ -2483,6 +2572,7 @@ void NetworkHandler::NavigationRequestWillBeSent(
           .SetInitialPriority(resourcePriority(net::HIGHEST))
           .SetReferrerPolicy(referrerPolicy(common_params.referrer->policy))
           .Build();
+
   if (!url_fragment.empty())
     request->SetUrlFragment(url_fragment);
 
@@ -2534,6 +2624,11 @@ void NetworkHandler::NavigationRequestWillBeSent(
           host_->ComputeSiteForCookies().IsFirstParty(common_params.url));
     }
   }
+
+  if (nav_request.is_ad_tagged()) {
+    request->SetIsAdRelated(true);
+  }
+
   frontend_->RequestWillBeSent(
       id, id, url_without_fragment, std::move(request), current_ticks,
       current_wall_time, std::move(initiator), redirect_emitted_extra_info,
@@ -2571,6 +2666,10 @@ void NetworkHandler::FencedFrameReportRequestSent(
   if (!event_data.empty()) {
     request_info->SetHasPostData(true);
     request_info->SetPostData(event_data);
+  }
+
+  if (request.is_ad_tagged) {
+    request_info->SetIsAdRelated(true);
   }
 
   frontend_->RequestWillBeSent(
@@ -2615,6 +2714,10 @@ void NetworkHandler::RequestSent(
   if (request_info.trust_token_params) {
     request_object->SetTrustTokenParams(
         BuildTrustTokenParams(*request_info.trust_token_params));
+  }
+
+  if (request_info.is_ad_related) {
+    request_object->SetIsAdRelated(true);
   }
 
   std::string resource_type = Network::ResourceTypeEnum::Other;
@@ -2855,6 +2958,10 @@ void NetworkHandler::FetchKeepAliveRequestWillBeSent(
     }
   }
 
+  if (request.is_ad_tagged) {
+    request_info->SetIsAdRelated(true);
+  }
+
   frontend_->RequestWillBeSent(
       request_id, request_id, url, std::move(request_info), current_ticks,
       current_wall_time, std::move(initiator), redirect_emitted_extra_info,
@@ -2905,10 +3012,7 @@ void NetworkHandler::OnSignedExchangeReceived(
     }
     if (certificate) {
       auto encoded_certificates = std::make_unique<protocol::Array<String>>();
-      encoded_certificates->emplace_back(
-          base::Base64Encode(net::x509_util::CryptoBufferAsStringPiece(
-              certificate->cert_buffer())));
-      for (const auto& cert : certificate->intermediate_buffers()) {
+      for (const auto& cert : certificate->cert_buffers()) {
         encoded_certificates->emplace_back(base::Base64Encode(
             net::x509_util::CryptoBufferAsStringPiece(cert.get())));
       }
@@ -3104,15 +3208,44 @@ void NetworkHandler::BodyDataReceived(const String& request_id,
   received_body_data_[request_id] = {body, is_base64_encoded};
 }
 
-void NetworkHandler::GetResponseBody(
+void NetworkHandler::ProcessDurableMessageOrGetLocalData(
     const String& request_id,
-    std::unique_ptr<GetResponseBodyCallback> callback) {
+    std::unique_ptr<GetResponseBodyCallback> callback,
+    std::optional<mojo_base::BigBuffer> durable_message) {
+  if (durable_message.has_value()) {
+    std::string_view data_view =
+        base::as_string_view(base::span(*durable_message));
+    if (base::IsStringUTF8(data_view)) {
+      callback->sendSuccess(std::string(data_view), false);
+    } else {
+      callback->sendSuccess(base::Base64Encode(data_view), true);
+    }
+    return;
+  }
+
   auto it = received_body_data_.find(request_id);
   if (it != received_body_data_.end()) {
     callback->sendSuccess(it->second.first, it->second.second);
   } else {
     callback->fallThrough();
   }
+}
+
+void NetworkHandler::GetResponseBody(
+    const String& request_id,
+    std::unique_ptr<GetResponseBodyCallback> callback) {
+  if (durable_message_collector_.is_bound()) {
+    CHECK(storage_partition_);
+    CHECK(devtools_token_);
+    durable_message_collector_->Retrieve(
+        request_id,
+        base::BindOnce(&NetworkHandler::ProcessDurableMessageOrGetLocalData,
+                       weak_factory_.GetWeakPtr(), request_id,
+                       std::move(callback)));
+    return;
+  }
+  ProcessDurableMessageOrGetLocalData(request_id, std::move(callback),
+                                      std::nullopt);
 }
 
 void NetworkHandler::TakeResponseBodyForInterceptionAsStream(
@@ -3203,6 +3336,9 @@ NetworkHandler::CreateRequestFromResourceRequest(
     request_object->SetPostDataEntries(std::move(data_entries));
     request_object->SetHasPostData(true);
   }
+  if (request.is_ad_tagged) {
+    request_object->SetIsAdRelated(true);
+  }
   return request_object;
 }
 
@@ -3223,13 +3359,26 @@ void NetworkHandler::ApplyOverrides(
     net::HttpRequestHeaders* headers,
     bool* skip_service_worker,
     bool* disable_cache,
-    std::optional<std::vector<net::SourceStreamType>>* accepted_stream_types) {
-  for (auto& entry : extra_headers_)
+    std::optional<std::vector<net::SourceStreamType>>* accepted_stream_types,
+    GURL* referrer_override) {
+  for (auto& entry : extra_headers_) {
+    if (referrer_override &&
+        base::EqualsCaseInsensitiveASCII(entry.first,
+                                         net::HttpRequestHeaders::kReferer)) {
+      GURL referrer_override_(entry.second);
+      if (referrer_override_.is_valid()) {
+        // If extra header `Referer` is set and is a valid URL, use it as the
+        // referrer.
+        *referrer_override = referrer_override_;
+      }
+    }
     headers->SetHeader(entry.first, entry.second);
+  }
   *skip_service_worker |= bypass_service_worker_;
   *disable_cache |= cache_disabled_;
-  if (!accepted_stream_types_)
+  if (!accepted_stream_types_) {
     return;
+  }
   if (!*accepted_stream_types)
     *accepted_stream_types = std::vector<net::SourceStreamType>();
   (*accepted_stream_types)
@@ -3290,21 +3439,39 @@ void NetworkHandler::RequestIntercepted(
 }
 
 void NetworkHandler::SetNetworkConditions(
-    network::mojom::NetworkConditionsPtr conditions) {
-  if (!storage_partition_)
+    std::vector<network::mojom::MatchedNetworkConditionsPtr> matched_conditions,
+    bool offline) {
+  if (!storage_partition_) {
     return;
+  }
   network::mojom::NetworkContext* context =
       storage_partition_->GetNetworkContext();
-  bool offline = conditions ? conditions->offline : false;
 
-  if (!devtools_token_.is_empty())
-    context->SetNetworkConditions(devtools_token_, std::move(conditions));
+  if (!devtools_token_.is_empty()) {
+    context->SetNetworkConditions(devtools_token_,
+                                  std::move(matched_conditions));
+  }
 
-  if (offline == !!background_sync_restorer_)
+  if (offline == !!background_sync_restorer_) {
     return;
+  }
   background_sync_restorer_.reset(
       offline ? new BackgroundSyncRestorer(host_id_, storage_partition_)
               : nullptr);
+}
+
+void NetworkHandler::ConfigureDurableMessageCollector(
+    network::mojom::NetworkDurableMessageConfigPtr config) {
+  CHECK(storage_partition_);
+  CHECK(devtools_token_);
+  network::mojom::NetworkContext* context =
+      storage_partition_->GetNetworkContext();
+  if (!durable_message_collector_.is_bound()) {
+    context->EnableDurableMessageCollector(
+        devtools_token_,
+        durable_message_collector_.BindNewPipeAndPassReceiver());
+  }
+  durable_message_collector_->Configure(std::move(config));
 }
 
 namespace {
@@ -3434,9 +3601,11 @@ void NetworkHandler::OnRequestWillBeSentExtraInfo(
     const std::vector<network::mojom::HttpRawHeaderPairPtr>& request_headers,
     const base::TimeTicks timestamp,
     const network::mojom::ClientSecurityStatePtr& security_state,
-    const network::mojom::OtherPartitionInfoPtr& other_partition_info) {
-  if (!enabled_)
+    const network::mojom::OtherPartitionInfoPtr& other_partition_info,
+    std::optional<base::UnguessableToken> applied_network_conditions_id) {
+  if (!enabled_) {
     return;
+  }
 
   frontend_->RequestWillBeSentExtraInfo(
       devtools_request_id, BuildProtocolAssociatedCookies(request_cookie_list),
@@ -3445,6 +3614,9 @@ void NetworkHandler::OnRequestWillBeSentExtraInfo(
       other_partition_info
           ? std::optional<bool>(
                 other_partition_info->site_has_cookie_in_other_partition)
+          : std::nullopt,
+      applied_network_conditions_id.has_value()
+          ? std::optional<String>(applied_network_conditions_id->ToString())
           : std::nullopt);
 }
 
@@ -3707,6 +3879,46 @@ DispatchResponse NetworkHandler::SetCookieControls(
   return Response::Success();
 }
 
+void NetworkHandler::GetIPProtectionProxyStatus(
+    std::unique_ptr<GetIPProtectionProxyStatusCallback> callback) {
+  if (!storage_partition_) {
+    callback->sendFailure(DispatchResponse::InternalError());
+    return;
+  }
+
+  network::mojom::NetworkContext* context =
+      storage_partition_->GetNetworkContext();
+
+  base::OnceCallback<void(ip_protection::IpProxyStatus)> internal_callback =
+      base::BindOnce(
+          [](std::unique_ptr<GetIPProtectionProxyStatusCallback>
+                 devtools_callback,
+             ip_protection::IpProxyStatus status) {
+            devtools_callback->sendSuccess(BuildIpProxyStatus(status));
+          },
+          std::move(callback));
+
+  context->GetIpProxyStatus(std::move(internal_callback));
+}
+
+DispatchResponse NetworkHandler::SetIPProtectionProxyBypassEnabled(
+    bool bypass_proxy) {
+  if (!net::features::kIpPrivacyEnableIppPanelInDevTools.Get()) {
+    return DispatchResponse::InvalidRequest(
+        "Missing required flag to bypass IP Proxy.");
+  }
+  if (!client_->IsTrusted()) {
+    return DispatchResponse::InternalError();
+  }
+  if (!storage_partition_) {
+    return DispatchResponse::InternalError();
+  }
+
+  storage_partition_->GetNetworkContext()->SetBypassIpProtectionProxy(
+      bypass_proxy);
+
+  return Response::Success();
+}
 namespace {
 
 String GetTrustTokenOperationStatus(

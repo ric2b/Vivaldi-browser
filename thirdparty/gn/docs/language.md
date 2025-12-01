@@ -63,8 +63,7 @@ The full grammar for language nerds is available in `gn help grammar`.
 ### Strings
 
 Strings are enclosed in double-quotes and use backslash as the escape
-character. They can span multiple lines. The only escape sequences supported
-are:
+character. The only escape sequences supported are:
 
   * `\"` (for literal quote)
   * `\$` (for literal dollars sign)

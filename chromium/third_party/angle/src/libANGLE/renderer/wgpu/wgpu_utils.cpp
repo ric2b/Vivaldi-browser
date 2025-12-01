@@ -234,6 +234,7 @@ void GenerateCaps(const WGPULimits &limitsWgpu,
     glExtensions->EGLImageExternalOES          = true;
     glExtensions->EGLImageExternalEssl3OES     = true;
     glExtensions->EGLImageExternalWrapModesEXT = true;
+    glExtensions->requiredInternalformatOES    = true;
 
     // OpenGL ES caps
     glCaps->maxElementIndex       = std::numeric_limits<GLuint>::max() - 1;
@@ -563,7 +564,6 @@ WGPUPrimitiveTopology GetPrimitiveTopology(gl::PrimitiveMode mode)
         case gl::PrimitiveMode::TriangleStrip:
             return WGPUPrimitiveTopology_TriangleStrip;
         case gl::PrimitiveMode::TriangleFan:
-            UNIMPLEMENTED();
             return WGPUPrimitiveTopology_TriangleList;  // Emulated
         default:
             UNREACHABLE();

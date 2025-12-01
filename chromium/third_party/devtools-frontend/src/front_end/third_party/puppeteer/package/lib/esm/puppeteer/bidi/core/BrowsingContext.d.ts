@@ -3,7 +3,7 @@
  * Copyright 2024 Google Inc.
  * SPDX-License-Identifier: Apache-2.0
  */
-import type * as Bidi from 'chromium-bidi/lib/cjs/protocol/protocol.js';
+import type * as Bidi from 'webdriver-bidi-protocol';
 import { EventEmitter } from '../../common/EventEmitter.js';
 import { disposeSymbol } from '../../util/disposable.js';
 import type { AddPreloadScriptOptions } from './Browser.js';
@@ -134,5 +134,7 @@ export declare class BrowsingContext extends EventEmitter<{
     [disposeSymbol](): void;
     deleteCookie(...cookieFilters: Bidi.Storage.CookieFilter[]): Promise<void>;
     locateNodes(locator: Bidi.BrowsingContext.Locator, startNodes: [Bidi.Script.SharedReference, ...Bidi.Script.SharedReference[]]): Promise<Bidi.Script.NodeRemoteValue[]>;
+    setJavaScriptEnabled(enabled: boolean): Promise<void>;
+    isJavaScriptEnabled(): boolean;
 }
 //# sourceMappingURL=BrowsingContext.d.ts.map

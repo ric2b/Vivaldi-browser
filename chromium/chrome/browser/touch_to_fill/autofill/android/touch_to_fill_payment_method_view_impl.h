@@ -8,6 +8,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/touch_to_fill/autofill/android/touch_to_fill_payment_method_view.h"
+#include "components/autofill/core/browser/payments/payments_autofill_client.h"
 
 namespace content {
 class WebContents;
@@ -15,6 +16,7 @@ class WebContents;
 
 namespace autofill {
 
+class BnplIssuer;
 class Iban;
 class LoyaltyCard;
 struct Suggestion;
@@ -36,15 +38,21 @@ class TouchToFillPaymentMethodViewImpl : public TouchToFillPaymentMethodView {
   bool IsReadyToShow(TouchToFillPaymentMethodViewController* controller,
                      JNIEnv* env);
   // TouchToFillPaymentMethodView:
-  bool ShowCreditCards(TouchToFillPaymentMethodViewController* controller,
-                       base::span<const Suggestion> suggestions,
-                       bool should_show_scan_credit_card) override;
+  bool ShowPaymentMethods(TouchToFillPaymentMethodViewController* controller,
+                          base::span<const Suggestion> suggestions,
+                          bool should_show_scan_credit_card) override;
   bool ShowIbans(TouchToFillPaymentMethodViewController* controller,
                  base::span<const autofill::Iban> ibans_to_suggest) override;
   bool ShowLoyaltyCards(TouchToFillPaymentMethodViewController* controller,
                         base::span<const LoyaltyCard> affiliated_loyalty_cards,
                         base::span<const LoyaltyCard> all_loyalty_cards,
                         bool first_time_usage) override;
+  bool UpdateBnplPaymentMethod(std::optional<uint64_t> extracted_amount,
+                               bool is_amount_supported_by_any_issuer) override;
+  bool ShowProgressScreen(
+      TouchToFillPaymentMethodViewController* controller) override;
+  bool ShowBnplIssuers(
+      base::span<const BnplIssuer> bnpl_issuers_to_suggest) override;
   void Hide() override;
 
   // The corresponding Java TouchToFillPaymentMethodViewBridge.

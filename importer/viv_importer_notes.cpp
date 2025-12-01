@@ -20,6 +20,7 @@
 #include "importer/viv_importer.h"
 #include "importer/viv_importer_utils.h"
 #include "importer/viv_opera_reader.h"
+#include "importer/viv_import_result.h"
 #include "ui/base/l10n/l10n_util.h"
 
 class OperaNotesReader : public OperaAdrFileReader {
@@ -117,22 +118,20 @@ void OperaNotesReader::AddNote(
   notes_.push_back(std::move(entry));
 }
 
-bool OperaImporter::ImportNotes(std::string* error) {
+ImportResult OperaImporter::ImportNotes() {
   if (notesfilename_.empty()) {
-    *error = "No notes filename provided.";
-    return false;
+    return import_result::Error(IDS_IMPORT_ERROR_OPERA_NOTES_FILE_NOT_FOUND);
   }
   base::FilePath file(notesfilename_);
   OperaNotesReader reader;
 
   if (!reader.LoadFile(file)) {
-    *error = "Notes file does not exist.";
-    return false;
+    return import_result::Error(IDS_IMPORT_ERROR_OPERA_NOTES_FILE_NOT_FOUND);
   }
   if (!reader.Notes().empty() && !cancelled()) {
     const std::u16string& first_folder_name =
         bridge_->GetLocalizedString(IDS_NOTES_GROUP_FROM_OPERA);
     bridge_->AddNotes(reader.Notes(), first_folder_name);
   }
-  return true;
+  return import_result::Success();
 }

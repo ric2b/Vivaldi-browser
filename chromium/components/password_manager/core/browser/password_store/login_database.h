@@ -50,21 +50,6 @@ extern const int kCompatibleVersionNumber;
 // the login information.
 class LoginDatabase : public EncryptDecryptInterface {
  public:
-  struct LoginDatabaseEmptinessState {
-    // True if the login database has 0 passwords stored.
-    bool no_login_found = true;
-    // True if the database has autofillable credentials. Used to decide whether
-    // password suggestions can be displayed via manual fallbacks. Not
-    // autofillable entries are: blocklisted entries, federated credentials and
-    // username-only credentials.
-    bool autofillable_credentials_exist = false;
-
-    friend bool operator==(const LoginDatabaseEmptinessState&,
-                           const LoginDatabaseEmptinessState&) = default;
-  };
-
-  using IsEmptyCallback =
-      base::RepeatingCallback<void(LoginDatabaseEmptinessState)>;
   using DeletingUndecryptablePasswordsEnabled =
       base::StrongAlias<class DeletingUndecryptablePasswordsEnabledTag, bool>;
   using OnUndecryptablePasswordsRemoved =
@@ -181,8 +166,6 @@ class LoginDatabase : public EncryptDecryptInterface {
   // whether further use of this login database will succeed is unspecified.
   bool DeleteAndRecreateDatabaseFile();
 
-  LoginDatabaseEmptinessState IsEmpty();
-
   // On MacOS, it deletes all logins from the database that cannot be decrypted
   // when encryption key from Keychain is available. If the Keychain is locked,
   // it does nothing and returns ENCRYPTION_UNAVAILABLE. If it's not running on
@@ -199,12 +182,6 @@ class LoginDatabase : public EncryptDecryptInterface {
   bool BeginTransaction();
   void RollbackTransaction();
   bool CommitTransaction();
-
-  // `is_empty_cb`is called to signal whether the database is empty (i.e.
-  // without any logins *or* blocklists) and whether there are any autofillable
-  // logins. The call happens when initializing the database and when
-  // adding/removing entries, regardless of success.
-  void SetIsEmptyCb(IsEmptyCallback is_empty_cb);
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   void SetIsUserDataDirPolicySet(bool is_set) {
@@ -373,13 +350,8 @@ class LoginDatabase : public EncryptDecryptInterface {
   bool UpdatePasswordNotes(FormPrimaryKey primary_key,
                            const std::vector<PasswordNote>& notes);
 
-  // If a non-null `is_empty_cb` was passed on construction, computes whether
-  // the DB is empty (SQL statement) and invokes the callback with the result.
-  void TriggerIsEmptyCb();
-
   const base::FilePath db_path_;
   const IsAccountStore is_account_store_;
-  IsEmptyCallback is_empty_cb_ = base::NullCallback();
 
   // `on_undecryptable_passwords_removed_`is called to signal whether user
   // interacted with the kClearUndecryptablePasswords experiment. It is needed

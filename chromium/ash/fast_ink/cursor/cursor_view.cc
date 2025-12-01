@@ -13,6 +13,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_rep_default.h"
 
 namespace ash {
@@ -122,10 +123,11 @@ void CursorView::Draw() {
     }
   }
 
-  // TODO(b/360768376): Disable overlay until we know why
-  // fast ink cursor glitches.
+  // Update content and damage rectangles for surface. When cursor is moving,
+  // enable `auto_refresh` to send frames asynchronously to minimize latency.
+  const bool is_cursor_moving = stationary_timer_->IsRunning();
   UpdateSurface(cursor_rect_, damage_rect_,
-                /*auto_refresh=*/false);
+                /*auto_refresh=*/is_cursor_moving);
 }
 
 void CursorView::OnStationary() {

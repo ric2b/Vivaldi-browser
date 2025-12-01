@@ -8,6 +8,7 @@
 #include "components/content_injection/content_injection_service.h"
 #include "components/content_injection/content_injection_service_factory.h"
 #include "components/page_actions/page_actions_tab_helper.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "services/service_manager/public/cpp/interface_provider.h"

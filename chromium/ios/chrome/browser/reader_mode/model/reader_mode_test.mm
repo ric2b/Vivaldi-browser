@@ -10,16 +10,18 @@
 #import "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "components/dom_distiller/core/extraction_utils.h"
+#import "components/language/ios/browser/language_detection_java_script_feature.h"
 #import "ios/chrome/browser/dom_distiller/model/distiller_service_factory.h"
 #import "ios/chrome/browser/reader_mode/model/features.h"
 #import "ios/chrome/browser/reader_mode/model/reader_mode_java_script_feature.h"
+#import "ios/chrome/browser/reader_mode/model/reader_mode_scroll_anchor_java_script_feature.h"
 #import "ios/chrome/browser/reader_mode/model/reader_mode_tab_helper.h"
-#import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
-#import "ios/web/js_messaging/java_script_feature_manager.h"
+#import "ios/chrome/browser/snapshots/model/snapshot_source_tab_helper.h"
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
+#import "ios/web/public/test/js_test_util.h"
 #import "ios/web/public/web_state.h"
 #import "third_party/dom_distiller_js/dom_distiller.pb.h"
 #import "third_party/dom_distiller_js/dom_distiller_json_converter.h"
@@ -37,8 +39,11 @@ void ReaderModeTest::SetUp() {
       /*disabled_features=*/{});
   profile_ = TestProfileIOS::Builder().Build();
 
-  web::JavaScriptFeatureManager::FromBrowserState(profile_.get())
-      ->ConfigureFeatures({ReaderModeJavaScriptFeature::GetInstance()});
+  web::test::OverrideJavaScriptFeatures(
+      profile_.get(),
+      {ReaderModeJavaScriptFeature::GetInstance(),
+       ReaderModeScrollAnchorJavaScriptFeature::GetInstance(),
+       language::LanguageDetectionJavaScriptFeature::GetInstance()});
 }
 
 std::unique_ptr<web::FakeWebState> ReaderModeTest::CreateWebState() {
@@ -51,6 +56,7 @@ std::unique_ptr<web::FakeWebState> ReaderModeTest::CreateWebState() {
   // Attach tab helpers
   ReaderModeTabHelper::CreateForWebState(
       web_state.get(), DistillerServiceFactory::GetForProfile(profile()));
+  SnapshotSourceTabHelper::CreateForWebState(web_state.get());
 
   return web_state;
 }
@@ -114,10 +120,16 @@ void ReaderModeTest::SetReaderModeState(web::FakeWebState* web_state,
   if (!tab_helper) {
     return;
   }
-  web_frame->set_call_java_script_function_callback(base::BindRepeating(^{
-    // Overrides the result from DOM distiller heuristic with a custom entry.
-    tab_helper->HandleReaderModeHeuristicResult(url, result);
-  }));
+  // `url` is captured by copy to ensure it is still valid when the block is
+  // executed.
+  web_frame->set_call_java_script_function_callback(base::BindRepeating(
+      ^(GURL url_copy) {
+        // Overrides the result from DOM distiller heuristic with a custom
+        // entry.
+        tab_helper->HandleReaderModeHeuristicResult(result);
+        web_frame->set_call_java_script_function_callback(base::DoNothing());
+      },
+      url));
 }
 
 void ReaderModeTest::WaitForPageLoadDelayAndRunUntilIdle() {
@@ -129,8 +141,14 @@ void ReaderModeTest::WaitForPageLoadDelayAndRunUntilIdle() {
 
 bool ReaderModeTest::WaitForAvailableReaderModeContentInWebState(
     web::WebState* web_state) {
+  // For the Reader mode WebState to be ready, distillation must complete
+  // (JavaScript completion) and the distilled content must be loaded in to the
+  // Reader mode WebState (page load).
+  constexpr base::TimeDelta timeout =
+      base::test::ios::kWaitForJSCompletionTimeout +
+      base::test::ios::kWaitForPageLoadTimeout;
   return base::test::ios::WaitUntilConditionOrTimeout(
-      base::test::ios::kWaitForJSCompletionTimeout, true, ^{
+      timeout, true, ^{
         return ReaderModeTabHelper::FromWebState(web_state)
                    ->GetReaderModeWebState() != nullptr;
       });

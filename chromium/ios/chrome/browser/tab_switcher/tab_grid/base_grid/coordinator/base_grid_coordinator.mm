@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import <MaterialComponents/MaterialSnackbar.h>
+#import "ios/chrome/browser/tab_switcher/tab_grid/base_grid/coordinator/base_grid_coordinator.h"
 
 #import "base/check.h"
 #import "base/strings/sys_string_conversions.h"
@@ -24,7 +24,8 @@
 #import "ios/chrome/browser/shared/public/commands/tab_grid_toolbar_commands.h"
 #import "ios/chrome/browser/shared/public/commands/tab_group_confirmation_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
+#import "ios/chrome/browser/shared/public/snackbar/snackbar_message.h"
+#import "ios/chrome/browser/shared/public/snackbar/snackbar_message_action.h"
 #import "ios/chrome/browser/tab_switcher/tab_grid/base_grid/coordinator/base_grid_coordinator+subclassing.h"
 #import "ios/chrome/browser/tab_switcher/tab_grid/base_grid/coordinator/base_grid_mediator.h"
 #import "ios/chrome/browser/tab_switcher/tab_grid/base_grid/ui/base_grid_view_controller.h"
@@ -116,7 +117,11 @@ using collaboration::CollaborationControllerDelegate;
   return YES;
 }
 
-- (LegacyGridTransitionLayout*)transitionLayout {
+- (LegacyGridTransitionLayout*)legacyTransitionLayout {
+  NOTREACHED() << "This should be implemented in subclasses.";
+}
+
+- (TabGridTransitionLayout*)transitionLayout {
   NOTREACHED() << "This should be implemented in subclasses.";
 }
 
@@ -321,34 +326,6 @@ using collaboration::CollaborationControllerDelegate;
       _tabGroupConfirmationCoordinator;
 }
 
-- (void)showTabGroupConfirmationForAction:(TabGroupActionType)actionType
-                                    group:
-                                        (base::WeakPtr<const TabGroup>)tabGroup
-                         sourceButtonItem:(UIBarButtonItem*)sourceButtonItem {
-  CHECK(!IsContainedTabGroupEnabled());
-  if (!tabGroup) {
-    return;
-  }
-
-  _tabGroupConfirmationCoordinator = [[TabGroupConfirmationCoordinator alloc]
-      initWithBaseViewController:self.baseViewController
-                         browser:self.browser
-                      actionType:actionType
-                sourceButtonItem:sourceButtonItem];
-  __weak BaseGridCoordinator* weakSelf = self;
-  _tabGroupConfirmationCoordinator.primaryAction = ^{
-    [weakSelf takeActionForActionType:actionType weakGroup:tabGroup];
-  };
-  _tabGroupConfirmationCoordinator.dismissAction = ^{
-    [weakSelf clearLeaveOrDeleteCompletion];
-  };
-  _tabGroupConfirmationCoordinator.tabGroupName = tabGroup->GetTitle();
-
-  [_tabGroupConfirmationCoordinator start];
-  self.gridViewController.tabGroupConfirmationHandler =
-      _tabGroupConfirmationCoordinator;
-}
-
 - (void)startLeaveOrDeleteSharedGroup:(base::WeakPtr<const TabGroup>)group
                             forAction:(TabGroupActionType)actionType
                            sourceView:(UIView*)sourceView {
@@ -370,32 +347,6 @@ using collaboration::CollaborationControllerDelegate;
         [strongSelf showTabGroupConfirmationForAction:actionType
                                                 group:group
                                            sourceView:sourceView];
-      });
-  [self startLeaveOrDeleteSharedGroup:group
-                   completionCallback:std::move(completionCallback)];
-}
-
-- (void)startLeaveOrDeleteSharedGroup:(base::WeakPtr<const TabGroup>)group
-                            forAction:(TabGroupActionType)actionType
-                     sourceButtonItem:(UIBarButtonItem*)sourceButtonItem {
-  CHECK(!IsContainedTabGroupEnabled());
-  __weak __typeof(self) weakSelf = self;
-  base::OnceCallback<void(ResultCallback)> completionCallback =
-      base::BindOnce(^(ResultCallback resultCallback) {
-        BaseGridCoordinator* strongSelf = weakSelf;
-        if (!strongSelf) {
-          std::move(resultCallback)
-              .Run(CollaborationControllerDelegate::Outcome::kCancel);
-          return;
-        }
-        auto completionBlock = base::CallbackToBlock(std::move(resultCallback));
-        strongSelf.leaveOrDeleteCompletion =
-            ^(CollaborationControllerDelegate::Outcome outcome) {
-              completionBlock(outcome);
-            };
-        [strongSelf showTabGroupConfirmationForAction:actionType
-                                                group:group
-                                     sourceButtonItem:sourceButtonItem];
       });
   [self startLeaveOrDeleteSharedGroup:group
                    completionCallback:std::move(completionCallback)];
@@ -427,8 +378,9 @@ using collaboration::CollaborationControllerDelegate;
   NSString* messageLabel =
       base::SysUTF16ToNSString(l10n_util::GetPluralStringFUTF16(
           IDS_IOS_TAB_GROUP_SNACKBAR_LABEL, numberOfClosedGroups));
-  MDCSnackbarMessage* message = CreateSnackbarMessage(messageLabel);
-  MDCSnackbarMessageAction* action = [[MDCSnackbarMessageAction alloc] init];
+  SnackbarMessage* message =
+      [[SnackbarMessage alloc] initWithTitle:messageLabel];
+  SnackbarMessageAction* action = [[SnackbarMessageAction alloc] init];
   action.handler = openTabGroupPanelAction;
   action.title = l10n_util::GetNSString(IDS_IOS_TAB_GROUP_SNACKBAR_ACTION);
   message.action = action;

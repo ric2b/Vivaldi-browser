@@ -24,8 +24,10 @@
 #include "chrome/browser/history_embeddings/history_embeddings_utils.h"
 #include "chrome/browser/page_image_service/image_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_ui_util.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/cr_components/history/history_util.h"
@@ -35,6 +37,7 @@
 #include "chrome/browser/ui/webui/history/browsing_history_handler.h"
 #include "chrome/browser/ui/webui/history/foreign_session_handler.h"
 #include "chrome/browser/ui/webui/history/history_login_handler.h"
+#include "chrome/browser/ui/webui/history/history_sign_in_state_watcher.h"
 #include "chrome/browser/ui/webui/history/navigation_handler.h"
 #include "chrome/browser/ui/webui/history_clusters/history_clusters_handler.h"
 #include "chrome/browser/ui/webui/managed_ui_handler.h"
@@ -58,6 +61,7 @@
 #include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/sync/base/features.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -65,13 +69,21 @@
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/webui/webui_util.h"
 
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/public/glic_enabling.h"
+#endif
+
 namespace {
 
 content::WebUIDataSource* CreateAndAddHistoryUIHTMLSource(Profile* profile) {
   content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
       profile, chrome::kChromeUIHistoryHost);
 
-  HistoryUtil::PopulateSourceForSidePanelHistory(source, profile);
+  source->AddBoolean(
+      "replaceSyncPromosWithSignInPromos",
+      base::FeatureList::IsEnabled(syncer::kReplaceSyncPromosWithSignInPromos));
+
+  HistoryUtil::PopulateCommonSourceForHistory(source, profile);
 
   static constexpr webui::LocalizedString kStrings[] = {
       // Localized strings (alphabetical order).
@@ -85,15 +97,55 @@ content::WebUIDataSource* CreateAndAddHistoryUIHTMLSource(Profile* profile) {
       {"noSyncedResults", IDS_HISTORY_NO_SYNCED_RESULTS},
       {"turnOnSyncPromo", IDS_HISTORY_TURN_ON_SYNC_PROMO},
       {"turnOnSyncPromoDesc", IDS_HISTORY_TURN_ON_SYNC_PROMO_DESC},
-  };
+      {"turnOnSyncHistoryPromo", IDS_HISTORY_SYNC_HISTORY_PROMO},
+      {"syncHistoryPromoBodySignedOut",
+       IDS_RECENT_TABS_SYNC_HISTORY_PROMO_BODY_SIGNED_OUT},
+      {"syncHistoryPromoBodyPendingSignIn",
+       IDS_RECENT_TABS_SYNC_HISTORY_PROMO_BODY_PENDING_SIGN_IN},
+      {"syncHistoryPromoBodyPendingSignInSyncHistoryOn",
+       IDS_RECENT_TABS_SYNC_HISTORY_PROMO_BODY_PENDING_SIGN_IN_SYNC_HISTORY_ON},
+      {"verifyItsYou", IDS_VERIFY_IT_IS_YOU}};
   source->AddLocalizedStrings(kStrings);
 
+  source->AddLocalizedString("turnOnSyncHistoryButton",
+                             IDS_HISTORY_SYNC_HISTORY_BUTTON);
+  source->AddString("accountPictureUrl",
+                    profiles::GetPlaceholderAvatarIconUrl());
+
+  // The history page footer can display messages about other forms of
+  // browsing history, linking to Google My Activity (GMA) and/or
+  // Gemini Apps Activity (GAA). At most one message is shown, depending on
+  // the user's settings.
   source->AddString(
-      "sidebarFooter",
+      "sidebarFooterGMAOnly",
       l10n_util::GetStringFUTF16(
-          IDS_HISTORY_OTHER_FORMS_OF_HISTORY,
+          IDS_HISTORY_OTHER_FORMS_OF_HISTORY_GMA_ONLY,
           l10n_util::GetStringUTF16(
               IDS_SETTINGS_CLEAR_DATA_MYACTIVITY_URL_IN_HISTORY)));
+  source->AddString(
+      "sidebarFooterGAAOnly",
+      l10n_util::GetStringFUTF16(IDS_HISTORY_OTHER_FORMS_OF_HISTORY_GAA_ONLY,
+                                 chrome::kMyActivityGeminiAppsUrl));
+  source->AddString("sidebarFooterGMAAndGAA",
+                    l10n_util::GetStringFUTF16(
+                        IDS_HISTORY_OTHER_FORMS_OF_HISTORY_GMA_AND_GAA,
+                        l10n_util::GetStringUTF16(
+                            IDS_SETTINGS_CLEAR_DATA_MYACTIVITY_URL_IN_HISTORY),
+                        chrome::kMyActivityGeminiAppsUrl));
+  // Links that are used in the messages above.
+  source->AddString("sidebarFooterGMALink",
+                    l10n_util::GetStringUTF16(
+                        IDS_SETTINGS_CLEAR_DATA_MYACTIVITY_URL_IN_HISTORY));
+  source->AddString("sidebarFooterGAALink", chrome::kMyActivityGeminiAppsUrl);
+
+#if BUILDFLAG(ENABLE_GLIC)
+  const bool is_glic_enabled =
+      glic::GlicEnabling::ShouldShowSettingsPage(profile);
+#else
+  const bool is_glic_enabled = false;
+#endif  // BUILDFLAG(ENABLE_GLIC)
+
+  source->AddBoolean("isGlicEnabled", is_glic_enabled);
 
 #if BUILDFLAG(IS_CHROMEOS)
   source->AddLocalizedString("turnOnSyncButton",
@@ -105,6 +157,13 @@ content::WebUIDataSource* CreateAndAddHistoryUIHTMLSource(Profile* profile) {
       identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin);
   AccountInfo account_info =
       signin_ui_util::GetSingleAccountForPromos(identity_manager);
+  source->AddString(
+      "turnOnSignedInSyncHistoryPromoBodySignInSyncOff",
+      l10n_util::GetStringFUTF16(
+          IDS_RECENT_TABS_SYNC_HISTORY_PROMO_BODY_SIGNED_IN_SYNC_OFF,
+          base::UTF8ToUTF16(account_info.email)));
+  source->AddString("accountName", account_info.full_name);
+  source->AddString("accountEmail", account_info.email);
   if (!has_primary_account && !account_info.IsEmpty()) {
     source->AddString("turnOnSyncButton",
                       l10n_util::GetStringFUTF16(
@@ -248,8 +307,14 @@ void HistoryUI::UpdateDataSource() {
 
   Profile* profile = Profile::FromWebUI(web_ui());
 
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile);
+  syncer::SyncService* sync_service =
+      SyncServiceFactory::GetForProfile(profile);
+
   base::Value::Dict update;
-  update.Set(kIsUserSignedInKey, HistoryUtil::IsUserSignedIn(profile));
+  update.Set(kSignInStateKey, static_cast<int>(GetHistorySignInState(
+                                  identity_manager, sync_service)));
 
   const bool is_managed = profile->GetPrefs()->IsManagedPreference(
       history_clusters::prefs::kVisible);

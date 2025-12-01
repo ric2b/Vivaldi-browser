@@ -74,7 +74,7 @@ namespace blink {
 //
 //   1. Use an existing byte span representation.
 //
-//      E.g.: Assuming |v| is a WTF::Vector
+//      E.g.: Assuming |v| is a blink::Vector
 //          IdentifiabilityMetricBuilder(...).Set(
 //              ..., base::as_byte_span(v.Data(), v.Size()));
 //
@@ -213,10 +213,6 @@ class IdentifiableToken {
 
   constexpr bool operator==(const IdentifiableToken& that) const {
     return value_ == that.value_;
-  }
-
-  constexpr bool operator!=(const IdentifiableToken& that) const {
-    return value_ != that.value_;
   }
 
   // Returns a value that can be passed into the UKM metrics recording

@@ -1,24 +1,20 @@
 // Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
 
-#include "components/ad_blocker/content/flat_rules_compiler.h"
+#include "components/ad_blocker/ios/ios_rules_compiler.h"
 
 #include <bitset>
 #include <map>
-#include <type_traits>
 
 #include "base/containers/adapters.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/files/file_util.h"
-#include "base/ios/ios_util.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
 #include "base/values.h"
-#include "chromium/url/url_util.h"
 #include "components/ad_blocker/core/adblock_content_injection_rule.h"
-#include "components/ad_blocker/core/utils.h"
-#include "components/ad_blocker/public/core/adblock_request_filter_rule.h"
+#include "components/ad_blocker/core/adblock_request_filter_rule.h"
 #include "components/ad_blocker/ios/utils.h"
 
 namespace adblock_filter {
@@ -26,18 +22,18 @@ namespace adblock_filter {
 namespace {
 
 constexpr auto kResourceTypeMap =
-    base::MakeFixedFlatMap<RequestFilterRule::ResourceType, std::string_view>({
-        {RequestFilterRule::kStylesheet, "style-sheet"},
-        {RequestFilterRule::kImage, "image"},
-        {RequestFilterRule::kObject, "media"},
-        {RequestFilterRule::kScript, "script"},
-        {RequestFilterRule::kXmlHttpRequest, "fetch"},
-        {RequestFilterRule::kSubDocument, "document"},
-        {RequestFilterRule::kFont, "font"},
-        {RequestFilterRule::kMedia, "media"},
-        {RequestFilterRule::kWebSocket, "websocket"},
-        {RequestFilterRule::kPing, "ping"},
-        {RequestFilterRule::kOther, "other"},
+    base::MakeFixedFlatMap<ResourceType, std::string_view>({
+        {ResourceType::kStylesheet, "style-sheet"},
+        {ResourceType::kImage, "image"},
+        {ResourceType::kObject, "media"},
+        {ResourceType::kScript, "script"},
+        {ResourceType::kXmlHttpRequest, "fetch"},
+        {ResourceType::kSubDocument, "document"},
+        {ResourceType::kFont, "font"},
+        {ResourceType::kMedia, "media"},
+        {ResourceType::kWebSocket, "websocket"},
+        {ResourceType::kPing, "ping"},
+        {ResourceType::kOther, "other"},
     });
 
 constexpr char kDelim = '^';
@@ -70,19 +66,17 @@ class Trigger {
     base::Value::Dict result;
     result.Set(rules_json::kUrlFilter, url_filter_);
     result.Set(rules_json::kUrlFilterIsCaseSensitive, case_sensitive_);
-    if (!resource_type_.all() && !resource_type_.none()) {
+    if (!resource_types_.HasAll(RegularResourceTypes::All()) &&
+        !resource_types_.empty()) {
       base::Value::List resource_type;
-      for (size_t i = 0; i < resource_type_.size(); i++) {
-        if (resource_type_.test(i)) {
-          resource_type.Append(base::Value(kResourceTypeMap.at(i)));
-        }
+      for (ResourceType type : resource_types_) {
+        resource_type.Append(base::Value(kResourceTypeMap.at(type)));
       }
       result.Set(rules_json::kResourceType, std::move(resource_type));
     }
     if (load_type_) {
       base::Value::List load_type;
-      if (*load_type_ == RequestFilterRule::kThirdParty ||
-          *load_type_ == RequestFilterRule::kStrictThirdParty) {
+      if (*load_type_ == Party::kThird || *load_type_ == Party::kStrictThird) {
         load_type.Append(base::Value(rules_json::kThirdParty));
       } else {
         load_type.Append(base::Value(rules_json::kFirstParty));
@@ -119,13 +113,11 @@ class Trigger {
     return result;
   }
 
-  void set_resource_type(std::bitset<RequestFilterRule::kTypeCount> type) {
-    resource_type_ = type;
+  void set_resource_type(RegularResourceTypes types) {
+    resource_types_ = types;
   }
 
-  void set_load_type(std::optional<RequestFilterRule::Party> load_type) {
-    load_type_ = load_type;
-  }
+  void set_load_type(std::optional<Party> load_type) { load_type_ = load_type; }
 
   void set_load_context(LoadContext context) { load_context_ = context; }
 
@@ -149,8 +141,8 @@ class Trigger {
 
   std::string url_filter_;
   bool case_sensitive_;
-  std::bitset<RequestFilterRule::kTypeCount> resource_type_;
-  std::optional<RequestFilterRule::Party> load_type_;
+  RegularResourceTypes resource_types_;
+  std::optional<Party> load_type_;
   LoadContext load_context_;
   std::vector<std::string> top_url_filter_;
   bool top_url_filter_is_excluding_;
@@ -471,16 +463,16 @@ void TraverseDomainTree(
 }
 
 base::Value::List* GetTarget(base::Value::Dict& compiled_rules,
-                             RequestFilterRule::Decision decision,
+                             RuleDecision decision,
                              bool is_generic) {
   switch (decision) {
-    case RequestFilterRule::kModify:
+    case RuleDecision::kModify:
       return compiled_rules.EnsureDict(rules_json::kBlockRules)
           ->EnsureList(is_generic ? rules_json::kGeneric
                                   : rules_json::kSpecific);
-    case RequestFilterRule::kPass:
+    case RuleDecision::kPass:
       return compiled_rules.EnsureList(rules_json::kAllowRules);
-    case RequestFilterRule::kModifyImportant:
+    case RuleDecision::kModifyImportant:
       return compiled_rules.EnsureList(rules_json::kBlockImportantRules);
   }
 }
@@ -489,7 +481,7 @@ base::Value::List* GetTarget(base::Value::Dict& compiled_rules,
 // First, we try to process the lists to remove anything redundant and split
 // out instances where some inclusions/exclusions are subdomains of each
 // other.
-void CompileRuleWithDomains(RequestFilterRule::Decision decision,
+void CompileRuleWithDomains(RuleDecision decision,
                             const std::set<std::string>& included_domains,
                             const std::set<std::string>& excluded_domains,
                             base::Value::Dict& compiled_rules,
@@ -509,7 +501,7 @@ void CompileRuleWithDomains(RequestFilterRule::Decision decision,
     base::Value::List* target = GetTarget(compiled_rules, decision, is_generic);
     CHECK(target);
 
-    Action action = (decision == RequestFilterRule::kPass)
+    Action action = (decision == RuleDecision::kPass)
                         ? Action::IgnorePreviousAction()
                         : std::move(block_action);
 
@@ -535,13 +527,13 @@ void CompileRuleWithDomains(RequestFilterRule::Decision decision,
                                false, true);
     base::Value::List* target = GetTarget(compiled_rules, decision, false);
     CHECK(target);
-    Action action = (decision == RequestFilterRule::kPass)
+    Action action = (decision == RuleDecision::kPass)
                         ? Action::IgnorePreviousAction()
                         : std::move(block_action);
     target->Append(MakeRule(trigger, action));
     return;
   }
-  if (decision == RequestFilterRule::kPass) {
+  if (decision == RuleDecision::kPass) {
     // Unfortunately, for allow rules, we have no way of producing a rule that
     // cancels an ignore previous action for subdomains. So, we just elect to
     // exclude not use a wildcard domain if a subdomain has an override.
@@ -582,7 +574,8 @@ void CompileRuleWithDomains(RequestFilterRule::Decision decision,
 void CompilePlainRequestFilter(const RequestFilterRule& rule,
                                base::Value::Dict& compiled_request_filter_rules,
                                Trigger trigger) {
-  if (rule.modifier != RequestFilterRule::kNoModifier) {
+  if (rule.modifier != ModifierType::kNoModifier ||
+      rule.request_methods != RequestMethods::All()) {
     // TODO(julien): Implement
     return;
   }
@@ -610,53 +603,51 @@ void CompileRequestFilterRule(
     return;
   }
 
-  static const std::bitset<RequestFilterRule::kTypeCount> subdocument_type =
-      (1 << RequestFilterRule::kSubDocument);
   std::optional<std::string> url_filter = GetRegexFromRule(rule);
   if (!url_filter)
     return;
   auto resource_types = rule.resource_types;
   auto explicit_types = rule.explicit_types;
   auto activations = rule.activation_types;
-  if (!resource_types.none() ||
-      (explicit_types.test(RequestFilterRule::kDocument) &&
-       rule.decision != RequestFilterRule::kPass)) {
+  if (!resource_types.empty() || (explicit_types.Has(ResourceType::kDocument) &&
+                                  rule.decision != RuleDecision::kPass)) {
     Trigger trigger(*url_filter, rule.is_case_sensitive);
     trigger.set_load_type(rule.party);
 
-    if (explicit_types.test(RequestFilterRule::kDocument) &&
-        rule.decision != RequestFilterRule::kPass && allow_strict_blocking) {
+    if (explicit_types.Has(ResourceType::kDocument) &&
+        rule.decision != RuleDecision::kPass && allow_strict_blocking) {
       // The SubDocument resource type is translated as a document block rule
       // In order to actually block subdocument, the load context must be set
       // instead (See below)
-      resource_types.set(RequestFilterRule::kSubDocument);
-    } else if (resource_types.test(RequestFilterRule::kSubDocument)) {
-      resource_types.reset(RequestFilterRule::kSubDocument);
+      resource_types.Put(ResourceType::kSubDocument);
+    } else if (resource_types.Has(ResourceType::kSubDocument)) {
+      resource_types.Remove(ResourceType::kSubDocument);
       Trigger subdocument_trigger = trigger.Clone();
       subdocument_trigger.set_load_context(LoadContext::kChildFrame);
-      subdocument_trigger.set_resource_type(subdocument_type);
+      subdocument_trigger.set_resource_type(RegularResourceTypes::FromRange(
+          ResourceType::kSubDocument, ResourceType::kSubDocument));
       CompilePlainRequestFilter(rule, compiled_request_filter_rules,
                                 std::move(subdocument_trigger));
     }
 
     // Unsupported on iOS.
-    resource_types.reset(RequestFilterRule::kWebTransport);
-    resource_types.reset(RequestFilterRule::kWebBundle);
-    resource_types.reset(RequestFilterRule::kWebRTC);
+    resource_types.Remove(ResourceType::kWebTransport);
+    resource_types.Remove(ResourceType::kWebBundle);
+    resource_types.Remove(ResourceType::kWebRTC);
 
     // Remaining types after handling subdocument
-    if (!resource_types.none()) {
+    if (!resource_types.empty()) {
       trigger.set_resource_type(resource_types);
       CompilePlainRequestFilter(rule, compiled_request_filter_rules,
                                 std::move(trigger));
     }
   }
 
-  if (rule.decision == RequestFilterRule::kPass && !activations.none()) {
+  if (rule.decision == RuleDecision::kPass && !activations.empty()) {
     Trigger trigger(kWildcardRegex, false);
     trigger.set_load_type(rule.party);
     trigger.set_top_url_filter(*url_filter, false, rule.is_case_sensitive);
-    if (activations.test(RequestFilterRule::kDocument)) {
+    if (activations.Has(ActivationType::kWholeDocument)) {
       if (source_settings.allow_attribution_tracker_rules && rule.host) {
         partner_list_allowed_documents.Append(*rule.host);
       }
@@ -666,17 +657,18 @@ void CompileRequestFilterRule(
           ->Append(MakeRule(trigger, Action::IgnorePreviousAction()));
     }
 
-    if (activations.test(RequestFilterRule::kGenericBlock)) {
+    if (activations.Has(ActivationType::kGenericBlock)) {
       compiled_request_filter_rules.EnsureList(rules_json::kGenericAllowRules)
           ->Append(MakeRule(trigger, Action::IgnorePreviousAction()));
     }
 
-    if (activations.test(RequestFilterRule::kElementHide)) {
+    if (activations.Has(ActivationType::kSpecificHide) &&
+        activations.Has(ActivationType::kGenericHide)) {
       compiled_cosmetic_filter_rules.EnsureList(rules_json::kAllowRules)
           ->Append(MakeRule(trigger, Action::IgnorePreviousAction()));
     }
 
-    if (activations.test(RequestFilterRule::kGenericHide)) {
+    if (activations.Has(ActivationType::kGenericHide)) {
       compiled_cosmetic_filter_rules.EnsureList(rules_json::kGenericAllowRules)
           ->Append(MakeRule(trigger, Action::IgnorePreviousAction()));
     }
@@ -686,8 +678,7 @@ void CompileRequestFilterRule(
 void CompileCosmeticRule(const CosmeticRule& rule,
                          base::Value::Dict& compiled_cosmetic_filter_rules) {
   CompileRuleWithDomains(
-      rule.core.is_allow_rule ? RequestFilterRule::kPass
-                              : RequestFilterRule::kModify,
+      rule.core.is_allow_rule ? RuleDecision::kPass : RuleDecision::kModify,
       rule.core.included_domains, rule.core.excluded_domains,
       *(compiled_cosmetic_filter_rules.EnsureDict(rules_json::kSelector)
             ->EnsureDict(rule.selector)),

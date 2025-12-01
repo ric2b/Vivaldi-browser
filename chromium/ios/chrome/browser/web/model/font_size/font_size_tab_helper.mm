@@ -44,7 +44,7 @@ FontSizeTabHelper::FontSizeTabHelper(web::WebState* web_state)
 FontSizeTabHelper::~FontSizeTabHelper() {}
 
 // static
-void FontSizeTabHelper::RegisterBrowserStatePrefs(
+void FontSizeTabHelper::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterDictionaryPref(prefs::kIosUserZoomMultipliers);
 }

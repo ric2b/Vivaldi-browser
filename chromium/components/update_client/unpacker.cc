@@ -90,8 +90,8 @@ void Unpacker::Verify(const std::vector<uint8_t>& pk_hash,
 void Unpacker::BeginUnzipping() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   unzip_begin_time_ = base::TimeTicks::Now();
-  if (!base::CreateNewTempDirectory(
-          FILE_PATH_LITERAL("chrome_Unpacker_BeginUnzipping"), &unpack_path_)) {
+  if (!CreateTempDirectory(FILE_PATH_LITERAL("chrome_Unpacker_BeginUnzipping"),
+                           &unpack_path_)) {
     VLOG(1) << "Unable to create temporary directory for unpacking.";
     EndUnpacking(UnpackerError::kUnzipPathError,
                  ::logging::GetLastSystemErrorCode());
@@ -162,7 +162,7 @@ void Unpacker::StoreVerifiedContentsInExtensionDir(
 void Unpacker::EndUnpacking(UnpackerError error, int extended_error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (error != UnpackerError::kNone && !unpack_path_.empty()) {
-    RetryDeletePathRecursively(unpack_path_);
+    RetryFileOperation(&base::DeletePathRecursively, unpack_path_);
   }
 
   Result result;

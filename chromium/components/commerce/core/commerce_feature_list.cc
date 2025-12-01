@@ -20,6 +20,8 @@
 #include "components/commerce/core/pref_names.h"
 #include "third_party/re2/src/re2/re2.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace commerce {
 
 namespace {
@@ -45,9 +47,9 @@ const CountryLocaleMap& GetAllowedCountryToLocaleMap() {
     map[&kPriceAnnotations] = {{"us", {"en-us"}}};
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_IOS)
     map[&kEnableDiscountInfoApi] = {{"us", {"en-us"}}};
-#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+#endif  // !BUILDFLAG(IS_IOS)
 
     map[&ntp_features::kNtpChromeCartModule] = {{"us", {"en-us"}}};
     map[&kPriceInsights] = {{"us", {"en-us"}}};
@@ -119,29 +121,18 @@ const re2::RE2& GetCouponPartnerMerchantPattern() {
 
 }  // namespace
 
-BASE_FEATURE(kCommerceAllowLocalImages,
-             "CommerceAllowLocalImages",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kCommerceAllowLocalImages, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
 BASE_FEATURE(kCommerceAllowOnDemandBookmarkUpdates,
-             "CommerceAllowOnDemandBookmarkUpdates",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi disabled
 
-BASE_FEATURE(kCommerceMerchantViewer,
-             "CommerceMerchantViewer",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kCommerceMerchantViewer, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
-BASE_FEATURE(kCommerceLocalPDPDetection,
-             "CommerceLocalPDPDetection",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kCommerceLocalPDPDetection, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
-BASE_FEATURE(kPriceAnnotations,
-             "PriceAnnotations",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kPriceAnnotations, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
-BASE_FEATURE(kPriceInsights,
-             "PriceInsights",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kPriceInsights, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
 const char kPriceInsightsDelayChipParam[] = "price-inishgts-delay-chip";
 const base::FeatureParam<bool> kPriceInsightsDelayChip{
@@ -159,51 +150,31 @@ const base::FeatureParam<bool> kPriceInsightsUseCache{
     &commerce::kPriceInsights, kPriceInsightsUseCacheParam, true};
 
 // Discount Autofill at Checkout
-BASE_FEATURE(kDiscountAutofill,
-             "DiscountAutofill",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kDiscountAutofill, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
 // Promotion in Magic Stack for Price Tracking users from other platforms.
-BASE_FEATURE(kPriceTrackingPromo,
-             "PriceTrackingPromo",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kPriceTrackingPromo, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi disabled
 
-// ShopCard in Magic Stack, including shopping features like price drop,
-// reviews, etc.
-BASE_FEATURE(kShopCard, "ShopCard", base::FEATURE_DISABLED_BY_DEFAULT);
+// Shopping variations to Tab resumption.
+BASE_FEATURE(kTabResumptionShopCard, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
 // Impression limits on ShopCards
-BASE_FEATURE(kShopCardImpressionLimits,
-             "ShopCardImpressionLimits",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kShopCardImpressionLimits, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
-BASE_FEATURE(kProductSpecifications,
-             "ProductSpecifications",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kProductSpecifications, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
 // Kill switch for unsupported fields becoming supported in the event of a
 // browser upgrade.
 BASE_FEATURE(kProductSpecificationsClearMetadataOnNewlySupportedFields,
-             "ProductSpecificationsClearMetadataOnNewlySupportedFields",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi disabled
 
-BASE_FEATURE(kCompareConfirmationToast,
-             "CompareConfirmationToast",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kProductSpecificationsCache,
-             "ProductSpecificationsCache",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kProductSpecificationsCache, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi disabled
 
 // Discount on navigation
-BASE_FEATURE(kEnableDiscountInfoApi,
-             "EnableDiscountInfoApi",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kEnableDiscountInfoApi, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
 // Force traffic to alternate Chrome shopping server.
-BASE_FEATURE(kShoppingAlternateServer,
-             "ShoppingAlternateServer",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kShoppingAlternateServer, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
 // TODO(crbug.com/406555154): Clean up this flag when discount on clank launched.
 const char kDiscountOnShoppyPageParam[] = "discount-on-shoppy-page";
@@ -224,7 +195,6 @@ const char kNonMerchantWideBehaviorParam[] = "non-merchant-wide-behavior";
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS)
 BASE_FEATURE(kDiscountDialogAutoPopupBehaviorSetting,
-             "DiscountDialogAutoPopupBehaviorSetting",
              base::FEATURE_ENABLED_BY_DEFAULT);
 const base::FeatureParam<int> kHistoryClustersBehavior{
     &commerce::kDiscountDialogAutoPopupBehaviorSetting,
@@ -237,7 +207,6 @@ const base::FeatureParam<int> kNonMerchantWideBehavior{
     kNonMerchantWideBehaviorParam, 0};
 #else
 BASE_FEATURE(kDiscountDialogAutoPopupBehaviorSetting,
-             "DiscountDialogAutoPopupBehaviorSetting",
              base::FEATURE_DISABLED_BY_DEFAULT);
 const base::FeatureParam<int> kHistoryClustersBehavior{
     &commerce::kDiscountDialogAutoPopupBehaviorSetting,
@@ -251,66 +220,43 @@ const base::FeatureParam<int> kNonMerchantWideBehavior{
 #endif
 
 BASE_FEATURE(kDiscountDialogAutoPopupCounterfactual,
-             "DiscountDialogAutoPopupCounterfactual",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);  // Vivaldi keep disabled
 
-BASE_FEATURE(kDiscountsUiRefactor,
-             "DiscountsUiRefactor",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kDiscountsUiRefactor, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
 const base::FeatureParam<bool> kDeleteAllMerchantsOnClearBrowsingHistory{
     &kCommerceMerchantViewer, "delete_all_merchants_on_clear_history", false};
 
-BASE_FEATURE(kShoppingList, "ShoppingList", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kShoppingList, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
 BASE_FEATURE(kPriceTrackingSubscriptionServiceLocaleKey,
-             "PriceTrackingSubscriptionServiceLocaleKey",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi disabled
 
 BASE_FEATURE(kPriceTrackingSubscriptionServiceProductVersion,
-             "PriceTrackingSubscriptionServiceProductVersion",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);  // Vivaldi keep disabled
 
-BASE_FEATURE(kShoppingPDPMetrics,
-             "ShoppingPDPMetrics",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kShoppingPDPMetrics, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
-BASE_FEATURE(kSubscriptionsApi,
-             "SubscriptionsApi",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kTrackByDefaultOnMobile,
-             "TrackByDefaultOnMobile",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kSubscriptionsApi, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
 #if BUILDFLAG(IS_IOS)
-BASE_FEATURE(kPriceInsightsIos,
-             "PriceInsightsIos",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kPriceInsightsIos, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi Disabled
 
 BASE_FEATURE(kPriceInsightsHighPriceIos,
              "PriceInsightsHighPrice",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);  // Vivaldi keep disabled
 #endif
 
-BASE_FEATURE(kShoppingPageTypes,
-             "ShoppingPageTypes",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kShoppingPageTypes, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
-BASE_FEATURE(kRetailCoupons, "RetailCoupons", base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kRetailCoupons, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi Disabled
 
-BASE_FEATURE(kCommerceDeveloper,
-             "CommerceDeveloper",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kCommerceDeveloper, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
 const char kRetailCouponsWithCodeParam[] = "RetailCouponsWithCodeParam";
 
 // Params use for Discount Consent v2.
-BASE_FEATURE(kDiscountConsentV2,
-             "DiscountConsentV2",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kCodeBasedRBD, "CodeBasedRBD", base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kDiscountConsentV2, base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi disabled
 
 extern const char kShopCardArm1[] = "arm_1";
 extern const char kShopCardArm2[] = "arm_2";
@@ -320,6 +266,9 @@ extern const char kShopCardArm4[] = "arm_4";
 // (max 3 impressions). So ShopCard variations of Tab Resumption can
 // be conclusively benchmarked against regular Tab Resumption.
 extern const char kShopCardArm5[] = "arm_5";
+// Similar to arm 3, but price drop and product image data acquisition
+// occurs after the card is rendered and is updated if applicable.
+extern const char kShopCardArm6[] = "arm_6";
 extern const char kShopCardFrontPosition[] = "shop_card_front";
 extern const char kShopCardMaxImpressions[] = "max_impressions";
 
@@ -346,6 +295,9 @@ const base::FeatureParam<bool> kRevertIconOnFailure{
     &kShoppingList, kRevertIconOnFailureParam, false};
 
 bool IsPartnerMerchant(const GURL& url) {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
+
   return commerce::IsCouponDiscountPartnerMerchant(url) ||
          IsRuleDiscountPartnerMerchant(url);
 }
@@ -359,12 +311,18 @@ bool IsCouponDiscountPartnerMerchant(const GURL& url) {
 }
 
 bool IsCartDiscountFeatureEnabled() {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
+
   return base::GetFieldTrialParamByFeatureAsBool(
       ntp_features::kNtpChromeCartModule,
       ntp_features::kNtpChromeCartModuleAbandonedCartDiscountParam, false);
 }
 
 bool IsCouponWithCodeEnabled() {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
+
   return base::GetFieldTrialParamByFeatureAsBool(
       kRetailCoupons, kRetailCouponsWithCodeParam, true);
 }
@@ -376,6 +334,9 @@ bool IsFakeDataEnabled() {
 }
 
 bool IsShoppingListAllowedForEnterprise(PrefService* prefs) {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
+
   return prefs->GetBoolean(kShoppingListEnabledPrefName) ||
          !prefs->IsManagedPreference(kShoppingListEnabledPrefName);
 }
@@ -407,6 +368,9 @@ bool IsEnabledForCountryAndLocale(const base::Feature& feature,
 bool IsRegionLockedFeatureEnabled(const base::Feature& feature,
                                   const std::string& country_code,
                                   const std::string& locale) {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
+
   auto* feature_list = base::FeatureList::GetInstance();
 
   // If the feature has a server-side config, this check will ensure that

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,7 @@ import type {MarkdownIssueDescription} from './MarkdownIssueDescription.js';
 
 const UIStrings = {
   /**
-   *@description Link title for the Quirks Mode issue in the Issues panel
+   * @description Link title for the Quirks Mode issue in the Issues panel
    */
   documentCompatibilityMode: 'Document compatibility mode',
 } as const;

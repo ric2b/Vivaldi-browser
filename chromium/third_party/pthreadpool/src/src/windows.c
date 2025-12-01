@@ -32,6 +32,14 @@
 #include "threadpool-object.h"
 #include "threadpool-utils.h"
 
+size_t pthreadpool_set_threads_count(struct pthreadpool* threadpool,
+                                     size_t num_threads) {
+  if (threadpool == NULL) {
+    return 1;
+  }
+  return threadpool->threads_count.value;
+}
+
 static void checkin_worker_thread(struct pthreadpool* threadpool,
                                   uint32_t event_index) {
   if (pthreadpool_decrement_fetch_acquire_release_size_t(

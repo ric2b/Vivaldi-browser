@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -145,6 +145,36 @@ describe('LoggingDriver', () => {
     await VisualLoggingTesting.LoggingDriver.startLogging({processingThrottler: throttler});
     shadowContent.innerHTML = '<div jslog="TreeItem" style="width:300px;height:300px"></div>';
     await assertImpressionRecordedDeferred();
+  });
+
+  it('does not log impressions for content in closed details element but does when opened', async () => {
+    await VisualLoggingTesting.LoggingDriver.startLogging({processingThrottler: throttler});
+
+    const details = document.createElement('details');
+    details.style.width = '100px';
+    details.style.height = '100px';
+    details.innerHTML = '<div id="details-content" jslog="TreeItem" style="width: 100px; height: 100px;"></div>';
+    renderElementIntoDOM(details);
+
+    let [work] = await expectCalled(throttle);
+    await work();
+    // This will fail with the bug, as an impression will be recorded.
+    sinon.assert.notCalled(recordImpression);
+
+    throttle.resetHistory();
+    recordImpression.resetHistory();
+
+    details.open = true;
+    // Opening details will trigger mutation observer.
+    [work] = await expectCalled(throttle);
+    await work();
+    sinon.assert.calledOnce(recordImpression);
+    assert.sameDeepMembers(recordImpression.firstCall.firstArg.impressions, [{
+                             id: getVeId('#details-content'),
+                             type: 1,
+                             width: 100,
+                             height: 100,
+                           }]);
   });
 
   it('logs impressions on mutation in additional document', async () => {

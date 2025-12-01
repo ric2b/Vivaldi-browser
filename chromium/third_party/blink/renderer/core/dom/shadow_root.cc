@@ -125,6 +125,7 @@ void ShadowRoot::DidChangeHostChildSlotName(const AtomicString& old_value,
 Node* ShadowRoot::Clone(Document&,
                         NodeCloningData&,
                         ContainerNode*,
+                        CustomElementRegistry*,
                         ExceptionState&) const {
   NOTREACHED() << "ShadowRoot nodes are not clonable.";
 }
@@ -145,7 +146,8 @@ void ShadowRoot::SetInnerHTMLWithoutTrustedTypes(
   if (DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
           html, &host(), kAllowScriptingContent,
           Element::ParseDeclarativeShadowRoots::kDontParse,
-          Element::ForceHtml::kDontForce, exception_state)) {
+          Element::ForceHtml::kDontForce, customElementRegistry(),
+          exception_state)) {
     ReplaceChildrenWithFragment(this, fragment, exception_state);
   }
 }
@@ -173,7 +175,8 @@ void ShadowRoot::setHTMLUnsafe(const V8UnionStringOrTrustedHTML* html,
   if (DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
           compliant_html, &host(), kAllowScriptingContent,
           Element::ParseDeclarativeShadowRoots::kParse,
-          Element::ForceHtml::kDontForce, exception_state)) {
+          Element::ForceHtml::kDontForce, customElementRegistry(),
+          exception_state)) {
     if (RuntimeEnabledFeatures::SanitizerAPIEnabled()) {
       SanitizerAPI::SanitizeUnsafeInternal(fragment, nullptr, exception_state);
     }
@@ -193,7 +196,8 @@ void ShadowRoot::setHTMLUnsafe(const V8UnionStringOrTrustedHTML* html,
   if (DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
           compliant_html, &host(), kAllowScriptingContent,
           Element::ParseDeclarativeShadowRoots::kParse,
-          Element::ForceHtml::kDontForce, exception_state)) {
+          Element::ForceHtml::kDontForce, customElementRegistry(),
+          exception_state)) {
     if (RuntimeEnabledFeatures::SanitizerAPIEnabled()) {
       SanitizerAPI::SanitizeUnsafeInternal(fragment, options, exception_state);
     }
@@ -207,7 +211,8 @@ void ShadowRoot::setHTML(const String& html,
   if (DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
           html, &host(), kAllowScriptingContent,
           Element::ParseDeclarativeShadowRoots::kParse,
-          Element::ForceHtml::kDontForce, exception_state)) {
+          Element::ForceHtml::kDontForce, customElementRegistry(),
+          exception_state)) {
     if (RuntimeEnabledFeatures::SanitizerAPIEnabled()) {
       SanitizerAPI::SanitizeSafeInternal(fragment, options, exception_state);
     }

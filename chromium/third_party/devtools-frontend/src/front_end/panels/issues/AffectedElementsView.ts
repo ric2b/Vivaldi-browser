@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -11,7 +11,7 @@ import {AffectedResourcesView} from './AffectedResourcesView.js';
 
 const UIStrings = {
   /**
-   *@description Noun for singular or plural number of affected element resource indication in issue view.
+   * @description Noun for singular or plural number of affected element resource indication in issue view.
    */
   nElements: '{n, plural, =1 {# element} other {# elements}}',
 } as const;

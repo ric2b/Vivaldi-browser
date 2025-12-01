@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -14,15 +14,15 @@ import surveyLinkStyles from './surveyLink.css.js';
 
 const UIStrings = {
   /**
-   *@description Text shown when the link to open a survey is clicked but the survey has not yet appeared
+   * @description Text shown when the link to open a survey is clicked but the survey has not yet appeared
    */
   openingSurvey: 'Opening survey …',
   /**
-   *@description Text displayed instead of the survey link after the survey link is clicked, if the survey was shown successfully
+   * @description Text displayed instead of the survey link after the survey link is clicked, if the survey was shown successfully
    */
   thankYouForYourFeedback: 'Thank you for your feedback',
   /**
-   *@description Text displayed instead of the survey link after the survey link is clicked, if the survey was not shown successfully
+   * @description Text displayed instead of the survey link after the survey link is clicked, if the survey was not shown successfully
    */
   anErrorOccurredWithTheSurvey: 'An error occurred with the survey',
 } as const;
@@ -122,11 +122,7 @@ export class SurveyLink extends HTMLElement {
       <button
           class="link ${linkState}" tabindex=${ariaDisabled ? '-1' : '0'}
           .disabled=${ariaDisabled} aria-disabled=${ariaDisabled} @click=${this.#sendSurvey}>
-        <devtools-icon class="link-icon" .data=${{
-            iconName: 'review',
-            color: 'var(--sys-color-primary)',
-            width: 'var(--issue-link-icon-size, 16px)',
-            height: 'var(--issue-link-icon-size, 16px)'}}>
+        <devtools-icon class="link-icon" name="review" style="color: var(--sys-color-primary); width: var(--issue-link-icon-size, 16px); height: var(--issue-link-icon-size, 16px)">
         </devtools-icon>
         ${linkText}
       </button>`;

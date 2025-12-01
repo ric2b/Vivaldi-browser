@@ -66,7 +66,6 @@
 <translation id="1752547299766512813">Guardar contraseñas</translation>
 <translation id="1754797958074421486">Términos de uso</translation>
 <translation id="1755590309862395270">Para sugerencias de autocompletado que se pueden eliminar.</translation>
-<translation id="1763111582687651119">Activar el buscador de apodos</translation>
 <translation id="1771413903824396513">Por Apodo</translation>
 <translation id="1771605894228673800">Quiero un VPN integrado</translation>
 <translation id="1800685789463945995">Vivaldi se bloquea o congela</translation>
@@ -377,7 +376,6 @@ bloqueado</translation>
 <translation id="5823830882692559950">Vivaldi.net rechazó tus credenciales: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">Carpeta nueva</translation>
 <translation id="5859825823508296659">Editar dominio</translation>
-<translation id="5867841422488265304">Buscar o escribir la dirección web</translation>
 <translation id="5869217094746242845">Más información sobre privacidad y seguridad</translation>
 <translation id="5871497086027727873">1 nota movida</translation>
 <translation id="5898502570200301364">Puedes usar las contraseñas que guardaste en el gestor de contraseñas de Vivaldi en otras aplicaciones en tu iPhone.</translation>
@@ -419,7 +417,6 @@ bloqueado</translation>
 <translation id="641394169129472837">Seleccionar cuál página abrir al presionar el botón de nueva pestaña.</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> seleccionadas</translation>
 <translation id="6442584491342758233">Coincidencia directa</translation>
-<translation id="6443682944493983866">Aceptar idiomas</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importar<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Copia de seguridad de la clave de cifrado</translation>
 <translation id="6527303717912515753">Compartir</translation>
@@ -593,7 +590,6 @@ bloqueado</translation>
 <translation id="8515808232153642813">Descrifrar</translation>
 <translation id="8517852590337319813">Activar tu cuenta</translation>
 <translation id="8546963963006468833">Con Vivaldi, puedes abrir enlaces fácilmente, buscar desde widgets y completar automáticamente contraseñas en otras aplicaciones.</translation>
-<translation id="8546995005405883065">Idiomas preferidos, aceptados por páginas compatibles en el orden indicado.</translation>
 <translation id="8562452229998620586">Las contraseñas guardadas aparecerán aquí.</translation>
 <translation id="856439694359429369">Haz clic para ver más opciones o doble clic para abrir.</translation>
 <translation id="8591818185775466306">Eliminar<ph name="ITEM_TYPE" /></translation>

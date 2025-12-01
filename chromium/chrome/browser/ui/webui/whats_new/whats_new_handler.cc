@@ -6,9 +6,11 @@
 
 #include "base/check_deref.h"
 #include "base/functional/bind.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -16,7 +18,10 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/hats/hats_service.h"
 #include "chrome/browser/ui/hats/hats_service_factory.h"
+#include "chrome/browser/ui/hats/survey_config.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/whats_new/whats_new_fetcher.h"
+#include "chrome/browser/ui/webui/whats_new/whats_new_interaction_data.h"
 #include "chrome/browser/ui/webui/whats_new/whats_new_util.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_features.h"
@@ -25,12 +30,20 @@
 #include "components/user_education/webui/whats_new_registry.h"
 #include "components/variations/service/variations_service.h"
 #include "components/variations/service/variations_service_utils.h"
+#include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_GLIC)
 #include "chrome/browser/glic/public/glic_keyed_service.h"
 #include "chrome/browser/glic/public/glic_keyed_service_factory.h"
 #endif
+
+namespace {
+
+// The trigger ID for the HaTS survey for the What's New refresh page.
+constexpr char kHatsSurveyEnSiteID[] = "en_site_id";
+
+}  // namespace
 
 WhatsNewHandler::WhatsNewHandler(
     mojo::PendingReceiver<whats_new::mojom::PageHandler> receiver,
@@ -119,6 +132,13 @@ void WhatsNewHandler::RecordExploreMoreToggled(bool expanded) {
 
 void WhatsNewHandler::RecordScrollDepth(whats_new::mojom::ScrollDepth depth) {
   base::UmaHistogramEnumeration("UserEducation.WhatsNew.ScrollDepth", depth);
+
+  WhatsNewInteractionData::CreateForWebContents(web_contents_);
+  WhatsNewInteractionData* interaction_data =
+      WhatsNewInteractionData::FromWebContents(web_contents_);
+  if (interaction_data) {
+    interaction_data->set_scroll_depth(depth);
+  }
 }
 
 void WhatsNewHandler::RecordTimeOnPage(base::TimeDelta time) {
@@ -194,12 +214,47 @@ void WhatsNewHandler::RecordModuleRestartClicked(
   base::UmaHistogramEnumeration(histogram_name, position);
 }
 
+void WhatsNewHandler::RecordQrCodeToggled(bool expanded) {
+  base::UmaHistogramBoolean("UserEducation.WhatsNew.QrCodeExpanded", expanded);
+}
+
+void WhatsNewHandler::RecordNavClick() {
+  base::RecordAction(
+      base::UserMetricsAction("UserEducation.WhatsNew.NavClick"));
+}
+
+void WhatsNewHandler::RecordFeatureTileNavigation() {
+  base::RecordAction(
+      base::UserMetricsAction("UserEducation.WhatsNew.FeatureTileNavigation"));
+}
+
+void WhatsNewHandler::RecordCarouselScrollButtonClick() {
+  base::RecordAction(base::UserMetricsAction(
+      "UserEducation.WhatsNew.CarouselScrollButtonClick"));
+}
+
+void WhatsNewHandler::RecordExpandMediaToggled(const std::string& module_name,
+                                               bool expanded) {
+  std::string histogram_name = "UserEducation.WhatsNew.ExpandMedia.";
+  histogram_name.append(module_name);
+  base::UmaHistogramBoolean(histogram_name, expanded);
+}
+
+void WhatsNewHandler::RecordCtaClick() {
+  base::RecordAction(
+      base::UserMetricsAction("UserEducation.WhatsNew.CtaClick"));
+}
+
+void WhatsNewHandler::RecordNextButtonClick() {
+  base::RecordAction(
+      base::UserMetricsAction("UserEducation.WhatsNew.NextButtonClick"));
+}
+
 void WhatsNewHandler::GetServerUrl(bool is_staging,
                                    GetServerUrlCallback callback) {
   GURL result = GURL("");
   if (!whats_new::IsRemoteContentDisabled()) {
-    result =
-        whats_new::GetV2ServerURLForRender(*whats_new_registry_, is_staging);
+    result = whats_new::GetServerURLForRender(*whats_new_registry_, is_staging);
   }
   std::move(callback).Run(result);
 
@@ -227,12 +282,21 @@ void WhatsNewHandler::TryShowHatsSurveyWithTimeout() {
         /*navigation_behavior=*/HatsService::REQUIRE_SAME_ORIGIN,
         base::DoNothing(), base::DoNothing(), survey_override.value());
   } else {
+    // Temporary survey for the refresh experiment.
+    const std::optional<std::string> survey_trigger_override =
+        base::FeatureList::IsEnabled(features::kWhatsNewDesktopRefresh)
+            ? std::make_optional(base::FeatureParam<std::string>(
+                                     &features::kWhatsNewDesktopRefresh,
+                                     kHatsSurveyEnSiteID, "")
+                                     .Get())
+            : std::nullopt;
     hats_service->LaunchDelayedSurveyForWebContents(
         kHatsSurveyTriggerWhatsNew, web_contents_,
         features::kHappinessTrackingSurveysForDesktopWhatsNewTime.Get()
             .InMilliseconds(),
         /*product_specific_bits_data=*/{},
         /*product_specific_string_data=*/{},
-        /*navigation_behavior=*/HatsService::REQUIRE_SAME_ORIGIN);
+        /*navigation_behavior=*/HatsService::REQUIRE_SAME_ORIGIN,
+        base::DoNothing(), base::DoNothing(), survey_trigger_override);
   }
 }

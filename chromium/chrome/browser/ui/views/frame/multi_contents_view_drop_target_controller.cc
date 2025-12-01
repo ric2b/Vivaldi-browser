@@ -4,31 +4,63 @@
 
 #include "chrome/browser/ui/views/frame/multi_contents_view_drop_target_controller.h"
 
+#include <algorithm>
+
 #include "base/callback_list.h"
 #include "base/check_deref.h"
 #include "base/functional/callback_forward.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ref.h"
+#include "base/metrics/user_metrics.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/types/to_address.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/multi_contents_drop_target_view.h"
 #include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
+#include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/common/drop_data.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/compositor/layer_tree_owner.h"
 #include "ui/views/view_class_properties.h"
 
 MultiContentsViewDropTargetController::MultiContentsViewDropTargetController(
-    MultiContentsDropTargetView& drop_target_view)
+    MultiContentsDropTargetView& drop_target_view,
+    DropDelegate& drop_delegate,
+    PrefService* prefs)
     : drop_target_view_(drop_target_view),
-      drop_target_parent_view_(CHECK_DEREF(drop_target_view.parent())) {}
+      drop_target_parent_view_(CHECK_DEREF(drop_target_view.parent())),
+      drop_delegate_(drop_delegate),
+      prefs_(prefs) {
+  drop_target_view_->SetDragDelegate(this);
+
+  pref_change_registrar_.Init(prefs);
+  pref_change_registrar_.Add(
+      prefs::kSplitViewDragAndDropNudgeShownCount,
+      base::BindRepeating(&MultiContentsViewDropTargetController::
+                              OnDragAndDropNudgeShownCountChange,
+                          base::Unretained(this)));
+  OnDragAndDropNudgeShownCountChange();
+  pref_change_registrar_.Add(
+      prefs::kSplitViewDragAndDropNudgeUsedCount,
+      base::BindRepeating(&MultiContentsViewDropTargetController::
+                              OnDragAndDropNudgeUsedCountChange,
+                          base::Unretained(this)));
+  OnDragAndDropNudgeUsedCountChange();
+}
 
 MultiContentsViewDropTargetController::
     ~MultiContentsViewDropTargetController() {
+  hide_drop_target_timer_.Stop();
   on_will_destroy_callback_list_.Notify();
+  drop_target_view_->SetDragDelegate(nullptr);
 }
 
 MultiContentsViewDropTargetController::DropTargetShowTimer::DropTargetShowTimer(
-    MultiContentsDropTargetView::DropSide drop_side)
-    : drop_side(drop_side) {}
+    MultiContentsDropTargetView::DropSide drop_side,
+    MultiContentsDropTargetView::DragType drag_type)
+    : drop_side(drop_side), drag_type(drag_type) {}
 
 void MultiContentsViewDropTargetController::OnTabDragUpdated(
     TabDragDelegate::DragController& controller,
@@ -42,7 +74,13 @@ void MultiContentsViewDropTargetController::OnTabDragUpdated(
 
   const gfx::Point point_in_parent = views::View::ConvertPointFromScreen(
       &drop_target_parent_view_.get(), point_in_screen);
-  HandleDragUpdate(gfx::PointF(point_in_parent));
+  if (PointOverlapsWithOSDropTarget(point_in_parent)) {
+    ResetDropTargetTimer();
+    drop_target_view_->Hide();
+    return;
+  }
+  HandleDragUpdate(point_in_parent,
+                   MultiContentsDropTargetView::DragType::kTab);
 }
 
 void MultiContentsViewDropTargetController::OnTabDragEntered() {}
@@ -64,9 +102,105 @@ bool MultiContentsViewDropTargetController::CanDropTab() {
   return drop_target_view_->GetVisible() && !drop_target_view_->IsClosing();
 }
 
+bool MultiContentsViewDropTargetController::GetDropFormats(
+    int* formats,
+    std::set<ui::ClipboardFormatType>* format_types) {
+  *formats = ui::OSExchangeData::URL;
+  format_types->insert(ui::ClipboardFormatType::UrlType());
+  return true;
+}
+
+bool MultiContentsViewDropTargetController::CanDrop(
+    const ui::OSExchangeData& data) {
+  if (!data.HasURL(ui::FilenameToURLPolicy::CONVERT_FILENAMES)) {
+    return false;
+  }
+  auto urls = data.GetURLs(ui::FilenameToURLPolicy::CONVERT_FILENAMES);
+  return urls.has_value() && !urls.value().empty();
+}
+
+void MultiContentsViewDropTargetController::OnDragEntered(
+    const ui::DropTargetEvent& event) {
+  hide_drop_target_timer_.Stop();
+
+  if (!drop_target_view_->GetVisible()) {
+    return;
+  }
+
+  CHECK(drop_target_view_->state().has_value());
+  if (*drop_target_view_->state() !=
+      MultiContentsDropTargetView::DropTargetState::kNudge) {
+    return;
+  }
+
+  drop_target_view_->Show(
+      drop_target_view_->side().value(),
+      MultiContentsDropTargetView::DropTargetState::kNudgeToFull,
+      MultiContentsDropTargetView::DragType::kLink);
+}
+
+void MultiContentsViewDropTargetController::OnDragExited() {
+  if (!drop_target_view_->GetVisible()) {
+    return;
+  }
+
+  CHECK(drop_target_view_->state().has_value());
+  if (*drop_target_view_->state() ==
+      MultiContentsDropTargetView::DropTargetState::kFull) {
+    // If the target is full expanded, then hide it immediately.
+    drop_target_view_->Hide();
+  } else {
+    // If we are we a nudge or expanded nudge evaluate hiding the drop target
+    // from a posted task. This is so we can determine if we are exiting the
+    // drop target into the web content area.
+    StartDropTargetHideTimer();
+  }
+}
+
+void MultiContentsViewDropTargetController::OnDragDone() {
+  drop_target_view_->Hide(/*suppress_animation=*/true);
+}
+
+int MultiContentsViewDropTargetController::OnDragUpdated(
+    const ui::DropTargetEvent& event) {
+  return ui::DragDropTypes::DRAG_LINK;
+}
+
+views::View::DropCallback
+MultiContentsViewDropTargetController::GetDropCallback(
+    const ui::DropTargetEvent& event) {
+  return base::BindOnce(&MultiContentsViewDropTargetController::DoDrop,
+                        base::Unretained(this));
+}
+
+void MultiContentsViewDropTargetController::DoDrop(
+    const ui::DropTargetEvent& event,
+    ui::mojom::DragOperation& output_drag_op,
+    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
+  CHECK(drop_target_view_->side().has_value());
+  MultiContentsDropTargetView::DropSide side =
+      drop_target_view_->side().value();
+  drop_target_view_->Hide(/*suppress_animation=*/true);
+  drop_delegate_->HandleLinkDrop(side, event);
+  output_drag_op = ui::mojom::DragOperation::kLink;
+
+  if (drop_target_view_->state() !=
+      MultiContentsDropTargetView::DropTargetState::kNudgeToFull) {
+    return;
+  }
+  prefs_->SetInteger(prefs::kSplitViewDragAndDropNudgeUsedCount,
+                     nudge_used_count_ + 1);
+  base::RecordAction(base::UserMetricsAction("Tabs.SplitView.NudgeUsed"));
+}
+
 void MultiContentsViewDropTargetController::HandleTabDrop(
     TabDragDelegate::DragController& controller) {
-  drop_target_view_->HandleTabDrop(controller);
+  CHECK(drop_target_view_->GetVisible());
+  CHECK(drop_target_view_->side().has_value());
+  MultiContentsDropTargetView::DropSide side =
+      drop_target_view_->side().value();
+  drop_target_view_->Hide(/*suppress_animation=*/true);
+  drop_delegate_->HandleTabDrop(side, controller);
 }
 
 base::CallbackListSubscription
@@ -77,8 +211,9 @@ MultiContentsViewDropTargetController::RegisterWillDestroyCallback(
 
 void MultiContentsViewDropTargetController::OnWebContentsDragUpdate(
     const content::DropData& data,
-    const gfx::PointF& point,
+    const gfx::Point& point,
     bool is_in_split_view) {
+  hide_drop_target_timer_.Stop();
   // "Drag update" events can still be delivered even if the point is out of the
   // contents area, particularly while the drop target is animating in and
   // shifting them.
@@ -86,15 +221,28 @@ void MultiContentsViewDropTargetController::OnWebContentsDragUpdate(
     ResetDropTargetTimer();
     return;
   }
-  if (!data.url.is_valid() || is_in_split_view) {
+  if (!data.url.is_valid() || !data.url.IsStandard() || is_in_split_view) {
     ResetDropTargetTimer();
     return;
   }
-  HandleDragUpdate(point);
+
+  if (base::FeatureList::IsEnabled(features::kSideBySideDropTargetNudge) &&
+      ShouldShowNudge() && drop_target_view_->ShouldShowAnimation()) {
+    HandleDragUpdateForNudge(point,
+                             MultiContentsDropTargetView::DragType::kLink);
+  } else {
+    HandleDragUpdate(point, MultiContentsDropTargetView::DragType::kLink);
+  }
 }
 
 void MultiContentsViewDropTargetController::OnWebContentsDragExit() {
   ResetDropTargetTimer();
+
+  if (drop_target_view_->GetVisible()) {
+    // Evaluate determining whether to hide the drop target on a new task
+    // This is so we avoid hiding the view if we are entering the drop target.
+    StartDropTargetHideTimer();
+  }
 }
 
 void MultiContentsViewDropTargetController::OnWebContentsDragEnded() {
@@ -102,32 +250,89 @@ void MultiContentsViewDropTargetController::OnWebContentsDragEnded() {
   drop_target_view_->Hide();
 }
 
+void MultiContentsViewDropTargetController::OnTabInserted() {
+  // When a link is dropped into the web contents from outside the current
+  // window, we do not receive a OnWebContentsDragEnded event. So when a new tab
+  // is created, hide the drop target.
+  ResetDropTargetTimer();
+  drop_target_view_->Hide();
+}
+
+bool MultiContentsViewDropTargetController::IsDropTimerRunningForTesting() {
+  return show_drop_target_timer_.has_value() &&
+         show_drop_target_timer_->timer.IsRunning();
+}
+
 void MultiContentsViewDropTargetController::HandleDragUpdate(
-    const gfx::PointF& point_in_view) {
+    const gfx::Point& point_in_view,
+    MultiContentsDropTargetView::DragType drag_type) {
   CHECK_LE(0, point_in_view.x());
   CHECK_LE(point_in_view.x(), drop_target_parent_view_->width());
-  const int drop_entry_point_width =
-      drop_target_view_->GetMaxWidth(drop_target_parent_view_->width());
   const bool is_rtl = base::i18n::IsRTL();
+
+  const int drop_entry_point_width = MultiContentsDropTargetView::GetMaxWidth(
+      drop_target_parent_view_->width(),
+      MultiContentsDropTargetView::DropTargetState::kFull);
   if (point_in_view.x() >=
       drop_target_parent_view_->width() - drop_entry_point_width) {
     StartOrUpdateDropTargetTimer(
         is_rtl ? MultiContentsDropTargetView::DropSide::START
-               : MultiContentsDropTargetView::DropSide::END);
+               : MultiContentsDropTargetView::DropSide::END,
+        drag_type);
     return;
   } else if (point_in_view.x() <= drop_entry_point_width) {
     StartOrUpdateDropTargetTimer(
         is_rtl ? MultiContentsDropTargetView::DropSide::END
-               : MultiContentsDropTargetView::DropSide::START);
+               : MultiContentsDropTargetView::DropSide::START,
+        drag_type);
     return;
   }
   ResetDropTargetTimer();
   drop_target_view_->Hide();
-  return;
+}
+
+void MultiContentsViewDropTargetController::HandleDragUpdateForNudge(
+    const gfx::Point& point_in_view,
+    MultiContentsDropTargetView::DragType drag_type) {
+  CHECK_LE(0, point_in_view.x());
+  CHECK_LE(point_in_view.x(), drop_target_parent_view_->width());
+  CHECK(base::FeatureList::IsEnabled(features::kSideBySideDropTargetNudge));
+  const bool is_rtl = base::i18n::IsRTL();
+  const float point_ratio =
+      (1.0f * point_in_view.x()) / drop_target_parent_view_->width();
+  const float nudge_ratio = features::kSideBySideDropTargetNudgeShowRatio.Get();
+
+  // Either hide or show the drop target if the drag is in the trigger area.
+  if (point_ratio > nudge_ratio && point_ratio < 1.0f - nudge_ratio) {
+    drop_target_view_->Hide();
+    return;
+  }
+
+  MultiContentsDropTargetView::DropSide side;
+  if (point_ratio <= nudge_ratio) {
+    side = is_rtl ? MultiContentsDropTargetView::DropSide::END
+                  : MultiContentsDropTargetView::DropSide::START;
+
+  } else {
+    CHECK(point_ratio >= 1.0f - nudge_ratio);
+    side = is_rtl ? MultiContentsDropTargetView::DropSide::START
+                  : MultiContentsDropTargetView::DropSide::END;
+  }
+
+  // Avoid transitioning to the `kNudge` state if the drop target view is
+  // already visible on that side.
+  if (drop_target_view_->side() != side) {
+    drop_target_view_->Show(
+        side, MultiContentsDropTargetView::DropTargetState::kNudge, drag_type);
+    prefs_->SetInteger(prefs::kSplitViewDragAndDropNudgeShownCount,
+                       nudge_shown_count_ + 1);
+    base::RecordAction(base::UserMetricsAction("Tabs.SplitView.NudgeShown"));
+  }
 }
 
 void MultiContentsViewDropTargetController::StartOrUpdateDropTargetTimer(
-    MultiContentsDropTargetView::DropSide drop_side) {
+    MultiContentsDropTargetView::DropSide drop_side,
+    MultiContentsDropTargetView::DragType drag_type) {
   if (drop_target_view_->GetVisible()) {
     return;
   }
@@ -135,10 +340,11 @@ void MultiContentsViewDropTargetController::StartOrUpdateDropTargetTimer(
   if (show_drop_target_timer_.has_value()) {
     CHECK(show_drop_target_timer_->timer.IsRunning());
     show_drop_target_timer_->drop_side = drop_side;
+    show_drop_target_timer_->drag_type = drag_type;
     return;
   }
 
-  show_drop_target_timer_.emplace(drop_side);
+  show_drop_target_timer_.emplace(drop_side, drag_type);
 
   show_drop_target_timer_->timer.Start(
       FROM_HERE, features::kSideBySideShowDropTargetDelay.Get(), this,
@@ -152,6 +358,58 @@ void MultiContentsViewDropTargetController::ResetDropTargetTimer() {
 void MultiContentsViewDropTargetController::ShowTimerDelayedDropTarget() {
   CHECK(show_drop_target_timer_.has_value());
   CHECK(!drop_target_view_->GetVisible());
-  drop_target_view_->Show(show_drop_target_timer_->drop_side);
+  drop_target_view_->Show(show_drop_target_timer_->drop_side,
+                          MultiContentsDropTargetView::DropTargetState::kFull,
+                          show_drop_target_timer_->drag_type);
   show_drop_target_timer_.reset();
+}
+
+void MultiContentsViewDropTargetController::StartDropTargetHideTimer() {
+  hide_drop_target_timer_.Start(
+      FROM_HERE, features::kSideBySideHideDropTargetDelay.Get(),
+      base::BindOnce(&MultiContentsDropTargetView::Hide,
+                     base::Unretained(drop_target_view_), false));
+}
+
+bool MultiContentsViewDropTargetController::PointOverlapsWithOSDropTarget(
+    const gfx::Point& point_in_view) {
+  if (!drop_target_parent_view_->GetWidget() ||
+      !drop_target_parent_view_->GetWidget()->IsMaximized()) {
+    return false;
+  }
+
+  const gfx::Point point_in_screen = views::View::ConvertPointToScreen(
+      drop_target_view_->parent(), point_in_view);
+  const views::Widget* top_level_widget =
+      drop_target_parent_view_->GetWidget()->GetTopLevelWidget();
+  const int screen_width =
+      top_level_widget->GetWorkAreaBoundsInScreen().width();
+
+  const float hide_for_os_width = std::max(
+      features::kSideBySideDropTargetHideForOSWidth.Get(),
+      static_cast<int>(
+          screen_width *
+          features::kSideBySideDropTargetHideForOSPercentage.Get() / 100));
+
+  return (point_in_screen.x() < hide_for_os_width) ||
+         (point_in_screen.x() > screen_width - hide_for_os_width);
+}
+
+void MultiContentsViewDropTargetController::
+    OnDragAndDropNudgeShownCountChange() {
+  nudge_shown_count_ =
+      prefs_->GetInteger(prefs::kSplitViewDragAndDropNudgeShownCount);
+}
+
+void MultiContentsViewDropTargetController::
+    OnDragAndDropNudgeUsedCountChange() {
+  nudge_used_count_ =
+      prefs_->GetInteger(prefs::kSplitViewDragAndDropNudgeUsedCount);
+}
+
+bool MultiContentsViewDropTargetController::ShouldShowNudge() {
+  return nudge_shown_count_ <
+             features::kSideBySideDropTargetNudgeShownLimit.Get() &&
+         nudge_used_count_ <
+             features::kSideBySideDropTargetNudgeUsedLimit.Get();
 }

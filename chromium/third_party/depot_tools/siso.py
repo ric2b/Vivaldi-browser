@@ -9,6 +9,7 @@ binary when run inside a gclient source tree, so users can just type
 
 import os
 import signal
+import shlex
 import shutil
 import sys
 
@@ -16,7 +17,7 @@ import caffeinate
 import gclient_paths
 
 
-def checkOutdir(args):
+def parse_args(args):
     subcmd = ''
     out_dir = "."
     for i, arg in enumerate(args):
@@ -27,8 +28,10 @@ def checkOutdir(args):
             out_dir = args[i + 1]
         elif arg.startswith("-C"):
             out_dir = arg[2:]
-    if subcmd != "ninja":
-        return
+    return subcmd, out_dir
+
+
+def check_outdir(subcmd, out_dir):
     ninja_marker = os.path.join(out_dir, ".ninja_deps")
     if os.path.exists(ninja_marker):
         print("depot_tools/siso.py: %s contains Ninja state file.\n"
@@ -37,6 +40,39 @@ def checkOutdir(args):
               (out_dir, out_dir),
               file=sys.stderr)
         sys.exit(1)
+
+
+def load_sisorc(rcfile):
+    if not os.path.exists(rcfile):
+        return [], {}
+    global_flags = []
+    subcmd_flags = {}
+    with open(rcfile) as file:
+        for line in file:
+            line = line.strip()
+            if line.startswith("#"):
+                continue
+            args = shlex.split(line)
+            if len(args) == 0:
+                continue
+            if line.startswith("-"):
+                global_flags.extend(args)
+                continue
+            subcmd_flags[args[0]] = args[1:]
+    return global_flags, subcmd_flags
+
+
+def apply_sisorc(global_flags, subcmd_flags, args, subcmd):
+    new_args = []
+    for arg in args:
+        if not new_args:
+            new_args.extend(global_flags)
+        if arg == subcmd:
+            new_args.append(arg)
+            new_args.extend(subcmd_flags.get(arg, []))
+            continue
+        new_args.append(arg)
+    return new_args
 
 
 def _is_google_corp_machine():
@@ -89,9 +125,11 @@ def main(args):
 
     environ = os.environ.copy()
 
+    subcmd, out_dir = parse_args(args[1:])
+
     # Get gclient root + src.
-    primary_solution_path = gclient_paths.GetPrimarySolutionPath()
-    gclient_root_path = gclient_paths.FindGclientRoot(os.getcwd())
+    primary_solution_path = gclient_paths.GetPrimarySolutionPath(out_dir)
+    gclient_root_path = gclient_paths.FindGclientRoot(out_dir)
     gclient_src_root_path = None
     if gclient_root_path:
         gclient_src_root_path = os.path.join(gclient_root_path, 'src')
@@ -141,6 +179,8 @@ def main(args):
                     'See build/config/siso/backend_config/README.md',
                     file=sys.stderr)
             return 1
+        global_flags, subcmd_flags = load_sisorc(
+            os.path.join(base_path, 'build', 'config', 'siso', '.sisorc'))
         siso_paths = [
             siso_override_path,
             os.path.join(base_path, 'third_party', 'siso', 'cipd',
@@ -150,8 +190,13 @@ def main(args):
         ]
         for siso_path in siso_paths:
             if siso_path and os.path.isfile(siso_path):
-                checkOutdir(args[1:])
-                return caffeinate.run([siso_path] + args[1:], env=env)
+                check_outdir(subcmd, out_dir)
+                new_args = apply_sisorc(global_flags, subcmd_flags, args[1:],
+                                        subcmd)
+                if args[1:] != new_args:
+                    print('depot_tools/siso.py: %s' % shlex.join(new_args),
+                          file=sys.stderr)
+                return caffeinate.run([siso_path] + new_args, env=env)
         print(
             'depot_tools/siso.py: Could not find siso in third_party/siso '
             'of the current project. Did you run gclient sync?',

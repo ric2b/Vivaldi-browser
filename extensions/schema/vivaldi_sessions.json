@@ -765,6 +765,28 @@
         }
       },
       {
+        "name": "restoreSyncTabs",
+        "type": "function",
+        "description": "Opens synced tabs in the active window. Only the last tab is activated.",
+        "parameters": [
+          {
+            "name": "ids",
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "status",
+              "type": "integer",
+              "description": "0 for success, error code for any error."
+            }
+          ]
+        }
+      },
+      {
         "name": "rename",
         "type": "function",
         "description": "Renames the named session.",

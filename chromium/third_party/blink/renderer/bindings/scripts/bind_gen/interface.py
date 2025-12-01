@@ -2187,11 +2187,6 @@ EventListener* event_handler = JSEventHandler::CreateOrNull(
         body.append(node)
         return func_def
 
-    body.extend([
-        make_check_argument_length(cg_context),
-        EmptyNode(),
-    ])
-
     if "PutForwards" in ext_attrs:
         body.append(make_steps_of_put_forwards(cg_context))
         return func_def
@@ -6746,6 +6741,13 @@ def _collect_include_headers(class_like):
         if idl_type.is_frozen_array:
             headers.add(
                 "third_party/blink/renderer/bindings/core/v8/frozen_array.h")
+            return
+
+        observable_array_def_obj = idl_type.observable_array_definition_object
+        if observable_array_def_obj is not None:
+            headers.add(
+                PathManager(observable_array_def_obj).api_path(ext="h"))
+            return
 
     for attribute in class_like.attributes:
         collect_from_idl_type(attribute.idl_type)

@@ -153,6 +153,14 @@
     if ([delegate respondsToSelector:@selector(downloadDriverDidReceiveExpectedContentLength:)]) {
         [delegate downloadDriverDidReceiveExpectedContentLength:expectedContentLength];
     }
+
+    // Vivaldi
+    id updater = _updater;
+    id<SPUUpdaterDelegate> updaterDelegate = _updaterDelegate;
+    if (updaterDelegate == nil) return;
+    if (updater != nil && [updaterDelegate respondsToSelector:@selector(vivaldiExpectedContentLength:)]) {
+        [updaterDelegate vivaldiExpectedContentLength:expectedContentLength];
+    }
 }
 
 - (void)downloadDriverDidReceiveDataOfLength:(uint64_t)length
@@ -160,6 +168,14 @@
     id<SPUCoreBasedUpdateDriverDelegate> delegate = _delegate;
     if ([delegate respondsToSelector:@selector(downloadDriverDidReceiveDataOfLength:)]) {
         [delegate downloadDriverDidReceiveDataOfLength:length];
+    }
+
+    // Vivaldi
+    id updater = _updater;
+    id<SPUUpdaterDelegate> updaterDelegate = _updaterDelegate;
+    if (updaterDelegate == nil) return;
+    if (updater != nil && [updaterDelegate respondsToSelector:@selector(vivaldiUpdateDidReceiveDataOfLength:)]) {
+        [updaterDelegate vivaldiUpdateDidReceiveDataOfLength:length];
     }
 }
 

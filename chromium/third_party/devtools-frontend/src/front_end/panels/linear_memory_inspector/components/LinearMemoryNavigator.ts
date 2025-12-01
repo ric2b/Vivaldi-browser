@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -14,27 +14,27 @@ import linearMemoryNavigatorStyles from './linearMemoryNavigator.css.js';
 
 const UIStrings = {
   /**
-   *@description Tooltip text that appears when hovering over a valid memory address (e.g. 0x0) in the address line in the Linear memory inspector.
+   * @description Tooltip text that appears when hovering over a valid memory address (e.g. 0x0) in the address line in the Linear memory inspector.
    */
   enterAddress: 'Enter address',
   /**
-   *@description Tooltip text that appears when hovering over the button to go back in history in the Linear Memory Navigator
+   * @description Tooltip text that appears when hovering over the button to go back in history in the Linear Memory Navigator
    */
   goBackInAddressHistory: 'Go back in address history',
   /**
-   *@description Tooltip text that appears when hovering over the button to go forward in history in the Linear Memory Navigator
+   * @description Tooltip text that appears when hovering over the button to go forward in history in the Linear Memory Navigator
    */
   goForwardInAddressHistory: 'Go forward in address history',
   /**
-   *@description Tooltip text that appears when hovering over the page back icon in the Linear Memory Navigator
+   * @description Tooltip text that appears when hovering over the page back icon in the Linear Memory Navigator
    */
   previousPage: 'Previous page',
   /**
-   *@description Tooltip text that appears when hovering over the next page icon in the Linear Memory Navigator
+   * @description Tooltip text that appears when hovering over the next page icon in the Linear Memory Navigator
    */
   nextPage: 'Next page',
   /**
-   *@description Text to refresh the page
+   * @description Text to refresh the page
    */
   refresh: 'Refresh',
 } as const;

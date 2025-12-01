@@ -34,6 +34,7 @@
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_header_view.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_header_view_controller_delegate.h"
+#import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_image_background_trait.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_mutator.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_shortcuts_handler.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_trait.h"
@@ -82,6 +83,11 @@ const CGFloat kMarginMultiplier = 2;
 
 // The maximum point size of the font for the Identity Disc button.
 const CGFloat kIdentityDiscMaxFontSize = 24;
+
+// The extra space between the avatar icon and the background for the sign in
+// button. This is used when IsNTPBackgroundCustomizationEnabled() == YES and
+// IsSignInButtonNoAvatarEnabled() == NO;
+const CGFloat kIdentityDiscAvatarBackgroundSpacing = 5;
 
 }  // namespace
 
@@ -163,8 +169,10 @@ const CGFloat kIdentityDiscMaxFontSize = 24;
       };
       [self registerForTraitChanges:traits withHandler:handler];
       if (IsNTPBackgroundCustomizationEnabled()) {
-        [self registerForTraitChanges:@[ NewTabPageTrait.class ]
-                           withAction:@selector(applyBackgroundColors)];
+        [self
+            registerForTraitChanges:
+                @[ NewTabPageTrait.class, NewTabPageImageBackgroundTrait.class ]
+                         withAction:@selector(applyBackgroundTheme)];
       }
     }
   }
@@ -309,7 +317,7 @@ const CGFloat kIdentityDiscMaxFontSize = 24;
 
 - (CGFloat)pinnedOffsetY {
   CGFloat offsetY = [self headerHeight];
-  if (IsSplitToolbarMode(self)) {
+  if (IsSplitToolbarMode(self) && !CanShowTabStrip(self)) {
     offsetY -= content_suggestions::FakeToolbarHeight();
   }
 
@@ -373,7 +381,7 @@ const CGFloat kIdentityDiscMaxFontSize = 24;
 
     self.headerView.tintAdjustmentMode = UIViewTintAdjustmentModeNormal;
     if (IsNTPBackgroundCustomizationEnabled()) {
-      [self applyBackgroundColors];
+      [self applyBackgroundTheme];
     }
   }
 }
@@ -402,7 +410,8 @@ const CGFloat kIdentityDiscMaxFontSize = 24;
   DCHECK(self.identityDiscImage);
   DCHECK(self.identityDiscButton.accessibilityLabel);
   if (!IsSignInButtonNoAvatarEnabled()) {
-    DCHECK([self.identityDiscButton imageForState:UIControlStateNormal]);
+    DCHECK([self.identityDiscButton imageForState:UIControlStateNormal] ||
+           self.identityDiscButton.configuration.image);
   }
 
   [self maybeShowSwitchAccountsIPH];
@@ -592,26 +601,24 @@ const CGFloat kIdentityDiscMaxFontSize = 24;
   UIButton* customizationMenuButton =
       [[ExtendedTouchTargetButton alloc] initWithFrame:CGRectZero];
 
-  UIImage* icon = DefaultSymbolTemplateWithPointSize(
-      kPencilSymbol,
-      IsSignInButtonNoAvatarEnabled()
-          ? ntp_home::kCustomizationMenuIconSizeWhenSignInButtonHasNoAvatar
-          : ntp_home::kCustomizationMenuIconSize);
-  [customizationMenuButton setImage:icon forState:UIControlStateNormal];
-
   if (!IsNTPBackgroundCustomizationEnabled()) {
-    UIColor* backgroundColor =
+    UIImage* icon = DefaultSymbolTemplateWithPointSize(
+        kPencilSymbol,
         IsSignInButtonNoAvatarEnabled()
-            ? [[UIColor colorNamed:kSolidWhiteColor]
-                  colorWithAlphaComponent:0.75]
-            : [[UIColor colorNamed:@"fake_omnibox_solid_background_color"]
-                  colorWithAlphaComponent:0.8];
-    customizationMenuButton.backgroundColor = backgroundColor;
+            ? ntp_home::kCustomizationMenuIconSizeWhenSignInButtonHasNoAvatar
+            : ntp_home::kCustomizationMenuIconSize);
+    [customizationMenuButton setImage:icon forState:UIControlStateNormal];
+    customizationMenuButton.backgroundColor =
+        [self defaultButtonBackgroundColor];
 
     UIColor* tintColor = [UIColor
         colorNamed:(IsSignInButtonNoAvatarEnabled() ? kBlue600Color
                                                     : kTextSecondaryColor)];
     customizationMenuButton.tintColor = tintColor;
+
+    customizationMenuButton.layer.cornerRadius =
+        ntp_home::kCustomizationMenuButtonCornerRadius;
+    customizationMenuButton.clipsToBounds = YES;
   }
 
   customizationMenuButton.accessibilityIdentifier =
@@ -634,7 +641,13 @@ const CGFloat kIdentityDiscMaxFontSize = 24;
   DCHECK(self.identityDiscAccessibilityLabel);
 
   UIButton* button = self.identityDiscButton;
-  if (!IsSignInButtonNoAvatarEnabled() || self.isSignedIn) {
+
+  button.accessibilityLabel = self.identityDiscAccessibilityLabel;
+  button.clipsToBounds = YES;
+
+  BOOL useOldExperience = !IsNTPBackgroundCustomizationEnabled() &&
+                          !IsSignInButtonNoAvatarEnabled();
+  if (self.isSignedIn || useOldExperience) {
     UIImage* image = self.identityDiscImage;
     button.configuration = nil;
     [button setImage:image forState:UIControlStateNormal];
@@ -642,39 +655,101 @@ const CGFloat kIdentityDiscMaxFontSize = 24;
     button.imageView.layer.cornerRadius = image.size.width / 2;
     button.imageView.layer.masksToBounds = YES;
     button.layer.cornerRadius = image.size.width;
-  } else {
-    NewTabPageColorPalette* colorPalette =
-        IsNTPBackgroundCustomizationEnabled()
-            ? [self.traitCollection objectForNewTabPageTrait]
-            : nil;
-    button.layer.cornerRadius = 0;
+    return;
+  }
+
+  // Other configuration uses UIButtonConfiguration, not this property.
+  button.layer.cornerRadius = 0;
+
+  if (!IsNTPBackgroundCustomizationEnabled()) {
+    CHECK(IsSignInButtonNoAvatarEnabled());
     [button setImage:nil forState:UIControlStateNormal];
-    UIButtonConfiguration* config =
+    UIButtonConfiguration* buttonConfiguration =
         [UIButtonConfiguration plainButtonConfiguration];
-    config.background.backgroundColor =
-        colorPalette ? colorPalette.secondaryColor
-                     : [[UIColor colorNamed:kSolidWhiteColor]
-                           colorWithAlphaComponent:0.75];
+    buttonConfiguration.background.backgroundColor =
+        [self defaultButtonBackgroundColor];
     NSDictionary* attributes = @{
       NSFontAttributeName : PreferredFontForTextStyle(
           UIFontTextStyleSubheadline, UIFontWeightSemibold,
           kIdentityDiscMaxFontSize),
-      NSForegroundColorAttributeName : colorPalette
-          ? colorPalette.tintColor
-          : [UIColor colorNamed:kBlue600Color],
+      NSForegroundColorAttributeName : [UIColor colorNamed:kBlue600Color],
     };
-    config.attributedTitle = [[NSAttributedString alloc]
+    buttonConfiguration.attributedTitle = [[NSAttributedString alloc]
         initWithString:l10n_util::GetNSString(IDS_IOS_SIGNIN_BUTTON_TEXT)
             attributes:attributes];
-    config.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
-    config.contentInsets = NSDirectionalEdgeInsetsMake(
+    buttonConfiguration.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
+    buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
         kPillVerticalPadding, kPillHorizontalPadding, kPillVerticalPadding,
         kPillHorizontalPadding);
-    button.configuration = config;
+    button.configuration = buttonConfiguration;
+    return;
   }
 
-  button.accessibilityLabel = self.identityDiscAccessibilityLabel;
-  button.clipsToBounds = YES;
+  [button setImage:nil forState:UIControlStateNormal];
+
+  UIButtonConfiguration* buttonConfiguration =
+      [UIButtonConfiguration plainButtonConfiguration];
+  UIColor* foregroundColor;
+  if ([self.traitCollection boolForNewTabPageImageBackgroundTrait]) {
+    UIVisualEffect* blurEffect =
+        [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+    UIVisualEffectView* blurBackgroundView =
+        [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+    buttonConfiguration.background.customView = blurBackgroundView;
+
+    foregroundColor = [UIColor colorNamed:kTextPrimaryColor];
+  } else {
+    NewTabPageColorPalette* colorPalette =
+        [self.traitCollection objectForNewTabPageTrait];
+    foregroundColor = colorPalette ? colorPalette.tintColor
+                                   : [UIColor colorNamed:kBlue600Color];
+
+    UIColor* backgroundColor = colorPalette
+                                   ? colorPalette.headerButtonColor
+                                   : [self defaultButtonBackgroundColor];
+    // The default avatar icon does not have a background.
+    if (colorPalette || IsSignInButtonNoAvatarEnabled()) {
+      buttonConfiguration.background.backgroundColor = backgroundColor;
+    }
+  }
+
+  if (IsSignInButtonNoAvatarEnabled()) {
+    buttonConfiguration.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
+    buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
+        kPillVerticalPadding, kPillHorizontalPadding, kPillVerticalPadding,
+        kPillHorizontalPadding);
+
+    NSDictionary* attributes = @{
+      NSFontAttributeName : PreferredFontForTextStyle(
+          UIFontTextStyleSubheadline, UIFontWeightSemibold,
+          kIdentityDiscMaxFontSize),
+      NSForegroundColorAttributeName : foregroundColor,
+    };
+    buttonConfiguration.attributedTitle = [[NSAttributedString alloc]
+        initWithString:l10n_util::GetNSString(IDS_IOS_SIGNIN_BUTTON_TEXT)
+            attributes:attributes];
+  } else {
+    buttonConfiguration.image = self.identityDiscImage;
+    buttonConfiguration.baseForegroundColor = foregroundColor;
+
+    // UIBackgroundConfiguration requires a background inset, but it's easier to
+    // think about the amount of space desired between the avatar and the
+    // background, an "outset" from the avatar. So use that amount to calculate
+    // the inset from the button edges.
+    CGFloat rawInsetAmount = (_identityDiscWidthConstraint.constant -
+                              buttonConfiguration.image.size.width) /
+                                 2 -
+                             kIdentityDiscAvatarBackgroundSpacing;
+    // Make sure that the background isn't larger than the view.
+    CGFloat insetAmount = MAX(rawInsetAmount, 0);
+    buttonConfiguration.background.backgroundInsets =
+        NSDirectionalEdgeInsetsMake(insetAmount, insetAmount, insetAmount,
+                                    insetAmount);
+    buttonConfiguration.background.cornerRadius =
+        buttonConfiguration.image.size.width;
+  }
+
+  button.configuration = buttonConfiguration;
 }
 
 - (void)fakeTapViewTapped {
@@ -868,18 +943,6 @@ const CGFloat kIdentityDiscMaxFontSize = 24;
   _searchEngineLogoMediator.consumer = self;
 }
 
-- (void)updateLogoColor:(UIColor*)logoTintColor {
-  CHECK(_searchEngineLogoMediator);
-
-  if (logoTintColor) {
-    _searchEngineLogoMediator.usesMonochromeLogo = YES;
-    _searchEngineLogoMediator.view.tintColor = logoTintColor;
-  } else {
-    _searchEngineLogoMediator.usesMonochromeLogo = NO;
-    _searchEngineLogoMediator.view.tintColor = nil;
-  }
-}
-
 - (void)setVoiceSearchIsEnabled:(BOOL)voiceSearchIsEnabled {
   if (_voiceSearchIsEnabled == voiceSearchIsEnabled) {
     return;
@@ -1015,10 +1078,44 @@ const CGFloat kIdentityDiscMaxFontSize = 24;
 
 #pragma mark - Private
 
+// Returns the default background color for buttons based on the current
+// appearance.
+- (UIColor*)defaultButtonBackgroundColor {
+  return
+      [UIColor colorWithDynamicProvider:^UIColor*(UITraitCollection* traits) {
+        if (!IsSignInButtonNoAvatarEnabled()) {
+          return [[UIColor colorNamed:@"fake_omnibox_solid_background_color"]
+              colorWithAlphaComponent:0.8];
+        }
+        return traits.userInterfaceStyle == UIUserInterfaceStyleDark
+                   ? [UIColor colorNamed:kTabGroupFaviconBackgroundColor]
+                   : [[UIColor colorNamed:kSolidWhiteColor]
+                         colorWithAlphaComponent:0.75];
+      }];
+}
 // Sets the background using the current color palette, or defaults if none is
 // set.
-- (void)applyBackgroundColors {
+- (void)applyBackgroundTheme {
   [self updateIdentityDiscState];
+
+  BOOL hasBlurredBackground =
+      [self.traitCollection boolForNewTabPageImageBackgroundTrait];
+  if (hasBlurredBackground) {
+    _searchEngineLogoMediator.usesMonochromeLogo = YES;
+    _searchEngineLogoMediator.view.tintColor = UIColor.whiteColor;
+    return;
+  }
+
+  NewTabPageColorPalette* colorPalette =
+      [self.traitCollection objectForNewTabPageTrait];
+  if (colorPalette) {
+    _searchEngineLogoMediator.usesMonochromeLogo = YES;
+    _searchEngineLogoMediator.view.tintColor = colorPalette.tintColor;
+    return;
+  }
+
+  _searchEngineLogoMediator.usesMonochromeLogo = NO;
+  _searchEngineLogoMediator.view.tintColor = nil;
 }
 
 - (void)setIsSignedIn:(BOOL)isSignedIn {
@@ -1048,7 +1145,7 @@ const CGFloat kIdentityDiscMaxFontSize = 24;
 
   if (showSignInButtonWithoutAvatar) {
     identityAvatarPadding *= kMarginMultiplier;
-  } else if (IsIdentityDiscAccountMenuEnabled()) {
+  } else {
     dimension += ntp_home::kHeaderIconMargin;
     identityAvatarPadding -= ntp_home::kHeaderIconMargin / 2;
   }
@@ -1064,42 +1161,27 @@ const CGFloat kIdentityDiscMaxFontSize = 24;
 - (void)updateIdentityDiscAccessibilityLabelWithName:(NSString*)name
                                                email:(NSString*)email {
   NSString* accountButtonLabel;
-  if (base::FeatureList::IsEnabled(kIdentityDiscAccountMenu)) {
-    // _hasAccountError is only set if the feature
-    // `kEnableErrorBadgeOnIdentityDisc` is enabled, and the primary identity
-    // has an error.
-    if (name) {
-      accountButtonLabel =
-          _hasAccountError
-              ? l10n_util::GetNSStringF(
-                    IDS_IOS_IDENTITY_DISC_WITH_NAME_AND_EMAIL_OPEN_ACCOUNT_MENU_WITH_ERROR,
-                    base::SysNSStringToUTF16(name),
-                    base::SysNSStringToUTF16(email))
-              : l10n_util::GetNSStringF(
-                    IDS_IOS_IDENTITY_DISC_WITH_NAME_AND_EMAIL_OPEN_ACCOUNT_MENU,
-                    base::SysNSStringToUTF16(name),
-                    base::SysNSStringToUTF16(email));
-    } else {
-      accountButtonLabel =
-          _hasAccountError
-              ? l10n_util::GetNSStringF(
-                    IDS_IOS_IDENTITY_DISC_WITH_EMAIL_OPEN_ACCOUNT_MENU_WITH_ERROR,
-                    base::SysNSStringToUTF16(email))
-              : l10n_util::GetNSStringF(
-                    IDS_IOS_IDENTITY_DISC_WITH_EMAIL_OPEN_ACCOUNT_MENU,
-                    base::SysNSStringToUTF16(email));
-    }
+  // `_hasAccountError` is only set if the primary identity has an error.
+  if (name) {
+    accountButtonLabel =
+        _hasAccountError
+            ? l10n_util::GetNSStringF(
+                  IDS_IOS_IDENTITY_DISC_WITH_NAME_AND_EMAIL_OPEN_ACCOUNT_MENU_WITH_ERROR,
+                  base::SysNSStringToUTF16(name),
+                  base::SysNSStringToUTF16(email))
+            : l10n_util::GetNSStringF(
+                  IDS_IOS_IDENTITY_DISC_WITH_NAME_AND_EMAIL_OPEN_ACCOUNT_MENU,
+                  base::SysNSStringToUTF16(name),
+                  base::SysNSStringToUTF16(email));
   } else {
-    // TODO(crbug.com/389915527): Update the following strings to reflect the
-    // error badge introduced with kEnableErrorBadgeOnIdentityDisc.
-    if (name) {
-      accountButtonLabel = l10n_util::GetNSStringF(
-          IDS_IOS_IDENTITY_DISC_WITH_NAME_AND_EMAIL,
-          base::SysNSStringToUTF16(name), base::SysNSStringToUTF16(email));
-    } else {
-      accountButtonLabel = l10n_util::GetNSStringF(
-          IDS_IOS_IDENTITY_DISC_WITH_EMAIL, base::SysNSStringToUTF16(email));
-    }
+    accountButtonLabel =
+        _hasAccountError
+            ? l10n_util::GetNSStringF(
+                  IDS_IOS_IDENTITY_DISC_WITH_EMAIL_OPEN_ACCOUNT_MENU_WITH_ERROR,
+                  base::SysNSStringToUTF16(email))
+            : l10n_util::GetNSStringF(
+                  IDS_IOS_IDENTITY_DISC_WITH_EMAIL_OPEN_ACCOUNT_MENU,
+                  base::SysNSStringToUTF16(email));
   }
 
   self.identityDiscAccessibilityLabel = accountButtonLabel;

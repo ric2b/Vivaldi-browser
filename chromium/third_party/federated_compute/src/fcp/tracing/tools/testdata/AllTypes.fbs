@@ -1,0 +1,16 @@
+include "fcp/tracing/tracing_schema_common.fbs";
+
+table AllTypes (tag: "ALLT") {
+  fieldz: byte;
+  fieldy: ubyte;
+  fieldx: bool;
+  fieldw: short;
+  fieldv: ushort;
+  fieldu: int;
+  fieldt: uint;
+  fields: float;
+  fieldr: long;
+  fieldq: ulong;
+  fieldp: double;
+  fieldo: string;
+}

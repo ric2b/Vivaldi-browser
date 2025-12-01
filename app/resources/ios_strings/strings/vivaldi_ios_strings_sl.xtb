@@ -38,6 +38,7 @@
 <translation id="4026745073321351206">🙄 Ste opazili težavo?</translation>
 <translation id="4216644171369573466">Sklad zavihkov, <ph name="GROUP_TITLE" />, Meni.</translation>
 <translation id="4304713468139749426">Upravitelj gesel</translation>
+<translation id="4439281775431634915">Vaši skladi zavihkov so shranjeni tukaj</translation>
 <translation id="4569525137269575065">Zapri sklad</translation>
 <translation id="473775607612524610">Posodobi</translation>
 <translation id="4755216899422789286">Odpri URL-je v Vivaldiju</translation>
@@ -50,6 +51,8 @@
             other {{count} tab stacks closed and saved}}</translation>
 <translation id="5019787757991745254">Barva sklada zavihkov <ph name="COLOR" /></translation>
 <translation id="5022440170224170365">Sklad zavihkov. Strnjeno.</translation>
+<translation id="5132327651247938019">Za zasebno brskanje se lahko pomaknete desno.</translation>
+<translation id="5204006339739481307">Za zasebno brskanje se lahko pomaknete levo.</translation>
 <translation id="5217245356412073535">Privzeti pogled spletnega mesta lahko spremenite v namizje v Nastavitve &gt; Nastavitve vsebine</translation>
 <translation id="5271549068863921519">Shrani geslo</translation>
 <translation id="5317780077021120954">Shrani</translation>
@@ -63,6 +66,7 @@
 <translation id="5962477178930921574">Prilepi in poišči</translation>
 <translation id="6163856768888310791">Odstrani sklad</translation>
 <translation id="6168969409902608220">Ime sklada</translation>
+<translation id="6192561334825788389">Za zasebno brskanje lahko podrsnete desno.</translation>
 <translation id="6233792867654386826">Odpre vnesene URL-je v Vivaldiju.</translation>
 <translation id="6271462272606946663">Skrij zahtevo za mobilno spletno mesto</translation>
 <translation id="6478587527114893588">Zapri sklad.</translation>
@@ -75,6 +79,8 @@
 <translation id="6827597288286078054">Zasebno iskanje</translation>
 <translation id="6851516051005285358">Zahtevaj spletno mesto za namizni računalnik</translation>
 <translation id="6890907822330704077">Sklad zavihkov, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> zavihkov.</translation>
+<translation id="7004032350256606903">Vaša organizacija zahteva zasebno brskanje.
+<ph name="BEGIN_LINK" />Več o tem<ph name="END_LINK" /></translation>
 <translation id="7307970171564921489">Odklenite zasebne zavihke z <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Želite odpreti zasebno?</translation>
 <translation id="7363285031331302144">Ustvari sklade zavihkov za organizacijo odprtih zavihkov</translation>
@@ -94,6 +100,7 @@
         =1 {Add Tab to New Stack}
         other {Add Tabs to New Stack}}</translation>
 <translation id="8465550436083180511">Strni zavihek.</translation>
+<translation id="8499954848910902473">Za zasebno brskanje lahko podrsnete levo.</translation>
 <translation id="8685478989144570078">Skladi zavihkov</translation>
 <translation id="8756969031206844760">Posodobim geslo?</translation>
 <translation id="8852861335827546438">Nov sklad zavihkov</translation>

@@ -805,7 +805,7 @@ typedef struct {
   // Indicates the delta q mode to be used.
   DELTAQ_MODE deltaq_mode;
   // Indicates the delta q mode strength.
-  DELTAQ_MODE deltaq_strength;
+  unsigned int deltaq_strength;
   // Indicates if delta quantization should be enabled in chroma planes.
   bool enable_chroma_deltaq;
   // Indicates if delta quantization should be enabled for hdr video
@@ -2379,12 +2379,21 @@ typedef struct WeberStats {
   double max_scale;
 } WeberStats;
 
+/*!
+ * \brief This structure stores different types of frame indices.
+ */
+typedef struct {
+  int show_frame_count;
+} FRAME_INDEX_SET;
+
 typedef struct {
   struct loopfilter lf;
   CdefInfo cdef_info;
   YV12_BUFFER_CONFIG copy_buffer;
   RATE_CONTROL rc;
   MV_STATS mv_stats;
+  unsigned int frame_number;
+  FRAME_INDEX_SET frame_index_set;
 } CODING_CONTEXT;
 
 typedef struct {
@@ -2399,13 +2408,6 @@ typedef struct {
   int subsampling_x;
   int subsampling_y;
 } FRAME_INFO;
-
-/*!
- * \brief This structure stores different types of frame indices.
- */
-typedef struct {
-  int show_frame_count;
-} FRAME_INDEX_SET;
 
 /*!\endcond */
 
@@ -2888,6 +2890,13 @@ typedef struct AV1_PRIMARY {
    * when --deltaq-mode=3.
    */
   AV1EncRowMultiThreadSync intra_row_mt_sync;
+
+  /*!
+   * If set to 1, the encoder should not update any internal state after
+   * completing the encode. E.g. no updates to reference buffers, CDF
+   * tables or RC state.
+   */
+  int b_freeze_internal_state;
 } AV1_PRIMARY;
 
 /*!
@@ -3767,9 +3776,9 @@ typedef struct EncodeFrameParams {
 
 void av1_initialize_enc(unsigned int usage, enum aom_rc_mode end_usage);
 
-struct AV1_COMP *av1_create_compressor(AV1_PRIMARY *ppi,
+struct AV1_COMP *av1_create_compressor(struct AV1_PRIMARY *ppi,
                                        const AV1EncoderConfig *oxcf,
-                                       BufferPool *const pool,
+                                       struct BufferPool *const pool,
                                        COMPRESSOR_STAGE stage,
                                        int lap_lag_in_frames);
 

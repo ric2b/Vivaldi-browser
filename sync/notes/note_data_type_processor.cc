@@ -81,7 +81,7 @@ class ScopedRemoteUpdateNotes {
 
 std::string ComputeServerDefinedUniqueTagForDebugging(
     const vivaldi::NoteNode* node,
-    NoteModelView* model) {
+    const NoteModelView* model) {
   if (node == model->main_node()) {
     return "main_notes";
   }
@@ -221,13 +221,8 @@ void NoteDataTypeProcessor::OnUpdateReceived(
     updates_handler.Process(updates, got_new_encryption_requirements);
   }
 
-  // Issue error and stop sync if notes count exceeds limit.
-  if (note_tracker_->TrackedNotesCount() > max_notes_till_sync_enabled_) {
-    // Local changes continue to be tracked in order to allow users to delete
-    // notes and recover upon restart.
-    DisconnectSync();
-    activation_request_.error_handler.Run(syncer::ModelError(
-        FROM_HERE, syncer::ModelError::Type::kGenericTestError));
+  if (MaybeReportNoteCountLimitExceededError(
+          syncer::ModelError::Type::kGenericTestError)) {
     return;
   }
 
@@ -406,20 +401,8 @@ void NoteDataTypeProcessor::ConnectIfReady() {
     return;
   }
 
-  // Issue error and stop sync if notes exceed limit.
-  // TODO(crbug.com/40854724): Think about adding two different limits: one for
-  // when sync just starts, the other (larger one) as hard limit, incl.
-  // incremental changes.
-  const size_t count = note_tracker_
-                           ? note_tracker_->TrackedNotesCount()
-                           : CountSyncableNotesFromModel(notes_model_);
-  if (count > max_notes_till_sync_enabled_) {
-    // For the case where a tracker already exists, local changes will continue
-    // to be tracked in order order to allow users to delete notes and
-    // recover upon restart.
-    start_callback_.Reset();
-    activation_request_.error_handler.Run(syncer::ModelError(
-        FROM_HERE, syncer::ModelError::Type::kGenericTestError));
+  if (MaybeReportNoteCountLimitExceededError(
+          syncer::ModelError::Type::kGenericTestError)) {
     return;
   }
 
@@ -448,6 +431,33 @@ void NoteDataTypeProcessor::ConnectIfReady() {
           weak_ptr_factory_for_worker_.GetWeakPtr(),
           base::SequencedTaskRunner::GetCurrentDefault());
   std::move(start_callback_).Run(std::move(activation_context));
+}
+
+bool NoteDataTypeProcessor::MaybeReportNoteCountLimitExceededError(
+    syncer::ModelError::Type error_type) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // If `activation_request_.error_handler` is not set, the check is ignored
+  // because this gets re-evaluated in ConnectIfReady().
+  if (!activation_request_.error_handler) {
+    return false;
+  }
+
+  const size_t count = note_tracker_
+                           ? note_tracker_->TrackedNotesCount()
+                           : CountSyncableNotesFromModel(notes_model_);
+  if (count > max_notes_till_sync_enabled_) {
+    // For the case where a tracker already
+    // exists, local changes will continue
+    // to be tracked in order order to allow users to delete s and
+    // recover upon restart.
+    DisconnectSync();
+    start_callback_.Reset();
+
+    activation_request_.error_handler.Run(
+        syncer::ModelError(FROM_HERE, error_type));
+    return true;
+  }
+  return false;
 }
 
 void NoteDataTypeProcessor::OnSyncStopping(
@@ -491,17 +501,8 @@ void NoteDataTypeProcessor::OnSyncStopping(
 void NoteDataTypeProcessor::NudgeForCommitIfNeeded() {
   DCHECK(note_tracker_);
 
-  // Issue error and stop sync if the number of local notes exceed limit.
-  // If `activation_request_.error_handler` is not set, the check is ignored
-  // because this gets re-evaluated in ConnectIfReady().
-  if (activation_request_.error_handler &&
-      note_tracker_->TrackedNotesCount() > max_notes_till_sync_enabled_) {
-    // Local changes continue to be tracked in order to allow users to delete
-    // notes and recover upon restart.
-    DisconnectSync();
-    start_callback_.Reset();
-    activation_request_.error_handler.Run(syncer::ModelError(
-        FROM_HERE, syncer::ModelError::Type::kGenericTestError));
+  if (MaybeReportNoteCountLimitExceededError(
+          syncer::ModelError::Type::kGenericTestError)) {
     return;
   }
 

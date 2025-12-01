@@ -87,6 +87,7 @@
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/signin/model/system_identity.h"
 #import "ios/chrome/browser/signin/model/system_identity_manager.h"
+#import "ios/chrome/browser/snapshots/model/snapshot_source_tab_helper.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_service_factory.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/test/toolbar_test_navigation_manager.h"
 #import "ios/chrome/browser/web/model/font_size/font_size_java_script_feature.h"
@@ -175,9 +176,9 @@ class OverflowMenuMediatorTest : public PlatformTest {
                               ios::BookmarkModelFactory::GetDefaultFactory());
     builder.AddTestingFactory(
         IOSChromeProfilePasswordStoreFactory::GetInstance(),
-        base::BindRepeating(&password_manager::BuildPasswordStoreInterface<
-                            web::BrowserState,
-                            password_manager::MockPasswordStoreInterface>));
+        base::BindOnce(
+            &password_manager::BuildPasswordStoreInterface<
+                ProfileIOS, password_manager::MockPasswordStoreInterface>));
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
         AuthenticationServiceFactory::GetFactoryWithDelegate(
@@ -324,6 +325,7 @@ class OverflowMenuMediatorTest : public PlatformTest {
     if (!tab_helper) {
       ReaderModeTabHelper::CreateForWebState(
           web_state_, DistillerServiceFactory::GetForProfile(profile_.get()));
+      SnapshotSourceTabHelper::CreateForWebState(web_state_);
       tab_helper = ReaderModeTabHelper::FromWebState(web_state_);
     }
     if (active) {
@@ -472,7 +474,7 @@ class OverflowMenuMediatorTest : public PlatformTest {
   std::unique_ptr<ReadingListModel> reading_list_model_;
   std::unique_ptr<TestingPrefServiceSimple> profilePrefs_;
   std::unique_ptr<TestingPrefServiceSimple> localStatePrefs_;
-  raw_ptr<web::FakeWebState> web_state_;
+  raw_ptr<web::FakeWebState, DanglingUntriaged> web_state_;
   std::unique_ptr<web::NavigationItem> navigation_item_;
   UIViewController* baseViewController_;
   translate::LanguageDetectionModel language_detection_model_;
@@ -1192,7 +1194,7 @@ TEST_F(OverflowMenuMediatorTest, TestReadingModeMenu) {
   // Force model update.
   mediator_.model = model_;
   ASSERT_TRUE(HasItem(kToolsMenuReadLater, /*enabled=*/YES));
-  ASSERT_TRUE(HasItem(kToolsMenuTextZoom, /*enabled=*/NO));
+  ASSERT_TRUE(HasItem(kToolsMenuTextZoom, /*enabled=*/YES));
   ASSERT_TRUE(HasItem(kToolsMenuRequestDesktopId, /*enabled=*/YES));
   ASSERT_TRUE(HasItem(kToolsMenuAddToBookmarks, /*enabled=*/YES));
   ASSERT_TRUE(HasItem(kToolsMenuReadingListId, /*enabled=*/YES));

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,6 +43,28 @@ describeWithMockConnection('SecurityAndPrivacyPanel', () => {
       // Create a new security panel. The last selected view memory should make the main view visible
       securityPanel = Security.SecurityPanel.SecurityPanel.instance({forceNew: true});
       assert.instanceOf(securityPanel.visibleView, Security.SecurityPanel.SecurityMainView);
+    });
+
+    it('remembers last selected view for IP Protection', () => {
+      updateHostConfig({
+        devToolsPrivacyUI: {enabled: true},
+        devToolsIpProtectionPanelInDevTools: {enabled: true},
+      });
+      let securityPanel = Security.SecurityPanel.SecurityPanel.instance({forceNew: true});
+
+      // Should initially be the controls view, as it's the first item in the privacy section.
+      assert.instanceOf(securityPanel.visibleView, Security.CookieControlsView.CookieControlsView);
+
+      const ipProtectionTreeElement = securityPanel.sidebar.ipProtectionTreeElement;
+      assert.exists(ipProtectionTreeElement, 'IPProtectionTreeElement should exist when feature is enabled');
+
+      // Select and switch to the IP Protection view
+      ipProtectionTreeElement.select(/* omitFocus=*/ false, /* selectedByUser=*/ true);
+      assert.instanceOf(securityPanel.visibleView, Security.IPProtectionView.IPProtectionView);
+
+      // Create a new security panel. The last selected view memory should make the IP Protection view visible
+      securityPanel = Security.SecurityPanel.SecurityPanel.instance({forceNew: true});
+      assert.instanceOf(securityPanel.visibleView, Security.IPProtectionView.IPProtectionView);
     });
   });
 

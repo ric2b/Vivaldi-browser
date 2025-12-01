@@ -7,6 +7,8 @@
 #import "base/check_op.h"
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
+#import "base/task/sequenced_task_runner.h"
+#import "base/time/time.h"
 #import "ios/chrome/browser/safari_data_import/public/safari_data_import_stage.h"
 #import "ios/chrome/browser/safari_data_import/public/safari_data_item.h"
 #import "ios/chrome/browser/safari_data_import/public/utils.h"
@@ -27,6 +29,9 @@ constexpr int kExpectedItemsCount = 4;
 
 /// Size of the leading image for each item.
 constexpr NSInteger kLeadingSymbolImagePointSize = 20;
+
+/// Minimum animation time the user should be in the "importing" state.
+constexpr base::TimeDelta kMinImportingTime = base::Seconds(0.5);
 
 /// The identifier for the only section in the table.
 NSString* const kSafariDataItemSectionIdentifier =
@@ -113,9 +118,6 @@ NSString* GetDescriptionForUnimportedItemTypeWithCount(SafariDataItemType type,
 /// as the number of items imported.
 NSString* GetDescriptionForImportedItemTypeWithCount(SafariDataItemType type,
                                                      int count) {
-  if (type != SafariDataItemType::kPasswords) {
-    CHECK_GT(count, 0);
-  }
   int message_id;
   switch (type) {
     case SafariDataItemType::kPasswords:
@@ -169,6 +171,9 @@ UIView* GetCheckmark() {
   int _pendingImportCount;
   /// Number of items already imported.
   int _importedCount;
+  /// Whether the required time for the user to be in the `importing` state has
+  /// passed.
+  BOOL _minimumImportingTimePassed;
 }
 
 - (instancetype)init {
@@ -200,9 +205,72 @@ UIView* GetCheckmark() {
 }
 
 - (void)notifyImportStart {
-  for (SafariDataItem* item in _itemDictionary.allValues) {
-    [item transitionToNextStatus];
-    [self updateCellForItem:item];
+  /// Put items into different arrays based on whether they will be removed or
+  /// not.
+  NSMutableArray<NSNumber*>* identifiersToReconfigure = [NSMutableArray array];
+  NSMutableArray<NSNumber*>* identifiersToDelete = [NSMutableArray array];
+  for (NSNumber* identifier in _itemDictionary.allKeys) {
+    SafariDataItem* item = _itemDictionary[identifier];
+    if (item.count == 0) {
+      /// Remove empty item types.
+      [_itemDictionary removeObjectForKey:identifier];
+      [identifiersToDelete addObject:identifier];
+    } else {
+      [item transitionToNextStatus];
+      [identifiersToReconfigure addObject:identifier];
+    }
+  }
+  /// Update snapshot.
+  NSDiffableDataSourceSnapshot<NSString*, NSNumber*>* snapshot =
+      [_dataSource snapshot];
+  [snapshot reconfigureItemsWithIdentifiers:identifiersToReconfigure];
+  [snapshot deleteItemsWithIdentifiers:identifiersToDelete];
+  [_dataSource applySnapshot:snapshot animatingDifferences:YES];
+  /// Start timer for the "importing" state.
+  __weak SafariDataItemTableView* weakSelf = self;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE, base::BindOnce(^{
+        [weakSelf minImportingTimeDidPass];
+      }),
+      kMinImportingTime);
+}
+
+#pragma mark - SafariDataItemConsumer
+
+- (void)populateItem:(SafariDataItem*)item {
+  NSNumber* itemType = GetUniqueIdentifierFromType(item.type);
+  /// Item should only be populated when there is a status update.
+  SafariDataItem* previousItem = _itemDictionary[itemType];
+  if (previousItem) {
+    CHECK_NE(item.status, previousItem.status)
+        << "Updating item type " << static_cast<NSUInteger>(item.type)
+        << " for status " << static_cast<NSUInteger>(item.status)
+        << "multiple times";
+  }
+  switch (item.status) {
+    case SafariDataItemImportStatus::kBlockedByPolicy:
+    case SafariDataItemImportStatus::kReady:
+      _itemDictionary[itemType] = item;
+      _pendingImportCount++;
+      CHECK_LE(_pendingImportCount, kExpectedItemsCount);
+      if (_pendingImportCount == kExpectedItemsCount) {
+        [self importPreparationDidComplete];
+      }
+      return;
+    case SafariDataItemImportStatus::kImporting:
+      NOTREACHED()
+          << "Transition to importing state is handled by -notifyImportStart";
+    case SafariDataItemImportStatus::kImported:
+      _importedCount++;
+      CHECK_LE(_importedCount, kExpectedItemsCount);
+      if (previousItem) {
+        /// Do not update the item if this item has previously been deleted.
+        _itemDictionary[itemType] = item;
+        if (_minimumImportingTimePassed) {
+          [self moveCellsForItemsToImportState:@[ itemType ]];
+        }
+      }
+      return;
   }
 }
 
@@ -232,24 +300,6 @@ UIView* GetCheckmark() {
   [_dataSource applySnapshot:snapshot animatingDifferences:NO];
 }
 
-/// Update `item` in the table.
-- (void)updateCellForItem:(SafariDataItem*)item {
-  CHECK(_dataSource);
-  NSDiffableDataSourceSnapshot<NSString*, NSNumber*>* snapshot =
-      [_dataSource snapshot];
-  NSNumber* identifier = GetUniqueIdentifierFromType(item.type);
-  BOOL animate;
-  if (item.status == SafariDataItemImportStatus::kReady ||
-      item.count + item.invalidCount > 0) {
-    [snapshot reconfigureItemsWithIdentifiers:@[ identifier ]];
-    animate = NO;
-  } else {
-    [snapshot deleteItemsWithIdentifiers:@[ identifier ]];
-    animate = YES;
-  }
-  [_dataSource applySnapshot:snapshot animatingDifferences:animate];
-}
-
 /// Returns the cell with the properties of the `item` displayed.
 - (TableViewDetailIconCell*)cellForIndexPath:(NSIndexPath*)indexPath
                               itemIdentifier:(NSNumber*)identifier {
@@ -275,10 +325,22 @@ UIView* GetCheckmark() {
 /// Helper method that sets up the description for `item`.
 - (void)setupDescriptionForItem:(SafariDataItem*)item
                         forCell:(TableViewDetailIconCell*)cell {
-  NSString* description =
-      item.status == SafariDataItemImportStatus::kImported
-          ? GetDescriptionForImportedItemTypeWithCount(item.type, item.count)
-          : GetDescriptionForUnimportedItemTypeWithCount(item.type, item.count);
+  NSString* description;
+  switch (item.status) {
+    case SafariDataItemImportStatus::kReady:
+    case SafariDataItemImportStatus::kImporting:
+      description =
+          GetDescriptionForUnimportedItemTypeWithCount(item.type, item.count);
+      break;
+    case SafariDataItemImportStatus::kImported:
+      description =
+          GetDescriptionForImportedItemTypeWithCount(item.type, item.count);
+      break;
+    case SafariDataItemImportStatus::kBlockedByPolicy:
+      description = l10n_util::GetNSString(
+          IDS_IOS_SAFARI_IMPORT_IMPORT_ITEM_BLOCKED_BY_POLICY);
+      break;
+  }
   if (item.invalidCount > 0) {
     /// Concatenate string for invalid passwords.
     CHECK_EQ(item.type, SafariDataItemType::kPasswords);
@@ -298,6 +360,7 @@ UIView* GetCheckmark() {
 - (void)setupAccessoryForItem:(SafariDataItem*)item
                       forCell:(TableViewDetailIconCell*)cell {
   switch (item.status) {
+    case SafariDataItemImportStatus::kBlockedByPolicy:
     case SafariDataItemImportStatus::kReady:
       /// No accessory when user has not initiated importing.
       break;
@@ -319,51 +382,42 @@ UIView* GetCheckmark() {
   }
 }
 
-/// Returns whether there is at least one item to be imported.
-- (BOOL)hasItemToImport {
+/// Handle import preparation complete.
+- (void)importPreparationDidComplete {
   for (SafariDataItem* item in _itemDictionary.allValues) {
     if (item.count + item.invalidCount > 0) {
-      return YES;
+      /// Found an item to import!
+      [self initializeDataSource];
+      [self.importStageTransitionHandler transitionToNextImportStage];
+      return;
     }
   }
-  return NO;
+  /// No item to import.
+  [self.importStageTransitionHandler resetToInitialImportStage:NO];
 }
 
-#pragma mark - SafariDataItemConsumer
-
-- (void)populateItem:(SafariDataItem*)item {
-  /// Item should only be populated when there is a status update.
-  SafariDataItem* currentItem =
-      _itemDictionary[GetUniqueIdentifierFromType(item.type)];
-  if (currentItem) {
-    CHECK_NE(item.status, currentItem.status)
-        << "Updating item type " << static_cast<NSUInteger>(item.type)
-        << " for status " << static_cast<NSUInteger>(item.status)
-        << "multiple times";
+/// Invoked when minimum importing time has passed.
+- (void)minImportingTimeDidPass {
+  _minimumImportingTimePassed = YES;
+  NSMutableArray<NSNumber*>* imported = [NSMutableArray array];
+  for (NSNumber* identifier in _itemDictionary.allKeys) {
+    if (_itemDictionary[identifier].status ==
+        SafariDataItemImportStatus::kImported) {
+      [imported addObject:identifier];
+    }
   }
-  _itemDictionary[GetUniqueIdentifierFromType(item.type)] = item;
-  switch (item.status) {
-    case SafariDataItemImportStatus::kReady:
-      _pendingImportCount++;
-      if (_pendingImportCount == kExpectedItemsCount) {
-        if ([self hasItemToImport]) {
-          [self initializeDataSource];
-          [self.importStageTransitionHandler transitionToNextImportStage];
-        } else {
-          [self.importStageTransitionHandler resetToInitialImportStage:NO];
-        }
-      }
-      return;
-    case SafariDataItemImportStatus::kImporting:
-      NOTREACHED()
-          << "Transition to importing state is handled by -notifyImportStart";
-    case SafariDataItemImportStatus::kImported:
-      [self updateCellForItem:item];
-      _importedCount++;
-      if (_importedCount == kExpectedItemsCount) {
-        [self.importStageTransitionHandler transitionToNextImportStage];
-      }
-      return;
+  [self moveCellsForItemsToImportState:imported];
+}
+
+/// Transition items with `identifiers` to import state UI.
+- (void)moveCellsForItemsToImportState:(NSArray<NSNumber*>*)identifiers {
+  CHECK(_minimumImportingTimePassed);
+  NSDiffableDataSourceSnapshot<NSString*, NSNumber*>* snapshot =
+      [_dataSource snapshot];
+  [snapshot reconfigureItemsWithIdentifiers:identifiers];
+  [_dataSource applySnapshot:snapshot animatingDifferences:YES];
+  if (_importedCount == kExpectedItemsCount) {
+    [self.importStageTransitionHandler transitionToNextImportStage];
   }
 }
 

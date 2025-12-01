@@ -52,10 +52,19 @@ const UIEdgeInsets textViewPadding = UIEdgeInsetsMake(8.f, 0.f, 8.f, 0.f);
 // Spacing between two buttons.
 const CGFloat stackSpacing = 8.f;
 
+CGFloat buttonCornerRadius() {
+  if (@available(iOS 26,*)) {
+    return iOS26ActionButtonCornerRadius;
+  } else {
+    return actionButtonCornerRadius;
+  }
+}
+
 UIButton* ActionButton() {
   UIButton* button = [UIButton new];
   button.backgroundColor = [UIColor colorNamed:kBackgroundColor];
-  button.layer.cornerRadius = actionButtonCornerRadius;
+  button.layer.cornerRadius = buttonCornerRadius();
+
   [button setTitleColor:UIColor.vSystemBlue
                forState:UIControlStateNormal];
   return button;
@@ -147,7 +156,7 @@ UIButton* ActionButton() {
 
   UIView* textViewContainer = [UIView new];
   textViewContainer.backgroundColor = [UIColor colorNamed:kBackgroundColor];
-  textViewContainer.layer.cornerRadius = actionButtonCornerRadius;
+  textViewContainer.layer.cornerRadius = buttonCornerRadius();
   [headerView addSubview:textViewContainer];
 
   VivaldiTextFieldView* textFieldView =

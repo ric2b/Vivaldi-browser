@@ -1,0 +1,73 @@
+name: msys2
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  msys2:
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - MSYSTEM: MINGW64
+            MSYS2_ARCH: x86_64
+          - MSYSTEM: CLANG64
+            MSYS2_ARCH: clang-x86_64
+    name: ${{ matrix.MSYSTEM }}
+
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+    - name: Setup MSYS2
+      uses: msys2/setup-msys2@cf96e00c0aab3788743aaf63b64146f0d383cee9 # v2
+      with:
+        msystem: ${{ matrix.MSYSTEM }}
+        update: true
+        install: >-
+          mingw-w64-${{ matrix.MSYS2_ARCH }}-cairo
+          mingw-w64-${{ matrix.MSYS2_ARCH }}-freetype
+          mingw-w64-${{ matrix.MSYS2_ARCH }}-cc
+          mingw-w64-${{ matrix.MSYS2_ARCH }}-gettext
+          mingw-w64-${{ matrix.MSYS2_ARCH }}-glib2
+          mingw-w64-${{ matrix.MSYS2_ARCH }}-gobject-introspection
+          mingw-w64-${{ matrix.MSYS2_ARCH }}-graphite2
+          mingw-w64-${{ matrix.MSYS2_ARCH }}-icu
+          mingw-w64-${{ matrix.MSYS2_ARCH }}-meson
+          mingw-w64-${{ matrix.MSYS2_ARCH }}-ninja
+          mingw-w64-${{ matrix.MSYS2_ARCH }}-pkgconf
+          mingw-w64-${{ matrix.MSYS2_ARCH }}-python
+          mingw-w64-${{ matrix.MSYS2_ARCH }}-python-pip
+    - name: Install Python Dependencies
+      run: |
+        pip3 install -r .ci/requirements-fonttools.txt --require-hashes
+    - name: Setup Meson
+      run: |
+        meson setup build \
+          --wrap-mode=nodownload \
+          --auto-features=enabled \
+          -Ddocs=disabled \
+          -Ddirectwrite=enabled \
+          -Dgdi=enabled \
+          -Dgraphite=enabled \
+          -Dchafa=disabled
+    - name: Build
+      run: meson compile -Cbuild
+    - name: Test
+      run: meson test --print-errorlogs --suite=harfbuzz -Cbuild
+    - name: Upload DLLs
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: libharfbuzz-${{ matrix.MSYS2_ARCH }}
+        path: ./build/src/libharfbuzz-*.dll

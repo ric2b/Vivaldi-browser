@@ -173,7 +173,8 @@ std::optional<base::Value> ResourceReader::ParseJSON() {
   if (!IsValid())
     return std::nullopt;
   DCHECK(mapped_file_.IsValid());
-  auto v = base::JSONReader::ReadAndReturnValueWithError(as_string_view());
+  auto v = base::JSONReader::ReadAndReturnValueWithError(
+      as_string_view(), base::JSON_PARSE_CHROMIUM_EXTENSIONS);
   if (!v.has_value()) {
     error_ = base::StringPrintf("%s:%d:%d: JSON error - %s",
                                 resource_path_.c_str(), v.error().line,

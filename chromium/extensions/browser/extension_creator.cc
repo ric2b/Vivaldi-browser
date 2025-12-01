@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,12 +31,31 @@ namespace extensions {
 
 ExtensionCreator::ExtensionCreator() : error_type_(kOtherError) {}
 
+bool FileConflicts(const base::FilePath& file_path) {
+#if BUILDFLAG(IS_ANDROID)
+  // In Android, the GetOrCreateEmptyFilesUnderDownloads method returns either
+  // an existing file or a newly created empty file's content URI. Apply a size
+  // check here to determine if the file is a pre-existing, non-empty one.
+  if (file_path.IsContentUri()) {
+    std::optional<int64_t> file_size = base::GetFileSize(file_path);
+    return file_size.has_value() && file_size.value() > 0;
+  }
+#endif  // BUILDFLAG(IS_ANDROID)
+  return base::PathExists(file_path);
+}
+
 bool ExtensionCreator::InitializeInput(
     const base::FilePath& extension_dir,
     const base::FilePath& crx_path,
     const base::FilePath& private_key_path,
     const base::FilePath& private_key_output_path,
     int run_flags) {
+#if BUILDFLAG(IS_ANDROID)
+  // The path must be either normal path or a virtual document path to allow
+  // Append.
+  CHECK(!extension_dir.IsContentUri());
+#endif  // BUILDFLAG(IS_ANDROID)
+
   // Validate input |extension_dir|.
   if (extension_dir.value().empty() || !base::DirectoryExists(extension_dir)) {
     error_message_ =
@@ -59,21 +79,21 @@ bool ExtensionCreator::InitializeInput(
     return false;
   }
 
-  // If an |output_private_key| path is given, make sure it doesn't over-write
-  // an existing private key.
+  // If an |output_private_key| path is given but no key specified in this pack
+  // request, make sure it doesn't over-write an existing private key not used
+  // for current extension.
   if (private_key_path.value().empty() &&
       !private_key_output_path.value().empty() &&
-      base::PathExists(private_key_output_path)) {
+      FileConflicts(private_key_output_path)) {
     error_message_ = l10n_util::GetStringUTF8(IDS_EXTENSION_PRIVATE_KEY_EXISTS);
     return false;
   }
 
   // Check whether crx file already exists. Should be last check, as this is
   // a warning only.
-  if (!(run_flags & kOverwriteCRX) && base::PathExists(crx_path)) {
+  if (!(run_flags & kOverwriteCRX) && FileConflicts(crx_path)) {
     error_message_ = l10n_util::GetStringUTF8(IDS_EXTENSION_CRX_EXISTS);
     error_type_ = kCRXExists;
-
     return false;
   }
 

@@ -3,13 +3,7 @@
 #ifndef COMPONENTS_AD_BLOCKER_CONTENT_INTERSTITIAL_DOCUMENT_BLOCKED_THROTTLE_H_
 #define COMPONENTS_AD_BLOCKER_CONTENT_INTERSTITIAL_DOCUMENT_BLOCKED_THROTTLE_H_
 
-#include <memory>
-#include <set>
-#include <string>
-#include <vector>
-
 #include "base/memory/weak_ptr.h"
-#include "components/site_engagement/core/mojom/site_engagement_details.mojom.h"
 #include "content/public/browser/navigation_throttle.h"
 
 namespace content {

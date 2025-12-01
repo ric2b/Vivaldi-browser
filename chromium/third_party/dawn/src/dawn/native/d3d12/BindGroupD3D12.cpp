@@ -43,14 +43,15 @@
 namespace dawn::native::d3d12 {
 
 // static
-ResultOrError<Ref<BindGroup>> BindGroup::Create(Device* device,
-                                                const BindGroupDescriptor* descriptor) {
+ResultOrError<Ref<BindGroup>> BindGroup::Create(
+    Device* device,
+    const UnpackedPtr<BindGroupDescriptor>& descriptor) {
     return ToBackend(descriptor->layout->GetInternalBindGroupLayout())
         ->AllocateBindGroup(device, descriptor);
 }
 
 BindGroup::BindGroup(Device* device,
-                     const BindGroupDescriptor* descriptor,
+                     const UnpackedPtr<BindGroupDescriptor>& descriptor,
                      const CPUDescriptorHeapAllocation& viewAllocation)
     : BindGroupBase(this, device, descriptor), mCPUViewAllocation(viewAllocation) {}
 
@@ -109,7 +110,7 @@ MaybeError BindGroup::InitializeImpl() {
                         // byte aligned. Since binding.size and binding.offset are in bytes,
                         // we need to divide by 4 to obtain the element size.
                         D3D12_UNORDERED_ACCESS_VIEW_DESC desc;
-                        desc.Buffer.NumElements = binding.size / 4;
+                        desc.Buffer.NumElements = static_cast<uint32_t>(binding.size / 4);
                         desc.Format = DXGI_FORMAT_R32_TYPELESS;
                         desc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
                         desc.Buffer.FirstElement = binding.offset / 4;
@@ -134,7 +135,7 @@ MaybeError BindGroup::InitializeImpl() {
                         desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
                         desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
                         desc.Buffer.FirstElement = binding.offset / 4;
-                        desc.Buffer.NumElements = binding.size / 4;
+                        desc.Buffer.NumElements = static_cast<uint32_t>(binding.size / 4);
                         desc.Buffer.StructureByteStride = 0;
                         desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
                         d3d12Device->CreateShaderResourceView(
@@ -199,12 +200,18 @@ MaybeError BindGroup::InitializeImpl() {
                         DAWN_UNREACHABLE();
                 }
             },
+            [&](const TexelBufferBindingInfo&) {
+                // D3D12 does not support texel buffers.
+                // TODO(crbug/382544164): Prototype texel buffer feature
+                DAWN_UNREACHABLE();
+            },
             [](const StaticSamplerBindingInfo&) {
                 // Static samplers are already initialized in the pipeline layout.
             },
             // No-op as samplers will be later initialized by CreateSamplers().
             [](const SamplerBindingInfo&) {},
-            [](const InputAttachmentBindingInfo&) { DAWN_UNREACHABLE(); });
+            [](const InputAttachmentBindingInfo&) { DAWN_UNREACHABLE(); },
+            [](const ExternalTextureBindingInfo&) { DAWN_UNREACHABLE(); });
     }
 
     // Loop through the dynamic storage buffers and build a flat map from the index of the
@@ -213,11 +220,10 @@ MaybeError BindGroup::InitializeImpl() {
     // of BindingNumber.
     mDynamicStorageBufferLengths.resize(bgl->GetDynamicStorageBufferCount());
     uint32_t dynamicStorageBufferIndex = 0;
-    for (BindingIndex bindingIndex(0); bindingIndex < bgl->GetDynamicBufferCount();
-         ++bindingIndex) {
+    for (BindingIndex bindingIndex : bgl->GetDynamicBufferIndices()) {
         if (bgl->IsStorageBufferBinding(bindingIndex)) {
             mDynamicStorageBufferLengths[dynamicStorageBufferIndex++] =
-                GetBindingAsBufferBinding(bindingIndex).size;
+                static_cast<uint32_t>(GetBindingAsBufferBinding(bindingIndex).size);
         }
     }
 

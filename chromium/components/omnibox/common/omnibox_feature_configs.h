@@ -166,9 +166,29 @@ struct AiMode : Config<AiMode> {
 // If enabled, show the AIM entrypoint in the omnibox.
 struct AiModeOmniboxEntryPoint : Config<AiModeOmniboxEntryPoint> {
   AiModeOmniboxEntryPoint();
+  // Whether the AIM entrypoint is enabled for all users.
   bool enabled;
+  // Whether the AIM entrypoint is enabled only for users whose locale is set to
+  // English and who are located in the US. Has no effect if `enabled` is true.
+  bool enabledEnUs;
+
+  // Never display AIM hint text.
+  bool hide_aim_hint_text;
+
   // Whether to hide the AIM hint text on NTP open.
   bool hide_aim_hint_text_on_ntp_open;
+
+  // Whether to hide the other (non-AIM) page actions on NTP.
+  bool hide_other_page_actions_on_ntp;
+
+  // The maximum number of times the hint can be shown per day.
+  int aim_hint_impression_limit_daily;
+
+  // The maximum number of times the hint can be shown in total.
+  int aim_hint_impression_limit_total;
+
+  // Whether impression limits for the AIM hint are enabled.
+  bool enable_hint_impression_limits;
 };
 
 // A config struct for features related to contextual search in omnibox.
@@ -194,6 +214,7 @@ struct ContextualSearch : Config<ContextualSearch> {
   DECLARE_FEATURE(kShowSuggestionsOnNoApc);
   DECLARE_FEATURE(kOpenLensActionUITweaks);
   DECLARE_FEATURE(kSuggestionsFulfilledByLensSupported);
+  DECLARE_FEATURE(kLoadingSuggestionsAnimation);
 
   // Whether to use contextual search features, for example the lens action.
   bool IsContextualSearchEnabled() const;
@@ -276,6 +297,20 @@ struct ContextualSearch : Config<ContextualSearch> {
   // overlay in the selection state. This is in contrast to the default behavior
   // where the suggestion is fulfilled by the contextual searchbox.
   bool suggestions_fulfilled_by_lens_supported;
+
+  // Whether to enable the loading suggestions animation. This adds an
+  // animation when contextual suggestions load into the omnibox popup.
+  bool enable_loading_suggestions_animation;
+
+  // The duration of the position animation when loading suggestions.
+  int loading_suggestions_position_animation_duration;
+
+  // The delay after the position animation begins that the opacity animation
+  // should start after.
+  int loading_suggestions_opacity_animation_delay;
+
+  // The duration of the opacity animation when loading suggestions.
+  int loading_suggestions_opacity_animation_duration;
 };
 
 // If enabled, allows MIA zero-prefix suggestions in NTP omnibox and realbox.
@@ -283,6 +318,11 @@ struct MiaZPS : Config<MiaZPS> {
   DECLARE_FEATURE(kOmniboxMiaZPS);
 
   MiaZPS();
+  MiaZPS(const MiaZPS&);
+  MiaZPS(MiaZPS&&);
+  MiaZPS& operator=(const MiaZPS&);
+  MiaZPS& operator=(MiaZPS&&);
+  ~MiaZPS();
   bool enabled;
   // Whether to use non-normalized text for local history zp suggestions.
   bool local_history_non_normalized_contents;
@@ -367,6 +407,11 @@ struct AdjustOmniboxIndent : Config<AdjustOmniboxIndent> {
 // met.
 struct DocumentProvider : Config<DocumentProvider> {
   DocumentProvider();
+  DocumentProvider(const DocumentProvider&);
+  DocumentProvider(DocumentProvider&&);
+  DocumentProvider& operator=(const DocumentProvider&);
+  DocumentProvider& operator=(DocumentProvider&&);
+  ~DocumentProvider();
   bool enabled;
   // The minimum input length required before requesting document suggestions.
   size_t min_query_length;
@@ -392,6 +437,11 @@ struct DocumentProvider : Config<DocumentProvider> {
 struct ForceAllowedToBeDefault : Config<ForceAllowedToBeDefault> {
   DECLARE_FEATURE(kForceAllowedToBeDefault);
   ForceAllowedToBeDefault();
+  ForceAllowedToBeDefault(const ForceAllowedToBeDefault&);
+  ForceAllowedToBeDefault(ForceAllowedToBeDefault&&);
+  ForceAllowedToBeDefault& operator=(const ForceAllowedToBeDefault&);
+  ForceAllowedToBeDefault& operator=(ForceAllowedToBeDefault&&);
+  ~ForceAllowedToBeDefault();
   bool enabled;
 };
 
@@ -401,6 +451,15 @@ struct RealboxContextualAndTrendingSuggestions
     : Config<RealboxContextualAndTrendingSuggestions> {
   DECLARE_FEATURE(kRealboxContextualAndTrendingSuggestions);
   RealboxContextualAndTrendingSuggestions();
+  RealboxContextualAndTrendingSuggestions(
+      const RealboxContextualAndTrendingSuggestions&);
+  RealboxContextualAndTrendingSuggestions(
+      RealboxContextualAndTrendingSuggestions&&);
+  RealboxContextualAndTrendingSuggestions& operator=(
+      const RealboxContextualAndTrendingSuggestions&);
+  RealboxContextualAndTrendingSuggestions& operator=(
+      RealboxContextualAndTrendingSuggestions&&);
+  ~RealboxContextualAndTrendingSuggestions();
   bool enabled;
 
   // The total number of matches a Section can contain across all Groups.
@@ -500,12 +559,22 @@ struct SearchAggregatorProvider : Config<SearchAggregatorProvider> {
 struct SuggestionAnswerMigration : Config<SuggestionAnswerMigration> {
   DECLARE_FEATURE(kOmniboxSuggestionAnswerMigration);
   SuggestionAnswerMigration();
+  SuggestionAnswerMigration(const SuggestionAnswerMigration&);
+  SuggestionAnswerMigration(SuggestionAnswerMigration&&);
+  SuggestionAnswerMigration& operator=(const SuggestionAnswerMigration&);
+  SuggestionAnswerMigration& operator=(SuggestionAnswerMigration&&);
+  ~SuggestionAnswerMigration();
   bool enabled;
 };
 
 struct OmniboxZpsSuggestionLimit : Config<OmniboxZpsSuggestionLimit> {
   DECLARE_FEATURE(kOmniboxZpsSuggestionLimit);
   OmniboxZpsSuggestionLimit();
+  OmniboxZpsSuggestionLimit(const OmniboxZpsSuggestionLimit&);
+  OmniboxZpsSuggestionLimit(OmniboxZpsSuggestionLimit&&);
+  OmniboxZpsSuggestionLimit& operator=(const OmniboxZpsSuggestionLimit&);
+  OmniboxZpsSuggestionLimit& operator=(OmniboxZpsSuggestionLimit&&);
+  ~OmniboxZpsSuggestionLimit();
   bool enabled;
   // Max number of zps suggestions to show.
   size_t max_suggestions;
@@ -549,6 +618,15 @@ struct HappinessTrackingSurveyForOmniboxOnFocusZps
     : Config<HappinessTrackingSurveyForOmniboxOnFocusZps> {
   DECLARE_FEATURE(kHappinessTrackingSurveyForOmniboxOnFocusZps);
   HappinessTrackingSurveyForOmniboxOnFocusZps();
+  HappinessTrackingSurveyForOmniboxOnFocusZps(
+      const HappinessTrackingSurveyForOmniboxOnFocusZps&);
+  HappinessTrackingSurveyForOmniboxOnFocusZps(
+      HappinessTrackingSurveyForOmniboxOnFocusZps&&);
+  HappinessTrackingSurveyForOmniboxOnFocusZps& operator=(
+      const HappinessTrackingSurveyForOmniboxOnFocusZps&);
+  HappinessTrackingSurveyForOmniboxOnFocusZps& operator=(
+      HappinessTrackingSurveyForOmniboxOnFocusZps&&);
+  ~HappinessTrackingSurveyForOmniboxOnFocusZps();
   bool enabled;
   // Number of times the omnibox must be focused on SRP/Web before the survey
   // may be shown
@@ -559,6 +637,23 @@ struct HappinessTrackingSurveyForOmniboxOnFocusZps
   std::string happiness_trigger_id;
   // Trigger ID of Usefulness and Distraction survey.
   std::string utility_trigger_id;
+};
+
+struct ComposeboxSuggestionLimit : Config<ComposeboxSuggestionLimit> {
+  DECLARE_FEATURE(kComposeboxSuggestionLimit);
+  ComposeboxSuggestionLimit();
+  ComposeboxSuggestionLimit(const ComposeboxSuggestionLimit&);
+  ComposeboxSuggestionLimit(ComposeboxSuggestionLimit&&);
+  ComposeboxSuggestionLimit& operator=(const ComposeboxSuggestionLimit&);
+  ComposeboxSuggestionLimit& operator=(ComposeboxSuggestionLimit&&);
+  ~ComposeboxSuggestionLimit();
+  bool enabled;
+  // Max number of zps suggestions to show.
+  size_t max_suggestions;
+  // Max number of aim zps suggestions to show.
+  size_t max_aim_suggestions;
+  // Max number of contextual zps suggestions to show.
+  size_t max_contextual_suggestions;
 };
 
 // Do not add new configs here at the bottom by default. They should be ordered

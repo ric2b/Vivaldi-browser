@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #![allow(warnings)]
+#[cfg(feature = "aom")]
 pub mod bindings {
     include!(env!("CRABBYAVIF_AOM_BINDINGS_RS"));
 }

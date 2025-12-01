@@ -197,6 +197,10 @@ class BookmarkToolbarMediator
             mModel.set(BookmarkToolbarProperties.CHECKED_VIEW_MENU_ID, id);
             return true;
         } else if (id == R.id.edit_menu_id) {
+            if (BuildConfig.IS_VIVALDI && mCurrentFolder != null)
+                mBookmarkManagerOpener.startVivaldiEditFolderActivity(
+                        mContext, mProfile, mCurrentFolder);
+            else // End Vivaldi
             mBookmarkManagerOpener.startEditActivity(
                     mContext, mProfile, assumeNonNull(mCurrentFolder));
             return true;

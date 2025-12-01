@@ -506,8 +506,10 @@ void PopulateAXTreeData(const ui::AXTreeData& source,
   destination->set_sel_focus_affinity(
       TextAffinityToProto(source.sel_focus_affinity));
   destination->set_root_scroller_id(source.root_scroller_id);
-  for (const auto& metadata : source.metadata) {
-    *destination->add_metadata() = metadata;
+  if (source.metadata.has_value()) {
+    for (const auto& metadata : *source.metadata) {
+      *destination->add_metadata() = metadata;
+    }
   }
 }
 
@@ -909,6 +911,8 @@ optimization_guide::proto::AXRole AXRoleToProto(ax::mojom::Role role) {
       return optimization_guide::proto::AXRole::AX_ROLE_MENUITEMCHECKBOX;
     case ax::mojom::Role::kMenuItemRadio:
       return optimization_guide::proto::AXRole::AX_ROLE_MENUITEMRADIO;
+    case ax::mojom::Role::kMenuItemSeparator:
+      return optimization_guide::proto::AXRole::AX_ROLE_MENUITEMSEPARATOR;
     case ax::mojom::Role::kMenuListOption:
       return optimization_guide::proto::AXRole::AX_ROLE_MENULISTOPTION;
     case ax::mojom::Role::kMenuListPopup:

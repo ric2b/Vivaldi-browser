@@ -138,10 +138,6 @@
 #include "include/codec/SkAvifDecoder.h"
 #endif
 
-#ifdef SK_HAS_HEIF_LIBRARY
-#include "include/android/SkHeifDecoder.h"
-#endif
-
 #ifdef SK_CODEC_DECODES_JPEGXL
 #include "include/codec/SkJpegxlDecoder.h"
 #endif
@@ -1460,8 +1456,8 @@ void Viewer::setupCurrentSlide() {
         // Start with a matrix that scales the slide to the available screen space
         if (fWindow->scaleContentToFit()) {
             if (windowRect.width() > 0 && windowRect.height() > 0) {
-                fDefaultMatrix = SkMatrix::RectToRect(slideBounds, windowRect,
-                                                      SkMatrix::kStart_ScaleToFit);
+                fDefaultMatrix = SkMatrix::RectToRectOrIdentity(slideBounds, windowRect,
+                                                                SkMatrix::kStart_ScaleToFit);
             }
         }
 

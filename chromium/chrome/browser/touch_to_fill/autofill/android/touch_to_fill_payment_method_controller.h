@@ -13,6 +13,7 @@
 
 namespace autofill {
 
+class BnplIssuer;
 class ContentAutofillClient;
 class Iban;
 class LoyaltyCard;
@@ -35,7 +36,7 @@ class TouchToFillPaymentMethodController
   // field determines which card suggestions should be disabled and grayed out
   // for the current merchant. Returns whether the surface was successfully
   // shown.
-  virtual bool ShowCreditCards(
+  virtual bool ShowPaymentMethods(
       std::unique_ptr<TouchToFillPaymentMethodView> view,
       base::WeakPtr<TouchToFillDelegate> delegate,
       base::span<const Suggestion> suggestions) = 0;
@@ -57,6 +58,32 @@ class TouchToFillPaymentMethodController
       base::span<const LoyaltyCard> affiliated_loyalty_cards,
       base::span<const LoyaltyCard> all_loyalty_cards,
       bool first_time_usage) = 0;
+
+  // Updates the BNPL payment method option on the Touch To Fill suggestion
+  // view. If the `extracted_amount` is null, the option is grayed out and its
+  // message text is updated to inform users that the purchase is not
+  // available. If the amount is present but not supported by any issuer, the
+  // UI is updated with a grayed-out BNPL option. If the amount is available
+  // and supported by at least one issuer, it is set to continue the flow.
+  virtual bool UpdateBnplPaymentMethod(
+      std::optional<uint64_t> extracted_amount,
+      bool is_amount_supported_by_any_issuer) = 0;
+
+  // Shows the Touch To Fill progress screen. If the TTF surface is already
+  // being shown when this is called, `view` is optional and will override the
+  // existing view when present. Otherwise, if the TTF surface is not already
+  // being shown, `view` is required. If provided, `delegate` will be notified
+  // of the user's actions. Returns whether the surface was successfully shown.
+  virtual bool ShowProgressScreen(
+      std::unique_ptr<TouchToFillPaymentMethodView> view,
+      base::WeakPtr<TouchToFillDelegate> delegate) = 0;
+
+  // Shows the Touch To Fill BNPL issuer selection screen. `delegate` will
+  // provide the BNPL issuers and be notified of the user's decision. Returns
+  // whether the surface was successfully shown.
+  virtual bool ShowBnplIssuers(
+      base::WeakPtr<TouchToFillDelegate> delegate,
+      base::span<const BnplIssuer> bnpl_issuers_to_suggest) = 0;
 
   // Hides the surface if it is currently shown.
   virtual void Hide() = 0;

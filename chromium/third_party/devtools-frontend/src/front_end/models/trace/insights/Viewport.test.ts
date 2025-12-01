@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@ import {
 import * as Trace from '../trace.js';
 
 describeWithEnvironment('Viewport', function() {
-  it('detects mobile optimized viewport', async () => {
+  it('detects mobile optimized viewport', async function() {
     const {data, insights} = await processTrace(this, 'lcp-images.json.gz');
     const insight =
         getInsightOrError('Viewport', insights, getFirstOrError(data.Meta.navigationsByNavigationId.values()));
@@ -20,7 +20,7 @@ describeWithEnvironment('Viewport', function() {
     assert.isTrue(insight.mobileOptimized);
   });
 
-  it('detects mobile unoptimized viewport (w/ no pointer interactions)', async () => {
+  it('detects mobile unoptimized viewport (w/ no pointer interactions)', async function() {
     const {data} = await processTrace(this, 'lcp-images.json.gz');
     const navigation = getFirstOrError(data.Meta.navigationsByNavigationId.values());
     const context = createContextForNavigation(data, navigation, data.Meta.mainFrameId);
@@ -37,9 +37,10 @@ describeWithEnvironment('Viewport', function() {
     assert.isEmpty(insight.longPointerInteractions);
   });
 
-  it('detects mobile unoptimized viewport (w/ pointer interactions)', async () => {
+  it('detects mobile unoptimized viewport (w/ pointer interactions)', async function() {
     const {data} = await processTrace(this, 'nytimes-bad-mobile-viewport.json.gz');
     const context = {
+      options: {},
       bounds: data.Meta.traceBounds,
       frameId: data.Meta.mainFrameId,
     };

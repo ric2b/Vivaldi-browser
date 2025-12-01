@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -18,40 +18,40 @@ import liveHeapProfileStyles from './liveHeapProfile.css.js';
 
 const UIStrings = {
   /**
-   *@description Text for a heap profile type
+   * @description Text for a heap profile type
    */
   jsHeap: 'JS Heap',
   /**
-   *@description Text in Live Heap Profile View of a profiler tool
+   * @description Text in Live Heap Profile View of a profiler tool
    */
   allocatedJsHeapSizeCurrentlyIn: 'Allocated JS heap size currently in use',
   /**
-   *@description Text in Live Heap Profile View of a profiler tool
+   * @description Text in Live Heap Profile View of a profiler tool
    */
   vms: 'VMs',
   /**
-   *@description Text in Live Heap Profile View of a profiler tool
+   * @description Text in Live Heap Profile View of a profiler tool
    */
   numberOfVmsSharingTheSameScript: 'Number of VMs sharing the same script source',
   /**
-   *@description Text in Live Heap Profile View of a profiler tool
+   * @description Text in Live Heap Profile View of a profiler tool
    */
   scriptUrl: 'Script URL',
   /**
-   *@description Text in Live Heap Profile View of a profiler tool
+   * @description Text in Live Heap Profile View of a profiler tool
    */
   urlOfTheScriptSource: 'URL of the script source',
   /**
-   *@description Data grid name for Heap Profile data grids
+   * @description Data grid name for Heap Profile data grids
    */
   heapProfile: 'Heap Profile',
   /**
-   *@description Text in Live Heap Profile View of a profiler tool
-   *@example {1} PH1
+   * @description Text in Live Heap Profile View of a profiler tool
+   * @example {1} PH1
    */
   anonymousScriptS: '(Anonymous Script {PH1})',
   /**
-   *@description A unit
+   * @description A unit
    */
   kb: 'kB',
 } as const;

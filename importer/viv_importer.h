@@ -8,6 +8,7 @@
 
 #include "chrome/utility/importer/importer.h"
 #include "components/user_data_importer/common/importer_data_types.h"
+#include "importer/viv_import_result.h"
 
 namespace password_manager {
 struct PasswordForm;
@@ -31,15 +32,15 @@ class OperaImporter : public Importer {
   OperaImporter(const OperaImporter&) = delete;
   OperaImporter& operator=(const OperaImporter&) = delete;
 
-  // Returns false on error in which case error is filled with an error message.
-  bool ImportBookMarks(std::string* error);
+  // Import methods using modern error handling
+  ImportResult ImportBookMarks();
 
   // void ReadFaviconIndexFile(std::u16string domain, );
 
-  bool ImportNotes(std::string* error);
-  bool ImportSpeedDial(std::string* error);
+  ImportResult ImportNotes();
+  ImportResult ImportSpeedDial();
 
-  bool ImportWand(std::string* error);
+  ImportResult ImportWand();
   bool ImportWand_ReadEntryHTML(
       std::string::iterator* buffer,
       const std::string::iterator& buffer_end,

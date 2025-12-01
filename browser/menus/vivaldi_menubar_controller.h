@@ -30,7 +30,6 @@ namespace ui {
 class SimpleMenuModel;
 }  // namespace ui
 
-
 namespace views {
 class MenuItemView;
 class MenuRunner;
@@ -51,9 +50,8 @@ class MenubarController : public views::MenuDelegate,
 
   static int GetMaximumId();
 
-  static MenubarController* Create(
-    VivaldiBrowserWindow* window,
-    std::optional<Params> params);
+  static MenubarController* Create(VivaldiBrowserWindow* window,
+                                   std::optional<Params> params);
 
   ~MenubarController() override;
 
@@ -136,9 +134,7 @@ class MenubarController : public views::MenuDelegate,
   typedef std::map<int, std::string> IdToUrlMap;
   typedef std::map<int, const std::vector<Element>*> IdToElementVectorMap;
 
-  MenubarController(
-    VivaldiBrowserWindow* window,
-    std::optional<Params> params);
+  MenubarController(VivaldiBrowserWindow* window, std::optional<Params> params);
 
   Profile* GetProfile();
   bool IsDarkTextColor(views::MenuItemView* menu);
@@ -155,8 +151,6 @@ class MenubarController : public views::MenuDelegate,
   void OnFaviconAvailable(int id,
                           int menu_id,
                           const favicon_base::FaviconImageResult& image_result);
-
-  static std::unique_ptr<MenubarController> active_controller_;
 
   raw_ptr<views::MenuItemView> bookmark_menu_ = nullptr;
   std::unique_ptr<BookmarkMenuDelegate> bookmark_menu_delegate_;

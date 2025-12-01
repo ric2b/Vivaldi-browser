@@ -38,7 +38,6 @@ using testing::_;
 using testing::AnyNumber;
 using testing::AtMost;
 using testing::Exactly;
-using testing::Invoke;
 using testing::Mock;
 using testing::MockCallback;
 using testing::NotNull;
@@ -48,6 +47,14 @@ using testing::StrEq;
 using testing::WithArg;
 
 namespace dawn {
+
+namespace {
+// WireTest sets the wire proc table as the global proc table.
+// Tests that use multiple wires may inherit WireTest multiple times (see
+// WireConfusionDeathTest). Refcount how many WireTest instances are running
+// to make sure we don't unset the proc table until the test is done.
+uint32_t sWireProcTableRefCount = 0;
+}  // namespace
 
 WireTest::WireTest() {}
 
@@ -84,7 +91,10 @@ void WireTest::SetUp() {
     mWireClient.reset(new wire::WireClient(clientDesc));
     mS2cBuf->SetHandler(mWireClient.get());
 
-    dawnProcSetProcs(&wire::client::GetProcs());
+    if (sWireProcTableRefCount == 0) {
+        dawnProcSetProcs(&wire::client::GetProcs());
+    }
+    ++sWireProcTableRefCount;
 
     auto reservedInstance = GetWireClient()->ReserveInstance();
     instance = wgpu::Instance::Acquire(reservedInstance.instance);
@@ -103,23 +113,23 @@ void WireTest::SetUp() {
         EXPECT_CALL(api, AdapterHasFeature(apiAdapter, _)).WillRepeatedly(Return(false));
 
         EXPECT_CALL(api, AdapterGetInfo(apiAdapter, NotNull()))
-            .WillOnce(WithArg<1>(Invoke([&](WGPUAdapterInfo* info) {
+            .WillOnce(WithArg<1>([&](WGPUAdapterInfo* info) {
                 *info = {};
                 info->vendor = kEmptyOutputStringView;
                 info->architecture = kEmptyOutputStringView;
                 info->device = kEmptyOutputStringView;
                 info->description = kEmptyOutputStringView;
                 return WGPUStatus_Success;
-            })));
+            }));
 
         EXPECT_CALL(api, AdapterGetLimits(apiAdapter, NotNull()))
-            .WillOnce(WithArg<1>(Invoke([&](WGPULimits* limits) {
+            .WillOnce(WithArg<1>([&](WGPULimits* limits) {
                 *limits = {};
                 return WGPUStatus_Success;
-            })));
+            }));
 
         EXPECT_CALL(api, AdapterGetFeatures(apiAdapter, NotNull()))
-            .WillOnce(WithArg<1>(Invoke([&](WGPUSupportedFeatures* features) { *features = {}; })));
+            .WillOnce(WithArg<1>([&](WGPUSupportedFeatures* features) { *features = {}; }));
 
         api.CallInstanceRequestAdapterCallback(apiInstance, WGPURequestAdapterStatus_Success,
                                                apiAdapter, kEmptyOutputStringView);
@@ -160,14 +170,13 @@ void WireTest::SetUp() {
             object->mUncapturedErrorUserdata2 = desc->uncapturedErrorCallbackInfo.userdata2;
 
             EXPECT_CALL(api, DeviceGetLimits(apiDevice, NotNull()))
-                .WillOnce(WithArg<1>(Invoke([&](WGPULimits* limits) {
+                .WillOnce(WithArg<1>([&](WGPULimits* limits) {
                     *limits = {};
                     return WGPUStatus_Success;
-                })));
+                }));
 
             EXPECT_CALL(api, DeviceGetFeatures(apiDevice, NotNull()))
-                .WillOnce(
-                    WithArg<1>(Invoke([&](WGPUSupportedFeatures* features) { *features = {}; })));
+                .WillOnce(WithArg<1>([&](WGPUSupportedFeatures* features) { *features = {}; }));
 
             api.CallAdapterRequestDeviceCallback(apiAdapter, WGPURequestDeviceStatus_Success,
                                                  apiDevice, kEmptyOutputStringView);
@@ -193,7 +202,11 @@ void WireTest::TearDown() {
     adapter = nullptr;
     device = nullptr;
     queue = nullptr;
-    dawnProcSetProcs(nullptr);
+
+    --sWireProcTableRefCount;
+    if (sWireProcTableRefCount == 0) {
+        dawnProcSetProcs(nullptr);
+    }
 
     // Derived classes should call the base TearDown() first. The client must
     // be reset before any mocks are deleted.

@@ -19,8 +19,6 @@
 #include <string>
 #include <utility>
 
-#include "gmock/gmock.h"
-#include "protobuf-matchers/protocol-buffer-matchers.h"
 #include "gtest/gtest.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
@@ -78,7 +76,9 @@ class FakeSocket : public MediumSocket {
    * OutputStream} and {@link InputStream}.
    */
   explicit FakeSocket(Medium medium, OutputStream* virtualOutputStream)
-      : MediumSocket(medium), is_virtual_socket_(true) {
+      : MediumSocket(medium),
+        is_virtual_socket_(true),
+        virtual_output_stream_(virtualOutputStream) {
     pipe_1_ = CreatePipe();
     reader_1_ = std::move(pipe_1_.first);
     writer_1_ = std::move(pipe_1_.second);
@@ -88,8 +88,10 @@ class FakeSocket : public MediumSocket {
   }
 
   InputStream& GetInputStream() override { return *reader_1_; }
-  OutputStream& GetOutputStream() override { return *writer_2_; }
-  Exception Close() override {
+  OutputStream& GetOutputStream() override {
+    return IsVirtualSocket() ? *virtual_output_stream_
+                             : *writer_2_;
+  }  Exception Close() override {
     if (IsVirtualSocket()) {
       LOG(INFO) << "Multiplex: Closing virtual socket: " << this;
       CloseLocal();
@@ -150,16 +152,35 @@ class FakeSocket : public MediumSocket {
   Future<ByteArray> bytes_read_future_;
   absl::flat_hash_map<std::string, std::shared_ptr<MediumSocket>>*
       virtual_sockets_ptr_ = nullptr;
+  OutputStream* virtual_output_stream_ = nullptr;
 };
 
-TEST(MultiplexSocketTest, CreateSuccessAndReaderThreadStarted) {
+TEST(MultiplexSocketTest, CreateIncomingSocketSuccess) {
   auto fake_socket_ptr = std::make_shared<FakeSocket>(Medium::BLUETOOTH);
   MultiplexSocket::StopListeningForIncomingConnection(std::string(SERVICE_ID_1),
                                                       Medium::BLUETOOTH);
+  MultiplexSocket::StopListeningForIncomingConnection(std::string(SERVICE_ID_2),
+                                                      Medium::BLUETOOTH);
+  MultiplexSocket::ListenForIncomingConnection(
+      std::string(SERVICE_ID_1), Medium::BLUETOOTH,
+      [](const std::string& service_id, MediumSocket* socket) {
+        LOG(INFO) << "Incoming connection for service_id: " << service_id;
+      });
+  MultiplexSocket::ListenForIncomingConnection(
+      std::string(SERVICE_ID_2), Medium::BLUETOOTH,
+      [](const std::string& service_id, MediumSocket* socket) {
+        LOG(INFO) << "Incoming connection for service_id: " << service_id;
+      });
+
   MultiplexSocket* multiplex_socket_incoming =
       MultiplexSocket::CreateIncomingSocket(
           fake_socket_ptr, std::string(SERVICE_ID_1), /*first_frame_len*/ 0);
   ASSERT_NE(multiplex_socket_incoming, nullptr);
+  MultiplexSocket* multiplex_socket_incoming_2 =
+      MultiplexSocket::CreateIncomingSocket(
+          fake_socket_ptr, std::string(SERVICE_ID_2), /*first_frame_len*/ 0);
+  ASSERT_EQ(multiplex_socket_incoming_2, multiplex_socket_incoming);
+
   FakeSocket* virtual_socket =
       (FakeSocket*)multiplex_socket_incoming->GetVirtualSocket(
           std::string(SERVICE_ID_1));
@@ -170,8 +191,7 @@ TEST(MultiplexSocketTest, CreateSuccessAndReaderThreadStarted) {
 
   SingleThreadExecutor executor;
   FakeSocket* socket = fake_socket_ptr.get();
-  CountDownLatch latch(1);
-  executor.Execute([socket, &latch]() {
+  executor.Execute([socket]() {
     ByteArray connection_req_frame = parser::ForConnectionRequestConnections(
         {}, {
                 .local_endpoint_id = "endpoint1",
@@ -183,10 +203,8 @@ TEST(MultiplexSocketTest, CreateSuccessAndReaderThreadStarted) {
     writer->Write(connection_req_frame);
     writer->Flush();
     LOG(INFO) << "writer_1_ Write end";
-    latch.CountDown();
   });
 
-  latch.Await(absl::Milliseconds(100));
   ExceptionOr<ByteArray> result = virtual_socket->GetByteReadFuture().Get();
   if (!result.ok()) {
     ADD_FAILURE() << "Read error: " << result.GetException().value;
@@ -195,11 +213,13 @@ TEST(MultiplexSocketTest, CreateSuccessAndReaderThreadStarted) {
   LOG(INFO) << "Received " << data.size() << " bytes of data.";
   EXPECT_NE(data.size(), 0);
   absl::SleepFor(absl::Milliseconds(100));
-  socket->reader_1_->Close();
+
   EXPECT_EQ(multiplex_socket_incoming->GetVirtualSocketCount(), 1);
   virtual_socket->Close();
   EXPECT_EQ(multiplex_socket_incoming->GetVirtualSocketCount(), 0);
+  multiplex_socket_incoming->ShutdownAll();
 }
+
 TEST(MultiplexSocketTest, CreateFail_MediumNotSupport) {
   auto fake_socket_ptr = std::make_shared<FakeSocket>(Medium::WEB_RTC);
   MultiplexSocket::StopListeningForIncomingConnection(std::string(SERVICE_ID_1),
@@ -211,36 +231,59 @@ TEST(MultiplexSocketTest, CreateFail_MediumNotSupport) {
   ASSERT_EQ(multiplex_socket_incoming, nullptr);
 }
 
-TEST(MultiplexSocketTest,
-     EstablishVirtualSocket_ReturnNullWhenMultiplexSocketDisabled) {
-  auto fake_socket_ptr = std::make_shared<FakeSocket>(Medium::BLE);
+TEST(MultiplexSocketTest, CreateIncomingVirtualSocketSuccess) {
+  auto fake_socket_ptr = std::make_shared<FakeSocket>(Medium::WIFI_LAN);
 
   MultiplexSocket::StopListeningForIncomingConnection(std::string(SERVICE_ID_1),
-                                                      Medium::BLE);
+                                                      Medium::WIFI_LAN);
   MultiplexSocket::StopListeningForIncomingConnection(std::string(SERVICE_ID_2),
-                                                      Medium::BLE);
-  MultiplexSocket* multiplex_socket = MultiplexSocket::CreateOutgoingSocket(
-      fake_socket_ptr, std::string(SERVICE_ID_1));
-  ASSERT_NE(multiplex_socket, nullptr);
+                                                      Medium::WIFI_LAN);
+  MultiplexSocket::ListenForIncomingConnection(
+      std::string(SERVICE_ID_1), Medium::WIFI_LAN,
+      [](const std::string& service_id, MediumSocket* socket) {
+        LOG(INFO) << "Incoming connection for service_id: " << service_id;
+      });
+  MultiplexSocket::ListenForIncomingConnection(
+      std::string(SERVICE_ID_2), Medium::WIFI_LAN,
+      [](const std::string& service_id, MediumSocket* socket) {
+        LOG(INFO) << "Incoming connection for service_id: " << service_id;
+      });
 
-  MediumSocket* socket =
-      multiplex_socket->EstablishVirtualSocket(std::string(SERVICE_ID_2));
-  EXPECT_EQ(socket, nullptr);
-  absl::SleepFor(absl::Milliseconds(100));
-  FakeSocket* virtual_socket = (FakeSocket*)multiplex_socket->GetVirtualSocket(
-      std::string(SERVICE_ID_1));
+  MultiplexSocket* multiplex_socket_incoming =
+      MultiplexSocket::CreateIncomingSocket(
+          fake_socket_ptr, std::string(SERVICE_ID_1), /*first_frame_len*/ 0);
+  ASSERT_NE(multiplex_socket_incoming, nullptr);
+
+  FakeSocket* virtual_socket =
+      (FakeSocket*)multiplex_socket_incoming->GetVirtualSocket(
+          std::string(SERVICE_ID_1));
   if (virtual_socket == nullptr) {
     LOG(INFO) << "Virtual socket not found for " << SERVICE_ID_1;
     return;
   }
-  fake_socket_ptr->reader_1_->Close();
-  EXPECT_EQ(multiplex_socket->GetVirtualSocketCount(), 1);
+
+  SingleThreadExecutor executor;
+  FakeSocket* socket = fake_socket_ptr.get();
+  executor.Execute([socket]() {
+    ByteArray connection_req_frame = ForConnectionRequest(
+        std::string(SERVICE_ID_2), "J7frzSmHK-VBTHjCKpf4ew");
+    auto& writer = socket->writer_1_;
+    LOG(INFO) << "writer_1_ Write start";
+    writer->Write(Base64Utils::IntToBytes(connection_req_frame.size()));
+    writer->Write(connection_req_frame);
+    writer->Flush();
+    LOG(INFO) << "writer_1_ Write end";
+  });
+  absl::SleepFor(absl::Milliseconds(100));
+
+  EXPECT_EQ(multiplex_socket_incoming->GetVirtualSocketCount(), 2);
   virtual_socket->Close();
-  EXPECT_EQ(multiplex_socket->GetVirtualSocketCount(), 0);
+  EXPECT_EQ(multiplex_socket_incoming->GetVirtualSocketCount(), 1);
+  multiplex_socket_incoming->ShutdownAll();
 }
 
 TEST(MultiplexSocketTest,
-     EstablishVirtualSocket_TimeoutBecauseNoConnectionResponse) {
+     EstablishVirtualSocket_Timeout_BecauseNoConnectionResponse) {
   auto fake_socket_ptr = std::make_shared<FakeSocket>(Medium::WIFI_LAN);
   MultiplexSocket::StopListeningForIncomingConnection(std::string(SERVICE_ID_1),
                                                       Medium::WIFI_LAN);
@@ -249,6 +292,9 @@ TEST(MultiplexSocketTest,
   MultiplexSocket* multiplex_socket = MultiplexSocket::CreateOutgoingSocket(
       fake_socket_ptr, std::string(SERVICE_ID_1));
   ASSERT_NE(multiplex_socket, nullptr);
+  MultiplexSocket* multiplex_socket_2 = MultiplexSocket::CreateOutgoingSocket(
+      fake_socket_ptr, std::string(SERVICE_ID_2));
+  ASSERT_EQ(multiplex_socket_2, multiplex_socket);
   multiplex_socket->Enable();
   FakeSocket* virtual_socket = (FakeSocket*)multiplex_socket->GetVirtualSocket(
       std::string(SERVICE_ID_1));
@@ -257,35 +303,35 @@ TEST(MultiplexSocketTest,
     return;
   }
 
-  SingleThreadExecutor executor;
-  CountDownLatch latch(1);
-  executor.Execute([&multiplex_socket, &latch]() {
+  SingleThreadExecutor establish_socket_executor;
+  establish_socket_executor.Execute([&multiplex_socket]() {
     LOG(INFO) << "EstablishVirtualSocket";
     MediumSocket* socket =
         multiplex_socket->EstablishVirtualSocket(std::string(SERVICE_ID_2));
     LOG(INFO) << "EstablishVirtualSocket finished";
     EXPECT_EQ(socket, nullptr);
-    latch.CountDown();
   });
-  latch.Await(absl::Milliseconds(3000));
 
-  auto reader = fake_socket_ptr->reader_2_.get();
-  LOG(INFO) << "reader_2_ Read start";
-  ExceptionOr<std::int32_t> read_int = Base64Utils::ReadInt(reader);
-  if (!read_int.ok()) {
-    ADD_FAILURE() << "Failed to read. Exception:" << read_int.exception();
-  }
-  auto length = read_int.result();
-  LOG(INFO) << " length:" << length;
-  EXPECT_GT(length, 0);
-  EXPECT_EQ(multiplex_socket->GetVirtualSocket(std::string(SERVICE_ID_2)),
-            nullptr);
+  SingleThreadExecutor read_executor;
+  read_executor.Execute([&multiplex_socket, &fake_socket_ptr]() {
+    auto reader = fake_socket_ptr->reader_2_.get();
+    LOG(INFO) << "reader_2_ Read start";
+    ExceptionOr<std::int32_t> read_int = Base64Utils::ReadInt(reader);
+    if (!read_int.ok()) {
+      ADD_FAILURE() << "Failed to read. Exception:" << read_int.exception();
+    }
+    auto length = read_int.result();
+    LOG(INFO) << " length:" << length;
+    EXPECT_GT(length, 0);
+    EXPECT_EQ(multiplex_socket->GetVirtualSocket(std::string(SERVICE_ID_2)),
+              nullptr);
+  });
 
-  absl::SleepFor(absl::Milliseconds(100));
-  fake_socket_ptr->reader_1_->Close();
+  absl::SleepFor(absl::Milliseconds(300));
   EXPECT_EQ(multiplex_socket->GetVirtualSocketCount(), 1);
   virtual_socket->Close();
   EXPECT_EQ(multiplex_socket->GetVirtualSocketCount(), 0);
+  multiplex_socket->ShutdownAll();
 }
 
 TEST(MultiplexSocketTest, EstablishVirtualSocket_RemoteAccepted) {
@@ -298,9 +344,22 @@ TEST(MultiplexSocketTest, EstablishVirtualSocket_RemoteAccepted) {
   MultiplexSocket* multiplex_socket = MultiplexSocket::CreateOutgoingSocket(
       fake_socket_ptr, std::string(SERVICE_ID_1));
   ASSERT_NE(multiplex_socket, nullptr);
-  multiplex_socket->Enable();
+  MultiplexSocket* multiplex_socket_2 = MultiplexSocket::CreateOutgoingSocket(
+      fake_socket_ptr, std::string(SERVICE_ID_2));
+  ASSERT_EQ(multiplex_socket_2, multiplex_socket);
 
   SingleThreadExecutor executor;
+  CountDownLatch latch(1);
+  executor.Execute([&multiplex_socket, &latch]() {
+    LOG(INFO) << "EstablishVirtualSocket";
+    MediumSocket* socket =
+        multiplex_socket->EstablishVirtualSocket(std::string(SERVICE_ID_2));
+    EXPECT_EQ(socket, nullptr);
+    latch.CountDown();
+  });
+  latch.Await();
+
+  multiplex_socket->Enable();
   executor.Execute([&multiplex_socket]() {
     LOG(INFO) << "EstablishVirtualSocket";
     MediumSocket* socket =
@@ -363,10 +422,27 @@ TEST(MultiplexSocketTest, EstablishVirtualSocket_RemoteAccepted) {
   EXPECT_NE(multiplex_socket->GetVirtualSocket(std::string(SERVICE_ID_2)),
             nullptr);
 
-  fake_socket_ptr->reader_1_->Close();
   EXPECT_EQ(multiplex_socket->GetVirtualSocketCount(), 2);
+
+  LOG(INFO) << "Send Data frame on virtual socket for SERVICE_ID_2.";
+  ByteArray data_frame =
+      ForData(std::string(SERVICE_ID_2), service_id_hash_salt,
+              /*should_pass_salt=*/true, ByteArray("data"));
+  writer->Write(Base64Utils::IntToBytes(data_frame.size()));
+  writer->Write(data_frame);
+  writer->Flush();
+  absl::SleepFor(absl::Milliseconds(100));
+
+  LOG(INFO) << "Send disconnection frame on virtual socket for SERVICE_ID_2.";
+  ByteArray disconnect_frame =
+      ForDisconnection(std::string(SERVICE_ID_2), service_id_hash_salt);
+  writer->Write(Base64Utils::IntToBytes(disconnect_frame.size()));
+  writer->Write(disconnect_frame);
+  writer->Flush();
+  absl::SleepFor(absl::Milliseconds(100));
+  EXPECT_EQ(multiplex_socket->GetVirtualSocketCount(), 1);
+
   multiplex_socket->ShutdownAll();
-  EXPECT_EQ(multiplex_socket->GetVirtualSocketCount(), 0);
 }
 
 }  // namespace multiplex

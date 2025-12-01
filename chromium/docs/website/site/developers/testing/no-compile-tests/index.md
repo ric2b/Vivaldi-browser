@@ -70,4 +70,3 @@ how to use this system.
 
 The verification logic is built as part of clang. Full documentation is at
 [“Clang” CFE Internals Manual > Specifying Diagnostics](https://clang.llvm.org/docs/InternalsManual.html#specifying-diagnostics)
-

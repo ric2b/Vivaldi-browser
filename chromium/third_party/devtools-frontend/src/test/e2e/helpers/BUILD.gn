@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -17,7 +17,6 @@ node_ts_library("helpers") {
     "datagrid-helpers.ts",
     "elements-helpers.ts",
     "emulation-helpers.ts",
-    "event-listeners-helpers.ts",
     "extension-helpers.ts",
     "issues-helpers.ts",
     "layers-helpers.ts",

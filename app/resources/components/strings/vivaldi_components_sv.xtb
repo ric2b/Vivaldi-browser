@@ -3,16 +3,6 @@
 <translationbundle lang="sv">
 <translation id="3830627370375585318">Tillåt att Vivaldi får åtkomst till nätverket i inställningarna för din brandvägg eller
         ditt virusskydd.</translation>
-<translation id="4200102020577305737">Öppna
-          Vivaldi-menyn &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          LAN-inställningar
-          och avmarkera "Använd en proxyserver för nätverket".</translation>
 <translation id="4932161901409251843">Öppna
           Vivaldi-menyn &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@
         Om det inte hjälper rekommenderar vi att du markerar det
         här alternativet igen så att funktionaliteten förbättras.</translation>
 <translation id="7496505986576158197">Vivaldi möjliggörs av <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> öppen källkodsprojekt och annan <ph name="BEGIN_LINK_OSS" />öppen källkod<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Gå till
+          Vivaldi menyn &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Nätverk och internet &gt; Proxy
+          och avmarkera "Identifiera inställningar automatiskt".</translation>
 </translationbundle>

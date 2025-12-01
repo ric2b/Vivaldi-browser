@@ -1,14 +1,18 @@
 
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import type * as Types from './../types/types.js';
 import type * as ModelHandlers from './ModelHandlers.js';
 
+export type FinalizeOptions = Types.Configuration.ParseOptions&{
+  allTraceEvents: readonly Types.Events.Event[],
+};
+
 export interface Handler {
   reset(): void;
   handleEvent(data: object): void;
-  finalize(options?: Types.Configuration.ParseOptions): Promise<void>;
+  finalize(options?: FinalizeOptions): Promise<void>;
   data(): unknown;
   deps?(): HandlerName[];
   handleUserConfig?(config: Types.Configuration.Configuration): void;
@@ -54,14 +58,14 @@ export type HandlersWithMeta<T extends Record<string, Handler>> = {
   [K in keyof T]: T[K];
 };
 
-// Represents the final parsed data from all of the handlers. If you instantiate a
+// Represents the final data from all of the handlers. If you instantiate a
 // TraceProcessor with a subset of handlers, you should instead use
 // `EnabledHandlerDataWithMeta<>`.
-export type ParsedTrace = Readonly<EnabledHandlerDataWithMeta<typeof ModelHandlers>>;
+export type HandlerData = Readonly<EnabledHandlerDataWithMeta<typeof ModelHandlers>>;
 
 type DeepWriteable<T> = {
   -readonly[P in keyof T]: DeepWriteable<T[P]>
 };
-export type ParsedTraceMutable = DeepWriteable<ParsedTrace>;
+export type HandlerDataMutable = DeepWriteable<HandlerData>;
 
 export type Handlers = typeof ModelHandlers;

@@ -328,6 +328,21 @@ class FcTestFont:
     def fonts(self):
         return self._fonts
 
+class FcBrokenFont:
+    def __init__(self, srcdir='.'):
+        fctest = FcTest()
+        p = Path(srcdir)
+        candidates = [ "broken_cff_major.otf", "no_family_name.ttf", "no_family_name_serif.ttf" ]
+        self._fonts = []
+        for f in candidates:
+            font_path = p / f
+            if not font_path.exists():
+                raise RuntimeError(f"{f} font not available.")
+            self._fonts.append(str(font_path))
+
+    @property
+    def fonts(self):
+        return self._fonts
 
 class FcExternalTestFont:
 
@@ -349,3 +364,6 @@ if __name__ == '__main__':
     f.setup()
     f = FcExternalTestFont()
     print(f.fonts)
+    f = FcBrokenFont()
+    print(f.fonts)
+

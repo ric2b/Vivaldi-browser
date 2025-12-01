@@ -1,0 +1,25 @@
+name: arm
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  arm-none-eabi:
+    runs-on: ubuntu-22.04
+    container:
+      image: devkitpro/devkitarm:latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_TOOLCHAIN_FILE=${DEVKITPRO}/cmake/3DS.cmake
+      - name: Build
+        run: make CXX_FLAGS="-w -DHB_NO_MT"
+        working-directory: build

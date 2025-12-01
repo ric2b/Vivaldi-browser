@@ -90,8 +90,6 @@ std::unique_ptr<KeyedService>
 PrivacySandboxServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
 
-  if (vivaldi::IsVivaldiRunning())
-    return nullptr;
 
   Profile* profile = Profile::FromBrowserContext(context);
   return std::make_unique<PrivacySandboxServiceImpl>(

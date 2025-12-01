@@ -5,7 +5,7 @@
 namespace safe_browsing {
 void RendererURLLoaderThrottle::OnURLLoaderThrottleProviderDestroyed() {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  extension_web_request_reporter_ = nullptr;
+  extension_web_request_reporter_.reset();
 #endif
 }
 

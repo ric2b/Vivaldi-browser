@@ -6,8 +6,8 @@
 #include "src/wasm/fuzzing/random-module-generation.h"
 #include "src/wasm/wasm-module-builder.h"
 #include "src/zone/zone.h"
+#include "test/common/wasm/fuzzer-common.h"
 #include "test/fuzzer/fuzzer-support.h"
-#include "test/fuzzer/wasm/fuzzer-common.h"
 
 namespace v8::internal::wasm::fuzzing {
 
@@ -17,7 +17,7 @@ class WasmCompileSIMDFuzzer : public WasmExecutionFuzzer {
                       base::Vector<const uint8_t> data,
                       ZoneBuffer* buffer) override {
     base::Vector<const uint8_t> wire_bytes = GenerateRandomWasmModule(
-        zone, {{WasmModuleGenerationOption::kGenerateSIMD}}, data);
+        zone, WasmModuleGenerationOptions::Simd(), data);
     if (wire_bytes.empty()) return false;
     buffer->write(wire_bytes.data(), wire_bytes.size());
     return true;

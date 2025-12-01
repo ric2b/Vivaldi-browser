@@ -135,7 +135,8 @@ std::unique_ptr<EncodedLogo> ParseDoodleLogoResponse(const GURL& base_url,
   // Default parsing failure to be true.
   *parsing_failed = true;
 
-  auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(response_sp);
+  auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(
+      response_sp, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
   if (!parsed_json.has_value()) {
     LOG(WARNING) << parsed_json.error().message << " at "
                  << parsed_json.error().line << ":"
@@ -220,9 +221,7 @@ std::unique_ptr<EncodedLogo> ParseDoodleLogoResponse(const GURL& base_url,
     }
   }
 
-  const bool is_eligible_for_share_button =
-      (logo->metadata.type == LogoType::ANIMATED ||
-       logo->metadata.type == LogoType::SIMPLE);
+  const bool is_eligible_for_share_button = is_simple || is_animated;
 
   if (is_eligible_for_share_button) {
     const std::string* short_link_ptr = ddljson->FindString("short_link");

@@ -1,0 +1,19 @@
+{
+    "_type": "https://in-toto.io/Statement/v1",
+    "predicateType": "https://project-oak.github.io/oak/tr/endorsement/v1",
+    "subject": [
+        {
+            "name": "tcp_atomic_counter_enclave_app",
+            "digest": {
+                "sha256": "09ab204446287049060482d9f60fb684ff43a5b53acf317a32ac4ebfa6a5ef95"
+            }
+        }
+    ],
+    "predicate": {
+        "issuedOn": "2024-10-08T18:06:05.246000Z",
+        "validity": {
+            "notBefore": "2024-10-08T18:06:05.246000Z",
+            "notAfter": "2025-10-08T18:06:05.246000Z"
+        }
+    }
+}

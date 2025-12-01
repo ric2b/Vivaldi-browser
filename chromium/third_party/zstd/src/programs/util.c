@@ -928,6 +928,7 @@ static int UTIL_prepareFileList(const char* dirName,
     hFile=FindFirstFileA(path, &cFile);
     if (hFile == INVALID_HANDLE_VALUE) {
         UTIL_DISPLAYLEVEL(1, "Cannot open directory '%s'\n", dirName);
+        free(path);
         return 0;
     }
     free(path);

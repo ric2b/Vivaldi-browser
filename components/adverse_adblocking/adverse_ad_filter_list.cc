@@ -38,7 +38,7 @@
 // Maximum size of checksum downloaded.
 const int kMaxChecksumSize = 10 * 1024;
 
-base::FilePath::StringType kAdverseAdFilePath =
+base::FilePath::StringViewType kAdverseAdFilePath =
     FILE_PATH_LITERAL("AdverseAdSiteList.json");
 
 AdverseAdFilterListService::AdverseAdFilterListService(Profile* profile)

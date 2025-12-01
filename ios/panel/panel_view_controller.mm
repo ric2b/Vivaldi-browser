@@ -50,20 +50,25 @@ using l10n_util::GetNSString;
 }
 
 - (void)viewDidLayoutSubviews {
- [super viewDidLayoutSubviews];
- if ([self.pageController.viewControllers count] == 0) {
-     return;
- }
- UINavigationController* navController =
-     self.pageController.viewControllers[0];
- if (!navController) return;
- int position = navController.navigationBar.frame.size.height;
- // Adjust topAnchor if neccessary
- if (position != 0.0) {
-     positionConstraint.active = NO;
-     positionConstraint.constant = position;
-     positionConstraint.active = YES;
- }
+  [super viewDidLayoutSubviews];
+  if ([self.pageController.viewControllers count] == 0) {
+    return;
+  }
+  UINavigationController* navController =
+      self.pageController.viewControllers[0];
+  if (!navController)
+    return;
+  int position = navController.navigationBar.frame.size.height;
+
+  // Adjust topAnchor if neccessary
+  if (position != 0.0) {
+    if (@available(iOS 26, *)) {
+      position += panel_top_padding;
+    }
+    positionConstraint.active = NO;
+    positionConstraint.constant = position;
+    positionConstraint.active = YES;
+  }
 }
 
 - (void)viewDidLoad {
@@ -81,7 +86,7 @@ using l10n_util::GetNSString;
   UIView* topView = [[UIView alloc] init];
   pageSwitcherBackgroundView = topView;
   topView.frame = CGRectMake(0, 0, 0, panel_top_view_height);
-  topView.backgroundColor = [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+  topView.backgroundColor = [UIColor clearColor];
   topView.translatesAutoresizingMaskIntoConstraints = NO;
   [self.view addSubview:topView];
 

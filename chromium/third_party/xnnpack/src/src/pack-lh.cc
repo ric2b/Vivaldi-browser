@@ -23,22 +23,26 @@ namespace {
 
 size_t xnn_pack_lh_fx_qd8_packed_size(size_t m, size_t k, size_t mr_packed,
                                       size_t kr, size_t sr) {
-  // Each packed row starts with the `mr` quantization params, followed by the
-  // `mr` rows of quantized data.
+  // Each packed row starts with the `mr_packed` quantization params, followed
+  // by the `mr_packed` rows of quantized data.
   m = round_up(m, mr_packed);
   k = round_up(k, kr * sr);
-  return m * sizeof(struct xnn_qd8_quantization_params) +
-          m * k * sizeof(int8_t);
+  const size_t alignment = alignof(struct xnn_qd8_quantization_params);
+  return m * round_up(sizeof(struct xnn_qd8_quantization_params) +
+                          k * sizeof(int8_t),
+                      alignment);
 }
 
 size_t xnn_pack_lh_fx_qd8_packed_offset(size_t m, size_t k, size_t mr_packed,
                                         size_t kr, size_t sr) {
-  // Each packed row starts with the `mr` quantization params, followed by the
-  // `mr` rows of quantized data.
-  m = round_up(m, mr_packed);
+  // Each packed row starts with the `mr_packed` quantization params, followed
+  // by the `mr_packed` rows of quantized data.
+  assert(m % mr_packed == 0);
   k = round_up(k, kr * sr);
-  return m * sizeof(struct xnn_qd8_quantization_params) +
-          m * k * sizeof(int8_t);
+  const size_t alignment = alignof(struct xnn_qd8_quantization_params);
+  return m * round_up(sizeof(struct xnn_qd8_quantization_params) +
+                          k * sizeof(int8_t),
+                      alignment);
 }
 
 // Wraps a templated function that generates `xnn_qd8_quantization_params` from
@@ -67,6 +71,9 @@ static void pack_lh_fx_qd(size_t m, size_t k, size_t mr_packed, size_t kr,
     // Pointers to the input and output data for this set of `mr` rows.
     struct xnn_qd8_quantization_params* quantization_params =
         (struct xnn_qd8_quantization_params*)lhs_packed;
+    assert((uintptr_t)quantization_params %
+               alignof(struct xnn_qd8_quantization_params) ==
+           0);
     OutputT* packed_weights =
         (OutputT*)((uintptr_t)lhs_packed +
                    mr_packed * sizeof(struct xnn_qd8_quantization_params));

@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -17,12 +17,12 @@ const {render, html} = Lit;
 
 const UIStrings = {
   /**
-   *@description A context menu item in the Minimap Breadcrumb context menu.
+   * @description A context menu item in the Minimap Breadcrumb context menu.
    * This context menu option activates the breadcrumb that the context menu was opened on.
    */
   activateBreadcrumb: 'Activate breadcrumb',
   /**
-   *@description A context menu item in the Minimap Breadcrumb context menu.
+   * @description A context menu item in the Minimap Breadcrumb context menu.
    * This context menu option removed all the child breadcrumbs and activates
    * the breadcrumb that the context menu was opened on.
    */
@@ -118,15 +118,10 @@ export class BreadcrumbsUI extends HTMLElement {
           </div>
           ${breadcrumb.child !== null ?
             html`
-            <devtools-icon .data=${{
-              iconName: 'chevron-right',
-              color: 'var(--icon-default)',
-              width: '16px',
-              height: '16px',
-            }}>`
+            <devtools-icon name="chevron-right" class="medium">`
             : ''}
       `;
-              // clang-format on
+    // clang-format on
   }
 
   #render(): void {

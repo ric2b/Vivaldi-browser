@@ -55,7 +55,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tasks.tab_management.TabGridDialogMediator.DialogController;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
 import org.chromium.chrome.browser.tasks.tab_management.TabListEditorCoordinator.TabListEditorController;
-import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActionListener;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcherPaneMediator.TabIndexLookup;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -230,20 +229,16 @@ public class TabSwitcherPaneMediatorUnitTest {
         assertTrue(dialogVisibilitySupplier.get());
 
         when(mTabListEditorController.isVisible()).thenReturn(false);
-        observer.tabPendingClosure(null, TabClosingSource.UNKNOWN);
+        observer.onFinishingTabClosure(null, TabClosingSource.UNKNOWN);
         assertFalse(dialogVisibilitySupplier.get());
 
         when(mTabListEditorController.isVisible()).thenReturn(true);
-        observer.onFinishingTabClosure(null, TabClosingSource.UNKNOWN);
+        observer.tabRemoved(null);
         assertTrue(dialogVisibilitySupplier.get());
 
         when(mTabListEditorController.isVisible()).thenReturn(false);
-        observer.tabRemoved(null);
+        observer.onTabClosePending(null, false, TabClosingSource.UNKNOWN);
         assertFalse(dialogVisibilitySupplier.get());
-
-        when(mTabListEditorController.isVisible()).thenReturn(true);
-        observer.multipleTabsPendingClosure(null, false, TabClosingSource.UNKNOWN);
-        assertTrue(dialogVisibilitySupplier.get());
     }
 
     @Test

@@ -1485,7 +1485,8 @@ class LCPPAutoPreconnectTest : public InProcessBrowserTest,
   std::unique_ptr<TestPreconnectManagerObserver> preconnect_manager_observer_;
 };
 
-IN_PROC_BROWSER_TEST_P(LCPPAutoPreconnectTest, EnabledAllOrigins) {
+// https://crbug.com/440185653: Test is flaky.
+IN_PROC_BROWSER_TEST_P(LCPPAutoPreconnectTest, DISABLED_EnabledAllOrigins) {
   const bool kEnabledAllOrigins = GetParam();
 
   const GURL kUrl = embedded_test_server()->GetURL(
@@ -1706,8 +1707,15 @@ INSTANTIATE_TEST_SUITE_P(All,
 
 // Make sure that the right NetworkAnonymizationKey is used by the
 // LoadingPredictor, both when the predictor is populated and when it isn't.
+//
+// TODO(crbug.com/448862629): Disable flaky test on mac
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_LoadingPredictorNoRedirects DISABLED_LoadingPredictorNoRedirects
+#else
+#define MAYBE_LoadingPredictorNoRedirects LoadingPredictorNoRedirects
+#endif
 IN_PROC_BROWSER_TEST_P(LoadingPredictorNetworkIsolationKeyBrowserTest,
-                       LoadingPredictorNoRedirects) {
+                       MAYBE_LoadingPredictorNoRedirects) {
   // Cache resources needed by navigations, so the only sockets created
   // during navigations should be for the two preconnects.
   CacheFavIcon();
@@ -2551,9 +2559,9 @@ class LoadingPredictorPrefetchBrowserTest
  private:
   void MonitorRequest(const net::test_server::HttpRequest& request) {
     // Monitor only prefetches.
-    if (request.headers.find(blink::kPurposeHeaderName) ==
+    if (request.headers.find(blink::kSecPurposeHeaderName) ==
             request.headers.end() ||
-        (request.headers.at(blink::kPurposeHeaderName) !=
+        (request.headers.at(blink::kSecPurposeHeaderName) !=
          blink::kSecPurposePrefetchHeaderValue)) {
       return;
     }

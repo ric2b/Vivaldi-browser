@@ -10,6 +10,7 @@
 #include "base/files/file_util.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
+#include "chrome/browser/ash/crosapi/document_scan_ash_type_converters.h"
 #include "chrome/browser/ash/scanning/fake_lorgnette_scanner_manager.h"
 #include "chrome/browser/ash/scanning/lorgnette_scanner_manager_factory.h"
 #include "chrome/browser/extensions/api/document_scan/document_scan_api_handler.h"
@@ -111,8 +112,8 @@ class DocumentScanApiTest : public ExtensionApiTest,
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
 
-    DocumentScanAPIHandler::Get(browser()->profile())
-        ->SetDocumentScanForTesting(&document_scan_ash_);
+    DocumentScanAPIHandler::Get(profile())->SetDocumentScanForTesting(
+        &document_scan_ash_);
 
     document_scan()->SetSmallestMaxReadSize(kRealBackendMinimumReadSize);
   }
@@ -129,8 +130,7 @@ class DocumentScanApiTest : public ExtensionApiTest,
 
   void SetScannerInfoList(std::vector<lorgnette::ScannerInfo> scanners) {
     auto* scanner_manager = static_cast<ash::FakeLorgnetteScannerManager*>(
-        ash::LorgnetteScannerManagerFactory::GetForBrowserContext(
-            browser()->profile()));
+        ash::LorgnetteScannerManagerFactory::GetForBrowserContext(profile()));
 
     lorgnette::ListScannersResponse response;
     response.set_result(lorgnette::OPERATION_RESULT_SUCCESS);
@@ -141,7 +141,7 @@ class DocumentScanApiTest : public ExtensionApiTest,
       open_response->scanner_handle = scanner.name() + "-handle";
       open_response->options.emplace();
       open_response->options.value()["option1"] =
-          CreateTestScannerOption("option1", 5);
+          mojo::ConvertForTesting(CreateTestScannerOption("option1", 5));
       document_scan()->SetOpenScannerResponse(scanner.name(),
                                               std::move(open_response));
 

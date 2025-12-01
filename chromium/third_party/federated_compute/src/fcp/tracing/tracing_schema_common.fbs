@@ -1,0 +1,28 @@
+// Copyright 2019 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Common tracing schema definitions:
+
+// The 4 letter tag for this event or operation. All tracing events and
+// operations must have a tag and the tag must be unique.
+attribute "tag";
+// Log messages for this table should have severity ERROR. Default is INFO.
+attribute "error";
+// Log messages for this table should have severity WARNING. Default is INFO.
+attribute "warning";
+// This table represents a tracing span within which child spans or events can
+// be created. The default is that the table represents an event that can be
+// logged but which can not have child spans or events.
+attribute "span";
+

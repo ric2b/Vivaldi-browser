@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -207,7 +207,8 @@ describeWithEnvironment('TextEditor', () => {
 
       const text = 'hello';
       editor.dispatch({
-        effects: TextEditor.Config.setAiAutoCompleteSuggestion.of({text, from: 0}),
+        effects: TextEditor.Config.setAiAutoCompleteSuggestion.of(
+            {text, from: 0, sampleId: 1, startTime: 0, onImpression: () => {}, clearCachedRequest: () => {}}),
       });
 
       const actualSuggestion = editor.editor.state.field(TextEditor.Config.aiAutoCompleteSuggestionState);
@@ -221,7 +222,8 @@ describeWithEnvironment('TextEditor', () => {
       renderElementIntoDOM(editor);
 
       editor.dispatch({
-        effects: TextEditor.Config.setAiAutoCompleteSuggestion.of({text: 'hello', from: 0}),
+        effects: TextEditor.Config.setAiAutoCompleteSuggestion.of(
+            {text: 'hello', from: 0, sampleId: 1, startTime: 0, onImpression: () => {}, clearCachedRequest: () => {}}),
       });
       assert.isOk(editor.editor.state.field(TextEditor.Config.aiAutoCompleteSuggestionState));
 
@@ -238,7 +240,8 @@ describeWithEnvironment('TextEditor', () => {
       renderElementIntoDOM(editor);
 
       editor.dispatch({
-        effects: TextEditor.Config.setAiAutoCompleteSuggestion.of({text: 'hello', from: 0}),
+        effects: TextEditor.Config.setAiAutoCompleteSuggestion.of(
+            {text: 'hello', from: 0, sampleId: 1, startTime: 0, onImpression: () => {}, clearCachedRequest: () => {}}),
       });
       assert.isOk(editor.editor.state.field(TextEditor.Config.aiAutoCompleteSuggestionState));
 
@@ -252,11 +255,13 @@ describeWithEnvironment('TextEditor', () => {
       renderElementIntoDOM(editor);
       const text = 'hello';
       editor.dispatch({
-        effects: TextEditor.Config.setAiAutoCompleteSuggestion.of({text, from: 0}),
+        effects: TextEditor.Config.setAiAutoCompleteSuggestion.of(
+            {text, from: 0, sampleId: 1, startTime: 0, onImpression: () => {}, clearCachedRequest: () => {}}),
       });
 
-      const accepted = TextEditor.Config.acceptAiAutoCompleteSuggestion(editor.editor);
+      const {accepted, suggestion} = TextEditor.Config.acceptAiAutoCompleteSuggestion(editor.editor);
       assert.isTrue(accepted);
+      assert.strictEqual(suggestion?.text, text);
 
       assert.strictEqual(editor.state.doc.toString(), text);
       assert.isNull(editor.editor.state.field(TextEditor.Config.aiAutoCompleteSuggestionState));

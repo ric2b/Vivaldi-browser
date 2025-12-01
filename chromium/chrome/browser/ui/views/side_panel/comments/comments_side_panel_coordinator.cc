@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/side_panel/comments/comments_side_panel_coordinator.h"
 
 #include "base/functional/callback.h"
+#include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -23,6 +24,7 @@
 #include "components/collaboration/public/features.h"
 #include "components/saved_tab_groups/public/saved_tab_group.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
+#include "components/saved_tab_groups/public/types.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -38,12 +40,18 @@ CommentsSidePanelCoordinator::CommentsSidePanelCoordinator(
     BrowserWindowInterface* browser)
     : browser_(browser),
       tab_group_sync_service_(
-          tab_groups::SavedTabGroupUtils::GetServiceForProfile(
+          tab_groups::TabGroupSyncServiceFactory::GetForProfile(
               browser_->GetProfile())) {
   browser_->GetTabStripModel()->AddObserver(this);
+  tab_groups::TabGroupSyncServiceFactory::GetForProfile(browser_->GetProfile())
+      ->AddObserver(this);
 }
 
-CommentsSidePanelCoordinator::~CommentsSidePanelCoordinator() = default;
+CommentsSidePanelCoordinator::~CommentsSidePanelCoordinator() {
+  browser_->GetTabStripModel()->RemoveObserver(this);
+  tab_groups::TabGroupSyncServiceFactory::GetForProfile(browser_->GetProfile())
+      ->RemoveObserver(this);
+}
 
 void CommentsSidePanelCoordinator::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
@@ -71,8 +79,20 @@ void CommentsSidePanelCoordinator::TabGroupedStateChanged(
   UpdateVisuals(tab);
 }
 
-// TODO(crbug.com/433773768): This should also be called when the current tab
-// group becomes shared/unshared.
+void CommentsSidePanelCoordinator::OnTabGroupUpdated(
+    const tab_groups::SavedTabGroup& group,
+    tab_groups::TriggerSource source) {
+  // Only handle updates to the active group.
+  std::optional<tab_groups::TabGroupId> active_group_id =
+      browser_->GetTabStripModel()->GetActiveTabGroupId();
+  if (!active_group_id.has_value() ||
+      active_group_id.value() != group.local_group_id()) {
+    return;
+  }
+
+  UpdateVisuals(browser_->GetActiveTabInterface());
+}
+
 void CommentsSidePanelCoordinator::UpdateVisuals(
     const tabs::TabInterface* tab) {
   // Only update the title if change contains a new tab.

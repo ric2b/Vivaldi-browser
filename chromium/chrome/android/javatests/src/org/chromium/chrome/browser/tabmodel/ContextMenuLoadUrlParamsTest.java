@@ -34,6 +34,7 @@ import org.chromium.chrome.browser.app.tabwindow.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.tab.Tab;
@@ -64,6 +65,13 @@ public class ContextMenuLoadUrlParamsTest {
 
     private static final String HTML_PATH =
             "/chrome/test/data/android/contextmenu/context_menu_test.html";
+    // LINT.IfChange(PageScaleFactor)
+    // The initial-scale defined in the test html file meta. The setUp function
+    // will check that the page scale factor has been updated to this value.
+    // This ensures the long press/ right click is simulated at the correct
+    // coordinates of the specified element. See crbug.com/432281754.
+    private static final float PAGE_SCALE_FACTOR = 1.0f;
+    // LINT.ThenChange(//chrome/test/data/android/contextmenu/context_menu_test.html:PageScaleFactor
     private static final Pattern SCHEME_SEPARATOR_RE = Pattern.compile("://");
 
     // Load parameters of the last call to openNewTab().
@@ -94,6 +102,7 @@ public class ContextMenuLoadUrlParamsTest {
                     profileProviderSupplier,
                     tabCreatorManager,
                     () -> NextTabPolicy.HIERARCHICAL,
+                    /* multiInstanceManager= */ null,
                     AsyncTabParamsManagerSingleton.getInstance(),
                     false,
                     ActivityType.TABBED,
@@ -114,7 +123,8 @@ public class ContextMenuLoadUrlParamsTest {
                             ModalDialogManager modalDialogManager,
                             OneshotSupplier<ProfileProvider> profileProviderSupplier,
                             TabCreatorManager tabCreatorManager,
-                            NextTabPolicySupplier nextTabPolicySupplier) {
+                            NextTabPolicySupplier nextTabPolicySupplier,
+                            MultiInstanceManager multiInstanceManager) {
                         return new RecordingTabModelSelector(
                                 context,
                                 modalDialogManager,
@@ -211,8 +221,8 @@ public class ContextMenuLoadUrlParamsTest {
     private void triggerContextMenuLoad(String url, String openerDomId, int menuItemId)
             throws TimeoutException {
         mActivityTestRule.loadUrl(url);
-        mActivityTestRule.assertWaitForPageScaleFactorMatch(0.5f);
-        Tab tab = mActivityTestRule.getActivity().getActivityTab();
+        mActivityTestRule.assertWaitForPageScaleFactorMatch(PAGE_SCALE_FACTOR);
+        Tab tab = mActivityTestRule.getActivityTab();
         ContextMenuUtils.selectContextMenuItem(
                 InstrumentationRegistry.getInstrumentation(),
                 mActivityTestRule.getActivity(),

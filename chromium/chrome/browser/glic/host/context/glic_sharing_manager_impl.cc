@@ -9,7 +9,10 @@
 #include "chrome/browser/glic/host/context/glic_page_context_fetcher.h"
 #include "chrome/browser/glic/host/context/glic_sharing_utils.h"
 #include "chrome/browser/glic/host/context/glic_tab_data.h"
+#include "chrome/browser/glic/host/glic.mojom-forward.h"
+#include "chrome/browser/glic/host/glic.mojom.h"
 #include "chrome/browser/glic/host/glic_features.mojom.h"
+#include "chrome/browser/page_content_annotations/multi_source_page_context_fetcher.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/prefs/pref_service.h"
@@ -17,14 +20,59 @@
 
 namespace glic {
 
+namespace {
+GlicGetContextResult TransformFetcherResult(
+    base::expected<glic::mojom::GetContextResultPtr,
+                   page_content_annotations::FetchPageContextErrorDetails>
+        result) {
+  if (result.has_value()) {
+    return base::ok(std::move(result.value()));
+  }
+
+  GlicGetContextFromFocusedTabError glic_error_code;
+  switch (result.error().error_code) {
+    case page_content_annotations::FetchPageContextError::kUnknown:
+      glic_error_code = GlicGetContextFromFocusedTabError::kUnknown;
+      break;
+    case page_content_annotations::FetchPageContextError::kWebContentsChanged:
+      glic_error_code = GlicGetContextFromFocusedTabError::kWebContentsChanged;
+      break;
+    case page_content_annotations::FetchPageContextError::
+        kPageContextNotEligible:
+      glic_error_code =
+          GlicGetContextFromFocusedTabError::kPageContextNotEligible;
+      break;
+  }
+  return base::unexpected(
+      GlicGetContextError{glic_error_code, result.error().message});
+}
+}  // namespace
+
 GlicSharingManagerImpl::GlicSharingManagerImpl(
     Profile* profile,
     GlicWindowController* window_controller,
-    Host* host,
     GlicMetrics* metrics)
-    : focused_browser_manager_(window_controller),
-      focused_tab_manager_(&focused_browser_manager_),
-      pinned_tab_manager_(profile, window_controller),
+    : focused_browser_manager_(
+          std::make_unique<GlicFocusedBrowserManager>(window_controller)),
+      focused_tab_manager_(std::make_unique<GlicFocusedTabManager>(
+          static_cast<GlicFocusedBrowserManager*>(
+              focused_browser_manager_.get()))),
+      pinned_tab_manager_(
+          std::make_unique<GlicPinnedTabManager>(profile,
+                                                 window_controller,
+                                                 metrics)),
+      profile_(profile),
+      metrics_(metrics) {}
+
+GlicSharingManagerImpl::GlicSharingManagerImpl(
+    std::unique_ptr<GlicFocusedTabManagerInterface> focused_tab_manager,
+    std::unique_ptr<GlicFocusedBrowserManagerInterface> focused_browser_manager,
+    std::unique_ptr<GlicPinnedTabManager> pinned_tab_manager,
+    Profile* profile,
+    GlicMetrics* metrics)
+    : focused_browser_manager_(std::move(focused_browser_manager)),
+      focused_tab_manager_(std::move(focused_tab_manager)),
+      pinned_tab_manager_(std::move(pinned_tab_manager)),
       profile_(profile),
       metrics_(metrics) {}
 
@@ -33,46 +81,47 @@ GlicSharingManagerImpl::~GlicSharingManagerImpl() = default;
 base::CallbackListSubscription
 GlicSharingManagerImpl::AddFocusedTabChangedCallback(
     FocusedTabChangedCallback callback) {
-  return focused_tab_manager_.AddFocusedTabChangedCallback(std::move(callback));
+  return focused_tab_manager_->AddFocusedTabChangedCallback(
+      std::move(callback));
 }
 
 FocusedTabData GlicSharingManagerImpl::GetFocusedTabData() {
-  return focused_tab_manager_.GetFocusedTabData();
+  return focused_tab_manager_->GetFocusedTabData();
 }
 
 base::CallbackListSubscription
 GlicSharingManagerImpl::AddTabPinningStatusChangedCallback(
     TabPinningStatusChangedCallback callback) {
-  return pinned_tab_manager_.AddTabPinningStatusChangedCallback(
+  return pinned_tab_manager_->AddTabPinningStatusChangedCallback(
       std::move(callback));
 }
 
 bool GlicSharingManagerImpl::PinTabs(
     base::span<const tabs::TabHandle> tab_handles) {
   CHECK(base::FeatureList::IsEnabled(mojom::features::kGlicMultiTab));
-  return pinned_tab_manager_.PinTabs(tab_handles);
+  return pinned_tab_manager_->PinTabs(tab_handles);
 }
 
 bool GlicSharingManagerImpl::UnpinTabs(
     base::span<const tabs::TabHandle> tab_handles) {
   CHECK(base::FeatureList::IsEnabled(mojom::features::kGlicMultiTab));
-  return pinned_tab_manager_.UnpinTabs(tab_handles);
+  return pinned_tab_manager_->UnpinTabs(tab_handles);
 }
 
 void GlicSharingManagerImpl::UnpinAllTabs() {
-  pinned_tab_manager_.UnpinAllTabs();
+  pinned_tab_manager_->UnpinAllTabs();
 }
 
 int32_t GlicSharingManagerImpl::GetMaxPinnedTabs() const {
-  return pinned_tab_manager_.GetMaxPinnedTabs();
+  return pinned_tab_manager_->GetMaxPinnedTabs();
 }
 
 int32_t GlicSharingManagerImpl::GetNumPinnedTabs() const {
-  return pinned_tab_manager_.GetNumPinnedTabs();
+  return pinned_tab_manager_->GetNumPinnedTabs();
 }
 
 bool GlicSharingManagerImpl::IsTabPinned(tabs::TabHandle tab_handle) const {
-  return pinned_tab_manager_.IsTabPinned(tab_handle);
+  return pinned_tab_manager_->IsTabPinned(tab_handle);
 }
 
 namespace {
@@ -113,66 +162,74 @@ GlicSharingManagerImpl::AddFocusedBrowserChangedCallback(
     FocusedBrowserChangedCallback callback) {
   // This callback itself keeps the `FocusedBrowserChangedWatcher` alive
   // while the subscription exists.
-  return focused_browser_manager_.AddFocusedBrowserChangedCallback(
+  return focused_browser_manager_->AddFocusedBrowserChangedCallback(
       base::BindRepeating(
           &FocusedBrowserChangedWatcher::OnFocusedBrowserChanged,
           std::make_unique<FocusedBrowserChangedWatcher>(
-              focused_browser_manager_.GetFocusedBrowser(),
+              focused_browser_manager_->GetFocusedBrowser(),
               std::move(callback))));
 }
 
 BrowserWindowInterface* GlicSharingManagerImpl::GetFocusedBrowser() const {
-  return focused_browser_manager_.GetFocusedBrowser();
+  return focused_browser_manager_->GetFocusedBrowser();
+}
+
+GlicFocusedBrowserManagerInterface&
+GlicSharingManagerImpl::focused_browser_manager() {
+  return *focused_browser_manager_;
 }
 
 base::CallbackListSubscription
 GlicSharingManagerImpl::AddFocusedTabDataChangedCallback(
     FocusedTabDataChangedCallback callback) {
-  return focused_tab_manager_.AddFocusedTabDataChangedCallback(
+  return focused_tab_manager_->AddFocusedTabDataChangedCallback(
       std::move(callback));
 }
 
 base::CallbackListSubscription
 GlicSharingManagerImpl::AddPinnedTabsChangedCallback(
     PinnedTabsChangedCallback callback) {
-  return pinned_tab_manager_.AddPinnedTabsChangedCallback(std::move(callback));
+  return pinned_tab_manager_->AddPinnedTabsChangedCallback(std::move(callback));
 }
 
 base::CallbackListSubscription
 GlicSharingManagerImpl::AddPinnedTabDataChangedCallback(
     PinnedTabDataChangedCallback callback) {
-  return pinned_tab_manager_.AddPinnedTabDataChangedCallback(
+  return pinned_tab_manager_->AddPinnedTabDataChangedCallback(
       std::move(callback));
 }
 
 int32_t GlicSharingManagerImpl::SetMaxPinnedTabs(uint32_t max_pinned_tabs) {
-  return pinned_tab_manager_.SetMaxPinnedTabs(max_pinned_tabs);
+  return pinned_tab_manager_->SetMaxPinnedTabs(max_pinned_tabs);
 }
 
 void GlicSharingManagerImpl::GetContextFromTab(
     tabs::TabHandle tab_handle,
     const mojom::GetTabContextOptions& options,
-    base::OnceCallback<void(mojom::GetContextResultPtr)> callback) {
+    base::OnceCallback<void(GlicGetContextResult)> callback) {
   auto* tab = tab_handle.Get();
   if (!tab) {
-    std::move(callback).Run(
-        mojom::GetContextResult::NewErrorReason("tab not found"));
+    std::move(callback).Run(base::unexpected(GlicGetContextError{
+        GlicGetContextFromFocusedTabError::kTabNotFound, "tab not found"}));
     return;
   }
 
-  const bool is_pinned = pinned_tab_manager_.IsTabPinned(tab_handle);
+  const bool is_pinned = pinned_tab_manager_->IsTabPinned(tab_handle);
   if (!is_pinned &&
       !profile_->GetPrefs()->GetBoolean(prefs::kGlicTabContextEnabled)) {
-    std::move(callback).Run(mojom::GetContextResult::NewErrorReason(
-        "permission denied: context permission not enabled"));
+    std::move(callback).Run(base::unexpected(GlicGetContextError{
+        GlicGetContextFromFocusedTabError::
+            kPermissionDeniedContextPermissionNotEnabled,
+        "permission denied: context permission not enabled"}));
     return;
   }
 
-  const bool is_focused = focused_tab_manager_.IsTabFocused(tab_handle);
+  const bool is_focused = focused_tab_manager_->IsTabFocused(tab_handle);
   const bool is_shared = is_focused || is_pinned;
   if (!is_shared || !IsTabValidForSharing(tab->GetContents())) {
-    std::move(callback).Run(
-        mojom::GetContextResult::NewErrorReason("permission denied"));
+    std::move(callback).Run(base::unexpected(GlicGetContextError{
+        GlicGetContextFromFocusedTabError::kPermissionDenied,
+        "permission denied"}));
     return;
   }
   if (is_focused) {
@@ -180,33 +237,47 @@ void GlicSharingManagerImpl::GetContextFromTab(
   } else {
     // TODO(b/422240100): Handle metrics for pinned tabs.
   }
-  FetchPageContext(tab, options, std::move(callback));
+
+  GetContextFromTabImpl(tab, options, std::move(callback));
 }
 
 void GlicSharingManagerImpl::GetContextForActorFromTab(
     tabs::TabHandle tab_handle,
     const mojom::GetTabContextOptions& options,
-    base::OnceCallback<void(mojom::GetContextResultPtr)> callback) {
+    base::OnceCallback<void(GlicGetContextResult)> callback) {
   auto* tab = tab_handle.Get();
   if (!tab) {
-    std::move(callback).Run(
-        mojom::GetContextResult::NewErrorReason(std::string("tab not found")));
+    std::move(callback).Run(base::unexpected(GlicGetContextError{
+        GlicGetContextFromFocusedTabError::kTabNotFound, "tab not found"}));
     return;
   }
 
-  FetchPageContext(tab, options, std::move(callback));
+  GetContextFromTabImpl(tab, options, std::move(callback));
 }
 
 std::vector<content::WebContents*> GlicSharingManagerImpl::GetPinnedTabs()
     const {
-  return pinned_tab_manager_.GetPinnedTabs();
+  return pinned_tab_manager_->GetPinnedTabs();
 }
 
 void GlicSharingManagerImpl::SubscribeToPinCandidates(
     mojom::GetPinCandidatesOptionsPtr options,
     mojo::PendingRemote<mojom::PinCandidatesObserver> observer) {
-  pinned_tab_manager_.SubscribeToPinCandidates(std::move(options),
-                                               std::move(observer));
+  pinned_tab_manager_->SubscribeToPinCandidates(std::move(options),
+                                                std::move(observer));
+}
+
+base::WeakPtr<GlicSharingManager> GlicSharingManagerImpl::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
+void GlicSharingManagerImpl::GetContextFromTabImpl(
+    tabs::TabInterface* tab,
+    const mojom::GetTabContextOptions& options,
+    base::OnceCallback<void(GlicGetContextResult)> callback) {
+  FetchPageContext(
+      tab, options,
+      base::BindOnce(&TransformFetcherResult).Then(std::move(callback)));
 }
 
 }  // namespace glic

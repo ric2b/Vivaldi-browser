@@ -47,6 +47,4 @@ extern NSString* vOverflowHelp;
 extern NSString* vOverflowShareFeedback;
 extern NSString* vOverflowAbout;
 
-extern NSString* vOverflowReaderMode;
-
 #endif  // IOS_UI_VIVALDI_OVERFLOW_MENU_VIVALDI_OVERFLOW_MENU_CONSTANTS_H_

@@ -3698,7 +3698,7 @@ class StringTest(unittest.TestCase):
     VALID_SHA1 = ('0000000000000000000000000000000000000000', )
     DO_NOT_UPLOAD_PNG_MESSAGE = ('Do not include actual screenshots in the '
                                  'changelist. Run '
-                                 'tools/translate/upload_screenshots.py to '
+                                 'tools/translation/upload_screenshots.py to '
                                  'upload them instead:')
     ADD_SIGNATURES_MESSAGE = ('You are adding UI strings.\n'
                               'To ensure the best translations, take '
@@ -3714,7 +3714,7 @@ class StringTest(unittest.TestCase):
     SHA1_FORMAT_MESSAGE = (
         'The following files do not seem to contain valid sha1 '
         'hashes. Make sure they contain hashes created by '
-        'tools/translate/upload_screenshots.py:')
+        'tools/translation/upload_screenshots.py:')
 
     def makeInputApi(self, files):
         input_api = MockInputApi()
@@ -5873,6 +5873,79 @@ class CheckAnonymousNamespaceTest(unittest.TestCase):
             'chrome/test.cpp' in results[0].message),
         self.assertFalse(
             'chrome/test.txt' in results[0].message),
+
+
+class CheckBaseFeatureMacroTest(unittest.TestCase):
+
+    def testBaseFeatureMacro(self):
+        mock_input_api = MockInputApi()
+        mock_input_api.files = [
+            # #################################################################
+            # Valid cases (no warnings)
+            # #################################################################
+            MockAffectedFile(
+                'valid1.cc',
+                ['BASE_FEATURE(kMyToggle, base::FEATURE_ENABLED_BY_DEFAULT);'
+                 ]),
+            MockAffectedFile('valid_multiline.cc', [
+                'BASE_FEATURE(kMyMultilineToggle,',
+                '    base::FEATURE_ENABLED_BY_DEFAULT);'
+            ]),
+            MockAffectedFile(
+                'valid_complex_arg.cc',
+                ['BASE_FEATURE(kMyToggle, GetDefaultState(vector<int>(1)));']),
+            MockAffectedFile('valid_comment.cc', [
+                '// BASE_FEATURE(invalidToggle, '
+                'base::FEATURE_ENABLED_BY_DEFAULT);'
+            ]),
+            MockAffectedFile('valid_3param_comment.cc', [
+                '// BASE_FEATURE(kMyToggle, "MyToggle", '
+                'base::FEATURE_ENABLED_BY_DEFAULT);'
+            ]),
+
+            # #################################################################
+            # Cases that should produce warnings.
+            # #################################################################
+            MockAffectedFile('warning_3param.cc', [
+                'BASE_FEATURE(kMyToggle, "MyToggle", '
+                'base::FEATURE_ENABLED_BY_DEFAULT);'
+            ]),
+            MockAffectedFile(
+                'warning_no_k.cc',
+                ['BASE_FEATURE(MyToggle, base::FEATURE_ENABLED_BY_DEFAULT);']),
+            MockAffectedFile(
+                'warning_lowercase_after_k.cc',
+                ['BASE_FEATURE(kmyToggle, base::FEATURE_ENABLED_BY_DEFAULT);'
+                 ]),
+            MockAffectedFile('warning_3param_multiline.cc', [
+                'BASE_FEATURE(kMyToggle,',
+                '             "MyToggle",',
+                '             base::FEATURE_ENABLED_BY_DEFAULT);'
+            ]),
+        ]
+        results = PRESUBMIT.CheckBaseFeatureMacro(mock_input_api,
+                                                  MockOutputApi())
+
+        self.assertEqual(1, len(results))
+        self.assertEqual('warning', results[0].type)
+        self.assertEqual('BASE_FEATURE() macro naming:', results[0].message)
+        warnings = results[0].items
+
+        expected_warnings = [
+            '    warning_3param.cc:1: The 3-argument BASE_FEATURE macro with a '
+            'string literal is discouraged. Use the 2-argument version '
+            'instead.',
+            '    warning_3param_multiline.cc:1: The 3-argument BASE_FEATURE '
+            'macro with a string literal is discouraged. Use the 2-argument '
+            'version instead.',
+            '    warning_no_k.cc:1: Feature identifier "MyToggle" should start '
+            'with "k" followed by an uppercase letter.',
+            '    warning_lowercase_after_k.cc:1: Feature identifier "kmyToggle"'
+            ' should start with "k" followed by an uppercase letter.',
+        ]
+
+        self.assertEqual(len(expected_warnings), len(warnings))
+        self.assertEqual(sorted(expected_warnings), sorted(warnings))
 
 
 if __name__ == '__main__':

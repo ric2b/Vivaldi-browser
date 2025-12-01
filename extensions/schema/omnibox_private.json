@@ -113,7 +113,7 @@
           },
           "providerName": {
             "$ref": "OmniboxProviderName",
-              "description": "The provider name."
+            "description": "The provider name."
           },
           "transition": {
             "$ref": "historyPrivate.TransitionType",
@@ -138,6 +138,10 @@
           "type": {
             "type": "integer",
             "description": "Same as AutocompleteMatch::Type. Used by AddOrUpdateShortcut."
+          },
+          "folderId": {
+            "type": "integer",
+            "description": "Folder id. Set for bookmark folders that match a nickname, otherwise 0."
           },
           "faviconUrl": {
             "type": "string",

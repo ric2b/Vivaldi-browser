@@ -744,6 +744,12 @@ bool BuildMockOfflineMetaInstaller(const std::string& appid,
   return RunVPythonCommand(create_meta_installer) == 0;
 }
 
+void CleanUpdateClientTempDirectories(UpdaterScope scope) {
+  EnumerateUpdateClientTempDirectories(scope, [](const base::FilePath& dir) {
+    EXPECT_TRUE(base::DeletePathRecursively(dir));
+  });
+}
+
 }  // namespace
 
 base::FilePath GetSetupExecutablePath() {
@@ -758,6 +764,7 @@ void Clean(UpdaterScope scope) {
   VLOG(0) << __func__;
 
   CleanProcesses();
+  CleanUpdateClientTempDirectories(scope);
 
   const HKEY root = UpdaterScopeToHKeyRoot(scope);
   for (const wchar_t* key : {CLIENT_STATE_KEY, CLIENTS_KEY, UPDATER_KEY}) {
@@ -860,8 +867,16 @@ void ExpectInstalled(UpdaterScope scope) {
                     CheckInstallationVersions::kCheckSxSOnly);
 }
 
+void ExpectCleanUpdateClientTempDirectories(UpdaterScope scope) {
+  ASSERT_NO_FATAL_FAILURE(EnumerateUpdateClientTempDirectories(
+      scope, [](const base::FilePath& dir) {
+        ADD_FAILURE() << "Directory not cleaned up: " << dir;
+      }));
+}
+
 void ExpectClean(UpdaterScope scope) {
   ExpectCleanProcesses();
+
   CheckInstallation(scope, CheckInstallationStatus::kCheckIsNotInstalled,
                     CheckInstallationVersions::kCheckActiveAndSxS);
 
@@ -2081,7 +2096,7 @@ void InstallApp(UpdaterScope scope,
             ERROR_SUCCESS);
   RegistrationRequest registration;
   registration.app_id = app_id;
-  registration.version = version;
+  registration.version = version.GetString();
   RegisterApp(scope, registration);
 }
 
@@ -2236,6 +2251,36 @@ void ClearAppAllowsUsageStats(UpdaterScope scope,
                               const std::string& identifier) {
   ASSERT_TRUE(DeleteRegKey(UpdaterScopeToHKeyRoot(scope),
                            GetAppClientStateKey(identifier).c_str()));
+}
+
+void InstallScheduledTask(const std::string& task_name,
+                          bool use_task_subfolders) {
+  scoped_refptr<TaskScheduler> task_scheduler =
+      TaskScheduler::CreateInstance(UpdaterScope::kUser, use_task_subfolders);
+  ASSERT_TRUE(task_scheduler);
+
+  EXPECT_TRUE(task_scheduler->RegisterTask(
+      base::UTF8ToWide(task_name), base::UTF8ToWide(task_name),
+      base::CommandLine::FromString(L"C:\\temp\\temp.exe"),
+      TaskScheduler::TriggerType::TRIGGER_TYPE_HOURLY, false));
+}
+
+void IsScheduledTaskRegistered(const std::string& task_name,
+                               bool use_task_subfolders) {
+  scoped_refptr<TaskScheduler> task_scheduler =
+      TaskScheduler::CreateInstance(UpdaterScope::kUser, use_task_subfolders);
+  ASSERT_TRUE(task_scheduler);
+
+  EXPECT_TRUE(task_scheduler->IsTaskRegistered(base::UTF8ToWide(task_name)));
+}
+
+void DeleteScheduledTask(const std::string& task_name,
+                         bool use_task_subfolders) {
+  scoped_refptr<TaskScheduler> task_scheduler =
+      TaskScheduler::CreateInstance(UpdaterScope::kUser, use_task_subfolders);
+  ASSERT_TRUE(task_scheduler);
+
+  EXPECT_TRUE(task_scheduler->DeleteTask(base::UTF8ToWide(task_name)));
 }
 
 }  // namespace updater::test

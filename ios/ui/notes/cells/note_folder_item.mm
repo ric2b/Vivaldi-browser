@@ -12,10 +12,6 @@
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 // Width by which to indent folder cell's content. This is multiplied by the
 // |indentationLevel| of the cell.
@@ -46,7 +42,7 @@ const CGFloat textStackSpacing = 4;
   return self;
 }
 
-- (void)configureCell:(TableViewCell*)cell
+- (void)configureCell:(LegacyTableViewCell*)cell
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:cell withStyler:styler];
   TableViewNoteFolderCell* folderCell =

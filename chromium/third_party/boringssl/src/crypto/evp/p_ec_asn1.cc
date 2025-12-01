@@ -21,9 +21,18 @@
 #include <openssl/ecdsa.h>
 #include <openssl/err.h>
 #include <openssl/nid.h>
+#include <openssl/span.h>
 
+#include "../ec/internal.h"
 #include "internal.h"
 
+
+namespace {
+
+struct EVP_PKEY_ALG_EC : public EVP_PKEY_ALG {
+  // ec_group returns the |EC_GROUP| for this algorithm.
+  const EC_GROUP *(*ec_group)();
+};
 
 static int eckey_pub_encode(CBB *out, const EVP_PKEY *key) {
   const EC_KEY *ec_key = reinterpret_cast<const EC_KEY *>(key->pkey);
@@ -49,25 +58,35 @@ static int eckey_pub_encode(CBB *out, const EVP_PKEY *key) {
   return 1;
 }
 
-static int eckey_pub_decode(EVP_PKEY *out, CBS *params, CBS *key) {
+static evp_decode_result_t eckey_pub_decode(const EVP_PKEY_ALG *alg,
+                                            EVP_PKEY *out, CBS *params,
+                                            CBS *key) {
   // See RFC 5480, section 2.
 
-  // The parameters are a named curve.
-  const EC_GROUP *group = EC_KEY_parse_curve_name(params);
-  if (group == NULL || CBS_len(params) != 0) {
+  // Check that |params| matches |alg|. Only the namedCurve form is allowed.
+  const EC_GROUP *group = static_cast<const EVP_PKEY_ALG_EC*>(alg)->ec_group();
+  if (ec_key_parse_curve_name(params, bssl::Span(&group, 1)) == nullptr) {
+    if (ERR_equals(ERR_peek_last_error(), ERR_LIB_EC, EC_R_UNKNOWN_GROUP)) {
+      ERR_clear_error();
+      return evp_decode_unsupported;
+    }
     OPENSSL_PUT_ERROR(EVP, EVP_R_DECODE_ERROR);
-    return 0;
+    return evp_decode_error;
+  }
+  if (CBS_len(params) != 0) {
+    OPENSSL_PUT_ERROR(EVP, EVP_R_DECODE_ERROR);
+    return evp_decode_error;
   }
 
   bssl::UniquePtr<EC_KEY> eckey(EC_KEY_new());
   if (eckey == nullptr ||  //
       !EC_KEY_set_group(eckey.get(), group) ||
       !EC_KEY_oct2key(eckey.get(), CBS_data(key), CBS_len(key), nullptr)) {
-    return 0;
+    return evp_decode_error;
   }
 
   EVP_PKEY_assign_EC_KEY(out, eckey.release());
-  return 1;
+  return evp_decode_ok;
 }
 
 static int eckey_pub_cmp(const EVP_PKEY *a, const EVP_PKEY *b) {
@@ -86,23 +105,32 @@ static int eckey_pub_cmp(const EVP_PKEY *a, const EVP_PKEY *b) {
   }
 }
 
-static int eckey_priv_decode(EVP_PKEY *out, CBS *params, CBS *key) {
+static evp_decode_result_t eckey_priv_decode(const EVP_PKEY_ALG *alg,
+                                             EVP_PKEY *out, CBS *params,
+                                             CBS *key) {
   // See RFC 5915.
-  const EC_GROUP *group = EC_KEY_parse_parameters(params);
-  if (group == NULL || CBS_len(params) != 0) {
+  const EC_GROUP *group = static_cast<const EVP_PKEY_ALG_EC*>(alg)->ec_group();
+  if (ec_key_parse_parameters(params, bssl::Span(&group, 1)) == nullptr) {
+    if (ERR_equals(ERR_peek_last_error(), ERR_LIB_EC, EC_R_UNKNOWN_GROUP)) {
+      ERR_clear_error();
+      return evp_decode_unsupported;
+    }
     OPENSSL_PUT_ERROR(EVP, EVP_R_DECODE_ERROR);
-    return 0;
+    return evp_decode_error;
+  }
+  if (CBS_len(params) != 0) {
+    OPENSSL_PUT_ERROR(EVP, EVP_R_DECODE_ERROR);
+    return evp_decode_error;
   }
 
-  EC_KEY *ec_key = EC_KEY_parse_private_key(key, group);
-  if (ec_key == NULL || CBS_len(key) != 0) {
+  bssl::UniquePtr<EC_KEY> ec_key(ec_key_parse_private_key(key, group, {}));
+  if (ec_key == nullptr || CBS_len(key) != 0) {
     OPENSSL_PUT_ERROR(EVP, EVP_R_DECODE_ERROR);
-    EC_KEY_free(ec_key);
-    return 0;
+    return evp_decode_error;
   }
 
-  EVP_PKEY_assign_EC_KEY(out, ec_key);
-  return 1;
+  EVP_PKEY_assign_EC_KEY(out, ec_key.release());
+  return evp_decode_ok;
 }
 
 static int eckey_priv_encode(CBB *out, const EVP_PKEY *key) {
@@ -222,6 +250,8 @@ static int eckey_opaque(const EVP_PKEY *pkey) {
   return EC_KEY_is_opaque(ec_key);
 }
 
+}  // namespace
+
 const EVP_PKEY_ASN1_METHOD ec_asn1_meth = {
     EVP_PKEY_EC,
     // 1.2.840.10045.2.1
@@ -256,6 +286,26 @@ const EVP_PKEY_ASN1_METHOD ec_asn1_meth = {
     int_ec_free,
 };
 
+const EVP_PKEY_ALG *EVP_pkey_ec_p224(void) {
+  static const EVP_PKEY_ALG_EC kAlg = {{&ec_asn1_meth}, &EC_group_p224};
+  return &kAlg;
+}
+
+const EVP_PKEY_ALG *EVP_pkey_ec_p256(void) {
+  static const EVP_PKEY_ALG_EC kAlg = {{&ec_asn1_meth}, &EC_group_p256};
+  return &kAlg;
+}
+
+const EVP_PKEY_ALG *EVP_pkey_ec_p384(void) {
+  static const EVP_PKEY_ALG_EC kAlg = {{&ec_asn1_meth}, &EC_group_p384};
+  return &kAlg;
+}
+
+const EVP_PKEY_ALG *EVP_pkey_ec_p521(void) {
+  static const EVP_PKEY_ALG_EC kAlg = {{&ec_asn1_meth}, &EC_group_p521};
+  return &kAlg;
+}
+
 int EVP_PKEY_set1_EC_KEY(EVP_PKEY *pkey, EC_KEY *key) {
   if (EVP_PKEY_assign_EC_KEY(pkey, key)) {
     EC_KEY_up_ref(key);
@@ -265,14 +315,16 @@ int EVP_PKEY_set1_EC_KEY(EVP_PKEY *pkey, EC_KEY *key) {
 }
 
 int EVP_PKEY_assign_EC_KEY(EVP_PKEY *pkey, EC_KEY *key) {
-  evp_pkey_set_method(pkey, &ec_asn1_meth);
-  pkey->pkey = key;
-  return key != NULL;
+  if (key == nullptr) {
+    return 0;
+  }
+  evp_pkey_set0(pkey, &ec_asn1_meth, key);
+  return 1;
 }
 
 EC_KEY *EVP_PKEY_get0_EC_KEY(const EVP_PKEY *pkey) {
-  if (pkey->type != EVP_PKEY_EC) {
-    OPENSSL_PUT_ERROR(EVP, EVP_R_EXPECTING_AN_EC_KEY_KEY);
+  if (EVP_PKEY_id(pkey) != EVP_PKEY_EC) {
+    OPENSSL_PUT_ERROR(EVP, EVP_R_EXPECTING_A_EC_KEY);
     return NULL;
   }
   return reinterpret_cast<EC_KEY *>(pkey->pkey);

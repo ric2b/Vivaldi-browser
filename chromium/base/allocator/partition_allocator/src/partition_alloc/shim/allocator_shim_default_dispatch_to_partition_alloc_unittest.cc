@@ -128,6 +128,18 @@ TEST(PartitionAllocAsMalloc, Calloc) {
   PartitionAllocFunctions::Free(data, nullptr);
 }
 
+TEST(PartitionAllocAsMalloc, CallocUnchecked) {
+  constexpr size_t alloc_size = 100;
+  void* data = PartitionAllocFunctions::CallocUnchecked(1, alloc_size, nullptr);
+  EXPECT_TRUE(data);
+
+  char* zeroes[alloc_size];
+  memset(zeroes, 0, alloc_size);
+
+  EXPECT_EQ(0, memcmp(zeroes, data, alloc_size));
+  PartitionAllocFunctions::Free(data, nullptr);
+}
+
 TEST(PartitionAllocAsMalloc, Memalign) {
   constexpr size_t alloc_size = 100;
   constexpr size_t alignment = 1024;
@@ -208,6 +220,12 @@ TEST(PartitionAllocAsMalloc, GoodSize) {
   EXPECT_LT(iterations, 100);
 }
 #endif  // PA_BUILDFLAG(IS_APPLE) && PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+
+#if PA_BUILDFLAG(IS_APPLE)
+TEST(PartitionAllocAsMalloc, TryFreeDefaultFallbackToFindZoneAndFree_Nullptr) {
+  TryFreeDefaultFallbackToFindZoneAndFree(nullptr);
+}
+#endif  // PA_BUILDFLAG(IS_APPLE)
 
 }  // namespace allocator_shim::internal
 #endif  // !defined(MEMORY_TOOL_REPLACES_ALLOCATOR) &&

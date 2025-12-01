@@ -4,13 +4,10 @@
 #define COMPONENTS_AD_BLOCKER_PUBLIC_CORE_ADBLOCK_KNOWN_SOURCES_HANDLER_H_
 
 #include <set>
-#include <string>
 
-#include "base/functional/callback.h"
-#include "base/observer_list.h"
+#include "base/observer_list_types.h"
 #include "base/uuid.h"
 #include "components/ad_blocker/public/core/adblock_types.h"
-#include "url/gurl.h"
 
 namespace adblock_filter {
 /* This class is designed to help the UI with keeping track of well-known rule

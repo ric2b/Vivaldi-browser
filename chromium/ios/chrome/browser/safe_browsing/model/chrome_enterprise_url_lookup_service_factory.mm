@@ -83,14 +83,13 @@ ChromeEnterpriseRealTimeUrlLookupServiceFactory::
 
 std::unique_ptr<KeyedService>
 ChromeEnterpriseRealTimeUrlLookupServiceFactory::BuildServiceInstanceFor(
-    web::BrowserState* browser_state) const {
+    ProfileIOS* profile) const {
   SafeBrowsingService* safe_browsing_service =
       GetApplicationContext()->GetSafeBrowsingService();
   if (!safe_browsing_service) {
     return nullptr;
   }
 
-  ProfileIOS* profile = ProfileIOS::FromBrowserState(browser_state);
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(profile);
 
@@ -115,7 +114,7 @@ ChromeEnterpriseRealTimeUrlLookupServiceFactory::BuildServiceInstanceFor(
       /*is_guest_session=*/false,
       base::BindRepeating(&enterprise_connectors::GetProfileEmail,
                           identity_manager),
-      base::BindRepeating(&enterprise_connectors::GetActiveContentAreaUser,
+      base::BindRepeating(&enterprise_connectors::GetURLFActiveContentAreaUser,
                           IdentityManagerFactory::GetForProfile(profile)),
       base::BindRepeating(&IsProfileAffiliated, profile),
       IsCommandLineSwitchEnabled());

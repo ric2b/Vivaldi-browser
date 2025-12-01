@@ -57,6 +57,7 @@ conf_links = [
   '40-nonlatin.conf',
   '45-generic.conf',
   '45-latin.conf',
+  '48-guessfamily.conf',
   '48-spacing.conf',
   '49-sansserif.conf',
   '50-user.conf',

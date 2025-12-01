@@ -122,7 +122,6 @@ static constexpr base::TimeDelta kDefaultStrongReferencePruneDelay =
 // Feature to control the duration for which a strong reference may remain
 // in the MemoryCache after its last access.
 BASE_FEATURE(kMemoryCacheChangeStrongReferencePruneDelay,
-             "MemoryCacheChangeStrongReferencePruneDelay",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Parameter defining the delay after which a strong reference is removed
@@ -132,6 +131,9 @@ BASE_FEATURE_PARAM(base::TimeDelta,
                    &kMemoryCacheChangeStrongReferencePruneDelay,
                    "strong_reference_prune_delay",
                    kDefaultStrongReferencePruneDelay);
+
+static constexpr char kPageSavedResourceStrongReferenceSize[] =
+    "Blink.MemoryCache.PageSavedResourceStrongReferenceSize2";
 
 MemoryCache* ReplaceMemoryCacheForTesting(MemoryCache* cache) {
   MemoryCache::Get();
@@ -278,7 +280,18 @@ void MemoryCache::RemoveInternal(ResourceMap* resource_map,
 
   Update(resource, resource->size(), 0);
   resource_map->erase(it);
-  strong_references_.erase(resource);
+  if (base::FeatureList::IsEnabled(features::kMemoryCacheIntelligentPruning)) {
+    // If intelligent pruning is on, the resource can only be in the new
+    // tiered vector. We perform a "lazy" remove for performance.
+    size_t index = tiered_strong_references_.Find(resource);
+    if (index != kNotFound) {
+      tiered_strong_references_[index] = nullptr;
+    }
+  } else {
+    // Otherwise, the resource can only be in the original strong references
+    // set.
+    strong_references_.erase(resource);
+  }
 }
 
 bool MemoryCache::Contains(const Resource* resource) const {
@@ -409,21 +422,36 @@ MemoryCache::Statistics MemoryCache::GetStatistics() const {
 void MemoryCache::EvictResources() {
   for (auto resource_map_iter = resource_maps_.begin();
        resource_map_iter != resource_maps_.end();) {
-    ResourceMap* resources = resource_map_iter->value.Get();
-    for (auto resource_iter = resources->begin();
-         resource_iter != resources->end();
-         resource_iter = resources->begin()) {
-      DCHECK(resource_iter.Get());
-      DCHECK(resource_iter->value.Get());
-      DCHECK(resource_iter->value->GetResource());
-      Resource* resource = resource_iter->value->GetResource();
-      DCHECK(resource);
-      RemoveInternal(resources, resource_iter);
-    }
+    RemoveAllResourcesFromMap(resource_map_iter->value.Get());
     resource_maps_.erase(resource_map_iter);
     resource_map_iter = resource_maps_.begin();
   }
   ClearStrongReferences();
+}
+
+void MemoryCache::EvictResourcesForCacheIdentifier(
+    const String& cache_identifier) {
+  const auto& resource_map_iter = resource_maps_.find(cache_identifier);
+  // Not all cache identifiers will end up in the resource map (e.g. a failed
+  // fetch or a dataURL)
+  if (resource_map_iter == resource_maps_.end()) {
+    return;
+  }
+
+  RemoveAllResourcesFromMap(resource_map_iter->value.Get());
+  resource_maps_.erase(resource_map_iter);
+}
+
+void MemoryCache::RemoveAllResourcesFromMap(ResourceMap* resources) {
+  for (auto resource_iter = resources->begin();
+       resource_iter != resources->end(); resource_iter = resources->begin()) {
+    DCHECK(resource_iter.Get());
+    DCHECK(resource_iter->value.Get());
+    DCHECK(resource_iter->value->GetResource());
+    Resource* resource = resource_iter->value->GetResource();
+    DCHECK(resource);
+    RemoveInternal(resources, resource_iter);
+  }
 }
 
 bool MemoryCache::OnMemoryDump(WebMemoryDumpLevelOfDetail level_of_detail,
@@ -496,6 +524,8 @@ void MemoryCache::SaveTieredStrongReference(Resource* resource) {
 void MemoryCache::SavePageResourceStrongReferences(
     HeapVector<Member<Resource>> resources) {
   DCHECK(base::FeatureList::IsEnabled(features::kMemoryCacheStrongReference));
+  base::UmaHistogramCustomCounts(kPageSavedResourceStrongReferenceSize,
+                                 resources.size(), 0, 200, 50);
   for (Resource* resource : resources) {
     resource->UpdateMemoryCacheLastAccessedTime();
     strong_references_.AppendOrMoveToLast(resource);
@@ -522,25 +552,22 @@ void MemoryCache::PruneTieredStrongReferences() {
   const size_t max_threshold = static_cast<size_t>(
       features::kMemoryCacheStrongReferenceTotalSizeThresholdParam.Get());
 
-  size_t current_total_size = 0;
-  for (Resource* resource : tiered_strong_references_) {
-    current_total_size += resource->size();
-  }
-
   // Enforce a maximum lifetime for all strong references.
   const base::TimeTicks now = base::TimeTicks::Now();
   const base::TimeDelta max_lifetime = strong_references_prune_duration_;
 
-  WTF::EraseIf(tiered_strong_references_,
-               [&](const Member<Resource>& resource) {
-                 if (now - resource->MemoryCacheLastAccessed() > max_lifetime) {
-                   // This resource IS expired. Update the size and return true
-                   // to erase it.
-                   current_total_size -= resource->size();
-                   return true;
-                 }
-                 return false;
-               });
+  EraseIf(tiered_strong_references_, [&](const Member<Resource>& resource) {
+    // Erase the resource if it's null (due to lazy removal by
+    // `RemoveInternal`) or if it has expired
+    return !resource ||
+           (now - resource->MemoryCacheLastAccessed() > max_lifetime);
+  });
+
+  size_t current_total_size = 0;
+  for (Resource* resource : tiered_strong_references_) {
+    CHECK(resource, base::NotFatalUntil::M145);
+    current_total_size += resource->size();
+  }
 
   //  Early exit if already under budget
   if (current_total_size <= max_threshold) {
@@ -553,6 +580,8 @@ void MemoryCache::PruneTieredStrongReferences() {
   // The sorting is "Just-In-Time" for the eviction decisions.
   std::sort(tiered_strong_references_.begin(), tiered_strong_references_.end(),
             [this](const Member<Resource>& a, const Member<Resource>& b) {
+              CHECK(a, base::NotFatalUntil::M145);
+              CHECK(b, base::NotFatalUntil::M145);
               // Note: `>` sorts in descending order (highest value first).
               return CalculateResourceValue(a.Get()) >
                      CalculateResourceValue(b.Get());

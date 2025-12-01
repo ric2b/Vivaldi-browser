@@ -1,0 +1,11 @@
+include "fcp/tracing/tracing_schema_common.fbs";
+
+table DeprecatedInt (tag: "DEPI") {
+  field1: int32 (deprecated);
+  field2: int32;
+}
+
+table DeprecatedString (tag: "DEPS") {
+  field1: string (deprecated);
+  field2: int32;
+}

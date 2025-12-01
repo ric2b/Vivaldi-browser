@@ -55,8 +55,7 @@ bool CanBeInlineContentsContainer(const LayoutObject& layout_object) {
     return true;
   }
   // Since we can't create |EphemeralRange|, we exclude a |LayoutBlockFlow| if
-  // its entire subtree is anonymous, e.g. |LayoutMultiColumnSet|,
-  // and with anonymous layout objects.
+  // its entire subtree is anonymous.
   return HasNonPsuedoNode(*block_flow);
 }
 
@@ -192,6 +191,16 @@ TextOffsetMapping::InlineContents CreateInlineContentsFromBlockFlow(
     if (layout_object == &target) {
       // Note: When |target| is in subtree of user agent shadow root, we don't
       // reach here. See  http://crbug.com/1224206
+      last = first;
+      break;
+    }
+    // Exclude out-of-flow objects (float/absolute/fixed) that are DOM
+    // descendants of `target`, since they don’t participate in the inline
+    // formatting context. See http://crbug.com/443752821.
+    if (RuntimeEnabledFeatures::CreateInlineContentsExcludeOutOfFlowEnabled() &&
+        layout_object->IsFloatingOrOutOfFlowPositioned() &&
+        layout_object->GetNode() &&
+        layout_object->GetNode()->IsDescendantOf(target.GetNode())) {
       last = first;
       break;
     }

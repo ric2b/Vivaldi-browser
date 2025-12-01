@@ -2,17 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include <stdint.h>
 
 #include <cmath>
 #include <concepts>
 #include <type_traits>
 
+#include "base/compiler_specific.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/containers/flat_map.h"
 #include "base/notreached.h"
@@ -20,7 +16,6 @@
 #include "base/test/bind.h"
 #include "base/test/run_until.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/base/big_buffer.h"
@@ -36,6 +31,7 @@
 #include "services/webnn/public/mojom/webnn_tensor.mojom.h"
 #include "services/webnn/webnn_context_impl.h"
 #include "services/webnn/webnn_context_provider_impl.h"
+#include "services/webnn/webnn_test_environment.h"
 #include "services/webnn/webnn_test_utils.h"
 #include "services/webnn/webnn_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -79,7 +75,7 @@ struct TensorRemoteAndHandle {
 };
 
 TensorRemoteAndHandle CreateTensor(
-    mojo::Remote<mojom::WebNNContext>& context_remote,
+    mojo::AssociatedRemote<mojom::WebNNContext>& context_remote,
     mojom::TensorInfoPtr tensor_info) {
   mojo::AssociatedRemote<mojom::WebNNTensor> webnn_tensor_remote;
 
@@ -99,7 +95,7 @@ TensorRemoteAndHandle CreateTensor(
 }
 
 TensorRemoteAndHandle CreateTensorWithValues(
-    mojo::Remote<mojom::WebNNContext>& context_remote,
+    mojo::AssociatedRemote<mojom::WebNNContext>& context_remote,
     mojom::TensorInfoPtr tensor_info,
     base::span<const uint8_t> data) {
   auto remote_and_handle = CreateTensor(context_remote, std::move(tensor_info));
@@ -110,7 +106,7 @@ TensorRemoteAndHandle CreateTensorWithValues(
 template <typename T>
 std::vector<T> BigBufferToVector(const mojo_base::BigBuffer& big_buffer) {
   std::vector<T> data(big_buffer.size() / sizeof(T));
-  memcpy(data.data(), big_buffer.data(), big_buffer.size());
+  UNSAFE_TODO(memcpy(data.data(), big_buffer.data(), big_buffer.size()));
   return data;
 }
 
@@ -119,7 +115,7 @@ enum class BuildAndComputeExpectation { kSuccess, kCreateGraphFailure };
 template <typename InputDataType, typename OutputDataType = InputDataType>
 [[nodiscard]] base::flat_map<std::string, std::vector<OutputDataType>>
 BuildAndCompute(
-    mojo::Remote<mojom::WebNNContext>& context_remote,
+    mojo::AssociatedRemote<mojom::WebNNContext>& context_remote,
     mojo::AssociatedRemote<mojom::WebNNGraphBuilder> graph_builder_remote,
     mojom::GraphInfoPtr graph_info,
     base::flat_map<std::string, base::span<const InputDataType>> named_inputs,
@@ -304,14 +300,17 @@ class WebNNGraphImplBackendTest : public dml::TestBase {
 
   mojo::AssociatedRemote<mojom::WebNNGraphBuilder> BindNewGraphBuilderRemote();
 
-  mojo::Remote<mojom::WebNNContext>& context() { return webnn_context_; }
+  mojo::AssociatedRemote<mojom::WebNNContext>& context() {
+    return webnn_context_;
+  }
 
  protected:
   base::test::ScopedFeatureList scoped_feature_list_;
   scoped_refptr<dml::Adapter> adapter_;
 
+  WebNNTestEnvironment webnn_test_environment_;
   mojo::Remote<mojom::WebNNContextProvider> provider_remote_;
-  mojo::Remote<mojom::WebNNContext> webnn_context_;
+  mojo::AssociatedRemote<mojom::WebNNContext> webnn_context_;
 };
 
 void WebNNGraphImplBackendTest::SetUp() {
@@ -394,14 +393,16 @@ class WebNNGraphImplBackendTest : public testing::Test {
 
   mojo::AssociatedRemote<mojom::WebNNGraphBuilder> BindNewGraphBuilderRemote();
 
-  mojo::Remote<mojom::WebNNContext>& context() { return webnn_context_; }
+  mojo::AssociatedRemote<mojom::WebNNContext>& context() {
+    return webnn_context_;
+  }
 
  protected:
   base::test::ScopedFeatureList scoped_feature_list_;
-  base::test::TaskEnvironment task_environment_;
 
+  WebNNTestEnvironment webnn_test_environment_;
   mojo::Remote<mojom::WebNNContextProvider> provider_remote_;
-  mojo::Remote<mojom::WebNNContext> webnn_context_;
+  mojo::AssociatedRemote<mojom::WebNNContext> webnn_context_;
 };
 
 void WebNNGraphImplBackendTest::SetUp() {
@@ -441,14 +442,16 @@ class WebNNGraphImplBackendTest : public testing::Test {
 
   mojo::AssociatedRemote<mojom::WebNNGraphBuilder> BindNewGraphBuilderRemote();
 
-  mojo::Remote<mojom::WebNNContext>& context() { return webnn_context_; }
+  mojo::AssociatedRemote<mojom::WebNNContext>& context() {
+    return webnn_context_;
+  }
 
  protected:
   base::test::ScopedFeatureList scoped_feature_list_;
-  base::test::TaskEnvironment task_environment_;
 
+  WebNNTestEnvironment webnn_test_environment_;
   mojo::Remote<mojom::WebNNContextProvider> provider_remote_;
-  mojo::Remote<mojom::WebNNContext> webnn_context_;
+  mojo::AssociatedRemote<mojom::WebNNContext> webnn_context_;
 };
 
 void WebNNGraphImplBackendTest::SetUp() {
@@ -506,7 +509,7 @@ void WebNNGraphImplBackendTest::SetUp() {
 #endif  // BUILDFLAG(WEBNN_USE_TFLITE) && !BUILDFLAG(IS_WIN)
 
 void WebNNGraphImplBackendTest::SetUpBase() {
-  WebNNContextProviderImpl::CreateForTesting(
+  webnn_test_environment_.BindWebNNContextProvider(
       provider_remote_.BindNewPipeAndPassReceiver());
 
   // Create the ContextImpl through context provider.
@@ -529,8 +532,9 @@ void WebNNGraphImplBackendTest::SetUpBase() {
 
 void WebNNGraphImplBackendTest::TearDown() {
   webnn_context_.reset();
-  provider_remote_.reset();
   EXPECT_TRUE(base::test::RunUntil([&]() { return true; }));
+  // Give WebNNContext a chance to run disconnect.
+  provider_remote_.reset();
 }
 
 mojo::AssociatedRemote<mojom::WebNNGraphBuilder>

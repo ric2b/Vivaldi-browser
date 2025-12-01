@@ -1322,6 +1322,8 @@ enum ClientSideDetectionType {
   FULLSCREEN_API = 7;
   // Clipboard copy API request triggered.
   CLIPBOARD_COPY_API = 8;
+  // Credit card form detected.
+  CREDIT_CARD_FORM = 9;
 }
 
 message ClientDownloadResponse {
@@ -1696,7 +1698,7 @@ message DownloadMetadata {
 // A Detailed Safebrowsing Report from clients. Chrome safebrowsing reports are
 // only sent by Chrome users who have opted into extended Safe Browsing.
 // This proto is replacing ClientMalwareReportRequest.
-// Next tag: 37
+// Next tag: 38
 message ClientSafeBrowsingReportRequest {
   // Note: A lot of the "optional" fields would make sense to be
   // "required" instead.  However, having them as optional allows the
@@ -1742,6 +1744,9 @@ message ClientSafeBrowsingReportRequest {
     // Analogous to DANGEROUS_DOWNLOAD_RECOVERY and DANGEROUS_DOWNLOAD_WARNING,
     // but used only for download warnings in Chrome on Android.
     DANGEROUS_DOWNLOAD_WARNING_ANDROID = 29;
+    // This report is triggered periodically if relevant Service Worker behavior
+    // (e.g., making network requests) is available.
+    SERVICE_WORKER_BEHAVIOR = 30;
   }
   // LINT.ThenChange(//tools/metrics/histograms/metadata/safe_browsing/enums.xml:ClientSafeBrowsingReportType)
 
@@ -2221,6 +2226,24 @@ message ClientSafeBrowsingReportRequest {
 
   optional UrlRealTimeAndHashRealTimeDiscrepancyInfo
       url_real_time_and_hash_real_time_discrepancy_info = 36;
+
+  // ServiceWorkerBehavior reports are sent for service worker registration
+  // events (i.e. `scope_url`, `import_script_urls`) and notification push
+  // events (i.e. `script_url`, `requested_urls`). Push event `requested_urls`
+  // are aggregated by `script_url` but registration event `import_script_urls`
+  // are not aggregated.
+  message ServiceWorkerBehavior {
+    // The registered scope URL of the service worker. This is a URL path prefix
+    // that defines the subset of origins the service worker can control.
+    optional string scope_url = 1;
+    // The URLs requested by the service worker during a push event.
+    repeated string requested_urls = 2;
+    // The URLs used to import scripts by the service worker.
+    repeated string import_script_urls = 3;
+    // The URL path to the service worker script recorded during the push event.
+    optional string script_url = 4;
+  }
+  repeated ServiceWorkerBehavior service_worker_behaviors = 37;
 }
 
 // An HTML Element on the page (eg: iframe, div, script, etc).
@@ -2722,7 +2745,25 @@ message ExtensionTelemetryReportRequest {
   // platform and the browser.
   optional ManagementAuthority management_authority = 6;
 
-  // Next available tag number: 7.
+  // Search hijacking telemetry signal
+  // A client-side heuristic signal that is generated if the number of Omnibox
+  // search events exceeds the number of Search Engine Results Page (SERP)
+  // landing events by a specified threshold during a specified interval.
+  message SearchHijackingSignal {
+    // The timestamp of the successful heuristic match (in milliseconds since
+    // Unix epoch)
+    optional int64 detection_timestamp = 1;
+    // The number of Omnibox search events detected during the heuristic match
+    // interval.
+    optional uint32 omnibox_search_count = 2;
+    // The number of SERP landing events detected during the heuristic match
+    // interval.
+    optional uint32 serp_landing_count = 3;
+  }
+
+  optional SearchHijackingSignal search_hijacking_signal = 7;
+
+  // Next available tag number: 8.
 }
 
 message ExtensionTelemetryReportResponse {

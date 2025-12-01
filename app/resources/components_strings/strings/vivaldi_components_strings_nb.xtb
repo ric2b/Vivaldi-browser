@@ -14,6 +14,7 @@
 <translation id="1555191101192706055">Angripere på nettstedet du prøvde å besøke, kan lure deg til å installere skadelig programvare som påvirker måten du surfer på – for eksempel ved å endre startsiden eller vise deg ekstra annonser på nettstedene du besøker.</translation>
 <translation id="1559528461873125649">Ingen slik fil eller mappe</translation>
 <translation id="1640244768702815859">Prøv <ph name="BEGIN_LINK" />å besøke sidens forside<ph name="END_LINK" />.</translation>
+<translation id="1644574205037202324">Historikk</translation>
 <translation id="1645368109819982629">Protokollen støttes ikke</translation>
 <translation id="1662550410081243962">Lagre og fyll ut betalingsmetoder</translation>
 <translation id="1710259589646384581">Operativsystem</translation>
@@ -24,21 +25,19 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Sjekk mellomtjeneren og brannmuren<ph name="END_LINK" /></translation>
 <translation id="2048261947532620704">Oversetter siden</translation>
 <translation id="2119505898009119320">Utstedt til <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
+<translation id="2148716181193084225">I dag</translation>
 <translation id="2166378884831602661">Denne siden kan ikke tilby en sikker tilkobling</translation>
 <translation id="2178904466768126352">Angripere på nettstedet du prøvde å besøke, kan muligens installere skadelig programvare som stjeler eller sletter ting som passord, bilder, meldinger eller kredittkortnumre.</translation>
-<translation id="2187317261103489799">Oppdag (standard)</translation>
 <translation id="2224337661447660594">Mangler internettilgang</translation>
 <translation id="2283340219607151381">Lagre og fyll ut adresser</translation>
 <translation id="2292556288342944218">Internettilgangen din er blokkert</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> krever brukernavn og passord.</translation>
 <translation id="2337852623177822836">Innstillingen kontrolleres av administratoren</translation>
 <translation id="2355395290879513365">Angripere kan kanskje se bildene du ser på denne nettsiden og lure deg ved å endre dem.</translation>
-<translation id="2356070529366658676">Spør</translation>
 <translation id="2359808026110333948">Fortsett</translation>
 <translation id="2388886110302389394">Åpne siden i nytt privatvindu (Ctrl-Skift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Kjør Nettverksdiagnose<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Denne siden er blokkert av en utvidelse</translation>
-<translation id="2539524384386349900">Oppdag</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sendte et ugyldig svar.</translation>
 <translation id="2634124572758952069">IP-adressen for tjeneren til <ph name="HOST_NAME" /> ble ikke funnet.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -64,10 +63,8 @@
       bruke en mellomtjener:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Trykk på oppdater-knappen for å sende inn dataene som trengs for å laste siden på nytt.</translation>
-<translation id="3234666976984236645">Alltid oppdag viktig innhold på dette nettstedet</translation>
 <translation id="3384522979010096022">Organisasjonen din tillater deg ikke å se dette nettstedet</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> kan ikke nås for øyeblikket.</translation>
-<translation id="3427092606871434483">Tillat (standard)</translation>
 <translation id="3447661539832366887">Eieren av denne enheten har slått av dinosaurspillet.</translation>
 <translation id="3447884698081792621">Vis sertifikat (utstedt av <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Skjul avansert</translation>
@@ -82,7 +79,6 @@
 <translation id="3681007416295224113">Sertifikatinformasjon</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Sjekk proxy-, brannmur- og DNS-konfigurasjoner<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Hvis du bruker en mellomtjener …</translation>
-<translation id="3861977424605124250">Vis ved oppstart</translation>
 <translation id="3950820424414687140">Logg inn</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> er blokkert</translation>
 <translation id="3987940399970879459">Mindre enn 1 MB</translation>
@@ -90,7 +86,6 @@
 <translation id="4075732493274867456">Klienten og tjeneren støtter ikke en vanlig SSL-protokollversjon eller krypteringsprogrampakke.</translation>
 <translation id="4116663294526079822">Alltid tillat på dette nettstedet</translation>
 <translation id="4130226655945681476">Sjekke nettverkskabler, modemet og ruteren</translation>
-<translation id="4151403195736952345">Bruk global standardinnstilling (Oppdag)</translation>
 <translation id="4165986682804962316">Nettstedinnstillinger</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Sjekk brannmur- og antiviruskonfigurasjoner<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Prøv å kjøre Nettverksdiagnose<ph name="END_LINK" />.</translation>
@@ -99,7 +94,6 @@
 <translation id="4250431568374086873">Tilkoblingen til dette nettstedet er ikke helt sikker</translation>
 <translation id="4265872034478892965">Tillatt av administratoren</translation>
 <translation id="4305666528087210886">Fikk ikke tilgang til filen</translation>
-<translation id="4312866146174492540">Blokker (standard)</translation>
 <translation id="4408413947728134509">Infokapsler <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> godtok ikke innlogginssertifikatet ditt, eller sertifikatet manglet.</translation>
 <translation id="4506599922270137252">Kontakte systemadministratoren</translation>
@@ -117,10 +111,10 @@
 <translation id="4943872375798546930">Ingen resultater</translation>
 <translation id="5017554619425969104">Teksten du kopierte</translation>
 <translation id="5023310440958281426">Sjekk administratorens retningslinjer</translation>
-<translation id="5039804452771397117">Tillat</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 i bruk)} other {(# i bruk)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Sjekk proxy-adressen<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-biters)</translation>
+<translation id="5216942107514965959">Sist besøkt i dag</translation>
 <translation id="5355557959165512791">Du kan ikke besøke <ph name="SITE" /> akkurat nå, fordi sertifikatet har blitt tilbakekalt. Nettverksfeil og -angrep er ofte midlertidige, så denne siden vil trolig virke igjen senere.</translation>
 <translation id="5386426401304769735">Sertifikatkjeden for dette nettstedet inneholder et sertifikat signert med SHA-1.</translation>
 <translation id="5452270690849572955">Denne <ph name="HOST_NAME" />-siden ble ikke funnet</translation>
@@ -137,6 +131,7 @@
 <translation id="5799902971440853357">Du kan ikke besøke <ph name="SITE" /> akkurat nå, fordi nettsiden sendte påloggingsinfo som Vivaldi ikke kan håndtere. Nettverksfeil og -angrep er ofte midlertidige, så denne siden vil trolig virke igjen senere.</translation>
 <translation id="5810442152076338065">Tilkoblingen til <ph name="DOMAIN" /> er kryptert med en foreldet chifferpakke.</translation>
 <translation id="5838278095973806738">Du bør ikke skrive inn sensitiv informasjon på denne siden (for eksempel passord eller betalingsinformasjon) da det kan blir stjålet av angripere.</translation>
+<translation id="5863515189965725638">Rediger IBAN</translation>
 <translation id="5869405914158311789">Siden kan ikke nås</translation>
 <translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 i bruk}other{# i bruk}}</translation>
 <translation id="5932224571077948991">Nettstedet viser påtrengende eller villedende annonser</translation>
@@ -166,8 +161,6 @@
 <translation id="6897140037006041989">Brukeragent</translation>
 <translation id="6935179587384421592"><ph name="SIZE" />. Det kan hende at enkelte nettsteder lastes inn tregere neste gang du besøker dem.</translation>
 <translation id="6957624206566198865">Åpne side i ny privatfane</translation>
-<translation id="7053983685419859001">Blokker</translation>
-<translation id="7066262000446496119">Hvem bruker Vivaldi?</translation>
 <translation id="7096937462164235847">Identiteten til dette nettstedet er ikke bekreftet.</translation>
 <translation id="7108819624672055576">Tillatt av en utvidelse</translation>
 <translation id="7111012039238467737">(Gyldig)</translation>
@@ -175,7 +168,6 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> følger ikke sikkerhetsstandarder.</translation>
 <translation id="7219179957768738017">Tilkoblinger bruker <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Vis varsler</translation>
-<translation id="7283555985781738399">Gjestemodus</translation>
 <translation id="7353601530677266744">Kommandolinje</translation>
 <translation id="7419106976560586862">Profilplassering</translation>
 <translation id="7455133967321480974">Bruk global standardinnstilling (Blokker)</translation>
@@ -194,8 +186,8 @@
 <translation id="7878562273885520351">Passordet ditt kan være kompromittert</translation>
 <translation id="7951415247503192394">(32-biters)</translation>
 <translation id="7953236668995583915">Last inn denne siden på nytt for å ta i bruk de oppdaterte innstillingene dine på dette nettstedet</translation>
-<translation id="8037357227543935929">Spør (standard)</translation>
 <translation id="8041940743680923270">Bruk global standardinnstilling (Spør)</translation>
+<translation id="8076492880354921740">Faner</translation>
 <translation id="808894953321890993">Endre passord</translation>
 <translation id="8149426793427495338">Datamaskinen din gikk inn i hvilemodus.</translation>
 <translation id="8150722005171944719">Filen på <ph name="URL" /> er ikke lesbar.  Den kan ha blitt slettet eller flyttet, eller filtillatelsene forhindrer tilgang til filen.</translation>
@@ -229,4 +221,5 @@
 <translation id="969892804517981540">Offisiell versjon</translation>
 <translation id="984275831282074731">Betalingsmetoder</translation>
 <translation id="988159990683914416">Utviklerversjon</translation>
+<translation id="995755448277384931">Legg til IBAN</translation>
 </translationbundle>

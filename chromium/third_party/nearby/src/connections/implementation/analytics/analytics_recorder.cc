@@ -164,7 +164,7 @@ OperationResultCategory ConvertToOperationResultCategory(
 
 AnalyticsRecorder::AnalyticsRecorder(EventLogger *event_logger)
     : event_logger_(event_logger) {
-  LOG(INFO) << "Start AnalyticsRecorder ctor event_logger_=" << event_logger_;
+  VLOG(1) << "Start AnalyticsRecorder ctor event_logger_=" << event_logger_;
   LogStartSession();
 }
 
@@ -998,6 +998,8 @@ OperationResultCode AnalyticsRecorder::GetChannelIoErrorResultCodeFromMedium(
       return OperationResultCode::CONNECTIVITY_CHANNEL_IO_ERROR_ON_WIFI_DIRECT;
     case Medium::WEB_RTC:
       return OperationResultCode::CONNECTIVITY_CHANNEL_IO_ERROR_ON_WEB_RTC;
+    case Medium::AWDL:
+      return OperationResultCode::CONNECTIVITY_CHANNEL_IO_ERROR_ON_AWDL;
     default:
       return OperationResultCode::
           CONNECTIVITY_CHANNEL_IO_ERROR_ON_UNKNOWN_MEDIUM;

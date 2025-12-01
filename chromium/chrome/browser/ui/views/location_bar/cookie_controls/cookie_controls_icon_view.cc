@@ -15,12 +15,14 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/privacy_sandbox/tracking_protection_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/user_education/browser_user_education_interface.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/location_bar/cookie_controls/cookie_controls_bubble_view_impl.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/browser/ui/cookie_controls_controller.h"
 #include "components/content_settings/core/common/cookie_blocking_3pcd_status.h"
@@ -82,8 +84,8 @@ CookieControlsIconView::CookieControlsIconView(
                          page_action_icon_delegate,
                          "CookieControls"),
       browser_(browser),
-      bubble_coordinator_(CHECK_DEREF(
-          browser->GetFeatures().cookie_controls_bubble_coordinator())) {
+      bubble_coordinator_(
+          CHECK_DEREF(CookieControlsBubbleCoordinator::From(browser))) {
   CHECK(browser_);
   SetUpForInOutAnimation(/*duration=*/base::Seconds(12));
   SetBackgroundVisibility(BackgroundVisibility::kWithLabel);

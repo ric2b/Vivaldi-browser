@@ -43,5 +43,3 @@ NSString* vOverflowDownloads = @"vivaldi_overflow_downloads";
 NSString* vOverflowHelp = @"vivaldi_overflow_help";
 NSString* vOverflowShareFeedback = @"vivaldi_overflow_share_feedback";
 NSString* vOverflowAbout = @"vivaldi_overflow_about";
-
-NSString* vOverflowReaderMode = @"vivaldi_overflow_reader_mode";

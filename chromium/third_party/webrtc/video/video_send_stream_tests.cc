@@ -101,7 +101,6 @@
 #include "rtc_base/task_queue_for_test.h"
 #include "rtc_base/thread.h"
 #include "rtc_base/thread_annotations.h"
-#include "rtc_base/time_utils.h"
 #include "rtc_base/unique_id_generator.h"
 #include "test/call_test.h"
 #include "test/configurable_frame_size_encoder.h"
@@ -1078,7 +1077,8 @@ void VideoSendStreamTest::TestNackRetransmission(
         config.rtcp_report_interval = TimeDelta::Millis(kRtcpIntervalMs);
         config.local_media_ssrc =
             test::VideoTestConstants::kReceiverLocalVideoSsrc;
-        RTCPSender rtcp_sender(env_, config);
+        config.schedule_next_rtcp_send_evaluation = [](TimeDelta) {};
+        RTCPSender rtcp_sender(env_, std::move(config));
 
         rtcp_sender.SetRTCPStatus(RtcpMode::kReducedSize);
         rtcp_sender.SetRemoteSSRC(test::VideoTestConstants::kVideoSendSsrcs[0]);
@@ -1280,7 +1280,8 @@ void VideoSendStreamTest::TestPacketFragmentationSize(TestVideoFormat format,
         config.outgoing_transport = transport_adapter_.get();
         config.rtcp_report_interval = TimeDelta::Millis(kRtcpIntervalMs);
         config.local_media_ssrc = test::VideoTestConstants::kVideoSendSsrcs[0];
-        RTCPSender rtcp_sender(env_, config);
+        config.schedule_next_rtcp_send_evaluation = [](TimeDelta) {};
+        RTCPSender rtcp_sender(env_, std::move(config));
 
         rtcp_sender.SetRTCPStatus(RtcpMode::kReducedSize);
         rtcp_sender.SetRemoteSSRC(test::VideoTestConstants::kVideoSendSsrcs[0]);
@@ -2811,7 +2812,7 @@ TEST_F(VideoSendStreamTest, ReconfigureBitratesSetsEncoderBitratesCorrectly) {
       // more than one update pending, in which case we keep waiting
       // until the correct value has been observed.
       // The target_bitrate_ is reduced by the calculated packet overhead.
-      const int64_t start_time = TimeMillis();
+      const Timestamp start_time = env_.clock().CurrentTime();
       do {
         MutexLock lock(&mutex_);
 
@@ -2823,7 +2824,7 @@ TEST_F(VideoSendStreamTest, ReconfigureBitratesSetsEncoderBitratesCorrectly) {
       } while (bitrate_changed_event_.Wait(
           std::max(TimeDelta::Millis(1),
                    test::VideoTestConstants::kDefaultTimeout -
-                       TimeDelta::Millis(TimeMillis() - start_time))));
+                       (env_.clock().CurrentTime() - start_time))));
       MutexLock lock(&mutex_);
       EXPECT_NEAR(target_bitrate_, expected_bitrate, abs_error)
           << "Timed out while waiting encoder rate to be set.";
@@ -2930,7 +2931,9 @@ TEST_F(VideoSendStreamTest, ReportsSentResolution) {
   static const struct {
     int width;
     int height;
-  } kEncodedResolution[kNumStreams] = {{241, 181}, {300, 121}, {121, 221}};
+  } kEncodedResolution[kNumStreams] = {{.width = 241, .height = 181},
+                                       {.width = 300, .height = 121},
+                                       {.width = 121, .height = 221}};
   class ScreencastTargetBitrateTest : public test::SendTest,
                                       public test::FakeEncoder {
    public:
@@ -3622,7 +3625,10 @@ TEST_F(VideoSendStreamTest, Vp9NonFlexModeSmallResolution) {
     }
   };
 
-  Vp9TestParams params{"L1T1", 1, 1, InterLayerPredMode::kOn};
+  Vp9TestParams params{.scalability_mode = "L1T1",
+                       .num_spatial_layers = 1,
+                       .num_temporal_layers = 1,
+                       .inter_layer_pred = InterLayerPredMode::kOn};
   NonFlexibleModeResolution test(params);
 
   RunBaseTest(&test);
@@ -3666,7 +3672,10 @@ TEST_F(VideoSendStreamTest, MAYBE_Vp9FlexModeRefCount) {
     }
   };
 
-  Vp9TestParams params{"L2T1", 2, 1, InterLayerPredMode::kOn};
+  Vp9TestParams params{.scalability_mode = "L2T1",
+                       .num_spatial_layers = 2,
+                       .num_temporal_layers = 1,
+                       .inter_layer_pred = InterLayerPredMode::kOn};
   FlexibleMode test(params);
 
   RunBaseTest(&test);

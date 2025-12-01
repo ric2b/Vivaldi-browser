@@ -74,7 +74,7 @@ typedef NS_ENUM(NSInteger, TableViewTextEditItemIconType) {
 
 // VivaldiTableViewTextEditCell implements an TableViewCell subclass containing
 // a text field and an (optional) icon.
-@interface VivaldiTableViewTextEditCell : TableViewCell
+@interface VivaldiTableViewTextEditCell : LegacyTableViewCell
 
 // Text field at the leading edge of the cell. It displays the item's
 // `textFieldValue`.

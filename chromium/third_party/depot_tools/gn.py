@@ -37,14 +37,11 @@ def findGnInPath():
     env_path = os.getenv('PATH')
     if not env_path:
         return
-    exe = 'gn'
-    if sys.platform in ('win32', 'cygwin'):
-        exe += '.exe'
     for bin_dir in env_path.split(os.pathsep):
         if bin_dir.rstrip(os.sep).endswith('depot_tools'):
             # skip depot_tools to avoid calling gn.py infinitely.
             continue
-        gn_path = os.path.join(bin_dir, exe)
+        gn_path = os.path.join(bin_dir, 'gn' + gclient_paths.GetExeSuffix())
         if os.path.isfile(gn_path):
             return gn_path
 

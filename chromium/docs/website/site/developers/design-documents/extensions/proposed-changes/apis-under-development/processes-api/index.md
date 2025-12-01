@@ -228,7 +228,7 @@ Types:
 **The operating system process ID.**
 
 **type ( string )**
-**The type of process. Either browser, renderer, extension, notification, plugin, worker, nacl,**
+**The type of process. Either browser, renderer, extension, notification, plugin, worker,**
 **utility, gpu, or other.**
 **profile ( string )**
 

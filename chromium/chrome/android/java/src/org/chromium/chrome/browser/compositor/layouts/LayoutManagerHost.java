@@ -13,6 +13,7 @@ import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.layouts.SceneOverlay;
+import org.chromium.chrome.browser.layouts.components.VirtualView;
 
 /**
  * This is the minimal interface of the host view from the layout side. Any of these functions may
@@ -21,10 +22,10 @@ import org.chromium.chrome.browser.layouts.SceneOverlay;
 @NullMarked
 public interface LayoutManagerHost {
     /**
-     * If set to true, the time it takes for ContentView to become ready will be
-     * logged to the screen.
+     * If set to true, the time it takes for ContentView to become ready will be logged to the
+     * screen.
      */
-    static final boolean LOG_CHROME_VIEW_SHOW_TIME = false;
+    boolean LOG_CHROME_VIEW_SHOW_TIME = false;
 
     /** Requests a refresh of the visuals. */
     void requestRender();
@@ -116,6 +117,14 @@ public interface LayoutManagerHost {
      * @param sceneOverlay The {@link SceneOverlay} to request keyboard focus for.
      */
     void requestKeyboardFocus(SceneOverlay sceneOverlay);
+
+    /**
+     * Requests keyboard focus for {@param view} (within {@param SceneOverlay}).
+     *
+     * @param sceneOverlay The {@link SceneOverlay} to request keyboard focus for.
+     * @param view The {@link VirtualView} to focus on.
+     */
+    void requestKeyboardFocus(SceneOverlay sceneOverlay, VirtualView view);
 
     /**
      * @return Whether {@param SceneOverlay} contains keyboard focus.

@@ -35,6 +35,7 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/platform/ax_mode_observer.h"
 #include "ui/base/buildflags.h"
+#include "ui/base/cursor/cursor.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -881,8 +882,8 @@ bool CaptionBubble::ShouldShowCloseButton() const {
   return false;
 }
 
-std::unique_ptr<views::NonClientFrameView>
-CaptionBubble::CreateNonClientFrameView(views::Widget* widget) {
+std::unique_ptr<views::FrameView> CaptionBubble::CreateFrameView(
+    views::Widget* widget) {
   std::vector<raw_ptr<views::View, VectorExperimental>> buttons = GetButtons();
   if (IsTranslateHeaderEnabled()) {
     caption_bubble_event_observer_ =
@@ -1401,8 +1402,7 @@ void CaptionBubble::SetBackgroundColor() {
   }
 
   views::BubbleDialogDelegateView::SetBackgroundColor(background_color);
-  GetWidget()->SetColorModeOverride(ui::ColorProviderKey::ColorMode::kDark,
-                                    /*background_color=*/std::nullopt);
+  GetWidget()->SetColorModeOverride(ui::ColorProviderKey::ColorMode::kDark);
 }
 
 void CaptionBubble::OnLanguageChanged(const std::string& display_language) {

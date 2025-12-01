@@ -152,6 +152,7 @@ namedinstance   Bool    Whether font is a named instance
 fontwrapper     String  The font wrapper format, current values are WOFF, WOFF2,
                         SFNT for any other SFNT font, and CFF for standalone
                         CFF fonts.
+genericfamily   Int     Type of Generic Family
     </programlisting>
   </refsect2>
   <refsect2>
@@ -563,6 +564,19 @@ hintnone        hintstyle       0
 hintslight      hintstyle       1
 hintmedium      hintstyle       2
 hintfull        hintstyle       3
+serif           genericfamily   1
+sans-serif      genericfamily   2
+monospace       genericfamily   3
+cursive         genericfamily   4
+fantasy         genericfamily   5
+system-ui       genericfamily   6
+ui-serif        genericfamily   7
+ui-sans-serif   genericfamily   8
+ui-monospace    genericfamily   9
+ui-rounded      genericfamily   10
+emoji           genericfamily   11
+math            genericfamily   12
+fangsong        genericfamily   13
     </programlisting>
       </para>
     </refsect2>

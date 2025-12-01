@@ -69,22 +69,12 @@ inline constexpr char kDeletingUndecryptablePasswordsEnabled[] =
 
 #if BUILDFLAG(IS_ANDROID)
 
-// Boolean pref indicating if the one-time notice for account storage was shown.
-// The notice informs passwords will start being saved to the signed-in account.
-inline constexpr char kAccountStorageNoticeShown[] =
-    "password_manager.account_storage_notice_shown";
-
 // Boolean controlling whether the password manager allows automatic signing in
 // through Credential Management API. This pref is not synced. Its value is set
 // by fetching the latest value from Google Mobile Services. Except for
 // migration steps, it should not be modified in Chrome.
 inline constexpr char kAutoSignInEnabledGMS[] =
     "profile.auto_sign_in_enabled_gms";
-
-// A cache of whether the profile LoginDatabase is empty, so that can be checked
-// early on startup.
-inline constexpr char kEmptyProfileStoreLoginDatabase[] =
-    "password_manager.empty_profile_store_login_database";
 
 // Boolean controlling whether the password manager offers to save passwords.
 // If false, the password manager will not save credentials, but it will still
@@ -139,20 +129,6 @@ inline constexpr char kLocalPasswordHashDataList[] =
 // in a row. The counter resets when the user applies password generation.
 inline constexpr char kPasswordGenerationBottomSheetDismissCount[] =
     "password_generation_bottom_sheet_dismiss_count";
-
-// Whether the auto-exported CSV should be deleted. Normally, it's deleted
-// immediately after export, but if that fails, this pref is used as a signal
-// that deletion should be retried.
-inline constexpr char kUpmAutoExportCsvNeedsDeletion[] =
-    "profile.upm_auto_export_csv_needs_deletion";
-
-// Whether the passwords who couldn't be migrated to UPM have been
-// saved as a CSV. The user can then choose to export the CSV out of Chrome
-// via a separate flow. The pref is also set to true if there were no
-// saved passwords. The value is used as a signal that the login db
-// can stop being used.
-inline constexpr char kUpmUnmigratedPasswordsExported[] =
-    "profile.upm_unmigrated_passwords_exported";
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -270,14 +246,6 @@ inline constexpr char kBiometricAuthenticationBeforeFilling[] =
 // in the Password Manager UI.
 inline constexpr char kPasswordManagerPromoCardsList[] =
     "password_manager.password_promo_cards_list";
-
-// A cache of whether the profile LoginDatabase has autofillable credentials.
-inline constexpr char kAutofillableCredentialsProfileStoreLoginDatabase[] =
-    "password_manager.autofillable_credentials_profile_store_login_database";
-
-// A cache of whether the account LoginDatabase has autofillable credentials.
-inline constexpr char kAutofillableCredentialsAccountStoreLoginDatabase[] =
-    "password_manager.autofillable_credentials_account_store_login_database";
 #endif
 
 // Boolean pref indicating whether password sharing is enabled. Enables both
@@ -291,12 +259,12 @@ inline constexpr char kRelaunchChromeBubbleDismissedCounter[] =
     "password_manager.relaunch_chrome_bubble_dismissed_counter";
 #endif
 
-#if !BUILDFLAG(IS_ANDROID)
+// #if !BUILDFLAG(IS_ANDROID) Vivaldi
 // Boolean pref indicating if the user is in one of the groups of the
 // kClearUndecryptablePasswords experiment.
 inline constexpr char kClearingUndecryptablePasswords[] =
     "password_manager.clearing_undecryptable_passwords";
-#endif
+// #endif Vivaldi
 
 // Boolean pref indicating if passwords were migrated to OSCryptAsync. Two for
 // each store.

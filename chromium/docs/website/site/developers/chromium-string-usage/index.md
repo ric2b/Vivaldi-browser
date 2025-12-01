@@ -6,17 +6,20 @@ page_name: chromium-string-usage
 title: Chromium String usage
 ---
 
-Types of Strings
-In the Chromium code base, we use std::string and std::u16string. Blink uses
-WTF::String instead, which is patterned on std::string, but is a slightly
+## Types of Strings
+
+In the Chromium code base, we use `std::string` and `std::u16string`. Blink uses
+`blink::String` instead, which is patterned on `std::string`, but is a slightly
 different class (see the
 [docs](https://chromium.googlesource.com/chromium/src/+/HEAD/third_party/blink/renderer/platform/wtf/text/README.md)
 for their guidelines, we’ll only talk about Chromium here). We also have a
 StringPiece\[16\] class, which is basically a pointer to a string that is owned
 elsewhere with a length of how many characters from the other string form this
-“token”. Finally, there is also WebCString and WebString, which is used by the
-webkit glue layer.
-String Encodings
+“token”. Finally, there is also `blink::WebString`, which is used by the
+Blink glue layer.
+
+## String Encodings
+
 We use a variety of encodings in the code base. UTF-8 is most common, but we
 also use ASCII and UTF-16.
 
@@ -34,7 +37,8 @@ also use ASCII and UTF-16.
             characters.
 *   **UTF-32** is an encoding where all characters are four bytes long.
 
-When to use which encoding
+### When to use which encoding
+
 The most important rule here is the meta-rule, code in the style of the
 surrounding code. In the frontend, we use std::string/char for UTF-8 and
 std::u16string16/char16_t for UTF-16 on all platforms. Even though std::string
@@ -44,7 +48,9 @@ platforms), but common in Windows-specific code to interface with native APIs
 (which often take wchar_t\* or similar). Most UI strings are UTF-16. URLs are
 generally UTF-8. Strings in the webkit glue layer are typically UTF-16 with
 several exceptions. Chromium code does not use UTF-32.
-The GURL class and strings
+
+## The GURL class and strings
+
 One common data type using strings is the GURL class. The constructor takes a
 std::string in UTF-8 for the URL itself. If you have a GURL, you can use the
 spec() method to get the std::string for the entire URL, or you can use
@@ -52,7 +58,8 @@ component methods to get parsed parts, such as scheme(), host(), port(), path(),
 query(), and ref(), all of which return a std::string. All the parts of the GURL
 with the exception of the ref string will be pure ASCII. The ref string *may*
 have UTF-8 characters which are not also ASCII characters.
-Guidelines for string use in our codebase
+
+## Guidelines for string use in our codebase
 
 *   Use std::string from the C++ standard library for normal use with
             strings

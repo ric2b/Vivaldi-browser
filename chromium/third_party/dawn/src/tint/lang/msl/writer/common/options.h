@@ -33,106 +33,30 @@
 #include <unordered_map>
 
 #include "src/tint/api/common/binding_point.h"
+#include "src/tint/api/common/bindings.h"
 #include "src/tint/api/common/vertex_pulling_config.h"
 #include "src/tint/utils/reflection.h"
 
 namespace tint::msl::writer {
-namespace binding {
-
-/// Generic binding point
-struct BindingInfo {
-    /// The group
-    uint32_t group = 0;
-    /// The binding
-    uint32_t binding = 0;
-
-    /// Equality operator
-    /// @param rhs the BindingInfo to compare against
-    /// @returns true if this BindingInfo is equal to `rhs`
-    inline bool operator==(const BindingInfo& rhs) const {
-        return group == rhs.group && binding == rhs.binding;
-    }
-    /// Inequality operator
-    /// @param rhs the BindingInfo to compare against
-    /// @returns true if this BindingInfo is not equal to `rhs`
-    inline bool operator!=(const BindingInfo& rhs) const { return !(*this == rhs); }
-
-    /// @returns the hash code of the BindingInfo
-    tint::HashCode HashCode() const { return Hash(group, binding); }
-
-    /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(BindingInfo, group, binding);
-};
-
-using Uniform = BindingInfo;
-using Storage = BindingInfo;
-using Texture = BindingInfo;
-using StorageTexture = BindingInfo;
-using Sampler = BindingInfo;
-
-/// An external texture
-struct ExternalTexture {
-    /// Metadata
-    BindingInfo metadata{};
-    /// Plane0 binding data
-    BindingInfo plane0{};
-    /// Plane1 binding data;
-    BindingInfo plane1{};
-
-    /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(ExternalTexture, metadata, plane0, plane1);
-};
-
-}  // namespace binding
-
-/// Maps the WGSL binding point to the SPIR-V group,binding for uniforms
-using UniformBindings = std::unordered_map<BindingPoint, binding::Uniform>;
-/// Maps the WGSL binding point to the SPIR-V group,binding for storage
-using StorageBindings = std::unordered_map<BindingPoint, binding::Storage>;
-/// Maps the WGSL binding point to the SPIR-V group,binding for textures
-using TextureBindings = std::unordered_map<BindingPoint, binding::Texture>;
-/// Maps the WGSL binding point to the SPIR-V group,binding for storage textures
-using StorageTextureBindings = std::unordered_map<BindingPoint, binding::StorageTexture>;
-/// Maps the WGSL binding point to the SPIR-V group,binding for samplers
-using SamplerBindings = std::unordered_map<BindingPoint, binding::Sampler>;
-/// Maps the WGSL binding point to the plane0, plane1, and metadata for external textures
-using ExternalTextureBindings = std::unordered_map<BindingPoint, binding::ExternalTexture>;
-
-/// Binding information
-struct Bindings {
-    /// Uniform bindings
-    UniformBindings uniform{};
-    /// Storage bindings
-    StorageBindings storage{};
-    /// Texture bindings
-    TextureBindings texture{};
-    /// Storage texture bindings
-    StorageTextureBindings storage_texture{};
-    /// Sampler bindings
-    SamplerBindings sampler{};
-    /// External bindings
-    ExternalTextureBindings external_texture{};
-
-    /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(Bindings, uniform, storage, texture, storage_texture, sampler, external_texture);
-};
 
 /// Options used to specify a mapping of binding points to indices into a UBO
 /// from which to load buffer sizes.
 /// TODO(crbug.com/366291600): Remove ubo_binding after switch to immediates.
 struct ArrayLengthOptions {
     /// The MSL binding point to use to generate a uniform buffer from which to read buffer sizes.
-    std::optional<uint32_t> ubo_binding;
+    std::optional<uint32_t> ubo_binding{};
 
     /// The offset in immediate block for buffer sizes.
-    std::optional<uint32_t> buffer_sizes_offset;
+    std::optional<uint32_t> buffer_sizes_offset{};
 
     /// The mapping from the storage buffer binding points in WGSL binding-point space to the index
     /// into the uniform buffer where the length of the buffer is stored.
-    std::unordered_map<BindingPoint, uint32_t> bindpoint_to_size_index;
+    std::unordered_map<BindingPoint, uint32_t> bindpoint_to_size_index{};
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
     TINT_REFLECT(ArrayLengthOptions, ubo_binding, buffer_sizes_offset, bindpoint_to_size_index);
+    TINT_REFLECT_EQUALS(ArrayLengthOptions);
+    TINT_REFLECT_HASH_CODE(ArrayLengthOptions);
 };
 
 /// Information to configure an argument buffer
@@ -147,6 +71,8 @@ struct ArgumentBufferInfo {
     std::unordered_map<uint32_t, uint32_t> binding_info_to_offset_index{};
 
     TINT_REFLECT(ArgumentBufferInfo, id, dynamic_buffer_id, binding_info_to_offset_index);
+    TINT_REFLECT_EQUALS(ArgumentBufferInfo);
+    TINT_REFLECT_HASH_CODE(ArgumentBufferInfo);
 };
 
 /// Configuration options used for generating MSL.
@@ -186,11 +112,20 @@ struct Options {
     /// Set to `true` to disable the polyfills on integer division and modulo.
     bool disable_polyfill_integer_div_mod = false;
 
+    /// Set to `true` to polyfill `unpack2x16snorm()`.
+    bool polyfill_unpack_2x16_snorm = false;
+
     /// Set to `true` to scalarize max min and clamp builtins.
     bool scalarize_max_min_clamp = false;
 
     /// Set to `true` to disable the module constant transform for f16
     bool disable_module_constant_f16 = false;
+
+    /// Set to `true` to generate polyfill for `subgroupBroadcast(f16)`
+    bool polyfill_subgroup_broadcast_f16 = false;
+
+    /// Set to `true` to generate polyfill for `clamp(f16/f32)`
+    bool polyfill_clamp_float = false;
 
     /// Emit argument buffers
     bool use_argument_buffers = false;
@@ -232,8 +167,11 @@ struct Options {
                  disable_demote_to_helper,
                  emit_vertex_point_size,
                  disable_polyfill_integer_div_mod,
+                 polyfill_unpack_2x16_snorm,
                  scalarize_max_min_clamp,
                  disable_module_constant_f16,
+                 polyfill_subgroup_broadcast_f16,
+                 polyfill_clamp_float,
                  use_argument_buffers,
                  buffer_size_ubo_index,
                  fixed_sample_mask,
@@ -243,6 +181,8 @@ struct Options {
                  immediate_binding_point,
                  group_to_argument_buffer_info,
                  bindings);
+    TINT_REFLECT_EQUALS(Options);
+    TINT_REFLECT_HASH_CODE(Options);
 };
 
 }  // namespace tint::msl::writer

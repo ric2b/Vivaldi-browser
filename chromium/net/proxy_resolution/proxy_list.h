@@ -43,17 +43,17 @@ class NET_EXPORT_PRIVATE ProxyList {
   void Set(const std::string& proxy_uri_list);
 
   // Set the proxy list to a single entry, |proxy_chain|.
-  void SetSingleProxyChain(const ProxyChain& proxy_chain);
+  void SetSingleProxyChain(ProxyChain proxy_chain);
 
   // Set the proxy list to a single entry, a chain containing |proxy_server|.
-  void SetSingleProxyServer(const ProxyServer& proxy_server);
+  void SetSingleProxyServer(ProxyServer proxy_server);
 
   // Append a single proxy chain to the end of the proxy list.
-  void AddProxyChain(const ProxyChain& proxy_chain);
+  void AddProxyChain(ProxyChain proxy_chain);
 
   // Append a single proxy chain containing the given server to the end of the
   // proxy list.
-  void AddProxyServer(const ProxyServer& proxy_server);
+  void AddProxyServer(ProxyServer proxy_server);
 
   // De-prioritizes the proxy chains that are cached as not working but are
   // allowed to be reconsidered, by moving them to the end of the fallback list.
@@ -117,22 +117,19 @@ class NET_EXPORT_PRIVATE ProxyList {
                 int net_error,
                 const NetLogWithSource& net_log);
 
-  // Updates |proxy_retry_info| to indicate that the first proxy chain in the
+  // Updates `proxy_retry_info` to indicate that the first proxy chain in the
   // list is bad. This is distinct from Fallback(), above, to allow updating
   // proxy retry information without modifying a given transction's proxy list.
-  // Will retry after |retry_delay| if positive, and will use the default proxy
+  // Will retry after `retry_delay` if positive, and will use the default proxy
   // retry duration otherwise. It may reconsider the proxy beforehand if
-  // |reconsider| is true. Additionally updates |proxy_retry_info| with
-  // |additional_proxies_to_bypass|. |net_error| should contain the network
-  // error countered when this proxy chain was tried, or OK if the proxy retry
-  // info is being updated for a non-network related reason (e.g. local policy).
-  void UpdateRetryInfoOnFallback(
-      ProxyRetryInfoMap* proxy_retry_info,
-      base::TimeDelta retry_delay,
-      bool reconsider,
-      const std::vector<ProxyChain>& additional_proxies_to_bypass,
-      int net_error,
-      const NetLogWithSource& net_log) const;
+  // `reconsider` is true. `net_error` should contain the network error
+  // encountered when this proxy chain was tried, or OK if the proxy retry info
+  // is being updated for a non-network related reason (e.g. local policy).
+  void UpdateRetryInfoOnFallback(ProxyRetryInfoMap* proxy_retry_info,
+                                 base::TimeDelta retry_delay,
+                                 bool reconsider,
+                                 int net_error,
+                                 const NetLogWithSource& net_log) const;
 
  private:
   // Updates |proxy_retry_info| to indicate that the |proxy_to_retry| in

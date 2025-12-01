@@ -20,18 +20,15 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />بررسی پروکسی و دیوار آتش<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">صادر شده برای: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">این سایت نمی‌تواند اتصالی ایمن ارائه دهد</translation>
-<translation id="2187317261103489799">تشخیص (پیش‌فرض)</translation>
 <translation id="2224337661447660594">اتصال اینترنت وجود ندارد</translation>
 <translation id="2292556288342944218">دسترسی شما به اینترنت مسدود است</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> به یک نام کاربری و رمز عبور نیاز دارد.</translation>
 <translation id="2337852623177822836">تنظیمات توسط مدیرتان کنترل می‌گردد</translation>
 <translation id="2355395290879513365">مهاجمین ممکن است بتوانند تصاویری را که در این سایت می‌بینید مشاهده کنند و با دست‌کاری آن‌ها شما را فریب دهند.</translation>
-<translation id="2356070529366658676">سؤال شود</translation>
 <translation id="2359808026110333948">ادامه</translation>
 <translation id="2388886110302389394">باز کردن صفحه در یک پنجره‌ی خصوصی جدید (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />راه‌اندازی عیب‌یابی شبکه<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">این صفحه توسط یک افزونه مسدود شده است</translation>
-<translation id="2539524384386349900">تشخیص</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> پاسخی نامعتبر ارسال کرد.</translation>
 <translation id="2634124572758952069">‏نشانی IP سرور <ph name="HOST_NAME" /> پیدا نشد.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />، <ph name="COUNTRY" /></translation>
@@ -54,10 +51,8 @@
       پروکسی استفاده کنید:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">دکمه تازه‌سازی را فشار دهید تا داده‌های مورد نیاز برای بارگذاری صفحه مجدداً ارسال شود.</translation>
-<translation id="3234666976984236645">همیشه محتوای مهم در این سایت شناسایی شود</translation>
 <translation id="3384522979010096022">سازمانتان اجازه‌ی مشاهده‌ی این سایت را به شما نمی‌دهد</translation>
 <translation id="3422472998109090673">دسترسی به <ph name="HOST_NAME" /> درحال حاضر امکان‌پذیر نیست.</translation>
-<translation id="3427092606871434483">اجازه (پیش‌فرض)</translation>
 <translation id="3447661539832366887">مالک این دستگاه بازی دایناسور را خاموش کرده است.</translation>
 <translation id="3447884698081792621">نمایش گواهی (صادرشده توسط <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">پنهان کردن پیشرفته</translation>
@@ -78,7 +73,6 @@
 <translation id="4075732493274867456">‏کلاینت و سرور از مجموعه رمزگذاری یا نسخه پروتکل SSL مشترکی استفاده نمی‌کنند.</translation>
 <translation id="4116663294526079822">همیشه مجاز در این سایت</translation>
 <translation id="4130226655945681476">بررسی کابل‌ها، مودم یا رهیاب شبکه</translation>
-<translation id="4151403195736952345">استفاده از پیش‌فرض سراسری (تشخیص)</translation>
 <translation id="4165986682804962316">تنظیمات سایت</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />بررسی پیکربندی آنتی‌ویروس و دیوار آتش<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />از عیب‌یابی شبکه استفاده کنید<ph name="END_LINK" />.</translation>
@@ -86,7 +80,6 @@
 <translation id="4250431568374086873">اتصال شما به این سایت کاملاً امن نیست</translation>
 <translation id="4265872034478892965">توسط مدیر مجاز شده است</translation>
 <translation id="4305666528087210886">دسترسی به فایل شما ممکن نیست</translation>
-<translation id="4312866146174492540">مسدود کردن (پیش‌فرض)</translation>
 <translation id="4408413947728134509"><ph name="NUM_COOKIES" /> کوکی</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> گواهی ورود به سیستمتان را نپذیرفت یا ممکن است گواهی‌ای ارائه نشده باشد.</translation>
 <translation id="4506599922270137252">تماس با سرپرست سیستم</translation>
@@ -102,7 +95,6 @@
 <translation id="483241715238664915">روشن کردن هشدارها</translation>
 <translation id="4943872375798546930">نتیجه‌ای یافت نشد</translation>
 <translation id="5023310440958281426">خط‌مشی‌های سرپرست سیستمتان را بررسی کنید</translation>
-<translation id="5039804452771397117">اجازه دادن</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 کوکی در حال استفاده)} سایر {(# کوکی در حال استفاده)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />بررسی آدرس پروکسی<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(۶۴ بیت)</translation>
@@ -149,7 +141,6 @@
 <translation id="6890956352250146925">تنظیمات کوکی‌ها و داده‌های سایت</translation>
 <translation id="6897140037006041989">نماینده کاربر</translation>
 <translation id="6957624206566198865">باز کردن صفحه در زبانه‌ی خصوصی جدید</translation>
-<translation id="7053983685419859001">مسدود کردن</translation>
 <translation id="7096937462164235847">هویت این وب‌سایت تأیید نشده است.</translation>
 <translation id="7108819624672055576">توسط یک افزونه مجاز شده است</translation>
 <translation id="7111012039238467737">(معتبر)</translation>
@@ -173,7 +164,6 @@
 <translation id="7878562273885520351">ممکن است رمز عبورتان درمعرض خطر باشد</translation>
 <translation id="7951415247503192394">(۳۲ بیت)</translation>
 <translation id="7953236668995583915">برای اعمال تنظیمات جدید در این سایت، این صفحه را دوباره بارگذاری کنید</translation>
-<translation id="8037357227543935929">درخواست (پیش‌فرض)</translation>
 <translation id="8041940743680923270">استفاده از پیش‌فرض سراسری (سؤال شود)</translation>
 <translation id="808894953321890993">تغییر رمز عبور</translation>
 <translation id="8149426793427495338">رایانه‌تان به حالت خواب رفته است.</translation>

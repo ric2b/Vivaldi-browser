@@ -7,9 +7,9 @@
 <translation id="1920297417712412573">نسخ إلى ملاحظة</translation>
 <translation id="2444387452209867610">إدراج ملاحظة</translation>
 <translation id="2873951654529031587">المهملات</translation>
-<translation id="3027988479108856431">للأسف ، لا تتوفر إعدادات ياندكس أثناء تشغيل هذا المتصفح. لاستيراد هذه الإعدادات إلى فيفالدي ، احفظ عملك وأغلق جميع نوافذ ياندكس. ثم انقر فوق متابعة.</translation>
 <translation id="3259769196742189631">التحقق من صحة</translation>
 <translation id="3334610655141903168">(بلا عنوان)</translation>
+<translation id="3402602684546832928">حدد ملف إشارة مرجعية Opera</translation>
 <translation id="3732157130969736834">رابط إشارة مرجعية</translation>
 <translation id="3914946330804881301">مستورد من أوبرا</translation>
 <translation id="4044951018940382324">فيفالدي</translation>
@@ -24,6 +24,7 @@
 <translation id="588258955323874662">شاشة كاملة</translation>
 <translation id="6229528619562190452">انقر هنا لتحديث فيفالدي.</translation>
 <translation id="6234173136417926046">استخدم الصورة كخلفية صفحة البداية</translation>
+<translation id="630690498669249215">ملف أوبرا الإشارات المرجعية</translation>
 <translation id="6477028720702061455">حدد مجلد ملف تعريف Opera للاستيراد</translation>
 <translation id="6510706699590490869">&amp;تحديث فيفالدي</translation>
 <translation id="6551219277044048123">إضافة كمحرك بحث ...</translation>

@@ -43,8 +43,8 @@
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 
 #if defined(TOOLKIT_VIEWS)
-#include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/browser_widget.h"
 #endif  // defined(TOOLKIT_VIEWS)
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -66,9 +66,13 @@
 #include "app/vivaldi_apptools.h"
 #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
 
+BASE_FEATURE(kDisplayMediaRejectLongDomains, base::FEATURE_DISABLED_BY_DEFAULT);
+
 namespace {
 using ::blink::mojom::MediaStreamRequestResult;
 using ::content::DesktopMediaID;
+using ::content::GlobalRenderFrameHostId;
+using ::content::RenderFrameHost;
 using ::content::WebContents;
 using ::content::WebContentsMediaCaptureId;
 
@@ -197,6 +201,15 @@ void DisplayMediaAccessHandler::HandleRequest(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(web_contents);
 
+  RenderFrameHost* const rfh = RenderFrameHost::FromID(
+      request.render_process_id, request.render_frame_id);
+  if (!rfh || !rfh->IsActive()) {
+    std::move(callback).Run(blink::mojom::StreamDevicesSet(),
+                            MediaStreamRequestResult::INVALID_STATE,
+                            /*ui=*/nullptr);
+    return;
+  }
+
   if (capture_policy::GetAllowedCaptureLevel(request.security_origin,
                                              web_contents) ==
       AllowedScreenCaptureLevel::kDisallowed) {
@@ -258,16 +271,6 @@ void DisplayMediaAccessHandler::HandleRequest(
           blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE ||
       request.video_type ==
           blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_SET) {
-    // Repeat the permission test from the render process.
-    content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
-        request.render_process_id, request.render_frame_id);
-    if (!rfh) {
-      std::move(callback).Run(blink::mojom::StreamDevicesSet(),
-                              MediaStreamRequestResult::INVALID_STATE,
-                              /*ui=*/nullptr);
-      return;
-    }
-
     // If the display-capture permissions-policy disallows capture, the render
     // process was not supposed to send this message.
     if (!rfh->IsFeatureEnabled(
@@ -500,6 +503,17 @@ void DisplayMediaAccessHandler::ProcessQueuedPickerRequest(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(web_contents);
 
+  // Reject captures for domains with more than 255 characters.
+  //
+  // Note, this check does not fully account for international characters, but
+  // since the puny-encodings of international domains are limited to 255 bytes,
+  // it is unlikely that valid domains are excluded by this check.
+  if (base::FeatureList::IsEnabled(kDisplayMediaRejectLongDomains) &&
+      GetApplicationTitle(web_contents).size() > 255u) {
+    RejectRequest(web_contents, MediaStreamRequestResult::INVALID_STATE);
+    return;
+  }
+
   WebContents* ui_web_contents = web_contents;
 
 #if defined(TOOLKIT_VIEWS)
@@ -530,7 +544,7 @@ void DisplayMediaAccessHandler::ProcessQueuedPickerRequest(
             child_web_contents->GetTopLevelNativeWindow()) {
       if (auto* browser_view =
               BrowserView::GetBrowserViewForNativeWindow(native_window)) {
-        if (browser_view->frame()->IsActive()) {
+        if (browser_view->GetWidget()->IsActive()) {
           ui_web_contents = child_web_contents;
         }
       }

@@ -24,13 +24,13 @@ import org.chromium.blink.mojom.AuthenticatorStatus;
 import org.chromium.blink.mojom.CredentialInfo;
 import org.chromium.blink.mojom.GetAssertionAuthenticatorResponse;
 import org.chromium.blink.mojom.GetAssertionResponse;
+import org.chromium.blink.mojom.GetCredentialOptions;
 import org.chromium.blink.mojom.GetCredentialResponse;
 import org.chromium.blink.mojom.MakeCredentialAuthenticatorResponse;
 import org.chromium.blink.mojom.Mediation;
 import org.chromium.blink.mojom.PaymentOptions;
 import org.chromium.blink.mojom.PublicKeyCredentialCreationOptions;
 import org.chromium.blink.mojom.PublicKeyCredentialReportOptions;
-import org.chromium.blink.mojom.PublicKeyCredentialRequestOptions;
 import org.chromium.blink.mojom.WebAuthnClientCapability;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -218,8 +218,7 @@ public final class AuthenticatorImpl implements Authenticator, AuthenticationCon
     }
 
     @Override
-    public void getCredential(
-            PublicKeyCredentialRequestOptions options, GetCredential_Response callback) {
+    public void getCredential(GetCredentialOptions options, GetCredential_Response callback) {
         assert mIntentSender != null;
         assert mRenderFrameHost != null;
         if (mIsOperationPending) {
@@ -227,7 +226,6 @@ public final class AuthenticatorImpl implements Authenticator, AuthenticationCon
                     getCredentialResponseForAssertion(AuthenticatorStatus.PENDING_REQUEST, null));
             return;
         }
-
         log(TAG, "getCredential");
 
         mGetCredentialCallback = callback;
@@ -237,11 +235,13 @@ public final class AuthenticatorImpl implements Authenticator, AuthenticationCon
         mIsImmediateRequest = options.mediation == Mediation.IMMEDIATE;
 
         if (!GmsCoreUtils.isWebauthnSupported()
-                || (!isChrome(mWebContents) && !GmsCoreUtils.isResultReceiverSupported())) {
-            recordOutcomeEvent(MakeCredentialOutcome.OTHER_FAILURE);
+                || (!isChrome(mWebContents) && !GmsCoreUtils.isResultReceiverSupported())
+                || options.publicKey == null) {
+            recordOutcomeEvent(GetAssertionOutcome.OTHER_FAILURE);
             onError(AuthenticatorStatus.NOT_IMPLEMENTED);
             return;
         }
+        assumeNonNull(options.publicKey);
 
         mPendingFido2CredentialRequest = getFido2CredentialRequest();
         mPendingFido2CredentialRequest.handleGetCredentialRequest(
@@ -307,6 +307,16 @@ public final class AuthenticatorImpl implements Authenticator, AuthenticationCon
         capabilities.add(
                 createWebAuthnClientCapability(AuthenticatorConstants.CAPABILITY_PPAA, true));
 
+        capabilities.add(
+                createWebAuthnClientCapability(
+                        AuthenticatorConstants.CAPABILITY_SIGNAL_ALL_ACCEPTED_CREDENTIALS, false));
+        capabilities.add(
+                createWebAuthnClientCapability(
+                        AuthenticatorConstants.CAPABILITY_SIGNAL_CURRENT_USER_DETAILS, false));
+        capabilities.add(
+                createWebAuthnClientCapability(
+                        AuthenticatorConstants.CAPABILITY_SIGNAL_UNKNOWN_CREDENTIAL, false));
+
         if (!couldSupportUvpaa()) {
             capabilities.add(
                     createWebAuthnClientCapability(
@@ -316,6 +326,9 @@ public final class AuthenticatorImpl implements Authenticator, AuthenticationCon
                             AuthenticatorConstants.CAPABILITY_CONDITIONAL_CREATE, false));
             capabilities.add(
                     createWebAuthnClientCapability(AuthenticatorConstants.CAPABILITY_UVPAA, false));
+            capabilities.add(
+                    createWebAuthnClientCapability(
+                            AuthenticatorConstants.CAPABILITY_IMMEDIATE_GET, false));
             callback.call(capabilities.toArray(new WebAuthnClientCapability[0]));
             return;
         }
@@ -339,6 +352,13 @@ public final class AuthenticatorImpl implements Authenticator, AuthenticationCon
                                     createWebAuthnClientCapability(
                                             AuthenticatorConstants.CAPABILITY_CONDITIONAL_CREATE,
                                             isUvpaa && conditionalCreateEnabled));
+                            capabilities.add(
+                                    createWebAuthnClientCapability(
+                                            AuthenticatorConstants.CAPABILITY_IMMEDIATE_GET,
+                                            DeviceFeatureMap.isEnabled(
+                                                            DeviceFeatureList
+                                                                    .WEBAUTHN_IMMEDIATE_GET)
+                                                    && isUvpaa));
                             callback.call(capabilities.toArray(new WebAuthnClientCapability[0]));
                         });
     }
@@ -402,15 +422,14 @@ public final class AuthenticatorImpl implements Authenticator, AuthenticationCon
     public void cancel() {
         log(TAG, "cancel");
         // This is not implemented for anything other than getAssertion requests, since there is
-        // no way to cancel a request that has already triggered gmscore UI. Get requests can be
-        // cancelled if they are pending conditional UI requests, or if they are discoverable
-        // credential requests with the account selector being shown to the user.
+        // no way to cancel a request that has already triggered GMSCore or CredMan UI. Get
+        // requests can be cancelled in situations such as while pending credential enumeration.
         if (!mIsOperationPending || mGetCredentialCallback == null) {
             return;
         }
 
         assumeNonNull(mPendingFido2CredentialRequest);
-        mPendingFido2CredentialRequest.cancelConditionalGetAssertion();
+        mPendingFido2CredentialRequest.cancelGetAssertion();
     }
 
     /** Callbacks for receiving responses from the internal handlers. */
@@ -545,7 +564,8 @@ public final class AuthenticatorImpl implements Authenticator, AuthenticationCon
         }
 
         @Override
-        public boolean showIntent(PendingIntent intent, Callback<Pair<Integer, Intent>> callback) {
+        public boolean showIntent(
+                PendingIntent intent, Callback<Pair<Integer, @Nullable Intent>> callback) {
             return mWindow != null
                     && mWindow.getActivity().get() != null
                     && mWindow.showCancelableIntent(intent, new CallbackWrapper(callback), null)
@@ -553,14 +573,14 @@ public final class AuthenticatorImpl implements Authenticator, AuthenticationCon
         }
 
         private static class CallbackWrapper implements WindowAndroid.IntentCallback {
-            private final Callback<Pair<Integer, Intent>> mCallback;
+            private final Callback<Pair<Integer, @Nullable Intent>> mCallback;
 
-            CallbackWrapper(Callback<Pair<Integer, Intent>> callback) {
+            CallbackWrapper(Callback<Pair<Integer, @Nullable Intent>> callback) {
                 mCallback = callback;
             }
 
             @Override
-            public void onIntentCompleted(int resultCode, Intent data) {
+            public void onIntentCompleted(int resultCode, @Nullable Intent data) {
                 mCallback.onResult(new Pair(resultCode, data));
             }
         }

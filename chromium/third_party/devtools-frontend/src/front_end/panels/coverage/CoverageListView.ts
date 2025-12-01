@@ -1,7 +1,8 @@
-// Copyright (c) 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
@@ -10,60 +11,70 @@ import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as Workspace from '../../models/workspace/workspace.js';
 import * as DataGrid from '../../ui/legacy/components/data_grid/data_grid.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import {Directives, html, nothing, render} from '../../ui/lit/lit.js';
 
 import coverageListViewStyles from './coverageListView.css.js';
-import {
-  CoverageType,
-  SourceURLCoverageInfo,
-  type URLCoverageInfo,
-} from './CoverageModel.js';
+import {CoverageType} from './CoverageModel.js';
+
+export interface CoverageListItem {
+  url: Platform.DevToolsPath.UrlString;
+  type: CoverageType;
+  size: number;
+  usedSize: number;
+  unusedSize: number;
+  usedPercentage: number;
+  unusedPercentage: number;
+  sources: CoverageListItem[];
+  isContentScript: boolean;
+  generatedUrl?: Platform.DevToolsPath.UrlString;
+}
 
 const UIStrings = {
   /**
-   *@description Text that appears on a button for the css resource type filter.
+   * @description Text that appears on a button for the css resource type filter.
    */
   css: 'CSS',
   /**
-   *@description Text in Coverage List View of the Coverage tab
+   * @description Text in Coverage List View of the Coverage tab
    */
   jsPerFunction: 'JS (per function)',
   /**
-   *@description Text in Coverage List View of the Coverage tab
+   * @description Text in Coverage List View of the Coverage tab
    */
   jsPerBlock: 'JS (per block)',
   /**
-   *@description Text for web URLs
+   * @description Text for web URLs
    */
   url: 'URL',
   /**
-   *@description Text that refers to some types
+   * @description Text that refers to some types
    */
   type: 'Type',
   /**
-   *@description Text in Coverage List View of the Coverage tab
+   * @description Text in Coverage List View of the Coverage tab
    */
   totalBytes: 'Total Bytes',
   /**
-   *@description Text in Coverage List View of the Coverage tab
+   * @description Text in Coverage List View of the Coverage tab
    */
   unusedBytes: 'Unused Bytes',
   /**
-   *@description Text in the Coverage List View of the Coverage Tab
+   * @description Text in the Coverage List View of the Coverage Tab
    */
   usageVisualization: 'Usage Visualization',
   /**
-   *@description Data grid name for Coverage data grids
+   * @description Data grid name for Coverage data grids
    */
   codeCoverage: 'Code Coverage',
   /**
-   *@description Cell title in Coverage List View of the Coverage tab. The coverage tool tells
+   * @description Cell title in Coverage List View of the Coverage tab. The coverage tool tells
    *developers which functions (logical groups of lines of code) were actually run/executed. If a
    *function does get run, then it is marked in the UI to indicate that it was covered.
    */
   jsCoverageWithPerFunction:
       'JS coverage with per function granularity: Once a function was executed, the whole function is marked as covered.',
   /**
-   *@description Cell title in Coverage List View of the Coverage tab. The coverage tool tells
+   * @description Cell title in Coverage List View of the Coverage tab. The coverage tool tells
    *developers which blocks (logical groups of lines of code, smaller than a function) were actually
    *run/executed. If a block does get run, then it is marked in the UI to indicate that it was
    *covered.
@@ -71,48 +82,49 @@ const UIStrings = {
   jsCoverageWithPerBlock:
       'JS coverage with per block granularity: Once a block of JavaScript was executed, that block is marked as covered.',
   /**
-   *@description Accessible text for the value in bytes in memory allocation or coverage view.
+   * @description Accessible text for the value in bytes in memory allocation or coverage view.
    */
   sBytes: '{n, plural, =1 {# byte} other {# bytes}}',
   /**
-   *@description Accessible text for the unused bytes column in the coverage tool that describes the total unused bytes and percentage of the file unused.
-   *@example {88%} percentage
+   * @description Accessible text for the unused bytes column in the coverage tool that describes the total unused bytes and percentage of the file unused.
+   * @example {88%} percentage
    */
   sBytesS: '{n, plural, =1 {# byte, {percentage}} other {# bytes, {percentage}}}',
   /**
-   *@description Tooltip text for the bar in the coverage list view of the coverage tool that illustrates the relation between used and unused bytes.
-   *@example {1000} PH1
-   *@example {12.34} PH2
+   * @description Tooltip text for the bar in the coverage list view of the coverage tool that illustrates the relation between used and unused bytes.
+   * @example {1000} PH1
+   * @example {12.34} PH2
    */
   sBytesSBelongToFunctionsThatHave: '{PH1} bytes ({PH2}) belong to functions that have not (yet) been executed.',
   /**
-   *@description Tooltip text for the bar in the coverage list view of the coverage tool that illustrates the relation between used and unused bytes.
-   *@example {1000} PH1
-   *@example {12.34} PH2
+   * @description Tooltip text for the bar in the coverage list view of the coverage tool that illustrates the relation between used and unused bytes.
+   * @example {1000} PH1
+   * @example {12.34} PH2
    */
   sBytesSBelongToBlocksOf: '{PH1} bytes ({PH2}) belong to blocks of JavaScript that have not (yet) been executed.',
   /**
-   *@description Message in Coverage View of the Coverage tab
-   *@example {1000} PH1
-   *@example {12.34} PH2
+   * @description Message in Coverage View of the Coverage tab
+   * @example {1000} PH1
+   * @example {12.34} PH2
    */
   sBytesSBelongToFunctionsThatHaveExecuted: '{PH1} bytes ({PH2}) belong to functions that have executed at least once.',
   /**
-   *@description Message in Coverage View of the Coverage tab
-   *@example {1000} PH1
-   *@example {12.34} PH2
+   * @description Message in Coverage View of the Coverage tab
+   * @example {1000} PH1
+   * @example {12.34} PH2
    */
   sBytesSBelongToBlocksOfJavascript:
       '{PH1} bytes ({PH2}) belong to blocks of JavaScript that have executed at least once.',
   /**
-   *@description Accessible text for the visualization column of coverage tool. Contains percentage of unused bytes to used bytes.
-   *@example {12.3} PH1
-   *@example {12.3} PH2
+   * @description Accessible text for the visualization column of coverage tool. Contains percentage of unused bytes to used bytes.
+   * @example {12.3} PH1
+   * @example {12.3} PH2
    */
   sOfFileUnusedSOfFileUsed: '{PH1} % of file unused, {PH2} % of file used',
 } as const;
 const str_ = i18n.i18n.registerUIStrings('panels/coverage/CoverageListView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
+const {styleMap} = Directives;
 
 export function coverageTypeToString(type: CoverageType): string {
   const types = [];
@@ -128,16 +140,14 @@ export function coverageTypeToString(type: CoverageType): string {
 }
 
 export class CoverageListView extends UI.Widget.VBox {
-  private readonly nodeForCoverageInfo: Map<URLCoverageInfo, GridNode>;
-  private readonly isVisibleFilter: (arg0: URLCoverageInfo) => boolean;
+  private readonly nodeForUrl: Map<Platform.DevToolsPath.UrlString, GridNode>;
   private highlightRegExp: RegExp|null;
   private dataGrid: DataGrid.SortableDataGrid.SortableDataGrid<GridNode>;
 
-  constructor(isVisibleFilter: (arg0: URLCoverageInfo) => boolean) {
+  constructor() {
     super({useShadowDom: true});
     this.registerRequiredCSS(coverageListViewStyles);
-    this.nodeForCoverageInfo = new Map();
-    this.isVisibleFilter = isVisibleFilter;
+    this.nodeForUrl = new Map();
     this.highlightRegExp = null;
 
     const columns = [
@@ -179,113 +189,82 @@ export class CoverageListView extends UI.Widget.VBox {
         weight: 1,
       },
     ] as DataGrid.DataGrid.ColumnDescriptor[];
-    this.dataGrid = new DataGrid.SortableDataGrid.SortableDataGrid<GridNode>({
-      displayName: i18nString(UIStrings.codeCoverage),
-      columns,
-      refreshCallback: undefined,
-      deleteCallback: undefined,
-    });
+    this.dataGrid =
+        DataGrid.SortableDataGrid.SortableDataGrid.create(['dummy'], [], i18nString(UIStrings.codeCoverage)) as
+        DataGrid.SortableDataGrid.SortableDataGrid<GridNode>;
+    this.dataGrid.removeColumn('dummy');
+    for (const column of columns) {
+      this.dataGrid.addColumn(column);
+    }
+    this.dataGrid.setColumnsVisibility(new Set(columns.map(column => column.id)));
     this.dataGrid.setResizeMethod(DataGrid.DataGrid.ResizeMethod.LAST);
     this.dataGrid.setStriped(true);
     this.dataGrid.element.classList.add('flex-auto');
     this.dataGrid.addEventListener(DataGrid.DataGrid.Events.OPENED_NODE, this.onOpenedNode, this);
-    this.dataGrid.addEventListener(DataGrid.DataGrid.Events.SORTING_CHANGED, this.sortingChanged, this);
 
     const dataGridWidget = this.dataGrid.asWidget();
     dataGridWidget.show(this.contentElement);
     this.setDefaultFocusedChild(dataGridWidget);
   }
 
-  update(coverageInfo: URLCoverageInfo[] = []): void {
+  update(coverageInfo: CoverageListItem[], highlightRegExp: RegExp|null): void {
+    this.highlightRegExp = highlightRegExp;
+    const maxSize = coverageInfo.reduce((acc, entry) => Math.max(acc, entry.size), 0);
+
+    const coverageUrls = new Set(coverageInfo.map(info => info.url));
+    for (const [url, node] of this.nodeForUrl.entries()) {
+      if (!coverageUrls.has(url)) {
+        node.remove();
+        this.nodeForUrl.delete(url);
+      }
+    }
+
     let hadUpdates = false;
-    const maxSize = coverageInfo.reduce((acc, entry) => Math.max(acc, entry.size()), 0);
-    const rootNode = this.dataGrid.rootNode();
     for (const entry of coverageInfo) {
-      let node = this.nodeForCoverageInfo.get(entry);
+      let node = this.nodeForUrl.get(entry.url);
       if (node) {
-        if (this.isVisibleFilter(node.coverageInfo)) {
-          hadUpdates = node.refreshIfNeeded(maxSize) || hadUpdates;
-          if (entry.sourcesURLCoverageInfo.size > 0) {
-            this.updateSourceNodes(entry.sourcesURLCoverageInfo, maxSize, node);
-          }
+        hadUpdates = node.refreshIfNeeded(maxSize, entry) || hadUpdates;
+        if (entry.sources.length > 0) {
+          this.updateSourceNodes(entry.sources, maxSize, node);
         }
+        node.setHighlight(this.highlightRegExp);
         continue;
       }
       node = new GridNode(entry, maxSize);
-      this.nodeForCoverageInfo.set(entry, node);
-      if (this.isVisibleFilter(node.coverageInfo)) {
-        rootNode.appendChild(node);
-        if (entry.sourcesURLCoverageInfo.size > 0) {
-          void this.createSourceNodes(entry.sourcesURLCoverageInfo, maxSize, node);
-        }
-        hadUpdates = true;
+      this.nodeForUrl.set(entry.url, node);
+      this.appendNodeByType(node);
+      if (entry.sources.length > 0) {
+        this.updateSourceNodes(entry.sources, maxSize, node);
       }
+      node.setHighlight(this.highlightRegExp);
+      hadUpdates = true;
     }
     if (hadUpdates) {
-      this.sortingChanged();
+      this.dataGrid.dispatchEventToListeners(DataGrid.DataGrid.Events.SORTING_CHANGED);
     }
   }
 
-  updateSourceNodes(
-      sourcesURLCoverageInfo: Map<Platform.DevToolsPath.UrlString, SourceURLCoverageInfo>, maxSize: number,
-      node: GridNode): void {
-    let shouldCreateSourceNodes = false;
-    for (const coverageInfo of sourcesURLCoverageInfo.values()) {
-      const sourceNode = this.nodeForCoverageInfo.get(coverageInfo);
+  updateSourceNodes(sources: CoverageListItem[], maxSize: number, node: GridNode): void {
+    for (const coverageInfo of sources) {
+      const sourceNode = this.nodeForUrl.get(coverageInfo.url);
       if (sourceNode) {
-        sourceNode.refreshIfNeeded(maxSize);
+        sourceNode.refreshIfNeeded(maxSize, coverageInfo);
       } else {
-        shouldCreateSourceNodes = true;
-        break;
+        const sourceNode = new GridNode(coverageInfo, maxSize);
+        node.appendChild(sourceNode);
+        this.nodeForUrl.set(coverageInfo.url, sourceNode);
       }
-    }
-    if (shouldCreateSourceNodes) {
-      void this.createSourceNodes(sourcesURLCoverageInfo, maxSize, node);
-    }
-  }
-
-  async createSourceNodes(
-      sourcesURLCoverageInfo: Map<Platform.DevToolsPath.UrlString, SourceURLCoverageInfo>, maxSize: number,
-      node: GridNode): Promise<void> {
-    for (const coverageInfo of sourcesURLCoverageInfo.values()) {
-      const sourceNode = new GridNode(coverageInfo, maxSize);
-      node.appendChild(sourceNode);
-      this.nodeForCoverageInfo.set(coverageInfo, sourceNode);
     }
   }
 
   reset(): void {
-    this.nodeForCoverageInfo.clear();
+    this.nodeForUrl.clear();
     this.dataGrid.rootNode().removeChildren();
   }
 
-  updateFilterAndHighlight(highlightRegExp: RegExp|null): void {
-    this.highlightRegExp = highlightRegExp;
-    let hadTreeUpdates = false;
-    for (const node of this.nodeForCoverageInfo.values()) {
-      const shouldBeVisible = this.isVisibleFilter(node.coverageInfo);
-      const isVisible = Boolean(node.parent);
-      if (shouldBeVisible) {
-        node.setHighlight(this.highlightRegExp);
-      }
-      if (shouldBeVisible === isVisible) {
-        continue;
-      }
-      hadTreeUpdates = true;
-      if (!shouldBeVisible) {
-        node.remove();
-      } else {
-        this.appendNodeByType(node);
-      }
-    }
-    if (hadTreeUpdates) {
-      this.sortingChanged();
-    }
-  }
-
   private appendNodeByType(node: GridNode): void {
-    if (node.coverageInfo instanceof SourceURLCoverageInfo) {
-      const parentNode = this.nodeForCoverageInfo.get(node.coverageInfo.generatedURLCoverageInfo);
+    if (node.coverageInfo.generatedUrl) {
+      const parentNode = this.nodeForUrl.get(node.coverageInfo.generatedUrl);
       parentNode?.appendChild(node);
     } else {
       this.dataGrid.rootNode().appendChild(node);
@@ -293,11 +272,9 @@ export class CoverageListView extends UI.Widget.VBox {
   }
 
   selectByUrl(url: string): void {
-    for (const [info, node] of this.nodeForCoverageInfo.entries()) {
-      if (info.url() === url) {
-        node.revealAndSelect();
-        break;
-      }
+    const node = this.nodeForUrl.get(url as Platform.DevToolsPath.UrlString);
+    if (node) {
+      node.revealAndSelect();
     }
   }
 
@@ -311,7 +288,7 @@ export class CoverageListView extends UI.Widget.VBox {
       return;
     }
     const coverageInfo = (node as GridNode).coverageInfo;
-    const sourceCode = Workspace.Workspace.WorkspaceImpl.instance().uiSourceCodeForURL(coverageInfo.url());
+    const sourceCode = Workspace.Workspace.WorkspaceImpl.instance().uiSourceCodeForURL(coverageInfo.url);
     if (!sourceCode) {
       return;
     }
@@ -320,21 +297,6 @@ export class CoverageListView extends UI.Widget.VBox {
       return;
     }
     void Common.Revealer.reveal(sourceCode);
-  }
-
-  private sortingChanged(): void {
-    const columnId = this.dataGrid.sortColumnId();
-    if (!columnId) {
-      return;
-    }
-    const sortFunction = GridNode.sortFunctionForColumn(columnId) as (
-                             (arg0: DataGrid.SortableDataGrid.SortableDataGridNode<GridNode>,
-                              arg1: DataGrid.SortableDataGrid.SortableDataGridNode<GridNode>) => number) |
-        null;
-    if (!sortFunction) {
-      return;
-    }
-    this.dataGrid.sortNodes(sortFunction, !this.dataGrid.isSortOrderAscending());
   }
 }
 
@@ -360,18 +322,28 @@ function getBytesFormatter(): Intl.NumberFormat {
 }
 
 export class GridNode extends DataGrid.SortableDataGrid.SortableDataGridNode<GridNode> {
-  coverageInfo: URLCoverageInfo;
+  coverageInfo: CoverageListItem;
   private lastUsedSize!: number|undefined;
   private url: Platform.DevToolsPath.UrlString;
   private maxSize: number;
   private highlightRegExp: RegExp|null;
 
-  constructor(coverageInfo: URLCoverageInfo, maxSize: number) {
+  constructor(coverageInfo: CoverageListItem, maxSize: number) {
     super();
     this.coverageInfo = coverageInfo;
-    this.url = coverageInfo.url();
+    this.url = coverageInfo.url;
     this.maxSize = maxSize;
     this.highlightRegExp = null;
+    this.#updateData(coverageInfo);
+  }
+
+  #updateData(coverageInfo: CoverageListItem): void {
+    this.data['url'] = this.url;
+    this.data['type'] = coverageTypeToString(coverageInfo.type);
+    this.data['size'] = coverageInfo.size;
+    this.data['unused-size'] = coverageInfo.unusedSize;
+    this.data['bars'] = coverageInfo.unusedSize;
+    this.coverageInfo = coverageInfo;
   }
 
   setHighlight(highlightRegExp: RegExp|null): void {
@@ -379,105 +351,104 @@ export class GridNode extends DataGrid.SortableDataGrid.SortableDataGridNode<Gri
       return;
     }
     this.highlightRegExp = highlightRegExp;
+    for (const child of this.children) {
+      (child as GridNode).setHighlight(this.highlightRegExp);
+    }
     this.refresh();
   }
 
-  refreshIfNeeded(maxSize: number): boolean {
-    if (this.lastUsedSize === this.coverageInfo.usedSize() && maxSize === this.maxSize) {
+  refreshIfNeeded(maxSize: number, coverageInfo: CoverageListItem): boolean {
+    if (this.lastUsedSize === coverageInfo.usedSize && maxSize === this.maxSize) {
       return false;
     }
-    this.lastUsedSize = this.coverageInfo.usedSize();
+    this.lastUsedSize = coverageInfo.usedSize;
     this.maxSize = maxSize;
     this.refresh();
+    this.#updateData(coverageInfo);
     return true;
   }
 
   override createCell(columnId: string): HTMLElement {
     const cell = this.createTD(columnId);
+    const info = this.coverageInfo;
+    const formatBytes = (value: number|undefined): string => {
+      return getBytesFormatter().format(value ?? 0);
+    };
+    const formatPercent = (value: number|undefined): string => {
+      return getPercentageFormatter().format(value ?? 0);
+    };
     switch (columnId) {
       case 'url': {
         UI.Tooltip.Tooltip.install(cell, this.url);
-        const outer = cell.createChild('div', 'url-outer');
-        const prefix = outer.createChild('div', 'url-prefix');
-        const suffix = outer.createChild('div', 'url-suffix');
-        const splitURL = /^(.*)(\/[^/]*)$/.exec(this.url);
-        prefix.textContent = splitURL ? splitURL[1] : this.url;
-        suffix.textContent = splitURL ? splitURL[2] : '';
-        if (this.highlightRegExp) {
-          this.highlight(outer, this.url);
-        }
         this.setCellAccessibleName(this.url, cell, columnId);
+        const splitURL = /^(.*)(\/[^/]*)$/.exec(this.url);
+        render(
+            html`
+          <div class="url-outer">
+            <div class="url-prefix">${splitURL ? splitURL[1] : this.url}</div>
+            <div class="url-suffix">${splitURL ? splitURL[2] : ''}</div>
+          </div>`,
+            cell);
+        if (this.highlightRegExp) {
+          this.highlight(cell, this.url);
+        }
         break;
       }
       case 'type': {
-        cell.textContent = coverageTypeToString(this.coverageInfo.type());
-        if (this.coverageInfo.type() & CoverageType.JAVA_SCRIPT_PER_FUNCTION) {
-          UI.Tooltip.Tooltip.install(cell, i18nString(UIStrings.jsCoverageWithPerFunction));
-        } else if (this.coverageInfo.type() & CoverageType.JAVA_SCRIPT) {
-          UI.Tooltip.Tooltip.install(cell, i18nString(UIStrings.jsCoverageWithPerBlock));
-        }
+        UI.Tooltip.Tooltip.install(
+            cell,
+            info.type & CoverageType.JAVA_SCRIPT_PER_FUNCTION ? i18nString(UIStrings.jsCoverageWithPerFunction) :
+                info.type & CoverageType.JAVA_SCRIPT          ? i18nString(UIStrings.jsCoverageWithPerBlock) :
+                                                                '');
+        render(coverageTypeToString(this.coverageInfo.type), cell);
         break;
       }
       case 'size': {
-        const size = this.coverageInfo.size() || 0;
-        const sizeSpan = cell.createChild('span');
-        const sizeFormatted = getBytesFormatter().format(size);
-        sizeSpan.textContent = sizeFormatted;
-        const sizeAccessibleName = i18nString(UIStrings.sBytes, {n: size});
-        this.setCellAccessibleName(sizeAccessibleName, cell, columnId);
+        this.setCellAccessibleName(i18nString(UIStrings.sBytes, {n: info.size || 0}), cell, columnId);
+        render(html`<span>${formatBytes(info.size)}</span>`, cell);
         break;
       }
       case 'unused-size': {
-        const unusedSize = this.coverageInfo.unusedSize() || 0;
-        const unusedSizeSpan = cell.createChild('span');
-        const unusedPercentsSpan = cell.createChild('span', 'percent-value');
-        const unusedSizeFormatted = getBytesFormatter().format(unusedSize);
-        unusedSizeSpan.textContent = unusedSizeFormatted;
-        const unusedPercentFormatted = getPercentageFormatter().format(this.coverageInfo.unusedPercentage());
-        unusedPercentsSpan.textContent = unusedPercentFormatted;
-        const unusedAccessibleName = i18nString(UIStrings.sBytesS, {n: unusedSize, percentage: unusedPercentFormatted});
-        this.setCellAccessibleName(unusedAccessibleName, cell, columnId);
+        this.setCellAccessibleName(
+            i18nString(UIStrings.sBytesS, {n: info.unusedSize, percentage: formatPercent(info.unusedPercentage)}), cell,
+            columnId);
+        // clang-format off
+        render(html`
+          <span>${formatBytes(info.unusedSize)}</span>
+          <span class="percent-value">
+            ${formatPercent(info.unusedPercentage)}
+          </span>`, cell);
+        // clang-format on
         break;
       }
       case 'bars': {
-        const barContainer = cell.createChild('div', 'bar-container');
-        const unusedPercent = getPercentageFormatter().format(this.coverageInfo.unusedPercentage());
-        const usedPercent = getPercentageFormatter().format(this.coverageInfo.usedPercentage());
-        if (this.coverageInfo.unusedSize() > 0) {
-          const unusedSizeBar = barContainer.createChild('div', 'bar bar-unused-size');
-          unusedSizeBar.style.width = ((this.coverageInfo.unusedSize() / this.maxSize) * 100 || 0) + '%';
-          if (this.coverageInfo.type() & CoverageType.JAVA_SCRIPT_PER_FUNCTION) {
-            UI.Tooltip.Tooltip.install(
-                unusedSizeBar,
-                i18nString(
-                    UIStrings.sBytesSBelongToFunctionsThatHave,
-                    {PH1: this.coverageInfo.unusedSize(), PH2: unusedPercent}));
-          } else if (this.coverageInfo.type() & CoverageType.JAVA_SCRIPT) {
-            UI.Tooltip.Tooltip.install(
-                unusedSizeBar,
-                i18nString(
-                    UIStrings.sBytesSBelongToBlocksOf, {PH1: this.coverageInfo.unusedSize(), PH2: unusedPercent}));
-          }
-        }
-        if (this.coverageInfo.usedSize() > 0) {
-          const usedSizeBar = barContainer.createChild('div', 'bar bar-used-size');
-          usedSizeBar.style.width = ((this.coverageInfo.usedSize() / this.maxSize) * 100 || 0) + '%';
-          if (this.coverageInfo.type() & CoverageType.JAVA_SCRIPT_PER_FUNCTION) {
-            UI.Tooltip.Tooltip.install(
-                usedSizeBar,
-                i18nString(
-                    UIStrings.sBytesSBelongToFunctionsThatHaveExecuted,
-                    {PH1: this.coverageInfo.usedSize(), PH2: usedPercent}));
-          } else if (this.coverageInfo.type() & CoverageType.JAVA_SCRIPT) {
-            UI.Tooltip.Tooltip.install(
-                usedSizeBar,
-                i18nString(
-                    UIStrings.sBytesSBelongToBlocksOfJavascript,
-                    {PH1: this.coverageInfo.usedSize(), PH2: usedPercent}));
-          }
-        }
         this.setCellAccessibleName(
-            i18nString(UIStrings.sOfFileUnusedSOfFileUsed, {PH1: unusedPercent, PH2: usedPercent}), cell, columnId);
+            i18nString(
+                UIStrings.sOfFileUnusedSOfFileUsed,
+                {PH1: formatPercent(info.unusedPercentage), PH2: formatPercent(info.usedPercentage)}),
+            cell, columnId);
+        // clang-format off
+        render(html`
+          <div class="bar-container">
+            ${info.unusedSize > 0 ? html`
+              <div class="bar bar-unused-size"
+                  title=${
+                    info.type & CoverageType.JAVA_SCRIPT_PER_FUNCTION ? i18nString(UIStrings.sBytesSBelongToFunctionsThatHave, {PH1: info.unusedSize, PH2: formatPercent(info.unusedPercentage)}) :
+                    info.type & CoverageType.JAVA_SCRIPT              ? i18nString(UIStrings.sBytesSBelongToBlocksOf, {PH1: info.unusedSize, PH2: formatPercent(info.unusedPercentage)}) :
+                                                                          ''}
+                  style=${styleMap({width: ((info.unusedSize / this.maxSize) * 100 || 0) + '%'})}>
+              </div>` : nothing}
+            ${info.usedSize > 0 ? html`
+            <div class="bar bar-used-size"
+                  title=${
+                    info.type & CoverageType.JAVA_SCRIPT_PER_FUNCTION ? i18nString(UIStrings.sBytesSBelongToFunctionsThatHaveExecuted, {PH1: info.usedSize, PH2: formatPercent(info.usedPercentage)}) :
+                    info.type & CoverageType.JAVA_SCRIPT              ? i18nString(UIStrings.sBytesSBelongToBlocksOfJavascript, {PH1: info.usedSize, PH2: formatPercent(info.usedPercentage)}) :
+                                                                          ''}
+                  { PH1: info.usedSize, PH2: formatPercent(info.usedPercentage) })}
+                style=${styleMap({width:((info.usedSize / this.maxSize) * 100 || 0) + '%'})}>
+            </div>` : nothing}
+          </div>`, cell);
+        // clang-format on
       }
     }
     return cell;
@@ -493,28 +464,5 @@ export class GridNode extends DataGrid.SortableDataGrid.SortableDataGridNode<Gri
     }
     const range = new TextUtils.TextRange.SourceRange(matches.index, matches[0].length);
     UI.UIUtils.highlightRangesWithStyleClass(element, [range], 'filter-highlight');
-  }
-
-  static sortFunctionForColumn(columnId: string): ((arg0: GridNode, arg1: GridNode) => number)|null {
-    const compareURL = (a: GridNode, b: GridNode): number => a.url.localeCompare(b.url);
-    switch (columnId) {
-      case 'url':
-        return compareURL;
-      case 'type':
-        return (a: GridNode, b: GridNode) => {
-          const typeA = coverageTypeToString(a.coverageInfo.type());
-          const typeB = coverageTypeToString(b.coverageInfo.type());
-          return typeA.localeCompare(typeB) || compareURL(a, b);
-        };
-      case 'size':
-        return (a: GridNode, b: GridNode) => a.coverageInfo.size() - b.coverageInfo.size() || compareURL(a, b);
-      case 'bars':
-      case 'unused-size':
-        return (a: GridNode, b: GridNode) =>
-                   a.coverageInfo.unusedSize() - b.coverageInfo.unusedSize() || compareURL(a, b);
-      default:
-        console.assert(false, 'Unknown sort field: ' + columnId);
-        return null;
-    }
   }
 }

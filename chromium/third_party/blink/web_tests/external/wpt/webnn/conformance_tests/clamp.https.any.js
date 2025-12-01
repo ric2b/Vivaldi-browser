@@ -1893,7 +1893,7 @@ const clampTests = [
       }],
       'expectedOutputs': {
         'clampOutput': {
-          'data': [0, Infinity, 0, 2147483647, 0, 1, 0],
+          'data': [-Infinity, Infinity, -3e35, 2147483647, -2, 1, 0],
           'descriptor': {shape: [7], dataType: 'float32'}
         }
       }
@@ -1917,7 +1917,7 @@ const clampTests = [
       }],
       'expectedOutputs': {
         'clampOutput': {
-          'data': [-Infinity, 0, -3e35, 0, -2, 0, 0],
+          'data': [-Infinity, Infinity, -3e35, 2147483647, -2, 1, 0],
           'descriptor': {shape: [7], dataType: 'float32'}
         }
       }
@@ -1925,10 +1925,4 @@ const clampTests = [
   },
 ];
 
-if (navigator.ml) {
-  clampTests.filter(isTargetTest).forEach((test) => {
-    webnn_conformance_test(buildAndExecuteGraph, getPrecisionTolerance, test);
-  });
-} else {
-  test(() => assert_implements(navigator.ml, 'missing navigator.ml'));
-}
+webnn_conformance_test(clampTests, buildAndExecuteGraph, getPrecisionTolerance);

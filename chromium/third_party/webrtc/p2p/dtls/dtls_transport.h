@@ -23,8 +23,8 @@
 #include "api/array_view.h"
 #include "api/crypto/crypto_options.h"
 #include "api/dtls_transport_interface.h"
+#include "api/environment/environment.h"
 #include "api/rtc_error.h"
-#include "api/rtc_event_log/rtc_event_log.h"
 #include "api/scoped_refptr.h"
 #include "api/sequence_checker.h"
 #include "api/task_queue/pending_task_safety_flag.h"
@@ -120,13 +120,10 @@ class DtlsTransportInternalImpl : public DtlsTransportInternal {
   //
   // `crypto_options` are the options used for the DTLS handshake. This affects
   // whether GCM crypto suites are negotiated.
-  //
-  // `event_log` is an optional RtcEventLog for logging state changes. It should
-  // outlive the DtlsTransport.
   DtlsTransportInternalImpl(
+      const Environment& env,
       IceTransportInternal* ice_transport,
       const CryptoOptions& crypto_options,
-      RtcEventLog* event_log,
       SSLProtocolVersion max_version = SSL_PROTOCOL_DTLS_12);
 
   ~DtlsTransportInternalImpl() override;
@@ -271,6 +268,7 @@ class DtlsTransportInternalImpl : public DtlsTransportInternal {
                               const ReceivedIpPacket& packet)> callback);
   void PeriodicRetransmitDtlsPacketUntilDtlsConnected();
 
+  const Environment env_;
   RTC_NO_UNIQUE_ADDRESS SequenceChecker thread_checker_;
 
   const int component_;
@@ -303,8 +301,6 @@ class DtlsTransportInternalImpl : public DtlsTransportInternal {
   // where DTLS can become writable before ICE. This can confuse other parts
   // of the stack.
   bool ice_has_been_writable_ = false;
-
-  RtcEventLog* const event_log_;
 
   // Initialized in constructor based on WebRTC-IceHandshakeDtls,
   // (so that we return PIGGYBACK_ACK to client if we get STUN_BINDING_REQUEST

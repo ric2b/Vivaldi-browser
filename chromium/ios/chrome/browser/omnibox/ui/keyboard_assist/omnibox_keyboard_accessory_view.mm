@@ -10,6 +10,7 @@
 #import "ios/chrome/browser/lens/ui_bundled/lens_entrypoint.h"
 #import "ios/chrome/browser/omnibox/ui/keyboard_assist/omnibox_assistive_keyboard_views.h"
 #import "ios/chrome/browser/omnibox/ui/keyboard_assist/omnibox_assistive_keyboard_views_utils.h"
+#import "ios/chrome/browser/omnibox/ui/omnibox_text_input.h"
 #import "ios/chrome/browser/search_engines/model/search_engine_observer_bridge.h"
 #import "ios/chrome/browser/search_engines/model/search_engines_util.h"
 #import "ios/chrome/browser/shared/public/commands/help_commands.h"
@@ -28,6 +29,17 @@ namespace {
 // should be shown.
 constexpr base::TimeDelta kLensButtonIPHDelay = base::Seconds(1);
 
+// The glass effect view height.
+constexpr CGFloat kGlassEffectViewHeight = 58;
+
+// Corner radius of the keyboard accessory on iOS 26.0+.
+constexpr CGFloat kCornerRadius = 24;
+
+// Shadow parameters. Used when the liquid glass effect is enabled.
+constexpr CGFloat kShadowRadius = 16.0;
+constexpr CGFloat kShadowVerticalOffset = 4.0;
+constexpr CGFloat kShadowOpacity = 0.12;
+
 }  // namespace
 
 @interface OmniboxKeyboardAccessoryView () <SearchEngineObserving>
@@ -43,7 +55,7 @@ constexpr base::TimeDelta kLensButtonIPHDelay = base::Seconds(1);
 @property(nonatomic, weak) UIStackView* searchStackView;
 
 // The text field that this view is an accessory to.
-@property(nonatomic, weak) UITextField* textField;
+@property(nonatomic, weak) UIResponder* responder;
 
 // IPH bubble handler for displaying IPH bubbles relating to the omnibox.
 @property(nonatomic, weak) id<HelpCommands> helpHandler;
@@ -57,6 +69,8 @@ constexpr base::TimeDelta kLensButtonIPHDelay = base::Seconds(1);
 
 @implementation OmniboxKeyboardAccessoryView {
   std::unique_ptr<SearchEngineObserverBridge> _searchEngineObserver;
+  /// The visual effect view applied to the keyboard accessory view.
+  UIVisualEffectView* _effectView;
 }
 
 @synthesize buttonTitles = _buttonTitles;
@@ -66,7 +80,7 @@ constexpr base::TimeDelta kLensButtonIPHDelay = base::Seconds(1);
                        delegate:(id<OmniboxAssistiveKeyboardDelegate>)delegate
                     pasteTarget:(id<UIPasteConfigurationSupporting>)pasteTarget
              templateURLService:(TemplateURLService*)templateURLService
-                      textField:(UITextField*)textField
+                      responder:(UIResponder*)responder
                     helpHandler:(id<HelpCommands>)helpHandler {
   self = [super initWithFrame:CGRectZero
                inputViewStyle:UIInputViewStyleKeyboard];
@@ -74,34 +88,71 @@ constexpr base::TimeDelta kLensButtonIPHDelay = base::Seconds(1);
     _buttonTitles = buttonTitles;
     _delegate = delegate;
     _pasteTarget = pasteTarget;
-    _textField = textField;
+    _responder = responder;
     self.translatesAutoresizingMaskIntoConstraints = NO;
-    self.allowsSelfSizing = YES;
+    // When the glass effect is enabled, the view's height is explicitly managed
+    // by a height constraint, so self-sizing must be disabled. For the default
+    // style, self-sizing is allowed.
+    self.allowsSelfSizing = !GlassEffectEnabled();
     self.templateURLService = templateURLService;
     self.helpHandler = helpHandler;
     [self addSubviews];
 
-    if (@available(iOS 17, *)) {
-      NSArray<UITrait>* traits =
-          TraitCollectionSetForTraits(@[ UITraitUserInterfaceStyle.class ]);
-      [self
-          registerForTraitChanges:traits
+    NSArray<UITrait>* traits =
+        TraitCollectionSetForTraits(@[ UITraitUserInterfaceStyle.class ]);
+    [self registerForTraitChanges:traits
                        withAction:@selector(updateLensAppearanceOnTraitChange)];
-    }
   }
   return self;
 }
 
-#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  if (@available(iOS 17, *)) {
-    return;
+- (UIView*)contentView {
+  if (@available(iOS 26, *)) {
+    if (_effectView) {
+      return _effectView.contentView;
+    }
+
+    // Create glass effect
+    UIGlassEffect* glassEffect = [[UIGlassEffect alloc] init];
+    glassEffect.interactive = YES;
+    glassEffect.tintColor = [UIColor colorNamed:kSecondaryBackgroundColor];
+    _effectView = [[UIVisualEffectView alloc] initWithEffect:glassEffect];
+    self.layer.shadowRadius = kShadowRadius;
+    self.layer.shadowOffset = CGSizeMake(0, kShadowVerticalOffset);
+    self.layer.shadowOpacity = kShadowOpacity;
+    self.layer.shadowColor =
+        [UIColor colorNamed:kBackgroundShadowColor].CGColor;
+    self.layer.masksToBounds = NO;
+    _effectView.cornerConfiguration = [UICornerConfiguration
+        configurationWithRadius:
+            [UICornerRadius
+                containerConcentricRadiusWithMinimum:kCornerRadius]];
+    _effectView.translatesAutoresizingMaskIntoConstraints = NO;
+    [_effectView.heightAnchor constraintEqualToConstant:kGlassEffectViewHeight]
+        .active = YES;
+
+    [self addSubview:_effectView];
+
+    // Insets around the effectView to keep it floating above keyboard.
+    const NSDirectionalEdgeInsets effectViewInsets =
+        NSDirectionalEdgeInsetsMake(0, 12., 12., 12.);
+    NSLayoutConstraint* heightConstraint =
+        [self.heightAnchor constraintEqualToConstant:kGlassEffectViewHeight +
+                                                     effectViewInsets.bottom];
+    heightConstraint.priority = UILayoutPriorityRequired;
+    heightConstraint.active = YES;
+    AddSameConstraintsToSidesWithInsets(
+        _effectView, self,
+        LayoutSides::kTrailing | LayoutSides::kLeading | LayoutSides::kBottom,
+        effectViewInsets);
+    AddSameConstraints(_effectView, _effectView.contentView);
+    return _effectView.contentView;
   }
 
-  [self updateLensAppearanceOnTraitChange];
+  // Pre-iOS 26, no glass effect is used, so views are added directly to this
+  // view.
+  return self;
 }
-#endif
 
 - (void)addSubviews {
   if (!self.subviews.count) {
@@ -116,8 +167,10 @@ constexpr base::TimeDelta kLensButtonIPHDelay = base::Seconds(1);
   const CGFloat kButtonHeight = 36.0;
   const CGFloat kBetweenShortcutButtonSpacing = 5.0;
   const CGFloat kBetweenSearchButtonSpacing = 12.0;
-  const CGFloat kHorizontalMargin = 10.0;
-  const CGFloat kVerticalMargin = 4.0;
+  const CGFloat kSearchStackViewLeadingMargin = 10.0;
+  const CGFloat kShortcutStackViewTrailingMargin = 10.0;
+  const CGFloat kSearchStackViewTopMargin = 4.0;
+  const CGFloat kSearchStackViewBottomMargin = 4.0;
 
   // Create and add stackview filled with the shortcut buttons.
   UIStackView* shortcutStackView = [[UIStackView alloc] init];
@@ -132,7 +185,8 @@ constexpr base::TimeDelta kLensButtonIPHDelay = base::Seconds(1);
     [button.heightAnchor constraintEqualToConstant:kButtonHeight].active = YES;
     [shortcutStackView addArrangedSubview:button];
   }
-  [self addSubview:shortcutStackView];
+  UIView* container = self.contentView;
+  [container addSubview:shortcutStackView];
   self.shortcutStackView = shortcutStackView;
 
   // Create and add a stackview containing the leading assistive buttons, i.e.
@@ -149,25 +203,27 @@ constexpr base::TimeDelta kLensButtonIPHDelay = base::Seconds(1);
   for (UIControl* button in leadingControls) {
     [searchStackView addArrangedSubview:button];
   }
-  [self addSubview:searchStackView];
+  [container addSubview:searchStackView];
   self.searchStackView = searchStackView;
 
   // Position the stack views.
-  id<LayoutGuideProvider> layoutGuide = self.safeAreaLayoutGuide;
+  id<LayoutGuideProvider> layoutGuide =
+      _effectView ? _effectView.contentView : self.safeAreaLayoutGuide;
   [NSLayoutConstraint activateConstraints:@[
     [searchStackView.leadingAnchor
         constraintEqualToAnchor:layoutGuide.leadingAnchor
-                       constant:kHorizontalMargin],
+                       constant:kSearchStackViewLeadingMargin],
     [shortcutStackView.trailingAnchor
         constraintEqualToAnchor:layoutGuide.trailingAnchor
-                       constant:-kHorizontalMargin],
+                       constant:-kShortcutStackViewTrailingMargin],
     [searchStackView.trailingAnchor
         constraintLessThanOrEqualToAnchor:shortcutStackView.leadingAnchor],
-    [searchStackView.topAnchor constraintEqualToAnchor:layoutGuide.topAnchor
-                                              constant:kVerticalMargin],
+    [searchStackView.topAnchor
+        constraintEqualToAnchor:layoutGuide.topAnchor
+                       constant:kSearchStackViewTopMargin],
     [searchStackView.bottomAnchor
         constraintEqualToAnchor:layoutGuide.bottomAnchor
-                       constant:-kVerticalMargin],
+                       constant:-kSearchStackViewBottomMargin],
     [shortcutStackView.topAnchor
         constraintEqualToAnchor:searchStackView.topAnchor],
     [shortcutStackView.bottomAnchor
@@ -232,7 +288,7 @@ constexpr base::TimeDelta kLensButtonIPHDelay = base::Seconds(1);
 
 - (void)didMoveToWindow {
   [super didMoveToWindow];
-  if (!self.window || ![self.textField isFirstResponder]) {
+  if (!self.window || ![self.responder isFirstResponder]) {
     return;
   }
   if (self.templateURLService) {

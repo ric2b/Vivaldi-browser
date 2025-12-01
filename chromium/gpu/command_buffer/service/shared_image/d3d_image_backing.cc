@@ -1530,11 +1530,45 @@ void D3DImageBacking::EndDCompTextureAccess() {
       /*d3d11_signal_device=*/nullptr, std::move(d3d11_fence), fence_value);
 }
 
+std::optional<scoped_refptr<gfx::D3DSharedFence>>
+D3DImageBacking::BeginAccessWebNN() {
+  AutoLock auto_lock(this);
+
+  // WebNNTensors only support exclusive read-write access.
+  if (!ValidateBeginAccess(true)) {
+    return std::nullopt;
+  }
+
+  scoped_refptr<gfx::D3DSharedFence> write_fence;
+  if (!write_fences_.empty()) {
+    // WebNNTensors expect to wait on 1 fence that originates from Dawn.
+    // If there was WebGPU work, this will be Dawn's submission fence.
+    // Otherwise, it will return WebNN's submission fence that was previously
+    // passed to BeginAccessDawn.
+    CHECK_EQ(write_fences_.size(), 1u);
+    write_fence = *write_fences_.begin();
+  }
+
+  BeginAccessCommon(true);
+  return write_fence;
+}
+
+void D3DImageBacking::EndAccessWebNN(
+    scoped_refptr<gfx::D3DSharedFence> signaled_fence) {
+  AutoLock auto_lock(this);
+  if (!signaled_fence) {
+    EndAccessCommon(/*signaled_fences=*/{});
+    return;
+  }
+  EndAccessCommon({signaled_fence});
+}
+
 std::unique_ptr<DawnBufferRepresentation> D3DImageBacking::ProduceDawnBuffer(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     const wgpu::Device& device,
-    wgpu::BackendType backend_type) {
+    wgpu::BackendType backend_type,
+    scoped_refptr<SharedContextState> context_state) {
   DCHECK(usage().Has(SHARED_IMAGE_USAGE_WEBGPU_SHARED_BUFFER));
   DCHECK(d3d12_resource_.Get() != nullptr);
 
@@ -1681,6 +1715,7 @@ std::unique_ptr<WebNNTensorRepresentation> D3DImageBacking::ProduceWebNNTensor(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker) {
   CHECK(usage() & SHARED_IMAGE_USAGE_WEBNN_SHARED_TENSOR);
+  DCHECK(d3d12_resource_.Get() != nullptr);
   return std::make_unique<WebNND3DTensorRepresentation>(manager, this, tracker);
 }
 

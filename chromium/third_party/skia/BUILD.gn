@@ -116,6 +116,10 @@ config("skia_private") {
     defines += [ "SK_PRINT_NATIVE_SHADERS" ]
   }
 
+  if (skia_dump_tasks) {
+    defines += [ "SK_DUMP_TASKS" ]
+  }
+
   # Temporary staging flag:
   defines += [ "SK_ENABLE_AVX512_OPTS" ]
 }
@@ -329,6 +333,9 @@ optional("fontmgr_android_ndk") {
     ":typeface_proxy",
   ]
   libs = [ "android" ]
+  if (defined(ndk_api) && ndk_api >= 31) {
+    libs += [ "icu" ]
+  }
   public_defines = [ "SK_FONTMGR_ANDROID_NDK_AVAILABLE" ]
   public = skia_ports_fontmgr_android_ndk_public
   sources = skia_ports_fontmgr_android_ndk_sources
@@ -726,7 +733,7 @@ if (skia_compile_sksl_tests) {
     include_dirs = [ "." ]
     deps = [
       ":run_sksllex",
-      "//third_party/externals/dawn/src/tint/api:api",
+      "//third_party/dawn:tint",
       "//third_party/externals/spirv-tools:spvtools",
       "//third_party/externals/spirv-tools:spvtools_val",
       "//third_party/spirv-cross:spirv_cross",
@@ -1071,21 +1078,6 @@ optional("vello") {
   public_deps = [ "//third_party/vello" ]
 }
 
-optional("heif") {
-  enabled = skia_use_libheif
-  public_defines = [ "SK_HAS_HEIF_LIBRARY" ]
-
-  # This HEIF decoding functionality is a part of the Android Framework.
-  # https://android.googlesource.com/platform/frameworks/av/+/master/media/libheif/include/HeifDecoderAPI.h
-  # There isn't a way to compile that library outside of it, so we just link against
-  # the library. This feature is not supported on other platforms (and we haven't
-  # yet tried something like https://github.com/strukturag/libheif/tree/master/libheif).
-  # The dependency for Android is set in gn_to_bp.py.
-  deps = []
-
-  sources = [ "src/codec/SkHeifCodec.cpp" ]
-}
-
 optional("avif") {
   enabled = skia_use_libavif
   public_defines = [ "SK_CODEC_DECODES_AVIF" ]
@@ -1220,6 +1212,15 @@ optional("graphite") {
     if (skia_enable_precompile) {
       public += skia_graphite_vk_precompile_public
       sources += skia_graphite_vk_precompile_sources
+    }
+    if (is_debug) {
+      sources += skia_sksl_validate_spirv_sources
+      deps += [
+        "//third_party/externals/spirv-tools:spvtools",
+
+        #spvtools depends on this but doesn't deps it in.
+        "//third_party/externals/spirv-tools:spvtools_val",
+      ]
     }
   }
   if (skia_enable_precompile) {
@@ -1463,30 +1464,29 @@ if (skia_use_rust_png_decode || skia_use_rust_png_encode) {
   action("rust_png_ffi_bazel_build") {
     script = "gn/bazel_build.py"
     sources = [
-      "experimental/rust_png/ffi/BUILD.bazel",
-      "experimental/rust_png/ffi/FFI.h",
-      "experimental/rust_png/ffi/FFI.rs",
+      "rust/png/BUILD.bazel",
+      "rust/png/FFI.h",
+      "rust/png/FFI.rs",
     ]
     outputs = [
       "$root_out_dir/librust_png_ffi_rs.a",
-      "$root_out_dir/experimental/rust_png/ffi/FFI.rs.h",
-      "$root_out_dir/experimental/rust_png/ffi/FFI.rs.cc",
+      "$root_out_dir/rust/png/FFI.rs.h",
+      "$root_out_dir/rust/png/FFI.rs.cc",
     ]
-    args =
-        [
-          "//experimental/rust_png/ffi:*",
+    args = [
+             "//rust/png:*",
 
-          rebase_path("//bazel-bin/experimental/rust_png/ffi/libffi_rs.a",
-                      root_build_dir) + "=librust_png_ffi_rs.a",
+             rebase_path("//bazel-bin/rust/png/libffi_rs.a", root_build_dir) +
+                 "=librust_png_ffi_rs.a",
 
-          # we want the `cxx`-generated headers to not simply be copied into
-          # the output directory, but in the same path as the Bazel build
-          # uses.
-          rebase_path("//bazel-bin/experimental/rust_png/ffi/FFI.rs.h",
-                      root_build_dir) + "=experimental/rust_png/ffi/FFI.rs.h",
-          rebase_path("//bazel-bin/experimental/rust_png/ffi/FFI.rs.cc",
-                      root_build_dir) + "=experimental/rust_png/ffi/FFI.rs.cc",
-        ] + bazel_args
+             # we want the `cxx`-generated headers to not simply be copied into
+             # the output directory, but in the same path as the Bazel build
+             # uses.
+             rebase_path("//bazel-bin/rust/png/FFI.rs.h", root_build_dir) +
+                 "=rust/png/FFI.rs.h",
+             rebase_path("//bazel-bin/rust/png/FFI.rs.cc", root_build_dir) +
+                 "=rust/png/FFI.rs.cc",
+           ] + bazel_args
   }
   action("rust_png_cxx_core_bazel_build") {
     script = "gn/bazel_build.py"
@@ -1504,19 +1504,19 @@ if (skia_use_rust_png_decode || skia_use_rust_png_encode) {
              "@crates//:cxx_cc",
 
              rebase_path(
-                     "//bazel-bin/external/rules_rust++crate+crates__cxx-1.0.161/libcxx_cc.a",
+                     "//bazel-bin/external/rules_rust++crate+crates__cxx-1.0.168/libcxx_cc.a",
                      root_build_dir) + "=libcxx_cc.a",
 
              # we want the `cxx.h` header to not simply be copied into the
              # output directory, but in the same path as the Bazel build uses.
              rebase_path(
-                     "//bazel-bin/external/rules_rust++crate+crates__cxx-1.0.161/_virtual_includes/cxx_cc/third_party/rust/cxx/v1/cxx.h",
+                     "//bazel-bin/external/rules_rust++crate+crates__cxx-1.0.168/_virtual_includes/cxx_cc/third_party/rust/cxx/v1/cxx.h",
                      root_build_dir) + "=third_party/rust/cxx/v1/cxx.h",
            ] + bazel_args
   }
   config("rust_png_cxx_bridge_public_config") {
     include_dirs = [
-      # This is where `experimental/rust_png/ffi/FFI.rs.h` and
+      # This is where `rust/png/FFI.rs.h` and
       # `third_party/rust/cxx/v1/cxx.h` were put by Bazel
       "$root_out_dir",
     ]
@@ -1524,14 +1524,14 @@ if (skia_use_rust_png_decode || skia_use_rust_png_encode) {
   config("rust_png_cxx_bridge_private_config") {
     include_dirs = [
       # This entry is needed so that `FFI.rs.cc` can resolve
-      # `#include "experimental/rust_png/ffi/FFI.h"`
+      # `#include "rust/png/FFI.h"`
       ".",
     ]
   }
   skia_source_set("rust_png_cxx_bridge") {
     deps = [ ":rust_png_ffi_bazel_build" ]
-    public = [ "${root_out_dir}/experimental/rust_png/ffi/FFI.rs.h" ]
-    sources = [ "${root_out_dir}/experimental/rust_png/ffi/FFI.rs.cc" ]
+    public = [ "${root_out_dir}/rust/png/FFI.rs.h" ]
+    sources = [ "${root_out_dir}/rust/png/FFI.rs.cc" ]
     libs = [ "$root_out_dir/librust_png_ffi_rs.a" ]
     public_configs = [ ":rust_png_cxx_bridge_public_config" ]
     configs = [ ":rust_png_cxx_bridge_private_config" ]
@@ -1682,7 +1682,6 @@ skia_component("skia") {
     ":android_utils",
     ":avif",
     ":crabbyavif",
-    ":heif",
     ":hsw",
     ":jpeg_decode",
     ":jpegxl_decode",
@@ -2140,55 +2139,29 @@ if (skia_enable_tools) {
       "tools/gpu/BackendSurfaceFactory.h",
       "tools/gpu/BackendTextureImageFactory.cpp",
       "tools/gpu/BackendTextureImageFactory.h",
+      "tools/gpu/CompressedTexture.cpp",
+      "tools/gpu/CompressedTexture.h",
       "tools/gpu/ContextType.cpp",
       "tools/gpu/ContextType.h",
       "tools/gpu/FlushFinishTracker.cpp",
       "tools/gpu/FlushFinishTracker.h",
-      "tools/gpu/GrContextFactory.cpp",
-      "tools/gpu/GrContextFactory.h",
-      "tools/gpu/GrTest.cpp",
       "tools/gpu/ManagedBackendTexture.cpp",
       "tools/gpu/ManagedBackendTexture.h",
-      "tools/gpu/MemoryCache.cpp",
-      "tools/gpu/MemoryCache.h",
-      "tools/gpu/ProtectedUtils.cpp",
       "tools/gpu/ProtectedUtils.h",
-      "tools/gpu/ProxyUtils.cpp",
-      "tools/gpu/ProxyUtils.h",
-      "tools/gpu/TestCanvas.cpp",
-      "tools/gpu/TestCanvas.h",
-      "tools/gpu/TestContext.cpp",
-      "tools/gpu/TestOps.cpp",
-      "tools/gpu/TestOps.h",
       "tools/gpu/YUVUtils.cpp",
       "tools/gpu/YUVUtils.h",
-      "tools/gpu/mock/MockTestContext.cpp",
       "tools/text/gpu/TextBlobTools.cpp",
     ]
 
     libs = []
     frameworks = []
 
-    if (skia_use_gl) {
-      sources += [ "tools/gpu/gl/GLTestContext.cpp" ]
-      if (is_ios) {
-        sources += [ "tools/gpu/gl/iOS/CreatePlatformGLTestContext_iOS.mm" ]
-        frameworks += [ "OpenGLES.framework" ]
-      } else if (is_mac) {
-        sources += [ "tools/gpu/gl/mac/CreatePlatformGLTestContext_mac.cpp" ]
-      }
-      if (skia_use_angle) {
-        deps += [ "//third_party/angle2" ]
-        sources += [ "tools/gpu/gl/angle/GLTestContext_angle.cpp" ]
-      }
-    }
-
     if (skia_use_gl && target_cpu != "wasm") {
       if (is_android || skia_use_egl) {
-        sources += [ "tools/gpu/gl/egl/CreatePlatformGLTestContext_egl.cpp" ]
+        sources += [ "tools/ganesh/gl/egl/CreatePlatformGLTestContext_egl.cpp" ]
         libs += [ "EGL" ]
       } else if (is_linux) {
-        sources += [ "tools/gpu/gl/glx/CreatePlatformGLTestContext_glx.cpp" ]
+        sources += [ "tools/ganesh/gl/glx/CreatePlatformGLTestContext_glx.cpp" ]
         libs += [
           "GLU",
           "GL",
@@ -2196,9 +2169,9 @@ if (skia_enable_tools) {
         ]
       } else if (is_win) {
         sources += [
-          "tools/gpu/gl/win/CreatePlatformGLTestContext_win.cpp",
-          "tools/gpu/gl/win/SkWGL.h",
-          "tools/gpu/gl/win/SkWGL_win.cpp",
+          "tools/ganesh/gl/win/CreatePlatformGLTestContext_win.cpp",
+          "tools/ganesh/gl/win/SkWGL.h",
+          "tools/ganesh/gl/win/SkWGL_win.cpp",
         ]
         libs += [ "Gdi32.lib" ]
         if (target_cpu != "arm64") {
@@ -2208,8 +2181,6 @@ if (skia_enable_tools) {
     }
 
     if (skia_use_vulkan) {
-      sources += [ "tools/gpu/vk/VkTestContext.h" ]
-      sources += [ "tools/gpu/vk/VkTestContext.cpp" ]
       sources += [ "tools/gpu/vk/VkTestHelper.h" ]
       sources += [ "tools/gpu/vk/VkTestHelper.cpp" ]
       sources += [ "tools/gpu/vk/VkTestMemoryAllocator.h" ]
@@ -2220,30 +2191,63 @@ if (skia_enable_tools) {
       sources += [ "tools/gpu/vk/VkYcbcrSamplerHelper.cpp" ]
       all_dependent_configs += [ ":vulkan_memory_allocator" ]
     }
-    if (skia_use_metal) {
-      sources += [ "tools/gpu/mtl/MtlTestContext.mm" ]
-    }
-    if (skia_use_direct3d) {
-      sources += [ "tools/gpu/d3d/D3DTestContext.cpp" ]
-      sources += [ "tools/gpu/d3d/D3DTestUtils.cpp" ]
-    }
     if (skia_use_dawn) {
       public_deps += [ "//third_party/externals/dawn/include/dawn:headers" ]
       if (is_clang) {
         cflags_cc = [ "-Wno-microsoft-cast" ]
       }
     }
-    if (!skia_enable_ganesh) {
-      sources -= [ "tools/gpu/GrTest.cpp" ]
-      sources -= [ "tools/gpu/TestOps.cpp" ]
-      sources -= [ "tools/gpu/TestOps.h" ]
-    } else {
+    if (skia_enable_ganesh) {
       sources += [
-        "tools/gpu/ganesh/AtlasTextOpTools.cpp",
-        "tools/gpu/ganesh/AtlasTextOpTools.h",
-        "tools/gpu/ganesh/GrAtlasTools.cpp",
-        "tools/gpu/ganesh/GrAtlasTools.h",
+        "tools/ganesh/AtlasTextOpTools.cpp",
+        "tools/ganesh/AtlasTextOpTools.h",
+        "tools/ganesh/DDLPromiseImageHelper.cpp",
+        "tools/ganesh/DDLPromiseImageHelper.h",
+        "tools/ganesh/DDLTileHelper.cpp",
+        "tools/ganesh/DDLTileHelper.h",
+        "tools/ganesh/GrAtlasTools.cpp",
+        "tools/ganesh/GrAtlasTools.h",
+        "tools/ganesh/GrContextFactory.cpp",
+        "tools/ganesh/GrContextFactory.h",
+        "tools/ganesh/GrTest.cpp",
+        "tools/ganesh/MemoryCache.cpp",
+        "tools/ganesh/MemoryCache.h",
+        "tools/ganesh/ProtectedUtils_Ganesh.cpp",
+        "tools/ganesh/ProxyUtils.cpp",
+        "tools/ganesh/ProxyUtils.h",
+        "tools/ganesh/TestCanvas.cpp",
+        "tools/ganesh/TestCanvas.h",
+        "tools/ganesh/TestContext.cpp",
+        "tools/ganesh/TestOps.cpp",
+        "tools/ganesh/TestOps.h",
+        "tools/ganesh/mock/MockTestContext.cpp",
       ]
+      if (skia_use_gl) {
+        sources += [ "tools/ganesh/gl/GLTestContext.cpp" ]
+        if (is_ios) {
+          sources +=
+              [ "tools/ganesh/gl/iOS/CreatePlatformGLTestContext_iOS.mm" ]
+          frameworks += [ "OpenGLES.framework" ]
+        } else if (is_mac) {
+          sources +=
+              [ "tools/ganesh/gl/mac/CreatePlatformGLTestContext_mac.cpp" ]
+        }
+        if (skia_use_angle) {
+          deps += [ "//third_party/angle2" ]
+          sources += [ "tools/ganesh/gl/angle/GLTestContext_angle.cpp" ]
+        }
+      }
+      if (skia_use_vulkan) {
+        sources += [ "tools/ganesh/vk/VkTestContext.h" ]
+        sources += [ "tools/ganesh/vk/VkTestContext.cpp" ]
+      }
+      if (skia_use_metal) {
+        sources += [ "tools/ganesh/mtl/MtlTestContext.mm" ]
+      }
+      if (skia_use_direct3d) {
+        sources += [ "tools/ganesh/d3d/D3DTestContext.cpp" ]
+        sources += [ "tools/ganesh/d3d/D3DTestUtils.cpp" ]
+      }
     }
     if (skia_enable_graphite) {
       sources += [
@@ -2341,10 +2345,6 @@ if (skia_enable_tools) {
     sources = [
       "tools/AndroidSkDebugToStdOut.cpp",
       "tools/AutoreleasePool.h",
-      "tools/DDLPromiseImageHelper.cpp",
-      "tools/DDLPromiseImageHelper.h",
-      "tools/DDLTileHelper.cpp",
-      "tools/DDLTileHelper.h",
       "tools/DecodeUtils.cpp",
       "tools/DecodeUtils.h",
       "tools/EncodeUtils.cpp",
@@ -2452,6 +2452,12 @@ if (skia_enable_tools) {
     }
     if (!skia_enable_ganesh) {
       sources -= ganesh_gm_sources
+    }
+    if (!skia_enable_graphite) {
+      sources -= graphite_gm_sources
+    }
+    if (!skia_enable_ganesh && !skia_enable_graphite) {
+      sources -= gpu_gm_sources
     }
     if (skia_use_fontations) {
       sources += fontations_gm_sources
@@ -2673,8 +2679,10 @@ if (skia_enable_tools) {
     }
 
     if (!skia_enable_optimize_size && !skia_use_fontations &&
+        !skia_use_rust_png_decode && !skia_use_rust_png_encode &&
         !skia_enable_vello_shaders) {
       # optional separate library to dlopen when running CanvasStateTests.
+      # currently does not link in the presence of rust
       skia_shared_library("canvas_state_lib") {
         sources = [
           "tests/CanvasStateHelpers.cpp",
@@ -2984,8 +2992,8 @@ if (skia_enable_tools) {
 
       deps = [
         ":skia",
-        "modules/skottie:skottie",
-        "tools/window:window",
+        "modules/skottie",
+        "tools/window",
       ]
     }
   }
@@ -3192,7 +3200,7 @@ if (skia_enable_tools) {
         "modules/skparagraph:slides",
         "modules/skresources",
         "modules/sksg:slides",
-        "modules/skshaper:skshaper",
+        "modules/skshaper",
         "modules/skunicode",
         "//third_party/delaunator",
         "//third_party/imgui",
@@ -3497,7 +3505,7 @@ if (skia_enable_tools) {
       sources = [ "modules/skottie/fuzz/FuzzSkottieJSON.cpp" ]
       deps = [
         "modules/jsonreader",
-        "modules/skottie:skottie",
+        "modules/skottie",
         "modules/svg",
       ]
     }

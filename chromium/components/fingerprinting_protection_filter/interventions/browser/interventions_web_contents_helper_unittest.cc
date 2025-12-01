@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,50 +25,11 @@ namespace {
 using ::content::RenderViewHostTestHarness;
 using ::content::WebContents;
 
-static constexpr std::string_view kTestUrl = "https://site.test/";
+using ::testing::Bool;
+using ::testing::Combine;
+using ::testing::ConvertGenerator;
 
-class CanvasInterventionsWebContentsHelperTest
-    : public RenderViewHostTestHarness {
- public:
-  CanvasInterventionsWebContentsHelperTest() = default;
-
-  void SetUp() override { RenderViewHostTestHarness::SetUp(); }
-
-  void TearDown() override {
-    RenderViewHostTestHarness::TearDown();
-    ResetFeatureState();
-  }
-
-  void ResetFeatureState() { scoped_feature_list_.Reset(); }
-
-  void SetFeatureFlags(bool is_canvas_interventions_feature_enabled,
-                       bool enable_in_regular_mode) {
-    if (is_canvas_interventions_feature_enabled) {
-      scoped_feature_list_.InitWithFeaturesAndParameters(
-          {
-              {fingerprinting_protection_interventions::features::kCanvasNoise,
-               {{"enable_in_regular_mode",
-                 base::ToString(enable_in_regular_mode)}}},
-          },
-          {});
-    } else {
-      scoped_feature_list_.InitWithFeatures(
-          /*enabled_features=*/{},
-          /*disabled_features=*/{
-              fingerprinting_protection_interventions::features::kCanvasNoise});
-    }
-  }
-
-  bool GetRuntimeFeatureFlagValue(
-      content::NavigationHandle* navigation_handle) {
-    auto feature_overrides =
-        navigation_handle->GetMutableRuntimeFeatureStateContext();
-    return feature_overrides.IsCanvasInterventionsEnabled();
-  }
-
- protected:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
+using CanvasInterventionsWebContentsHelperTest = RenderViewHostTestHarness;
 
 TEST_F(CanvasInterventionsWebContentsHelperTest, CreateForWebContents) {
   InterventionsWebContentsHelper::CreateForWebContents(
@@ -77,54 +38,87 @@ TEST_F(CanvasInterventionsWebContentsHelperTest, CreateForWebContents) {
                          RenderViewHostTestHarness::web_contents()));
 }
 
-class CanvasInterventionsWebContentsHelperLauncher
-    : public CanvasInterventionsWebContentsHelperTest,
-      public testing::WithParamInterface<std::tuple<bool, bool, bool>> {
+struct TestParam {
+  using TupleT = std::tuple<bool, bool, bool>;
+  explicit TestParam(TupleT params)
+      : enable_block_canvas_readback(std::get<0>(params)),
+        feature_enabled_in_regular_mode(std::get<1>(params)),
+        run_in_regular_mode(std::get<2>(params)) {}
+
+  const bool enable_block_canvas_readback;
+  const bool feature_enabled_in_regular_mode;
+  const bool run_in_regular_mode;
+};
+
+class BlockReadbackFeatureFlag {
  public:
-  CanvasInterventionsWebContentsHelperLauncher() {
-    std::tie(enable_canvas_interventions_, feature_enabled_in_regular_mode_,
-             run_in_regular_mode_) = GetParam();
+  BlockReadbackFeatureFlag(bool is_block_readback_feature_enabled,
+                           bool enable_in_regular_mode) {
+    if (is_block_readback_feature_enabled) {
+      scoped_feature_list_.InitWithFeaturesAndParameters(
+          {
+              {fingerprinting_protection_interventions::features::
+                   kBlockCanvasReadback,
+               {{"enable_in_regular_mode",
+                 base::ToString(enable_in_regular_mode)}}},
+          },
+          {});
+    } else {
+      scoped_feature_list_.InitWithFeatures(
+          /*enabled_features=*/{},
+          /*disabled_features=*/{fingerprinting_protection_interventions::
+                                     features::kBlockCanvasReadback});
+    }
   }
 
- protected:
-  bool enable_canvas_interventions_;
-  bool feature_enabled_in_regular_mode_;
-  bool run_in_regular_mode_;
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
+
+bool GetRuntimeFeatureFlagValue(content::NavigationHandle* navigation_handle) {
+  return navigation_handle->GetMutableRuntimeFeatureStateContext()
+      .IsBlockCanvasReadbackEnabled();
+}
+
+class CanvasInterventionsWebContentsHelperLauncher
+    : public CanvasInterventionsWebContentsHelperTest,
+      public testing::WithParamInterface<TestParam> {};
 
 INSTANTIATE_TEST_SUITE_P(All,
                          CanvasInterventionsWebContentsHelperLauncher,
-                         testing::Combine(testing::Bool(),
-                                          testing::Bool(),
-                                          testing::Bool()));
+                         testing::ConvertGenerator<TestParam::TupleT>(
+                             Combine(Bool(), Bool(), Bool())));
 
 TEST_P(CanvasInterventionsWebContentsHelperLauncher,
        InterventionsNavigationPropagatesCanvasInterventionsFeature) {
   WebContents* web_contents = RenderViewHostTestHarness::web_contents();
+  TestParam param = GetParam();
   InterventionsWebContentsHelper::CreateForWebContents(
-      web_contents, /*is_incognito=*/!run_in_regular_mode_);
-  SetFeatureFlags(enable_canvas_interventions_,
-                  feature_enabled_in_regular_mode_);
+      web_contents, /*is_incognito=*/!param.run_in_regular_mode);
+  BlockReadbackFeatureFlag block_readback_feature_flag(
+      param.enable_block_canvas_readback,
+      param.feature_enabled_in_regular_mode);
 
   std::unique_ptr<content::NavigationSimulator> nav_sim_handle =
-      content::NavigationSimulator::CreateBrowserInitiated(GURL(kTestUrl),
-                                                           web_contents);
+      content::NavigationSimulator::CreateBrowserInitiated(
+          GURL("https://site.test/"), web_contents);
   nav_sim_handle->Start();
 
   // RuntimeFeature is not updated on the NavigationRequest yet.
-  EXPECT_FALSE(
+  ASSERT_FALSE(
       GetRuntimeFeatureFlagValue(nav_sim_handle->GetNavigationHandle()));
 
   // RuntimeFeature should now be updated after ReadyToCommit.
   nav_sim_handle->ReadyToCommit();
 
-  if (run_in_regular_mode_) {
+  if (param.run_in_regular_mode) {
     EXPECT_EQ(
-        enable_canvas_interventions_ && feature_enabled_in_regular_mode_,
+        param.enable_block_canvas_readback &&
+            param.feature_enabled_in_regular_mode,
         GetRuntimeFeatureFlagValue(nav_sim_handle->GetNavigationHandle()));
   } else {
     EXPECT_EQ(
-        enable_canvas_interventions_,
+        param.enable_block_canvas_readback,
         GetRuntimeFeatureFlagValue(nav_sim_handle->GetNavigationHandle()));
   }
 }

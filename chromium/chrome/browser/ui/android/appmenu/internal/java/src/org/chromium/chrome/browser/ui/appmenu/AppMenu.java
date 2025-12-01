@@ -56,7 +56,8 @@ import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.Highl
 // Vivaldi
 import android.os.Build;
 
-import org.chromium.base.supplier.Supplier;
+import java.util.function.Supplier;
+
 import org.chromium.build.BuildConfig;
 import org.chromium.ui.base.DeviceFormFactor;
 

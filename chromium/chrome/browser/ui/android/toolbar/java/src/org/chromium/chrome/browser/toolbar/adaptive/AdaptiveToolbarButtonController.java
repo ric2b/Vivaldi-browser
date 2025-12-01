@@ -55,6 +55,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /** Meta {@link ButtonDataProvider} which chooses the optional button variant that will be shown. */
 @NullMarked
@@ -146,6 +147,13 @@ public class AdaptiveToolbarButtonController
 
         new OneShotCallback<>(
                 profileSupplier, mCallbackController.makeCancelable(this::setProfile));
+    }
+
+    @Override
+    public void onFinishNativeInitialization() {
+        for (ButtonDataProvider provider : mButtonDataProviderMap.values()) {
+            provider.onFinishNativeInitialization();
+        }
     }
 
     private void startSettings(UiState uiState) {
@@ -309,6 +317,13 @@ public class AdaptiveToolbarButtonController
     @Override
     public void buttonDataChanged(boolean canShowHint) {
         notifyObservers(canShowHint);
+
+        // If the dynamic button is no longer available, switch to the session button variant.
+        if (!canShowHint
+                && (mButtonData.getButtonSpec() == null || mButtonData.getButtonSpec().getButtonVariant() != mSessionButtonVariant)) {
+            setSingleProvider(mSessionButtonVariant);
+            notifyObservers(true);
+        }
     }
 
     @VisibleForTesting
@@ -420,5 +435,9 @@ public class AdaptiveToolbarButtonController
         if (wasOldScreenWideEnoughForButton != isScreenWideEnoughForButton()) {
             notifyObservers(mButtonData.canShow());
         }
+    }
+
+    public Set<Integer> getAllSupportedTypesForTesting() {
+        return mButtonDataProviderMap.keySet();
     }
 }

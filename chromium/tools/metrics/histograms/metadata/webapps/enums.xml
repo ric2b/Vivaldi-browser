@@ -267,7 +267,7 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Downloaded component"/>
 </enum>
 
-<enum name="KeyRotationInfoSource">
+<enum name="KeyDistributionComponentSource">
   <int value="0" label="No component"/>
   <int value="1" label="Preloaded component"/>
   <int value="2" label="Downloaded component"/>
@@ -281,6 +281,12 @@ chromium-metrics-reviews@google.com.
 <enum name="LaunchFromHomeScreen">
   <int value="0" label="Launched as standalone web app"/>
   <int value="1" label="Launched as a tab"/>
+</enum>
+
+<enum name="ManagedSessionType">
+  <int value="0" label="Managed User Session"/>
+  <int value="1" label="Managed Guest Session"/>
+  <int value="2" label="Kiosk Session"/>
 </enum>
 
 <enum name="ManifestIconDownloaderResult">
@@ -404,6 +410,15 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Failed to begin jump list update"/>
   <int value="4" label="Failed to add link items to jump list"/>
   <int value="5" label="Failed to commit update to jump list"/>
+</enum>
+
+<enum name="WebAppApplyPendingManifestUpdateResult">
+  <int value="0" label="System shutdown"/>
+  <int value="1" label="App not installed"/>
+  <int value="2" label="Icon changes applied successfully"/>
+  <int value="3" label="Failed to overwrite icons from pending icons"/>
+  <int value="4" label="App has no pending updates"/>
+  <int value="5" label="Failed to remove pending icon directories"/>
 </enum>
 
 <enum name="WebAppIconDownloaderResult">
@@ -583,6 +598,31 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="FailedWebContentsDestroyed"/>
   <int value="5" label="FailedErrorPageLoaded"/>
 </enum>
+
+<!-- LINT.IfChange(WebInstallApiResult) -->
+
+<enum name="WebInstallApiResult">
+  <int value="0" label="Success"/>
+  <int value="1" label="Success Already Installed"/>
+  <int value="2" label="Unexpected failure"/>
+  <int value="3" label="Permission denied"/>
+  <int value="4" label="Unsupported profile/context"/>
+  <int value="5" label="Canceled by user (via the install dialog)"/>
+  <int value="6" label="Install command failed"/>
+  <int value="7" label="No custom id field in manifest"/>
+  <int value="8" label="Manifest id mismatch"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/web_applications/web_install_service_impl.h:WebInstallApiResult) -->
+
+<!-- LINT.IfChange(WebInstallApiType) -->
+
+<enum name="WebInstallApiType">
+  <int value="0" label="Current Document"/>
+  <int value="1" label="Background Document"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/web_applications/web_install_service_impl.h:WebInstallApiType) -->
 
 <enum name="WinRegistryErrorCode">
   <int value="0" label="ERROR_OTHER"/>

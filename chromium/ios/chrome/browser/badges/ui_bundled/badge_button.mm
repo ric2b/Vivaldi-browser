@@ -12,6 +12,15 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/ui/vivaldi_infobar_badges/vivaldi_infobar_badges_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 // Duration of button animations, in seconds.
 const CGFloat kButtonAnimationDuration = 0.2;
@@ -46,6 +55,12 @@ const CGFloat kButtonCircularCornerRadiusDivisor = 2.0;
 
 - (void)setAccepted:(BOOL)accepted animated:(BOOL)animated {
   self.accepted = accepted;
+
+  if (IsVivaldiRunning()) {
+    [self changeIconImageForAcceptedState:accepted animated:animated];
+    return;
+  } // End Vivaldi
+
   void (^changeTintColor)() = ^{
     self.tintColor = accepted ? nil : [UIColor colorNamed:kToolbarButtonColor];
     self.accessibilityIdentifier =
@@ -131,5 +146,58 @@ const CGFloat kButtonCircularCornerRadiusDivisor = 2.0;
     [self setImage:self.image forState:UIControlStateDisabled];
   }
 }
+
+// MARK:- Vivaldi
+- (void)changeIconImageForAcceptedState:(BOOL)accepted animated:(BOOL)animated {
+  void (^changeIconImage)() = ^{
+    switch (self.badgeType) {
+      case kBadgeTypePasswordSave:
+      case kBadgeTypePasswordUpdate:
+        self.image =
+          [UIImage imageNamed:(accepted ?
+              vInfobarBadgeKeySelected : vInfobarBadgeKey)];
+        break;
+      case kBadgeTypeOverflow:
+        self.image =
+          [UIImage imageNamed:(accepted ?
+              vInfobarBadgeMoreSelected : vInfobarBadgeMore)];
+        break;
+      case kBadgeTypeSaveCard:
+        self.image =
+          [UIImage imageNamed:(accepted ?
+              vInfobarBadgeCreditCardSelected : vInfobarBadgeCreditCard)];
+        break;
+      case kBadgeTypeTranslate:
+        self.image =
+          [UIImage imageNamed:(accepted ?
+              vInfobarBadgeTranslateSelected : vInfobarBadgeTranslate)];
+        break;
+      case kBadgeTypePermissionsCamera:
+        self.image =
+          [UIImage imageNamed:(accepted ?
+              vInfobarBadgeCameraSelected : vInfobarBadgeCamera)];
+        break;
+      case kBadgeTypePermissionsMicrophone:
+        self.image =
+          [UIImage imageNamed:(accepted ?
+              vInfobarBadgeMicSelected : vInfobarBadgeMic)];
+        break;
+      case kBadgeTypeReaderMode:
+        self.image =
+          [UIImage imageNamed:(accepted ?
+              vInfobarBadgeReaderModeSelected : vInfobarBadgeReaderMode)];
+        break;
+      default:
+        break;
+    }
+  };
+  if (animated) {
+    [UIView animateWithDuration:kButtonAnimationDuration
+                     animations:changeIconImage];
+  } else {
+    changeIconImage();
+  }
+}
+// End Vivaldi
 
 @end

@@ -18,7 +18,6 @@
 <translation id="1728549374069268714">Idikit at pumunta</translation>
 <translation id="1769904678986817931">Mga Katangian ng Imahe...</translation>
 <translation id="1920297417712412573">Kopyahin sa Tandaan</translation>
-<translation id="1921101374471252440">&amp;Muling I-load ang Larawan</translation>
 <translation id="1924750141060565109">Landscape 15</translation>
 <translation id="19598411548897379">Generic na</translation>
 <translation id="1973351931613083086">Auto-i-play</translation>
@@ -32,7 +31,6 @@
 <translation id="2501278716633472235">Bumalik ka na</translation>
 <translation id="2612127540243995147">Handa nang i-install. Ang Vivaldi ay isasara at muling ilulunsad.</translation>
 <translation id="2613387515621326337">Magpakita ng update na website</translation>
-<translation id="2647368062414805334">Nakakalungkot, ang iyong mga setting ng Edge ay hindi magagamit habang tumatakbo ang browser na iyon. Upang mai import ang mga setting na iyon sa Vivaldi, i save ang iyong trabaho at isara ang lahat ng mga window ng Edge. Pagkatapos ay i click ang Magpatuloy.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">hayop 3</translation>
 <translation id="2873951654529031587">Trash - Basurahan</translation>
@@ -40,7 +38,6 @@
 <translation id="2923448633003185837">I-paste at Pumunta</translation>
 <translation id="2953943267837858202">Hindi pinapayagan na awtomatikong i play ang video</translation>
 <translation id="2989805286512600854">Buksan sa Bagong Tab</translation>
-<translation id="3027988479108856431">Nakakalungkot, ang iyong mga setting ng Yandex ay hindi magagamit habang tumatakbo ang browser na iyon. Upang i import ang mga setting na iyon sa Vivaldi, i save ang iyong trabaho at isara ang lahat ng Yandex windows. Pagkatapos ay i click ang Magpatuloy.</translation>
 <translation id="3084011186245865060">Landscape 6</translation>
 <translation id="3093931836425623631">Ang Vivaldi ay ginawang posible sa pamamagitan ng proyektong open source ng Chromium at iba pang open source software.</translation>
 <translation id="3127383884976966729">Hayop 7</translation>
@@ -66,7 +63,6 @@
 <translation id="3732157130969736834">Bookmark Link</translation>
 <translation id="3732388226447288666">hayop 2</translation>
 <translation id="3732439195215136813">Hayop 5</translation>
-<translation id="3795800845758778870">Nakakalungkot, ang iyong mga setting ng Brave ay hindi magagamit habang tumatakbo ang browser na iyon. Upang mai import ang mga setting na iyon sa Vivaldi, i save ang iyong trabaho at isara ang lahat ng mga window ng Matapang. Pagkatapos ay i click ang Magpatuloy.</translation>
 <translation id="3822431842304177896">Bagong Separator</translation>
 <translation id="3832132597516774400">Landscape 5</translation>
 <translation id="3894751534882749287">Kung nais mong tingnan ang pahina pa rin, maaari mong baguhin ang antas ng proteksyon sa pagsubaybay nito sa popup ng blocker ng Tagasubaybay o sa pamamagitan ng pag click sa pindutan ng Payagan</translation>
@@ -104,10 +100,10 @@
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> available na (mayroon kang <ph name="OLD_VERSION" />). Gusto mo bang i-download ito ngayon?</translation>
 <translation id="5770433027661640693">Landscape 10</translation>
 <translation id="5857090052475505287">Bagong Folder</translation>
-<translation id="5916080360077521750">Nakakalungkot, ang iyong mga setting ng Chrome ay hindi magagamit habang tumatakbo ang browser na iyon. Upang mai import ang mga setting na iyon sa Vivaldi, i save ang iyong trabaho at isara ang lahat ng mga bintana ng Chrome. Pagkatapos ay i click ang Magpatuloy.</translation>
 <translation id="6040143037577758943">Isara</translation>
 <translation id="6229528619562190452">Mag click dito upang i update ang Vivaldi.</translation>
 <translation id="6234173136417926046">Gamitin ang Imahe bilang Background ng Start Page</translation>
+<translation id="630690498669249215">File ng Mga Bookmark ng Opera</translation>
 <translation id="6339818817272922368">Lokal na Account</translation>
 <translation id="6438786710866753178">Landscape 4</translation>
 <translation id="6477028720702061455">Piliin ang folder ng profile ng Opera para sa pag-import</translation>
@@ -146,7 +142,6 @@
 <translation id="8539196077526389150">Landscape 13</translation>
 <translation id="8562339533180097902">Isara ang Vivaldi at i install ngayon</translation>
 <translation id="8567452685425968223">Pagkuha ng update...</translation>
-<translation id="8624587806981488221">&amp;Muling I-load ang Larawan</translation>
 <translation id="8651348004684669199">Magdagdag ng Active Tab</translation>
 <translation id="8669345741879513971">halimaw 10</translation>
 <translation id="867544375504146191">Yandex sa Filipino ay "Yandeks".</translation>

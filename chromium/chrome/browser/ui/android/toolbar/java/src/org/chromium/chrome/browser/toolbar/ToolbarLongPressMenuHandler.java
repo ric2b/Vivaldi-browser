@@ -31,6 +31,7 @@ import org.chromium.chrome.browser.lifecycle.ConfigurationChangedObserver;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.toolbar.ToolbarPositionController.ToolbarPositionAndSource;
 import org.chromium.chrome.browser.toolbar.settings.AddressBarPreference;
 import org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils;
 import org.chromium.components.browser_ui.widget.ListItemBuilder;
@@ -79,7 +80,7 @@ public class ToolbarLongPressMenuHandler implements ConfigurationChangedObserver
     private final Context mContext;
     private final ObservableSupplier<Profile> mProfileSupplier;
     private final BooleanSupplier mSuppressLongPressSupplier;
-    private final Supplier<GURL> mUrlSupplier;
+    private final Supplier<@Nullable GURL> mUrlSupplier;
     private final Supplier<ViewRectProvider> mUrlBarViewRectProviderSupplier;
     private final @Nullable OnLongClickListener mOnLongClickListener;
     private final SharedPreferencesManager mSharedPreferencesManager;
@@ -89,7 +90,14 @@ public class ToolbarLongPressMenuHandler implements ConfigurationChangedObserver
     /**
      * Creates a new {@link ToolbarLongPressMenuHandler}.
      *
-     * @param context current context
+     * @param context current context.
+     * @param profileSupplier supplier of the current profile.
+     * @param isCustomTab whether the handler is used in a custom tab.
+     * @param suppressLongPressSupplier supplier of whether the long press should be suppressed.
+     * @param lifecycleDispatcher dispatcher for the activity lifecycle.
+     * @param windowAndroid window for the activity.
+     * @param urlSupplier supplier of the current URL, can be null.
+     * @param urlBarViewRectProviderSupplier supplier of the URL bar view rect provider.
      */
     public ToolbarLongPressMenuHandler(
             Context context,
@@ -98,7 +106,7 @@ public class ToolbarLongPressMenuHandler implements ConfigurationChangedObserver
             BooleanSupplier suppressLongPressSupplier,
             ActivityLifecycleDispatcher lifecycleDispatcher,
             WindowAndroid windowAndroid,
-            Supplier<GURL> urlSupplier,
+            Supplier<@Nullable GURL> urlSupplier,
             Supplier<ViewRectProvider> urlBarViewRectProviderSupplier) {
         mContext = context;
         mProfileSupplier = profileSupplier;
@@ -260,11 +268,20 @@ public class ToolbarLongPressMenuHandler implements ConfigurationChangedObserver
             recreate((Activity) mContext);
         } // Vivaldi end
         boolean onTop = AddressBarPreference.isToolbarConfiguredToShowOnTop();
-        mSharedPreferencesManager.writeBoolean(ChromePreferenceKeys.TOOLBAR_TOP_ANCHORED, !onTop);
+        if (onTop) {
+            mSharedPreferencesManager.writeInt(
+                    ChromePreferenceKeys.TOOLBAR_TOP_ANCHORED,
+                    ToolbarPositionAndSource.BOTTOM_LONG_PRESS);
+        } else {
+            mSharedPreferencesManager.writeInt(
+                    ChromePreferenceKeys.TOOLBAR_TOP_ANCHORED,
+                    ToolbarPositionAndSource.TOP_LONG_PRESS);
+        }
     }
 
     private void handleCopyLink() {
-        Clipboard.getInstance().copyUrlToClipboard(mUrlSupplier.get());
+        GURL url = mUrlSupplier.get() == null ? GURL.emptyGURL() : mUrlSupplier.get();
+        Clipboard.getInstance().copyUrlToClipboard(url);
     }
 
     @VisibleForTesting

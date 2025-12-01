@@ -14,10 +14,6 @@ import org.chromium.chrome.browser.tab.TabAttributes;
 import org.chromium.chrome.browser.tab.TabId;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 
-// Vivaldi
-import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
-import org.chromium.build.BuildConfig;
-
 /**
  * Implementation of the TabModelOrderController based off of tab_strip_model_order_controller.cc
  * and tab_strip_model.cc
@@ -39,27 +35,32 @@ import org.chromium.build.BuildConfig;
         if (type == TabLaunchType.FROM_BROWSER_ACTIONS || type == TabLaunchType.FROM_RECENT_TABS) {
             return TabList.INVALID_TAB_INDEX;
         }
-
-        if (newTab.getIsPinned()) {
+        if (newTab.getIsPinned() && type != TabLaunchType.FROM_RESTORE) {
             TabModel tabModel = mTabModelSelector.getCurrentModel();
-            @TabId int parentId = newTab.getParentId();
-            @Nullable Tab parentTab = tabModel.getTabById(parentId);
-            int index = tabModel.indexOf(parentTab);
 
-            if (type == TabLaunchType.FROM_TAB_LIST_INTERFACE
-                    && parentTab != null
-                    && index != TabList.INVALID_TAB_INDEX
-                    && parentTab.getIsPinned()) {
-                return index + 1;
+            if (type == TabLaunchType.FROM_TAB_LIST_INTERFACE) {
+                @TabId int parentId = newTab.getParentId();
+                @Nullable Tab parentTab = tabModel.getTabById(parentId);
+                int index = tabModel.indexOf(parentTab);
+                if (parentTab != null
+                        && index != TabList.INVALID_TAB_INDEX
+                        && parentTab.getIsPinned()) {
+                    return index + 1;
+                }
+            }
+
+            // Use the `position` when its in valid range; otherwise defer to TabModel
+            // implementation, which will place it at the first unpinned position.
+            int firstNonPinnedTabIndex = tabModel.findFirstNonPinnedTabIndex();
+            if (position <= firstNonPinnedTabIndex) {
+                return position;
             }
 
             // TabModel will handle the index.
             return TabList.INVALID_TAB_INDEX;
         }
 
-        // Note(david@vivaldi.com): We always determine the tab position except while restoring.
-        if (mightBeAdjacent(type) || BuildConfig.IS_VIVALDI) {
-            if (type != TabLaunchType.FROM_RESTORE) // Vivaldi
+        if (mightBeAdjacent(type)) {
             position = determineInsertionIndexIfMaybeAdjacent(type, newTab);
         }
 
@@ -92,26 +93,9 @@ import org.chromium.build.BuildConfig;
             int currentId = currentTab.getId();
             int currentIndex = TabModelUtils.getTabIndexById(currentModel, currentId);
 
-            // Note(david@vivaldi.com): We determine the index of the new tab according to the
-            // selected new tab position setting.
-            if (BuildConfig.IS_VIVALDI) {
-                int tabPositionSetting =
-                        ChromeSharedPreferences.getInstance().readInt("new_tab_position", 1);
-                // We check for NewTabPositionSetting.AFTER_RELATED_TAB. Magic number due to dep
-                // issues. Ref. VAB-8839 Do the same calculation if AS_TAB_STACK_WITH_RELATED_TAB
-                if (tabPositionSetting == 0 || tabPositionSetting == 3) {
-                    int relatedTabIndex = getIndexAfterRelatedTabs(newTab, currentIndex);
-                    // When a link has been clicked we assume a relation.
-                    int index = mightBeAdjacent(type) ? currentIndex + 1 : -1;
-                    // If there are more related tabs we set our index accordingly otherwise we
-                    // add our tab after the active one. If there is no relation at all we add
-                    // it to the end of the list.
-                    return (relatedTabIndex == currentIndex ? index : relatedTabIndex);
-                }
-                // We check for NewTabPositionSetting.AFTER_ACTIVE_TAB. Magic number due to dep
-                // issues.
-                boolean afterActiveTab = (tabPositionSetting == 1);
-                return (afterActiveTab ? currentIndex + 1 : -1);
+            // If the current tab is a pinned tab, new tabs are inserted after the last pinned tab.
+            if (currentTab.getIsPinned()) {
+                return currentModel.findFirstNonPinnedTabIndex();
             }
 
             if (willOpenInForeground(type, newTab.isIncognito())) {
@@ -178,10 +162,8 @@ import org.chromium.build.BuildConfig;
     /** Clear the opener attribute on all tabs in the model. */
     void forgetAllOpeners() {
         TabModel currentModel = mTabModelSelector.getCurrentModel();
-        int count = currentModel.getCount();
-        for (int i = 0; i < count; i++) {
-            TabAttributes.from(currentModel.getTabAtChecked(i))
-                    .set(TabAttributeKeys.GROUPED_WITH_PARENT, false);
+        for (Tab tab : currentModel) {
+            TabAttributes.from(tab).set(TabAttributeKeys.GROUPED_WITH_PARENT, false);
         }
     }
 
@@ -242,4 +224,5 @@ import org.chromium.build.BuildConfig;
         }
         return currentIndex;
     }
+    // End Vivaldi
 }

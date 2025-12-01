@@ -26,6 +26,7 @@ static NSString* const kTestCardName = @"TestName";
 static NSString* const kTestCardNumber = @"4111111111111111";
 static NSString* const kTestExpirationMonth = @"01";
 static NSString* const kTestCardNickname = @"nickname";
+static NSString* const kTestCardCvc = @"123";
 
 class AutofillAddCreditCardMediatorTest : public PlatformTest {
  protected:
@@ -62,7 +63,8 @@ TEST_F(AutofillAddCreditCardMediatorTest,
                                                        // card number.
                   expirationMonth:kTestExpirationMonth
                    expirationYear:TestExpirationYear()
-                     cardNickname:kTestCardNickname];
+                     cardNickname:kTestCardNickname
+                          cardCvc:kTestCardCvc];
 
   // A credit card with invalid number shouldn't be saved so the number of
   // credit cards has to equal zero.
@@ -86,7 +88,8 @@ TEST_F(AutofillAddCreditCardMediatorTest,
                        cardNumber:kTestCardNumber
                   expirationMonth:@"15"  // This is an invalid month.
                    expirationYear:TestExpirationYear()
-                     cardNickname:kTestCardNickname];
+                     cardNickname:kTestCardNickname
+                          cardCvc:kTestCardCvc];
 
   //  A credit card with invalid expiration date shouldn't be saved so the
   //  number of credit cards has to equal zero.
@@ -112,7 +115,8 @@ TEST_F(AutofillAddCreditCardMediatorTest, TestSavingCreditCardWithInvalidYear) {
                                       autofill::test::LastYear())  // This is an
                                                                    // invalid
                                                                    // year.
-                     cardNickname:kTestCardNickname];
+                     cardNickname:kTestCardNickname
+                          cardCvc:kTestCardCvc];
 
   // A credit card with invalid expiration date shouldn't be saved so the number
   // of credit cards has to equal zero.
@@ -125,8 +129,8 @@ TEST_F(AutofillAddCreditCardMediatorTest, TestSavingCreditCardWithInvalidYear) {
 // Test saving a credit card with invalid nickname.
 TEST_F(AutofillAddCreditCardMediatorTest,
        TestSavingCreditCardWithInvalidNickname) {
-  // `creditCardMediatorHasInvalidExpirationDate` expected to be called by
-  // `add_credit_card_mediator_` if the credit card has invalid expiration date.
+  // `creditCardMediatorHasInvalidNickname` expected to be called by
+  // `add_credit_card_mediator_` if the credit card has invalid nickname.
   OCMExpect([add_credit_card_mediator_delegate_mock_
       creditCardMediatorHasInvalidNickname:[OCMArg any]]);
 
@@ -136,10 +140,30 @@ TEST_F(AutofillAddCreditCardMediatorTest,
                        cardNumber:kTestCardNumber
                   expirationMonth:kTestExpirationMonth
                    expirationYear:TestExpirationYear()
-                     cardNickname:@"cvc123"];  // This is an invalid nickname.
+                     cardNickname:@"cvc123"  // This is an invalid nickname.
+                          cardCvc:kTestCardCvc];
 
   // A credit card with invalid nickname shouldn't be saved so the number
   // of credit cards has to equal zero.
+  EXPECT_THAT(personal_data_manager_.payments_data_manager().GetCreditCards(),
+              SizeIs(0));
+
+  EXPECT_OCMOCK_VERIFY(add_credit_card_mediator_delegate_mock_);
+}
+
+// Test saving a credit card with invalid CVC.
+TEST_F(AutofillAddCreditCardMediatorTest, TestSavingCreditCardWithInvalidCvc) {
+  [add_credit_card_mediator_
+      addCreditCardViewController:nil
+      addCreditCardWithHolderName:kTestCardName
+                       cardNumber:kTestCardNumber
+                  expirationMonth:kTestExpirationMonth
+                   expirationYear:TestExpirationYear()
+                     cardNickname:kTestCardNickname
+                          cardCvc:@"12345"];  // This is an invalid CVC.
+
+  // A credit card with invalid CVC shouldn't be saved so the number of credit
+  // cards has to equal zero.
   EXPECT_THAT(personal_data_manager_.payments_data_manager().GetCreditCards(),
               SizeIs(0));
 
@@ -160,7 +184,8 @@ TEST_F(AutofillAddCreditCardMediatorTest, TestSavingValidCreditCard) {
                                               cardNumber:kTestCardNumber
                                          expirationMonth:kTestExpirationMonth
                                           expirationYear:TestExpirationYear()
-                                            cardNickname:kTestCardNickname];
+                                            cardNickname:kTestCardNickname
+                                                 cardCvc:kTestCardCvc];
 
   // A valid credit card expected to be savd so the number of credit cards has
   // to equal one.
@@ -206,7 +231,8 @@ TEST_F(AutofillAddCreditCardMediatorTest,
                        cardNumber:card_number
                   expirationMonth:updated_expiration_month
                    expirationYear:updated_expiration_year
-                     cardNickname:updated_card_nickname];
+                     cardNickname:updated_card_nickname
+                          cardCvc:kTestCardCvc];
 
   // A duplicated credit card is expected to be updated (not saved) as a new
   // card so the number of credit cards has to remain equal to one.
@@ -262,7 +288,8 @@ TEST_F(AutofillAddCreditCardMediatorTest,
                        cardNumber:card_number
                   expirationMonth:updated_expiration_month
                    expirationYear:updated_expiration_year
-                     cardNickname:updated_card_nickname];
+                     cardNickname:updated_card_nickname
+                          cardCvc:kTestCardCvc];
 
   // Server credit cards should not be updated. There should be a new credit
   // card in storage.
@@ -316,7 +343,8 @@ TEST_F(AutofillAddCreditCardMediatorTest, TestMetricsWhenSavingCreditCard) {
                                               cardNumber:kTestCardNumber
                                          expirationMonth:kTestExpirationMonth
                                           expirationYear:TestExpirationYear()
-                                            cardNickname:kTestCardNickname];
+                                            cardNickname:kTestCardNickname
+                                                 cardCvc:kTestCardCvc];
 
   // Expect the metric to add a record based on the number of existing cards.
   histogram_tester.ExpectUniqueSample("Autofill.PaymentMethods.SettingsPage."
@@ -339,10 +367,56 @@ TEST_F(AutofillAddCreditCardMediatorTest,
                                               cardNumber:kTestCardNumber
                                          expirationMonth:kTestExpirationMonth
                                           expirationYear:TestExpirationYear()
-                                            cardNickname:kTestCardNickname];
+                                            cardNickname:kTestCardNickname
+                                                 cardCvc:kTestCardCvc];
 
   // Expect the metric to add a record for a stored credit card count of 0.
   histogram_tester.ExpectUniqueSample("Autofill.PaymentMethods.SettingsPage."
                                       "StoredCreditCardCountBeforeCardAdded",
                                       0, 1);
+}
+
+// Tests that the metric is recorded when adding a card with a CVC.
+TEST_F(AutofillAddCreditCardMediatorTest, TestAddCardWithCvcRecordsUserAction) {
+  base::UserActionTester user_action_tester;
+
+  // Verify that the action has not been logged yet.
+  EXPECT_EQ(
+      0, user_action_tester.GetActionCount("AutofillCreditCardsAddedWithCvc"));
+
+  // Simulate adding a card with a CVC.
+  [add_credit_card_mediator_ addCreditCardViewController:nil
+                             addCreditCardWithHolderName:@"John Doe"
+                                              cardNumber:@"4111111111111111"
+                                         expirationMonth:@"10"
+                                          expirationYear:@"2025"
+                                            cardNickname:@"My Card"
+                                                 cardCvc:@"123"];
+
+  // Verify that the action was logged exactly once.
+  EXPECT_EQ(
+      1, user_action_tester.GetActionCount("AutofillCreditCardsAddedWithCvc"));
+}
+
+// Tests that the metric is not recorded when adding a card without a CVC.
+TEST_F(AutofillAddCreditCardMediatorTest,
+       TestAddCardWithoutCvcDoesNotRecordUserAction) {
+  base::UserActionTester user_action_tester;
+
+  // Verify that the action has not been logged yet.
+  EXPECT_EQ(
+      0, user_action_tester.GetActionCount("AutofillCreditCardsAddedWithCvc"));
+
+  // Simulate adding a card without a CVC (passing an empty string).
+  [add_credit_card_mediator_ addCreditCardViewController:nil
+                             addCreditCardWithHolderName:@"Jane Doe"
+                                              cardNumber:@"4111111111111112"
+                                         expirationMonth:@"11"
+                                          expirationYear:@"2026"
+                                            cardNickname:@"Another Card"
+                                                 cardCvc:@""];
+
+  // Verify that the action was still not logged.
+  EXPECT_EQ(
+      0, user_action_tester.GetActionCount("AutofillCreditCardsAddedWithCvc"));
 }

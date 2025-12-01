@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -180,11 +180,14 @@ export interface TrackVisualConfig {
   expanded: boolean;
   originalIndex: number;
   visualIndex: number;
+  trackName: string;
 }
 
 /**
  * Stores the visual config if the user has modified it. Split into "main" and
  * "network" so we can pass the relevant config into the right data provider.
+ * NOTE: as of August 2025 (M141) we currently do not export this in new
+ * traces, or use it if an existing trace is imported with it.
  */
 export interface PersistedTraceVisualConfig {
   main: TrackVisualConfig[]|null;
@@ -216,7 +219,7 @@ export interface MetaData {
   hostDPR?: number;
 }
 
-interface MetadataSourceMap {
+export interface MetadataSourceMap {
   url: string;
   /** If not defined, then this was a data url. */
   sourceMapUrl?: string;

@@ -4,6 +4,10 @@
 // found in the LICENSE file.
 //
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "compiler/translator/Compiler.h"
 
 #include <sstream>
@@ -241,18 +245,25 @@ struct UniformSortComparator
         {
             return false;
         }
-        // First, sort by precision: lowp and mediump are smaller than highp
-        if (firstType.getPrecision() != secondType.getPrecision())
+
+        // Next sort by precisions
+        // Group uniforms into high-precision and non-high-precision. A non-highp uniform is
+        // considered "smaller" than a highp uniform.
+        const TPrecision firstPrecision  = firstType.getPrecision();
+        const TPrecision secondPrecision = secondType.getPrecision();
+        const bool firstIsHighP          = (firstPrecision == TPrecision::EbpHigh);
+        const bool secondIsHighP         = (secondPrecision == TPrecision::EbpHigh);
+        if (firstIsHighP != secondIsHighP)
         {
-            return firstType.getPrecision() != TPrecision::EbpHigh;
+            return secondIsHighP;
         }
-        // We don't sort highp uniforms. If both uniforms are highp, consider them as equivalent
-        if (firstType.getPrecision() == TPrecision::EbpHigh &&
-            secondType.getPrecision() == TPrecision::EbpHigh)
+        // If both are highp, they are equivalent. Do not reorder them.
+        if (firstIsHighP)
         {
             return false;
         }
-        // If both uniforms are mediump or lowp, we further sort them based on a list of criteria
+        // If we reach here, both uniforms are non-highp. We further sort them based on a list of
+        // criteria
         ASSERT(firstType.getPrecision() != TPrecision::EbpHigh &&
                secondType.getPrecision() != TPrecision::EbpHigh);
         // criteria 1: sort by whether the uniform is a struct. Non-structs is smaller.
@@ -611,7 +622,7 @@ TIntermBlock *TCompiler::compileTreeImpl(const char *const shaderStrings[],
         return nullptr;
     }
 
-    if (!postParseChecks(parseContext))
+    if (!postParseChecks(&parseContext))
     {
         return nullptr;
     }
@@ -1018,13 +1029,10 @@ bool TCompiler::checkAndSimplifyAST(TIntermBlock *root,
         return false;
     }
 
-    // Checks which functions are used and if "main" exists
+    // Checks which functions are used
     mFunctionMetadata.clear();
     mFunctionMetadata.resize(mCallDag.size());
-    if (!tagUsedFunctions())
-    {
-        return false;
-    }
+    tagUsedFunctions();
 
     if (!pruneUnusedFunctions(root))
     {
@@ -1453,27 +1461,26 @@ bool TCompiler::checkAndSimplifyAST(TIntermBlock *root,
     return true;
 }
 
-bool TCompiler::postParseChecks(const TParseContext &parseContext)
+bool TCompiler::postParseChecks(TParseContext *parseContext)
 {
-    std::stringstream errorMessage;
+    // If parse failed, we shouldn't reach here.
+    ASSERT(parseContext->getTreeRoot() != nullptr);
 
-    if (parseContext.getTreeRoot() == nullptr)
+    if (!parseContext->isMainDeclared())
     {
-        errorMessage << "Shader parsing failed (mTreeRoot == nullptr)";
-    }
-
-    for (TType *type : parseContext.getDeferredArrayTypesToSize())
-    {
-        errorMessage << "Unsized global array type: " << type->getBasicString();
-    }
-
-    if (!errorMessage.str().empty())
-    {
-        mDiagnostics.globalError(errorMessage.str().c_str());
+        parseContext->error(kNoSourceLoc, "Missing main()", "");
         return false;
     }
 
-    return true;
+    bool success = true;
+
+    for (TType *type : parseContext->getDeferredArrayTypesToSize())
+    {
+        parseContext->error(kNoSourceLoc, "Unsized global array type: ", type->getBasicString());
+        success = false;
+    }
+
+    return success;
 }
 
 bool TCompiler::compile(const char *const shaderStrings[],
@@ -1586,6 +1593,10 @@ void TCompiler::setResourceString()
         << ":MaxTextureImageUnits:" << mResources.MaxTextureImageUnits
         << ":MaxFragmentUniformVectors:" << mResources.MaxFragmentUniformVectors
         << ":MaxDrawBuffers:" << mResources.MaxDrawBuffers
+        << ":ShadingRateFlag2VerticalPixelsEXT:" << mResources.ShadingRateFlag2VerticalPixelsEXT
+        << ":ShadingRateFlag2VerticalPixelsEXT:" << mResources.ShadingRateFlag2VerticalPixelsEXT
+        << ":ShadingRateFlag2HorizontalPixelsEXT:" << mResources.ShadingRateFlag2HorizontalPixelsEXT
+        << ":ShadingRateFlag4HorizontalPixelsEXT:" << mResources.ShadingRateFlag4HorizontalPixelsEXT
         << ":OES_standard_derivatives:" << mResources.OES_standard_derivatives
         << ":OES_EGL_image_external:" << mResources.OES_EGL_image_external
         << ":OES_EGL_image_external_essl3:" << mResources.OES_EGL_image_external_essl3
@@ -1640,6 +1651,7 @@ void TCompiler::setResourceString()
         << ":OES_texture_buffer:" << mResources.OES_texture_buffer
         << ":EXT_texture_buffer:" << mResources.EXT_texture_buffer
         << ":EXT_fragment_shading_rate:" << mResources.EXT_fragment_shading_rate
+        << ":EXT_fragment_shading_rate_primitive:" << mResources.EXT_fragment_shading_rate_primitive
         << ":OES_sample_variables:" << mResources.OES_sample_variables
         << ":EXT_clip_cull_distance:" << mResources.EXT_clip_cull_distance
         << ":ANGLE_clip_cull_distance:" << mResources.ANGLE_clip_cull_distance
@@ -1714,7 +1726,8 @@ void TCompiler::collectVariables(TIntermBlock *root)
     CollectVariables(root, &mAttributes, &mOutputVariables, &mUniforms, &mInputVaryings,
                      &mOutputVaryings, &mSharedVariables, &mUniformBlocks, &mShaderStorageBlocks,
                      mResources.UserVariableNamePrefix, mResources.HashFunction, &mSymbolTable,
-                     mShaderType, mExtensionBehavior, mResources, mTessControlShaderOutputVertices);
+                     mShaderType, mExtensionBehavior, mResources, mTessControlShaderOutputVertices,
+                     mCompileOptions.transformFloatUniformTo16Bits);
     collectInterfaceBlocks();
     mVariablesCollected = true;
 }
@@ -1850,20 +1863,18 @@ bool TCompiler::checkCallDepth()
     return true;
 }
 
-bool TCompiler::tagUsedFunctions()
+void TCompiler::tagUsedFunctions()
 {
-    // Search from main, starting from the end of the DAG as it usually is the root.
+    // Search from main, starting from the end of the DAG as it's usually found at the end of the
+    // shader.
     for (size_t i = mCallDag.size(); i-- > 0;)
     {
         if (mCallDag.getRecordFromIndex(i).node->getFunction()->isMain())
         {
             internalTagUsedFunction(i);
-            return true;
+            break;
         }
     }
-
-    mDiagnostics.globalError("Missing main()");
-    return false;
 }
 
 void TCompiler::internalTagUsedFunction(size_t index)

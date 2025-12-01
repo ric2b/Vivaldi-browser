@@ -322,6 +322,7 @@ External library support:
   --enable-mediafoundation enable encoding via MediaFoundation [auto]
   --disable-metal          disable Apple Metal framework [autodetect]
   --enable-libmysofa       enable libmysofa, needed for sofalizer filter [no]
+  --enable-ohcodec         enable OpenHarmony Codec support [no]
   --enable-openal          enable OpenAL 1.1 capture support [no]
   --enable-opencl          enable OpenCL processing [no]
   --enable-opengl          enable OpenGL rendering [no]
@@ -335,6 +336,7 @@ External library support:
   --disable-securetransport disable Secure Transport, needed for TLS support
                            on OSX if openssl and gnutls are not used [autodetect]
   --enable-vapoursynth     enable VapourSynth demuxer [no]
+  --enable-whisper         enable whisper filter [no]
   --disable-xlib           disable xlib [autodetect]
   --disable-zlib           disable zlib [autodetect]
 
@@ -380,10 +382,10 @@ Toolchain options:
   --target-samples=DIR     path to samples directory on target
   --tempprefix=PATH        force fixed dir/prefix instead of mktemp for checks
   --toolchain=NAME         set tool defaults according to NAME
-                           (gcc-asan, clang-asan, gcc-msan, clang-msan,
-                           gcc-tsan, clang-tsan, gcc-usan, clang-usan,
-                           valgrind-massif, valgrind-memcheck,
-                           msvc, icl, gcov, llvm-cov, hardened)
+                           (<tool>[-sanitizer[-...]], e.g. clang-asan-ubsan
+                           tools: gcc, clang, msvc, icl, gcov, llvm-cov,
+                                  valgrind-memcheck, valgrind-massif, hardened
+                           sanitizers: asan, fuzz, lsan, msan, tsan, ubsan)
   --nm=NM                  use nm tool NM [$nm_default]
   --ar=AR                  use archive tool AR [$ar_default]
   --as=AS                  use assembler AS [$as_default]
@@ -822,7 +824,7 @@ is_in(){
 }
 
 # The cfg loop is very hot (several thousands iterations), and in bash also
-# potentialy quite slow. Try to abort the iterations early, preferably without
+# potentially quite slow. Try to abort the iterations early, preferably without
 # calling functions. 70%+ of the time cfg is already done or without deps.
 check_deps(){
     for cfg; do
@@ -928,7 +930,7 @@ reverse () {
     '
 }
 
-# keeps the last occurence of each non-unique item
+# keeps the last occurrence of each non-unique item
 unique(){
     unique_out=
     eval unique_in=\$$1
@@ -1997,12 +1999,14 @@ EXTERNAL_LIBRARY_LIST="
     libzvbi
     lv2
     mediacodec
+    ohcodec
     openal
     opengl
     openssl
     pocketsphinx
     vapoursynth
     vulkan_static
+    whisper
 "
 
 HWACCEL_AUTODETECT_LIBRARY_LIST="
@@ -2498,6 +2502,7 @@ TYPES_LIST="
     kCVImageBufferTransferFunction_ITU_R_2020
     kCVImageBufferTransferFunction_SMPTE_ST_428_1
     kVTQPModulationLevel_Default
+    SecPkgContext_KeyingMaterialInfo
     socklen_t
     struct_addrinfo
     struct_group_source_req
@@ -2648,6 +2653,7 @@ CONFIG_EXTRA="
     rv34dsp
     scene_sad
     sinewin
+    smpte_436m
     snappy
     srtp
     startcode
@@ -2656,6 +2662,7 @@ CONFIG_EXTRA="
     tpeldsp
     vaapi_1
     vaapi_encode
+    vulkan_1_4
     vc1dsp
     videodsp
     vp3dsp
@@ -3087,6 +3094,7 @@ prores_decoder_select="blockdsp idctdsp"
 prores_encoder_select="fdctdsp"
 prores_aw_encoder_select="fdctdsp"
 prores_ks_encoder_select="fdctdsp"
+prores_raw_decoder_select="blockdsp idctdsp"
 qcelp_decoder_select="lsp"
 qdm2_decoder_select="mpegaudiodsp"
 ra_144_decoder_select="audiodsp"
@@ -3152,7 +3160,7 @@ vp6a_decoder_select="vp6_decoder"
 vp6f_decoder_select="vp6_decoder"
 vp7_decoder_select="h264pred videodsp vp8dsp"
 vp8_decoder_select="h264pred videodsp vp8dsp"
-vp9_decoder_select="videodsp vp9_parser vp9_superframe_split_bsf"
+vp9_decoder_select="videodsp vp9_parser cbs_vp9 vp9_superframe_split_bsf"
 vvc_decoder_select="cabac cbs_h266 golomb videodsp vvc_sei"
 wcmv_decoder_select="inflate_wrapper"
 webp_decoder_select="vp8_decoder exif"
@@ -3289,6 +3297,8 @@ mpeg4_videotoolbox_hwaccel_deps="videotoolbox"
 mpeg4_videotoolbox_hwaccel_select="mpeg4_decoder"
 prores_videotoolbox_hwaccel_deps="videotoolbox"
 prores_videotoolbox_hwaccel_select="prores_decoder"
+prores_raw_vulkan_hwaccel_deps="vulkan spirv_compiler"
+prores_raw_vulkan_hwaccel_select="prores_raw_decoder"
 vc1_d3d11va_hwaccel_deps="d3d11va"
 vc1_d3d11va_hwaccel_select="vc1_decoder"
 vc1_d3d11va2_hwaccel_deps="d3d11va"
@@ -3323,6 +3333,8 @@ vp9_vdpau_hwaccel_deps="vdpau VdpPictureInfoVP9"
 vp9_vdpau_hwaccel_select="vp9_decoder"
 vp9_videotoolbox_hwaccel_deps="videotoolbox"
 vp9_videotoolbox_hwaccel_select="vp9_decoder"
+vp9_vulkan_hwaccel_deps="vulkan vulkan_1_4"
+vp9_vulkan_hwaccel_select="vp9_decoder"
 vvc_vaapi_hwaccel_deps="vaapi VAPictureParameterBufferVVC"
 vvc_vaapi_hwaccel_select="vvc_decoder"
 wmv3_d3d11va_hwaccel_select="vc1_d3d11va_hwaccel"
@@ -3343,6 +3355,7 @@ qsvdec_select="qsv"
 qsvenc_select="qsv"
 qsvvpp_select="qsv"
 vaapi_encode_deps="vaapi"
+vulkan_1_4_deps="vulkan"
 vulkan_encode_deps="vulkan"
 v4l2_m2m_deps="linux_videodev2_h sem_timedwait"
 
@@ -3367,6 +3380,7 @@ pad_cuda_filter_deps_any="cuda_nvcc cuda_llvm"
 sharpen_npp_filter_deps="ffnvcodec libnpp"
 
 ddagrab_filter_deps="d3d11va IDXGIOutput1 DXGI_OUTDUPL_FRAME_INFO"
+scale_d3d11_filter_deps="d3d11va"
 
 amf_deps_any="libdl LoadLibrary"
 nvenc_deps="ffnvcodec"
@@ -3394,6 +3408,8 @@ av1_qsv_encoder_deps="libvpl"
 av1_qsv_encoder_select="qsvenc"
 av1_vaapi_encoder_deps="VAEncPictureParameterBufferAV1"
 av1_vaapi_encoder_select="cbs_av1 vaapi_encode"
+av1_vulkan_encoder_deps="vulkan_1_4"
+av1_vulkan_encoder_select="cbs_av1 vulkan_encode"
 h263_v4l2m2m_decoder_deps="v4l2_m2m h263_v4l2_m2m"
 h263_v4l2m2m_encoder_deps="v4l2_m2m h263_v4l2_m2m"
 h264_amf_encoder_deps="amf"
@@ -3408,6 +3424,9 @@ h264_mf_encoder_deps="mediafoundation"
 h264_mmal_decoder_deps="mmal"
 h264_nvenc_encoder_deps="nvenc"
 h264_nvenc_encoder_select="atsc_a53"
+h264_oh_decoder_deps="ohcodec"
+h264_oh_decoder_select="h264_mp4toannexb_bsf"
+h264_oh_encoder_deps="ohcodec"
 h264_omx_encoder_deps="omx"
 h264_qsv_decoder_select="h264_mp4toannexb_bsf qsvdec"
 h264_qsv_encoder_select="atsc_a53 qsvenc"
@@ -3430,6 +3449,9 @@ hevc_mediacodec_encoder_select="extract_extradata_bsf hevc_metadata"
 hevc_mf_encoder_deps="mediafoundation"
 hevc_nvenc_encoder_deps="nvenc"
 hevc_nvenc_encoder_select="atsc_a53"
+hevc_oh_decoder_deps="ohcodec"
+hevc_oh_decoder_select="hevc_mp4toannexb_bsf"
+hevc_oh_encoder_deps="ohcodec"
 hevc_qsv_decoder_select="hevc_mp4toannexb_bsf qsvdec"
 hevc_qsv_encoder_select="hevcparse qsvenc"
 hevc_rkmpp_decoder_deps="rkmpp"
@@ -3514,6 +3536,7 @@ av1_metadata_bsf_select="cbs_av1"
 dovi_rpu_bsf_select="cbs_h265 cbs_av1 dovi_rpudec dovi_rpuenc"
 dts2pts_bsf_select="cbs_h264 h264parse"
 eac3_core_bsf_select="ac3_parser"
+eia608_to_smpte436m_bsf_select="smpte_436m"
 evc_frame_merge_bsf_select="evcparse"
 filter_units_bsf_select="cbs"
 h264_metadata_bsf_deps="const_nan"
@@ -3522,6 +3545,7 @@ h264_redundant_pps_bsf_select="cbs_h264"
 hevc_metadata_bsf_select="cbs_h265"
 mjpeg2jpeg_bsf_select="jpegtables"
 mpeg2_metadata_bsf_select="cbs_mpeg2"
+smpte436m_to_eia608_bsf_select="smpte_436m"
 trace_headers_bsf_select="cbs cbs_vp8"
 vp9_metadata_bsf_select="cbs_vp9"
 vvc_metadata_bsf_select="cbs_h266"
@@ -3707,6 +3731,9 @@ matroska_audio_muxer_select="matroska_muxer"
 matroska_demuxer_select="riffdec"
 matroska_demuxer_suggest="bzlib zlib"
 matroska_muxer_select="iso_writer mpeg4audio riffenc aac_adtstoasc_bsf pgs_frame_merge_bsf vp9_superframe_bsf"
+mcc_demuxer_select="smpte_436m"
+mcc_muxer_select="smpte_436m"
+mcc_muxer_suggest="eia608_to_smpte436m_bsf"
 mlp_demuxer_select="mlp_parser"
 mmf_muxer_select="riffenc"
 mov_demuxer_select="iso_media riffdec"
@@ -3720,6 +3747,7 @@ mpegts_demuxer_select="iso_media"
 mpegts_muxer_select="ac3_parser adts_muxer latm_muxer h264_mp4toannexb_bsf hevc_mp4toannexb_bsf vvc_mp4toannexb_bsf"
 mpegtsraw_demuxer_select="mpegts_demuxer"
 mxf_muxer_select="iso_writer pcm_rechunk_bsf rangecoder"
+mxf_muxer_suggest="eia608_to_smpte436m_bsf"
 mxf_d10_muxer_select="mxf_muxer"
 mxf_opatom_muxer_select="mxf_muxer"
 nut_muxer_select="riffenc"
@@ -4059,6 +4087,7 @@ xstack_qsv_filter_deps="libmfx"
 xstack_qsv_filter_select="qsvvpp"
 pad_vaapi_filter_deps="vaapi_1"
 drawbox_vaapi_filter_deps="vaapi_1"
+whisper_filter_deps="whisper"
 
 # examples
 avio_http_serve_files_deps="avformat avutil fork"
@@ -4520,7 +4549,7 @@ done
 
 if disabled autodetect; then
 
-    # Unless iconv is explicitely disabled by the user, we still want to probe
+    # Unless iconv is explicitly disabled by the user, we still want to probe
     # for the iconv from the libc.
     disabled iconv || enable libc_iconv
 
@@ -4604,16 +4633,16 @@ set >> $logfile
 
 test -n "$valgrind" && toolchain="valgrind-memcheck"
 
-enabled ossfuzz && ! echo $CFLAGS | grep -q -- "-fsanitize="  && ! echo $CFLAGS | grep -q -- "-fcoverage-mapping" &&{
-    add_cflags  -fsanitize=address,undefined -fsanitize-coverage=trace-pc-guard,trace-cmp -fno-omit-frame-pointer
-    add_ldflags -fsanitize=address,undefined -fsanitize-coverage=trace-pc-guard,trace-cmp
-}
-
 add_sanitizer_flags(){
     case "$1" in
         asan)
             add_cflags  -fsanitize=address
             add_ldflags -fsanitize=address
+        ;;
+        fuzz)
+            add_cflags  -fsanitize=fuzzer-no-link
+            add_ldflags -fsanitize=fuzzer-no-link
+            : "${libfuzzer_path:=-fsanitize=fuzzer}"
         ;;
         lsan)
             add_cflags  -fsanitize=leak
@@ -4627,7 +4656,7 @@ add_sanitizer_flags(){
             add_cflags  -fsanitize=thread
             add_ldflags -fsanitize=thread
         ;;
-        usan)
+        usan|ubsan)
             add_cflags  -fsanitize=undefined
             add_ldflags -fsanitize=undefined
         ;;
@@ -4637,14 +4666,24 @@ add_sanitizer_flags(){
     esac
 }
 
+add_sanitizers(){
+    IFS=-
+    set -- $*
+    unset IFS
+    for sanitizer; do
+        add_sanitizer_flags "$sanitizer"
+    done
+    add_cflags -fno-omit-frame-pointer
+}
+
 case "$toolchain" in
     clang-*)
-        add_sanitizer_flags "${toolchain#clang-}"
+        add_sanitizers "${toolchain#clang-}"
         cc_default="clang"
         cxx_default="clang++"
     ;;
     gcc-*)
-        add_sanitizer_flags "${toolchain#gcc-}"
+        add_sanitizers "${toolchain#gcc-}"
         cc_default="gcc"
         cxx_default="g++"
         # In case of tsan with gcc, PIC has to be enabled
@@ -4905,7 +4944,7 @@ msvc_common_flags(){
             -lstdc++)             ;;
             -l*)                  echo ${flag#-l}.lib ;;
             -LARGEADDRESSAWARE)   echo $flag ;;
-            -L*)                  echo -libpath:${flag#-L} ;;
+            -L*) [ "$_flags_type" = "link" ] && echo -libpath:${flag#-L} ;;
             -Wl,*)                ;;
             *)                    echo $flag ;;
         esac
@@ -4925,6 +4964,12 @@ msvc_flags(){
                                        -wd4273 -wd4554 -wd4701 -wd4703 ;;
         esac
     done
+}
+
+msvc_flags_link(){
+    _flags_type=link
+    msvc_flags "$@"
+    unset _flags_type
 }
 
 icl_flags(){
@@ -5112,7 +5157,7 @@ probe_cc(){
         _cc_o='-Fo$@'
         _cc_e='-P'
         _flags_filter=icl_flags
-        _ld_lib='lib%.a'
+        _ld_lib='%.lib'
         _ld_path='-libpath:'
         # -Qdiag-error to make icl error when seeing certain unknown arguments
         _flags='-nologo -Qdiag-error:4044,10157'
@@ -5122,7 +5167,7 @@ probe_cc(){
         disable stripping
     elif $_cc -? 2>/dev/null | grep -q 'LLVM.*Linker'; then
         # lld can emulate multiple different linkers; in ms link.exe mode,
-        # the -? parameter gives the help output which contains an identifyable
+        # the -? parameter gives the help output which contains an identifiable
         # string, while it gives an error in other modes.
         _type=lld-link
         # The link.exe mode doesn't have a switch for getting the version,
@@ -5130,14 +5175,14 @@ probe_cc(){
         _ident=$($_cc -flavor gnu --version 2>/dev/null)
         _ld_o='-out:$@'
         _flags_filter=msvc_flags
-        _ld_lib='lib%.a'
+        _ld_lib='%.lib'
         _ld_path='-libpath:'
-    elif $_cc -nologo- 2>&1 | grep -q ^Microsoft || { $_cc -v 2>&1 | grep -q clang && $_cc -? > /dev/null 2>&1; }; then
+    elif VSLANG=1033 $_cc -nologo- 2>&1 | grep -q ^Microsoft || { $_cc -v 2>&1 | grep -q clang && $_cc -? > /dev/null 2>&1; }; then
         _type=msvc
-        if $_cc -nologo- 2>&1 | grep -q ^Microsoft; then
+        if VSLANG=1033 $_cc -nologo- 2>&1 | grep -q ^Microsoft; then
             # Depending on the tool (cl.exe or link.exe), the version number
             # is printed on the first line of stderr or stdout
-            _ident=$($_cc 2>&1 | grep ^Microsoft | head -n1 | tr -d '\r')
+            _ident=$(VSLANG=1033 $_cc 2>&1 | grep ^Microsoft | head -n1 | tr -d '\r')
         else
             _ident=$($_cc --version 2>/dev/null | head -n1 | tr -d '\r')
         fi
@@ -5153,13 +5198,14 @@ probe_cc(){
         _cflags_noopt="-O1"
         if $_cc -nologo- 2>&1 | grep -q Linker; then
             _ld_o='-out:$@'
+            _flags_filter=msvc_flags_link
         else
             _ld_o='-Fe$@'
+            _flags_filter=msvc_flags
         fi
         _cc_o='-Fo$@'
         _cc_e='-P -Fi$@'
-        _flags_filter=msvc_flags
-        _ld_lib='lib%.a'
+        _ld_lib='%.lib'
         _ld_path='-libpath:'
         _flags='-nologo'
         disable stripping
@@ -5246,7 +5292,7 @@ if [ -z "$CC_DEPFLAGS" ] && [ "$dep_cc" != "$cc" ]; then
     DEPCCFLAGS=$_flags
 fi
 
-if $ar 2>&1 | grep -q ^Microsoft; then
+if VSLANG=1033 $ar 2>&1 | grep -q ^Microsoft; then
     arflags="-nologo"
     ar_o='-out:$@'
 elif $ar 2>&1 | grep -q "\[D\] "; then
@@ -5256,6 +5302,12 @@ else
     arflags="rc"
     ar_o='$@'
 fi
+
+# Treat unrecognized flags as errors on MSVC
+test_cpp_condition windows.h "_MSC_FULL_VER >= 193030705" &&
+    check_cflags -options:strict
+test_host_cpp_condition windows.h "_MSC_FULL_VER >= 193030705" &&
+    check_host_cflags -options:strict
 
 add_cflags $extra_cflags
 add_cxxflags $extra_cxxflags
@@ -5278,6 +5330,7 @@ if test "$cpu" = host; then
     case "$cc_type" in
         gcc|llvm_gcc)
             check_native(){
+                : > $TMPC
                 $cc $1=native -v -c -o $TMPO $TMPC >$TMPE 2>&1 || return
                 sed -n "/cc1.*$1=/{
                             s/.*$1=\\([^ ]*\\).*/\\1/
@@ -5289,6 +5342,7 @@ if test "$cpu" = host; then
         ;;
         clang)
             check_native(){
+                : > $TMPC
                 $cc $1=native -v -c -o $TMPO $TMPC >$TMPE 2>&1 || return
                 sed -n "/cc1.*-target-cpu /{
                             s/.*-target-cpu \\([^ ]*\\).*/\\1/
@@ -5585,7 +5639,7 @@ elif enabled ppc; then
             cpuflags="-mcpu=$cpu"
             disable vsx
         ;;
-        power[7-8]*)
+        power[7-9]*|power10)
             cpuflags="-mcpu=$cpu"
         ;;
         cell)
@@ -5943,9 +5997,6 @@ case $target_os in
     win32|win64)
         disable symver
         if enabled shared; then
-            # Link to the import library instead of the normal static library
-            # for shared libs.
-            LD_LIB='%.lib'
             # Cannot build both shared and static libs with MSVC or icl.
             disable static
         fi
@@ -5953,6 +6004,8 @@ case $target_os in
         enabled x86_32 && check_ldflags -LARGEADDRESSAWARE
         add_cppflags -DWIN32_LEAN_AND_MEAN
         shlibdir_default="$bindir_default"
+        LIBPREF=""
+        LIBSUF=".lib"
         SLIBPREF=""
         SLIBSUF=".dll"
         SLIBNAME_WITH_VERSION='$(SLIBPREF)$(FULLNAME)-$(LIBVERSION)$(SLIBSUF)'
@@ -5962,7 +6015,11 @@ case $target_os in
         SLIB_INSTALL_LINKS=
         SLIB_INSTALL_EXTRA_SHLIB='$(SLIBNAME:$(SLIBSUF)=.lib)'
         SLIB_INSTALL_EXTRA_LIB='$(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.def)'
-        SHFLAGS='-dll -def:$$(@:$(SLIBSUF)=.def) -implib:$(SUBDIR)$(SLIBNAME:$(SLIBSUF)=.lib)'
+        if test $ld_type = "clang"; then
+            SHFLAGS='-Wl,-dll -Wl,-def:$$(@:$(SLIBSUF)=.def) -Wl,-implib:$(SUBDIR)$(SLIBNAME:$(SLIBSUF)=.lib)'
+        else
+            SHFLAGS='-dll -def:$$(@:$(SLIBSUF)=.def) -implib:$(SUBDIR)$(SLIBNAME:$(SLIBSUF)=.lib)'
+        fi
         enabled x86_64 && objformat="win64" || objformat="win32"
         ranlib=:
         enable dos_paths
@@ -6204,7 +6261,7 @@ set_default libdir
 set_default $PATHS_LIST
 set_default nm
 
-disabled optimizations || enabled ossfuzz || check_cflags -fomit-frame-pointer
+disabled optimizations || enabled ossfuzz || echo "$CFLAGS" | grep -q -- '-fsanitize=' || check_cflags -fomit-frame-pointer
 
 enable_weak_pic() {
     disabled pic && return
@@ -6832,6 +6889,7 @@ check_type "windows.h d3d12video.h" "ID3D12VideoEncoder"
 test_code cc "windows.h d3d12video.h" "D3D12_FEATURE_VIDEO feature = D3D12_FEATURE_VIDEO_ENCODER_CODEC" && \
 test_code cc "windows.h d3d12video.h" "D3D12_FEATURE_DATA_VIDEO_ENCODER_RESOURCE_REQUIREMENTS req" && enable d3d12_encoder_feature
 check_type "windows.h" "DPI_AWARENESS_CONTEXT" -D_WIN32_WINNT=0x0A00
+check_type "windows.h security.h schnlsp.h" SecPkgContext_KeyingMaterialInfo -DSECURITY_WIN32
 check_type "d3d9.h dxva2api.h" DXVA2_ConfigPictureDecode -D_WIN32_WINNT=0x0602
 check_func_headers mfapi.h MFCreateAlignedMemoryBuffer -lmfplat
 
@@ -6969,7 +7027,7 @@ enabled jni               && { [ $target_os = "android" ] && check_headers jni.h
 enabled ladspa            && require_headers "ladspa.h dlfcn.h"
 enabled lcms2             && require_pkg_config lcms2 "lcms2 >= 2.13" lcms2.h cmsCreateContext
 enabled libaom            && require_pkg_config libaom "aom >= 2.0.0" aom/aom_codec.h aom_codec_version
-enabled liboapv           && require_pkg_config liboapv "oapv >= 0.1.13.1" "oapv/oapv.h" oapve_encode
+enabled liboapv           && require_pkg_config liboapv "oapv >= 0.2.0.0" "oapv/oapv.h" oapve_encode
 enabled libaribb24        && { check_pkg_config libaribb24 "aribb24 > 1.0.3" "aribb24/aribb24.h" arib_instance_new ||
                                { enabled gpl && require_pkg_config libaribb24 aribb24 "aribb24/aribb24.h" arib_instance_new; } ||
                                die "ERROR: libaribb24 requires version higher than 1.0.3 or --enable-gpl."; }
@@ -7119,6 +7177,8 @@ enabled libvo_amrwbenc    && require libvo_amrwbenc vo-amrwbenc/enc_if.h E_IF_in
 enabled libvorbis         && require_pkg_config libvorbis vorbis vorbis/codec.h vorbis_info_init &&
                              require_pkg_config libvorbisenc vorbisenc vorbis/vorbisenc.h vorbis_encode_init
 
+enabled whisper           && require_pkg_config whisper "whisper >= 1.7.5" whisper.h whisper_init_from_file_with_params
+
 enabled libvpx            && {
     enabled libvpx_vp8_decoder && {
         check_pkg_config libvpx_vp8_decoder "vpx >= 1.4.0" "vpx/vpx_decoder.h vpx/vp8dx.h" vpx_codec_vp8_dx ||
@@ -7176,6 +7236,10 @@ enabled mmal              && { check_lib mmal interface/mmal/mmal.h mmal_port_co
                                  check_lib mmal interface/mmal/mmal.h mmal_port_connect -lmmal_core -lmmal_util -lmmal_vc_client -lbcm_host; } ||
                                die "ERROR: mmal not found" &&
                                check_func_headers interface/mmal/mmal.h "MMAL_PARAMETER_VIDEO_MAX_NUM_CALLBACKS"; }
+enabled ohcodec           && { check_lib ohcodec "multimedia/player_framework/native_avcodec_videodecoder.h multimedia/player_framework/native_avcodec_videoencoder.h" \
+                                    "OH_VideoDecoder_CreateByName OH_VideoEncoder_CreateByName" \
+                                    -lnative_media_vdec -lnative_media_venc -lnative_media_codecbase -lnative_media_core -lnative_window ||
+                               die "ERROR: missing native_media libs"; }
 enabled openal            && { check_pkg_config openal "openal >= 1.1" "AL/al.h" alGetError ||
                                { for al_extralibs in "${OPENAL_LIBS}" "-lopenal" "-lOpenAL32"; do
                                check_lib openal 'AL/al.h' alGetError "${al_extralibs}" && break; done } ||
@@ -7281,6 +7345,8 @@ enabled schannel &&
     test_cpp_condition winerror.h "defined(SEC_I_CONTEXT_EXPIRED)" &&
     schannel_extralibs="-lsecur32 -lncrypt -lcrypt32" ||
         disable schannel
+
+enabled schannel && check_cc dtls_protocol "windows.h security.h schnlsp.h" "int i = SP_PROT_DTLS1_X_CLIENT;" -DSECURITY_WIN32
 
 makeinfo --version > /dev/null 2>&1 && enable makeinfo  || disable makeinfo
 enabled makeinfo \
@@ -7467,6 +7533,9 @@ fi
 
 if disabled vulkan; then
     disable libglslang libshaderc spirv_compiler
+else
+    check_pkg_config_header_only vulkan_1_4 "vulkan >= 1.4.317" "vulkan/vulkan.h" "defined VK_VERSION_1_4" ||
+        check_cpp_condition vulkan_1_4 "vulkan/vulkan.h" "defined(VK_VERSION_1_5) || (defined(VK_VERSION_1_4) && VK_HEADER_VERSION >= 317)"
 fi
 
 if enabled x86; then
@@ -7556,6 +7625,7 @@ check_disable_warning -Wno-unused-const-variable
 check_disable_warning -Wno-bool-operation
 check_disable_warning -Wno-char-subscripts
 check_disable_warning -Wno-implicit-const-int-float-conversion
+check_disable_warning -Wno-microsoft-enum-forward-reference
 
 check_disable_warning_headers(){
     warning_flag=-W${1#-Wno-}
@@ -7693,7 +7763,25 @@ if enabled icc; then
             disable aligned_stack
     fi
 elif enabled gcc; then
-    check_optflags -fno-tree-vectorize
+    gcc_version=$($cc -dumpversion)
+    major_version=${gcc_version%%.*}
+    if [ $major_version -lt 13 ]; then
+        # Disable tree-vectorize for GCC <13 - it has historically been buggy.
+        check_optflags -fno-tree-vectorize
+    else
+        case $arch in
+        x86|arm|aarch64)
+            # Allow the default of having tree-vectorize enabled on well tested
+            # architectures.
+            ;;
+        *)
+            # Disable tree-vectorize on potentially less tested
+            # architectures. Known issues:
+            # - https://gcc.gnu.org/PR121064 on Loongarch
+            check_optflags -fno-tree-vectorize
+            ;;
+        esac
+    fi
     check_cflags -Werror=format-security
     check_cflags -Werror=implicit-function-declaration
     check_cflags -Werror=missing-prototypes
@@ -7773,7 +7861,7 @@ elif enabled_any msvc icl; then
     fi
     # msvcrt10 x64 incorrectly enables log2, only msvcrt12 (MSVC 2013) onwards actually has log2.
     check_cpp_condition log2 crtversion.h "_VC_CRT_MAJOR_VERSION >= 12"
-    # the new SSA optimzer in VS2015 U3 is mis-optimizing some parts of the code
+    # the new SSA optimizer in VS2015 U3 is mis-optimizing some parts of the code
     # Issue has been fixed in MSVC v19.00.24218.
     test_cpp_condition windows.h "_MSC_FULL_VER >= 190024218" ||
         check_cflags -d2SSAOptimizer-

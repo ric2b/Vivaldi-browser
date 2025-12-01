@@ -1,0 +1,72 @@
+# Copyright (c) 2025 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/ios/rules.gni")
+
+bundle_data_xcassets("assets") {
+  catalog = "Assets.xcassets"
+  sources = [
+    #vivaldi_badge_translate
+    "Assets.xcassets/vivaldi_badge_translate.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_translate.imageset/vivaldi_badge_translate.pdf",
+
+    #vivaldi_badge_translate_selected
+    "Assets.xcassets/vivaldi_badge_translate_selected.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_translate_selected.imageset/vivaldi_badge_translate_selected.pdf",
+
+    #vivaldi_badge_readermode
+    "Assets.xcassets/vivaldi_badge_readermode.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_readermode.imageset/vivaldi_badge_readermode.pdf",
+
+    #vivaldi_badge_readermode_selected
+    "Assets.xcassets/vivaldi_badge_readermode_selected.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_readermode_selected.imageset/vivaldi_badge_readermode_selected.pdf",
+
+    #vivaldi_badge_more
+    "Assets.xcassets/vivaldi_badge_more.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_more.imageset/vivaldi_badge_more.pdf",
+
+    #vivaldi_badge_more_selected
+    "Assets.xcassets/vivaldi_badge_more_selected.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_more_selected.imageset/vivaldi_badge_more_selected.pdf",
+
+    #vivaldi_badge_mic
+    "Assets.xcassets/vivaldi_badge_mic.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_mic.imageset/vivaldi_badge_mic.pdf",
+
+    #vivaldi_badge_mic_selected
+    "Assets.xcassets/vivaldi_badge_mic-selected.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_mic-selected.imageset/vivaldi_badge_mic_selected.pdf",
+
+    #vivaldi_badge_location
+    "Assets.xcassets/vivaldi_badge_location.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_location.imageset/vivaldi_badge_location.pdf",
+
+    #vivaldi_badge_location_selected
+    "Assets.xcassets/vivaldi_badge_location_selected.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_location_selected.imageset/vivaldi_badge_location_selected.pdf",
+
+    #vivaldi_badge_key
+    "Assets.xcassets/vivaldi_badge_key.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_key.imageset/vivaldi_badge_key.pdf",
+
+    #vivaldi_badge_key_selected
+    "Assets.xcassets/vivaldi_badge_key_selected.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_key_selected.imageset/vivaldi_badge_key_selected.pdf",
+
+    #vivaldi_badge_credit_card
+    "Assets.xcassets/vivaldi_badge_credit_card.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_credit_card.imageset/vivaldi_badge_credit_card.pdf",
+
+    #vivaldi_badge_credit_card_selected
+    "Assets.xcassets/vivaldi_badge_credit_card_selected.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_credit_card_selected.imageset/vivaldi_badge_credit_card_selected.pdf",
+
+    #vivaldi_badge_camera
+    "Assets.xcassets/vivaldi_badge_camera.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_camera.imageset/vivaldi_badge_camera.pdf",
+
+    #vivaldi_badge_camera_selected
+    "Assets.xcassets/vivaldi_badge_camera_selected.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_badge_camera_selected.imageset/vivaldi_badge_camera_selected.pdf",
+  ]
+}

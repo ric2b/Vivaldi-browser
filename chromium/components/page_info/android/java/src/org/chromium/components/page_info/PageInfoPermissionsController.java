@@ -61,6 +61,7 @@ public class PageInfoPermissionsController extends PageInfoPreferenceSubpageCont
     private final String mTitle;
     private final String mPageUrl;
     private boolean mHasSoundPermission;
+    private boolean mHasAutoPictureInPicturePermission;
     private boolean mDataIsStale;
     private @Nullable SingleWebsiteSettings mSubPage;
     @ContentSettingsType.EnumType private final int mHighlightedPermission;
@@ -98,6 +99,8 @@ public class PageInfoPermissionsController extends PageInfoPreferenceSubpageCont
 
         Bundle fragmentArgs = SingleWebsiteSettings.createFragmentArgsForSite(mPageUrl);
         fragmentArgs.putBoolean(SingleWebsiteSettings.EXTRA_SHOW_SOUND, mHasSoundPermission);
+        fragmentArgs.putBoolean(
+                SingleWebsiteSettings.EXTRA_SHOW_AUTO_PIP, mHasAutoPictureInPicturePermission);
 
         mSubPage =
                 (SingleWebsiteSettings)
@@ -134,10 +137,17 @@ public class PageInfoPermissionsController extends PageInfoPreferenceSubpageCont
         mRowView.setParams(rowParams);
 
         mHasSoundPermission = false;
+        mHasAutoPictureInPicturePermission = false;
         for (PermissionObject permission : permissions) {
-            if (permission.type == ContentSettingsType.SOUND) {
-                mHasSoundPermission = true;
-                break;
+            switch (permission.type) {
+                case ContentSettingsType.SOUND:
+                    mHasSoundPermission = true;
+                    break;
+                case ContentSettingsType.AUTO_PICTURE_IN_PICTURE:
+                    mHasAutoPictureInPicturePermission = true;
+                    break;
+                default:
+                    break;
             }
         }
     }
@@ -261,5 +271,13 @@ public class PageInfoPermissionsController extends PageInfoPreferenceSubpageCont
     public void onPermissionChanged() {
         mMainController.recordAction(PageInfoAction.PAGE_INFO_CHANGED_PERMISSION);
         mDataIsStale = true;
+    }
+
+    @Override
+    public void onLocationPermissionSubpageClicked() {
+        // TODO(crbug.com/418936295): Update location preference on preference changes.
+        mMainController.launchSubpage(
+                new PageInfoLocationPermissionController(
+                        mRowView, getDelegate(), mMainController.getURL().getSpec()));
     }
 }

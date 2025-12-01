@@ -1013,7 +1013,7 @@ void AccessibilityManager::EnableFaceGaze(bool enabled) {
 }
 
 bool AccessibilityManager::IsFaceGazeEnabled() const {
-  return ::features::IsAccessibilityFaceGazeEnabled() && profile_ &&
+  return profile_ &&
          profile_->GetPrefs()->GetBoolean(prefs::kAccessibilityFaceGazeEnabled);
 }
 
@@ -1819,12 +1819,10 @@ void AccessibilityManager::SetProfile(Profile* profile) {
                        base::Unretained(this)));
     }
 
-    if (::features::IsAccessibilityFaceGazeEnabled()) {
-      pref_change_registrar_->Add(
-          prefs::kAccessibilityFaceGazeEnabled,
-          base::BindRepeating(&AccessibilityManager::OnFaceGazeChanged,
-                              base::Unretained(this)));
-    }
+    pref_change_registrar_->Add(
+        prefs::kAccessibilityFaceGazeEnabled,
+        base::BindRepeating(&AccessibilityManager::OnFaceGazeChanged,
+                            base::Unretained(this)));
 
     local_state_pref_change_registrar_ =
         std::make_unique<PrefChangeRegistrar>();
@@ -1867,9 +1865,7 @@ void AccessibilityManager::SetProfile(Profile* profile) {
   for (const std::string& feature : kAccessibilityCommonFeatures)
     OnAccessibilityCommonChanged(feature);
 
-  if (::features::IsAccessibilityFaceGazeEnabled()) {
-    OnAccessibilityCommonChanged(prefs::kAccessibilityFaceGazeEnabled);
-  }
+  OnAccessibilityCommonChanged(prefs::kAccessibilityFaceGazeEnabled);
 
   // Dictation is not in kAccessibilityCommonFeatures because it needs to
   // be handled in OnDictationChanged also. OnDictationChanged will call to
@@ -2049,10 +2045,7 @@ void AccessibilityManager::UpdateChromeOSAccessibilityHistograms() {
   base::UmaHistogramBoolean(
       "Accessibility.CrosSpokenFeedback.BrailleDisplayConnected",
       IsBrailleDisplayConnected());
-  if (::features::IsAccessibilityFaceGazeEnabled()) {
-    base::UmaHistogramBoolean("Accessibility.CrosFaceGaze",
-                              IsFaceGazeEnabled());
-  }
+  base::UmaHistogramBoolean("Accessibility.CrosFaceGaze", IsFaceGazeEnabled());
   base::UmaHistogramBoolean("Accessibility.CrosAlwaysShowScrollbar",
                             IsAlwaysShowScrollbarsEnabled());
 }
@@ -2326,8 +2319,10 @@ void AccessibilityManager::LoadEnhancedNetworkTts() {
 
   auto* component_loader = extensions::ComponentLoader::Get(profile_);
 
-  if (component_loader->Exists(extension_misc::kEnhancedNetworkTtsExtensionId))
+  if (component_loader->ExistsOrPendingAdd(
+          extension_misc::kEnhancedNetworkTtsExtensionId)) {
     return;
+  }
 
   base::FilePath resources_path;
   if (!base::PathService::Get(chrome::DIR_RESOURCES, &resources_path)) {
@@ -2351,7 +2346,8 @@ void AccessibilityManager::LoadEnhancedNetworkTts() {
       extension_misc::kEnhancedNetworkTtsExtensionId, manifest_filename,
       guest_manifest_filename,
       base::BindOnce(&AccessibilityManager::PostLoadEnhancedNetworkTts,
-                     base::Unretained(this)));
+                     base::Unretained(this)),
+      {});
 }
 
 void AccessibilityManager::UnloadEnhancedNetworkTts() {
@@ -2996,7 +2992,7 @@ speech::LanguageCode AccessibilityManager::GetDictationLanguageCode() {
 void AccessibilityManager::InstallFaceGazeAssets(
     InstallFaceGazeAssetsCallback callback) {
   DCHECK(!callback.is_null());
-  if (!::features::IsAccessibilityFaceGazeEnabled() || !IsFaceGazeEnabled()) {
+  if (!IsFaceGazeEnabled()) {
     std::move(callback).Run(std::nullopt);
     return;
   }
@@ -3207,7 +3203,7 @@ void AccessibilityManager::SendSyntheticMouseEvent(
     gfx::Point location_in_screen,
     bool use_rewriters) {
   const display::Display& display =
-      display::Screen::GetScreen()->GetDisplayNearestPoint(location_in_screen);
+      display::Screen::Get()->GetDisplayNearestPoint(location_in_screen);
   auto* host = ash::GetWindowTreeHostForDisplay(display.id());
   if (!host) {
     return;

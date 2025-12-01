@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -42,6 +42,7 @@ import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Extensions from '../../models/extensions/extensions.js';
 import * as Logs from '../../models/logs/logs.js';
+import * as NetworkTimeCalculator from '../../models/network_time_calculator/network_time_calculator.js';
 import * as Trace from '../../models/trace/trace.js';
 import * as Workspace from '../../models/workspace/workspace.js';
 import * as NetworkForward from '../../panels/network/forward/forward.js';
@@ -52,73 +53,72 @@ import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 import * as MobileThrottling from '../mobile_throttling/mobile_throttling.js';
 import * as Search from '../search/search.js';
 
-import {Events, type RequestActivatedEvent} from './NetworkDataGridNode.js';
+import {Events, type RequestActivatedEvent, RequestPanelBehavior} from './NetworkDataGridNode.js';
 import {NetworkItemView} from './NetworkItemView.js';
 import {NetworkLogView} from './NetworkLogView.js';
 import {NetworkOverview} from './NetworkOverview.js';
 import networkPanelStyles from './networkPanel.css.js';
 import {NetworkSearchScope} from './NetworkSearchScope.js';
-import {type NetworkTimeCalculator, NetworkTransferTimeCalculator} from './NetworkTimeCalculator.js';
 
 const UIStrings = {
   /**
-   *@description Text to close something
+   * @description Text to close something
    */
   close: 'Close',
   /**
-   *@description Title of a search bar or tool
+   * @description Title of a search bar or tool
    */
   search: 'Search',
   /**
-   *@description Tooltip text that appears on the setting to preserve log when hovering over the item
+   * @description Tooltip text that appears on the setting to preserve log when hovering over the item
    */
   doNotClearLogOnPageReload: 'Do not clear log on page reload / navigation',
   /**
-   *@description Text to preserve the log after refreshing
+   * @description Text to preserve the log after refreshing
    */
   preserveLog: 'Preserve log',
   /**
-   *@description Text to disable cache while DevTools is open
+   * @description Text to disable cache while DevTools is open
    */
   disableCacheWhileDevtoolsIsOpen: 'Disable cache while DevTools is open',
   /**
-   *@description Text in Network Config View of the Network panel
+   * @description Text in Network Config View of the Network panel
    */
   disableCache: 'Disable cache',
   /**
-   *@description Tooltip text that appears when hovering over the largeicon settings gear in show settings pane setting in network panel of the network panel
+   * @description Tooltip text that appears when hovering over the largeicon settings gear in show settings pane setting in network panel of the network panel
    */
   networkSettings: 'Network settings',
   /**
-   *@description Tooltip for expanding network request row setting
+   * @description Tooltip for expanding network request row setting
    */
   showMoreInformationInRequestRows: 'Show more information in request rows',
   /**
-   *@description Text in Network Panel used to toggle the "big request rows" setting.
+   * @description Text in Network Panel used to toggle the "big request rows" setting.
    */
   useLargeRequestRows: 'Big request rows',
   /**
-   *@description Tooltip text for network request overview setting
+   * @description Tooltip text for network request overview setting
    */
   showOverviewOfNetworkRequests: 'Show overview of network requests',
   /**
-   *@description Text in Network Panel used to show the overview for a given network request.
+   * @description Text in Network Panel used to show the overview for a given network request.
    */
   showOverview: 'Overview',
   /**
-   *@description Tooltip for group by frame network setting
+   * @description Tooltip for group by frame network setting
    */
   groupRequestsByTopLevelRequest: 'Group requests by top level request frame',
   /**
-   *@description Text for group by frame network setting
+   * @description Text for group by frame network setting
    */
   groupByFrame: 'Group by frame',
   /**
-   *@description Tooltip for capture screenshot network setting
+   * @description Tooltip for capture screenshot network setting
    */
   captureScreenshotsWhenLoadingA: 'Capture screenshots when loading a page',
   /**
-   *@description Text to take screenshots
+   * @description Text to take screenshots
    */
   captureScreenshots: 'Screenshots',
   /**
@@ -153,12 +153,12 @@ const UIStrings = {
    */
   exportHarWithSensitiveData: 'Export `HAR` (with sensitive data)…',
   /**
-   *@description Text for throttling the network
+   * @description Text for throttling the network
    */
   throttling: 'Throttling',
   /**
-   *@description Text in Network Panel to tell the user to reload the page to capture screenshots.
-   *@example {Ctrl + R} PH1
+   * @description Text in Network Panel to tell the user to reload the page to capture screenshots.
+   * @example {Ctrl + R} PH1
    */
   hitSToReloadAndCaptureFilmstrip: 'Press {PH1} to reload and capture filmstrip.',
   /**
@@ -175,11 +175,11 @@ const UIStrings = {
    */
   openInNetworkPanelMissingRequest: 'Open in Network panel (missing request)',
   /**
-   *@description Text in Network Panel that is displayed whilst the recording is in progress.
+   * @description Text in Network Panel that is displayed whilst the recording is in progress.
    */
   recordingFrames: 'Recording frames…',
   /**
-   *@description Text in Network Panel that is displayed when frames are being fetched.
+   * @description Text in Network Panel that is displayed when frames are being fetched.
    */
   fetchingFrames: 'Fetching frames…',
   /**
@@ -212,7 +212,7 @@ export class NetworkPanel extends UI.Panel.Panel implements
   private readonly overviewPane: PerfUI.TimelineOverviewPane.TimelineOverviewPane;
   private readonly networkOverview: NetworkOverview;
   private readonly overviewPlaceholderElement: HTMLElement;
-  private readonly calculator: NetworkTransferTimeCalculator;
+  private readonly calculator: NetworkTimeCalculator.NetworkTransferTimeCalculator;
   private splitWidget: UI.SplitWidget.SplitWidget;
   private readonly sidebarLocation: UI.View.TabbedViewLocation;
   private readonly progressBarContainer: HTMLDivElement;
@@ -222,7 +222,7 @@ export class NetworkPanel extends UI.Panel.Panel implements
   private readonly closeButtonElement: UI.UIUtils.DevToolsCloseButton;
   private preserveLogSetting: Common.Settings.Setting<boolean>;
   recordLogSetting: Common.Settings.Setting<boolean>;
-  private readonly throttlingSelect: UI.Toolbar.ToolbarComboBox;
+  private readonly throttlingSelect: UI.Toolbar.ToolbarItem;
   private readonly displayScreenshotDelay: number;
 
   constructor(displayScreenshotDelay: number) {
@@ -291,7 +291,7 @@ export class NetworkPanel extends UI.Panel.Panel implements
     this.overviewPane.setOverviewControls([this.networkOverview]);
     this.overviewPlaceholderElement = panel.contentElement.createChild('div');
 
-    this.calculator = new NetworkTransferTimeCalculator();
+    this.calculator = new NetworkTimeCalculator.NetworkTransferTimeCalculator();
 
     this.splitWidget = new UI.SplitWidget.SplitWidget(true, false, 'network-panel-split-view-state');
     this.splitWidget.hideMain();
@@ -391,7 +391,7 @@ export class NetworkPanel extends UI.Panel.Panel implements
     return networkPanelInstance;
   }
 
-  static revealAndFilter(filters: Array<{
+  static async revealAndFilter(filters: Array<{
     filterType: NetworkForward.UIFilter.FilterType | null,
     filterValue: string,
   }>): Promise<void> {
@@ -404,11 +404,13 @@ export class NetworkPanel extends UI.Panel.Panel implements
         filterString += `${filter.filterValue} `;
       }
     }
+    await UI.ViewManager.ViewManager.instance().showView('network');
     panel.networkLogView.setTextFilterValue(filterString);
-    return UI.ViewManager.ViewManager.instance().showView('network');
+    panel.filterBar.setting().set(true);
+    panel.filterBar.focus();
   }
 
-  throttlingSelectForTest(): UI.Toolbar.ToolbarComboBox {
+  throttlingSelectForTest(): UI.Toolbar.ToolbarItem {
     return this.throttlingSelect;
   }
 
@@ -519,10 +521,12 @@ export class NetworkPanel extends UI.Panel.Panel implements
     updateShowOptionsToGenerateHarWithSensitiveData();
   }
 
-  private createThrottlingConditionsSelect(): UI.Toolbar.ToolbarComboBox {
-    const toolbarItem = new UI.Toolbar.ToolbarComboBox(null, i18nString(UIStrings.throttling));
+  private createThrottlingConditionsSelect(): UI.Toolbar.ToolbarItem {
+    const toolbarItem = new UI.Toolbar.ToolbarItem(document.createElement('div'));
     toolbarItem.setMaxWidth(160);
-    MobileThrottling.ThrottlingManager.throttlingManager().createNetworkThrottlingSelector(toolbarItem.element);
+
+    MobileThrottling.NetworkThrottlingSelector.NetworkThrottlingSelect.createForGlobalConditions(
+        toolbarItem.element, i18nString(UIStrings.throttling));
     return toolbarItem;
   }
 
@@ -692,9 +696,9 @@ export class NetworkPanel extends UI.Panel.Panel implements
 
   private onRequestActivated(event: Common.EventTarget.EventTargetEvent<RequestActivatedEvent>): void {
     const {showPanel, tab, takeFocus} = event.data;
-    if (showPanel) {
+    if (showPanel === RequestPanelBehavior.ShowPanel) {
       this.showRequestPanel(tab, takeFocus);
-    } else {
+    } else if (showPanel === RequestPanelBehavior.HidePanel) {
       this.hideRequestPanel();
     }
   }
@@ -886,7 +890,7 @@ export class NetworkLogWithFilterRevealer implements
 export class FilmStripRecorder implements Tracing.TracingManager.TracingManagerClient {
   #tracingManager: Tracing.TracingManager.TracingManager|null = null;
   #resourceTreeModel: SDK.ResourceTreeModel.ResourceTreeModel|null = null;
-  readonly #timeCalculator: NetworkTimeCalculator;
+  readonly #timeCalculator: NetworkTimeCalculator.NetworkTimeCalculator;
   readonly #filmStripView: PerfUI.FilmStripView.FilmStripView;
   #callback: ((filmStrip: Trace.Extras.FilmStrip.Data) => void)|null = null;
   // Used to fetch screenshots of the page load and show them in the panel.
@@ -896,7 +900,7 @@ export class FilmStripRecorder implements Tracing.TracingManager.TracingManagerC
   #collectedTraceEvents: Trace.Types.Events.Event[] = [];
 
   constructor(
-      timeCalculator: NetworkTimeCalculator,
+      timeCalculator: NetworkTimeCalculator.NetworkTimeCalculator,
       filmStripView: PerfUI.FilmStripView.FilmStripView,
   ) {
     this.#timeCalculator = timeCalculator;
@@ -914,14 +918,15 @@ export class FilmStripRecorder implements Tracing.TracingManager.TracingManagerC
     this.#tracingManager = null;
     await this.#traceEngine.parse(this.#collectedTraceEvents);
 
-    const data = this.#traceEngine.parsedTrace(this.#traceEngine.size() - 1) as
-        Trace.Extras.FilmStrip.HandlerDataWithScreenshots;
+    const data = this.#traceEngine.parsedTrace(this.#traceEngine.size() - 1)?.data as
+            Trace.Extras.FilmStrip.HandlerDataWithScreenshots |
+        null;
     if (!data) {
       return;
     }
     const zeroTimeInSeconds = Trace.Types.Timing.Seconds(this.#timeCalculator.minimumBoundary());
     const filmStrip =
-        Trace.Extras.FilmStrip.fromParsedTrace(data, Trace.Helpers.Timing.secondsToMicro(zeroTimeInSeconds));
+        Trace.Extras.FilmStrip.fromHandlerData(data, Trace.Helpers.Timing.secondsToMicro(zeroTimeInSeconds));
 
     if (this.#callback) {
       this.#callback(filmStrip);
@@ -1045,7 +1050,7 @@ let searchNetworkViewInstance: SearchNetworkView;
 
 export class SearchNetworkView extends Search.SearchView.SearchView {
   private constructor() {
-    super('network', new Common.Throttler.Throttler(/* timeoutMs */ 200));
+    super('network');
   }
 
   static instance(opts: {

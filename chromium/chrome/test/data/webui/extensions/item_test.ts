@@ -5,7 +5,7 @@
 /** @fileoverview Suite of tests for extension-item. */
 
 import type {CrIconElement, ExtensionsItemElement} from 'chrome://extensions/extensions.js';
-import {Mv2ExperimentStage, navigation, Page} from 'chrome://extensions/extensions.js';
+import {Mv2ExperimentStage, navigation, Page, TooltipPosition} from 'chrome://extensions/extensions.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {isChildVisible, microtasksFinished} from 'chrome://webui-test/test_util.js';
@@ -65,6 +65,48 @@ function testDeveloperElementsAreVisible(item: HTMLElement): void {
 /** Tests that dev elements are hidden. */
 function testDeveloperElementsAreHidden(item: HTMLElement): void {
   testElementsVisibility(item, devElements, false);
+}
+
+/**
+ * Helper to create a runtime error object with default values.
+ */
+function createRuntimeError(
+    extensionId: string,
+    customFields?: Partial<chrome.developerPrivate.RuntimeError>):
+    chrome.developerPrivate.RuntimeError {
+  return {
+    type: chrome.developerPrivate.ErrorType.RUNTIME,
+    extensionId: extensionId,
+    fromIncognito: false,
+    source: '',
+    message: 'Some runtime error',
+    id: 1,
+    severity: chrome.developerPrivate.ErrorLevel.ERROR,
+    contextUrl: '',
+    occurrences: 1,
+    renderViewId: 0,
+    renderProcessId: 0,
+    canInspect: false,
+    stackTrace: [],
+    isServiceWorker: false,
+    ...customFields,
+  };
+}
+
+/**
+ * Helper to check if errors button exists and what type it is.
+ */
+function getErrorsButtonInfo(item: HTMLElement):
+    {exists: boolean, isWarning: boolean, isError: boolean} {
+  const btn = item.shadowRoot!.querySelector('#errors-button');
+  if (!btn) {
+    return {exists: false, isWarning: false, isError: false};
+  }
+  return {
+    exists: true,
+    isWarning: btn.classList.contains('warning'),
+    isError: btn.classList.contains('error'),
+  };
 }
 
 suite('ExtensionItemTest', function() {
@@ -662,6 +704,7 @@ suite('ExtensionItemTest', function() {
     assertEquals(
         loadTimeData.getString('enableToggleTooltipEnabled'),
         crTooltip.textContent!.trim());
+    assertEquals(TooltipPosition.LEFT, crTooltip.getAttribute('position'));
 
     let data = createExtensionInfo(item.data);
     data.permissions = {
@@ -683,6 +726,19 @@ suite('ExtensionItemTest', function() {
         crTooltip.textContent!.trim());
   });
 
+  test('EnableExtensionToggleTooltipPositions', () => {
+    let crTooltip =
+        item.shadowRoot.querySelector<HTMLElement>('#enable-toggle-tooltip')!;
+    assertEquals(TooltipPosition.LEFT, crTooltip.getAttribute('position'));
+
+    document.dir = 'rtl';
+    const rtlItem = document.createElement('extensions-item');
+    document.body.appendChild(rtlItem);
+    crTooltip = rtlItem.shadowRoot.querySelector<HTMLElement>(
+        '#enable-toggle-tooltip')!;
+    assertEquals(TooltipPosition.RIGHT, crTooltip.getAttribute('position'));
+  });
+
   test('CanUploadAsAccountExtension', async () => {
     testVisible(item, '#account-upload-button', false);
 
@@ -695,5 +751,66 @@ suite('ExtensionItemTest', function() {
     await mockDelegate.testClickingCalls(
         item.shadowRoot.querySelector<HTMLElement>('#account-upload-button')!,
         'uploadItemToAccount', [item.data.id]);
+  });
+
+  test('ShowErrorAsWarningsButtonLabel', async () => {
+    // 1. No runtime errors, no install warnings: button should show "Warnings"
+    // label.
+    let data = createExtensionInfo(item.data);
+    data.runtimeErrors = [];
+    data.installWarnings = [];
+    data.manifestErrors = [{
+      type: chrome.developerPrivate.ErrorType.MANIFEST,
+      extensionId: data.id,
+      fromIncognito: false,
+      source: 'manifest.json',
+      message: 'Some manifest error',
+      id: 1,
+      manifestKey: 'background',
+    }];
+    item.data = data;
+    await microtasksFinished();
+    let buttonInfo = getErrorsButtonInfo(item);
+    assertTrue(buttonInfo.exists, 'Errors button should exist');
+    assertTrue(
+        buttonInfo.isWarning,
+        'Button should have warning class when no errors or install warnings');
+
+    // 2. Has runtime errors: button should show "Errors" label.
+    data = createExtensionInfo(item.data);
+    data.runtimeErrors = [createRuntimeError(data.id)];
+    data.installWarnings = [];
+    item.data = data;
+    await microtasksFinished();
+    buttonInfo = getErrorsButtonInfo(item);
+    assertTrue(buttonInfo.exists, 'Errors button should exist');
+    assertTrue(
+        buttonInfo.isError,
+        'Button should have error class when runtime errors exist');
+
+    // 3. Has install warnings: button should show "Errors" label.
+    data = createExtensionInfo(item.data);
+    data.runtimeErrors = [];
+    data.installWarnings = ['Some install warning'];
+    item.data = data;
+    await microtasksFinished();
+    buttonInfo = getErrorsButtonInfo(item);
+    assertTrue(buttonInfo.exists, 'Errors button should exist');
+    assertTrue(
+        buttonInfo.isError,
+        'Button should have error class when install warnings exist');
+
+    // 4. Has both runtime errors and install warnings: button should show
+    // "Errors" label.
+    data = createExtensionInfo(item.data);
+    data.runtimeErrors = [createRuntimeError(data.id, {id: 2})];
+    data.installWarnings = ['Some install warning'];
+    item.data = data;
+    await microtasksFinished();
+    buttonInfo = getErrorsButtonInfo(item);
+    assertTrue(buttonInfo.exists, 'Errors button should exist');
+    assertTrue(
+        buttonInfo.isError,
+        'Button should have error class when both errors and warnings exist');
   });
 });

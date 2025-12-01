@@ -18,6 +18,10 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 namespace {
 
 // FullScreen progress threshold in which to toggle between full screen on and
@@ -89,6 +93,12 @@ const CGFloat kUpdateDisplayedBadgeAnimationDamping = 0.85;
                                        usingInfoBar:nil];
     [newButton setAccepted:displayedBadgeItem.badgeState & BadgeStateAccepted
                   animated:NO];
+
+    if (vivaldi::IsVivaldiRunning() &&
+        newButton.tintColor != self.displayedBadgeTintColor) {
+      newButton.tintColor = self.displayedBadgeTintColor;
+    } // End Vivaldi
+
     self.displayedBadge = newButton;
   }
 
@@ -111,6 +121,12 @@ const CGFloat kUpdateDisplayedBadgeAnimationDamping = 0.85;
                     animated:NO];
       self.displayedBadge = newButton;
     }
+
+    if (vivaldi::IsVivaldiRunning() &&
+        self.displayedBadge.tintColor != self.displayedBadgeTintColor) {
+      self.displayedBadge.tintColor = self.displayedBadgeTintColor;
+    } // End Vivaldi
+
     // Disable button if banner is being displayed.
     [self.displayedBadge
         setEnabled:!(displayedBadgeItem.badgeState & BadgeStatePresented)];
@@ -219,5 +235,16 @@ const CGFloat kUpdateDisplayedBadgeAnimationDamping = 0.85;
                    }
                    completion:nil];
 }
+
+// Vivaldi
+- (void)setDisplayedBadgeTintColor:(UIColor*)displayedBadgeTintColor {
+  if (_displayedBadgeTintColor != displayedBadgeTintColor) {
+    _displayedBadgeTintColor = displayedBadgeTintColor;
+  }
+  if (self.displayedBadge.tintColor != _displayedBadgeTintColor) {
+    self.displayedBadge.tintColor = _displayedBadgeTintColor;
+  }
+}
+// End Vivaldi
 
 @end

@@ -64,6 +64,10 @@
 #include "ui/views/view_class_properties.h"
 #include "url/origin.h"
 
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/page_info/page_info_infobar_delegate.h"
+
 namespace {
 
 struct PageSpecificSiteDataDialogSection {
@@ -176,9 +180,16 @@ class PageSpecificSiteDataDialogModelDelegate : public ui::DialogModelDelegate {
     }
 
     if (status_changed_) {
+      Browser* browser = chrome::FindBrowserWithTab(web_contents_.get());
+      if (browser && browser->is_vivaldi()) {
+        PageInfoInfoBarDelegate::CreateForVivaldi(
+          infobars::ContentInfoBarManager::FromWebContents(
+              web_contents_.get()));
+      } else {
       CollectedCookiesInfoBarDelegate::Create(
           infobars::ContentInfoBarManager::FromWebContents(
               web_contents_.get()));
+      }
     }
 
     // Reset the dialog reference in the user data. If the dialog is opened

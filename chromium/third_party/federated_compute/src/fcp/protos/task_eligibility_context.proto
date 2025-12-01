@@ -1,0 +1,51 @@
+// Copyright 2021 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package google.internal.federated.plan;
+
+option java_package = "com.google.internal.federated.plan";
+option java_multiple_files = true;
+option java_outer_classname = "TaskEligibilityContextProto";
+
+// Context provided to the server task eligibility computation.
+//
+// This context is provided to the server and is used to produce the checkpoint
+// that will be sent to the clients to aid the clients in computing
+// `TaskEligibilityInfo`.
+message TaskEligibilityContext {
+  // A list of information for each task currently being considered.
+  repeated SingleTaskEligibilityContext tasks = 1;
+}
+
+// Per-task context provided to the server eligibility computation.
+message SingleTaskEligibilityContext {
+  // Name of the task.
+  string task_name = 1;
+
+  // Information about a policy that should be applied to the task to determine
+  // if it's eligible to be run. For example, a "didnt_run_recently" policy
+  // could instruct the server task eligibility computation that the task should
+  // not be run again by a client that ran it recently, where "recently" is
+  // implementation defined.
+  message EligibilityPolicy {
+    // The name of the policy. The set of possible values and their
+    // interpretation is implementation defined.
+    string name = 1;
+  }
+
+  // The list of eligibility policies that should be applied to the task.
+  repeated EligibilityPolicy policies = 2;
+}

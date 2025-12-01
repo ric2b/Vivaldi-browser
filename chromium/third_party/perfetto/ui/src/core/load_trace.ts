@@ -15,7 +15,6 @@
 import {assertExists, assertTrue} from '../base/logging';
 import {time, Time, TimeSpan} from '../base/time';
 import {cacheTrace} from './cache_manager';
-import {Cpu} from '../base/multi_machine_trace';
 import {
   getEnabledMetatracingCategories,
   isMetatracingEnabled,
@@ -45,7 +44,6 @@ import {
 import {AppImpl} from './app_impl';
 import {raf} from './raf_scheduler';
 import {TraceImpl} from './trace_impl';
-import {SerializedAppState} from './state_serialization_schema';
 import {TraceSource} from './trace_source';
 import {Router} from '../core/router';
 import {TraceInfoImpl} from './trace_info_impl';
@@ -90,6 +88,13 @@ const FTRACE_DROP_UNTIL_FLAG = featureFlags.register({
   description:
     'Drop ftrace events until all per-cpu data streams are known to be valid',
   defaultValue: true,
+});
+const FORCE_FULL_SORT_FLAG = featureFlags.register({
+  id: 'forceFullSort',
+  name: 'Force full sort',
+  description:
+    'Forces the trace processor into performing a full sort ignoring any windowing logic',
+  defaultValue: false,
 });
 
 // TODO(stevegolton): Move this into some global "SQL extensions" file and
@@ -148,6 +153,7 @@ async function createEngine(
       ingestFtraceInRawTable: INGEST_FTRACE_IN_RAW_TABLE_FLAG.get(),
       analyzeTraceProtoContent: ANALYZE_TRACE_PROTO_CONTENT_FLAG.get(),
       ftraceDropUntilAllCpusValid: FTRACE_DROP_UNTIL_FLAG.get(),
+      forceFullSort: FORCE_FULL_SORT_FLAG.get(),
     });
   }
   engine.onResponseReceived = () => raf.scheduleFullRedraw();
@@ -164,14 +170,13 @@ async function loadTraceIntoEngine(
   engine: EngineBase,
 ): Promise<TraceImpl> {
   let traceStream: TraceStream | undefined;
-  let serializedAppState: SerializedAppState | undefined;
+  const serializedAppState = traceSource.serializedAppState;
   if (traceSource.type === 'FILE') {
     traceStream = new TraceFileStream(traceSource.file);
   } else if (traceSource.type === 'ARRAY_BUFFER') {
     traceStream = new TraceBufferStream(traceSource.buffer);
   } else if (traceSource.type === 'URL') {
     traceStream = new TraceHttpStream(traceSource.url);
-    serializedAppState = traceSource.serializedAppState;
   } else if (traceSource.type === 'HTTP_RPC') {
     traceStream = undefined;
   } else if (traceSource.type === 'MULTIPLE_FILES') {
@@ -211,7 +216,7 @@ async function loadTraceIntoEngine(
     await engine.registerSqlPackages(p);
   }
 
-  const traceDetails = await getTraceInfo(engine, traceSource);
+  const traceDetails = await getTraceInfo(engine, app, traceSource);
   const trace = TraceImpl.createInstanceForCore(app, engine, traceDetails);
   app.setActiveTrace(trace);
 
@@ -270,6 +275,15 @@ async function loadTraceIntoEngine(
     // TODO(primiano): this can probably be removed once we refactor tracks
     // to be URI based and can deal with non-existing URIs.
     deserializeAppStatePhase2(serializedAppState, trace);
+  }
+
+  // Execute startup commands as the final step - simulates user actions
+  // after the trace is fully loaded and any saved state has been restored.
+  // This ensures startup commands see the complete, final state of the trace.
+  if (trace.commands.hasStartupCommands()) {
+    updateStatus(app, 'Running startup commands');
+    using _ = trace.omnibox.disablePrompts();
+    await trace.commands.runStartupCommands();
   }
 
   return trace;
@@ -357,6 +371,7 @@ async function computeVisibleTime(
 
 async function getTraceInfo(
   engine: Engine,
+  app: AppImpl,
   traceSource: TraceSource,
 ): Promise<TraceInfoImpl> {
   const traceTime = await getTraceTimeBounds(engine);
@@ -452,6 +467,7 @@ async function getTraceInfo(
   // trace_uuid can be missing from the TP tables if the trace is empty or in
   // other similar edge cases.
   const uuid = uuidRes.numRows() > 0 ? uuidRes.firstRow({uuid: STR}).uuid : '';
+  updateStatus(app, 'Caching trace...');
   const cached = await cacheTrace(traceSource, uuid);
 
   const downloadable =
@@ -465,7 +481,6 @@ async function getTraceInfo(
     traceUrl,
     tzOffMin,
     unixOffset,
-    cpus: await getCpus(engine),
     importErrors: await getTraceErrors(engine),
     source: traceSource,
     traceType,
@@ -494,22 +509,6 @@ async function getTraceTimeBounds(engine: Engine): Promise<TimeSpan> {
     endTs: LONG,
   });
   return new TimeSpan(Time.fromRaw(bounds.startTs), Time.fromRaw(bounds.endTs));
-}
-
-// TODO(hjd): When streaming must invalidate this somehow.
-async function getCpus(engine: Engine): Promise<Cpu[]> {
-  const cpus: Cpu[] = [];
-  const queryRes = await engine.query(
-    `select ucpu, cpu, ifnull(machine_id, 0) as machine from cpu`,
-  );
-  for (
-    const it = queryRes.iter({ucpu: NUM, cpu: NUM, machine: NUM});
-    it.valid();
-    it.next()
-  ) {
-    cpus.push(new Cpu(it.ucpu, it.cpu, it.machine));
-  }
-  return cpus;
 }
 
 async function getTraceErrors(engine: Engine): Promise<number> {

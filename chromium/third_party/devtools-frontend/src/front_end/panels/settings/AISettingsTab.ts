@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -10,7 +10,6 @@ import type * as Platform from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import * as AiAssistanceModel from '../../models/ai_assistance/ai_assistance.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
-import type * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as Input from '../../ui/components/input/input.js';
 import * as LegacyWrapper from '../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import * as Switch from '../../ui/components/switch/switch.js';
@@ -24,182 +23,190 @@ const {html, Directives: {ifDefined, classMap}} = Lit;
 
 const UIStrings = {
   /**
-   *@description Header text for for a list of things to consider in the context of generative AI features
+   * @description Header text for for a list of things to consider in the context of generative AI features
    */
   boostYourProductivity: 'Boost your productivity with AI',
   /**
-   *@description Text announcing a list of facts to consider (when using a GenAI feature)
+   * @description Text announcing a list of facts to consider (when using a GenAI feature)
    */
   thingsToConsider: 'Things to consider',
   /**
-   *@description Text describing a fact to consider when using AI features
+   * @description Text describing a fact to consider when using AI features
    */
   experimentalFeatures:
       'These features use generative AI and may provide inaccurate or offensive information that doesn’t represent Google’s views',
   /**
-   *@description Text describing a fact to consider when using AI features
+   * @description Text describing a fact to consider when using AI features
    */
   sendsDataToGoogle:
       'These features send relevant data to Google. Google collects this data and feedback to improve its products and services with the help of human reviewers. Avoid sharing sensitive or personal information.',
   /**
-   *@description Text describing a fact to consider when using AI features
+   * @description Text describing a fact to consider when using AI features
    */
   sendsDataToGoogleNoLogging:
       'Your content will not be used by human reviewers to improve AI. Your organization may change these settings at any time.',
   /**
-   *@description Text describing a fact to consider when using AI features
+   * @description Text describing a fact to consider when using AI features
    */
   dataCollection: 'Depending on your region, Google may refrain from data collection',
   /**
-   *@description Text describing a fact to consider when using AI features
+   * @description Text describing a fact to consider when using AI features
    */
   dataCollectionNoLogging:
       'Depending on your Google account management and/or region, Google may refrain from data collection',
   /**
-   *@description Text describing the 'Console Insights' feature
+   * @description Text describing the 'Console Insights' feature
    */
   helpUnderstandConsole: 'Helps you understand and fix console warnings and errors',
   /**
-   *@description Text describing the 'Auto Annotations' feature
+   * @description Text describing the 'Auto Annotations' feature
    */
-  getAIAnnotationsSuggestions: 'Get AI suggestions for performance panel annotations',
+  aIAnnotationsFeatureDescription: 'Automatically generate titles for performance trace annotations',
   /**
-   *@description Label for a button to expand an accordion
+   * @description Text explaining AI feature helps annotate a performance trace with auto-generated labels
+   */
+  helpAnnotatePerformance: 'Helps you annotate your performance trace with auto-generated labels',
+  /**
+   * @description Label for a button to expand an accordion
    */
   showMore: 'Show more',
   /**
-   *@description Label for a button to collapse an accordion
+   * @description Label for a button to collapse an accordion
    */
   showLess: 'Show less',
   /**
-   *@description Header for a list of feature attributes. 'When (the feature is turned) on, you'll be able to …'
+   * @description Header for a list of feature attributes. 'When (the feature is turned) on, you'll be able to …'
    */
   whenOn: 'When on',
   /**
-   *@description Description of the console insights feature
+   * @description Description of the console insights feature
    */
   explainConsole: 'Get explanations for console warnings and errors',
   /**
-   *@description Description of the console insights feature ('these issues' refers to console warnings and errors)
+   * @description Description of the console insights feature ('these issues' refers to console warnings and errors)
    */
   receiveSuggestions: 'Receive suggestions and code samples to address these issues',
   /**
-   *@description Explainer for which data is being sent by the console insights feature
+   * @description Explainer for which data is being sent by the console insights feature
    */
   consoleInsightsSendsData:
-      'The console message, associated stack trace, related source code, and the associated network headers are sent to Google to generate explanations. This data may be seen by human reviewers to improve this feature.',
+      'To generate explanations, the console message, associated stack trace, related source code, and the associated network headers are sent to Google. This data may be seen by human reviewers to improve this feature.',
   /**
-   *@description Explainer for which data is being sent by the console insights feature
+   * @description Explainer for which data is being sent by the console insights feature
    */
   consoleInsightsSendsDataNoLogging:
-      'The console message, associated stack trace, related source code, and the associated network headers are sent to Google to generate explanations. This data will not be used to improve Google’s AI models.',
+      'To generate explanations, the console message, associated stack trace, related source code, and the associated network headers are sent to Google. This data will not be used to improve Google’s AI models. Your organization may change these settings at any time.',
   /**
-   *@description Reference to the terms of service and privacy notice
-   *@example {Google Terms of Service} PH1
-   *@example {Privacy Notice} PH2
+   * @description Reference to the terms of service and privacy notice
+   * @example {Google Terms of Service} PH1
+   * @example {Privacy Notice} PH2
    */
   termsOfServicePrivacyNotice: 'Use of these features is subject to the {PH1} and {PH2}',
   /**
-   *@description Text describing the 'AI assistance' feature
+   * @description Text describing the 'AI assistance' feature
    */
   helpUnderstandStyling: 'Get help with understanding CSS styles',
   /**
-   *@description Text describing the 'AI assistance' feature
+   * @description Text describing the 'AI assistance' feature
    */
   helpUnderstandStylingAndNetworkRequest: 'Get help with understanding CSS styles, and network requests',
   /**
-   *@description Text describing the 'AI assistance' feature
+   * @description Text describing the 'AI assistance' feature
    */
   helpUnderstandStylingNetworkAndFile: 'Get help with understanding CSS styles, network requests, and files',
   /**
-   *@description Text describing the 'AI assistance' feature
+   * @description Text describing the 'AI assistance' feature
    */
   helpUnderstandStylingNetworkPerformanceAndFile:
       'Get help with understanding CSS styles, network requests, performance, and files',
   /**
-   *@description Text describing the 'Code suggestions' feature
+   * @description Text describing the 'Code suggestions' feature
    */
   helpUnderstandCodeSuggestions: 'Get help completing your code',
   /**
-   *@description Text which is a hyperlink to more documentation
+   * @description Text which is a hyperlink to more documentation
    */
   learnMore: 'Learn more',
   /**
-   *@description Description of the AI assistance feature
+   * @description Description of the AI assistance feature
    */
   explainStyling: 'Understand CSS styles with AI-powered insights',
   /**
-   *@description Description of the AI assistance feature
+   * @description Description of the AI assistance feature
    */
   explainStylingAndNetworkRequest: 'Understand CSS styles, and network activity with AI-powered insights',
   /**
-   *@description Description of the AI assistance feature
+   * @description Description of the AI assistance feature
    */
   explainStylingNetworkAndFile: 'Understand CSS styles, network activity, and file origins with AI-powered insights',
   /**
-   *@description Description of the AI assistance feature
+   * @description Description of the AI assistance feature
    */
   explainStylingNetworkPerformanceAndFile:
       'Understand CSS styles, network activity, performance bottlenecks, and file origins with AI-powered insights',
   /**
-   *@description Description of the AI assistance feature
+   * @description Description of the AI assistance feature
    */
   receiveStylingSuggestions: 'Improve your development workflow with contextual explanations and suggestions',
   /**
-   *@description Explainer for which data is being sent by the AI assistance feature
+   * @description Explainer for which data is being sent by the AI assistance feature
    */
   freestylerSendsData:
-      'Any user query and data the inspected page can access via Web APIs, network requests, files, and performance traces are sent to Google to generate explanations. This data may be seen by human reviewers to improve this feature. Don’t use on pages with personal or sensitive information.',
+      'To generate explanations, any user query and data the inspected page can access via Web APIs, network requests, files, and performance traces are sent to Google. This data may be seen by human reviewers to improve this feature. Don’t use on pages with personal or sensitive information.',
   /**
-   *@description Explainer for which data is being sent by the AI assistance feature
+   * @description Explainer for which data is being sent by the AI assistance feature
    */
   freestylerSendsDataNoLogging:
-      'Any user query and data the inspected page can access via Web APIs, network requests, files, and performance traces are sent to Google to generate explanations. This data will not be used to improve Google’s AI models.',
+      'To generate explanations, any user query and data the inspected page can access via Web APIs, network requests, files, and performance traces are sent to Google. This data will not be used to improve Google’s AI models. Your organization may change these settings at any time.',
   /**
-   *@description Explainer for which data is being sent by the AI generated annotations feature
+   * @description Explainer for which data is being sent by the AI generated annotations feature
    */
   generatedAiAnnotationsSendData:
-      'Your performance trace is sent to Google to generate an explanation. This data will be used to improve Google’s AI models.',
+      'To generate annotation suggestions, your performance trace is sent to Google. This data may be seen by human reviewers to improve this feature.',
   /**
-   *@description Explainer for which data is being sent by the AI assistance feature
+   * @description Explainer for which data is being sent by the AI assistance feature
    */
   generatedAiAnnotationsSendDataNoLogging:
-      'Your performance trace is sent to Google to generate an explanation. This data will not be used to improve Google’s AI models.',
+      'To generate annotation suggestions, your performance trace is sent to Google. This data will not be used to improve Google’s AI models. Your organization may change these settings at any time.',
   /**
-   *@description Description of the 'Code suggestions' feature
+   * @description Description of the 'Code suggestions' feature
    */
   asYouTypeCodeSuggestions:
       'As you type in the Console or Sources panel, you’ll get code suggestions. Press Tab to accept one.',
   /**
-   *@description Explainer for which data is being sent for the 'Code suggestions' feature
+   * @description Explainer for which data is being sent for the 'Code suggestions' feature
    */
   codeSuggestionsSendData:
-      'To generate code suggestions, your console input, the history of your current console session, and the contents of the currently open file are shared with Google. This data may be seen by human reviewers to improve this feature.',
+      'To generate code suggestions, your console input, the history of your current console session, the currently inspected CSS, and the contents of the currently open file are shared with Google. This data may be seen by human reviewers to improve this feature.',
   /**
-   *@description Explainer for which data is being sent for the 'Code suggestions' feature when logging is not enabled
+   * @description Explainer for which data is being sent for the 'Code suggestions' feature when logging is not enabled
    */
   codeSuggestionsSendDataNoLogging:
-      'To generate code suggestions, your console input, the history of your current console session, and the contents of the currently open file are shared with Google. This data will not be used to improve Google’s AI models.',
+      'To generate code suggestions, your console input, the history of your current console session, the currently inspected CSS, and the contents of the currently open file are shared with Google. This data will not be used to improve Google’s AI models. Your organization may change these settings at any time.',
   /**
-   *@description Label for a link to the terms of service
+   * @description Label for a link to the terms of service
    */
   termsOfService: 'Google Terms of Service',
   /**
-   *@description Label for a link to the privacy notice
+   * @description Label for a link to the privacy notice
    */
   privacyNotice: 'Google Privacy Policy',
   /**
-   *@description Label for a toggle to enable the Console Insights feature
+   * @description Label for a toggle to enable the Console Insights feature
    */
   enableConsoleInsights: 'Enable `Console insights`',
   /**
-   *@description Label for a toggle to enable the AI assistance feature
+   * @description Label for a toggle to enable the AI assistance feature
    */
   enableAiAssistance: 'Enable AI assistance',
   /**
-   *@description Label for a toggle to enable the AI assistance feature
+   * @description Label for a toggle to enable the AI annotation feature
    */
   enableAiSuggestedAnnotations: 'Enable AI suggestions for performance panel annotations',
+  /**
+   * @description Label for a toggle to enable the AI code suggestions feature
+   */
+  enableAiCodeSuggestions: 'Enable AI code suggestions',
 } as const;
 const str_ = i18n.i18n.registerUIStrings('panels/settings/AISettingsTab.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -256,7 +263,7 @@ export class AISettingsTab extends LegacyWrapper.LegacyWrapper.WrappableComponen
     if (Root.Runtime.hostConfig.devToolsAiCodeCompletion?.enabled) {
       // Get an existing setting or, if it does not exist, create a new one.
       this.#aiCodeCompletionSetting =
-          Common.Settings.Settings.instance().createSetting('ai-code-completion-fre-completed', false);
+          Common.Settings.Settings.instance().createSetting('ai-code-completion-enabled', false);
     }
 
     this.#boundOnAidaAvailabilityChange = this.#onAidaAvailabilityChange.bind(this);
@@ -339,10 +346,10 @@ export class AISettingsTab extends LegacyWrapper.LegacyWrapper.WrappableComponen
       const aiAnnotationsData: AiSettingParams = {
         settingName: i18n.i18n.lockedString('Auto annotations'),
         iconName: 'pen-spark',
-        settingDescription: i18nString(UIStrings.getAIAnnotationsSuggestions),
+        settingDescription: i18nString(UIStrings.aIAnnotationsFeatureDescription),
         enableSettingText: i18nString(UIStrings.enableAiSuggestedAnnotations),
         settingItems: [
-          {iconName: 'pen-spark', text: i18nString(UIStrings.getAIAnnotationsSuggestions)},
+          {iconName: 'label-auto', text: i18nString(UIStrings.helpAnnotatePerformance)},
         ],
         toConsiderSettingItems: [{
           iconName: 'google',
@@ -367,15 +374,17 @@ export class AISettingsTab extends LegacyWrapper.LegacyWrapper.WrappableComponen
         settingName: i18n.i18n.lockedString('Code suggestions'),
         iconName: 'text-analysis',
         settingDescription: i18nString(UIStrings.helpUnderstandCodeSuggestions),
-        enableSettingText: i18nString(UIStrings.enableAiSuggestedAnnotations),
+        enableSettingText: i18nString(UIStrings.enableAiCodeSuggestions),
         settingItems: [{iconName: 'code', text: i18nString(UIStrings.asYouTypeCodeSuggestions)}],
         toConsiderSettingItems: [{
           iconName: 'google',
           text: noLogging ? i18nString(UIStrings.codeSuggestionsSendDataNoLogging) :
                             i18nString(UIStrings.codeSuggestionsSendData)
         }],
-        // TODO: Add a relevant link
-        learnMoreLink: {url: '', linkJSLogContext: 'learn-more.code-completion'},
+        learnMoreLink: {
+          url: ' https://developers.chrome.com/docs/devtools/ai-assistance/code-completion',
+          linkJSLogContext: 'learn-more.code-completion'
+        },
         settingExpandState: {
           isSettingExpanded: false,
           expandSettingJSLogContext: 'code-completion.accordion',
@@ -476,12 +485,7 @@ export class AISettingsTab extends LegacyWrapper.LegacyWrapper.WrappableComponen
     // clang-format off
     return html`
       <div>
-        <devtools-icon .data=${{
-          iconName: icon,
-          color: 'var(--icon-default)',
-          width: 'var(--sys-size-8)',
-          height: 'var(--sys-size-8)',
-        } as IconButton.Icon.IconData}>
+        <devtools-icon .name=${icon} class="medium">
         </devtools-icon>
       </div>
       <div>${text}</div>
@@ -534,11 +538,7 @@ export class AISettingsTab extends LegacyWrapper.LegacyWrapper.WrappableComponen
     // clang-format off
     return html`
       <div>
-        <devtools-icon .data=${{
-          iconName: settingItem.iconName,
-          width: 'var(--sys-size-9)',
-          height: 'var(--sys-size-9)',
-        } as IconButton.Icon.IconData}>
+        <devtools-icon class="extra-large" .name=${settingItem.iconName}>
         </devtools-icon>
       </div>
       <div class="padded">${settingItem.text}</div>
@@ -592,8 +592,9 @@ export class AISettingsTab extends LegacyWrapper.LegacyWrapper.WrappableComponen
           .checked=${Boolean(setting.get()) && !isDisabled}
           .jslogContext=${setting.name || ''}
           .disabled=${isDisabled}
+          .label=${disabledReasonsJoined || settingData.enableSettingText}
+          data-testid=${settingData.enableSettingText}
           @switchchange=${this.#toggleSetting.bind(this, setting)}
-          aria-label=${disabledReasonsJoined || settingData.enableSettingText}
         ></devtools-switch>
       </div>
       <div class=${classMap(detailsClasses)}>
@@ -627,12 +628,7 @@ export class AISettingsTab extends LegacyWrapper.LegacyWrapper.WrappableComponen
       <div class="disabled-explainer">
         ${disabledReasons.map(reason => html`
           <div class="disabled-explainer-row">
-            <devtools-icon .data=${{
-              iconName: 'warning',
-              color: 'var(--sys-color-orange)',
-              width: 'var(--sys-size-8)',
-              height: 'var(--sys-size-8)',
-            } as IconButton.Icon.IconData}>
+            <devtools-icon name="warning" class="medium" style="color: var(--icon-warning);">
             </devtools-icon>
             ${reason}
           </div>

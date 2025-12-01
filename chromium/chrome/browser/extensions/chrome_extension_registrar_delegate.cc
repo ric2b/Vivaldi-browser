@@ -41,6 +41,7 @@
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/install_flag.h"
 #include "extensions/browser/pending_extension_manager.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/crash_keys.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_handlers/incognito_info.h"
@@ -63,6 +64,8 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 using extensions::mojom::ManifestLocation;
 

@@ -73,7 +73,7 @@ class SigninWebDialogDelegate : public ui::WebDialogDelegate {
 
     const float kScale = 0.8;
     set_dialog_size(gfx::ScaleToRoundedSize(
-        display::Screen::GetScreen()->GetPrimaryDisplay().size(), kScale));
+        display::Screen::Get()->GetPrimaryDisplay().size(), kScale));
   }
 
   ~SigninWebDialogDelegate() override = default;
@@ -131,7 +131,7 @@ void NetworkPortalSigninController::ShowSignin(SigninSource source) {
 
   url = default_network->probe_url();
   if (url.is_empty()) {
-    url = GURL(captive_portal::CaptivePortalDetector::kDefaultURL);
+    url = GURL(captive_portal::CaptivePortalDetector::GetDefaultUrl());
   }
 
   SigninMode mode = GetSigninMode(portal_state);

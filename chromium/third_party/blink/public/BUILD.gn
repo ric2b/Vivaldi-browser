@@ -83,6 +83,7 @@ buildflag_header("buildflags") {
 if (is_android) {
   java_cpp_enum("blink_headers_java_enums_srcjar") {
     sources = [
+      "./common/context_menu_data/context_menu_data.h",
       "./common/input/web_input_event.h",
       "./mojom/context_menu/context_menu.mojom",
       "./mojom/input/input_handler.mojom",
@@ -107,7 +108,6 @@ source_set("test_headers") {
     "common/interest_group/test_interest_group_builder.h",
     "common/origin_trials/scoped_test_origin_trial_policy.h",
     "platform/scheduler/test/renderer_scheduler_test_support.h",
-    "platform/scheduler/test/web_fake_thread_scheduler.h",
     "platform/scheduler/test/web_mock_thread_scheduler.h",
     "test/frame_widget_test_helper.h",
     "test/test_web_frame_content_dumper.h",
@@ -288,6 +288,7 @@ source_set("blink_headers") {
     "web/web_bundled_code_cache_generator.h",
     "web/web_console_message.h",
     "web/web_content_capture_client.h",
+    "web/web_content_extraction.h",
     "web/web_content_holder.h",
     "web/web_crypto_histograms.h",
     "web/web_crypto_normalize.h",
@@ -325,6 +326,8 @@ source_set("blink_headers") {
     "web/web_image_cache.h",
     "web/web_input_element.h",
     "web/web_input_method_controller.h",
+    "web/web_interaction_effects_monitor.h",
+    "web/web_interaction_effects_monitor_observer.h",
     "web/web_label_element.h",
     "web/web_language_detection_details.h",
     "web/web_lifecycle_update.h",

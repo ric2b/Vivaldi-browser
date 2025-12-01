@@ -11,7 +11,10 @@
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
+#include "src/gpu/Token.h"
+#include "src/gpu/graphite/DebugUtils.h"
 #include "src/gpu/graphite/Log.h"
+#include "src/gpu/graphite/RuntimeEffectDictionary.h"
 
 #include <functional>
 
@@ -21,7 +24,6 @@ class CommandBuffer;
 class Context;
 class GraphicsPipeline;
 class ResourceProvider;
-class RuntimeEffectDictionary;
 class ScratchResourceManager;
 class Texture;
 class TextureProxy;
@@ -56,7 +58,7 @@ public:
     // Recorder.
     virtual Status prepareResources(ResourceProvider*,
                                     ScratchResourceManager*,
-                                    const RuntimeEffectDictionary*) = 0;
+                                    sk_sp<const RuntimeEffectDictionary>) = 0;
 
     // Returns true on success; false on failure.
     virtual Status addCommands(Context*, CommandBuffer*, ReplayTargetData) = 0;
@@ -74,6 +76,21 @@ public:
     virtual bool visitProxies(const std::function<bool(const TextureProxy*)>& visitor) {
         return true;
     }
+
+#if defined(SK_DUMP_TASKS)
+    virtual void dump(int index, const char* prefix = "") const {
+        const char* taskName = this->getTaskName();
+        if (index >= 0) {
+            SkDebugf("%s%d: %s\n", prefix, index, taskName);
+        } else {
+            SkDebugf("%s%s\n", prefix, taskName);
+        }
+    }
+
+    skgpu::Token fFlushToken = skgpu::Token::InvalidToken();
+
+    virtual const char* getTaskName() const { return "Base Task (unknown type)"; }
+#endif
 };
 
 } // namespace skgpu::graphite

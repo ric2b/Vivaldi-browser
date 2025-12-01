@@ -23,6 +23,7 @@ SadTabKind SadTabKindFromTerminationStatus(base::TerminationStatus status) {
     case base::TERMINATION_STATUS_LAUNCH_FAILED:
       return SAD_TAB_KIND_KILLED;
     case base::TERMINATION_STATUS_OOM:
+    case base::TERMINATION_STATUS_EVICTED_FOR_MEMORY:
       return SAD_TAB_KIND_OOM;
     default:
       return SAD_TAB_KIND_CRASHED;
@@ -88,8 +89,8 @@ void SadTabHelper::PrimaryMainFrameRenderProcessGone(
 }
 
 void SadTabHelper::InstallSadTab(base::TerminationStatus status) {
-  sad_tab_.reset(
-      SadTab::Create(web_contents(), SadTabKindFromTerminationStatus(status)));
+  sad_tab_ =
+      SadTab::Create(web_contents(), SadTabKindFromTerminationStatus(status));
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(SadTabHelper);

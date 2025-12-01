@@ -3,9 +3,7 @@
 #ifndef COMPONENTS_AD_BLOCKER_CONTENT_ADBLOCK_CONTENT_INJECTION_PROVIDER_H_
 #define COMPONENTS_AD_BLOCKER_CONTENT_ADBLOCK_CONTENT_INJECTION_PROVIDER_H_
 
-#include "base/memory/weak_ptr.h"
 #include "components/ad_blocker/core/adblock_resources.h"
-#include "components/ad_blocker/public/core/adblock_types.h"
 #include "components/content_injection/content_injection_provider.h"
 
 namespace content {

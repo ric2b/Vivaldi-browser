@@ -30,7 +30,7 @@
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane_listener.h"
 #include "ui/views/controls/throbber.h"
-#include "ui/views/window/non_client_view.h"
+#include "ui/views/window/frame_view.h"
 
 namespace views {
 class Combobox;
@@ -63,8 +63,7 @@ class PartialTranslateBubbleView : public LocationBarBubbleDelegateView,
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kSourceLanguageDoneButton);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kErrorMessage);
 
-  PartialTranslateBubbleView(base::WeakPtr<actions::ActionItem> action_item,
-                             views::View* anchor_view,
+  PartialTranslateBubbleView(views::View* anchor_view,
                              std::unique_ptr<PartialTranslateBubbleModel> model,
                              content::WebContents* web_contents,
                              base::OnceClosure on_closing);
@@ -322,10 +321,6 @@ class PartialTranslateBubbleView : public LocationBarBubbleDelegateView,
   base::OnceClosure on_closing_;
 
   raw_ptr<content::WebContents> web_contents_;
-
-  // The action item that this bubble is associated with. This bubble updates
-  // the action item's "IsShowingBubbleProperty" as needed.
-  const base::WeakPtr<actions::ActionItem> action_item_ = nullptr;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TRANSLATE_PARTIAL_TRANSLATE_BUBBLE_VIEW_H_

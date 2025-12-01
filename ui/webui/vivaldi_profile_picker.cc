@@ -53,3 +53,8 @@ VivaldiProfilePickerUI::VivaldiProfilePickerUI(::content::WebUI* web_ui)
   content::URLDataSource::Add(profile_, std::make_unique<ThemeSource>(profile_,
         /*serve_untrusted=*/false));
 }
+
+void VivaldiProfilePickerUI::WebUIRenderFrameCreated(
+    content::RenderFrameHost* render_frame_host) {
+  render_frame_host->SetSupportsDraggableRegions(true);
+}

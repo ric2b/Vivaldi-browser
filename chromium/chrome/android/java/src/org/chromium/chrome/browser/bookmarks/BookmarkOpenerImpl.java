@@ -16,7 +16,6 @@ import androidx.annotation.Nullable;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.ActivityUtils;
 import org.chromium.chrome.browser.IntentHandler;
@@ -30,6 +29,7 @@ import org.chromium.ui.base.PageTransition;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -59,11 +59,7 @@ public class BookmarkOpenerImpl implements BookmarkOpener {
     @Override
     public boolean openBookmarkInCurrentTab(BookmarkId id, boolean incognito) {
         if (id == null) return false;
-        // VAB-11250
-        if (BuildConfig.IS_VIVALDI && !mBookmarkModelSupplier.hasValue()) {
-            assert false;
-            return false;
-        }
+
         BookmarkItem item = mBookmarkModelSupplier.get().getBookmarkById(id);
         if (item == null) return false;
         maybeMarkReadingListItemAsRead(item);
@@ -155,6 +151,7 @@ public class BookmarkOpenerImpl implements BookmarkOpener {
         RecordUserAction.record("MobileBookmarkManagerEntryOpened");
         recordTypeOpened(item, "Bookmarks.OpenBookmarkType");
         recordTimeSinceAdded(item, "Bookmarks.OpenBookmarkTimeInterval2.");
+        recordBookmarkURLOpened();
     }
 
     private void recordMetricsForOpenBookmarksInNewTabs(List<BookmarkItem> items) {
@@ -163,6 +160,7 @@ public class BookmarkOpenerImpl implements BookmarkOpener {
         for (BookmarkItem item : items) {
             recordTypeOpened(item, "Bookmarks.MultipleOpened.OpenBookmarkType");
             recordTimeSinceAdded(item, "Bookmarks.MultipleOpened.OpenBookmarkTimeInterval2.");
+            recordBookmarkURLOpened();
         }
     }
 
@@ -191,5 +189,9 @@ public class BookmarkOpenerImpl implements BookmarkOpener {
                 1,
                 DateUtils.DAY_IN_MILLIS * 30,
                 50);
+    }
+
+    private void recordBookmarkURLOpened() {
+        RecordHistogram.recordBooleanHistogram("Bookmarks.MobileBookmarkManager.OpenedURL", true);
     }
 }

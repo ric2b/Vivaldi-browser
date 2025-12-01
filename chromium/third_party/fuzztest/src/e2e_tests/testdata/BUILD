@@ -17,6 +17,9 @@
 # The binaries in this package contain a set of small fuzz tests that are used
 # by `functional_test` and `benchmark_test`.
 
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 package(default_visibility = ["//e2e_tests:__pkg__"])
 
 licenses(["notice"])
@@ -40,12 +43,11 @@ cc_binary(
     ],
 )
 
-# This library contains "puzzles" with proto inputs for benchmarking purposes.
-cc_library(
-    name = "fuzz_tests_with_proto_inputs_lib",
+# This binary contains "puzzles" with proto inputs for benchmarking purposes.
+cc_binary(
+    name = "fuzz_tests_with_proto_inputs",
     testonly = 1,
     srcs = ["fuzz_tests_with_proto_inputs.cc"],
-    local_defines = ["FUZZTEST_INTERNAL_DO_NOT_CRASH_ON_TARGET"],
     deps = [
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/container:flat_hash_map",
@@ -55,20 +57,10 @@ cc_library(
         "@abseil-cpp//absl/time",
         "@abseil-cpp//absl/types:span",
         "@com_google_fuzztest//fuzztest",
+        "@com_google_fuzztest//fuzztest:fuzztest_gtest_main",
         "@com_google_fuzztest//fuzztest/internal:test_protobuf_cc_proto",
-        "@googletest//:gtest",
         "@protobuf",
         "@re2",
-    ],
-    alwayslink = 1,
-)
-
-cc_binary(
-    name = "fuzz_tests_with_proto_inputs",
-    testonly = 1,
-    deps = [
-        ":fuzz_tests_with_proto_inputs_lib",
-        "@com_google_fuzztest//fuzztest:fuzztest_gtest_main",
     ],
 )
 
@@ -100,11 +92,11 @@ cc_binary(
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/time",
         "@abseil-cpp//absl/types:span",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//fuzztest",
         "@com_google_fuzztest//fuzztest:flatbuffers",
         "@com_google_fuzztest//fuzztest:fuzztest_gtest_main",
         "@com_google_fuzztest//fuzztest:googletest_fixture_adapter",
-        "@com_google_fuzztest//fuzztest/internal:logging",
         "@com_google_fuzztest//fuzztest/internal:test_flatbuffers_cc_fbs",
         "@com_google_fuzztest//fuzztest/internal:test_protobuf_cc_proto",
         "@protobuf",

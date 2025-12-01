@@ -12,13 +12,14 @@
 #include <variant>
 
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "quiche/quic/core/quic_time.h"
 #include "quiche/quic/moqt/moqt_messages.h"
+#include "quiche/quic/moqt/moqt_object.h"
 #include "quiche/quic/moqt/moqt_priority.h"
 #include "quiche/quic/moqt/moqt_publisher.h"
 #include "quiche/quic/moqt/moqt_session.h"
+#include "quiche/quic/moqt/moqt_session_callbacks.h"
 #include "quiche/quic/moqt/moqt_track.h"
 #include "quiche/common/platform/api/quiche_test.h"
 
@@ -29,18 +30,18 @@ struct MockSessionCallbacks {
   testing::MockFunction<void(absl::string_view)> goaway_received_callback;
   testing::MockFunction<void(absl::string_view)> session_terminated_callback;
   testing::MockFunction<void()> session_deleted_callback;
-  testing::MockFunction<std::optional<MoqtAnnounceErrorReason>(
+  testing::MockFunction<std::optional<MoqtPublishNamespaceErrorReason>(
       const TrackNamespace&, std::optional<VersionSpecificParameters>)>
-      incoming_announce_callback;
+      incoming_publish_namespace_callback;
   testing::MockFunction<std::optional<MoqtSubscribeErrorReason>(
       TrackNamespace, std::optional<VersionSpecificParameters>)>
-      incoming_subscribe_announces_callback;
+      incoming_subscribe_namespace_callback;
 
   MockSessionCallbacks() {
-    ON_CALL(incoming_announce_callback, Call(testing::_, testing::_))
-        .WillByDefault(DefaultIncomingAnnounceCallback);
-    ON_CALL(incoming_subscribe_announces_callback, Call(testing::_, testing::_))
-        .WillByDefault(DefaultIncomingSubscribeAnnouncesCallback);
+    ON_CALL(incoming_publish_namespace_callback, Call(testing::_, testing::_))
+        .WillByDefault(DefaultIncomingPublishNamespaceCallback);
+    ON_CALL(incoming_subscribe_namespace_callback, Call(testing::_, testing::_))
+        .WillByDefault(DefaultIncomingSubscribeNamespaceCallback);
   }
 
   MoqtSessionCallbacks AsSessionCallbacks() {
@@ -49,8 +50,8 @@ struct MockSessionCallbacks {
         goaway_received_callback.AsStdFunction(),
         session_terminated_callback.AsStdFunction(),
         session_deleted_callback.AsStdFunction(),
-        incoming_announce_callback.AsStdFunction(),
-        incoming_subscribe_announces_callback.AsStdFunction()};
+        incoming_publish_namespace_callback.AsStdFunction(),
+        incoming_subscribe_namespace_callback.AsStdFunction()};
   }
 };
 
@@ -58,7 +59,7 @@ class MockTrackPublisher : public MoqtTrackPublisher {
  public:
   explicit MockTrackPublisher(FullTrackName name)
       : track_name_(std::move(name)) {
-    ON_CALL(*this, GetDeliveryOrder())
+    ON_CALL(*this, delivery_order())
         .WillByDefault(testing::Return(MoqtDeliveryOrder::kAscending));
   }
   const FullTrackName& GetTrackName() const override { return track_name_; }
@@ -69,22 +70,26 @@ class MockTrackPublisher : public MoqtTrackPublisher {
               (override));
   MOCK_METHOD(void, RemoveObjectListener, (MoqtObjectListener * listener),
               (override));
-  MOCK_METHOD(absl::StatusOr<MoqtTrackStatusCode>, GetTrackStatus, (),
+  MOCK_METHOD(std::optional<Location>, largest_location, (), (const, override));
+  MOCK_METHOD(std::optional<MoqtForwardingPreference>, forwarding_preference,
+              (), (const, override));
+  MOCK_METHOD(std::optional<MoqtDeliveryOrder>, delivery_order, (),
               (const, override));
-  MOCK_METHOD(Location, GetLargestLocation, (), (const, override));
-  MOCK_METHOD(MoqtForwardingPreference, GetForwardingPreference, (),
+  MOCK_METHOD(std::optional<quic::QuicTimeDelta>, expiration, (),
               (const, override));
-  MOCK_METHOD(MoqtPriority, GetPublisherPriority, (), (const, override));
-  MOCK_METHOD(MoqtDeliveryOrder, GetDeliveryOrder, (), (const, override));
-  MOCK_METHOD(std::unique_ptr<MoqtFetchTask>, Fetch,
-              (Location, uint64_t, std::optional<uint64_t>, MoqtDeliveryOrder),
+  MOCK_METHOD(std::unique_ptr<MoqtFetchTask>, StandaloneFetch,
+              (Location, Location, std::optional<MoqtDeliveryOrder>),
               (override));
+  MOCK_METHOD(std::unique_ptr<MoqtFetchTask>, RelativeFetch,
+              (uint64_t, std::optional<MoqtDeliveryOrder>), (override));
+  MOCK_METHOD(std::unique_ptr<MoqtFetchTask>, AbsoluteFetch,
+              (uint64_t, std::optional<MoqtDeliveryOrder>), (override));
 
  private:
   FullTrackName track_name_;
 };
 
-class MockSubscribeRemoteTrackVisitor : public SubscribeRemoteTrack::Visitor {
+class MockSubscribeRemoteTrackVisitor : public SubscribeVisitor {
  public:
   MOCK_METHOD(void, OnReply,
               (const FullTrackName& full_track_name,
@@ -98,8 +103,7 @@ class MockSubscribeRemoteTrackVisitor : public SubscribeRemoteTrack::Visitor {
                const PublishedObjectMetadata& metadata,
                absl::string_view object, bool end_of_message),
               (override));
-  MOCK_METHOD(void, OnSubscribeDone, (FullTrackName full_track_name),
-              (override));
+  MOCK_METHOD(void, OnPublishDone, (FullTrackName full_track_name), (override));
   MOCK_METHOD(void, OnMalformedTrack, (const FullTrackName& full_track_name),
               (override));
 };

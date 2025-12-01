@@ -22,7 +22,9 @@
           "willDownloadUpdate",
           "didDownloadUpdate",
           "willInstallUpdateOnQuit",
-          "updaterDidRelaunchApplication"
+          "updaterDidRelaunchApplication",
+          "needRestartToReloadCodecs",
+          "error"
         ]
       },
       {
@@ -51,6 +53,62 @@
           "SystemIsTooOld",
           "SystemIsTooNew"
         ]
+      },
+      {
+        "id": "About",
+        "type": "object",
+        "description": "A structure describing various properties of Vivaldi.",
+        "properties": {
+          "userAgent": {
+            "type": "string"
+          },
+          "commandLine": {
+            "type": "string"
+          },
+          "macLinker": {
+            "type": "string"
+          },
+          "JSVersion": {
+            "description": "Javascript version.",
+            "type": "string"
+          },
+          "JSEngine": {
+            "description": "Javascript engine version. Currently hardcoded to V8. See version_ui.cc #237",
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "cl": {
+            "description": "Version control specific identifier of this release.",
+            "type": "string"
+          },
+          "annotatedVersion": {
+            "type": "string"
+          },
+          "copyright": {
+            "type": "string"
+          },
+          "companyName": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "id": "AboutPaths",
+        "type": "object",
+        "description": "A structure showing file paths. Runs async on FILE thread",
+        "properties": {
+          "exePath": {
+            "type": "string"
+          },
+          "profilePath": {
+            "type": "string"
+          },
+          "fullOSVersion": {
+            "type": "string"
+          }
+        }
       }
     ],
     "functions": [
@@ -63,6 +121,18 @@
             "name": "withUi",
             "type": "boolean",
             "description": "Indicates whether we want the auto-update ui to appear."
+          }
+        ]
+      },
+      {
+        "name": "startUpdate",
+        "type": "function",
+        "description": "Start Vivaldi update check.",
+        "parameters": [
+          {
+            "name": "shouldStartUpdate",
+            "type": "boolean",
+            "description": "Should the update check start downloading the update."
           }
         ]
       },
@@ -210,6 +280,38 @@
         "type": "function",
         "description": "Runs startup checks after the autoupdate UI is prepared.",
         "parameters": []
+      },
+      {
+        "name": "getAboutInfo",
+        "type": "function",
+        "description": "Return various system information. OS, command line parameters etc..",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "$ref": "About",
+              "description": "Various system information. OS, command line and more",
+              "name": "result"
+            }
+          ]
+        }
+      },
+      {
+        "name": "getAboutPathsInfo",
+        "type": "function",
+        "description": "Return various system information. OS, command line parameters etc..",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "$ref": "AboutPaths",
+              "description": "Returns profile path and executable file path.",
+              "name": "result"
+            }
+          ]
+        }
       }
 
     ],
@@ -237,10 +339,10 @@
         "description": "Fired if checkForUpdates did not find an update.",
         "parameters": [
           {
-              "name": "reason",
-              "description": "Enum reason why the updated did not find an update.",
-              "$ref": "UpdateNotFoundReason"
-            }
+            "name": "reason",
+            "description": "Enum reason why the updated did not find an update.",
+            "$ref": "UpdateNotFoundReason"
+          }
         ]
       },
       {
@@ -319,6 +421,28 @@
         "type": "function",
         "description": "Signal sent when update completed without installation. Currently, only sent by macOS for exit on silent error.",
         "parameters": []
+      },
+      {
+        "name": "onUpdateProgress",
+        "type": "function",
+        "description": "Progress listener during update and install.",
+        "parameters": [
+          {
+            "$ref": "UpdateOperationStatusEnum",
+            "name": "status",
+            "description": "Status of update."
+          },
+          {
+            "type": "string",
+            "name": "version",
+            "description": "Version to upgrade to."
+          },
+          {
+            "type": "number",
+            "name": "progress",
+            "description": "The progress of download/installation."
+          }
+        ]
       }
     ]
   }

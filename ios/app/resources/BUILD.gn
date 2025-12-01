@@ -39,7 +39,129 @@ bundle_data_xcassets("resources") {
   ]
 }
 
-bundle_data("vivaldi_appicons") {
-  sources = [ "VivaldiAppIcons.xcassets" ]
-  outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
+bundle_data_xcassets("vivaldi_appicons") {
+  catalog = "VivaldiAppIcons.xcassets"
+  sources = [
+    #Final/Default
+    "VivaldiAppIcons.xcassets/AppIcon-Final.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Final.icon/icon.json",
+
+    #Snapshot
+    "VivaldiAppIcons.xcassets/AppIcon-Snapshot.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Snapshot.icon/icon.json",
+
+    #Internal
+    "VivaldiAppIcons.xcassets/AppIcon-Internal.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Internal.icon/icon.json",
+
+    #Aqua
+    "VivaldiAppIcons.xcassets/AppIcon-Aqua.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Aqua.icon/Assets/aqua.png",
+    "VivaldiAppIcons.xcassets/AppIcon-Aqua.icon/icon.json",
+
+    #BluePrint
+    "VivaldiAppIcons.xcassets/AppIcon-Blueprint.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Blueprint.icon/Assets/blueprint2.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Blueprint.icon/icon.json",
+
+    #Burgundy
+    "VivaldiAppIcons.xcassets/AppIcon-Burgundy.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Burgundy.icon/icon.json",
+
+    #Camo
+    "VivaldiAppIcons.xcassets/AppIcon-Camo.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Camo.icon/Assets/OR4EJM0.jpg",
+    "VivaldiAppIcons.xcassets/AppIcon-Camo.icon/icon.json",
+
+    #Community
+    "VivaldiAppIcons.xcassets/AppIcon-Community.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Community.icon/icon.json",
+
+    #Coral
+    "VivaldiAppIcons.xcassets/AppIcon-Coral.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Coral.icon/icon.json",
+
+    #Gradient
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient.icon/Assets/gradientX.png",
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient.icon/icon.json",
+
+    #Gradient1
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient1.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient1.icon/icon.json",
+
+    #Gradient2
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient2.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient2.icon/icon.json",
+
+    #Gradient3
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient3.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient3.icon/icon.json",
+
+    #Green
+    "VivaldiAppIcons.xcassets/AppIcon-Green.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Green.icon/icon.json",
+
+    #Japan
+    "VivaldiAppIcons.xcassets/AppIcon-Japan.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Japan.icon/icon.json",
+
+    #LGBTPlus
+    "VivaldiAppIcons.xcassets/AppIcon-LGBTPlus.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-LGBTPlus.icon/Assets/gray.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-LGBTPlus.icon/Assets/lgbtplus.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-LGBTPlus.icon/icon.json",
+
+    #MatteBlack
+    "VivaldiAppIcons.xcassets/AppIcon-MatteBlack.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-MatteBlack.icon/icon.json",
+
+    #OldOpera
+    "VivaldiAppIcons.xcassets/AppIcon-OldOpera.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-OldOpera.icon/Assets/old_opera.png",
+    "VivaldiAppIcons.xcassets/AppIcon-OldOpera.icon/icon.json",
+
+    #Pink
+    "VivaldiAppIcons.xcassets/AppIcon-Pink.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Pink.icon/icon.json",
+
+    #Pride
+    "VivaldiAppIcons.xcassets/AppIcon-Pride.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Pride.icon/Assets/gray.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Pride.icon/Assets/lgbt.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Pride.icon/icon.json",
+
+    #SageGreen
+    "VivaldiAppIcons.xcassets/AppIcon-SageGreen.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-SageGreen.icon/icon.json",
+
+    #Sand
+    "VivaldiAppIcons.xcassets/AppIcon-Sand.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Sand.icon/icon.json",
+
+    #SoftPink
+    "VivaldiAppIcons.xcassets/AppIcon-SoftPink.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-SoftPink.icon/icon.json",
+
+    #SoftPurple
+    "VivaldiAppIcons.xcassets/AppIcon-SoftPurple.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-SoftPurple.icon/icon.json",
+
+    #SoftRed
+    "VivaldiAppIcons.xcassets/AppIcon-SoftRed.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-SoftRed.icon/icon.json",
+
+    #White
+    "VivaldiAppIcons.xcassets/AppIcon-White.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-White.icon/icon.json",
+
+    #Wood
+    "VivaldiAppIcons.xcassets/AppIcon-Wood.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Wood.icon/Assets/wood1.jpg",
+    "VivaldiAppIcons.xcassets/AppIcon-Wood.icon/icon.json",
+
+    #Yellow
+    "VivaldiAppIcons.xcassets/AppIcon-Yellow.icon/Assets/Vector.svg",
+    "VivaldiAppIcons.xcassets/AppIcon-Yellow.icon/icon.json",
+  ]
 }

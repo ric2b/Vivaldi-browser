@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/themes/browser_theme_pack.h"
 
 #include <limits.h>
@@ -20,8 +15,10 @@
 #include <string_view>
 #include <utility>
 
+#include "base/compiler_specific.h"
 #include "base/containers/contains.h"
 #include "base/containers/fixed_flat_set.h"
+#include "base/containers/flat_map.h"
 #include "base/containers/heap_array.h"
 #include "base/containers/span.h"
 #include "base/files/file.h"
@@ -387,7 +384,7 @@ scoped_refptr<base::RefCountedMemory> ReadFileData(const base::FilePath& path) {
         std::vector<unsigned char> raw_data;
         raw_data.resize(size);
         char* data = reinterpret_cast<char*>(&(raw_data.front()));
-        if (file.ReadAtCurrentPos(data, size) == length) {
+        if (UNSAFE_TODO(file.ReadAtCurrentPos(data, size)) == length) {
           return base::MakeRefCounted<base::RefCountedBytes>(
               std::move(raw_data));
         }
@@ -667,18 +664,18 @@ void BrowserThemePack::SetColor(int id, SkColor color) {
 
   int first_available_color = -1;
   for (size_t i = 0; i < kColorsArrayLength; ++i) {
-    if (colors_[i].id == id) {
-      colors_[i].color = color;
+    if (UNSAFE_TODO(colors_[i]).id == id) {
+      UNSAFE_TODO(colors_[i]).color = color;
       return;
     }
-    if (colors_[i].id == -1 && first_available_color == -1) {
+    if (UNSAFE_TODO(colors_[i]).id == -1 && first_available_color == -1) {
       first_available_color = i;
     }
   }
 
   DCHECK_NE(-1, first_available_color);
-  colors_[first_available_color].id = id;
-  colors_[first_available_color].color = color;
+  UNSAFE_TODO(colors_[first_available_color]).id = id;
+  UNSAFE_TODO(colors_[first_available_color]).color = color;
 }
 
 void BrowserThemePack::SetColorIfUnspecified(int id, SkColor color) {
@@ -693,22 +690,22 @@ void BrowserThemePack::SetTint(int id, color_utils::HSL tint) {
 
   int first_available_index = -1;
   for (size_t i = 0; i < kTintTableLength; ++i) {
-    if (tints_[i].id == id) {
-      tints_[i].h = tint.h;
-      tints_[i].s = tint.s;
-      tints_[i].l = tint.l;
+    if (UNSAFE_TODO(tints_[i]).id == id) {
+      UNSAFE_TODO(tints_[i]).h = tint.h;
+      UNSAFE_TODO(tints_[i]).s = tint.s;
+      UNSAFE_TODO(tints_[i]).l = tint.l;
       return;
     }
-    if (tints_[i].id == -1 && first_available_index == -1) {
+    if (UNSAFE_TODO(tints_[i]).id == -1 && first_available_index == -1) {
       first_available_index = i;
     }
   }
 
   DCHECK_NE(-1, first_available_index);
-  tints_[first_available_index].id = id;
-  tints_[first_available_index].h = tint.h;
-  tints_[first_available_index].s = tint.s;
-  tints_[first_available_index].l = tint.l;
+  UNSAFE_TODO(tints_[first_available_index]).id = id;
+  UNSAFE_TODO(tints_[first_available_index]).h = tint.h;
+  UNSAFE_TODO(tints_[first_available_index]).s = tint.s;
+  UNSAFE_TODO(tints_[first_available_index]).l = tint.l;
 }
 
 void BrowserThemePack::SetDisplayProperty(int id, int value) {
@@ -716,18 +713,19 @@ void BrowserThemePack::SetDisplayProperty(int id, int value) {
 
   int first_available_index = -1;
   for (size_t i = 0; i < kDisplayPropertiesSize; ++i) {
-    if (display_properties_[i].id == id) {
-      display_properties_[i].property = value;
+    if (UNSAFE_TODO(display_properties_[i]).id == id) {
+      UNSAFE_TODO(display_properties_[i]).property = value;
       return;
     }
-    if (display_properties_[i].id == -1 && first_available_index == -1) {
+    if (UNSAFE_TODO(display_properties_[i]).id == -1 &&
+        first_available_index == -1) {
       first_available_index = i;
     }
   }
 
   DCHECK_NE(-1, first_available_index);
-  display_properties_[first_available_index].id = id;
-  display_properties_[first_available_index].property = value;
+  UNSAFE_TODO(display_properties_[first_available_index]).id = id;
+  UNSAFE_TODO(display_properties_[first_available_index]).property = value;
 }
 
 SkColor BrowserThemePack::ComputeImageColor(const gfx::Image& image,
@@ -850,8 +848,9 @@ scoped_refptr<BrowserThemePack> BrowserThemePack::BuildFromDataPack(
   if (!pointer) {
     return nullptr;
   }
-  std::memcpy(pack->tab_group_color_palette_shades_.data(), pointer->data(),
-              sizeof(pack->tab_group_color_palette_shades_));
+  UNSAFE_TODO(std::memcpy(pack->tab_group_color_palette_shades_.data(),
+                          pointer->data(),
+                          sizeof(pack->tab_group_color_palette_shades_)));
 
   pointer = data_pack->GetStringView(kSourceImagesID);
   if (!pointer) {
@@ -986,7 +985,7 @@ bool BrowserThemePack::WriteToDisk(const base::FilePath& path) const {
 
   int source_count = 1;
   SourceImage* end = source_images_;
-  for (; end->id != -1; end++) {
+  for (; end->id != -1; UNSAFE_TODO(end++)) {
     source_count++;
   }
   resources[kSourceImagesID] =
@@ -1011,10 +1010,10 @@ bool BrowserThemePack::WriteToDisk(const base::FilePath& path) const {
 bool BrowserThemePack::GetTint(int id, color_utils::HSL* hsl) const {
   if (tints_) {
     for (size_t i = 0; i < kTintTableLength; ++i) {
-      if (tints_[i].id == id) {
-        hsl->h = tints_[i].h;
-        hsl->s = tints_[i].s;
-        hsl->l = tints_[i].l;
+      if (UNSAFE_TODO(tints_[i]).id == id) {
+        hsl->h = UNSAFE_TODO(tints_[i]).h;
+        hsl->s = UNSAFE_TODO(tints_[i]).s;
+        hsl->l = UNSAFE_TODO(tints_[i]).l;
         return true;
       }
     }
@@ -1045,8 +1044,8 @@ bool BrowserThemePack::GetColor(int id, SkColor* color) const {
 
   if (colors_) {
     for (size_t i = 0; i < kColorsArrayLength; ++i) {
-      if (colors_[i].id == id) {
-        *color = colors_[i].color;
+      if (UNSAFE_TODO(colors_[i]).id == id) {
+        *color = UNSAFE_TODO(colors_[i]).color;
         if (base::Contains(kOpaqueColors, id)) {
           *color = SkColorSetA(*color, SK_AlphaOPAQUE);
         }
@@ -1061,8 +1060,8 @@ bool BrowserThemePack::GetColor(int id, SkColor* color) const {
 bool BrowserThemePack::GetDisplayProperty(int id, int* result) const {
   if (display_properties_) {
     for (size_t i = 0; i < kDisplayPropertiesSize; ++i) {
-      if (display_properties_[i].id == id) {
-        *result = display_properties_[i].property;
+      if (UNSAFE_TODO(display_properties_[i]).id == id) {
+        *result = UNSAFE_TODO(display_properties_[i]).property;
         return true;
       }
     }
@@ -1130,7 +1129,7 @@ bool BrowserThemePack::HasCustomImage(int idr_id) const {
   }
 
   SourceImage* img = source_images_;
-  for (; img->id != -1; ++img) {
+  for (; img->id != -1; UNSAFE_TODO(++img)) {
     if (img->id == prs_id) {
       return true;
     }
@@ -1379,32 +1378,32 @@ void BrowserThemePack::InitHeader() {
 void BrowserThemePack::InitTints() {
   tints_ = new TintEntry[kTintTableLength];
   for (size_t i = 0; i < kTintTableLength; ++i) {
-    tints_[i].id = -1;
-    tints_[i].h = -1;
-    tints_[i].s = -1;
-    tints_[i].l = -1;
+    UNSAFE_TODO(tints_[i]).id = -1;
+    UNSAFE_TODO(tints_[i]).h = -1;
+    UNSAFE_TODO(tints_[i]).s = -1;
+    UNSAFE_TODO(tints_[i]).l = -1;
   }
 }
 
 void BrowserThemePack::InitColors() {
   colors_ = new ColorPair[kColorsArrayLength];
   for (size_t i = 0; i < kColorsArrayLength; ++i) {
-    colors_[i].id = -1;
-    colors_[i].color = SkColorSetRGB(0, 0, 0);
+    UNSAFE_TODO(colors_[i]).id = -1;
+    UNSAFE_TODO(colors_[i]).color = SkColorSetRGB(0, 0, 0);
   }
 }
 
 void BrowserThemePack::InitDisplayProperties() {
   display_properties_ = new DisplayPropertyPair[kDisplayPropertiesSize];
   for (size_t i = 0; i < kDisplayPropertiesSize; ++i) {
-    display_properties_[i].id = -1;
-    display_properties_[i].property = 0;
+    UNSAFE_TODO(display_properties_[i]).id = -1;
+    UNSAFE_TODO(display_properties_[i]).property = 0;
   }
 }
 
 void BrowserThemePack::InitSourceImages() {
   source_images_ = new SourceImage[1];
-  source_images_[0].id = -1;
+  UNSAFE_TODO(source_images_[0]).id = -1;
 }
 
 void BrowserThemePack::FinalizePackFromColors() {
@@ -1417,7 +1416,8 @@ void BrowserThemePack::FinalizePackFromColors() {
 void BrowserThemePack::SetHeaderId(const Extension* extension) {
   DCHECK(header_);
   const std::string& id = extension->id();
-  memcpy(header_->theme_id, id.c_str(), crx_file::id_util::kIdSize);
+  UNSAFE_TODO(
+      memcpy(header_->theme_id, id.c_str(), crx_file::id_util::kIdSize));
 }
 
 void BrowserThemePack::SetTintsFromJSON(const base::Value::Dict* tints_value) {
@@ -1460,10 +1460,10 @@ void BrowserThemePack::SetTintsFromJSON(const base::Value::Dict* tints_value) {
   size_t count = 0;
   for (std::map<int, color_utils::HSL>::const_iterator it = temp_tints.begin();
        it != temp_tints.end() && count < kTintTableLength; ++it, ++count) {
-    tints_[count].id = it->first;
-    tints_[count].h = it->second.h;
-    tints_[count].s = it->second.s;
-    tints_[count].l = it->second.l;
+    UNSAFE_TODO(tints_[count]).id = it->first;
+    UNSAFE_TODO(tints_[count]).h = it->second.h;
+    UNSAFE_TODO(tints_[count]).s = it->second.s;
+    UNSAFE_TODO(tints_[count]).l = it->second.l;
   }
 }
 
@@ -1481,8 +1481,8 @@ void BrowserThemePack::SetColorsFromJSON(
   for (std::map<int, SkColor>::const_iterator it = temp_colors.begin();
        it != temp_colors.end() && count < kOverwritableColorTableLength;
        ++it, ++count) {
-    colors_[count].id = it->first;
-    colors_[count].color = it->second;
+    UNSAFE_TODO(colors_[count]).id = it->first;
+    UNSAFE_TODO(colors_[count]).color = it->second;
   }
 }
 
@@ -1590,34 +1590,31 @@ void BrowserThemePack::SetDisplayPropertiesFromJSON(
   for (std::map<int, int>::const_iterator it = temp_properties.begin();
        it != temp_properties.end() && count < kDisplayPropertiesSize;
        ++it, ++count) {
-    display_properties_[count].id = it->first;
-    display_properties_[count].property = it->second;
+    UNSAFE_TODO(display_properties_[count]).id = it->first;
+    UNSAFE_TODO(display_properties_[count]).property = it->second;
   }
 }
 
 void BrowserThemePack::ParseImageNamesFromJSON(
-    const base::Value::Dict* images_value,
+    const extensions::ThemeInfo::ThemeImages* theme_images,
     const base::FilePath& images_path,
     FilePathMap* file_paths) const {
-  if (!images_value) {
+  if (!theme_images) {
     return;
   }
 
-  for (const auto [key, value] : *images_value) {
-    if (value.is_dict()) {
-      for (const auto [inner_key, inner_value] : value.GetDict()) {
-        ui::ResourceScaleFactor scale_factor = ui::kScaleFactorNone;
-        if (GetScaleFactorFromManifestKey(inner_key, &scale_factor) &&
-            inner_value.is_string()) {
-          AddFileAtScaleToMap(key, scale_factor,
-                              images_path.AppendASCII(inner_value.GetString()),
-                              file_paths);
-        }
+  for (const auto& [theme_image_name, theme_resources] : *theme_images) {
+    for (const auto& theme_resource : theme_resources) {
+      ui::ResourceScaleFactor scale_factor = ui::k100Percent;
+      if (!theme_resource.scale.empty() &&
+          !GetScaleFactorFromManifestKey(theme_resource.scale, &scale_factor)) {
+        // Invalid scale factor; skip.
+        continue;
       }
-    } else if (value.is_string()) {
-      AddFileAtScaleToMap(key, ui::k100Percent,
-                          images_path.AppendASCII(value.GetString()),
-                          file_paths);
+      AddFileAtScaleToMap(
+          theme_image_name, scale_factor,
+          images_path.Append(theme_resource.resource.relative_path()),
+          file_paths);
     }
   }
 }
@@ -1662,7 +1659,7 @@ void BrowserThemePack::BuildSourceImagesArray(const FilePathMap& file_paths) {
   std::ranges::transform(
       file_paths, source_images_.get(),
       [](const auto& pair) { return SourceImage{pair.first}; });
-  source_images_[file_paths.size()].id = -1;
+  UNSAFE_TODO(source_images_[file_paths.size()]).id = -1;
 }
 
 bool BrowserThemePack::LoadRawBitmapsTo(const FilePathMap& file_paths,
@@ -1808,10 +1805,9 @@ void BrowserThemePack::CreateToolbarImageAndColors(ImageCache* images) {
 
   auto image = image_it->second.AsImageSkia();
 
-  constexpr int kToolbarColorId = TP::COLOR_TOOLBAR;
   SkColor toolbar_color;
-  if (!GetColor(kToolbarColorId, &toolbar_color)) {
-    toolbar_color = TP::GetDefaultColor(kToolbarColorId, false);
+  if (!GetColor(TP::COLOR_TOOLBAR, &toolbar_color)) {
+    toolbar_color = TP::GetDefaultColor(TP::COLOR_TOOLBAR, false);
   }
 
   // Generate a composite image by drawing the toolbar image on top of the
@@ -1825,7 +1821,7 @@ void BrowserThemePack::CreateToolbarImageAndColors(ImageCache* images) {
   const gfx::Image dest_image(gfx::ImageSkia(std::move(source), dest_size));
   temp_output[kSrcImageId] = dest_image;
 
-  SetColorIfUnspecified(kToolbarColorId,
+  SetColorIfUnspecified(TP::COLOR_TOOLBAR,
                         ComputeImageColor(dest_image, dest_size.height()));
 
   MergeImageCaches(temp_output, images);

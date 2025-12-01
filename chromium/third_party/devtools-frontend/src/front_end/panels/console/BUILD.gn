@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -75,6 +75,7 @@ devtools_entrypoint("bundle") {
   visibility = [
     ":*",
     "../../../test/e2e/console/*",
+    "../../../test/e2e_non_hosted/console/*",
     "../../entrypoints/*",
     "../../panels/explain/*",
   ]
@@ -102,6 +103,7 @@ ts_library("unittests") {
     "ConsoleContextSelector.test.ts",
     "ConsoleFormat.test.ts",
     "ConsolePrompt.test.ts",
+    "ConsoleSidebar.test.ts",
     "ConsoleView.test.ts",
     "ConsoleViewMessage.test.ts",
     "ConsoleViewport.test.ts",

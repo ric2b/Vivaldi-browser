@@ -21,6 +21,7 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
+import android.text.method.LinkMovementMethod;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -109,7 +110,8 @@ public class EditorDialogView extends AlwaysDismissedDialog
     private @Nullable AlertDialog mConfirmationDialog;
 
     private @Nullable String mDeleteConfirmationTitle;
-    private @Nullable String mDeleteConfirmationText;
+    private @Nullable CharSequence mDeleteConfirmationText;
+    private @Nullable String mDeleteConfirmationPrimaryButtonText;
 
     private @Nullable Runnable mDeleteRunnable;
     private @Nullable Runnable mDoneRunnable;
@@ -180,8 +182,13 @@ public class EditorDialogView extends AlwaysDismissedDialog
         mDeleteConfirmationTitle = deleteConfirmationTitle;
     }
 
-    public void setDeleteConfirmationText(@Nullable String deleteConfirmationText) {
+    public void setDeleteConfirmationText(@Nullable CharSequence deleteConfirmationText) {
         mDeleteConfirmationText = deleteConfirmationText;
+    }
+
+    public void setDeleteConfirmationPrimaryButtonText(
+            @Nullable String deleteConfirmationPrimaryButtonText) {
+        mDeleteConfirmationPrimaryButtonText = deleteConfirmationPrimaryButtonText;
     }
 
     public void setAllowDelete(boolean allowDelete) {
@@ -259,9 +266,13 @@ public class EditorDialogView extends AlwaysDismissedDialog
         toolbar.setOnMenuItemClickListener(
                 item -> {
                     if (item.getItemId() == R.id.delete_menu_id) {
-                        if (mDeleteConfirmationTitle != null || mDeleteConfirmationText != null) {
+                        if (mDeleteConfirmationTitle != null
+                                && mDeleteConfirmationText != null
+                                && mDeleteConfirmationPrimaryButtonText != null) {
                             handleDeleteWithConfirmation(
-                                    mDeleteConfirmationTitle, mDeleteConfirmationText);
+                                    mDeleteConfirmationTitle,
+                                    mDeleteConfirmationText,
+                                    mDeleteConfirmationPrimaryButtonText);
                         } else {
                             handleDelete();
                         }
@@ -619,14 +630,17 @@ public class EditorDialogView extends AlwaysDismissedDialog
     }
 
     private void handleDeleteWithConfirmation(
-            @Nullable String confirmationTitle, @Nullable String confirmationText) {
+            String confirmationTitle, CharSequence confirmationText, String primaryButtonText) {
         LayoutInflater inflater = LayoutInflater.from(getContext());
         View body = inflater.inflate(R.layout.confirmation_dialog_view, null);
         TextView titleView = body.findViewById(R.id.confirmation_dialog_title);
         titleView.setText(confirmationTitle);
         TextView messageView = body.findViewById(R.id.confirmation_dialog_message);
         messageView.setText(confirmationText);
+        messageView.setMovementMethod(LinkMovementMethod.getInstance());
 
+        // TODO(crbug.com/440257087): Migrate to modal dialog to keep it consistent with keyboard
+        // accessory removal dialog.
         mConfirmationDialog =
                 new AlertDialog.Builder(getContext(), R.style.ThemeOverlay_BrowserUI_AlertDialog)
                         .setView(body)
@@ -640,7 +654,7 @@ public class EditorDialogView extends AlwaysDismissedDialog
                                     }
                                 })
                         .setPositiveButton(
-                                R.string.delete,
+                                primaryButtonText,
                                 (dialog, which) -> {
                                     handleDelete();
                                     mConfirmationDialog = null;

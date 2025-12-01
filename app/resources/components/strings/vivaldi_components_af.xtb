@@ -3,16 +3,6 @@
 <translationbundle lang="af">
 <translation id="3830627370375585318">Gee Vivaldi toegang tot die netwerk in u brandmuur- of antivirus
           instellings.</translation>
-<translation id="4200102020577305737">Gaan na
-          die Vivaldi-kieslys &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          LAN-instellings
-          en deselekteer “Gebruik ’n instaanbediener vir u LAN”.</translation>
 <translation id="4932161901409251843">Gaan na
           die Vivaldi-kieslys &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@
           Indien dit nie die probleem verhelp nie, stel ons voor om hierdie opsie
           weer te kies vir verbeterde verrigting.</translation>
 <translation id="7496505986576158197">Vivaldi word moontlik gemaak deur die <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />-oopbronprojek en ander <ph name="BEGIN_LINK_OSS" />oopbronprogrammatuur<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Gan na
+          die Vivaldi-kieslys &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Netwerk &amp; internet &gt; Proksie
+          en skakel “Bespeur instellings outomaties” af.</translation>
 </translationbundle>

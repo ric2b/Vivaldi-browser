@@ -21,20 +21,24 @@
 #include "browser/sessions/vivaldi_session_utils.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "build/build_config.h"
+#include "chrome/browser/extensions/api/sessions/session_id.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sync/session_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/startup/startup_tab.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/sessions/session_service_factory.h"
+#include "components/datasource/vivaldi_image_store.h"
 #include "components/sessions/content/content_serialized_navigation_builder.h"
+#include "components/prefs/pref_service.h"
 #include "components/sessions/core/session_service_commands.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
-#include "components/datasource/vivaldi_image_store.h"
-#include "components/prefs/pref_service.h"
+#include "components/sync_sessions/open_tabs_ui_delegate.h"
+#include "components/sync_sessions/session_sync_service.h"
 #include "components/tabs/tab_helpers.h"
 #include "content/public/browser/navigation_entry.h"
 #include "extensions/browser/extension_function_dispatcher.h"
@@ -1143,5 +1147,85 @@ SessionsPrivateRestoreLastClosedFunction::Run() {
   return RespondNow(ArgumentList(Results::Create(did_open_session_window)));
 }
 
+ExtensionFunction::ResponseAction
+SessionsPrivateRestoreSyncTabsFunction::Run() {
+  using vivaldi::sessions_private::RestoreSyncTabs::Params;
+  namespace Results = vivaldi::sessions_private::RestoreSyncTabs::Results;
+
+  // Code flow inspired by SessionsRestoreFunction (in chromium) and the calls
+  // it makes.
+  std::optional<vivaldi::sessions_private::RestoreSyncTabs::Params> params =
+      vivaldi::sessions_private::RestoreSyncTabs::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  if (!ExtensionTabUtil::IsTabStripEditable()) {
+    return RespondNow(ArgumentList(
+        Results::Create(sessions::kErrorTabStripNotEditable)));
+  }
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  if (profile != profile->GetOriginalProfile()) {
+    return RespondNow(ArgumentList(
+        Results::Create(sessions::kErrorRestoreInIncognito)));
+  }
+
+  Browser* browser = chrome::FindBrowserWithProfile(profile);
+  if (!browser) {
+    return RespondNow(ArgumentList(Results::Create(sessions::kErrorNoBrowser)));
+  }
+
+  std::vector<std::unique_ptr<SessionId>> ids;
+  for (auto& id : params->ids) {
+    std::unique_ptr<SessionId> session_id(SessionId::Parse(id));
+    if (!session_id) {
+      return RespondNow(ArgumentList(
+          Results::Create(sessions::kErrorUnknownId)));
+    }
+    if (!session_id->IsForeign()) {
+      return RespondNow(ArgumentList(
+          Results::Create(sessions::kErrorNoSyncId)));
+    }
+    ids.push_back(std::move(session_id));
+  }
+
+  sync_sessions::SessionSyncService* service =
+      SessionSyncServiceFactory::GetInstance()->GetForProfile(
+          Profile::FromBrowserContext(browser_context()));
+  DCHECK(service);
+
+  sync_sessions::OpenTabsUIDelegate* open_tabs =
+      service->GetOpenTabsUIDelegate();
+  // If the user has disabled tab sync, GetOpenTabsUIDelegate() returns null.
+  if (!open_tabs) {
+    return RespondNow(ArgumentList(Results::Create(sessions::kErrorNoTabSync)));
+  }
+
+  std::vector<const sessions::SessionTab*> tabs;
+  for (size_t i = 0; i < ids.size(); i++) {
+    const sessions::SessionTab* tab = nullptr;
+    if (open_tabs->GetForeignTab(ids[i]->session_tag(),
+                                 SessionID::FromSerializedValue(ids[i]->id()),
+                                 &tab)) {
+      tabs.push_back(tab);
+    } else {
+      // We could return here, but I rather prefer just a warning to the
+      // terminal. We could also report this error state back to UI.
+      LOG(WARNING) << "Restore. Failed to load session tab";
+    }
+  }
+
+  TabStripModel* tab_strip = browser->tab_strip_model();
+  content::WebContents* contents = tab_strip->GetActiveWebContents();
+  for (size_t i = 0; i < tabs.size(); i++) {
+    bool load_content = i + 1 == ids.size();
+    WindowOpenDisposition disposition = load_content
+        ? WindowOpenDisposition::NEW_FOREGROUND_TAB
+        : WindowOpenDisposition::NEW_BACKGROUND_TAB;
+    SessionRestore::RestoreForeignSessionTab(
+        contents, *(tabs[i]), disposition, false, load_content);
+  }
+
+  return RespondNow(ArgumentList(Results::Create(sessions::kNoError)));
+}
 
 }  // namespace extensions

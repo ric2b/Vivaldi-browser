@@ -250,26 +250,10 @@ void RecordNavigationSourceScopesLimitOutcome(
       "Conversions.NavigationSourceScopesLimitOutcome", outcome);
 }
 
-void RecordGoogleAmpViewerUsage(RegistrationType type,
-                                bool is_context_google_amp_viewer) {
-  switch (type) {
-    case RegistrationType::kSource:
-      base::UmaHistogramBoolean("Conversions.GoogleAmpViewer.Source",
-                                is_context_google_amp_viewer);
-      break;
-    case RegistrationType::kTrigger:
-      base::UmaHistogramBoolean("Conversions.GoogleAmpViewer.Trigger",
-                                is_context_google_amp_viewer);
-      break;
-  }
-}
-
 bool BackgroundRegistrationsEnabled() {
-  return (base::FeatureList::IsEnabled(
-              blink::features::kKeepAliveInBrowserMigration) ||
-          base::FeatureList::IsEnabled(blink::features::kFetchLaterAPI)) &&
-         base::FeatureList::IsEnabled(
-             blink::features::kAttributionReportingInBrowserMigration);
+  return base::FeatureList::IsEnabled(
+             blink::features::kKeepAliveInBrowserMigration) ||
+         base::FeatureList::IsEnabled(blink::features::kFetchLaterAPI);
 }
 
 constexpr size_t kMaxDeferredReceiversPerNavigation = 30;
@@ -477,10 +461,6 @@ class AttributionDataHostManagerImpl::RegistrationContext {
     return suitable_context_.context_origin();
   }
 
-  bool is_context_google_amp_viewer() const {
-    return suitable_context_.is_context_google_amp_viewer();
-  }
-
   ukm::SourceId ukm_source_id() const {
     return suitable_context_.ukm_source_id();
   }
@@ -651,11 +631,13 @@ class AttributionDataHostManagerImpl::Registrations {
   Registrations(RegistrationsId id,
                 RegistrationContext context,
                 bool waiting_on_navigation,
-                std::optional<int64_t> defer_until_navigation)
+                std::optional<int64_t> defer_until_navigation,
+                bool from_context_menu)
       : waiting_on_navigation_(waiting_on_navigation),
         defer_until_navigation_(defer_until_navigation),
         id_(id),
-        context_(std::move(context)) {}
+        context_(std::move(context)),
+        from_context_menu_(from_context_menu) {}
 
   Registrations(const Registrations&) = delete;
   Registrations& operator=(const Registrations&) = delete;
@@ -774,6 +756,8 @@ class AttributionDataHostManagerImpl::Registrations {
                        std::move(invalid_parameter), issue_type);
   }
 
+  bool from_context_menu() const { return from_context_menu_; }
+
  private:
   // True if navigation or beacon has completed.
   bool registrations_complete_ = false;
@@ -801,6 +785,8 @@ class AttributionDataHostManagerImpl::Registrations {
   base::circular_deque<PendingRegistrationData> pending_registration_data_;
 
   RegistrationContext context_;
+
+  bool from_context_menu_;
 };
 
 class AttributionDataHostManagerImpl::PendingRegistrationData {
@@ -1058,11 +1044,7 @@ class AttributionDataHostManagerImpl::OsRegistrationsBuffer {
     if (!context_.has_value()) {
       context_ = registration_context;
     } else {
-      // TODO(anthonygarant): Convert to CHECK after validating that the
-      // contexts are always equivalent.
-      base::UmaHistogramBoolean(
-          "Conversions.OsRegistrationsBufferWithSameContext",
-          context_->IsEquivalent(registration_context));
+      CHECK(context_->IsEquivalent(registration_context));
     }
 
     CHECK_LE(registrations_.size(), kMaxBufferSize);
@@ -1408,7 +1390,8 @@ void AttributionDataHostManagerImpl::NotifyNavigationRegistrationStarted(
     AttributionSuitableContext suitable_context,
     const blink::AttributionSrcToken& attribution_src_token,
     int64_t navigation_id,
-    std::string devtools_request_id) {
+    std::string devtools_request_id,
+    bool from_context_menu) {
   if (auto [it, inserted] = registrations_.emplace(
           RegistrationsId(attribution_src_token),
           RegistrationContext(suitable_context,
@@ -1416,7 +1399,7 @@ void AttributionDataHostManagerImpl::NotifyNavigationRegistrationStarted(
                               std::move(devtools_request_id), navigation_id,
                               RegistrationMethod::kNavForeground),
           /*waiting_on_navigation=*/false,
-          /*defer_until_navigation=*/std::nullopt);
+          /*defer_until_navigation=*/std::nullopt, from_context_menu);
       !inserted) {
     RecordNavigationUnexpectedRegistration(
         NavigationUnexpectedRegistration::kRegistrationAlreadyExists);
@@ -1424,6 +1407,10 @@ void AttributionDataHostManagerImpl::NotifyNavigationRegistrationStarted(
                             navigation_id);
     SCOPED_CRASH_KEY_NUMBER("AttributionReporting", "exist_nav_id",
                             it->navigation_id().value_or(0));
+    SCOPED_CRASH_KEY_BOOL("AttributionReporting", "start_ctx_menu",
+                          from_context_menu);
+    SCOPED_CRASH_KEY_BOOL("AttributionReporting", "exist_ctx_menu",
+                          it->from_context_menu());
     base::debug::DumpWithoutCrashing();
     return;
   }
@@ -1676,7 +1663,8 @@ void AttributionDataHostManagerImpl::NotifyBackgroundRegistrationStarted(
           attribution_src_token.has_value()
               ? RegistrationMethod::kNavBackgroundBrowser
               : RegistrationMethod::kForegroundOrBackgroundBrowser),
-      waiting_on_navigation, deferred_until);
+      waiting_on_navigation, deferred_until,
+      /*from_context_menu=*/false);
   CHECK(inserted);
 
   // We must indicate that the background registration was tied to the
@@ -1802,8 +1790,6 @@ void AttributionDataHostManagerImpl::SourceDataAvailable(
 
   RecordRegistrationMethod(
       context->GetRegistrationMethod(was_fetched_via_service_worker));
-  RecordGoogleAmpViewerUsage(RegistrationType::kSource,
-                             context->is_context_google_amp_viewer());
 
   if (navigation_id.has_value() &&
       !AddNavigationSourceRegistrationToBatchMap(
@@ -1844,8 +1830,7 @@ void AttributionDataHostManagerImpl::TriggerDataAvailable(
 
   RecordRegistrationMethod(
       context->GetRegistrationMethod(was_fetched_via_service_worker));
-  RecordGoogleAmpViewerUsage(RegistrationType::kTrigger,
-                             context->is_context_google_amp_viewer());
+
   attribution_manager_->HandleTrigger(
       AttributionTrigger(std::move(reporting_origin), std::move(data),
                          /*destination_origin=*/context->context_origin(),
@@ -1874,8 +1859,7 @@ void AttributionDataHostManagerImpl::OsDataAvailable(
 
   RecordRegistrationMethod(
       context->GetRegistrationMethod(was_fetched_via_service_worker));
-  RecordGoogleAmpViewerUsage(registration_type,
-                             context->is_context_google_amp_viewer());
+
   if (context->navigation_id().has_value()) {
     MaybeBufferOsRegistrations(context->navigation_id().value(),
                                std::move(registration_items), *context);
@@ -1939,7 +1923,8 @@ void AttributionDataHostManagerImpl::NotifyFencedFrameReportingBeaconStarted(
                               ? RegistrationMethod::kFencedFrameAutomaticBeacon
                               : RegistrationMethod::kFencedFrameBeacon),
       /*waiting_on_navigation=*/false,
-      /*defer_until_navigation=*/std::nullopt);
+      /*defer_until_navigation=*/std::nullopt,
+      /*from_context_menu=*/false);
   CHECK(inserted);
 }
 
@@ -2086,9 +2071,6 @@ void AttributionDataHostManagerImpl::OnWebHeaderParsed(RegistrationsId id) {
   if (handle_result.has_value()) {
     RecordRegistrationMethod(registrations->context().GetRegistrationMethod(
         /*was_fetched_via_service_worker=*/false));
-    RecordGoogleAmpViewerUsage(
-        pending_decode.registration_type,
-        registrations->context().is_context_google_amp_viewer());
   } else {
     MaybeLogAuditIssueAndReportHeaderError(
         *registrations, std::move(pending_decode), handle_result.error());
@@ -2153,9 +2135,6 @@ void AttributionDataHostManagerImpl::OnOsHeaderParsed(RegistrationsId id,
   if (registration_items.has_value()) {
     RecordRegistrationMethod(registrations->context().GetRegistrationMethod(
         /*was_fetched_via_service_worker=*/false));
-    RecordGoogleAmpViewerUsage(
-        pending_decode.registration_type,
-        registrations->context().is_context_google_amp_viewer());
 
     if (registrations->navigation_id().has_value()) {
       MaybeBufferOsRegistrations(*registrations->navigation_id(),

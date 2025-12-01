@@ -243,7 +243,9 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
 
   // Aligns code to something that's optimal for a jump target for the platform.
   void CodeTargetAlign();
-  void LoopHeaderAlign() { CodeTargetAlign(); }
+  void SwitchTargetAlign();
+  void BranchTargetAlign();
+  void LoopHeaderAlign();
 
   inline void Unreachable();
 
@@ -3096,6 +3098,10 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
 
   // FP register type.
   inline static Instr FPType(VRegister fd);
+
+  // Clear any internal state to avoid check failures if we drop
+  // the assembly code.
+  void ClearInternalState() { constpool_.Clear(); }
 
   // Unused on this architecture.
   void MaybeEmitOutOfLineConstantPool() {}

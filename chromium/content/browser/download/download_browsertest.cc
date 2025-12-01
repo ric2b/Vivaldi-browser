@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 // This file contains download browser tests that are known to be runnable
 // in a pure content context.  Over time tests should be migrated here.
 
@@ -106,9 +101,6 @@
 #include "content/browser/plugin_service_impl.h"
 #endif
 
-#if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
-#endif
 
 using ::testing::_;
 using ::testing::AllOf;
@@ -977,7 +969,7 @@ class DownloadContentTest : public ContentBrowserTest {
  public:
   DownloadContentTest() {
     feature_list_.InitWithFeatures(
-        {},
+        {blink::features::kSvgAnchorElementDownloadAttribute},
         {
             download::features::kAllowDownloadResumptionWithoutStrongValidators,
             // Link Preview hides alt+click. Disables it not to do so.
@@ -1160,8 +1152,10 @@ class DownloadContentTest : public ContentBrowserTest {
 
     // Check the contents.
     EXPECT_EQ(value, file_contents);
-    if (memcmp(file_contents.c_str(), value.c_str(), expected_size) != 0)
+    if (UNSAFE_TODO(
+            memcmp(file_contents.c_str(), value.c_str(), expected_size)) != 0) {
       return false;
+    }
 
     return true;
   }
@@ -1205,7 +1199,8 @@ class DownloadContentTest : public ContentBrowserTest {
 
       pattern =
           TestDownloadHttpResponse::GetPatternBytes(seed, offset, bytes_read);
-      ASSERT_EQ(0, memcmp(pattern.data(), &data.front(), bytes_read))
+      UNSAFE_TODO(
+          ASSERT_EQ(0, memcmp(pattern.data(), &data.front(), bytes_read)))
           << "Comparing block at offset " << offset << " and length "
           << bytes_read;
       offset += bytes_read;
@@ -5561,6 +5556,31 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
   EXPECT_TRUE(downloads[0]->HasUserGesture());
 
   ASSERT_TRUE(server.ShutdownAndWaitUntilComplete());
+}
+
+IN_PROC_BROWSER_TEST_F(DownloadContentTest, SVGAnchorDownloadAttribute) {
+  GURL svg_url =
+      embedded_test_server()->GetURL("/download/svg_download_test.html");
+  EXPECT_TRUE(NavigateToURL(shell(), svg_url));
+
+  std::unique_ptr<DownloadTestObserver> observer(CreateWaiter(shell(), 1));
+
+  SimulateEndOfPaintHoldingOnPrimaryMainFrame(shell()->web_contents());
+  auto click_result =
+      EvalJs(shell()->web_contents(), "clickSVGDownloadLink();");
+  EXPECT_EQ("SVG download link clicked", click_result.ExtractString());
+  observer->WaitForFinished();
+
+  std::vector<raw_ptr<download::DownloadItem, VectorExperimental>> downloads;
+  DownloadManagerForShell(shell())->GetAllDownloads(&downloads);
+  ASSERT_EQ(1u, downloads.size());
+  EXPECT_EQ(download::DownloadItem::COMPLETE, downloads[0]->GetState());
+
+  EXPECT_EQ(FILE_PATH_LITERAL("svg-suggested-filename.txt"),
+            downloads[0]->GetTargetFilePath().BaseName().value());
+  VerifyFile(downloads[0]->GetFullPath(), "SVG download test content", 25);
+
+  DownloadManagerForShell(shell())->Shutdown();
 }
 
 using DownloadRangeTestParams =

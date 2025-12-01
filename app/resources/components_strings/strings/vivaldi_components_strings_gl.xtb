@@ -19,17 +19,14 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Comprobar o proxy e o firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emitido para:<ph name="ORGANIZATION" />[<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Este sitio non pode proporcionar unha conexión segura</translation>
-<translation id="2187317261103489799">Detectar (predeterminado)</translation>
 <translation id="2224337661447660594">Sen Internet</translation>
 <translation id="2292556288342944218">O acceso a Internet está bloqueado</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> require un nome do usuario e contrasinal.</translation>
 <translation id="2337852623177822836">Configuración controlada polo teu administrador</translation>
 <translation id="2355395290879513365">Os atacantes poden ver as imaxes que estás mirando neste sitio e enganarte modificándoas.</translation>
-<translation id="2356070529366658676">Preguntar</translation>
 <translation id="2359808026110333948">Continuar</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Executar a diagnose da rede<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Unha extensión bloqueou esta páxina</translation>
-<translation id="2539524384386349900">Detectar</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> enviou unha resposta inválida.</translation>
 <translation id="2634124572758952069">Non se puido atopar a dirección IP do servidor de <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />,<ph name="COUNTRY" /></translation>
@@ -52,9 +49,7 @@
       necesitas usar un servidor proxy, segue estas instruccións:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Preme o botón de recargar a páxina para reenviar os datos necesarios para cargar a páxina.</translation>
-<translation id="3234666976984236645">Detectar sempre contido importante para este sitio</translation>
 <translation id="3422472998109090673">O sitio <ph name="HOST_NAME" /> é inaccesible neste momento.</translation>
-<translation id="3427092606871434483">Permitir (predeterminado)</translation>
 <translation id="3447661539832366887">O propietario deste dispositivo desactivou o xogo do dinosario.</translation>
 <translation id="3447884698081792621">Amosar certificado (emitido por <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Agochar configuración avanzada</translation>
@@ -74,7 +69,6 @@
 <translation id="4075732493274867456">O cliente e o servidor non son compatibles cunha versión do protocolo SSL ou un conxunto de cifrado comúns.</translation>
 <translation id="4116663294526079822">Permitir sempre neste sitio</translation>
 <translation id="4130226655945681476">Comprobando os cables, módem e rúter da rede</translation>
-<translation id="4151403195736952345">Usar valor por defecto global (Detectar)</translation>
 <translation id="4165986682804962316">Configuración do sitio</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Comprobar a configuración do firewall e antivirus<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Intentar executar as diagnoses de rede<ph name="END_LINK" />.</translation>
@@ -82,7 +76,6 @@
 <translation id="4250431568374086873">A túa conexión a este sitio non é totalmente segura</translation>
 <translation id="4265872034478892965">Permitido polo teu administrador</translation>
 <translation id="4305666528087210886">Non se puido acceder ao ficheiro</translation>
-<translation id="4312866146174492540">Bloquear (predeterminado)</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> non aceptou o teu certificado de inicio de sesión ou é posible que non se lle proporcionase un.</translation>
 <translation id="4506599922270137252">Contactando co administrador do sistema</translation>
@@ -98,7 +91,6 @@
 <translation id="483241715238664915">Habilitar avisos</translation>
 <translation id="4943872375798546930">Sen resultados</translation>
 <translation id="5023310440958281426">Comproba as políticas do administrador</translation>
-<translation id="5039804452771397117">Permitir</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 en uso)} other {(# en uso)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Comprobar o enderezo do proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
@@ -143,7 +135,6 @@
 <translation id="6711464428925977395">Algo pasou co servidor de proxy, ou o enderezo é incorrecto.</translation>
 <translation id="6757797048963528358">O teu dispositivo entrou en suspensión.</translation>
 <translation id="6897140037006041989">Axente de usuario</translation>
-<translation id="7053983685419859001">Bloquear</translation>
 <translation id="7096937462164235847">Non se verificou a identidade deste sitio web.</translation>
 <translation id="7108819624672055576">Permitido por unha extensión</translation>
 <translation id="7111012039238467737">(Válido)</translation>
@@ -166,7 +157,6 @@
 <translation id="7834399512844817676">Normalmente <ph name="SITE" /> usa o cifrado para protexer a túa información. Cando Vivaldi intentou establecer unha conexión con <ph name="SITE" />, o sitio web devolveu unhas credenciais inusuais e incorrectas. Isto pode ocorrer se un atacante está intentando suplantar a <ph name="SITE" /> ou se a conexión é interrompida polo inicio de sesión nunha rede inalámbrica. A túa información segue estando protexida, xa que Vivaldi detivo a conexión antes de intercambiar datos.</translation>
 <translation id="7878562273885520351">O teu contrasinal pode estar comprometido</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
-<translation id="8037357227543935929">Preguntar (por defecto)</translation>
 <translation id="8041940743680923270">Usar valor por defecto global (Preguntar)</translation>
 <translation id="808894953321890993">Cambiar contrasinal</translation>
 <translation id="8149426793427495338">O computador entrou en suspensión.</translation>

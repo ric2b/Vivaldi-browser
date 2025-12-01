@@ -9,9 +9,9 @@ title: MobLab release notes
 # The latest recovery images for Moblab:
 
 *   [Wukong (fizz) OS Recovery
-            Image](https://storage.googleapis.com/moblab-recovery-images/chromeos_14526.55.0_fizz-moblab_recovery_stable-channel_mp.bin.zip)
+            Image](https://storage.googleapis.com/moblab-recovery-images/chromeos_16295.66.0_fizz-moblab_recovery_stable-channel_FizzMoblabMPKeys-v6.bin.zip)
 *   [Wyvern (puff) OS Recovery
-            Image](https://storage.googleapis.com/moblab-recovery-images/chromeos_14526.55.0_puff-moblab_recovery_stable-channel_mp-v3.bin.zip)
+            Image](https://storage.googleapis.com/moblab-recovery-images/chromeos_16295.66.0_puff-moblab_recovery_stable-channel_PuffMoblabMPKeys-v7.bin.zip)
 
 # June 26th 2024: Moblab Release
 
@@ -40,7 +40,7 @@ After the update you will be running Moblab version R-2.25.0
 # June 15th 2023: Moblab Release
 
 **You should reboot Moblab when tests are not running to get this latest version of the software.**
-After the update you will be running Moblab version R-2.23.3 
+After the update you will be running Moblab version R-2.23.3
 
 **Highlights**
 - Surface the ChromeOS builds recommended by the SPERA team for Performance_CUJ test suite
@@ -48,7 +48,7 @@ After the update you will be running Moblab version R-2.23.3
 # March 15th 2023: Moblab Release
 
 **You should reboot Moblab when tests are not running to get this latest version of the software.**
-After the update you will be running Moblab version R-2.22.3 
+After the update you will be running Moblab version R-2.22.3
 
 **Highlights**
 - Moblab is ready for the upcoming change in the RSA key for ChromeOS builds. ChromeOS builds will be switching to using a new private RSA key that is accessible to only Google and Partners. (Only ChromiumOS builds will have the public RSA key).
@@ -69,13 +69,13 @@ After the update you will be running Moblab version R-2.21.1
 After the update you will be running Moblab version R-2.20.2
 
 **Highlights**
-- Fix to run suite on model specified instead of just the board specified. 
+- Fix to run suite on model specified instead of just the board specified.
 - Improvements to usability of DUT management page
 
 # November 15th 2022: Moblab Patch Release
 **You should reboot your Moblab when next not running tests to get this latest version of the software.**
 
-After the update you will be running Moblab version R-2.19.2. 
+After the update you will be running Moblab version R-2.19.2.
 
 **Highlights**
 - Resolves the issue of: DUTs ending in repair_failed state
@@ -83,7 +83,7 @@ After the update you will be running Moblab version R-2.19.2.
 # September 30th 2022: Moblab Patch Release
 **You should reboot your Moblab when next not running tests to get this latest version of the software.**
 
-After the update you will be running Moblab version R-2.19.1. 
+After the update you will be running Moblab version R-2.19.1.
 
 **Highlights**
 - Removable storage qual suite now only requires 1 DUT to run
@@ -91,7 +91,7 @@ After the update you will be running Moblab version R-2.19.1.
 # September 23rd 2022: Moblab Release
 **You should reboot your Moblab when next not running tests to get this latest version of the software.**
 
-After the update you will be running Moblab version R-2.19.0. 
+After the update you will be running Moblab version R-2.19.0.
 
 **Highlights**
 - Added a CUJ tab to the Run Suite tab
@@ -101,7 +101,7 @@ After the update you will be running Moblab version R-2.19.0.
 # September 2nd 2022: Moblab Release
 **You should reboot your Moblab when next not running tests to get this latest version of the software.**
 
-After the update you will be running Moblab version R-2.18.5. 
+After the update you will be running Moblab version R-2.18.5.
 
 **Highlights**
 - Removing legacy Storage Qual from the Run Suite tab
@@ -114,7 +114,7 @@ After the update you will be running Moblab version R-2.18.5.
 After the update you will be running Moblab version R-2.17.3 (from previous R-2.17.2)
 
 **Highlights**
-This patch fixes an issue with provisioning by upgrading the devserver component and resolving a CTS test failure. 
+This patch fixes an issue with provisioning by upgrading the devserver component and resolving a CTS test failure.
 
 # June 24th 2022: Moblab Update
 **You should reboot your Moblab when next not running tests to get this latest version of the software.**
@@ -122,7 +122,7 @@ This patch fixes an issue with provisioning by upgrading the devserver component
 After the update you will be running Moblab version R-2.17.2
 
 **Highlights**
-This release mainly focussed on UI improvements: 
+This release mainly focussed on UI improvements:
 - Fix column sorting on Manage DUTs page
 - Display "Moblab Uptime" on top-right corner for quick access to this data
 - Add "Moblab Start Time" and some Useful links to the About page
@@ -136,7 +136,7 @@ the Moblab software; after the update you will be running Moblab version
 R-2.16.4.
 
 
-**Highlights** 
+**Highlights**
 * Support for provisioning a locally built custom OS image on a Moblab DUT (instructions: [here](https://docs.google.com/document/u/3/d/e/2PACX-1vRxmVGH43FnQx_2lbyUssQZfmxjsRn6-X7RCvI-BYzNjE9-CcO0ZSLICRRGylzHyk2Cg-Vup2VNcv0p/pub?urp=gmail_link))
 * Storage Qual test improvements for pre-qualified components
 * Robustifying the moblab start up

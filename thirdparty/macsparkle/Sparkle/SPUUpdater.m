@@ -76,6 +76,7 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
     BOOL _showingPermissionRequest;
     BOOL _loggedATSWarning;
     BOOL _loggedNoSecureKeyWarning;
+    BOOL _loggedUpdateSecurityPolicyWarning;
     BOOL _updatingMainBundle;
 }
 
@@ -155,6 +156,13 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 
 - (BOOL)startUpdater:(NSError * __autoreleasing *)error
 {
+    if (![NSThread isMainThread]) {
+        if (error != NULL) {
+            *error = [NSError errorWithDomain:SUSparkleErrorDomain code:SUInvalidUpdaterError userInfo:@{ NSLocalizedDescriptionKey: @"-[SPUUpdater startUpdater:] must be called on the main thread]"}];
+        }
+        return NO;
+    }
+    
     if (_startedUpdater) {
         return YES;
     }
@@ -169,6 +177,8 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
     
     _startedUpdater = YES;
     [self setCanCheckForUpdates:YES];
+    
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(updateAutomaticCheckSettingChanged:) name:SUUpdateAutomaticCheckSettingChangedNotification object:nil];
     
     // Start updater on next update cycle so we make sure the application invoking the updater is ready
     // This also gives the developer a cycle to check for updates before Sparkle's update cycle scheduler kicks in
@@ -344,11 +354,18 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
     if (!hasAnyPublicKey) {
         if ((feedURL != nil && !servingOverHttps) || ![SUCodeSigningVerifier bundleAtURLIsCodeSigned:[[self hostBundle] bundleURL]]) {
             if (error != NULL) {
-                *error = [NSError errorWithDomain:SUSparkleErrorDomain code:SUNoPublicDSAFoundError userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:@"For security reasons, updates need to be signed with an EdDSA key for %@. See Sparkle's documentation for more information.", hostName] }];
+                *error = [NSError errorWithDomain:SUSparkleErrorDomain code:SUNoPublicDSAFoundError userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:@"For security reasons, updates need to be signed with an EdDSA key for %@. Visit Sparkle's documentation for more information.", hostName] }];
             }
             return NO;
         } else {
-            if (_updatingMainBundle && !_loggedNoSecureKeyWarning) {
+            BOOL verifyBeforeExtraction = [_host boolForInfoDictionaryKey:SUVerifyUpdateBeforeExtractionKey];
+            
+            if (verifyBeforeExtraction) {
+                if (error != NULL) {
+                    *error = [NSError errorWithDomain:SUSparkleErrorDomain code:SUNoPublicDSAFoundError userInfo:@{ NSLocalizedDescriptionKey: [NSString stringWithFormat:@"For security reasons, updates need to be signed with an EdDSA key because %@ is specified for %@. Visit Sparkle's documentation for more information.", SUVerifyUpdateBeforeExtractionKey, hostName] }];
+                }
+                return NO;
+            } else if (_updatingMainBundle && !_loggedNoSecureKeyWarning) {
                 SULog(SULogLevelError, @"Error: Serving updates without an EdDSA key and only using Apple Code Signing is deprecated and may be unsupported in a future release. Visit Sparkle's documentation for more information: https://sparkle-project.org/documentation/#3-segue-for-security-concerns");
                 
                 _loggedNoSecureKeyWarning = YES;
@@ -365,6 +382,14 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
     }
 #endif // VIVALDI_SIGNED_BUILD
     
+    if (_updatingMainBundle) {
+        if (!_loggedUpdateSecurityPolicyWarning && mainBundleHost.hasUpdateSecurityPolicy) {
+            SULog(SULogLevelDefault, @"Warning: %@ has a custom NSUpdateSecurityPolicy in its Info.plist. This may cause issues when installing updates. Please consider removing this key for your builds using Sparkle if you do not really require a custom update security policy.", hostName);
+            
+            _loggedUpdateSecurityPolicyWarning = YES;
+        }
+    }
+    
     return YES;
 }
 
@@ -377,19 +402,18 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 
     id<SPUUpdaterDelegate> delegate = _delegate;
     
-    // If the user has been asked about automatic checks, don't bother prompting
+    // If the user has been asked about automatic checks or the developer has overridden the setting, don't bother prompting
     // When the user answers to the permission prompt, this will be set to either @YES or @NO instead of nil
-    if ([_host objectForUserDefaultsKey:SUEnableAutomaticChecksKey] != nil) {
+    if ([_host objectForKey:SUEnableAutomaticChecksKey] != nil) {
         shouldPrompt = NO;
     }
     // Does the delegate want to take care of the logic for when we should ask permission to update?
     else if ([delegate respondsToSelector:@selector((updaterShouldPromptForPermissionToCheckForUpdates:))]) {
         shouldPrompt = [delegate updaterShouldPromptForPermissionToCheckForUpdates:self];
     }
-    // Has the user been asked already? And don't ask if the host has a default value set in its Info.plist.
-    else if ([_host objectForKey:SUEnableAutomaticChecksKey] == nil) {
+    else {
         // We wait until the second launch of the updater for this host bundle, unless explicitly overridden via SUPromptUserOnFirstLaunchKey.
-        shouldPrompt = [_host objectForKey:SUPromptUserOnFirstLaunchKey] || hasLaunchedBefore;
+        shouldPrompt = hasLaunchedBefore || [_host boolForInfoDictionaryKey:SUPromptUserOnFirstLaunchKey];
     }
     
     if (!hasLaunchedBefore) {
@@ -410,7 +434,9 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
         
         _showingPermissionRequest = YES;
         [self setSessionInProgress:YES];
-        [self setCanCheckForUpdates:YES];
+        
+        BOOL canShowUserDriverInFocusDuringPermissionPrompt = [_userDriver respondsToSelector:@selector(showUpdateInFocus)];
+        [self setCanCheckForUpdates:canShowUserDriverInFocusDuringPermissionPrompt];
         
         __weak __typeof__(self) weakSelf = self;
         [_userDriver showUpdatePermissionRequest:updatePermissionRequest reply:^(SUUpdatePermissionResponse *response) {
@@ -421,6 +447,11 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
                     strongSelf->_showingPermissionRequest = NO;
                     
                     [strongSelf updatePermissionRequestFinishedWithResponse:response];
+                    
+                    if (!canShowUserDriverInFocusDuringPermissionPrompt) {
+                        [strongSelf setCanCheckForUpdates:YES];
+                    }
+                    
                     // Schedule checks, but make sure we ignore the delayed call from KVO
                     [strongSelf resetUpdateCycle];
                 }
@@ -447,6 +478,10 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 
 - (NSDate *)lastUpdateCheckDate
 {
+    if (![NSThread isMainThread]) {
+        SULog(SULogLevelError, @"Error: -[SPUUpdater lastUpdateCheckDate] must be called on the main thread.");
+    }
+    
     if (_updateLastCheckedDate == nil)
     {
         _updateLastCheckedDate = [_host objectForUserDefaultsKey:SULastCheckTimeKey];
@@ -609,6 +644,16 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 // Sparkle internally uses _checkForUpdatesInBackground
 - (void)checkForUpdatesInBackground
 {
+    if (![NSThread isMainThread]) {
+        SULog(SULogLevelError, @"Error: -[SPUUpdater checkForUpdatesInBackground] can only be called on the main thread");
+        
+        // Try to be nice and dispatch on main thread anyway
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self checkForUpdatesInBackground];
+        });
+        return;
+    }
+
     if (!_startedUpdater) {
         SULog(SULogLevelError, @"Error: checkForUpdatesInBackground - updater hasn't been started yet. Please call -startUpdater: first");
         return;
@@ -636,9 +681,24 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 
 - (void)checkForUpdates
 {
+    if (![NSThread isMainThread]) {
+        SULog(SULogLevelError, @"Error: -[SPUUpdater checkForUpdates] can only be called on the main thread");
+        
+        // Try to be nice and dispatch on main thread anyway
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self checkForUpdates];
+        });
+        
+        return;
+    }
+
     if (_showingPermissionRequest || _driver.showingUpdate) {
         if ([_userDriver respondsToSelector:@selector(showUpdateInFocus)]) {
             [_userDriver showUpdateInFocus];
+        } else {
+            NSString *noticeType = _showingPermissionRequest ? @"permission request" : @"update";
+            
+            SULog(SULogLevelError, @"Error: checkForUpdates called but %@ is being shown and %@ does not implement -[SPUUserDriver showUpdateInFocus]", noticeType, _userDriver);
         }
         return;
     }
@@ -678,6 +738,17 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 
 - (void)checkForUpdateInformation
 {
+    if (![NSThread isMainThread]) {
+        SULog(SULogLevelError, @"Error: -[SPUUpdater checkForUpdateInformation] can only be called on the main thread");
+        
+        // Try to be nice and dispatch on main thread anyway
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self checkForUpdateInformation];
+        });
+        
+        return;
+    }
+
     __weak __typeof__(self) weakSelf = self;
     if (!_startedUpdater) {
         SULog(SULogLevelError, @"Error: checkForUpdateInformation - updater hasn't been started yet. Please call -startUpdater: first");
@@ -804,6 +875,11 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
             [strongSelf setSessionInProgress:NO];
             [strongSelf setCanCheckForUpdates:YES];
             
+            if (!strongSelf->_updatingMainBundle && error == nil && !shouldShowUpdateImmediately && resumableUpdate == nil) {
+                // If we're not updating the main bundle, a potentially new installed bundle may have different info
+                [NSNotificationCenter.defaultCenter postNotificationName:SUUpdateSettingsNeedsSynchronizationNotification object:nil userInfo:@{SUUpdateBundlePathUserInfoKey: strongSelf->_host.bundlePath}];
+            }
+            
             notifyDelegateOfDriverCompletion(error, shouldShowUpdateImmediately);
             
             // Ensure the delegate doesn't start a new session when being notified of the previous one ending
@@ -813,9 +889,11 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
         }
     }];
     
-    [_driver setUpdateShownHandler:^{
-        weakSelf.canCheckForUpdates = YES;
-    }];
+    if ([_userDriver respondsToSelector:@selector(showUpdateInFocus)]) {
+        [_driver setUpdateShownHandler:^{
+            weakSelf.canCheckForUpdates = YES;
+        }];
+    }
     
     [_driver setUpdateWillInstallHandler:^{
         [weakSelf updateLastUpdateCheckDate];
@@ -860,6 +938,16 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 
 - (void)resetUpdateCycle
 {
+    if (![NSThread isMainThread]) {
+        SULog(SULogLevelError, @"Error: -[SPUUpdater resetUpdateCycle] must be called on the main thread.");
+        
+        // Try to be nice and dispatch on main thread anyway
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self resetUpdateCycle];
+        });
+        return;
+    }
+    
     if (!_startedUpdater) {
         SULog(SULogLevelError, @"Error: resetUpdateCycle - updater hasn't been started yet. Please call -startUpdater: first");
         return; // not even ready yet
@@ -898,38 +986,87 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 
 - (void)resetUpdateCycleAfterShortDelay
 {
+    if (![NSThread isMainThread]) {
+        SULog(SULogLevelError, @"Error: -[SPUUpdater resetUpdateCycleAfterShortDelay] must be called on the main thread.");
+        
+        // Try to be nice and dispatch on main thread anyway
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self resetUpdateCycleAfterShortDelay];
+        });
+        return;
+    }
+    
     [self cancelNextUpdateCycle];
     [_updaterCycle resetUpdateCycleAfterDelay];
 }
 
 - (void)setAutomaticallyChecksForUpdates:(BOOL)automaticallyCheckForUpdates
 {
-    [_host setBool:automaticallyCheckForUpdates forUserDefaultsKey:SUEnableAutomaticChecksKey];
-    // Hack to support backwards compatibility with older Sparkle versions, which supported
-    // disabling updates by setting the check interval to 0.
-    if (automaticallyCheckForUpdates && (NSInteger)[self updateCheckInterval] == 0) {
-        [self setUpdateCheckInterval:SUDefaultUpdateCheckInterval];
+    if (![NSThread isMainThread]) {
+        SULog(SULogLevelError, @"Error: -[SPUUpdater setAutomaticallyChecksForUpdates:] must be called on the main thread.");
     }
     
-    if (_startedUpdater) {
+    _updaterSettings.automaticallyChecksForUpdates = automaticallyCheckForUpdates;
+}
+
+- (BOOL)automaticallyChecksForUpdates
+{
+    if (![NSThread isMainThread]) {
+        SULog(SULogLevelError, @"Error: -[SPUUpdater automaticallyChecksForUpdates] must be called on the main thread.");
+    }
+    
+    return [_updaterSettings automaticallyChecksForUpdates];
+}
+
+- (void)updateAutomaticCheckSettingChanged:(NSNotification *)notification
+{
+    NSString *bundlePath = notification.userInfo[SUUpdateBundlePathUserInfoKey];
+    if (![bundlePath isEqualToString:_host.bundlePath]) {
+        return;
+    }
+    
+    if (_startedUpdater && !_sessionInProgress) {
         // Provide a small delay in case multiple preferences are being updated simultaneously.
         [self resetUpdateCycleAfterShortDelay];
     }
 }
 
-- (BOOL)automaticallyChecksForUpdates
++ (NSSet<NSString *> *)keyPathsForValuesAffectingAutomaticallyChecksForUpdates
 {
-    return [_updaterSettings automaticallyChecksForUpdates];
+    return [NSSet setWithObject:@"updaterSettings.automaticallyChecksForUpdates"];
+}
+
++ (BOOL)automaticallyNotifiesObserversOfAutomaticallyChecksForUpdates
+{
+    return NO;
 }
 
 - (void)setAutomaticallyDownloadsUpdates:(BOOL)automaticallyUpdates
 {
-    [_host setBool:automaticallyUpdates forUserDefaultsKey:SUAutomaticallyUpdateKey];
+    if (![NSThread isMainThread]) {
+        SULog(SULogLevelError, @"Error: -[SPUUpdater setAutomaticallyDownloadsUpdates:] must be called on the main thread.");
+    }
+    
+    _updaterSettings.automaticallyDownloadsUpdates = automaticallyUpdates;
 }
 
 - (BOOL)automaticallyDownloadsUpdates
 {
-    return [_updaterSettings allowsAutomaticUpdates] && [_updaterSettings automaticallyDownloadsUpdates];
+    if (![NSThread isMainThread]) {
+        SULog(SULogLevelError, @"Error: -[SPUUpdater automaticallyDownloadsUpdates] must be called on the main thread.");
+    }
+    
+    return [_updaterSettings automaticallyDownloadsUpdates];
+}
+
++ (NSSet<NSString *> *)keyPathsForValuesAffectingAutomaticallyDownloadsUpdates
+{
+    return [NSSet setWithObject:@"updaterSettings.automaticallyDownloadsUpdates"];
+}
+
++ (BOOL)automaticallyNotifiesObserversOfAutomaticallyDownloadsUpdates
+{
+    return NO;
 }
 
 - (void)setFeedURL:(NSURL * _Nullable)feedURL
@@ -1046,12 +1183,30 @@ NSString *const SUUpdaterAppcastNotificationKey = @"SUUpdaterAppCastNotification
 
 - (void)setSendsSystemProfile:(BOOL)sendsSystemProfile
 {
-    [_host setBool:sendsSystemProfile forUserDefaultsKey:SUSendProfileInfoKey];
+    if (![NSThread isMainThread]) {
+        SULog(SULogLevelError, @"Error: -[SPUUpdater setSendsSystemProfile:] must be called on the main thread.");
+    }
+    
+    _updaterSettings.sendsSystemProfile = sendsSystemProfile;
 }
 
 - (BOOL)sendsSystemProfile
 {
+    if (![NSThread isMainThread]) {
+        SULog(SULogLevelError, @"Error: -[SPUUpdater sendsSystemProfile] must be called on the main thread.");
+    }
+    
     return [_updaterSettings sendsSystemProfile];
+}
+
++ (NSSet<NSString *> *)keyPathsForValuesAffectingSendsSystemProfile
+{
+    return [NSSet setWithObject:@"updaterSettings.sendsSystemProfile"];
+}
+
++ (BOOL)automaticallyNotifiesObserversOfSendsSystemProfile
+{
+    return NO;
 }
 
 static NSString *escapeURLComponent(NSString *str) {
@@ -1073,12 +1228,17 @@ static NSString *escapeURLComponent(NSString *str) {
     BOOL sendingSystemProfile = [self sendsSystemProfile];
 
     // Let's only send the system profiling information once per week at most, so we normalize daily-checkers vs. biweekly-checkers and the such.
-    NSDate *lastSubmitDate = [_host objectForUserDefaultsKey:SULastProfileSubmitDateKey];
-    if (!lastSubmitDate) {
-        lastSubmitDate = [NSDate distantPast];
+    if (sendingSystemProfile) {
+        NSDate *lastSubmitDate = [_host objectForUserDefaultsKey:SULastProfileSubmitDateKey];
+        if (!lastSubmitDate) {
+            lastSubmitDate = [NSDate distantPast];
+        }
+        const NSTimeInterval oneWeek = 60 * 60 * 24 * 7;
+        NSTimeInterval timeSinceLastSubmission = [lastSubmitDate timeIntervalSinceNow] * -1;
+        if (timeSinceLastSubmission < oneWeek) {
+            sendingSystemProfile = NO;
+        }
     }
-    const NSTimeInterval oneWeek = 60 * 60 * 24 * 7;
-    sendingSystemProfile &= (-[lastSubmitDate timeIntervalSinceNow] >= oneWeek);
 
     id<SPUUpdaterDelegate> delegate = _delegate;
     NSArray<NSDictionary<NSString *, NSString *> *> *parameters = @[];
@@ -1136,24 +1296,38 @@ static NSString *escapeURLComponent(NSString *str) {
 
 - (void)setUpdateCheckInterval:(NSTimeInterval)updateCheckInterval
 {
-    [_host setObject:@(updateCheckInterval) forUserDefaultsKey:SUScheduledCheckIntervalKey];
-    if ((NSInteger)updateCheckInterval == 0) { // For compatibility with 1.1's settings.
-        [self setAutomaticallyChecksForUpdates:NO];
+    if (![NSThread isMainThread]) {
+        SULog(SULogLevelError, @"Error: -[SPUUpdater setUpdateCheckInterval:] must be called on the main thread.");
     }
     
-    if (_startedUpdater) {
-        // Provide a small delay in case multiple preferences are being updated simultaneously.
-        [self resetUpdateCycleAfterShortDelay];
-    }
+    _updaterSettings.updateCheckInterval = updateCheckInterval;
 }
 
 - (NSTimeInterval)updateCheckInterval
 {
+    if (![NSThread isMainThread]) {
+        SULog(SULogLevelError, @"Error: -[SPUUpdater updateCheckInterval] must be called on the main thread.");
+    }
+    
     return [_updaterSettings updateCheckInterval];
+}
+
++ (NSSet<NSString *> *)keyPathsForValuesAffectingUpdateCheckInterval
+{
+    return [NSSet setWithObject:@"updaterSettings.updateCheckInterval"];
+}
+
++ (BOOL)automaticallyNotifiesObserversOfUpdateCheckInterval
+{
+    return NO;
 }
 
 - (void)dealloc
 {
+    if (_startedUpdater) {
+        [NSNotificationCenter.defaultCenter removeObserver:self name:SUUpdateAutomaticCheckSettingChangedNotification object:nil];
+    }
+    
     // Stop checking for updates
     [self cancelNextUpdateCycle];
     [_updaterTimer invalidate];

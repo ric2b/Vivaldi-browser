@@ -23,7 +23,7 @@ import org.chromium.base.FeatureList;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
-import org.chromium.components.content_settings.ContentSettingValues;
+import org.chromium.components.content_settings.ContentSetting;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.content_settings.CookieControlsMode;
 import org.chromium.device.DeviceFeatureList;
@@ -47,8 +47,8 @@ public class ContentSettingsResources {
         private final int mIcon;
         private final int mIconBlocked;
         private final int mTitle;
-        private final @ContentSettingValues @Nullable Integer mDefaultEnabledValue;
-        private final @ContentSettingValues @Nullable Integer mDefaultDisabledValue;
+        private final @ContentSetting @Nullable Integer mDefaultEnabledValue;
+        private final @ContentSetting @Nullable Integer mDefaultDisabledValue;
         private final int mEnabledSummary;
         private final int mDisabledSummary;
         private final int mSummaryOverrideForScreenReader;
@@ -59,8 +59,8 @@ public class ContentSettingsResources {
         ResourceItem(
                 int icon,
                 int title,
-                @ContentSettingValues @Nullable Integer defaultEnabledValue,
-                @ContentSettingValues @Nullable Integer defaultDisabledValue,
+                @ContentSetting @Nullable Integer defaultEnabledValue,
+                @ContentSetting @Nullable Integer defaultDisabledValue,
                 int enabledSummary,
                 int disabledSummary,
                 int summaryOverrideForScreenReader,
@@ -92,11 +92,11 @@ public class ContentSettingsResources {
             return mTitle;
         }
 
-        private @ContentSettingValues @Nullable Integer getDefaultEnabledValue() {
+        private @ContentSetting @Nullable Integer getDefaultEnabledValue() {
             return mDefaultEnabledValue;
         }
 
-        private @ContentSettingValues @Nullable Integer getDefaultDisabledValue() {
+        private @ContentSetting @Nullable Integer getDefaultDisabledValue() {
             return mDefaultDisabledValue;
         }
 
@@ -153,8 +153,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.web_asset,
                         R.string.site_settings_page_intrusive_ads_label,
-                        ContentSettingValues.ALLOW,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ALLOW,
+                        ContentSetting.BLOCK,
                         R.string.site_settings_page_intrusive_allowed_sub_label,
                         R.string.site_settings_page_intrusive_blocked_sub_label,
                         R.string.site_settings_page_intrusive_ads_a11y,
@@ -166,8 +166,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.ic_account_attention,
                         R.string.anti_abuse_permission_title,
-                        ContentSettingValues.ALLOW,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ALLOW,
+                        ContentSetting.BLOCK,
                         R.string.anti_abuse_description,
                         R.string.anti_abuse_description,
                         0,
@@ -179,8 +179,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.gm_filled_cardboard_24,
                         R.string.ar_permission_title,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_ar_ask,
                         R.string.website_settings_category_ar_blocked,
                         R.string.website_settings_category_ar_a11y,
@@ -192,8 +192,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.download_24px,
                         R.string.automatic_downloads_permission_title,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_ask,
                         0,
                         R.string.website_settings_category_automatic_downloads_a11y,
@@ -205,8 +205,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.ic_brightness_medium_24dp,
                         R.string.auto_dark_web_content_title,
-                        ContentSettingValues.ALLOW,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ALLOW,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_auto_dark_allowed,
                         R.string.website_settings_category_auto_dark_blocked,
                         0,
@@ -218,8 +218,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.picture_in_picture_24px,
                         R.string.auto_picture_in_picture_permission_title,
-                        ContentSettingValues.ALLOW,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ALLOW,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_automatic_picture_in_picture_allowed,
                         R.string.website_settings_category_automatic_picture_in_picture_blocked,
                         R.string.website_settings_category_automatic_picture_in_picture_a11y,
@@ -231,8 +231,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                                 R.drawable.sync_24px,
                                 R.string.background_sync_permission_title,
-                                ContentSettingValues.ALLOW,
-                                ContentSettingValues.BLOCK,
+                                ContentSetting.ALLOW,
+                                ContentSetting.BLOCK,
                                 R.string.website_settings_category_allowed_recommended,
                                 0,
                                 R.string.website_settings_category_background_sync_a11y,
@@ -246,8 +246,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.settings_bluetooth,
                         0,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         0,
                         0,
                         0,
@@ -259,8 +259,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.settings_bluetooth,
                         R.string.website_settings_bluetooth,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_bluetooth_ask,
                         R.string.website_settings_category_bluetooth_blocked,
                         R.string.website_settings_category_bluetooth_a11y,
@@ -272,8 +272,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.gm_filled_bluetooth_searching_24,
                         R.string.website_settings_bluetooth_scanning,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_bluetooth_scanning_ask,
                         0,
                         R.string.website_settings_category_bluetooth_scanning_a11y,
@@ -285,8 +285,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.gm_filled_content_paste_24,
                         R.string.clipboard_permission_title,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_clipboard_ask,
                         R.string.website_settings_category_clipboard_blocked,
                         R.string.website_settings_category_clipboard_a11y,
@@ -298,8 +298,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.gm_database_24,
                         R.string.site_data_page_title,
-                        ContentSettingValues.ALLOW,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ALLOW,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_site_data_page_toggle_sub_label_allow,
                         R.string.website_settings_site_data_page_toggle_sub_label_block,
                         R.string.website_settings_site_data_page_a11y,
@@ -311,8 +311,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.ic_account_circle_24dp,
                         R.string.website_settings_federated_identity,
-                        ContentSettingValues.ALLOW,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ALLOW,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_federated_identity_allowed,
                         R.string.website_settings_category_federated_identity_blocked,
                         R.string.website_settings_category_federated_identity_a11y,
@@ -324,8 +324,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.ic_file_save_24,
                         R.string.website_settings_file_system_write_guard_title,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         0,
                         0,
                         0,
@@ -333,12 +333,12 @@ public class ContentSettingsResources {
                         R.string.website_settings_file_editing_ask,
                         R.string.website_settings_file_editing_block);
 
-            case ContentSettingsType.GEOLOCATION:
+            case ContentSettingsType.GEOLOCATION, ContentSettingsType.GEOLOCATION_WITH_OPTIONS:
                 return new ResourceItem(
                         R.drawable.gm_filled_location_on_24,
                         R.string.website_settings_device_location,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_location_ask,
                         0,
                         R.string.website_settings_category_location_a11y,
@@ -350,8 +350,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.gm_filled_hand_gesture_24,
                         R.string.hand_tracking_permission_title,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_hand_tracking_ask,
                         R.string.website_settings_category_hand_tracking_blocked,
                         R.string.website_settings_category_hand_tracking_a11y,
@@ -363,8 +363,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.gm_filled_devices_24,
                         R.string.website_settings_idle_detection,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_idle_detection_ask,
                         R.string.website_settings_category_idle_detection_blocked,
                         R.string.website_settings_category_idle_detection_a11y,
@@ -376,8 +376,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.code_24px,
                         R.string.javascript_permission_title,
-                        ContentSettingValues.ALLOW,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ALLOW,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_javascript_allowed,
                         0,
                         R.string.website_settings_category_javascript_a11y,
@@ -389,8 +389,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.settings_v8,
                         R.string.website_settings_javascript_optimizer_link_row_label,
-                        ContentSettingValues.ALLOW,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ALLOW,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_javascript_optimizer_toggle,
                         R.string.website_settings_category_javascript_optimizer_toggle,
                         R.string.website_settings_category_javascript_optimizer_a11y,
@@ -402,8 +402,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.router_24,
                         R.string.local_network_access_permission_title,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_local_network_access_ask,
                         R.string.website_settings_category_local_network_access_blocked,
                         R.string.website_settings_category_local_network_access_a11y,
@@ -414,8 +414,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                                 R.drawable.gm_filled_videocam_24,
                                 R.string.website_settings_use_camera,
-                                ContentSettingValues.ASK,
-                                ContentSettingValues.BLOCK,
+                                ContentSetting.ASK,
+                                ContentSetting.BLOCK,
                                 R.string.website_settings_category_camera_ask,
                                 0,
                                 R.string.website_settings_category_camera_a11y,
@@ -429,8 +429,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                                 R.drawable.gm_filled_mic_24,
                                 R.string.website_settings_use_mic,
-                                ContentSettingValues.ASK,
-                                ContentSettingValues.BLOCK,
+                                ContentSetting.ASK,
+                                ContentSetting.BLOCK,
                                 R.string.website_settings_category_mic_ask,
                                 0,
                                 R.string.website_settings_category_mic_a11y,
@@ -457,8 +457,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.gm_filled_nfc_24,
                         R.string.nfc_permission_title,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_nfc_ask,
                         R.string.website_settings_category_nfc_blocked,
                         R.string.website_settings_category_nfc_a11y,
@@ -470,8 +470,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.gm_filled_notifications_24,
                         R.string.push_notifications_permission_title,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_notifications_ask,
                         0,
                         R.string.website_settings_category_notifications_a11y,
@@ -483,8 +483,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.permission_popups,
                         R.string.popup_permission_title,
-                        ContentSettingValues.ALLOW,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ALLOW,
+                        ContentSetting.BLOCK,
                         0,
                         R.string.website_settings_category_popups_redirects_blocked,
                         R.string.website_settings_category_popups_redirects_a11y,
@@ -498,8 +498,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.permission_protected_media,
                         R.string.protected_content,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         0,
                         0,
                         0,
@@ -511,8 +511,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.ic_desktop_windows,
                         R.string.desktop_site_title,
-                        ContentSettingValues.ALLOW,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ALLOW,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_desktop_site_allowed,
                         R.string.website_settings_category_desktop_site_blocked,
                         R.string.website_settings_category_desktop_site_a11y,
@@ -548,8 +548,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                                 R.drawable.settings_sensors,
                                 sensorsPermissionTitle,
-                                ContentSettingValues.ALLOW,
-                                ContentSettingValues.BLOCK,
+                                ContentSetting.ALLOW,
+                                ContentSetting.BLOCK,
                                 sensorsAllowedDescription,
                                 sensorsBlockedDescription,
                                 sensorsScreenreaderAnnouncement,
@@ -563,8 +563,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.gm_filled_developer_board_24,
                         0,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         0,
                         0,
                         0,
@@ -576,8 +576,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.gm_filled_developer_board_24,
                         R.string.website_settings_serial_port,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_serial_port_ask,
                         R.string.website_settings_category_serial_port_blocked,
                         R.string.website_settings_category_serial_port_a11y,
@@ -589,8 +589,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                                 R.drawable.ic_volume_up_grey600_24dp,
                                 R.string.sound_permission_title,
-                                ContentSettingValues.ALLOW,
-                                ContentSettingValues.BLOCK,
+                                ContentSetting.ALLOW,
+                                ContentSetting.BLOCK,
                                 R.string.website_settings_category_sound_allowed,
                                 R.string.website_settings_category_sound_blocked,
                                 R.string.website_settings_category_sound_a11y,
@@ -604,8 +604,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.ic_storage_access_24,
                         R.string.storage_access_permission_title,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_storage_access_allowed,
                         R.string.website_settings_category_storage_access_blocked,
                         R.string.website_settings_category_storage_access_a11y,
@@ -617,8 +617,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.gm_filled_usb_24,
                         0,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         0,
                         0,
                         0,
@@ -630,8 +630,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.gm_filled_usb_24,
                         R.string.website_settings_usb,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_usb_ask,
                         R.string.website_settings_category_usb_blocked,
                         R.string.website_settings_category_usb_a11y,
@@ -643,8 +643,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.gm_filled_cardboard_24,
                         R.string.vr_permission_title,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_vr_ask,
                         R.string.website_settings_category_vr_blocked,
                         R.string.website_settings_category_vr_a11y,
@@ -656,8 +656,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.gm_filled_select_window_24,
                         R.string.window_management_permission_title,
-                        ContentSettingValues.ASK,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ASK,
+                        ContentSetting.BLOCK,
                         R.string.website_settings_category_window_management_ask,
                         R.string.website_settings_category_window_management_blocked,
                         R.string.website_settings_category_window_management_a11y,
@@ -670,8 +670,8 @@ public class ContentSettingsResources {
                 return new ResourceItem(
                         R.drawable.video_autoplay_24_dpi,
                         R.string.site_settings_autoplay_title,
-                        ContentSettingValues.ALLOW,
-                        ContentSettingValues.BLOCK,
+                        ContentSetting.ALLOW,
+                        ContentSetting.BLOCK,
                         R.string.site_settings_autoplay_allow,
                         R.string.site_settings_autoplay_block,
                         R.string.site_settings_autoplay_a11y,
@@ -694,16 +694,16 @@ public class ContentSettingsResources {
      * @param context The Context for this drawable.
      * @param contentSettingsType The ContentSettingsType for this drawable. Returns null if the
      *     resource for this type cannot be found.
-     * @param value The ContentSettingValues for this drawable. If ContentSettingValues.BLOCK, the
-     *     returned icon will have a strike through it.
+     * @param value The ContentSetting for this drawable. If ContentSetting.BLOCK, the returned icon
+     *     will have a strike through it.
      * @return A grey 24dp {@link Drawable} for this content setting.
      */
     public static @Nullable Drawable getContentSettingsIcon(
             Context context,
             @ContentSettingsType.EnumType int contentSettingsType,
-            @ContentSettingValues @Nullable Integer value) {
+            @ContentSetting @Nullable Integer value) {
         Drawable icon = SettingsUtils.getTintedIcon(context, getIcon(contentSettingsType));
-        if (value != null && value == ContentSettingValues.BLOCK) {
+        if (value != null && value == ContentSetting.BLOCK) {
             return getBlockedSquareIcon(context.getResources(), icon);
         }
         return icon;
@@ -715,15 +715,15 @@ public class ContentSettingsResources {
      * @param context The Context for this drawable.
      * @param contentSettingsType The ContentSettingsType for this drawable. Returns null if the
      *     resource for this type cannot be found.
-     * @param value The ContentSettingValues for this drawable. If ContentSettingValues.BLOCK, the
-     *     returned icon will have a strike through it.
+     * @param value The ContentSetting for this drawable. If ContentSetting.BLOCK, the returned icon
+     *     will have a strike through it.
      * @param isIncognito Whether this icon should use the incognito color scheme.
      * @return A blue 24dp {@link Drawable} for this content setting.
      */
     public static @Nullable Drawable getIconForOmnibox(
             Context context,
             @ContentSettingsType.EnumType int contentSettingsType,
-            @ContentSettingValues @Nullable Integer value,
+            @ContentSetting @Nullable Integer value,
             boolean isIncognito) {
         int color =
                 isIncognito
@@ -741,7 +741,7 @@ public class ContentSettingsResources {
         }
 
         Drawable icon = SettingsUtils.getTintedIcon(context, getIcon(contentSettingsType), color);
-        if (value != null && value == ContentSettingValues.BLOCK) {
+        if (value != null && value == ContentSetting.BLOCK) {
             return getBlockedSquareIcon(context.getResources(), icon);
         }
         return icon;
@@ -835,7 +835,7 @@ public class ContentSettingsResources {
      * Not required unless this entry describes a settings that appears on the Site Settings page
      * and has a global toggle.
      */
-    public static @ContentSettingValues @Nullable Integer getDefaultEnabledValue(int contentType) {
+    public static @ContentSetting @Nullable Integer getDefaultEnabledValue(int contentType) {
         return getResourceItem(contentType).getDefaultEnabledValue();
     }
 
@@ -844,8 +844,12 @@ public class ContentSettingsResources {
      * required unless this entry describes a settings that appears on the Site Settings page and
      * has a global toggle.
      */
-    public static @ContentSettingValues @Nullable Integer getDefaultDisabledValue(int contentType) {
+    public static @ContentSetting @Nullable Integer getDefaultDisabledValue(int contentType) {
         return getResourceItem(contentType).getDefaultDisabledValue();
+    }
+
+    public static int getCategorySummary(@ContentSetting int value, boolean isOneTime) {
+        return getCategorySummary(value, isOneTime, /* isApproximateGeolocation= */ false);
     }
 
     /**
@@ -854,15 +858,21 @@ public class ContentSettingsResources {
      * @param value The ContentSetting for which we want the resource.
      * @param isOneTime Whether the content setting value has a OneTime session model.
      */
-    public static int getCategorySummary(@ContentSettingValues int value, boolean isOneTime) {
+    public static int getCategorySummary(
+            @ContentSetting int value, boolean isOneTime, boolean isApproximateGeolocation) {
         switch (value) {
-            case ContentSettingValues.ALLOW:
+            case ContentSetting.ALLOW:
+                if (isApproximateGeolocation) {
+                    return isOneTime
+                            ? R.string.website_settings_category_approx_geo_allowed_this_time
+                            : R.string.website_settings_category_approx_geo_allowed;
+                }
                 return isOneTime
                         ? R.string.website_settings_category_allowed_this_time
                         : R.string.website_settings_category_allowed;
-            case ContentSettingValues.BLOCK:
+            case ContentSetting.BLOCK:
                 return R.string.website_settings_category_blocked;
-            case ContentSettingValues.ASK:
+            case ContentSetting.ASK:
                 return R.string.website_settings_category_ask;
             default:
                 return 0;
@@ -876,14 +886,13 @@ public class ContentSettingsResources {
      * @param contentSettingsType The ContentSettingsType for this string resource id.
      */
     public static int getSiteSummary(
-            @ContentSettingValues Integer value,
-            @ContentSettingsType.EnumType int contentSettingsType) {
+            @ContentSetting Integer value, @ContentSettingsType.EnumType int contentSettingsType) {
         switch (value) {
-            case ContentSettingValues.ALLOW:
+            case ContentSetting.ALLOW:
                 return contentSettingsType == ContentSettingsType.REQUEST_DESKTOP_SITE
                         ? R.string.website_settings_desktop_site_allow
                         : R.string.website_settings_permissions_allow;
-            case ContentSettingValues.BLOCK:
+            case ContentSetting.BLOCK:
                 return contentSettingsType == ContentSettingsType.REQUEST_DESKTOP_SITE
                         ? R.string.website_settings_desktop_site_block
                         : R.string.website_settings_permissions_block;
@@ -998,7 +1007,6 @@ public class ContentSettingsResources {
             case CookieControlsMode.BLOCK_THIRD_PARTY:
                 return R.string.third_party_cookies_link_row_sub_label_disabled;
             case CookieControlsMode.INCOGNITO_ONLY:
-                return R.string.third_party_cookies_link_row_sub_label_disabled_incognito;
             case CookieControlsMode.OFF:
                 return R.string.third_party_cookies_link_row_sub_label_enabled;
         }
@@ -1099,14 +1107,13 @@ public class ContentSettingsResources {
      * @return An integer of resource ID for permission result announcement.
      */
     public static int getPermissionResultAnnouncementForScreenReader(
-            @ContentSettingsType.EnumType int contentSettingsType,
-            @ContentSettingValues Integer value) {
-        if (value == ContentSettingValues.BLOCK) {
+            @ContentSettingsType.EnumType int contentSettingsType, @ContentSetting Integer value) {
+        if (value == ContentSetting.BLOCK) {
             switch (contentSettingsType) {
                 case ContentSettingsType.NOTIFICATIONS:
                     return R.string
                             .permissions_notification_not_allowed_confirmation_screenreader_announcement;
-                case ContentSettingsType.GEOLOCATION:
+                case ContentSettingsType.GEOLOCATION, ContentSettingsType.GEOLOCATION_WITH_OPTIONS:
                     return R.string
                             .permissions_geolocation_not_allowed_confirmation_screenreader_announcement;
                 case ContentSettingsType.MEDIASTREAM_CAMERA:
@@ -1116,9 +1123,9 @@ public class ContentSettingsResources {
                     return R.string
                             .permissions_microphone_not_allowed_confirmation_screenreader_announcement;
             }
-        } else if (value == ContentSettingValues.SESSION_ONLY) {
+        } else if (value == ContentSetting.SESSION_ONLY) {
             switch (contentSettingsType) {
-                case ContentSettingsType.GEOLOCATION:
+                case ContentSettingsType.GEOLOCATION, ContentSettingsType.GEOLOCATION_WITH_OPTIONS:
                     return R.string
                             .permissions_geolocation_allowed_once_confirmation_screenreader_announcement;
                 case ContentSettingsType.MEDIASTREAM_CAMERA:
@@ -1128,12 +1135,12 @@ public class ContentSettingsResources {
                     return R.string
                             .permissions_microphone_allowed_once_confirmation_screenreader_announcement;
             }
-        } else if (value == ContentSettingValues.ALLOW) {
+        } else if (value == ContentSetting.ALLOW) {
             switch (contentSettingsType) {
                 case ContentSettingsType.NOTIFICATIONS:
                     return R.string
                             .permissions_notification_allowed_confirmation_screenreader_announcement;
-                case ContentSettingsType.GEOLOCATION:
+                case ContentSettingsType.GEOLOCATION, ContentSettingsType.GEOLOCATION_WITH_OPTIONS:
                     return R.string
                             .permissions_geolocation_allowed_confirmation_screenreader_announcement;
                 case ContentSettingsType.MEDIASTREAM_CAMERA:

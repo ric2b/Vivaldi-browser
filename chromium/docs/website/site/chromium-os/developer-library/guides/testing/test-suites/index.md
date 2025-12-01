@@ -14,7 +14,7 @@ that are in a Test Suite.
 A test suite is a collection of tests, client and server side, that are run on a
 particular build to validate a larger system.
 
-[Design Doc](/chromium-os/developer-library/guides/testing/dynamic-test-suites)
+[Design Doc](/chromium-os/developer-library/reference/design-docs/dynamic-test-suites)
 
 Test Suites build on the Autotest [control file
 specification](http://autotest.readthedocs.org/en/latest/main/local/ControlRequirements.html).

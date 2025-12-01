@@ -10,10 +10,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Dawn Win11 arm64 DEPS Builder",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-dawn-archive",
               "builder_group": "chromium.dawn",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_chromium_config": {
@@ -37,7 +36,7 @@
         {
           "bucket": "ci",
           "builder": "Dawn Win11 arm64 DEPS Builder",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/dawn-win11-arm64-deps-rel/targets"

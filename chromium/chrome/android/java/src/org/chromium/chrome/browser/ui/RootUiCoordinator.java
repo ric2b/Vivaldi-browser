@@ -27,9 +27,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.WindowInsetsCompat;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
+import org.chromium.base.DeviceInfo;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.lifetime.Destroyable;
 import org.chromium.base.metrics.RecordUserAction;
@@ -38,7 +38,6 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneShotCallback;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.base.supplier.UnownedUserDataSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
@@ -52,6 +51,7 @@ import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.TabBookmarker;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
 import org.chromium.chrome.browser.browser_controls.TopControlsStacker;
 import org.chromium.chrome.browser.browserservices.intents.WebappConstants;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
@@ -67,6 +67,8 @@ import org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter;
 import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.device_lock.DeviceLockActivityLauncherImpl;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
+import org.chromium.chrome.browser.dom_distiller.ReaderModeBottomSheetManager;
+import org.chromium.chrome.browser.dom_distiller.ReaderModeIphController;
 import org.chromium.chrome.browser.download.DownloadMetrics.OpenWithExternalAppsSource;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.ephemeraltab.EphemeralTabCoordinator;
@@ -154,15 +156,16 @@ import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeControllerCreator;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeControllerFactory;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils;
-import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils.EdgeToEdgeDebuggingInfo;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils.MissingNavbarInsetsReason;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController.StatusBarColorProvider;
 import org.chromium.chrome.browser.wallet.BoardingPassController;
-import org.chromium.components.browser_ui.accessibility.PageZoomCoordinator;
-import org.chromium.components.browser_ui.accessibility.PageZoomCoordinatorDelegate;
+import org.chromium.components.browser_ui.accessibility.PageZoomBarCoordinator;
+import org.chromium.components.browser_ui.accessibility.PageZoomBarCoordinatorDelegate;
+import org.chromium.components.browser_ui.accessibility.PageZoomManager;
+import org.chromium.components.browser_ui.accessibility.PageZoomManagerDelegate;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerFactory;
@@ -171,14 +174,15 @@ import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.components.browser_ui.bottomsheet.ExpandedSheetHelper;
 import org.chromium.components.browser_ui.bottomsheet.ManagedBottomSheetController;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
+import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager.AppHeaderObserver;
 import org.chromium.components.browser_ui.device_lock.DeviceLockActivityLauncher;
 import org.chromium.components.browser_ui.device_lock.DeviceLockActivityLauncherSupplier;
-import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeManager;
 import org.chromium.components.browser_ui.util.ComposedBrowserControlsVisibilityDelegate;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
 import org.chromium.components.browser_ui.widget.scrim.ScrimManager.ScrimClient;
+import org.chromium.components.dom_distiller.core.DomDistillerFeatures;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.messages.DismissReason;
@@ -191,12 +195,15 @@ import org.chromium.components.ukm.UkmRecorder;
 import org.chromium.content_public.browser.ActionModeCallbackHelper;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.IntentRequestTracker;
 import org.chromium.ui.base.MimeTypeUtils;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.display.DisplayAndroid;
+import org.chromium.ui.display.DisplayUtil;
+import org.chromium.ui.edge_to_edge.EdgeToEdgeManager;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogManagerObserver;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -204,6 +211,7 @@ import org.chromium.ui.widget.Toast;
 
 import java.lang.ref.WeakReference;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -249,8 +257,6 @@ public class RootUiCoordinator
 
     protected final ActivityTabProvider mActivityTabProvider;
     protected ObservableSupplier<ShareDelegate> mShareDelegateSupplier;
-    protected final OneshotSupplierImpl<DesktopWindowStateManager>
-            mDesktopWindowStateManagerSupplier = new OneshotSupplierImpl<>();
 
     protected @Nullable FindToolbarManager mFindToolbarManager;
     private @Nullable FindToolbarObserver mFindToolbarObserver;
@@ -327,11 +333,6 @@ public class RootUiCoordinator
     protected StatusBarColorController mStatusBarColorController;
     protected final Supplier<SnackbarManager> mSnackbarManagerSupplier;
     protected final ObservableSupplierImpl<EdgeToEdgeController> mEdgeToEdgeControllerSupplier;
-    private final EdgeToEdgeDebuggingInfo mEdgeToEdgeDebuggingInfo =
-            new EdgeToEdgeDebuggingInfo(
-                    (info) ->
-                            ChromePureJavaExceptionReporter.reportJavaExceptionFromMsg(
-                                    info, /* isWarning= */ true));
     protected Destroyable mEdgeToEdgeBottomChin;
     protected final @ActivityType int mActivityType;
     protected final Supplier<Boolean> mIsInOverviewModeSupplier;
@@ -349,7 +350,8 @@ public class RootUiCoordinator
     protected final TopControlsStacker mTopControlsStacker;
     @NonNull protected final ObservableSupplier<Integer> mOverviewColorSupplier;
     @Nullable private ContextualSearchObserver mReadAloudContextualSearchObserver;
-    @Nullable private PageZoomCoordinator mPageZoomCoordinator;
+    @Nullable private PageZoomBarCoordinator mPageZoomCoordinator;
+    @Nullable private ReaderModeBottomSheetManager mReaderModeBottomSheetManager;
     private AppMenuObserver mAppMenuObserver;
 
     private final OneshotSupplierImpl<ToolbarManager> mToolbarManagerOneshotSupplier =
@@ -366,7 +368,12 @@ public class RootUiCoordinator
     private final boolean mIsTablet;
     private final ObservableSupplierImpl<TopInsetCoordinator> mTopInsetCoordinatorSupplier;
     private @Nullable ToolbarControlContainer mToolbarContainer;
+    private @Nullable DesktopWindowStateManager mDesktopWindowStateManager;
     private final ExclusiveAccessManager mExclusiveAccessManager;
+    private final PageZoomManager mPageZoomManager;
+    private @Nullable AppHeaderObserver mAppHeaderObserver;
+    protected final ObservableSupplierImpl<ReaderModeIphController>
+            mReaderModeIphControllerSupplier = new ObservableSupplierImpl<>();
 
     /** Vivaldi **/
     protected PanelManager mPanelManager;
@@ -420,6 +427,7 @@ public class RootUiCoordinator
      * @param edgeToEdgeManager Manages core edge-to-edge state and logic.
      * @param xrSpaceModeObservableSupplier Supplies current XR space mode status. True for XR full
      *     space mode, false otherwise.
+     * @param desktopWindowStateManager Tracks whether in desktop windowing mode
      */
     public RootUiCoordinator(
             @NonNull AppCompatActivity activity,
@@ -463,7 +471,8 @@ public class RootUiCoordinator
             @Nullable Bundle savedInstanceState,
             @NonNull ObservableSupplier<Integer> overviewColorSupplier,
             @NonNull EdgeToEdgeManager edgeToEdgeManager,
-            @Nullable ObservableSupplier<Boolean> xrSpaceModeObservableSupplier) {
+            @Nullable ObservableSupplier<Boolean> xrSpaceModeObservableSupplier,
+            @Nullable DesktopWindowStateManager desktopWindowStateManager) {
         mCallbackController = new CallbackController();
         mActivity = activity;
         mWindowAndroid = windowAndroid;
@@ -550,6 +559,7 @@ public class RootUiCoordinator
                         shouldAllowBrightThemeColors(),
                         shouldAllowThemingOnTablets());
 
+        mDesktopWindowStateManager = desktopWindowStateManager;
         mStatusBarColorController =
                 new StatusBarColorController(
                         mActivity.getWindow(),
@@ -561,18 +571,16 @@ public class RootUiCoordinator
                         mActivityTabProvider,
                         mTopUiThemeColorProvider,
                         edgeToEdgeManager.getEdgeToEdgeSystemBarColorHelper(),
-                        mDesktopWindowStateManagerSupplier,
-                        mOverviewColorSupplier);
+                        mDesktopWindowStateManager,
+                        mOverviewColorSupplier,
+                        NtpCustomizationUtils.canEnableEdgeToEdgeForCustomizedTheme(mIsTablet));
         mEphemeralTabCoordinatorSupplier = ephemeralTabCoordinatorSupplier;
-
-        mPageZoomCoordinator =
-                new PageZoomCoordinator(
-                        new PageZoomCoordinatorDelegate() {
+        mPageZoomManager =
+                new PageZoomManager(
+                        new PageZoomManagerDelegate() {
                             @Override
-                            public View getZoomControlView() {
-                                ViewStub viewStub =
-                                        mActivity.findViewById(R.id.page_zoom_container);
-                                return viewStub.inflate();
+                            public WebContents getWebContents() {
+                                return mActivityTabProvider.get().getWebContents();
                             }
 
                             @Override
@@ -580,6 +588,20 @@ public class RootUiCoordinator
                                 return mProfileSupplier.get().getOriginalProfile();
                             }
                         });
+
+        mPageZoomCoordinator =
+                new PageZoomBarCoordinator(
+                        new PageZoomBarCoordinatorDelegate() {
+                            @Override
+                            public View getZoomControlView() {
+                                ViewStub viewStub =
+                                        mActivity.findViewById(R.id.page_zoom_container);
+                                return viewStub.inflate();
+                            }
+                        },
+                        mPageZoomManager,
+                        /* useSlider= */ ChromeFeatureList.sAndroidSettingsContainment.isEnabled());
+
         mActivityRecreationController =
                 new ActivityRecreationController(
                         mToolbarManagerOneshotSupplier,
@@ -597,9 +619,35 @@ public class RootUiCoordinator
 
         if (ChromeFeatureList.sEnableExclusiveAccessManager.isEnabled()) {
             mExclusiveAccessManager =
-                    new ExclusiveAccessManager(mFullscreenManager, mActivityTabProvider);
+                    new ExclusiveAccessManager(
+                            mActivity,
+                            mFullscreenManager,
+                            mActivityTabProvider,
+                            mDesktopWindowStateManager);
         } else {
             mExclusiveAccessManager = null;
+        }
+
+        if (ChromeFeatureList.sLockTopControlsOnLargeTabletsV2.isEnabled()) {
+
+            if (DeviceInfo.isDesktop()
+                    || BrowserControlsUtils.doSyncMinHeightWithTotalHeight(mActivity)) {
+                mTopControlsStacker.setScrollingDisabled(true);
+            } else if (mDesktopWindowStateManager != null) {
+                mAppHeaderObserver =
+                        new AppHeaderObserver() {
+                            @Override
+                            public void onDesktopWindowingModeChanged(boolean isInDesktopWindow) {
+                                mTopControlsStacker.setScrollingDisabled(isInDesktopWindow);
+                            }
+                        };
+                mDesktopWindowStateManager.addObserver(mAppHeaderObserver);
+                var appHeaderState = mDesktopWindowStateManager.getAppHeaderState();
+                if (appHeaderState != null) {
+                    mAppHeaderObserver.onDesktopWindowingModeChanged(
+                            appHeaderState.isInDesktopWindow());
+                }
+            }
         }
     }
 
@@ -624,7 +672,7 @@ public class RootUiCoordinator
      * @return The {@link DesktopWindowStateManager} instance associated with the current activity.
      */
     public @Nullable DesktopWindowStateManager getDesktopWindowStateManager() {
-        return null;
+        return mDesktopWindowStateManager;
     }
 
     public void onAttachFragment(Fragment fragment) {
@@ -707,8 +755,9 @@ public class RootUiCoordinator
 
         if (mFindToolbarManager != null) mFindToolbarManager.removeObserver(mFindToolbarObserver);
 
-        if (mModalDialogManagerObserver != null && mModalDialogManagerSupplier.hasValue()) {
-            mModalDialogManagerSupplier.get().removeObserver(mModalDialogManagerObserver);
+        var modalDialogManager = mModalDialogManagerSupplier.get();
+        if (mModalDialogManagerObserver != null && modalDialogManager != null) {
+            modalDialogManager.removeObserver(mModalDialogManagerObserver);
         }
 
         if (mBottomSheetManager != null) mBottomSheetManager.onDestroy();
@@ -728,8 +777,9 @@ public class RootUiCoordinator
             mCaptureController = null;
         }
 
-        if (mMerchantTrustSignalsCoordinatorSupplier.hasValue()) {
-            mMerchantTrustSignalsCoordinatorSupplier.get().destroy();
+        var merchantTrustSignalsCoordinator = mMerchantTrustSignalsCoordinatorSupplier.get();
+        if (merchantTrustSignalsCoordinator != null) {
+            merchantTrustSignalsCoordinator.destroy();
             mMerchantTrustSignalsCoordinatorSupplier.set(null);
         }
 
@@ -760,19 +810,20 @@ public class RootUiCoordinator
             mRestoreTabsFeatureHelper = null;
         }
 
-        if (mReadAloudControllerSupplier.hasValue()) {
+        var readAloudController = mReadAloudControllerSupplier.get();
+        if (readAloudController != null) {
             ContextualSearchManager contextualSearchManager =
                     mContextualSearchManagerSupplier.get();
             if (contextualSearchManager != null) {
                 contextualSearchManager.removeObserver(mReadAloudContextualSearchObserver);
             }
-            var readAloudController = mReadAloudControllerSupplier.get();
             mReadAloudControllerSupplier.set(null);
             readAloudController.destroy();
         }
 
-        if (mContextualSearchManagerSupplier.hasValue()) {
-            mContextualSearchManagerSupplier.get().destroy();
+        var manager = mContextualSearchManagerSupplier.get();
+        if (manager != null) {
+            manager.destroy();
             mContextualSearchManagerSupplier.set(null);
         }
 
@@ -791,13 +842,19 @@ public class RootUiCoordinator
             mEdgeToEdgeBottomChin.destroy();
         }
 
-        if (mTopInsetCoordinatorSupplier.hasValue()) {
-            mTopInsetCoordinatorSupplier.get().destroy();
+        var topInsetCoordinator = mTopInsetCoordinatorSupplier.get();
+        if (topInsetCoordinator != null) {
+            topInsetCoordinator.destroy();
         }
 
         if (mBoardingPassController != null) {
             mBoardingPassController.destroy();
             mBoardingPassController = null;
+        }
+
+        if (mReaderModeBottomSheetManager != null) {
+            mReaderModeBottomSheetManager.destroy();
+            mReaderModeBottomSheetManager = null;
         }
 
         if (mAutomotiveBackButtonToolbarCoordinator != null) {
@@ -807,12 +864,21 @@ public class RootUiCoordinator
         mBottomControlsStacker.destroy();
         mTopControlsStacker.destroy();
 
+        if (mDesktopWindowStateManager != null) {
+            if (mAppHeaderObserver != null) {
+                mDesktopWindowStateManager.removeObserver(mAppHeaderObserver);
+                mAppHeaderObserver = null;
+            }
+            mDesktopWindowStateManager.destroy();
+            mDesktopWindowStateManager = null;
+        }
+
         if (ChromeApplicationImpl.isVivaldi()) {
             if (mPanelManager != null) {
                 mPanelManager.onDestroyed();
                 mPanelManager = null;
             }
-        }
+        } // End Vivaldi 
 
         mActivity = null;
     }
@@ -852,7 +918,8 @@ public class RootUiCoordinator
         initBottomSheetObserver();
         initSnackbarObserver();
         initBrowserControlsObserver();
-        if (mAppMenuCoordinator != null && mModalDialogManagerSupplier.hasValue()) {
+        var modalDialogManager = mModalDialogManagerSupplier.get();
+        if (mAppMenuCoordinator != null && modalDialogManager != null) {
             mModalDialogManagerObserver =
                     new ModalDialogManagerObserver() {
                         @Override
@@ -860,7 +927,7 @@ public class RootUiCoordinator
                             mAppMenuCoordinator.getAppMenuHandler().hideAppMenu();
                         }
                     };
-            mModalDialogManagerSupplier.get().addObserver(mModalDialogManagerObserver);
+            modalDialogManager.addObserver(mModalDialogManagerObserver);
         }
         new ChromeActionModeHandler(
                 mActivityTabProvider,
@@ -929,10 +996,6 @@ public class RootUiCoordinator
         } // End Vivaldi
     }
 
-    public void onResumeWithNative() {
-        addToEdgeToEdgeDebuggingInfo("onResumeWithNative");
-    }
-
     protected boolean showWebSearchInActionMode() {
         return true;
     }
@@ -940,16 +1003,22 @@ public class RootUiCoordinator
     @Override
     @CallSuper
     public void onFinishNativeInitialization() {
-        if (mProfileSupplier.hasValue()) {
-            initProfileDependentFeatures(mProfileSupplier.get());
+        Profile profile = mProfileSupplier.get();
+        if (profile != null) {
+            initProfileDependentFeatures(profile);
         } else {
             new OneShotCallback<>(
                     mProfileSupplier,
                     mCallbackController.makeCancelable(this::initProfileDependentFeatures));
         }
 
+        if (ChromeFeatureList.sEnableExclusiveAccessManager.isEnabled()) {
+            mExclusiveAccessManager.initialize(mTabModelSelectorSupplier.get());
+        }
+
         initMessagesInfra();
         initScrollCapture();
+        mAdaptiveToolbarUiCoordinator.onFinishNativeInitialization();
 
         if (mWindowAndroid.getInsetObserver() != null
                 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
@@ -1014,7 +1083,17 @@ public class RootUiCoordinator
                 contextualSearchManager.addObserver(mReadAloudContextualSearchObserver);
             }
         }
-        if (BuildInfo.getInstance().isAutomotive) {
+        if (DomDistillerFeatures.sReaderModeDistillInApp.isEnabled()) {
+            mReaderModeBottomSheetManager =
+                    new ReaderModeBottomSheetManager(
+                            mActivity,
+                            getBottomSheetController(),
+                            mActivityTabProvider,
+                            mBrowserControlsManager,
+                            mTopUiThemeColorProvider);
+        }
+
+        if (DeviceInfo.isAutomotive()) {
 
             // Vivaldi
             if (!VivaldiUtils.isAutomotiveToolbarEnabled()) return;
@@ -1033,7 +1112,9 @@ public class RootUiCoordinator
                         mWindowAndroid, mIsTablet)) {
             var topInsetCoordinator =
                     new TopInsetCoordinator(
-                            mActivityTabProvider, mWindowAndroid.getInsetObserver());
+                            mActivityTabProvider,
+                            mWindowAndroid.getInsetObserver(),
+                            mLayoutStateProviderOneShotSupplier);
             mTopInsetCoordinatorSupplier.set(topInsetCoordinator);
         }
     }
@@ -1087,13 +1168,14 @@ public class RootUiCoordinator
 
     /** Whether contextual search panel is opened. */
     public boolean isContextualSearchOpened() {
-        return mContextualSearchManagerSupplier.hasValue()
-                && mContextualSearchManagerSupplier.get().isSearchPanelOpened();
+        var manager = mContextualSearchManagerSupplier.get();
+        return manager != null && manager.isSearchPanelOpened();
     }
 
     /** Hide contextual search panel. */
     public void hideContextualSearch() {
-        if (mContextualSearchManagerSupplier.hasValue()) {
+        var manager = mContextualSearchManagerSupplier.get();
+        if (manager != null) {
             mContextualSearchManagerSupplier
                     .get()
                     .hideContextualSearch(OverlayPanel.StateChangeReason.UNKNOWN);
@@ -1215,9 +1297,7 @@ public class RootUiCoordinator
      */
     public double getPrimaryDisplaySizeInInches() {
         DisplayAndroid display = DisplayAndroid.getNonMultiDisplay(mActivity);
-        double xInches = display.getDisplayWidth() / display.getXdpi();
-        double yInches = display.getDisplayHeight() / display.getYdpi();
-        return Math.sqrt(Math.pow(xInches, 2) + Math.pow(yInches, 2));
+        return DisplayUtil.getDisplaySizeInInches(display);
     }
 
     /**
@@ -1404,8 +1484,8 @@ public class RootUiCoordinator
         // EphemeralTabCoordinator, and FindToolbarManager will all be owned by this class.
 
         // Do not show the menu if Contextual Search panel is opened.
-        if (mContextualSearchManagerSupplier.get() != null
-                && mContextualSearchManagerSupplier.get().isSearchPanelOpened()) {
+        var manager = mContextualSearchManagerSupplier.get();
+        if (manager != null && manager.isSearchPanelOpened()) {
             return false;
         }
 
@@ -1433,6 +1513,11 @@ public class RootUiCoordinator
             // value simultaneously.
             mPageZoomCoordinator.hide();
         }
+    }
+
+    /** Returns the {@link PageZoomManager}. */
+    public PageZoomManager getPageZoomManager() {
+        return mPageZoomManager;
     }
 
     // Protected class methods
@@ -1508,7 +1593,6 @@ public class RootUiCoordinator
             mAdaptiveToolbarUiCoordinator =
                     new AdaptiveToolbarUiCoordinator(
                             mActivity, mActivityTabProvider, mModalDialogManagerSupplier);
-
             mAdaptiveToolbarUiCoordinator.initialize(
                     createAdaptiveToolbarBehavior(trackerSupplier),
                     mActivityLifecycleDispatcher,
@@ -1524,7 +1608,8 @@ public class RootUiCoordinator
                             mToolbarManager.setUrlBarFocus(false, OmniboxFocusReason.UNFOCUS),
                     mWindowAndroid,
                     trackerSupplier,
-                    this::getScrimManager);
+                    this::getScrimManager,
+                    mReaderModeIphControllerSupplier);
 
             var omniboxActionDelegate =
                     new OmniboxActionDelegateImpl(
@@ -1670,8 +1755,10 @@ public class RootUiCoordinator
                         if (layoutType != LayoutType.BROWSING
                                 && layoutType != LayoutType.SIMPLE_ANIMATION) {
                             // Hide contextual search.
-                            if (mContextualSearchManagerSupplier.get() != null) {
-                                mContextualSearchManagerSupplier.get().dismissContextualSearchBar();
+                            ContextualSearchManager contextualSearchManager =
+                                    mContextualSearchManagerSupplier.get();
+                            if (contextualSearchManager != null) {
+                                contextualSearchManager.dismissContextualSearchBar();
                             }
                         }
 
@@ -1824,10 +1911,9 @@ public class RootUiCoordinator
      * cross-feature interaction, e.g. hide other features when this feature is shown.
      */
     protected void onFindToolbarShown() {
-        if (mContextualSearchManagerSupplier.get() != null) {
-            mContextualSearchManagerSupplier
-                    .get()
-                    .hideContextualSearch(OverlayPanel.StateChangeReason.UNKNOWN);
+        ContextualSearchManager contextualSearchManager = mContextualSearchManagerSupplier.get();
+        if (contextualSearchManager != null) {
+            contextualSearchManager.hideContextualSearch(OverlayPanel.StateChangeReason.UNKNOWN);
         }
     }
 
@@ -1884,12 +1970,10 @@ public class RootUiCoordinator
 
         Supplier<OverlayPanelManager> panelManagerSupplier =
                 () -> {
-                    if (mCompositorViewHolderSupplier.get() != null
-                            && mCompositorViewHolderSupplier.get().getLayoutManager() != null) {
-                        return mCompositorViewHolderSupplier
-                                .get()
-                                .getLayoutManager()
-                                .getOverlayPanelManager();
+                    var compositorViewHolder = mCompositorViewHolderSupplier.get();
+                    if (compositorViewHolder != null
+                            && compositorViewHolder.getLayoutManager() != null) {
+                        return compositorViewHolder.getLayoutManager().getOverlayPanelManager();
                     }
                     return null;
                 };
@@ -1909,9 +1993,10 @@ public class RootUiCoordinator
                             return null;
                         },
                         () -> {
-                            return mEdgeToEdgeControllerSupplier.get() == null
+                            var edgeToEdgeController = mEdgeToEdgeControllerSupplier.get();
+                            return edgeToEdgeController == null
                                     ? 0
-                                    : mEdgeToEdgeControllerSupplier.get().getBottomInset();
+                                    : edgeToEdgeController.getBottomInset();
                         },
                         getDesktopWindowStateManager());
         BottomSheetControllerFactory.setExceptionReporter(
@@ -1976,8 +2061,7 @@ public class RootUiCoordinator
                             mEdgeToEdgeManager,
                             mBrowserControlsManager,
                             mLayoutManagerSupplier,
-                            mFullscreenManager,
-                            mEdgeToEdgeDebuggingInfo);
+                            mFullscreenManager);
             mEdgeToEdgeControllerSupplier.set(mEdgeToEdgeController);
             mEdgeToEdgeBottomChin = createEdgeToEdgeBottomChin();
 
@@ -2018,23 +2102,6 @@ public class RootUiCoordinator
         }
 
         EdgeToEdgeUtils.recordIfMissingNavigationBar(reason);
-        mEdgeToEdgeDebuggingInfo.setMissingNavBarInsetsReason(reason);
-    }
-
-    private void addToEdgeToEdgeDebuggingInfo(String callSite) {
-        if (!ChromeFeatureList.sEdgeToEdgeDebugging.isEnabled()
-                || mEdgeToEdgeDebuggingInfo.isUsed()) {
-            return;
-        }
-
-        boolean hasEdgeToEdgeController = mEdgeToEdgeControllerSupplier.get() != null;
-        boolean isSupportedConfiguration = EdgeToEdgeUtils.isEdgeToEdgeBottomChinEnabled(mActivity);
-        mEdgeToEdgeDebuggingInfo.addToDebugReport(
-                callSite,
-                hasEdgeToEdgeController,
-                isSupportedConfiguration,
-                mActivity != null ? mActivity.getWindow() : null,
-                mWindowAndroid);
     }
 
     /** Create a bottom chin for Edge-to-Edge. */
@@ -2208,7 +2275,7 @@ public class RootUiCoordinator
      * @param outState The {@link Bundle} that is used to save state information.
      */
     public void onSaveInstanceState(Bundle outState) {
-        assert mTabModelSelectorSupplier.hasValue();
+        assert mTabModelSelectorSupplier.get() != null;
         mActivityRecreationController.saveUiState(outState);
     }
 
@@ -2230,19 +2297,19 @@ public class RootUiCoordinator
 
         Supplier<Integer> gtsTabListModelSizeSupplier =
                 () -> {
-                    if (mTabSwitcherSupplier.get() != null) {
-                        return mTabSwitcherSupplier.get().getTabSwitcherTabListModelSize();
+                    var tabSwitcher = mTabSwitcherSupplier.get();
+                    if (tabSwitcher != null) {
+                        return tabSwitcher.getTabSwitcherTabListModelSize();
                     }
                     return 0;
                 };
 
         Callback<Integer> scrollGTSToRestoredTabsCallback =
                 (tabListModelSize) -> {
-                    if (mTabSwitcherSupplier.get() != null) {
-                        mTabSwitcherSupplier
-                                .get()
-                                .setTabSwitcherRecyclerViewPosition(
-                                        new RecyclerViewPosition(tabListModelSize, 0));
+                    var tabSwitcher = mTabSwitcherSupplier.get();
+                    if (tabSwitcher != null) {
+                        tabSwitcher.setTabSwitcherRecyclerViewPosition(
+                                new RecyclerViewPosition(tabListModelSize, 0));
                     }
                 };
 
@@ -2252,7 +2319,8 @@ public class RootUiCoordinator
                 mTabCreatorManagerSupplier.get(),
                 getBottomSheetController(),
                 gtsTabListModelSizeSupplier,
-                scrollGTSToRestoredTabsCallback);
+                scrollGTSToRestoredTabsCallback,
+                mModalDialogManagerSupplier);
     }
 
     private void initBoardingPassDetector() {
@@ -2275,6 +2343,10 @@ public class RootUiCoordinator
 
     public BottomControlsStacker getBottomControlsStackerForTesting() {
         return mBottomControlsStacker;
+    }
+
+    public @Nullable AdaptiveToolbarUiCoordinator getAdaptiveToolbarUiCoordinatorForTesting() {
+        return mAdaptiveToolbarUiCoordinator;
     }
 
     public DataSharingTabManager getDataSharingTabManager() {

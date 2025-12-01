@@ -17,18 +17,25 @@ enum class FederatedAuthRequestResult;
 enum class IdpSigninStatus;
 }  // namespace blink::mojom
 
+namespace perfetto {
+class NamedTrack;
+}  // namespace perfetto
+
 namespace content {
 class BrowserContext;
-enum class FedCmDisconnectStatus;
+namespace webid {
+enum class DisconnectStatus;
+enum class RequesterFrameType;
+}  // namespace webid
 enum class FedCmIdpSigninStatusMode;
-enum class FedCmRequesterFrameType;
 class FederatedIdentityApiPermissionContextDelegate;
 class FederatedIdentityPermissionContextDelegate;
 enum class IdpSigninStatus;
-class FederatedAuthRequestPageData;
 class RenderFrameHost;
 
 namespace webid {
+
+class RequestPageData;
 
 // Returns true if `origin` is same site with `render_frame_host` and
 // all its ancestors. Also returns true if there are no ancestors or
@@ -82,7 +89,7 @@ CONTENT_EXPORT std::string GetConsoleErrorMessageFromResult(
 // Returns a string to be used as the console error message for a disconnect()
 // call.
 CONTENT_EXPORT std::string GetDisconnectConsoleErrorMessage(
-    FedCmDisconnectStatus disconnect_status_for_metrics);
+    webid::DisconnectStatus disconnect_status_for_metrics);
 
 // Returns the eTLD+1 for a given url. For localhost, returns the host.
 std::string FormatUrlForDisplay(const GURL& url);
@@ -100,16 +107,20 @@ bool HasSharingPermissionOrIdpHasThirdPartyCookiesAccess(
     FederatedIdentityPermissionContextDelegate* sharing_permission_delegate,
     FederatedIdentityApiPermissionContextDelegate* api_permission_delegate);
 
-FederatedAuthRequestPageData* GetPageData(Page& page);
+RequestPageData* GetPageData(Page& page);
 
 // Returns the frame type of the requester.
-FedCmRequesterFrameType ComputeRequesterFrameType(const RenderFrameHost& rfh,
-                                                  const url::Origin& requester,
-                                                  const url::Origin& embedder);
+webid::RequesterFrameType ComputeRequesterFrameType(
+    const RenderFrameHost& rfh,
+    const url::Origin& requester,
+    const url::Origin& embedder);
 
 void MaybeAddResponseCodeToConsole(RenderFrameHost& render_frame_host,
                                    const char* fetch_description,
                                    int response_code);
+
+// Creates a Perfetto track for the class pointed to by `class_pointer`.
+perfetto::NamedTrack CreatePerfettoTrackForFedCM(void* class_pointer);
 
 }  // namespace webid
 

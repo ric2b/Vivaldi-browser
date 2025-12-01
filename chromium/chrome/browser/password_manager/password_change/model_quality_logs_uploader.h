@@ -39,8 +39,25 @@ class ModelQualityLogsUploader {
   // log entry to the model quality logging service.
   void UploadFinalLog();
 
+  // Sets quality data for Step=LOGGED_IN_CHECK.
+  void SetLoggedInCheckQuality(int retry_count, QualityStatus quality_status);
+
   // Sets quality data for Step=OPEN_FORM_STEP.
   void SetOpenFormQuality(
+      const std::optional<optimization_guide::proto::PasswordChangeResponse>&
+          response,
+      std::unique_ptr<LoggingData> logging_data,
+      base::Time server_request_start_time);
+
+  // Sets quality data for Step=SUBMIT_FORM_STEP.
+  void SetSubmitFormQuality(
+      const std::optional<optimization_guide::proto::PasswordChangeResponse>&
+          response,
+      std::unique_ptr<LoggingData> logging_data,
+      base::Time server_request_start_time);
+
+  // Sets quality data for Step=VERIFY_SUBMISSION_STEP.
+  void SetVerifySubmissionQuality(
       const std::optional<optimization_guide::proto::PasswordChangeResponse>&
           response,
       std::unique_ptr<LoggingData> logging_data,
@@ -75,19 +92,10 @@ class ModelQualityLogsUploader {
   // in Step=OPEN_FORM_STEP.
   void SubmitFormTargetElementNotFound();
 
-  // Sets quality data for Step=SUBMIT_FORM_STEP.
-  void SetSubmitFormQuality(
-      const std::optional<optimization_guide::proto::PasswordChangeResponse>&
-          response,
-      std::unique_ptr<LoggingData> logging_data,
-      base::Time server_request_start_time);
-
-  // Sets quality data for Step=VERIFY_SUBMISSION_STEP.
-  void SetVerifySubmissionQuality(
-      const std::optional<optimization_guide::proto::PasswordChangeResponse>&
-          response,
-      std::unique_ptr<LoggingData> logging_data,
-      base::Time server_request_start_time);
+  // Called when the user clicks 'continue' during the login check step
+  // to begin the password change flow, which may indicate an incorrect
+  // classification of the user's login state by the model.
+  void LoginCheckSkipped();
 
   // Records the outcome of the first login attempt
   // using a previously saved APC-password and immediately
@@ -120,6 +128,7 @@ class ModelQualityLogsUploader {
 #endif
 
  private:
+  const base::Time flow_start_time_;
   optimization_guide::proto::LogAiDataRequest final_log_data_;
   raw_ptr<Profile> profile_;
   base::WeakPtrFactory<ModelQualityLogsUploader> weak_ptr_factory_{this};

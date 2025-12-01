@@ -11,6 +11,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/web_contents.h"
 
 #include "app/vivaldi_apptools.h"
 #include "browser/ad_blocker/adblock_rule_service_factory.h"
@@ -86,9 +87,9 @@ void VivaldiContentBrowserClient::CreateThrottlesForNavigation(
     adblock_filter::RuleServiceFactory::GetForBrowserContext(
         handle->GetWebContents()->GetBrowserContext())
         ->GetStateAndLogs()
-        ->CreateTabHelper(handle->GetWebContents())
+        ->GetTabHelper(handle->GetWebContents())
         ->MaybeAddNavigationThrottle(registry);
-    }
+  }
 }
 
 bool VivaldiContentBrowserClient::CanCommitURL(
@@ -152,4 +153,17 @@ void VivaldiContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
 
   map->Add<translate::mojom::ContentTranslateDriver>(
       base::BindRepeating(&vivaldi::BindVivaldiContentTranslateDriver));
+}
+
+void VivaldiContentBrowserClient::OnWebContentsCreated(
+    content::WebContents* web_contents) {
+  ChromeContentBrowserClient::OnWebContentsCreated(web_contents);
+  // Ensures that the ad-blocker is aware of every WebContent and, consequently,
+  // every navigation.
+  if (vivaldi::IsVivaldiRunning()) {
+    adblock_filter::RuleServiceFactory::GetForBrowserContext(
+        web_contents->GetBrowserContext())
+        ->GetStateAndLogs()
+        ->CreateTabHelper(web_contents);
+  }
 }

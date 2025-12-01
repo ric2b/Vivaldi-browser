@@ -11,9 +11,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_ui_util.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/webui/profile_info_watcher.h"
+#include "chrome/browser/ui/webui/history/history_sign_in_state_watcher.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -21,8 +22,10 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 
-HistoryLoginHandler::HistoryLoginHandler(base::RepeatingClosure signin_callback)
-    : signin_callback_(std::move(signin_callback)) {}
+HistoryLoginHandler::HistoryLoginHandler(
+    base::RepeatingClosure signin_state_changed_callback)
+    : signin_state_changed_callback_(std::move(signin_state_changed_callback)) {
+}
 
 HistoryLoginHandler::~HistoryLoginHandler() = default;
 
@@ -39,15 +42,20 @@ void HistoryLoginHandler::RegisterMessages() {
 }
 
 void HistoryLoginHandler::OnJavascriptAllowed() {
-  profile_info_watcher_ = std::make_unique<ProfileInfoWatcher>(
-      Profile::FromWebUI(web_ui()),
-      base::BindRepeating(&HistoryLoginHandler::ProfileInfoChanged,
+  Profile* profile = Profile::FromWebUI(web_ui());
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile);
+  syncer::SyncService* sync_service =
+      SyncServiceFactory::GetForProfile(profile);
+  history_sign_in_state_watcher_ = std::make_unique<HistorySignInStateWatcher>(
+      identity_manager, sync_service,
+      base::BindRepeating(&HistoryLoginHandler::SigninStateChanged,
                           base::Unretained(this)));
-  ProfileInfoChanged();
+  SigninStateChanged();
 }
 
 void HistoryLoginHandler::OnJavascriptDisallowed() {
-  profile_info_watcher_ = nullptr;
+  history_sign_in_state_watcher_ = nullptr;
 }
 
 void HistoryLoginHandler::HandleOtherDevicesInitialized(
@@ -55,13 +63,14 @@ void HistoryLoginHandler::HandleOtherDevicesInitialized(
   AllowJavascript();
 }
 
-void HistoryLoginHandler::ProfileInfoChanged() {
-  bool signed_in = !profile_info_watcher_->GetAuthenticatedUsername().empty();
-  if (!signin_callback_.is_null()) {
-    signin_callback_.Run();
+void HistoryLoginHandler::SigninStateChanged() {
+  if (!signin_state_changed_callback_.is_null()) {
+    signin_state_changed_callback_.Run();
   }
 
-  FireWebUIListener("sign-in-state-changed", base::Value(signed_in));
+  HistorySignInState sign_in_state =
+      history_sign_in_state_watcher_->GetSignInState();
+  FireWebUIListener("sign-in-state-changed", static_cast<int>(sign_in_state));
 }
 
 void HistoryLoginHandler::HandleTurnOnSyncFlow(

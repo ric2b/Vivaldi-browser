@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,15 +11,15 @@ import * as UI from '../../ui/legacy/legacy.js';
 
 const UIStrings = {
   /**
-   *@description Message to offer insights for a console error message
+   * @description Message to offer insights for a console error message
    */
   explainThisError: 'Understand this error',
   /**
-   *@description Message to offer insights for a console warning message
+   * @description Message to offer insights for a console warning message
    */
   explainThisWarning: 'Understand this warning',
   /**
-   *@description Message to offer insights for a console message
+   * @description Message to offer insights for a console message
    */
   explainThisMessage: 'Understand this message',
   /**

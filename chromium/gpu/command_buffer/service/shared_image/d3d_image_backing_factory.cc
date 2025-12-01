@@ -103,33 +103,6 @@ bool DCompTextureIsSupported(const D3D11_TEXTURE2D_DESC& desc) {
              (D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE);
 }
 
-// Formats supported by CreateSharedImage() with no GpuMemoryBufferHandle.
-DXGI_FORMAT GetDXGIFormatForCreateTexture(viz::SharedImageFormat format) {
-  if (format == viz::SinglePlaneFormat::kRGBA_F16) {
-    return DXGI_FORMAT_R16G16B16A16_FLOAT;
-  } else if (format == viz::SinglePlaneFormat::kBGRA_8888) {
-    return DXGI_FORMAT_B8G8R8A8_UNORM;
-  } else if (format == viz::SinglePlaneFormat::kRGBA_8888) {
-    return DXGI_FORMAT_R8G8B8A8_UNORM;
-  } else if (format == viz::SinglePlaneFormat::kBGRX_8888) {
-    return DXGI_FORMAT_B8G8R8A8_UNORM;
-  } else if (format == viz::SinglePlaneFormat::kRGBX_8888) {
-    return DXGI_FORMAT_R8G8B8A8_UNORM;
-  } else if (format == viz::SinglePlaneFormat::kR_8) {
-    return DXGI_FORMAT_R8_UNORM;
-  } else if (format == viz::SinglePlaneFormat::kRG_88) {
-    return DXGI_FORMAT_R8G8_UNORM;
-  } else if (format == viz::SinglePlaneFormat::kR_16) {
-    return DXGI_FORMAT_R16_UNORM;
-  } else if (format == viz::SinglePlaneFormat::kRG_1616) {
-    return DXGI_FORMAT_R16G16_UNORM;
-  } else if (format == viz::MultiPlaneFormat::kNV12) {
-    return DXGI_FORMAT_NV12;
-  }
-
-  return DXGI_FORMAT_UNKNOWN;
-}
-
 // Formats supported by CreateSharedImage(GMB).
 DXGI_FORMAT GetDXGIFormatForGMB(viz::SharedImageFormat format) {
   if (format == viz::SinglePlaneFormat::kRGBA_8888) {
@@ -191,32 +164,39 @@ D3DImageBackingFactory::D3DImageBackingFactory(
     Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device,
     scoped_refptr<DXGISharedHandleManager> dxgi_shared_handle_manager,
     const GLFormatCaps& gl_format_caps,
-    const GpuDriverBugWorkarounds& workarounds)
+    const GpuDriverBugWorkarounds& workarounds,
+    bool enable_webnn_only_d3d_factory)
     : SharedImageBackingFactory(kSupportedUsage),
       d3d11_device_(std::move(d3d11_device)),
       dxgi_shared_handle_manager_(std::move(dxgi_shared_handle_manager)),
       angle_d3d11_device_(gl::QueryD3D11DeviceObjectFromANGLE()),
       gl_format_caps_(gl_format_caps),
-      use_update_subresource1_(UseUpdateSubresource1(workarounds)) {
-  CHECK(angle_d3d11_device_);
+      use_update_subresource1_(UseUpdateSubresource1(workarounds)),
+      enable_webnn_only_d3d_factory_(enable_webnn_only_d3d_factory) {
+  CHECK(angle_d3d11_device_ || enable_webnn_only_d3d_factory)
+      << "D3DImageBackingFactory requires a D3D11 device.";
 
-  UINT format_support;
-  HRESULT hr =
-      d3d11_device_->CheckFormatSupport(DXGI_FORMAT_NV12, &format_support);
-  constexpr auto kRequiredUsage = D3D11_FORMAT_SUPPORT_TEXTURE2D |
-                                  D3D11_FORMAT_SUPPORT_SHADER_SAMPLE |
-                                  D3D11_FORMAT_SUPPORT_RENDER_TARGET;
-  bool has_required_format_support =
-      (format_support & kRequiredUsage) == kRequiredUsage;
-  d3d11_supports_nv12_ = SUCCEEDED(hr) && has_required_format_support;
+  if (d3d11_device_) {
+    UINT format_support;
+    HRESULT hr =
+        d3d11_device_->CheckFormatSupport(DXGI_FORMAT_NV12, &format_support);
+    constexpr auto kRequiredUsage = D3D11_FORMAT_SUPPORT_TEXTURE2D |
+                                    D3D11_FORMAT_SUPPORT_SHADER_SAMPLE |
+                                    D3D11_FORMAT_SUPPORT_RENDER_TARGET;
+    bool has_required_format_support =
+        (format_support & kRequiredUsage) == kRequiredUsage;
+    d3d11_supports_nv12_ = SUCCEEDED(hr) && has_required_format_support;
 
-  D3D_FEATURE_LEVEL feature_level = d3d11_device_->GetFeatureLevel();
-  if (feature_level < D3D_FEATURE_LEVEL_9_3) {
-    max_nv12_dim_supported_ = 2048;
-  } else if (feature_level < D3D_FEATURE_LEVEL_11_0) {
-    max_nv12_dim_supported_ = 4096;
+    D3D_FEATURE_LEVEL feature_level = d3d11_device_->GetFeatureLevel();
+    if (feature_level < D3D_FEATURE_LEVEL_9_3) {
+      max_nv12_dim_supported_ = 2048;
+    } else if (feature_level < D3D_FEATURE_LEVEL_11_0) {
+      max_nv12_dim_supported_ = 4096;
+    } else {
+      max_nv12_dim_supported_ = 16384;
+    }
   } else {
-    max_nv12_dim_supported_ = 16384;
+    d3d11_supports_nv12_ = false;
   }
 }
 
@@ -521,7 +501,7 @@ std::unique_ptr<SharedImageBacking> D3DImageBackingFactory::CreateSharedImage(
     return nullptr;
   }
 
-  DXGI_FORMAT dxgi_format = GetDXGIFormatForCreateTexture(format);
+  DXGI_FORMAT dxgi_format = ToDXGIFormat(format);
   DCHECK_NE(dxgi_format, DXGI_FORMAT_UNKNOWN);
 
   // GL_TEXTURE_2D is ok to use here as D3D11_BIND_RENDER_TARGET is being used.
@@ -685,10 +665,9 @@ std::unique_ptr<SharedImageBacking> D3DImageBackingFactory::CreateSharedImage(
   CHECK(!format.PrefersExternalSampler());
 
   // TOOD(hitawala): Move this size check to IsSupported.
-  const gfx::BufferFormat buffer_format = gpu::ToBufferFormat(format);
-  if (!gpu::IsImageSizeValidForGpuMemoryBufferFormat(size, buffer_format)) {
+  if (!IsSizeForBufferHandleValid(size, format)) {
     LOG(ERROR) << "Invalid image size " << size.ToString() << " for "
-               << gfx::BufferFormatToString(buffer_format);
+               << format.ToString();
     return nullptr;
   }
 
@@ -919,6 +898,16 @@ bool D3DImageBackingFactory::IsSupported(SharedImageUsageSet usage,
                                          gfx::GpuMemoryBufferType gmb_type,
                                          GrContextType gr_context_type,
                                          base::span<const uint8_t> pixel_data) {
+  // Only usages for WebNN is allowed if D3D shared images are disabled.
+  if (enable_webnn_only_d3d_factory_) {
+    constexpr uint32_t kAllowedUsages =
+        gpu::SHARED_IMAGE_USAGE_WEBNN_SHARED_TENSOR |
+        gpu::SHARED_IMAGE_USAGE_WEBGPU_SHARED_BUFFER |
+        gpu::SHARED_IMAGE_USAGE_WEBNN_SHARED_TENSOR_READ |
+        gpu::SHARED_IMAGE_USAGE_WEBNN_SHARED_TENSOR_WRITE;
+    return (usage & ~kAllowedUsages) == 0;
+  }
+
   if (!pixel_data.empty() && !IsFormatSupportedForInitialData(format)) {
     return false;
   }
@@ -938,14 +927,17 @@ bool D3DImageBackingFactory::IsSupported(SharedImageUsageSet usage,
       // creating a swapchain backing.
     } else if (gmb_type == gfx::EMPTY_BUFFER) {
       return gl::DirectCompositionTextureSupported() &&
-             IsFormatSupportedForDCompTexture(
-                 GetDXGIFormatForCreateTexture(format));
+             IsFormatSupportedForDCompTexture(ToDXGIFormat(format));
     }
   }
 
+  // Allow WebNN as part of a buffer usage when D3D shared images are supported.
+  if (is_buffer && usage.Has(gpu::SHARED_IMAGE_USAGE_WEBNN_SHARED_TENSOR)) {
+    return true;
+  }
+
   if (gmb_type == gfx::EMPTY_BUFFER) {
-    if (GetDXGIFormatForCreateTexture(format) == DXGI_FORMAT_UNKNOWN &&
-        !is_buffer) {
+    if (ToDXGIFormat(format) == DXGI_FORMAT_UNKNOWN && !is_buffer) {
       return false;
     }
   } else if (gmb_type == gfx::DXGI_SHARED_HANDLE) {

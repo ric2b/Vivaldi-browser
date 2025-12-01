@@ -120,9 +120,8 @@ Return FindStorageBufferBindingAliasing(const PipelineLayoutBase* pipelineLayout
     for (BindGroupIndex groupIndex : pipelineLayout->GetBindGroupLayoutsMask()) {
         BindGroupLayoutInternalBase* bgl = bindGroups[groupIndex]->GetLayout();
 
-        for (BindingIndex bindingIndex{0}; bindingIndex < bgl->GetBufferCount(); ++bindingIndex) {
+        for (BindingIndex bindingIndex : bgl->GetBufferIndices()) {
             const BindingInfo& bindingInfo = bgl->GetBindingInfo(bindingIndex);
-            // Buffer bindings are sorted to have smallest of bindingIndex.
             const BufferBindingInfo& layout =
                 std::get<BufferBindingInfo>(bindingInfo.bindingLayout);
 
@@ -158,16 +157,11 @@ Return FindStorageBufferBindingAliasing(const PipelineLayoutBase* pipelineLayout
         }
 
         // TODO(dawn:1642): optimize: precompute start/end range of storage textures bindings.
-        for (BindingIndex bindingIndex{bgl->GetBufferCount()};
-             bindingIndex < bgl->GetBindingCount(); ++bindingIndex) {
+        for (BindingIndex bindingIndex : bgl->GetStorageTextureIndices()) {
             const BindingInfo& bindingInfo = bgl->GetBindingInfo(bindingIndex);
+            const auto& layout = std::get<StorageTextureBindingInfo>(bindingInfo.bindingLayout);
 
-            const auto* layout = std::get_if<StorageTextureBindingInfo>(&bindingInfo.bindingLayout);
-            if (layout == nullptr) {
-                continue;
-            }
-
-            switch (layout->access) {
+            switch (layout.access) {
                 case wgpu::StorageTextureAccess::WriteOnly:
                 case wgpu::StorageTextureAccess::ReadWrite:
                     break;
@@ -675,11 +669,9 @@ MaybeError CommandBufferStateTracker::CheckMissingAspects(ValidationAspects aspe
                             std::numeric_limits<uint32_t>::max());
 
                 const auto& bindingInfo = mBindgroups[i]->GetLayout()->GetBindingInfo(bindingIndex);
-                const BufferBinding& bufferBinding =
-                    mBindgroups[i]->GetBindingAsBufferBinding(bindingIndex);
+                const BufferBase* buffer = mBindgroups[i]->GetBindingAsBuffer(bindingIndex);
 
                 BindingNumber bindingNumber = bindingInfo.binding;
-                const BufferBase* buffer = bufferBinding.buffer;
 
                 uint64_t bufferSize =
                     mBindgroups[i]->GetUnverifiedBufferSizes()[packedIndex.value()];
@@ -710,9 +702,7 @@ MaybeError CommandBufferStateTracker::CheckMissingAspects(ValidationAspects aspe
                 mBindgroups[a.e0.bindGroupIndex], a.e0.bindGroupIndex, a.e0.bindingIndex,
                 mBindgroups[a.e1.bindGroupIndex], a.e1.bindGroupIndex, a.e1.bindingIndex,
                 a.e0.offset, a.e0.size, a.e1.offset, a.e1.size,
-                mBindgroups[a.e0.bindGroupIndex]
-                    ->GetBindingAsBufferBinding(a.e0.bindingIndex)
-                    .buffer);
+                mBindgroups[a.e0.bindGroupIndex]->GetBindingAsBuffer(a.e0.bindingIndex));
         } else {
             DAWN_ASSERT(std::holds_alternative<TextureAliasing>(result));
             const auto& a = std::get<TextureAliasing>(result);

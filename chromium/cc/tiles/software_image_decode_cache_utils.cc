@@ -18,6 +18,7 @@
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/tone_map_util.h"
 #include "cc/tiles/mipmap_util.h"
+#include "skia/ext/geometry.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "ui/gfx/geometry/skia_conversions.h"
@@ -49,15 +50,62 @@ gfx::Rect GetSrcRect(const DrawImage& image) {
   return gfx::Rect(x, y, right - x, bottom - y);
 }
 
-// Does *not* return nullptr.
-std::unique_ptr<base::DiscardableMemory> AllocateDiscardable(
+// Given `base_rect` in the base image with the specified dimensions, return the
+// corresponding rectangle in the gainmap image.
+SkRect ComputeGainmapRect(SkISize base_image_dimensions,
+                          SkISize gain_image_dimensions,
+                          SkRect base_rect) {
+  SkRect base_image_rect =
+      SkRect::MakeSize(SkSize::Make(base_image_dimensions));
+  SkRect gain_image_rect =
+      SkRect::MakeSize(SkSize::Make(gain_image_dimensions));
+  return skia::ScaleSkRectProportional(gain_image_rect, base_image_rect,
+                                       base_rect);
+}
+
+// Allocate `memory` as discardable, and back `image` with that memory.
+// On failure, sets `image` to nullptr.
+void AllocateDiscardableSkImage(
     const SkImageInfo& info,
-    base::OnceClosure on_no_memory) {
+    const SkImageInfo& gainmap_info,
+    base::OnceClosure on_no_memory,
+    std::unique_ptr<base::DiscardableMemory>& memory,
+    sk_sp<SkImage>& image,
+    sk_sp<SkImage>& gainmap_image) {
+  // Initialize the output images to be empty.
+  image = nullptr;
+  gainmap_image = nullptr;
+
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"), "AllocateDiscardable");
-  size_t size = info.minRowBytes() * info.height();
-  auto* allocator = base::DiscardableMemoryAllocator::GetInstance();
-  return allocator->AllocateLockedDiscardableMemoryWithRetryOrDie(
-      size, std::move(on_no_memory));
+  size_t size = info.minRowBytes() * info.height() +
+                gainmap_info.minRowBytes() * gainmap_info.height();
+  memory = base::DiscardableMemoryAllocator::GetInstance()
+               ->AllocateLockedDiscardableMemoryWithRetryOrDie(
+                   size, std::move(on_no_memory));
+  if (!memory->data()) {
+    return;
+  }
+  // SAFETY: The base::DiscardableMemory functionality should provide a safe
+  // interface. Fixing it is tracked in https://crbug.com/40586428. This use is
+  // safe because we are using the same size parameter here as in the allocation
+  // a few lines earlier.
+  UNSAFE_BUFFERS(
+      base::span<uint8_t> memory_as_span(memory->data_as<uint8_t>(), size));
+  auto gainmap_image_span = memory_as_span.subspan(
+      info.minRowBytes() * info.height(),
+      gainmap_info.minRowBytes() * gainmap_info.height());
+
+  // A more robust scheme would be to unlock `memory` when `image` falls out of
+  // scope.
+  SkPixmap pixmap(info, memory_as_span.data(), info.minRowBytes());
+  image = SkImages::RasterFromPixmap(
+      pixmap, [](const void* pixels, void* context) {}, nullptr);
+  if (!gainmap_image_span.empty()) {
+    SkPixmap gainmap_pixmap(gainmap_info, gainmap_image_span.data(),
+                            gainmap_info.minRowBytes());
+    gainmap_image = SkImages::RasterFromPixmap(
+        gainmap_pixmap, [](const void* pixels, void* context) {}, nullptr);
+  }
 }
 
 }  // namespace
@@ -73,29 +121,40 @@ SoftwareImageDecodeCacheUtils::DoDecodeImage(
   const SkISize target_size =
       SkISize::Make(key.target_size().width(), key.target_size().height());
   DCHECK(target_size == paint_image.GetSupportedDecodeSize(target_size));
-  sk_sp<SkColorSpace> target_color_space =
-      key.target_color_params().color_space.ToSkColorSpace();
 
+  SkImageInfo target_info =
+      SkImageInfo::Make(target_size, color_type, kPremul_SkAlphaType,
+                        key.target_color_params().color_space.ToSkColorSpace());
+
+  SkImageInfo target_gainmap_info;
+  if (paint_image.HasGainmapInfo()) {
+    target_gainmap_info = SkImageInfo::Make(
+        paint_image.GetSupportedDecodeSize(target_size, AuxImage::kGainmap),
+        color_type, kPremul_SkAlphaType);
+  }
+
+  sk_sp<SkImage> target_image;
+  sk_sp<SkImage> target_gainmap_image;
+  std::unique_ptr<base::DiscardableMemory> target_pixels;
+  AllocateDiscardableSkImage(target_info, target_gainmap_info,
+                             std::move(on_no_memory), target_pixels,
+                             target_image, target_gainmap_image);
+  if (!target_image) {
+    return nullptr;
+  }
+
+  SkPixmap target_pixmap;
+  target_image->peekPixels(&target_pixmap);
   // Temporary workaround for migrating HLG and PQ color spaces. The round-trip
   // through gfx::ColorSpace destroys the distinction between HLG and HLGish,
   // and PQ and PQish. Ensure that the decode of these spaces does no
   // conversion. https://issues.skia.org/issues/420956739
-  sk_sp<SkColorSpace> decode_color_space = target_color_space;
   if (key.target_color_params().color_space.GetTransferID() ==
           gfx::ColorSpace::TransferID::PQ ||
       key.target_color_params().color_space.GetTransferID() ==
           gfx::ColorSpace::TransferID::HLG) {
-    decode_color_space = paint_image.GetSkImageInfo().refColorSpace();
+    target_pixmap.setColorSpace(paint_image.GetSkImageInfo().refColorSpace());
   }
-
-  SkImageInfo target_info = SkImageInfo::Make(
-      target_size, color_type, kPremul_SkAlphaType, target_color_space);
-  std::unique_ptr<base::DiscardableMemory> target_pixels =
-      AllocateDiscardable(target_info, std::move(on_no_memory));
-  if (!target_pixels->data())
-    return nullptr;
-  SkPixmap target_pixmap(target_info.makeColorSpace(decode_color_space),
-                         target_pixels->data(), target_info.minRowBytes());
 
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeCacheUtils::DoDecodeImage - "
@@ -106,8 +165,23 @@ SoftwareImageDecodeCacheUtils::DoDecodeImage(
     target_pixels->Unlock();
     return nullptr;
   }
-  return std::make_unique<CacheEntry>(target_info, std::move(target_pixels),
-                                      SkSize::Make(0, 0));
+
+  if (target_gainmap_image) {
+    SkPixmap target_gainmap_pixmap;
+    target_gainmap_image->peekPixels(&target_gainmap_pixmap);
+    bool gainmap_result =
+        paint_image.Decode(target_gainmap_pixmap, key.frame_key().frame_index(),
+                           AuxImage::kGainmap, client_id);
+    // If the gainmap fails to decode, just pretend that it wasn't there. Do
+    // not fail the base image decode because of problems in the gainmap.
+    if (!gainmap_result) {
+      target_gainmap_image = nullptr;
+    }
+  }
+
+  return std::make_unique<CacheEntry>(
+      target_image, target_gainmap_image, paint_image.GetHDRMetadata(),
+      std::move(target_pixels), SkSize::Make(0, 0));
 }
 
 // static
@@ -117,61 +191,94 @@ SoftwareImageDecodeCacheUtils::GenerateCacheEntryFromCandidate(
     const DecodedDrawImage& candidate_image,
     bool needs_extract_subset,
     SkColorType color_type) {
-  SkISize target_size =
-      SkISize::Make(key.target_size().width(), key.target_size().height());
-  SkImageInfo target_info =
-      SkImageInfo::Make(target_size, color_type, kPremul_SkAlphaType);
-  // TODO(crbug.com/40095682): If this turns into a crasher, pass an actual
-  // "free memory" closure.
-  std::unique_ptr<base::DiscardableMemory> target_pixels =
-      AllocateDiscardable(target_info, base::DoNothing());
-
-  if (key.type() == CacheKey::kSubrectOriginal) {
-    DCHECK(needs_extract_subset);
-    TRACE_EVENT0(
-        TRACE_DISABLED_BY_DEFAULT("cc.debug"),
-        "SoftwareImageDecodeCacheUtils::GenerateCacheEntryFromCandidate - "
-        "subrect");
-    bool result = candidate_image.image()->readPixels(
-        target_info, target_pixels->data(), target_info.minRowBytes(),
-        key.src_rect().x(), key.src_rect().y(), SkImage::kDisallow_CachingHint);
-    // We have a decoded image, and we're reading into already allocated memory.
-    // This should never fail.
-    DCHECK(result) << key.ToString();
-    return std::make_unique<CacheEntry>(
-        target_info.makeColorSpace(candidate_image.image()->refColorSpace()),
-        std::move(target_pixels),
-        SkSize::Make(-key.src_rect().x(), -key.src_rect().y()));
-  }
-
-  DCHECK_EQ(key.type(), CacheKey::kSubrectAndScale);
   TRACE_EVENT0(
       TRACE_DISABLED_BY_DEFAULT("cc.debug"),
-      "SoftwareImageDecodeCacheUtils::GenerateCacheEntryFromCandidate - "
-      "scale");
+      "SoftwareImageDecodeCacheUtils::GenerateCacheEntryFromCandidate");
+
+  // Let `decoded_pixmap` be the candidate image's pixels that we will be
+  // copying and potentially scaling. Let `decoded_gainmap_image` be
+  // the candidate gainmap image (if it exists).
   SkPixmap decoded_pixmap;
-  // We don't need to subrect this image, since all candidates passed in would
-  // already have a src_rect applied to them.
   bool result = candidate_image.image()->peekPixels(&decoded_pixmap);
   DCHECK(result) << key.ToString();
+  sk_sp<SkImage> decoded_gainmap_image = candidate_image.gainmap_image();
+
+  // Compute the actual source rect of `decoded_pixmap` that will be used,
+  // and let `decoded_pixmap_sub_rect` an SkPixmap with just that rect.
+  SkIRect src_rect = SkIRect::MakeSize(decoded_pixmap.dimensions());
   if (needs_extract_subset) {
-    result = decoded_pixmap.extractSubset(&decoded_pixmap,
-                                          gfx::RectToSkIRect(key.src_rect()));
+    result = src_rect.intersect(gfx::RectToSkIRect(key.src_rect()));
     DCHECK(result) << key.ToString();
   }
-
-  // Nearest neighbor would only be set in the unscaled case.
-  DCHECK(!key.is_nearest_neighbor());
-  SkPixmap target_pixmap(target_info, target_pixels->data(),
-                         target_info.minRowBytes());
-  PaintFlags::FilterQuality filter_quality = PaintFlags::FilterQuality::kMedium;
-  result = decoded_pixmap.scalePixels(
-      target_pixmap,
-      PaintFlags::FilterQualityToSkSamplingOptions(filter_quality));
+  SkPixmap decoded_pixmap_sub_rect;
+  result = decoded_pixmap.extractSubset(&decoded_pixmap_sub_rect, src_rect);
   DCHECK(result) << key.ToString();
 
+  // Compute the corresponding SkRect of the gainmap image. Note that this is
+  // not an SkIRect (because it doesn't necessarily at integer bounds).
+  SkRect src_gainmap_rect;
+  if (decoded_gainmap_image) {
+    src_gainmap_rect = ComputeGainmapRect(decoded_pixmap.dimensions(),
+                                          decoded_gainmap_image->dimensions(),
+                                          SkRect::Make(src_rect));
+  }
+
+  SkImageInfo target_info =
+      SkImageInfo::Make(gfx::SizeToSkISize(key.target_size()), color_type,
+                        kPremul_SkAlphaType, decoded_pixmap.refColorSpace());
+  SkImageInfo target_gainmap_info;
+  if (decoded_gainmap_image) {
+    // Set the target gainmap image size to the target base image's size. But,
+    // don't supersample the gainmap, so take the minimum with the gainmap's
+    // source rectangle size.
+    SkISize target_gainmap_max_size =
+        SkSize(src_gainmap_rect.width(), src_gainmap_rect.height()).toCeil();
+    SkISize target_gainmap_size = SkISize::Make(
+        std::min(key.target_size().width(), target_gainmap_max_size.width()),
+        std::min(key.target_size().height(), target_gainmap_max_size.height()));
+    target_gainmap_info =
+        decoded_gainmap_image->imageInfo().makeDimensions(target_gainmap_size);
+  }
+
+  sk_sp<SkImage> target_image;
+  sk_sp<SkImage> target_gainmap_image;
+  std::unique_ptr<base::DiscardableMemory> target_pixels;
+  // TODO(crbug.com/40095682): If this turns into a crasher, pass an actual
+  // "free memory" closure.
+  AllocateDiscardableSkImage(target_info, target_gainmap_info,
+                             base::DoNothing(), target_pixels, target_image,
+                             target_gainmap_image);
+  if (!target_image) {
+    return nullptr;
+  }
+
+  // Populate the pixels of `target_pixmap` from `decoded_pixmap_sub_rect`
+  // by `scalePixels`. The implementation will optimize this to `readPixels` if
+  // possible.
+  SkPixmap target_pixmap;
+  target_image->peekPixels(&target_pixmap);
+  result = decoded_pixmap_sub_rect.scalePixels(
+      target_pixmap, PaintFlags::FilterQualityToSkSamplingOptions(
+                         PaintFlags::FilterQuality::kMedium));
+  DCHECK(result) << key.ToString();
+
+  // Populate the pixels of `target_gainmap_image` using a `drawImage` from
+  // `src_gainmap_rect`.
+  if (target_gainmap_image) {
+    SkPixmap target_gainmap_pixmap;
+    target_gainmap_image->peekPixels(&target_gainmap_pixmap);
+    auto canvas = SkCanvas::MakeRasterDirect(
+        target_gainmap_pixmap.info(), target_gainmap_pixmap.writable_addr(),
+        target_gainmap_pixmap.rowBytes());
+    canvas->drawImageRect(
+        decoded_gainmap_image, src_gainmap_rect,
+        SkRect::MakeSize(SkSize::Make(target_gainmap_info.dimensions())),
+        SkSamplingOptions(SkFilterMode::kLinear), nullptr,
+        SkCanvas::kStrict_SrcRectConstraint);
+  }
+
   return std::make_unique<CacheEntry>(
-      target_info.makeColorSpace(candidate_image.image()->refColorSpace()),
+      target_image, target_gainmap_image, candidate_image.hdr_metadata(),
       std::move(target_pixels),
       SkSize::Make(-key.src_rect().x(), -key.src_rect().y()));
 }
@@ -200,7 +307,7 @@ SoftwareImageDecodeCacheUtils::CacheKey::FromDrawImage(const DrawImage& image,
   //   results (and only ever cache one tone mapping for a given image).
   TargetColorParams target_color_params = image.target_color_params();
   target_color_params.hdr_headroom = std::nullopt;
-  if (ToneMapUtil::UseGainmapShader(paint_image) ||
+  if (paint_image.HasGainmapInfo() ||
       ToneMapUtil::UseGlobalToneMapFilter(paint_image.color_space())) {
     if (paint_image.color_space()) {
       target_color_params.color_space =
@@ -351,19 +458,21 @@ std::string SoftwareImageDecodeCacheUtils::CacheKey::ToString() const {
 // CacheEntry ------------------------------------------------------------------
 SoftwareImageDecodeCacheUtils::CacheEntry::CacheEntry()
     : tracing_id_(g_next_tracing_id_.GetNext()) {}
+
 SoftwareImageDecodeCacheUtils::CacheEntry::CacheEntry(
-    const SkImageInfo& info,
+    sk_sp<SkImage> image,
+    sk_sp<SkImage> gainmap_image,
+    const std::optional<gfx::HDRMetadata>& hdr_metadata,
     std::unique_ptr<base::DiscardableMemory> in_memory,
     const SkSize& src_rect_offset)
     : is_locked(true),
       memory(std::move(in_memory)),
-      image_info_(info),
+      image_(std::move(image)),
+      gainmap_image_(std::move(gainmap_image)),
+      hdr_metadata_(hdr_metadata),
       src_rect_offset_(src_rect_offset),
       tracing_id_(g_next_tracing_id_.GetNext()) {
   DCHECK(memory);
-  SkPixmap pixmap(image_info_, memory->data(), image_info_.minRowBytes());
-  image_ = SkImages::RasterFromPixmap(
-      pixmap, [](const void* pixels, void* context) {}, nullptr);
 }
 
 SoftwareImageDecodeCacheUtils::CacheEntry::~CacheEntry() {
@@ -381,9 +490,10 @@ void SoftwareImageDecodeCacheUtils::CacheEntry::MoveImageMemoryTo(
   is_locked = false;
 
   entry->memory = std::move(memory);
-  entry->image_info_ = std::move(image_info_);
   entry->src_rect_offset_ = std::move(src_rect_offset_);
   entry->image_ = std::move(image_);
+  entry->gainmap_image_ = std::move(gainmap_image_);
+  entry->hdr_metadata_ = hdr_metadata_;
 }
 
 bool SoftwareImageDecodeCacheUtils::CacheEntry::Lock() {

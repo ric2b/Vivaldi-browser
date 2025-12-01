@@ -673,6 +673,9 @@ typedef struct PARTITION_SPEED_FEATURES {
   // ML based partition search breakout model index
   int ml_partition_search_breakout_model_index;
 
+  // ML based partition search breakout model index
+  int ml_4_partition_search_level_index;
+
   // Aggressiveness levels for pruning split and rectangular partitions based on
   // simple_motion_search. SIMPLE_AGG_LVL0 to SIMPLE_AGG_LVL5 correspond to
   // simple motion search based pruning. QIDX_BASED_AGG_LVL1 corresponds to
@@ -921,8 +924,9 @@ typedef struct MV_SPEED_FEATURES {
   int prune_intrabc_candidate_block_hash_search;
 
   // Intrabc search level
-  // 0: top + left search
-  // 1: top search only
+  // 0: top + left search, all block sizes, always hash plus pixel search
+  // 1: top search only, 4x4, 8x8 and 16x16 block sizes only, perform pixel
+  //    search if and only if hash search failed to find a candidate
   int intrabc_search_level;
 
   // Whether the maximum intrabc block size to hash is 8x8
@@ -1723,8 +1727,8 @@ typedef struct REAL_TIME_SPEED_FEATURES {
   // For keyframes in rtc: adjust the rc_bits_per_mb, to reduce overshoot.
   int rc_adjust_keyframe;
 
-  // On scene change: compute spatial variance.
-  int rc_compute_spatial_var_sc;
+  // On scene change or keyframe: compute spatial variance.
+  int rc_compute_spatial_var_sc_kf;
 
   // For nonrd mode: Prefer larger partition blks in variance based partitioning
   // 0: disabled, 1-3: increasing aggressiveness

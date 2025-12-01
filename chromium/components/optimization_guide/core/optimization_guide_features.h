@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/byte_count.h"
 #include "base/component_export.h"
 #include "base/containers/enum_set.h"
 #include "base/containers/flat_set.h"
@@ -48,8 +49,6 @@ BASE_DECLARE_FEATURE(kPreventLongRunningPredictionModels);
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kOverrideNumThreadsForModelExecution);
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
-BASE_DECLARE_FEATURE(kOptGuideEnableXNNPACKDelegateWithTFLite);
-COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kOptimizationGuidePersonalizedFetching);
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kOptimizationGuidePredictionModelKillswitch);
@@ -79,6 +78,8 @@ COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kAnnotatedPageContentWithMediaData);
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kOptimizationGuideProactivePersonalizedHintsFetching);
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+BASE_DECLARE_FEATURE(kOptimizationGuideBypassFormsClassificationAuth);
 
 // Allows setting feature params for model download configuration, such as
 // minimum performance class for download.
@@ -242,11 +243,6 @@ COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 std::optional<int> OverrideNumThreadsForOptTarget(
     proto::OptimizationTarget opt_target);
 
-// Whether XNNPACK should be used with TFLite, on platforms where it is
-// supported. This is a no-op on unsupported platforms.
-COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
-bool TFLiteXNNPACKDelegateEnabled();
-
 // Whether logging of model quality is enabled.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 bool IsModelQualityLoggingEnabled();
@@ -342,21 +338,21 @@ base::TimeDelta GetOnDeviceEligibleModelFeatureRecentUsePeriod();
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 base::TimeDelta GetOnDeviceModelRetentionTime();
 
-// Return the disk space (in MiB) required for on device model install.
+// Return the disk space required for on device model install.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
-int GetDiskSpaceRequiredInMbForOnDeviceModelInstall();
+base::ByteCount GetDiskSpaceRequiredForOnDeviceModelInstall();
 
 // Whether there is enough free disk space to allow on-device model
 // installation.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 bool IsFreeDiskSpaceSufficientForOnDeviceModelInstall(
-    int64_t free_disk_space_bytes);
+    base::ByteCount free_disk_space_bytes);
 
 // Whether there is too little disk space to retain the on-device model
 // installation.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 bool IsFreeDiskSpaceTooLowForOnDeviceModelInstall(
-    int64_t free_disk_space_bytes);
+    base::ByteCount free_disk_space_bytes);
 
 // Returns true if unsafe content should be removed.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
@@ -371,6 +367,12 @@ bool ShouldUseTextSafetyClassifierModel();
 // range [0, 1].
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 double GetOnDeviceModelLanguageDetectionMinimumReliability();
+
+// Whether the newer generalized safety model is used instead of the ULM-based
+// model as the text safety model. Irrelevant if
+// `ShouldUseTextSafetyClassifierModel()` returns false;
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+bool ShouldUseGeneralizedSafetyModel();
 
 // These params configure the repetition checker. See HasRepeatingSuffix() in
 // repetition_checker.h for explanation. A value of 2 for num repeats and 16 for
@@ -403,10 +405,6 @@ bool ShouldEnableOptimizationGuideIconView();
 // Whether Ai settings page integration with Privacy Guide is enabled.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 bool IsPrivacyGuideAiSettingsEnabled();
-
-// Whether policy-disabled AI settings are visible.
-COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
-BASE_DECLARE_FEATURE(kAiSettingsPageEnterpriseDisabledUi);
 
 }  // namespace features
 }  // namespace optimization_guide

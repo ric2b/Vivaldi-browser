@@ -57,6 +57,8 @@
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/base/cursor/cursor.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -881,7 +883,7 @@ gfx::Size AppListItemView::GetIconSize() const {
   if (is_folder_) {
     return app_list_config_->folder_icon_size();
   }
-  if (is_promise_app_ && features::ArePromiseIconsEnabled() && item_weak_) {
+  if (is_promise_app_ && item_weak_) {
     // Placeholder icons do not change size between states.
     if (ImageModelHasPlaceholderIcon()) {
       return gfx::Size(kPlaceholderIconDimension, kPlaceholderIconDimension);
@@ -2073,8 +2075,7 @@ bool AppListItemView::ImageModelHasPlaceholderIcon() const {
 }
 
 void AppListItemView::UpdateProgressIndicatorState() {
-  if ((!is_promise_app_ && !forced_progress_indicator_value_) ||
-      !features::ArePromiseIconsEnabled()) {
+  if ((!is_promise_app_ && !forced_progress_indicator_value_)) {
     return;
   }
 

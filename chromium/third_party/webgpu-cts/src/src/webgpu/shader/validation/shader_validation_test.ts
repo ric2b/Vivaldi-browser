@@ -9,6 +9,7 @@ const kEnables: Record<string, GPUFeatureName> = {
   f16: 'shader-f16',
   subgroups: 'subgroups' as GPUFeatureName,
   clip_distances: 'clip-distances' as GPUFeatureName,
+  chromium_experimental_primitive_id: 'chromium-experimental-primitive-id' as GPUFeatureName,
 };
 
 /**

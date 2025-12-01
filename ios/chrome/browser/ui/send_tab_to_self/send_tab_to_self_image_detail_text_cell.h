@@ -14,7 +14,7 @@
 //  |  |       |   Optional multiline detail text      |
 //  |  +-------+                                       |
 //  +--------------------------------------------------+
-@interface SendTabToSelfImageDetailTextCell : TableViewCell
+@interface SendTabToSelfImageDetailTextCell : LegacyTableViewCell
 
 // Cell image.
 @property(nonatomic, strong) UIImage* image;

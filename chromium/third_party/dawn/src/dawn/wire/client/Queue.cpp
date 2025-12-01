@@ -92,7 +92,7 @@ WireResult Client::DoQueueWorkDoneCallback(ObjectHandle eventManager,
                                            WGPUFuture future,
                                            WGPUQueueWorkDoneStatus status,
                                            WGPUStringView message) {
-    return GetEventManager(eventManager).SetFutureReady<WorkDoneEvent>(future.id, status, message);
+    return SetFutureReady<WorkDoneEvent>(eventManager, future.id, status, message);
 }
 
 WGPUFuture Queue::APIOnSubmittedWorkDone(const WGPUQueueWorkDoneCallbackInfo& callbackInfo) {
@@ -102,13 +102,13 @@ WGPUFuture Queue::APIOnSubmittedWorkDone(const WGPUQueueWorkDoneCallbackInfo& ca
 
     Client* client = GetClient();
     auto [futureIDInternal, tracked] =
-        GetEventManager().TrackEvent(std::make_unique<WorkDoneEvent>(callbackInfo));
+        GetEventManager().TrackEvent(AcquireRef(new WorkDoneEvent(callbackInfo)));
     if (!tracked) {
         return {futureIDInternal};
     }
 
     QueueOnSubmittedWorkDoneCmd cmd;
-    cmd.queueId = GetWireId();
+    cmd.queueId = GetWireHandle(client).id;
     cmd.eventManagerHandle = GetEventManagerHandle();
     cmd.future = {futureIDInternal};
 
@@ -123,8 +123,8 @@ void Queue::APIWriteBuffer(WGPUBuffer cBuffer,
     Buffer* buffer = FromAPI(cBuffer);
 
     QueueWriteBufferCmd cmd;
-    cmd.queueId = GetWireId();
-    cmd.bufferId = buffer->GetWireId();
+    cmd.queueId = GetWireHandle(GetClient()).id;
+    cmd.bufferId = buffer->GetWireHandle(GetClient()).id;
     cmd.bufferOffset = bufferOffset;
     cmd.data = static_cast<const uint8_t*>(data);
     cmd.size = size;
@@ -138,7 +138,7 @@ void Queue::APIWriteTexture(const WGPUTexelCopyTextureInfo* destination,
                             const WGPUTexelCopyBufferLayout* dataLayout,
                             const WGPUExtent3D* writeSize) {
     QueueWriteTextureCmd cmd;
-    cmd.queueId = GetWireId();
+    cmd.queueId = GetWireHandle(GetClient()).id;
     cmd.destination = destination;
     cmd.data = static_cast<const uint8_t*>(data);
     cmd.dataSize = dataSize;

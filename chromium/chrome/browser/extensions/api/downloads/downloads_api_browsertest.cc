@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "chrome/browser/extensions/api/downloads/downloads_api.h"
 
 #include <stddef.h>
@@ -247,7 +242,9 @@ class DownloadsEventsListener : public EventRouter::TestObserver {
                const std::string& event_name,
                const std::string& json_args) {
     base::RunLoop loop;
-    base::Value args = base::JSONReader::Read(json_args).value();
+    base::Value args =
+        base::JSONReader::Read(json_args, base::JSON_PARSE_CHROMIUM_EXTENSIONS)
+            .value();
     waiting_for_ =
         std::make_unique<Event>(profile, event_name, args, base::Time());
     for (const auto& event : events_) {
@@ -2018,7 +2015,9 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 
 // Test that we disallow certain headers case-insensitively.
 // TODO(crbug.com/335421977): Flaky on "Linux ChromiumOS MSan Tests"
-#if (BUILDFLAG(IS_CHROMEOS) && defined(MEMORY_SANITIZER))
+// TODO(crbug.com/441086569): Flaky on "Linux Tests (dbg)"
+#if (BUILDFLAG(IS_CHROMEOS) && defined(MEMORY_SANITIZER)) || \
+    (BUILDFLAG(IS_LINUX) && !defined(NDEBUG))
 #define MAYBE_DownloadExtensionTest_Download_UnsafeHeaders \
   DISABLED_DownloadExtensionTest_Download_UnsafeHeaders
 #else

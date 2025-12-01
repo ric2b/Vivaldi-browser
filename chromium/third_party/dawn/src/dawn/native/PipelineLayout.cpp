@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <utility>
 
 #include "absl/container/inlined_vector.h"
@@ -274,9 +275,12 @@ ResultOrError<Ref<PipelineLayoutBase>> PipelineLayoutBase::CreateDefault(
     };
 
     // Does the trivial conversions from a ShaderBindingInfo to a BindGroupLayoutEntry
+    std::vector<std::unique_ptr<wgpu::TexelBufferBindingLayout>> texelBufferLayouts;
+
     auto ConvertMetadataToEntry =
-        [](const ShaderBindingInfo& shaderBinding,
-           const ExternalTextureBindingLayout* externalTextureBindingEntry) -> EntryData {
+        [&texelBufferLayouts](
+            BindGroupIndex /*group*/, const ShaderBindingInfo& shaderBinding,
+            const ExternalTextureBindingLayout* externalTextureBindingEntry) -> EntryData {
         EntryData entry = {};
         entry.bindingArraySize = uint32_t(shaderBinding.arraySize);
 
@@ -303,6 +307,13 @@ ResultOrError<Ref<PipelineLayoutBase>> PipelineLayoutBase::CreateDefault(
                 entry.storageTexture.format = bindingInfo.format;
                 entry.storageTexture.viewDimension = bindingInfo.viewDimension;
             },
+            [&](const TexelBufferBindingInfo& bindingInfo) {
+                auto layout = std::make_unique<wgpu::TexelBufferBindingLayout>();
+                layout->format = bindingInfo.format;
+                layout->access = bindingInfo.access;
+                texelBufferLayouts.push_back(std::move(layout));
+                entry.nextInChain = texelBufferLayouts.back().get();
+            },
             [&](const ExternalTextureBindingInfo&) {
                 entry.nextInChain = externalTextureBindingEntry;
             },
@@ -317,6 +328,7 @@ ResultOrError<Ref<PipelineLayoutBase>> PipelineLayoutBase::CreateDefault(
     // Creates the BGL from the entries for a stage, checking it is valid.
     auto CreateBGL = [](DeviceBase* device, EntryMap entries,
                         PipelineCompatibilityToken pipelineCompatibilityToken,
+                        ChainedStruct* descriptorChain,
                         bool allowInternalBinding) -> ResultOrError<Ref<BindGroupLayoutBase>> {
         // Put all the values from the map in a vector
         std::vector<BindGroupLayoutEntry> entryVec;
@@ -327,14 +339,19 @@ ResultOrError<Ref<PipelineLayoutBase>> PipelineLayoutBase::CreateDefault(
 
         // Create and validate the BGL
         BindGroupLayoutDescriptor desc = {};
+        desc.nextInChain = descriptorChain;
         desc.entries = entryVec.data();
         desc.entryCount = entryVec.size();
 
+        UnpackedPtr<BindGroupLayoutDescriptor> unpacked;
         if (device->IsValidationEnabled()) {
-            DAWN_TRY_CONTEXT(ValidateBindGroupLayoutDescriptor(device, &desc, allowInternalBinding),
-                             "validating %s", &desc);
+            DAWN_TRY_ASSIGN_CONTEXT(
+                unpacked, ValidateBindGroupLayoutDescriptor(device, &desc, allowInternalBinding),
+                "validating %s", &desc);
+        } else {
+            unpacked = Unpack(&desc);
         }
-        return device->GetOrCreateBindGroupLayout(&desc, pipelineCompatibilityToken);
+        return device->GetOrCreateBindGroupLayout(unpacked, pipelineCompatibilityToken);
     };
 
     DAWN_ASSERT(!stages.empty());
@@ -367,7 +384,7 @@ ResultOrError<Ref<PipelineLayoutBase>> PipelineLayoutBase::CreateDefault(
             for (const auto& [bindingNumber, shaderBinding] : groupBindings) {
                 // Create the BindGroupLayoutEntry
                 EntryData entry =
-                    ConvertMetadataToEntry(shaderBinding, &externalTextureBindingLayout);
+                    ConvertMetadataToEntry(group, shaderBinding, &externalTextureBindingLayout);
                 entry.binding = uint32_t(bindingNumber);
                 entry.visibility = StageBit(stage.shaderStage);
 
@@ -403,13 +420,54 @@ ResultOrError<Ref<PipelineLayoutBase>> PipelineLayoutBase::CreateDefault(
             std::max(immediateDataRangeByteSize, metadata.immediateDataRangeByteSize);
     }
 
+    // Gather the dynamic binding arrays from the shader and check compatibility between stages.
+    PerBindGroup<std::optional<GroupDynamicBindingArrayInfo>> dynamicArrays;
+    for (const StageAndDescriptor& stage : stages) {
+        const EntryPointMetadata& metadata = stage.module->GetEntryPoint(stage.entryPoint);
+
+        for (const auto& [group, array] : metadata.dynamicBindingArrays) {
+            if (!dynamicArrays[group].has_value()) {
+                dynamicArrays[group] = array;
+                continue;
+            }
+
+            DAWN_INVALID_IF(dynamicArrays[group]->start != array.start,
+                            "Dynamic array start doesn't match for @group(%u) between shader "
+                            "stages (%u vs. %u).",
+                            group, dynamicArrays[group]->start, array.start);
+
+            // If a stage doesn't access the dynamic array with any kind, merge the types of the
+            // other stages in.
+            if (dynamicArrays[group]->kind == wgpu::DynamicBindingKind::Undefined) {
+                dynamicArrays[group]->kind = array.kind;
+            } else {
+                DAWN_INVALID_IF(array.kind != wgpu::DynamicBindingKind::Undefined &&
+                                    dynamicArrays[group]->kind != array.kind,
+                                "Dynamic array kind doesn't match for @group(%u) between shader "
+                                "stages (%s vs. %s).",
+                                group, dynamicArrays[group]->kind, array.kind);
+            }
+        }
+    }
+
     // Create the bind group layouts, including the empty ones as all the bind group layouts should
     // be created with `pipelineCompatibilityToken` whether they are empty or not.
     PerBindGroup<Ref<BindGroupLayoutBase>> bindGroupLayouts = {};
     for (auto group : Range(kMaxBindGroupsTyped)) {
+        wgpu::ChainedStruct* descriptorChain = nullptr;
+
+        wgpu::BindGroupLayoutDynamicBindingArray dynamic;
+        if (dynamicArrays[group].has_value()) {
+            dynamic.nextInChain = descriptorChain;
+            dynamic.dynamicArray.kind = dynamicArrays[group]->kind;
+            dynamic.dynamicArray.start = uint32_t(dynamicArrays[group]->start);
+
+            descriptorChain = &dynamic;
+        }
+
         DAWN_TRY_ASSIGN(bindGroupLayouts[group],
                         CreateBGL(device, std::move(entryData[group]), pipelineCompatibilityToken,
-                                  allowInternalBinding));
+                                  descriptorChain, allowInternalBinding));
     }
 
     // Create the deduced pipeline layout, validating if it is valid.

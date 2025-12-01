@@ -4,6 +4,7 @@
 #ifndef DEVICE_VR_OPENXR_ANDROID_OPENXR_SCENE_UNDERSTANDING_MANAGER_ANDROID_H_
 #define DEVICE_VR_OPENXR_ANDROID_OPENXR_SCENE_UNDERSTANDING_MANAGER_ANDROID_H_
 
+#include "device/vr/openxr/android/openxr_anchor_manager_android.h"
 #include "device/vr/openxr/android/openxr_hit_test_manager_android.h"
 #include "device/vr/openxr/android/openxr_plane_manager_android.h"
 #include "device/vr/openxr/openxr_extension_handler_factory.h"
@@ -26,13 +27,15 @@ class OpenXRSceneUnderstandingManagerAndroid
   ~OpenXRSceneUnderstandingManagerAndroid() override;
 
   // OpenXRSceneUnderstandingManager
+  OpenXrSceneUnderstandingManagerType GetType() const override;
   OpenXrPlaneManager* GetPlaneManager() override;
+  OpenXrAnchorManager* GetAnchorManager() override;
   OpenXrHitTestManager* GetHitTestManager() override;
  private:
-  const raw_ref<const OpenXrExtensionHelper> extension_helper_;
   XrSpace mojo_space_;
 
   std::unique_ptr<OpenXrPlaneManagerAndroid> plane_manager_;
+  std::unique_ptr<OpenXrAnchorManagerAndroid> anchor_manager_;
   std::unique_ptr<OpenXrHitTestManagerAndroid> hit_test_manager_;
 };
 
@@ -44,13 +47,21 @@ class OpenXrSceneUnderstandingManagerAndroidFactory
 
   const base::flat_set<std::string_view>& GetRequestedExtensions()
       const override;
-  std::set<device::mojom::XRSessionFeature> GetSupportedFeatures(
-      const OpenXrExtensionEnumeration* extension_enum) const override;
+  std::set<device::mojom::XRSessionFeature> GetSupportedFeatures()
+      const override;
+
+  void CheckAndUpdateEnabledState(
+      const OpenXrExtensionEnumeration* extension_enum,
+      XrInstance instance,
+      XrSystemId system) override;
 
   std::unique_ptr<OpenXRSceneUnderstandingManager>
   CreateSceneUnderstandingManager(const OpenXrExtensionHelper& extension_helper,
-                                  XrSession session,
+                                  OpenXrApiWrapper* openxr,
                                   XrSpace mojo_space) const override;
+
+ private:
+  std::set<device::mojom::XRSessionFeature> supported_features_;
 };
 
 }  // namespace device

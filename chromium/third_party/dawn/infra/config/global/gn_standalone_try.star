@@ -25,70 +25,399 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# Starlark file for Buildbucket entries of trybots using the gn_v2_trybot
-# recipe. Note that builders must first be defined the the build repo in
-# https://source.chromium.org/chromium/infra/infra_superproject/+/main:build/recipes/recipe_modules/dawn/trybots.py
-
 """Try Dawn builders using GN and a standalone Dawn checkout (instead of Chromium)."""
 
+load("@chromium-luci//builders.star", "os")
+load("@chromium-luci//try.star", "try_")
 load("//constants.star", "siso")
+load("//location_filters.star", "exclusion_filters")
 
-luci.recipe(
-    name = "recipe:dawn/gn_v2_trybot",
-    cipd_package = "infra/recipe_bundles/chromium.googlesource.com/chromium/tools/build",
-    recipe = "dawn/gn_v2_trybot",
-    use_bbagent = True,
-    use_python3 = True,
+try_.defaults.set(
+    executable = "recipe:dawn/gn_v2_trybot",
+    builder_group = "try",
+    bucket = "try",
+    pool = "luci.chromium.gpu.try",
+    builderless = True,
+    build_numbers = True,
+    list_view = "try",
+    cq_group = "Dawn-CQ",
+    contact_team_email = "chrome-gpu-infra@google.com",
+    service_account = "dawn-try-builder@chops-service-accounts.iam.gserviceaccount.com",
+    siso_project = siso.project.DEFAULT_UNTRUSTED,
+    siso_remote_jobs = siso.remote_jobs.DEFAULT,
 )
 
-LINUX_BUILDER_DIMENSIONS = {
-    "cores": "8",
-    "os": "Ubuntu-22.04",
-    "pool": "luci.chromium.gpu.try",
-}
+################################################################################
+# CQ Builders                                                                  #
+################################################################################
 
-TRY_SERVICE_ACCOUNT = "dawn-try-builder@chops-service-accounts.iam.gserviceaccount.com"
+## Templates
 
-def generate_properties():
-    properties = {
-        "$build/reclient": {
-            "instance": siso.project.DEFAULT_UNTRUSTED,
-            "jobs": siso.remote_jobs.DEFAULT,
-            "metrics_project": "chromium-reclient-metrics",
-            "scandeps_server": True,
-        },
-        "$build/siso": {
-            "configs": ["builder"],
-            "enable_cloud_monitoring": True,
-            "enable_cloud_profiler": True,
-            "enable_cloud_trace": True,
-            "metrics_project": "chromium-reclient-metrics",
-            "project": siso.project.DEFAULT_UNTRUSTED,
-            "remote_jobs": siso.remote_jobs.DEFAULT,
-        },
-        "builder_group": "dawn",
-    }
-    return properties
+def apply_cq_builder_defaults(kwargs):
+    kwargs.setdefault("max_concurrent_builds", 3)
+    return kwargs
 
-def trybot(name, dimensions):
-    """Adds a trybot.
+def apply_linux_cq_builder_defaults(kwargs):
+    kwargs = apply_cq_builder_defaults(kwargs)
+    kwargs.setdefault("os", os.LINUX_DEFAULT)
+    kwargs.setdefault("ssd", None)
+    return kwargs
 
-    Note that the mirroring configuration is handled in the build-side
-    trybots.py file.
+def apply_win_cq_builder_defaults(kwargs):
+    kwargs = apply_cq_builder_defaults(kwargs)
+    kwargs.setdefault("os", os.WINDOWS_DEFAULT)
 
-    Args:
-        name: The name of the trybot being added.
-        dimensions: The Swarming dimensions the trybot should target.
-    """
-    luci.builder(
+    # This can be changed to prefer SSDs once the GPU Windows GCE fleet has
+    # been switched to primarily using SSDs.
+    kwargs.setdefault("ssd", None)
+    return kwargs
+
+def apply_functional_builder_with_node_defaults(kwargs):
+    kwargs.setdefault("tryjob", try_.job(
+        location_filters = exclusion_filters.gn_clang_cq_file_exclusions,
+    ))
+    return kwargs
+
+def apply_functional_builder_without_node_defaults(kwargs):
+    kwargs.setdefault("tryjob", try_.job(
+        location_filters = exclusion_filters.gn_clang_no_node_cq_file_exclusions,
+    ))
+    return kwargs
+
+def apply_fuzz_builder_defaults(kwargs):
+    kwargs.setdefault("tryjob", try_.job(
+        location_filters = exclusion_filters.gn_clang_cq_fuzz_file_exclusions,
+    ))
+    return kwargs
+
+def dawn_linux_functional_cq_tester(**kwargs):
+    kwargs = apply_linux_cq_builder_defaults(kwargs)
+    kwargs = apply_functional_builder_with_node_defaults(kwargs)
+    try_.builder(**kwargs)
+
+def dawn_win_functional_cq_tester(**kwargs):
+    kwargs = apply_win_cq_builder_defaults(kwargs)
+    kwargs = apply_functional_builder_with_node_defaults(kwargs)
+    try_.builder(**kwargs)
+
+def dawn_linux_functional_cq_tester_without_node(**kwargs):
+    kwargs = apply_linux_cq_builder_defaults(kwargs)
+    kwargs = apply_functional_builder_without_node_defaults(kwargs)
+    try_.builder(**kwargs)
+
+def dawn_win_functional_cq_tester_without_node(**kwargs):
+    kwargs = apply_win_cq_builder_defaults(kwargs)
+    kwargs = apply_functional_builder_without_node_defaults(kwargs)
+    try_.builder(**kwargs)
+
+def dawn_linux_fuzz_cq_tester(**kwargs):
+    kwargs = apply_linux_cq_builder_defaults(kwargs)
+    kwargs = apply_fuzz_builder_defaults(kwargs)
+    try_.builder(**kwargs)
+
+## Functional testers
+
+dawn_linux_functional_cq_tester(
+    name = "dawn-cq-linux-x64-dbg",
+    description_html = "Tests debug Dawn on Linux/x64 on multiple hardware configs. Blocks CL submission",
+    mirrors = [
+        "ci/dawn-linux-x64-builder-dbg",
+        "ci/dawn-linux-x64-sws-dbg",
+    ],
+    gn_args = "ci/dawn-linux-x64-builder-dbg",
+)
+
+dawn_linux_functional_cq_tester(
+    name = "dawn-cq-linux-x64-rel",
+    description_html = "Tests release Dawn on Linux/x64 on multiple hardware configs. Blocks CL submission",
+    mirrors = [
+        "ci/dawn-linux-x64-builder-rel",
+        "ci/dawn-linux-x64-sws-rel",
+    ],
+    gn_args = "ci/dawn-linux-x64-builder-rel",
+)
+
+dawn_linux_functional_cq_tester_without_node(
+    name = "dawn-cq-linux-x86-dbg",
+    description_html = "Tests debug Dawn on Linux/x86 on multiple hardware configs. Blocks CL submission",
+    mirrors = [
+        "ci/dawn-linux-x86-builder-dbg",
+        "ci/dawn-linux-x86-sws-dbg",
+    ],
+    gn_args = "ci/dawn-linux-x86-builder-dbg",
+)
+
+dawn_linux_functional_cq_tester_without_node(
+    name = "dawn-cq-linux-x86-rel",
+    description_html = "Tests release Dawn on Linux/x86 on multiple hardware configs. Blocks CL submission",
+    mirrors = [
+        "ci/dawn-linux-x86-builder-rel",
+        "ci/dawn-linux-x86-sws-rel",
+    ],
+    gn_args = "ci/dawn-linux-x86-builder-rel",
+)
+
+dawn_win_functional_cq_tester(
+    name = "dawn-cq-win-x64-dbg",
+    description_html = "Tests debug Dawn on Win/x64 on multiple hardware configs. Blocks CL submission",
+    mirrors = [
+        "ci/dawn-win-x64-builder-dbg",
+        "ci/dawn-win-x64-sws-dbg",
+    ],
+    gn_args = "ci/dawn-win-x64-builder-dbg",
+)
+
+dawn_win_functional_cq_tester(
+    name = "dawn-cq-win-x64-rel",
+    description_html = "Tests release Dawn on Win/x64 on multiple hardware configs. Blocks CL submission",
+    mirrors = [
+        "ci/dawn-win-x64-builder-rel",
+        "ci/dawn-win-x64-sws-rel",
+    ],
+    gn_args = "ci/dawn-win-x64-builder-rel",
+)
+
+dawn_win_functional_cq_tester_without_node(
+    name = "dawn-cq-win-x86-dbg",
+    description_html = "Tests debug Dawn on Win/x86 on multiple hardware configs. Blocks CL submission",
+    mirrors = [
+        "ci/dawn-win-x86-builder-dbg",
+        "ci/dawn-win-x86-sws-dbg",
+    ],
+    gn_args = "ci/dawn-win-x86-builder-dbg",
+)
+
+dawn_win_functional_cq_tester_without_node(
+    name = "dawn-cq-win-x86-rel",
+    description_html = "Tests release Dawn on Win/x86 on multiple hardware configs. Blocks CL submission",
+    mirrors = [
+        "ci/dawn-win-x86-builder-rel",
+        "ci/dawn-win-x86-sws-rel",
+    ],
+    gn_args = "ci/dawn-win-x86-builder-rel",
+)
+
+## Fuzz testers
+
+dawn_linux_fuzz_cq_tester(
+    name = "dawn-cq-linux-x64-fuzz-dbg",
+    description_html = "Compiles and runs debug Dawn binaries for 'tools/run fuzz' for Linux/x64. Blocks CL submission.",
+    mirrors = [
+        "ci/dawn-linux-x64-fuzz-dbg",
+    ],
+    gn_args = "ci/dawn-linux-x64-fuzz-dbg",
+)
+
+dawn_linux_fuzz_cq_tester(
+    name = "dawn-cq-linux-x64-fuzz-rel",
+    description_html = "Compiles and runs release Dawn binaries for 'tools/run fuzz' for Linux/x64. Blocks CL submission.",
+    mirrors = [
+        "ci/dawn-linux-x64-fuzz-rel",
+    ],
+    gn_args = "ci/dawn-linux-x64-fuzz-rel",
+)
+
+dawn_linux_fuzz_cq_tester(
+    name = "dawn-cq-linux-x86-fuzz-dbg",
+    description_html = "Compiles and runs debug Dawn binaries for 'tools/run fuzz' for Linux/x86. Blocks CL submission.",
+    mirrors = [
+        "ci/dawn-linux-x86-fuzz-dbg",
+    ],
+    gn_args = "ci/dawn-linux-x86-fuzz-dbg",
+)
+
+dawn_linux_fuzz_cq_tester(
+    name = "dawn-cq-linux-x86-fuzz-rel",
+    description_html = "Compiles and runs release Dawn binaries for 'tools/run fuzz' for Linux/x86. Blocks CL submission.",
+    mirrors = [
+        "ci/dawn-linux-x86-fuzz-rel",
+    ],
+    gn_args = "ci/dawn-linux-x86-fuzz-rel",
+)
+
+################################################################################
+# Manual Trybots                                                               #
+################################################################################
+
+## Templates
+
+def dawn_linux_manual_builder(*, name, **kwargs):
+    return try_.builder(
         name = name,
-        bucket = "try",
-        executable = "recipe:dawn/gn_v2_trybot",
-        properties = generate_properties(),
-        dimensions = dimensions,
-        build_numbers = True,
-        resultdb_settings = resultdb.settings(enable = True),
-        service_account = TRY_SERVICE_ACCOUNT,
+        max_concurrent_builds = 1,
+        os = os.LINUX_DEFAULT,
+        ssd = None,
+        **kwargs
     )
 
-trybot("dawn-cq-linux-x64-sws-rel", LINUX_BUILDER_DIMENSIONS)
+def dawn_mac_manual_builder(*, name, **kwargs):
+    return try_.builder(
+        name = name,
+        max_concurrent_builds = 1,
+        os = os.MAC_DEFAULT,
+        # TODO(crbug.com/441328362): Remove the architecture restriction once
+        # all tests are run on Swarming.
+        cpu = "x86-64",
+        **kwargs
+    )
+
+def dawn_win_manual_builder(*, name, **kwargs):
+    return try_.builder(
+        name = name,
+        max_concurrent_builds = 1,
+        os = os.WINDOWS_DEFAULT,
+        # This can be changed to prefer SSDs once the GPU Windows GCE fleet has
+        # been switched to primarily using SSDs.
+        ssd = None,
+        **kwargs
+    )
+
+## Functional testers
+
+dawn_linux_manual_builder(
+    name = "dawn-try-linux-x64-sws-dbg",
+    description_html = "Tests debug Dawn on Linux/x64 with SwiftShader. Manual only.",
+    mirrors = [
+        "ci/dawn-linux-x64-builder-dbg",
+        "ci/dawn-linux-x64-sws-dbg",
+    ],
+    gn_args = "ci/dawn-linux-x64-builder-dbg",
+)
+
+dawn_linux_manual_builder(
+    name = "dawn-try-linux-x64-sws-rel",
+    description_html = "Tests release Dawn on Linux/x64 with SwiftShader. Manual only.",
+    mirrors = [
+        "ci/dawn-linux-x64-builder-rel",
+        "ci/dawn-linux-x64-sws-rel",
+    ],
+    gn_args = "ci/dawn-linux-x64-builder-rel",
+)
+
+dawn_linux_manual_builder(
+    name = "dawn-try-linux-x86-sws-dbg",
+    description_html = "Tests debug Dawn on Linux/x86 with SwiftShader. Manual only.",
+    mirrors = [
+        "ci/dawn-linux-x86-builder-dbg",
+        "ci/dawn-linux-x86-sws-dbg",
+    ],
+    gn_args = "ci/dawn-linux-x86-builder-dbg",
+)
+
+dawn_linux_manual_builder(
+    name = "dawn-try-linux-x86-sws-rel",
+    description_html = "Tests release Dawn on Linux/x86 with SwiftShader. Manual only.",
+    mirrors = [
+        "ci/dawn-linux-x86-builder-rel",
+        "ci/dawn-linux-x86-sws-rel",
+    ],
+    gn_args = "ci/dawn-linux-x86-builder-rel",
+)
+
+dawn_mac_manual_builder(
+    name = "dawn-try-mac-x64-sws-dbg",
+    description_html = "Tests debug Dawn on Mac/x64 with SwiftShader. Manual only.",
+    mirrors = [
+        "ci/dawn-mac-x64-builder-dbg",
+        "ci/dawn-mac-x64-sws-dbg",
+    ],
+    gn_args = "ci/dawn-mac-x64-builder-dbg",
+)
+
+dawn_mac_manual_builder(
+    name = "dawn-try-mac-x64-sws-rel",
+    description_html = "Tests release Dawn on Mac/x64 with SwiftShader. Manual only.",
+    mirrors = [
+        "ci/dawn-mac-x64-builder-rel",
+        "ci/dawn-mac-x64-sws-rel",
+    ],
+    gn_args = "ci/dawn-mac-x64-builder-rel",
+)
+
+dawn_win_manual_builder(
+    name = "dawn-try-win-x64-sws-dbg",
+    description_html = "Tests debug Dawn on Windows/x64 with SwiftShader. Manual only.",
+    mirrors = [
+        "ci/dawn-win-x64-builder-dbg",
+        "ci/dawn-win-x64-sws-dbg",
+    ],
+    gn_args = "ci/dawn-win-x64-builder-dbg",
+)
+
+dawn_win_manual_builder(
+    name = "dawn-try-win-x64-sws-msvc-rel",
+    description_html = "Tests release Dawn on Windows/x64 with SwiftShader using binaries built with MSVC. Manual only.",
+    mirrors = [
+        "ci/dawn-win-x64-builder-msvc-rel",
+        "ci/dawn-win-x64-sws-msvc-rel",
+    ],
+    gn_args = "ci/dawn-win-x64-builder-msvc-rel",
+)
+
+dawn_win_manual_builder(
+    name = "dawn-try-win-x64-sws-rel",
+    description_html = "Tests release Dawn on Windows/x64 with SwiftShader. Manual only.",
+    mirrors = [
+        "ci/dawn-win-x64-builder-rel",
+        "ci/dawn-win-x64-sws-rel",
+    ],
+    gn_args = "ci/dawn-win-x64-builder-rel",
+)
+
+dawn_win_manual_builder(
+    name = "dawn-try-win-x86-sws-dbg",
+    description_html = "Tests debug Dawn on Windows/x86 with SwiftShader. Manual only.",
+    mirrors = [
+        "ci/dawn-win-x86-builder-dbg",
+        "ci/dawn-win-x86-sws-dbg",
+    ],
+    gn_args = "ci/dawn-win-x86-builder-dbg",
+)
+
+dawn_win_manual_builder(
+    name = "dawn-try-win-x86-sws-rel",
+    description_html = "Tests release Dawn on Windows/x86 with SwiftShader. Manual only.",
+    mirrors = [
+        "ci/dawn-win-x86-builder-rel",
+        "ci/dawn-win-x86-sws-rel",
+    ],
+    gn_args = "ci/dawn-win-x86-builder-rel",
+)
+
+## Fuzz testers
+
+dawn_linux_manual_builder(
+    name = "dawn-try-linux-x64-fuzz-dbg",
+    description_html = "Runs debug Dawn fuzz tests on Linux/x64. Manual only.",
+    mirrors = [
+        "ci/dawn-linux-x64-fuzz-dbg",
+    ],
+    gn_args = "ci/dawn-linux-x64-fuzz-dbg",
+)
+
+dawn_linux_manual_builder(
+    name = "dawn-try-linux-x64-fuzz-rel",
+    description_html = "Runs release Dawn fuzz tests on Linux/x64. Manual only.",
+    mirrors = [
+        "ci/dawn-linux-x64-fuzz-rel",
+    ],
+    gn_args = "ci/dawn-linux-x64-fuzz-rel",
+)
+
+dawn_linux_manual_builder(
+    name = "dawn-try-linux-x86-fuzz-dbg",
+    description_html = "Runs debug Dawn fuzz tests on Linux/x86. Manual only.",
+    mirrors = [
+        "ci/dawn-linux-x86-fuzz-dbg",
+    ],
+    gn_args = "ci/dawn-linux-x86-fuzz-dbg",
+)
+
+dawn_linux_manual_builder(
+    name = "dawn-try-linux-x86-fuzz-rel",
+    description_html = "Runs release Dawn fuzz tests on Linux/x86. Manual only.",
+    mirrors = [
+        "ci/dawn-linux-x86-fuzz-rel",
+    ],
+    gn_args = "ci/dawn-linux-x86-fuzz-rel",
+)

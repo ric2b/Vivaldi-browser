@@ -73,12 +73,10 @@ class MutablePageMetadata : public MemoryChunkMetadata {
       MutablePageMetadata* to, size_t amount);
 
   // Only works if the pointer is in the first kPageSize of the MemoryChunk.
-  V8_INLINE static MutablePageMetadata* FromAddress(Address a);
   V8_INLINE static MutablePageMetadata* FromAddress(const Isolate* i,
                                                     Address a);
 
   // Only works if the object is in the first kPageSize of the MemoryChunk.
-  V8_INLINE static MutablePageMetadata* FromHeapObject(Tagged<HeapObject> o);
   V8_INLINE static MutablePageMetadata* FromHeapObject(const Isolate* i,
                                                        Tagged<HeapObject> o);
 
@@ -220,10 +218,6 @@ class MutablePageMetadata : public MemoryChunkMetadata {
   Space* owner() const {
     return reinterpret_cast<Space*>(MemoryChunkMetadata::owner());
   }
-
-  // Gets the chunk's allocation space, potentially dealing with a null owner_
-  // (like read-only chunks have).
-  inline AllocationSpace owner_identity() const;
 
   heap::ListNode<MutablePageMetadata>& list_node() { return list_node_; }
   const heap::ListNode<MutablePageMetadata>& list_node() const {

@@ -20,6 +20,7 @@
 #include "api/audio_codecs/audio_encoder_factory.h"
 #include "api/audio_options.h"
 #include "api/data_channel_interface.h"
+#include "api/environment/environment.h"
 #include "api/field_trials_view.h"
 #include "api/jsep.h"
 #include "api/media_stream_interface.h"
@@ -46,10 +47,16 @@ class PeerConnectionTestWrapper
       public webrtc::CreateSessionDescriptionObserver,
       public sigslot::has_slots<> {
  public:
+  // Asynchronously negotiates and exchanges ICE candidates between `caller` and
+  // `callee`. See also WaitForNegotiation() and other "WaitFor..." methods.
   static void Connect(PeerConnectionTestWrapper* caller,
                       PeerConnectionTestWrapper* callee);
+  // Synchronously negotiates. ICE candidates needs to be exchanged separately.
+  static void AwaitNegotiation(PeerConnectionTestWrapper* caller,
+                               PeerConnectionTestWrapper* callee);
 
   PeerConnectionTestWrapper(const std::string& name,
+                            const webrtc::Environment& env,
                             webrtc::SocketServer* socket_server,
                             webrtc::Thread* network_thread,
                             webrtc::Thread* worker_thread);
@@ -84,6 +91,17 @@ class PeerConnectionTestWrapper
 
   void WaitForNegotiation();
 
+  // Synchronous negotiation methods.
+  std::unique_ptr<webrtc::SessionDescriptionInterface> AwaitCreateOffer();
+  std::unique_ptr<webrtc::SessionDescriptionInterface> AwaitCreateAnswer();
+  void AwaitSetLocalDescription(webrtc::SessionDescriptionInterface* sdp);
+  void AwaitSetRemoteDescription(webrtc::SessionDescriptionInterface* sdp);
+  // Listen for remote ICE candidates but don't add them until
+  // AwaitAddRemoteIceCandidates().
+  void ListenForRemoteIceCandidates(
+      webrtc::scoped_refptr<PeerConnectionTestWrapper> remote_wrapper);
+  void AwaitAddRemoteIceCandidates();
+
   // Implements PeerConnectionObserver.
   void OnSignalingChange(
       webrtc::PeerConnectionInterface::SignalingState new_state) override;
@@ -99,6 +117,7 @@ class PeerConnectionTestWrapper
   void OnIceGatheringChange(
       webrtc::PeerConnectionInterface::IceGatheringState new_state) override {}
   void OnIceCandidate(const webrtc::IceCandidate* candidate) override;
+  void OnIceCandidateRemoved(const webrtc::IceCandidate* candidate) override {}
 
   // Implements CreateSessionDescriptionObserver.
   void OnSuccess(webrtc::SessionDescriptionInterface* desc) override;
@@ -142,8 +161,12 @@ class PeerConnectionTestWrapper
   bool CheckForConnection();
   bool CheckForAudio();
   bool CheckForVideo();
+  void OnRemoteIceCandidate(const std::string& sdp_mid,
+                            int sdp_mline_index,
+                            const std::string& candidate);
 
   std::string name_;
+  const webrtc::Environment env_;
   webrtc::SocketServer* const socket_server_;
   webrtc::Thread* const network_thread_;
   webrtc::Thread* const worker_thread_;
@@ -157,6 +180,8 @@ class PeerConnectionTestWrapper
   bool pending_negotiation_;
   std::vector<webrtc::scoped_refptr<webrtc::FakePeriodicVideoTrackSource>>
       fake_video_sources_;
+  webrtc::scoped_refptr<PeerConnectionTestWrapper> remote_wrapper_;
+  std::vector<std::unique_ptr<webrtc::IceCandidate>> remote_ice_candidates_;
 };
 
 #endif  // PC_TEST_PEER_CONNECTION_TEST_WRAPPER_H_

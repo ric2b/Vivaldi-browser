@@ -23,6 +23,7 @@
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/foundations/autofill_client.h"
 #include "components/autofill/core/browser/permissions/autofill_ai/autofill_ai_permission_utils.h"
+#include "components/autofill/core/browser/proto/server.pb.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 
@@ -84,16 +85,18 @@ std::optional<std::u16string> GetValueForDateSelect(
     const AttributeInstance& attribute,
     const AutofillField& field,
     const std::string& app_locale) {
-  FieldType type = field.Type().GetAutofillAiTypeAndResolveTagTypes(
-      attribute.type().entity_type());
+  const FieldType type =
+      field.Type().GetAutofillAiType(attribute.type().entity_type());
   if (!IsDateFieldType(type)) {
     return std::nullopt;
   }
 
-  auto get_part = [&](const std::u16string& format_string, uint32_t min = 0,
+  auto get_part = [&](std::u16string format_string, uint32_t min = 0,
                       uint32_t max =
                           std::numeric_limits<uint32_t>::max()) -> uint32_t {
-    std::u16string s = attribute.GetInfo(type, app_locale, format_string);
+    std::u16string s = attribute.GetInfo(
+        type, app_locale,
+        AutofillFormatString(std::move(format_string), FormatString_Type_DATE));
     unsigned int i = 0;
     return base::StringToUint(s, &i) && min <= i && i <= max
                ? i
@@ -118,8 +121,8 @@ std::optional<std::u16string> GetValueForDateSelect(
 std::u16string GetValueForInput(const AttributeInstance& attribute,
                                 const AutofillField& field,
                                 const std::string& app_locale) {
-  FieldType type = field.Type().GetAutofillAiTypeAndResolveTagTypes(
-      attribute.type().entity_type());
+  const FieldType type =
+      field.Type().GetAutofillAiType(attribute.type().entity_type());
   // TODO(crbug.com/389625753): Investigate whether only passing the
   // field type is the right choice here. This would for example
   // fail the fill a PASSPORT_NUMBER field that gets a
@@ -150,8 +153,8 @@ std::u16string GetValueForSelect(const AttributeInstance& attribute,
                                  const AutofillField& field,
                                  const std::string& app_locale,
                                  AddressNormalizer* address_normalizer) {
-  FieldType type = field.Type().GetAutofillAiTypeAndResolveTagTypes(
-      attribute.type().entity_type());
+  const FieldType type =
+      field.Type().GetAutofillAiType(attribute.type().entity_type());
   if (IsDateFieldType(type)) {
     return GetValueForDateSelect(attribute, field, app_locale).value_or(u"");
   }

@@ -6,6 +6,7 @@
 
 NSString* vMenuNewTab = @"vivaldi_new_tab";
 NSString* vMenuNewBackgroundTab = @"vivaldi_new_background_tab";
+NSString* vMenuNewWindow = @"vivaldi_new_window";
 NSString* vMenuPrivateTab = @"vivaldi_private_tab";
 NSString* vMenuLink = @"vivaldi_link";
 NSString* vMenuEdit = @"vivaldi_edit";
@@ -21,6 +22,8 @@ NSString* vMenuSelect = @"vivaldi_select";
 NSString* vMenuAddBookmark = @"vivaldi_add_bookmark";
 NSString* vMenuEditBookmark = @"vivaldi_edit_bookmark";
 NSString* vMenuAddToReadingList = @"vivaldi_add_reading_list";
+NSString* vMenuShowBookmarks = @"vivaldi_show_bookmarks";
+NSString* vMenuShowReadingList = @"vivaldi_show_reading_list";
 NSString* vMenuQRCode = @"vivaldi_qr_code";
 NSString* vMenuOpenIn = @"vivaldi_open_in";
 NSString* vMenuOpenImageInTab = @"vivaldi_open_image_in_tab";

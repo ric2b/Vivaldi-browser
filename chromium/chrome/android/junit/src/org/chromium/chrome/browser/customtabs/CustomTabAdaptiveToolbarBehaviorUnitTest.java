@@ -38,7 +38,6 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.robolectric.annotation.Config;
 
-import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Features.EnableFeatures;
@@ -53,6 +52,7 @@ import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant
 import org.chromium.components.feature_engagement.Tracker;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 /** Tests for {@link CustomTabAdaptiveToolbarBehavior}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -109,9 +109,6 @@ public class CustomTabAdaptiveToolbarBehaviorUnitTest {
                 Mockito.mock(AdaptiveToolbarButtonController.class);
         Supplier<Tracker> trackerSupplier = Mockito.mock(Supplier.class);
 
-        mBehavior.registerPerSurfaceButtons(controller, trackerSupplier);
-
-        ChromeFeatureList.sCctAdaptiveButtonEnableOpenInBrowser.setForTesting(true);
         when(mIntentDataProvider.getOpenInBrowserButtonState())
                 .thenReturn(OPEN_IN_BROWSER_STATE_DEFAULT);
         mBehavior.registerPerSurfaceButtons(controller, trackerSupplier);
@@ -120,14 +117,11 @@ public class CustomTabAdaptiveToolbarBehaviorUnitTest {
     }
 
     @Test
-    public void registerPerSurfaceButtons_OpenInBrowser_WhenOpenInBrowserButtonOn() {
+    public void registerPerSurfaceButtons_openInBrowser_WhenOpenInBrowserButtonOn() {
         AdaptiveToolbarButtonController controller =
                 Mockito.mock(AdaptiveToolbarButtonController.class);
         Supplier<Tracker> trackerSupplier = Mockito.mock(Supplier.class);
 
-        mBehavior.registerPerSurfaceButtons(controller, trackerSupplier);
-
-        ChromeFeatureList.sCctAdaptiveButtonEnableOpenInBrowser.setForTesting(true);
         when(mIntentDataProvider.getOpenInBrowserButtonState())
                 .thenReturn(OPEN_IN_BROWSER_STATE_ON);
         mBehavior.registerPerSurfaceButtons(controller, trackerSupplier);
@@ -142,7 +136,6 @@ public class CustomTabAdaptiveToolbarBehaviorUnitTest {
                 Mockito.mock(AdaptiveToolbarButtonController.class);
         Supplier<Tracker> trackerSupplier = Mockito.mock(Supplier.class);
 
-        ChromeFeatureList.sCctAdaptiveButtonEnableOpenInBrowser.setForTesting(true);
         when(mIntentDataProvider.getOpenInBrowserButtonState())
                 .thenReturn(OPEN_IN_BROWSER_STATE_OFF);
         mBehavior.registerPerSurfaceButtons(controller, trackerSupplier);

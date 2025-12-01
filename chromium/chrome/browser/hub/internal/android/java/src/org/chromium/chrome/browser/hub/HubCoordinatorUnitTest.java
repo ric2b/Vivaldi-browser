@@ -81,7 +81,6 @@ public class HubCoordinatorUnitTest {
     @Rule public BaseRobolectricTestRule mBaseRule = new BaseRobolectricTestRule();
 
     @Mock private Tab mTab;
-    @Mock private Tab mIncognitoTab;
     @Mock private HubLayoutController mHubLayoutController;
     @Mock private Pane mTabSwitcherPane;
     @Mock private Pane mIncognitoTabSwitcherPane;
@@ -145,8 +144,6 @@ public class HubCoordinatorUnitTest {
                 .thenReturn(mIncognitoHubSearchEnabledStateSupplier);
         when(mTab.getId()).thenReturn(TAB_ID);
         when(mTab.isIncognito()).thenReturn(false);
-        when(mIncognitoTab.getId()).thenReturn(INCOGNITO_TAB_ID);
-        when(mIncognitoTab.isIncognito()).thenReturn(true);
         when(mHubLayoutController.getPreviousLayoutTypeSupplier())
                 .thenReturn(mPreviousLayoutTypeSupplier);
         when(mHubLayoutController.getIsAnimatingSupplier())
@@ -160,7 +157,12 @@ public class HubCoordinatorUnitTest {
                         .registerPane(
                                 PaneId.INCOGNITO_TAB_SWITCHER,
                                 LazyOneshotSupplier.fromValue(mIncognitoTabSwitcherPane));
-        mPaneManager = spy(new PaneManagerImpl(builder, mHubVisibilitySupplier));
+        mPaneManager =
+                spy(
+                        new PaneManagerImpl(
+                                builder,
+                                mHubVisibilitySupplier,
+                                /* defaultPaneId= */ PaneId.TAB_SWITCHER));
 
         assertTrue(mPaneManager.focusPane(PaneId.TAB_SWITCHER));
         assertEquals(mTabSwitcherPane, mPaneManager.getFocusedPaneSupplier().get());
@@ -183,7 +185,8 @@ public class HubCoordinatorUnitTest {
                         mSearchActivityClient,
                         mEdgeToEdgeSupplier,
                         mHubColorMixer,
-                        /* xrSpaceModeObservableSupplier= */ null);
+                        /* xrSpaceModeObservableSupplier= */ null,
+                        /* defaultPaneId= */ PaneId.TAB_SWITCHER);
         ShadowLooper.runUiThreadTasks();
         mRootView.getChildCount();
         assertNotEquals(0, mRootView.getChildCount());
@@ -377,7 +380,8 @@ public class HubCoordinatorUnitTest {
                                             mSearchActivityClient,
                                             mEdgeToEdgeSupplier,
                                             mHubColorMixer,
-                                            null);
+                                            null,
+                                            /* defaultPaneId= */ PaneId.TAB_SWITCHER);
 
                             // EmptyDelegate.isBottomToolbarEnabled() returns false,
                             // so no bottom toolbar coordinator should be created
@@ -419,7 +423,8 @@ public class HubCoordinatorUnitTest {
                                             mSearchActivityClient,
                                             mEdgeToEdgeSupplier,
                                             mHubColorMixer,
-                                            null);
+                                            null,
+                                            /* defaultPaneId= */ PaneId.TAB_SWITCHER);
 
                             assertNotNull(coordinator.getHubBottomToolbarCoordinatorForTesting());
 

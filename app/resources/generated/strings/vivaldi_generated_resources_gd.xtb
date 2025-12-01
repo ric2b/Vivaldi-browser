@@ -28,7 +28,6 @@
 <translation id="1451375123200651445">Duilleag-lìn, faidhle singilte</translation>
 <translation id="1465176863081977902">Dèan leth&amp;bhreac de sheòladh na fuaime</translation>
 <translation id="1476607407192946488">&amp;Roghainnean cànain</translation>
-<translation id="1546280085599573572">Dh’atharraich an leudachan seo an duilleag a chì thu nuair a bhriogas tu air a’ phutan “Dachaidh”.</translation>
 <translation id="1552752544932680961">Rianaich an leudachan</translation>
 <translation id="15662109988763471">Cha deach an clò-bhualadair a thagh thu ri fhaighinn no cha deach a stàladh mar bu chòir. Thoir sùil air a’ chlò-bhualadair no feuch fear eile.</translation>
 <translation id="1588438908519853928">Àbhaisteach</translation>
@@ -70,7 +69,6 @@
 <translation id="215753907730220065">Fàg an làn-sgrìn</translation>
 <translation id="2158475082070321257">Dèan lethbhreac dhen cheangal airson a shoillseachadh</translation>
 <translation id="2177950615300672361">Taba incognito: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Mòideal an Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Cuir ann mar theacsa lom</translation>
 <translation id="2249605167705922988">m.e. 1-5, 8, 11-13</translation>
 <translation id="2280486287150724112">Am marghan deas</translation>
@@ -83,7 +81,6 @@
 <translation id="2348176352564285430">Aplacaid: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Tagh pasgan nan leudachan.</translation>
 <translation id="2379281330731083556">Dèan clò-bhualaidh a' cleachdadh còmhradh an t-siostaim... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Plugan neo-aithnichte</translation>
 <translation id="2423578206845792524">Sàbhail an d&amp;ealbh mar...</translation>
 <translation id="2439110203301358333">Chuir prògram eile air a’ choimpiutair agad leudachan ris aig a bheil buaidh air obrachadh Vivaldi ma dh’fhaoidte.</translation>
 <translation id="2443487764245141020">Dh’fhaoidte cuideachd gum bi aig làraichean an t-uidheam agad aithneachadh le aithnichear</translation>
@@ -107,7 +104,6 @@
 <translation id="2785873697295365461">Tuairisgeulaichean an fhaidhle</translation>
 <translation id="2825758591930162672">Iuchair phoblach a’ chuspair</translation>
 <translation id="2850541429955027218">Cuir ùrlar ris</translation>
-<translation id="2861941300086904918">Manaidsear tèarainteachd Native Client</translation>
 <translation id="2881076733170862447">Nuair a bhriogas tu air an leudachan</translation>
 <translation id="2889064240420137087">Fosgail an ceangal le…</translation>
 <translation id="2902127500170292085">Cha b’ urrainn dha <ph name="EXTENSION_NAME" /> conaltradh a dhèanamh leis a’ chlò-bhualadair seo. Dèan cinnteach gu bheil an clò-bhualadair ceangailte ris is feuch ris a-rithist.</translation>
@@ -154,7 +150,6 @@
 <translation id="3511307672085573050">Dèan l&amp;ethbhreac de sheòladh a’ cheangail</translation>
 <translation id="354068948465830244">Tha cead aige dàta na làraich a leughadh is atharrachadh</translation>
 <translation id="3560034655160545939">&amp;Dearbhadh-litreachaidh</translation>
-<translation id="3587482841069643663">Na h-uile</translation>
 <translation id="3627588569887975815">Fosgail an ceangal ann an uinneag inco&amp;gnito</translation>
 <translation id="3678156199662914018">Leudachan: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Iarrtas co-roinneadh sgrìn <ph name="APP_NAME" /></translation>
@@ -196,7 +191,6 @@
 <translation id="4131410914670010031">Dubh is geal</translation>
 <translation id="4165986682804962316">Roghainnean na làraich</translation>
 <translation id="4170314459383239649">Falamhaich aig àm fàgail</translation>
-<translation id="4176463684765177261">À comas</translation>
 <translation id="4200983522494130825">&amp;Taba ùr</translation>
 <translation id="4225397296022057997">Air a h-uile làrach</translation>
 <translation id="4256316378292851214">Sàbhail a’ &amp;video mar…</translation>
@@ -220,6 +214,7 @@
 <translation id="4613271546271159013">Dh’atharraich leudachan an duilleag a chì thu nuair a dh’fhosglas tu taba ùr.</translation>
 <translation id="4616405296204756919">’S urrainn dhut faclan-faire a shàbhaladh air uidheam sam bith. Chaidh an sàbhaladh an-seo: <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">F&amp;osgail a’ video ann an taba ùr</translation>
+<translation id="4654801841330730814">Na h-uile</translation>
 <translation id="4677772697204437347">Cuimhne a’ GPU</translation>
 <translation id="4681930562518940301">F&amp;osgail an dealbh tùsail ann an taba ùr</translation>
 <translation id="4711638718396952945">Aisig na roghainnean</translation>
@@ -245,11 +240,9 @@
 <translation id="5059526285558225588">Co-dhùin dè rud a thèid a cho-roinneadh</translation>
 <translation id="5063480226653192405">Cleachdadh</translation>
 <translation id="5116628073786783676">Sà&amp;bhail an fhuaim mar…</translation>
-<translation id="5143374789336132547">Dh’atharraich an leudachan “<ph name="EXTENSION_NAME" />” an duilleag a chì thu nuair a bhriogas tu air a’ phutan “Dachaidh”.</translation>
 <translation id="5154108062446123722">Roghainnean adhartach airson <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5154702632169343078">Cuspair</translation>
 <translation id="5171343362375269016">Cuimhne suaipte</translation>
-<translation id="5233019165164992427">Port dì-bhugachadh NaCl</translation>
 <translation id="5233231016133573565">ID a’ phròiseis</translation>
 <translation id="5233736638227740678">Cuir a&amp;nn</translation>
 <translation id="5256861893479663409">Air a h-uile làrach</translation>
@@ -272,7 +265,6 @@
 <translation id="5485102783864353244">Cuir an aplacaid ris</translation>
 <translation id="5486561344817861625">Dèan ath-thòiseachadh a’ bhrabhsair mas-fhìor</translation>
 <translation id="5509693895992845810">Sàbhail m&amp;ar…</translation>
-<translation id="5521078259930077036">A bheil thu dhen bheachd gur e seo an duilleag-dhachaigh ris an robh dùil agad?</translation>
 <translation id="5542132724887566711">Pròifil</translation>
 <translation id="5556459405103347317">Ath-luchdaich</translation>
 <translation id="5575473780076478375">Leudachan incognito: <ph name="EXTENSION_NAME" /></translation>
@@ -284,7 +276,6 @@
 <translation id="5677928146339483299">Air a bhacadh</translation>
 <translation id="5707185214361380026">Dh’fhàillig luchdadh an leudachain o:</translation>
 <translation id="5713171467967533494">Fosgail ann am brabhsair Vivaldi</translation>
-<translation id="5715711091495208045">Bròcair a’ phlugain: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Sàbhail mar PDF</translation>
 <translation id="5747809636523347288">Cuir ann e i&amp;s tadhail air <ph name="URL" /></translation>
 <translation id="5759728514498647443">Gabhaidh sgrìobhainnean a chuireas tu slighe <ph name="APP_NAME" /> a leughadh le <ph name="APP_NAME" />.</translation>
@@ -292,7 +283,6 @@
 <translation id="5780973441651030252">Prìomhachas a’ phròiseis</translation>
 <translation id="5804241973901381774">Ceadan</translation>
 <translation id="5828633471261496623">’Ga chlò-bhualadh...</translation>
-<translation id="583281660410589416">Neo-aithnichte</translation>
 <translation id="5851868085455377790">Foillsichear</translation>
 <translation id="5860491529813859533">Cuir air</translation>
 <translation id="5910363049092958439">Sàbhail an d&amp;ealbh mar…</translation>
@@ -344,7 +334,6 @@
 <translation id="6691936601825168937">&amp;Air adhart</translation>
 <translation id="6786747875388722282">Leudachain</translation>
 <translation id="6787839852456839824">Ath-ghoiridean a’ mheur-chlàir</translation>
-<translation id="6798954102094737107">Plugan: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Cùm na h-atharraichean</translation>
 <translation id="6824564591481349393">Dèan l&amp;ethbhreac de sheòladh a’ phuist-d</translation>
 <translation id="6840155290835956714">Faighnich mus dèanar a chur</translation>
@@ -380,7 +369,6 @@
 <translation id="7629827748548208700">Taba: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Sguir dheth</translation>
 <translation id="7659154729610375585">A bheil thu airson am modh incognito fhàgail co-dhiù?</translation>
-<translation id="7661259717474717992">Leig le làraichean dàta bhriosgaidean a shàbhaladh is a leughadh</translation>
 <translation id="7663719505383602579">Faightear: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Air a stàladh leis an rianaire agad</translation>
 <translation id="7685038817958445325">Cha ghabh a chastadh</translation>
@@ -423,7 +411,6 @@ Cum am faidhle iuchrach agad ann an àite sàbhailte. Bi agad ri tionndadh ùr a
 <translation id="8261378640211443080">Chan eil an leudachan seo air an liosta aig <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> agus dh’fhaoidte gun deach a chur ris gun fhiosta.</translation>
 <translation id="8351419472474436977">Tha smachd aig an leudachan seo air na roghainnean progsaidh agad agus is ciall dha sin gun urrainn dha rud sam bith a nì thu air loidhne atharrachadh, briseadh no èisteachd ris. Mur eil thu cinnteach carson a thachair seo, tha teans nach robh thu ’ga iarraidh sa chiad dol a-mach.</translation>
 <translation id="8382913212082956454">Dèan lethbhreac de sheòladh a’ ph&amp;uist-d</translation>
-<translation id="8434480141477525001">Port dì-bhugachadh NaCl</translation>
 <translation id="8449008133205184768">Cuir ann is maidsich an stoidhle</translation>
 <translation id="8477178913400731244">Sguab an dàta às</translation>
 <translation id="8477384620836102176">&amp;Coitcheann</translation>

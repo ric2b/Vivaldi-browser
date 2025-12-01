@@ -43,33 +43,17 @@
 namespace blink {
 
 // static
-void AcceleratedStaticBitmapImage::ReleaseTexture(void* ctx) {
-  auto* release_ctx = static_cast<ReleaseContext*>(ctx);
-  if (release_ctx->context_provider_wrapper) {
-    if (release_ctx->texture_id) {
-      auto* ri = release_ctx->context_provider_wrapper->ContextProvider()
-                     .RasterInterface();
-      ri->EndSharedImageAccessDirectCHROMIUM(release_ctx->texture_id);
-      ri->DeleteGpuRasterTexture(release_ctx->texture_id);
-    }
-  }
-
-  delete release_ctx;
-}
-
-// static
 scoped_refptr<AcceleratedStaticBitmapImage>
 AcceleratedStaticBitmapImage::CreateFromCanvasSharedImage(
     scoped_refptr<gpu::ClientSharedImage> shared_image,
     const gpu::SyncToken& sync_token,
-    GLuint shared_image_texture_id,
     SkAlphaType alpha_type,
     base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper,
     base::PlatformThreadRef context_thread_ref,
     scoped_refptr<base::SingleThreadTaskRunner> context_task_runner,
     viz::ReleaseCallback release_callback) {
   return base::AdoptRef(new AcceleratedStaticBitmapImage(
-      std::move(shared_image), sync_token, shared_image_texture_id, alpha_type,
+      std::move(shared_image), sync_token, alpha_type,
       ImageOrientationEnum::kDefault, std::move(context_provider_wrapper),
       context_thread_ref, std::move(context_task_runner),
       std::move(release_callback)));
@@ -98,7 +82,7 @@ AcceleratedStaticBitmapImage::CreateFromExternalSharedImage(
   // Need to update the sync token, however.
   std::move(external_callback).Run(release_token);
 
-  auto release_callback = WTF::BindOnce(
+  auto release_callback = blink::BindOnce(
       [](base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider,
          scoped_refptr<gpu::ClientSharedImage> shared_image,
          const gpu::SyncToken& sync_token, bool is_lost) {
@@ -110,7 +94,7 @@ AcceleratedStaticBitmapImage::CreateFromExternalSharedImage(
       shared_gpu_context, shared_image);
 
   return base::AdoptRef(new AcceleratedStaticBitmapImage(
-      std::move(shared_image), sync_token, 0u, alpha_type,
+      std::move(shared_image), sync_token, alpha_type,
       ImageOrientationEnum::kDefault, shared_gpu_context,
       base::PlatformThreadRef(),
       ThreadScheduler::Current()->CleanupTaskRunner(),
@@ -120,7 +104,6 @@ AcceleratedStaticBitmapImage::CreateFromExternalSharedImage(
 AcceleratedStaticBitmapImage::AcceleratedStaticBitmapImage(
     scoped_refptr<gpu::ClientSharedImage> shared_image,
     const gpu::SyncToken& sync_token,
-    GLuint shared_image_texture_id,
     SkAlphaType alpha_type,
     const ImageOrientation& orientation,
     base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper,
@@ -138,8 +121,6 @@ AcceleratedStaticBitmapImage::AcceleratedStaticBitmapImage(
                                            std::move(release_callback))),
       paint_image_content_id_(cc::PaintImage::GetNextContentId()) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  if (shared_image_texture_id)
-    InitializeTextureBacking(shared_image_texture_id);
 }
 
 AcceleratedStaticBitmapImage::~AcceleratedStaticBitmapImage() {
@@ -209,7 +190,7 @@ bool AcceleratedStaticBitmapImage::CopyToTexture(
 }
 
 bool AcceleratedStaticBitmapImage::CopyToResourceProvider(
-    CanvasResourceProvider* resource_provider,
+    CanvasResourceProviderSharedImage* resource_provider,
     const gfx::Rect& copy_rect) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(resource_provider);
@@ -297,12 +278,6 @@ void AcceleratedStaticBitmapImage::CreateImageFromMailboxIfNeeded() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (texture_backing_)
     return;
-  InitializeTextureBacking(0u);
-}
-
-void AcceleratedStaticBitmapImage::InitializeTextureBacking(
-    GLuint shared_image_texture_id) {
-  DCHECK(!shared_image_texture_id || !mailbox_ref_->is_cross_thread());
 
   auto context_provider_wrapper = SharedGpuContext::ContextProviderWrapper();
   if (!context_provider_wrapper)
@@ -315,63 +290,18 @@ void AcceleratedStaticBitmapImage::InitializeTextureBacking(
   const auto& capabilities =
       context_provider_wrapper->ContextProvider().GetCapabilities();
 
-  if (capabilities.gpu_rasterization) {
-    DCHECK_EQ(shared_image_texture_id, 0u);
-    skia_context_provider_wrapper_ = context_provider_wrapper;
-    texture_backing_ = sk_make_sp<MailboxTextureBacking>(
-        shared_image_->mailbox(), mailbox_ref_, GetSize(),
-        GetSharedImageFormat(), GetAlphaType(), GetColorSpace(),
-        std::move(context_provider_wrapper));
+  if (!capabilities.gpu_rasterization) {
+    // As the context provider no longer has a GrDirectContext, it is
+    // impossible to obtain a texture backing without OOP-R.
+    // TODO(crbug.com/391648152): Remove this condition entirely as part of
+    // removing non-OOP-R codepaths from Blink.
     return;
   }
 
-  GrDirectContext* shared_gr_context =
-      context_provider_wrapper->ContextProvider().GetGrContext();
-  DCHECK(shared_ri &&
-         shared_gr_context);  // context isValid already checked in callers
-
-  GLuint shared_context_texture_id = 0u;
-  bool should_delete_texture_on_release = true;
-
-  if (shared_image_texture_id) {
-    shared_context_texture_id = shared_image_texture_id;
-    should_delete_texture_on_release = false;
-  } else {
-    shared_context_texture_id =
-        shared_ri->CreateAndConsumeForGpuRaster(shared_image_->mailbox());
-    shared_ri->BeginSharedImageAccessDirectCHROMIUM(
-        shared_context_texture_id, GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM);
-  }
-
-  GrGLTextureInfo texture_info;
-  texture_info.fTarget = shared_image_->GetTextureTarget();
-  texture_info.fID = shared_context_texture_id;
-  texture_info.fFormat =
-      context_provider_wrapper->ContextProvider().GetGrGLTextureFormat(
-          GetSharedImageFormat());
-  auto backend_texture =
-      GrBackendTextures::MakeGL(GetSize().width(), GetSize().height(),
-                                skgpu::Mipmapped::kNo, texture_info);
-
-  GrSurfaceOrigin origin = shared_image_->surface_origin();
-
-  auto* release_ctx = new ReleaseContext;
-  release_ctx->mailbox_ref = mailbox_ref_;
-  if (should_delete_texture_on_release)
-    release_ctx->texture_id = shared_context_texture_id;
-  release_ctx->context_provider_wrapper = context_provider_wrapper;
-
-  sk_sp<SkImage> sk_image = SkImages::BorrowTextureFrom(
-      shared_gr_context, backend_texture, origin,
-      ToClosestSkColorType(GetSharedImageFormat()), GetAlphaType(),
-      GetColorSpace().ToSkColorSpace(), &ReleaseTexture, release_ctx);
-
-  if (sk_image) {
-    skia_context_provider_wrapper_ = context_provider_wrapper;
-    texture_backing_ = sk_make_sp<MailboxTextureBacking>(
-        std::move(sk_image), mailbox_ref_, GetSize(), GetSharedImageFormat(),
-        GetAlphaType(), GetColorSpace(), std::move(context_provider_wrapper));
-  }
+  skia_context_provider_wrapper_ = context_provider_wrapper;
+  texture_backing_ = sk_make_sp<MailboxTextureBacking>(
+      shared_image_->mailbox(), mailbox_ref_, GetSize(), GetSharedImageFormat(),
+      GetAlphaType(), GetColorSpace(), std::move(context_provider_wrapper));
 }
 
 void AcceleratedStaticBitmapImage::EnsureSyncTokenVerified() {

@@ -119,6 +119,10 @@
             "optional": true,
             "description": "If present this url should be used to retrive a favicon."
           },
+          "uuid": {
+            "type": "string",
+            "description": "The unique identifier for the node. IDs are unique within the current profile, and they remain valid even after the browser is restarted."
+          },
           "children": {
             "type": "array",
             "optional": true,

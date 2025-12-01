@@ -34,6 +34,7 @@
 #include <utility>
 
 #include "base/check_op.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
 #include "skia/ext/font_utils.h"
@@ -142,6 +143,8 @@ const SimpleFontData* FontCache::GetLastResortFallbackFont(
   const FontPlatformData* font_platform_data = GetFontPlatformData(
       description, fallback_creation_params, AlternateFontName::kLastResort);
 
+  int last_resort_fallback_attempt = 0;
+
   // We should at least have Sans or Arial which is the last resort fallback of
   // SkFontHost ports.
   if (!font_platform_data) {
@@ -150,6 +153,7 @@ const SimpleFontData* FontCache::GetLastResortFallbackFont(
                                     (font_family_names::kSans));
     font_platform_data = GetFontPlatformData(description, sans_creation_params,
                                              AlternateFontName::kLastResort);
+    ++last_resort_fallback_attempt;
   }
   if (!font_platform_data) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
@@ -157,6 +161,7 @@ const SimpleFontData* FontCache::GetLastResortFallbackFont(
                                     (font_family_names::kArial));
     font_platform_data = GetFontPlatformData(description, arial_creation_params,
                                              AlternateFontName::kLastResort);
+    ++last_resort_fallback_attempt;
   }
 #if BUILDFLAG(IS_WIN)
   // Try some more Windows-specific fallbacks.
@@ -167,6 +172,7 @@ const SimpleFontData* FontCache::GetLastResortFallbackFont(
     font_platform_data =
         GetFontPlatformData(description, msuigothic_creation_params,
                             AlternateFontName::kLastResort);
+    ++last_resort_fallback_attempt;
   }
   if (!font_platform_data) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
@@ -175,6 +181,7 @@ const SimpleFontData* FontCache::GetLastResortFallbackFont(
     font_platform_data =
         GetFontPlatformData(description, mssansserif_creation_params,
                             AlternateFontName::kLastResort);
+    ++last_resort_fallback_attempt;
   }
   if (!font_platform_data) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
@@ -182,6 +189,7 @@ const SimpleFontData* FontCache::GetLastResortFallbackFont(
                                     (font_family_names::kSegoeUI));
     font_platform_data = GetFontPlatformData(
         description, segoeui_creation_params, AlternateFontName::kLastResort);
+    ++last_resort_fallback_attempt;
   }
   if (!font_platform_data) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
@@ -189,6 +197,7 @@ const SimpleFontData* FontCache::GetLastResortFallbackFont(
                                     (font_family_names::kCalibri));
     font_platform_data = GetFontPlatformData(
         description, calibri_creation_params, AlternateFontName::kLastResort);
+    ++last_resort_fallback_attempt;
   }
   if (!font_platform_data) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
@@ -197,6 +206,7 @@ const SimpleFontData* FontCache::GetLastResortFallbackFont(
     font_platform_data =
         GetFontPlatformData(description, timesnewroman_creation_params,
                             AlternateFontName::kLastResort);
+    ++last_resort_fallback_attempt;
   }
   if (!font_platform_data) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
@@ -205,9 +215,21 @@ const SimpleFontData* FontCache::GetLastResortFallbackFont(
     font_platform_data =
         GetFontPlatformData(description, couriernew_creation_params,
                             AlternateFontName::kLastResort);
+    ++last_resort_fallback_attempt;
   }
 #endif
 
+  // 0 <= last_resort_fallback_attempt <= 8, so set the max to 9 and put failed
+  // attempts in that bucket.
+  static const int kMaxAttempts = 9;
+  if (!font_platform_data) {
+    last_resort_fallback_attempt = kMaxAttempts;
+  }
+  base::UmaHistogramExactLinear(
+      "Blink.Fonts.LastResortAttemptsUntilStaticMatch",
+      last_resort_fallback_attempt, kMaxAttempts);
+  base::UmaHistogramBoolean("Blink.Fonts.LastResortFallbackFound",
+                            font_platform_data != nullptr);
   DCHECK(font_platform_data);
   return FontDataFromFontPlatformData(font_platform_data);
 }
@@ -243,11 +265,7 @@ sk_sp<SkTypeface> FontCache::CreateTypeface(
       return typeface;
   }
 #endif  // BUILDFLAG(IS_ANDROID)
-
-  // TODO(https://crbug.com/1425390: Assign FontCache::font_manager_ in the
-  // ctor.
-  auto font_manager = font_manager_ ? font_manager_ : skia::DefaultFontMgr();
-  return sk_sp<SkTypeface>(font_manager->matchFamilyStyle(
+  return sk_sp<SkTypeface>(font_manager_->matchFamilyStyle(
       name.empty() ? nullptr : name.c_str(), font_description.SkiaFontStyle()));
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,57 +12,57 @@ import type {LoadNetworkResourceResult} from './InspectorFrontendHostAPI.js';
 
 const UIStrings = {
   /**
-   *@description Name of an error category used in error messages
+   * @description Name of an error category used in error messages
    */
   systemError: 'System error',
   /**
-   *@description Name of an error category used in error messages
+   * @description Name of an error category used in error messages
    */
   connectionError: 'Connection error',
   /**
-   *@description Name of an error category used in error messages
+   * @description Name of an error category used in error messages
    */
   certificateError: 'Certificate error',
   /**
-   *@description Name of an error category used in error messages
+   * @description Name of an error category used in error messages
    */
   httpError: 'HTTP error',
   /**
-   *@description Name of an error category used in error messages
+   * @description Name of an error category used in error messages
    */
   cacheError: 'Cache error',
   /**
-   *@description Name of an error category used in error messages
+   * @description Name of an error category used in error messages
    */
   signedExchangeError: 'Signed Exchange error',
   /**
-   *@description Name of an error category used in error messages
+   * @description Name of an error category used in error messages
    */
   ftpError: 'FTP error',
   /**
-   *@description Name of an error category used in error messages
+   * @description Name of an error category used in error messages
    */
   certificateManagerError: 'Certificate manager error',
   /**
-   *@description Name of an error category used in error messages
+   * @description Name of an error category used in error messages
    */
   dnsResolverError: 'DNS resolver error',
   /**
-   *@description Name of an error category used in error messages
+   * @description Name of an error category used in error messages
    */
   unknownError: 'Unknown error',
   /**
-   *@description Phrase used in error messages that carry a network error name
-   *@example {404} PH1
-   *@example {net::ERR_INSUFFICIENT_RESOURCES} PH2
+   * @description Phrase used in error messages that carry a network error name
+   * @example {404} PH1
+   * @example {net::ERR_INSUFFICIENT_RESOURCES} PH2
    */
   httpErrorStatusCodeSS: 'HTTP error: status code {PH1}, {PH2}',
   /**
-   *@description Name of an error category used in error messages
+   * @description Name of an error category used in error messages
    */
   invalidUrl: 'Invalid URL',
   /**
-   *@description Name of an error category used in error messages
+   * @description Name of an error category used in error messages
    */
   decodingDataUrlFailed: 'Decoding Data URL failed',
 } as const;
@@ -272,11 +272,11 @@ export const loadAsStream = function(
 
   function dataURLDecodeSuccessful(text: string): void {
     streamWrite(streamId, text);
-    finishedCallback(({statusCode: 200} as LoadNetworkResourceResult));
+    finishedCallback(({statusCode: 200}));
   }
 
   function dataURLDecodeFailed(_xhrStatus: Error): void {
     const messageOverride: string = i18nString(UIStrings.decodingDataUrlFailed);
-    finishedCallback(({statusCode: 404, messageOverride} as LoadNetworkResourceResult));
+    finishedCallback(({statusCode: 404, messageOverride}));
   }
 };

@@ -2,16 +2,6 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="hr">
 <translation id="3830627370375585318">U postavkama vatrozida ili antivirusnog programa omogućite Chromeu da pristupa mreži.</translation>
-<translation id="4200102020577305737">Idite na
-          izbornik Vivaldi &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Postavke LAN-a
-          pa poništite odabir potvrdnog okvira "Upotrijebi proxy poslužitelj za LAN".</translation>
 <translation id="4932161901409251843">Idite na
           izbornik Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />

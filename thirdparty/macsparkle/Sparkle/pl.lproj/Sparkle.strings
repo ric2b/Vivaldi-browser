@@ -20,7 +20,7 @@
 "%1$@ %2$@ has been downloaded and is ready to use! Would you like to install it and relaunch %1$@ now?" = "%1$@ %2$@ został pobrany i jest gotowy do użycia! Czy chcesz teraz zainstalować i ponownie uruchomić %1$@?";
 
 /* No comment provided by engineer. */
-"%1$@ can’t be updated, because it was opened from a read-only or a temporary location." = "%1$@ nie może zostać uaktualniony, ponieważ został uruchomiony z folderu tymczasowego lub tylko do odczytu.";
+"%1$@ can’t be updated because it was opened from a read-only or a temporary location." = "%1$@ nie może zostać uaktualniony, ponieważ został uruchomiony z folderu tymczasowego lub tylko do odczytu.";
 
 /* No comment provided by engineer. */
 "A new version of %@ is available!" = "Dostępna jest nowa wersja %@!";
@@ -81,3 +81,36 @@
 
 /* Status message shown when the user checks for updates but is already current or the feed doesn't contain any updates. */
 "You’re up to date!" = "Jesteś na bieżąco!";
+
+/* Software Update title/label */
+"Software Update" = "Uaktualnienie oprogramowania";
+
+/* Remind Me Later choice for update alert */
+"Remind Me Later" = "Przypomnij później";
+
+/* Skip This Version choice for update alert */
+"Skip This Version" = "Pomiń tę wersję";
+
+/* Install Update choice for update alert */
+"Install Update" = "Zainstaluj teraz";
+
+/* Automatically download and install updates in the future option for update alert */
+"Automatically download and install updates in the future" = "Automatycznie pobierz i zainstaluj przyszłe uaktualnienia";
+
+/* Check for updates automatically response for update permission dialog */
+"Check Automatically" = "Sprawdzaj automatycznie";
+
+/* Don't check for updates automatically response for update permission dialog */
+"Don’t Check" = "Nie sprawdzaj";
+
+/* Title question for update permission dialog */
+"Check for updates automatically?" = "Sprawdzać automatycznie uaktualnienia?";
+
+/* Include anonymous system profile choice for update permission dialog */
+"Include anonymous system profile" = "Załącz anonimowe informacje o systemie";
+
+/* Automatically download and install updates choice for update permission dialog */
+"Automatically download and install updates" = "Automatycznie pobierz i zainstaluj uaktualnienia";
+
+/* Anonymous system profile information disclosure for update permission dialog */
+"Anonymous system profile information is used to help us plan future development work. Please contact us if you have any questions about this.\n\nThis is the information that would be sent:" = "Anonymous system profile information is used to help us plan future development work. Please contact us if you have any questions about this.\n\nThis is the information that would be sent:";

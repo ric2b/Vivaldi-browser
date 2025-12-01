@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">书签已保存至 <ph name="FOLDER_NAME" /> 文件夹</translation>
 <translation id="2433507940547922241">外观</translation>
 <translation id="2501278716633472235">返回上一页</translation>
+<translation id="2546283357679194313">Cookie 和网站数据</translation>
 <translation id="2633278372998075009">隐身标签</translation>
 <translation id="2650751991977523696">是否重新下载文件？</translation>
 <translation id="265156376773362237">标准预加载</translation>
@@ -54,6 +55,9 @@
 <translation id="4269820728363426813">复制链接地址</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />在安卓设置中开启“屏幕锁定”功能<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">密码管理器</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, plural,
+          =1 {标签或标签组已1天或更久未使用}
+          other {标签或标签组已#天或更久未使用}}</translation>
 <translation id="451872707440238414">搜索书签</translation>
 <translation id="4526803704855831732">隐身标签页</translation>
 <translation id="4532845899244822526">选择文件夹</translation>
@@ -62,6 +66,7 @@
 
 只有将谷歌搜索设置为默认搜索引擎时才能使用即触即搜功能。</translation>
 <translation id="4759238208242260848">下载</translation>
+<translation id="4777866634702576038">删除标签组？</translation>
 <translation id="4850886885716139402">查看</translation>
 <translation id="4883379392681899581">离开隐身模式</translation>
 <translation id="4943872375798546930">无结果</translation>
@@ -71,13 +76,12 @@
 <translation id="5144385790872094440">预加载您访问的部分网页。从 Google 网站或应用链接到的网页可能会通过 Google 服务器预加载。</translation>
 <translation id="5186185447130319458">隐身模式</translation>
 <translation id="5206168361184759344">{FILE_COUNT, plural,
-            =1 {正在下载个文件…
-            other {正在下载 # 个文件…}}</translation>
+            =1 {1个文件正在下载…
+            other {# 个文件正在下载 …}}</translation>
 <translation id="5233638681132016545">新建标签</translation>
 <translation id="5375131951310889874">解读网站上某些关键字无需离开页面，您可以直接即触即搜。只有将谷歌搜索设置为默认搜索引擎时才能使用即触即搜功能。它将单词及其附近的上下文发送到谷歌搜索，返回定义、图片、搜索结果和其他详细信息。
 
 要调整您的搜索词，请长按选择。 要优化搜索，请将面板一直向上滑动并点击搜索框。</translation>
-<translation id="543338862236136125">修改密码</translation>
 <translation id="572328651809341494">最近打开的标签</translation>
 <translation id="5833984609253377421">分享链接</translation>
 <translation id="6150320133806434356">书签已保存</translation>
@@ -85,6 +89,7 @@
 <translation id="6336451774241870485">新隐身标签</translation>
 <translation id="6337323516034698937">要将此标签页发送到另一台设备，请在两台设备上登录 Vivaldi 同步。如有必要，请确保输入加密密钥。</translation>
 <translation id="6341580099087024258">询问文件保存位置</translation>
+<translation id="6364438453358674297">从历史中删除建议？</translation>
 <translation id="6404511346730675251">编辑书签</translation>
 <translation id="650224091954855786">{FILE_COUNT, plural,
           =1 {# 个文件已下载完毕}
@@ -112,6 +117,9 @@
 <translation id="8062594758852531064">增强型预加载：</translation>
 <translation id="8073388330009372546">在新标签页中打开图片</translation>
 <translation id="8127542551745560481">编辑主页</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+          =1 {(1) 个不活动项}
+          other {(#) 个不活动项}}</translation>
 <translation id="8266862848225348053">下载位置</translation>
 <translation id="8348430946834215779">尽可能使用 HTTPS，并在加载不支持 HTTPS 的网站前收到警告</translation>
 <translation id="8560602726703398413">您可在书签中找到自己的阅读清单</translation>
@@ -121,6 +129,9 @@
 <translation id="9042893549633094279">隐私与安全</translation>
 <translation id="9063523880881406963">关闭“请求切换到桌面版网站”</translation>
 <translation id="9080642952018487277">进入隐身模式</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+          =1 {1 天或更久未使用}
+          other { # 天或更久未使用}}</translation>
 <translation id="930124987204876019">删除历史记录、Cookie、网站数据、缓存内容…</translation>
 <translation id="961856697154696964">删除浏览数据</translation>
 </translationbundle>

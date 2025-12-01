@@ -619,7 +619,7 @@ static int render_fontconfig(ShowCQTContext *s, AVFrame *tmp, char* font)
     FcDefaultSubstitute(pat);
 
     if (!FcConfigSubstitute(fontconfig, pat, FcMatchPattern)) {
-        av_log(s->ctx, AV_LOG_ERROR, "could not substitue fontconfig options.\n");
+        av_log(s->ctx, AV_LOG_ERROR, "could not substitute fontconfig options.\n");
         FcPatternDestroy(pat);
         FcConfigDestroy(fontconfig);
         return AVERROR(ENOMEM);
@@ -655,6 +655,7 @@ fail:
 static int render_default_font(AVFrame *tmp)
 {
     const char *str = "EF G A BC D ";
+    const uint8_t *vga16_font = avpriv_vga16_font_get();
     int x, u, v, mask;
     uint8_t *data = tmp->data[0];
     int linesize = tmp->linesize[0];
@@ -666,7 +667,7 @@ static int render_default_font(AVFrame *tmp)
             for (v = 0; v < height; v++) {
                 uint8_t *p = startptr + v * linesize + height/2 * 4 * u;
                 for (mask = 0x80; mask; mask >>= 1, p += 4) {
-                    if (mask & avpriv_vga16_font[str[u] * 16 + v])
+                    if (mask & vga16_font[str[u] * 16 + v])
                         p[3] = 255;
                     else
                         p[3] = 0;
@@ -1515,7 +1516,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
         i = insamples->nb_samples - remaining;
         j = s->fft_len/2 + s->remaining_fill_max - s->remaining_fill;
         if (remaining >= s->remaining_fill) {
-            for (m = 0; m < s->remaining_fill; m++) {
+            for (m = FFMAX(0, -j); m < s->remaining_fill; m++) {
                 s->fft_data[j+m].re = audio_data[2*(i+m)];
                 s->fft_data[j+m].im = audio_data[2*(i+m)+1];
             }
@@ -1544,7 +1545,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
                 s->fft_data[m] = s->fft_data[m+step];
             s->remaining_fill = step;
         } else {
-            for (m = 0; m < remaining; m++) {
+            for (m = FFMAX(0, -j); m < remaining; m++) {
                 s->fft_data[j+m].re = audio_data[2*(i+m)];
                 s->fft_data[j+m].im = audio_data[2*(i+m)+1];
             }

@@ -159,6 +159,8 @@ extern const char kDisableWelcomeRecapForFactoryTest[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kEnableArc[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kEnableArcVm[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kEnableArcVmDlc[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kArcVmDlcHardwareRequirementSatisfied[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kEnableArcVmRtVcpu[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kEnableBirchWeatherApiForTestingOverride[];
@@ -500,9 +502,6 @@ bool ShouldAllowDefaultShelfPinLayoutIgnoringSync();
 
 COMPONENT_EXPORT(ASH_CONSTANTS)
 bool IsCampbellSecretKeyMatched();
-
-COMPONENT_EXPORT(ASH_CONSTANTS)
-bool IsMantisSecretKeyMatched();
 
 COMPONENT_EXPORT(ASH_CONSTANTS)
 bool IsScannerUpdateSecretKeyMatched();

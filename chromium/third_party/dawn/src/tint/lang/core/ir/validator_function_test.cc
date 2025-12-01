@@ -333,13 +333,13 @@ TEST_F(IR_ValidatorTest, Function_Param_Struct_MissingIOAnnotations) {
 TEST_F(IR_ValidatorTest, Function_Param_Struct_DuplicateAnnotations) {
     auto* f = ComputeEntryPoint("my_func");
     IOAttributes attr;
-    attr.location = 0;
+    attr.builtin = BuiltinValue::kPosition;
     auto* str_ty =
         ty.Struct(mod.symbols.New("MyStruct"), {
                                                    {mod.symbols.New("a"), ty.vec4<f32>(), attr},
                                                });
     auto* p = b.FunctionParam("my_param", str_ty);
-    p->SetLocation(0);
+    p->SetBuiltin(BuiltinValue::kPosition);
     f->SetParams({p});
 
     b.Append(f->Block(), [&] { b.Return(f); });
@@ -349,8 +349,8 @@ TEST_F(IR_ValidatorTest, Function_Param_Struct_DuplicateAnnotations) {
     EXPECT_THAT(
         res.Failure().reason,
         testing::HasSubstr(
-            R"(:5:54 error: input param struct member has same IO annotation, as top-level struct, '@location'
-%my_func = @compute @workgroup_size(1u, 1u, 1u) func(%my_param:MyStruct [@location(0)]):void {
+            R"(:5:54 error: input param struct member has same IO annotation, as top-level struct, 'built-in'
+%my_func = @compute @workgroup_size(1u, 1u, 1u) func(%my_param:MyStruct [@position]):void {
                                                      ^^^^^^^^^^^^^^^^^^
 )")) << res.Failure();
 }
@@ -396,6 +396,287 @@ TEST_F(IR_ValidatorTest, Function_Param_Struct_WorkgroupPlusOtherIOAnnotations) 
 %my_func = @compute @workgroup_size(1u, 1u, 1u) func(%my_param:MyStruct):void {
                                                      ^^^^^^^^^^^^^^^^^^
 )")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Function_Param_Location_InvalidType) {
+    auto* f = FragmentEntryPoint("my_func");
+
+    auto* p = b.FunctionParam("my_param", ty.bool_());
+    p->SetLocation(0);
+    f->SetParams({p});
+
+    b.Append(f->Block(), [&] { b.Return(f); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:1:27 error: fragment entry point params can only be a bool if decorated with @builtin(front_facing)
+%my_func = @fragment func(%my_param:bool [@location(0)]):void {
+                          ^^^^^^^^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Function_Param_Struct_Location_InvalidType) {
+    auto* f = FragmentEntryPoint("my_func");
+
+    IOAttributes attr;
+    attr.location = 0;
+    auto* str_ty =
+        ty.Struct(mod.symbols.New("MyStruct"), {
+                                                   {mod.symbols.New("a"), ty.bool_(), attr},
+                                               });
+    auto* p = b.FunctionParam("my_param", str_ty);
+    f->SetParams({p});
+
+    b.Append(f->Block(), [&] { b.Return(f); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:5:27 error: fragment entry point param members can only be a bool if decorated with @builtin(front_facing)
+%my_func = @fragment func(%my_param:MyStruct):void {
+                          ^^^^^^^^^^^^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Function_Param_Location_Struct_WithCapability) {
+    auto* f = FragmentEntryPoint("my_func");
+
+    auto* str_ty = ty.Struct(mod.symbols.New("MyStruct"), {
+                                                              {mod.symbols.New("a"), ty.f32()},
+                                                          });
+    auto* p = b.FunctionParam("my_param", str_ty);
+    p->SetLocation(0);
+    f->SetParams({p});
+
+    b.Append(f->Block(), [&] { b.Return(f); });
+
+    auto res = ir::Validate(mod, Capabilities{Capability::kAllowLocationForNumericElements});
+    ASSERT_EQ(res, Success) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Function_Param_Location_Struct_WithoutCapability) {
+    auto* f = FragmentEntryPoint("my_func");
+
+    auto* str_ty = ty.Struct(mod.symbols.New("MyStruct"), {
+                                                              {mod.symbols.New("a"), ty.f32()},
+                                                          });
+    auto* p = b.FunctionParam("my_param", str_ty);
+    p->SetLocation(0);
+    f->SetParams({p});
+
+    b.Append(f->Block(), [&] { b.Return(f); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:5:27 error: input param with a location attribute must be a numeric scalar or vector, but has type MyStruct
+%my_func = @fragment func(%my_param:MyStruct [@location(0)]):void {
+                          ^^^^^^^^^^^^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, EntryPoint_InputLocation_Duplicate_InParams) {
+    auto* f = FragmentEntryPoint("my_func");
+
+    auto* p1 = b.FunctionParam("p1", ty.f32());
+    p1->SetLocation(0);
+    auto* p2 = b.FunctionParam("p2", ty.f32());
+    p2->SetLocation(0);
+    f->SetParams({p1, p2});
+
+    b.Append(f->Block(), [&] { b.Return(f); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:1:51 error: duplicate location(0) on entry point input
+%my_func = @fragment func(%p1:f32 [@location(0)], %p2:f32 [@location(0)]):void {
+                                                  ^^^^^^^
+
+:1:27 note: %p1 declared here
+%my_func = @fragment func(%p1:f32 [@location(0)], %p2:f32 [@location(0)]):void {
+                          ^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, EntryPoint_InputLocation_Duplicate_InParamAndMSV) {
+    auto* f = FragmentEntryPoint("my_func");
+
+    auto* p1 = b.FunctionParam("p1", ty.f32());
+    p1->SetLocation(0);
+    f->SetParams({p1});
+
+    auto* v = b.Var("v", AddressSpace::kIn, ty.f32());
+    v->SetLocation(0);
+    mod.root_block->Append(v);
+
+    b.Append(f->Block(), [&] {
+        b.Load(v);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:2:29 error: var: duplicate location(0) on entry point input
+  %v:ptr<__in, f32, read> = var undef @location(0)
+                            ^^^
+
+:5:27 note: %p1 declared here
+%my_func = @fragment func(%p1:f32 [@location(0)]):void {
+                          ^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, EntryPoint_OutputLocation_Duplicate_InReturnAndMSV) {
+    auto* f = FragmentEntryPoint("my_func");
+    f->SetReturnType(ty.f32());
+    f->SetReturnLocation(0);
+
+    auto* v = b.Var("v", AddressSpace::kOut, ty.f32());
+    v->SetLocation(0);
+    mod.root_block->Append(v);
+
+    b.Append(f->Block(), [&] {
+        b.Store(v, 1.0_f);
+        b.Return(f, 1.0_f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:2:36 error: var: duplicate location(0) on entry point output
+  %v:ptr<__out, f32, read_write> = var undef @location(0)
+                                   ^^^
+
+:5:1 note: %my_func declared here
+%my_func = @fragment func():f32 [@location(0)] {
+^^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, EntryPoint_OutputLocation_Duplicate_InReturnStruct) {
+    auto* f = FragmentEntryPoint("my_func");
+
+    IOAttributes attr;
+    attr.location = 0;
+    auto* str_ty =
+        ty.Struct(mod.symbols.New("MyStruct"), {
+                                                   {mod.symbols.New("a"), ty.f32(), attr},
+                                                   {mod.symbols.New("b"), ty.f32(), attr},
+                                               });
+    f->SetReturnType(str_ty);
+
+    b.Append(f->Block(), [&] { b.Unreachable(); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:6:1 error: duplicate location(0) on entry point output
+%my_func = @fragment func():MyStruct {
+^^^^^^^^
+
+:6:1 note: %my_func declared here
+%my_func = @fragment func():MyStruct {
+^^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, EntryPoint_Compute_InputLocation_InParam) {
+    auto* f = ComputeEntryPoint("my_func");
+
+    auto* p = b.FunctionParam("p", ty.f32());
+    p->SetLocation(0);
+    f->SetParams({p});
+
+    b.Append(f->Block(), [&] { b.Return(f); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(
+                    R"(:1:54 error: location attribute is not valid for compute shader inputs
+%my_func = @compute @workgroup_size(1u, 1u, 1u) func(%p:f32 [@location(0)]):void {
+                                                     ^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, EntryPoint_Compute_InputLocation_InMSV) {
+    auto* f = ComputeEntryPoint("my_func");
+
+    auto* v = b.Var("v", AddressSpace::kIn, ty.f32());
+    v->SetLocation(0);
+    mod.root_block->Append(v);
+
+    b.Append(f->Block(), [&] {
+        b.Load(v);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(
+                    R"(:2:29 error: var: location attribute is not valid for compute shader inputs
+  %v:ptr<__in, f32, read> = var undef @location(0)
+                            ^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, EntryPoint_Compute_OutputLocation) {
+    auto* f = ComputeEntryPoint("my_func");
+
+    auto* v = b.Var("v", AddressSpace::kOut, ty.f32());
+    v->SetLocation(0);
+    mod.root_block->Append(v);
+
+    b.Append(f->Block(), [&] {
+        b.Store(v, 1.0_f);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_EQ(res, Success) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, EntryPoint_SameLocation_InputAndOutput) {
+    auto* f = FragmentEntryPoint("my_func");
+
+    auto* p = b.FunctionParam("p", ty.f32());
+    p->SetLocation(0);
+    f->SetParams({p});
+
+    f->SetReturnType(ty.f32());
+    f->SetReturnLocation(0);
+
+    b.Append(f->Block(), [&] { b.Return(f, 1.0_f); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_EQ(res, Success) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, EntryPoint_SameLocation_DifferentEntryPoints) {
+    auto* f1 = FragmentEntryPoint("f1");
+    auto* p1 = b.FunctionParam("p1", ty.f32());
+    p1->SetLocation(0);
+    f1->SetParams({p1});
+    b.Append(f1->Block(), [&] { b.Return(f1); });
+
+    auto* f2 = FragmentEntryPoint("f2");
+    auto* p2 = b.FunctionParam("p2", ty.f32());
+    p2->SetLocation(0);
+    f2->SetParams({p2});
+    b.Append(f2->Block(), [&] { b.Return(f2); });
+
+    auto res = ir::Validate(mod, Capabilities{Capability::kAllowMultipleEntryPoints});
+    ASSERT_EQ(res, Success) << res.Failure();
 }
 
 TEST_F(IR_ValidatorTest, Function_ParameterWithConstructibleType) {
@@ -482,7 +763,7 @@ TEST_F(IR_ValidatorTest, Function_Param_InvariantWithoutPosition) {
     EXPECT_THAT(
         res.Failure().reason,
         testing::HasSubstr(
-            R"(:1:17 error: invariant can only decorate a param iff it is also decorated with position
+            R"(:1:17 error: invariant can only decorate a param if it is also decorated with position
 %my_func = func(%my_param:vec4<f32> [@invariant]):void {
                 ^^^^^^^^^^^^^^^^^^^
 )")) << res.Failure();
@@ -527,7 +808,33 @@ TEST_F(IR_ValidatorTest, Function_Param_Struct_InvariantWithoutPosition) {
     EXPECT_THAT(
         res.Failure().reason,
         testing::HasSubstr(
-            R"(:5:17 error: invariant can only decorate a param member iff it is also decorated with position
+            R"(:5:17 error: invariant can only decorate a param member if it is also decorated with position
+%my_func = func(%my_param:MyStruct):void {
+                ^^^^^^^^^^^^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Function_Param_StructNested_InvariantWithoutPosition) {
+    IOAttributes attr;
+    attr.invariant = true;
+
+    auto* inner_ty =
+        ty.Struct(mod.symbols.New("Inner"), {{mod.symbols.New("pos"), ty.vec4<f32>(), attr}});
+
+    auto* str_ty = ty.Struct(mod.symbols.New("MyStruct"), {{mod.symbols.New("i"), inner_ty}});
+
+    auto* f = b.Function("my_func", ty.void_());
+    auto* p = b.FunctionParam("my_param", str_ty);
+    f->SetParams({p});
+
+    b.Append(f->Block(), [&] { b.Return(f); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:9:17 error: invariant can only decorate a param member if it is also decorated with position
 %my_func = func(%my_param:MyStruct):void {
                 ^^^^^^^^^^^^^^^^^^
 )")) << res.Failure();
@@ -562,7 +869,7 @@ TEST_F(IR_ValidatorTest, Function_Return_MultipleIOAnnotations) {
     EXPECT_THAT(
         res.Failure().reason,
         testing::HasSubstr(
-            R"(:1:1 error: return values has more than one IO annotation, [ @location, built-in ]
+            R"(:1:1 error: return value has more than one IO annotation, [ @location, built-in ]
 %my_func = @vertex func():vec4<f32> [@location(0), @position] {
 ^^^^^^^^
 )")) << res.Failure();
@@ -584,8 +891,46 @@ TEST_F(IR_ValidatorTest, Function_Return_Struct_MultipleIOAnnotations) {
     EXPECT_THAT(
         res.Failure().reason,
         testing::HasSubstr(
-            R"(:5:1 error: return values struct member has more than one IO annotation, [ @location, built-in ]
+            R"(:5:1 error: return value struct member has more than one IO annotation, [ @location, built-in ]
 %my_func = @vertex func():MyStruct {
+^^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Function_Return_Location_InvalidType) {
+    auto* f = FragmentEntryPoint("my_func");
+    f->SetReturnType(ty.bool_());
+    f->SetReturnLocation(0);
+    b.Append(f->Block(), [&] { b.Unreachable(); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:1:1 error: return value with a location attribute must be a numeric scalar or vector, but has type bool
+%my_func = @fragment func():bool [@location(0)] {
+^^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Function_Return_Struct_Location_InvalidType) {
+    IOAttributes attr;
+    attr.location = 0;
+    auto* str_ty =
+        ty.Struct(mod.symbols.New("MyStruct"), {
+                                                   {mod.symbols.New("a"), ty.bool_(), attr},
+                                               });
+    auto* f = b.Function("my_func", str_ty, Function::PipelineStage::kFragment);
+    b.Append(f->Block(), [&] { b.Unreachable(); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:5:1 error: return value struct member with a location attribute must be a numeric scalar or vector, but has type bool
+%my_func = @fragment func():MyStruct {
 ^^^^^^^^
 )")) << res.Failure();
 }
@@ -599,7 +944,7 @@ TEST_F(IR_ValidatorTest, Function_Return_Void_IOAnnotation) {
     ASSERT_NE(res, Success);
     EXPECT_THAT(
         res.Failure().reason,
-        testing::HasSubstr(R"(:1:1 error: return values with void type should never be annotated
+        testing::HasSubstr(R"(:1:1 error: return value with void type should never be annotated
 %f = @fragment func():void [@location(0)] {
 ^^
 )")) << res.Failure();
@@ -615,7 +960,7 @@ TEST_F(IR_ValidatorTest, Function_Return_NonVoid_MissingIOAnnotations) {
     EXPECT_THAT(
         res.Failure().reason,
         testing::HasSubstr(
-            R"(:1:1 error: return values must have at least one IO annotation, e.g. a binding point, a location, etc
+            R"(:1:1 error: return value must have at least one IO annotation, e.g. a binding point, a location, etc
 %my_func = @fragment func():f32 {
 ^^^^^^^^
 )")) << res.Failure();
@@ -634,7 +979,7 @@ TEST_F(IR_ValidatorTest, Function_Return_NonVoid_Struct_MissingIOAnnotations) {
     EXPECT_THAT(
         res.Failure().reason,
         testing::HasSubstr(
-            R"(:5:1 error: return values struct members must have at least one IO annotation, e.g. a binding point, a location, etc
+            R"(:5:1 error: return value struct members must have at least one IO annotation, e.g. a binding point, a location, etc
 %my_func = @fragment func():MyStruct {
 ^^^^^^^^
 )")) << res.Failure();
@@ -662,7 +1007,7 @@ TEST_F(IR_ValidatorTest, Function_Return_InvariantWithoutPosition) {
     EXPECT_THAT(
         res.Failure().reason,
         testing::HasSubstr(
-            R"(:1:1 error: invariant can only decorate outputs iff they are also position builtins
+            R"(:1:1 error: invariant can only decorate outputs if they are also position builtins
 %my_func = func():vec4<f32> [@invariant] {
 ^^^^^^^^
 )")) << res.Failure();
@@ -701,7 +1046,7 @@ TEST_F(IR_ValidatorTest, Function_Return_Struct_InvariantWithoutPosition) {
     EXPECT_THAT(
         res.Failure().reason,
         testing::HasSubstr(
-            R"(:5:1 error: invariant can only decorate output members iff they are also position builtins
+            R"(:5:1 error: invariant can only decorate output members if they are also position builtins
 %my_func = func():MyStruct {
 ^^^^^^^^
 )")) << res.Failure();
@@ -882,6 +1227,22 @@ TEST_F(IR_ValidatorTest, Function_WorkgroupSize_ParamsSameType) {
 )")) << res.Failure();
 }
 
+TEST_F(IR_ValidatorTest, Function_WorkgroupSize_InvalidValueKind) {
+    auto* f = ComputeEntryPoint();
+    f->SetWorkgroupSize({b.Constant(1_u), b.FunctionParam("p", ty.u32()), b.Constant(3_u)});
+
+    b.Append(f->Block(), [&] { b.Unreachable(); });
+
+    auto res = ir::Validate(mod, Capabilities{Capability::kAllowOverrides});
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(R"(:1:1 error: @workgroup_size must be an InstructionResult or a Constant
+%f = @compute @workgroup_size(1u, %p, 3u) func():void {
+^^
+)")) << res.Failure();
+}
+
 TEST_F(IR_ValidatorTest, Function_WorkgroupSize_ParamsTooSmall) {
     auto* f = ComputeEntryPoint();
     f->SetWorkgroupSize({b.Constant(-1_i), b.Constant(2_i), b.Constant(3_i)});
@@ -893,6 +1254,36 @@ TEST_F(IR_ValidatorTest, Function_WorkgroupSize_ParamsTooSmall) {
     EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(R"(:1:1 error: @workgroup_size params must be greater than 0
 %f = @compute @workgroup_size(-1i, 2i, 3i) func():void {
+^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Function_WorkgroupSize_ParamZero) {
+    auto* f = ComputeEntryPoint();
+    f->SetWorkgroupSize({b.Constant(0_i), b.Constant(2_i), b.Constant(3_i)});
+
+    b.Append(f->Block(), [&] { b.Unreachable(); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:1:1 error: @workgroup_size params must be greater than 0
+%f = @compute @workgroup_size(0i, 2i, 3i) func():void {
+^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Function_WorkgroupSize_ParamsTooLarge) {
+    auto* f = ComputeEntryPoint();
+    f->SetWorkgroupSize({b.Constant(1048576_i), b.Constant(1048576_i), b.Constant(1048576_i)});
+
+    b.Append(f->Block(), [&] { b.Unreachable(); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:1:1 error: workgroup grid size cannot exceed 0xffffffff
+%f = @compute @workgroup_size(1048576i, 1048576i, 1048576i) func():void {
 ^^
 )")) << res.Failure();
 }

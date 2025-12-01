@@ -12,7 +12,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <tmmintrin.h>
+#include <smmintrin.h>
 
 #include "src/xnnpack/common.h"
 #include "src/xnnpack/gemm.h"
@@ -85,9 +85,8 @@ void xnn_qs8_qc4w_gemm_minmax_fp32_ukernel_6x4c8__avx_madd(
   const __m128i vmask = _mm_set1_epi8(0x0F);
   XNN_FORCE_REALIZATION(vmask);
   do {
-    const __m128i vksum0123 = _mm_load_si128(w);
-    __m128i vacc0x01 = _mm_unpacklo_epi32(vksum0123, _mm_setzero_si128());
-    __m128i vacc0x23 = _mm_unpackhi_epi32(vksum0123, _mm_setzero_si128());
+    __m128i vacc0x01 = _mm_cvtepu32_epi64(_mm_loadu_si64(w));
+    __m128i vacc0x23 = _mm_cvtepu32_epi64(_mm_loadu_si64(((const int32_t*) w + 2)));
     __m128i vacc1x01 = vacc0x01;
     __m128i vacc1x23 = vacc0x23;
     __m128i vacc2x01 = vacc0x01;
@@ -123,12 +122,12 @@ void xnn_qs8_qc4w_gemm_minmax_fp32_ukernel_6x4c8__avx_madd(
 
       const __m128i vbb01234567x0123 = _mm_load_si128(w);
       const __m128i vbb89ABCDEFx0123 = _mm_load_si128((const __m128i*) ((const int8_t*) w + 16));
-      const __m128i vbs01234567x01 = _mm_srli_epi32(vbb01234567x0123, 4);
-      const __m128i vbs89ABCDEFx01 = _mm_srli_epi32(vbb89ABCDEFx0123, 4);
+      const __m128i vbs01234567x23 = _mm_srli_epi32(vbb01234567x0123, 4);
+      const __m128i vbs89ABCDEFx23 = _mm_srli_epi32(vbb89ABCDEFx0123, 4);
       const __m128i vb01234567x01 = _mm_and_si128(vbb01234567x0123, vmask);
       const __m128i vb89ABCDEFx01 = _mm_and_si128(vbb89ABCDEFx0123, vmask);
-      const __m128i vb01234567x23 = _mm_and_si128(vbs01234567x01, vmask);
-      const __m128i vb89ABCDEFx23 = _mm_and_si128(vbs89ABCDEFx01, vmask);
+      const __m128i vb01234567x23 = _mm_and_si128(vbs01234567x23, vmask);
+      const __m128i vb89ABCDEFx23 = _mm_and_si128(vbs89ABCDEFx23, vmask);
 
       vacc0x01 = _mm_dpbusd_epi32_madd(vacc0x01, va0x01234567, vb01234567x01);
       vacc0x23 = _mm_dpbusd_epi32_madd(vacc0x23, va0x01234567, vb89ABCDEFx01);

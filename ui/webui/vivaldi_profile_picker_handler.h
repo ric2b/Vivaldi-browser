@@ -19,6 +19,7 @@ class VivaldiProfilePickerHandler : public content::WebUIMessageHandler {
   void HandleDeleteProfile(const base::Value::List& args);
   void HandleModifyProfile(const base::Value::List& args);
   void HandleChooseFile(const base::Value::List& args);
+  void HandleCloseProfilePicker(const base::Value::List& args);
 
   void SendErrorResponse(int callback_id, const std::string& message);
   void SendResponse(int callback_id, base::Value&& response);
@@ -43,6 +44,10 @@ class VivaldiProfilePickerHandler : public content::WebUIMessageHandler {
   };
 
  private:
+
+  //CSD = Client-Side Decorations
+  bool UseCSD();
+
   using ImgMap = std::map<std::string, Image>;
   using AvatarsReadCallback = base::OnceCallback<void(ImgMap)>;
 

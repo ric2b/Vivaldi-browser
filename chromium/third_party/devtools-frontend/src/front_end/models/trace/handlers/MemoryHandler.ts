@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,10 +9,10 @@ export interface MemoryData {
   updateCountersByProcess: Map<Types.Events.ProcessID, Types.Events.UpdateCounters[]>;
 }
 
-const updateCountersByProcess: MemoryData['updateCountersByProcess'] = new Map();
+let updateCountersByProcess: MemoryData['updateCountersByProcess'] = new Map();
 
 export function reset(): void {
-  updateCountersByProcess.clear();
+  updateCountersByProcess = new Map();
 }
 
 export function handleEvent(event: Types.Events.Event): void {

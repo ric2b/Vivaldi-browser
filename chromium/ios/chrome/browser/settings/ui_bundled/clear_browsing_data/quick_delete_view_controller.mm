@@ -69,10 +69,6 @@ constexpr CGFloat kSectionFooterHeight = 0;
 // TableView's corner radius size.
 constexpr CGFloat kTableViewCornerRadius = 10;
 
-// Horizontal padding for the primary button.
-constexpr CGFloat kPrimaryButtonHorizontalPaddingIpad = 64.0;
-constexpr CGFloat kPrimaryButtonHorizontalPaddingIphone = 24.0;
-
 // Section identifiers in Quick Delete's table view.
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierTimeRange = kSectionIdentifierEnumZero,
@@ -155,35 +151,23 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
   self.topAlignedLayout = YES;
   self.customScrollViewBottomInsets = 0;
   self.actionHandler = self;
+  self.destructiveAction = YES;
 
   [super viewDidLoad];
 
-  [self adjustPrimaryActionButtonHorizontalPadding];
   [self displayGradientView:NO];
 
-  // Configure the color of the primary button to red in several states, as the
-  // default colour is blue.
   [self updatePrimaryActionButtonEnabledStatus];
-  self.confirmationCheckmarkColor = [UIColor colorNamed:kRed600Color];
-  self.confirmationButtonColor = [UIColor colorNamed:kRed100Color];
 
   // Assign the table view's anchors now that it is in the same hierarchy as the
   // top view and that the content has been loaded.
   _tableViewHeightConstraint = [_tableView.heightAnchor
       constraintEqualToConstant:_tableView.contentSize.height];
-
-  [NSLayoutConstraint activateConstraints:@[
-    [_tableView.widthAnchor
-        constraintEqualToAnchor:self.primaryActionButton.widthAnchor],
-    _tableViewHeightConstraint
-  ]];
-
-  if (@available(iOS 17, *)) {
-    NSArray<UITrait>* traits = TraitCollectionSetForTraits(
-        @[ UITraitPreferredContentSizeCategory.class ]);
-    [self registerForTraitChanges:traits
-                       withAction:@selector(updateBottomSheetHeight)];
-  }
+  _tableViewHeightConstraint.active = YES;
+  NSArray<UITrait>* traits = TraitCollectionSetForTraits(
+      @[ UITraitPreferredContentSizeCategory.class ]);
+  [self registerForTraitChanges:traits
+                     withAction:@selector(updateBottomSheetHeight)];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -198,21 +182,6 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
   // text is bigger then the standard row height.
   [self updateBottomSheetHeight];
 }
-
-#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  if (@available(iOS 17, *)) {
-    return;
-  }
-  // Update the bottomsheet height when trait collection changed (for example
-  // when the user uses large font).
-  if (self.traitCollection.preferredContentSizeCategory !=
-      previousTraitCollection.preferredContentSizeCategory) {
-    [self updateBottomSheetHeight];
-  }
-}
-#endif
 
 #pragma mark - ConfirmationAlertActionHandler
 
@@ -467,37 +436,12 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
 
 #pragma mark - Private
 
-// Adjusts the primary action button horizontal padding. It affects the
-// padding of the content of the bottom sheet.
-- (void)adjustPrimaryActionButtonHorizontalPadding {
-  CGFloat buttonHorizontalPadding =
-      ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad
-           ? kPrimaryButtonHorizontalPaddingIpad
-           : kPrimaryButtonHorizontalPaddingIphone);
-
-  [NSLayoutConstraint activateConstraints:@[
-    [self.primaryActionButton.leadingAnchor
-        constraintEqualToAnchor:(self.view.leadingAnchor)
-                       constant:buttonHorizontalPadding],
-    [self.primaryActionButton.trailingAnchor
-        constraintEqualToAnchor:(self.view.trailingAnchor)
-                       constant:-buttonHorizontalPadding],
-  ]];
-}
-
 // Updates the enabled status of the primary button. The primary button should
 // only be enabled if at least one browsing data type is selected for deletion.
 - (void)updatePrimaryActionButtonEnabledStatus {
   self.primaryActionButton.enabled = _historySelected || _tabsSelected ||
                                      _siteDataSelected || _cacheSelected ||
                                      _passwordsSelected || _autofillSelected;
-
-  UIButtonConfiguration* buttonConfiguration =
-      self.primaryActionButton.configuration;
-  buttonConfiguration.background.backgroundColor =
-      self.primaryActionButton.enabled ? [UIColor colorNamed:kRedColor]
-                                       : [UIColor colorNamed:kRed100Color];
-  self.primaryActionButton.configuration = buttonConfiguration;
 }
 
 // Action handler that executes when a voiceover announcement ends.

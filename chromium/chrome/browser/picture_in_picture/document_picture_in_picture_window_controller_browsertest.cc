@@ -22,7 +22,6 @@
 #include "chrome/browser/devtools/devtools_window_testing.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/platform_util.h"
-#include "chrome/browser/preloading/scoped_prewarm_feature_list.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -50,6 +49,7 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/fenced_frame_test_util.h"
+#include "content/public/test/file_system_chooser_test_helpers.h"
 #include "content/public/test/media_start_stop_observer.h"
 #include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -71,6 +71,8 @@
 #include "ui/display/screen.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/codec/png_codec.h"
+#include "ui/shell_dialogs/select_file_dialog.h"
+#include "ui/shell_dialogs/select_file_dialog_factory.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/test/button_test_api.h"
 #include "ui/views/view_observer.h"
@@ -296,10 +298,6 @@ class DocumentPictureInPictureWindowControllerBrowserTest
   raw_ptr<content::DocumentPictureInPictureWindowController,
           AcrossTasksDanglingUntriaged>
       pip_window_controller_ = nullptr;
-  // TODO(https://crbug.com/423465927): Explore a better approach to make the
-  // existing tests run with the prewarm feature enabled.
-  test::ScopedPrewarmFeatureList prewarm_feature_list_{
-      test::ScopedPrewarmFeatureList::PrewarmState::kDisabled};
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
@@ -550,7 +548,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
   ASSERT_TRUE(browser_view);
 
   auto* pip_frame_view = static_cast<PictureInPictureBrowserFrameView*>(
-      browser_view->frame()->GetFrameView());
+      browser_view->browser_widget()->GetFrameView());
   ASSERT_TRUE(pip_frame_view);
 
   ClickButton(
@@ -599,7 +597,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
                        MaximumWindowOuterBounds) {
   const BrowserWindow* const browser_window = browser()->window();
   const gfx::NativeWindow native_window = browser_window->GetNativeWindow();
-  const display::Screen* const screen = display::Screen::GetScreen();
+  const display::Screen* const screen = display::Screen::Get();
   const display::Display display =
       screen->GetDisplayNearestWindow(native_window);
   const gfx::Size maximum_window_size =
@@ -636,7 +634,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
   auto* browser_view = static_cast<BrowserView*>(
       BrowserWindow::FindBrowserWindowWithWebContents(pip_web_contents));
   auto* pip_frame_view = static_cast<PictureInPictureBrowserFrameView*>(
-      browser_view->frame()->GetFrameView());
+      browser_view->browser_widget()->GetFrameView());
 
   // Get the document picture in picture window title and the location to be
   // clicked.
@@ -646,10 +644,11 @@ IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
 
   // Simulate a click on the document picture in picture window title, and
   // verify that the context menu is not shown.
-  pip_frame_view->frame()->ShowContextMenuForViewImpl(
+  pip_frame_view->browser_widget()->ShowContextMenuForViewImpl(
       window_title, click_location, ui::mojom::MenuSourceType::kMouse);
 
-  EXPECT_EQ(false, pip_frame_view->frame()->IsMenuRunnerRunningForTesting());
+  EXPECT_EQ(false,
+            pip_frame_view->browser_widget()->IsMenuRunnerRunningForTesting());
 }
 
 IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
@@ -664,7 +663,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
   auto* browser_view = static_cast<BrowserView*>(
       BrowserWindow::FindBrowserWindowWithWebContents(pip_web_contents));
   auto* pip_frame_view = static_cast<PictureInPictureBrowserFrameView*>(
-      browser_view->frame()->GetFrameView());
+      browser_view->browser_widget()->GetFrameView());
   // Make the window manager forget about the window controller, which will
   // cause it to fail to close the window when asked.
   PictureInPictureWindowManager::GetInstance()
@@ -840,7 +839,7 @@ IN_PROC_BROWSER_TEST_P(DocumentPictureInPictureWindowControllerBrowserTest,
                        MAYBE_VerifyWindowMargins) {
   const BrowserWindow* const browser_window = browser()->window();
   const gfx::NativeWindow native_window = browser_window->GetNativeWindow();
-  const display::Screen* const screen = display::Screen::GetScreen();
+  const display::Screen* const screen = display::Screen::Get();
   const display::Display display =
       screen->GetDisplayNearestWindow(native_window);
 
@@ -984,4 +983,107 @@ IN_PROC_BROWSER_TEST_F(DocumentPictureInPictureWindowControllerBrowserTest,
   EXPECT_EQ(base::UTF8ToUTF16(window_page_title),
             browser_view->GetAccessibleTabLabel(
                 browser()->tab_strip_model()->active_index()));
+}
+
+// A dialog that checks if the picture-in-picture window is force-tucked
+// when the dialog is shown, and then immediately cancels itself.
+class TuckingTestSelectFileDialog : public ui::SelectFileDialog {
+ public:
+  TuckingTestSelectFileDialog(Listener* listener,
+                              std::unique_ptr<ui::SelectFilePolicy> policy,
+                              bool* was_tucked)
+      : ui::SelectFileDialog(listener, std::move(policy)),
+        was_tucked_(was_tucked) {}
+
+ private:
+  ~TuckingTestSelectFileDialog() override = default;
+
+  // ui::SelectFileDialog overrides
+  void SelectFileImpl(Type type,
+                      const std::u16string& title,
+                      const base::FilePath& default_path,
+                      const FileTypeInfo* file_types,
+                      int file_type_index,
+                      const base::FilePath::StringType& default_extension,
+                      gfx::NativeWindow owning_window,
+                      const GURL* caller) override {
+    *was_tucked_ = PictureInPictureWindowManager::GetInstance()
+                       ->IsPictureInPictureForceTucked();
+    listener_->FileSelectionCanceled();
+  }
+
+  bool IsRunning(gfx::NativeWindow owning_window) const override {
+    return true;
+  }
+  void ListenerDestroyed() override {}
+  bool HasMultipleFileTypeChoicesImpl() override { return false; }
+
+  raw_ptr<bool> was_tucked_;
+  base::WeakPtrFactory<TuckingTestSelectFileDialog> weak_factory_{this};
+};
+
+class TuckingTestSelectFileDialogFactory : public ui::SelectFileDialogFactory {
+ public:
+  explicit TuckingTestSelectFileDialogFactory(bool* was_tucked)
+      : was_tucked_(was_tucked) {}
+  ~TuckingTestSelectFileDialogFactory() override = default;
+
+  ui::SelectFileDialog* Create(
+      ui::SelectFileDialog::Listener* listener,
+      std::unique_ptr<ui::SelectFilePolicy> policy) override {
+    return new TuckingTestSelectFileDialog(listener, std::move(policy),
+                                           was_tucked_);
+  }
+
+ private:
+  raw_ptr<bool> was_tucked_;
+};
+
+class DocumentPictureInPictureWindowControllerTuckingBrowserTest
+    : public DocumentPictureInPictureWindowControllerBrowserTest {
+ public:
+  DocumentPictureInPictureWindowControllerTuckingBrowserTest() = default;
+
+  void SetUp() override {
+    feature_list_.InitWithFeatures(
+        {blink::features::kDocumentPictureInPictureAPI,
+         blink::features::kDocumentPictureInPicturePreferInitialPlacement,
+         media::kFileDialogsTuckPictureInPicture},
+        {});
+    InProcessBrowserTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// Test when the file picker is opened, the pip window is tucked.
+IN_PROC_BROWSER_TEST_F(
+    DocumentPictureInPictureWindowControllerTuckingBrowserTest,
+    TuckOnOpenFilePicker) {
+  LoadTabAndEnterPictureInPicture(browser());
+  // Initially it was not tucked
+  EXPECT_FALSE(PictureInPictureWindowManager::GetInstance()
+                   ->IsPictureInPictureForceTucked());
+
+  // `was_tucked_during_picker` will be updated if the window is tucked while
+  // the file picker dialog is open.
+  bool was_tucked_during_picker = false;
+  ui::SelectFileDialog::SetFactory(
+      std::make_unique<TuckingTestSelectFileDialogFactory>(
+          &was_tucked_during_picker));
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  auto result = EvalJs(web_contents, "window.showOpenFilePicker();");
+  EXPECT_TRUE(result.ExtractError().find("aborted") != std::string::npos)
+      << result;
+
+  ui::SelectFileDialog::SetFactory(nullptr);
+
+  // The pip window should be tucked once, and now it's back to non-tucked
+  // state.
+  EXPECT_TRUE(was_tucked_during_picker);
+  EXPECT_FALSE(PictureInPictureWindowManager::GetInstance()
+                   ->IsPictureInPictureForceTucked());
 }

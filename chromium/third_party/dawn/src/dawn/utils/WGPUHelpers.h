@@ -111,13 +111,15 @@ BasicRenderPass CreateBasicRenderPass(
     wgpu::TextureFormat format = BasicRenderPass::kDefaultColorFormat);
 
 wgpu::PipelineLayout MakeBasicPipelineLayout(const wgpu::Device& device,
-                                             const wgpu::BindGroupLayout* bindGroupLayout);
+                                             const wgpu::BindGroupLayout* bindGroupLayout,
+                                             uint32_t immediateDataByteSize = 0);
 
 wgpu::PipelineLayout MakePipelineLayout(const wgpu::Device& device,
                                         std::vector<wgpu::BindGroupLayout> bgls);
 
 #ifndef __EMSCRIPTEN__
 extern wgpu::ExternalTextureBindingLayout kExternalTextureBindingLayout;
+extern wgpu::TexelBufferBindingLayout kTexelBufferBindingLayout;
 #endif  // __EMSCRIPTEN__
 
 // Helpers to make creating bind group layouts look nicer:
@@ -153,8 +155,10 @@ struct BindingLayoutEntryInitializationHelper : wgpu::BindGroupLayoutEntry {
     BindingLayoutEntryInitializationHelper(uint32_t entryBinding,
                                            wgpu::ShaderStage entryVisibility,
                                            wgpu::ExternalTextureBindingLayout* bindingLayout);
+    BindingLayoutEntryInitializationHelper(uint32_t entryBinding,
+                                           wgpu::ShaderStage entryVisibility,
+                                           wgpu::TexelBufferBindingLayout* bindingLayout);
 #endif  // __EMSCRIPTEN__
-
     // NOLINTNEXTLINE(runtime/explicit)
     BindingLayoutEntryInitializationHelper(const wgpu::BindGroupLayoutEntry& entry);
 };
@@ -178,6 +182,7 @@ struct BindingInitializationHelper {
     BindingInitializationHelper(uint32_t binding, const wgpu::TextureView& textureView);
 #ifndef __EMSCRIPTEN__
     BindingInitializationHelper(uint32_t binding, const wgpu::ExternalTexture& externalTexture);
+    BindingInitializationHelper(uint32_t binding, const wgpu::TexelBufferView& texelBufferView);
 #endif  // __EMSCRIPTEN__
     BindingInitializationHelper(uint32_t binding,
                                 const wgpu::Buffer& buffer,
@@ -193,7 +198,8 @@ struct BindingInitializationHelper {
     wgpu::TextureView textureView;
     wgpu::Buffer buffer;
 #ifndef __EMSCRIPTEN__
-    wgpu::ExternalTextureBindingEntry externalTextureBindingEntry;
+    mutable wgpu::ExternalTextureBindingEntry externalTextureBindingEntry;
+    mutable wgpu::TexelBufferBindingEntry texelBufferBindingEntry = {};
 #endif  // __EMSCRIPTEN__
     uint64_t offset = 0;
     uint64_t size = 0;

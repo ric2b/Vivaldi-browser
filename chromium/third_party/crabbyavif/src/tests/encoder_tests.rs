@@ -120,6 +120,7 @@ fn encode_decode_grid_impl(
         mutable: encoder::MutableSettings {
             // Encode losslessly for easier comparison of outputs.
             quality: 100,
+            quality_alpha: 100,
             ..Default::default()
         },
         ..Default::default()
@@ -156,7 +157,7 @@ fn encode_decode_grid_impl(
     }
     assert!(decoder.next_image().is_ok());
     let decoded_image = decoder.image().expect("image was none");
-    are_images_equal(decoded_image, &reference_image)?;
+    assert!(are_images_equal(decoded_image, &reference_image)?);
     Ok(())
 }
 
@@ -861,6 +862,54 @@ fn gainmap_base_image_hdr() -> AvifResult<()> {
     Ok(())
 }
 
+// From aviftransformtest.cc
+#[test]
+#[cfg(feature = "png")]
+fn alpha_transformative_properties() -> AvifResult<()> {
+    let mut reference = get_decoder("abc_color_irot_alpha_irot.avif");
+    reference.parse()?;
+    reference.next_image()?;
+    let reference = reference.image().unwrap();
+
+    let (mut image, _) = reader::Reader::read_frame(
+        &mut reader::png::PngReader::create(&get_test_file("abc.png"))?,
+        &reader::Config {
+            yuv_format: Some(PixelFormat::Yuv444),
+            matrix_coefficients: Some(reference.matrix_coefficients),
+            ..Default::default()
+        },
+    )?;
+    image.color_primaries = reference.color_primaries;
+    image.transfer_characteristics = reference.transfer_characteristics;
+    let mut encoder = encoder::Encoder::create_with_settings(&encoder::Settings {
+        speed: Some(10),
+        mutable: MutableSettings {
+            quality: 100,
+            quality_alpha: 100,
+            quality_gainmap: 100,
+            ..Default::default()
+        },
+        ..Default::default()
+    })?;
+    encoder.add_image(&image)?;
+    let encoded = encoder.finish()?;
+    assert!(!encoded.is_empty());
+
+    let mut decoder = decoder::Decoder::default();
+    decoder.set_io_vec(encoded);
+    decoder.settings.image_content_to_decode = ImageContentType::All;
+    decoder.parse()?;
+    decoder.next_image()?;
+    let decoded = decoder.image().unwrap();
+
+    // Check with existing correct AVIF file.
+    assert!(are_images_equal(decoded, reference)?);
+
+    // The rendering of the images should be compared but that is outside the
+    // scope of CrabbyAvif.
+    Ok(())
+}
+
 #[test]
 fn gainmap_oriented() -> AvifResult<()> {
     let (mut image, gainmap) = generate_gainmap_image(false)?;
@@ -1209,4 +1258,59 @@ fn opaque_alpha_grid(depth: u8, all_cells_opaque: bool) -> AvifResult<()> {
         assert!(alpha_plane.unwrap().row_bytes > 0);
     }
     Ok(())
+}
+
+#[test]
+fn quality_categories() -> AvifResult<()> {
+    if !HAS_ENCODER {
+        return Ok(());
+    }
+    let width = 100;
+    let height = 200;
+    let depth = 8;
+    let yuv_format = PixelFormat::Yuv420;
+    let yuv_range = YuvRange::Full;
+    let input_image = generate_gradient_image(
+        width, height, depth, yuv_format, yuv_range, /*alpha=*/ true,
+    )?;
+    let settings = encoder::Settings {
+        speed: Some(10),
+        mutable: encoder::MutableSettings {
+            quality: 5,
+            quality_alpha: 100,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut encoder = encoder::Encoder::create_with_settings(&settings)?;
+    encoder.add_image(&input_image)?;
+    let edata = encoder.finish()?;
+    assert!(!edata.is_empty());
+
+    let mut decoder = decoder::Decoder::default();
+    decoder.set_io_vec(edata);
+    assert!(decoder.parse().is_ok());
+    let image = decoder.image().expect("image was none");
+    assert!(image.alpha_present);
+    if !HAS_DECODER {
+        return Ok(());
+    }
+    assert!(decoder.next_image().is_ok());
+    let image = decoder.image().expect("image was none");
+
+    // Color planes should have some loss because the quality was set to a low value.
+    assert!(!are_planes_equal(image, &input_image, Plane::Y)?);
+    assert!(!are_planes_equal(image, &input_image, Plane::U)?);
+    assert!(!are_planes_equal(image, &input_image, Plane::V)?);
+
+    // Alpha plane should be lossless.
+    assert!(are_planes_equal(image, &input_image, Plane::A)?);
+
+    Ok(())
+}
+
+#[test]
+fn codec_versions() {
+    assert!(crabby_avif::codec_versions().contains("dav1d"));
+    assert!(crabby_avif::codec_versions().contains("aom"));
 }

@@ -26,7 +26,8 @@ std::unique_ptr<KeyedService> BuildHistoryService(
   auto history_service = std::make_unique<history::HistoryService>(
       std::make_unique<ChromeHistoryClient>(
           BookmarkModelFactory::GetForBrowserContext(context)),
-      std::make_unique<history::ContentVisitDelegate>(context));
+      std::make_unique<history::ContentVisitDelegate>(context),
+      /*device_info_tracker=*/nullptr, /*local_device_info_provider=*/nullptr);
 #if !BUILDFLAG(IS_ANDROID)
   Profile *profile = Profile::FromBrowserContext(context);
   int number_of_days_to_keep_visits = profile->GetPrefs()->GetInteger(
@@ -39,7 +40,8 @@ std::unique_ptr<KeyedService> BuildHistoryService(
           context->GetPath(), chrome::GetChannel());
   param.number_of_days_to_keep_visits = number_of_days_to_keep_visits;
 
-  if (!history_service->Init(param)) {
+  if (!history_service->Init(history::HistoryDatabaseParamsForPath(
+          context->GetPath(), chrome::GetChannel()))) {
     return nullptr;
   }
   return history_service;

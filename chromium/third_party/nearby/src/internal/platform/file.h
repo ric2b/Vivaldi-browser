@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 
+#include "absl/time/time.h"
 #include "internal/platform/byte_array.h"
 #include "internal/platform/exception.h"
 #include "internal/platform/implementation/input_file.h"
@@ -66,6 +67,8 @@ class InputFile final {
   // versa.
   InputStream& GetInputStream();
 
+  absl::Time GetLastModifiedTime() const;
+
  private:
   std::unique_ptr<api::InputFile> impl_;
 };
@@ -85,10 +88,6 @@ class OutputFile final {
   // Returns Exception::kIo on error, Exception::kSuccess otherwise.
   Exception Write(const ByteArray& data);
 
-  // Ensures that all data written by previous calls to Write() is passed
-  // down to the applicable transport layer.
-  Exception Flush();
-
   // Disallows further writes to the file and frees system resources,
   // associated with it.
   Exception Close();
@@ -101,6 +100,8 @@ class OutputFile final {
   // Write, or Close will be observable through OutputStream& handle, and vice
   // versa.
   OutputStream& GetOutputStream();
+
+  void SetLastModifiedTime(absl::Time last_modified_time);
 
  private:
   std::unique_ptr<api::OutputFile> impl_;

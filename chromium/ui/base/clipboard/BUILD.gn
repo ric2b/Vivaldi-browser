@@ -20,10 +20,10 @@ component("clipboard_types") {
 
   if (use_blink) {
     sources += [ "clipboard_format_type.h" ]
+  }
 
-    if (is_ios) {
-      sources += [ "clipboard_format_type_ios.mm" ]
-    }
+  if (is_ios) {
+    sources += [ "clipboard_format_type_ios.mm" ]
   }
 
   if (is_android) {
@@ -94,6 +94,7 @@ component("clipboard") {
     "clipboard.h",
     "clipboard_change_notifier.cc",
     "clipboard_change_notifier.h",
+    "clipboard_metadata.h",
     "clipboard_metrics.cc",
     "clipboard_metrics.h",
     "clipboard_monitor.cc",

@@ -216,7 +216,7 @@ filter input and output pads of all the filterchains are connected.
 
 Leading and trailing whitespaces (space, tabs, or line feeds) separating tokens
 in the filtergraph specification are ignored. This means that the filtergraph
-can be expressed using empty lines and spaces to improve redability.
+can be expressed using empty lines and spaces to improve readability.
 
 For example, the filtergraph:
 @example
@@ -3383,7 +3383,7 @@ where applicable, an overall figure is also given.
 It accepts the following option:
 @table @option
 @item length
-Short window length in seconds, used for peak and trough RMS measurement.
+Short window length in seconds, used for peak and through RMS measurement.
 Default is @code{0.05} (50 milliseconds). Allowed range is @code{[0 - 10]}.
 
 @item metadata
@@ -3544,7 +3544,7 @@ standard RMS level measured in dBFS
 
 @item RMS_peak
 @item RMS_trough
-peak and trough values for RMS level measured over a short window,
+peak and through values for RMS level measured over a short window,
 measured in dBFS.
 
 @item Zero crossings
@@ -7682,6 +7682,113 @@ There are 6 samples at -4 dB, 62 at -5 dB, 286 at -6 dB, etc.
 In other words, raising the volume by +4 dB does not cause any clipping,
 raising it by +5 dB causes clipping for 6 samples, etc.
 
+@anchor{whisper}
+@section whisper
+
+It runs automatic speech recognition using the OpenAI's Whisper model.
+
+It requires the whisper.cpp library (https://github.com/ggml-org/whisper.cpp)
+as a prerequisite. After installing the library it can be enabled using:
+@code{./configure --enable-whisper}.
+
+The filter has following options:
+
+@table @option
+@item model
+The file path of the downloaded whisper.cpp model (mandatory).
+
+@item language
+The language to use for transcription ('auto' for auto-detect).
+Default value: @code{"auto"}
+
+@item queue
+The maximum size that will be queued into the filter before processing the audio
+with whisper. Using a small value the audio stream will be processed more often,
+but the transcription quality will be lower and the required processing power
+will be higher. Using a large value (e.g. 10-20s) will produce more accurate
+results using less CPU (as using the whisper-cli tool), but the transcription
+latency will be higher, thus not useful to process real-time streams.
+Consider using the vad_model option associated with a large queue value.
+Default value: @code{"3"}
+
+@item use_gpu
+If the GPU support should be enabled.
+Default value: @code{"true"}
+
+@item gpu_device
+The GPU device index to use.
+Default value: @code{"0"}
+
+@item destination
+If set, the transcription output will be sent to the specified file or URL
+(use one of the FFmpeg AVIO protocols); otherwise, the output will be logged as
+info messages.
+The output will also be set in the "lavfi.whisper.text" frame metadata.
+If the destination is a file and it already exists, it will be overwritten.
+
+@item format
+The destination format string; it could be "text" (only the transcribed text
+will be sent to the destination), "srt" (subtitle format) or "json".
+Default value: @code{"text"}
+
+@item vad_model
+Path to the VAD model file. If set, the filter will load an additional voice
+activity detection module (https://github.com/snakers4/silero-vad) that will be
+used to fragment the audio queue; use this option setting a valid path obtained
+from the whisper.cpp repository (e.g. "../whisper.cpp/models/ggml-silero-v5.1.2.bin")
+and increase the queue parameter to a higher value (e.g. 20).
+
+@item vad_threshold
+The VAD threshold to use.
+Default value: @code{"0.5"}
+
+@item vad_min_speech_duration
+The minimum VAD speaking duration.
+Default value: @code{"0.1"}
+
+@item vad_min_silence_duration
+The minimum VAD silence duration.
+Default value: @code{"0.5"}
+
+@end table
+
+@subsection Examples
+@itemize
+
+@item
+Run a transcription with srt file generation:
+@example
+ffmpeg -i input.mp4 -vn -af "whisper=model=../whisper.cpp/models/ggml-base.en.bin\
+:language=en\
+:queue=3\
+:destination=output.srt\
+:format=srt" -f null -
+@end example
+
+@item
+Run a transcription and send the output in JSON format to an HTTP service:
+@example
+ffmpeg -i input.mp4 -vn -af "whisper=model=../whisper.cpp/models/ggml-base.en.bin\
+:language=en\
+:queue=3\
+:destination=http\\://localhost\\:3000\
+:format=json' -f null -
+@end example
+
+@item
+Transcribe the microphone input using the VAD option:
+@example
+ffmpeg -loglevel warning -f pulse -i default \
+-af 'highpass=f=200,lowpass=f=3000,whisper=model=../whisper.cpp/models/ggml-medium.bin\
+:language=en\
+:queue=10\
+:destination=-\
+:format=json\
+:vad_model=../whisper.cpp/models/ggml-silero-v5.1.2.bin' -f null -
+@end example
+
+@end itemize
+
 @c man end AUDIO FILTERS
 
 @chapter Audio Sources
@@ -7904,7 +8011,7 @@ Gains are separated by white spaces and each gain is set in dBFS.
 Default is @code{0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0}.
 
 @item bands, b
-Set the custom bands from where custon equalizer gains are set.
+Set the custom bands from where custom equalizer gains are set.
 This must be in strictly increasing order. Only used if the preset option is set to @code{custom}.
 Bands are separated by white spaces and each band represent frequency in Hz.
 Default is @code{25 40 63 100 160 250 400 630 1000 1600 2500 4000 6300 10000 16000 24000}.
@@ -9214,7 +9321,7 @@ The default value is @code{all}.
 
 Repack CEA-708 closed captioning side data
 
-This filter fixes various issues seen with commerical encoders
+This filter fixes various issues seen with commercial encoders
 related to upstream malformed CEA-708 payloads, specifically
 incorrect number of tuples (wrong cc_count for the target FPS),
 and incorrect ordering of tuples (i.e. the CEA-608 tuples are not at
@@ -9357,19 +9464,19 @@ Mostly useful to speed-up filtering.
 @item threy
 Set Y threshold for averaging chrominance values.
 Set finer control for max allowed difference between Y components
-of current pixel and neigbour pixels.
+of current pixel and neighbour pixels.
 Default value is 200. Allowed range is from 1 to 200.
 
 @item threu
 Set U threshold for averaging chrominance values.
 Set finer control for max allowed difference between U components
-of current pixel and neigbour pixels.
+of current pixel and neighbour pixels.
 Default value is 200. Allowed range is from 1 to 200.
 
 @item threv
 Set V threshold for averaging chrominance values.
 Set finer control for max allowed difference between V components
-of current pixel and neigbour pixels.
+of current pixel and neighbour pixels.
 Default value is 200. Allowed range is from 1 to 200.
 
 @item distance
@@ -9752,6 +9859,33 @@ colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131
 @subsection Commands
 
 This filter supports the all above options as @ref{commands}.
+
+@section colordetect
+Analyze the video frames to determine the effective value range and alpha
+mode.
+
+The filter accepts the following options:
+
+@table @option
+@item mode
+Set of properties to detect. Unavailable properties, such as alpha mode for
+an input image without an alpha channel, will be ignored automatically.
+
+Accepts a combination of the following flags:
+
+@table @samp
+@item color_range
+Detect if the source contains luma pixels outside the limited (MPEG) range,
+which indicates that this is a full range YUV source.
+@item alpha_mode
+Detect if the source contains color values above the alpha channel, which
+indicates that the alpha channel is independent (straight), rather than
+premultiplied.
+@item all
+Enable detection of all of the above properties. This is the default.
+@end table
+
+@end table
 
 @section colorize
 Overlay a solid color on the video stream.
@@ -16321,6 +16455,36 @@ Render frames with rounded corners. The value, given as a float ranging from
 square to fully circular. In other words, it gives the radius divided by half
 the smaller side length. Defaults to @code{0.0}.
 
+@item lut
+Specifies a custom LUT (in Adobe .cube format) to apply to the colors
+as part of color conversion. The exact interpretation depends on the value
+of @option{lut_type}.
+
+@item lut_type
+Controls the interpretation of color values fed to and from the LUT
+specified as @option{lut}. Valid values are:
+
+@table @samp
+@item auto
+Chooses the interpretation of the LUT automatically from tagged
+metadata, and otherwise falls back to @samp{native}. (Default)
+
+@item native
+Applied to raw image contents in its native RGB colorspace (non-linear
+light), before conversion to the output color space.
+
+@item normalized
+Applied to the normalized RGB image contents, in linear light, before
+conversion to the output color space.
+
+@item conversion
+Fully replaces the conversion from the image color space to the output
+color space. If such a LUT is present, it has the highest priority, and
+overrides any ICC profiles, as well as options related to tone mapping
+and output colorimetry (@option{color_primaries}, @option{color_trc}).
+
+@end table
+
 @item extra_opts
 Pass extra libplacebo internal configuration options. These can be specified
 as a list of @var{key}=@var{value} pairs separated by ':'. The following example
@@ -19615,7 +19779,7 @@ Specifies which version of the stats file format to use. Details of
 each format are written below.
 Default value is 1.
 
-@item stats_add_max
+@item output_max
 Determines whether the max value is output to the stats log.
 Default value is 0.
 Requires stats_version >= 2. If this is set and stats_version < 2,
@@ -19790,7 +19954,7 @@ To enable the compilation of this filter, you need to configure FFmpeg with
 @code{--enable-libqrencode}.
 
 The QR code is generated from the provided text or text pattern. The
-corresponding QR code is scaled and overlayed into the video output according to
+corresponding QR code is scaled and overlaid into the video output according to
 the specified options.
 
 In case no text is specified, no QR code is overlaied.
@@ -23119,7 +23283,7 @@ by progressively selecting a different column from each input frame.
 
 The end result is a sort of inverted parallax, so that far away objects move
 much faster that the ones in the front. The ideal conditions for this video
-effect are when there is either very little motion and the backgroud is static,
+effect are when there is either very little motion and the background is static,
 or when there is a lot of motion and a very wide depth of field (e.g. wide
 panorama, while moving on a train).
 
@@ -23147,7 +23311,7 @@ How many columns should be inserted before end of filtering.
 
 Normally the filter shifts and tilts from the very first frame, and stops when
 the last one is received. However, before filtering starts, normal video may
-be preseved, so that the effect is slowly shifted in its place. Similarly,
+be preserved, so that the effect is slowly shifted in its place. Similarly,
 the last video frame may be reconstructed at the end. Alternatively it is
 possible to just start and end with black.
 
@@ -25468,7 +25632,7 @@ pixel formats are not RGB.
 @item fitmode, fm
 Set sample aspect ratio of video output frames.
 Can be used to configure waveform so it is not
-streched too much in one of directions.
+stretched too much in one of directions.
 
 @table @samp
 @item none

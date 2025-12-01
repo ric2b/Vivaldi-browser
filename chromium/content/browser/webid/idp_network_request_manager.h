@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/functional/callback.h"
+#include "base/values.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/frame_tree_node_id.h"
 #include "content/public/browser/web_contents.h"
@@ -36,16 +37,19 @@ class SimpleURLLoader;
 
 namespace content {
 
+namespace webid {
+enum class MetricsEndpointErrorCode;
+}
+
 using IdentityProviderDataPtr = scoped_refptr<IdentityProviderData>;
 using IdentityRequestAccountPtr = scoped_refptr<IdentityRequestAccount>;
 class IdentityProviderInfo;
 class FederatedIdentityPermissionContextDelegate;
 class RenderFrameHostImpl;
-enum class MetricsEndpointErrorCode;
 
 // Manages network requests and maintains relevant state for interaction with
 // the Identity Provider across a FedCM transaction. Owned by
-// FederatedAuthRequestImpl and has a lifetime limited to a single identity
+// RequestService and has a lifetime limited to a single identity
 // transaction between an RP and an IDP.
 //
 // Diagram of the permission-based data flows between the browser and the IDP:
@@ -102,16 +106,20 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
 
   // Don't change the meaning or the order of these values because they are
   // being recorded in metrics and in sync with the counterpart in enums.xml.
+  // LINT.IfChange(AccountsResponseInvalidReason)
+
   enum class AccountsResponseInvalidReason {
-    kResponseIsNotJsonOrDict,
-    kNoAccountsKey,
-    kAccountListIsEmpty,
-    kAccountIsNotDict,
-    kAccountMissesRequiredField,
-    kAccountsShareSameId,
+    kResponseIsNotJsonOrDict = 0,
+    kNoAccountsKey = 1,
+    kAccountListIsEmpty = 2,
+    kAccountIsNotDict = 3,
+    kAccountMissesRequiredField = 4,
+    kAccountsShareSameId = 5,
 
     kMaxValue = kAccountsShareSameId
   };
+
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/blink/enums.xml:FedCmAccountsResponseInvalidReason)
 
   struct CONTENT_EXPORT Endpoints {
     Endpoints();
@@ -133,6 +141,7 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
     std::set<GURL> provider_urls;
     GURL accounts;
     GURL login_url;
+    GURL issuance_endpoint;
   };
 
   struct CONTENT_EXPORT ClientMetadata {
@@ -143,15 +152,18 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
     GURL privacy_policy_url;
     GURL terms_of_service_url;
     GURL brand_icon_url;
-    std::optional<bool> client_matches_top_frame_origin;
+    bool client_is_third_party_to_top_frame_origin{false};
   };
 
   struct CONTENT_EXPORT TokenResult {
     TokenResult();
     ~TokenResult();
-    TokenResult(const TokenResult&);
+    TokenResult(const TokenResult&) = delete;
+    TokenResult& operator=(const TokenResult&) = delete;
+    TokenResult(TokenResult&&);
+    TokenResult& operator=(TokenResult&&) = default;
 
-    std::string token;
+    std::optional<base::Value> token;
     std::optional<IdentityCredentialTokenError> error;
   };
 
@@ -163,6 +175,8 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
   // This enum describes the type of error dialog shown.
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
+  // LINT.IfChange(FedCmErrorDialogType)
+
   enum class FedCmErrorDialogType {
     kGenericEmptyWithoutUrl = 0,
     kGenericEmptyWithUrl = 1,
@@ -178,13 +192,16 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
     kTemporarilyUnavailableWithUrl = 11,
     kServerErrorWithoutUrl = 12,
     kServerErrorWithUrl = 13,
-
     kMaxValue = kServerErrorWithUrl
   };
+
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/blink/enums.xml:FedCmErrorDialogType)
 
   // This enum describes the type of token response received.
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
+  // LINT.IfChange(FedCmTokenResponseType)
+
   enum class FedCmTokenResponseType {
     kTokenReceivedAndErrorNotReceivedAndContinueOnNotReceived = 0,
     kTokenReceivedAndErrorReceivedAndContinueOnNotReceived = 1,
@@ -194,20 +211,24 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
     kTokenReceivedAndErrorReceivedAndContinueOnReceived = 5,
     kTokenNotReceivedAndErrorNotReceivedAndContinueOnReceived = 6,
     kTokenNotReceivedAndErrorReceivedAndContinueOnReceived = 7,
-
     kMaxValue = kTokenNotReceivedAndErrorReceivedAndContinueOnReceived
   };
+
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/blink/enums.xml:FedCmTokenResponseType)
 
   // This enum describes the type of error URL compared to the IDP's config URL.
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
+  // LINT.IfChange(FedCmErrorUrlType)
+
   enum class FedCmErrorUrlType {
     kSameOrigin = 0,
     kCrossOriginSameSite = 1,
     kCrossSite = 2,
-
     kMaxValue = kCrossSite
   };
+
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/blink/enums.xml:FedCmErrorUrlType)
 
   using AccountsRequestCallback =
       base::OnceCallback<void(FetchStatus,
@@ -236,7 +257,7 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
   using DisconnectCallback =
       base::OnceCallback<void(FetchStatus, const std::string&)>;
   using TokenRequestCallback =
-      base::OnceCallback<void(FetchStatus, TokenResult)>;
+      base::OnceCallback<void(FetchStatus, TokenResult&&)>;
   using ContinueOnCallback = base::OnceCallback<void(FetchStatus, const GURL&)>;
   using RecordErrorMetricsCallback =
       base::OnceCallback<void(FedCmTokenResponseType,
@@ -314,7 +335,7 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
   virtual void SendFailedTokenRequestMetrics(
       const GURL& metrics_endpoint_url,
       bool did_show_ui,
-      MetricsEndpointErrorCode error_code);
+      webid::MetricsEndpointErrorCode error_code);
 
   // Send logout request to a single target.
   virtual void SendLogout(const GURL& logout_url, LogoutCallback);

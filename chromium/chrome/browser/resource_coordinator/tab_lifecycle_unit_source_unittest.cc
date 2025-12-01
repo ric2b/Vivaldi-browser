@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/byte_count.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
@@ -159,7 +160,7 @@ class TabLifecycleUnitSourceTest : public ChromeRenderViewHostTestHarness {
     task_environment()->FastForwardBy(kShortDelay);
     auto time_before_first_tab = NowTicks();
     EXPECT_CALL(source_observer_, OnLifecycleUnitCreated(_))
-        .WillOnce(::testing::Invoke([&](LifecycleUnit* lifecycle_unit) {
+        .WillOnce([&](LifecycleUnit* lifecycle_unit) {
           *first_lifecycle_unit = lifecycle_unit;
 
           if (focus_tab_strip) {
@@ -168,7 +169,7 @@ class TabLifecycleUnitSourceTest : public ChromeRenderViewHostTestHarness {
             EXPECT_EQ(time_before_first_tab,
                       (*first_lifecycle_unit)->GetLastFocusedTimeTicks());
           }
-        }));
+        });
     std::unique_ptr<content::WebContents> first_web_contents =
         CreateAndNavigateWebContents();
     content::WebContents* raw_first_web_contents = first_web_contents.get();
@@ -183,7 +184,7 @@ class TabLifecycleUnitSourceTest : public ChromeRenderViewHostTestHarness {
     task_environment()->FastForwardBy(kShortDelay);
     auto time_before_second_tab = NowTicks();
     EXPECT_CALL(source_observer_, OnLifecycleUnitCreated(_))
-        .WillOnce(::testing::Invoke([&](LifecycleUnit* lifecycle_unit) {
+        .WillOnce([&](LifecycleUnit* lifecycle_unit) {
           *second_lifecycle_unit = lifecycle_unit;
 
           if (focus_tab_strip) {
@@ -196,7 +197,7 @@ class TabLifecycleUnitSourceTest : public ChromeRenderViewHostTestHarness {
             EXPECT_EQ(time_before_second_tab,
                       (*second_lifecycle_unit)->GetLastFocusedTimeTicks());
           }
-        }));
+        });
     std::unique_ptr<content::WebContents> second_web_contents =
         CreateAndNavigateWebContents();
     content::WebContents* raw_second_web_contents = second_web_contents.get();
@@ -223,7 +224,7 @@ class TabLifecycleUnitSourceTest : public ChromeRenderViewHostTestHarness {
     task_environment()->FastForwardBy(kShortDelay);
     LifecycleUnit* third_lifecycle_unit = nullptr;
     EXPECT_CALL(source_observer_, OnLifecycleUnitCreated(_))
-        .WillOnce(::testing::Invoke([&](LifecycleUnit* lifecycle_unit) {
+        .WillOnce([&](LifecycleUnit* lifecycle_unit) {
           third_lifecycle_unit = lifecycle_unit;
 
           if (focus_tab_strip) {
@@ -238,7 +239,7 @@ class TabLifecycleUnitSourceTest : public ChromeRenderViewHostTestHarness {
           }
           EXPECT_EQ(NowTicks(),
                     third_lifecycle_unit->GetLastFocusedTimeTicks());
-        }));
+        });
     std::unique_ptr<content::WebContents> third_web_contents =
         CreateAndNavigateWebContents();
     content::WebContents* raw_third_web_contents = third_web_contents.get();
@@ -287,8 +288,7 @@ class TabLifecycleUnitSourceTest : public ChromeRenderViewHostTestHarness {
     // Make sure that the second tab strip has a foreground tab.
     LifecycleUnit* third_lifecycle_unit = nullptr;
     EXPECT_CALL(source_observer_, OnLifecycleUnitCreated(_))
-        .WillOnce(::testing::Invoke(
-            [&](LifecycleUnit* unit) { third_lifecycle_unit = unit; }));
+        .WillOnce([&](LifecycleUnit* unit) { third_lifecycle_unit = unit; });
     other_tab_strip_model.AppendWebContents(CreateTestWebContents(),
                                             /*foreground=*/true);
     ::testing::Mock::VerifyAndClear(&source_observer_);
@@ -410,9 +410,9 @@ class TabLifecycleUnitSourceTest : public ChromeRenderViewHostTestHarness {
     task_environment()->FastForwardBy(kShortDelay);
     LifecycleUnit* third_lifecycle_unit = nullptr;
     EXPECT_CALL(source_observer_, OnLifecycleUnitCreated(_))
-        .WillOnce(::testing::Invoke([&](LifecycleUnit* lifecycle_unit) {
+        .WillOnce([&](LifecycleUnit* lifecycle_unit) {
           third_lifecycle_unit = lifecycle_unit;
-        }));
+        });
     std::unique_ptr<content::WebContents> third_web_contents =
         CreateAndNavigateWebContents();
     content::WebContents* raw_third_web_contents = third_web_contents.get();
@@ -693,7 +693,8 @@ TEST_F(TabLifecycleUnitSourceTest, UpdateMemorySavingsOnMultipleDiscards) {
       PreDiscardResourceUsage::FromWebContents(
           tab_strip_model_->GetWebContentsAt(1));
   EXPECT_NE(pre_discard_resource_usage, nullptr);
-  EXPECT_EQ(pre_discard_resource_usage->memory_footprint_estimate_kb(), 100u);
+  EXPECT_EQ(pre_discard_resource_usage->memory_footprint_estimate(),
+            base::KiB(100));
 
   // Navigate the tab so that it is no longer discarded.
   EXPECT_CALL(tab_observer_, MockOnLifecycleUnitStateChanged(
@@ -717,7 +718,8 @@ TEST_F(TabLifecycleUnitSourceTest, UpdateMemorySavingsOnMultipleDiscards) {
   pre_discard_resource_usage = PreDiscardResourceUsage::FromWebContents(
       tab_strip_model_->GetWebContentsAt(1));
   EXPECT_NE(pre_discard_resource_usage, nullptr);
-  EXPECT_EQ(pre_discard_resource_usage->memory_footprint_estimate_kb(), 500u);
+  EXPECT_EQ(pre_discard_resource_usage->memory_footprint_estimate(),
+            base::KiB(500));
   ::testing::Mock::VerifyAndClear(&tab_observer_);
 
   // Expect notifications when tabs are closed.

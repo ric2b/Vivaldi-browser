@@ -1806,9 +1806,8 @@ class MergeAssumptionChecker final : public ObjectVisitor {
                     &eval_from_shared_or_wrapped_arguments)) {
           visited_.insert(eval_from_shared_or_wrapped_arguments);
         }
-      } else if (IsBytecodeArray(current)) {
-        Tagged<HeapObject> constants =
-            Cast<BytecodeArray>(current)->constant_pool();
+      } else if (Tagged<BytecodeArray> bytes; TryCast(current, &bytes)) {
+        Tagged<HeapObject> constants = bytes->constant_pool();
         QueueVisit(constants, kConstantPool);
       }
       current_object_kind_ = pair.second;
@@ -1831,6 +1830,7 @@ class MergeAssumptionChecker final : public ObjectVisitor {
       Tagged<HeapObject> obj;
       bool is_weak = maybe_obj.IsWeak();
       if (maybe_obj.GetHeapObject(&obj)) {
+        if (SafeIsAnyHole(obj)) continue;
         if (IsSharedFunctionInfo(obj)) {
           CHECK((current_object_kind_ == kConstantPool && !is_weak) ||
                 (current_object_kind_ == kScriptInfosList && is_weak) ||

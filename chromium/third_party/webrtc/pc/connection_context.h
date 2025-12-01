@@ -64,17 +64,12 @@ class ConnectionContext final : public RefCountedNonVirtual<ConnectionContext> {
   Thread* network_thread() { return network_thread_; }
   const Thread* network_thread() const { return network_thread_; }
 
-  // Environment associated with the PeerConnectionFactory.
-  // Note: environments are different for different PeerConnections,
-  // but they are not supposed to change after creating the PeerConnection.
-  const Environment& env() const { return env_; }
-
   // Accessors only used from the PeerConnectionFactory class
-  NetworkManager* default_network_manager() {
+  NetworkManager* default_network_manager() const {
     RTC_DCHECK_RUN_ON(signaling_thread_);
     return default_network_manager_.get();
   }
-  PacketSocketFactory* default_socket_factory() {
+  PacketSocketFactory* default_socket_factory() const {
     RTC_DCHECK_RUN_ON(signaling_thread_);
     return default_socket_factory_.get();
   }
@@ -87,7 +82,7 @@ class ConnectionContext final : public RefCountedNonVirtual<ConnectionContext> {
   // use RTX, but so far, no code has been found that sets it to false.
   // Kept in the API in order to ease introduction if we want to resurrect
   // the functionality.
-  bool use_rtx() { return use_rtx_; }
+  bool use_rtx() const { return use_rtx_; }
 
   // For use by tests.
   void set_use_rtx(bool use_rtx) { use_rtx_ = use_rtx; }
@@ -100,17 +95,16 @@ class ConnectionContext final : public RefCountedNonVirtual<ConnectionContext> {
   ~ConnectionContext();
 
  private:
-  // The following three variables are used to communicate between the
+  // The following four variables are used to communicate between the
   // constructor and the destructor, and are never exposed externally.
   bool wraps_current_thread_;
   std::unique_ptr<SocketFactory> owned_socket_factory_;
   std::unique_ptr<Thread> owned_network_thread_
       RTC_GUARDED_BY(signaling_thread_);
+  bool blocking_media_engine_destruction_;
   Thread* const network_thread_;
   AlwaysValidPointer<Thread> const worker_thread_;
   Thread* const signaling_thread_;
-
-  const Environment env_;
 
   // This object is const over the lifetime of the ConnectionContext, and is
   // only altered in the destructor.

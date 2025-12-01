@@ -59,16 +59,24 @@ std::vector<std::string> FilterImportableExtensions(
   for (const auto [key, value] : extensions_list) {
     DCHECK(value.is_dict());
     const base::Value::Dict& dict = value.GetDict();
-    // Do not import extensions installed by default
+    // Do not import:
+    // * extensions installed by default
     if (dict.FindBool("was_installed_by_default").value_or(true)) {
       continue;
     }
-    // Nor disabled extensions
-    if (!dict.FindInt("state").value_or(false)) {
+    // * disabled extensions (using old extension preference
+    // crbug.com/446481994)
+    if (const auto state = dict.FindInt("state"); state && state == 0) {
       continue;
     }
 
-    // Nor extensions not installed from webstore
+    // * disabled extensions (using new disable_reasons preference)
+    if (const auto* disable_reasons = dict.FindList("disable_reasons");
+        disable_reasons && !disable_reasons->empty()) {
+      continue;
+    }
+
+    // * extensions not installed from webstore
     if (!dict.FindBool("from_webstore").value_or(false)) {
       continue;
     }
@@ -124,12 +132,10 @@ void ChromiumExtensionsImporter::AddExtensions(
       continue;
     }
 
-    scoped_refptr<vivaldi::SilentWebstoreInstaller> installer =
-        new vivaldi::SilentWebstoreInstaller(
-            extension, profile_, gfx::NativeWindow(),
-            base::BindOnce(&ChromiumExtensionsImporter::OnExtensionAdded,
-                           weak_ptr_factory_.GetWeakPtr()));
-    installer->BeginInstall();
+    vivaldi::SilentWebstoreInstaller::Install(
+        extension, profile_,
+        base::BindOnce(&ChromiumExtensionsImporter::OnExtensionAdded,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 }
 

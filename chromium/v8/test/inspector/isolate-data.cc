@@ -24,6 +24,9 @@ namespace internal {
 
 namespace {
 
+const v8::EmbedderDataTypeTag kInspectorIsolateDataTag = 1;
+const v8::EmbedderDataTypeTag kContextGroupIdTag = 2;
+
 const int kIsolateDataIndex = 2;
 const int kContextGroupIdIndex = 3;
 
@@ -79,7 +82,8 @@ InspectorIsolateData::InspectorIsolateData(
 InspectorIsolateData* InspectorIsolateData::FromContext(
     v8::Local<v8::Context> context) {
   return static_cast<InspectorIsolateData*>(
-      context->GetAlignedPointerFromEmbedderData(kIsolateDataIndex));
+      context->GetAlignedPointerFromEmbedderData(kIsolateDataIndex,
+                                                 kInspectorIsolateDataTag));
 }
 
 InspectorIsolateData::~InspectorIsolateData() {
@@ -131,10 +135,12 @@ bool InspectorIsolateData::CreateContext(int context_group_id,
   v8::Local<v8::Context> context =
       v8::Context::New(isolate_.get(), nullptr, global_template);
   if (context.IsEmpty()) return false;
-  context->SetAlignedPointerInEmbedderData(kIsolateDataIndex, this);
+  context->SetAlignedPointerInEmbedderData(kIsolateDataIndex, this,
+                                           kInspectorIsolateDataTag);
   // Should be 2-byte aligned.
   context->SetAlignedPointerInEmbedderData(
-      kContextGroupIdIndex, reinterpret_cast<void*>(context_group_id * 2));
+      kContextGroupIdIndex, reinterpret_cast<void*>(context_group_id * 2),
+      kContextGroupIdTag);
   contexts_[context_group_id].emplace_back(isolate_.get(), context);
   if (inspector_) FireContextCreated(context, context_group_id, name);
   return true;
@@ -152,8 +158,8 @@ void InspectorIsolateData::ResetContextGroup(int context_group_id) {
 
 int InspectorIsolateData::GetContextGroupId(v8::Local<v8::Context> context) {
   return static_cast<int>(
-      reinterpret_cast<intptr_t>(
-          context->GetAlignedPointerFromEmbedderData(kContextGroupIdIndex)) /
+      reinterpret_cast<intptr_t>(context->GetAlignedPointerFromEmbedderData(
+          kContextGroupIdIndex, kContextGroupIdTag)) /
       2);
 }
 
@@ -559,7 +565,7 @@ void InspectorIsolateData::installAdditionalCommandLineAPI(
 }
 
 void InspectorIsolateData::consoleAPIMessage(
-    int contextGroupId, v8::Isolate::MessageErrorLevel level,
+    int contextGroupId, int contextId, v8::Isolate::MessageErrorLevel level,
     const v8_inspector::StringView& message,
     const v8_inspector::StringView& url, unsigned lineNumber,
     unsigned columnNumber, v8_inspector::V8StackTrace* stack) {

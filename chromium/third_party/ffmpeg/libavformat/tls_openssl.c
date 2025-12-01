@@ -20,6 +20,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/avassert.h"
 #include "libavutil/mem.h"
 #include "network.h"
 #include "os_support.h"
@@ -31,6 +32,7 @@
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <openssl/x509v3.h>
 
 /**
  * Returns a heap‐allocated null‐terminated string containing
@@ -161,8 +163,8 @@ int ff_ssl_read_key_cert(char *key_url, char *cert_url, char *key_buf, size_t ke
     int ret = 0;
     BIO *key_b = NULL, *cert_b = NULL;
     AVBPrint key_bp, cert_bp;
-    EVP_PKEY *pkey;
-    X509 *cert;
+    EVP_PKEY *pkey = NULL;
+    X509 *cert = NULL;
     char *key_tem = NULL, *cert_tem = NULL;
 
     /* To prevent a crash during cleanup, always initialize it. */
@@ -216,11 +218,13 @@ int ff_ssl_read_key_cert(char *key_url, char *cert_url, char *key_buf, size_t ke
     snprintf(cert_buf, cert_sz, "%s", cert_tem);
 
     /* Generate fingerprint. */
-    *fingerprint = generate_fingerprint(cert);
-    if (!*fingerprint) {
-        av_log(NULL, AV_LOG_ERROR, "TLS: Failed to generate fingerprint from %s\n", cert_url);
-        ret = AVERROR(EIO);
-        goto end;
+    if (fingerprint) {
+        *fingerprint = generate_fingerprint(cert);
+        if (!*fingerprint) {
+            av_log(NULL, AV_LOG_ERROR, "TLS: Failed to generate fingerprint from %s\n", cert_url);
+            ret = AVERROR(EIO);
+            goto end;
+        }
     }
 
 end:
@@ -230,10 +234,12 @@ end:
     av_bprint_finalize(&cert_bp, NULL);
     av_free(key_tem);
     av_free(cert_tem);
+    EVP_PKEY_free(pkey);
+    X509_free(cert);
     return ret;
 }
 
-static int openssl_gen_private_key(EVP_PKEY **pkey, EC_KEY **eckey)
+static int openssl_gen_private_key(EVP_PKEY **pkey)
 {
     int ret = 0;
 
@@ -248,6 +254,7 @@ static int openssl_gen_private_key(EVP_PKEY **pkey, EC_KEY **eckey)
      */
 #if OPENSSL_VERSION_NUMBER < 0x30000000L /* OpenSSL 3.0 */
     EC_GROUP *ecgroup = NULL;
+    EC_KEY *eckey = NULL;
     int curve = NID_X9_62_prime256v1;
 #else
     const char *curve = SN_X9_62_prime256v1;
@@ -255,24 +262,33 @@ static int openssl_gen_private_key(EVP_PKEY **pkey, EC_KEY **eckey)
 
 #if OPENSSL_VERSION_NUMBER < 0x30000000L /* OpenSSL 3.0 */
     *pkey = EVP_PKEY_new();
-    *eckey = EC_KEY_new();
+    if (!*pkey)
+        return AVERROR(ENOMEM);
+
+    eckey = EC_KEY_new();
+    if (!eckey) {
+        EVP_PKEY_free(*pkey);
+        *pkey = NULL;
+        return AVERROR(ENOMEM);
+    }
+
     ecgroup = EC_GROUP_new_by_curve_name(curve);
     if (!ecgroup) {
         av_log(NULL, AV_LOG_ERROR, "TLS: Create EC group by curve=%d failed, %s", curve, ERR_error_string(ERR_get_error(), NULL));
         goto einval_end;
     }
 
-    if (EC_KEY_set_group(*eckey, ecgroup) != 1) {
+    if (EC_KEY_set_group(eckey, ecgroup) != 1) {
         av_log(NULL, AV_LOG_ERROR, "TLS: Generate private key, EC_KEY_set_group failed, %s\n", ERR_error_string(ERR_get_error(), NULL));
         goto einval_end;
     }
 
-    if (EC_KEY_generate_key(*eckey) != 1) {
+    if (EC_KEY_generate_key(eckey) != 1) {
         av_log(NULL, AV_LOG_ERROR, "TLS: Generate private key, EC_KEY_generate_key failed, %s\n", ERR_error_string(ERR_get_error(), NULL));
         goto einval_end;
     }
 
-    if (EVP_PKEY_set1_EC_KEY(*pkey, *eckey) != 1) {
+    if (EVP_PKEY_set1_EC_KEY(*pkey, eckey) != 1) {
         av_log(NULL, AV_LOG_ERROR, "TLS: Generate private key, EVP_PKEY_set1_EC_KEY failed, %s\n", ERR_error_string(ERR_get_error(), NULL));
         goto einval_end;
     }
@@ -287,16 +303,20 @@ static int openssl_gen_private_key(EVP_PKEY **pkey, EC_KEY **eckey)
 
 einval_end:
     ret = AVERROR(EINVAL);
+    EVP_PKEY_free(*pkey);
+    *pkey = NULL;
 end:
 #if OPENSSL_VERSION_NUMBER < 0x30000000L /* OpenSSL 3.0 */
     EC_GROUP_free(ecgroup);
+    EC_KEY_free(eckey);
 #endif
     return ret;
 }
 
 static int openssl_gen_certificate(EVP_PKEY *pkey, X509 **cert, char **fingerprint)
 {
-    int ret = 0, serial, expire_day;
+    int ret = 0, expire_day;
+    uint64_t serial;
     const char *aor = "lavf";
     X509_NAME* subject = NULL;
 
@@ -311,8 +331,8 @@ static int openssl_gen_certificate(EVP_PKEY *pkey, X509 **cert, char **fingerpri
         goto enomem_end;
     }
 
-    serial = (int)av_get_random_seed();
-    if (ASN1_INTEGER_set(X509_get_serialNumber(*cert), serial) != 1) {
+    serial = av_get_random_seed();
+    if (ASN1_INTEGER_set_uint64(X509_get_serialNumber(*cert), serial) != 1) {
         av_log(NULL, AV_LOG_ERROR, "TLS: Failed to set serial, %s\n", ERR_error_string(ERR_get_error(), NULL));
         goto einval_end;
     }
@@ -356,9 +376,11 @@ static int openssl_gen_certificate(EVP_PKEY *pkey, X509 **cert, char **fingerpri
         goto einval_end;
     }
 
-    *fingerprint = generate_fingerprint(*cert);
-    if (!*fingerprint) {
-        goto enomem_end;
+    if (fingerprint) {
+        *fingerprint = generate_fingerprint(*cert);
+        if (!*fingerprint) {
+            goto enomem_end;
+        }
     }
 
     goto end;
@@ -368,6 +390,10 @@ enomem_end:
 einval_end:
     ret = AVERROR(EINVAL);
 end:
+    if (ret) {
+        X509_free(*cert);
+        *cert = NULL;
+    }
     X509_NAME_free(subject);
     return ret;
 }
@@ -376,11 +402,10 @@ int ff_ssl_gen_key_cert(char *key_buf, size_t key_sz, char *cert_buf, size_t cer
 {
     int ret = 0;
     EVP_PKEY *pkey = NULL;
-    EC_KEY *ec_key = NULL;
     X509 *cert = NULL;
     char *key_tem = NULL, *cert_tem = NULL;
 
-    ret = openssl_gen_private_key(&pkey, &ec_key);
+    ret = openssl_gen_private_key(&pkey);
     if (ret < 0) goto error;
 
     ret = openssl_gen_certificate(pkey, &cert, fingerprint);
@@ -395,6 +420,8 @@ int ff_ssl_gen_key_cert(char *key_buf, size_t key_sz, char *cert_buf, size_t cer
     av_free(key_tem);
     av_free(cert_tem);
 error:
+    X509_free(cert);
+    EVP_PKEY_free(pkey);
     return ret;
 }
 
@@ -461,10 +488,11 @@ typedef struct TLSContext {
     TLSShared tls_shared;
     SSL_CTX *ctx;
     SSL *ssl;
-    EVP_PKEY *pkey;
     BIO_METHOD* url_bio_method;
     int io_err;
     char error_message[256];
+    struct sockaddr_storage dest_addr;
+    socklen_t dest_addr_len;
 } TLSContext;
 
 /**
@@ -474,16 +502,16 @@ typedef struct TLSContext {
  * to a human-readable string, and stores it in the TLSContext's error_message field.
  * The error queue is then cleared using ERR_clear_error().
  */
-static const char* openssl_get_error(TLSContext *ctx)
+static const char* openssl_get_error(TLSContext *c)
 {
     int r2 = ERR_get_error();
     if (r2) {
-        ERR_error_string_n(r2, ctx->error_message, sizeof(ctx->error_message));
+        ERR_error_string_n(r2, c->error_message, sizeof(c->error_message));
     } else
-        ctx->error_message[0] = '\0';
+        c->error_message[0] = '\0';
 
     ERR_clear_error();
-    return ctx->error_message;
+    return c->error_message;
 }
 
 int ff_tls_set_external_socket(URLContext *h, URLContext *sock)
@@ -508,7 +536,7 @@ int ff_dtls_export_materials(URLContext *h, char *dtls_srtp_materials, size_t ma
     ret = SSL_export_keying_material(c->ssl, dtls_srtp_materials, materials_sz,
         dst, strlen(dst), NULL, 0, 0);
     if (!ret) {
-        av_log(c, AV_LOG_ERROR, "TLS: Failed to export SRTP material, %s\n", openssl_get_error(c));
+        av_log(c, AV_LOG_ERROR, "Failed to export SRTP material, %s\n", openssl_get_error(c));
         return -1;
     }
     return 0;
@@ -553,7 +581,8 @@ static int tls_close(URLContext *h)
     }
     if (c->ctx)
         SSL_CTX_free(c->ctx);
-    ffurl_closep(&c->tls_shared.tcp);
+    if (!c->tls_shared.external_sock)
+        ffurl_closep(c->tls_shared.is_dtls ? &c->tls_shared.udp : &c->tls_shared.tcp);
     if (c->url_bio_method)
         BIO_meth_free(c->url_bio_method);
     return 0;
@@ -575,9 +604,23 @@ static int url_bio_destroy(BIO *b)
 static int url_bio_bread(BIO *b, char *buf, int len)
 {
     TLSContext *c = BIO_get_data(b);
+    TLSShared *s = &c->tls_shared;
     int ret = ffurl_read(c->tls_shared.is_dtls ? c->tls_shared.udp : c->tls_shared.tcp, buf, len);
-    if (ret >= 0)
+    if (ret >= 0) {
+        if (s->is_dtls && s->listen && !c->dest_addr_len) {
+            int err_ret;
+
+            ff_udp_get_last_recv_addr(s->udp, &c->dest_addr, &c->dest_addr_len);
+            err_ret = ff_udp_set_remote_addr(s->udp, (struct sockaddr *)&c->dest_addr, c->dest_addr_len, 1);
+            if (err_ret < 0) {
+                av_log(c, AV_LOG_ERROR, "Failed connecting udp context\n");
+                return err_ret;
+            }
+            av_log(c, AV_LOG_TRACE, "Set UDP remote addr on UDP socket, now 'connected'\n");
+        }
+
         return ret;
+    }
     BIO_clear_retry_flags(b);
     if (ret == AVERROR_EXIT)
         return 0;
@@ -618,30 +661,26 @@ static int url_bio_bputs(BIO *b, const char *str)
     return url_bio_bwrite(b, str, strlen(str));
 }
 
-static av_cold int init_bio_method(URLContext *h)
+static av_cold void init_bio_method(URLContext *h)
 {
-    TLSContext *p = h->priv_data;
+    TLSContext *c = h->priv_data;
     BIO *bio;
-    int bio_idx = BIO_get_new_index();
-    if (bio_idx == -1)
-        return AVERROR_EXTERNAL;
-    p->url_bio_method = BIO_meth_new(bio_idx | BIO_TYPE_SOURCE_SINK, "urlprotocol bio");
-    BIO_meth_set_write(p->url_bio_method, url_bio_bwrite);
-    BIO_meth_set_read(p->url_bio_method, url_bio_bread);
-    BIO_meth_set_puts(p->url_bio_method, url_bio_bputs);
-    BIO_meth_set_ctrl(p->url_bio_method, url_bio_ctrl);
-    BIO_meth_set_create(p->url_bio_method, url_bio_create);
-    BIO_meth_set_destroy(p->url_bio_method, url_bio_destroy);
-    bio = BIO_new(p->url_bio_method);
-    BIO_set_data(bio, p);
+    c->url_bio_method = BIO_meth_new(BIO_TYPE_SOURCE_SINK, "urlprotocol bio");
+    BIO_meth_set_write(c->url_bio_method, url_bio_bwrite);
+    BIO_meth_set_read(c->url_bio_method, url_bio_bread);
+    BIO_meth_set_puts(c->url_bio_method, url_bio_bputs);
+    BIO_meth_set_ctrl(c->url_bio_method, url_bio_ctrl);
+    BIO_meth_set_create(c->url_bio_method, url_bio_create);
+    BIO_meth_set_destroy(c->url_bio_method, url_bio_destroy);
+    bio = BIO_new(c->url_bio_method);
+    BIO_set_data(bio, c);
 
-    SSL_set_bio(p->ssl, bio, bio);
-    return 0;
+    SSL_set_bio(c->ssl, bio, bio);
 }
 
 static void openssl_info_callback(const SSL *ssl, int where, int ret) {
     const char *method = "undefined";
-    TLSContext *ctx = (TLSContext*)SSL_get_ex_data(ssl, 0);
+    TLSContext *c = (TLSContext*)SSL_get_ex_data(ssl, 0);
 
     if (where & SSL_ST_CONNECT) {
         method = "SSL_connect";
@@ -649,46 +688,41 @@ static void openssl_info_callback(const SSL *ssl, int where, int ret) {
         method = "SSL_accept";
 
     if (where & SSL_CB_LOOP) {
-        av_log(ctx, AV_LOG_DEBUG, "Info method=%s state=%s(%s), where=%d, ret=%d\n",
+        av_log(c, AV_LOG_DEBUG, "Info method=%s state=%s(%s), where=%d, ret=%d\n",
                method, SSL_state_string(ssl), SSL_state_string_long(ssl), where, ret);
     } else if (where & SSL_CB_ALERT) {
         method = (where & SSL_CB_READ) ? "read":"write";
-        av_log(ctx, AV_LOG_DEBUG, "Alert method=%s state=%s(%s), where=%d, ret=%d\n",
+        av_log(c, AV_LOG_DEBUG, "Alert method=%s state=%s(%s), where=%d, ret=%d\n",
                method, SSL_state_string(ssl), SSL_state_string_long(ssl), where, ret);
     }
-}
-
-/**
- * Always return 1 to accept any certificate. This is because we allow the peer to
- * use a temporary self-signed certificate for DTLS.
- */
-static int openssl_dtls_verify_callback(int preverify_ok, X509_STORE_CTX *ctx)
-{
-    return 1;
 }
 
 static int dtls_handshake(URLContext *h)
 {
-    int ret = 0, r0, r1;
-    TLSContext *p = h->priv_data;
+    int ret = 1, r0, r1;
+    TLSContext *c = h->priv_data;
 
-    r0 = SSL_do_handshake(p->ssl);
-    r1 = SSL_get_error(p->ssl, r0);
+    c->tls_shared.udp->flags &= ~AVIO_FLAG_NONBLOCK;
+
+    r0 = SSL_do_handshake(c->ssl);
     if (r0 <= 0) {
+        r1 = SSL_get_error(c->ssl, r0);
+
         if (r1 != SSL_ERROR_WANT_READ && r1 != SSL_ERROR_WANT_WRITE && r1 != SSL_ERROR_ZERO_RETURN) {
-            av_log(p, AV_LOG_ERROR, "TLS: Read failed, r0=%d, r1=%d %s\n", r0, r1, openssl_get_error(p));
-            ret = AVERROR(EIO);
+            av_log(c, AV_LOG_ERROR, "Handshake failed, r0=%d, r1=%d\n", r0, r1);
+            ret = print_ssl_error(h, r0);
             goto end;
         }
     } else {
-        av_log(p, AV_LOG_TRACE, "TLS: Read %d bytes, r0=%d, r1=%d\n", r0, r0, r1);
+        av_log(c, AV_LOG_TRACE, "Handshake success, r0=%d\n", r0);
     }
 
-    /* Check whether the DTLS is completed. */
-    if (SSL_is_init_finished(p->ssl) != 1)
+    /* Check whether the handshake is completed. */
+    if (SSL_is_init_finished(c->ssl) != TLS_ST_OK)
         goto end;
 
-    p->tls_shared.state = DTLS_STATE_FINISHED;
+    ret = 0;
+    c->tls_shared.state = DTLS_STATE_FINISHED;
 end:
     return ret;
 }
@@ -696,59 +730,84 @@ end:
 static av_cold int openssl_init_ca_key_cert(URLContext *h)
 {
     int ret;
-    TLSContext *p = h->priv_data;
-    TLSShared *c = &p->tls_shared;
+    TLSContext *c = h->priv_data;
+    TLSShared *s = &c->tls_shared;
     EVP_PKEY *pkey = NULL;
     X509 *cert = NULL;
     /* setup ca, private key, certificate */
-    if (c->ca_file) {
-        if (!SSL_CTX_load_verify_locations(p->ctx, c->ca_file, NULL))
-            av_log(h, AV_LOG_ERROR, "SSL_CTX_load_verify_locations %s\n", openssl_get_error(p));
+    if (s->ca_file) {
+        if (!SSL_CTX_load_verify_locations(c->ctx, s->ca_file, NULL))
+            av_log(h, AV_LOG_ERROR, "SSL_CTX_load_verify_locations %s\n", openssl_get_error(c));
+    } else {
+        if (!SSL_CTX_set_default_verify_paths(c->ctx)) {
+            // Only log the failure but do not error out, as this is not fatal
+            av_log(h, AV_LOG_WARNING, "Failure setting default verify locations: %s\n",
+                openssl_get_error(c));
+        }
     }
 
-    if (c->cert_file) {
-        ret = SSL_CTX_use_certificate_chain_file(p->ctx, c->cert_file);
+    if (s->cert_file) {
+        ret = SSL_CTX_use_certificate_chain_file(c->ctx, s->cert_file);
         if (ret <= 0) {
             av_log(h, AV_LOG_ERROR, "Unable to load cert file %s: %s\n",
-               c->cert_file, openssl_get_error(p));
+               s->cert_file, openssl_get_error(c));
             ret = AVERROR(EIO);
             goto fail;
         }
-    } else if (c->cert_buf) {
-        cert = cert_from_pem_string(c->cert_buf);
-        if (SSL_CTX_use_certificate(p->ctx, cert) != 1) {
-            av_log(p, AV_LOG_ERROR, "SSL: Init SSL_CTX_use_certificate failed, %s\n", openssl_get_error(p));
+    } else if (s->cert_buf) {
+        cert = cert_from_pem_string(s->cert_buf);
+        if (SSL_CTX_use_certificate(c->ctx, cert) != 1) {
+            av_log(c, AV_LOG_ERROR, "SSL: Init SSL_CTX_use_certificate failed, %s\n", openssl_get_error(c));
             ret = AVERROR(EINVAL);
-            return ret;
+            goto fail;
         }
-    } else if (c->is_dtls){
-        av_log(p, AV_LOG_ERROR, "TLS: Init cert failed, %s\n", openssl_get_error(p));
-        ret = AVERROR(EINVAL);
-        goto fail;
     }
 
-    if (c->key_file) {
-        ret = SSL_CTX_use_PrivateKey_file(p->ctx, c->key_file, SSL_FILETYPE_PEM);
+    if (s->key_file) {
+        ret = SSL_CTX_use_PrivateKey_file(c->ctx, s->key_file, SSL_FILETYPE_PEM);
         if (ret <= 0) {
             av_log(h, AV_LOG_ERROR, "Unable to load key file %s: %s\n",
-                c->key_file, openssl_get_error(p));
+                s->key_file, openssl_get_error(c));
             ret = AVERROR(EIO);
             goto fail;
         }
-    } else if (c->key_buf) {
-        p->pkey = pkey = pkey_from_pem_string(c->key_buf, 1);
-        if (SSL_CTX_use_PrivateKey(p->ctx, pkey) != 1) {
-            av_log(p, AV_LOG_ERROR, "TLS: Init SSL_CTX_use_PrivateKey failed, %s\n", openssl_get_error(p));
+    } else if (s->key_buf) {
+        pkey = pkey_from_pem_string(s->key_buf, 1);
+        if (SSL_CTX_use_PrivateKey(c->ctx, pkey) != 1) {
+            av_log(c, AV_LOG_ERROR, "Init SSL_CTX_use_PrivateKey failed, %s\n", openssl_get_error(c));
             ret = AVERROR(EINVAL);
-            return ret;
+            goto fail;
         }
-    } else if (c->is_dtls) {
-        av_log(p, AV_LOG_ERROR, "TLS: Init pkey failed, %s\n", openssl_get_error(p));
-        ret = AVERROR(EINVAL);
-        goto fail;
     }
+
+    if (s->listen && !s->cert_file && !s->cert_buf && !s->key_file && !s->key_buf) {
+        av_log(h, AV_LOG_VERBOSE, "No server certificate provided, using self-signed\n");
+
+        ret = openssl_gen_private_key(&pkey);
+        if (ret < 0)
+            goto fail;
+
+        ret = openssl_gen_certificate(pkey, &cert, NULL);
+        if (ret < 0)
+            goto fail;
+
+        if (SSL_CTX_use_certificate(c->ctx, cert) != 1) {
+            av_log(c, AV_LOG_ERROR, "SSL_CTX_use_certificate failed for self-signed cert, %s\n", openssl_get_error(c));
+            ret = AVERROR(EINVAL);
+            goto fail;
+        }
+
+        if (SSL_CTX_use_PrivateKey(c->ctx, pkey) != 1) {
+            av_log(c, AV_LOG_ERROR, "SSL_CTX_use_PrivateKey failed for self-signed cert, %s\n", openssl_get_error(c));
+            ret = AVERROR(EINVAL);
+            goto fail;
+        }
+    }
+
     ret = 0;
 fail:
+    X509_free(cert);
+    EVP_PKEY_free(pkey);
     return ret;
 }
 
@@ -758,92 +817,76 @@ fail:
  */
 static int dtls_start(URLContext *h, const char *url, int flags, AVDictionary **options)
 {
-    TLSContext *p = h->priv_data;
-    TLSShared *c = &p->tls_shared;
+    TLSContext *c = h->priv_data;
+    TLSShared *s = &c->tls_shared;
     int ret = 0;
-    c->is_dtls = 1;
-    const char* ciphers = "ALL";
+    av_assert0(s);
+    s->is_dtls = 1;
 
-    /**
-     * The profile for OpenSSL's SRTP is SRTP_AES128_CM_SHA1_80, see ssl/d1_srtp.c.
-     * The profile for FFmpeg's SRTP is SRTP_AES128_CM_HMAC_SHA1_80, see libavformat/srtp.c.
-     */
-    const char* profiles = "SRTP_AES128_CM_SHA1_80";
-    /* Refer to the test cases regarding these curves in the WebRTC code. */
-    const char* curves = "X25519:P-256:P-384:P-521";
-
-    p->ctx = SSL_CTX_new(DTLS_method());
-    if (!p->ctx) {
+    c->ctx = SSL_CTX_new(s->listen ? DTLS_server_method() : DTLS_client_method());
+    if (!c->ctx) {
         ret = AVERROR(ENOMEM);
         goto fail;
     }
 
-    /* For ECDSA, we could set the curves list. */
-    if (SSL_CTX_set1_curves_list(p->ctx, curves) != 1) {
-        av_log(p, AV_LOG_ERROR, "TLS: Init SSL_CTX_set1_curves_list failed, curves=%s, %s\n",
-            curves, openssl_get_error(p));
-        ret = AVERROR(EINVAL);
-        return ret;
-    }
-
-    /**
-     * We activate "ALL" cipher suites to align with the peer's capabilities,
-     * ensuring maximum compatibility.
-     */
-    if (SSL_CTX_set_cipher_list(p->ctx, ciphers) != 1) {
-        av_log(p, AV_LOG_ERROR, "TLS: Init SSL_CTX_set_cipher_list failed, ciphers=%s, %s\n",
-            ciphers, openssl_get_error(p));
-        ret = AVERROR(EINVAL);
-        return ret;
-    }
     ret = openssl_init_ca_key_cert(h);
     if (ret < 0) goto fail;
 
-    /* Server will send Certificate Request. */
-    SSL_CTX_set_verify(p->ctx, SSL_VERIFY_PEER | SSL_VERIFY_CLIENT_ONCE, openssl_dtls_verify_callback);
-    /* The depth count is "level 0:peer certificate", "level 1: CA certificate",
-     * "level 2: higher level CA certificate", and so on. */
-    SSL_CTX_set_verify_depth(p->ctx, 4);
-    /* Whether we should read as many input bytes as possible (for non-blocking reads) or not. */
-    SSL_CTX_set_read_ahead(p->ctx, 1);
-    /* Setup the SRTP context */
-    if (SSL_CTX_set_tlsext_use_srtp(p->ctx, profiles)) {
-        av_log(p, AV_LOG_ERROR, "TLS: Init SSL_CTX_set_tlsext_use_srtp failed, profiles=%s, %s\n",
-            profiles, openssl_get_error(p));
-        ret = AVERROR(EINVAL);
-        return ret;
+    /* Note, this doesn't check that the peer certificate actually matches the requested hostname. */
+    if (s->verify)
+        SSL_CTX_set_verify(c->ctx, SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+
+    if (s->use_srtp) {
+        /**
+         * The profile for OpenSSL's SRTP is SRTP_AES128_CM_SHA1_80, see ssl/d1_srtp.c.
+         * The profile for FFmpeg's SRTP is SRTP_AES128_CM_HMAC_SHA1_80, see libavformat/srtp.c.
+         */
+        const char* profiles = "SRTP_AES128_CM_SHA1_80";
+        if (SSL_CTX_set_tlsext_use_srtp(c->ctx, profiles)) {
+            av_log(c, AV_LOG_ERROR, "Init SSL_CTX_set_tlsext_use_srtp failed, profiles=%s, %s\n",
+                profiles, openssl_get_error(c));
+            ret = AVERROR(EINVAL);
+            goto fail;
+        }
     }
 
     /* The ssl should not be created unless the ctx has been initialized. */
-    p->ssl = SSL_new(p->ctx);
-    if (!p->ssl) {
+    c->ssl = SSL_new(c->ctx);
+    if (!c->ssl) {
         ret = AVERROR(ENOMEM);
         goto fail;
     }
 
+    if (!s->listen && !s->numerichost)
+        SSL_set_tlsext_host_name(c->ssl, s->host);
+
     /* Setup the callback for logging. */
-    SSL_set_ex_data(p->ssl, 0, p);
-    SSL_set_info_callback(p->ssl, openssl_info_callback);
+    SSL_set_ex_data(c->ssl, 0, c);
+    SSL_CTX_set_info_callback(c->ctx, openssl_info_callback);
+
     /**
      * We have set the MTU to fragment the DTLS packet. It is important to note that the
      * packet is split to ensure that each handshake packet is smaller than the MTU.
      */
-    SSL_set_options(p->ssl, SSL_OP_NO_QUERY_MTU);
-    SSL_set_mtu(p->ssl, p->tls_shared.mtu);
-    DTLS_set_link_mtu(p->ssl, p->tls_shared.mtu);
-    ret = init_bio_method(h);
-    if (ret < 0)
-        goto fail;
+    if (s->mtu <= 0)
+        s->mtu = 1096;
+    SSL_set_options(c->ssl, SSL_OP_NO_QUERY_MTU);
+    SSL_set_mtu(c->ssl, s->mtu);
+    DTLS_set_link_mtu(c->ssl, s->mtu);
+    init_bio_method(h);
 
-    if (p->tls_shared.external_sock != 1) {
-        if ((ret = ff_tls_open_underlying(&p->tls_shared, h, url, options)) < 0) {
-            av_log(p, AV_LOG_ERROR, "Failed to connect %s\n", url);
+    if (!c->tls_shared.external_sock) {
+        if ((ret = ff_tls_open_underlying(&c->tls_shared, h, url, options)) < 0) {
+            av_log(c, AV_LOG_ERROR, "Failed to connect %s\n", url);
             return ret;
         }
     }
 
-    /* Setup DTLS as passive, which is server role. */
-    c->listen ? SSL_set_accept_state(p->ssl) : SSL_set_connect_state(p->ssl);
+    /* This seems to be necessary despite explicitly setting client/server method above. */
+    if (s->listen)
+        SSL_set_accept_state(c->ssl);
+    else
+        SSL_set_connect_state(c->ssl);
 
     /**
      * During initialization, we only need to call SSL_do_handshake once because SSL_read consumes
@@ -856,80 +899,77 @@ static int dtls_start(URLContext *h, const char *url, int flags, AVDictionary **
      *
      * The SSL_do_handshake can't be called if DTLS hasn't prepare for udp.
      */
-    if (p->tls_shared.external_sock != 1) {
+    if (!c->tls_shared.external_sock) {
         ret = dtls_handshake(h);
         // Fatal SSL error, for example, no available suite when peer is DTLS 1.0 while we are DTLS 1.2.
         if (ret < 0) {
-            av_log(p, AV_LOG_ERROR, "TLS: Failed to drive SSL context, ret=%d\n", ret);
+            av_log(c, AV_LOG_ERROR, "Failed to drive SSL context, ret=%d\n", ret);
             return AVERROR(EIO);
         }
     }
 
-    av_log(p, AV_LOG_VERBOSE, "TLS: Setup ok, MTU=%d\n", p->tls_shared.mtu);
+    av_log(c, AV_LOG_VERBOSE, "Setup ok, MTU=%d\n", c->tls_shared.mtu);
 
     ret = 0;
 fail:
     return ret;
 }
 
-/**
- * Cleanup the DTLS context.
- */
-static av_cold int dtls_close(URLContext *h)
-{
-    TLSContext *ctx = h->priv_data;
-    SSL_free(ctx->ssl);
-    SSL_CTX_free(ctx->ctx);
-    av_freep(&ctx->tls_shared.cert_buf);
-    av_freep(&ctx->tls_shared.key_buf);
-    EVP_PKEY_free(ctx->pkey);
-    return 0;
-}
-
 static int tls_open(URLContext *h, const char *uri, int flags, AVDictionary **options)
 {
-    TLSContext *p = h->priv_data;
-    TLSShared *c = &p->tls_shared;
+    TLSContext *c = h->priv_data;
+    TLSShared *s = &c->tls_shared;
     int ret;
 
-    if ((ret = ff_tls_open_underlying(c, h, uri, options)) < 0)
+    av_assert0(s);
+    if ((ret = ff_tls_open_underlying(s, h, uri, options)) < 0)
         goto fail;
 
     // We want to support all versions of TLS >= 1.0, but not the deprecated
     // and insecure SSLv2 and SSLv3.  Despite the name, TLS_*_method()
     // enables support for all versions of SSL and TLS, and we then disable
     // support for the old protocols immediately after creating the context.
-    p->ctx = SSL_CTX_new(c->listen ? TLS_server_method() : TLS_client_method());
-    if (!p->ctx) {
-        av_log(h, AV_LOG_ERROR, "%s\n", openssl_get_error(p));
+    c->ctx = SSL_CTX_new(s->listen ? TLS_server_method() : TLS_client_method());
+    if (!c->ctx) {
+        av_log(h, AV_LOG_ERROR, "%s\n", openssl_get_error(c));
         ret = AVERROR(EIO);
         goto fail;
     }
-    if (!SSL_CTX_set_min_proto_version(p->ctx, TLS1_VERSION)) {
+    if (!SSL_CTX_set_min_proto_version(c->ctx, TLS1_VERSION)) {
         av_log(h, AV_LOG_ERROR, "Failed to set minimum TLS version to TLSv1\n");
         ret = AVERROR_EXTERNAL;
         goto fail;
     }
     ret = openssl_init_ca_key_cert(h);
     if (ret < 0) goto fail;
-    // Note, this doesn't check that the peer certificate actually matches
-    // the requested hostname.
-    if (c->verify)
-        SSL_CTX_set_verify(p->ctx, SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
-    p->ssl = SSL_new(p->ctx);
-    if (!p->ssl) {
-        av_log(h, AV_LOG_ERROR, "%s\n", openssl_get_error(p));
+
+    if (s->verify)
+        SSL_CTX_set_verify(c->ctx, SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+    c->ssl = SSL_new(c->ctx);
+    if (!c->ssl) {
+        av_log(h, AV_LOG_ERROR, "%s\n", openssl_get_error(c));
         ret = AVERROR(EIO);
         goto fail;
     }
-    SSL_set_ex_data(p->ssl, 0, p);
-    SSL_CTX_set_info_callback(p->ctx, openssl_info_callback);
-    ret = init_bio_method(h);
-    if (ret < 0)
-        goto fail;
-    if (!c->listen && !c->numerichost)
-        SSL_set_tlsext_host_name(p->ssl, c->host);
-    ret = c->listen ? SSL_accept(p->ssl) : SSL_connect(p->ssl);
+    SSL_set_ex_data(c->ssl, 0, c);
+    SSL_CTX_set_info_callback(c->ctx, openssl_info_callback);
+    init_bio_method(h);
+    if (!s->listen && !s->numerichost) {
+        // By default OpenSSL does too lax wildcard matching
+        SSL_set_hostflags(c->ssl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+        if (!SSL_set1_host(c->ssl, s->host)) {
+            av_log(h, AV_LOG_ERROR, "Failed to set hostname for TLS/SSL verification: %s\n",
+                openssl_get_error(c));
+            ret = AVERROR_EXTERNAL;
+            goto fail;
+        }
+        if (!SSL_set_tlsext_host_name(c->ssl, s->host)) {
+            av_log(h, AV_LOG_ERROR, "Failed to set hostname for SNI: %s\n", openssl_get_error(c));
+            ret = AVERROR_EXTERNAL;
+            goto fail;
+        }
+    }
+    ret = s->listen ? SSL_accept(c->ssl) : SSL_connect(c->ssl);
     if (ret == 0) {
         av_log(h, AV_LOG_ERROR, "Unable to negotiate TLS/SSL session\n");
         ret = AVERROR(EIO);
@@ -948,10 +988,10 @@ fail:
 static int tls_read(URLContext *h, uint8_t *buf, int size)
 {
     TLSContext *c = h->priv_data;
-    URLContext *uc = c->tls_shared.is_dtls ? c->tls_shared.udp
-                                           : c->tls_shared.tcp;
+    TLSShared *s = &c->tls_shared;
+    URLContext *uc = s->is_dtls ? s->udp : s->tcp;
     int ret;
-    // Set or clear the AVIO_FLAG_NONBLOCK on c->tls_shared.tcp
+    // Set or clear the AVIO_FLAG_NONBLOCK on the underlying socket
     uc->flags &= ~AVIO_FLAG_NONBLOCK;
     uc->flags |= h->flags & AVIO_FLAG_NONBLOCK;
     ret = SSL_read(c->ssl, buf, size);
@@ -965,12 +1005,17 @@ static int tls_read(URLContext *h, uint8_t *buf, int size)
 static int tls_write(URLContext *h, const uint8_t *buf, int size)
 {
     TLSContext *c = h->priv_data;
-    URLContext *uc = c->tls_shared.is_dtls ? c->tls_shared.udp
-                                           : c->tls_shared.tcp;
+    TLSShared *s = &c->tls_shared;
+    URLContext *uc = s->is_dtls ? s->udp : s->tcp;
     int ret;
+
     // Set or clear the AVIO_FLAG_NONBLOCK on c->tls_shared.tcp
     uc->flags &= ~AVIO_FLAG_NONBLOCK;
     uc->flags |= h->flags & AVIO_FLAG_NONBLOCK;
+
+    if (s->is_dtls)
+        size = FFMIN(size, DTLS_get_data_mtu(c->ssl));
+
     ret = SSL_write(c->ssl, buf, size);
     if (ret > 0)
         return ret;
@@ -981,16 +1026,16 @@ static int tls_write(URLContext *h, const uint8_t *buf, int size)
 
 static int tls_get_file_handle(URLContext *h)
 {
-    TLSContext *p = h->priv_data;
-    TLSShared *c = &p->tls_shared;
-    return ffurl_get_file_handle(c->is_dtls ? c->udp : c->tcp);
+    TLSContext *c = h->priv_data;
+    TLSShared *s = &c->tls_shared;
+    return ffurl_get_file_handle(s->is_dtls ? s->udp : s->tcp);
 }
 
 static int tls_get_short_seek(URLContext *h)
 {
-    TLSContext *p = h->priv_data;
-    TLSShared *c = &p->tls_shared;
-    return ffurl_get_short_seek(c->is_dtls ? c->udp : c->tcp);
+    TLSContext *c = h->priv_data;
+    TLSShared *s = &c->tls_shared;
+    return ffurl_get_short_seek(s->is_dtls ? s->udp : s->tcp);
 }
 
 static const AVOption options[] = {
@@ -1029,7 +1074,7 @@ const URLProtocol ff_dtls_protocol = {
     .name           = "dtls",
     .url_open2      = dtls_start,
     .url_handshake  = dtls_handshake,
-    .url_close      = dtls_close,
+    .url_close      = tls_close,
     .url_read       = tls_read,
     .url_write      = tls_write,
     .url_get_file_handle = tls_get_file_handle,

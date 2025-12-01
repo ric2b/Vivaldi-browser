@@ -10,11 +10,20 @@
 
 #include "sdk/android/src/jni/pc/sdp_observer.h"
 
+#include <jni.h>
+
+#include <memory>
+#include <string>
 #include <utility>
 
+#include "api/jsep.h"
+#include "api/rtc_error.h"
+#include "rtc_base/checks.h"
 #include "sdk/android/generated_peerconnection_jni/SdpObserver_jni.h"
 #include "sdk/android/native_api/jni/java_types.h"
-#include "sdk/android/src/jni/jni_helpers.h"
+#include "sdk/android/native_api/jni/scoped_java_ref.h"
+#include "sdk/android/src/jni/jvm.h"
+#include "sdk/android/src/jni/pc/session_description.h"
 #include "sdk/media_constraints.h"
 
 namespace webrtc {
@@ -35,7 +44,7 @@ void CreateSdpObserverJni::OnSuccess(SessionDescriptionInterface* desc) {
   RTC_CHECK(desc->ToString(&sdp)) << "got so far: " << sdp;
   Java_SdpObserver_onCreateSuccess(
       env, j_observer_global_,
-      NativeToJavaSessionDescription(env, sdp, desc->type()));
+      NativeToJavaSessionDescription(env, sdp, desc->GetType()));
   // OnSuccess transfers ownership of the description (there's a TODO to make
   // it use unique_ptr...).
   delete desc;

@@ -1,0 +1,422 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.confidentialcompute;
+
+import "google/protobuf/any.proto";
+import "google/rpc/status.proto";
+import "proto/crypto/crypto.proto";
+
+// API for an untrusted companion app to communicate with a container
+// TEE over a gRPC channel.
+service ConfidentialTransform {
+  // The StreamInitialize method is a client-streaming RPC so multiple
+  // StreamInitialize requests can be sent. The expected order of inner message
+  // types is the following:
+  // 1. Optionally the client will send a sequence of
+  //    WriteConfigurationRequests, to write a blob of configuration data in
+  //    chunks, starting with a WriteConfigurationRequest where
+  //    first_request_metadata is set, and concluding with a
+  //    WriteConfigurationRequest where commit is true. This step may be
+  //    repeated for multiple configuration blobs.
+  // 2. The client sends an InitializeRequest which contains a
+  //    container-specific proto configuration, max_num_sessions, decryption
+  //    keys, and container-specific constraints. The proto configuration may
+  //    refer to larger configuration blobs passed via
+  //    WriteConfigurationRequests.
+  // This method must be called exactly once for the lifetime of the TEE, prior
+  // to any other RPCs on this service.
+  rpc StreamInitialize(stream StreamInitializeRequest)
+      returns (InitializeResponse) {}
+
+  // Bidirectional stream to execute a Session. A session determines the
+  // scope of data.
+  //
+  // The general pattern for a session is always this following where the
+  // [Op] can be Configure, Write, Commit, or Finalize.
+  //   --> [Op]Request       - client sends a request
+  //   <-- ReadResponse      - server may write back an arbitrary number of
+  //   ...                     read responses
+  //   <-- ReadResponse
+  //   <-- [Op]Response      - server completes the [Op] response
+  //
+  // The expected order of [Op]s is the following:
+  // 1. Configure            - single ConfigureRequest in the first request
+  // 2. -- Write*            - zero or more WriteRequests
+  // 3. -- Commit (optional) - multiple write requests may be followed with a
+  //                           single commit to indicate an end of a batch.
+  // 4. Finalize             - FinalizeRequest indicates the end of a session,
+  //                           however the finalizing operation may be
+  //                           retried if necessary for the session logic.
+  //
+  // Steps 2 and 3 may be repeated any number of times.
+  rpc Session(stream SessionRequest) returns (stream SessionResponse) {}
+}
+
+// Request providing implementation-specific configuration that will be
+// used for the lifetime of the TEE.
+// The TEE will extract and sign privacy-relevant properties of the
+// configuration along with its public key, that can then be
+// provided to the Ledger to be matched against the data usage policy.
+// The TEE is responsible for validating that any session-level
+// configuration matches the top-level configuration.
+message InitializeRequest {
+  // Implementation-specific configuration to be passed to the TEE.
+  google.protobuf.Any configuration = 1;
+
+  // The maximum number of sessions the trusted application can have open at
+  // once.
+  uint32 max_num_sessions = 2;
+
+  // Serialized and encrypted
+  // fcp.confidentialcompute.AuthorizeConfidentialTransformResponse.ProtectedResponse,
+  // encrypted using the TEE's application encryption key and
+  // therefore only accessible to the TEE.
+  // Contains the decyption keys that the TEE needs to access all inputs.
+  oak.crypto.v1.EncryptedRequest protected_response = 3;
+}
+
+// Polymorphic request message for StreamInitialize.
+message StreamInitializeRequest {
+  oneof kind {
+    // Optional request to write a configuration blob in chunks.
+    WriteConfigurationRequest write_configuration = 1;
+    // If the configuration is too large to fit in a single gRPC message,
+    // initialize_request.configuration may refer to the configuration_ids of
+    // other configuration blobs passed in via WriteConfigurationRequests.
+    InitializeRequest initialize_request = 2;
+  }
+}
+
+// Encodes metadata about a WriteConfigurationRequest that is written to the
+// TEE.
+message ConfigurationMetadata {
+  // Identifier for this configuration blob, which will later be
+  // referenced from the configuration proto in the
+  // ConfigureRequest.
+  string configuration_id = 1;
+  // The total size of the configuration blob in bytes.
+  int64 total_size_bytes = 2;
+}
+
+// Optional request to write configuration that is too large to fit in a single
+// gRPC message, for example, LLM model weights. This configuration will be
+// subsequently referenced by the configuration proto in a ConfigureRequest.
+message WriteConfigurationRequest {
+  // Metadata about a configuration blob sent with the first request
+  // to write that configuration.
+  ConfigurationMetadata first_request_metadata = 1;
+  // Indicates that this is the final WriteConfigurationRequest for a given
+  // configuration blob.
+  bool commit = 2;
+  // A chunk of data for the blob being written.
+  bytes data = 3
+      ;
+}
+
+// Message indicating that the TEE was successfully initialized
+// with the configuration streamed in the StreamInitializeRequests.
+message InitializeResponse {
+  // The CBOR Web Token (CWT; RFC 8392) containing the public key
+  // generated by the enclave for use in this session.
+  // The CWT will contain all the claims and properties required by
+  // fcp.confidentialcompute.AuthorizeAccessRequest.recipient_public_key
+  // The CWT will also include claims regarding the initialization
+  // configuration which must be verified by the Ledger to match the
+  // data usage policy.
+  bytes public_key = 1;
+}
+
+// Polymorphic request message for a Session stream.
+// See RPC documentation for the expected order of inner message types.
+message SessionRequest {
+  oneof kind {
+    ConfigureRequest configure = 1;
+    WriteRequest write = 2;
+    CommitRequest commit = 4;
+    FinalizeRequest finalize = 3;
+  }
+}
+
+// Polymorphic response message for a Session stream.
+// See RPC documentation for the expected order of inner message types.
+message SessionResponse {
+  oneof kind {
+    ConfigureResponse configure = 1;
+    WriteFinishedResponse write = 2;
+    CommitResponse commit = 4;
+    ReadResponse read = 3;
+    FinalizeResponse finalize = 5;
+  }
+}
+
+message ConfigureRequest {
+  // Implementation-specific configuration to be passed to the TEE.
+  google.protobuf.Any configuration = 1;
+  // Chunk size for the resulting blobs produced by the session and returned by
+  // ReadResponse.
+  uint32 chunk_size = 2;
+}
+
+// Message acknowledging creation of a session with a configuration
+// passed in the ConfigureRequest.
+message ConfigureResponse {
+  // The session-level nonce which will be included in the authenticated
+  // data of the symmetric encryption key used to encrypt each blob,
+  // along with a per-blob counter.
+  bytes nonce = 1;
+
+  reserved 2;
+}
+
+// Encodes metadata about a blob that is written to or read from the
+// TEE.
+message BlobMetadata {
+  // The total size of the blob in bytes.
+  int64 total_size_bytes = 1;
+
+  // Describes the type of data-unaware compression that has been applied prior
+  // to any encryption.
+  enum CompressionType {
+    COMPRESSION_TYPE_UNSPECIFIED = 0;
+    // No compression was applied.
+    COMPRESSION_TYPE_NONE = 1;
+    // GZIP compression was applied.
+    COMPRESSION_TYPE_GZIP = 2;
+  }
+
+  CompressionType compression_type = 2;
+
+  oneof encryption_metadata {
+    Unencrypted unencrypted = 3;
+    HpkePlusAeadMetadata hpke_plus_aead_data = 4;
+  }
+
+  // Metadata for unencrypted data.
+  message Unencrypted {
+    // An identifier for the blob.
+    bytes blob_id = 1;
+  }
+
+  // Metadata for plaintext encrypted with AEAD, with the symmetric key
+  // then encrypted with HPKE.
+  message HpkePlusAeadMetadata {
+    // The associated data for the ciphertext.
+    bytes ciphertext_associated_data = 1;
+
+    // The symmetric key used to encrypt the ciphertext, encrypted using HPKE.
+    // The key is encoded as a COSE_Key struct (RFC 9052); at least the
+    // following algorithms should be supported:
+    //   -65538: AEAD_AES_128_GCM_SIV (fixed nonce)
+    bytes encrypted_symmetric_key = 2;
+
+    // The associated data for `encrypted_symmetric_key`.
+    oneof symmetric_key_associated_data_components {
+      LedgerAssociatedData ledger_symmetric_key_associated_data = 3;
+      RewrappedAssociatedData rewrapped_symmetric_key_associated_data = 4;
+      KmsAssociatedData kms_symmetric_key_associated_data = 8;
+    }
+
+    // The ephemeral Diffie-Hellman key needed to derive the symmetric key used
+    // to encrypt `encrypted_secret_key`.
+    bytes encapsulated_public_key = 5;
+
+    // Counter used with the session-level nonce to protect against replay
+    // attacks. Before decrypting and processing the data, the trusted worker
+    // application will ensure that
+    // 1) The counter is greater than all previously seen counters
+    // 2) When combined with the session's nonce, it matches the
+    //    RewrappedAssociatedData.nonce
+    // Since the decryption step only succeeds if the associated data matches
+    // what was included by the Ledger, this ensures that the Ledger explicitly
+    // authorized access for each individual WriteRequest.
+    uint32 counter = 6;
+
+    // Components which will be appended together to create the associated data
+    // to be used for decryption of the symmetric key by the Ledger so that it
+    // can check the policy and grant access to worker components.
+    message LedgerAssociatedData {
+      // A serialized `fcp.confidentialcompute.BlobHeader`.
+      bytes record_header = 1;
+    }
+
+    // Components which will be appended together to create the associated data
+    // to be used for decryption of the symmetric key by a trusted worker
+    // application after the Ledger has checked the policy and rewrapped the
+    // symmetric key for access by the worker.
+    message RewrappedAssociatedData {
+      // If the application will be re-encrypting its output, the CWT for the
+      // public key to use. The CWT has the same required claims and parameters
+      // as `fcp.confidentialcompute.CreateKeyResponse.public_key`. Reusing the
+      // same public key as the input ensures that derived objects have the same
+      // expiration time as the original data. This key can be ignored if the
+      // application doesn't encrypt its outputs (e.g., because it produces
+      // anonymized aggregate results).
+      bytes reencryption_public_key = 1;
+
+      // Unique nonce for this blob to protect against replay attacks by an
+      // untrusted portion of the stack.
+      bytes nonce = 2;
+    }
+
+    // This field replaces LedgerAssociatedData when using KMS.
+    // Components which will be appended together to create the associated data
+    // to be used for decryption of the symmetric key by a trusted worker that
+    // is pre-authorized by KMS. This associated data should be used along with
+    // decryption keys provided by KMS.
+    message KmsAssociatedData {
+      // A serialized `fcp.confidentialcompute.BlobHeader`.
+      bytes record_header = 1;
+    }
+
+    // The ID of the blob. This must match the ID in the blob's
+    // `fcp.confidentialcompute.BlobHeader`.
+    bytes blob_id = 7;
+  }
+}
+
+// Request to write a chunk of a blob into the TEE.
+// The client must write all chunks of a single blob before moving on to writing
+// the next blob. Chunks of different blobs should never be interleaved. If
+// commit is true, the TEE will decrypt the blob and use the
+// first_request_configuration to specify how to incorporate the blob data into
+// the session. At that point, the stream will fail if the dechunked blob does
+// not have the correct nonce and counter in the authenticated data which
+// matches the session-level nonce and current counter.
+message WriteRequest {
+  // Metadata about the blob being written to the TEE, sent with the
+  // first WriteRequest for a blob.
+  BlobMetadata first_request_metadata = 1;
+  // Configuration sent with the first WriteRequest for a particular
+  // blob to indicate how the blob should be incorporated into the
+  // session.
+  // This configuration may be empty if the TEE-initialization configuration or
+  // the session-level configuration fully specifies how to incorporate data
+  // into the session, but it allows for some flexibility. For example, a TEE
+  // implementation may allow incorporating either raw user uploads
+  // (`accumulate`) or partial aggregates (`merge`) into the session state. This
+  // configuration would then specify which operation to use to incorporate the
+  // blob into the session.
+  google.protobuf.Any first_request_configuration = 2;
+  // Indicates that this is the final WriteRequest for a given blob.
+  bool commit = 3;
+  // A chunk of data for the blob being written.
+  bytes data = 4
+      ;
+}
+
+// Acknowledges successful receipt of all chunks of an encrypted blob.
+message WriteFinishedResponse {
+  // The total number of bytes that have been written for the
+  // blob.
+  int64 committed_size_bytes = 1;
+  // Status of writing the blob to the session. If not OK, indicates that the
+  // blob wasn't successfully processed, with the error message providing more
+  // information. Even if this status is not OK, the Session should still be in
+  // a safe state to continue using. Errors that would cause the Session to be
+  // in an invalid state should cause the Session bidirectional stream to fail
+  // with an error.
+  google.rpc.Status status = 2;
+
+  reserved 3;
+}
+
+// Request to incorporate all previously cached blobs into the session.
+message CommitRequest {
+  // Application-specific configuration specifying how to commit the previously
+  // cached blobs. This may not be necessary for all applications.
+  google.protobuf.Any configuration = 1;
+}
+
+// Acknowledges the successful commit of all previously cached blobs.
+message CommitResponse {
+  // Status of committing the previously written blobs to the session. If not
+  // OK, indicates that the blobs weren't successfully committed, with the error
+  // message providing more information. Even if this status is not OK, the
+  // Session should still be in a safe state to continue using. Errors that
+  // would cause the Session to be in an invalid state should cause the Session
+  // bidirectional stream to fail with an error.
+  google.rpc.Status status = 1;
+
+  // Stats about the commit operation.
+  message CommitStats {
+    int32 num_inputs_committed = 1;
+    repeated google.rpc.Status ignored_errors = 2;
+  }
+
+  CommitStats stats = 3;
+  reserved 2;
+}
+
+// Request to finalize the session by running a finalization
+// operation, after which the session state is no longer mutable.
+message FinalizeRequest {
+  // Configuration specifying how to finalize the session. This may not be
+  // necessary if the transformation provided in the CreateRequest fully
+  // specifies this.
+  google.protobuf.Any configuration = 2;
+
+  // The current state associated with the pipeline to which the trusted
+  // container belongs. This field is optional.
+  bytes pipeline_state = 3;
+}
+
+// A response reading a chunk of a blob from the TEE, which will be
+// encrypted unless this was the last step in a differentially private
+// algorithm. Multiple ReadResponses may be sent in sequence if the
+// blob is large.
+message ReadResponse {
+  // Configuration sent with the first ReadResponse for a finalized
+  // blob to include any supplementary information needed to decrypt or
+  // otherwise process the blob.
+  google.protobuf.Any first_response_configuration = 4;
+  // Metadata about the blob being read from the TEE.
+  BlobMetadata first_response_metadata = 1;
+  // Indicates that this is the last chunk of data for the current blob.
+  bool finish_read = 2;
+  // A chunk of data read from the blob.
+  bytes data = 3
+      ;
+}
+
+// A response indicating that the TEE has finished finalizing the session.
+// This response must be the last response sent on the Session stream following
+// an arbitrary number of ReadResponses.
+message FinalizeResponse {
+  // Release Token signed by the worker TEE's application signing key.
+  // This is passed back to the untrusted space so that it can use it to request
+  // KMS to release the final results.
+  bytes release_token = 1;
+
+  // The application specific configuration data associated with finalization.
+  google.protobuf.Any configuration = 2;
+}
+
+// This message is deprecated. Going forward, FinalizeResponse will be used
+// instead.
+// Configuration associated with the final result produced by the
+// container. This is returned as part of
+// `ReadResponse.first_response_configuration` when reading the final result
+// from the container.
+message FinalResultConfiguration {
+  // Release Token signed by the worker TEE's application signing key.
+  // This is passed back to the untrusted space so that it can use it to request
+  // KMS to release the final results.
+  bytes release_token = 1;
+
+  // The application specific configuration associated with the final result.
+  google.protobuf.Any application_configuration = 2;
+}

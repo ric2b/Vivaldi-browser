@@ -45,9 +45,7 @@ base::RepeatingClosure GetDefaultSearchProviderChangedCallback() {
 #endif
 }
 
-std::unique_ptr<KeyedService> BuildTemplateURLService(
-    web::BrowserState* context) {
-  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
+std::unique_ptr<KeyedService> BuildTemplateURLService(ProfileIOS* profile) {
 
   // Vivaldi
   if (!profile->GetPrefs()->HasPrefPath(prefs::kLanguageAtInstall))
@@ -86,9 +84,9 @@ TemplateURLServiceFactory* TemplateURLServiceFactory::GetInstance() {
 }
 
 // static
-BrowserStateKeyedServiceFactory::TestingFactory
+TemplateURLServiceFactory::TestingFactory
 TemplateURLServiceFactory::GetDefaultFactory() {
-  return base::BindRepeating(&BuildTemplateURLService);
+  return base::BindOnce(&BuildTemplateURLService);
 }
 
 TemplateURLServiceFactory::TemplateURLServiceFactory()
@@ -103,16 +101,15 @@ TemplateURLServiceFactory::TemplateURLServiceFactory()
 
 TemplateURLServiceFactory::~TemplateURLServiceFactory() {}
 
-void TemplateURLServiceFactory::RegisterBrowserStatePrefs(
+void TemplateURLServiceFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   DefaultSearchManager::RegisterProfilePrefs(registry);
   TemplateURLService::RegisterProfilePrefs(registry);
 }
 
 std::unique_ptr<KeyedService>
-TemplateURLServiceFactory::BuildServiceInstanceFor(
-    web::BrowserState* context) const {
-  return BuildTemplateURLService(context);
+TemplateURLServiceFactory::BuildServiceInstanceFor(ProfileIOS* profile) const {
+  return BuildTemplateURLService(profile);
 }
 
 }  // namespace ios

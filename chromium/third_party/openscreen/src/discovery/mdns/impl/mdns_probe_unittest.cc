@@ -19,7 +19,6 @@
 #include "platform/test/fake_udp_socket.h"
 
 using testing::_;
-using testing::Invoke;
 using testing::Return;
 using testing::StrictMock;
 

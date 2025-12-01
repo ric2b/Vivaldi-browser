@@ -29,6 +29,11 @@
 #include "chrome/installer/util/registry_util.h"
 #include "installer/util/vivaldi_setup_util.h"
 
+namespace {
+static const char kSwitchPreviousVersion[] = "previous-version";
+}
+
+
 namespace installer {
 
 namespace {
@@ -179,9 +184,8 @@ base::expected<void, InstallStatus> UnpackAndMaybePatchChromeArchive(
       return base::unexpected(UNSUPPORTED_OPTION);
     }
     base::Version previous_version;
-    if (cmd_line.HasSwitch(switches::kPreviousVersion)) {
-      previous_version = base::Version(
-          cmd_line.GetSwitchValueASCII(switches::kPreviousVersion));
+    if (cmd_line.HasSwitch(kSwitchPreviousVersion)) {
+      previous_version = base::Version(cmd_line.GetSwitchValueASCII(kSwitchPreviousVersion));
     }
 
     std::unique_ptr<ArchivePatchHelper> archive_helper(

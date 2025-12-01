@@ -815,6 +815,22 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   return [VivaldiGlobalHelpers
               canShowSidePanelForTrait:self.traitCollection];
 }
+
+#pragma mark - UITableViewDelegate
+- (void)tableView:(UITableView*)tableView
+    willDisplayHeaderView:(UIView*)view
+               forSection:(NSInteger)section {
+  // Remove background color from section headers on iOS 26+
+  if (@available(iOS 26, *)) {
+    if ([view isKindOfClass:[UITableViewHeaderFooterView class]]) {
+      UITableViewHeaderFooterView* headerView =
+          (UITableViewHeaderFooterView*)view;
+      headerView.contentView.backgroundColor = [UIColor clearColor];
+      headerView.backgroundView = [[UIView alloc] init];
+      headerView.backgroundView.backgroundColor = [UIColor clearColor];
+    }
+  }
+}
 // End Vivaldi
 
 @end

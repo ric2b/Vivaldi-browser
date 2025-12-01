@@ -50,6 +50,7 @@ var TestRunner = class {
       'guid',
       'requestId',
       'openerFrameId',
+      'parentFrameId',
       'issueId',
       'initiatingFrameId',
       'pipelineId'
@@ -784,4 +785,6 @@ TestRunner.wrapPromiseWithTimeout = (promise, timeout, label) => {
   ]);
 };
 
-exports.TestRunner = TestRunner;
+if (self.exports !== undefined) {
+  exports.TestRunner = TestRunner;
+}

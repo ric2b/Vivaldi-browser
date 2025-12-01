@@ -803,8 +803,7 @@ void HistoryURLProvider::PromoteMatchesIfNecessary(
   //     params.have_what_you_typed_match is false, the SearchProvider should
   //     take care of adding this defaultable match.)
   if ((params.promote_type == HistoryURLProviderParams::WHAT_YOU_TYPED_MATCH) ||
-      (!matches_.back().allowed_to_be_default_match &&
-       params.have_what_you_typed_match)) {
+      params.have_what_you_typed_match) {
     matches_.push_back(params.what_you_typed_match);
   }
 }

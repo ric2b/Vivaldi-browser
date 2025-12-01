@@ -197,12 +197,10 @@ TEST(ParseTree, ShortenTargets) {
 
   auto all_elements_are_literal_nodes =
       [](base::span<const std::unique_ptr<const ParseNode>> container) -> bool {
-    // TODO(thestig): Switch to std::ranges::all_of() when the CI/CQ bots all
-    // support it.
-    return std::all_of(container.begin(), container.end(),
-                       [](const std::unique_ptr<const ParseNode>& element) {
-                         return element->AsLiteral();
-                       });
+    return std::ranges::all_of(
+        container, [](const std::unique_ptr<const ParseNode>& element) {
+          return element->AsLiteral();
+        });
   };
 
   auto get_literal_value = [](const ParseNode& node) {

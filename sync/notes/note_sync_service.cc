@@ -18,7 +18,7 @@ NoteSyncService::NoteSyncService(file_sync::SyncedFileStore* synced_file_store,
 
 NoteSyncService::~NoteSyncService() = default;
 
-std::string NoteSyncService::EncodeNoteSyncMetadata() {
+std::string NoteSyncService::EncodeNoteSyncMetadata() const {
   return note_data_type_processor_.EncodeSyncMetadata();
 }
 
@@ -41,7 +41,7 @@ bool NoteSyncService::IsTrackingMetadata() const {
          is_tracking_metadata_for_testing_;
 }
 
-sync_notes::NoteModelView* NoteSyncService::note_model_view() {
+sync_notes::NoteModelView* NoteSyncService::note_model_view() const {
   return note_model_view_.get();
 }
 

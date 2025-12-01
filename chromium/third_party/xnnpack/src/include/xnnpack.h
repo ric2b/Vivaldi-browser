@@ -1468,7 +1468,9 @@ XNN_DEPRECATED enum xnn_status xnn_define_static_mean(
 enum xnn_reduce_operator {
   xnn_reduce_invalid = -1,
   xnn_reduce_sum,
+  xnn_reduce_sum_squared,
   xnn_reduce_mean,
+  xnn_reduce_mean_squared,
   xnn_reduce_max,
   xnn_reduce_min,
 };
@@ -4000,6 +4002,22 @@ enum xnn_status xnn_reshape_fully_connected_nc_qd8_f16_qc4w(
   pthreadpool_t threadpool);
 
 enum xnn_status xnn_create_fully_connected_nc_qd8_f16_qb4w(
+    size_t input_channels,
+    size_t output_channels,
+    size_t input_stride,
+    size_t output_stride,
+    size_t block_size,
+    uint8_t kernel_zero_point,
+    const uint16_t* kernel_scale,
+    const void* kernel,
+    const float* bias,
+    float output_min,
+    float output_max,
+    uint32_t flags,
+    xnn_weights_cache_t weights_cache,
+    xnn_operator_t* fully_connected_op_out);
+
+enum xnn_status xnn_create_fully_connected_nc_qd8_f16_qb4w_f16_scales(
     size_t input_channels,
     size_t output_channels,
     size_t input_stride,

@@ -30,7 +30,7 @@
 #include <utility>
 
 #include "src/tint/lang/core/ir/module.h"
-#include "src/tint/lang/spirv/reader/ast_parser/parse.h"
+#include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/spirv/reader/lower/lower.h"
 #include "src/tint/lang/spirv/reader/parser/parser.h"
 
@@ -48,11 +48,18 @@ Result<core::ir::Module> ReadIR(const std::vector<uint32_t>& input, const Option
         return std::move(res.Failure());
     }
 
-    return mod;
-}
+    // Always validate the core IR, so that we fail somewhat gracefully on invalid inputs instead of
+    // just ICEing later on.
+    auto validation_result =
+        core::ir::Validate(mod.Get(), core::ir::Capabilities{
+                                          core::ir::Capability::kAllowMultipleEntryPoints,
+                                          core::ir::Capability::kAllowOverrides,
+                                      });
+    if (validation_result != tint::Success) {
+        return validation_result.Failure();
+    }
 
-Program Read(const std::vector<uint32_t>& input, const Options& options) {
-    return ast_parser::Parse(input, options);
+    return mod;
 }
 
 }  // namespace tint::spirv::reader

@@ -49,10 +49,7 @@ import java.util.function.DoubleConsumer;
 
 /** Unit tests for {@link HistoryPane}. */
 @RunWith(BaseRobolectricTestRunner.class)
-@EnableFeatures({
-    ChromeFeatureList.HISTORY_PANE_ANDROID,
-    SigninFeatures.HISTORY_PAGE_HISTORY_SYNC_PROMO
-})
+@EnableFeatures({ChromeFeatureList.HISTORY_PANE_ANDROID, SigninFeatures.ENABLE_SEAMLESS_SIGNIN})
 public class HistoryPaneUnitTest {
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
@@ -70,7 +67,6 @@ public class HistoryPaneUnitTest {
     @Mock private UserPrefs.Natives mUserPrefsNatives;
     @Mock private LargeIconBridge.Natives mLargeIconBridgeNatives;
     @Mock private SigninManager mSigninManager;
-    @Mock private IdentityServicesProvider.Natives mIdentityServicesProvider;
     @Mock private IdentityServicesProvider mIdentityService;
     @Mock private IdentityManager mIdentityManager;
     @Mock private SyncService mSyncService;

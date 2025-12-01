@@ -676,22 +676,25 @@ void ReadBookmarkAttributes(BookmarkAttributeReadFunc GetAttribute,
   static const char kDescriptionAttrName[] = "DESCRIPTION";
   static const char kSpeedDialAttrName[] = "SPEEDDIAL";
 
-  std::string value;
+  std::optional<std::string> value;
   if (nickname) {
-    if (GetAttribute.Run(kNickAttrName, &value)) {
-      CodePagetoUTF16(value, nickname);
+    value = GetAttribute.Run(std::string_view(kNickAttrName));
+    if (value.has_value()){
+      CodePagetoUTF16(value.value(), nickname);
       *nickname = base::UnescapeForHTML(*nickname);
     }
   }
   if (description) {
-    if (GetAttribute.Run(kDescriptionAttrName, &value)) {
-      CodePagetoUTF16(value, description);
+    value = GetAttribute.Run(std::string_view(kDescriptionAttrName));
+    if (value.has_value()){
+      CodePagetoUTF16(value.value(), description);
       *description = base::UnescapeForHTML(*description);
     }
   }
   if (is_speeddial_folder) {
-    if (GetAttribute.Run(kSpeedDialAttrName, &value) &&
-        base::EqualsCaseInsensitiveASCII(value, "true"))
+    value = GetAttribute.Run(std::string_view(kSpeedDialAttrName));
+    if (value.has_value() &&
+        base::EqualsCaseInsensitiveASCII(value.value(), "true"))
       *is_speeddial_folder = true;
     else
       *is_speeddial_folder = false;

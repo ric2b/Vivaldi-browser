@@ -4,7 +4,7 @@
 import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 
 import type {AppElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
-import {playFromSelectionTimeout, SpeechBrowserProxyImpl, SpeechController, ToolbarEvent, VoiceLanguageController} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import {ContentController, NodeStore, playFromSelectionTimeout, SelectionController, SpeechBrowserProxyImpl, SpeechController, ToolbarEvent, VoiceLanguageController} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 import {MockTimer} from 'chrome-untrusted://webui-test/mock_timer.js';
 import {microtasksFinished} from 'chrome-untrusted://webui-test/test_util.js';
@@ -90,6 +90,7 @@ suite('Speech', () => {
     VoiceLanguageController.setInstance(voiceLanguageController);
     speechController = new SpeechController();
     SpeechController.setInstance(speechController);
+    ContentController.setInstance(new ContentController());
 
     app = document.createElement('read-anything-app');
     document.body.appendChild(app);
@@ -206,7 +207,9 @@ suite('Speech', () => {
           },
           baseTree);
       chrome.readingMode.setContentForTesting(selectedTree, leafIds);
-      app.updateSelection();
+      const selectionController = SelectionController.getInstance();
+      selectionController.updateSelection(app.getSelection());
+      selectionController.onSelectionChange(app.getSelection());
     }
 
     function playFromSelection() {
@@ -227,7 +230,9 @@ suite('Speech', () => {
 
     test('selection is cleared after play', () => {
       selectAndPlay(axTree, 5, 0, 5, 10);
-      assertEquals('None', app.getSelection().type);
+      const selection = app.getSelection();
+      assertTrue(!!selection);
+      assertEquals('None', selection.type);
     });
 
     test('in middle of node, play from beginning of node', () => {
@@ -247,7 +252,8 @@ suite('Speech', () => {
 
     test('after speech started, cancels and plays from selection', () => {
       select(axTree, 5, 0, 5, 10);
-      speechController.initializeSpeechTree(1);
+      const domNode = NodeStore.getInstance().getDomNode(1);
+      speechController.initializeSpeechTree(domNode);
       speechController.setHasSpeechBeenTriggered(true);
       speech.reset();
 
@@ -323,7 +329,8 @@ suite('Speech', () => {
 
   suite('while playing', () => {
     setup(() => {
-      speechController.initializeSpeechTree(1);
+      const domNode = NodeStore.getInstance().getDomNode(1);
+      speechController.initializeSpeechTree(domNode);
       emitEvent(app, ToolbarEvent.PLAY_PAUSE);
     });
 

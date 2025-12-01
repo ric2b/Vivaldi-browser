@@ -20,8 +20,12 @@ use std::path::PathBuf;
 
 extern crate pkg_config;
 
-fn main() {
+fn main() -> Result<(), String> {
     println!("cargo:rerun-if-changed=build.rs");
+    if !cfg!(feature = "dav1d") {
+        // The feature is disabled at the top level. Do not build this dependency.
+        return Ok(());
+    }
 
     let build_target = std::env::var("TARGET").unwrap();
     let build_dir = if build_target.contains("android") {
@@ -34,7 +38,9 @@ fn main() {
         } else if build_target.contains("arm") {
             "build.android/arm"
         } else {
-            panic!("Unknown target_arch for android. Must be one of x86, x86_64, arm, aarch64.");
+            return Err(
+                "Unknown target_arch for android. Must be one of x86, x86_64, arm, aarch64.".into(),
+            );
         }
     } else {
         "build"
@@ -57,21 +63,26 @@ fn main() {
         let include_dir = PathBuf::from(&abs_library_dir).join("include");
         include_paths.push(format!("-I{}", include_dir.display()));
     } else {
-        let library = pkg_config::Config::new().probe("dav1d");
-        if library.is_err() {
-            println!(
-                "dav1d could not be found with pkg-config. Install the system library or run dav1d.cmd"
-            );
-        }
-        let library = library.unwrap();
-        for lib in &library.libs {
-            println!("cargo:rustc-link-lib={lib}");
-        }
-        for link_path in &library.link_paths {
-            println!("cargo:rustc-link-search={}", link_path.display());
-        }
-        for include_path in &library.include_paths {
-            include_paths.push(format!("-I{}", include_path.display()));
+        match pkg_config::Config::new().probe("dav1d") {
+            Ok(library) => {
+                for lib in &library.libs {
+                    println!("cargo:rustc-link-lib={lib}");
+                }
+                for link_path in &library.link_paths {
+                    println!("cargo:rustc-link-search={}", link_path.display());
+                }
+                for include_path in &library.include_paths {
+                    include_paths.push(format!("-I{}", include_path.display()));
+                }
+            }
+            Err(_) => {
+                return Err(
+                    "dav1d binaries could not be found locally or with pkg-config. \
+                    Disable the dav1d feature, install the libdav1d-dev system library, \
+                    or build the dependency locally by running dav1d.cmd from sys/dav1d-sys."
+                        .into(),
+                );
+            }
         }
     }
 
@@ -95,6 +106,7 @@ fn main() {
         "dav1d_open",
         "dav1d_picture_unref",
         "dav1d_send_data",
+        "dav1d_version",
     ];
     for allowlist_item in allowlist_items {
         bindings = bindings.allowlist_item(allowlist_item);
@@ -105,4 +117,5 @@ fn main() {
     bindings
         .write_to_file(outfile.as_path())
         .unwrap_or_else(|_| panic!("Couldn't write bindings for dav1d"));
+    Ok(())
 }

@@ -191,9 +191,9 @@ RuntimePrivateGetAllFeatureFlagsFunction::Run() {
       &vivaldi_features::kDoubleClickMenu,
       &vivaldi_features::kInternalPageReaderMode,
       &vivaldi_features::kLocationOverride,
+      &vivaldi_features::kNewAboutPage,
       &vivaldi_features::kNewPrivacyReport,
       &vivaldi_features::kSpeeddialWidgets,
-      &vivaldi_features::kTabsButton,
       &vivaldi_features::kNoteEditor,
   };
 
@@ -269,7 +269,11 @@ ExtensionFunction::ResponseAction
 RuntimePrivateCloseGuestSessionFunction::Run() {
   namespace Results = vivaldi::runtime_private::CloseGuestSession::Results;
 
-  Profile* profile = Profile::FromBrowserContext(browser_context());
+  Profile* profile = g_browser_process->profile_manager()->GetProfile(
+      ProfileManager::GetGuestProfilePath());
+  if (!profile) {
+    return RespondNow(ArgumentList(Results::Create(false)));
+  }
   profiles::CloseProfileWindows(profile);
 
   return RespondNow(ArgumentList(Results::Create(true)));
@@ -597,6 +601,7 @@ void RuntimePrivateCreateProfileFunction::OpenNewWindowForProfile(
       false,  // There is no need to unblock all extensions because we only open
               // browser window if the Profile is not locked. Hence there is no
               // extension blocked.
+      false,  // Do not open command line URLs
       profile);
 }
 

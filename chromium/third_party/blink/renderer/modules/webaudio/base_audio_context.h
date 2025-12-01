@@ -37,7 +37,6 @@
 #include "third_party/blink/renderer/core/dom/events/event_listener.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_state_observer.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
-#include "third_party/blink/renderer/modules/webaudio/async_audio_decoder.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_destination_node.h"
 #include "third_party/blink/renderer/modules/webaudio/deferred_task_handler.h"
 #include "third_party/blink/renderer/modules/webaudio/inspector_helper_mixin.h"
@@ -121,6 +120,9 @@ class MODULES_EXPORT BaseAudioContext
   double currentTime() const { return destination_handler_->CurrentTime(); }
   AudioListener* listener() { return listener_.Get(); }
   V8AudioContextState state() const;
+  uint32_t renderQuantumSize() const {
+    return deferred_task_handler_->RenderQuantumFrames();
+  }
   AudioWorklet* audioWorklet() const;
   DEFINE_ATTRIBUTE_EVENT_LISTENER(statechange, kStatechange)
   AnalyserNode* createAnalyser(ExceptionState&);
@@ -213,9 +215,7 @@ class MODULES_EXPORT BaseAudioContext
   void HandleDecodeAudioData(AudioBuffer*,
                              ScriptPromiseResolver<AudioBuffer>*,
                              V8DecodeSuccessCallback*,
-                             V8DecodeErrorCallback*,
-                             ExceptionContext);
-
+                             V8DecodeErrorCallback*);
 
   virtual bool HasRealtimeConstraint() = 0;
 
@@ -406,8 +406,6 @@ class MODULES_EXPORT BaseAudioContext
 
   // Graph locking.
   scoped_refptr<DeferredTaskHandler> deferred_task_handler_;
-
-  AsyncAudioDecoder audio_decoder_;
 
   // Vector of promises created by decodeAudioData.  This keeps the resolvers
   // alive until decodeAudioData finishes decoding and can tell the main thread

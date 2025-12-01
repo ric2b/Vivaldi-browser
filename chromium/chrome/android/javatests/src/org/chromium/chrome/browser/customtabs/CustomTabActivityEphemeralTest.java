@@ -6,12 +6,13 @@ package org.chromium.chrome.browser.customtabs;
 
 import static androidx.browser.customtabs.CustomTabsIntent.EXTRA_ENABLE_EPHEMERAL_BROWSING;
 import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
-import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.allOf;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -52,6 +53,7 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.intents.SessionHolder;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbar;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
@@ -195,7 +197,8 @@ public class CustomTabActivityEphemeralTest {
     @MediumTest
     public void testToolbarDoesNotHaveIncognitoLogo() {
         launchEphemeralCustomTabActivity();
-        onView(withId(R.id.incognito_cct_logo_image_view)).check(matches(not(isDisplayed())));
+        onView(allOf(withId(R.id.incognito_cct_logo_image_view), isDisplayed()))
+                .check(doesNotExist());
     }
 
     @Test
@@ -381,7 +384,8 @@ public class CustomTabActivityEphemeralTest {
     public void recordsHistogramEphemeral() {
         HistogramWatcher histogramWatcher =
                 HistogramWatcher.newSingleRecordWatcher(
-                        HISTOGRAM_NAME, IntentHandler.IncognitoCctCallerId.EPHEMERAL_TAB);
+                        HISTOGRAM_NAME,
+                        BrowserServicesIntentDataProvider.IncognitoCctCallerId.EPHEMERAL_TAB);
         launchEphemeralCustomTabActivity();
         histogramWatcher.assertExpected();
     }

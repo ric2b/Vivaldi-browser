@@ -56,6 +56,7 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/display/screen.h"
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
@@ -364,6 +365,15 @@ void WebViewGuest::ToggleFullscreenModeForTab(
     cursor_hider_.reset(new CursorHider(window->GetRootWindow()));
   } else {
     cursor_hider_.reset(nullptr);
+  }
+
+  // Proactive resize the element to fill the screen.
+  if (enter_fullscreen) {
+    display::Display display = display::Screen::Get()->GetDisplayNearestWindow(
+            web_contents->GetNativeView());
+    const gfx::Size display_size_in_pixel = display.GetSizeInPixel();
+    content::RenderWidgetHostView* rwhv = GetGuestMainFrame()->GetView();
+    rwhv->SetSize(display_size_in_pixel);
   }
 #endif  // USE_AURA
 

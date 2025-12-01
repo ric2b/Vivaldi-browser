@@ -111,6 +111,21 @@ try_.builder(
 )
 
 try_.builder(
+    name = "android-10-x86-nofieldtrial-rel",
+    mirrors = [
+        "ci/android-10-x86-nofieldtrial-rel",
+    ],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/android-10-x86-nofieldtrial-rel",
+            "release_try_builder",
+        ],
+    ),
+    contact_team_email = "clank-engprod@google.com",
+    siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
+)
+
+try_.builder(
     name = "android-11-x86-rel",
     mirrors = [
         "ci/android-11-x86-rel",
@@ -565,7 +580,7 @@ try_.builder(
         ],
     ),
     builderless = not settings.is_main,
-    cores = "16|32",
+    cores = 32,
     ssd = True,
     main_list_view = "try",
     properties = {
@@ -684,14 +699,6 @@ try_.builder(
     # TODO(crbug.com/40462241): Switch this back to debug try builder when cronet's
     # shared library loading is fixed.
     gn_args = "ci/android-cronet-arm64-rel",
-    contact_team_email = "cronet-team@google.com",
-    siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
-)
-
-try_.builder(
-    name = "android-cronet-asan-arm-rel",
-    mirrors = ["ci/android-cronet-asan-arm-rel"],
-    gn_args = "ci/android-cronet-asan-arm-rel",
     contact_team_email = "cronet-team@google.com",
     siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
 )
@@ -1045,6 +1052,9 @@ try_.builder(
         ],
     ),
     contact_team_email = "chrome-browser-infra-team@google.com",
+    experiments = {
+        "chromium_tests.resultdb_module": 100,
+    },
     siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
 )
 
@@ -1464,7 +1474,6 @@ gpu.try_.optional_tests_builder(
         android_config = builder_config.android_config(
             config = "base_config",
         ),
-        build_gs_bucket = "chromium-gpu-fyi-archive",
     ),
     builder_config_settings = builder_config.try_settings(
         retry_failed_shards = False,
@@ -1484,7 +1493,7 @@ gpu.try_.optional_tests_builder(
     ),
     targets = targets.bundle(
         targets = [
-            "gpu_pixel_4_telemetry_tests",
+            "gpu_pixel_04_telemetry_tests",
             "android_webview_gpu_telemetry_tests",
         ],
         mixins = [
@@ -1539,6 +1548,7 @@ gpu.try_.optional_tests_builder(
     builderless = True,
     ssd = None,
     free_space = None,
+    alerts_enabled = False,
     contact_team_email = "chrome-gpu-infra@google.com",
     main_list_view = "try",
     max_concurrent_builds = 10,
@@ -1593,6 +1603,8 @@ gpu.try_.optional_tests_builder(
     builderless = True,
     ssd = None,
     free_space = None,
+    # Exclude gpu fyi builders.
+    alerts_enabled = False,
     contact_team_email = "chrome-gpu-infra@google.com",
     main_list_view = "try",
     max_concurrent_builds = 10,

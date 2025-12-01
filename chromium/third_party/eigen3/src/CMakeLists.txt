@@ -29,6 +29,11 @@ if (POLICY CMP0146)
   cmake_policy(SET CMP0146 OLD)
 endif ()
 
+# Normalize DESTINATION paths
+if (POLICY CMP0177)
+  cmake_policy(SET CMP0177 NEW)
+endif ()
+
 #==============================================================================
 # CMake Project.
 #==============================================================================

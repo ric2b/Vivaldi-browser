@@ -87,7 +87,7 @@ bool SamplerHeapCacheEntry::Populate(MutexProtected<ShaderVisibleDescriptorAlloc
 
     // Attempt to allocate descriptors for the currently bound shader-visible heaps.
     // If either failed, return early to re-allocate and switch the heaps.
-    const uint32_t descriptorCount = mSamplers.size();
+    const uint32_t descriptorCount = static_cast<uint32_t>(mSamplers.size());
     D3D12_CPU_DESCRIPTOR_HANDLE baseCPUDescriptor;
     if (!allocator->AllocateGPUDescriptors(descriptorCount,
                                            device->GetQueue()->GetPendingCommandSerial(),
@@ -120,12 +120,8 @@ ResultOrError<Ref<SamplerHeapCacheEntry>> SamplerHeapCache::GetOrCreate(const Bi
     std::vector<Sampler*> samplers;
     samplers.reserve(samplerCount);
 
-    for (BindingIndex bindingIndex = bgl->GetDynamicBufferCount();
-         bindingIndex < bgl->GetBindingCount(); ++bindingIndex) {
-        const BindingInfo& bindingInfo = bgl->GetBindingInfo(bindingIndex);
-        if (std::holds_alternative<SamplerBindingInfo>(bindingInfo.bindingLayout)) {
-            samplers.push_back(ToBackend(group->GetBindingAsSampler(bindingIndex)));
-        }
+    for (BindingIndex bindingIndex : bgl->GetSamplerIndices()) {
+        samplers.push_back(ToBackend(group->GetBindingAsSampler(bindingIndex)));
     }
 
     // Check the cache if there exists a sampler heap allocation that corresponds to the

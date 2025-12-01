@@ -25,7 +25,6 @@
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
-#import "ios/chrome/browser/shared/ui/symbols/chrome_icon.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_styler.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
@@ -69,7 +68,7 @@ UIEdgeInsets noteTextViewPadding = UIEdgeInsetsMake(8, 8, 0, 8);
 CGFloat noteTextViewBottomPadding = 12;
 
 // Padding for the body container view
-UIEdgeInsets bodyContainerViewPadding = UIEdgeInsetsMake(12, 12, 0, 12);
+UIEdgeInsets bodyContainerViewPadding = UIEdgeInsetsMake(12, 12, 12, 12);
 CGFloat bodyContainerCornerRadius = 6;
 // Markdown toggle button icons
 NSString* vMarkdownToggleOn = @"markdown_toggle_on";
@@ -417,8 +416,14 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
   self.bodyContainerView.clipsToBounds = YES;
 
   [self.view addSubview:self.bodyContainerView];
-  [self.bodyContainerView
-    fillSuperviewToSafeAreaInsetWithPadding:bodyContainerViewPadding];
+  if (@available(iOS 26, *)) {
+    [self.bodyContainerView
+      fillSuperviewToSafeAreaInsetWithPadding:bodyContainerViewPadding];
+  } else {
+    bodyContainerViewPadding.bottom = 0;
+    [self.bodyContainerView
+      fillSuperviewToSafeAreaInsetWithPadding:bodyContainerViewPadding];
+  }
 
   // Note text view
   VivaldiTextView* noteTextView = [[VivaldiTextView alloc] init];
@@ -742,6 +747,7 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
 
 - (void)toggleMarkdown {
   if (self.webView.hidden) {
+    self.isToggledOn = YES;
     [self.noteTextView endEditing:YES];
     [self commitNoteChanges];
     [self.webView reloadFromOrigin];
@@ -750,6 +756,7 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
     _profile->GetPrefs()->SetBoolean(
         vivaldiprefs::kVivaldiNotesShowMarkdownEditor, YES);
   } else {
+    self.isToggledOn = NO;
     [self commitNoteChanges];
     [self setWebViewHidden:YES];
     [self updateUIFromNote];
@@ -758,8 +765,6 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
         vivaldiprefs::kVivaldiNotesShowMarkdownEditor, NO);
   }
 
-  // set toggle button
-  self.isToggledOn = !self.isToggledOn;
   UIImage* newImage;
   if (self.isToggledOn) {
     newImage = [UIImage imageNamed:vMarkdownToggleOn];

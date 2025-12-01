@@ -26,9 +26,9 @@ private:
   DirectMatchServiceFactory(const DirectMatchServiceFactory&) = delete;
   DirectMatchServiceFactory& operator=(const DirectMatchServiceFactory&) = delete;
 
-  // BrowserStateKeyedServiceFactory implementation.
+  // ProfileKeyedServiceFactoryIOS implementation.
   std::unique_ptr<KeyedService> BuildServiceInstanceFor(
-       web::BrowserState* context) const override;
+       ProfileIOS* profile) const override;
 };
 
 }  // namespace direct_match

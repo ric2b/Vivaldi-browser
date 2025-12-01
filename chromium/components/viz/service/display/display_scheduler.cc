@@ -17,6 +17,7 @@
 #include "base/trace_event/trace_event.h"
 #include "components/viz/common/features.h"
 #include "components/viz/service/performance_hint/hint_session.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 
 namespace viz {
 
@@ -29,10 +30,6 @@ base::TimeDelta ComputeAdpfTarget(const BeginFrameArgs& args) {
     return deadline.latch_delta * 3 / 4;
   }
   return base::Milliseconds(12);
-}
-
-bool DrawImmediatelyWhenInteractive() {
-  return features::ShouldDrawImmediatelyWhenInteractive();
 }
 
 bool AdpfCanUseSetThreads() {
@@ -495,8 +492,7 @@ DisplayScheduler::DesiredBeginFrameDeadlineMode() const {
   // Only wait if we actually have pending surfaces and we're not forcing draw
   // due to an ongoing interaction.
   bool wait_for_pending_surfaces =
-      has_pending_surfaces_ && !(DrawImmediatelyWhenInteractive() &&
-                                 damage_tracker_->HasDamageDueToInteraction());
+      has_pending_surfaces_ && !(damage_tracker_->HasDamageDueToInteraction());
 
   bool all_surfaces_ready =
       !wait_for_pending_surfaces && damage_tracker_->IsRootSurfaceValid() &&
@@ -615,7 +611,8 @@ void DisplayScheduler::DidSwapBuffers() {
     begin_frame_source_->SetIsGpuBusy(true);
 
   uint32_t swap_id = next_swap_id_++;
-  TRACE_EVENT_ASYNC_BEGIN0("viz", "DisplayScheduler:pending_swaps", swap_id);
+  TRACE_EVENT_BEGIN("viz", "DisplayScheduler:pending_swaps",
+                    perfetto::Track(swap_id));
 }
 
 void DisplayScheduler::DidReceiveSwapBuffersAck() {
@@ -626,7 +623,8 @@ void DisplayScheduler::DidReceiveSwapBuffersAck() {
   // ensure any callback from BeginFrameSource observes the correct swap
   // throttled state.
   begin_frame_source_->SetIsGpuBusy(false);
-  TRACE_EVENT_ASYNC_END0("viz", "DisplayScheduler:pending_swaps", swap_id);
+  TRACE_EVENT_END(
+      "viz", /* DisplayScheduler:pending_swaps */ perfetto::Track(swap_id));
   ScheduleBeginFrameDeadline();
 }
 

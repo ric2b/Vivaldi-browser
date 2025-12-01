@@ -5,18 +5,21 @@
 <translation id="1118377629180821201">Landskap 12</translation>
 <translation id="1158503667684816647">Ikke vis denne bekreftelsen igjen</translation>
 <translation id="1159983379553246472">Last inn fanen på nytt for å fikse problemer med medieavspilling.</translation>
+<translation id="1204778305310783648">“Feil å gjøre internett til en overvåkingsøkonomi“: Jon von Tetzchner på Web Summit 2023.</translation>
 <translation id="1222195720020481779">Starter installasjonsprogrammet...</translation>
 <translation id="1224683873953469764">Skaff Vivaldi for mobil</translation>
-<translation id="1270785070369717623">Dessverre er ikke dine Opera GX-innstillinger tilgjengelige mens den nettleseren kjører. For å importere disse instillingene til Vivaldi, lagre arbeidet ditt og lukk alle Opera GX-vinduer. Klikk deretter Fortsett.</translation>
 <translation id="1276145862619442150">Hurtigvalg</translation>
 <translation id="1281950884873973195">Dyr 6</translation>
 <translation id="1411638389238344450">Send lenken på e-post</translation>
 <translation id="1454726940098520109">Ikke vis bekreftelse igjen</translation>
 <translation id="1462666970065907900">Sikker på at du vil lukke dette vinduet?</translation>
 <translation id="1480046233931937785">Anerkjennelser</translation>
+<translation id="1489123210863708132">Aktivert Sporing- og reklameblokkering for å sikre surfingen din og bygge opp personvernstatistikken.</translation>
 <translation id="1490502035430975848">Inspiser portaldokument</translation>
+<translation id="1500787357908295021">Din personvernstatistikk</translation>
 <translation id="1521774566618522728">Aktiv i dag</translation>
 <translation id="1526344461589023948">En feil oppstod ved lagring av en nedlastet oppdatering. Sjekk at datamaskinen har nok ledig diskplass og prøv igjen.</translation>
+<translation id="16328381871867323">Lovgivere begynner endelig å ta bekymringene rundt hvordan våre digitale data spores, samles inn og lagres på alvor. Finn ut hva denne banebrytende avgjørelsen betyr og hvordan den kan påvirke oss.</translation>
 <translation id="1635542496948266458">Bytt profil</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nytt privatvindu</translation>
@@ -25,40 +28,48 @@
 <translation id="1756026472674246267">Åpne lenken i ny fane</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Bildeegenskaper...</translation>
+<translation id="1919345977826869612">Reklame</translation>
 <translation id="1920297417712412573">Kopier til notat</translation>
-<translation id="1921101374471252440">&amp;Last inn bildet på nytt</translation>
 <translation id="1924750141060565109">Landskap 15</translation>
 <translation id="19598411548897379">Generisk</translation>
+<translation id="1970180444859658569">‘Do-Not-Track’ privacy setting gets legal backing in Germany</translation>
 <translation id="1973351931613083086">automatisk avspilling</translation>
 <translation id="1985669426322966465">Programoppdatering</translation>
 <translation id="2079036669923635404">Klikk her for å oppdatere Vivaldi til versjon <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">En feil oppstod under nedlasting av oppdateringsfilene. Sjekk internettilkoblingen din og prøv igjen.</translation>
+<translation id="2225863440766607138">Sporing</translation>
 <translation id="2226825946708954262">⚠ Fortsett med tap av data</translation>
 <translation id="2339641773402824483">Ser etter oppdateringer...</translation>
+<translation id="2429571091666452569">Fra listen:</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Lim inn notat</translation>
 <translation id="2486841023299517366">Dyr 4</translation>
 <translation id="2501278716633472235">Gå tilbake</translation>
 <translation id="2612127540243995147">Klar til å installere. Vivaldi vil bli lukket og startet på nytt etter installasjonen.</translation>
 <translation id="2613387515621326337">Vis oppdateringsnettsiden</translation>
-<translation id="2645477450146475243">Dessverre er ikke dine Opera-innstillinger tilgjengelige mens den nettleseren kjører. For å importere disse instillingene til Vivaldi, lagre arbeidet ditt og lukk alle Opera-vinduer. Klikk deretter Fortsett.</translation>
-<translation id="2647368062414805334">Dessverre er ikke Edge-innstillingene tilgjengelige når nettleseren kjører. For å importere innstillingene til Vivaldi, lagre arbeidet ditt og lukk alle Edge-vinduer. Klikk så fortsett.</translation>
+<translation id="2690699652723742414">Siste 30 dager</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
+<translation id="2741210449864955442">https://vivaldi.com/blog/technology/vivaldi-browser-at-the-web-summit/</translation>
+<translation id="2765309692777226484">Sporings- og reklameblokkering er deaktivert.</translation>
 <translation id="2848085334714181751">Dyr 3</translation>
 <translation id="2873951654529031587">Søppel</translation>
+<translation id="2902312830803030883">Flere handlinger</translation>
 <translation id="292258461174562431">Monster 4</translation>
 <translation id="2923448633003185837">Lim inn og gå</translation>
 <translation id="2953943267837858202">Automatisk avspilling av video ikke tillatt</translation>
 <translation id="2977472760057091832">Åpne lenken i privatvindu</translation>
 <translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Åpne i ny fane</translation>
-<translation id="3027988479108856431">Yandex innstillingene er ikke tilgjengelige når nettleseren kjører. Hvis du vil importere disse innstillingene til Vivaldi, lagre arbeidet ditt og lukk alle Yandex-vinduer. Deretter klikker du på Fortsett.</translation>
 <translation id="3084011186245865060">Landskap 6</translation>
 <translation id="3085906383264247940">Opera (beta)</translation>
 <translation id="3093931836425623631">Vivaldi er mulig takket være åpen kildekode-prosjektet Chromium, samt andre åpen kildekode-prosjekter.</translation>
+<translation id="3119245580849443327">Vivaldi Personvernrapport</translation>
+<translation id="3126903660515914763">https://vivaldi.com/blog/news/alert-no-google-topics-in-vivaldi/</translation>
 <translation id="3127383884976966729">Dyr 7</translation>
 <translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Nytt bokmerke</translation>
+<translation id="3156779787905856989">Manifest V3, webRequest of reklameblokkering</translation>
+<translation id="3191389212681074619">https://help.vivaldi.com/android/android-privacy/android-tracker-and-ad-blocker/</translation>
 <translation id="3255747772218936245">Installer oppdatering</translation>
 <translation id="3259769196742189631">Valider siden</translation>
 <translation id="3291915639428159043">Automatisk avspilling blokkert</translation>
@@ -67,6 +78,7 @@
 <translation id="3334610655141903168">(ingen tittel)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> er nyeste tilgjengelige versjon.</translation>
 <translation id="3383198080133834965">Du er oppdatert!</translation>
+<translation id="3402602684546832928">Velg Opera bokmerkefil</translation>
 <translation id="3451317331714872347">Landskap 8</translation>
 <translation id="3457498675806041407">Bekreft avslutning</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> er allerede installert, og vil bli aktivert etter en omstart av nettleseren.</translation>
@@ -78,15 +90,18 @@
 <translation id="3588820906588687999">Åpne bilde i ny fane</translation>
 <translation id="3601066750251199488">Monster 3</translation>
 <translation id="3620979700683094848">Nettsteder kan spille av video automatisk</translation>
+<translation id="3650023731264842343">Under lasting av følgende side:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">En ny versjon av Vivaldi er tilgjengelig!</translation>
+<translation id="3694122362646626770">Nettsteder</translation>
 <translation id="3708982624815781692">Nedlastningen ble avbrutt.</translation>
+<translation id="3716128635228495027">Tilbake til Vivaldi</translation>
 <translation id="3732157130969736834">Bokmerk lenke</translation>
 <translation id="3732388226447288666">Dyr 2</translation>
 <translation id="3732439195215136813">Dyr 5</translation>
-<translation id="3795800845758778870">Dessverre er ikke Brave-innstillingene tilgjengelige når nettleseren kjører. For å importere innstillingene til Vivaldi, lagre arbeidet ditt og lukk alle Brave-vinduer. Klikk så fortsett.</translation>
 <translation id="3822431842304177896">Nytt skilletegn</translation>
 <translation id="3832132597516774400">Landskap 5</translation>
+<translation id="3861977424605124250">Vis ved oppstart</translation>
 <translation id="3894751534882749287">Hvis du vil vise siden likevel, kan du endre nivået av sporingsbeskyttelse i menyen for sporingsblokkering, eller ved å trykke på Tillat-knappen</translation>
 <translation id="3914946330804881301">Importert fra Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
@@ -99,6 +114,7 @@
 <translation id="4074744496918018786">Åpne bilde i privatvindu</translation>
 <translation id="410351446219883937">Automatisk avspilling</translation>
 <translation id="4281844954008187215">Vilkår for bruk</translation>
+<translation id="430967081421617822">For alltid</translation>
 <translation id="4324492550286218827">Landskap 2</translation>
 <translation id="4406101500523955324">Åpne i nytt privatvindu</translation>
 <translation id="4420816922321010053">Sikker på at du vil avslutte Vivaldi?</translation>
@@ -106,6 +122,11 @@
 <translation id="443008484043213881">Verktøy</translation>
 <translation id="4456211719108566931">Monster 6</translation>
 <translation id="4459169140545916303">Aktiv for <ph name="DEVICE_LAST_ACTIVATED_TIME" /> dager siden</translation>
+<translation id="4474776280324528449">https://vivaldi.com/blog/do-no-track-gets-legal-backing-in-germany/</translation>
+<translation id="4510781427281143276">Slett profil</translation>
+<translation id="4511738570787012048">Bli med Vivaldi i kampen for null sporing og ta tilbake kontrollen over personvernet ditt på nettet.
+
+		Les mer om hvordan vi kjemper for brukernes rettigheter i artiklene nedenfor.</translation>
 <translation id="4512900838580567989">Åpne lenken i ny bakgrunnsfane</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Åpne bilde i ny bakgrunnsfane</translation>
@@ -125,24 +146,31 @@
 <translation id="5238244642230426581">Importerte bokmerker</translation>
 <translation id="527605719918376753">Slå av lyd for fane</translation>
 <translation id="5305569355661722298">Bekreft lukking av vinduer</translation>
+<translation id="5317780077021120954">Lagre</translation>
 <translation id="5322922669477407077">Opera (Developer)</translation>
 <translation id="5388358297987318779">Åpne bilde</translation>
+<translation id="5398772614898833570">Reklame blokkert</translation>
 <translation id="5416008465899576639">En ny versjon av Vivaldi er tilgjengelig.</translation>
 <translation id="5497042274492038489">Bekreft lukking av vindu</translation>
 <translation id="5556459405103347317">Last inn på nytt</translation>
+<translation id="5583322400766491358">Personlige data er lagret trygt på enheten din og deles aldri med tredjeparter.</translation>
 <translation id="5594602170491763400">Monster 5</translation>
 <translation id="5648110075441906505">Åpne bilde i nytt vindu</translation>
+<translation id="5648166631817621825">Siste 7 dager</translation>
 <translation id="5656371807944747581">Oppdateringsfeil!</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> er nå tilgjengelig (du har <ph name="OLD_VERSION" />). Vil du laste ned nå?</translation>
+<translation id="5741670635761443575">Varsel: Ingen Google Topics i Vivaldi.</translation>
 <translation id="5770433027661640693">Landskap 10</translation>
 <translation id="5857090052475505287">Ny mappe</translation>
 <translation id="588258955323874662">Fullskjerm</translation>
-<translation id="5916080360077521750">Chrome-innstillingene er ikke tilgjengelige når nettleseren kjører. Hvis du vil importere disse innstillingene til Vivaldi, lagre arbeidet ditt og lukk alle Chrome-vinduer. Deretter klikker du på Fortsett.</translation>
 <translation id="6040143037577758943">Lukk</translation>
 <translation id="6140948187512243695">Vis detaljer</translation>
+<translation id="6165508094623778733">Lær mer</translation>
 <translation id="6229528619562190452">Klikk her for å oppdatere Vivaldi.</translation>
 <translation id="6234173136417926046">Bruk bildet som startsidebakgrunn</translation>
+<translation id="630690498669249215">Opera bokmerkefil</translation>
 <translation id="6339818817272922368">Lokal konto</translation>
+<translation id="6376435169746695498">Lastingen av denne siden ble blokkert av en matchende <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Sikre profilen min</translation>
 <translation id="6438786710866753178">Landskap 4</translation>
 <translation id="6477028720702061455">Velg Opera profilkatalog for import</translation>
@@ -151,32 +179,46 @@
 <translation id="6551219277044048123">Legg til en &amp;søkemotor...</translation>
 <translation id="6630781781151951863">Landskap 18</translation>
 <translation id="6635049669875534328">Versjonsmerknader:</translation>
+<translation id="6653655836861174026">Med Vivaldi-profiler kan du atskille alle dine Vivaldi-greier. Opprett profiler for venner og familie, eller skill mellom arbeid og lek.</translation>
 <translation id="6693585104974197539">Velg mappen for Edge-profilen som skal importeres</translation>
 <translation id="6726279523566323394">Velg mappen for Brave-profilen som skal importeres</translation>
+<translation id="6736243959894955139">Adresse</translation>
 <translation id="6892812721183419409">Åpne lenken som <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopier</translation>
+<translation id="6951961820678531655">Er du sikker på at du vil slette profilen “__1”?</translation>
 <translation id="6960139763942959188">Denne profilen lagres for øyeblikket ikke sikkert, i et ukryptert format. Vivaldi er i ferd med å oppgradere profilen din til er mer sikkert, kryptert format. Du bør avslutte og ta en sikkerhetskopi av profilen din før du fortsetter.</translation>
+<translation id="7013466836883158999">Er det mulig å lage bærekraftige produkter uten å spionere på brukerne? Hvordan ser fremtidens nettlesing ut? Se vår administrerende direktør, Jon von Tetzchner, svare på disse spørsmålene på Web Summit 2023.</translation>
+<translation id="7066262000446496119">Hvem bruker Vivaldi?</translation>
 <translation id="7086554968911045110">Landskap 7</translation>
 <translation id="7099506190679014195">Sikker oppgradering av nøkkellager</translation>
 <translation id="7111492742514999492">Landskap 9</translation>
 <translation id="7113310725918019676">Tillat <ph name="BLOCKED_TYPE" /> fra <ph name="DOMAIN" /></translation>
-<translation id="7208252576848052204">Dessverre er ikke dine Arc-innstillinger tilgjengelige mens den nettleseren kjører. For å importere disse instillingene til Vivaldi, lagre arbeidet ditt og lukk alle Arc-vinduer. Klikk deretter Fortsett.</translation>
+<translation id="7277237102285741596">https://vivaldi.com/blog/manifest-v3-webrequest-and-ad-blockers/</translation>
+<translation id="7283555985781738399">Gjestemodus</translation>
 <translation id="7321500017121629018">Aktiv i går</translation>
 <translation id="7337881442233988129">Chromium</translation>
+<translation id="7421665776469827022">Data spart</translation>
+<translation id="7454640759045234067">Sporinger blokkert</translation>
+<translation id="7515032462649518126">Velg tilpasset avatarbilde</translation>
 <translation id="7581266044164103589">Kunne ikke starte oppdateringsprogrammet. Sjekk at datamaskinen har nok ledig diskplass og arbeidsminne og prøv igjen.</translation>
 <translation id="7658239707568436148">Avbryt</translation>
+<translation id="7698231949697067951">Det du gjør på nettet angår bare deg! Under kan du se hvordan vi har hjulpet deg med å være trygg.</translation>
 <translation id="7724603315864178912">Klipp ut</translation>
 <translation id="7727481996062361502">Verifiserer oppdatering...</translation>
 <translation id="7793738202466490491">Legg til som kalenderhendelse</translation>
 <translation id="7834693436815575883">Automatisk avspilling tillatt</translation>
 <translation id="7848222781052558334">Kunne ikke bekrefte den digitale signaturen på de nedlastede filene.</translation>
 <translation id="7865983598101744945">Bekreft avslutning</translation>
+<translation id="788493840831967104">Tid spart</translation>
 <translation id="7957213167373139414">Min kalender</translation>
+<translation id="7981965265950405093">Vivaldi har sin egen innebygde blokkering av annonser og sporere, massevis av tilpasningsmuligheter, innebygd Mail og Kalender, og mer. Kommer den til å følge Googles strenge krav til Manifest V3? Vivaldi-utvikler Julien Picalausa går i dybden på dette temaet.</translation>
 <translation id="8027581147000338959">Åpne i nytt vindu</translation>
+<translation id="8034402064393340023">Vår forpliktelse til ditt personvern</translation>
 <translation id="8044382196220116469">Ikke tillat sider å automatisk spille av video</translation>
 <translation id="8099620695029051217">Kopier adresse</translation>
 <translation id="8119307142152921512">sporing og reklame</translation>
 <translation id="8197810018650377191">Bokmerk siden</translation>
+<translation id="8248593573177859437">Personvernrapport</translation>
 <translation id="8261506727792406068">Slett</translation>
 <translation id="8331671104904436324">Åpne i ny bakgrunnsfane</translation>
 <translation id="8373293945112511707">Landskap 1</translation>
@@ -188,7 +230,6 @@
 <translation id="8539196077526389150">Landskap 13</translation>
 <translation id="8562339533180097902">Lukk Vivaldi og installer nå</translation>
 <translation id="8567452685425968223">Pakker ut oppdatering...</translation>
-<translation id="8624587806981488221">&amp;Last inn bildet på nytt</translation>
 <translation id="8651348004684669199">Legg til aktiv fane</translation>
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
@@ -197,6 +238,7 @@
 <translation id="8773635261052182196">Du får ikke lenger se disse meldingene. Du kan aktivere dem igjen fra Vivaldi innstillinger.</translation>
 <translation id="8774017153185436870">Nettsteder vil kanskje spille av video automatisk</translation>
 <translation id="8813277370772331957">Minn meg på dette senere</translation>
+<translation id="8837256239226739065">Undersøk Service Worker i bakgrunnen</translation>
 <translation id="8894900864683381599">Legg til lenken som nettpanel</translation>
 <translation id="8912720443398351457">Er du sikker på at du vil avslutte Vivaldi?</translation>
 <translation id="8940028675168378100">Blokkert av <ph name="BLOCKER_NAME" /></translation>
@@ -207,10 +249,13 @@
 <translation id="9065203028668620118">Rediger</translation>
 <translation id="9090254883741610153">La meg fortsette</translation>
 <translation id="910680796491389880">Thunderbird</translation>
+<translation id="9118360612142967597">Å spionere på folks atferd og lage profiler av dem er feil. Derfor har vi sørget for at Googles Topics er deaktivert på to ulike måter i Vivaldi-nettleseren.</translation>
 <translation id="912022491595344261">Åpne bilde som <ph name="USER" /></translation>
+<translation id="9149866541089851383">Rediger…</translation>
 <translation id="9157539936604258187">Åpne lenke</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
 <translation id="9180553614777056266">Reklameblokkering</translation>
+<translation id="9188210215803842004">Netsteder og sporingsdetaljer</translation>
 <translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Landskap 16</translation>
 </translationbundle>

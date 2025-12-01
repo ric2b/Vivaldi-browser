@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -21,31 +21,31 @@ const MAX_URL_LENGTH = 60;
 
 const UIStrings = {
   /**
-   *@description Text that refers to the priority of network request
+   * @description Text that refers to the priority of network request
    */
   priority: 'Priority',
   /**
-   *@description Text for the duration of a network request
+   * @description Text for the duration of a network request
    */
   duration: 'Duration',
   /**
-   *@description Text that refers to the queueing and connecting time of a network request
+   * @description Text that refers to the queueing and connecting time of a network request
    */
   queuingAndConnecting: 'Queuing and connecting',
   /**
-   *@description Text that refers to the request sent and waiting time of a network request
+   * @description Text that refers to the request sent and waiting time of a network request
    */
   requestSentAndWaiting: 'Request sent and waiting',
   /**
-   *@description Text that refers to the content downloading time of a network request
+   * @description Text that refers to the content downloading time of a network request
    */
   contentDownloading: 'Content downloading',
   /**
-   *@description Text that refers to the waiting on main thread time of a network request
+   * @description Text that refers to the waiting on main thread time of a network request
    */
   waitingOnMainThread: 'Waiting on main thread',
   /**
-   *@description Text that refers to a network request is render blocking
+   * @description Text that refers to a network request is render blocking
    */
   renderBlocking: 'Render blocking',
   /**
@@ -58,7 +58,7 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 export interface NetworkTooltipData {
   networkRequest: Trace.Types.Events.SyntheticNetworkRequest|null;
-  entityMapper: TimelineUtils.EntityMapper.EntityMapper|null;
+  entityMapper: Trace.EntityMapper.EntityMapper|null;
 }
 
 export class NetworkRequestTooltip extends HTMLElement {
@@ -86,7 +86,7 @@ export class NetworkRequestTooltip extends HTMLElement {
       return html`${PerfUI.NetworkPriorities.uiLabelForNetworkPriority(networkRequest.args.data.priority)}`;
     }
     return html`${PerfUI.NetworkPriorities.uiLabelForNetworkPriority(networkRequest.args.data.initialPriority)}
-        <devtools-icon name=${'arrow-forward'} class="priority"></devtools-icon>
+        <devtools-icon name="arrow-forward" class="priority"></devtools-icon>
         ${PerfUI.NetworkPriorities.uiLabelForNetworkPriority(networkRequest.args.data.priority)}`;
   }
 

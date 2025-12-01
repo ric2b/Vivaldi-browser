@@ -8,6 +8,10 @@
 <translation id="2038563949887743358">ਡੈਸਕਟਾਪ ਸਾਇਟ ਦੀ ਬੇਨਤੀ ਚਾਲੂ ਕਰੋ</translation>
 <translation id="2433507940547922241">ਮੁਹਾਂਦਰਾ</translation>
 <translation id="2633278372998075009">ਨਿੱਜੀ ਟੈਬ</translation>
+<translation id="3060635849835183725">{BOOKMARKS_COUNT,plural,
+          =1 {<ph name="BOOKMARKS_COUNT_ONE" /> ਬੁੱਕਮਾਰਕ}
+          one {<ph name="BOOKMARKS_COUNT_MANY" /> ਬੁੱਕਮਾਰਕ}
+          other {<ph name="BOOKMARKS_COUNT_MANY" /> ਬੁੱਕਮਾਰਕ}}</translation>
 <translation id="3076631378407175873">ਕਾਪੀਰਾਈਟ <ph name="YEAR" /> Vivaldi Technologies AS. ਸਭ ਹੱਕ ਰਾਖਵੇਂ ਹਨ।</translation>
 <translation id="3234355010754616171">ਨਵਾਂ ਨਿੱਜੀ ਟੈਬ</translation>
 <translation id="3518985090088779359">ਸਵੀਕਾਰ ਕਰੋ ਤੇ ਜਾਰੀ ਰੱਖੋ</translation>
@@ -20,9 +24,17 @@
 <translation id="4943872375798546930">ਕੋਈ ਨਤੀਜਾ ਨਹੀਂ</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> ਸਟੋਰੇਜ</translation>
 <translation id="5186185447130319458">ਨਿੱਜੀ</translation>
+<translation id="5206168361184759344">{FILE_COUNT,plural,
+            =1 {ਫ਼ਾਈਲ ਡਾਊਨਲੋਡ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ…}
+            one {# ਫ਼ਾਈਲ ਡਾਊਨਲੋਡ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ…}
+            other {# ਫ਼ਾਈਲਾਂ ਡਾਊਨਲੋਡ ਕੀਤੀਆਂ ਜਾ ਰਹੀਆਂ ਹਨ…}}</translation>
 <translation id="5233638681132016545">ਨਵਾਂ ਟੈਬ</translation>
 <translation id="572328651809341494">ਹਾਲੀਆ ਟੈਬ</translation>
 <translation id="6336451774241870485">ਨਵਾਂ ਨਿੱਜੀ ਟੈਬ</translation>
+<translation id="650224091954855786">{FILE_COUNT,plural,
+          =1 {ਫ਼ਾਈਲ ਡਾਊਨਲੋਡ ਕੀਤੀ ਗਈ}
+          one {# ਡਾਊਨਲੋਡ ਪੂਰਾ ਹੋਇਆ}
+          other {# ਡਾਊਨਲੋਡ ਪੂਰੇ ਹੋਏ}}</translation>
 <translation id="6593061639179217415">ਡੈਸਕਟਾਪ ਸਾਇਟ</translation>
 <translation id="6610147964972079463">ਨਿੱਜੀ ਟੈਬਾਂ ਬੰਦ ਕਰੋ</translation>
 <translation id="706339621163631076">ਬਰਾਉਜ਼ਰ ਪਰਦੇਦਾਰੀ ਨੀਤੀ</translation>

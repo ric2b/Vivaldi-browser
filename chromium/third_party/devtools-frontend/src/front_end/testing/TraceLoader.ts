@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,11 @@ import * as TraceBounds from '../services/trace_bounds/trace_bounds.js';
 // ones.
 const fileContentsCache = new Map<string, Trace.Types.File.Contents>();
 
+interface ParsedTraceAndModel {
+  parsedTrace: Trace.TraceModel.ParsedTrace;
+  model: Trace.TraceModel.Model;
+}
+
 // The new engine cache is a map of maps of:
 // trace file name => trace engine configuration => trace data
 //
@@ -30,12 +35,7 @@ const fileContentsCache = new Map<string, Trace.Types.File.Contents>();
 // file with different trace engine configurations, we will not use the cache
 // and will reparse. This is required as some of the settings and experiments
 // change if events are kept and dropped.
-const traceEngineCache = new Map<string, Map<string, {
-                                   parsedTrace: Trace.Handlers.Types.ParsedTrace,
-                                   insights: Trace.Insights.Types.TraceInsightSets | null,
-                                   metadata: Trace.Types.File.MetaData | null,
-                                   model: Trace.TraceModel.Model,
-                                 }>>();
+const traceEngineCache = new Map<string, Map<string, ParsedTraceAndModel>>();
 
 export interface TraceEngineLoaderOptions {
   initTraceBounds: boolean;
@@ -59,7 +59,7 @@ export class TraceLoader {
     // The trace that takes the longest on my Mac M1 Pro is ~3s (yahoo-news.json.gz).
     // In CQ, that same trace takes ~10s (linux), ~7.5s (mac), ~11.5s (windows).
     if (context.timeout() > 0) {
-      context.timeout(Math.max(context.timeout(), 30000));
+      context.timeout(Math.max(context.timeout(), 45000));
     }
   }
 
@@ -77,7 +77,6 @@ export class TraceLoader {
     if (cached) {
       return cached;
     }
-    // Required URLs differ across the component server and the unit tests, so try both.
     const urlForTest = new URL(`../panels/timeline/fixtures/traces/${name}`, import.meta.url);
 
     const contents = await TraceLoader.loadTraceFileFromURL(urlForTest);
@@ -131,29 +130,23 @@ export class TraceLoader {
   /**
    * Executes only the new trace engine on the fixture and returns the resulting parsed data.
    *
-   * @param context - The Mocha test context. Processing a trace can easily
+   * @param context The Mocha test context. Processing a trace can easily
    * takes up longer than the default Mocha timeout, which is 2s. So we have to
    * increase this test's timeout. It might be null when we only render a
    * component example. See TraceLoader.setTestTimeout.
-   *
-   * @param file - The name of the trace file to be loaded.
+   * @param file The name of the trace file to be loaded.
    * The trace file should be in ../panels/timeline/fixtures/traces folder.
-   *
-   * @param options - Additional trace options.
-   * @param options.initTraceBounds - (defaults to `true`) after the trace is
+   * @param options Additional trace options.
+   * @param options.initTraceBounds (defaults to `true`) after the trace is
    * loaded, the TraceBounds manager will automatically be initialised using
    * the bounds from the trace.
-   *
-   * @param config - The config the new trace engine should run with. Optional,
+   * @param config The config the new trace engine should run with. Optional,
    * will fall back to the Default config if not provided.
    */
   static async traceEngine(
       context: Mocha.Context|Mocha.Suite|null, name: string,
-      config: Trace.Types.Configuration.Configuration = Trace.Types.Configuration.defaults()): Promise<{
-    parsedTrace: Trace.Handlers.Types.ParsedTrace,
-    insights: Trace.Insights.Types.TraceInsightSets|null,
-    metadata: Trace.Types.File.MetaData|null,
-  }> {
+      config: Trace.Types.Configuration.Configuration = Trace.Types.Configuration.defaults()):
+      Promise<Trace.TraceModel.ParsedTrace> {
     if (context) {
       TraceLoader.setTestTimeout(context);
     }
@@ -169,47 +162,40 @@ export class TraceLoader {
     // If we have results from the cache, we use those to ensure we keep the
     // tests speedy and don't re-parse trace files over and over again.
     if (fromCache) {
+      const parsedTrace = fromCache.parsedTrace;
       await wrapInTimeout(context, () => {
         const syntheticEventsManager = fromCache.model.syntheticTraceEventsManager(0);
         if (!syntheticEventsManager) {
           throw new Error('Cached trace engine result did not have a synthetic events manager instance');
         }
         Trace.Helpers.SyntheticEvents.SyntheticEventsManager.activate(syntheticEventsManager);
-        TraceLoader.initTraceBoundsManager(fromCache.parsedTrace);
+        TraceLoader.initTraceBoundsManager(parsedTrace);
         Timeline.ModificationsManager.ModificationsManager.reset();
         Timeline.ModificationsManager.ModificationsManager.initAndActivateModificationsManager(fromCache.model, 0);
       }, 4_000, 'Initializing state for cached trace');
-      return {parsedTrace: fromCache.parsedTrace, insights: fromCache.insights, metadata: fromCache.metadata};
+      return parsedTrace;
     }
 
     const fileContents = await wrapInTimeout(context, async () => {
       return await TraceLoader.fixtureContents(context, name);
-    }, 15_000, `Loading fixtureContents for ${name}`);
+    }, 30_000, `Loading fixtureContents for ${name}`);
 
-    const parsedTraceData = await wrapInTimeout(context, async () => {
+    const parsedTraceFileAndModel = await wrapInTimeout(context, async () => {
       return await TraceLoader.executeTraceEngineOnFileContents(
           fileContents, /* emulate fresh recording */ false, config);
     }, 15_000, `Executing traceEngine for ${name}`);
 
-    const cacheByName = traceEngineCache.get(name) ?? new Map<string, {
-                          parsedTrace: Trace.Handlers.Types.ParsedTrace,
-                          insights: Trace.Insights.Types.TraceInsightSets | null,
-                          metadata: Trace.Types.File.MetaData | null,
-                          model: Trace.TraceModel.Model,
-                        }>();
-    cacheByName.set(configCacheKey, parsedTraceData);
+    const cacheByName = traceEngineCache.get(name) ?? new Map<string, ParsedTraceAndModel>();
+    cacheByName.set(configCacheKey, parsedTraceFileAndModel);
     traceEngineCache.set(name, cacheByName);
 
-    TraceLoader.initTraceBoundsManager(parsedTraceData.parsedTrace);
+    TraceLoader.initTraceBoundsManager(parsedTraceFileAndModel.parsedTrace);
     await wrapInTimeout(context, () => {
       Timeline.ModificationsManager.ModificationsManager.reset();
-      Timeline.ModificationsManager.ModificationsManager.initAndActivateModificationsManager(parsedTraceData.model, 0);
+      Timeline.ModificationsManager.ModificationsManager.initAndActivateModificationsManager(
+          parsedTraceFileAndModel.model, 0);
     }, 5_000, `Creating modification manager for ${name}`);
-    return {
-      parsedTrace: parsedTraceData.parsedTrace,
-      insights: parsedTraceData.insights,
-      metadata: parsedTraceData.metadata,
-    };
+    return parsedTraceFileAndModel.parsedTrace;
   }
 
   /**
@@ -218,22 +204,17 @@ export class TraceLoader {
    * level - rely on this being set. This is always set in the actual panel, but
    * parsing a trace in a test does not automatically set it.
    **/
-  static initTraceBoundsManager(data: Trace.Handlers.Types.ParsedTrace): void {
+  static initTraceBoundsManager(parsedTrace: Trace.TraceModel.ParsedTrace): void {
     TraceBounds.TraceBounds.BoundsManager
         .instance({
           forceNew: true,
         })
-        .resetWithNewBounds(data.Meta.traceBounds);
+        .resetWithNewBounds(parsedTrace.data.Meta.traceBounds);
   }
 
   static async executeTraceEngineOnFileContents(
       contents: Trace.Types.File.Contents, emulateFreshRecording = false,
-      traceEngineConfig?: Trace.Types.Configuration.Configuration): Promise<{
-    model: Trace.TraceModel.Model,
-    metadata: Trace.Types.File.MetaData,
-    parsedTrace: Trace.Handlers.Types.ParsedTrace,
-    insights: Trace.Insights.Types.TraceInsightSets|null,
-  }> {
+      traceEngineConfig?: Trace.Types.Configuration.Configuration): Promise<ParsedTraceAndModel> {
     const events = 'traceEvents' in contents ? contents.traceEvents : contents;
     const metadata = 'metadata' in contents ? contents.metadata : {};
     return await new Promise((resolve, reject) => {
@@ -244,19 +225,16 @@ export class TraceLoader {
         // When we receive the final update from the model, update the recording
         // state back to waiting.
         if (Trace.TraceModel.isModelUpdateDataComplete(data)) {
-          const metadata = model.metadata(0);
           const parsedTrace = model.parsedTrace(0);
-          const insights = model.traceInsights(0);
-          if (metadata && parsedTrace) {
-            resolve({
-              model,
-              metadata,
-              parsedTrace,
-              insights,
-            });
-          } else {
+          if (!parsedTrace) {
             reject(new Error('Unable to load trace'));
+            return;
           }
+
+          resolve({
+            model,
+            parsedTrace,
+          });
         }
       });
 
@@ -288,6 +266,15 @@ export class TraceLoader {
     const traceContents = JSON.parse(contents) as Trace.Types.File.TraceFile;
     return traceContents;
   }
+
+  /**
+   * Karma test run in a single context if we load all the traces
+   * we risk getting out of memory
+   */
+  static resetCache() {
+    fileContentsCache.clear();
+    traceEngineCache.clear();
+  }
 }
 
 export async function fetchFileAsText(url: URL): Promise<string> {
@@ -309,9 +296,9 @@ export async function fetchFileAsText(url: URL): Promise<string> {
  * Wraps an async Promise with a timeout. We use this to break down and
  * instrument `TraceLoader` to understand on CQ where timeouts occur.
  *
- * @param asyncPromise - The Promise representing the async operation to be timed.
- * @param timeoutMs - The timeout in milliseconds.
- * @param stepName - An identifier for the step (for logging).
+ * @param asyncPromise The Promise representing the async operation to be timed.
+ * @param timeoutMs The timeout in milliseconds.
+ * @param stepName An identifier for the step (for logging).
  * @returns A promise that resolves with the operation's result, or rejects if it times out.
  */
 async function wrapInTimeout<T>(

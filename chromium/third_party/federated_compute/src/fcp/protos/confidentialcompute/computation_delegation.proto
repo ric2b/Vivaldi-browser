@@ -1,0 +1,46 @@
+// Copyright 2025 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.confidentialcompute.outgoing;
+
+import "google/protobuf/any.proto";
+
+// API for a TEE to delegate computation, either to itself or to another TEE
+// on a remote worker.
+//
+// Note: Requests originate from a TEE and responses are sent back to a TEE.
+service ComputationDelegation {
+  // Executes a computation either within the TEE itself or in a TEE on a remote
+  // worker.
+  rpc Execute(ComputationRequest) returns (ComputationResponse) {}
+}
+
+// Request providing a computation to execute.
+// Next ID: 3
+message ComputationRequest {
+  // The computation to be executed.
+  google.protobuf.Any computation = 1;
+
+  // The BNS address of the worker to execute the computation.
+  string worker_bns = 2;
+}
+
+// Response from executing a computation.
+// Next ID: 2
+message ComputationResponse {
+  // The result of the computation execution.
+  google.protobuf.Any result = 1;
+}

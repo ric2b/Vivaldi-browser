@@ -534,6 +534,11 @@ unsigned TextControlElement::IndexForPosition(HTMLElement* inner_editor,
   return index;
 }
 
+unsigned TextControlElement::IndexForPosition(
+    const Position& editor_position) const {
+  return IndexForPosition(InnerEditorElement(), editor_position);
+}
+
 bool TextControlElement::ShouldApplySelectionCache() const {
   const auto& doc = GetDocument();
   return doc.FocusedElement() != this || doc.ShouldUpdateSelectionAfterLayout();
@@ -945,6 +950,17 @@ void TextControlElement::AdjustPlaceholderBreakElement() {
     return;
   }
   Node* last_child = inner_editor->lastChild();
+  if (RuntimeEnabledFeatures::TextareaLastLineRemovalFixEnabled()) {
+    // Remove the last empty text.  It prevents from adding the placeholder
+    // break though it produces no height.
+    while (auto* text_last_child = DynamicTo<Text>(last_child)) {
+      if (!text_last_child->data().empty()) {
+        break;
+      }
+      last_child = last_child->previousSibling();
+      text_last_child->remove();
+    }
+  }
   if (RuntimeEnabledFeatures::TextareaLineEndingsAsBrEnabled() &&
       IsA<HTMLBRElement>(last_child)) {
     if (!IsPlaceholderBreakElement(last_child)) {
@@ -1186,23 +1202,21 @@ String TextControlElement::ValueWithHardLineBreaks() const {
     return has_valid_ifcs ? result.ReleaseString() : Value();
   }
 
-  if (layout_object->IsLayoutNGObject()) {
-    InlineCursor cursor(*layout_object);
-    if (!cursor)
-      return Value();
-    const auto* mapping = InlineNode::GetOffsetMapping(layout_object);
-    if (!mapping)
-      return Value();
-    Position break_position = GetNextSoftBreak(*mapping, cursor);
-    StringBuilder result;
-    for (Node& node : NodeTraversal::DescendantsOf(*inner_text)) {
-      AppendWrappedNode(*inner_text, node, *mapping, cursor, break_position,
-                        result);
-    }
-    return result.ToString();
+  InlineCursor cursor(*layout_object);
+  if (!cursor) {
+    return Value();
   }
-
-  return Value();
+  const auto* mapping = InlineNode::GetOffsetMapping(layout_object);
+  if (!mapping) {
+    return Value();
+  }
+  Position break_position = GetNextSoftBreak(*mapping, cursor);
+  StringBuilder result;
+  for (Node& node : NodeTraversal::DescendantsOf(*inner_text)) {
+    AppendWrappedNode(*inner_text, node, *mapping, cursor, break_position,
+                      result);
+  }
+  return result.ToString();
 }
 
 TextControlElement* EnclosingTextControl(const Position& position) {

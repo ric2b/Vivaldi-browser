@@ -1001,8 +1001,7 @@ class KeepAliveURLAttributionReportingBrowserTest
   const FeaturesType& GetEnabledFeatures() override {
     static const FeaturesType enabled_features =
         GetDefaultEnabledBackForwardCacheFeaturesForTesting(
-            {{blink::features::kKeepAliveInBrowserMigration, {}},
-             {blink::features::kAttributionReportingInBrowserMigration, {}}});
+            {{blink::features::kKeepAliveInBrowserMigration, {}}});
     return enabled_features;
   }
 };
@@ -1431,6 +1430,56 @@ IN_PROC_BROWSER_TEST_P(KeepAliveFetchRetryBrowserTest,
       ExpectedSucceededRequests(/*browser=*/0, /*renderer=*/0),
       ExpectedFailedRequests(/*browser=*/1),
       /*retried_count=*/0);
+}
+
+// Tests that Request.retryOptions() returns null when retryOptions is not set.
+IN_PROC_BROWSER_TEST_P(KeepAliveFetchRetryBrowserTest, RetryOptionsNotSet) {
+  ASSERT_TRUE(server()->Start());
+  const auto beacon_url = server()->GetURL(kPrimaryHost, kKeepAliveEndpoint);
+  ASSERT_TRUE(NavigateToURL(web_contents(),
+                            server()->GetURL(kPrimaryHost, "/title1.html")));
+
+  EXPECT_EQ(true, EvalJs(web_contents(), JsReplace(R"((async function() {
+        const request = new Request($1, {keepalive: true});
+        return request.getRetryOptions() === null;
+    })())",
+                                                   beacon_url)));
+}
+
+// Tests that Request.retryOptions() returns the correct options when set.
+IN_PROC_BROWSER_TEST_P(KeepAliveFetchRetryBrowserTest, RetryOptionsSet) {
+  ASSERT_TRUE(server()->Start());
+  const auto beacon_url = server()->GetURL(kPrimaryHost, kKeepAliveEndpoint);
+  ASSERT_TRUE(NavigateToURL(web_contents(),
+                            server()->GetURL(kPrimaryHost, "/title1.html")));
+
+  EXPECT_EQ(true, EvalJs(web_contents(), JsReplace(R"((async function() {
+        const init = {
+          keepalive: true,
+          retryOptions: {
+            maxAttempts: 5,
+            initialDelay: 100,
+            backoffFactor: 2.5,
+            maxAge: 5000,
+            retryAfterUnload: true,
+            retryNonIdempotent: true,
+            retryOnlyIfServerUnreached: true,
+          }
+        };
+        const request = new Request($1, init);
+        const options = request.getRetryOptions();
+        if (!options) return false;
+        const inputOptions = init.retryOptions;
+        return options.maxAttempts === inputOptions.maxAttempts &&
+               options.initialDelay === inputOptions.initialDelay &&
+               options.backoffFactor === inputOptions.backoffFactor &&
+               options.maxAge === inputOptions.maxAge &&
+               options.retryAfterUnload === inputOptions.retryAfterUnload &&
+               options.retryNonIdempotent === inputOptions.retryNonIdempotent &&
+               (options.retryOnlyIfServerUnreached ===
+                    inputOptions.retryOnlyIfServerUnreached);
+    })())",
+                                                   beacon_url)));
 }
 
 // TODO(crbug.com/417930271): test unload, redirects, timeout, attribution.

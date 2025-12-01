@@ -53,10 +53,6 @@ SavedTabGroupModelListener::~SavedTabGroupModelListener() {
 
 void SavedTabGroupModelListener::OnTabGroupAdded(
     const tab_groups::TabGroupId& group_id) {
-  if (!tab_groups::IsTabGroupSyncServiceDesktopMigrationEnabled()) {
-    return;
-  }
-
   if (local_tab_group_listeners_.contains(group_id)) {
     return;
   }
@@ -68,16 +64,17 @@ void SavedTabGroupModelListener::OnTabGroupAdded(
       group_and_tab_guid_mapping.second;
   service_->AddGroup(std::move(copy_group));
 
+  // It's possible that the group is null, which happens in case
+  // TabGroupSyncService is not yet initialized. In that case, we will skip the
+  // "Connect" step, as that will happen as a part of post-init reconcilition.
   std::optional<SavedTabGroup> group = service_->GetGroup(group_id);
-  ConnectToLocalTabGroup(group.value(), tab_guid_mapping);
+  if (group.has_value()) {
+    ConnectToLocalTabGroup(group.value(), tab_guid_mapping);
+  }
 }
 
 void SavedTabGroupModelListener::OnTabGroupWillBeRemoved(
     const tab_groups::TabGroupId& group_id) {
-  if (!tab_groups::IsTabGroupSyncServiceDesktopMigrationEnabled()) {
-    return;
-  }
-
   if (!local_tab_group_listeners_.contains(group_id)) {
     return;
   }

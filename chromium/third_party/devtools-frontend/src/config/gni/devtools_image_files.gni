@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -18,6 +18,8 @@ devtools_image_files = [
   "toolbarResizerVertical.png",
   "touchCursor_2x.png",
   "touchCursor.png",
+  "gdp-logo-light.png",
+  "gdp-logo-dark.png",
 ]
 
 devtools_svg_sources = [
@@ -28,6 +30,7 @@ devtools_svg_sources = [
   "accelerometer-front.svg",
   "account-tree.svg",
   "add-photo.svg",
+  "ai-explorer-badge.svg",
   "align-content-center.svg",
   "align-content-end.svg",
   "align-content-space-around.svg",
@@ -93,6 +96,7 @@ devtools_svg_sources = [
   "clear.svg",
   "cloud.svg",
   "code-circle.svg",
+  "code-whisperer-badge.svg",
   "code.svg",
   "colon.svg",
   "color-picker-filled.svg",
@@ -115,6 +119,7 @@ devtools_svg_sources = [
   "devices.svg",
   "devtools-thumbnail.svg",
   "devtools-tips.svg",
+  "devtools-user-badge.svg",
   "devtools.svg",
   "difference.svg",
   "dock-bottom.svg",
@@ -123,6 +128,7 @@ devtools_svg_sources = [
   "dock-window.svg",
   "document.svg",
   "dog-paw.svg",
+  "dom-detective-badge.svg",
   "domain.svg",
   "dots-horizontal.svg",
   "dots-vertical.svg",
@@ -200,6 +206,7 @@ devtools_svg_sources = [
   "keyboard-full.svg",
   "keyboard-pen.svg",
   "keyboard.svg",
+  "label-auto.svg",
   "label.svg",
   "large-arrow-right-filled.svg",
   "layers-filled.svg",
@@ -212,6 +219,7 @@ devtools_svg_sources = [
   "list.svg",
   "location-on.svg",
   "lock.svg",
+  "mark-email-unread.svg",
   "match-case.svg",
   "match-whole-word.svg",
   "memory.svg",
@@ -267,6 +275,7 @@ devtools_svg_sources = [
   "snippet.svg",
   "spark-info.svg",
   "speculative-loads.svg",
+  "speedster-badge.svg",
   "star.svg",
   "step-into.svg",
   "step-out.svg",
@@ -291,6 +300,7 @@ devtools_svg_sources = [
   "triangle-left.svg",
   "triangle-right.svg",
   "triangle-up.svg",
+  "trophy.svg",
   "tune.svg",
   "undo.svg",
   "warning-filled.svg",

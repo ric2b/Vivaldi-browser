@@ -13,6 +13,11 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/common/material_timing.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
+// End Vivaldi
+
 @interface OmniboxFocusOrchestratorParity ()
 
 @property(nonatomic, assign) BOOL isAnimating;
@@ -42,6 +47,19 @@
                              completion:(ProceduralBlock)completion {
   _completion = completion;
   _trigger = trigger;
+
+  // Vivaldi
+  if (vivaldi::IsVivaldiRunning()) {
+    if (toolbarExpanded) {
+      return [self updateUIToExpandedState:animated
+                            omniboxFocused:omniboxFocused];
+    } else {
+      return [self updateUIToContractedState:animated
+                              omniboxFocused:omniboxFocused];
+    }
+  }
+  // End Vivaldi
+
   // If a new transition is requested while one is ongoing, we don't want
   // to start the new one immediately. However, we do want the omnibox to end
   // up in whatever state was requested last. Therefore, we cache the last
@@ -506,5 +524,84 @@
       return NO;
   }
 }
+
+#pragma mark - VIVALDI
+- (void)updateUIToExpandedState:(BOOL)animated
+                 omniboxFocused:(BOOL)omniboxFocused {
+  void (^expansion)() = ^{
+    [self.toolbarAnimatee expandLocationBar];
+    [self.toolbarAnimatee showCancelButton];
+    [self.locationBarAnimatee setSteadyViewFaded:omniboxFocused];
+    [self.locationBarAnimatee setEditViewFaded:!omniboxFocused];
+    [self.editViewAnimatee setLeadingIconScale:!omniboxFocused ? 0 : 1];
+    [self.editViewAnimatee setClearButtonFaded:!omniboxFocused];
+  };
+
+  void (^hideControls)() = ^{
+    [self.toolbarAnimatee hideControlButtons];
+  };
+
+  if (animated) {
+    [UIView animateWithDuration:vPrimaryToolbarAnimationDuration
+                          delay:0
+         usingSpringWithDamping:vPrimaryToolbarAnimationDamping
+          initialSpringVelocity:vPrimaryToolbarAnimationSpringVelocity
+                        options:UIViewAnimationOptionCurveEaseInOut
+                     animations:expansion
+                     completion:^(BOOL finished) {
+      [self animationFinished];
+    }];
+    [UIView animateWithDuration:kMaterialDuration2
+                          delay:0
+                        options:UIViewAnimationOptionCurveEaseInOut
+                     animations:hideControls
+                     completion:^(BOOL finished) {
+      [self animationFinished];
+    }];
+  } else {
+    expansion();
+    hideControls();
+  }
+}
+
+- (void)updateUIToContractedState:(BOOL)animated
+                   omniboxFocused:(BOOL)omniboxFocused {
+  void (^contraction)() = ^{
+    [self.toolbarAnimatee contractLocationBar];
+    [self.toolbarAnimatee hideCancelButton];
+    [self.locationBarAnimatee setSteadyViewFaded:omniboxFocused];
+    [self.locationBarAnimatee setEditViewFaded:!omniboxFocused];
+    [self.editViewAnimatee setLeadingIconScale:!omniboxFocused ? 0 : 1];
+    [self.editViewAnimatee setClearButtonFaded:!omniboxFocused];
+  };
+
+  void (^showControls)() = ^{
+    [self.toolbarAnimatee showControlButtons];
+  };
+
+  if (animated) {
+    [UIView animateWithDuration:vPrimaryToolbarAnimationDuration
+                          delay:0
+         usingSpringWithDamping:vPrimaryToolbarAnimationDamping
+          initialSpringVelocity:vPrimaryToolbarAnimationSpringVelocity
+                        options:UIViewAnimationOptionCurveEaseInOut
+                     animations:contraction
+                     completion:^(BOOL finished) {
+      [self animationFinished];
+    }];
+
+    [UIView animateWithDuration:kMaterialDuration2
+                          delay:0
+                        options:UIViewAnimationOptionCurveEaseInOut
+                     animations:showControls
+                     completion:^(BOOL finished) {
+      [self animationFinished];
+    }];
+  } else {
+    contraction();
+    showControls();
+  }
+}
+// End Vivaldi
 
 @end

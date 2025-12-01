@@ -280,6 +280,7 @@ const CGFloat commonPadding = 20;
                                  layoutStyle:self.selectedLayout];
         return folderRegularCell;
       }
+#if defined(VIVALDI_RELEASE_KIND) && VIVALDI_RELEASE_KIND != 2 // Not final
       case VivaldiStartPageLayoutStyleIcon: {
         VivaldiSpeedDialIconCell *iconCell =
           [collectionView dequeueReusableCellWithReuseIdentifier:cellIdIcon
@@ -290,6 +291,7 @@ const CGFloat commonPadding = 20;
                           wallpaper:self.wallpaper];
         return iconCell;
       }
+#endif
       case VivaldiStartPageLayoutStyleList: {
         VivaldiSpeedDialFolderListCell *folderListCell =
             [collectionView
@@ -323,6 +325,7 @@ const CGFloat commonPadding = 20;
                          forCell:smallCell];
         return smallCell;
       }
+#if defined(VIVALDI_RELEASE_KIND) && VIVALDI_RELEASE_KIND != 2 // Not final
       case VivaldiStartPageLayoutStyleIcon: {
         VivaldiSpeedDialIconCell *iconCell =
           [collectionView dequeueReusableCellWithReuseIdentifier:cellIdIcon
@@ -335,6 +338,7 @@ const CGFloat commonPadding = 20;
                          forCell:iconCell];
         return iconCell;
       }
+#endif
       case VivaldiStartPageLayoutStyleList: {
           VivaldiSpeedDialListCell *listCell =
             [collectionView dequeueReusableCellWithReuseIdentifier:cellIdList
@@ -362,7 +366,9 @@ const CGFloat commonPadding = 20;
       desiredFaviconSizeInPoints = kDesiredSmallFaviconSizePt;
       break;
     case VivaldiStartPageLayoutStyleSmall:
+#if defined(VIVALDI_RELEASE_KIND) && VIVALDI_RELEASE_KIND != 2 // Not final
     case VivaldiStartPageLayoutStyleIcon:
+#endif
     case VivaldiStartPageLayoutStyleList:
       desiredFaviconSizeInPoints = kDesiredMediumFaviconSizePt;
       break;
@@ -412,11 +418,13 @@ const CGFloat commonPadding = 20;
         [smallCell configureCellWithAttributes:attributes item:item];
         break;
       }
+#if defined(VIVALDI_RELEASE_KIND) && VIVALDI_RELEASE_KIND != 2 // Not final
       case VivaldiStartPageLayoutStyleIcon: {
         VivaldiSpeedDialIconCell* iconCell = (VivaldiSpeedDialIconCell*)cell;
         [iconCell configureCellWithAttributes:attributes item:item];
         break;
       }
+#endif
       case VivaldiStartPageLayoutStyleList: {
         VivaldiSpeedDialListCell* listCell =
             (VivaldiSpeedDialListCell*)cell;

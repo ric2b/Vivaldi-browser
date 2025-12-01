@@ -57,6 +57,8 @@
 
 - (void)loadAppcastFromURL:(NSURL *)appcastURL userAgent:(NSString *)userAgent httpHeaders:(NSDictionary * _Nullable)httpHeaders inBackground:(BOOL)background
 {
+    assert(NSThread.isMainThread);
+    
     NSMutableDictionary *requestHTTPHeaders = [NSMutableDictionary dictionary];
     if (httpHeaders != nil) {
         [requestHTTPHeaders addEntriesFromDictionary:(NSDictionary * _Nonnull)httpHeaders];
@@ -163,7 +165,7 @@
                         if (fileSize != nil && ![deltaItem.deltaFromSparkleExecutableSize isEqualToNumber:fileSize]) {
                             sparkleExecutableIsOK = NO;
                             
-                            SULog(SULogLevelDefault, @"Expected file size (%lld) of Sparkle's executable does not match actual file size (%lld). Skipping delta update.", deltaItem.deltaFromSparkleExecutableSize.unsignedLongLongValue, fileSize.unsignedLongLongValue);
+                            SULog(SULogLevelDefault, @"Expected file size (%llu) of Sparkle's executable does not match actual file size (%llu). Skipping delta update.", deltaItem.deltaFromSparkleExecutableSize.unsignedLongLongValue, fileSize.unsignedLongLongValue);
                         } else {
                             sparkleExecutableIsOK = YES;
                         }
@@ -429,11 +431,17 @@ SPU_OBJC_DIRECT
 {
     id<SUVersionComparison> comparator = nil;
     
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
     // Give the delegate a chance to provide a custom version comparator
     id<SPUUpdaterDelegate> updaterDelegate = _updaterDelegate;
     if ([updaterDelegate respondsToSelector:@selector((versionComparatorForUpdater:))]) {
-        comparator = [updaterDelegate versionComparatorForUpdater:_updater];
+        id updater = _updater;
+        if (updater != nil) {
+            comparator = [updaterDelegate versionComparatorForUpdater:updater];
+        }
     }
+#pragma clang diagnostic pop
     
     // If we don't get a comparator from the delegate, use the default comparator
     if (comparator == nil) {

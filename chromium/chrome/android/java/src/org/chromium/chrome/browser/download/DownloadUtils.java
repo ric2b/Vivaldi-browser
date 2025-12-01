@@ -30,9 +30,9 @@ import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.BuildInfo;
 import org.chromium.base.ContentUriUtils;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.DeviceInfo;
 import org.chromium.base.FileUtils;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
@@ -158,40 +158,18 @@ public class DownloadUtils {
             return false;
         }
 
-        if (isTablet) { // TODO: We ignore tablet for now
+        if (isTablet) {
             if (ChromeApplicationImpl.isVivaldi()) {
                 boolean offTheRecord = (tab != null) ? tab.isIncognito() : false;
                 PanelUtils.showPanel(activity, UrlConstants.DOWNLOADS_URL,
                         offTheRecord, showPrefetchedContent);
                 return true;
             }
-            // Download Home shows up as a tab on tablets.
             LoadUrlParams params = new LoadUrlParams(UrlConstants.DOWNLOADS_URL);
-            if ((ChromeFeatureList.sAndroidNativePagesInNewTab.isEnabled()
-                            && ChromeFeatureList.sAndroidNativePagesInNewTabDownloadsEnabled
-                                    .getValue())
-                    || tab == null
-                    || !tab.isInitialized()) {
-                // Open a new tab, which pops Chrome into the foreground.
-                ChromeAsyncTabLauncher delegate =
-                        new ChromeAsyncTabLauncher(
-                                /* incognito= */ OtrProfileId.isOffTheRecord(otrProfileId));
-                delegate.launchNewTab(params, TabLaunchType.FROM_CHROME_UI, /* parent= */ tab);
-            } else {
-                // Download Home shows up inside an existing tab, but only if the last Activity was
-                // the ChromeTabbedActivity.
-                tab.loadUrl(params);
-
-                // Bring Chrome to the foreground, if possible. Unless Chrome is already in the
-                // foreground, this request is most likely coming from a notification.
-                Intent intent =
-                        IntentHandler.createTrustedBringTabToFrontIntent(
-                                tab.getId(), IntentHandler.BringToFrontSource.NOTIFICATION);
-                if (intent != null) {
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    IntentUtils.safeStartActivity(appContext, intent);
-                }
-            }
+            ChromeAsyncTabLauncher delegate =
+                    new ChromeAsyncTabLauncher(
+                            /* incognito= */ OtrProfileId.isOffTheRecord(otrProfileId));
+            delegate.launchNewTab(params, TabLaunchType.FROM_CHROME_UI, /* parent= */ tab);
         } else {
             if (ChromeApplicationImpl.isVivaldi()) {
                 boolean offTheRecord = (tab != null) ? tab.isIncognito() : false;
@@ -211,6 +189,7 @@ public class DownloadUtils {
                             : ProfileManager.getLastUsedRegularProfile()
                                     .getOffTheRecordProfile(
                                             otrProfileId, /* createIfNeeded= */ true);
+            assert profile != null;
             Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
             tracker.notifyEvent(EventConstants.DOWNLOAD_HOME_OPENED);
         }
@@ -326,7 +305,7 @@ public class DownloadUtils {
      * @param tab Tab displaying the page that will be downloaded.
      * @return Whether the "Download Page" button should be enabled.
      */
-    public static boolean isAllowedToDownloadPage(Tab tab) {
+    public static boolean isAllowedToDownloadPage(@Nullable Tab tab) {
         if (tab == null) return false;
 
         if (tab.isIncognito()
@@ -402,8 +381,8 @@ public class DownloadUtils {
      * @param source The location from which the download was opened.
      */
     public static void openItem(
-            OfflineItem offlineItem,
-            OtrProfileId otrProfileId,
+            @Nullable OfflineItem offlineItem,
+            @Nullable OtrProfileId otrProfileId,
             @DownloadOpenSource int source,
             Context context) {
         if (offlineItem == null) {
@@ -452,8 +431,8 @@ public class DownloadUtils {
             @Nullable String mimeType,
             @Nullable String downloadGuid,
             @Nullable OtrProfileId otrProfileId,
-            String originalUrl,
-            String referrer,
+            @Nullable String originalUrl,
+            @Nullable String referrer,
             @DownloadOpenSource int source,
             Context context) {
         DownloadMetrics.recordDownloadOpen(source, mimeType);
@@ -472,7 +451,7 @@ public class DownloadUtils {
             String normalizedMimeType = Intent.normalizeMimeType(mimeType);
 
             // Sharing for media files is disabled on automotive.
-            boolean isAutomotive = BuildInfo.getInstance().isAutomotive;
+            boolean isAutomotive = DeviceInfo.isAutomotive();
             Intent intent =
                     MediaViewerUtils.getMediaViewerIntent(
                             /* displayUri= */ fileUri,
@@ -541,11 +520,11 @@ public class DownloadUtils {
     @CalledByNative
     public static void openDownload(
             @JniType("std::string") String filePath,
-            @JniType("std::string") String mimeType,
-            @JniType("std::string") String downloadGuid,
+            @JniType("std::string") @Nullable String mimeType,
+            @JniType("std::string") @Nullable String downloadGuid,
             OtrProfileId otrProfileId,
-            @JniType("std::string") String originalUrl,
-            @JniType("std::string") String referer,
+            @JniType("std::string") @Nullable String originalUrl,
+            @JniType("std::string") @Nullable String referer,
             @DownloadOpenSource int source) {
         // Mapping generic MIME type to android openable type based on URL and file extension.
         String newMimeType = MimeUtils.remapGenericMimeType(mimeType, originalUrl, filePath);
@@ -657,7 +636,7 @@ public class DownloadUtils {
             return !entry.isAutoResumable;
         } else {
             // Only the native downloads backend knows about the download.
-            if (item.getDownloadInfo().state() == DownloadState.IN_PROGRESS) {
+            if (assumeNonNull(item.getDownloadInfo()).state() == DownloadState.IN_PROGRESS) {
                 return item.getDownloadInfo().isPaused();
             } else {
                 return item.getDownloadInfo().state() == DownloadState.INTERRUPTED;
@@ -676,7 +655,7 @@ public class DownloadUtils {
         DownloadSharedPreferenceEntry entry =
                 helper.getDownloadSharedPreferenceEntry(item.getContentId());
         return entry != null
-                && item.getDownloadInfo().state() == DownloadState.INTERRUPTED
+                && assumeNonNull(item.getDownloadInfo()).state() == DownloadState.INTERRUPTED
                 && entry.isAutoResumable;
     }
 
@@ -811,8 +790,8 @@ public class DownloadUtils {
     public static boolean openFileWithExternalApps(
             String filePath,
             @Nullable String mimeType,
-            String originalUrl,
-            String referrer,
+            @Nullable String originalUrl,
+            @Nullable String referrer,
             Context context,
             @OpenWithExternalAppsSource int source) {
         try {

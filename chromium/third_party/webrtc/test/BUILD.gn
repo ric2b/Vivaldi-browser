@@ -149,6 +149,27 @@ rtc_library("create_frame_generator_capturer") {
   ]
 }
 
+rtc_library("create_test_environment") {
+  testonly = true
+  sources = [
+    "create_test_environment.cc",
+    "create_test_environment.h",
+  ]
+  deps = [
+    ":create_test_field_trials",
+    "../api:field_trials",
+    "../api:field_trials_view",
+    "../api:time_controller",
+    "../api/environment",
+    "../api/environment:environment_factory",
+    "../api/rtc_event_log",
+    "../rtc_base:checks",
+    "../system_wrappers",
+    "//third_party/abseil-cpp/absl/base:nullability",
+    "//third_party/abseil-cpp/absl/strings:string_view",
+  ]
+}
+
 rtc_library("create_test_field_trials") {
   testonly = true
   sources = [ "create_test_field_trials.h" ]
@@ -682,6 +703,7 @@ if (rtc_include_tests) {
         ":call_config_utils",
         ":copy_to_file_audio_capturer_unittest",
         ":create_frame_generator_capturer",
+        ":create_test_environment",
         ":create_test_field_trials",
         ":direct_transport",
         ":fake_video_codecs",
@@ -1208,6 +1230,7 @@ rtc_library("audio_codec_mocks") {
     "../api/units:time_delta",
     "../rtc_base:buffer",
     "../rtc_base:checks",
+    "//third_party/abseil-cpp/absl/strings:string_view",
   ]
 }
 
@@ -1261,6 +1284,7 @@ if (!build_with_chromium) {
     ]
 
     deps = [
+      ":create_test_environment",
       ":create_test_field_trials",
       ":direct_transport",
       ":encoder_settings",
@@ -1298,7 +1322,6 @@ if (!build_with_chromium) {
       "../api/task_queue",
       "../api/test/video:function_video_factory",
       "../api/transport:bitrate_settings",
-      "../api/transport:field_trial_based_config",
       "../api/transport:network_control",
       "../api/units:time_delta",
       "../api/units:timestamp",
@@ -1434,7 +1457,6 @@ rtc_library("video_codec_tester") {
     "../api:make_ref_counted",
     "../api:scoped_refptr",
     "../api/environment",
-    "../api/environment:environment_factory",
     "../api/numerics",
     "../api/test/metrics:metric",
     "../api/test/metrics:metrics_logger",
@@ -1470,6 +1492,7 @@ rtc_library("video_codec_tester") {
     "../rtc_base:timeutils",
     "../rtc_base/synchronization:mutex",
     "../rtc_base/system:file_wrapper",
+    "../system_wrappers",
     "../video/config:encoder_config",
     "../video/config:streams_config",
     "//third_party/abseil-cpp/absl/functional:any_invocable",
@@ -1487,6 +1510,7 @@ rtc_library("wait_until") {
   ]
   deps = [
     ":test_support",
+    "../api:function_view",
     "../api:rtc_error",
     "../api:time_controller",
     "../api/units:time_delta",

@@ -29,8 +29,8 @@ void FontFaceSet::HandlePendingEventsAndPromisesSoon() {
       pending_task_queued_ = true;
       context->GetTaskRunner(TaskType::kFontLoading)
           ->PostTask(FROM_HERE,
-                     WTF::BindOnce(&FontFaceSet::HandlePendingEventsAndPromises,
-                                   WrapPersistent(this)));
+                     BindOnce(&FontFaceSet::HandlePendingEventsAndPromises,
+                              WrapPersistent(this)));
     }
   }
 }
@@ -323,8 +323,7 @@ void FontFaceSet::LoadFontPromiseResolver::Trace(Visitor* visitor) const {
 }
 
 bool FontFaceSet::IterationSource::FetchNextItem(ScriptState*,
-                                                 FontFace*& value,
-                                                 ExceptionState&) {
+                                                 FontFace*& value) {
   if (font_faces_.size() <= index_) {
     return false;
   }
@@ -333,8 +332,7 @@ bool FontFaceSet::IterationSource::FetchNextItem(ScriptState*,
 }
 
 FontFaceSetIterable::IterationSource* FontFaceSet::CreateIterationSource(
-    ScriptState*,
-    ExceptionState&) {
+    ScriptState*) {
   // Setlike should iterate each item in insertion order, and items should
   // be keep on up to date. But since blink does not have a way to hook up CSS
   // modification, take a snapshot here, and make it ordered as follows.

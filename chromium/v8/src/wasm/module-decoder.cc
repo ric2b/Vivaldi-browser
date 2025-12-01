@@ -4,6 +4,7 @@
 
 #include "src/wasm/module-decoder.h"
 
+#include "src/logging/counters.h"
 #include "src/logging/metrics.h"
 #include "src/tracing/trace-event.h"
 #include "src/wasm/constant-expression.h"
@@ -65,6 +66,8 @@ const char* SectionName(SectionCode code) {
       return kInstTraceString;
     case kBranchHintsSectionCode:
       return kBranchHintsString;
+    case kCompilationPrioritySectionCode:
+      return kCompilationPriorityString;
     case kDescriptorsSectionCode:
       return kDescriptorsString;
     default:

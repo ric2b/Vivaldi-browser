@@ -90,14 +90,17 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest,
   }
 
   ShowSuggestions(manager(), {SuggestionType::kAddressEntry});
-  client().popup_controller(manager()).AcceptSuggestion(0);
+  client().popup_controller(manager()).AcceptSuggestion(
+      /*index=*/0, autofill::AutofillMetrics::SuggestionAcceptedMethod::kTap);
   task_environment()->FastForwardBy(base::Milliseconds(100));
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
+  client().popup_controller(manager()).AcceptSuggestion(
+      /*index=*/0, autofill::AutofillMetrics::SuggestionAcceptedMethod::kTap);
   task_environment()->FastForwardBy(base::Milliseconds(400));
 
   // Only now suggestions should be accepted.
   check.Call();
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
+  client().popup_controller(manager()).AcceptSuggestion(
+      /*index=*/0, autofill::AutofillMetrics::SuggestionAcceptedMethod::kTap);
 }
 
 // Tests that reshowing the suggestions resets the accept threshold.
@@ -113,20 +116,24 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest,
 
   ShowSuggestions(manager(), {SuggestionType::kAddressEntry});
   // Calls before the threshold are ignored.
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
+  client().popup_controller(manager()).AcceptSuggestion(
+      /*index=*/0, autofill::AutofillMetrics::SuggestionAcceptedMethod::kTap);
   task_environment()->FastForwardBy(base::Milliseconds(100));
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
+  client().popup_controller(manager()).AcceptSuggestion(
+      /*index=*/0, autofill::AutofillMetrics::SuggestionAcceptedMethod::kTap);
   task_environment()->FastForwardBy(base::Milliseconds(400));
 
   // Show the suggestions again (simulating, e.g., a click somewhere slightly
   // different).
   ShowSuggestions(manager(), {SuggestionType::kAddressEntry});
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
+  client().popup_controller(manager()).AcceptSuggestion(
+      /*index=*/0, autofill::AutofillMetrics::SuggestionAcceptedMethod::kTap);
 
   // After waiting again, suggestions become acceptable.
   task_environment()->FastForwardBy(base::Milliseconds(500));
   check.Call();
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
+  client().popup_controller(manager()).AcceptSuggestion(
+      /*index=*/0, autofill::AutofillMetrics::SuggestionAcceptedMethod::kTap);
 }
 
 // Tests that calling `Show()` on the controller shows the view.
@@ -293,6 +300,35 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest,
 }
 
 TEST_F(AutofillKeyboardAccessoryControllerImplTest,
+       GetRemovalConfirmationText_CompleteAutofillAccountNameEmailProfile) {
+  AutofillProfile complete_profile = test::GetFullProfile();
+  test_api(complete_profile)
+      .set_record_type(AutofillProfile::RecordType::kAccountNameEmail);
+  ShowAutofillProfileSuggestion(complete_profile);
+  RemovalConfirmationText confirmation_text;
+
+  EXPECT_TRUE(client().popup_controller(manager()).GetRemovalConfirmationText(
+      0, &confirmation_text));
+  EXPECT_EQ(
+      confirmation_text.title,
+      l10n_util::GetStringUTF16(
+          IDS_AUTOFILL_REMOVE_ACCOUNT_NAME_AND_EMAIL_PROFILE_SUGGESTION_CONFIRMATION_TITLE));
+
+  std::u16string email =
+      base::UTF8ToUTF16(GetPrimaryAccountInfoFromBrowserContext(
+                            web_contents()->GetBrowserContext())
+                            ->email);
+  EXPECT_EQ(
+      confirmation_text.body,
+      l10n_util::GetStringFUTF16(
+          IDS_AUTOFILL_REMOVE_ACCOUNT_NAME_AND_EMAIL_PROFILE_SUGGESTION_CONFIRMATION_BODY,
+          email));
+  EXPECT_FALSE(confirmation_text.body_link.empty());
+  EXPECT_EQ(confirmation_text.confirm_button_text,
+            l10n_util::GetStringUTF16(IDS_AUTOFILL_REMOVE_SUGGESTION_BUTTON));
+}
+
+TEST_F(AutofillKeyboardAccessoryControllerImplTest,
        GetRemovalConfirmationText_AutofillProfile_EmptyCity) {
   AutofillProfile profile = test::GetFullProfile();
   profile.ClearFields({ADDRESS_HOME_CITY});
@@ -351,7 +387,8 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest,
         client().popup_controller(manager()).Hide(
             SuggestionHidingReason::kAcceptSuggestion);
       });
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
+  client().popup_controller(manager()).AcceptSuggestion(
+      /*index=*/0, autofill::AutofillMetrics::SuggestionAcceptedMethod::kTap);
 }
 
 TEST_F(AutofillKeyboardAccessoryControllerImplTest,
@@ -363,7 +400,8 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest,
   task_environment()->FastForwardBy(base::Milliseconds(500));
 
   EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion).Times(0);
-  client().popup_controller(manager()).AcceptSuggestion(/*index=*/0);
+  client().popup_controller(manager()).AcceptSuggestion(
+      /*index=*/0, autofill::AutofillMetrics::SuggestionAcceptedMethod::kTap);
 }
 
 // Tests that the `KeyboardAccessoryController` moves "clear form" suggestions
@@ -417,9 +455,11 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest, SelectInvalidSuggestion) {
 
   // The following should not crash:
   client().popup_controller(manager()).AcceptSuggestion(
-      /*index=*/0);  // Non-acceptable type.
+      /*index=*/0,  // Non-acceptable type.
+      autofill::AutofillMetrics::SuggestionAcceptedMethod::kTap);
   client().popup_controller(manager()).AcceptSuggestion(
-      /*index=*/1);  // Out of bounds!
+      /*index=*/1,  // Out of bounds!
+      autofill::AutofillMetrics::SuggestionAcceptedMethod::kTap);
 }
 
 }  // namespace

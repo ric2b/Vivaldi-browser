@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -29,13 +29,13 @@ const {html} = Lit;
  * `;
  * ```
  *
- * @attr icon-name - The basename of the icon file (not including the `.svg`
- *                   suffix).
- * @attr jslogcontext - The context for the `jslog` attribute. A `jslog`
- *                      attribute is generated automatically with the
- *                      provided context.
  * @property iconName - The `"icon-name"` attribute is reflected as a property.
  * @property jslogContext - The `"jslogcontext"` attribute is reflected as a property.
+ * @attribute icon-name - The basename of the icon file (not including the `.svg`
+ *                   suffix).
+ * @attribute jslogcontext - The context for the `jslog` attribute. A `jslog`
+ *                      attribute is generated automatically with the
+ *                      provided context.
  */
 export class FloatingButton extends HTMLElement {
   static readonly observedAttributes = ['icon-name', 'jslogcontext'];
@@ -61,7 +61,7 @@ export class FloatingButton extends HTMLElement {
    * If you pass `null`, the `"icon-name"` attribute will be removed from this
    * element.
    *
-   * @param the - new icon name or `null` to unset.
+   * @param the new icon name or `null` to unset.
    */
   set iconName(iconName: string|null) {
     if (iconName === null) {
@@ -117,9 +117,9 @@ export class FloatingButton extends HTMLElement {
  * Helper function to programmatically create a `FloatingButton` instance with a
  * given `iconName` and `title`.
  *
- * @param iconName - the name of the icon to use
- * @param title - the tooltip for the `FloatingButton`
- * @param jslogContext - the context string for the `jslog` attribute
+ * @param iconName the name of the icon to use
+ * @param title the tooltip for the `FloatingButton`
+ * @param jslogContext the context string for the `jslog` attribute
  * @returns the newly created `FloatingButton` instance.
  */
 export const create = (iconName: string, title: string, jslogContext?: string): FloatingButton => {

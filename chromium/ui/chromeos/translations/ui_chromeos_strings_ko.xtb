@@ -35,6 +35,7 @@
 <translation id="1249250836236328755">장르</translation>
 <translation id="1254593899333212300">인터넷에 바로 연결</translation>
 <translation id="1272293450992660632">PIN 값이 일치하지 않습니다.</translation>
+<translation id="1279040297980392566">검색이 완료되기를 기다리는 중입니다. 나중에 다시 시도하세요.</translation>
 <translation id="1280820357415527819">모바일 네트워크 검색 중</translation>
 <translation id="1293556467332435079">파일</translation>
 <translation id="1297922636971898492">현재 Google Drive를 사용할 수 없습니다. Google Drive를 다시 사용할 수 있게 되면 자동으로 업로드가 다시 시작됩니다.</translation>
@@ -73,7 +74,7 @@
 <translation id="1577977504532381335">관리자 정책 검토</translation>
 <translation id="158849752021629804">홈 네크워크가 필요합니다.</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" />PB</translation>
-<translation id="1601786938618212857">우편번호</translation>
+<translation id="1601786938618212857">압축</translation>
 <translation id="1620510694547887537">카메라</translation>
 <translation id="162175252992296058">포르투갈어(미국 국제 키보드)</translation>
 <translation id="1629521517399325891">사용자 인증서를 네트워크 인증에 사용할 수 없습니다.</translation>
@@ -1078,6 +1079,7 @@
 <translation id="9213073329713032541">설치가 시작되었습니다.</translation>
 <translation id="9219103736887031265">이미지</translation>
 <translation id="9219908252191632183">달</translation>
+<translation id="931652069802536959">정책에 따라 네트워크가 차단됨</translation>
 <translation id="938470336146445890">사용자 인증서를 설치하세요.</translation>
 <translation id="939736085109172342">새 폴더</translation>
 <translation id="943972244133411984">수정한 사용자</translation>

@@ -45,6 +45,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/webauthn/passkey_upgrade_request_controller.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_controller.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
 #include "chrome/browser/webauthn/chrome_authenticator_request_delegate.h"
@@ -624,8 +625,6 @@ bool IsMechanismEnclaveCredential(
   return false;
 }
 
-// EnclaveAuthenticatorBrowserTest now inherits from
-// EnclaveAuthenticatorTestBase
 class EnclaveAuthenticatorBrowserTest : public EnclaveAuthenticatorTestBase {
  public:
   class DelegateObserver
@@ -638,11 +637,6 @@ class EnclaveAuthenticatorBrowserTest : public EnclaveAuthenticatorTestBase {
     void WaitForUI() {
       ui_shown_run_loop_->Run();
       ui_shown_run_loop_ = std::make_unique<base::RunLoop>();
-    }
-
-    void WaitForUIReady() {
-      ui_ready_run_loop_->Run();
-      ui_ready_run_loop_ = std::make_unique<base::RunLoop>();
     }
 
     void WaitForPreTransportAvailabilityEnumerated() {
@@ -736,8 +730,6 @@ class EnclaveAuthenticatorBrowserTest : public EnclaveAuthenticatorTestBase {
     bool on_transport_availability_enumerated_called_ = false;
     std::unique_ptr<base::RunLoop> ui_shown_run_loop_ =
         std::make_unique<base::RunLoop>();
-    std::unique_ptr<base::RunLoop> ui_ready_run_loop_ =
-        std::make_unique<base::RunLoop>();
     std::unique_ptr<base::RunLoop> pre_tai_run_loop_ =
         std::make_unique<base::RunLoop>();
     std::unique_ptr<base::RunLoop> destruction_run_loop_ =
@@ -787,6 +779,17 @@ class EnclaveAuthenticatorBrowserTest : public EnclaveAuthenticatorTestBase {
         CHECK_EQ(step_, model_->step());
       }
       Reset();
+    }
+
+    // This will return immediately if the step is not kNotStarted. Otherwise,
+    // it will wait for the next step, whichever it may be.
+    void WaitForStart() {
+      if (model_->step() !=
+          AuthenticatorRequestDialogModel::Step::kNotStarted) {
+        return;
+      }
+      ObserveNextStep();
+      WaitForStep();
     }
 
     // AuthenticatorRequestDialogModel::Observer:
@@ -912,6 +915,7 @@ class EnclaveAuthenticatorBrowserTest : public EnclaveAuthenticatorTestBase {
   std::unique_ptr<DelegateObserver> delegate_observer_;
   std::unique_ptr<ModelObserver> model_observer_;
   raw_ptr<ChromeAuthenticatorRequestDelegate> request_delegate_;
+  base::HistogramTester histogram_tester_;
 };
 
 // Parses the string resulting from the Javascript snippets that exercise the
@@ -996,8 +1000,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -1077,8 +1082,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest, MakeCredentialWithPrf) {
                         kMakeCredentialWithPrf, {kEval}, /*offsets=*/nullptr));
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   dialog_model()->OnGPMCreatePasskey();
   EXPECT_EQ(dialog_model()->step(),
             AuthenticatorRequestDialogModel::Step::kGPMCreatePin);
@@ -1104,9 +1110,10 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest, MakeCredentialWithPrf) {
                                       /*offsets=*/nullptr));
 
   delegate_observer()->WaitForUI();
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
   dialog_model()->OnGPMCreatePasskey();
 
   ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
@@ -1148,8 +1155,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest, GetAssertionWithPrf) {
                         kGetAssertionWithPrf, {kEval}, /*offsets=*/nullptr));
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -1209,8 +1217,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -1262,8 +1271,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kTrustThisComputerCreation);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kTrustThisComputerCreation);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -1310,8 +1320,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kTrustThisComputerCreation);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kTrustThisComputerCreation);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -1351,8 +1362,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -1382,8 +1394,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kTrustThisComputerCreation);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kTrustThisComputerCreation);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -1418,8 +1431,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialReturnId);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kTrustThisComputerCreation);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kTrustThisComputerCreation);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -1452,8 +1466,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
                                       {base::Base64Encode(*cred_id)},
                                       /*offsets=*/nullptr));
   delegate_observer()->WaitForUI();
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
 
   model_observer()->SetStepToObserve(
       AuthenticatorRequestDialogModel::Step::kGPMEnterPin);
@@ -1511,8 +1526,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kGetAssertionUvDiscouraged);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -1584,8 +1600,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -1603,8 +1620,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   model_observer()->SetStepToObserve(
       AuthenticatorRequestDialogModel::Step::kGPMEnterPin);
   dialog_model()->OnGPMCreatePasskey();
@@ -1631,8 +1649,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kGetAssertionUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
   model_observer()->SetStepToObserve(
       AuthenticatorRequestDialogModel::Step::kGPMEnterPin);
   dialog_model()->OnUserConfirmedPriorityMechanism();
@@ -1686,8 +1705,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -1714,6 +1734,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   // Checks that a following request goes straight to ready state.
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
   delegate_observer()->WaitForUI();
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   EXPECT_TRUE(IsReady(request_delegate()
                           ->enclave_controller_for_testing()
                           ->account_state_for_testing()));
@@ -1729,8 +1752,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest, UserCancelsUV) {
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -1749,8 +1773,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest, UserCancelsUV) {
   content::ExecuteScriptAsync(web_contents, kGetAssertionUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
   dialog_model()->OnUserConfirmedPriorityMechanism();
   ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
   EXPECT_EQ(script_result, "\"webauthn: OK\"");
@@ -1764,9 +1789,10 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest, UserCancelsUV) {
 
   content::ExecuteScriptAsync(web_contents, kGetAssertionUvRequired);
   delegate_observer()->WaitForUI();
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
   model_observer()->SetStepToObserve(
       AuthenticatorRequestDialogModel::Step::kClosed);
   dialog_model()->OnUserConfirmedPriorityMechanism();
@@ -1792,8 +1818,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::DOMMessageQueue message_queue(web_contents);
   content::ExecuteScriptAsync(web_contents, kGetAssertionConditionalUI);
   delegate_observer()->WaitForUI();
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kPasskeyAutofill);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kPasskeyAutofill);
+  model_observer()->WaitForStep();
 
   dialog_model()->OnAccountPreselectedIndex(0);
 
@@ -1830,8 +1857,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::DOMMessageQueue message_queue(web_contents);
   content::ExecuteScriptAsync(web_contents, kGetAssertionConditionalUI);
   delegate_observer()->WaitForUI();
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kPasskeyAutofill);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kPasskeyAutofill);
+  model_observer()->WaitForStep();
 
   model_observer()->SetStepToObserve(
       AuthenticatorRequestDialogModel::Step::kTrustThisComputerAssertion);
@@ -1859,8 +1887,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
 
   content::ExecuteScriptAsync(web_contents, kGetAssertionConditionalUI);
   delegate_observer()->WaitForUI();
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kPasskeyAutofill);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kPasskeyAutofill);
+  model_observer()->WaitForStep();
   // Not crashing here is success.
   dialog_model()->OnAccountPreselectedIndex(0);
 }
@@ -1885,8 +1914,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest, GpmEnclaveNeedsReauth) {
   delegate_observer()->WaitForUI();
 
   // The dialog should always jump to the mechanism selection for signin errors.
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kMechanismSelection);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kMechanismSelection);
+  model_observer()->WaitForStep();
   ASSERT_EQ(browser()->tab_strip_model()->GetTabCount(), 1);
 
   // No credentials should be displayed since tapping on them won't work.
@@ -2032,8 +2062,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -2060,8 +2091,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   dialog_model()->OnGPMCreatePasskey();
   EXPECT_EQ(dialog_model()->step(),
             AuthenticatorRequestDialogModel::Step::kGPMCreatePin);
@@ -2218,8 +2250,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest, EnrollAndCreate) {
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kTrustThisComputerCreation);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kTrustThisComputerCreation);
+  model_observer()->WaitForStep();
   EXPECT_TRUE(
       request_delegate()->enclave_controller_for_testing()->is_active());
   model_observer()->SetStepToObserve(
@@ -2250,8 +2283,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kGetAssertionUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -2348,6 +2382,7 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
         base::ReplaceStringPlaceholders(kMakeCredentialGoogle, {kSyncEmail},
                                         /*offsets=*/nullptr));
     delegate_observer()->WaitForUI();
+    model_observer_->WaitForStart();
     EXPECT_TRUE(
         std::ranges::none_of(dialog_model()->mechanisms, [](const auto& m) {
           return std::holds_alternative<
@@ -2372,6 +2407,7 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
                                                       {kSyncEmailLocalPartOnly},
                                                       /*offsets=*/nullptr));
     delegate_observer()->WaitForUI();
+    model_observer_->WaitForStart();
     EXPECT_TRUE(
         std::ranges::none_of(dialog_model()->mechanisms, [](const auto& m) {
           return std::holds_alternative<
@@ -2396,6 +2432,7 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
             kMakeCredentialGoogle, {std::string(kSyncEmail) + "_different"},
             /*offsets=*/nullptr));
     delegate_observer()->WaitForUI();
+    model_observer_->WaitForStart();
     EXPECT_FALSE(
         std::ranges::none_of(dialog_model()->mechanisms, [](const auto& m) {
           return std::holds_alternative<
@@ -2443,9 +2480,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::DOMMessageQueue message_queue(web_contents);
   content::ExecuteScriptAsync(web_contents, kGetAssertionCredId1);
   delegate_observer()->WaitForUI();
-
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
 
   // Only the first passkey should be included in the request.
   std::optional<int> found;
@@ -2479,9 +2516,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(
-      dialog_model()->step(),
+  model_observer()->SetStepToObserve(
       AuthenticatorRequestDialogModel::Step::kGPMConfirmOffTheRecordCreate);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -2516,9 +2553,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(
-      dialog_model()->step(),
+  model_observer()->SetStepToObserve(
       AuthenticatorRequestDialogModel::Step::kGPMConfirmOffTheRecordCreate);
+  model_observer()->WaitForStep();
   model_observer()->SetStepToObserve(
       AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
   dialog_model()->OnGPMConfirmOffTheRecordCreate();
@@ -2551,8 +2588,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kGetAssertionUvDiscouraged);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -2664,8 +2702,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveICloudRecoveryKeyTest, Enroll) {
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -2734,8 +2773,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveICloudRecoveryKeyTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -2790,8 +2830,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveICloudRecoveryKeyTest, DISABLED_Recovery) {
     content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
     delegate_observer()->WaitForUI();
 
-    EXPECT_EQ(dialog_model()->step(),
-              AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+    model_observer()->SetStepToObserve(
+        AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+    model_observer()->WaitForStep();
     EXPECT_EQ(request_delegate()
                   ->enclave_controller_for_testing()
                   ->account_state_for_testing(),
@@ -2879,9 +2920,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveICloudRecoveryKeyTest, DISABLED_Recovery) {
     content::ExecuteScriptAsync(web_contents, kMakeCredentialUvRequired);
     delegate_observer()->WaitForUI();
 
-    EXPECT_EQ(
-        dialog_model()->step(),
+    model_observer()->SetStepToObserve(
         AuthenticatorRequestDialogModel::Step::kTrustThisComputerCreation);
+    model_observer()->WaitForStep();
     EXPECT_EQ(request_delegate()
                   ->enclave_controller_for_testing()
                   ->account_state_for_testing(),
@@ -2934,8 +2975,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -2954,8 +2996,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   // priority mechanism for an attachment=platform request. Decline it.
   content::ExecuteScriptAsync(web_contents, kMakeCredentialAttachmentPlatform);
   delegate_observer()->WaitForUI();
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   model_observer()->SetStepToObserve(
       AuthenticatorRequestDialogModel::Step::kMechanismSelection);
   dialog_model()->StartOver();
@@ -2970,8 +3013,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   // Decline a second time.
   content::ExecuteScriptAsync(web_contents, kMakeCredentialAttachmentPlatform);
   delegate_observer()->WaitForUI();
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   model_observer()->SetStepToObserve(
       AuthenticatorRequestDialogModel::Step::kMechanismSelection);
   dialog_model()->StartOver();
@@ -2988,8 +3032,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   // passkey creation dialog.
   content::ExecuteScriptAsync(web_contents, kMakeCredentialAttachmentPlatform);
   delegate_observer()->WaitForUI();
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kMechanismSelection);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kMechanismSelection);
+  model_observer()->WaitForStep();
 
   // Now, select GPM from the list and complete the creation.
   dialog_model()->OnGPMSelected();
@@ -3012,8 +3057,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   // The next request should have GPM as the priority again.
   content::ExecuteScriptAsync(web_contents, kMakeCredentialAttachmentPlatform);
   delegate_observer()->WaitForUI();
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   dialog_model()->CancelAuthenticatorRequest();
   delegate_observer()->WaitForDelegateDestruction();
 }
@@ -3047,8 +3093,10 @@ IN_PROC_BROWSER_TEST_P(EnclaveAuthenticatorIncognitoBrowserTest,
   delegate_observer()->WaitForUI();
 
   // Enclave will be the priority mechanism. Select it.
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
+
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -3096,11 +3144,12 @@ IN_PROC_BROWSER_TEST_P(EnclaveAuthenticatorIncognitoBrowserTest,
 
   // Passkeys from GPM should still be present, but they should not be the
   // default.
+  model_observer_->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kMechanismSelection);
+  model_observer_->WaitForStep();
   EXPECT_TRUE(std::ranges::any_of(
       dialog_model()->mechanisms,
       [](const auto& m) { return IsMechanismEnclaveCredential(m); }));
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kMechanismSelection);
 
   // Finally, if the user manually chooses the enclave, it should be the default
   // again. Attempting to bootstrap should be enough.
@@ -3123,8 +3172,9 @@ IN_PROC_BROWSER_TEST_P(EnclaveAuthenticatorIncognitoBrowserTest,
   SetTrustedVaultRecoverable(kSecretVersion, rfh);
   content::ExecuteScriptAsync(web_contents, kGetAssertionUvRequired);
   delegate_observer()->WaitForUI();
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
 }
 
 INSTANTIATE_TEST_SUITE_P(Incognito,
@@ -3146,8 +3196,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvDiscouraged);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   dialog_model()->OnGPMCreatePasskey();
   EXPECT_EQ(dialog_model()->step(),
             AuthenticatorRequestDialogModel::Step::kGPMCreatePin);
@@ -3167,8 +3218,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   model_observer()->SetStepToObserve(
       AuthenticatorRequestDialogModel::Step::kGPMEnterPin);
   dialog_model()->OnGPMCreatePasskey();
@@ -3211,8 +3263,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kGetAssertionUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
   model_observer()->SetStepToObserve(
       AuthenticatorRequestDialogModel::Step::kGPMEnterPin);
   dialog_model()->OnUserConfirmedPriorityMechanism();
@@ -3268,8 +3321,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kGetAssertionUvPreferred);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -3297,8 +3351,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
 
   content::ExecuteScriptAsync(web_contents, kGetAssertionUvPreferred);
   delegate_observer()->WaitForUI();
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
   dialog_model()->OnUserConfirmedPriorityMechanism();
 
   ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
@@ -3310,12 +3365,14 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kGetAssertionUvPreferred);
   delegate_observer()->WaitForUI();
 #if BUILDFLAG(IS_MAC)
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMTouchID);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMTouchID);
+  model_observer()->WaitForStep();
   dialog_model()->OnTouchIDComplete(true);
 #else
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
   dialog_model()->OnUserConfirmedPriorityMechanism();
 #endif
 
@@ -3337,8 +3394,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest, Bug_354083161) {
   content::ExecuteScriptAsync(web_contents, kGetAssertionUvDiscouraged);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -3375,8 +3433,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest, Bug_354083161) {
           {base::Base64Encode(TestProtobufCredId())}, /*offsets=*/nullptr));
   delegate_observer()->WaitForUI();
 
-  ASSERT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
   dialog_model()->OnUserConfirmedPriorityMechanism();
 
   ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
@@ -3396,8 +3455,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest, NoSilentOperations) {
   content::ExecuteScriptAsync(web_contents, kGetAssertionUvDiscouraged);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -3440,8 +3500,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest, NoSilentOperations) {
 
   // The UI must not be, e.g., kGPMConnecting as that indicates that the
   // operation is happening without any UI.
-  ASSERT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
 }
 
 // Allows a `BlockingUnexportableKeyProvider` to block inside a thread-pool
@@ -3563,8 +3624,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest, SelectDeletedPasskey) {
   content::DOMMessageQueue message_queue(web_contents);
   content::ExecuteScriptAsync(web_contents, kGetAssertionConditionalUI);
   delegate_observer()->WaitForUI();
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kPasskeyAutofill);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kPasskeyAutofill);
+  model_observer()->WaitForStep();
 
   // Delete the credential during the request. Websites could do this through
   // the signal API, and users through the password manager.
@@ -3609,8 +3671,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialUvRequired);
   delegate_observer()->WaitForUI();
 
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   EXPECT_EQ(request_delegate()
                 ->enclave_controller_for_testing()
                 ->account_state_for_testing(),
@@ -3634,8 +3697,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
 
   content::ExecuteScriptAsync(web_contents, kGetAssertionUvRequired);
   delegate_observer()->WaitForUI();
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+  model_observer()->WaitForStep();
 
   // Wrap the enclave request invocation callback so that it can be delayed.
   base::test::TestFuture<std::unique_ptr<device::enclave::CredentialRequest>>
@@ -3673,6 +3737,7 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   // NB: We no longer have access to the original request_delegate() or
   // dialog_model().
   delegate_observer()->WaitForUI();
+  model_observer_->WaitForStart();
   dialog_model()->OnUserConfirmedPriorityMechanism();
 
   // Resume the first request.
@@ -3720,8 +3785,9 @@ class EnclaveAuthenticatorConditionalCreateBrowserTest
     content::ExecuteScriptAsync(web_contents, kMakeCredentialUvRequired);
     delegate_observer()->WaitForUI();
 
-    EXPECT_EQ(dialog_model()->step(),
-              AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+    model_observer()->SetStepToObserve(
+        AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+    model_observer()->WaitForStep();
     EXPECT_EQ(request_delegate()
                   ->enclave_controller_for_testing()
                   ->account_state_for_testing(),
@@ -3787,6 +3853,11 @@ IN_PROC_BROWSER_TEST_P(EnclaveAuthenticatorConditionalCreateBrowserTest,
       ParseCredentialId(script_result);
   EXPECT_TRUE(cred_id);
 
+  histogram_tester_.ExpectUniqueSample(
+      "WebAuthentication.AutomaticPasskeyUpgrade.Result",
+      /*sample=*/PasskeyUpgradeResult::kSuccess,
+      /*expected_bucket_count=*/1);
+
   // The request should not have instantiated non-enclave discoveries.
   ASSERT_TRUE(
       delegate_observer()->on_transport_availability_enumerated_called());
@@ -3812,6 +3883,11 @@ IN_PROC_BROWSER_TEST_P(EnclaveAuthenticatorConditionalCreateBrowserTest,
   std::string script_result;
   ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
   EXPECT_THAT(script_result, testing::HasSubstr("NotAllowedError"));
+
+  histogram_tester_.ExpectUniqueSample(
+      "WebAuthentication.AutomaticPasskeyUpgrade.Result",
+      /*sample=*/PasskeyUpgradeResult::kOptOut,
+      /*expected_bucket_count=*/1);
 }
 
 // Regression test for crbug.com/414750307.
@@ -3835,29 +3911,11 @@ IN_PROC_BROWSER_TEST_P(EnclaveAuthenticatorConditionalCreateBrowserTest,
   std::string script_result;
   ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
   EXPECT_THAT(script_result, testing::HasSubstr("NotAllowedError"));
-}
 
-// Regression test for crbug.com/414750307.
-IN_PROC_BROWSER_TEST_P(EnclaveAuthenticatorConditionalCreateBrowserTest,
-                       ConditionalCreate_FailsWithGPMPasskeysDisabledByPolicy) {
-  // Disabling GPM passkeys via policy should cause upgrade requests to fail.
-  browser()->profile()->GetPrefs()->SetBoolean(
-      password_manager::prefs::kCredentialsEnablePasskeys, false);
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL("www.example.com", "/title1.html")));
-
-  InjectPassword(base::Time::Now());
-
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  content::DOMMessageQueue message_queue(web_contents);
-  content::ExecuteScriptAsync(web_contents, kMakeCredentialConditionalCreate);
-  delegate_observer()->WaitForUI();
-
-  std::string script_result;
-  ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
-  EXPECT_THAT(script_result, testing::HasSubstr("NotAllowedError"));
+  histogram_tester_.ExpectUniqueSample(
+      "WebAuthentication.AutomaticPasskeyUpgrade.Result",
+      /*sample=*/PasskeyUpgradeResult::kGpmDisabled,
+      /*expected_bucket_count=*/1);
 }
 
 IN_PROC_BROWSER_TEST_P(EnclaveAuthenticatorConditionalCreateBrowserTest,
@@ -3876,6 +3934,11 @@ IN_PROC_BROWSER_TEST_P(EnclaveAuthenticatorConditionalCreateBrowserTest,
   std::string script_result;
   ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
   EXPECT_THAT(script_result, testing::HasSubstr("NotAllowedError"));
+
+  histogram_tester_.ExpectUniqueSample(
+      "WebAuthentication.AutomaticPasskeyUpgrade.Result",
+      /*sample=*/PasskeyUpgradeResult::kEnclaveNotInitialized,
+      /*expected_bucket_count=*/1);
 }
 
 IN_PROC_BROWSER_TEST_P(EnclaveAuthenticatorConditionalCreateBrowserTest,
@@ -3894,6 +3957,11 @@ IN_PROC_BROWSER_TEST_P(EnclaveAuthenticatorConditionalCreateBrowserTest,
   std::string script_result;
   ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
   EXPECT_THAT(script_result, testing::HasSubstr("NotAllowedError"));
+
+  histogram_tester_.ExpectUniqueSample(
+      "WebAuthentication.AutomaticPasskeyUpgrade.Result",
+      /*sample=*/PasskeyUpgradeResult::kNoMatchingPassword,
+      /*expected_bucket_count=*/1);
 }
 
 IN_PROC_BROWSER_TEST_P(EnclaveAuthenticatorConditionalCreateBrowserTest,
@@ -3922,12 +3990,24 @@ IN_PROC_BROWSER_TEST_P(EnclaveAuthenticatorConditionalCreateBrowserTest,
   ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
   EXPECT_THAT(script_result, testing::HasSubstr("NotAllowedError"));
 
+  histogram_tester_.ExpectUniqueSample(
+      "WebAuthentication.AutomaticPasskeyUpgrade.Result",
+      /*sample=*/PasskeyUpgradeResult::kNoMatchingPassword,
+      /*expected_bucket_count=*/1);
+
   // With an upgrade eligible password, we signal the exclude list match with an
   // InvalidStateError.
   InjectPassword(base::Time::Now());
   content::ExecuteScriptAsync(web_contents, script);
   ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
   EXPECT_THAT(script_result, testing::HasSubstr("InvalidStateError"));
+
+  // PasskeyUpgradeRequestController does not directly observe the authenticator
+  // request result, such as the authenticator error that indicates the exclude
+  // list match. Hence, no additional histogram value should have been emitted
+  // for the second request.
+  histogram_tester_.ExpectTotalCount(
+      "WebAuthentication.AutomaticPasskeyUpgrade.Result", 1);
 }
 
 class EnclaveAuthenticatorImmediateMediationBrowserTest
@@ -3941,7 +4021,6 @@ class EnclaveAuthenticatorImmediateMediationBrowserTest
 IN_PROC_BROWSER_TEST_F(
     EnclaveAuthenticatorImmediateMediationBrowserTest,
     GivenOnlyOneGpmPasskeyWithBiometricsEnabled_WhenImmediateRequestWithUv_TouchIdShown) {
-  base::HistogramTester histogram_tester;
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   content::DOMMessageQueue message_queue(web_contents);
@@ -3996,7 +4075,7 @@ IN_PROC_BROWSER_TEST_F(
   // At this point, step should be kGPMTouchID
   EXPECT_EQ(dialog_model()->step(),
             AuthenticatorRequestDialogModel::Step::kGPMTouchID);
-  histogram_tester.ExpectUniqueSample(
+  histogram_tester_.ExpectUniqueSample(
       "WebAuthentication.GetAssertion.Immediate.EnclaveReady",
       /*sample=*/true,
       /*expected_bucket_count=*/1);
@@ -4006,7 +4085,6 @@ IN_PROC_BROWSER_TEST_F(
 
 IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorImmediateMediationBrowserTest,
                        ImmediateRequest_EnclaveNotReady_NoPasskeys) {
-  base::HistogramTester histogram_tester;
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   content::DOMMessageQueue message_queue(web_contents);
@@ -4025,7 +4103,7 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorImmediateMediationBrowserTest,
   std::string script_result;
   ASSERT_TRUE(message_queue.WaitForMessage(&script_result));
   EXPECT_THAT(script_result, testing::HasSubstr("NotAllowedError"));
-  histogram_tester.ExpectUniqueSample(
+  histogram_tester_.ExpectUniqueSample(
       "WebAuthentication.GetAssertion.Immediate.EnclaveReady",
       /*sample=*/false,
       /*expected_bucket_count=*/1);
@@ -4044,8 +4122,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialLargeBlob);
 
   delegate_observer()->WaitForUI();
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   dialog_model()->OnGPMCreatePasskey();
   EXPECT_EQ(dialog_model()->step(),
             AuthenticatorRequestDialogModel::Step::kGPMCreatePin);
@@ -4059,8 +4138,6 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
                        GetAssertion_LargeBlobWriteThenRead) {
-  base::HistogramTester histogram_tester;
-
   // New empty vault.
   SetTrustedVaultEmpty();
 
@@ -4070,8 +4147,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   content::ExecuteScriptAsync(web_contents, kMakeCredentialLargeBlob);
 
   delegate_observer()->WaitForUI();
-  EXPECT_EQ(dialog_model()->step(),
-            AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->SetStepToObserve(
+      AuthenticatorRequestDialogModel::Step::kGPMCreatePasskey);
+  model_observer()->WaitForStep();
   dialog_model()->OnGPMCreatePasskey();
   EXPECT_EQ(dialog_model()->step(),
             AuthenticatorRequestDialogModel::Step::kGPMCreatePin);
@@ -4093,8 +4171,9 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
     // Wait for Chrome UI.
     delegate_observer()->WaitForUI();
 
-    EXPECT_EQ(dialog_model()->step(),
-              AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+    model_observer()->SetStepToObserve(
+        AuthenticatorRequestDialogModel::Step::kSelectPriorityMechanism);
+    model_observer()->WaitForStep();
     dialog_model()->OnUserConfirmedPriorityMechanism();
 
     // Collect the JS result.
@@ -4107,7 +4186,7 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   std::string write_js = base::ReplaceStringPlaceholders(
       kGetAssertionWriteLargeBlob, {cred_id_b64}, nullptr);
   EXPECT_EQ(run_get_and_confirm(write_js), "\"write ok\"");
-  histogram_tester.ExpectBucketCount(
+  histogram_tester_.ExpectBucketCount(
       "WebAuthentication.GPM.GetAssertion.LargeBlobSucceeded.Write",
       /*sample=*/true, /*expected_count=*/1);
 
@@ -4115,7 +4194,7 @@ IN_PROC_BROWSER_TEST_F(EnclaveAuthenticatorBrowserTest,
   std::string read_js = base::ReplaceStringPlaceholders(
       kGetAssertionReadLargeBlob, {cred_id_b64}, nullptr);
   EXPECT_EQ(run_get_and_confirm(read_js), "\"read hello world\"");
-  histogram_tester.ExpectBucketCount(
+  histogram_tester_.ExpectBucketCount(
       "WebAuthentication.GPM.GetAssertion.LargeBlobSucceeded.Read",
       /*sample=*/true, /*expected_count=*/1);
 
@@ -4145,6 +4224,7 @@ IN_PROC_BROWSER_TEST_F(EnclaveLargeBlobFlagOffTest,
   content::ExecuteScriptAsync(wc, kMakeCredentialLargeBlob);
 
   delegate_observer()->WaitForUI();
+  model_observer_->WaitForStart();
   dialog_model()->OnGPMCreatePasskey();
   dialog_model()->OnGPMPinEntered(u"123456");
 

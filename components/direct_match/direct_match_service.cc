@@ -3,6 +3,7 @@
 #include "direct_match_service.h"
 
 #include "base/barrier_callback.h"
+#include "base/containers/fixed_flat_set.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -17,8 +18,8 @@
 #include "base/values.h"
 #include "components/datasource/vivaldi_data_url_utils.h"
 
-#include "components/signature/vivaldi_signature.h"
 #include "chrome/browser/profiles/nuke_profile_directory_utils.h"
+#include "components/signature/vivaldi_signature.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -30,6 +31,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/datasource/vivaldi_image_store.h"
 #include "content/public/browser/storage_partition.h"
+
+using vivaldi_image_store::kDirectMatchImageDirectory;
 #else
 #include "ios/chrome/browser/shared/model/paths/paths.h"
 #endif
@@ -39,7 +42,7 @@
 #endif
 
 namespace direct_match {
-const std::set<std::string> blocker_extension_ids{
+constexpr auto kBlockerExtensionIds = base::MakeFixedFlatSet<std::string_view>({
     "cfhdojbkjhnklbpkdaibdccddilifddb",  // Adblock Plus
     "cjpalhdlnbpafiamejdnhcphjbkeiagm",  // uBlock Origin
     "bgnkhhnnamicmpeenaelnjfhikgbkllg",  // AGuard Plus
@@ -47,10 +50,14 @@ const std::set<std::string> blocker_extension_ids{
     "mlomiejdfkolichcflejclcbmpeaniij",  // Ghostery
     "ddkjiahejlhfcafbddmgiahcphecmpfh",  // uBlock Lite
     "pkehgijcmpdhfbdbbnkijodmdjhbjlgp"   // Privacy Badger
-};
+});
 
 namespace {
-const std::string kDirectMatchImageDirectory = "VivaldiDirectMatchIcons";
+#if BUILDFLAG(IS_IOS)
+constexpr std::string_view kDirectMatchImageDirectory =
+    "VivaldiDirectMatchIcons";
+#endif  // BUILDFLAG(IS_IOS)
+
 constexpr float kIncrementConstant = 0.28;
 constexpr int kMaxRequestSize = 2 * 1024 * 1024;
 constexpr net::BackoffEntry::Policy kBackoffPolicy = {
@@ -133,8 +140,8 @@ void DirectMatchService::Load(
 #else
 void DirectMatchService::Load(Profile* profile) {
   prefs_ = profile->GetPrefs();
-  user_data_dir_ = base::FilePath(profile->GetPath().Append(
-      vivaldi_image_store::kDirectMatchImageDirectory));
+  user_data_dir_ =
+      base::FilePath(profile->GetPath().Append(kDirectMatchImageDirectory));
 #if BUILDFLAG(IS_ANDROID)
   int dir_key = chrome::DIR_USER_DATA;
   // Use the determined directory key to get the user data directory.
@@ -576,7 +583,7 @@ void DirectMatchService::OnExtensionUnloaded(std::string id) {
 }
 
 void DirectMatchService::OnExtensionReady(std::string id) {
-  if (blocker_extension_ids.count(id) > 0) {
+  if (kBlockerExtensionIds.count(id) > 0) {
     installed_blocker_extension_ids_.insert(id);
   }
 }

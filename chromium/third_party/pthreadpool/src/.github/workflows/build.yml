@@ -25,7 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Update apt
-        run: sudo apt update
+        run: |
+          echo 'set man-db/auto-update false' | sudo debconf-communicate >/dev/null
+          sudo dpkg-reconfigure man-db
+          sudo apt update
       - name: Install ninja
         run: sudo apt install ninja-build
       - name: Setup ccache
@@ -53,7 +56,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Update apt
-        run: sudo apt update
+        run: |
+          echo 'set man-db/auto-update false' | sudo debconf-communicate >/dev/null
+          sudo dpkg-reconfigure man-db
+          sudo apt update
       - name: Install ninja
         run: sudo apt install ninja-build
       - name: Setup ccache
@@ -200,7 +206,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Update apt
-        run: sudo apt update
+        run: |
+          echo 'set man-db/auto-update false' | sudo debconf-communicate >/dev/null
+          sudo dpkg-reconfigure man-db
+          sudo apt update
       - name: Install ninja
         run: sudo apt install ninja-build
       - name: Setup Android NDK
@@ -280,7 +289,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Update apt
-        run: sudo apt update
+        run: |
+          echo 'set man-db/auto-update false' | sudo debconf-communicate >/dev/null
+          sudo dpkg-reconfigure man-db
+          sudo apt update
       - name: Install clang-18
         working-directory: ${{ github.workspace }}
         run: |
@@ -320,7 +332,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Update apt
-        run: sudo apt update
+        run: |
+          echo 'set man-db/auto-update false' | sudo debconf-communicate >/dev/null
+          sudo dpkg-reconfigure man-db
+          sudo apt update
       - name: Install clang-18
         working-directory: ${{ github.workspace }}
         run: |
@@ -363,7 +378,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Update apt
-        run: sudo apt update
+        run: |
+          echo 'set man-db/auto-update false' | sudo debconf-communicate >/dev/null
+          sudo dpkg-reconfigure man-db
+          sudo apt update
       - name: Install gcc-9
         working-directory: ${{ github.workspace }}
         run: |

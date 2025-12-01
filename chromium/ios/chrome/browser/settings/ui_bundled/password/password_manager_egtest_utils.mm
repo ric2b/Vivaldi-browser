@@ -11,7 +11,7 @@
 #import "ios/chrome/browser/settings/ui_bundled/password/password_settings/password_settings_constants.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/password_settings_app_interface.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/passwords_table_view_constants.h"
-#import "ios/chrome/browser/settings/ui_bundled/password/reauthentication/reauthentication_constants.h"
+#import "ios/chrome/browser/settings/ui_bundled/password/reauthentication/local_reauthentication_constants.h"
 #import "ios/chrome/browser/settings/ui_bundled/settings_root_table_constants.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -244,6 +244,16 @@ void SaveExamplePasskeyToStore(NSString* rpId,
                                                    userId:userId
                                                  username:username
                                           userDisplayName:userDisplayName];
+}
+
+void SaveHiddenPasskeyToStore(NSString* rpId,
+                              NSString* userId,
+                              NSString* username,
+                              NSString* userDisplayName) {
+  [PasswordSettingsAppInterface saveHiddenPasskeyToStore:rpId
+                                                  userId:userId
+                                                username:username
+                                         userDisplayName:userDisplayName];
 }
 
 #pragma mark - Helpers

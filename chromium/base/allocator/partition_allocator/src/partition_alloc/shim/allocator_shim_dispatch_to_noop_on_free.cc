@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "partition_alloc/shim/allocator_shim_dispatch_to_noop_on_free.h"
 
 #include <cstddef>
@@ -39,6 +34,7 @@ AllocatorDispatch allocator_dispatch = {
     nullptr,                     // alloc_function
     nullptr,                     // alloc_unchecked_function
     nullptr,                     // alloc_zero_initialized_function
+    nullptr,                     // alloc_zero_initialized_unchecked_function
     nullptr,                     // alloc_aligned_function
     nullptr,                     // realloc_function
     nullptr,                     // realloc_unchecked_function

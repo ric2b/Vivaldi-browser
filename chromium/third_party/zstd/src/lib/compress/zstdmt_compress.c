@@ -1008,18 +1008,20 @@ static void ZSTDMT_releaseAllJobResources(ZSTDMT_CCtx* mtctx)
 {
     unsigned jobID;
     DEBUGLOG(3, "ZSTDMT_releaseAllJobResources");
-    for (jobID=0; jobID <= mtctx->jobIDMask; jobID++) {
-        /* Copy the mutex/cond out */
-        ZSTD_pthread_mutex_t const mutex = mtctx->jobs[jobID].job_mutex;
-        ZSTD_pthread_cond_t const cond = mtctx->jobs[jobID].job_cond;
-
-        DEBUGLOG(4, "job%02u: release dst address %08X", jobID, (U32)(size_t)mtctx->jobs[jobID].dstBuff.start);
-        ZSTDMT_releaseBuffer(mtctx->bufPool, mtctx->jobs[jobID].dstBuff);
-
-        /* Clear the job description, but keep the mutex/cond */
-        ZSTD_memset(&mtctx->jobs[jobID], 0, sizeof(mtctx->jobs[jobID]));
-        mtctx->jobs[jobID].job_mutex = mutex;
-        mtctx->jobs[jobID].job_cond = cond;
+    if (mtctx->jobs) {
+        for (jobID=0; jobID <= mtctx->jobIDMask; jobID++) {
+            /* Copy the mutex/cond out */
+            ZSTD_pthread_mutex_t const mutex = mtctx->jobs[jobID].job_mutex;
+            ZSTD_pthread_cond_t const cond = mtctx->jobs[jobID].job_cond;
+            
+            DEBUGLOG(4, "job%02u: release dst address %08X", jobID, (U32)(size_t)mtctx->jobs[jobID].dstBuff.start);
+            ZSTDMT_releaseBuffer(mtctx->bufPool, mtctx->jobs[jobID].dstBuff);
+            
+            /* Clear the job description, but keep the mutex/cond */
+            ZSTD_memset(&mtctx->jobs[jobID], 0, sizeof(mtctx->jobs[jobID]));
+            mtctx->jobs[jobID].job_mutex = mutex;
+            mtctx->jobs[jobID].job_cond = cond;
+        }
     }
     mtctx->inBuff.buffer = g_nullBuffer;
     mtctx->inBuff.filled = 0;
@@ -1268,8 +1270,7 @@ size_t ZSTDMT_initCStream_internal(
 
     if (mtctx->allJobsCompleted == 0) {   /* previous compression not correctly finished */
         ZSTDMT_waitForAllJobsCompleted(mtctx);
-        ZSTDMT_releaseAllJobResources(mtctx);
-        mtctx->allJobsCompleted = 1;
+        ZSTDMT_releaseAllJobResources(mtctx); /* Will set allJobsCompleted to 1 */
     }
 
     mtctx->params = params;

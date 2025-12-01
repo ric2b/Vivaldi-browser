@@ -48,9 +48,10 @@ from .protocol import (BaseProtocolPart,
                        VirtualPressureSourceProtocolPart,
                        ProtectedAudienceProtocolPart,
                        DisplayFeaturesProtocolPart,
+                       GlobalPrivacyControlProtocolPart,
                        merge_dicts)
 
-from typing import Any, List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional
 from webdriver.client import Session
 from webdriver import error as webdriver_error
 from webdriver.bidi import error as webdriver_bidi_error
@@ -273,7 +274,7 @@ class WebDriverBidiBrowsingContextProtocolPart(BidiBrowsingContextProtocolPart):
 
 
 class WebDriverBidiEventsProtocolPart(BidiEventsProtocolPart):
-    _subscriptions: List[Tuple[List[str], Optional[List[str]]]] = []
+    _subscriptions: List[str] = []
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -312,15 +313,10 @@ class WebDriverBidiEventsProtocolPart(BidiEventsProtocolPart):
 
     async def subscribe(self, events, contexts):
         self.logger.info("Subscribing to events %s in %s" % (events, contexts))
-        # The BiDi subscriptions are done for top context even if the sub-context is provided. We need to get the
-        # top-level contexts list to handle the scenario when subscription is done for a sub-context which is closed
-        # afterwards. However, the subscription itself is done for the provided contexts in order to throw in case of
-        # the sub-context is removed.
-        top_contexts = await self._contexts_to_top_contexts(contexts)
         result = await self.webdriver.bidi_session.session.subscribe(events=events, contexts=contexts)
         # The `subscribe` method either raises an exception or adds subscription. The command is atomic, meaning in case
         # of exception no subscription is added.
-        self._subscriptions.append((events, top_contexts))
+        self._subscriptions.append(result["subscription"])
         return result
 
     async def unsubscribe(self, subscriptions):
@@ -331,10 +327,10 @@ class WebDriverBidiEventsProtocolPart(BidiEventsProtocolPart):
     async def unsubscribe_all(self):
         self.logger.info("Unsubscribing from all the events")
         while self._subscriptions:
-            events, contexts = self._subscriptions.pop()
-            self.logger.debug("Unsubscribing from events %s in %s" % (events, contexts))
+            subscription = self._subscriptions.pop()
+            self.logger.debug("Unsubscribing from event %s" % subscription)
             try:
-                await self.webdriver.bidi_session.session.unsubscribe(events=events, contexts=contexts)
+                await self.webdriver.bidi_session.session.unsubscribe(subscriptions=[subscription])
             except webdriver_bidi_error.NoSuchFrameException:
                 # The browsing context is already removed. Nothing to do.
                 pass
@@ -345,7 +341,7 @@ class WebDriverBidiEventsProtocolPart(BidiEventsProtocolPart):
                 else:
                     raise e
             except Exception as e:
-                self.logger.error("Failed to unsubscribe from events %s in %s: %s" % (events, contexts, e))
+                self.logger.error("Failed to unsubscribe from event %s: %s" % (subscription, e))
                 # Re-raise the exception to identify regressions.
                 # TODO: consider to continue the loop in case of the exception.
                 raise e
@@ -591,6 +587,107 @@ class WebDriverActionSequenceProtocolPart(ActionSequenceProtocolPart):
 class WebDriverTestDriverProtocolPart(TestDriverProtocolPart):
     def setup(self):
         self.webdriver = self.parent.webdriver
+
+    def run(self, url, script_resume, test_window=None):
+        # If protocol implements `bidi_events`, remove all the existing subscriptions.
+        if hasattr(self.parent, 'bidi_events'):
+            # Use protocol loop to run the async cleanup.
+            self.parent.loop.run_until_complete(self.parent.bidi_events.unsubscribe_all())
+
+        if test_window is None:
+            test_window = self.parent.base.current_window
+
+        # Exceptions occurred outside the main loop.
+        unexpected_exceptions = []
+
+        if hasattr(self.parent, 'bidi_events'):
+            # If protocol implements `bidi_events`, forward all the events to test_driver.
+            async def process_bidi_event(method, params):
+                try:
+                    self.logger.debug(f"Received bidi event: {method}, {params}")
+                    if hasattr(self.parent, 'bidi_browsing_context') and method == "browsingContext.userPromptOpened" and \
+                            params["context"] == test_window:
+                        # User prompts of the test window are handled separately. In classic
+                        # implementation, this user prompt always causes an exception when
+                        # `protocol.testdriver.get_next_message()` is called. In BiDi it's not the
+                        # case, as the BiDi protocol allows sending commands even with the user
+                        # prompt opened. However, the user prompt can block the testdriver JS
+                        # execution and cause a dead loop. To overcome this issue, the user prompt
+                        # of the test window is always dismissed and the test is failing.
+                        try:
+                            await self.parent.bidi_browsing_context.handle_user_prompt(params["context"])
+                        except Exception as e:
+                            if "no such alert" in str(e):
+                                # The user prompt is already dismissed by WebDriver BiDi server. Ignore the exception.
+                                pass
+                            else:
+                                # The exception is unexpected. Re-raising it to handle it in the main loop.
+                                raise e
+                        raise Exception("Unexpected user prompt in test window: %s" % params)
+                    else:
+                        self.send_message(-1, "event", method, json.dumps({
+                            "params": params,
+                            "method": method}))
+                except Exception as e:
+                    # As the event listener is async, the exceptions should be added to the list to be processed in the
+                    # main loop.
+                    self.logger.error("BiDi event processing failed: %s" % e)
+                    unexpected_exceptions.append(e)
+
+            self.parent.bidi_events.add_event_listener(None, process_bidi_event)
+            self.parent.loop.run_until_complete(self.parent.bidi_events.subscribe(['browsingContext.userPromptOpened'], None))
+
+        # If possible, support async actions.
+        if hasattr(self.parent, 'loop'):
+            handler = WebDriverAsyncCallbackHandler(self.logger, self.parent, test_window, self.parent.loop)
+        else:
+            handler = WebDriverCallbackHandler(self.logger, self.parent, test_window)
+
+        self.webdriver.url = url
+
+        while True:
+            if len(unexpected_exceptions) > 0:
+                # TODO: what to do if there are more then 1 unexpected exceptions?
+                raise unexpected_exceptions[0]
+
+            test_driver_message = self.get_next_message(url, script_resume, test_window)
+            self.logger.debug("Receive message from testdriver: %s" % test_driver_message)
+
+            # As of 2019-03-29, WebDriver does not define expected behavior for
+            # cases where the browser crashes during script execution:
+            #
+            # https://github.com/w3c/webdriver/issues/1308
+            if not isinstance(test_driver_message, list) or len(test_driver_message) != 3:
+                try:
+                    is_alive = self.parent.is_alive()
+                except webdriver_error.WebDriverException:
+                    is_alive = False
+                if not is_alive:
+                    raise Exception("Browser crashed during script execution.")
+
+            # In case of WebDriver Classic, a user prompt created after starting execution of the resume script will
+            # resolve the script with `null` [1, 2]. In that case, cycle this event loop and handle the prompt the next
+            # time the resume script executes.
+            #
+            # [1]: Step 5.3 of https://www.w3.org/TR/webdriver/#execute-async-script
+            # [2]: https://www.w3.org/TR/webdriver/#dfn-execute-a-function-body
+            if test_driver_message is None:
+                continue
+
+            done, rv = handler(test_driver_message)
+            if done:
+                break
+
+        # If protocol implements `bidi_events`, remove all the existing subscriptions.
+        if hasattr(self.parent, 'bidi_events'):
+            # Use protocol loop to run the async cleanup.
+            self.parent.loop.run_until_complete(self.parent.bidi_events.unsubscribe_all())
+
+        if len(unexpected_exceptions) > 0:
+            # TODO: what to do if there are more then 1 unexpected exceptions?
+            raise unexpected_exceptions[0]
+
+        return rv
 
     def get_next_message(self, url, script_resume, test_window):
         if hasattr(self.parent, "bidi_script"):
@@ -842,6 +939,17 @@ class WebDriverDisplayFeaturesProtocolPart(DisplayFeaturesProtocolPart):
     def clear_display_features(self):
         return self.webdriver.send_session_command("DELETE", "displayfeatures")
 
+class WebDriverGlobalPrivacyControlProtocolPart(GlobalPrivacyControlProtocolPart):
+    def setup(self):
+        self.webdriver = self.parent.webdriver
+
+    def set_global_privacy_control(self, gpc):
+        return self.webdriver.set_global_privacy_control(gpc)
+
+    def get_global_privacy_control(self):
+        return self.webdriver.get_global_privacy_control()
+
+
 class WebDriverProtocol(Protocol):
     enable_bidi = False
     implements = [WebDriverBaseProtocolPart,
@@ -867,7 +975,8 @@ class WebDriverProtocol(Protocol):
                   WebDriverStorageProtocolPart,
                   WebDriverVirtualPressureSourceProtocolPart,
                   WebDriverProtectedAudienceProtocolPart,
-                  WebDriverDisplayFeaturesProtocolPart]
+                  WebDriverDisplayFeaturesProtocolPart,
+                  WebDriverGlobalPrivacyControlProtocolPart]
 
     def __init__(self, executor, browser, capabilities, **kwargs):
         super().__init__(executor, browser)
@@ -1012,115 +1121,7 @@ class WebDriverRun(TimedRunner):
             self.result_flag.set()
 
 
-class TestDriverExecutorMixin:
-    def __init__(self, script_resume: str):
-        self.script_resume = script_resume
-
-    def run_testdriver(self, protocol, url, timeout):
-        # If protocol implements `bidi_events`, remove all the existing subscriptions.
-        if hasattr(protocol, 'bidi_events'):
-            # Use protocol loop to run the async cleanup.
-            protocol.loop.run_until_complete(protocol.bidi_events.unsubscribe_all())
-
-        test_window = self.get_or_create_test_window(protocol)
-        # Exceptions occurred outside the main loop.
-        unexpected_exceptions = []
-
-        if hasattr(protocol, 'bidi_events'):
-            # If protocol implements `bidi_events`, forward all the events to test_driver.
-            async def process_bidi_event(method, params):
-                try:
-                    self.logger.debug(f"Received bidi event: {method}, {params}")
-                    if hasattr(protocol, 'bidi_browsing_context') and method == "browsingContext.userPromptOpened" and \
-                            params["context"] == test_window:
-                        # User prompts of the test window are handled separately. In classic
-                        # implementation, this user prompt always causes an exception when
-                        # `protocol.testdriver.get_next_message()` is called. In BiDi it's not the
-                        # case, as the BiDi protocol allows sending commands even with the user
-                        # prompt opened. However, the user prompt can block the testdriver JS
-                        # execution and cause a dead loop. To overcome this issue, the user prompt
-                        # of the test window is always dismissed and the test is failing.
-                        try:
-                            await protocol.bidi_browsing_context.handle_user_prompt(params["context"])
-                        except Exception as e:
-                            if "no such alert" in str(e):
-                                # The user prompt is already dismissed by WebDriver BiDi server. Ignore the exception.
-                                pass
-                            else:
-                                # The exception is unexpected. Re-raising it to handle it in the main loop.
-                                raise e
-                        raise Exception("Unexpected user prompt in test window: %s" % params)
-                    else:
-                        protocol.testdriver.send_message(-1, "event", method, json.dumps({
-                            "params": params,
-                            "method": method}))
-                except Exception as e:
-                    # As the event listener is async, the exceptions should be added to the list to be processed in the
-                    # main loop.
-                    self.logger.error("BiDi event processing failed: %s" % e)
-                    unexpected_exceptions.append(e)
-
-            protocol.bidi_events.add_event_listener(None, process_bidi_event)
-            protocol.loop.run_until_complete(protocol.bidi_events.subscribe(['browsingContext.userPromptOpened'], None))
-
-        # If possible, support async actions.
-        if hasattr(protocol, 'loop'):
-            handler = WebDriverAsyncCallbackHandler(self.logger, protocol, test_window, protocol.loop)
-        else:
-            handler = WebDriverCallbackHandler(self.logger, protocol, test_window)
-
-        protocol.webdriver.url = url
-
-        while True:
-            if len(unexpected_exceptions) > 0:
-                # TODO: what to do if there are more then 1 unexpected exceptions?
-                raise unexpected_exceptions[0]
-
-            test_driver_message = protocol.testdriver.get_next_message(url, self.script_resume,
-                                                                       test_window)
-            self.logger.debug("Receive message from testdriver: %s" % test_driver_message)
-
-            # As of 2019-03-29, WebDriver does not define expected behavior for
-            # cases where the browser crashes during script execution:
-            #
-            # https://github.com/w3c/webdriver/issues/1308
-            if not isinstance(test_driver_message, list) or len(test_driver_message) != 3:
-                try:
-                    is_alive = protocol.is_alive()
-                except webdriver_error.WebDriverException:
-                    is_alive = False
-                if not is_alive:
-                    raise Exception("Browser crashed during script execution.")
-
-            # In case of WebDriver Classic, a user prompt created after starting execution of the resume script will
-            # resolve the script with `null` [1, 2]. In that case, cycle this event loop and handle the prompt the next
-            # time the resume script executes.
-            #
-            # [1]: Step 5.3 of https://www.w3.org/TR/webdriver/#execute-async-script
-            # [2]: https://www.w3.org/TR/webdriver/#dfn-execute-a-function-body
-            if test_driver_message is None:
-                continue
-
-            done, rv = handler(test_driver_message)
-            if done:
-                break
-
-        # If protocol implements `bidi_events`, remove all the existing subscriptions.
-        if hasattr(protocol, 'bidi_events'):
-            # Use protocol loop to run the async cleanup.
-            protocol.loop.run_until_complete(protocol.bidi_events.unsubscribe_all())
-
-        if len(unexpected_exceptions) > 0:
-            # TODO: what to do if there are more then 1 unexpected exceptions?
-            raise unexpected_exceptions[0]
-
-        return rv
-
-    def get_or_create_test_window(self, protocol):
-        return protocol.base.current_window
-
-
-class WebDriverTestharnessExecutor(TestharnessExecutor, TestDriverExecutorMixin):
+class WebDriverTestharnessExecutor(TestharnessExecutor):
     supports_testdriver = True
     protocol_cls = WebDriverProtocol
 
@@ -1133,8 +1134,7 @@ class WebDriverTestharnessExecutor(TestharnessExecutor, TestDriverExecutorMixin)
                                      debug_info=debug_info)
         self.protocol = self.protocol_cls(self, browser, capabilities)
         with open(os.path.join(here, "testharness_webdriver_resume.js")) as f:
-            script_resume = f.read()
-        TestDriverExecutorMixin.__init__(self, script_resume)
+            self.script_resume = f.read()
         with open(os.path.join(here, "window-loaded.js")) as f:
             self.window_loaded_script = f.read()
 
@@ -1177,6 +1177,8 @@ class WebDriverTestharnessExecutor(TestharnessExecutor, TestDriverExecutorMixin)
             # The previous test may not have closed its old windows (if something
             # went wrong or if cleanup_after_test was False), so clean up here.
             protocol.testharness.close_old_windows()
+
+            test_window = self.create_test_window(protocol)
             # Restore the window to the initial position
             if self.initial_window_size:
                 try:
@@ -1184,7 +1186,7 @@ class WebDriverTestharnessExecutor(TestharnessExecutor, TestDriverExecutorMixin)
                 except Exception:
                     pass
 
-            raw_results = self.run_testdriver(protocol, url, timeout)
+            raw_results = protocol.testdriver.run(url, self.script_resume, test_window)
             extra = {}
             if counters := self._check_for_leaks(protocol):
                 extra["leak_counters"] = counters
@@ -1213,7 +1215,7 @@ class WebDriverTestharnessExecutor(TestharnessExecutor, TestDriverExecutorMixin)
         finally:
             protocol.base.set_window(protocol.testharness.runner_handle)
 
-    def get_or_create_test_window(self, protocol):
+    def create_test_window(self, protocol):
         test_window = protocol.base.create_window()
         protocol.base.set_window(test_window)
         # Wait until about:blank has been loaded
@@ -1221,7 +1223,7 @@ class WebDriverTestharnessExecutor(TestharnessExecutor, TestDriverExecutorMixin)
         return test_window
 
 
-class WebDriverRefTestExecutor(RefTestExecutor, TestDriverExecutorMixin):
+class WebDriverRefTestExecutor(RefTestExecutor):
     protocol_cls = WebDriverProtocol
     supports_testdriver = True
 
@@ -1247,8 +1249,7 @@ class WebDriverRefTestExecutor(RefTestExecutor, TestDriverExecutorMixin):
         self.debug_test = debug_test
 
         with open(os.path.join(here, "test-wait.js")) as f:
-            wait_script = f.read() % {"classname": "reftest-wait"}
-        TestDriverExecutorMixin.__init__(self, wait_script)
+            self.wait_script = f.read() % {"classname": "reftest-wait"}
 
     def reset(self):
         self.implementation.reset()
@@ -1295,7 +1296,7 @@ class WebDriverRefTestExecutor(RefTestExecutor, TestDriverExecutorMixin):
     def _screenshot(self, protocol, url, timeout):
         # There's nothing we want from the "complete" message, so discard the
         # return value.
-        self.run_testdriver(protocol, url, timeout)
+        protocol.testdriver.run(url, self.wait_script)
 
         screenshot = self.protocol.webdriver.screenshot()
         if screenshot is None:
@@ -1342,7 +1343,7 @@ class WebDriverPrintRefTestExecutor(WebDriverRefTestExecutor):
     def _render(self, protocol, url, timeout):
         # There's nothing we want from the "complete" message, so discard the
         # return value.
-        self.run_testdriver(protocol, url, timeout)
+        protocol.testdriver.run(url, self.wait_script)
 
         pdf = protocol.pdf_print.render_as_pdf(*self.viewport_size)
         screenshots = protocol.pdf_print.pdf_to_png(pdf, self.page_ranges)
@@ -1354,7 +1355,7 @@ class WebDriverPrintRefTestExecutor(WebDriverRefTestExecutor):
         return screenshots
 
 
-class WebDriverCrashtestExecutor(CrashtestExecutor, TestDriverExecutorMixin):
+class WebDriverCrashtestExecutor(CrashtestExecutor):
     protocol_cls = WebDriverProtocol
     supports_testdriver = True
 
@@ -1374,8 +1375,7 @@ class WebDriverCrashtestExecutor(CrashtestExecutor, TestDriverExecutorMixin):
                                           capabilities=capabilities)
 
         with open(os.path.join(here, "test-wait.js")) as f:
-            wait_script = f.read() % {"classname": "test-wait"}
-        TestDriverExecutorMixin.__init__(self, wait_script)
+            self.wait_script = f.read() % {"classname": "test-wait"}
 
     def do_test(self, test):
         timeout = (test.timeout * self.timeout_multiplier if self.debug_info is None
@@ -1396,7 +1396,7 @@ class WebDriverCrashtestExecutor(CrashtestExecutor, TestDriverExecutorMixin):
     def do_crashtest(self, protocol, url, timeout):
         # There's nothing we want from the "complete" message, so discard the
         # return value.
-        self.run_testdriver(protocol, url, timeout)
+        protocol.testdriver.run(url, self.wait_script)
         result = {"status": "PASS", "message": None}
         if (leak_part := getattr(protocol, "leak", None)) and (counters := leak_part.check()):
             result["extra"] = {"leak_counters": counters}

@@ -36,7 +36,8 @@ DistilledPagePrefs::DistilledPagePrefs(PrefService* pref_service)
   pref_change_registrar_.Add(
       prefs::kTheme,
       base::BindRepeating(&DistilledPagePrefs::NotifyOnChangeTheme,
-                          weak_ptr_factory_.GetWeakPtr()));
+                          weak_ptr_factory_.GetWeakPtr(),
+                          ThemeSettingsUpdateSource::kUserPreference));
   pref_change_registrar_.Add(
       prefs::kFontScale,
       base::BindRepeating(&DistilledPagePrefs::NotifyOnChangeFontScaling,
@@ -76,17 +77,22 @@ mojom::FontFamily DistilledPagePrefs::GetFontFamily() {
 }
 
 void DistilledPagePrefs::SetUserPrefTheme(mojom::Theme new_theme) {
+  if (static_cast<mojom::Theme>(pref_service_->GetInteger(prefs::kTheme)) ==
+      new_theme) {
+    return;
+  }
   pref_service_->SetInteger(prefs::kTheme, static_cast<int32_t>(new_theme));
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&DistilledPagePrefs::NotifyOnChangeTheme,
-                                weak_ptr_factory_.GetWeakPtr()));
 }
 
 void DistilledPagePrefs::SetDefaultTheme(mojom::Theme default_theme) {
+  if (default_theme_ == default_theme) {
+    return;
+  }
   default_theme_ = default_theme;
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&DistilledPagePrefs::NotifyOnChangeTheme,
-                                weak_ptr_factory_.GetWeakPtr()));
+                                weak_ptr_factory_.GetWeakPtr(),
+                                ThemeSettingsUpdateSource::kSystem));
 }
 
 mojom::Theme DistilledPagePrefs::GetTheme() {
@@ -94,7 +100,7 @@ mojom::Theme DistilledPagePrefs::GetTheme() {
   if (pref_service_->FindPreference(prefs::kTheme)->HasUserSetting()) {
     theme = static_cast<mojom::Theme>(pref_service_->GetInteger(prefs::kTheme));
   } else {
-    theme = default_theme_.value_or(mojom::Theme::kLight);
+    theme = default_theme_;
   }
   if (mojom::IsKnownEnumValue(theme))
     return theme;
@@ -105,19 +111,37 @@ mojom::Theme DistilledPagePrefs::GetTheme() {
   return mojom::Theme::kLight;
 }
 
-void DistilledPagePrefs::SetFontScaling(float scaling) {
+void DistilledPagePrefs::SetUserPrefFontScaling(float scaling) {
   pref_service_->SetDouble(prefs::kFontScale, scaling);
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&DistilledPagePrefs::NotifyOnChangeFontScaling,
                                 weak_ptr_factory_.GetWeakPtr()));
 }
 
+void DistilledPagePrefs::SetDefaultFontScaling(float scaling) {
+  // Default zoom level pref is outside of the distilled page prefs font
+  // scaling range, so set it to the closest boundary.
+  default_font_scaling_ = std::clamp(scaling, kMinFontScale, kMaxFontScale);
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&DistilledPagePrefs::NotifyOnChangeFontScaling,
+                                weak_ptr_factory_.GetWeakPtr()));
+}
+
 float DistilledPagePrefs::GetFontScaling() {
-  float scaling = pref_service_->GetDouble(prefs::kFontScale);
+  float scaling;
+  if (pref_service_->FindPreference(prefs::kFontScale)->HasUserSetting()) {
+    scaling = pref_service_->GetDouble(prefs::kFontScale);
+  } else {
+#if BUILDFLAG(IS_ANDROID)
+    scaling = default_font_scaling_;
+#else
+    scaling = kDefaultFontScale;
+#endif
+  }
   if (scaling < kMinFontScale || scaling > kMaxFontScale) {
     // Persisted data was incorrect, trying to clean it up by storing the
     // default.
-    SetFontScaling(kDefaultFontScale);
+    SetUserPrefFontScaling(kDefaultFontScale);
     return kDefaultFontScale;
   }
   return scaling;
@@ -137,10 +161,11 @@ void DistilledPagePrefs::NotifyOnChangeFontFamily() {
     observer.OnChangeFontFamily(new_font_family);
 }
 
-void DistilledPagePrefs::NotifyOnChangeTheme() {
+void DistilledPagePrefs::NotifyOnChangeTheme(
+    ThemeSettingsUpdateSource source) {
   mojom::Theme new_theme = GetTheme();
   for (Observer& observer : observers_)
-    observer.OnChangeTheme(new_theme);
+    observer.OnChangeTheme(new_theme, source);
 }
 
 void DistilledPagePrefs::NotifyOnChangeFontScaling() {

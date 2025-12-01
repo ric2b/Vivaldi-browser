@@ -70,14 +70,11 @@ TEST(Tokenizer, IntegerNoSpace) {
 }
 
 TEST(Tokenizer, String) {
-  TokenExpectation strings[] = {
-      {Token::STRING, "\"foo\""},
-      {Token::STRING, "\"bar\\\"baz\""},
-      {Token::STRING, "\"asdf\\\\\""},
-      {Token::STRING, "\"new\nline\""},
-  };
-  EXPECT_TRUE(CheckTokenizer(
-      "  \"foo\" \"bar\\\"baz\" \"asdf\\\\\" \"new\nline\"", strings));
+  TokenExpectation strings[] = {{Token::STRING, "\"foo\""},
+                                {Token::STRING, "\"bar\\\"baz\""},
+                                {Token::STRING, "\"asdf\\\\\""}};
+  EXPECT_TRUE(
+      CheckTokenizer("  \"foo\" \"bar\\\"baz\" \"asdf\\\\\" ", strings));
 }
 
 TEST(Tokenizer, Operator) {

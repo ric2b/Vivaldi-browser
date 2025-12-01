@@ -9,6 +9,7 @@
 #ifndef CALENDAR_EVENT_TEMPLATE_TYPE_H_
 #define CALENDAR_EVENT_TEMPLATE_TYPE_H_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 

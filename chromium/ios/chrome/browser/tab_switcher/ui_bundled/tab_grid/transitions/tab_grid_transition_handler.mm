@@ -22,14 +22,23 @@
   TabGridTransitionType _transitionType;
   TabGridTransitionDirection _direction;
 
-  UIViewController<TabGridTransitionLayoutProviding>* _tabGridViewController;
+  UIViewController* _tabGridViewController;
   UIViewController* _BVCContainerViewController;
+
+  // Transition layout provider for the tab grid.
+  id<TabGridTransitionLayoutProviding> _tabGridTransitionLayoutProvider;
 
   // Transition item for the selected cell in tab grid.
   TabGridTransitionItem* _tabGridCellItem;
 
   // The view controller of the currently active tab grid.
   UIViewController* _activeGrid;
+
+  // The view controller of the pinned tabs.
+  UIViewController* _pinnedTabsViewController;
+
+  // Whether the active cell if from a pinned tab.
+  BOOL _activeCellPinned;
 
   // The tab grid transition animation to be performed.
   id<TabGridTransitionAnimation> _animation;
@@ -41,34 +50,37 @@
   BOOL _isRegularBrowserNTP;
 
   // Whether the transition is for an incognito tab.
-  BOOL _isIncognito;
+  BOOL _incognito;
 }
 
 #pragma mark - Public
 
 - (instancetype)initWithTransitionType:(TabGridTransitionType)transitionType
                              direction:(TabGridTransitionDirection)direction
-                 tabGridViewController:
-                     (UIViewController<TabGridTransitionLayoutProviding>*)
-                         tabGridViewController
+       tabGridTransitionLayoutProvider:
+           (id<TabGridTransitionLayoutProviding>)tabGridTransitionLayoutProvider
+                 tabGridViewController:(UIViewController*)tabGridViewController
             bvcContainerViewController:
                 (UIViewController*)bvcContainerViewController
                      layoutGuideCenter:(LayoutGuideCenter*)layoutGuideCenter
                    isRegularBrowserNTP:(BOOL)isRegularBrowserNTP
-                           isIncognito:(BOOL)isIncognito {
+                             incognito:(BOOL)incognito {
   self = [super init];
   if (self) {
-    CHECK(tabGridViewController.transitionLayout);
-
+    TabGridTransitionLayout* transitionLayout = [tabGridTransitionLayoutProvider
+        transitionLayoutForIsIncognito:incognito];
     _transitionType = transitionType;
     _direction = direction;
+    _tabGridTransitionLayoutProvider = tabGridTransitionLayoutProvider;
     _tabGridViewController = tabGridViewController;
     _BVCContainerViewController = bvcContainerViewController;
-    _tabGridCellItem = tabGridViewController.transitionLayout.activeCell;
-    _activeGrid = tabGridViewController.transitionLayout.activeGrid;
+    _tabGridCellItem = transitionLayout.activeCell;
+    _activeGrid = transitionLayout.activeGrid;
+    _pinnedTabsViewController = transitionLayout.pinnedTabs;
+    _activeCellPinned = transitionLayout.isActiveCellPinned;
     _layoutGuideCenter = layoutGuideCenter;
     _isRegularBrowserNTP = isRegularBrowserNTP;
-    _isIncognito = isIncognito;
+    _incognito = incognito;
   }
   return self;
 }
@@ -216,12 +228,22 @@
           ? _BVCContainerViewController.view.frame
           : _tabGridCellItem.originalFrame;
 
-  switch (_transitionType) {
+  // The animation is ugly or crashes when the selected cell is not visible.
+  TabGridTransitionType transitionType = _transitionType;
+  if (!_tabGridTransitionLayoutProvider.isSelectedCellVisible) {
+    transitionType = TabGridTransitionType::kReducedMotion;
+  }
+
+  switch (transitionType) {
     case TabGridTransitionType::kNormal:
+      CHECK(_tabGridCellItem);
+
       return [[TabGridAnimationParameters alloc]
            initWithDestinationFrame:destinationFrame
                         originFrame:originFrame
                          activeGrid:_activeGrid
+                         pinnedTabs:_pinnedTabsViewController
+                   activeCellPinned:_activeCellPinned
                        animatedView:_BVCContainerViewController.view
                     contentSnapshot:_tabGridCellItem.snapshot
                    topToolbarHeight:topToolbarHeight
@@ -233,7 +255,7 @@
               [self snapshotOfViewPortionBelowRect:tabContentView
                                         middleRect:contentAreaFrame]
               shouldScaleTopToolbar:scaleTopToolbar
-                        isIncognito:_isIncognito];
+                          incognito:_incognito];
     case TabGridTransitionType::kReducedMotion:
       // TODO(crbug.com/414807974): Handle reduced motion.
       return nil;

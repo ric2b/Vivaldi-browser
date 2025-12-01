@@ -288,6 +288,9 @@ class PLATFORM_EXPORT ResourceFetcher
   // If `skip_service_worker` is true, the identifier won't be a ServiceWorker's
   // identifier to keep the cache separated.
   String GetCacheIdentifier(const KURL& url, bool skip_service_worker) const;
+  String GetCacheIdentifier(ResourceType type,
+                            const KURL& url,
+                            bool skip_service_worker) const;
 
   // If `url` exists as a resource in a subresource bundle in this frame,
   // returns its UnguessableToken; otherwise, returns std::nullopt.
@@ -384,7 +387,7 @@ class PLATFORM_EXPORT ResourceFetcher
   // changed such that the load should no longer be deferred.
   void ReloadImagesIfNotDeferred();
 
-  void MaybeStartSpeculativeImageDecode();
+  void StartSpeculativeImageDecodes();
 
   // Populates the provided request's permissions policy.
   void PopulateResourceRequestPermissionsPolicy(
@@ -499,8 +502,6 @@ class PLATFORM_EXPORT ResourceFetcher
 
   void MaybeSaveResourceToStrongReference(Resource* resource);
 
-  void SpeculativeImageDecodeFinished();
-
   enum class RevalidationPolicy {
     kUse,
     kRevalidate,
@@ -612,6 +613,10 @@ class PLATFORM_EXPORT ResourceFetcher
       bool handled_by_serviceworker,
       const blink::ServiceWorkerRouterInfo* router_info);
 
+  void RecordResourceHistogram(std::string_view prefix,
+                               ResourceType type,
+                               RevalidationPolicyForMetrics policy) const;
+
   void ScheduleLoadingPotentiallyUnusedPreload(Resource*);
   void StartLoadAndFinishIfFailed(Resource*,
                                   bool is_potentially_unused_preload);
@@ -718,16 +723,8 @@ class PLATFORM_EXPORT ResourceFetcher
 
   SubresourceLoadMetrics subresource_load_metrics_;
 
-  // Number of of not-small images that get a priority boost.
-  // TODO(http://crbug.com/1431169): change this to a const after the
-  // feature flag is removed.
-  uint32_t boosted_image_target_ = 0;
-
   // Number of images that have had their priority boosted by heuristics.
   uint32_t boosted_image_count_ = 0;
-
-  // Area (in pixels) below which an image is considered "small"
-  uint32_t small_image_max_size_ = 0;
 
   // Number of resources that have had their priority boosted based on LCPP
   // signals.

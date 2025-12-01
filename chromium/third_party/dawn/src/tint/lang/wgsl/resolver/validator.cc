@@ -29,7 +29,6 @@
 
 #include <algorithm>
 #include <bitset>
-#include <limits>
 #include <string_view>
 #include <tuple>
 #include <utility>
@@ -38,8 +37,6 @@
 #include "src/tint/lang/core/type/abstract_numeric.h"
 #include "src/tint/lang/core/type/atomic.h"
 #include "src/tint/lang/core/type/binding_array.h"
-#include "src/tint/lang/core/type/depth_multisampled_texture.h"
-#include "src/tint/lang/core/type/depth_texture.h"
 #include "src/tint/lang/core/type/i8.h"
 #include "src/tint/lang/core/type/input_attachment.h"
 #include "src/tint/lang/core/type/multisampled_texture.h"
@@ -54,31 +51,23 @@
 #include "src/tint/lang/wgsl/ast/alias.h"
 #include "src/tint/lang/wgsl/ast/assignment_statement.h"
 #include "src/tint/lang/wgsl/ast/blend_src_attribute.h"
-#include "src/tint/lang/wgsl/ast/break_statement.h"
 #include "src/tint/lang/wgsl/ast/call_statement.h"
-#include "src/tint/lang/wgsl/ast/continue_statement.h"
-#include "src/tint/lang/wgsl/ast/disable_validation_attribute.h"
-#include "src/tint/lang/wgsl/ast/discard_statement.h"
 #include "src/tint/lang/wgsl/ast/for_loop_statement.h"
 #include "src/tint/lang/wgsl/ast/id_attribute.h"
-#include "src/tint/lang/wgsl/ast/if_statement.h"
-#include "src/tint/lang/wgsl/ast/internal_attribute.h"
 #include "src/tint/lang/wgsl/ast/interpolate_attribute.h"
-#include "src/tint/lang/wgsl/ast/loop_statement.h"
 #include "src/tint/lang/wgsl/ast/return_statement.h"
 #include "src/tint/lang/wgsl/ast/switch_statement.h"
 #include "src/tint/lang/wgsl/ast/traverse_expressions.h"
-#include "src/tint/lang/wgsl/ast/unary_op_expression.h"
 #include "src/tint/lang/wgsl/ast/variable_decl_statement.h"
 #include "src/tint/lang/wgsl/ast/workgroup_attribute.h"
 #include "src/tint/lang/wgsl/sem/array.h"
 #include "src/tint/lang/wgsl/sem/break_if_statement.h"
+#include "src/tint/lang/wgsl/sem/builtin_fn.h"
 #include "src/tint/lang/wgsl/sem/call.h"
 #include "src/tint/lang/wgsl/sem/for_loop_statement.h"
 #include "src/tint/lang/wgsl/sem/function.h"
 #include "src/tint/lang/wgsl/sem/if_statement.h"
 #include "src/tint/lang/wgsl/sem/loop_statement.h"
-#include "src/tint/lang/wgsl/sem/materialize.h"
 #include "src/tint/lang/wgsl/sem/member_accessor_expression.h"
 #include "src/tint/lang/wgsl/sem/statement.h"
 #include "src/tint/lang/wgsl/sem/struct.h"
@@ -87,15 +76,9 @@
 #include "src/tint/lang/wgsl/sem/value_conversion.h"
 #include "src/tint/lang/wgsl/sem/variable.h"
 #include "src/tint/lang/wgsl/sem/while_statement.h"
-#include "src/tint/utils/containers/map.h"
-#include "src/tint/utils/containers/reverse.h"
-#include "src/tint/utils/containers/transform.h"
 #include "src/tint/utils/internal_limits.h"
-#include "src/tint/utils/macros/defer.h"
-#include "src/tint/utils/macros/scoped_assignment.h"
 #include "src/tint/utils/math/math.h"
 #include "src/tint/utils/text/string.h"
-#include "src/tint/utils/text/string_stream.h"
 #include "src/tint/utils/text/styled_text.h"
 #include "src/tint/utils/text/text_style.h"
 
@@ -247,8 +230,8 @@ bool Validator::IsPlain(const core::type::Type* type) const {
 
 // https://gpuweb.github.io/gpuweb/wgsl.html#storable-types
 bool Validator::IsStorable(const core::type::Type* type) const {
-    return IsPlain(type) ||
-           type->IsAnyOf<core::type::BindingArray, core::type::Texture, core::type::Sampler>();
+    return IsPlain(type) || type->IsAnyOf<core::type::BindingArray, core::type::ResourceBinding,
+                                          core::type::Texture, core::type::Sampler>();
 }
 
 const ast::Statement* Validator::ClosestContinuing(bool stop_at_loop,
@@ -464,6 +447,18 @@ bool Validator::InputAttachmentIndexAttribute(const ast::InputAttachmentIndexAtt
     return true;
 }
 
+bool Validator::ResourceBinding([[maybe_unused]] const core::type::ResourceBinding* t,
+                                const Source& source) const {
+    if (!enabled_extensions_.Contains(wgsl::Extension::kChromiumExperimentalDynamicBinding)) {
+        AddError(source) << "use of a " << style::Attribute("resource_binding")
+                         << " requires enabling extension "
+                         << style::Code("chromium_experimental_dynamic_binding");
+        return false;
+    }
+
+    return true;
+}
+
 bool Validator::BindingArray(const core::type::BindingArray* t, const Source& source) const {
     if (allowed_features_.features.count(wgsl::LanguageFeature::kSizedBindingArray) == 0) {
         AddError(source) << "use of " << style::Type("binding_array") << " requires the "
@@ -471,6 +466,16 @@ bool Validator::BindingArray(const core::type::BindingArray* t, const Source& so
                          << "language feature, which is not allowed in the current environment";
         return false;
     }
+
+    if (t->Count()->Is<core::type::RuntimeArrayCount>()) {
+        if (!enabled_extensions_.Contains(wgsl::Extension::kChromiumExperimentalDynamicBinding)) {
+            AddError(source) << "use of a runtime " << style::Attribute("binding_array")
+                             << " requires enabling extension "
+                             << style::Code("chromium_experimental_dynamic_binding");
+            return false;
+        }
+    }
+
     if (!t->Count()->Is<core::type::ConstantArrayCount>()) {
         AddError(source) << "binding_array count must be a constant expression";
         return false;
@@ -698,7 +703,7 @@ bool Validator::AddressSpaceLayout(const core::type::Type* store_ty,
         if (address_space == core::AddressSpace::kUniform) {
             // We already validated that this array member is itself aligned to 16 bytes above, so
             // we only need to validate that stride is a multiple of 16 bytes.
-            if (arr->Stride() % 16 != 0) {
+            if (arr->ImplicitStride() % 16 != 0) {
                 // Since WGSL has no stride attribute, try to provide a useful hint for how the
                 // shader author can resolve the issue.
                 StyledText hint;
@@ -718,7 +723,8 @@ bool Validator::AddressSpaceLayout(const core::type::Type* store_ty,
                                  << " storage requires that array elements are aligned to 16 "
                                     "bytes, but array element of type "
                                  << style::Type(arr->ElemType()->FriendlyName())
-                                 << " has a stride of " << arr->Stride() << " bytes. " << hint;
+                                 << " has a stride of " << arr->ImplicitStride() << " bytes. "
+                                 << hint;
                 return false;
             }
         }
@@ -975,12 +981,16 @@ bool Validator::Parameter(const sem::Variable* var) const {
         }
     }
 
+    auto* ba = var->Type()->As<core::type::BindingArray>();
+    bool is_runtime_binding_array = ba && ba->Count()->Is<core::type::RuntimeArrayCount>();
+
     if (IsPlain(var->Type())) {
         if (!var->Type()->IsConstructible()) {
             AddError(decl->type->source) << "type of function parameter must be constructible";
             return false;
         }
-    } else if (!var->Type()->Is<core::type::Pointer>() && !var->Type()->IsHandle()) {
+    } else if (var->Type()->Is<core::type::ResourceBinding>() || is_runtime_binding_array ||
+               (!var->Type()->Is<core::type::Pointer>() && !var->Type()->IsHandle())) {
         AddError(decl->source) << "type of function parameter cannot be "
                                << sem_.TypeNameOf(var->Type());
         return false;
@@ -1160,16 +1170,35 @@ bool Validator::BuiltinAttribute(const ast::BuiltinAttribute* attr,
             }
             break;
         }
-        case core::BuiltinValue::kPrimitiveId: {
-            if (!enabled_extensions_.Contains(wgsl::Extension::kChromiumExperimentalPrimitiveId)) {
-                AddError(attr->source) << "use of " << style::Attribute("@builtin")
-                                       << style::Code("(", style::Enum(builtin), ")")
-                                       << " requires enabling extension "
-                                       << style::Code("chromium_experimental_primitive_id");
+        case core::BuiltinValue::kPrimitiveIndex: {
+            if (!enabled_extensions_.Contains(wgsl::Extension::kPrimitiveIndex)) {
+                AddError(attr->source)
+                    << "use of " << style::Attribute("@builtin")
+                    << style::Code("(", style::Enum(builtin), ")")
+                    << " requires enabling extension " << style::Code("primitive_index");
                 return false;
             }
             if (!type->Is<core::type::U32>()) {
                 err_builtin_type("u32");
+                return false;
+            }
+            if (stage != ast::PipelineStage::kNone &&
+                !(stage == ast::PipelineStage::kFragment && is_input)) {
+                is_stage_mismatch = true;
+            }
+            break;
+        }
+        case core::BuiltinValue::kBarycentricCoord: {
+            if (!enabled_extensions_.Contains(
+                    wgsl::Extension::kChromiumExperimentalBarycentricCoord)) {
+                AddError(attr->source) << "use of " << style::Attribute("@builtin")
+                                       << style::Code("(", style::Enum(builtin), ")")
+                                       << " requires enabling extension "
+                                       << style::Code("chromium_experimental_barycentric_coord");
+                return false;
+            }
+            if (!(type->IsFloatVector() && type->As<core::type::Vector>()->Width() == 3)) {
+                err_builtin_type("vec3<f32>");
                 return false;
             }
             if (stage != ast::PipelineStage::kNone &&
@@ -1298,8 +1327,7 @@ bool Validator::Function(const sem::Function* func, ast::PipelineStage stage) co
                 AddError(end_source) << "missing return at end of function";
                 return false;
             }
-        } else if (DAWN_UNLIKELY(IsValidationEnabled(
-                       decl->attributes, ast::DisabledValidation::kFunctionHasNoBody))) {
+        } else {
             TINT_ICE() << "function " << decl->name->symbol.NameView() << " has no body";
         }
     }
@@ -1438,10 +1466,6 @@ bool Validator::EntryPoint(const sem::Function* func, ast::PipelineStage stage) 
                 [&](const ast::InvariantAttribute* invariant) {
                     invariant_attribute = invariant;
                     return InvariantAttribute(invariant, stage);
-                },
-                [&](const ast::InternalAttribute* internal) {
-                    pipeline_io_attribute = internal;
-                    return true;
                 },
                 [&](Default) { return true; });
 
@@ -2559,24 +2583,6 @@ bool Validator::Array(const sem::Array* arr, const Source& el_source) const {
     return true;
 }
 
-bool Validator::ArrayStrideAttribute(const ast::StrideAttribute* attr,
-                                     uint32_t el_size,
-                                     uint32_t el_align) const {
-    auto stride = attr->stride;
-    bool is_valid_stride = (stride >= el_size) && (stride >= el_align) && (stride % el_align == 0);
-    if (!is_valid_stride) {
-        // https://gpuweb.github.io/gpuweb/wgsl/#array-layout-rules
-        // Arrays decorated with the stride attribute must have a stride that is
-        // at least the size of the element type, and be a multiple of the
-        // element type's alignment value.
-        AddError(attr->source)
-            << "arrays decorated with the stride attribute must have a stride that is at least the "
-               "size of the element type, and be a multiple of the element type's alignment value";
-        return false;
-    }
-    return true;
-}
-
 bool Validator::Alias(const ast::Alias*) const {
     return true;
 }
@@ -3087,7 +3093,7 @@ bool Validator::NoDuplicateAttributes(VectorRef<const ast::Attribute*> attribute
             diagnostic_controls.Push(&diag->control);
         } else {
             auto added = seen.Add(&d->TypeInfo(), d->source);
-            if (!added && !d->Is<ast::InternalAttribute>()) {
+            if (!added) {
                 AddError(d->source) << "duplicate " << d->Name() << " attribute";
                 AddNote(added.value) << "first attribute declared here";
                 return false;
@@ -3123,23 +3129,6 @@ bool Validator::DiagnosticControls(VectorRef<const ast::DiagnosticControl*> cont
         }
     }
     return true;
-}
-
-bool Validator::IsValidationDisabled(VectorRef<const ast::Attribute*> attributes,
-                                     ast::DisabledValidation validation) const {
-    for (auto* attribute : attributes) {
-        if (auto* dv = attribute->As<ast::DisableValidationAttribute>()) {
-            if (dv->validation == validation) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-bool Validator::IsValidationEnabled(VectorRef<const ast::Attribute*> attributes,
-                                    ast::DisabledValidation validation) const {
-    return !IsValidationDisabled(attributes, validation);
 }
 
 bool Validator::IsArrayWithOverrideCount(const core::type::Type* ty) const {

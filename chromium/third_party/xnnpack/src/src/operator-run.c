@@ -770,10 +770,13 @@ void xnn_compute_dq_zero_buffer_igemm(struct igemm_context* restrict context,
 }
 
 void xnn_compute_dq_zero_buffer_subconv(
-    struct subconv_context* restrict context, size_t batch_index) {
-  memset(context->zero_buffers[batch_index],
-         context->quantization_params[batch_index].zero_point,
-         context->zero_size);
+    struct subconv_context* restrict context, size_t batch_index,
+    size_t batch_size) {
+  for (size_t k = 0; k < batch_size; k++) {
+    memset(context->zero_buffers[batch_index + k],
+           context->quantization_params[batch_index + k].zero_point,
+           context->zero_size);
+  }
 }
 
 void xnn_compute_grouped_batch_dqigemm(struct igemm_context* restrict context,
@@ -1041,14 +1044,20 @@ void xnn_compute_dqigemm(struct igemm_context* restrict context,
 void xnn_compute_conv2d_igemm_indirection(
     struct conv2d_igemm_indirection_init_context* restrict context,
     size_t output_tile_start, size_t output_tile_size) {
-  xnn_indirection_init_conv2d(
-      output_tile_size, output_tile_start, output_tile_start + output_tile_size,
-      context->indirection_buffer, context->input, context->zero_buffer,
-      context->input_pixel_stride, context->input_height, context->input_width,
-      context->output_height, context->output_width, context->kernel_height,
-      context->kernel_width, context->stride_height, context->stride_width,
-      context->dilation_height, context->dilation_width,
-      context->input_padding_top, context->input_padding_left);
+  while (output_tile_size > 0) {
+    const size_t mr_step = min(output_tile_size, context->mr);
+    xnn_indirection_init_conv2d(
+        mr_step, output_tile_start, output_tile_start + mr_step,
+        context->indirection_buffer, context->input, context->zero_buffer,
+        context->input_pixel_stride, context->input_height,
+        context->input_width, context->output_height, context->output_width,
+        context->kernel_height, context->kernel_width, context->stride_height,
+        context->stride_width, context->dilation_height,
+        context->dilation_width, context->input_padding_top,
+        context->input_padding_left);
+    output_tile_size -= mr_step;
+    output_tile_start += mr_step;
+  }
 }
 
 void xnn_compute_grouped_subgemm2d(struct subgemm_context* restrict context,
@@ -1695,9 +1704,8 @@ void xnn_compute_univector_contiguous(
 
 void xnn_compute_contiguous_reduce(
     struct reduce_context* restrict context, size_t output_idx0,
-    size_t output_idx1, size_t output_idx2, size_t output1_block_size,
+    size_t output_idx1, size_t output_idx2, 
     size_t output2_block_size) {
-  assert(output1_block_size == 1);
   const size_t* input_stride = context->input_stride;
   const size_t* output_stride = context->output_stride;
 
@@ -1775,9 +1783,7 @@ void xnn_compute_contiguous_reduce(
 void xnn_compute_discontiguous_reduce(struct reduce_context* restrict context,
                                       size_t output_idx0, size_t output_idx1,
                                       size_t output_idx2,
-                                      size_t output1_block_size,
                                       size_t output2_block_size) {
-  assert(output1_block_size == 1);
   const size_t* input_stride = context->input_stride;
   const size_t* output_stride = context->output_stride;
 
@@ -1813,27 +1819,30 @@ void xnn_compute_discontiguous_reduce(struct reduce_context* restrict context,
         context->accumulation_element_size, context->identity_value);
   }
 
-  // Input dimension 0 is reduced.
-  for (size_t i = 0; i < input_shape0; ++i) {
-    const void* input = (const void*)((uintptr_t)context->input + input_offset);
-    // Input dimension 2 is reduced.
-    for (size_t j = 0; j < input_shape2; ++j) {
-      const void* input_row = input;
-      // The microkernel reduces input dimension 4 and iterates over
-      // output_block_size elements of dimension 5.
-      context->ukernel.discontiguous_reduce(
-          context->channels, output2_block_size, input_row, input_stride[4],
-          context->zero, output, &context->params);
-      // input_stride[4] is the number of bytes of input which have been
-      // processed by the microkernel call.
-      input_row = (const void*)((uintptr_t)input_row + input_stride[4]);
-      // Reset the output pointer.
-      output = (void*)((uintptr_t)output_ptr + workspace_offset);
-      // Iterating over input_shape[2].
-      input = (const void*)((uintptr_t)input + input_stride[2]);
+  if (context->is_old_reduce) {
+    // Input dimension 0 is reduced.
+    for (size_t i = 0; i < input_shape0; ++i) {
+      // Input dimension 2 is reduced.
+      for (size_t j = 0; j < input_shape2; ++j) {
+        // The microkernel reduces input dimension 4 and iterates over
+        // output_block_size elements of dimension 5.
+        context->ukernel.discontiguous_reduce(
+            context->channels, output2_block_size,
+            (const void*)((uintptr_t)context->input + input_offset +
+                          i * input_stride[0] + j * input_stride[2]),
+            input_stride[4], context->zero,
+            (void*)((uintptr_t)output_ptr + workspace_offset),
+            &context->params);
+      }
     }
-    // Iterating over input_shape[0].
-    input_offset += input_stride[0];
+  } else {
+    // The microkernel reduces input dimension 0, 2 & 4 and iterates over
+    // output_block_size elements of dimension 5.
+    context->ukernel.discontiguous_reduce2(
+        output2_block_size, context->channels, input_shape2, input_shape0,
+        (const void*)((uintptr_t)context->input + input_offset),
+        input_stride[4], input_stride[2], input_stride[0], context->zero,
+        output, &context->params);
   }
   // Convert to output datatype if accumulation type != output type.
   if (context->workspace) {
@@ -2490,6 +2499,16 @@ enum xnn_status xnn_run_operator_with_index(xnn_operator_t op,
         pthreadpool_parallelize_3d_tile_1d(
             threadpool, compute->task_3d_tile_1d, context, compute->range[0],
             compute->range[1], compute->range[2], compute->tile[0], flags);
+        break;
+      case xnn_parallelization_type_3d_tile_1d_dynamic:
+        assert(compute->range[0] != 0);
+        assert(compute->range[1] != 0);
+        assert(compute->range[2] != 0);
+        assert(compute->tile[0] != 0);
+        pthreadpool_parallelize_3d_tile_1d_dynamic(
+            threadpool, compute->task_3d_tile_1d_dynamic, context,
+            compute->range[0], compute->range[1], compute->range[2],
+            compute->tile[0], flags);
         break;
       case xnn_parallelization_type_3d_tile_1d_with_thread:
         assert(compute->range[0] != 0);

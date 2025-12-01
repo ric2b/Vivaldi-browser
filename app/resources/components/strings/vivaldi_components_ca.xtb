@@ -3,16 +3,6 @@
 <translationbundle lang="ca">
 <translation id="3830627370375585318">Configura el tallafoc o l'antivirus per permetre que Vivaldi accedeixi
           a la xarxa.</translation>
-<translation id="4200102020577305737">Ves al
-          menú de Vivaldi &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Configuració LAN
-          i desmarca "Utilitza un servidor intermediari per a la LAN".</translation>
 <translation id="4932161901409251843">Ves al
           menú de Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@
         Si això no resol el problema, et recomanem que tornis a seleccionar
         aquesta opció per obtenir un rendiment millorat.</translation>
 <translation id="7496505986576158197">Vivaldi és possible gràcies a <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> i altres <ph name="BEGIN_LINK_OSS" />projectes de codi obert<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Ves al
+          menú de Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Internet i xarxa &gt; Servidor intermediari
+          i desmarca "Detecta automàticament".</translation>
 </translationbundle>

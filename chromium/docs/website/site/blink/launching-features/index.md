@@ -339,9 +339,12 @@ Please note that neither Origin Trials nor other experiments are exempt from
 requiring cross-functional approvals from the Chrome launch review process.
 
 Depending on your feature and your experimentation goals, running a non-Origin
-Trial experiment via Finch on a percentage of the user population may be
+Trial experiment via mechanisms such as [Finch (Google-only link, sorry)](http://go/finch), or similar mechanisms for other Chromium browsers, on a percentage of the user population may be
 useful. Features that are going through the intent process should adhere to the
 following guidelines:
+* In general, **Finch experimentation is discouraged** for developer-visible web platform behavior changes,
+  and should not be the normal way to launch new APIs.
+  Instead, [waterfall rollouts are preferred](https://chromium.googlesource.com/chromium/src/+/main/docs/flag_guarding_guidelines.md#Prefer-waterfall-rollout-for-platform-changes).
 * Canary, Dev, and Beta channel experimentation does not require API owners'
   approval.
 * Experimentation on 1% of Stable channel population requires an Intent to
@@ -819,10 +822,8 @@ You will likely also need to land a Chromium CL to turn on the feature.
 Link to the blink-dev thread via the [Google Groups web interface](https://groups.google.com/a/chromium.org/g/blink-dev)
 in your CL's commit message to make it easy and clear to review.
 
-
-You may wish to use [Finch](http://go/finch) to increase confidence in the new
-code as you deploy it.
-
+Note: Finch experimentation is discouraged for developer-visible web platform behavior changes.
+Instead, [waterfall rollouts are preferred](https://chromium.googlesource.com/chromium/src/+/main/docs/flag_guarding_guidelines.md#Prefer-waterfall-rollout-for-platform-changes).
 ## Post Launch
 
 After launching a new feature, watch for crashes, regressions caused by your

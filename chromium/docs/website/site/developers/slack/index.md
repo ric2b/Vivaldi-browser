@@ -116,4 +116,12 @@ later
 ## Questions?
 
 If you can, probably best to ask questions on #slack-help. If you can't log in
-to Slack at all, contact chromium-slack-invites@chromium.org
+to Slack at all, contact chromium-slack-invites@chromium.org.
+
+Note that you can't use your Chromium Slack account to join other Slacks as an
+external guest - our instance is configured not to allow this, because we want
+Chromium Slack accounts to just be for Chromium use. If you're being invited
+to join another Slack as a guest, you'll need to choose "Create Another
+Workspace" when accepting the invite to create a separate Slack account. If you
+try to join using your Chromium Slack account, you'll get a message that joining
+is disabled.

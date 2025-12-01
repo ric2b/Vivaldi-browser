@@ -33,6 +33,7 @@ class UIResourceProvider;
 
 namespace android {
 
+class CompositorViewTest;
 class SceneLayer;
 class TabContentManager;
 
@@ -41,7 +42,6 @@ class CompositorView : public content::CompositorClient,
  public:
   CompositorView(JNIEnv* env,
                  const base::android::JavaRef<jobject>& obj,
-                 jboolean low_mem_device,
                  ui::WindowAndroid* window_android,
                  TabContentManager* tab_content_manager);
 
@@ -109,6 +109,8 @@ class CompositorView : public content::CompositorClient,
   base::WeakPtr<ui::UIResourceProvider> GetUIResourceProvider();
 
  private:
+  friend class CompositorViewTest;
+
   ~CompositorView() override;
 
   // content::BrowserChildProcessObserver implementation:
@@ -117,7 +119,13 @@ class CompositorView : public content::CompositorClient,
       const content::ChildProcessTerminationInfo& info) override;
 
   void SetBackground(bool visible, SkColor color);
-  void OnSurfaceControlFeatureStatusUpdate(bool available);
+
+  // Constructor for testing.
+  CompositorView(JNIEnv* env,
+                 const base::android::JavaRef<jobject>& obj,
+                 ui::WindowAndroid* window_android,
+                 TabContentManager* tab_content_manager,
+                 std::unique_ptr<content::Compositor> compositor);
 
   base::android::ScopedJavaGlobalRef<jobject> obj_;
   std::unique_ptr<content::Compositor> compositor_;

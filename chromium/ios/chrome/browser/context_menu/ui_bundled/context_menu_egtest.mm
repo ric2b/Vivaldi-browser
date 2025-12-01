@@ -19,6 +19,7 @@
 #import "ios/chrome/browser/popup_menu/ui_bundled/popup_menu_constants.h"
 #import "ios/chrome/browser/reader_mode/model/features.h"
 #import "ios/chrome/browser/reader_mode/test/reader_mode_app_interface.h"
+#import "ios/chrome/browser/reader_mode/ui/constants.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
@@ -303,8 +304,7 @@ void ClearContextMenu() {
 
 // Taps on `context_menu_item_button` context menu item.
 void TapOnContextMenuButton(id<GREYMatcher> context_menu_item_button) {
-  [[EarlGrey selectElementWithMatcher:context_menu_item_button]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:context_menu_item_button];
   [[EarlGrey selectElementWithMatcher:context_menu_item_button]
       performAction:grey_tap()];
 }
@@ -559,10 +559,6 @@ void RelaunchApp() {
       longPressElementOnWebView:
           [ElementSelector selectorWithElementID:kDestinationPageTextId]];
 
-  // TODO(crbug.com/40191349): Xcode 13 gesture recognizers seem to get stuck
-  // when the user longs presses on plain text.  For this test, disable EG
-  // synchronization.
-  ScopedSynchronizationDisabler disabler;
   // Verify that context menu is not shown.
   [[EarlGrey selectElementWithMatcher:ContextMenuCopyButton()]
       assertWithMatcher:grey_nil()];
@@ -572,11 +568,6 @@ void RelaunchApp() {
       selectElementWithMatcher:grey_allOf(SystemSelectionCalloutCopyButton(),
                                           grey_sufficientlyVisible(), nil)]
       assertWithMatcher:grey_notNil()];
-
-  // TODO(crbug.com/40191349): Tap to dismiss the system selection callout
-  // buttons so tearDown doesn't hang when `disabler` goes out of scope.
-  [[EarlGrey selectElementWithMatcher:WebViewMatcher()]
-      performAction:grey_tap()];
 }
 
 // Tests cancelling the context menu.
@@ -674,7 +665,8 @@ void RelaunchApp() {
 
 // Checks that "open in new window" shows up on a long press of a url link
 // and that it actually opens in a new window.
-- (void)testOpenLinkInNewWindow {
+// TODO(crbug.com/441761691): Re-enable the test.
+- (void)DISABLED_testOpenLinkInNewWindow {
   if (![ChromeEarlGrey areMultipleWindowsSupported]) {
     EARL_GREY_TEST_DISABLED(@"Multiple windows can't be opened.");
   }
@@ -705,7 +697,15 @@ void RelaunchApp() {
 // Checks that "open in new window" shows up on a long press of a url link
 // and that it actually opens in a new window, and that when the link is in an
 // incognito webstate, the newly opened webstate is also incognito.
-- (void)testOpenIncognitoLinkInNewWindow {
+// TODO(crbug.com/441761691): Test is flaky on iPad simulator.
+#if TARGET_OS_SIMULATOR
+#define MAYBE_testOpenIncognitoLinkInNewWindow \
+  FLAKY_testOpenIncognitoLinkInNewWindow
+#else
+#define MAYBE_testOpenIncognitoLinkInNewWindow \
+  testOpenIncognitoLinkInNewWindow
+#endif
+- (void)MAYBE_testOpenIncognitoLinkInNewWindow {
   if (![ChromeEarlGrey areMultipleWindowsSupported]) {
     EARL_GREY_TEST_DISABLED(@"Multiple windows can't be opened.");
   }
@@ -953,7 +953,11 @@ void RelaunchApp() {
                       grey_accessibilityID(
                           kContextMenuImagePreviewAccessibilityIdentifier)];
 
-  [ChromeEarlGrey verifyShareActionWithURL:shortTitleURL pageTitle:@"Image"];
+  // On iOS 26, the name of the image (chromium_logo.png in this case) is used
+  // as a page title instead of "Image".
+  NSString* pageTitle =
+      base::ios::IsRunningOnIOS26OrLater() ? @"chromium_logo" : @"Image";
+  [ChromeEarlGrey verifyShareActionWithURL:shortTitleURL pageTitle:pageTitle];
   // Ensure that UMA was logged correctly.
   NSError* error = [MetricsAppInterface
        expectCount:1
@@ -975,34 +979,37 @@ void RelaunchApp() {
 
 // Tests that opening the context menu for a link in Reading mode
 // displays all options.
+// TODO(crbug.com/436842225): Renable this test. It is flaky on iphone-device
+// and ipad-device.
+#if TARGET_OS_SIMULATOR
+#define MAYBE_testOpenContextMenuFromReadingMode \
+  testOpenContextMenuFromReadingMode
+#else
+#define MAYBE_testOpenContextMenuFromReadingMode \
+  FLAKY_testOpenContextMenuFromReadingMode
+#endif
 - (void)testOpenContextMenuFromReadingMode {
-  // TODO(crbug.com/435671883): Support Reading mode interface on iPad.
-  if ([ChromeEarlGrey isIPadIdiom]) {
-    EARL_GREY_TEST_DISABLED(@"Reading mode interface fails on iPad");
-  }
+  [self setUpHistogramTester];
 
   const GURL initialURL = self.testServer->GetURL("/article.html");
   [ChromeEarlGrey loadURL:initialURL];
   [ChromeEarlGrey waitForPageToFinishLoading];
 
   // Open Reader Mode UI.
-  [ChromeEarlGrey showReaderMode];
-  GREYAssertTrue([ChromeEarlGrey waitUntilReaderModeWebStateIsReady],
-                 @"Reader mode content could not be loaded");
+  GREYAssertTrue(
+      [ChromeEarlGrey showReaderModeAndWaitUntilReaderModeWebStateIsReady],
+      @"Reader mode content could not be loaded");
 
+  // Wait for Reader Mode UI to appear on-screen.
+  [ChromeEarlGrey
+      waitForSufficientlyVisibleElementWithMatcher:
+          grey_accessibilityID(kReaderModeViewAccessibilityIdentifier)];
+  [ChromeEarlGrey
+      waitForWebStateContainingElement:ElementSelectorToLongPressLink()];
+
+  // Open the context menu and tap on an action.
   [ChromeEarlGreyUI longPressElementOnWebView:ElementSelectorToLongPressLink()];
-
-  // Make sure the context menu appeared.
-  [[EarlGrey selectElementWithMatcher:OpenLinkInNewTabButton()]
-      assertWithMatcher:grey_notNil()];
-
-  if ([ChromeEarlGrey isIPadIdiom]) {
-    // Tap the tools menu to dismiss the popover.
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::ToolsMenuButton()]
-        performAction:grey_tap()];
-  }
-  // Tap the drop shadow to dismiss the popover.
-  chrome_test_util::TapAtOffsetOf(nil, 0, CGVectorMake(0.5, 0.95));
+  TapOnContextMenuButton(OpenLinkInNewTabButton());
 
   // Make sure the context menu disappeared.
   ConditionBlock condition = ^{
@@ -1016,23 +1023,52 @@ void RelaunchApp() {
   GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
                  base::test::ios::kWaitForUIElementTimeout, condition),
              @"Waiting for the context menu to disappear");
+
+  // Ensure that UMA was logged correctly.
+  NSError* error = [MetricsAppInterface
+       expectCount:1
+         forBucket:36  // Number refering to MenuScenarioHistogram enum.
+      forHistogram:@"Mobile.ContextMenu.EntryPoints"];
+  if (error) {
+    GREYFail([error description]);
+  }
+  error = [MetricsAppInterface
+       expectCount:1
+         forBucket:0  // Number refering to MenuActionType enum.
+      forHistogram:@"Mobile.ContextMenu.ReaderModeLink.Actions"];
+  if (error) {
+    GREYFail([error description]);
+  }
 }
 
 // Tests that the context menu is displayed for an image url in Reading mode.
+// TODO(crbug.com/436842225): Renable this test. It is flaky on iphone-device
+// and ipad-device.
+#if TARGET_OS_SIMULATOR
+#define MAYBE_testContextMenuDisplayedOnImageForReadingMode \
+  testContextMenuDisplayedOnImageForReadingMode
+#else
+#define MAYBE_testContextMenuDisplayedOnImageForReadingMode \
+  FLAKY_testContextMenuDisplayedOnImageForReadingMode
+#endif
 - (void)testContextMenuDisplayedOnImageForReadingMode {
-  // TODO(crbug.com/435671883): Support Reading mode interface on iPad.
-  if ([ChromeEarlGrey isIPadIdiom]) {
-    EARL_GREY_TEST_DISABLED(@"Reading mode interface fails on iPad");
-  }
+  [self setUpHistogramTester];
 
   const GURL pageURL = self.testServer->GetURL("/article.html");
   [ChromeEarlGrey loadURL:pageURL];
   [ChromeEarlGrey waitForPageToFinishLoading];
 
   // Open Reader Mode UI.
-  [ChromeEarlGrey showReaderMode];
-  GREYAssertTrue([ChromeEarlGrey waitUntilReaderModeWebStateIsReady],
-                 @"Reader mode content could not be loaded");
+  GREYAssertTrue(
+      [ChromeEarlGrey showReaderModeAndWaitUntilReaderModeWebStateIsReady],
+      @"Reader mode content could not be loaded");
+
+  // Wait for Reader Mode UI to appear on-screen.
+  [ChromeEarlGrey
+      waitForSufficientlyVisibleElementWithMatcher:
+          grey_accessibilityID(kReaderModeViewAccessibilityIdentifier)];
+  [ChromeEarlGrey
+      waitForWebStateContainingElement:ElementSelectorToLongPressImage()];
 
   [ChromeEarlGreyUI
       longPressElementOnWebView:ElementSelectorToLongPressImage()];
@@ -1043,6 +1079,22 @@ void RelaunchApp() {
   const GURL imageURL = self.testServer->GetURL(kLogoPageImageSourcePath);
   [[EarlGrey selectElementWithMatcher:OmniboxText(imageURL.GetContent())]
       assertWithMatcher:grey_notNil()];
+
+  // Ensure that UMA was logged correctly.
+  NSError* error = [MetricsAppInterface
+       expectCount:1
+         forBucket:34  // Number refering to MenuScenarioHistogram enum.
+      forHistogram:@"Mobile.ContextMenu.EntryPoints"];
+  if (error) {
+    GREYFail([error description]);
+  }
+  error = [MetricsAppInterface
+       expectCount:1
+         forBucket:20  // Number refering to MenuActionType enum.
+      forHistogram:@"Mobile.ContextMenu.ReaderModeImage.Actions"];
+  if (error) {
+    GREYFail([error description]);
+  }
 }
 
 @end

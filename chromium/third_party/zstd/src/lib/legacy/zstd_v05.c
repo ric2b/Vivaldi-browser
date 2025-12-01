@@ -1224,7 +1224,7 @@ const char* FSEv05_getErrorName(size_t code) { return ERR_getErrorName(code); }
 /*-**************************************************************
 *  FSEv05 NCount encoding-decoding
 ****************************************************************/
-static short FSEv05_abs(short a) { return a<0 ? -a : a; }
+static short FSEv05_abs(short a) { return a<0 ? (short)-a : a; }
 
 
 size_t FSEv05_readNCount (short* normalizedCounter, unsigned* maxSVPtr, unsigned* tableLogPtr,

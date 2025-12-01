@@ -188,6 +188,17 @@ void ContextPrivateViewport(PrivateState *privateState,
                             GLint y,
                             GLsizei width,
                             GLsizei height);
+void ContextPrivateGenVertexArrays(PrivateState *privateState,
+                                   PrivateStateCache *privateStateCache,
+                                   GLsizei n,
+                                   VertexArrayID *arraysPacked);
+GLboolean ContextPrivateIsVertexArray(PrivateState *privateState,
+                                      PrivateStateCache *privateStateCache,
+                                      VertexArrayID arrayPacked);
+void ContextPrivateVertexAttribDivisor(PrivateState *privateState,
+                                       PrivateStateCache *privateStateCache,
+                                       GLuint index,
+                                       GLuint divisor);
 void ContextPrivateVertexAttribI4i(PrivateState *privateState,
                                    PrivateStateCache *privateStateCache,
                                    GLuint index,
@@ -214,6 +225,27 @@ void ContextPrivateSampleMaski(PrivateState *privateState,
                                PrivateStateCache *privateStateCache,
                                GLuint maskNumber,
                                GLbitfield mask);
+void ContextPrivateVertexAttribBinding(PrivateState *privateState,
+                                       PrivateStateCache *privateStateCache,
+                                       GLuint attribindex,
+                                       GLuint bindingindex);
+void ContextPrivateVertexAttribFormat(PrivateState *privateState,
+                                      PrivateStateCache *privateStateCache,
+                                      GLuint attribindex,
+                                      GLint size,
+                                      VertexAttribType typePacked,
+                                      GLboolean normalized,
+                                      GLuint relativeoffset);
+void ContextPrivateVertexAttribIFormat(PrivateState *privateState,
+                                       PrivateStateCache *privateStateCache,
+                                       GLuint attribindex,
+                                       GLint size,
+                                       VertexAttribType typePacked,
+                                       GLuint relativeoffset);
+void ContextPrivateVertexBindingDivisor(PrivateState *privateState,
+                                        PrivateStateCache *privateStateCache,
+                                        GLuint bindingindex,
+                                        GLuint divisor);
 void ContextPrivateBlendEquationSeparatei(PrivateState *privateState,
                                           PrivateStateCache *privateStateCache,
                                           GLuint buf,

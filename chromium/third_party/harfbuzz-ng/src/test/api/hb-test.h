@@ -109,43 +109,6 @@ hb_test_run (void)
   return g_test_run ();
 }
 
-/* Bugzilla helpers */
-
-static inline void
-hb_test_bug (const char *uri_base, unsigned int number)
-{
-  char *s = g_strdup_printf ("%u", number);
-
-  g_test_bug_base (uri_base);
-  g_test_bug (s);
-
-  g_free (s);
-}
-
-static inline void
-hb_test_bug_freedesktop (unsigned int number)
-{
-  hb_test_bug ("https://bugs.freedesktop.org/", number);
-}
-
-static inline void
-hb_test_bug_gnome (unsigned int number)
-{
-  hb_test_bug ("https://bugzilla.gnome.org/", number);
-}
-
-static inline void
-hb_test_bug_mozilla (unsigned int number)
-{
-  hb_test_bug ("https://bugzilla.mozilla.org/", number);
-}
-
-static inline void
-hb_test_bug_redhat (unsigned int number)
-{
-  hb_test_bug ("https://bugzilla.redhat.com/", number);
-}
-
 
 /* Wrap glib test functions to simplify.  Should have been in glib already. */
 
@@ -154,33 +117,20 @@ hb_test_bug_redhat (unsigned int number)
 static inline char *
 hb_test_normalize_path (const char *path)
 {
-  char *s, *p;
-
   g_assert (0 == strncmp (path, "test_", 5));
   path += 4;
 
-  s = g_strdup (path);
-  for (p = s; *p; p++)
-    if (*p == '_')
-      *p = '/';
+  char *p = g_strdup (path);
+  p[0] = '/';
 
-  return s;
+  return p;
 }
 
 
-#if GLIB_CHECK_VERSION(2,25,12)
 typedef GTestFunc        hb_test_func_t;
 typedef GTestDataFunc    hb_test_data_func_t;
 typedef GTestFixtureFunc hb_test_fixture_func_t;
-#else
-typedef void (*hb_test_func_t)         (void);
-typedef void (*hb_test_data_func_t)    (gconstpointer user_data);
-typedef void (*hb_test_fixture_func_t) (void);
-#endif
 
-#if !GLIB_CHECK_VERSION(2,30,0)
-#define g_test_fail() g_error("Test failed")
-#endif
 #ifndef g_assert_true
 #define g_assert_true g_assert
 #endif
@@ -207,7 +157,6 @@ static inline void hb_test_assert_blobs_equal (hb_blob_t *expected_blob, hb_blob
       int expected = *(raw_expected + i);
       int actual = *(raw_actual + i);
       if (expected != actual) fprintf(stderr, "+%u %02x != %02x\n", i, expected, actual);
-      else fprintf(stderr, "+%u %02x\n", i, expected);
     }
   }
   g_assert_cmpint(0, ==, memcmp(raw_expected, raw_actual, expected_length));
@@ -268,16 +217,7 @@ hb_test_add_vtable (const char             *test_path,
 }
 #define hb_test_add_fixture(FixturePrefix, UserData, Func) \
 G_STMT_START { \
-  typedef G_PASTE (FixturePrefix, _t) Fixture; \
-  void (*add_vtable) (const char*, gsize, gconstpointer, \
-		      void (*) (Fixture*, gconstpointer), \
-		      void (*) (Fixture*, gconstpointer), \
-		      void (*) (Fixture*, gconstpointer)) \
-	= (void (*) (const gchar *, gsize, gconstpointer, \
-		     void (*) (Fixture*, gconstpointer), \
-		     void (*) (Fixture*, gconstpointer), \
-		     void (*) (Fixture*, gconstpointer))) hb_test_add_vtable; \
-  add_vtable (#Func, sizeof (G_PASTE (FixturePrefix, _t)), UserData, \
+  hb_test_add_vtable (#Func, sizeof (G_PASTE (FixturePrefix, _t)), UserData, \
 	      G_PASTE (FixturePrefix, _init), Func, G_PASTE (FixturePrefix, _finish)); \
 } G_STMT_END
 
@@ -296,16 +236,7 @@ hb_test_add_vtable_flavor (const char             *test_path,
 }
 #define hb_test_add_fixture_flavor(FixturePrefix, UserData, Flavor, Func) \
 G_STMT_START { \
-  typedef G_PASTE (FixturePrefix, _t) Fixture; \
-  void (*add_vtable) (const char*, const char *, gsize, gconstpointer, \
-		      void (*) (Fixture*, gconstpointer), \
-		      void (*) (Fixture*, gconstpointer), \
-		      void (*) (Fixture*, gconstpointer)) \
-	= (void (*) (const gchar *, const char *, gsize, gconstpointer, \
-		     void (*) (Fixture*, gconstpointer), \
-		     void (*) (Fixture*, gconstpointer), \
-		     void (*) (Fixture*, gconstpointer))) hb_test_add_vtable_flavor; \
-  add_vtable (#Func, Flavor, sizeof (G_PASTE (FixturePrefix, _t)), UserData, \
+  hb_test_add_vtable_flavor (#Func, Flavor, sizeof (G_PASTE (FixturePrefix, _t)), UserData, \
 	      G_PASTE (FixturePrefix, _init), Func, G_PASTE (FixturePrefix, _finish)); \
 } G_STMT_END
 

@@ -99,6 +99,7 @@ FT_BEGIN_HEADER
     return (FT_Long)( ab >> 16 );
   }
 
+
 #define FT_MulFix( a, b )  FT_MulFix_64( a, b )
 
 #elif !defined( FT_CONFIG_OPTION_NO_ASSEMBLER )
@@ -182,7 +183,7 @@ FT_BEGIN_HEADER
       : "a"(a), "d"(b)
       : "%ecx", "cc" );
 
-#elif defined( _MSC_VER)
+#elif defined( _MSC_VER )
 
     __asm
     {

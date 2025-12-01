@@ -25,6 +25,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "net/base/features.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
 #include "net/base/proxy_chain.h"
@@ -1135,8 +1136,17 @@ bool TransportClientSocketPool::FindTopStalledGroup(Group** group,
   return has_stalled_group;
 }
 
-void TransportClientSocketPool::OnIPAddressChanged() {
+void TransportClientSocketPool::OnIPAddressChanged(
+    NetworkChangeNotifier::IPAddressChangeType change_type) {
   DCHECK(cleanup_on_ip_address_change_);
+
+  // Ignore changes to randomly generated IPv6 temporary addresses.
+  if (base::FeatureList::IsEnabled(
+          net::features::kMaintainConnectionsOnIpv6TempAddrChange) &&
+      change_type == NetworkChangeNotifier::IP_ADDRESS_CHANGE_IPV6_TEMPADDR) {
+    return;
+  }
+
   FlushWithError(ERR_NETWORK_CHANGED, kNetworkChanged);
 }
 

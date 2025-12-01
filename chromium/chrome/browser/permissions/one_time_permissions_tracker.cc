@@ -17,6 +17,7 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/permissions/content_setting_permission_context_base.h"
 #include "components/permissions/features.h"
+#include "components/permissions/permission_util.h"
 #include "content/public/browser/visibility.h"
 #include "url/gurl.h"
 
@@ -208,7 +209,7 @@ void OneTimePermissionsTracker::CleanupStateForExpiredContentSetting(
   }
 
   for (const auto& origin : affected_origins) {
-    if (type == ContentSettingsType::GEOLOCATION) {
+    if (type == permissions::PermissionUtil::GetGeolocationType()) {
       origin_tracker_[origin].background_expiration_timer->Stop();
     } else {
       origin_tracker_[origin]

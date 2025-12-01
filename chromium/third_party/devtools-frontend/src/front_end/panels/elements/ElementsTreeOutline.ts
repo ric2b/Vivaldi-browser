@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -36,8 +36,8 @@
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
-import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
+import * as Badges from '../../models/badges/badges.js';
 import * as Elements from '../../models/elements/elements.js';
 import * as IssuesManager from '../../models/issues_manager/issues_manager.js';
 import * as CodeHighlighter from '../../ui/components/code_highlighter/code_highlighter.js';
@@ -58,16 +58,16 @@ import {TopLayerContainer} from './TopLayerContainer.js';
 
 const UIStrings = {
   /**
-   *@description ARIA accessible name in Elements Tree Outline of the Elements panel
+   * @description ARIA accessible name in Elements Tree Outline of the Elements panel
    */
   pageDom: 'Page DOM',
   /**
-   *@description A context menu item to store a value as a global variable the Elements Panel
+   * @description A context menu item to store a value as a global variable the Elements Panel
    */
   storeAsGlobalVariable: 'Store as global variable',
   /**
-   *@description Tree element expand all button element button text content in Elements Tree Outline of the Elements panel
-   *@example {3} PH1
+   * @description Tree element expand all button element button text content in Elements Tree Outline of the Elements panel
+   * @example {3} PH1
    */
   showAllNodesDMore: 'Show all nodes ({PH1} more)',
   /**
@@ -80,6 +80,361 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 const elementsTreeOutlineByDOMModel = new WeakMap<SDK.DOMModel.DOMModel, ElementsTreeOutline>();
 
 const populatedTreeElements = new Set<ElementsTreeElement>();
+
+export type View = typeof DEFAULT_VIEW;
+
+interface ViewInput {
+  omitRootDOMNode: boolean;
+  selectEnabled: boolean;
+  hideGutter: boolean;
+  visibleWidth?: number;
+  visible?: boolean;
+  wrap: boolean;
+  showSelectionOnKeyboardFocus: boolean;
+  preventTabOrder: boolean;
+  deindentSingleNode: boolean;
+  currentHighlightedNode: SDK.DOMModel.DOMNode|null;
+
+  onSelectedNodeChanged:
+      (event: Common.EventTarget.EventTargetEvent<{node: SDK.DOMModel.DOMNode | null, focus: boolean}>) => void;
+  onElementsTreeUpdated: (event: Common.EventTarget.EventTargetEvent<SDK.DOMModel.DOMNode[]>) => void;
+  onElementCollapsed: () => void;
+  onElementExpanded: () => void;
+}
+
+interface ViewOutput {
+  elementsTreeOutline?: ElementsTreeOutline;
+  highlightedTreeElement: ElementsTreeElement|null;
+  alreadyExpandedParentTreeElement: ElementsTreeElement|null;
+}
+
+export const DEFAULT_VIEW = (input: ViewInput, output: ViewOutput, target: HTMLElement): void => {
+  if (!output.elementsTreeOutline) {
+    // FIXME: this is basically a ref to existing imperative
+    // implementation. Once this is declarative the ref should not be
+    // needed.
+    output.elementsTreeOutline = new ElementsTreeOutline(input.omitRootDOMNode, input.selectEnabled, input.hideGutter);
+    output.elementsTreeOutline.addEventListener(
+        ElementsTreeOutline.Events.SelectedNodeChanged, input.onSelectedNodeChanged, this);
+    output.elementsTreeOutline.addEventListener(
+        ElementsTreeOutline.Events.ElementsTreeUpdated, input.onElementsTreeUpdated, this);
+    output.elementsTreeOutline.addEventListener(UI.TreeOutline.Events.ElementExpanded, input.onElementCollapsed, this);
+    output.elementsTreeOutline.addEventListener(UI.TreeOutline.Events.ElementCollapsed, input.onElementExpanded, this);
+    target.appendChild(output.elementsTreeOutline.element);
+  }
+  if (input.visibleWidth !== undefined) {
+    output.elementsTreeOutline.setVisibleWidth(input.visibleWidth);
+  }
+  if (input.visible !== undefined) {
+    output.elementsTreeOutline.setVisible(input.visible);
+  }
+  output.elementsTreeOutline.setWordWrap(input.wrap);
+  output.elementsTreeOutline.setShowSelectionOnKeyboardFocus(input.showSelectionOnKeyboardFocus, input.preventTabOrder);
+  if (input.deindentSingleNode) {
+    output.elementsTreeOutline.deindentSingleNode();
+  }
+  // Node highlighting logic. FIXME: express as a lit template.
+  const previousHighlightedNode = output.highlightedTreeElement?.node() ?? null;
+  if (previousHighlightedNode !== input.currentHighlightedNode) {
+    let treeElement: ElementsTreeElement|null = null;
+
+    if (output.highlightedTreeElement) {
+      let currentTreeElement: ElementsTreeElement|null = output.highlightedTreeElement;
+      while (currentTreeElement && currentTreeElement !== output.alreadyExpandedParentTreeElement) {
+        if (currentTreeElement.expanded) {
+          currentTreeElement.collapse();
+        }
+
+        const parent: UI.TreeOutline.TreeElement|null = currentTreeElement.parent;
+        currentTreeElement = parent instanceof ElementsTreeElement ? parent : null;
+      }
+    }
+
+    output.highlightedTreeElement = null;
+    output.alreadyExpandedParentTreeElement = null;
+    if (input.currentHighlightedNode) {
+      let deepestExpandedParent: SDK.DOMModel.DOMNode|null = input.currentHighlightedNode;
+      const treeElementByNode = output.elementsTreeOutline.treeElementByNode;
+
+      const treeIsNotExpanded = (deepestExpandedParent: SDK.DOMModel.DOMNode): boolean => {
+        const element = treeElementByNode.get(deepestExpandedParent);
+        return element ? !element.expanded : true;
+      };
+      while (deepestExpandedParent && treeIsNotExpanded(deepestExpandedParent)) {
+        deepestExpandedParent = deepestExpandedParent.parentNode;
+      }
+
+      output.alreadyExpandedParentTreeElement =
+          (deepestExpandedParent ? treeElementByNode.get(deepestExpandedParent) :
+                                   output.elementsTreeOutline.rootElement()) as ElementsTreeElement;
+      treeElement = output.elementsTreeOutline.createTreeElementFor(input.currentHighlightedNode);
+    }
+
+    output.highlightedTreeElement = treeElement;
+    output.elementsTreeOutline.setHoverEffect(treeElement);
+    treeElement?.reveal(true);
+  }
+};
+
+/**
+ * The main goal of this presenter is to wrap ElementsTreeOutline until
+ * ElementsTreeOutline can be fully integrated into DOMTreeWidget.
+ *
+ * FIXME: once TreeOutline is declarative, this file needs to be renamed
+ * to DOMTreeWidget.ts.
+ */
+export class DOMTreeWidget extends UI.Widget.Widget {
+  omitRootDOMNode = false;
+  selectEnabled = false;
+  hideGutter = false;
+  showSelectionOnKeyboardFocus = false;
+  preventTabOrder = false;
+  deindentSingleNode = false;
+  onSelectedNodeChanged:
+      (event:
+           Common.EventTarget.EventTargetEvent<{node: SDK.DOMModel.DOMNode | null, focus: boolean}>) => void = () => {};
+  onElementsTreeUpdated: (event: Common.EventTarget.EventTargetEvent<SDK.DOMModel.DOMNode[]>) => void = () => {};
+  onDocumentUpdated: (domModel: SDK.DOMModel.DOMModel) => void = () => {};
+
+  #visible = false;
+  #visibleWidth?: number;
+  #wrap = false;
+
+  set visibleWidth(width: number) {
+    this.#visibleWidth = width;
+    this.performUpdate();
+  }
+
+  // FIXME: this is not declarative because ElementsTreeOutline can
+  // change root node internally.
+  set rootDOMNode(node: SDK.DOMModel.DOMNode|null) {
+    this.performUpdate();
+    if (!this.#viewOutput.elementsTreeOutline) {
+      throw new Error('Unexpected: missing elementsTreeOutline');
+    }
+    this.#viewOutput.elementsTreeOutline.rootDOMNode = node;
+    this.performUpdate();
+  }
+  get rootDOMNode(): SDK.DOMModel.DOMNode|null {
+    return this.#viewOutput.elementsTreeOutline?.rootDOMNode ?? null;
+  }
+
+  #currentHighlightedNode: SDK.DOMModel.DOMNode|null = null;
+
+  #view: View;
+  #viewOutput: ViewOutput = {
+    highlightedTreeElement: null,
+    alreadyExpandedParentTreeElement: null,
+  };
+  #highlightThrottler = new Common.Throttler.Throttler(100);
+
+  constructor(element?: HTMLElement, view?: View) {
+    super(element, {
+      useShadowDom: false,
+      delegatesFocus: false,
+    });
+    this.#view = view ?? DEFAULT_VIEW;
+    if (Common.Settings.Settings.instance().moduleSetting('highlight-node-on-hover-in-overlay').get()) {
+      SDK.TargetManager.TargetManager.instance().addModelListener(
+          SDK.OverlayModel.OverlayModel, SDK.OverlayModel.Events.HIGHLIGHT_NODE_REQUESTED, this.#highlightNode, this,
+          {scoped: true});
+      SDK.TargetManager.TargetManager.instance().addModelListener(
+          SDK.OverlayModel.OverlayModel, SDK.OverlayModel.Events.INSPECT_MODE_WILL_BE_TOGGLED, this.#clearState, this,
+          {scoped: true});
+    }
+  }
+
+  #highlightNode(event: Common.EventTarget.EventTargetEvent<SDK.DOMModel.DOMNode>): void {
+    void this.#highlightThrottler.schedule(() => {
+      this.#currentHighlightedNode = event.data;
+      this.requestUpdate();
+    });
+  }
+
+  #clearState(): void {
+    this.#currentHighlightedNode = null;
+    this.requestUpdate();
+  }
+
+  selectDOMNode(node: SDK.DOMModel.DOMNode|null, focus?: boolean): void {
+    this.#viewOutput?.elementsTreeOutline?.selectDOMNode(node, focus);
+  }
+
+  highlightNodeAttribute(node: SDK.DOMModel.DOMNode, attribute: string): void {
+    this.#viewOutput?.elementsTreeOutline?.highlightNodeAttribute(node, attribute);
+  }
+
+  setWordWrap(wrap: boolean): void {
+    this.#wrap = wrap;
+    this.performUpdate();
+  }
+
+  selectedDOMNode(): SDK.DOMModel.DOMNode|null {
+    return this.#viewOutput.elementsTreeOutline?.selectedDOMNode() ?? null;
+  }
+
+  /**
+   * FIXME: this is called to re-render everything from scratch, for
+   * example, if global settings changed. Instead, the setting values
+   * should be the input for the view function.
+   */
+  reload(): void {
+    this.#viewOutput.elementsTreeOutline?.update();
+  }
+
+  /**
+   * Used by layout tests.
+   */
+  getTreeOutlineForTesting(): ElementsTreeOutline|undefined {
+    return this.#viewOutput.elementsTreeOutline;
+  }
+
+  override performUpdate(): void {
+    this.#view(
+        {
+          omitRootDOMNode: this.omitRootDOMNode,
+          selectEnabled: this.selectEnabled,
+          hideGutter: this.hideGutter,
+          visibleWidth: this.#visibleWidth,
+          visible: this.#visible,
+          wrap: this.#wrap,
+          showSelectionOnKeyboardFocus: this.showSelectionOnKeyboardFocus,
+          preventTabOrder: this.preventTabOrder,
+          deindentSingleNode: this.deindentSingleNode,
+
+          currentHighlightedNode: this.#currentHighlightedNode,
+          onElementsTreeUpdated: this.onElementsTreeUpdated.bind(this),
+          onSelectedNodeChanged: event => {
+            this.#clearState();
+            this.onSelectedNodeChanged(event);
+          },
+          onElementCollapsed: this.#clearState.bind(this),
+          onElementExpanded: this.#clearState.bind(this),
+        },
+        this.#viewOutput, this.contentElement);
+  }
+
+  modelAdded(domModel: SDK.DOMModel.DOMModel): void {
+    this.performUpdate();
+    if (!this.#viewOutput.elementsTreeOutline) {
+      throw new Error('Unexpected: missing elementsTreeOutline');
+    }
+    this.#viewOutput.elementsTreeOutline.wireToDOMModel(domModel);
+    this.performUpdate();
+  }
+
+  modelRemoved(domModel: SDK.DOMModel.DOMModel): void {
+    this.#viewOutput.elementsTreeOutline?.unwireFromDOMModel(domModel);
+    this.performUpdate();
+  }
+
+  /**
+   * FIXME: which node is expanded should be part of the view input.
+   */
+  expand(): void {
+    if (this.#viewOutput.elementsTreeOutline?.selectedTreeElement) {
+      this.#viewOutput.elementsTreeOutline.selectedTreeElement.expand();
+    }
+  }
+
+  /**
+   * FIXME: which node is selected should be part of the view input.
+   */
+  selectDOMNodeWithoutReveal(node: SDK.DOMModel.DOMNode): void {
+    this.#viewOutput.elementsTreeOutline?.findTreeElement(node)?.select();
+  }
+
+  /**
+   * FIXME: adorners should be part of the view input.
+   */
+  updateNodeAdorners(node: SDK.DOMModel.DOMNode): void {
+    void this.#viewOutput.elementsTreeOutline?.findTreeElement(node)?.updateStyleAdorners();
+  }
+
+  highlightMatch(node: SDK.DOMModel.DOMNode, query?: string): void {
+    const treeElement = this.#viewOutput.elementsTreeOutline?.findTreeElement(node);
+    if (!treeElement) {
+      return;
+    }
+    if (query) {
+      treeElement.highlightSearchResults(query);
+    }
+    treeElement.reveal();
+    const matches = treeElement.listItemElement.getElementsByClassName(UI.UIUtils.highlightedSearchResultClassName);
+    if (matches.length) {
+      matches[0].scrollIntoViewIfNeeded(false);
+    }
+    treeElement.select(/* omitFocus */ true);
+  }
+
+  hideMatchHighlights(node: SDK.DOMModel.DOMNode): void {
+    const treeElement = this.#viewOutput.elementsTreeOutline?.findTreeElement(node);
+    if (!treeElement) {
+      return;
+    }
+    treeElement.hideSearchHighlights();
+  }
+
+  toggleHideElement(node: SDK.DOMModel.DOMNode): void {
+    void this.#viewOutput.elementsTreeOutline?.toggleHideElement(node);
+  }
+
+  toggleEditAsHTML(node: SDK.DOMModel.DOMNode): void {
+    this.#viewOutput.elementsTreeOutline?.toggleEditAsHTML(node);
+  }
+
+  duplicateNode(node: SDK.DOMModel.DOMNode): void {
+    this.#viewOutput.elementsTreeOutline?.duplicateNode(node);
+  }
+
+  copyStyles(node: SDK.DOMModel.DOMNode): void {
+    void this.#viewOutput.elementsTreeOutline?.findTreeElement(node)?.copyStyles();
+  }
+
+  /**
+   * FIXME: used to determine focus state, probably we can have a better
+   * way to do it.
+   */
+  empty(): boolean {
+    return !this.#viewOutput.elementsTreeOutline;
+  }
+
+  override focus(): void {
+    super.focus();
+    this.#viewOutput.elementsTreeOutline?.focus();
+  }
+
+  override wasShown(): void {
+    super.wasShown();
+    this.#visible = true;
+    this.performUpdate();
+  }
+
+  override detach(overrideHideOnDetach?: boolean): void {
+    super.detach(overrideHideOnDetach);
+    this.#visible = false;
+    this.performUpdate();
+  }
+
+  override show(parentElement: Element, insertBefore?: Node|null, suppressOrphanWidgetError = false): void {
+    this.performUpdate();
+    const domModels = SDK.TargetManager.TargetManager.instance().models(SDK.DOMModel.DOMModel, {scoped: true});
+    for (const domModel of domModels) {
+      if (domModel.parentModel()) {
+        continue;
+      }
+      if (!this.rootDOMNode) {
+        if (domModel.existingDocument()) {
+          this.rootDOMNode = domModel.existingDocument();
+          this.onDocumentUpdated(domModel);
+        } else {
+          void domModel.requestDocument();
+        }
+      }
+    }
+    super.show(parentElement, insertBefore, suppressOrphanWidgetError);
+  }
+}
 
 export class ElementsTreeOutline extends
     Common.ObjectWrapper.eventMixin<ElementsTreeOutline.EventTypes, typeof UI.TreeOutline.TreeOutline>(
@@ -114,10 +469,8 @@ export class ElementsTreeOutline extends
   constructor(omitRootDOMNode?: boolean, selectEnabled?: boolean, hideGutter?: boolean) {
     super();
 
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.HIGHLIGHT_ERRORS_ELEMENTS_PANEL)) {
-      this.#issuesManager = IssuesManager.IssuesManager.IssuesManager.instance();
-      this.#issuesManager.addEventListener(IssuesManager.IssuesManager.Events.ISSUE_ADDED, this.#onIssueAdded, this);
-    }
+    this.#issuesManager = IssuesManager.IssuesManager.IssuesManager.instance();
+    this.#issuesManager.addEventListener(IssuesManager.IssuesManager.Events.ISSUE_ADDED, this.#onIssueAdded, this);
 
     this.treeElementByNode = new WeakMap();
     const shadowContainer = document.createElement('div');
@@ -189,48 +542,46 @@ export class ElementsTreeOutline extends
     this.showHTMLCommentsSetting = Common.Settings.Settings.instance().moduleSetting('show-html-comments');
     this.showHTMLCommentsSetting.addChangeListener(this.onShowHTMLCommentsChange.bind(this));
     this.setUseLightSelectionColor(true);
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.HIGHLIGHT_ERRORS_ELEMENTS_PANEL)) {
-      // TODO(changhaohan): refactor the popover to use tooltip component.
-      this.#popupHelper = new UI.PopoverHelper.PopoverHelper(this.elementInternal, event => {
-        const hoveredNode = event.composedPath()[0] as Element;
-        if (!hoveredNode?.matches('.violating-element')) {
-          return null;
-        }
+    // TODO(changhaohan): refactor the popover to use tooltip component.
+    this.#popupHelper = new UI.PopoverHelper.PopoverHelper(this.elementInternal, event => {
+      const hoveredNode = event.composedPath()[0] as Element;
+      if (!hoveredNode?.matches('.violating-element')) {
+        return null;
+      }
 
-        const issues = this.#nodeElementToIssues.get(hoveredNode);
-        if (!issues) {
-          return null;
-        }
+      const issues = this.#nodeElementToIssues.get(hoveredNode);
+      if (!issues) {
+        return null;
+      }
 
-        return {
-          box: hoveredNode.boxInWindow(),
-          show: async (popover: UI.GlassPane.GlassPane) => {
-            popover.setIgnoreLeftMargin(true);
-            // clang-format off
-            render(html`
-              <div class="squiggles-content">
-                ${issues.map(issue => {
-                  const elementIssueDetails = getElementIssueDetails(issue);
-                  if (!elementIssueDetails) {
-                    // This shouldn't happen, but add this if check to pass ts check.
-                    return nothing;
-                  }
-                  const issueKindIconData = IssueCounter.IssueCounter.getIssueKindIconData(issue.getKind());
-                  const openIssueEvent = (): Promise<void> => Common.Revealer.reveal(issue);
-                  return html`
-                    <div class="squiggles-content-item">
-                    <devtools-icon .data=${issueKindIconData} @click=${openIssueEvent}></devtools-icon>
-                    <x-link class="link" @click=${openIssueEvent}>${i18nString(UIStrings.viewIssue)}</x-link>
-                    <span>${elementIssueDetails.tooltip}</span>
-                    </div>`;})}
-              </div>`, popover.contentElement);
-            // clang-format on
-            return true;
-          },
-        };
-      }, 'elements.issue');
-      this.#popupHelper.setTimeout(300);
-    }
+      return {
+        box: hoveredNode.boxInWindow(),
+        show: async (popover: UI.GlassPane.GlassPane) => {
+          popover.setIgnoreLeftMargin(true);
+          // clang-format off
+          render(html`
+            <div class="squiggles-content">
+              ${issues.map(issue => {
+                const elementIssueDetails = getElementIssueDetails(issue);
+                if (!elementIssueDetails) {
+                  // This shouldn't happen, but add this if check to pass ts check.
+                  return nothing;
+                }
+                const issueKindIconName = IssueCounter.IssueCounter.getIssueKindIconName(issue.getKind());
+                const openIssueEvent = (): Promise<void> => Common.Revealer.reveal(issue);
+                return html`
+                  <div class="squiggles-content-item">
+                  <devtools-icon .name=${issueKindIconName} @click=${openIssueEvent}></devtools-icon>
+                  <x-link class="link" @click=${openIssueEvent}>${i18nString(UIStrings.viewIssue)}</x-link>
+                  <span>${elementIssueDetails.tooltip}</span>
+                  </div>`;})}
+            </div>`, popover.contentElement);
+          // clang-format on
+          return true;
+        },
+      };
+    }, 'elements.issue');
+    this.#popupHelper.setTimeout(300);
   }
 
   static forDOMModel(domModel: SDK.DOMModel.DOMModel): ElementsTreeOutline|null {
@@ -274,6 +625,13 @@ export class ElementsTreeOutline extends
       for (const [element, issues] of treeElementNodeElementsToIssues) {
         this.#nodeElementToIssues.set(element, issues);
       }
+    }
+  }
+
+  deindentSingleNode(): void {
+    const firstChild = this.firstChild();
+    if (!firstChild || (firstChild && !firstChild.isExpandable())) {
+      this.shadowRoot.querySelector('.elements-disclosure')?.classList.add('single-node');
     }
   }
 
@@ -652,6 +1010,15 @@ export class ElementsTreeOutline extends
     treeElement.revealAndSelect(omitFocus);
   }
 
+  highlightNodeAttribute(node: SDK.DOMModel.DOMNode, attribute: string): void {
+    const treeElement = this.findTreeElement(node);
+    if (!treeElement) {
+      return;
+    }
+    treeElement.reveal();
+    treeElement.highlightAttribute(attribute);
+  }
+
   treeElementFromEventInternal(event: MouseEvent): UI.TreeOutline.TreeElement|null {
     const scrollContainer = this.element.parentElement;
     if (!scrollContainer) {
@@ -863,11 +1230,6 @@ export class ElementsTreeOutline extends
   }
 
   private contextMenuEventFired(event: MouseEvent): void {
-    // The context menu construction may be async. In order to
-    // make sure that no other (default) context menu shows up, we need
-    // to stop propagating and prevent the default action.
-    event.stopPropagation();
-    event.preventDefault();
     const treeElement = this.treeElementFromEventInternal(event);
     if (treeElement instanceof ElementsTreeElement) {
       void this.showContextMenu(treeElement, event);
@@ -879,13 +1241,21 @@ export class ElementsTreeOutline extends
       return;
     }
 
-    const contextMenu = new UI.ContextMenu.ContextMenu(event);
-    const isPseudoElement = Boolean(treeElement.node().pseudoType());
-    const isTag = treeElement.node().nodeType() === Node.ELEMENT_NODE && !isPseudoElement;
     const node = (event.target as Node | null);
     if (!node) {
       return;
     }
+
+    // The context menu construction may be async. In order to
+    // make sure that no other (default) context menu shows up, we need
+    // to stop propagating and prevent the default action.
+    event.stopPropagation();
+    event.preventDefault();
+
+    const contextMenu = new UI.ContextMenu.ContextMenu(event);
+    const isPseudoElement = Boolean(treeElement.node().pseudoType());
+    const isTag = treeElement.node().nodeType() === Node.ELEMENT_NODE && !isPseudoElement;
+
     let textNode: Element|null = node.enclosingNodeOrSelfWithClass('webkit-html-text-node');
     if (textNode?.classList.contains('bogus')) {
       textNode = null;
@@ -973,6 +1343,8 @@ export class ElementsTreeOutline extends
       if (!success) {
         return;
       }
+
+      Badges.UserBadges.instance().recordAction(Badges.BadgeAction.DOM_ELEMENT_OR_ATTRIBUTE_EDITED);
 
       // Select it and expand if necessary. We force tree update so that it processes dom events and is up to date.
       this.runPendingUpdates();
@@ -1128,6 +1500,8 @@ export class ElementsTreeOutline extends
     domModel.addEventListener(SDK.DOMModel.Events.DistributedNodesChanged, this.distributedNodesChanged, this);
     domModel.addEventListener(SDK.DOMModel.Events.TopLayerElementsChanged, this.topLayerElementsChanged, this);
     domModel.addEventListener(SDK.DOMModel.Events.ScrollableFlagUpdated, this.scrollableFlagUpdated, this);
+    domModel.addEventListener(
+        SDK.DOMModel.Events.AffectedByStartingStylesFlagUpdated, this.affectedByStartingStylesFlagUpdated, this);
   }
 
   unwireFromDOMModel(domModel: SDK.DOMModel.DOMModel): void {
@@ -1142,6 +1516,8 @@ export class ElementsTreeOutline extends
     domModel.removeEventListener(SDK.DOMModel.Events.DistributedNodesChanged, this.distributedNodesChanged, this);
     domModel.removeEventListener(SDK.DOMModel.Events.TopLayerElementsChanged, this.topLayerElementsChanged, this);
     domModel.removeEventListener(SDK.DOMModel.Events.ScrollableFlagUpdated, this.scrollableFlagUpdated, this);
+    domModel.removeEventListener(
+        SDK.DOMModel.Events.AffectedByStartingStylesFlagUpdated, this.affectedByStartingStylesFlagUpdated, this);
     elementsTreeOutlineByDOMModel.delete(domModel);
   }
 
@@ -1166,9 +1542,7 @@ export class ElementsTreeOutline extends
     this.reset();
     if (domModel.existingDocument()) {
       this.rootDOMNode = domModel.existingDocument();
-      if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.HIGHLIGHT_ERRORS_ELEMENTS_PANEL)) {
-        this.#addAllElementIssues();
-      }
+      this.#addAllElementIssues();
     }
   }
 
@@ -1232,7 +1606,11 @@ export class ElementsTreeOutline extends
     this.updateModifiedNodesTimeout = window.setTimeout(this.updateModifiedNodes.bind(this), 50);
   }
 
-  private updateModifiedNodes(): void {
+  /**
+   * TODO: this is made public for unit tests until the ElementsTreeOutline is
+   * migrated into DOMTreeWidget and highlights are declarative.
+   */
+  updateModifiedNodes(): void {
     if (this.updateModifiedNodesTimeout) {
       clearTimeout(this.updateModifiedNodesTimeout);
       delete this.updateModifiedNodesTimeout;
@@ -1472,7 +1850,7 @@ export class ElementsTreeOutline extends
 
     console.assert(!treeElement.isClosingTag());
 
-    this.innerUpdateChildren(treeElement);
+    this.#updateChildren(treeElement);
   }
 
   insertChildElement(
@@ -1500,7 +1878,7 @@ export class ElementsTreeOutline extends
     }
   }
 
-  private innerUpdateChildren(treeElement: ElementsTreeElement): void {
+  #updateChildren(treeElement: ElementsTreeElement): void {
     if (this.treeElementsBeingUpdated.has(treeElement)) {
       return;
     }
@@ -1610,6 +1988,15 @@ export class ElementsTreeOutline extends
     const treeElement = this.treeElementByNode.get(node);
     if (treeElement && isOpeningTag(treeElement.tagTypeContext)) {
       void treeElement.tagTypeContext.adornersThrottler.schedule(async () => treeElement.updateScrollAdorner());
+    }
+  }
+
+  private affectedByStartingStylesFlagUpdated(event: Common.EventTarget.EventTargetEvent<{node: SDK.DOMModel.DOMNode}>):
+      void {
+    const {node} = event.data;
+    const treeElement = this.treeElementByNode.get(node);
+    if (treeElement && isOpeningTag(treeElement.tagTypeContext)) {
+      void treeElement.tagTypeContext.adornersThrottler.schedule(async () => await treeElement.updateStyleAdorners());
     }
   }
 }

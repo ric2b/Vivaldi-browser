@@ -7,6 +7,7 @@
 
 #include <concepts>
 
+#include "base/byte_count.h"
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
 #include "chrome/browser/ui/performance_controls/memory_saver_chip_tab_helper.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
@@ -34,8 +35,8 @@ class MemorySaverUnitTestMixin : public T {
   }
 
   // Creates a new tab at index 0 that would report the given memory savings and
-  // discard reason if the tab was discarded
-  void AddNewTab(int memory_savings,
+  // discard reason if the tab was discarded.
+  void AddNewTab(base::ByteCount memory_savings,
                  mojom::LifecycleUnitDiscardReason discard_reason) {
     T::AddTab(T::browser(), GURL("http://foo.com"));
     content::WebContents* const contents =

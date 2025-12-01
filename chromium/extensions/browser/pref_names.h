@@ -89,6 +89,16 @@ inline constexpr char kInstallDenyList[] = "extensions.install.denylist";
 // accessed through extensions::ExternalPolicyProvider.
 inline constexpr char kInstallForceList[] = "extensions.install.forcelist";
 
+// A list containing the ids of extensions that Chrome will install disabled for
+// acceptance by the user. This preference is typically populated from the
+// contents of the "initial_extensions" list in the installation's
+// inital_preferences file only for the initial profile during first run.
+inline constexpr char kInitialInstallList[] = "extensions.install.initiallist";
+
+// String pref indicates the name of the provider of the `kInitialInstallList`.
+inline constexpr char kInitialInstallProviderName[] =
+    "extensions.install.initialprovidername";
+
 // A dictionary containing, for each extension id, additional
 // OAuth redirect URLs that will be allowed in chrome.identity API.
 inline constexpr char kOAuthRedirectUrls[] = "extensions.oauth_redirect_urls";
@@ -120,6 +130,11 @@ inline constexpr char kPinnedExtensions[] = "extensions.pinned_extensions";
 inline constexpr char kExtensionInstallTypeBlocklist[] =
     "extensions.extension_install_type_blocklist";
 
+// Pref for policy to enable/disable force-install extensions with non-malware
+// violations.
+inline constexpr char kExtensionForceInstallWithNonMalwareViolationsEnabled[] =
+    "extensions.extension_force_install_with_non_malware_violations_enabled";
+
 // Properties in kExtensions dictionaries --------------------------------------
 
 // Extension-controlled preferences.
@@ -143,6 +158,10 @@ inline constexpr char kPrefIncognitoContentSettings[] =
 // org.freedesktop.portal.GlobalShortcuts.
 inline constexpr char kGlobalShortcutsUuid[] =
     "extensions.global_shortcuts.uuid";
+
+// Boolean that specifies whether ExtensionInstallCloudPolicyChecks is enabled.
+inline constexpr char kExtensionInstallCloudPolicyChecksEnabled[] =
+    "extensions.install.cloud_policy_checks_enabled";
 
 }  // namespace pref_names
 }  // namespace extensions

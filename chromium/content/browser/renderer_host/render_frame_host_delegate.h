@@ -20,7 +20,6 @@
 #include "content/browser/webui/web_ui_impl.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/javascript_dialog_manager.h"
-#include "content/public/browser/media_player_watch_time.h"
 #include "content/public/browser/media_stream_request.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/select_audio_output_request.h"
@@ -52,10 +51,11 @@
 #include "third_party/blink/public/mojom/page/draggable_region.mojom-forward.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_mode.h"
+#include "ui/base/clipboard/clipboard_metadata.h"
 #include "ui/base/window_open_disposition.h"
 
 #if BUILDFLAG(IS_WIN)
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
@@ -162,7 +162,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   using ClipboardPasteData = content::ClipboardPasteData;
   using ClipboardEndpoint = content::ClipboardEndpoint;
-  using ClipboardMetadata = content::ClipboardMetadata;
+  using ClipboardMetadata = ui::ClipboardMetadata;
 
   // This is used to give the delegate a chance to filter IPC messages.
   virtual bool OnMessageReceived(RenderFrameHostImpl* render_frame_host,

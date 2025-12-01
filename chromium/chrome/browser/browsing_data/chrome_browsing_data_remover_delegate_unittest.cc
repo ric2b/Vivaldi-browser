@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/check_deref.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file_util.h"
@@ -90,7 +91,6 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/fake_profile_manager.h"
-#include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -100,7 +100,6 @@
 #include "components/autofill/core/browser/data_manager/personal_data_manager_test_utils.h"
 #include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/payments/credit_card.h"
-#include "components/autofill/core/browser/strike_databases/strike_database.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #include "components/autofill/core/browser/test_utils/test_autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
@@ -164,6 +163,7 @@
 #include "components/segmentation_platform/public/features.h"
 #include "components/site_engagement/content/site_engagement_service.h"
 #include "components/site_isolation/pref_names.h"
+#include "components/strike_database/strike_database.h"
 #include "components/sync/test/test_sync_service.h"
 #include "components/tpcd/metadata/browser/manager.h"
 #include "components/tpcd/metadata/browser/parser.h"
@@ -213,7 +213,7 @@
 #include "url/scheme_host_port.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
+#include "base/android/device_info.h"
 #include "chrome/browser/android/customtabs/chrome_origin_verifier.h"
 #include "chrome/browser/android/search_permissions/search_permissions_service.h"
 #include "chrome/browser/android/webapps/webapp_registry.h"
@@ -298,7 +298,6 @@ using testing::_;
 using testing::ByRef;
 using testing::Eq;
 using testing::FloatEq;
-using testing::Invoke;
 using testing::IsEmpty;
 using testing::MakeMatcher;
 using testing::Matcher;
@@ -490,8 +489,7 @@ class RemoveHistoryTester {
     base::RunLoop run_loop;
     base::CancelableTaskTracker tracker;
     history_service_->QueryURL(
-        url, /*want_visits=*/false,
-        base::BindLambdaForTesting([&](history::QueryURLResult result) {
+        url, base::BindLambdaForTesting([&](history::QueryURLResult result) {
           contains_url = result.success;
           run_loop.Quit();
         }),
@@ -504,6 +502,7 @@ class RemoveHistoryTester {
   void AddHistory(const GURL& url, base::Time time) {
     history_service_->AddPage(url, time, 0, 0, GURL(), history::RedirectList(),
                               ui::PAGE_TRANSITION_LINK, history::SOURCE_BROWSED,
+                              history::VisitResponseCodeCategory::kNot404,
                               false);
   }
 
@@ -553,9 +552,10 @@ class RemoveFaviconTester {
   // Adds a visit to history and stores an arbitrary favicon bitmap for
   // |page_url|.
   void VisitAndAddFavicon(const GURL& page_url) {
-    history_service_->AddPage(page_url, base::Time::Now(), 0, 0, GURL(),
-                              history::RedirectList(), ui::PAGE_TRANSITION_LINK,
-                              history::SOURCE_BROWSED, false);
+    history_service_->AddPage(
+        page_url, base::Time::Now(), 0, 0, GURL(), history::RedirectList(),
+        ui::PAGE_TRANSITION_LINK, history::SOURCE_BROWSED,
+        history::VisitResponseCodeCategory::kNot404, false);
 
     SkBitmap bitmap;
     bitmap.allocN32Pixels(gfx::kFaviconSize, gfx::kFaviconSize);
@@ -727,22 +727,22 @@ namespace {
 
 class TestTpcdManagerDelegate : public tpcd::metadata::Manager::Delegate {
  public:
-  explicit TestTpcdManagerDelegate(ScopedTestingLocalState& local_state)
-      : local_state_(local_state) {}
+  explicit TestTpcdManagerDelegate(PrefService* local_state)
+      : local_state_(CHECK_DEREF(local_state)) {}
 
   void SetTpcdMetadataGrants(const ContentSettingsForOneType& grants) override {
   }
-  PrefService& GetLocalState() override { return *local_state_->Get(); }
+  PrefService& GetLocalState() override { return local_state_.get(); }
 
  private:
-  const raw_ref<ScopedTestingLocalState> local_state_;
+  const raw_ref<PrefService> local_state_;
 };
 
 }  // namespace
 
 class RemoveTpcdMetadataCohortsTester {
  public:
-  explicit RemoveTpcdMetadataCohortsTester(ScopedTestingLocalState& local_state,
+  explicit RemoveTpcdMetadataCohortsTester(PrefService* local_state,
                                            TestingProfile* profile)
       : test_delegate_(local_state) {
     det_generator_ = new tpcd::metadata::DeterministicGenerator();
@@ -1095,8 +1095,6 @@ class MockNetworkErrorLoggingService : public net::NetworkErrorLoggingService {
 
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
-namespace autofill {
-
 // StrikeDatabaseTester is in the autofill namespace since
 // StrikeDatabase declares it as a friend in the autofill namespace.
 class StrikeDatabaseTester {
@@ -1118,10 +1116,8 @@ class StrikeDatabaseTester {
   }
 
  private:
-  raw_ptr<autofill::StrikeDatabase> strike_database_;
+  const raw_ptr<strike_database::StrikeDatabase> strike_database_;
 };
-
-}  // namespace autofill
 
 // Test Class -----------------------------------------------------------------
 
@@ -1355,7 +1351,9 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
     return &task_environment_;
   }
 
-  ScopedTestingLocalState& local_state() { return local_state_; }
+  PrefService* local_state() {
+    return TestingBrowserProcess::GetGlobal()->local_state();
+  }
 
  protected:
   // |feature_list_| needs to be destroyed after |task_environment_|, to avoid
@@ -1374,7 +1372,6 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
   content::BrowserTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   base::ScopedTempDir temp_dir_;
-  ScopedTestingLocalState local_state_{TestingBrowserProcess::GetGlobal()};
   std::unique_ptr<network::NetworkContext> network_context_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
   raw_ptr<TestingProfile> profile_;  // Owned by `profile_manager_`.
@@ -2449,7 +2446,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   tester.AddProfileAndCard();
   ASSERT_TRUE(tester.HasProfileAndCard());
 
-  autofill::StrikeDatabaseTester strike_database_tester(GetProfile());
+  StrikeDatabaseTester strike_database_tester(GetProfile());
   BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
                                 constants::DATA_TYPE_FORM_DATA, false);
 
@@ -4020,10 +4017,10 @@ class ChromeBrowsingDataRemoverDelegateWithAccountPasswordsTest
  public:
   ChromeBrowsingDataRemoverDelegateWithAccountPasswordsTest() {
 #if BUILDFLAG(IS_ANDROID)
-    // Override the GMS version to be big enough for local UPM support, so these
-    // tests still pass in bots with an outdated version.
-    base::android::BuildInfo::GetInstance()->set_gms_version_code_for_test(
-        base::NumberToString(password_manager::GetLocalUpmMinGmsVersion()));
+    // Override the GMS version to be big enough for split stores UPM support,
+    // so these tests still pass in bots with an outdated version.
+    base::android::device_info::set_gms_version_code_for_test(
+        base::NumberToString(password_manager::GetSplitStoresUpmMinVersion()));
 #endif
   }
 

@@ -42,7 +42,7 @@ using vivaldi_bookmark_kit::GetDisplayURL;
   return self;
 }
 
-- (void)configureCell:(TableViewCell*)cell
+- (void)configureCell:(LegacyTableViewCell*)cell
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:cell withStyler:styler];
   if (_bookmarkNode->is_folder()) {

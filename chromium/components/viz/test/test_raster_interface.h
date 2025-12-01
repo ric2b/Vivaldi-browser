@@ -77,6 +77,10 @@ class TestRasterInterface : public gpu::raster::RasterInterface {
                        GLint y,
                        GLsizei width,
                        GLsizei height) override {}
+  void CopySharedImage(const gpu::Mailbox& source_mailbox,
+                       const gpu::Mailbox& dest_mailbox,
+                       const gfx::Rect& source_rect,
+                       const gfx::Rect& dest_rect) override {}
   void WritePixels(const gpu::Mailbox& dest_mailbox,
                    int dst_x_offset,
                    int dst_y_offset,
@@ -117,7 +121,7 @@ class TestRasterInterface : public gpu::raster::RasterInterface {
       const gfx::Point& source_starting_point,
       const SkImageInfo& dst_info,
       GLuint dst_row_bytes,
-      unsigned char* out,
+      base::span<uint8_t> out,
       base::OnceCallback<void(bool)> readback_done) override {}
   void ReadbackYUVPixelsAsync(
       const gpu::Mailbox& source_mailbox,
@@ -126,11 +130,11 @@ class TestRasterInterface : public gpu::raster::RasterInterface {
       const gfx::Rect& output_rect,
       bool vertically_flip_texture,
       int y_plane_row_stride_bytes,
-      unsigned char* y_plane_data,
+      base::span<uint8_t> y_plane_data,
       int u_plane_row_stride_bytes,
-      unsigned char* u_plane_data,
+      base::span<uint8_t> u_plane_data,
       int v_plane_row_stride_bytes,
-      unsigned char* v_plane_data,
+      base::span<uint8_t> v_plane_data,
       const gfx::Point& paste_location,
       base::OnceCallback<void()> release_mailbox,
       base::OnceCallback<void(bool)> readback_done) override {}
@@ -141,18 +145,6 @@ class TestRasterInterface : public gpu::raster::RasterInterface {
                            int src_y,
                            int plane_index,
                            void* dst_pixels) override;
-  GLuint CreateAndConsumeForGpuRaster(const gpu::Mailbox& mailbox) override;
-  GLuint CreateAndConsumeForGpuRaster(
-      const scoped_refptr<gpu::ClientSharedImage>& shared_image) override;
-  void DeleteGpuRasterTexture(GLuint texture) override;
-  void BeginGpuRaster() override;
-  void EndGpuRaster() override;
-  void BeginSharedImageAccessDirectCHROMIUM(GLuint texture,
-                                            GLenum mode) override;
-  void EndSharedImageAccessDirectCHROMIUM(GLuint texture) override;
-  void InitializeDiscardableTextureCHROMIUM(GLuint texture) override;
-  void UnlockDiscardableTextureCHROMIUM(GLuint texture) override;
-  bool LockDiscardableTextureCHROMIUM(GLuint texture) override;
   void TraceBeginCHROMIUM(const char* category_name,
                           const char* trace_name) override {}
   void TraceEndCHROMIUM() override {}

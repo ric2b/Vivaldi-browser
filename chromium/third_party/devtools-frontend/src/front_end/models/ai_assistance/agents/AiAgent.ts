@@ -1,10 +1,9 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import * as Host from '../../../core/host/host.js';
 import * as Root from '../../../core/root/root.js';
-import type * as Lit from '../../../ui/lit/lit.js';
 import {debugLog, isStructuredLogEnabled} from '../debug.js';
 
 export const enum ResponseType {
@@ -85,6 +84,7 @@ export interface SideEffectResponse {
   code?: string;
   confirm: (confirm: boolean) => void;
 }
+interface SerializedSideEffectResponse extends Omit<SideEffectResponse, 'confirm'> {}
 
 export interface ActionResponse {
   type: ResponseType.ACTION;
@@ -106,6 +106,9 @@ export interface UserQuery {
 
 export type ResponseData = AnswerResponse|SuggestionsResponse|ErrorResponse|ActionResponse|SideEffectResponse|
     ThoughtResponse|TitleResponse|QueryingResponse|ContextResponse|UserQuery;
+
+export type SerializedResponseData = AnswerResponse|SuggestionsResponse|ErrorResponse|ActionResponse|
+    SerializedSideEffectResponse|ThoughtResponse|TitleResponse|QueryingResponse|ContextResponse|UserQuery;
 
 export type FunctionCallResponseData =
     TitleResponse|ThoughtResponse|ActionResponse|SideEffectResponse|SuggestionsResponse;
@@ -130,13 +133,7 @@ export interface ParsedAnswer {
   suggestions?: [string, ...string[]];
 }
 
-export interface ParsedStep {
-  thought?: string;
-  title?: string;
-  action?: string;
-}
-
-export type ParsedResponse = ParsedAnswer|ParsedStep;
+export type ParsedResponse = ParsedAnswer;
 
 export const MAX_STEPS = 10;
 
@@ -144,6 +141,9 @@ export interface ConversationSuggestion {
   title: string;
   jslogContext?: string;
 }
+
+/** At least one. */
+export type ConversationSuggestions = [ConversationSuggestion, ...ConversationSuggestion[]];
 
 export const enum ExternalRequestResponseType {
   ANSWER = 'answer',
@@ -172,8 +172,7 @@ export type ExternalRequestResponse = ExternalRequestAnswer|ExternalRequestNotif
 export abstract class ConversationContext<T> {
   abstract getOrigin(): string;
   abstract getItem(): T;
-  abstract getIcon(): Lit.TemplateResult|undefined;
-  abstract getTitle(opts?: {disabled: boolean}): string|ReturnType<typeof Lit.Directives.until>;
+  abstract getTitle(): string;
 
   isOriginAllowed(agentOrigin: string|undefined): boolean {
     if (!agentOrigin) {
@@ -194,7 +193,7 @@ export abstract class ConversationContext<T> {
     return;
   }
 
-  async getSuggestions(): Promise<[ConversationSuggestion, ...ConversationSuggestion[]]|undefined> {
+  async getSuggestions(): Promise<ConversationSuggestions|undefined> {
     return;
   }
 }
@@ -238,8 +237,6 @@ export interface FunctionDeclaration<Args extends Record<string, unknown>, Retur
     signal?: AbortSignal,
   }) => Promise<FunctionCallHandlerResult<ReturnType>>;
 }
-
-const OBSERVATION_PREFIX = 'OBSERVATION: ';
 
 interface AidaFetchResult {
   text?: string;
@@ -360,7 +357,7 @@ export abstract class AiAgent<T> {
     function validTemperature(temperature: number|undefined): number|undefined {
       return typeof temperature === 'number' && temperature >= 0 ? temperature : undefined;
     }
-    const enableAidaFunctionCalling = declarations.length && !this.functionCallEmulationEnabled;
+    const enableAidaFunctionCalling = declarations.length;
     const userTier = Host.AidaClient.convertToUserTierEnum(this.userTier);
     const preamble = userTier === Host.AidaClient.UserTier.TESTERS ? this.preamble : undefined;
     const facts = Array.from(this.#facts);
@@ -402,18 +399,71 @@ export abstract class AiAgent<T> {
   }
 
   /**
+   * The AI has instructions to emit structured suggestions in their response. This
+   * function parses for that.
+   *
+   * Note: currently only StylingAgent and PerformanceAgent utilize this, but
+   * eventually all agents should support this.
+   */
+  parseTextResponseForSuggestions(text: string): ParsedResponse {
+    if (!text) {
+      return {answer: ''};
+    }
+
+    const lines = text.split('\n');
+    const answerLines: string[] = [];
+    let suggestions: [string, ...string[]]|undefined;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('SUGGESTIONS:')) {
+        try {
+          // TODO: Do basic validation this is an array with strings
+          suggestions = JSON.parse(trimmed.substring('SUGGESTIONS:'.length).trim());
+        } catch {
+        }
+      } else {
+        answerLines.push(line);
+      }
+    }
+
+    // Sometimes the model fails to put the SUGGESTIONS text on its own line. Handle
+    // the case where the suggestions are part of the last line of the answer.
+    if (!suggestions && answerLines.at(-1)?.includes('SUGGESTIONS:')) {
+      const [answer, suggestionsText] = answerLines[answerLines.length - 1].split('SUGGESTIONS:', 2);
+      try {
+        // TODO: Do basic validation this is an array with strings
+        suggestions = JSON.parse(suggestionsText.trim().substring('SUGGESTIONS:'.length).trim());
+      } catch {
+      }
+      answerLines[answerLines.length - 1] = answer;
+    }
+
+    const response: ParsedResponse = {
+      // If we could not parse the parts, consider the response to be an
+      // answer.
+      answer: answerLines.join('\n'),
+    };
+
+    if (suggestions) {
+      response.suggestions = suggestions;
+    }
+
+    return response;
+  }
+
+  /**
    * Parses a streaming text response into a
-   * though/action/title/answer/suggestions component. This is only used
-   * by StylingAgent.
+   * though/action/title/answer/suggestions component.
    */
   parseTextResponse(response: string): ParsedResponse {
-    return {answer: response};
+    return this.parseTextResponseForSuggestions(response.trim());
   }
 
   /**
    * Declare a function that the AI model can call.
-   * @param name - The name of the function
-   * @param declaration - the function declaration. Currently functions must:
+   * @param name The name of the function
+   * @param declaration the function declaration. Currently functions must:
    * 1. Return an object of serializable key/value pairs. You cannot return
    *    anything other than a plain JavaScript object that can be serialized.
    * 2. Take one parameter which is an object that can have
@@ -431,20 +481,6 @@ export abstract class AiAgent<T> {
 
   protected clearDeclaredFunctions(): void {
     this.#functionDeclarations.clear();
-  }
-
-  protected formatParsedAnswer({answer}: ParsedAnswer): string {
-    return answer;
-  }
-
-  /**
-   * Special mode for StylingAgent that turns custom text output into a
-   * function call.
-   */
-  protected functionCallEmulationEnabled = false;
-  protected emulateFunctionCall(_aidaResponse: Host.AidaClient.DoConversationResponse):
-      Host.AidaClient.AidaFunctionCallResponse|'no-function-call'|'wait-for-completion' {
-    throw new Error('Unexpected emulateFunctionCall. Only StylingAgent implements function call emulation');
   }
 
   async *
@@ -533,7 +569,7 @@ export abstract class AiAgent<T> {
         }
         this.#history.push({
           parts: [{
-            text: this.formatParsedAnswer(parsedResponse),
+            text: parsedResponse.answer,
           }],
           role: Host.AidaClient.Role.MODEL,
         });
@@ -555,15 +591,13 @@ export abstract class AiAgent<T> {
             yield this.#createErrorResponse(ErrorType.ABORT);
             break;
           }
-          query = this.functionCallEmulationEnabled ? {text: OBSERVATION_PREFIX + result.result} : {
+          query = {
             functionResponse: {
               name: functionCall.name,
               response: result,
             },
           };
-          request = this.buildRequest(
-              query,
-              this.functionCallEmulationEnabled ? Host.AidaClient.Role.USER : Host.AidaClient.Role.ROLE_UNSPECIFIED);
+          request = this.buildRequest(query, Host.AidaClient.Role.ROLE_UNSPECIFIED);
         } catch {
           yield this.#createErrorResponse(ErrorType.UNKNOWN);
           break;
@@ -587,26 +621,15 @@ export abstract class AiAgent<T> {
     if (!call) {
       throw new Error(`Function ${name} is not found.`);
     }
-    if (this.functionCallEmulationEnabled) {
-      if (!call.displayInfoFromArgs) {
-        throw new Error('functionCallEmulationEnabled requires all functions to provide displayInfoFromArgs');
-      }
-      // Emulated function calls are formatted as text.
-      this.#history.push({
-        parts: [{text: this.#formatParsedStep(call.displayInfoFromArgs(args))}],
-        role: Host.AidaClient.Role.MODEL,
-      });
-    } else {
-      this.#history.push({
-        parts: [{
-          functionCall: {
-            name,
-            args,
-          },
-        }],
-        role: Host.AidaClient.Role.MODEL,
-      });
-    }
+    this.#history.push({
+      parts: [{
+        functionCall: {
+          name,
+          args,
+        },
+      }],
+      role: Host.AidaClient.Role.MODEL,
+    });
 
     let code;
     if (call.displayInfoFromArgs) {
@@ -719,21 +742,6 @@ export abstract class AiAgent<T> {
         break;
       }
 
-      if (this.functionCallEmulationEnabled) {
-        const emulatedFunctionCall = this.emulateFunctionCall(aidaResponse);
-        if (emulatedFunctionCall === 'wait-for-completion') {
-          continue;
-        }
-        if (emulatedFunctionCall !== 'no-function-call') {
-          yield {
-            rpcId,
-            functionCall: emulatedFunctionCall,
-            completed: true,
-          };
-          break;
-        }
-      }
-
       rpcId = aidaResponse.metadata.rpcGlobalId ?? rpcId;
       yield {
         rpcId,
@@ -753,23 +761,6 @@ export abstract class AiAgent<T> {
       });
       localStorage.setItem('aiAssistanceStructuredLog', JSON.stringify(this.#structuredLog));
     }
-  }
-
-  #formatParsedStep(step: ParsedStep): string {
-    let text = '';
-    if (step.thought) {
-      text = `THOUGHT: ${step.thought}`;
-    }
-    if (step.title) {
-      text += `\nTITLE: ${step.title}`;
-    }
-    if (step.action) {
-      text += `\nACTION
-${step.action}
-STOP`;
-    }
-
-    return text;
   }
 
   #removeLastRunParts(): void {

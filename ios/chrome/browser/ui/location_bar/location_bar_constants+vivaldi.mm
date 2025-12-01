@@ -3,8 +3,6 @@
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
 
 #pragma mark - Sizes and paddings
-// Top padding for the location bar on new tab page desktop style tab.
-const CGFloat vLocationBarTopPaddingDesktopTab = 6.f;
 // Space between the location icon and the location label.
 const CGFloat vLocationBarSteadyViewLocationImageToLabelSpacing = -6;
 // Trailing space between the trailing button and the trailing edge of the

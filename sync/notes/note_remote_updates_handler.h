@@ -64,7 +64,7 @@ class NoteRemoteUpdatesHandler {
   // is invalid).
   const SyncedNoteTrackerEntity* DetermineLocalTrackedEntityToUpdate(
       const syncer::EntityData& update_entity,
-      bool* should_ignore_update);
+      bool* should_ignore_update) const;
 
   // Given a remote update entity, it returns the parent note node of the
   // corresponding node. It returns null if the parent node cannot be found.

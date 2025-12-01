@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -60,13 +60,13 @@ function finalize(partialModel: PartialInsightModel<DuplicatedJavaScriptInsightM
   };
 }
 
-export function isDuplicatedJavaScript(model: InsightModel): model is DuplicatedJavaScriptInsightModel {
+export function isDuplicatedJavaScriptInsight(model: InsightModel): model is DuplicatedJavaScriptInsightModel {
   return model.insightKey === InsightKeys.DUPLICATE_JAVASCRIPT;
 }
 
 export function generateInsight(
-    parsedTrace: Handlers.Types.ParsedTrace, context: InsightSetContext): DuplicatedJavaScriptInsightModel {
-  const scripts = parsedTrace.Scripts.scripts.filter(script => {
+    data: Handlers.Types.HandlerData, context: InsightSetContext): DuplicatedJavaScriptInsightModel {
+  const scripts = data.Scripts.scripts.filter(script => {
     if (script.frame !== context.frameId) {
       return false;
     }
@@ -108,7 +108,7 @@ export function generateInsight(
     duplicationGroupedByNodeModules,
     scriptsWithDuplication: [...new Set(scriptsWithDuplication)],
     scripts,
-    mainDocumentUrl: context.navigation?.args.data?.url ?? parsedTrace.Meta.mainFrameURL,
+    mainDocumentUrl: context.navigation?.args.data?.url ?? data.Meta.mainFrameURL,
     metricSavings: metricSavingsForWastedBytes(wastedBytesByRequestId, context),
     wastedBytes: wastedBytesByRequestId.values().reduce((acc, cur) => acc + cur, 0),
   });

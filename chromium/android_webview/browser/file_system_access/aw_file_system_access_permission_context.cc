@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "base/android/build_info.h"
 #include "base/base_paths_android.h"
 #include "base/base_paths_posix.h"
 #include "base/files/file_path.h"
@@ -188,6 +187,14 @@ void AwFileSystemAccessPermissionContext::NotifyEntryMoved(
     const url::Origin& origin,
     const content::PathInfo& old_path,
     const content::PathInfo& new_path) {}
+
+void AwFileSystemAccessPermissionContext::NotifyEntryModified(
+    const url::Origin& origin,
+    const content::PathInfo& path) {}
+
+void AwFileSystemAccessPermissionContext::NotifyEntryRemoved(
+    const url::Origin& origin,
+    const content::PathInfo& path) {}
 
 void AwFileSystemAccessPermissionContext::OnFileCreatedFromShowSaveFilePicker(
     const GURL& file_picker_binding_context,

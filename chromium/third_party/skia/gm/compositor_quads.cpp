@@ -287,7 +287,7 @@ protected:
             }
         } else {
             //  Haven't been split yet, so fill in based on the rect
-            baseRect.toQuad(points);
+            baseRect.copyToQuad(points);
         }
 
         // Consider the first line against the 4 quad edges in tile, which should have 0,1, or 2
@@ -742,10 +742,9 @@ public:
 
         // This acts like the whole image is rendered over the entire tile grid, so derive local
         // coordinates from 'rect', based on the grid to image transform.
-        SkMatrix gridToImage = SkMatrix::RectToRect(SkRect::MakeWH(kColCount * kTileWidth,
-                                                                   kRowCount * kTileHeight),
-                                                    SkRect::MakeWH(fImage->width(),
-                                                                   fImage->height()));
+        SkMatrix gridToImage = SkMatrix::RectToRectOrIdentity(
+                                    SkRect::MakeWH(kColCount * kTileWidth, kRowCount * kTileHeight),
+                                    SkRect::MakeWH(fImage->width(), fImage->height()));
         SkRect localRect = gridToImage.mapRect(rect);
 
         // drawTextureSet automatically derives appropriate local quad from localRect if clipPtr
@@ -829,7 +828,7 @@ private:
             if (fResetEachQuad) {
                 // Apply a local transform in the shader to map from the tile rectangle to (0,0,w,h)
                 static const SkRect kTarget = SkRect::MakeWH(kTileWidth, kTileHeight);
-                SkMatrix local = SkMatrix::RectToRect(kTarget, rect);
+                SkMatrix local = SkMatrix::RectToRectOrIdentity(kTarget, rect);
                 paint->setShader(fShader->makeWithLocalMatrix(local));
             } else {
                 paint->setShader(fShader);
@@ -901,8 +900,11 @@ public:
     int drawTiles(SkCanvas* canvas) override {
         // Refresh the SkImage at the start, so that it's not attempted for every set entry
         if (fYUVData) {
+#if defined(SK_GANESH)
             fImage = fYUVData->refImage(canvas->recordingContext(),
                                         sk_gpu_test::LazyYUVImage::Type::kFromPixmaps);
+
+#endif
             if (!fImage) {
                 return 0;
             }
@@ -927,10 +929,9 @@ public:
 
         // This acts like the whole image is rendered over the entire tile grid, so derive local
         // coordinates from 'rect', based on the grid to image transform.
-        SkMatrix gridToImage = SkMatrix::RectToRect(SkRect::MakeWH(kColCount * kTileWidth,
-                                                                   kRowCount * kTileHeight),
-                                                    SkRect::MakeWH(fImage->width(),
-                                                                   fImage->height()));
+        SkMatrix gridToImage = SkMatrix::RectToRectOrIdentity(
+                                SkRect::MakeWH(kColCount * kTileWidth, kRowCount * kTileHeight),
+                                SkRect::MakeWH(fImage->width(), fImage->height()));
         SkRect localRect = gridToImage.mapRect(rect);
 
         // drawTextureSet automatically derives appropriate local quad from localRect if clipPtr

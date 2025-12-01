@@ -5,6 +5,7 @@
 #include "components/autofill/core/browser/form_processing/autofill_ai/determine_attribute_types.h"
 
 #include <memory>
+#include <ostream>
 #include <vector>
 
 #include "base/containers/to_vector.h"
@@ -23,7 +24,7 @@
 
 namespace autofill {
 
-void PrintTo(const AutofillFieldWithAttributeType& f, ::std::ostream* os) {
+void PrintTo(const AutofillFieldWithAttributeType& f, std::ostream* os) {
   *os << f.field->global_id() << " -> " << f.type.name_as_string();
 }
 
@@ -116,58 +117,8 @@ TEST_F(DetermineAttributeTypesTest, IsEmptyInUnrelatedForm) {
               IsEmpty());
 }
 
-// Tests that DetermineAttributeTypes() processes `*_TAG` correctly if
-TEST_F(DetermineAttributeTypesTest, LegacyBehavior) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(features::kAutofillAiNoTagTypes);
-
-  std::vector<std::unique_ptr<AutofillField>> fields = CreateFields({
-      {VEHICLE_MAKE},
-      {VEHICLE_MODEL},
-      {NAME_FIRST, VEHICLE_OWNER_TAG},
-      {NAME_MIDDLE},
-      {NAME_LAST, DRIVERS_LICENSE_NAME_TAG},
-      {DRIVERS_LICENSE_NUMBER},
-      {DRIVERS_LICENSE_EXPIRATION_DATE},
-  });
-
-  using enum AttributeTypeName;
-  auto vehicle_matcher =
-      ElementsAre(FieldAndType(fields[0], AttributeType(kVehicleMake)),
-                  FieldAndType(fields[1], AttributeType(kVehicleModel)),
-                  FieldAndType(fields[2], AttributeType(kVehicleOwner)));
-  auto drivers_license_matcher = ElementsAre(
-      FieldAndType(fields[4], AttributeType(kDriversLicenseName)),
-      FieldAndType(fields[5], AttributeType(kDriversLicenseNumber)),
-      FieldAndType(fields[6], AttributeType(kDriversLicenseExpirationDate)));
-  const Section section = fields.front()->section();
-
-  // DetermineAttributeTypes() overload with Section and AttributeType.
-  EXPECT_THAT(DetermineAttributeTypes(fields, section, kVehicle, kPassKey),
-              vehicle_matcher);
-  EXPECT_THAT(
-      DetermineAttributeTypes(fields, section, kDriversLicense, kPassKey),
-      drivers_license_matcher);
-
-  // DetermineAttributeTypes() overload with Section, without EntityType.
-  EXPECT_THAT(
-      DetermineAttributeTypes(fields, section, kPassKey),
-      UnorderedElementsAre(Pair(kVehicle, vehicle_matcher),
-                           Pair(kDriversLicense, drivers_license_matcher)));
-
-  // DetermineAttributeTypes() overload without Section and AttributeType.
-  EXPECT_THAT(
-      DetermineAttributeTypes(fields, kPassKey),
-      UnorderedElementsAre(
-          Pair(section, UnorderedElementsAre(
-                            Pair(kVehicle, vehicle_matcher),
-                            Pair(kDriversLicense, drivers_license_matcher)))));
-}
-
 // Tests that DetermineAttributeTypes() assigns static types correctly.
 TEST_F(DetermineAttributeTypesTest, AssignsStaticTypes) {
-  base::test::ScopedFeatureList feature_list{features::kAutofillAiNoTagTypes};
-
   std::vector<std::unique_ptr<AutofillField>> fields = CreateFields({
       {DRIVERS_LICENSE_NUMBER},
       {VEHICLE_MAKE},
@@ -211,8 +162,6 @@ TEST_F(DetermineAttributeTypesTest, AssignsStaticTypes) {
 // - It must look at both the forward and backward vicinity.
 // - Fields can have multiple types simultaneously.
 TEST_F(DetermineAttributeTypesTest, AssignsDynamicTypesToTheVicinity) {
-  base::test::ScopedFeatureList features_list{features::kAutofillAiNoTagTypes};
-
   // The NAME_{FIRST,MIDDLE,LAST} fields are expected to be assigned to both the
   // vehicle and the driver's license entities.
   std::vector<std::unique_ptr<AutofillField>> fields = CreateFields({
@@ -264,7 +213,6 @@ TEST_F(DetermineAttributeTypesTest, AssignsDynamicTypesToTheVicinity) {
 
 // Tests that DetermineAttributeTypes() propagates dynamic types forward.
 TEST_F(DetermineAttributeTypesTest, PropagatesDynamicTypesForward) {
-  base::test::ScopedFeatureList features_list{features::kAutofillAiNoTagTypes};
   using enum AttributeTypeName;
 
   // The last NAME_FULL field is too far away to be reached by the propagation.
@@ -290,7 +238,6 @@ TEST_F(DetermineAttributeTypesTest, PropagatesDynamicTypesForward) {
 
 // Tests that DetermineAttributeTypes() propagates dynamic types backward.
 TEST_F(DetermineAttributeTypesTest, PropagatesDynamicTypesBackward) {
-  base::test::ScopedFeatureList features_list{features::kAutofillAiNoTagTypes};
   using enum AttributeTypeName;
 
   // The last NAME_FULL field is too far away to be reached by the propagation.
@@ -318,7 +265,6 @@ TEST_F(DetermineAttributeTypesTest, PropagatesDynamicTypesBackward) {
 // are other entities between the source and target.
 TEST_F(DetermineAttributeTypesTest,
        PropagatesDynamicTypesForwardAcrossEntities) {
-  base::test::ScopedFeatureList features_list{features::kAutofillAiNoTagTypes};
   using enum AttributeTypeName;
 
   std::vector<std::unique_ptr<AutofillField>> fields =
@@ -358,7 +304,6 @@ TEST_F(DetermineAttributeTypesTest,
 // are other entities between the source and target.
 TEST_F(DetermineAttributeTypesTest,
        PropagatesDynamicTypesBackwardAcrossEntities) {
-  base::test::ScopedFeatureList features_list{features::kAutofillAiNoTagTypes};
   using enum AttributeTypeName;
 
   std::vector<std::unique_ptr<AutofillField>> fields =
@@ -397,8 +342,6 @@ TEST_F(DetermineAttributeTypesTest,
 // Tests that DetermineAttributeTypes() isolates fields from different sections
 // from another.
 TEST_F(DetermineAttributeTypesTest, DistinguishesBetweenSections) {
-  base::test::ScopedFeatureList features_list{features::kAutofillAiNoTagTypes};
-
   std::vector<std::unique_ptr<AutofillField>> fields = CreateFields({
       {NAME_FIRST},
       {NAME_MIDDLE},
@@ -460,13 +403,65 @@ TEST_F(DetermineAttributeTypesTest, DistinguishesBetweenSections) {
                ElementsAre(Pair(kDriversLicense, drivers_license_matcher)))));
 }
 
+// Tests that even with union types, for each AutofillField and EntityType,
+// there is at most at most one AttributeType.
+//
+// This is not enforced before DetermineAttributeTypes() during the construction
+// of AutofillField::Type(). We test it here nonetheless because it is an
+// important property of DetermineAttributeTypes().
+TEST_F(DetermineAttributeTypesTest, AtMostOneAttributePerFieldPerEntity) {
+  base::test::ScopedFeatureList feature_list(
+      features::kAutofillUnionTypesForAutofillAi);
+  using enum AttributeTypeName;
+
+  std::vector<std::unique_ptr<AutofillField>> fields = CreateFields(
+      {// AutofillType::MakeAutofillType() truncates this to NAME_FULL because
+       // both NAME_FULL and PASSPORT_ISSUING_COUNTRY are belong to `kPassport`.
+       {NAME_FULL, PASSPORT_ISSUING_COUNTRY},
+       // AutofillType::MakeAutofillType() keeps both because they belong to
+       // destinct EntityTypes.
+       {DRIVERS_LICENSE_NUMBER, PASSPORT_NUMBER},
+       // AutofillType::MakeAutofillType() ignores `NAME_FULL` because it does
+       // not belong to the FieldTypeGroup::kAutofillAi and keeps both remaining
+       // types because they belong to destinct EntityTypes.
+       {PASSPORT_ISSUE_DATE, NAME_FULL, DRIVERS_LICENSE_ISSUE_DATE}});
+
+  auto drivers_license_matcher = ElementsAre(
+      FieldAndType(fields[0], AttributeType(kDriversLicenseName)),
+      FieldAndType(fields[1], AttributeType(kDriversLicenseNumber)),
+      FieldAndType(fields[2], AttributeType(kDriversLicenseIssueDate)));
+  auto passport_matcher =
+      ElementsAre(FieldAndType(fields[0], AttributeType(kPassportName)),
+                  FieldAndType(fields[1], AttributeType(kPassportNumber)),
+                  FieldAndType(fields[2], AttributeType(kPassportIssueDate)));
+  const Section section = fields.front()->section();
+
+  // DetermineAttributeTypes() overload with Section and AttributeType.
+  EXPECT_THAT(DetermineAttributeTypes(fields, section, kPassport, kPassKey),
+              passport_matcher);
+  EXPECT_THAT(
+      DetermineAttributeTypes(fields, section, kDriversLicense, kPassKey),
+      drivers_license_matcher);
+
+  // DetermineAttributeTypes() overload with Section, without EntityType.
+  EXPECT_THAT(
+      DetermineAttributeTypes(fields, section, kPassKey),
+      UnorderedElementsAre(Pair(kDriversLicense, drivers_license_matcher),
+                           Pair(kPassport, passport_matcher)));
+
+  // DetermineAttributeTypes() overload without Section and AttributeType.
+  EXPECT_THAT(DetermineAttributeTypes(fields, kPassKey),
+              UnorderedElementsAre(Pair(
+                  section, UnorderedElementsAre(
+                               Pair(kDriversLicense, drivers_license_matcher),
+                               Pair(kPassport, passport_matcher)))));
+}
+
 // Tests for that the overloads behave equivalently:
 // - `DetermineAttributeTypes(fields, section, entity)`
 // - `DetermineAttributeTypes(fields, section)[entity]`
 // - `DetermineAttributeTypes(fields)[section][entity]`
 TEST_F(DetermineAttributeTypesTest, OverloadEquivalence) {
-  base::test::ScopedFeatureList features_list{features::kAutofillAiNoTagTypes};
-
   // We create four fields such that
   // - `field[0]` propagates to `field[2]` and
   // - `field[3]` propagates to `field[1]`.

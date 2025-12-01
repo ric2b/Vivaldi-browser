@@ -13,6 +13,7 @@
 #include "base/check.h"
 #include "base/logging.h"
 #include "base/notreached.h"
+#include "cc/base/math_util.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/tiles/tiling_set_coverage_iterator.h"
 #include "cc/trees/layer_tree_impl.h"
@@ -188,6 +189,12 @@ void TileDisplayLayerImpl::PushPropertiesTo(LayerImpl* layer) {
 void TileDisplayLayerImpl::AppendQuads(const AppendQuadsContext& context,
                                        viz::CompositorRenderPass* render_pass,
                                        AppendQuadsData* append_quads_data) {
+  // If this layer is used as a backdrop filter, don't create and append a quad
+  // as that will be done in RenderSurfaceImpl::AppendQuads.
+  if (is_backdrop_filter_mask_) {
+    return;
+  }
+
   if (solid_color_) {
     CHECK(tilings_.empty());
     AppendSolidQuad(render_pass, append_quads_data, *solid_color_);
@@ -199,12 +206,6 @@ void TileDisplayLayerImpl::AppendQuads(const AppendQuadsContext& context,
   }
 
   const float max_contents_scale = tilings_.front()->contents_scale_key();
-
-  // If this layer is used as a backdrop filter, don't create and append a quad
-  // as that will be done in RenderSurfaceImpl::AppendQuads.
-  if (is_backdrop_filter_mask_) {
-    return;
-  }
 
   viz::SharedQuadState* shared_quad_state =
       render_pass->CreateAndAppendSharedQuadState();
@@ -382,6 +383,10 @@ gfx::Rect TileDisplayLayerImpl::GetDamageRect() const {
 void TileDisplayLayerImpl::ResetChangeTracking() {
   LayerImpl::ResetChangeTracking();
   damage_rect_.SetRect(0, 0, 0, 0);
+}
+
+gfx::ContentColorUsage TileDisplayLayerImpl::GetContentColorUsage() const {
+  return content_color_usage_;
 }
 
 void TileDisplayLayerImpl::RecordDamage(const gfx::Rect& damage_rect) {

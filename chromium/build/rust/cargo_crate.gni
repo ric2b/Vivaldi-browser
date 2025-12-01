@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/rust/gni_impl/rustc_print_cfg.gni")
 import("//build/rust/rust_executable.gni")
 import("//build/rust/rust_macro.gni")
 import("//build/rust/rust_static_library.gni")
@@ -148,6 +149,16 @@ template("cargo_crate") {
   }
   if (defined(invoker.cargo_pkg_version)) {
     _rustenv += [ "CARGO_PKG_VERSION=${invoker.cargo_pkg_version}" ]
+
+    # Parse `<major>.<minor>.<patch>-<pre>` (the `-<pre>` part of optional,
+    # other parts are mandatory).
+    _cargo_pkg_version_parts = string_split(invoker.cargo_pkg_version, ".")
+    _rustenv += [ "CARGO_PKG_VERSION_MAJOR=${_cargo_pkg_version_parts[0]}" ]
+    _rustenv += [ "CARGO_PKG_VERSION_MINOR=${_cargo_pkg_version_parts[1]}" ]
+    _cargo_pkg_version_subparts = string_split(_cargo_pkg_version_parts[2], "-")
+    _cargo_pkg_version_subparts += [ "" ]  # In case there is no prerelease.
+    _rustenv += [ "CARGO_PKG_VERSION_PATCH=${_cargo_pkg_version_subparts[0]}" ]
+    _rustenv += [ "CARGO_PKG_VERSION_PRE=${_cargo_pkg_version_subparts[1]}" ]
   }
   if (defined(invoker.cargo_pkg_name)) {
     _rustenv += [ "CARGO_PKG_NAME=${invoker.cargo_pkg_name}" ]
@@ -438,10 +449,12 @@ template("cargo_crate") {
         "//build/action_helpers.py",
         "//build/gn_helpers.py",
         _rustflags_txt,
+        rustc_print_cfg_path,
       ]
       build_script_target = ":${_build_script_name}($rust_macro_toolchain)"
       deps = [
         ":${_build_script_name}_write_rustflags",
+        "//build/rust/gni_impl:rustc_print_cfg",
         build_script_target,
       ]
       testonly = _testonly
@@ -480,15 +493,11 @@ template("cargo_crate") {
         rebase_path(get_path_info(invoker.build_root, "dir"), root_build_dir),
         "--target",
         rust_abi_target,
+        "--rustc-print-cfg-path",
+        rebase_path(rustc_print_cfg_path, root_build_dir),
         "--rustflags",
         rebase_path(_rustflags_txt, root_build_dir),
       ]
-      if (cargo_target_abi != "") {
-        args += [
-          "--target-abi",
-          cargo_target_abi,
-        ]
-      }
       if (defined(invoker.features)) {
         args += [ "--features" ]
         args += invoker.features

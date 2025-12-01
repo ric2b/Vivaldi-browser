@@ -151,7 +151,7 @@ class DeviceInfo {
       const std::optional<PhoneAsASecurityKeyInfo>& paask_info,
       const std::string& fcm_registration_token,
       const DataTypeSet& interested_data_types,
-      std::optional<base::Time> floating_workspace_last_signin_timestamp);
+      std::optional<base::Time> auto_sign_out_last_signin_timestamp);
 
   DeviceInfo(const DeviceInfo&) = delete;
   DeviceInfo& operator=(const DeviceInfo&) = delete;
@@ -231,7 +231,7 @@ class DeviceInfo {
   const DataTypeSet& interested_data_types() const;
 
   // Returns the time at which this device was last signed into the device.
-  std::optional<base::Time> floating_workspace_last_signin_timestamp() const;
+  std::optional<base::Time> auto_sign_out_last_signin_timestamp() const;
 
   // Apps can set ids for a device that is meaningful to them but
   // not unique enough so the user can be tracked. Exposing |guid|
@@ -256,8 +256,7 @@ class DeviceInfo {
 
   void set_interested_data_types(const DataTypeSet& data_types);
 
-  void set_floating_workspace_last_signin_timestamp(
-      std::optional<base::Time> time);
+  void set_auto_sign_out_last_signin_timestamp(std::optional<base::Time> time);
 
   // Vivaldi
   size_t vivaldi_total_synced_files_size() const {
@@ -315,7 +314,7 @@ class DeviceInfo {
   // Data types for which this device receives invalidations.
   DataTypeSet interested_data_types_;
 
-  std::optional<base::Time> floating_workspace_last_signin_timestamp_;
+  std::optional<base::Time> auto_sign_out_last_signin_timestamp_;
 
   size_t vivaldi_total_synced_files_size_;
 

@@ -49,7 +49,7 @@
   self.viewProvider = [[VivaldiTabsSettingsViewProvider alloc] init];
 
   self.viewController =
-      [VivaldiTabsSettingsViewProvider
+      [self.viewProvider
           makeViewControllerWithPresentationDelegate:self
           onInactiveTabsSelectionTap:^{
       [self showInactiveTabsSettings];

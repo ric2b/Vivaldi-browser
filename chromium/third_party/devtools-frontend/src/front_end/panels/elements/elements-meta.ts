@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -88,7 +88,7 @@ const UIStrings = {
    */
   selectAnElementInThePageTo: 'Select an element in the page to inspect it',
   /**
-   *@description Title/tooltip of an action in the elements panel to add a new style rule.
+   * @description Title/tooltip of an action in the elements panel to add a new style rule.
    */
   newStyleRule: 'New Style Rule',
   /**
@@ -217,7 +217,6 @@ UI.ViewManager.registerViewExtension({
   commandPrompt: i18nLazyString(UIStrings.showEventListeners),
   title: i18nLazyString(UIStrings.eventListeners),
   order: 5,
-  hasToolbar: true,
   persistence: UI.ViewManager.ViewPersistence.PERMANENT,
   async loadView() {
     const Elements = await loadElementsModule();

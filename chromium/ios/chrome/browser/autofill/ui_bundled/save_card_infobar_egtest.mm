@@ -5,6 +5,7 @@
 #import <memory>
 
 #import "base/i18n/time_formatting.h"
+#import "base/ios/ios_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
@@ -17,7 +18,10 @@
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/autofill/ui_bundled/autofill_app_interface.h"
 #import "ios/chrome/browser/autofill/ui_bundled/bottom_sheet/bottom_sheet_constants.h"
+#import "ios/chrome/browser/badges/model/features.h"
+#import "ios/chrome/browser/badges/ui_bundled/badge_constants.h"
 #import "ios/chrome/browser/infobars/ui_bundled/banners/infobar_banner_constants.h"
+#import "ios/chrome/browser/infobars/ui_bundled/modals/infobar_save_card_modal_constants.h"
 #import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/common/ui/confirmation_alert/constants.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -103,6 +107,15 @@ id<GREYMatcher> UploadBottomSheetCancelButtonMatcher() {
       IDS_AUTOFILL_NO_THANKS_MOBILE_UPLOAD_SAVE);
 }
 
+// Matcher for the activity indicator.
+id<GREYMatcher> ActivityIndicatorMatcher() {
+  return grey_allOf(
+      grey_kindOfClassName(@"UIActivityIndicatorView"),
+      grey_ancestor(grey_accessibilityID(
+          kConfirmationAlertPrimaryActionAccessibilityIdentifier)),
+      nil);
+}
+
 id<GREYMatcher> LocalBannerLabelsMatcher() {
   NSString* bannerLabel = [NSString
       stringWithFormat:
@@ -158,6 +171,10 @@ id<GREYMatcher> BottomSheetCardDescriptionMatcher() {
 
   return grey_allOf(grey_accessibilityID(kSaveCardLabel),
                     grey_accessibilityLabel(cardDescriptionLabel), nil);
+}
+
+id<GREYMatcher> CVCTextField() {
+  return grey_accessibilityID(kSaveCardModalCVCTextFieldIdentifier);
 }
 
 // Simulates typing text on the keyboard and avoid having the first character
@@ -239,6 +256,16 @@ void FillAndSubmitXframeCreditCardForm() {
 // Some tests are not compatible with explicit save prompts for addresses.
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
+
+  if ([self isRunningTest:@selector(FLAKY_testInfobarWithoutBadge)]) {
+    config.features_enabled.push_back(kAutofillBadgeRemoval);
+  }
+
+  if ([self isRunningTest:@selector(testOfferLocalSave_WithInfobar)]) {
+    // This test needs the badge.
+    config.features_disabled.push_back(kAutofillBadgeRemoval);
+  }
+
   if ([self isRunningTest:@selector(testStickySavePromptJourney)]) {
     config.features_enabled.push_back(kAutofillStickyInfobarIos);
   }
@@ -448,6 +475,35 @@ void FillAndSubmitXframeCreditCardForm() {
   [ChromeTestCase removeAnyOpenMenusAndInfoBars];
   GREYAssertTrue([AutofillAppInterface waitForEvents],
                  @"Strike not added on infobar dismissed");
+}
+
+- (void)triggerCreditCardSaveModal {
+  [self fillAndSubmitFormWithID:kFillFullFormId
+               paymentsResponse:kResponseGetUploadDetailsSuccess
+                      errorCode:net::HTTP_OK
+                   forLocalSave:NO];
+  GREYAssertTrue(
+      [self
+          waitForUIElementToAppearWithMatcher:UploadBottomSheetTitleMatcher()],
+      @"Save card bottom sheet failed to appear on the first attempt.");
+  [self dismissUploadSaveCardBottomSheetWithoutAccepting];
+
+  // Trigger the infobar banner.
+  [self fillAndSubmitFormWithID:kFillFullFormId
+               paymentsResponse:kResponseGetUploadDetailsSuccess
+                      errorCode:net::HTTP_OK
+                   forLocalSave:NO];
+  GREYAssertTrue(
+      [self waitForUIElementToAppearWithMatcher:UploadBannerLabelsMatcher()],
+      @"Save card infobar failed to show on the second attempt.");
+
+  // Tap the banner's save button to open the modal.
+  [[EarlGrey selectElementWithMatcher:UploadBannerSaveButtonMatcher()]
+      performAction:grey_tap()];
+
+  // Ensure the modal is visible by asserting its save button is present.
+  [[EarlGrey selectElementWithMatcher:UploadModalSaveButtonMatcher()]
+      assertWithMatcher:grey_enabled()];
 }
 
 #pragma mark - Tests
@@ -803,6 +859,11 @@ void FillAndSubmitXframeCreditCardForm() {
 }
 
 - (void)testSaveCardBottomSheetShowsLoadingAndConfirmationAfterAcceptPushed {
+  // TODO(crbug.com/439735103): Re-enable the test on iOS26.
+  if (base::ios::IsRunningOnIOS26OrLater()) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 26.");
+  }
+
   [self fillAndSubmitFormWithID:kFillFullFormId
                paymentsResponse:kResponseGetUploadDetailsSuccess
                       errorCode:net::HTTP_OK
@@ -841,15 +902,11 @@ void FillAndSubmitXframeCreditCardForm() {
       performAction:grey_tap()];
 
   // Assert an activity indicator view is being shown in the loading state.
-  id<GREYMatcher> activityIndicatorView =
-      grey_kindOfClassName(@"UIActivityIndicatorView");
   GREYAssertTrue(
-      [self waitForUIElementToAppearWithMatcher:activityIndicatorView],
+      [self waitForUIElementToAppearWithMatcher:ActivityIndicatorMatcher()],
       @"Save card bottomsheet failed to show activity indicator in loading "
       @"state.");
-  [[[EarlGrey selectElementWithMatcher:activityIndicatorView]
-      inRoot:grey_accessibilityID(
-                 kConfirmationAlertPrimaryActionAccessibilityIdentifier)]
+  [[EarlGrey selectElementWithMatcher:ActivityIndicatorMatcher()]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   // Assert the accept button is disabled and has accessibility label for
@@ -1203,33 +1260,40 @@ void FillAndSubmitXframeCreditCardForm() {
   [[EarlGrey selectElementWithMatcher:LocalBottomSheetCancelButtonMatcher()]
       assertWithMatcher:grey_userInteractionEnabled()];
 
-  // Push the accept button on the save card bottomsheet.
-  [[EarlGrey selectElementWithMatcher:BottomSheetAcceptButtonMatcher()]
-      performAction:grey_tap()];
+  {
+    // Disable the synchronization, otherwise the test runner waits for the
+    // animation for the accept button and the following assertions will fail on
+    // iOS 26.
+    ScopedSynchronizationDisabler disabler;
 
-  // Assert the accept button is disabled and has accessibility label for
-  // confirmation state.
-  [[EarlGrey selectElementWithMatcher:
-                 grey_accessibilityID(
-                     kConfirmationAlertPrimaryActionAccessibilityIdentifier)]
-      assertWithMatcher:
-          grey_allOf(
-              grey_not(grey_enabled()),
-              grey_accessibilityLabel(l10n_util::GetNSString(
-                  IDS_AUTOFILL_SAVE_CARD_CONFIRMATION_SUCCESS_ACCESSIBLE_NAME)),
-              nil)];
+    // Push the accept button on the save card bottomsheet.
+    [[EarlGrey selectElementWithMatcher:BottomSheetAcceptButtonMatcher()]
+        performAction:grey_tap()];
 
-  // Assert a checkmark symbol is being shown in the confirmation state.
-  [[[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(
-                                   kConfirmationAlertCheckmarkSymbolIdentifier)]
-      inRoot:grey_accessibilityID(
-                 kConfirmationAlertPrimaryActionAccessibilityIdentifier)]
-      assertWithMatcher:grey_sufficientlyVisible()];
+    // Assert the accept button is disabled and has accessibility label for
+    // confirmation state.
+    [[EarlGrey selectElementWithMatcher:
+                   grey_accessibilityID(
+                       kConfirmationAlertPrimaryActionAccessibilityIdentifier)]
+        assertWithMatcher:
+            grey_allOf(
+                grey_not(grey_enabled()),
+                grey_accessibilityLabel(l10n_util::GetNSString(
+                    IDS_AUTOFILL_SAVE_CARD_CONFIRMATION_SUCCESS_ACCESSIBLE_NAME)),
+                nil)];
 
-  // Assert the cancel button is disabled.
-  [[EarlGrey selectElementWithMatcher:LocalBottomSheetCancelButtonMatcher()]
-      assertWithMatcher:grey_not(grey_enabled())];
+    // Assert a checkmark symbol is being shown in the confirmation state.
+    [[[EarlGrey
+        selectElementWithMatcher:
+            grey_accessibilityID(kConfirmationAlertCheckmarkSymbolIdentifier)]
+        inRoot:grey_accessibilityID(
+                   kConfirmationAlertPrimaryActionAccessibilityIdentifier)]
+        assertWithMatcher:grey_sufficientlyVisible()];
+
+    // Assert the cancel button is disabled.
+    [[EarlGrey selectElementWithMatcher:LocalBottomSheetCancelButtonMatcher()]
+        assertWithMatcher:grey_not(grey_enabled())];
+  }
 
   // Wait for bottomsheet to auto-dismiss.
   GREYAssertTrue(
@@ -1257,9 +1321,7 @@ void FillAndSubmitXframeCreditCardForm() {
       performAction:grey_tap()];
 
   GREYAssertFalse(
-      [self
-          waitForUIElementToAppearWithMatcher:grey_kindOfClassName(
-                                                  @"UIActivityIndicatorView")],
+      [self waitForUIElementToAppearWithMatcher:ActivityIndicatorMatcher()],
       @"Local save card bottomsheet should not show activity indicator.");
 
   // Wait for bottomsheet to auto-dismiss.
@@ -1309,6 +1371,12 @@ void FillAndSubmitXframeCreditCardForm() {
       [self waitForUIElementToAppearWithMatcher:LocalBannerLabelsMatcher()],
       @"Local save card infobar failed to show.");
 
+  // Verify that the badge is displayed.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(
+                                   kBadgeButtonSaveCardAccessibilityIdentifier)]
+      assertWithMatcher:grey_notNil()];
+
   // Tap the save button.
   [[EarlGrey selectElementWithMatcher:LocalSaveButtonMatcher()]
       performAction:grey_tap()];
@@ -1322,6 +1390,138 @@ void FillAndSubmitXframeCreditCardForm() {
   // Ensure credit card is saved locally.
   GREYAssertEqual(1U, [AutofillAppInterface localCreditCount],
                   @"Credit card should have been saved.");
+}
+
+// TODO(crbug.com/440644620): Find a solution to page loading flakes.
+// Tests that the save card flow via the infobar still works correctly when the
+// badge is removed.
+- (void)FLAKY_testInfobarWithoutBadge {
+  // Ensure there are no saved credit cards.
+  GREYAssertEqual(0U, [AutofillAppInterface localCreditCount],
+                  @"There should be no saved credit card.");
+
+  [ChromeEarlGrey
+      loadURL:web::test::HttpServer::MakeUrl(kCreditCardUploadForm)];
+
+  // Set up the Google Payments server response.
+  [AutofillAppInterface setPaymentsResponse:kResponseGetUploadDetailsFailure
+                                 forRequest:kURLGetUploadDetailsRequest
+                              withErrorCode:net::HTTP_OK];
+
+  // Set strike count as 1 to directly show the infobar.
+  [AutofillAppInterface setFormFillMaxStrikes:1
+                                      forCard:@"CreditCardSave__5454"];
+
+  [AutofillAppInterface resetEventWaiterForEvents:@[
+    @(CreditCardSaveManagerObserverEvent::kOnDecideToRequestUploadSaveCalled),
+    @(CreditCardSaveManagerObserverEvent::
+          kOnReceivedGetUploadDetailsResponseCalled),
+    @(CreditCardSaveManagerObserverEvent::kOnOfferLocalSaveCalled)
+  ]
+                                          timeout:kWaitForDownloadTimeout];
+
+  [self fillAndSubmitFormWithID:kFillFullFormId];
+
+  GREYAssertTrue([AutofillAppInterface waitForEvents],
+                 @"Request upload save or get upload details response or offer "
+                 @"local save not called");
+
+  // Wait until the save card infobar becomes visible.
+  GREYAssert(
+      [self waitForUIElementToAppearWithMatcher:LocalBannerLabelsMatcher()],
+      @"Local save card infobar failed to show.");
+
+  // Verify that the badge isn't displayed.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(
+                                   kBadgeButtonSaveCardAccessibilityIdentifier)]
+      assertWithMatcher:grey_nil()];
+
+  // Tap the save button.
+  [[EarlGrey selectElementWithMatcher:LocalSaveButtonMatcher()]
+      performAction:grey_tap()];
+
+  // Wait until the save card infobar disappears.
+  GREYAssert(
+      [self waitForUIElementToDisappearWithMatcher:LocalBannerLabelsMatcher()
+                               showingConfirmation:NO],
+      @"Local save card infobar failed to disappear.");
+
+  // Ensure credit card is saved locally.
+  GREYAssertEqual(1U, [AutofillAppInterface localCreditCount],
+                  @"Credit card should have been saved.");
+}
+
+// Tests CVC validation with short invalid input in the credit card upload save
+// modal.
+- (void)testUpstreamCVCValidation_WithShortInvalidInput {
+  // Action: Trigger the upstream save modal to be displayed.
+  [self triggerCreditCardSaveModal];
+
+  // The modal is now visible. The save button should initially be enabled
+  // because the pre-filled CVC is valid.
+  [[EarlGrey selectElementWithMatcher:UploadModalSaveButtonMatcher()]
+      assertWithMatcher:grey_enabled()];
+
+  [[EarlGrey selectElementWithMatcher:CVCTextField()]
+      performAction:grey_replaceText(@"12")];
+
+  [[EarlGrey selectElementWithMatcher:UploadModalSaveButtonMatcher()]
+      assertWithMatcher:grey_not(grey_enabled())];
+}
+
+// Tests CVC validation with long invalid input in the credit card upload save
+// modal.
+- (void)testUpstreamCVCValidation_WithLongInvalidInput {
+  // Trigger the upstream save modal to be displayed.
+  [self triggerCreditCardSaveModal];
+
+  // The modal is now visible. The save button should initially be enabled
+  // because the pre-filled CVC is valid.
+  [[EarlGrey selectElementWithMatcher:UploadModalSaveButtonMatcher()]
+      assertWithMatcher:grey_enabled()];
+
+  [[EarlGrey selectElementWithMatcher:CVCTextField()]
+      performAction:grey_replaceText(@"12345")];
+
+  [[EarlGrey selectElementWithMatcher:UploadModalSaveButtonMatcher()]
+      assertWithMatcher:grey_not(grey_enabled())];
+}
+
+// Tests CVC validation with non-digit invalid input in the credit card upload
+// save modal.
+- (void)testUpstreamCVCValidation_WithNonDigitInput {
+  // Trigger the upstream save modal to be displayed.
+  [self triggerCreditCardSaveModal];
+
+  // The modal is now visible. The save button should initially be enabled
+  // because the pre-filled CVC is valid.
+  [[EarlGrey selectElementWithMatcher:UploadModalSaveButtonMatcher()]
+      assertWithMatcher:grey_enabled()];
+
+  [[EarlGrey selectElementWithMatcher:CVCTextField()]
+      performAction:grey_replaceText(@"a")];
+
+  [[EarlGrey selectElementWithMatcher:UploadModalSaveButtonMatcher()]
+      assertWithMatcher:grey_not(grey_enabled())];
+}
+
+// Tests CVC validation with 4 digits valid input in the credit card upload save
+// modal.
+- (void)testUpstreamCVCValidation_WithValidInput {
+  // Trigger the upstream save modal to be displayed.
+  [self triggerCreditCardSaveModal];
+
+  // The modal is now visible. The save button should initially be enabled
+  // because the pre-filled CVC is valid.
+  [[EarlGrey selectElementWithMatcher:UploadModalSaveButtonMatcher()]
+      assertWithMatcher:grey_enabled()];
+
+  [[EarlGrey selectElementWithMatcher:CVCTextField()]
+      performAction:grey_replaceText(@"1234")];
+
+  [[EarlGrey selectElementWithMatcher:UploadModalSaveButtonMatcher()]
+      assertWithMatcher:grey_enabled()];
 }
 
 @end

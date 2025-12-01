@@ -1199,38 +1199,36 @@ void convertCubicToQuads(const SkPoint p[4], SkScalar tolScale, TArray<SkPoint, 
     }
 }
 
-void path_to_quads(const SkPath& path, SkPath* quadPath) {
-    quadPath->reset();
+SkPath path_to_quads(const SkPath& path) {
+    SkPathBuilder quadPath;
     TArray<SkPoint, true> qPts;
     SkAutoConicToQuads      converter;
     const SkPoint*          quadPts;
     for (auto [verb, pts, w] : SkPathPriv::Iterate(path)) {
         switch (verb) {
-            case SkPathVerb::kMove: quadPath->moveTo(pts[0].fX, pts[0].fY); break;
-            case SkPathVerb::kLine: quadPath->lineTo(pts[1].fX, pts[1].fY); break;
+            case SkPathVerb::kMove: quadPath.moveTo(pts[0]); break;
+            case SkPathVerb::kLine: quadPath.lineTo(pts[1]); break;
             case SkPathVerb::kQuad:
-                quadPath->quadTo(pts[1].fX, pts[1].fY, pts[2].fX, pts[2].fY);
+                quadPath.quadTo(pts[1].fX, pts[1].fY, pts[2].fX, pts[2].fY);
                 break;
             case SkPathVerb::kCubic:
                 qPts.clear();
                 convertCubicToQuads(pts, SK_Scalar1, &qPts);
                 for (int i = 0; i < qPts.size(); i += 3) {
-                    quadPath->quadTo(
+                    quadPath.quadTo(
                             qPts[i + 1].fX, qPts[i + 1].fY, qPts[i + 2].fX, qPts[i + 2].fY);
                 }
                 break;
             case SkPathVerb::kConic:
                 quadPts = converter.computeQuads(pts, *w, SK_Scalar1);
                 for (int i = 0; i < converter.countQuads(); ++i) {
-                    quadPath->quadTo(quadPts[i * 2 + 1].fX,
-                                     quadPts[i * 2 + 1].fY,
-                                     quadPts[i * 2 + 2].fX,
-                                     quadPts[i * 2 + 2].fY);
+                    quadPath.quadTo(quadPts[i * 2 + 1], quadPts[i * 2 + 2]);
                 }
                 break;
-            case SkPathVerb::kClose: quadPath->close(); break;
+            case SkPathVerb::kClose: quadPath.close(); break;
         }
     }
+    return quadPath.detach();
 }
 
 class SkCOLRCanvas : public SkNoDrawCanvas {
@@ -1261,8 +1259,7 @@ public:
     }
     SkIRect writePath(const SkPath& path, bool layer) {
         // Convert to quads.
-        SkPath quads;
-        path_to_quads(path, &quads);
+        SkPath quads = path_to_quads(path);
 
         SkRect  bounds  = quads.computeTightBounds();
         SkIRect ibounds = bounds.roundOut();
@@ -1329,15 +1326,11 @@ public:
     }
 
     void onDrawRect(const SkRect& rect, const SkPaint& paint) override {
-        SkPath path;
-        path.addRect(rect);
-        this->drawPath(path, paint);
+        this->drawPath(SkPath::Rect(rect), paint);
     }
 
     void onDrawOval(const SkRect& oval, const SkPaint& paint) override {
-        SkPath path;
-        path.addOval(oval);
-        this->drawPath(path, paint);
+        this->drawPath(SkPath::Oval(oval), paint);
     }
 
     void onDrawArc(const SkRect&  oval,
@@ -1345,17 +1338,14 @@ public:
                    SkScalar       sweepAngle,
                    bool           useCenter,
                    const SkPaint& paint) override {
-        SkPath path;
         bool fillNoPathEffect = SkPaint::kFill_Style == paint.getStyle() && !paint.getPathEffect();
-        SkPathPriv::CreateDrawArcPath(
-                &path, SkArc::Make(oval, startAngle, sweepAngle, useCenter), fillNoPathEffect);
+        SkPath path = SkPathPriv::CreateDrawArcPath(
+                SkArc::Make(oval, startAngle, sweepAngle, useCenter), fillNoPathEffect);
         this->drawPath(path, paint);
     }
 
     void onDrawRRect(const SkRRect& rrect, const SkPaint& paint) override {
-        SkPath path;
-        path.addRRect(rrect);
-        this->drawPath(path, paint);
+        this->drawPath(SkPath::RRect(rrect), paint);
     }
 
     void onDrawPath(const SkPath& platonicPath, const SkPaint& originalPaint) override {
@@ -1382,7 +1372,7 @@ public:
         // If done to the canvas then everything would get clipped out.
         m.postTranslate(0, fBaselineOffset);  // put the baseline at 0
         m.postScale(1, -1);                   // and flip it since OpenType is y-up.
-        path.transform(m);
+        path = path.makeTransform(m);
 
         // While creating the default glyf, union with dark colors and intersect with bright colors.
         SkColor  color = paint.getColor();
@@ -1416,8 +1406,7 @@ public:
     }
 
     void finishGlyph() {
-        SkPath baseGlyph;
-        fBasePath.resolve(&baseGlyph);
+        SkPath baseGlyph = fBasePath.resolve().value_or(SkPath());
         fGlyf->fBounds = this->writePath(baseGlyph, false);
     }
 

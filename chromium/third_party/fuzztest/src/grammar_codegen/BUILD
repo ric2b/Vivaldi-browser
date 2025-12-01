@@ -14,6 +14,9 @@
 
 # Code generation library for grammar support.
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 package(default_visibility = ["@com_google_fuzztest//tools:__pkg__"])
 
 licenses(["notice"])
@@ -31,7 +34,7 @@ cc_library(
         ":grammar_info",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
-        "@com_google_fuzztest//fuzztest/internal:logging",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//grammar_codegen/generated_antlr_parser",
     ],
 )
@@ -46,6 +49,7 @@ cc_library(
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//fuzztest/internal:logging",
     ],
 )

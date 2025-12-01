@@ -34,6 +34,7 @@
 #include "content/public/browser/download_manager.h"
 #include "content/public/common/content_client.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/shell_dialogs/selected_file_info.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -60,24 +61,41 @@ void WriteToFile(const base::FilePath& path,
                  bool is_base64) {
   DCHECK(!path.empty());
 
-  if (!is_base64) {
-    base::WriteFile(path, content);
+  std::optional<std::vector<uint8_t>> decoded_content;
+  if (is_base64) {
+    decoded_content = base::Base64Decode(content);
+    if (!decoded_content) {
+      LOG(ERROR) << "Invalid base64. Not writing " << path;
+      return;
+    }
+  }
+  base::span<const uint8_t> content_span =
+      decoded_content ? *decoded_content : base::as_byte_span(content);
+
+  base::File file(path,
+                  base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
+  if (!file.IsValid()) {
+    LOG(ERROR) << "Failed to open file: " << path.value();
     return;
   }
-
-  const std::optional<std::vector<uint8_t>> decoded_content =
-      base::Base64Decode(content);
-  if (decoded_content) {
-    base::WriteFile(path, decoded_content.value());
-  } else {
-    LOG(ERROR) << "Invalid base64. Not writing " << path;
+  if (!file.WriteAndCheck(0, content_span)) {
+    LOG(ERROR) << "Failed to write: " << path.value();
+    return;
   }
 }
 
 void AppendToFile(const base::FilePath& path, const std::string& content) {
   DCHECK(!path.empty());
 
-  base::AppendToFile(path, content);
+  base::File file(path, base::File::FLAG_OPEN_ALWAYS | base::File::FLAG_APPEND);
+  if (!file.IsValid()) {
+    LOG(ERROR) << "Failed to open file: " << path.value();
+    return;
+  }
+  if (!file.WriteAtCurrentPosAndCheck(base::as_byte_span(content))) {
+    LOG(ERROR) << "Failed to append: " << path.value();
+    return;
+  }
 }
 
 }  // namespace
@@ -122,7 +140,7 @@ void DevToolsFileHelper::Save(const std::string& url,
   auto it = saved_files_.find(url);
   if (it != saved_files_.end() && !save_as) {
     SaveToFileSelected(url, content, is_base64, std::move(save_callback),
-                       it->second);
+                       ui::SelectedFileInfo(it->second));
     return;
   }
 
@@ -184,31 +202,42 @@ void DevToolsFileHelper::Append(const std::string& url,
   if (it == saved_files_.end()) {
     return;
   }
-  std::move(callback).Run();
-  file_task_runner_->PostTask(FROM_HERE,
-                              BindOnce(&AppendToFile, it->second, content));
+  file_task_runner_->PostTaskAndReply(
+      FROM_HERE, BindOnce(&AppendToFile, it->second.path(), content),
+      std::move(callback));
 }
 
-void DevToolsFileHelper::SaveToFileSelected(const std::string& url,
-                                            const std::string& content,
-                                            bool is_base64,
-                                            SaveCallback callback,
-                                            const base::FilePath& path) {
-  GetLastSavePath() = path;
-  saved_files_[url] = path;
+void DevToolsFileHelper::SaveToFileSelected(
+    const std::string& url,
+    const std::string& content,
+    bool is_base64,
+    SaveCallback callback,
+    const ui::SelectedFileInfo& file_info) {
+  GetLastSavePath() = file_info.path();
+  saved_files_[url] = file_info;
 
   ScopedDictPrefUpdate update(profile_->GetPrefs(),
                               prefs::kDevToolsEditedFiles);
   base::Value::Dict& files_map = update.Get();
-  files_map.Set(base::MD5String(url), base::FilePathToValue(path));
 
-  std::string file_system_path = path.AsUTF8Unsafe();
+#if BUILDFLAG(IS_ANDROID)
+  // On Android, the selected file path can be a content URL that isn't supposed
+  // to be shown to the user. In that case, store the display name instead.
+  base::FilePath path_in_prefs = file_info.display_name.empty()
+                                     ? file_info.path()
+                                     : base::FilePath(file_info.display_name);
+#else
+  base::FilePath path_in_prefs = file_info.path();
+#endif  // BUILDFLAG(IS_ANDROID)
+  files_map.Set(base::MD5String(url), base::FilePathToValue(path_in_prefs));
+
+  std::string file_system_path = file_info.path().AsUTF8Unsafe();
   // Run 'SaveCallback' only once we have actually written the file, but
   // run it on the current task runner.
   scoped_refptr<base::SequencedTaskRunner> current_task_runner =
       base::SequencedTaskRunner::GetCurrentDefault();
   file_task_runner_->PostTask(
-      FROM_HERE, BindOnce(&WriteToFile, path, content, is_base64)
+      FROM_HERE, BindOnce(&WriteToFile, file_info.path(), content, is_base64)
                      .Then(base::BindPostTask(
                          current_task_runner,
                          BindOnce(std::move(callback), file_system_path))));
@@ -242,7 +271,7 @@ void DevToolsFileHelper::UpgradeDraggedFileSystemPermissions(
       storage_->GetDraggedFileSystemPaths(GURL(file_system_url));
   for (const auto& file_system_path : file_system_paths) {
     InnerAddFileSystem(handle_permissions_callback, kDefaultFileSystemType,
-                       file_system_path);
+                       ui::SelectedFileInfo(file_system_path));
   }
 }
 
@@ -375,7 +404,8 @@ void DevToolsFileHelper::DisconnectAutomaticFileSystem(
 void DevToolsFileHelper::InnerAddFileSystem(
     const HandlePermissionsCallback& handle_permissions_callback,
     const std::string& type,
-    const base::FilePath& path) {
+    const ui::SelectedFileInfo& file_info) {
+  base::FilePath path = file_info.path();
   std::string file_system_path = path.AsUTF8Unsafe();
 
   if (IsFileSystemAdded(file_system_path)) {

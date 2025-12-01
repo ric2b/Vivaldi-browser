@@ -77,9 +77,6 @@
   "core/common/ResourceType.ts | webassembly": {
     "message": "WebAssembly"
   },
-  "core/common/ResourceType.ts | webbundle": {
-    "message": "WebBundle"
-  },
   "core/common/ResourceType.ts | websocket": {
     "message": "WebSocket"
   },
@@ -121,6 +118,9 @@
   },
   "core/common/Revealer.ts | timelinePanel": {
     "message": "Bảng điều khiển Hiệu suất"
+  },
+  "core/common/SettingRegistration.ts | account": {
+    "message": "Tài khoản"
   },
   "core/common/SettingRegistration.ts | adorner": {
     "message": "Adorner"
@@ -172,9 +172,6 @@
   },
   "core/common/SettingRegistration.ts | sources": {
     "message": "Nguồn"
-  },
-  "core/common/SettingRegistration.ts | sync": {
-    "message": "Đồng bộ hóa"
   },
   "core/host/InspectorFrontendHost.ts | devtoolsS": {
     "message": "Công cụ cho nhà phát triển – {PH1}"
@@ -1001,6 +998,9 @@
   "entrypoints/js_app/js_app.ts | showNode": {
     "message": "Hiện tập lệnh"
   },
+  "entrypoints/main/GlobalAiButton.ts | aiAssistance": {
+    "message": "Trợ giúp AI"
+  },
   "entrypoints/main/MainImpl.ts | customizeAndControlDevtools": {
     "message": "Tùy chỉnh và điều khiển Công cụ cho nhà phát triển"
   },
@@ -1076,14 +1076,14 @@
   "entrypoints/main/main-meta.ts | dontMatchChromeColorSchemeCommand": {
     "message": "Không khớp với bảng phối màu của Chrome"
   },
+  "entrypoints/main/main-meta.ts | earnBadges": {
+    "message": "Nhận huy hiệu"
+  },
   "entrypoints/main/main-meta.ts | enableCtrlShortcutToSwitchPanels": {
     "message": "Bật phím tắt Ctrl + 1-9 để chuyển đổi bảng điều khiển"
   },
   "entrypoints/main/main-meta.ts | enableShortcutToSwitchPanels": {
     "message": "Bật phím tắt ⌘ + 1-9 để chuyển đổi bảng điều khiển"
-  },
-  "entrypoints/main/main-meta.ts | enableSync": {
-    "message": "Bật tính năng đồng bộ hóa các chế độ cài đặt"
   },
   "entrypoints/main/main-meta.ts | findNextResult": {
     "message": "Tìm kết quả tiếp theo"
@@ -1138,6 +1138,9 @@
   },
   "entrypoints/main/main-meta.ts | right": {
     "message": "Bên phải"
+  },
+  "entrypoints/main/main-meta.ts | saveSettings": {
+    "message": "Lưu các chế độ cài đặt DevTools vào Tài khoản Google của bạn"
   },
   "entrypoints/main/main-meta.ts | searchAsYouTypeCommand": {
     "message": "Bật tính năng tìm kiếm khi bạn nhập"
@@ -1412,6 +1415,9 @@
   "models/ai_assistance/AiUtils.ts | offline": {
     "message": "Bạn chỉ dùng được tính năng này khi đang kết nối Internet."
   },
+  "models/ai_assistance/ConversationHandler.ts | externalRequestReceived": {
+    "message": "DevTools đã nhận được một yêu cầu bên ngoài"
+  },
   "models/bindings/ContentProviderBasedProject.ts | unknownErrorLoadingFile": {
     "message": "Lỗi không xác định khi tải tệp"
   },
@@ -1628,6 +1634,12 @@
   "models/issues_manager/SharedDictionaryIssue.ts | compressionDictionaryTransport": {
     "message": "Truyền tải từ điển nén"
   },
+  "models/issues_manager/UnencodedDigestIssue.ts | integrityIntegration": {
+    "message": "Kiểm tra tính toàn vẹn do máy chủ khởi tạo"
+  },
+  "models/issues_manager/UnencodedDigestIssue.ts | unencodedDigestHeader": {
+    "message": "Đặc tả chuỗi đại diện không mã hoá HTTP"
+  },
   "models/live-metrics/LiveMetrics.ts | lcpEmulationWarning": {
     "message": "Việc mô phỏng một thiết bị mới sau khi trang tải có thể ảnh hưởng đến LCP. Hãy tải lại trang sau khi mô phỏng một thiết bị mới để có dữ liệu LCP chính xác."
   },
@@ -1657,6 +1669,21 @@
   },
   "models/logs/logs-meta.ts | reset": {
     "message": "đặt lại"
+  },
+  "models/network_time_calculator/NetworkTimeCalculator.ts | sDownload": {
+    "message": "Tốc độ tải xuống {PH1}"
+  },
+  "models/network_time_calculator/NetworkTimeCalculator.ts | sFromCache": {
+    "message": "{PH1} (trong bộ nhớ đệm)"
+  },
+  "models/network_time_calculator/NetworkTimeCalculator.ts | sFromServiceworker": {
+    "message": "{PH1} (từ ServiceWorker)"
+  },
+  "models/network_time_calculator/NetworkTimeCalculator.ts | sLatency": {
+    "message": "Độ trễ {PH1}"
+  },
+  "models/network_time_calculator/NetworkTimeCalculator.ts | sLatencySDownloadSTotal": {
+    "message": "Độ trễ {PH1}, tải xuống {PH2} (tổng cộng là {PH3})"
   },
   "models/persistence/EditFileSystemView.ts | enterAPath": {
     "message": "Nhập một đường dẫn"
@@ -1727,21 +1754,6 @@
   "models/persistence/PlatformFileSystem.ts | unableToReadFilesWithThis": {
     "message": "PlatformFileSystem không thể đọc tệp."
   },
-  "models/persistence/WorkspaceSettingsTab.ts | addFolder": {
-    "message": "Thêm thư mục"
-  },
-  "models/persistence/WorkspaceSettingsTab.ts | folderExcludePattern": {
-    "message": "Loại trừ khỏi không gian làm việc"
-  },
-  "models/persistence/WorkspaceSettingsTab.ts | mappingsAreInferredAutomatically": {
-    "message": "Thông tin ánh xạ được dự đoán tự động."
-  },
-  "models/persistence/WorkspaceSettingsTab.ts | remove": {
-    "message": "Xóa"
-  },
-  "models/persistence/WorkspaceSettingsTab.ts | workspace": {
-    "message": "Không gian làm việc"
-  },
   "models/persistence/persistence-meta.ts | disableOverrideNetworkRequests": {
     "message": "Tắt tính năng ghi đè các yêu cầu mạng"
   },
@@ -1766,11 +1778,380 @@
   "models/persistence/persistence-meta.ts | rewrite": {
     "message": "ghi đè"
   },
-  "models/persistence/persistence-meta.ts | showWorkspace": {
-    "message": "Hiện chế độ cài đặt của Không gian làm việc"
+  "models/trace/Name.ts | anonymous": {
+    "message": "(ẩn danh)"
   },
-  "models/persistence/persistence-meta.ts | workspace": {
-    "message": "Không gian làm việc"
+  "models/trace/Name.ts | eventDispatchS": {
+    "message": "Sự kiện: {PH1}"
+  },
+  "models/trace/Name.ts | frame": {
+    "message": "Khung"
+  },
+  "models/trace/Name.ts | layoutShift": {
+    "message": "Thay đổi bố cục"
+  },
+  "models/trace/Name.ts | wsConnectionClosed": {
+    "message": "Đã đóng WebSocket"
+  },
+  "models/trace/Name.ts | wsConnectionOpened": {
+    "message": "Đã mở WebSocket"
+  },
+  "models/trace/Name.ts | wsConnectionOpenedWithUrl": {
+    "message": "Đã mở WebSocket: {PH1}"
+  },
+  "models/trace/Styles.ts | abortPostTaskCallback": {
+    "message": "Huỷ postTask"
+  },
+  "models/trace/Styles.ts | animation": {
+    "message": "Ảnh động"
+  },
+  "models/trace/Styles.ts | animationFrameFired": {
+    "message": "Đã kích hoạt khung ảnh động"
+  },
+  "models/trace/Styles.ts | async": {
+    "message": "Không đồng bộ"
+  },
+  "models/trace/Styles.ts | asyncTask": {
+    "message": "Nhiệm vụ không đồng bộ"
+  },
+  "models/trace/Styles.ts | cacheModule": {
+    "message": "Lưu mã mô-đun vào bộ nhớ đệm"
+  },
+  "models/trace/Styles.ts | cacheScript": {
+    "message": "Lưu mã tập lệnh vào bộ nhớ đệm"
+  },
+  "models/trace/Styles.ts | cachedWasmModule": {
+    "message": "Mô-đun Wasm được lưu vào bộ nhớ đệm"
+  },
+  "models/trace/Styles.ts | cancelAnimationFrame": {
+    "message": "Huỷ khung ảnh động"
+  },
+  "models/trace/Styles.ts | cancelIdleCallback": {
+    "message": "Huỷ lệnh gọi lại ở trạng thái rảnh"
+  },
+  "models/trace/Styles.ts | commit": {
+    "message": "Xác nhận"
+  },
+  "models/trace/Styles.ts | compileCode": {
+    "message": "Biên dịch mã"
+  },
+  "models/trace/Styles.ts | compileModule": {
+    "message": "Biên dịch mô-đun"
+  },
+  "models/trace/Styles.ts | compileScript": {
+    "message": "Biên dịch tập lệnh"
+  },
+  "models/trace/Styles.ts | compiledWasmModule": {
+    "message": "Mô-đun Wasm được biên dịch"
+  },
+  "models/trace/Styles.ts | compositeLayers": {
+    "message": "Lớp tổng hợp"
+  },
+  "models/trace/Styles.ts | computeIntersections": {
+    "message": "Tính các giao điểm"
+  },
+  "models/trace/Styles.ts | consoleTaskRun": {
+    "message": "Chạy tác vụ trên bảng điều khiển"
+  },
+  "models/trace/Styles.ts | consoleTime": {
+    "message": "Thời gian trên bảng điều khiển"
+  },
+  "models/trace/Styles.ts | cppGc": {
+    "message": "GC CPP"
+  },
+  "models/trace/Styles.ts | createWebsocket": {
+    "message": "Tạo WebSocket"
+  },
+  "models/trace/Styles.ts | decrypt": {
+    "message": "Giải mã"
+  },
+  "models/trace/Styles.ts | decryptReply": {
+    "message": "Giải mã thư trả lời"
+  },
+  "models/trace/Styles.ts | deserializeCodeCache": {
+    "message": "Giải tuần tự bộ nhớ đệm đoạn mã"
+  },
+  "models/trace/Styles.ts | destroyWebsocket": {
+    "message": "Hủy bỏ WebSocket"
+  },
+  "models/trace/Styles.ts | digest": {
+    "message": "Thông báo"
+  },
+  "models/trace/Styles.ts | digestReply": {
+    "message": "Thư trả lời bằng chuỗi đại diện"
+  },
+  "models/trace/Styles.ts | domGc": {
+    "message": "Thu gom rác (GC) DOM"
+  },
+  "models/trace/Styles.ts | domcontentloadedEvent": {
+    "message": "Sự kiện DOMContentLoaded"
+  },
+  "models/trace/Styles.ts | drawFrame": {
+    "message": "Khung vẽ"
+  },
+  "models/trace/Styles.ts | drawing": {
+    "message": "Đang vẽ"
+  },
+  "models/trace/Styles.ts | embedderCallback": {
+    "message": "Lệnh gọi lại trình nhúng"
+  },
+  "models/trace/Styles.ts | encrypt": {
+    "message": "Mã hóa"
+  },
+  "models/trace/Styles.ts | encryptReply": {
+    "message": "Mã hoá thư trả lời"
+  },
+  "models/trace/Styles.ts | evaluateModule": {
+    "message": "Đánh giá mô-đun"
+  },
+  "models/trace/Styles.ts | evaluateScript": {
+    "message": "Đánh giá tập lệnh"
+  },
+  "models/trace/Styles.ts | event": {
+    "message": "Sự kiện"
+  },
+  "models/trace/Styles.ts | eventTiming": {
+    "message": "Thời gian xảy ra sự kiện"
+  },
+  "models/trace/Styles.ts | experience": {
+    "message": "Trải nghiệm"
+  },
+  "models/trace/Styles.ts | finishLoading": {
+    "message": "Kết thúc quá trình tải"
+  },
+  "models/trace/Styles.ts | fireIdleCallback": {
+    "message": "Kích hoạt lệnh gọi lại ở trạng thái rảnh"
+  },
+  "models/trace/Styles.ts | firstContentfulPaint": {
+    "message": "Nội dung đầu tiên hiển thị"
+  },
+  "models/trace/Styles.ts | firstPaint": {
+    "message": "Hiển thị đầu tiên"
+  },
+  "models/trace/Styles.ts | frameStart": {
+    "message": "Bắt đầu khung"
+  },
+  "models/trace/Styles.ts | frameStartMainThread": {
+    "message": "Bắt đầu khung (chuỗi chính)"
+  },
+  "models/trace/Styles.ts | frameStartedLoading": {
+    "message": "Khung đã bắt đầu tải"
+  },
+  "models/trace/Styles.ts | functionCall": {
+    "message": "Lệnh gọi hàm"
+  },
+  "models/trace/Styles.ts | gcEvent": {
+    "message": "Sự kiện GC"
+  },
+  "models/trace/Styles.ts | gpu": {
+    "message": "GPU"
+  },
+  "models/trace/Styles.ts | hitTest": {
+    "message": "Thử nghiệm nhấn"
+  },
+  "models/trace/Styles.ts | idle": {
+    "message": "Rảnh"
+  },
+  "models/trace/Styles.ts | imageDecode": {
+    "message": "Giải mã hình ảnh"
+  },
+  "models/trace/Styles.ts | installTimer": {
+    "message": "Cài đặt đồng hồ hẹn giờ"
+  },
+  "models/trace/Styles.ts | invalidateLayout": {
+    "message": "Vô hiệu hóa bố cục"
+  },
+  "models/trace/Styles.ts | jsFrame": {
+    "message": "Khung JS"
+  },
+  "models/trace/Styles.ts | largestContentfulPaint": {
+    "message": "Nội dung lớn nhất hiển thị"
+  },
+  "models/trace/Styles.ts | layerize": {
+    "message": "Xác định lớp"
+  },
+  "models/trace/Styles.ts | layout": {
+    "message": "Bố cục"
+  },
+  "models/trace/Styles.ts | layoutShift": {
+    "message": "Thay đổi bố cục"
+  },
+  "models/trace/Styles.ts | layoutShiftCluster": {
+    "message": "Cụm thay đổi bố cục"
+  },
+  "models/trace/Styles.ts | loading": {
+    "message": "Đang tải"
+  },
+  "models/trace/Styles.ts | majorGc": {
+    "message": "Thu gom rác (GC) lớn"
+  },
+  "models/trace/Styles.ts | messaging": {
+    "message": "Nhắn tin"
+  },
+  "models/trace/Styles.ts | minorGc": {
+    "message": "Thu gom rác (GC) nhỏ"
+  },
+  "models/trace/Styles.ts | onMessage": {
+    "message": "Trên thông báo"
+  },
+  "models/trace/Styles.ts | onloadEvent": {
+    "message": "Sự kiện tải"
+  },
+  "models/trace/Styles.ts | optimizeCode": {
+    "message": "Tối ưu hoá mã"
+  },
+  "models/trace/Styles.ts | other": {
+    "message": "Khác"
+  },
+  "models/trace/Styles.ts | paint": {
+    "message": "Vẽ"
+  },
+  "models/trace/Styles.ts | paintImage": {
+    "message": "Tạo điểm ảnh cho hình ảnh"
+  },
+  "models/trace/Styles.ts | paintSetup": {
+    "message": "Thiết lập sự kiện tạo điểm ảnh"
+  },
+  "models/trace/Styles.ts | painting": {
+    "message": "Vẽ"
+  },
+  "models/trace/Styles.ts | parseAndCompile": {
+    "message": "Phân tích cú pháp và biên dịch"
+  },
+  "models/trace/Styles.ts | parseHtml": {
+    "message": "Phân tích cú pháp HTML"
+  },
+  "models/trace/Styles.ts | parseStylesheet": {
+    "message": "Phân tích cú pháp biểu định kiểu"
+  },
+  "models/trace/Styles.ts | prePaint": {
+    "message": "Trước khi tạo điểm ảnh"
+  },
+  "models/trace/Styles.ts | profilingOverhead": {
+    "message": "Mức hao tổn khi phân tích"
+  },
+  "models/trace/Styles.ts | rasterizePaint": {
+    "message": "Chuyển đổi đường quét cho sự kiện tạo điểm ảnh"
+  },
+  "models/trace/Styles.ts | rasterizing": {
+    "message": "Đang tạo điểm ảnh"
+  },
+  "models/trace/Styles.ts | recalculateStyle": {
+    "message": "Tính toán lại kiểu"
+  },
+  "models/trace/Styles.ts | receiveData": {
+    "message": "Nhận dữ liệu"
+  },
+  "models/trace/Styles.ts | receiveResponse": {
+    "message": "Nhận phản hồi"
+  },
+  "models/trace/Styles.ts | receiveWebsocketHandshake": {
+    "message": "Nhận giao thức bắt tay của WebSocket"
+  },
+  "models/trace/Styles.ts | removeTimer": {
+    "message": "Xoá đồng hồ hẹn giờ"
+  },
+  "models/trace/Styles.ts | rendering": {
+    "message": "Kết xuất hình ảnh"
+  },
+  "models/trace/Styles.ts | requestAnimationFrame": {
+    "message": "Yêu cầu khung ảnh động"
+  },
+  "models/trace/Styles.ts | requestIdleCallback": {
+    "message": "Yêu cầu lệnh gọi lại ở trạng thái rảnh"
+  },
+  "models/trace/Styles.ts | requestMainThreadFrame": {
+    "message": "Yêu cầu khung chuỗi chính"
+  },
+  "models/trace/Styles.ts | runMicrotasks": {
+    "message": "Chạy nhiệm vụ nhỏ"
+  },
+  "models/trace/Styles.ts | runPostTaskCallback": {
+    "message": "Kích hoạt postTask"
+  },
+  "models/trace/Styles.ts | schedulePostMessage": {
+    "message": "Lên lịch cho postMessage"
+  },
+  "models/trace/Styles.ts | schedulePostTaskCallback": {
+    "message": "Lên lịch cho postTask"
+  },
+  "models/trace/Styles.ts | scheduleStyleRecalculation": {
+    "message": "Lên lịch tính toán lại kiểu"
+  },
+  "models/trace/Styles.ts | scripting": {
+    "message": "Đang viết tập lệnh"
+  },
+  "models/trace/Styles.ts | scroll": {
+    "message": "Cuộn"
+  },
+  "models/trace/Styles.ts | sendRequest": {
+    "message": "Gửi yêu cầu"
+  },
+  "models/trace/Styles.ts | sendWebsocketHandshake": {
+    "message": "Gửi giao thức bắt tay của WebSocket"
+  },
+  "models/trace/Styles.ts | sign": {
+    "message": "Ký"
+  },
+  "models/trace/Styles.ts | signReply": {
+    "message": "Quá trình ký thư trả lời"
+  },
+  "models/trace/Styles.ts | streamingCompileTask": {
+    "message": "Nhiệm vụ biên dịch truyền trực tuyến"
+  },
+  "models/trace/Styles.ts | streamingWasmResponse": {
+    "message": "Phản hồi Wasm truyền trực tuyến"
+  },
+  "models/trace/Styles.ts | system": {
+    "message": "Hệ thống"
+  },
+  "models/trace/Styles.ts | task": {
+    "message": "Nhiệm vụ"
+  },
+  "models/trace/Styles.ts | timerFired": {
+    "message": "Đã kích hoạt đồng hồ hẹn giờ"
+  },
+  "models/trace/Styles.ts | timestamp": {
+    "message": "Dấu thời gian"
+  },
+  "models/trace/Styles.ts | updateLayer": {
+    "message": "Cập nhật lớp"
+  },
+  "models/trace/Styles.ts | updateLayerTree": {
+    "message": "Cập nhật cây lớp"
+  },
+  "models/trace/Styles.ts | userTiming": {
+    "message": "Thời gian người dùng"
+  },
+  "models/trace/Styles.ts | verify": {
+    "message": "Xác minh"
+  },
+  "models/trace/Styles.ts | verifyReply": {
+    "message": "Xác minh thư trả lời"
+  },
+  "models/trace/Styles.ts | waitingForNetwork": {
+    "message": "Đang đợi mạng"
+  },
+  "models/trace/Styles.ts | wasmModuleCacheHit": {
+    "message": "Kết quả tìm kiếm trong bộ nhớ đệm của mô-đun Wasm"
+  },
+  "models/trace/Styles.ts | wasmModuleCacheInvalid": {
+    "message": "Bộ nhớ đệm của mô-đun Wasm không hợp lệ"
+  },
+  "models/trace/Styles.ts | willSendRequest": {
+    "message": "Sẽ gửi yêu cầu"
+  },
+  "models/trace/Styles.ts | wsMessageReceived": {
+    "message": "Nhận thông báo WebSocket"
+  },
+  "models/trace/Styles.ts | wsMessageSent": {
+    "message": "Gửi thông báo WebSocket"
+  },
+  "models/trace/Styles.ts | xhrLoad": {
+    "message": "Tải XHR"
+  },
+  "models/trace/Styles.ts | xhrReadyStateChange": {
+    "message": "Thay đổi XHR readyState"
   },
   "models/trace/insights/CLSCulprits.ts | animation": {
     "message": "Ảnh động"
@@ -2657,6 +3038,9 @@
   "panels/ai_assistance/AiAssistancePanel.ts | deleteChat": {
     "message": "Xoá cuộc trò chuyện trên thiết bị"
   },
+  "panels/ai_assistance/AiAssistancePanel.ts | exportConversation": {
+    "message": "Xuất cuộc trò chuyện"
+  },
   "panels/ai_assistance/AiAssistancePanel.ts | followTheSteps": {
     "message": "Làm theo các bước trên để đặt câu hỏi"
   },
@@ -2678,6 +3062,9 @@
   "panels/ai_assistance/AiAssistancePanel.ts | noPastConversations": {
     "message": "Không có cuộc trò chuyện trước đây"
   },
+  "panels/ai_assistance/AiAssistancePanel.ts | responseCopiedToClipboard": {
+    "message": "Đã sao chép câu trả lời vào bảng nhớ tạm"
+  },
   "panels/ai_assistance/AiAssistancePanel.ts | sendFeedback": {
     "message": "Gửi phản hồi"
   },
@@ -2685,7 +3072,7 @@
     "message": "Cài đặt"
   },
   "panels/ai_assistance/ai_assistance-meta.ts | aiAssistance": {
-    "message": "Trợ lý AI"
+    "message": "Trợ giúp AI"
   },
   "panels/ai_assistance/ai_assistance-meta.ts | askAi": {
     "message": "Hỏi AI"
@@ -3500,17 +3887,17 @@
   "panels/application/PreloadingTreeElement.ts | speculativeLoads": {
     "message": "Tải theo suy đoán"
   },
-  "panels/application/ReportingApiReportsView.ts | clickToDisplayBody": {
-    "message": "Nhấp vào bất kỳ báo cáo nào để hiện nội dung"
-  },
-  "panels/application/ReportingApiReportsView.ts | noReportSelected": {
-    "message": "Chưa chọn báo cáo nào"
-  },
   "panels/application/ReportingApiTreeElement.ts | reportingApi": {
     "message": "API báo cáo"
   },
+  "panels/application/ReportingApiView.ts | clickToDisplayBody": {
+    "message": "Nhấp vào bất kỳ báo cáo nào để hiện nội dung"
+  },
   "panels/application/ReportingApiView.ts | noReportOrEndpoint": {
     "message": "Không có báo cáo hoặc điểm cuối"
+  },
+  "panels/application/ReportingApiView.ts | noReportSelected": {
+    "message": "Chưa chọn báo cáo nào"
   },
   "panels/application/ReportingApiView.ts | reportingApiDescription": {
     "message": "Trên trang này, bạn sẽ có thể kiểm tra Reporting API báo cáo và điểm cuối."
@@ -4187,7 +4574,7 @@
   "panels/application/components/BackForwardCacheStrings.ts | webRTC": {
     "message": "Những trang có WebRTC không thể chuyển sang bộ nhớ đệm cho thao tác tiến/lùi."
   },
-  "panels/application/components/BackForwardCacheStrings.ts | webRTCSticky": {
+  "panels/application/components/BackForwardCacheStrings.ts | webRTCUsedWithCCNS": {
     "message": "Bộ nhớ đệm cho thao tác tiến/lùi bị tắt vì WebRTC đã được dùng."
   },
   "panels/application/components/BackForwardCacheStrings.ts | webShare": {
@@ -4196,13 +4583,13 @@
   "panels/application/components/BackForwardCacheStrings.ts | webSocket": {
     "message": "Những trang có WebSocket không thể chuyển sang bộ nhớ đệm cho thao tác tiến/lùi."
   },
-  "panels/application/components/BackForwardCacheStrings.ts | webSocketSticky": {
+  "panels/application/components/BackForwardCacheStrings.ts | webSocketUsedWithCCNS": {
     "message": "Bộ nhớ đệm cho thao tác tiến/lùi bị tắt vì WebSocket đã được dùng."
   },
   "panels/application/components/BackForwardCacheStrings.ts | webTransport": {
     "message": "Những trang có WebTransport không thể chuyển sang bộ nhớ đệm cho thao tác tiến/lùi."
   },
-  "panels/application/components/BackForwardCacheStrings.ts | webTransportSticky": {
+  "panels/application/components/BackForwardCacheStrings.ts | webTransportUsedWithCCNS": {
     "message": "Bộ nhớ đệm cho thao tác tiến/lùi bị tắt vì WebTransport đã được dùng."
   },
   "panels/application/components/BackForwardCacheStrings.ts | webXR": {
@@ -4698,7 +5085,7 @@
     "message": "(không rõ ràng)"
   },
   "panels/application/components/StorageMetadataView.ts | origin": {
-    "message": "Nguồn gốc"
+    "message": "Nguồn gốc của khung"
   },
   "panels/application/components/StorageMetadataView.ts | persistent": {
     "message": "Dài hạn"
@@ -5594,6 +5981,33 @@
   "panels/changes/changes-meta.ts | showChanges": {
     "message": "Hiển thị công cụ Thay đổi"
   },
+  "panels/common/BadgeNotification.ts | activityBasedBadgeAwardMessage": {
+    "message": "Bạn đã nhận được huy hiệu {PH1}! Huy hiệu này đã được thêm vào Hồ sơ nhà phát triển của bạn."
+  },
+  "panels/common/BadgeNotification.ts | close": {
+    "message": "Đóng"
+  },
+  "panels/common/BadgeNotification.ts | createProfile": {
+    "message": "Tạo hồ sơ"
+  },
+  "panels/common/BadgeNotification.ts | manageSettings": {
+    "message": "Quản lý chế độ cài đặt"
+  },
+  "panels/common/BadgeNotification.ts | receiveBadges": {
+    "message": "Bật huy hiệu"
+  },
+  "panels/common/BadgeNotification.ts | remindMeLater": {
+    "message": "Nhắc tôi sau"
+  },
+  "panels/common/BadgeNotification.ts | starterBadgeAwardMessageNoGdpProfile": {
+    "message": "Bạn đã nhận được huy hiệu {PH1} cho {PH2}! Tạo hồ sơ để nhận huy hiệu của bạn."
+  },
+  "panels/common/BadgeNotification.ts | starterBadgeAwardMessageSettingDisabled": {
+    "message": "Bạn đã nhận được huy hiệu {PH1} cho {PH2}! Hãy bật huy hiệu để nhận."
+  },
+  "panels/common/BadgeNotification.ts | viewProfile": {
+    "message": "Xem hồ sơ"
+  },
   "panels/common/FreDialog.ts | cancel": {
     "message": "Huỷ"
   },
@@ -5605,6 +6019,54 @@
   },
   "panels/common/FreDialog.ts | thingsToConsider": {
     "message": "Những yếu tố cần xem xét"
+  },
+  "panels/common/GdpSignUpDialog.ts | cancel": {
+    "message": "Huỷ"
+  },
+  "panels/common/GdpSignUpDialog.ts | contentPolicy": {
+    "message": "Chính sách về nội dung"
+  },
+  "panels/common/GdpSignUpDialog.ts | designedForSuccess": {
+    "message": "Được thiết kế để giúp bạn gặt hái thành công"
+  },
+  "panels/common/GdpSignUpDialog.ts | designedForSuccessBody": {
+    "message": "Phát triển kỹ năng, xây dựng dự án bằng AI và nhận huy hiệu để trưng bày trong hồ sơ nhà phát triển của bạn"
+  },
+  "panels/common/GdpSignUpDialog.ts | gdpDialogAriaLabel": {
+    "message": "Hộp thoại đăng ký Google Developer Program"
+  },
+  "panels/common/GdpSignUpDialog.ts | keepUpdated": {
+    "message": "Cập nhật cho tôi"
+  },
+  "panels/common/GdpSignUpDialog.ts | keepUpdatedBody": {
+    "message": "Các tính năng mới nhất của Công cụ cho nhà phát triển, thư mời tham dự sự kiện và thông tin chi tiết phù hợp sẽ được gửi thẳng vào hộp thư đến của bạn"
+  },
+  "panels/common/GdpSignUpDialog.ts | learnMore": {
+    "message": "Tìm hiểu thêm"
+  },
+  "panels/common/GdpSignUpDialog.ts | learnMoreAccessibleText": {
+    "message": "Tìm hiểu thêm về Google Developer Program"
+  },
+  "panels/common/GdpSignUpDialog.ts | privacyPolicy": {
+    "message": "Chính sách quyền riêng tư"
+  },
+  "panels/common/GdpSignUpDialog.ts | signUp": {
+    "message": "Đăng ký"
+  },
+  "panels/common/GdpSignUpDialog.ts | signUpFailed": {
+    "message": "Không thể tạo hồ sơ Google Developer Program cho bạn. Vui lòng thử lại sau."
+  },
+  "panels/common/GdpSignUpDialog.ts | tailorProfile": {
+    "message": "Điều chỉnh hồ sơ"
+  },
+  "panels/common/GdpSignUpDialog.ts | tailorProfileBody": {
+    "message": "Tên trong Tài khoản Google và các mối quan tâm của bạn sẽ được sử dụng trong Hồ sơ nhà phát triển của Google. Tên của bạn có thể xuất hiện trên nội dung mà bạn đóng góp. Bạn có thể thay đổi tên đó bất cứ lúc nào."
+  },
+  "panels/common/GdpSignUpDialog.ts | tailorProfileBodyDisclaimer": {
+    "message": "Khi tạo Hồ sơ nhà phát triển, bạn đồng ý với {PH1}. {PH2} và {PH3} của Google áp dụng cho việc bạn sử dụng dịch vụ này."
+  },
+  "panels/common/GdpSignUpDialog.ts | termsOfService": {
+    "message": "Điều khoản dịch vụ"
   },
   "panels/common/common.ts | allow": {
     "message": "Cho phép"
@@ -6632,8 +7094,14 @@
   "panels/elements/ElementsTreeElement.ts | disableGridMode": {
     "message": "Tắt chế độ lưới"
   },
+  "panels/elements/ElementsTreeElement.ts | disableMasonryMode": {
+    "message": "Tắt chế độ bố cục kiểu xếp gạch"
+  },
   "panels/elements/ElementsTreeElement.ts | disableScrollSnap": {
     "message": "Tắt lớp phủ scroll-snap"
+  },
+  "panels/elements/ElementsTreeElement.ts | disableStartingStyle": {
+    "message": "Tắt chế độ @starting-style"
   },
   "panels/elements/ElementsTreeElement.ts | distributeItemsEvenly": {
     "message": "Phân bổ đồng đều các mục"
@@ -6659,8 +7127,14 @@
   "panels/elements/ElementsTreeElement.ts | enableGridMode": {
     "message": "Bật chế độ lưới"
   },
+  "panels/elements/ElementsTreeElement.ts | enableMasonryMode": {
+    "message": "Bật chế độ bố cục kiểu xếp gạch"
+  },
   "panels/elements/ElementsTreeElement.ts | enableScrollSnap": {
     "message": "Bật lớp phủ scroll-snap"
+  },
+  "panels/elements/ElementsTreeElement.ts | enableStartingStyle": {
+    "message": "Bật chế độ @starting-style"
   },
   "panels/elements/ElementsTreeElement.ts | expandRecursively": {
     "message": "Mở rộng định kỳ"
@@ -6771,7 +7245,7 @@
     "message": "Danh mục trình xử lý sự kiện"
   },
   "panels/elements/EventListenersWidget.ts | frameworkListeners": {
-    "message": "Trình xử lý Framework"
+    "message": "Phân giải các trình nghe Framework"
   },
   "panels/elements/EventListenersWidget.ts | passive": {
     "message": "Thụ động"
@@ -6800,8 +7274,17 @@
   "panels/elements/LayoutPane.ts | flexboxOverlays": {
     "message": "Lớp phủ hộp linh hoạt"
   },
+  "panels/elements/LayoutPane.ts | gridOrMasonry": {
+    "message": "Kiểu lưới/Kiểu xây gạch"
+  },
+  "panels/elements/LayoutPane.ts | gridOrMasonryOverlays": {
+    "message": "Lớp phủ kiểu lưới/kiểu xếp gạch"
+  },
   "panels/elements/LayoutPane.ts | noFlexboxLayoutsFoundOnThisPage": {
     "message": "Không tìm thấy bố cục hộp linh hoạt trên trang này"
+  },
+  "panels/elements/LayoutPane.ts | noGridOrMasonryLayoutsFoundOnThisPage": {
+    "message": "Không tìm thấy bố cục kiểu lưới hoặc bố cục kiểu xếp gạch trên trang này"
   },
   "panels/elements/LayoutPane.ts | overlayDisplaySettings": {
     "message": "Cài đặt hiển thị lớp phủ"
@@ -8600,6 +9083,12 @@
   "panels/mobile_throttling/NetworkPanelIndicator.ts | requestsMayBeOverridden": {
     "message": "Yêu cầu có thể bị ghi đè cục bộ. Hãy xem bảng điều khiển Nguồn"
   },
+  "panels/mobile_throttling/NetworkThrottlingSelector.ts | add": {
+    "message": "Thêm…"
+  },
+  "panels/mobile_throttling/NetworkThrottlingSelector.ts | addS": {
+    "message": "Thêm {PH1}"
+  },
   "panels/mobile_throttling/NetworkThrottlingSelector.ts | custom": {
     "message": "Tùy chỉnh"
   },
@@ -8608,6 +9097,12 @@
   },
   "panels/mobile_throttling/NetworkThrottlingSelector.ts | presets": {
     "message": "Giá trị đặt trước"
+  },
+  "panels/mobile_throttling/NetworkThrottlingSelector.ts | recommendedThrottling": {
+    "message": "{PH1} – nên chọn"
+  },
+  "panels/mobile_throttling/NetworkThrottlingSelector.ts | sS": {
+    "message": "{PH1}: {PH2}"
   },
   "panels/mobile_throttling/ThrottlingManager.ts | calibrate": {
     "message": "Hiệu chỉnh…"
@@ -8646,10 +9141,10 @@
     "message": "Đặt lại về giá trị mặc định"
   },
   "panels/mobile_throttling/ThrottlingManager.ts | saveDataOff": {
-    "message": "\"Save-Data\": buộc tắt"
+    "message": "\"Save-Data\": tắt"
   },
   "panels/mobile_throttling/ThrottlingManager.ts | saveDataOn": {
-    "message": "\"Save-Data\": buộc bật"
+    "message": "\"Save-Data\": bật"
   },
   "panels/mobile_throttling/ThrottlingManager.ts | saveDataSettingTooltip": {
     "message": "Ghi đè giá trị do navigator.connection.saveData báo cáo trên trang"
@@ -9089,9 +9584,6 @@
   "panels/network/NetworkDataGridNode.ts | servedFromSignedHttpExchange": {
     "message": "Được phân phối qua Signed HTTP Exchange, kích thước tài nguyên: {PH1}"
   },
-  "panels/network/NetworkDataGridNode.ts | servedFromWebBundle": {
-    "message": "Được phân phát qua Web Bundle, kích thước tài nguyên: {PH1}"
-  },
   "panels/network/NetworkDataGridNode.ts | serviceWorker": {
     "message": "(ServiceWorker)"
   },
@@ -9106,15 +9598,6 @@
   },
   "panels/network/NetworkDataGridNode.ts | unknownExplanation": {
     "message": "Hệ thống không hiển thị được trạng thái của yêu cầu vì trang phát hành yêu cầu đã hủy tải khi yêu cầu đang được thực hiện. Bạn có thể dùng chrome://net-export để thu thập nhật ký mạng và xem tất cả thông tin chi tiết về yêu cầu."
-  },
-  "panels/network/NetworkDataGridNode.ts | webBundle": {
-    "message": "(Web Bundle)"
-  },
-  "panels/network/NetworkDataGridNode.ts | webBundleError": {
-    "message": "Lỗi Web Bundle"
-  },
-  "panels/network/NetworkDataGridNode.ts | webBundleInnerRequest": {
-    "message": "Được phân phát qua Web Bundle"
   },
   "panels/network/NetworkItemView.ts | connectionInfo": {
     "message": "Thông tin kết nối"
@@ -9357,7 +9840,7 @@
     "message": "Chỉ hiển thị các yêu cầu bị chặn"
   },
   "panels/network/NetworkLogView.ts | onlyShowIPProtectedRequests": {
-    "message": "(Chỉ ở chế độ ẩn danh) Chỉ hiển thị các yêu cầu được gửi đến proxy của tính năng Bảo vệ địa chỉ IP"
+    "message": "Chỉ hiển thị các yêu cầu được gửi đến proxy của tính năng Bảo vệ địa chỉ IP. Không có hiệu lực trong quá trình duyệt web thông thường."
   },
   "panels/network/NetworkLogView.ts | onlyShowRequestsWithBlockedCookies": {
     "message": "Chỉ hiển thị các yêu cầu có cookie phản hồi bị chặn"
@@ -9454,6 +9937,9 @@
   },
   "panels/network/NetworkLogViewColumns.ts | initiatorAddressSpace": {
     "message": "Không gian địa chỉ của trình khởi tạo"
+  },
+  "panels/network/NetworkLogViewColumns.ts | isAdRelated": {
+    "message": "Có liên quan đến quảng cáo"
   },
   "panels/network/NetworkLogViewColumns.ts | latency": {
     "message": "Độ trễ"
@@ -9619,21 +10105,6 @@
   },
   "panels/network/NetworkSearchScope.ts | url": {
     "message": "URL"
-  },
-  "panels/network/NetworkTimeCalculator.ts | sDownload": {
-    "message": "Tốc độ tải xuống {PH1}"
-  },
-  "panels/network/NetworkTimeCalculator.ts | sFromCache": {
-    "message": "{PH1} (trong bộ nhớ đệm)"
-  },
-  "panels/network/NetworkTimeCalculator.ts | sFromServiceworker": {
-    "message": "{PH1} (từ ServiceWorker)"
-  },
-  "panels/network/NetworkTimeCalculator.ts | sLatency": {
-    "message": "Độ trễ {PH1}"
-  },
-  "panels/network/NetworkTimeCalculator.ts | sLatencySDownloadSTotal": {
-    "message": "Độ trễ {PH1}, tải xuống {PH2} (tổng cộng là {PH3})"
   },
   "panels/network/RequestCookiesView.ts | cookiesThatWereReceivedFromThe": {
     "message": "Các cookie nhận được từ máy chủ trong tiêu đề \"set-cookie\" của phản hồi"
@@ -10121,9 +10592,6 @@
   "panels/network/components/RequestHeadersView.ts | fromSignedexchange": {
     "message": "(từ signed-exchange)"
   },
-  "panels/network/components/RequestHeadersView.ts | fromWebBundle": {
-    "message": "(qua Web Bundle)"
-  },
   "panels/network/components/RequestHeadersView.ts | general": {
     "message": "Chung"
   },
@@ -10237,9 +10705,6 @@
   },
   "panels/network/components/ResponseHeaderSection.ts | toUseThisResourceFromADifferentSite": {
     "message": "Để sử dụng tài nguyên này trên một trang web khác, máy chủ có thể giảm bớt tiêu đề phản hồi của chính sách tài nguyên nhiều nguồn gốc:"
-  },
-  "panels/network/components/WebBundleInfoView.ts | bundledResource": {
-    "message": "Tài nguyên trong gói"
   },
   "panels/network/network-meta.ts | addNetworkRequestBlockingPattern": {
     "message": "Thêm mẫu chặn yêu cầu kết nối mạng"
@@ -11741,6 +12206,66 @@
   "panels/security/CookieReportView.ts | videoCookieTypeString": {
     "message": "Video"
   },
+  "panels/security/IPProtectionView.ts | AuthTokensUnavailable": {
+    "message": "Đã đạt đến giới hạn về số lượng mã thông báo xác thực. Tính năng Bảo vệ địa chỉ IP sẽ tạm dừng."
+  },
+  "panels/security/IPProtectionView.ts | Available": {
+    "message": "Tính năng Bảo vệ địa chỉ IP đang bật và đang hoạt động."
+  },
+  "panels/security/IPProtectionView.ts | BypassedByDevTools": {
+    "message": "Công cụ cho nhà phát triển đang bỏ qua tính năng Bảo vệ địa chỉ IP."
+  },
+  "panels/security/IPProtectionView.ts | FeatureNotEnabled": {
+    "message": "Tính năng Bảo vệ địa chỉ IP chưa được bật."
+  },
+  "panels/security/IPProtectionView.ts | MaskedDomainListNotEnabled": {
+    "message": "Tính năng Danh sách miền bị ẩn chưa được bật."
+  },
+  "panels/security/IPProtectionView.ts | MaskedDomainListNotPopulated": {
+    "message": "Danh sách miền bị ẩn chưa được điền sẵn."
+  },
+  "panels/security/IPProtectionView.ts | Unavailable": {
+    "message": "Tính năng Bảo vệ địa chỉ IP không hoạt động."
+  },
+  "panels/security/IPProtectionView.ts | bypassDescription": {
+    "message": "Tạm thời bỏ qua tính năng bảo vệ địa chỉ IP để thử nghiệm"
+  },
+  "panels/security/IPProtectionView.ts | bypassTitle": {
+    "message": "Bỏ qua tính năng Bảo vệ địa chỉ IP"
+  },
+  "panels/security/IPProtectionView.ts | cardTitle": {
+    "message": "Trạng thái proxy của tính năng Bảo vệ địa chỉ IP"
+  },
+  "panels/security/IPProtectionView.ts | idColumn": {
+    "message": "Mã nhận dạng"
+  },
+  "panels/security/IPProtectionView.ts | methodColumn": {
+    "message": "Phương thức"
+  },
+  "panels/security/IPProtectionView.ts | notInIncognito": {
+    "message": "Không có proxy IP"
+  },
+  "panels/security/IPProtectionView.ts | openIncognito": {
+    "message": "Chỉ có thể dùng proxy IP trong chế độ ẩn danh. Mở trang web ở chế độ ẩn danh."
+  },
+  "panels/security/IPProtectionView.ts | proxyRequests": {
+    "message": "Yêu cầu proxy"
+  },
+  "panels/security/IPProtectionView.ts | statusColumn": {
+    "message": "Trạng thái"
+  },
+  "panels/security/IPProtectionView.ts | statusUnknown": {
+    "message": "Trạng thái không xác định"
+  },
+  "panels/security/IPProtectionView.ts | urlColumn": {
+    "message": "URL"
+  },
+  "panels/security/IPProtectionView.ts | viewExplanation": {
+    "message": "Kiểm tra cách trang web này hoạt động khi proxy IP được bật trong Chrome"
+  },
+  "panels/security/IPProtectionView.ts | viewTitle": {
+    "message": "Chế độ kiểm soát proxy của tính năng Bảo vệ địa chỉ IP"
+  },
   "panels/security/SecurityModel.ts | cipherWithMAC": {
     "message": "{PH1} của {PH2}"
   },
@@ -12047,6 +12572,9 @@
   "panels/security/SecurityPanelSidebar.ts | flagControls": {
     "message": "Chế độ điều khiển"
   },
+  "panels/security/SecurityPanelSidebar.ts | ipProtection": {
+    "message": "Bảo vệ địa chỉ IP"
+  },
   "panels/security/SecurityPanelSidebar.ts | mainOrigin": {
     "message": "Nguồn gốc chính"
   },
@@ -12329,6 +12857,9 @@
   "panels/sensors/sensors-meta.ts | userIdleScreenUnlocked": {
     "message": "Người dùng ở trạng thái rảnh, màn hình đang mở khóa"
   },
+  "panels/settings/AISettingsTab.ts | aIAnnotationsFeatureDescription": {
+    "message": "Tự động tạo tiêu đề cho chú thích về dấu vết hiệu suất"
+  },
   "panels/settings/AISettingsTab.ts | asYouTypeCodeSuggestions": {
     "message": "Khi nhập vào Bảng điều khiển hoặc bảng điều khiển Nguồn, bạn sẽ nhận được các đề xuất về mã. Nhấn phím Tab để chấp nhận một đề xuất."
   },
@@ -12336,16 +12867,16 @@
     "message": "Tăng cường năng suất bằng AI"
   },
   "panels/settings/AISettingsTab.ts | codeSuggestionsSendData": {
-    "message": "Để tạo đề xuất về mã, dữ liệu đầu vào trên bảng điều khiển, nhật ký của phiên bảng điều khiển hiện tại và nội dung của tệp đang mở sẽ được chia sẻ với Google. Nhân viên đánh giá có thể xem xét dữ liệu này để cải thiện tính năng."
+    "message": "Để tạo đề xuất về mã, dữ liệu đầu vào của bạn trên bảng điều khiển, nhật ký của phiên bảng điều khiển hiện tại, CSS đang được kiểm tra và nội dung của tệp đang mở sẽ được chia sẻ với Google. Nhân viên đánh giá có thể xem xét dữ liệu này để cải thiện tính năng."
   },
   "panels/settings/AISettingsTab.ts | codeSuggestionsSendDataNoLogging": {
-    "message": "Để tạo đề xuất về mã, dữ liệu đầu vào trên bảng điều khiển, nhật ký của phiên bảng điều khiển hiện tại và nội dung của tệp đang mở sẽ được chia sẻ với Google. Dữ liệu này sẽ không được dùng để cải thiện các mô hình AI của Google."
+    "message": "Để tạo đề xuất về mã, dữ liệu đầu vào của bạn trên bảng điều khiển, nhật ký của phiên bảng điều khiển hiện tại, CSS đang được kiểm tra và nội dung của tệp đang mở sẽ được chia sẻ với Google. Dữ liệu này sẽ không được dùng để cải thiện các mô hình AI của Google. Tổ chức của bạn có thể thay đổi các chế độ cài đặt này bất cứ lúc nào."
   },
   "panels/settings/AISettingsTab.ts | consoleInsightsSendsData": {
     "message": "Thông báo trên bảng điều khiển, dấu vết ngăn xếp liên quan, mã nguồn liên quan và tiêu đề mạng liên quan sẽ được gửi đến Google để đưa ra nội dung giải thích. Nhân viên đánh giá có thể xem xét dữ liệu này để cải thiện tính năng."
   },
   "panels/settings/AISettingsTab.ts | consoleInsightsSendsDataNoLogging": {
-    "message": "Thông báo trên bảng điều khiển, dấu vết ngăn xếp liên quan, mã nguồn liên quan và tiêu đề mạng liên quan sẽ được gửi đến Google để đưa ra nội dung giải thích. Dữ liệu này sẽ không được dùng để cải thiện các mô hình AI của Google."
+    "message": "Thông báo trên bảng điều khiển, dấu vết ngăn xếp liên quan, mã nguồn liên quan và tiêu đề mạng liên quan sẽ được gửi đến Google để đưa ra nội dung giải thích. Dữ liệu này sẽ không được dùng để cải thiện các mô hình AI của Google. Tổ chức của bạn có thể thay đổi các chế độ cài đặt này bất cứ lúc nào."
   },
   "panels/settings/AISettingsTab.ts | dataCollection": {
     "message": "Tuỳ vào khu vực của bạn, Google có thể không thu thập dữ liệu"
@@ -12355,6 +12886,9 @@
   },
   "panels/settings/AISettingsTab.ts | enableAiAssistance": {
     "message": "Bật trợ lý AI"
+  },
+  "panels/settings/AISettingsTab.ts | enableAiCodeSuggestions": {
+    "message": "Bật tính năng đề xuất mã bằng AI"
   },
   "panels/settings/AISettingsTab.ts | enableAiSuggestedAnnotations": {
     "message": "Bật đề xuất dựa trên AI về chú thích trong bảng điều khiển hiệu suất"
@@ -12381,19 +12915,19 @@
     "message": "Tìm hiểu các kiểu Dịch vụ so sánh giá (CSS), hoạt động mạng, điểm tắc nghẽn hiệu suất và nguồn gốc của tệp nhờ thông tin chi tiết dựa trên AI"
   },
   "panels/settings/AISettingsTab.ts | freestylerSendsData": {
-    "message": "Hệ thống có thể gửi cho Google mọi truy vấn và dữ liệu của người dùng mà trang được kiểm tra có thể truy cập thông qua API web, yêu cầu về mạng, tệp và dấu vết hiệu suất để tạo nội dung giải thích. Nhân viên đánh giá có thể xem xét dữ liệu này để cải thiện tính năng. Không sử dụng trên các trang có thông tin cá nhân hoặc thông tin nhạy cảm."
+    "message": "Để tạo nội dung giải thích, hệ thống có thể gửi cho Google mọi truy vấn và dữ liệu của người dùng mà trang được kiểm tra có thể truy cập thông qua API web, yêu cầu về mạng, tệp và dấu vết hiệu suất. Nhân viên đánh giá có thể xem xét dữ liệu này để cải thiện tính năng. Không sử dụng trên các trang có thông tin cá nhân hoặc thông tin nhạy cảm."
   },
   "panels/settings/AISettingsTab.ts | freestylerSendsDataNoLogging": {
-    "message": "Hệ thống có thể gửi cho Google mọi truy vấn và dữ liệu của người dùng mà trang được kiểm tra có thể truy cập thông qua API web, yêu cầu về mạng, tệp và dấu vết hiệu suất để tạo nội dung giải thích. Dữ liệu này sẽ không được dùng để cải thiện các mô hình AI của Google."
+    "message": "Để tạo nội dung giải thích, hệ thống có thể gửi cho Google mọi truy vấn và dữ liệu của người dùng mà trang được kiểm tra có thể truy cập thông qua API web, yêu cầu về mạng, tệp và dấu vết hiệu suất. Dữ liệu này sẽ không được dùng để cải thiện các mô hình AI của Google. Tổ chức của bạn có thể thay đổi các chế độ cài đặt này bất cứ lúc nào."
   },
   "panels/settings/AISettingsTab.ts | generatedAiAnnotationsSendData": {
-    "message": "Dữ liệu theo dõi hiệu suất của bạn được gửi đến Google để tạo nội dung giải thích. Dữ liệu này sẽ được dùng để cải thiện các mô hình AI của Google."
+    "message": "Để tạo đề xuất chú thích, dữ liệu theo dõi hiệu suất của bạn sẽ được gửi đến Google. Nhân viên đánh giá có thể xem xét dữ liệu này để cải thiện tính năng."
   },
   "panels/settings/AISettingsTab.ts | generatedAiAnnotationsSendDataNoLogging": {
-    "message": "Dữ liệu theo dõi hiệu suất của bạn được gửi đến Google để tạo nội dung giải thích. Dữ liệu này sẽ không được dùng để cải thiện các mô hình AI của Google."
+    "message": "Để tạo đề xuất chú thích, dữ liệu theo dõi hiệu suất của bạn sẽ được gửi đến Google. Dữ liệu này sẽ không được dùng để cải thiện các mô hình AI của Google. Tổ chức của bạn có thể thay đổi các chế độ cài đặt này bất cứ lúc nào."
   },
-  "panels/settings/AISettingsTab.ts | getAIAnnotationsSuggestions": {
-    "message": "Nhận đề xuất dựa trên AI về chú thích trong bảng điều khiển hiệu suất"
+  "panels/settings/AISettingsTab.ts | helpAnnotatePerformance": {
+    "message": "Giúp bạn chú thích dấu vết hiệu suất bằng các nhãn được tạo tự động"
   },
   "panels/settings/AISettingsTab.ts | helpUnderstandCodeSuggestions": {
     "message": "Nhận trợ giúp để hoàn tất mã"
@@ -12593,17 +13127,59 @@
   "panels/settings/SettingsScreen.ts | unstableExperiments": {
     "message": "Thử nghiệm không ổn định"
   },
-  "panels/settings/components/SyncSection.ts | preferencesSyncDisabled": {
-    "message": "Để bật chế độ cài đặt này, trước tiên, bạn phải bật tính năng đồng bộ hoá các chế độ cài đặt trong Chrome."
+  "panels/settings/WorkspaceSettingsTab.ts | addFolder": {
+    "message": "Thêm thư mục"
   },
-  "panels/settings/components/SyncSection.ts | settings": {
-    "message": "Chuyển đến phần Cài đặt"
+  "panels/settings/WorkspaceSettingsTab.ts | folderExcludePattern": {
+    "message": "Loại trừ khỏi không gian làm việc"
+  },
+  "panels/settings/WorkspaceSettingsTab.ts | mappingsAreInferredAutomatically": {
+    "message": "Thông tin ánh xạ được dự đoán tự động."
+  },
+  "panels/settings/WorkspaceSettingsTab.ts | remove": {
+    "message": "Xóa"
+  },
+  "panels/settings/WorkspaceSettingsTab.ts | workspace": {
+    "message": "Không gian làm việc"
+  },
+  "panels/settings/components/SyncSection.ts | dataDisclaimer": {
+    "message": "({PH1} đã được gửi đến Google)"
+  },
+  "panels/settings/components/SyncSection.ts | gdpPremiumSubscription": {
+    "message": "Premium"
+  },
+  "panels/settings/components/SyncSection.ts | gdpProSubscription": {
+    "message": "Pro"
+  },
+  "panels/settings/components/SyncSection.ts | gdpStandardPlan": {
+    "message": "Gói Standard"
+  },
+  "panels/settings/components/SyncSection.ts | gdpUnknownSubscription": {
+    "message": "Gói không xác định"
+  },
+  "panels/settings/components/SyncSection.ts | notSignedIn": {
+    "message": "Bạn chưa đăng nhập vào Chrome."
+  },
+  "panels/settings/components/SyncSection.ts | preferencesSyncDisabled": {
+    "message": "Trước tiên, bạn cần bật tính năng lưu các chế độ cài đặt Chrome vào Tài khoản Google của mình."
+  },
+  "panels/settings/components/SyncSection.ts | relevantData": {
+    "message": "Dữ liệu có liên quan"
+  },
+  "panels/settings/components/SyncSection.ts | signUp": {
+    "message": "Đăng ký"
   },
   "panels/settings/components/SyncSection.ts | signedIn": {
     "message": "Đã đăng nhập vào Chrome bằng:"
   },
   "panels/settings/components/SyncSection.ts | syncDisabled": {
     "message": "Để bật chế độ cài đặt này, bạn phải bật tính năng đồng bộ hoá Chrome."
+  },
+  "panels/settings/components/SyncSection.ts | tooltipDisclaimerText": {
+    "message": "Khi bạn đủ điều kiện nhận huy hiệu, mã nhận dạng của huy hiệu và loại hoạt động bạn đã thực hiện để nhận được huy hiệu đó sẽ được gửi đến Google"
+  },
+  "panels/settings/components/SyncSection.ts | viewProfile": {
+    "message": "Xem hồ sơ"
   },
   "panels/settings/emulation/DevicesSettingsTab.ts | addCustomDevice": {
     "message": "Thêm thiết bị tuỳ chỉnh"
@@ -12799,6 +13375,12 @@
   },
   "panels/settings/settings-meta.ts | showShortcuts": {
     "message": "Hiện lối tắt"
+  },
+  "panels/settings/settings-meta.ts | showWorkspace": {
+    "message": "Hiện chế độ cài đặt của Không gian làm việc"
+  },
+  "panels/settings/settings-meta.ts | workspace": {
+    "message": "Không gian làm việc"
   },
   "panels/snippets/ScriptSnippetFileSystem.ts | linkedTo": {
     "message": "Đã liên kết với {PH1}"
@@ -14162,6 +14744,9 @@
   "panels/timeline/TimelinePanel.ts | CpuThrottlingIsEnabled": {
     "message": "– Chế độ điều tiết CPU đã được bật"
   },
+  "panels/timeline/TimelinePanel.ts | JavascriptSamplingIsDisabled": {
+    "message": "– Tùy chọn lấy mẫu JavaScript đã bị tắt"
+  },
   "panels/timeline/TimelinePanel.ts | NetworkThrottlingIsEnabled": {
     "message": "– Đã bật chế độ hạn chế băng thông mạng"
   },
@@ -14200,6 +14785,12 @@
   },
   "panels/timeline/TimelinePanel.ts | dimThirdParties": {
     "message": "Giảm độ sáng của bên thứ ba"
+  },
+  "panels/timeline/TimelinePanel.ts | disableJavascriptSamples": {
+    "message": "Tắt mẫu JavaScript"
+  },
+  "panels/timeline/TimelinePanel.ts | disablesJavascriptSampling": {
+    "message": "Tắt tính năng lấy mẫu JavaScript, giảm mức hao tổn khi chạy trên thiết bị di động"
   },
   "panels/timeline/TimelinePanel.ts | dropTimelineFileOrUrlHere": {
     "message": "Thả tệp theo dõi hoặc URL tại đây"
@@ -14597,6 +15188,9 @@
   "panels/timeline/TimelineUIUtils.ts | function": {
     "message": "Chức năng"
   },
+  "panels/timeline/TimelineUIUtils.ts | functionStack": {
+    "message": "Ngăn xếp hàm"
+  },
   "panels/timeline/TimelineUIUtils.ts | idleCallbackRequested": {
     "message": "Đã yêu cầu lệnh gọi lại ở trạng thái rảnh"
   },
@@ -14693,6 +15287,9 @@
   "panels/timeline/TimelineUIUtils.ts | repeats": {
     "message": "Lặp lại"
   },
+  "panels/timeline/TimelineUIUtils.ts | requestIdleCallbackTimeout": {
+    "message": "Thời gian chờ"
+  },
   "panels/timeline/TimelineUIUtils.ts | sAtS": {
     "message": "{PH1} lúc {PH2}"
   },
@@ -14732,9 +15329,6 @@
   "panels/timeline/TimelineUIUtils.ts | source": {
     "message": "Nguồn"
   },
-  "panels/timeline/TimelineUIUtils.ts | stackTrace": {
-    "message": "Dấu vết ngăn xếp"
-  },
   "panels/timeline/TimelineUIUtils.ts | streamed": {
     "message": "Đã truyền trực tuyến"
   },
@@ -14773,6 +15367,15 @@
   },
   "panels/timeline/TimingsTrackAppender.ts | timings": {
     "message": "Thời gian"
+  },
+  "panels/timeline/TrackConfigBanner.ts | configureTracks": {
+    "message": "Định cấu hình các kênh"
+  },
+  "panels/timeline/TrackConfigBanner.ts | showAll": {
+    "message": "Hiển thị tất cả"
+  },
+  "panels/timeline/TrackConfigBanner.ts | someTracksAreHidden": {
+    "message": "Một số dòng bị ẩn trong dấu vết này. Bạn có thể định cấu hình các dòng bằng cách nhấp chuột phải vào tên dòng."
   },
   "panels/timeline/UIDevtoolsUtils.ts | async": {
     "message": "Không đồng bộ"
@@ -14875,6 +15478,33 @@
   },
   "panels/timeline/components/DetailsView.ts | websocketProtocol": {
     "message": "Giao thức của WebSocket"
+  },
+  "panels/timeline/components/ExportTraceOptions.ts | exportTraceOptionsDialogTitle": {
+    "message": "Lưu dấu vết hiệu suất "
+  },
+  "panels/timeline/components/ExportTraceOptions.ts | includeAnnotations": {
+    "message": "Bao gồm chú thích"
+  },
+  "panels/timeline/components/ExportTraceOptions.ts | includeScriptContent": {
+    "message": "Bao gồm nội dung tập lệnh"
+  },
+  "panels/timeline/components/ExportTraceOptions.ts | includeSourcemap": {
+    "message": "Bao gồm bản đồ nguồn của tập lệnh"
+  },
+  "panels/timeline/components/ExportTraceOptions.ts | saveButtonTitle": {
+    "message": "Lưu"
+  },
+  "panels/timeline/components/ExportTraceOptions.ts | scriptContentPrivacyInfo": {
+    "message": "Bao gồm toàn bộ nội dung của tất cả tập lệnh đã tải (ngoại trừ tiện ích)."
+  },
+  "panels/timeline/components/ExportTraceOptions.ts | shouldCompress": {
+    "message": "Nén bằng gzip"
+  },
+  "panels/timeline/components/ExportTraceOptions.ts | showExportTraceOptionsDialogTitle": {
+    "message": "Lưu dấu vết…"
+  },
+  "panels/timeline/components/ExportTraceOptions.ts | sourceMapsContentPrivacyInfo": {
+    "message": "Bao gồm các bản đồ nguồn hiện có (lựa chọn này có thể làm lộ mã đã tạo)."
   },
   "panels/timeline/components/FieldSettingsDialog.ts | advanced": {
     "message": "Nâng cao"
@@ -15611,381 +16241,6 @@
   "panels/timeline/timeline-meta.ts | stop": {
     "message": "Dừng"
   },
-  "panels/timeline/utils/EntryName.ts | anonymous": {
-    "message": "(ẩn danh)"
-  },
-  "panels/timeline/utils/EntryName.ts | eventDispatchS": {
-    "message": "Sự kiện: {PH1}"
-  },
-  "panels/timeline/utils/EntryName.ts | frame": {
-    "message": "Khung"
-  },
-  "panels/timeline/utils/EntryName.ts | layoutShift": {
-    "message": "Thay đổi bố cục"
-  },
-  "panels/timeline/utils/EntryName.ts | wsConnectionClosed": {
-    "message": "Đã đóng WebSocket"
-  },
-  "panels/timeline/utils/EntryName.ts | wsConnectionOpened": {
-    "message": "Đã mở WebSocket"
-  },
-  "panels/timeline/utils/EntryName.ts | wsConnectionOpenedWithUrl": {
-    "message": "Đã mở WebSocket: {PH1}"
-  },
-  "panels/timeline/utils/EntryStyles.ts | abortPostTaskCallback": {
-    "message": "Huỷ postTask"
-  },
-  "panels/timeline/utils/EntryStyles.ts | animation": {
-    "message": "Ảnh động"
-  },
-  "panels/timeline/utils/EntryStyles.ts | animationFrameFired": {
-    "message": "Đã kích hoạt khung ảnh động"
-  },
-  "panels/timeline/utils/EntryStyles.ts | async": {
-    "message": "Không đồng bộ"
-  },
-  "panels/timeline/utils/EntryStyles.ts | asyncTask": {
-    "message": "Nhiệm vụ không đồng bộ"
-  },
-  "panels/timeline/utils/EntryStyles.ts | cacheModule": {
-    "message": "Lưu mã mô-đun vào bộ nhớ đệm"
-  },
-  "panels/timeline/utils/EntryStyles.ts | cacheScript": {
-    "message": "Lưu mã tập lệnh vào bộ nhớ đệm"
-  },
-  "panels/timeline/utils/EntryStyles.ts | cachedWasmModule": {
-    "message": "Mô-đun Wasm được lưu vào bộ nhớ đệm"
-  },
-  "panels/timeline/utils/EntryStyles.ts | cancelAnimationFrame": {
-    "message": "Huỷ khung ảnh động"
-  },
-  "panels/timeline/utils/EntryStyles.ts | cancelIdleCallback": {
-    "message": "Huỷ lệnh gọi lại ở trạng thái rảnh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | commit": {
-    "message": "Xác nhận"
-  },
-  "panels/timeline/utils/EntryStyles.ts | compileCode": {
-    "message": "Biên dịch mã"
-  },
-  "panels/timeline/utils/EntryStyles.ts | compileModule": {
-    "message": "Biên dịch mô-đun"
-  },
-  "panels/timeline/utils/EntryStyles.ts | compileScript": {
-    "message": "Biên dịch tập lệnh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | compiledWasmModule": {
-    "message": "Mô-đun Wasm được biên dịch"
-  },
-  "panels/timeline/utils/EntryStyles.ts | compositeLayers": {
-    "message": "Lớp tổng hợp"
-  },
-  "panels/timeline/utils/EntryStyles.ts | computeIntersections": {
-    "message": "Tính các giao điểm"
-  },
-  "panels/timeline/utils/EntryStyles.ts | consoleTaskRun": {
-    "message": "Chạy tác vụ trên bảng điều khiển"
-  },
-  "panels/timeline/utils/EntryStyles.ts | consoleTime": {
-    "message": "Thời gian trên bảng điều khiển"
-  },
-  "panels/timeline/utils/EntryStyles.ts | cppGc": {
-    "message": "GC CPP"
-  },
-  "panels/timeline/utils/EntryStyles.ts | createWebsocket": {
-    "message": "Tạo WebSocket"
-  },
-  "panels/timeline/utils/EntryStyles.ts | decrypt": {
-    "message": "Giải mã"
-  },
-  "panels/timeline/utils/EntryStyles.ts | decryptReply": {
-    "message": "Giải mã thư trả lời"
-  },
-  "panels/timeline/utils/EntryStyles.ts | deserializeCodeCache": {
-    "message": "Giải tuần tự bộ nhớ đệm đoạn mã"
-  },
-  "panels/timeline/utils/EntryStyles.ts | destroyWebsocket": {
-    "message": "Hủy bỏ WebSocket"
-  },
-  "panels/timeline/utils/EntryStyles.ts | digest": {
-    "message": "Thông báo"
-  },
-  "panels/timeline/utils/EntryStyles.ts | digestReply": {
-    "message": "Thư trả lời bằng chuỗi đại diện"
-  },
-  "panels/timeline/utils/EntryStyles.ts | domGc": {
-    "message": "Thu gom rác (GC) DOM"
-  },
-  "panels/timeline/utils/EntryStyles.ts | domcontentloadedEvent": {
-    "message": "Sự kiện DOMContentLoaded"
-  },
-  "panels/timeline/utils/EntryStyles.ts | drawFrame": {
-    "message": "Khung vẽ"
-  },
-  "panels/timeline/utils/EntryStyles.ts | drawing": {
-    "message": "Đang vẽ"
-  },
-  "panels/timeline/utils/EntryStyles.ts | embedderCallback": {
-    "message": "Lệnh gọi lại trình nhúng"
-  },
-  "panels/timeline/utils/EntryStyles.ts | encrypt": {
-    "message": "Mã hóa"
-  },
-  "panels/timeline/utils/EntryStyles.ts | encryptReply": {
-    "message": "Mã hoá thư trả lời"
-  },
-  "panels/timeline/utils/EntryStyles.ts | evaluateModule": {
-    "message": "Đánh giá mô-đun"
-  },
-  "panels/timeline/utils/EntryStyles.ts | evaluateScript": {
-    "message": "Đánh giá tập lệnh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | event": {
-    "message": "Sự kiện"
-  },
-  "panels/timeline/utils/EntryStyles.ts | eventTiming": {
-    "message": "Thời gian xảy ra sự kiện"
-  },
-  "panels/timeline/utils/EntryStyles.ts | experience": {
-    "message": "Trải nghiệm"
-  },
-  "panels/timeline/utils/EntryStyles.ts | finishLoading": {
-    "message": "Kết thúc quá trình tải"
-  },
-  "panels/timeline/utils/EntryStyles.ts | fireIdleCallback": {
-    "message": "Kích hoạt lệnh gọi lại ở trạng thái rảnh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | firstContentfulPaint": {
-    "message": "Nội dung đầu tiên hiển thị"
-  },
-  "panels/timeline/utils/EntryStyles.ts | firstPaint": {
-    "message": "Hiển thị đầu tiên"
-  },
-  "panels/timeline/utils/EntryStyles.ts | frameStart": {
-    "message": "Bắt đầu khung"
-  },
-  "panels/timeline/utils/EntryStyles.ts | frameStartMainThread": {
-    "message": "Bắt đầu khung (chuỗi chính)"
-  },
-  "panels/timeline/utils/EntryStyles.ts | frameStartedLoading": {
-    "message": "Khung đã bắt đầu tải"
-  },
-  "panels/timeline/utils/EntryStyles.ts | functionCall": {
-    "message": "Lệnh gọi hàm"
-  },
-  "panels/timeline/utils/EntryStyles.ts | gcEvent": {
-    "message": "Sự kiện GC"
-  },
-  "panels/timeline/utils/EntryStyles.ts | gpu": {
-    "message": "GPU"
-  },
-  "panels/timeline/utils/EntryStyles.ts | hitTest": {
-    "message": "Thử nghiệm nhấn"
-  },
-  "panels/timeline/utils/EntryStyles.ts | idle": {
-    "message": "Rảnh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | imageDecode": {
-    "message": "Giải mã hình ảnh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | installTimer": {
-    "message": "Cài đặt đồng hồ hẹn giờ"
-  },
-  "panels/timeline/utils/EntryStyles.ts | invalidateLayout": {
-    "message": "Vô hiệu hóa bố cục"
-  },
-  "panels/timeline/utils/EntryStyles.ts | jsFrame": {
-    "message": "Khung JS"
-  },
-  "panels/timeline/utils/EntryStyles.ts | largestContentfulPaint": {
-    "message": "Nội dung lớn nhất hiển thị"
-  },
-  "panels/timeline/utils/EntryStyles.ts | layerize": {
-    "message": "Xác định lớp"
-  },
-  "panels/timeline/utils/EntryStyles.ts | layout": {
-    "message": "Bố cục"
-  },
-  "panels/timeline/utils/EntryStyles.ts | layoutShift": {
-    "message": "Thay đổi bố cục"
-  },
-  "panels/timeline/utils/EntryStyles.ts | layoutShiftCluster": {
-    "message": "Cụm thay đổi bố cục"
-  },
-  "panels/timeline/utils/EntryStyles.ts | loading": {
-    "message": "Đang tải"
-  },
-  "panels/timeline/utils/EntryStyles.ts | majorGc": {
-    "message": "Thu gom rác (GC) lớn"
-  },
-  "panels/timeline/utils/EntryStyles.ts | messaging": {
-    "message": "Nhắn tin"
-  },
-  "panels/timeline/utils/EntryStyles.ts | minorGc": {
-    "message": "Thu gom rác (GC) nhỏ"
-  },
-  "panels/timeline/utils/EntryStyles.ts | onMessage": {
-    "message": "Trên thông báo"
-  },
-  "panels/timeline/utils/EntryStyles.ts | onloadEvent": {
-    "message": "Sự kiện tải"
-  },
-  "panels/timeline/utils/EntryStyles.ts | optimizeCode": {
-    "message": "Tối ưu hoá mã"
-  },
-  "panels/timeline/utils/EntryStyles.ts | other": {
-    "message": "Khác"
-  },
-  "panels/timeline/utils/EntryStyles.ts | paint": {
-    "message": "Vẽ"
-  },
-  "panels/timeline/utils/EntryStyles.ts | paintImage": {
-    "message": "Tạo điểm ảnh cho hình ảnh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | paintSetup": {
-    "message": "Thiết lập sự kiện tạo điểm ảnh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | painting": {
-    "message": "Vẽ"
-  },
-  "panels/timeline/utils/EntryStyles.ts | parseAndCompile": {
-    "message": "Phân tích cú pháp và biên dịch"
-  },
-  "panels/timeline/utils/EntryStyles.ts | parseHtml": {
-    "message": "Phân tích cú pháp HTML"
-  },
-  "panels/timeline/utils/EntryStyles.ts | parseStylesheet": {
-    "message": "Phân tích cú pháp biểu định kiểu"
-  },
-  "panels/timeline/utils/EntryStyles.ts | prePaint": {
-    "message": "Trước khi tạo điểm ảnh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | profilingOverhead": {
-    "message": "Mức hao tổn khi phân tích"
-  },
-  "panels/timeline/utils/EntryStyles.ts | rasterizePaint": {
-    "message": "Chuyển đổi đường quét cho sự kiện tạo điểm ảnh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | rasterizing": {
-    "message": "Đang tạo điểm ảnh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | recalculateStyle": {
-    "message": "Tính toán lại kiểu"
-  },
-  "panels/timeline/utils/EntryStyles.ts | receiveData": {
-    "message": "Nhận dữ liệu"
-  },
-  "panels/timeline/utils/EntryStyles.ts | receiveResponse": {
-    "message": "Nhận phản hồi"
-  },
-  "panels/timeline/utils/EntryStyles.ts | receiveWebsocketHandshake": {
-    "message": "Nhận giao thức bắt tay của WebSocket"
-  },
-  "panels/timeline/utils/EntryStyles.ts | removeTimer": {
-    "message": "Xoá đồng hồ hẹn giờ"
-  },
-  "panels/timeline/utils/EntryStyles.ts | rendering": {
-    "message": "Kết xuất hình ảnh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | requestAnimationFrame": {
-    "message": "Yêu cầu khung ảnh động"
-  },
-  "panels/timeline/utils/EntryStyles.ts | requestIdleCallback": {
-    "message": "Yêu cầu lệnh gọi lại ở trạng thái rảnh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | requestMainThreadFrame": {
-    "message": "Yêu cầu khung chuỗi chính"
-  },
-  "panels/timeline/utils/EntryStyles.ts | runMicrotasks": {
-    "message": "Chạy nhiệm vụ nhỏ"
-  },
-  "panels/timeline/utils/EntryStyles.ts | runPostTaskCallback": {
-    "message": "Kích hoạt postTask"
-  },
-  "panels/timeline/utils/EntryStyles.ts | schedulePostMessage": {
-    "message": "Lên lịch cho postMessage"
-  },
-  "panels/timeline/utils/EntryStyles.ts | schedulePostTaskCallback": {
-    "message": "Lên lịch cho postTask"
-  },
-  "panels/timeline/utils/EntryStyles.ts | scheduleStyleRecalculation": {
-    "message": "Lên lịch tính toán lại kiểu"
-  },
-  "panels/timeline/utils/EntryStyles.ts | scripting": {
-    "message": "Đang viết tập lệnh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | scroll": {
-    "message": "Cuộn"
-  },
-  "panels/timeline/utils/EntryStyles.ts | sendRequest": {
-    "message": "Gửi yêu cầu"
-  },
-  "panels/timeline/utils/EntryStyles.ts | sendWebsocketHandshake": {
-    "message": "Gửi giao thức bắt tay của WebSocket"
-  },
-  "panels/timeline/utils/EntryStyles.ts | sign": {
-    "message": "Ký"
-  },
-  "panels/timeline/utils/EntryStyles.ts | signReply": {
-    "message": "Quá trình ký thư trả lời"
-  },
-  "panels/timeline/utils/EntryStyles.ts | streamingCompileTask": {
-    "message": "Nhiệm vụ biên dịch truyền trực tuyến"
-  },
-  "panels/timeline/utils/EntryStyles.ts | streamingWasmResponse": {
-    "message": "Phản hồi Wasm truyền trực tuyến"
-  },
-  "panels/timeline/utils/EntryStyles.ts | system": {
-    "message": "Hệ thống"
-  },
-  "panels/timeline/utils/EntryStyles.ts | task": {
-    "message": "Nhiệm vụ"
-  },
-  "panels/timeline/utils/EntryStyles.ts | timerFired": {
-    "message": "Đã kích hoạt đồng hồ hẹn giờ"
-  },
-  "panels/timeline/utils/EntryStyles.ts | timestamp": {
-    "message": "Dấu thời gian"
-  },
-  "panels/timeline/utils/EntryStyles.ts | updateLayer": {
-    "message": "Cập nhật lớp"
-  },
-  "panels/timeline/utils/EntryStyles.ts | updateLayerTree": {
-    "message": "Cập nhật cây lớp"
-  },
-  "panels/timeline/utils/EntryStyles.ts | userTiming": {
-    "message": "Thời gian người dùng"
-  },
-  "panels/timeline/utils/EntryStyles.ts | verify": {
-    "message": "Xác minh"
-  },
-  "panels/timeline/utils/EntryStyles.ts | verifyReply": {
-    "message": "Xác minh thư trả lời"
-  },
-  "panels/timeline/utils/EntryStyles.ts | waitingForNetwork": {
-    "message": "Đang đợi mạng"
-  },
-  "panels/timeline/utils/EntryStyles.ts | wasmModuleCacheHit": {
-    "message": "Kết quả tìm kiếm trong bộ nhớ đệm của mô-đun Wasm"
-  },
-  "panels/timeline/utils/EntryStyles.ts | wasmModuleCacheInvalid": {
-    "message": "Bộ nhớ đệm của mô-đun Wasm không hợp lệ"
-  },
-  "panels/timeline/utils/EntryStyles.ts | willSendRequest": {
-    "message": "Sẽ gửi yêu cầu"
-  },
-  "panels/timeline/utils/EntryStyles.ts | wsMessageReceived": {
-    "message": "Nhận thông báo WebSocket"
-  },
-  "panels/timeline/utils/EntryStyles.ts | wsMessageSent": {
-    "message": "Gửi thông báo WebSocket"
-  },
-  "panels/timeline/utils/EntryStyles.ts | xhrLoad": {
-    "message": "Tải XHR"
-  },
-  "panels/timeline/utils/EntryStyles.ts | xhrReadyStateChange": {
-    "message": "Thay đổi XHR readyState"
-  },
   "panels/timeline/utils/IgnoreList.ts | skip3rdPartyScripts": {
     "message": "Được đánh dấu bằng ignoreList trong bản đồ nguồn"
   },
@@ -16010,11 +16265,38 @@
   "panels/utils/utils.ts | thirdPartyPhaseout": {
     "message": "Cookie cho yêu cầu này bị chặn do các cờ Chrome hoặc do cấu hình trình duyệt. Tìm hiểu thêm trong bảng điều khiển Vấn đề."
   },
+  "panels/web_audio/WebAudioView.ts | audioContextS": {
+    "message": "Ngữ cảnh bằng âm thanh: {PH1}"
+  },
+  "panels/web_audio/WebAudioView.ts | callbackBufferSize": {
+    "message": "Dung lượng bộ nhớ đệm gọi lại"
+  },
+  "panels/web_audio/WebAudioView.ts | callbackInterval": {
+    "message": "Khoảng thời gian gọi lại"
+  },
+  "panels/web_audio/WebAudioView.ts | currentTime": {
+    "message": "Thời gian hiện tại"
+  },
+  "panels/web_audio/WebAudioView.ts | maxOutputChannels": {
+    "message": "Số kênh đầu ra tối đa"
+  },
+  "panels/web_audio/WebAudioView.ts | noRecordings": {
+    "message": "(không có bản ghi nào)"
+  },
   "panels/web_audio/WebAudioView.ts | noWebAudio": {
     "message": "Không phát hiện thấy hoạt động sử dụng API Web Audio"
   },
   "panels/web_audio/WebAudioView.ts | openAPageThatUsesWebAudioApiTo": {
     "message": "Mở một trang sử dụng API Web âm thanh để bắt đầu giám sát."
+  },
+  "panels/web_audio/WebAudioView.ts | renderCapacity": {
+    "message": "Khả năng kết xuất"
+  },
+  "panels/web_audio/WebAudioView.ts | sampleRate": {
+    "message": "Tốc độ lấy mẫu"
+  },
+  "panels/web_audio/WebAudioView.ts | state": {
+    "message": "Trạng thái"
   },
   "panels/web_audio/web_audio-meta.ts | audio": {
     "message": "âm thanh"
@@ -16367,11 +16649,11 @@
   "ui/legacy/InspectorView.ts | moreTools": {
     "message": "Công cụ khác"
   },
-  "ui/legacy/InspectorView.ts | moveToBottom": {
-    "message": "Chuyển xuống dưới cùng"
+  "ui/legacy/InspectorView.ts | moveToDrawer": {
+    "message": "Chuyển vào ngăn"
   },
-  "ui/legacy/InspectorView.ts | moveToTop": {
-    "message": "Chuyển lên trên cùng"
+  "ui/legacy/InspectorView.ts | moveToMainTabBar": {
+    "message": "Chuyển đến thanh thẻ chính"
   },
   "ui/legacy/InspectorView.ts | panels": {
     "message": "Bảng điều khiển"
@@ -16445,29 +16727,23 @@
   "ui/legacy/SearchableView.ts | dOfD": {
     "message": "{PH1}/{PH2}"
   },
-  "ui/legacy/SearchableView.ts | disableCaseSensitive": {
-    "message": "Tắt tính năng tìm kiếm phân biệt chữ hoa chữ thường"
-  },
   "ui/legacy/SearchableView.ts | disableFindAndReplace": {
     "message": "Tắt tính năng tìm và thay thế"
-  },
-  "ui/legacy/SearchableView.ts | disableRegularExpression": {
-    "message": "Tắt biểu thức chính quy"
-  },
-  "ui/legacy/SearchableView.ts | enableCaseSensitive": {
-    "message": "Bật tính năng tìm kiếm phân biệt chữ hoa chữ thường"
   },
   "ui/legacy/SearchableView.ts | enableFindAndReplace": {
     "message": "Tìm và thay thế"
   },
-  "ui/legacy/SearchableView.ts | enableRegularExpression": {
-    "message": "Bật biểu thức chính quy"
-  },
   "ui/legacy/SearchableView.ts | findString": {
     "message": "Tìm"
   },
+  "ui/legacy/SearchableView.ts | matchCase": {
+    "message": "Khớp chữ hoa/chữ thường"
+  },
   "ui/legacy/SearchableView.ts | matchString": {
     "message": "1 kết quả phù hợp"
+  },
+  "ui/legacy/SearchableView.ts | matchWholeWord": {
+    "message": "Khớp cả từ"
   },
   "ui/legacy/SearchableView.ts | replace": {
     "message": "Thay thế"
@@ -16481,6 +16757,9 @@
   "ui/legacy/SearchableView.ts | searchPrevious": {
     "message": "Hiện kết quả trước đó"
   },
+  "ui/legacy/SearchableView.ts | useRegularExpression": {
+    "message": "Sử dụng biểu thức chính quy"
+  },
   "ui/legacy/SettingsUI.ts | oneOrMoreSettingsHaveChanged": {
     "message": "Một hoặc nhiều chế độ cài đặt đã thay đổi nên cần tải lại để các thay đổi này có hiệu lực"
   },
@@ -16489,6 +16768,9 @@
   },
   "ui/legacy/SoftContextMenu.ts | checked": {
     "message": "đã chọn"
+  },
+  "ui/legacy/SoftContextMenu.ts | newFeature": {
+    "message": "Đây là tính năng mới"
   },
   "ui/legacy/SoftContextMenu.ts | sS": {
     "message": "{PH1}, {PH2}"
@@ -17062,6 +17344,9 @@
   },
   "ui/legacy/components/quick_open/CommandMenu.ts | runCommand": {
     "message": "Lệnh chạy"
+  },
+  "ui/legacy/components/quick_open/FilteredListWidget.ts | newFeature": {
+    "message": "Đây là tính năng mới"
   },
   "ui/legacy/components/quick_open/FilteredListWidget.ts | noResultsFound": {
     "message": "Không tìm thấy kết quả nào"

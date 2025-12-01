@@ -649,6 +649,12 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
       const blink::web_pref::WebPreferences& r) {
     return r.long_press_link_select_text;
   }
+
+  static bool increment_local_surface_id_for_mainframe_same_doc_navigation(
+      const blink::web_pref::WebPreferences& r) {
+    return r.increment_local_surface_id_for_mainframe_same_doc_navigation;
+  }
+
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
@@ -822,6 +828,12 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
       const blink::web_pref::WebPreferences& r) {
     return r.content_based_fingerprinting_protection_enabled;
   }
+
+  static bool ai_prompt_api_enabled(const blink::web_pref::WebPreferences& r) {
+    return false; // Vivaldi Keep disabled
+    //return r.ai_prompt_api_enabled;
+  }
+
 
   // Vivaldi
   static bool allow_tab_cycle_from_webpage_into_ui(

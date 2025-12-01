@@ -273,6 +273,16 @@ void BookmarkMenuController::BookmarkNodeMoved(
   // Overriding the BookmarkNodeMoved method prevents the base class from
   // invoking `BookmarkModelChanged`, which would close the menu.
   CHECK(menu_delegate_.get());
+
+  if (vivaldi::IsVivaldiRunning()) {
+    // NOTE(espen@vivaldi.com): A drag that modifies the bar must close the menu
+    // to prevent different logical layout between JS and here (that can lead to
+    // a crash).
+    if (old_parent == BookmarkParentFolder::BookmarkBarFolder() ||
+        new_parent == BookmarkParentFolder::BookmarkBarFolder()) {
+      BookmarkMergedSurfaceServiceChanged();
+    }
+  }
 }
 
 void BookmarkMenuController::BookmarkNodeChanged(

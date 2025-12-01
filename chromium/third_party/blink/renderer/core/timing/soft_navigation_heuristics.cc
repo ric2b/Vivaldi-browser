@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/paint/timing/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
+#include "third_party/blink/renderer/core/timing/interaction_effects_monitor.h"
 #include "third_party/blink/renderer/core/timing/soft_navigation_context.h"
 #include "third_party/blink/renderer/core/timing/soft_navigation_paint_attribution_tracker.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -38,7 +39,6 @@ namespace blink {
 namespace {
 
 BASE_FEATURE(kShutdownSoftNavigationContextOnDetach,
-             "ShutdownSoftNavigationContextOnDetach",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 const char kPageLoadInternalSoftNavigationOutcome[] =
@@ -161,20 +161,20 @@ constexpr bool IsInteractionEnd(
 }
 
 std::optional<SoftNavigationHeuristics::EventScope::Type>
-EventScopeTypeFromEvent(const Event& event) {
+EventScopeTypeFromInputEvent(const Event& event,
+                             bool has_interaction_effects_monitor) {
   if (!event.isTrusted()) {
     return std::nullopt;
   }
   if (event.IsMouseEvent() && event.type() == event_type_names::kClick) {
     return SoftNavigationHeuristics::EventScope::Type::kClick;
   }
-  if (event.type() == event_type_names::kNavigate) {
-    return SoftNavigationHeuristics::EventScope::Type::kNavigate;
-  }
   if (event.IsKeyboardEvent()) {
-    Node* target_node = event.target() ? event.target()->ToNode() : nullptr;
-    if (target_node && target_node->IsHTMLElement() &&
-        DynamicTo<HTMLElement>(target_node)->IsHTMLBodyElement()) {
+    Node* target_node =
+        event.RawTarget() ? event.RawTarget()->ToNode() : nullptr;
+    if ((target_node && target_node->IsHTMLElement() &&
+         DynamicTo<HTMLElement>(target_node)->IsHTMLBodyElement()) ||
+        has_interaction_effects_monitor) {
       if (event.type() == event_type_names::kKeydown) {
         return SoftNavigationHeuristics::EventScope::Type::kKeydown;
       } else if (event.type() == event_type_names::kKeypress) {
@@ -273,6 +273,12 @@ void SoftNavigationHeuristics::Shutdown() {
     OnSoftNavigationContextWasExhausted(*context.Get(), viewport_area,
                                         required_paint_area);
   }
+
+  for (const auto& monitor : interaction_effects_monitors_) {
+    monitor->Shutdown();
+  }
+  interaction_effects_monitors_.clear();
+
   potential_soft_navigations_.clear();
 }
 
@@ -458,7 +464,7 @@ void SoftNavigationHeuristics::EmitSoftNavigationEntry(
   CHECK(performance);
   performance->AddSoftNavigationEntry(
       AtomicString(context->InitialUrl()), context->UserInteractionTimestamp(),
-      context->FirstContentfulPaintTimingInfo());
+      context->FirstContentfulPaintTimingInfo(), context->NavigationId());
   ReportSoftNavigationToMetrics(context);
 
   TRACE_EVENT_INSTANT("scheduler,devtools.timeline,loading",
@@ -591,37 +597,13 @@ void SoftNavigationHeuristics::Trace(Visitor* visitor) const {
   visitor->Trace(window_);
   visitor->Trace(paint_attribution_tracker_);
   visitor->Trace(contexts_waiting_for_paint_timestamp_);
+  visitor->Trace(interaction_effects_monitors_);
   // Register a custom weak callback, which runs after processing weakness for
   // the container. This allows us to observe the collection becoming empty
   // without needing to observe individual element disposal.
   visitor->RegisterWeakCallbackMethod<
       SoftNavigationHeuristics,
       &SoftNavigationHeuristics::ProcessCustomWeakness>(this);
-}
-
-// This is invoked when executing a callback with an active `EventScope`,
-// which happens for click and keyboard input events, as well as
-// user-initiated navigation and popstate events. Running such an event
-// listener "activates" the `SoftNavigationContext` as a candidate soft
-// navigation.
-void SoftNavigationHeuristics::OnCreateTaskScope(
-    scheduler::TaskAttributionInfo& task_state) {
-  CHECK(active_interaction_context_);
-  // A task scope can be created without a `SoftNavigationContext` or one that
-  // differs from the one associated with the current `EventScope` if, for
-  // example, a previously created and awaited promise is resolved in an event
-  // handler.
-  if (task_state.GetSoftNavigationContext() !=
-      active_interaction_context_.Get()) {
-    return;
-  }
-
-  // TODO(crbug.com/40942324): Replace task_id with either an id for the
-  // `SoftNavigationContext` or a serialized version of the object.
-  TRACE_EVENT_INSTANT("loading", "SoftNavigationHeuristics::OnCreateTaskScope",
-                      perfetto::Track::FromPointer(active_interaction_context_),
-                      "context", active_interaction_context_.Get(), "task_id",
-                      task_state.Id().value());
 }
 
 void SoftNavigationHeuristics::ProcessCustomWeakness(
@@ -694,19 +676,19 @@ SoftNavigationHeuristics::EventScope SoftNavigationHeuristics::CreateEventScope(
   // is enabled.
   if (!tracker) {
     return SoftNavigationHeuristics::EventScope(this,
-                                                /*observer_scope=*/std::nullopt,
                                                 /*task_scope=*/std::nullopt,
                                                 type, is_nested);
   }
   return SoftNavigationHeuristics::EventScope(
-      this, tracker->RegisterObserver(this),
-      tracker->CreateTaskScope(active_interaction_context_.Get()), type,
-      is_nested);
+      this, tracker->SetTaskStateVariable(active_interaction_context_.Get()),
+      type, is_nested);
 }
 
 std::optional<SoftNavigationHeuristics::EventScope>
-SoftNavigationHeuristics::MaybeCreateEventScopeForEvent(const Event& event) {
-  std::optional<EventScope::Type> type = EventScopeTypeFromEvent(event);
+SoftNavigationHeuristics::MaybeCreateEventScopeForInputEvent(
+    const Event& event) {
+  std::optional<EventScope::Type> type = EventScopeTypeFromInputEvent(
+      event, !interaction_effects_monitors_.empty());
   if (!type) {
     return std::nullopt;
   }
@@ -783,6 +765,33 @@ uint64_t SoftNavigationHeuristics::CalculateRequiredPaintArea() const {
   return kMinRequiredArea;
 }
 
+void SoftNavigationHeuristics::ForEachInteractionEffectsMonitor(
+    base::FunctionRef<void(InteractionEffectsMonitor&)> callback) {
+  for (const auto& monitor : interaction_effects_monitors_) {
+    callback(*monitor.Get());
+  }
+}
+
+void SoftNavigationHeuristics::RegisterInteractionEffectsMonitor(
+    InteractionEffectsMonitor* monitor) {
+  // This should not be called after detach.
+  CHECK(window_->GetFrame());
+  auto result = interaction_effects_monitors_.insert(monitor);
+  CHECK(result.is_new_entry);
+}
+
+void SoftNavigationHeuristics::UnregisterInteractionEffectsMonitor(
+    InteractionEffectsMonitor* monitor) {
+  // `interaction_effects_monitors_` is cleared on detach, and the observer
+  // might be unregistered after that.
+  if (!window_->GetFrame()) {
+    return;
+  }
+  auto iter = interaction_effects_monitors_.find(monitor);
+  CHECK_NE(iter, interaction_effects_monitors_.end());
+  interaction_effects_monitors_.erase(monitor);
+}
+
 // static
 void SoftNavigationHeuristics::InsertedNode(Node* inserted_node,
                                             Node* container_node) {
@@ -821,12 +830,10 @@ void SoftNavigationHeuristics::OnVideoSrcChanged(HTMLVideoElement* element) {
 // ///////////////////////////////////////////
 SoftNavigationHeuristics::EventScope::EventScope(
     SoftNavigationHeuristics* heuristics,
-    std::optional<ObserverScope> observer_scope,
     std::optional<TaskScope> task_scope,
     Type type,
     bool is_nested)
     : heuristics_(heuristics),
-      observer_scope_(std::move(observer_scope)),
       task_scope_(std::move(task_scope)),
       type_(type),
       is_nested_(is_nested) {
@@ -835,7 +842,6 @@ SoftNavigationHeuristics::EventScope::EventScope(
 
 SoftNavigationHeuristics::EventScope::EventScope(EventScope&& other)
     : heuristics_(std::exchange(other.heuristics_, nullptr)),
-      observer_scope_(std::move(other.observer_scope_)),
       task_scope_(std::move(other.task_scope_)),
       type_(other.type_),
       is_nested_(other.is_nested_) {}
@@ -843,7 +849,6 @@ SoftNavigationHeuristics::EventScope::EventScope(EventScope&& other)
 SoftNavigationHeuristics::EventScope&
 SoftNavigationHeuristics::EventScope::operator=(EventScope&& other) {
   heuristics_ = std::exchange(other.heuristics_, nullptr);
-  observer_scope_ = std::move(other.observer_scope_);
   task_scope_ = std::move(other.task_scope_);
   type_ = other.type_;
   is_nested_ = other.is_nested_;

@@ -25,7 +25,7 @@
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/regional_capabilities/model/regional_capabilities_service_factory.h"
-#import "ios/chrome/browser/search_engine_choice/ui_bundled/search_engine_choice_ui_util.h"
+#import "ios/chrome/browser/search_engine_choice/ui/search_engine_choice_ui_util.h"
 #import "ios/chrome/browser/search_engines/model/search_engine_observer_bridge.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/settings/ui_bundled/cells/settings_search_engine_item.h"
@@ -121,13 +121,13 @@ const char kUmaSelectDefaultSearchEngine[] =
   // Note that `TemplateURL` pointers should not be freed. They either come from
   // `TemplateURLService::GetTemplateURLs()`, or they are owned by
   // `_choiceScreenTemplateUrls`.
-  std::vector<raw_ptr<TemplateURL>> _firstList;
+  std::vector<raw_ptr<TemplateURL, DanglingUntriaged>> _firstList;
   // The second list in the page which contains all remaining custom search
   // engines.
   // Note that `TemplateURL` pointers should not be freed. They either come from
   // `TemplateURLService::GetTemplateURLs()`, or they are owned by
   // `_choiceScreenTemplateUrls`.
-  std::vector<raw_ptr<TemplateURL>> _secondList;
+  std::vector<raw_ptr<TemplateURL, DanglingUntriaged>> _secondList;
   // FaviconLoader is a keyed service that uses LargeIconService to retrieve
   // favicon images.
   raw_ptr<FaviconLoader> _faviconLoader;
@@ -619,6 +619,25 @@ const char kUmaSelectDefaultSearchEngine[] =
         ^(FaviconAttributes* attributes) {
           if (attributes && attributes.faviconImage) {
             [weakSelf faviconReceivedFor:item faviconAttributes:attributes];
+          } else {
+            SearchEngineTableViewController* strongSelf = weakSelf;
+            if (!strongSelf) {
+              return;
+            }
+            GURL itemURL = GURL(templateURL->url_ref().ReplaceSearchTerms(
+                TemplateURLRef::SearchTermsArgs(std::u16string()),
+                strongSelf->_templateURLService->search_terms_data()));
+
+            // Fallback to try fetch from page URL or host.
+            strongSelf->_vivaldiFaviconLoader->GetFaviconForPageUrlOrHost(
+                itemURL, kDesiredMediumFaviconSizePt,
+                ios::VivaldiFaviconOptions::kCacheFirstThenFresh,
+                ^(FaviconAttributes* fallbackAttributes) {
+                  if (fallbackAttributes && fallbackAttributes.faviconImage) {
+                    [weakSelf faviconReceivedFor:item
+                               faviconAttributes:fallbackAttributes];
+                  }
+                });
           }
         });
   } else {

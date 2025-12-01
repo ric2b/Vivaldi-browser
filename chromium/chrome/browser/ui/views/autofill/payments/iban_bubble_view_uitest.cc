@@ -33,10 +33,10 @@
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/payments/payments_network_interface.h"
 #include "components/autofill/core/browser/strike_databases/payments/iban_save_strike_database.h"
-#include "components/autofill/core/browser/strike_databases/strike_database_integrator_base.h"
 #include "components/autofill/core/browser/test_utils/test_event_waiter.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/autofill_test_utils.h"
+#include "components/strike_database/strike_database_integrator_base.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
@@ -347,7 +347,7 @@ class IbanBubbleViewFullFormBrowserTest
     if (!iban_bubble_controller) {
       return IbanBubbleType::kInactive;
     }
-    return iban_bubble_controller->GetBubbleType();
+    return iban_bubble_controller->GetIbanBubbleType();
   }
 
   SavePaymentIconView* GetSaveIbanIconView() {
@@ -618,16 +618,16 @@ IN_PROC_BROWSER_TEST_F(IbanBubbleViewFullFormBrowserTest,
       "Autofill.SaveIbanPromptResult.Local.SavedWithNickname", true, 1);
 }
 
-// Tests the local save bubble. Ensures that clicking the [X] button will still
-// see the omnibox icon.
+// Tests the local save bubble. Ensures that clicking the [X] button will remove
+// the omnibox icon.
 IN_PROC_BROWSER_TEST_F(IbanBubbleViewFullFormBrowserTest,
-                       Local_ClickingClosesBubbleStillShowOmnibox) {
+                       Local_ClickingClosesBubbleClearsOmnibox) {
   base::HistogramTester histogram_tester;
   FillForm();
   SubmitFormAndWaitForIbanLocalSaveBubble();
 
   ClickOnCloseButton();
-  EXPECT_TRUE(GetSaveIbanIconView()->GetVisible());
+  EXPECT_FALSE(GetSaveIbanIconView()->GetVisible());
   EXPECT_FALSE(GetSaveIbanBubbleView());
   histogram_tester.ExpectUniqueSample(
       "Autofill.SaveIbanPromptOffer.Local.FirstShow",

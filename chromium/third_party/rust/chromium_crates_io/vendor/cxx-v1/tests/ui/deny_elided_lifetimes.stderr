@@ -1,24 +1,24 @@
 error: hidden lifetime parameters in types are deprecated
-  --> tests/ui/deny_elided_lifetimes.rs:21:50
+  --> tests/ui/deny_elided_lifetimes.rs:36:50
    |
-21 |         fn lifetime_elided(s: &i32) -> UniquePtr<Cpp>;
+36 |         fn lifetime_elided(s: &i32) -> UniquePtr<Cpp>;
    |                                                  ^^^ expected lifetime parameter
    |
 note: the lint level is defined here
   --> tests/ui/deny_elided_lifetimes.rs:1:9
    |
-1  | #![deny(elided_lifetimes_in_paths, mismatched_lifetime_syntaxes)]
+ 1 | #![deny(elided_lifetimes_in_paths, mismatched_lifetime_syntaxes)]
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^
 help: indicate the anonymous lifetime
    |
-21 |         fn lifetime_elided(s: &i32) -> UniquePtr<Cpp<'_>>;
+36 |         fn lifetime_elided(s: &i32) -> UniquePtr<Cpp<'_>>;
    |                                                     ++++
 
 error: hiding a lifetime that's elided elsewhere is confusing
-  --> tests/ui/deny_elided_lifetimes.rs:21:31
+  --> tests/ui/deny_elided_lifetimes.rs:36:31
    |
-21 |         fn lifetime_elided(s: &i32) -> UniquePtr<Cpp>;
-   |                               ^^^^               --- the same lifetime is hidden here
+36 |         fn lifetime_elided(s: &i32) -> UniquePtr<Cpp>;
+   |                               ^^^^               ^^^ the same lifetime is hidden here
    |                               |
    |                               the lifetime is elided here
    |
@@ -26,9 +26,9 @@ error: hiding a lifetime that's elided elsewhere is confusing
 note: the lint level is defined here
   --> tests/ui/deny_elided_lifetimes.rs:1:36
    |
-1  | #![deny(elided_lifetimes_in_paths, mismatched_lifetime_syntaxes)]
+ 1 | #![deny(elided_lifetimes_in_paths, mismatched_lifetime_syntaxes)]
    |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 help: use `'_` for type paths
    |
-21 |         fn lifetime_elided(s: &i32) -> UniquePtr<Cpp<'_>>;
+36 |         fn lifetime_elided(s: &i32) -> UniquePtr<Cpp<'_>>;
    |                                                     ++++

@@ -132,7 +132,6 @@ luci.recipe(
     cipd_package = RECIPE_CIPD_PACKAGE,
     cipd_version = "refs/heads/main",
     use_bbagent = True,
-    use_python3 = True,
 )
 
 luci.recipe(
@@ -140,7 +139,6 @@ luci.recipe(
     cipd_package = RECIPE_CIPD_PACKAGE,
     cipd_version = "refs/heads/main",
     use_bbagent = True,
-    use_python3 = True,
 )
 
 luci.builder(

@@ -16,7 +16,9 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
+import org.chromium.chrome.browser.toolbar.top.ToolbarChildButton;
 import org.chromium.chrome.browser.toolbar.top.ToolbarUtils;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
@@ -28,7 +30,7 @@ import org.chromium.ui.widget.Toast;
  * changes.
  */
 @NullMarked
-public class ReloadButtonCoordinator {
+public class ReloadButtonCoordinator extends ToolbarChildButton {
     /** An interface that allows parent components to control tab reload logic. */
     public interface Delegate {
         /**
@@ -51,6 +53,7 @@ public class ReloadButtonCoordinator {
      * @param ntpLoadingSupplier a supplier that provides loading state of content inside NTP, e.g
      *     feed, this is not a reload state of the whole tab.
      * @param themeColorProvider a provider that notifies about theme changes and focus tint.
+     * @param incognitoStateProvider a provider that notifies about incognito state changes.
      */
     public ReloadButtonCoordinator(
             ImageButton view,
@@ -59,7 +62,9 @@ public class ReloadButtonCoordinator {
             ObservableSupplier<Boolean> ntpLoadingSupplier,
             ObservableSupplier<Boolean> enabledSupplier,
             ThemeColorProvider themeColorProvider,
+            IncognitoStateProvider incognitoStateProvider,
             boolean isWebApp) {
+        super(view.getContext(), themeColorProvider, incognitoStateProvider);
         mView = view;
 
         // ThemeColorProvider might not be updated by this time. Keep existing color list.
@@ -94,11 +99,16 @@ public class ReloadButtonCoordinator {
         PropertyModelChangeProcessor.create(model, mView, ReloadButtonViewBinder::bind);
     }
 
-    /**
-     * Sets reload button visibility.
-     *
-     * @param isVisible indicated whether view should be visible or gone.
-     */
+    @Override
+    public void onTintChanged(
+            @Nullable ColorStateList tint,
+            @Nullable ColorStateList activityFocusTint,
+            int brandedColorScheme) {
+        super.onTintChanged(tint, activityFocusTint, brandedColorScheme);
+        mMediator.onTintChanged(tint, activityFocusTint, brandedColorScheme);
+    }
+
+    @Override
     public void setVisibility(boolean isVisible) {
         mMediator.setVisibility(isVisible);
     }
@@ -150,7 +160,9 @@ public class ReloadButtonCoordinator {
     }
 
     /** Destroys current object instance. It can't be used after this call. */
+    @Override
     public void destroy() {
+        super.destroy();
         mMediator.destroy();
     }
 }

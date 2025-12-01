@@ -1,18 +1,20 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/* eslint @typescript-eslint/no-explicit-any: 0 */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
+import * as fs from 'fs';
 import * as path from 'path';
 import type {Page, ScreenshotOptions, Target} from 'puppeteer-core';
 import puppeteer from 'puppeteer-core';
+import * as url from 'url';
 
 import {formatAsPatch, resultAssertionsDiff, ResultsDBReporter} from '../../test/conductor/karma-resultsdb-reporter.js';
 import {CHECKOUT_ROOT, GEN_DIR, SOURCE_ROOT} from '../../test/conductor/paths.js';
 import * as ResultsDb from '../../test/conductor/resultsdb.js';
 import {loadTests, TestConfig} from '../../test/conductor/test_config.js';
-import {ScreenshotError} from '../conductor/screenshot-error.js';
+import {ScreenshotError, ScreenshotErrorReporter} from '../conductor/screenshot-error.js';
 import {assertElementScreenshotUnchanged} from '../shared/screenshots.js';
 
 const COVERAGE_OUTPUT_DIRECTORY = 'karma-coverage';
@@ -27,6 +29,7 @@ function* reporters() {
   if (ResultsDb.available()) {
     yield 'resultsdb';
   } else {
+    yield 'screenshots';
     yield 'progress-diff';
   }
   if (TestConfig.coverage) {
@@ -94,7 +97,12 @@ const CustomChrome = function(this: any, _baseBrowserDecorator: unknown, args: B
       disableAnimations(page),
     ]);
 
+    page.on('framenavigated', frame => {
+      console.error(`\nframe navigated ${frame.url()}\n`);
+    });
+
     browser.on('targetcreated', async (target: Target) => {
+      console.error(`\ntarget created url=${target.url()} type=${target.type()}\n`);
       if (target.type() === 'page') {
         const page = await target.page();
         if (!page) {
@@ -110,6 +118,12 @@ const CustomChrome = function(this: any, _baseBrowserDecorator: unknown, args: B
     await page.goto(url);
   };
   this._getOptions = function(url: string) {
+    const flagsDisabledWithDebugging = TestConfig.debug ? [] : [
+      // If the user has non 1 scale factor DevTools renders
+      // Small and makes it not useful for debugging
+      '--force-device-scale-factor=1',
+    ];
+
     return [
       '--remote-allow-origins=*',
       `--remote-debugging-port=${REMOTE_DEBUGGING_PORT}`,
@@ -120,9 +134,9 @@ const CustomChrome = function(this: any, _baseBrowserDecorator: unknown, args: B
       '--disable-gpu',
       '--disable-font-subpixel-positioning',
       '--disable-lcd-text',
-      '--force-device-scale-factor=1',
       '--disable-device-discovery-notifications',
       '--window-size=1280,768',
+      ...flagsDisabledWithDebugging,
       ...args.flags,
       url,
     ];
@@ -195,6 +209,7 @@ module.exports = function(config: any) {
       {pattern: path.join(GEN_DIR, 'inspector_overlay/**/*.js'), served: true, included: false},
       {pattern: path.join(GEN_DIR, 'inspector_overlay/**/*.js.map'), served: true, included: false},
       {pattern: path.join(GEN_DIR, 'front_end/**/fixtures/**/*'), served: true, included: false},
+      {pattern: path.join(GEN_DIR, 'front_end/**/*.snapshot.txt'), served: true, included: false},
       {pattern: path.join(GEN_DIR, 'front_end/ui/components/docs/**/*'), served: true, included: false},
     ],
 
@@ -229,7 +244,9 @@ module.exports = function(config: any) {
       require('karma-spec-reporter'),
       require('karma-coverage'),
       {'reporter:resultsdb': ['type', ResultsDBReporter]},
+      {'reporter:screenshots': ['type', ScreenshotErrorReporter]},
       {'reporter:progress-diff': ['type', ProgressWithDiffReporter]},
+      {'middleware:snapshotTester': ['factory', snapshotTesterFactory]},
     ],
 
     preprocessors: {
@@ -244,6 +261,8 @@ module.exports = function(config: any) {
       '/front_end': `/base/${targetDir}/front_end`,
     },
 
+    middleware: ['snapshotTester'],
+
     coverageReporter: {
       dir: path.join(TestConfig.artifactsDir, COVERAGE_OUTPUT_DIRECTORY),
       subdir: '.',
@@ -256,7 +275,9 @@ module.exports = function(config: any) {
 
     singleRun: !TestConfig.debug,
 
-    pingTimeout: 4000,
+    pingTimeout: 15_000,
+    browserDisconnectTimeout: 15_000,
+    browserNoActivityTimeout: 60_000,
 
     mochaReporter: {
       showDiff: true,
@@ -266,3 +287,63 @@ module.exports = function(config: any) {
 
   config.set(options);
 };
+
+function snapshotTesterFactory() {
+  return (req: any, res: any, next: any) => {
+    if (req.url.startsWith('/snapshot-update-mode')) {
+      res.writeHead(200, {'Content-Type': 'application/json'});
+      const updateMode = TestConfig.onDiff.update === true;
+      res.end(JSON.stringify({updateMode}));
+      return;
+    }
+
+    if (req.url.startsWith('/snapshot')) {
+      const parsedUrl = url.parse(req.url, true);
+      if (typeof parsedUrl.query.snapshotPath !== 'string') {
+        throw new Error('invalid snapshotPath');
+      }
+
+      const snapshotPath = path.join(SOURCE_ROOT, parsedUrl.query.snapshotPath);
+      if (!fs.existsSync(snapshotPath)) {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+
+      const snapshot = fs.readFileSync(snapshotPath, 'utf-8');
+      res.writeHead(200);
+      res.end(snapshot);
+      return;
+    }
+
+    if (req.url.startsWith('/update-snapshot')) {
+      const parsedUrl = url.parse(req.url, true);
+      if (typeof parsedUrl.query.snapshotPath !== 'string') {
+        throw new Error('invalid snapshotPath');
+      }
+
+      const snapshotPath = path.join(SOURCE_ROOT, parsedUrl.query.snapshotPath);
+
+      let body = '';
+      req.on('data', (chunk: any) => {
+        body += chunk.toString();
+      });
+      req.on('end', () => {
+        // eslint-disable-next-line no-console
+        console.info(`updating snapshot: ${snapshotPath}`);
+        if (body) {
+          fs.writeFileSync(snapshotPath, body);
+        } else {
+          fs.rmSync(snapshotPath, {force: true});
+        }
+
+        res.writeHead(200);
+        res.end();
+      });
+
+      return;
+    }
+
+    next();
+  };
+}

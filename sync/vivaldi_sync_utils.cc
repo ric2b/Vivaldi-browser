@@ -8,7 +8,6 @@
 #include "base/notreached.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/base/data_type.h"
-#include "components/sync/base/hash_util.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/protocol/proto_enum_conversions.h"
 #include "components/sync/protocol/sync.pb.h"

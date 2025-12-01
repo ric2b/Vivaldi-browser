@@ -25,17 +25,20 @@
 #include "extensions/buildflags/buildflags.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
-
-using content::WebContents;
-using content::WebContentsObserver;
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #endif
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
+
+using content::WebContents;
+using content::WebContentsObserver;
 
 namespace extensions {
 
@@ -59,7 +62,8 @@ WebAuthFlow::WebAuthFlow(
       timeout_for_non_interactive_(timeout_for_non_interactive),
       non_interactive_timeout_timer_(std::make_unique<base::OneShotTimer>()),
       popup_bounds_(popup_bounds) {
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("identity", "WebAuthFlow", this);
+  TRACE_EVENT_BEGIN("identity", "WebAuthFlow",
+                    perfetto::Track::FromPointer(this));
   if (timeout_for_non_interactive_) {
     DCHECK_GE(*timeout_for_non_interactive_, base::TimeDelta());
     DCHECK_LE(*timeout_for_non_interactive_, base::Minutes(1));
@@ -84,7 +88,7 @@ WebAuthFlow::~WebAuthFlow() {
   // below may generate notifications.
   WebContentsObserver::Observe(nullptr);
 
-  TRACE_EVENT_NESTABLE_ASYNC_END0("identity", "WebAuthFlow", this);
+  TRACE_EVENT_END("identity", perfetto::Track::FromPointer(this));
 }
 
 void WebAuthFlow::SetClockForTesting(
@@ -320,15 +324,16 @@ void WebAuthFlow::DidFinishNavigation(
       // response headers.
     } else {
       failed = true;
-      TRACE_EVENT_NESTABLE_ASYNC_INSTANT1(
-          "identity", "DidFinishNavigationFailure", this, "error_code",
-          navigation_handle->GetNetErrorCode());
+      TRACE_EVENT_INSTANT("identity", "DidFinishNavigationFailure",
+                          perfetto::Track::FromPointer(this), "error_code",
+                          navigation_handle->GetNetErrorCode());
     }
   } else if (navigation_handle->GetResponseHeaders() &&
              navigation_handle->GetResponseHeaders()->response_code() >= 400) {
     failed = true;
-    TRACE_EVENT_NESTABLE_ASYNC_INSTANT1(
-        "identity", "DidFinishNavigationFailure", this, "response_code",
+    TRACE_EVENT_INSTANT(
+        "identity", "DidFinishNavigationFailure",
+        perfetto::Track::FromPointer(this), "response_code",
         navigation_handle->GetResponseHeaders()->response_code());
   }
 

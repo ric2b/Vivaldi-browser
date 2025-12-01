@@ -295,12 +295,12 @@ class HloSharding {
   }
 
   // Returns whether the sharding represents unreduced subgroup sharding.
-  bool IsUnReducedSubgroup() const {
+  bool IsUnreducedSubgroup() const {
     if (!IsTuple()) {
       return absl::c_linear_search(subgroup_types_, OpSharding::UNREDUCED);
     }
     return absl::c_all_of(tuple_elements_, [](const HloSharding& s) {
-      return s.IsUnReducedSubgroup();
+      return s.IsUnreducedSubgroup();
     });
   }
 
@@ -522,6 +522,15 @@ class HloSharding {
     return -1;
   }
 
+  // Returns the unreduced subgroup dim, or -1 if it doesn't exist.
+  int64_t SubgroupUnreducedDim() const {
+    auto it = absl::c_find(subgroup_types_, OpSharding::UNREDUCED);
+    if (it != subgroup_types_.end()) {
+      return (it - subgroup_types_.begin()) + TiledDataRank();
+    }
+    return -1;
+  }
+
   // Returns the data rank for tiled sharding. It doesn't include subgroup dims.
   int64_t TiledDataRank() const {
     CHECK(IsTiled());
@@ -732,12 +741,12 @@ class HloSharding {
   // combined with other shardings. Metadata are not populated when tuple_ is
   // true. Instead, metadata should be set on individual tuple elements.
   std::vector<OpMetadata> metadata_;
-  // This field is used to represented the sharding type of each subgroup.
+  // This field is used to represent the sharding type of each subgroup.
   // For example, sharding={devices=[2,2,2,2]0,1,2,...,15 last_tile_dims={
   // replicate, manual, unreduced}} means that each of the last 3 dimensions
-  // in [2,2,2,2] represents a subgrouping in replicate, manual.
+  // in [2,2,2,2] represents a subgroup in replicate, manual and unreduced.
   // When creating HloSharding, subgroup dims of the same type will be merged,
-  // so that there is at most one dim with a given type.
+  // so that the elements in subgroup_types_ are unique.
   std::vector<OpSharding::Type> subgroup_types_;
   bool replicated_ : 1;  // When non-tuple, true if the sharding is trivial.
   bool maximal_ : 1;     // When non-tuple, true if the tile size is the same as

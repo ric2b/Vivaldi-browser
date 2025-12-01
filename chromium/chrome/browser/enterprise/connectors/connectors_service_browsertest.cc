@@ -2,16 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
 
 #include <memory>
 #include <utility>
 
+#include "base/compiler_specific.h"
 #include "base/json/json_reader.h"
 #include "base/path_service.h"
 #include "build/build_config.h"
@@ -227,8 +223,9 @@ class ConnectorsServiceProfileBrowserTest
                 const char* scope_pref,
                 const char* pref_value,
                 bool profile_scope = true) {
-    browser()->profile()->GetPrefs()->Set(pref,
-                                          *base::JSONReader::Read(pref_value));
+    browser()->profile()->GetPrefs()->Set(
+        pref, *base::JSONReader::Read(pref_value,
+                                      base::JSON_PARSE_CHROMIUM_EXTENSIONS));
     browser()->profile()->GetPrefs()->SetInteger(
         scope_pref, profile_scope ? policy::POLICY_SCOPE_USER
                                   : policy::POLICY_SCOPE_MACHINE);
@@ -317,7 +314,8 @@ class ConnectorsServiceAnalysisProfileBrowserTest
   bool enhanced_fields_enabled() { return std::get<2>(GetParam()); }
 
   bool is_cloud() {
-    return strcmp(settings_value(), kNormalCloudAnalysisSettingsPref) == 0;
+    return UNSAFE_TODO(
+               strcmp(settings_value(), kNormalCloudAnalysisSettingsPref)) == 0;
   }
 
   // Returns the Value the "normal" reporting workflow uses to validate that it

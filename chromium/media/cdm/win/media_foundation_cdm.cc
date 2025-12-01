@@ -315,13 +315,13 @@ MediaFoundationCdm::MediaFoundationCdm(
       session_keys_change_cb_(session_keys_change_cb),
       session_expiration_update_cb_(session_expiration_update_cb) {
   DVLOG_FUNC(1);
-  CHECK(!uma_prefix_.empty(), base::NotFatalUntil::M140);
-  CHECK(create_mf_cdm_cb_, base::NotFatalUntil::M140);
-  CHECK(is_type_supported_cb_, base::NotFatalUntil::M140);
-  CHECK(session_message_cb_, base::NotFatalUntil::M140);
-  CHECK(session_closed_cb_, base::NotFatalUntil::M140);
-  CHECK(session_keys_change_cb_, base::NotFatalUntil::M140);
-  CHECK(session_expiration_update_cb_, base::NotFatalUntil::M140);
+  CHECK(!uma_prefix_.empty());
+  CHECK(create_mf_cdm_cb_);
+  CHECK(is_type_supported_cb_);
+  CHECK(session_message_cb_);
+  CHECK(session_closed_cb_);
+  CHECK(session_keys_change_cb_);
+  CHECK(session_expiration_update_cb_);
 }
 
 MediaFoundationCdm::~MediaFoundationCdm() {
@@ -333,7 +333,7 @@ HRESULT MediaFoundationCdm::Initialize() {
   ComPtr<IMFContentDecryptionModule> mf_cdm;
   create_mf_cdm_cb_.Run(hr, mf_cdm);
   if (!mf_cdm) {
-    CHECK(FAILED(hr), base::NotFatalUntil::M140);
+    CHECK(FAILED(hr));
 
     if (hr == DRM_E_TEE_INVALID_HWDRM_STATE) {
       OnCdmEvent(CdmEvent::kHardwareContextReset, hr);
@@ -397,7 +397,7 @@ void MediaFoundationCdm::GetStatusForPolicy(
 
   is_type_supported_cb_.Run(
       content_type,
-      base::BindOnce(&MediaFoundationCdm::OnIsTypeSupportedResult,
+      base::BindOnce(&MediaFoundationCdm::OnGetStatusForPolicyResult,
                      weak_factory_.GetWeakPtr(), std::move(promise)));
 }
 
@@ -615,7 +615,7 @@ bool MediaFoundationCdm::OnSessionId(
   auto itr = pending_sessions_.find(session_token);
   CHECK(itr != pending_sessions_.end());
   auto session = std::move(itr->second);
-  CHECK(session, base::NotFatalUntil::M140);
+  CHECK(session);
   pending_sessions_.erase(itr);
 
   if (session_id.empty() || sessions_.count(session_id)) {
@@ -710,7 +710,7 @@ void MediaFoundationCdm::OnHardwareContextReset() {
   // Recreates IMFContentDecryptionModule so we can create new sessions.
   if (FAILED(Initialize())) {
     DLOG(ERROR) << __func__ << ": Re-initialization failed";
-    CHECK(!mf_cdm_, base::NotFatalUntil::M140);
+    CHECK(!mf_cdm_);
   }
 }
 
@@ -719,9 +719,16 @@ void MediaFoundationCdm::OnCdmEvent(CdmEvent event, HRESULT hr) {
   cdm_event_cb_.Run(event, hr);
 }
 
-void MediaFoundationCdm::OnIsTypeSupportedResult(
+void MediaFoundationCdm::OnGetStatusForPolicyResult(
     std::unique_ptr<KeyStatusCdmPromise> promise,
-    bool is_supported) {
+    IsTypeSupportedValueOrError value_or_error) {
+  if (!value_or_error.has_value()) {
+    base::UmaHistogramSparse(uma_prefix_ + "GetStatusForPolicy",
+                             value_or_error.error());
+  }
+
+  auto is_supported = value_or_error.value_or(false);
+
   if (is_supported) {
     promise->resolve(CdmKeyInformation::KeyStatus::USABLE);
   } else {

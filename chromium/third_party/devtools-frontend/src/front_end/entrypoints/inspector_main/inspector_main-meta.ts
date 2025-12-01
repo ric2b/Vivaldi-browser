@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -257,7 +257,7 @@ Common.Settings.registerSettingExtension({
 UI.Toolbar.registerToolbarItem({
   async loadItem() {
     const InspectorMain = await loadInspectorMainModule();
-    return InspectorMain.InspectorMain.NodeIndicator.instance();
+    return InspectorMain.InspectorMain.NodeIndicatorProvider.instance();
   },
   order: 2,
   location: UI.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_LEFT,
@@ -268,6 +268,6 @@ UI.Toolbar.registerToolbarItem({
     const InspectorMain = await loadInspectorMainModule();
     return InspectorMain.OutermostTargetSelector.OutermostTargetSelector.instance();
   },
-  order: 98,
+  order: 97,
   location: UI.Toolbar.ToolbarItemLocation.MAIN_TOOLBAR_RIGHT,
 });

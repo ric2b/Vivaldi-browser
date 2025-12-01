@@ -1,8 +1,9 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import * as AddSourceMapURLDialog from './AddSourceMapURLDialog.js';
+import * as AiCodeCompletionPlugin from './AiCodeCompletionPlugin.js';
 import * as AiWarningInfobarPlugin from './AiWarningInfobarPlugin.js';
 import * as BreakpointEditDialog from './BreakpointEditDialog.js';
 import * as BreakpointsView from './BreakpointsView.js';
@@ -37,6 +38,7 @@ import * as WatchExpressionsSidebarPane from './WatchExpressionsSidebarPane.js';
 
 export {
   AddSourceMapURLDialog,
+  AiCodeCompletionPlugin,
   AiWarningInfobarPlugin,
   BreakpointEditDialog,
   BreakpointsView,

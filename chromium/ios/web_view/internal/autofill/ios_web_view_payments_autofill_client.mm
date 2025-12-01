@@ -7,11 +7,15 @@
 #import <optional>
 
 #import "base/check_deref.h"
+#import "components/autofill/core/browser/autofill_progress_dialog_type.h"
 #import "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
 #import "components/autofill/core/browser/payments/credit_card_cvc_authenticator.h"
 #import "components/autofill/core/browser/payments/mandatory_reauth_manager.h"
 #import "components/autofill/core/browser/payments/payments_autofill_client.h"
 #import "components/autofill/core/browser/payments/payments_network_interface.h"
+#import "components/autofill/core/browser/ui/payments/autofill_progress_dialog_controller.h"
+#import "components/autofill/core/browser/ui/payments/card_unmask_otp_input_dialog_controller.h"
+#import "components/autofill/core/browser/ui/payments/card_unmask_prompt_controller.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web_view/internal/autofill/web_view_autofill_client_ios.h"
 #import "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
@@ -32,13 +36,19 @@ IOSWebViewPaymentsAutofillClient::IOSWebViewPaymentsAutofillClient(
               client->GetIdentityManager(),
               &client->GetPersonalDataManager().payments_data_manager(),
               web_state->GetBrowserState()->IsOffTheRecord())),
-      web_state_(CHECK_DEREF(web_state)) {}
+      web_state_(CHECK_DEREF(web_state)) {
+  GetPaymentsDataManager().CleanupForCrbug445879524();
+}
 
 IOSWebViewPaymentsAutofillClient::~IOSWebViewPaymentsAutofillClient() = default;
 
 void IOSWebViewPaymentsAutofillClient::LoadRiskData(
     base::OnceCallback<void(const std::string&)> callback) {
   [bridge_ loadRiskData:std::move(callback)];
+}
+
+bool IOSWebViewPaymentsAutofillClient::LocalCardSaveIsSupported() {
+  return false;
 }
 
 void IOSWebViewPaymentsAutofillClient::ShowSaveCreditCardToCloud(
@@ -81,6 +91,24 @@ void IOSWebViewPaymentsAutofillClient::OnUnmaskVerificationResult(
   [bridge_ didReceiveUnmaskVerificationResult:result];
 }
 
+void IOSWebViewPaymentsAutofillClient::ShowAutofillProgressDialog(
+    autofill::AutofillProgressDialogType autofill_progress_dialog_type,
+    base::OnceClosure cancel_callback) {
+  [bridge_ showAutofillProgressDialogOfType:autofill_progress_dialog_type
+                             cancelCallback:std::move(cancel_callback)];
+}
+
+void IOSWebViewPaymentsAutofillClient::CloseAutofillProgressDialog(
+    bool show_confirmation_before_closing,
+    base::OnceClosure no_interactive_authentication_callback) {
+  [bridge_
+      closeAutofillProgressDialogWithConfirmation:
+          show_confirmation_before_closing
+                               completionCallback:
+                                   std::move(
+                                       no_interactive_authentication_callback)];
+}
+
 CreditCardCvcAuthenticator&
 IOSWebViewPaymentsAutofillClient::GetCvcAuthenticator() {
   if (!cvc_authenticator_) {
@@ -111,5 +139,22 @@ IOSWebViewPaymentsAutofillClient::GetOrCreatePaymentsMandatoryReauthManager() {
   }
   return payments_reauth_manager_.get();
 }
+
+#if BUILDFLAG(IS_IOS)
+std::unique_ptr<AutofillProgressDialogController>
+IOSWebViewPaymentsAutofillClient::ExtractProgressDialogModel() {
+  return nullptr;
+}
+
+std::unique_ptr<CardUnmaskOtpInputDialogController>
+IOSWebViewPaymentsAutofillClient::ExtractOtpInputDialogModel() {
+  return nullptr;
+}
+
+CardUnmaskPromptController*
+IOSWebViewPaymentsAutofillClient::GetCardUnmaskPromptModel() {
+  return nullptr;
+}
+#endif
 
 }  // namespace autofill::payments

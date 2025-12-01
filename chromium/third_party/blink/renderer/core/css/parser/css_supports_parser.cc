@@ -259,6 +259,9 @@ bool CSSSupportsParser::ConsumeAtRuleFn(CSSParserTokenStream& stream) {
     case CSSAtRuleID::kCSSAtRuleProperty:
       rule_type = StyleRule::kProperty;
       break;
+    case CSSAtRuleID::kCSSAtRuleRoute:
+      rule_type = StyleRule::kRoute;
+      break;
     case CSSAtRuleID::kCSSAtRuleScope:
       rule_type = StyleRule::kScope;
       break;
@@ -273,6 +276,9 @@ bool CSSSupportsParser::ConsumeAtRuleFn(CSSParserTokenStream& stream) {
       break;
     case CSSAtRuleID::kCSSAtRuleApplyMixin:
       rule_type = StyleRule::kApplyMixin;
+      break;
+    case CSSAtRuleID::kCSSAtRuleContents:
+      rule_type = StyleRule::kContents;
       break;
     case CSSAtRuleID::kCSSAtRulePositionTry:
       rule_type = StyleRule::kPositionTry;

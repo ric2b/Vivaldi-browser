@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,46 +8,40 @@ import * as Types from '../types/types.js';
 import {data as AsyncJSCallsHandlerData} from './AsyncJSCallsHandler.js';
 import {data as flowsHandlerData} from './FlowsHandler.js';
 
-const lastScheduleStyleRecalcByFrame = new Map<string, Types.Events.ScheduleStyleRecalculation>();
+let lastScheduleStyleRecalcByFrame = new Map<string, Types.Events.ScheduleStyleRecalculation>();
 
 // This tracks the last event that is considered to have invalidated the layout
 // for a given frame.
 // Note that although there is an InvalidateLayout event, there are also other
 // events (ScheduleStyleRecalculation) that could be the reason a layout was
 // invalidated.
-const lastInvalidationEventForFrame = new Map<string, Types.Events.Event>();
+let lastInvalidationEventForFrame = new Map<string, Types.Events.Event>();
 
-// Important: although the event is called UpdateLayoutTree, in the UI we
-// present these to the user as "Recalculate Style". So don't get confused!
-// These are the same - just UpdateLayoutTree is what the event from Chromium
-// is called.
-const lastUpdateLayoutTreeByFrame = new Map<string, Types.Events.UpdateLayoutTree>();
+let lastRecalcByFrame = new Map<string, Types.Events.RecalcStyle>();
 
 // These two maps store the same data but in different directions.
 // For a given event, tell me what its initiator was. An event can only have one initiator.
-const eventToInitiatorMap = new Map<Types.Events.Event, Types.Events.Event>();
+let eventToInitiatorMap = new Map<Types.Events.Event, Types.Events.Event>();
 // For a given event, tell me what events it initiated. An event can initiate
 // multiple events, hence why the value for this map is an array.
-const initiatorToEventsMap = new Map<Types.Events.Event, Types.Events.Event[]>();
+let initiatorToEventsMap = new Map<Types.Events.Event, Types.Events.Event[]>();
 
-const requestAnimationFrameEventsById = new Map<number, Types.Events.RequestAnimationFrame>();
-const timerInstallEventsById = new Map<number, Types.Events.TimerInstall>();
-const requestIdleCallbackEventsById = new Map<number, Types.Events.RequestIdleCallback>();
+let timerInstallEventsById = new Map<number, Types.Events.TimerInstall>();
+let requestIdleCallbackEventsById = new Map<number, Types.Events.RequestIdleCallback>();
 
-const webSocketCreateEventsById = new Map<number, Types.Events.WebSocketCreate>();
-const schedulePostTaskCallbackEventsById = new Map<number, Types.Events.SchedulePostTaskCallback>();
+let webSocketCreateEventsById = new Map<number, Types.Events.WebSocketCreate>();
+let schedulePostTaskCallbackEventsById = new Map<number, Types.Events.SchedulePostTaskCallback>();
 
 export function reset(): void {
-  lastScheduleStyleRecalcByFrame.clear();
-  lastInvalidationEventForFrame.clear();
-  lastUpdateLayoutTreeByFrame.clear();
-  timerInstallEventsById.clear();
-  eventToInitiatorMap.clear();
-  initiatorToEventsMap.clear();
-  requestAnimationFrameEventsById.clear();
-  requestIdleCallbackEventsById.clear();
-  webSocketCreateEventsById.clear();
-  schedulePostTaskCallbackEventsById.clear();
+  lastScheduleStyleRecalcByFrame = new Map();
+  lastInvalidationEventForFrame = new Map();
+  lastRecalcByFrame = new Map();
+  timerInstallEventsById = new Map();
+  eventToInitiatorMap = new Map();
+  initiatorToEventsMap = new Map();
+  requestIdleCallbackEventsById = new Map();
+  webSocketCreateEventsById = new Map();
+  schedulePostTaskCallbackEventsById = new Map();
 }
 
 function storeInitiator(data: {initiator: Types.Events.Event, event: Types.Events.Event}): void {
@@ -70,14 +64,11 @@ function storeInitiator(data: {initiator: Types.Events.Event, event: Types.Event
 export function handleEvent(event: Types.Events.Event): void {
   if (Types.Events.isScheduleStyleRecalculation(event)) {
     lastScheduleStyleRecalcByFrame.set(event.args.data.frame, event);
-  } else if (Types.Events.isUpdateLayoutTree(event)) {
-    // IMPORTANT: although the trace event is called UpdateLayoutTree, this
-    // represents a Styles Recalculation. This event in the timeline is shown to
-    // the user as "Recalculate Styles."
+  } else if (Types.Events.isRecalcStyle(event)) {
     if (event.args.beginData) {
-      // Store the last UpdateLayout event: we use this when we see an
+      // Store the last RecalcStyle event: we use this when we see an
       // InvalidateLayout and try to figure out its initiator.
-      lastUpdateLayoutTreeByFrame.set(event.args.beginData.frame, event);
+      lastRecalcByFrame.set(event.args.beginData.frame, event);
 
       // If this frame has seen a ScheduleStyleRecalc event, then that event is
       // considered to be the initiator of this StylesRecalc.
@@ -98,17 +89,17 @@ export function handleEvent(event: Types.Events.Event): void {
     // cause of this layout invalidation.
     if (!lastInvalidationEventForFrame.has(event.args.data.frame)) {
       // 1. If we have not had an invalidation event for this frame
-      // 2. AND we have had an UpdateLayoutTree for this frame
-      // 3. AND the UpdateLayoutTree event ended AFTER the InvalidateLayout startTime
-      // 4. AND we have an initiator for the UpdateLayoutTree event
-      // 5. Then we set the last invalidation event for this frame to be the UpdateLayoutTree's initiator.
-      const lastUpdateLayoutTreeForFrame = lastUpdateLayoutTreeByFrame.get(event.args.data.frame);
-      if (lastUpdateLayoutTreeForFrame) {
-        const {endTime} = Helpers.Timing.eventTimingsMicroSeconds(lastUpdateLayoutTreeForFrame);
-        const initiatorOfUpdateLayout = eventToInitiatorMap.get(lastUpdateLayoutTreeForFrame);
+      // 2. AND we have had an RecalcStyle for this frame
+      // 3. AND the RecalcStyle event ended AFTER the InvalidateLayout startTime
+      // 4. AND we have an initiator for the RecalcStyle event
+      // 5. Then we set the last invalidation event for this frame to be the RecalcStyle's initiator.
+      const lastRecalcStyleForFrame = lastRecalcByFrame.get(event.args.data.frame);
+      if (lastRecalcStyleForFrame) {
+        const {endTime} = Helpers.Timing.eventTimingsMicroSeconds(lastRecalcStyleForFrame);
+        const initiatorOfRecalcStyle = eventToInitiatorMap.get(lastRecalcStyleForFrame);
 
-        if (initiatorOfUpdateLayout && endTime && endTime > event.ts) {
-          invalidationInitiator = initiatorOfUpdateLayout;
+        if (initiatorOfRecalcStyle && endTime && endTime > event.ts) {
+          invalidationInitiator = initiatorOfRecalcStyle;
         }
       }
     }

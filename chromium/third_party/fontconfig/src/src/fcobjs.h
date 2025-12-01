@@ -77,4 +77,5 @@ FC_OBJECT (ORDER,		FcTypeInteger,	FcCompareNumber)
 FC_OBJECT (DESKTOP_NAME,	FcTypeString,	NULL)
 FC_OBJECT (NAMED_INSTANCE,	FcTypeBool,	FcCompareBool)
 FC_OBJECT (FONT_WRAPPER,	FcTypeString,	FcCompareString)
+FC_OBJECT (GENERIC_FAMILY,	FcTypeInteger,	FcCompareNumber)
 /* ^-------------- Add new objects here. */

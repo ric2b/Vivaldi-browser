@@ -6,8 +6,6 @@
 #import "UIKit/UIKit.h"
 
 #pragma mark - Sizes and paddings
-// Top padding for the location bar on new tab page desktop style tab.
-extern const CGFloat vLocationBarTopPaddingDesktopTab;
 // Space between the location icon and the location label.
 extern const CGFloat vLocationBarSteadyViewLocationImageToLabelSpacing;
 // Trailing space between the trailing button and the trailing edge of the

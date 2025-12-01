@@ -1,8 +1,11 @@
-### [Ask AI about more insights](ai-insights)
-You can now ask Gemini about more performance insights: image delivery, legacy JavaScript, duplicate JavaScript, and modern HTTP.
+### [Full stack trace AI agent in Performance panel](perf-ai-agent)
+The Performance panel now integrates a more capable AI agent that has full access to the stack trace.
 
-### [Emulate the 'Save-Data' header](save-data)
-In 'Network conditions', you can now emulate the 'Save-Data' request header that indicates the client's preference for reduced data usage.
+### [AI code completion in Sources and Console](ai-code-completion)
+Code completion powered by AI is now available in the Sources panel and the Console.
 
-### [Debug complex CSS values easier](debug-css)
-See also, from version 138: The Elements > Styles tab can now show you a tooltip with a breakdown of the definition chain and step-by-step evaluations of complex CSS variables, so you can find bugs quicker and gain a deeper understanding of how a value is computed.
+### [Google Developer Program support](gdp)
+The Google Developer Program, a ready-made subscription and community platform, is now in DevTools, offering a more personalized experience, a badge system, and easier discovery of new features.
+
+### [One main 'Debug with AI' button](ai-main-button)
+The primary action bar at the top of DevTools now features the primary "Debug with AI" button which opens the 'AI assistance' panel in a right-hand side bar.

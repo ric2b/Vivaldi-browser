@@ -22,7 +22,6 @@
 <translation id="1451375123200651445">Nettside, enkeltfil</translation>
 <translation id="1465176863081977902">Kopier lydfil&amp;adressa</translation>
 <translation id="1476607407192946488">Spr&amp;åkinnstillingar</translation>
-<translation id="1546280085599573572">Denne utvidinga har endra kva side som vert vist når du vel heim-knappen.</translation>
 <translation id="1552752544932680961">Utvidingsstyraren</translation>
 <translation id="15662109988763471">Den valde skrivaren er ikkje tilgjengeleg eller er ikkje installert rett. Sjå over skrivaren eller vel ein annan ein.</translation>
 <translation id="1588438908519853928">Normal</translation>
@@ -57,7 +56,6 @@
 <translation id="2150139952286079145">Søk mål</translation>
 <translation id="215753907730220065">Avslutt fullskjerm</translation>
 <translation id="2177950615300672361">Privatfane: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Lokalklientmodul: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Lim inn som rein tekst</translation>
 <translation id="2249605167705922988">t.d. 1-5, 8, 11-13</translation>
 <translation id="2280486287150724112">Høgremarg</translation>
@@ -70,7 +68,6 @@
 <translation id="2348176352564285430">App: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Vel utvidingsmappa.</translation>
 <translation id="2379281330731083556">Skriv ut frå systemvindauget … <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Ukjent programtillegg</translation>
 <translation id="2423578206845792524">Lagra &amp;bildet som …</translation>
 <translation id="2439110203301358333">Eit anna program på maskina di la til ei utviding som kanskje endrar måten Vivaldi oppfører seg på.</translation>
 <translation id="2443487764245141020">Nettstadar treng kanskje òg å kjenna att eininga di ved hjelp av ein identifikator</translation>
@@ -86,7 +83,6 @@
 <translation id="2721037002783622288">Søk hos <ph name="SEARCH_ENGINE" /> etter &amp;bilde</translation>
 <translation id="2785873697295365461">Fildeskriptorar</translation>
 <translation id="2850541429955027218">Legg til drakta</translation>
-<translation id="2861941300086904918">Tryggleiksstyrar lokalklient</translation>
 <translation id="2881076733170862447">Når du vel utvidinga</translation>
 <translation id="2889064240420137087">Opna lenkja med …</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> klarte ikkje å kommunisera med denne skrivaren. Sjå til at skrivaren er tilkopla og prøv igjen.</translation>
@@ -125,7 +121,6 @@
 <translation id="3511307672085573050">Kopier len&amp;kjeadressa</translation>
 <translation id="354068948465830244">Denne kan lesa og endra nettsidedata</translation>
 <translation id="3560034655160545939">&amp;Stavekontroll</translation>
-<translation id="3587482841069643663">Alle</translation>
 <translation id="3627588569887975815">Opna lenkja i eit privat&amp;vindauge</translation>
 <translation id="3678156199662914018">Utviding: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Skjermdelingsførespurnad</translation>
@@ -154,7 +149,6 @@
 <translation id="4100839878934973028">Eit anna program på maskina di la til ein app som kanskje endrar måten Vivaldi oppfører seg på.</translation>
 <translation id="4109898769411476438">Lukk nettlesar før du importerer</translation>
 <translation id="4131410914670010031">Monokrom</translation>
-<translation id="4176463684765177261">Slått av</translation>
 <translation id="4200983522494130825">Ny &amp;fane</translation>
 <translation id="4225397296022057997">På alle stadar</translation>
 <translation id="4256316378292851214">Lagra &amp;videofila som …</translation>
@@ -168,6 +162,7 @@
 <translation id="4595560905247879544">Appar og utvidingar kan berre verta endra av styraren (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Ei utviding har endra kva side som vert vist når du opnar ei ny fane.</translation>
 <translation id="4643612240819915418">Opna &amp;videofila i ei ny fane</translation>
+<translation id="4654801841330730814">Alle</translation>
 <translation id="4677772697204437347">GPU-minne</translation>
 <translation id="4681930562518940301">Opna &amp;originalbildet i ei ny fane</translation>
 <translation id="4711638718396952945">Før attende innstillingane</translation>
@@ -190,10 +185,8 @@
 <translation id="5059526285558225588">Vel kva du vil dela</translation>
 <translation id="5063480226653192405">Bruk</translation>
 <translation id="5116628073786783676">Lagra &amp;lydfila som …</translation>
-<translation id="5143374789336132547">Utvidinga "<ph name="EXTENSION_NAME" />" har endra kva side som vert vist når du vel heim-knappen.</translation>
 <translation id="5154108062446123722">Avanserte innstillingar for <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5171343362375269016">Brukt vekselminne</translation>
-<translation id="5233019165164992427">NaCl-feilsøkingsport</translation>
 <translation id="5233231016133573565">Prosess-id</translation>
 <translation id="5233736638227740678">&amp;Lim inn</translation>
 <translation id="5256861893479663409">På alle stadar</translation>
@@ -212,7 +205,6 @@
 <translation id="5485102783864353244">Legg til app</translation>
 <translation id="5486561344817861625">Simuler nettlesaromstart</translation>
 <translation id="5509693895992845810">Lagra &amp;som …</translation>
-<translation id="5521078259930077036">Er dette heimesida du venta å finna?</translation>
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Last på nytt</translation>
 <translation id="5575473780076478375">Privatutviding: <ph name="EXTENSION_NAME" /></translation>
@@ -220,7 +212,6 @@
 <translation id="5623842676595125836">Logg</translation>
 <translation id="5677928146339483299">Blokkert</translation>
 <translation id="5707185214361380026">Klarte ikkje å lasta utvidinga frå:</translation>
-<translation id="5715711091495208045">Programtilleggstilbydar: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Lagra som PDF</translation>
 <translation id="5747809636523347288">Lim &amp;inn og gå til <ph name="URL" /></translation>
 <translation id="5759728514498647443">Dokument du sender til utskrift gjennom <ph name="APP_NAME" /> kan verta lesne av <ph name="APP_NAME" />.</translation>
@@ -228,7 +219,6 @@
 <translation id="5780973441651030252">Prosessprioritet</translation>
 <translation id="5804241973901381774">Tilgangar</translation>
 <translation id="5828633471261496623">Skriv ut …</translation>
-<translation id="583281660410589416">Ukjend</translation>
 <translation id="5860491529813859533">Slå på</translation>
 <translation id="5910363049092958439">Lagra &amp;bildet som …</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> høgst)</translation>
@@ -266,7 +256,6 @@
 <translation id="6579369886355986318">Vis &amp;alle kontrollane</translation>
 <translation id="6639554308659482635">SQLite-minne</translation>
 <translation id="6686817083349815241">Lagra passordet ditt</translation>
-<translation id="6798954102094737107">Programtillegg: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Ta vare på endringane</translation>
 <translation id="6824564591481349393">Kopier &amp;e-postadressa</translation>
 <translation id="6840155290835956714">Spør før sending</translation>
@@ -296,7 +285,6 @@
 <translation id="7576690715254076113">Samla</translation>
 <translation id="7629827748548208700">Fane: <ph name="TAB_NAME" /></translation>
 <translation id="7659154729610375585">Avslutta privatøkta likevel?</translation>
-<translation id="7661259717474717992">La nettstadar lagra og lesa informasjonskapseldata</translation>
 <translation id="7663719505383602579">Mottakar: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installert av administratoren din</translation>
 <translation id="7685049629764448582">JavaScript-minne</translation>
@@ -334,7 +322,6 @@ Ta godt vare på nøkkelfila. Du treng ho for å kunna laga nye utgåver av utvi
 <translation id="8261378640211443080">Denne utvidinga er ikkje lista i <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> og kan ha vorte lagt til utan din kjennskap.</translation>
 <translation id="8351419472474436977">Denne utvidinga har teke kontroll over mellomlagerinnstillingane dine. Det betyr ho kan endra, øydeleggja eller tjuvlytta på alt du gjer på nettet. Om du ikkje veit korfor endringa skjedde, vil du sannsynlegvis ikkje ha ho.</translation>
 <translation id="8382913212082956454">Kopier &amp;e-postadressa</translation>
-<translation id="8434480141477525001">NaCl-feilsøkingsport</translation>
 <translation id="8449008133205184768">Lim inn og tilpass til stilen</translation>
 <translation id="8496717697661868878">Køyr dette programtillegget</translation>
 <translation id="8512476990829870887">Avslutt prosessen</translation>

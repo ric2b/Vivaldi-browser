@@ -5,7 +5,6 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
 
 @interface VivaldiTableViewIllustratedItem : TableViewItem
@@ -15,7 +14,7 @@
 @property(nonatomic, copy) NSAttributedString* subtitle;
 @end
 
-@interface VivaldiTableViewIllustratedCell : TableViewCell
+@interface VivaldiTableViewIllustratedCell : LegacyTableViewCell
 
 @property(nonatomic, readonly, strong) UIImageView* illustratedImageView;
 @property(nonatomic, readonly, strong) UILabel* titleLabel;

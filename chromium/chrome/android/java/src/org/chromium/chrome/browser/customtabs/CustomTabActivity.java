@@ -9,6 +9,7 @@ import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_DARK;
 import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_LIGHT;
 
 import static org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant.PRICE_INSIGHTS;
+import static org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant.PRICE_TRACKING;
 
 import android.app.Activity;
 import android.app.ActivityManager;
@@ -34,6 +35,7 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.TimeUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
@@ -43,6 +45,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.app.metrics.LaunchCauseMetrics;
+import org.chromium.chrome.browser.app.tab_activity_glue.PopupCreator;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchController;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchControllerFactory;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchMetrics;
@@ -106,6 +109,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     private boolean mIsEnterAnimationCompleted;
     private @Nullable AuxiliarySearchController mAuxiliarySearchController;
     private CustomTabActivityTimeoutHandler mTimeoutHandler;
+    private static Runnable sOnFinishCallbackForTesting;
     private final CustomTabActivityTabProvider.Observer mTabChangeObserver =
             new CustomTabActivityTabProvider.Observer() {
                 @Override
@@ -283,6 +287,15 @@ public class CustomTabActivity extends BaseCustomTabActivity {
                                     mConnection.getClientPackageNameForSession(mSession));
                 });
         super.finishNativeInitialization();
+
+        // Window bounds adjustments are called here because we probe WebContents' width and height
+        // from the native object.
+        if (getIntentDataProvider().getUiType() == CustomTabsUiType.POPUP
+                && ChromeFeatureList.isEnabled(
+                        ChromeFeatureList.ANDROID_WINDOW_POPUP_RESIZE_AFTER_SPAWN)) {
+            PopupCreator.adjustWindowBoundsToRequested(
+                    this, getIntentDataProvider().getRequestedWindowFeatures());
+        }
     }
 
     @Override
@@ -435,6 +448,10 @@ public class CustomTabActivity extends BaseCustomTabActivity {
             CustomTabToolbar toolbar = findViewById(R.id.toolbar);
             toolbar.maybeRecordHistogramForAdaptiveToolbarButtonFallbackUi(PRICE_INSIGHTS);
             return true;
+        } else if (id == R.id.enable_price_tracking_menu_id) {
+            CustomTabToolbar toolbar = findViewById(R.id.toolbar);
+            toolbar.maybeRecordHistogramForAdaptiveToolbarButtonFallbackUi(PRICE_TRACKING);
+            // Let the flow proceed to superclass for processing the action.
         } else if (id == R.id.open_history_menu_id) {
             // The menu is visible only when the app-specific history is enabled. Assert that.
             assert HistoryManager.isAppSpecificHistoryEnabled();
@@ -478,6 +495,8 @@ public class CustomTabActivity extends BaseCustomTabActivity {
 
     @Override
     public void finish() {
+        if (sOnFinishCallbackForTesting != null) sOnFinishCallbackForTesting.run();
+
         RecordHistogram.recordLinearCountHistogram(
                 "CustomTabs.Omnibox.NumNavigationsPerSession",
                 mNumOmniboxNavigationEventsPerSession,
@@ -594,5 +613,11 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         super.onEnterAnimationComplete();
 
         mIsEnterAnimationCompleted = true;
+    }
+
+    @VisibleForTesting
+    public static void setOnFinishCallbackForTesting(Runnable callback) {
+        sOnFinishCallbackForTesting = callback;
+        ResettersForTesting.register(() -> sOnFinishCallbackForTesting = null);
     }
 }

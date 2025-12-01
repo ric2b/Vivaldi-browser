@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <optional>
 #include <set>
 #include <utility>
 
@@ -257,18 +258,40 @@ void SessionStore::WriteBatch::Commit(std::unique_ptr<WriteBatch> batch) {
 }
 
 // static
-bool SessionStore::AreValidSpecifics(const SessionSpecifics& specifics) {
+std::optional<SessionStore::SpecificsInvalidReason>
+SessionStore::GetSpecificsInvalidReason(
+    const sync_pb::SessionSpecifics& specifics) {
+  // A session tag is always required.
   if (specifics.session_tag().empty()) {
-    return false;
+    return SpecificsInvalidReason::kMissingSessionTag;
   }
+
+  // Only one of header or tab may be set.
+  if (specifics.has_header() && specifics.has_tab()) {
+    return SpecificsInvalidReason::kBothHeaderAndTab;
+  }
+
   if (specifics.has_vivaldi_specific()) {
     DCHECK(specifics.tab_node_id() == TabNodePool::kVivaldiTabNodeID);
-    return true;
-  }
+    return std::nullopt;
+  } // End Vivaldi
+  
+  // Tabs must have both a valid tab ID and tab node ID.
   if (specifics.has_tab()) {
-    return specifics.tab_node_id() >= 0 && specifics.tab().tab_id() > 0;
+    if (specifics.tab_node_id() < 0) {
+      return SpecificsInvalidReason::kTabBadTabNodeId;
+    }
+    if (specifics.tab().tab_id() <= 0) {
+      return SpecificsInvalidReason::kTabBadTabId;
+    }
+    return std::nullopt;
   }
+
   if (specifics.has_header()) {
+    // A header entity must not have a tab node ID.
+    if (specifics.tab_node_id() != TabNodePool::kInvalidTabNodeID) {
+      return SpecificsInvalidReason::kHeaderWithTabNodeId;
+    }
     // Verify that tab IDs appear only once within a header. Intended to prevent
     // http://crbug.com/360822.
     std::set<int> session_tab_ids;
@@ -276,14 +299,20 @@ bool SessionStore::AreValidSpecifics(const SessionSpecifics& specifics) {
       for (int tab_id : window.tab()) {
         bool success = session_tab_ids.insert(tab_id).second;
         if (!success) {
-          return false;
+          return SpecificsInvalidReason::kHeaderWithDuplicateTabIds;
         }
       }
     }
-    return !specifics.has_tab() &&
-           specifics.tab_node_id() == TabNodePool::kInvalidTabNodeID;
+    return std::nullopt;
   }
-  return false;
+
+  // Neither header nor tab is set.
+  return SpecificsInvalidReason::kNeitherHeaderNorTab;
+}
+
+// static
+bool SessionStore::AreValidSpecifics(const SessionSpecifics& specifics) {
+  return !GetSpecificsInvalidReason(specifics).has_value();
 }
 
 // static

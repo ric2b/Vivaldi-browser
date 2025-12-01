@@ -6,6 +6,8 @@
 
 #include "base/containers/to_vector.h"
 #include "components/autofill/core/browser/country_type.h"
+#include "components/autofill/core/browser/form_parsing/determine_regex_types.h"
+#include "components/autofill/core/browser/form_qualifiers.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #include "components/autofill/core/common/autocomplete_parsing_util.h"
@@ -93,6 +95,18 @@ FormFieldData CreateFieldByRole(FieldType role) {
       field.set_label(u"Email or Frequent Flyer Number");
       field.set_name(u"email_or_frequentflyer");
       break;
+    case FieldType::FLIGHT_RESERVATION_FLIGHT_NUMBER:
+      field.set_label(u"Flight Number");
+      field.set_name(u"flightNumber");
+      break;
+    case FieldType::FLIGHT_RESERVATION_TICKET_NUMBER:
+      field.set_label(u"Ticket Number");
+      field.set_name(u"ticketNumber");
+      break;
+    case FieldType::FLIGHT_RESERVATION_CONFIRMATION_CODE:
+      field.set_label(u"Confirmation Code");
+      field.set_name(u"confirmationCode");
+      break;
     case FieldType::EMPTY_TYPE:
       break;
     default:
@@ -140,11 +154,20 @@ FormFieldData GetFormFieldData(const FieldDescription& fd) {
   if (fd.id_attribute) {
     ff.set_id_attribute(*fd.id_attribute);
   }
+  if (fd.nonce) {
+    ff.set_nonce(*fd.nonce);
+  }
   if (fd.value) {
     ff.set_value(*fd.value);
   }
   if (fd.placeholder) {
     ff.set_placeholder(*fd.placeholder);
+  }
+  if (fd.aria_label) {
+    ff.set_aria_label(*fd.aria_label);
+  }
+  if (fd.aria_description) {
+    ff.set_aria_description(*fd.aria_description);
   }
   if (fd.max_length) {
     ff.set_max_length(*fd.max_length);
@@ -224,20 +247,25 @@ void FormStructureTest::CheckFormStructureTestData(
     auto form_structure = std::make_unique<FormStructure>(form);
 
     if (test_case.form_flags.determine_heuristic_type) {
-      form_structure->DetermineHeuristicTypes(GeoIpCountryCode(""), nullptr);
+      const RegexPredictions regex_predictions =
+          DetermineRegexTypes(GeoIpCountryCode(""), LanguageCode(""),
+                              form_structure->ToFormData(), nullptr);
+      regex_predictions.ApplyTo(form_structure->fields());
+      form_structure->RationalizeAndAssignSections(GeoIpCountryCode(""),
+                                                   LanguageCode(""), nullptr);
     }
 
     if (test_case.form_flags.is_autofillable) {
-      EXPECT_TRUE(form_structure->IsAutofillable());
+      EXPECT_TRUE(IsAutofillable(*form_structure));
     }
     if (test_case.form_flags.should_be_parsed) {
-      EXPECT_TRUE(form_structure->ShouldBeParsed());
+      EXPECT_TRUE(ShouldBeParsed(*form_structure, /*log_manager=*/nullptr));
     }
     if (test_case.form_flags.should_be_queried) {
-      EXPECT_TRUE(form_structure->ShouldBeQueried());
+      EXPECT_TRUE(ShouldBeQueried(*form_structure));
     }
     if (test_case.form_flags.should_be_uploaded) {
-      EXPECT_TRUE(form_structure->ShouldBeUploaded());
+      EXPECT_TRUE(ShouldBeUploaded(*form_structure));
     }
     if (test_case.form_flags.has_author_specified_types) {
       EXPECT_TRUE(

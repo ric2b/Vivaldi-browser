@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import {
@@ -22,14 +22,12 @@ describe('The Security Panel', function() {
     await securityTabDoesNotExist(devToolsPage);
   });
 
-  // Flaky on mac
-  it.skipOnPlatforms(
-      ['mac'], '[crbug.com/422762924] appears under More tools after being closed', async ({devToolsPage}) => {
-        await closeSecurityTab(devToolsPage);
-        await openSecurityPanelFromMoreTools(true, devToolsPage);
-        await devToolsPage.reload();
-        await securityTabExists(devToolsPage);
-      });
+  it('appears under More tools after being closed', async ({devToolsPage}) => {
+    await closeSecurityTab(devToolsPage);
+    await openSecurityPanelFromMoreTools(true, devToolsPage);
+    await devToolsPage.reload();
+    await securityTabExists(devToolsPage);
+  });
 
   it('can be opened from command menu after being closed', async ({devToolsPage}) => {
     await closeSecurityTab(devToolsPage);

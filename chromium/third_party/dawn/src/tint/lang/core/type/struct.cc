@@ -27,6 +27,7 @@
 
 #include "src/tint/lang/core/type/struct.h"
 
+#include <algorithm>
 #include <cmath>
 #include <iomanip>
 #include <string>
@@ -76,23 +77,17 @@ Struct::Struct(Symbol name, bool is_wgsl_internal)
     : Base(Hash(tint::TypeCode::Of<Struct>().bits, name, is_wgsl_internal), type::Flags{}),
       name_(name),
       members_{},
-      align_(0),
       size_(0),
-      size_no_padding_(0),
       is_wgsl_internal_(is_wgsl_internal) {}
 
 Struct::Struct(Symbol name,
                VectorRef<const StructMember*> members,
-               uint32_t align,
                uint32_t size,
-               uint32_t size_no_padding,
                bool is_wgsl_internal)
     : Base(Hash(tint::TypeCode::Of<Struct>().bits, name, is_wgsl_internal), FlagsFrom(members)),
       name_(name),
       members_(std::move(members)),
-      align_(align),
       size_(size),
-      size_no_padding_(size_no_padding),
       is_wgsl_internal_(is_wgsl_internal) {}
 
 Struct::~Struct() = default;
@@ -114,7 +109,11 @@ const StructMember* Struct::FindMember(Symbol name) const {
 }
 
 uint32_t Struct::Align() const {
-    return align_;
+    uint32_t align = 0;
+    for (auto* mem : members_) {
+        align = std::max(align, mem->Align());
+    }
+    return align;
 }
 
 uint32_t Struct::Size() const {
@@ -215,6 +214,14 @@ const Type* Struct::Element(uint32_t index) const {
     return index < members_.Length() ? members_[index]->Type() : nullptr;
 }
 
+uint32_t Struct::SizeNoPadding() const {
+    if (members_.IsEmpty()) {
+        return 0;
+    }
+    auto& mem = members_.Back();
+    return mem->Offset() + mem->Size();
+}
+
 Struct* Struct::Clone(CloneContext& ctx) const {
     auto sym = ctx.dst.st->Register(name_.Name());
 
@@ -222,8 +229,7 @@ Struct* Struct::Clone(CloneContext& ctx) const {
     for (const auto& mem : members_) {
         members.Push(mem->Clone(ctx));
     }
-    return ctx.dst.mgr->Get<Struct>(sym, members, align_, size_, size_no_padding_,
-                                    is_wgsl_internal_);
+    return ctx.dst.mgr->Get<Struct>(sym, members, size_, is_wgsl_internal_);
 }
 
 StructMember::StructMember(Symbol name,

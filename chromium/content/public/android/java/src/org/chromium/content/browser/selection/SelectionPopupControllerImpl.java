@@ -5,6 +5,7 @@
 package org.chromium.content.browser.selection;
 
 import static org.chromium.build.NullUtil.assumeNonNull;
+import static org.chromium.ui.listmenu.ListMenuUtils.setupCallbacksRecursively;
 
 import android.app.Activity;
 import android.app.SearchManager;
@@ -55,8 +56,8 @@ import org.chromium.content.browser.PopupController.HideablePopup;
 import org.chromium.content.browser.WindowEventObserver;
 import org.chromium.content.browser.WindowEventObserverManager;
 import org.chromium.content.browser.input.ImeAdapterImpl;
-import org.chromium.content.browser.selection.SelectActionMenuHelper.SelectActionMenuDelegate;
 import org.chromium.content.browser.selection.SelectActionMenuHelper.TextProcessingIntentHandler;
+import org.chromium.content.browser.selection.SelectActionMenuHelper.TextSelectionCapabilitiesDelegate;
 import org.chromium.content.browser.webcontents.WebContentsImpl;
 import org.chromium.content_public.browser.ActionModeCallback;
 import org.chromium.content_public.browser.ActionModeCallbackHelper;
@@ -76,7 +77,11 @@ import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.ViewAndroidDelegate.ContainerViewObserver;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.listmenu.ListMenuFlyoutController;
+import org.chromium.ui.listmenu.ListMenuSubmenuItemProperties;
+import org.chromium.ui.listmenu.MenuModelBridge;
 import org.chromium.ui.modelutil.MVCListAdapter;
+import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.mojom.MenuSourceType;
 import org.chromium.ui.touch_selection.SelectionEventType;
 import org.chromium.ui.touch_selection.TouchSelectionDraggableType;
@@ -84,6 +89,7 @@ import org.chromium.ui.touch_selection.TouchSelectionDraggableType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -91,6 +97,12 @@ import java.util.SortedSet;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.FragmentManager;
+
+import org.chromium.url.GURL;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 
 /** Implementation of the interface {@link SelectionPopupController}. */
 @JNINamespace("content")
@@ -102,7 +114,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
                 HideablePopup,
                 ContainerViewObserver,
                 UserData,
-                SelectActionMenuDelegate {
+                TextSelectionCapabilitiesDelegate {
     private static final String TAG = "SelectionPopupCtlr"; // 20 char limit
     private static final boolean DEBUG = false;
 
@@ -192,6 +204,9 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     private int mLastSelectionOffset;
     private boolean mIsInHandleDragging;
 
+    // Vivaldi
+    private GURL mVivaldiKeywordURL = GURL.emptyGURL();
+
     // Tracks whether a touch selection is currently active.
     private boolean mHasSelection;
 
@@ -229,8 +244,13 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     // Cached selection menu items to check against new selections.
     private @Nullable SelectionMenuCachedResult mSelectionMenuCachedResult;
 
+    // TODO(crbug.com/445155873): Move menu items from using custom click listeners to handling them
+    //  manually in the handleMenuItemClick callback.
     /** Custom {@link android.view.View.OnClickListener} map for ActionMode menu items. */
     private final Map<MenuItem, View.OnClickListener> mCustomActionMenuItemClickListeners;
+
+    /** Menu model bridge used to display extra items. */
+    private @Nullable MenuModelBridge mMenuModelBridge;
 
     /** An interface for getting {@link View} for readback. */
     public interface ReadbackViewCallback {
@@ -256,6 +276,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
      * @return {@link SelectionPopupController} object. {@code null} if not available because {@link
      *     #create()} is not called yet.
      */
+    @CalledByNative
     public static @Nullable SelectionPopupControllerImpl fromWebContents(WebContents webContents) {
         return webContents.getOrSetUserData(
                 SelectionPopupControllerImpl.class, UserDataFactoryLazyHolder.INSTANCE);
@@ -522,11 +543,12 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             boolean canRichlyEdit,
             boolean shouldSuggest,
             int sourceType,
-            RenderFrameHost renderFrameHost) {
+            RenderFrameHost renderFrameHost,
+            MenuModelBridge menuModelBridge,
+            /*Vivaldi*/ GURL vivaldiKeywordUrl) {
+        mMenuModelBridge = menuModelBridge;
         RecordHistogram.recordEnumeratedHistogram(
-                "Android.ShowSelectionMenuSourceType",
-                sourceType,
-                MenuSourceType.MAX_VALUE);
+                "Android.ShowSelectionMenuSourceType", sourceType, MenuSourceType.MAX_VALUE);
 
         int offsetBottom = bottom;
         offsetBottom += handleHeight;
@@ -542,6 +564,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         mCanEditRichly = canRichlyEdit;
         mMenuSourceType = sourceType;
         mUnselectAllOnDismiss = true;
+        mVivaldiKeywordURL = vivaldiKeywordUrl; // Vivaldi
 
         if (hasSelection()) {
             mRenderFrameHost = renderFrameHost;
@@ -661,8 +684,13 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             final int groupId = delegate.getGroupId(item);
             final int id = delegate.getItemId(item);
             logSelectionAction(groupId, id);
+            boolean isSubmenuParent = item.containsKey(ListMenuSubmenuItemProperties.SUBMENU_ITEMS);
             mCallback.onDropdownItemClicked(
-                    groupId, id, delegate.getItemIntent(item), delegate.getClickListener(item));
+                    groupId,
+                    id,
+                    delegate.getItemIntent(item),
+                    delegate.getClickListener(item),
+                    !isSubmenuParent);
         };
     }
 
@@ -756,6 +784,34 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
                                 + mWebContents.getRenderCoordinates().getContentOffsetYPix()));
 
         MVCListAdapter.ModelList items = getDropdownItems();
+        if (mMenuModelBridge != null) {
+            for (ListItem listItem : mMenuModelBridge.getListItems()) {
+                items.add(listItem);
+            }
+        }
+        setupCallbacksRecursively(
+                /* headerModelList= */ null,
+                items,
+                this::dismissMenu,
+                // TODO(crbug.com/433410990): Implement flyouts for selected text context menu.
+                new ListMenuFlyoutController<>(
+                        new ListMenuFlyoutController.FlyoutHandler<SelectionPopupController>() {
+                            @Override
+                            public List<
+                                            ListMenuFlyoutController.FlyoutPopupEntry<
+                                                    SelectionPopupController>>
+                                    getFlyoutWindows() {
+                                return Collections.emptyList();
+                            }
+
+                            @Override
+                            public void addFlyoutWindow(
+                                    ListItem item, View view, int levelOfHoveredItem) {}
+
+                            @Override
+                            public void removeFlyoutWindows(int removeFromIndex) {}
+                        }),
+                /* drillDownOverrideValue= */ true);
         SelectionDropdownMenuDelegate.ItemClickListener itemClickListener =
                 getDropdownItemClickListener(mDropdownMenuDelegate);
         mDropdownMenuDelegate.show(mContext, mView, items, itemClickListener, x, y);
@@ -805,6 +861,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
                 destroyDropdownMenu();
                 break;
         }
+        mMenuModelBridge = null;
     }
 
     /**
@@ -950,6 +1007,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         return true;
     }
 
+    // TODO(crbug.com/445155873): Refactor this to directly populate the Menu for ActionMode and the
+    //  MVCListAdapter.ModelList for dropdown menus.
     @VisibleForTesting
     public SortedSet<SelectionMenuGroup> getMenuItems() {
         TextProcessingIntentHandler textProcessingIntentHandler =
@@ -1157,7 +1216,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             int groupId,
             int id,
             @Nullable Intent intent,
-            View.@Nullable OnClickListener clickListener) {
+            View.@Nullable OnClickListener clickListener,
+            boolean closeMenu) {
         // Use the click listener for the item if it has one.
         if (clickListener != null) {
             clickListener.onClick(null);
@@ -1169,7 +1229,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             // than select all.
             clearSelection();
         }
-        destroyDropdownMenu();
+        if (closeMenu) destroyDropdownMenu();
         return true;
     }
 
@@ -1190,6 +1250,25 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             share();
         } else if (id == R.id.select_action_menu_web_search) {
             search();
+        } else if (id == R.id.select_action_menu_add_as_search_engine) {
+            try {
+                // Note(simonb@vivaldi.com) Call the add as search engine bottomsheet
+                // through reflection to avoid GN dependency issues.
+                Class<?> addSearchEngineBottomSheet =
+                        Class.forName("org.vivaldi.browser.prompts.AddNewSearchEngineBottomSheet");
+                Constructor<?> ctor = addSearchEngineBottomSheet.getConstructor(GURL.class);
+                Object addSearchEngineBottomSheetInstance = ctor.newInstance(mVivaldiKeywordURL);
+                Method method = addSearchEngineBottomSheet.getMethod(
+                        "show", FragmentManager.class, String.class);
+                if (mContext != null) {
+                    method.invoke(addSearchEngineBottomSheetInstance,
+                            ((AppCompatActivity) mContext).getSupportFragmentManager(),
+                            "AddNewSearchEngineBottomSheet");
+                }
+            } catch (Throwable e) {
+                Log.w(TAG, "org.vivaldi.browser.prompts.AddNewSearchEngineBottomSheet show failed",
+                        e);
+            }
         }
     }
 
@@ -1347,7 +1426,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
                     intent,
                     new WindowAndroid.IntentCallback() {
                         @Override
-                        public void onIntentCompleted(int resultCode, Intent data) {
+                        public void onIntentCompleted(int resultCode, @Nullable Intent data) {
                             if (resultCode != Activity.RESULT_OK || data == null) return;
                             CharSequence value =
                                     data.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT);
@@ -1976,6 +2055,11 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         return new Rect(x, y, right, bottom);
     }
 
+    @CalledByNative
+    private long getNativePtr() {
+        return mNativeSelectionPopupController;
+    }
+
     /**
      * Gets the current touch handle rects.
      *
@@ -2008,5 +2092,13 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     @Override
     public boolean canShowVivaldiActionMenu() {
         return hasSelection() && !isFocusedNodeEditable();
+    }
+
+    @Override
+    /** Vivaldi
+     * Returns if the current marked input can be added as Search Engine
+     */
+    public boolean canAddAsSearchEngine() {
+        return isFocusedNodeEditable() && !mVivaldiKeywordURL.getQuery().isEmpty();
     }
 }

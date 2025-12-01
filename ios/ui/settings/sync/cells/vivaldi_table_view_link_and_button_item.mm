@@ -11,10 +11,6 @@
 #import "ios/chrome/common/ui/util/text_view_util.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 // Alpha value for the disabled action button.
 const CGFloat kDisabledButtonAlpha = 0.5;
@@ -47,7 +43,7 @@ const NSTextAlignment kDefaultTextAlignment = NSTextAlignmentCenter;
   return self;
 }
 
-- (void)configureCell:(TableViewCell*)tableCell
+- (void)configureCell:(LegacyTableViewCell*)tableCell
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:tableCell withStyler:styler];
   VivaldiTableViewLinkAndButtonCell* cell =

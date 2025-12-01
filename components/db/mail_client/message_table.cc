@@ -158,7 +158,7 @@ bool MessageTable::DeleteMessages(SearchListIDs search_list_ids) {
 bool MessageTable::UpdateToVersion2() {
   if (!GetDB().DoesTableExist("messages")) {
     NOTREACHED() << "messages table should exist before migration";
-    //return false;
+    // return false;
   }
 
   if (!GetDB().Execute("DROP TRIGGER messages_au"))
@@ -252,6 +252,16 @@ int MessageTable::SelectMaxOffsetFromMigration() {
   }
 
   return max_offset;
+}
+
+int MessageTable::CountMessages() {
+  sql::Statement statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE, "SELECT count(*) from messages_search_fts"));
+
+  if (!statement.Step())
+    return -1;
+
+  return statement.ColumnInt(0);
 }
 
 bool MessageTable::DetachDBAfterMigrate() {

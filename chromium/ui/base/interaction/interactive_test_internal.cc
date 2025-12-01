@@ -29,9 +29,6 @@ namespace ui::test::internal {
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kInteractiveTestPivotElementId);
 DEFINE_CUSTOM_ELEMENT_EVENT_TYPE(kInteractiveTestPivotEventType);
 
-const char kInteractiveTestFailedMessagePrefix[] = "Interactive test failed ";
-const char kNoCheckDescriptionSpecified[] = "[no description specified]";
-
 StateObserverElement::StateObserverElement(ElementIdentifier id,
                                            ElementContext context)
     : TestElementBase(id, context) {}
@@ -358,22 +355,10 @@ std::string InteractiveTestPrivate::DebugDumpBounds(
                             bounds.width(), bounds.height());
 }
 
-void SpecifyElement(ui::InteractionSequence::StepBuilder& builder,
-                    ElementSpecifier element) {
-  std::visit(
-      absl::Overload{
-          [&builder](ElementIdentifier id) { builder.SetElementID(id); },
-          [&builder](std::string_view name) { builder.SetElementName(name); }},
-      element);
-}
-
 std::string DescribeElement(ElementSpecifier element) {
-  return std::visit(
-      absl::Overload{[](ElementIdentifier id) { return id.GetName(); },
-                     [](std::string_view name) {
-                       return base::StringPrintf("\"%s\"", name.data());
-                     }},
-      element);
+  std::ostringstream oss;
+  oss << element;
+  return oss.str();
 }
 
 InteractionSequence::Builder BuildSubsequence(

@@ -14,11 +14,15 @@ class IdentityManager;
 namespace enterprise_connectors {
 
 // Returns email of the active Gaia user based on the values provided by
-// tab url and identity manager. Only returns a value for Workspace
-// sites.
-// TODO(crbug.com/415002299): Add tests for this.
+// tab url and identity manager. Only returns a value for google.com sites.
 std::string GetActiveContentAreaUser(signin::IdentityManager* im,
                                      const GURL& tab_url);
+
+// Returns email of the active Gaia user based on the values provided by
+// tab url and identity manager. Only returns a value for certain Workspace
+// sites supported for URL filtering.
+std::string GetURLFActiveContentAreaUser(signin::IdentityManager* im,
+                                         const GURL& tab_url);
 
 // Returns email of the active Gaia user based on the values found in the
 // provided frame URL and identity manager. Only returns a value if `tab_url` is
@@ -26,6 +30,11 @@ std::string GetActiveContentAreaUser(signin::IdentityManager* im,
 std::string GetActiveFrameUser(signin::IdentityManager* im,
                                const GURL& tab_url,
                                const GURL& frame_url);
+
+// Returns true if the main tab should be able to have its active user
+// retrieved. If this returns false, none of the other functions in this file
+// should be called.
+bool CanRetrieveActiveUser(const GURL& tab_url);
 
 }  // namespace enterprise_connectors
 

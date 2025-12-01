@@ -81,6 +81,15 @@ class ReadAnythingAppController
  public:
   static gin::WrapperInfo kWrapperInfo;
 
+  static constexpr char kWordsSeenHistogramName[] =
+      "Accessibility.ReadAnything.WordsSeen";
+
+  static constexpr char kWordsHeardHistogramName[] =
+      "Accessibility.ReadAnything.WordsHeard";
+
+  static const int kMaxWordsConsumed = 25000;
+  static const int kWordsConsumedBuckets = 100;
+
   ReadAnythingAppController(const ReadAnythingAppController&) = delete;
   ReadAnythingAppController& operator=(const ReadAnythingAppController&) =
       delete;
@@ -199,6 +208,10 @@ class ReadAnythingAppController
   int DarkTheme() const;
   int YellowTheme() const;
   int BlueTheme() const;
+  int HighContrastTheme() const;
+  int LowContrastTheme() const;
+  int SepiaLightTheme() const;
+  int SepiaDarkTheme() const;
   int AutoHighlighting() const;
   int WordHighlighting() const;
   int PhraseHighlighting() const;
@@ -241,6 +254,7 @@ class ReadAnythingAppController
   void OnCollapseSelection() const;
   bool IsGoogleDocs() const;
   bool IsReadAloudEnabled() const;
+  bool IsTsTextSegmentationEnabled() const;
   bool IsChromeOsAsh() const;
   bool IsPhraseHighlightingEnabled() const;
   void OnLetterSpacingChange(int value);
@@ -249,14 +263,14 @@ class ReadAnythingAppController
   void OnFontChange(const std::string& font);
   void OnSpeechRateChange(double rate);
   void OnVoiceChange(const std::string& voice, const std::string& lang);
+  void LogExtensionState();
   void OnLanguagePrefChange(const std::string& lang, bool enabled);
   bool RequiresDistillation();
   void OnHighlightGranularityChanged(int granularity);
   double GetLineSpacingValue(int line_spacing) const;
   double GetLetterSpacingValue(int letter_spacing) const;
   std::vector<std::string> GetSupportedFonts();
-  void RequestImageDataUrl(ui::AXNodeID node_id) const;
-  std::string GetImageDataUrl(ui::AXNodeID node_id) const;
+  void RequestImageData(ui::AXNodeID node_id) const;
   v8::Local<v8::Value> GetImageBitmap(ui::AXNodeID node_id);
   void OnIsSpeechActiveChanged(bool is_speech_active);
   void OnIsAudioCurrentlyPlayingChanged(bool is_audio_currently_playing);
@@ -264,7 +278,10 @@ class ReadAnythingAppController
   std::vector<std::string> GetAllFonts() const;
   void OnScrolledToBottom();
   bool IsDocsLoadMoreButtonVisible() const;
-  void OnNoTextContent(bool previouslyHadContent);
+  void OnNoTextContent();
+  void UpdateWordsSeen(int words_seen);
+  void UpdateWordsHeard(int words_heard);
+  void LogEmptyState();
 
   // The language code that should be used to determine which voices are
   // supported for speech.
@@ -274,28 +291,18 @@ class ReadAnythingAppController
       const std::string& locale,
       const std::string& display_locale) const;
 
-  // Returns a list of AXNodeIds representing the next nodes that should be
-  // spoken and highlighted with Read Aloud.
-  // This defaults to returning the first granularity until
-  // MovePositionTo<Next,Previous>Granularity() moves the position.
-  // If the the current processed_granularity_index_ has not been calculated
-  // yet, GetNextNodes() is called which updates the AXPosition.
-  // GetCurrentTextStartIndex and GetCurrentTextEndIndex called with an AXNodeID
-  // return by GetCurrentText will return the starting text and ending text
-  // indices for specific text that should be referenced within the node.
-  std::vector<ui::AXNodeID> GetCurrentText();
+  // Returns a list of nodes and ranges representing the next nodes that should
+  // be spoken and highlighted with Read Aloud. The ranges are represented as a
+  // start offset and a length. Multiple nodes are returned if the segment spans
+  // over more than one node. This defaults to returning the first granularity
+  // until MovePositionTo<Next,Previous>Granularity() moves the position. If the
+  // the current processed_granularity_index_ has not been calculated yet,
+  // GetNextNodes() is called which updates the AXPosition.
+  v8::Local<v8::Value> GetCurrentTextSegments();
 
-  // Returns the Read Aloud starting text index for a node. For example,
-  // if the entire text of the node should be read by Read Aloud at a particular
-  // moment, this will return 0. Returns -1 if the node isn't in the current
-  // segment.
-  int GetCurrentTextStartIndex(ui::AXNodeID node_id);
-
-  // Returns the Read Aloud ending text index for a node. For example,
-  // if the entire text of the node should be read by Read Aloud at a particular
-  // moment, this will return the length of the node's text. Returns -1 if the
-  // node isn't in the current segment.
-  int GetCurrentTextEndIndex(ui::AXNodeID node_id);
+  // Returns the actual text content representing by the nodes returned by
+  // GetCurrentTextSegments().
+  std::u16string GetCurrentTextContent();
 
   int GetAccessibleBoundary(const std::u16string& text, int max_text_length);
 
@@ -379,6 +386,16 @@ class ReadAnythingAppController
   // Records the number of selections that occurred for the active page. Called
   // when the active tree changes.
   void RecordNumSelections();
+
+  // Records the number of words consumed on the active page via reading mode.
+  // This number is an estimate based on scrolling position and does not work
+  // for languages that don't use whitespace to separate words.
+  void RecordEstimatedWordsSeen();
+
+  // Records the number of words consumed on the active page via read aloud.
+  // This number is an estimate based on word boundaries and may be less
+  // accurate for voices that don't support word boundaries.
+  void RecordEstimatedWordsHeard();
 
   void RecordDistillationSuccess();
 

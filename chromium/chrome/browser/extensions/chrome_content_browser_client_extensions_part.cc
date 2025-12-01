@@ -56,6 +56,7 @@
 #include "extensions/browser/url_loader_factory_manager.h"
 #include "extensions/browser/url_request_util.h"
 #include "extensions/browser/view_type_utils.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/api/sockets/sockets_manifest_data.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_id.h"
@@ -97,6 +98,8 @@
 #include "pdf/pdf_features.h"
 #endif  // BUILDFLAG(ENABLE_PDF)
 
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
+
 using blink::web_pref::WebPreferences;
 using content::BrowserContext;
 using content::BrowserThread;
@@ -127,7 +130,8 @@ const Extension* GetEnabledExtensionFromSiteURL(BrowserContext* context,
 bool HasEffectiveUrl(content::BrowserContext* browser_context,
                      const GURL& url) {
   return ChromeContentBrowserClientExtensionsPart::GetEffectiveURL(
-             Profile::FromBrowserContext(browser_context), url) != url;
+             Profile::FromBrowserContext(browser_context), url)
+      .has_value();
 }
 
 bool AllowServiceWorker(const GURL& scope,
@@ -219,7 +223,7 @@ ChromeContentBrowserClientExtensionsPart::
     ~ChromeContentBrowserClientExtensionsPart() = default;
 
 // static
-GURL ChromeContentBrowserClientExtensionsPart::GetEffectiveURL(
+std::optional<GURL> ChromeContentBrowserClientExtensionsPart::GetEffectiveURL(
     Profile* profile,
     const GURL& url) {
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile);
@@ -256,7 +260,7 @@ GURL ChromeContentBrowserClientExtensionsPart::GetEffectiveURL(
   }
 
   // Don't translate to effective URLs in all other cases.
-  return url;
+  return std::nullopt;
 }
 
 // static

@@ -43,7 +43,6 @@ class VivaldiLocalSessionObserver : public syncer::DeviceInfoTracker::Observer {
   void OnSessionNamePrefsChanged(const std::string& path);
 
   void OnDeviceInfoChange() override;
-  void OnDeviceInfoShutdown() override;
 
   void UpdateSession();
   void SetFallbackDeviceName(const std::string& device_name);

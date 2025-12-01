@@ -88,6 +88,13 @@ class VisitDatabase {
   // may still be no matches).
   bool GetVisitsForURL(URLID url_id, VisitVector* visits);
 
+  // Fills in the given vector with all of the visits that did not have an HTTP
+  // response code of 404 for the given page ID, sorted in ascending order of
+  // date. Returns true on success (although there may still be no matches). An
+  // empty `visits` does not imply that the URL has no visits overall, as there
+  // may be 404 visits.
+  bool GetNon404VisitsForURL(URLID url_id, VisitVector* visits);
+
   // Fills in the given vector with the visits for the given page ID which
   // should be user-visible, which excludes things like redirects and subframes,
   // and match the set of options passed, sorted in ascending order of date.
@@ -213,6 +220,7 @@ class VisitDatabase {
   // scheme/host/port as `url`, as well as the time of the earliest visit.
   // "User-visible" is defined as in GetVisibleVisitsInRange() above, i.e.
   // excluding redirects and subframes.
+  // Visits with an HTTP response code of 404 are also excluded.
   // This function is only valid for HTTP and HTTPS URLs; all other schemes
   // cause the function to return false.
   bool GetVisibleVisitCountToHost(const GURL& url,
@@ -221,12 +229,13 @@ class VisitDatabase {
 
   // Gets the number of URLs as seen in chrome://history within the time
   // range [`begin_time`, `end_time`). "User-visible" is defined as in
-  // GetVisibleVisitsInRange() above, i.e. excluding redirects and subframes.
+  // `GetVisibleVisitsInRange()` above, i.e. excluding redirects and subframes.
   // Each URL is counted only once per day. For determination of the date,
-  // timestamps are converted to dates using local time. Returns false if
-  // there is a failure executing the statement. True otherwise.
+  // timestamps are converted to dates using local time. Returns false if there
+  // is a failure executing the statement. True otherwise.
   bool GetHistoryCount(const base::Time& begin_time,
                        const base::Time& end_time,
+                       VisitQuery404sPolicy policy_for_404_visits,
                        int* count);
 
   // Gets the last time any webpage on the given host was visited within the
@@ -243,13 +252,17 @@ class VisitDatabase {
   bool GetLastVisitToOrigin(const url::Origin& origin,
                             base::Time begin_time,
                             base::Time end_time,
+                            VisitQuery404sPolicy policy_for_404_visits,
                             base::Time* last_visit);
 
-  // Gets counts for total visits and days visited for pages matching `host`'s
-  // scheme, port, and host. Counts only user-visible visits.
-  DailyVisitsResult GetDailyVisitsToHost(const GURL& host,
-                                         base::Time begin_time,
-                                         base::Time end_time);
+  // Gets counts for total visits and days visited for pages matching `origin`.
+  // Counts only user-visible visits. Counts or ignores visits with an HTTP
+  // response code of 404 based on `policy_for_404_visits`.
+  DailyVisitsResult GetDailyVisitsToOrigin(
+      const url::Origin& origin,
+      base::Time begin_time,
+      base::Time end_time,
+      VisitQuery404sPolicy policy_for_404_visits);
 
   // Get the time of the first item in our database.
   bool GetStartDate(base::Time* first_visit);
@@ -313,11 +326,6 @@ class VisitDatabase {
   // Called by the derived classes to migrate the older visits table which
   // don't have publicly_routable column yet.
   bool MigrateVisitsWithoutPubliclyRoutableColumn();
-
-  // Called by the derived classes to do early checks before migrating the older
-  // visits table's floc_allowed (for historical reasons named
-  // "publicly_routable" in the schema) column to another table.
-  bool CanMigrateFlocAllowed();
 
   // Called by the derived classes to migrate the older visits table which
   // which doesn't have `opener_visit` column and also drops `publicly_routable`

@@ -86,12 +86,9 @@ ZeroStateSuggestionsPageData::ZeroStateSuggestionsPageData(content::Page& page)
   page_content_extraction_service_ = page_content_annotations::
       PageContentExtractionServiceFactory::GetForProfile(profile);
 
-  OPTIMIZATION_GUIDE_LOG(
-      optimization_guide_common::mojom::LogSource::MODEL_EXECUTION,
-      optimization_guide_keyed_service_->GetOptimizationGuideLogger(),
-      base::StringPrintf(
-          "ZeroStateSuggestionsPageData: Creating page data for %s.",
-          web_contents->GetLastCommittedURL().spec()));
+  MODEL_EXECUTION_LOG(base::StringPrintf(
+      "ZeroStateSuggestionsPageData: Creating page data for %s.",
+      web_contents->GetLastCommittedURL().spec()));
 
   base::TimeDelta initiate_page_content_extraction_delay;
   if (auto* helper = ContextualCueingHelper::FromWebContents(web_contents)) {
@@ -128,13 +125,13 @@ ZeroStateSuggestionsPageData::ZeroStateSuggestionsPageData(content::Page& page)
 }
 
 ZeroStateSuggestionsPageData::~ZeroStateSuggestionsPageData() {
-  OPTIMIZATION_GUIDE_LOG(
-      optimization_guide_common::mojom::LogSource::MODEL_EXECUTION,
-      optimization_guide_keyed_service_->GetOptimizationGuideLogger(),
-      base::StringPrintf(
-          "ZeroStateSuggestionsPageData: Destructing page data for %s.",
-          GetUrl().spec()));
+  MODEL_EXECUTION_LOG(base::StringPrintf(
+      "ZeroStateSuggestionsPageData: Destructing page data for %s.",
+      GetUrl().spec()));
   if (!work_done()) {
+    MODEL_EXECUTION_LOG(base::StringPrintf(
+        "ZeroStateSuggestionsPageData: %s: Destroying before content extracted",
+        GetUrl().spec()));
     GiveUp();
   }
 }
@@ -144,9 +141,7 @@ void ZeroStateSuggestionsPageData::InitiatePageContentExtraction() {
 
   if (content_extraction_initiated_) {
     // Do not re-fetch content.
-    OPTIMIZATION_GUIDE_LOG(
-        optimization_guide_common::mojom::LogSource::MODEL_EXECUTION,
-        optimization_guide_keyed_service_->GetOptimizationGuideLogger(),
+    MODEL_EXECUTION_LOG(
         base::StringPrintf("ZeroStateSuggestionsPageData: Content extraction "
                            "already initiated for %s. Not trying again",
                            url.spec()));
@@ -174,9 +169,7 @@ void ZeroStateSuggestionsPageData::InitiatePageContentExtraction() {
     // Wait for signal from tab helper to initiate content extraction if not
     // loaded yet.
 
-    OPTIMIZATION_GUIDE_LOG(
-        optimization_guide_common::mojom::LogSource::MODEL_EXECUTION,
-        optimization_guide_keyed_service_->GetOptimizationGuideLogger(),
+    MODEL_EXECUTION_LOG(
         base::StringPrintf("ZeroStateSuggestionsPageData: Page not "
                            "sufficiently loaded for %s. Waiting until ready",
                            url.spec()));
@@ -185,9 +178,7 @@ void ZeroStateSuggestionsPageData::InitiatePageContentExtraction() {
   content_extraction_initiated_ = true;
   page_context_begin_time_ = base::TimeTicks::Now();
 
-  OPTIMIZATION_GUIDE_LOG(
-      optimization_guide_common::mojom::LogSource::MODEL_EXECUTION,
-      optimization_guide_keyed_service_->GetOptimizationGuideLogger(),
+  MODEL_EXECUTION_LOG(
       base::StringPrintf("ZeroStateSuggestionsPageData: Initiating page "
                          "content extraction for %s.",
                          url.spec()));
@@ -214,9 +205,8 @@ void ZeroStateSuggestionsPageData::InitiatePageContentExtraction() {
     // Otherwise, extract fresh APC.
     if (should_extract_apc) {
       blink::mojom::AIPageContentOptionsPtr ai_page_content_options;
-      ai_page_content_options =
-          optimization_guide::DefaultAIPageContentOptions();
-      ai_page_content_options->on_critical_path = true;
+      ai_page_content_options = optimization_guide::DefaultAIPageContentOptions(
+          /*on_critical_path =*/true);
 
       optimization_guide::GetAIPageContent(
           web_contents, std::move(ai_page_content_options),
@@ -244,9 +234,7 @@ void ZeroStateSuggestionsPageData::InitiatePageContentExtraction() {
     OnReceivedInnerText(/*result=*/nullptr);
   }
 
-  OPTIMIZATION_GUIDE_LOG(
-      optimization_guide_common::mojom::LogSource::MODEL_EXECUTION,
-      optimization_guide_keyed_service_->GetOptimizationGuideLogger(),
+  MODEL_EXECUTION_LOG(
       base::StringPrintf("ZeroStateSuggestionsPageData: Starting request for "
                          "optimization metadata for %s.",
                          url.spec()));
@@ -353,7 +341,19 @@ void ZeroStateSuggestionsPageData::GiveUp() {
     return;
   }
 
-  // If we've timed out, fail everything.
+  MODEL_EXECUTION_LOG(
+      base::StringPrintf("ZeroStateSuggestionsPageData: Timed out or page "
+                         "destroyed while waiting for "
+                         "annotated page content from %s.",
+                         GetUrl().spec()));
+
+  // Each OnReceived* method may try to construct the page context proto and
+  // access the (maybe already destroyed) page if partial results are available,
+  // so clear both of these first.
+  inner_text_result_.reset();
+  annotated_page_content_.reset();
+
+  // Finish with failure and run the page context callbacks.
   OnReceivedInnerText(nullptr);
   OnReceivedOptimizationMetadata(
       optimization_guide::OptimizationGuideDecision::kUnknown, {});

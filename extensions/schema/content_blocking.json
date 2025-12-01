@@ -135,7 +135,7 @@
             "description": "For an online source, this is the url that was provided when setting it up.",
             "type": "string"
           },
-          "source_file":{
+          "source_file": {
             "description": "For an local source, this is the file that was provided when setting it up.",
             "type": "string"
           },
@@ -204,6 +204,39 @@
           },
           "trackers_blocked": {
             "type": "integer"
+          }
+        }
+      },
+      {
+        "id": "AdBlockingStatsData",
+        "description": "Statistics for trackers and ads blocked.",
+        "type": "object",
+        "properties": {
+          "reporting_start": {
+            "type": "number",
+            "description": "The time at which the counters have been initialized or reset."
+          },
+          "total_ads_blocked": {
+            "type": "integer",
+            "description": "Number of ads blocked."
+          },
+          "total_trackers_blocked": {
+            "type": "integer",
+            "description": "Number of trackers blocked."
+          },
+          "blocked_domains": {
+            "type": "array",
+            "items": {
+              "$ref": "BlockedCounter"
+            },
+            "description": "Counter with domains blocked."
+          },
+          "blocked_for_origin": {
+            "type": "array",
+            "items": {
+              "$ref": "BlockedCounter"
+            },
+            "description": "Counter with a domain that was an origin for blocking."
           }
         }
       },
@@ -742,41 +775,19 @@
         "name": "getAdBlockingStats",
         "type": "function",
         "description": "Retrieves the stats for ads and trackers blocked.",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "number_of_days",
+            "type": "integer",
+            "description": "Number of days to return statistic data. 0 or less returns all data."
+          }
+        ],
         "returns_async": {
           "name": "callback",
-          "does_not_support_promises": "vivaldi",
           "parameters": [
             {
-              "name": "reporting_start",
-              "type": "number",
-              "description": "The time at which the counters have been initialized or reset."
-            },
-            {
-              "name": "total_ads_blocked",
-              "type": "integer",
-              "description": "Number of ads blocked."
-            },
-            {
-              "name": "total_trackers_blocked",
-              "type": "integer",
-              "description": "Number of trackers blocked."
-            },
-            {
-              "name": "blocked_domains",
-              "type": "array",
-              "items": {
-                 "$ref": "BlockedCounter"
-              },
-              "description": "Counter with domains blocked."
-            },
-            {
-              "name": "blocked_for_origin",
-              "type": "array",
-              "items": {
-                 "$ref": "BlockedCounter"
-              },
-              "description": "Counter with a domain that was an origin for blocking."
+              "name": "statistics",
+              "$ref": "AdBlockingStatsData"
             }
           ]
         }

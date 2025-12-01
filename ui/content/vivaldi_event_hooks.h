@@ -58,13 +58,11 @@ class COMPONENT_EXPORT(INPUT) VivaldiEventHooks
                                   const input::NativeWebKeyboardEvent& event);
 
   // Hook to notify UI about the end of the drag operation and pointer position
-  // when the user released the pointer. Return true to prevent any default
-  // action in Chromium. cancelled indicate that the platform API indicated
-  // explicitly cancelled drag (currently can be true only on Windows).
-  static bool HandleDragEnd(content::WebContents* web_contents,
-                            ui::mojom::DragOperation operation,
-                            int screen_x,
-                            int screen_y);
+  // when the user released the pointer.
+  static void HandleDragEnd(content::WebContents* web_contents,
+                            bool outside,
+                            int client_x,
+                            int client_y);
 
  protected:
   static bool HasInstance();
@@ -86,10 +84,10 @@ class COMPONENT_EXPORT(INPUT) VivaldiEventHooks
       content::RenderWidgetHostImpl* widget_host,
       const input::NativeWebKeyboardEvent& event) = 0;
 
-  virtual bool DoHandleDragEnd(content::WebContents* web_contents,
-                               ui::mojom::DragOperation operation,
-                               int screen_x,
-                               int screen_y) = 0;
+  virtual void DoHandleDragEnd(content::WebContents* web_contents,
+                               bool outside,
+                               int client_x,
+                               int client_y) = 0;
 
  private:
   static VivaldiEventHooks* instance_;

@@ -662,6 +662,12 @@ class V8_EXPORT Isolate {
     kInvalidatedNoDateTimeConfigurationChangeProtector = 174,
     kWasmNonTrappingFloatToInt = 175,
     kWasmSignExtensionOps = 176,
+    kRegExpCompile = 177,
+    kRegExpStaticProperties = 178,
+    kRegExpStaticPropertiesWithLastMatch = 179,
+    kWithStatement = 180,
+    kHtmlWrapperMethods = 181,
+    kWasmCustomDescriptors = 182,
 
     // If you add new values here, you'll also need to update Chromium's:
     // web_feature.mojom, use_counter_callback.cc, and enums.xml. V8 changes to
@@ -965,14 +971,14 @@ class V8_EXPORT Isolate {
    * Returns the value that was set or restored by
    * SetContinuationPreservedEmbedderData(), if any.
    */
-  V8_DEPRECATE_SOON("Use GetContinuationPreservedEmbedderDataV2 instead")
+  V8_DEPRECATED("Use GetContinuationPreservedEmbedderDataV2 instead")
   Local<Value> GetContinuationPreservedEmbedderData();
 
   /**
    * Sets a value that will be stored on continuations and reset while the
    * continuation runs.
    */
-  V8_DEPRECATE_SOON("Use SetContinuationPreservedEmbedderDataV2 instead")
+  V8_DEPRECATED("Use SetContinuationPreservedEmbedderDataV2 instead")
   void SetContinuationPreservedEmbedderData(Local<Value> data);
 
   /**
@@ -1702,13 +1708,11 @@ class V8_EXPORT Isolate {
 
   void SetWasmLoadSourceMapCallback(WasmLoadSourceMapCallback callback);
 
-  void SetWasmImportedStringsEnabledCallback(
-      WasmImportedStringsEnabledCallback callback);
+  void SetWasmCustomDescriptorsEnabledCallback(
+      WasmCustomDescriptorsEnabledCallback callback);
 
   void SetSharedArrayBufferConstructorEnabledCallback(
       SharedArrayBufferConstructorEnabledCallback callback);
-
-  void SetWasmJSPIEnabledCallback(WasmJSPIEnabledCallback callback);
 
   /**
    * This function can be called by the embedder to signal V8 that the dynamic

@@ -40,7 +40,7 @@
 #include "services/network/public/mojom/network_service.mojom.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
+#include "base/android/android_info.h"
 #include "chrome/browser/enterprise/util/android_enterprise_info.h"
 #endif
 
@@ -85,7 +85,7 @@ bool ShouldDisableDohForWindowsParentalControls() {
 }
 
 // Defines the base::Feature for controlling the ZTDNS check.
-BASE_FEATURE(kZeroTrustDNS, "ZeroTrustDNS", base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kZeroTrustDNS, base::FEATURE_ENABLED_BY_DEFAULT);
 
 // DnsIsZtEnabled returns a BOOL value that specifies whether Zero
 // Trust DNS (ZTDNS) is enabled on the current device.
@@ -154,8 +154,9 @@ bool ShouldEnableAsyncDns() {
 #if BUILDFLAG(IS_ANDROID)
   int min_sdk = base::GetFieldTrialParamByFeatureAsInt(net::features::kAsyncDns,
                                                        "min_sdk", 0);
-  if (base::android::BuildInfo::GetInstance()->sdk_int() < min_sdk)
+  if (base::android::android_info::sdk_int() < min_sdk) {
     feature_can_be_enabled = false;
+  }
 #endif
   return feature_can_be_enabled &&
          base::FeatureList::IsEnabled(net::features::kAsyncDns);

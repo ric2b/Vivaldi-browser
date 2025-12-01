@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">Yer imi <ph name="FOLDER_NAME" /> klasörüne kaydedildi</translation>
 <translation id="2433507940547922241">Görünüm</translation>
 <translation id="2501278716633472235">Geri dön</translation>
+<translation id="2546283357679194313">Çerezler ve site verileri</translation>
 <translation id="2633278372998075009">Özel sekmeler</translation>
 <translation id="2650751991977523696">Dosya tekrar indirilsin mi?</translation>
 <translation id="265156376773362237">Standart önceden yükleme</translation>
@@ -54,6 +55,9 @@
 <translation id="4269820728363426813">Bağlantı adresini kopyala</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Android ayarlarında ekran kilidini açın<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Şifre Yöneticisi</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, plural,
+=1 {1 gün veya daha uzun süredir kullanılmayan sekmeler ve gruplar}
+other {# gün veya daha uzun süredir kullanılmayan sekmeler ve gruplar}}</translation>
 <translation id="451872707440238414">Yer imlerinizde arayın</translation>
 <translation id="4526803704855831732">Özel Sekmeler</translation>
 <translation id="4532845899244822526">Klasör seçin</translation>
@@ -62,6 +66,7 @@
 
 Touch to Search, yalnızca Google, Vivaldi'de varsayılan arama motoru olarak ayarlandığında kullanılabilen bir özelliktir.</translation>
 <translation id="4759238208242260848">İndirilenler</translation>
+<translation id="4777866634702576038">Sekme grubu silinsin mi?</translation>
 <translation id="4850886885716139402">Görüntüle</translation>
 <translation id="4883379392681899581">Özel moddan çık</translation>
 <translation id="4943872375798546930">Sonuç yok</translation>
@@ -70,12 +75,13 @@ Touch to Search, yalnızca Google, Vivaldi'de varsayılan arama motoru olarak ay
 <translation id="5118676864324397542"><ph name="APP_NAME" /> depolama alanı</translation>
 <translation id="5144385790872094440">Ziyaret ettiğiniz sayfaların bazıları önceden yüklenir. Bir Google sitesinden veya uygulamasından bağlantı verildiğinde sayfalar Google sunucuları aracılığıyla önceden yüklenebilir.</translation>
 <translation id="5186185447130319458">Özel</translation>
-<translation id="5206168361184759344">{FILE_COUNT,plural, =1{Dosya indiriliyor…}other{# dosya indiriliyor…}}</translation>
+<translation id="5206168361184759344">{FILE_COUNT,plural,
+            =1 {Dosya indiriliyor…}
+            other {# dosya indiriliyor…}}</translation>
 <translation id="5233638681132016545">Yeni sekme</translation>
 <translation id="5375131951310889874">Sayfadan ayrılmadan web sitelerindeki konular hakkında bilgi edinin. Touch to Search, yalnızca Google, Vivaldi'de varsayılan arama motoru olarak ayarlandığında kullanılabilen bir özelliktir. Bir kelimeyi ve çevresindeki bağlamı Google Arama'ya göndererek tanımları, resimleri, arama sonuçlarını ve diğer ayrıntıları döndürür.
 
 Arama teriminizi ayarlamak için, seçmek için uzun basın. Aramanızı hassaslaştırmak için paneli tamamen yukarı kaydırın ve arama kutusuna dokunun.</translation>
-<translation id="543338862236136125">Şifreyi düzenle</translation>
 <translation id="572328651809341494">Son sekmeler</translation>
 <translation id="5833984609253377421">Bağlantıyı paylaş</translation>
 <translation id="6150320133806434356">Yer imi kaydedildi</translation>
@@ -83,8 +89,11 @@ Arama teriminizi ayarlamak için, seçmek için uzun basın. Aramanızı hassasl
 <translation id="6336451774241870485">Yeni özel sekme</translation>
 <translation id="6337323516034698937">Bu sekmeyi başka bir cihaza göndermek için her iki cihazda da Vivaldi Senkronizasyonun'da oturum açın. Gerekirse şifreleme parolasını girdiğinizden emin olun.</translation>
 <translation id="6341580099087024258">Dosyaların kaydedileceği yeri sor</translation>
+<translation id="6364438453358674297">Öneri geçmişten kaldırılsın mı?</translation>
 <translation id="6404511346730675251">Yer imini düzenle</translation>
-<translation id="650224091954855786">{FILE_COUNT,plural, =1{Dosya indirildi}other{# indirme işlemi tamamlandı}}</translation>
+<translation id="650224091954855786">{FILE_COUNT,plural,
+          =1 {Dosya indirildi}
+          other {# indirme işlemi tamamlandı}}</translation>
 <translation id="6585139692466700358">Vivaldi'nin çeviri sistemini kullanarak sayfaları diğer dillere çevirmeyi teklif et</translation>
 <translation id="6588043302623806746">Güvenli DNS kullan</translation>
 <translation id="6593061639179217415">Masaüstü sitesi</translation>
@@ -108,6 +117,9 @@ Arama teriminizi ayarlamak için, seçmek için uzun basın. Aramanızı hassasl
 <translation id="8062594758852531064">Genişletilmiş önceden yükleme:</translation>
 <translation id="8073388330009372546">Resmi yeni sekmede aç</translation>
 <translation id="8127542551745560481">Ana sayfayı düzenle</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+=1 {(1) etkin olmayan öğe}
+other {(#) etkin olmayan öğe}}</translation>
 <translation id="8266862848225348053">İndirme konumu</translation>
 <translation id="8348430946834215779">Mümkün olduğunda HTTPS kullanın ve HTTPS'yi desteklemeyen siteleri yüklemeden önce uyarı alın</translation>
 <translation id="8560602726703398413">Okuma listenizi Yer imlerinde bulun</translation>
@@ -117,6 +129,9 @@ Arama teriminizi ayarlamak için, seçmek için uzun basın. Aramanızı hassasl
 <translation id="9042893549633094279">Gizlilik ve güvenlik</translation>
 <translation id="9063523880881406963">Masaüstü sitesi isteğini kapat</translation>
 <translation id="9080642952018487277">Özel moda geç</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+=1 {1 gün veya daha uzun süredir kullanılmıyor}
+other {# gün veya daha uzun süredir kullanılmıyor}}</translation>
 <translation id="930124987204876019">Geçmiş, çerezler, site verileri, önbelleği silin…</translation>
 <translation id="961856697154696964">Tarama verilerini sil</translation>
 </translationbundle>

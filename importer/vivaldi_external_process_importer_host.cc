@@ -39,6 +39,8 @@ void ExternalProcessImporterHost::ShowChromeWarningDialog() {
   } else if (source_profile_.importer_type ==
              user_data_importer::TYPE_OPERA_GX) {
     importerLockString_id = IDS_OPERA_GX_IMPORTER_LOCK_TEXT;
+  } else if (source_profile_.importer_type == user_data_importer::TYPE_VIVALDI) {
+    importerLockString_id = IDS_VIVALDI_IMPORTER_LOCK_TEXT;
   }
 
   DCHECK(!headless_);

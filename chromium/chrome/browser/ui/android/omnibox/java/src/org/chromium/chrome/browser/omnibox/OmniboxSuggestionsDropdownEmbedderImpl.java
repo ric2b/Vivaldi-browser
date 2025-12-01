@@ -17,18 +17,19 @@ import android.view.WindowInsets;
 import androidx.core.graphics.Insets;
 import androidx.core.view.WindowInsetsCompat;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
+import org.chromium.base.DeviceInfo;
 import org.chromium.base.supplier.ObservableSupplierImpl;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownEmbedder;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.base.WindowAndroid;
-import org.chromium.ui.display.DisplayUtil;
+
+import java.util.function.Supplier;
 
 // Vivaldi
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
@@ -51,6 +52,7 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
     /*Vivaldi*/ public  final View mAnchorView;
     private final View mAlignmentView;
     private final boolean mForcePhoneStyleOmnibox;
+    private final Supplier<@ControlsPosition Integer> mControlsPositionSupplier;
     private final Supplier<Integer> mKeyboardHeightSupplier;
     private final Supplier<Integer> mBottomWindowPaddingSupplier;
     private final Context mContext;
@@ -92,12 +94,14 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
             View alignmentView,
             boolean forcePhoneStyleOmnibox,
             @Nullable View baseChromeLayout,
+            Supplier<@ControlsPosition Integer> controlsPositionSupplier,
             Supplier<Integer> keyboardHeightSupplier,
             Supplier<Integer> bottomWindowPaddingSupplier) {
         mWindowAndroid = windowAndroid;
         mAnchorView = anchorView;
         mAlignmentView = alignmentView;
         mForcePhoneStyleOmnibox = forcePhoneStyleOmnibox;
+        mControlsPositionSupplier = controlsPositionSupplier;
         mKeyboardHeightSupplier = keyboardHeightSupplier;
         mBottomWindowPaddingSupplier = bottomWindowPaddingSupplier;
         mContext = mAnchorView.getContext();
@@ -229,12 +233,20 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
             contentView = mAnchorView.getRootView().findViewById(android.R.id.content);
         }
 
-        ViewUtils.getRelativeLayoutPosition(contentView, mAnchorView, mPositionArray);
-        int top = mPositionArray[1] + mAnchorView.getMeasuredHeight() - contentView.getPaddingTop();
+        int top;
         int left;
         int width;
         int paddingLeft;
         int paddingRight;
+
+        @ControlsPosition int controlsPosition = mControlsPositionSupplier.get();
+        if (controlsPosition == ControlsPosition.BOTTOM) {
+            top = 0;
+        } else {
+            ViewUtils.getRelativeLayoutPosition(contentView, mAnchorView, mPositionArray);
+            top = mPositionArray[1] + mAnchorView.getMeasuredHeight() - contentView.getPaddingTop();
+        }
+
         if (isTablet()) {
             ViewUtils.getRelativeLayoutPosition(mAnchorView, mAlignmentView, mPositionArray);
             // Width equal to alignment view and left equivalent to left of alignment view. Top
@@ -265,7 +277,7 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
         int keyboardHeight = mKeyboardHeightSupplier.get();
 
         int windowHeight;
-        if (BuildInfo.getInstance().isAutomotive
+        if (DeviceInfo.isAutomotive()
                 && contentView != null
                 && contentView.getRootWindowInsets() != null) {
             // Some automotive devices dismiss bottom system bars when bringing up the keyboard,
@@ -282,7 +294,8 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
                             - systemBars.top
                             - systemBars.bottom;
         } else {
-            windowHeight = DisplayUtil.dpToPx(mWindowAndroid.getDisplay(), mWindowHeightDp);
+            // TODO(crbug.com/446742684): Improve positioning logic calculations
+            windowHeight = mWindowAndroid.getDisplay().getDisplayHeight();
         }
 
         int paddingBottom = 0;
@@ -302,8 +315,12 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
                 contentView == null
                         ? Integer.MAX_VALUE
                         : contentView.getMeasuredHeight() - keyboardHeight;
-
-        int height = Math.min(windowSpace, contentSpace) - top;
+        int height;
+        if (controlsPosition == ControlsPosition.BOTTOM) {
+            height = Math.min(windowSpace, contentSpace) - mAnchorView.getMeasuredHeight();
+        } else {
+            height = Math.min(windowSpace, contentSpace) - top;
+        }
 
         // Note(david@vivaldi.com): Ref.: VAB-8066. (followup) Ref. VAB-8955 |address_bar_to_bottom|
         // is true indicates that the controls are at the bottom.  (followup) VAB-11189 Added handling

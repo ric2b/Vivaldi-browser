@@ -6,8 +6,6 @@
 #include <memory>
 
 #include "base/notreached.h"
-#include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
-#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 // Helper instance to allow access code from non-linked components.
 
@@ -113,6 +111,10 @@ enum class TabAlert;
 
 namespace vivaldi {
 class WindowRegistryService;
+}
+
+namespace vivaldiprefs {
+enum class TabsAutoMutingValues;
 }
 
 // "\chromium\components\sessions\core\session_id.h"
@@ -285,7 +287,6 @@ class VivaldiBrowserComponentWrapper {
       base::OnceCallback<void(VivaldiBrowserWindow* window)> callback) = 0;
   virtual Browser* FindBrowserByWindowId(
       int32_t /*SessionId::id_type*/ window_id) = 0;
-  virtual bool IsOutsideAppWindow(int x, int y) = 0;
   virtual content::WebContents* FindActiveTabContentsInThisProfile(
       content::BrowserContext* context) = 0;
   virtual void UpdateMuting(content::WebContents* active_web_contents,
@@ -325,14 +326,6 @@ class VivaldiBrowserComponentWrapper {
                                        bool activePage,
                                        bool inherit_opener,
                                        bool is_extension_host) = 0;
-
-  virtual void WindowRegistryServiceAddWindow(
-      content::BrowserContext* browser_context,
-      VivaldiBrowserWindow* window,
-      const std::string& window_key) = 0;
-  virtual VivaldiBrowserWindow* WindowRegistryServiceGetNamedWindow(
-      content::BrowserContext* browser_context,
-      const std::string& window_key) = 0;
 
   virtual bool ExtensionTabUtilGetTabById(
       int tab_id,
@@ -414,6 +407,12 @@ class VivaldiBrowserComponentWrapper {
   virtual void HandleRegisterHandlerRequest(
       content::WebContents* web_contents,
       custom_handlers::ProtocolHandler* handler) = 0;
+
+  virtual bool IsProtocolHandlerAlreadyDecided(
+      content::WebContents* web_contents,
+      const std::string& protocol,
+      const GURL& url) = 0;
+
   virtual void SetOrRollbackProtocolHandler(content::WebContents* web_contents,
                                             bool allow) = 0;
 

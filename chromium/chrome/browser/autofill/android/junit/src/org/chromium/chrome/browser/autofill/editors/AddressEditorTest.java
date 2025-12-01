@@ -22,11 +22,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import static org.chromium.chrome.browser.autofill.editors.AddressEditorCoordinator.UserFlow.MIGRATE_EXISTING_ADDRESS_PROFILE;
-import static org.chromium.chrome.browser.autofill.editors.AddressEditorCoordinator.UserFlow.SAVE_NEW_ADDRESS_PROFILE;
-import static org.chromium.chrome.browser.autofill.editors.AddressEditorCoordinator.UserFlow.UPDATE_EXISTING_ADDRESS_PROFILE;
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.CANCEL_RUNNABLE;
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.CUSTOM_DONE_BUTTON_TEXT;
+import static org.chromium.chrome.browser.autofill.editors.EditorProperties.DELETE_CONFIRMATION_PRIMARY_BUTTON_TEXT;
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.DELETE_CONFIRMATION_TEXT;
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.DELETE_CONFIRMATION_TITLE;
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.DONE_RUNNABLE;
@@ -75,6 +73,7 @@ import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManagerFactory;
 import org.chromium.chrome.browser.autofill.PhoneNumberUtil;
 import org.chromium.chrome.browser.autofill.PhoneNumberUtilJni;
+import org.chromium.chrome.browser.autofill.SaveUpdateAddressProfilePromptMode;
 import org.chromium.chrome.browser.autofill.editors.AddressEditorCoordinator.Delegate;
 import org.chromium.chrome.browser.autofill.editors.EditorProperties.EditorItem;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -94,6 +93,7 @@ import org.chromium.google_apis.gaia.GaiaId;
 import org.chromium.ui.base.TestActivity;
 import org.chromium.ui.modelutil.ListModel;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.text.SpanApplier;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -174,6 +174,12 @@ public class AddressEditorTest {
                     .setLocality("Los Angeles")
                     .setPostalCode("90291")
                     .setCountryCode("US")
+                    .build();
+    private static final AutofillProfile sAccountNameEmailProfile =
+            AutofillProfile.builder()
+                    .setRecordType(RecordType.ACCOUNT_NAME_EMAIL)
+                    .setFullName("Elisa Beckett")
+                    .setEmailAddress("elisa.beckett@gmail.com")
                     .build();
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
@@ -265,6 +271,26 @@ public class AddressEditorTest {
         setUpAddressUiComponents(addressUiComponents, "US");
     }
 
+    private void setupEditorForNewProfile() {
+        mAddressEditor =
+                new AddressEditorCoordinator(
+                        mActivity, mDelegate, mProfile, /* saveToDisk= */ false);
+        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+    }
+
+    private void setupEditorForExistingProfile(
+            AutofillProfile profile, @SaveUpdateAddressProfilePromptMode int promptMode) {
+        mAddressEditor =
+                new AddressEditorCoordinator(
+                        mActivity,
+                        mDelegate,
+                        mProfile,
+                        new AutofillAddress(mActivity, profile, mPersonalDataManager),
+                        promptMode,
+                        /* saveToDisk= */ false);
+        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+    }
+
     private static void validateTextField(
             EditorItem editorItem,
             String value,
@@ -313,11 +339,16 @@ public class AddressEditorTest {
     }
 
     private static void checkModelHasExpectedValues(
-            PropertyModel editorModel, String expectedDeleteTitle, String expectedDeleteText) {
+            PropertyModel editorModel,
+            String expectedDeleteTitle,
+            String expectedDeleteText,
+            String expectedDeleteButtonText) {
         assertNotNull(editorModel);
 
         assertEquals(expectedDeleteTitle, editorModel.get(DELETE_CONFIRMATION_TITLE));
-        assertEquals(expectedDeleteText, editorModel.get(DELETE_CONFIRMATION_TEXT));
+        assertEquals(expectedDeleteText, editorModel.get(DELETE_CONFIRMATION_TEXT).toString());
+        assertEquals(
+                expectedDeleteButtonText, editorModel.get(DELETE_CONFIRMATION_PRIMARY_BUTTON_TEXT));
     }
 
     private void validateShownFields(
@@ -447,10 +478,7 @@ public class AddressEditorTest {
     @SmallTest
     public void validateCustomDoneButtonText() {
         setUpAddressUiComponents(new ArrayList());
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity, mDelegate, mProfile, /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForNewProfile();
         mAddressEditor.setCustomDoneButtonText("Custom done");
         mAddressEditor.showEditorDialog();
 
@@ -464,19 +492,21 @@ public class AddressEditorTest {
     @SmallTest
     public void validateUiStrings_NewAddressProfile() {
         setUpAddressUiComponents(new ArrayList());
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity, mDelegate, mProfile, /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForNewProfile();
         mAddressEditor.showEditorDialog();
 
         final String deleteTitle =
                 mActivity.getString(R.string.autofill_delete_address_confirmation_dialog_title);
         final String deleteText =
                 mActivity.getString(R.string.autofill_delete_local_address_record_type_notice);
+        final String deleteButtonText =
+                mActivity.getString(R.string.autofill_delete_suggestion_button);
 
         checkModelHasExpectedValues(
-                mAddressEditor.getEditorModelForTesting(), deleteTitle, deleteText);
+                mAddressEditor.getEditorModelForTesting(),
+                deleteTitle,
+                deleteText,
+                deleteButtonText);
     }
 
     @Test
@@ -484,10 +514,7 @@ public class AddressEditorTest {
     public void validateUiStrings_NewAddressProfile_EligibleForAddressAccountStorage() {
         setUpAddressUiComponents(new ArrayList());
         when(mPersonalDataManager.isEligibleForAddressAccountStorage()).thenReturn(true);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity, mDelegate, mProfile, /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForNewProfile();
         mAddressEditor.showEditorDialog();
 
         final String deleteTitle =
@@ -496,33 +523,36 @@ public class AddressEditorTest {
                 mActivity
                         .getString(R.string.autofill_delete_account_address_record_type_notice)
                         .replace("$1", USER_EMAIL);
+        final String deleteButtonText =
+                mActivity.getString(R.string.autofill_delete_suggestion_button);
 
         checkModelHasExpectedValues(
-                mAddressEditor.getEditorModelForTesting(), deleteTitle, deleteText);
+                mAddressEditor.getEditorModelForTesting(),
+                deleteTitle,
+                deleteText,
+                deleteButtonText);
     }
 
     @Test
     @SmallTest
     public void validateUiStrings_LocalOrSyncAddressProfile_AddressSyncDisabled() {
         setUpAddressUiComponents(new ArrayList());
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, sLocalProfile, mPersonalDataManager),
-                        SAVE_NEW_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                sLocalProfile, SaveUpdateAddressProfilePromptMode.SAVE_NEW_PROFILE);
         mAddressEditor.showEditorDialog();
 
         final String deleteTitle =
                 mActivity.getString(R.string.autofill_delete_address_confirmation_dialog_title);
         final String deleteText =
                 mActivity.getString(R.string.autofill_delete_local_address_record_type_notice);
+        final String deleteButtonText =
+                mActivity.getString(R.string.autofill_delete_suggestion_button);
 
         checkModelHasExpectedValues(
-                mAddressEditor.getEditorModelForTesting(), deleteTitle, deleteText);
+                mAddressEditor.getEditorModelForTesting(),
+                deleteTitle,
+                deleteText,
+                deleteButtonText);
     }
 
     @Test
@@ -531,15 +561,8 @@ public class AddressEditorTest {
         setUpAddressUiComponents(new ArrayList());
         when(mSyncService.getSelectedTypes())
                 .thenReturn(Collections.singleton(UserSelectableType.AUTOFILL));
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, sLocalProfile, mPersonalDataManager),
-                        SAVE_NEW_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                sLocalProfile, SaveUpdateAddressProfilePromptMode.SAVE_NEW_PROFILE);
 
         mAddressEditor.showEditorDialog();
 
@@ -547,9 +570,14 @@ public class AddressEditorTest {
                 mActivity.getString(R.string.autofill_delete_address_confirmation_dialog_title);
         final String deleteText =
                 mActivity.getString(R.string.autofill_delete_sync_address_record_type_notice);
+        final String deleteButtonText =
+                mActivity.getString(R.string.autofill_delete_suggestion_button);
 
         checkModelHasExpectedValues(
-                mAddressEditor.getEditorModelForTesting(), deleteTitle, deleteText);
+                mAddressEditor.getEditorModelForTesting(),
+                deleteTitle,
+                deleteText,
+                deleteButtonText);
     }
 
     @Test
@@ -562,7 +590,7 @@ public class AddressEditorTest {
                         mDelegate,
                         mProfile,
                         new AutofillAddress(mActivity, sLocalProfile, mPersonalDataManager),
-                        UPDATE_EXISTING_ADDRESS_PROFILE,
+                        SaveUpdateAddressProfilePromptMode.UPDATE_PROFILE,
                         /* saveToDisk= */ false);
         mAddressEditor.setEditorDialogForTesting(mEditorDialog);
         mAddressEditor.showEditorDialog();
@@ -571,9 +599,14 @@ public class AddressEditorTest {
                 mActivity.getString(R.string.autofill_delete_address_confirmation_dialog_title);
         final String deleteText =
                 mActivity.getString(R.string.autofill_delete_local_address_record_type_notice);
+        final String deleteButtonText =
+                mActivity.getString(R.string.autofill_delete_suggestion_button);
 
         checkModelHasExpectedValues(
-                mAddressEditor.getEditorModelForTesting(), deleteTitle, deleteText);
+                mAddressEditor.getEditorModelForTesting(),
+                deleteTitle,
+                deleteText,
+                deleteButtonText);
     }
 
     @Test
@@ -588,7 +621,7 @@ public class AddressEditorTest {
                         mDelegate,
                         mProfile,
                         new AutofillAddress(mActivity, sLocalProfile, mPersonalDataManager),
-                        UPDATE_EXISTING_ADDRESS_PROFILE,
+                        SaveUpdateAddressProfilePromptMode.UPDATE_PROFILE,
                         /* saveToDisk= */ false);
         mAddressEditor.setEditorDialogForTesting(mEditorDialog);
 
@@ -598,25 +631,22 @@ public class AddressEditorTest {
                 mActivity.getString(R.string.autofill_delete_address_confirmation_dialog_title);
         final String deleteText =
                 mActivity.getString(R.string.autofill_delete_sync_address_record_type_notice);
+        final String deleteButtonText =
+                mActivity.getString(R.string.autofill_delete_suggestion_button);
 
         checkModelHasExpectedValues(
-                mAddressEditor.getEditorModelForTesting(), deleteTitle, deleteText);
+                mAddressEditor.getEditorModelForTesting(),
+                deleteTitle,
+                deleteText,
+                deleteButtonText);
     }
 
     @Test
     @SmallTest
     public void validateUiStrings_LocalAddressProfile_MigrationToAccount() {
         setUpAddressUiComponents(new ArrayList());
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, sLocalProfile, mPersonalDataManager),
-                        MIGRATE_EXISTING_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
-
+        setupEditorForExistingProfile(
+                sLocalProfile, SaveUpdateAddressProfilePromptMode.MIGRATE_PROFILE);
         mAddressEditor.showEditorDialog();
 
         final String deleteTitle =
@@ -625,9 +655,14 @@ public class AddressEditorTest {
                 mActivity
                         .getString(R.string.autofill_delete_account_address_record_type_notice)
                         .replace("$1", USER_EMAIL);
+        final String deleteButtonText =
+                mActivity.getString(R.string.autofill_delete_suggestion_button);
 
         checkModelHasExpectedValues(
-                mAddressEditor.getEditorModelForTesting(), deleteTitle, deleteText);
+                mAddressEditor.getEditorModelForTesting(),
+                deleteTitle,
+                deleteText,
+                deleteButtonText);
     }
 
     @Test
@@ -636,16 +671,8 @@ public class AddressEditorTest {
         setUpAddressUiComponents(new ArrayList());
         when(mSyncService.getSelectedTypes())
                 .thenReturn(Collections.singleton(UserSelectableType.AUTOFILL));
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, sLocalProfile, mPersonalDataManager),
-                        MIGRATE_EXISTING_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
-
+        setupEditorForExistingProfile(
+                sLocalProfile, SaveUpdateAddressProfilePromptMode.MIGRATE_PROFILE);
         mAddressEditor.showEditorDialog();
 
         final String deleteTitle =
@@ -654,24 +681,22 @@ public class AddressEditorTest {
                 mActivity
                         .getString(R.string.autofill_delete_account_address_record_type_notice)
                         .replace("$1", USER_EMAIL);
+        final String deleteButtonText =
+                mActivity.getString(R.string.autofill_delete_suggestion_button);
 
         checkModelHasExpectedValues(
-                mAddressEditor.getEditorModelForTesting(), deleteTitle, deleteText);
+                mAddressEditor.getEditorModelForTesting(),
+                deleteTitle,
+                deleteText,
+                deleteButtonText);
     }
 
     @Test
     @SmallTest
     public void validateUiStrings_AccountAddressProfile_SaveInAccountFlow() {
         setUpAddressUiComponents(new ArrayList());
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, sAccountProfile, mPersonalDataManager),
-                        SAVE_NEW_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                sAccountProfile, SaveUpdateAddressProfilePromptMode.SAVE_NEW_PROFILE);
         mAddressEditor.showEditorDialog();
 
         final String deleteTitle =
@@ -680,24 +705,22 @@ public class AddressEditorTest {
                 mActivity
                         .getString(R.string.autofill_delete_account_address_record_type_notice)
                         .replace("$1", USER_EMAIL);
+        final String deleteButtonText =
+                mActivity.getString(R.string.autofill_delete_suggestion_button);
 
         checkModelHasExpectedValues(
-                mAddressEditor.getEditorModelForTesting(), deleteTitle, deleteText);
+                mAddressEditor.getEditorModelForTesting(),
+                deleteTitle,
+                deleteText,
+                deleteButtonText);
     }
 
     @Test
     @SmallTest
     public void validateUiStrings_AccountAddressProfile_UpdateAccountProfileFlow() {
         setUpAddressUiComponents(new ArrayList());
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, sAccountProfile, mPersonalDataManager),
-                        UPDATE_EXISTING_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                sAccountProfile, SaveUpdateAddressProfilePromptMode.UPDATE_PROFILE);
         mAddressEditor.showEditorDialog();
 
         final String deleteTitle =
@@ -706,24 +729,22 @@ public class AddressEditorTest {
                 mActivity
                         .getString(R.string.autofill_delete_account_address_record_type_notice)
                         .replace("$1", USER_EMAIL);
+        final String deleteButtonText =
+                mActivity.getString(R.string.autofill_delete_suggestion_button);
 
         checkModelHasExpectedValues(
-                mAddressEditor.getEditorModelForTesting(), deleteTitle, deleteText);
+                mAddressEditor.getEditorModelForTesting(),
+                deleteTitle,
+                deleteText,
+                deleteButtonText);
     }
 
     @Test
     @SmallTest
     public void validateDefaultFields() {
         setUpAddressUiComponents(new ArrayList());
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, sLocalProfile, mPersonalDataManager),
-                        SAVE_NEW_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                sLocalProfile, SaveUpdateAddressProfilePromptMode.SAVE_NEW_PROFILE);
         mAddressEditor.showEditorDialog();
 
         assertNotNull(mAddressEditor.getEditorModelForTesting());
@@ -741,10 +762,7 @@ public class AddressEditorTest {
     @SmallTest
     public void validateShownItems_NewAddressProfile() {
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity, mDelegate, mProfile, /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForNewProfile();
 
         mAddressEditor.showEditorDialog();
         validateShownFields(
@@ -759,10 +777,7 @@ public class AddressEditorTest {
     public void validateShownItems_NewAddressProfile_EligibleForAddressAccountStorage() {
         when(mPersonalDataManager.isEligibleForAddressAccountStorage()).thenReturn(true);
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity, mDelegate, mProfile, /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForNewProfile();
 
         mAddressEditor.showEditorDialog();
         validateShownFields(
@@ -784,15 +799,8 @@ public class AddressEditorTest {
     @SmallTest
     public void validateShownItems_LocalOrSyncAddressProfile_SaveLocally() {
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, sLocalProfile, mPersonalDataManager),
-                        SAVE_NEW_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                sLocalProfile, SaveUpdateAddressProfilePromptMode.SAVE_NEW_PROFILE);
 
         mAddressEditor.showEditorDialog();
         validateShownFields(
@@ -806,15 +814,8 @@ public class AddressEditorTest {
     @SmallTest
     public void validateShownItems_LocalOrSyncAddressProfile_UpdateLocally() {
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, sLocalProfile, mPersonalDataManager),
-                        UPDATE_EXISTING_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                sLocalProfile, SaveUpdateAddressProfilePromptMode.UPDATE_PROFILE);
 
         mAddressEditor.showEditorDialog();
         validateShownFields(
@@ -828,15 +829,8 @@ public class AddressEditorTest {
     @SmallTest
     public void validateShownItems_LocalOrSyncAddressProfile_MigrationToAccount() {
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, sLocalProfile, mPersonalDataManager),
-                        MIGRATE_EXISTING_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                sLocalProfile, SaveUpdateAddressProfilePromptMode.MIGRATE_PROFILE);
 
         mAddressEditor.showEditorDialog();
         validateShownFields(
@@ -857,15 +851,8 @@ public class AddressEditorTest {
     @SmallTest
     public void validateShownItems_AccountProfile_SaveInAccountFlow() {
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, sAccountProfile, mPersonalDataManager),
-                        SAVE_NEW_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                sAccountProfile, SaveUpdateAddressProfilePromptMode.SAVE_NEW_PROFILE);
 
         mAddressEditor.showEditorDialog();
         validateShownFields(
@@ -886,15 +873,8 @@ public class AddressEditorTest {
     @SmallTest
     public void validateShownItems_AccountProfile_UpdateAlreadySaved() {
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, sAccountProfile, mPersonalDataManager),
-                        UPDATE_EXISTING_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                sAccountProfile, SaveUpdateAddressProfilePromptMode.UPDATE_PROFILE);
 
         mAddressEditor.showEditorDialog();
         validateShownFields(
@@ -930,15 +910,8 @@ public class AddressEditorTest {
                                 true,
                                 true)),
                 "DE");
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, sLocalProfile, mPersonalDataManager),
-                        SAVE_NEW_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                sLocalProfile, SaveUpdateAddressProfilePromptMode.SAVE_NEW_PROFILE);
         mAddressEditor.showEditorDialog();
 
         assertNotNull(mAddressEditor.getEditorModelForTesting());
@@ -991,10 +964,7 @@ public class AddressEditorTest {
     public void edit_NewAddressProfile_EligibleForAddressAccountStorage() {
         when(mPersonalDataManager.isEligibleForAddressAccountStorage()).thenReturn(true);
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity, mDelegate, mProfile, /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForNewProfile();
         mAddressEditor.showEditorDialog();
 
         PropertyModel editorModel = mAddressEditor.getEditorModelForTesting();
@@ -1021,18 +991,9 @@ public class AddressEditorTest {
     @SmallTest
     public void edit_AlterAddressProfile_Cancel() {
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(
-                                mActivity,
-                                new AutofillProfile(sLocalProfile),
-                                mPersonalDataManager),
-                        SAVE_NEW_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                new AutofillProfile(sLocalProfile),
+                SaveUpdateAddressProfilePromptMode.SAVE_NEW_PROFILE);
         mAddressEditor.showEditorDialog();
 
         PropertyModel editorModel = mAddressEditor.getEditorModelForTesting();
@@ -1053,18 +1014,9 @@ public class AddressEditorTest {
     @SmallTest
     public void edit_AlterAddressProfile_CommitChanges() {
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(
-                                mActivity,
-                                new AutofillProfile(sLocalProfile),
-                                mPersonalDataManager),
-                        SAVE_NEW_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                new AutofillProfile(sLocalProfile),
+                SaveUpdateAddressProfilePromptMode.SAVE_NEW_PROFILE);
         mAddressEditor.showEditorDialog();
 
         assertNotNull(mAddressEditor.getEditorModelForTesting());
@@ -1094,18 +1046,9 @@ public class AddressEditorTest {
     public void edit_AlterAddressProfile_CommitChanges_InvisibleFieldsNotReset() {
         // Whitelist only full name, admin area and locality.
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS.subList(0, 3));
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(
-                                mActivity,
-                                new AutofillProfile(sLocalProfile),
-                                mPersonalDataManager),
-                        SAVE_NEW_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                new AutofillProfile(sLocalProfile),
+                SaveUpdateAddressProfilePromptMode.SAVE_NEW_PROFILE);
 
         mAddressEditor.showEditorDialog();
 
@@ -1139,10 +1082,7 @@ public class AddressEditorTest {
     public void edit_NewAddressProfile_NoInitialValidation() {
         when(mPersonalDataManager.isEligibleForAddressAccountStorage()).thenReturn(true);
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity, mDelegate, mProfile, /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForNewProfile();
         mAddressEditor.showEditorDialog();
 
         validateErrorMessages(
@@ -1154,10 +1094,7 @@ public class AddressEditorTest {
     public void edit_NewAddressProfile_FieldsAreValidatedAfterSave() {
         when(mPersonalDataManager.isEligibleForAddressAccountStorage()).thenReturn(true);
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity, mDelegate, mProfile, /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForNewProfile();
         mAddressEditor.showEditorDialog();
 
         PropertyModel editorModel = mAddressEditor.getEditorModelForTesting();
@@ -1175,15 +1112,8 @@ public class AddressEditorTest {
         accountProfile.setInfo(FieldType.ADDRESS_HOME_ZIP, "");
 
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, accountProfile, mPersonalDataManager),
-                        UPDATE_EXISTING_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                accountProfile, SaveUpdateAddressProfilePromptMode.UPDATE_PROFILE);
         mAddressEditor.showEditorDialog();
 
         validateErrorMessages(mAddressEditor.getEditorModelForTesting(), /* errorsPresent= */ true);
@@ -1198,15 +1128,8 @@ public class AddressEditorTest {
         accountProfile.setInfo(FieldType.ADDRESS_HOME_ZIP, "");
 
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, accountProfile, mPersonalDataManager),
-                        UPDATE_EXISTING_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                accountProfile, SaveUpdateAddressProfilePromptMode.UPDATE_PROFILE);
         mAddressEditor.showEditorDialog();
 
         PropertyModel editorModel = mAddressEditor.getEditorModelForTesting();
@@ -1221,15 +1144,8 @@ public class AddressEditorTest {
         setUpAddressUiComponents(SUPPORTED_ADDRESS_FIELDS);
 
         AutofillProfile accountProfile = new AutofillProfile(sAccountProfile);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, accountProfile, mPersonalDataManager),
-                        UPDATE_EXISTING_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                accountProfile, SaveUpdateAddressProfilePromptMode.UPDATE_PROFILE);
         mAddressEditor.showEditorDialog();
 
         PropertyModel editorModel = mAddressEditor.getEditorModelForTesting();
@@ -1249,53 +1165,40 @@ public class AddressEditorTest {
 
     @Test
     @SmallTest
-    public void edit_HomeAddressProfile() {
+    public void edit_HomeAddressProfile_showsReadOnlyUIAndExternalLink() {
         AutofillProfile homeProfile = new AutofillProfile(sHomeProfile);
-        mAddressEditor =
-                new AddressEditorCoordinator(
-                        mActivity,
-                        mDelegate,
-                        mProfile,
-                        new AutofillAddress(mActivity, homeProfile, mPersonalDataManager),
-                        UPDATE_EXISTING_ADDRESS_PROFILE,
-                        /* saveToDisk= */ false);
-        mAddressEditor.setEditorDialogForTesting(mEditorDialog);
+        setupEditorForExistingProfile(
+                homeProfile, SaveUpdateAddressProfilePromptMode.UPDATE_PROFILE);
         mAddressEditor.showEditorDialog();
 
         PropertyModel editorModel = mAddressEditor.getEditorModelForTesting();
         assertNotNull(editorModel);
 
-        assertEquals(false, editorModel.get(SHOW_BUTTONS));
+        // Buttons should be hidden for home address profiles.
+        assertFalse(editorModel.get(SHOW_BUTTONS));
 
         ListModel<EditorItem> model = editorModel.get(EDITOR_FIELDS);
+        // The model should contain: [description, notice, external link].
         assertEquals(3, model.size());
 
+        // Validate the description text.
         EditorItem descriptionItem = model.get(0);
         assertEquals(NON_EDITABLE_TEXT, descriptionItem.type);
-        assertEquals(true, descriptionItem.isFullLine);
-
+        assertTrue(descriptionItem.isFullLine);
         assertEquals("Profile description", descriptionItem.model.get(TEXT));
 
-        final String deleteTitle =
-                mActivity.getString(R.string.autofill_delete_address_confirmation_dialog_title);
-        final String deleteText =
-                mActivity
-                        .getString(R.string.autofill_delete_account_address_record_type_notice)
-                        .replace("$1", USER_EMAIL);
+        // Validate notices.
         final String recordTypeNotice =
                 mActivity
                         .getString(R.string.autofill_address_home_and_work_record_type_notice)
                         .replace("$1", USER_EMAIL);
+        validateRecordTypeNotice(editorModel, recordTypeNotice);
+        validateRequiredNotice(editorModel);
 
-        checkModelHasExpectedValues(
-                mAddressEditor.getEditorModelForTesting(), deleteTitle, deleteText);
-        validateRequiredNotice(mAddressEditor.getEditorModelForTesting());
-        validateRecordTypeNotice(mAddressEditor.getEditorModelForTesting(), recordTypeNotice);
-
+        // Validate the external edit link's appearance.
         EditorItem linkItem = model.get(2);
         assertEquals(NON_EDITABLE_TEXT, linkItem.type);
-        assertEquals(true, linkItem.isFullLine);
-
+        assertTrue(linkItem.isFullLine);
         assertEquals(
                 mActivity.getString(R.string.autofill_edit_address_label),
                 linkItem.model.get(TEXT));
@@ -1303,8 +1206,156 @@ public class AddressEditorTest {
         assertEquals(
                 mActivity.getString(R.string.autofill_edit_address_label_content_description),
                 linkItem.model.get(CONTENT_DESCRIPTION));
+    }
+
+    @Test
+    @SmallTest
+    public void edit_HomeAddressProfile_setsDeleteConfirmationStrings() {
+        AutofillProfile homeProfile = new AutofillProfile(sHomeProfile);
+        setupEditorForExistingProfile(
+                homeProfile, SaveUpdateAddressProfilePromptMode.UPDATE_PROFILE);
+        mAddressEditor.showEditorDialog();
+
+        PropertyModel editorModel = mAddressEditor.getEditorModelForTesting();
+
+        // Validate delete confirmation dialog strings.
+        final String deleteTitle =
+                mActivity.getString(
+                        R.string.autofill_remove_home_profile_suggestion_confirmation_title);
+        final String deleteText =
+                mActivity
+                        .getString(
+                                R.string.autofill_remove_home_profile_suggestion_confirmation_body)
+                        .replace("$1", USER_EMAIL);
+        final String deleteTextReplaced =
+                SpanApplier.applySpans(deleteText, new SpanApplier.SpanInfo("<link>", "</link>"))
+                        .toString();
+        final String deleteButtonText =
+                mActivity.getString(R.string.autofill_remove_suggestion_button);
+        checkModelHasExpectedValues(editorModel, deleteTitle, deleteTextReplaced, deleteButtonText);
+    }
+
+    @Test
+    @SmallTest
+    public void edit_HomeAddressProfile_clickingExternalLinkNotifiesDelegate() {
+        AutofillProfile homeProfile = new AutofillProfile(sHomeProfile);
+        setupEditorForExistingProfile(
+                homeProfile, SaveUpdateAddressProfilePromptMode.UPDATE_PROFILE);
+        mAddressEditor.showEditorDialog();
+
+        PropertyModel editorModel = mAddressEditor.getEditorModelForTesting();
+        assertNotNull(editorModel);
+
+        ListModel<EditorItem> model = editorModel.get(EDITOR_FIELDS);
+        assertEquals(3, model.size());
+        EditorItem linkItem = model.get(2);
+
+        // Click the external edit link.
         linkItem.model.get(CLICK_RUNNABLE).run();
 
+        // Verify that the delegate was notified to handle the external edit action.
         verify(mDelegate, times(1)).onExternalEdit(homeProfile);
+        // Verify no other actions were triggered.
+        verify(mDelegate, times(0)).onDone(any());
+        verify(mDelegate, times(0)).onCancel();
+    }
+
+    @Test
+    @SmallTest
+    public void edit_AccountNameEmailProfile_showsReadOnlyUIAndExternalLink() {
+        AutofillProfile accountNameEmailProfile = new AutofillProfile(sAccountNameEmailProfile);
+        setupEditorForExistingProfile(
+                accountNameEmailProfile, SaveUpdateAddressProfilePromptMode.UPDATE_PROFILE);
+        mAddressEditor.showEditorDialog();
+
+        PropertyModel editorModel = mAddressEditor.getEditorModelForTesting();
+        assertNotNull(editorModel);
+
+        // Buttons should be hidden for account name and email profiles.
+        assertFalse(editorModel.get(SHOW_BUTTONS));
+
+        ListModel<EditorItem> model = editorModel.get(EDITOR_FIELDS);
+        // The model should contain: [description, notice, external link].
+        assertEquals(3, model.size());
+
+        // Validate the description text.
+        EditorItem descriptionItem = model.get(0);
+        assertEquals(NON_EDITABLE_TEXT, descriptionItem.type);
+        assertTrue(descriptionItem.isFullLine);
+        assertEquals("Profile description", descriptionItem.model.get(TEXT));
+
+        // Validate notices.
+        final String recordTypeNotice =
+                mActivity
+                        .getString(R.string.autofill_address_home_and_work_record_type_notice)
+                        .replace("$1", USER_EMAIL);
+        validateRecordTypeNotice(editorModel, recordTypeNotice);
+        validateRequiredNotice(editorModel);
+
+        // Validate the external edit link's appearance.
+        EditorItem linkItem = model.get(2);
+        assertEquals(NON_EDITABLE_TEXT, linkItem.type);
+        assertTrue(linkItem.isFullLine);
+        assertEquals(
+                mActivity.getString(R.string.autofill_edit_address_label),
+                linkItem.model.get(TEXT));
+        assertEquals(R.drawable.autofill_external_link, linkItem.model.get(ICON));
+        assertEquals(
+                mActivity.getString(R.string.autofill_edit_address_label_content_description),
+                linkItem.model.get(CONTENT_DESCRIPTION));
+    }
+
+    @Test
+    @SmallTest
+    public void edit_AccountNameEmailProfile_setsDeleteConfirmationStrings() {
+        AutofillProfile accountNameEmailProfile = new AutofillProfile(sAccountNameEmailProfile);
+        setupEditorForExistingProfile(
+                accountNameEmailProfile, SaveUpdateAddressProfilePromptMode.UPDATE_PROFILE);
+        mAddressEditor.showEditorDialog();
+
+        PropertyModel editorModel = mAddressEditor.getEditorModelForTesting();
+
+        // Validate delete confirmation dialog strings.
+        final String deleteTitle =
+                mActivity.getString(
+                        R.string
+                                .autofill_remove_account_name_and_email_profile_suggestion_confirmation_title);
+        final String deleteText =
+                mActivity
+                        .getString(
+                                R.string
+                                        .autofill_remove_account_name_and_email_profile_suggestion_confirmation_body)
+                        .replace("$1", USER_EMAIL);
+        final String deleteTextReplaced =
+                SpanApplier.applySpans(deleteText, new SpanApplier.SpanInfo("<link>", "</link>"))
+                        .toString();
+        final String deleteButtonText =
+                mActivity.getString(R.string.autofill_remove_suggestion_button);
+        checkModelHasExpectedValues(editorModel, deleteTitle, deleteTextReplaced, deleteButtonText);
+    }
+
+    @Test
+    @SmallTest
+    public void edit_AccountNameEmailProfile_clickingExternalLinkNotifiesDelegate() {
+        AutofillProfile accountNameEmailProfile = new AutofillProfile(sAccountNameEmailProfile);
+        setupEditorForExistingProfile(
+                accountNameEmailProfile, SaveUpdateAddressProfilePromptMode.UPDATE_PROFILE);
+        mAddressEditor.showEditorDialog();
+
+        PropertyModel editorModel = mAddressEditor.getEditorModelForTesting();
+        assertNotNull(editorModel);
+
+        ListModel<EditorItem> model = editorModel.get(EDITOR_FIELDS);
+        assertEquals(3, model.size());
+        EditorItem linkItem = model.get(2);
+
+        // Click the external edit link.
+        linkItem.model.get(CLICK_RUNNABLE).run();
+
+        // Verify that the delegate was notified to handle the external edit action.
+        verify(mDelegate, times(1)).onExternalEdit(accountNameEmailProfile);
+        // Verify no other actions were triggered.
+        verify(mDelegate, times(0)).onDone(any());
+        verify(mDelegate, times(0)).onCancel();
     }
 }

@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">Boekmerk is in vouer <ph name="FOLDER_NAME" /> bewaar</translation>
 <translation id="2433507940547922241">Voorkoms</translation>
 <translation id="2501278716633472235">Gaan terug</translation>
+<translation id="2546283357679194313">Koekies ek webwerfdata</translation>
 <translation id="2633278372998075009">Privaat oortjies</translation>
 <translation id="2650751991977523696">Laai lêer weer af?</translation>
 <translation id="265156376773362237">Standaardvooraflaai</translation>
@@ -54,6 +55,9 @@
 <translation id="4269820728363426813">Kopieer skakeladres</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Aktiveer skermslot in Android-instellings<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Wagwoordbestuurder</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, plural,
+          =1 {Oortjies en groepe wat 1 dag of langer nie gebruik is nie}
+          other {Oortjies en groepe wat # dae of langer nie gebruik is nie}}</translation>
 <translation id="451872707440238414">Deursoek u boekmerke</translation>
 <translation id="4526803704855831732">Privaat Oortjies</translation>
 <translation id="4532845899244822526">Kies vouer</translation>
@@ -62,6 +66,7 @@
 
 Tik-om-te-soek is ’n funksie wat slegs beskikbaar is wanneer Google ingestel is as die versteksoekenjin in Vivaldi.</translation>
 <translation id="4759238208242260848">Aflaaie</translation>
+<translation id="4777866634702576038">Skrap oortjiegroep?</translation>
 <translation id="4850886885716139402">Bekyk</translation>
 <translation id="4883379392681899581">Verlaat privaat modus</translation>
 <translation id="4943872375798546930">Geen resultate</translation>
@@ -77,7 +82,6 @@ Tik-om-te-soek is ’n funksie wat slegs beskikbaar is wanneer Google ingestel i
 <translation id="5375131951310889874">Leer meer oor onderwerpe op webwerwe sonder om die blad te verlaat. Tik-om-te-soek is ’n funksie wat slegs beskikbaar is wanneer Google ingestel is as versteksoekenjin in Vivaldi. Dit stuur ’n woord en die omringende konteks na Google Search en antwoord met definisies, beelde, soekresultate en ander details.
 
 Druk lank op die soekterm om die seleksie aan te pas. Om die soekopdrag te verfyn, skuif die paneel heeltemal na bo en tik op die soekkassie.</translation>
-<translation id="543338862236136125">Wysig wagwoord</translation>
 <translation id="572328651809341494">Onlangse oortjies</translation>
 <translation id="5833984609253377421">Deel skakel</translation>
 <translation id="6150320133806434356">Boekmerk bewaar</translation>
@@ -85,6 +89,7 @@ Druk lank op die soekterm om die seleksie aan te pas. Om die soekopdrag te verfy
 <translation id="6336451774241870485">Nuwe privaat oortjie</translation>
 <translation id="6337323516034698937">Om hierdie oortjie na ’n ander toestel te stuur moet u op altwee toestelle op Vivaldi Sinchronisering aangeteken wees. Maak seker dat u die enkripsiewagwoord invoer indien nodig.</translation>
 <translation id="6341580099087024258">Vra waar om lêers te bewaar</translation>
+<translation id="6364438453358674297">Verwyder voorstel uit geskiedenis?</translation>
 <translation id="6404511346730675251">Wysig boekmerk</translation>
 <translation id="650224091954855786">{FILE_COUNT, plural,
           =1 {Lêer is afgelaai}
@@ -112,6 +117,9 @@ Druk lank op die soekterm om die seleksie aan te pas. Om die soekopdrag te verfy
 <translation id="8062594758852531064">Uitgebreide vooraflaai:</translation>
 <translation id="8073388330009372546">Open beeld in nuwe oortjie</translation>
 <translation id="8127542551745560481">Wysig tuisblad</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+          =1 {(1) onaktiewe item}
+          other {(#) onaktiewe items}}</translation>
 <translation id="8266862848225348053">Aflaaievouer</translation>
 <translation id="8348430946834215779">Gebruik HTTPS waar moontlik en word gewaarsku voordat werwe laai wat dit nie steun nie</translation>
 <translation id="8560602726703398413">Bekyk u leeslys in Boekmerke</translation>
@@ -121,6 +129,9 @@ Druk lank op die soekterm om die seleksie aan te pas. Om die soekopdrag te verfy
 <translation id="9042893549633094279">Privaatheid en sekuriteit</translation>
 <translation id="9063523880881406963">Deaktiveer Versoek om werkskermwerf</translation>
 <translation id="9080642952018487277">Betree privaat modus</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+          =1 {1 of meer dae nie gebruik nie}
+          other {# of meer dae nie gebruik nie}}</translation>
 <translation id="930124987204876019">Skrap geskiedenis, webkoekies, werfdata, kasgeheue …</translation>
 <translation id="961856697154696964">Skrap blaaierdata</translation>
 </translationbundle>

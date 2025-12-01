@@ -19,7 +19,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
-#include "chrome/browser/password_manager/android/password_manager_android_util.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service_mobile.h"
 #include "chrome/browser/profiles/profile.h"
@@ -29,9 +28,9 @@
 #include "chrome/common/pref_names.h"
 #include "components/google/core/common/google_util.h"
 #include "components/password_manager/core/browser/features/password_features.h"
-#include "components/password_manager/core/browser/split_stores_and_local_upm.h"
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
 #include "components/policy/core/common/policy_switches.h"
+#include "components/prefs/android/pref_service_android.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/base/signin_switches.h"
@@ -162,7 +161,7 @@ SigninManagerAndroid::SigninManagerAndroid(
 
   java_signin_manager_ = Java_SigninManagerImpl_create(
       base::android::AttachCurrentThread(), reinterpret_cast<intptr_t>(this),
-      profile_, identity_manager_,
+      profile_, profile_->GetPrefs(), identity_manager_,
       identity_manager_->GetIdentityMutatorJavaObject());
 }
 
@@ -214,6 +213,7 @@ void SigninManagerAndroid::RegisterPolicyWithAccount(
 
   user_policy_signin_service_->RegisterForPolicyWithAccountId(
       account.email, account.account_id,
+      /*is_registration_for_management_consistency_check=*/false,
       base::BindOnce(
           [](RegisterPolicyWithAccountCallback callback,
              const std::string& dm_token, const std::string& client_id,
@@ -270,7 +270,6 @@ void SigninManagerAndroid::IsAccountManaged(
     JNIEnv* env,
     const JavaParamRef<jobject>& j_account_info,
     const JavaParamRef<jobject>& j_callback) {
-  base::Time start_time = base::Time::Now();
   CoreAccountInfo account = ConvertFromJavaCoreAccountInfo(env, j_account_info);
   base::android::ScopedJavaGlobalRef<jobject> callback(env, j_callback);
 
@@ -287,19 +286,13 @@ void SigninManagerAndroid::IsAccountManaged(
       account,
       base::BindOnce(
           &SigninManagerAndroid::OnPolicyRegisterDoneForIsAccountManaged,
-          weak_factory_.GetWeakPtr(), account, std::move(callback),
-          start_time));
+          weak_factory_.GetWeakPtr(), account, std::move(callback)));
 }
 
 void SigninManagerAndroid::OnPolicyRegisterDoneForIsAccountManaged(
     const CoreAccountInfo& account,
     base::android::ScopedJavaGlobalRef<jobject> callback,
-    base::Time start_time,
     const std::optional<ManagementCredentials>& credentials) {
-  DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES(
-      "Signin.Android.IsAccountManagedDuration",
-      (base::Time::Now() - start_time));
-
   bool is_managed = credentials.has_value();
   // Cache result in case IsAccountManaged() is invoked again for the same user.
   cached_is_account_managed_.emplace(

@@ -649,10 +649,9 @@ TEST_F(StablePortabilityDataImporterTest, History_Basic) {
                                      2, 1);
 }
 
-// Tests parsing an invalid JSON file.
-// TODO(crbug.com/435652239): Fully cover test plan.
-TEST_F(StablePortabilityDataImporterTest, History_InvalidJson) {
+TEST_F(StablePortabilityDataImporterTest, History_InvalidJson_Malformed) {
   base::HistogramTester histogram_tester;
+
   const char kHistoryJson[] = R"({
     "metadata": {
       "data_type": "history_visits"
@@ -668,6 +667,52 @@ TEST_F(StablePortabilityDataImporterTest, History_InvalidJson) {
   histogram_tester.ExpectUniqueSample(kHistogramPrefix + "History.Outcome",
                                       DataTypeMetrics::ImportOutcome::kFailure,
                                       1);
+}
+
+TEST_F(StablePortabilityDataImporterTest, History_InvalidJson_NotJson) {
+  const char kHistoryData[] = "This is not a JSON file.";
+  ImportHistory(kHistoryData);
+  EXPECT_EQ(GetNumberOfHistoryImported(), -1);
+}
+
+TEST_F(StablePortabilityDataImporterTest,
+       History_InvalidJson_MissingHistoryVisits) {
+  const char kHistoryJson[] = R"({
+    "metadata": {
+      "data_type": "history_visits"
+    }
+  })";
+  ImportHistory(kHistoryJson);
+  EXPECT_EQ(GetNumberOfHistoryImported(), -1);
+}
+
+TEST_F(StablePortabilityDataImporterTest,
+       History_InvalidJson_HistoryVisitsNotArray) {
+  const char kHistoryJson[] = R"({
+    "metadata": {
+      "data_type": "history_visits"
+    },
+    "history_visits": {}
+  })";
+  ImportHistory(kHistoryJson);
+  EXPECT_EQ(GetNumberOfHistoryImported(), -1);
+}
+
+TEST_F(StablePortabilityDataImporterTest, History_InvalidJson_WrongDataType) {
+  const char kHistoryJson[] = R"({
+    "metadata": {
+      "data_type": "bookmarks"
+    },
+    "history_visits": []
+  })";
+  ImportHistory(kHistoryJson);
+  EXPECT_EQ(GetNumberOfHistoryImported(), -1);
+}
+
+TEST_F(StablePortabilityDataImporterTest, History_EmptyInput) {
+  ImportHistory("");
+  // Empty input data is considered an error.
+  EXPECT_EQ(GetNumberOfHistoryImported(), -1);
 }
 
 // Tests parsing a valid JSON file with no history entries.

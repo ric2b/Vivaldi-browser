@@ -77,14 +77,12 @@
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
 @interface UIScrollEdgeElementContainerInteraction (Compatibility)
 - (void)_setScrollView:(UIScrollView*)scrollView;
 - (void)setScrollView:(UIScrollView*)scrollView;
 - (void)_setEdge:(UIRectEdge)edge;
 - (void)setEdge:(UIRectEdge)edge;
 @end
-#endif
 
 namespace {
 
@@ -439,7 +437,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       stringID = IDS_IOS_TAB_GRID_INCOGNITO_TABS_TITLE;
       break;
     case TabGridPageRegularTabs:
-        stringID = IDS_IOS_TAB_GRID_REGULAR_TABS_WITH_GROUPS_TITLE;
+      stringID = IDS_IOS_TAB_GRID_REGULAR_TABS_WITH_GROUPS_TITLE;
       break;
     case TabGridPageTabGroups:
       stringID = IDS_IOS_TAB_GRID_TAB_GROUPS_TITLE;
@@ -454,18 +452,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
   }
   return l10n_util::GetNSString(stringID);
-}
-
-#pragma mark - TabGridTransitionLayoutProviding
-
-- (TabGridTransitionLayout*)transitionLayout {
-  TabGridPage activePage = self.activePage;
-  BaseGridViewController* activeGrid =
-      [self gridViewControllerForPage:activePage];
-  TabGridTransitionItem* activeCell =
-      [self transitionItemForActiveCellWithActivePage:activePage];
-  return [TabGridTransitionLayout layoutWithActiveCell:activeCell
-                                            activeGrid:activeGrid];
 }
 
 #pragma mark - Public Methods
@@ -703,26 +689,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       [self calculateInsetsForRegularGridView];
   self.tabGroupsPanelViewController.contentInsets =
       [self calculateInsetsForGridView];
-}
-
-// Returns the corresponding BaseGridViewController for `page`. Returns `nil` if
-// page does not have a corresponding BaseGridViewController.
-- (BaseGridViewController*)gridViewControllerForPage:(TabGridPage)page {
-  switch (page) {
-    case TabGridPageIncognitoTabs:
-      return self.incognitoTabsViewController;
-    case TabGridPageRegularTabs:
-      return self.regularTabsViewController;
-    case TabGridPageTabGroups:
-      return nil;
-
-    // Vivaldi
-    case TabGridPageRemoteTabs:
-    case TabGridPageClosedTabs:
-      return nil;
-    // End Vivaldi
-
-  }
 }
 
 - (void)setActivePage:(TabGridPage)activePage {
@@ -996,7 +962,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
         constraintEqualToAnchor:self.view.trailingAnchor],
   ]];
 
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     UIScrollEdgeElementContainerInteraction* edgeEffect =
         [[UIScrollEdgeElementContainerInteraction alloc] init];
@@ -1012,7 +977,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     }
     [topToolbar addInteraction:edgeEffect];
   }
-#endif
 }
 
 // Adds the app bar.
@@ -1058,7 +1022,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   [self.layoutGuideCenter referenceView:bottomToolbar
                               underName:kTabGridBottomToolbarGuide];
 
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     UIScrollEdgeElementContainerInteraction* edgeEffect =
         [[UIScrollEdgeElementContainerInteraction alloc] init];
@@ -1074,7 +1037,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     }
     [bottomToolbar addInteraction:edgeEffect];
   }
-#endif
 }
 
 // Adds the PinnedTabsViewController and sets constraints.
@@ -1452,25 +1414,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 }
 
-// Returns transition layout for the provided `page`.
-- (TabGridTransitionItem*)transitionItemForActiveCellWithActivePage:
-    (TabGridPage)activePage {
-  switch (activePage) {
-    case TabGridPageIncognitoTabs:
-      return [self.incognitoTabsViewController transitionItemForActiveCell];
-    case TabGridPageRegularTabs:
-      return [self transitionItemForRegularActiveCell];
-    case TabGridPageTabGroups:
-      return nil;
-
-      // Vivaldi
-    case TabGridPageRemoteTabs:
-    case TabGridPageClosedTabs:
-      return nil;
-      // End Vivaldi
-  }
-}
-
 // Returns transition layout provider for the regular tabs page.
 - (TabGridTransitionItem*)transitionItemForRegularActiveCell {
   if (IsPinnedTabsEnabled() && self.pinnedTabsViewController.hasSelectedCell) {
@@ -1635,7 +1578,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   _searchText = searchText;
   searchBar.searchTextField.accessibilityIdentifier =
       [kTabGridSearchTextFieldIdentifierPrefix
-          stringByAppendingString:searchText];
+          stringByAppendingString:searchText ?: @""];
   [self updateScrimVisibilityForText:searchText];
   switch (self.currentPage) {
     case TabGridPageIncognitoTabs:
@@ -2228,14 +2171,17 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   if (command.action == @selector(keyCommand_select1)) {
     newTitle = l10n_util::GetNSStringWithFixup(
         IDS_IOS_KEYBOARD_GO_TO_INCOGNITO_TAB_GRID);
+    command.image = CustomSymbolWithConfiguration(kIncognitoSymbol, nil);
   }
   if (command.action == @selector(keyCommand_select2)) {
     newTitle = l10n_util::GetNSStringWithFixup(
         IDS_IOS_KEYBOARD_GO_TO_REGULAR_TAB_GRID);
+    command.image = DefaultSymbolWithConfiguration(kTabsSymbol, nil);
   }
   if (command.action == @selector(keyCommand_select3)) {
     newTitle =
         l10n_util::GetNSStringWithFixup(IDS_IOS_KEYBOARD_GO_TO_TAB_GROUPS_GRID);
+    command.image = DefaultSymbolWithConfiguration(kTabGroupsSymbol, nil);
   }
   // Vivaldi
   if (command.action == @selector(keyCommand_select4)) {

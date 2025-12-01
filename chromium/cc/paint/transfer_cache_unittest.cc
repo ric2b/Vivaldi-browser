@@ -33,17 +33,10 @@ class TransferCacheTest : public testing::Test {
   TransferCacheTest() : test_client_entry_(std::vector<uint8_t>(100)) {}
 
   void SetUp() override {
-    gpu::ContextCreationAttribs attribs;
-    attribs.fail_if_major_perf_caveat = false;
-    // Enable GPU rasterization.
-    attribs.enable_gpu_rasterization = true;
-    attribs.enable_raster_interface = true;
-    attribs.enable_gles2_interface = false;
-
     context_ = std::make_unique<gpu::RasterInProcessContext>();
     auto result = context_->Initialize(
-        viz::TestGpuServiceHolder::GetInstance()->task_executor(), attribs,
-        gpu::SharedMemoryLimits(), nullptr, nullptr);
+        viz::TestGpuServiceHolder::GetInstance()->task_executor(),
+        /*enable_gpu_rasterization=*/true, nullptr, nullptr);
 
     ASSERT_EQ(result, gpu::ContextResult::kSuccess);
     ASSERT_TRUE(context_->GetCapabilities().gpu_rasterization);
@@ -69,9 +62,9 @@ class TransferCacheTest : public testing::Test {
   void CreateEntry(const ClientTransferCacheEntry& entry) {
     auto* context_support = ContextSupport();
     uint32_t size = entry.SerializedSize();
-    void* data = context_support->MapTransferCacheEntry(size);
-    ASSERT_TRUE(data);
-    entry.Serialize(UNSAFE_TODO(base::span(static_cast<uint8_t*>(data), size)));
+    base::span<uint8_t> data = context_support->MapTransferCacheEntry(size);
+    ASSERT_FALSE(data.empty());
+    entry.Serialize(data);
     context_support->UnmapAndCreateTransferCacheEntry(entry.UnsafeType(),
                                                       entry.Id());
   }

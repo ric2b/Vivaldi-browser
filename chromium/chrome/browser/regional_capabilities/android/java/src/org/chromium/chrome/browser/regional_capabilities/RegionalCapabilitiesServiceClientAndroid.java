@@ -15,9 +15,11 @@ import org.jni_zero.NativeMethods;
 import org.chromium.base.Callback;
 import org.chromium.base.Promise;
 import org.chromium.base.ResettersForTesting;
+import org.chromium.base.ServiceLoaderUtil;
 import org.chromium.base.ThreadUtils;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
+import org.chromium.components.regional_capabilities.RegionalProgram;
 import org.chromium.components.search_engines.SearchEngineChoiceService;
 
 // Vivaldi
@@ -35,6 +37,8 @@ import org.chromium.build.BuildConfig;
 public class RegionalCapabilitiesServiceClientAndroid {
     private static @Nullable RegionalCapabilitiesServiceClientAndroid sInstance;
 
+    private final RegionalCapabilitiesServiceClientDelegate mDelegate;
+
     /** Returns the instance of the singleton. Creates the instance if needed. */
     @MainThread
     public static RegionalCapabilitiesServiceClientAndroid getInstance() {
@@ -42,6 +46,7 @@ public class RegionalCapabilitiesServiceClientAndroid {
         if (sInstance == null) {
             sInstance = new RegionalCapabilitiesServiceClientAndroid();
         }
+
         return sInstance;
     }
 
@@ -61,6 +66,13 @@ public class RegionalCapabilitiesServiceClientAndroid {
     @MainThread
     public RegionalCapabilitiesServiceClientAndroid() {
         ThreadUtils.checkUiThread();
+        @Nullable RegionalCapabilitiesServiceClientDelegate maybeDelegate =
+                ServiceLoaderUtil.maybeCreate(RegionalCapabilitiesServiceClientDelegate.class);
+        if (maybeDelegate != null) {
+            mDelegate = maybeDelegate;
+        } else {
+            mDelegate = new NoOpRegionalCapabilitiesServiceClientDelegate();
+        }
     }
 
     private void requestDeviceCountryInternal(Callback<@Nullable String> deviceCountryCallback) {
@@ -105,6 +117,22 @@ public class RegionalCapabilitiesServiceClientAndroid {
                                 RegionalCapabilitiesServiceClientAndroidJni.get()
                                         .processDeviceCountryResponse(
                                                 ptrToNativeCallback, deviceCountry));
+    }
+
+    // TODO(crbug.com/443716378): Expecting this method to need to be public in internal code
+    // refactorings.
+    @VisibleForTesting
+    public @RegionalProgram int getDeviceProgram() {
+        return mDelegate.getDeviceProgram();
+    }
+
+    /**
+     * Called by the native RegionalCapabilitiesService to synchronously read the device program.
+     */
+    @CalledByNative
+    private static @RegionalProgram int getDeviceProgramForNative() {
+        ThreadUtils.checkUiThread();
+        return getInstance().getDeviceProgram();
     }
 
     @NativeMethods

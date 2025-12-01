@@ -73,6 +73,8 @@ cc_component("cc") {
     "input/overscroll_behavior.h",
     "input/page_scale_animation.cc",
     "input/page_scale_animation.h",
+    "input/progress_bar_offset_manager.cc",
+    "input/progress_bar_offset_manager.h",
     "input/scroll_elasticity_helper.cc",
     "input/scroll_elasticity_helper.h",
     "input/scroll_snap_data.cc",
@@ -262,7 +264,6 @@ cc_component("cc") {
     "raster/raster_query_queue.h",
     "raster/raster_source.cc",
     "raster/raster_source.h",
-    "raster/scoped_grcontext_access.h",
     "raster/single_thread_task_graph_runner.cc",
     "raster/single_thread_task_graph_runner.h",
     "raster/staging_buffer_pool.cc",
@@ -451,6 +452,7 @@ cc_component("cc") {
     "trees/scoped_abort_remaining_swap_promises.h",
     "trees/scroll_node.cc",
     "trees/scroll_node.h",
+    "trees/scroll_source_type.h",
     "trees/single_thread_proxy.cc",
     "trees/single_thread_proxy.h",
     "trees/sticky_position_constraint.cc",
@@ -978,6 +980,7 @@ cc_test("cc_unittests") {
     "//ui/gfx/geometry",
     "//ui/gl",
     "//ui/gl:test_support",
+    "//ui/native_theme",
   ]
 
   data = [ "//components/test/data/viz/" ]

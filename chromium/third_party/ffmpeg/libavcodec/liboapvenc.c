@@ -44,7 +44,7 @@
 #define MAX_BS_BUF   (128 * 1024 * 1024)
 #define MAX_NUM_FRMS (1)           // supports only 1-frame in an access unit
 #define FRM_IDX      (0)           // supports only 1-frame in an access unit
-#define MAX_NUM_CC   (OAPV_MAX_CC) // Max number of color componets (upto 4:4:4:4)
+#define MAX_NUM_CC   (OAPV_MAX_CC) // Max number of color components (upto 4:4:4:4)
 
 /**
  * The structure stores all the states associated with the instance of APV encoder
@@ -102,8 +102,26 @@ static inline int get_color_format(enum AVPixelFormat pix_fmt)
     int cf = OAPV_CF_UNKNOWN;
 
     switch (pix_fmt) {
+    case AV_PIX_FMT_GRAY10:
+        cf = OAPV_CF_YCBCR400;
+        break;
     case AV_PIX_FMT_YUV422P10:
         cf = OAPV_CF_YCBCR422;
+        break;
+    case AV_PIX_FMT_YUV422P12:
+        cf = OAPV_CF_YCBCR422;
+        break;
+    case AV_PIX_FMT_YUV444P10:
+        cf = OAPV_CF_YCBCR444;
+        break;
+    case AV_PIX_FMT_YUV444P12:
+        cf = OAPV_CF_YCBCR444;
+        break;
+    case AV_PIX_FMT_YUVA444P10:
+        cf = OAPV_CF_YCBCR4444;
+        break;
+    case AV_PIX_FMT_YUVA444P12:
+        cf = OAPV_CF_YCBCR4444;
         break;
     default:
         av_assert0(cf != OAPV_CF_UNKNOWN);
@@ -375,7 +393,7 @@ static int liboapve_encode(AVCodecContext *avctx, AVPacket *avpkt,
         uint8_t *data = apv->bitb.addr;
         int size = apv->stat.write;
 
-        // The encoder may return a "Raw bitstream" formated AU, including au_size.
+        // The encoder may return a "Raw bitstream" formatted AU, including au_size.
         // Discard it as we only need the access_unit() structure.
         if (size > 4 && AV_RB32(data) != APV_SIGNATURE) {
             data += 4;
@@ -438,7 +456,13 @@ static av_cold int liboapve_close(AVCodecContext *avctx)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 
 static const enum AVPixelFormat supported_pixel_formats[] = {
+    AV_PIX_FMT_GRAY10,
     AV_PIX_FMT_YUV422P10,
+    AV_PIX_FMT_YUV422P12,
+    AV_PIX_FMT_YUV444P10,
+    AV_PIX_FMT_YUV444P12,
+    AV_PIX_FMT_YUVA444P10,
+    AV_PIX_FMT_YUVA444P12,
     AV_PIX_FMT_NONE
 };
 

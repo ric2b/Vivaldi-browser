@@ -1,0 +1,71 @@
+// Copyright 2025 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.confidentialcompute.outgoing;
+
+import "google/protobuf/any.proto";
+import "fcp/protos/confidentialcompute/confidential_transform.proto";
+
+// API for the TEE to read and write data.
+// Note that the requests are from the TEE and the responses are to the TEE.
+service DataReadWrite {
+  // Read data from a URI.
+  rpc Read(ReadRequest) returns (stream ReadResponse) {}
+  // Write data out from the TEE.
+  rpc Write(stream WriteRequest) returns (WriteResponse) {}
+}
+
+// Request to read data from a URI.
+message ReadRequest {
+  // Data URI to be resolved.
+  string uri = 1;
+  // A nonce to prevent replay attacks.
+  bytes nonce = 2;
+}
+
+// Read response with the data resolved from the URI.
+message ReadResponse {
+  // Metadata about the blob being written to the TEE, sent with the
+  // first ReadResponse for a blob.
+  BlobMetadata first_response_metadata = 1;
+  // Indicates that this is the final ReadResponse for a given blob.
+  bool finish_read = 2;
+  // A chunk of data resolved from the URI in ReadRequest, encrypted with the
+  // public key of the requestor TEE.
+  bytes data = 3
+      ;
+}
+
+// Request to write data out from the TEE. This can be used to store
+// program-committed data and release non-encrypted data.
+message WriteRequest {
+  // Metadata about the blob being written out by the TEE, sent with the
+  // first WriteRequest for a blob.
+  BlobMetadata first_request_metadata = 1;
+  // Indicates that this is the final WriteRequest for a given blob.
+  bool commit = 2;
+  // A chunk of data to be written out by the TEE.
+  bytes data = 3
+      ;
+}
+
+// Write response.
+message WriteResponse {
+  // Deprecated.
+  google.protobuf.Any reply = 1 [deprecated = true];
+  // The URI of the written data.
+  string file_uri = 2;
+}

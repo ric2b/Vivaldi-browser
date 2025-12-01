@@ -282,6 +282,7 @@ class TestConfigWizard(unittest.TestCase):
         self.wizard._configure_oauth(parts, scope='global')
         want = {
             'credential.https://chromium.googlesource.com.helper': ['', 'luci'],
+            'credential.https://chromium.googlesource.com.usehttppath': ['yes'],
         }
         self.assertEqual(self.global_state, want)
 

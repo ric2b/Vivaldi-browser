@@ -9,11 +9,9 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <functional>
 #include <iterator>
-#include <limits>
+#include <memory>
 #include <optional>
-#include <ostream>
 #include <random>
 #include <set>
 #include <string>
@@ -26,14 +24,13 @@
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/flat_set.h"
-#include "base/containers/flat_tree.h"
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/numerics/clamped_math.h"
+#include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -43,7 +40,6 @@
 #include "base/test/test_future.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "base/version.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -53,16 +49,19 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolation_data.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/proto/web_app.pb.h"
+#include "chrome/browser/web_applications/proto/web_app_install_state.pb.h"
 #include "chrome/browser/web_applications/proto/web_app_isolation_data.pb.h"
 #include "chrome/browser/web_applications/proto/web_app_os_integration_state.pb.h"
 #include "chrome/browser/web_applications/scope_extension_info.h"
 #include "chrome/browser/web_applications/test/web_app_test_observers.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_chromeos_data.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
+#include "chrome/browser/web_applications/web_app_install_params.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_management_type.h"
 #include "chrome/browser/web_applications/web_app_proto_utils.h"
@@ -70,7 +69,6 @@
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/base32/base32.h"
 #include "components/prefs/pref_service.h"
@@ -81,7 +79,14 @@
 #include "components/sync/base/time.h"
 #include "components/sync/model/string_ordinal.h"
 #include "components/sync/protocol/web_app_specifics.pb.h"
+#include "components/web_package/signed_web_bundles/ecdsa_p256_public_key.h"
+#include "components/web_package/signed_web_bundles/ecdsa_p256_sha256_signature.h"
+#include "components/web_package/signed_web_bundles/ed25519_public_key.h"
+#include "components/web_package/signed_web_bundles/ed25519_signature.h"
+#include "components/web_package/signed_web_bundles/signed_web_bundle_signature_stack_entry.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
+#include "components/webapps/common/web_app_id.h"
+#include "components/webapps/isolated_web_apps/types/iwa_version.h"
 #include "components/webapps/isolated_web_apps/types/storage_location.h"
 #include "components/webapps/isolated_web_apps/types/update_channel.h"
 #include "content/public/browser/service_worker_context.h"
@@ -93,11 +98,9 @@
 #include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "third_party/blink/public/common/safe_url_pattern.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
-#include "third_party/blink/public/mojom/manifest/capture_links.mojom-shared.h"
-#include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
-#include "third_party/blink/public/mojom/manifest/manifest.mojom-shared.h"
-#include "third_party/blink/public/mojom/manifest/manifest_launch_handler.mojom-shared.h"
-#include "third_party/liburlpattern/pattern.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom-data-view.h"
+#include "third_party/blink/public/mojom/manifest/manifest.mojom-data-view.h"
+#include "third_party/liburlpattern/part.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
@@ -448,9 +451,9 @@ std::vector<blink::Manifest::ImageResource> CreateRandomHomeTabIcons(
   return icons;
 }
 
-std::vector<blink::SafeUrlPattern> CreateRandomScopePatterns(
+std::vector<blink::SafeUrlPattern> CreateRandomUrlPatterns(
     RandomHelper& random) {
-  std::vector<blink::SafeUrlPattern> scope_patterns;
+  std::vector<blink::SafeUrlPattern> url_patterns;
 
   for (int i = random.next_uint(4) + 1; i >= 0; --i) {
     blink::SafeUrlPattern url_pattern;
@@ -480,9 +483,9 @@ std::vector<blink::SafeUrlPattern> CreateRandomScopePatterns(
       url_pattern.pathname.push_back(std::move(part));
     }
 
-    scope_patterns.push_back(std::move(url_pattern));
+    url_patterns.push_back(std::move(url_pattern));
   }
-  return scope_patterns;
+  return url_patterns;
 }
 
 proto::os_state::WebAppOsIntegration GenerateRandomWebAppOsIntegration(
@@ -905,7 +908,6 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
     app->SetNoteTakingNewNoteUrl(
         scope.Resolve("new_note" + base::NumberToString(random.next_uint())));
   }
-  app->SetCaptureLinks(random.next_enum<blink::mojom::CaptureLinks>());
 
   const int num_additional_search_terms = random.next_uint(8);
   std::vector<std::string> additional_search_terms(num_additional_search_terms);
@@ -1046,7 +1048,7 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
         home_tab_params.icons = CreateRandomHomeTabIcons(random);
       }
       if (random.next_bool()) {
-        home_tab_params.scope_patterns = CreateRandomScopePatterns(random);
+        home_tab_params.scope_patterns = CreateRandomUrlPatterns(random);
       }
       tab_strip.home_tab = std::move(home_tab_params);
     } else {
@@ -1103,13 +1105,13 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
       }
     };
 
-    base::Version version = base::Version({
+    IwaVersion iwa_version = *IwaVersion::Create({
         random.next_uint(UINT32_MAX - 1U),
         random.next_uint(),
         random.next_uint(),
     });
 
-    auto idb = IsolationData::Builder(get_location_type(), version);
+    auto idb = IsolationData::Builder(get_location_type(), iwa_version);
     std::optional<IsolatedWebAppIntegrityBlockData> integrity_block_data =
         CreateIntegrityBlockData(random);
     if (integrity_block_data) {
@@ -1120,21 +1122,21 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
       idb.SetControlledFramePartitions({"partition_name"});
     }
     if (random.next_bool()) {
-      base::Version pending_version = [&] {
+      IwaVersion pending_version = [&] {
         if (random.next_bool()) {
           // Case where `pending_version == version`. Useful for validating key
           // rotation scenarios.
-          return version;
+          return iwa_version;
         }
         // Otherwise, create `pending_version > version`.
-        uint32_t major_version = version.components()[0];
+        uint32_t major_version = iwa_version.version().components()[0];
         CHECK_LT(major_version, UINT32_MAX - 1U);
         uint32_t delta = random.next_uint(UINT32_MAX - 1U - major_version) + 1;
         // `major_version` + `delta` < UINT32_MAX.
-        return base::Version(
+        return *IwaVersion::Create(
             {major_version + delta, random.next_uint(), random.next_uint()});
       }();
-      CHECK_GE(pending_version, version);
+      CHECK_GE(pending_version, iwa_version);
       IsolationData::PendingUpdateInfo pending_update_info(
           get_location_type(), pending_version, integrity_block_data);
       idb.SetPendingUpdateInfo(std::move(pending_update_info));
@@ -1203,6 +1205,9 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
   if (random.next_bool()) {
     app->SetStoredTrustedIconSizes(IconPurpose::MASKABLE,
                                    {icon_sizes[random.next_uint(8)]});
+  }
+  if (is_iwa && random.next_bool()) {
+    app->SetBorderlessUrlPatterns(CreateRandomUrlPatterns(random));
   }
 
   return app;

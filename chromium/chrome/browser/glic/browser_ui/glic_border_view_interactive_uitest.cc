@@ -5,13 +5,21 @@
 #include <math.h>
 
 #include "base/numerics/ranges.h"
+#include "base/test/run_until.h"
+#include "base/test/test_future.h"
 #include "cc/test/pixel_test_utils.h"
+#include "chrome/browser/actor/actor_keyed_service.h"
+#include "chrome/browser/actor/actor_test_util.h"
+#include "chrome/browser/actor/ui/actor_border_view_controller.h"
+#include "chrome/browser/actor/ui/actor_ui_tab_controller.h"
 #include "chrome/browser/glic/browser_ui/glic_border_view.h"
 #include "chrome/browser/glic/test_support/glic_test_util.h"
 #include "chrome/browser/glic/test_support/interactive_glic_test.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/interaction/browser_elements.h"
+#include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
@@ -22,6 +30,8 @@
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "chrome/test/interaction/webcontents_interaction_test_util.h"
 #include "components/tabs/public/split_tab_visual_data.h"
+#include "components/tabs/public/tab_interface.h"
+#include "content/public/test/browser_task_environment.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -36,6 +46,10 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/switches.h"
 #include "ui/views/test/widget_activation_waiter.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "base/mac/mac_util.h"
+#endif  // BUILDFLAG(IS_MAC)
 
 namespace glic {
 
@@ -98,7 +112,7 @@ class TesterImpl : public GlicBorderView::Tester {
     animation_started_ = true;
     wait_for_animation_started_.Quit();
   }
-  void EmphasisRestarted() override {
+  void AnimationReset() override {
     emphasis_restarted_ = true;
     wait_for_emphasis_restarted_.Quit();
   }
@@ -233,10 +247,10 @@ class GlicBorderViewUiTest : public test::InteractiveGlicTest {
   }
 
   void ClickGlicButtonInBrowser(Browser* browser) {
-    RunTestSequence(InContext(browser->window()->GetElementContext(),
-                              PressButton(kGlicButtonElementId)),
-                    CheckControllerHasWidget(true),
-                    CheckControllerWidgetMode(GlicWindowMode::kAttached));
+    RunTestSequenceInContext(BrowserElements::From(browser)->GetContext(),
+                             PressButton(kGlicButtonElementId)),
+        CheckControllerHasWidget(true),
+        CheckControllerWidgetMode(GlicWindowMode::kAttached);
   }
 
   void AppendTabAndNavigate(Browser* browser, const GURL& url) {
@@ -270,7 +284,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, BorderResize) {
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
   StartBorderAnimation();
@@ -308,7 +322,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, Visibility) {
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   EXPECT_FALSE(border->GetVisible());
 
@@ -338,7 +352,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, SmokeTest) {
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
 
@@ -401,7 +415,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, AnimationStateReset) {
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
 
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
@@ -432,7 +446,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, AnimationStateResetOnShutdown) {
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
 
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
@@ -465,7 +479,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, FocusedTabChange) {
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
 
@@ -519,11 +533,18 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, FocusedTabChange) {
 // Ensures that only the emphasis animation is restarted when the focused tab is
 // destroyed.
 IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, FocusedTabDestroyed) {
+  // TODO(crbug.com/445214951): Flaky on mac-vm builder for macOS 15.
+#if BUILDFLAG(IS_MAC)
+  if (base::mac::MacOSMajorVersion() == 15 && base::mac::IsVirtualMachine()) {
+    GTEST_SKIP() << "Disabled on macOS Sequoia for virtual machines.";
+  }
+#endif  // BUILDFLAG(IS_MAC)
+
   auto* border = browser()
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
 
@@ -585,7 +606,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, MAYBE_FocusedWindowChange) {
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
 
@@ -593,7 +614,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, MAYBE_FocusedWindowChange) {
   GlicBorderView* border2 = browser2->window()
                                 ->AsBrowserView()
                                 ->GetActiveContentsContainerView()
-                                ->GetGlicBorderView();
+                                ->glic_border_view();
   auto* tester2 = static_cast<TesterImpl*>(border2->tester());
 
   // Start the animation in the first browser window.
@@ -656,7 +677,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, RampingDownDuringEmphasisRampUp) {
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
 
@@ -710,7 +731,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, RampingDownDuringOpacityRampUp) {
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
 
@@ -766,7 +787,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, RampingDownDuringStableState) {
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
 
@@ -815,7 +836,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, EnsureTimeWraps) {
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
 
@@ -843,7 +864,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, FocusedTabChangeEffectTime) {
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
 
@@ -875,6 +896,53 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, FocusedTabChangeEffectTime) {
   EXPECT_EQ(effect_time_before_tab_switching, effect_time_after_tab_switching);
 }
 
+IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest,
+                       ActorGlowShowsBorderWhenIndicatorIsOff) {
+  auto* border = browser()
+                     ->window()
+                     ->AsBrowserView()
+                     ->GetActiveContentsContainerView()
+                     ->glic_border_view();
+  ASSERT_TRUE(border);
+  EXPECT_FALSE(border->GetVisible());
+  TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
+
+  // Ensure the border is not showing initially.
+  EXPECT_FALSE(border->IsShowing());
+
+  // Get the actor keyed service.
+  auto* actor_keyed_service =
+      actor::ActorKeyedService::Get(browser()->profile());
+  ASSERT_TRUE(actor_keyed_service);
+
+  // Create a new task.
+  const actor::TaskId task_id = actor_keyed_service->CreateTask();
+  actor_keyed_service->GetTask(task_id)->AddTab(
+      browser()->GetActiveTabInterface()->GetHandle(), base::DoNothing());
+
+  // Perform an action to trigger the glow.
+  actor::PerformActionsFuture result_future;
+  std::vector<std::unique_ptr<actor::ToolRequest>> actions;
+  actions.push_back(actor::MakeWaitRequest());
+  actor_keyed_service->PerformActions(task_id, std::move(actions),
+                                      result_future.GetCallback());
+  EXPECT_EQ(result_future.Get<0>(), actor::mojom::ActionResultCode::kOk);
+
+  // Wait for the animation to start and verify the border is showing.
+  tester->WaitForAnimationStart();
+  EXPECT_TRUE(border->IsShowing());
+  EXPECT_TRUE(border->GetVisible());
+
+  // Stop the task.
+  actor_keyed_service->StopTask(task_id, /*success*/ true);
+
+  // Poll until the border is no longer showing.
+  ASSERT_TRUE(base::test::RunUntil([&]() { return !border->IsShowing(); }));
+
+  EXPECT_FALSE(border->IsShowing());
+  EXPECT_FALSE(border->GetVisible());
+}
+
 namespace {
 class GlicBorderViewFeatureDisabledBrowserTest : public GlicBorderViewUiTest {
  public:
@@ -895,7 +963,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewFeatureDisabledBrowserTest, NoBorder) {
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   EXPECT_FALSE(border);
 }
 
@@ -922,7 +990,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewPrefersReducedMotionUiTest,
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
 
@@ -996,7 +1064,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewPrefersReducedMotionUiTest,
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
 
@@ -1065,7 +1133,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewWithoutHardwareAccelerationUiTest,
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   TesterImpl* tester = static_cast<TesterImpl*>(border->tester());
 
@@ -1145,7 +1213,7 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewUiTest, MinimizeRestore) {
                      ->window()
                      ->AsBrowserView()
                      ->GetActiveContentsContainerView()
-                     ->GetGlicBorderView();
+                     ->glic_border_view();
   ASSERT_TRUE(border);
   EXPECT_FALSE(border->GetVisible());
 
@@ -1196,10 +1264,10 @@ IN_PROC_BROWSER_TEST_F(GlicBorderViewSideBySideUiTest, BasicVisiblity) {
       browser()->window()->AsBrowserView()->GetContentsContainerViews();
   ASSERT_EQ(2U, content_containers.size());
 
-  auto* border1 = content_containers[0]->GetGlicBorderView();
+  auto* border1 = content_containers[0]->glic_border_view();
   ASSERT_TRUE(border1);
 
-  auto* border2 = content_containers[1]->GetGlicBorderView();
+  auto* border2 = content_containers[1]->glic_border_view();
   ASSERT_TRUE(border2);
 
   // Add a second tab and create a split

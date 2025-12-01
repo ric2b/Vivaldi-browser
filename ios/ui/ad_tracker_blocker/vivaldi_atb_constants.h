@@ -13,6 +13,7 @@ extern const CGFloat vBlockedCountBgCornerRadius;
 extern const CGFloat tableFooterHeight;
 // Corner radius for the action button used on the footer.
 extern const CGFloat actionButtonCornerRadius;
+extern const CGFloat iOS26ActionButtonCornerRadius;
 // Padding for the action button used on the footer.
 extern const UIEdgeInsets actionButtonPadding;
 // Common container view padding for the cells

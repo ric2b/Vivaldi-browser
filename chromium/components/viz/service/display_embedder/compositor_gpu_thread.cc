@@ -149,15 +149,6 @@ CompositorGpuThread::GetSharedContextState() {
   // GL resources with the contexts created on gpu main thread.
   auto context =
       gl::init::CreateGLContext(share_group.get(), surface.get(), attribs);
-
-  if (!context && !features::UseGles2ForOopR()) {
-    LOG(ERROR) << "Failed to create GLES3 context, fallback to GLES2.";
-    attribs.client_major_es_version = 2;
-    attribs.client_minor_es_version = 0;
-    context =
-        gl::init::CreateGLContext(share_group.get(), surface.get(), attribs);
-  }
-
   if (!context) {
     LOG(ERROR) << "Failed to create shared context";
     return nullptr;
@@ -261,9 +252,11 @@ void CompositorGpuThread::Init() {
   // Making sure to create the |memory_pressure_listener_| on
   // CompositorGpuThread since this callback will be called on the thread it was
   // created on.
-  memory_pressure_listener_ = std::make_unique<base::MemoryPressureListener>(
-      FROM_HERE, base::BindRepeating(&CompositorGpuThread::HandleMemoryPressure,
-                                     base::Unretained(this))),
+  memory_pressure_listener_ =
+      std::make_unique<base::AsyncMemoryPressureListener>(
+          FROM_HERE, base::MemoryPressureListenerTag::kCompositorGpuThread,
+          base::BindRepeating(&CompositorGpuThread::HandleMemoryPressure,
+                              base::Unretained(this))),
   init_succeeded_ = true;
 }
 
@@ -325,6 +318,26 @@ void CompositorGpuThread::LoseContext() {
     shared_context_state_->MarkContextLost();
     shared_context_state_.reset();
   }
+}
+
+void CompositorGpuThread::AddVideoMemoryUsageStatsOnCompositorGpu(
+    GetVideoMemoryUsageStatsCallback callback,
+    gpu::VideoMemoryUsageStats video_memory_usage_stats) {
+  if (!task_runner()->BelongsToCurrentThread()) {
+    task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &CompositorGpuThread::AddVideoMemoryUsageStatsOnCompositorGpu,
+            weak_ptr_factory_.GetWeakPtr(), std::move(callback),
+            video_memory_usage_stats));
+    return;
+  }
+
+  uint64_t size = GetSharedContextState()->GetMemoryUsage();
+  video_memory_usage_stats.process_map[base::GetCurrentProcId()].video_memory +=
+      size;
+  video_memory_usage_stats.bytes_allocated += size;
+  std::move(callback).Run(video_memory_usage_stats);
 }
 
 }  // namespace viz

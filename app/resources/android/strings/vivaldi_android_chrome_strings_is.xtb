@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">Bókamerki vistað í <ph name="FOLDER_NAME" /> möppu</translation>
 <translation id="2433507940547922241">Útlit</translation>
 <translation id="2501278716633472235">Fara til baka</translation>
+<translation id="2546283357679194313">Kökur og síðugögn</translation>
 <translation id="2633278372998075009">Einkaflipar</translation>
 <translation id="2650751991977523696">Sækja skrá aftur?</translation>
 <translation id="265156376773362237">Hefðbundin forhleðsla</translation>
@@ -54,6 +55,9 @@
 <translation id="4269820728363426813">Afrita slóð tengils</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Kveiktu á skjálás í stillingum Android<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Lykilorðastýring</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, plural,
+          =1 {Flipar og grúppur ekki notað í einn dag eða fleiri}
+          other {Flipar og grúppur ekki notað í # daga eða fleiri}}</translation>
 <translation id="451872707440238414">Leita í bókamerkjunum þínum</translation>
 <translation id="4526803704855831732">Einkaflipar</translation>
 <translation id="4532845899244822526">Velja möppu</translation>
@@ -62,6 +66,7 @@
 
 Að ýta til þess að leita er aðgerð, sem bara er í boði þegar Google er valin sem sjálfgefin leitarvél í Vivaldi.</translation>
 <translation id="4759238208242260848">Niðurhöl</translation>
+<translation id="4777866634702576038">Eyða flipagrúppu?</translation>
 <translation id="4850886885716139402">Sjá</translation>
 <translation id="4883379392681899581">Fara úr einkaham</translation>
 <translation id="4943872375798546930">Engin niðurstaða</translation>
@@ -77,7 +82,6 @@ Að ýta til þess að leita er aðgerð, sem bara er í boði þegar Google er 
 <translation id="5375131951310889874">Kynntu þér efni vefsíða án þess að yfirgefa síðuna. Að ýta til þess að leita er aðgerð, sem bara er í boði þegar Google er valin sem sjálfgefin leitarvél í Vivaldi. Þá er orðið og samhengi þessi sent inn í leitarvél Google, sem skilar þá skilgreiningum, myndum, leitarniðurstöðum, og fleiru.
 
 Ýttu lengi til að velja leitarorð. Fyrir nákvæmari leitarskilyrði má draga spjald alla leið upp og slá á leitarboxið.</translation>
-<translation id="543338862236136125">Breyta aðgangsorði</translation>
 <translation id="572328651809341494">Nýlegir flipar</translation>
 <translation id="5833984609253377421">Deila tengli</translation>
 <translation id="6150320133806434356">Bókamerki vistað</translation>
@@ -85,6 +89,7 @@ Að ýta til þess að leita er aðgerð, sem bara er í boði þegar Google er 
 <translation id="6336451774241870485">Nýr einkaflipi</translation>
 <translation id="6337323516034698937">Til þess að geta sent flipa yfir á annað tæki, þarftu að skrá þig inn á Vivaldi samstillingu á báðum tækjum. Gættu þess að slá inn lykilorð fyrir dulkóðun sé þess krafist.</translation>
 <translation id="6341580099087024258">Spyja hvar á að vista skrár</translation>
+<translation id="6364438453358674297">Fjarlægja tillögur ú sögu?</translation>
 <translation id="6404511346730675251">Breyta bókamerki</translation>
 <translation id="650224091954855786">{FILE_COUNT, plural,
           =1 {Skrá sótt}
@@ -112,6 +117,9 @@ Að ýta til þess að leita er aðgerð, sem bara er í boði þegar Google er 
 <translation id="8062594758852531064">Aukin forhleðsla:</translation>
 <translation id="8073388330009372546">Opna mynd í nýjum flipa</translation>
 <translation id="8127542551745560481">Breyta heimasíðu</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+          =1 {(1) óvirkt atriði}
+          other {(#) óvirk atriði}}</translation>
 <translation id="8266862848225348053">Niðurhalsmappa</translation>
 <translation id="8348430946834215779">Nota HTTPS þegar hægt er og fá viðvörun áður en síðum sem styðja það ekki er hlaðið</translation>
 <translation id="8560602726703398413">Finndu leslistann þinn í bókamerkjum</translation>
@@ -121,6 +129,9 @@ Að ýta til þess að leita er aðgerð, sem bara er í boði þegar Google er 
 <translation id="9042893549633094279">Friðhelgi og öryggi</translation>
 <translation id="9063523880881406963">Slökktu á borðtölvuútgáfu</translation>
 <translation id="9080642952018487277">Fara í einkaham</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+          =1 {Ekki notað í einn dag eða fleiri}
+          other {Ekki notað í # daga eða fleiri}}</translation>
 <translation id="930124987204876019">Eyddu sögu, fótsporum, vefsvæðagögnum, skyndiminni…</translation>
 <translation id="961856697154696964">Eyða sögu vafranotkunar</translation>
 </translationbundle>

@@ -17,6 +17,8 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
+#include "chrome/browser/ui/omnibox/omnibox_popup_view.h"
 #include "chrome/browser/ui/tabs/tab_style.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/chrome_widget_sublevel.h"
@@ -30,8 +32,6 @@
 #include "chrome/browser/ui/views/tabs/tab_strip_controller.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/common/pref_names.h"
-#include "components/omnibox/browser/omnibox_edit_model.h"
-#include "components/omnibox/browser/omnibox_popup_view.h"
 #include "components/user_education/common/help_bubble/help_bubble_factory_registry.h"
 #include "components/user_education/views/help_bubble_factory_views.h"
 #include "components/user_education/views/help_bubble_view.h"
@@ -462,7 +462,7 @@ void TabHoverCardController::HideHoverCard() {
 
 void TabHoverCardController::OnViewIsDeleting(views::View* observed_view) {
   if (hover_card_ == observed_view) {
-    tab_resource_usage_collector_->RemoveObserver(this);
+    tab_resource_usage_collector_observation_.Reset();
     delayed_show_timer_.Stop();
     hover_card_observation_.Reset();
     event_sniffer_.reset();
@@ -540,7 +540,8 @@ void TabHoverCardController::CreateHoverCard(Tab* tab) {
                             weak_ptr_factory_.GetWeakPtr()));
   }
 
-  tab_resource_usage_collector_->AddObserver(this);
+  tab_resource_usage_collector_observation_.Observe(
+      tab_resource_usage_collector_);
 }
 
 void TabHoverCardController::UpdateCardContent(Tab* tab) {
@@ -612,7 +613,8 @@ void TabHoverCardController::MaybeStartThumbnailObservation(
   // that generating the image is a more deliberate choice from the user. The
   // memory pressure monitor is disabled in tests.
   if (const auto* const monitor = base::MemoryPressureMonitor::Get()) {
-    switch (monitor->GetCurrentPressureLevel()) {
+    switch (monitor->GetCurrentPressureLevel(
+        base::MemoryPressureMonitorTag::kTabHoverCardController)) {
       case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL:
         capture_delay = base::TimeDelta::Max();
         break;
@@ -672,7 +674,8 @@ void TabHoverCardController::StartThumbnailObservation(Tab* tab) {
   // Do not capture thumbnails during critical memory pressure.
   const auto* const monitor = base::MemoryPressureMonitor::Get();
   if (monitor &&
-      monitor->GetCurrentPressureLevel() ==
+      monitor->GetCurrentPressureLevel(
+          base::MemoryPressureMonitorTag::kTabHoverCardController) ==
           base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
     // Because we're blocked, we'll show a placeholder instead of nothing or
     // the wrong image.

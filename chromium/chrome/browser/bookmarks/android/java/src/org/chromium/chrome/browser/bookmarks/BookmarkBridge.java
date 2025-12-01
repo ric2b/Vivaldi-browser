@@ -198,7 +198,7 @@ class BookmarkBridge {
         if (mInitializedPartnerBookmarks) return;
 
         mInitializedPartnerBookmarks = true;
-        assert sPartnerBookmarkIteratorSupplier.hasValue();
+        assert sPartnerBookmarkIteratorSupplier.get() != null;
         sPartnerBookmarkIteratorSupplier.runSyncOrOnAvailable(
                 (provider) -> {
                     // Don't attempt to load partner bookmarks if the bridge has been deleted.
@@ -966,11 +966,11 @@ class BookmarkBridge {
 
     @CalledByNative
     @VisibleForTesting
-    void bookmarkNodeAdded(BookmarkItem parent, int index) {
+    void bookmarkNodeAdded(BookmarkItem parent, int index, boolean addedByUser) {
         if (mIsDoingExtensiveChanges) return;
 
         for (BookmarkModelObserver observer : mObservers) {
-            observer.bookmarkNodeAdded(parent, index);
+            observer.bookmarkNodeAdded(parent, index, addedByUser);
         }
     }
 
@@ -1297,6 +1297,9 @@ class BookmarkBridge {
         boolean isChildOfTrashNode(long nativeBookmarkBridge, BookmarkBridge caller,
                                    long bookmarkId);
 
+        void exportBookmarks(long nativeBookmarkBridge, BookmarkBridge caller, String filePath);
+
+        void importBookmarks(long nativeBookmarkBridge, BookmarkBridge caller, String filePath);
     }
 
     /** Vivaldi */
@@ -1441,5 +1444,32 @@ class BookmarkBridge {
         if (mNativeBookmarkBridge == 0) return null;
         assert mIsNativeBookmarkModelLoaded;
         return BookmarkBridgeJni.get().getReadingListItemForUrl(mNativeBookmarkBridge, url);
+    }
+
+    /**
+     * Vivaldi
+     * Exports all bookmarks to a {@link String} path.
+     * @param filePath String the filepath string to export all bookmarks passed to JNI
+     */
+    public void exportBookmarks(String filePath) {
+        ThreadUtils.assertOnUiThread();
+        if (mNativeBookmarkBridge == 0) return;
+        assert mIsNativeBookmarkModelLoaded;
+        BookmarkBridgeJni.get().exportBookmarks(
+                mNativeBookmarkBridge, BookmarkBridge.this, filePath);
+    }
+
+    /**
+     * Vivaldi
+     * Imports all bookmarks from a {@link String} path.
+     * @param filePath String the filepath string to import all bookmarks from,
+     * passed to JNI
+     */
+    public void importBookmarks(String filePath) {
+        ThreadUtils.assertOnUiThread();
+        if (mNativeBookmarkBridge == 0) return;
+        assert mIsNativeBookmarkModelLoaded;
+        BookmarkBridgeJni.get().importBookmarks(
+                mNativeBookmarkBridge, BookmarkBridge.this, filePath);
     }
 }

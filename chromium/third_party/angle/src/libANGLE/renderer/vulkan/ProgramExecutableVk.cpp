@@ -5,6 +5,11 @@
 //
 // ProgramExecutableVk.cpp: Collects the information and interfaces common to both ProgramVks and
 // ProgramPipelineVks in order to execute/draw with either.
+//
+
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
 
 #include "libANGLE/renderer/vulkan/ProgramExecutableVk.h"
 
@@ -253,6 +258,8 @@ angle::Result UpdateFullTexturesDescriptorSet(vk::ErrorContext *context,
                                               const gl::SamplerBindingVector &samplers,
                                               VkDescriptorSet descriptorSet)
 {
+    vk::Renderer *renderer = context->getRenderer();
+
     const std::vector<gl::SamplerBinding> &samplerBindings = executable.getSamplerBindings();
     const std::vector<GLuint> &samplerBoundTextureUnits = executable.getSamplerBoundTextureUnits();
     const std::vector<gl::LinkedUniform> &uniforms      = executable.getUniforms();
@@ -311,8 +318,8 @@ angle::Result UpdateFullTexturesDescriptorSet(vk::ErrorContext *context,
             {
                 ASSERT(writeSet.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER);
                 const vk::BufferView *view = nullptr;
-                ANGLE_TRY(
-                    textureVk->getBufferView(context, nullptr, &samplerBinding, false, &view));
+                ANGLE_TRY(textureVk->getBufferView(context, nullptr, &samplerBinding, false, &view,
+                                                   nullptr));
 
                 VkBufferView &bufferView  = updateBuilder->allocBufferView();
                 bufferView                = view->getHandle();
@@ -331,14 +338,14 @@ angle::Result UpdateFullTexturesDescriptorSet(vk::ErrorContext *context,
                 const gl::SamplerState &samplerState =
                     sampler ? sampler->getSamplerState() : textureVk->getState().getSamplerState();
 
-                vk::ImageLayout imageLayout    = textureVk->getImage().getCurrentImageLayout();
+                vk::ImageAccess imageAccess    = textureVk->getImage().getCurrentImageAccess();
                 const vk::ImageView &imageView = textureVk->getReadImageView(
                     samplerState.getSRGBDecode(), samplerUniform.isTexelFetchStaticUse(),
                     isSamplerExternalY2Y);
 
                 VkDescriptorImageInfo *imageInfo = const_cast<VkDescriptorImageInfo *>(
                     &writeSet.pImageInfo[arrayElement + samplerUniform.getOuterArrayOffset()]);
-                imageInfo->imageLayout = ConvertImageLayoutToVkImageLayout(imageLayout);
+                imageInfo->imageLayout = renderer->getVkImageLayout(imageAccess);
                 imageInfo->imageView   = imageView.getHandle();
                 imageInfo->sampler     = samplerHelper.get().getHandle();
             }
@@ -896,7 +903,7 @@ angle::Result ProgramExecutableVk::getPipelineCacheWarmUpTasks(
     vk::RenderPass compatibleRenderPass;
 
     WarmUpTaskCommon prepForWarmUpContext(renderer);
-    ANGLE_TRY(prepareForWarmUpPipelineCache(&prepForWarmUpContext, pipelineRobustness,
+    ANGLE_TRY(preparePipelineCacheForWarmUp(&prepForWarmUpContext, pipelineRobustness,
                                             pipelineProtectedAccess, subset, &isCompute,
                                             &graphicsPipelineDesc, &compatibleRenderPass));
 
@@ -952,7 +959,7 @@ angle::Result ProgramExecutableVk::getPipelineCacheWarmUpTasks(
     return angle::Result::Continue;
 }
 
-angle::Result ProgramExecutableVk::prepareForWarmUpPipelineCache(
+angle::Result ProgramExecutableVk::preparePipelineCacheForWarmUp(
     vk::ErrorContext *context,
     vk::PipelineRobustness pipelineRobustness,
     vk::PipelineProtectedAccess pipelineProtectedAccess,
@@ -966,7 +973,18 @@ angle::Result ProgramExecutableVk::prepareForWarmUpPipelineCache(
     ASSERT(renderPassOut);
     ASSERT(context->getFeatures().warmUpPipelineCacheAtLink.enabled);
 
-    ANGLE_TRY(ensurePipelineCacheInitialized(context));
+    // Ensure pipeline cache is initialized
+    if (context->getFeatures().preferGlobalPipelineCache.enabled)
+    {
+        // Make sure Renderer's pipeline cache is initialized
+        vk::PipelineCacheAccess unused;
+        ANGLE_TRY(context->getRenderer()->getPipelineCache(context, &unused));
+    }
+    else
+    {
+        // Make sure ProgramExecutableVk's pipeline cache is initialized
+        ANGLE_TRY(ensurePipelineCacheInitialized(context));
+    }
 
     *isComputeOut        = false;
     const bool isCompute = mExecutable->hasLinkedShaderStage(gl::ShaderType::Compute);
@@ -2186,7 +2204,7 @@ void ProgramExecutableVk::updateShaderResourcesWithSharedCacheKey(
 }
 
 angle::Result ProgramExecutableVk::updateShaderResourcesDescInfo(
-    vk::Context *context,
+    ContextVk *contextVk,
     vk::CommandBufferHelperCommon *commandBufferHelper,
     const FramebufferVk *framebufferVk,
     const gl::BufferVector &shaderStorageBufferBindings,
@@ -2226,14 +2244,14 @@ angle::Result ProgramExecutableVk::updateShaderResourcesDescInfo(
 
         // Update DescriptorSetDescBuilder with inputAttachments
         ANGLE_TRY(mShaderResourceDescriptorDescBuilder.updateInputAttachments(
-            context, *executable, mVariableInfoMap, framebufferVk,
+            contextVk, *executable, mVariableInfoMap, framebufferVk,
             mShaderResourceWriteDescriptorDescs));
     }
 
     if (hasStorageBuffers)
     {
         mShaderResourceDescriptorDescBuilder.updateStorageBuffers(
-            context, commandBufferHelper, *executable, shaderStorageBufferBindings,
+            contextVk, commandBufferHelper, *executable, shaderStorageBufferBindings,
             executable->getShaderStorageBlocks(), getStorageBufferDescriptorType(),
             limits.maxStorageBufferRange, emptyBuffer, mShaderResourceWriteDescriptorDescs,
             memoryBarrierBits);
@@ -2242,7 +2260,7 @@ angle::Result ProgramExecutableVk::updateShaderResourcesDescInfo(
     if (hasAtomicCounterBuffers)
     {
         mShaderResourceDescriptorDescBuilder.updateAtomicCounters(
-            context, commandBufferHelper, *executable, mVariableInfoMap,
+            contextVk, commandBufferHelper, *executable, mVariableInfoMap,
             atomicCounterBufferBindings, executable->getAtomicCounterBuffers(),
             limits.minStorageBufferOffsetAlignment, emptyBuffer,
             mShaderResourceWriteDescriptorDescs);
@@ -2251,7 +2269,7 @@ angle::Result ProgramExecutableVk::updateShaderResourcesDescInfo(
     if (hasImages)
     {
         ANGLE_TRY(mShaderResourceDescriptorDescBuilder.updateImages(
-            context, *executable, mVariableInfoMap, activeImages, imageUnits,
+            contextVk, *executable, mVariableInfoMap, activeImages, imageUnits,
             mShaderResourceWriteDescriptorDescs));
     }
 
@@ -2264,7 +2282,7 @@ angle::Result ProgramExecutableVk::updateShaderResourcesDescInfo(
 
     vk::SharedDescriptorSetCacheKey newSharedCacheKey;
     ANGLE_TRY(updateBuffersDescriptorSet(
-        context, currentFrameCount, mShaderResourceDescriptorDescBuilder,
+        contextVk, currentFrameCount, mShaderResourceDescriptorDescBuilder,
         mShaderResourceWriteDescriptorDescs, DescriptorSetIndex::ShaderResource, updateBuilder,
         &newSharedCacheKey));
 

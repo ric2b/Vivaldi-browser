@@ -4,25 +4,21 @@
 <translation id="1056898198331236512">אזהרה</translation>
 <translation id="1165039591588034296">שגיאה</translation>
 <translation id="1244303850296295656">שגיאת תוסף</translation>
-<translation id="1546280085599573572">התוסף הזה שינה את הדף שמוצג כשאתה לוחץ על הלחצן 'דף הבית'.</translation>
 <translation id="1588438908519853928">רגיל</translation>
 <translation id="1708338024780164500">(לא פעיל)</translation>
 <translation id="1729533290416704613">הגדרה זו גם קובעת איזה דף מוצג כשאתה מבצע חיפוש מסרגל הכתובות.</translation>
 <translation id="2087822576218954668">הדפס: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">כרטיסיית גלישה בסתר: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">‏<ph name="NEXE_NAME" /> :Native Client יישום </translation>
 <translation id="2282146716419988068">‏תהליך GPU</translation>
 <translation id="2301382460326681002">ספריית הבסיס של ההרחבה אינה חוקית.</translation>
 <translation id="2327492829706409234">הפעל יישום</translation>
 <translation id="2348176352564285430">יישום: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">בחר את ספריית ההרחבה.</translation>
-<translation id="241082044617551207">פלאגין לא ידוע</translation>
 <translation id="2439110203301358333">‏תכנית אחרת במחשב שלך הוסיפה תוסף שעשוי לשנות את אופן הפעולה של Vivaldi.</translation>
 <translation id="2445081178310039857">ספריית הבסיס של ההרחבה נחוצה.</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">הפוך מחדש לפעיל</translation>
 <translation id="2850541429955027218">הוסף את העיצוב</translation>
-<translation id="2861941300086904918">‏מנהל האבטחה של Native Client</translation>
 <translation id="2932883381142163287">דווח על שימוש לרעה</translation>
 <translation id="2941112035454246133">נמוכה</translation>
 <translation id="3080207940057008665">‏תכנית אחרת במחשב שלך הוסיפה עיצוב שעשוי לשנות את אופן הפעולה של Vivaldi.</translation>
@@ -40,7 +36,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4100839878934973028">‏תכנית אחרת במחשב שלך הוסיפה יישום שעשוי לשנות את אופן הפעולה של Vivaldi.</translation>
-<translation id="4176463684765177261">מושבת</translation>
 <translation id="4309420042698375243">‏‎<ph name="NUM_KILOBYTES" />K ‏‎(<ph name="NUM_KILOBYTES_LIVE" />K בשימוש)‎‎</translation>
 <translation id="431076611119798497">&amp;פרטים</translation>
 <translation id="4384652540891215547">הפעל את התוסף</translation>
@@ -49,17 +44,13 @@
 <translation id="488785315393301722">הצג פרטים</translation>
 <translation id="5027562294707732951">הוסף את התוסף</translation>
 <translation id="5039804452771397117">אפשר</translation>
-<translation id="5143374789336132547">התוסף "<ph name="EXTENSION_NAME" />" שינה את הדף שמוצג כשאתה לוחץ על הלחצן 'דף הבית'.</translation>
 <translation id="5233231016133573565">זיהוי תהליך</translation>
 <translation id="52912272896845572">קובץ המפתח הפרטי אינו חוקי</translation>
 <translation id="5362741141255528695">בחר קובץ מפתח פרטי.</translation>
 <translation id="5485102783864353244">הוסף יישום</translation>
-<translation id="5521078259930077036">האם זהו דף הבית שציפית לראות?</translation>
 <translation id="5542132724887566711">פרופיל</translation>
 <translation id="5556459405103347317">טען שוב</translation>
 <translation id="5575473780076478375">תוסף של גלישה פרטית: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5715711091495208045">מתווך פלאגין: <ph name="PLUGIN_NAME" /></translation>
-<translation id="583281660410589416">לא ידוע</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (שיא של <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="6101226222197207147">יישום חדש נוסף (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6196854373336333322">‏התוסף "<ph name="EXTENSION_NAME" />" השתלט על הגדרות שרת ה-Proxy. פירוש הדבר שהוא יכול לשנות ולקטוע לכל פעולה שתבצע באינטרנט או לצותת לה. אם אינך יודע בוודאות מדוע שינוי זה התרחש, סביר להניח שזהו שינוי לא רצוי.</translation>
@@ -69,7 +60,6 @@
 <translation id="6498249116389603658">&amp;כל השפות שלך</translation>
 <translation id="6503077044568424649">הכי פופולריים</translation>
 <translation id="6508261954199872201">יישום: <ph name="APP_NAME" /></translation>
-<translation id="6798954102094737107">פלאגין: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6900284862687837908">יישום רקע: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="7287143125007575591">הגישה נדחתה.</translation>
 <translation id="7427348830195639090">דף רקע: <ph name="BACKGROUND_PAGE_URL" /></translation>

@@ -1,5 +1,6 @@
 // Copyright (c) 2016 Vivaldi Technologies
 
+#include "base/no_destructor.h"
 #include "components/sessions/core/live_tab.h"
 #include "components/sessions/core/live_tab_context.h"
 
@@ -8,10 +9,9 @@
 #endif
 
 namespace sessions {
-
-const std::string &LiveTab::GetVivExtData() const {
-  static std::string dummy;
-  return dummy;
+const std::string& LiveTab::GetVivExtData() const {
+  static base::NoDestructor<std::string> dummy;
+  return *dummy;
 }
 
 std::string LiveTabContext::GetVivExtData() const {
@@ -26,9 +26,9 @@ LiveTab* LiveTabContext::AddRestoredTab(
     tab_restore::Type original_session_type) {
   const std::map<std::string, bool> dummy_page_action_overrides;
   const std::string dummy_ext_data;
-  return AddRestoredTab(
-      tab, tab_index, select, is_restoring_group_or_window,
-      original_session_type, dummy_page_action_overrides, dummy_ext_data);
+  return AddRestoredTab(tab, tab_index, select, is_restoring_group_or_window,
+                        original_session_type, dummy_page_action_overrides,
+                        dummy_ext_data);
 }
 
 LiveTab* LiveTabContext::AddRestoredTab(
@@ -39,8 +39,7 @@ LiveTab* LiveTabContext::AddRestoredTab(
     tab_restore::Type original_session_type,
     const std::map<std::string, bool> viv_page_action_overrides,
     const std::string& viv_ext_data) {
-  return AddRestoredTab(tab, tab_index, select,
-                        is_restoring_group_or_window,
+  return AddRestoredTab(tab, tab_index, select, is_restoring_group_or_window,
                         original_session_type);
 }
 

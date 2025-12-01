@@ -22,6 +22,7 @@ WKWebView* BuildNotesWKWebView(
       WKWebViewConfigurationProvider::FromBrowserState(browser_state);
   WKWebViewConfiguration* configuration =
       config_provider.GetWebViewConfiguration();
+  [[configuration preferences] setJavaScriptCanOpenWindowsAutomatically:NO];
 
   GetWebClient()->PreWebViewCreation();
 
@@ -29,6 +30,9 @@ WKWebView* BuildNotesWKWebView(
       [[VivaldiNotesWebView alloc] initWithFrame:frame
                                    configuration:configuration];
   web_view.inputViewProvider = input_view_provider;
+  web_view.allowsBackForwardNavigationGestures = NO;
+  [web_view.configuration.userContentController removeAllUserScripts];
+  [web_view.configuration.userContentController removeAllContentRuleLists];
 
   // NOTE(tomas@vivaldi): VIB-1113
   // This is to mitigate a bug in webkit

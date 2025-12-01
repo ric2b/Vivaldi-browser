@@ -57,7 +57,7 @@
 - (void)start {
   self.viewProvider = [[VivaldiAppearanceSettingsViewProvider alloc] init];
   self.viewController =
-      [VivaldiAppearanceSettingsViewProvider
+      [self.viewProvider
           makeViewControllerWithPresentingViewControllerTrait:
               self.presentingViewController.traitCollection
                     presentationDelegate:self];

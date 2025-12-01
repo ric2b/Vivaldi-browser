@@ -32,8 +32,6 @@ const base::FeatureParam<bool>* GetPageActionMigrationParam(
       return &features::kPageActionsMigrationPriceInsights;
     case PageActionIconType::kDiscounts:
       return &features::kPageActionsMigrationDiscounts;
-    case PageActionIconType::kProductSpecifications:
-      return &features::kPageActionsMigrationProductSpecifications;
     case PageActionIconType::kManagePasswords:
       return &features::kPageActionsMigrationManagePasswords;
     case PageActionIconType::kCookieControls:
@@ -48,6 +46,10 @@ const base::FeatureParam<bool>* GetPageActionMigrationParam(
       return &features::kPageActionsMigrationPriceTracking;
     case PageActionIconType::kMandatoryReauth:
       return &features::kPageActionsMigrationAutofillMandatoryReauth;
+    case PageActionIconType::kClickToCall:
+      return &features::kPageActionsMigrationClickToCall;
+    case PageActionIconType::kSharingHub:
+      return &features::kPageActionsMigrationSharingHub;
     default:
       return nullptr;
   }

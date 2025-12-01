@@ -426,6 +426,10 @@ ImportTypes MapImportType(
       type = vivaldi::import_data::ImportTypes::kOpera;
       break;
 
+    case user_data_importer::TYPE_OPERA_BOOKMARK_FILE:
+      type = vivaldi::import_data::ImportTypes::kOperaBookmark;
+      break;
+
     case user_data_importer::TYPE_CHROME:
       type = vivaldi::import_data::ImportTypes::kChrome;
       break;
@@ -498,6 +502,7 @@ std::string MapSuggestedProfilePath(
     }
 #endif
     case ImportTypes::kBookmarksFile:
+    case ImportTypes::kOperaBookmark:
       return chrome::GetUserDocumentsDirectory(&path) ? path.AsUTF8Unsafe()
                                                       : "";
     default:
@@ -586,7 +591,9 @@ void ImportDataGetProfilesFunction::Finished() {
           MapSuggestedProfilePath(profile->import_type);
     }
     if (source_profile.importer_type ==
-        user_data_importer::TYPE_BOOKMARKS_FILE) {
+            user_data_importer::TYPE_OPERA_BOOKMARK_FILE ||
+        source_profile.importer_type ==
+            user_data_importer::TYPE_BOOKMARKS_FILE) {
       profile->dialog_type = "file";
     } else {
       profile->dialog_type = "folder";
@@ -686,11 +693,14 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
 
   std::u16string dialog_title;
   if (importer_type_ == user_data_importer::TYPE_BOOKMARKS_FILE ||
+      importer_type_ == user_data_importer::TYPE_OPERA_BOOKMARK_FILE ||
       ((importer_type_ == user_data_importer::TYPE_OPERA ||
         importer_type_ == user_data_importer::TYPE_EDGE_CHROMIUM ||
         importer_type_ == user_data_importer::TYPE_BRAVE ||
-        importer_type_ == user_data_importer::TYPE_VIVALDI) &&
-       !params->ask_user_for_file_location)) {
+        importer_type_ == user_data_importer::TYPE_VIVALDI ||
+        importer_type_ == user_data_importer::TYPE_CHROMIUM ||
+        importer_type_ == user_data_importer::TYPE_CHROME) &&
+       (!params->ask_user_for_file_location || params->import_path.has_value()))) {
     base::FilePath import_path =
         base::FilePath::FromUTF8Unsafe(params->import_path->c_str());
     source_profile.source_path = import_path;

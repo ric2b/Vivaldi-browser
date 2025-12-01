@@ -30,6 +30,9 @@ constexpr CGFloat kDefaultAccessoryHeight = 44;
 // Button target area for the large keyboard accessory.
 constexpr CGFloat kLargeButtonTargetArea = 44;
 
+// Button target area for the liquid glass keyboard accessory.
+constexpr CGFloat kLiquidGlassButtonTargetArea = 48;
+
 // Trailing horizontal padding.
 constexpr CGFloat kKeyboardHorizontalPadding = 16;
 
@@ -51,7 +54,7 @@ constexpr CGFloat ManualFillCloseButtonLeadingInset = 7;
 constexpr CGFloat ManualFillCloseButtonTrailingInset = 15;
 
 // The trailing content inset for the close button when using liquid glass.
-constexpr CGFloat LiquidGlassCloseButtonTrailingInset = 24;
+constexpr CGFloat LiquidGlassCloseButtonTrailingInset = 28;
 
 // The bottom content inset for the close button.
 constexpr CGFloat ManualFillCloseButtonBottomInset = 4;
@@ -73,8 +76,6 @@ UIImage* SymbolNamed(NSString* imageName) {
   return [UIImage systemImageNamed:imageName withConfiguration:configuration];
 }
 
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
-
 // Padding around the keyboard accessory on iOS 26.0+.
 constexpr CGFloat kSurroundingPadding = 12;
 
@@ -83,19 +84,16 @@ constexpr CGFloat kCornerRadius = 24;
 
 // Width for the small keyboard accessory. Only when liquid glass effect is
 // enabled.
-constexpr CGFloat kSmallAccessoryWidth = 3 * kLargeButtonTargetArea + 4;
+constexpr CGFloat kSmallAccessoryWidth = 3 * kLiquidGlassButtonTargetArea + 8;
 
 // Alpha of the tint color for the glass effect. A lower alpha will produce a
 // more pronounced glass effect.
-constexpr CGFloat kGlassTintAlpha = 0.5;
+constexpr CGFloat kGlassTintAlpha = 1.0;
 
 // Shadow parameters. Used when the liquid glass effect is enabled.
 constexpr CGFloat kShadowRadius = 16.0;
 constexpr CGFloat kShadowVerticalOffset = 4.0;
 constexpr CGFloat kShadowOpacity = 0.12;
-
-#endif  // defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >=
-        // __IPHONE_26_0
 
 }  // namespace
 
@@ -251,27 +249,21 @@ NSString* const kFormInputAccessoryViewOmniboxTypingShieldAccessibilityID =
 
 // Whether the liquid glass effect is enabled. Restricted to iOS 26+.
 - (BOOL)isLiquidGlassEffectEnabled {
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     if (_largeAccessoryViewEnabled || _smallWidthAccessoryViewEnabled) {
       return YES;
     }
   }
-#endif  // defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >=
-        // __IPHONE_26_0
 
   return NO;
 }
 
 // Sets the small width mode. This mode is always disabled on iOS < 26.
 - (void)setSmallWidthAccessoryViewEnabled:(BOOL)enabled {
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     _smallWidthAccessoryViewEnabled = enabled;
     return;
   }
-#endif  // defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >=
-        // __IPHONE_26_0
 
   _smallWidthAccessoryViewEnabled = NO;
 }
@@ -473,7 +465,6 @@ NSString* const kFormInputAccessoryViewOmniboxTypingShieldAccessibilityID =
 // If the liquid glass effect is enabled, clip the contents of the leading view
 // to the liquid glass effect's bounds.
 - (void)clipToLiquidGlassEffectBounds:(UIView*)leadingViewContainer {
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     if ([self isLiquidGlassEffectEnabled]) {
       // Set leading view container bounds to match the glass effect.
@@ -486,8 +477,6 @@ NSString* const kFormInputAccessoryViewOmniboxTypingShieldAccessibilityID =
           kCALayerMinXMaxYCorner | kCALayerMinXMinYCorner;
     }
   }
-#endif  // defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >=
-        // __IPHONE_26_0
 }
 
 // Adds the trailing view in the accessory's view hierarchy.
@@ -570,11 +559,12 @@ NSString* const kFormInputAccessoryViewOmniboxTypingShieldAccessibilityID =
 
 // Sets the minimum size constraints for an image button.
 - (void)setMinimumSizeForButton:(UIButton*)button {
-  [button.widthAnchor
-      constraintGreaterThanOrEqualToConstant:kLargeButtonTargetArea]
+  CGFloat targetArea = [self isLiquidGlassEffectEnabled]
+                           ? kLiquidGlassButtonTargetArea
+                           : kLargeButtonTargetArea;
+  [button.widthAnchor constraintGreaterThanOrEqualToConstant:targetArea]
       .active = YES;
-  [button.heightAnchor
-      constraintGreaterThanOrEqualToConstant:kLargeButtonTargetArea]
+  [button.heightAnchor constraintGreaterThanOrEqualToConstant:targetArea]
       .active = YES;
 }
 
@@ -614,10 +604,11 @@ NSString* const kFormInputAccessoryViewOmniboxTypingShieldAccessibilityID =
         0, 0, 0, LiquidGlassCloseButtonTrailingInset);
   }
 
-  if (!_isCompact) {
+  FormInputAccessoryViewTextData* textData =
+      [self.delegate textDataforFormInputAccessoryView:self];
+
+  if (!_isCompact && textData.manualFillButtonTitle) {
     // Set the button title with a custom sized font.
-    FormInputAccessoryViewTextData* textData =
-        [self.delegate textDataforFormInputAccessoryView:self];
     UIFont* font = [UIFont systemFontOfSize:kManualFillTitleFontSize
                                      weight:UIFontWeightMedium];
     NSDictionary* attributes;
@@ -808,7 +799,6 @@ NSString* const kFormInputAccessoryViewOmniboxTypingShieldAccessibilityID =
 // Sets up the liquid glass effect for the accessory. Returns whether liquid
 // glass is enabled.
 - (BOOL)setupLiquidGlassEffect {
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if ([self isLiquidGlassEffectEnabled]) {
     if (@available(iOS 26, *)) {
       // Create glass effect
@@ -865,8 +855,6 @@ NSString* const kFormInputAccessoryViewOmniboxTypingShieldAccessibilityID =
       return YES;
     }
   }
-#endif  // defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >=
-  // __IPHONE_26_0
 
   return NO;
 }

@@ -41,7 +41,7 @@
 #include "ui/events/gestures/gesture_types.h"
 #include "ui/gfx/font_list.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/native_theme/native_theme_mac.h"
 #import "ui/views/cocoa/drag_drop_client_mac.h"
@@ -394,8 +394,7 @@ void NativeWidgetMac::ReparentNativeViewImpl(gfx::NativeView new_parent) {
   }
 }
 
-std::unique_ptr<NonClientFrameView>
-NativeWidgetMac::CreateNonClientFrameView() {
+std::unique_ptr<FrameView> NativeWidgetMac::CreateFrameView() {
   return GetWidget() ? std::make_unique<NativeFrameViewMac>(GetWidget(),
                                                             /*client=*/nullptr)
                      : nullptr;
@@ -1222,7 +1221,7 @@ void NativeWidgetMac::OnWidgetDestroyed(Widget* widget) {
 // Widget:
 
 // static
-void Widget::CloseAllSecondaryWidgets() {
+void Widget::CloseAllWidgets() {
   NSArray* starting_windows = [NSApp windows];  // Creates an autoreleased copy.
   for (NSWindow* window in starting_windows) {
     // Ignore any windows that couldn't have been created by NativeWidgetMac or
@@ -1243,9 +1242,15 @@ void Widget::CloseAllSecondaryWidgets() {
     crash_reporter::ScopedCrashKeyString scopedWindowKey(&window_info_key,
                                                          value);
 
-    Widget* widget = GetWidgetForNativeWindow(gfx::NativeWindow(window));
-    if (widget && widget->is_secondary_widget()) {
-      [window close];
+    // It is necessary to call `GetNativeWidgetForNativeWindow()` below as the
+    // views::Widget may be destroyed independently from its NativeWidget (see
+    // CLIENT_OWNS_WIDGET), and in this case `GetWidgetForNativeWindow()` will
+    // return null.
+    if (internal::NativeWidgetPrivate* native_widget =
+            internal::NativeWidgetPrivate::GetNativeWidgetForNativeWindow(
+                gfx::NativeWindow(window))) {
+      // `CloseNow()` will destroy both in-process and remote NSWindows.
+      native_widget->CloseNow();
     }
   }
 }

@@ -4,7 +4,6 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
-#include <math.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <stddef.h>
@@ -14,20 +13,19 @@
 
 #include "include/xnnpack.h"
 #include "src/xnnpack/allocator.h"
-#include "src/xnnpack/common.h"
 #include "src/xnnpack/compute.h"
 #include "src/xnnpack/config-types.h"
 #include "src/xnnpack/config.h"
-#include "src/xnnpack/operator-utils.h"
-#include "src/xnnpack/reference-config.h"
 #include "src/xnnpack/datatype.h"
 #include "src/xnnpack/log.h"
 #include "src/xnnpack/microkernel-type.h"
 #include "src/xnnpack/microparams.h"
 #include "src/xnnpack/normalization.h"
 #include "src/xnnpack/operator-type.h"
+#include "src/xnnpack/operator-utils.h"
 #include "src/xnnpack/operator.h"
 #include "src/xnnpack/params.h"
+#include "src/xnnpack/reference-config.h"
 #include <pthreadpool.h>
 
 static enum xnn_status create_reduce_nd(
@@ -217,9 +215,13 @@ static enum xnn_status reshape_reduce_nd(
     normalized_input_shape[i] = 1;
   }
   const uint32_t log2_data_element_size = reduce_op->reduce.log2_data_element_size;
-  const uint32_t log2_accumulator_element_size = reduce_op->reduce.log2_accumulator_element_size;
-  reduce_op->compute[0].type = xnn_parallelization_type_3d_tile_2d;
-  reduce_op->ukernel.type = xnn_microkernel_type_reduce;
+  const uint32_t log2_accumulator_element_size =
+      reduce_op->reduce.log2_accumulator_element_size;
+  const bool is_old_reduce =
+      reduce_op->ukernel.type != xnn_microkernel_type_reduce2;
+  reduce_op->ukernel.type = is_old_reduce
+      ? xnn_microkernel_type_reduce
+      : xnn_microkernel_type_reduce2;
   // Reduction along the innermost dimension.
   const bool is_minmax = (reduce_op->type == xnn_operator_type_reduce_max_nd ||
                           reduce_op->type == xnn_operator_type_reduce_min_nd);
@@ -235,7 +237,8 @@ static enum xnn_status reshape_reduce_nd(
 
     if (reduce_op->reduce_config->update != NULL) {
       float scale = 1.0f;
-      if (reduce_op->type == xnn_operator_type_mean_nd) {
+      if (reduce_op->type == xnn_operator_type_mean_nd ||
+          reduce_op->type == xnn_operator_type_mean_squared_nd) {
         scale = 1.0f / num_reduction_elements;
       }
       reduce_op->reduce_config->update(&reduce_op->params.reduce, scale);
@@ -247,18 +250,20 @@ static enum xnn_status reshape_reduce_nd(
       .output_element_size = UINT32_C(1) << log2_data_element_size,
       .identity_value = reduce_op->reduce.identity_value,
       .ukernel.contiguous_reduce = reduce_op->reduce_config->ukernel,
+      .is_old_reduce = is_old_reduce,
     };
 
     if (is_minmax) {
       reduce_op->dynamic_context.reduce->fill_ukernel = reduce_op->fill_config->ukernel;
     }
 
-    reduce_op->compute[0].task_3d_tile_2d = (pthreadpool_task_3d_tile_2d_t) xnn_compute_contiguous_reduce;
+    reduce_op->compute[0].type = xnn_parallelization_type_3d_tile_1d_dynamic;
+    reduce_op->compute[0].task_3d_tile_1d_dynamic =
+        (pthreadpool_task_3d_tile_1d_dynamic_t)xnn_compute_contiguous_reduce;
     reduce_op->compute[0].range[0] = normalized_input_shape[0];
     reduce_op->compute[0].range[1] = normalized_input_shape[2];
     reduce_op->compute[0].range[2] = normalized_input_shape[4];
-    reduce_op->compute[0].tile[0] = 1;
-    reduce_op->compute[0].tile[1] = 2;
+    reduce_op->compute[0].tile[0] = 2;
     reduce_op->dynamic_context.reduce->output_stride[XNN_MAX_TENSOR_DIMS / 2 - 1] = 1;
     for (int i = XNN_MAX_TENSOR_DIMS / 2 -  2; i >= 0; --i) {
       reduce_op->dynamic_context.reduce->output_stride[i] = (reduce_op->dynamic_context.reduce->output_stride[i + 1] * normalized_input_shape[(i + 1) * 2]);
@@ -275,7 +280,8 @@ static enum xnn_status reshape_reduce_nd(
 
     if (reduce_op->reduce_config->update != NULL) {
       float scale = 1.0f;
-      if (reduce_op->type == xnn_operator_type_mean_nd) {
+      if (reduce_op->type == xnn_operator_type_mean_nd ||
+          reduce_op->type == xnn_operator_type_mean_squared_nd) {
         scale = 1.0f / num_reduction_elements;
       }
       reduce_op->reduce_config->update(&reduce_op->params.reduce, scale);
@@ -294,25 +300,40 @@ static enum xnn_status reshape_reduce_nd(
       reduce_op->channels = channel_like_dim;
     }
 
-    *reduce_op->dynamic_context.reduce = (struct reduce_context) {
-      .zero = reduce_op->zero_buffer,
-      .channels = axis_dim,
-      .ukernel.discontiguous_reduce = reduce_op->reduce_config->rd_ukernel,
-      .accumulation_element_size = UINT32_C(1) << log2_accumulator_element_size,
-      .output_element_size = UINT32_C(1) << log2_data_element_size,
-      .identity_value = reduce_op->reduce.identity_value,
-    };
+    if (is_old_reduce) {
+      *reduce_op->dynamic_context.reduce = (struct reduce_context) {
+        .zero = reduce_op->zero_buffer,
+        .channels = axis_dim,
+        .ukernel.discontiguous_reduce = reduce_op->reduce_config->rd_ukernel,
+        .accumulation_element_size = UINT32_C(1) << log2_accumulator_element_size,
+        .output_element_size = UINT32_C(1) << log2_data_element_size,
+        .identity_value = reduce_op->reduce.identity_value,
+        .is_old_reduce = true,
+      };
+    } else {
+      *reduce_op->dynamic_context.reduce = (struct reduce_context) {
+        .zero = reduce_op->zero_buffer,
+        .channels = axis_dim,
+        .ukernel.discontiguous_reduce2 = reduce_op->reduce_config->rd_ukernel2,
+        .accumulation_element_size = UINT32_C(1) << log2_accumulator_element_size,
+        .output_element_size = UINT32_C(1) << log2_data_element_size,
+        .identity_value = reduce_op->reduce.identity_value,
+        .is_old_reduce = false,
+      };
+    }
+
 
     if (is_minmax) {
       reduce_op->dynamic_context.reduce->fill_ukernel = reduce_op->fill_config->ukernel;
     }
 
-    reduce_op->compute[0].task_3d_tile_2d = (pthreadpool_task_3d_tile_2d_t) xnn_compute_discontiguous_reduce;
+    reduce_op->compute[0].type = xnn_parallelization_type_3d_tile_1d_dynamic;
+    reduce_op->compute[0].task_3d_tile_1d_dynamic =
+        (pthreadpool_task_3d_tile_1d_dynamic_t)xnn_compute_discontiguous_reduce;
     reduce_op->compute[0].range[0] = normalized_input_shape[1];
     reduce_op->compute[0].range[1] = normalized_input_shape[3];
     reduce_op->compute[0].range[2] = normalized_input_shape[5];
     reduce_op->compute[0].tile[0] = 1;
-    reduce_op->compute[0].tile[1] = normalized_input_shape[5];
     reduce_op->dynamic_context.reduce->output_stride[XNN_MAX_TENSOR_DIMS / 2 - 1] = 1;
     for (int i = XNN_MAX_TENSOR_DIMS / 2 -  2; i >= 0; --i) {
       reduce_op->dynamic_context.reduce->output_stride[i] = (reduce_op->dynamic_context.reduce->output_stride[i + 1] * normalized_input_shape[(i * 2+3)]);
@@ -417,42 +438,64 @@ enum xnn_status xnn_create_reduce_nd(
                           operator_type == xnn_operator_type_reduce_min_nd);
 
   // Load configs.
-  const struct xnn_reduce_config* config = NULL;
+  const struct xnn_reduce_config* reduce_config = NULL;
   const struct xnn_unary_elementwise_config* cvt_config = NULL;
   const struct xnn_xx_fill_config* fill_config = NULL;
   uint32_t log2_data_element_size = xnn_datatype_log2_size_bytes(datatype);
   uint32_t log2_accumulator_element_size;
   switch (datatype) {
     case xnn_datatype_fp16: {
+      switch (operator_type) {
+        case xnn_operator_type_sum_nd:
+        case xnn_operator_type_mean_nd:
+          reduce_config = xnn_init_f16_f32acc_rsum_config();
+          break;
+        case xnn_operator_type_sum_squared_nd:
+        case xnn_operator_type_mean_squared_nd:
+          reduce_config = xnn_init_f16_f32acc_rsum2_config();
+          break;
+        case xnn_operator_type_reduce_min_nd:
+          reduce_config = xnn_init_f16_rmin_config();
+          break;
+        case xnn_operator_type_reduce_max_nd:
+          reduce_config = xnn_init_f16_rmax_config();
+          break;
+        default:
+          break;
+      }
       if (is_minmax) {
         log2_accumulator_element_size = 1;
         fill_config = xnn_init_xx_fill_config();
         cvt_config = cvt_unused;
-
-        if (operator_type == xnn_operator_type_reduce_min_nd) {
-          config = xnn_init_f16_rmin_config();
-        } else {  // max
-          config = xnn_init_f16_rmax_config();
-        }
       } else {
         log2_accumulator_element_size = 2;
-        config = xnn_init_f16_f32acc_rsum_config();
         fill_config = fill_unused;
         cvt_config = xnn_init_f32_to_f16_cvt_config();
       }
       break;
     }
     case xnn_datatype_fp32: {
+      switch (operator_type) {
+        case xnn_operator_type_sum_nd:
+        case xnn_operator_type_mean_nd:
+          reduce_config = xnn_init_f32_rsum_config();
+          break;
+        case xnn_operator_type_sum_squared_nd:
+        case xnn_operator_type_mean_squared_nd:
+          reduce_config = xnn_init_f32_rsum2_config();
+          break;
+        case xnn_operator_type_reduce_min_nd:
+          reduce_config = xnn_init_f32_rmin_config();
+          break;
+        case xnn_operator_type_reduce_max_nd:
+          reduce_config = xnn_init_f32_rmax_config();
+          break;
+        default:
+          break;
+      }
       if (is_minmax) {
         fill_config = xnn_init_xx_fill_config();
-
-        if (operator_type == xnn_operator_type_reduce_min_nd) {
-          config = xnn_init_f32_rmin_config();
-        } else {  // max
-          config = xnn_init_f32_rmax_config();
-        }
       } else {
-        config = xnn_init_f32_rsum_config();
         fill_config = fill_unused;
       }
 
@@ -461,6 +504,20 @@ enum xnn_status xnn_create_reduce_nd(
       break;
     }
     case xnn_datatype_qint8: { // qs8
+      switch (operator_type) {
+        case xnn_operator_type_sum_nd:
+        case xnn_operator_type_mean_nd:
+          reduce_config = xnn_init_qs8_rsum_config();
+          break;
+        case xnn_operator_type_reduce_min_nd:
+          reduce_config = xnn_init_s8_rmin_config();
+          break;
+        case xnn_operator_type_reduce_max_nd:
+          reduce_config = xnn_init_s8_rmax_config();
+          break;
+        default:
+          break;
+      }
       if (is_minmax) {
         assert(input_quantization->scale == output_quantization->scale);
         assert(
@@ -468,15 +525,8 @@ enum xnn_status xnn_create_reduce_nd(
         log2_accumulator_element_size = 0;
         fill_config = xnn_init_xx_fill_config();
         cvt_config = cvt_unused;
-
-        if (operator_type == xnn_operator_type_reduce_min_nd) {
-          config = xnn_init_s8_rmin_config();
-        } else {  // max
-          config = xnn_init_s8_rmax_config();
-        }
       } else {
         log2_accumulator_element_size = 2;
-        config = xnn_init_qs8_rsum_config();
         fill_config = fill_unused;
         cvt_config = xnn_init_unary_reference_config(
           xnn_unary_convert, xnn_datatype_int32, xnn_datatype_qint8);
@@ -484,6 +534,20 @@ enum xnn_status xnn_create_reduce_nd(
       break;
     }
     case xnn_datatype_quint8: { // qu8
+      switch (operator_type) {
+        case xnn_operator_type_sum_nd:
+        case xnn_operator_type_mean_nd:
+          reduce_config = xnn_init_qu8_rsum_config();
+          break;
+        case xnn_operator_type_reduce_min_nd:
+          reduce_config = xnn_init_u8_rmin_config();
+          break;
+        case xnn_operator_type_reduce_max_nd:
+          reduce_config = xnn_init_u8_rmax_config();
+          break;
+        default:
+          break;
+      }
       if (is_minmax) {
         assert(input_quantization->scale == output_quantization->scale);
         assert(
@@ -491,15 +555,8 @@ enum xnn_status xnn_create_reduce_nd(
         log2_accumulator_element_size = 0;
         fill_config = xnn_init_xx_fill_config();
         cvt_config = cvt_unused;
-
-        if (operator_type == xnn_operator_type_reduce_min_nd) {
-          config = xnn_init_u8_rmin_config();
-        } else {  // max
-          config = xnn_init_u8_rmax_config();
-        }
       } else {
         log2_accumulator_element_size = 2;
-        config = xnn_init_qu8_rsum_config();
         // We just use an int32 -> qu8 conversion. This means we effectively
         // only have a 31-bit accumulator instead of 32-bit, but that seems
         // insignificant.
@@ -516,7 +573,7 @@ enum xnn_status xnn_create_reduce_nd(
   };
 
   // Check configs and restore unused pointers to NULL.
-  if (config == NULL || fill_config == NULL || cvt_config == NULL) {
+  if (reduce_config == NULL || fill_config == NULL || cvt_config == NULL) {
     xnn_log_error(
         "failed to create %s (%s) operator: unsupported hardware configuration",
         xnn_operator_type_to_string(operator_type), xnn_datatype_to_string(datatype));
@@ -529,9 +586,9 @@ enum xnn_status xnn_create_reduce_nd(
   struct xnn_reduce_params params;
   size_t params_size = 0;
   // Setup parameters
-  if (config->init.reduce) {
-    params_size = config->init.reduce(&params, input_quantization,
-                                                 output_quantization);
+  if (reduce_config->init.reduce) {
+    params_size = reduce_config->init.reduce(&params, input_quantization,
+                                             output_quantization);
   }
   union xnn_unary_uparams cvt_params;
   size_t cvt_params_size = 0;
@@ -539,10 +596,25 @@ enum xnn_status xnn_create_reduce_nd(
     cvt_params_size = cvt_config->init(&cvt_params, NULL, input_quantization, output_quantization);
   }
 
-  return create_reduce_nd(
-    flags, log2_data_element_size, log2_accumulator_element_size, operator_type,
-    config, fill_config, cvt_config, &params,
-    params_size, &cvt_params, cvt_params_size, reduce_op_out);
+  // TODO(b/405244706): once all the datatypes and reductions are supported,
+  // turn back to just return `create_reduce_nd` result.
+  enum xnn_status status = xnn_status_invalid_state;
+  status = create_reduce_nd(
+      flags, log2_data_element_size, log2_accumulator_element_size,
+      operator_type, reduce_config, fill_config, cvt_config, &params,
+      params_size, &cvt_params, cvt_params_size, reduce_op_out);
+  if (status != xnn_status_success) {
+    return status;
+  }
+
+  if ((datatype == xnn_datatype_fp16 || datatype == xnn_datatype_fp32) &&
+      (reduce_operator_type == xnn_reduce_sum ||
+       reduce_operator_type == xnn_reduce_sum_squared ||
+       reduce_operator_type == xnn_reduce_mean ||
+       reduce_operator_type == xnn_reduce_mean_squared)) {
+    (*reduce_op_out)->ukernel.type = xnn_microkernel_type_reduce2;
+  }
+  return xnn_status_success;
 }
 
 enum xnn_status xnn_reshape_reduce_nd(

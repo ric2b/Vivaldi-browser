@@ -42,6 +42,7 @@ FATE_CHECKASM = fate-checkasm-aacencdsp                                 \
                 fate-checkasm-sbrdsp                                    \
                 fate-checkasm-rv34dsp                                   \
                 fate-checkasm-rv40dsp                                   \
+                fate-checkasm-scene_sad                                 \
                 fate-checkasm-svq1enc                                   \
                 fate-checkasm-synth_filter                              \
                 fate-checkasm-sw_gbrp                                   \
@@ -55,8 +56,10 @@ FATE_CHECKASM = fate-checkasm-aacencdsp                                 \
                 fate-checkasm-v210dec                                   \
                 fate-checkasm-v210enc                                   \
                 fate-checkasm-vc1dsp                                    \
+                fate-checkasm-vf_blackdetect                            \
                 fate-checkasm-vf_blend                                  \
                 fate-checkasm-vf_bwdif                                  \
+                fate-checkasm-vf_colordetect                            \
                 fate-checkasm-vf_colorspace                             \
                 fate-checkasm-vf_eq                                     \
                 fate-checkasm-vf_gblur                                  \

@@ -17,6 +17,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <tuple>
 #include <vector>
@@ -83,6 +84,38 @@ TEST(BasicTest, EncodeDecode) {
   EXPECT_EQ(decoder->image->depth, image->depth);
   ASSERT_GT(testutil::GetPsnr(*image, *decoder->image, /*ignore_alpha=*/false),
             40.0);
+}
+
+TEST(BasicTest, QualityCategories) {
+  ImagePtr image = testutil::CreateImage(/*width=*/12, /*height=*/34,
+                                         /*depth=*/8, AVIF_PIXEL_FORMAT_YUV420,
+                                         AVIF_PLANES_ALL, AVIF_RANGE_FULL);
+  ASSERT_NE(image, nullptr);
+  testutil::FillImageGradient(image.get(), /*offset=*/0);
+
+  EncoderPtr encoder(avifEncoderCreate());
+  encoder->quality = 5;
+  encoder->qualityAlpha = 100;
+  encoder->speed = 10;
+  ASSERT_NE(encoder, nullptr);
+  AvifRwData encoded;
+  ASSERT_EQ(avifEncoderWrite(encoder.get(), image.get(), &encoded),
+            AVIF_RESULT_OK);
+
+  auto decoder = CreateDecoder(encoded);
+  ASSERT_NE(decoder, nullptr);
+  ASSERT_EQ(avifDecoderParse(decoder.get()), AVIF_RESULT_OK);
+  ASSERT_EQ(avifDecoderNextImage(decoder.get()), AVIF_RESULT_OK);
+  EXPECT_EQ(decoder->image->width, image->width);
+  EXPECT_EQ(decoder->image->height, image->height);
+  EXPECT_EQ(decoder->image->depth, image->depth);
+
+  // Color planes should have some loss because the quality was set to a low
+  // value.
+  ASSERT_FALSE(testutil::AreImagesEqual(*image, *decoder->image,
+                                        /*ignore_alpha=*/true));
+  // Alpha plane should be lossless.
+  ASSERT_TRUE(testutil::ArePlanesEqual(*image, *decoder->image, AVIF_CHAN_A));
 }
 
 TEST(TransformTest, ClapIrotImir) {
@@ -183,6 +216,7 @@ TEST_P(LosslessRoundTrip, RoundTrip) {
   ASSERT_NE(encoder, nullptr);
   encoder->speed = 10;
   encoder->quality = 100;
+  encoder->qualityAlpha = 100;
   AvifRwData encoded;
   avifResult result = avifEncoderWrite(encoder.get(), image.get(), &encoded);
 
@@ -717,6 +751,14 @@ TEST(PixelFormatToStringTest, Test) {
   EXPECT_STREQ(avifPixelFormatToString(AVIF_PIXEL_FORMAT_ANDROID_NV12), "NV12");
   EXPECT_STREQ(avifPixelFormatToString(AVIF_PIXEL_FORMAT_ANDROID_NV21), "NV21");
   EXPECT_STREQ(avifPixelFormatToString(AVIF_PIXEL_FORMAT_NONE), "Unknown");
+}
+
+TEST(CodecVersions, Test) {
+  char versions[256];
+  avifCodecVersions(nullptr);
+  avifCodecVersions(versions);
+  EXPECT_NE(strstr(versions, "aom"), nullptr);
+  EXPECT_GT(avifLibYUVVersion(), 0);
 }
 
 }  // namespace

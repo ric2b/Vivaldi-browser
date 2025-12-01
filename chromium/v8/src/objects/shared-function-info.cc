@@ -87,10 +87,10 @@ Tagged<Code> SharedFunctionInfo::GetCode(Isolate* isolate) const {
       DCHECK(HasBytecodeArray());
       return isolate->builtins()->code(Builtin::kInterpreterEntryTrampoline);
     }
-    if (IsCode(data)) {
+    if (Tagged<Code> code; TryCast(data, &code)) {
       // Having baseline Code means we are a compiled, baseline function.
       DCHECK(HasBaselineCode());
-      return Cast<Code>(data);
+      return code;
     }
     if (IsInterpreterData(data)) {
       Tagged<Code> code = InterpreterTrampoline(isolate);
@@ -233,7 +233,8 @@ void SharedFunctionInfo::SetScript(IsolateForSandbox isolate,
 void SharedFunctionInfo::CopyFrom(Tagged<SharedFunctionInfo> other,
                                   IsolateForSandbox isolate) {
   if (other->HasTrustedData()) {
-    SetTrustedData(Cast<ExposedTrustedObject>(other->GetTrustedData(isolate)));
+    SetTrustedData(
+        TrustedCast<ExposedTrustedObject>(other->GetTrustedData(isolate)));
   } else {
     SetUntrustedData(other->GetUntrustedData());
   }
@@ -385,22 +386,24 @@ void SharedFunctionInfo::DiscardCompiledMetadata(
       PrintF(scope.file(), "]\n");
     }
 
-    Tagged<HeapObject> outer_scope_info;
     if (scope_info()->HasOuterScopeInfo()) {
-      outer_scope_info = scope_info()->OuterScopeInfo();
-    } else {
-      outer_scope_info = ReadOnlyRoots(isolate).the_hole_value();
-    }
+      Tagged<ScopeInfo> outer_scope_info = scope_info()->OuterScopeInfo();
 
-    // Raw setter to avoid validity checks, since we're performing the unusual
-    // task of decompiling.
-    set_raw_outer_scope_info_or_feedback_metadata(outer_scope_info);
-    gc_notify_updated_slot(
-        *this,
-        RawField(SharedFunctionInfo::kOuterScopeInfoOrFeedbackMetadataOffset),
-        outer_scope_info);
+      // Raw setter to avoid validity checks, since we're performing the unusual
+      // task of decompiling.
+      set_raw_outer_scope_info_or_feedback_metadata(outer_scope_info);
+      gc_notify_updated_slot(
+          *this,
+          RawField(SharedFunctionInfo::kOuterScopeInfoOrFeedbackMetadataOffset),
+          outer_scope_info);
+    } else {
+      // Raw setter to avoid validity checks, since we're performing the unusual
+      // task of decompiling.
+      set_raw_outer_scope_info_or_feedback_metadata(
+          ReadOnlyRoots(isolate).the_hole_value());
+    }
   } else {
-    DCHECK(IsScopeInfo(outer_scope_info()) || IsTheHole(outer_scope_info()));
+    DCHECK(IsTheHole(outer_scope_info()) || IsScopeInfo(outer_scope_info()));
   }
 
   // TODO(rmcilroy): Possibly discard ScopeInfo here as well.
@@ -891,7 +894,7 @@ bool SharedFunctionInfo::UniqueIdsAreUnique(Isolate* isolate) {
   std::unordered_set<uint32_t> ids({isolate->next_unique_sfi_id()});
   CombinedHeapObjectIterator it(isolate->heap());
   for (Tagged<HeapObject> o = it.Next(); !o.is_null(); o = it.Next()) {
-    if (!IsSharedFunctionInfo(o)) continue;
+    if (IsAnyHole(o) || !IsSharedFunctionInfo(o)) continue;
     auto result = ids.emplace(Cast<SharedFunctionInfo>(o)->unique_id());
     // If previously inserted...
     if (!result.second) return false;

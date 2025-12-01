@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,13 +8,13 @@ import {reveal} from './Revealer.js';
 let consoleInstance: Console|undefined;
 
 export class Console extends ObjectWrapper<EventTypes> {
-  readonly #messagesInternal: Message[];
+  readonly #messages: Message[];
   /**
    * Instantiable via the instance() factory below.
    */
   constructor() {
     super();
-    this.#messagesInternal = [];
+    this.#messages = [];
   }
 
   static instance(opts?: {forceNew: boolean}): Console {
@@ -32,14 +32,14 @@ export class Console extends ObjectWrapper<EventTypes> {
   /**
    * Add a message to the Console panel.
    *
-   * @param text - the message text.
-   * @param level - the message level.
-   * @param show - whether to show the Console panel (if it's not already shown).
-   * @param source - the message source.
+   * @param text the message text.
+   * @param level the message level.
+   * @param show whether to show the Console panel (if it's not already shown).
+   * @param source the message source.
    */
   addMessage(text: string, level = MessageLevel.INFO, show = false, source?: FrontendMessageSource): void {
     const message = new Message(text, level, Date.now(), show, source);
-    this.#messagesInternal.push(message);
+    this.#messages.push(message);
     this.dispatchEventToListeners(Events.MESSAGE_ADDED, message);
   }
 
@@ -54,15 +54,15 @@ export class Console extends ObjectWrapper<EventTypes> {
   /**
    * Adds an error message to the Console panel.
    *
-   * @param text - the message text.
-   * @param show - whether to show the Console panel (if it's not already shown).
+   * @param text the message text.
+   * @param show whether to show the Console panel (if it's not already shown).
    */
   error(text: string, show = true): void {
     this.addMessage(text, MessageLevel.ERROR, show);
   }
 
   messages(): Message[] {
-    return this.#messagesInternal;
+    return this.#messages;
   }
 
   show(): void {

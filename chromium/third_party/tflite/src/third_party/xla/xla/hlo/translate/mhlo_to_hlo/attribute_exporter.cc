@@ -39,6 +39,7 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_original_value.h"
 #include "xla/hlo/ir/hlo_sharding.h"
 #include "xla/hlo/parser/hlo_parser.h"
+#include "xla/hlo/translate/hlo_to_mhlo/hlo_utils.h"
 #include "xla/mlir_hlo/mhlo/IR/hlo_ops.h"
 #include "xla/service/hlo.pb.h"
 #include "xla/service/spmd/shardy/constants.h"
@@ -354,11 +355,10 @@ std::optional<xla::OpSharding> ConvertSharding(llvm::StringRef sharding) {
 }
 
 std::optional<xla::OriginalValueProto> ConvertOriginalValue(
-    llvm::StringRef original_value, const xla::Shape& shape) {
+    llvm::StringRef original_value) {
   absl::StatusOr<std::shared_ptr<xla::OriginalValue>> hlo_original_value =
       xla::ParseOriginalValue(
-          absl::string_view(original_value.data(), original_value.size()),
-          shape);
+          absl::string_view(original_value.data(), original_value.size()));
   if (!hlo_original_value.ok()) {
     return std::nullopt;
   }
@@ -469,7 +469,8 @@ std::optional<xla::OpSharding> ExtractShardyArgShardingFromFrontendAttrs(
       arg_frontend_attrs != nullptr) {
     auto sdy_sharding =
         xla::sdy::parseStringAttr<mlir::sdy::TensorShardingAttr>(
-            arg_frontend_attrs, HloSharding::kShardingFrontendAttrName);
+            arg_frontend_attrs,
+            xla::ToStringRef(HloSharding::kShardingFrontendAttrName));
     if (sdy_sharding != nullptr) {
       return CreateOpShardingFromSdySharding(sdy_sharding, sdy_meshes,
                                              arg_frontend_attrs);
@@ -501,7 +502,8 @@ std::optional<xla::OpSharding> ExtractShardyResultShardingFromFrontendAttrs(
       << "xla.sdy.FuncResultSharding custom call should have frontend attrs";
   auto sharding_per_value_attr =
       xla::sdy::parseStringAttr<mlir::sdy::TensorShardingPerValueAttr>(
-          op_frontend_attrs, HloSharding::kShardingFrontendAttrName);
+          op_frontend_attrs,
+          xla::ToStringRef(HloSharding::kShardingFrontendAttrName));
   CHECK(sharding_per_value_attr != nullptr)
       << "Failed to parse sharding from frontend attrs";
   CHECK_EQ(sharding_per_value_attr.size(), 1)

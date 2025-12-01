@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -406,7 +406,6 @@ window.DevToolsAPI = DevToolsAPI;
 const EnumeratedHistogram = {
   // LINT.IfChange(EnumeratedHistogram)
   ActionTaken: 'DevTools.ActionTaken',
-  CSSHintShown: 'DevTools.CSSHintShown',
   DeveloperResourceLoaded: 'DevTools.DeveloperResourceLoaded',
   DeveloperResourceScheme: 'DevTools.DeveloperResourceScheme',
   ExperimentDisabled: 'DevTools.ExperimentDisabled',
@@ -1220,6 +1219,14 @@ const InspectorFrontendHostImpl = class {
    */
   registerAidaClientEvent(request, cb) {
     DevToolsAPI.sendMessageToEmbedder('registerAidaClientEvent', [request], cb);
+  }
+
+  /**
+   * @param request
+   * @param cb
+   */
+  dispatchHttpRequest(request, cb) {
+    DevToolsAPI.sendMessageToEmbedder('dispatchHttpRequest', [request], cb);
   }
 };
 

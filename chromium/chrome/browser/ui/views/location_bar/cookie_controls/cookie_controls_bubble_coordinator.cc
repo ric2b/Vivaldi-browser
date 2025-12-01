@@ -6,6 +6,8 @@
 
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
+#include "chrome/browser/ui/views/location_bar/cookie_controls/cookie_controls_bubble_view_controller.h"
+#include "chrome/browser/ui/views/location_bar/cookie_controls/cookie_controls_bubble_view_impl.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 
@@ -15,7 +17,12 @@ class WebContents;
 
 namespace {}  // namespace
 
-CookieControlsBubbleCoordinator::CookieControlsBubbleCoordinator() = default;
+DEFINE_USER_DATA(CookieControlsBubbleCoordinator);
+
+CookieControlsBubbleCoordinator::CookieControlsBubbleCoordinator(
+    BrowserWindowInterface* browser_window)
+    : scoped_unowned_user_data_(browser_window->GetUnownedUserDataHost(),
+                                *this) {}
 
 CookieControlsBubbleCoordinator::~CookieControlsBubbleCoordinator() = default;
 
@@ -88,4 +95,10 @@ void CookieControlsBubbleCoordinator::OnViewIsDeleting(
     views::View* observed_view) {
   bubble_view_ = nullptr;
   view_controller_ = nullptr;
+}
+
+// static
+CookieControlsBubbleCoordinator* CookieControlsBubbleCoordinator::From(
+    BrowserWindowInterface* window) {
+  return Get(window->GetUnownedUserDataHost());
 }

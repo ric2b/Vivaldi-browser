@@ -77,8 +77,11 @@ translate::TranslateManager* ChromeIOSTranslateClient::GetTranslateManager() {
 
 std::unique_ptr<infobars::InfoBar> ChromeIOSTranslateClient::CreateInfoBar(
     std::unique_ptr<translate::TranslateInfoBarDelegate> delegate) const {
-  bool skip_banner = delegate->translate_step() ==
-                     translate::TranslateStep::TRANSLATE_STEP_TRANSLATING;
+  bool skip_banner =
+      delegate->translate_step() ==
+          translate::TranslateStep::TRANSLATE_STEP_TRANSLATING ||
+      delegate->translate_step() ==
+          translate::TranslateStep::TRANSLATE_STEP_AFTER_TRANSLATE;
   return std::make_unique<InfoBarIOS>(InfobarType::kInfobarTypeTranslate,
                                       std::move(delegate), skip_banner);
 }
@@ -92,6 +95,12 @@ bool ChromeIOSTranslateClient::ShowTranslateUI(
   DCHECK(web_state_);
   if (error_type != translate::TranslateErrors::NONE) {
     step = translate::TRANSLATE_STEP_TRANSLATE_ERROR;
+  }
+
+  // If infobar management is not available from the web state, as is the case
+  // for Reader mode web state then do not show translation infobar.
+  if (!InfoBarManagerImpl::FromWebState(web_state_)) {
+    return false;
   }
 
   // Infobar UI.

@@ -4,8 +4,6 @@
 
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/pinned_tabs/pinned_cell.h"
 
-#import <MaterialComponents/MaterialActivityIndicator.h>
-
 #import <ostream>
 
 #import "base/check.h"
@@ -34,6 +32,10 @@ using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 namespace {
+
+// Scale of activity indicator replacing fav icon when active.
+const CGFloat kIndicatorScale = 0.75;
+
 // TODO(crbug.com/40890700): Refactor this method.
 // Frame-based layout utilities for GridTransitionCell.
 // Scales the size of `view`'s frame by `factor` in both height and width. This
@@ -77,6 +79,7 @@ UIColor* GetInterfaceStyleDarkColor(UIColor* dynamicColor) {
   return [dynamicColor
       resolvedColorWithTraitCollection:interfaceStyleDarkTraitCollection];
 }
+
 }  // namespace
 
 @interface PinnedCell ()
@@ -110,7 +113,7 @@ UIColor* GetInterfaceStyleDarkColor(UIColor* dynamicColor) {
   // View for displaying the favicon.
   UIImageView* _faviconView;
   // Activity Indicator view that animates while WebState is loading.
-  MDCActivityIndicator* _activityIndicator;
+  UIActivityIndicatorView* _activityIndicator;
   // Title label's leading constraint.
   NSLayoutConstraint* _titleLabelLeadingConstraint;
   // Title label's trailing constraint.
@@ -416,14 +419,12 @@ UIColor* GetInterfaceStyleDarkColor(UIColor* dynamicColor) {
 }
 
 - (void)setupActivityIndicator {
-  CGRect indicatorFrame =
-      CGRectMake(0, 0, kPinnedCellFaviconWidth, kPinnedCellFaviconWidth);
-  MDCActivityIndicator* activityIndicator =
-      [[MDCActivityIndicator alloc] initWithFrame:indicatorFrame];
+  UIActivityIndicatorView* activityIndicator =
+      [[UIActivityIndicatorView alloc] init];
+  activityIndicator.color = [UIColor colorNamed:kBlueColor];
+  activityIndicator.transform = CGAffineTransformScale(
+      activityIndicator.transform, kIndicatorScale, kIndicatorScale);
   activityIndicator.translatesAutoresizingMaskIntoConstraints = NO;
-  activityIndicator.cycleColors = @[ [UIColor colorNamed:kBlueColor] ];
-  activityIndicator.radius =
-      ui::AlignValueToUpperPixel(kPinnedCellFaviconWidth / 2);
   [_headerView addSubview:activityIndicator];
 
   [NSLayoutConstraint activateConstraints:@[

@@ -55,13 +55,13 @@ using testing::IsEmpty;
 // automatic request to /favicon.ico. This is because the automatic request
 // messes with our tests, in which we want to trigger a single request from the
 // web page to a resource of our choice and observe the side-effect in metrics.
-constexpr char kNoFaviconPath[] = "/private_network_access/no-favicon.html";
+constexpr char kNoFaviconPath[] = "/local_network_access/no-favicon.html";
 
 // Same as kNoFaviconPath, except it carries a header that makes the browser
 // consider it came from the `public` address space, irrespective of the fact
 // that we loaded the web page from localhost.
 constexpr char kTreatAsPublicAddressPath[] =
-    "/private_network_access/no-favicon-treat-as-public-address.html";
+    "/local_network_access/no-favicon-treat-as-public-address.html";
 
 GURL SecureURL(const net::EmbeddedTestServer& server, const std::string& path) {
   // Test HTTPS servers cannot lie about their hostname, so they yield URLs
@@ -268,7 +268,6 @@ class PrivateNetworkAccessWithFeatureEnabledBrowserTest
             {
                 features::kBlockInsecurePrivateNetworkRequests,
                 features::kBlockInsecurePrivateNetworkRequestsFromPrivate,
-                features::kBlockInsecurePrivateNetworkRequestsDeprecationTrial,
                 features::kPrivateNetworkAccessSendPreflights,
                 features::kPrivateNetworkAccessForNavigations,
                 features::kPrivateNetworkAccessForWorkers,
@@ -576,9 +575,8 @@ IN_PROC_BROWSER_TEST_F(PrivateNetworkAccessWithFeatureDisabledBrowserTest,
 
   EXPECT_TRUE(content::NavigateToURL(
       web_contents(),
-      NonSecureURL(
-          *server,
-          "/private_network_access/remote-initiator-navigation.html")));
+      NonSecureURL(*server,
+                   "/local_network_access/remote-initiator-navigation.html")));
   EXPECT_THAT(
       feature_histogram_tester.GetNonZeroCounts(AllAddressSpaceFeatures()),
       IsEmpty());
@@ -609,9 +607,8 @@ IN_PROC_BROWSER_TEST_F(
 
   EXPECT_TRUE(content::NavigateToURL(
       web_contents(),
-      NonSecureURL(
-          *server,
-          "/private_network_access/remote-initiator-navigation.html")));
+      NonSecureURL(*server,
+                   "/local_network_access/remote-initiator-navigation.html")));
 
   EXPECT_EQ(true, content::EvalJs(web_contents(), R"(
     runTest({
@@ -636,9 +633,8 @@ IN_PROC_BROWSER_TEST_F(
 
   EXPECT_TRUE(content::NavigateToURL(
       web_contents(),
-      NonSecureURL(
-          *server,
-          "/private_network_access/remote-initiator-navigation.html")));
+      NonSecureURL(*server,
+                   "/local_network_access/remote-initiator-navigation.html")));
 
   EXPECT_EQ(true, content::EvalJs(web_contents(), R"(
     runTest({
@@ -1397,7 +1393,6 @@ class PrivateNetworkAccessAutoReloadBrowserTest
       : PrivateNetworkAccessBrowserTestBase(
             {
                 features::kBlockInsecurePrivateNetworkRequests,
-                features::kBlockInsecurePrivateNetworkRequestsDeprecationTrial,
                 features::kPrivateNetworkAccessForNavigations,
             },
             {
@@ -1456,45 +1451,6 @@ IN_PROC_BROWSER_TEST_F(PrivateNetworkAccessWithFeatureEnabledBrowserTest,
     fetch($1).then(response => true).catch(error => false)
   )",
                                                       subresource_url)));
-}
-
-class PrivateNetworkAccessWithNullIPKillswitchTest
-    : public PrivateNetworkAccessBrowserTestBase {
- public:
-  PrivateNetworkAccessWithNullIPKillswitchTest()
-      : PrivateNetworkAccessBrowserTestBase(
-            {
-                features::kBlockInsecurePrivateNetworkRequests,
-                features::kBlockInsecurePrivateNetworkRequestsFromPrivate,
-                features::kBlockInsecurePrivateNetworkRequestsDeprecationTrial,
-                features::kPrivateNetworkAccessSendPreflights,
-                features::kPrivateNetworkAccessForNavigations,
-                features::kPrivateNetworkAccessForWorkers,
-                network::features::kTreatNullIPAsPublicAddressSpace,
-            },
-            {
-                network::features::kLocalNetworkAccessChecks,
-            }) {}
-};
-
-// This test verifies that 0.0.0.0 subresources are not blocked when the
-// killswitch feature is enabled.
-IN_PROC_BROWSER_TEST_F(PrivateNetworkAccessWithNullIPKillswitchTest,
-                       NullIPNotBlockedWithKillswitch) {
-  if constexpr (BUILDFLAG(IS_WIN)) {
-    GTEST_SKIP() << "0.0.0.0 behavior varies across platforms and is "
-                    "unreachable on Windows.";
-  }
-
-  std::unique_ptr<net::EmbeddedTestServer> server = NewServer();
-  GURL url = PublicNonSecureURL(*server);
-  EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
-  GURL subresource_url = server->GetURL("0.0.0.0", "/cors-ok.txt");
-  EXPECT_EQ(true, content::EvalJs(web_contents(),
-                                  content::JsReplace(R"(
-    fetch($1).then(response => response.ok)
-  )",
-                                                     subresource_url)));
 }
 
 }  // namespace

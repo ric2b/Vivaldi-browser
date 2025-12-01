@@ -2771,10 +2771,10 @@ TEST_F(LibYUVConvertTest, TestARGBToUVRow) {
       benchmark_width_ * benchmark_height_ * benchmark_iterations_ / 32;
 
   for (int i = 0; i < benchmark_iterations; ++i) {
-#if defined(HAS_ARGBTOUVROW_SSSE3)
-    int has_ssse3 = TestCpuFlag(kCpuHasSSSE3);
-    if (has_ssse3) {
-      ARGBToUVRow_SSSE3(&orig_argb_pixels[0], 0, &dest_u[0], &dest_v[0], 64);
+#if defined(HAS_ARGBTOUVROW_AVX2)
+    int has_avx2 = TestCpuFlag(kCpuHasAVX2);
+    if (has_avx2) {
+      ARGBToUVRow_AVX2(&orig_argb_pixels[0], 0, &dest_u[0], &dest_v[0], 64);
     } else {
       ARGBToUVRow_C(&orig_argb_pixels[0], 0, &dest_u[0], &dest_v[0], 64);
     }
@@ -2859,7 +2859,8 @@ TEST_F(LibYUVConvertTest, TestI400LargeSize) {
   free_aligned_buffer_page_end(dest_argb);
   free_aligned_buffer_page_end(orig_i400);
 }
-#endif  // defined(__x86_64__) || defined(_M_X64) || defined(__aarch64__)
+#endif  // !defined(DISABLE_SLOW_TESTS) && \
+        // (defined(__x86_64__) || defined(_M_X64) || defined(__aarch64__))
 
 #endif  // !defined(LEAN_TESTS)
 

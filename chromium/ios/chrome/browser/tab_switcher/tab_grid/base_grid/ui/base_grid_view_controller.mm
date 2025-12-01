@@ -44,6 +44,7 @@
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_context_menu/tab_context_menu_provider.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/transitions/legacy_grid_transition_layout.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/transitions/tab_grid_transition_item.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/transitions/tab_grid_transition_layout.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_group_item.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_snapshot_and_favicon.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_switcher_item.h"
@@ -54,6 +55,7 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/raccoon/raccoon_api.h"
 #import "ios/web/public/web_state_id.h"
+#import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
@@ -80,11 +82,7 @@ namespace {
 NSString* const kCellIdentifier = @"GridCellIdentifier";
 NSString* const kGroupCellIdentifier = @"GroupGridCellIdentifier";
 
-// Returns the accessibility identifier to set on a GridCell when positioned at
-// the given index.
-NSString* GridCellAccessibilityIdentifier(NSUInteger index) {
-  return [NSString stringWithFormat:@"%@%ld", kGridCellIdentifierPrefix, index];
-}
+CGFloat const kCellMaxHeightForEmptyThumbnailCenteredPortraitLayout = 275;
 
 // Returns the accessibility identifier to set on a GroupGridCell when
 // positioned at the given index.
@@ -289,6 +287,19 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
   [coordinator
       animateAlongsideTransition:^(
           id<UIViewControllerTransitionCoordinatorContext> context) {
+        if (IsTabGridEmptyThumbnailUIEnabled()) {
+          for (UICollectionViewCell* cell in self.collectionView.visibleCells) {
+            if ([cell isKindOfClass:[GridCell class]]) {
+              GridCell* gridCell = ObjCCastStrict<GridCell>(cell);
+              gridCell.layoutType = [self layoutTypeForContainerSize:size
+                                                          isGridCell:YES];
+            } else if ([cell isKindOfClass:[GroupGridCell class]]) {
+              GroupGridCell* gridCell = ObjCCastStrict<GroupGridCell>(cell);
+              gridCell.layoutType = [self layoutTypeForContainerSize:size
+                                                          isGridCell:NO];
+            }
+          }
+        }
         [self.collectionView.collectionViewLayout invalidateLayout];
       }
       completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
@@ -421,6 +432,8 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
   [self updateSuggestedActionsSection];
 }
 
+// TODO(crbug.com/427543764): Rename this method now that it checks for
+// something different.
 - (BOOL)isSelectedCellVisible {
   // The collection view's selected item may not have updated yet, so use the
   // selected index.
@@ -429,8 +442,13 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
     return NO;
   }
   NSIndexPath* selectedIndexPath = [self indexPathForTabIndex:selectedIndex];
+
+  GridItemIdentifier* gridItem =
+      [self.diffableDataSource itemIdentifierForIndexPath:selectedIndexPath];
+
   return [self.collectionView.indexPathsForVisibleItems
-      containsObject:selectedIndexPath];
+             containsObject:selectedIndexPath] &&
+         gridItem.type == GridItemType::kTab;
 }
 
 - (void)setContentInsets:(UIEdgeInsets)contentInsets {
@@ -446,7 +464,7 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
   _contentInsets = contentInsets;
 }
 
-- (LegacyGridTransitionLayout*)transitionLayout {
+- (LegacyGridTransitionLayout*)legacyTransitionLayout {
   [self.collectionView layoutIfNeeded];
   NSMutableArray<LegacyGridTransitionItem*>* items =
       [[NSMutableArray alloc] init];
@@ -503,6 +521,12 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
   return [LegacyGridTransitionLayout layoutWithInactiveItems:items
                                                   activeItem:activeItem
                                                selectionItem:selectionItem];
+}
+
+- (TabGridTransitionLayout*)transitionLayout {
+  return [TabGridTransitionLayout
+      layoutWithActiveCell:self.transitionItemForActiveCell
+                activeGrid:self];
 }
 
 - (TabGridTransitionItem*)transitionItemForActiveCell {
@@ -1659,6 +1683,11 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
   cell.tabsCount = item.numberOfTabsInGroup;
   cell.title = item.title;
   cell.accessibilityIdentifier = GroupGridCellAccessibilityIdentifier(index);
+  if (IsTabGridEmptyThumbnailUIEnabled()) {
+    cell.layoutType =
+        [self layoutTypeForContainerSize:self.collectionView.bounds.size
+                              isGridCell:NO];
+  }
 
   cell.facePileProvider =
       [self.gridProvider facePileProviderForItem:groupItemIdentifier];
@@ -1703,7 +1732,12 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
   cell.itemIdentifier = itemIdentifier;
   cell.title = item.title;
   cell.titleHidden = item.hidesTitle;
-  cell.accessibilityIdentifier = GridCellAccessibilityIdentifier(index);
+  [cell setAccessibilityIdentifiersWithIndex:index];
+  if (IsTabGridEmptyThumbnailUIEnabled()) {
+    cell.layoutType =
+        [self layoutTypeForContainerSize:self.collectionView.bounds.size
+                              isGridCell:YES];
+  }
   if (self.mode == TabGridMode::kSelection) {
     if ([self.gridProvider isItemSelected:itemIdentifier]) {
       cell.state = GridCellStateEditingSelected;
@@ -1739,6 +1773,8 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
                             itemID) {
                       [cell setPriceDrop:priceCardItem.price
                            previousPrice:priceCardItem.previousPrice];
+                    } else {
+                      [cell hidePriceDrop];
                     }
                   }];
   cell.opacity = 1.0f;
@@ -1873,7 +1909,8 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
       continue;
     }
     NSUInteger itemIndex = base::checked_cast<NSUInteger>(indexPath.item);
-    cell.accessibilityIdentifier = GridCellAccessibilityIdentifier(itemIndex);
+    GridCell* gridCell = base::apple::ObjCCast<GridCell>(cell);
+    [gridCell setAccessibilityIdentifiersWithIndex:itemIndex];
   }
 }
 
@@ -1953,11 +1990,30 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
   [self.diffableDataSource applySnapshot:snapshot animatingDifferences:NO];
 }
 
-// Vivaldi
-- (void)didSelectSearchRecentTabsInSuggestedActionsViewController:
-    (SuggestedActionsViewController*)viewController {
-  [self.tabGridHandler showRecentTabsForText:self.searchText];
+// Return the layout type based on the aspect ratio of `containerSize`, whether
+// the cell is currently a grid cell (as opposed to a cell showing a preview of
+// a tab group), and whether the current cell height is below a threshold in
+// scenarios where it would be better to use EmptyThumbnailLayoutTypePortrait
+// instead of EmptyThumbnailLayoutTypeCenteredPortrait.
+- (EmptyThumbnailLayoutType)layoutTypeForContainerSize:(CGSize)containerSize
+                                            isGridCell:(BOOL)isGridCell {
+  const CGFloat aspectRatio = TabGridItemAspectRatio(containerSize);
+  CGFloat cellHeight =
+      aspectRatio * containerSize.width /
+      TabGridColumnsCount(containerSize,
+                          self.traitCollection.preferredContentSizeCategory);
+  if (aspectRatio < 1) {
+    return EmptyThumbnailLayoutTypeLandscape;
+  } else if (isGridCell) {
+    return EmptyThumbnailLayoutTypeCenteredPortrait;
+  } else if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
+    if (cellHeight < kCellMaxHeightForEmptyThumbnailCenteredPortraitLayout) {
+      return EmptyThumbnailLayoutTypePortrait;
+    } else {
+      return EmptyThumbnailLayoutTypeCenteredPortrait;
+    }
+  }
+  return EmptyThumbnailLayoutTypePortrait;
 }
-// End Vivaldi
 
 @end

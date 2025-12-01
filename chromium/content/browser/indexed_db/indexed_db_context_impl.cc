@@ -75,13 +75,6 @@ namespace content::indexed_db {
 using blink::StorageKey;
 using storage::BucketLocator;
 
-// `IdbPrioritizeForegroundClients` affects relative ordering of transactions
-// for a single client. This feature affects which backends are run at a higher
-// task priority. See crbug.com/329221141
-BASE_FEATURE(kIdbExpediteBackendProcessingForForegroundClients,
-             "IdbExpediteBackendProcessingForForegroundClients",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 namespace {
 
 base::FilePath GetBlobStorePath(const base::FilePath& data_path,
@@ -99,30 +92,14 @@ base::FilePath GetSqlitePath(const base::FilePath& data_path,
   return data_path.Append(indexed_db::GetSqliteDbDirectory(bucket_locator));
 }
 
-base::TaskPriority GetBaseTaskPriority() {
-  if (base::FeatureList::IsEnabled(
-          kIdbExpediteBackendProcessingForForegroundClients)) {
-    return base::TaskPriority::USER_BLOCKING;
-  }
-
-  return base::FeatureList::IsEnabled(base::kUseUtilityThreadGroup)
-             ? base::TaskPriority::USER_BLOCKING
-             : base::TaskPriority::USER_VISIBLE;
-}
-
-// Creates a task runner suitable for use by the main IDB task runner.
-scoped_refptr<base::UpdateableSequencedTaskRunner> CreateMainTaskRunner() {
-  return base::ThreadPool::CreateUpdateableSequencedTaskRunner(
-      {base::MayBlock(), GetBaseTaskPriority(), base::WithBaseSyncPrimitives(),
-       // BLOCK_SHUTDOWN to support clearing session-only storage.
-       base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
-}
-
-// Creates a task runner suitable for use by a backing store. See
-// https://crbug.com/329221141 for notes on task priority.
-scoped_refptr<base::UpdateableSequencedTaskRunner> CreateBucketTaskRunner() {
-  return base::ThreadPool::CreateUpdateableSequencedTaskRunner(
-      {base::MayBlock(), GetBaseTaskPriority(), base::WithBaseSyncPrimitives(),
+// Creates a task runner suitable for use either as the main IDB thread or for a
+// backing store. See https://crbug.com/329221141 for notes on task priority.
+scoped_refptr<base::SequencedTaskRunner> CreateTaskRunner() {
+  return base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::WithBaseSyncPrimitives(),
+       base::FeatureList::IsEnabled(base::kUseUtilityThreadGroup)
+           ? base::TaskPriority::USER_BLOCKING
+           : base::TaskPriority::USER_VISIBLE,
        // BLOCK_SHUTDOWN to support clearing session-only storage.
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
 }
@@ -259,7 +236,7 @@ IndexedDBContextImpl::IndexedDBContextImpl(
         file_system_access_context,
     scoped_refptr<base::SequencedTaskRunner> custom_task_runner)
     : idb_task_runner_(custom_task_runner ? custom_task_runner
-                                          : CreateMainTaskRunner()),
+                                          : CreateTaskRunner()),
       base_data_path_(base_data_path.empty() ? base::FilePath()
                                              : base_data_path),
       quota_manager_proxy_(std::move(quota_manager_proxy)),
@@ -636,17 +613,6 @@ void IndexedDBContextImpl::GetUsageForTesting(
   std::move(callback).Run(total_size);
 }
 
-void IndexedDBContextImpl::GetSchedulingPriorityForTesting(
-    GetSchedulingPriorityForTestingCallback callback) {
-  if (bucket_contexts_.empty()) {
-    std::move(callback).Run(std::nullopt);
-    return;
-  }
-  bucket_contexts_.begin()
-      ->second.AsyncCall(&BucketContext::CalculateSchedulingPriority)
-      .Then(std::move(callback));
-}
-
 void IndexedDBContextImpl::BindMockFailureSingletonForTesting(
     mojo::PendingReceiver<storage::mojom::MockFailureInjector> receiver) {
   pending_failure_injector_ = std::move(receiver);
@@ -862,18 +828,19 @@ int64_t IndexedDBContextImpl::ReadUsageFromDisk(
   DCHECK(!in_memory());
 
 #if BUILDFLAG(IS_WIN)
-  // Touch all files in the LevelDB directory to update directory entry
+  // Touch all files in the database paths to update directory entry
   // metadata. See note for `bucket_size_map_` about why this is necessary.
-  // TODO(crbug.com/419203257): Determine if this is also needed for SQLite.
   if (write_in_progress) {
-    const base::FilePath leveldb_dir =
-        GetLevelDBPath(GetDataPath(bucket_locator), bucket_locator);
-    base::FileEnumerator file_iter(leveldb_dir, /*recursive=*/true,
-                                   base::FileEnumerator::FILES);
-    for (base::FilePath file_path = file_iter.Next(); !file_path.empty();
-         file_path = file_iter.Next()) {
-      base::File file(
-          file_path, base::File::FLAG_OPEN | base::File::FLAG_WIN_SHARE_DELETE);
+    const base::FilePath& data_path = GetDataPath(bucket_locator);
+    for (const base::FilePath& path :
+         {GetLevelDBPath(data_path, bucket_locator),
+          GetSqlitePath(data_path, bucket_locator)}) {
+      base::FileEnumerator(path, /*recursive=*/false,
+                           base::FileEnumerator::FILES)
+          .ForEach([](const base::FilePath& file_path) {
+            base::File file(file_path, base::File::FLAG_OPEN |
+                                           base::File::FLAG_WIN_SHARE_DELETE);
+          });
     }
   }
 #endif
@@ -1130,29 +1097,16 @@ void IndexedDBContextImpl::EnsureBucketContext(
 
   // See docs above `TaskRunnerLimiter`.
   scoped_refptr<base::SequencedTaskRunner> bucket_task_runner;
-  scoped_refptr<base::UpdateableSequencedTaskRunner>
-      updateable_bucket_task_runner;
   TaskRunnerLimiter& task_runner_limiter =
       task_runner_limiters_[bucket_locator.storage_key.top_level_site()];
   static int kTaskRunnerCountLimit = base::SysInfo::NumberOfProcessors();
   if (++task_runner_limiter.active_bucket_count > kTaskRunnerCountLimit) {
-    // The overflow task runner will never be set to the highest priority.
     if (!task_runner_limiter.overflow_task_runner) {
-      scoped_refptr<base::UpdateableSequencedTaskRunner> overflow_task_runner =
-          CreateBucketTaskRunner();
-      overflow_task_runner->UpdatePriority(base::TaskPriority::USER_VISIBLE);
-      task_runner_limiter.overflow_task_runner =
-          std::move(overflow_task_runner);
+      task_runner_limiter.overflow_task_runner = CreateTaskRunner();
     }
     bucket_task_runner = task_runner_limiter.overflow_task_runner;
   } else {
-    updateable_bucket_task_runner = CreateBucketTaskRunner();
-    bucket_task_runner = updateable_bucket_task_runner;
-  }
-
-  if (!base::FeatureList::IsEnabled(
-          kIdbExpediteBackendProcessingForForegroundClients)) {
-    updateable_bucket_task_runner.reset();
+    bucket_task_runner = CreateTaskRunner();
   }
 
   const auto& [iter, inserted] = bucket_contexts_.emplace(
@@ -1161,8 +1115,8 @@ void IndexedDBContextImpl::EnsureBucketContext(
           force_single_thread_ ? IDBTaskRunner()
                                : std::move(bucket_task_runner),
           bucket, data_directory, std::move(bucket_delegate),
-          updateable_bucket_task_runner, quota_manager_proxy_,
-          std::move(cloned_blob_storage_context), std::move(fsa_context)));
+          quota_manager_proxy_, std::move(cloned_blob_storage_context),
+          std::move(fsa_context)));
   DCHECK(inserted);
   if (pending_failure_injector_) {
     iter->second.AsyncCall(&BucketContext::BindMockFailureSingletonForTesting)

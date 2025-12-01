@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/enum_array.h"
 #include "base/files/file_path.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
@@ -53,7 +54,10 @@ enum class RuleGroup {
   kFirst = kTrackingRules,
   kLast = kAdBlockingRules,
 };
-constexpr size_t kRuleGroupCount = static_cast<size_t>(RuleGroup::kLast) + 1;
+
+template <typename T>
+using RuleGroupArray =
+    base::EnumArray<T, RuleGroup, RuleGroup::kFirst, RuleGroup::kLast>;
 
 enum class FetchResult {
   kSuccess = 0,

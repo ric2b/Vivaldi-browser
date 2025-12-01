@@ -5,13 +5,13 @@
 package org.chromium.net.impl;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 import org.chromium.net.Proxy;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Executor;
 
 /** Wraps a {@link org.chromium.net.Proxy.Callback} in a version safe manner. */
 final class VersionSafeProxyCallback {
@@ -23,8 +23,9 @@ final class VersionSafeProxyCallback {
     }
 
     private final @NonNull Proxy.Callback mBackend;
+    private final @NonNull Executor mExecutor;
 
-    VersionSafeProxyCallback(@NonNull Proxy.Callback backend) {
+    VersionSafeProxyCallback(@NonNull Executor executor, @NonNull Proxy.Callback backend) {
         if (!apiContainsProxyCallbackClass()) {
             throw new AssertionError(
                     String.format(
@@ -33,12 +34,17 @@ final class VersionSafeProxyCallback {
                             VersionSafeCallbacks.ApiVersion.getMaximumAvailableApiLevel(),
                             PROXY_CALLBACK_API_LEVEL));
         }
+        mExecutor = Objects.requireNonNull(executor);
         mBackend = Objects.requireNonNull(backend);
     }
 
-    @Nullable
-    List<Map.Entry<String, String>> onBeforeTunnelRequest() {
-        return mBackend.onBeforeTunnelRequest();
+    @NonNull
+    Executor getExecutor() {
+        return mExecutor;
+    }
+
+    void onBeforeTunnelRequest(Proxy.Callback.Request request) {
+        mBackend.onBeforeTunnelRequest(request);
     }
 
     boolean onTunnelHeadersReceived(

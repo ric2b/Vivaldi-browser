@@ -18,6 +18,7 @@
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/common/constants.h"  // nogncheck
@@ -48,10 +49,12 @@ RendererURLLoaderThrottle::RendererURLLoaderThrottle(
 RendererURLLoaderThrottle::RendererURLLoaderThrottle(
     mojom::SafeBrowsing* safe_browsing,
     base::optional_ref<const blink::LocalFrameToken> local_frame_token,
-    mojom::ExtensionWebRequestReporter* extension_web_request_reporter)
+    mojo::PendingRemote<mojom::ExtensionWebRequestReporter>
+        extension_web_request_reporter)
     : safe_browsing_(safe_browsing),
       frame_token_(local_frame_token.CopyAsOptional()),
-      extension_web_request_reporter_(extension_web_request_reporter) {}
+      extension_web_request_reporter_(
+          std::move(extension_web_request_reporter)) {}
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 RendererURLLoaderThrottle::~RendererURLLoaderThrottle() {
@@ -61,8 +64,8 @@ RendererURLLoaderThrottle::~RendererURLLoaderThrottle() {
   }
 
   if (deferred_)
-    TRACE_EVENT_NESTABLE_ASYNC_END0("safe_browsing", "Deferred",
-                                    TRACE_ID_LOCAL(this));
+    TRACE_EVENT_END("safe_browsing",
+                    /* Deferred */ perfetto::Track::FromPointer(this));
 }
 
 void RendererURLLoaderThrottle::DetachFromCurrentSequence() {
@@ -73,12 +76,12 @@ void RendererURLLoaderThrottle::DetachFromCurrentSequence() {
   safe_browsing_ = nullptr;
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  // Create a new pipe to the ExtensionWebRequestReporter interface that can be
-  // bound to a different sequence.
-  extension_web_request_reporter_->Clone(
-      extension_web_request_reporter_pending_remote_
-          .InitWithNewPipeAndPassReceiver());
-  extension_web_request_reporter_ = nullptr;
+  // Pass the pipe to the ExtensionWebRequestReporter interface to be bound to
+  // a different sequence.
+  if (extension_web_request_reporter_) {
+    pending_extension_web_request_reporter_ =
+        extension_web_request_reporter_.Unbind();
+  }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 }
 
@@ -168,9 +171,9 @@ void RendererURLLoaderThrottle::WillProcessResponse(
   DCHECK(!deferred_);
   deferred_ = true;
   *defer = true;
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN1("safe_browsing", "Deferred",
-                                    TRACE_ID_LOCAL(this), "original_url",
-                                    original_url_.spec());
+  TRACE_EVENT_BEGIN("safe_browsing", "Deferred",
+                    perfetto::Track::FromPointer(this), "original_url",
+                    original_url_.spec());
 }
 
 const char* RendererURLLoaderThrottle::NameForLoggingWillProcessResponse() {
@@ -192,8 +195,8 @@ void RendererURLLoaderThrottle::OnCheckUrlResult(
   if (proceed) {
     if (pending_checks_ == 0 && deferred_) {
       deferred_ = false;
-      TRACE_EVENT_NESTABLE_ASYNC_END0("safe_browsing", "Deferred",
-                                      TRACE_ID_LOCAL(this));
+      TRACE_EVENT_END("safe_browsing",
+                      /* Deferred */ perfetto::Track::FromPointer(this));
       delegate_->Resume();
     }
   } else {
@@ -219,8 +222,8 @@ void RendererURLLoaderThrottle::OnMojoDisconnect() {
 
   if (deferred_) {
     deferred_ = false;
-    TRACE_EVENT_NESTABLE_ASYNC_END0("safe_browsing", "Deferred",
-                                    TRACE_ID_LOCAL(this));
+    TRACE_EVENT_END("safe_browsing",
+                    /* Deferred */ perfetto::Track::FromPointer(this));
     delegate_->Resume();
   }
 }
@@ -228,18 +231,15 @@ void RendererURLLoaderThrottle::OnMojoDisconnect() {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 void RendererURLLoaderThrottle::
     BindExtensionWebRequestReporterPipeIfDetached() {
-  if (extension_web_request_reporter_pending_remote_.is_valid()) {
-    extension_web_request_reporter_remote_.Bind(
-        std::move(extension_web_request_reporter_pending_remote_));
-    extension_web_request_reporter_ =
-        extension_web_request_reporter_remote_.get();
+  if (pending_extension_web_request_reporter_) {
+    extension_web_request_reporter_.Bind(
+        std::move(pending_extension_web_request_reporter_));
   }
 }
 
 void RendererURLLoaderThrottle::MaybeSendExtensionWebRequestData(
     network::ResourceRequest* request) {
   BindExtensionWebRequestReporterPipeIfDetached();
-
   // Skip if request destination isn't HTTP/HTTPS (ex. extension scheme).
   if (!request->url.SchemeIsHTTPOrHTTPS()) {
     return;

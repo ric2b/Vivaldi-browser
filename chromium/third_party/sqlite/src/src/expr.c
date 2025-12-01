@@ -73,7 +73,9 @@ char sqlite3ExprAffinity(const Expr *pExpr){
           pExpr->pLeft->x.pSelect->pEList->a[pExpr->iColumn].pExpr
       );
     }
-    if( op==TK_VECTOR ){
+    if( op==TK_VECTOR
+     || (op==TK_FUNCTION && pExpr->affExpr==SQLITE_AFF_DEFER)
+    ){
       assert( ExprUseXList(pExpr) );
       return sqlite3ExprAffinity(pExpr->x.pList->a[0].pExpr);
     }
@@ -266,7 +268,9 @@ CollSeq *sqlite3ExprCollSeq(Parse *pParse, const Expr *pExpr){
       p = p->pLeft;
       continue;
     }
-    if( op==TK_VECTOR ){
+    if( op==TK_VECTOR
+     || (op==TK_FUNCTION && p->affExpr==SQLITE_AFF_DEFER)
+    ){
       assert( ExprUseXList(p) );
       p = p->x.pList->a[0].pExpr;
       continue;
@@ -1140,7 +1144,7 @@ Expr *sqlite3ExprAnd(Parse *pParse, Expr *pLeft, Expr *pRight){
     return pLeft;
   }else{
     u32 f = pLeft->flags | pRight->flags;
-    if( (f&(EP_OuterON|EP_InnerON|EP_IsFalse))==EP_IsFalse
+    if( (f&(EP_OuterON|EP_InnerON|EP_IsFalse|EP_HasFunc))==EP_IsFalse
      && !IN_RENAME_OBJECT
     ){
       sqlite3ExprDeferredDelete(pParse, pLeft);
@@ -4894,6 +4898,12 @@ expr_code_doover:
       sqlite3VdbeLoadString(v, target, pExpr->u.zToken);
       return target;
     }
+    case TK_NULLS: {
+      /* Set a range of registers to NULL.  pExpr->y.nReg registers starting
+      ** with target */
+      sqlite3VdbeAddOp3(v, OP_Null, 0, target, target + pExpr->y.nReg - 1);
+      return target;
+    }
     default: {
       /* Make NULL the default case so that if a bug causes an illegal
       ** Expr node to be passed into this function, it will be handled
@@ -5576,6 +5586,25 @@ int sqlite3ExprCodeRunJustOnce(
     pParse->pConstExpr = p;
   }
   return regDest;
+}
+
+/*
+** Make arrangements to invoke OP_Null on a range of registers
+** during initialization.
+*/
+SQLITE_NOINLINE void sqlite3ExprNullRegisterRange(
+  Parse *pParse,   /* Parsing context */
+  int iReg,        /* First register to set to NULL */
+  int nReg         /* Number of sequential registers to NULL out */
+){
+  u8 okConstFactor = pParse->okConstFactor;
+  Expr t;
+  memset(&t, 0, sizeof(t));
+  t.op = TK_NULLS;
+  t.y.nReg = nReg;
+  pParse->okConstFactor = 1;
+  sqlite3ExprCodeRunJustOnce(pParse, &t, iReg);
+  pParse->okConstFactor = okConstFactor;
 }
 
 /*
@@ -7006,7 +7035,9 @@ static void findOrCreateAggInfoColumn(
 ){
   struct AggInfo_col *pCol;
   int k;
+  int mxTerm = pParse->db->aLimit[SQLITE_LIMIT_COLUMN];
 
+  assert( mxTerm <= SMXV(i16) );
   assert( pAggInfo->iFirstReg==0 );
   pCol = pAggInfo->aCol;
   for(k=0; k<pAggInfo->nColumn; k++, pCol++){
@@ -7023,6 +7054,10 @@ static void findOrCreateAggInfoColumn(
     /* OOM on resize */
     assert( pParse->db->mallocFailed );
     return;
+  }
+  if( k>mxTerm ){
+    sqlite3ErrorMsg(pParse, "more than %d aggregate terms", mxTerm);
+    k = mxTerm;
   }
   pCol = &pAggInfo->aCol[k];
   assert( ExprUseYTab(pExpr) );
@@ -7057,6 +7092,7 @@ fix_up_expr:
   if( pExpr->op==TK_COLUMN ){
     pExpr->op = TK_AGG_COLUMN;
   }
+  assert( k <= SMXV(pExpr->iAgg) );
   pExpr->iAgg = (i16)k;
 }
 
@@ -7141,13 +7177,19 @@ static int analyzeAggregate(Walker *pWalker, Expr *pExpr){
         ** function that is already in the pAggInfo structure
         */
         struct AggInfo_func *pItem = pAggInfo->aFunc;
+        int mxTerm = pParse->db->aLimit[SQLITE_LIMIT_COLUMN];
+        assert( mxTerm <= SMXV(i16) );
         for(i=0; i<pAggInfo->nFunc; i++, pItem++){
           if( NEVER(pItem->pFExpr==pExpr) ) break;
           if( sqlite3ExprCompare(0, pItem->pFExpr, pExpr, -1)==0 ){
             break;
           }
         }
-        if( i>=pAggInfo->nFunc ){
+        if( i>mxTerm ){
+          sqlite3ErrorMsg(pParse, "more than %d aggregate terms", mxTerm);
+          i = mxTerm;
+          assert( i<pAggInfo->nFunc );
+        }else if( i>=pAggInfo->nFunc ){
           /* pExpr is original.  Make a new entry in pAggInfo->aFunc[]
           */
           u8 enc = ENC(pParse->db);
@@ -7201,6 +7243,7 @@ static int analyzeAggregate(Walker *pWalker, Expr *pExpr){
         */
         assert( !ExprHasProperty(pExpr, EP_TokenOnly|EP_Reduced) );
         ExprSetVVAProperty(pExpr, EP_NoReduce);
+        assert( i <= SMXV(pExpr->iAgg) );
         pExpr->iAgg = (i16)i;
         pExpr->pAggInfo = pAggInfo;
         return WRC_Prune;

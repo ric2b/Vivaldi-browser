@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@ export const generatedProperties = [
  {
   "longhands": [
    "max-lines",
+   "block-ellipsis",
    "continue"
   ],
   "name": "-alternative-webkit-line-clamp"
@@ -94,14 +95,12 @@ export const generatedProperties = [
   "name": "-webkit-font-smoothing"
  },
  {
-  "inherited": true,
   "keywords": [
    "auto",
    "loose",
    "normal",
    "strict",
-   "after-white-space",
-   "anywhere"
+   "after-white-space"
   ],
   "name": "-webkit-line-break"
  },
@@ -352,6 +351,7 @@ export const generatedProperties = [
    "base-palette",
    "baseline-shift",
    "baseline-source",
+   "block-ellipsis",
    "block-size",
    "border-block-end-color",
    "border-block-end-style",
@@ -473,6 +473,7 @@ export const generatedProperties = [
    "font-family",
    "font-feature-settings",
    "font-kerning",
+   "font-language-override",
    "font-optical-sizing",
    "font-palette",
    "font-size",
@@ -492,7 +493,7 @@ export const generatedProperties = [
    "font-variation-settings",
    "font-weight",
    "forced-color-adjust",
-   "gap-rule-paint-order",
+   "gap-rule-overlap",
    "grid-auto-columns",
    "grid-auto-flow",
    "grid-auto-rows",
@@ -517,8 +518,8 @@ export const generatedProperties = [
    "inset-block-start",
    "inset-inline-end",
    "inset-inline-start",
-   "interest-hide-delay",
-   "interest-show-delay",
+   "interest-delay-end",
+   "interest-delay-start",
    "interpolate-size",
    "isolation",
    "item-tolerance",
@@ -595,10 +596,12 @@ export const generatedProperties = [
    "overflow-y",
    "overlay",
    "override-colors",
+   "overscroll-area",
    "overscroll-behavior-block",
    "overscroll-behavior-inline",
    "overscroll-behavior-x",
    "overscroll-behavior-y",
+   "overscroll-position",
    "pad",
    "padding-block-end",
    "padding-block-start",
@@ -638,6 +641,7 @@ export const generatedProperties = [
    "row-rule-style",
    "row-rule-width",
    "ruby-align",
+   "ruby-overhang",
    "ruby-position",
    "rx",
    "ry",
@@ -735,7 +739,7 @@ export const generatedProperties = [
    "timeline-trigger-name",
    "timeline-trigger-range-end",
    "timeline-trigger-range-start",
-   "timeline-trigger-timeline",
+   "timeline-trigger-source",
    "top",
    "touch-action",
    "transform",
@@ -891,6 +895,9 @@ export const generatedProperties = [
   "name": "animation-timing-function"
  },
  {
+  "keywords": [
+   "none"
+  ],
   "name": "animation-trigger"
  },
  {
@@ -1041,6 +1048,14 @@ export const generatedProperties = [
    "last"
   ],
   "name": "baseline-source"
+ },
+ {
+  "inherited": true,
+  "keywords": [
+   "auto",
+   "no-ellipsis"
+  ],
+  "name": "block-ellipsis"
  },
  {
   "keywords": [
@@ -1754,7 +1769,9 @@ export const generatedProperties = [
  {
   "longhands": [
    "column-width",
-   "column-count"
+   "column-count",
+   "column-height",
+   "column-wrap"
   ],
   "name": "columns"
  },
@@ -2249,7 +2266,8 @@ export const generatedProperties = [
    "font-size-adjust",
    "font-kerning",
    "font-feature-settings",
-   "font-variation-settings"
+   "font-variation-settings",
+   "font-language-override"
   ],
   "name": "font"
  },
@@ -2275,6 +2293,13 @@ export const generatedProperties = [
    "none"
   ],
   "name": "font-kerning"
+ },
+ {
+  "inherited": true,
+  "keywords": [
+   "normal"
+  ],
+  "name": "font-language-override"
  },
  {
   "inherited": true,
@@ -2518,7 +2543,7 @@ export const generatedProperties = [
    "row-over-column",
    "column-over-row"
   ],
-  "name": "gap-rule-paint-order"
+  "name": "gap-rule-overlap"
  },
  {
   "longhands": [
@@ -2737,16 +2762,16 @@ export const generatedProperties = [
  },
  {
   "longhands": [
-   "interest-show-delay",
-   "interest-hide-delay"
+   "interest-delay-start",
+   "interest-delay-end"
   ],
   "name": "interest-delay"
  },
  {
-  "name": "interest-hide-delay"
+  "name": "interest-delay-end"
  },
  {
-  "name": "interest-show-delay"
+  "name": "interest-delay-start"
  },
  {
   "inherited": true,
@@ -2805,13 +2830,15 @@ export const generatedProperties = [
    "loose",
    "normal",
    "strict",
-   "anywhere"
+   "anywhere",
+   "after-white-space"
   ],
   "name": "line-break"
  },
  {
   "longhands": [
    "max-lines",
+   "block-ellipsis",
    "continue"
   ],
   "name": "line-clamp"
@@ -3333,6 +3360,12 @@ export const generatedProperties = [
   "name": "override-colors"
  },
  {
+  "keywords": [
+   "none"
+  ],
+  "name": "overscroll-area"
+ },
+ {
   "longhands": [
    "overscroll-behavior-x",
    "overscroll-behavior-y"
@@ -3360,6 +3393,12 @@ export const generatedProperties = [
    "none"
   ],
   "name": "overscroll-behavior-y"
+ },
+ {
+  "keywords": [
+   "none"
+  ],
+  "name": "overscroll-position"
  },
  {
   "name": "pad"
@@ -3693,6 +3732,14 @@ export const generatedProperties = [
    "space-between"
   ],
   "name": "ruby-align"
+ },
+ {
+  "inherited": true,
+  "keywords": [
+   "auto",
+   "none"
+  ],
+  "name": "ruby-overhang"
  },
  {
   "inherited": true,
@@ -4114,7 +4161,8 @@ export const generatedProperties = [
    "-webkit-right",
    "-webkit-center",
    "start",
-   "end"
+   "end",
+   "match-parent"
   ],
   "name": "text-align"
  },
@@ -4127,7 +4175,8 @@ export const generatedProperties = [
    "left",
    "right",
    "center",
-   "justify"
+   "justify",
+   "match-parent"
   ],
   "name": "text-align-last"
  },
@@ -4382,7 +4431,7 @@ export const generatedProperties = [
  {
   "longhands": [
    "timeline-trigger-name",
-   "timeline-trigger-timeline",
+   "timeline-trigger-source",
    "timeline-trigger-behavior",
    "timeline-trigger-range-start",
    "timeline-trigger-range-end",
@@ -4420,7 +4469,7 @@ export const generatedProperties = [
    "none",
    "auto"
   ],
-  "name": "timeline-trigger-timeline"
+  "name": "timeline-trigger-source"
  },
  {
   "keywords": [
@@ -4734,8 +4783,7 @@ export const generatedPropertyValues = {
    "loose",
    "normal",
    "strict",
-   "after-white-space",
-   "anywhere"
+   "after-white-space"
   ]
  },
  "-webkit-line-clamp": {
@@ -4864,6 +4912,11 @@ export const generatedPropertyValues = {
    "step-end"
   ]
  },
+ "animation-trigger": {
+  "values": [
+   "none"
+  ]
+ },
  "app-region": {
   "values": [
    "none",
@@ -4959,6 +5012,12 @@ export const generatedPropertyValues = {
    "auto",
    "first",
    "last"
+  ]
+ },
+ "block-ellipsis": {
+  "values": [
+   "auto",
+   "no-ellipsis"
   ]
  },
  "block-size": {
@@ -5619,6 +5678,11 @@ export const generatedPropertyValues = {
    "none"
   ]
  },
+ "font-language-override": {
+  "values": [
+   "normal"
+  ]
+ },
  "font-optical-sizing": {
   "values": [
    "auto",
@@ -5788,7 +5852,7 @@ export const generatedPropertyValues = {
    "preserve-parent-color"
   ]
  },
- "gap-rule-paint-order": {
+ "gap-rule-overlap": {
   "values": [
    "row-over-column",
    "column-over-row"
@@ -5935,7 +5999,8 @@ export const generatedPropertyValues = {
    "loose",
    "normal",
    "strict",
-   "anywhere"
+   "anywhere",
+   "after-white-space"
   ]
  },
  "line-height": {
@@ -6228,6 +6293,11 @@ export const generatedPropertyValues = {
    "auto"
   ]
  },
+ "overscroll-area": {
+  "values": [
+   "none"
+  ]
+ },
  "overscroll-behavior-x": {
   "values": [
    "auto",
@@ -6239,6 +6309,11 @@ export const generatedPropertyValues = {
   "values": [
    "auto",
    "contain",
+   "none"
+  ]
+ },
+ "overscroll-position": {
+  "values": [
    "none"
   ]
  },
@@ -6414,6 +6489,12 @@ export const generatedPropertyValues = {
    "start",
    "center",
    "space-between"
+  ]
+ },
+ "ruby-overhang": {
+  "values": [
+   "auto",
+   "none"
   ]
  },
  "ruby-position": {
@@ -6603,7 +6684,8 @@ export const generatedPropertyValues = {
    "-webkit-right",
    "-webkit-center",
    "start",
-   "end"
+   "end",
+   "match-parent"
   ]
  },
  "text-align-last": {
@@ -6614,7 +6696,8 @@ export const generatedPropertyValues = {
    "left",
    "right",
    "center",
-   "justify"
+   "justify",
+   "match-parent"
   ]
  },
  "text-anchor": {
@@ -6771,7 +6854,7 @@ export const generatedPropertyValues = {
    "state"
   ]
  },
- "timeline-trigger-timeline": {
+ "timeline-trigger-source": {
   "values": [
    "none",
    "auto"

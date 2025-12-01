@@ -19,6 +19,10 @@
 #import "ios/web/public/web_state.h"
 #import "url/gurl.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 @interface LinkPreviewCoordinator () {
   // The WebState used for loading the preview.
   std::unique_ptr<web::WebState> _previewWebState;
@@ -107,6 +111,16 @@
   // history tab helper which adding the history entry of the preview.
   AttachTabHelpers(_previewWebState.get(), TabHelperFilter::kPrerender);
   _previewWebState->SetWebUsageEnabled(true);
+
+  if (vivaldi::IsVivaldiRunning()) {
+    // Note: (prio@vivaldi.com) - Load the Preview URL when setting up webState
+    // because Chromium first clones the source web state and loads the preview
+    // URL later. Which makes preview to show source page in the preview from
+    // where the context menu is fired.
+    web::NavigationManager::WebLoadParams loadParams(self.URL);
+    loadParams.referrer = self.referrer;
+    _previewWebState->GetNavigationManager()->LoadURLWithParams(loadParams);
+  } // End Vivaldi
 
   // Delay the history record when showing the preview. (The history entry will
   // be added when the user tapping on the preview.)

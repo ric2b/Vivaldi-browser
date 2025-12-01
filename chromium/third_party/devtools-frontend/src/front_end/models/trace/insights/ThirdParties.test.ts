@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,7 @@ import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {getFirstOrError, getInsightOrError, processTrace} from '../../../testing/InsightHelpers.js';
 
 describeWithEnvironment('ThirdParties', function() {
-  it('categorizes third party web requests (simple)', async () => {
+  it('categorizes third party web requests (simple)', async function() {
     const {data, insights} = await processTrace(this, 'load-simple.json.gz');
     assert.strictEqual(insights.size, 1);
     const insight =
@@ -26,7 +26,7 @@ describeWithEnvironment('ThirdParties', function() {
     ]);
   });
 
-  it('categorizes third party web requests (complex)', async () => {
+  it('categorizes third party web requests (complex)', async function() {
     const {data, insights} = await processTrace(this, 'lantern/paul/trace.json.gz');
     assert.strictEqual(insights.size, 1);
     const insight =

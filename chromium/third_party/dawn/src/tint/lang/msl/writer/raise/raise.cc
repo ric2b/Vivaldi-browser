@@ -99,7 +99,7 @@ Result<RaiseResult> Raise(core::ir::Module& module, const Options& options) {
 
     // PrepareImmediateData must come before any transform that needs internal immediates.
     core::ir::transform::PrepareImmediateDataConfig immediate_data_config;
-    if (options.array_length_from_constants.buffer_sizes_offset) {
+    if (array_length_from_constants.buffer_sizes_offset) {
         // Find the largest index declared in the map, in order to determine the number of
         // elements needed in the array of buffer sizes. The buffer sizes will be packed into
         // vec4s to satisfy the 16-byte alignment requirement for array elements in uniform
@@ -111,7 +111,7 @@ Result<RaiseResult> Raise(core::ir::Module& module, const Options& options) {
         buffer_sizes_array_elements_num = (max_index / 4) + 1;
 
         immediate_data_config.AddInternalImmediateData(
-            options.array_length_from_constants.buffer_sizes_offset.value(),
+            array_length_from_constants.buffer_sizes_offset.value(),
             module.symbols.New("tint_storage_buffer_sizes"),
             module.Types().array(module.Types().vec4<core::u32>(),
                                  buffer_sizes_array_elements_num));
@@ -141,6 +141,7 @@ Result<RaiseResult> Raise(core::ir::Module& module, const Options& options) {
     {
         core::ir::transform::BuiltinPolyfillConfig core_polyfills{};
         core_polyfills.clamp_int = true;
+        core_polyfills.clamp_float = options.polyfill_clamp_float;
         core_polyfills.degrees = true;
         core_polyfills.dot_4x8_packed = true;
         core_polyfills.extract_bits = core::ir::transform::BuiltinPolyfillLevel::kClampOrRangeCheck;
@@ -153,6 +154,7 @@ Result<RaiseResult> Raise(core::ir::Module& module, const Options& options) {
         core_polyfills.radians = true;
         core_polyfills.texture_sample_base_clamp_to_edge_2d_f32 = true;
         core_polyfills.abs_signed_int = true;
+        core_polyfills.subgroup_broadcast_f16 = options.polyfill_subgroup_broadcast_f16;
         RUN_TRANSFORM(core::ir::transform::BuiltinPolyfill, module, core_polyfills);
     }
 
@@ -165,7 +167,7 @@ Result<RaiseResult> Raise(core::ir::Module& module, const Options& options) {
     RUN_TRANSFORM(core::ir::transform::MultiplanarExternalTexture, module, multiplanar_map);
 
     // TODO(crbug.com/366291600): Replace ArrayLengthFromUniform with ArrayLengthFromImmediates
-    if (options.array_length_from_constants.ubo_binding) {
+    if (array_length_from_constants.ubo_binding) {
         auto array_length_from_uniform_result = core::ir::transform::ArrayLengthFromUniform(
             module, BindingPoint{0u, array_length_from_constants.ubo_binding.value()},
             array_length_from_constants.bindpoint_to_size_index);
@@ -176,8 +178,8 @@ Result<RaiseResult> Raise(core::ir::Module& module, const Options& options) {
             array_length_from_uniform_result->needs_storage_buffer_sizes;
     }
 
-    if (options.array_length_from_constants.buffer_sizes_offset) {
-        TINT_ASSERT(!options.array_length_from_constants.ubo_binding);
+    if (array_length_from_constants.buffer_sizes_offset) {
+        TINT_ASSERT(!array_length_from_constants.ubo_binding);
         auto array_length_from_immediate_result = core::ir::transform::ArrayLengthFromImmediates(
             module, immediate_data_layout.Get(),
             array_length_from_constants.buffer_sizes_offset.value(),
@@ -220,7 +222,7 @@ Result<RaiseResult> Raise(core::ir::Module& module, const Options& options) {
             cfg.skip_bindings.insert(options.immediate_binding_point.value());
         }
 
-        if (options.array_length_from_constants.ubo_binding) {
+        if (array_length_from_constants.ubo_binding) {
             cfg.skip_bindings.insert(
                 BindingPoint{0u, array_length_from_constants.ubo_binding.value()});
         }
@@ -250,7 +252,8 @@ Result<RaiseResult> Raise(core::ir::Module& module, const Options& options) {
     RUN_TRANSFORM(raise::ModuleScopeVars, module);
 
     RUN_TRANSFORM(raise::BinaryPolyfill, module);
-    RUN_TRANSFORM(raise::BuiltinPolyfill, module);
+    RUN_TRANSFORM(raise::BuiltinPolyfill, module,
+                  {.polyfill_unpack_2x16_snorm = options.polyfill_unpack_2x16_snorm});
     // After 'BuiltinPolyfill' as that transform can introduce signed dot products.
     core::ir::transform::SignedIntegerPolyfillConfig signed_integer_cfg{
         .signed_negation = true, .signed_arithmetic = true, .signed_shiftleft = true};

@@ -260,6 +260,14 @@ Value RunLabelMatches(Scope* scope,
                       const std::vector<Value>& args,
                       Err* err);
 
+extern const char kLen[];
+extern const char kLen_HelpShort[];
+extern const char kLen_Help[];
+Value RunLen(Scope* scope,
+             const FunctionCallNode* function,
+             const std::vector<Value>& args,
+             Err* err);
+
 extern const char kLoadableModule[];
 extern const char kLoadableModule_HelpShort[];
 extern const char kLoadableModule_Help[];

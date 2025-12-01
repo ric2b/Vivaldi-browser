@@ -22,6 +22,7 @@ limitations under the License.
 #include <memory>
 #include <optional>
 #include <stack>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -29,6 +30,7 @@ limitations under the License.
 #include "absl/base/thread_annotations.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
 #include "tensorflow/compiler/tf2xla/host_compute_metadata.pb.h"
@@ -154,6 +156,16 @@ class XlaCompiler {
     // Resource updates are converted into input / output of xla. The two
     // buffers are aliased with other if this option is true.
     bool alias_resource_update = false;
+
+    std::string DebugString() const {
+      return absl::StrCat("use_tuple_arg=", use_tuple_arg,
+                          " return_updated_values_for_all_resources=",
+                          return_updated_values_for_all_resources,
+                          " always_return_tuple=", always_return_tuple,
+                          " is_entry_computation=", is_entry_computation,
+                          " add_token_input_output=", add_token_input_output,
+                          " alias_resource_update=", alias_resource_update);
+    }
   };
 
   using OutputDescription = ::tensorflow::XlaOutputDescription;
@@ -222,6 +234,9 @@ class XlaCompiler {
 
     // Enable detailed logging of compilation metadata.
     bool detailed_logging = true;
+
+    // If true, use Shardy (go/shardy) partitioner. If false, use GSPMD.
+    bool use_shardy_partitioner = false;
   };
 
   // Argument for compiling a single op.
@@ -344,14 +359,16 @@ class XlaCompiler {
   std::unique_ptr<Graph> GetGraph(const FunctionBody* fbody);
 
   // Builds XLA computations for each of the arguments to the computation.
-  // `args` are the arguments to the computation.
+  // `args` are the arguments to the computation. Populates
+  // `args_tuple_sdy_sharding` with corresponding shardy sharding if
+  // `use_tuple_arg` is true.
   absl::Status BuildArguments(
       const Graph& graph, const std::vector<XlaCompiler::Argument>& args,
       bool use_tuple_arg, xla::XlaBuilder* builder, XlaContext* context,
       const std::map<int, xla::OpSharding>& arg_shardings,
       std::vector<XlaExpression>* arg_expressions,
       std::vector<int>* input_to_args, std::vector<xla::Shape>* input_shapes,
-      bool is_entry_computation);
+      std::string& args_tuple_sdy_sharding, bool is_entry_computation);
 
   xla::ChannelHandle NewChannel(xla::ChannelHandle::ChannelType type);
 

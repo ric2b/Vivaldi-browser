@@ -12,6 +12,7 @@ const char kVmConciergeInterface[] = "org.chromium.VmConcierge";
 const char kVmConciergeServicePath[] = "/org/chromium/VmConcierge";
 const char kVmConciergeServiceName[] = "org.chromium.VmConcierge";
 
+// LINT.IfChange
 // keep-sorted start
 const char kAddGroupPermissionMesaMethod[] = "AddGroupPermissionMesa";
 const char kAdjustVmMethod[] = "AdjustVm";
@@ -28,6 +29,7 @@ const char kDetachUsbDeviceMethod[] = "DetachUsbDevice";
 const char kDiskImageStatusMethod[] = "DiskImageStatus";
 const char kExportDiskImageMethod[] = "ExportDiskImage";
 const char kGetBaguetteImageUrlMethod[] = "GetBaguetteImageUrl";
+const char kGetBalloonInfoMethod[] = "GetBalloonInfo";
 const char kGetDnsSettingsMethod[] = "GetDnsSettings";
 const char kGetVmEnterpriseReportingInfoMethod[] =
     "GetVmEnterpriseReportingInfo";
@@ -72,6 +74,7 @@ const char kVmStoppedSignal[] = "VmStoppedSignal";
 const char kVmStoppingSignal[] = "VmStoppingSignal";
 const char kVmSwappingSignal[] = "VmSwappingSignal";
 // keep-sorted end
+// LINT.ThenChange(vm_tools/dbus_bindings/org.chromium.VmConcierge.xml)
 
 const char kArcVmName[] = "arcvm";
 

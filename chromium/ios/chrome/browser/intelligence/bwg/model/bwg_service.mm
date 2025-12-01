@@ -9,6 +9,7 @@
 #import "components/prefs/pref_service.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "google_apis/gaia/google_service_auth_error.h"
+#import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/intelligence/bwg/metrics/bwg_metrics.h"
 #import "ios/chrome/browser/intelligence/features/features.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
@@ -65,6 +66,7 @@ bool BwgService::IsProfileEligibleForBwg() {
           : false;
 
   // Checks the Chrome and Gemini Enterprise policies.
+  // kGeminiEnabledByPolicy is 0 for allowed, 1 for disallowed.
   bool is_disabled_by_policy =
       pref_service_->GetInteger(prefs::kGeminiEnabledByPolicy) == 1 ||
       is_disabled_by_gemini_policy_;
@@ -78,7 +80,7 @@ bool BwgService::IsProfileEligibleForBwg() {
 }
 
 bool BwgService::IsBwgAvailableForWebState(web::WebState* web_state) {
-  if (!IsProfileEligibleForBwg()) {
+  if (!web_state || !IsProfileEligibleForBwg()) {
     return false;
   }
   // The web state is eligible for HTML and images that use http/https schemes.
@@ -114,11 +116,21 @@ void BwgService::OnIdentityManagerShutdown(
 #pragma mark - Private
 
 void BwgService::CheckGeminiEnterpriseEligibility() {
-  ios::provider::CheckGeminiEligibility(auth_service_, ^(BOOL eligible) {
-    is_disabled_by_gemini_policy_ = !eligible;
-  });
+  if (tests_hook::DisableGeminiEligibilityCheck()) {
+    is_disabled_by_gemini_policy_ = false;
+    return;
+  }
+
+  ios::provider::CheckGeminiEligibility(
+      auth_service_, base::CallbackToBlock(
+                         base::BindOnce(&BwgService::OnGeminiEligibilityResult,
+                                        weak_ptr_factory_.GetWeakPtr())));
 }
 
 void BwgService::ClearConsentPref() {
   pref_service_->ClearPref(prefs::kIOSBwgConsent);
+}
+
+void BwgService::OnGeminiEligibilityResult(bool eligible) {
+  is_disabled_by_gemini_policy_ = !eligible;
 }

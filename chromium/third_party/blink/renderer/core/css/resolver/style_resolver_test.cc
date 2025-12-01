@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
+#include "third_party/blink/renderer/core/css/style_scope_data.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
@@ -1425,6 +1426,71 @@ TEST_F(StyleResolverTest, QuietlySwapActiveStyleSheets) {
     EXPECT_EQ("1", matched_properties.back().properties->GetPropertyValue(
                        CSSPropertyID::kZIndex));
   }
+}
+
+TEST_F(StyleResolverTest, QuietlySwapActiveStyleSheets_ImplicitScope) {
+  GetDocument().body()->SetInnerHTMLWithoutTrustedTypes(R"HTML(
+    <div id=outer>
+      Test
+      <style id=inner></style>
+    </div>
+    <div id=aside>
+      <style>
+        @scope {
+          .foo {}
+        }
+      </style>
+      <style>
+        @scope {
+          .bar {}
+        }
+      </style>
+    </div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* outer = GetDocument().getElementById(AtomicString("outer"));
+  ASSERT_TRUE(outer);
+  Element* inner = GetDocument().getElementById(AtomicString("inner"));
+  ASSERT_TRUE(inner);
+  Element* aside = GetDocument().getElementById(AtomicString("aside"));
+  ASSERT_TRUE(aside);
+
+  // Before swap:
+  ASSERT_TRUE(aside->GetStyleScopeData());
+  EXPECT_EQ(2u, aside->GetStyleScopeData()->GetTriggeredScopes().size());
+
+  // Create a "fake" stylesheet owned by #inner, and quietly swap to that.
+  const auto* context = MakeGarbageCollected<CSSParserContext>(GetDocument());
+  auto* contents = MakeGarbageCollected<StyleSheetContents>(context);
+
+  contents->ParseString(R"CSS(
+    @scope {
+      div {}
+    }
+  )CSS",
+                        /*allow_imports=*/false);
+
+  auto* sheet =
+      MakeGarbageCollected<CSSStyleSheet>(contents, /*owner_node=*/*inner);
+
+  MediaQueryEvaluator* mq_evaluator =
+      MakeGarbageCollected<MediaQueryEvaluator>(&GetFrame());
+  RuleSet& rule_set = contents->EnsureRuleSet(*mq_evaluator, /*mixins=*/{});
+
+  ActiveStyleSheetVector active_stylesheets;
+  active_stylesheets.push_back(std::make_pair(sheet, &rule_set));
+
+  ScopedStyleResolver* scoped_resolver = GetDocument().GetScopedStyleResolver();
+  ASSERT_TRUE(scoped_resolver);
+  scoped_resolver->QuietlySwapActiveStyleSheets(active_stylesheets);
+
+  // After swap:
+  ASSERT_TRUE(aside->GetStyleScopeData());
+  EXPECT_EQ(0u, aside->GetStyleScopeData()->GetTriggeredScopes().size());
+
+  ASSERT_TRUE(outer->GetStyleScopeData());
+  EXPECT_EQ(1u, outer->GetStyleScopeData()->GetTriggeredScopes().size());
 }
 
 TEST_F(StyleResolverTest, InheritStyleImagesFromDisplayContents) {
@@ -4049,6 +4115,96 @@ TEST_F(StyleResolverTest, TextSizeAdjustUseCounter) {
 
   EXPECT_TRUE(IsUseCounted(WebFeature::kTextSizeAdjustNotAuto));
   EXPECT_TRUE(IsUseCounted(WebFeature::kTextSizeAdjustPercentNot100));
+}
+
+TEST_F(StyleResolverTest, UseCountPseudoElementImplicitAnchor) {
+  GetDocument().documentElement()->SetInnerHTMLWithoutTrustedTypes(R"HTML(
+    <style id=style></style>
+    <div id=div></div>
+  )HTML");
+
+  HTMLElement* style_element =
+      To<HTMLElement>(GetDocument().getElementById(AtomicString("style")));
+
+  auto set_sheet_text = [this, style_element](const String& sheet_text) {
+    GetDocument().ClearUseCounterForTesting(
+        WebFeature::kCSSPseudoElementUsesImplicitAnchor);
+    style_element->setInnerText(sheet_text);
+    UpdateAllLifecyclePhasesForTest();
+  };
+
+  // Static positioned element can not be anchor positioned.
+  set_sheet_text(R"HTML(
+    #div::before {
+      content: "";
+      position-area: top left;
+      left: anchor(right);
+    }
+  )HTML");
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSPseudoElementUsesImplicitAnchor));
+
+  // Non-auto position-anchor means implicit anchor is not used.
+  set_sheet_text(R"HTML(
+    #div::before {
+      content: "";
+      position: absolute;
+      position-anchor: --a;
+      position-area: top left;
+      left: anchor(right);
+    }
+  )HTML");
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSPseudoElementUsesImplicitAnchor));
+
+  // ::before element not generated without content property.
+  set_sheet_text(R"HTML(
+    #div::before {
+      position: absolute;
+      position-area: top left;
+      left: anchor(right);
+    }
+  )HTML");
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSPseudoElementUsesImplicitAnchor));
+
+  // anchor-center using implicit anchor.
+  set_sheet_text(R"HTML(
+    #div::before {
+      content: "";
+      position: absolute;
+      justify-self: anchor-center;
+    }
+  )HTML");
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSPseudoElementUsesImplicitAnchor));
+
+  // position-area using implicit anchor.
+  set_sheet_text(R"HTML(
+    #div::before {
+      content: "";
+      position: fixed;
+      position-area: inline-start;
+    }
+  )HTML");
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSPseudoElementUsesImplicitAnchor));
+
+  // position-area using implicit anchor.
+  set_sheet_text(R"HTML(
+    #div::before {
+      content: "";
+      position: fixed;
+      top: anchor(bottom);
+    }
+  )HTML");
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSPseudoElementUsesImplicitAnchor));
+
+  // Strictly not using implicit anchor, but too complicated to separate for use
+  // counting.
+  set_sheet_text(R"HTML(
+    #div::before {
+      content: "";
+      position: absolute;
+      top: anchor(--a bottom);
+    }
+  )HTML");
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSPseudoElementUsesImplicitAnchor));
 }
 
 }  // namespace blink

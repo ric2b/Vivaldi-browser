@@ -36,10 +36,10 @@ inline typename internal::traits<Derived>::Scalar SparseMatrixBase<Derived>::dot
   Scalar res1(0);
   Scalar res2(0);
   for (; i; ++i) {
-    res1 += numext::conj(i.value()) * other.coeff(i.index());
+    res1 = numext::fma(numext::conj(i.value()), other.coeff(i.index()), res1);
     ++i;
     if (i) {
-      res2 += numext::conj(i.value()) * other.coeff(i.index());
+      res2 = numext::fma(numext::conj(i.value()), other.coeff(i.index()), res2);
     }
   }
   return res1 + res2;

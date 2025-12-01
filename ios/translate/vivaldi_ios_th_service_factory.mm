@@ -41,14 +41,12 @@ VivaldiIOSTHServiceFactory::VivaldiIOSTHServiceFactory()
 VivaldiIOSTHServiceFactory::~VivaldiIOSTHServiceFactory() {}
 
 std::unique_ptr<KeyedService>
-    VivaldiIOSTHServiceFactory::BuildServiceInstanceFor(
-  web::BrowserState* browser_state) const {
-    ProfileIOS* profile = ProfileIOS::FromBrowserState(browser_state);
-    PrefService* pref_service = profile->GetOriginalProfile()->GetPrefs();
-    bool session_only =
-        pref_service->GetBoolean(prefs::kSavingBrowserHistoryDisabled);
-    auto th_model = std::make_unique<TH_Model>(session_only);
-    return th_model;
+VivaldiIOSTHServiceFactory::BuildServiceInstanceFor(ProfileIOS* profile) const {
+  PrefService* pref_service = profile->GetOriginalProfile()->GetPrefs();
+  bool session_only =
+      pref_service->GetBoolean(prefs::kSavingBrowserHistoryDisabled);
+  auto th_model = std::make_unique<TH_Model>(session_only);
+  return th_model;
 }
 
 }  // namespace translate_history

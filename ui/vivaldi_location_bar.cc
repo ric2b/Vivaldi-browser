@@ -9,6 +9,7 @@
 #include "chrome/browser/ui/passwords/manage_passwords_icon_view.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views/bubble_anchor_util_views.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "ui/vivaldi_browser_window.h"
@@ -28,6 +29,10 @@ content::WebContents* VivaldiLocationBar::GetWebContents() { return nullptr; }
 
 LocationBarModel* VivaldiLocationBar::GetLocationBarModel() { return nullptr; }
 
+std::optional<bubble_anchor_util::AnchorConfiguration>
+VivaldiLocationBar::GetChipAnchor() {
+  return std::nullopt;
+}
 
 LocationBarTesting* VivaldiLocationBar::GetLocationBarForTesting() {
   return nullptr;

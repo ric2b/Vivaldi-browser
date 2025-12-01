@@ -160,3 +160,32 @@ wheel: <
   name: "infra/python/wheels/protobuf-py3"
   version: "version:4.25.1"
 >
+
+wheel: <
+  name: "infra/python/wheels/colorama-py2_py3"
+  version: "version:0.4.1"
+>
+
+# beautifulsoup and its dependencies
+wheel: <
+  name: "infra/python/wheels/beautifulsoup4-py3"
+  version: "version:4.9.0"
+>
+wheel: <
+  name: "infra/python/wheels/soupsieve-py3"
+  version: "version:1.9.5"
+>
+
+# requests and its dependencies
+wheel: <
+  name: "infra/python/wheels/requests-py3"
+  version: "version:2.31.0"
+>
+wheel: <
+  name: "infra/python/wheels/charset_normalizer-py3"
+  version: "version:2.0.4"
+>
+wheel: <
+  name: "infra/python/wheels/urllib3-py3"
+  version: "version:2.4.0"
+>

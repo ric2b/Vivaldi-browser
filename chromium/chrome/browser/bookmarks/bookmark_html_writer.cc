@@ -404,16 +404,6 @@ class Writer : public base::RefCountedThreadSafe<Writer> {
     return Write(utf8_string);
   }
 
-  // Vivaldi
-  bool WriteAttr(const std::string& text) {
-    return Write(text, ATTRIBUTE_VALUE);
-  }
-
-  // Vivaldi
-  bool WriteString(const std::string& text) {
-    return Write(text);
-  }
-
   // Indents the current line.
   [[nodiscard]] bool WriteIndent() { return Write(indent_); }
 
@@ -554,6 +544,16 @@ class Writer : public base::RefCountedThreadSafe<Writer> {
     }
 
     return true;
+  }
+
+  // Vivaldi
+  bool WriteAttr(const std::string& text) {
+    return Write(text, ATTRIBUTE_VALUE);
+  }
+
+  // Vivaldi
+  bool WriteString(const std::string& text) {
+    return Write(text);
   }
 
   // The BookmarkModel as a base::Value, split into local and account bookmarks.

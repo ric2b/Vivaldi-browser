@@ -17,7 +17,7 @@ the binary itself.
 
 import argparse
 import json
-import os
+import posixpath
 import re
 
 PREFS_GEN_FILE_HEAD_TEMPLATE = """\
@@ -127,9 +127,9 @@ def main():
         "origin_name": args.prefs_definitions.name
     }
 
-    relative_prefs_names_header = os.path.relpath(os.path.normpath(
+    relative_prefs_names_header = posixpath.relpath(posixpath.normpath(
         args.prefs_names_h.name), args.root)
-    relative_prefs_enums_header = os.path.relpath(os.path.normpath(
+    relative_prefs_enums_header = posixpath.relpath(posixpath.normpath(
         args.prefs_enums_h.name), args.root)
 
     prefs_names_header_guard = '_'.join(

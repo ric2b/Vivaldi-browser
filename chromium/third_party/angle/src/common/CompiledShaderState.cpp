@@ -8,6 +8,10 @@
 //   shader variables.
 //
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "common/CompiledShaderState.h"
 
 #include <cstring>
@@ -100,6 +104,7 @@ void WriteShaderVar(gl::BinaryOutputStream *stream, const sh::ShaderVariable &va
     stream->writeBool(var.texelFetchStaticUse);
     stream->writeInt(var.getFlattenedOffsetInParentArrays());
     stream->writeInt(var.id);
+    stream->writeBool(var.isFloat16);
 }
 
 void LoadShaderVar(gl::BinaryInputStream *stream, sh::ShaderVariable *var)
@@ -138,6 +143,7 @@ void LoadShaderVar(gl::BinaryInputStream *stream, sh::ShaderVariable *var)
     var->texelFetchStaticUse = stream->readBool();
     var->setParentArrayIndex(stream->readInt<int>());
     var->id = stream->readInt<uint32_t>();
+    var->isFloat16 = stream->readBool();
 }
 
 void WriteShInterfaceBlock(gl::BinaryOutputStream *stream, const sh::InterfaceBlock &block)

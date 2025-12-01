@@ -1,4 +1,4 @@
-// Copyright (c) 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -14,13 +14,13 @@ const {render, html} = Lit;
 
 const UIStrings = {
   /**
-   *@description Text for total
+   * @description Text for total
    */
   total: 'Total',
   /**
-   *@description Range in Timeline Details View's Summary
-   *@example {1ms} PH1
-   *@example {10ms} PH2
+   * @description Range in Timeline Details View's Summary
+   * @example {1ms} PH1
+   * @example {10ms} PH2
    */
   rangeSS: 'Range:  {PH1} – {PH2}',
 } as const;

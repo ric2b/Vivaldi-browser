@@ -9,8 +9,8 @@
 
 class AuthenticationService;
 class GURL;
-@class MDCSnackbarMessage;
 class PrefService;
+@class SnackbarMessage;
 @class URLWithTitle;
 
 namespace bookmarks {
@@ -38,7 +38,7 @@ class PrefRegistrySyncable;
     NS_DESIGNATED_INITIALIZER;
 
 // Registers the feature preferences.
-+ (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry;
++ (void)registerProfilePrefs:(user_prefs::PrefRegistrySyncable*)registry;
 
 // Disconnects the mediator
 - (void)disconnect;
@@ -46,29 +46,29 @@ class PrefRegistrySyncable;
 // Adds a bookmark with a `title` and a `URL` and display a snackbar with an
 // `editAction`. Returns a message to be displayed after the Bookmark has been
 // added.
-- (MDCSnackbarMessage*)addBookmarkWithTitle:(NSString*)title
-                                        URL:(const GURL&)URL
-                                 editAction:(void (^)())editAction;
+- (SnackbarMessage*)addBookmarkWithTitle:(NSString*)title
+                                     URL:(const GURL&)URL
+                              editAction:(void (^)())editAction;
 
 // Bulk adds URLs to bookmarks by automatically using their hostname + path as
 // title. Returns a snackbar toast message with the amount of bookmarks
 // successfully added and with the viewAction passed. Skips adding invalid URLs
 // or URLs already bookmarked.
-- (MDCSnackbarMessage*)bulkAddBookmarksWithURLs:(NSArray<NSURL*>*)URLs
-                                     viewAction:(void (^)())viewAction;
+- (SnackbarMessage*)bulkAddBookmarksWithURLs:(NSArray<NSURL*>*)URLs
+                                  viewAction:(void (^)())viewAction;
 
 // Adds bookmarks for `URLs` into `folder`. Returns a message to be displayed
 // after the Bookmark has been added.
-- (MDCSnackbarMessage*)addBookmarks:(NSArray<URLWithTitle*>*)URLs
-                           toFolder:(const bookmarks::BookmarkNode*)folder;
+- (SnackbarMessage*)addBookmarks:(NSArray<URLWithTitle*>*)URLs
+                        toFolder:(const bookmarks::BookmarkNode*)folder;
 
 // Vivaldi
 // Adds a Speed Dial with a `title` and a `URL` and display a snackbar with an
 // `editAction`. Returns a message to be displayed after the Speed Dial has been
 // added.
-- (MDCSnackbarMessage*)addSpeedDialWithTitle:(NSString*)title
-                                         URL:(const GURL&)URL
-                                  editAction:(void (^)())editAction;
+- (SnackbarMessage*)addSpeedDialWithTitle:(NSString*)title
+                                      URL:(const GURL&)URL
+                               editAction:(void (^)())editAction;
 // End Vivaldi
 
 @end

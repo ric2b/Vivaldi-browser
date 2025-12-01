@@ -6,6 +6,10 @@
 
 // validationES3.cpp: Validation functions for OpenGL ES 3.0 entry point parameters
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "libANGLE/validationES3_autogen.h"
 
 #include "anglebase/numerics/safe_conversions.h"
@@ -2004,7 +2008,8 @@ bool ValidateBindVertexArray(const Context *context,
     return ValidateBindVertexArrayBase(context, entryPoint, array);
 }
 
-bool ValidateIsVertexArray(const Context *context,
+bool ValidateIsVertexArray(const PrivateState &state,
+                           ErrorSet *errors,
                            angle::EntryPoint entryPoint,
                            VertexArrayID array)
 {
@@ -2826,7 +2831,7 @@ bool ValidateGenQueries(const Context *context,
                         GLsizei n,
                         const QueryID *queries)
 {
-    return ValidateGenOrDelete(context, entryPoint, n, queries);
+    return ValidateGenOrDelete(context->getMutableErrorSetForValidation(), entryPoint, n, queries);
 }
 
 bool ValidateDeleteQueries(const Context *context,
@@ -2834,7 +2839,7 @@ bool ValidateDeleteQueries(const Context *context,
                            GLsizei n,
                            const QueryID *queries)
 {
-    return ValidateGenOrDelete(context, entryPoint, n, queries);
+    return ValidateGenOrDelete(context->getMutableErrorSetForValidation(), entryPoint, n, queries);
 }
 
 bool ValidateGenSamplers(const Context *context,
@@ -2870,7 +2875,7 @@ bool ValidateGenTransformFeedbacks(const Context *context,
                                    GLsizei n,
                                    const TransformFeedbackID *ids)
 {
-    return ValidateGenOrDelete(context, entryPoint, n, ids);
+    return ValidateGenOrDelete(context->getMutableErrorSetForValidation(), entryPoint, n, ids);
 }
 
 bool ValidateDeleteTransformFeedbacks(const Context *context,
@@ -2878,7 +2883,7 @@ bool ValidateDeleteTransformFeedbacks(const Context *context,
                                       GLsizei n,
                                       const TransformFeedbackID *ids)
 {
-    if (!ValidateGenOrDelete(context, entryPoint, n, ids))
+    if (!ValidateGenOrDelete(context->getMutableErrorSetForValidation(), entryPoint, n, ids))
     {
         return false;
     }
@@ -2895,12 +2900,13 @@ bool ValidateDeleteTransformFeedbacks(const Context *context,
     return true;
 }
 
-bool ValidateGenVertexArrays(const Context *context,
+bool ValidateGenVertexArrays(const PrivateState &state,
+                             ErrorSet *errors,
                              angle::EntryPoint entryPoint,
                              GLsizei n,
                              const VertexArrayID *arrays)
 {
-    return ValidateGenOrDelete(context, entryPoint, n, arrays);
+    return ValidateGenOrDelete(errors, entryPoint, n, arrays);
 }
 
 bool ValidateDeleteVertexArrays(const Context *context,
@@ -2908,7 +2914,7 @@ bool ValidateDeleteVertexArrays(const Context *context,
                                 GLsizei n,
                                 const VertexArrayID *arrays)
 {
-    return ValidateGenOrDelete(context, entryPoint, n, arrays);
+    return ValidateGenOrDelete(context->getMutableErrorSetForValidation(), entryPoint, n, arrays);
 }
 
 bool ValidateBeginTransformFeedback(const Context *context,
@@ -3462,7 +3468,9 @@ bool ValidateVertexAttribIPointer(const Context *context,
                                   GLsizei stride,
                                   const void *pointer)
 {
-    if (!ValidateIntegerVertexFormat(context, entryPoint, index, size, type))
+    if (!ValidateIntegerVertexFormat(context->getPrivateState(), context->getPrivateStateCache(),
+                                     context->getMutableErrorSetForValidation(), entryPoint, index,
+                                     size, type))
     {
         return false;
     }
@@ -4537,13 +4545,13 @@ bool ValidateBindSampler(const Context *context,
     return true;
 }
 
-bool ValidateVertexAttribDivisor(const Context *context,
+bool ValidateVertexAttribDivisor(const PrivateState &privateState,
+                                 ErrorSet *errors,
                                  angle::EntryPoint entryPoint,
                                  GLuint index,
                                  GLuint divisor)
 {
-    return ValidateVertexAttribIndex(context->getPrivateState(),
-                                     context->getMutableErrorSetForValidation(), entryPoint, index);
+    return ValidateVertexAttribIndex(privateState, errors, entryPoint, index);
 }
 
 bool ValidateTexStorage2D(const Context *context,

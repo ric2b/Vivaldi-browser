@@ -1,0 +1,62 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package google.internal.federatedcompute.v1;
+
+import "proto/attestation/endorsement.proto";
+import "proto/attestation/evidence.proto";
+
+option java_package = "com.google.internal.federatedcompute.v1";
+option java_multiple_files = true;
+
+// The specification of how data should be encrypted and the attestation for the
+// server that generated the encryption key.
+message ConfidentialEncryptionConfig {
+  // The public key for encrypting uploads, encoded as a CBOR Web Token (CWT;
+  // RFC 8392) signed by the application key in `attestation_evidence`. The CWT
+  // and COSE key (RFC 9052) will contain at least the following claims and
+  // parameters:
+  //
+  // CWT Claims (https://www.iana.org/assignments/cwt/cwt.xhtml)
+  //   -65543: SHA-256 hash of the access policy used to derive the key (KMS
+  //           only)
+  //   -65537: COSE_Key containing the public key parameters (bstr)
+  //        4: Expiration Time (int)
+  //        6: Issued At (int)
+  //
+  // COSE Key Parameters (https://www.iana.org/assignments/cose/cose.xhtml)
+  //        1: Key Type (int)
+  //        2: Key ID (bstr)
+  //        3: Algorithm (int)
+  //
+  // Supported COSE Algorithms:
+  //   -65537: HPKE-Base-X25519-SHA256-AES128GCM
+  bytes public_key = 1;
+
+  // A serialized fcp.confidentialcompute.PublicKeyDetails message providing
+  // additional information about the public key. This field is signed along
+  // with the public key in the attestation.
+  bytes public_key_details = 2 [deprecated = true];
+
+  // The attestation for the application supplying the public key and details.
+  bytes attestation = 3 [deprecated = true];
+
+  // The attestation evidence for the service providing the public key.
+  oak.attestation.v1.Evidence attestation_evidence = 4;
+
+  // The attestation endorsements for the service providing the public key.
+  oak.attestation.v1.Endorsements attestation_endorsements = 5;
+}

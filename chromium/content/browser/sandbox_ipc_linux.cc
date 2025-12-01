@@ -14,6 +14,7 @@
 
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/containers/span.h"
 #include "base/files/scoped_file.h"
 #include "base/linux_util.h"
 #include "base/logging.h"
@@ -108,7 +109,7 @@ void SandboxIPCHandler::HandleRequestFromChild(int fd) {
     return;
 
   base::Pickle pickle = base::Pickle::WithUnownedBuffer(
-      UNSAFE_TODO(base::span(buf, base::checked_cast<size_t>(len))));
+      base::span(buf).first(base::checked_cast<size_t>(len)));
   base::PickleIterator iter(pickle);
 
   int kind;
@@ -120,47 +121,14 @@ void SandboxIPCHandler::HandleRequestFromChild(int fd) {
   if (sandbox::HandleInterceptedCall(kind, fd, iter, fds))
     return;
 
-  if (kind ==
-      sandbox::policy::SandboxLinux::METHOD_MAKE_SHARED_MEMORY_SEGMENT) {
-    HandleMakeSharedMemorySegment(fd, iter, fds);
-    return;
-  }
   NOTREACHED();
-}
-
-void SandboxIPCHandler::HandleMakeSharedMemorySegment(
-    int fd,
-    base::PickleIterator iter,
-    const std::vector<base::ScopedFD>& fds) {
-  uint32_t size;
-  if (!iter.ReadUInt32(&size))
-    return;
-  // TODO(crbug.com/41470149): executable shared memory should be removed when
-  // NaCl is unshipped.
-  bool executable;
-  if (!iter.ReadBool(&executable))
-    return;
-  base::ScopedFD shm_fd;
-  if (executable) {
-    shm_fd =
-        base::subtle::PlatformSharedMemoryRegion::ExecutableRegion::CreateFD(
-            size);
-  } else {
-    base::subtle::PlatformSharedMemoryRegion region =
-        base::subtle::PlatformSharedMemoryRegion::CreateUnsafe(size);
-    shm_fd = std::move(region.PassPlatformHandle().fd);
-  }
-  base::Pickle reply;
-  SendRendererReply(fds, reply, shm_fd.get());
-  // shm_fd will close the handle which is no longer needed by this process.
 }
 
 void SandboxIPCHandler::SendRendererReply(
     const std::vector<base::ScopedFD>& fds,
     const base::Pickle& reply,
     int reply_fd) {
-  struct msghdr msg;
-  UNSAFE_TODO(memset(&msg, 0, sizeof(msg)));
+  struct msghdr msg = {};
   struct iovec iov = {const_cast<uint8_t*>(reply.data()), reply.size()};
   msg.msg_iov = &iov;
   msg.msg_iovlen = 1;

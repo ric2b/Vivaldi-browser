@@ -184,8 +184,8 @@ void OldLargeObjectSpace::PromoteNewLargeObject(LargePageMetadata* page) {
   MemoryChunk* chunk = page->Chunk();
   DCHECK_EQ(page->owner_identity(), NEW_LO_SPACE);
   DCHECK(page->is_large());
-  DCHECK(chunk->IsFlagSet(MemoryChunk::FROM_PAGE));
-  DCHECK(!chunk->IsFlagSet(MemoryChunk::TO_PAGE));
+  DCHECK(chunk->IsFromPage());
+  DCHECK(!chunk->IsToPage());
 #endif  // DEBUG
   PtrComprCageBase cage_base(heap()->isolate());
   static_cast<LargeObjectSpace*>(page->owner())->RemovePage(page);
@@ -275,7 +275,8 @@ void LargeObjectSpace::UpdateAccountingAfterResizingObject(
 }
 
 bool LargeObjectSpace::Contains(Tagged<HeapObject> object) const {
-  MemoryChunkMetadata* chunk = MemoryChunkMetadata::FromHeapObject(object);
+  MemoryChunkMetadata* chunk =
+      MemoryChunkMetadata::FromHeapObject(heap()->isolate(), object);
 
   bool owned = (chunk->owner() == this);
 

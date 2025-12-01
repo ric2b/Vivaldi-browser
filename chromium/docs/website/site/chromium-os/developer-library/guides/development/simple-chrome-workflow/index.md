@@ -238,10 +238,10 @@ Alternatively, you can set `dcheck_is_configurable=true` to log DCHECK errors wi
 To build Chrome, `cd` into `src` subdirectory of `chromium` checkout and run:
 
 ```
-(sdk) autoninja -C out_${SDK_BOARD}/Release chrome nacl_helper
+(sdk) autoninja -C out_${SDK_BOARD}/Release chrome
 ```
 
-> **Note**: Targets other than **chrome**, **nacl_helper** or
+> **Note**: Targets other than **chrome** or
 > (optionally) **chromiumos_preflight** are not supported in Simple Chrome and
 > will likely fail. browser_tests should be run outside the Simple Chrome
 > environment. Some unit_tests may be built in the Simple Chrome environment and

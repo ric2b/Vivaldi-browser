@@ -5,10 +5,12 @@
 #ifndef COMPONENTS_ENTERPRISE_CONNECTORS_CORE_REPORTING_EVENT_ROUTER_H_
 #define COMPONENTS_ENTERPRISE_CONNECTORS_CORE_REPORTING_EVENT_ROUTER_H_
 
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/enterprise/buildflags/buildflags.h"
 #include "components/enterprise/connectors/core/realtime_reporting_client_base.h"
+#include "components/enterprise/data_controls/core/browser/clipboard_context.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/safe_browsing/core/common/proto/realtimeapi.pb.h"
 #include "url/gurl.h"
@@ -25,6 +27,7 @@ namespace enterprise_connectors {
 class ReportingEventRouter : public KeyedService {
   using ReferrerChain =
       google::protobuf::RepeatedPtrField<safe_browsing::ReferrerChainEntry>;
+  using FrameUrlChain = google::protobuf::RepeatedPtrField<std::string>;
 
  public:
   explicit ReportingEventRouter(RealtimeReportingClientBase* reporting_client);
@@ -109,9 +112,11 @@ class ReportingEventRouter : public KeyedService {
                             const std::string& content_transfer_method,
                             const std::string& source_email,
                             const std::string& content_area_account_email,
+                            std::optional<std::u16string> user_justification,
                             const ContentAnalysisResponse::Result& result,
                             const int64_t content_size,
                             const ReferrerChain& referrer_chain,
+                            const FrameUrlChain& frame_url_chain,
                             EventResult event_result);
 
   // Notifies listeners that safe browsing detected a dangerous download
@@ -129,6 +134,7 @@ class ReportingEventRouter : public KeyedService {
                                 const std::string& scan_id,
                                 const int64_t content_size,
                                 const ReferrerChain& referrer_chain,
+                                const FrameUrlChain& frame_url_chain,
                                 EventResult event_result);
 
   // Notifies listeners that deep scanning detected a dangerous download.
@@ -149,6 +155,7 @@ class ReportingEventRouter : public KeyedService {
                                 const std::string& content_transfer_method,
                                 const int64_t content_size,
                                 const ReferrerChain& referrer_chain,
+                                const FrameUrlChain& frame_url_chain,
                                 EventResult event_result);
 
   // Notifies listeners that the analysis connector detected a violation.
@@ -167,9 +174,42 @@ class ReportingEventRouter : public KeyedService {
                                  const ContentAnalysisResponse::Result& result,
                                  const int64_t content_size,
                                  const ReferrerChain& referrer_chain,
+                                 const FrameUrlChain& frame_url_chain,
                                  EventResult event_result);
+#if BUILDFLAG(ENTERPRISE_DATA_CONTROLS)
+  // Converts `source` into a `CopiedTextSource`. `CopiedTextSource::context` is
+  // always populated, but `CopiedTextSource::url` may be left empty depending
+  // on the policies that are set and broader clipboard copy context.
+  //
+  // This function should only be used to obtain a clipboard source for paste
+  // reports and scans.
+  static std::string GetClipboardSourceString(
+      const enterprise_connectors::ContentMetaData::CopiedTextSource& source);
+
+  // Helper functions to simplify calling `OnDataControlsSensitiveDataEvent`.
+  void ReportCopy(const data_controls::ClipboardContext& context,
+                  const data_controls::Verdict& verdict);
+  void ReportCopyWarningBypassed(const data_controls::ClipboardContext& context,
+                                 const data_controls::Verdict& verdict);
+  void ReportPaste(const data_controls::ClipboardContext& context,
+                   const data_controls::Verdict& verdict);
+  void ReportPasteWarningBypassed(
+      const data_controls::ClipboardContext& context,
+      const data_controls::Verdict& verdict);
+#endif  // BUILDFLAG(ENTERPRISE_DATA_CONTROLS)
+
+ private:
+  FRIEND_TEST_ALL_PREFIXES(ReportingEventRouterTest,
+                           TestOnDataControlsSensitiveDataEvent);
 
 #if BUILDFLAG(ENTERPRISE_DATA_CONTROLS)
+  // Helper function to help bridge between public Data Controls reporting
+  // methods and `OnDataControlsSensitiveDataEvent()`.
+  void ReportCopyOrPaste(const data_controls::ClipboardContext& context,
+                         const data_controls::Verdict& verdict,
+                         const std::string& trigger,
+                         enterprise_connectors::EventResult result);
+
   // Helper function to report sensitive data event that were caused by
   // triggering a Data Controls rule. This is similar to
   // `OnSensitiveDataEvent()` with a signature more suited to Data Controls as
@@ -188,7 +228,6 @@ class ReportingEventRouter : public KeyedService {
       int64_t content_size);
 #endif  // BUILDFLAG(ENTERPRISE_DATA_CONTROLS)
 
- private:
   // Returns filename with full path if full path is required;
   // Otherwise returns only the basename without full path.
   static std::string GetFileName(const std::string& filename,

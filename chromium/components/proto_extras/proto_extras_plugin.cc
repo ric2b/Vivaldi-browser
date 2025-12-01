@@ -96,6 +96,7 @@ void FieldToMapKeyFunction(const FieldDescriptor* field, Printer* printer) {
 
 void FieldToValueFunction(const FieldDescriptor* field, Printer* printer) {
   using enum FieldDescriptor::Type;
+  using enum FieldDescriptor::CppStringType;
   auto conversion_function = [&]() -> std::string {
     switch (field->type()) {
       case TYPE_DOUBLE:
@@ -117,7 +118,13 @@ void FieldToValueFunction(const FieldDescriptor* field, Printer* printer) {
       case TYPE_STRING:
         return "static_cast<std::string>";
       case TYPE_BYTES:
-        return "base::Base64Encode";
+        switch (field->cpp_string_type()) {
+          case kView:
+          case kString:
+            return "base::Base64Encode";
+          case kCord:
+            return "::proto_extras::Base64EncodeCord";
+        }
       case TYPE_ENUM:
         return base::StrCat({QualifiedClassName(field->enum_type()), "_Name"});
       case TYPE_MESSAGE:
@@ -204,11 +211,11 @@ void CreateToValueSerializationDefinitions(
           }
         }}},
       R"(
-base::DictValue Serialize(const $message_type$& message) {
+base::Value Serialize(const $message_type$& message) {
   base::DictValue dict;
   ::proto_extras::SerializeUnknownFields(message, dict);
   $serialize_fields$
-  return dict;
+  return base::Value(std::move(dict));
 }
 void MaybeSerialize(const std::optional<$message_type$>& opt_message,
                     std::string_view name,
@@ -414,7 +421,7 @@ class ProtoExtrasGenerator : public google::protobuf::compiler::CodeGenerator {
     auto forward_declarations = [&]() {
       if (generator_options.generate_to_value_serialization) {
         NamespaceOpener ns("base", &h_printer);
-        h_printer.Print("class DictValue;\n");
+        h_printer.Print("class DictValue;\nclass Value;\n");
       }
       NamespaceOpener ns(Namespace(file), &h_printer);
       base::flat_set<std::string> forward_declarations;
@@ -560,7 +567,7 @@ $function_definitions$
     }
     std::string message_type = ClassName(&message);
     if (options.generate_to_value_serialization) {
-      printer->Print("base::DictValue Serialize(const $m$& message);", "m",
+      printer->Print("base::Value Serialize(const $m$& message);", "m",
                      message_type);
       printer->Print(
           R"(

@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "third_party/blink/renderer/modules/mediarecorder/audio_track_recorder.h"
 
 #include <stdint.h>
@@ -14,6 +9,7 @@
 #include <optional>
 #include <string>
 
+#include "base/compiler_specific.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
@@ -78,7 +74,6 @@
 using base::TimeTicks;
 using base::test::RunOnceClosure;
 using ::testing::_;
-using ::testing::Invoke;
 
 namespace {
 
@@ -120,8 +115,8 @@ class TestInterfaceFactory : public media::mojom::InterfaceFactory {
 
     // Each `AudioTrackMojoEncoder` instance will try to open a connection to
     // this factory, so we must clean up after each one is destroyed.
-    receiver_.set_disconnect_handler(WTF::BindOnce(
-        &TestInterfaceFactory::OnConnectionError, base::Unretained(this)));
+    receiver_.set_disconnect_handler(BindOnce(
+        &TestInterfaceFactory::OnConnectionError, blink::Unretained(this)));
   }
 
   void OnConnectionError() { receiver_.reset(); }
@@ -384,14 +379,14 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
     InitializeRecorder();
     EXPECT_CALL(*mock_callback_interface_, OnEncodedAudio)
         .WillRepeatedly(
-            Invoke([this](const media::AudioParameters& params,
-                          scoped_refptr<media::DecoderBuffer> encoded_data,
-                          std::optional<media::AudioEncoder::CodecDescription>
-                              codec_description,
-                          base::TimeTicks capture_time) {
+            [this](const media::AudioParameters& params,
+                   scoped_refptr<media::DecoderBuffer> encoded_data,
+                   std::optional<media::AudioEncoder::CodecDescription>
+                       codec_description,
+                   base::TimeTicks capture_time) {
               OnEncodedAudio(params, encoded_data, std::move(codec_description),
                              capture_time);
-            }));
+            });
   }
 
   void TearDown() override {
@@ -432,7 +427,7 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
                     ->GetBrowserInterfaceBroker()
                     ->SetBinderForTesting(
                         media::mojom::InterfaceFactory::Name_,
-                        WTF::BindRepeating(
+                        BindRepeating(
                             &TestInterfaceFactory::BindRequest,
                             base::Owned(std::move(interface_factory))));
             CHECK(result);
@@ -716,8 +711,9 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
                        first_source_cache_pos_ < first_source_cache_.size();
          b += sizeof(first_source_cache_[0]), ++first_source_cache_pos_) {
       float sample;
-      memcpy(&sample, (*encoded_data).subspan(b, kSampleSize).data(),
-             kSampleSize);
+      UNSAFE_TODO(memcpy(&sample,
+                         (*encoded_data).subspan(b, kSampleSize).data(),
+                         kSampleSize));
       ASSERT_FLOAT_EQ(sample, first_source_cache_[first_source_cache_pos_])
           << "(Sample " << first_source_cache_pos_ << ")";
     }
@@ -731,7 +727,7 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
     // `DecodeOutputCb`, so we can be sure that these will run and the decoded
     // output is validated.
     media::AudioDecoder::DecodeCB decode_cb =
-        WTF::BindOnce(&AudioTrackRecorderTest::OnDecode, WTF::Unretained(this));
+        BindOnce(&AudioTrackRecorderTest::OnDecode, Unretained(this));
     aac_decoder_->Decode(encoded_data, std::move(decode_cb));
   }
 
@@ -759,9 +755,9 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
                                      media::EncryptionScheme::kUnencrypted);
     EXPECT_CALL(*this, InitCb);
     media::AudioDecoder::InitCB init_cb =
-        WTF::BindOnce(&AudioTrackRecorderTest::OnInit, WTF::Unretained(this));
-    media::AudioDecoder::OutputCB output_cb = WTF::BindRepeating(
-        &AudioTrackRecorderTest::OnDecodeOutput, WTF::Unretained(this));
+        BindOnce(&AudioTrackRecorderTest::OnInit, Unretained(this));
+    media::AudioDecoder::OutputCB output_cb = blink::BindRepeating(
+        &AudioTrackRecorderTest::OnDecodeOutput, Unretained(this));
     aac_decoder_->Initialize(config, /*cdm_context=*/nullptr,
                              std::move(init_cb), std::move(output_cb),
                              /*waiting_cb=*/base::DoNothing());

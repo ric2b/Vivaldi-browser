@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">Закладку збережено у теці <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Зовнішній вигляд</translation>
 <translation id="2501278716633472235">Перейти назад</translation>
+<translation id="2546283357679194313">Файли кукі та дані сайтів</translation>
 <translation id="2633278372998075009">Приватні вкладки</translation>
 <translation id="2650751991977523696">Завантажити файл ще раз?</translation>
 <translation id="265156376773362237">Стандартне передзавантаження</translation>
@@ -28,6 +29,7 @@
 <translation id="3029276696788198026">Без попереднього завантаження</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> закладка}
+          few {<ph name="BOOKMARKS_COUNT_MANY" /> закладки}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> закладок}}</translation>
 <translation id="3076631378407175873">© Vivaldi Technologies AS, <ph name="YEAR" />. Усі права захищено.</translation>
 <translation id="3110967157686007724">Приватна вкладка</translation>
@@ -54,6 +56,9 @@
 <translation id="4269820728363426813">Копіювати адресу посилання</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Увімкніть блокування екрана в налаштуваннях Android<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Менеджер паролів</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, plural,
+          =1 {Вкладки та групи, які не використовуються протягом 1 дня та більше}
+          other {Вкладки та групи, які не використовуються протягом # днів та більше}}</translation>
 <translation id="451872707440238414">Шукати у закладках</translation>
 <translation id="4526803704855831732">Приватні вкладки</translation>
 <translation id="4532845899244822526">Вибрати папку</translation>
@@ -62,6 +67,7 @@
 
 Швидкий пошук доступний тільки якщо Google вибраний типовою пошуковою системою у Vivaldi.</translation>
 <translation id="4759238208242260848">Завантаження</translation>
+<translation id="4777866634702576038">Видалити групу вкладок?</translation>
 <translation id="4850886885716139402">Переглянути</translation>
 <translation id="4883379392681899581">Покинути приватний режим</translation>
 <translation id="4943872375798546930">Немає результатів</translation>
@@ -72,12 +78,12 @@
 <translation id="5186185447130319458">Приватний режим</translation>
 <translation id="5206168361184759344">{FILE_COUNT, plural,
             =1 {Завантажується файл…}
+            few {Завантажується # файли…}
             other {Завантажується # файлів…}}</translation>
 <translation id="5233638681132016545">Нова вкладка</translation>
 <translation id="5375131951310889874">Отримуйте більше інформації прямо на сторінці. Швидкий пошук доступний, тільки якщо ви вибрали Google типовим пошуком у Vivaldi. Ця функція надсилає слово та його контекст до пошуку Google і повертає визначення, зображення, результати пошуку та інші деталі.
 
 Для налаштування пошуку викорисовуйте довге натискання. Щоб уточнити запит, прокрутіть панель вгору до упору та натисніть на полі пошуку.</translation>
-<translation id="543338862236136125">Змінити пароль</translation>
 <translation id="572328651809341494">Останні вкладки</translation>
 <translation id="5833984609253377421">Поділитися посиланням</translation>
 <translation id="6150320133806434356">Закладку збережено</translation>
@@ -85,9 +91,11 @@
 <translation id="6336451774241870485">Приватна вкладка</translation>
 <translation id="6337323516034698937">Щоб надіслати цю вкладку на інший пристрій, увімкніть синхронізацію Vivaldi на обох пристроях. Переконайтеся, що ви ввели пароль шифрування, якщо це необхідно.</translation>
 <translation id="6341580099087024258">Запитувати, де зберігати файли</translation>
+<translation id="6364438453358674297">Видалити пропозицію з історії?</translation>
 <translation id="6404511346730675251">Редагувати закладку</translation>
 <translation id="650224091954855786">{FILE_COUNT, plural,
           =1 {Файл завантажено}
+          few {# файли завантажено}
           other {# файлів завантажено}}</translation>
 <translation id="6585139692466700358">Пропонувати перекладати сторінки за допомогою сервісу перекладу Vivaldi</translation>
 <translation id="6588043302623806746">Використовувати захищений DNS</translation>
@@ -112,6 +120,10 @@
 <translation id="8062594758852531064">Розширене передзавантаження:</translation>
 <translation id="8073388330009372546">Відкрити зображення в новій вкладці</translation>
 <translation id="8127542551745560481">Редагувати головну сторінку</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+          =1 {(1) неактивна вкладка}
+          few {(#) неактивні вкладки}
+          other {(#) неактивних вкладок}}</translation>
 <translation id="8266862848225348053">Папка для завантажень</translation>
 <translation id="8348430946834215779">За можливості використовуйте HTTPS і отримуйте попередження перед завантаженням сайтів, які не підтримують цей протокол</translation>
 <translation id="8560602726703398413">Знайдіть свій список читання в закладках</translation>
@@ -121,6 +133,9 @@
 <translation id="9042893549633094279">Конфіденційність і безпека</translation>
 <translation id="9063523880881406963">Вимкнути функцію "Запитувати версію сайту для комп'ютера"</translation>
 <translation id="9080642952018487277">Відкрити приватний режим</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+          =1 {Не використовуються протягом 1 дня чи більше}
+          other {Не використовуються протягом # днів чи більше}}</translation>
 <translation id="930124987204876019">Видалити історію, файли cookie, дані сайтів, кеш…</translation>
 <translation id="961856697154696964">Видалити дані перегляду</translation>
 </translationbundle>

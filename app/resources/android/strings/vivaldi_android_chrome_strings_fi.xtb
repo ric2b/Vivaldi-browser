@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">Kirjanmerkki tallennettu kansioon <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Ulkoasu</translation>
 <translation id="2501278716633472235">Palaa takaisin</translation>
+<translation id="2546283357679194313">Evästeet ja sivustotieto</translation>
 <translation id="2633278372998075009">Yksityisvälilehdet</translation>
 <translation id="2650751991977523696">Ladataanko tiedosto uudelleen?</translation>
 <translation id="265156376773362237">Vakioesilataus</translation>
@@ -54,6 +55,9 @@
 <translation id="4269820728363426813">Kopioi linkin osoite</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Aseta Android-asetuksista näytön lukitus käyttöön<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Salasanahallinta</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, plural,
+          =1 {Välilehdet ja ryhmät, joita ei ole käytetty 1 päivään tai pidempään}
+          other {Välilehdet ja ryhmät, joita ei ole käytetty # päivään tai pidempään}}</translation>
 <translation id="451872707440238414">Hae kirjanmerkeistä</translation>
 <translation id="4526803704855831732">Yksityisvälilehdet</translation>
 <translation id="4532845899244822526">Valitse kansio</translation>
@@ -62,6 +66,7 @@
 
 Kosketushaku on ominaisuus, joka on käytettävissä vain kun Google on Vivaldin oletushakukone.</translation>
 <translation id="4759238208242260848">Lataukset</translation>
+<translation id="4777866634702576038">Poistetaanko välilehtiryhmä?</translation>
 <translation id="4850886885716139402">Näytä</translation>
 <translation id="4883379392681899581">Poistu yksityistilasta</translation>
 <translation id="4943872375798546930">Ei tuloksia</translation>
@@ -77,7 +82,6 @@ other {Ladataan # tiedostoa…}}</translation>
 <translation id="5375131951310889874">Lue lisää sivuston aiheista jättämättä sivua. Kosketushaku on ominaisuus, joka on käytettävissä vain kun Google on Vivaldin oletushakukone. Se lähettää sanan konteksteineen Google-hakuun ja palauttaa määritelmiä, kuvia, hakutuloksia ja muuta tietoa.
 
 Hakusanoja voi mukauttaa valitsemalla ne painamalla pitkään. Säädä hakua pyyhkäisemällä paneeli ylös asti ja napauttamalla hakukenttää.</translation>
-<translation id="543338862236136125">Vahda salasana</translation>
 <translation id="572328651809341494">Viimeaikaiset välilehdet</translation>
 <translation id="5833984609253377421">Jaa linkki</translation>
 <translation id="6150320133806434356">Kirjanmerkki tallennettu</translation>
@@ -85,6 +89,7 @@ Hakusanoja voi mukauttaa valitsemalla ne painamalla pitkään. Säädä hakua py
 <translation id="6336451774241870485">Uusi yksityisvälilehti</translation>
 <translation id="6337323516034698937">Lähettääksesi välilehden laitteelta toiselle kirjaa molemmat laitteeet Vivaldin synkronointipalveluun. Varmista, että syötät tarvittaessa salasanan.</translation>
 <translation id="6341580099087024258">Kysy tiedostojen tallennussijaintia</translation>
+<translation id="6364438453358674297">Poistetaanko ehdotus historiasta?</translation>
 <translation id="6404511346730675251">Muokkaa kirjanmerkkiä</translation>
 <translation id="650224091954855786">{FILE_COUNT, plural,
 =1 {Tiedosto on ladattu}
@@ -112,6 +117,9 @@ other {# tiedostoa on ladattu}}</translation>
 <translation id="8062594758852531064">Laajennettu esilataus:</translation>
 <translation id="8073388330009372546">Avaa kuva uuteen välilehteen</translation>
 <translation id="8127542551745560481">Muokkaa kotisivua</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+          =1 {(1) passiivinen kohde}
+          other {(#) passiivista kohdetta}}</translation>
 <translation id="8266862848225348053">Lataussijainti</translation>
 <translation id="8348430946834215779">Käytä HTTPS:ää aina kun mahdollista ja varoita ladattaessa sivuja, jotka eivät tue sitä</translation>
 <translation id="8560602726703398413">Etsi lukulistasi kirjanmerkeistä</translation>
@@ -121,6 +129,9 @@ other {# tiedostoa on ladattu}}</translation>
 <translation id="9042893549633094279">Yksityisyys ja tietoturva</translation>
 <translation id="9063523880881406963">Poista käytöstä ”Käytä työpöytäsivustoa”</translation>
 <translation id="9080642952018487277">Siirry yksityistilaan</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+          =1 {Ei käytetty yhteen tai useampaan päivään}
+          other {Ei käytetty # tai useampaan päivään}}</translation>
 <translation id="930124987204876019">Poista historia, evästeet, sivustotiedot, välimuisti…</translation>
 <translation id="961856697154696964">Poista selaustiedot</translation>
 </translationbundle>

@@ -9,6 +9,7 @@
 #ifndef COMPONENTS_DB_MAIL_CLIENT_MESSAGE_TYPE_H_
 #define COMPONENTS_DB_MAIL_CLIENT_MESSAGE_TYPE_H_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 

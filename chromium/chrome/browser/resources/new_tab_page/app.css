@@ -18,6 +18,7 @@
   --cr-searchbox-icon-size-in-searchbox: 20px;
   --cr-searchbox-icon-top-position: 0;
   --cr-searchbox-min-width: var(--ntp-search-box-width);
+  --cr-searchbox-results-search-icon-size: 20px;
   --ntp-theme-text-shadow: none;
   --ntp-one-google-bar-height: 56px;
   --ntp-search-box-width: 337px;
@@ -30,18 +31,24 @@
   --ntp-module-item-border-radius: 12px;
   --ntp-protected-icon-background-color: transparent;
   --ntp-protected-icon-background-color-hovered: rgba(255, 255, 255, .1);
+  --ntp-scrim-opacity_: 1;
 }
 
 /**
  * Hide everything that should not display when the composebox is open
  * so they are not tabbable.
  */
-:host([show-composebox_]:not([closing-composebox])) cr-most-visited,
-:host([show-composebox_]:not([closing-composebox])) ntp-middle-slot-promo,
-:host([show-composebox_]:not([closing-composebox])) ntp-modules,
-:host([show-composebox_]:not([closing-composebox])) #backgroundImageAttribution,
-:host([show-composebox_]:not([closing-composebox])) ntp-customize-buttons {
+:host([show-composebox_]:not([ntp-realbox-next-enabled_])) cr-most-visited,
+:host([show-composebox_]:not([ntp-realbox-next-enabled_])) ntp-middle-slot-promo,
+:host([show-composebox_]:not([ntp-realbox-next-enabled_])) ntp-modules,
+:host([show-composebox_]:not([ntp-realbox-next-enabled_])) #backgroundImageAttribution,
+:host([show-composebox_]:not([ntp-realbox-next-enabled_])) ntp-customize-buttons,
+:host([show-composebox_]:not([ntp-realbox-next-enabled_])) setup-list-module-wrapper{
   display: none;
+}
+
+:host([ntp-realbox-next-enabled_]) {
+  --ntp-scrim-opacity_: 0.5;
 }
 
 /**
@@ -87,6 +94,23 @@ cr-most-visited {
   --ntp-protected-icon-background-color-hovered: rgba(0, 0, 0, .7);
 }
 
+/* The styles to create a stacking context for the OGB-related elements.
+ * The OGB has z-index of 1000 (set by inline styling),
+ * and it needs to be segregated to get the OGB scrimmed. */
+#oneGoogleBarStackingContext {
+  display: flex;
+  border: 0px;
+  top: 0;
+  width: 100%;
+  /* OGB is above any other element by default to keep the original behavior. */
+  z-index: 1000;
+}
+
+/* When scrim is applied, OGB must be behind it. */
+:host([show-scrim_]) #oneGoogleBarStackingContext {
+  z-index: 0;
+}
+
 #oneGoogleBarScrim {
   background: linear-gradient(rgba(0,0,0,0.25) 0%,
                               rgba(0,0,0,0.12) 45%,
@@ -130,7 +154,8 @@ cr-most-visited {
   z-index: 1;  /* Needed so it layers on top of OneGoogleBar. */
 }
 
-:host([show-composebox_]) #logo {
+:host([show-composebox_]) #logo,
+:host([ntp-realbox-next-enabled_][show-scrim_]) #logo {
   z-index: 2;
 }
 
@@ -138,6 +163,7 @@ cr-most-visited {
   display: inherit;
   margin-bottom: 16px;
   position: relative;
+  z-index: 2;
 }
 
 #modules:not([hidden]) {
@@ -275,10 +301,6 @@ ntp-composebox {
       var(--color-new-tab-page-composebox-background);
 }
 
-ntp-composebox.fade-out {
-  opacity: 0;
-}
-
 ntp-composebox,
 ntp-lens-upload-dialog {
   left: 0;
@@ -288,19 +310,13 @@ ntp-lens-upload-dialog {
   z-index: 101;
 }
 
-#composeboxScrim {
+#scrim {
   background: var(--color-new-tab-page-composebox-scrim-background);
   inset: 0;
-  opacity: 0;
-  pointer-events: none;
+  opacity: var(--ntp-scrim-opacity_);
   position: fixed;
-  transition: opacity 1s ease-in-out;
+  transition: all 250ms ease;
   z-index: 1;
-}
-
-#composeboxScrim.fade {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 #webstoreToast {

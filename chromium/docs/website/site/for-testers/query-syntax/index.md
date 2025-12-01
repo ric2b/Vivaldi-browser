@@ -307,4 +307,3 @@ concepts like hotlists.
    </td>
   </tr>
 </table>
-

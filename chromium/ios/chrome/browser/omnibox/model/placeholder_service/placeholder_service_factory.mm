@@ -21,9 +21,7 @@
 namespace ios {
 namespace {
 
-std::unique_ptr<KeyedService> BuildPlaceholderService(
-    web::BrowserState* context) {
-  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
+std::unique_ptr<KeyedService> BuildPlaceholderService(ProfileIOS* profile) {
 #if defined(VIVALDI_BUILD)
   return std::make_unique<PlaceholderService>(
       IOSChromeFaviconLoaderFactory::GetForProfile(profile),
@@ -53,9 +51,9 @@ PlaceholderServiceFactory* PlaceholderServiceFactory::GetInstance() {
 }
 
 // static
-BrowserStateKeyedServiceFactory::TestingFactory
+PlaceholderServiceFactory::TestingFactory
 PlaceholderServiceFactory::GetDefaultFactory() {
-  return base::BindRepeating(&BuildPlaceholderService);
+  return base::BindOnce(&BuildPlaceholderService);
 }
 
 PlaceholderServiceFactory::PlaceholderServiceFactory()
@@ -77,9 +75,8 @@ PlaceholderServiceFactory::PlaceholderServiceFactory()
 PlaceholderServiceFactory::~PlaceholderServiceFactory() {}
 
 std::unique_ptr<KeyedService>
-PlaceholderServiceFactory::BuildServiceInstanceFor(
-    web::BrowserState* context) const {
-  return BuildPlaceholderService(context);
+PlaceholderServiceFactory::BuildServiceInstanceFor(ProfileIOS* profile) const {
+  return BuildPlaceholderService(profile);
 }
 
 }  // namespace ios

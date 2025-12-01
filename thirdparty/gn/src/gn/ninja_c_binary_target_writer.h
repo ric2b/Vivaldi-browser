@@ -11,7 +11,7 @@
 #include "gn/unique_vector.h"
 
 struct EscapeOptions;
-struct ModuleDep;
+struct ClangModuleDep;
 
 // Writes a .ninja file for a binary target type (an executable, a shared
 // library, or a static library).
@@ -26,12 +26,12 @@ class NinjaCBinaryTargetWriter : public NinjaBinaryTargetWriter {
   using OutputFileSet = std::set<OutputFile>;
 
   // Writes all flags for the compiler: includes, defines, cflags, etc.
-  void WriteCompilerVars(const std::vector<ModuleDep>& module_dep_info);
+  void WriteCompilerVars(const std::vector<ClangModuleDep>& module_dep_info);
 
   // Write module_deps or module_deps_no_self flags for clang modulemaps.
   void WriteModuleDepsSubstitution(
       const Substitution* substitution,
-      const std::vector<ModuleDep>& module_dep_info,
+      const std::vector<ClangModuleDep>& module_dep_info,
       bool include_self);
 
   // Writes build lines required for precompiled headers. Any generated
@@ -77,7 +77,7 @@ class NinjaCBinaryTargetWriter : public NinjaBinaryTargetWriter {
   void WriteSources(const std::vector<OutputFile>& pch_deps,
                     const std::vector<OutputFile>& input_deps,
                     const std::vector<OutputFile>& order_only_deps,
-                    const std::vector<ModuleDep>& module_dep_info,
+                    const std::vector<ClangModuleDep>& module_dep_info,
                     std::vector<OutputFile>* object_files,
                     std::vector<SourceFile>* other_files);
   void WriteSwiftSources(const std::vector<OutputFile>& input_deps,

@@ -12,31 +12,7 @@ load("./config.star", "config")
 load("./gn_logs.star", "gn_logs")
 load("./win_sdk.star", "win_sdk")
 
-def __add_generated_libcxx_headers(ctx, cmd):
-    """Adds libc++ headers as tool inputs for clang compile actions.
-
-    This is needed because libc++ headers in the build directory are not always
-    discovered by the precomputed tree and scandeps. It identifies them using
-    `-isystem` flags and `libcxx_headers.gni`.
-    """
-
-    libcxx_headers = []
-    for line in str(ctx.fs.read("buildtools/third_party/libc++/libcxx_headers.gni")).split("\n"):
-        if "third_party/libc++/src/include" in line:
-            libcxx_headers.append(line.split("src/include/")[1].removesuffix("\","))
-
-    tool_inputs = []
-    for arg in cmd.args:
-        isystem = arg.removeprefix("-isystem")
-        if arg == isystem or "third_party/libc++/src/include" not in isystem:
-            continue
-        isystem = ctx.fs.canonpath(isystem)
-        for header in libcxx_headers:
-            tool_inputs.append(path.join(isystem, header))
-    ctx.actions.fix(tool_inputs = cmd.tool_inputs + tool_inputs)
-
 def __clang_compile_coverage(ctx, cmd):
-    __add_generated_libcxx_headers(ctx, cmd)
     clang_command = clang_code_coverage_wrapper.run(ctx, list(cmd.args))
     ctx.actions.fix(args = clang_command)
 
@@ -98,7 +74,6 @@ def __clang_link(ctx, cmd):
     ctx.actions.fix(inputs = cmd.inputs + inputs)
 
 __handlers = {
-    "add_generated_libcxx_headers": __add_generated_libcxx_headers,
     "clang_compile_coverage": __clang_compile_coverage,
     "clang_link": __clang_link,
 }
@@ -110,6 +85,8 @@ def __rules(ctx):
 
     canonicalize_dir = not input_root_absolute_path
     canonicalize_dir_for_objc = not input_root_absolute_path_for_objc
+
+    use_thin_lto = gn_logs_data.get("use_thin_lto") == "true"
 
     rules = []
     if win_sdk.enabled(ctx):
@@ -225,7 +202,6 @@ def __rules(ctx):
                 "third_party/llvm-build/Release+Asserts/bin/clang++",
             ],
             "exclude_input_patterns": ["*.stamp"],
-            "handler": "add_generated_libcxx_headers",
             "remote": True,
             "input_root_absolute_path": input_root_absolute_path,
             "canonicalize_dir": canonicalize_dir,
@@ -265,7 +241,6 @@ def __rules(ctx):
                 "third_party/llvm-build/Release+Asserts/bin/clang++",
             ],
             "exclude_input_patterns": ["*.stamp"],
-            "handler": "add_generated_libcxx_headers",
             "remote": True,
             "timeout": "2m",
             "input_root_absolute_path": input_root_absolute_path_for_objc,
@@ -425,7 +400,10 @@ def __rules(ctx):
             "remote": config.get(ctx, "remote-link"),
             "canonicalize_dir": True,
             "platform_ref": "large",
-            "timeout": "10m",
+            # Remote linking with ThinLTO takes much longer.
+            # Linking browser_tests takes 50m locally. On remote with gVisor,
+            # it takes even more.
+            "timeout": "80m" if use_thin_lto else "10m",
         },
     ])
     return rules

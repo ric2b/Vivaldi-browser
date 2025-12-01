@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -13,7 +13,7 @@ import timeRangeOverlayStyles from './timeRangeOverlay.css.js';
 
 const UIStrings = {
   /**
-   *@description Accessible label used to explain to a user that they are viewing an entry label.
+   * @description Accessible label used to explain to a user that they are viewing an entry label.
    */
   timeRange: 'Time range',
 } as const;

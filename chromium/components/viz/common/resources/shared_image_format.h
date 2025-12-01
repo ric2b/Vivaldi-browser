@@ -10,6 +10,7 @@
 #include <compare>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "base/check.h"
 #include "base/component_export.h"
@@ -136,6 +137,9 @@ class COMPONENT_EXPORT(VIZ_SHARED_IMAGE_FORMAT) SharedImageFormat final {
   // Returns true is `plane_index` is valid.
   bool IsValidPlaneIndex(int plane_index) const;
 
+  // Returns the subsampling width and height scale for the format.
+  std::pair<int, int> GetSubsamplingScale() const;
+
   // Returns the size for a plane given `plane_index`.
   gfx::Size GetPlaneSize(int plane_index, const gfx::Size& size) const;
 
@@ -162,6 +166,10 @@ class COMPONENT_EXPORT(VIZ_SHARED_IMAGE_FORMAT) SharedImageFormat final {
 
   // Returns the bit depth for multiplanar format based on the channel format.
   int MultiplanarBitDepth() const;
+
+  // Returns the number of bytes per channel for multiplanar format based on the
+  // channel format.
+  uint64_t MultiplanarStorageBytesPerChannel() const;
 
   // Returns a std::string for the format.
   std::string ToString() const;

@@ -7,6 +7,7 @@
 #include "services/webnn/public/cpp/webnn_types.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom-shared.h"
+#include "services/webnn/scoped_sequence.h"
 #include "services/webnn/tflite/graph_builder_tflite.h"
 #include "services/webnn/tflite/graph_impl_tflite.h"
 #include "services/webnn/tflite/tensor_impl_tflite.h"
@@ -17,18 +18,28 @@
 namespace webnn::tflite {
 
 ContextImplTflite::ContextImplTflite(
-    mojo::PendingReceiver<mojom::WebNNContext> receiver,
+    mojo::PendingAssociatedReceiver<mojom::WebNNContext> receiver,
     WebNNContextProviderImpl* context_provider,
-    mojom::CreateContextOptionsPtr options)
+    mojom::CreateContextOptionsPtr options,
+    mojo::ScopedDataPipeConsumerHandle write_tensor_consumer,
+    mojo::ScopedDataPipeProducerHandle read_tensor_producer,
+    gpu::CommandBufferId command_buffer_id,
+    std::unique_ptr<ScopedSequence> sequence,
+    scoped_refptr<gpu::SchedulerTaskRunner> task_runner)
     : WebNNContextImpl(std::move(receiver),
                        context_provider,
                        GraphBuilderTflite::GetContextProperties(),
-                       std::move(options)) {}
+                       std::move(options),
+                       std::move(write_tensor_consumer),
+                       std::move(read_tensor_producer),
+                       command_buffer_id,
+                       std::move(sequence),
+                       std::move(task_runner)) {}
 
 ContextImplTflite::~ContextImplTflite() = default;
 
 base::WeakPtr<WebNNContextImpl> ContextImplTflite::AsWeakPtr() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);
   return weak_factory_.GetWeakPtr();
 }
 
@@ -46,37 +57,35 @@ void ContextImplTflite::CreateGraphImpl(
       std::move(constant_tensor_operands), this));
 }
 
-void ContextImplTflite::CreateTensorImpl(
+base::expected<scoped_refptr<WebNNTensorImpl>, mojom::ErrorPtr>
+ContextImplTflite::CreateTensorImpl(
     mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
-    mojom::TensorInfoPtr tensor_info,
-    CreateTensorImplCallback callback) {
+    mojom::TensorInfoPtr tensor_info) {
   // TODO(crbug.com/332350952): implement constant tensors for TFLite.
   if (tensor_info->usage.Has(MLTensorUsageFlags::kGraphConstant)) {
-    std::move(callback).Run(base::unexpected(
+    return base::unexpected(
         mojom::Error::New(mojom::Error::Code::kNotSupportedError,
-                          "Creation of constant tensors is not supported.")));
-    return;
+                          "Creation of constant tensors is not supported."));
   }
   // TODO(crbug.com/345352987): implement WebGPU interop tensors for TFLite
   // backend.
   if (tensor_info->usage.Has(MLTensorUsageFlags::kWebGpuInterop)) {
-    std::move(callback).Run(base::unexpected(
+    return base::unexpected(
         mojom::Error::New(mojom::Error::Code::kNotSupportedError,
-                          "WebGPU Interop is not supported.")));
-    return;
+                          "WebGPU Interop is not supported."));
   }
-  std::move(callback).Run(TensorImplTflite::Create(
-      std::move(receiver), AsWeakPtr(), std::move(tensor_info)));
+  return TensorImplTflite::Create(std::move(receiver), AsWeakPtr(),
+                                  std::move(tensor_info));
 }
 
-void ContextImplTflite::CreateTensorFromMailboxImpl(
+base::expected<scoped_refptr<WebNNTensorImpl>, mojom::ErrorPtr>
+ContextImplTflite::CreateTensorFromSharedImageImpl(
     mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
     mojom::TensorInfoPtr tensor_info,
-    gpu::Mailbox mailbox,
-    CreateTensorImplCallback callback) {
-  std::move(callback).Run(
-      base::unexpected(mojom::Error::New(mojom::Error::Code::kNotSupportedError,
-                                         "WebGPU Interop is not supported.")));
+    std::unique_ptr<gpu::WebNNTensorRepresentation> representation) {
+  return base::unexpected(
+      mojom::Error::New(mojom::Error::Code::kNotSupportedError,
+                        "WebGPU Interop is not supported."));
 }
 
 }  // namespace webnn::tflite

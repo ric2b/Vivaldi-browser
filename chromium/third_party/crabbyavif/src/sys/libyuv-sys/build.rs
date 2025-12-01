@@ -23,8 +23,12 @@ fn path_buf(inputs: &[&str]) -> PathBuf {
     path
 }
 
-fn main() {
+fn main() -> Result<(), String> {
     println!("cargo:rerun-if-changed=build.rs");
+    if !cfg!(feature = "libyuv") {
+        // The feature is disabled at the top level. Do not build this dependency.
+        return Ok(());
+    }
 
     let build_target = std::env::var("TARGET").unwrap();
     let build_dir = if build_target.contains("android") {
@@ -37,7 +41,9 @@ fn main() {
         } else if build_target.contains("arm") {
             "build.android/armeabi-v7a"
         } else {
-            panic!("Unknown target_arch for android. Must be one of x86, x86_64, arm, aarch64.");
+            return Err(
+                "Unknown target_arch for android. Must be one of x86, x86_64, arm, aarch64.".into(),
+            );
         }
     } else {
         "build"
@@ -52,11 +58,13 @@ fn main() {
         "libyuv.a"
     });
     let extra_includes_str;
+    let custom_error;
     if Path::new(&library_file).exists() {
         println!("cargo:rustc-link-lib=static=yuv");
         println!("cargo:rustc-link-search={}", abs_object_dir.display());
         let version_dir = PathBuf::from(&abs_library_dir).join(path_buf(&["include"]));
         extra_includes_str = format!("-I{}", version_dir.display());
+        custom_error = None;
     } else {
         // Local library was not found. Look for a system library.
         match pkg_config::Config::new().probe("yuv") {
@@ -73,9 +81,14 @@ fn main() {
                     include_str.push_str(include_path.to_str().unwrap());
                 }
                 extra_includes_str = include_str;
+                custom_error = None;
             }
             Err(_) => {
-                // Try to build without any extra flags.
+                custom_error = Some(
+                    "libyuv binaries could not be found locally or with pkg-config. \
+                    Disable the libyuv feature, install the system library libyuv-dev, \
+                    or build the dependency locally by running libyuv.cmd from sys/libyuv-sys.",
+                );
                 println!("cargo:rustc-link-lib=yuv");
                 extra_includes_str = String::new();
             }
@@ -146,6 +159,7 @@ fn main() {
         "I444AlphaToARGBMatrix",
         "I444ToARGBMatrix",
         "I444ToRGB24Matrix",
+        "LIBYUV_VERSION",
         "NV12Scale",
         "NV12ToARGBMatrix",
         "NV12ToRGB565Matrix",
@@ -180,10 +194,15 @@ fn main() {
     for allowlist_item in allowlist_items {
         bindings = bindings.allowlist_item(allowlist_item);
     }
-    let bindings = bindings
-        .generate()
-        .unwrap_or_else(|_| panic!("Unable to generate bindings for libyuv."));
+    let bindings = bindings.generate().map_err(|err| {
+        if let Some(custom_error) = custom_error {
+            custom_error.into()
+        } else {
+            err.to_string()
+        }
+    })?;
     bindings
         .write_to_file(outfile.as_path())
-        .unwrap_or_else(|_| panic!("Couldn't write bindings for libyuv"));
+        .map_err(|err| err.to_string())?;
+    Ok(())
 }

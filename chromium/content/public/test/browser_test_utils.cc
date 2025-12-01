@@ -2014,7 +2014,7 @@ EvalJsResult EvalJsAfterLifecycleUpdate(
 
   if (!result.is_ok() &&
       base::StartsWith(result.ExtractError(),
-                       "a JavaScript error: \"EvalError: Refused",
+                       "a JavaScript error: \"EvalError: Evaluating",
                        base::CompareCase::SENSITIVE)) {
     return EvalJsResult(base::Value(),
                         base::StrCat({"EvalJsAfterLifecycleUpdate encountered "
@@ -2077,7 +2077,8 @@ bool HasOriginKeyedProcess(RenderFrameHost* frame) {
   return static_cast<RenderFrameHostImpl*>(frame)
       ->GetSiteInstance()
       ->GetSiteInfo()
-      .requires_origin_keyed_process();
+      .agent_cluster_key()
+      .IsOriginKeyed();
 }
 
 bool HasSandboxedSiteInstance(RenderFrameHost* frame) {
@@ -2341,6 +2342,12 @@ bool AccessibilityTreeContainsNodeWithName(ui::BrowserAccessibility* node,
 void WaitForAccessibilityTreeToChange(WebContents* web_contents) {
   AccessibilityNotificationWaiter accessibility_waiter(web_contents);
   ASSERT_TRUE(accessibility_waiter.WaitForNotification());
+}
+
+bool WaitForAccessibilityTreeToChange(WebContents* web_contents,
+                                      base::TimeDelta timeout) {
+  AccessibilityNotificationWaiter accessibility_waiter(web_contents);
+  return accessibility_waiter.WaitForNotificationWithTimeout(timeout);
 }
 
 void WaitForAccessibilityTreeToContainNodeWithName(WebContents* web_contents,
@@ -2920,7 +2927,8 @@ bool RequestFrame(WebContents* web_contents) {
 
 RenderFrameSubmissionObserver::RenderFrameSubmissionObserver(
     RenderFrameMetadataProviderImpl* render_frame_metadata_provider)
-    : render_frame_metadata_provider_(render_frame_metadata_provider) {
+    : render_frame_metadata_provider_(
+          render_frame_metadata_provider->GetWeakPtr()) {
   render_frame_metadata_provider_->AddObserver(this);
   render_frame_metadata_provider_->ReportAllFrameSubmissionsForTesting(true);
 }
@@ -2943,8 +2951,10 @@ RenderFrameSubmissionObserver::RenderFrameSubmissionObserver(
           RenderFrameMetadataProviderFromRenderFrameHost(rfh)) {}
 
 RenderFrameSubmissionObserver::~RenderFrameSubmissionObserver() {
-  render_frame_metadata_provider_->RemoveObserver(this);
-  render_frame_metadata_provider_->ReportAllFrameSubmissionsForTesting(false);
+  if (render_frame_metadata_provider_) {
+    render_frame_metadata_provider_->RemoveObserver(this);
+    render_frame_metadata_provider_->ReportAllFrameSubmissionsForTesting(false);
+  }
 }
 
 void RenderFrameSubmissionObserver::WaitForAnyFrameSubmission() {
@@ -3976,8 +3986,9 @@ void DevToolsInspectorLogWatcher::DispatchProtocolMessage(
     base::span<const uint8_t> message) {
   std::string_view message_str(reinterpret_cast<const char*>(message.data()),
                                message.size());
-  auto parsed_message =
-      std::move(base::JSONReader::Read(message_str)->GetDict());
+  auto parsed_message = std::move(
+      base::JSONReader::Read(message_str, base::JSON_PARSE_CHROMIUM_EXTENSIONS)
+          ->GetDict());
   std::optional<int> command_id = parsed_message.FindInt("id");
   if (command_id.has_value()) {
     switch (command_id.value()) {
@@ -4903,6 +4914,18 @@ bool WaitForDOMContentLoaded(RenderFrameHost* rfh) {
   return observer.Wait();
 }
 
+std::vector<RenderWidgetHost*> GetPopupWidgets(WebContents* web_contents) {
+  std::vector<RenderWidgetHost*> popup_widgets;
+  for (RenderWidgetHostView* view : static_cast<WebContentsImpl*>(web_contents)
+                                        ->GetRenderWidgetHostViewsForTests()) {
+    if (static_cast<RenderWidgetHostViewBase*>(view)->GetWidgetType() ==
+        WidgetType::kPopup) {
+      popup_widgets.push_back(view->GetRenderWidgetHost());
+    }
+  }
+  return popup_widgets;
+}
+
 CreateNewPopupWidgetInterceptor::CreateNewPopupWidgetInterceptor(
     RenderFrameHost* rfh,
     base::OnceCallback<void(RenderWidgetHost*)> did_create_callback)
@@ -5062,5 +5085,20 @@ void ShowPopupWidgetWaiter::DidShowPopupMenu(const gfx::Rect& bounds) {
   run_loop_.Quit();
 }
 #endif
+
+RequestCloseWidgetInterceptor::RequestCloseWidgetInterceptor(
+    RenderWidgetHost* render_widget_host)
+    : swapped_impl_(static_cast<RenderWidgetHostImpl*>(render_widget_host)
+                        ->popup_widget_host_receiver_for_testing(),
+                    this) {}
+
+RequestCloseWidgetInterceptor::~RequestCloseWidgetInterceptor() = default;
+
+blink::mojom::PopupWidgetHost*
+RequestCloseWidgetInterceptor::GetForwardingInterface() {
+  return swapped_impl_.old_impl();
+}
+
+void RequestCloseWidgetInterceptor::RequestClosePopup() {}
 
 }  // namespace content

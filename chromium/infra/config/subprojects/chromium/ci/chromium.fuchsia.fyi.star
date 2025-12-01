@@ -60,7 +60,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.FUCHSIA,
         ),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -175,7 +174,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.FUCHSIA,
         ),
-        build_gs_bucket = "chromium-fyi-archive",
         # This builder is slow naturally, running everything in serial to avoid
         # using too much resource.
         run_tests_serially = True,
@@ -278,7 +276,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.FUCHSIA,
         ),
-        build_gs_bucket = "chromium-fyi-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -295,7 +292,7 @@ ci.builder(
         ],
         mixins = [
             "fuchsia-persistent-emulator",
-            "linux-focal",
+            "linux-jammy",
             targets.mixin(
                 swarming = targets.swarming(
                     dimensions = {
@@ -338,7 +335,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.FUCHSIA,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -430,7 +426,6 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.FUCHSIA,
         ),
-        build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -439,9 +434,7 @@ ci.builder(
             "fuchsia",
             "cast_receiver_perf_optimized",
             "x64",
-            # TODO(crbug.com/420718775): Enable "dcheck_always_on", now there
-            # are multiple test failures needing extra investigation.
-            # See https://ci.chromium.org/ui/p/chromium/builders/try/fuchsia-x64-perf-cast-receiver-rel/170/overview
+            "dcheck_always_on",
         ],
     ),
     # Do not forget to update

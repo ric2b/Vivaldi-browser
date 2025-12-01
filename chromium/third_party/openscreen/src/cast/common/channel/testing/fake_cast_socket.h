@@ -62,7 +62,6 @@ struct FakeCastSocketPair {
                      const IPEndpoint& remote_endpoint)
       : local_endpoint(local_endpoint), remote_endpoint(remote_endpoint) {
     using ::testing::_;
-    using ::testing::Invoke;
 
     auto moved_connection =
         std::make_unique<::testing::NiceMock<MockTlsConnection>>(
@@ -77,15 +76,14 @@ struct FakeCastSocketPair {
     peer_socket =
         std::make_unique<CastSocket>(std::move(moved_peer), &mock_peer_client);
 
-    ON_CALL(*connection, Send(_)).WillByDefault(Invoke([this](ByteView data) {
+    ON_CALL(*connection, Send(_)).WillByDefault([this](ByteView data) {
       peer_connection->OnRead(std::vector<uint8_t>(data.cbegin(), data.cend()));
       return true;
-    }));
-    ON_CALL(*peer_connection, Send(_))
-        .WillByDefault(Invoke([this](ByteView data) {
-          connection->OnRead(std::vector<uint8_t>(data.cbegin(), data.cend()));
-          return true;
-        }));
+    });
+    ON_CALL(*peer_connection, Send(_)).WillByDefault([this](ByteView data) {
+      connection->OnRead(std::vector<uint8_t>(data.cbegin(), data.cend()));
+      return true;
+    });
   }
   ~FakeCastSocketPair() = default;
 

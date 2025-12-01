@@ -85,6 +85,11 @@ impl From<&avifRGBImage> for rgb::Image {
             (rgb::Format::Abgr, false) => rgb::Format::Abgr,
             (rgb::Format::Rgb565, _) => rgb::Format::Rgb565,
             (rgb::Format::Rgba1010102, _) => rgb::Format::Rgba1010102,
+            (rgb::Format::Gray, _) => rgb::Format::Gray,
+            (rgb::Format::GrayA, true) => rgb::Format::Gray,
+            (rgb::Format::GrayA, false) => rgb::Format::GrayA,
+            (rgb::Format::AGray, true) => rgb::Format::Gray,
+            (rgb::Format::AGray, false) => rgb::Format::AGray,
         };
         dst.shuffle_channels_to(format).unwrap()
     }
@@ -199,7 +204,7 @@ fn CopyPlanes(dst: &mut avifImage, src: &Image) -> AvifResult<()> {
                 // SAFETY: Pre-conditions are met to call these two functions.
                 dst.yuvPlanes[2] = unsafe { crabby_avifAlloc(plane_size) } as *mut _;
                 if dst.yuvPlanes[2].is_null() {
-                    return Err(AvifError::OutOfMemory);
+                    return AvifError::out_of_memory();
                 }
                 dst.yuvRowBytes[2] = plane_data.width * 2;
             }

@@ -1,11 +1,37 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="af">
+<translation id="1049697408958544531">{NUM_WEEKS, plural,
+          =1 {<ph name="NUM_WEEKS_ONE" /> week gelede geskep}
+          other {<ph name="NUM_WEEKS_MANY" /> weke gelede geskep}
+        }</translation>
 <translation id="1062777154504442433">Nuwe oortjiegroep</translation>
+<translation id="1092908249939127748">{NUM_MONTHS, plural,
+          =1 {<ph name="NUM_YEARS_ONE" /> jaar gelede geskep}
+          other {<ph name="NUM_YEARS_MANY" /> jaar gelede geskep}
+        }</translation>
+<translation id="1329584516321524826">Pas bygewerk</translation>
+<translation id="149054111719651807">{NUM_MINS, plural,
+          =1 {<ph name="NUM_MINS_ONE" /> minuut gelede geskep}
+          other {<ph name="NUM_MINS_MANY" /> minute gelede geskep}
+        }</translation>
 <translation id="1625440863545383011">Verwyder oortjie en verlaat groep</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Boekmerk oortjie}
           other {Boekmerk oortjies}
+        }</translation>
+<translation id="2498435670446402865">Hernoem oortjiegroep</translation>
+<translation id="2734252994837336591">{NUM_WEEKS, plural,
+          =1 {<ph name="NUM_WEEKS_ONE" /> week gelede bygewerk}
+          other {<ph name="NUM_WEEKS_MANY" /> weke gelede bygewerk}
+        }</translation>
+<translation id="2753877351161418426">{NUM_HOURS, plural,
+          =1 {<ph name="NUM_HOURS_ONE" /> uur gelede bygewerk}
+          other {<ph name="NUM_HOURS_MANY" /> uur gelede bygewerk}
+        }</translation>
+<translation id="2776817246640326047">{NUM_HOURS, plural,
+          =1 {<ph name="NUM_HOURS_ONE" /> uur gelede geskep}
+          other {<ph name="NUM_HOURS_MANY" /> uur gelede geskep}
         }</translation>
 <translation id="2947471979790858922">U aktiwiteit in hierdie privaat oortjies word van hierdie toestel verwyder</translation>
 <translation id="3298614730029636660">Verlaat oortjiegroep</translation>
@@ -13,13 +39,41 @@
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {U kan u geslote oortjies in Onlangse oortjies onder Vivaldi se hoofkieslys vind. U privaat oortjie is nie beskikbaar nie.}
         other {U kan u geslote oortjies in Onlangse oortjies onder Vivaldi se hoofkieslys vind. U # privaat oortjies is nie beskikbaar nie.}}</translation>
+<translation id="4009732926939031387">{NUM_DAYS, plural,
+          =1 {<ph name="NUM_DAYS_ONE" /> dag gelede geskep}
+          other {<ph name="NUM_DAYS_MANY" /> dae gelede geskep}
+        }</translation>
+<translation id="4453940245650019914">{NUM_DAYS, plural,
+          =1 {<ph name="NUM_DAYS_ONE" /> dag gelede bygewerk}
+          other {<ph name="NUM_DAYS_MANY" /> dae gelede bygewerk}
+        }</translation>
+<translation id="4686942373615810936">Pas geskep</translation>
+<translation id="4870911314065352661">Sluit alle oortjies?</translation>
 <translation id="4871187110787939393">Sluit alle privaat oortjies?</translation>
 <translation id="5494920125229734069">Kies alles</translation>
 <translation id="6807841890213931603">Verwyder oortjie en skrap groep</translation>
 <translation id="750227952939161636">U oortjiestapels word outomaties oor al u aangetekende toestelle bewaar en bygewerk</translation>
 <translation id="7640137753339219124">Skrap groep</translation>
 <translation id="7653857400289671414">U oortjiestapels word outomaties bewaar</translation>
+<translation id="775668479044571025">{NUM_MONTHS, plural,
+          =1 {<ph name="NUM_YEARS_ONE" /> jaar gelede bygewerk}
+          other {<ph name="NUM_YEARS_MANY" /> jaar gelede bygewerk}
+        }</translation>
+<translation id="7825973332242257878">Oortjiegroepe</translation>
+<translation id="8207688828622594111">{NUM_MINS, plural,
+          =1 {<ph name="NUM_MINS_ONE" /> minuut gelede bygewerk}
+          other {<ph name="NUM_MINS_MANY" /> minute gelede bygewerk}
+        }</translation>
+<translation id="8374451057714760401">{NUM_MONTHS, plural,
+                =1 {<ph name="NUM_MONTHS_ONE" /> maand gelede bygewerk}
+                other {<ph name="NUM_MONTHS_MANY" /> maande gelede bygewerk
+              }</translation>
 <translation id="8440938071054361204">Wysig groepnaam</translation>
 <translation id="8602902357364871325">Sluit oortjiegroep</translation>
+<translation id="875848103419578654">{NUM_MONTHS, plural,
+                =1 {<ph name="NUM_MONTHS_ONE" /> maand gelede geskep}
+                other {<ph name="NUM_MONTHS_MANY" /> maande gelede geskep}
+              }</translation>
 <translation id="8851621822786801079">Verwyder uit groep</translation>
+<translation id="8887921976452567404">U geslote oortjies en groepe kan vanuit die Onlangse oortjiesafdeling en die Oortjiegroepafdeling heropen word.</translation>
 </translationbundle>

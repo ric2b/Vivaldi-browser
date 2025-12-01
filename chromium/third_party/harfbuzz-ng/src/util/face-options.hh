@@ -33,12 +33,16 @@ struct face_options_t
 {
   ~face_options_t ()
   {
-    g_free (face_loader);
     g_free (font_file);
+    g_free (face_loader);
+    hb_face_destroy (face);
   }
 
   void set_face (hb_face_t *face_)
-  { face = face_; }
+  {
+    hb_face_destroy (face);
+    face = hb_face_reference (face_);
+  }
 
   void add_options (option_parser_t *parser);
 
@@ -94,15 +98,16 @@ face_options_t::post_parse (GError **error)
   }
 
   if ((!cache.font_path || 0 != strcmp (cache.font_path, font_path)) ||
-      (cache.face_loader != face_loader && 0 != strcmp (cache.face_loader, face_loader)) ||
+      (cache.face_loader != face_loader &&
+       (cache.face_loader && face_loader && 0 != strcmp (cache.face_loader, face_loader))) ||
       cache.face_index != face_index)
   {
     hb_face_destroy (cache.face);
     cache.face = hb_face_create_from_file_or_fail_using (font_path, face_index, face_loader);
     cache.face_index = face_index;
 
-    free ((char *) cache.font_path);
-    free ((char *) cache.face_loader);
+    g_free ((char *) cache.font_path);
+    g_free ((char *) cache.face_loader);
     cache.font_path = g_strdup (font_path);
     cache.face_loader = face_loader ? g_strdup (face_loader) : nullptr;
 
@@ -115,7 +120,7 @@ face_options_t::post_parse (GError **error)
     }
   }
 
-  face = cache.face;
+  set_face (cache.face);
 }
 
 static G_GNUC_NORETURN gboolean

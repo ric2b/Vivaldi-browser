@@ -20,6 +20,7 @@
 #include "chrome/test/interaction/interaction_test_util_browser.h"
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "chrome/test/interaction/webcontents_interaction_test_util.h"
+#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/optimization_guide/core/model_execution/feature_keys.h"
 #include "components/optimization_guide/core/model_execution/model_execution_features.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
@@ -285,7 +286,7 @@ class WallpaperSearchOptimizationGuideInteractiveTest
           ExecuteModel(
               optimization_guide::ModelBasedCapabilityKey::kWallpaperSearch,
               testing::_, testing::_, testing::_))
-          .WillOnce(testing::Invoke(
+          .WillOnce(
               [](optimization_guide::ModelBasedCapabilityKey feature_arg,
                  const google::protobuf::MessageLite& request_arg,
                  const std::optional<base::TimeDelta>& execution_timeout,
@@ -315,7 +316,7 @@ class WallpaperSearchOptimizationGuideInteractiveTest
                              OptimizationGuideModelExecutionResult(
                                  base::ok(result), nullptr),
                          nullptr);
-              }));
+              });
     });
   }
 

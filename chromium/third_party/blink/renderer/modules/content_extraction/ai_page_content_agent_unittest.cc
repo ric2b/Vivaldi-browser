@@ -10,11 +10,13 @@
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "third_party/blink/public/mojom/content_extraction/ai_page_content.mojom-data-view.h"
 #include "third_party/blink/renderer/core/accessibility/ax_context.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
+#include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
@@ -59,6 +61,10 @@ class AIPageContentAgentTest : public testing::Test {
     helper_.InitializeWithSettings(&UpdateWebSettings);
     helper_.Resize(kWindowSize);
     ASSERT_TRUE(helper_.LocalMainFrame());
+  }
+
+  void TearDown() override {
+    url_test_helpers::UnregisterAllURLsAndClearMemoryCache();
   }
 
   void CheckListItemWithText(const mojom::blink::AIPageContentNode& node,
@@ -638,6 +644,128 @@ TEST_F(AIPageContentAgentTest, IFrameWithContent) {
 
   const auto& iframe_root = *iframe.children_nodes[0];
   CheckTextNode(*iframe_root.children_nodes[0], "inside iframe");
+}
+
+TEST_F(AIPageContentAgentTest, CrossSiteIframeIncluded) {
+  KURL main_url = url_test_helpers::ToKURL("http://example.com/main.html");
+  KURL cross_origin_url =
+      url_test_helpers::ToKURL("http://www.example.com/frame.html");
+  KURL cross_site_url =
+      url_test_helpers::ToKURL("http://altostrat.com/frame_another.html");
+
+  // Mock the cross origin, same-site iframe's content.
+  url_test_helpers::RegisterMockedURLLoadFromBase(
+      WebString::FromUTF8("http://www.example.com/"), test::CoreTestDataPath(),
+      WebString::FromUTF8("frame.html"));
+
+  // Mock the cross-site iframe's content.
+  url_test_helpers::RegisterMockedURLLoadFromBase(
+      WebString::FromUTF8("http://altostrat.com/"), test::CoreTestDataPath(),
+      WebString::FromUTF8("frame_another.html"));
+
+  // Load the main page which contains the same-site iframe and the cross-origin
+  // iframe.
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      "<body>"
+      "<iframe src='http://www.example.com/frame.html'></iframe>"
+      "<iframe src='http://altostrat.com/frame_another.html'></iframe>"
+      "</body>",
+      main_url);
+
+  // Let the iframe load.
+  test::RunPendingTasks();
+
+  auto options = GetAIPageContentOptionsForTest();
+
+  options.include_same_site_only = false;
+  GetAIPageContent(options);
+
+  const auto& root = ContentRootNode();
+  ASSERT_EQ(root.children_nodes.size(), 2u);
+
+  // Both nodes should be present.
+  const auto& same_site_iframe_node = *root.children_nodes[0];
+  const auto& cross_site_iframe_node = *root.children_nodes[1];
+  CheckIframeNode(same_site_iframe_node);
+  CheckIframeNode(cross_site_iframe_node);
+
+  // The contents of both nodes should be present as well.
+  ASSERT_EQ(same_site_iframe_node.children_nodes.size(), 1u);
+  ASSERT_EQ(cross_site_iframe_node.children_nodes.size(), 1u);
+
+  const auto& same_site_iframe_root = *same_site_iframe_node.children_nodes[0];
+  const auto& cross_site_iframe_root =
+      *cross_site_iframe_node.children_nodes[0];
+
+  CheckRootNode(same_site_iframe_root);
+  CheckRootNode(cross_site_iframe_root);
+  ASSERT_EQ(same_site_iframe_root.children_nodes.size(), 1u);
+  ASSERT_EQ(cross_site_iframe_root.children_nodes.size(), 1u);
+
+  CheckTextNode(*same_site_iframe_root.children_nodes[0], "I am an iframe\n");
+  CheckTextNode(*cross_site_iframe_root.children_nodes[0],
+                "I am another iframe\n");
+}
+
+TEST_F(AIPageContentAgentTest, CrossSiteIframeExcluded) {
+  KURL main_url = url_test_helpers::ToKURL("http://example.com/main.html");
+  KURL cross_origin_url =
+      url_test_helpers::ToKURL("http://www.example.com/frame.html");
+  KURL cross_site_url =
+      url_test_helpers::ToKURL("http://altostrat.com/frame_another.html");
+
+  // Mock the cross origin, same-site iframe's content.
+  url_test_helpers::RegisterMockedURLLoadFromBase(
+      WebString::FromUTF8("http://www.example.com/"), test::CoreTestDataPath(),
+      WebString::FromUTF8("frame.html"));
+
+  // Mock the cross-site iframe's content.
+  url_test_helpers::RegisterMockedURLLoadFromBase(
+      WebString::FromUTF8("http://altostrat.com/"), test::CoreTestDataPath(),
+      WebString::FromUTF8("frame_another.html"));
+
+  // Load the main page which contains the same-site iframe and the cross-origin
+  // iframe.
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      "<body>"
+      "<iframe src='http://www.example.com/frame.html'></iframe>"
+      "<iframe src='http://altostrat.com/frame_another.html'></iframe>"
+      "</body>",
+      main_url);
+
+  // Let the iframe load.
+  test::RunPendingTasks();
+
+  auto options = GetAIPageContentOptionsForTest();
+
+  options.include_same_site_only = true;
+  GetAIPageContent(options);
+
+  const auto& root = ContentRootNode();
+  ASSERT_EQ(root.children_nodes.size(), 2u);
+
+  // Both nodes should be present.
+  const auto& same_site_iframe_node = *root.children_nodes[0];
+  const auto& cross_site_iframe_node = *root.children_nodes[1];
+  CheckIframeNode(same_site_iframe_node);
+  CheckIframeNode(cross_site_iframe_node);
+
+  // Only the contents of the same-site iframe should be present.
+  ASSERT_EQ(same_site_iframe_node.children_nodes.size(), 1u);
+  ASSERT_TRUE(cross_site_iframe_node.children_nodes.empty());
+  ASSERT_EQ(cross_site_iframe_node.content_attributes->iframe_data->content
+                ->get_redacted_frame_metadata()
+                ->reason,
+            blink::mojom::RedactedFrameMetadata_Reason::kCrossSite);
+
+  const auto& same_site_iframe_root = *same_site_iframe_node.children_nodes[0];
+
+  CheckRootNode(same_site_iframe_root);
+  ASSERT_EQ(same_site_iframe_root.children_nodes.size(), 1u);
+
+  CheckTextNode(*same_site_iframe_root.children_nodes[0], "I am an iframe\n");
 }
 
 TEST_F(AIPageContentAgentTest, NoLayoutElement) {
@@ -1864,6 +1992,9 @@ TEST_F(AIPageContentAgentTest, FormWithTextInput) {
             "LI");
   EXPECT_EQ(text_input1.content_attributes->form_control_data->field_value,
             "Lorem");
+  EXPECT_EQ(
+      text_input1.content_attributes->form_control_data->redaction_decision,
+      mojom::AIPageContentRedactionDecision::kNoRedactionNecessary);
   EXPECT_FALSE(text_input1.content_attributes->form_control_data->is_required);
   EXPECT_EQ(text_input1.children_nodes.size(), 1u);
   CheckContainerNode(*text_input1.children_nodes[0]);
@@ -1878,6 +2009,9 @@ TEST_F(AIPageContentAgentTest, FormWithTextInput) {
             "ID");
   EXPECT_EQ(text_input2.content_attributes->form_control_data->field_value,
             "Ipsum");
+  EXPECT_EQ(
+      text_input2.content_attributes->form_control_data->redaction_decision,
+      mojom::AIPageContentRedactionDecision::kNoRedactionNecessary);
   EXPECT_TRUE(text_input2.content_attributes->form_control_data->is_required);
   EXPECT_EQ(text_input2.children_nodes.size(), 1u);
   CheckContainerNode(*text_input2.children_nodes[0]);
@@ -1915,6 +2049,8 @@ TEST_F(AIPageContentAgentTest, FormWithSelect) {
 
   const auto& select = *form.children_nodes[0];
   CheckFormControlNode(select, mojom::blink::FormControlType::kSelectOne);
+  EXPECT_EQ(select.content_attributes->form_control_data->redaction_decision,
+            mojom::AIPageContentRedactionDecision::kNoRedactionNecessary);
 
   const auto& select_options =
       select.content_attributes->form_control_data->select_options;
@@ -2020,6 +2156,8 @@ TEST_F(AIPageContentAgentTest, FormWithRadio) {
   EXPECT_EQ(radio1.content_attributes->form_control_data->field_name,
             "vehicle1");
   EXPECT_EQ(radio1.content_attributes->form_control_data->field_value, "Bike");
+  EXPECT_EQ(radio1.content_attributes->form_control_data->redaction_decision,
+            mojom::AIPageContentRedactionDecision::kNoRedactionNecessary);
   EXPECT_FALSE(radio1.content_attributes->form_control_data->is_checked);
   EXPECT_EQ(radio1.children_nodes.size(), 0u);
 
@@ -2041,7 +2179,8 @@ TEST_F(AIPageContentAgentTest, FormWithPassword) {
       helper_.LocalMainFrame(),
       "<body>"
       "  <form>"
-      "    <input type='password' name='Enter password' value='mypassword'>"
+      "    <input id='pwd' type='password' name='Enter password' "
+      "value='mypassword'>"
       "  </form>"
       "</body>",
       url_test_helpers::ToKURL("http://foobar.com"));
@@ -2066,10 +2205,74 @@ TEST_F(AIPageContentAgentTest, FormWithPassword) {
             "Enter password");
   EXPECT_EQ(password.content_attributes->form_control_data->field_value,
             nullptr);
-  EXPECT_EQ(password.children_nodes.size(), 1u);
-  CheckContainerNode(*password.children_nodes[0]);
-  EXPECT_EQ(password.children_nodes[0]->children_nodes.size(), 1u);
-  CheckTextNode(*password.children_nodes[0]->children_nodes[0], u"••••••••••");
+  EXPECT_EQ(password.content_attributes->form_control_data->redaction_decision,
+            mojom::AIPageContentRedactionDecision::kRedacted_HasBeenPassword);
+  EXPECT_EQ(password.children_nodes.size(), 0u);
+
+  // Now reveal the password (simulating clicking the eye icon)
+  // This mimics JavaScript: passwordInput.type = 'text';
+  Document* document = helper_.LocalMainFrame()->GetFrame()->GetDocument();
+  auto* input_element =
+      To<HTMLInputElement>(document->getElementById(AtomicString("pwd")));
+  ASSERT_TRUE(input_element);
+  input_element->setType(AtomicString("text"));
+
+  // Ensure the DOM is updated
+  document->UpdateStyleAndLayout(DocumentUpdateReason::kTest);
+
+  // Get AI page content again - password should still be hidden
+  GetAIPageContent();
+
+  const auto& root2 = ContentRootNode();
+  EXPECT_EQ(root2.children_nodes.size(), 1u);
+
+  const auto& form2 = *root2.children_nodes[0];
+  EXPECT_EQ(form2.content_attributes->attribute_type,
+            mojom::blink::AIPageContentAttributeType::kForm);
+  EXPECT_EQ(form2.children_nodes.size(), 1u);
+
+  const auto& revealed_password = *form2.children_nodes[0];
+  CheckFormControlNode(revealed_password,
+                       mojom::blink::FormControlType::kInputText);
+  EXPECT_EQ(revealed_password.content_attributes->form_control_data->field_name,
+            "Enter password");
+  // Even though the password is revealed, the value should still be hidden
+  // because HasBeenBeenPasswordField() is true.
+  EXPECT_EQ(
+      revealed_password.content_attributes->form_control_data->field_value,
+      nullptr);
+  EXPECT_EQ(revealed_password.content_attributes->form_control_data
+                ->redaction_decision,
+            mojom::AIPageContentRedactionDecision::kRedacted_HasBeenPassword);
+  EXPECT_EQ(revealed_password.children_nodes.size(), 0u);
+
+  input_element->SetValue("");
+
+  // Ensure the DOM is updated
+  document->UpdateStyleAndLayout(DocumentUpdateReason::kTest);
+
+  // Get AI page content again - empty passwords are unredacted.
+  GetAIPageContent();
+
+  const auto& root3 = ContentRootNode();
+  EXPECT_EQ(root3.children_nodes.size(), 1u);
+
+  const auto& form3 = *root3.children_nodes[0];
+  EXPECT_EQ(form3.content_attributes->attribute_type,
+            mojom::blink::AIPageContentAttributeType::kForm);
+  EXPECT_EQ(form3.children_nodes.size(), 1u);
+
+  const auto& empty_password = *form3.children_nodes[0];
+  CheckFormControlNode(empty_password,
+                       mojom::blink::FormControlType::kInputText);
+  EXPECT_EQ(empty_password.content_attributes->form_control_data->field_name,
+            "Enter password");
+  EXPECT_EQ(empty_password.content_attributes->form_control_data->field_value,
+            "");
+  EXPECT_EQ(
+      empty_password.content_attributes->form_control_data->redaction_decision,
+      mojom::AIPageContentRedactionDecision::kUnredacted_EmptyPassword);
+  EXPECT_EQ(empty_password.children_nodes.size(), 1u);
 }
 
 TEST_F(AIPageContentAgentTest, InteractiveElementsTextArea) {
@@ -2087,6 +2290,8 @@ TEST_F(AIPageContentAgentTest, InteractiveElementsTextArea) {
 
   const auto& text_area = *root.children_nodes[0];
   CheckFormControlNode(text_area, mojom::blink::FormControlType::kTextArea);
+  EXPECT_EQ(text_area.content_attributes->form_control_data->redaction_decision,
+            mojom::AIPageContentRedactionDecision::kNoRedactionNecessary);
   CheckHitTestableAndInteractive(text_area,
                                  {ClickabilityReason::kClickableControl});
 
@@ -2117,6 +2322,8 @@ TEST_F(AIPageContentAgentTest, InteractiveElementsButton) {
 
   const auto& button = *root.children_nodes[0];
   CheckFormControlNode(button, mojom::blink::FormControlType::kButtonSubmit);
+  EXPECT_EQ(button.content_attributes->form_control_data->redaction_decision,
+            mojom::AIPageContentRedactionDecision::kNoRedactionNecessary);
   CheckHitTestableAndInteractive(button,
                                  {ClickabilityReason::kClickableControl});
   EXPECT_TRUE(button.content_attributes->node_interaction_info->is_focusable);
@@ -2254,8 +2461,9 @@ TEST_F(AIPageContentAgentTest, SelectionInIframe) {
       Content()->frame_data->frame_interaction_info;
   ASSERT_FALSE(frame_interaction_info->selection);
 
+  EXPECT_TRUE(iframe.content_attributes->iframe_data->content);
   const auto& iframe_interaction_info =
-      iframe.content_attributes->iframe_data->local_frame_data
+      iframe.content_attributes->iframe_data->content->get_local_frame_data()
           ->frame_interaction_info;
   ASSERT_TRUE(iframe_interaction_info->selection);
   const auto& selection = *iframe_interaction_info->selection;
@@ -2432,13 +2640,17 @@ TEST_F(AIPageContentAgentTest, MetaTags) {
             mojom::blink::AIPageContentAttributeType::kIframe);
 
   const auto& iframe_data = *iframe.content_attributes->iframe_data;
-  EXPECT_EQ(iframe_data.local_frame_data->meta_data.size(), 2u);
 
-  EXPECT_EQ(iframe_data.local_frame_data->meta_data[0]->name, "author");
-  EXPECT_EQ(iframe_data.local_frame_data->meta_data[0]->content, "Gary");
+  EXPECT_TRUE(iframe.content_attributes->iframe_data->content);
+  EXPECT_EQ(iframe_data.content->get_local_frame_data()->meta_data.size(), 2u);
+  EXPECT_EQ(iframe_data.content->get_local_frame_data()->meta_data[0]->name,
+            "author");
+  EXPECT_EQ(iframe_data.content->get_local_frame_data()->meta_data[0]->content,
+            "Gary");
 
-  EXPECT_EQ(iframe_data.local_frame_data->meta_data[1]->name, "keywords");
-  EXPECT_EQ(iframe_data.local_frame_data->meta_data[1]->content,
+  EXPECT_EQ(iframe_data.content->get_local_frame_data()->meta_data[1]->name,
+            "keywords");
+  EXPECT_EQ(iframe_data.content->get_local_frame_data()->meta_data[1]->content,
             "HTML, CSS, JavaScript");
 }
 
@@ -2476,10 +2688,13 @@ TEST_F(AIPageContentAgentTest, NestedIframesMetaTags) {
             mojom::blink::AIPageContentAttributeType::kIframe);
 
   const auto& iframe_data = *iframe.content_attributes->iframe_data;
-  EXPECT_EQ(iframe_data.local_frame_data->meta_data.size(), 1u);
+  EXPECT_TRUE(iframe_data.content);
+  EXPECT_EQ(iframe_data.content->get_local_frame_data()->meta_data.size(), 1u);
 
-  EXPECT_EQ(iframe_data.local_frame_data->meta_data[0]->name, "author");
-  EXPECT_EQ(iframe_data.local_frame_data->meta_data[0]->content, "Gary");
+  EXPECT_EQ(iframe_data.content->get_local_frame_data()->meta_data[0]->name,
+            "author");
+  EXPECT_EQ(iframe_data.content->get_local_frame_data()->meta_data[0]->content,
+            "Gary");
 
   EXPECT_EQ(iframe.children_nodes.size(), 1u);
 
@@ -2492,10 +2707,15 @@ TEST_F(AIPageContentAgentTest, NestedIframesMetaTags) {
             mojom::blink::AIPageContentAttributeType::kIframe);
 
   const auto& subiframe_data = *subiframe.content_attributes->iframe_data;
-  EXPECT_EQ(subiframe_data.local_frame_data->meta_data.size(), 1u);
+  EXPECT_TRUE(subiframe_data.content);
+  EXPECT_EQ(subiframe_data.content->get_local_frame_data()->meta_data.size(),
+            1u);
 
-  EXPECT_EQ(subiframe_data.local_frame_data->meta_data[0]->name, "author");
-  EXPECT_EQ(subiframe_data.local_frame_data->meta_data[0]->content, "Jordan");
+  EXPECT_EQ(subiframe_data.content->get_local_frame_data()->meta_data[0]->name,
+            "author");
+  EXPECT_EQ(
+      subiframe_data.content->get_local_frame_data()->meta_data[0]->content,
+      "Jordan");
 }
 
 TEST_F(AIPageContentAgentTest, Title) {
@@ -2869,8 +3089,10 @@ TEST_F(AIPageContentAgentTest, PaidContentSubframe) {
   const auto& iframe = nodes[1];
   EXPECT_EQ(iframe->content_attributes->attribute_type,
             mojom::blink::AIPageContentAttributeType::kIframe);
-  EXPECT_TRUE(iframe->content_attributes->iframe_data->local_frame_data
-                  ->contains_paid_content);
+  EXPECT_TRUE(iframe->content_attributes->iframe_data->content);
+  EXPECT_TRUE(
+      iframe->content_attributes->iframe_data->content->get_local_frame_data()
+          ->contains_paid_content);
 
   auto& children = iframe->children_nodes[0]->children_nodes;
   EXPECT_FALSE(
@@ -2954,8 +3176,10 @@ TEST_F(AIPageContentAgentTest, PaidContentSubframeMicrodata) {
   const auto& iframe1 = nodes[2];
   EXPECT_EQ(iframe1->content_attributes->attribute_type,
             mojom::blink::AIPageContentAttributeType::kIframe);
-  EXPECT_TRUE(iframe1->content_attributes->iframe_data->local_frame_data
-                  ->contains_paid_content);
+  EXPECT_TRUE(iframe1->content_attributes->iframe_data->content);
+  EXPECT_TRUE(
+      iframe1->content_attributes->iframe_data->content->get_local_frame_data()
+          ->contains_paid_content);
 
   const auto& children1 = iframe1->children_nodes[0]->children_nodes;
   EXPECT_FALSE(
@@ -2968,8 +3192,10 @@ TEST_F(AIPageContentAgentTest, PaidContentSubframeMicrodata) {
   const auto& iframe2 = nodes[3];
   EXPECT_EQ(iframe2->content_attributes->attribute_type,
             mojom::blink::AIPageContentAttributeType::kIframe);
-  EXPECT_FALSE(iframe2->content_attributes->iframe_data->local_frame_data
-                   ->contains_paid_content);
+  EXPECT_TRUE(iframe2->content_attributes->iframe_data->content);
+  EXPECT_FALSE(
+      iframe2->content_attributes->iframe_data->content->get_local_frame_data()
+          ->contains_paid_content);
 
   const auto& children2 = iframe2->children_nodes[0]->children_nodes;
   EXPECT_FALSE(
@@ -2982,8 +3208,10 @@ TEST_F(AIPageContentAgentTest, PaidContentSubframeMicrodata) {
   const auto& iframe3 = nodes[4];
   EXPECT_EQ(iframe3->content_attributes->attribute_type,
             mojom::blink::AIPageContentAttributeType::kIframe);
-  EXPECT_TRUE(iframe3->content_attributes->iframe_data->local_frame_data
-                  ->contains_paid_content);
+  EXPECT_TRUE(iframe3->content_attributes->iframe_data->content);
+  EXPECT_TRUE(
+      iframe3->content_attributes->iframe_data->content->get_local_frame_data()
+          ->contains_paid_content);
 
   const auto& children3 = iframe3->children_nodes[0]->children_nodes;
   EXPECT_FALSE(
@@ -3411,6 +3639,8 @@ TEST_F(AIPageContentAgentTest, LabelWithForSibling) {
   ASSERT_TRUE(input.content_attributes->node_interaction_info);
   CheckHitTestableAndInteractive(input,
                                  {ClickabilityReason::kClickableControl});
+  EXPECT_EQ(input.content_attributes->form_control_data->redaction_decision,
+            mojom::AIPageContentRedactionDecision::kNoRedactionNecessary);
 
   const auto& label = *root.children_nodes[1];
   CheckContainerNode(label);
@@ -3903,7 +4133,7 @@ TEST_F(AIPageContentAgentTest, ClickabilityReasonClickEvents) {
           mojom::blink::AIPageContentClickabilityReason::kClickEvents));
 }
 
-TEST_F(AIPageContentAgentTest, ClickabilityReasonMouseEvents) {
+TEST_F(AIPageContentAgentTest, ClickabilityReasonMouseHover) {
   // An element with various mouse event listeners.
   frame_test_helpers::LoadHTMLString(
       helper_.LocalMainFrame(),
@@ -3919,6 +4149,36 @@ TEST_F(AIPageContentAgentTest, ClickabilityReasonMouseEvents) {
 
   const auto& div_node = *ContentRootNode().children_nodes[0];
   ASSERT_TRUE(div_node.content_attributes->node_interaction_info);
+  EXPECT_THAT(
+      div_node.content_attributes->node_interaction_info->clickability_reasons,
+      testing::Contains(
+          mojom::blink::AIPageContentClickabilityReason::kMouseHover));
+  EXPECT_THAT(
+      div_node.content_attributes->node_interaction_info->clickability_reasons,
+      testing::Contains(
+          mojom::blink::AIPageContentClickabilityReason::kMouseEvents));
+}
+
+TEST_F(AIPageContentAgentTest, ClickabilityReasonMouseClick) {
+  // An element with various mouse event listeners.
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      "<body><div id='testDiv'>Mouse Events</div>"
+      "<script>"
+      "  const div = document.getElementById('testDiv');"
+      "  div.onmousedown = function(){};"
+      "</script>"
+      "</body>",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  GetAIPageContentWithActionableElements();
+
+  const auto& div_node = *ContentRootNode().children_nodes[0];
+  ASSERT_TRUE(div_node.content_attributes->node_interaction_info);
+  EXPECT_THAT(
+      div_node.content_attributes->node_interaction_info->clickability_reasons,
+      testing::Contains(
+          mojom::blink::AIPageContentClickabilityReason::kMouseClick));
   EXPECT_THAT(
       div_node.content_attributes->node_interaction_info->clickability_reasons,
       testing::Contains(
@@ -4009,6 +4269,7 @@ TEST_F(AIPageContentAgentTest, ClickabilityReasonMultipleReasons) {
       "  const btn = document.getElementById('multiReasonBtn');"
       "  btn.onclick = function(){};"
       "  btn.onmouseover = function(){};"
+      "  btn.onmouseup = function(){};"
       "  btn.onkeydown = function(){};"
       "</script>"
       "</body>",
@@ -4025,6 +4286,8 @@ TEST_F(AIPageContentAgentTest, ClickabilityReasonMultipleReasons) {
           mojom::blink::AIPageContentClickabilityReason::kClickableControl,
           mojom::blink::AIPageContentClickabilityReason::kClickEvents,
           mojom::blink::AIPageContentClickabilityReason::kMouseEvents,
+          mojom::blink::AIPageContentClickabilityReason::kMouseHover,
+          mojom::blink::AIPageContentClickabilityReason::kMouseClick,
           mojom::blink::AIPageContentClickabilityReason::kKeyEvents,
           mojom::blink::AIPageContentClickabilityReason::kEditable,
           mojom::blink::AIPageContentClickabilityReason::kCursorPointer,
@@ -4153,6 +4416,114 @@ TEST_F(AIPageContentAgentTest, TabIndex) {
   EXPECT_THAT(interaction_info.clickability_reasons,
               testing::Contains(
                   mojom::blink::AIPageContentClickabilityReason::kTabIndex));
+}
+
+TEST_F(AIPageContentAgentTest, ClipPathCircle) {
+  // The <div> element is clipped to a small circle.
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(), R"(
+      <body>
+        <style>
+          div {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100px;
+            height: 100px;
+            background: red;
+            clip-path: circle(20%);
+          }
+        </style>
+        <div onclick=console.log(1)></div>
+      </body>)",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  GetAIPageContentWithActionableElements();
+
+  const auto& div_node = *ContentRootNode().children_nodes[0];
+
+  CheckGeometry(div_node, gfx::Rect(30, 30, 40, 40), gfx::Rect(30, 30, 40, 40));
+}
+
+TEST_F(AIPageContentAgentTest, ClipPathEllipse) {
+  // The <div> element is clipped to an ellipse.
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(), R"(
+      <body>
+        <style>
+          div {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100px;
+            height: 100px;
+            background: red;
+            clip-path: ellipse(20px 50px);
+          }
+        </style>
+        <div onclick=console.log(1)></div>
+      </body>)",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  GetAIPageContentWithActionableElements();
+
+  const auto& div_node = *ContentRootNode().children_nodes[0];
+
+  CheckGeometry(div_node, gfx::Rect(30, 0, 40, 100), gfx::Rect(30, 0, 40, 100));
+}
+
+TEST_F(AIPageContentAgentTest, ClipPathCircleHalf) {
+  // Only the bottom half of the circle is within the viewport.
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(), R"(
+      <body>
+        <style>
+          div {
+            position: absolute;
+            top: -50px;
+            left: 0;
+            width: 100px;
+            height: 100px;
+            background: red;
+            clip-path: circle(20%);
+          }
+        </style>
+        <div onclick=console.log(1)></div>
+      </body>)",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  GetAIPageContentWithActionableElements();
+
+  const auto& div_node = *ContentRootNode().children_nodes[0];
+
+  CheckGeometry(div_node, gfx::Rect(30, -20, 40, 40), gfx::Rect(30, 0, 40, 20));
+}
+
+TEST_F(AIPageContentAgentTest, ClipPathEmpty) {
+  // The entire <div> element is clipped.
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(), R"(
+      <body>
+        <style>
+          div {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100px;
+            height: 100px;
+            background: red;
+            clip-path: circle(0%);
+          }
+        </style>
+        <div onclick=console.log(1)></div>
+      </body>)",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  GetAIPageContentWithActionableElements();
+
+  const auto& div_node = *ContentRootNode().children_nodes[0];
+
+  CheckGeometry(div_node, gfx::Rect(), gfx::Rect());
 }
 
 }  // namespace

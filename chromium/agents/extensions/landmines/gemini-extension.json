@@ -1,9 +1,8 @@
 {
   "name": "landmines",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "contextFileName": "GEMINI.md",
   "excludeTools": [
-    "run_shell_command(autoninja)",
     "glob",
     "search_file_content",
     "run_shell_command(find .)",
@@ -11,8 +10,11 @@
     "run_shell_command(grep -r)",
     "run_shell_command(grep -R)",
     "run_shell_command(git grep)",
+    "run_shell_command(git commit --amend)",
+    "run_shell_command(git commit -a --amend)",
     "run_shell_command(gn ls)",
     "run_shell_command(gn clean)",
-    "read_many_files"
+    "run_shell_command(brew)",
+    "run_shell_command(apt-get)"
   ]
 }

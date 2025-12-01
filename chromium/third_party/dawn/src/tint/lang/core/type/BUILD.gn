@@ -100,6 +100,10 @@ libtint_source_set("type") {
     "pointer.h",
     "reference.cc",
     "reference.h",
+    "resource_binding.cc",
+    "resource_binding.h",
+    "resource_type.cc",
+    "resource_type.h",
     "sampled_texture.cc",
     "sampled_texture.h",
     "sampler.cc",
@@ -138,7 +142,7 @@ libtint_source_set("type") {
     "void.h",
   ]
   deps = [
-    "${dawn_root}/src/utils:utils",
+    "${dawn_root}/src/utils",
     "${tint_src_dir}/api/common",
     "${tint_src_dir}/lang/core",
     "${tint_src_dir}/utils",
@@ -176,6 +180,7 @@ if (tint_build_unittests) {
       "multisampled_texture_test.cc",
       "pointer_test.cc",
       "reference_test.cc",
+      "resource_binding_test.cc",
       "sampled_texture_test.cc",
       "sampler_test.cc",
       "storage_texture_test.cc",
@@ -191,7 +196,7 @@ if (tint_build_unittests) {
       "vector_test.cc",
     ]
     deps = [
-      "${dawn_root}/src/utils:utils",
+      "${dawn_root}/src/utils",
       "${tint_src_dir}:gmock_and_gtest",
       "${tint_src_dir}/api/common",
       "${tint_src_dir}/lang/core",

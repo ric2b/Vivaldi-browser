@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -46,36 +46,36 @@ import callStackSidebarPaneStyles from './callStackSidebarPane.css.js';
 
 const UIStrings = {
   /**
-   *@description Text in Call Stack Sidebar Pane of the Sources panel
+   * @description Text in Call Stack Sidebar Pane of the Sources panel
    */
   callStack: 'Call Stack',
   /**
-   *@description Not paused message element text content in Call Stack Sidebar Pane of the Sources panel
+   * @description Not paused message element text content in Call Stack Sidebar Pane of the Sources panel
    */
   notPaused: 'Not paused',
   /**
-   *@description Text exposed to screen reader when navigating through a ignore-listed call frame in the sources panel
+   * @description Text exposed to screen reader when navigating through a ignore-listed call frame in the sources panel
    */
   onIgnoreList: 'on ignore list',
   /**
-   *@description Show all link text content in Call Stack Sidebar Pane of the Sources panel
+   * @description Show all link text content in Call Stack Sidebar Pane of the Sources panel
    */
   showIgnorelistedFrames: 'Show ignore-listed frames',
   /**
-   *@description Text to show more content
+   * @description Text to show more content
    */
   showMore: 'Show more',
   /**
-   *@description A context menu item in the Call Stack Sidebar Pane of the Sources panel
+   * @description A context menu item in the Call Stack Sidebar Pane of the Sources panel
    */
   copyStackTrace: 'Copy stack trace',
   /**
-   *@description Text in Call Stack Sidebar Pane of the Sources panel when some call frames have warnings
+   * @description Text in Call Stack Sidebar Pane of the Sources panel when some call frames have warnings
    */
   callFrameWarnings: 'Some call frames have warnings',
   /**
-   *@description Error message that is displayed in UI when a file needed for debugging information for a call frame is missing
-   *@example {src/myapp.debug.wasm.dwp} PH1
+   * @description Error message that is displayed in UI when a file needed for debugging information for a call frame is missing
+   * @example {src/myapp.debug.wasm.dwp} PH1
    */
   debugFileNotFound: 'Failed to load debug file "{PH1}".',
   /**
@@ -109,10 +109,14 @@ export class CallStackSidebarPane extends UI.View.SimpleView implements UI.Conte
   private lastDebuggerModel: SDK.DebuggerModel.DebuggerModel|null = null;
 
   private constructor() {
-    super(i18nString(UIStrings.callStack), true, 'sources.callstack');
+    super({
+      jslog: `${VisualLogging.section('sources.callstack')}`,
+      title: i18nString(UIStrings.callStack),
+      viewId: 'sources.callstack',
+      useShadowDom: true,
+    });
     this.registerRequiredCSS(callStackSidebarPaneStyles);
 
-    this.contentElement.setAttribute('jslog', `${VisualLogging.section('sources.callstack')}`);
     ({element: this.ignoreListMessageElement, checkbox: this.ignoreListCheckboxElement} =
          this.createIgnoreListMessageElementAndCheckbox());
     this.contentElement.appendChild(this.ignoreListMessageElement);
@@ -123,13 +127,8 @@ export class CallStackSidebarPane extends UI.View.SimpleView implements UI.Conte
 
     this.callFrameWarningsElement = this.contentElement.createChild('div', 'call-frame-warnings-message');
     const icon = new IconButton.Icon.Icon();
-    icon.data = {
-      iconName: 'warning-filled',
-      color: 'var(--icon-warning)',
-      width: '14px',
-      height: '14px',
-    };
-    icon.classList.add('call-frame-warning-icon');
+    icon.name = 'warning-filled';
+    icon.classList.add('call-frame-warning-icon', 'small');
     this.callFrameWarningsElement.appendChild(icon);
     this.callFrameWarningsElement.appendChild(document.createTextNode(i18nString(UIStrings.callFrameWarnings)));
     this.callFrameWarningsElement.tabIndex = -1;
@@ -244,7 +243,8 @@ export class CallStackSidebarPane extends UI.View.SimpleView implements UI.Conte
     let previousStackTrace: Protocol.Runtime.CallFrame[]|SDK.DebuggerModel.CallFrame[] = details.callFrames;
     let {maxAsyncStackChainDepth} = this;
     let asyncStackTrace: Protocol.Runtime.StackTrace|null = null;
-    for await (asyncStackTrace of details.debuggerModel.iterateAsyncParents(details)) {
+    for await (const {stackTrace} of details.debuggerModel.iterateAsyncParents(details)) {
+      asyncStackTrace = stackTrace;
       const title = UI.UIUtils.asyncStackTraceLabel(asyncStackTrace.description, previousStackTrace);
       items.push(...await Item.createItemsForAsyncStack(
           title, details.debuggerModel, asyncStackTrace.callFrames, this.locationPool, this.refreshItem.bind(this)));
@@ -331,25 +331,15 @@ export class CallStackSidebarPane extends UI.View.SimpleView implements UI.Conte
     UI.ARIAUtils.setSelected(element, isSelected);
     element.classList.toggle('hidden', !this.showIgnoreListed && item.isIgnoreListed);
     const icon = new IconButton.Icon.Icon();
-    icon.data = {
-      iconName: 'large-arrow-right-filled',
-      color: 'var(--icon-arrow-main-thread)',
-      width: '14px',
-      height: '14px',
-    };
-    icon.classList.add('selected-call-frame-icon');
+    icon.name = 'large-arrow-right-filled';
+    icon.classList.add('selected-call-frame-icon', 'small');
     element.appendChild(icon);
     element.tabIndex = item === this.list.selectedItem() ? 0 : -1;
 
     if (callframe?.missingDebugInfoDetails) {
       const icon = new IconButton.Icon.Icon();
-      icon.data = {
-        iconName: 'warning-filled',
-        color: 'var(--icon-warning)',
-        width: '14px',
-        height: '14px',
-      };
-      icon.classList.add('call-frame-warning-icon');
+      icon.name = 'warning-filled';
+      icon.classList.add('call-frame-warning-icon', 'small');
       const messages = callframe.missingDebugInfoDetails.resources.map(
           r => i18nString(UIStrings.debugFileNotFound, {PH1: Common.ParsedURL.ParsedURL.extractName(r.resourceUrl)}));
       UI.Tooltip.Tooltip.install(icon, [callframe.missingDebugInfoDetails.details, ...messages].join('\n'));

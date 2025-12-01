@@ -7,9 +7,8 @@
 #include <algorithm>
 #include <memory>
 
-#include "ash/frame/non_client_frame_view_ash.h"
+#include "ash/frame/frame_view_ash.h"
 #include "ash/public/cpp/test/test_new_window_delegate.h"
-#include "ash/test/test_widget_builder.h"
 #include "ash/wm/window_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
@@ -39,6 +38,7 @@
 #include "ui/events/base_event_utils.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/native/native_view_host.h"
+#include "ui/views/test/test_widget_builder.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -67,7 +67,7 @@ class TestNewWindowDelegate : public ash::TestNewWindowDelegate {
                Disposition disposition) override {
     url_ = url;
     // Window will be deleted by shell upon shutdown.
-    auto* widget = ash::TestWidgetBuilder().BuildOwnedByNativeWidget();
+    auto* widget = views::test::TestWidgetBuilder().BuildOwnedByNativeWidget();
     ASSERT_TRUE(widget->IsActive());
   }
 
@@ -90,9 +90,9 @@ class TestWidgetDelegate : public views::WidgetDelegateView {
   // views::WidgetDelegateView:
   bool CanActivate() const override { return true; }
 
-  std::unique_ptr<views::NonClientFrameView> CreateNonClientFrameView(
+  std::unique_ptr<views::FrameView> CreateFrameView(
       views::Widget* widget) override {
-    return std::make_unique<NonClientFrameViewAsh>(widget);
+    return std::make_unique<FrameViewAsh>(widget);
   }
 };
 

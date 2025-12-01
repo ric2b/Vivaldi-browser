@@ -4,6 +4,11 @@
 // found in the LICENSE file.
 //
 // CLContextVk.cpp: Implements the class methods for CLContextVk.
+//
+
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_libc_calls
+#endif
 
 #include "libANGLE/renderer/vulkan/CLContextVk.h"
 #include "common/PackedEnums.h"
@@ -12,12 +17,12 @@
 #include "libANGLE/renderer/vulkan/CLMemoryVk.h"
 #include "libANGLE/renderer/vulkan/CLProgramVk.h"
 #include "libANGLE/renderer/vulkan/CLSamplerVk.h"
-#include "libANGLE/renderer/vulkan/DisplayVk.h"
 #include "libANGLE/renderer/vulkan/vk_cache_utils.h"
 #include "libANGLE/renderer/vulkan/vk_renderer.h"
 #include "libANGLE/renderer/vulkan/vk_utils.h"
 
 #include "libANGLE/CLBuffer.h"
+#include "libANGLE/CLCommandQueue.h"
 #include "libANGLE/CLContext.h"
 #include "libANGLE/CLEvent.h"
 #include "libANGLE/CLImage.h"
@@ -333,8 +338,8 @@ angle::Result CLContextVk::linkProgram(const cl::Program &program,
 
 angle::Result CLContextVk::createUserEvent(const cl::Event &event, CLEventImpl::Ptr *eventOut)
 {
-    *eventOut = CLEventImpl::Ptr(
-        new (std::nothrow) CLEventVk(event, cl::ExecutionStatus::Submitted, QueueSerial()));
+    *eventOut =
+        CLEventImpl::Ptr(new (std::nothrow) CLEventVk(event, cl::ExecutionStatus::Submitted));
     if (*eventOut == nullptr)
     {
         ANGLE_CL_RETURN_ERROR(CL_OUT_OF_HOST_MEMORY);

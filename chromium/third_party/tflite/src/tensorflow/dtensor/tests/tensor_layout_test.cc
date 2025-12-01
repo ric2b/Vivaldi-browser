@@ -22,6 +22,7 @@ limitations under the License.
 
 #include <gmock/gmock.h>
 #include "absl/container/inlined_vector.h"
+#include "absl/status/status_matchers.h"
 #include "absl/strings/match.h"
 #include "mlir/IR/BuiltinTypeInterfaces.h"  // from @llvm-project
 #include "xla/tsl/platform/errors.h"
@@ -40,8 +41,6 @@ using ::testing::ContainsRegex;
 using ::testing::ElementsAre;
 using ::testing::IsEmpty;
 using ::testing::SizeIs;
-using ::tsl::testing::IsOkAndHolds;
-using ::tsl::testing::StatusIs;
 
 // Simple implementation of a proto matcher comparing string representations.
 // Only works as ShapeProto's textual representation is deterministic.

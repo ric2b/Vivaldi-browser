@@ -12,6 +12,7 @@
 <translation id="1163931534039071049">Ramt boarne &amp;besjen</translation>
 <translation id="1165039591588034296">Flater</translation>
 <translation id="1175364870820465910">&amp;Printsje...</translation>
+<translation id="1177548198167638471">Freegje net wer</translation>
 <translation id="1181037720776840403">Wiskje</translation>
 <translation id="1184037892196730210">Skerm oerbringe net mooglik</translation>
 <translation id="1187722533808055681">Aktivearing fanút ynaktyf</translation>
@@ -28,7 +29,7 @@
 <translation id="1451375123200651445">Webstee, inkele triem</translation>
 <translation id="1465176863081977902">Audio adres k&amp;opiearje</translation>
 <translation id="1476607407192946488">&amp;Taal ynstellingen</translation>
-<translation id="1546280085599573572">Dizze tafoeging hat feroare hokker side te sjen is as jo klikke op de Thús knop.</translation>
+<translation id="1478607704480248626">Ynstallaasje is net ynskeakele</translation>
 <translation id="1552752544932680961">Tafoeging beheare</translation>
 <translation id="15662109988763471">De selektearre printer is net beskikber of is net just ynstallearre. Kontrolearje de printer of besykje in oaren ien te selektearjen.</translation>
 <translation id="1588438908519853928">Normaal</translation>
@@ -49,11 +50,14 @@
 <translation id="176587472219019965">&amp;Nij finster</translation>
 <translation id="1769104665586091481">Keppeling iepenje yn nij &amp;finster</translation>
 <translation id="1779468444204342338">Minimum</translation>
+<translation id="1805822111539868586">Werjeften ynspektearje</translation>
 <translation id="1815083418640426271">Plakke as platte tekst</translation>
 <translation id="1828901632669367785">Printsje mei help fan systeemdialoochskerm...</translation>
+<translation id="1843048149176045210">Keppeling nei ynlaad kopiearje</translation>
 <translation id="1850508293116537636">Rjochtsom &amp;draaie</translation>
 <translation id="1886996562706621347">Stean it websteeën ta om te freegjen om standert handlers foar protokollen te wurden (oanrekommandearre)</translation>
 <translation id="1901303067676059328">&amp;Alles selektearje</translation>
+<translation id="1906488504371069394">Untdek mear tafoegingen en tema's yn de <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /></translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1925021887439448749">Oanpast webadres opjaan</translation>
 <translation id="1932098463447129402">Net foar</translation>
@@ -70,7 +74,7 @@
 <translation id="215753907730220065">Folslein skerm ferlitte</translation>
 <translation id="2158475082070321257">Keppeling nei markearring kopiearje</translation>
 <translation id="2177950615300672361">Privee ljepper: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Native kliïnt module: <ph name="NEXE_NAME" /></translation>
+<translation id="2187906491731510095">Tafoegingen fernijd</translation>
 <translation id="2218515861914035131">Plakke as tekst sûnder opmaak</translation>
 <translation id="2249605167705922988">bgl. 1-5, 8, 11-13</translation>
 <translation id="2280486287150724112">Marzje rjochts</translation>
@@ -81,9 +85,12 @@
 <translation id="2326931316514688470">Ap&amp;p op 'e nij lade</translation>
 <translation id="2327492829706409234">App ynskeakelje</translation>
 <translation id="2348176352564285430">App: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="2378602615417849384">{NUM_EXTENSIONS, plural,
+      =1 {Dizze tafoging wurdt mooglik ynkoatten net mear stipe}
+      other {Dizze tafoegingen wurde mooglik ynkoatten net mear stipe}
+    }</translation>
 <translation id="2378982052244864789">Selektearje de tafoegings triemtafel.</translation>
 <translation id="2379281330731083556">Printsje mei it systeemskerm... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Unbekende ynstekker</translation>
 <translation id="2423578206845792524">O&amp;fbylding bewarje as...</translation>
 <translation id="2439110203301358333">In oar programma op jo kompjûter hat in tafoeging taheakke dy de manier hoe't Vivaldi wurket feroarje kin.</translation>
 <translation id="2443487764245141020">Miskien wolle websteeën jo ek werkenne mei help fan in ID</translation>
@@ -102,12 +109,12 @@
 <translation id="2678063897982469759">Op 'e nij ynskeakelje</translation>
 <translation id="2719936478972253983">De folgjende koekjes binne tsjinkeard</translation>
 <translation id="2721037002783622288">&amp;Sykje om ôfbylding mei <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2722547199758472013">ID: <ph name="EXTENSION_ID" /></translation>
 <translation id="2738771556149464852">Net nei</translation>
 <translation id="2749881179542288782">Hifkje grammatika mei stavering</translation>
 <translation id="2785873697295365461">Triem omskriuwers</translation>
 <translation id="2825758591930162672">Iepenbiere kaai fan entiteit</translation>
 <translation id="2850541429955027218">Tema taheakje</translation>
-<translation id="2861941300086904918">Native kliïnt feiligens behearder</translation>
 <translation id="2881076733170862447">As jo op in tafoeging klikke</translation>
 <translation id="2889064240420137087">Iepenje keppeling mei...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> koe net komunisearje mei dizze printer. Kontrolearje of de printer oansluten is en besykje nochris.</translation>
@@ -131,6 +138,10 @@
 <translation id="3129173833825111527">Marzje links</translation>
 <translation id="3144647712221361880">Iepenje keppeling as</translation>
 <translation id="3222066309010235055">Foar rendearje <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3228985231489269630">{NUM_EXTENSIONS, plural,
+      =1 {Wiskje of ferfang dizze foar in ferlykbere tafoeging út <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" />.}
+      other {Widkje of ferfang dizze foar ferlykbere tafoegingen út <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" />}
+    }</translation>
 <translation id="3241680850019875542">Selektearje de haad triemtafel fan de tafoeging om yn te pakken. Foar it fernijen fan in tafoeging, selektearje jo de privee kaai triem om dit op 'e nij te brûken.</translation>
 <translation id="3275778913554317645">As finster iepenje</translation>
 <translation id="3280237271814976245">Bewarje &amp;as...</translation>
@@ -154,7 +165,7 @@
 <translation id="3511307672085573050">Keppeling adr&amp;es kopiearje</translation>
 <translation id="354068948465830244">Dit kin webstee gegevens lêze en feroarje</translation>
 <translation id="3560034655160545939">&amp;Staveringshifker</translation>
-<translation id="3587482841069643663">Alles</translation>
+<translation id="3612673635130633812">Ynladen troch &lt;a href="<ph name="URL" />"&gt;<ph name="EXTENSION" />&lt;/a&gt;</translation>
 <translation id="3627588569887975815">Keppeling yn ynko&amp;gnito finster iepenje</translation>
 <translation id="3678156199662914018">Tafoeging: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Fersyk om skerm te dielen fan <ph name="APP_NAME" /></translation>
@@ -197,7 +208,6 @@
 <translation id="4131410914670010031">Swart en wyt</translation>
 <translation id="4165986682804962316">Webstee ynstellingen</translation>
 <translation id="4170314459383239649">Wiskje by it útgean</translation>
-<translation id="4176463684765177261">Utskeakele</translation>
 <translation id="4200983522494130825">Nije &amp;ljepper</translation>
 <translation id="4225397296022057997">Op alle siden</translation>
 <translation id="4256316378292851214">Be&amp;warje fideo as...</translation>
@@ -221,10 +231,13 @@
 <translation id="4613271546271159013">In tafoeging hat feroare hokker side te sjen is as jo in nije ljepper iepenje.</translation>
 <translation id="4616405296204756919">Jo kinne bewarrre wachtwurden op elk apparaat brûke. Se wurde bewarre yn de <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Fideo iepenje yn nije ljepper</translation>
+<translation id="4644205769234414680">Tastean yn privee modus</translation>
+<translation id="4654801841330730814">Alles</translation>
 <translation id="4677772697204437347">GPU ûnthâld</translation>
 <translation id="4681930562518940301">Orizjinele ô&amp;fbylding iepenje yn nije ljepper</translation>
 <translation id="4711638718396952945">Ynstellingen werstelle</translation>
 <translation id="4726710629007580002">It ynstallearjen fan dizze tafoeging brocht warskôgings:</translation>
+<translation id="473775607612524610">Fernije</translation>
 <translation id="4763408175235639573">De folgjende koekjes binne bewarre by it besjen fan dizze side</translation>
 <translation id="479536056609751218">Webstee, HTML allinne</translation>
 <translation id="4827904420700932487">QR koade foar dizze ôfbylding oanmeitsje</translation>
@@ -246,11 +259,9 @@
 <translation id="5059526285558225588">Kies wat te dielen</translation>
 <translation id="5063480226653192405">Brûkme</translation>
 <translation id="5116628073786783676">Be&amp;warje audio as...</translation>
-<translation id="5143374789336132547">De tafoeging "<ph name="EXTENSION_NAME" />" hat feroare hokker side te sjen is as jo klikke op de Thús knop.</translation>
 <translation id="5154108062446123722">Avansearre ynstellingen foar <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5154702632169343078">Underwerp</translation>
 <translation id="5171343362375269016">Wiksel ûnthâld</translation>
-<translation id="5233019165164992427">Flater opspoaringspoarte fan Native kliïnt</translation>
 <translation id="5233231016133573565">Proses ID</translation>
 <translation id="5233736638227740678">&amp;Plakke</translation>
 <translation id="5256861893479663409">Op alle websteeën</translation>
@@ -273,7 +284,6 @@
 <translation id="5485102783864353244">App taheakje</translation>
 <translation id="5486561344817861625">Sneuper werstart simulearje</translation>
 <translation id="5509693895992845810">Bewarje &amp;as...</translation>
-<translation id="5521078259930077036">Is dit de startside dy't jo ferwachte?</translation>
 <translation id="5542132724887566711">Profyl</translation>
 <translation id="5556459405103347317">Ferfarskje</translation>
 <translation id="5575473780076478375">Privee modus tafoeging: <ph name="EXTENSION_NAME" /></translation>
@@ -285,7 +295,6 @@
 <translation id="5677928146339483299">Tsjinkeard</translation>
 <translation id="5707185214361380026">Flater by it laden fan tafoeging fan:</translation>
 <translation id="5713171467967533494">Iepenje yn Vivaldi sneuper</translation>
-<translation id="5715711091495208045">Ynstekker broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Bewarje as PDF</translation>
 <translation id="5747809636523347288">Pl&amp;akke en gean nei <ph name="URL" /></translation>
 <translation id="5759728514498647443">Dokuminten dy't jo stjoere nei <ph name="APP_NAME" /> om te printsjen, kinne lêzen wurde troch <ph name="APP_NAME" />.</translation>
@@ -293,7 +302,6 @@
 <translation id="5780973441651030252">Proses prioriteit</translation>
 <translation id="5804241973901381774">Foech</translation>
 <translation id="5828633471261496623">Oan 't printsjen...</translation>
-<translation id="583281660410589416">Unbekend</translation>
 <translation id="5851868085455377790">Utjouwer</translation>
 <translation id="5860491529813859533">Ynskeakelje</translation>
 <translation id="5910363049092958439">Be&amp;warje ôfbylding as...</translation>
@@ -345,7 +353,6 @@
 <translation id="6691936601825168937">&amp;Foarút</translation>
 <translation id="6786747875388722282">Tafoegingen</translation>
 <translation id="6787839852456839824">Fluchtoetsen</translation>
-<translation id="6798954102094737107">Ynstekker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Feroaringen behâlde</translation>
 <translation id="6824564591481349393">&amp;E-post adres kopiearje</translation>
 <translation id="6840155290835956714">Freegje foarôf it stjoeren</translation>
@@ -378,10 +385,10 @@
 <translation id="7453008956351770337">Troch dizze printer te selektearjen, jouwe jo de folgjende tafoegings tagong ta jo printer:</translation>
 <translation id="7564847347806291057">Proses eine litte</translation>
 <translation id="7576690715254076113">Sortearje</translation>
+<translation id="7612050744024016345">Alle tafoegingen</translation>
 <translation id="7629827748548208700">Ljepper: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Ofbrekke</translation>
 <translation id="7659154729610375585">Dochs út privee modus gean?</translation>
-<translation id="7661259717474717992">Stean websteeën it ta om koekje gegevens te bewarjen en te lêzen</translation>
 <translation id="7663719505383602579">Untfanger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Ynstallearre troch jo systeembehearder</translation>
 <translation id="7685038817958445325">Kin net oerbringe</translation>
@@ -415,6 +422,7 @@ Kaai triem: <ph name="KEY_FILE" />
 Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo tafoeging te meitsjen.</translation>
 <translation id="8004582292198964060">Sneuper</translation>
 <translation id="8018313076035239964">Haw kontrôle oer hokfoar ynformaasje websteeën brûke kinne en hokfoar ynhâld se sjen litte</translation>
+<translation id="8023801379949507775">Tafoegingen no fernije</translation>
 <translation id="8071432093239591881">As ôfbylding printsje</translation>
 <translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
         =1 {# blêdwizer}
@@ -427,7 +435,6 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="8261378640211443080">Dizze tafoeging stiet net op de list yn de <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> en is miskien wol taheakke sûnder dat wy it wisten.</translation>
 <translation id="8351419472474436977">Dizze tafoeging hat de bestjoering oernommen fan jo proksy ynstellingen, Wat oanjout dat de tafoeging alles wat jo mei ferbining dogge, feroarjeit feroarje, beskeadigje of besjen kin. As jo net wis binne wêrom dizze feroaring bard is, dan wolle jo dit wierskynlik net.</translation>
 <translation id="8382913212082956454">&amp;E-post adres kopiearje</translation>
-<translation id="8434480141477525001">NaCI útbrek poarte</translation>
 <translation id="8449008133205184768">Plakke en styl oanpasse</translation>
 <translation id="8477178913400731244">Gegevens wiskje</translation>
 <translation id="8477384620836102176">&amp;Algemien</translation>
@@ -437,6 +444,7 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="8546306075665861288">Ofbyldingen lytsûnthâld</translation>
 <translation id="8569682776816196752">Gjin bestimmings fûn</translation>
 <translation id="8584280235376696778">Fideo &amp;iepenje yn nije ljepper</translation>
+<translation id="8587660243683137365">Dizze side as app ynstallearje</translation>
 <translation id="8605428685123651449">SQLite ûnthâld</translation>
 <translation id="8615618338313291042">Privee modus App: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">CSS lytsûnthâld</translation>
@@ -446,6 +454,7 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="8708000541097332489">Wiskje by it útgean</translation>
 <translation id="8714838604780058252">Eftergrûn ôfbyldings</translation>
 <translation id="8725066075913043281">Besykje nochris</translation>
+<translation id="8770406935328356739">Tafoegingen had map</translation>
 <translation id="8774934320277480003">Marzje boppe</translation>
 <translation id="8798099450830957504">Standert</translation>
 <translation id="8808478386290700967">Web Store</translation>
@@ -456,6 +465,7 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="8899851313684471736">Keppeling yn nij &amp;finster iepenje</translation>
 <translation id="8915370057835397490">Suggestjes lade</translation>
 <translation id="8916476537757519021">Privee sub ramt: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8926389886865778422">Freegje net wer</translation>
 <translation id="8929696694736010839">Allinne aktive privee sesje</translation>
 <translation id="895944840846194039">JavaSkript ûnthâld</translation>
 <translation id="8962083179518285172">Details ferbergje</translation>

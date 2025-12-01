@@ -15,4 +15,8 @@ DEPS = [
 
 from .config import config_ctx as CONFIG_CTX
 
-__all__ = ['CONFIG_CTX']
+from .api import GclientApi as API
+from .test_api import GclientTestApi as TEST_API
+
+__all__ = ['CONFIG_CTX', 'API', 'TEST_API']
+

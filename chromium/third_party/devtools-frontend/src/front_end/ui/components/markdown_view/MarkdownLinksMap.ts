@@ -1,13 +1,13 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/*
-  To use links in markdown, add key here with the link and
-  use the added key in markdown.
-  @example markdown
-  Find more information about web development at [Learn more](exampleLink)
-*/
+/**
+ * To use links in markdown, add key here with the link and
+ * use the added key in markdown.
+ * @example markdown
+ * Find more information about web development at [Learn more](exampleLink)
+ */
 
 // This is only exported for tests, and it should not be
 // imported in any component, instead add link in map and

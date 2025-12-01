@@ -61,6 +61,7 @@ pub struct avifDecoder {
     // with libavif must be added before this line.
     pub androidMediaCodecOutputColorFormat: AndroidMediaCodecOutputColorFormat,
     pub compressionFormat: CompressionFormat,
+    pub allowSampleTransform: avifBool,
 
     // Rust specific fields that are not accessed from the C/C++ layer.
     rust_decoder: Box<Decoder>,
@@ -99,6 +100,7 @@ impl Default for avifDecoder {
             imageContentToDecode: AVIF_IMAGE_CONTENT_COLOR_AND_ALPHA,
             imageSequenceTrackPresent: AVIF_FALSE,
             androidMediaCodecOutputColorFormat: AndroidMediaCodecOutputColorFormat::default(),
+            allowSampleTransform: AVIF_FALSE,
             compressionFormat: CompressionFormat::default(),
             rust_decoder: Box::<Decoder>::default(),
             image_object: avifImage::default(),
@@ -227,6 +229,7 @@ impl From<&avifDecoder> for Settings {
             image_count_limit: NonZero::new(decoder.imageCountLimit),
             max_threads: u32::try_from(decoder.maxThreads).unwrap_or(0),
             android_mediacodec_output_color_format: decoder.androidMediaCodecOutputColorFormat,
+            allow_sample_transform: decoder.allowSampleTransform == AVIF_TRUE,
         }
     }
 }

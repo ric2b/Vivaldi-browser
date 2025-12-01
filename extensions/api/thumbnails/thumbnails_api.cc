@@ -492,7 +492,7 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
 
   // Need to transform the rect to pixelsize from device-size.
   double scale = 1.0f;
-  display::Screen* screen = display::Screen::GetScreen();
+  display::Screen* screen = display::Screen::Get();
   if (screen) {
     gfx::NativeWindow window = tabstrip_contents->GetTopLevelNativeWindow();
     display::Display display = screen->GetDisplayNearestWindow(window);
@@ -518,8 +518,12 @@ void ThumbnailsCaptureTabFunction::SendResult(
     std::unique_ptr<CaptureData> data) {
   namespace Results = vivaldi::thumbnails::CaptureTab::Results;
 
-  Respond(ArgumentList(Results::Create(*data->success, data->base64)));
-  ShowFolderIfNecessary(browser_context(), *data);
+  if (*data->success) {
+    Respond(ArgumentList(Results::Create(data->base64)));
+    ShowFolderIfNecessary(browser_context(), *data);
+  } else {
+    Respond(Error("Tab capture failed"));
+  }
 }
 
 ThumbnailsCaptureBookmarkFunction::ThumbnailsCaptureBookmarkFunction() =

@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -20,12 +20,12 @@ import type {TypeToggleEvent} from './ValueInterpreterSettings.js';
 
 const UIStrings = {
   /**
-   *@description Tooltip text that appears when hovering over the gear button to open and close settings in the Linear memory inspector. These settings
+   * @description Tooltip text that appears when hovering over the gear button to open and close settings in the Linear memory inspector. These settings
    *             allow the user to change the value type to view, such as 32-bit Integer, or 32-bit Float.
    */
   toggleValueTypeSettings: 'Toggle value type settings',
   /**
-   *@description Tooltip text that appears when hovering over the 'Little Endian' or 'Big Endian' setting in the Linear memory inspector.
+   * @description Tooltip text that appears when hovering over the 'Little Endian' or 'Big Endian' setting in the Linear memory inspector.
    */
   changeEndianness: 'Change `Endianness`',
 } as const;

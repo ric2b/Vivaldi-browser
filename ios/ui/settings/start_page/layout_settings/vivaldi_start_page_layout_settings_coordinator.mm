@@ -45,8 +45,7 @@
   VivaldiStartPageLayoutSettingsViewProvider* viewProvider =
       [VivaldiStartPageLayoutSettingsViewProvider new];
   self.viewProvider = viewProvider;
-  UIViewController *controller =
-      [VivaldiStartPageLayoutSettingsViewProvider makeViewController];
+  UIViewController *controller = [self.viewProvider makeViewController];
   controller.title =
       l10n_util::GetNSString(IDS_IOS_VIVALDI_START_PAGE_LAYOUT_TITLE);
   controller.navigationItem.largeTitleDisplayMode =

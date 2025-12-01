@@ -38,6 +38,7 @@
 <translation id="4026745073321351206">🙄 Ein Problem entdeckt?</translation>
 <translation id="4216644171369573466">Tabgruppe, <ph name="GROUP_TITLE" />, Menu.</translation>
 <translation id="4304713468139749426">Passwortverwaltung</translation>
+<translation id="4439281775431634915">Tabgruppen werden hier gespeichert</translation>
 <translation id="4569525137269575065">Gruppe schließen</translation>
 <translation id="473775607612524610">Update</translation>
 <translation id="4755216899422789286">URLs in Vivaldi öffnen</translation>
@@ -50,6 +51,8 @@
             other {{count} Tabgruppen geschlossen und gespeichert}}</translation>
 <translation id="5019787757991745254">Farbe der Tabgruppe <ph name="COLOR" /></translation>
 <translation id="5022440170224170365">Tabgruppe. Reduziert.</translation>
+<translation id="5132327651247938019">Nach rechts scrollen, um privat zu surfen.</translation>
+<translation id="5204006339739481307">Nach links scrollen, um privat zu surfen.</translation>
 <translation id="5217245356412073535">Sie können die Standardansicht der Website unter Einstellungen &gt; Inhaltseinstellungen auf Desktop ändern</translation>
 <translation id="5271549068863921519">Passwort speichern</translation>
 <translation id="5317780077021120954">Speichern</translation>
@@ -63,6 +66,7 @@
 <translation id="5962477178930921574">Einfügen und Suchen</translation>
 <translation id="6163856768888310791">Gruppierung aufheben</translation>
 <translation id="6168969409902608220">Gruppe benamen</translation>
+<translation id="6192561334825788389">Nach rechts wischen, um privat zu surfen.</translation>
 <translation id="6233792867654386826">Öffnet eingegebene URLs in Vivaldi.</translation>
 <translation id="6271462272606946663">Mobile Seite anfordern ausblenden</translation>
 <translation id="6478587527114893588">Gruppe schließen.</translation>
@@ -75,6 +79,8 @@
 <translation id="6827597288286078054">Private Suche</translation>
 <translation id="6851516051005285358">Desktopwebsite anfordern</translation>
 <translation id="6890907822330704077">TTabgruppe, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> Tabs.</translation>
+<translation id="7004032350256606903">Ihre Organisation verlangt, dass Sie privat surfen.
+<ph name="BEGIN_LINK" />Weitere Informationen<ph name="END_LINK" /></translation>
 <translation id="7307970171564921489">Private Tabs mit <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> entsperren</translation>
 <translation id="7347289093190902150">Privat öffnen?</translation>
 <translation id="7363285031331302144">Tabgruppen erstellen, um offene Tabs zu organisieren</translation>
@@ -94,6 +100,7 @@
         =1 {Tab zu neuer Gruppe hinzufügen}
         other {Tabs zu neuer Gruppe hinzufügen}}</translation>
 <translation id="8465550436083180511">Gruppe reduzieren.</translation>
+<translation id="8499954848910902473">Nach links wischen, um privat zu surfen.</translation>
 <translation id="8685478989144570078">Tabgruppen</translation>
 <translation id="8756969031206844760">Passwort aktualisieren?</translation>
 <translation id="8852861335827546438">Neue Tabgruppe</translation>

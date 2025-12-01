@@ -71,7 +71,7 @@ public class PasswordsPreference extends ChromeBasePreference implements Profile
         }
 
         // This warning should override the managed text if any is present.
-        setUpPostDeprecationWarning(holder, prefService);
+        setUpPostDeprecationWarning(holder);
     }
 
     private void setUpManagedDisclaimerView(PreferenceViewHolder holder, PrefService prefService) {
@@ -89,24 +89,15 @@ public class PasswordsPreference extends ChromeBasePreference implements Profile
                                 .password_saving_off_by_administrator);
     }
 
-    private void setUpPostDeprecationWarning(PreferenceViewHolder holder, PrefService prefService) {
+    private void setUpPostDeprecationWarning(PreferenceViewHolder holder) {
         assert mProfile != null : "Profile is not set!";
 
-        boolean isPasswordManagerAvailable =
-                PasswordManagerUtilBridge.isPasswordManagerAvailable(prefService);
+        boolean isPasswordManagerAvailable = PasswordManagerUtilBridge.isPasswordManagerAvailable();
         boolean hasPasswordsInCsv = LoginDbDeprecationUtilBridge.hasPasswordsInCsv(mProfile);
 
         // If there are no unmigrated passwords left in Chrome and the password manager is available
         // no subtitle is needed.
         if (isPasswordManagerAvailable && !hasPasswordsInCsv) {
-            return;
-        }
-
-        // If the password manager is not available, but the auto-export hasn't finished yet
-        // don't show any subtitle either, because clicking the button will have no effect anyway
-        // and the version of the subtitle cannot be accurately determined.
-        if (!isPasswordManagerAvailable
-                && !prefService.getBoolean(Pref.UPM_UNMIGRATED_PASSWORDS_EXPORTED)) {
             return;
         }
 
@@ -128,7 +119,7 @@ public class PasswordsPreference extends ChromeBasePreference implements Profile
         // ChromeBasePreference sets summary text view to be not visible by default if it's empty.
         // So explicitly setting it to visible here.
         summaryView.setVisibility(View.VISIBLE);
-        }
+        } // End Vivaldi
         setWidgetLayoutResource(R.layout.passwords_preference_error_widget);
     }
 }

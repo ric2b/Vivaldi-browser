@@ -1053,6 +1053,14 @@ void SendStatisticsProxy::OnSendEncodedImage(
     }
   }
 
+  std::optional<EncodedImage::Psnr> psnr = encoded_image.psnr();
+  if (psnr.has_value()) {
+    stats->psnr_sum.y += psnr->y;
+    stats->psnr_sum.u += psnr->u;
+    stats->psnr_sum.v += psnr->v;
+    stats->psnr_measurements += 1;
+  }
+
   // If any of the simulcast streams have a huge frame, it should be counted
   // as a single difficult input frame.
   // https://w3c.github.io/webrtc-stats/#dom-rtcvideosenderstats-hugeframessent
@@ -1092,9 +1100,10 @@ void SendStatisticsProxy::OnSendEncodedImage(
 void SendStatisticsProxy::OnEncoderImplementationChanged(
     EncoderImplementation implementation) {
   MutexLock lock(&mutex_);
-  encoder_changed_ =
-      EncoderChangeEvent{stats_.encoder_implementation_name.value_or("unknown"),
-                         implementation.name};
+  encoder_changed_ = EncoderChangeEvent{
+      .previous_encoder_implementation =
+          stats_.encoder_implementation_name.value_or("unknown"),
+      .new_encoder_implementation = implementation.name};
   stats_.encoder_implementation_name = implementation.name;
   stats_.power_efficient_encoder = implementation.is_hardware_accelerated;
   // Clear cached scalability mode values, they may no longer be accurate.

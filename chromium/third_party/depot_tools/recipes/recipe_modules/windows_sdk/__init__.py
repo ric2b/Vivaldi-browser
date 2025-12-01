@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-PYTHON_VERSION_COMPATIBILITY = 'PY3'
 
 DEPS = [
     'recipe_engine/cipd',
@@ -25,3 +24,5 @@ PROPERTIES = {
     ), default={'version': 'uploaded:2018-06-13'},
   )
 }
+
+from .api import WindowsSDKApi as API

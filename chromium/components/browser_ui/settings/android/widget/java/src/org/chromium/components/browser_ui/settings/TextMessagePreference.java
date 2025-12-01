@@ -31,6 +31,11 @@ public class TextMessagePreference extends ChromeBasePreference {
     }
 
     @Override
+    public @BackgroundStyle int getCustomBackgroundStyle() {
+        return BackgroundStyle.NONE;
+    }
+
+    @Override
     public void onBindViewHolder(PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
 

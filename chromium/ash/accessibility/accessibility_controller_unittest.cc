@@ -58,6 +58,7 @@
 #include "ui/message_center/public/cpp/notification_types.h"
 #include "ui/native_theme/features/native_theme_features.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/native_theme/os_settings_provider.h"
 
 using message_center::MessageCenter;
 
@@ -139,7 +140,6 @@ class AccessibilityControllerTest : public AccessibilityControllerTestBase {
     scoped_feature_list_.InitWithFeatures(
         /*enabled_features=*/{ash::features::kOnDeviceSpeechRecognition,
                               ::features::kAccessibilityAccelerator,
-                              ::features::kAccessibilityFaceGaze,
                               ::features::kAccessibilityMouseKeys,
                               ::features::kAccessibilityFlashScreenFeature},
         /*disabled_features=*/{});
@@ -1720,24 +1720,25 @@ TEST_F(AccessibilityControllerTest, VerifyFeatureData) {
 }
 
 TEST_F(AccessibilityControllerTest, ChangingPrefChangesCaretBlinkInterval) {
-  // Starts with default value.
-  EXPECT_EQ(prefs()->GetInteger(prefs::kAccessibilityCaretBlinkInterval), 500);
+  // The pref should contain the default value.
+  EXPECT_EQ(
+      prefs()->GetInteger(prefs::kAccessibilityCaretBlinkInterval),
+      ui::OsSettingsProvider::kDefaultCaretBlinkInterval.InMilliseconds());
 
-  auto* native_theme_dark = ui::NativeTheme::GetInstanceForDarkUI();
-  auto* native_theme_web = ui::NativeTheme::GetInstanceForWeb();
-  auto* native_theme = ui::NativeTheme::GetInstanceForNativeUi();
+  // All NativeThemes should start with the default value.
+  const auto* const native_theme = ui::NativeTheme::GetInstanceForNativeUi();
+  const auto* const native_theme_web = ui::NativeTheme::GetInstanceForWeb();
+  EXPECT_EQ(ui::OsSettingsProvider::kDefaultCaretBlinkInterval,
+            native_theme->caret_blink_interval());
+  EXPECT_EQ(ui::OsSettingsProvider::kDefaultCaretBlinkInterval,
+            native_theme_web->caret_blink_interval());
 
-  base::TimeDelta expected_interval = base::Milliseconds(500);
-  EXPECT_EQ(expected_interval, native_theme_dark->GetCaretBlinkInterval());
-  EXPECT_EQ(expected_interval, native_theme_web->GetCaretBlinkInterval());
-  EXPECT_EQ(expected_interval, native_theme->GetCaretBlinkInterval());
-
-  // Native Themes should be updated.
-  prefs()->SetInteger(prefs::kAccessibilityCaretBlinkInterval, 42);
-  expected_interval = base::Milliseconds(42);
-  EXPECT_EQ(expected_interval, native_theme_dark->GetCaretBlinkInterval());
-  EXPECT_EQ(expected_interval, native_theme_web->GetCaretBlinkInterval());
-  EXPECT_EQ(expected_interval, native_theme->GetCaretBlinkInterval());
+  // NativeThemes should be updated when the pref updates.
+  static constexpr auto kNewInterval = base::Milliseconds(42);
+  prefs()->SetInteger(prefs::kAccessibilityCaretBlinkInterval,
+                      kNewInterval.InMilliseconds());
+  EXPECT_EQ(kNewInterval, native_theme->caret_blink_interval());
+  EXPECT_EQ(kNewInterval, native_theme_web->caret_blink_interval());
 }
 
 TEST_F(AccessibilityControllerTest, FlashNotificationsWhenEnabled) {

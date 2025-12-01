@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,6 +20,7 @@ describe('ScriptsHandler', () => {
     await Trace.Handlers.ModelHandlers.Meta.finalize();
     await Trace.Handlers.ModelHandlers.NetworkRequests.finalize();
     await Trace.Handlers.ModelHandlers.Scripts.finalize({
+      allTraceEvents: events,
       async resolveSourceMap(params: Trace.Types.Configuration.ResolveSourceMapParams):
           Promise<SDK.SourceMap.SourceMap> {
             // Don't need to actually make a source map.
@@ -42,7 +43,7 @@ describe('ScriptsHandler', () => {
         request: undefined,
         scriptId: '3',
         sourceMapUrl: 'http://localhost:8080/source.map.json',
-        ts: 0,
+        ts: 50442438976,
         url: 'http://localhost:8080/index.html',
       },
       {
@@ -52,7 +53,7 @@ describe('ScriptsHandler', () => {
         request: undefined,
         scriptId: '4',
         sourceMapUrl: 'http://localhost:8080/source.map.json',
-        ts: 0,
+        ts: 50442438976,
         url: 'http://localhost:8080/index.html',
       },
       {
@@ -62,7 +63,7 @@ describe('ScriptsHandler', () => {
         request: undefined,
         scriptId: '1',
         sourceMapUrl: 'http://localhost:8080/source.map.json',
-        ts: 0,
+        ts: 50442438976,
         url: 'http://localhost:8080/index.html',
       },
       {

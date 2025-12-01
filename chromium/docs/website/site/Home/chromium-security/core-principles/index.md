@@ -97,7 +97,6 @@ standards, including [public key
 pinning](http://tools.ietf.org/html/draft-ietf-websec-key-pinning-01), [Content
 Security Policies](https://www.w3.org/TR/CSP/), and [SPDY](/spdy). We also open
 source or otherwise make our security technologies widely available (e.g.
-[Native Client](/nativeclient) / Pepper, [Open Type
-Sanitizer](https://code.google.com/p/ots/), [application
+[Open Type Sanitizer](https://code.google.com/p/ots/), [application
 sandboxing](/developers/design-documents/sandbox), and [Safe
 Browsing](https://code.google.com/apis/safebrowsing/)).

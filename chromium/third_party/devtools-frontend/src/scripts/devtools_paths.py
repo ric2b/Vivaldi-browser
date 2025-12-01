@@ -1,4 +1,4 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """
@@ -121,11 +121,6 @@ def package_lock_json_path():
 
 def package_json_path():
     return path.join(devtools_root_path(), 'package.json')
-
-
-def browser_protocol_path():
-    return path.join(third_party_path(), 'blink', 'public',
-                     'devtools_protocol', 'browser_protocol.pdl')
 
 
 def custom_devtools_frontend_path(target):

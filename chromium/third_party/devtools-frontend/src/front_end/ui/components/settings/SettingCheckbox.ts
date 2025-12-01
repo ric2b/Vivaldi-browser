@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -19,7 +19,7 @@ const {html, Directives: {ifDefined}} = Lit;
 
 const UIStrings = {
   /**
-   *@description Text that is usually a hyperlink to more documentation
+   * @description Text that is usually a hyperlink to more documentation
    */
   learnMore: 'Learn more',
 } as const;
@@ -66,7 +66,7 @@ export class SettingCheckbox extends HTMLElement {
     }
 
     const learnMore = this.#setting.learnMore();
-    if (learnMore && learnMore.url) {
+    if (learnMore?.url) {
       const url = learnMore.url;
       const data: Buttons.Button.ButtonData = {
         iconName: 'help',
@@ -86,6 +86,14 @@ export class SettingCheckbox extends HTMLElement {
     }
 
     return undefined;
+  }
+
+  get checked(): boolean {
+    if (!this.#setting || this.#setting.disabledReasons().length > 0) {
+      return false;
+    }
+
+    return this.#setting.get();
   }
 
   #render(): void {
@@ -111,7 +119,7 @@ export class SettingCheckbox extends HTMLElement {
         <label title=${title}>
           <input
             type="checkbox"
-            .checked=${disabledReasons.length ? false : this.#setting.get()}
+            .checked=${this.checked}
             ?disabled=${this.#setting.disabled()}
             @change=${this.#checkboxChanged}
             jslog=${VisualLogging.toggle().track({click: true}).context(this.#setting.name)}

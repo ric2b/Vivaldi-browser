@@ -12,8 +12,8 @@
 #import "base/types/expected.h"
 #import "build/branding_buildflags.h"
 #import "components/grit/components_resources.h"
-#import "components/plus_addresses/grit/plus_addresses_strings.h"
-#import "components/plus_addresses/metrics/plus_address_metrics.h"
+#import "components/plus_addresses/core/browser/grit/plus_addresses_strings.h"
+#import "components/plus_addresses/core/browser/metrics/plus_address_metrics.h"
 #import "ios/chrome/browser/plus_addresses/ui/plus_address_bottom_sheet_constants.h"
 #import "ios/chrome/browser/plus_addresses/ui/plus_address_bottom_sheet_delegate.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
@@ -555,7 +555,6 @@ UIImageView* BrandingImageView() {
 // Enables/Disables the primary action button.
 - (void)enablePrimaryActionButton:(BOOL)enabled {
   self.primaryActionButton.enabled = enabled;
-  UpdateButtonColorOnEnableDisable(self.primaryActionButton);
 }
 
 - (void)onURLTapForType:(PlusAddressURLType)type {

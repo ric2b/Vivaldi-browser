@@ -98,11 +98,9 @@ FieldAccess AccessBuilder::ForContextCellFloat64Value() {
 }
 
 // static
-FieldAccess AccessBuilder::ForHeapNumberOrOddballOrHoleValue() {
+FieldAccess AccessBuilder::ForHeapNumberOrOddballValue() {
   STATIC_ASSERT_FIELD_OFFSETS_EQUAL(offsetof(HeapNumber, value_),
                                     offsetof(Oddball, to_number_raw_));
-  STATIC_ASSERT_FIELD_OFFSETS_EQUAL(offsetof(HeapNumber, value_),
-                                    Hole::kRawNumericValueOffset);
   return ForHeapNumberValue();
 }
 
@@ -1220,11 +1218,11 @@ ElementAccess AccessBuilder::ForFixedArrayElement(ElementsKind kind) {
       access.machine_type = MachineType::Float64();
       break;
     case HOLEY_DOUBLE_ELEMENTS:
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       access.type = Type::NumberOrUndefinedOrHole();
 #else
       access.type = Type::NumberOrHole();
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
       access.write_barrier_kind = kNoWriteBarrier;
       access.machine_type = MachineType::Float64();
       break;

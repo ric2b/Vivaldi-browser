@@ -16,17 +16,6 @@ update_target("//chrome/browser:browser") {
     sources += [
       "//vivaldi/browser/shell_integration/vivaldi_shell_integration_win.cc",
     ]
-
-    # With Vivaldi we do not use registry to communicate the update version,
-    # so use a directory-based watcher on Windows instead.
-    sources -= [
-      "upgrade_detector/registry_monitor.cc",
-      "upgrade_detector/registry_monitor.h",
-    ]
-    sources += [
-      "upgrade_detector/directory_monitor.cc",
-      "upgrade_detector/directory_monitor.h",
-    ]
   }
   if (is_linux) {
     sources += [
@@ -76,32 +65,36 @@ update_target("//chrome/browser:browser") {
       "//vivaldi/browser/android/prefs/vivaldi_relaunch_utils.cc",
       "//vivaldi/browser/android/prompts/search_engine_prompt_bridge.cc",
       "//vivaldi/browser/android/prompts/search_engine_prompt_bridge.h",
-      # TODO CHR 124: Check if we can only use the Chromium implementation for the future.
-      #"//vivaldi/browser/android/autofill/autofill_provider_android.cc",
-      #"//vivaldi/browser/android/autofill/autofill_provider_android.h",
-      #"//vivaldi/browser/android/autofill/form_data_android.cc",
-      #"//vivaldi/browser/android/autofill/form_data_android.h",
-      #"//vivaldi/browser/android/autofill/form_field_data_android.cc",
-      #"//vivaldi/browser/android/autofill/form_field_data_android.h",
-      #"//vivaldi/browser/android/autofill/autofill_provider.h",
-      #"//vivaldi/browser/android/autofill/autofill_provider.cc",
-      #"//vivaldi/browser/android/autofill/android_autofill_manager.h",
-      #"//vivaldi/browser/android/autofill/android_autofill_manager.cc",
-      #"//vivaldi/browser/android/autofill/android_autofill_features.h",
-      #"//vivaldi/browser/android/autofill/android_autofill_features.cc",
-      #"//vivaldi/browser/android/autofill/autofill_provider_android_bridge.h",
-      #"//vivaldi/browser/android/autofill/autofill_provider_android_bridge_impl.h",
-      #"//vivaldi/browser/android/autofill/autofill_provider_android_bridge_impl.cc",
-      #"//vivaldi/browser/android/autofill/form_data_android_bridge.h",
-      #"//vivaldi/browser/android/autofill/form_data_android_bridge_impl.h",
-      #"//vivaldi/browser/android/autofill/form_data_android_bridge_impl.cc",
-      #"//vivaldi/browser/android/autofill/form_field_data_android_bridge.h",
-      #"//vivaldi/browser/android/autofill/form_field_data_android_bridge_impl.h",
-      #"//vivaldi/browser/android/autofill/form_field_data_android_bridge_impl.cc",
-      #"//vivaldi/browser/android/autofill/android_autofill_bridge_factory.h",
-      #"//vivaldi/browser/android/autofill/android_autofill_bridge_factory.cc",
+      "//vivaldi/browser/android/password_manager/password_ui_view_android.h",
+      "//vivaldi/browser/android/password_manager/password_ui_view_android.cc",
+      "//vivaldi/browser/android/password_check/password_check_bridge.h",
+      "//vivaldi/browser/android/password_check/password_check_bridge.cc",
+      "//vivaldi/browser/android/password_check/password_check_manager.h",
+      "//vivaldi/browser/android/password_check/password_check_manager.cc",
+      "//vivaldi/browser/android/password_check/password_check_ui_status.h",
+      "//vivaldi/browser/android/password_entry_edit/credential_edit_bridge.cc",
+      "//vivaldi/browser/android/password_entry_edit/credential_edit_bridge.h",
       "//vivaldi/browser/android/translate/vivaldi_translate_bridge.h",
       "//vivaldi/browser/android/translate/vivaldi_translate_bridge.cc",
+    ]
+  }
+}
+
+if (is_win || is_linux || is_mac) {
+  update_target("//chrome/browser/upgrade_detector:impl") {
+    # With Vivaldi we do not use registry to communicate the update version,
+    # so use a directory-based watcher on Windows instead.
+    if (is_win) {
+      sources -= [
+        "registry_monitor.cc",
+      ]
+      sources += [
+        "directory_monitor.cc",
+        "directory_monitor.h",
+      ]
+    }
+    configs += [
+      "//vivaldi/gn/config:release_kind",
     ]
   }
 }
@@ -177,12 +170,15 @@ if (!is_android) {
         "//vivaldi/browser/stats_reporter_unittest.cc",
         "//vivaldi/browser/translate/vivaldi_translate_server_request_unittests.cc"
       ]
-      if (is_win) {
-        sources -= [ "../browser/upgrade_detector/registry_monitor_unittest.cc" ]
-      }
     }
     update_target("//chrome/browser/ui/toolbar:unit_tests") {
       sources -= [ "app_menu_icon_controller_unittest.cc" ]
+    }
+  }
+
+  if (is_win) {
+    update_target("//chrome/browser/upgrade_detector:unit_tests") {
+      sources -= [ "registry_monitor_unittest.cc" ]
     }
   }
 
@@ -219,5 +215,63 @@ if (!is_android) {
 
   update_target("//chrome/browser/ui/page_info:impl") {
     sources += [ "//vivaldi/browser/ui/vivaldi_page_info_infobar_delegate.cc" ]
+  }
+}
+
+if (is_android) {
+  update_target("//chrome/browser/password_manager/factories:factories") {
+    sources += [
+      "//chrome/browser/password_manager/factories/bulk_leak_check_service_factory.cc",
+      "//chrome/browser/password_manager/factories/bulk_leak_check_service_factory.h",
+    ]
+  }
+
+  update_target("//components/password_manager/core/browser/ui:ui") {
+    sources += [
+      "//components/password_manager/core/browser/ui/bulk_leak_check_service_adapter.cc",
+      "//components/password_manager/core/browser/ui/bulk_leak_check_service_adapter.h",
+      "//components/password_manager/core/browser/ui/insecure_credentials_manager.cc",
+      "//components/password_manager/core/browser/ui/insecure_credentials_manager.h",
+    ]
+  }
+
+  update_target("//components/password_manager/core/browser/leak_detection:leak_detection_interface_headers") {
+    sources += [
+      "//components/password_manager/core/browser/leak_detection/bulk_leak_check.h",
+      "//components/password_manager/core/browser/leak_detection/bulk_leak_check_service.h",
+      "//components/password_manager/core/browser/leak_detection/bulk_leak_check_service_interface.h",
+    ]
+  }
+
+  update_target("//components/password_manager/core/browser/leak_detection:leak_detection") {
+    sources += [
+      "//components/password_manager/core/browser/leak_detection/bulk_leak_check_impl.cc",
+      "//components/password_manager/core/browser/leak_detection/bulk_leak_check_impl.h",
+      "//components/password_manager/core/browser/leak_detection/bulk_leak_check_service.cc",
+      "//components/password_manager/core/browser/leak_detection/bulk_leak_check_service_interface.cc",
+    ]
+  }
+
+  update_target("//components/password_manager/core/browser/password_store:password_store_impl") {
+    sources += [
+      "//components/password_manager/core/browser/password_store/insecure_credentials_table.cc",
+      "//components/password_manager/core/browser/password_store/insecure_credentials_table.h",
+      "//components/password_manager/core/browser/password_store/login_database.cc",
+      "//components/password_manager/core/browser/password_store/login_database.h",
+      "//components/password_manager/core/browser/password_store/login_database_async_helper.cc",
+      "//components/password_manager/core/browser/password_store/login_database_async_helper.h",
+      "//components/password_manager/core/browser/password_store/password_notes_table.cc",
+      "//components/password_manager/core/browser/password_store/password_notes_table.h",
+      "//components/password_manager/core/browser/password_store/password_store_built_in_backend.cc",
+      "//components/password_manager/core/browser/password_store/password_store_built_in_backend.h",
+      "//components/password_manager/core/browser/password_store/statistics_table.cc",
+      "//components/password_manager/core/browser/password_store/statistics_table.h",
+    ]
+  }
+
+  update_target("//components/password_manager/core/browser/password_store:password_store_interface") {
+    sources += [
+      "//components/password_manager/core/browser/password_store/login_database_posix.cc",
+    ]
   }
 }

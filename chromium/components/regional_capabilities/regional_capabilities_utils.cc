@@ -58,10 +58,6 @@ void ShufflePrepopulatedEngines(std::vector<const PrepopulatedEngine*>& engines,
 
 }  // namespace
 
-bool IsEeaCountry(country_codes::CountryId country_id) {
-  return kEeaChoiceCountriesIds.contains(country_id);
-}
-
 std::optional<SearchEngineCountryOverride> GetSearchEngineCountryOverride() {
   if (vivaldi::IsVivaldiRunning()) {
     return std::nullopt;
@@ -81,6 +77,15 @@ std::optional<SearchEngineCountryOverride> GetSearchEngineCountryOverride() {
   if (country_id == switches::kEeaListCountryOverride) {
     return SearchEngineCountryListOverride::kEeaAll;
   }
+  if (country_id == switches::kTaiyakiProgramOverride) {
+    if (!IsClientCompatibleWithProgram(Program::kTaiyaki)) {
+      // The unsupported flag is overriding the country to "invalid country".
+      return country_codes::CountryId();
+    }
+
+    return RegionalProgramOverride::kTaiyaki;
+  }
+
   return country_codes::CountryId(country_id);
 }
 
@@ -110,7 +115,7 @@ std::vector<const PrepopulatedEngine*> GetPrepopulatedEngines(
   std::vector<const PrepopulatedEngine*> engines;
 
   switch (search_engine_list_type) {
-    case SearchEngineListType::kTopFive: {
+    case SearchEngineListType::kTopN: {
       // Some regional lists can have more (e.g. EEA lists) or fewer (e.g. the
       // default) than 5 entries.
       size_t num_top_engines = std::min(regional_settings.search_engines.size(),

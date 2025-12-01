@@ -121,7 +121,8 @@
       templateURLService->GetDefaultSearchProvider()->GetEngineType(
           templateURLService->search_terms_data()) == SEARCH_ENGINE_GOOGLE;
   _aimShortcutAvailable =
-      !self.isLensOverlay && _autocompleteProviderClient &&
+      self.presentationContext != OmniboxPresentationContext::kLensOverlay &&
+      _autocompleteProviderClient &&
       OmniboxFieldTrial::IsDeterministicAimActionInTypedStateEnabled(
           _autocompleteProviderClient.get());
 }
@@ -191,9 +192,17 @@
     (const AutocompleteResult&)autocompleteResult {
   NSMutableArray<AutocompleteMatchFormatter*>* wrappedMatches =
       [[NSMutableArray alloc] init];
+
+  // TODO(crbug.com/439796782): If multiple matches with `TILE_NAVSUGGEST` are
+  // present in the autocomplete result, process only the first on the one.
+  BOOL tileNavSuggestHandled = NO;
   for (size_t i = 0; i < autocompleteResult.size(); i++) {
     const AutocompleteMatch& match = autocompleteResult.match_at((NSUInteger)i);
     if (match.type == AutocompleteMatchType::TILE_NAVSUGGEST) {
+      if (tileNavSuggestHandled) {
+        continue;
+      }
+      tileNavSuggestHandled = YES;
       DCHECK(match.type == AutocompleteMatchType::TILE_NAVSUGGEST);
       for (const AutocompleteMatch::SuggestTile& tile : match.suggest_tiles) {
         AutocompleteMatch tileMatch = AutocompleteMatch(match);

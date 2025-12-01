@@ -7,11 +7,12 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/reader_mode/model/reader_mode_browser_agent_web_state_delegate.h"
+
 @protocol AppLauncherTabHelperBrowserPresentationProvider;
 @class CommandDispatcher;
 @protocol DownloadManagerTabHelperDelegate;
 @protocol PasswordControllerDelegate;
-class PrerenderService;
 @class PrintCoordinator;
 @protocol RepostFormTabHelperDelegate;
 @class SadTabCoordinator;
@@ -29,11 +30,11 @@ class Browser;
 // The required dependencies are injected into the mediator instance as
 // properties, and are generally expected not to change during the mediator's
 // lifetime. The mediator keeps only weak references to injected dependencies.
-@interface TabLifecycleMediator : NSObject
+@interface TabLifecycleMediator
+    : NSObject <ReaderModeBrowserAgentWebStateDelegate>
 
 @property(nonatomic, weak) id<DownloadManagerTabHelperDelegate>
     downloadManagerTabHelperDelegate;
-@property(nonatomic, assign) PrerenderService* prerenderService;
 @property(nonatomic, weak) UIViewController* baseViewController;
 @property(nonatomic, weak) CommandDispatcher* commandDispatcher;
 @property(nonatomic, weak) id<NetExportTabHelperDelegate> tabHelperDelegate;

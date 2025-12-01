@@ -31,7 +31,6 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
-import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.embedder_support.util.UrlUtilities;
@@ -59,9 +58,11 @@ import org.chromium.url.GURL;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.List;
 
 // Vivaldi
@@ -134,8 +135,8 @@ public class PageInfoController
     // Used to show Site settings from Page Info UI.
     private final PermissionParamsListBuilder mPermissionParamsListBuilder;
 
-    // The current page info subpage controller, if any.
-    private @Nullable PageInfoSubpageController mCurrentSubpageController;
+    // The current page info subpage controller stack, if any.
+    private final Deque<PageInfoSubpageController> mCurrentSubpageControllers = new ArrayDeque<>();
 
     // The controller for the connection section of the page info.
     private final PageInfoConnectionController mConnectionController;
@@ -169,7 +170,7 @@ public class PageInfoController
     public PageInfoController(
             WebContents webContents,
             @ConnectionSecurityLevel int securityLevel,
-            String publisher,
+            @Nullable String publisher,
             PageInfoControllerDelegate delegate,
             PageInfoHighlight pageInfoHighlight,
             @OpenedFromSource int source,
@@ -394,18 +395,14 @@ public class PageInfoController
      *
      * @param name The title of the permission to display to the user.
      * @param nameMidSentence The title of the permission to display to the user when used
-     *         mid-sentence.
+     *     mid-sentence.
      * @param type The ContentSettingsType of the permission.
-     * @param currentSettingValue The ContentSetting value of the currently selected setting.
+     * @param allowed Whether the permission is allowed.
      */
     @CalledByNative
     private void addPermissionSection(
-            String name,
-            String nameMidSentence,
-            int type,
-            @ContentSettingValues int currentSettingValue) {
-        mPermissionParamsListBuilder.addPermissionEntry(
-                name, nameMidSentence, type, currentSettingValue);
+            String name, String nameMidSentence, int type, boolean allowed) {
+        mPermissionParamsListBuilder.addPermissionEntry(name, nameMidSentence, type, allowed);
     }
 
     /** Update the permissions view based on the contents of mDisplayedPermissions. */
@@ -491,9 +488,10 @@ public class PageInfoController
     @Override
     public void onDismiss(PropertyModel model, @DialogDismissalCause int dismissalCause) {
         assert mNativePageInfoController != 0;
-        if (mCurrentSubpageController != null) {
-            mCurrentSubpageController.onSubpageRemoved();
-            mCurrentSubpageController = null;
+        while (!mCurrentSubpageControllers.isEmpty()) {
+            PageInfoSubpageController currentSubpageController =
+                    mCurrentSubpageControllers.removeFirst();
+            currentSubpageController.onSubpageRemoved();
         }
 
         destroy();
@@ -560,7 +558,7 @@ public class PageInfoController
     public static void show(
             final Activity activity,
             WebContents webContents,
-            final String contentPublisher,
+            final @Nullable String contentPublisher,
             @OpenedFromSource int source,
             PageInfoControllerDelegate delegate,
             PageInfoHighlight pageInfoHighlight,
@@ -631,35 +629,47 @@ public class PageInfoController
     /** Launches a subpage for the specified controller. */
     @Override
     public void launchSubpage(PageInfoSubpageController controller) {
-        if (mCurrentSubpageController != null) return;
-        mCurrentSubpageController = controller;
-        CharSequence title = mCurrentSubpageController.getSubpageTitle();
-        View subview = mCurrentSubpageController.createViewForSubpage(mContainer);
+        if (mContainer.isPageChangeInProgress()) return;
+        mCurrentSubpageControllers.addFirst(controller);
+        displayCurrentSubpageInStack(/* onPreviousPageRemoved= */ null);
+    }
+
+    private void displayCurrentSubpageInStack(@Nullable Runnable onPreviousPageRemoved) {
+        assert !mCurrentSubpageControllers.isEmpty();
+        PageInfoSubpageController currentSubpageController = mCurrentSubpageControllers.peekFirst();
+        CharSequence title = currentSubpageController.getSubpageTitle();
+        View subview =
+                currentSubpageController.getCurrentSubpageView() != null
+                        ? currentSubpageController.getCurrentSubpageView()
+                        : currentSubpageController.createViewForSubpage(mContainer);
+
         if (subview != null) {
-            mContainer.showPage(subview, title, null);
+            mContainer.showPage(subview, title, onPreviousPageRemoved);
         }
     }
 
     /** Exits the subpage of the current controller. */
     @Override
     public void exitSubpage() {
-        if (mCurrentSubpageController == null) return;
-        mContainer.showPage(
-                mView,
-                null,
+        if (mCurrentSubpageControllers.isEmpty()) return;
+        PageInfoSubpageController previousSubpageController =
+                mCurrentSubpageControllers.removeFirst();
+        Runnable onPreviousPageRemoved =
                 () -> {
-                    // The PageInfo dialog can get dismissed during the page change animation.
-                    // In that case mSubpageController will already be null.
-                    if (mCurrentSubpageController == null) return;
-                    mCurrentSubpageController.onSubpageRemoved();
-                    mCurrentSubpageController.updateRowIfNeeded();
-                    mCurrentSubpageController = null;
-                });
+                    previousSubpageController.onSubpageRemoved();
+                    previousSubpageController.updateRowIfNeeded();
+                };
+
+        if (mCurrentSubpageControllers.isEmpty()) {
+            mContainer.showPage(mView, null, onPreviousPageRemoved);
+        } else {
+            displayCurrentSubpageInStack(onPreviousPageRemoved);
+        }
     }
 
     @Override
-    public @Nullable Activity getActivity() {
-        return mWindowAndroid.getActivity().get();
+    public Activity getActivity() {
+        return assertNonNull(mWindowAndroid.getActivity().get());
     }
 
     @Override

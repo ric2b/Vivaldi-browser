@@ -364,4 +364,3 @@ Where permissible by law, CA owners must notify _chrome-root-program_ _[at]_ _go
 * other change control events involving PKI components that would materially affect the ongoing operations or perceived trustworthiness of a CA certificate included in the Chrome Root Store (e.g., changes to operational location(s)).
 
 Not limited to the circumstances above, the Chrome Root Program reserves the right to require re-application to the Chrome Root Store.
-

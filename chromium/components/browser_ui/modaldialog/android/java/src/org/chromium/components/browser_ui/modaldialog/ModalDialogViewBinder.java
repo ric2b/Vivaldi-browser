@@ -48,6 +48,8 @@ public class ModalDialogViewBinder
             assert model.get(ModalDialogProperties.MESSAGE_PARAGRAPH_1) == null
                     : "Do not use MESSAGE_PARAGRAPH_1 and MESSAGE_PARAGRAPHS at the same time.";
             view.setMessageParagraphs(model.get(ModalDialogProperties.MESSAGE_PARAGRAPHS));
+        } else if (ModalDialogProperties.MENU_ITEMS == propertyKey) {
+            view.setMenuItems(model.get(ModalDialogProperties.MENU_ITEMS));
         } else if (ModalDialogProperties.BUTTON_GROUP_BUTTON_SPEC_LIST == propertyKey) {
             assert checkFilterTouchConsistency(model);
             assert checkDefaultButtonsNotCombinedWithButtonGroup(model);
@@ -162,6 +164,8 @@ public class ModalDialogViewBinder
         } else if (ModalDialogProperties.CHANGE_CUSTOM_VIEW_OR_BUTTONS == propertyKey) {
             // Intentionally left empty since this is a property used for switching button group to
             // default buttons, or switching custom view.
+        } else if (ModalDialogProperties.DISABLE_SCRIM == propertyKey) {
+            // Intentionally left empty since this is a property used for the dialog container.
         } else {
             assert false : "Unhandled property detected in ModalDialogViewBinder!";
         }

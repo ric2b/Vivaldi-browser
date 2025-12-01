@@ -14,8 +14,10 @@
 #include "base/feature_list.h"
 #include "base/notimplemented.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/browser/permission_settings_registry.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/page_info/android/page_info_client.h"
 #include "components/page_info/core/features.h"
 #include "components/page_info/page_info.h"
@@ -29,9 +31,9 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "device/vr/buildflags/buildflags.h"
+#include "media/base/media_switches.h"
 #include "net/base/features.h"
 #include "services/network/public/cpp/features.h"
-#include "ui/android/ui_android_features.h"
 #include "url/origin.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
@@ -146,7 +148,13 @@ void PageInfoControllerAndroid::SetPermissionInfo(
   // a particular order, but only if their value is different from the
   // default. This order comes from https://crbug.com/610358.
   std::vector<ContentSettingsType> permissions_to_display;
-  permissions_to_display.push_back(ContentSettingsType::GEOLOCATION);
+  if (base::FeatureList::IsEnabled(
+          content_settings::features::kApproximateGeolocationPermission)) {
+    permissions_to_display.push_back(
+        ContentSettingsType::GEOLOCATION_WITH_OPTIONS);
+  } else {
+    permissions_to_display.push_back(ContentSettingsType::GEOLOCATION);
+  }
   permissions_to_display.push_back(ContentSettingsType::MEDIASTREAM_CAMERA);
   permissions_to_display.push_back(ContentSettingsType::MEDIASTREAM_MIC);
   permissions_to_display.push_back(ContentSettingsType::NOTIFICATIONS);
@@ -154,7 +162,8 @@ void PageInfoControllerAndroid::SetPermissionInfo(
   permissions_to_display.push_back(ContentSettingsType::IMAGES);
   permissions_to_display.push_back(ContentSettingsType::JAVASCRIPT);
   permissions_to_display.push_back(ContentSettingsType::POPUPS);
-  if (base::FeatureList::IsEnabled(ui::kAndroidWindowManagementWebApi)) {
+  if (base::FeatureList::IsEnabled(
+          permissions::features::kAndroidWindowManagementWebApi)) {
     permissions_to_display.push_back(ContentSettingsType::WINDOW_MANAGEMENT);
   }
   permissions_to_display.push_back(ContentSettingsType::ADS);
@@ -178,22 +187,30 @@ void PageInfoControllerAndroid::SetPermissionInfo(
     permissions_to_display.push_back(
         ContentSettingsType::FEDERATED_IDENTITY_API);
   }
+  if (base::FeatureList::IsEnabled(media::kAutoPictureInPictureAndroid)) {
+    permissions_to_display.push_back(
+        ContentSettingsType::AUTO_PICTURE_IN_PICTURE);
+  }
   permissions_to_display.push_back(ContentSettingsType::STORAGE_ACCESS);
   if (base::FeatureList::IsEnabled(
           network::features::kLocalNetworkAccessChecks)) {
     permissions_to_display.push_back(ContentSettingsType::LOCAL_NETWORK_ACCESS);
   }
 
-  std::map<ContentSettingsType, ContentSetting>
+  std::map<ContentSettingsType, /*allowed*/ bool>
       user_specified_settings_to_display;
 
   for (const auto& permission : permission_info_list) {
     if (base::Contains(permissions_to_display, permission.type)) {
-      std::optional<ContentSetting> setting_to_display =
+      std::optional<PermissionSetting> setting_to_display =
           GetSettingToDisplay(permission);
       if (setting_to_display) {
+        auto* info =
+            content_settings::PermissionSettingsRegistry::GetInstance()->Get(
+                permission.type);
+
         user_specified_settings_to_display[permission.type] =
-            *setting_to_display;
+            info->delegate().IsAnyPermissionAllowed(*setting_to_display);
       }
     }
   }
@@ -210,7 +227,7 @@ void PageInfoControllerAndroid::SetPermissionInfo(
           ConvertUTF16ToJavaString(env, setting_title),
           ConvertUTF16ToJavaString(env, setting_title_mid_sentence),
           static_cast<jint>(permission),
-          static_cast<jint>(user_specified_settings_to_display[permission]));
+          user_specified_settings_to_display[permission]);
     }
   }
 
@@ -229,11 +246,10 @@ void PageInfoControllerAndroid::SetPermissionInfo(
   Java_PageInfoController_updatePermissionDisplay(env, controller_jobject_);
 }
 
-std::optional<ContentSetting> PageInfoControllerAndroid::GetSettingToDisplay(
+std::optional<PermissionSetting> PageInfoControllerAndroid::GetSettingToDisplay(
     const PageInfo::PermissionInfo& permission) {
   // All permissions should be displayed if they are non-default.
-  if (permission.setting != CONTENT_SETTING_DEFAULT &&
-      permission.setting != permission.default_setting) {
+  if (permission.setting && permission.setting != permission.default_setting) {
     return permission.setting;
   }
 
@@ -256,6 +272,12 @@ std::optional<ContentSetting> PageInfoControllerAndroid::GetSettingToDisplay(
       return permission.default_setting;
   } else if (permission.type == ContentSettingsType::FILE_SYSTEM_WRITE_GUARD) {
     // The file editing permission should show up if there are any open files.
+    return permission.default_setting;
+  } else if (permission.type == ContentSettingsType::AUTO_PICTURE_IN_PICTURE) {
+    // The auto-pip permission should always display the default setting if it
+    // is showing up in Page Info before it's set by the user. Logic for whether
+    // the setting should show up in Page Info is in ShouldShowPermission in
+    // page_info.cc.
     return permission.default_setting;
   }
 

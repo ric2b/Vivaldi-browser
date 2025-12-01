@@ -2808,6 +2808,59 @@ cl_mem CL_API_CALL clCreateImageWithProperties(cl_context context,
     return object;
 }
 
+// cl_khr_external_memory
+cl_int CL_API_CALL clEnqueueAcquireExternalMemObjectsKHR(cl_command_queue command_queue,
+                                                         cl_uint num_mem_objects,
+                                                         const cl_mem *mem_objects,
+                                                         cl_uint num_events_in_wait_list,
+                                                         const cl_event *event_wait_list,
+                                                         cl_event *event)
+{
+    CL_EVENT(EnqueueAcquireExternalMemObjectsKHR,
+             "command_queue = 0x%016" PRIxPTR ", num_mem_objects = %u, mem_objects = 0x%016" PRIxPTR
+             ", num_events_in_wait_list = %u, event_wait_list = 0x%016" PRIxPTR
+             ", event = 0x%016" PRIxPTR "",
+             (uintptr_t)command_queue, num_mem_objects, (uintptr_t)mem_objects,
+             num_events_in_wait_list, (uintptr_t)event_wait_list, (uintptr_t)event);
+
+    ANGLE_CL_VALIDATE_ERROR(EnqueueAcquireExternalMemObjectsKHR, command_queue, num_mem_objects,
+                            mem_objects, num_events_in_wait_list, event_wait_list, event);
+
+    cl::gClErrorTls = CL_SUCCESS;
+    cl_int returnValue =
+        EnqueueAcquireExternalMemObjectsKHR(command_queue, num_mem_objects, mem_objects,
+                                            num_events_in_wait_list, event_wait_list, event);
+    ANGLE_CAPTURE_CL(EnqueueAcquireExternalMemObjectsKHR, true, command_queue, num_mem_objects,
+                     mem_objects, num_events_in_wait_list, event_wait_list, event, returnValue);
+    return returnValue;
+}
+
+cl_int CL_API_CALL clEnqueueReleaseExternalMemObjectsKHR(cl_command_queue command_queue,
+                                                         cl_uint num_mem_objects,
+                                                         const cl_mem *mem_objects,
+                                                         cl_uint num_events_in_wait_list,
+                                                         const cl_event *event_wait_list,
+                                                         cl_event *event)
+{
+    CL_EVENT(EnqueueReleaseExternalMemObjectsKHR,
+             "command_queue = 0x%016" PRIxPTR ", num_mem_objects = %u, mem_objects = 0x%016" PRIxPTR
+             ", num_events_in_wait_list = %u, event_wait_list = 0x%016" PRIxPTR
+             ", event = 0x%016" PRIxPTR "",
+             (uintptr_t)command_queue, num_mem_objects, (uintptr_t)mem_objects,
+             num_events_in_wait_list, (uintptr_t)event_wait_list, (uintptr_t)event);
+
+    ANGLE_CL_VALIDATE_ERROR(EnqueueReleaseExternalMemObjectsKHR, command_queue, num_mem_objects,
+                            mem_objects, num_events_in_wait_list, event_wait_list, event);
+
+    cl::gClErrorTls = CL_SUCCESS;
+    cl_int returnValue =
+        EnqueueReleaseExternalMemObjectsKHR(command_queue, num_mem_objects, mem_objects,
+                                            num_events_in_wait_list, event_wait_list, event);
+    ANGLE_CAPTURE_CL(EnqueueReleaseExternalMemObjectsKHR, true, command_queue, num_mem_objects,
+                     mem_objects, num_events_in_wait_list, event_wait_list, event, returnValue);
+    return returnValue;
+}
+
 // cl_khr_icd
 cl_int CL_API_CALL clIcdGetPlatformIDsKHR(cl_uint num_entries,
                                           cl_platform_id *platforms,
@@ -2825,6 +2878,35 @@ cl_int CL_API_CALL clIcdGetPlatformIDsKHR(cl_uint num_entries,
     cl_int returnValue = IcdGetPlatformIDsKHR(num_entries, platforms, num_platforms);
     ANGLE_CAPTURE_CL(IcdGetPlatformIDsKHR, true, num_entries, platforms, num_platforms,
                      returnValue);
+    return returnValue;
+}
+
+void *CL_API_CALL clIcdGetFunctionAddressForPlatformKHR(cl_platform_id platform,
+                                                        const char *func_name)
+{
+    CL_EVENT(IcdGetFunctionAddressForPlatformKHR,
+             "platform = 0x%016" PRIxPTR ", func_name = 0x%016" PRIxPTR "", (uintptr_t)platform,
+             (uintptr_t)func_name);
+
+    cl::gClErrorTls = CL_SUCCESS;
+    ANGLE_CL_VALIDATE_POINTER(IcdGetFunctionAddressForPlatformKHR, platform, func_name);
+
+    void *returnValue = IcdGetFunctionAddressForPlatformKHR(platform, func_name);
+    ANGLE_CAPTURE_CL(IcdGetFunctionAddressForPlatformKHR, true, platform, func_name, returnValue);
+    return returnValue;
+}
+
+cl_int CL_API_CALL clIcdSetPlatformDispatchDataKHR(cl_platform_id platform, void *dispatch_data)
+{
+    CL_EVENT(IcdSetPlatformDispatchDataKHR,
+             "platform = 0x%016" PRIxPTR ", dispatch_data = 0x%016" PRIxPTR "", (uintptr_t)platform,
+             (uintptr_t)dispatch_data);
+
+    ANGLE_CL_VALIDATE_ERROR(IcdSetPlatformDispatchDataKHR, platform, dispatch_data);
+
+    cl::gClErrorTls    = CL_SUCCESS;
+    cl_int returnValue = IcdSetPlatformDispatchDataKHR(platform, dispatch_data);
+    ANGLE_CAPTURE_CL(IcdSetPlatformDispatchDataKHR, true, platform, dispatch_data, returnValue);
     return returnValue;
 }
 

@@ -8,6 +8,7 @@
 #include <locale>
 #include <map>
 
+#include "base/containers/fixed_flat_map.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -40,20 +41,22 @@ void reduce_spaces(std::string& s) {
 
 // Turn strftime type format patterns into moment.js compatible ones.
 // See: https://github.com/benjaminoakes/moment-strftime for more info.
-std::map<char, std::string> dateFormatMods = {
-    {'a', "dddd"},     {'A', "dddd"}, {'B', "MMMM"},       {'c', "lll"},
-    {'d', "DD"},       {'e', "D"},    {'F', "YYYY-MM-DD"}, {'H', "HH"},
-    {'I', "hh"},       {'j', "DDDD"}, {'k', "H"},          {'l', "h"},
-    {'m', "MM"},       {'M', "mm"},   {'p', "A"},          {'S', "ss"},
-    {'T', "HH:mm:ss"}, {'u', "E"},    {'w', "d"},          {'W', "WW"},
-    {'x', "ll"},       {'X', "LTS"},  {'y', "YY"},         {'Y', "YYYY"},
-    {'z', ""},         {'Z', ""},     {'f', "SSS"},        {'r', "hh:mm:ss A"}};
+constexpr auto kDateFormatMods = base::MakeFixedFlatMap<char, std::string>(
+    {{'a', "dddd"},       {'A', "dddd"},     {'B', "MMMM"},
+     {'c', "lll"},        {'d', "DD"},       {'e', "D"},
+     {'F', "YYYY-MM-DD"}, {'H', "HH"},       {'I', "hh"},
+     {'j', "DDDD"},       {'k', "H"},        {'l', "h"},
+     {'m', "MM"},         {'M', "mm"},       {'p', "A"},
+     {'S', "ss"},         {'T', "HH:mm:ss"}, {'u', "E"},
+     {'w', "d"},          {'W', "WW"},       {'x', "ll"},
+     {'X', "LTS"},        {'y', "YY"},       {'Y', "YYYY"},
+     {'z', ""},           {'Z', ""},         {'f', "SSS"},
+     {'r', "hh:mm:ss A"}});
 
 // TODO: Three known languages that still might need special treatment are
 // Tongan, Farsi and Vietnamese, out of 92 tested so far.
 std::string getMomentJsFormatString(const char* fmt, bool short_date) {
   std::string s = "";
-  std::map<char, std::string>::iterator it;
   char c;
 
   for (int i = 0; fmt[i] != '\0'; i++) {
@@ -79,8 +82,8 @@ std::string getMomentJsFormatString(const char* fmt, bool short_date) {
         continue;
       }
 
-      it = dateFormatMods.find(c);
-      if (it != dateFormatMods.end()) {
+      auto it = kDateFormatMods.find(c);
+      if (it != kDateFormatMods.end()) {
         s += it->second;
       }
       i++;

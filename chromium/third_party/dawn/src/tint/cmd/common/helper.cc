@@ -84,11 +84,11 @@ auto& operator<<(STREAM& out, InputFormat value) {
 
 InputFormat InputFormatFromFilename(const std::string& filename) {
     auto input_format = InputFormat::kUnknown;
-    if (tint::HasSuffix(filename, ".wgsl")) {
+    if (filename.ends_with(".wgsl")) {
         input_format = InputFormat::kWgsl;
-    } else if (tint::HasSuffix(filename, ".spv")) {
+    } else if (filename.ends_with(".spv")) {
         input_format = InputFormat::kSpirvBin;
-    } else if (tint::HasSuffix(filename, ".spvasm")) {
+    } else if (filename.ends_with(".spvasm")) {
         input_format = InputFormat::kSpirvAsm;
     }
     return input_format;
@@ -111,35 +111,31 @@ void PrintBindings(tint::inspector::Inspector& inspector, const std::string& ep_
 
 #if TINT_BUILD_SPV_READER
 tint::Program ReadSpirv(const std::vector<uint32_t>& data, const LoadProgramOptions& opts) {
-    if (opts.use_ir_reader) {
 #if TINT_BUILD_WGSL_WRITER
-        // Parse the SPIR-V binary to a core Tint IR module.
-        auto result = tint::spirv::reader::ReadIR(data, opts.spirv_reader_options);
-        if (result != Success) {
-            std::cerr << "Failed to parse SPIR-V: " << result.Failure() << "\n";
-            exit(1);
-        }
-
-        // Convert the IR module to a Program.
-        tint::wgsl::writer::ProgramOptions writer_options;
-        writer_options.allow_non_uniform_derivatives =
-            opts.spirv_reader_options.allow_non_uniform_derivatives;
-        writer_options.allowed_features = opts.spirv_reader_options.allowed_features;
-        auto prog_result = tint::wgsl::writer::ProgramFromIR(result.Get(), writer_options);
-        if (prog_result != Success) {
-            std::cerr << "Failed to convert IR to Program:\n\n" << prog_result.Failure() << "\n\n";
-            std::cerr << tint::core::ir::Disassembler(result.Get()).Plain() << "\n";
-            exit(1);
-        }
-
-        return prog_result.Move();
-#else
-        std::cerr << "Tint not built with the WGSL writer enabled\n";
+    // Parse the SPIR-V binary to a core Tint IR module.
+    auto result = tint::spirv::reader::ReadIR(data, opts.spirv_reader_options);
+    if (result != Success) {
+        std::cerr << "Failed to parse SPIR-V: " << result.Failure() << "\n";
         exit(1);
-#endif  // TINT_BUILD_WGSL_READER
-    } else {
-        return tint::spirv::reader::Read(data, opts.spirv_reader_options);
     }
+
+    // Convert the IR module to a Program.
+    tint::wgsl::writer::Options writer_options;
+    writer_options.allow_non_uniform_derivatives =
+        opts.spirv_reader_options.allow_non_uniform_derivatives;
+    writer_options.allowed_features = opts.spirv_reader_options.allowed_features;
+    auto prog_result = tint::wgsl::writer::ProgramFromIR(result.Get(), writer_options);
+    if (prog_result != Success) {
+        std::cerr << "Failed to convert IR to Program:\n\n" << prog_result.Failure() << "\n\n";
+        std::cerr << tint::core::ir::Disassembler(result.Get()).Plain() << "\n";
+        exit(1);
+    }
+
+    return prog_result.Move();
+#else
+    std::cerr << "Tint not built with the WGSL writer enabled\n";
+    exit(1);
+#endif  // TINT_BUILD_WGSL_READER
 }
 #endif  // TINT_BUILD_SPV_READER
 
@@ -147,8 +143,7 @@ tint::Program ReadSpirv(const std::vector<uint32_t>& data, const LoadProgramOpti
 
 void PrintWGSL(std::ostream& out, const tint::Program& program) {
 #if TINT_BUILD_WGSL_WRITER
-    tint::wgsl::writer::Options options;
-    auto result = tint::wgsl::writer::Generate(program, options);
+    auto result = tint::wgsl::writer::Generate(program);
     if (result == Success) {
         out << "\n" << result->wgsl << "\n";
     } else {
@@ -261,10 +256,6 @@ ProgramInfo LoadProgramInfo(const LoadProgramOptions& opts) {
         // Flush any diagnostics written to stderr. We depend on these being emitted to the console
         // before the program for end-to-end tests.
         fflush(stderr);
-    }
-
-    if (!info.program.IsValid()) {
-        exit(1);
     }
 
     return info;

@@ -1,0 +1,87 @@
+// Copyright 2025 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";  // Our OSS build does not support editions.
+
+package fedsql;
+
+import "google/protobuf/any.proto";
+import "fcp/protos/confidentialcompute/sql_query.proto";
+import "fcp/protos/confidentialcompute/windowing_schedule.proto";
+
+option java_package = "com.google.intelligence.fcp.confidentialcompute";
+option java_outer_classname = "SelectionCriteriaProto";
+
+// Deprecated. Configuration describing how clients should contribute inputs
+// into aggregation windows.
+message ContributionStrategy {
+  // When enabled, clients will contribute their full input dataset on each
+  // participation. When disabled (default), clients contribute inputs into
+  // each aggregation window at-most once.
+  bool recontribute_inputs_each_participation = 1;
+
+  reserved 2, 3, 4;
+}
+
+message EventTimeColumnConfig {
+  // The column in the example store that is used for event time in the query.
+  string event_time_column_name = 1;
+
+  enum EventTimeFormat {
+    EVENT_TIME_FORMAT_UNSPECIFIED = 0;
+    LOCAL_DATE_DECIMAL = 1;
+    UTC_DATE_DECIMAL = 2;
+  }
+
+  // The data format for event time.
+  EventTimeFormat event_time_format = 2;
+}
+
+// Selection criteria sent to clients for SQL tasks. Contains the query that the
+// FedSqlExampleStore should execute before handing results off to TensorFlow.
+message SelectionCriteria {
+  // The SQL query executed by each client.
+  //
+  // Queries sent to clients have some constraints:
+  // * The result columns are constrained to types which can be expressed in
+  //   a TensorFlow `Example` proto, as that is how results are serialized to
+  //   pass into the cross-client aggregation plan.
+  //
+  fcp.confidentialcompute.SqlQuery client_query = 1;
+
+  // Wrapped selection criteria to pass to the app ExampleStore. ExampleStores
+  // define their own selection criteria messages, and the FedSQL handler merely
+  // passes the message along.
+  google.protobuf.Any inner_selection_criteria = 2;
+
+  // Minimum SQL client library version required to execute the plan.
+  int32 min_client_sql_version = 3;
+
+  // Deprecated. Example-level SWOR aggregation windows won't be needed once
+  // suuport for verifiable custom DP units is implemented.
+  ContributionStrategy contribution_strategy = 4 [deprecated = true];
+
+  // The SQL queries executed by each client.
+  //
+  // These queries have the same constraints as a query specified with
+  // `client_query`. Only one of `client_query` and `client_queries` should be
+  // set. This field should only be used by tasks using the lightweight client.
+  fcp.confidentialcompute.SqlQuerySet client_queries = 5;
+
+  // Map of query names to the output columns used for event time in the SQL
+  // queries.
+  map<string, EventTimeColumnConfig> event_time_column_configs = 6;
+
+  reserved 7, 8;
+}

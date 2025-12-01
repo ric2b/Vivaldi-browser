@@ -43,6 +43,7 @@
 #include "api/units/data_rate.h"
 #include "api/units/time_delta.h"
 #include "api/units/timestamp.h"
+#include "api/video/encoded_image.h"
 #include "api/video/recordable_encoded_frame.h"
 #include "api/video/video_content_type.h"
 #include "api/video/video_sink_interface.h"
@@ -366,6 +367,8 @@ struct MediaSenderInfo {
   // https://w3c.github.io/webrtc-stats/#dom-rtcoutboundrtpstreamstats-retransmittedbytessent
   uint64_t retransmitted_bytes_sent = 0;
   int packets_sent = 0;
+  // https://w3c.github.io/webrtc-stats/#dom-rtcoutboundrtpstreamstats-packetssentwithect1
+  int64_t packets_sent_with_ect1 = 0;
   // https://w3c.github.io/webrtc-stats/#dom-rtcoutboundrtpstreamstats-retransmittedpacketssent
   uint64_t retransmitted_packets_sent = 0;
   // https://w3c.github.io/webrtc-stats/#dom-rtcoutboundrtpstreamstats-nackcount
@@ -429,6 +432,10 @@ struct MediaReceiverInfo {
   // https://w3c.github.io/webrtc-stats/#dom-rtcinboundrtpstreamstats-headerbytesreceived
   int64_t header_and_padding_bytes_received = 0;
   int packets_received = 0;
+  // https://w3c.github.io/webrtc-stats/#dom-rtcreceivedrtpstreamstats-packetsreceivedwithect1
+  int64_t packets_received_with_ect1 = 0;
+  // https://w3c.github.io/webrtc-stats/#dom-rtcreceivedrtpstreamstats-packetsreceivedwithce
+  int64_t packets_received_with_ce = 0;
   int packets_lost = 0;
 
   std::optional<uint64_t> retransmitted_bytes_received;
@@ -590,8 +597,12 @@ struct VideoSenderInfo : public MediaSenderInfo {
   // https://w3c.github.io/webrtc-stats/#dom-rtcoutboundrtpstreamstats-totalencodedbytestarget
   uint64_t total_encoded_bytes_target = 0;
   bool has_entered_low_resolution = false;
+  // https://w3c.github.io/webrtc-stats/#dom-rtcinboundrtpstreamstats-qpsum
   std::optional<uint64_t> qp_sum;
   VideoContentType content_type = VideoContentType::UNSPECIFIED;
+  // https://w3c.github.io/webrtc-stats/#dom-rtcoutboundrtpstreamstats-psnrsum
+  webrtc::EncodedImage::Psnr psnr_sum;
+  uint32_t psnr_measurements = 0;
   uint32_t frames_sent = 0;
   // https://w3c.github.io/webrtc-stats/#dom-rtcvideosenderstats-hugeframessent
   uint32_t huge_frames_sent = 0;
@@ -820,6 +831,10 @@ struct MediaChannelParameters {
 
   std::vector<Codec> codecs;
   std::vector<RtpExtension> extensions;
+  // RTCP feedback type used for congestion control for this media channel.
+  // If transport sequence numbers are used, 'extensions' will include
+  // kTransportSequenceNumberUri.
+  std::optional<RtcpFeedbackType> rtcp_cc_ack_type;
   // For a send stream this is true if we've negotiated a send direction,
   // for a receive stream this is true if we've negotiated a receive direction.
   bool is_stream_active = true;

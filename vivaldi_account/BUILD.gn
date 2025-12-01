@@ -36,6 +36,7 @@ source_set("vivaldi_account") {
 
     deps += [
       "//chrome/android:jni_headers",
+      "//chrome/common:buildflags",
     ]
   }
 
@@ -56,6 +57,7 @@ source_set("vivaldi_account_manager_factory") {
   deps = [
     "//chrome/common:buildflags",
     "//components/keyed_service/content",
+    "//components/password_manager/core/browser",
     "//content/public/browser",
   ]
 }

@@ -20,6 +20,7 @@ source_set("resource_reader") {
   deps = [
     ":data_url_utils",
     "//base:base",
+    "//extensions/buildflags",
     "//third_party/widevine/cdm:buildflags",
   ]
 }

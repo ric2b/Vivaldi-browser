@@ -182,6 +182,7 @@ bool IsValidRole(ax::mojom::blink::Role role) {
     case ax::mojom::blink::Role::kKeyboard:
     case ax::mojom::blink::Role::kImeCandidate:
     case ax::mojom::blink::Role::kListGrid:
+    case ax::mojom::blink::Role::kMenuItemSeparator:
     case ax::mojom::blink::Role::kPane:
     case ax::mojom::blink::Role::kPdfActionableHighlight:
     case ax::mojom::blink::Role::kPdfRoot:
@@ -982,18 +983,6 @@ Node* AXObject::GetParentNodeForComputeParent(AXObjectCacheImpl& cache,
                : nullptr;
   }
 
-  if (RuntimeEnabledFeatures::SelectAccessibilityReparentInputEnabled()) {
-    if (auto* input = DynamicTo<HTMLInputElement>(node)) {
-      if (auto* select = input->FirstAncestorSelectElement()) {
-        if (input->IsFirstTextInputInAncestorSelect() && input->IsTextField()) {
-          // The first descendant <input> in a <select> is reparented to be a
-          // direct child of the <select> in the a11y tree.
-          return select;
-        }
-      }
-    }
-  }
-
   return CanComputeAsNaturalParent(parent) ? parent : nullptr;
 }
 
@@ -1410,6 +1399,9 @@ void AXObject::Serialize(ui::AXNodeData* node_data,
   // Always try to serialize child tree ids.
   SerializeChildTreeID(node_data);
 
+  SerializeAriaNotificationAttributes(
+      AXObjectCache().RetrieveAriaNotifications(this), node_data);
+
   // Return early. The following attributes are unnecessary for ignored nodes.
   // Exception: focusable ignored nodes are fully serialized, so that reasonable
   // verbalizations can be made if they actually receive focus.
@@ -1452,8 +1444,6 @@ void AXObject::Serialize(ui::AXNodeData* node_data,
   }
   SerializeOtherScreenReaderAttributes(node_data);
   SerializeMathContent(node_data);
-  SerializeAriaNotificationAttributes(
-      AXObjectCache().RetrieveAriaNotifications(this), node_data);
 }
 
 void AXObject::SerializeBoundingBoxAttributes(ui::AXNodeData& dst) const {
@@ -2780,7 +2770,9 @@ AXObject* AXObject::GetCommandForElement() const {
     const AtomicString& action =
         button_element->FastGetAttribute(html_names::kCommandAttr);
     if (!command_for->IsValidBuiltinPopoverCommand(
-            *button_element, HTMLButtonElement::GetCommandEventType(action))) {
+            *button_element,
+            HTMLButtonElement::GetCommandEventType(
+                action, command_for->GetDocument().GetExecutionContext()))) {
       return nullptr;
     }
 
@@ -2822,8 +2814,7 @@ AXObject* AXObject::GetInterestForTargetPopover() const {
     return nullptr;
   }
 
-  if (!RuntimeEnabledFeatures::HTMLInterestForAttributeEnabled(
-          GetElement()->GetDocument().GetExecutionContext())) {
+  if (!RuntimeEnabledFeatures::HTMLInterestForAttributeEnabled()) {
     return nullptr;
   }
 
@@ -3037,7 +3028,7 @@ void AXObject::SerializeTextInsertionDeletionOffsetAttributes(
     return;
   }
 
-  WTF::Vector<TextChangedOperation>* offsets =
+  Vector<TextChangedOperation>* offsets =
       AXObjectCache().GetFromTextOperationInNodeIdMap(AXObjectID());
   if (!offsets) {
     return;
@@ -3215,8 +3206,7 @@ ax::mojom::blink::Role AXObject::ComputeFinalRoleForSerialization() const {
   // get their role changed to dialog. This is computed before serialization
   // because there is a lot of other code which looks at kMenuListPopup which we
   // don't want to adjust for the popup being changed to a dialog.
-  if (role_ == ax::mojom::blink::Role::kMenuListPopup &&
-      RuntimeEnabledFeatures::CustomizableSelectEnabled()) {
+  if (role_ == ax::mojom::blink::Role::kMenuListPopup) {
     if (auto* parent = ParentObject()) {
       if (auto* select = DynamicTo<HTMLSelectElement>(parent->GetNode())) {
         if (select->IsAppearanceBasePicker() && select->IsInDialogMode()) {
@@ -4457,8 +4447,7 @@ bool AXObject::ComputeIsIgnoredButIncludedInTree() {
 
   // We need to keep the <select>'s author provided <button> in the tree despite
   // being ignored in order to use it to calculate a value for the <select>
-  if (RuntimeEnabledFeatures::CustomizableSelectEnabled() &&
-      IsInMenuListSubtree() && IsInert()) {
+  if (IsInMenuListSubtree() && IsInert()) {
     for (auto* ancestor = this;
          ancestor &&
          ancestor->RoleValue() != ax::mojom::blink::Role::kMenuListPopup;
@@ -5876,7 +5865,6 @@ const AXObject* AXObject::AncestorMenuList() const {
     if (ax_menu_list->IsMenuList()) {
       DCHECK(IsA<HTMLSelectElement>(ax_menu_list->GetNode()));
       DCHECK(To<HTMLSelectElement>(ax_menu_list->GetNode())->UsesMenuList());
-      DCHECK(!To<HTMLSelectElement>(ax_menu_list->GetNode())->IsMultiple());
       return ax_menu_list;
     }
   }
@@ -6085,7 +6073,7 @@ ax::mojom::blink::Role AXObject::DetermineAriaRole() const {
       role = ax::mojom::blink::Role::kTextFieldWithComboBox;
     } else if (auto* select_element =
                    DynamicTo<HTMLSelectElement>(*GetNode())) {
-      if (select_element->UsesMenuList() && !select_element->IsMultiple()) {
+      if (select_element->UsesMenuList()) {
         // This is a select element. Don't set the aria role for it.
         role = ax::mojom::blink::Role::kUnknown;
       }
@@ -6535,12 +6523,13 @@ AXObject* AXObject::UnignoredChildAtSlow(int index) const {
 }
 
 AXObject* AXObject::UnignoredNextSiblingSlow() const {
-  if (IsIgnored()) {
+  if (!IsIgnoredButIncludedInTree() && IsIgnored()) {
     // TODO(crbug.com/1407397): Make sure this no longer fires then turn this
     // block into CHECK(!IsIgnored());
     DUMP_WILL_BE_NOTREACHED()
         << "We don't support finding unignored siblings for ignored "
-           "objects because it is not clear whether to search for the "
+           "not-included in tree objects because it is not clear whether to "
+           "search for the "
            "sibling in the unignored tree or in the whole tree: "
         << this;
     return nullptr;
@@ -6580,9 +6569,10 @@ AXObject* AXObject::UnignoredNextSiblingSlow() const {
 }
 
 AXObject* AXObject::UnignoredPreviousSiblingSlow() const {
-  if (IsIgnored()) {
+  if (!IsIgnoredButIncludedInTree() && IsIgnored()) {
     NOTREACHED() << "We don't support finding unignored siblings for ignored "
-                    "objects because it is not clear whether to search for the "
+                    "not-included in tree objects because it is not clear "
+                    "whether to search for the "
                     "sibling in the unignored tree or in the whole tree: "
                  << this;
   }
@@ -7164,8 +7154,10 @@ void AXObject::SetScrollOffset(const gfx::Point& offset) const {
     return;
 
   // TODO(bokan): This should potentially be a UserScroll.
+  // TODO(crbug.com/414556050): Pass the correct `ScrollSourceType`.
   area->SetScrollOffset(ScrollOffset(offset.OffsetFromOrigin()),
-                        mojom::blink::ScrollType::kProgrammatic);
+                        mojom::blink::ScrollType::kProgrammatic,
+                        cc::ScrollSourceType::kNone);
 }
 
 void AXObject::Scroll(ax::mojom::blink::Action scroll_action) const {
@@ -8178,7 +8170,6 @@ bool AXObject::SupportsNameFromContents(bool recursive,
     case ax::mojom::blink::Role::kGraphicsObject:
     case ax::mojom::blink::Role::kGraphicsSymbol:
     case ax::mojom::blink::Role::kGrid:
-    case ax::mojom::blink::Role::kGroup:
     case ax::mojom::blink::Role::kHeader:
     case ax::mojom::blink::Role::kIframePresentational:
     case ax::mojom::blink::Role::kIframe:
@@ -8286,6 +8277,18 @@ bool AXObject::SupportsNameFromContents(bool recursive,
     // ----- Conditional: contribute to ancestor only, unless focusable -------
     // Some objects can contribute their contents to ancestor names, but
     // only have their own name if they are focusable
+    case ax::mojom::blink::Role::kGroup:
+      // When kAXObjectSupportsNameFromAddressContents is enabled, address tags
+      // are allowed to contribute to their ancestors' accessible names
+      // (https://www.w3.org/TR/html-aria/#docconformance). All other Group
+      // objects should return false for now.
+      // TODO(crbug.com/443106926): investigate whether other Group objects
+      // should be eligible in the future.
+      if (!::features::IsAXObjectSupportsNameFromAddressContentEnabled() ||
+          !GetNode()->HasTagName(html_names::kAddressTag)) {
+        return false;
+      }
+      [[fallthrough]];
     case ax::mojom::blink::Role::kGenericContainer:
       if (IsA<HTMLBodyElement>(GetNode()) ||
           GetNode() == GetDocument()->documentElement()) {
@@ -8388,6 +8391,7 @@ bool AXObject::SupportsNameFromContents(bool recursive,
     case ax::mojom::blink::Role::kDirectoryDeprecated:
     case ax::mojom::blink::Role::kKeyboard:
     case ax::mojom::blink::Role::kImeCandidate:
+    case ax::mojom::blink::Role::kMenuItemSeparator:
     case ax::mojom::blink::Role::kListGrid:
     case ax::mojom::blink::Role::kPane:
     case ax::mojom::blink::Role::kPdfActionableHighlight:
@@ -8819,10 +8823,6 @@ bool operator==(const AXObject& first, const AXObject& second) {
     return true;
   }
   return false;
-}
-
-bool operator!=(const AXObject& first, const AXObject& second) {
-  return !(first == second);
 }
 
 bool operator<(const AXObject& first, const AXObject& second) {

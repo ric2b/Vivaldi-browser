@@ -38,6 +38,8 @@ class VivaldiLocationBar : public LocationBar {
 
   LocationBarModel* GetLocationBarModel() override;
 
+  std::optional<bubble_anchor_util::AnchorConfiguration> GetChipAnchor() override;
+
   void OnChanged() override {}
 
   void OnPopupVisibilityChanged() override {}

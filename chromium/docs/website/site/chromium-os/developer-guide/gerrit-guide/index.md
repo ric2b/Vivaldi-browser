@@ -43,12 +43,7 @@ Follow the steps in [Chromium's Gerrit Guide](/developers/gerrit-guide).
 
 **For Googlers:**
 
-1.  Opt into the new auth system to have `git cl` authenticate
-    using the corp SSO protocol:
-    ```
-    git config --global depot-tools.useNewAuthStack 1
-    ```
-2.  Ensure that `repo` authenticates to chromium and chrome-internal using
+1.  Ensure that `repo` authenticates to chromium and chrome-internal using
     the corp SSO protocol. This is required to recognise you as a Googler
     and will only work from a Google corp machine:
     ```
@@ -57,19 +52,18 @@ Follow the steps in [Chromium's Gerrit Guide](/developers/gerrit-guide).
     git config --global --replace-all url.sso://chrome-internal.insteadOf https://chrome-internal.googlesource.com
     git config --global --add url.sso://chrome-internal.insteadOf https://chrome-internal-review.googlesource.com
     ```
-3.  Run `gcert` once a day to authenticate your account.
-4.  **Verification:** Run
+2.  Run `gcert` once a day to authenticate your account.
+3.  **Verification:** Run
     `git ls-remote https://chrome-internal.googlesource.com/chromeos/manifest-internal.git`
 
 **For Partners:**
 
-1.  Load <https://chrome-internal.googlesource.com/new-password>
+1.  Load <https://www.googlesource.com/new-password>
     1.  **Make sure you are logged into your corp-partner account.**
     2.  **You can verify this by ensuring that the Username field looks
                 like git-&lt;user&gt;corp-partner.google.com**
 3.  Follow the directions on the new-password page to append to your
-    .gitcookies file. You should click the radio button labeled "only
-    chrome-internal.googlesource.com" if it exists.
+    .gitcookies file.
 4.  **Verification:** Find a repo in your local manifest and run `git
     ls-remote https://chrome-internal.googlesource.com/<REPO_PATH>.git` -
     Example: `git ls-remote

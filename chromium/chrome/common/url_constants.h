@@ -147,11 +147,6 @@ inline constexpr char kChromeOsHelpViaWebUIURL[] =
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
-// The isolated-app: scheme is used for Isolated Web Apps. A public explainer
-// can be found here: https://github.com/reillyeon/isolated-web-apps
-inline constexpr char kIsolatedAppScheme[] = "isolated-app";
-inline constexpr char16_t kIsolatedAppSchemeUtf16[] = u"isolated-app";
-
 // The chrome-native: scheme is used show pages rendered with platform specific
 // widgets instead of using HTML.
 inline constexpr char kChromeNativeScheme[] = "chrome-native";
@@ -325,6 +320,10 @@ inline constexpr char kGoogleAccountWorkAddressURL[] =
     "https://myaccount.google.com/address/"
     "work?utm_source=chrome&utm_campaign=manage_addresses";
 
+// URL of the change Google Account name page.
+inline constexpr char kGoogleAccountNameEmailAddressEditURL[] =
+    "https://myaccount.google.com/personal-info";
+
 // URL of the two factor authentication setup required intersitial.
 inline constexpr char kGoogleTwoFactorIntersitialURL[] =
     "https://myaccount.google.com/interstitials/twosvrequired";
@@ -387,7 +386,12 @@ inline constexpr char kInsecureDownloadBlockingLearnMoreUrl[] =
 inline constexpr char16_t kMyActivityUrlInClearBrowsingData[] =
     u"https://myactivity.google.com/myactivity?utm_source=chrome_cbd";
 
-// The URL for "Your Gemini Apps Activity" page.
+// The URL for the Gemini Personal Context page.
+inline constexpr char16_t kGeminiPersonalContextUrl[] =
+    u"https://gemini.google.com/corp/saved-info";
+
+// The URL for "Your Gemini Apps Activity" page.inline constexpr char16_t
+// kMyActivityGeminiAppsUrl[] =
 inline constexpr char16_t kMyActivityGeminiAppsUrl[] =
     u"https://myactivity.google.com/product/gemini";
 
@@ -406,6 +410,10 @@ inline constexpr char kPageInfoHelpCenterURL[] =
 #else
     "https://support.google.com/chrome?p=ui_security_indicator";
 #endif
+
+// Help center article URL for automated password change.
+inline constexpr char16_t kPasswordChangeLearnMoreURL[] =
+    u"https://support.google.com/chrome?p=automatedpasswordchange";
 
 // Help URL for the bulk password check.
 inline constexpr char kPasswordCheckLearnMoreURL[] =
@@ -1004,6 +1012,13 @@ inline constexpr char kChromeAppsDeprecationLearnMoreURL[] =
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
 inline constexpr char kChromeRootStoreSettingsHelpCenterURL[] =
     "https://support.google.com/chrome?p=root_store";
+#endif
+
+#if BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
+// TODO(crbug.com/436926181): Make sure the URL is not a dead link.
+// "Learn more" URL for how to save PDF to Google Drive from the PDF viewer.
+inline constexpr char kPdfViewerSaveToDriveHelpCenterURL[] =
+    "https://support.google.com/drive?p=save_from_chrome";
 #endif
 
 // Please do not append entries here. See the comments at the top of the file.

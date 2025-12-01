@@ -57,8 +57,7 @@ can be published on the Chrome Web Store and installed manually for early
 testing. Confidential extensions can be enabled only for trusted testers so they
 are invisible to the public. Extensions can use content scripts to do script
 injection and can use page actions and browser actions to provide UI outside the
-content area. Extensions can also use NaCL, which has full access to the Pepper
-API.
+content area.
 
 Component extensions (i.e. extensions automatically installed into Chrome) are
 also a prototyping option, but should only be used if there is something needed

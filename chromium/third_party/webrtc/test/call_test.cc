@@ -58,6 +58,7 @@
 #include "modules/rtp_rtcp/source/rtp_packet_received.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/task_queue_for_test.h"
+#include "test/create_test_environment.h"
 #include "test/create_test_field_trials.h"
 #include "test/encoder_settings.h"
 #include "test/fake_decoder.h"
@@ -75,7 +76,7 @@ namespace test {
 
 CallTest::CallTest(absl::string_view field_trials)
     : field_trials_(CreateTestFieldTrials(field_trials)),
-      env_(CreateEnvironment(&field_trials_)),
+      env_(CreateTestEnvironment({.field_trials = &field_trials_})),
       send_env_(env_),
       recv_env_(env_),
       audio_send_config_(/*send_transport=*/nullptr),
@@ -346,6 +347,7 @@ void CallTest::CreateAudioAndFecSendConfigs(size_t num_audio_streams,
     audio_send_config.rtp.ssrc = VideoTestConstants::kAudioSendSsrc;
     AddRtpExtensionByUri(RtpExtension::kTransportSequenceNumberUri,
                          &audio_send_config.rtp.extensions);
+    audio_send_config.include_in_congestion_control_allocation = true;
 
     audio_send_config.send_codec_spec = AudioSendStream::Config::SendCodecSpec(
         VideoTestConstants::kAudioSendPayloadType,

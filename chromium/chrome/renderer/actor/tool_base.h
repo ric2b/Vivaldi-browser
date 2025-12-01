@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "chrome/common/actor.mojom-forward.h"
+#include "chrome/common/actor/task_id.h"
 #include "chrome/renderer/actor/journal.h"
 #include "third_party/blink/public/web/web_node.h"
 
@@ -26,7 +27,7 @@ class ToolBase {
  public:
   using ToolFinishedCallback = base::OnceCallback<void(mojom::ActionResultPtr)>;
   ToolBase(content::RenderFrame& frame,
-           Journal::TaskId task_id,
+           TaskId task_id,
            Journal& journal,
            mojom::ToolTargetPtr target,
            mojom::ObservedToolTargetPtr observed_target);
@@ -61,11 +62,21 @@ class ToolBase {
   // may happen asynchronously outside of the injected events.
   virtual base::TimeDelta ExecutionObservationDelay() const;
 
+  // Scrolls the target element into view if it's not already. If the target is
+  // a coordinate, the coordinate is updated to reflect the new location after
+  // scrolling.
+  virtual void EnsureTargetInView();
+
+  // Whether or not the tool supports page stability monitoring via paint
+  // stability tracking, which is currently only supported on a subset of
+  // interactions.
+  virtual bool SupportsPaintStability() const;
+
  protected:
   // Raw ref since this is owned by ToolExecutor whose lifetime is tied to
   // RenderFrame.
   base::raw_ref<content::RenderFrame> frame_;
-  Journal::TaskId task_id_;
+  TaskId task_id_;
   base::raw_ref<Journal> journal_;
   mojom::ToolTargetPtr target_;
   mojom::ObservedToolTargetPtr observed_target_;

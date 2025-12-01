@@ -12,7 +12,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "components/signin/internal/identity_manager/account_capabilities_constants.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
+#import "ios/chrome/browser/authentication/test/signin_earl_grey.h"
 #import "ios/chrome/browser/browser_container/ui_bundled/edit_menu_app_interface.h"
 #import "ios/chrome/browser/browser_container/ui_bundled/edit_menu_matchers.h"
 #import "ios/chrome/browser/explain_with_gemini/coordinator/explain_with_gemini_constants.h"
@@ -113,6 +113,8 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   AppLaunchConfiguration config;
   config.features_enabled_and_params.push_back(
       {kExplainGeminiEditMenu, {{{kExplainGeminiEditMenuParams, "2"}}}});
+  config.features_enabled_and_params.push_back(
+      {kBWGPromoConsent, {{{kBWGPromoConsentParams, "3"}}}});
   if ([self
           isRunningTest:@selector(MAYBE_testExplainWithGeminiInReadingMode)]) {
     config.features_enabled_and_params.push_back({kEnableReaderMode, {}});
@@ -245,9 +247,9 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   [self loadPage];
 
   // Open Reader Mode UI.
-  [ChromeEarlGrey showReaderMode];
-  GREYAssertTrue([ChromeEarlGrey waitUntilReaderModeWebStateIsReady],
-                 @"Reader mode content could not be loaded.");
+  GREYAssertTrue(
+      [ChromeEarlGrey showReaderModeAndWaitUntilReaderModeWebStateIsReady],
+      @"Reader mode content could not be loaded.");
   [ChromeEarlGrey
       waitForSufficientlyVisibleElementWithMatcher:
           grey_accessibilityID(kReaderModeViewAccessibilityIdentifier)];

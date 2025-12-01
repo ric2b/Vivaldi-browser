@@ -557,10 +557,7 @@ void ProxyImpl::RenewTreePriority() {
   // - When the active scroll gesture requires main-thread repainting for the
   //   scroll offset change to be visible.
   if (host_impl_->active_tree()->GetDeviceViewport().size().IsEmpty() ||
-      host_impl_->EvictedUIResourcesExist() ||
-      (is_current_scroll_main_painted &&
-       base::FeatureList::IsEnabled(
-           features::kMainRepaintScrollPrefersNewContent))) {
+      host_impl_->EvictedUIResourcesExist() || is_current_scroll_main_painted) {
     // Once we enter NEW_CONTENTS_TAKES_PRIORITY mode, visible tiles on active
     // tree might be freed. We need to set RequiresHighResToDraw to ensure that
     // high res tiles will be required to activate pending tree.
@@ -636,9 +633,6 @@ void ProxyImpl::NotifyImageDecodeRequestFinished(int request_id,
   DCHECK(IsImplThread());
   if (base::FeatureList::IsEnabled(
           features::kSendExplicitDecodeRequestsImmediately)) {
-    if (speculative) {
-      SetSpeculativeDecodeRequestInFlight(false);
-    }
     MainThreadTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(&ProxyMain::NotifyImageDecodeRequestFinished,
@@ -1014,15 +1008,6 @@ void ProxyImpl::QueueImageDecodeOnImpl(int request_id,
                                        std::unique_ptr<DrawImage> image,
                                        bool speculative) {
   host_impl_->QueueImageDecode(request_id, *image, speculative);
-}
-
-bool ProxyImpl::SpeculativeDecodeRequestInFlight() const {
-  return speculative_decode_request_in_flight_.load();
-}
-
-void ProxyImpl::SetSpeculativeDecodeRequestInFlight(bool value) {
-  CHECK(value != speculative_decode_request_in_flight_.load());
-  speculative_decode_request_in_flight_.store(value);
 }
 
 void ProxyImpl::SetSourceURL(ukm::SourceId source_id, const GURL& url) {

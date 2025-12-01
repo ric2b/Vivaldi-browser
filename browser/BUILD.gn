@@ -3,6 +3,20 @@ import("//vivaldi/gn/config/version.gni")
 import("//chrome/version.gni")
 import("//extensions/buildflags/buildflags.gni")
 
+if (is_android) {
+  import("//build/config/android/rules.gni")
+  java_cpp_enum("password_check_enums_srcjar") {
+    sources = [ "//vivaldi/browser/android/password_check/password_check_ui_status.h" ]
+  }
+
+  # Wrap the java_cpp_enum in android_library so it can be used by both
+  # chrome_java and modules.
+  android_library("password_check_java_enums") {
+    deps = [ "//third_party/androidx:androidx_annotation_annotation_java" ]
+    srcjar_deps = [ ":password_check_enums_srcjar" ]
+  }
+}
+
 static_library("browser") {
   public_deps = [
     "//vivaldi/app",
@@ -133,8 +147,6 @@ static_library("browser") {
       "vivaldi_browser_finder.h",
       "vivaldi_webcontents_util.cc",
       "vivaldi_webcontents_util.h",
-#      "vivaldi_browser_component_wrapper_impl.cc",
-#      "vivaldi_browser_component_wrapper_impl.h",
     ]
   }
   if (is_mac) {
@@ -320,6 +332,7 @@ source_set("vivaldi_browser_component_wrapper_impl") {
     "//chrome/browser/profiles:profile",
     "//content/public/browser:browser",
     "//vivaldi/components:tabs",
+    "//vivaldi/prefs:prefs_files_generated",
   ]
 }
 source_set("features") {

@@ -62,7 +62,7 @@ class DirectVariableAccessTest : public TransformTestBase<testing::Test> {
   public:
     std::string Run(std::string in,
                     const DirectVariableAccessOptions& transform_options = {},
-                    const wgsl::writer::ProgramOptions program_options = {}) {
+                    const wgsl::writer::Options program_options = {}) {
         wgsl::reader::Options parser_options;
         parser_options.allowed_features = wgsl::AllowedFeatures::Everything();
         Source::File file{"test", in};
@@ -95,7 +95,7 @@ class DirectVariableAccessTest : public TransformTestBase<testing::Test> {
                    "\n\nAST:\n" + Program::printer(program_out);
         }
 
-        auto output = wgsl::writer::Generate(program_out, wgsl::writer::Options{});
+        auto output = wgsl::writer::Generate(program_out);
         if (output != Success) {
             return "wgsl::writer::IRToProgram() failed: \n" + output.Failure().reason +
                    "\n\nIR:\n" + ir::Disassembler(module.Get()).Plain();
@@ -1483,7 +1483,7 @@ fn b() {
 
     auto* expect = src;
 
-    wgsl::writer::ProgramOptions program_options;
+    wgsl::writer::Options program_options;
     program_options.allowed_features.features.emplace(
         wgsl::LanguageFeature::kUnrestrictedPointerParameters);
     auto got = Run(src, /* transform_options */ {}, program_options);
@@ -1548,7 +1548,7 @@ fn b() {
 
     auto* expect = src;
 
-    wgsl::writer::ProgramOptions program_options;
+    wgsl::writer::Options program_options;
     program_options.allowed_features.features.emplace(
         wgsl::LanguageFeature::kUnrestrictedPointerParameters);
     auto got = Run(src, /* transform_options */ {}, program_options);
@@ -1637,7 +1637,7 @@ fn b() {
 
     auto* expect = src;
 
-    wgsl::writer::ProgramOptions program_options;
+    wgsl::writer::Options program_options;
     program_options.allowed_features.features.emplace(
         wgsl::LanguageFeature::kUnrestrictedPointerParameters);
     auto got = Run(src, /* transform_options */ {}, program_options);
@@ -1828,7 +1828,7 @@ fn b() {
 
     auto* expect = src;
 
-    wgsl::writer::ProgramOptions program_options;
+    wgsl::writer::Options program_options;
     program_options.allowed_features.features.emplace(
         wgsl::LanguageFeature::kUnrestrictedPointerParameters);
     auto got = Run(src, /* transform_options */ {}, program_options);
@@ -2060,7 +2060,7 @@ fn b() {
 
     auto* expect = src;
 
-    wgsl::writer::ProgramOptions program_options;
+    wgsl::writer::Options program_options;
     program_options.allowed_features.features.emplace(
         wgsl::LanguageFeature::kUnrestrictedPointerParameters);
     auto got = Run(src, /* transform_options */ {}, program_options);
@@ -2086,7 +2086,7 @@ fn b() {
 
     auto* expect = src;
 
-    wgsl::writer::ProgramOptions program_options;
+    wgsl::writer::Options program_options;
     program_options.allowed_features.features.emplace(
         wgsl::LanguageFeature::kUnrestrictedPointerParameters);
     auto got = Run(src, /* transform_options */ {}, program_options);

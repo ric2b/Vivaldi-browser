@@ -28,7 +28,6 @@
 <translation id="1451375123200651445">Webová stránka, jeden soubor</translation>
 <translation id="1465176863081977902">K&amp;opírovat adresu zvukového souboru</translation>
 <translation id="1476607407192946488">&amp;Jazyková nastavení</translation>
-<translation id="1546280085599573572">Toto rozšíření změnilo stránku, která se zobrazí po kliknutí na tlačítko Domovská stránka.</translation>
 <translation id="1552752544932680961">Správa rozšíření</translation>
 <translation id="15662109988763471">Zvolená tiskárna není k dispozici nebo není správně nainstalovaná. Zkontrolujte tiskárnu nebo vyberte jinou.</translation>
 <translation id="1588438908519853928">Normální</translation>
@@ -70,7 +69,6 @@
 <translation id="215753907730220065">Ukončit režim celé obrazovky</translation>
 <translation id="2158475082070321257">Kopírovat odkaz na zvýraznění</translation>
 <translation id="2177950615300672361">Soukromý list: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Modul nativního klienta: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Vložit jako prostý text</translation>
 <translation id="2249605167705922988">např. 1-5, 8, 11-13</translation>
 <translation id="2280486287150724112">Pravý okraj</translation>
@@ -83,7 +81,6 @@
 <translation id="2348176352564285430">Aplikace: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Vyberte adresář rozšíření.</translation>
 <translation id="2379281330731083556">Tisk pomocí dialogového okna systému… <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Neznámý zásuvný modul</translation>
 <translation id="2423578206845792524">Uložit o&amp;brázek jako…</translation>
 <translation id="2439110203301358333">Jiný program ve vašem počítači nainstaloval rozšíření, které může měnit funkce prohlížeče Vivaldi.</translation>
 <translation id="2443487764245141020">Weby také mohou potřebovat rozpoznávat vaše zařízení pomocí identifikátoru</translation>
@@ -107,7 +104,6 @@
 <translation id="2785873697295365461">Popisovače souborů</translation>
 <translation id="2825758591930162672">Veřejný klíč subjektu</translation>
 <translation id="2850541429955027218">Přidat motiv</translation>
-<translation id="2861941300086904918">Správce zabezpečení nativního klienta</translation>
 <translation id="2881076733170862447">Když kliknete na rozšíření</translation>
 <translation id="2889064240420137087">Otevřít odkaz pomocí…</translation>
 <translation id="2902127500170292085">Rozšíření <ph name="EXTENSION_NAME" /> s touto tiskárnou nedokáže komunikovat. Ujistěte se, zda je tiskárna zapojena, a zkuste to znovu.</translation>
@@ -154,7 +150,6 @@
 <translation id="3511307672085573050">Kopírovat adr&amp;esu odkazu</translation>
 <translation id="354068948465830244">Rozšíření může číst a měnit data webů</translation>
 <translation id="3560034655160545939">&amp;Kontrola pravopisu</translation>
-<translation id="3587482841069643663">Vše</translation>
 <translation id="3627588569887975815">Otevřít odkaz v &amp;soukromém okně</translation>
 <translation id="3678156199662914018">Rozšíření: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Požadavek na sdílení obrazovky s aplikací <ph name="APP_NAME" /></translation>
@@ -197,7 +192,6 @@
 <translation id="4131410914670010031">Černobíle</translation>
 <translation id="4165986682804962316">Nastavení webu</translation>
 <translation id="4170314459383239649">Smazat při ukončení</translation>
-<translation id="4176463684765177261">Zakázano</translation>
 <translation id="4200983522494130825">Nový &amp;list</translation>
 <translation id="4225397296022057997">Na všech webech</translation>
 <translation id="4256316378292851214">Uložit &amp;video jako…</translation>
@@ -221,6 +215,7 @@
 <translation id="4613271546271159013">Rozšíření změnilo stránku, která se zobrazí při otevření nového listu.</translation>
 <translation id="4616405296204756919">Uložená hesla můžete používat na libovolném zařízení. Uložena jsou v <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Otevřít video v novém listu</translation>
+<translation id="4654801841330730814">Vše</translation>
 <translation id="4677772697204437347">Paměť GPU</translation>
 <translation id="4681930562518940301">Otevřít původní &amp;obrázek v novém listu</translation>
 <translation id="4711638718396952945">Obnovit nastavení</translation>
@@ -246,11 +241,9 @@
 <translation id="5059526285558225588">Vyberte, co budete sdílet</translation>
 <translation id="5063480226653192405">Využití</translation>
 <translation id="5116628073786783676">Uložit &amp;zvuk jako…</translation>
-<translation id="5143374789336132547">Rozšíření <ph name="EXTENSION_NAME" /> změnilo stránku, která se zobrazí po kliknutí na tlačítko Domovská stránka.</translation>
 <translation id="5154108062446123722">Rozšířené nastavení tiskárny <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5154702632169343078">Předmět</translation>
 <translation id="5171343362375269016">Stránkovaná paměť</translation>
-<translation id="5233019165164992427">Port ladění klienta NaCl</translation>
 <translation id="5233231016133573565">ID úlohy</translation>
 <translation id="5233736638227740678">&amp;Vložit</translation>
 <translation id="5256861893479663409">Na všech webech</translation>
@@ -273,7 +266,6 @@
 <translation id="5485102783864353244">Přidat aplikaci</translation>
 <translation id="5486561344817861625">Simulovat restart prohlížeče</translation>
 <translation id="5509693895992845810">Uložit &amp;jako…</translation>
-<translation id="5521078259930077036">Je toto domovská stránka, kterou jste očekávali?</translation>
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Načíst znovu</translation>
 <translation id="5575473780076478375">Soukromé rozšíření: <ph name="EXTENSION_NAME" /></translation>
@@ -285,7 +277,6 @@
 <translation id="5677928146339483299">Blokováno</translation>
 <translation id="5707185214361380026">Nepodařilo se načíst rozšíření z:</translation>
 <translation id="5713171467967533494">Otevřít v prohlížeči Vivaldi</translation>
-<translation id="5715711091495208045">Zprostředkovatel zásuvného modulu: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Uložit jako PDF</translation>
 <translation id="5747809636523347288">Vložit a &amp;přejít na adresu <ph name="URL" /></translation>
 <translation id="5759728514498647443">Dokumenty odeslané k tisku prostřednictvím aplikace <ph name="APP_NAME" /> lze číst v aplikaci <ph name="APP_NAME" />.</translation>
@@ -293,7 +284,6 @@
 <translation id="5780973441651030252">Priorita procesu</translation>
 <translation id="5804241973901381774">Oprávnění</translation>
 <translation id="5828633471261496623">Tiskne se…</translation>
-<translation id="583281660410589416">Neznámé</translation>
 <translation id="5851868085455377790">Vydavatel</translation>
 <translation id="5860491529813859533">Zapnout</translation>
 <translation id="5910363049092958439">Uložit o&amp;brázek jako…</translation>
@@ -345,7 +335,6 @@
 <translation id="6691936601825168937">&amp;Vpřed</translation>
 <translation id="6786747875388722282">Rozšíření</translation>
 <translation id="6787839852456839824">Klávesové zkratky</translation>
-<translation id="6798954102094737107">Zásuvný modul: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Uchovat změny</translation>
 <translation id="6824564591481349393">Kopírovat &amp;e-mailovou adresu</translation>
 <translation id="6840155290835956714">Před odesláním se zeptat</translation>
@@ -381,7 +370,6 @@
 <translation id="7629827748548208700">List: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Zrušit</translation>
 <translation id="7659154729610375585">Přesto anonymní režim ukončit?</translation>
-<translation id="7661259717474717992">Povolit webům ukládat a číst data souborů cookie</translation>
 <translation id="7663719505383602579">Příjemce: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Nainstalováno vaším administrátorem</translation>
 <translation id="7685038817958445325">Nelze sdílet</translation>
@@ -427,7 +415,6 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="8261378640211443080">Toto rozšíření není uvedeno na webu <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> a mohlo být přidáno bez vašeho vědomí.</translation>
 <translation id="8351419472474436977">Toto rozšíření převzalo kontrolu nad nastavením vašeho proxy serveru, což znamená, že může změnit, narušit nebo sledovat vše, co děláte na internetu. Pokud si nejste jisti, proč k tomu došlo, zřejmě se jedná o nežádoucí změnu.</translation>
 <translation id="8382913212082956454">Kopírovat &amp;e-mailovou adresu</translation>
-<translation id="8434480141477525001">Port ladění klienta NaCl</translation>
 <translation id="8449008133205184768">Vložit a použít odpovídající styl</translation>
 <translation id="8477178913400731244">Vymazat data</translation>
 <translation id="8477384620836102176">&amp;Obecné</translation>

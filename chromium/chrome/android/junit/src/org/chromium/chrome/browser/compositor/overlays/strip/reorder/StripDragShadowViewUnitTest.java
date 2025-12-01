@@ -44,7 +44,6 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.Callback;
 import org.chromium.base.Token;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
@@ -64,6 +63,8 @@ import org.chromium.components.tab_groups.TabGroupColorId;
 import org.chromium.components.tab_groups.TabGroupColorPickerUtils;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.TestActivity;
+
+import java.util.function.Supplier;
 
 /** Unit tests for {@link StripDragShadowView}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -326,8 +327,7 @@ public class StripDragShadowViewUnitTest {
 
         // Verify card color
         @ColorRes
-        int expectedBackgroundColor =
-                TabUiThemeUtil.getTabStripSelectedTabColor(mActivity, incognito);
+        int expectedBackgroundColor = TabUiThemeUtil.getDraggedTabBackgroundColor(mActivity);
         assertEquals(
                 "Unexpected card color.",
                 expectedBackgroundColor,
@@ -358,7 +358,8 @@ public class StripDragShadowViewUnitTest {
     private void testUpdate_GroupTinting(boolean incognito) {
         @TabGroupColorId int colorId = TabGroupColorId.GREY;
         when(mMockTab.isIncognitoBranded()).thenReturn(incognito);
-        when(mMockTabGroupModelFilter.getTabGroupColorWithFallback(anyInt())).thenReturn(colorId);
+        when(mMockTabGroupModelFilter.getTabGroupColorWithFallback(any(Token.class)))
+                .thenReturn(colorId);
         mStripDragShadowView.prepareForGroupDrag(mMockTab, 0);
 
         // Verify card color

@@ -23,7 +23,6 @@ source_set("cells") {
     "//base",
     "//ios/chrome/app/strings",
     "//ios/chrome/common/ui/util",
-    "//ios/third_party/material_components_ios",
     "//ui/base",
   ]
 

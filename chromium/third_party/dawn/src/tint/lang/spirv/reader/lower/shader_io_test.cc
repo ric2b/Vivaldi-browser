@@ -39,7 +39,10 @@ using namespace tint::core::number_suffixes;  // NOLINT
 
 class SpirvReader_ShaderIOTest : public core::ir::transform::TransformTest {
   public:
-    void SetUp() override { capabilities.Add(core::ir::Capability::kAllowMultipleEntryPoints); }
+    void SetUp() override {
+        capabilities.Add(core::ir::Capability::kAllowMultipleEntryPoints);
+        capabilities.Add(core::ir::Capability::kAllowLocationForNumericElements);
+    }
 
   protected:
     core::IOAttributes BuiltinAttrs(core::BuiltinValue builtin) {
@@ -579,7 +582,7 @@ TEST_F(SpirvReader_ShaderIOTest, Inputs_UsedByMultipleEntryPoints) {
         auto* group_value = b.Load(group_id);
         b.Add(ty.vec3<u32>(), group_value, group_value);
         b.Call(foo);
-        b.Return(ep1);
+        b.Return(ep2);
     });
 
     auto* src = R"(
@@ -1269,7 +1272,7 @@ TEST_F(SpirvReader_ShaderIOTest, MultipleOutputs) {
     color1->SetLocation(1u);
 
     auto* color2 = b.Var("color2", ty.ptr(core::AddressSpace::kOut, ty.vec4<f32>()));
-    color2->SetLocation(1u);
+    color2->SetLocation(2u);
     color2->SetInterpolation(core::Interpolation{core::InterpolationType::kPerspective,
                                                  core::InterpolationSampling::kCentroid});
 
@@ -1289,7 +1292,7 @@ TEST_F(SpirvReader_ShaderIOTest, MultipleOutputs) {
 $B1: {  # root
   %position:ptr<__out, vec4<f32>, read_write> = var undef @invariant @builtin(position)
   %color1:ptr<__out, vec4<f32>, read_write> = var undef @location(1)
-  %color2:ptr<__out, vec4<f32>, read_write> = var undef @location(1) @interpolate(perspective, centroid)
+  %color2:ptr<__out, vec4<f32>, read_write> = var undef @location(2) @interpolate(perspective, centroid)
 }
 
 %foo = @vertex func():void {
@@ -1307,7 +1310,7 @@ $B1: {  # root
 tint_symbol = struct @align(16) {
   position:vec4<f32> @offset(0), @invariant, @builtin(position)
   color1:vec4<f32> @offset(16), @location(1)
-  color2:vec4<f32> @offset(32), @location(1), @interpolate(perspective, centroid)
+  color2:vec4<f32> @offset(32), @location(2), @interpolate(perspective, centroid)
 }
 
 $B1: {  # root
@@ -2297,6 +2300,91 @@ $B1: {  # root
     %9:void = call %foo_inner, %inst_idx_1
     %10:vec4<f32> = load %pos
     ret %10
+  }
+}
+)";
+
+    Run(ShaderIO);
+
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(SpirvReader_ShaderIOTest, PrimitiveIndex_i32) {
+    auto* idx = b.Var("prim_idx", ty.ptr(core::AddressSpace::kIn, ty.i32()));
+    idx->SetBuiltin(core::BuiltinValue::kPrimitiveIndex);
+    mod.root_block->Append(idx);
+
+    auto* ep = b.Function("foo", ty.i32(), core::ir::Function::PipelineStage::kFragment);
+    ep->SetReturnLocation(0);
+    b.Append(ep->Block(), [&] {
+        auto* idx_value = b.Load(idx);
+        auto* doubled = b.Multiply(ty.i32(), idx_value, 2_i);
+        b.Return(ep, doubled);
+    });
+
+    auto* src = R"(
+$B1: {  # root
+  %prim_idx:ptr<__in, i32, read> = var undef @builtin(primitive_index)
+}
+
+%foo = @fragment func():i32 [@location(0)] {
+  $B2: {
+    %3:i32 = load %prim_idx
+    %4:i32 = mul %3, 2i
+    ret %4
+  }
+}
+)";
+    EXPECT_EQ(src, str());
+
+    auto* expect = R"(
+%foo = @fragment func(%prim_idx:u32 [@primitive_index]):i32 [@location(0)] {
+  $B1: {
+    %3:i32 = convert %prim_idx
+    %4:i32 = mul %3, 2i
+    ret %4
+  }
+}
+)";
+
+    Run(ShaderIO);
+
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(SpirvReader_ShaderIOTest, PrimitiveIndex_u32) {
+    auto* idx = b.Var("prim_idx", ty.ptr(core::AddressSpace::kIn, ty.u32()));
+    idx->SetBuiltin(core::BuiltinValue::kPrimitiveIndex);
+    mod.root_block->Append(idx);
+
+    auto* ep = b.Function("foo", ty.u32(), core::ir::Function::PipelineStage::kFragment);
+    ep->SetReturnLocation(0);
+    b.Append(ep->Block(), [&] {
+        auto* idx_value = b.Load(idx);
+        auto* doubled = b.Multiply(ty.u32(), idx_value, 2_u);
+        b.Return(ep, doubled);
+    });
+
+    auto* src = R"(
+$B1: {  # root
+  %prim_idx:ptr<__in, u32, read> = var undef @builtin(primitive_index)
+}
+
+%foo = @fragment func():u32 [@location(0)] {
+  $B2: {
+    %3:u32 = load %prim_idx
+    %4:u32 = mul %3, 2u
+    ret %4
+  }
+}
+)";
+    EXPECT_EQ(src, str());
+
+    auto* expect = R"(
+%foo = @fragment func(%prim_idx:u32 [@primitive_index]):u32 [@location(0)] {
+  $B1: {
+    %3:u32 = mul %prim_idx, 2u
+    ret %3
   }
 }
 )";

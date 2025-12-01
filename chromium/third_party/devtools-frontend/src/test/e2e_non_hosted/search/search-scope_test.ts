@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,7 +55,7 @@ describe('The Search Panel', () => {
 
       // Wrap the entries with the file details.
       return {
-        fileName: fileNameElement.firstChild?.textContent || '',
+        fileName: fileNameElement.deepInnerText().split('\u2014')[0],
         matchesCount: parseInt(matchesCountElement.textContent || '', 10),
       };
     })));

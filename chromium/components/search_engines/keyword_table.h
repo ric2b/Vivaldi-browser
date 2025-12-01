@@ -89,10 +89,6 @@ class Statement;
 // Starter Pack Keyword Version      The version of starter pack data.
 // Builtin Keyword Country           The country associated with the builtin
 //                                   keywords data, stored as a country ID.
-// Builtin Keyword Milestone         The version number of Chrome milestone when
-//                                   the keyword data has been last merged into
-//                                   the database. Written between Chrome M122
-//                                   and M129.
 //
 class KeywordTable : public WebDatabaseTable {
  public:
@@ -141,9 +137,6 @@ class KeywordTable : public WebDatabaseTable {
   // last updated.
   bool SetBuiltinKeywordDataVersion(int version);
   int GetBuiltinKeywordDataVersion();
-
-  // Chrome milestone when the built-in keywords were last updated.
-  bool ClearBuiltinKeywordMilestone();
 
   // Country associated with the built-in keywords, stored as a country ID,
   // see `country_codes::CountryId()`.

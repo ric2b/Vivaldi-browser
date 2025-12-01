@@ -138,6 +138,8 @@ source_set("parser") {
   sources += [
     "adblock_content_injection_rule.cc",
     "adblock_content_injection_rule.h",
+    "adblock_request_filter_rule.cc",
+    "adblock_request_filter_rule.h",
     "adblock_rule_parser.cc",
     "adblock_rule_parser.h",
     "adblock_ruleset_file_parser.cc",
@@ -195,7 +197,9 @@ source_set("core") {
     ":package_adblocker_files",
     "//base:base",
     "//base:i18n",
+    "//extensions/buildflags",
     "//services/network/public/cpp",
+    "//third_party/widevine/cdm:buildflags",
     "//url",
   ]
 }

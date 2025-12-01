@@ -47,7 +47,6 @@
 #include "third_party/blink/renderer/core/css/css_uri_value.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/document_style_environment_variables.h"
-#include "third_party/blink/renderer/core/css/document_style_sheet_collection.h"
 #include "third_party/blink/renderer/core/css/font_face_cache.h"
 #include "third_party/blink/renderer/core/css/invalidation/invalidation_set.h"
 #include "third_party/blink/renderer/core/css/media_feature_overrides.h"
@@ -63,11 +62,11 @@
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_stats.h"
 #include "third_party/blink/renderer/core/css/resolver/style_rule_usage_tracker.h"
 #include "third_party/blink/renderer/core/css/resolver/viewport_style_resolver.h"
-#include "third_party/blink/renderer/core/css/shadow_tree_style_sheet_collection.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/css/style_containment_scope_tree.h"
 #include "third_party/blink/renderer/core/css/style_environment_variables.h"
 #include "third_party/blink/renderer/core/css/style_rule_font_feature_values.h"
+#include "third_party/blink/renderer/core/css/style_sheet_collection.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/css/vision_deficiency.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
@@ -242,10 +241,11 @@ StyleEngine::StyleEngine(Document& document)
       style_containment_scope_tree_(
           MakeGarbageCollected<StyleContainmentScopeTree>()),
       document_style_sheet_collection_(
-          MakeGarbageCollected<DocumentStyleSheetCollection>(document)),
+          MakeGarbageCollected<StyleSheetCollection>(document)),
       preferred_color_scheme_(mojom::blink::PreferredColorScheme::kLight),
       owner_preferred_color_scheme_(mojom::blink::PreferredColorScheme::kLight),
-      owner_color_scheme_(mojom::blink::ColorScheme::kLight) {
+      owner_color_scheme_(mojom::blink::ColorScheme::kLight),
+      preferred_contrast_(mojom::blink::PreferredContrast::kNoPreference) {
   if (document.GetFrame()) {
     resolver_ = MakeGarbageCollected<StyleResolver>(document);
     global_rule_set_ = MakeGarbageCollected<CSSGlobalRuleSet>();
@@ -275,7 +275,7 @@ StyleEngine::StyleEngine(Document& document)
 
 StyleEngine::~StyleEngine() = default;
 
-TreeScopeStyleSheetCollection& StyleEngine::EnsureStyleSheetCollectionFor(
+StyleSheetCollection& StyleEngine::EnsureStyleSheetCollectionFor(
     TreeScope& tree_scope) {
   if (tree_scope == document_) {
     return GetDocumentStyleSheetCollection();
@@ -285,13 +285,12 @@ TreeScopeStyleSheetCollection& StyleEngine::EnsureStyleSheetCollectionFor(
       style_sheet_collection_map_.insert(&tree_scope, nullptr);
   if (result.is_new_entry) {
     result.stored_value->value =
-        MakeGarbageCollected<ShadowTreeStyleSheetCollection>(
-            To<ShadowRoot>(tree_scope));
+        MakeGarbageCollected<StyleSheetCollection>(To<ShadowRoot>(tree_scope));
   }
   return *result.stored_value->value.Get();
 }
 
-TreeScopeStyleSheetCollection* StyleEngine::StyleSheetCollectionFor(
+StyleSheetCollection* StyleEngine::StyleSheetCollectionFor(
     TreeScope& tree_scope) {
   if (tree_scope == document_) {
     return &GetDocumentStyleSheetCollection();
@@ -308,8 +307,7 @@ TreeScopeStyleSheetCollection* StyleEngine::StyleSheetCollectionFor(
 const HeapVector<Member<StyleSheet>>& StyleEngine::StyleSheetsForStyleSheetList(
     TreeScope& tree_scope) {
   DCHECK(document_);
-  TreeScopeStyleSheetCollection& collection =
-      EnsureStyleSheetCollectionFor(tree_scope);
+  StyleSheetCollection& collection = EnsureStyleSheetCollectionFor(tree_scope);
   if (document_->IsActive()) {
     collection.UpdateStyleSheetList();
   }
@@ -466,8 +464,7 @@ void StyleEngine::RemoveStyleSheetCandidateNode(
                 "The ShadowRoot must be subclass of TreeScope.");
   TreeScope& tree_scope =
       shadow_root ? static_cast<TreeScope&>(*shadow_root) : GetDocument();
-  TreeScopeStyleSheetCollection* collection =
-      StyleSheetCollectionFor(tree_scope);
+  StyleSheetCollection* collection = StyleSheetCollectionFor(tree_scope);
   // After detaching document, collection could be null. In the case,
   // we should not update anything. Instead, just return.
   if (!collection) {
@@ -604,7 +601,7 @@ void StyleEngine::MediaQueryAffectingValueChanged(
     return;
   }
 
-  for (auto text_track : text_tracks) {
+  for (auto& text_track : text_tracks) {
     bool style_needs_recalc = false;
     auto style_sheets = text_track->GetCSSStyleSheets();
     for (const auto& sheet : style_sheets) {
@@ -638,21 +635,14 @@ void StyleEngine::MediaQueryAffectingValueChanged(MediaValueChange change) {
   }
 }
 
-void StyleEngine::UpdateActiveStyleSheetsInShadow(
+void StyleEngine::PrepareUpdateActiveStyleSheetsInShadow(
     TreeScope* tree_scope,
-    UnorderedTreeScopeSet& tree_scopes_removed) {
+    UnorderedTreeScopeSet& tree_scopes_removed,
+    const MediaQueryEvaluator& medium) {
   DCHECK_NE(tree_scope, document_);
-  auto* collection =
-      To<ShadowTreeStyleSheetCollection>(StyleSheetCollectionFor(*tree_scope));
+  auto* collection = StyleSheetCollectionFor(*tree_scope);
   DCHECK(collection);
-  collection->UpdateActiveStyleSheets(*this);
-  if (!collection->HasStyleSheetCandidateNodes() &&
-      !tree_scope->HasAdoptedStyleSheets()) {
-    tree_scopes_removed.insert(tree_scope);
-    // When removing TreeScope from ActiveTreeScopes,
-    // its resolver should be destroyed by invoking resetAuthorStyle.
-    DCHECK(!tree_scope->GetScopedStyleResolver());
-  }
+  collection->PrepareUpdateActiveStyleSheets(medium);
 }
 
 void StyleEngine::UpdateActiveUserStyleSheets() {
@@ -660,7 +650,8 @@ void StyleEngine::UpdateActiveUserStyleSheets() {
 
   ActiveStyleSheetVector new_active_sheets;
   for (auto& sheet : injected_user_style_sheets_) {
-    if (RuleSet* rule_set = RuleSetForSheet(*sheet.second)) {
+    // TODO: Support mixins in user stylesheets.
+    if (RuleSet* rule_set = RuleSetForSheet(*sheet.second, /*mixins=*/{})) {
       new_active_sheets.push_back(std::make_pair(sheet.second, rule_set));
     }
   }
@@ -683,17 +674,45 @@ void StyleEngine::UpdateActiveStyleSheets() {
     UpdateActiveUserStyleSheets();
   }
 
-  if (ShouldUpdateDocumentStyleSheetCollection()) {
-    GetDocumentStyleSheetCollection().UpdateActiveStyleSheets(*this);
-  }
+  const MediaQueryEvaluator& medium = EnsureMediaQueryEvaluator();
 
+  // Prepare the stylesheet collections for update. This collects all the
+  // stylesheets from the nodes in question and extracts mixins.
+  //
+  // Note that if mixins in a parent changes, we should invalidate all children
+  // (in addition to the parent itself), or at least all mixin-using children,
+  // but we do not do invalidation of mixins in general yet.
+  if (ShouldUpdateDocumentStyleSheetCollection()) {
+    document_style_sheet_collection_->PrepareUpdateActiveStyleSheets(medium);
+  }
   if (ShouldUpdateShadowTreeStyleSheetCollection()) {
     UnorderedTreeScopeSet tree_scopes_removed;
     for (TreeScope* tree_scope : dirty_tree_scopes_) {
-      UpdateActiveStyleSheetsInShadow(tree_scope, tree_scopes_removed);
+      PrepareUpdateActiveStyleSheetsInShadow(tree_scope, tree_scopes_removed,
+                                             medium);
     }
-    for (TreeScope* tree_scope : tree_scopes_removed) {
-      active_tree_scopes_.erase(tree_scope);
+  }
+
+  // Now create the actual RuleSets.
+  if (ShouldUpdateDocumentStyleSheetCollection()) {
+    document_style_sheet_collection_->FinishUpdateActiveStyleSheets(
+        medium, document_style_sheet_collection_->Mixins());
+  }
+  if (ShouldUpdateShadowTreeStyleSheetCollection()) {
+    for (TreeScope* tree_scope : dirty_tree_scopes_) {
+      StyleSheetCollection& collection = *StyleSheetCollectionFor(*tree_scope);
+      collection.FinishUpdateActiveStyleSheets(
+          EnsureMediaQueryEvaluator(),
+          EffectiveMixinsForTreeScope(*tree_scope));
+      if (!collection.HasStyleSheetCandidateNodes() &&
+          !tree_scope->HasAdoptedStyleSheets()) {
+        active_tree_scopes_.erase(tree_scope);
+        // When removing TreeScope from ActiveTreeScopes,
+        // its resolver should have been destroyed by
+        // invoking ResetAuthorStyle() (in particular,
+        // ShadowRootRemovedFromDocument() does this).
+        DCHECK(!tree_scope->GetScopedStyleResolver());
+      }
     }
   }
 
@@ -703,6 +722,33 @@ void StyleEngine::UpdateActiveStyleSheets() {
   document_scope_dirty_ = false;
   tree_scopes_removed_ = false;
   user_style_dirty_ = false;
+}
+
+MixinMap StyleEngine::EffectiveMixinsForTreeScope(TreeScope& tree_scope) {
+  TreeScope* parent_scope = tree_scope.ParentTreeScope();
+
+  StyleSheetCollection* collection = StyleSheetCollectionFor(tree_scope);
+  if (!collection) {
+    // If there's no collection, there are also no style sheets.
+    if (parent_scope) {
+      return EffectiveMixinsForTreeScope(*parent_scope);
+    } else {
+      return {};
+    }
+  }
+
+  if (!parent_scope) {
+    return collection->Mixins();
+  }
+
+  MixinMap inherited_mixins = EffectiveMixinsForTreeScope(*parent_scope);
+  if (inherited_mixins.mixins.empty() &&
+      inherited_mixins.media_query_set_results.empty()) {
+    return collection->Mixins();
+  }
+
+  inherited_mixins.Merge(collection->Mixins());
+  return inherited_mixins;
 }
 
 void StyleEngine::UpdateCounterStyles() {
@@ -783,7 +829,7 @@ const ActiveStyleSheetVector StyleEngine::ActiveStyleSheetsForInspector() {
   active_style_sheets.AppendVector(
       GetDocumentStyleSheetCollection().ActiveStyleSheets());
   for (TreeScope* tree_scope : active_tree_scopes_) {
-    if (TreeScopeStyleSheetCollection* collection =
+    if (StyleSheetCollection* collection =
             style_sheet_collection_map_.at(tree_scope)) {
       active_style_sheets.AppendVector(collection->ActiveStyleSheets());
     }
@@ -938,35 +984,21 @@ const Font* StyleEngine::ComputeFont(
   return GetStyleResolver().ComputeFont(element, font_style, font_properties);
 }
 
-RuleSet* StyleEngine::RuleSetForSheet(CSSStyleSheet& sheet) {
+RuleSet* StyleEngine::RuleSetForSheet(CSSStyleSheet& sheet,
+                                      const MixinMap& mixins) const {
   if (!sheet.MatchesMediaQueries(EnsureMediaQueryEvaluator())) {
     return nullptr;
   }
-  return &sheet.Contents()->EnsureRuleSet(*media_query_evaluator_);
+  return &sheet.Contents()->EnsureRuleSet(*media_query_evaluator_, mixins);
 }
 
-RuleSet* StyleEngine::CreateUnconnectedRuleSet(CSSStyleSheet& sheet) {
+RuleSet* StyleEngine::CreateUnconnectedRuleSet(CSSStyleSheet& sheet,
+                                               const MixinMap& mixins) {
   if (!sheet.MatchesMediaQueries(EnsureMediaQueryEvaluator())) {
     return nullptr;
   }
-  return sheet.Contents()->CreateUnconnectedRuleSet(*media_query_evaluator_);
-}
-
-RuleSet* StyleEngine::RuleSetScope::RuleSetForSheet(StyleEngine& engine,
-                                                    CSSStyleSheet* css_sheet) {
-  RuleSet* rule_set = engine.RuleSetForSheet(*css_sheet);
-  if (rule_set && rule_set->HasCascadeLayers() &&
-      !css_sheet->Contents()->HasSingleOwnerNode() &&
-      !layer_rule_sets_.insert(rule_set).is_new_entry) {
-    // The condition above is met for a stylesheet with cascade layers which
-    // shares StyleSheetContents with another stylesheet in this TreeScope.
-    // WillMutateRules() creates a unique StyleSheetContents for this sheet to
-    // avoid incorrectly identifying two separate anonymous layers as the same
-    // layer.
-    css_sheet->WillMutateRules();
-    rule_set = engine.RuleSetForSheet(*css_sheet);
-  }
-  return rule_set;
+  return sheet.Contents()->CreateUnconnectedRuleSet(*media_query_evaluator_,
+                                                    mixins);
 }
 
 void StyleEngine::ClearResolvers() {
@@ -1070,7 +1102,7 @@ void StyleEngine::MarkTreeScopeDirty(TreeScope& scope) {
     return;
   }
 
-  TreeScopeStyleSheetCollection* collection = StyleSheetCollectionFor(scope);
+  StyleSheetCollection* collection = StyleSheetCollectionFor(scope);
   DCHECK(collection);
   collection->MarkSheetListDirty();
   dirty_tree_scopes_.insert(&scope);
@@ -1730,7 +1762,7 @@ void StyleEngine::ClassChangedForElement(const SpaceSplitString& old_classes,
 
   // Class vectors tend to be very short. This is faster than using a hash
   // table.
-  WTF::Vector<bool> remaining_class_bits(old_classes.size());
+  Vector<bool> remaining_class_bits(old_classes.size());
 
   InvalidationLists invalidation_lists;
   bool affecting_has_state = false;
@@ -1793,27 +1825,7 @@ void StyleEngine::ClassChangedForElement(const SpaceSplitString& old_classes,
 
 namespace {
 
-bool HasAttributeDependentGeneratedContent(const Element& element) {
-  DCHECK(!RuntimeEnabledFeatures::CSSAdvancedAttrFunctionEnabled());
-
-  const auto HasAttrFunc = [](PseudoElement* pseudo_element) {
-    if (!pseudo_element) {
-      return false;
-    }
-
-    const ComputedStyle* style = pseudo_element->GetComputedStyle();
-    return style && style->HasAttrFunction();
-  };
-
-  return HasAttrFunc(element.GetPseudoElement(kPseudoIdCheckMark)) ||
-         HasAttrFunc(element.GetPseudoElement(kPseudoIdBefore)) ||
-         HasAttrFunc(element.GetPseudoElement(kPseudoIdAfter)) ||
-         HasAttrFunc(element.GetPseudoElement(kPseudoIdPickerIcon)) ||
-         HasAttrFunc(element.GetPseudoElement(kPseudoIdScrollMarker));
-}
-
 bool HasAttributeDependentStyle(const Element& element) {
-  DCHECK(RuntimeEnabledFeatures::CSSAdvancedAttrFunctionEnabled());
   const ComputedStyle* style = element.GetComputedStyle();
   if (style && style->HasAttrFunction()) {
     return true;
@@ -1856,10 +1868,7 @@ void StyleEngine::AttributeChangedForElement(
                                                          element);
 
   if (!element.NeedsStyleRecalc()) {
-    bool attr_dependent =
-        RuntimeEnabledFeatures::CSSAdvancedAttrFunctionEnabled()
-            ? HasAttributeDependentStyle(element)
-            : HasAttributeDependentGeneratedContent(element);
+    bool attr_dependent = HasAttributeDependentStyle(element);
     if (attr_dependent) {
       element.SetNeedsStyleRecalc(
           kLocalStyleChange,
@@ -2480,7 +2489,7 @@ void StyleEngine::ApplyRuleSetInvalidationForTreeScope(
       // recalc, or if the host is not rendered.
       return;
     }
-    for (auto rule_set : rule_sets) {
+    for (const auto& rule_set : rule_sets) {
       if (rule_set->HasSlottedRules()) {
         invalidate_slotted = true;
         break;
@@ -2498,7 +2507,7 @@ void StyleEngine::ApplyRuleSetInvalidationForTreeScope(
   //
   // We do a similar thing for :part(), descending into all shadows.
   if (invalidation_scope != kInvalidateAllScopes) {
-    for (auto rule_set : rule_sets) {
+    for (const auto& rule_set : rule_sets) {
       if (rule_set->HasUAShadowPseudoElementRules() ||
           rule_set->HasPartPseudoRules()) {
         invalidation_scope = kInvalidateAllScopes;
@@ -2666,7 +2675,7 @@ RuleSet* StyleEngine::DefaultViewTransitionStyle(const Element& element) const {
 
   auto* css_style_sheet = transition->UAStyleSheet();
   return &css_style_sheet->Contents()->EnsureRuleSet(
-      CSSDefaultStyleSheets::ScreenEval());
+      CSSDefaultStyleSheets::ScreenEval(), /*mixins=*/{});
 }
 
 void StyleEngine::UpdateViewTransitionOptIn() {
@@ -3191,7 +3200,7 @@ void StyleEngine::InvalidateFunctionalMediaDependentStylesIfNeeded() {
   });
 }
 
-const MediaQueryEvaluator& StyleEngine::EnsureMediaQueryEvaluator() {
+const MediaQueryEvaluator& StyleEngine::EnsureMediaQueryEvaluator() const {
   if (!media_query_evaluator_) {
     if (GetDocument().GetFrame()) {
       media_query_evaluator_ =
@@ -3270,7 +3279,7 @@ void StyleEngine::InvalidateEnvDependentStylesIfNeeded() {
   });
 }
 
-bool StyleEngine::HasComplexSafaAreaConstraints() {
+bool StyleEngine::HasComplexSafeAreaConstraints() {
   DCHECK(RuntimeEnabledFeatures::UpdateComplexSafaAreaConstraintsEnabled());
   if (needs_to_update_complex_safe_area_constraints_) {
     has_complex_safe_area_constraints_ = ElementHasComplexSafeAreaConstraint(
@@ -3934,30 +3943,9 @@ void StyleEngine::RecalcPositionTryStyleForPseudoElement(
   pseudo_element.RecalcStyle(style_recalc_change, style_recalc_context);
 }
 
-void StyleEngine::RecalcTransitionPseudoStyle() {
-  // TODO(khushalsagar) : This forces a style recalc and layout tree rebuild
-  // for the pseudo-element tree each time we do a style recalc phase. See if
-  // we can optimize this to only when the pseudo-element tree is dirtied.
-  SelectorFilterParentScope filter_scope(
-      nullptr, SelectorFilterParentScope::ScopeType::kRoot);
-
-  ViewTransitionUtils::ForEachTransition(
-      *document_, [&](ViewTransition& transition) {
-        transition.RecalcTransitionPseudoTreeStyle();
-      });
-}
-
-void StyleEngine::RebuildTransitionPseudoLayoutTrees() {
-  ViewTransitionUtils::ForEachTransition(
-      *document_, [&](ViewTransition& transition) {
-        transition.RebuildTransitionPseudoLayoutTree();
-      });
-}
-
 void StyleEngine::RecalcStyle() {
   RecalcStyle(
       {}, StyleRecalcContext::FromAncestors(style_recalc_root_.RootElement()));
-  RecalcTransitionPseudoStyle();
 }
 
 void StyleEngine::ClearEnsuredDescendantStyles(Element& root) {
@@ -4019,9 +4007,6 @@ void StyleEngine::RebuildLayoutTree(Element* size_container) {
         size_container ? size_container->GetReattachParent() : nullptr;
     RebuildLayoutTreeForTraversalRootAncestors(root_element.GetReattachParent(),
                                                container_parent);
-    if (size_container == nullptr) {
-      RebuildTransitionPseudoLayoutTrees();
-    }
     layout_tree_rebuild_root_.Clear();
     propagate_to_root = IsA<HTMLHtmlElement>(root_element) ||
                         IsA<HTMLBodyElement>(root_element);
@@ -4312,9 +4297,12 @@ void StyleEngine::UpdateColorScheme() {
   } else {
     preferred_color_scheme_ = owner_preferred_color_scheme_;
   }
+  mojom::blink::PreferredContrast old_preferred_contrast = preferred_contrast_;
+  preferred_contrast_ = settings->GetPreferredContrast();
   bool old_force_dark_mode_enabled = force_dark_mode_enabled_;
   force_dark_mode_enabled_ = settings->GetForceDarkModeEnabled();
   bool media_feature_override_color_scheme = false;
+  bool media_feature_override_contrast = false;
 
   // TODO(1479201): Should DevTools emulation use the WebPreferences API
   // overrides?
@@ -4330,26 +4318,43 @@ void StyleEngine::UpdateColorScheme() {
       preferred_color_scheme_ = preferred_color_scheme_override.value();
       media_feature_override_color_scheme = true;
     }
+    if (std::optional<mojom::blink::PreferredContrast>
+            preferred_contrast_override = overrides->GetPreferredContrast()) {
+      preferred_contrast_ = preferred_contrast_override.value();
+      media_feature_override_contrast = true;
+    }
   }
 
   const PreferenceOverrides* preference_overrides =
       GetDocument().GetPage()->GetPreferenceOverrides();
-  if (preference_overrides && !media_feature_override_color_scheme) {
-    std::optional<mojom::blink::PreferredColorScheme>
-        preferred_color_scheme_override =
-            preference_overrides->GetPreferredColorScheme();
-    if (preferred_color_scheme_override.has_value()) {
-      preferred_color_scheme_ = preferred_color_scheme_override.value();
+  if (preference_overrides) {
+    if (!media_feature_override_color_scheme) {
+      std::optional<mojom::blink::PreferredColorScheme>
+          preferred_color_scheme_override =
+              preference_overrides->GetPreferredColorScheme();
+      if (preferred_color_scheme_override.has_value()) {
+        preferred_color_scheme_ = preferred_color_scheme_override.value();
+      }
+    }
+    if (!media_feature_override_contrast) {
+      std::optional<mojom::blink::PreferredContrast>
+          preferred_contrast_override =
+              preference_overrides->GetPreferredContrast();
+      if (preferred_contrast_override.has_value()) {
+        preferred_contrast_ = preferred_contrast_override.value();
+      }
     }
   }
 
   if (GetDocument().Printing()) {
     preferred_color_scheme_ = mojom::blink::PreferredColorScheme::kLight;
+    preferred_contrast_ = mojom::blink::PreferredContrast::kNoPreference;
     force_dark_mode_enabled_ = false;
   }
 
   if (forced_colors_ != old_forced_colors ||
       preferred_color_scheme_ != old_preferred_color_scheme ||
+      preferred_contrast_ != old_preferred_contrast ||
       force_dark_mode_enabled_ != old_force_dark_mode_enabled) {
     PlatformColorsChanged();
   }
@@ -4439,6 +4444,10 @@ void StyleEngine::UpdateColorSchemeBackground(bool color_scheme_changed) {
     if (auto* root_element = GetDocument().documentElement()) {
       if (const ComputedStyle* style = root_element->GetComputedStyle()) {
         root_color_scheme = style->UsedColorScheme();
+        if (RuntimeEnabledFeatures::
+                AboutBlankPageRespectsDarkModeOnUserActionEnabled()) {
+          root_color_scheme = AdjustAboutBlankColorScheme(root_color_scheme);
+        }
       } else if (SupportsDarkColorScheme()) {
         root_color_scheme = mojom::blink::ColorScheme::kDark;
       }
@@ -4503,6 +4512,30 @@ void StyleEngine::UpdateForcedBackgroundColor() {
       GetDocument().GetPage()->GetColorProviderForPainting(
           color_scheme, forced_colors_ != ForcedColors::kNone),
       GetDocument().IsInWebAppScope());
+}
+
+mojom::blink::ColorScheme StyleEngine::AdjustAboutBlankColorScheme(
+    mojom::blink::ColorScheme root_color_scheme) const {
+  // In browser contexts with a dark mode preference, about:blank should
+  // open in a dark color scheme when the user types about:blank into
+  // address bar or user is opening about:blank as a new tab page.
+  //
+  // Users were previously getting blinded when opening a new tab
+  // to about:blank or navigating to about:blank while in dark mode
+  // with no obvious user facing setting to override this behavior.
+  // Now we adjust to dark mode by default in these scenarios.
+  // The detection of this scenario is not intended to be perfect,
+  // though to capture a majority of known user scenarios.
+  // See https://issues.chromium.org/issues/40190899
+
+  const bool likely_user_initiated_aboutblank =
+      GetDocument().IsInMainFrame() && GetDocument().Url().IsAboutBlankURL() &&
+      !GetDocument().GetPage()->OpenedByDOM();
+  if (preferred_color_scheme_ == mojom::blink::PreferredColorScheme::kDark &&
+      likely_user_initiated_aboutblank) {
+    return mojom::blink::ColorScheme::kDark;
+  }
+  return root_color_scheme;
 }
 
 Color StyleEngine::ColorAdjustBackgroundColor() const {

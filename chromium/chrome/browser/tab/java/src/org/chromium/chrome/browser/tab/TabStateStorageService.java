@@ -36,12 +36,11 @@ public class TabStateStorageService {
      * object.
      *
      * @param id The id of the tab.
-     * @param parentCollectionId The id of the parent.
-     * @param position A sortable field to decide the order of tabs in a given parent.
      * @param parentTabId The tab id of the tab that spawned this tab, optional.
      * @param rootId If the tab is part of a tab group, the owner tab id.
      * @param timestampMillis The last time it was shown.
      * @param webContentsStateBuffer Holds serialized web contents data.
+     * @param webContentsStateVersion The version of the web contents state.
      * @param openerAppId If associated with another app, its id. Optional.
      * @param themeColor The toolbar color specified by the page. Optional.
      * @param launchTypeAtCreation How the tab was created.
@@ -53,12 +52,11 @@ public class TabStateStorageService {
      */
     public void saveTabData(
             int id,
-            int parentCollectionId,
-            String position,
             int parentTabId,
             int rootId,
             long timestampMillis,
             @Nullable ByteBuffer webContentsStateBuffer,
+            int webContentsStateVersion,
             String openerAppId,
             int themeColor,
             int launchTypeAtCreation,
@@ -71,12 +69,11 @@ public class TabStateStorageService {
                 .saveTab(
                         mNativeTabStateStorageService,
                         id,
-                        parentCollectionId,
-                        position,
                         parentTabId,
                         rootId,
                         timestampMillis,
                         webContentsStateBuffer,
+                        webContentsStateVersion,
                         openerAppId,
                         themeColor,
                         launchTypeAtCreation,
@@ -104,6 +101,7 @@ public class TabStateStorageService {
             int rootId,
             long timestampMillis,
             @Nullable ByteBuffer webContentsStateBuffer,
+            int webContentsStateVersion,
             @Nullable @JniType("std::string") String openerAppId,
             int themeColor,
             int launchTypeAtCreation,
@@ -118,7 +116,8 @@ public class TabStateStorageService {
         tabState.rootId = rootId;
         tabState.timestampMillis = timestampMillis;
         if (webContentsStateBuffer != null) {
-            tabState.contentsState = new WebContentsState(webContentsStateBuffer);
+            tabState.contentsState =
+                    new WebContentsState(webContentsStateBuffer, webContentsStateVersion);
         }
         tabState.openerAppId = openerAppId;
         tabState.themeColor = themeColor;
@@ -134,14 +133,13 @@ public class TabStateStorageService {
     @NativeMethods
     interface Natives {
         void saveTab(
-                long nativeTabStateStorageService,
+                long nativeTabStateStorageServiceAndroid,
                 int id,
-                int parentCollectionId,
-                @JniType("std::string") String position,
                 int parentTabId,
                 int rootId,
                 long timestampMillis,
                 @Nullable ByteBuffer webContentsStateBuffer,
+                int webContentsStateVersion,
                 @Nullable @JniType("std::string") String openerAppId,
                 int themeColor,
                 int launchTypeAtCreation,
@@ -151,6 +149,6 @@ public class TabStateStorageService {
                 boolean tabHasSensitiveContent,
                 boolean isPinned);
 
-        void loadAllTabs(long nativeTabStateStorageService, Callback<TabState[]> callback);
+        void loadAllTabs(long nativeTabStateStorageServiceAndroid, Callback<TabState[]> callback);
     }
 }

@@ -28,7 +28,6 @@
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_interactive_uitest.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/hover_button_controller.h"
-#include "chrome/browser/ui/views/toolbar/toolbar_actions_bar_bubble_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -623,10 +622,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionsMenuViewInteractiveUITest,
   {
     // Since we are revoking permissions, automatically accept the reload page
     // bubble to update the permissions.
-    content::WebContents* web_contents =
-        browser()->tab_strip_model()->GetActiveWebContents();
-    extensions::ExtensionActionRunner::GetForWebContents(web_contents)
-        ->accept_bubble_for_testing(true);
+    auto reload_page_dialog_reset =
+        extensions::ReloadPageDialogController::AcceptDialogForTesting(true);
     extensions::PermissionsManagerWaiter waiter(
         extensions::PermissionsManager::Get(profile()));
     context_menu->ExecuteCommand(

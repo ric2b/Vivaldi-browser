@@ -52,7 +52,6 @@
 #include "src/tint/lang/wgsl/ast/if_statement.h"
 #include "src/tint/lang/wgsl/ast/increment_decrement_statement.h"
 #include "src/tint/lang/wgsl/ast/input_attachment_index_attribute.h"
-#include "src/tint/lang/wgsl/ast/internal_attribute.h"
 #include "src/tint/lang/wgsl/ast/interpolate_attribute.h"
 #include "src/tint/lang/wgsl/ast/invariant_attribute.h"
 #include "src/tint/lang/wgsl/ast/let.h"
@@ -61,12 +60,9 @@
 #include "src/tint/lang/wgsl/ast/must_use_attribute.h"
 #include "src/tint/lang/wgsl/ast/override.h"
 #include "src/tint/lang/wgsl/ast/return_statement.h"
-#include "src/tint/lang/wgsl/ast/row_major_attribute.h"
 #include "src/tint/lang/wgsl/ast/stage_attribute.h"
-#include "src/tint/lang/wgsl/ast/stride_attribute.h"
 #include "src/tint/lang/wgsl/ast/struct.h"
 #include "src/tint/lang/wgsl/ast/struct_member_align_attribute.h"
-#include "src/tint/lang/wgsl/ast/struct_member_offset_attribute.h"
 #include "src/tint/lang/wgsl/ast/struct_member_size_attribute.h"
 #include "src/tint/lang/wgsl/ast/switch_statement.h"
 #include "src/tint/lang/wgsl/ast/templated_identifier.h"
@@ -389,17 +385,10 @@ class DependencyScanner {
                 TraverseExpression(wg->y);
                 TraverseExpression(wg->z);
             },
-            [&](const ast::InternalAttribute* i) {
-                for (auto* dep : i->dependencies) {
-                    TraverseExpression(dep);
-                }
-            },
             [&](Default) {
                 if (!attr->IsAnyOf<ast::BuiltinAttribute, ast::DiagnosticAttribute,
                                    ast::InterpolateAttribute, ast::InvariantAttribute,
-                                   ast::MustUseAttribute, ast::RowMajorAttribute,
-                                   ast::StageAttribute, ast::StrideAttribute,
-                                   ast::StructMemberOffsetAttribute>()) {
+                                   ast::MustUseAttribute, ast::StageAttribute>()) {
                     TINT_ICE() << "unhandled attribute type: " << attr->TypeInfo().name;
                 }
             });

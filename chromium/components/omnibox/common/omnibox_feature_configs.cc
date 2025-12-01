@@ -77,15 +77,43 @@ AiMode::AiMode() {
 
 AiModeOmniboxEntryPoint::AiModeOmniboxEntryPoint() {
   enabled = base::FeatureList::IsEnabled(omnibox::kAiModeOmniboxEntryPoint);
+  enabledEnUs =
+      base::FeatureList::IsEnabled(omnibox::kAiModeOmniboxEntryPointEnUs);
+
+  hide_aim_hint_text =
+      base::FeatureParam<bool>(&omnibox::kAiModeOmniboxEntryPoint,
+                               "HideAimHintText", false)
+          .Get();
+
   hide_aim_hint_text_on_ntp_open =
       base::FeatureParam<bool>(&omnibox::kAiModeOmniboxEntryPoint,
-                              "HideAimHintTextOnNtpOpen", false)
+                              "HideAimHintTextOnNtpOpen", true)
+          .Get();
+
+  hide_other_page_actions_on_ntp =
+      base::FeatureParam<bool>(&omnibox::kAiModeOmniboxEntryPoint,
+                               "HideOtherPageActionsOnNtp", true)
+          .Get();
+
+  aim_hint_impression_limit_daily =
+      base::FeatureParam<int>(&omnibox::kAiModeOmniboxEntryPoint,
+                              "AimHintImpressionLimitDaily", 1)
+          .Get();
+
+  aim_hint_impression_limit_total =
+      base::FeatureParam<int>(&omnibox::kAiModeOmniboxEntryPoint,
+                              "AimHintImpressionLimitTotal", 5)
+          .Get();
+
+  enable_hint_impression_limits =
+      base::FeatureParam<bool>(&omnibox::kAiModeOmniboxEntryPoint,
+                               "EnableHintImpressionLimits", false)
           .Get();
 }
 
 BASE_FEATURE(ContextualSearch::kContextualSuggestionsAblateOthersWhenPresent,
              "ContextualSuggestionsAblateOthersWhenPresent",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Meta-feature that enables/disables the other related features if set.
 // When not overridden, each feature is enabled/disabled separately.
@@ -104,7 +132,7 @@ BASE_FEATURE(ContextualSearch::kStarterPackPage,
 // current page, by using more than the URL, i.e. the page content.
 BASE_FEATURE(ContextualSearch::kContextualZeroSuggestLensFulfillment,
              "ContextualZeroSuggestLensFulfillment",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables the contextual search provider to wait for the Lens suggest inputs
 // to be ready before making the suggest request.
@@ -115,11 +143,11 @@ BASE_FEATURE(ContextualSearch::kContextualSearchProviderAsyncSuggestInputs,
 // Feature to enable use of the "ctxus" param on zero suggest requests.
 BASE_FEATURE(ContextualSearch::kSendContextualUrlSuggestParam,
              "SendContextualUrlSuggestParam",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(ContextualSearch::kOmniboxContextualSearchOnFocusSuggestions,
              "OmniboxContextualSearchOnFocusSuggestions",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(ContextualSearch::kContextualSearchBoxUsesContextualSearchProvider,
              "ContextualSearchBoxUsesContextualSearchProvider",
@@ -135,7 +163,7 @@ BASE_FEATURE(ContextualSearch::kContextualSearchOpenLensActionUsesThumbnail,
 
 BASE_FEATURE(ContextualSearch::kSendPageTitleSuggestParam,
              "SendPageTitleSuggestParam",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(ContextualSearch::kContextualSearchAlternativeActionLabel,
              "ContextualSearchAlternativeActionLabel",
@@ -143,11 +171,11 @@ BASE_FEATURE(ContextualSearch::kContextualSearchAlternativeActionLabel,
 
 BASE_FEATURE(ContextualSearch::kUseApcPaywallSignal,
              "UseApcPaywallSignal",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(ContextualSearch::kShowSuggestionsOnNoApc,
              "ShowSuggestionsOnNoApc",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(ContextualSearch::kOpenLensActionUITweaks,
              "OpenLensActionUITweaks",
@@ -155,6 +183,10 @@ BASE_FEATURE(ContextualSearch::kOpenLensActionUITweaks,
 
 BASE_FEATURE(ContextualSearch::kSuggestionsFulfilledByLensSupported,
              "SuggestionsFulfilledByLensSupported",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(ContextualSearch::kLoadingSuggestionsAnimation,
+             "LoadingSuggestionsAnimation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 ContextualSearch::ContextualSearch() {
@@ -212,6 +244,21 @@ ContextualSearch::ContextualSearch() {
       base::FeatureList::IsEnabled(kOpenLensActionUITweaks);
   suggestions_fulfilled_by_lens_supported =
       base::FeatureList::IsEnabled(kSuggestionsFulfilledByLensSupported);
+
+  enable_loading_suggestions_animation =
+      base::FeatureList::IsEnabled(kLoadingSuggestionsAnimation);
+  loading_suggestions_position_animation_duration =
+      base::FeatureParam<int>(&kLoadingSuggestionsAnimation,
+                              "PositionAnimationDuration", 250)
+          .Get();
+  loading_suggestions_opacity_animation_delay =
+      base::FeatureParam<int>(&kLoadingSuggestionsAnimation,
+                              "OpacityAnimationDelay", 100)
+          .Get();
+  loading_suggestions_opacity_animation_duration =
+      base::FeatureParam<int>(&kLoadingSuggestionsAnimation,
+                              "OpacityAnimationDuration", 150)
+          .Get();
 }
 
 ContextualSearch::ContextualSearch(const ContextualSearch&) = default;
@@ -244,6 +291,12 @@ MiaZPS::MiaZPS() {
                                enable_if(IS_ANDROID || IS_IOS))
           .Get();
 }
+
+MiaZPS::MiaZPS(const MiaZPS&) = default;
+MiaZPS::MiaZPS(MiaZPS&&) = default;
+MiaZPS& MiaZPS::operator=(const MiaZPS&) = default;
+MiaZPS& MiaZPS::operator=(MiaZPS&&) = default;
+MiaZPS::~MiaZPS() = default;
 
 BASE_FEATURE(Toolbelt::kOmniboxToolbelt,
              "OmniboxToolbelt",
@@ -338,6 +391,13 @@ DocumentProvider::DocumentProvider() {
                          .Get();
 }
 
+DocumentProvider::DocumentProvider(const DocumentProvider&) = default;
+DocumentProvider::DocumentProvider(DocumentProvider&&) = default;
+DocumentProvider& DocumentProvider::operator=(const DocumentProvider&) =
+    default;
+DocumentProvider& DocumentProvider::operator=(DocumentProvider&&) = default;
+DocumentProvider::~DocumentProvider() = default;
+
 BASE_FEATURE(AdjustOmniboxIndent::kAdjustOmniboxIndent,
              "AdjustOmniboxIndent",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -379,6 +439,16 @@ ForceAllowedToBeDefault::ForceAllowedToBeDefault() {
   enabled = base::FeatureList::IsEnabled(kForceAllowedToBeDefault);
 }
 
+ForceAllowedToBeDefault::ForceAllowedToBeDefault(
+    const ForceAllowedToBeDefault&) = default;
+ForceAllowedToBeDefault::ForceAllowedToBeDefault(ForceAllowedToBeDefault&&) =
+    default;
+ForceAllowedToBeDefault& ForceAllowedToBeDefault::operator=(
+    const ForceAllowedToBeDefault&) = default;
+ForceAllowedToBeDefault& ForceAllowedToBeDefault::operator=(
+    ForceAllowedToBeDefault&&) = default;
+ForceAllowedToBeDefault::~ForceAllowedToBeDefault() = default;
+
 // static
 BASE_FEATURE(RealboxContextualAndTrendingSuggestions::
                  kRealboxContextualAndTrendingSuggestions,
@@ -400,6 +470,21 @@ RealboxContextualAndTrendingSuggestions::
                               "TrendingSuggestionsLimit", 4)
           .Get();
 }
+
+RealboxContextualAndTrendingSuggestions::
+    RealboxContextualAndTrendingSuggestions(
+        const RealboxContextualAndTrendingSuggestions&) = default;
+RealboxContextualAndTrendingSuggestions::
+    RealboxContextualAndTrendingSuggestions(
+        RealboxContextualAndTrendingSuggestions&&) = default;
+RealboxContextualAndTrendingSuggestions&
+RealboxContextualAndTrendingSuggestions::operator=(
+    const RealboxContextualAndTrendingSuggestions&) = default;
+RealboxContextualAndTrendingSuggestions&
+RealboxContextualAndTrendingSuggestions::operator=(
+    RealboxContextualAndTrendingSuggestions&&) = default;
+RealboxContextualAndTrendingSuggestions::
+    ~RealboxContextualAndTrendingSuggestions() = default;
 
 // static
 BASE_FEATURE(SearchAggregatorProvider::kSearchAggregatorProvider,
@@ -579,9 +664,19 @@ SuggestionAnswerMigration::SuggestionAnswerMigration() {
   enabled = base::FeatureList::IsEnabled(kOmniboxSuggestionAnswerMigration);
 }
 
+SuggestionAnswerMigration::SuggestionAnswerMigration(
+    const SuggestionAnswerMigration&) = default;
+SuggestionAnswerMigration::SuggestionAnswerMigration(
+    SuggestionAnswerMigration&&) = default;
+SuggestionAnswerMigration& SuggestionAnswerMigration::operator=(
+    const SuggestionAnswerMigration&) = default;
+SuggestionAnswerMigration& SuggestionAnswerMigration::operator=(
+    SuggestionAnswerMigration&&) = default;
+SuggestionAnswerMigration::~SuggestionAnswerMigration() = default;
+
 BASE_FEATURE(OmniboxZpsSuggestionLimit::kOmniboxZpsSuggestionLimit,
              "OmniboxZpsSuggestionLimit",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 OmniboxZpsSuggestionLimit::OmniboxZpsSuggestionLimit() {
   enabled = base::FeatureList::IsEnabled(kOmniboxZpsSuggestionLimit);
   max_suggestions = base::FeatureParam<size_t>(&kOmniboxZpsSuggestionLimit,
@@ -589,13 +684,23 @@ OmniboxZpsSuggestionLimit::OmniboxZpsSuggestionLimit() {
                         .Get();
   max_search_suggestions =
       base::FeatureParam<size_t>(&kOmniboxZpsSuggestionLimit,
-                                 "OmniboxZpsMaxSearchSuggestions", 3)
+                                 "OmniboxZpsMaxSearchSuggestions", 6)
           .Get();
   max_url_suggestions =
       base::FeatureParam<size_t>(&kOmniboxZpsSuggestionLimit,
-                                 "OmniboxZpsMaxUrlSuggestions", 3)
+                                 "OmniboxZpsMaxUrlSuggestions", 0)
           .Get();
 }
+
+OmniboxZpsSuggestionLimit::OmniboxZpsSuggestionLimit(
+    const OmniboxZpsSuggestionLimit&) = default;
+OmniboxZpsSuggestionLimit::OmniboxZpsSuggestionLimit(
+    OmniboxZpsSuggestionLimit&&) = default;
+OmniboxZpsSuggestionLimit& OmniboxZpsSuggestionLimit::operator=(
+    const OmniboxZpsSuggestionLimit&) = default;
+OmniboxZpsSuggestionLimit& OmniboxZpsSuggestionLimit::operator=(
+    OmniboxZpsSuggestionLimit&&) = default;
+OmniboxZpsSuggestionLimit::~OmniboxZpsSuggestionLimit() = default;
 
 BASE_FEATURE(OmniboxUrlSuggestionsOnFocus::kOmniboxUrlSuggestionsOnFocus,
              "OmniboxUrlSuggestionsOnFocus",
@@ -672,4 +777,50 @@ HappinessTrackingSurveyForOmniboxOnFocusZps::
           &kHappinessTrackingSurveyForOmniboxOnFocusZps, "UtilityTriggerId", "")
           .Get();
 }
+
+HappinessTrackingSurveyForOmniboxOnFocusZps::
+    HappinessTrackingSurveyForOmniboxOnFocusZps(
+        const HappinessTrackingSurveyForOmniboxOnFocusZps&) = default;
+HappinessTrackingSurveyForOmniboxOnFocusZps::
+    HappinessTrackingSurveyForOmniboxOnFocusZps(
+        HappinessTrackingSurveyForOmniboxOnFocusZps&&) = default;
+HappinessTrackingSurveyForOmniboxOnFocusZps&
+HappinessTrackingSurveyForOmniboxOnFocusZps::operator=(
+    const HappinessTrackingSurveyForOmniboxOnFocusZps&) = default;
+HappinessTrackingSurveyForOmniboxOnFocusZps&
+HappinessTrackingSurveyForOmniboxOnFocusZps::operator=(
+    HappinessTrackingSurveyForOmniboxOnFocusZps&&) = default;
+
+HappinessTrackingSurveyForOmniboxOnFocusZps::
+    ~HappinessTrackingSurveyForOmniboxOnFocusZps() = default;
+
+BASE_FEATURE(ComposeboxSuggestionLimit::kComposeboxSuggestionLimit,
+             "ComposeboxSuggestionLimit",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+ComposeboxSuggestionLimit::ComposeboxSuggestionLimit() {
+  enabled = base::FeatureList::IsEnabled(kComposeboxSuggestionLimit);
+  max_suggestions = base::FeatureParam<size_t>(&kComposeboxSuggestionLimit,
+                                               "ComposeboxMaxSuggestions", 5)
+                        .Get();
+  max_aim_suggestions =
+      base::FeatureParam<size_t>(&kComposeboxSuggestionLimit,
+                                 "ComposeboxMaxAimSuggestions", 5)
+          .Get();
+  max_contextual_suggestions =
+      base::FeatureParam<size_t>(&kComposeboxSuggestionLimit,
+                                 "ComposeboxMaxContextualSuggestions", 5)
+          .Get();
+}
+
+ComposeboxSuggestionLimit::ComposeboxSuggestionLimit(
+    const ComposeboxSuggestionLimit&) = default;
+ComposeboxSuggestionLimit::ComposeboxSuggestionLimit(
+    ComposeboxSuggestionLimit&&) = default;
+ComposeboxSuggestionLimit&
+ComposeboxSuggestionLimit::ComposeboxSuggestionLimit::operator=(
+    const ComposeboxSuggestionLimit&) = default;
+ComposeboxSuggestionLimit&
+ComposeboxSuggestionLimit::ComposeboxSuggestionLimit::operator=(
+    ComposeboxSuggestionLimit&&) = default;
+ComposeboxSuggestionLimit::~ComposeboxSuggestionLimit() = default;
 }  // namespace omnibox_feature_configs

@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -10,7 +10,7 @@ import {AffectedResourcesView} from './AffectedResourcesView.js';
 
 const UIStrings = {
   /**
-   *@description Label for the the number of affected `Potentially-tracking Sites` associated with a
+   * @description Label for the the number of affected `Potentially-tracking Sites` associated with a
    *DevTools issue. In this context, `tracking` refers to bounce tracking and `Site` is equivalent
    *to eTLD+1.
    *See https://github.com/privacycg/nav-tracking-mitigations/blob/main/bounce-tracking-explainer.md

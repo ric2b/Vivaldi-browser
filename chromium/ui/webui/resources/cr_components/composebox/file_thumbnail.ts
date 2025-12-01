@@ -44,6 +44,9 @@ export class ComposeboxFileThumbnailElement extends CrLitElement {
     objectUrl: null,
     uuid: '',
     status: FileUploadStatus.kNotUploaded,
+    url: null,
+    file: null,
+    tabId: null,
   };
 
   protected deleteFile_() {

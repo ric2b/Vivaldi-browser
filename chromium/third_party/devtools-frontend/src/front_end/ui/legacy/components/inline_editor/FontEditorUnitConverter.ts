@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,7 +30,7 @@ async function getEmMultiplier(isFontSizeProperty?: boolean): Promise<number> {
 async function getRemMultiplier(): Promise<number> {
   const selectedNode = UI.Context.Context.instance().flavor(SDK.DOMModel.DOMNode);
   const htmlNode = findHtmlNode(selectedNode);
-  if (!htmlNode || !htmlNode.id) {
+  if (!htmlNode?.id) {
     return 16;
   }
   const [model] =

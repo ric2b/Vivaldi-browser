@@ -6,10 +6,13 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
-#include "base/android/build_info.h"
+#include "base/android/device_info.h"
 #include "base/check_deref.h"
 #include "base/functional/callback_helpers.h"
+#include "chrome/browser/android/tab_android.h"
+#include "chrome/browser/android/tab_web_contents_delegate_android.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/strike_database_factory.h"
 #include "chrome/browser/device_reauth/chrome_device_authenticator_factory.h"
@@ -25,6 +28,8 @@
 #include "components/facilitated_payments/core/browser/facilitated_payments_app_info_list.h"
 #include "components/facilitated_payments/core/browser/network_api/facilitated_payments_network_interface.h"
 #include "components/facilitated_payments/core/browser/network_api/multiple_request_facilitated_payments_network_interface.h"
+#include "components/facilitated_payments/core/browser/payment_link_manager.h"
+#include "components/facilitated_payments/core/browser/pix_account_linking_manager.h"
 #include "components/facilitated_payments/core/features/features.h"
 #include "components/facilitated_payments/core/utils/facilitated_payments_ui_utils.h"
 #include "components/optimization_guide/core/hints/optimization_guide_decider.h"
@@ -125,7 +130,15 @@ bool ChromeFacilitatedPaymentsClient::IsInLandscapeMode() {
 }
 
 bool ChromeFacilitatedPaymentsClient::IsFoldable() {
-  return base::android::BuildInfo::GetInstance()->is_foldable();
+  return base::android::device_info::is_foldable();
+}
+
+bool ChromeFacilitatedPaymentsClient::IsInChromeCustomTabMode() {
+  auto* delegate = TabAndroid::FromWebContents(&GetWebContents())
+                       ? static_cast<android::TabWebContentsDelegateAndroid*>(
+                             GetWebContents().GetDelegate())
+                       : nullptr;
+  return delegate && delegate->IsCustomTab();
 }
 
 optimization_guide::OptimizationGuideDecider*
@@ -154,10 +167,11 @@ void ChromeFacilitatedPaymentsClient::ShowPaymentLinkPrompt(
     base::span<const autofill::Ewallet> ewallet_suggestions,
     std::unique_ptr<payments::facilitated::FacilitatedPaymentsAppInfoList>
         app_suggestions,
-    base::OnceCallback<void(int64_t)> on_payment_account_selected) {
+    base::OnceCallback<void(payments::facilitated::SelectedFopData)>
+        on_fop_selected) {
   facilitated_payments_controller_->ShowForPaymentLink(
       ewallet_suggestions, std::move(app_suggestions),
-      std::move(on_payment_account_selected));
+      std::move(on_fop_selected));
 }
 
 void ChromeFacilitatedPaymentsClient::ShowProgressScreen() {
@@ -185,7 +199,8 @@ ChromeFacilitatedPaymentsClient::GetFacilitatedPaymentsDriverForFrame(
   return &driver_factory_.GetOrCreateForFrame(render_frame_host);
 }
 
-autofill::StrikeDatabase* ChromeFacilitatedPaymentsClient::GetStrikeDatabase() {
+strike_database::StrikeDatabase*
+ChromeFacilitatedPaymentsClient::GetStrikeDatabase() {
   content::BrowserContext* context = GetWebContents().GetBrowserContext();
 
   Profile* profile = Profile::FromBrowserContext(context);
@@ -194,6 +209,12 @@ autofill::StrikeDatabase* ChromeFacilitatedPaymentsClient::GetStrikeDatabase() {
   }
 
   return autofill::StrikeDatabaseFactory::GetForProfile(profile);
+}
+
+void ChromeFacilitatedPaymentsClient::InitPixAccountLinkingFlow(
+    const url::Origin& pix_payment_page_origin) {
+  pix_account_linking_manager_->MaybeShowPixAccountLinkingPrompt(
+      pix_payment_page_origin);
 }
 
 void ChromeFacilitatedPaymentsClient::ShowPixAccountLinkingPrompt(

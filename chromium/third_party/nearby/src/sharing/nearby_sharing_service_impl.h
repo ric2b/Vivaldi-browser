@@ -34,7 +34,6 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
-#include "internal/base/observer_list.h"
 #include "internal/platform/clock.h"
 #include "internal/platform/device_info.h"
 #include "internal/platform/implementation/account_manager.h"
@@ -54,7 +53,6 @@
 #include "sharing/internal/api/preference_manager.h"
 #include "sharing/internal/api/sharing_platform.h"
 #include "sharing/internal/api/sharing_rpc_client.h"
-#include "sharing/internal/api/wifi_adapter.h"
 #include "sharing/internal/public/connectivity_manager.h"
 #include "sharing/internal/public/context.h"
 #include "sharing/local_device_data/nearby_share_local_device_data_manager.h"
@@ -69,6 +67,7 @@
 #include "sharing/paired_key_verification_runner.h"
 #include "sharing/proto/enums.pb.h"
 #include "sharing/proto/wire_format.pb.h"
+#include "sharing/service_observers.h"
 #include "sharing/share_session.h"
 #include "sharing/share_target.h"
 #include "sharing/share_target_discovered_callback.h"
@@ -93,7 +92,6 @@ class NearbySharingServiceImpl
       public ::nearby::AccountManager::Observer,
       public NearbyFastInitiation::Observer,
       public sharing::api::BluetoothAdapter::Observer,
-      public sharing::api::WifiAdapter::Observer,
       public NearbyConnectionsManager::IncomingConnectionListener,
       public NearbyConnectionsManager::DiscoveryListener {
   FRIEND_TEST(NearbySharingServiceUnitTests::NearbySharingServiceImplTest,
@@ -112,7 +110,6 @@ class NearbySharingServiceImpl
   // NearbySharingService
   void AddObserver(NearbySharingService::Observer* observer) override;
   void RemoveObserver(NearbySharingService::Observer* observer) override;
-  bool HasObserver(NearbySharingService::Observer* observer) override;
   void Shutdown(
       std::function<void(StatusCodes)> status_codes_callback) override;
   ABSL_DEPRECATED("Use the variant with vendor ID instead.")
@@ -140,8 +137,6 @@ class NearbySharingServiceImpl
   bool IsBluetoothPowered() const override;
   bool IsExtendedAdvertisingSupported() const override;
   bool IsLanConnected() const override;
-  bool IsWifiPresent() const override;
-  bool IsWifiPowered() const override;
   std::string GetQrCodeUrl() const override;
   void SendAttachments(
       int64_t share_target_id,
@@ -225,12 +220,6 @@ class NearbySharingServiceImpl
   void AdapterPoweredChanged(sharing::api::BluetoothAdapter* adapter,
                              bool powered) override;
 
-  // Handle the state changes of Wi-Fi adapter.
-  void AdapterPresentChanged(sharing::api::WifiAdapter* adapter,
-                             bool present) override;
-  void AdapterPoweredChanged(sharing::api::WifiAdapter* adapter,
-                             bool powered) override;
-
   // Handle the hardware error reported that requires PC restart.
   void HardwareErrorReported(NearbyFastInitiation* fast_init) override;
 
@@ -296,7 +285,6 @@ class NearbySharingServiceImpl
 
   void InvalidateFastInitiationScanning();
   void StartFastInitiationScanning();
-  void OnFastInitiationDevicesDetected();
   void OnFastInitiationDevicesNotDetected();
   void StopFastInitiationScanning();
 
@@ -494,7 +482,7 @@ class NearbySharingServiceImpl
   std::unique_ptr<ThreadTimer> certificate_download_during_discovery_timer_;
 
   // A list of service observers.
-  ObserverList<NearbySharingService::Observer> observers_;
+  ServiceObservers service_observers_;
   // A map of foreground receiver callbacks -> vendor ID.
   absl::flat_hash_map<TransferUpdateCallback*, Advertisement::BlockedVendorId>
       foreground_receive_callbacks_map_;

@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "Ia10f1db344be6605e71cb14e14dee866a953facf",
+  "upstream_commit_id": "If271721f13fc7a1f5f818a360bedcf59704a266e",
 
   # The path of the sysroots.json file.
   # This is used by vendor builds like Electron.
@@ -197,8 +197,10 @@ hooks = [
     'name': 'lastchange_dawn',
     'pattern': '.',
     'action': ['python3', 'chromium/build/util/lastchange.py',
+               '-m', 'DAWN_COMMIT_HASH',
                '-s', 'chromium/third_party/dawn',
-               '--revision', 'chromium/gpu/webgpu/DAWN_VERSION'],
+               '--revision', 'chromium/gpu/webgpu/DAWN_VERSION',
+               '--header', 'chromium/gpu/webgpu/dawn_commit_hash.h'],
   },
   # Pull dsymutil binaries using checked-in hashes.
   {
@@ -233,7 +235,6 @@ hooks = [
     'action': [ 'python3', "-u",
                 'chromium/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
-                '--no_auth',
                 '--bucket', 'chromium-browser-clang/rc',
                 '-s', 'chromium/build/toolchain/win/rc/win/rc.exe.sha1',
     ],
@@ -333,7 +334,7 @@ hooks = [
   {
     'name': 'Fetch PGO profiles for mac arm',
     'pattern': '.',
-    'condition': 'checkout_pgo_profiles and (checkout_mac or checkout_android)',
+    'condition': 'checkout_pgo_profiles and (checkout_mac or checkout_ios)',
     'action': [ 'python3',
                 'chromium/tools/update_pgo_profiles.py',
                 '--target=mac-arm',
@@ -418,6 +419,18 @@ hooks = [
       'python3', "-u",
       'scripts/rungn.py',
       '--refresh',
+    ],
+  },
+  {
+    'name': 'Generate clang compilation database',
+    'pattern': '.',
+    'condition': 'clangd_compdb',
+    'action': [ 'python3',
+                'chromium/tools/clang/scripts/generate_compdb.py',
+                '-p',
+                'out/Debug',
+                '-o',
+                'compile_commands.json'
     ],
   }
 ]

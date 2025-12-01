@@ -25,6 +25,7 @@
 #include "src/objects/js-objects.h"
 #include "src/objects/map-updater.h"
 #include "src/objects/maybe-object.h"
+#include "src/objects/objects.h"
 #include "src/objects/oddball.h"
 #include "src/objects/property.h"
 #include "src/objects/transitions-inl.h"
@@ -458,8 +459,6 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
       return kVisitWasmResumeData;
     case WASM_STRUCT_TYPE:
       return kVisitWasmStruct;
-    case WASM_DESCRIPTOR_OPTIONS_TYPE:
-      return kVisitWasmDescriptorOptions;
     case WASM_CONTINUATION_OBJECT_TYPE:
       return kVisitWasmContinuationObject;
     case WASM_SUSPENDING_OBJECT_TYPE:
@@ -1938,8 +1937,9 @@ bool CanHoldValue(Tagged<DescriptorArray> descriptors, InternalIndex descriptor,
   PropertyDetails details = descriptors->GetDetails(descriptor);
   if (details.location() == PropertyLocation::kField) {
     if (details.kind() == PropertyKind::kData) {
-      return IsGeneralizableTo(constness, details.constness()) &&
-             Object::FitsRepresentation(value, details.representation()) &&
+      if (!IsGeneralizableTo(constness, details.constness())) return false;
+      if (IsUninitializedHole(value)) return true;
+      return Object::FitsRepresentation(value, details.representation()) &&
              FieldType::NowContains(descriptors->GetFieldType(descriptor),
                                     value);
     } else {
@@ -2382,8 +2382,8 @@ void Map::SetInstanceDescriptors(Isolate* isolate,
 
 // static
 DirectHandle<PrototypeInfo> Map::GetOrCreatePrototypeInfo(
-    DirectHandle<JSObject> prototype, Isolate* isolate) {
-  DCHECK(IsJSObjectThatCanBeTrackedAsPrototype(*prototype));
+    DirectHandle<JSReceiver> prototype, Isolate* isolate) {
+  DCHECK(IsAnyObjectThatCanBeTrackedAsPrototype(*prototype));
   {
     Tagged<PrototypeInfo> prototype_info;
     if (prototype->map()->TryGetPrototypeInfo(&prototype_info)) {

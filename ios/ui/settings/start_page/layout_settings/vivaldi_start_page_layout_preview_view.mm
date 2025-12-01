@@ -165,6 +165,7 @@ const CGFloat numberOfItems = 30;
       [smallCell configurePreviewForDevice: self.showTabletLayout];
       return smallCell;
     }
+#if defined(VIVALDI_RELEASE_KIND) && VIVALDI_RELEASE_KIND != 2 // Not final
     case VivaldiStartPageLayoutStyleIcon: {
       VivaldiSpeedDialIconCell *iconCell =
         [collectionView dequeueReusableCellWithReuseIdentifier:cellIdIcon
@@ -172,6 +173,7 @@ const CGFloat numberOfItems = 30;
       [iconCell configurePreviewForDevice: self.showTabletLayout];
       return iconCell;
     }
+#endif
     case VivaldiStartPageLayoutStyleList: {
         VivaldiSpeedDialListCell *listCell =
           [collectionView dequeueReusableCellWithReuseIdentifier:cellIdList

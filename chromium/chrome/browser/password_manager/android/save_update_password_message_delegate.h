@@ -115,6 +115,9 @@ class SaveUpdatePasswordMessageDelegate
 
   // Following methods handle events associated with user interaction with UI.
   void HandleSaveButtonClicked();
+  void SavePassword();
+  void SavePasswordAfterDeviceLockUi(bool is_device_lock_set);
+  void SaveFormManager();
   void HandleNeverSaveClicked();
   void HandleUpdateButtonClicked();
   void DisplayEditDialog(bool update_password);
@@ -124,15 +127,13 @@ class SaveUpdatePasswordMessageDelegate
 
   void ClearState();
 
-  void RecordMessageShownMetrics();
+  void RecordMessageShownMetrics(bool update_password);
   void RecordDismissalReasonMetrics(
       password_manager::metrics_util::UIDismissalReason ui_dismissal_reason);
 
   static password_manager::metrics_util::UIDismissalReason
   MessageDismissReasonToPasswordManagerUIDismissalReason(
       messages::DismissReason dismiss_reason);
-
-  void MaybeNudgeToUpdateGmsCore();
 
   PasswordEditDialogFactory password_edit_dialog_factory_;
 
@@ -150,9 +151,6 @@ class SaveUpdatePasswordMessageDelegate
   std::unique_ptr<PasswordEditDialog> password_edit_dialog_;
 
   std::unique_ptr<DeviceLockBridge> device_lock_bridge_;
-
-  void SavePassword();
-  void SavePasswordAfterDeviceLockUi(bool is_device_lock_set);
 
   base::WeakPtrFactory<SaveUpdatePasswordMessageDelegate> weak_ptr_factory_{
       this};

@@ -15,8 +15,10 @@
 use super::image::*;
 
 use std::ffi::CStr;
+use std::ffi::CString;
 use std::os::raw::c_char;
 use std::os::raw::c_int;
+use std::os::raw::c_uint;
 use std::os::raw::c_void;
 
 use crate::utils::clap::*;
@@ -474,13 +476,6 @@ pub enum avifChannelIndex {
     AvifChanA = 3,
 }
 
-/// cbindgen:rename-all=ScreamingSnakeCase
-#[repr(C)]
-pub enum avifHeaderFormat {
-    AvifHeaderFull,
-    AvifHeaderReduced,
-}
-
 #[repr(C)]
 pub struct avifPixelFormatInfo {
     monochrome: avifBool,
@@ -595,3 +590,35 @@ pub const AVIF_QUANTIZER_LOSSLESS: u32 = 0;
 pub const AVIF_SPEED_SLOWEST: u32 = 0;
 pub const AVIF_SPEED_FASTEST: u32 = 10;
 pub const AVIF_SPEED_DEFAULT: u32 = 6;
+
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if outBuffer is not null, it has to be point a valid char buffer of size at least 256.
+#[no_mangle]
+pub unsafe extern "C" fn crabby_avifCodecVersions(outBuffer: *mut c_char) {
+    if outBuffer.is_null() {
+        return;
+    }
+    let versions = match CString::new(codec_versions()) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    let bytes = versions.as_bytes_with_nul();
+    if bytes.len() > 256 {
+        return;
+    }
+    // SAFETY: Safe because of the pre-condition, the null check and the size check above.
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr() as _, outBuffer, bytes.len());
+    }
+}
+
+/// # Safety
+/// C API function that does not perform any unsafe operations.
+#[no_mangle]
+pub unsafe extern "C" fn crabby_avifLibYUVVersion() -> c_uint {
+    #[cfg(feature = "libyuv")]
+    return libyuv_sys::bindings::LIBYUV_VERSION as _;
+    #[cfg(not(feature = "libyuv"))]
+    return 0;
+}

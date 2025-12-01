@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,10 +23,7 @@ async function openNestedWorkerFile(selectors: NestedFileSelector, devToolsPage:
 }
 
 describe('The Sources Tab', function() {
-  it('can show multiple dedicated workers with different scripts', async ({devToolsPage, inspectedPage}: {
-                                                                     devToolsPage: DevToolsPage,
-                                                                     inspectedPage: InspectedPage,
-                                                                   }) => {
+  it('can show multiple dedicated workers with different scripts', async ({devToolsPage, inspectedPage}) => {
     const worker1Selectors = createSelectorsForFile('worker1.js', inspectedPage);
     const worker2Selectors = createSelectorsForFile('worker2.js', inspectedPage);
     // Have the target load the page.

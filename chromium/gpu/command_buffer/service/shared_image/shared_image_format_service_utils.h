@@ -20,7 +20,11 @@
 
 #if BUILDFLAG(ENABLE_VULKAN)
 #include <vulkan/vulkan_core.h>
-#endif
+#endif  // BUILDFLAG(ENABLE_VULKAN)
+
+#if BUILDFLAG(IS_WIN)
+#include <dxgi.h>
+#endif  // BUILDFLAG(IS_WIN)
 
 namespace skgpu::graphite {
 class TextureInfo;
@@ -48,6 +52,11 @@ struct GLFormatDesc {
 // A set of utility functions to get the equivalent GPU API (GL, Vulkan, Dawn,
 // Metal) type/format information for a given SharedImageFormat. These functions
 // should ideally only be called from the GPU service and viz.
+
+// Returns true if the buffer handle `size` is valid for `format`, checking for
+// odd size support.
+GPU_GLES2_EXPORT bool IsSizeForBufferHandleValid(const gfx::Size& size,
+                                                 viz::SharedImageFormat format);
 
 // BufferFormat is being transitioned out of SharedImage code (to use
 // SharedImageFormat instead). Refrain from using this function or preferably
@@ -130,6 +139,11 @@ GPU_GLES2_EXPORT VkFormat ToVkFormatSinglePlanar(viz::SharedImageFormat format);
 GPU_GLES2_EXPORT VkFormat ToVkFormat(viz::SharedImageFormat format,
                                      int plane_index);
 #endif
+
+#if BUILDFLAG(IS_WIN)
+// Formats supported with no GpuMemoryBufferHandle.
+GPU_GLES2_EXPORT DXGI_FORMAT ToDXGIFormat(viz::SharedImageFormat format);
+#endif  // BUILDFLAG(IS_WIN)
 
 // Following functions return the appropriate Dawn format for a
 // SharedImageFormat. Returns wgpu::TextureFormat format for given `format`.

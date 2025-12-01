@@ -8,7 +8,13 @@
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
+#include "api/video/video_frame_buffer.h"
+
+#include <jni.h>
+
+#include "api/scoped_refptr.h"
 #include "api/video/i420_buffer.h"
+#include "rtc_base/checks.h"
 #include "sdk/android/src/jni/jni_helpers.h"
 #include "sdk/android/src/jni/video_frame.h"
 #include "sdk/android/src/jni/wrapped_native_i420_buffer.h"
@@ -22,8 +28,8 @@ JNI_FUNCTION_DECLARATION(jint,
                          JNIEnv* jni,
                          jclass,
                          jobject video_frame_buffer) {
-  const jni_zero::JavaParamRef<jobject> j_video_frame_buffer(
-      jni, video_frame_buffer);
+  const jni_zero::JavaRef<jobject> j_video_frame_buffer =
+      jni_zero::JavaRef<jobject>::CreateLeaky(jni, video_frame_buffer);
   webrtc::scoped_refptr<VideoFrameBuffer> buffer =
       JavaToNativeFrameBuffer(jni, j_video_frame_buffer);
   return static_cast<jint>(buffer->type());
@@ -34,7 +40,8 @@ JNI_FUNCTION_DECLARATION(jobject,
                          JNIEnv* jni,
                          jclass,
                          jobject i420_buffer) {
-  const jni_zero::JavaParamRef<jobject> j_i420_buffer(jni, i420_buffer);
+  const jni_zero::JavaRef<jobject> j_i420_buffer =
+      jni_zero::JavaRef<jobject>::CreateLeaky(jni, i420_buffer);
   webrtc::scoped_refptr<VideoFrameBuffer> buffer =
       JavaToNativeFrameBuffer(jni, j_i420_buffer);
   const I420BufferInterface* inputBuffer = buffer->GetI420();

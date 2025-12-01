@@ -33,7 +33,6 @@ static_assert(proto::CastMessage_ProtocolVersion_CASTV2_1_3 ==
 
 using proto::CastMessage;
 using ::testing::_;
-using ::testing::Invoke;
 using ::testing::SaveArg;
 using ::testing::WithArg;
 
@@ -232,12 +231,11 @@ TEST_F(VirtualConnectionRouterTest, SendMessage) {
   ASSERT_TRUE(message.IsInitialized());
 
   EXPECT_CALL(destination, OnMessage(&remote_router_, remote_socket_, _))
-      .WillOnce(
-          WithArg<2>(Invoke([&message](CastMessage message_at_destination) {
-            ASSERT_TRUE(message_at_destination.IsInitialized());
-            EXPECT_EQ(message.SerializeAsString(),
-                      message_at_destination.SerializeAsString());
-          })));
+      .WillOnce(WithArg<2>([&message](CastMessage message_at_destination) {
+        ASSERT_TRUE(message_at_destination.IsInitialized());
+        EXPECT_EQ(message.SerializeAsString(),
+                  message_at_destination.SerializeAsString());
+      }));
   local_router_.Send(VirtualConnection{"receiver-1234", "sender-4321",
                                        local_socket_->socket_id()},
                      message);

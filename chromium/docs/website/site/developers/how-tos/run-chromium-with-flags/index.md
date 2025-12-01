@@ -128,7 +128,11 @@ line on non-rooted devices" in chrome://flags, then set command-line in
 command-line item should be a "_" (underscore) followed by the ones you actually
 need. Finally, manually restart Chrome ("Relaunch" from chrome://flags page
 might no be enough to trigger reading this file). See
-<https://crbug.com/784947>.
+<https://crbug.com/784947> for more information. To set the flags without having
+a production build, `adb` can be used instead by following
+[these instructions](https://chromium.googlesource.com/chromium/src/+/main/android_webview/docs/commandline-flags.md#manual)
+from the WebView docs (but note that the file path mentioned above should be
+used instead of the WebView-specific path shown there).
 
 ### ContentShell on Android
 

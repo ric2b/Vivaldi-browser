@@ -32,6 +32,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "dawn/common/LRUCache.h"
 #include "dawn/common/RefCountedWithExternalCount.h"
 #include "dawn/common/WeakRef.h"
@@ -40,15 +41,16 @@
 #include "dawn/native/Error.h"
 #include "dawn/native/Format.h"
 #include "dawn/native/Forward.h"
+#include "dawn/native/IntegerTypes.h"
 #include "dawn/native/ObjectBase.h"
 #include "dawn/native/SharedTextureMemory.h"
 #include "dawn/native/Subresource.h"
-#include "partition_alloc/pointers/raw_ref.h"
-
 #include "dawn/native/dawn_platform.h"
+#include "partition_alloc/pointers/raw_ref.h"
 
 namespace dawn::native {
 
+class DynamicArrayState;
 class MemoryDump;
 
 enum class AllowMultiPlanarTextureFormat {
@@ -70,6 +72,30 @@ ResultOrError<TextureViewDescriptor> GetTextureViewDescriptorWithDefaults(
     const TextureViewDescriptor* descriptor);
 
 bool IsValidSampleCount(uint32_t sampleCount);
+
+// Computes a swizzle which, when applied, is equivalent to applying `firstSwizzle`
+// then `secondSwizzle`, like the order of WGSL swizzles (`value.rgba.rgba`).
+wgpu::TextureComponentSwizzle ComposeSwizzle(wgpu::TextureComponentSwizzle firstSwizzle,
+                                             wgpu::TextureComponentSwizzle secondSwizzle);
+
+// Checks if two swizzles are functionally identical.
+bool AreSwizzleEquivalent(wgpu::TextureComponentSwizzle lhs, wgpu::TextureComponentSwizzle rhs);
+
+// The default swizzle as defined by the WebGPU specification.
+static constexpr wgpu::TextureComponentSwizzle kRGBASwizzle = {
+    wgpu::ComponentSwizzle::R,
+    wgpu::ComponentSwizzle::G,
+    wgpu::ComponentSwizzle::B,
+    wgpu::ComponentSwizzle::A,
+};
+
+// The swizzle typically used for depth and stencil textures.
+static constexpr wgpu::TextureComponentSwizzle kR001Swizzle = {
+    wgpu::ComponentSwizzle::R,
+    wgpu::ComponentSwizzle::Zero,
+    wgpu::ComponentSwizzle::Zero,
+    wgpu::ComponentSwizzle::One,
+};
 
 static constexpr wgpu::TextureUsage kReadOnlyTextureUsages =
     wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::TextureBinding | kReadOnlyRenderAttachment |
@@ -144,6 +170,8 @@ class TextureBase : public RefCountedWithExternalCount<SharedResource> {
     SubresourceRange GetAllSubresources() const;
     uint32_t GetSampleCount() const;
     uint32_t GetSubresourceCount() const;
+    bool HasPinnedUsage() const;
+    wgpu::TextureUsage GetPinnedUsage() const;
 
     // |GetUsage| returns the usage with which the texture was created using the base WebGPU
     // API. The dawn-internal-usages extension may add additional usages. |GetInternalUsage|
@@ -186,6 +214,11 @@ class TextureBase : public RefCountedWithExternalCount<SharedResource> {
     // GetMipLevelSingleSubresourceVirtualSize.
     Extent3D GetMipLevelSubresourceVirtualSize(uint32_t level, Aspect aspect) const;
 
+    MaybeError Pin(wgpu::TextureUsage usage);
+    void Unpin();
+    void AddDynamicArraySlot(DynamicArrayState* dynamicArray, BindingIndex i);
+    void RemoveDynamicArraySlot(DynamicArrayState* dynamicArray, BindingIndex i);
+
     ResultOrError<Ref<TextureViewBase>> CreateView(
         const TextureViewDescriptor* descriptor = nullptr);
     Ref<TextureViewBase> CreateErrorView(const TextureViewDescriptor* descriptor = nullptr);
@@ -206,6 +239,8 @@ class TextureBase : public RefCountedWithExternalCount<SharedResource> {
     TextureViewBase* APICreateView(const TextureViewDescriptor* descriptor = nullptr);
     TextureViewBase* APICreateErrorView(const TextureViewDescriptor* descriptor = nullptr);
     void APIDestroy();
+    void APIPin(wgpu::TextureUsage usages);
+    void APIUnpin();
     uint32_t APIGetWidth() const;
     uint32_t APIGetHeight() const;
     uint32_t APIGetDepthOrArrayLayers() const;
@@ -225,6 +260,9 @@ class TextureBase : public RefCountedWithExternalCount<SharedResource> {
 
     ExecutionSerial mLastSharedTextureMemoryUsageSerial{kBeginningOfGPUTime};
 
+    virtual MaybeError PinImpl(wgpu::TextureUsage usage);
+    virtual void UnpinImpl();
+
   private:
     struct TextureState {
         TextureState();
@@ -241,6 +279,9 @@ class TextureBase : public RefCountedWithExternalCount<SharedResource> {
 
     ResultOrError<Ref<TextureViewBase>> GetOrCreateDefaultView();
 
+    MaybeError ValidatePin(wgpu::TextureUsage usages) const;
+    MaybeError ValidateUnpin() const;
+
     void WillAddFirstExternalRef() override;
     void WillDropLastExternalRef() override;
 
@@ -255,6 +296,7 @@ class TextureBase : public RefCountedWithExternalCount<SharedResource> {
     uint32_t mSampleCount;
     wgpu::TextureUsage mUsage = wgpu::TextureUsage::None;
     wgpu::TextureUsage mInternalUsage = wgpu::TextureUsage::None;
+    wgpu::TextureUsage mPinnedUsage = wgpu::TextureUsage::None;  // None if not pinned.
     TextureState mState;
     wgpu::TextureFormat mFormatEnumForReflection;
 
@@ -264,8 +306,21 @@ class TextureBase : public RefCountedWithExternalCount<SharedResource> {
     ApiObjectList mTextureViews;
 
     using TextureViewCache =
-        LRUCache<TextureViewQuery, Ref<TextureViewBase>, ErrorData, TextureViewCacheFuncs>;
+        LRUCache<TextureViewQuery, Ref<TextureViewBase>, TextureViewCacheFuncs>;
     std::unique_ptr<TextureViewCache> mTextureViewCache;
+
+    // Keep a hash set of the places this texture is bound to in DynamicArrayStates.
+    struct DynamicArraySlot {
+        WeakRef<DynamicArrayState> dynamicArray;
+        BindingIndex slot;
+
+        struct HashFuncs {
+            size_t operator()(const DynamicArraySlot& query) const;
+            bool operator()(const DynamicArraySlot& a, const DynamicArraySlot& b) const;
+        };
+    };
+    absl::flat_hash_set<DynamicArraySlot, DynamicArraySlot::HashFuncs, DynamicArraySlot::HashFuncs>
+        mDynamicArraySlots;
 
     // TODO(crbug.com/dawn/845): Use a more optimized data structure to save space
     std::vector<bool> mIsSubresourceContentInitializedAtIndex;
@@ -315,11 +370,11 @@ class TextureViewBase : public ApiObjectBase {
     wgpu::TextureUsage GetUsage() const;
     wgpu::TextureUsage GetInternalUsage() const;
 
+    wgpu::TextureComponentSwizzle GetSwizzle() const;
     wgpu::ComponentSwizzle GetSwizzleRed() const;
     wgpu::ComponentSwizzle GetSwizzleGreen() const;
     wgpu::ComponentSwizzle GetSwizzleBlue() const;
     wgpu::ComponentSwizzle GetSwizzleAlpha() const;
-    bool UsesNonDefaultSwizzle() const;
 
     virtual bool IsYCbCr() const;
     // Valid to call only if `IsYCbCr()` is true.

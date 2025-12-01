@@ -46,8 +46,6 @@ update_target("//content/browser:browser") {
     "//vivaldi/components/content/vivaldi_web_contents.cc",
     "//vivaldi/components/content/vivaldi_postponed_calls.cc",
     "//vivaldi/components/content/vivaldi_postponed_calls.h",
-    "//vivaldi/components/content/vivaldi_content_frame_tools.cc",
-    "//vivaldi/components/content/vivaldi_content_frame_tools.h",
     "//vivaldi/content/browser/renderer_host/vivaldi_render_widget_host_view_child_frame.cc",
     "//vivaldi/content/browser/renderer_host/vivaldi_overscroll_controller.cc",
     "//vivaldi/content/browser/renderer_host/vivaldi_overscroll_controller.h",
@@ -190,10 +188,14 @@ if (!is_android) {
       "//vivaldi/components/menu/vivaldi_toolkit_delegate_views.cc",
     ]
     deps += [
-      "//vivaldi/extensions/schema",
+      "//extensions/common:mojom",
+      "//chrome/common:mojo_bindings",
       "//chrome/common/compose:mojo_bindings",
       "//chrome/browser:compose_optimization_guide_proto",
       "//components/autofill/content/common/mojom",
+      "//components/lens:buildflags",
+      "//components/supervised_user/core/browser/proto",
+      "//vivaldi/extensions/schema",
     ]
   }
 
@@ -202,6 +204,8 @@ if (!is_android) {
       "//vivaldi/components/browser/vivaldi_app_window.cc",
       "//vivaldi/components/guest_view/vivaldi_guest_view_internal_api.cc",
       "//vivaldi/components/guest_view/vivaldi_web_view_permission_helper_delegate.cc",
+      "//vivaldi/components/permissions/vivaldi_permission_persistence.cc",
+      "//vivaldi/components/permissions/vivaldi_permission_persistence.h",
     ]
     deps += [
       "//vivaldi/extensions:vivaldi_extension_component_wrapper",

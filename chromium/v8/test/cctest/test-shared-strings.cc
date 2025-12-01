@@ -1176,7 +1176,8 @@ UNINITIALIZED_TEST(PagePromotionRecordingOldToShared) {
     // create an OLD_TO_SHARED slot.
     ObjectSlot slot = young_object->RawFieldOfFirstElement();
     CHECK(RememberedSet<OLD_TO_SHARED>::Contains(
-        MutablePageMetadata::FromHeapObject(*young_object), slot.address()));
+        MutablePageMetadata::FromHeapObject(i_isolate, *young_object),
+        slot.address()));
   }
 }
 
@@ -1850,6 +1851,7 @@ UNINITIALIZED_TEST(ConcurrentExternalizationWithSharedResources) {
 
 void TestConcurrentExternalizationWithDeadStrings(bool share_resources,
                                                   bool transition_with_stack) {
+  if (v8_flags.conservative_stack_scanning) return;
   v8_flags.shared_string_table = true;
   i::FlagList::EnforceFlagImplications();
 
@@ -2119,21 +2121,26 @@ class WorkerIsolateThread : public v8::base::Thread {
 
     {
       v8::Isolate::Scope isolate_scope(client);
-      HandleScope handle_scope(i_client);
-      DirectHandle<String> shared_string = factory->NewStringFromAsciiChecked(
-          "foobar", AllocationType::kSharedOld);
-      CHECK(HeapLayout::InWritableSharedSpace(*shared_string));
-      v8::Local<v8::String> lh_shared_string = Utils::ToLocal(shared_string);
-      gh_shared_string.Reset(test_->main_isolate(), lh_shared_string);
-      gh_shared_string.SetWeak();
-    }
 
-    {
-      // We need to invoke GC without stack, otherwise some objects may survive.
-      DisableConservativeStackScanningScopeForTesting no_stack_scanning(
-          i_client->heap());
-      i_client->heap()->CollectGarbageShared(i_client->main_thread_local_heap(),
-                                             GarbageCollectionReason::kTesting);
+      {
+        HandleScope handle_scope(i_client);
+        DirectHandle<String> shared_string = factory->NewStringFromAsciiChecked(
+            "foobar", AllocationType::kSharedOld);
+        CHECK(HeapLayout::InWritableSharedSpace(*shared_string));
+        v8::Local<v8::String> lh_shared_string = Utils::ToLocal(shared_string);
+        gh_shared_string.Reset(test_->main_isolate(), lh_shared_string);
+        gh_shared_string.SetWeak();
+      }
+
+      {
+        // We need to invoke GC without stack, otherwise some objects may
+        // survive.
+        DisableConservativeStackScanningScopeForTesting no_stack_scanning(
+            i_client->heap());
+        i_client->heap()->CollectGarbageShared(
+            i_client->main_thread_local_heap(),
+            GarbageCollectionReason::kTesting);
+      }
     }
 
     CHECK(gh_shared_string.IsEmpty());
@@ -2217,7 +2224,8 @@ class ClientIsolateThreadForPagePromotions : public v8::base::Thread {
       // create an OLD_TO_SHARED slot.
       ObjectSlot slot = young_object->RawFieldOfFirstElement();
       CHECK(RememberedSet<OLD_TO_SHARED>::Contains(
-          MutablePageMetadata::FromHeapObject(*young_object), slot.address()));
+          MutablePageMetadata::FromHeapObject(i_client, *young_object),
+          slot.address()));
     }
 
     client->Dispose();
@@ -2403,7 +2411,8 @@ class ClientIsolateThreadForRetainingByRememberedSet : public v8::base::Thread {
       // create an OLD_TO_SHARED slot.
       ObjectSlot slot = young_object->RawFieldOfFirstElement();
       CHECK(RememberedSet<OLD_TO_SHARED>::Contains(
-          MutablePageMetadata::FromHeapObject(*young_object), slot.address()));
+          MutablePageMetadata::FromHeapObject(i_client, *young_object),
+          slot.address()));
     }
 
     client_isolate_->Dispose();

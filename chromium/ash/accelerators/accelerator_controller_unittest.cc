@@ -26,7 +26,7 @@
 #include "ash/display/display_configuration_controller_test_api.h"
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
-#include "ash/frame/non_client_frame_view_ash.h"
+#include "ash/frame/frame_view_ash.h"
 #include "ash/game_dashboard/test_game_dashboard_delegate.h"
 #include "ash/ime/ime_controller_impl.h"
 #include "ash/ime/test_ime_controller_client.h"
@@ -1075,7 +1075,7 @@ TEST_F(AcceleratorControllerTestWithClamshellSplitView,
 }
 
 TEST_F(AcceleratorControllerTest, RotateScreen) {
-  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
+  display::Display display = display::Screen::Get()->GetPrimaryDisplay();
   display::Display::Rotation initial_rotation =
       GetActiveDisplayRotation(display.id());
   AccessibilityController* accessibility_controller =
@@ -1239,7 +1239,7 @@ TEST_F(AcceleratorControllerTest, RotateScreenWithWindowLockingOrientation) {
   // those that requested window rotation locks.
   TabletModeControllerTestApi().AttachExternalMouse();
   EXPECT_TRUE(tablet_mode_controller->is_in_tablet_physical_state());
-  EXPECT_FALSE(display::Screen::GetScreen()->InTabletMode());
+  EXPECT_FALSE(display::Screen::Get()->InTabletMode());
 
   wm::ActivateWindow(win0.get());
   EXPECT_TRUE(screen_orientation_controller->rotation_locked());
@@ -1625,7 +1625,7 @@ TEST_F(AcceleratorControllerTest, ToggleMultitaskMenu) {
   ui::Accelerator accelerator(ui::VKEY_Z, ui::EF_COMMAND_DOWN);
   // Pressing accelerator once should show the multitask menu.
   EXPECT_TRUE(ProcessInController(accelerator));
-  auto* frame_view = NonClientFrameViewAsh::Get(window.get());
+  auto* frame_view = FrameViewAsh::Get(window.get());
   auto* size_button = static_cast<chromeos::FrameSizeButton*>(
       frame_view->GetHeaderView()->caption_button_container()->size_button());
   ASSERT_TRUE(size_button->IsMultitaskMenuShown());
@@ -1798,12 +1798,10 @@ TEST_F(AcceleratorControllerTest, SideVolumeButtonLocation) {
   base::Value::Dict location;
   location.Set(kVolumeButtonRegion, kVolumeButtonRegionScreen);
   location.Set(kVolumeButtonSide, kVolumeButtonSideLeft);
-  std::string json_location;
-  base::JSONWriter::Write(location, &json_location);
   base::ScopedTempDir file_tmp_dir;
   ASSERT_TRUE(file_tmp_dir.CreateUniqueTempDir());
   base::FilePath file_path = file_tmp_dir.GetPath().Append("location.json");
-  ASSERT_TRUE(WriteJsonFile(file_path, json_location));
+  ASSERT_TRUE(WriteJsonFile(file_path, base::WriteJson(location).value_or("")));
   EXPECT_TRUE(base::PathExists(file_path));
   test_api_->SetSideVolumeButtonFilePath(file_path);
   EXPECT_EQ(kVolumeButtonRegionScreen,

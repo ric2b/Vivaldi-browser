@@ -31,14 +31,18 @@ inline constexpr std::string_view kAutofillAblationSeedPref =
 // AutofillAI.
 inline constexpr char kAutofillAiOptInStatus[] =
     "autofill.autofill_ai.opt_in_status";
+// Integer that is set to the last version where the Autofill AI deduping
+// routine was run. This routine will be run once per version.
+inline constexpr char kAutofillAiLastVersionDeduped[] =
+    "autofill.ai_last_version_deduped";
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS)
+    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
 // Boolean that is true if BNPL on Autofill is enabled.
 inline constexpr char kAutofillBnplEnabled[] = "autofill.bnpl_enabled";
 // Boolean that is true if the user has ever seen a BNPL suggestion.
 inline constexpr char kAutofillHasSeenBnpl[] = "autofill.has_seen_bnpl";
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
-        // BUILDFLAG(IS_CHROMEOS)
+        // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
 // Boolean that is true if Autofill is enabled and allowed to save credit card
 // data.
 inline constexpr char kAutofillCreditCardEnabled[] =
@@ -106,6 +110,20 @@ inline constexpr char kAutofillMetadataUploadEvents[] =
 // prefs was last reset.
 inline constexpr char kAutofillUploadEventsLastResetTimestamp[] =
     "autofill.upload_events_last_reset_timestamp";
+// A string that stores hash of concatenated NAME_FULL and EMAIL_ADDRESS info
+// coming from the Account Name Email profile.
+inline constexpr char kAutofillNameAndEmailProfileSignature[] =
+    "autofill.name_and_email_profile_signature";
+// A counter responsible for keeping track of number of times the user did not
+// accept `kAccountNameEmail` profile suggestion.
+inline constexpr char kAutofillNameAndEmailProfileNotSelectedCounter[] =
+    "autofill.name_and_email_profile_not_selected_counter";
+// Boolean responsible for storing if kAccountNameEmail profile suggestion was
+// filled and submitted. The use_count (and other types of `AutofillProfile`
+// metadata) are not synced for kAccountNameEmail profile, thus making the
+// tracking of the usage pref based.
+inline constexpr char kAutofillWasNameAndEmailProfileUsed[] =
+    "autofill.was_name_and_email_profile_used";
 // Integer that is set to the last major version where the Autocomplete
 // retention policy was run.
 inline constexpr char kAutocompleteLastVersionRetentionPolicy[] =
@@ -247,20 +265,20 @@ bool IsFacilitatedPaymentsA2AEnabled(const PrefService* prefs);
 void SetFacilitatedPaymentsA2ATriggeredOnce(PrefService* prefs, bool value);
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS)
+    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
 void SetAutofillBnplEnabled(PrefService* prefs, bool value);
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
-        // BUILDFLAG(IS_CHROMEOS)
+        // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
 
 bool IsAutofillBnplEnabled(const PrefService* prefs);
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS)
+    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
 void SetAutofillHasSeenBnpl(PrefService* prefs);
 
 bool HasSeenBnpl(const PrefService* prefs);
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
-        // BUILDFLAG(IS_CHROMEOS)
+        // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
 }  // namespace autofill::prefs
 
 #endif  // COMPONENTS_AUTOFILL_CORE_COMMON_AUTOFILL_PREFS_H_

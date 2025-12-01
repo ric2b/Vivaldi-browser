@@ -34,6 +34,8 @@
 //                       Do not modify this file directly
 ////////////////////////////////////////////////////////////////////////////////
 
+// clang-format off
+
 #include "src/tint/lang/core/enums.h"
 
 #include <gtest/gtest.h>
@@ -63,10 +65,14 @@ static constexpr AccessCase kValidAccessCases[] = {
 };
 
 static constexpr AccessCase kInvalidAccessCases[] = {
-    {"ccad", Access::kUndefined},       {"3", Access::kUndefined},
-    {"rVad", Access::kUndefined},       {"read1write", Access::kUndefined},
-    {"reaJqqrite", Access::kUndefined}, {"rea7ll_write", Access::kUndefined},
-    {"wrqHtpp", Access::kUndefined},    {"ve", Access::kUndefined},
+    {"ccad", Access::kUndefined},
+    {"3", Access::kUndefined},
+    {"rVad", Access::kUndefined},
+    {"read1write", Access::kUndefined},
+    {"reaJqqrite", Access::kUndefined},
+    {"rea7ll_write", Access::kUndefined},
+    {"wrqHtpp", Access::kUndefined},
+    {"ve", Access::kUndefined},
     {"Grbe", Access::kUndefined},
 };
 
@@ -79,9 +85,7 @@ TEST_P(AccessParseTest, Parse) {
 }
 
 INSTANTIATE_TEST_SUITE_P(ValidAccessCases, AccessParseTest, testing::ValuesIn(kValidAccessCases));
-INSTANTIATE_TEST_SUITE_P(InvalidAccessCases,
-                         AccessParseTest,
-                         testing::ValuesIn(kInvalidAccessCases));
+INSTANTIATE_TEST_SUITE_P(InvalidAccessCases, AccessParseTest, testing::ValuesIn(kInvalidAccessCases));
 
 using AccessPrintTest = testing::TestWithParam<AccessCase>;
 
@@ -107,23 +111,36 @@ inline std::ostream& operator<<(std::ostream& out, AddressSpaceCase c) {
 }
 
 static constexpr AddressSpaceCase kValidAddressSpaceCases[] = {
-    {"function", AddressSpace::kFunction},      {"immediate", AddressSpace::kImmediate},
-    {"pixel_local", AddressSpace::kPixelLocal}, {"private", AddressSpace::kPrivate},
-    {"storage", AddressSpace::kStorage},        {"uniform", AddressSpace::kUniform},
+    {"function", AddressSpace::kFunction},
+    {"immediate", AddressSpace::kImmediate},
+    {"pixel_local", AddressSpace::kPixelLocal},
+    {"private", AddressSpace::kPrivate},
+    {"storage", AddressSpace::kStorage},
+    {"uniform", AddressSpace::kUniform},
     {"workgroup", AddressSpace::kWorkgroup},
 };
 
 static constexpr AddressSpaceCase kInvalidAddressSpaceCases[] = {
-    {"fuviition", AddressSpace::kUndefined},    {"fuWWcti8n", AddressSpace::kUndefined},
-    {"fxxcMion", AddressSpace::kUndefined},     {"iXediggte", AddressSpace::kUndefined},
-    {"immXVue", AddressSpace::kUndefined},      {"3mmediate", AddressSpace::kUndefined},
-    {"pixel_locaE", AddressSpace::kUndefined},  {"piTTel_locPl", AddressSpace::kUndefined},
-    {"pxxdxel_loal", AddressSpace::kUndefined}, {"p44ivate", AddressSpace::kUndefined},
-    {"prSSvaVVe", AddressSpace::kUndefined},    {"RriR22e", AddressSpace::kUndefined},
-    {"sFra9e", AddressSpace::kUndefined},       {"stoage", AddressSpace::kUndefined},
-    {"VOORRHge", AddressSpace::kUndefined},     {"unfoym", AddressSpace::kUndefined},
-    {"llnnrrf77rm", AddressSpace::kUndefined},  {"unif4r00", AddressSpace::kUndefined},
-    {"wooogup", AddressSpace::kUndefined},      {"wozzgrop", AddressSpace::kUndefined},
+    {"fuviition", AddressSpace::kUndefined},
+    {"fuWWcti8n", AddressSpace::kUndefined},
+    {"fxxcMion", AddressSpace::kUndefined},
+    {"iXediggte", AddressSpace::kUndefined},
+    {"immXVue", AddressSpace::kUndefined},
+    {"3mmediate", AddressSpace::kUndefined},
+    {"pixel_locaE", AddressSpace::kUndefined},
+    {"piTTel_locPl", AddressSpace::kUndefined},
+    {"pxxdxel_loal", AddressSpace::kUndefined},
+    {"p44ivate", AddressSpace::kUndefined},
+    {"prSSvaVVe", AddressSpace::kUndefined},
+    {"RriR22e", AddressSpace::kUndefined},
+    {"sFra9e", AddressSpace::kUndefined},
+    {"stoage", AddressSpace::kUndefined},
+    {"VOORRHge", AddressSpace::kUndefined},
+    {"unfoym", AddressSpace::kUndefined},
+    {"llnnrrf77rm", AddressSpace::kUndefined},
+    {"unif4r00", AddressSpace::kUndefined},
+    {"wooogup", AddressSpace::kUndefined},
+    {"wozzgrop", AddressSpace::kUndefined},
     {"o11pkgriiu", AddressSpace::kUndefined},
 };
 
@@ -135,12 +152,8 @@ TEST_P(AddressSpaceParseTest, Parse) {
     EXPECT_EQ(expect, ParseAddressSpace(string));
 }
 
-INSTANTIATE_TEST_SUITE_P(ValidAddressSpaceCases,
-                         AddressSpaceParseTest,
-                         testing::ValuesIn(kValidAddressSpaceCases));
-INSTANTIATE_TEST_SUITE_P(InvalidAddressSpaceCases,
-                         AddressSpaceParseTest,
-                         testing::ValuesIn(kInvalidAddressSpaceCases));
+INSTANTIATE_TEST_SUITE_P(ValidAddressSpaceCases, AddressSpaceParseTest, testing::ValuesIn(kValidAddressSpaceCases));
+INSTANTIATE_TEST_SUITE_P(InvalidAddressSpaceCases, AddressSpaceParseTest, testing::ValuesIn(kInvalidAddressSpaceCases));
 
 using AddressSpacePrintTest = testing::TestWithParam<AddressSpaceCase>;
 
@@ -150,9 +163,7 @@ TEST_P(AddressSpacePrintTest, Print) {
     EXPECT_EQ(expect, ToString(value));
 }
 
-INSTANTIATE_TEST_SUITE_P(ValidAddressSpaceCases,
-                         AddressSpacePrintTest,
-                         testing::ValuesIn(kValidAddressSpaceCases));
+INSTANTIATE_TEST_SUITE_P(ValidAddressSpaceCases, AddressSpacePrintTest, testing::ValuesIn(kValidAddressSpaceCases));
 
 }  // namespace parse_print_tests
 
@@ -169,8 +180,10 @@ inline std::ostream& operator<<(std::ostream& out, InterpolationSamplingCase c) 
 }
 
 static constexpr InterpolationSamplingCase kValidInterpolationSamplingCases[] = {
-    {"center", InterpolationSampling::kCenter}, {"centroid", InterpolationSampling::kCentroid},
-    {"either", InterpolationSampling::kEither}, {"first", InterpolationSampling::kFirst},
+    {"center", InterpolationSampling::kCenter},
+    {"centroid", InterpolationSampling::kCentroid},
+    {"either", InterpolationSampling::kEither},
+    {"first", InterpolationSampling::kFirst},
     {"sample", InterpolationSampling::kSample},
 };
 
@@ -200,12 +213,8 @@ TEST_P(InterpolationSamplingParseTest, Parse) {
     EXPECT_EQ(expect, ParseInterpolationSampling(string));
 }
 
-INSTANTIATE_TEST_SUITE_P(ValidInterpolationSamplingCases,
-                         InterpolationSamplingParseTest,
-                         testing::ValuesIn(kValidInterpolationSamplingCases));
-INSTANTIATE_TEST_SUITE_P(InvalidInterpolationSamplingCases,
-                         InterpolationSamplingParseTest,
-                         testing::ValuesIn(kInvalidInterpolationSamplingCases));
+INSTANTIATE_TEST_SUITE_P(ValidInterpolationSamplingCases, InterpolationSamplingParseTest, testing::ValuesIn(kValidInterpolationSamplingCases));
+INSTANTIATE_TEST_SUITE_P(InvalidInterpolationSamplingCases, InterpolationSamplingParseTest, testing::ValuesIn(kInvalidInterpolationSamplingCases));
 
 using InterpolationSamplingPrintTest = testing::TestWithParam<InterpolationSamplingCase>;
 
@@ -215,9 +224,7 @@ TEST_P(InterpolationSamplingPrintTest, Print) {
     EXPECT_EQ(expect, ToString(value));
 }
 
-INSTANTIATE_TEST_SUITE_P(ValidInterpolationSamplingCases,
-                         InterpolationSamplingPrintTest,
-                         testing::ValuesIn(kValidInterpolationSamplingCases));
+INSTANTIATE_TEST_SUITE_P(ValidInterpolationSamplingCases, InterpolationSamplingPrintTest, testing::ValuesIn(kValidInterpolationSamplingCases));
 
 }  // namespace parse_print_tests
 }  // namespace interpolation_sampling_tests
@@ -241,10 +248,14 @@ static constexpr InterpolationTypeCase kValidInterpolationTypeCases[] = {
 };
 
 static constexpr InterpolationTypeCase kInvalidInterpolationTypeCases[] = {
-    {"fat", InterpolationType::kUndefined},       {"flrrt", InterpolationType::kUndefined},
-    {"fGat", InterpolationType::kUndefined},      {"linFFar", InterpolationType::kUndefined},
-    {"lna", InterpolationType::kUndefined},       {"lrrnea", InterpolationType::kUndefined},
-    {"persetive", InterpolationType::kUndefined}, {"XrspJJcDive", InterpolationType::kUndefined},
+    {"fat", InterpolationType::kUndefined},
+    {"flrrt", InterpolationType::kUndefined},
+    {"fGat", InterpolationType::kUndefined},
+    {"linFFar", InterpolationType::kUndefined},
+    {"lna", InterpolationType::kUndefined},
+    {"lrrnea", InterpolationType::kUndefined},
+    {"persetive", InterpolationType::kUndefined},
+    {"XrspJJcDive", InterpolationType::kUndefined},
     {"pesect8v", InterpolationType::kUndefined},
 };
 
@@ -256,12 +267,8 @@ TEST_P(InterpolationTypeParseTest, Parse) {
     EXPECT_EQ(expect, ParseInterpolationType(string));
 }
 
-INSTANTIATE_TEST_SUITE_P(ValidInterpolationTypeCases,
-                         InterpolationTypeParseTest,
-                         testing::ValuesIn(kValidInterpolationTypeCases));
-INSTANTIATE_TEST_SUITE_P(InvalidInterpolationTypeCases,
-                         InterpolationTypeParseTest,
-                         testing::ValuesIn(kInvalidInterpolationTypeCases));
+INSTANTIATE_TEST_SUITE_P(ValidInterpolationTypeCases, InterpolationTypeParseTest, testing::ValuesIn(kValidInterpolationTypeCases));
+INSTANTIATE_TEST_SUITE_P(InvalidInterpolationTypeCases, InterpolationTypeParseTest, testing::ValuesIn(kInvalidInterpolationTypeCases));
 
 using InterpolationTypePrintTest = testing::TestWithParam<InterpolationTypeCase>;
 
@@ -271,9 +278,7 @@ TEST_P(InterpolationTypePrintTest, Print) {
     EXPECT_EQ(expect, ToString(value));
 }
 
-INSTANTIATE_TEST_SUITE_P(ValidInterpolationTypeCases,
-                         InterpolationTypePrintTest,
-                         testing::ValuesIn(kValidInterpolationTypeCases));
+INSTANTIATE_TEST_SUITE_P(ValidInterpolationTypeCases, InterpolationTypePrintTest, testing::ValuesIn(kValidInterpolationTypeCases));
 
 }  // namespace parse_print_tests
 }  // namespace interpolation_type_tests
@@ -290,89 +295,169 @@ inline std::ostream& operator<<(std::ostream& out, TexelFormatCase c) {
 }
 
 static constexpr TexelFormatCase kValidTexelFormatCases[] = {
-    {"bgra8unorm", TexelFormat::kBgra8Unorm},   {"r16float", TexelFormat::kR16Float},
-    {"r16sint", TexelFormat::kR16Sint},         {"r16snorm", TexelFormat::kR16Snorm},
-    {"r16uint", TexelFormat::kR16Uint},         {"r16unorm", TexelFormat::kR16Unorm},
-    {"r32float", TexelFormat::kR32Float},       {"r32sint", TexelFormat::kR32Sint},
-    {"r32uint", TexelFormat::kR32Uint},         {"r8sint", TexelFormat::kR8Sint},
-    {"r8snorm", TexelFormat::kR8Snorm},         {"r8uint", TexelFormat::kR8Uint},
-    {"r8unorm", TexelFormat::kR8Unorm},         {"rg11b10ufloat", TexelFormat::kRg11B10Ufloat},
-    {"rg16float", TexelFormat::kRg16Float},     {"rg16sint", TexelFormat::kRg16Sint},
-    {"rg16snorm", TexelFormat::kRg16Snorm},     {"rg16uint", TexelFormat::kRg16Uint},
-    {"rg16unorm", TexelFormat::kRg16Unorm},     {"rg32float", TexelFormat::kRg32Float},
-    {"rg32sint", TexelFormat::kRg32Sint},       {"rg32uint", TexelFormat::kRg32Uint},
-    {"rg8sint", TexelFormat::kRg8Sint},         {"rg8snorm", TexelFormat::kRg8Snorm},
-    {"rg8uint", TexelFormat::kRg8Uint},         {"rg8unorm", TexelFormat::kRg8Unorm},
-    {"rgb10a2uint", TexelFormat::kRgb10A2Uint}, {"rgb10a2unorm", TexelFormat::kRgb10A2Unorm},
-    {"rgba16float", TexelFormat::kRgba16Float}, {"rgba16sint", TexelFormat::kRgba16Sint},
-    {"rgba16snorm", TexelFormat::kRgba16Snorm}, {"rgba16uint", TexelFormat::kRgba16Uint},
-    {"rgba16unorm", TexelFormat::kRgba16Unorm}, {"rgba32float", TexelFormat::kRgba32Float},
-    {"rgba32sint", TexelFormat::kRgba32Sint},   {"rgba32uint", TexelFormat::kRgba32Uint},
-    {"rgba8sint", TexelFormat::kRgba8Sint},     {"rgba8snorm", TexelFormat::kRgba8Snorm},
-    {"rgba8uint", TexelFormat::kRgba8Uint},     {"rgba8unorm", TexelFormat::kRgba8Unorm},
+    {"bgra8unorm", TexelFormat::kBgra8Unorm},
+    {"r16float", TexelFormat::kR16Float},
+    {"r16sint", TexelFormat::kR16Sint},
+    {"r16snorm", TexelFormat::kR16Snorm},
+    {"r16uint", TexelFormat::kR16Uint},
+    {"r16unorm", TexelFormat::kR16Unorm},
+    {"r32float", TexelFormat::kR32Float},
+    {"r32sint", TexelFormat::kR32Sint},
+    {"r32uint", TexelFormat::kR32Uint},
+    {"r8sint", TexelFormat::kR8Sint},
+    {"r8snorm", TexelFormat::kR8Snorm},
+    {"r8uint", TexelFormat::kR8Uint},
+    {"r8unorm", TexelFormat::kR8Unorm},
+    {"rg11b10ufloat", TexelFormat::kRg11B10Ufloat},
+    {"rg16float", TexelFormat::kRg16Float},
+    {"rg16sint", TexelFormat::kRg16Sint},
+    {"rg16snorm", TexelFormat::kRg16Snorm},
+    {"rg16uint", TexelFormat::kRg16Uint},
+    {"rg16unorm", TexelFormat::kRg16Unorm},
+    {"rg32float", TexelFormat::kRg32Float},
+    {"rg32sint", TexelFormat::kRg32Sint},
+    {"rg32uint", TexelFormat::kRg32Uint},
+    {"rg8sint", TexelFormat::kRg8Sint},
+    {"rg8snorm", TexelFormat::kRg8Snorm},
+    {"rg8uint", TexelFormat::kRg8Uint},
+    {"rg8unorm", TexelFormat::kRg8Unorm},
+    {"rgb10a2uint", TexelFormat::kRgb10A2Uint},
+    {"rgb10a2unorm", TexelFormat::kRgb10A2Unorm},
+    {"rgba16float", TexelFormat::kRgba16Float},
+    {"rgba16sint", TexelFormat::kRgba16Sint},
+    {"rgba16snorm", TexelFormat::kRgba16Snorm},
+    {"rgba16uint", TexelFormat::kRgba16Uint},
+    {"rgba16unorm", TexelFormat::kRgba16Unorm},
+    {"rgba32float", TexelFormat::kRgba32Float},
+    {"rgba32sint", TexelFormat::kRgba32Sint},
+    {"rgba32uint", TexelFormat::kRgba32Uint},
+    {"rgba8sint", TexelFormat::kRgba8Sint},
+    {"rgba8snorm", TexelFormat::kRgba8Snorm},
+    {"rgba8uint", TexelFormat::kRgba8Uint},
+    {"rgba8unorm", TexelFormat::kRgba8Unorm},
 };
 
 static constexpr TexelFormatCase kInvalidTexelFormatCases[] = {
-    {"bg811kor", TexelFormat::kUndefined},        {"bgr8unorm", TexelFormat::kUndefined},
-    {"bgJa8unom", TexelFormat::kUndefined},       {"r16fcoat", TexelFormat::kUndefined},
-    {"r16floOt", TexelFormat::kUndefined},        {"r16floKK_vtt", TexelFormat::kUndefined},
-    {"xx8sint", TexelFormat::kUndefined},         {"__q16Fn", TexelFormat::kUndefined},
-    {"r16qint", TexelFormat::kUndefined},         {"r1633nor6", TexelFormat::kUndefined},
-    {"rtto6sn9QQm", TexelFormat::kUndefined},     {"r1666nor", TexelFormat::kUndefined},
-    {"r6Oizz66", TexelFormat::kUndefined},        {"r16uyynt", TexelFormat::kUndefined},
-    {"Z1HHnZ", TexelFormat::kUndefined},          {"qWW46unrm", TexelFormat::kUndefined},
-    {"r16OOnrm", TexelFormat::kUndefined},        {"16unoYm", TexelFormat::kUndefined},
-    {"rloat", TexelFormat::kUndefined},           {"r3fFoat", TexelFormat::kUndefined},
-    {"w32floa", TexelFormat::kUndefined},         {"fG2iKt", TexelFormat::kUndefined},
-    {"r32qKint", TexelFormat::kUndefined},        {"r32mmiFt", TexelFormat::kUndefined},
-    {"32uint", TexelFormat::kUndefined},          {"r2uinq", TexelFormat::kUndefined},
-    {"r32uibb", TexelFormat::kUndefined},         {"isint", TexelFormat::kUndefined},
-    {"rOOinq", TexelFormat::kUndefined},          {"r8siTvvt", TexelFormat::kUndefined},
-    {"r8FFnorm", TexelFormat::kUndefined},        {"P800oQm", TexelFormat::kUndefined},
-    {"rPsnorm", TexelFormat::kUndefined},         {"rssin77", TexelFormat::kUndefined},
-    {"r8CiRRbb", TexelFormat::kUndefined},        {"r8uinXX", TexelFormat::kUndefined},
-    {"q8CCnoOOm", TexelFormat::kUndefined},       {"r8nsrL", TexelFormat::kUndefined},
-    {"rXunorm", TexelFormat::kUndefined},         {"r11b10ufloat", TexelFormat::kUndefined},
-    {"g11b10ufqqo", TexelFormat::kUndefined},     {"rg122b10ufloat", TexelFormat::kUndefined},
-    {"rzzy6Xlo0t", TexelFormat::kUndefined},      {"rP1ifloat", TexelFormat::kUndefined},
-    {"rg6Cnnoat", TexelFormat::kUndefined},       {"rgqqAAHHn", TexelFormat::kUndefined},
-    {"g16sint", TexelFormat::kUndefined},         {"rg1fKin", TexelFormat::kUndefined},
-    {"lgg16snP", TexelFormat::kUndefined},        {"rg6snorm", TexelFormat::kUndefined},
-    {"4g16cTNorm", TexelFormat::kUndefined},      {"pgl6uin77", TexelFormat::kUndefined},
-    {"rz1Ngint", TexelFormat::kUndefined},        {"bg16uXXut", TexelFormat::kUndefined},
-    {"rg16norm", TexelFormat::kUndefined},        {"Q688norK", TexelFormat::kUndefined},
-    {"rg9unqrm", TexelFormat::kUndefined},        {"rg32flo11t", TexelFormat::kUndefined},
-    {"rgiiF22oat", TexelFormat::kUndefined},      {"r773float", TexelFormat::kUndefined},
-    {"rg3NNi2t", TexelFormat::kUndefined},        {"rg32VVint", TexelFormat::kUndefined},
-    {"WW1132swnF", TexelFormat::kUndefined},      {"rww32uin", TexelFormat::kUndefined},
-    {"rg32uiDt", TexelFormat::kUndefined},        {"rg32inK", TexelFormat::kUndefined},
-    {"rg8s1PPht", TexelFormat::kUndefined},       {"rg8snt", TexelFormat::kUndefined},
-    {"rYY8sint", TexelFormat::kUndefined},        {"kkHHsnVtm", TexelFormat::kUndefined},
-    {"rg8rrnorm", TexelFormat::kUndefined},       {"rs8snorWW", TexelFormat::kUndefined},
-    {"Y8uint", TexelFormat::kUndefined},          {"r8uqft", TexelFormat::kUndefined},
-    {"rgv22uiut", TexelFormat::kUndefined},       {"rgunor", TexelFormat::kUndefined},
-    {"Yg8norm", TexelFormat::kUndefined},         {"7YEg8unorm", TexelFormat::kUndefined},
-    {"oog10a2dinM", TexelFormat::kUndefined},     {"rgb0a2uinMM", TexelFormat::kUndefined},
-    {"rgb10a2uin55", TexelFormat::kUndefined},    {"rb0a2uNorm", TexelFormat::kUndefined},
-    {"Ogb330a23nrm", TexelFormat::kUndefined},    {"rgb1032unorm", TexelFormat::kUndefined},
-    {"rgbI6flomt", TexelFormat::kUndefined},      {"rrbK16flnnat", TexelFormat::kUndefined},
-    {"rba1flXX", TexelFormat::kUndefined},        {"Iga1pLLint", TexelFormat::kUndefined},
-    {"fb16sint", TexelFormat::kUndefined},        {"UgbRRDsinY", TexelFormat::kUndefined},
-    {"rgha16snorm", TexelFormat::kUndefined},     {"rba1quunIIr", TexelFormat::kUndefined},
-    {"rgba16Hnorm", TexelFormat::kUndefined},     {"gbaQQvvint", TexelFormat::kUndefined},
-    {"66a16uent", TexelFormat::kUndefined},       {"rW7a16uin", TexelFormat::kUndefined},
-    {"rg0a556unorDD", TexelFormat::kUndefined},   {"rgbH16unIIrm", TexelFormat::kUndefined},
-    {"rba16unorm", TexelFormat::kUndefined},      {"rba32flort", TexelFormat::kUndefined},
-    {"rlba32float", TexelFormat::kUndefined},     {"tGgb32loJJt", TexelFormat::kUndefined},
-    {"rgya3sint", TexelFormat::kUndefined},       {"rba32sint", TexelFormat::kUndefined},
-    {"IIgbaBB2sint", TexelFormat::kUndefined},    {"33Kb832uinTT", TexelFormat::kUndefined},
-    {"nngbaYYUUuindSS", TexelFormat::kUndefined}, {"dgba5x2uiZt", TexelFormat::kUndefined},
-    {"rkkba8sinq", TexelFormat::kUndefined},      {"5bapisin00", TexelFormat::kUndefined},
-    {"rnnba8siIIt", TexelFormat::kUndefined},     {"ccWbsnoKm", TexelFormat::kUndefined},
-    {"rgb8snKK", TexelFormat::kUndefined},        {"rgba8sno66m", TexelFormat::kUndefined},
-    {"rgaKPPuin", TexelFormat::kUndefined},       {"rgxxa8int", TexelFormat::kUndefined},
-    {"rgbq8uint", TexelFormat::kUndefined},       {"rMba8SSnyyrm", TexelFormat::kUndefined},
-    {"rgbuunrm", TexelFormat::kUndefined},        {"rgbSnrm", TexelFormat::kUndefined},
+    {"bg811kor", TexelFormat::kUndefined},
+    {"bgr8unorm", TexelFormat::kUndefined},
+    {"bgJa8unom", TexelFormat::kUndefined},
+    {"r16fcoat", TexelFormat::kUndefined},
+    {"r16floOt", TexelFormat::kUndefined},
+    {"r16floKK_vtt", TexelFormat::kUndefined},
+    {"xx8sint", TexelFormat::kUndefined},
+    {"__q16Fn", TexelFormat::kUndefined},
+    {"r16qint", TexelFormat::kUndefined},
+    {"r1633nor6", TexelFormat::kUndefined},
+    {"rtto6sn9QQm", TexelFormat::kUndefined},
+    {"r1666nor", TexelFormat::kUndefined},
+    {"r6Oizz66", TexelFormat::kUndefined},
+    {"r16uyynt", TexelFormat::kUndefined},
+    {"Z1HHnZ", TexelFormat::kUndefined},
+    {"qWW46unrm", TexelFormat::kUndefined},
+    {"r16OOnrm", TexelFormat::kUndefined},
+    {"16unoYm", TexelFormat::kUndefined},
+    {"rloat", TexelFormat::kUndefined},
+    {"r3fFoat", TexelFormat::kUndefined},
+    {"w32floa", TexelFormat::kUndefined},
+    {"fG2iKt", TexelFormat::kUndefined},
+    {"r32qKint", TexelFormat::kUndefined},
+    {"r32mmiFt", TexelFormat::kUndefined},
+    {"32uint", TexelFormat::kUndefined},
+    {"r2uinq", TexelFormat::kUndefined},
+    {"r32uibb", TexelFormat::kUndefined},
+    {"isint", TexelFormat::kUndefined},
+    {"rOOinq", TexelFormat::kUndefined},
+    {"r8siTvvt", TexelFormat::kUndefined},
+    {"r8FFnorm", TexelFormat::kUndefined},
+    {"P800oQm", TexelFormat::kUndefined},
+    {"rPsnorm", TexelFormat::kUndefined},
+    {"rssin77", TexelFormat::kUndefined},
+    {"r8CiRRbb", TexelFormat::kUndefined},
+    {"r8uinXX", TexelFormat::kUndefined},
+    {"q8CCnoOOm", TexelFormat::kUndefined},
+    {"r8nsrL", TexelFormat::kUndefined},
+    {"rXunorm", TexelFormat::kUndefined},
+    {"r11b10ufloat", TexelFormat::kUndefined},
+    {"g11b10ufqqo", TexelFormat::kUndefined},
+    {"rg122b10ufloat", TexelFormat::kUndefined},
+    {"rzzy6Xlo0t", TexelFormat::kUndefined},
+    {"rP1ifloat", TexelFormat::kUndefined},
+    {"rg6Cnnoat", TexelFormat::kUndefined},
+    {"rgqqAAHHn", TexelFormat::kUndefined},
+    {"g16sint", TexelFormat::kUndefined},
+    {"rg1fKin", TexelFormat::kUndefined},
+    {"lgg16snP", TexelFormat::kUndefined},
+    {"rg6snorm", TexelFormat::kUndefined},
+    {"4g16cTNorm", TexelFormat::kUndefined},
+    {"pgl6uin77", TexelFormat::kUndefined},
+    {"rz1Ngint", TexelFormat::kUndefined},
+    {"bg16uXXut", TexelFormat::kUndefined},
+    {"rg16norm", TexelFormat::kUndefined},
+    {"Q688norK", TexelFormat::kUndefined},
+    {"rg9unqrm", TexelFormat::kUndefined},
+    {"rg32flo11t", TexelFormat::kUndefined},
+    {"rgiiF22oat", TexelFormat::kUndefined},
+    {"r773float", TexelFormat::kUndefined},
+    {"rg3NNi2t", TexelFormat::kUndefined},
+    {"rg32VVint", TexelFormat::kUndefined},
+    {"WW1132swnF", TexelFormat::kUndefined},
+    {"rww32uin", TexelFormat::kUndefined},
+    {"rg32uiDt", TexelFormat::kUndefined},
+    {"rg32inK", TexelFormat::kUndefined},
+    {"rg8s1PPht", TexelFormat::kUndefined},
+    {"rg8snt", TexelFormat::kUndefined},
+    {"rYY8sint", TexelFormat::kUndefined},
+    {"kkHHsnVtm", TexelFormat::kUndefined},
+    {"rg8rrnorm", TexelFormat::kUndefined},
+    {"rs8snorWW", TexelFormat::kUndefined},
+    {"Y8uint", TexelFormat::kUndefined},
+    {"r8uqft", TexelFormat::kUndefined},
+    {"rgv22uiut", TexelFormat::kUndefined},
+    {"rgunor", TexelFormat::kUndefined},
+    {"Yg8norm", TexelFormat::kUndefined},
+    {"7YEg8unorm", TexelFormat::kUndefined},
+    {"oog10a2dinM", TexelFormat::kUndefined},
+    {"rgb0a2uinMM", TexelFormat::kUndefined},
+    {"rgb10a2uin55", TexelFormat::kUndefined},
+    {"rb0a2uNorm", TexelFormat::kUndefined},
+    {"Ogb330a23nrm", TexelFormat::kUndefined},
+    {"rgb1032unorm", TexelFormat::kUndefined},
+    {"rgbI6flomt", TexelFormat::kUndefined},
+    {"rrbK16flnnat", TexelFormat::kUndefined},
+    {"rba1flXX", TexelFormat::kUndefined},
+    {"Iga1pLLint", TexelFormat::kUndefined},
+    {"fb16sint", TexelFormat::kUndefined},
+    {"UgbRRDsinY", TexelFormat::kUndefined},
+    {"rgha16snorm", TexelFormat::kUndefined},
+    {"rba1quunIIr", TexelFormat::kUndefined},
+    {"rgba16Hnorm", TexelFormat::kUndefined},
+    {"gbaQQvvint", TexelFormat::kUndefined},
+    {"66a16uent", TexelFormat::kUndefined},
+    {"rW7a16uin", TexelFormat::kUndefined},
+    {"rg0a556unorDD", TexelFormat::kUndefined},
+    {"rgbH16unIIrm", TexelFormat::kUndefined},
+    {"rba16unorm", TexelFormat::kUndefined},
+    {"rba32flort", TexelFormat::kUndefined},
+    {"rlba32float", TexelFormat::kUndefined},
+    {"tGgb32loJJt", TexelFormat::kUndefined},
+    {"rgya3sint", TexelFormat::kUndefined},
+    {"rba32sint", TexelFormat::kUndefined},
+    {"IIgbaBB2sint", TexelFormat::kUndefined},
+    {"33Kb832uinTT", TexelFormat::kUndefined},
+    {"nngbaYYUUuindSS", TexelFormat::kUndefined},
+    {"dgba5x2uiZt", TexelFormat::kUndefined},
+    {"rkkba8sinq", TexelFormat::kUndefined},
+    {"5bapisin00", TexelFormat::kUndefined},
+    {"rnnba8siIIt", TexelFormat::kUndefined},
+    {"ccWbsnoKm", TexelFormat::kUndefined},
+    {"rgb8snKK", TexelFormat::kUndefined},
+    {"rgba8sno66m", TexelFormat::kUndefined},
+    {"rgaKPPuin", TexelFormat::kUndefined},
+    {"rgxxa8int", TexelFormat::kUndefined},
+    {"rgbq8uint", TexelFormat::kUndefined},
+    {"rMba8SSnyyrm", TexelFormat::kUndefined},
+    {"rgbuunrm", TexelFormat::kUndefined},
+    {"rgbSnrm", TexelFormat::kUndefined},
 };
 
 using TexelFormatParseTest = testing::TestWithParam<TexelFormatCase>;
@@ -383,12 +468,8 @@ TEST_P(TexelFormatParseTest, Parse) {
     EXPECT_EQ(expect, ParseTexelFormat(string));
 }
 
-INSTANTIATE_TEST_SUITE_P(ValidTexelFormatCases,
-                         TexelFormatParseTest,
-                         testing::ValuesIn(kValidTexelFormatCases));
-INSTANTIATE_TEST_SUITE_P(InvalidTexelFormatCases,
-                         TexelFormatParseTest,
-                         testing::ValuesIn(kInvalidTexelFormatCases));
+INSTANTIATE_TEST_SUITE_P(ValidTexelFormatCases, TexelFormatParseTest, testing::ValuesIn(kValidTexelFormatCases));
+INSTANTIATE_TEST_SUITE_P(InvalidTexelFormatCases, TexelFormatParseTest, testing::ValuesIn(kInvalidTexelFormatCases));
 
 using TexelFormatPrintTest = testing::TestWithParam<TexelFormatCase>;
 
@@ -398,9 +479,7 @@ TEST_P(TexelFormatPrintTest, Print) {
     EXPECT_EQ(expect, ToString(value));
 }
 
-INSTANTIATE_TEST_SUITE_P(ValidTexelFormatCases,
-                         TexelFormatPrintTest,
-                         testing::ValuesIn(kValidTexelFormatCases));
+INSTANTIATE_TEST_SUITE_P(ValidTexelFormatCases, TexelFormatPrintTest, testing::ValuesIn(kValidTexelFormatCases));
 
 }  // namespace parse_print_tests
 
@@ -479,6 +558,7 @@ static constexpr BuiltinTypeCase kValidBuiltinTypeCases[] = {
     {"mat4x4f", BuiltinType::kMat4X4F},
     {"mat4x4h", BuiltinType::kMat4X4H},
     {"ptr", BuiltinType::kPtr},
+    {"resource_binding", BuiltinType::kResourceBinding},
     {"sampler", BuiltinType::kSampler},
     {"sampler_comparison", BuiltinType::kSamplerComparison},
     {"subgroup_matrix_left", BuiltinType::kSubgroupMatrixLeft},
@@ -711,126 +791,129 @@ static constexpr BuiltinTypeCase kInvalidBuiltinTypeCases[] = {
     {"ptd", BuiltinType::kUndefined},
     {"pCPtd", BuiltinType::kUndefined},
     {"p", BuiltinType::kUndefined},
-    {"s5mpler", BuiltinType::kUndefined},
-    {"s9jmffler", BuiltinType::kUndefined},
-    {"samRvlXXr", BuiltinType::kUndefined},
-    {"samper_ompariscn", BuiltinType::kUndefined},
-    {"sampler_copaXXi58n", BuiltinType::kUndefined},
-    {"samplr_comprison", BuiltinType::kUndefined},
-    {"subgrppp_matrix_lecct", BuiltinType::kUndefined},
-    {"subgroup_matrvx_left", BuiltinType::kUndefined},
-    {"sEEbgrupJmatSSix_left", BuiltinType::kUndefined},
-    {"subgrup_marix_result", BuiltinType::kUndefined},
-    {"sbgrup_m_trix_resut", BuiltinType::kUndefined},
-    {"sbgroup_m_trix_rewwult", BuiltinType::kUndefined},
-    {"subgroup_matrix_ri99ddt", BuiltinType::kUndefined},
-    {"subgroPP_m99trix_righ", BuiltinType::kUndefined},
-    {"sugroup_matrix_rKKght", BuiltinType::kUndefined},
-    {"teel_buoofeDD", BuiltinType::kUndefined},
-    {"exel_uBeii", BuiltinType::kUndefined},
-    {"texl_buqer", BuiltinType::kUndefined},
-    {"txt00rLL_d", BuiltinType::kUndefined},
-    {"tnxture_16vv", BuiltinType::kUndefined},
-    {"trrxtur_nd", BuiltinType::kUndefined},
+    {"resour5e_binding", BuiltinType::kUndefined},
+    {"rejource_bin99iffg", BuiltinType::kUndefined},
+    {"rRsYYuXXce_bivding", BuiltinType::kUndefined},
+    {"cmler", BuiltinType::kUndefined},
+    {"XX8m5le", BuiltinType::kUndefined},
+    {"mpler", BuiltinType::kUndefined},
+    {"samcclr_cppmparison", BuiltinType::kUndefined},
+    {"sampler_comparivon", BuiltinType::kUndefined},
+    {"sampSSerJcomparEEon", BuiltinType::kUndefined},
+    {"subgroup_atrix_let", BuiltinType::kUndefined},
+    {"subgou_mat_x_left", BuiltinType::kUndefined},
+    {"subgroup_mat_iw_left", BuiltinType::kUndefined},
+    {"subgroudd_matrix_resu99t", BuiltinType::kUndefined},
+    {"subgroup_mtrix_99eulPP", BuiltinType::kUndefined},
+    {"suKKgroup_mtrix_result", BuiltinType::kUndefined},
+    {"suDDgroup_maorix_righM", BuiltinType::kUndefined},
+    {"subropBmatriixright", BuiltinType::kUndefined},
+    {"sqgroup_atrix_right", BuiltinType::kUndefined},
+    {"LLexe00bffer", BuiltinType::kUndefined},
+    {"tnxel_bvvffe66", BuiltinType::kUndefined},
+    {"nrxel_buffer", BuiltinType::kUndefined},
     {"xxture_eed", BuiltinType::kUndefined},
-    {"CCNOxture_2d", BuiltinType::kUndefined},
-    {"txture_2d", BuiltinType::kUndefined},
-    {"tex4ure_2d_array", BuiltinType::kUndefined},
-    {"teNNture_2d_arNNy", BuiltinType::kUndefined},
-    {"texture2d_array", BuiltinType::kUndefined},
-    {"tuxtre3d", BuiltinType::kUndefined},
-    {"textErYYS3A", BuiltinType::kUndefined},
-    {"tex0ure_3d", BuiltinType::kUndefined},
-    {"texaaure_cube", BuiltinType::kUndefined},
-    {"extre_cubmmq", BuiltinType::kUndefined},
-    {"texture_cbe", BuiltinType::kUndefined},
-    {"tExtue_cube_araUU", BuiltinType::kUndefined},
-    {"eturKK_cube_aDDray", BuiltinType::kUndefined},
-    {"textut___cu0e_array", BuiltinType::kUndefined},
-    {"tpturl_dpAh_2d", BuiltinType::kUndefined},
-    {"txture_dMpth_2d", BuiltinType::kUndefined},
-    {"BBexture_depth_2d", BuiltinType::kUndefined},
-    {"text99e_depth2bb_arnnay", BuiltinType::kUndefined},
-    {"EEe1tureAAdepth_2d_arra", BuiltinType::kUndefined},
-    {"texturT_dep5h_2d_arra66", BuiltinType::kUndefined},
-    {"textuHe_depth_cube", BuiltinType::kUndefined},
-    {"texture_dxpthHHcbe", BuiltinType::kUndefined},
-    {"zexture_deptyy0cubn", BuiltinType::kUndefined},
-    {"texture_deth_cube_array", BuiltinType::kUndefined},
-    {"texture_depth_cubeHkray", BuiltinType::kUndefined},
-    {"texture_depth_cubearcay", BuiltinType::kUndefined},
-    {"texture_depth_urrtiooapled_2d", BuiltinType::kUndefined},
-    {"texue_depth_JJultisampled_2d", BuiltinType::kUndefined},
-    {"texture_depth_multCCsampld_20", BuiltinType::kUndefined},
-    {"99eAAure_exxernal", BuiltinType::kUndefined},
-    {"textcre_external", BuiltinType::kUndefined},
-    {"texture_Sxternal", BuiltinType::kUndefined},
-    {"BBextre_multisaopleds2d", BuiltinType::kUndefined},
-    {"texture_multisampld_2d", BuiltinType::kUndefined},
-    {"texmmur_multieampled_2d", BuiltinType::kUndefined},
-    {"tQQturPP_storage_1gg", BuiltinType::kUndefined},
-    {"textr_stoBe_1d", BuiltinType::kUndefined},
-    {"tlKKtur_storagN_1d", BuiltinType::kUndefined},
-    {"trrture_storage2d", BuiltinType::kUndefined},
-    {"texrure_tpprage_2d", BuiltinType::kUndefined},
+    {"CCNOxture_1d", BuiltinType::kUndefined},
+    {"txture_1d", BuiltinType::kUndefined},
+    {"tex4uae_2d", BuiltinType::kUndefined},
+    {"extuNNe_2NN", BuiltinType::kUndefined},
+    {"texture2d", BuiltinType::kUndefined},
+    {"txtureud_array", BuiltinType::kUndefined},
+    {"teYYtuAe_2d_arESy", BuiltinType::kUndefined},
+    {"texture_2d_0rray", BuiltinType::kUndefined},
+    {"texaaure_3d", BuiltinType::kUndefined},
+    {"tqqmmtur_d", BuiltinType::kUndefined},
+    {"textue_3d", BuiltinType::kUndefined},
+    {"tetuUUe_cEb", BuiltinType::kUndefined},
+    {"textuK_DDube", BuiltinType::kUndefined},
+    {"__ext0rt_cube", BuiltinType::kUndefined},
+    {"tepAure_be_array", BuiltinType::kUndefined},
+    {"texture_cube_arMa", BuiltinType::kUndefined},
+    {"texture_BBube_array", BuiltinType::kUndefined},
+    {"nnxtbbre_dpt99_2d", BuiltinType::kUndefined},
+    {"texturEEdeptAA_2d", BuiltinType::kUndefined},
+    {"texture5depth66Td", BuiltinType::kUndefined},
+    {"texture_depth_2H_array", BuiltinType::kUndefined},
+    {"textureHHdepthxxd_aray", BuiltinType::kUndefined},
+    {"textyy0e_depthznd_array", BuiltinType::kUndefined},
+    {"texture_depth_cue", BuiltinType::kUndefined},
+    {"texurH_kepth_cube", BuiltinType::kUndefined},
+    {"exture_cepth_cube", BuiltinType::kUndefined},
+    {"ooexrrure_dpt_cube_array", BuiltinType::kUndefined},
+    {"textre_depthJJube_array", BuiltinType::kUndefined},
+    {"tCCxture_dep0h_ube_array", BuiltinType::kUndefined},
+    {"texure_deAAtx_mult99sampled_2d", BuiltinType::kUndefined},
+    {"texture_cepth_multisampled_2d", BuiltinType::kUndefined},
+    {"texture_deSth_multisampled_2d", BuiltinType::kUndefined},
+    {"textureoeterBBal", BuiltinType::kUndefined},
+    {"texture_extenal", BuiltinType::kUndefined},
+    {"textummeexternal", BuiltinType::kUndefined},
+    {"texggure_multisomPPQle_2d", BuiltinType::kUndefined},
+    {"teture_mltisamBed_2", BuiltinType::kUndefined},
+    {"texture_mlllNKismpled2d", BuiltinType::kUndefined},
+    {"trrture_storage1d", BuiltinType::kUndefined},
+    {"texrure_tpprage_1d", BuiltinType::kUndefined},
     {"teyture_storage_PPd", BuiltinType::kUndefined},
-    {"texturcc_torageZ2d_array", BuiltinType::kUndefined},
-    {"texturestorage_2d_aray", BuiltinType::kUndefined},
-    {"texture_storage_2d_00rray", BuiltinType::kUndefined},
-    {"texPPuBB_stJrage_ssd", BuiltinType::kUndefined},
-    {"texJJre_sffowwagf_3d", BuiltinType::kUndefined},
-    {"textIre_stoXXage_3", BuiltinType::kUndefined},
-    {"a", BuiltinType::kUndefined},
-    {"u3", BuiltinType::kUndefined},
-    {"KK2", BuiltinType::kUndefined},
-    {"m4", BuiltinType::kUndefined},
-    {"o8", BuiltinType::kUndefined},
-    {"jNHh", BuiltinType::kUndefined},
-    {"vEw3Uc2", BuiltinType::kUndefined},
-    {"vuc", BuiltinType::kUndefined},
-    {"Krrdd", BuiltinType::kUndefined},
-    {"2Pttcf", BuiltinType::kUndefined},
-    {"vwwcsf", BuiltinType::kUndefined},
-    {"11enncf", BuiltinType::kUndefined},
-    {"ve2h", BuiltinType::kUndefined},
-    {"vech", BuiltinType::kUndefined},
-    {"ecaSSIh", BuiltinType::kUndefined},
-    {"vED2i", BuiltinType::kUndefined},
+    {"teture_stoZZcge_2d", BuiltinType::kUndefined},
+    {"txtue_storage_2d", BuiltinType::kUndefined},
+    {"texture00storage_2d", BuiltinType::kUndefined},
+    {"teJturBss_storagePPd_array", BuiltinType::kUndefined},
+    {"textureffsforage_2dwwaJJay", BuiltinType::kUndefined},
+    {"XXexture_stoage_2I_array", BuiltinType::kUndefined},
+    {"textur_oage_d", BuiltinType::kUndefined},
+    {"textue_storage_3d", BuiltinType::kUndefined},
+    {"tuxtreKKstorage_3d", BuiltinType::kUndefined},
+    {"m43", BuiltinType::kUndefined},
+    {"po2", BuiltinType::kUndefined},
+    {"HhNj2", BuiltinType::kUndefined},
+    {"uEw33", BuiltinType::kUndefined},
+    {"u", BuiltinType::kUndefined},
+    {"rdd", BuiltinType::kUndefined},
+    {"Pttc2", BuiltinType::kUndefined},
+    {"vwws2", BuiltinType::kUndefined},
+    {"nncc11", BuiltinType::kUndefined},
+    {"ve2f", BuiltinType::kUndefined},
+    {"vecf", BuiltinType::kUndefined},
+    {"ecaSSIf", BuiltinType::kUndefined},
+    {"vED2h", BuiltinType::kUndefined},
     {"veIccR", BuiltinType::kUndefined},
     {"ec9", BuiltinType::kUndefined},
-    {"aec2u", BuiltinType::kUndefined},
-    {"LSc2u", BuiltinType::kUndefined},
+    {"aec2i", BuiltinType::kUndefined},
+    {"LSc2i", BuiltinType::kUndefined},
     {"ecmm", BuiltinType::kUndefined},
-    {"4eV", BuiltinType::kUndefined},
-    {"ec_", BuiltinType::kUndefined},
-    {"cQ", BuiltinType::kUndefined},
-    {"veERdd", BuiltinType::kUndefined},
-    {"vec9", BuiltinType::kUndefined},
-    {"e03", BuiltinType::kUndefined},
-    {"vzh", BuiltinType::kUndefined},
-    {"veccch", BuiltinType::kUndefined},
-    {"v_Qch", BuiltinType::kUndefined},
+    {"4ecV", BuiltinType::kUndefined},
+    {"vc__", BuiltinType::kUndefined},
+    {"vQ2", BuiltinType::kUndefined},
+    {"vddRE", BuiltinType::kUndefined},
+    {"e93", BuiltinType::kUndefined},
+    {"03", BuiltinType::kUndefined},
+    {"vzf", BuiltinType::kUndefined},
+    {"vecccf", BuiltinType::kUndefined},
+    {"v_Qcf", BuiltinType::kUndefined},
     {"vect", BuiltinType::kUndefined},
     {"zz3ecECpp", BuiltinType::kUndefined},
-    {"veddhhi", BuiltinType::kUndefined},
-    {"e7766u", BuiltinType::kUndefined},
+    {"veddhhh", BuiltinType::kUndefined},
+    {"e7766i", BuiltinType::kUndefined},
     {"vec3P", BuiltinType::kUndefined},
-    {"vecwu", BuiltinType::kUndefined},
-    {"vu", BuiltinType::kUndefined},
-    {"6ecXX", BuiltinType::kUndefined},
-    {"RR", BuiltinType::kUndefined},
-    {"e1V", BuiltinType::kUndefined},
-    {"vecHHGG", BuiltinType::kUndefined},
-    {"MeFF4f", BuiltinType::kUndefined},
-    {"ve4h", BuiltinType::kUndefined},
+    {"vecwi", BuiltinType::kUndefined},
+    {"ecu", BuiltinType::kUndefined},
+    {"vXXc3u", BuiltinType::kUndefined},
+    {"Rc3", BuiltinType::kUndefined},
+    {"eV", BuiltinType::kUndefined},
+    {"GGeHH4", BuiltinType::kUndefined},
+    {"MFFc4", BuiltinType::kUndefined},
+    {"ve4f", BuiltinType::kUndefined},
     {"cTgg", BuiltinType::kUndefined},
     {"KK1c_Q", BuiltinType::kUndefined},
     {"vEc4", BuiltinType::kUndefined},
     {"c4M", BuiltinType::kUndefined},
     {"veS77G4", BuiltinType::kUndefined},
-    {"vKFttu", BuiltinType::kUndefined},
-    {"vZZUss4u", BuiltinType::kUndefined},
-    {"vc4u", BuiltinType::kUndefined},
+    {"vKFtti", BuiltinType::kUndefined},
+    {"vZZUss4i", BuiltinType::kUndefined},
+    {"vc4i", BuiltinType::kUndefined},
+    {"lec4u", BuiltinType::kUndefined},
+    {"veh4u", BuiltinType::kUndefined},
+    {"vkcTT", BuiltinType::kUndefined},
 };
 
 using BuiltinTypeParseTest = testing::TestWithParam<BuiltinTypeCase>;
@@ -841,12 +924,8 @@ TEST_P(BuiltinTypeParseTest, Parse) {
     EXPECT_EQ(expect, ParseBuiltinType(string));
 }
 
-INSTANTIATE_TEST_SUITE_P(ValidBuiltinTypeCases,
-                         BuiltinTypeParseTest,
-                         testing::ValuesIn(kValidBuiltinTypeCases));
-INSTANTIATE_TEST_SUITE_P(InvalidBuiltinTypeCases,
-                         BuiltinTypeParseTest,
-                         testing::ValuesIn(kInvalidBuiltinTypeCases));
+INSTANTIATE_TEST_SUITE_P(ValidBuiltinTypeCases, BuiltinTypeParseTest, testing::ValuesIn(kValidBuiltinTypeCases));
+INSTANTIATE_TEST_SUITE_P(InvalidBuiltinTypeCases, BuiltinTypeParseTest, testing::ValuesIn(kInvalidBuiltinTypeCases));
 
 using BuiltinTypePrintTest = testing::TestWithParam<BuiltinTypeCase>;
 
@@ -856,9 +935,7 @@ TEST_P(BuiltinTypePrintTest, Print) {
     EXPECT_EQ(expect, ToString(value));
 }
 
-INSTANTIATE_TEST_SUITE_P(ValidBuiltinTypeCases,
-                         BuiltinTypePrintTest,
-                         testing::ValuesIn(kValidBuiltinTypeCases));
+INSTANTIATE_TEST_SUITE_P(ValidBuiltinTypeCases, BuiltinTypePrintTest, testing::ValuesIn(kValidBuiltinTypeCases));
 
 }  // namespace parse_print_tests
 
@@ -874,6 +951,7 @@ inline std::ostream& operator<<(std::ostream& out, BuiltinValueCase c) {
 }
 
 static constexpr BuiltinValueCase kValidBuiltinValueCases[] = {
+    {"barycentric_coord", BuiltinValue::kBarycentricCoord},
     {"clip_distances", BuiltinValue::kClipDistances},
     {"frag_depth", BuiltinValue::kFragDepth},
     {"front_facing", BuiltinValue::kFrontFacing},
@@ -883,7 +961,7 @@ static constexpr BuiltinValueCase kValidBuiltinValueCases[] = {
     {"local_invocation_index", BuiltinValue::kLocalInvocationIndex},
     {"num_workgroups", BuiltinValue::kNumWorkgroups},
     {"position", BuiltinValue::kPosition},
-    {"primitive_id", BuiltinValue::kPrimitiveId},
+    {"primitive_index", BuiltinValue::kPrimitiveIndex},
     {"sample_index", BuiltinValue::kSampleIndex},
     {"sample_mask", BuiltinValue::kSampleMask},
     {"subgroup_id", BuiltinValue::kSubgroupId},
@@ -894,57 +972,60 @@ static constexpr BuiltinValueCase kValidBuiltinValueCases[] = {
 };
 
 static constexpr BuiltinValueCase kInvalidBuiltinValueCases[] = {
-    {"clip_dlstances", BuiltinValue::kUndefined},
-    {"clip_dishances", BuiltinValue::kUndefined},
-    {"Klip_dktancTTs", BuiltinValue::kUndefined},
-    {"fae_depwwh", BuiltinValue::kUndefined},
-    {"fjaKvvdepth", BuiltinValue::kUndefined},
-    {"fragYdeth", BuiltinValue::kUndefined},
-    {"EEIont_fcing", BuiltinValue::kUndefined},
-    {"front_facinQQ", BuiltinValue::kUndefined},
-    {"fronP_fanl", BuiltinValue::kUndefined},
-    {"globalffinvocatin_iHH", BuiltinValue::kUndefined},
-    {"global_innocation_id", BuiltinValue::kUndefined},
-    {"g66obag_invoFatio_id", BuiltinValue::kUndefined},
-    {"inss8ancehindex", BuiltinValue::kUndefined},
-    {"llnstaFFce_ndex", BuiltinValue::kUndefined},
-    {"2sjjace00index", BuiltinValue::kUndefined},
-    {"local_gnvocation_id", BuiltinValue::kUndefined},
-    {"localeinvocation_d", BuiltinValue::kUndefined},
-    {"local_invocatioff_d", BuiltinValue::kUndefined},
-    {"locinvocation_index", BuiltinValue::kUndefined},
-    {"local_invocation_inde", BuiltinValue::kUndefined},
-    {"local_qqnvcation_index", BuiltinValue::kUndefined},
-    {"nu_workgrpAA", BuiltinValue::kUndefined},
-    {"numwovkgroups", BuiltinValue::kUndefined},
-    {"njjm_workgrous", BuiltinValue::kUndefined},
-    {"ZZosition", BuiltinValue::kUndefined},
-    {"pO2PPtiIIn", BuiltinValue::kUndefined},
-    {"poZZition", BuiltinValue::kUndefined},
-    {"priminnive_id", BuiltinValue::kUndefined},
-    {"primHtivZkk_22d", BuiltinValue::kUndefined},
-    {"primitie_id", BuiltinValue::kUndefined},
-    {"sampR_inex", BuiltinValue::kUndefined},
-    {"sampl99_iqqdex", BuiltinValue::kUndefined},
-    {"s77mple_index", BuiltinValue::kUndefined},
-    {"s3mpemask", BuiltinValue::kUndefined},
-    {"sampluu_mcck", BuiltinValue::kUndefined},
-    {"s1mplRR_mas", BuiltinValue::kUndefined},
-    {"subgrllp_JJd", BuiltinValue::kUndefined},
-    {"sbgrMMp_d", BuiltinValue::kUndefined},
-    {"subrT66p_xd", BuiltinValue::kUndefined},
-    {"subgroJp_invQQcation_id", BuiltinValue::kUndefined},
-    {"subgAup_invocatin_uud", BuiltinValue::kUndefined},
-    {"subgoup_invocaton_id", BuiltinValue::kUndefined},
-    {"yb33roup_iqe", BuiltinValue::kUndefined},
-    {"subgroup_xxize", BuiltinValue::kUndefined},
-    {"suborrN_sze", BuiltinValue::kUndefined},
-    {"ve99tex_indx", BuiltinValue::kUndefined},
-    {"vertex_idex", BuiltinValue::kUndefined},
-    {"vertex_KnHl", BuiltinValue::kUndefined},
-    {"_orroup_id", BuiltinValue::kUndefined},
-    {"wrkgroup_id", BuiltinValue::kUndefined},
-    {"wrkgrjup_id", BuiltinValue::kUndefined},
+    {"baycentric_coowwd", BuiltinValue::kUndefined},
+    {"barycentrjK_vvoord", BuiltinValue::kUndefined},
+    {"baryYYntric_cord", BuiltinValue::kUndefined},
+    {"cipEEdistanceI", BuiltinValue::kUndefined},
+    {"clip_diQQtances", BuiltinValue::kUndefined},
+    {"clip_itaPcel", BuiltinValue::kUndefined},
+    {"frg_defftHH", BuiltinValue::kUndefined},
+    {"frag_deptn", BuiltinValue::kUndefined},
+    {"frF6g_gpth", BuiltinValue::kUndefined},
+    {"hront_fass8ng", BuiltinValue::kUndefined},
+    {"frot_FFalling", BuiltinValue::kUndefined},
+    {"f0ont_2acing", BuiltinValue::kUndefined},
+    {"global_invgcation_id", BuiltinValue::kUndefined},
+    {"global_invoceion_id", BuiltinValue::kUndefined},
+    {"global_invoffaton_id", BuiltinValue::kUndefined},
+    {"instace_ide", BuiltinValue::kUndefined},
+    {"insance_index", BuiltinValue::kUndefined},
+    {"intanceqqindex", BuiltinValue::kUndefined},
+    {"oca_invoAAaion_id", BuiltinValue::kUndefined},
+    {"local_invoation_iv", BuiltinValue::kUndefined},
+    {"local_invocation_ij", BuiltinValue::kUndefined},
+    {"locaZZ_invocation_index", BuiltinValue::kUndefined},
+    {"local_2nvocationOinIIPUx", BuiltinValue::kUndefined},
+    {"local_invocatiZZn_index", BuiltinValue::kUndefined},
+    {"num_workgroupnn", BuiltinValue::kUndefined},
+    {"nu22_ZZHrkgkkoups", BuiltinValue::kUndefined},
+    {"num_workgrops", BuiltinValue::kUndefined},
+    {"osiiRn", BuiltinValue::kUndefined},
+    {"posqqt99on", BuiltinValue::kUndefined},
+    {"posit77on", BuiltinValue::kUndefined},
+    {"prmitive3inex", BuiltinValue::kUndefined},
+    {"primitiveindeccu", BuiltinValue::kUndefined},
+    {"priRRitive_i1ex", BuiltinValue::kUndefined},
+    {"sllple_inJJex", BuiltinValue::kUndefined},
+    {"sImplMM_ix", BuiltinValue::kUndefined},
+    {"s66mpleinTex", BuiltinValue::kUndefined},
+    {"sQQmpleJmask", BuiltinValue::kUndefined},
+    {"suumpemask", BuiltinValue::kUndefined},
+    {"sampl_mak", BuiltinValue::kUndefined},
+    {"ygqoup_i33", BuiltinValue::kUndefined},
+    {"subgrouxx_id", BuiltinValue::kUndefined},
+    {"subgrrN_d", BuiltinValue::kUndefined},
+    {"su99group_nvocation_id", BuiltinValue::kUndefined},
+    {"subgoup_invocation_id", BuiltinValue::kUndefined},
+    {"subgloup_inHocaton_id", BuiltinValue::kUndefined},
+    {"sug_oup_sie", BuiltinValue::kUndefined},
+    {"subgroup_sze", BuiltinValue::kUndefined},
+    {"jbgroup_size", BuiltinValue::kUndefined},
+    {"EEetttmmx_index", BuiltinValue::kUndefined},
+    {"verte_ndex", BuiltinValue::kUndefined},
+    {"vertex_irrdx", BuiltinValue::kUndefined},
+    {"workgrxupid", BuiltinValue::kUndefined},
+    {"zzorkgou_id", BuiltinValue::kUndefined},
+    {"workgroup_ed", BuiltinValue::kUndefined},
 };
 
 using BuiltinValueParseTest = testing::TestWithParam<BuiltinValueCase>;
@@ -955,12 +1036,8 @@ TEST_P(BuiltinValueParseTest, Parse) {
     EXPECT_EQ(expect, ParseBuiltinValue(string));
 }
 
-INSTANTIATE_TEST_SUITE_P(ValidBuiltinValueCases,
-                         BuiltinValueParseTest,
-                         testing::ValuesIn(kValidBuiltinValueCases));
-INSTANTIATE_TEST_SUITE_P(InvalidBuiltinValueCases,
-                         BuiltinValueParseTest,
-                         testing::ValuesIn(kInvalidBuiltinValueCases));
+INSTANTIATE_TEST_SUITE_P(ValidBuiltinValueCases, BuiltinValueParseTest, testing::ValuesIn(kValidBuiltinValueCases));
+INSTANTIATE_TEST_SUITE_P(InvalidBuiltinValueCases, BuiltinValueParseTest, testing::ValuesIn(kInvalidBuiltinValueCases));
 
 using BuiltinValuePrintTest = testing::TestWithParam<BuiltinValueCase>;
 
@@ -970,9 +1047,7 @@ TEST_P(BuiltinValuePrintTest, Print) {
     EXPECT_EQ(expect, ToString(value));
 }
 
-INSTANTIATE_TEST_SUITE_P(ValidBuiltinValueCases,
-                         BuiltinValuePrintTest,
-                         testing::ValuesIn(kValidBuiltinValueCases));
+INSTANTIATE_TEST_SUITE_P(ValidBuiltinValueCases, BuiltinValuePrintTest, testing::ValuesIn(kValidBuiltinValueCases));
 
 }  // namespace parse_print_tests
 
@@ -1009,60 +1084,60 @@ static constexpr AttributeCase kValidAttributeCases[] = {
 };
 
 static constexpr AttributeCase kInvalidAttributeCases[] = {
-    {"EEtmlign", Attribute::kUndefined},
-    {"ali", Attribute::kUndefined},
-    {"ligrr", Attribute::kUndefined},
-    {"bixing", Attribute::kUndefined},
-    {"zzndin", Attribute::kUndefined},
-    {"bindine", Attribute::kUndefined},
-    {"blupZd_sc", Attribute::kUndefined},
-    {"0TTend_suu7", Attribute::kUndefined},
-    {"bvveJJds", Attribute::kUndefined},
-    {"buQltin", Attribute::kUndefined},
-    {"bClRin", Attribute::kUndefined},
-    {"uCt", Attribute::kUndefined},
-    {"coprPP", Attribute::kUndefined},
-    {"xxoDD88r", Attribute::kUndefined},
-    {"lldmYYqqr", Attribute::kUndefined},
-    {"omFFut__", Attribute::kUndefined},
-    {"rrGGNNute", Attribute::kUndefined},
-    {"comMlte", Attribute::kUndefined},
-    {"diagnot", Attribute::kUndefined},
-    {"qiagnxltic", Attribute::kUndefined},
-    {"iagnostic", Attribute::kUndefined},
-    {"fa44gmet", Attribute::kUndefined},
-    {"WWrGgment", Attribute::kUndefined},
-    {"frjjgmen", Attribute::kUndefined},
-    {"gjjoup", Attribute::kUndefined},
-    {"gj1p", Attribute::kUndefined},
-    {"goup", Attribute::kUndefined},
-    {"99d", Attribute::kUndefined},
-    {"iVV", Attribute::kUndefined},
-    {"xd", Attribute::kUndefined},
-    {"inut33avvtachment_index", Attribute::kUndefined},
-    {"isput_att9chment_index", Attribute::kUndefined},
-    {"inFut_attachmen_index", Attribute::kUndefined},
-    {"nterpoleuue", Attribute::kUndefined},
-    {"interpoaKK", Attribute::kUndefined},
-    {"interJolae", Attribute::kUndefined},
-    {"invarCXXaSSt", Attribute::kUndefined},
-    {"JnWWar66anZZ", Attribute::kUndefined},
-    {"dvarmma5", Attribute::kUndefined},
-    {"lUcBBBBon", Attribute::kUndefined},
-    {"JJ0catio11", Attribute::kUndefined},
-    {"lfcattion", Attribute::kUndefined},
-    {"mtt_use", Attribute::kUndefined},
-    {"mwstLuse", Attribute::kUndefined},
-    {"must1use", Attribute::kUndefined},
-    {"siwwe", Attribute::kUndefined},
-    {"se", Attribute::kUndefined},
-    {"siz", Attribute::kUndefined},
-    {"NNertex", Attribute::kUndefined},
-    {"vRR__tlUU", Attribute::kUndefined},
-    {"vHrtex", Attribute::kUndefined},
-    {"wrrkCCroup_size", Attribute::kUndefined},
-    {"workroup_size", Attribute::kUndefined},
-    {"wpIrdgoup_size", Attribute::kUndefined},
+    {"uigZp", Attribute::kUndefined},
+    {"00ui7TT", Attribute::kUndefined},
+    {"vvJJ", Attribute::kUndefined},
+    {"biQding", Attribute::kUndefined},
+    {"bCdRng", Attribute::kUndefined},
+    {"iCi", Attribute::kUndefined},
+    {"blnPPp_srr", Attribute::kUndefined},
+    {"xx8DDuen_src", Attribute::kUndefined},
+    {"lldqqendYYsrc", Attribute::kUndefined},
+    {"uiFFti__", Attribute::kUndefined},
+    {"rrGGNNtin", Attribute::kUndefined},
+    {"buiMlin", Attribute::kUndefined},
+    {"lo", Attribute::kUndefined},
+    {"xllor", Attribute::kUndefined},
+    {"olor", Attribute::kUndefined},
+    {"camp44e", Attribute::kUndefined},
+    {"WWGmpute", Attribute::kUndefined},
+    {"cjjmpue", Attribute::kUndefined},
+    {"djjagnostic", Attribute::kUndefined},
+    {"diagnoj1c", Attribute::kUndefined},
+    {"diagnotic", Attribute::kUndefined},
+    {"99ragment", Attribute::kUndefined},
+    {"fVVagmeny", Attribute::kUndefined},
+    {"frxmeZZt", Attribute::kUndefined},
+    {"g33vvp", Attribute::kUndefined},
+    {"gros9", Attribute::kUndefined},
+    {"grFu", Attribute::kUndefined},
+    {"ue", Attribute::kUndefined},
+    {"Z", Attribute::kUndefined},
+    {"i", Attribute::kUndefined},
+    {"inpMt_attFchmnt_index", Attribute::kUndefined},
+    {"inputWWatZZachment66index", Attribute::kUndefined},
+    {"inpt_attacme5t_indmdx", Attribute::kUndefined},
+    {"BBnterpBlaUe", Attribute::kUndefined},
+    {"inter0olatJ11", Attribute::kUndefined},
+    {"intfrpottate", Attribute::kUndefined},
+    {"inXaittn", Attribute::kUndefined},
+    {"inLwriant", Attribute::kUndefined},
+    {"in1ariant", Attribute::kUndefined},
+    {"lowwation", Attribute::kUndefined},
+    {"latien", Attribute::kUndefined},
+    {"loction", Attribute::kUndefined},
+    {"muNNt_use", Attribute::kUndefined},
+    {"mustUlRRs__", Attribute::kUndefined},
+    {"mHst_use", Attribute::kUndefined},
+    {"srCCe", Attribute::kUndefined},
+    {"ize", Attribute::kUndefined},
+    {"dzIp", Attribute::kUndefined},
+    {"vetex", Attribute::kUndefined},
+    {"LNtx", Attribute::kUndefined},
+    {"r", Attribute::kUndefined},
+    {"wxxrkgqqoup_GizRR", Attribute::kUndefined},
+    {"workSroup_siGGe", Attribute::kUndefined},
+    {"oqkccr8up_size", Attribute::kUndefined},
 };
 
 using AttributeParseTest = testing::TestWithParam<AttributeCase>;
@@ -1073,12 +1148,8 @@ TEST_P(AttributeParseTest, Parse) {
     EXPECT_EQ(expect, ParseAttribute(string));
 }
 
-INSTANTIATE_TEST_SUITE_P(ValidAttributeCases,
-                         AttributeParseTest,
-                         testing::ValuesIn(kValidAttributeCases));
-INSTANTIATE_TEST_SUITE_P(InvalidAttributeCases,
-                         AttributeParseTest,
-                         testing::ValuesIn(kInvalidAttributeCases));
+INSTANTIATE_TEST_SUITE_P(ValidAttributeCases, AttributeParseTest, testing::ValuesIn(kValidAttributeCases));
+INSTANTIATE_TEST_SUITE_P(InvalidAttributeCases, AttributeParseTest, testing::ValuesIn(kInvalidAttributeCases));
 
 using AttributePrintTest = testing::TestWithParam<AttributeCase>;
 
@@ -1088,11 +1159,11 @@ TEST_P(AttributePrintTest, Print) {
     EXPECT_EQ(expect, ToString(value));
 }
 
-INSTANTIATE_TEST_SUITE_P(ValidAttributeCases,
-                         AttributePrintTest,
-                         testing::ValuesIn(kValidAttributeCases));
+INSTANTIATE_TEST_SUITE_P(ValidAttributeCases, AttributePrintTest, testing::ValuesIn(kValidAttributeCases));
 
 }  // namespace parse_print_tests
 
 }  // namespace
 }  // namespace tint::core
+
+// clang-format on

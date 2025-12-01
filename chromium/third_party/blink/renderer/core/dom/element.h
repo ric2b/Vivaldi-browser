@@ -32,6 +32,7 @@
 #include "third_party/blink/public/common/input/pointer_id.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink-forward.h"
+#include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_typedefs.h"
 #include "third_party/blink/renderer/core/animation/animatable.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -47,6 +48,7 @@
 #include "third_party/blink/renderer/core/dom/element_rare_data_field.h"
 #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
 #include "third_party/blink/renderer/core/dom/focusgroup_flags.h"
+#include "third_party/blink/renderer/core/dom/named_animation_trigger_map.h"
 #include "third_party/blink/renderer/core/dom/names_map.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/dom/whitespace_attacher.h"
@@ -63,10 +65,10 @@
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string_table.h"
 #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
-#include "ui/gfx/geometry/rect_f.h"
 
 namespace gfx {
 class QuadF;
+class RectF;
 class Vector2dF;
 }  // namespace gfx
 
@@ -74,6 +76,7 @@ namespace blink {
 
 class AnchorElementObserver;
 class AnchorPositionScrollData;
+class AnimationTrigger;
 class AriaNotificationOptions;
 class Attr;
 class Attribute;
@@ -86,7 +89,6 @@ class CSSPseudoElement;
 class CSSStyleDeclaration;
 class CustomElementDefinition;
 class CustomElementRegistry;
-class DOMPatchStatus;
 class DOMRect;
 class DOMRectList;
 class DOMStringMap;
@@ -112,6 +114,7 @@ class Locale;
 class MutableCSSPropertyValueSet;
 class NamedNodeMap;
 class OutOfFlowData;
+class Patch;
 class PointerLockOptions;
 class PopoverData;
 class PseudoElement;
@@ -120,6 +123,7 @@ class ResizeObserver;
 class ResizeObserverSize;
 class ScrollIntoViewOptions;
 class CheckVisibilityOptions;
+class ScopedCSSName;
 class ScrollMarkerGroupData;
 class ScrollMarkerPseudoElement;
 class ScrollToOptions;
@@ -229,6 +233,8 @@ enum class CommandEventType {
   // kClose
   // Input / Select
   kShowPicker,
+  // Interest invokers (`interestfor`)
+  kToggleInterest,
   // Number Input
   kStepUp,
   kStepDown,
@@ -246,6 +252,10 @@ enum class CommandEventType {
   kHideMenu,
   kShowMenu,
 };
+
+// Defaults for the `interestfor` API's `normal` value.
+static constexpr double kDefaultInterestDelayStartSeconds = 0.5;
+static constexpr double kDefaultInterestDelayEndSeconds = 0.25;
 
 typedef HeapVector<Member<Attr>> AttrNodeList;
 
@@ -651,8 +661,10 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   Element& CloneWithChildren(NodeCloningData& data,
                              Document*,
                              ContainerNode*,
+                             CustomElementRegistry*,
                              ExceptionState& = ASSERT_NO_EXCEPTION) const;
   Element& CloneWithoutChildren(NodeCloningData& data,
+                                CustomElementRegistry*,
                                 Document* = nullptr) const;
   Element& CloneWithoutChildren() const;
 
@@ -661,7 +673,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   virtual const CSSPropertyValueSet* AdditionalPresentationAttributeStyle() {
     return nullptr;
   }
-  void InvalidateStyleAttribute(bool only_changed_independent_properties);
+  virtual void InvalidateStyleAttribute(
+      bool only_changed_independent_properties);
 
   const CSSPropertyValueSet* InlineStyle() const {
     return HasElementData() ? GetElementData()->inline_style_.Get() : nullptr;
@@ -932,7 +945,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
                                    SlotAssignmentMode,
                                    bool serializable,
                                    bool clonable,
-                                   const AtomicString& reference_target);
+                                   const AtomicString& reference_target,
+                                   const bool waiting_for_scoped_registry);
 
   ShadowRoot& CreateUserAgentShadowRoot(
       SlotAssignmentMode = SlotAssignmentMode::kNamed);
@@ -945,14 +959,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
                                        const AtomicString& reference_target);
   // This version is for testing only, and allows easy attachment of a shadow
   // root, specifying only the type and none of the other arguments.
-  ShadowRoot& AttachShadowRootForTesting(ShadowRootMode type) {
-    return AttachShadowRootInternal(type, FocusDelegation::kNone,
-                                    SlotAssignmentMode::kNamed,
-                                    /*registry*/ nullptr,
-                                    /*serializable*/ false,
-                                    /*clonable*/ false,
-                                    /*reference_target*/ g_null_atom);
-  }
+  ShadowRoot& AttachShadowRootForTesting(ShadowRootMode type);
 
   // Returns the shadow root attached to this element if it is a shadow host.
   ShadowRoot* GetShadowRoot() const;
@@ -990,12 +997,14 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
     SetElementFlag(ElementFlags::kStyleAffectedByEmpty);
   }
 
-  void SetIsCanvasOrInCanvasSubtree(bool value) {
-    SetElementFlag(ElementFlags::kIsCanvasOrInCanvasSubtree, value);
-  }
+  void SetIsCanvasOrInCanvasSubtree(bool);
   bool IsCanvasOrInCanvasSubtree() const {
     return HasElementFlag(ElementFlags::kIsCanvasOrInCanvasSubtree);
   }
+  // Called when `IsCanvasOrInCanvasSubtree()` has changed.
+  virtual void DidChangeIsCanvasOrInCanvasSubtree() {}
+  // Like `IsCanvasOrInCanvasSubtree()`, but excludes the outermost <canvas>.
+  bool IsInCanvasSubtree() const;
 
   bool IsDefined() const {
     // An element whose custom element state is "uncustomized" or "custom"
@@ -1180,20 +1189,38 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
     kFullInterest,
   };
 
+  enum class InterestLostCancelable {
+    kNotCancelable,
+    kCancelable,
+  };
+  enum class InterestLostPopoverBehavior {
+    kDontClosePopovers,
+    kClosePopovers,
+  };
+
   // Implementation of the `interestfor` feature. These are called on the
   // element with the `interestfor` attribute, and not on the target itself.
   // These are called when interest is actually gained or lost on the element,
   // e.g. after any hover-delays. They return true if the event was *not*
   // cancelled, and the action was performed.
-  bool InterestGained(Element& target, InterestState new_state);
-  bool InterestLost(Element& target);
+  bool InterestGained(Element* target);
+  bool InterestLost(
+      Element* target,
+      InterestLostCancelable = InterestLostCancelable::kCancelable,
+      InterestLostPopoverBehavior =
+          InterestLostPopoverBehavior::kClosePopovers);
+
   // Returns the target of the `interestfor` attribute, if any, and only if
   // the element supports this attribute. For example, `interestfor` is not
   // allowed on a `<div>`.
-  virtual Element* InterestForElement() const { return nullptr; }
+  Element* InterestForElement() const;
+  // Checks that the provided interest invoker relationship is valid. For this
+  // call, `this` is the interest invoker (with the `interestfor` attribute),
+  // and the provided `target` is the proposed target element.
+  virtual bool IsValidInterestInvoker(Element& target) const { return false; }
   // Returns the active interest invoker for which this element is the target,
   // or nullptr otherwise.
-  Element* GetInterestInvoker() const;
+  Element* SourceInterestInvoker() const;
   // Returns the current state of "interest" in an element that is an interest
   // invoker.
   InterestState GetInterestState();
@@ -1206,9 +1233,12 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // Used in some situations (e.g. target popover closed via other means) to
   // immediately lose interest in an element, ignoring any hide delays that may
   // be set on the element. Element must already be an an interest invoker that
-  // has interest in the provided target, or a DCHECK will fail. If the target
-  // of the interest invoker is a popover, the popover will be hidden.
-  void LoseInterestNow(Element* target);
+  // has interest, or a DCHECK will fail. If the target of the interest invoker
+  // is a popover, the popover will be hidden.
+  void LoseInterestNow(InterestLostCancelable, InterestLostPopoverBehavior);
+
+  // Lose interest immediately in all elements that currently have interest.
+  static void LoseInterestInAllElements(Document&);
 
   // Returns true if any of its (non-inclusive) flat tree descendants is
   // keyboard focusable. Note that this is quite slow, since it traverses the
@@ -1515,7 +1545,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   EditContext* editContext() const;
 
   // https://github.com/WICG/declarative-partial-updates
-  DOMPatchStatus* currentPatch();
+  Patch* currentPatch();
 
   // Helpers for V8DOMActivityLogger::logEvent.  They call logEvent only if
   // the element is isConnected() and the context is an isolated world.
@@ -1610,6 +1640,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool HasBeenExplicitlyScrolled() const;
   void SetHasBeenExplicitlyScrolled();
 
+  void SetAffectedByStartingStyles();
+  bool AffectedByStartingStyles() const;
+
   bool AffectedBySubjectHas() const;
   void SetAffectedBySubjectHas();
   bool AffectedByNonSubjectHas() const;
@@ -1658,10 +1691,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
       PseudoId pseudo_id,
       const AtomicString& view_transition_name) const;
 
-  void RecalcTransitionPseudoTreeStyle(
-      const Vector<AtomicString>& view_transition_names);
-  void RebuildTransitionPseudoLayoutTree(
-      const Vector<AtomicString>& view_transition_names);
+  // Performs an incremental update of the view-transition pseudo-elements.
+  void UpdateTransitionPseudoElements(const StyleRecalcChange,
+                                      const StyleRecalcContext&);
 
   // Returns true if the element has the 'inert' attribute, forcing itself and
   // all its subtree to be inert.
@@ -1688,6 +1720,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void RemoveInterestInvokerTargetData();
   InterestInvokerTargetData& EnsureInterestInvokerTargetData();
   InterestInvokerTargetData* GetInterestInvokerTargetData() const;
+  void HandlePointerEventsForInterestFor(const AtomicString& event_type);
 
   void DefaultEventHandler(Event&) override;
 
@@ -1714,10 +1747,16 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void RemoveAnchorPositionScrollData();
   AnchorPositionScrollData* GetAnchorPositionScrollData() const;
 
-  // Returns true if any element is implicitly anchored to this element.
-  bool HasImplicitlyAnchoredElement() const;
-  void DecrementImplicitlyAnchoredElementCount();
-  void IncrementImplicitlyAnchoredElementCount();
+  // Returns true if any element may be implicitly anchored to this element.
+  // This flag is sticky once set. An element may be an implicit anchor for
+  // multiple elements, and all elements may be the implicit anchor for any
+  // pseudo element if the pseudo element is using anchor positioning. Since
+  // using anchor positioning depends on style, it would be tricky to keep
+  // track of when an element is no longer an implicit anchor, hence once we
+  // start considering an element as a potential implicit anchor, it will stay
+  // so.
+  bool MayBeImplicitAnchor() const;
+  void SetMayBeImplicitAnchor();
 
   bool HasAnchorElementObserverForTesting() const {
     return GetAnchorElementObserver();
@@ -1772,6 +1811,10 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool IsClickableFormControlNode() const;
 
   bool HasTabIndexWasSetExplicitly() const;
+
+  void SetNamedTriggers(NamedAnimationTriggerMap&& named_triggers);
+  NamedAnimationTriggerMap* NamedTriggers() const;
+  AnimationTrigger* NamedTrigger(const ScopedCSSName* name) const;
 
  protected:
   bool HasElementData() const { return static_cast<bool>(element_data_); }
@@ -1901,9 +1944,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void ClearPseudoElement(
       PseudoId,
       const AtomicString& view_transition_name = g_null_atom);
-  void ClearTransitionPseudoTreeIfNeeded(const StyleRecalcChange);
-  void DetachTransitionPseudo();
-  void AttachTransitionPseudo();
 
   bool IsElementNode() const =
       delete;  // This will catch anyone doing an unnecessary check.
@@ -1987,6 +2027,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void RebuildPseudoElementLayoutTree(PseudoId, WhitespaceAttacher&);
   void RebuildColumnLayoutTrees(WhitespaceAttacher&);
   void RebuildFirstLetterLayoutTree();
+  void RebuildTransitionLayoutTree(WhitespaceAttacher&);
   void RebuildShadowRootLayoutTree(WhitespaceAttacher&);
   inline void CheckForEmptyStyleChange(const Node* node_before_change,
                                        const Node* node_after_change);
@@ -2069,6 +2110,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   }
 
   void AttachSucceedingPseudoElements(AttachContext& context) {
+    AttachPseudoElement(kPseudoIdInterestHint, context);
     AttachPseudoElement(kPseudoIdPickerIcon, context);
     AttachPseudoElement(kPseudoIdAfter, context);
     AttachDocumentElementSucceedingPseudoElements(context);
@@ -2088,6 +2130,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   }
 
   void AttachColumnPseudoElements(AttachContext& context);
+  void AttachTransitionPseudoElements(AttachContext& context);
 
   void DetachPrecedingPseudoElements(bool performing_reattach) {
     DetachPseudoElement(kPseudoIdScrollMarker, performing_reattach);
@@ -2098,6 +2141,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   }
 
   void DetachSucceedingPseudoElements(bool performing_reattach) {
+    DetachPseudoElement(kPseudoIdInterestHint, performing_reattach);
     DetachPseudoElement(kPseudoIdPickerIcon, performing_reattach);
     DetachPseudoElement(kPseudoIdAfter, performing_reattach);
     DetachPseudoElement(kPseudoIdScrollButtonBlockStart, performing_reattach);
@@ -2110,6 +2154,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   }
 
   void DetachColumnPseudoElements(bool performing_reattach);
+  void DetachTransitionPseudoElements(bool performing_reattach);
 
   void RecomputeDirectionFromParent();
 
@@ -2223,9 +2268,12 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   Node* Clone(Document& factory,
               NodeCloningData& data,
               ContainerNode* append_to,
+              CustomElementRegistry* fallback_registry,
               ExceptionState& append_exception_state) const override;
 
-  virtual Element& CloneWithoutAttributesAndChildren(Document& factory) const;
+  virtual Element& CloneWithoutAttributesAndChildren(
+      Document& factory,
+      CustomElementRegistry* registry) const;
 
   void UpdateNamedItemRegistration(NamedItemType,
                                    const AtomicString& old_name,
@@ -2270,11 +2318,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool IsStyleAttributeChangeAllowed(const AtomicString& style_string);
 
   // These schedule interest gained/lost events, for `interestfor` invokers.
-  void ScheduleInterestGainedTask(InterestState);
+  void ScheduleInterestGainedTask();
   void ScheduleInterestLostTask();
-  static bool GainOrLoseInterest(Element* invoker,
-                                 Element* target,
-                                 InterestState new_state);
   enum class InterestSource {
     kHover,
     kDeHover,

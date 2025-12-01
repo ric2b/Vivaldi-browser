@@ -3,16 +3,6 @@
 <translationbundle lang="da">
 <translation id="3830627370375585318">Tillad Vivaldi at få adgang til netværket i dine firewall- eller antivirus-
           indstillinger.</translation>
-<translation id="4200102020577305737">Gå til
-          Vivaldi-menuen &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          LAN-indstillinger
-          og fravælg “Brug en proxyserver til dit LAN”.</translation>
 <translation id="4932161901409251843">Gå til
           Vivaldi-menuen &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@
         Hvis det ikke løser problemet, anbefaler vi, at du markerer denne indstilling
         igen for bedre ydeevne.</translation>
 <translation id="7496505986576158197">Vivaldi er muliggjort af <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source-projektet og anden <ph name="BEGIN_LINK_OSS" />open source-software<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Gå til
+          Vivaldi-menuen &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Netværk og internet &gt; Proxy
+          og fjern markeringen i "Automatisk registrering af indstillinger".</translation>
 </translationbundle>

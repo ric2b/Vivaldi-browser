@@ -60,6 +60,8 @@ namespace tint::core::ir {
 /// ```
 class Switch final : public Castable<Switch, ControlInstruction> {
   public:
+    /// The number of supported operands
+    static constexpr size_t kNumOperands = 1;
     /// The offset in Operands() for the condition
     static constexpr size_t kConditionOperandOffset = 0;
 
@@ -103,6 +105,13 @@ class Switch final : public Castable<Switch, ControlInstruction> {
 
     /// @returns the switch cases
     Vector<Case, 4>& Cases() { return cases_; }
+
+    /// @returns the switch cases by moving them
+    Vector<Case, 4> TakeCases() {
+        auto rtn = std::move(cases_);
+        cases_.Clear();
+        return rtn;
+    }
 
     /// @returns the switch cases
     VectorRef<Case> Cases() const { return cases_; }

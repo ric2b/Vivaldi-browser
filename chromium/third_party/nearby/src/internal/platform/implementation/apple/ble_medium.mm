@@ -54,7 +54,9 @@
 #import "internal/platform/implementation/apple/utils.h"
 
 static NSString *const kWeaveServiceUUID = @"FEF3";
-static const UInt8 kRequestConnectionTimeoutInSeconds = 12;
+
+// Timeout for BLE operations that are initiated by a call to a public API.
+static const UInt8 kApiTimeoutInSeconds = 12;
 static NSTimeInterval const kThresholdInterval = 2;                                // 2 seconds
 static NSTimeInterval const kAdvertisementPacketsMapExpirationTimeInterval = 600;  // 10 minutes
 
@@ -81,6 +83,9 @@ NSString *ConvertDataToHexString(NSData *data) {
 }  // namespace
 
 BleMedium::BleMedium() : medium_([[GNCBLEMedium alloc] init]) {}
+
+// ble_medium.mm
+BleMedium::~BleMedium() { [medium_ stop]; }
 
 std::unique_ptr<api::ble_v2::BleMedium::AdvertisingSession> BleMedium::StartAdvertising(
     const api::ble_v2::BleAdvertisementData &advertising_data,
@@ -118,11 +123,15 @@ bool BleMedium::StartAdvertising(const api::ble_v2::BleAdvertisementData &advert
               completionHandler:^(NSError *error) {
                 if (error != nil) {
                   GNCLoggerError(@"Failed to start advertising: %@", error);
+                  blockError = error;
                 }
-                blockError = error;
                 dispatch_semaphore_signal(semaphore);
               }];
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+  dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, kApiTimeoutInSeconds * NSEC_PER_SEC);
+  if (dispatch_semaphore_wait(semaphore, timeout) != 0) {
+    GNCLoggerError(@"Start advertising operation timed out.");
+    return false;
+  }
   return blockError == nil;
 }
 
@@ -134,11 +143,15 @@ bool BleMedium::StopAdvertising() {
   [medium_ stopAdvertisingWithCompletionHandler:^(NSError *error) {
     if (error != nil) {
       GNCLoggerError(@"Failed to stop advertising: %@", error);
+      blockError = error;
     }
-    blockError = error;
     dispatch_semaphore_signal(semaphore);
   }];
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+  dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, kApiTimeoutInSeconds * NSEC_PER_SEC);
+  if (dispatch_semaphore_wait(semaphore, timeout) != 0) {
+    GNCLoggerError(@"Stop advertising operation timed out.");
+    return false;
+  }
   return blockError == nil;
 }
 
@@ -200,7 +213,8 @@ std::unique_ptr<api::ble_v2::BleMedium::ScanningSession> BleMedium::StartScannin
   [medium_ startScanningForService:serviceUUID
       advertisementFoundHandler:^(id<GNCPeripheral> peripheral,
                                   NSDictionary<CBUUID *, NSData *> *serviceData) {
-        HandleAdvertisementFound(peripheral, serviceData);
+        callback_executor_.Execute(
+            [this, peripheral, serviceData] { HandleAdvertisementFound(peripheral, serviceData); });
       }
       completionHandler:^(NSError *error) {
         if (scanning_cb_.start_scanning_result) {
@@ -234,16 +248,21 @@ bool BleMedium::StartScanning(const Uuid &service_uuid, api::ble_v2::TxPowerLeve
   [medium_ startScanningForService:serviceUUID
       advertisementFoundHandler:^(id<GNCPeripheral> peripheral,
                                   NSDictionary<CBUUID *, NSData *> *serviceData) {
-        HandleAdvertisementFound(peripheral, serviceData);
+        callback_executor_.Execute(
+            [this, peripheral, serviceData] { HandleAdvertisementFound(peripheral, serviceData); });
       }
       completionHandler:^(NSError *error) {
         if (error != nil) {
           GNCLoggerError(@"Failed to start scanning: %@", error);
+          blockError = error;
         }
-        blockError = error;
         dispatch_semaphore_signal(semaphore);
       }];
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+  dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, kApiTimeoutInSeconds * NSEC_PER_SEC);
+  if (dispatch_semaphore_wait(semaphore, timeout) != 0) {
+    GNCLoggerError(@"Start scanning operation timed out.");
+    return false;
+  }
   return blockError == nil;
 }
 
@@ -276,7 +295,8 @@ bool BleMedium::StartMultipleServicesScanning(const std::vector<Uuid> &service_u
   [medium_ startScanningForMultipleServices:serviceUUIDs
       advertisementFoundHandler:^(id<GNCPeripheral> peripheral,
                                   NSDictionary<CBUUID *, NSData *> *serviceData) {
-        HandleAdvertisementFound(peripheral, serviceData);
+        callback_executor_.Execute(
+            [this, peripheral, serviceData] { HandleAdvertisementFound(peripheral, serviceData); });
       }
       completionHandler:^(NSError *error) {
         if (error != nil) {
@@ -285,7 +305,11 @@ bool BleMedium::StartMultipleServicesScanning(const std::vector<Uuid> &service_u
         }
         dispatch_semaphore_signal(semaphore);
       }];
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+  dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, kApiTimeoutInSeconds * NSEC_PER_SEC);
+  if (dispatch_semaphore_wait(semaphore, timeout) != 0) {
+    GNCLoggerError(@"Start scanning for multiple services operation timed out.");
+    return false;
+  }
   return blockError == nil;
 }
 
@@ -297,11 +321,15 @@ bool BleMedium::StopScanning() {
   [medium_ stopScanningWithCompletionHandler:^(NSError *error) {
     if (error != nil) {
       GNCLoggerError(@"Failed to stop scanning: %@", error);
+      blockError = error;
     }
-    blockError = error;
     dispatch_semaphore_signal(semaphore);
   }];
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+  dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, kApiTimeoutInSeconds * NSEC_PER_SEC);
+  if (dispatch_semaphore_wait(semaphore, timeout) != 0) {
+    GNCLoggerError(@"Stop scanning operation timed out.");
+    return false;
+  }
   return blockError == nil;
 }
 
@@ -312,12 +340,16 @@ bool BleMedium::ResumeMediumScanning() {
   __block NSError *blockError = nil;
   [medium_ resumeMediumScanning:^(NSError *error) {
     if (error != nil) {
-      GNCLoggerError(@"Failed to start scanning for multiple services: %@", error);
+      GNCLoggerError(@"Failed to resume scanning: %@", error);
       blockError = error;
     }
     dispatch_semaphore_signal(semaphore);
   }];
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+  dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, kApiTimeoutInSeconds * NSEC_PER_SEC);
+  if (dispatch_semaphore_wait(semaphore, timeout) != 0) {
+    GNCLoggerError(@"ResumeMediumScanning operation timed out.");
+    return false;
+  }
   return blockError == nil;
 }
 
@@ -326,15 +358,23 @@ std::unique_ptr<api::ble_v2::GattServer> BleMedium::StartGattServer(
     api::ble_v2::ServerGattConnectionCallback callback) {
   dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
   __block GNCBLEGATTServer *blockServer = nil;
+  __block NSError *blockError = nil;
   [medium_ startGATTServerWithCompletionHandler:^(GNCBLEGATTServer *server, NSError *error) {
     if (error != nil) {
       GNCLoggerError(@"Error starting GATT server: %@", error);
+      blockError = error;
+    } else {
+      GNCLoggerInfo(@"Starting GATT server operation completed.");
+      blockServer = server;
     }
-    blockServer = server;
     dispatch_semaphore_signal(semaphore);
   }];
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-  if (!blockServer) {
+  dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, kApiTimeoutInSeconds * NSEC_PER_SEC);
+  if (dispatch_semaphore_wait(semaphore, timeout) != 0) {
+    GNCLoggerError(@"Starting GATT server operation timed out.");
+    return nullptr;
+  }
+  if (!blockServer || blockError != nil) {
     return nullptr;
   }
   return std::make_unique<GattServer>(blockServer);
@@ -349,10 +389,30 @@ std::unique_ptr<api::ble_v2::GattClient> BleMedium::ConnectToGattServer(
     return nullptr;
   }
 
-  __block api::ble_v2::ClientGattConnectionCallback blockCallback = std::move(callback);
+  api::ble_v2::ClientGattConnectionCallback thread_callback = {
+      .on_characteristic_changed_cb =
+          [this,
+           call_on_characteristic_changed_cb = std::move(callback.on_characteristic_changed_cb)](
+              absl::string_view characteristic_uuid) mutable {
+            callback_executor_.Execute([characteristic_uuid = std::string(characteristic_uuid),
+                                        call_on_characteristic_changed_cb = std::move(
+                                            call_on_characteristic_changed_cb)]() mutable {
+              call_on_characteristic_changed_cb(characteristic_uuid);
+            });
+          },
+      .disconnected_cb =
+          [this, call_disconnected_cb = std::move(callback.disconnected_cb)]() mutable {
+            callback_executor_.Execute(
+                [call_disconnected_cb = std::move(call_disconnected_cb)]() mutable {
+                  call_disconnected_cb();
+                });
+          }};
+
+  __block api::ble_v2::ClientGattConnectionCallback blockCallback = std::move(thread_callback);
 
   dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
   __block GNCBLEGATTClient *blockClient = nil;
+  __block NSError *blockError = nil;
   [medium_ connectToGATTServerForPeripheral:peripheral
       disconnectionHandler:^(void) {
         blockCallback.disconnected_cb();
@@ -360,12 +420,19 @@ std::unique_ptr<api::ble_v2::GattClient> BleMedium::ConnectToGattServer(
       completionHandler:^(GNCBLEGATTClient *client, NSError *error) {
         if (error != nil) {
           GNCLoggerError(@"Error connecting to GATT server: %@", error);
+          blockError = error;
+        } else {
+          GNCLoggerInfo(@"Connecting to GATT server operation completed.");
+          blockClient = client;
         }
-        blockClient = client;
         dispatch_semaphore_signal(semaphore);
       }];
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-  if (!blockClient) {
+  dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, kApiTimeoutInSeconds * NSEC_PER_SEC);
+  if (dispatch_semaphore_wait(semaphore, timeout) != 0) {
+    GNCLoggerError(@"Connecting to GATT server operation timed out.");
+    return nullptr;
+  }
+  if (!blockClient || blockError != nil) {
     return nullptr;
   }
   return std::make_unique<GattClient>(blockClient);
@@ -406,12 +473,16 @@ std::unique_ptr<api::ble_v2::BleServerSocket> BleMedium::OpenServerSocket(
                               bleServiceAddedCompletion:^(NSError *error) {
                                 if (error != nil) {
                                   GNCLoggerError(@"Failed to add Weave service: %@", error);
+                                  blockError = error;
                                 }
-                                blockError = error;
                                 dispatch_semaphore_signal(semaphore);
                               }];
   [socketPeripheralManager_ start];
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+  dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, kApiTimeoutInSeconds * NSEC_PER_SEC);
+  if (dispatch_semaphore_wait(semaphore, timeout) != 0) {
+    GNCLoggerError(@"OpenServerSocket operation timed out.");
+    return nullptr;
+  }
   if (blockError != nil) {
     return nullptr;
   }
@@ -467,13 +538,18 @@ std::unique_ptr<api::ble_v2::BleL2capServerSocket> BleMedium::OpenL2capServerSoc
         }
       }
       peripheralManager:nil];
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+  dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, kApiTimeoutInSeconds * NSEC_PER_SEC);
+  if (dispatch_semaphore_wait(semaphore, timeout) != 0) {
+    GNCLoggerError(@"OpenL2capServerSocket operation timed out.");
+    return nullptr;
+  }
   if (blockPSMPublishedError != nil) {
     return nullptr;
   }
 
   return std::move(l2cap_server_socket);
 }
+
 // TODO(b/290385712): Add support for @c cancellation_flag.
 // TODO(b/293336684): Old Weave code that need to be deleted once shared Weave is complete.
 std::unique_ptr<api::ble_v2::BleSocket> BleMedium::Connect(
@@ -481,7 +557,7 @@ std::unique_ptr<api::ble_v2::BleSocket> BleMedium::Connect(
     api::ble_v2::BlePeripheral::UniqueId peripheral_id, CancellationFlag *cancellation_flag) {
   id<GNCPeripheral> peripheral = peripherals_.Get(peripheral_id);
   if (!peripheral) {
-    GNCLoggerError(@"[NEARBY] Failed to connect to Gatt server: peripheral is not found.");
+    GNCLoggerError(@"Failed to connect to Gatt server: peripheral is not found.");
     return nullptr;
   }
 
@@ -517,7 +593,11 @@ std::unique_ptr<api::ble_v2::BleSocket> BleMedium::Connect(
                                dispatch_semaphore_signal(semaphore);
                              });
                            }];
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+  dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, kApiTimeoutInSeconds * NSEC_PER_SEC);
+  if (dispatch_semaphore_wait(semaphore, timeout) != 0) {
+    GNCLoggerError(@"Failed to connect BLE socket: timeout.");
+    return nullptr;
+  }
   if (socket == nullptr) {
     return nullptr;
   }
@@ -532,12 +612,10 @@ std::unique_ptr<api::ble_v2::BleL2capSocket> BleMedium::ConnectOverL2cap(
     api::ble_v2::BlePeripheral::UniqueId peripheral_id, CancellationFlag *cancellation_flag) {
   id<GNCPeripheral> peripheral = peripherals_.Get(peripheral_id);
   if (!peripheral) {
-    GNCLoggerError(@"[NEARBY] Failed to connect over L2CAP: peripheral is not found.");
+    GNCLoggerError(@"Failed to connect over L2CAP: peripheral is not found.");
     return nullptr;
   }
   dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
-  dispatch_time_t timeout =
-      dispatch_time(DISPATCH_TIME_NOW, kRequestConnectionTimeoutInSeconds * NSEC_PER_SEC);
   __block std::unique_ptr<BleL2capSocket> socket;
   __block NSError *openError = nil;
   const std::string &service_id_str = service_id;
@@ -566,13 +644,14 @@ std::unique_ptr<api::ble_v2::BleL2capSocket> BleMedium::ConnectOverL2cap(
                      dispatch_semaphore_signal(semaphore);
                    }];
                  }];
+  dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, kApiTimeoutInSeconds * NSEC_PER_SEC);
   if (dispatch_semaphore_wait(semaphore, timeout) != 0) {
-    GNCLoggerError(@"[NEARBY] Failed to connect over L2CAP: timeout.");
+    GNCLoggerError(@"Failed to connect over L2CAP: timeout.");
     return nullptr;
   }
   if (socket == nullptr) {
     if (openError != nil) {
-      GNCLoggerError(@"[NEARBY] Failed to connect over L2CAP:%@.", openError);
+      GNCLoggerError(@"Failed to connect over L2CAP:%@.", openError);
     }
     return nullptr;
   }

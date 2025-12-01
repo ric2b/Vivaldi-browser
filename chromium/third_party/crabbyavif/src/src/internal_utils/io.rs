@@ -27,7 +27,7 @@ pub struct DecoderFileIO {
 
 impl DecoderFileIO {
     pub fn create(filename: &String) -> AvifResult<DecoderFileIO> {
-        let file = File::open(filename).or(Err(AvifError::IoError))?;
+        let file = File::open(filename).map_err(AvifError::map_io_error)?;
         Ok(DecoderFileIO {
             file: Some(file),
             buffer: Vec::new(),
@@ -39,7 +39,7 @@ impl decoder::IO for DecoderFileIO {
     fn read(&mut self, offset: u64, max_read_size: usize) -> AvifResult<&[u8]> {
         let file_size = self.size_hint();
         if offset > file_size {
-            return Err(AvifError::IoError);
+            return AvifError::io_error();
         }
         let available_size: usize = (file_size - offset) as usize;
         let size_to_read: usize =
@@ -48,7 +48,7 @@ impl decoder::IO for DecoderFileIO {
             if self.buffer.capacity() < size_to_read
                 && self.buffer.try_reserve_exact(size_to_read).is_err()
             {
-                return Err(AvifError::OutOfMemory);
+                return AvifError::out_of_memory();
             }
             self.buffer.resize(size_to_read, 0);
             if self
@@ -58,7 +58,7 @@ impl decoder::IO for DecoderFileIO {
                 .is_err()
                 || self.file.unwrap_ref().read_exact(&mut self.buffer).is_err()
             {
-                return Err(AvifError::IoError);
+                return AvifError::io_error();
             }
         } else {
             self.buffer.clear();
@@ -98,7 +98,7 @@ impl decoder::IO for DecoderRawIO<'_> {
     fn read(&mut self, offset: u64, max_read_size: usize) -> AvifResult<&[u8]> {
         let data_len = self.data.len() as u64;
         if offset > data_len {
-            return Err(AvifError::IoError);
+            return AvifError::io_error();
         }
         let available_size: usize = (data_len - offset) as usize;
         let size_to_read: usize =
@@ -127,7 +127,7 @@ impl decoder::IO for DecoderMemoryIO {
     fn read(&mut self, offset: u64, max_read_size: usize) -> AvifResult<&[u8]> {
         let data_len = self.data.len() as u64;
         if offset > data_len {
-            return Err(AvifError::IoError);
+            return AvifError::io_error();
         }
         let available_size: usize = (data_len - offset) as usize;
         let size_to_read: usize =

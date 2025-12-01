@@ -4537,4 +4537,20 @@ such as the auto update until date, first release, and more.
     <td>Yes</td>
     <td>Yes</td>
    </tr>
+
+  <tr>
+    <td>2025-07-28</td>
+    <td>Lenovo</td>
+    <td><a href="https://psref.lenovo.com/Product//Lenovo_Chrome_2in1_14ITN10?tab=model">Lenovo Chromebook 2-in-1 14ITN10 / Lenovo Chromebook Plus 2-in-1 14ITN10</a></td>
+    <td>Pujjoniru</td>
+    <td>Nirul</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Twinlake</td>
+    <td>Convertible</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
 </table>

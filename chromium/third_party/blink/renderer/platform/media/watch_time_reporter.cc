@@ -261,8 +261,8 @@ void WatchTimeReporter::OnUnderflow() {
   // In the event of a pending finalize, we don't want to count underflow events
   // that occurred after the finalize time. Yet if the finalize is canceled we
   // want to ensure they are all recorded.
-  pending_underflow_events_.push_back(
-      {false, get_media_time_cb_.Run(), media::kNoTimestamp});
+  pending_underflow_events_.emplace_back(false, get_media_time_cb_.Run(),
+                                         media::kNoTimestamp);
 }
 
 void WatchTimeReporter::OnUnderflowComplete(base::TimeDelta elapsed) {
@@ -508,7 +508,7 @@ void WatchTimeReporter::RecordWatchTime() {
       }
     }
 
-    std::erase_if(pending_underflow_events_, [](const UnderflowEvent& ufe) {
+    EraseIf(pending_underflow_events_, [](const UnderflowEvent& ufe) {
       return ufe.reported && ufe.duration != media::kNoTimestamp;
     });
 
@@ -612,10 +612,23 @@ WatchTimeReporter::CreateBaseComponent() {
     }
   }
 
-  if (properties_->is_mse)
-    keys_to_finalize.emplace_back(NORMAL_KEY(Mse));
-  else
-    keys_to_finalize.emplace_back(NORMAL_KEY(Src));
+  switch (properties_->demuxer_type) {
+    case media::DemuxerType::kMockDemuxer:
+    case media::DemuxerType::kUnknownDemuxer:
+      // Testing demuxers, do nothing.
+      break;
+    case media::DemuxerType::kChunkDemuxer:
+      keys_to_finalize.emplace_back(NORMAL_KEY(Mse));
+      break;
+    case media::DemuxerType::kFFmpegDemuxer:
+    case media::DemuxerType::kFrameInjectingDemuxer:
+    case media::DemuxerType::kStreamProviderDemuxer:
+      keys_to_finalize.emplace_back(NORMAL_KEY(Src));
+      break;
+    case media::DemuxerType::kManifestDemuxer:
+      keys_to_finalize.emplace_back(NORMAL_KEY(Hls));
+      break;
+  }
 
   if (properties_->is_eme)
     keys_to_finalize.emplace_back(NORMAL_KEY(Eme));

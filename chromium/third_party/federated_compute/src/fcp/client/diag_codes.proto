@@ -1,0 +1,347 @@
+// Copyright 2021 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.client;
+
+option java_package = "com.google.intelligence.fcp.client";
+option java_multiple_files = true;
+
+/**
+ * Enumerations of diagnostic codes for debugging, testing, and logging.
+ *
+ * Diag codes serve two purposes:
+ *  - testing and development. The ability to log, observe and assert on
+ *    diag code traces allows for integration testing of code that runs
+ *    asynchronously in different processes or apps. Both DebugDiagCodes and
+ *    ProdDiagCodes are used to this end.
+ *  - monitoring of a deployment. Sequences of diag codes are
+ *    * easy to analyze
+ *    * have limited expressive power by design (mere integers) to discourage
+ *      logging sensitive information
+ *    * are easier to support across platforms as compared to unstructured logs,
+ *      for both policy and technical reasons.
+ *
+ * Note that only the ordinal of the diag code enum will be logged to clearcut.
+ * As a result, the diag codes for debug and production should be mutually
+ * exclusive.
+ */
+enum DebugDiagCode {
+  DEBUG_DIAG_CODE_UNDEFINED = 0;
+
+  // Codes reserved for test-only training diag codes.
+  // =================================================
+
+  /** Logged right before ClientExecution.getLoopOp() is executed */
+  TRAINING_BEFORE_LOOP_OP = 1000;
+
+  /** Logged right after ClientExecution.getLoopOp() is executed */
+  TRAINING_AFTER_LOOP_OP = 1001;
+
+  /** Logged if opstats is enabled */
+  TRAINING_OPSTATS_ENABLED = 1002;
+
+  // Codes reserved for test-only resource cache diag codes.
+  //================================================================
+
+  // Logged when a resource is requested that is in the cache.
+  RESOURCE_CACHE_HIT = 1200;
+
+  // Logged when a resource is requested that isn't in the cache.
+  RESOURCE_CACHE_MISS = 1201;
+}
+
+/**
+ * Diagnosis codes that are meant to be logged in production. These usually are
+ * pretty severe errors, public API being called, or infrequent jobs (like
+ * training or old example removal) being run.
+ *
+ * The logging of ProdDiagCode is controlled by a runtime dynamic flag. Logging
+ * can be skipped in accordance to the flag.
+ */
+enum ProdDiagCode {
+  PROD_DIAG_CODE_UNDEFINED = 0;
+
+  // Codes reserved for background training
+  // ======================================
+
+  /**
+   * Successfully interrupted TensorFlow execution happening on a separate
+   * thread.
+   */
+  BACKGROUND_TRAINING_INTERRUPT_TF_EXECUTION = 51;
+
+  /**
+   * TensorFlow session was interrupted but timed out waiting for execution to
+   * complete.
+   */
+  BACKGROUND_TRAINING_INTERRUPT_TF_EXECUTION_TIMED_OUT = 50;
+
+  /**
+   * TensorFlow session was interrupted and finished execution after the grace
+   * period.
+   */
+  BACKGROUND_TRAINING_INTERRUPT_TF_EXTENDED_EXECUTION_COMPLETED = 49;
+
+  /**
+   * TensorFlow session was interrupted but timed out waiting for execution to
+   * complete in the extended period.
+   */
+  BACKGROUND_TRAINING_INTERRUPT_TF_EXTENDED_EXECUTION_TIMED_OUT = 48;
+
+  /** Sent when the provided ClientOnlyPlan cannot be parsed. */
+  BACKGROUND_TRAINING_FAILED_CANNOT_PARSE_PLAN = 40;
+
+  /** Sent when the provided ClientOnlyPlan does not pass a sanity check. */
+  BACKGROUND_TRAINING_FAILED_PLAN_FAILS_SANITY_CHECK = 39;
+
+  /** Successfully interrupted GRPC on a separate thread. */
+  BACKGROUND_TRAINING_INTERRUPT_GRPC = 34;
+
+  /** GRPC was interrupted but timed out waiting for execution to complete. */
+  BACKGROUND_TRAINING_INTERRUPT_GRPC_TIMED_OUT = 33;
+
+  /** GRPC was interrupted and finished after the grace period. */
+  BACKGROUND_TRAINING_INTERRUPT_GRPC_EXTENDED_COMPLETED = 32;
+
+  /**
+   * GRPC was interrupted but timed out waiting for execution to complete in the
+   * extended period.
+   */
+  BACKGROUND_TRAINING_INTERRUPT_GRPC_EXTENDED_TIMED_OUT = 31;
+
+  /** Successfully interrupted HTTP on a separate thread. */
+  BACKGROUND_TRAINING_INTERRUPT_HTTP = 24;
+
+  /**
+   * HTTP was interrupted but timed out waiting for execution to complete.
+   */
+  BACKGROUND_TRAINING_INTERRUPT_HTTP_TIMED_OUT = 23;
+
+  /** HTTP was interrupted and finished after the grace period. */
+  BACKGROUND_TRAINING_INTERRUPT_HTTP_EXTENDED_COMPLETED = 22;
+
+  /**
+   * HTTP was interrupted but timed out waiting for execution to complete in the
+   * extended period.
+   */
+  BACKGROUND_TRAINING_INTERRUPT_HTTP_EXTENDED_TIMED_OUT = 21;
+
+  /**
+   * Sent when TFLite was used.
+   */
+  BACKGROUND_TRAINING_TFLITE_ENGINE_USED = 20;
+
+  /**
+   * Sent when TFLite model flatbuffer is not empty.
+   */
+  BACKGROUND_TRAINING_TFLITE_MODEL_INCLUDED = 18;
+
+  /**
+   * A generic SecAgg client error.
+   */
+  SECAGG_CLIENT_NATIVE_ERROR_GENERIC = 1369;
+
+  /**
+   * The server requested an unsupported version.
+   */
+  SECAGG_CLIENT_ERROR_UNSUPPORTED_VERSION = 1368;
+
+  /**
+   * Sent when a plan that ingests data via Dataset is attempted to be run in
+   * an environment where Dataset support is not available.
+   */
+  DATASET_NOT_SUPPORTED = 1493;
+
+  /** Logged when a CheckinRequestAck message was expected, but not received. */
+  BACKGROUND_TRAINING_CHECKIN_REQUEST_ACK_EXPECTED_BUT_NOT_RECVD = 29;
+
+  /** Logged when a CheckinRequestAck message is received. */
+  BACKGROUND_TRAINING_CHECKIN_REQUEST_ACK_RECEIVED = 28;
+
+  /**
+   * Sent when the provided eligibility eval ClientOnlyPlan cannot be parsed.
+   */
+  BACKGROUND_TRAINING_ELIGIBILITY_EVAL_FAILED_CANNOT_PARSE_PLAN = 26;
+
+  /**
+   * Codes reserved for logs related to opstats
+   * ==========================================
+   */
+
+  // Logged when the provided path for creating database is invalid.
+  OPSTATS_INVALID_FILE_PATH = 1699;
+
+  // Logged when failed to create parent directories for the database file.
+  OPSTATS_PARENT_DIR_CREATION_FAILED = 1698;
+
+  // Logged when failed to read from OpStats DB.
+  OPSTATS_READ_FAILED = 1697;
+
+  // Logged when failed to reset OpStats DB.
+  OPSTATS_RESET_FAILED = 1696;
+
+  // Logged when failed to write to OpStats DB.
+  OPSTATS_WRITE_FAILED = 1695;
+
+  // Logged when the OpStats example store is requested, but the collection uri
+  // is wrong.
+  OPSTATS_INCORRECT_COLLECTION_URI = 1694;
+
+  // Logged when the provided selection criteria for the OpStats example store
+  // is invalid.
+  OPSTATS_INVALID_SELECTION_CRITERIA = 1693;
+
+  // Logged when the OpStats example store is requested, but not enabled.
+  OPSTATS_EXAMPLE_STORE_REQUESTED_NOT_ENABLED = 1692;
+
+  // Logged when extracting the task name from the checkin response fails.
+  OPSTATS_TASK_NAME_EXTRACTION_FAILED = 1691;
+
+  // Logged when we start to construct an opstats message for a run after having
+  // successfully created an underlying db.
+  OPSTATS_DB_COMMIT_EXPECTED = 1690;
+
+  // Logged when we try to commit an opstats message to the db.
+  OPSTATS_DB_COMMIT_ATTEMPTED = 1689;
+
+  // Logged when there's already another instance of OpStatsDb which uses the
+  // same underlying file.
+  OPSTATS_MULTIPLE_DB_INSTANCE_DETECTED = 1688;
+
+  // Logged when failed to open a file descriptor for the underlying database
+  // file.
+  OPSTATS_FAILED_TO_OPEN_FILE = 1687;
+
+  /**
+   * Codes reserved for logs related to HTTP
+   * =======================================
+   */
+  /* Logged when a client using the GRPC protocol downloads a regular
+   * (non-eligibility eval) task's resource (plan or initial checkpoint) using
+   * HTTP. */
+  HTTP_GRPC_PROTOCOL_REGULAR_TASK_RESOURCE_USES_HTTP = 1799;
+  /* Logged when the attempt to fetch HTTP resources (as per
+   * `HTTP_GRPC_PROTOCOL_REGULAR_TASK_RESOURCE_USES_HTTP`) failed. */
+  HTTP_GRPC_PROTOCOL_REGULAR_TASK_RESOURCE_HTTP_FETCH_FAILED = 1798;
+  /* Logged when the attempt to fetch HTTP resources (as per
+   * `HTTP_GRPC_PROTOCOL_REGULAR_TASK_RESOURCE_USES_HTTP`) succeeded. */
+  HTTP_GRPC_PROTOCOL_REGULAR_TASK_RESOURCE_HTTP_FETCH_SUCCEEDED = 1797;
+  /* Logged when a cancellation request or an abort request failed. */
+  HTTP_CANCELLATION_OR_ABORT_REQUEST_FAILED = 1790;
+  /* Logged when a ReportEligibilityEvalTaskResult request failed. */
+  HTTP_REPORT_ELIGIBILITY_EVAL_RESULT_REQUEST_FAILED = 1789;
+  /* Logged when a ReportTaskResult request failed. */
+  HTTP_REPORT_TASK_RESULT_REQUEST_FAILED = 1788;
+  /* Logged when HTTP federated protocol is used. */
+  HTTP_FEDERATED_PROTOCOL_USED = 1787;
+
+  /**
+   * Codes reserved for logs related to temp files
+   * =============================================
+   */
+  TEMP_FILES_NATIVE_FAILED_TO_DELETE = 1090;
+
+  /**
+   * Codes reserved for logs related to Federated Select
+   * =======================================
+   */
+  /* Logged when a task tries to use Federated Select to fetch one or more
+   * slices but the feature is disabled. */
+  FEDSELECT_SLICE_HTTP_FETCH_REQUESTED_BUT_DISABLED = 1899;
+  /* Logged when a regular (non-eligibility eval) task uses Federated Select to
+   * fetch one or more slices via HTTP. */
+  FEDSELECT_SLICE_HTTP_FETCH_REQUESTED = 1898;
+  /* Logged when the attempt to fetch one or more slices via HTTP (as per
+   * `FEDSELECT_SLICE_HTTP_FETCH_REQUESTED`) failed. */
+  FEDSELECT_SLICE_HTTP_FETCH_FAILED = 1897;
+  /* Logged when the attempt to fetch one or more slices via HTTP (as per
+   * `FEDSELECT_SLICE_HTTP_FETCH_REQUESTED`) succeeded. */
+  FEDSELECT_SLICE_HTTP_FETCH_SUCCEEDED = 1896;
+
+  /**
+   * Codes for logs related to the resource cache
+   * ========================================
+   */
+
+  /* Logged when a FileBackedResourceCache fails to read the CacheManifest
+   * proto db. */
+  RESOURCE_CACHE_MANIFEST_READ_FAILED = 1999;
+  /* Logged when a FileBackedResourceCache fails to write the CacheManifest to
+   * storage. */
+  RESOURCE_CACHE_MANIFEST_WRITE_FAILED = 1998;
+  /* Logged when a FileBackedResourceCache fails to read the cached resource to
+   * storage. */
+  RESOURCE_CACHE_RESOURCE_READ_FAILED = 1997;
+  /* Logged when a FileBackedResourceCache fails to write the cached resource to
+   * storage. */
+  RESOURCE_CACHE_RESOURCE_WRITE_FAILED = 1996;
+  /* Logged when a FileBackedResourceCache is initialized without an absolute
+   * root path. */
+  RESOURCE_CACHE_CACHE_ROOT_PATH_NOT_ABSOLUTE = 1995;
+  /* Logged when a FileBackedResourceCache fails to create the cache dir on
+   * initialization. */
+  RESOURCE_CACHE_FAILED_TO_CREATE_CACHE_DIR = 1994;
+  /* Logged when a FileBackedResourceCache is initialized with an invalid cache
+   * manifest path. */
+  RESOURCE_CACHE_INVALID_MANIFEST_PATH = 1993;
+  /* Logged when a FileBackedResourceCache fails to create the parent directory
+   * of the cache manifest. */
+  RESOURCE_CACHE_FAILED_TO_CREATE_MANIFEST_DIR = 1992;
+  /* Logged when a FileBackedResourceCache fails to reset the cache manifest. */
+  RESOURCE_CACHE_FAILED_TO_RESET_MANIFEST = 1991;
+  /* Logged when a FileBackedResourceCache fails to get the size of the cache
+   * manifest. */
+  RESOURCE_CACHE_INIT_FAILED_TO_GET_MANIFEST_SIZE = 1990;
+  /* Logged when a FileBackedResourceCache fails to iterate over the cache
+   * directory during cleanup.
+   */
+  RESOURCE_CACHE_CLEANUP_FAILED_TO_ITERATE_OVER_CACHE_DIR = 1989;
+  /* Logged when a FileBackedResourceCache fails to delete a cached file during
+   * cleanup. */
+  RESOURCE_CACHE_CLEANUP_FAILED_TO_DELETE_CACHED_FILE = 1988;
+  /* Logged when a FileBackedResourceCache fails to get the file size of a
+   * cached file. */
+  RESOURCE_CACHE_CLEANUP_FAILED_TO_GET_FILE_SIZE = 1987;
+  /* Logged when a FileBackedResourceCache fails to initialize the cache
+   * manifest when it doesn't already exist. */
+  RESOURCE_CACHE_INIT_FAILED_TO_INITIALIZE_MANIFEST = 1986;
+  /* Logged when a FileBackedResourceCache fails to delete an existing cache
+   * manifest due to an error. */
+  RESOURCE_CACHE_FAILED_TO_DELETE_MANIFEST = 1985;
+  /* Logged when a FileBackedResourceCache fails in some way during cleanup in
+   * initialization. */
+  RESOURCE_CACHE_INIT_FAILED_CLEANUP = 1984;
+  /* Logged when a FileBackedResourceCache fails to check if a cached file
+   * exists during cleanup. */
+  RESOURCE_CACHE_CLEANUP_FAILED_TO_CHECK_IF_FILE_EXISTS = 1983;
+  /* Logged when a FileBackedResourceCache fails to check if a cached file
+   * exists during Put(). */
+  RESOURCE_CACHE_PUT_FAILED_TO_CHECK_IF_FILE_EXISTS = 1982;
+
+  /**
+   * Codes for logs related to eligibility eval.
+   * ========================================
+   */
+
+  /** Logged when the native eligibility eval stack successfully completed an
+   * eligibility computation. */
+  ELIGIBILITY_EVAL_NATIVE_COMPUTATION_SUCCESS = 2199;
+  /** Logged when an unexpected policy kind is encounted by the native
+   * eligibility eval stack. */
+  ELIGIBILITY_EVAL_UNEXPECTED_POLICY_KIND = 2198;
+
+  reserved 25;
+}

@@ -43,11 +43,15 @@
 
 #include "src/tint/api/tint.h"
 #include "src/tint/cmd/common/helper.h"
+#include "src/tint/lang/core/ir/core_builtin_call.h"
 #include "src/tint/lang/core/ir/disassembler.h"
+#include "src/tint/lang/core/ir/load.h"
+#include "src/tint/lang/core/ir/transform/resource_binding_helper.h"
 #include "src/tint/lang/core/ir/transform/single_entry_point.h"
 #include "src/tint/lang/core/ir/transform/substitute_overrides.h"
 #include "src/tint/lang/core/ir/var.h"
 #include "src/tint/lang/core/type/f16.h"
+#include "src/tint/lang/core/type/resource_type.h"
 #include "src/tint/lang/msl/ir/transform/flatten_bindings.h"
 #include "src/tint/lang/wgsl/ast/module.h"
 #include "src/tint/utils/command/cli.h"
@@ -56,6 +60,7 @@
 #include "src/tint/utils/diagnostic/diagnostic.h"
 #include "src/tint/utils/diagnostic/formatter.h"
 #include "src/tint/utils/macros/defer.h"
+#include "src/tint/utils/rtti/switch.h"
 #include "src/tint/utils/text/string.h"
 #include "src/tint/utils/text/styled_text.h"
 #include "src/tint/utils/text/styled_text_printer.h"
@@ -153,11 +158,7 @@ struct Options {
     bool enable_robustness = true;
 
     bool dump_ir = false;
-    bool use_ir_reader = false;
-
-#if TINT_BUILD_SYNTAX_TREE_WRITER
-    bool dump_ast = false;
-#endif  // TINT_BUILD_SYNTAX_TREE_WRITER
+    bool minify = false;
 
 #if TINT_BUILD_SPV_READER
     tint::spirv::reader::Options spirv_reader_options;
@@ -198,28 +199,28 @@ Format InferFormat(const std::string& filename) {
     (void)filename;
 
 #if TINT_BUILD_SPV_WRITER
-    if (tint::HasSuffix(filename, ".spv")) {
+    if (filename.ends_with(".spv")) {
         return Format::kSpirv;
     }
-    if (tint::HasSuffix(filename, ".spvasm")) {
+    if (filename.ends_with(".spvasm")) {
         return Format::kSpvAsm;
     }
 #endif  // TINT_BUILD_SPV_WRITER
 
 #if TINT_BUILD_WGSL_WRITER
-    if (tint::HasSuffix(filename, ".wgsl")) {
+    if (filename.ends_with(".wgsl")) {
         return Format::kWgsl;
     }
 #endif  // TINT_BUILD_WGSL_WRITER
 
 #if TINT_BUILD_MSL_WRITER
-    if (tint::HasSuffix(filename, ".metal")) {
+    if (filename.ends_with(".metal")) {
         return Format::kMsl;
     }
 #endif  // TINT_BUILD_MSL_WRITER
 
 #if TINT_BUILD_HLSL_WRITER
-    if (tint::HasSuffix(filename, ".hlsl")) {
+    if (filename.ends_with(".hlsl")) {
         return Format::kHlsl;
     }
 #endif  // TINT_BUILD_HLSL_WRITER
@@ -300,10 +301,6 @@ If not provided, will be inferred from output filename extension:
                                              Parameter{"name"});
     TINT_DEFER(opts->output_file = output.value.value_or(""));
 
-    auto& use_ir_reader = options.Add<BoolOption>(
-        "use-ir-reader", "Use the IR for the SPIR-V reader", Default{false});
-    TINT_DEFER(opts->use_ir_reader = *use_ir_reader.value);
-
     auto& disable_wg_init = options.Add<BoolOption>(
         "disable-workgroup-init", "Disable workgroup memory zero initialization", Default{false});
     TINT_DEFER(opts->disable_workgroup_init = *disable_wg_init.value);
@@ -321,6 +318,9 @@ If not provided, will be inferred from output filename extension:
 
     auto& rename_all = options.Add<BoolOption>("rename-all", "Renames all symbols", Default{false});
     TINT_DEFER(opts->rename_all = *rename_all.value);
+
+    auto& minify = options.Add<BoolOption>("minify", "Minify the output WGSL", Default{false});
+    TINT_DEFER(opts->minify = *minify.value);
 
     auto& overrides = options.Add<StringOption>(
         "overrides", "Override values as IDENTIFIER=VALUE, comma-separated");
@@ -496,12 +496,6 @@ When specified, automatically enables HLSL validation)",
         "dump-inspector-bindings", "Dump reflection data about bindings to stdout",
         Alias{"emit-inspector-bindings"}, Default{false});
     TINT_DEFER(opts->dump_inspector_bindings = *dump_inspector_bindings.value);
-
-#if TINT_BUILD_SYNTAX_TREE_WRITER
-    auto& dump_ast = options.Add<BoolOption>("dump-ast", "Writes the AST to stdout",
-                                             Alias{"emit-ast"}, Default{false});
-    TINT_DEFER(opts->dump_ast = *dump_ast.value);
-#endif  // TINT_BUILD_SYNTAX_TREE_WRITER
 
     auto& parse_only =
         options.Add<BoolOption>("parse-only", "Stop after parsing the input", Default{false});
@@ -770,7 +764,7 @@ Options:
     auto files = result.Get();
     if (files.Length() > 1) {
         std::cerr << "More than one input file specified: "
-                  << tint::Join(Transform(files, tint::Quote), ", ") << "\n";
+                  << tint::Join(Transform(files, tint::cmd::Quote), ", ") << "\n";
         return false;
     }
     if (files.Length() == 1) {
@@ -855,10 +849,9 @@ std::string Disassemble(const std::vector<uint32_t>& data) {
 /// @param inspector the inspector
 /// @param ir the module to generate
 /// @returns true on success
-[[maybe_unused]]
-bool GenerateSpirv([[maybe_unused]] const Options& options,
-                   [[maybe_unused]] tint::inspector::Inspector& inspector,
-                   [[maybe_unused]] tint::core::ir::Module& ir) {
+[[maybe_unused]] bool GenerateSpirv([[maybe_unused]] const Options& options,
+                                    [[maybe_unused]] tint::inspector::Inspector& inspector,
+                                    [[maybe_unused]] tint::core::ir::Module& ir) {
 #if TINT_BUILD_SPV_WRITER
     tint::spirv::writer::Options gen_options;
     if (options.rename_all) {
@@ -883,6 +876,7 @@ bool GenerateSpirv([[maybe_unused]] const Options& options,
     }
 
     gen_options.bindings = tint::spirv::writer::GenerateBindings(ir);
+    gen_options.resource_binding = tint::core::ir::transform::GenerateResourceBindingConfig(ir);
 
     // Enable the Vulkan Memory Model if needed.
     for (auto* ty : ir.Types()) {
@@ -950,9 +944,10 @@ bool GenerateWgsl([[maybe_unused]] Options& options,
                   [[maybe_unused]] tint::inspector::Inspector& inspector,
                   [[maybe_unused]] tint::Program& program) {
 #if TINT_BUILD_WGSL_WRITER
-    // TODO(jrprice): Provide a way for the user to set non-default options.
-    tint::wgsl::writer::Options gen_options;
-    auto result = tint::wgsl::writer::Generate(program, gen_options);
+    tint::wgsl::writer::Options writer_options{
+        .minify = options.minify,
+    };
+    auto result = tint::wgsl::writer::Generate(program, writer_options);
     if (result != tint::Success) {
         std::cerr << "Failed to generate: " << result.Failure() << "\n";
         return false;
@@ -994,10 +989,9 @@ bool GenerateWgsl([[maybe_unused]] Options& options,
 /// @param inspector the inspector
 /// @param ir the module to generate
 /// @returns true on success
-[[maybe_unused]]
-bool GenerateMsl([[maybe_unused]] const Options& options,
-                 [[maybe_unused]] tint::inspector::Inspector& inspector,
-                 [[maybe_unused]] tint::core::ir::Module& ir) {
+[[maybe_unused]] bool GenerateMsl([[maybe_unused]] const Options& options,
+                                  [[maybe_unused]] tint::inspector::Inspector& inspector,
+                                  [[maybe_unused]] tint::core::ir::Module& ir) {
 #if TINT_BUILD_MSL_WRITER
     if (!options.use_argument_buffers) {
         // Remap resource numbers to a flat namespace.
@@ -1106,10 +1100,9 @@ bool GenerateMsl([[maybe_unused]] const Options& options,
 /// @param inspector the inspector
 /// @param ir the module to generate
 /// @returns true on success
-[[maybe_unused]]
-bool GenerateHlsl([[maybe_unused]] const Options& options,
-                  [[maybe_unused]] tint::inspector::Inspector& inspector,
-                  [[maybe_unused]] tint::core::ir::Module& ir) {
+[[maybe_unused]] bool GenerateHlsl([[maybe_unused]] const Options& options,
+                                   [[maybe_unused]] tint::inspector::Inspector& inspector,
+                                   [[maybe_unused]] tint::core::ir::Module& ir) {
 #if TINT_BUILD_HLSL_WRITER
     const bool for_fxc = options.format == Format::kHlslFxc;
     // Set up the backend options.
@@ -1174,8 +1167,8 @@ bool GenerateHlsl([[maybe_unused]] const Options& options,
                 std::cout << "Validating with DXC: " << dxc.Path() << "\n";
             }
             dxc_res = tint::hlsl::validate::ValidateUsingDXC(
-                dxc.Path(), result->hlsl, result->entry_points, dxc_require_16bit_types,
-                hlsl_shader_model);
+                dxc.Path(), result->hlsl, result->entry_point_name, result->pipeline_stage,
+                dxc_require_16bit_types, hlsl_shader_model);
         } else {
             dxc_res.failed = true;
             dxc_res.output = "DXC executable '" + dxc_path + "' not found. Cannot validate.";
@@ -1203,8 +1196,8 @@ bool GenerateHlsl([[maybe_unused]] const Options& options,
             if (options.verbose) {
                 std::cout << "Validating with FXC: " << fxc.Path() << "\n";
             }
-            fxc_res = tint::hlsl::validate::ValidateUsingFXC(fxc.Path(), result->hlsl,
-                                                             result->entry_points);
+            fxc_res = tint::hlsl::validate::ValidateUsingFXC(
+                fxc.Path(), result->hlsl, result->entry_point_name, result->pipeline_stage);
         } else {
             fxc_res.failed = true;
             fxc_res.output = "FXC DLL '" + options.fxc_path + "' not found. Cannot validate.";
@@ -1232,10 +1225,9 @@ bool GenerateHlsl([[maybe_unused]] const Options& options,
 /// @param inspector the inspector
 /// @param ir the module to generate
 /// @returns true on success
-[[maybe_unused]]
-bool GenerateGlsl([[maybe_unused]] const Options& options,
-                  [[maybe_unused]] tint::inspector::Inspector& inspector,
-                  [[maybe_unused]] tint::core::ir::Module& ir) {
+[[maybe_unused]] bool GenerateGlsl([[maybe_unused]] const Options& options,
+                                   [[maybe_unused]] tint::inspector::Inspector& inspector,
+                                   [[maybe_unused]] tint::core::ir::Module& ir) {
 #if TINT_BUILD_GLSL_WRITER
     tint::glsl::writer::Options gen_options;
     gen_options.strip_all_names = options.rename_all;
@@ -1440,34 +1432,27 @@ int Run(tint::VectorRef<std::string_view> arguments, ExeMode exe_mode) {
         options.format = Format::kSpvAsm;
     }
 
-    tint::cmd::LoadProgramOptions opts;
-    opts.filename = options.input_filename;
-    opts.printer = options.printer.get();
+    tint::cmd::LoadProgramOptions opts{
+        .filename = options.input_filename,
 #if TINT_BUILD_SPV_READER
-    opts.use_ir_reader = options.use_ir_reader;
-    opts.spirv_reader_options = options.spirv_reader_options;
+        .spirv_reader_options = options.spirv_reader_options,
+#endif
+        .printer = options.printer.get(),
+    };
+
+#if TINT_BUILD_SPV_READER
     // Allow the shader-f16 extension
     opts.spirv_reader_options.allowed_features = tint::wgsl::AllowedFeatures::Everything();
 #endif
 
     auto info = tint::cmd::LoadProgramInfo(opts);
+    if (!info.program.IsValid()) {
+        return 1;
+    }
 
     if (options.parse_only) {
         return 1;
     }
-
-#if TINT_BUILD_SYNTAX_TREE_WRITER
-    if (options.dump_ast) {
-        tint::wgsl::writer::Options gen_options;
-        gen_options.use_syntax_tree_writer = true;
-        auto result = tint::wgsl::writer::Generate(info.program, gen_options);
-        if (result != tint::Success) {
-            std::cerr << "Failed to dump AST: " << result.Failure() << "\n";
-        } else {
-            std::cout << result->wgsl << "\n";
-        }
-    }
-#endif  // TINT_BUILD_SYNTAX_TREE_WRITER
 
     if (options.dump_ir || options.format == Format::kIr) {
         auto res = DumpIR(info.program, options);

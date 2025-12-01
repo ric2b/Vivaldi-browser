@@ -106,6 +106,7 @@ void IncrementalMarkingJob::Task::RunInternal() {
   // Set the current isolate such that trusted pointer tables etc are
   // available and the cage base is set correctly for multi-cage mode.
   SetCurrentIsolateScope isolate_scope(isolate());
+  SetCurrentLocalHeapScope thread_local_scope(isolate());
 
   isolate()->stack_guard()->ClearStartIncrementalMarking();
 
@@ -123,8 +124,8 @@ void IncrementalMarkingJob::Task::RunInternal() {
 
   IncrementalMarking* incremental_marking = heap->incremental_marking();
   if (incremental_marking->IsStopped()) {
-    if (heap->IncrementalMarkingLimitReached() !=
-        Heap::IncrementalMarkingLimit::kNoLimit) {
+    auto [limit, reason] = heap->IncrementalMarkingLimitReached();
+    if (limit != Heap::IncrementalMarkingLimit::kNoLimit) {
       heap->StartIncrementalMarking(heap->GCFlagsForIncrementalMarking(),
                                     GarbageCollectionReason::kTask,
                                     kGCCallbackScheduleIdleGarbageCollection);

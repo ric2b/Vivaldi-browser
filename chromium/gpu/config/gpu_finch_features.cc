@@ -4,6 +4,8 @@
 
 #include "gpu/config/gpu_finch_features.h"
 
+#include <string_view>
+
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
@@ -16,7 +18,8 @@
 #include "ui/gl/gl_utils.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
+#include "base/android/android_info.h"
+#include "base/android/device_info.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_split.h"
@@ -34,7 +37,7 @@ namespace features {
 namespace {
 
 #if BUILDFLAG(IS_ANDROID)
-bool IsDeviceBlocked(const std::string& field, const std::string& block_list) {
+bool IsDeviceBlocked(std::string_view field, std::string_view block_list) {
   auto disable_patterns = base::SplitString(
       block_list, "|", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   for (const auto& disable_pattern : disable_patterns) {
@@ -47,61 +50,28 @@ bool IsDeviceBlocked(const std::string& field, const std::string& block_list) {
 
 }  // namespace
 
-// Used to limit GL version to 2.0 for skia raster and compositing.
-BASE_FEATURE(kUseGles2ForOopR,
-             "UseGles2ForOopR",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // More aggressive behavior for the shader cache: increase size, and do not
 // purge as much in case of memory pressure.
-BASE_FEATURE(kAggressiveShaderCacheLimits,
-             "AggressiveShaderCacheLimits",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kAggressiveShaderCacheLimits, base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_ANDROID)
 // Use android SurfaceControl API for managing display compositor's buffer queue
 // and using overlays on Android. Also used by webview to disable surface
 // SurfaceControl.
-BASE_FEATURE(kAndroidSurfaceControl,
-             "AndroidSurfaceControl",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// https://crbug.com/1176185 List of devices on which SurfaceControl should be
-// disabled.
-const base::FeatureParam<std::string> kAndroidSurfaceControlDeviceBlocklist{
-    &kAndroidSurfaceControl, "AndroidSurfaceControlDeviceBlocklist",
-    "capri|caprip"};
-
-// List of models on which SurfaceControl should be disabled.
-const base::FeatureParam<std::string> kAndroidSurfaceControlModelBlocklist{
-    &kAndroidSurfaceControl, "AndroidSurfaceControlModelBlocklist",
-    "SM-F9*|SM-W202?|SCV44|SCG05|SCG11|SC-55B"};
+BASE_FEATURE(kAndroidSurfaceControl, base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Hardware Overlays for WebView.
-BASE_FEATURE(kWebViewSurfaceControl,
-             "WebViewSurfaceControl",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kWebViewSurfaceControl, base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kWebViewSurfaceControlForTV,
-             "WebViewSurfaceControlForTV",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Use thread-safe media path on WebView.
-BASE_FEATURE(kWebViewThreadSafeMedia,
-             "WebViewThreadSafeMedia",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kWebViewSurfaceControlForTV, base::FEATURE_DISABLED_BY_DEFAULT);
 
 // This is used as default state because it's different for webview and chrome.
 // WebView hardcodes this as enabled in AwMainDelegate.
-BASE_FEATURE(kWebViewThreadSafeMediaDefault,
-             "WebViewThreadSafeMediaDefault",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kWebViewThreadSafeMediaDefault, base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Used to limit AImageReader max queue size to 1 since many devices especially
 // android Tv devices do not support more than 1 images.
-BASE_FEATURE(kLimitAImageReaderMaxSizeToOne,
-             "LimitAImageReaderMaxSizeToOne",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kLimitAImageReaderMaxSizeToOne, base::FEATURE_ENABLED_BY_DEFAULT);
 
 // List of devices on which to limit AImageReader max queue size to 1.
 const base::FeatureParam<std::string> kLimitAImageReaderMaxSizeToOneBlocklist{
@@ -112,7 +82,6 @@ const base::FeatureParam<std::string> kLimitAImageReaderMaxSizeToOneBlocklist{
 // Currently for all android tv except the ones in this list will have max
 // queue size of 1 image.
 BASE_FEATURE(kRelaxLimitAImageReaderMaxSizeToOne,
-             "RelaxLimitAImageReaderMaxSizeToOne",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // List of devices on which to relax the restriction of max queue size of 1 for
@@ -138,13 +107,11 @@ const base::FeatureParam<std::string>
 // Allows using recommended AHardwareBuffer usage from Vulkan, that should allow
 // drivers to pick most optimal layout.
 BASE_FEATURE(kUseHardwareBufferUsageFlagsFromVulkan,
-             "UseHardwareBufferUsageFlagsFromVulkan",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Same as above (and depends on it) and allows using extra usage even if we use
 // USAGE_COMPOSER_OVERLAY.
 BASE_FEATURE(kAllowHardwareBufferUsageFlagsFromVulkanForScanout,
-             "AllowHardwareBufferUsageFlagsFromVulkanForScanout",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 #endif
@@ -154,7 +121,6 @@ BASE_FEATURE(kAllowHardwareBufferUsageFlagsFromVulkanForScanout,
 // DefaultEnableGpuRasterization has launched on Mac, Windows, ChromeOS,
 // Android and Linux.
 BASE_FEATURE(kDefaultEnableGpuRasterization,
-             "DefaultEnableGpuRasterization",
 #if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS) || \
     BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX)
              base::FEATURE_ENABLED_BY_DEFAULT
@@ -165,28 +131,27 @@ BASE_FEATURE(kDefaultEnableGpuRasterization,
 
 // Enables the use of MSAA in skia on Ice Lake and later intel architectures.
 BASE_FEATURE(kEnableMSAAOnNewIntelGPUs,
-             "EnableMSAAOnNewIntelGPUs",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_ANDROID)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 
 #if BUILDFLAG(IS_WIN)
-BASE_FEATURE(kNoUndamagedOverlayPromotion,
-             "NoUndamagedOverlayPromotion",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kNoUndamagedOverlayPromotion, base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_IOS)
 // If enabled, the TASK_CATEGORY_POLICY value of the GPU process will be
 // adjusted to match the one from the browser process every time it changes.
-BASE_FEATURE(kAdjustGpuProcessPriority,
-             "AdjustGpuProcessPriority",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kAdjustGpuProcessPriority, base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 // When enabled, Grshader disk cache will be cleared on startup if any cache
 // entry prefix does not match with the current prefix. prefix is made up of
 // various parameters like chrome version, driver version etc.
 BASE_FEATURE(kClearGrShaderDiskCacheOnInvalidPrefix,
-             "ClearGrShaderDiskCacheOnInvalidPrefix",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls the decode acceleration of JPEG images (as opposed to camera
@@ -194,7 +159,6 @@ BASE_FEATURE(kClearGrShaderDiskCacheOnInvalidPrefix,
 // TODO(andrescj): remove or enable by default in Chrome OS once
 // https://crbug.com/868400 is resolved.
 BASE_FEATURE(kVaapiJpegImageDecodeAcceleration,
-             "VaapiJpegImageDecodeAcceleration",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls the decode acceleration of WebP images in Chrome OS using the
@@ -202,7 +166,6 @@ BASE_FEATURE(kVaapiJpegImageDecodeAcceleration,
 // TODO(gildekel): remove or enable by default in Chrome OS once
 // https://crbug.com/877694 is resolved.
 BASE_FEATURE(kVaapiWebPImageDecodeAcceleration,
-             "VaapiWebPImageDecodeAcceleration",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enable Vulkan graphics backend for compositing and rasterization. Defaults to
@@ -210,10 +173,7 @@ BASE_FEATURE(kVaapiWebPImageDecodeAcceleration,
 // --use-vulkan will be followed.
 // Note Android WebView uses kWebViewDrawFunctorUsesVulkan instead of this.
 BASE_FEATURE(kVulkan,
-             "Vulkan",
-// NOTE(jarle@vivaldi.com): Temp. solution for white video bug.
-// https://bugs.vivaldi.com/browse/VAB-4124
-#if BUILDFLAG(IS_ANDROID) && !defined(VIVALDI_BUILD)
+#if BUILDFLAG(IS_ANDROID)
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
              base::FEATURE_DISABLED_BY_DEFAULT
@@ -221,7 +181,6 @@ BASE_FEATURE(kVulkan,
 );
 
 BASE_FEATURE(kEnableDrDc,
-             "EnableDrDc",
 #if BUILDFLAG(IS_ANDROID)
              base::FEATURE_ENABLED_BY_DEFAULT
 #elif BUILDFLAG(IS_MAC)
@@ -241,8 +200,8 @@ BASE_FEATURE(kEnableDrDc,
 #else
 #define WEBGPU_ENABLED base::FEATURE_DISABLED_BY_DEFAULT
 #endif
-BASE_FEATURE(kWebGPUService, "WebGPUService", WEBGPU_ENABLED);
-BASE_FEATURE(kWebGPUBlobCache, "WebGPUBlobCache", WEBGPU_ENABLED);
+BASE_FEATURE(kWebGPUService, WEBGPU_ENABLED);
+BASE_FEATURE(kWebGPUBlobCache, WEBGPU_ENABLED);
 #undef WEBGPU_ENABLED
 
 // List of Dawn toggles for WebGPU, delimited by ,
@@ -272,17 +231,12 @@ const base::FeatureParam<std::string> kWebGPUUnsafeFeatures{
 const base::FeatureParam<std::string> kWGSLUnsafeFeatures{
     &kWebGPUService, "UnsafeWGSLFeatures", ""};
 
-BASE_FEATURE(kWebGPUUseVulkanMemoryModel,
-             "WebGPUUseVulkanMemoryModel",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kWebGPUUseVulkanMemoryModel, base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kWebGPUEnableRangeAnalysisForRobustness,
-             "WebGPUEnableRangeAnalysisForRobustness",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kWebGPUUseSpirv14,
-            "WebGPUUseSpirv14",
-            base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kWebGPUUseSpirv14, base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_ANDROID)
 
@@ -348,7 +302,6 @@ const base::FeatureParam<std::string> kDrDcBlockListByAndroidBuildFP{
 // Note: This can also be overridden by
 // --enable-skia-graphite & --disable-skia-graphite.
 BASE_FEATURE(kSkiaGraphite,
-             "SkiaGraphite",
 #if ((BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64)) || BUILDFLAG(IS_IOS))
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
@@ -356,17 +309,18 @@ BASE_FEATURE(kSkiaGraphite,
 #endif
 );
 
+// Enable atlasing of small paths on Skia Graphite. Only meaningful if
+// SkiaGraphite is also enabled.
+BASE_FEATURE(kSkiaGraphiteSmallPathAtlas, base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enable Skia Graphite's Pipeline precompilation feature.
 // Note: This is only meaningful when Skia Graphite is enabled but can then also
 // be overridden by
 // --enable-skia-graphite-precompilation and
 // --disable-skia-graphite-precompilation.
-BASE_FEATURE(kSkiaGraphitePrecompilation,
-             "SkiaGraphitePrecompilation",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kSkiaGraphitePrecompilation, base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kConditionallySkipGpuChannelFlush,
-             "ConditionallySkipGpuChannelFlush",
 // To enable on ChromeOS, test failures must be investigated
 // (crrev.com/c/5435673).
 #if BUILDFLAG(IS_CHROMEOS)
@@ -390,46 +344,57 @@ const base::FeatureParam<bool> kSkiaGraphiteDawnBackendValidation{
 const base::FeatureParam<bool> kSkiaGraphiteDawnBackendDebugLabels{
     &kSkiaGraphite, "dawn_backend_debug_labels", DCHECK_IS_ON()};
 
+// Whether to use PersistentCache for Dawn's pipeline cache.
+BASE_FEATURE_PARAM(bool,
+                   kSkiaGraphiteDawnUsePersistentCache,
+                   &kSkiaGraphite,
+                   "dawn_use_persistent_cache",
+                   false);
+
 const base::FeatureParam<int> kSkiaGraphiteMaxPendingRecordings{
     &kSkiaGraphite, "max_pending_recordings", 100};
+
+const base::FeatureParam<int> kSkiaGraphiteMinPathSizeForMsaa{
+    &kSkiaGraphiteSmallPathAtlas, "min_path_size_for_msaa", 0};
+
+// Whether to enable deferred submissions optimization (if possible). If it's
+// false, every SI's access will require a Graphite's Context::submit() call
+// before EndAccess()
+BASE_FEATURE_PARAM(bool,
+                   kSkiaGraphiteEnableDeferredSubmit,
+                   &kSkiaGraphite,
+                   "enable_deferred_submit",
+                   true);
 
 #if BUILDFLAG(IS_WIN)
 // Whether the we should DumpWithoutCrashing when D3D related errors are detected.
 const base::FeatureParam<bool> kSkiaGraphiteDawnDumpWCOnD3DError{
     &kSkiaGraphite, "dawn_dumpwc_d3d_errors", false};
 
+// Whether to disable D3D shader optimizations.
+const base::FeatureParam<bool> kSkiaGraphiteDawnDisableD3DShaderOptimizations{
+    &kSkiaGraphite, "dawn_disable_d3d_shader_optimizations", false};
+
 // Whether the Dawn D3D11 flush should be delayed until the end of the frame.
 const base::FeatureParam<bool> kSkiaGraphiteDawnD3D11DelayFlush{
     &kSkiaGraphite, "dawn_d3d11_delay_flush", true};
 
-BASE_FEATURE(kSkiaGraphiteDawnUseD3D12,
-             "SkiaGraphiteDawnUseD3D12",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kSkiaGraphiteDawnUseD3D12, base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
-
-// Enable persistent storage of VkPipelineCache data.
-BASE_FEATURE(kEnableVkPipelineCache,
-             "EnableVkPipelineCache",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enabling this will make the GPU decode path use a mock implementation of
 // discardable memory.
 BASE_FEATURE(kNoDiscardableMemoryForGpuDecodePath,
-             "NoDiscardableMemoryForGpuDecodePath",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Use a 100-command limit before forcing context switch per command buffer
 // instead of 20.
-BASE_FEATURE(kIncreasedCmdBufferParseSlice,
-             "IncreasedCmdBufferParseSlice",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kIncreasedCmdBufferParseSlice, base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Prune transfer cache entries not accessed recently. This also turns off
 // similar logic in cc::GpuImageDecodeCache which is the largest (often single)
 // client of transfer cache.
-BASE_FEATURE(kPruneOldTransferCacheEntries,
-             "PruneOldTransferCacheEntries",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kPruneOldTransferCacheEntries, base::FEATURE_DISABLED_BY_DEFAULT);
 
 // On platforms with delegated compositing, try to release overlays later, when
 // no new frames are swapped.
@@ -441,23 +406,18 @@ BASE_FEATURE(kDeferredOverlaysRelease,
 // to textures.
 #if BUILDFLAG(IS_WIN)
 BASE_FEATURE(kD3DBackingUploadWithUpdateSubresource,
-             "D3DBackingUploadWithUpdateSubresource",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 // This feature allows viz to handle overlays' swap failures instead of loosing a context and
 // restarting a gpu service.
-BASE_FEATURE(kHandleOverlaysSwapFailure,
-             "HandleOverlaysSwapFailure",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kHandleOverlaysSwapFailure, base::FEATURE_DISABLED_BY_DEFAULT);
 
 // This feature allows enabling specific entries in
 // software_rendering_list.json, via experimentation. The entries must have
 // test_group property and test_group feature parameter should be set in the
 // experiment for the entries that need to be enabled.
-BASE_FEATURE(kGPUBlockListTestGroup,
-             "GPUBlockListTestGroup",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kGPUBlockListTestGroup, base::FEATURE_DISABLED_BY_DEFAULT);
 const base::FeatureParam<int> kGPUBlockListTestGroupId{&kGPUBlockListTestGroup,
                                                        "test_group", 0};
 
@@ -465,9 +425,7 @@ const base::FeatureParam<int> kGPUBlockListTestGroupId{&kGPUBlockListTestGroup,
 // via experimentation. The entries must have test_group property and
 // test_group feature parameter should be set in the experiment for the entries
 // that need to be enabled.
-BASE_FEATURE(kGPUDriverBugListTestGroup,
-             "GPUDriverBugListTestGroup",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kGPUDriverBugListTestGroup, base::FEATURE_DISABLED_BY_DEFAULT);
 const base::FeatureParam<int> kGPUDriverBugListTestGroupId{
     &kGPUDriverBugListTestGroup, "test_group", 0};
 
@@ -477,7 +435,7 @@ bool UseGles2ForOopR() {
   if (gl::UsePassthroughCommandDecoder(base::CommandLine::ForCurrentProcess()))
     return true;
 #endif
-  return base::FeatureList::IsEnabled(features::kUseGles2ForOopR);
+  return false;
 }
 
 bool IsUsingVulkan() {
@@ -498,34 +456,47 @@ bool IsUsingVulkan() {
 
   // No support for devices before Q -- exit before checking feature flags
   // so that devices are not counted in finch trials.
-  if (base::android::BuildInfo::GetInstance()->sdk_int() <
-      base::android::SDK_VERSION_Q)
+  if (base::android::android_info::sdk_int() <
+      base::android::android_info::SDK_VERSION_Q) {
     return false;
+  }
 
   if (!base::FeatureList::IsEnabled(kVulkan))
     return false;
 
   // Check block list against build info.
-  const auto* build_info = base::android::BuildInfo::GetInstance();
-  if (IsDeviceBlocked(build_info->hardware(), kVulkanBlockListByHardware.Get()))
+  if (IsDeviceBlocked(base::android::android_info::hardware(),
+                      kVulkanBlockListByHardware.Get())) {
     return false;
-  if (IsDeviceBlocked(build_info->brand(), kVulkanBlockListByBrand.Get()))
+  }
+  if (IsDeviceBlocked(base::android::android_info::brand(),
+                      kVulkanBlockListByBrand.Get())) {
     return false;
-  if (IsDeviceBlocked(build_info->device(), kVulkanBlockListByDevice.Get()))
+  }
+  if (IsDeviceBlocked(base::android::android_info::device(),
+                      kVulkanBlockListByDevice.Get())) {
     return false;
-  if (IsDeviceBlocked(build_info->android_build_id(),
-                      kVulkanBlockListByAndroidBuildId.Get()))
+  }
+  if (IsDeviceBlocked(base::android::android_info::android_build_id(),
+                      kVulkanBlockListByAndroidBuildId.Get())) {
     return false;
-  if (IsDeviceBlocked(build_info->manufacturer(),
-                      kVulkanBlockListByManufacturer.Get()))
+  }
+  if (IsDeviceBlocked(base::android::android_info::manufacturer(),
+                      kVulkanBlockListByManufacturer.Get())) {
     return false;
-  if (IsDeviceBlocked(build_info->model(), kVulkanBlockListByModel.Get()))
+  }
+  if (IsDeviceBlocked(base::android::android_info::model(),
+                      kVulkanBlockListByModel.Get())) {
     return false;
-  if (IsDeviceBlocked(build_info->board(), kVulkanBlockListByBoard.Get()))
+  }
+  if (IsDeviceBlocked(base::android::android_info::board(),
+                      kVulkanBlockListByBoard.Get())) {
     return false;
-  if (IsDeviceBlocked(build_info->android_build_fp(),
-                      kVulkanBlockListByAndroidBuildFP.Get()))
+  }
+  if (IsDeviceBlocked(base::android::android_info::android_build_fp(),
+                      kVulkanBlockListByAndroidBuildFP.Get())) {
     return false;
+  }
 
   return true;
 
@@ -543,13 +514,6 @@ bool IsUsingThreadSafeMediaForWebView() {
     return false;
   }
 
-  // If the feature is overridden from command line or finch we will use its
-  // value. If not we use kWebViewThreadSafeMediaDefault which is set in
-  // AwMainDelegate for WebView.
-  if (auto state =
-          base::FeatureList::GetStateIfOverridden(kWebViewThreadSafeMedia)) {
-    return *state;
-  }
   return base::FeatureList::IsEnabled(kWebViewThreadSafeMediaDefault);
 #else
   return false;
@@ -625,7 +589,7 @@ bool IsSkiaGraphiteSupportedByDevice(const base::CommandLine* command_line) {
   // Desktop Android isn't ready to pick up the fieldtrial_testing_config.json
   // change that enables graphite. However, it's the same platform as regular
   // Android and does. Skip enabling the feature there for now.
-  if (base::android::BuildInfo::GetInstance()->is_desktop()) {
+  if (base::android::device_info::is_desktop()) {
     return false;
   }
 
@@ -689,8 +653,8 @@ bool IsDrDcEnabled(const gpu::GpuFeatureInfo& gpu_feature_info) {
 bool ShouldEnableDrDc() {
 #if BUILDFLAG(IS_ANDROID)
   // Enabled on android P+.
-  if (base::android::BuildInfo::GetInstance()->sdk_int() <
-      base::android::SDK_VERSION_P) {
+  if (base::android::android_info::sdk_int() <
+      base::android::android_info::SDK_VERSION_P) {
     return false;
   }
 
@@ -702,31 +666,35 @@ bool ShouldEnableDrDc() {
   }
 
   // Check block list against build info.
-  const auto* build_info = base::android::BuildInfo::GetInstance();
-  if (IsDeviceBlocked(build_info->device(), kDrDcBlockListByDevice.Get())) {
+  if (IsDeviceBlocked(base::android::android_info::device(),
+                      kDrDcBlockListByDevice.Get())) {
     return false;
   }
-  if (IsDeviceBlocked(build_info->model(), kDrDcBlockListByModel.Get())) {
+  if (IsDeviceBlocked(base::android::android_info::model(),
+                      kDrDcBlockListByModel.Get())) {
     return false;
   }
-  if (IsDeviceBlocked(build_info->hardware(), kDrDcBlockListByHardware.Get())) {
+  if (IsDeviceBlocked(base::android::android_info::hardware(),
+                      kDrDcBlockListByHardware.Get())) {
     return false;
   }
-  if (IsDeviceBlocked(build_info->brand(), kDrDcBlockListByBrand.Get())) {
+  if (IsDeviceBlocked(base::android::android_info::brand(),
+                      kDrDcBlockListByBrand.Get())) {
     return false;
   }
-  if (IsDeviceBlocked(build_info->android_build_id(),
+  if (IsDeviceBlocked(base::android::android_info::android_build_id(),
                       kDrDcBlockListByAndroidBuildId.Get())) {
     return false;
   }
-  if (IsDeviceBlocked(build_info->manufacturer(),
+  if (IsDeviceBlocked(base::android::android_info::manufacturer(),
                       kDrDcBlockListByManufacturer.Get())) {
     return false;
   }
-  if (IsDeviceBlocked(build_info->board(), kDrDcBlockListByBoard.Get())) {
+  if (IsDeviceBlocked(base::android::android_info::board(),
+                      kDrDcBlockListByBoard.Get())) {
     return false;
   }
-  if (IsDeviceBlocked(build_info->android_build_fp(),
+  if (IsDeviceBlocked(base::android::android_info::android_build_fp(),
                       kDrDcBlockListByAndroidBuildFP.Get())) {
     return false;
   }
@@ -734,7 +702,7 @@ bool ShouldEnableDrDc() {
   // Chrome on Android desktop aims to be Vulkan-only, which can result
   // in crashes when enabled together with DrDc. Re-enable DrDc after
   // crbug.com/380295059 is fixed if it is shown beneficial on desktop.
-  if (build_info->is_desktop()) {
+  if (base::android::device_info::is_desktop()) {
     return false;
   }
 #endif
@@ -774,14 +742,11 @@ bool EnablePruneOldTransferCacheEntries() {
 
 #if BUILDFLAG(IS_ANDROID)
 bool IsAndroidSurfaceControlEnabled() {
-  const auto* build_info = base::android::BuildInfo::GetInstance();
-  if (IsDeviceBlocked(build_info->device(),
-                      kAndroidSurfaceControlDeviceBlocklist.Get()) ||
-      (IsDeviceBlocked(build_info->model(),
-                       kAndroidSurfaceControlModelBlocklist.Get()) &&
-       // Power issue due to pre-rotate in the models has been fixed in S_V2.
-       // crbug.com/1328738
-       build_info->sdk_int() <= base::android::SDK_VERSION_S)) {
+  if (base::android::android_info::sdk_int() <=
+          base::android::android_info::SDK_VERSION_S &&
+      (IsDeviceBlocked(base::android::android_info::device(), "capri|caprip") ||
+       IsDeviceBlocked(base::android::android_info::model(),
+                       "SM-F9*|SM-W202?|SCV44|SCG05|SCG11|SC-55B"))) {
     return false;
   }
 
@@ -792,11 +757,23 @@ bool IsAndroidSurfaceControlEnabled() {
   if (LimitAImageReaderMaxSizeToOne())
     return false;
 
+  // Check conditions that egl_android_native_fence_sync is enabled.
+  // LINT.IfChange(AndroidSurfaceControlCondition)
+  if (base::SysInfo::GetAndroidHardwareEGL() == "swiftshader" ||
+      base::SysInfo::GetAndroidHardwareEGL() == "emulation") {
+    return false;
+  }
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableAndroidNativeFenceSyncForTesting)) {
+    return false;
+  }
+  // LINT.ThenChange(//gpu/config/gpu_finch_features.cc:AndroidSurfaceControlCondition)
+
   // On WebView we require thread-safe media to use SurfaceControl
   if (IsUsingThreadSafeMediaForWebView()) {
     // We decouple experiments between ATV and the rest of the users by using
     // different flags here.
-    if (base::android::BuildInfo::GetInstance()->is_tv()) {
+    if (base::android::device_info::is_tv()) {
       return base::FeatureList::IsEnabled(kWebViewSurfaceControlForTV);
     } else {
       return base::FeatureList::IsEnabled(kWebViewSurfaceControl);
@@ -815,7 +792,7 @@ bool IsAndroidSurfaceControlEnabled() {
 bool LimitAImageReaderMaxSizeToOne() {
   // Always limit image reader to 1 frame for Android TV. Many TVs doesn't work
   // with more than 1 frame and it's very hard to localize which models do.
-  if (base::android::BuildInfo::GetInstance()->is_tv()) {
+  if (base::android::device_info::is_tv()) {
     // For the android Tvs which are in the below list, we are relaxing this
     // restrictions as those are able to create AImageReader with more than 1
     // images. This helps in removing the flickering seen which can happen with
@@ -823,25 +800,23 @@ bool LimitAImageReaderMaxSizeToOne() {
     // manufacturer when available as sometimes manufacturer field gets
     // modified by vendors.
 
-    const auto* build_info = base::android::BuildInfo::GetInstance();
-
     if (IsDeviceBlocked(
-            build_info->soc_manufacturer(),
+            base::android::android_info::soc_manufacturer(),
             kRelaxLimitAImageReaderMaxSizeToOneSoCBlocklist.Get())) {
       return false;
     }
     if (IsDeviceBlocked(
-            build_info->manufacturer(),
+            base::android::android_info::manufacturer(),
             kRelaxLimitAImageReaderMaxSizeToOneManufacturerBlocklist.Get())) {
       return false;
     }
     if (IsDeviceBlocked(
-            build_info->device(),
+            base::android::android_info::device(),
             kRelaxLimitAImageReaderMaxSizeToOneDeviceBlocklist.Get())) {
       return false;
     }
     if (IsDeviceBlocked(
-            build_info->model(),
+            base::android::android_info::model(),
             kRelaxLimitAImageReaderMaxSizeToOneModelBlocklist.Get())) {
       return false;
     }
@@ -849,7 +824,7 @@ bool LimitAImageReaderMaxSizeToOne() {
     return true;
   }
 
-  return (IsDeviceBlocked(base::android::BuildInfo::GetInstance()->model(),
+  return (IsDeviceBlocked(base::android::android_info::model(),
                           kLimitAImageReaderMaxSizeToOneBlocklist.Get()));
 }
 
@@ -858,12 +833,12 @@ bool IncreaseBufferCountForHighFrameRate() {
   // of buffers. So these checks, espeically the RAM one, is to limit the impact
   // of more buffers to devices that can handle them.
   // 8GB of ram with large margin for error.
-  constexpr int RAM_8GB_CUTOFF = 7200;
+  constexpr base::ByteCount RAM_8GB_CUTOFF = base::MiB(7200);
   static bool increase =
-      base::android::BuildInfo::GetInstance()->sdk_int() >=
-          base::android::SdkVersion::SDK_VERSION_R &&
+      base::android::android_info::sdk_int() >=
+          base::android::android_info::SDK_VERSION_R &&
       IsAndroidSurfaceControlEnabled() &&
-      base::SysInfo::AmountOfPhysicalMemoryMB() > RAM_8GB_CUTOFF;
+      base::SysInfo::AmountOfPhysicalMemory() > RAM_8GB_CUTOFF;
   return increase;
 }
 
@@ -876,22 +851,16 @@ bool IncreaseBufferCountForHighFrameRate() {
 // remove the synchronous flush done by VerifySyncTokens().
 //
 // TODO(b/324276400): Work in progress.
-BASE_FEATURE(kSyncPointGraphValidation,
-             "SyncPointGraphValidation",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kSyncPointGraphValidation, base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsSyncPointGraphValidationEnabled() {
   return base::FeatureList::IsEnabled(kSyncPointGraphValidation);
 }
 
-BASE_FEATURE(kANGLEPerContextBlobCache,
-             "ANGLEPerContextBlobCache",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kANGLEPerContextBlobCache, base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_APPLE)
-BASE_FEATURE(kIOSurfaceMultiThreading,
-             "IOSurfaceMultiThreading",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kIOSurfaceMultiThreading, base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 // Support thread safety for graphite::context by sharing the same
@@ -899,7 +868,6 @@ BASE_FEATURE(kIOSurfaceMultiThreading,
 // GpuMain and CompositorGpuThread. Note: When this feature is disabled,
 // each thread creates its own graphite::context and the context wrapper.
 BASE_FEATURE(kGraphiteContextIsThreadSafe,
-             "GraphiteContextIsThreadSafe",
 #if BUILDFLAG(IS_MAC)
              // DrDC needs a thread-safe graphite context to work correctly.
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -912,12 +880,8 @@ bool IsGraphiteContextThreadSafe() {
   return base::FeatureList::IsEnabled(features::kGraphiteContextIsThreadSafe);
 }
 
-BASE_FEATURE(kWebGPUCompatibilityMode,
-             "WebGPUCompatibilityMode",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kWebGPUCompatibilityMode, base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kWebGPUAndroidOpenGLES,
-             "WebGPUAndroidOpenGLES",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kWebGPUAndroidOpenGLES, base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace features

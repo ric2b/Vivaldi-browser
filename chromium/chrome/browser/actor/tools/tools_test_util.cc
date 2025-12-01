@@ -21,6 +21,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/chrome_test_utils.h"
 #include "chrome/test/base/test_browser_window.h"
+#include "components/optimization_guide/core/filters/optimization_hints_component_update_listener.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
@@ -28,8 +29,62 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "net/dns/mock_host_resolver.h"
 #include "ui/display/display_switches.h"
+#include "ui/gfx/geometry/rect_f.h"
 
 namespace actor {
+
+actor_login::Credential MakeTestCredential(
+    const std::u16string& username,
+    const GURL& url,
+    bool immediately_available_to_login) {
+  actor_login::Credential credential;
+  credential.username = username;
+  // TODO(crbug.com/441231531): Clarify the format.
+  credential.source_site_or_app =
+      base::UTF8ToUTF16(url.GetWithEmptyPath().spec());
+  credential.request_origin = url::Origin::Create(url);
+  credential.type = actor_login::CredentialType::kPassword;
+  credential.immediatelyAvailableToLogin = immediately_available_to_login;
+  return credential;
+}
+
+MockActorLoginService::MockActorLoginService() = default;
+
+MockActorLoginService::~MockActorLoginService() = default;
+
+void MockActorLoginService::GetCredentials(
+    tabs::TabInterface* tab,
+    actor_login::CredentialsOrErrorReply callback) {
+  std::move(callback).Run(credentials_);
+}
+
+void MockActorLoginService::AttemptLogin(
+    tabs::TabInterface* tab,
+    const actor_login::Credential& credential,
+    actor_login::LoginStatusResultOrErrorReply callback) {
+  last_credential_used_ = credential;
+  std::move(callback).Run(login_status_);
+}
+
+void MockActorLoginService::SetCredentials(
+    const actor_login::CredentialsOrError& credentials) {
+  credentials_ = credentials;
+}
+
+void MockActorLoginService::SetCredential(
+    const actor_login::Credential& credential) {
+  SetCredentials(std::vector{credential});
+}
+
+void MockActorLoginService::SetLoginStatus(
+    actor_login::LoginStatusResultOrError login_status) {
+  login_status_ = login_status;
+}
+
+const std::optional<actor_login::Credential>&
+MockActorLoginService::last_credential_used() const {
+  return last_credential_used_;
+}
 
 ActorToolsTest::ActorToolsTest() {
   scoped_feature_list_.InitWithFeatures(
@@ -43,10 +98,7 @@ ActorToolsTest::~ActorToolsTest() = default;
 void ActorToolsTest::SetUpOnMainThread() {
   InProcessBrowserTest::SetUpOnMainThread();
   host_resolver()->AddRule("*", "127.0.0.1");
-  ASSERT_TRUE(embedded_test_server()->Start());
-  ASSERT_TRUE(embedded_https_test_server().Start());
-  auto execution_engine =
-      std::make_unique<ExecutionEngine>(browser()->profile());
+  auto execution_engine = CreateExecutionEngine(browser()->profile());
   auto event_dispatcher = ui::NewUiEventDispatcher(
       ActorKeyedService::Get(browser()->profile())->GetActorUiStateManager());
   auto actor_task = std::make_unique<ActorTask>(browser()->profile(),
@@ -61,6 +113,14 @@ void ActorToolsTest::SetUpOnMainThread() {
       "OptimizationGuide.HintsManager.HintCacheInitialized", 1);
 
   InitActionBlocklist(browser()->profile());
+
+  // Simulate the component loading, as the implementation checks it, but the
+  // actual list is set via the command line.
+  ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+  optimization_guide::OptimizationHintsComponentUpdateListener::GetInstance()
+      ->MaybeUpdateHintsComponent(
+          {base::Version("123"),
+           temp_dir_.GetPath().Append(FILE_PATH_LITERAL("dont_care"))});
 }
 
 void ActorToolsTest::SetUpCommandLine(base::CommandLine* command_line) {
@@ -108,6 +168,80 @@ ExecutionEngine& ActorToolsTest::execution_engine() {
 ActorTask& ActorToolsTest::actor_task() const {
   CHECK(task_id_);
   return *ActorKeyedService::Get(browser()->profile())->GetTask(task_id_);
+}
+
+std::unique_ptr<ExecutionEngine> ActorToolsTest::CreateExecutionEngine(
+    Profile* profile) {
+  return std::make_unique<ExecutionEngine>(profile);
+}
+
+// static
+std::string ActorToolsGeneralPageStabilityTest::DescribeParam(
+    const testing::TestParamInfo<ParamType>& info) {
+  return DescribeGeneralPageStabilityMode(info.param);
+}
+
+ActorToolsGeneralPageStabilityTest::ActorToolsGeneralPageStabilityTest() {
+  scoped_feature_list_.InitAndEnableFeatureWithParameters(
+      ::features::kGlicActor,
+      {{::features::kActorGeneralPageStabilityMode.name,
+        ::features::kActorGeneralPageStabilityMode.GetName(GetParam())}});
+}
+
+ActorToolsGeneralPageStabilityTest::~ActorToolsGeneralPageStabilityTest() =
+    default;
+
+gfx::RectF GetBoundingClientRect(content::RenderFrameHost& rfh,
+                                 std::string_view query) {
+  double width =
+      content::EvalJs(
+          &rfh, content::JsReplace(
+                    "document.querySelector($1).getBoundingClientRect().width",
+                    query))
+          .ExtractDouble();
+  double height =
+      content::EvalJs(
+          &rfh, content::JsReplace(
+                    "document.querySelector($1).getBoundingClientRect().height",
+                    query))
+          .ExtractDouble();
+  double x =
+      content::EvalJs(
+          &rfh,
+          content::JsReplace(
+              "document.querySelector($1).getBoundingClientRect().x", query))
+          .ExtractDouble();
+  double y =
+      content::EvalJs(
+          &rfh,
+          content::JsReplace(
+              "document.querySelector($1).getBoundingClientRect().y", query))
+          .ExtractDouble();
+
+  return gfx::RectF(x, y, width, height);
+}
+
+std::string DescribeGeneralPageStabilityMode(
+    features::ActorGeneralPageStabilityMode mode) {
+  switch (mode) {
+    case features::ActorGeneralPageStabilityMode::kDisabled:
+      return "Disabled";
+    case features::ActorGeneralPageStabilityMode::kNavigateAndHistoryEnabled:
+      return "NavigateAndHistoryEnabled";
+    case features::ActorGeneralPageStabilityMode::kAllEnabled:
+      return "AllEnabled";
+  }
+}
+
+std::string DescribePaintStabilityMode(features::ActorPaintStabilityMode mode) {
+  switch (mode) {
+    case features::ActorPaintStabilityMode::kDisabled:
+      return "Disabled";
+    case features::ActorPaintStabilityMode::kLogOnly:
+      return "LogOnly";
+    case features::ActorPaintStabilityMode::kEnabled:
+      return "Enabled";
+  }
 }
 
 }  // namespace actor

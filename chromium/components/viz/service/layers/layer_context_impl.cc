@@ -16,6 +16,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/time/time.h"
 #include "base/types/expected_macros.h"
 #include "cc/animation/animation.h"
 #include "cc/animation/animation_host.h"
@@ -70,8 +71,28 @@ cc::LayerTreeSettings GetDisplayTreeSettings(
   settings.use_layer_lists = true;
   settings.trees_in_viz_in_viz_process = true;
   settings.display_tree_draw_mode_is_gpu = remote_settings->draw_mode_is_gpu;
+  settings.enable_early_damage_check =
+      remote_settings->enable_early_damage_check;
+  settings.damaged_frame_limit = remote_settings->damaged_frame_limit;
+  settings.scrollbar_animator = remote_settings->scrollbar_animator;
+  settings.scrollbar_fade_delay = remote_settings->scrollbar_fade_delay;
+  settings.scrollbar_fade_duration = remote_settings->scrollbar_fade_duration;
+  settings.scrollbar_thinning_duration =
+      remote_settings->scrollbar_thinning_duration;
+  settings.idle_thickness_scale = remote_settings->idle_thickness_scale;
+  settings.top_controls_show_threshold =
+      remote_settings->top_controls_show_threshold;
+  settings.top_controls_hide_threshold =
+      remote_settings->top_controls_hide_threshold;
+  settings.minimum_occlusion_tracking_size =
+      remote_settings->minimum_occlusion_tracking_size;
   settings.enable_edge_anti_aliasing =
       remote_settings->enable_edge_anti_aliasing;
+  settings.enable_backface_visibility_interop =
+      remote_settings->enable_backface_visibility_interop;
+  settings.enable_fluent_scrollbar = remote_settings->enable_fluent_scrollbar;
+  settings.enable_fluent_overlay_scrollbar =
+      remote_settings->enable_fluent_overlay_scrollbar;
   return settings;
 }
 
@@ -253,6 +274,14 @@ base::expected<void, std::string> UpdatePropertyTreeNode(
   node.in_subtree_of_page_scale_layer = wire.in_subtree_of_page_scale_layer;
   node.delegates_to_parent_for_backface = wire.delegates_to_parent_for_backface;
   node.will_change_transform = wire.will_change_transform;
+  node.maximum_animation_scale = wire.maximum_animation_scale;
+  node.node_and_ancestors_are_animated_or_invertible =
+      wire.node_and_ancestors_are_animated_or_invertible;
+  node.is_invertible = wire.is_invertible;
+  node.ancestors_are_invertible = wire.ancestors_are_invertible;
+  node.node_and_ancestors_are_flat = wire.node_and_ancestors_are_flat;
+  node.node_or_ancestors_will_change_transform =
+      wire.node_or_ancestors_will_change_transform;
 
   node.visible_frame_element_id = wire.visible_frame_element_id;
   node.SetTransformChanged(cc::DamageReason::kUntracked);
@@ -520,13 +549,16 @@ base::expected<void, std::string> UpdateTransformTreeProperties(
   return base::ok();
 }
 
-base::expected<void, std::string> UpdateScrollTreeProperties(
+base::expected<bool, std::string> UpdateScrollTreeProperties(
     cc::PropertyTrees& trees,
     cc::ScrollTree& tree,
     const mojom::ScrollTreeUpdate& update) {
   tree.synced_scroll_offset_map() = update.synced_scroll_offsets;
   tree.scrolling_contents_cull_rects() = update.scrolling_contents_cull_rects;
-  return base::ok();
+  bool elastic_overscroll_changed =
+      tree.elastic_overscroll() != update.elastic_overscroll;
+  tree.elastic_overscroll() = update.elastic_overscroll;
+  return elastic_overscroll_changed;
 }
 
 void UpdateMirrorLayerExtra(const mojom::MirrorLayerExtraPtr& extra,
@@ -686,6 +718,7 @@ void UpdateTileDisplayLayerExtra(const mojom::TileDisplayLayerExtraPtr& extra,
   layer.SetIsBackdropFilterMask(extra->is_backdrop_filter_mask);
   layer.SetIsDirectlyCompositedImage(extra->is_directly_composited_image);
   layer.SetNearestNeighbor(extra->nearest_neighbor);
+  layer.SetContentColorUsage(extra->content_color_usage);
 }
 
 base::expected<void, std::string> UpdateLayer(const mojom::Layer& wire,
@@ -1436,6 +1469,16 @@ void LayerContextImpl::BeginFrame(const BeginFrameArgs& args) {
 
 void LayerContextImpl::ReceiveReturnsFromParent(
     std::vector<ReturnedResource> resources) {
+  // Impl and Main thread task runners are the same. They bind to the viz
+  // thread.
+  auto* task_runner = task_runner_provider_->MainThreadTaskRunner();
+  if (!task_runner->BelongsToCurrentThread()) {
+    task_runner->PostTask(
+        FROM_HERE,
+        base::BindOnce(&LayerContextImpl::ReceiveReturnsFromParent,
+                       weak_factory_.GetWeakPtr(), std::move(resources)));
+    return;
+  }
   host_impl_->resource_provider()->ReceiveReturnsFromParent(
       std::move(resources));
   DoReturnResources();
@@ -1445,6 +1488,11 @@ void LayerContextImpl::DoReturnResources() {
   if (!resources_to_return_.empty()) {
     compositor_sink_->DoReturnResources(std::move(resources_to_return_));
   }
+}
+
+void LayerContextImpl::HandleBadMojoMessage(const std::string& function,
+                                            const std::string& error) {
+  receiver_->ReportBadMessage(function + "() : " + error);
 }
 
 void LayerContextImpl::DidLoseLayerTreeFrameSinkOnImplThread() {
@@ -1592,17 +1640,21 @@ void LayerContextImpl::SubmitCompositorFrame(CompositorFrame frame,
     return;
   }
 
-  frame.metadata.send_frame_token_to_embedder = true;
-
   std::optional<HitTestRegionList> hit_test_region_list =
       host_impl_->BuildHitTestData();
 
   // TODO(vmiura): Implement other functionality from
   // AsyncLayerTreeFrameSink::SubmitCompositorFrame()
 
-  compositor_sink_->SubmitCompositorFrame(
+  auto result = compositor_sink_->MaybeSubmitCompositorFrame(
       host_impl_->GetCurrentLocalSurfaceId(), std::move(frame),
       std::move(hit_test_region_list), 0);
+  if (result != SubmitResult::ACCEPTED) {
+    client_->ResetWithReason(
+        static_cast<uint32_t>(result),
+        CompositorFrameSinkSupport::GetSubmitResultAsString(result));
+    return;
+  }
 
   if (base::FeatureList::IsEnabled(features::kTreeAnimationsInViz)) {
     constexpr bool start_ready_animations = true;
@@ -1627,13 +1679,15 @@ void LayerContextImpl::UpdateDisplayTree(mojom::LayerTreeUpdatePtr update) {
   CHECK(receiver_);
 
   const BeginFrameArgs begin_frame_args = update->begin_frame_args;
+  auto start_update_display_tree = base::TimeTicks::Now();
   auto result = DoUpdateDisplayTree(std::move(update));
   if (!result.has_value()) {
-    receiver_->ReportBadMessage(result.error());
+    HandleBadMojoMessage("UpdateDisplayTree", result.error());
+    return;
   }
 
   // After a tree update, either Draw or schedule animations.
-  DoDraw(begin_frame_args);
+  DoDraw(begin_frame_args, start_update_display_tree);
 
   // We may have resources to return after a tree update and draw.
   DoReturnResources();
@@ -1671,9 +1725,13 @@ base::expected<void, std::string> LayerContextImpl::DoUpdateDisplayTree(
   }
 
   if (update->scroll_tree_update) {
-    RETURN_IF_ERROR(UpdateScrollTreeProperties(
-        property_trees, property_trees.scroll_tree_mutable(),
-        *update->scroll_tree_update));
+    ASSIGN_OR_RETURN(const bool scroll_properties_changed,
+                     UpdateScrollTreeProperties(
+                         property_trees, property_trees.scroll_tree_mutable(),
+                         *update->scroll_tree_update));
+    if (scroll_properties_changed) {
+      layers.set_needs_update_draw_properties();
+    }
   }
 
   ASSIGN_OR_RETURN(const bool transform_nodes_changed,
@@ -1747,6 +1805,9 @@ base::expected<void, std::string> LayerContextImpl::DoUpdateDisplayTree(
   RETURN_IF_FALSE(update->next_frame_token > 0, "invalid frame token");
   host_impl_->set_next_frame_token_from_client(update->next_frame_token);
 
+  host_impl_->set_send_frame_token_to_embedder(
+      update->send_frame_token_to_embedder);
+
   for (const auto& tiling : update->tilings) {
     if (cc::LayerImpl* layer = layers.LayerById(tiling->layer_id)) {
       if (layer->GetLayerType() != cc::mojom::LayerType::kTileDisplay) {
@@ -1802,9 +1863,6 @@ base::expected<void, std::string> LayerContextImpl::DoUpdateDisplayTree(
   if (update->max_safe_area_inset_bottom < 0 ||
       !std::isfinite(update->max_safe_area_inset_bottom)) {
     return base::unexpected("Invalid max safe area inset bottom");
-  }
-  if (layers.elastic_overscroll()->SetCurrent(update->elastic_overscroll)) {
-    layers.set_needs_update_draw_properties();
   }
   layers.SetBrowserControlsParams(update->browser_controls_params);
   host_impl_->browser_controls_manager()->SetOffsetTagModifications(
@@ -1881,6 +1939,7 @@ base::expected<void, std::string> LayerContextImpl::DoUpdateDisplayTree(
   property_trees.set_changed(any_tree_changed);
   if (any_tree_changed) {
     property_trees.ResetCachedData();
+    layers.set_needs_update_draw_properties();
   }
 
   std::vector<std::unique_ptr<cc::RenderSurfaceImpl>> old_render_surfaces;
@@ -1903,7 +1962,8 @@ base::expected<void, std::string> LayerContextImpl::DoUpdateDisplayTree(
   return base::ok();
 }
 
-void LayerContextImpl::DoDraw(const BeginFrameArgs& begin_frame_args) {
+void LayerContextImpl::DoDraw(const BeginFrameArgs& begin_frame_args,
+                              base::TimeTicks start_update_display_tree) {
   if (base::FeatureList::IsEnabled(features::kTreeAnimationsInViz)) {
     compositor_sink_->SetLayerContextWantsBeginFrames(true);
   } else {
@@ -1911,11 +1971,20 @@ void LayerContextImpl::DoDraw(const BeginFrameArgs& begin_frame_args) {
       host_impl_->WillBeginImplFrame(begin_frame_args);
 
       cc::LayerTreeHostImpl::FrameData frame;
+      TreesInVizTiming stage_breakdown;
+      stage_breakdown.start_update_display_tree = start_update_display_tree;
       const bool has_damage = true;
       frame.begin_frame_ack = BeginFrameAck(begin_frame_args, has_damage);
       frame.origin_begin_main_frame_args = begin_frame_args;
+      stage_breakdown.start_prepare_to_draw = base::TimeTicks::Now();
       host_impl_->PrepareToDraw(&frame);
-      host_impl_->DrawLayers(&frame);
+      stage_breakdown.start_draw_layers = base::TimeTicks::Now();
+      std::optional<cc::SubmitInfo> submit_info =
+          host_impl_->DrawLayers(&frame);
+      if (submit_info.has_value()) {
+        stage_breakdown.submit_compositor_frame = submit_info->time;
+      }
+      frame.set_trees_in_viz_timestamps(std::move(stage_breakdown));
       host_impl_->DidDrawAllLayers(frame);
       host_impl_->DidFinishImplFrame(begin_frame_args);
     }
@@ -1927,7 +1996,7 @@ void LayerContextImpl::UpdateDisplayTiling(mojom::TilingPtr tiling,
   CHECK(receiver_);
   auto result = DoUpdateDisplayTiling(std::move(tiling), update_damage);
   if (!result.has_value()) {
-    receiver_->ReportBadMessage(result.error());
+    HandleBadMojoMessage("UpdateDisplayTiling", result.error());
   }
 }
 

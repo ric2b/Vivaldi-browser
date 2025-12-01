@@ -17,6 +17,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
+#include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
 #include "net/url_request/redirect_info.h"
@@ -485,10 +486,14 @@ void ThrottlingURLLoader::Start(
   }
 
   if (initiator_origin_trial_features &&
-      base::Contains(
-          *initiator_origin_trial_features,
-          static_cast<int>(
-              mojom::OriginTrialFeature::kDeviceBoundSessionCredentials))) {
+      (base::Contains(
+           *initiator_origin_trial_features,
+           static_cast<int>(
+               mojom::OriginTrialFeature::kDeviceBoundSessionCredentials)) ||
+       base::Contains(
+           *initiator_origin_trial_features,
+           static_cast<int>(
+               mojom::OriginTrialFeature::kDeviceBoundSessionCredentials2)))) {
     url_request->allows_device_bound_session_registration = true;
   }
 

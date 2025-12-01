@@ -4,6 +4,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/lazy_instance.h"
+#include "base/strings/string_util.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -196,10 +197,6 @@ VivaldiLocalSessionObserver::VivaldiLocalSessionObserver(ProfileClass* profile)
 
 void VivaldiLocalSessionObserver::OnDeviceInfoChange() {
   UpdateSession();
-}
-
-void VivaldiLocalSessionObserver::OnDeviceInfoShutdown() {
-  DeregisterDeviceInfoObservers();
 }
 
 void VivaldiLocalSessionObserver::DeregisterDeviceInfoObservers() {

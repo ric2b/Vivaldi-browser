@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -20,11 +20,11 @@ const NO_NORMALIZED_TIMESTAMP = -1.5;
 
 const UIStrings = {
   /**
-   *@description Title of the 'Playback Status' button
+   * @description Title of the 'Playback Status' button
    */
   playbackStatus: 'Playback Status',
   /**
-   *@description Title of the 'Buffering Status' button
+   * @description Title of the 'Buffering Status' button
    */
   bufferingStatus: 'Buffering Status',
 } as const;

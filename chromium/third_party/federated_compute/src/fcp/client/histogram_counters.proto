@@ -1,0 +1,189 @@
+/*
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+syntax = "proto3";
+
+package fcp.client;
+
+option java_package = "com.google.intelligence.fcp.client";
+option java_multiple_files = true;
+
+/**
+ * Enumerations of timer and counter identifiers.
+ *
+ * For monitoring, certain timers and counters are logged as integer histograms.
+ * This allows for computing aggregate histograms on the cloud and determine
+ * distributions of latencies for blocks of code, resource usage etc.
+ */
+enum HistogramCounters {
+  HISTOGRAM_COUNTER_UNDEFINED = 0;
+
+  /**
+   * How long it takes to run a plan on device, excluding downloading the plan
+   * and reporting results.
+   */
+  TRAINING_RUN_PHASE_LATENCY = 1;
+
+  /**
+   * The end time of running training for a whole plan, excluding downloading
+   * the plan and reporting results, relative to the start of the training
+   * session.
+   */
+  TRAINING_RUN_PHASE_END_TIME = 2;
+
+  /** How long running a "restore state op" takes. */
+  TRAINING_RESTORE_STATE_LATENCY = 3;
+
+  /**
+   * How long it takes to run training for a whole client execution (which may
+   * involve running multiple epochs). This includes connecting and fetching
+   * example from the example store, as well as training over them.
+   */
+  TRAINING_RUN_CLIENT_EXECUTION_LATENCY = 4;
+
+  /** How long running an "init op" takes. */
+  TRAINING_INIT_OP_LATENCY = 5;
+
+  /** How long running a "before op" takes. */
+  TRAINING_BEFORE_OP_LATENCY = 6;
+
+  /** How long running an "after op" takes. */
+  TRAINING_AFTER_OP_LATENCY = 7;
+
+  /**
+   * How long it takes to run training for a whole epoch. This includes
+   * connecting and fetching example from the example store, as well as training
+   * over them.
+   */
+  TRAINING_RUN_EPOCH_LATENCY = 8;
+
+  /**
+   * How long it takes to gather enough examples for a mini batch.
+   * This counter may be an average across minibatches and epochs.
+   */
+  TRAINING_GATHER_MINI_BATCH_LATENCY = 9;
+
+  /**
+   * How long it takes to run training on a mini batch.
+   * This counter may be an average across minibatches and epochs.
+   */
+  TRAINING_RUN_MINI_BATCH_LATENCY = 10;
+
+  /**
+   * How long it takes the TensorFlow session to terminate after it's been
+   * interrupted.
+   */
+  TRAINING_INTERRUPT_TERMINATION_LATENCY = 11;
+
+  /** How long it takes to commit the opstats message to the database. */
+  TRAINING_OPSTATS_COMMIT_LATENCY = 12;
+
+  /** The number of examples encountered during overall training, across all
+   * client executions. */
+  TRAINING_OVERALL_EXAMPLE_COUNT = 100001;
+
+  /**
+   * The sum of the size (in bytes) of all the examples encountered during
+   * overall training, across all client executions.
+   */
+  TRAINING_OVERALL_EXAMPLE_SIZE = 100002;
+
+  /**
+   * The number of examples encountered in a client execution, across all
+   * epochs.
+   */
+  TRAINING_CLIENT_EXECUTION_EXAMPLE_COUNT = 100003;
+
+  /**
+   * The sum of the size (in bytes) of all the examples encountered in a client
+   * execution, across all epoch.
+   */
+  TRAINING_CLIENT_EXECUTION_EXAMPLE_SIZE = 100004;
+
+  /**
+   * The number of examples encountered in an epoch.
+   * This counter may be an average from multiple epochs.
+   */
+  TRAINING_EPOCH_EXAMPLE_COUNT = 100005;
+
+  /**
+   * The sum of the size (in bytes) of all the examples encountered in an
+   * epoch. This counter may be an average from multiple epochs
+   */
+  TRAINING_EPOCH_EXAMPLE_SIZE = 100006;
+
+  /**
+   * The number of examples in a mini batch.
+   * This counter may be an average from multiple minibatches.
+   */
+  TRAINING_MINI_BATCH_EXAMPLE_COUNT = 100007;
+
+  /**
+   * The sum of the size (in bytes) of all the examples in a mini batch.
+   * This counter may be an average from multiple minibatches.
+   */
+  TRAINING_MINI_BATCH_EXAMPLE_SIZE = 100008;
+
+  /**
+   * The size (in bytes) of the OpStatsDb file.
+   */
+  OPSTATS_DB_SIZE_BYTES = 100009;
+
+  /**
+   * The number of entries in OpStatsDb.
+   */
+  OPSTATS_DB_NUM_ENTRIES = 100010;
+
+  /**
+   * The number of entries pruned from OpStatsDb due to exceeding max size.
+   */
+  OPSTATS_NUM_PRUNED_ENTRIES = 100011;
+
+  /**
+   * The tenure (in hours) of the oldest entry which has been pruned from the
+   * OpStatsDb due to exceeding max size.
+   */
+  OPSTATS_OLDEST_PRUNED_ENTRY_TENURE_HOURS = 100012;
+
+  /** How long checking in/downloading a plan takes (for FL plans only). */
+  TRAINING_FL_CHECKIN_LATENCY = 200001;
+
+  /**
+   * The end time of reporting results to the server, relative to the start
+   * of the training session.
+   */
+  TRAINING_FL_REPORT_RESULTS_END_TIME = 200002;
+
+  /** How long reporting results to the server takes. */
+  TRAINING_FL_REPORT_RESULTS_LATENCY = 200003;
+
+  /** The end time of checking in/downloading a plan from the server, relative
+  to the start of the training session. */
+  TRAINING_FL_CHECKIN_END_TIME = 200004;
+
+  /** How long reporting results to the server takes. */
+  TRAINING_FL_ELIGIBILITY_EVAL_CHECKIN_LATENCY = 200005;
+
+  /** The end time of multiple task assignments, relative to the start of the
+   * training session. */
+  TRAINING_FL_MULTIPLE_TASK_ASSIGNMENTS_END_TIME = 200006;
+
+  /** How long multiple task assignments takes. */
+  TRAINING_FL_MULTIPLE_TASK_ASSIGNMENTS_LATENCY = 200007;
+
+  /** The number of rounds between a client's consecutive training sessions on
+   * the same task.*/
+  TRAINING_FL_ROUND_SEPARATION = 200008;
+}

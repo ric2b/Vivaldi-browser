@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "ui/base/resource/resource_bundle.h"
 
 #include <stdint.h>
@@ -21,6 +16,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "base/debug/crash_logging.h"
 #include "base/files/file.h"
@@ -42,7 +38,7 @@
 #include "net/filter/gzip_header.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/brotli/include/brotli/decode.h"
-#include "third_party/skia/include/codec/SkPngDecoder.h"
+#include "third_party/skia/include/codec/SkPngRustDecoder.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/zlib/google/compression_utils.h"
@@ -65,7 +61,6 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
 #include "ui/base/resource/resource_bundle_android.h"
 #endif
 
@@ -162,12 +157,13 @@ base::span<uint8_t> GetBufferForWriting(OutputBufferType out_buf, size_t len) {
   if (std::holds_alternative<std::string*>(out_buf)) {
     std::string* str = std::get<std::string*>(out_buf);
     str->resize(len);
-    return base::span<uint8_t>(reinterpret_cast<uint8_t*>(str->data()), len);
+    return UNSAFE_TODO(
+        base::span<uint8_t>(reinterpret_cast<uint8_t*>(str->data()), len));
   }
 
   std::vector<uint8_t>* vec = std::get<std::vector<uint8_t>*>(out_buf);
   vec->resize(len);
-  return base::span<uint8_t>(vec->data(), len);
+  return UNSAFE_TODO(base::span<uint8_t>(vec->data(), len));
 }
 
 // Decompresses data in |input| using brotli, storing
@@ -1090,7 +1086,7 @@ void ResourceBundle::InitSharedInstance(Delegate* delegate) {
 // Register Png Decoder for use by DataURIResourceProviderProxy for embedded
 // images.
 #if BUILDFLAG(IS_CHROMEOS)
-  SkCodecs::Register(SkPngDecoder::Decoder());
+  SkCodecs::Register(SkPngRustDecoder::Decoder());
 #endif
 }
 
@@ -1143,7 +1139,7 @@ void ResourceBundle::AddDataPackFromPathInternal(
 
 void ResourceBundle::AddResourceHandle(
     std::unique_ptr<ResourceHandle> resource_handle) {
-#if DCHECK_IS_ON()
+#if DCHECK_IS_ON() && !BUILDFLAG(IS_ANDROID) // Vivaldi
   resource_handle->CheckForDuplicateResources(resource_handles_);
 #endif
 
@@ -1336,7 +1332,7 @@ std::u16string ResourceBundle::GetLocalizedStringImpl(int resource_id) const {
   // Data pack encodes strings as either UTF8 or UTF16.
   std::u16string msg;
   if (encoding == ResourceHandle::UTF16) {
-    msg.assign(reinterpret_cast<const char16_t*>(data->data()),
+    msg.assign(UNSAFE_TODO(reinterpret_cast<const char16_t*>(data->data())),
                data->length() / 2);
   } else if (encoding == ResourceHandle::UTF8) {
     // Best-effort conversion.

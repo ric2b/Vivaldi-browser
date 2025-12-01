@@ -21,12 +21,15 @@ namespace rx
 {
 namespace cl_vk
 {
+std::vector<VkBufferCopy> CalculateRectCopyRegions(const cl::BufferRect &srcRect,
+                                                   const cl::BufferRect &dstRect);
+
 VkExtent3D GetExtent(const cl::Extents &extent);
 VkOffset3D GetOffset(const cl::Offset &offset);
 VkImageType GetImageType(cl::MemObjectType memObjectType);
 VkImageViewType GetImageViewType(cl::MemObjectType memObjectType);
 VkMemoryPropertyFlags GetMemoryPropertyFlags(cl::MemFlags memFlags);
-VkBufferUsageFlags GetBufferUsageFlags(cl::MemFlags memFlags);
+VkBufferUsageFlags GetBufferUsageFlags(cl::MemFlags memFlags, bool physicalAddressing);
 
 }  // namespace cl_vk
 }  // namespace rx

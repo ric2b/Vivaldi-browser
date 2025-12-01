@@ -12,8 +12,10 @@
 #include <vector>
 
 #include "base/containers/flat_set.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/numerics/math_constants.h"
+#include "device/vr/openxr/openxr_api_wrapper.h"
 #include "device/vr/openxr/openxr_extension_helper.h"
 #include "device/vr/openxr/openxr_util.h"
 #include "device/vr/public/mojom/xr_session.mojom-shared.h"
@@ -25,19 +27,37 @@ OpenXRSceneUnderstandingManagerMSFT::OpenXRSceneUnderstandingManagerMSFT(
     const OpenXrExtensionHelper& extension_helper,
     XrSession session,
     XrSpace mojo_space)
-    : extension_helper_(extension_helper),
-      mojo_space_(mojo_space) {
-  plane_manager_ =
-      std::make_unique<OpenXrPlaneManagerMsft>(extension_helper, session);
-  hit_test_manager_ = std::make_unique<OpenXrHitTestManagerMsft>(
-      plane_manager_.get(), mojo_space_);
+    : mojo_space_(mojo_space) {
+  const auto* extension_enum = extension_helper.ExtensionEnumeration();
+  if (extension_enum->ExtensionSupported(
+          XR_MSFT_SPATIAL_ANCHOR_EXTENSION_NAME)) {
+    anchor_manager_ = std::make_unique<OpenXrAnchorManagerMsft>(
+        extension_helper, session, mojo_space_);
+  }
+
+  if (extension_enum->ExtensionSupported(
+          XR_MSFT_SCENE_UNDERSTANDING_EXTENSION_NAME)) {
+    plane_manager_ =
+        std::make_unique<OpenXrPlaneManagerMsft>(extension_helper, session);
+    hit_test_manager_ = std::make_unique<OpenXrHitTestManagerMsft>(
+        plane_manager_.get(), mojo_space_);
+  }
 }
 
 OpenXRSceneUnderstandingManagerMSFT::~OpenXRSceneUnderstandingManagerMSFT() =
     default;
 
+OpenXrSceneUnderstandingManagerType
+OpenXRSceneUnderstandingManagerMSFT::GetType() const {
+  return OpenXrSceneUnderstandingManagerType::kMsft;
+}
+
 OpenXrPlaneManager* OpenXRSceneUnderstandingManagerMSFT::GetPlaneManager() {
   return plane_manager_.get();
+}
+
+OpenXrAnchorManager* OpenXRSceneUnderstandingManagerMSFT::GetAnchorManager() {
+  return anchor_manager_.get();
 }
 
 OpenXrHitTestManager* OpenXRSceneUnderstandingManagerMSFT::GetHitTestManager() {
@@ -52,30 +72,48 @@ OpenXrSceneUnderstandingManagerMsftFactory::
 const base::flat_set<std::string_view>&
 OpenXrSceneUnderstandingManagerMsftFactory::GetRequestedExtensions() const {
   static base::NoDestructor<base::flat_set<std::string_view>> kExtensions(
-      {XR_MSFT_SCENE_UNDERSTANDING_EXTENSION_NAME});
+      {XR_MSFT_SCENE_UNDERSTANDING_EXTENSION_NAME,
+       XR_MSFT_SPATIAL_ANCHOR_EXTENSION_NAME});
   return *kExtensions;
 }
 
 std::set<device::mojom::XRSessionFeature>
-OpenXrSceneUnderstandingManagerMsftFactory::GetSupportedFeatures(
-    const OpenXrExtensionEnumeration* extension_enum) const {
-  if (!IsEnabled(extension_enum)) {
-    return {};
+OpenXrSceneUnderstandingManagerMsftFactory::GetSupportedFeatures() const {
+  return supported_features_;
+}
+
+void OpenXrSceneUnderstandingManagerMsftFactory::CheckAndUpdateEnabledState(
+    const OpenXrExtensionEnumeration* extension_enum,
+    XrInstance instance,
+    XrSystemId system) {
+  supported_features_.clear();
+
+  if (extension_enum->ExtensionSupported(
+          XR_MSFT_SCENE_UNDERSTANDING_EXTENSION_NAME)) {
+    supported_features_.insert(device::mojom::XRSessionFeature::HIT_TEST);
   }
 
-  return {device::mojom::XRSessionFeature::HIT_TEST};
+  if (extension_enum->ExtensionSupported(
+          XR_MSFT_SPATIAL_ANCHOR_EXTENSION_NAME)) {
+    supported_features_.insert(device::mojom::XRSessionFeature::ANCHORS);
+  }
+
+  bool enabled = !supported_features_.empty();
+  UMA_HISTOGRAM_BOOLEAN("XR.OpenXR.SceneUnderstandingMSFTAvailability",
+                        enabled);
+  SetEnabled(enabled);
 }
 
 std::unique_ptr<OpenXRSceneUnderstandingManager>
 OpenXrSceneUnderstandingManagerMsftFactory::CreateSceneUnderstandingManager(
     const OpenXrExtensionHelper& extension_helper,
-    XrSession session,
+    OpenXrApiWrapper* openxr,
     XrSpace mojo_space) const {
-  bool is_supported = IsEnabled(extension_helper.ExtensionEnumeration());
+  bool is_supported = IsEnabled();
   DVLOG(2) << __func__ << " is_supported=" << is_supported;
   if (is_supported) {
     return std::make_unique<OpenXRSceneUnderstandingManagerMSFT>(
-        extension_helper, session, mojo_space);
+        extension_helper, openxr->session(), mojo_space);
   }
 
   return nullptr;

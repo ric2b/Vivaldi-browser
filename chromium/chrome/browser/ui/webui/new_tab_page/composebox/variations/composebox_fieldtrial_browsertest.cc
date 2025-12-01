@@ -4,7 +4,9 @@
 
 #include "chrome/browser/ui/webui/new_tab_page/composebox/variations/composebox_fieldtrial.h"
 
+#include <memory>
 #include <optional>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -62,29 +64,22 @@ class TestingAimEligibilityService : public ChromeAimEligibilityService {
   bool server_eligibility_enabled_;
 };
 
-class NtpComposeboxFieldTrialBrowserTest
+class NtpFieldTrialBrowserTest
     : public InProcessBrowserTest,
       public ::testing::WithParamInterface<
-          std::tuple<std::string, std::string, bool, bool, bool, bool>> {
+          std::tuple<std::string, std::string, bool, bool, bool, bool, bool>> {
  public:
-  NtpComposeboxFieldTrialBrowserTest() = default;
-  ~NtpComposeboxFieldTrialBrowserTest() override = default;
+  NtpFieldTrialBrowserTest() = default;
+  ~NtpFieldTrialBrowserTest() override = default;
 
  protected:
-  void SetUp() override {
-    auto composebox_feature = std::get<5>(GetParam());
-    std::vector<base::test::FeatureRef> enabled_features;
-    std::vector<base::test::FeatureRef> disabled_features;
+  virtual bool IsFeatureEnabledByDefault() const = 0;
 
-    if (composebox_feature) {
-      enabled_features.push_back(ntp_composebox::kNtpComposebox);
-    } else {
-      disabled_features.push_back(ntp_composebox::kNtpComposebox);
-    }
-
-    feature_list_.InitWithFeatures(enabled_features, disabled_features);
-
-    InProcessBrowserTest::SetUp();
+  // This test is testing the default state of a feature, so we need to ensure
+  // that field trial configs don't change the feature state.
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    InProcessBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch("disable-field-trial-config");
   }
 
   void SetUpOnMainThread() override {
@@ -118,8 +113,76 @@ class NtpComposeboxFieldTrialBrowserTest
     InProcessBrowserTest::TearDownOnMainThread();
   }
 
+  bool GetExpectedEnabled() {
+    auto [locale, country, is_locally_eligible, is_server_eligible,
+          server_eligibility_enabled, override_feature, feature] = GetParam();
+
+    bool expected_enabled = false;
+
+    // Mirrored implementation logic for Is...Enabled methods:
+    // Get the service to check server eligibility (this is now handled by the
+    // mock).
+    auto* service =
+        AimEligibilityServiceFactory::GetForProfile(browser()->profile());
+
+    // If service or local eligibility check fails, return false.
+    if (!service || !service->IsAimLocallyEligible()) {
+      return false;
+    }
+
+    // If the generic feature is overridden, it takes precedence.
+    if (override_feature) {
+      return feature;
+    }
+
+    // If the server eligibility is enabled, return overall eligibility alone.
+    // The service will control locale rollout so there's no need to check
+    // locale or the state of kMyFeature below.
+    if (service->IsServerEligibilityEnabled()) {
+      expected_enabled = service->IsAimEligible();
+    } else {
+      // Otherwise, check the generic entrypoint feature default value.
+      expected_enabled = IsFeatureEnabledByDefault();
+    }
+
+    return expected_enabled;
+  }
+
   base::test::ScopedFeatureList feature_list_;
   std::unique_ptr<ScopedBrowserLocale> scoped_browser_locale_;
+};
+
+class NtpComposeboxFieldTrialBrowserTest : public NtpFieldTrialBrowserTest {
+ public:
+  NtpComposeboxFieldTrialBrowserTest() = default;
+  ~NtpComposeboxFieldTrialBrowserTest() override = default;
+  NtpComposeboxFieldTrialBrowserTest(
+      const NtpComposeboxFieldTrialBrowserTest&) = delete;
+  NtpComposeboxFieldTrialBrowserTest& operator=(
+      const NtpComposeboxFieldTrialBrowserTest&) = delete;
+
+ protected:
+  bool IsFeatureEnabledByDefault() const override {
+    return ntp_composebox::kNtpComposebox.default_state ==
+           base::FEATURE_ENABLED_BY_DEFAULT;
+  }
+
+  void SetUp() override {
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+    const auto override_feature = std::get<5>(GetParam());
+    const auto composebox_feature = std::get<6>(GetParam());
+    if (override_feature) {
+      if (composebox_feature) {
+        enabled_features.push_back(ntp_composebox::kNtpComposebox);
+      } else {
+        disabled_features.push_back(ntp_composebox::kNtpComposebox);
+      }
+    }
+    feature_list_.InitWithFeatures(enabled_features, disabled_features);
+
+    InProcessBrowserTest::SetUp();
+  }
 };
 
 INSTANTIATE_TEST_SUITE_P(,
@@ -135,38 +198,81 @@ INSTANTIATE_TEST_SUITE_P(,
                              ::testing::Values(true, false),
                              // Values for server eligibility enabled.
                              ::testing::Values(true, false),
+                             // Values for whether to override the generic
+                             // composebox feature.
+                             ::testing::Values(true, false),
                              // Values for the generic composebox feature.
                              ::testing::Values(true, false)));
 
 IN_PROC_BROWSER_TEST_P(NtpComposeboxFieldTrialBrowserTest, Test) {
-  auto [locale, country, is_locally_eligible, is_server_eligible,
-        server_eligibility_enabled, composebox_feature] = GetParam();
+  bool expected = GetExpectedEnabled();
+  if (!base::FeatureList::IsEnabled(ntp_composebox::kNtpComposebox)) {
+    expected = false;
+  }
+  EXPECT_EQ(ntp_composebox::IsNtpComposeboxEnabled(browser()->profile()),
+            expected);
+}
 
-  bool expected_enabled = false;
+class NtpRealboxNextFieldTrialBrowserTest : public NtpFieldTrialBrowserTest {
+ public:
+  NtpRealboxNextFieldTrialBrowserTest() = default;
+  ~NtpRealboxNextFieldTrialBrowserTest() override = default;
+  NtpRealboxNextFieldTrialBrowserTest(
+      const NtpRealboxNextFieldTrialBrowserTest&) = delete;
+  NtpRealboxNextFieldTrialBrowserTest& operator=(
+      const NtpRealboxNextFieldTrialBrowserTest&) = delete;
 
-  // Implementation logic mirrors IsNtpComposeboxEnabled:
-  // 1. If generic composebox feature is overridden to false, return false.
-  if (!composebox_feature) {
-    expected_enabled = false;
-  } else {
-    // Get the service to check server eligibility (this is now handled by the
-    // mock).
-    auto* service =
-        AimEligibilityServiceFactory::GetForProfile(browser()->profile());
-
-    // 2. If server response is enabled, return overall eligibility alone.
-    if (service->IsServerEligibilityEnabled()) {
-      expected_enabled = service->IsAimEligible();
-    } else {
-      // 3. If not locally eligible, return false.
-      if (!is_locally_eligible) {
-        expected_enabled = false;
-      } else {
-        expected_enabled = composebox_feature;
-      }
-    }
+ protected:
+  bool IsFeatureEnabledByDefault() const override {
+    return ntp_composebox::kNtpComposebox.default_state ==
+               base::FEATURE_ENABLED_BY_DEFAULT &&
+           ntp_realbox::kNtpRealboxNext.default_state ==
+               base::FEATURE_ENABLED_BY_DEFAULT;
   }
 
-  EXPECT_EQ(ntp_composebox::IsNtpComposeboxEnabled(browser()->profile()),
-            expected_enabled);
+  void SetUp() override {
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+    const auto override_feature = std::get<5>(GetParam());
+    const auto feature = std::get<6>(GetParam());
+    if (override_feature) {
+      if (feature) {
+        enabled_features.push_back(ntp_composebox::kNtpComposebox);
+        enabled_features.push_back(ntp_realbox::kNtpRealboxNext);
+      } else {
+        disabled_features.push_back(ntp_realbox::kNtpRealboxNext);
+      }
+    }
+    feature_list_.InitWithFeatures(enabled_features, disabled_features);
+
+    InProcessBrowserTest::SetUp();
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(,
+                         NtpRealboxNextFieldTrialBrowserTest,
+                         ::testing::Combine(
+                             // Values for the locale.
+                             ::testing::Values("en-US", "es-MX"),
+                             // Values for the country.
+                             ::testing::Values("us", "ca"),
+                             // Values for local eligibility.
+                             ::testing::Values(true, false),
+                             // Values for server eligibility.
+                             ::testing::Values(true, false),
+                             // Values for server eligibility enabled.
+                             ::testing::Values(true, false),
+                             // Values for whether to override the generic
+                             // realbox next feature.
+                             ::testing::Values(true, false),
+                             // Values for the generic realbox next feature.
+                             ::testing::Values(true, false)));
+
+IN_PROC_BROWSER_TEST_P(NtpRealboxNextFieldTrialBrowserTest, Test) {
+  bool expected = GetExpectedEnabled();
+  if (!base::FeatureList::IsEnabled(ntp_realbox::kNtpRealboxNext)) {
+    expected = false;
+  }
+  EXPECT_EQ(ntp_realbox::IsNtpRealboxNextEnabled(browser()->profile()),
+            expected);
 }

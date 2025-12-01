@@ -40,15 +40,12 @@ std::string GetHeadingHtmlTagForPDF(const ui::AXNode* ax_node,
 // Returns the alt text for the given node.
 std::string GetAltText(const ui::AXNode* ax_node);
 
-// Returns the image data url for the given node.
-std::string GetImageDataUrl(const ui::AXNode* ax_node);
-
 // Returns the text content for the given node. This needs to be a wrapper
 // instead of getting text from the node directly because the text content
 // is different if in Google Docs or pdfs.
 std::u16string GetTextContent(const ui::AXNode* ax_node,
-                              bool is_docs,
-                              bool is_pdf);
+                              bool is_pdf,
+                              bool is_docs);
 
 std::u16string GetNameAttributeText(const ui::AXNode* ax_node);
 }  // namespace a11y

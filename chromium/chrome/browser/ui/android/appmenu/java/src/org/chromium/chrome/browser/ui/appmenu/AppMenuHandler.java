@@ -13,7 +13,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 // Vivaldi
-import org.chromium.base.supplier.Supplier;
+import java.util.function.Supplier;
 
 /**
  * Responsible for handling the creation, showing, hiding of the AppMenu and notifying the
@@ -29,7 +29,7 @@ public interface AppMenuHandler {
         AppMenuItemType.DIVIDER
     })
     @Retention(RetentionPolicy.SOURCE)
-    public @interface AppMenuItemType {
+    @interface AppMenuItemType {
         /** Regular Android menu item that contains a title and an icon if icon is specified. */
         int STANDARD = 0;
 

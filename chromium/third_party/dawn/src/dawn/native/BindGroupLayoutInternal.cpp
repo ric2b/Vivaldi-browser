@@ -38,7 +38,6 @@
 
 #include "dawn/common/Enumerator.h"
 #include "dawn/common/MatchVariant.h"
-#include "dawn/common/Range.h"
 #include "dawn/native/ChainUtils.h"
 #include "dawn/native/Device.h"
 #include "dawn/native/Error.h"
@@ -48,6 +47,7 @@
 #include "dawn/native/ObjectType_autogen.h"
 #include "dawn/native/PerStage.h"
 #include "dawn/native/Sampler.h"
+#include "dawn/native/TexelBufferView.h"
 #include "dawn/native/ValidationUtils_autogen.h"
 #include "dawn/platform/metrics/HistogramMacros.h"
 
@@ -255,6 +255,30 @@ MaybeError ValidateBindGroupLayoutEntry(DeviceBase* device,
         }
     }
 
+    if (auto* texelBufferLayout = entry.Get<TexelBufferBindingLayout>()) {
+        bindingMemberCount++;
+        DAWN_INVALID_IF(!device->AreTexelBuffersEnabled(), "%s is not enabled.",
+                        wgpu::WGSLLanguageFeatureName::TexelBuffers);
+
+        DAWN_TRY(ValidateTexelBufferAccess(texelBufferLayout->access));
+
+        // TODO(393558555): Support bindingArraySize > 1 for texel buffers.
+        DAWN_INVALID_IF(
+            arraySize > 1,
+            "bindingArraySize (%u) > 1 for a storage texture binding is not implemented yet.",
+            arraySize);
+
+        DAWN_INVALID_IF(entry->visibility & wgpu::ShaderStage::Vertex &&
+                            texelBufferLayout->access != wgpu::TexelBufferAccess::ReadOnly,
+                        "Vertex visibility requires read-only texel buffer access.");
+
+        const Format* format;
+        DAWN_TRY_ASSIGN(format, device->GetInternalFormat(texelBufferLayout->format));
+        DAWN_INVALID_IF(!IsFormatSupportedForTexelBuffer(format->format),
+                        "Texel buffer layout format (%s) is not allowed for texel buffers.",
+                        format->format);
+    }
+
     if (entry.Get<ExternalTextureBindingLayout>()) {
         bindingMemberCount++;
         DAWN_INVALID_IF(arraySize > 1,
@@ -265,11 +289,11 @@ MaybeError ValidateBindGroupLayoutEntry(DeviceBase* device,
 
     DAWN_INVALID_IF(bindingMemberCount == 0,
                     "BindGroupLayoutEntry had none of buffer, sampler, texture, "
-                    "storageTexture, or externalTexture set");
+                    "storageTexture, texelBuffer, or externalTexture set");
 
     DAWN_INVALID_IF(bindingMemberCount != 1,
                     "BindGroupLayoutEntry had more than one of buffer, sampler, texture, "
-                    "storageTexture, or externalTexture set");
+                    "storageTexture, texelBuffer, or externalTexture set");
 
     DAWN_INVALID_IF(
         arraySize > 1 && entry->texture.sampleType == wgpu::TextureSampleType::BindingNotUsed,
@@ -280,7 +304,7 @@ MaybeError ValidateBindGroupLayoutEntry(DeviceBase* device,
 
 MaybeError ValidateStaticSamplersWithTextureBindings(
     DeviceBase* device,
-    const BindGroupLayoutDescriptor* descriptor,
+    const UnpackedPtr<BindGroupLayoutDescriptor>& descriptor,
     const std::map<BindingNumber, uint32_t>& bindingNumberToIndexMap) {
     // Map of texture binding number to static sampler binding number.
     std::map<BindingNumber, BindingNumber> textureToStaticSamplerBindingMap;
@@ -321,14 +345,64 @@ MaybeError ValidateStaticSamplersWithTextureBindings(
 
 }  // anonymous namespace
 
-MaybeError ValidateBindGroupLayoutDescriptor(DeviceBase* device,
-                                             const BindGroupLayoutDescriptor* descriptor,
-                                             bool allowInternalBinding) {
-    DAWN_INVALID_IF(descriptor->nextInChain != nullptr, "nextInChain must be nullptr");
+ResultOrError<UnpackedPtr<BindGroupLayoutDescriptor>> ValidateBindGroupLayoutDescriptor(
+    DeviceBase* device,
+    const BindGroupLayoutDescriptor* descriptorChain,
+    bool allowInternalBinding) {
+    UnpackedPtr<BindGroupLayoutDescriptor> descriptor;
+    DAWN_TRY_ASSIGN(descriptor, ValidateAndUnpack(descriptorChain));
+
+    // A running total of the number of bindings used by the layout.
+    BindingCounts bindingCounts = {};
+
+    // Handle the dynamic binding array first to also extract information needed to validate the
+    // rest of the bindings.
+    std::optional<BindingNumber> startOfDynamicArray = {};
+    if (auto* dynamic = descriptor.Get<BindGroupLayoutDynamicBindingArray>()) {
+        DAWN_INVALID_IF(!device->HasFeature(Feature::ChromiumExperimentalBindless),
+                        "Dynamic binding array used without the %s feature enabled.",
+                        wgpu::FeatureName::ChromiumExperimentalBindless);
+        DAWN_INVALID_IF(dynamic->dynamicArray.nextInChain != nullptr,
+                        "DynamicBindingArrayLayout::nextInChain must be nullptr");
+
+        startOfDynamicArray = BindingNumber(dynamic->dynamicArray.start);
+        DAWN_TRY(ValidateDynamicBindingKind(dynamic->dynamicArray.kind));
+
+        DAWN_INVALID_IF(startOfDynamicArray >= kMaxBindingsPerBindGroupTyped,
+                        "dynamic array start (%u) exceeds the maxBindingsPerBindGroup limit (%u).",
+                        startOfDynamicArray.value(), kMaxBindingsPerBindGroup);
+
+        // Add to the limits the storage buffer that will be used for the availability data of the
+        // dynamic array. Set a minimum binding size so as to not increment unverifiedBufferCount.
+        BindGroupLayoutEntry availabilityEntry{
+            .binding = 0,
+            .visibility = kAllStages,
+            .buffer =
+                {
+                    .type = wgpu::BufferBindingType::ReadOnlyStorage,
+                    .minBindingSize = 4,
+                },
+        };
+        IncrementBindingCounts(&bindingCounts, Unpack(&availabilityEntry));
+
+        // Check that no ExternalTexture entry is in the static bindings part. It is redundant with
+        // validation below but since this is a temporary constraint only, it is fine.
+        // TODO(https://crbug.com/42240282): This is a workaround for an issue generating the
+        // binding numbers for expanded ExternalTexture entries. See comment in
+        // ConvertAndExpandBGLEntries.
+        // TODO(https://crbug.com/435317394): Remove this constraint that isn't necessary for
+        // dynamic binding arrays, except as a temporary workaround.
+        for (uint32_t i = 0; i < descriptor->entryCount; ++i) {
+            UnpackedPtr<BindGroupLayoutEntry> entry;
+            DAWN_TRY_ASSIGN(entry, ValidateAndUnpack(&descriptor->entries[i]));
+            DAWN_INVALID_IF(
+                entry.Has<ExternalTextureBindingLayout>(),
+                "entries[%i] is an ExternalTexture when a dynamic binding array is specified.", i);
+        }
+    }
 
     // Map of binding number to entry index.
     std::map<BindingNumber, uint32_t> bindingMap;
-    BindingCounts bindingCounts = {};
 
     for (uint32_t i = 0; i < descriptor->entryCount; ++i) {
         UnpackedPtr<BindGroupLayoutEntry> entry;
@@ -338,7 +412,7 @@ MaybeError ValidateBindGroupLayoutDescriptor(DeviceBase* device,
         DAWN_INVALID_IF(
             bindingNumber >= kMaxBindingsPerBindGroupTyped,
             "On entries[%u]: binding number (%u) exceeds the maxBindingsPerBindGroup limit (%u).",
-            i, uint32_t(bindingNumber), kMaxBindingsPerBindGroup);
+            i, bindingNumber, kMaxBindingsPerBindGroup);
 
         BindingNumber arraySize{1};
         if (entry->bindingArraySize > 1) {
@@ -356,6 +430,12 @@ MaybeError ValidateBindGroupLayoutDescriptor(DeviceBase* device,
                             uint32_t(arraySize) + uint32_t(bindingNumber),
                             kMaxBindingsPerBindGroupTyped);
         }
+
+        DAWN_INVALID_IF(startOfDynamicArray.has_value() &&
+                            bindingNumber + arraySize > startOfDynamicArray.value(),
+                        "On entries[%u]: the range of binding used [%u, %u) conflicts with the "
+                        "dynamic binding array that starts at binding %u.",
+                        i, bindingNumber, bindingNumber + arraySize, startOfDynamicArray.value());
 
         // Check that the same binding is not set twice. bindingNumber + arraySize cannot overflow
         // as they are both smaller than kMaxBindingsPerBindGroupTyped.
@@ -381,7 +461,7 @@ MaybeError ValidateBindGroupLayoutDescriptor(DeviceBase* device,
         ValidateBindingCounts(device->GetLimits(), bindingCounts, device->GetAdapter()),
         "validating binding counts");
 
-    return {};
+    return descriptor;
 }
 
 namespace {
@@ -431,6 +511,8 @@ BindingInfo ConvertToBindingInfo(const UnpackedPtr<BindGroupLayoutEntry>& bindin
         }
     } else if (binding->storageTexture.access != wgpu::StorageTextureAccess::BindingNotUsed) {
         bindingInfo.bindingLayout = StorageTextureBindingInfo::From(binding->storageTexture);
+    } else if (auto* texelBufferLayout = binding.Get<TexelBufferBindingLayout>()) {
+        bindingInfo.bindingLayout = TexelBufferBindingInfo::From(*texelBufferLayout);
     } else if (auto* staticSamplerBindingLayout = binding.Get<StaticSamplerBindingLayout>()) {
         bindingInfo.bindingLayout = StaticSamplerBindingInfo::From(*staticSamplerBindingLayout);
     } else {
@@ -447,13 +529,30 @@ BindingInfo ConvertToBindingInfo(const UnpackedPtr<BindGroupLayoutEntry>& bindin
 struct ExpandedBindingInfo {
     ityp::vector<BindingIndex, BindingInfo> entries;
     ExternalTextureBindingExpansionMap externalTextureBindingExpansions;
+    std::optional<BindingNumber> dynamicArrayMetatada;
 };
-ExpandedBindingInfo ConvertAndExpandBGLEntries(const BindGroupLayoutDescriptor* descriptor) {
+ExpandedBindingInfo ConvertAndExpandBGLEntries(
+    const UnpackedPtr<BindGroupLayoutDescriptor>& descriptor) {
     ExpandedBindingInfo result;
 
-    // When new bgl entries are created, we use binding numbers larger than kMaxBindingsPerBindGroup
-    // to ensure there are no collisions.
-    BindingNumber nextOpenBindingNumberForNewEntry = kMaxBindingsPerBindGroupTyped;
+    // When new BGL entries are created, we use binding numbers decreasing from the max uint32_t
+    // to ensure there are no collisions and that validation will prevent using these BindingNumbers
+    // when creating a bindgroup (so there is no risk of applications injecting their own buffer for
+    // the metadata for example).
+    // New BGL entries that are added internally we must ensure that there are no collisions with
+    // existing BindingNumbers and that validation will prevent using these BindingNumbers when
+    // creating a bindgroup. Otherwise a misbehaved application could try injecting its own planes
+    // for ExternalTextures or its own metadata buffer for dynamic binding array metadata.
+    //
+    // TODO(https://crbug.com/42240282): The scheme for ExternalTextures is to generate increasing
+    // BindingNumbers from maxBindingsPerBindGroup. This won't work with dynamic binding arrays as
+    // these can contain BindingNumbers way past maxBindingsPerBindGroup. Instead change to use the
+    // scheme decreasing from UINT32_MAX. (this couldn't be done immediately due to failures on
+    // D3D12).
+    // TODO(https://crbug.com/435317394): Changing the scheme will allow re-enabling use in
+    // ExternalTextures in bind group with dynamic binding arrays.
+    BindingNumber nextOpenBindingNumberForNewEntryET = kMaxBindingsPerBindGroupTyped;
+    BindingNumber nextOpenBindingNumberForNewEntryNonET = std::numeric_limits<BindingNumber>::max();
     for (uint32_t i = 0; i < descriptor->entryCount; i++) {
         UnpackedPtr<BindGroupLayoutEntry> entry = Unpack(&descriptor->entries[i]);
 
@@ -470,12 +569,12 @@ ExpandedBindingInfo ConvertAndExpandBGLEntries(const BindGroupLayoutDescriptor* 
             result.entries.push_back(plane0Entry);
 
             BindingInfo plane1Entry = CreateSampledTextureBindingForExternalTexture(
-                nextOpenBindingNumberForNewEntry++, entry->visibility);
+                nextOpenBindingNumberForNewEntryET++, entry->visibility);
             bindingExpansion.plane1 = BindingNumber(plane1Entry.binding);
             result.entries.push_back(plane1Entry);
 
             BindingInfo paramsEntry = CreateUniformBindingForExternalTexture(
-                nextOpenBindingNumberForNewEntry++, entry->visibility);
+                nextOpenBindingNumberForNewEntryET++, entry->visibility);
             bindingExpansion.params = BindingNumber(paramsEntry.binding);
             result.entries.push_back(paramsEntry);
 
@@ -494,36 +593,23 @@ ExpandedBindingInfo ConvertAndExpandBGLEntries(const BindGroupLayoutDescriptor* 
             info.binding++;
         }
     }
+
+    // Add an internal entry for the metadata buffer of the dynamic array if needed.
+    if (descriptor.Has<BindGroupLayoutDynamicBindingArray>()) {
+        BindingInfo metadataEntry = {
+            .binding = nextOpenBindingNumberForNewEntryNonET--,
+            .visibility = kAllStages,
+            .bindingLayout = BufferBindingInfo{{
+                .type = wgpu::BufferBindingType::ReadOnlyStorage,
+                // This is an internal buffer so it doesn't need its minBindingSize runtime-checked.
+                .minBindingSize = 4,
+                .hasDynamicOffset = false,
+            }}};
+        result.entries.push_back(metadataEntry);
+        result.dynamicArrayMetatada = metadataEntry.binding;
+    }
+
     return result;
-}
-
-bool SortBindingsCompare(const BindingInfo& a, const BindingInfo& b) {
-    if (&a == &b) {
-        return false;
-    }
-
-    // Buffers with dynamic offsets come first and then the rest of the buffers. Other bindings are
-    // only grouped by types. This is to make it easier and faster to handle them.
-    auto TypePriority = [](const BindingInfo& info) {
-        return MatchVariant(
-            info.bindingLayout,
-            [&](const BufferBindingInfo& layout) { return layout.hasDynamicOffset ? 0 : 1; },
-            [&](const TextureBindingInfo&) { return 2; },
-            [&](const StorageTextureBindingInfo&) { return 3; },
-            [&](const SamplerBindingInfo&) { return 4; },
-            [&](const StaticSamplerBindingInfo&) { return 5; },
-            [&](const InputAttachmentBindingInfo&) { return 6; });
-    };
-
-    auto aPriority = TypePriority(a);
-    auto bPriority = TypePriority(b);
-    if (aPriority != bPriority) {
-        return aPriority < bPriority;
-    }
-
-    // Afterwards sort the bindings by binding number. This is necessary because dynamic buffers
-    // are applied in order of increasing binding number in SetBindGroup.
-    return a.binding < b.binding;
 }
 
 // This is a utility function to help DAWN_ASSERT that the BGL-binding comparator places buffers
@@ -550,7 +636,7 @@ bool CheckBufferBindingsFirst(ityp::span<BindingIndex, const BindingInfo> bindin
 
 BindGroupLayoutInternalBase::BindGroupLayoutInternalBase(
     DeviceBase* device,
-    const BindGroupLayoutDescriptor* descriptor,
+    const UnpackedPtr<BindGroupLayoutDescriptor>& descriptor,
     ApiObjectBase::UntrackedByDeviceTag tag)
     : ApiObjectBase(device, descriptor->label) {
     ExpandedBindingInfo unpackedBindings = ConvertAndExpandBGLEntries(descriptor);
@@ -569,16 +655,16 @@ BindGroupLayoutInternalBase::BindGroupLayoutInternalBase(
     DAWN_ASSERT(mBindingInfo.size() <= kMaxBindingsPerPipelineLayoutTyped);
 
     // Compute various counts of expanded bindings and other metadata.
+    std::array<BindingIndex, Order_Count + 1> counts{};
     for (const auto& binding : mBindingInfo) {
         MatchVariant(
             binding.bindingLayout,
             [&](const BufferBindingInfo& layout) {
-                mBufferCount++;
                 if (layout.minBindingSize == 0) {
                     mUnverifiedBufferCount++;
                 }
                 if (layout.hasDynamicOffset) {
-                    mDynamicBufferCount++;
+                    counts[Order_DynamicBuffer]++;
                     switch (layout.type) {
                         case wgpu::BufferBindingType::Storage:
                         case kInternalStorageBufferBinding:
@@ -592,17 +678,29 @@ BindGroupLayoutInternalBase::BindGroupLayoutInternalBase(
                         case wgpu::BufferBindingType::Undefined:
                             break;
                     }
+                } else {
+                    counts[Order_RegularBuffer]++;
                 }
             },
-            [&](const TextureBindingInfo&) {}, [&](const StorageTextureBindingInfo&) {},
-            [&](const SamplerBindingInfo&) {},
+            [&](const TextureBindingInfo&) { counts[Order_SampledTexture]++; },
+            [&](const StorageTextureBindingInfo&) { counts[Order_StorageTexture]++; },
+            [&](const SamplerBindingInfo&) { counts[Order_RegularSampler]++; },
             [&](const StaticSamplerBindingInfo& layout) {
-                mStaticSamplerCount++;
+                counts[Order_StaticSampler]++;
                 if (layout.isUsedForSingleTextureBinding) {
                     mNeedsCrossBindingValidation = true;
                 }
             },
-            [&](const InputAttachmentBindingInfo&) {});
+            [&](const TexelBufferBindingInfo&) { counts[Order_TexelBuffer]++; },
+            [&](const InputAttachmentBindingInfo&) { counts[Order_InputAttachment]++; },
+            [&](const ExternalTextureBindingInfo&) { DAWN_UNREACHABLE(); });
+    }
+
+    // Do a prefix sum to store the start offset of each binding type.
+    BindingIndex sum{0};
+    for (auto [type, count] : Enumerate(counts)) {
+        mBindingTypeStart[type] = sum;
+        sum += count;
     }
 
     // Recompute the number of bindings of each type from the descriptor since that is used for
@@ -611,11 +709,56 @@ BindGroupLayoutInternalBase::BindGroupLayoutInternalBase(
         UnpackedPtr<BindGroupLayoutEntry> entry = Unpack(&descriptor->entries[i]);
         IncrementBindingCounts(&mValidationBindingCounts, entry);
     }
+
+    // Handle the dynamic binding array if there is one.
+    if (auto* dynamic = descriptor.Get<BindGroupLayoutDynamicBindingArray>()) {
+        mHasDynamicArray = true;
+        mAPIDynamicArrayStart = BindingNumber(dynamic->dynamicArray.start);
+        mDynamicArrayKind = dynamic->dynamicArray.kind;
+        mDynamicArrayMetadataBinding = mBindingMap[unpackedBindings.dynamicArrayMetatada.value()];
+
+        // Pack the dynamic array to start right after static bindings.
+        mDynamicArrayStart = mBindingInfo.size();
+    }
+}
+
+// static
+bool BindGroupLayoutInternalBase::SortBindingsCompare(const BindingInfo& a, const BindingInfo& b) {
+    if (&a == &b) {
+        return false;
+    }
+
+    // Buffers with dynamic offsets come first and then the rest of the buffers. Other bindings are
+    // only grouped by types. This is to make it easier and faster to handle them.
+    auto TypeOrder = [](const BindingInfo& info) {
+        return MatchVariant(
+            info.bindingLayout,
+            [&](const BufferBindingInfo& layout) {
+                return layout.hasDynamicOffset ? Order_DynamicBuffer : Order_RegularBuffer;
+            },
+            [&](const TextureBindingInfo&) { return Order_SampledTexture; },
+            [&](const StorageTextureBindingInfo&) { return Order_StorageTexture; },
+            [&](const SamplerBindingInfo&) { return Order_RegularSampler; },
+            [&](const StaticSamplerBindingInfo&) { return Order_StaticSampler; },
+            [&](const TexelBufferBindingInfo&) { return Order_TexelBuffer; },
+            [&](const InputAttachmentBindingInfo&) { return Order_InputAttachment; },
+            [&](const ExternalTextureBindingInfo&) -> BindingTypeOrder { DAWN_UNREACHABLE(); });
+    };
+
+    auto aOrder = TypeOrder(a);
+    auto bOrder = TypeOrder(b);
+    if (aOrder != bOrder) {
+        return aOrder < bOrder;
+    }
+
+    // Afterwards sort the bindings by binding number. This is necessary because dynamic buffers
+    // are applied in order of increasing binding number in SetBindGroup.
+    return a.binding < b.binding;
 }
 
 BindGroupLayoutInternalBase::BindGroupLayoutInternalBase(
     DeviceBase* device,
-    const BindGroupLayoutDescriptor* descriptor)
+    const UnpackedPtr<BindGroupLayoutDescriptor>& descriptor)
     : BindGroupLayoutInternalBase(device, descriptor, kUntrackedByDevice) {
     GetObjectTrackingList()->Track(this);
 }
@@ -646,16 +789,48 @@ const BindGroupLayoutInternalBase::BindingMap& BindGroupLayoutInternalBase::GetB
     return mBindingMap;
 }
 
-bool BindGroupLayoutInternalBase::HasBinding(BindingNumber bindingNumber) const {
-    DAWN_ASSERT(!IsError());
-    return mBindingMap.contains(bindingNumber);
-}
-
 BindingIndex BindGroupLayoutInternalBase::GetBindingIndex(BindingNumber bindingNumber) const {
     DAWN_ASSERT(!IsError());
     const auto& it = mBindingMap.find(bindingNumber);
     DAWN_ASSERT(it != mBindingMap.end());
     return it->second;
+}
+
+bool BindGroupLayoutInternalBase::HasDynamicArray() const {
+    DAWN_ASSERT(!IsError());
+    return mHasDynamicArray;
+}
+
+BindingNumber BindGroupLayoutInternalBase::GetAPIDynamicArrayStart() const {
+    DAWN_ASSERT(!IsError());
+    DAWN_ASSERT(mHasDynamicArray);
+    return mAPIDynamicArrayStart;
+}
+
+BindingIndex BindGroupLayoutInternalBase::GetDynamicArrayStart() const {
+    DAWN_ASSERT(!IsError());
+    DAWN_ASSERT(mHasDynamicArray);
+    return mDynamicArrayStart;
+}
+
+BindingIndex BindGroupLayoutInternalBase::GetDynamicBindingIndex(BindingNumber binding) const {
+    DAWN_ASSERT(!IsError());
+    DAWN_ASSERT(mHasDynamicArray);
+    DAWN_ASSERT(binding >= mAPIDynamicArrayStart);
+    uint32_t indexInArray = uint32_t(binding - mAPIDynamicArrayStart);
+    return BindingIndex(indexInArray);
+}
+
+BindingIndex BindGroupLayoutInternalBase::GetDynamicArrayMetadataBinding() const {
+    DAWN_ASSERT(!IsError());
+    DAWN_ASSERT(mHasDynamicArray);
+    return mDynamicArrayMetadataBinding;
+}
+
+wgpu::DynamicBindingKind BindGroupLayoutInternalBase::GetDynamicArrayKind() const {
+    DAWN_ASSERT(!IsError());
+    DAWN_ASSERT(mHasDynamicArray);
+    return mDynamicArrayKind;
 }
 
 void BindGroupLayoutInternalBase::ReduceMemoryUsage() {}
@@ -690,13 +865,19 @@ size_t BindGroupLayoutInternalBase::ComputeContentHash() {
                 recorder.Record(BindingInfoType::StorageTexture, layout.access, layout.format,
                                 layout.viewDimension);
             },
+            [&](const TexelBufferBindingInfo& layout) {
+                recorder.Record(BindingInfoType::TexelBuffer, layout.format, layout.access);
+            },
             [&](const StaticSamplerBindingInfo& layout) {
                 recorder.Record(BindingInfoType::StaticSampler, layout.sampler->GetContentHash());
             },
             [&](const InputAttachmentBindingInfo& layout) {
                 recorder.Record(BindingInfoType::InputAttachment, layout.sampleType);
-            });
+            },
+            [&](const ExternalTextureBindingInfo& layout) { DAWN_UNREACHABLE(); });
     }
+
+    recorder.Record(mHasDynamicArray, mAPIDynamicArrayStart, mDynamicArrayKind);
 
     return recorder.GetContentHash();
 }
@@ -712,12 +893,21 @@ bool BindGroupLayoutInternalBase::EqualityFunc::operator()(
             return false;
         }
     }
-    return a->mBindingMap == b->mBindingMap;
+    if (a->mBindingMap != b->mBindingMap) {
+        return false;
+    }
+
+    if (a->mHasDynamicArray != b->mHasDynamicArray ||
+        a->mDynamicArrayKind != b->mDynamicArrayKind ||
+        a->mAPIDynamicArrayStart != b->mAPIDynamicArrayStart) {
+        return false;
+    }
+    return true;
 }
 
 bool BindGroupLayoutInternalBase::IsEmpty() const {
     DAWN_ASSERT(!IsError());
-    return mBindingInfo.empty();
+    return mBindingInfo.empty() && !mHasDynamicArray;
 }
 
 BindingIndex BindGroupLayoutInternalBase::GetBindingCount() const {
@@ -725,14 +915,9 @@ BindingIndex BindGroupLayoutInternalBase::GetBindingCount() const {
     return mBindingInfo.size();
 }
 
-BindingIndex BindGroupLayoutInternalBase::GetBufferCount() const {
-    DAWN_ASSERT(!IsError());
-    return BindingIndex(mBufferCount);
-}
-
 BindingIndex BindGroupLayoutInternalBase::GetDynamicBufferCount() const {
     DAWN_ASSERT(!IsError());
-    return BindingIndex(mDynamicBufferCount);
+    return GetBindingTypeEnd(Order_DynamicBuffer) - GetBindingTypeStart(Order_DynamicBuffer);
 }
 
 uint32_t BindGroupLayoutInternalBase::GetDynamicStorageBufferCount() const {
@@ -747,12 +932,54 @@ uint32_t BindGroupLayoutInternalBase::GetUnverifiedBufferCount() const {
 
 uint32_t BindGroupLayoutInternalBase::GetStaticSamplerCount() const {
     DAWN_ASSERT(!IsError());
-    return mStaticSamplerCount;
+    return uint32_t(GetBindingTypeEnd(Order_StaticSampler) -
+                    GetBindingTypeStart(Order_StaticSampler));
 }
 
 const BindingCounts& BindGroupLayoutInternalBase::GetValidationBindingCounts() const {
     DAWN_ASSERT(!IsError());
     return mValidationBindingCounts;
+}
+
+BeginEndRange<BindingIndex> BindGroupLayoutInternalBase::GetDynamicBufferIndices() const {
+    return Range(GetBindingTypeStart(Order_DynamicBuffer), GetBindingTypeEnd(Order_DynamicBuffer));
+}
+
+BeginEndRange<BindingIndex> BindGroupLayoutInternalBase::GetBufferIndices() const {
+    return Range(GetBindingTypeStart(Order_DynamicBuffer), GetBindingTypeEnd(Order_RegularBuffer));
+}
+
+BeginEndRange<BindingIndex> BindGroupLayoutInternalBase::GetStorageTextureIndices() const {
+    return Range(GetBindingTypeStart(Order_StorageTexture),
+                 GetBindingTypeEnd(Order_StorageTexture));
+}
+
+BeginEndRange<BindingIndex> BindGroupLayoutInternalBase::GetTexelBufferIndices() const {
+    return Range(GetBindingTypeStart(Order_TexelBuffer), GetBindingTypeEnd(Order_TexelBuffer));
+}
+
+BeginEndRange<BindingIndex> BindGroupLayoutInternalBase::GetSampledTextureIndices() const {
+    return Range(GetBindingTypeStart(Order_SampledTexture),
+                 GetBindingTypeEnd(Order_SampledTexture));
+}
+
+BeginEndRange<BindingIndex> BindGroupLayoutInternalBase::GetTextureIndices() const {
+    return Range(GetBindingTypeStart(Order_SampledTexture),
+                 GetBindingTypeEnd(Order_InputAttachment));
+}
+
+BeginEndRange<BindingIndex> BindGroupLayoutInternalBase::GetSamplerIndices() const {
+    return Range(GetBindingTypeStart(Order_StaticSampler), GetBindingTypeEnd(Order_RegularSampler));
+}
+
+BeginEndRange<BindingIndex> BindGroupLayoutInternalBase::GetNonStaticSamplerIndices() const {
+    return Range(GetBindingTypeStart(Order_RegularSampler),
+                 GetBindingTypeEnd(Order_RegularSampler));
+}
+
+BeginEndRange<BindingIndex> BindGroupLayoutInternalBase::GetInputAttachmentIndices() const {
+    return Range(GetBindingTypeStart(Order_InputAttachment),
+                 GetBindingTypeEnd(Order_InputAttachment));
 }
 
 const ExternalTextureBindingExpansionMap&
@@ -778,8 +1005,10 @@ size_t BindGroupLayoutInternalBase::GetBindingDataSize() const {
     // Followed by:
     // |---------buffer size array--------|
     // |-uint64_t[mUnverifiedBufferCount]-|
-    const uint64_t bindingCount = uint64_t(uint32_t(mBindingInfo.size()));
-    size_t objectPointerStart = mBufferCount * sizeof(BufferBindingData);
+    const size_t bufferCount = size_t(GetBindingTypeEnd(Order_RegularBuffer));
+    const size_t bindingCount = size_t(mBindingInfo.size());
+
+    size_t objectPointerStart = bufferCount * sizeof(BufferBindingData);
     DAWN_ASSERT(IsAligned(objectPointerStart, alignof(Ref<ObjectBase>)));
     size_t bufferSizeArrayStart =
         Align(objectPointerStart + bindingCount * sizeof(Ref<ObjectBase>), sizeof(uint64_t));
@@ -789,9 +1018,11 @@ size_t BindGroupLayoutInternalBase::GetBindingDataSize() const {
 
 BindGroupLayoutInternalBase::BindingDataPointers
 BindGroupLayoutInternalBase::ComputeBindingDataPointers(void* dataStart) const {
-    const uint64_t bindingCount = uint64_t(uint32_t(mBindingInfo.size()));
+    const size_t bufferCount = size_t(GetBindingTypeEnd(Order_RegularBuffer));
+    const size_t bindingCount = size_t(mBindingInfo.size());
+
     BufferBindingData* bufferData = reinterpret_cast<BufferBindingData*>(dataStart);
-    auto bindings = reinterpret_cast<Ref<ObjectBase>*>(bufferData + mBufferCount);
+    auto bindings = reinterpret_cast<Ref<ObjectBase>*>(bufferData + bufferCount);
     uint64_t* unverifiedBufferSizes =
         AlignPtr(reinterpret_cast<uint64_t*>(bindings + bindingCount), sizeof(uint64_t));
 
@@ -799,13 +1030,12 @@ BindGroupLayoutInternalBase::ComputeBindingDataPointers(void* dataStart) const {
     DAWN_ASSERT(IsPtrAligned(bindings, alignof(Ref<ObjectBase>)));
     DAWN_ASSERT(IsPtrAligned(unverifiedBufferSizes, alignof(uint64_t)));
 
-    return {{bufferData, GetBufferCount()},
+    return {{bufferData, GetBindingTypeEnd(Order_RegularBuffer)},
             {bindings, GetBindingCount()},
             {unverifiedBufferSizes, mUnverifiedBufferCount}};
 }
 
 bool BindGroupLayoutInternalBase::IsStorageBufferBinding(BindingIndex bindingIndex) const {
-    DAWN_ASSERT(bindingIndex < GetBufferCount());
     switch (std::get<BufferBindingInfo>(GetBindingInfo(bindingIndex).bindingLayout).type) {
         case wgpu::BufferBindingType::Uniform:
             return false;
@@ -832,6 +1062,14 @@ std::string BindGroupLayoutInternalBase::EntriesToString() const {
     }
     entries += "]";
     return entries;
+}
+
+BindingIndex BindGroupLayoutInternalBase::GetBindingTypeStart(BindingTypeOrder type) const {
+    return mBindingTypeStart[type];
+}
+
+BindingIndex BindGroupLayoutInternalBase::GetBindingTypeEnd(BindingTypeOrder type) const {
+    return mBindingTypeStart[BindingTypeOrder(static_cast<uint32_t>(type) + 1)];
 }
 
 }  // namespace dawn::native

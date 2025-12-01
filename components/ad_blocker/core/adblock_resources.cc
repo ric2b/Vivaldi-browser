@@ -112,12 +112,12 @@ constexpr auto kAliasMap =
     });
 
 constexpr auto kMimetypeForEmpty =
-    base::MakeFixedFlatMap<RequestFilterRule::ResourceType, std::string_view>({
-        {RequestFilterRule::kSubDocument, "text/html,"},
-        {RequestFilterRule::kOther, "text/plain,"},
-        {RequestFilterRule::kStylesheet, "text/css,"},
-        {RequestFilterRule::kScript, "application/javascript,"},
-        {RequestFilterRule::kXmlHttpRequest, "text/plain,"},
+    base::MakeFixedFlatMap<ResourceType, std::string_view>({
+        {ResourceType::kSubDocument, "text/html,"},
+        {ResourceType::kOther, "text/plain,"},
+        {ResourceType::kStylesheet, "text/css,"},
+        {ResourceType::kScript, "application/javascript,"},
+        {ResourceType::kXmlHttpRequest, "text/plain,"},
     });
 
 constexpr auto kMimeTypeForExtension =
@@ -212,12 +212,12 @@ void Resources::OnLoadFinished(base::Value* destination,
 #if !BUILDFLAG(IS_IOS)
 std::optional<std::string> Resources::GetRedirect(
     const std::string& name,
-    RequestFilterRule::ResourceType resource_type) const {
+    ResourceType resource_type) const {
   // If resources aren't yet loaded, then we'll just block the request.
   if (!redirectable_resources_.is_dict() ||
-      resource_type == RequestFilterRule::kWebSocket ||
-      resource_type == RequestFilterRule::kWebRTC ||
-      resource_type == RequestFilterRule::kPing)
+      resource_type == ResourceType::kWebSocket ||
+      resource_type == ResourceType::kWebRTC ||
+      resource_type == ResourceType::kPing)
     return std::nullopt;
 
   std::string_view actual_name(name);

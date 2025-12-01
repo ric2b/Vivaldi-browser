@@ -104,7 +104,7 @@ if(${CMAKE_CROSSCOMPILING})
       ${TFLITE_HOST_TOOLS_DIR}/bin
       ${TFLITE_HOST_TOOLS_DIR}/flatbuffers-flatc/bin
       )
-  find_program(FLATC_BIN flatc PATHS ${FLATC_PATHS})
+  find_program(FLATC_BIN flatc HINTS ${FLATC_PATHS})
   if(${FLATC_BIN} STREQUAL "FLATC_BIN-NOTFOUND")
     message(FATAL_ERROR "Host 'flatc' compiler has not been found in the following locations: ${FLATC_PATHS}")
   else()
@@ -840,6 +840,9 @@ set(TFLITE_GENERATED_HEADERS_DIR ${CMAKE_BINARY_DIR}/tensorflow/lite)
 
 # Add the profiling proto directory.
 add_subdirectory(${TFLITE_SOURCE_DIR}/profiling/proto)
+
+# Add the benchmark result proto directory.
+add_subdirectory(${TFLITE_SOURCE_DIR}/tools/benchmark/proto)
 
 # Add the tf example directory.
 add_subdirectory(${TF_SOURCE_DIR}/core/example ${CMAKE_BINARY_DIR}/example_proto_generated)

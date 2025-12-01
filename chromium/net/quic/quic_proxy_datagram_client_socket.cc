@@ -9,11 +9,15 @@
 #include "base/functional/callback_helpers.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/types/expected.h"
+#include "base/types/expected_macros.h"
 #include "base/values.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/net_errors.h"
 #include "net/base/proxy_chain.h"
 #include "net/base/proxy_delegate.h"
 #include "net/http/http_log_util.h"
+#include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/log/net_log_source.h"
 #include "net/log/net_log_source_type.h"
@@ -76,7 +80,7 @@ int QuicProxyDatagramClientSocket::ConnectViaStream(
   datagram_visitor_registered_ = true;
 
   DCHECK_EQ(STATE_DISCONNECTED, next_state_);
-  next_state_ = STATE_SEND_REQUEST;
+  next_state_ = STATE_CALCULATE_HEADERS;
 
   int rv = DoLoop(OK);
   if (rv == ERR_IO_PENDING) {
@@ -335,6 +339,13 @@ int QuicProxyDatagramClientSocket::DoLoop(int last_io_result) {
     // TODO(crbug.com/326437102): Add support for generate auth token request
     // and complete states.
     switch (state) {
+      case STATE_CALCULATE_HEADERS:
+        DCHECK_EQ(OK, rv);
+        rv = DoCalculateHeaders();
+        break;
+      case STATE_CALCULATE_HEADERS_COMPLETE:
+        rv = DoCalculateHeadersComplete(rv);
+        break;
       case STATE_SEND_REQUEST:
         DCHECK_EQ(OK, rv);
         net_log_.BeginEvent(
@@ -354,12 +365,60 @@ int QuicProxyDatagramClientSocket::DoLoop(int last_io_result) {
         net_log_.EndEventWithNetErrorCode(
             NetLogEventType::HTTP_TRANSACTION_TUNNEL_READ_HEADERS, rv);
         break;
+      case STATE_PROCESS_RESPONSE_HEADERS:
+        DCHECK_EQ(OK, rv);
+        rv = DoProcessResponseHeaders();
+        break;
+      case STATE_PROCESS_RESPONSE_HEADERS_COMPLETE:
+        rv = DoProcessResponseHeadersComplete(rv);
+        break;
+      case STATE_PROCESS_RESPONSE_CODE:
+        DCHECK_EQ(OK, rv);
+        rv = DoProcessResponseCode();
+        break;
       default:
         NOTREACHED() << "bad state";
     }
   } while (rv != ERR_IO_PENDING && next_state_ != STATE_DISCONNECTED &&
            next_state_ != STATE_CONNECT_COMPLETE);
   return rv;
+}
+
+int QuicProxyDatagramClientSocket::DoCalculateHeaders() {
+  next_state_ = STATE_CALCULATE_HEADERS_COMPLETE;
+
+  proxy_delegate_headers_.Clear();
+
+  if (proxy_delegate_) {
+    ASSIGN_OR_RETURN(
+        proxy_delegate_headers_,
+        proxy_delegate_->OnBeforeTunnelRequest(
+            proxy_chain_, proxy_chain_index(),
+            base::BindOnce(
+                &QuicProxyDatagramClientSocket::OnBeforeTunnelRequestComplete,
+                weak_factory_.GetWeakPtr())),
+        [](const auto& e) {
+          // Success should always be reported via a base::expected containing
+          // an HttpRequestHeaders, see ProxyDelegate::OnBeforeTunnelRequest.
+          CHECK_NE(OK, e);
+          return e;
+        });
+  }
+  return OK;
+}
+
+int QuicProxyDatagramClientSocket::DoCalculateHeadersComplete(int result) {
+  DCHECK_NE(ERR_IO_PENDING, result);
+  if (result != OK) {
+    return result;
+  }
+  next_state_ = STATE_SEND_REQUEST;
+
+  // TODO(crbug.com/326437102):  Add Proxy-Authentication headers.
+
+  request_.extra_headers.MergeFrom(proxy_delegate_headers_);
+
+  return result;
 }
 
 int QuicProxyDatagramClientSocket::DoSendRequest() {
@@ -375,19 +434,7 @@ int QuicProxyDatagramClientSocket::DoSendRequest() {
                       : std::move(host);
   request_.extra_headers.SetHeader(HttpRequestHeaders::kHost, host_and_port);
 
-  HttpRequestHeaders authorization_headers;
-  // TODO(crbug.com/326437102):  Add Proxy-Authentication headers.
-  request_.extra_headers.MergeFrom(authorization_headers);
 
-  if (proxy_delegate_) {
-    HttpRequestHeaders proxy_delegate_headers;
-    int result = proxy_delegate_->OnBeforeTunnelRequest(
-        proxy_chain(), proxy_chain_index(), &proxy_delegate_headers);
-    if (result < 0) {
-      return result;
-    }
-    request_.extra_headers.MergeFrom(proxy_delegate_headers);
-  }
 
   if (!user_agent_.empty()) {
     request_.extra_headers.SetHeader(HttpRequestHeaders::kUserAgent,
@@ -449,20 +496,41 @@ int QuicProxyDatagramClientSocket::DoReadReplyComplete(int result) {
     return result;
   }
 
+  next_state_ = STATE_PROCESS_RESPONSE_HEADERS;
+
   NetLogResponseHeaders(
       net_log_, NetLogEventType::HTTP_TRANSACTION_READ_TUNNEL_RESPONSE_HEADERS,
       response_.headers.get());
 
+  return OK;
+}
+
+int QuicProxyDatagramClientSocket::DoProcessResponseHeaders() {
+  next_state_ = STATE_PROCESS_RESPONSE_HEADERS_COMPLETE;
+
   // TODO(crbug.com/326437102): Add case for Proxy Authentication.
   if (proxy_delegate_) {
-    int rv = proxy_delegate_->OnTunnelHeadersReceived(
-        proxy_chain(), proxy_chain_index(), *response_.headers);
-    if (rv != OK) {
-      CHECK_NE(ERR_IO_PENDING, rv);
-      return rv;
-    }
+    return proxy_delegate_->OnTunnelHeadersReceived(
+        proxy_chain(), proxy_chain_index(), *response_.headers,
+        base::BindOnce(&QuicProxyDatagramClientSocket::OnIOComplete,
+                       weak_factory_.GetWeakPtr()));
   }
 
+  return OK;
+}
+
+int QuicProxyDatagramClientSocket::DoProcessResponseHeadersComplete(
+    int result) {
+  DCHECK_NE(ERR_IO_PENDING, result);
+  if (result != OK) {
+    return result;
+  }
+
+  next_state_ = STATE_PROCESS_RESPONSE_CODE;
+  return OK;
+}
+
+int QuicProxyDatagramClientSocket::DoProcessResponseCode() {
   switch (response_.headers->response_code()) {
     case 200:  // OK
       next_state_ = STATE_CONNECT_COMPLETE;
@@ -493,6 +561,22 @@ int QuicProxyDatagramClientSocket::ProcessResponseHeaders(
     return ERR_QUIC_PROTOCOL_ERROR;
   }
   return OK;
+}
+
+void QuicProxyDatagramClientSocket::OnBeforeTunnelRequestComplete(
+    base::expected<HttpRequestHeaders, Error> result) {
+  if (result.has_value()) {
+    proxy_delegate_headers_ = std::move(result.value());
+    OnIOComplete(OK);
+  } else {
+    // OnBeforeTunnelRequestComplete should never report ERR_IO_PENDING since
+    // it's used to signal that IO has completed.
+    CHECK_NE(ERR_IO_PENDING, result.error());
+    // Success should always be reported via a base::expected containing an
+    // HttpRequestHeaders, see ProxyDelegate::OnBeforeTunnelRequest.
+    CHECK_NE(OK, result.error());
+    OnIOComplete(result.error());
+  }
 }
 
 }  // namespace net

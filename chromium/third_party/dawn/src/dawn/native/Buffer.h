@@ -56,15 +56,16 @@ ResultOrError<UnpackedPtr<BufferDescriptor>> ValidateBufferDescriptor(
 
 static constexpr wgpu::BufferUsage kReadOnlyBufferUsages =
     wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::Index |
-    wgpu::BufferUsage::Vertex | wgpu::BufferUsage::Uniform | kReadOnlyStorageBuffer |
-    kIndirectBufferForFrontendValidation | kIndirectBufferForBackendResourceTracking;
+    wgpu::BufferUsage::Vertex | wgpu::BufferUsage::Uniform | kReadOnlyTexelBuffer |
+    kReadOnlyStorageBuffer | kIndirectBufferForFrontendValidation |
+    kIndirectBufferForBackendResourceTracking;
 
 static constexpr wgpu::BufferUsage kMappableBufferUsages =
     wgpu::BufferUsage::MapRead | wgpu::BufferUsage::MapWrite;
 
 static constexpr wgpu::BufferUsage kShaderBufferUsages =
-    wgpu::BufferUsage::Uniform | wgpu::BufferUsage::Storage | kInternalStorageBuffer |
-    kReadOnlyStorageBuffer;
+    wgpu::BufferUsage::Uniform | wgpu::BufferUsage::Storage | wgpu::BufferUsage::TexelBuffer |
+    kInternalStorageBuffer | kReadOnlyStorageBuffer | kReadOnlyTexelBuffer;
 
 static constexpr wgpu::BufferUsage kReadOnlyShaderBufferUsages =
     kShaderBufferUsages & kReadOnlyBufferUsages;
@@ -74,6 +75,10 @@ static constexpr wgpu::BufferUsage kReadOnlyShaderBufferUsages =
 wgpu::BufferUsage ComputeInternalBufferUsages(const DeviceBase* device,
                                               wgpu::BufferUsage usage,
                                               size_t bufferSize);
+
+ResultOrError<UnpackedPtr<TexelBufferViewDescriptor>> ValidateTexelBufferViewDescriptor(
+    const BufferBase* buffer,
+    const TexelBufferViewDescriptor* descriptor);
 
 class BufferBase : public SharedResource {
   public:
@@ -86,6 +91,8 @@ class BufferBase : public SharedResource {
         SharedMemoryNoAccess,
         Destroyed,
     };
+    static bool IsMappedState(BufferState state);
+
     static Ref<BufferBase> MakeError(DeviceBase* device, const BufferDescriptor* descriptor);
 
     ObjectType GetType() const override;
@@ -142,6 +149,12 @@ class BufferBase : public SharedResource {
     wgpu::BufferMapState APIGetMapState() const;
     uint64_t APIGetSize() const;
 
+    ResultOrError<Ref<TexelBufferViewBase>> CreateTexelView(
+        const TexelBufferViewDescriptor* descriptor);
+    TexelBufferViewBase* APICreateTexelView(const TexelBufferViewDescriptor* descriptor);
+
+    ApiObjectList* GetTexelBufferViewTrackingList();
+
   protected:
     BufferBase(DeviceBase* device, const UnpackedPtr<BufferDescriptor>& descriptor);
     BufferBase(DeviceBase* device, const BufferDescriptor* descriptor, ObjectBase::ErrorTag tag);
@@ -154,6 +167,11 @@ class BufferBase : public SharedResource {
     // creation. Otherwise, returns false indicating that backend specific mapping was used instead.
     ResultOrError<bool> MapAtCreationInternal();
 
+    BufferState GetState() const;
+    wgpu::MapMode MapMode() const;
+    size_t MapOffset() const;
+    size_t MapSize() const;
+
     uint64_t mAllocatedSize = 0;
 
     ExecutionSerial mLastUsageSerial = ExecutionSerial(0);
@@ -163,6 +181,7 @@ class BufferBase : public SharedResource {
 
     virtual MaybeError MapAtCreationImpl() = 0;
     virtual MaybeError MapAsyncImpl(wgpu::MapMode mode, size_t offset, size_t size) = 0;
+    virtual void FinalizeMapImpl() = 0;
     virtual void* GetMappedPointerImpl() = 0;
     virtual void UnmapImpl() = 0;
 
@@ -178,7 +197,7 @@ class BufferBase : public SharedResource {
     MaybeError UnmapInternal(WGPUMapAsyncStatus status, std::string_view message);
 
     // Updates internal state to reflect that the buffer is now mapped.
-    void SetMapped(BufferState newState);
+    void FinalizeMap(BufferState newState);
 
     const uint64_t mSize = 0;
     const wgpu::BufferUsage mUsage = wgpu::BufferUsage::None;
@@ -208,6 +227,10 @@ class BufferBase : public SharedResource {
     // unmapped. Because this buffer itself is directly mappable, it will not create another
     // staging buffer recursively.
     Ref<BufferBase> mStagingBuffer = nullptr;
+
+    // Track texel buffer views created from this buffer so they can be destroyed
+    // when the buffer is destroyed.
+    ApiObjectList mTexelBufferViews;
 
     // Mapping specific states.
     wgpu::MapMode mMapMode = wgpu::MapMode::None;

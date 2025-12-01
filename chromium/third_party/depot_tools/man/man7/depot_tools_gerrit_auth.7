@@ -2,12 +2,12 @@
 .\"     Title: depot_tools_gerrit_auth
 .\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
 .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 05/07/2025
+.\"      Date: 08/05/2025
 .\"    Manual: Chromium depot_tools Manual
-.\"    Source: depot_tools fab0a429
+.\"    Source: depot_tools fd5e520f3
 .\"  Language: English
 .\"
-.TH "DEPOT_TOOLS_GERRIT_A" "7" "05/07/2025" "depot_tools fab0a429" "Chromium depot_tools Manual"
+.TH "DEPOT_TOOLS_GERRIT_A" "7" "08/05/2025" "depot_tools fd5e520f3" "Chromium depot_tools Manual"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -51,6 +51,7 @@ You need to add the following lines to your Git config:
 [credential "https://chromium\&.googlesource\&.com"]
 helper =
 helper = luci
+useHttpPath = yes
 .fi
 .if n \{\
 .RE

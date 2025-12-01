@@ -51,8 +51,10 @@ import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
 import org.chromium.chrome.browser.toolbar.optional_button.ButtonData.ButtonSpec;
 import org.chromium.chrome.browser.toolbar.optional_button.OptionalButtonConstants.TransitionType;
+import org.chromium.chrome.browser.toolbar.optional_button.OptionalButtonProperties.OnBeforeWidthTransitionCallback;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.widget.textbubble.TextBubble;
+import org.chromium.components.dom_distiller.core.DomDistillerFeatures;
 import org.chromium.ui.interpolators.Interpolators;
 import org.chromium.ui.listmenu.ListMenuButton;
 import org.chromium.ui.widget.ViewRectProvider;
@@ -110,6 +112,7 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
     private @Nullable OnLongClickListener mLongClickListener;
     private @Nullable Callback<Integer> mTransitionStartedCallback;
     private @Nullable Callback<Integer> mTransitionFinishedCallback;
+    private @Nullable OnBeforeWidthTransitionCallback mOnBeforeWidthTransitionCallback;
     private @Nullable BooleanSupplier mIsAnimationAllowedPredicate;
     private final Runnable mCollapseActionChipRunnable =
             new Runnable() {
@@ -155,6 +158,10 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
 
     void setTransitionStartedCallback(Callback<Integer> callback) {
         mTransitionStartedCallback = callback;
+    }
+
+    void setOnBeforeWidthTransitionCallback(OnBeforeWidthTransitionCallback callback) {
+        mOnBeforeWidthTransitionCallback = callback;
     }
 
     void setTransitionFinishedCallback(Callback<Integer> callback) {
@@ -269,7 +276,7 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
         final boolean canAnimate = isAnimationAllowedByParent && isButtonVariantChanging;
 
         mCurrentButtonVariant = buttonSpec.getButtonVariant();
-        mCanCurrentButtonShow = canShow;
+        mCanCurrentButtonShow = true;
         mCurrentButtonSupportsTinting = buttonSpec.getSupportsTinting();
 
         mIconDrawable = buttonSpec.getDrawable();
@@ -816,6 +823,10 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
         setWidth(expandedStateWidthPx);
 
         mState = State.RUNNING_ACTION_CHIP_EXPANSION_TRANSITION;
+        if (mOnBeforeWidthTransitionCallback != null) {
+            mOnBeforeWidthTransitionCallback.onResult(
+                    getCurrentTransitionType(), expandedStateWidthPx - mCollapsedStateWidthPx);
+        }
     }
 
     private void animateActionChipCollapse() {
@@ -825,9 +836,14 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
 
         mBackground.setColorFilter(mBackgroundColorFilter);
         mActionChipLabel.setVisibility(GONE);
+        int widthDelta = mCollapsedStateWidthPx - getLayoutParams().width;
+
         setWidth(mCollapsedStateWidthPx);
 
         mState = State.RUNNING_ACTION_CHIP_COLLAPSE_TRANSITION;
+        if (mOnBeforeWidthTransitionCallback != null) {
+            mOnBeforeWidthTransitionCallback.onResult(getCurrentTransitionType(), widthDelta);
+        }
     }
 
     private void showTextBubble(@StringRes int stringId) {
@@ -937,6 +953,7 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
     // ============================================================================================
     public static boolean isCpaSpecUpdateEnabled() {
         return ChromeFeatureList.sCpaSpecUpdate.isEnabled()
+                || DomDistillerFeatures.sReaderModeDistillInApp.isEnabled()
                 || ThemeModuleUtils.isForceEnableDependencies();
     }
 }

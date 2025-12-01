@@ -332,10 +332,12 @@
 <translation id="2083190527011054446">Қайырлы түн, <ph name="GIVEN_NAME" />!</translation>
 <translation id="2086334242442703436">Эмоджи таңдағышты ашу</translation>
 <translation id="2088116547584365419">ойындар</translation>
+<translation id="2093792000875799555">Chromebook-қа арналған Steam жаңалықтары</translation>
 <translation id="209965399369889474">Желіге жалғанбаған.</translation>
 <translation id="2107581415810719320">Басқа <ph name="BUTTON_NUMBER" />-түйме</translation>
 <translation id="2107914222138020205">USB-C кабелі Thunderbolt стандартын қолдамайды. Құрылғының өнімділігі шектелуі мүмкін.</translation>
 <translation id="2108303511227308752">Alt + Backspace пернелер тіркесімінің функциясы өзгерді. Delete пернесінің әрекетін орындау үшін <ph name="LAUNCHER_KEY_NAME" /> пернесі + Backspace пернесі тіркесімін басыңыз.</translation>
+<translation id="2115680839221566783">Батарея заряды – <ph name="PERCENTAGE" />%. Зарядтау кідіртілді.</translation>
 <translation id="2126242104232412123">Жаңа жұмыс үстелі</translation>
 <translation id="2132302418721800944">Толық экранды жазу</translation>
 <translation id="2135456203358955318">Бекітілген ұлғайтқыш</translation>
@@ -588,7 +590,7 @@
 <translation id="2970920913501714344">Қолданбаларды, кеңейтімдерді және тақырыптарды орнатыңыз</translation>
 <translation id="2977598380246111477">Келесі сан</translation>
 <translation id="2980700224869191055"><ph name="EMOTICON_NAME" /> эмотиконы</translation>
-<translation id="2985148236010982088">Барлық қолданбаны қарау</translation>
+<translation id="2985148236010982088">Барлық қолданбаны көру</translation>
 <translation id="2992272421330787632">Барлық медиафайл ұсынысын жасыру</translation>
 <translation id="2992327365391326550">Құрылғы микрофоны өшірулі.</translation>
 <translation id="2993956882370897557">End пернесін пайдалану қажет пе? Пайдалану</translation>
@@ -1370,6 +1372,7 @@
 <translation id="5429993543155113935">Инкогнито терезелеріне қазір қолдау көрсетілмейді.</translation>
 <translation id="5431318178759467895">Түс</translation>
 <translation id="5433020815079095860">Аудио кіріс</translation>
+<translation id="543584294741034249">Көп дегенде <ph name="DISPLAY_LIMIT" /> сыртқы дисплейді жалғауға болады.</translation>
 <translation id="544691375626129091">Барлық қолжетімді пайдаланушылар әлдеқашан осы сеансқа қосылған.</translation>
 <translation id="54609108002486618">Басқарылады</translation>
 <translation id="5460938382730614333">Белгілегіш қосулы.</translation>
@@ -1587,6 +1590,7 @@
 <translation id="612734058257491180">Google Assistant қонақ сеансында жұмыс істемейді.</translation>
 <translation id="6127395413317891856">Офлайн режимдесіз. Қосылымды тексеріп, әрекетті қайталап көріңіз.</translation>
 <translation id="6129953537138746214">Бос орын</translation>
+<translation id="6136872094979134163">Chromebook-қа арналған Steam жаңалықтарын алу мүмкін емес.</translation>
 <translation id="6137566720514957455"><ph name="USER_EMAIL_ADDRESS" /> аккаунтын өшіру диалогтік терезесін ашу</translation>
 <translation id="6141205840878048728">Не нәрсеге зейін қойғыңыз келеді?</translation>
 <translation id="6141988275892716286">Жүктеп алуды растау</translation>
@@ -1676,6 +1680,7 @@
 <translation id="6445835306623867477"><ph name="RECEIVER_NAME" /> қабылдағышындағы <ph name="ROUTE_TITLE" /></translation>
 <translation id="6445915701151710649">орталық процессор</translation>
 <translation id="6447111710783417522"><ph name="DATE" />, <ph name="NUMBER" /> іс-шара</translation>
+<translation id="6448529022565414427">Зарядтау кідіртілді</translation>
 <translation id="6449483711453944360">Linux қолданбалары мен инкогнито терезелеріне қазір қолдау көрсетілмейді.</translation>
 <translation id="6450245544201845082">Тінтуірдің оң жақ түймесін басу жылдам пәрмені әзірше өшірулі.</translation>
 <translation id="6452181791372256707">Қабылдамау</translation>

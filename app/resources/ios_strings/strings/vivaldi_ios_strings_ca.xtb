@@ -38,6 +38,7 @@
 <translation id="4026745073321351206">🙄 Has trobat un problema?</translation>
 <translation id="4216644171369573466">Pila de pestanyes, <ph name="GROUP_TITLE" />, Menú.</translation>
 <translation id="4304713468139749426">Gestor de contrasenyes</translation>
+<translation id="4439281775431634915">Les teves piles de pestanyes es desen aquí</translation>
 <translation id="4569525137269575065">Tanca la pila</translation>
 <translation id="473775607612524610">Actualitza</translation>
 <translation id="4755216899422789286">Obre els URL a Vivaldi</translation>
@@ -50,6 +51,8 @@
             other {{count} piles de pestanyes tancades i desades}}</translation>
 <translation id="5019787757991745254">Color de la pila de pestanyes <ph name="COLOR" /></translation>
 <translation id="5022440170224170365">Pila de pestanyes. Recollida.</translation>
+<translation id="5132327651247938019">Pots desplaçar cap a la dreta per navegar en mode privat.</translation>
+<translation id="5204006339739481307">Pots desplaçar cap a l'esquerra per navegar en mode privat.</translation>
 <translation id="5217245356412073535">Pots canviar la visualització predeterminada dels llocs web a la visualització per a ordinadors a Ajustos &gt; Ajustos del contingut</translation>
 <translation id="5271549068863921519">Desa la contrasenya</translation>
 <translation id="5317780077021120954">Desa</translation>
@@ -63,6 +66,7 @@
 <translation id="5962477178930921574">Enganxa i cerca</translation>
 <translation id="6163856768888310791">Desfés la pila</translation>
 <translation id="6168969409902608220">Nom de la pila</translation>
+<translation id="6192561334825788389">Pots lliscar cap a la dreta per navegar en mode privat.</translation>
 <translation id="6233792867654386826">Obre les URL entrades a Vivaldi.</translation>
 <translation id="6271462272606946663">Amaga Demana el lloc per mòbil</translation>
 <translation id="6478587527114893588">Tanca la pila.</translation>
@@ -75,6 +79,8 @@
 <translation id="6827597288286078054">Cerca Privada</translation>
 <translation id="6851516051005285358">Sol·licita el lloc web per a escriptori</translation>
 <translation id="6890907822330704077">Pila de pestanyes, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> pestanyes.</translation>
+<translation id="7004032350256606903">La teva organització requereix que naveguis amb privacitat.
+<ph name="BEGIN_LINK" />Llegeix més<ph name="END_LINK" /></translation>
 <translation id="7307970171564921489">Desbloqueja les pestanyes privades amb <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Obrir en privat?</translation>
 <translation id="7363285031331302144">Crea piles de pestanyes per organitzar les teves pestanyes obertes</translation>
@@ -94,6 +100,7 @@
         =1 {Afegeix la pestanya a una nova pila}
         other {Afegeix les pestanyes a una nova pila}}</translation>
 <translation id="8465550436083180511">Recull la pila de pestanyes.</translation>
+<translation id="8499954848910902473">Pots lliscar cap a l'esquerra per navegar en mode privat.</translation>
 <translation id="8685478989144570078">Piles de pestanyes</translation>
 <translation id="8756969031206844760">Vols actualitzar la contrasenya?</translation>
 <translation id="8852861335827546438">Nova pila de pestanyes</translation>

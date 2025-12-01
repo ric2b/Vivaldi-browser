@@ -39,11 +39,13 @@
 #include "src/tint/lang/core/number.h"
 #include "src/tint/lang/core/type/abstract_float.h"
 #include "src/tint/lang/core/type/abstract_int.h"
+#include "src/tint/lang/core/type/binding_array.h"
 #include "src/tint/lang/core/type/clone_context.h"
 #include "src/tint/lang/core/type/manager.h"
 #include "src/tint/lang/core/type/matrix.h"
 #include "src/tint/lang/core/type/memory_view.h"
 #include "src/tint/lang/core/type/reference.h"
+#include "src/tint/lang/core/type/resource_binding.h"
 #include "src/tint/lang/core/type/sampled_texture.h"
 #include "src/tint/lang/core/type/storage_texture.h"
 
@@ -253,6 +255,65 @@ TEST_F(IR_ValidatorTest, AbstractInt_FunctionParam) {
 )")) << res.Failure();
 }
 
+TEST_F(IR_ValidatorTest, StructMember_Void) {
+    auto* str_ty =
+        ty.Struct(mod.symbols.New("MyStruct"), {
+                                                   {mod.symbols.New("v"), ty.void_(), {}},
+                                               });
+    auto* v = b.Var(ty.ptr(private_, str_ty));
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:6:3 error: var: struct member 0 cannot have void type
+  %1:ptr<private, MyStruct, read_write> = var undef
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, StructMember_AlignZero) {
+    core::IOAttributes attrs = {};
+    tint::Vector<const core::type::StructMember*, 4> members;
+    members.Push(ty.Get<core::type::StructMember>(mod.symbols.New("v"), ty.u32(), 0u, 0u,
+                                                  /* align */ 0u, 16u, std::move(attrs)));
+    auto* str_ty = ty.Get<core::type::Struct>(mod.symbols.New("MyStruct"), std::move(members),
+                                              tint::RoundUp(0u, 16u));
+
+    auto* v = b.Var(ty.ptr(private_, str_ty));
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:6:3 error: var: struct member must not have an alignment of 0
+  %1:ptr<private, MyStruct, read_write> = var undef
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, StructMember_AlignNotDivisibleByTypeAlignment) {
+    core::IOAttributes attrs = {};
+    tint::Vector<const core::type::StructMember*, 4> members;
+    members.Push(ty.Get<core::type::StructMember>(mod.symbols.New("v"), ty.u32(), 0u, 0u,
+                                                  /* align */ 10u, 16u, std::move(attrs)));
+    auto* str_ty = ty.Get<core::type::Struct>(mod.symbols.New("MyStruct"), std::move(members),
+                                              tint::RoundUp(0u, 16u));
+
+    auto* v = b.Var(ty.ptr(private_, str_ty));
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:6:3 error: var: struct member alignment (10) must be divisible by type alignment (4)
+  %1:ptr<private, MyStruct, read_write> = var undef
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+)")) << res.Failure();
+}
+
 TEST_F(IR_ValidatorTest, FunctionParam_InvalidAddressSpaceForHandleType) {
     auto* type = ty.ptr(AddressSpace::kFunction, ty.sampler());
     auto* fn = b.Function("my_func", ty.void_());
@@ -284,6 +345,23 @@ TEST_F(IR_ValidatorTest, FunctionParam_InvalidTypeForHandleAddressSpace) {
         << res.Failure();
 }
 
+TEST_F(IR_ValidatorTest, FunctionParam_InvalidHandlePointer) {
+    auto* type =
+        ty.ptr(AddressSpace::kHandle, ty.sampled_texture(type::TextureDimension::k1d, ty.f32()));
+    auto* fn = b.Function("my_func", ty.void_());
+    fn->SetParams(Vector{b.FunctionParam(type)});
+    b.Append(fn->Block(), [&] {  //
+        b.Return(fn);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr("function parameter type, 'ptr<handle, texture_1d<f32>, read>', "
+                                   "must be constructible, a pointer, or a handle"))
+        << res.Failure();
+}
+
 TEST_F(IR_ValidatorTest, NonCoreType) {
     auto* fn = b.Function("my_func", ty.void_());
     fn->AppendParam(b.FunctionParam(ty.Get<tint::mock::NonCoreType>()));
@@ -300,6 +378,40 @@ TEST_F(IR_ValidatorTest, NonCoreType) {
 using TypeTest = IRTestParamHelper<std::tuple<
     /* allowed */ bool,
     /* type_builder */ TypeBuilderFn>>;
+
+using Type_ArrayElements = TypeTest;
+
+TEST_P(Type_ArrayElements, Test) {
+    bool allowed = std::get<0>(GetParam());
+    auto* type = std::get<1>(GetParam())(ty);
+    auto* f = b.Function("my_func", ty.void_());
+    b.Append(f->Block(), [&] {
+        b.Var("v", AddressSpace::kFunction, ty.array(type, 4));
+        b.Return(f);
+    });
+
+    if (allowed) {
+        auto res = ir::Validate(mod);
+        ASSERT_EQ(res, Success) << res.Failure();
+    } else {
+        auto res = ir::Validate(mod);
+        ASSERT_NE(res, Success) << res.Failure();
+        EXPECT_THAT(res.Failure().reason,
+                    testing::HasSubstr(R"(:3:5 error: var: array elements, ')" +
+                                       ty.array(type, 4)->FriendlyName() +
+                                       R"(', must have creation-fixed footprint
+ )")) << res.Failure();
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(IR_ValidatorTest,
+                         Type_ArrayElements,
+                         testing::Values(std::make_tuple(true, TypeBuilder<u32>),
+                                         std::make_tuple(true, TypeBuilder<i32>),
+                                         std::make_tuple(true, TypeBuilder<f32>),
+                                         std::make_tuple(true, TypeBuilder<f16>),
+                                         std::make_tuple(true, TypeBuilder<core::type::Bool>),
+                                         std::make_tuple(false, TypeBuilder<core::type::Void>)));
 
 using Type_VectorElements = TypeTest;
 
@@ -400,7 +512,7 @@ TEST_P(Type_SubgroupMatrixComponentType, Test) {
         b.Return(f);
     });
 
-    auto res = ir::Validate(mod);
+    auto res = ir::Validate(mod, Capabilities{Capability::kAllow8BitIntegers});
     if (allowed) {
         ASSERT_EQ(res, Success) << res.Failure();
     } else {
@@ -455,6 +567,77 @@ INSTANTIATE_TEST_SUITE_P(IR_ValidatorTest,
                                          std::make_tuple(false, TypeBuilder<f16>),
                                          std::make_tuple(false, TypeBuilder<core::type::Bool>),
                                          std::make_tuple(false, TypeBuilder<core::type::Void>)));
+
+TEST_F(IR_ValidatorTest, BindingArray) {
+    b.Append(mod.root_block, [&] {
+        auto* var = b.Var(
+            "m", AddressSpace::kHandle,
+            ty.binding_array(ty.sampled_texture(core::type::TextureDimension::k2d, ty.f32()), 4));
+        var->SetBindingPoint(0, 0);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_EQ(res, Success);
+}
+
+TEST_F(IR_ValidatorTest, BindingArrayRuntimeCount) {
+    b.Append(mod.root_block, [&] {
+        auto* var = b.Var("m", AddressSpace::kHandle,
+                          ty.Get<core::type::BindingArray>(
+                              ty.sampled_texture(core::type::TextureDimension::k2d, ty.f32()),
+                              ty.Get<core::type::RuntimeArrayCount>()));
+        var->SetBindingPoint(0, 0);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(R"(:2:3 error: var: binding_array count must be a constant expression
+  %m:ptr<handle, binding_array<texture_2d<f32>, >, read> = var undef @binding_point(0, 0)
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^)"));
+}
+
+TEST_F(IR_ValidatorTest, BindingArrayNonSampledTexture) {
+    b.Append(mod.root_block, [&] {
+        auto* var = b.Var("m", AddressSpace::kHandle, ty.binding_array(ty.external_texture(), 5));
+        var->SetBindingPoint(0, 0);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(
+                    R"(:2:3 error: var: binding_array element type must be a sampled texture type
+  %m:ptr<handle, binding_array<texture_external, 5>, read> = var undef @binding_point(0, 0)
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^)"));
+}
+
+TEST_F(IR_ValidatorTest, ResourceBinding_WithoutCapabilityFails) {
+    b.Append(mod.root_block, [&] {
+        auto* var = b.Var("m", AddressSpace::kHandle, ty.Get<core::type::ResourceBinding>());
+        var->SetBindingPoint(0, 0);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:2:3 error: var: resource_binding type can only be used with kAllowResourceBinding capability
+  %m:ptr<handle, resource_binding, read> = var undef @binding_point(0, 0)
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^)"));
+}
+
+TEST_F(IR_ValidatorTest, ResourceBinding_WithCapabilityPasses) {
+    b.Append(mod.root_block, [&] {
+        auto* var = b.Var("m", AddressSpace::kHandle, ty.Get<core::type::ResourceBinding>());
+        var->SetBindingPoint(0, 0);
+    });
+
+    auto res = ir::Validate(mod, Capabilities{Capability::kAllowResourceBinding});
+    ASSERT_EQ(res, Success) << res.Failure();
+}
 
 using Type_MultisampledTextureTypeAndDimension =
     IRTestParamHelper<std::tuple<std::tuple<
@@ -512,7 +695,7 @@ INSTANTIATE_TEST_SUITE_P(
                                      std::make_tuple(false, TypeBuilder<core::type::Void>)),
                      testing::Values(std::make_tuple(false, core::type::TextureDimension::k1d),
                                      std::make_tuple(true, core::type::TextureDimension::k2d),
-                                     std::make_tuple(true, core::type::TextureDimension::k2dArray),
+                                     std::make_tuple(false, core::type::TextureDimension::k2dArray),
                                      std::make_tuple(false, core::type::TextureDimension::k3d),
                                      std::make_tuple(false, core::type::TextureDimension::kCube),
                                      std::make_tuple(false,
@@ -1125,23 +1308,34 @@ TEST_P(AddressSpace_AccessMode, Test) {
         mod.root_block->Append(v);
     }
 
-    auto pass = true;
+    const char* expected_error = nullptr;
     switch (access) {
         case core::Access::kWrite:
+            if (aspace == AddressSpace::kUniform || aspace == AddressSpace::kHandle) {
+                expected_error = "uniform and handle pointers must be read access";
+            } else if (aspace == AddressSpace::kWorkgroup) {
+                expected_error = "workgroup pointers must be read_write access";
+            }
+            break;
         case core::Access::kReadWrite:
-            pass = aspace != AddressSpace::kUniform && aspace != AddressSpace::kHandle;
+            if (aspace == AddressSpace::kUniform || aspace == AddressSpace::kHandle) {
+                expected_error = "uniform and handle pointers must be read access";
+            }
             break;
         case core::Access::kRead:
+            if (aspace == AddressSpace::kWorkgroup) {
+                expected_error = "workgroup pointers must be read_write access";
+            }
+            break;
         default:
             break;
     }
     auto res = ir::Validate(mod);
-    if (pass) {
+    if (expected_error == nullptr) {
         ASSERT_EQ(res, Success);
     } else {
         ASSERT_NE(res, Success);
-        EXPECT_THAT(res.Failure().reason,
-                    testing::HasSubstr("uniform and handle pointers must be read access"));
+        EXPECT_THAT(res.Failure().reason, testing::HasSubstr(expected_error));
     }
 }
 

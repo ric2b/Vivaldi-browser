@@ -20,7 +20,6 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Bildeeigenskapar …</translation>
 <translation id="1920297417712412573">Kopier til notat</translation>
-<translation id="1921101374471252440">Last &amp;bildet på nytt</translation>
 <translation id="1924750141060565109">Landskap 15</translation>
 <translation id="19598411548897379">Allmenn</translation>
 <translation id="1973351931613083086">Auto-avspeling</translation>
@@ -34,7 +33,6 @@
 <translation id="2501278716633472235">Gå attende</translation>
 <translation id="2612127540243995147">Klar til å installera. Vivaldi vil verta lukka og starta om att.</translation>
 <translation id="2613387515621326337">Syn oppdateringsnettsida</translation>
-<translation id="2647368062414805334">Dessverre er dine Edge-innstillingar ikkje tilgjengelege medan den nettlesaren køyrer. For å importere desse innstillingane til Vivaldi, lagre arbeidet ditt og lukk alle Edge-vindauge. Klikk så fortsett.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Dyr 3</translation>
 <translation id="2873951654529031587">Bossbøtta</translation>
@@ -43,7 +41,6 @@
 <translation id="2953943267837858202">Automatisk videospeling er ikkje tillate</translation>
 <translation id="2977472760057091832">Opna lenkja i eit privat vindauge</translation>
 <translation id="2989805286512600854">Opna i ny fane</translation>
-<translation id="3027988479108856431">Diverre er ikkje Yandex-innstillingane tilgjengelege medan den nettlesaren køyrer. For å importera innstillingane i Vivaldi må du lagra arbeidet ditt og lukka alle Yandex-vindauga. Vel Hald fram.</translation>
 <translation id="3084011186245865060">Landskap 6</translation>
 <translation id="3093931836425623631">Vivaldi er gjort mogleg gjennom openkjeldeprosjektet Chromium og andre openkjeldeprogram.</translation>
 <translation id="3127383884976966729">Dyr 7</translation>
@@ -56,6 +53,7 @@
 <translation id="3334610655141903168">(ingen tittel)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> er den nyaste tilgjengelege versjonen.</translation>
 <translation id="3383198080133834965">Du har den siste utgåva!</translation>
+<translation id="3402602684546832928">Vel Opera-bokmerkefil</translation>
 <translation id="3451317331714872347">Landskap 8</translation>
 <translation id="3457498675806041407">Stadfest lukking</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> er allereie installert og vil verta teken i bruk etter omstart av nettlesaren.</translation>
@@ -71,7 +69,6 @@
 <translation id="3732157130969736834">Lag bokmerke av lenkja</translation>
 <translation id="3732388226447288666">Dyr 2</translation>
 <translation id="3732439195215136813">Dyr 5</translation>
-<translation id="3795800845758778870">Dessverre er dine Brave-innstillingar ikkje tilgjengelege medan den nettlesaren køyrer. For å importere desse innstillingane til Vivaldi, lagre arbeidet ditt og lukk alle Brave-vindauge. Klikk så fortsett.</translation>
 <translation id="3822431842304177896">Nytt skilje</translation>
 <translation id="3832132597516774400">Landskap 5</translation>
 <translation id="3894751534882749287">Visss du ønskjer å visa sida likevel, kan du endre sporingsvernnivået i menyen for sporingsblokkering, eller ved å trykkja på Tillat-knappen</translation>
@@ -114,10 +111,10 @@
 <translation id="5770433027661640693">Landskap 10</translation>
 <translation id="5857090052475505287">Ny mappe</translation>
 <translation id="588258955323874662">Fullskjermsvising</translation>
-<translation id="5916080360077521750">Diverre er ikkje Chrome-innstillingane tilgjengelege medan den nettlesaren køyrer. For å importera innstillingane i Vivaldi må du lagra arbeidet ditt og lukka alle Chrome-vindauga. Vel Hald fram.</translation>
 <translation id="6040143037577758943">Lukk</translation>
 <translation id="6229528619562190452">Klikk her for å oppdatera Vivaldi.</translation>
 <translation id="6234173136417926046">Bruk bildet som startsidebakgrunn</translation>
+<translation id="630690498669249215">Opera bokmerke-fil</translation>
 <translation id="6339818817272922368">Lokalkonto</translation>
 <translation id="6438786710866753178">Landskap 4</translation>
 <translation id="6477028720702061455">Vel Opera-profilmappa som skal importerast</translation>
@@ -158,7 +155,6 @@
 <translation id="8539196077526389150">Landskap 13</translation>
 <translation id="8562339533180097902">Lukk Vivaldi og installer no</translation>
 <translation id="8567452685425968223">Pakkar ut oppdateringa …</translation>
-<translation id="8624587806981488221">Last &amp;bildet på nytt</translation>
 <translation id="8651348004684669199">Legg til aktiv fane</translation>
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>

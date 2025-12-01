@@ -24,18 +24,18 @@ bool WindowPrivateIsOnScreenWithNotchFunction::IsWindowOnScreenWithNotch(
   return false;
 }
 
-void WindowPrivateSetControlButtonsPaddingFunction::RequestChange(
+void WindowPrivateSetControlButtonsPositionFunction::RequestChange(
     gfx::NativeWindow window,
-    vivaldi::window_private::ControlButtonsPadding padding) {
+    vivaldi::window_private::ControlButtonsPosition position) {
   auto* ns_window = window.GetNativeNSWindow();
 
-  const auto *paddingAsString = vivaldi::window_private::ToString(padding);
-  NSString* ns_padding =
-      [NSString stringWithUTF8String:paddingAsString];
+  const auto *positionAsString = vivaldi::window_private::ToString(position);
+  NSString* ns_position =
+      [NSString stringWithUTF8String:positionAsString];
 
-  NSDictionary* userInfo = @{@"padding" : ns_padding};
+  NSDictionary* userInfo = @{@"position" : ns_position};
   [[NSNotificationCenter defaultCenter]
-      postNotificationName:@"VivaldiSetControlButtonsPadding"
+      postNotificationName:@"VivaldiSetControlButtonsPosition"
                     object:ns_window
                   userInfo:userInfo];
 }

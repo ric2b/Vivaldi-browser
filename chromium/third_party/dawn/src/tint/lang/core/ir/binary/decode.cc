@@ -691,6 +691,8 @@ struct Decoder {
                 return CreateTypeArray(type_in.array());
             case pb::Type::KindCase::kBindingArray:
                 return CreateTypeBindingArray(type_in.binding_array());
+            case pb::Type::KindCase::kResourceBinding:
+                return CreateTypeResourceBinding(type_in.resource_binding());
             case pb::Type::KindCase::kTexelBuffer:
                 return CreateTypeTexelBuffer(type_in.texel_buffer());
             case pb::Type::KindCase::kDepthTexture:
@@ -768,6 +770,10 @@ struct Decoder {
             return mod_out_.Types().invalid();
         }
         auto* el_ty = Type(vector_in.element_type());
+        if (el_ty == nullptr) {
+            err_ << "vector element type is invalid\n";
+            return mod_out_.Types().invalid();
+        }
         return mod_out_.Types().vec(el_ty, vector_in.width());
     }
 
@@ -779,13 +785,22 @@ struct Decoder {
             return mod_out_.Types().invalid();
         }
         auto* el_ty = Type(matrix_in.element_type());
+        if (el_ty == nullptr) {
+            err_ << "matrix element type is invalid\n";
+            return mod_out_.Types().invalid();
+        }
         auto* column_ty = mod_out_.Types().vec(el_ty, matrix_in.num_rows());
         return mod_out_.Types().mat(column_ty, matrix_in.num_columns());
     }
 
-    const type::Pointer* CreateTypePointer(const pb::TypePointer& pointer_in) {
+    const type::Type* CreateTypePointer(const pb::TypePointer& pointer_in) {
         auto address_space = AddressSpace(pointer_in.address_space());
         auto* store_ty = Type(pointer_in.store_type());
+        if (!store_ty) {
+            err_ << "pointer must have a store type\n";
+            return mod_out_.Types().invalid();
+        }
+
         auto access = AccessControl(pointer_in.access());
         return mod_out_.Types().ptr(address_space, store_ty, access);
     }
@@ -825,6 +840,11 @@ struct Decoder {
 
             auto symbol = mod_out_.symbols.Register(member_name);
             auto* type = Type(member_in.type());
+            if (type == nullptr) {
+                err_ << "struct member '" << member_name << "' type  is invalid\n";
+                return mod_out_.Types().invalid();
+            }
+
             auto index = static_cast<uint32_t>(members_out.Length());
             auto align = member_in.align();
             auto size = member_in.size();
@@ -863,22 +883,30 @@ struct Decoder {
         return mod_out_.Types().Struct(name, std::move(members_out));
     }
 
-    const type::Atomic* CreateTypeAtomic(const pb::TypeAtomic& atomic_in) {
-        return mod_out_.Types().atomic(Type(atomic_in.type()));
+    const type::Type* CreateTypeAtomic(const pb::TypeAtomic& atomic_in) {
+        const auto* el_ty = Type(atomic_in.type());
+        if (el_ty == nullptr) {
+            err_ << "invalid atomic element type\n";
+            return mod_out_.Types().invalid();
+        }
+        return mod_out_.Types().atomic(el_ty);
     }
 
     const type::Type* CreateTypeArray(const pb::TypeArray& array_in) {
         auto* element = Type(array_in.element());
-        uint32_t stride = array_in.stride();
         uint32_t count = array_in.count();
         if (count >= internal_limits::kMaxArrayElementCount) {
             err_ << "array count (" << count << ") must be less than "
                  << internal_limits::kMaxArrayElementCount << "\n";
             return mod_out_.Types().invalid();
         }
+        if (element == nullptr) {
+            err_ << "array element type is invalid\n";
+            return mod_out_.Types().invalid();
+        }
 
-        return count > 0 ? mod_out_.Types().array(element, count, stride)
-                         : mod_out_.Types().runtime_array(element, stride);
+        return count > 0 ? mod_out_.Types().array(element, count)
+                         : mod_out_.Types().runtime_array(element);
     }
 
     const type::Type* CreateTypeBindingArray(const pb::TypeBindingArray& array_in) {
@@ -890,8 +918,16 @@ struct Decoder {
                  << internal_limits::kMaxArrayElementCount << "\n";
             return mod_out_.Types().invalid();
         }
+        if (element == nullptr) {
+            err_ << "binding array element type is invalid\n";
+            return mod_out_.Types().invalid();
+        }
 
         return mod_out_.Types().binding_array(element, count);
+    }
+
+    const type::ResourceBinding* CreateTypeResourceBinding(const pb::TypeResourceBinding&) {
+        return mod_out_.Types().resource_binding();
     }
 
     const type::Type* CreateTypeDepthTexture(const pb::TypeDepthTexture& texture_in) {
@@ -903,16 +939,23 @@ struct Decoder {
         return mod_out_.Types().depth_texture(dimension);
     }
 
-    const type::SampledTexture* CreateTypeSampledTexture(const pb::TypeSampledTexture& texture_in) {
+    const type::Type* CreateTypeSampledTexture(const pb::TypeSampledTexture& texture_in) {
         auto dimension = TextureDimension(texture_in.dimension());
         auto sub_type = Type(texture_in.sub_type());
+        if (!sub_type) {
+            err_ << "invalid Sampled texture subtype\n";
+            return mod_out_.Types().invalid();
+        }
         return mod_out_.Types().sampled_texture(dimension, sub_type);
     }
 
-    const type::MultisampledTexture* CreateTypeMultisampledTexture(
-        const pb::TypeMultisampledTexture& texture_in) {
+    const type::Type* CreateTypeMultisampledTexture(const pb::TypeMultisampledTexture& texture_in) {
         auto dimension = TextureDimension(texture_in.dimension());
         auto sub_type = Type(texture_in.sub_type());
+        if (!sub_type) {
+            err_ << "invalid Multisampled texture subtype\n";
+            return mod_out_.Types().invalid();
+        }
         return mod_out_.Types().multisampled_texture(dimension, sub_type);
     }
 
@@ -926,15 +969,27 @@ struct Decoder {
         return mod_out_.Types().depth_multisampled_texture(dimension);
     }
 
-    const type::StorageTexture* CreateTypeStorageTexture(const pb::TypeStorageTexture& texture_in) {
+    const type::Type* CreateTypeStorageTexture(const pb::TypeStorageTexture& texture_in) {
         auto dimension = TextureDimension(texture_in.dimension());
         auto texel_format = TexelFormat(texture_in.texel_format());
+        auto sub_ty = mod_out_.Types().SubtypeFor(texel_format);
+        if (!sub_ty) {
+            err_ << "unable to create a sub-type for " << texel_format << "\n";
+            return mod_out_.Types().invalid();
+        }
+
         auto access = AccessControl(texture_in.access());
         return mod_out_.Types().storage_texture(dimension, texel_format, access);
     }
 
-    const type::TexelBuffer* CreateTypeTexelBuffer(const pb::TypeTexelBuffer& buffer_in) {
+    const type::Type* CreateTypeTexelBuffer(const pb::TypeTexelBuffer& buffer_in) {
         auto texel_format = TexelFormat(buffer_in.texel_format());
+        auto sub_ty = mod_out_.Types().SubtypeFor(texel_format);
+        if (!sub_ty) {
+            err_ << "unable to create a sub-type for " << texel_format << "\n";
+            return mod_out_.Types().invalid();
+        }
+
         auto access = AccessControl(buffer_in.access());
         return mod_out_.Types().texel_buffer(texel_format, access);
     }
@@ -952,17 +1007,24 @@ struct Decoder {
         return mod_out_.Types().Get<type::Sampler>(kind);
     }
 
-    const type::InputAttachment* CreateTypeInputAttachment(
-        const pb::TypeInputAttachment& input_in) {
+    const type::Type* CreateTypeInputAttachment(const pb::TypeInputAttachment& input_in) {
         auto sub_type = Type(input_in.sub_type());
+        if (!sub_type) {
+            err_ << "invalid Input attachment subtype\n";
+            return mod_out_.Types().invalid();
+        }
         return mod_out_.Types().input_attachment(sub_type);
     }
 
-    const type::SubgroupMatrix* CreateTypeSubgroupMatrix(
-        SubgroupMatrixKind kind,
-        const pb::TypeSubgroupMatrix& subgroup_matrix) {
-        return mod_out_.Types().subgroup_matrix(kind, Type(subgroup_matrix.sub_type()),
-                                                subgroup_matrix.columns(), subgroup_matrix.rows());
+    const type::Type* CreateTypeSubgroupMatrix(SubgroupMatrixKind kind,
+                                               const pb::TypeSubgroupMatrix& subgroup_matrix) {
+        const auto el_ty = Type(subgroup_matrix.sub_type());
+        if (el_ty == nullptr) {
+            err_ << "invalid subtype for subgroup matrix\n";
+            return mod_out_.Types().invalid();
+        }
+        return mod_out_.Types().subgroup_matrix(kind, el_ty, subgroup_matrix.columns(),
+                                                subgroup_matrix.rows());
     }
 
     const type::Type* CreateTypeBuiltinStruct(pb::TypeBuiltinStruct builtin_struct_in) {
@@ -972,51 +1034,80 @@ struct Decoder {
         }
 
         auto& ty = mod_out_.Types();
+        const core::type::Struct* res = nullptr;
         switch (builtin_struct_in) {
             case pb::TypeBuiltinStruct::AtomicCompareExchangeResultI32:
-                return type::CreateAtomicCompareExchangeResult(ty, mod_out_.symbols, ty.i32());
+                res = type::CreateAtomicCompareExchangeResult(ty, mod_out_.symbols, ty.i32());
+                break;
             case pb::TypeBuiltinStruct::AtomicCompareExchangeResultU32:
-                return type::CreateAtomicCompareExchangeResult(ty, mod_out_.symbols, ty.u32());
+                res = type::CreateAtomicCompareExchangeResult(ty, mod_out_.symbols, ty.u32());
+                break;
             case pb::TypeBuiltinStruct::FrexpResultF16:
-                return type::CreateFrexpResult(ty, mod_out_.symbols, ty.f16());
+                res = type::CreateFrexpResult(ty, mod_out_.symbols, ty.f16());
+                break;
             case pb::TypeBuiltinStruct::FrexpResultF32:
-                return type::CreateFrexpResult(ty, mod_out_.symbols, ty.f32());
+                res = type::CreateFrexpResult(ty, mod_out_.symbols, ty.f32());
+                break;
             case pb::TypeBuiltinStruct::FrexpResultVec2F16:
-                return type::CreateFrexpResult(ty, mod_out_.symbols, ty.vec2<f16>());
+                res = type::CreateFrexpResult(ty, mod_out_.symbols, ty.vec2<f16>());
+                break;
             case pb::TypeBuiltinStruct::FrexpResultVec2F32:
-                return type::CreateFrexpResult(ty, mod_out_.symbols, ty.vec2<f32>());
+                res = type::CreateFrexpResult(ty, mod_out_.symbols, ty.vec2<f32>());
+                break;
             case pb::TypeBuiltinStruct::FrexpResultVec3F16:
-                return type::CreateFrexpResult(ty, mod_out_.symbols, ty.vec3<f16>());
+                res = type::CreateFrexpResult(ty, mod_out_.symbols, ty.vec3<f16>());
+                break;
             case pb::TypeBuiltinStruct::FrexpResultVec3F32:
-                return type::CreateFrexpResult(ty, mod_out_.symbols, ty.vec3<f32>());
+                res = type::CreateFrexpResult(ty, mod_out_.symbols, ty.vec3<f32>());
+                break;
             case pb::TypeBuiltinStruct::FrexpResultVec4F16:
-                return type::CreateFrexpResult(ty, mod_out_.symbols, ty.vec4<f16>());
+                res = type::CreateFrexpResult(ty, mod_out_.symbols, ty.vec4<f16>());
+                break;
             case pb::TypeBuiltinStruct::FrexpResultVec4F32:
-                return type::CreateFrexpResult(ty, mod_out_.symbols, ty.vec4<f32>());
+                res = type::CreateFrexpResult(ty, mod_out_.symbols, ty.vec4<f32>());
+                break;
             case pb::TypeBuiltinStruct::ModfResultF16:
-                return type::CreateModfResult(ty, mod_out_.symbols, ty.f16());
+                res = type::CreateModfResult(ty, mod_out_.symbols, ty.f16());
+                break;
             case pb::TypeBuiltinStruct::ModfResultF32:
-                return type::CreateModfResult(ty, mod_out_.symbols, ty.f32());
+                res = type::CreateModfResult(ty, mod_out_.symbols, ty.f32());
+                break;
             case pb::TypeBuiltinStruct::ModfResultVec2F16:
-                return type::CreateModfResult(ty, mod_out_.symbols, ty.vec2<f16>());
+                res = type::CreateModfResult(ty, mod_out_.symbols, ty.vec2<f16>());
+                break;
             case pb::TypeBuiltinStruct::ModfResultVec2F32:
-                return type::CreateModfResult(ty, mod_out_.symbols, ty.vec2<f32>());
+                res = type::CreateModfResult(ty, mod_out_.symbols, ty.vec2<f32>());
+                break;
             case pb::TypeBuiltinStruct::ModfResultVec3F16:
-                return type::CreateModfResult(ty, mod_out_.symbols, ty.vec2<f16>());
+                res = type::CreateModfResult(ty, mod_out_.symbols, ty.vec2<f16>());
+                break;
             case pb::TypeBuiltinStruct::ModfResultVec3F32:
-                return type::CreateModfResult(ty, mod_out_.symbols, ty.vec3<f32>());
+                res = type::CreateModfResult(ty, mod_out_.symbols, ty.vec3<f32>());
+                break;
             case pb::TypeBuiltinStruct::ModfResultVec4F16:
-                return type::CreateModfResult(ty, mod_out_.symbols, ty.vec2<f16>());
+                res = type::CreateModfResult(ty, mod_out_.symbols, ty.vec2<f16>());
+                break;
             case pb::TypeBuiltinStruct::ModfResultVec4F32:
-                return type::CreateModfResult(ty, mod_out_.symbols, ty.vec4<f32>());
+                res = type::CreateModfResult(ty, mod_out_.symbols, ty.vec4<f32>());
+                break;
 
             case pb::TypeBuiltinStruct::TypeBuiltinStruct_INT_MIN_SENTINEL_DO_NOT_USE_:
             case pb::TypeBuiltinStruct::TypeBuiltinStruct_INT_MAX_SENTINEL_DO_NOT_USE_:
                 break;
         }
 
-        err_ << "invalid TypeBuiltinStruct: " << std::to_string(builtin_struct_in) << "\n";
-        return mod_out_.Types().invalid();
+        if (!res) {
+            err_ << "invalid TypeBuiltinStruct: " << std::to_string(builtin_struct_in) << "\n";
+            return mod_out_.Types().invalid();
+        }
+
+        // Make sure this struct name wasn't already used by another struct in the module.
+        auto struct_name = res->Name().Name();
+        if (!struct_names_.Add(struct_name)) {
+            err_ << "duplicate struct name: " << struct_name << "\n";
+            return mod_out_.Types().invalid();
+        }
+        return res;
     }
 
     const type::Type* Type(size_t id) {
@@ -1062,6 +1153,10 @@ struct Decoder {
 
     ir::InstructionResult* InstructionResult(const pb::InstructionResult& res_in) {
         auto* type = Type(res_in.type());
+        if (type == nullptr || type->Is<core::type::Invalid>()) {
+            err_ << "result '" << res_in.name() << "' has invalid type\n";
+            return nullptr;
+        }
         auto* res_out = b.InstructionResult(type);
         if (!res_in.name().empty()) {
             if (DAWN_UNLIKELY(res_in.name().find('\0') != std::string::npos)) {
@@ -1076,6 +1171,10 @@ struct Decoder {
 
     ir::FunctionParam* FunctionParameter(const pb::FunctionParameter& param_in) {
         auto* type = Type(param_in.type());
+        if (type == nullptr || type->Is<core::type::Invalid>()) {
+            err_ << "param '" << param_in.name() << "' has invalid type\n";
+            return nullptr;
+        }
         auto* param_out = b.FunctionParam(type);
         if (!param_in.name().empty()) {
             if (DAWN_UNLIKELY(param_in.name().find('\0') != std::string::npos)) {
@@ -1114,6 +1213,10 @@ struct Decoder {
 
     ir::BlockParam* BlockParameter(const pb::BlockParameter& param_in) {
         auto* type = Type(param_in.type());
+        if (type == nullptr || type->Is<core::type::Invalid>()) {
+            err_ << "block parameter '" << param_in.name() << "' has invalid type\n";
+            return nullptr;
+        }
         auto* param_out = b.BlockParam(type);
         if (!param_in.name().empty()) {
             if (DAWN_UNLIKELY(param_in.name().find('\0') != std::string::npos)) {
@@ -1188,6 +1291,11 @@ struct Decoder {
     const core::constant::Value* CreateConstantComposite(
         const pb::ConstantValueComposite& composite_in) {
         auto* type = Type(composite_in.type());
+        if (!type) {
+            err_ << "invalid type for constant composite\n";
+            return b.InvalidConstant()->Value();
+        }
+
         auto type_elements = type->Elements();
         size_t num_values = static_cast<size_t>(composite_in.elements().size());
         if (DAWN_UNLIKELY(type_elements.count == 0)) {
@@ -1215,6 +1323,11 @@ struct Decoder {
 
     const core::constant::Value* CreateConstantSplat(const pb::ConstantValueSplat& splat_in) {
         auto* type = Type(splat_in.type());
+        if (!type) {
+            err_ << "invalid type for constant splat\n";
+            return b.InvalidConstant()->Value();
+        }
+
         uint32_t num_elements = type->Elements().count;
         if (DAWN_UNLIKELY(num_elements == 0)) {
             err_ << "cannot create a splat of type " << type->FriendlyName() << "\n";
@@ -1607,8 +1720,10 @@ struct Decoder {
                 return core::BuiltinValue::kWorkgroupId;
             case pb::BuiltinValue::clip_distances:
                 return core::BuiltinValue::kClipDistances;
-            case pb::BuiltinValue::primitive_id:
-                return core::BuiltinValue::kPrimitiveId;
+            case pb::BuiltinValue::primitive_index:
+                return core::BuiltinValue::kPrimitiveIndex;
+            case pb::BuiltinValue::barycentric_coord:
+                return core::BuiltinValue::kBarycentricCoord;
             case pb::BuiltinValue::BuiltinValue_INT_MIN_SENTINEL_DO_NOT_USE_:
             case pb::BuiltinValue::BuiltinValue_INT_MAX_SENTINEL_DO_NOT_USE_:
                 break;
@@ -1923,6 +2038,10 @@ struct Decoder {
                 return core::BuiltinFn::kSubgroupMatrixMultiplyAccumulate;
             case pb::BuiltinFn::print:
                 return core::BuiltinFn::kPrint;
+            case pb::BuiltinFn::has_binding:
+                return core::BuiltinFn::kHasBinding;
+            case pb::BuiltinFn::get_binding:
+                return core::BuiltinFn::kGetBinding;
 
             case pb::BuiltinFn::BuiltinFn_INT_MIN_SENTINEL_DO_NOT_USE_:
             case pb::BuiltinFn::BuiltinFn_INT_MAX_SENTINEL_DO_NOT_USE_:

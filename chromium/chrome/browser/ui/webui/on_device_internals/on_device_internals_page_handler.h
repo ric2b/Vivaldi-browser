@@ -60,8 +60,8 @@ class PageHandler : public mojom::PageHandler,
       const base::FilePath& model_path,
       mojo::PendingReceiver<on_device_model::mojom::OnDeviceModel> model,
       LoadPlatformModelCallback callback) override;
-  void GetDevicePerformanceInfo(
-      GetDevicePerformanceInfoCallback callback) override;
+  void GetDeviceAndPerformanceInfo(
+      GetDeviceAndPerformanceInfoCallback callback) override;
   void GetDefaultModelPath(GetDefaultModelPathCallback callback) override;
   void GetPageData(GetPageDataCallback callback) override;
   void SetFeatureRecentlyUsedState(int feature_key,
@@ -77,17 +77,26 @@ class PageHandler : public mojom::PageHandler,
                          int source_line,
                          const std::string& message) override;
 
-  // Called when device performance info is received. Creates and fully
-  // populates a `PageData` to be returned via `callback`.
+  // Called when model info is received. Populates `page_data` with the model
+  // info and starts gathering DevicePerformanceInfo.
+  void OnReceivedModelInfoForPageData(GetPageDataCallback callback,
+                                      mojom::PageDataPtr page_data,
+                                      mojom::BaseModelInfoPtr model_info);
+
+  // Called when device performance info is received. Populates `page_data` with
+  // the performance info and passes it off to `callback`.
   void OnReceivedPerformanceInfoForPageData(
       GetPageDataCallback callback,
-      on_device_model::mojom::DevicePerformanceInfoPtr performance_info);
+      mojom::PageDataPtr page_data,
+      on_device_model::mojom::DevicePerformanceInfoPtr perf_info,
+      on_device_model::mojom::DeviceInfoPtr device_info);
 
   mojo::Receiver<mojom::PageHandler> receiver_;
   mojo::Remote<mojom::Page> page_;
 
   mojo::Remote<Service> service_;
-  on_device_model::mojom::DevicePerformanceInfoPtr performance_info_;
+  on_device_model::mojom::DevicePerformanceInfoPtr perf_info_;
+  on_device_model::mojom::DeviceInfoPtr device_info_;
 
 #if BUILDFLAG(USE_CHROMEOS_MODEL_SERVICE)
   mojo::Remote<PlatformService> platform_service_;

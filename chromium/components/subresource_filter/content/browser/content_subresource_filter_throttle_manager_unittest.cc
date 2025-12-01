@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 
 #include <map>
@@ -99,6 +94,7 @@ class FakeSubresourceFilterAgent : public mojom::SubresourceFilterAgent {
 
   // mojom::SubresourceFilterAgent:
   void ActivateForNextCommittedLoad(
+      const GURL& url,
       mojom::ActivationStatePtr activation_state,
       const std::optional<blink::FrameAdEvidence>& ad_evidence) override {
     last_activation_ = std::move(activation_state);

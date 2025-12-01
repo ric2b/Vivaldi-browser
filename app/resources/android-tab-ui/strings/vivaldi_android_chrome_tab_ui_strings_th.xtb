@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="th">
+<translation id="2330212241471632770">{TABS_COUNT,plural,
+          =1 {แท็บบุ๊กมาร์ก}
+          other {แท็บบุ๊กมาร์ก}
+        }</translation>
 </translationbundle>

@@ -10,6 +10,7 @@
 #include "ash/constants/ash_pref_names.h"
 #include "ash/shell.h"
 #include "ash/system/accessibility/accessibility_feature_disable_dialog.h"
+#include "base/metrics/statistics_recorder.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
@@ -130,7 +131,6 @@ class FaceGazeIntegrationTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     std::vector<base::test::FeatureRef> enabled_features;
     std::vector<base::test::FeatureRef> disabled_features;
-    enabled_features.push_back(::features::kAccessibilityFaceGaze);
     if (GetParam() == ManifestVersion::kTwo) {
       disabled_features.push_back(
           ::features::kAccessibilityManifestV3AccessibilityCommon);
@@ -468,7 +468,8 @@ IN_PROC_BROWSER_TEST_P(FaceGazeIntegrationTest, DISABLED_PerformanceHistogram) {
   utils()->EnableFaceGaze(Config().Default().WithBindings(
       gestures_to_macros, gestures_to_confidences));
 
-  HistogramWaiter waiter("Accessibility.FaceGaze.AverageFaceLandmarkerLatency");
+  base::StatisticsRecorder::HistogramWaiter waiter(
+      "Accessibility.FaceGaze.AverageFaceLandmarkerLatency");
   for (int i = 0; i < 100; ++i) {
     utils()->ProcessFaceLandmarkerResult(
         MockFaceLandmarkerResult().WithLatency(i));

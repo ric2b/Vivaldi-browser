@@ -9,6 +9,7 @@
 
 extern NSString* vMenuNewTab;
 extern NSString* vMenuNewBackgroundTab;
+extern NSString* vMenuNewWindow;
 extern NSString* vMenuPrivateTab;
 extern NSString* vMenuLink;
 extern NSString* vMenuEdit;
@@ -24,6 +25,8 @@ extern NSString* vMenuSelect;
 extern NSString* vMenuAddBookmark;
 extern NSString* vMenuEditBookmark;
 extern NSString* vMenuAddToReadingList;
+extern NSString* vMenuShowBookmarks;
+extern NSString* vMenuShowReadingList;
 extern NSString* vMenuQRCode;
 extern NSString* vMenuOpenIn;
 extern NSString* vMenuOpenImageInTab;

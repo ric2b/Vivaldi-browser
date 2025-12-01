@@ -47,6 +47,7 @@
 #include "extensions/browser/process_map.h"
 #include "extensions/browser/rules_registry_ids.h"
 #include "extensions/browser/safe_browsing_delegate.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/api/web_request/web_request_activity_log_constants.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension_id.h"
@@ -55,6 +56,8 @@
 #if BUILDFLAG(ENABLE_GUEST_VIEW)
 #include "extensions/browser/guest_view/guest_view_events.h"
 #endif
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 using content::BrowserThread;
 using extension_web_request_api_helpers::ExtraInfoSpec;
@@ -1755,9 +1758,16 @@ void WebRequestEventRouter::OnEventHandled(
     return;
   }
 
-  listener->blocked_requests.erase(request_id);
-  DecrementBlockCount(browser_context, extension_id, event_name, request_id,
-                      std::move(response), listener->extra_info_spec);
+  // Check if this listener was a blocking listener. We only decrement the
+  // block count if it was. This prevents a scenario where a non-blocking
+  // listener that fails to re-register upon wake-up (via
+  // `cannot_dispatch_callback`) causes the request to resume before other
+  // blocking listeners have responded. See crbug.com/412695438.
+  if (listener->IsBlocking()) {
+    listener->blocked_requests.erase(request_id);
+    DecrementBlockCount(browser_context, extension_id, event_name, request_id,
+                        std::move(response), listener->extra_info_spec);
+  }
 }
 
 bool WebRequestEventRouter::AddEventListener(

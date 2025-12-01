@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "components/omnibox/browser/autocomplete_provider.h"
 
 #include <stddef.h>
@@ -301,7 +296,7 @@ void TestProvider::AddResultsWithSearchTermsArgs(
     if (!match_keyword_.empty()) {
       match.keyword = match_keyword_;
       ASSERT_NE(nullptr,
-                match.GetTemplateURL(client_->GetTemplateURLService(), false));
+                match.GetTemplateURL(client_->GetTemplateURLService()));
     }
 
     matches_.push_back(match);
@@ -622,10 +617,8 @@ void AutocompleteProviderTest::RunKeywordTest(
   result.AppendMatches(matches);
   controller_->UpdateAssociatedKeywords(&result);
   for (size_t j = 0; j < result.size(); ++j) {
-    EXPECT_EQ(match_data[j].expected_associated_keyword,
-              result.match_at(j)->associated_keyword
-                  ? result.match_at(j)->associated_keyword->keyword
-                  : std::u16string());
+    EXPECT_EQ(result.match_at(j)->associated_keyword,
+              match_data[j].expected_associated_keyword);
   }
 }
 
@@ -679,8 +672,8 @@ void AutocompleteProviderTest::RunSearchboxStatsTest(
   }
   result_.Reset();
   result_.AppendMatches(matches);
-  result_.MergeSuggestionGroupsMap(
-      omnibox::BuildDefaultGroupsForInput(AutocompleteInput()));
+  result_.MergeSuggestionGroupsMap(omnibox::BuildDefaultGroupsForInput(
+      AutocompleteInput(), /*is_incognito=*/false));
   result_.set_zero_prefix_enabled_in_session(input_is_zero_suggest);
 
   // Update Searchbox stats.
@@ -1044,9 +1037,6 @@ TEST_F(AutocompleteProviderTest, SuggestionGroups) {
 
 TEST_F(AutocompleteProviderTest, UpdateSearchboxStats) {
   ResetControllerWithTestProviders(false, nullptr, nullptr);
-
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(omnibox::kCategoricalSuggestions);
 
   {
     omnibox::metrics::ChromeSearchboxStats searchbox_stats;

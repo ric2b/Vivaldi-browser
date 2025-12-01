@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -40,28 +40,32 @@ export function getReleaseNote(): ReleaseNote {
 }
 
 let releaseNote: ReleaseNote = {
-  version: 81,
-  header: 'What\'s new in DevTools 140',
+  version: 83,
+  header: 'What\'s new in DevTools 142',
   markdownLinks: [
     {
-      key: 'ai-insights',
-      link: 'https://developer.chrome.com/blog/new-in-devtools-140/#ai-insights',
+      key: 'perf-ai-agent',
+      link: 'https://developer.chrome.com/blog/new-in-devtools-142/#perf-ai-agent',
     },
     {
-      key: 'save-data',
-      link: 'https://developer.chrome.com/blog/new-in-devtools-140/#save-data',
+      key: 'ai-code-completion',
+      link: 'https://developer.chrome.com/blog/new-in-devtools-142/#ai-code-completion',
     },
     {
-      key: 'debug-css',
-      link: 'https://developer.chrome.com/blog/new-in-devtools-138#debug-css-values',
+      key: 'gdp',
+      link: 'https://developer.chrome.com/blog/new-in-devtools-142/#gdp',
+    },
+    {
+      key: 'ai-main-button',
+      link: 'https://developer.chrome.com/blog/new-in-devtools-142/#ai-main-button',
     },
   ],
   videoLinks: [
     {
-      description: 'See past highlights from Chrome 139',
-      link: 'https://developer.chrome.com/blog/new-in-devtools-139' as Platform.DevToolsPath.UrlString,
+      description: 'See past highlights from Chrome 141',
+      link: 'https://developer.chrome.com/blog/new-in-devtools-141' as Platform.DevToolsPath.UrlString,
       type: VideoType.WHATS_NEW,
     },
   ],
-  link: 'https://developer.chrome.com/blog/new-in-devtools-140/',
+  link: 'https://developer.chrome.com/blog/new-in-devtools-142/',
 };

@@ -25,6 +25,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
@@ -100,6 +101,8 @@
 #include "net/url_request/url_request_test_job.h"
 #include "net/url_request/url_request_test_util.h"
 #include "services/network/cookie_settings.h"
+#include "services/network/devtools_durable_msg_accounting_delegate.h"
+#include "services/network/devtools_durable_msg_collector.h"
 #include "services/network/file_opener_for_upload.h"
 #include "services/network/observer_wrapper.h"
 #include "services/network/public/cpp/cors/origin_access_list.h"
@@ -139,6 +142,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+#include "url/scheme_host_port.h"
 
 namespace network {
 
@@ -655,6 +659,25 @@ MATCHER_P2(CookieOrLine, string, type, "") {
                                      result_listener);
 }
 
+// Mock implementation of durable message accounting delegate.
+class MockDurableMessageAccountingDelegate
+    : public DevtoolsDurableMessageAccountingDelegate {
+ public:
+  void WillAddBytes(DevtoolsDurableMessage& message,
+                    int64_t chunk_size) override {
+    size_ += chunk_size;
+  }
+
+  void WillRemoveBytes(DevtoolsDurableMessage& message) override {
+    size_ -= message.encoded_byte_size();
+  }
+
+  int64_t size() { return size_; }
+
+ private:
+  int64_t size_ = 0;
+};
+
 // Permits simply constructing a URLLoader object specifying only those options
 // which are non-default.
 // Replace:
@@ -691,7 +714,7 @@ struct URLLoaderOptions {
         ObserverWrapper(std::move(devtools_observer)),
         ObserverWrapper(std::move(device_bound_session_observer)),
         std::move(accept_ch_frame_observer), shared_storage_writable_eligible,
-        *shared_resource_checker);
+        *shared_resource_checker, std::move(maybe_durable_message));
   }
 
   int32_t options = mojom::kURLLoadOptionNone;
@@ -719,6 +742,7 @@ struct URLLoaderOptions {
   bool shared_storage_writable_eligible = false;
   CookieSettings cookie_settings;
   std::unique_ptr<SharedResourceChecker> shared_resource_checker;
+  base::WeakPtr<DevtoolsDurableMessage> maybe_durable_message;
 
  private:
   bool used = false;
@@ -786,8 +810,8 @@ class URLLoaderTest : public testing::Test {
     net::HttpNetworkSessionParams params;
     auto quic_context = std::make_unique<net::QuicContext>();
     quic_context->params()->origins_to_force_quic_on.insert(
-        net::HostPortPair(net::QuicSimpleTestServer::GetHost(),
-                          net::QuicSimpleTestServer::GetPort()));
+        url::SchemeHostPort("https", net::QuicSimpleTestServer::GetHost(),
+                            net::QuicSimpleTestServer::GetPort()));
     params.enable_quic = true;
     net::URLRequestContextBuilder context_builder;
     context_builder.set_http_network_session_params(params);
@@ -906,6 +930,7 @@ class URLLoaderTest : public testing::Test {
     url_loader_options.accept_ch_frame_observer =
         accept_ch_frame_observer_ ? accept_ch_frame_observer_->Bind()
                                   : mojo::NullRemote();
+    url_loader_options.maybe_durable_message = std::move(durable_message_);
     url_loader = url_loader_options.MakeURLLoader(
         context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.BindNewPipeAndPassReceiver(), request, client_.CreateRemote());
@@ -1138,6 +1163,10 @@ class URLLoaderTest : public testing::Test {
       const net::CookieSettingOverrides& overrides) {
     cookie_setting_overrides_ = overrides;
   }
+  void set_durable_message(
+      base::WeakPtr<DevtoolsDurableMessage> durable_message) {
+    durable_message_ = std::move(durable_message);
+  }
 
   // Convenience methods after calling Load();
   std::string mime_type() const {
@@ -1283,6 +1312,7 @@ class URLLoaderTest : public testing::Test {
       mojom::IPAddressSpace::kUnknown;
   net::CookieSettingOverrides cookie_setting_overrides_;
   std::optional<int> partial_decoder_decoding_buffer_size_;
+  base::WeakPtr<DevtoolsDurableMessage> durable_message_;
 
   bool orb_enabled_ = false;
 
@@ -1870,7 +1900,11 @@ TEST_F(URLLoaderTest, NonSecurePublicToLoopbackPreflightBlock) {
           mojom::IPAddressSpace::kUnknown, mojom::IPAddressSpace::kLoopback)));
 }
 
-TEST_F(URLLoaderTest, SecureLocalToLoopbackBlock) {
+TEST_F(URLLoaderTest, SecureLocalToLoopbackDefault) {
+  // This test presumes that LNA enforcement is enabled.
+  base::test::ScopedFeatureList feature_list(
+      features::kLocalNetworkAccessChecks);
+
   auto client_security_state = NewSecurityState();
   client_security_state->is_web_secure_context = true;
   client_security_state->ip_address_space = mojom::IPAddressSpace::kLocal;
@@ -1878,11 +1912,9 @@ TEST_F(URLLoaderTest, SecureLocalToLoopbackBlock) {
 
   ResourceRequest request = CreateCrossOriginResourceRequest();
 
-  EXPECT_EQ(net::ERR_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_CHECKS,
-            LoadRequest(request));
-  EXPECT_THAT(client()->completion_status().cors_error_status,
-              Optional(InsecurePrivateNetworkCorsErrorStatus(
-                  mojom::IPAddressSpace::kLoopback)));
+  // Local and Loopback are currently merged and LNA checks are not
+  // enforced.
+  EXPECT_EQ(net::OK, LoadRequest(request));
 }
 
 TEST_F(URLLoaderTest, SecureLocalToLoopbackWarn) {
@@ -1911,56 +1943,20 @@ TEST_F(URLLoaderTest, SecureLocalToLoopbackAllow) {
   EXPECT_EQ(net::OK, LoadRequest(request));
 }
 
-TEST_F(URLLoaderTest, SecureLocalToLoopbackPreflightBlock) {
-  auto client_security_state = NewSecurityState();
-  client_security_state->is_web_secure_context = true;
-  client_security_state->ip_address_space = mojom::IPAddressSpace::kLocal;
-  client_security_state->private_network_request_policy =
-      mojom::PrivateNetworkRequestPolicy::kPreflightBlock;
-  set_factory_client_security_state(std::move(client_security_state));
+TEST_F(URLLoaderTest, NonSecureLocalToLoopbackDefault) {
+  // This test presumes that LNA enforcement is enabled.
+  base::test::ScopedFeatureList feature_list(
+      features::kLocalNetworkAccessChecks);
 
-  ResourceRequest request = CreateCrossOriginResourceRequest();
-
-  EXPECT_EQ(net::ERR_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_CHECKS,
-            LoadRequest(request));
-  EXPECT_THAT(
-      client()->completion_status().cors_error_status,
-      Optional(CorsErrorStatus(
-          mojom::CorsError::kUnexpectedPrivateNetworkAccess,
-          mojom::IPAddressSpace::kUnknown, mojom::IPAddressSpace::kLoopback)));
-}
-
-TEST_F(URLLoaderTest, SecureLocalToLoopbackPreflightWarn) {
-  auto client_security_state = NewSecurityState();
-  client_security_state->is_web_secure_context = true;
-  client_security_state->ip_address_space = mojom::IPAddressSpace::kLocal;
-  client_security_state->private_network_request_policy =
-      mojom::PrivateNetworkRequestPolicy::kPreflightWarn;
-  set_factory_client_security_state(std::move(client_security_state));
-
-  ResourceRequest request = CreateCrossOriginResourceRequest();
-
-  EXPECT_EQ(net::ERR_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_CHECKS,
-            LoadRequest(request));
-  EXPECT_THAT(
-      client()->completion_status().cors_error_status,
-      Optional(CorsErrorStatus(
-          mojom::CorsError::kUnexpectedPrivateNetworkAccess,
-          mojom::IPAddressSpace::kUnknown, mojom::IPAddressSpace::kLoopback)));
-}
-
-TEST_F(URLLoaderTest, NonSecureLocalToLoopbackBlock) {
   auto client_security_state = NewSecurityState();
   client_security_state->ip_address_space = mojom::IPAddressSpace::kLocal;
   set_factory_client_security_state(std::move(client_security_state));
 
   ResourceRequest request = CreateCrossOriginResourceRequest();
 
-  EXPECT_EQ(net::ERR_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_CHECKS,
-            LoadRequest(request));
-  EXPECT_THAT(client()->completion_status().cors_error_status,
-              Optional(InsecurePrivateNetworkCorsErrorStatus(
-                  mojom::IPAddressSpace::kLoopback)));
+  // Local and Loopback are currently merged and LNA checks are not
+  // enforced.
+  EXPECT_EQ(net::OK, LoadRequest(request));
 }
 
 TEST_F(URLLoaderTest, NonSecureLocalToLoopbackWarn) {
@@ -1985,42 +1981,6 @@ TEST_F(URLLoaderTest, NonSecureLocalToLoopbackAllow) {
   ResourceRequest request = CreateCrossOriginResourceRequest();
 
   EXPECT_EQ(net::OK, LoadRequest(request));
-}
-
-TEST_F(URLLoaderTest, NonSecureLocalToLoopbackPreflightBlock) {
-  auto client_security_state = NewSecurityState();
-  client_security_state->ip_address_space = mojom::IPAddressSpace::kLocal;
-  client_security_state->private_network_request_policy =
-      mojom::PrivateNetworkRequestPolicy::kPreflightBlock;
-  set_factory_client_security_state(std::move(client_security_state));
-
-  ResourceRequest request = CreateCrossOriginResourceRequest();
-
-  EXPECT_EQ(net::ERR_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_CHECKS,
-            LoadRequest(request));
-  EXPECT_THAT(
-      client()->completion_status().cors_error_status,
-      Optional(CorsErrorStatus(
-          mojom::CorsError::kUnexpectedPrivateNetworkAccess,
-          mojom::IPAddressSpace::kUnknown, mojom::IPAddressSpace::kLoopback)));
-}
-
-TEST_F(URLLoaderTest, NonSecureLocalToLoopbackPreflightWarn) {
-  auto client_security_state = NewSecurityState();
-  client_security_state->ip_address_space = mojom::IPAddressSpace::kLocal;
-  client_security_state->private_network_request_policy =
-      mojom::PrivateNetworkRequestPolicy::kPreflightWarn;
-  set_factory_client_security_state(std::move(client_security_state));
-
-  ResourceRequest request = CreateCrossOriginResourceRequest();
-
-  EXPECT_EQ(net::ERR_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_CHECKS,
-            LoadRequest(request));
-  EXPECT_THAT(
-      client()->completion_status().cors_error_status,
-      Optional(CorsErrorStatus(
-          mojom::CorsError::kUnexpectedPrivateNetworkAccess,
-          mojom::IPAddressSpace::kUnknown, mojom::IPAddressSpace::kLoopback)));
 }
 
 TEST_F(URLLoaderTest, SecureLoopbackToLoopbackBlock) {
@@ -2302,8 +2262,12 @@ TEST_F(URLLoaderTest, SecurePublicToLoopbackPermissionGranted) {
 }
 
 TEST_F(URLLoaderTest, SecureLocalToLoopbackLNAPermissionNotRequired) {
-  base::test::ScopedFeatureList feature_list(
-      features::kLocalNetworkAccessChecks);
+  base::test::ScopedFeatureList feature_list;
+  base::FieldTrialParams params;
+  params["LocalNetworkAccessChecksWarn"] = "false";
+  feature_list.InitAndEnableFeatureWithParameters(
+      features::kLocalNetworkAccessChecks, params);
+
   auto client_security_state = NewSecurityState();
   client_security_state->ip_address_space = mojom::IPAddressSpace::kLocal;
   client_security_state->private_network_request_policy =
@@ -2472,7 +2436,11 @@ class URLLoaderFakeTransportInfoTest
 // appropriately when they go from a less-private address space to a
 // more-private address space or not. The test is parameterized by
 // (client address space, server address space, expected result) tuple.
-TEST_P(URLLoaderFakeTransportInfoTest, PrivateNetworkRequestLoadsCorrectly) {
+TEST_P(URLLoaderFakeTransportInfoTest, LocalNetworkRequestLoadsCorrectly) {
+  // This test presumes that LNA enforcement is enabled.
+  base::test::ScopedFeatureList feature_list(
+      features::kLocalNetworkAccessChecks);
+
   const auto params = GetParam();
 
   auto client_security_state = NewSecurityState();
@@ -2641,7 +2609,9 @@ constexpr URLLoaderFakeTransportInfoTestParams
             mojom::IPAddressSpace::kLocal,
             mojom::IPAddressSpace::kLoopback,
             net::TransportType::kDirect,
-            net::ERR_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_CHECKS,
+            // Local and Loopback are currently merged and LNA checks are not
+            // enforced.
+            net::OK,
         },
         // Client: kLoopback
         {
@@ -2737,8 +2707,9 @@ constexpr URLLoaderFakeTransportInfoTestParams
             mojom::IPAddressSpace::kLocal,
             mojom::IPAddressSpace::kLoopback,
             net::TransportType::kCached,
-            net::
-                ERR_CACHED_IP_ADDRESS_SPACE_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_POLICY,
+            // Local and Loopback are currently merged and LNA checks are not
+            // enforced.
+            net::OK,
         },
         {
             mojom::IPAddressSpace::kLoopback,
@@ -2991,6 +2962,232 @@ TEST_F(URLLoaderTest, CompressedResponseSniffMimeClienteSideDecoding) {
   EXPECT_THAT(client()->response_head()->client_side_content_decoding_types,
               ElementsAre(net::SourceStreamType::kGzip));
   EXPECT_EQ(body, ReadTestFile("content-sniffer-test0.html.gz"));
+}
+
+// Tests that URLLoader writes into given DurableMessage object when configured.
+TEST_F(URLLoaderTest, WritesToDurableMessage) {
+  MockDurableMessageAccountingDelegate accounting_delegate;
+  DevtoolsDurableMessage durable_message("test", accounting_delegate);
+  set_durable_message(durable_message.GetWeakPtr());
+  std::string body;
+  constexpr int kGzippedBodyLength = 60;
+  EXPECT_EQ(net::OK, Load(test_server()->GetURL("/hello.html.gz"), &body));
+  EXPECT_EQ(body, ReadTestFile("hello.html"));
+  EXPECT_TRUE(durable_message.is_complete());
+  ASSERT_EQ(accounting_delegate.size(), kGzippedBodyLength);
+  ASSERT_EQ(durable_message.encoded_byte_size(),
+            static_cast<size_t>(kGzippedBodyLength));
+  ASSERT_EQ(durable_message.byte_size_for_testing(), body.size());
+  // Retrieve the stored body and verify that it is accurate.
+  EXPECT_EQ(durable_message.Retrieve(), base::as_byte_span(body));
+}
+
+TEST_F(URLLoaderTest, DurableMessageWorksWithMimeSniffing) {
+  MockDurableMessageAccountingDelegate accounting_delegate;
+  DevtoolsDurableMessage durable_message("test", accounting_delegate);
+  set_durable_message(durable_message.GetWeakPtr());
+  constexpr int kGzippedBodyLength = 142;
+  set_sniff();
+  set_client_side_content_decoding_enabled();
+  std::string encoded_body;
+  EXPECT_EQ(net::OK,
+            Load(test_server()->GetURL("/content-sniffer-test0.html.gz"),
+                 &encoded_body));
+  EXPECT_THAT(client()->response_head()->client_side_content_decoding_types,
+              ElementsAre(net::SourceStreamType::kGzip));
+  EXPECT_TRUE(did_mime_sniff());
+  EXPECT_THAT(durable_message.GetClientDecodingTypesForTesting(),
+              ElementsAre(net::SourceStreamType::kGzip));
+  EXPECT_EQ(encoded_body, ReadTestFile("content-sniffer-test0.html.gz"));
+  EXPECT_TRUE(durable_message.is_complete());
+  ASSERT_EQ(accounting_delegate.size(), kGzippedBodyLength);
+  ASSERT_EQ(durable_message.encoded_byte_size(),
+            static_cast<size_t>(kGzippedBodyLength));
+  ASSERT_EQ(durable_message.byte_size_for_testing(), encoded_body.size());
+  // Retrieve the stored body and verify that it is accurate and contents are in
+  // decoded form.
+  mojo_base::BigBuffer buffer = durable_message.Retrieve();
+  auto decoded_body = ReadTestFile("content-sniffer-test0.html");
+  EXPECT_EQ(buffer.size(), decoded_body.size());
+  EXPECT_EQ(buffer, base::as_byte_span(decoded_body));
+}
+
+// Tests a large response body, which would result in multiple asynchronous
+// chunks being written into the configured durable message.
+TEST_F(URLLoaderMockSocketTest, DurableMessageWorksWithLotsOfData) {
+  std::string response_body;
+  constexpr int kReadSize = 1024;
+  response_body.reserve(5 * kReadSize * kReadSize);
+  // Using a repeating patter with a length that's prime is more likely to spot
+  // out of order or repeated chunks of data.
+  while (response_body.size() < 5 * kReadSize * kReadSize) {
+    response_body.append("foppity");
+  }
+  const auto compressed = net::CompressGzip(response_body);
+  int seq = 1;
+  std::vector<net::MockRead> reads;
+  reads.emplace_back(net::ASYNC, /*seq=*/seq++,
+                     "HTTP/1.1 200 OK\r\n"
+                     "Content-Encoding: gzip\r\n\r\n");
+  for (size_t i = 0; i < compressed.size(); i += kReadSize) {
+    reads.emplace_back(net::ASYNC,
+                       base::as_string_view(compressed).substr(i, kReadSize),
+                       /*result=*/0, /*seq=*/seq++);
+  }
+  reads.emplace_back(net::ASYNC, net::OK, /*seq=*/seq);
+  net::SequencedSocketData socket_data_connect(kAsyncMockConnect, {}, {});
+  net::SequencedSocketData socket_data_reads_writes(reads, kOriginTestWrites);
+  socket_data_reads_writes.set_receive_buffer_size(1);
+  socket_factory_.AddSocketDataProvider(&socket_data_connect);
+  socket_factory_.AddSocketDataProvider(&socket_data_reads_writes);
+  ResourceRequest request =
+      CreateResourceRequest("GET", GURL("http://origin.test/"));
+
+  MockDurableMessageAccountingDelegate accounting_delegate;
+  DevtoolsDurableMessage durable_message("test", accounting_delegate);
+  set_durable_message(durable_message.GetWeakPtr());
+  set_sniff();
+  // Set the flag for ClientSideContentDecoding.
+  request.client_side_content_decoding_enabled = true;
+
+  std::string body;
+  EXPECT_EQ(net::OK, LoadRequest(request, &body));
+  EXPECT_TRUE(did_mime_sniff());
+  EXPECT_EQ(mime_type(), "text/plain");
+  EXPECT_THAT(body, base::as_string_view(compressed));
+  EXPECT_THAT(client()->response_head()->client_side_content_decoding_types,
+              ElementsAre(net::SourceStreamType::kGzip));
+  EXPECT_TRUE(durable_message.is_complete());
+  size_t compressed_size = compressed.size();
+  ASSERT_EQ(accounting_delegate.size(), static_cast<int64_t>(compressed_size));
+  ASSERT_EQ(durable_message.encoded_byte_size(), compressed_size);
+  ASSERT_EQ(durable_message.byte_size_for_testing(), compressed_size);
+  EXPECT_EQ(durable_message.Retrieve(), base::as_byte_span(response_body));
+}
+
+// Tests that client side decoding types are written into DurableMessage and the
+// body is decoded on retrieval.
+TEST_F(URLLoaderTest, DurableMessagePerformsClientSideDecodingGzip) {
+  MockDurableMessageAccountingDelegate accounting_delegate;
+  DevtoolsDurableMessage durable_message("test", accounting_delegate);
+  set_durable_message(durable_message.GetWeakPtr());
+  constexpr size_t kGzippedBodyLength = 60;
+  set_sniff();
+  set_client_side_content_decoding_enabled();
+  std::string encoded_body;
+  EXPECT_EQ(net::OK,
+            Load(test_server()->GetURL("/hello.html.gz"), &encoded_body));
+  EXPECT_THAT(client()->response_head()->client_side_content_decoding_types,
+              ElementsAre(net::SourceStreamType::kGzip));
+  EXPECT_THAT(durable_message.GetClientDecodingTypesForTesting(),
+              ElementsAre(net::SourceStreamType::kGzip));
+  EXPECT_TRUE(durable_message.is_complete());
+  ASSERT_EQ(accounting_delegate.size(),
+            static_cast<int64_t>(kGzippedBodyLength));
+  ASSERT_EQ(durable_message.encoded_byte_size(), kGzippedBodyLength);
+  // Retrieve the stored body and verify that it is accurate and contents are in
+  // decoded form.
+  mojo_base::BigBuffer buffer = durable_message.Retrieve();
+  auto decoded_body = ReadTestFile("hello.html");
+  EXPECT_EQ(buffer.size(), decoded_body.size());
+  EXPECT_EQ(buffer, base::as_byte_span(decoded_body));
+}
+
+// Tests that URLLoader still completes the load without errors/crashing, but
+// does not write into the DurableMessage object when the original message has
+// been evicted.
+TEST_F(URLLoaderTest, DoesNotWriteToDurableMessageWithEvictedMessage) {
+  MockDurableMessageAccountingDelegate accounting_delegate;
+  std::unique_ptr<DevtoolsDurableMessage> durable_message =
+      std::make_unique<DevtoolsDurableMessage>("test", accounting_delegate);
+  set_durable_message(durable_message->GetWeakPtr());
+
+  // Simulate eviction of the durable message.
+  durable_message.reset();
+
+  std::string body;
+  EXPECT_EQ(net::OK, Load(test_server()->GetURL("/hello.html.gz"), &body));
+  EXPECT_EQ(body, ReadTestFile("hello.html"));
+  ASSERT_EQ(accounting_delegate.size(), 0);
+}
+
+// Tests Durable Message incomplete read scenarios.
+
+TEST_F(URLLoaderTest, ErrorBeforeHeadersWritesIncompleteDurableMessage) {
+  MockDurableMessageAccountingDelegate accounting_delegate;
+  DevtoolsDurableMessage durable_message("test", accounting_delegate);
+  set_durable_message(durable_message.GetWeakPtr());
+  EXPECT_EQ(net::ERR_EMPTY_RESPONSE,
+            Load(test_server()->GetURL("/close-socket"), nullptr));
+  EXPECT_FALSE(client()->response_body().is_valid());
+  EXPECT_FALSE(durable_message.is_complete());
+  ASSERT_EQ(accounting_delegate.size(), 0);
+}
+
+TEST_F(URLLoaderTest, SyncErrorWhileReadingBodyWritesDurableMessage) {
+  MockDurableMessageAccountingDelegate accounting_delegate;
+  DevtoolsDurableMessage durable_message("test", accounting_delegate);
+  set_durable_message(durable_message.GetWeakPtr());
+  std::string body;
+  EXPECT_EQ(net::ERR_FAILED,
+            Load(net::URLRequestFailedJob::GetMockHttpUrlWithFailurePhase(
+                     net::URLRequestFailedJob::READ_SYNC, net::ERR_FAILED),
+                 &body));
+  EXPECT_EQ("", body);
+  EXPECT_TRUE(durable_message.is_complete());
+  ASSERT_EQ(accounting_delegate.size(), 0);
+}
+
+TEST_F(URLLoaderTest, AsyncErrorWhileReadingBodyWritesDurableMessage) {
+  MockDurableMessageAccountingDelegate accounting_delegate;
+  DevtoolsDurableMessage durable_message("test", accounting_delegate);
+  set_durable_message(durable_message.GetWeakPtr());
+  std::string body;
+  EXPECT_EQ(net::ERR_FAILED,
+            Load(net::URLRequestFailedJob::GetMockHttpUrlWithFailurePhase(
+                     net::URLRequestFailedJob::READ_ASYNC, net::ERR_FAILED),
+                 &body));
+  EXPECT_EQ("", body);
+  EXPECT_TRUE(durable_message.is_complete());
+  ASSERT_EQ(accounting_delegate.size(), 0);
+}
+
+TEST_F(URLLoaderTest,
+       SyncErrorWhileReadingBodyAfterBytesReceivedWritesDurableMessage) {
+  MockDurableMessageAccountingDelegate accounting_delegate;
+  DevtoolsDurableMessage durable_message("test", accounting_delegate);
+  set_durable_message(durable_message.GetWeakPtr());
+
+  const std::string response_body("Foo.");
+  std::list<std::string> packets = {response_body};
+  AddMultipleWritesInterceptor(packets, net::ERR_ACCESS_DENIED,
+                               false /*async_reads*/);
+  std::string body_readback;
+  EXPECT_EQ(net::ERR_ACCESS_DENIED,
+            Load(MultipleWritesInterceptor::GetURL(), &body_readback));
+  EXPECT_EQ(response_body, body_readback);
+  EXPECT_TRUE(durable_message.is_complete());
+  ASSERT_GT(accounting_delegate.size(), 0);
+}
+
+TEST_F(
+    URLLoaderTest,
+    AsyncErrorWhileReadingBodyAfterBytesReceivedWritesIncompleteDurableMessage) {
+  MockDurableMessageAccountingDelegate accounting_delegate;
+  DevtoolsDurableMessage durable_message("test", accounting_delegate);
+  set_durable_message(durable_message.GetWeakPtr());
+  const std::string kBody("Foo.");
+
+  std::list<std::string> packets;
+  packets.push_back(kBody);
+  AddMultipleWritesInterceptor(packets, net::ERR_ACCESS_DENIED,
+                               true /*async_reads*/);
+  std::string body;
+  EXPECT_EQ(net::ERR_ACCESS_DENIED,
+            Load(MultipleWritesInterceptor::GetURL(), &body));
+  EXPECT_EQ(kBody, body);
+  EXPECT_TRUE(durable_message.is_complete());
+  ASSERT_GT(accounting_delegate.size(), 0);
 }
 
 class NeverFinishedBodyHttpResponse : public net::test_server::HttpResponse {
@@ -5720,6 +5917,64 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Values(TestMode::kCredentialsModeOmit,
                     TestMode::kCredentialsModeOmitWorkaround,
                     TestMode::kCredentialsModeOmitWithFeatureFix));
+
+TEST_F(URLLoaderTest, AcceptCHFrameNotAllowedHintWithFeature) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      features::kOffloadAcceptCHFrameCheck,
+      {{"AcceptCHFrameOffloadNotAllowedHints", "true"}});
+
+  net::TransportInfo info = net::DefaultTransportInfo();
+  info.accept_ch_frame = "Sec-CH-UA-Platform";
+
+  const GURL url("http://accept-ch.test/");
+  net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
+      url, std::make_unique<FakeTransportInfoInterceptor>(info));
+
+  MockAcceptCHFrameObserver observer;
+  set_accept_ch_frame_observer_for_next_request(&observer);
+
+  network::ResourceRequest::TrustedParams::EnabledClientHints enabled_hints;
+  enabled_hints.origin = url::Origin::Create(url);
+  enabled_hints.is_outermost_main_frame = true;
+  enabled_hints.hints = {network::mojom::WebClientHintsType::kUAArch};
+  enabled_hints.not_allowed_hints = {
+      network::mojom::WebClientHintsType::kUAPlatform};
+  set_enabled_client_hints_for_next_request(std::move(enabled_hints));
+
+  EXPECT_THAT(Load(url), IsOk());
+  EXPECT_FALSE(observer.called());
+}
+
+TEST_F(URLLoaderTest, AcceptCHFrameNotAllowedHintWithoutFeature) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      features::kOffloadAcceptCHFrameCheck,
+      {{"AcceptCHFrameOffloadNotAllowedHints", "false"}});
+
+  net::TransportInfo info = net::DefaultTransportInfo();
+  info.accept_ch_frame = "Sec-CH-UA-Platform";
+
+  const GURL url("http://accept-ch.test/");
+  net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
+      url, std::make_unique<FakeTransportInfoInterceptor>(info));
+
+  MockAcceptCHFrameObserver observer;
+  set_accept_ch_frame_observer_for_next_request(&observer);
+
+  network::ResourceRequest::TrustedParams::EnabledClientHints enabled_hints;
+  enabled_hints.origin = url::Origin::Create(url);
+  enabled_hints.is_outermost_main_frame = true;
+  enabled_hints.hints = {network::mojom::WebClientHintsType::kUAArch};
+  enabled_hints.not_allowed_hints = {
+      network::mojom::WebClientHintsType::kUAPlatform};
+  set_enabled_client_hints_for_next_request(std::move(enabled_hints));
+
+  EXPECT_THAT(Load(url), IsOk());
+  EXPECT_TRUE(observer.called());
+  EXPECT_THAT(observer.accept_ch_frame(),
+              ElementsAre(network::mojom::WebClientHintsType::kUAPlatform));
+}
 
 // Tests that a request with CredentialsMode::kOmit still sends client
 // certificates when features::kOmitCorsClientCert is disabled, and when the

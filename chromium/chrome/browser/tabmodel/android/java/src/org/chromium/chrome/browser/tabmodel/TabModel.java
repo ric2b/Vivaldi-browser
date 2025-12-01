@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.tabmodel;
 
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -14,6 +15,10 @@ import org.chromium.chrome.browser.tab.TabId;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.OptionalInt;
 import java.util.Set;
 
 /**
@@ -22,8 +27,18 @@ import java.util.Set;
  */
 @NullMarked
 public interface TabModel extends SupportsTabModelObserver, TabList {
+    Map<Integer, Long> sTabPinTimestampMap = new HashMap<>();
+
     /** Returns the profile associated with the current model. */
     @Nullable Profile getProfile();
+
+    /**
+     * Associates this tab model with a browser window. This should be called shortly after startup
+     * to associate the tab model with a AndroidBrowserWindow.
+     *
+     * @param nativeAndroidBrowserWindow The native AndroidBrowserWindow pointer.
+     */
+    void associateWithBrowserWindow(long nativeAndroidBrowserWindow);
 
     /** Returns the matching tab that has the given id, or null if there is none. */
     @Nullable Tab getTabById(@TabId int tabId);
@@ -188,4 +203,64 @@ public interface TabModel extends SupportsTabModelObserver, TabList {
      * @return The total count of selected tabs.
      */
     int getMultiSelectedTabsCount();
+
+    /**
+     * Returns the index of the first non-pinned tab in the model.
+     *
+     * @return The index of the first non-pinned tab, or the model count if all tabs are pinned.
+     */
+    int findFirstNonPinnedTabIndex();
+
+    /**
+     * @return The number of pinned tabs in this model.
+     */
+    int getPinnedTabsCount();
+
+    /** Returns the native {@code SessionID} as returned by {@code tab_model.h:GetSessionId()}. */
+    OptionalInt getNativeSessionIdForTesting();
+
+    /**
+     * Sets the mute setting for the sites of the provided tabs.
+     *
+     * @param tabs The list of {@link Tab}s whose sites will have their sound setting changed.
+     * @param mute If true, it will block sound (muted); if false, it will allow sound (unmuted).
+     */
+    void setMuteSetting(List<Tab> tabs, boolean mute);
+
+    /**
+     * Returns whether a tab is muted. This is determined by the audio state of the WebContents if
+     * it's available, otherwise it falls back to the sound content setting for the tab's URL.
+     *
+     * @param tab The {@link Tab} to check.
+     */
+    boolean isMuted(Tab tab);
+
+    private static long getCurrentTimeMillis() {
+        return System.currentTimeMillis();
+    }
+
+    /**
+     * Records the timestamp when a tab is pinned.
+     *
+     * @param tab The tab that was pinned.
+     */
+    default void recordPinTimestamp(Tab tab) {
+        sTabPinTimestampMap.put(tab.getId(), getCurrentTimeMillis());
+    }
+
+    /**
+     * Records the duration for which a tab was pinned. This is called when a tab is unpinned. If a
+     * timestamp for the tab's pinning exists, it calculates the duration and records it to a
+     * histogram.
+     *
+     * @param tab The tab that was unpinned.
+     */
+    default void recordPinnedDuration(Tab tab) {
+        if (sTabPinTimestampMap.containsKey(tab.getId())) {
+            long pinTimestamp = sTabPinTimestampMap.get(tab.getId());
+            long duration = getCurrentTimeMillis() - pinTimestamp;
+            RecordHistogram.recordLongTimesHistogram100("Tab.PinnedDuration", duration);
+            sTabPinTimestampMap.remove(tab.getId());
+        }
+    }
 }

@@ -46,7 +46,6 @@
 #include "logging/rtc_event_log/events/rtc_event_dtls_writable_state.h"
 #include "logging/rtc_event_log/events/rtc_event_end_log.h"
 #include "logging/rtc_event_log/events/rtc_event_frame_decoded.h"
-#include "logging/rtc_event_log/events/rtc_event_generic_ack_received.h"
 #include "logging/rtc_event_log/events/rtc_event_generic_packet_received.h"
 #include "logging/rtc_event_log/events/rtc_event_generic_packet_sent.h"
 #include "logging/rtc_event_log/events/rtc_event_ice_candidate_pair.h"
@@ -114,17 +113,22 @@ constexpr int kMaxExtensionSizeBytes = 10;
 constexpr int kMaxNumExtensions = 6;
 
 constexpr ExtensionPair kExtensions[kMaxNumExtensions] = {
-    {RTPExtensionType::kRtpExtensionTransmissionTimeOffset,
-     RtpExtension::kTimestampOffsetUri},
-    {RTPExtensionType::kRtpExtensionAbsoluteSendTime,
-     RtpExtension::kAbsSendTimeUri},
-    {RTPExtensionType::kRtpExtensionTransportSequenceNumber,
-     RtpExtension::kTransportSequenceNumberUri},
-    {RTPExtensionType::kRtpExtensionAudioLevel, RtpExtension::kAudioLevelUri},
-    {RTPExtensionType::kRtpExtensionVideoRotation,
-     RtpExtension::kVideoRotationUri},
-    {RTPExtensionType::kRtpExtensionDependencyDescriptor,
-     RtpExtension::kDependencyDescriptorUri}};
+    {.type = RTPExtensionType::kRtpExtensionTransmissionTimeOffset,
+     .name = RtpExtension::kTimestampOffsetUri},
+    {.type = RTPExtensionType::kRtpExtensionAbsoluteSendTime,
+     .name = RtpExtension::kAbsSendTimeUri},
+    {.type = RTPExtensionType::kRtpExtensionTransportSequenceNumber,
+     .name = RtpExtension::kTransportSequenceNumberUri},
+    {.type = RTPExtensionType::kRtpExtensionAudioLevel,
+     .name = RtpExtension::kAudioLevelUri},
+    {.type = RTPExtensionType::kRtpExtensionVideoRotation,
+     .name = RtpExtension::kVideoRotationUri},
+    {.type = RTPExtensionType::kRtpExtensionDependencyDescriptor,
+     .name = RtpExtension::kDependencyDescriptorUri}};
+
+MATCHER_P2(Near, value, margin, "") {
+  return value - margin < arg && arg < value + margin;
+}
 
 template <typename T>
 void ShuffleInPlace(Random* prng, ArrayView<T> array) {
@@ -625,16 +629,6 @@ std::unique_ptr<RtcEventGenericPacketReceived>
 EventGenerator::NewGenericPacketReceived() {
   return std::make_unique<RtcEventGenericPacketReceived>(
       received_packet_number_++, prng_.Rand(40, 250));
-}
-std::unique_ptr<RtcEventGenericAckReceived>
-EventGenerator::NewGenericAckReceived() {
-  std::optional<int64_t> receive_timestamp = std::nullopt;
-  if (prng_.Rand(0, 2) > 0) {
-    receive_timestamp = prng_.Rand(0, 100000);
-  }
-  AckedPacket packet = {prng_.Rand(40, 250), receive_timestamp};
-  return std::move(RtcEventGenericAckReceived::CreateLogs(
-      received_packet_number_++, std::vector<AckedPacket>{packet})[0]);
 }
 
 void EventGenerator::RandomizeRtpPacket(
@@ -1190,17 +1184,6 @@ void EventVerifier::VerifyLoggedGenericPacketReceived(
             logged_event.packet_length);
 }
 
-void EventVerifier::VerifyLoggedGenericAckReceived(
-    const RtcEventGenericAckReceived& original_event,
-    const LoggedGenericAckReceived& logged_event) const {
-  EXPECT_EQ(original_event.timestamp_ms(), logged_event.log_time_ms());
-  EXPECT_EQ(original_event.packet_number(), logged_event.packet_number);
-  EXPECT_EQ(original_event.acked_packet_number(),
-            logged_event.acked_packet_number);
-  EXPECT_EQ(original_event.receive_acked_packet_time_ms(),
-            logged_event.receive_acked_packet_time_ms);
-}
-
 void EventVerifier::VerifyLoggedRtcpPacketIncoming(
     const RtcEventRtcpPacketIncoming& original_event,
     const LoggedRtcpPacketIncoming& logged_event) const {
@@ -1402,16 +1385,22 @@ void EventVerifier::VerifyLoggedStartEvent(
     int64_t start_time_us,
     int64_t utc_start_time_us,
     const LoggedStartEvent& logged_event) const {
-  EXPECT_EQ(start_time_us / 1000, logged_event.log_time_ms());
+  // Use approximate comparison to support various roundings to milliseconds.
+  EXPECT_THAT(logged_event.log_time(),
+              Near(Timestamp::Micros(start_time_us), TimeDelta::Millis(1)));
   if (encoding_type_ == RtcEventLog::EncodingType::NewFormat) {
-    EXPECT_EQ(utc_start_time_us / 1000, logged_event.utc_start_time.ms());
+    EXPECT_THAT(
+        logged_event.utc_start_time,
+        Near(Timestamp::Micros(utc_start_time_us), TimeDelta::Millis(1)));
   }
 }
 
 void EventVerifier::VerifyLoggedStopEvent(
     int64_t stop_time_us,
     const LoggedStopEvent& logged_event) const {
-  EXPECT_EQ(stop_time_us / 1000, logged_event.log_time_ms());
+  // Use approximate comparison to support various roundings to milliseconds.
+  EXPECT_THAT(logged_event.log_time(),
+              Near(Timestamp::Micros(stop_time_us), TimeDelta::Millis(1)));
 }
 
 void VerifyLoggedStreamConfig(const rtclog::StreamConfig& original_config,

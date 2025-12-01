@@ -227,7 +227,9 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
 
   void InLayoutNGInlineFormattingContextWillChange(bool) final;
 
-  void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
+  void StyleDidChange(StyleDifference,
+                      const ComputedStyle* old_style,
+                      const StyleChangeContext&) override;
 
   void InvalidateDisplayItemClients(PaintInvalidationReason) const override;
 
@@ -236,7 +238,6 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
                                MapCoordinatesFlags) const override;
 
  private:
-  bool AbsoluteTransformDependsOnPoint(const LayoutObject& object) const;
   void QuadsForSelfInternal(Vector<gfx::QuadF>& quads,
                             const LayoutBoxModelObject* ancestor,
                             MapCoordinatesFlags mode,
@@ -297,8 +298,6 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
 
   LayoutUnit OffsetLeft(const Element*) const final;
   LayoutUnit OffsetTop(const Element*) const final;
-  LayoutUnit OffsetWidth() const final;
-  LayoutUnit OffsetHeight() const final;
 
   PhysicalRect BoundingBoxRelativeToFirstFragment() const final;
 

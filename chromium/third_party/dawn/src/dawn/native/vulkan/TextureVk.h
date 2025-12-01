@@ -116,6 +116,9 @@ class Texture : public TextureBase {
     Texture(Device* device, const UnpackedPtr<TextureDescriptor>& descriptor);
 
     void DestroyImpl() override;
+    MaybeError PinImpl(wgpu::TextureUsage usage) override;
+    void UnpinImpl() override;
+
     MaybeError ClearTexture(CommandRecordingContext* recordingContext,
                             const SubresourceRange& range,
                             TextureBase::ClearValue);
@@ -312,6 +315,7 @@ class TextureView final : public TextureViewBase, public WeakRefSupport<TextureV
   public:
     static ResultOrError<Ref<TextureView>> Create(
         TextureBase* texture,
+        uint64_t textureViewId,
         const UnpackedPtr<TextureViewDescriptor>& descriptor);
     VkImageView GetHandle() const;
     VkImageView GetHandleForBGRA8UnormStorage() const;
@@ -321,8 +325,13 @@ class TextureView final : public TextureViewBase, public WeakRefSupport<TextureV
     bool IsYCbCr() const override;
     YCbCrVkDescriptor GetYCbCrVkDescriptor() const override;
 
+    // Unique per-device.
+    uint64_t GetTextureViewId() const { return mTextureViewId; }
+
   private:
-    TextureView(TextureBase* texture, const UnpackedPtr<TextureViewDescriptor>& descriptor);
+    TextureView(TextureBase* texture,
+                uint64_t textureViewId,
+                const UnpackedPtr<TextureViewDescriptor>& descriptor);
     ~TextureView() override;
     void DestroyImpl() override;
     using TextureViewBase::TextureViewBase;
@@ -341,6 +350,8 @@ class TextureView final : public TextureViewBase, public WeakRefSupport<TextureV
     bool mIsYCbCr = false;
     YCbCrVkDescriptor mYCbCrVkDescriptor;
     std::vector<VkImageView> mHandlesFor2DViewOn3D;
+
+    const uint64_t mTextureViewId;
 };
 
 }  // namespace dawn::native::vulkan

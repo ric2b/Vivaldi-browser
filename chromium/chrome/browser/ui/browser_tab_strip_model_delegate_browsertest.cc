@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 #include "chrome/browser/ui/browser_tab_strip_model_delegate.h"
 
+#include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -14,6 +14,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/saved_tab_groups/public/features.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "content/public/test/browser_test.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -78,10 +79,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTabStripModelDelegateTest, MoveTabsToNewWindow) {
 
   // Execute this on a background tab to ensure that the code path can handle
   // other tabs besides the active one.
-  ui_test_utils::BrowserChangeObserver new_browser_observer(
-      nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
+  ui_test_utils::BrowserCreatedObserver browser_created_observer;
   delegate->MoveTabsToNewWindow({0});
-  Browser* active_browser = new_browser_observer.Wait();
+  Browser* active_browser = browser_created_observer.Wait();
   ui_test_utils::WaitUntilBrowserBecomeActive(active_browser);
 
   // Now there are two browsers, each with one tab and the new browser is
@@ -136,10 +136,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTabStripModelDelegateTest,
 
   // Execute this on a background tab to ensure that the code path can handle
   // other tabs besides the active one.
-  ui_test_utils::BrowserChangeObserver new_browser_observer(
-      nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
+  ui_test_utils::BrowserCreatedObserver browser_created_observer;
   delegate->MoveTabsToNewWindow({0, 2});
-  Browser* active_browser = new_browser_observer.Wait();
+  Browser* active_browser = browser_created_observer.Wait();
   ui_test_utils::WaitUntilBrowserBecomeActive(active_browser);
 
   // Now there are two browsers, with one or two tabs and the new browser is
@@ -250,7 +249,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTabStripModelDelegateTest,
   EXPECT_EQ(browser()->tab_strip_model()->group_model()->ListTabGroups().size(),
             2u);
 
-  auto* sync_service = tab_groups::SavedTabGroupUtils::GetServiceForProfile(
+  auto* sync_service = tab_groups::TabGroupSyncServiceFactory::GetForProfile(
       browser()->profile());
   EXPECT_NE(sync_service, nullptr);
 
@@ -307,7 +306,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTabStripModelDelegateTest,
   EXPECT_EQ(browser()->tab_strip_model()->group_model()->ListTabGroups().size(),
             2u);
 
-  auto* sync_service = tab_groups::SavedTabGroupUtils::GetServiceForProfile(
+  auto* sync_service = tab_groups::TabGroupSyncServiceFactory::GetForProfile(
       browser()->profile());
   EXPECT_NE(sync_service, nullptr);
 

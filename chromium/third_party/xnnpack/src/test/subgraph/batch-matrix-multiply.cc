@@ -22,8 +22,7 @@
 #include "src/xnnpack/math.h"
 #include "src/xnnpack/subgraph.h"
 #include "test/replicable_random_device.h"
-#include "test/subgraph/calculate_quantization_params.h"
-#include "test/subgraph/fake-dynamic-quantize.h"
+#include "test/subgraph/quantization-helpers.h"
 #include "test/subgraph/runtime-flags.h"
 #include "test/subgraph/subgraph-tester.h"
 
@@ -142,29 +141,8 @@ Tensor<float> ReferenceImpl(Tensor<InputA> input_a, Tensor<InputB> input_b,
   return output;
 }
 
-// For float types, generate data in [-1, 1]
-template <typename T>
-DatatypeGenerator<T> MakeDatatypeGenerator(T) {
-  return DatatypeGenerator<T>(-1.0f, 1.0f);
-}
-template <typename T>
-T MaxDatatype(T) {
-  return 1.0f;
-}
-
-// For quantized types, generate the full range of the type.
-template <typename T, typename Kind>
-DatatypeGenerator<quantized<T, Kind>> MakeDatatypeGenerator(
-    quantized<T, Kind>) {
-  return DatatypeGenerator<quantized<T, Kind>>();
-}
-template <typename T, typename Kind>
-T MaxDatatype(quantized<T, Kind>) {
-  return NumericLimits<quantized<T, Kind>>::max();
-}
-
 template <typename Input, typename Output = Input>
-void TestDynamicB(uint64_t subgraph_flags = xnn_test_runtime_flags()) {
+void TestDynamicB(uint64_t runtime_flags = xnn_test_runtime_flags()) {
   ReplicableRandomDevice rng;
   std::bernoulli_distribution flag_dist(0.5);
   std::bernoulli_distribution k_big_dist(0.33);
@@ -214,7 +192,7 @@ void TestDynamicB(uint64_t subgraph_flags = xnn_test_runtime_flags()) {
       flags |= XNN_FLAG_SLOW_CONSISTENT_ARITHMETIC;
     }
 
-    SubgraphTester subgraph(3, subgraph_flags);
+    SubgraphTester subgraph(3, runtime_flags);
     const uint32_t input_a_id = 0;
     const uint32_t input_b_id = 1;
     const uint32_t output_id = 2;
@@ -257,9 +235,11 @@ void TestDynamicB(uint64_t subgraph_flags = xnn_test_runtime_flags()) {
 
       Tensor<Input> input_a(a_shape, XnnExtraBytes);
       Tensor<Input> input_b(b_shape, XnnExtraBytes);
-      auto input_gen = MakeDatatypeGenerator(Input());
-      input_a.generate([&]() { return input_gen(rng); });
-      input_b.generate([&]() { return input_gen(rng); });
+      auto input_a_gen = MakeDatatypeGenerator(Input());
+      auto input_b_gen =
+          MakeDatatypeGenerator(Input(), /*symmetric_range=*/true);
+      input_a.generate([&]() { return input_a_gen(rng); });
+      input_b.generate([&]() { return input_b_gen(rng); });
       broadcast_extent_1(input_a);
       broadcast_extent_1(input_b);
 
@@ -324,22 +304,22 @@ TEST(BatchMatrixMultiplyQS8, dynamic_b) {
 
 TEST(BatchMatrixMultiplyF16, dont_inline_lhs_dynamic_b) {
   TestDynamicB<xnn_float16, xnn_float16>(
-      /*subgraph_flags=*/xnn_test_runtime_flags() |
+      /*runtime_flags=*/xnn_test_runtime_flags() |
       XNN_FLAG_NO_INLINED_LHS_PACKING);
 }
 TEST(BatchMatrixMultiplyF32, dont_inline_lhs_dynamic_b) {
-  TestDynamicB<float, float>(/*subgraph_flags=*/xnn_test_runtime_flags() |
+  TestDynamicB<float, float>(/*runtime_flags=*/xnn_test_runtime_flags() |
                              XNN_FLAG_NO_INLINED_LHS_PACKING);
 }
 TEST(BatchMatrixMultiplyBF16F32, dont_inline_lhs_dynamic_b) {
   TestDynamicB<xnn_bfloat16, float>(
-      /*subgraph_flags=*/xnn_test_runtime_flags() |
+      /*runtime_flags=*/xnn_test_runtime_flags() |
       XNN_FLAG_NO_INLINED_LHS_PACKING);
 }
 
 template <typename InputA, typename InputB, typename Output = InputA>
 void TestStaticB(xnn_datatype convert_to = xnn_datatype_invalid,
-                 uint64_t subgraph_flags = xnn_test_runtime_flags()) {
+                 uint64_t runtime_flags = xnn_test_runtime_flags()) {
   ReplicableRandomDevice rng;
   std::bernoulli_distribution flag_dist(0.5);
   std::uniform_int_distribution<> dim_dist{1, 100};
@@ -370,7 +350,8 @@ void TestStaticB(xnn_datatype convert_to = xnn_datatype_invalid,
     b_shape[input_b_rank - 2] = dim_dist(rng);
     b_shape[input_b_rank - 1] = dim_dist(rng);
     Tensor<InputB> input_b(b_shape, XnnExtraBytes);
-    auto input_b_gen = MakeDatatypeGenerator(InputB());
+    auto input_b_gen =
+        MakeDatatypeGenerator(InputB(), /*symmetric_range=*/true);
     input_b.generate([&]() { return input_b_gen(rng); });
     broadcast_extent_1(input_b);
     size_t k = input_b.extent(input_b_rank - 2);
@@ -391,8 +372,7 @@ void TestStaticB(xnn_datatype convert_to = xnn_datatype_invalid,
               /*bias_quantization=*/{0, 1.0f});
     }
 
-
-    SubgraphTester subgraph(3, subgraph_flags);
+    SubgraphTester subgraph(3);
     subgraph.AddInputTensor(input_a_rank, xnn_datatype_of<InputA>(),
                             input_a_quantization, input_a_id);
 
@@ -429,7 +409,8 @@ void TestStaticB(xnn_datatype convert_to = xnn_datatype_invalid,
     subgraph.AddOutputTensor(output_rank, xnn_datatype_of<Output>(),
                              output_quantization, output_id)
         .AddBatchMatrixMultiply(bmm_input_a_id, input_b_id, output_id, flags);
-    xnn_status status = subgraph.CreateRuntime();
+    xnn_status status =
+        subgraph.CreateRuntime(/*threadpool=*/nullptr, runtime_flags);
     if (status == xnn_status_unsupported_hardware) {
       GTEST_SKIP();
       return;
@@ -523,23 +504,32 @@ TEST(BatchMatrixMultiplyQS8, static_b) {
 TEST(BatchMatrixMultiplyF16, dont_inline_lhs_static_b) {
   TestStaticB<xnn_float16, xnn_float16>(
       /*convert_to=*/xnn_datatype_invalid,
-      /*subgraph_flags=*/XNN_FLAG_NO_INLINED_LHS_PACKING);
+      /*runtime_flags=*/xnn_test_runtime_flags() |
+          XNN_FLAG_NO_INLINED_LHS_PACKING);
 }
 TEST(BatchMatrixMultiplyF32, dont_inline_lhs_static_b) {
   TestStaticB<float, float>(
       /*convert_to=*/xnn_datatype_invalid,
-      /*subgraph_flags=*/XNN_FLAG_NO_INLINED_LHS_PACKING);
+      /*runtime_flags=*/xnn_test_runtime_flags() |
+          XNN_FLAG_NO_INLINED_LHS_PACKING);
 }
 TEST(BatchMatrixMultiplyBF16F32, dont_inline_lhs_static_b) {
   TestStaticB<xnn_bfloat16, xnn_bfloat16, float>(
       /*convert_to=*/xnn_datatype_invalid,
-      /*subgraph_flags=*/XNN_FLAG_NO_INLINED_LHS_PACKING);
+      /*runtime_flags=*/xnn_test_runtime_flags() |
+          XNN_FLAG_NO_INLINED_LHS_PACKING);
 }
 
 using qcint8 = quantized<int8_t, channelwise>;
 
 TEST(BatchMatrixMultiplyQD8F32, static_b) {
   TestStaticB<float, qcint8>(/*convert_to=*/xnn_datatype_qdint8);
+}
+
+TEST(BatchMatrixMultiplyQD8F32, dont_inline_lhs_static_b) {
+  TestStaticB<float, qcint8>(/*convert_to=*/xnn_datatype_qdint8,
+                             /*runtime_flags=*/xnn_test_runtime_flags() |
+                                 XNN_FLAG_NO_INLINED_LHS_PACKING);
 }
 
 }  // namespace xnnpack

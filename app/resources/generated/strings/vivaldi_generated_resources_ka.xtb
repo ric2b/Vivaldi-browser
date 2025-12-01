@@ -12,6 +12,7 @@
 <translation id="1163931534039071049">&amp;ფრეიმის კოდის ჩვენება</translation>
 <translation id="1165039591588034296">შეცდომა</translation>
 <translation id="1175364870820465910">&amp;ბეჭდვა…</translation>
+<translation id="1177548198167638471">აღარ მკითხო</translation>
 <translation id="1181037720776840403">წაშლა</translation>
 <translation id="1184037892196730210">ეკრანის ტრანსლაცია შეუძლებელია</translation>
 <translation id="1187722533808055681">უქმეს გაღვიძებები</translation>
@@ -28,9 +29,10 @@
 <translation id="1451375123200651445">ვებგვერდი, ერთი ფაილი</translation>
 <translation id="1465176863081977902">აუდიოს ბმულის &amp;კოპირება</translation>
 <translation id="1476607407192946488">&amp;ენის პარამეტრები</translation>
-<translation id="1546280085599573572">ამ გაფართოებამ შეცვალა გვერდი, რომელსაც გაჩვენებთ, როცა საწყის გვერდზე გადასვლის ღილაკზე დააწკაპუნებთ.</translation>
+<translation id="1478607704480248626">დაყენება ჩართული არაა</translation>
 <translation id="1552752544932680961">გაფართოების მართვა</translation>
 <translation id="15662109988763471">არჩეული პრინტერი ხელმიუწვდომელია ან არასწორადაა დაყენებული. შეამოწმეთ თქვენი პრინტერი ან სხვა აირჩიეთ.</translation>
+<translation id="1581962803218266616">Finder-ში ჩვენება</translation>
 <translation id="1588438908519853928">ნორმალური</translation>
 <translation id="1588870296199743671">ბმულის გახსნის საშუალება...</translation>
 <translation id="1589055389569595240">მართლწერისა და გრამატიკის ჩვენება</translation>
@@ -49,14 +51,18 @@
 <translation id="176587472219019965">&amp;ახალი ფანჯარა</translation>
 <translation id="1769104665586091481">ბმულის &amp;ახალ ფანჯარაში გახსნა</translation>
 <translation id="1779468444204342338">მინიმუმი</translation>
+<translation id="1805822111539868586">ხედების გამოკვლევა</translation>
 <translation id="1815083418640426271">უბრალო ტექსტად ჩასმა</translation>
 <translation id="1828901632669367785">სისტემური ფანჯრით დაბეჭდვა...</translation>
+<translation id="1843048149176045210">გადმოწერის ბმულის კოპირება</translation>
 <translation id="1850508293116537636">&amp;საათის ისრის მიმართულებით შებრუნება</translation>
 <translation id="1886996562706621347">საიტებისთვის კითხვის, გახდნენ თუ არა პროტოკოლის ნაგულისხმევი დამმუშავებლები, უფლების მიცემა (რეკომენდებულია)</translation>
 <translation id="1901303067676059328">ყველაფრის &amp;მონიშვნა</translation>
+<translation id="1906488504371069394">აღმოაჩინეთ მეტი გაფართოება და თემა <ph name="BEGIN_LINK" />Chrome-ის ვებ-მაღაზიაში<ph name="END_LINK" /></translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1925021887439448749">შეიყვანეთ მორგებული ვებ-მისამართი</translation>
 <translation id="1932098463447129402">არა თარიღამდე</translation>
+<translation id="1936157145127842922">საქაღალდეში ჩვენება</translation>
 <translation id="1936931585862840749">ამოსაბეჭდი ეგზემპლარების რაოდენობის მისათითებლად გამოიყენეთ რიცხვი (1-დან <ph name="MAX_COPIES" />-მდე).</translation>
 <translation id="2019718679933488176">აუდიოს ახალ ჩანართში &amp;გახსნა</translation>
 <translation id="2050339315714019657">პორტრეტი</translation>
@@ -70,7 +76,7 @@
 <translation id="215753907730220065">სრული ეკრანიდან გამოსვლა</translation>
 <translation id="2158475082070321257">გამოყოფილთან ბმულის კოპირება</translation>
 <translation id="2177950615300672361">ინკოგნიტო ჩანართი: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">საკუთარი კლიენტის მოდული: <ph name="NEXE_NAME" /></translation>
+<translation id="2187906491731510095">განახლებული გაფართოებები</translation>
 <translation id="2218515861914035131">უბრალო ტექსტად ჩასმა</translation>
 <translation id="2249605167705922988">მაგ: 1-5, 8, 11-13</translation>
 <translation id="2280486287150724112">მარჯვენა კიდე</translation>
@@ -81,9 +87,12 @@
 <translation id="2326931316514688470">&amp;აპის თავიდან ჩატვირთვა</translation>
 <translation id="2327492829706409234">აპის ჩართვა</translation>
 <translation id="2348176352564285430">აპი: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="2378602615417849384">{NUM_EXTENSIONS, plural,
+      =1 {ეს გაფართოება, მალე, შეიძლება, მხარდაჭერილი აღარ იყოს}
+      other {ეს გაფართოებები, მალე, შეიძლება, მხარდაჭერილი აღარ იყოს}
+    }</translation>
 <translation id="2378982052244864789">აირჩიეთ გაფართოების საქაღალდე.</translation>
 <translation id="2379281330731083556">სისტემური დიალოგით დაბეჭდვა... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">უცნობი დამატება</translation>
 <translation id="2423578206845792524">&amp;გამოსახულების შენახვა, როგორც...</translation>
 <translation id="2439110203301358333">სხვა პროგრამამ თქვენი კომპიუტერიდან დაამატა გაფართოება, რომელმაც, შეიძლება, შეცვალოს გზა, როგორ მუშაობს Vivaldi.</translation>
 <translation id="2443487764245141020">ვებსაიტებს ასევე შეიძლება დასჭირდეთ თქვენი მოწყობილობის ამოცნობა შესაბამისი იდენტიფიკატორის მეშვეობით</translation>
@@ -95,6 +104,7 @@
 <translation id="2550212893339833758">დასვოპილი მეხსიერება</translation>
 <translation id="2553440850688409052">ამ დამატების დამალვა</translation>
 <translation id="2607101320794533334">სუბიექტის საჯარო გასაღების ინფორმაცია</translation>
+<translation id="261305050785128654">აცნობეთ ვებგვერდებს, რომელ ენაზე საუბრობთ. როცა შესაძლებელია, ისინი თავიანთ შემცველობას ამ ენაზე გაჩვენებენ.</translation>
 <translation id="26224892172169984">საიტებისთვის პროტოკოლების დამუშავების უფლების აკრძალვა</translation>
 <translation id="2653275834716714682">ტექსტის ჩანაცვლება</translation>
 <translation id="265390580714150011">ველის მნიშვნელობა</translation>
@@ -102,12 +112,12 @@
 <translation id="2678063897982469759">თავიდან ჩართვა</translation>
 <translation id="2719936478972253983">დაიბლოკა შემდეგი ქუქი-ჩანაწერები</translation>
 <translation id="2721037002783622288">&amp;გამოსახულების <ph name="SEARCH_ENGINE" /> ძებნა</translation>
+<translation id="2722547199758472013">ID: <ph name="EXTENSION_ID" /></translation>
 <translation id="2738771556149464852">არა შემდეგ</translation>
 <translation id="2749881179542288782">შეამოწმეთ გრამატიკა მართლწერით</translation>
 <translation id="2785873697295365461">ფაილის დესკრიპტორები</translation>
 <translation id="2825758591930162672">სუბიექტის საჯარო გასაღები</translation>
 <translation id="2850541429955027218">თემის დამატება</translation>
-<translation id="2861941300086904918">საკუთარი კლიენტის უსაფრთხოების მმართველი</translation>
 <translation id="2881076733170862447">როცა დააწკაპუნებთ გაფართოებაზე</translation>
 <translation id="2889064240420137087">ბმულის გახსნა პროგრამით...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> პრინტერთან დაკავშირება შეუძლებელია. დარწმუნდით, რომ ის შეერთებულია და თავიდან სცადეთ.</translation>
@@ -131,6 +141,10 @@
 <translation id="3129173833825111527">მარცხენა კიდე</translation>
 <translation id="3144647712221361880">ბმულის გახსნა, როგორც</translation>
 <translation id="3222066309010235055">წინასწარი რენდერი: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3228985231489269630">{NUM_EXTENSIONS, plural,
+      =1 {მისი წაშლა, ან ჩანაცვლება მსგავსი გაფართოებით <ph name="BEGIN_LINK" />Chrome-ის ვებ-მაღაზიიდან<ph name="END_LINK" />.}
+      other {მათი წაშლა, ან ჩანაცვლება მსგავსი გაფართოებებით <ph name="BEGIN_LINK" />Chrome-ის ვებ-მაღაზიიდან<ph name="END_LINK" />}
+    }</translation>
 <translation id="3241680850019875542">აირჩიეთ გაფართოების პაკეტის ძირითადი საქაღალდე. გაფართოების განახლებისთვის კი მისი პირადი გასაღების ფაილიც დაგჭირდებათ.</translation>
 <translation id="3275778913554317645">ფანჯრის სახით გახსნა</translation>
 <translation id="3280237271814976245">&amp;შენახვა როგორც...</translation>
@@ -153,8 +167,10 @@
 <translation id="3493881266323043047">სისწორე</translation>
 <translation id="3511307672085573050">ბმულის &amp;მისამართის კოპირება</translation>
 <translation id="354068948465830244">ამას საიტის მონაცემების წაკითხვა და შეცვლა შეუძლია</translation>
+<translation id="3555812735919707620">გაფართოების წაშლა</translation>
 <translation id="3560034655160545939">&amp;მართლწერის შემოწმება</translation>
-<translation id="3587482841069643663">ყველა</translation>
+<translation id="3581861561942370740">ძებნა გადმოწერების ისტორიაში</translation>
+<translation id="3612673635130633812">გადმოწერილია &lt;a href="<ph name="URL" />"&gt;<ph name="EXTENSION" />&lt;/a&gt;</translation>
 <translation id="3627588569887975815">ბმულის ახალ &amp;ინკოგნიტო ფანჯარაში გახსნა</translation>
 <translation id="3678156199662914018">გაფართოება: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> ეკრანის გაზიარების მოთხოვნა</translation>
@@ -170,6 +186,7 @@
 <translation id="3838085852053358637">გაფართოების ჩატვირთვა ჩავარდა</translation>
 <translation id="383891835335927981">საიტები არც გადიდებულა, არც დაპატარავებულა</translation>
 <translation id="385051799172605136">უკან</translation>
+<translation id="3855441664322950881">გაფართოების შეკუმშვა</translation>
 <translation id="3858860766373142691">სახელი</translation>
 <translation id="3861977424605124250">ჩვენება გაშვებისას</translation>
 <translation id="3867944738977021751">სერტიფიკატის ველები</translation>
@@ -183,6 +200,7 @@
 <translation id="3948116654032448504">&amp;გამოსახულების <ph name="SEARCH_ENGINE" /> ძებნა</translation>
 <translation id="3979395879372752341">ახალი გაფართოება დამატებულია (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">გამოყოფილთან ბმულის კოპირება</translation>
+<translation id="399788104667917863">მიმაგრება ხელსაწყოთა პანელზე</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">ლექსიკონში ჩ&amp;ამატება</translation>
 <translation id="4058793769387728514">შეამოწმე დოკუმენტი ახლა</translation>
@@ -197,7 +215,6 @@
 <translation id="4131410914670010031">შავი და თეთრი</translation>
 <translation id="4165986682804962316">საიტის მორგება</translation>
 <translation id="4170314459383239649">გასუფთავება გასვლისას</translation>
-<translation id="4176463684765177261">გათიშულია</translation>
 <translation id="4200983522494130825">&amp;ახალი ჩანართი</translation>
 <translation id="4225397296022057997">ყველა საიტზე</translation>
 <translation id="4256316378292851214">&amp;ვიდეოს შენახვა, როგორც...</translation>
@@ -221,15 +238,19 @@
 <translation id="4613271546271159013">გაფართოებამ შეცვალა, რა გვერდს ხედავთ, როცა ახალ ჩანართს ხსნით.</translation>
 <translation id="4616405296204756919">შენახული პაროლები ნებისმიერ მოწყობილობაზე შეგიძლიათ, გამოიყენოთ. ისინი შენახულია <ph name="VIVALDI_PASSWORD_MANAGER" />-ში.</translation>
 <translation id="4643612240819915418">ვიდეოს ახალ ჩანართში &amp;გახსნა</translation>
+<translation id="4644205769234414680">ინკოგნიტოში დაშვება</translation>
+<translation id="4654801841330730814">ყველა</translation>
 <translation id="4677772697204437347">GPU მეხსიერება</translation>
 <translation id="4681930562518940301">&amp;საწყისი გამოსახულების ახალ ჩანართში გახსნა</translation>
 <translation id="4711638718396952945">პარამეტრების აღდგენა</translation>
 <translation id="4726710629007580002">ამ გაფართოების დაყენებისას აღმოჩენილია გაფრთხილებები:</translation>
+<translation id="473775607612524610">განახლება</translation>
 <translation id="4763408175235639573">ამ გვერდის დათვალიერებისას შეიქმნა შემდეგი ქუქი-ჩანაწერები</translation>
 <translation id="479536056609751218">ვებგვერდი, მხოლოდ HTML</translation>
 <translation id="4827904420700932487">ამ სურათისთვის QR კოდის შექმნა</translation>
 <translation id="4839303808932127586">&amp;ვიდეოს შენახვა, როგორც...</translation>
 <translation id="4840096453115567876">მაინც გსურთ ინკოგნიტო რეჟიმიდან გასვლა?</translation>
+<translation id="4885692421645694729">ამ გაფართოებას დამატებითი საიტის წვდომა არ აქვს</translation>
 <translation id="488785315393301722">დეტალების ჩვენება</translation>
 <translation id="4895799941222633551">&amp;მალსახმობის შექმნა...</translation>
 <translation id="4912643508233590958">უქმეს გაღვიძებები</translation>
@@ -246,13 +267,13 @@
 <translation id="5059526285558225588">აირჩიეთ, რა გაზიარდეს</translation>
 <translation id="5063480226653192405">გამოყენება</translation>
 <translation id="5116628073786783676">&amp;აუდიოს შენახვა, როგორც...</translation>
-<translation id="5143374789336132547">გაფართოებამ "<ph name="EXTENSION_NAME" />" შეცვალა ვებგვერდი, რომელსაც საწყისი გვერდის ღილაკზე დაწკაპუნებისას გაჩვენებთ.</translation>
 <translation id="5154108062446123722">დამატებითი პარამეტრები პრინტერისთვის <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5154702632169343078">თემა</translation>
+<translation id="5170568018924773124">საქაღალდეში ჩვენება</translation>
 <translation id="5171343362375269016">დასვოპილი მეხსიერება</translation>
-<translation id="5233019165164992427">NaCl-ის გამართვის პორტი</translation>
 <translation id="5233231016133573565">პროცესის ID</translation>
 <translation id="5233736638227740678">&amp;ჩასმა</translation>
+<translation id="5244466461749935369">ჯერჯერობით შენარჩუნება</translation>
 <translation id="5256861893479663409">ყველა საიტზე</translation>
 <translation id="5260334392110301220">ჭკვიანი ბრჭყალები</translation>
 <translation id="5269977353971873915">ბეჭდვს შეცდომა</translation>
@@ -273,7 +294,6 @@
 <translation id="5485102783864353244">აპის დამატება</translation>
 <translation id="5486561344817861625">ბრაუზერის გადატვირთვის სიმულაცია</translation>
 <translation id="5509693895992845810">შეინახვა &amp;როგორც...</translation>
-<translation id="5521078259930077036">ეს ის საწყისი გვერდია, რომელსაც მოელოდით?</translation>
 <translation id="5542132724887566711">პროფილი</translation>
 <translation id="5556459405103347317">თავიდან ჩატვირთვა</translation>
 <translation id="5575473780076478375">ინკოგნიტო გაფართოება: <ph name="EXTENSION_NAME" /></translation>
@@ -285,15 +305,14 @@
 <translation id="5677928146339483299">დაბლოკილია</translation>
 <translation id="5707185214361380026">შეცდომა გაფართოების ჩატვირთვისას ბმულიდან:</translation>
 <translation id="5713171467967533494">Vivaldi-ის ბრაუზერში გახსნა</translation>
-<translation id="5715711091495208045">დამატების შუამავალი: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">PDF-ის სახით შენახვა</translation>
 <translation id="5747809636523347288">ჩასმა და &amp;გადასვლა ბმულზე <ph name="URL" /></translation>
 <translation id="5759728514498647443">დოკუმენტები, რომლებიც დასაბეჭდად <ph name="APP_NAME" />-ით გააგზავნეთ, <ph name="APP_NAME" />-ს შეუძლია, წაიკითხოს.</translation>
 <translation id="5764483294734785780">&amp;აუდიოს შენახვა, როგორც...</translation>
+<translation id="577313026359983030">ჩემი გაფართოებები</translation>
 <translation id="5780973441651030252">პრორცესის პრიორიტეტი</translation>
 <translation id="5804241973901381774">ნებართვები</translation>
 <translation id="5828633471261496623">დაბეჭდვა...</translation>
-<translation id="583281660410589416">უცნობი</translation>
 <translation id="5851868085455377790">გამომცემელი</translation>
 <translation id="5860491529813859533">ჩართვა</translation>
 <translation id="5910363049092958439">&amp;გამოსახულების შენახვა, როგორც...</translation>
@@ -329,6 +348,7 @@
 <translation id="6374469231428023295">კიდევ სცადეთ</translation>
 <translation id="6398765197997659313">სრული ეკრანიდან გასვლა</translation>
 <translation id="6406303162637086258">ბრაუზერის გადატვირთვის სიმულაცია</translation>
+<translation id="6419546358665792306">გაშლილის ჩატვირთვა</translation>
 <translation id="6445450263907939268">თუ ეს ცვლილებები არ გნებავთ, შეგიძლიათ, წინა პარამეტრები აღადგინოთ.</translation>
 <translation id="6447842834002726250">ქუქიები</translation>
 <translation id="6498249116389603658">&amp;ყველა თქვენი ენა</translation>
@@ -345,7 +365,6 @@
 <translation id="6691936601825168937">&amp;წინ</translation>
 <translation id="6786747875388722282">გაფართოებები</translation>
 <translation id="6787839852456839824">კლავიატურის ბმულები</translation>
-<translation id="6798954102094737107">დამატება: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">ცვლილებების დატოვება</translation>
 <translation id="6824564591481349393">ელფოსტის მისამართის &amp;კოპირება</translation>
 <translation id="6840155290835956714">კითხვა გაგზავნამდე</translation>
@@ -378,10 +397,10 @@
 <translation id="7453008956351770337">ამ პრინტერის არჩევით, თქვენს პრინტერთან წვდომას აძლევთ შემდეგ გაფართოებას:</translation>
 <translation id="7564847347806291057">პროცესის დასრულება</translation>
 <translation id="7576690715254076113">დაშლა</translation>
+<translation id="7612050744024016345">ყველა გაფართოება</translation>
 <translation id="7629827748548208700">ჩანართი: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">გაუქმება</translation>
 <translation id="7659154729610375585">მაინც გსურთ ინკოგნიტო რეჟიმიდან გასვლა?</translation>
-<translation id="7661259717474717992">საიტებისთვის ქუქიების მონაცემების შენახვისა და წაკითხვის ნების დართვა</translation>
 <translation id="7663719505383602579">მიმღები: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">დაყენებულია თქვენი ადმინისტრატორის მიერ</translation>
 <translation id="7685038817958445325">ტრანსლაცია შეუძლებელია</translation>
@@ -415,6 +434,7 @@
 გასაღების ფაილი უსაფრთხო ადგილას შეინახეთ. ის თქვენი გაფართოების ახალი ვერსიების შესაქმნელად დაგჭირდებათ.</translation>
 <translation id="8004582292198964060">ბრაუზერი</translation>
 <translation id="8018313076035239964">აკონტროლეთ, რა ინფორმაცია შეუძლათ ვებგვერდებს, გამოიყენონ და რა შემცველობა შეუძლიათ, გაჩვენოთ</translation>
+<translation id="8023801379949507775">გაფართოების ახლავე განახლება</translation>
 <translation id="8071432093239591881">გამოსახულების სახით დაბეჭდვა</translation>
 <translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
         =1 {# სანიშნე}
@@ -427,7 +447,6 @@
 <translation id="8261378640211443080">გაფართოება სიაში <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> არაა და შეიძლება, თქვენთვის კითხვის გარეშე დაემატა.</translation>
 <translation id="8351419472474436977">თქვენი პროქსის პარამეტრებს, ახლა, ეს გაფართოება აკონტროლებს, რაც ნიშნავს, რომ მას შეუძლია შეცვალოს, გააფუჭოს ან შეცვალოს ყველაფერი, რასაც ინტერნეტში ხედავთ. თუ დარწმუნებული არ ბრძანდებით, რატომ მოხდა ეს, ალბათ, ეს არც გნებავთ.</translation>
 <translation id="8382913212082956454">ელფოსტის მისამართის &amp;კოპირება</translation>
-<translation id="8434480141477525001">NaCl-ის გამართვის პორტი</translation>
 <translation id="8449008133205184768">კოპირებისა და ჩასმის სტილი</translation>
 <translation id="8477178913400731244">მონაცემების წაშლა</translation>
 <translation id="8477384620836102176">&amp;ზოგადი</translation>
@@ -437,6 +456,7 @@
 <translation id="8546306075665861288">გამოსახულებების ქეში</translation>
 <translation id="8569682776816196752">სამიზნე აღმოჩენილი არაა</translation>
 <translation id="8584280235376696778">ვიდეოს ახალ ჩანართში &amp;გახსნა</translation>
+<translation id="8587660243683137365">ამ გვერდის დაყენება აპის სახით</translation>
 <translation id="8605428685123651449">SQLite-ის მეხსიერება</translation>
 <translation id="8615618338313291042">ინკოგნიტო აპი:<ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">CSS-ის კეში</translation>
@@ -446,6 +466,7 @@
 <translation id="8708000541097332489">გასუფთავება გასვლისას</translation>
 <translation id="8714838604780058252">ფონის გრაფიკა</translation>
 <translation id="8725066075913043281">კიდევ სცადეთ</translation>
+<translation id="8770406935328356739">გაფართოების ძირითადი საქაღალდე</translation>
 <translation id="8774934320277480003">ზედა კიდე</translation>
 <translation id="8798099450830957504">ნაგულისხმევი</translation>
 <translation id="8808478386290700967">ვებმაღაზია</translation>
@@ -456,6 +477,7 @@
 <translation id="8899851313684471736">ბმულის &amp;ახალ ფანჯარაში გახსნა</translation>
 <translation id="8915370057835397490">მინიშნების ჩატვირთვა</translation>
 <translation id="8916476537757519021">ინკოგნიტო ქვეჩარჩო: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8926389886865778422">აღარ მკითხო</translation>
 <translation id="8929696694736010839">მხოლოდ მიმდინარე ინკოგნიტო სესია</translation>
 <translation id="895944840846194039">JavaScript-ის მეხსიერება</translation>
 <translation id="8962083179518285172">დეტალების დამალვა</translation>

@@ -34,7 +34,6 @@
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
-#include "third_party/blink/renderer/core/canvas_interventions/canvas_interventions_enums.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_performance_monitor.h"
@@ -199,7 +198,6 @@ class CORE_EXPORT CanvasRenderingContext
     NOTREACHED();
   }
   virtual bool IsPaintable() const = 0;
-  virtual bool IsHibernating() const { return false; }
   void DidDraw(CanvasPerformanceMonitor::DrawType draw_type) {
     const CanvasRenderingContextHost* const host = Host();
     return DidDraw(host ? SkIRect::MakeWH(host->width(), host->height())
@@ -271,6 +269,9 @@ class CORE_EXPORT CanvasRenderingContext
   void WillProcessTask(const base::PendingTask&, bool) final {}
 
   // Canvas2D-specific interface
+  virtual std::optional<cc::PaintRecord> FlushCanvas(FlushReason) {
+    NOTREACHED();
+  }
   virtual void RestoreCanvasMatrixClipStack(cc::PaintCanvas*) const {}
   virtual void Reset() {}
   virtual void RestoreFromInvalidSizeIfNeeded() {}
@@ -288,9 +289,6 @@ class CORE_EXPORT CanvasRenderingContext
   virtual void DropAndRecreateExistingCanvas2DResourceProvider() {
     NOTREACHED();
   }
-  virtual CanvasResourceProvider* GetResourceProviderForCanvas2D() const {
-    NOTREACHED();
-  }
   virtual const std::optional<cc::PaintRecord>& GetLastRecordingForCanvas2D() {
     return empty_recording_;
   }
@@ -304,13 +302,20 @@ class CORE_EXPORT CanvasRenderingContext
   GetRGBAUnacceleratedStaticBitmapImage(SourceDrawingBuffer source_buffer) {
     NOTREACHED();
   }
-  virtual gfx::Size DrawingBufferSize() const { NOTREACHED(); }
 
   // WebGL & WebGPU-specific interface
   virtual void SetHdrMetadata(const gfx::HDRMetadata& hdr_metadata) {}
   virtual void Reshape(int width, int height) {}
 
-  virtual int AllocatedBufferCountPerPixel() { NOTREACHED(); }
+  intptr_t AllocatedBufferSize() const;
+  virtual int AllocatedBufferCountPerPixel() const { return 1; }
+  virtual gfx::Size DrawingBufferSize() const {
+    const CanvasRenderingContextHost* host = Host();
+    if (host == nullptr) [[unlikely]] {
+      return gfx::Size();
+    }
+    return Host()->Size();
+  }
 
   // OffscreenCanvas-specific methods.
   virtual bool PushFrame() { return false; }
@@ -348,12 +353,6 @@ class CORE_EXPORT CanvasRenderingContext
     return false;
   }
 
-  virtual bool ShouldTriggerIntervention() const { return false; }
-
-  virtual CanvasOperationType GetCanvasTriggerOperations() const {
-    return CanvasOperationType::kNone;
-  }
-
   bool did_print_in_current_task() const { return did_print_in_current_task_; }
 
  protected:
@@ -363,9 +362,9 @@ class CORE_EXPORT CanvasRenderingContext
 
   virtual void Dispose();
 
-  bool IsDrawElementEligible(Element* element,
-                             const String& func_name,
-                             ExceptionState& exception_state);
+  bool IsDrawElementImageEligible(Element* element,
+                                  const String& func_name,
+                                  ExceptionState& exception_state);
 
   bool ConvertHitTestRegionsToHTMLCanvasRegions(
       const HeapVector<Member<CanvasElementHitTestRegion>>& hit_test_regions,

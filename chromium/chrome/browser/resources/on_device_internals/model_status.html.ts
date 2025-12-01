@@ -32,8 +32,18 @@ export function getHtml(this: OnDeviceInternalsModelStatusElement) {
             <span class="value">${baseInfo.version}</value>
           </div>
           <div>
+            Backend Type: <span class="value">${baseInfo.backendType}</value>
+          </div>
+          <div>
             File path:
             <span class="value">${baseInfo.filePath}</value>
+          </div>
+          <div>
+            Folder size:
+            <span class="value">
+              ${(Number(baseInfo.fileSize) / 1024 / 1024).
+                toLocaleString('en-US', {maximumFractionDigits : 2})} MiB
+            </value>
           </div>
         </div>` : html``}
       </div>

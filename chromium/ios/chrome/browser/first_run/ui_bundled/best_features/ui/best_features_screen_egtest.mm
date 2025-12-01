@@ -4,11 +4,10 @@
 
 #import "components/password_manager/core/browser/password_manager_util.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
+#import "ios/chrome/browser/authentication/test/signin_earl_grey.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_constants.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
 #import "ios/chrome/browser/first_run/ui_bundled/best_features/ui/best_features_constants.h"
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_constants.h"
-#import "ios/chrome/browser/settings/ui_bundled/notifications/notifications_earl_grey_app_interface.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/common/ui/confirmation_alert/constants.h"
@@ -143,6 +142,9 @@ id<GREYMatcher> SharePasswordsTitle() {
       [self isRunningTest:@selector(testBestFeatures_variantECPEEnabled)]) {
     feature_param = "5";
   }
+  if ([self isRunningTest:@selector(testBestFeatures_variantDShopper)]) {
+    config.additional_args.push_back("--mock-shopping-service=is-eligible");
+  }
 
   config.additional_args.push_back(
       "--enable-features=BestFeaturesScreenInFirstRunExperience:"
@@ -253,6 +255,13 @@ id<GREYMatcher> SharePasswordsTitle() {
 // Promo, the items are correct, and that the FeatureHighlightScreenshotVC and
 // InstructionsHalfSheetVC appear correctly.
 - (void)testBestFeatures_variantB {
+  // TODO(crbug.com/437839631): Re-enable the test.
+#if TARGET_OS_SIMULATOR
+  if (@available(iOS 18.2, *)) {
+    EARL_GREY_TEST_DISABLED(@"Fails on iOS 18.2 simulator.");
+  }
+#endif
+
   // Wait for the Best Features Screen to appear.
   [ChromeEarlGrey
       waitForUIElementToAppearWithMatcher:
@@ -278,6 +287,13 @@ id<GREYMatcher> SharePasswordsTitle() {
 // the items are correct, and that the FeatureHighlightScreenshotVC and
 // InstructionsHalfSheetVC appear correctly.
 - (void)testBestFeatures_variantC {
+  // TODO(crbug.com/437839631): Re-enable the test.
+#if TARGET_OS_SIMULATOR
+  if (@available(iOS 18.2, *)) {
+    EARL_GREY_TEST_DISABLED(@"Fails on iOS 18.2 simulator.");
+  }
+#endif
+
   // Ensure the Default Browser Promo appears before the Best Features Screen.
   [self skipDefaultBrowserPromo];
 
@@ -300,7 +316,13 @@ id<GREYMatcher> SharePasswordsTitle() {
 // shopping users see the correct items, and that the
 // FeatureHighlightScreenshotVC and InstructionsHalfSheetVC appear correctly.
 - (void)testBestFeatures_variantDShopper {
-  [NotificationsEarlGreyAppInterface setUpMockShoppingService];
+  // TODO(crbug.com/437839631): Re-enable the test.
+#if TARGET_OS_SIMULATOR
+  if (@available(iOS 18.2, *)) {
+    EARL_GREY_TEST_DISABLED(@"Fails on iOS 18.2 simulator.");
+  }
+#endif
+
   // Ensure the Default Browser Promo appears before the Best Features Screen.
   [self skipDefaultBrowserPromo];
 
@@ -322,6 +344,13 @@ id<GREYMatcher> SharePasswordsTitle() {
 // non-shopping users see the correct items, and that the
 // FeatureHighlightScreenshotVC and InstructionsHalfSheetVC appear correctly.
 - (void)testBestFeatures_variantDNonShopper {
+  // TODO(crbug.com/437839631): Re-enable the test.
+#if TARGET_OS_SIMULATOR
+  if (@available(iOS 18.2, *)) {
+    EARL_GREY_TEST_DISABLED(@"Fails on iOS 18.2 simulator.");
+  }
+#endif
+
   // Ensure the Default Browser Promo appears before the Best Features Screen.
   [self skipDefaultBrowserPromo];
 
@@ -344,6 +373,13 @@ id<GREYMatcher> SharePasswordsTitle() {
 // users who don't have CPE enabled see the correct items, and that the
 // FeatureHighlightScreenshotVC and InstructionsHalfSheetVC appear correctly.
 - (void)testBestFeatures_variantE {
+  // TODO(crbug.com/437839631): Re-enable the test.
+#if TARGET_OS_SIMULATOR
+  if (@available(iOS 18.2, *)) {
+    EARL_GREY_TEST_DISABLED(@"Fails on iOS 18.2 simulator.");
+  }
+#endif
+
   // Ensure the Default Browser Promo appears before the Best Features Screen.
   [self skipDefaultBrowserPromo];
 
@@ -365,6 +401,13 @@ id<GREYMatcher> SharePasswordsTitle() {
 // users who have CPE enabled see the correct items, and that the
 // FeatureHighlightScreenshotVC and InstructionsHalfSheetVC appear correctly.
 - (void)testBestFeatures_variantECPEEnabled {
+  // TODO(crbug.com/437839631): Re-enable the test.
+#if TARGET_OS_SIMULATOR
+  if (@available(iOS 18.2, *)) {
+    EARL_GREY_TEST_DISABLED(@"Fails on iOS 18.2 simulator.");
+  }
+#endif
+
   // Ensure the Default Browser Promo appears before the Best Features Screen.
   [self skipDefaultBrowserPromo];
 

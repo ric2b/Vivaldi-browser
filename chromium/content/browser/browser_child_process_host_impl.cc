@@ -296,7 +296,6 @@ void BrowserChildProcessHostImpl::LaunchWithoutExtraCommandLineSwitches(
       switches::kIPCConnectionTimeout,
       switches::kLogBestEffortTasks,
       switches::kPerfettoDisableInterning,
-      switches::kTraceToConsole,
   };
   cmd_line->CopySwitchesFrom(browser_command_line, kForwardSwitches);
 
@@ -329,7 +328,7 @@ void BrowserChildProcessHostImpl::LaunchWithoutExtraCommandLineSwitches(
           : nullptr;
 
   child_process_launcher_ = std::make_unique<ChildProcessLauncher>(
-      std::move(delegate), std::move(cmd_line), data_.id, this,
+      std::move(delegate), std::move(cmd_line), data_.GetChildProcessId(), this,
       std::move(*child_process_host_->GetMojoInvitation()),
       base::BindRepeating(&BrowserChildProcessHostImpl::OnMojoError,
                           weak_factory_.GetWeakPtr(),
@@ -460,6 +459,9 @@ void BrowserChildProcessHostImpl::OnChildDisconnected() {
 #if BUILDFLAG(IS_ANDROID)
     info.has_spare_renderer =
         SpareRenderProcessHostManagerImpl::Get().HasSpareRenderer();
+    info.last_spare_renderer_creation_info =
+        SpareRenderProcessHostManagerImpl::Get()
+            .GetLastSpareRendererCreationInfo();
     exited_abnormally_ = true;
     // Do not treat clean_exit, ie when child process exited due to quitting
     // its main loop, as a crash.
@@ -517,6 +519,11 @@ void BrowserChildProcessHostImpl::OnChildDisconnected() {
         break;
       }
 #endif  // BUILDFLAG(IS_WIN)
+      case base::TERMINATION_STATUS_EVICTED_FOR_MEMORY: {
+        // TODO(crbug.com/394092280): Decide to what to do with preemptive
+        // process kill failures here.
+        break;
+      }
       case base::TERMINATION_STATUS_MAX_ENUM: {
         NOTREACHED();
       }
@@ -623,6 +630,9 @@ void BrowserChildProcessHostImpl::OnProcessLaunchFailed(int error_code) {
 #if BUILDFLAG(IS_ANDROID)
   info.has_spare_renderer =
       SpareRenderProcessHostManagerImpl::Get().HasSpareRenderer();
+  info.last_spare_renderer_creation_info =
+      SpareRenderProcessHostManagerImpl::Get()
+          .GetLastSpareRendererCreationInfo();
 #endif
   DCHECK_EQ(info.status, base::TERMINATION_STATUS_LAUNCH_FAILED);
 

@@ -14,12 +14,9 @@
 #import "ios/ui/modal_page/modal_page_commands.h"
 #import "ios/ui/modal_page/modal_page_view_controller.h"
 #import "ios/web/common/web_view_creation_util.h"
+#import "ios/web/web_state/crw_web_view.h"
 #import "net/base/apple/url_conversions.h"
 #import "ui/base/l10n/l10n_util.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface ModalPageCoordinator () <UIAdaptivePresentationControllerDelegate,
                               WKNavigationDelegate>

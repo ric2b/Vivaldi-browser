@@ -72,6 +72,8 @@ namespace v8 {
 namespace internal {
 namespace test_cpu_profiler {
 
+constexpr v8::EmbedderDataTypeTag kFastApiReceiverTag = 1;
+
 // Helper methods
 static v8::Local<v8::Function> GetFunction(v8::Local<v8::Context> env,
                                            const char* name) {
@@ -1918,6 +1920,63 @@ TEST(Inlining) {
   const v8::CpuProfileNode* level2_node = GetChild(env, level1_node, "level2");
   const v8::CpuProfileNode* level3_node = GetChild(env, level2_node, "level3");
   GetChild(env, level3_node, "action");
+
+  profile->Delete();
+}
+
+static const char* inlining_top_level_test_source =
+    "function action(n = 100) {\n"
+    "  var s = 0;\n"
+    "  for (var i = 0; i < n; ++i) s += i*i*i;\n"
+    "  return s;\n"
+    "}\n"
+    "function proxy() { return action(100); }\n"
+    "function start() {\n"
+    "  var n = 100;\n"
+    "  while (--n)\n"
+    "    proxy();\n"
+    "}"
+    "%PrepareFunctionForOptimization(action);\n"
+    "%PrepareFunctionForOptimization(proxy);\n"
+    "%PrepareFunctionForOptimization(start);\n"
+    "start();\n"
+    "%OptimizeFunctionOnNextCall(action);\n"
+    "%OptimizeFunctionOnNextCall(proxy);\n"
+    "%OptimizeFunctionOnNextCall(start);\n";
+
+// https://issues.chromium.org/issues/436562902
+// The test checks that the inlined stack for an optimized frame (start)
+// at the top of the stack is restored correctly
+//
+// [Top down]:
+//     0  (root):0:0 3 0 #1
+//     0    start:7:15 0 4 #4
+//     0      proxy:6:15 0 4 #5
+//    10        action:1:16 0 4 #6
+//    23    (program):0:0 3 0 #3
+//     0    (idle):0:0 3 0 #2
+TEST(InliningTopLevel) {
+  if (!v8_flags.turbofan) return;
+  if (v8_flags.optimize_on_next_call_optimizes_to_maglev) return;
+
+  i::v8_flags.allow_natives_syntax = true;
+  v8::HandleScope scope(CcTest::isolate());
+  v8::Local<v8::Context> env = CcTest::NewContext({PROFILER_EXTENSION_ID});
+  v8::Context::Scope context_scope(env);
+  ProfilerHelper helper(env);
+  // Ensure that source positions are collected everywhere.
+  CcTest::i_isolate()->SetIsProfiling(true);
+
+  CompileRun(inlining_top_level_test_source);
+  v8::Local<v8::Function> function = GetFunction(env, "start");
+
+  static const unsigned min_samples = 100;
+  v8::CpuProfile* profile = helper.Run(function, nullptr, 0, min_samples);
+
+  const v8::CpuProfileNode* root = profile->GetTopDownRoot();
+  const v8::CpuProfileNode* start_node = GetChild(env, root, "start");
+  const v8::CpuProfileNode* proxy_node = GetChild(env, start_node, "proxy");
+  GetChild(env, proxy_node, "action");
 
   profile->Delete();
 }
@@ -4305,7 +4364,7 @@ int GetSourcePositionEntryCount(i::Isolate* isolate, const char* source,
   if (function->ActiveTierIsIgnition(isolate)) return -1;
   i::DirectHandle<i::Code> code(function->code(isolate), isolate);
   i::SourcePositionTableIterator iterator(
-      Cast<TrustedByteArray>(code->source_position_table()));
+      CheckedCast<TrustedByteArray>(code->source_position_table()));
 
   while (!iterator.done()) {
     if (mode == EntryCountMode::kAll ||
@@ -4424,15 +4483,15 @@ UNINITIALIZED_TEST(DetailedSourcePositionAPI_Inlining) {
 namespace {
 
 struct FastApiReceiver {
-  static void FastCallback(v8::Local<v8::Object> receiver, int argument,
+  static void FastCallback(v8::Local<v8::Object> receiver_obj, int argument,
                            v8::FastApiCallbackOptions& options) {
     // TODO(mslekova): The fallback is not used by the test. Replace this
     // with a CHECK.
-    CHECK(IsValidUnwrapObject(*receiver));
-    FastApiReceiver* receiver_ptr =
-        GetInternalField<FastApiReceiver>(*receiver);
+    CHECK(IsValidUnwrapObject(*receiver_obj));
+    FastApiReceiver* receiver =
+        GetInternalField<FastApiReceiver>(*receiver_obj, kFastApiReceiverTag);
 
-    receiver_ptr->result_ |= ApiCheckerResult::kFastCalled;
+    receiver->result_ |= ApiCheckerResult::kFastCalled;
 
     // Artificially slow down the callback with a predictable amount of time.
     // This ensures the test has a relatively stable run time on various
@@ -4446,7 +4505,8 @@ struct FastApiReceiver {
       info.GetIsolate()->ThrowError("Called with a non-object.");
       return;
     }
-    FastApiReceiver* receiver = GetInternalField<FastApiReceiver>(receiver_obj);
+    FastApiReceiver* receiver =
+        GetInternalField<FastApiReceiver>(receiver_obj, kFastApiReceiverTag);
 
     receiver->result_ |= ApiCheckerResult::kSlowCalled;
   }
@@ -4647,8 +4707,10 @@ TEST(FastApiCPUProfiler) {
 
   v8::Local<v8::Object> object =
       object_template->NewInstance(env.local()).ToLocalChecked();
+
   object->SetAlignedPointerInInternalField(kV8WrapperObjectIndex,
-                                           reinterpret_cast<void*>(&receiver));
+                                           reinterpret_cast<void*>(&receiver),
+                                           kFastApiReceiverTag);
 
   int num_runs_arg = 100;
   env->Global()->Set(env.local(), v8_str("receiver"), object).Check();

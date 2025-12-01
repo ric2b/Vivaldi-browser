@@ -9,6 +9,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "base/types/optional_ref.h"
 #include "cc/input/browser_controls_offset_tag_modifications.h"
 #include "cc/input/browser_controls_state.h"
@@ -48,6 +49,7 @@ class InputHandlerProxyMomentumScrollJankTest;
 class InputHandlerProxyForceHandlingOnMainThread;
 class TestInputHandlerProxy;
 class UnifiedScrollingInputHandlerProxyTest;
+class InputHandlerProxyEventMetricsTest;
 }  // namespace test
 
 class CompositorThreadEventQueue;
@@ -269,6 +271,7 @@ class PLATFORM_EXPORT InputHandlerProxy : public cc::InputHandlerClient,
   friend class test::InputHandlerProxyEventQueueTest;
   friend class test::InputHandlerProxyMomentumScrollJankTest;
   friend class test::InputHandlerProxyForceHandlingOnMainThread;
+  friend class test::InputHandlerProxyEventMetricsTest;
 
   void DispatchSingleInputEvent(std::unique_ptr<EventWithCallback>);
   void DispatchQueuedInputEvents(bool frame_aligned);
@@ -338,13 +341,27 @@ class PLATFORM_EXPORT InputHandlerProxy : public cc::InputHandlerClient,
                          uint32_t main_thread_repaint_reasons,
                          bool raster_inducing = false);
 
-  bool HasQueuedEventsReadyForDispatch(bool frame_aligned) const;
+  bool HasQueuedEventsReadyForDispatch(
+      bool frame_aligned,
+      base::TimeTicks sample_time = base::TimeTicks::Max()) const;
 
   // If `scroll_predictor_` can generate a new prediction, this will generate
   // a synthetic GestureScrollUpdate using previous input events. This will then
   // be dispatched. We only do this while scrolling and after main-thread hit
-  // testing has completed.
-  void GenerateAndDispatchSytheticScrollPrediction(
+  // testing has completed. Returns true if a synthetic event was successfully
+  // generated and dispatched.
+  bool GenerateAndDispatchSyntheticScrollPrediction(
+      const viz::BeginFrameArgs& args);
+
+  // This method processes all events in the queue with a timestamp up to and
+  // including the `sample_time`. It also passes the next event in the queue (if
+  // any) to the predictor to improve prediction accuracy.
+  void ProcessQueuedEventsUpToSampleTime(const viz::BeginFrameArgs& args,
+                                         base::TimeTicks sample_time);
+  // This method is called when the first event in the queue is after the
+  // `sample_time`. It uses this "future" event to generate a synthetic scroll
+  // update for the current frame.
+  void GenerateSyntheticScrollPredictionFromFutureEvent(
       const viz::BeginFrameArgs& args);
 
   raw_ptr<InputHandlerProxyClient> client_;
@@ -391,7 +408,7 @@ class PLATFORM_EXPORT InputHandlerProxy : public cc::InputHandlerClient,
   std::optional<blink::WebGestureDevice> currently_active_gesture_device_;
   // Set only when the compositor input handler is handling a gesture. Denotes
   // which modifiers were present on the `WebInputEvent` so they can be applied
-  // in GenerateAndDispatchSytheticScrollPrediction.
+  // in GenerateAndDispatchSyntheticScrollPrediction.
   std::optional<int> currently_active_gesture_scroll_modifiers_;
 
   base::OnceClosure queue_flushed_callback_;
@@ -454,6 +471,9 @@ class PLATFORM_EXPORT InputHandlerProxy : public cc::InputHandlerClient,
   // has started, or completed.
   bool enqueue_scroll_events_ = true;
 
+  // Cached value of the kUpdateScrollPredictorInputMapping feature flag.
+  const bool update_scroll_predictor_;
+
   // `cc::InputHandlerClient::ScrollEventDispatchMode::kEnqueueScrollEvents`:
   // Scroll events arriving in `HandleInputEventWithLatencyInfo` will be
   // enqueued to be dispatched during the next `DeliverInputForBeginFrame`.
@@ -473,6 +493,12 @@ class PLATFORM_EXPORT InputHandlerProxy : public cc::InputHandlerClient,
       cc::InputHandlerClient::ScrollEventDispatchMode::kEnqueueScrollEvents;
 
   double scroll_deadline_ratio_ = 0.333;
+
+  // Used to guard against re-entrant calls to DeliverInputForDeadline.
+  viz::BeginFrameId last_deadline_call_for_frame_id_;
+
+  // Timer to ensure DeliverInputForDeadline is called.
+  base::DeadlineTimer deadline_timer_;
 };
 
 }  // namespace blink

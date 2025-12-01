@@ -9,6 +9,7 @@
 // Include the non-inl header before the rest of the headers.
 
 #include <algorithm>
+#include <cstddef>
 
 #include "include/v8-internal.h"
 #include "src/base/logging.h"
@@ -90,7 +91,7 @@ void BodyDescriptorBase::IterateJSObjectBodyImpl(Tagged<Map> map,
       v->VisitExternalPointer(
           obj, obj->RawExternalPointerField(
                    offset + EmbedderDataSlot::kExternalPointerOffset,
-                   kEmbedderDataSlotPayloadTag));
+                   {kFirstEmbedderDataTag, kLastEmbedderDataTag}));
     }
     // Proceed processing inobject properties.
     start_offset = inobject_fields_start_offset;
@@ -299,7 +300,7 @@ template <typename ObjectVisitor>
 void BodyDescriptorBase::IterateProtectedPointer(Tagged<HeapObject> obj,
                                                  int offset, ObjectVisitor* v) {
   DCHECK(IsTrustedObject(obj));
-  Tagged<TrustedObject> host = Cast<TrustedObject>(obj);
+  Tagged<TrustedObject> host = TrustedCast<TrustedObject>(obj);
   v->VisitProtectedPointer(host, host->RawProtectedPointerField(offset));
 }
 
@@ -477,6 +478,11 @@ class RegExpDataWrapper::BodyDescriptor final : public BodyDescriptorBase {
 
 class WeakCell::BodyDescriptor final : public BodyDescriptorBase {
  public:
+  static constexpr int kTargetOffset = offsetof(WeakCell, target_);
+  static constexpr int kUnregisterTokenOffset =
+      offsetof(WeakCell, unregister_token_);
+  static_assert(kUnregisterTokenOffset == kTargetOffset + kTaggedSize);
+
   template <typename ObjectVisitor>
   static inline void IterateBody(Tagged<Map> map, Tagged<HeapObject> obj,
                                  int object_size, ObjectVisitor* v) {
@@ -782,9 +788,8 @@ class BytecodeArray::BodyDescriptor final : public BodyDescriptorBase {
     IterateProtectedPointer(obj, kConstantPoolOffset, v);
   }
 
-  static inline int SizeOf(Tagged<Map> map, Tagged<HeapObject> obj) {
-    return BytecodeArray::SizeFor(
-        Cast<BytecodeArray>(obj)->length(kAcquireLoad));
+  static inline int SizeOf(Tagged<Map> map, Tagged<BytecodeArray> obj) {
+    return BytecodeArray::SizeFor(obj->length(kAcquireLoad));
   }
 };
 
@@ -1182,14 +1187,14 @@ class WasmDispatchTable::BodyDescriptor final : public BodyDescriptorBase {
     IterateSelfIndirectPointer(obj, tag, v);
     IterateProtectedPointer(obj, kProtectedOffheapDataOffset, v);
     IterateProtectedPointer(obj, kProtectedUsesOffset, v);
-    int length = Cast<WasmDispatchTable>(obj)->length(kAcquireLoad);
+    int length = TrustedCast<WasmDispatchTable>(obj)->length(kAcquireLoad);
     for (int i = 0; i < length; ++i) {
       IterateProtectedPointer(obj, OffsetOf(i) + kImplicitArgBias, v);
     }
   }
 
-  static inline int SizeOf(Tagged<Map> map, Tagged<HeapObject> object) {
-    int capacity = Cast<WasmDispatchTable>(object)->capacity();
+  static inline int SizeOf(Tagged<Map> map, Tagged<WasmDispatchTable> object) {
+    int capacity = object->capacity();
     return SizeFor(capacity);
   }
 };
@@ -1232,35 +1237,13 @@ class WasmStruct::BodyDescriptor final : public BodyDescriptorBase {
   }
 };
 
-// TODO(403372470): This is effectively the same as just dropping this
-// descriptor and falling back to the default JSObject::BodyDescriptor.
-// If WebAssembly.DescriptorOptions remains in the proposal, we could
-// simplify this code. (Or decide that having an explicit descriptor for
-// each class is good style.)
-class WasmDescriptorOptions::BodyDescriptor final : public BodyDescriptorBase {
- public:
-  template <typename ObjectVisitor>
-  static inline void IterateBody(Tagged<Map> map, Tagged<HeapObject> obj,
-                                 int object_size, ObjectVisitor* v) {
-    IteratePointers(obj, JSObject::BodyDescriptor::kStartOffset, kHeaderSize,
-                    v);
-    IterateJSObjectBodyImpl(map, obj, kHeaderSize, object_size, v);
-  }
-
-  static inline int SizeOf(Tagged<Map> map, Tagged<HeapObject> object) {
-    return map->instance_size();
-  }
-};
-
 class WasmNull::BodyDescriptor : public DataOnlyBodyDescriptor {
  public:
   static_assert(WasmNull::kStartOfStrongFieldsOffset ==
                 WasmNull::kEndOfStrongFieldsOffset);
 
-  static constexpr int kSize = WasmNull::kSize;
-
-  static constexpr int SizeOf(Tagged<Map> map, Tagged<HeapObject> object) {
-    return kSize;
+  static inline int SizeOf(Tagged<Map> map, Tagged<HeapObject> object) {
+    return WasmNull::Size();
   }
 };
 
@@ -1324,7 +1307,8 @@ class InstructionStream::BodyDescriptor final : public BodyDescriptorBase {
       RelocInfo::ModeMask(RelocInfo::INTERNAL_REFERENCE) |
       RelocInfo::ModeMask(RelocInfo::INTERNAL_REFERENCE_ENCODED) |
       RelocInfo::ModeMask(RelocInfo::OFF_HEAP_TARGET) |
-      RelocInfo::ModeMask(RelocInfo::WASM_STUB_CALL);
+      RelocInfo::ModeMask(RelocInfo::WASM_STUB_CALL) |
+      RelocInfo::ModeMask(RelocInfo::JS_DISPATCH_HANDLE);
 
   template <typename ObjectVisitor>
   static inline void IterateBody(Tagged<Map> map, Tagged<HeapObject> obj,
@@ -1423,7 +1407,7 @@ class Code::BodyDescriptor final : public BodyDescriptorBase {
 #endif  // V8_ENABLE_LEAPTIERING
 
     v->VisitInstructionStreamPointer(
-        Cast<Code>(obj),
+        TrustedCast<Code>(obj),
         obj->RawInstructionStreamField(kInstructionStreamOffset));
   }
 
@@ -1458,7 +1442,7 @@ class EmbedderDataArray::BodyDescriptor final : public BodyDescriptorBase {
       v->VisitExternalPointer(
           obj, obj->RawExternalPointerField(
                    offset + EmbedderDataSlot::kExternalPointerOffset,
-                   kEmbedderDataSlotPayloadTag));
+                   {kFirstEmbedderDataTag, kLastEmbedderDataTag}));
     }
 
 #else
@@ -1706,7 +1690,7 @@ class ProtectedWeakFixedArray::BodyDescriptor final
   template <typename ObjectVisitor>
   static inline void IterateBody(Tagged<Map> map, Tagged<HeapObject> obj,
                                  int object_size, ObjectVisitor* v) {
-    Tagged<TrustedObject> host = Cast<TrustedObject>(obj);
+    Tagged<TrustedObject> host = TrustedCast<TrustedObject>(obj);
     for (int offset = OFFSET_OF_DATA_START(ProtectedWeakFixedArray);
          offset < object_size; offset += kTaggedSize) {
       v->VisitProtectedPointer(host,

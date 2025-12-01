@@ -214,5 +214,3 @@ you would like to deploy to.
         ```shell
         (cr) ~/chromiumos/src/scripts$ cros flash usb:// ${BOARD}/latest
         ```
-
-

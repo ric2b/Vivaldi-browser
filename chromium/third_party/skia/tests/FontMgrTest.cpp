@@ -116,7 +116,7 @@ DEF_TEST(FontMgr_Iter, reporter) {
             set->getStyle(j, &fs, &sname);
 
             if (FLAGS_verboseFontMgr) {
-                SkDebugf("\t[%d] %s [%3d %d %d]", j, sname.c_str(),
+                SkDebugf("\t[%d] \"%s\" [%3d %d %d]\n", j, sname.c_str(),
                          fs.weight(), fs.width(), fs.slant());
             }
 
@@ -130,18 +130,26 @@ DEF_TEST(FontMgr_Iter, reporter) {
             face1->getFamilyName(&name1);
             SkFontStyle s1 = face1->fontStyle();
 
+            sk_sp<SkTypeface::LocalizedStrings> otherNames(face1->createFamilyNameIterator());
+            SkTypeface::LocalizedString otherName;
+            while (otherNames->next(&otherName)) {
+                if (FLAGS_verboseFontMgr) {
+                    SkDebugf("\t\"%s\" aka \"%s\"\n", name1.c_str(), otherName.fString.c_str());
+                }
+            }
+
             SkString resource1;
             face1->getResourceName(&resource1);
             if (FLAGS_verboseFontMgr) {
-                SkDebugf(" \"%s\" \"%s\"\n", name1.c_str(), resource1.c_str());
+                SkDebugf("\t\"%s\" from resource \"%s\"\n", name1.c_str(), resource1.c_str());
             }
 
             // Note that fs != s1 is fine, though probably rare.
 
             sk_sp<SkTypeface> face2(fm->matchFamilyStyle(name1.c_str(), s1));
             if (!face2) {
-                // The Ubunutu 18.04 test machines have Noto Emoji but it cannot be found by name.
-                if (name1.equals("Noto Emoji")) {
+                // Some fonts cannot be looked up by name on our test machines
+                if (name1.equals("Noto Emoji") || name1.equals("Noto Sans Phags Pa")) {
                     continue;
                 }
                 REPORTER_ASSERT(reporter, face2.get(), "Could not find %s", name1.c_str());
@@ -176,6 +184,12 @@ DEF_TEST(FontMgr_MatchFamilyStyle, reporter) {
     using FS = SkFontStyle;
     sk_sp<SkTypeface> typeface(fm->matchFamilyStyle("Non Existing Family Name", FS::Normal()));
     REPORTER_ASSERT(reporter, !typeface);
+
+    // Test a long name with many interesting case folding code points.
+    using FS = SkFontStyle;
+    sk_sp<SkTypeface> typeface1(fm->matchFamilyStyle("ῢ ΰ ῤ ῦ ῧ Ῠ Ῡ Ὺ Ύ Ῥ ῲ ῳ ῴ ῶ ῷ Ὸ Ό Ὼ Ώ ῼ",
+                                                     FS::Normal()));
+    REPORTER_ASSERT(reporter, !typeface1);
 
     // TODO: enable after determining if a default font should be required.
     if ((false)) {

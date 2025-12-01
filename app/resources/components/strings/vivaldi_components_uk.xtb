@@ -3,16 +3,6 @@
 <translationbundle lang="uk">
 <translation id="3830627370375585318">Надайте Vivaldi доступ до мережі
 в налаштуваннях брандмауера чи антивірусу.</translation>
-<translation id="4200102020577305737">Перейдіть до
-          меню Vivaldi &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Налаштування LAN
-          і зніміть прапорець "Використовувати проксі-сервер для вашої локальної мережі".</translation>
 <translation id="4932161901409251843">Перейдіть у
           меню Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@
           Якщо проблема не зникне, радимо знову вибрати цю опцію,
           щоб покращити стабільність.</translation>
 <translation id="7496505986576158197">Vivaldi створено на базі відкритого проєкту <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> та іншого <ph name="BEGIN_LINK_OSS" />відкритого програмного забезпечення<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Відкрийте
+          меню Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Мережа та інтернет &gt; Проксі-сервер
+          і виберіть "Автоматичне визначення настройок".</translation>
 </translationbundle>

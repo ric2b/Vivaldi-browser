@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,23 +10,23 @@ import type * as Recorder from './recorder.js';
 
 const UIStrings = {
   /**
-   *@description Title of the Recorder Panel
+   * @description Title of the Recorder Panel
    */
   recorder: 'Recorder',
   /**
-   *@description Title of the Recorder Panel
+   * @description Title of the Recorder Panel
    */
   showRecorder: 'Show Recorder',
   /**
-   *@description Title of start/stop recording action in command menu
+   * @description Title of start/stop recording action in command menu
    */
   startStopRecording: 'Start/Stop recording',
   /**
-   *@description Title of create a new recording action in command menu
+   * @description Title of create a new recording action in command menu
    */
   createRecording: 'Create a new recording',
   /**
-   *@description Title of start a new recording action in command menu
+   * @description Title of start a new recording action in command menu
    */
   replayRecording: 'Replay recording',
   /**

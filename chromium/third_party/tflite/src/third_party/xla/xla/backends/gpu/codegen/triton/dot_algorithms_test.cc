@@ -312,6 +312,7 @@ TEST_F(BlasAlgorithmTest, Algorithm_BF16_BF16_F32_X3) {
                                     ::testing::HasSubstr("loop_convert_fusion"),
                                     ::testing::HasSubstr("loop_select_fusion"),
                                     ::testing::HasSubstr("nvjet"),
+                                    ::testing::HasSubstr("nvjet"),
                                     ::testing::HasSubstr("nvjet")));
       break;
     case CudaComputeCapabilities::kAmpere:
@@ -319,6 +320,8 @@ TEST_F(BlasAlgorithmTest, Algorithm_BF16_BF16_F32_X3) {
                                     ::testing::HasSubstr("loop_convert_fusion"),
                                     ::testing::HasSubstr("loop_convert_fusion"),
                                     ::testing::HasSubstr("loop_select_fusion"),
+                                    ::testing::HasSubstr("gemm_bf16_"),
+                                    ::testing::HasSubstr("gemm_bf16_"),
                                     ::testing::HasSubstr("gemm_bf16_")));
       break;
     case CudaComputeCapabilities::kHopper:
@@ -371,13 +374,16 @@ TEST_F(BlasAlgorithmTest, Algorithm_BF16_BF16_F32_X6) {
       stream_executor::CudaComputeCapability::CudaComputeCapabilities;
   switch (cc.major) {
     case CudaComputeCapabilities::kBlackwell:
-      EXPECT_THAT(kernel_names, ::testing::UnorderedElementsAre(
-                                    ::testing::HasSubstr("loop_convert_fusion"),
-                                    ::testing::HasSubstr("loop_convert_fusion"),
-                                    ::testing::HasSubstr("loop_select_fusion"),
-                                    ::testing::HasSubstr("wrapped_add"),
-                                    ::testing::HasSubstr("nvjet"),
-                                    ::testing::HasSubstr("nvjet")));
+      EXPECT_THAT(
+          kernel_names,
+          ::testing::UnorderedElementsAre(
+              ::testing::HasSubstr("loop_convert_fusion"),
+              ::testing::HasSubstr("loop_convert_fusion"),
+              ::testing::HasSubstr("loop_select_fusion"),
+              ::testing::HasSubstr("wrapped_add"),
+              ::testing::HasSubstr("nvjet"), ::testing::HasSubstr("nvjet"),
+              ::testing::HasSubstr("nvjet"), ::testing::HasSubstr("nvjet"),
+              ::testing::HasSubstr("nvjet"), ::testing::HasSubstr("nvjet")));
       break;
     case CudaComputeCapabilities::kAmpere:
       EXPECT_THAT(kernel_names, ::testing::UnorderedElementsAre(
@@ -385,6 +391,11 @@ TEST_F(BlasAlgorithmTest, Algorithm_BF16_BF16_F32_X6) {
                                     ::testing::HasSubstr("loop_convert_fusion"),
                                     ::testing::HasSubstr("loop_select_fusion"),
                                     ::testing::HasSubstr("wrapped_add"),
+                                    ::testing::HasSubstr("gemm_bf16_"),
+                                    ::testing::HasSubstr("gemm_bf16_"),
+                                    ::testing::HasSubstr("gemm_bf16_"),
+                                    ::testing::HasSubstr("gemm_bf16_"),
+                                    ::testing::HasSubstr("gemm_bf16_"),
                                     ::testing::HasSubstr("gemm_bf16_")));
       break;
     case CudaComputeCapabilities::kHopper:
@@ -438,30 +449,31 @@ TEST_F(BlasAlgorithmTest, Algorithm_TF32_TF32_F32_X3) {
       stream_executor::CudaComputeCapability::CudaComputeCapabilities;
   switch (cc.major) {
     case CudaComputeCapabilities::kBlackwell:
-      EXPECT_THAT(kernel_names,
-                  ::testing::UnorderedElementsAre(
-                      ::testing::HasSubstr("bitcast_convert_subtract"),
-                      ::testing::HasSubstr("bitcast_convert_subtract"),
-                      ::testing::HasSubstr("loop_select_fusion"),
-                      ::testing::HasSubstr("tf32gemm")));
+      EXPECT_THAT(kernel_names, ::testing::UnorderedElementsAre(
+                                    ::testing::HasSubstr("loop_and_subtract"),
+                                    ::testing::HasSubstr("loop_and_subtract"),
+                                    ::testing::HasSubstr("loop_select_fusion"),
+                                    ::testing::HasSubstr("tf32gemm"),
+                                    ::testing::HasSubstr("tf32gemm"),
+                                    ::testing::HasSubstr("tf32gemm")));
       break;
     case CudaComputeCapabilities::kAmpere:
-      EXPECT_THAT(kernel_names,
-                  ::testing::UnorderedElementsAre(
-                      ::testing::HasSubstr("bitcast_convert_subtract"),
-                      ::testing::HasSubstr("bitcast_convert_subtract"),
-                      ::testing::HasSubstr("loop_select_fusion"),
-                      ::testing::HasSubstr("cutlass_80")));
+      EXPECT_THAT(kernel_names, ::testing::UnorderedElementsAre(
+                                    ::testing::HasSubstr("loop_and_subtract"),
+                                    ::testing::HasSubstr("loop_and_subtract"),
+                                    ::testing::HasSubstr("loop_select_fusion"),
+                                    ::testing::HasSubstr("cutlass_80"),
+                                    ::testing::HasSubstr("cutlass_80"),
+                                    ::testing::HasSubstr("cutlass_80")));
       break;
     case CudaComputeCapabilities::kHopper:
-      EXPECT_THAT(
-          kernel_names,
-          ::testing::UnorderedElementsAre(
-              ::testing::HasSubstr("bitcast_convert_subtract"),
-              ::testing::HasSubstr("bitcast_convert_subtract"),
-              ::testing::HasSubstr("loop_select_fusion"),
-              ::testing::HasSubstr("tf32f32"), ::testing::HasSubstr("tf32f32"),
-              ::testing::HasSubstr("tf32f32")));
+      EXPECT_THAT(kernel_names, ::testing::UnorderedElementsAre(
+                                    ::testing::HasSubstr("loop_and_subtract"),
+                                    ::testing::HasSubstr("loop_and_subtract"),
+                                    ::testing::HasSubstr("loop_select_fusion"),
+                                    ::testing::HasSubstr("tf32f32"),
+                                    ::testing::HasSubstr("tf32f32"),
+                                    ::testing::HasSubstr("tf32f32")));
       break;
     default:
       GTEST_SKIP() << "Unsupported compute capability: " << cc.major

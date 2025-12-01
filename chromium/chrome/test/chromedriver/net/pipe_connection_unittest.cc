@@ -2,17 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/test/chromedriver/net/pipe_connection.h"
 
 #include <cmath>
 #include <cstdint>
 #include <string>
 
+#include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "base/files/file_util.h"
 #include "base/files/platform_file.h"
@@ -95,7 +91,8 @@ int WriteToPipe(base::PlatformFile file_out, const char* buffer, int size) {
   int offset = 0;
   int rv = 0;
   for (; offset < size; offset += rv) {
-    rv = WriteToPipeNoBestEffort(file_out, buffer + offset, size - offset);
+    rv = WriteToPipeNoBestEffort(file_out, UNSAFE_TODO(buffer + offset),
+                                 size - offset);
     if (rv < 0) {
       return rv;
     }
@@ -330,7 +327,8 @@ TEST_F(PipeConnectionTest, DetermineRecipient) {
             connection->ReceiveNextMessage(&message, long_timeout()));
 
   // Getting message id and method
-  std::optional<base::Value> message_value = base::JSONReader::Read(message);
+  std::optional<base::Value> message_value =
+      base::JSONReader::Read(message, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
   EXPECT_TRUE(message_value.has_value());
   base::Value::Dict* message_dict = message_value->GetIfDict();
   EXPECT_TRUE(message_dict);

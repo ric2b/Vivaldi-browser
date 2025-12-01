@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "services/tracing/public/cpp/perfetto/perfetto_config.h"
 
 #include <cstdint>
@@ -90,8 +85,9 @@ void AddDataSourceConfigs(
 
   auto* trace_event_data_source = AddDataSourceConfig(
       perfetto_config, tracing::mojom::kTraceEventDataSourceName,
-      chrome_config_string, privacy_filtering_enabled, convert_to_legacy_json,
-      json_agent_label_filter, enable_package_name_filter);
+      /*chrome_config_string=*/"", privacy_filtering_enabled,
+      convert_to_legacy_json, json_agent_label_filter,
+      enable_package_name_filter);
   auto* trace_event_source_config = trace_event_data_source->mutable_config();
   trace_event_source_config->set_name("track_event");
   trace_event_source_config->set_track_event_config_raw(

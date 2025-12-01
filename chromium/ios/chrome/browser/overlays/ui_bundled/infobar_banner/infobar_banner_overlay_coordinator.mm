@@ -29,6 +29,7 @@
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/permissions/permissions_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/safe_browsing/enhanced_safe_browsing_infobar_overlay_mediator.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/save_card/save_card_infobar_banner_overlay_mediator.h"
+#import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/save_cvc/save_cvc_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/sync_error/sync_error_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/tailored_security/tailored_security_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/translate/translate_infobar_banner_overlay_mediator.h"
@@ -42,11 +43,11 @@
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
-#import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/infobars/ui_bundled/banners/infobar_banner_constants.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
@@ -76,6 +77,7 @@ using vivaldi::IsVivaldiRunning;
     [ConfirmInfobarBannerOverlayMediator class],
     [TranslateInfobarBannerOverlayMediator class],
     [SaveCardInfobarBannerOverlayMediator class],
+    [SaveCVCInfobarBannerOverlayMediator class],
     [SaveAddressProfileInfobarBannerOverlayMediator class],
     [PermissionsBannerOverlayMediator class],
     [TailoredSecurityInfobarBannerOverlayMediator class],
@@ -106,7 +108,7 @@ using vivaldi::IsVivaldiRunning;
 
   if (IsVivaldiRunning() &&
       GetApplicationContext()
-          ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox)) {
+          ->GetLocalState()->GetBoolean(omnibox::kIsOmniboxInBottomPosition)) {
     UIWindowScene* windowScene =
         (UIWindowScene*)self.baseViewController.view.window.windowScene;
     CGFloat sceneHeight = windowScene
@@ -272,6 +274,9 @@ using vivaldi::IsVivaldiRunning;
       break;
     case InfobarType::kInfobarTypeSaveCard:
       mediatorClass = [SaveCardInfobarBannerOverlayMediator class];
+      break;
+    case InfobarType::kInfobarTypeSaveCvc:
+      mediatorClass = [SaveCVCInfobarBannerOverlayMediator class];
       break;
     case InfobarType::kInfobarTypeSyncError:
       mediatorClass = [SyncErrorInfobarBannerOverlayMediator class];

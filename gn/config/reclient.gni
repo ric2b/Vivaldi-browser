@@ -1,8 +1,19 @@
 # Reclient activation and configuration
 
 declare_args() {
+  vivaldi_override_reclient_with_siso = false
+}
+
+declare_args() {
+  vivaldi_enable_reclient = false
+  vivaldi_enable_siso = vivaldi_override_reclient_with_siso
+}
+
+if (vivaldi_override_reclient_with_siso) {
   vivaldi_enable_reclient = false
 }
+
+assert(!(vivaldi_enable_reclient && vivaldi_enable_siso))
 
 # reclient variables must be set here, before importing rb.gni
 if (vivaldi_enable_reclient) {
@@ -22,6 +33,29 @@ if (vivaldi_enable_reclient) {
     if (is_win) {
       reclient_cc_cfg_file = "${reclient_cfg_dir}/rewrapper_windows.cfg"
     } else if (is_mac) {
+      reclient_cc_cfg_file = "${reclient_cfg_dir}/rewrapper_mac.cfg"
+    } else{
+      reclient_cc_cfg_file = "${reclient_cfg_dir}/rewrapper_linux.cfg"
+    }
+  }
+} else if (vivaldi_enable_siso) {
+  declare_overrides() {
+    if (getenv("CHROME_HEADLESS") == "1") {
+      reclient_cfg_dir=rebase_path("//vivaldi/build/reclient_cfgs", root_build_dir)
+      #siso_cfg_dir=rebase_path("//vivaldi/build/siso_cfgs", root_build_dir)
+    } else {
+      reclient_cfg_dir=rebase_path("//vivaldi/build/reclient_main_cfgs", root_build_dir)
+      #siso_cfg_dir=rebase_path("//vivaldi/build/siso_main_cfgs", root_build_dir)
+    }
+    rbe_exec_root = rebase_path("//vivaldi")
+
+    use_remoteexec = true
+    use_siso = true
+  }
+  declare_overrides() {
+    if (is_win) {
+      reclient_cc_cfg_file = "${reclient_cfg_dir}/rewrapper_windows.cfg"
+    } else if (is_mac || is_ios) {
       reclient_cc_cfg_file = "${reclient_cfg_dir}/rewrapper_mac.cfg"
     } else{
       reclient_cc_cfg_file = "${reclient_cfg_dir}/rewrapper_linux.cfg"

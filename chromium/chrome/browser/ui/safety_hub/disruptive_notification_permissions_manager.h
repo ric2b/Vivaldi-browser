@@ -88,9 +88,10 @@ class DisruptiveNotificationPermissionsManager
   enum class RevocationState {
     kProposed = 1,
     kRevoked = 2,
-    kIgnore = 3,
+    kIgnoreInsideSH = 3,
     kAcknowledged = 4,
-    kMaxValue = kAcknowledged,
+    kIgnoreOutsideSH = 5,
+    kMaxValue = kIgnoreOutsideSH,
   };
   // LINT.ThenChange(//tools/metrics/histograms/enums.xml:DisruptiveNotificationRevocationState)
 
@@ -120,8 +121,10 @@ class DisruptiveNotificationPermissionsManager
   // revocations and false positives.
   ContentSettingsForOneType GetRevokedNotifications();
 
-  // Returns true if settings are being changed due to auto revocation;
-  bool IsRunning();
+  // Returns true if settings are being changed due to auto revocation or if
+  // this service is responsible for changing notification permissions
+  // (regrants, undoing regrants etc).
+  bool IsChangingContentSettings();
 
   // If the url has a revoked disruptive notification permission, this method
   // allows the notification permissions again and adds a constraint so that
@@ -149,6 +152,12 @@ class DisruptiveNotificationPermissionsManager
   void RestoreDeletedRevokedPermission(
       const ContentSettingsPattern& primary_pattern,
       content_settings::ContentSettingConstraints constraints);
+
+  // Called when the notification content setting was changed outside of the
+  // service. Either record the regrant of the notification permission or clean
+  // up the matching revocation entries.
+  void OnPermissionChanged(const ContentSettingsPattern& primary_pattern,
+                           const ContentSettingsPattern& secondary_pattern);
 
   // If the URL is in the revoke or proposed revoke list, report a false
   // positive and record metrics.
@@ -181,6 +190,7 @@ class DisruptiveNotificationPermissionsManager
 
  private:
   friend class DisruptiveNotificationPermissionsManagerTest;
+  friend class DisruptiveNotificationPermissionsMigrationTest;
   friend class RevokedPermissionsServiceBrowserTest;
   friend class RevokedPermissionsServiceTest;
   FRIEND_TEST_ALL_PREFIXES(
@@ -209,6 +219,9 @@ class DisruptiveNotificationPermissionsManager
 
     // Timestamp of proposed or actual revocation.
     base::Time timestamp;
+
+    // If lifetime is 0, it doesn't expire.
+    base::TimeDelta lifetime;
 
     bool has_reported_proposal = false;
     bool has_reported_false_positive = false;

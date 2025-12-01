@@ -13,8 +13,9 @@ import android.content.Context;
 import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.build.annotations.NullMarked;
-import org.chromium.chrome.browser.tasks.tab_management.MessageCardView.DismissActionProvider;
-import org.chromium.chrome.browser.tasks.tab_management.MessageCardView.ReviewActionProvider;
+import org.chromium.chrome.browser.tasks.tab_management.MessageCardView.ActionProvider;
+import org.chromium.chrome.browser.tasks.tab_management.MessageCardView.ServiceDismissActionProvider;
+import org.chromium.chrome.browser.tasks.tab_management.TabSwitcherMessageManager.MessageType;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -25,21 +26,19 @@ public class ArchivedTabsIphMessageCardViewModel {
      * Create a {@link PropertyModel} for ArchivedTabsIphMessageCardView.
      *
      * @param context The {@link Context} to use.
-     * @param reviewActionProvider The provider for the review action.
-     * @param dismissActionProvider The provier for the dismiss action.
+     * @param actionProvider The provider for the review action.
+     * @param serviceDismissActionProvider The provier for the dismiss action.
      * @return A {@link PropertyModel} for the ArchivedTabsIphMessageCardView.
      */
     public static PropertyModel create(
             Context context,
-            ReviewActionProvider reviewActionProvider,
-            DismissActionProvider dismissActionProvider) {
+            ActionProvider actionProvider,
+            ServiceDismissActionProvider<@MessageType Integer> serviceDismissActionProvider) {
         String dismissButtonContextDescription =
                 context.getString(R.string.accessibility_tab_suggestion_dismiss_button);
 
         return new PropertyModel.Builder(ResizableMessageCardViewProperties.ALL_KEYS)
-                .with(
-                        MessageCardViewProperties.MESSAGE_TYPE,
-                        MessageService.MessageType.ARCHIVED_TABS_IPH_MESSAGE)
+                .with(MessageCardViewProperties.MESSAGE_TYPE, MessageType.ARCHIVED_TABS_IPH_MESSAGE)
                 .with(
                         MessageCardViewProperties.MESSAGE_IDENTIFIER,
                         MessageService.DEFAULT_MESSAGE_IDENTIFIER)
@@ -52,10 +51,8 @@ public class ArchivedTabsIphMessageCardViewModel {
                         })
                 .with(
                         MessageCardViewProperties.MESSAGE_SERVICE_DISMISS_ACTION_PROVIDER,
-                        dismissActionProvider)
-                .with(
-                        MessageCardViewProperties.MESSAGE_SERVICE_ACTION_PROVIDER,
-                        reviewActionProvider)
+                        serviceDismissActionProvider)
+                .with(MessageCardViewProperties.MESSAGE_SERVICE_ACTION_PROVIDER, actionProvider)
                 .with(
                         MessageCardViewProperties.DISMISS_BUTTON_CONTENT_DESCRIPTION,
                         dismissButtonContextDescription)

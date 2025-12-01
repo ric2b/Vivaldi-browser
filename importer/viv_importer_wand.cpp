@@ -14,8 +14,11 @@
 #include "chrome/common/importer/importer_bridge.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/user_data_importer/common/importer_data_types.h"
+#include "importer/viv_import_result.h"
 #include "importer/viv_importer.h"
 #include "importer/viv_importer_utils.h"
+
+#include "app/vivaldi_resources.h"
 
 /*
 Opera SSL Private Key Verification
@@ -315,8 +318,7 @@ bool WandReadEncryptedField(std::string::iterator* buffer,
 
     EVP_CIPHER_CTX decryptor;
     EVP_CipherInit(&decryptor, EVP_des_ede3_cbc(), digest_buffer,
-                   digest_buffer + 24,
-                   0);
+                   digest_buffer + 24, 0);
 
     OPENSSL_cleanse(digest_buffer, sizeof(digest_buffer));
     out_data.resize(in_data.length());
@@ -666,26 +668,22 @@ bool OperaImporter::GetMasterPasswordInfo() {
 }
 
 namespace {
-bool WandFormatError(std::string* error) {
-  *error = "Password file can't be read and might be corrupt";
-  return false;
+ImportResult WandFormatError() {
+  return import_result::Error(IDS_IMPORT_ERROR_OPERA_WAND_FORMAT_ERROR);
 }
 }  // namespace
 
-bool OperaImporter::ImportWand(std::string* error) {
+ImportResult OperaImporter::ImportWand() {
   if (wandfilename_.empty()) {
-    *error = "No notes filename provided.";
-    return false;
+    return import_result::Error(IDS_IMPORT_ERROR_OPERA_WAND_FILE_NOT_FOUND);
   }
   if (master_password_required_ && !GetMasterPasswordInfo()) {
-    *error = "Master password required but none was supplied.";
-    return false;
+    return import_result::Error(IDS_IMPORT_ERROR_OPERA_MASTER_PASSWORD_REQUIRED);
   }
   base::FilePath file(wandfilename_);
 
   if (!base::PathExists(file)) {
-    *error = "Password (wand) file does not exist.";
-    return false;
+    return import_result::Error(IDS_IMPORT_ERROR_OPERA_WAND_FILE_NOT_FOUND);
   }
 
   std::string wand_data;
@@ -695,19 +693,19 @@ bool OperaImporter::ImportWand(std::string* error) {
   std::string::iterator wand_buffer_end = wand_data.end();
 
   if (!WandReadUint32(&wand_buffer, wand_buffer_end, &wand_version_))
-    return WandFormatError(error);
+    return WandFormatError();
 
   if (wand_version_ < 5 || wand_version_ > 6)
-    return WandFormatError(error);
+    return WandFormatError();
 
   std::vector<user_data_importer::ImportedPasswordForm> passwords;
 
   uint32_t masterpass_used = 0;
   if (!WandReadUint32(&wand_buffer, wand_buffer_end, &masterpass_used))
-    return WandFormatError(error);
+    return WandFormatError();
   if (masterpass_used != 0 && !master_password_block_.empty() &&
       !GetMasterPasswordInfo())
-    return WandFormatError(error);
+    return WandFormatError();
 
   uint32_t dummy;
   std::u16string dummy_str;
@@ -716,59 +714,59 @@ bool OperaImporter::ImportWand(std::string* error) {
   for (i = 0; i < 6; i++) {
     dummy = 0xffffffff;
     if (!WandReadUint32(&wand_buffer, wand_buffer_end, &dummy))
-      return WandFormatError(error);
+      return WandFormatError();
     if (dummy != 0)
-      return WandFormatError(error);
+      return WandFormatError();
   }
 
   entry_count = 0;
   if (!WandReadUint32(&wand_buffer, wand_buffer_end, &entry_count))
-    return WandFormatError(error);
+    return WandFormatError();
   if (entry_count != 1)
-    return WandFormatError(error);
+    return WandFormatError();
   dummy_str.clear();
   if (!WandReadEncryptedField(&wand_buffer, wand_buffer_end, &dummy_str))
-    return WandFormatError(error);
+    return WandFormatError();
 
   if (*(wand_buffer++) != 0x01 || wand_buffer >= wand_buffer_end)
-    return WandFormatError(error);
+    return WandFormatError();
 
   if (!WandReadUint32(&wand_buffer, wand_buffer_end, &entry_count))
-    return WandFormatError(error);
+    return WandFormatError();
 
   if (entry_count != 1)
-    return WandFormatError(error);
+    return WandFormatError();
 
   if (!ImportWand_ReadEntryHTML(&wand_buffer, wand_buffer_end, &passwords,
                                 true))
-    return WandFormatError(error);
+    return WandFormatError();
 
   dummy_str.clear();
   if (!WandReadEncryptedField(&wand_buffer, wand_buffer_end, &dummy_str))
-    return WandFormatError(error);
+    return WandFormatError();
 
   // TODO(yngve): parse older files
 
   if (*(wand_buffer++) != 0x00 || wand_buffer >= wand_buffer_end)
-    return WandFormatError(error);
+    return WandFormatError();
 
   if (!WandReadUint32(&wand_buffer, wand_buffer_end, &entry_count))
-    return WandFormatError(error);
+    return WandFormatError();
 
   for (i = 0; i < entry_count; i++) {
     if (!ImportWand_ReadEntryHTML(&wand_buffer, wand_buffer_end, &passwords)) {
       LOG(ERROR) << "Failed to import password entry " << i;
-      return WandFormatError(error);
+      return WandFormatError();
     }
   }
 
   entry_count = 0;
   if (!WandReadUint32(&wand_buffer, wand_buffer_end, &entry_count))
-    return WandFormatError(error);
+    return WandFormatError();
 
   for (i = 0; i < entry_count; i++) {
     if (!ImportWand_ReadEntryAuth(&wand_buffer, wand_buffer_end, &passwords))
-      return WandFormatError(error);
+      return WandFormatError();
   }
 
   if (!cancelled()) {
@@ -777,5 +775,5 @@ bool OperaImporter::ImportWand(std::string* error) {
          it < passwords.end(); it++)
       bridge_->SetPasswordForm(*it);
   }
-  return true;
+  return import_result::Success();
 }

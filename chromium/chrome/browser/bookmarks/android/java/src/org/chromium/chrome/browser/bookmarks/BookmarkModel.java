@@ -168,7 +168,6 @@ public class BookmarkModel extends BookmarkBridge {
      * list. The bookmarks are appended at the end.
      */
     public void moveBookmarks(List<BookmarkId> bookmarkIds, BookmarkId newParentId) {
-        //if (ChromeApplicationImpl.isVivaldi()) {
         if (BuildConfig.IS_VIVALDI) {
             List<BookmarkId> list = getChildIDsVivaldi(newParentId,
                     true, true, false);

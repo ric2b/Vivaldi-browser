@@ -214,15 +214,15 @@ ifrt_proxy_cc_test(
         "//xla/python/ifrt_proxy/common:types",
         "//xla/service:computation_placer_hdr",
         "//xla/tsl/concurrency:ref_count",
-        "//xla/tsl/platform:status_matchers",
         "//xla/tsl/platform:statusor",
+        "//xla/tsl/util/proto:proto_matchers",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:status_matchers",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
         "@llvm-project//llvm:Support",
-        "@local_tsl//tsl/platform",
         "@local_tsl//tsl/platform:protobuf",
     ],
 )
@@ -408,6 +408,10 @@ cc_library(
     name = "executable",
     srcs = ["executable.cc"],
     hdrs = ["executable.h"],
+    # TODO(b/437149714): Remove this once the long term solution is in place.
+    visibility = internal_visibility(default_ifrt_proxy_visibility + if_google([
+        "//xla/python/ifrt_proxy/common/google:cc_client_users",
+    ])),
     deps = [
         ":array",
         ":host_buffer",
@@ -481,7 +485,9 @@ cc_library(
     srcs = ["grpc_host_buffer.cc"],
     hdrs = ["grpc_host_buffer.h"],
     deps = [
+        ":global_flags",
         ":host_buffer",
+        "//xla/pjrt:semaphore",
         "//xla/pjrt/distributed:util",
         "//xla/python/ifrt",
         "//xla/python/ifrt_proxy/common:grpc_ifrt_service_cc_grpc_proto",
@@ -600,13 +606,14 @@ ifrt_proxy_cc_test(
         "//xla/python/ifrt_proxy/common:types",
         "//xla/tsl/concurrency:ref_count",
         "//xla/tsl/platform:statusor",
+        "//xla/tsl/util/proto:proto_matchers",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:status_matchers",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
         "@llvm-project//llvm:Support",
         "@local_tsl//tsl/platform:protobuf",
-        "@local_tsl//tsl/platform:status_matchers",
     ],
 )
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 The Chromium Authors. All rights reserved.
+ * Copyright 2024 The Chromium Authors
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
@@ -13,7 +13,7 @@
   display: grid;
   align-items: end;
   grid-template-columns: repeat(3, 1fr) 0.5fr;
-  grid-row-gap: 5px;
+  row-gap: 5px;
 }
 
 .row-border {

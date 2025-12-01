@@ -19,16 +19,13 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Asenqed n upṛusi d uɣrab n tmes<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Yettwazen ɣer: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Asmel-a ur yezmir ara ad d-yefk tuqqna taɣellsant</translation>
-<translation id="2187317261103489799">Af (amezwer)</translation>
 <translation id="2224337661447660594">Ulac internet</translation>
 <translation id="2292556288342944218">Anekcum-ik·im ɣer Internet yettusewḥel</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> yesra isem n useqdac d wawal uffir.</translation>
 <translation id="2337852623177822836">Aɣewwar yettuεass sɣur anedbal-inek·inem</translation>
 <translation id="2355395290879513365">Iẓeddamen zemren ad ẓren tugniwin i tettwaliḍ deg usmel-a syin ad k•kem-xedɛen s ubeddel-nsent.</translation>
-<translation id="2356070529366658676">Suter</translation>
 <translation id="2359808026110333948">Kemmel</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Aselkem n tdaddanin n uzeṭṭa<ph name="END_LINK" /></translation>
-<translation id="2539524384386349900">Af</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> yuzen tiririt mačči d tameɣtut.</translation>
 <translation id="2634124572758952069">D awezɣi ad d-naf tansa IP n uqeddac n <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -51,9 +48,7 @@
       ad tesqedceḍ aqeddac n upṛuksi:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Sit ɣef tqeffalt n usali i wallus n tuzna n yisefka i ilaqen i usali n usebter.</translation>
-<translation id="3234666976984236645">Yal ass ttaf-d agbur axatar deg usmel-a</translation>
 <translation id="3422472998109090673">Awwaḍ ɣer <ph name="HOST_NAME" /> d awezɣi akka tura.</translation>
-<translation id="3427092606871434483">Sireg (amezwer)</translation>
 <translation id="3447661539832366887">Bab n yibenj-a isens urar n udinuzuṛ.</translation>
 <translation id="3447884698081792621">Sken aselkin (yettwazen sɣur <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Ffer talqayt</translation>
@@ -73,7 +68,6 @@
 <translation id="4075732493274867456">Amsaɣ akked uqeddac ur sefraken ara lqem n uneggaf SSL neɣ asertu n uwgelhen yettwassnen.</translation>
 <translation id="4116663294526079822">Ssirig deg usmel-a yal ass</translation>
 <translation id="4130226655945681476">Asenqed n yiguta n uzeṭṭa, amudem d umeglay</translation>
-<translation id="4151403195736952345">Seqdec aɣewwar amatu amezwer (Af)</translation>
 <translation id="4165986682804962316">Iγewwaṛen n usmel</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Asenqed n twila n uɣrab n tmes d mgalvirus<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Ɛreḍ aselem n tdaddanin n uzeṭṭa<ph name="END_LINK" />.</translation>
@@ -81,7 +75,6 @@
 <translation id="4250431568374086873">Tuqqna-inek·inem ɣer usmel-a mačči d taɣellsant yemmden</translation>
 <translation id="4265872034478892965">Yettusireg sɣur unedbal-ik•im</translation>
 <translation id="4305666528087210886">Anekcum ɣer ufaylu-inek·inem d awezɣi</translation>
-<translation id="4312866146174492540">Sewḥel (amezwer)</translation>
 <translation id="4408413947728134509">Inagan n tuqqna <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> ur yeqbil ara aselen-inek·inem n unekcum, neɣ ur t-tmuddeḍ ara.</translation>
 <translation id="4506599922270137252">Nermes anedbal n unagraw</translation>
@@ -96,7 +89,6 @@
 <translation id="4764776831041365478">Asebter web <ph name="URL" /> yezmer ulac anekcum ɣur-s i kra n waud, neɣ ahat yettusenkez ɣer usebter web amaynut i lebda.</translation>
 <translation id="4943872375798546930">Ulac igemmaḍ</translation>
 <translation id="5023310440958281426">Senqed tisertiyin n unedbal-ik•im</translation>
-<translation id="5039804452771397117">Sireg</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 deg useqdec)} other {(# deg useqdec)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Asenqed n tansa n upṛuksi<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
@@ -139,7 +131,6 @@
 <translation id="6711464428925977395">Yella wayen ur nteddu ara akken iwata akked uqeddac n upṛuksi, neɣ tansa d tarameɣtut.</translation>
 <translation id="6757797048963528358">Ibenk-inek·inem yekcem deg tnafa.</translation>
 <translation id="6897140037006041989">Ameggi aseqdac</translation>
-<translation id="7053983685419859001">Sewḥel</translation>
 <translation id="7108819624672055576">Yettusireg sɣur usiɣzef</translation>
 <translation id="7111012039238467737">(Ameɣtu)</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ur iqudar ara ilugan n tɣellist.</translation>
@@ -160,7 +151,6 @@
 <translation id="7834399512844817676"><ph name="SITE" /> yesseqdac awgelhen i ummesten n telɣut-ik•im. Mi yeɛreḍ Vivaldi ad yeqqen ɣer <ph name="SITE" /> tikkelt-a, asmel yettarra-d isallen n usulu irmeɣta ur nelli di tennumi. Aya iḍerru-d mi ara yeɛreḍ uẓeddam ad yili d <ph name="SITE" />, neɣ d agdil n tuqqna Wi-Fi iḥebsen tuqqna. Talɣut-ik•im ad teqqim d taɣellsant acku Vivaldi isseḥbes tuqqna send ad yili umbaddal n yisefka.</translation>
 <translation id="7878562273885520351">Awal-ik·im uffir yezmer ad yettwaker</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
-<translation id="8037357227543935929">Suter (amezwer)</translation>
 <translation id="8041940743680923270">Seqdec aɣewwar amatu amezwer (Suter)</translation>
 <translation id="808894953321890993">Beddel awal n uffir</translation>
 <translation id="8149426793427495338">Aselkim-inek·inem ikcem deg tnafa.</translation>

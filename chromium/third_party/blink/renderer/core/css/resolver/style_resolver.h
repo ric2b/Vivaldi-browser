@@ -235,7 +235,9 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
                                       const CSSValue&);
   // Resolves a single CSSValue in the context of some element's computed style.
   //
-  // This currently always resolves the value with tree_scope=Document.
+  // This currently always resolves the value with tree_scope=Document,
+  // and without any custom @env bindings. (When we get mixin support
+  // in Devtools, we'll need to do something about at least the latter.)
   //
   // This is intended for use by the Inspector Agent.
   static const CSSValue* ResolveValue(Element& element,
@@ -287,6 +289,8 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
     DCHECK(count_computed_style_bytes_);
     return computed_style_bytes_used_;
   }
+
+  void ApplyTriggerData(StyleResolverState& state);
 
   void Trace(Visitor*) const;
 

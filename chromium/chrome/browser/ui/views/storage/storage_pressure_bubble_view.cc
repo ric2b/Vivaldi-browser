@@ -8,8 +8,9 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/frame/app_menu_button.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -52,8 +53,9 @@ void ShowStoragePressureBubble(const url::Origin& origin) {
 }
 
 void StoragePressureBubbleView::ShowBubble(const url::Origin& origin) {
-  Browser* browser = BrowserList::GetInstance()->GetLastActive();
-  if (!browser) {
+  BrowserWindowInterface* const bwi =
+      GetLastActiveBrowserWindowInterfaceWithAnyProfile();
+  if (!bwi) {
     return;
   }
 
@@ -65,26 +67,28 @@ void StoragePressureBubbleView::ShowBubble(const url::Origin& origin) {
     vivaldi_anchor_view = window->GetBubbleDialogAnchor();
   } // End Vivaldi
 
-  StoragePressureBubbleView* bubble = new StoragePressureBubbleView(
-      vivaldi_anchor_view ? vivaldi_anchor_view :
-      BrowserView::GetBrowserViewForBrowser(browser)
-          ->toolbar_button_provider()
-          ->GetAppMenuButton(),
-      browser, origin);
+  StoragePressureBubbleView* bubble =
+      new StoragePressureBubbleView(BrowserView::GetBrowserViewForBrowser(bwi)
+                                        ->toolbar_button_provider()
+                                        ->GetAppMenuButton(),
+                                    bwi, origin);
+
   if (vivaldi_anchor_view) {
     // Center the bubble view.
     bubble->SetArrow(views::BubbleBorder::Arrow::FLOAT);
   }
+
   views::BubbleDialogDelegateView::CreateBubble(bubble)->Show();
 
   RecordBubbleHistogramValue(StoragePressureBubbleHistogramValue::kShown);
 }
 
-StoragePressureBubbleView::StoragePressureBubbleView(views::View* anchor_view,
-                                                     Browser* browser,
-                                                     const url::Origin& origin)
+StoragePressureBubbleView::StoragePressureBubbleView(
+    views::View* anchor_view,
+    BrowserWindowInterface* bwi,
+    const url::Origin& origin)
     : BubbleDialogDelegateView(anchor_view, views::BubbleBorder::TOP_RIGHT),
-      browser_(browser),
+      bwi_(bwi),
       origin_(origin),
       ignored_(true) {
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kOk));
@@ -116,11 +120,11 @@ void StoragePressureBubbleView::OnDialogAccepted() {
   GetWidget()->Close();
 
   CHECK(weak_this);
-  CHECK(browser_);
-  CHECK(browser_->profile());
+  CHECK(bwi_);
+  CHECK(bwi_->GetProfile());
 
   const GURL all_sites_gurl(kAllSitesContentSettingsUrl);
-  NavigateParams params(browser_, all_sites_gurl,
+  NavigateParams params(bwi_->GetBrowserForMigrationOnly(), all_sites_gurl,
                         ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   Navigate(&params);

@@ -3063,7 +3063,7 @@ Some features are limited to increase battery life.
       <message name="IDS_ASH_STATUS_TRAY_BATTERY_CALCULATING_CHARGE_LEVEL" desc="The label in the tray dialog indicating that the battery charge level is being calculated.">
         Calculating battery %...
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_BATTERY_CHARGING_ON_HOLD" desc="The label in the tray dialog indicating that charging has paused." translateable="false">
+      <message name="IDS_ASH_STATUS_TRAY_BATTERY_CHARGING_ON_HOLD" desc="The label in the tray dialog indicating that charging has paused.">
         Charging on hold
       </message>
       <message name="IDS_ASH_STATUS_TRAY_BATTERY_TIME_LEFT_SHORT" desc="The label in the tray bubble settings row to show a time estimate until the battery is empty.">
@@ -3090,7 +3090,7 @@ Some features are limited to increase battery life.
       <message name="IDS_ASH_STATUS_TRAY_BATTERY_PERCENT_CHARGING_BSM_ON_ACCESSIBLE" desc="The message used by accessibility to show battery is being charged with battery saver enabled.">
         Battery at <ph name="percentage">$1<ex>56</ex></ph>% and charging. Battery Saver is on.
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_BATTERY_PERCENT_CHARGING_ON_HOLD_ACCESSIBLE" desc="The message used by accessibility to show the battery percentage and that charging is currently paused." translateable="false">
+      <message name="IDS_ASH_STATUS_TRAY_BATTERY_PERCENT_CHARGING_ON_HOLD_ACCESSIBLE" desc="The message used by accessibility to show the battery percentage and that charging is currently paused.">
         Battery at <ph name="percentage">$1<ex>56</ex></ph>%. Charging on hold.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_BATTERY_CALCULATING_ACCESSIBLE" desc="The message used by accessibility to show battery is calculating its time in short message.">
@@ -4053,6 +4053,9 @@ No devices connected.
       </message>
       <message name="IDS_ASH_DISPLAY_FAILURE_SEND_FEEDBACK" desc="Button text below error report to allow user to send feedback report.">
         Send feedback
+      </message>
+      <message name="IDS_ASH_DISPLAY_FAILURE_MAX_DISPLAY_LIMIT" desc="An error message to show that the system failed to configure multiple displays due to max display reached.">
+        You can connect up to <ph name="DISPLAY_LIMIT">$1<ex>2</ex></ph> external displays.
       </message>
       <message name="IDS_ASH_DISPLAY_RESOLUTION_CHANGE_ACCEPT" desc="A button label shown in the notification for the resolution change to accept the change">
         Accept
@@ -9249,6 +9252,17 @@ To shut down the device, press and hold the power button on the device again.
       </message>
       <message name="IDS_ASH_ERROR_MESSAGE_TOAST_SETTINGS" desc="An error message toast is a notification that shows up when an error occurs. This is the text that is displayed on the button when the action is to upgrade the operating system (by opening settings).">
         Settings
+      </message>
+
+      <!-- Borealis MOTD -->
+      <message name="IDS_ASH_BOREALIS_MOTD_DISMISS_TEXT" desc="Text on dismiss button in Borealis MOTD. Clicking on it will dismiss the dialog.">
+        Dismiss
+      </message>
+      <message name="IDS_ASH_BOREALIS_MOTD_PLACEHOLDER_TEXT" desc="Placeholder text for Borealis MOTD. Shown if the message of the day is unable to be retrieved from the Static Content Service.">
+        Unable to retrieve Steam for Chromebook news.
+      </message>
+      <message name="IDS_ASH_BOREALIS_MOTD_TITLE_TEXT" desc="Title text for Borealis MOTD. Shown at the top of the dialog.">
+        Steam for Chromebook News
       </message>
      </messages>
     </release>

@@ -7,12 +7,13 @@ package org.chromium.chrome.browser.fullscreen;
 import android.app.Activity;
 import android.view.Gravity;
 
-import org.chromium.base.BuildInfo;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.DeviceInfo;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.ui.KeyboardUtils;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.widget.Toast;
 import org.chromium.ui.widget.Toast.ToastPriority;
@@ -48,7 +49,7 @@ interface FullscreenToast {
     boolean isVisible();
 
     // Android widget-based fullscreen toast.
-    static class AndroidToast implements FullscreenToast {
+    class AndroidToast implements FullscreenToast {
         private final Activity mActivity;
         private final BooleanSupplier mIsPersistentFullscreenMode;
 
@@ -99,7 +100,7 @@ interface FullscreenToast {
                     UiUtils.isGestureNavigationMode(mActivity.getWindow())
                             ? R.string.immersive_fullscreen_gesture_navigation_mode_api_notification
                             : R.string.immersive_fullscreen_api_notification;
-            if (DeviceInfo.isDesktop()) {
+            if (KeyboardUtils.isHardKeyboardConnected(ContextUtils.getApplicationContext())) {
                 if (ChromeFeatureList.isEnabled(
                         ChromeFeatureList.DISPLAY_EDGE_TO_EDGE_FULLSCREEN)) {
                     toastTextId = R.string.immersive_fullscreen_api_notification_desktop;
@@ -110,7 +111,7 @@ interface FullscreenToast {
             if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
                 toastTextId = R.string.vivaldi_immersive_fullscreen_api_notification;
             } else
-            if (BuildInfo.getInstance().isAutomotive) {
+            if (DeviceInfo.isAutomotive()) {
                 toastTextId = R.string.immersive_fullscreen_automotive_toolbar_improvements;
             }
             mNotificationToast =
@@ -125,6 +126,31 @@ interface FullscreenToast {
                 mNotificationToast.cancel();
                 mNotificationToast = null;
             }
+        }
+    }
+
+    // Used when Exclusive Access Manager is used for the Toast control.
+    class NoEffectToastStub implements FullscreenToast {
+        NoEffectToastStub() {}
+
+        @Override
+        public void onExitPersistentFullscreen() {}
+
+        @Override
+        public void onEnterFullscreen() {}
+
+        @Override
+        public void onFullscreenLayout() {}
+
+        @Override
+        public void onExitFullscreen() {}
+
+        @Override
+        public void onWindowFocusChanged(boolean hasWindowFocus) {}
+
+        @Override
+        public boolean isVisible() {
+            return false;
         }
     }
 }

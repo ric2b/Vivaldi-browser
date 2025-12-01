@@ -4,12 +4,16 @@
 
 #include "third_party/blink/renderer/core/layout/masonry/layout_masonry.h"
 
-#include "third_party/blink/renderer/core/layout/grid/grid_data.h"
 #include "third_party/blink/renderer/core/layout/grid/layout_grid.h"
 
 namespace blink {
 
-LayoutMasonry::LayoutMasonry(Element* element) : LayoutBlock(element) {}
+LayoutMasonry::LayoutMasonry(Element* element) : LayoutBlock(element) {
+  CHECK(element);
+  CHECK(element->GetComputedStyle());
+  masonry_track_sizing_direction_ =
+      element->GetComputedStyle()->MasonryTrackSizingDirection();
+}
 
 const GridLayoutData* LayoutMasonry::LayoutData() const {
   return LayoutGrid::GetGridLayoutDataFromFragments(this);
@@ -18,7 +22,12 @@ const GridLayoutData* LayoutMasonry::LayoutData() const {
 Vector<LayoutUnit> LayoutMasonry::GridTrackPositions(
     GridTrackSizingDirection track_direction) const {
   NOT_DESTROYED();
-  return LayoutGrid::ComputeExpandedPositions(LayoutData(), track_direction);
+  if (track_direction != masonry_track_sizing_direction_) {
+    return {};
+  }
+  return LayoutGrid::ComputeExpandedPositions(track_direction == kForColumns
+                                                  ? LayoutData()->Columns()
+                                                  : LayoutData()->Rows());
 }
 
 LayoutUnit LayoutMasonry::GridGap(
@@ -32,6 +41,61 @@ LayoutUnit LayoutMasonry::MasonryItemOffset(
   NOT_DESTROYED();
   // Distribution offset is baked into the `gutter_size` in Masonry.
   return LayoutUnit();
+}
+
+bool LayoutMasonry::HasCachedPlacementData() const {
+  // TODO(almaher): Check for !IsGridPlacementDirty() similar to
+  // LayoutGrid.
+  return !!cached_placement_data_;
+}
+
+const GridPlacementData& LayoutMasonry::CachedPlacementData() const {
+  DCHECK(cached_placement_data_);
+  return *cached_placement_data_;
+}
+
+void LayoutMasonry::SetCachedPlacementData(GridPlacementData&& placement_data) {
+  cached_placement_data_ = std::move(placement_data);
+}
+
+wtf_size_t LayoutMasonry::AutoRepeatCountForDirection(
+    GridTrackSizingDirection track_direction) const {
+  NOT_DESTROYED();
+  if (!cached_placement_data_) {
+    return 0;
+  }
+  return cached_placement_data_->AutoRepeatTrackCount(track_direction);
+}
+
+wtf_size_t LayoutMasonry::ExplicitGridStartForDirection(
+    GridTrackSizingDirection track_direction) const {
+  NOT_DESTROYED();
+  if (!cached_placement_data_) {
+    return 0;
+  }
+  return cached_placement_data_->StartOffset(track_direction);
+}
+
+wtf_size_t LayoutMasonry::ExplicitGridEndForDirection(
+    GridTrackSizingDirection track_direction) const {
+  NOT_DESTROYED();
+  if (!cached_placement_data_) {
+    return 0;
+  }
+
+  return base::checked_cast<wtf_size_t>(
+      ExplicitGridStartForDirection(track_direction) +
+      cached_placement_data_->ExplicitGridTrackCount(track_direction));
+}
+
+Vector<LayoutUnit, 1> LayoutMasonry::TrackSizesForComputedStyle(
+    GridTrackSizingDirection track_direction) const {
+  NOT_DESTROYED();
+  if (track_direction != masonry_track_sizing_direction_) {
+    return {};
+  }
+  return LayoutGrid::CollectTrackSizesForComputedStyle(LayoutData(),
+                                                       track_direction);
 }
 
 }  // namespace blink

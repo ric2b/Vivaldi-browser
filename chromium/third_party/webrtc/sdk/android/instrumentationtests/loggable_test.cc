@@ -8,7 +8,9 @@
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
-#include <memory>
+#include <jni.h>
+
+#include <string>
 
 #include "rtc_base/logging.h"
 #include "sdk/android/native_api/jni/java_types.h"
@@ -23,8 +25,8 @@ JNI_FUNCTION_DECLARATION(void,
                          JNIEnv* jni,
                          jclass,
                          jstring j_message) {
-  std::string message =
-      JavaToNativeString(jni, jni_zero::JavaParamRef<jstring>(jni, j_message));
+  std::string message = JavaToNativeString(
+      jni, jni_zero::JavaRef<jstring>::CreateLeaky(jni, j_message));
   RTC_LOG(LS_INFO) << message;
 }
 

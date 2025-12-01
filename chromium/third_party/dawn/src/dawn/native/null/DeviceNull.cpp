@@ -96,6 +96,7 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
 MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits) {
     GetDefaultLimitsForSupportedFeatureLevel(limits);
     limits->v1.maxImmediateSize = kMaxSupportedImmediateDataBytes;
+    limits->dynamicBindingArrayLimits.maxDynamicBindingArraySize = kMaxDynamicBindingArraySize;
     return {};
 }
 
@@ -195,13 +196,13 @@ MaybeError Device::Initialize(const UnpackedPtr<DeviceDescriptor>& descriptor) {
 }
 
 ResultOrError<Ref<BindGroupBase>> Device::CreateBindGroupImpl(
-    const BindGroupDescriptor* descriptor) {
+    const UnpackedPtr<BindGroupDescriptor>& descriptor) {
     Ref<BindGroup> bindGroup = AcquireRef(new BindGroup(this, descriptor));
     DAWN_TRY(bindGroup->Initialize(descriptor));
     return bindGroup;
 }
 ResultOrError<Ref<BindGroupLayoutInternalBase>> Device::CreateBindGroupLayoutImpl(
-    const BindGroupLayoutDescriptor* descriptor) {
+    const UnpackedPtr<BindGroupLayoutDescriptor>& descriptor) {
     return AcquireRef(new BindGroupLayout(this, descriptor));
 }
 ResultOrError<Ref<BufferBase>> Device::CreateBufferImpl(
@@ -349,7 +350,7 @@ BindGroupDataHolder::~BindGroupDataHolder() {
 
 // BindGroup
 
-BindGroup::BindGroup(DeviceBase* device, const BindGroupDescriptor* descriptor)
+BindGroup::BindGroup(DeviceBase* device, const UnpackedPtr<BindGroupDescriptor>& descriptor)
     : BindGroupDataHolder(descriptor->layout->GetInternalBindGroupLayout()->GetBindingDataSize()),
       BindGroupBase(device, descriptor, mBindingDataAllocation) {}
 
@@ -359,7 +360,8 @@ MaybeError BindGroup::InitializeImpl() {
 
 // BindGroupLayout
 
-BindGroupLayout::BindGroupLayout(DeviceBase* device, const BindGroupLayoutDescriptor* descriptor)
+BindGroupLayout::BindGroupLayout(DeviceBase* device,
+                                 const UnpackedPtr<BindGroupLayoutDescriptor>& descriptor)
     : BindGroupLayoutInternalBase(device, descriptor) {}
 
 // Buffer
@@ -398,6 +400,8 @@ MaybeError Buffer::MapAsyncImpl(wgpu::MapMode mode, size_t offset, size_t size) 
     GetDevice()->GetQueue()->IncrementLastSubmittedCommandSerial();
     return {};
 }
+
+void Buffer::FinalizeMapImpl() {}
 
 void* Buffer::GetMappedPointerImpl() {
     return mBackingData.get();
@@ -464,11 +468,12 @@ MaybeError Queue::SubmitPendingCommandsImpl() {
     return {};
 }
 
-ResultOrError<bool> Queue::WaitForQueueSerialImpl(ExecutionSerial serial, Nanoseconds timeout) {
-    return true;
+ResultOrError<ExecutionSerial> Queue::WaitForQueueSerialImpl(ExecutionSerial waitSerial,
+                                                             Nanoseconds timeout) {
+    return waitSerial;
 }
 
-MaybeError Queue::WaitForIdleForDestruction() {
+MaybeError Queue::WaitForIdleForDestructionImpl() {
     ToBackend(GetDevice())->ForgetPendingOperations();
     return {};
 }
@@ -596,5 +601,11 @@ bool Device::CanTextureLoadResolveTargetInTheSameRenderpass() const {
 
 Texture::Texture(DeviceBase* device, const UnpackedPtr<TextureDescriptor>& descriptor)
     : TextureBase(device, descriptor) {}
+
+MaybeError Texture::PinImpl(wgpu::TextureUsage usage) {
+    return {};
+}
+
+void Texture::UnpinImpl() {}
 
 }  // namespace dawn::native::null

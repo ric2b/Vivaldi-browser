@@ -6,7 +6,6 @@
 <translation id="1158503667684816647">Onaylama penceresini tekrar gösterme</translation>
 <translation id="1222195720020481779">Yükleyici başlatılıyor...</translation>
 <translation id="1224683873953469764">Mobil Cihazlarınız için Vivaldi'yi Edinin</translation>
-<translation id="1270785070369717623">Ne yazık ki, Opera GX ayarlarınız bu tarayıcı çalışırken kullanılamaz. Bu ayarları Vivaldi'ye aktarmak için çalışmanızı kaydedin ve tüm Opera GX pencerelerini kapatın. Ardından Devam'a tıklayın.</translation>
 <translation id="1276145862619442150">Hızlı Erişimler</translation>
 <translation id="1281950884873973195">Hayvan 6</translation>
 <translation id="1411638389238344450">Bağlantıyı E-posta ile Gönder</translation>
@@ -24,7 +23,6 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Resim Özellikleri...</translation>
 <translation id="1920297417712412573">Nota Kopyala</translation>
-<translation id="1921101374471252440">&amp;Resmi Yeniden Yükle</translation>
 <translation id="1924750141060565109">Manzara 15</translation>
 <translation id="19598411548897379">Genel</translation>
 <translation id="1973351931613083086">otomatik oynatma</translation>
@@ -39,8 +37,6 @@
 <translation id="2501278716633472235">Geri dön</translation>
 <translation id="2612127540243995147">Kurulmaya hazır. Vivaldi kapatılacak ve yeniden başlatılacak.</translation>
 <translation id="2613387515621326337">Güncelleme web sayfasını göster</translation>
-<translation id="2645477450146475243">Ne yazık ki, Opera ayarlarınız bu tarayıcı çalışırken kullanılamaz. Bu ayarları Vivaldi'ye aktarmak için çalışmanızı kaydedin ve tüm Opera pencerelerini kapatın. Ardından Devam'a tıklayın.</translation>
-<translation id="2647368062414805334">Edge ayarları tarayıcı çalışırken aktarılamıyor. Bu ayarları Vivaldi'ye aktarmak için çalışmalarınızı kaydedın ve tüm Edge pencerelerini kapatın. Sonra devam ete tıklayın.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Hayvan 3</translation>
 <translation id="2873951654529031587">Çöp Kutusu</translation>
@@ -50,7 +46,6 @@
 <translation id="2977472760057091832">Bağlantıyı Gizli Pencerede Aç</translation>
 <translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Yeni Sekmede Aç</translation>
-<translation id="3027988479108856431">Maalesef, tarayıcınız çalışıyorken Yandex ayarlarınıza erişilemiyor. Ayarları Vivaldi içerisine almak için, işlerinizi kaydedin ve Yandex pencerelerini kapatın.Daha sonra Devam düğmesine basın.</translation>
 <translation id="3084011186245865060">Manzara 6</translation>
 <translation id="3085906383264247940">Opera (Beta)</translation>
 <translation id="3093931836425623631">Chromium açık kaynak projesi ve diğer açık kaynaklı yazılımlarla Vivaldi'ye ortam sağladı.</translation>
@@ -65,6 +60,7 @@
 <translation id="3334610655141903168">(başlık yok)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> şu anki en son sürüm.</translation>
 <translation id="3383198080133834965">Güncelsiniz!</translation>
+<translation id="3402602684546832928">Opera yer imi dosyasını seçin</translation>
 <translation id="3451317331714872347">Manzara 8</translation>
 <translation id="3457498675806041407">Çıkmayı Onayla</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> zaten yüklü ve tarayıcıyı tekrar başlattığınızda aktifleşecek.</translation>
@@ -81,7 +77,6 @@
 <translation id="3732157130969736834">Bağlantıyı Yer imlerine Ekle</translation>
 <translation id="3732388226447288666">Hayvan 2</translation>
 <translation id="3732439195215136813">Hayvan 5</translation>
-<translation id="3795800845758778870">Brave ayarları tarayıcı çalışırken aktarılamıyor. Bu ayarları Vivaldi'ye aktarmak için çalışmalarınızı kaydedın ve tüm Brave pencerelerini kapatın. Sonra devam ete tıklayın.</translation>
 <translation id="3822431842304177896">Yeni Ayırıcı</translation>
 <translation id="3832132597516774400">Manzara 5</translation>
 <translation id="3894751534882749287">Eğer sayfayı yine de görmek istiyorsanız, İzleme-engelleme açılır peneresınden ya da İzin ver düğmesine tıklayarak sayfanın izleme koruma düzeyini değiştirebilirsiniz</translation>
@@ -133,10 +128,10 @@
 <translation id="5770433027661640693">Manzara 10</translation>
 <translation id="5857090052475505287">Yeni Klasör</translation>
 <translation id="588258955323874662">Tam Ekran</translation>
-<translation id="5916080360077521750">Maalesef, tarayıcınız çalışıyorken Chrome ayarlarınıza erişilemiyor. Ayarları Vivaldi içerisine almak için, işlerinizi kaydedin ve Chrome pencerelerini kapatın.Daha sonra Devam düğmesine basın.</translation>
 <translation id="6040143037577758943">Kapat</translation>
 <translation id="6229528619562190452">Vivaldi'yi güncellemek için buraya tıklayın.</translation>
 <translation id="6234173136417926046">Resmi Başlangıç Sayfası Arka Planı Olarak Kullan</translation>
+<translation id="630690498669249215">Opera Yer İmleri Dosyası</translation>
 <translation id="6339818817272922368">Yerel Hesap</translation>
 <translation id="6398710281890660037">Profilimi güvene alın</translation>
 <translation id="6438786710866753178">Manzara 4</translation>
@@ -155,7 +150,6 @@
 <translation id="7099506190679014195">Güvenli anahtar deposu yükseltmesi</translation>
 <translation id="7111492742514999492">Manzara 9</translation>
 <translation id="7113310725918019676"><ph name="DOMAIN" /> adresinden <ph name="BLOCKED_TYPE" /> içeriğine izin ver</translation>
-<translation id="7208252576848052204">Ne yazık ki, Arc ayarlarınız bu tarayıcı çalışırken kullanılamaz. Bu ayarları Vivaldi'ye aktarmak için çalışmanızı kaydedin ve tüm Arc pencerelerini kapatın. Ardından Devam'a tıklayın.</translation>
 <translation id="7321500017121629018">Dün aktifti</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Güncelleme kurucusu başlatılamadı. Bilgisayarınızda yeterli bellek ya da boş disk alanı olduğunu kontrol edip yeniden deneyin.</translation>
@@ -182,7 +176,6 @@
 <translation id="8539196077526389150">Manzara 13</translation>
 <translation id="8562339533180097902">Vivaldi'yi kapat ve hemen kur</translation>
 <translation id="8567452685425968223">Güncelleme açılıyor...</translation>
-<translation id="8624587806981488221">&amp;Resmi yeniden yükle</translation>
 <translation id="8651348004684669199">Etkin Sekmeyi Ekle</translation>
 <translation id="8669345741879513971">Canavar 10</translation>
 <translation id="867544375504146191">Yandex</translation>

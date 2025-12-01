@@ -24,12 +24,6 @@
             (SuggestedActionsViewController*)viewController
     fetchHistoryResultsCountWithCompletion:(void (^)(size_t))completion;
 
-// Vivaldi
-// Tells the delegate that the user tapped on the search in reecent tabs item.
-- (void)didSelectSearchRecentTabsInSuggestedActionsViewController:
-    (SuggestedActionsViewController*)viewController;
-// End Vivaldi
-
 @end
 
 // SuggestedActionsViewController represents the suggestions will appear on

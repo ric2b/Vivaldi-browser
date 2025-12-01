@@ -108,6 +108,9 @@ class ReaderModeController : public web::WebStateObserver,
   // from C++ to avoid exposing Obj-C types
   // in this header. Owns the FAB button and presentation coordinator state.
   void* objc_ui_state_ = nullptr;
+
+  // For safely capturing the controller in async blocks.
+  base::WeakPtrFactory<ReaderModeController> weak_factory_{this};
 };
 
 #endif  // IOS_READER_MODE_READER_MODE_CONTROLLER_H_

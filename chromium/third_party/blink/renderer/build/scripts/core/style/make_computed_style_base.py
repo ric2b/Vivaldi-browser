@@ -46,7 +46,7 @@ ALIGNMENT_ORDER = [
     'Vector<TimelineAttachment>',
     'Vector<TimelineAxis>',
     'Vector<TimelineInset>',
-    'Vector<std::optional<Vector<AtomicString>>>',
+    'HeapVector<Member<StyleTriggerAttachmentVector>>',
     'GridPosition',
     'ScrollStartData',
     'AtomicString',
@@ -89,6 +89,7 @@ ALIGNMENT_ORDER = [
     'FitText',
     'TabSize',
     'float',
+    'StyleInterestDelay',
     # Aligns like int
     'cc::ScrollSnapType',
     'cc::ScrollSnapAlign',

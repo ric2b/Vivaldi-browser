@@ -25,13 +25,12 @@ tree:
 
 Other disables:
 
-- `autoninja`:
-  - Replaced with `agent_autoninja.py`, which ensures `--quiet` is passed.
-  - I was finding that even when told to use `--quiet`, it would often forget to
-    after running for a while.
 - `git grep`
   - This runs plenty fast, but skips submodules by default. Better to just use
     other search tools.
+- `git commit --amend`
+  - Better to squash commits afterwards than to have gemini overwrite your
+    commits.
 - `gn ls`
   - Produces too much output and hangs the agent.
 - `gn clean`
@@ -40,6 +39,7 @@ Other disables:
 - `read_many_files`
   - The agent tends to echo out file contents when using this tool, which hangs
     the agent for large files (e.g. `tools/metrics/histograms/enums.xml`)
+  - https://github.com/google-gemini/gemini-cli/issues/5604
 
 ## But I Want to Use a Disabled Command
 

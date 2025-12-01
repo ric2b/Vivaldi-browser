@@ -10,7 +10,7 @@
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/vivaldi_tab_strip_group_stroke_view.h"
 
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/swift_constants_for_objective_c.h"
+#import "ios/chrome/browser/tab_switcher/tab_strip/ui/swift_constants_for_objective_c.h"
 
 @implementation VivaldiTabStripGroupStrokeView {
   CAShapeLayer* _topStrokeLayer;

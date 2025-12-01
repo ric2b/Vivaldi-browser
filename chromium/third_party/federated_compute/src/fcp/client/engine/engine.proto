@@ -1,0 +1,55 @@
+// Copyright 2021 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.client.engine;
+
+option java_package = "com.google.intelligence.fcp.client.engine";
+option java_multiple_files = true;
+option java_outer_classname = "TrainingProto";
+
+// A constraint on the task when to run again.
+message TaskRetry {
+  // An opaque context stored between task activations.
+  string retry_token = 1;
+
+  // The suggested minimal duration after which the client should retry again,
+  // in milliseconds.
+  int64 delay_min = 2;
+
+  // The suggested maximal duration before which the client should retry again
+  // (if conditions allow), in milliseconds.
+  int64 delay_max = 3;
+}
+
+enum PhaseOutcome {
+  PHASE_OUTCOME_UNDEFINED = 0;
+  COMPLETED = 1;
+  INTERRUPTED = 2;
+  ERROR = 3;
+}
+
+enum DataSourceType {
+  // Default value for this enum.
+  TRAINING_DATA_SOURCE_UNDEFINED = 0;
+
+  // Feed based execution, examples were batched outside of TensorFlow and fed
+  // into the training session.
+  FEED = 1;
+
+  // Dataset based execution, TensorFlow was given an ExternalDatasetProvider
+  // and used it internally to create iterators and pull examples.
+  DATASET = 2;
+}

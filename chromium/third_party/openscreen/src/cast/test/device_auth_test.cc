@@ -28,7 +28,6 @@ using proto::CastMessage;
 using proto::DeviceAuthMessage;
 
 using ::testing::_;
-using ::testing::Invoke;
 
 const std::string& GetSpecificTestDataPath() {
   static std::string data_path = GetTestDataPath() + "cast/receiver/channel/";
@@ -80,10 +79,9 @@ class DeviceAuthTest : public ::testing::Test {
     }
     CastMessage challenge_reply;
     EXPECT_CALL(fake_cast_socket_pair_.mock_peer_client, OnMessage(_, _))
-        .WillOnce(
-            Invoke([&challenge_reply](CastSocket* socket, CastMessage message) {
-              challenge_reply = std::move(message);
-            }));
+        .WillOnce([&challenge_reply](CastSocket* socket, CastMessage message) {
+          challenge_reply = std::move(message);
+        });
     ASSERT_TRUE(
         fake_cast_socket_pair_.peer_socket->Send(std::move(auth_challenge))
             .ok());

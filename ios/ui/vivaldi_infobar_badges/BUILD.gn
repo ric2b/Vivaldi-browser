@@ -1,0 +1,16 @@
+
+# Copyright 2025 Vivaldi Technologies. All rights reserved.
+
+source_set("vivaldi_infobar_badges") {
+  sources = [
+    "vivaldi_infobar_badges_constants.h",
+    "vivaldi_infobar_badges_constants.mm",
+  ]
+
+  deps = [
+    "//base",
+    "resources:assets",
+  ]
+
+ frameworks = [ "UIKit.framework" ]
+}

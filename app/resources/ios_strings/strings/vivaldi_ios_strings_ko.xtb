@@ -15,6 +15,7 @@
 <translation id="2181990701313127304">스택에 새 탭</translation>
 <translation id="2351280151183279120">스택 공유</translation>
 <translation id="2353953000228441783">사이트 보기 기본 설정</translation>
+<translation id="2360196772093551345">모바일 사이트 요청</translation>
 <translation id="2394192052244849643">붙여넣기 및 검색</translation>
 <translation id="2418705169960294134">새 시크릿 탭</translation>
 <translation id="2565593432251168402">탭 스택을 만들어서 정리하세요</translation>
@@ -63,6 +64,7 @@
 <translation id="6163856768888310791">스택 해제</translation>
 <translation id="6168969409902608220">스택 이름</translation>
 <translation id="6233792867654386826">입력한 URL을 Vivaldi에서 엽니다.</translation>
+<translation id="6271462272606946663">모바일 사이트 요청 숨기기</translation>
 <translation id="6478587527114893588">스택을 닫습니다.</translation>
 <translation id="6527405730445064713">탭 스택. 펼쳐짐.</translation>
 <translation id="6532106788206463496">변경사항 저장</translation>
@@ -78,6 +80,7 @@
 <translation id="7363285031331302144">열린 탭을 정리하기 위해 탭 스택을 만듭니다</translation>
 <translation id="7395230742578757172">새 탭 스택에서 열기</translation>
 <translation id="7424676799308869002">스택을 보관하시겠어요?</translation>
+<translation id="7460698861522306757">모바일 사이트 요청</translation>
 <translation id="7498234416455752244">계속 수정하기</translation>
 <translation id="7549299604720382000">새 시크릿 탭</translation>
 <translation id="7585610907974664408">스택에 새 시크릿 탭</translation>

@@ -1,0 +1,126 @@
+// Copyright 2021 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package google.internal.federated.plan;
+
+import "google/protobuf/duration.proto";
+import "fcp/protos/plan.proto";
+
+option java_package = "com.google.internal.federated.plan";
+option java_multiple_files = true;
+
+// Provides the information needed to determine eligibility for tasks in a
+// population.
+message PopulationEligibilitySpec {
+  // Eligibility-related information about each task in the population.
+  repeated TaskInfo task_info = 1;
+
+  message TaskInfo {
+    // The name of the task.
+    string task_name = 1;
+
+    // The TaskAssignments method to use for the task.
+    TaskAssignmentMode task_assignment_mode = 2;
+
+    enum TaskAssignmentMode {
+      TASK_ASSIGNMENT_MODE_UNSPECIFIED = 0;
+      // Task assignment uses /TaskAssignments.StartTaskAssignment.
+      TASK_ASSIGNMENT_MODE_SINGLE = 1;
+      // Task assignment uses /TaskAssignments.PerformMultipleTaskAssignments.
+      TASK_ASSIGNMENT_MODE_MULTIPLE = 2;
+    }
+
+    // The indices of the eligibility policies in `eligibility_policies` that
+    // apply to this task.
+    repeated int32 eligibility_policy_indices = 3;
+  }
+
+  // The eligibility policies used by this population.
+  repeated EligibilityPolicyEvalSpec eligibility_policies = 3;
+}
+
+// Specification describing the eligibility policy and its parameters.
+message EligibilityPolicyEvalSpec {
+  // The name of the policy.
+  string name = 1;
+
+  // The minimum version of the policy implementation. If the client does not
+  // implement at least this version, it is ineligible for any tasks that use
+  // this policy.
+  int32 min_version = 2;
+
+  // The specification of the policy implementation, including the
+  // policy-specific parameters.
+  oneof policy_type {
+    DataAvailabilityPolicy data_availability_policy = 3;
+    SamplingWithoutReplacementPolicy swor_policy = 4;
+    TensorFlowCustomPolicy tf_custom_policy = 5;
+    MinimumSeparationPolicy min_sep_policy = 6;
+  }
+}
+
+// Data availability policy parameters.
+message DataAvailabilityPolicy {
+  // The ExampleSelector passed to the example store used to select examples
+  // counted by the data availability policy.
+  ExampleSelector selector = 1;
+
+  // The minimum number of examples from the selector to be considered
+  // eligible.
+  int32 min_example_count = 2;
+
+  // Indicates if the elibigility policy should use ExampleQueryResult format to
+  // calculate the number of returned examples instead of counting tf.Examples.
+  bool use_example_query_result_format = 3;
+}
+
+// Sampling without replacement policy parameters.
+message SamplingWithoutReplacementPolicy {
+  // The minimum period between successful contributions.
+  google.protobuf.Duration min_period = 1;
+
+  // If this is set, then previous successful executions of any task name
+  // matching group_regex count in the sampling without replacement
+  // evaluation. If this is not set, then this is a per-task sampling without
+  // replacement policy.
+  string group_regex = 2;
+}
+
+// TensorFlow custom policy parameters. The TensorFlow custom policy
+// implementation is present in the Eligibility Eval Task for this population.
+message TensorFlowCustomPolicy {
+  // Serialized arguments that will be evaluated by the TensorFlow custom
+  // policy implementation.
+  bytes arguments = 1;
+}
+
+// Minimum separation policy parameters.
+message MinimumSeparationPolicy {
+  // The current index (e.g., algorithmic round number) of the federated
+  // computation.
+  int64 current_index = 1;
+
+  // The minimum index separation required between successful contributions.
+  int64 minimum_separation = 2;
+
+  // The minimum period required after the opstats database's earliest
+  // trustworthy time.
+  // This is to ensure that the opstats database is old enough to have
+  // trustworthy data to determine the eligibility, and to prevent clients that
+  // have reset the opstats database within the minimum separation period from
+  // overcontributing.
+  google.protobuf.Duration min_trustworthiness_period = 3;
+}

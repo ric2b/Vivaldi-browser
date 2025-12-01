@@ -12,6 +12,7 @@
 #include <atomic>
 #include <optional>
 
+#include "base/containers/heap_array.h"
 #include "base/functional/bind.h"
 #include "base/memory/page_size.h"
 #include "base/memory/ptr_util.h"
@@ -47,19 +48,20 @@ class TestChannel : public Channel {
     return OnReadComplete(bytes_read, next_read_size_hint);
   }
 
-  MOCK_METHOD7(GetReadPlatformHandles,
-               bool(const void* payload,
-                    size_t payload_size,
-                    size_t num_handles,
-                    const void* extra_header,
-                    size_t extra_header_size,
-                    std::vector<PlatformHandle>* handles,
-                    bool* deferred));
-  MOCK_METHOD2(GetReadPlatformHandlesForIpcz,
-               bool(size_t, std::vector<PlatformHandle>&));
-  MOCK_METHOD0(Start, void());
-  MOCK_METHOD0(ShutDownImpl, void());
-  MOCK_METHOD0(LeakHandle, void());
+  MOCK_METHOD(bool,
+              GetReadPlatformHandles,
+              (const void* payload,
+               size_t payload_size,
+               size_t num_handles,
+               const void* extra_header,
+               size_t extra_header_size,
+               std::vector<PlatformHandle>* handles));
+  MOCK_METHOD(bool,
+              GetReadPlatformHandlesForIpcz,
+              (size_t, std::vector<PlatformHandle>&));
+  MOCK_METHOD(void, Start, ());
+  MOCK_METHOD(void, ShutDownImpl, ());
+  MOCK_METHOD(void, LeakHandle, ());
 
   void Write(MessagePtr message) override {}
 
@@ -72,9 +74,9 @@ class MockChannelDelegate : public Channel::Delegate {
  public:
   MockChannelDelegate() = default;
 
-  size_t GetReceivedPayloadSize() const { return payload_size_; }
+  size_t GetReceivedPayloadSize() const { return payload_.size(); }
 
-  const void* GetReceivedPayload() const { return payload_.get(); }
+  const void* GetReceivedPayload() const { return payload_.data(); }
 
  protected:
   void OnChannelMessage(
@@ -82,17 +84,16 @@ class MockChannelDelegate : public Channel::Delegate {
       size_t payload_size,
       std::vector<PlatformHandle> handles,
       scoped_refptr<ipcz_driver::Envelope> envelope) override {
-    payload_.reset(new char[payload_size]);
-    memcpy(payload_.get(), payload, payload_size);
-    payload_size_ = payload_size;
+    auto payload_span =
+        base::span(static_cast<const char*>(payload), payload_size);
+    payload_ = base::HeapArray<char>::CopiedFrom(payload_span);
   }
 
   // Notify that an error has occured and the Channel will cease operation.
   void OnChannelError(Channel::Error error) override {}
 
  private:
-  size_t payload_size_ = 0;
-  std::unique_ptr<char[]> payload_;
+  base::HeapArray<char> payload_;
 };
 
 Channel::MessagePtr CreateDefaultMessage(bool legacy_message) {
@@ -135,8 +136,9 @@ void TestMessagesAreEqual(Channel::Message* message1,
   TestMemoryEqual(message1->payload(), message1->payload_size(),
                   message2->payload(), message2->payload_size());
 
-  if (legacy_messages)
+  if (legacy_messages) {
     return;
+  }
 
   ASSERT_EQ(message1->extra_header_size(), message2->extra_header_size());
   TestMemoryEqual(message1->extra_header(), message1->extra_header_size(),
@@ -553,13 +555,15 @@ class CallbackChannelDelegate : public Channel::Delegate {
       size_t payload_size,
       std::vector<PlatformHandle> handles,
       scoped_refptr<ipcz_driver::Envelope> envelope) override {
-    if (on_message_)
+    if (on_message_) {
       std::move(on_message_).Run();
+    }
   }
 
   void OnChannelError(Channel::Error error) override {
-    if (on_error_)
+    if (on_error_) {
       std::move(on_error_).Run();
+    }
   }
 
   void set_on_message(base::OnceClosure on_message) {

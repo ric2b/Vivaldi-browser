@@ -59,4 +59,8 @@ source_set("vivaldi_ntp") {
     "Foundation.framework",
     "UIKit.framework",
   ]
+
+  configs += [
+    "//vivaldi/gn/config:release_kind"
+  ]
 }

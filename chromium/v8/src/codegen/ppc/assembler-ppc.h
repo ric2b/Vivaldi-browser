@@ -202,6 +202,9 @@ class Assembler : public AssemblerBase {
 
   void MaybeEmitOutOfLineConstantPool() { EmitConstantPool(); }
 
+  // Unused on this architecture.
+  void ClearInternalState() {}
+
   inline void CheckTrampolinePoolQuick(int extra_space = 0) {
     if (pc_offset() >= next_trampoline_check_ - extra_space) {
       CheckTrampolinePool();
@@ -653,6 +656,8 @@ class Assembler : public AssemblerBase {
   void DataAlign(int m);
   // Aligns code to something that's optimal for a jump target for the platform.
   void CodeTargetAlign();
+  void SwitchTargetAlign() { CodeTargetAlign(); }
+  void BranchTargetAlign() {}
   void LoopHeaderAlign() { CodeTargetAlign(); }
 
   // Branch instructions

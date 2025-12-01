@@ -101,7 +101,8 @@ class SharedDictionaryManagerOnDisk : public SharedDictionaryManager {
       base::OnceCallback<void(net::SharedDictionaryInfo)> callback);
 
   void UpdateDictionaryLastFetchTime(net::SharedDictionaryInfo& info,
-                                     base::Time last_fetch_time);
+                                     base::Time last_fetch_time,
+                                     const std::optional<base::TimeDelta>& ttl);
   void UpdateDictionaryLastUsedTime(net::SharedDictionaryInfo& info);
 
   // Posts a MismatchingEntryDeletionTask if this method is called for the first
@@ -195,7 +196,7 @@ class SharedDictionaryManagerOnDisk : public SharedDictionaryManager {
   bool expired_entry_deletion_task_queued_ = false;
 
   bool cleanup_task_disabled_for_testing_ = false;
-  std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
+  std::unique_ptr<base::AsyncMemoryPressureListener> memory_pressure_listener_;
 
   base::WeakPtrFactory<SharedDictionaryManagerOnDisk> weak_factory_{this};
 };

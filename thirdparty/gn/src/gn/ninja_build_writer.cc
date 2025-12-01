@@ -595,7 +595,7 @@ bool NinjaBuildWriter::WritePhonyAndAllRules(Err* err) {
       const StringAtom output_string_atom(output_string);
 
       if (!written_rules.insert(output_string_atom).second) {
-        *err = GetDuplicateOutputError(default_toolchain_targets_, output);
+        *err = GetDuplicateOutputError(all_targets_, output);
         return false;
       }
     }

@@ -15,14 +15,13 @@ import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Build;
 
+import org.chromium.base.ApkInfo;
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.PackageManagerUtils;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.ChromeTabbedActivity2;
@@ -39,11 +38,13 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorSupplier;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.external_intents.ExternalNavigationDelegate;
+import org.chromium.components.external_intents.ExternalNavigationParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.GURL;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 /** The main implementation of the {@link ExternalNavigationDelegate}. */
 @NullMarked
@@ -106,8 +107,8 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
         ResolveInfo info =
                 PackageManagerUtils.resolveActivity(
                         intent, matchDefaultOnly ? PackageManager.MATCH_DEFAULT_ONLY : 0);
-        return info != null
-                && info.activityInfo.packageName.equals(BuildInfo.getInstance().hostPackageName);
+        if (info == null) return false;
+        return info.activityInfo.packageName.equals(ApkInfo.getHostPackageName());
     }
 
     @Override
@@ -116,7 +117,8 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
     }
 
     @Override
-    public boolean shouldDisableExternalIntentRequestsForUrl(GURL url) {
+    public boolean shouldDisableExternalIntentRequestsForUrl(
+            ExternalNavigationParams params, Intent intent) {
         return false;
     }
 
@@ -136,12 +138,11 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
     @Override
     public void closeTab() {
         if (!hasValidTab()) return;
-        if (mTabModelSelectorSupplier == null || !mTabModelSelectorSupplier.hasValue()) return;
-        mTabModelSelectorSupplier
-                .get()
-                .tryCloseTab(
-                        TabClosureParams.closeTab(mTab).allowUndo(false).build(),
-                        /* allowDialog= */ false);
+        if (mTabModelSelectorSupplier == null) return;
+        TabModelSelector tabModelSelector = mTabModelSelectorSupplier.get();
+        if (tabModelSelector == null) return;
+        tabModelSelector.tryCloseTab(
+                TabClosureParams.closeTab(mTab).allowUndo(false).build(), /* allowDialog= */ false);
     }
 
     @Override

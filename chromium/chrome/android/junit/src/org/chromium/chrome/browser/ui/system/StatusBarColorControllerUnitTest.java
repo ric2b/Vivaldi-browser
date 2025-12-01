@@ -31,7 +31,6 @@ import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
-import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features;
 import org.chromium.chrome.R;
@@ -39,13 +38,15 @@ import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.LayoutManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.ntp_customization.NtpCustomizationConfigManager;
+import org.chromium.chrome.browser.ntp_customization.NtpCustomizationUtils;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderUtils;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController.StatusBarColorProvider;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
-import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeSystemBarColorHelper;
 import org.chromium.ui.base.TestActivity;
+import org.chromium.ui.edge_to_edge.EdgeToEdgeSystemBarColorHelper;
 import org.chromium.ui.util.ColorUtils;
 
 /* Unit tests for StatusBarColorController behavior. */
@@ -195,10 +196,61 @@ public class StatusBarColorControllerUnitTest {
                 mStatusBarColorController.getStatusBarColorWithoutStatusIndicator());
     }
 
+    @Test
+    public void testAddHomepageStateListener() {
+        int size = NtpCustomizationConfigManager.getInstance().getListenersSizeForTesting();
+
+        initialize(
+                /* isTablet= */ false,
+                /* isInDesktopWindow= */ false,
+                /* supportEdgeToEdge= */ true);
+        assertEquals(
+                size + 1, NtpCustomizationConfigManager.getInstance().getListenersSizeForTesting());
+
+        mStatusBarColorController.onDestroy();
+        assertEquals(
+                size, NtpCustomizationConfigManager.getInstance().getListenersSizeForTesting());
+    }
+
+    @Test
+    public void testBackgroundColorForNtp() {
+        @ColorInt
+        int defaultNtpBackground = mContext.getColor(R.color.home_surface_background_color);
+        @ColorInt int currentNtpBackground = mContext.getColor(R.color.default_red);
+        NtpCustomizationConfigManager ntpCustomizationConfigManager =
+                NtpCustomizationConfigManager.getInstance();
+        ntpCustomizationConfigManager.setBackgroundImageTypeForTesting(
+                NtpCustomizationUtils.NtpBackgroundImageType.CHROME_COLOR);
+        ntpCustomizationConfigManager.setBackgroundColorForTesting(currentNtpBackground);
+
+        // Verifies when customized NTP background isn't supported, the status bar color is set to
+        // the default NTP background color.
+        initialize(
+                /* isTablet= */ false,
+                /* isInDesktopWindow= */ false,
+                /* supportEdgeToEdge= */ false);
+        assertEquals(
+                defaultNtpBackground,
+                mStatusBarColorController.getBackgroundColorForNtpForTesting());
+
+        // Verifies when customized NTP background is supported, the status bar color is set to
+        // the customized NTP background color.
+        initialize(
+                /* isTablet= */ false,
+                /* isInDesktopWindow= */ false,
+                /* supportEdgeToEdge= */ true);
+        assertEquals(
+                currentNtpBackground,
+                mStatusBarColorController.getBackgroundColorForNtpForTesting());
+        ntpCustomizationConfigManager.resetForTesting();
+    }
+
     private void initialize(boolean isTablet, boolean isInDesktopWindow) {
-        OneshotSupplierImpl<DesktopWindowStateManager> desktopWindowStateManagerSupplier =
-                new OneshotSupplierImpl<>();
-        desktopWindowStateManagerSupplier.set(mDesktopWindowStateManager);
+        initialize(isTablet, isInDesktopWindow, /* supportEdgeToEdge= */ false);
+    }
+
+    private void initialize(
+            boolean isTablet, boolean isInDesktopWindow, boolean supportEdgeToEdge) {
         AppHeaderUtils.setAppInDesktopWindowForTesting(isInDesktopWindow);
         mStatusBarColorController =
                 new StatusBarColorController(
@@ -211,8 +263,9 @@ public class StatusBarColorControllerUnitTest {
                         mActivityTabProvider,
                         mTopUiThemeColorProvider,
                         mSystemBarColorHelper,
-                        desktopWindowStateManagerSupplier,
-                        mOverviewColorSupplier);
+                        mDesktopWindowStateManager,
+                        mOverviewColorSupplier,
+                        supportEdgeToEdge);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 }

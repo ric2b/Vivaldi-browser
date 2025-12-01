@@ -109,7 +109,7 @@ void IncrementalMarking::MarkBlackBackground(Tagged<HeapObject> obj,
                                              int object_size) {
   CHECK(marking_state()->TryMark(obj));
   base::MutexGuard guard(&background_live_bytes_mutex_);
-  background_live_bytes_[MutablePageMetadata::FromHeapObject(obj)] +=
+  background_live_bytes_[MutablePageMetadata::FromHeapObject(isolate(), obj)] +=
       static_cast<intptr_t>(object_size);
 }
 
@@ -449,9 +449,7 @@ void IncrementalMarking::StartPointerTableBlackAllocation() {
     isolate()->shared_trusted_pointer_space()->set_allocate_black(true);
   }
 #endif  // V8_ENABLE_SANDBOX
-#ifdef V8_ENABLE_LEAPTIERING
   heap()->js_dispatch_table_space()->set_allocate_black(true);
-#endif  // V8_ENABLE_LEAPTIERING
 }
 
 void IncrementalMarking::StopPointerTableBlackAllocation() {
@@ -467,9 +465,7 @@ void IncrementalMarking::StopPointerTableBlackAllocation() {
         false);
   }
 #endif  // V8_ENABLE_SANDBOX
-#ifdef V8_ENABLE_LEAPTIERING
   heap()->js_dispatch_table_space()->set_allocate_black(false);
-#endif  // V8_ENABLE_LEAPTIERING
 }
 
 std::pair<v8::base::TimeDelta, size_t> IncrementalMarking::CppHeapStep(
@@ -776,13 +772,21 @@ void IncrementalMarking::Step(v8::base::TimeDelta max_duration,
   // marker doesn't rely on correct synchronization but e.g. on black allocation
   // and the on_hold worklist.
 #ifndef V8_ATOMIC_OBJECT_FIELD_WRITES
-  {
-    DCHECK(!v8_flags.concurrent_marking);
-    // Ensure that the isolate has no shared heap. Otherwise a shared GC might
-    // happen when trying to enter the safepoint.
-    DCHECK(!isolate()->has_shared_space());
-    AllowGarbageCollection allow_gc;
-    safepoint_scope.emplace(isolate(), SafepointKind::kIsolate);
+  DCHECK(!v8_flags.concurrent_marking);
+  // Ensure that the isolate has no shared heap. Otherwise a shared GC might
+  // happen when trying to enter the safepoint.
+  const bool did_run =
+      isolate()->heap()->safepoint()->RunIfCanAvoidGlobalSafepoint(
+          [&safepoint_scope, this]() {
+            AllowGarbageCollection allow_gc;
+            safepoint_scope.emplace(isolate(), SafepointKind::kIsolate);
+          });
+  CHECK_IMPLIES(!isolate()->has_shared_space(), did_run);
+  if (!did_run) {
+    // A safepoint was not established. Marking now may result in false
+    // positives. Bailout instead.
+    CHECK(!safepoint_scope.has_value());
+    return;
   }
 #endif
 

@@ -23,6 +23,10 @@
 #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
 #include "ui/views/widget/widget.h"
 
+#if defined(USE_AURA)
+#include "ui/aura/window_occlusion_tracker.h"
+#endif // USE_AURA
+
 #include "ui/vivaldi_ui_web_contents_delegate.h"
 
 class ScopedKeepAlive;
@@ -188,6 +192,9 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   VivaldiBrowserWindow(const VivaldiBrowserWindow&) = delete;
   VivaldiBrowserWindow& operator=(const VivaldiBrowserWindow&) = delete;
 
+  // Used to supress layouts during a fullscreen transition.
+  bool is_in_fullscreen_transition_ = false;
+
   enum WindowType {
     NORMAL,
     POPUP,
@@ -205,12 +212,12 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   static VivaldiBrowserWindow* FromId(SessionID::id_type window_id);
 
   // Create a new VivaldiBrowserWindow;
-  static VivaldiBrowserWindow* CreateVivaldiBrowserWindow(
-      std::unique_ptr<Browser> browser);
+  static std::unique_ptr<BrowserWindow, BrowserWindowDeleter>
+  CreateVivaldiBrowserWindow(Browser* browser);
 
   // Returns a Browser instance of this view.
-  Browser* browser() { return browser_.get(); }
-  const Browser* browser() const { return browser_.get(); }
+  Browser* browser() { return browser_; }
+  const Browser* browser() const { return browser_; }
   content::WebContents* web_contents() const { return web_contents_.get(); }
 
   // Use the id together with FromId() to store long-term references to the
@@ -248,7 +255,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   }
 
   // Takes ownership of |browser|.
-  void CreateWebContents(std::unique_ptr<Browser> browser,
+  void CreateWebContents(Browser* browser,
                          const VivaldiBrowserWindowParams& params);
 
   // DidStartNavigation for the window contents.
@@ -270,7 +277,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void OnUIReady();
 
   // Enable or disable fullscreen mode.
-  void SetFullscreen(bool enable);
+  void SetFullscreen(bool enable, int64_t display_id);
 
   void ShowForReal();
 
@@ -315,7 +322,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   //
   // BrowserWindow overrides
   //
-  void DestroyBrowser() override;
+  void DeleteBrowserWindow() final;
   ExclusiveAccessContext* GetExclusiveAccessContext() override;
   void Show() override;
   void ShowInactive() override {}
@@ -333,7 +340,8 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void BookmarkBarStateChanged(
       BookmarkBar::AnimateChangeType change_type) override {}
   void TemporarilyShowBookmarkBar(base::TimeDelta duration) override {}
-  void UpdateDevTools() override;
+  void UpdateDevTools(content::WebContents* inspected_web_contents) override;
+  bool CanDockDevTools() const override;
   void UpdateLoadingAnimations(bool should_animate) override {}
   void SetStarredState(bool is_starred) override {}
   bool IsTabModalPopupDeprecated() const override;
@@ -374,7 +382,6 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void RotatePaneFocus(bool forwards) override {}
   void FocusWebContentsPane() override {}
   void ShowAppMenu() override {}
-  bool PreHandleMouseEvent(const blink::WebMouseEvent& event) override;
   void PreHandleDragUpdate(const content::DropData& drop_data,
                            const gfx::PointF& point) override {}
   void PreHandleDragExit() override {}
@@ -439,12 +446,13 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   ui::NativeTheme* GetNativeTheme() override;
   const ui::ThemeProvider* GetThemeProvider() const override;
   const ui::ColorProvider* GetColorProvider() const override;
-  ui::ElementContext GetElementContext() override;
   int GetTopControlsHeight() const override;
   void SetTopControlsGestureScrollInProgress(bool in_progress) override {}
   std::unique_ptr<FindBar> CreateFindBar() override;
   web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost()
       override;
+  web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHostFor(
+      content::WebContents* web_contents) override;
   void ShowOneClickSigninConfirmation(
       const std::u16string& email,
       base::OnceCallback<void(bool)> start_sync_callback) override {}
@@ -467,9 +475,6 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void UpdateCustomTabBarVisibility(bool visible, bool animate) override {}
   SharingDialog* ShowSharingDialog(content::WebContents* contents,
                                    SharingDialogData data) override;
-  void SetContentScrimVisibility(bool visible) override {
-    // See BrowserView::SetDevToolsScrimVisibility for example if needed.
-  }
   void SetDevToolsScrimVisibility(bool visible) override {}
   void ShowHatsDialog(
       const std::string& site_id,
@@ -613,10 +618,11 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   // it.
   const std::unique_ptr<InterfaceHelper> interface_helper_;
 
-  // The Browser object for this window. This must be the first field in the
-  // class so it is destructed after any field below that may refer to the
-  // browser.
-  std::unique_ptr<Browser> browser_;
+  // The Browser object for this window.
+  raw_ptr<Browser> browser_ = nullptr;
+
+  // Copy of the browser_::Profile on creation. browser_ can go away before this.
+  Profile* profile_ = nullptr;
 
   std::unique_ptr<content::WebContents> web_contents_;
   raw_ptr<views::Widget> widget_ = nullptr;
@@ -682,6 +688,9 @@ class VivaldiBrowserWindow final : public BrowserWindow {
 
   std::unique_ptr<autofill::AutofillBubbleHandler> autofill_bubble_handler_;
 
+#if defined(USE_AURA)
+  std::unique_ptr<aura::WindowOcclusionTracker::ScopedPause> scoped_pause_;
+#endif
 
 #if !BUILDFLAG(IS_MAC)
   // Last key code received in HandleKeyboardEvent(). For auto repeat detection.

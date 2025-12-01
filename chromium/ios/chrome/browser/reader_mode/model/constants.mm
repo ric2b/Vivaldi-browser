@@ -34,10 +34,17 @@ const char kReaderModeTimeSpentHistogram[] = "IOS.ReaderMode.TimeSpent";
 
 const char kReaderModeAccessPointHistogram[] = "IOS.ReaderMode.AccessPoint";
 
+const char kReaderModeAccessPointWithModeHistogram[] =
+    "IOS.ReaderMode.AccessPointWithMode";
+
 NSString* GetReaderModeSymbolName() {
   if (@available(iOS 18, *)) {
     return kReaderModeSymbolPostIOS18;
   } else {
     return kReaderModeSymbolPreIOS18;
   }
+}
+
+std::vector<double> ReaderModeFontScaleMultipliers() {
+  return {0.5, 0.75, 1.0, 1.25, 1.5, 2.0};
 }

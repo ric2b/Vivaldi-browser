@@ -6,6 +6,10 @@
 
 // StateManagerGL.h: Defines a class for caching applied OpenGL state
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "libANGLE/renderer/gl/StateManagerGL.h"
 
 #include <string.h>
@@ -2512,6 +2516,8 @@ angle::Result StateManagerGL::syncState(const gl::Context *context,
                             break;
                         case gl::state::EXTENDED_DIRTY_BIT_BLEND_ADVANCED_COHERENT:
                             setBlendAdvancedCoherent(state.isBlendAdvancedCoherentEnabled());
+                            break;
+                        case gl::state::EXTENDED_DIRTY_BIT_FETCH_PER_SAMPLE_ENABLED:
                             break;
                         default:
                             UNREACHABLE();

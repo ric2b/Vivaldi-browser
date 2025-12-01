@@ -85,6 +85,7 @@ enum class ActionType {
   SetTabReminder,
   // TODO(crbug.com/416002705): Rename reference to BWG.
   AskBWG,
+  HideToolbars,
 
   // Vivaldi action groups
   vStartPage,

@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">Əlfəcin, <ph name="FOLDER_NAME" /> qovluğunda saxlanıldı</translation>
 <translation id="2433507940547922241">Görünüş</translation>
 <translation id="2501278716633472235">Geriyə</translation>
+<translation id="2546283357679194313">Kukilər və sayt məlumatları</translation>
 <translation id="2633278372998075009">Məxfi vərəqlər</translation>
 <translation id="2650751991977523696">Fayl yenidən endirilsin?</translation>
 <translation id="265156376773362237">Standart öncədən yükləmə</translation>
@@ -54,6 +55,9 @@
 <translation id="4269820728363426813">Keçid ünvanını kopyalamaq</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Android ayarlarında ekran kilidini aktiv edin<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Şifrə idarəedici</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, plural,
+          =1 {1 gün və çox istifadə olunmayan vərəqlər və qruplar}
+          other {# gün və çox istifadə olunmayan vərəqlər və qruplar}}</translation>
 <translation id="451872707440238414">Əlfəcinizi axtarın</translation>
 <translation id="4526803704855831732">Məxfi vərəqlər</translation>
 <translation id="4532845899244822526">Qovluq seçmək</translation>
@@ -62,6 +66,7 @@
 
 Bir toxunuşla axtarış yalnız Vivaldidə Google standart axtarış mühərriki kimi təyin edildiyində mümkündür.</translation>
 <translation id="4759238208242260848">Endirmələr</translation>
+<translation id="4777866634702576038">Vərəq qrupu silinsin?</translation>
 <translation id="4850886885716139402">Görünüş</translation>
 <translation id="4883379392681899581">Məxfi rejimdən çıxın</translation>
 <translation id="4943872375798546930">Nəticə yoxdur</translation>
@@ -77,7 +82,6 @@ Bir toxunuşla axtarış yalnız Vivaldidə Google standart axtarış mühərrik
 <translation id="5375131951310889874">Səhifəni tərk etmədən daha çox məlumat əldə edin. Bir toxunuşla axtarış funksiyası yalnız Vivaldidə Google standart axtarış mühərriki təyin edildiyində mümkündür. O, sözü və ona uyğun məzmunu Google-də axtarışa göndərir və uyğun təsviri, şəkilləri və digər axtarış nəticələrini qaytarır.
 
 Axtarış qaydalarını tənzimləmək üçün basıb saxlayın. Axtarış vasitəsini dəyişmək üçün paneli açın və axtarış vasitəsini seçin.</translation>
-<translation id="543338862236136125">Şifrəyə düzəliş etmək</translation>
 <translation id="572328651809341494">Əvvəlki vərəqlər</translation>
 <translation id="5833984609253377421">Keçidi paylaşmaq</translation>
 <translation id="6150320133806434356">Əlfəcin saxlanıldı</translation>
@@ -85,6 +89,7 @@ Axtarış qaydalarını tənzimləmək üçün basıb saxlayın. Axtarış vasit
 <translation id="6336451774241870485">Yeni məxfi vərəq</translation>
 <translation id="6337323516034698937">Bu vərəqi başqa cihaza göndərmək üçün hər iki cihazda Vivaldi Eyniləşdirməyə daxil olun. Əgər lazımdırsa şifrələmə şifrəsi əlavə etdiyinizdən əmin olun.</translation>
 <translation id="6341580099087024258">Faylların harada saxlanılacağını soruşmaq</translation>
+<translation id="6364438453358674297">Təkliflər tarixçədən silinsin?</translation>
 <translation id="6404511346730675251">Əlfəcinə düzəliş et</translation>
 <translation id="650224091954855786">{FILE_COUNT, plural,
           =1 {Fayl endirildi}
@@ -112,6 +117,9 @@ Axtarış qaydalarını tənzimləmək üçün basıb saxlayın. Axtarış vasit
 <translation id="8062594758852531064">Genişləndirilmiş öncədən yükləmə:</translation>
 <translation id="8073388330009372546">Şəkli yeni vərəqdə açmaq</translation>
 <translation id="8127542551745560481">Əsas səhifəyə düzəliş et</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+          =1 {(1) qeyri-aktiv element}
+          other {(#) qeyri-aktiv elementlər}}</translation>
 <translation id="8266862848225348053">Endirmə yeri</translation>
 <translation id="8348430946834215779">Mümkün olduqda HTTPS istifadə edin və onu dəstəkləməyən saytları yükləməzdən əvvəl xəbərdarlıq alın</translation>
 <translation id="8560602726703398413">Əlfəcinlərdə oxuma siyahısını tap</translation>
@@ -121,6 +129,9 @@ Axtarış qaydalarını tənzimləmək üçün basıb saxlayın. Axtarış vasit
 <translation id="9042893549633094279">Məxfilik və təhlükəsizlik</translation>
 <translation id="9063523880881406963">Komputer versiyasını söndürün</translation>
 <translation id="9080642952018487277">Gizli işləmək</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+          =1 {1 gün və ondan çox istifadə olunmayıb}
+          other {# gün və ondan çox istifadə olunmayıb}}</translation>
 <translation id="930124987204876019">Tarixçə, kuki, sayt verilənlərini və keşi silin…</translation>
 <translation id="961856697154696964">Baxdığınız məlumatları silmək</translation>
 </translationbundle>

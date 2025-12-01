@@ -12,6 +12,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
@@ -22,9 +23,12 @@
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_browsertest_util.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/startup/startup_types.h"
 #include "chrome/browser/ui/tab_contents/chrome_web_contents_view_delegate.h"
+#include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom-shared.h"
 #include "chrome/browser/web_applications/test/os_integration_test_override_impl.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
@@ -62,6 +66,11 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/host/glic_features.mojom.h"
+#include "chrome/browser/glic/test_support/interactive_glic_test.h"
+#endif  // BUILDFLAG(ENABLE_GLIC)
+
 using testing::AllOf;
 using testing::AnyOfArray;
 using testing::Contains;
@@ -71,6 +80,10 @@ using testing::Le;
 using testing::Not;
 
 namespace {
+
+#if BUILDFLAG(ENABLE_GLIC)
+constexpr char kDocumentWithImage[] = "/test_visual.html";
+#endif  // BUILDFLAG(ENABLE_GLIC)
 
 class ContextMenuUiTest : public InteractiveBrowserTest {
  public:
@@ -193,7 +206,9 @@ struct FencedFrameContextMenuTestCase {
 // Kombucha framework.
 class ContextMenuFencedFrameTest : public ContextMenuUiTest {
  public:
-  ContextMenuFencedFrameTest() = default;
+  ContextMenuFencedFrameTest() {
+    scoped_feature_list_.InitAndEnableFeature(features::kSideBySide);
+  }
   ~ContextMenuFencedFrameTest() override = default;
   ContextMenuFencedFrameTest(const ContextMenuFencedFrameTest&) = delete;
   ContextMenuFencedFrameTest& operator=(const ContextMenuFencedFrameTest&) =
@@ -481,6 +496,7 @@ class ContextMenuFencedFrameTest : public ContextMenuUiTest {
 
  private:
   content::test::FencedFrameTestHelper fenced_frame_test_helper_;
+  base::test::ScopedFeatureList scoped_feature_list_;
   // OS integration is needed to be able to launch web applications. This
   // override ensures OS integration doesn't leave any traces.
   std::unique_ptr<web_app::OsIntegrationTestOverrideImpl::BlockingRegistration>
@@ -677,7 +693,8 @@ IN_PROC_BROWSER_TEST_F(
   FencedFrameContextMenuTestCase test_case = {
       .command_ids = {IDC_CONTENT_CONTEXT_OPENLINKNEWTAB,
                       IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW,
-                      IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD},
+                      IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD,
+                      IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW},
       .relative_url = "/download-anchor-same-origin.html",
       .click_target = "anchor",
       .is_in_nested_iframe = false};
@@ -691,7 +708,40 @@ IN_PROC_BROWSER_TEST_F(
   FencedFrameContextMenuTestCase test_case = {
       .command_ids = {IDC_CONTENT_CONTEXT_OPENLINKNEWTAB,
                       IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW,
-                      IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD},
+                      IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD,
+                      IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW},
+      .relative_url = "/download-anchor-same-origin.html",
+      .click_target = "anchor",
+      .is_in_nested_iframe = true};
+
+  RunTest(test_case);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    ContextMenuFencedFrameTest,
+    CommonOpenLinkCommandsDisabledInFencedFrameAfterNetworkCutoffWithSplitActive) {
+  chrome::NewSplitTab(browser(),
+                      split_tabs::SplitTabCreatedSource::kLinkContextMenu);
+  browser()->tab_strip_model()->ActivateTabAt(0);
+
+  FencedFrameContextMenuTestCase test_case = {
+      .command_ids = {IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW},
+      .relative_url = "/download-anchor-same-origin.html",
+      .click_target = "anchor",
+      .is_in_nested_iframe = false};
+
+  RunTest(test_case);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    ContextMenuFencedFrameTest,
+    CommonOpenLinkCommandsDisabledInNestedIframeAfterNetworkCutoffWithSplitActive) {
+  chrome::NewSplitTab(browser(),
+                      split_tabs::SplitTabCreatedSource::kLinkContextMenu);
+  browser()->tab_strip_model()->ActivateTabAt(0);
+
+  FencedFrameContextMenuTestCase test_case = {
+      .command_ids = {IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW},
       .relative_url = "/download-anchor-same-origin.html",
       .click_target = "anchor",
       .is_in_nested_iframe = true};
@@ -1107,5 +1157,113 @@ IN_PROC_BROWSER_TEST_F(ContextMenuFencedFrameTestNoTestingConfig,
   response.WaitForRequest();
   EXPECT_EQ(response.http_request()->content, kBeaconMessage);
 }
+
+#if BUILDFLAG(ENABLE_GLIC)
+
+// TODO(b:448604727): State observation is currently unsupported with multi-
+// instance, so we will poll.
+DEFINE_LOCAL_STATE_IDENTIFIER_VALUE(
+    ui::test::PollingStateObserver<glic::mojom::WebUiState>,
+    kPollingWebUiState);
+
+class GlicInteractiveContextMenuTest
+    : public glic::test::InteractiveGlicTest,
+      public ::testing::WithParamInterface<bool> {
+ public:
+  GlicInteractiveContextMenuTest() {
+    if (UseMultiInstance()) {
+      scoped_feature_list_.InitWithFeatures(
+          /*enabled_features=*/{features::kGlic, features::kTabstripComboButton,
+                                features::kGlicShareImage,
+                                features::kGlicMultiInstance,
+                                glic::mojom::features::kGlicMultiTab},
+          /*disabled_features=*/{features::kGlicWarming,
+                                 features::kGlicFreWarming});
+    } else {
+      scoped_feature_list_.InitWithFeatures(
+          /*enabled_features=*/{features::kGlic, features::kTabstripComboButton,
+                                features::kGlicShareImage},
+          /*disabled_features=*/{features::kGlicWarming,
+                                 features::kGlicFreWarming});
+    }
+  }
+  ~GlicInteractiveContextMenuTest() override = default;
+
+  void SetUpOnMainThread() override {
+    glic::test::InteractiveGlicTest::SetUpOnMainThread();
+    ASSERT_TRUE(embedded_https_test_server().Start());
+    host_resolver()->AddRule("*", "127.0.0.1");
+  }
+
+  bool UseMultiInstance() const { return GetParam(); }
+
+  auto PollForAndInstrumentGlic() {
+    return Steps(
+        UninstrumentWebContents(glic::test::kGlicContentsElementId, false),
+        UninstrumentWebContents(glic::test::kGlicHostElementId, false),
+        InAnyContext(
+            Steps(InstrumentNonTabWebView(glic::test::kGlicHostElementId,
+                                          kGlicViewElementId),
+                  InstrumentInnerWebContents(glic::test::kGlicContentsElementId,
+                                             glic::test::kGlicHostElementId, 0),
+                  WaitForWebContentsReady(glic::test::kGlicContentsElementId))),
+        PollState(
+            kPollingWebUiState,
+            [this]() -> glic::mojom::WebUiState {
+              if (glic::GlicInstance* instance =
+                      glic_service()->GetInstanceForActiveTab(browser())) {
+                return instance->host().GetPrimaryWebUiState();
+              }
+              return glic::mojom::WebUiState::kUnavailable;
+            }),
+        WaitForState(kPollingWebUiState, glic::mojom::WebUiState::kReady));
+  }
+
+  auto CheckHistograms() {
+    return Do([this]() {
+      histogram_tester_.ExpectUniqueSample(
+          "Glic.TabContext.ShareImageResult",
+          static_cast<int>(glic::ShareImageResult::kSuccess), 1);
+      EXPECT_THAT(
+          histogram_tester_.GetAllSamples("Glic.TabContext.ShareImageDuration"),
+          testing::SizeIs(1));
+    });
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+  base::HistogramTester histogram_tester_;
+};
+
+IN_PROC_BROWSER_TEST_P(GlicInteractiveContextMenuTest, GlicShareImage) {
+  DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kActiveTab);
+
+  const GURL url = embedded_test_server()->GetURL(kDocumentWithImage);
+  const DeepQuery kPathToImg{
+      "img",
+  };
+  RunTestSequence(
+      InstrumentTab(kActiveTab), NavigateWebContents(kActiveTab, url),
+      MoveMouseTo(kActiveTab, kPathToImg),
+      MayInvolveNativeContextMenu(
+          ClickMouse(ui_controls::RIGHT),
+          SelectMenuItem(RenderViewContextMenu::kGlicShareImageMenuItem)),
+      PollForAndInstrumentGlic(),
+      WaitForJsResult(
+          glic::test::kGlicContentsElementId,
+          "() => { "
+          "  let c = document.querySelector('#additionalContextResult');"
+          "  return !!c && c.children.length === 4 && "
+          "      c.children[1].innerText.startsWith('MIME Type: image/png');"
+          "}"),
+      CheckHistograms());
+}
+
+INSTANTIATE_TEST_SUITE_P(MultiInstance,
+                         GlicInteractiveContextMenuTest,
+                         // This parameter toggles multi-instance mode.
+                         testing::Bool());
+
+#endif  // BUILDFLAG(ENABLE_GLIC)
 
 }  // namespace

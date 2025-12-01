@@ -1,0 +1,132 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// LINT: LEGACY_NAMES
+syntax = "proto3";
+
+package fcp.confidentialcompute;
+
+// A customer-facing interface for configuring private inference queries in a
+// TEE-hosted federated analytics workload.
+message InferenceConfiguration {
+  // A set of private inference tasks to execute inside the TEE-hosted
+  // container using client data.
+  repeated InferenceTask inference_task = 1;
+  // Configuration of different models to be used for inference.
+  oneof model_config {
+    GemmaConfiguration gemma_config = 2;
+  }
+}
+
+// A single private inference task to execute inside the TEE-hosted
+// container. For Gemma, each task involves prompting the Gemma model once using
+// input from one column and outputting the responses into another column.
+message InferenceTask {
+  // Data columns used for inference and for storing inference results.
+  ColumnConfiguration column_config = 1;
+  // The logic used by a model to perform inference.
+  oneof inference_logic {
+    Prompt prompt = 2;
+  }
+}
+
+// Configuration for columns used for inference. Currently, only one input
+// column is allowed to be used as inference input, and inference result will be
+// saved in one output column.
+message ColumnConfiguration {
+  string input_column_name = 1;
+  string output_column_name = 2;
+}
+
+// A message for storing logics required for prompting a model.
+message Prompt {
+  string prompt_template = 1;
+  // A regex to match against the model response, if provided. Only the first
+  // match will be used.
+  string regex = 2;
+}
+
+// Configuration for running inference using Gemma models.
+message GemmaConfiguration {
+  // The path to the model tokenizer file. Tokenizer file does not require
+  // chunking because it is less than 2GB in size.
+  string tokenizer_file = 1;
+  // The path to the model weights file, possibly over 2GB size. This file will
+  // be chunked into multiple gRPC requests under 2GB in the pipeline.
+  string model_weight_file = 2;
+  // The Gemma model variant to be used for inference.
+  GemmaModel model = 3;
+  // The Gemma model training type to be used for inference.
+  GemmaModelTraining model_training = 4;
+  // The Gemma model tensor type to be used for inference.
+  GemmaTensorType tensor_type = 5;
+}
+
+// An enum of Gemma models supported for inference in TEE. Details about Gemma
+// model variants can be found at gcpp::Model in the Gemma CPP repo
+// (https://github.com/google/gemma.cpp).
+enum GemmaModel {
+  GEMMA_MODEL_UNSPECIFIED = 0;
+  // Tiny model is only for testing.
+  GEMMA_TINY = 1;
+  GEMMA_2B = 2;
+  GEMMA2_2B = 3;
+  GEMMA_7B = 4;
+  GEMMA2_9B = 5;
+  GEMMA3_1B = 6;
+  GEMMA3_4B = 7;
+  GEMMA3_12B = 8;
+}
+
+// An enum of Gemma model training types supported for inference in TEE. Details
+// about Gemma model training can be found atÏ gcpp::ModelTraining in the Gemma
+// CPP repo (https://github.com/google/gemma.cpp).
+enum GemmaModelTraining {
+  GEMMA_MODEL_TRAINING_UNSPECIFIED = 0;
+  GEMMA_IT = 1;
+  GEMMA_PT = 2;
+}
+
+// An enum of Gemma tensor types supported for inference in TEE. Details about
+// the Gemma model tensor types can be found at gcpp::Type in the Gemma CPP repo
+// (https://github.com/google/gemma.cpp).
+enum GemmaTensorType {
+  GEMMA_TENSOR_TYPE_UNSPECIFIED = 0;
+  GEMMA_F32 = 1;
+  GEMMA_SFP = 2;
+}
+
+// Message to be passed in as part of FedSqlContainerInitializeConfiguration as
+// StreamInitializeRequest.configure.configuration for private inference in the
+// ConfidentialTransform API.
+message InferenceInitializeConfiguration {
+  InferenceConfiguration inference_config = 1;
+  // Additional model-specific initialization configuration.
+  oneof model_init_config {
+    GemmaInitializeConfiguration gemma_init_config = 2;
+  }
+}
+
+// Additional initialize configuration for Gemma models not covered by
+// InferenceConfiguration.
+message GemmaInitializeConfiguration {
+  // The configuration_id for the tokenizer blob. It should match
+  // StreamInitializeRequest.write_configuration.first_request_metadata.configuration_id
+  // for the tokenizer blob.
+  string tokenizer_configuration_id = 1;
+  // The configuration_id for the model weight blob. It should match
+  // StreamInitializeRequest.write_configuration.first_request_metadata.configuration_id
+  // for the model weight blob.
+  string model_weight_configuration_id = 2;
+}

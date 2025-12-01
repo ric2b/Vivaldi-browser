@@ -5,13 +5,9 @@
 #ifndef TOOLS_GN_RUST_PROJECT_WRITER_HELPERS_H_
 #define TOOLS_GN_RUST_PROJECT_WRITER_HELPERS_H_
 
-#include <fstream>
 #include <optional>
-#include <sstream>
 #include <string>
-#include <string_view>
-#include <tuple>
-#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "base/containers/flat_map.h"
@@ -35,12 +31,12 @@ using DependencyList = std::vector<Dependency>;
 class Crate {
  public:
   Crate(SourceFile root,
-        std::optional<OutputFile> gen_dir,
+        std::vector<SourceDir> extra_include_dirs,
         CrateIndex index,
         std::string label,
         std::string edition)
       : root_(root),
-        gen_dir_(gen_dir),
+        extra_include_dirs_(std::move(extra_include_dirs)),
         index_(index),
         label_(label),
         edition_(edition) {}
@@ -74,8 +70,8 @@ class Crate {
   // Returns the root file for the crate.
   SourceFile& root() { return root_; }
 
-  // Returns the root file for the crate.
-  std::optional<OutputFile>& gen_dir() { return gen_dir_; }
+  // Extra include dirs in addition to the directory containing the crate root.
+  std::vector<SourceDir>& extra_include_dirs() { return extra_include_dirs_; }
 
   // Returns the crate index.
   CrateIndex index() { return index_; }
@@ -111,7 +107,7 @@ class Crate {
 
  private:
   SourceFile root_;
-  std::optional<OutputFile> gen_dir_;
+  std::vector<SourceDir> extra_include_dirs_;
   CrateIndex index_;
   std::string label_;
   std::string edition_;

@@ -20,9 +20,7 @@ namespace {
 // Keep the JSON conversion in one function to prevent LOG and DVLOG calls
 // from unnecessarily converting it.
 std::string ToJSON(const media::MediaLogRecord& event) {
-  std::string params_json;
-  base::JSONWriter::Write(event.params, &params_json);
-  return params_json;
+  return base::WriteJson(event.params).value_or("");
 }
 
 // Print an event to the chromium log.
@@ -110,7 +108,15 @@ void BatchingMediaLog::AddLogRecordLocked(
           last_duration_changed_event_ = *event;
         } else if (*event_key == "kBufferingStateChanged") {
           // This may fire many times on poor networks; only keep the last.
-          last_buffering_state_event_ = *event;
+          if (event->params.Find("video_buffering_state")) {
+            last_video_buffering_state_ = *event;
+          } else if (event->params.Find("audio_buffering_state")) {
+            last_audio_buffering_state_ = *event;
+          } else if (event->params.Find("pipeline_buffering_state")) {
+            last_pipeline_buffering_state_ = *event;
+          } else {
+            NOTREACHED();
+          }
         } else if (*event_key == "kPlay") {
           last_play_event_ = *event;
         } else if (*event_key == "kPause") {
@@ -192,9 +198,7 @@ std::string BatchingMediaLog::MediaEventToMessageString(
         return PipelineStatusToString(
             static_cast<media::PipelineStatusCodes>(code));
       }
-      std::stringstream formatted;
-      formatted << *group << ":" << code;
-      return formatted.str();
+      return *group;
     }
     case media::MediaLogRecord::Type::kMessage: {
       const std::string* result = event.params.FindString(
@@ -225,9 +229,19 @@ void BatchingMediaLog::SendQueuedMediaEvents() {
     last_duration_changed_event_.reset();
   }
 
-  if (last_buffering_state_event_) {
-    queued_media_events_.push_back(*last_buffering_state_event_);
-    last_buffering_state_event_.reset();
+  if (last_video_buffering_state_) {
+    queued_media_events_.push_back(*last_video_buffering_state_);
+    last_video_buffering_state_.reset();
+  }
+
+  if (last_audio_buffering_state_) {
+    queued_media_events_.push_back(*last_audio_buffering_state_);
+    last_audio_buffering_state_.reset();
+  }
+
+  if (last_pipeline_buffering_state_) {
+    queued_media_events_.push_back(*last_pipeline_buffering_state_);
+    last_pipeline_buffering_state_.reset();
   }
 
   if (last_play_event_) {

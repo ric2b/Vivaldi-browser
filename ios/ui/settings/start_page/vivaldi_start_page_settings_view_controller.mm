@@ -470,8 +470,10 @@ NSString* const kStartPageShowAddSettingsCellId =
       return GetNSString(IDS_IOS_VIVALDI_START_PAGE_LAYOUT_SMALL);
     case VivaldiStartPageLayoutStyleList:
       return GetNSString(IDS_IOS_VIVALDI_START_PAGE_LAYOUT_LIST);
+#if defined(VIVALDI_RELEASE_KIND) && VIVALDI_RELEASE_KIND != 2 // Not final
     case VivaldiStartPageLayoutStyleIcon:
       return GetNSString(IDS_IOS_VIVALDI_START_PAGE_LAYOUT_ICON);
+#endif
     default:
       return GetNSString(IDS_IOS_VIVALDI_START_PAGE_LAYOUT_SMALL);
   }

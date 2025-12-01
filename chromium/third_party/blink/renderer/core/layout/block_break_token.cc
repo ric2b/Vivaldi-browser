@@ -8,7 +8,6 @@
 #include "third_party/blink/renderer/core/layout/inline/inline_break_token.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
@@ -54,9 +53,7 @@ BlockBreakToken* BlockBreakToken::CreateForBreakInRepeatedFragment(
   token->data_->sequence_number = sequence_number;
   token->data_->consumed_block_size = consumed_block_size;
   token->is_at_block_end_ = is_at_block_end;
-#if DCHECK_IS_ON()
   token->is_repeated_actual_break_ = true;
-#endif
   return token;
 }
 
@@ -82,31 +79,6 @@ BlockBreakToken::BlockBreakToken(PassKey key, LayoutInputNode node)
     : BreakToken(kBlockBreakToken, node),
       data_(MakeGarbageCollected<BlockBreakTokenData>()),
       const_num_children_(0) {}
-
-const InlineBreakToken* BlockBreakToken::InlineBreakTokenFor(
-    const LayoutInputNode& node) const {
-  DCHECK(node.GetLayoutBox());
-  return InlineBreakTokenFor(*node.GetLayoutBox());
-}
-
-const InlineBreakToken* BlockBreakToken::InlineBreakTokenFor(
-    const LayoutBox& layout_object) const {
-  DCHECK(&layout_object);
-  for (const BreakToken* child : ChildBreakTokens()) {
-    switch (child->Type()) {
-      case kBlockBreakToken:
-        // Currently there are no cases where InlineBreakToken is stored in
-        // non-direct child descendants.
-        DCHECK(!To<BlockBreakToken>(child)->InlineBreakTokenFor(layout_object));
-        break;
-      case kInlineBreakToken:
-        if (child->InputNode().GetLayoutBox() == &layout_object)
-          return To<InlineBreakToken>(child);
-        break;
-    }
-  }
-  return nullptr;
-}
 
 void BlockBreakToken::MutableForOofFragmentation::Merge(
     const BlockBreakToken& new_break_token) {
@@ -147,14 +119,7 @@ String BlockBreakToken::ToString(bool skip_node_info) const {
   string_builder.Append(ConsumedBlockSize().ToString());
   string_builder.Append("px");
 
-  if (!RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled() &&
-      ConsumedBlockSizeForLegacy() != ConsumedBlockSize()) {
-    string_builder.Append(" legacy consumed:");
-    string_builder.Append(ConsumedBlockSizeForLegacy().ToString());
-    string_builder.Append("px");
-  }
-
-  if (MonolithicOverflow()) {
+  if (!is_repeated_actual_break_ && MonolithicOverflow()) {
     string_builder.Append(" monolithic overflow:");
     string_builder.Append(MonolithicOverflow().ToString());
     string_builder.Append("px");

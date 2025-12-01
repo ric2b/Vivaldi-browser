@@ -21,7 +21,6 @@
 #import "ios/chrome/browser/url_loading/model/new_tab_animation_tab_helper.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_notifier_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_observer_bridge.h"
-#import "ios/chrome/browser/web/model/page_placeholder_tab_helper.h"
 #import "ios/web/public/ui/crw_web_view_proxy.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web/public/web_state_observer_bridge.h"
@@ -49,8 +48,8 @@
 
   raw_ptr<WebStateList> _webStateList;
   __weak NewTabPageCoordinator* _ntpCoordinator;
-  raw_ptr<feature_engagement::Tracker> _tracker;
-  raw_ptr<UrlLoadingNotifierBrowserAgent> _loadingNotifier;
+  raw_ptr<feature_engagement::Tracker, DanglingUntriaged> _tracker;
+  raw_ptr<UrlLoadingNotifierBrowserAgent, DanglingUntriaged> _loadingNotifier;
 
   // YES if browsing in incognito.
   BOOL _incognito;
@@ -318,9 +317,6 @@
 - (void)willSwitchToTabWithURL:(const GURL&)URL
               newWebStateIndex:(NSInteger)newWebStateIndex {
   web::WebState* webState = _webStateList->GetWebStateAt(newWebStateIndex);
-  const BOOL willAddPlaceholder =
-      PagePlaceholderTabHelper::FromWebState(webState)
-          ->will_add_placeholder_for_next_navigation();
   UIImage* topToolbarImage = [self.toolbarSnapshotProvider
       toolbarSideSwipeSnapshotForWebState:webState
                           withToolbarType:ToolbarType::kPrimary];
@@ -334,7 +330,6 @@
 
   [self.consumer switchToTabWithWebState:webState
                        animationPosition:position
-                      willAddPlaceholder:willAddPlaceholder
                          topToolbarImage:topToolbarImage
                       bottomToolbarImage:bottomToolbarImage];
 }

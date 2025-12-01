@@ -24,10 +24,8 @@
 #include "api/candidate.h"
 #include "api/environment/environment.h"
 #include "api/environment/environment_factory.h"
-#include "api/local_network_access_permission.h"
 #include "api/packet_socket_factory.h"
 #include "api/test/mock_async_dns_resolver.h"
-#include "api/test/mock_local_network_access_permission.h"
 #include "api/test/rtc_error_matchers.h"
 #include "api/transport/stun.h"
 #include "api/units/time_delta.h"
@@ -61,7 +59,6 @@
 #include "rtc_base/socket_address.h"
 #include "rtc_base/third_party/sigslot/sigslot.h"
 #include "rtc_base/thread.h"
-#include "rtc_base/time_utils.h"
 #include "rtc_base/virtual_socket_server.h"
 #include "system_wrappers/include/metrics.h"
 #include "test/gmock.h"
@@ -188,13 +185,14 @@ class TurnPortTestVirtualSocketServer : public VirtualSocketServer {
 class TestConnectionWrapper : public sigslot::has_slots<> {
  public:
   explicit TestConnectionWrapper(Connection* conn) : connection_(conn) {
-    conn->SignalDestroyed.connect(
-        this, &TestConnectionWrapper::OnConnectionDestroyed);
+    conn->SubscribeDestroyed(this, [this](Connection* connection) {
+      OnConnectionDestroyed(connection);
+    });
   }
 
   ~TestConnectionWrapper() override {
     if (connection_) {
-      connection_->SignalDestroyed.disconnect(this);
+      connection_->UnsubscribeDestroyed(this);
     }
   }
 
@@ -218,7 +216,7 @@ class TurnPortTest : public ::testing::Test,
   TurnPortTest()
       : ss_(new TurnPortTestVirtualSocketServer()),
         main_(ss_.get()),
-        turn_server_(&main_, ss_.get(), kTurnUdpIntAddr, kTurnUdpExtAddr),
+        turn_server_(env_, &main_, ss_.get(), kTurnUdpIntAddr, kTurnUdpExtAddr),
         socket_factory_(ss_.get()) {
     // Some code uses "last received time == 0" to represent "nothing received
     // so far", so we need to start the fake clock at a nonzero time...
@@ -281,12 +279,9 @@ class TurnPortTest : public ::testing::Test,
   bool CreateTurnPort(const SocketAddress& local_address,
                       absl::string_view username,
                       absl::string_view password,
-                      const ProtocolAddress& server_address,
-                      LocalNetworkAccessPermissionFactoryInterface*
-                          lna_permission_factory = nullptr) {
+                      const ProtocolAddress& server_address) {
     return CreateTurnPortWithAllParams(MakeNetwork(local_address), username,
-                                       password, server_address,
-                                       lna_permission_factory);
+                                       password, server_address);
   }
 
   bool CreateTurnPortWithNetwork(const Network* network,
@@ -303,9 +298,7 @@ class TurnPortTest : public ::testing::Test,
   bool CreateTurnPortWithAllParams(const Network* network,
                                    absl::string_view username,
                                    absl::string_view password,
-                                   const ProtocolAddress& server_address,
-                                   LocalNetworkAccessPermissionFactoryInterface*
-                                       lna_permission_factory = nullptr) {
+                                   const ProtocolAddress& server_address) {
     RelayServerConfig config;
     config.credentials = RelayCredentials(username, password);
     CreateRelayPortArgs args = {.env = env_};
@@ -317,7 +310,6 @@ class TurnPortTest : public ::testing::Test,
     args.server_address = &server_address;
     args.config = &config;
     args.turn_customizer = turn_customizer_.get();
-    args.lna_permission_factory = lna_permission_factory;
 
     turn_port_ = TurnPort::Create(args, 0, 0);
     if (!turn_port_) {
@@ -344,8 +336,8 @@ class TurnPortTest : public ::testing::Test,
     RTC_CHECK(server_address.proto == PROTO_UDP);
 
     if (!socket_) {
-      socket_.reset(socket_factory()->CreateUdpSocket(
-          SocketAddress(kLocalAddr1.ipaddr(), 0), 0, 0));
+      socket_ = socket_factory()->CreateUdpSocket(
+          env_, SocketAddress(kLocalAddr1.ipaddr(), 0), 0, 0);
       ASSERT_TRUE(socket_ != nullptr);
       socket_->RegisterReceivedPacketCallback(
           [&](AsyncPacketSocket* socket, const ReceivedIpPacket& packet) {
@@ -372,13 +364,20 @@ class TurnPortTest : public ::testing::Test,
   }
 
   void ConnectSignals() {
-    turn_port_->SignalPortComplete.connect(this,
-                                           &TurnPortTest::OnTurnPortComplete);
-    turn_port_->SignalPortError.connect(this, &TurnPortTest::OnTurnPortError);
-    turn_port_->SignalCandidateError.connect(this,
-                                             &TurnPortTest::OnCandidateError);
-    turn_port_->SignalUnknownAddress.connect(
-        this, &TurnPortTest::OnTurnUnknownAddress);
+    turn_port_->SubscribePortComplete(
+        [this](Port* port) { OnTurnPortComplete(port); });
+    turn_port_->SubscribePortError(
+        [this](Port* port) { OnTurnPortError(port); });
+    turn_port_->SubscribeCandidateError(
+        [this](Port* port, const IceCandidateErrorEvent& event) {
+          OnCandidateError(port, event);
+        });
+    turn_port_->SubscribeUnknownAddress(
+        [this](PortInterface* port, const SocketAddress& address,
+               ProtocolType proto, IceMessage* stun_msg, const std::string& rf,
+               bool port_muxed) {
+          OnTurnUnknownAddress(port, address, proto, stun_msg, rf, port_muxed);
+        });
     turn_port_->SubscribePortDestroyed(
         [this](PortInterface* port) { OnTurnPortDestroyed(port); });
     turn_port_->SetCallbacksForTest(this);
@@ -397,8 +396,8 @@ class TurnPortTest : public ::testing::Test,
     // UDP port will be controlled.
     udp_port_->SetIceRole(ICEROLE_CONTROLLED);
     udp_port_->SetIceTiebreaker(kTiebreakerDefault);
-    udp_port_->SignalPortComplete.connect(this,
-                                          &TurnPortTest::OnUdpPortComplete);
+    udp_port_->SubscribePortComplete(
+        [this](Port* port) { OnUdpPortComplete(port); });
   }
 
   void PrepareTurnAndUdpPorts(ProtocolType protocol_type) {
@@ -663,7 +662,7 @@ class TurnPortTest : public ::testing::Test,
     Connection* conn1 = udp_port_->CreateConnection(turn_port_->Candidates()[0],
                                                     Port::ORIGIN_MESSAGE);
     ASSERT_TRUE(conn1 != nullptr);
-    conn1->Ping(0);
+    conn1->Ping();
     SIMULATED_WAIT(!turn_unknown_address_, kSimulatedRtt * 2, fake_clock_);
     EXPECT_FALSE(turn_unknown_address_);
     EXPECT_FALSE(conn1->receiving());
@@ -678,7 +677,7 @@ class TurnPortTest : public ::testing::Test,
                   {.timeout = TimeDelta::Millis(kSimulatedRtt),
                    .clock = &fake_clock_}),
         IsRtcOk());
-    conn2->Ping(0);
+    conn2->Ping();
 
     // Two hops from TURN port to UDP port through TURN server, thus two RTTs.
     EXPECT_THAT(WaitUntil([&] { return conn2->write_state(); },
@@ -691,7 +690,7 @@ class TurnPortTest : public ::testing::Test,
     EXPECT_EQ(Connection::STATE_WRITE_INIT, conn1->write_state());
 
     // Send another ping from UDP to TURN.
-    conn1->Ping(0);
+    conn1->Ping();
     EXPECT_THAT(WaitUntil([&] { return conn1->write_state(); },
                           Eq(Connection::STATE_WRITABLE),
                           {.timeout = TimeDelta::Millis(kSimulatedRtt * 2),
@@ -720,7 +719,7 @@ class TurnPortTest : public ::testing::Test,
                    .clock = &fake_clock_}),
         IsRtcOk());
     // Make sure turn connection can receive.
-    conn1->Ping(0);
+    conn1->Ping();
     EXPECT_THAT(WaitUntil([&] { return conn1->write_state(); },
                           Eq(Connection::STATE_WRITABLE),
                           {.timeout = TimeDelta::Millis(kSimulatedRtt * 2),
@@ -732,7 +731,7 @@ class TurnPortTest : public ::testing::Test,
     // the TURN port should still process a ping from an unknown address.
     turn_port_->DestroyConnection(conn2);
 
-    conn1->Ping(0);
+    conn1->Ping();
     EXPECT_THAT(WaitUntil([&] { return turn_unknown_address_; }, IsTrue(),
                           {.timeout = TimeDelta::Millis(kSimulatedRtt),
                            .clock = &fake_clock_}),
@@ -767,7 +766,7 @@ class TurnPortTest : public ::testing::Test,
     // Now restore the password before continuing.
     conn1->set_remote_password_for_test(pwd);
 
-    conn1->Ping(0);
+    conn1->Ping();
     EXPECT_THAT(WaitUntil([&] { return turn_unknown_address_; }, IsTrue(),
                           {.timeout = TimeDelta::Millis(kSimulatedRtt),
                            .clock = &fake_clock_}),
@@ -776,7 +775,7 @@ class TurnPortTest : public ::testing::Test,
     // If the connection is created again, it will start to receive pings.
     conn2 = turn_port_->CreateConnection(udp_port_->Candidates()[0],
                                          Port::ORIGIN_MESSAGE);
-    conn1->Ping(0);
+    conn1->Ping();
     EXPECT_THAT(WaitUntil([&] { return conn2->receiving(); }, IsTrue(),
                           {.timeout = TimeDelta::Millis(kSimulatedRtt),
                            .clock = &fake_clock_}),
@@ -798,22 +797,25 @@ class TurnPortTest : public ::testing::Test,
           turn_packets_.push_back(
               Buffer(packet.payload().data(), packet.payload().size()));
         });
-    conn1->SignalDestroyed.connect(this,
-                                   &TurnPortTest::OnConnectionSignalDestroyed);
+
+    conn1->SubscribeDestroyed(this, [this](Connection* connection) {
+      OnConnectionSignalDestroyed(connection);
+    });
     conn2->RegisterReceivedPacketCallback(
         [&](Connection* connection, const ReceivedIpPacket& packet) {
           udp_packets_.push_back(
               Buffer(packet.payload().data(), packet.payload().size()));
         });
-    conn2->SignalDestroyed.connect(this,
-                                   &TurnPortTest::OnConnectionSignalDestroyed);
-    conn1->Ping(0);
+    conn2->SubscribeDestroyed(this, [this](Connection* connection) {
+      OnConnectionSignalDestroyed(connection);
+    });
+    conn1->Ping();
     EXPECT_THAT(WaitUntil([&] { return conn1->write_state(); },
                           Eq(Connection::STATE_WRITABLE),
                           {.timeout = TimeDelta::Millis(kSimulatedRtt * 2),
                            .clock = &fake_clock_}),
                 IsRtcOk());
-    conn2->Ping(0);
+    conn2->Ping();
     EXPECT_THAT(WaitUntil([&] { return conn2->write_state(); },
                           Eq(Connection::STATE_WRITABLE),
                           {.timeout = TimeDelta::Millis(kSimulatedRtt * 2),
@@ -871,23 +873,26 @@ class TurnPortTest : public ::testing::Test,
           turn_packets_.push_back(
               Buffer(packet.payload().data(), packet.payload().size()));
         });
-    conn1->SignalDestroyed.connect(this,
-                                   &TurnPortTest::OnConnectionSignalDestroyed);
+    conn1->SubscribeDestroyed(this, [this](Connection* connection) {
+      OnConnectionSignalDestroyed(connection);
+    });
+
     conn2->RegisterReceivedPacketCallback(
         [&](Connection* connection, const ReceivedIpPacket& packet) {
           udp_packets_.push_back(
               Buffer(packet.payload().data(), packet.payload().size()));
         });
-    conn2->SignalDestroyed.connect(this,
-                                   &TurnPortTest::OnConnectionSignalDestroyed);
+    conn2->SubscribeDestroyed(this, [this](Connection* connection) {
+      OnConnectionSignalDestroyed(connection);
+    });
 
-    conn1->Ping(0);
+    conn1->Ping();
     EXPECT_THAT(WaitUntil([&] { return conn1->write_state(); },
                           Eq(Connection::STATE_WRITABLE),
                           {.timeout = TimeDelta::Millis(kSimulatedRtt * 2),
                            .clock = &fake_clock_}),
                 IsRtcOk());
-    conn2->Ping(0);
+    conn2->Ping();
     EXPECT_THAT(WaitUntil([&] { return conn2->write_state(); },
                           Eq(Connection::STATE_WRITABLE),
                           {.timeout = TimeDelta::Millis(kSimulatedRtt * 2),
@@ -1300,7 +1305,7 @@ TEST_F(TurnPortTest, TestTurnAllocateNonceResetAfterAllocateMismatch) {
   // using timestamp `ts_before` but then get an allocate mismatch error and
   // receive an even newer nonce based on the system clock. `ts_before` is
   // chosen so that the two NONCEs generated by the server will be different.
-  int64_t ts_before = TimeMillis() - 1;
+  int64_t ts_before = env_.clock().TimeInMilliseconds() - 1;
   std::string first_nonce =
       turn_server_.server()->SetTimestampForNextNonce(ts_before);
   turn_port_->PrepareAddress();
@@ -1356,7 +1361,8 @@ TEST_F(TurnPortTest, TestTurnAllocateMismatch) {
   std::string test_packet = "Test packet";
   EXPECT_FALSE(turn_port_->HandleIncomingPacket(
       socket_.get(), ReceivedIpPacket::CreateFromLegacy(
-                         test_packet.data(), test_packet.size(), TimeMicros(),
+                         test_packet.data(), test_packet.size(),
+                         env_.clock().TimeInMicroseconds(),
                          SocketAddress(kTurnUdpExtAddr.ipaddr(), 0))));
 }
 
@@ -1471,7 +1477,7 @@ TEST_F(TurnPortTest, TestStopProcessingPacketsAfterClosed) {
   ASSERT_TRUE(conn1 != nullptr);
   ASSERT_TRUE(conn2 != nullptr);
   // Make sure conn2 is writable.
-  conn2->Ping(0);
+  conn2->Ping();
   EXPECT_THAT(WaitUntil([&] { return conn2->write_state(); },
                         Eq(Connection::STATE_WRITABLE),
                         {.timeout = TimeDelta::Millis(kSimulatedRtt * 2),
@@ -1481,7 +1487,7 @@ TEST_F(TurnPortTest, TestStopProcessingPacketsAfterClosed) {
   turn_port_->CloseForTest();
   SIMULATED_WAIT(false, kSimulatedRtt, fake_clock_);
   turn_unknown_address_ = false;
-  conn2->Ping(0);
+  conn2->Ping();
   SIMULATED_WAIT(false, kSimulatedRtt, fake_clock_);
   // Since the turn port does not handle packets any more, it should not
   // SignalUnknownAddress.
@@ -1700,7 +1706,7 @@ TEST_F(TurnPortTest, TestChannelBindGetErrorResponse) {
                                                   Port::ORIGIN_MESSAGE);
 
   ASSERT_TRUE(conn2 != nullptr);
-  conn1->Ping(0);
+  conn1->Ping();
   EXPECT_THAT(WaitUntil([&] { return conn1->writable(); }, IsTrue(),
                         {.timeout = TimeDelta::Millis(kSimulatedRtt * 2),
                          .clock = &fake_clock_}),
@@ -2188,13 +2194,14 @@ static struct IPAddressTypeTestConfig {
   absl::string_view address;
   IPAddressType address_type;
 } kAllIPAddressTypeTestConfigs[] = {
-    {"127.0.0.1", IPAddressType::kLoopback},
-    {"localhost", IPAddressType::kLoopback},
-    {"::1", IPAddressType::kLoopback},
-    {"10.0.0.3", IPAddressType::kPrivate},
-    {"fd00:4860:4860::8844", IPAddressType::kPrivate},
-    {"1.1.1.1", IPAddressType::kPublic},
-    {"2001:4860:4860::8888", IPAddressType::kPublic},
+    {.address = "127.0.0.1", .address_type = IPAddressType::kLoopback},
+    {.address = "localhost", .address_type = IPAddressType::kLoopback},
+    {.address = "::1", .address_type = IPAddressType::kLoopback},
+    {.address = "10.0.0.3", .address_type = IPAddressType::kPrivate},
+    {.address = "fd00:4860:4860::8844",
+     .address_type = IPAddressType::kPrivate},
+    {.address = "1.1.1.1", .address_type = IPAddressType::kPublic},
+    {.address = "2001:4860:4860::8888", .address_type = IPAddressType::kPublic},
 };
 
 // Used by the test framework to print the param value for parameterized tests.
@@ -2244,151 +2251,5 @@ TEST_P(TurnPortIPAddressTypeMetricsTest, TestIPAddressTypeMetrics) {
 INSTANTIATE_TEST_SUITE_P(All,
                          TurnPortIPAddressTypeMetricsTest,
                          ::testing::ValuesIn(kAllIPAddressTypeTestConfigs));
-
-struct LocalAreaNetworkPermissionTestConfig {
-  template <typename Sink>
-  friend void AbslStringify(
-      Sink& sink,
-      const LocalAreaNetworkPermissionTestConfig& config) {
-    sink.Append(config.address);
-    sink.Append("_");
-    switch (config.lna_permission_status) {
-      case webrtc::LocalNetworkAccessPermissionStatus::kDenied:
-        sink.Append("Denied");
-        break;
-      case webrtc::LocalNetworkAccessPermissionStatus::kGranted:
-        sink.Append("Granted");
-        break;
-    }
-  }
-
-  webrtc::LocalNetworkAccessPermissionStatus lna_permission_status;
-  absl::string_view address;
-  bool should_succeed;
-} kAllLocalAreNetworkPermissionTestConfigs[] = {
-    {webrtc::LocalNetworkAccessPermissionStatus::kDenied, "127.0.0.1",
-     /*should_succeed=*/false},
-    {webrtc::LocalNetworkAccessPermissionStatus::kDenied, "10.0.0.3",
-     /*should_succeed=*/false},
-    {webrtc::LocalNetworkAccessPermissionStatus::kDenied, "1.1.1.1",
-     /*should_succeed=*/true},
-    {webrtc::LocalNetworkAccessPermissionStatus::kDenied, "::1",
-     /*should_succeed=*/false},
-    {webrtc::LocalNetworkAccessPermissionStatus::kDenied,
-     "fd00:4860:4860::8844",
-     /*should_succeed=*/false},
-    {webrtc::LocalNetworkAccessPermissionStatus::kDenied,
-     "2001:4860:4860::8888",
-     /*should_succeed=*/true},
-    {webrtc::LocalNetworkAccessPermissionStatus::kGranted, "127.0.0.1",
-     /*should_succeed=*/true},
-    {webrtc::LocalNetworkAccessPermissionStatus::kGranted, "10.0.0.3",
-     /*should_succeed=*/true},
-    {webrtc::LocalNetworkAccessPermissionStatus::kGranted, "1.1.1.1",
-     /*should_succeed=*/true},
-    {webrtc::LocalNetworkAccessPermissionStatus::kGranted, "::1",
-     /*should_succeed=*/true},
-    {webrtc::LocalNetworkAccessPermissionStatus::kGranted,
-     "fd00:4860:4860::8844",
-     /*should_succeed=*/true},
-    {webrtc::LocalNetworkAccessPermissionStatus::kGranted,
-     "2001:4860:4860::8888",
-     /*should_succeed=*/true},
-};
-
-class TurnPortLocalNetworkAccessPermissionTest
-    : public TurnPortWithMockDnsResolverTest,
-      public ::testing::WithParamInterface<
-          LocalAreaNetworkPermissionTestConfig> {
- protected:
-  void CreateTurnPort(
-      absl::string_view address,
-      LocalNetworkAccessPermissionFactoryInterface* lna_permission_factory) {
-    ProtocolAddress server_address({address, 5000}, PROTO_UDP);
-
-    // Use the test's address instead of `server_address` because
-    // `server_address` might not be a resolved address with an unknown family.
-    SocketAddress local_address =
-        SocketAddress(GetParam().address, 5000).family() == AF_INET6
-            ? kLocalIPv6Addr
-            : kLocalAddr1;
-    TurnPortWithMockDnsResolverTest::CreateTurnPort(
-        local_address, kTurnUsername, kTurnPassword, server_address,
-        lna_permission_factory);
-  }
-
-  void setup_dns_resolver_mock() {
-    auto expectations =
-        [](webrtc::MockAsyncDnsResolver* resolver,
-           webrtc::MockAsyncDnsResolverResult* resolver_result) {
-          EXPECT_CALL(*resolver, Start(_, _, _))
-              .WillOnce(
-                  [](const webrtc::SocketAddress& /* addr */, int /* family */,
-                     absl::AnyInvocable<void()> callback) { callback(); });
-
-          EXPECT_CALL(*resolver, result)
-              .WillRepeatedly(ReturnPointee(resolver_result));
-          EXPECT_CALL(*resolver_result, GetError).WillRepeatedly(Return(0));
-          EXPECT_CALL(*resolver_result, GetResolvedAddress(_, _))
-              .WillOnce(DoAll(
-                  SetArgPointee<1>(SocketAddress(GetParam().address, 5000)),
-                  Return(true)));
-        };
-
-    SetDnsResolverExpectations(std::move(expectations));
-  }
-};
-
-TEST_P(TurnPortLocalNetworkAccessPermissionTest, ResolvedAddresses) {
-  turn_server_.AddInternalSocket({GetParam().address, 5000}, PROTO_UDP);
-
-  FakeLocalNetworkAccessPermissionFactory factory(
-      GetParam().lna_permission_status);
-  CreateTurnPort(GetParam().address, &factory);
-  turn_port_->PrepareAddress();
-
-  if (GetParam().should_succeed) {
-    EXPECT_THAT(WaitUntil([&] { return turn_ready_; }, IsTrue(),
-                          {.clock = &fake_clock_}),
-                IsRtcOk());
-    EXPECT_EQ(1u, turn_port_->Candidates().size());
-    EXPECT_NE(SOCKET_ERROR, turn_port_->error());
-  } else {
-    EXPECT_THAT(WaitUntil([&] { return turn_error_; }, IsTrue(),
-                          {.clock = &fake_clock_}),
-                IsRtcOk());
-    EXPECT_EQ(0u, turn_port_->Candidates().size());
-    EXPECT_NE(SOCKET_ERROR, turn_port_->error());
-  }
-}
-
-TEST_P(TurnPortLocalNetworkAccessPermissionTest, UnresolvedAddresses) {
-  turn_server_.AddInternalSocket({GetParam().address, 5000}, PROTO_UDP);
-  setup_dns_resolver_mock();
-
-  FakeLocalNetworkAccessPermissionFactory factory(
-      GetParam().lna_permission_status);
-  CreateTurnPort("fakehost.test", &factory);
-  turn_port_->PrepareAddress();
-
-  if (GetParam().should_succeed) {
-    EXPECT_THAT(WaitUntil([&] { return turn_ready_; }, IsTrue(),
-                          {.clock = &fake_clock_}),
-                IsRtcOk());
-    EXPECT_EQ(1u, turn_port_->Candidates().size());
-    EXPECT_NE(SOCKET_ERROR, turn_port_->error());
-  } else {
-    EXPECT_THAT(WaitUntil([&] { return turn_error_; }, IsTrue(),
-                          {.clock = &fake_clock_}),
-                IsRtcOk());
-    EXPECT_EQ(0u, turn_port_->Candidates().size());
-    EXPECT_NE(SOCKET_ERROR, turn_port_->error());
-  }
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    TurnPortLocalNetworkAccessPermissionTest,
-    ::testing::ValuesIn(kAllLocalAreNetworkPermissionTestConfigs));
 
 }  // namespace webrtc

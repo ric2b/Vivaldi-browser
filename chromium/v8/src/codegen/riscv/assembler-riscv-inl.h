@@ -274,9 +274,10 @@ void WritableRelocInfo::set_target_object(Tagged<HeapObject> target,
     // We must not compress pointers to objects outside of the main pointer
     // compression cage as we wouldn't be able to decompress them with the
     // correct cage base.
-    DCHECK_IMPLIES(V8_ENABLE_SANDBOX_BOOL, !HeapLayout::InTrustedSpace(target));
+    DCHECK_IMPLIES(V8_ENABLE_SANDBOX_BOOL,
+                   !TrustedHeapLayout::InTrustedSpace(target));
     DCHECK_IMPLIES(V8_EXTERNAL_CODE_SPACE_BOOL,
-                   !HeapLayout::InCodeSpace(target));
+                   !TrustedHeapLayout::InCodeSpace(target));
     Assembler::set_target_compressed_address_at(
         pc_, constant_pool_,
         V8HeapCompressionScheme::CompressObject(target.ptr()), &jit_allocation_,
@@ -329,7 +330,7 @@ Handle<Code> Assembler::relative_code_target_object_handle_at(
   DCHECK(IsAuipc(instr1));
   DCHECK(IsJalr(instr2));
   int32_t code_target_index = BranchLongOffset(instr1, instr2);
-  return Cast<Code>(GetEmbeddedObject(code_target_index));
+  return TrustedCast<Code>(GetEmbeddedObject(code_target_index));
 }
 
 Builtin Assembler::target_builtin_at(Address pc) {
@@ -421,12 +422,14 @@ void Assembler::set_uint32_constant_at(Address pc, Address constant_pool,
 }
 
 [[nodiscard]] static inline Instr SetLo12Offset(int32_t lo12, Instr instr) {
-  DCHECK(Assembler::IsJalr(instr) || Assembler::IsAddi(instr));
+  DCHECK(Assembler::IsJalr(instr) || Assembler::IsAddi(instr) ||
+         Assembler::IsLoadWord(instr));
   DCHECK(is_int12(lo12));
   instr &= ~kImm12Mask;
   int32_t imm12 = lo12 << kImm12Shift;
   DCHECK(Assembler::IsJalr(instr | (imm12 & kImm12Mask)) ||
-         Assembler::IsAddi(instr | (imm12 & kImm12Mask)));
+         Assembler::IsAddi(instr | (imm12 & kImm12Mask)) ||
+         Assembler::IsLoadWord(instr | (imm12 & kImm12Mask)));
   return instr | (imm12 & kImm12Mask);
 }
 

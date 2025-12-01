@@ -33,9 +33,11 @@ class AutofillOfferManager;
 enum class AutofillProgressDialogType;
 class AutofillSaveCardBottomSheetBridge;
 class BnplIssuer;
-struct BnplTosModel;
 struct CardUnmaskChallengeOption;
 class CardUnmaskDelegate;
+class AutofillProgressDialogController;
+class CardUnmaskOtpInputDialogController;
+class CardUnmaskPromptController;
 struct CardUnmaskPromptOptions;
 class CreditCard;
 class CreditCardCvcAuthenticator;
@@ -58,7 +60,8 @@ enum class WebauthnDialogCallbackType;
 
 namespace payments {
 
-struct BnplIssuerContext;
+class BnplStrategy;
+class BnplUiDelegate;
 class MandatoryReauthManager;
 class MultipleRequestPaymentsNetworkInterface;
 class PaymentsNetworkInterface;
@@ -351,6 +354,9 @@ class PaymentsAutofillClient : public RiskDataLoader {
   // HasCreditCardScanFeature() returns true.
   virtual void ScanCreditCard(CreditCardScanCallback callback);
 
+  // Returns true if credit card local save is supported by the client.
+  virtual bool LocalCardSaveIsSupported() = 0;
+
   // Runs `callback` once the user makes a decision with respect to the
   // offer-to-save prompt. This includes both the save local card prompt and the
   // save CVC for a local card prompt. On desktop, shows the offer-to-save
@@ -500,15 +506,15 @@ class PaymentsAutofillClient : public RiskDataLoader {
       base::WeakPtr<CardUnmaskDelegate> delegate);
   virtual void OnUnmaskVerificationResult(PaymentsRpcResult result);
 
-  // Shows a view that presents the Buy-Now-Pay-Later Terms of Service to the
-  // user to accept or decline.
-  virtual void ShowBnplTos(BnplTosModel bnpl_tos_model,
-                           base::OnceClosure accept_callback,
-                           base::OnceClosure cancel_callback);
+#if BUILDFLAG(IS_IOS)
+  virtual std::unique_ptr<AutofillProgressDialogController>
+  ExtractProgressDialogModel() = 0;
 
-  // Closes the Buy-Now-Pay-Later Terms of Service dialog that was displayed in
-  // `ShowBnplTos()`.
-  virtual void CloseBnplTos();
+  virtual std::unique_ptr<CardUnmaskOtpInputDialogController>
+  ExtractOtpInputDialogModel() = 0;
+
+  virtual CardUnmaskPromptController* GetCardUnmaskPromptModel() = 0;
+#endif
 
   // Returns a pointer to a VirtualCardEnrollmentManager that is owned by
   // PaymentsAutofillClient. VirtualCardEnrollmentManager is used for virtual
@@ -604,6 +610,27 @@ class PaymentsAutofillClient : public RiskDataLoader {
       base::WeakPtr<TouchToFillDelegate> delegate,
       std::vector<LoyaltyCard> loyalty_cards_to_suggest);
 
+  // Updates the BNPL payment method option on the Touch To Fill surface, if
+  // possible, returning `true` on success. Should be called only on Android if
+  // the feature is supported by the platform.
+  virtual bool UpdateTouchToFillBnplPaymentMethod(
+      std::optional<uint64_t> extracted_amount,
+      bool is_amount_supported_by_any_issuer);
+
+  // Shows the BNPL progress screen, if possible, returning `true` on success.
+  // Should be called only on Android if the feature is supported by the
+  // platform. If `delegate` is present, it will be notified of events.
+  virtual bool ShowTouchToFillProgress(
+      base::WeakPtr<TouchToFillDelegate> delegate);
+
+  // Shows the Touch To Fill surface with BNPL issuer information, if possible,
+  // returning `true` on success. `delegate` will be notified of events. This
+  // function is not implemented on iOS and iOS WebView, and should not be used
+  // on those platforms.
+  virtual bool ShowTouchToFillBnplIssuers(
+      base::WeakPtr<TouchToFillDelegate> delegate,
+      base::span<const BnplIssuer> bnpl_issuers_to_suggest);
+
   // Hides the Touch To Fill surface for filling payment information if one is
   // currently shown. Should be called only if the feature is supported by the
   // platform.
@@ -647,23 +674,24 @@ class PaymentsAutofillClient : public RiskDataLoader {
   // transitions to the server version.
   virtual void ShowCreditCardSaveAndFillPendingDialog();
 
+  // Hides the Save and Fill dialog upon receivng response from the CreateCard
+  // server call.
+  virtual void HideCreditCardSaveAndFillDialog();
+
   // Gets the payments Save and Fill manager owned by the client. This will be
   // used to handle the Save and Fill dialog.
   virtual payments::SaveAndFillManager* GetSaveAndFillManager();
 
-  // Shows the issuer selection dialog for BNPL when the BNPL suggestion is
-  // selected to let users choose a BNPL issuer.
-  virtual void ShowSelectBnplIssuerDialog(
-      std::vector<BnplIssuerContext> bnpl_issuer_context,
-      std::string app_locale,
-      base::OnceCallback<void(BnplIssuer)> selected_issuer_callback,
-      base::OnceClosure cancel_callback);
-
-  // Dismiss the issuer selection dialog for BNPL.
-  virtual void DismissSelectBnplIssuerDialog();
-
   // Checks if the browser popup is a tab modal popup.
   virtual bool IsTabModalPopupDeprecated() const;
+
+  // Gets the `BnplStrategy` instance associated with the client. Helps
+  // determines the next step in the BNPL flow depending on the platform.
+  virtual BnplStrategy* GetBnplStrategy();
+
+  // Gets the `BnplUiDelegate` instance associated with the client. Handles the
+  // UI in the BNPL flow depending on the platform.
+  virtual BnplUiDelegate* GetBnplUiDelegate();
 };
 
 }  // namespace payments

@@ -77,7 +77,7 @@ class OmniboxTextControllerTest : public PlatformTest {
     omnibox_text_controller_ = [[TestOmniboxTextController alloc]
         initWithOmniboxClient:omnibox_client_.get()
              omniboxTextModel:omnibox_text_model_.get()
-                inLensOverlay:NO];
+          presentationContext:OmniboxPresentationContext::kLocationBar];
 
     omnibox_text_controller_.omniboxAutocompleteController =
         omnibox_autocomplete_controller_;
@@ -207,4 +207,11 @@ TEST_F(OmniboxTextControllerTest, DisplayText) {
   EXPECT_EQ(u"https://www.example.com/",
             [omnibox_text_controller_ displayedText]);
   EXPECT_TRUE(current_text_is_URL());
+}
+
+// Tests that calling onTextChanged after disconnect doesn't crash.
+TEST_F(OmniboxTextControllerTest, OnTextChangedAfterDisconnect) {
+  [omnibox_text_controller_ disconnect];
+  [omnibox_text_controller_ onTextChanged];
+  // The test passes if it doesn't crash.
 }

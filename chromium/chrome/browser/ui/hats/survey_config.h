@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "build/branding_buildflags.h"
 #include "components/compose/buildflags.h"
+#include "pdf/buildflags.h"
 
 #if !BUILDFLAG(IS_ANDROID)
 // Trigger identifiers currently used; duplicates not allowed.
@@ -88,6 +89,10 @@ extern const char kHatsSurveyTriggerSafetyHubAndroid[];
 extern const char kHatsSurveyOrganicTriggerSafetyHubAndroid[];
 #endif  // #if !BUILDFLAG(IS_ANDROID)
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+extern const char kHatsSurveyTriggerPrivacySandboxWhatsNewSurvey[];
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
 extern const char kHatsSurveyTriggerPermissionsPrompt[];
 extern const char kHatsSurveyTriggerPlusAddressAcceptedFirstTimeCreate[];
 extern const char kHatsSurveyTriggerPlusAddressCreatedMultiplePlusAddresses[];
@@ -107,6 +112,10 @@ extern const char kHatsSurveyTriggerMerchantTrustEvaluationExperimentSurvey[];
 extern const char kHatsSurveyTriggerMerchantTrustLearnSurvey[];
 extern const char kHatsSurveyTriggerOnFocusZpsSuggestionsHappiness[];
 extern const char kHatsSurveyTriggerOnFocusZpsSuggestionsUtility[];
+
+#if BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
+extern const char kHatsSurveyTriggerPdfSaveToDrive[];
+#endif  // BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
 
 extern const char kHatsSurveyTriggerTesting[];
 // The Trigger ID for a test HaTS Next survey which is available for testing

@@ -3,6 +3,7 @@
 #ifndef DIRECT_MATCH_FAVICON_INSTALLER_H_
 #define DIRECT_MATCH_FAVICON_INSTALLER_H_
 
+#include "base/files/file_path.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/image_decoder/image_decoder.h"

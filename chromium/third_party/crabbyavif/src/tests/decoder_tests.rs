@@ -497,6 +497,20 @@ fn color_nogrid_alpha_nogrid_gainmap_grid() {
     assert!(decoder.gainmap().image.row_bytes[0] > 0);
 }
 
+// From aviftransformtest.cc
+#[test]
+fn lenient_missing_alpha_transformative_properties() {
+    let mut decoder_ref = get_decoder("abc_color_irot_alpha_irot.avif");
+    assert!(decoder_ref.parse().is_ok());
+    let mut decoder = get_decoder("abc_color_irot_alpha_NOirot.avif");
+    assert!(decoder.parse().is_ok());
+    if HAS_DECODER {
+        assert!(decoder_ref.next_image().is_ok());
+        assert!(decoder.next_image().is_ok());
+    }
+    assert!(are_images_equal(decoder_ref.image().unwrap(), decoder.image().unwrap()).unwrap());
+}
+
 // From avifgainmaptest.cc
 #[test]
 fn gainmap_oriented() {
@@ -1422,6 +1436,7 @@ fn yuv_range(filename: &str, expected_yuv_range: YuvRange) {
 #[test_case("weld_sato_12plus4bit.avif", false)]
 fn sato_16bit(filename: &str, has_alpha: bool) {
     let mut decoder = get_decoder(filename);
+    decoder.settings.allow_sample_transform = true;
     assert!(decoder.parse().is_ok());
     assert_eq!(has_alpha, decoder.image().unwrap().alpha_present);
     if !HAS_DECODER {
@@ -1429,11 +1444,19 @@ fn sato_16bit(filename: &str, has_alpha: bool) {
     }
     let res = decoder.next_image();
     assert_eq!(res, Ok(()));
-    assert_eq!(has_alpha, decoder.image().unwrap().has_alpha());
-    if cfg!(feature = "sample_transform") {
-        assert_eq!(16, decoder.image().unwrap().depth);
-        // TODO: compare with reference weld_16bit.png
-    } else {
-        assert!(decoder.image().unwrap().depth < 16);
+    assert_eq!(16, decoder.image().unwrap().depth);
+    // TODO: compare with reference weld_16bit.png
+}
+
+#[test]
+fn sato_disabled() {
+    let mut decoder = get_decoder("weld_sato_8plus8bit.avif");
+    decoder.settings.allow_sample_transform = false;
+    assert!(decoder.parse().is_ok());
+    if !HAS_DECODER {
+        return;
     }
+    let res = decoder.next_image();
+    assert_eq!(res, Ok(()));
+    assert_eq!(decoder.image().unwrap().depth, 8);
 }

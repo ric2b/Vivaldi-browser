@@ -14,6 +14,9 @@ template("system_command") {
   if (defined(output_from_stdout)) {
     command_output_from_stdout = output_from_stdout
   }
+  if (defined(stamp) && stamp != "") {
+    command_stamp = stamp
+  }
   command_inputs = inputs
   command_outputs = outputs
   action(target_name) {
@@ -37,6 +40,9 @@ template("system_command") {
         "--cwd",
         rebase_path(command_cwd, root_build_dir),
       ]
+    }
+    if (defined(command_stamp)) {
+       args += [ "--stamp", command_stamp ]
     }
     if (defined(command_output_from_stdout)) {
       args += [

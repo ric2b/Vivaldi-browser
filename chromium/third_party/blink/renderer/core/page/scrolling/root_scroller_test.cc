@@ -2090,7 +2090,8 @@ TEST_F(ImplicitRootScrollerSimTest,
   Compositor().BeginFrame();
   EXPECT_EQ(container,
             GetDocument().GetRootScrollerController().EffectiveRootScroller());
-  EXPECT_EQ(To<LayoutBox>(container->GetLayoutObject())->Size().height, 600);
+  EXPECT_EQ(To<LayoutBox>(container->GetLayoutObject())->StitchedSize().height,
+            600);
   WebView().MainFrameWidget()->SetZoomLevel(ZoomFactorToZoomLevel(2.0));
   WebView().GetPage()->GetBrowserControls().SetShownRatio(0, 0);
   WebView().ResizeWithBrowserControls(gfx::Size(800, 650), 50, 50, false);
@@ -2869,7 +2870,8 @@ class RootScrollerHitTest : public ImplicitRootScrollerSimTest {
                          .GlobalRootScroller();
     ScrollableArea* scrollable_area =
         To<LayoutBox>(scroller->GetLayoutObject())->GetScrollableArea();
-    scrollable_area->DidCompositorScroll(gfx::PointF(0, 100000));
+    scrollable_area->DidCompositorScroll(gfx::PointF(0, 100000),
+                                         cc::ScrollSourceType::kNone);
 
     WebView().ResizeWithBrowserControls(gfx::Size(400, 450), 50, 50, false);
 

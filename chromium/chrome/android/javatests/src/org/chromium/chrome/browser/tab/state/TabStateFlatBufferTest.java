@@ -192,9 +192,7 @@ public class TabStateFlatBufferTest {
 
     @Test
     @LargeTest
-    @EnableFeatures(
-            ChromeFeatureList.LEGACY_TAB_STATE_DEPRECATION
-                    + ":delete_migrated_files_after_restore/true")
+    @EnableFeatures(ChromeFeatureList.CLEANUP_LEGACY_TABSTATE)
     public void testLegacyTabStateFileMarkedForDeletion() throws ExecutionException {
         TabState state = getTestTabState(/* isIncognito= */ false);
         File legacyTabStateFile =
@@ -225,9 +223,7 @@ public class TabStateFlatBufferTest {
 
     @Test
     @LargeTest
-    @EnableFeatures(
-            ChromeFeatureList.LEGACY_TAB_STATE_DEPRECATION
-                    + ":delete_migrated_files_after_restore/true")
+    @EnableFeatures(ChromeFeatureList.CLEANUP_LEGACY_TABSTATE)
     public void testUnmigratedLegacyTabStateFileNotMarkedForDeletion() throws ExecutionException {
         TabState state = getTestTabState(/* isIncognito= */ false);
         File legacyTabStateFile =
@@ -312,7 +308,8 @@ public class TabStateFlatBufferTest {
         ByteBuffer buffer = ByteBuffer.allocateDirect(capacity);
         buffer.put(bytes);
         buffer.rewind();
-        state.contentsState = new WebContentsState(buffer);
+        state.contentsState =
+                new WebContentsState(buffer, WebContentsState.CONTENTS_STATE_CURRENT_VERSION);
         state.openerAppId = "openerAppId";
         return state;
     }

@@ -4,6 +4,7 @@
 #define IOS_UI_SETTINGS_READER_MODE_VIVALDI_READER_MODE_CONSUMER_H_
 
 // Protocol for mediator to communicate to the Swift implementation.
+NS_SWIFT_UI_ACTOR
 @protocol VivaldiReaderModeConsumer <NSObject>
 
 // Sets the reader mode enabled state.

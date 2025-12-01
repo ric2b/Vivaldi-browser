@@ -12,6 +12,7 @@
 #include "chrome/browser/page_content_annotations/page_content_extraction_service_factory.h"
 #include "chrome/browser/page_content_annotations/page_content_extraction_types.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/history/core/browser/features.h"
 #include "components/optimization_guide/content/browser/page_content_proto_provider.h"
 #include "components/optimization_guide/content/browser/page_context_eligibility.h"
 #include "components/page_content_annotations/core/page_content_annotations_features.h"
@@ -23,7 +24,6 @@
 #include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
-#include "third_party/blink/public/common/features.h"
 
 #if BUILDFLAG(ENABLE_PDF)
 #include "components/pdf/browser/pdf_document_helper.h"
@@ -54,7 +54,11 @@ void RecordPdfPageCountMetrics(
 std::unique_ptr<AnnotatedPageContentRequest>
 AnnotatedPageContentRequest::Create(content::WebContents* web_contents) {
   auto request = blink::mojom::AIPageContentOptions::New();
-  request->mode = blink::mojom::AIPageContentMode::kDefault;
+  request->mode =
+      (page_content_annotations::features::AnnotatedPageContentMode() ==
+       "actionable")
+          ? blink::mojom::AIPageContentMode::kActionableElements
+          : blink::mojom::AIPageContentMode::kDefault;
   request->on_critical_path = page_content_annotations::features::
       IsAnnotatedPageContentOnCriticalPath();
 
@@ -67,11 +71,11 @@ AnnotatedPageContentRequest::AnnotatedPageContentRequest(
     blink::mojom::AIPageContentOptionsPtr request)
     : web_contents_(web_contents),
       request_(std::move(request)),
-      delay_(page_content_annotations::features::
-                 GetAnnotatedPageContentCaptureDelay()),
+      delay_(features::GetAnnotatedPageContentCaptureDelay()),
       include_inner_text_(
-          page_content_annotations::features::
-              ShouldAnnotatedPageContentStudyIncludeInnerText()) {
+          features::ShouldAnnotatedPageContentStudyIncludeInnerText()),
+      get_ai_page_content_callback_(
+          base::BindRepeating(&optimization_guide::GetAIPageContent)) {
   // Post to a background thread to avoid blocking the set up of the overlay.
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
@@ -107,8 +111,7 @@ void AnnotatedPageContentRequest::DidFinishNavigation(
     return;
   }
 
-  if (base::FeatureList::IsEnabled(
-          blink::features::kVisitedLinksOnErrorNavigation)) {
+  if (base::FeatureList::IsEnabled(history::kVisitedLinksOn404)) {
     // With the flag enabled, navigations with a 404 status code will be
     // eligible for History. We want to ignore 404s. At this point, we should
     // only be looking at committed same-document navigations. Same-document
@@ -148,9 +151,10 @@ void AnnotatedPageContentRequest::DidStopLoading() {
     return;
   }
 
-  if (web_contents_->GetContentsMimeType() == pdf::kPDFMimeType) {
-    // Pdfs don't provide a FirstContentfulPaint signal, so skip waiting for
-    // it for these Documents.
+  if (web_contents_->GetContentsMimeType() == pdf::kPDFMimeType ||
+      web_contents_->GetVisibility() == content::Visibility::HIDDEN) {
+    // Pdfs and hidden tabs don't provide a reliable FirstContentfulPaint
+    // signal, so skip waiting for it for these Documents.
     waiting_for_fcp_ = false;
   }
 
@@ -180,30 +184,38 @@ void AnnotatedPageContentRequest::MaybeScheduleExtraction() {
   }
 
   lifecycle_ = Lifecycle::kScheduled;
+
+  // Ignore the delay setting if the page is hidden. This would not affect user
+  // experience since page is not shown to users.
+  base::TimeDelta delay = is_hidden_ ? base::TimeDelta() : delay_;
+
+  content::GetUIThreadTaskRunner()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&AnnotatedPageContentRequest::ExtractPageContent,
+                     weak_factory_.GetWeakPtr()),
+      delay);
+}
+
+void AnnotatedPageContentRequest::ExtractPageContent() {
+  // If there was a navigation in between the delay, skip extraction.
+  if (lifecycle_ != Lifecycle::kScheduled) {
+    return;
+  }
+
   if (web_contents_->GetContentsMimeType() == pdf::kPDFMimeType) {
 #if BUILDFLAG(ENABLE_PDF)
-    content::GetUIThreadTaskRunner()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&AnnotatedPageContentRequest::RequestPdfPageCount,
-                       weak_factory_.GetWeakPtr()),
-        page_content_annotations::features::
-            GetAnnotatedPageContentCaptureDelay());
+    RequestPdfPageCount();
 #endif  // BUILDFLAG(ENABLE_PDF)
   } else {
-    content::GetUIThreadTaskRunner()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(
-            &AnnotatedPageContentRequest::RequestAnnotatedPageContentSync,
-            weak_factory_.GetWeakPtr()),
-        delay_);
+    RequestAnnotatedPageContentSync();
   }
 }
 
 void AnnotatedPageContentRequest::RequestAnnotatedPageContentSync() {
   TRACE_EVENT0("browser",
                "AnnotatedPageContentRequest::RequestAnnotatedPageContentSync");
-  optimization_guide::GetAIPageContent(
-      web_contents_, request_.Clone(),
+  get_ai_page_content_callback_.Run(
+      web_contents_, request_->Clone(),
       base::BindOnce(&AnnotatedPageContentRequest::OnPageContentReceived,
                      weak_factory_.GetWeakPtr()));
 
@@ -215,24 +227,65 @@ void AnnotatedPageContentRequest::RequestAnnotatedPageContentSync() {
   }
 }
 
+void AnnotatedPageContentRequest::SetGetAIPageContentCallbackForTesting(
+    GetAIPageContentCallback callback) {
+  get_ai_page_content_callback_ = std::move(callback);
+}
+
 bool AnnotatedPageContentRequest::ShouldScheduleExtraction() const {
+  auto triggering_mode = features::GetPageContentExtractionTriggeringMode();
+
+  // If the page is not loaded, the extraction would not work.
+  if (waiting_for_fcp_ || waiting_for_load_) {
+    return false;
+  }
+
+  if (triggering_mode ==
+          features::PageContentExtractionTriggeringMode::kOnLoadAndHidden &&
+      is_hidden_) {
+    // Allow extraction if:
+    // 1. Page loaded while hidden (kPending) - This is the *first* extraction.
+    // 2. Page loaded while visible, and is now hidden
+    //      (kExtractedAtPageLoad). This is the *second* extraction.
+    if (lifecycle_ == Lifecycle::kPending ||
+        lifecycle_ == Lifecycle::kExtractedAtPageLoad) {
+      return true;
+    }
+  }
+
   if (lifecycle_ != Lifecycle::kPending) {
     return false;
   }
 
-  return !waiting_for_fcp_ && !waiting_for_load_;
+  if (triggering_mode ==
+          features::PageContentExtractionTriggeringMode::kOnLoad ||
+      triggering_mode ==
+          features::PageContentExtractionTriggeringMode::kOnLoadAndHidden) {
+    return true;
+  }
+  if (triggering_mode ==
+      features::PageContentExtractionTriggeringMode::kOnHidden) {
+    return is_hidden_;
+  }
+  return false;
 }
 
 void AnnotatedPageContentRequest::OnPageContentReceived(
     std::optional<optimization_guide::AIPageContentResult> page_content) {
-  lifecycle_ = Lifecycle::kDone;
+  if (is_hidden_) {
+    lifecycle_ = Lifecycle::kFinal;
+  } else {
+    // Set to kExtractedAtPageLoad, which could potentially trigger another
+    // extraction when backgrounded when background trigger is also needed.
+    lifecycle_ = Lifecycle::kExtractedAtPageLoad;
+  }
   if (!page_content) {
     return;
   }
 
   Profile* profile =
       Profile::FromBrowserContext(web_contents_->GetBrowserContext());
-  auto* page_content_extraction_service = page_content_annotations::
+  auto* page_content_extraction_service =
       PageContentExtractionServiceFactory::GetForProfile(profile);
   page_content_extraction_service->OnPageContentExtracted(
       web_contents_->GetPrimaryPage(), page_content->proto);
@@ -275,6 +328,10 @@ void AnnotatedPageContentRequest::RequestPdfPageCount() {
 
 void AnnotatedPageContentRequest::OnPdfDocumentLoadComplete() {
   CHECK_EQ(pdf::kPDFMimeType, web_contents_->GetContentsMimeType());
+  // Do not need to set to kExtractedAtPageLoad since PDFs contents will
+  // never change.
+  lifecycle_ = Lifecycle::kFinal;
+
   auto* pdf_helper =
       pdf::PDFDocumentHelper::MaybeGetForWebContents(web_contents_);
   if (pdf_helper) {
@@ -296,6 +353,34 @@ void AnnotatedPageContentRequest::OnPageContextEligibilityAPILoaded(
 std::optional<ExtractedPageContentResult>
 AnnotatedPageContentRequest::GetCachedContentAndEligibility() {
   return cached_content_;
+}
+
+void AnnotatedPageContentRequest::OnVisibilityChanged(
+    content::Visibility visibility) {
+  bool was_hidden = is_hidden_;
+  is_hidden_ = visibility == content::Visibility::HIDDEN;
+  if (is_hidden_ == was_hidden) {
+    return;
+  }
+
+  auto triggering_mode = features::GetPageContentExtractionTriggeringMode();
+  bool trigger_on_hide =
+      triggering_mode ==
+          features::PageContentExtractionTriggeringMode::kOnHidden ||
+      triggering_mode ==
+          features::PageContentExtractionTriggeringMode::kOnLoadAndHidden;
+
+  if (!trigger_on_hide) {
+    return;
+  }
+
+  if (is_hidden_) {
+    MaybeScheduleExtraction();
+  } else {
+    // When extraction runs on hide, reset the lifecycle, so it can be extracted
+    // on hide again. Keep the cached contents to be used as needed.
+    lifecycle_ = Lifecycle::kPending;
+  }
 }
 
 }  // namespace page_content_annotations

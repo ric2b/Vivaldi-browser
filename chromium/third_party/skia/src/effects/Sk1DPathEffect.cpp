@@ -209,7 +209,7 @@ static void morphpath(SkPathBuilder* dst, const SkPath& src, SkPathMeasure& meas
                 break;
             case SkPathVerb::kConic:
                 if (morphpoints(dstP, srcP.subspan(1), meas, dist)) {
-                    dst->conicTo(dstP[0], dstP[1], iter.conicWeight());
+                    dst->conicTo(dstP[0], dstP[1], rec->conicWeight());
                 }
                 break;
             case SkPathVerb::kCubic:
@@ -227,7 +227,7 @@ static void morphpath(SkPathBuilder* dst, const SkPath& src, SkPathMeasure& meas
 SkScalar SkPath1DPathEffectImpl::next(SkPathBuilder* builder, SkScalar distance,
                                       SkPathMeasure& meas) const {
 #if defined(SK_BUILD_FOR_FUZZER)
-    if (dst->countPoints() > 100000) {
+    if (builder->countPoints() > 100000) {
         return fAdvance;
     }
 #endif

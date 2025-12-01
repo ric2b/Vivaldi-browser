@@ -14,13 +14,10 @@
 #import "components/autofill/core/browser/autofill_progress_dialog_type.h"
 #import "components/autofill/core/browser/payments/autofill_save_card_delegate.h"
 #import "components/autofill/core/browser/payments/autofill_save_card_ui_info.h"
-#include "components/autofill/core/browser/payments/multiple_request_payments_network_interface.h"
+#import "components/autofill/core/browser/payments/multiple_request_payments_network_interface.h"
 #import "components/autofill/core/browser/payments/payments_autofill_client.h"
-#import "components/autofill/core/browser/ui/payments/autofill_progress_dialog_controller_impl.h"
-#include "components/autofill/core/browser/ui/payments/card_expiration_date_fix_flow_controller_impl.h"
-#include "components/autofill/core/browser/ui/payments/card_name_fix_flow_controller_impl.h"
-#import "components/autofill/core/browser/ui/payments/card_unmask_otp_input_dialog_controller_impl.h"
-#import "components/autofill/core/browser/ui/payments/card_unmask_prompt_controller_impl.h"
+#import "components/autofill/core/browser/ui/payments/card_expiration_date_fix_flow_controller_impl.h"
+#import "components/autofill/core/browser/ui/payments/card_name_fix_flow_controller_impl.h"
 #import "components/infobars/core/infobar_manager.h"
 
 class GURL;
@@ -32,8 +29,14 @@ class WebState;
 namespace autofill {
 
 struct AutofillErrorDialogContext;
+class AutofillProgressDialogController;
+class AutofillProgressDialogControllerImpl;
 struct CardUnmaskChallengeOption;
 class CardUnmaskAuthenticationSelectionDialogControllerImpl;
+class CardUnmaskOtpInputDialogController;
+class CardUnmaskOtpInputDialogControllerImpl;
+class CardUnmaskPromptController;
+class CardUnmaskPromptControllerImpl;
 class ChromeAutofillClientIOS;
 class CreditCardCvcAuthenticator;
 class CreditCardOtpAuthenticator;
@@ -71,6 +74,7 @@ class IOSChromePaymentsAutofillClient : public PaymentsAutofillClient {
       base::OnceCallback<void(const std::string&)> callback) override;
 
   // PaymentsAutofillClient:
+  bool LocalCardSaveIsSupported() override;
   void ShowSaveCreditCardLocally(const CreditCard& card,
                                  SaveCreditCardOptions options,
                                  LocalSaveCardPromptCallback callback) override;
@@ -132,18 +136,11 @@ class IOSChromePaymentsAutofillClient : public PaymentsAutofillClient {
       override;
   PaymentsDataManager& GetPaymentsDataManager() final;
 
-  std::unique_ptr<AutofillProgressDialogControllerImpl>
-  GetProgressDialogModel() {
-    return std::move(progress_dialog_controller_);
-  }
-  CardUnmaskPromptControllerImpl* GetCardUnmaskPromptModel() {
-    return unmask_controller_.get();
-  }
-
-  std::unique_ptr<CardUnmaskOtpInputDialogControllerImpl>
-  GetOtpInputDialogModel() {
-    return std::move(otp_input_dialog_controller_);
-  }
+  std::unique_ptr<AutofillProgressDialogController> ExtractProgressDialogModel()
+      override;
+  std::unique_ptr<CardUnmaskOtpInputDialogController>
+  ExtractOtpInputDialogModel() override;
+  CardUnmaskPromptController* GetCardUnmaskPromptModel() override;
 
  private:
   // Shows save card UI offering upload or local save.
@@ -151,17 +148,17 @@ class IOSChromePaymentsAutofillClient : public PaymentsAutofillClient {
       AutofillSaveCardUiInfo ui_info,
       std::unique_ptr<AutofillSaveCardDelegate> save_card_delegate);
 
-  const raw_ref<autofill::ChromeAutofillClientIOS> client_;
+  const raw_ref<autofill::ChromeAutofillClientIOS, DanglingUntriaged> client_;
 
-  const raw_ref<infobars::InfoBarManager> infobar_manager_;
+  const raw_ref<infobars::InfoBarManager, DanglingUntriaged> infobar_manager_;
 
   std::unique_ptr<PaymentsNetworkInterface> payments_network_interface_;
   std::unique_ptr<MultipleRequestPaymentsNetworkInterface>
       multiple_request_payments_network_interface_;
 
   // TODO(crbug.com/40937065): Make these member variables as const raw_refs.
-  const raw_ptr<PrefService> pref_service_;
-  const raw_ptr<web::WebState> web_state_;
+  const raw_ptr<PrefService, DanglingUntriaged> pref_service_;
+  const raw_ptr<web::WebState, DanglingUntriaged> web_state_;
   std::unique_ptr<CardUnmaskPromptControllerImpl> unmask_controller_;
 
   // The unique_ptr reference is only temporarily valid until the corresponding

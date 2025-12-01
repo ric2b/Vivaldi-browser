@@ -1,0 +1,83 @@
+// Copyright 2019 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+include "fcp/tracing/tracing_schema_common.fbs";
+
+table SpanWithId (tag: "SWID", span) {
+  id: int32;
+}
+
+table SpanWithNoData (tag: "SWND", span) {
+}
+
+table SpanNeverLogged (tag: "SNLG", span) {
+}
+
+table EventFoo (tag: "EFOO") {
+  first: int32;
+  second: int32;
+}
+
+table EventBar (tag: "EBAR") {
+  first: int32;
+  second: string;
+}
+
+table EventWithNoData (warning, tag: "EVND") {
+}
+
+table EventNeverLogged (tag: "ENLG") {
+}
+
+table ErrorEvent (error, tag: "EERR") {
+  cause: string;
+}
+
+table DeprecatedInt (tag: "DEPI") {
+  first: int32 (deprecated);
+  second: int32;
+}
+
+table AllTypes (tag: "ALLT") {
+  fieldz: byte;
+  fieldy: ubyte;
+  fieldx: bool;
+  fieldw: short;
+  fieldv: ushort;
+  fieldu: int;
+  fieldt: uint;
+  fields: float;
+  fieldr: long;
+  fieldq: ulong;
+  fieldp: double;
+  fieldo: string;
+}
+
+table FieldOrder (tag: "FORD") {
+  fieldz: int;
+  fieldy: int;
+  fieldx: string;
+}
+
+table OrderWithIds (tag: "ORDI") {
+  fieldz: int (id: 1);
+  fieldy: int (id: 2);
+  fieldx: string (id: 0);
+}
+
+enum Color : byte { Red = 0, Green = 1, Blue = 2 }
+
+table ColorEnum (tag: "CLEN") {
+  color: Color;
+}

@@ -29,13 +29,11 @@ ReadOnlyHeap::~ReadOnlyHeap() {
   IsolateGroup::current()->code_pointer_table()->TearDownSpace(
       &code_pointer_space_);
 #endif
-#ifdef V8_ENABLE_LEAPTIERING
   JSDispatchTable* jdt = IsolateGroup::current()->js_dispatch_table();
 #if V8_STATIC_DISPATCH_HANDLES_BOOL
   jdt->DetachSpaceFromReadOnlySegments(&js_dispatch_table_space_);
 #endif  // V8_STATIC_DISPATCH_HANDLES_BOOL
   jdt->TearDownSpace(&js_dispatch_table_space_);
-#endif
 }
 
 // static
@@ -172,7 +170,6 @@ ReadOnlyHeap::ReadOnlyHeap(ReadOnlySpace* ro_space)
   IsolateGroup::current()->code_pointer_table()->InitializeSpace(
       &code_pointer_space_);
 #endif  // V8_ENABLE_SANDBOX
-#ifdef V8_ENABLE_LEAPTIERING
   JSDispatchTable* jdt = IsolateGroup::current()->js_dispatch_table();
   jdt->InitializeSpace(&js_dispatch_table_space_);
   // To avoid marking trying to write to these read-only cells they are
@@ -184,7 +181,6 @@ ReadOnlyHeap::ReadOnlyHeap(ReadOnlySpace* ro_space)
   jdt->PreAllocateEntries(&js_dispatch_table_space_,
                           JSBuiltinDispatchHandleRoot::kCount);
 #endif  // V8_STATIC_DISPATCH_HANDLES_BOOL
-#endif  // V8_ENABLE_LEAPTIERING
 }
 
 // static
@@ -236,8 +232,16 @@ ReadOnlyHeapObjectIterator::ReadOnlyHeapObjectIterator(
 
 Tagged<HeapObject> ReadOnlyHeapObjectIterator::Next() {
   while (current_page_ != ro_space_->pages().end()) {
-    Tagged<HeapObject> obj = page_iterator_.Next();
-    if (!obj.is_null()) return obj;
+    while (true) {
+      Tagged<HeapObject> obj = page_iterator_.Next();
+      if (obj.is_null()) break;
+
+      // Skip over the holes in the iterator, for uniform behaviour between
+      // configs where holes are and aren't unmapped.
+      if (IsAnyHole(obj)) continue;
+
+      return obj;
+    }
 
     ++current_page_;
     if (current_page_ == ro_space_->pages().end()) return Tagged<HeapObject>();
@@ -278,11 +282,19 @@ Tagged<HeapObject> ReadOnlyPageObjectIterator::Next() {
     current_addr_ += ALIGN_TO_ALLOCATION_ALIGNMENT(object_size);
 
     if (skip_free_space_or_filler_ == SkipFreeSpaceOrFiller::kYes &&
-        IsFreeSpaceOrFiller(object)) {
+        !IsAnyHole(object) && IsFreeSpaceOrFiller(object)) {
       continue;
     }
 
+#ifdef V8_ENABLE_WEBASSEMBLY
+    // WasmNull is extra special because it also reserves (unmapped) padding
+    // for the hole roots.
+    if (IsAnyHole(object) || !IsWasmNull(object)) {
+      DCHECK_VALID_REGULAR_OBJECT_SIZE(object_size);
+    }
+#else
     DCHECK_VALID_REGULAR_OBJECT_SIZE(object_size);
+#endif  // V8_ENABLE_WEBASSEMBLY
     return object;
   }
 }

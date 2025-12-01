@@ -31,7 +31,6 @@
 #include "third_party/blink/renderer/modules/credentialmanagement/credential_manager_type_converters.h"  // IWYU pragma: keep
 #include "third_party/blink/renderer/modules/credentialmanagement/credential_utils.h"
 #include "third_party/blink/renderer/modules/credentialmanagement/digital_credential.h"
-#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -41,6 +40,11 @@ namespace blink {
 namespace {
 
 using mojom::blink::RequestDigitalIdentityStatus;
+
+enum class DigitalIdentityRequestType {
+  kGet,
+  kCreate,
+};
 
 // Abort an ongoing WebIdentityDigitalCredential request. This will only be
 // called before the request finishes due to `scoped_abort_state`.
@@ -73,15 +77,16 @@ ScriptObject ValueToScriptObject(ScriptState* script_state,
 
 void OnCompleteRequest(ScriptPromiseResolver<IDLNullable<Credential>>* resolver,
                        std::unique_ptr<ScopedAbortState> scoped_abort_state,
+                       DigitalIdentityRequestType request_type,
                        RequestDigitalIdentityStatus status,
-                       const WTF::String& protocol,
+                       const String& protocol,
                        std::optional<base::Value> token) {
   switch (status) {
     case RequestDigitalIdentityStatus::kErrorTooManyRequests: {
       resolver->Reject(MakeGarbageCollected<DOMException>(
           DOMExceptionCode::kNotAllowedError,
-          "Only one navigator.credentials.get request may be outstanding at "
-          "one time."));
+          "Only one navigator.credentials.get/create request may be "
+          "outstanding at one time."));
       return;
     }
     case RequestDigitalIdentityStatus::kErrorCanceled: {
@@ -109,8 +114,10 @@ void OnCompleteRequest(ScriptPromiseResolver<IDLNullable<Credential>>* resolver,
     case RequestDigitalIdentityStatus::kErrorNoTransientUserActivation:
       resolver->Reject(MakeGarbageCollected<DOMException>(
           DOMExceptionCode::kNotAllowedError,
-          "The 'digital-credentials-get' feature requires transient "
-          "activation."));
+          String::Format("The '%s' feature requires transient activation.",
+                         request_type == DigitalIdentityRequestType::kCreate
+                             ? "digital-credentials-create"
+                             : "digital-credentials-get")));
       return;
 
     case RequestDigitalIdentityStatus::kError: {
@@ -150,8 +157,7 @@ bool IsDigitalIdentityCredentialType(const CredentialCreationOptions& options) {
 
 void DiscoverDigitalIdentityCredentialFromExternalSource(
     ScriptPromiseResolver<IDLNullable<Credential>>* resolver,
-    const CredentialRequestOptions& options,
-    ExceptionState& exception_state) {
+    const CredentialRequestOptions& options) {
   CHECK(IsDigitalIdentityCredentialType(options));
   CHECK(RuntimeEnabledFeatures::WebIdentityDigitalCredentialsEnabled(
       resolver->GetExecutionContext()));
@@ -207,7 +213,7 @@ void DiscoverDigitalIdentityCredentialFromExternalSource(
 
   std::unique_ptr<ScopedAbortState> scoped_abort_state;
   if (auto* signal = options.getSignalOr(nullptr)) {
-    auto callback = WTF::BindOnce(&AbortRequest, WrapPersistent(script_state));
+    auto callback = BindOnce(&AbortRequest, WrapPersistent(script_state));
     auto* handle = signal->AddAlgorithm(std::move(callback));
     scoped_abort_state = std::make_unique<ScopedAbortState>(signal, handle);
   }
@@ -215,20 +221,30 @@ void DiscoverDigitalIdentityCredentialFromExternalSource(
   auto* request =
       CredentialManagerProxy::From(script_state)->DigitalIdentityRequest();
   request->Get(std::move(requests),
-               WTF::BindOnce(&OnCompleteRequest, WrapPersistent(resolver),
-                             std::move(scoped_abort_state)));
+               blink::BindOnce(&OnCompleteRequest, WrapPersistent(resolver),
+                               std::move(scoped_abort_state),
+                               DigitalIdentityRequestType::kGet));
 }
 
 void CreateDigitalIdentityCredentialInExternalSource(
     ScriptPromiseResolver<IDLNullable<Credential>>* resolver,
-    const CredentialCreationOptions& options,
-    ExceptionState& exception_state) {
+    const CredentialCreationOptions& options) {
   CHECK(IsDigitalIdentityCredentialType(options));
   CHECK(RuntimeEnabledFeatures::WebIdentityDigitalCredentialsCreationEnabled(
       resolver->GetExecutionContext()));
 
   if (!CheckGenericSecurityRequirementsForCredentialsContainerRequest(
           resolver)) {
+    return;
+  }
+
+    if (!resolver->GetExecutionContext()->IsFeatureEnabled(
+          network::mojom::PermissionsPolicyFeature::kDigitalCredentialsCreate)) {
+    resolver->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kNotAllowedError,
+        "The 'digital-credentials-create' feature is not enabled in this "
+        "document. Permissions Policy may be used to delegate digital "
+        "credential API capabilities to cross-origin child frames."));
     return;
   }
 
@@ -270,7 +286,7 @@ void CreateDigitalIdentityCredentialInExternalSource(
 
   std::unique_ptr<ScopedAbortState> scoped_abort_state;
   if (auto* signal = options.getSignalOr(nullptr)) {
-    auto callback = WTF::BindOnce(&AbortRequest, WrapPersistent(script_state));
+    auto callback = BindOnce(&AbortRequest, WrapPersistent(script_state));
     auto* handle = signal->AddAlgorithm(std::move(callback));
     scoped_abort_state = std::make_unique<ScopedAbortState>(signal, handle);
   }
@@ -278,8 +294,9 @@ void CreateDigitalIdentityCredentialInExternalSource(
   CredentialManagerProxy::From(script_state)
       ->DigitalIdentityRequest()
       ->Create(std::move(requests),
-               WTF::BindOnce(&OnCompleteRequest, WrapPersistent(resolver),
-                             std::move(scoped_abort_state)));
+               blink::BindOnce(&OnCompleteRequest, WrapPersistent(resolver),
+                               std::move(scoped_abort_state),
+                               DigitalIdentityRequestType::kCreate));
 }
 
 }  // namespace blink

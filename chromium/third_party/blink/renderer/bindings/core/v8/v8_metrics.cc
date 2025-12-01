@@ -123,6 +123,7 @@ void CheckGarbageCollectionLimitsInitialized(
   DCHECK_LE(0, limits.bytes_baseline);
   DCHECK_LE(0, limits.bytes_limit);
   DCHECK_LE(0, limits.bytes_current);
+  DCHECK_LE(0, limits.bytes_max);
 }
 
 // Returns true if |event| contains valid cpp histogram values.
@@ -181,9 +182,10 @@ void CheckUnifiedEvents(const v8::metrics::GarbageCollectionFullCycle& event) {
   DCHECK_LE(0, event.main_thread_collection_weight_in_percent);
 }
 
-static constexpr size_t kMinSize = 1;
-static constexpr size_t kMaxSize = 4 * 1024 * 1024;
-static constexpr size_t kNumBuckets = 50;
+constexpr size_t kMinSize = 1;
+constexpr size_t kMaxSize = 4 * 1024 * 1024;
+constexpr size_t kMaxSizeLarge = 32 * 1024 * 1024;
+constexpr size_t kNumBuckets = 50;
 
 void ReportHistogramTimesAllGcPhases(
     std::string_view prefix,
@@ -224,12 +226,15 @@ void ReportHistogramCollectionSizes(
 void ReportHistogramCollectionLimits(
     std::string_view prefix,
     const v8::metrics::GarbageCollectionLimits& statistics) {
-  base::UmaHistogramCustomCounts(base::StrCat({prefix, ".Limit.Full"}),
+  base::UmaHistogramCustomCounts(base::StrCat({prefix, ".Limit2.Full"}),
                                  CappedSizeInKB(statistics.bytes_limit),
-                                 kMinSize, kMaxSize, kNumBuckets);
-  base::UmaHistogramCustomCounts(base::StrCat({prefix, ".Current.Full"}),
+                                 kMinSize, kMaxSizeLarge, kNumBuckets);
+  base::UmaHistogramCustomCounts(base::StrCat({prefix, ".Current2.Full"}),
                                  CappedSizeInKB(statistics.bytes_current),
-                                 kMinSize, kMaxSize, kNumBuckets);
+                                 kMinSize, kMaxSizeLarge, kNumBuckets);
+  base::UmaHistogramCustomCounts(base::StrCat({prefix, ".Max.Full"}),
+                                 CappedSizeInKB(statistics.bytes_max), kMinSize,
+                                 kMaxSizeLarge, kNumBuckets);
 }
 
 void ReportV8FullHistograms(
@@ -293,6 +298,10 @@ void ReportV8FullHistograms(
   ReportHistogramCollectionLimits(
       base::StrCat({"V8.GC.Cycle", priority, ".Consumed.Global"}),
       event.global_consumed);
+  base::UmaHistogramCustomCounts(
+      base::StrCat({"V8.GC.Cycle", priority, ".ExternalMemory.Full"}),
+      CappedSizeInKB(event.external_memory_bytes), kMinSize, kMaxSizeLarge,
+      kNumBuckets);
 
   /* Report efficacy metrics: */
   base::UmaHistogramCustomCounts(
@@ -432,6 +441,87 @@ void V8MetricsRecorder::AddMainThreadEvent(
   CheckUnifiedEvents(event);
 
   DCHECK_LE(0, event.reason);
+
+  auto ukm = GetUkmRecorderAndSourceId(context_id);
+  if (ukm) {
+    auto builder = ukm::builders::V8_GC_FullCycle(ukm->source_id);
+    if (event.priority) {
+      builder.SetPriority(static_cast<int64_t>(*event.priority));
+    }
+    builder.SetReason(event.reason)
+        .SetReduceMemory(event.reduce_memory)
+        .SetIsLoading(event.is_loading)
+        .SetReason_IncrementalMarking(event.incremental_marking_reason)
+        .SetDuration_SinceLastMarkCompact(
+            ukm::GetExponentialBucketMinForFineUserTiming(
+                event.total_duration_since_last_mark_compact))
+        .SetDuration_Total(ukm::GetExponentialBucketMinForFineUserTiming(
+            event.total.total_wall_clock_duration_in_us))
+        .SetDuration_MainThread(ukm::GetExponentialBucketMinForFineUserTiming(
+            event.main_thread.total_wall_clock_duration_in_us))
+        .SetDuration_MainThread_Atomic(
+            ukm::GetExponentialBucketMinForFineUserTiming(
+                event.main_thread_atomic.total_wall_clock_duration_in_us))
+        .SetMemory_BytesFreed(
+            ukm::GetExponentialBucketMinForBytes(event.memory.bytes_freed))
+        .SetObjects_BytesBefore(
+            ukm::GetExponentialBucketMinForBytes(event.objects.bytes_before))
+        .SetObjects_BytesAfter(
+            ukm::GetExponentialBucketMinForBytes(event.objects.bytes_after))
+        .SetObjects_BytesFreed(
+            ukm::GetExponentialBucketMinForBytes(event.objects.bytes_freed))
+        .SetGlobal_ConsumedBytes_Baseline(ukm::GetExponentialBucketMinForBytes(
+            event.global_consumed.bytes_baseline))
+        .SetGlobal_ConsumedBytes_Current(ukm::GetExponentialBucketMinForBytes(
+            event.global_consumed.bytes_current))
+        .SetGlobal_ConsumedBytes_Limit(ukm::GetExponentialBucketMinForBytes(
+            event.global_consumed.bytes_limit))
+        .SetGlobal_ConsumedBytes_DeltaLimit(
+            ukm::GetExponentialBucketMinForBytes(
+                event.global_consumed.bytes_limit -
+                event.global_consumed.bytes_baseline))
+        .SetGlobal_ConsumedBytes_DeltaCurrent(
+            ukm::GetExponentialBucketMinForBytes(
+                event.global_consumed.bytes_current -
+                event.global_consumed.bytes_baseline))
+        .SetOldGeneration_ConsumedBytes_Baseline(
+            ukm::GetExponentialBucketMinForBytes(
+                event.old_generation_consumed.bytes_baseline))
+        .SetOldGeneration_ConsumedBytes_Current(
+            ukm::GetExponentialBucketMinForBytes(
+                event.old_generation_consumed.bytes_current))
+        .SetOldGeneration_ConsumedBytes_Limit(
+            ukm::GetExponentialBucketMinForBytes(
+                event.old_generation_consumed.bytes_limit))
+        .SetOldGeneration_ConsumedBytes_DeltaLimit(
+            ukm::GetExponentialBucketMinForBytes(
+                event.old_generation_consumed.bytes_limit -
+                event.old_generation_consumed.bytes_baseline))
+        .SetOldGeneration_ConsumedBytes_DeltaCurrent(
+            ukm::GetExponentialBucketMinForBytes(
+                event.old_generation_consumed.bytes_current -
+                event.old_generation_consumed.bytes_baseline));
+    if (CheckCppEvents(event)) {
+      builder
+          .SetDuration_Total_Cpp(ukm::GetExponentialBucketMinForFineUserTiming(
+              event.total_cpp.total_wall_clock_duration_in_us))
+          .SetDuration_MainThread_Cpp(
+              ukm::GetExponentialBucketMinForFineUserTiming(
+                  event.main_thread_cpp.total_wall_clock_duration_in_us))
+          .SetDuration_MainThread_Atomic_Cpp(
+              ukm::GetExponentialBucketMinForFineUserTiming(
+                  event.main_thread_atomic_cpp.total_wall_clock_duration_in_us))
+          .SetMemory_BytesFreed_Cpp(ukm::GetExponentialBucketMinForBytes(
+              event.memory_cpp.bytes_freed))
+          .SetObjects_BytesBefore_Cpp(ukm::GetExponentialBucketMinForBytes(
+              event.objects_cpp.bytes_before))
+          .SetObjects_BytesAfter_Cpp(ukm::GetExponentialBucketMinForBytes(
+              event.objects_cpp.bytes_after))
+          .SetObjects_BytesFreed_Cpp(ukm::GetExponentialBucketMinForBytes(
+              event.objects_cpp.bytes_freed));
+    }
+    builder.Record(ukm->recorder);
+  }
 
   ReportV8FullHistograms("", event);
   if (event.priority.has_value()) {

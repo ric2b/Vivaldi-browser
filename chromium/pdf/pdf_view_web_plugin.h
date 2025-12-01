@@ -29,7 +29,6 @@
 #include "pdf/mojom/pdf.mojom.h"
 #include "pdf/paint_manager.h"
 #include "pdf/pdf_accessibility_action_handler.h"
-#include "pdf/pdf_annotation_agent.h"
 #include "pdf/pdfium/pdfium_engine_client.h"
 #include "pdf/pdfium/pdfium_form_filler.h"
 #include "pdf/post_message_receiver.h"
@@ -53,6 +52,11 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "v8/include/v8.h"
+
+#if BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
+#include "mojo/public/cpp/bindings/unique_receiver_set.h"
+#include "pdf/save_data_buffer_handler_for_drive.h"
+#endif  // BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 #include "services/screen_ai/public/mojom/screen_ai_service.mojom-forward.h"
@@ -85,6 +89,7 @@ namespace chrome_pdf {
 class MetricsHandler;
 class PDFiumEngine;
 class PdfAccessibilityDataHandler;
+class PdfAnnotationAgent;
 class Thumbnail;
 
 #if BUILDFLAG(ENABLE_PDF_INK2)
@@ -101,8 +106,7 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
                                public PaintManager::Client,
                                public PdfAccessibilityActionHandler,
                                public PreviewModeClient::Client,
-                               public blink::mojom::AnnotationAgentContainer,
-                               public PDFAnnotationAgent::Container {
+                               public blink::mojom::AnnotationAgentContainer {
  public:
   // Do not save files larger than 100 MB. This cap should be kept in sync with
   // and is also enforced in chrome/browser/resources/pdf/pdf_viewer.ts.
@@ -421,6 +425,11 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
   void GetPdfBytes(uint32_t size_limit, GetPdfBytesCallback callback) override;
   void GetPageText(int32_t page_index, GetPageTextCallback callback) override;
   void GetMostVisiblePageIndex(GetMostVisiblePageIndexCallback callback) override;
+#if BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
+  void GetSaveDataBufferHandlerForDrive(
+      pdf::mojom::SaveRequestType request_type,
+      GetSaveDataBufferHandlerForDriveCallback callback) override;
+#endif  // BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
 
   // UrlLoader::Client:
   bool IsValid() const override;
@@ -465,12 +474,6 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
       blink::mojom::AnnotationType type,
       CreateAgentFromSelectionCallback callback) override;
   void RemoveAgentsOfType(blink::mojom::AnnotationType type) override;
-
-  // `PDFAnnotationAgent::Container`:
-  bool FindAndHighlightTextFragments(
-      base::span<const std::string> text_fragments) override;
-  void ScrollTextFragmentIntoView() override;
-  void RemoveTextFragments() override;
 
   // Initializes the plugin for testing, bypassing certain consistency checks.
   bool InitializeForTesting();
@@ -532,6 +535,32 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
   bool IsSaveDataBufferEmptyForTesting() const {
     return save_data_buffer_.empty();
   }
+
+#if BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
+  size_t GetSaveToDriveBufferHandlerReceiverSizeForTesting() const {
+    return save_data_buffer_handler_receivers_.size();
+  }
+#endif  // BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
+
+  // Returns the size of the original PDF file. It does not handle files larger
+  // than INT_MAX. If the file is larger than that, it returns 0.
+  uint32_t GetOriginalFileSize();
+
+  // Returns a block of data from the original PDF file.
+  std::vector<uint8_t> GetOriginalFileData(uint32_t offset,
+                                           uint32_t block_size);
+
+  // Populates `buffer` with the modified PDF file data.
+  // The `buffer` is released if the file is larger than `INT_MAX`.
+  void PopulateBufferWithModifiedFileData(std::vector<uint8_t>& buffer);
+
+  // Gets a block of modified PDF data from `buffer`.
+  // `PopulateBufferWithModifiedFileData()` must be called first to populate
+  // `buffer`.
+  std::vector<uint8_t> GetModifiedFileDataFromBuffer(
+      base::span<const uint8_t> buffer,
+      uint32_t offset,
+      uint32_t block_size);
 
  private:
   // Callback that runs after `LoadUrl()`. The `loader` is the loader used to
@@ -620,24 +649,22 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
                     const std::string& token);
   void SaveToFile(const std::string& token);
 
-  // Returns `block_size` bytes to save the PDF with `request_type`, starting
-  // from location `offset`. For non-original save requests, uses `buffer` to
-  // temporarily store save data for future calls. Since the caller may not know
-  // the exact file size, the first request (when `offset` is 0) can be called
-  // with `block_size` 0 and in that case, the entire file data, capped at 16MB
-  // limit is returned. The function also returns the total file size. Note that
-  // it only handles files less than INT_MAX size, and if the file is larger
-  // than that, it returns 0 as file size and no data.
-  SaveDataBlock SaveBlockToBufferImpl(std::vector<uint8_t>& buffer,
-                                      pdf::mojom::SaveRequestType request_type,
-                                      uint32_t offset,
-                                      uint32_t block_size);
-
-  // For a call to `SaveBlockToBufferImpl()`, ensures `offset` and
-  // `block_size` have expected values and returns the effective `block_size`.
+  // For a call in `SaveBlockToBuffer()`, ensures `offset` and `block_size` have
+  // expected values and returns the effective `block_size`.
   uint32_t VerifyParamsAndGetSaveBlockSize(uint32_t total_file_size,
                                            uint32_t offset,
                                            uint32_t block_size);
+
+  // Returns `block_size` bytes to save the PDF with `request_type`, starting
+  // from location `offset`. Since the caller may not know the exact file size,
+  // the first request (when `offset` is 0) can be called with `block_size` 0
+  // and in that case, the entire file data, capped at 16MB limit is returned.
+  // The function also returns the total file size.
+  // Note that it only handles files less than INT_MAX size, and if the file is
+  // larger than that, it returns 0 as file size and no data.
+  SaveDataBlock SaveBlockToBuffer(pdf::mojom::SaveRequestType request_type,
+                                  uint32_t offset,
+                                  uint32_t block_size);
 
   // Sets whether the plugin can and should handle the save by using `pdf_host_`
   // to notify the browser. Prevents duplicate notifications to the browser if
@@ -1027,10 +1054,19 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
   // Maximum size of save data in each block.
   uint32_t max_save_buffer_size_;
 
+#if BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
+  // Owns all the receivers for `pdf::mojom::SaveDataBufferHandler`. Each
+  // receiver is associated with a Save to Drive handler and is used to read the
+  // corresponding data request. Once a receiver is destroyed, the corresponding
+  // buffer and handler are freed.
+  mojo::UniqueReceiverSet<pdf::mojom::SaveDataBufferHandler>
+      save_data_buffer_handler_receivers_;
+#endif  // BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
+
   // Used to allow the embedder to scroll-to and highlight a text fragment.
   mojo::Receiver<blink::mojom::AnnotationAgentContainer>
       annotation_agent_container_receiver_{this};
-  std::unique_ptr<PDFAnnotationAgent> annotation_agent_;
+  std::unique_ptr<PdfAnnotationAgent> annotation_agent_;
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
   enum class SearchifyState {

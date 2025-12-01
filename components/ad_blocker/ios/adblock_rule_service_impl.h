@@ -3,14 +3,9 @@
 #ifndef COMPONENTS_AD_BLOCKER_IOS_ADBLOCK_RULE_SERVICE_IMPL_H_
 #define COMPONENTS_AD_BLOCKER_IOS_ADBLOCK_RULE_SERVICE_IMPL_H_
 
-#include <array>
-#include <map>
 #include <memory>
-#include <set>
 #include <string>
-#include <vector>
 
-#include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -22,7 +17,6 @@
 #include "components/ad_blocker/ios/adblock_organized_rules_manager.h"
 #include "components/ad_blocker/public/core/adblock_types.h"
 #include "components/ad_blocker/public/ios/adblock_rule_service.h"
-#include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 
 class PrefService;
@@ -76,8 +70,8 @@ class RuleServiceImpl : public RuleService,
 
  private:
   void OnFullyLoaded(
-      std::array<std::unique_ptr<AdBlockerContentRuleListProvider>,
-                 kRuleGroupCount> loaded_content_rule_list_providers,
+      RuleGroupArray<std::unique_ptr<AdBlockerContentRuleListProvider>>
+          loaded_content_rule_list_providers,
       RuleServiceStorageDelegate::LoadResult load_result);
   void OnRulesIndexChanged(RuleGroup group,
                            RuleService::IndexBuildResult build_result);
@@ -102,8 +96,7 @@ class RuleServiceImpl : public RuleService,
   bool is_loaded_ = false;
   std::optional<RuleManagerImpl> rule_manager_;
   std::optional<KnownRuleSourcesHandlerImpl> known_sources_handler_;
-  std::array<std::optional<OrganizedRulesManager>, kRuleGroupCount>
-      organized_rules_manager_;
+  RuleGroupArray<std::optional<OrganizedRulesManager>> organized_rules_manager_;
 
   std::optional<Resources> resources_;
   std::unique_ptr<ContentInjectionHandler> content_injection_handler_;

@@ -10,8 +10,11 @@
 
 #include "sdk/android/native_api/network_monitor/network_monitor.h"
 
+#include <jni.h>
+
 #include <memory>
 
+#include "rtc_base/network_monitor_factory.h"
 #include "sdk/android/src/jni/android_network_monitor.h"
 #include "third_party/jni_zero/jni_zero.h"
 
@@ -21,7 +24,7 @@ std::unique_ptr<NetworkMonitorFactory> CreateAndroidNetworkMonitorFactory(
     JNIEnv* env,
     jobject application_context) {
   return std::make_unique<jni::AndroidNetworkMonitorFactory>(
-      env, jni_zero::JavaParamRef<jobject>(env, application_context));
+      env, jni_zero::JavaRef<jobject>::CreateLeaky(env, application_context));
 }
 
 std::unique_ptr<NetworkMonitorFactory> CreateAndroidNetworkMonitorFactory() {

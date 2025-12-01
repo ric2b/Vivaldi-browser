@@ -732,13 +732,15 @@ TEST_F(AuthenticatorRequestDialogControllerTest, Mechanisms) {
       // Windows should also jump to the QR code first.
       // TODO: the expectation here (mss) doesn't match the comment.
       {L, ga, {cable}, {empty_al, has_winapi}, {add, winapi}, mss},
-      // Unless there is a recognized platform credential.
+      // Unless there is a recognized platform credential, in which case we
+      // should jump directly to Windows.
+      // Regression test for https://crbug.com/326508293.
       {L,
        ga,
        {cable},
        {empty_al, has_winapi, has_plat, one_cred},
        {c(wincred1), add, winapi},
-       hero},
+       plat_ui},
       // For <=Win 10, we can't tell if there is a credential or not. Show the
       // mechanism selection screen instead.
       {L,
@@ -922,11 +924,7 @@ TEST_F(AuthenticatorRequestDialogControllerTest, Mechanisms) {
        // create(): Client device hint should jump to the platform
        // authenticator.
        {L, mc, {usb, internal, cable}, {rk, hint_plat}, {add, t(internal)},
-#if BUILDFLAG(IS_MAC)
-         create_pk,
-#else
-         plat_ui,
-#endif
+        kIsMac ? create_pk : plat_ui,
        },
        // But not if there isn't a platform authenticator.
        {L, mc, {usb, cable}, {rk, hint_plat}, {add}, qr},
@@ -934,8 +932,10 @@ TEST_F(AuthenticatorRequestDialogControllerTest, Mechanisms) {
        {L, mc, {cable}, {has_winapi, rk, hint_plat}, {winapi, add},
         plat_ui},
        // Or if there's iCloud Keychain.
+#if BUILDFLAG(IS_MAC)
        {L, mc, {cable}, {has_ickc, create_ickc, rk, hint_plat}, {ickc, add},
         plat_ui},
+#endif // BUILDFLAG(IS_MAC)
 
        // get(): Security key hint should show security key UI.
        {L, ga, {usb, internal, cable}, {rk, hint_sk}, {add, t(usb)},
@@ -969,9 +969,6 @@ TEST_F(AuthenticatorRequestDialogControllerTest, Mechanisms) {
        // get(): Client device hint should trigger webauthn.dll, if it exists.
        {L, ga, {cable}, {rk, has_winapi, hint_plat}, {add, winapi},
         plat_ui},
-       // But not if there's a credential match.
-       {L, ga, {usb, cable, internal}, {one_cred, has_winapi, rk, hint_plat},
-        {c(wincred1), add, winapi}, mss},
        // And otherwise it doesn't do anything because we generally assume that
        // we can enumerate platform authenticators and do a good job.
        {L, ga, {usb, cable, internal}, {rk, hint_plat}, {add}, qr},
@@ -989,13 +986,14 @@ TEST_F(AuthenticatorRequestDialogControllerTest, Mechanisms) {
        {c(wincred1), c(wincred2), add},
        plat_ui},
       // Mix of internal credentials, and USB/NFC (empty allow list).
-      // This should offer dispatching to the Windows API for USB/NFC.
+      // This should default to Windows, and on cancel offer dispatching to the
+      // Windows API for USB/NFC.
       {L,
        ga,
        {cable},
        {two_cred, has_winapi, empty_al, has_plat},
        {c(wincred1), c(wincred2), add, winapi},
-       mss},
+       plat_ui},
 
       // Tests where Windows handles hybrid with internal credentials only.
       // This should dispatch directly to the Windows API.
@@ -1400,6 +1398,40 @@ TEST_F(AuthenticatorRequestDialogControllerTest, WinNoPlatformAuthenticator) {
   EXPECT_EQ(model->step(), Step::kErrorWindowsHelloNotEnabled);
   EXPECT_FALSE(model->offer_try_again_in_ui);
 }
+
+// Tests that if a WebAuthn request with an empty allow-list has a matching
+// Windows Hello credential, the request is dispatched to Windows with an empty
+// allow list (i.e. no filtering takes place).
+// Regression test for https://crbug.com/448351425.
+TEST_F(AuthenticatorRequestDialogControllerTest, WinCredMatchEmptyAllowList) {
+  static constexpr char kWinAuthenticatorId[] = "win-authenticator";
+  TransportAvailabilityInfo tai;
+  tai.request_type = device::FidoRequestType::kGetAssertion;
+  tai.win_is_uvpaa = true;
+  tai.recognized_credentials = {kWinCred1};
+  tai.has_win_native_api_authenticator = true;
+  tai.has_empty_allow_list = true;
+  auto model =
+      base::MakeRefCounted<AuthenticatorRequestDialogModel>(main_rfh());
+  UpdateModelBeforeStartFlow(model.get(), tai);
+  AuthenticatorRequestDialogController controller(model.get(), main_rfh());
+  controller.saved_authenticators().AddAuthenticator(AuthenticatorReference(
+      kWinAuthenticatorId, AuthenticatorTransport::kInternal,
+      device::AuthenticatorType::kWinNative));
+  base::RunLoop run_loop;
+  controller.SetRequestCallback(base::BindLambdaForTesting(
+      [&run_loop](const std::string& authenticator_id) {
+        EXPECT_EQ(kWinAuthenticatorId, authenticator_id);
+        run_loop.Quit();
+      }));
+  controller.SetAccountPreselectedCallback(base::BindLambdaForTesting(
+      [](device::DiscoverableCredentialMetadata cred) {
+        FAIL() << "Should not have narrowed the allow list";
+      }));
+  controller.StartFlow(std::move(tai), {});
+  EXPECT_EQ(model->step(), Step::kNotStarted);
+  run_loop.Run();
+}
 #endif
 
 TEST_F(AuthenticatorRequestDialogControllerTest, NoAvailableTransports) {
@@ -1658,6 +1690,58 @@ TEST_F(AuthenticatorRequestDialogControllerTest,
 
     EXPECT_EQ(test_case.expected_final_step, model->step());
     EXPECT_FALSE(power_receiver.was_called());
+  }
+}
+
+// Tests that if the bluetooth adapter needs action, the QR sheet and USB sheet
+// are split.
+TEST_F(AuthenticatorRequestDialogControllerTest,
+       BleAdapterNeedsActionSplitsUsbAndQrSheets) {
+#if BUILDFLAG(IS_WIN)
+  device::FakeWinWebAuthnApi fake_win_webauthn_api;
+  device::WinWebAuthnApi::ScopedOverride win_webauthn_api_override(
+      &fake_win_webauthn_api);
+  fake_win_webauthn_api.set_version(4);
+#endif  // BUILDFLAG(IS_WIN)
+
+  for (BleStatus ble_status :
+       {BleStatus::kPendingPermissionRequest, BleStatus::kPermissionDenied,
+        BleStatus::kOff, BleStatus::kOn}) {
+    SCOPED_TRACE(testing::Message() << static_cast<int>(ble_status));
+    TransportAvailabilityInfo transports_info;
+    transports_info.request_type = RequestType::kMakeCredential;
+    transports_info.attestation_conveyance_preference =
+        device::AttestationConveyancePreference::kNone;
+    transports_info.available_transports = {
+        AuthenticatorTransport::kUsbHumanInterfaceDevice,
+        AuthenticatorTransport::kHybrid};
+    transports_info.can_power_on_ble_adapter = false;
+    transports_info.ble_status = ble_status;
+    auto model =
+        base::MakeRefCounted<AuthenticatorRequestDialogModel>(main_rfh());
+    AuthenticatorRequestDialogController controller(model.get(), main_rfh());
+    controller.set_cable_transport_info(/*extension_is_v2=*/std::nullopt,
+                                        std::nullopt);
+    UpdateModelBeforeStartFlow(model.get(), transports_info);
+    controller.StartFlow(std::move(transports_info), {});
+    EXPECT_EQ(model->show_security_key_on_qr_sheet,
+              ble_status == BleStatus::kOn);
+    EXPECT_TRUE(
+        std::ranges::any_of(model->mechanisms, [](const auto& m) -> bool {
+          return std::holds_alternative<
+              AuthenticatorRequestDialogModel::Mechanism::AddPhone>(m.type);
+        }));
+    EXPECT_EQ(std::ranges::any_of(
+                  model->mechanisms,
+                  [](const auto& m) -> bool {
+                    const auto* transport = std::get_if<
+                        AuthenticatorRequestDialogModel::Mechanism::Transport>(
+                        &m.type);
+                    return transport &&
+                           transport->value() ==
+                               AuthenticatorTransport::kUsbHumanInterfaceDevice;
+                  }),
+              ble_status != BleStatus::kOn);
   }
 }
 
@@ -2446,7 +2530,6 @@ TEST_F(AuthenticatorRequestDialogControllerTest, MechanismsFromUserAccounts) {
   const AuthenticatorRequestDialogModel::Mechanism& mech1 =
       model->mechanisms[0];
   EXPECT_EQ(mech1.name, base::UTF8ToUTF16(*kUser1.name));
-  EXPECT_EQ(mech1.short_name, base::UTF8ToUTF16(*kUser1.name));
   EXPECT_EQ(mech1.description,
             l10n_util::GetStringUTF16(IDS_WEBAUTHN_SOURCE_USB_SECURITY_KEY));
   EXPECT_EQ(mech1.icon, vector_icons::kPasskeyIcon);
@@ -2467,7 +2550,6 @@ TEST_F(AuthenticatorRequestDialogControllerTest, MechanismsFromUserAccounts) {
   const AuthenticatorRequestDialogModel::Mechanism& mech2 =
       model->mechanisms[1];
   EXPECT_EQ(mech2.name, base::UTF8ToUTF16(*kUser2.name));
-  EXPECT_EQ(mech2.short_name, base::UTF8ToUTF16(*kUser2.name));
   EXPECT_EQ(mech2.description,
             l10n_util::GetStringUTF16(IDS_WEBAUTHN_SOURCE_USB_SECURITY_KEY));
   EXPECT_EQ(mech2.icon, vector_icons::kPasskeyIcon);
@@ -2600,8 +2682,6 @@ TEST_F(AuthenticatorRequestDialogControllerTest,
       ASSERT_NE(win_button_it, model->mechanisms.end());
       EXPECT_EQ(win_button_it->name,
                 l10n_util::GetStringUTF16(test_case.expected_button));
-      EXPECT_EQ(win_button_it->short_name,
-                l10n_util::GetStringUTF16(test_case.expected_button));
       switch (test_case.expected_button) {
         case kHelloOrSk:
         case kHello:
@@ -2661,8 +2741,6 @@ TEST_F(AuthenticatorRequestDialogControllerTest,
     ASSERT_NE(win_button_it, model->mechanisms.end());
     EXPECT_EQ(win_button_it->name,
               l10n_util::GetStringUTF16(test_case.expected_button));
-    EXPECT_EQ(win_button_it->short_name,
-              l10n_util::GetStringUTF16(test_case.expected_button));
     switch (test_case.expected_button) {
       case kHelloOrSk:
       case kHello:
@@ -2718,6 +2796,8 @@ TEST_F(AuthenticatorRequestDialogControllerTest,
   EXPECT_FALSE(icloud_mechanism_found);
 }
 
+#if BUILDFLAG(IS_MAC)
+
 // Test that when iCloud Keychain is dispatched to automatically because of
 // client hints, cancelling brings the user back to the mechanism selection
 // screen.
@@ -2735,6 +2815,7 @@ TEST_F(AuthenticatorRequestDialogControllerTest,
       kICloudKeychainId, AuthenticatorTransport::kInternal,
       device::AuthenticatorType::kICloudKeychain));
   controller.set_allow_icloud_keychain(true);
+  controller.set_should_create_in_icloud_keychain(true);
   content::AuthenticatorRequestClientDelegate::Hints hints;
   hints.transport = device::FidoTransportProtocol::kInternal;
   controller.SetHints(std::move(hints));
@@ -2768,3 +2849,5 @@ TEST_F(AuthenticatorRequestDialogControllerTest,
   controller.OnUserConsentDenied();
   EXPECT_EQ(model->step(), Step::kNotStarted);
 }
+
+#endif  // BUILDFLAG(IS_MAC)

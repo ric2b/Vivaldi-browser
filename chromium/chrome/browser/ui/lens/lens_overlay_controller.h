@@ -178,31 +178,19 @@ class LensOverlayController : public lens::mojom::LensPageHandler,
     // Showing an overlay without results.
     kOverlay,
 
+    // TODO(crbug.com/450638028): Remove this state and only keep kOverlay.
     // Showing an overlay with results.
     kOverlayAndResults,
 
-    // Showing results with the overlay hidden and live page showing.
-    // TODO(crbug.com/428208291): Live page with results is no longer related to
-    // the overlay and therefore should not exist as a state of the overlay
-    // controller. Remove once we have a parent class that can handle this flow.
-    kLivePageAndResults,
+    // The UI is hidden, but the lens session is still active (e.g. side panel
+    // is showing results). This differs from kBackground, where the tab is
+    // inactive.
+    kHidden,
 
-    // The UI has been made inactive / backgrounded and is hidden. This differs
-    // from kSuspended as the overlay and web view are not freed and could be
+    // The UI has been made inactive because the tab has been backgrounded.
+    // The overlay and web view are not freed and could be
     // immediately reshown.
     kBackground,
-
-    // The UI is currently storing all necessary state for a potential
-    // restoration of the overlay view. This frees the overlay and associated
-    // views. The following is stored in order to restore the overlay if the
-    // user returns:
-    // - Screenshot bitmap
-    // - The currently selected region, if any
-    // - Any overlay objects passed from query controller
-    // - Any text passed from query controller
-    // - the latest interaction response
-    // TODO(b/335516480): Implement suspended state.
-    kSuspended,
 
     // Will be kOff soon.
     kClosing,
@@ -254,6 +242,10 @@ class LensOverlayController : public lens::mojom::LensPageHandler,
   // Send text data to the WebUI, or stores it to be sent when the WebUI is
   // ready.
   void SendText(lens::mojom::TextPtr text);
+
+  // Send region text data to the WebUI and indicates whether the text is from
+  // an injected image. If the WebUI is not ready, this is a no-op.
+  void SendRegionText(lens::mojom::TextPtr text, bool is_injected_image);
 
   // Creates theme with data obtained from `palette_id` to be sent to the WebUI.
   lens::mojom::OverlayThemePtr CreateTheme(lens::PaletteId palette_id);
@@ -314,6 +306,9 @@ class LensOverlayController : public lens::mojom::LensPageHandler,
 
   // Handles a new region thumbnail being created.
   void HandleRegionBitmapCreated(const SkBitmap& region_bitmap);
+
+  // Called when the side panel alignment chgces.
+  void OnSidePanelAlignmentChanged();
 
   // Testing function to issue a Lens region selection request.
   void IssueLensRegionRequestForTesting(lens::mojom::CenterRotatedBoxPtr region,
@@ -396,6 +391,9 @@ class LensOverlayController : public lens::mojom::LensPageHandler,
   // Opens the side panel for testing. If the side panel is already open, this
   // does nothing.
   void OpenSidePanelForTesting();
+
+  // Sets the invocation time for WebUI binding.
+  void SetInvocationTimeForWebUIBinding(base::TimeTicks time);
 
   // Returns the lens suggest inputs stored in this controller for testing.
   const lens::proto::LensOverlaySuggestInputs& GetLensSuggestInputsForTesting();
@@ -559,9 +557,14 @@ class LensOverlayController : public lens::mojom::LensPageHandler,
   // Hides the overlay view and restores input to the tab contents web view.
   void HideOverlay();
 
-  // Hides the overlay, but also sets the state to kLivePageAndResults if the
+  // Hides the overlay, but also sets the state to kHidden if the
   // side panel is bound.
-  void HideOverlayAndMaybeSetLivePageState();
+  void HideOverlayAndMaybeSetHiddenState();
+
+  // Should only be called when the overlay is in kHidden state. This will
+  // reshow the overlay using the current viewport screenshot and page context
+  // on the live page.
+  void ReshowOverlay();
 
  private:
   // Data class for constructing overlay and storing overlay state for
@@ -675,41 +678,6 @@ class LensOverlayController : public lens::mojom::LensPageHandler,
       bool is_zero_prefix_suggestion,
       lens::LensOverlayInvocationSource invocation_source);
 
-  // Takes a screenshot of the current viewport.
-  void CaptureScreenshot();
-
-  // Fetches the bounding boxes of all images within the current viewport.
-  void FetchViewportImageBoundingBoxes(const SkBitmap& bitmap);
-
-  // Gets the current page number if viewing a PDF.
-  void GetPdfCurrentPage(
-      mojo::AssociatedRemote<chrome::mojom::ChromeRenderFrame>
-          chrome_render_frame,
-      int attempt_id,
-      const SkBitmap& bitmap,
-      const std::vector<gfx::Rect>& bounds);
-
-  // Called once a screenshot has been captured. This should trigger transition
-  // to kOverlay. As this process is asynchronous, there are edge cases that can
-  // result in multiple in-flight screenshot attempts. We record the
-  // `attempt_id` for each attempt so we can ignore all but the most recent
-  // attempt.
-  // `chrome_render_frame` is added to keep the InterfacePtr alive during the
-  // IPC call in FetchViewportImageBoundingBoxes().
-  void DidCaptureScreenshot(
-      mojo::AssociatedRemote<chrome::mojom::ChromeRenderFrame>
-          chrome_render_frame,
-      int attempt_id,
-      const SkBitmap& bitmap,
-      const std::vector<gfx::Rect>& bounds,
-      std::optional<uint32_t> pdf_current_page);
-
-  // Called when the page context eligibility is fetched.
-  void OnPageContextEligibilityFetched(const SkBitmap& bitmap,
-                                       const std::vector<gfx::Rect>& all_bounds,
-                                       std::optional<uint32_t> pdf_current_page,
-                                       bool is_page_context_eligible);
-
   // Process the bitmap and creates all necessary data to initialize the
   // overlay. Happens on a separate thread to prevent main thread from hanging.
   void CreateInitializationData(const SkBitmap& screenshot,
@@ -721,12 +689,14 @@ class LensOverlayController : public lens::mojom::LensPageHandler,
       const SkBitmap& screenshot,
       const std::vector<gfx::Rect>& all_bounds,
       std::optional<uint32_t> pdf_current_page,
+      std::optional<base::TimeTicks> screenshot_bitmap_start_time,
       SkBitmap rgb_screenshot);
 
   // Stores the page content and continues the initialization process. Also
   // records the page count for PDF.
   void StorePageContentAndContinueInitialization(
       std::unique_ptr<OverlayInitializationData> initialization_data,
+      std::optional<base::TimeTicks> page_context_start_time,
       std::vector<lens::PageContent> page_contents,
       lens::MimeType primary_content_type,
       std::optional<uint32_t> page_count);
@@ -824,8 +794,17 @@ class LensOverlayController : public lens::mojom::LensPageHandler,
   // another side panel opens.
   void OnSidePanelDidOpen();
 
+  // Sets the top right or top left corner of the overlay to be rounded if the
+  // side panel is open and the `SideBySide` feature is enabled. This is
+  // necessary because rounded corners are owned by the `MultiContentsView`,
+  // and the overlay is shown on top of it.
+  // TODO(crbug.com/443102583): Remove this block if `overlay_view_` ends up
+  // getting reparented into `MultiContentsView`.
+  void SetOverlayRoundedCorner();
+
   // Called to continue the screenshot process while opening lens overlay.
-  void FinishedWaitingForReflow();
+  void FinishedWaitingForReflow(
+      std::optional<base::TimeTicks> reflow_start_time);
 
   // content::RenderProcessHostObserver:
   void RenderProcessExited(
@@ -932,6 +911,9 @@ class LensOverlayController : public lens::mojom::LensPageHandler,
   // points since the state of the overlay has changed.
   void UpdateEntryPointsState();
 
+  // Notifies the side panel whether the overlay is showing.
+  void NotifyIsOverlayShowing(bool is_showing);
+
   // Callback to run when the partial page text is retrieved from the PDF.
   void OnPdfPartialPageTextRetrieved(
       std::vector<std::u16string> pdf_pages_text);
@@ -946,8 +928,24 @@ class LensOverlayController : public lens::mojom::LensPageHandler,
       bool is_zero_prefix_suggestion,
       lens::LensOverlayInvocationSource invocation_source);
 
+  // Called by LensSearchContextualizationController after taking a screenshot.
+  void OnScreenshotTaken(std::optional<base::TimeTicks> screenshot_start_time,
+                         const SkBitmap& bitmap,
+                         const std::vector<gfx::Rect>& all_bounds,
+                         std::optional<uint32_t> pdf_current_page);
+
+  // Part 2 of reshowing the overlay. Called after the screenshot and page
+  // context has been updated.
+  void ReshowOverlayPart2();
+  // Part 3 of reshowing the overlay. Called after the RGB bitmap has been
+  // created.
+  void ReshowOverlayPart3(const SkBitmap& rgb_bitmap);
+
   // Shorthand to grab the LensSearchboxController for this instance of Lens.
   lens::LensSearchboxController* GetLensSearchboxController();
+
+  // Shorthand to grab the LensOverlaySidePanelCoordinator for this instance of Lens.
+  lens::LensOverlaySidePanelCoordinator* GetLensOverlaySidePanelCoordinator();
 
   // Shorthand to grab the LensSearchContextualizationController for this
   // instance of Lens.
@@ -1039,6 +1037,10 @@ class LensOverlayController : public lens::mojom::LensPageHandler,
   // timeToWebUIReady on the WebUI side.
   base::Time invocation_time_since_epoch_;
 
+  // The time at which the webUI binding was invoked. Used to compute timing
+  // metrics.
+  base::TimeTicks invocation_time_for_webui_binding_;
+
   // Indicates whether this is the first upload handler event received. This is
   // used to determine whether to show the upload progress bar.
   bool is_first_upload_handler_event_ = true;
@@ -1050,12 +1052,8 @@ class LensOverlayController : public lens::mojom::LensPageHandler,
   // Indicates whether the user is currently on a context eligible page.
   bool is_page_context_eligible_ = true;
 
-  // Indicates whether the screenshot should be sent when updating the page
-  // content when first initializing the overlay. This is only used when the
-  // early start query flow optimization is enabled. Setting this to true does
-  // not guarantee the screenshot is sent on initialization, as that is still
-  // dependent on whether the page is context eligible or not.
-  bool should_send_screenshot_on_init_ = false;
+  // Indicates whether live blur should be enabled when the overlay is shown.
+  bool should_enable_live_blur_on_show_ = false;
 
   // TODO(384778180): The two `pre_initialization_*` fields below are used to
   // store data that came back before the initialization data was ready. This
@@ -1147,6 +1145,8 @@ class LensOverlayController : public lens::mojom::LensPageHandler,
   // be assumed to be non-null.
   raw_ptr<SidePanelCoordinator> side_panel_coordinator_ = nullptr;
 
+  // TODO(crbug.com/450336818): Remove this field and use the
+  // LensSearchController to get the side panel coordinator.
   // Side panel coordinator for the side panel coordinator that controls the
   // results side panel. Guaranteed to exist if the overlay is not `kOff`.
   raw_ptr<lens::LensOverlaySidePanelCoordinator>
@@ -1172,11 +1172,10 @@ class LensOverlayController : public lens::mojom::LensPageHandler,
   // order.
   raw_ptr<views::View> preselection_widget_anchor_;
 
-#if BUILDFLAG(IS_MAC)
   // Register for adding observers to prefs the current profiles pref service.
-  // Currently only used to observe the immersive mode pref on Mac.
+  // Used to observe the immersive mode pref on Mac, and the side panel
+  // horizontal alignment pref.
   PrefChangeRegistrar pref_change_registrar_;
-#endif  // BUILDFLAG(IS_MAC)
 
   // --------------------Browser window scoped state: END---------------------
 

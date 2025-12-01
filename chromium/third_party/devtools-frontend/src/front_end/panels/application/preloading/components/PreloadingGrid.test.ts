@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -100,6 +100,7 @@ describeWithEnvironment('PreloadingGrid', () => {
             ruleSets: [{
               id: 'ruleSetId:0.1' as Protocol.Preload.RuleSetId,
               loaderId: 'loaderId:1' as Protocol.Network.LoaderId,
+              tag: 'tag1',
               sourceText: `
 {
   "tag": "tag1",

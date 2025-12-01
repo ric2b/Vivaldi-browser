@@ -98,6 +98,10 @@ struct BookmarkMenuContainer {
     virtual void OnBookmarkAction(int64_t bookmark_id, int command) {}
     // To inform JS that a new menu has been made visible. For bookmark bar.
     virtual void OnOpenMenu(int64_t bookmark_id) {}
+    // To inform JS that a drag has started. If drag lands on bookmark bar or
+    // other places of interrest we will use the id to look up what must be
+    // processed.
+    virtual void OnStartDrag(int64_t bookmark_id) {}
   };
 
   BookmarkMenuContainer(Delegate* delegate);
@@ -105,6 +109,10 @@ struct BookmarkMenuContainer {
 
   // Icons to use for folders and bookmarks missing a fav icon
   BookmarkSupport support;
+  // List of bookmarks dragged from JS. May be dropped in an open menu.
+  std::vector<int64_t> dragged_ids;
+  // Profile path for dragged_ids
+  base::FilePath dragged_path;
   // Sort options
   vivaldi::BookmarkSorter::SortField sort_field;
   vivaldi::BookmarkSorter::SortOrder sort_order;
@@ -143,7 +151,7 @@ void ConvertContainerRectToScreen(content::WebContents* web_contents,
 
 class VivaldiBookmarkMenuObserver {
  public:
-  virtual void BookmarkMenuClosed(VivaldiBookmarkMenu* menu) = 0;
+  virtual void BookmarkMenuWillDelete(VivaldiBookmarkMenu* menu) = 0;
 
  protected:
   virtual ~VivaldiBookmarkMenuObserver() {}
@@ -175,10 +183,16 @@ class VivaldiContextMenu : public VivaldiMenu {
 
 class VivaldiBookmarkMenu : public VivaldiMenu {
  public:
-  virtual ~VivaldiBookmarkMenu() {}
+  VivaldiBookmarkMenu();
+  virtual ~VivaldiBookmarkMenu();
+
+  static VivaldiBookmarkMenu* GetActive();
   virtual bool CanShow() = 0;
   virtual void Show() = 0;
+  virtual void Close() = 0;
   virtual void set_observer(VivaldiBookmarkMenuObserver* observer) {}
+ private:
+  static VivaldiBookmarkMenu* active_;
 };
 
 class VivaldiMenubarMenu : public VivaldiMenu {

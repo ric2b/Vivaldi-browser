@@ -54,6 +54,7 @@
 #include "third_party/blink/renderer/core/css/css_initial_color_value.h"
 #include "third_party/blink/renderer/core/css/css_keyframe_rule.h"
 #include "third_party/blink/renderer/core/css/css_keyframes_rule.h"
+#include "third_party/blink/renderer/core/css/css_math_function_value.h"
 #include "third_party/blink/renderer/core/css/css_position_try_rule.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_rule_list.h"
@@ -655,6 +656,13 @@ namespace {
 
 inline ScopedStyleResolver* ScopedResolverFor(const Element& element) {
   TreeScope* tree_scope = &element.GetTreeScope();
+  if (RuntimeEnabledFeatures::Svg2CascadeEnabled()) {
+    if (const auto* svg_element = DynamicTo<SVGElement>(element)) {
+      if (SVGElement* corresponding = svg_element->CorrespondingElement()) {
+        tree_scope = &corresponding->GetTreeScope();
+      }
+    }
+  }
   if (ScopedStyleResolver* resolver = tree_scope->GetScopedStyleResolver()) {
     DCHECK(!element.IsVTTElement());
     return resolver;
@@ -823,7 +831,7 @@ void MatchVTTRules(const Element& element,
     RuleSetGroup rule_set_group{rule_set_group_index++};
 
     for (CSSStyleSheet* style : styles) {
-      RuleSet* rule_set = style_engine.RuleSetForSheet(*style);
+      RuleSet* rule_set = style_engine.RuleSetForSheet(*style, /*mixins=*/{});
       if (!rule_set) {
         continue;
       }
@@ -897,9 +905,9 @@ void MatchElementScopeRules(const Element& element,
   collector.BeginAddingAuthorRulesForTreeScope(element.GetTreeScope());
   if (element_scope_resolver) {
     collector.ClearMatchedRules();
-    DCHECK_EQ(&element_scope_resolver->GetTreeScope(), &element.GetTreeScope());
     element_scope_resolver->CollectMatchingElementScopeRules(
-        collector, /*part_shadow_host*/ nullptr);
+        element.GetTreeScope().RootNode(), collector,
+        /*part_shadow_host*/ nullptr);
     MatchHostPartRules(element, collector, tracker);
     collector.SortAndTransferMatchedRules(
         CascadeOrigin::kAuthor, /*is_vtt_embedded_style=*/false, tracker);
@@ -978,7 +986,8 @@ void MatchOuterScopeRules(const Element& matching_element,
                                                  &*current_part_names);
       } else {
         resolver->CollectMatchingElementScopeRules(
-            collector, base::OptionalToPtr(current_part_names));
+            tree_scope.RootNode(), collector,
+            base::OptionalToPtr(current_part_names));
       }
 
       collector.SortAndTransferMatchedRules(
@@ -1400,6 +1409,7 @@ const ComputedStyle* StyleResolver::ResolveStyle(
 
   ApplyAnchorData(state);
   ApplyInertness(state);
+  ApplyTriggerData(state);
 
   IncrementResolvedStyleCounters(style_request, GetDocument());
   if (InvalidationTracingFlag::IsEnabled()) [[unlikely]] {
@@ -1691,6 +1701,15 @@ bool CanApplyInlineStyleIncrementally(Element* element,
           property.Value().IsRevertLayerValue()) {
         return false;
       }
+      // Even though they are not substitution functions (and therefore not
+      // covered by the unparsed/pending-substitution value check above),
+      // anchor() and anchor-size() functions can still become IACVT,
+      // which must be handled by the StyleCascade.
+      if (auto* math_function =
+              DynamicTo<CSSMathFunctionValue>(property.Value());
+          math_function && math_function->HasAnchorFunctions()) {
+        return false;
+      }
     }
   }
 
@@ -1741,7 +1760,7 @@ void StyleResolver::ApplyBaseStyleNoCache(
     if (IsForcedColorsModeEnabled()) {
       cascade.MutableMatchResult().AddMatchedProperties(
           ForcedColorsUserAgentDeclarations(),
-          {.origin = CascadeOrigin::kUserAgent});
+          /*env_bindings=*/nullptr, {.origin = CascadeOrigin::kUserAgent});
     }
 
     // UA rule: * { overlay: none !important }
@@ -1753,7 +1772,7 @@ void StyleResolver::ApplyBaseStyleNoCache(
     // namespace since the sheet has a default namespace.
     cascade.MutableMatchResult().AddMatchedProperties(
         UniversalOverlayUserAgentDeclaration(),
-        {.origin = CascadeOrigin::kUserAgent});
+        /*env_bindings=*/nullptr, {.origin = CascadeOrigin::kUserAgent});
 
     // This adds a CSSInitialColorValue to the cascade for the document
     // element. The CSSInitialColorValue will resolve to a color-scheme
@@ -1765,7 +1784,7 @@ void StyleResolver::ApplyBaseStyleNoCache(
     if (element == state.GetDocument().documentElement()) {
       cascade.MutableMatchResult().AddMatchedProperties(
           DocumentElementUserAgentDeclarations(),
-          {.origin = CascadeOrigin::kUserAgent});
+          /*env_bindings=*/nullptr, {.origin = CascadeOrigin::kUserAgent});
     }
   }
 
@@ -1890,7 +1909,7 @@ void StyleResolver::ApplyBaseStyleNoCache(
   if (!match_result.CustomHighlightNames().empty()) {
     builder.SetCustomHighlightNames(match_result.CustomHighlightNames());
   }
-  builder.SetPseudoElementStyles(match_result.PseudoElementStyles());
+  builder.SetPseudoElementStyles(match_result.PseudoElementStyles().Bits());
 
   if (element->IsPseudoElement()) {
     state.StyleBuilder().SetStyleType(element->GetPseudoIdForStyling());
@@ -1993,7 +2012,7 @@ void StyleResolver::ApplyBaseStyle(
       for (const CSSPropertyValue& property : inline_style->Properties()) {
         StyleBuilder::ApplyProperty(
             property.Name(), state,
-            property.Value().EnsureScopedValue(&GetDocument()));
+            property.Value().EnsureScopedValue(&element->GetTreeScope()));
         author_flags |= CSSProperty::Get(property.PropertyID()).GetFlags();
       }
     }
@@ -2083,7 +2102,7 @@ CompositorKeyframeValue* StyleResolver::CreateCompositorKeyframeValueSnapshot(
     cascade.MutableMatchResult().BeginAddingAuthorRulesForTreeScope(
         element.GetTreeScope());
     cascade.MutableMatchResult().AddMatchedProperties(
-        set, {.origin = CascadeOrigin::kAuthor});
+        set, /*env_bindings=*/nullptr, {.origin = CascadeOrigin::kAuthor});
     cascade.Apply();
   }
   const ComputedStyle* style = state.TakeStyle();
@@ -2218,7 +2237,7 @@ const ComputedStyle* StyleResolver::StyleForPage(uint32_t page_index,
     set->SetProperty(CSSPropertyID::kMarginLeft, *value,
                      /*important=*/params.ignore_css_margins);
     cascade.MutableMatchResult().AddMatchedProperties(
-        set, {.origin = CascadeOrigin::kUserAgent});
+        set, /*env_bindings=*/nullptr, {.origin = CascadeOrigin::kUserAgent});
   }
 
   if (!ignore_author_style) {
@@ -2487,7 +2506,8 @@ void StyleResolver::CollectPseudoRulesForElement(
     style_request.search_text_request = StyleRequest::kNotCurrent;
   }
 
-  if (IsTransitionPseudoElement(pseudo_id) && pseudo_id != kPseudoIdViewTransition) {
+  if (IsTransitionPseudoElement(pseudo_id) &&
+      pseudo_id != kPseudoIdViewTransition) {
     // Check view transition classes in addition to view transition names.
     auto* view_transition_element =
         element.GetPseudoElement(kPseudoIdViewTransition);
@@ -2637,8 +2657,7 @@ StyleResolver::FindKeyframesRuleResult StyleResolver::FindKeyframesRule(
     const AtomicString& animation_name) {
   HeapVector<Member<ScopedStyleResolver>, 8> resolvers;
   CollectScopedResolversForHostedShadowTrees(*element, resolvers);
-  if (ScopedStyleResolver* scoped_resolver =
-          element->GetTreeScope().GetScopedStyleResolver()) {
+  if (ScopedStyleResolver* scoped_resolver = ScopedResolverFor(*element)) {
     resolvers.push_back(scoped_resolver);
   }
 
@@ -2926,7 +2945,7 @@ const CSSValue* StyleResolver::ComputeValue(
   cascade.MutableMatchResult().BeginAddingAuthorRulesForTreeScope(
       element->GetTreeScope());
   cascade.MutableMatchResult().AddMatchedProperties(
-      set, {.origin = CascadeOrigin::kAuthor});
+      set, /*env_bindings=*/nullptr, {.origin = CascadeOrigin::kAuthor});
   cascade.Apply();
 
   if (state.HasUnsupportedGuaranteedInvalid()) {
@@ -2949,7 +2968,8 @@ const CSSValue* StyleResolver::ResolveValue(
   StyleResolverState state(document, element);
   state.SetStyle(style);
   return StyleCascade::Resolve(state, property_name, value,
-                               /*tree_scope=*/&document);
+                               /*tree_scope=*/&document,
+                               /*env_bindings=*/nullptr);
 }
 
 FilterOperations StyleResolver::ComputeFilterOperations(
@@ -3085,7 +3105,7 @@ void StyleResolver::ApplyCallbackSelectors(StyleResolverState& state) {
   if (!rules) {
     return;
   }
-  for (auto rule : *rules) {
+  for (const auto& rule : *rules) {
     state.StyleBuilder().AddCallbackSelector(rule->SelectorsText());
   }
 }
@@ -3098,7 +3118,7 @@ void StyleResolver::ApplyDocumentRulesSelectors(StyleResolverState& state,
   if (!rules) {
     return;
   }
-  for (auto rule : *rules) {
+  for (const auto& rule : *rules) {
     state.StyleBuilder().AddDocumentRulesSelector(rule);
   }
 }
@@ -3652,6 +3672,11 @@ StyleRulePositionTry* StyleResolver::ResolvePositionTryRule(
   }
 
   return position_try_rule;
+}
+
+void StyleResolver::ApplyTriggerData(StyleResolverState& state) {
+  CSSAnimations::UpdateNamedTriggers(
+      state.StyleBuilder(), state.AnimationUpdate(), state.GetElement());
 }
 
 }  // namespace blink

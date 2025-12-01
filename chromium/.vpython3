@@ -43,14 +43,14 @@ verify_pep425_tag: [
 #   //tools/perf/crossbench
 wheel: <
   name: "infra/python/wheels/protobuf-py3"
-  version: "version:6.31.0"
+  version: "version:6.32.0"
 >
 
 # TODO(https://crbug.com/898348): Add in necessary wheels as Python3 versions
 # become available.
 wheel: <
   name: "infra/python/wheels/six-py2_py3"
-  version: "version:1.15.0"
+  version: "version:1.17.0"
 >
 
 # These wheels are necessary to run pytype, i.e. enforce Python 3 type hinting.

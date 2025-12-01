@@ -30,7 +30,6 @@ import androidx.core.graphics.drawable.RoundedBitmapDrawable;
 import androidx.core.widget.ImageViewCompat;
 
 import org.chromium.base.SysUtils;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils;
@@ -49,6 +48,8 @@ import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.util.MotionEventUtils;
 import org.chromium.ui.widget.ChromeImageButton;
+
+import java.util.function.Supplier;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -120,6 +121,7 @@ public class MessageBannerView extends RelativeLayout {
     }
 
     void setTitle(String title) {
+        mTitle.setVisibility(TextUtils.isEmpty(title) ? GONE : VISIBLE);
         mTitle.setText(title);
         if (mOnTitleChanged != null) mOnTitleChanged.run();
         if (mOverrideSecondaryIconContentDescription
@@ -411,7 +413,7 @@ public class MessageBannerView extends RelativeLayout {
         // TODO(crbug.com/315815559): pressing the button will trigger an unexpected exit, which
         // will make the close button disappear. Check #isPrimaryButton to prevent from that.
         // Remove the check once the fix lands.
-        if (mEnableCloseButton && MotionEventUtils.isMouseEvent(event)) {
+        if (mEnableCloseButton && MotionEventUtils.isPointerEvent(event)) {
             if (event.getAction() == MotionEvent.ACTION_HOVER_ENTER) {
                 mCloseButton.setVisibility(VISIBLE);
             } else if (event.getAction() == MotionEvent.ACTION_HOVER_EXIT

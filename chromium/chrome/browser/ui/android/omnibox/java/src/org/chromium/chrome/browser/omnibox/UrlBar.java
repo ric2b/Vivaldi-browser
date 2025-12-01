@@ -65,7 +65,6 @@ import org.chromium.ui.display.DisplayUtil;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.Optional;
 
 /** The URL text entry view for the Omnibox. */
 @NullMarked
@@ -101,9 +100,9 @@ public class UrlBar extends AutocompleteEditText {
     private int mUrlDirection;
 
     private @Nullable UrlBarDelegate mUrlBarDelegate;
-    private Optional<Callback<String>> mTextChangeListener = Optional.empty();
-    private Optional<Runnable> mTypingStartedListener = Optional.empty();
-    private Optional<OnKeyListener> mKeyDownListener = Optional.empty();
+    private @Nullable Callback<String> mTextChangeListener;
+    private @Nullable Runnable mTypingStartedListener;
+    private @Nullable OnKeyListener mKeyDownListener;
     private @Nullable UrlBarTextContextMenuDelegate mTextContextMenuDelegate;
     private @Nullable Callback<Integer> mUrlDirectionListener;
 
@@ -219,11 +218,7 @@ public class UrlBar extends AutocompleteEditText {
         setFocusableInTouchMode(false);
         setHorizontalFadingEdgeEnabled(true);
         setVerticalScrollBarEnabled(false);
-        // Disable elegant text height for now. We calculate font size at runtime, and try to
-        // respect the user's need to increase the font size.
-        // Enabling elegant text for UrlBar will likely produce smaller font when users ask for a
-        // larger one.
-        setElegantTextHeight(OmniboxFeatures.sElegantTextHeight.isEnabled());
+        setElegantTextHeight(true);
         // Use a global draw instead of View#onDraw in case this View is not visible.
         FirstDrawDetector.waitForFirstDraw(
                 this,
@@ -254,9 +249,9 @@ public class UrlBar extends AutocompleteEditText {
         // Glitch text can be generated online using glitch text generators.
         // Set the clipping bounds to the padding
         mClipBounds.left = getScrollX();
-        mClipBounds.top = getPaddingTop();
+        mClipBounds.top = getPaddingTop() + getScrollY();
         mClipBounds.right = getScrollX() + getWidth();
-        mClipBounds.bottom = getHeight() - getPaddingBottom();
+        mClipBounds.bottom = getHeight() + getScrollY() - getPaddingBottom();
         canvas.clipRect(mClipBounds);
 
         super.onDraw(canvas);
@@ -271,8 +266,8 @@ public class UrlBar extends AutocompleteEditText {
         mUrlBarDelegate = null;
         setOnFocusChangeListener(null);
         mTextContextMenuDelegate = null;
-        mTextChangeListener = Optional.empty();
-        mTypingStartedListener = Optional.empty();
+        mTextChangeListener = null;
+        mTypingStartedListener = null;
     }
 
     /** Set the delegate to be used for text context menu actions. */
@@ -292,7 +287,8 @@ public class UrlBar extends AutocompleteEditText {
         // - if we don't pass the event after IME, soft keyboard navigation will not work.
         return (KeyNavigationUtil.isActionDown(event)
                         && !KeyNavigationUtil.isEnter(event)
-                        && mKeyDownListener.map(l -> l.onKey(this, keyCode, event)).orElse(false))
+                        && (mKeyDownListener != null
+                                && mKeyDownListener.onKey(this, keyCode, event)))
                 || super_onKeyPreIme(keyCode, event);
     }
 
@@ -305,7 +301,8 @@ public class UrlBar extends AutocompleteEditText {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         return (KeyNavigationUtil.isEnter(event)
-                        && mKeyDownListener.map(l -> l.onKey(this, keyCode, event)).orElse(false))
+                        && (mKeyDownListener != null
+                                && mKeyDownListener.onKey(this, keyCode, event)))
                 || super_onKeyDown(keyCode, event);
     }
 
@@ -329,18 +326,14 @@ public class UrlBar extends AutocompleteEditText {
     @Override
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
     public void onFocusChanged(boolean focused, int direction, Rect previouslyFocusedRect) {
+        // Reset scroll position of the multiline input field.
+        if (!focused) {
+            bringPointIntoView(0);
+        }
+
         mFocused = focused;
         if (!mFocused) mFocusEventEmitted = false;
         super.onFocusChanged(focused, direction, previouslyFocusedRect);
-
-        // TODO(crbug.com432311666): Confirm with UX if any of these settings could be persisted as
-        // the default height of the UrlBar.
-        setMinHeight(
-                getResources()
-                        .getDimensionPixelSize(
-                                focused
-                                        ? R.dimen.url_bar_default_height_active
-                                        : R.dimen.url_bar_default_height_inactive));
 
         setSingleLine(true);
         setMaxLines(1);
@@ -445,7 +438,9 @@ public class UrlBar extends AutocompleteEditText {
     @Override
     protected void onTextChanged(CharSequence text, int start, int lengthBefore, int lengthAfter) {
         if (mShouldSendTypingStartedEvent && lengthAfter > 0) {
-            mTypingStartedListener.ifPresent(Runnable::run);
+            if (mTypingStartedListener != null) {
+                mTypingStartedListener.run();
+            }
             mShouldSendTypingStartedEvent = false;
         }
 
@@ -471,7 +466,7 @@ public class UrlBar extends AutocompleteEditText {
 
         limitDisplayableLength();
 
-        if (OmniboxFeatures.allowMultilineEditField()) {
+        if (OmniboxFeatures.allowMultilineEditField() && !mIsInCct) {
             // Observe the user input alone, to prevent autocompletion from taking over the input.
             boolean isMultilineEligible = TextUtils.indexOf(getTextWithoutAutocomplete(), ' ') >= 0;
             boolean wasMultilineEligible = !isSingleLine();
@@ -642,7 +637,7 @@ public class UrlBar extends AutocompleteEditText {
      * @param listener The listener to be notified.
      */
     public void setTextChangeListener(Callback<String> listener) {
-        mTextChangeListener = Optional.ofNullable(listener);
+        mTextChangeListener = listener;
     }
 
     /**
@@ -650,7 +645,7 @@ public class UrlBar extends AutocompleteEditText {
      * first time. When <null>, callback is removed.
      */
     /* package */ void setTypingStartedListener(@Nullable Runnable r) {
-        mTypingStartedListener = Optional.ofNullable(r);
+        mTypingStartedListener = r;
     }
 
     /**
@@ -659,7 +654,7 @@ public class UrlBar extends AutocompleteEditText {
      * @param listener The listener to be notified.
      */
     public void setKeyDownListener(OnKeyListener listener) {
-        mKeyDownListener = Optional.ofNullable(listener);
+        mKeyDownListener = listener;
     }
 
     /** Set the text to report to Autofill services upon call to onProvideAutofillStructure. */
@@ -1155,6 +1150,7 @@ public class UrlBar extends AutocompleteEditText {
         // of some urls (e.g. "flipkart.com" -> "flip cart. com" or "flipkart. com") despite
         // TYPE_TEXT_FLAG_NO_SUGGESTIONS and lack of TYPE_TEXT_FLAG_AUTO_CORRECT.
         outAttrs.inputType |= EditorInfo.TYPE_TEXT_VARIATION_URI;
+        outAttrs.imeOptions &= ~EditorInfo.IME_FLAG_NO_ENTER_ACTION;
         return connection;
     }
 
@@ -1253,7 +1249,9 @@ public class UrlBar extends AutocompleteEditText {
 
     @Override
     public void onAutocompleteTextStateChanged(boolean updateDisplay) {
-        mTextChangeListener.ifPresent(l -> l.onResult(getTextWithoutAutocomplete()));
+        if (mTextChangeListener != null) {
+            mTextChangeListener.onResult(getTextWithoutAutocomplete());
+        }
     }
 
     private boolean containsRtl(CharSequence text) {
@@ -1283,16 +1281,9 @@ public class UrlBar extends AutocompleteEditText {
 
         float effectiveFontHeightPx = getMaxHeightOfFont();
 
-        if (getPaint().isElegantTextHeight()) {
-            // http://go/ui-font-deprecation: when enabled, line height will be increased by up to
-            // 60%.
-            effectiveFontHeightPx *= getLineHeight() / getTextSize();
-        } else {
-            // Otherwise, scale the font down a little bit so it doesn't extend edge to edge.
-            // This ensures we present the user with properly rendered UI and that we respect their
-            // choice to use larger font (within the bounds permitted by url bar height).
-            effectiveFontHeightPx *= LINE_HEIGHT_FACTOR;
-        }
+        // http://go/ui-font-deprecation: when enabled, line height will be increased by up to
+        // 60%.
+        effectiveFontHeightPx *= getLineHeight() / getTextSize();
 
         if (effectiveFontHeightPx > viewHeight) {
             // we need to shrink the text to fit in the text field.

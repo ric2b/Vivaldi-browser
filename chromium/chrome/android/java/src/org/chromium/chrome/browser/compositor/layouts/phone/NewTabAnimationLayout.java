@@ -38,6 +38,7 @@ import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.BlackHoleEventFilter;
+import org.chromium.chrome.browser.compositor.layouts.phone.NewBackgroundTabAnimationHostView.AnimationType;
 import org.chromium.chrome.browser.compositor.scene_layer.StaticTabSceneLayer;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
@@ -103,7 +104,8 @@ public class NewTabAnimationLayout extends Layout {
     private @Nullable Runnable mTimeoutRunnable;
     private @Nullable Callback<Boolean> mVisibilityObserver;
     private @TabId int mNextTabId = Tab.INVALID_TAB_ID;
-    private int mToken = TokenHolder.INVALID_TOKEN;
+    private int mBrowserControlsVisibilityToken = TokenHolder.INVALID_TOKEN;
+    private int mCustomTabCountToken = TokenHolder.INVALID_TOKEN;
     private boolean mSkipForceAnimationToFinish;
     private boolean mRunOnNextLayoutImmediatelyForTesting;
 
@@ -118,6 +120,7 @@ public class NewTabAnimationLayout extends Layout {
      * @param compositorViewHolderSupplier Supplier to the {@link CompositorViewHolder} instance.
      * @param animationHostView The host view for animations.
      * @param toolbarManager The {@link ToolbarManager} instance.
+     * @param browserControlsManager The {@link BrowserControlsManager} instance.
      * @param scrimVisibilitySupplier Supplier for the Scrim visibility.
      */
     public NewTabAnimationLayout(
@@ -337,6 +340,7 @@ public class NewTabAnimationLayout extends Layout {
             ResourceManager resourceManager,
             BrowserControlsStateProvider browserControls) {
         ensureSceneLayerExists();
+        if (!hasLayoutTab()) return;
 
         LayoutTab layoutTab = getLayoutTab();
         layoutTab.set(LayoutTab.IS_ACTIVE_LAYOUT, isActive());
@@ -606,7 +610,7 @@ public class NewTabAnimationLayout extends Layout {
                     }
                 };
 
-        final Rect finalAnimationRect = finalRect;
+        final Rect finalAnimationRect = new Rect(finalRect);
         mAnimationRunnable =
                 () -> {
                     mAnimationRunnable = null;
@@ -649,8 +653,8 @@ public class NewTabAnimationLayout extends Layout {
         mSkipForceAnimationToFinish = true;
         startHiding();
 
-        if (!isRegularNtp && mToken == TokenHolder.INVALID_TOKEN) {
-            mToken = mBrowserVisibilityDelegate.showControlsPersistent();
+        if (!isRegularNtp && mBrowserControlsVisibilityToken == TokenHolder.INVALID_TOKEN) {
+            mBrowserControlsVisibilityToken = mBrowserVisibilityDelegate.showControlsPersistent();
         }
 
         ToggleTabStackButton tabSwitcherButton =
@@ -667,7 +671,7 @@ public class NewTabAnimationLayout extends Layout {
                                         false);
         assumeNonNull(mTabModelSelector);
         int prevTabCount = mTabModelSelector.getModel(isIncognito).getCount() - 1;
-        mCustomTabCount.set(prevTabCount);
+        mCustomTabCountToken = mCustomTabCount.setCount(prevTabCount);
         @ColorInt
         int toolbarColor =
                 isRegularNtp
@@ -680,6 +684,8 @@ public class NewTabAnimationLayout extends Layout {
         mCompositorViewHolder.getGlobalVisibleRect(compositorViewRect);
         boolean isTopToolbar =
                 isRegularNtp || ToolbarPositionController.shouldShowToolbarOnTop(animationTab);
+        ObservableSupplier<Float> ntpSearchBoxTransitionPercentageSupplier =
+                mToolbarManager.getNtpSearchBoxTransitionPercentageSupplier();
 
         mBackgroundHostView.setUpAnimation(
                 tabSwitcherButton,
@@ -691,7 +697,7 @@ public class NewTabAnimationLayout extends Layout {
                 toolbarPosition[1],
                 compositorViewRect.top,
                 compositorViewRect.left,
-                mToolbarManager.getNtpTransitionPercentage());
+                ntpSearchBoxTransitionPercentageSupplier.get());
 
         // {@link View#INVISIBLE} is needed to generate the geometry information.
         mBackgroundHostView.setVisibility(View.INVISIBLE);
@@ -714,15 +720,23 @@ public class NewTabAnimationLayout extends Layout {
                     mAnimationRunnable = null;
                     mTimeoutRunnable = null;
                     assumeNonNull(mTabModelSelector);
+                    assumeNonNull(mBackgroundHostView);
+                    @AnimationType int animationType = mBackgroundHostView.getAnimationType();
+                    boolean shouldObserveNtp =
+                            isRegularNtp && animationType == AnimationType.DEFAULT;
                     AnimationInterruptor interruptor =
                             new AnimationInterruptor(
                                     mLayoutStateProvider,
                                     mTabModelSelector.getCurrentTabSupplier(),
                                     animationTab,
                                     mScrimVisibilitySupplier,
+                                    ntpSearchBoxTransitionPercentageSupplier,
+                                    shouldObserveNtp,
                                     this::forceAnimationToFinish);
                     assumeNonNull(mBackgroundHostView);
                     mTabCreatedBackgroundAnimation = mBackgroundHostView.getAnimatorSet(x, y);
+                    AnimationFreezeChecker checker =
+                            new AnimationFreezeChecker(AnimationFreezeChecker.BACKGROUND_TAG);
                     mTabCreatedBackgroundAnimation.addListener(
                             new CancelAwareAnimatorListener() {
                                 private void internalBackgroundCleanUp() {
@@ -732,20 +746,24 @@ public class NewTabAnimationLayout extends Layout {
 
                                 @Override
                                 public void onStart(Animator animation) {
+                                    checker.onAnimationStart();
                                     // Release custom tab count as soon as the animation starts to
                                     // avoid showing the old tab count if the user decides to scroll
                                     // up during AnimationType.NTP_PARTIAL_SCROLL or
                                     // AnimationType.NTP_FULL_SCROLL.
-                                    mCustomTabCount.release();
+                                    mCustomTabCount.releaseCount(mCustomTabCountToken);
+                                    mCustomTabCountToken = TokenHolder.INVALID_TOKEN;
                                 }
 
                                 @Override
                                 public void onEnd(Animator animation) {
+                                    checker.onAnimationEnd();
                                     internalBackgroundCleanUp();
                                 }
 
                                 @Override
                                 public void onCancel(Animator animation) {
+                                    checker.onAnimationCancel();
                                     internalBackgroundCleanUp();
                                 }
                             });
@@ -759,7 +777,8 @@ public class NewTabAnimationLayout extends Layout {
                     mTimeoutRunnable = null;
                     mAnimationRunnable = null;
                     cleanUpBackgroundAnimation();
-                    mCustomTabCount.release();
+                    mCustomTabCount.releaseCount(mCustomTabCountToken);
+                    mCustomTabCountToken = TokenHolder.INVALID_TOKEN;
                     if (mVisibilityObserver != null) {
                         visibilitySupplier.removeObserver(mVisibilityObserver);
                         mVisibilityObserver = null;
@@ -794,9 +813,10 @@ public class NewTabAnimationLayout extends Layout {
         mTabCreatedBackgroundAnimation = null;
         mAnimationHostView.removeView(mBackgroundHostView);
         mBackgroundHostView = null;
-        if (mToken != TokenHolder.INVALID_TOKEN) {
-            mBrowserVisibilityDelegate.releasePersistentShowingToken(mToken);
-            mToken = TokenHolder.INVALID_TOKEN;
+        if (mBrowserControlsVisibilityToken != TokenHolder.INVALID_TOKEN) {
+            mBrowserVisibilityDelegate.releasePersistentShowingToken(
+                    mBrowserControlsVisibilityToken);
+            mBrowserControlsVisibilityToken = TokenHolder.INVALID_TOKEN;
         }
     }
 

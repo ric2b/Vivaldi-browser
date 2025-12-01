@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@ import {SyntheticEventsManager} from './SyntheticEvents.js';
 import {eventTimingsMicroSeconds} from './Timing.js';
 
 interface MatchingPairableAsyncEvents {
+  syntheticId: string;
   begin: Types.Events.PairableAsyncBegin|null;
   end: Types.Events.PairableAsyncEnd|null;
   instant?: Types.Events.PairableAsyncInstant[];
@@ -36,7 +37,7 @@ export function stackTraceInEvent(event: Types.Events.Event): Types.Events.CallF
   if (event.args?.stackTrace) {
     return event.args.stackTrace;
   }
-  if (Types.Events.isUpdateLayoutTree(event)) {
+  if (Types.Events.isRecalcStyle(event)) {
     return event.args.beginData?.stackTrace || null;
   }
   if (Types.Events.isLayout(event)) {
@@ -106,29 +107,36 @@ export function addEventToProcessThread<T extends Types.Events.Event>(
   eventsInProcessThread.set(event.pid, eventsInThread);
 }
 
-export interface TimeSpan {
-  ts: Types.Timing.Micro;
-  dur?: Types.Timing.Micro;
-}
-export function eventTimeComparator(a: Types.Events.Event, b: Types.Events.Event): -1|0|1 {
-  const aBeginTime = a.ts;
-  const bBeginTime = b.ts;
+export function compareBeginAndEnd(aBeginTime: number, bBeginTime: number, aEndTime: number, bEndTime: number): -1|0|1 {
   if (aBeginTime < bBeginTime) {
     return -1;
   }
   if (aBeginTime > bBeginTime) {
     return 1;
   }
-  const aDuration = a.dur ?? 0;
-  const bDuration = b.dur ?? 0;
-  const aEndTime = aBeginTime + aDuration;
-  const bEndTime = bBeginTime + bDuration;
+
   if (aEndTime > bEndTime) {
     return -1;
   }
   if (aEndTime < bEndTime) {
     return 1;
   }
+
+  return 0;
+}
+
+export function eventTimeComparator(a: Types.Events.Event, b: Types.Events.Event): -1|0|1 {
+  const aBeginTime = a.ts;
+  const bBeginTime = b.ts;
+  const aDuration = a.dur ?? 0;
+  const bDuration = b.dur ?? 0;
+  const aEndTime = aBeginTime + aDuration;
+  const bEndTime = bBeginTime + bDuration;
+  const timeDifference = compareBeginAndEnd(aBeginTime, bBeginTime, aEndTime, bEndTime);
+  if (timeDifference) {
+    return timeDifference;
+  }
+
   // If times are equal, prioritize profile calls over trace events,
   // since an exactly equal timestamp with a trace event is likely
   // indicates that the SamplesIntegrator meant to parent the trace
@@ -180,6 +188,30 @@ export function mergeEventsInOrder<T1 extends Types.Events.Event, T2 extends Typ
   return result;
 }
 
+export function parseDevtoolsDetails(timingDetail: string, key: string): Types.Extensions.DevToolsObj|
+    Types.Extensions.ExtensionTrackEntryPayloadDeeplink|null {
+  try {
+    // Attempt to parse the detail as an object that might be coming from a
+    // DevTools Perf extension.
+    // Wrapped in a try-catch because timingDetail might either:
+    // 1. Not be `json.parse`-able (it should, but just in case...)
+    // 2. Not be an object - in which case the `in` check will error.
+    // If we hit either of these cases, we just ignore this mark and move on.
+    const detailObj = JSON.parse(timingDetail);
+    if (!(key in detailObj)) {
+      return null;
+    }
+    if (!Types.Extensions.isValidExtensionPayload(detailObj[key])) {
+      return null;
+    }
+    return detailObj[key];
+  } catch {
+    // No need to worry about this error, just discard this event and don't
+    // treat it as having any useful information for the purposes of extensions.
+    return null;
+  }
+}
+
 export function getNavigationForTraceEvent(
     event: Types.Events.Event,
     eventFrameId: string,
@@ -202,8 +234,8 @@ export function getNavigationForTraceEvent(
   return navigations[eventNavigationIndex];
 }
 
-export function extractId(event: Types.Events.PairableAsync|
-                          Types.Events.SyntheticEventPair<Types.Events.PairableAsync>): string|undefined {
+export function extractId(
+    event: Types.Events.PairableAsync|Types.Events.SyntheticEventPair<Types.Events.PairableAsync>): string|undefined {
   return event.id ?? event.id2?.global ?? event.id2?.local;
 }
 
@@ -229,12 +261,12 @@ export function activeURLForFrameAtTime(
 }
 
 /**
- * @param node - the node attached to the profile call. Here a node represents a function in the call tree.
- * @param profileId - the profile ID that the sample came from that backs this call.
- * @param sampleIndex - the index of the sample in the given profile that this call was created from
- * @param ts - the timestamp of the profile call
- * @param pid - the process ID of the profile call
- * @param tid - the thread ID of the profile call
+ * @param node the node attached to the profile call. Here a node represents a function in the call tree.
+ * @param profileId the profile ID that the sample came from that backs this call.
+ * @param sampleIndex the index of the sample in the given profile that this call was created from
+ * @param ts the timestamp of the profile call
+ * @param pid the process ID of the profile call
+ * @param tid the thread ID of the profile call
  *
  * See `panels/timeline/docs/profile_calls.md` for more context on how these events are created.
  */
@@ -259,62 +291,113 @@ export function makeProfileCall(
 }
 
 /**
- * Matches beginning events with PairableAsyncEnd and PairableAsyncInstant (ASYNC_NESTABLE_INSTANT)
- * if provided, though currently only coming from Animations. Traces may contain multiple instant events so we need to
- * account for that.
+ * Matches beginning events with PairableAsyncEnd and PairableAsyncInstant
+ * if provided. Traces may contain multiple instant events so we need to
+ * account for that. Additionally we have seen cases where we might only have a
+ * begin event & instant event(s), with no end event. So we account for that
+ * situation also.
  *
- * @returns Map of the animation's ID to it's matching events.
+ * You might also like to read the models/trace/README.md which has some
+ * documentation on trace IDs. This is important as Perfetto will reuse trace
+ * IDs when emitting events (if they do not overlap). This means it's not as
+ * simple as grouping events by IDs. Instead, we group begin & instant events
+ * by ID as we find them. When we find end events, we then pop any matching
+ * begin/instant events off the stack and group those. That way, if we meet the
+ * same ID later on it doesn't cause us collisions.
+ *
+ * @returns An array of all the matched event groups, along with their ID. Note
+ * that two event groups can have the same ID if they were non-overlapping
+ * events. You cannot rely on ID being unique across a trace. The returned set
+ * of groups are NOT SORTED in any order.
  */
-export function matchEvents(unpairedEvents: Types.Events.PairableAsync[]): Map<string, MatchingPairableAsyncEvents> {
+function matchEvents(unpairedEvents: Types.Events.PairableAsync[]): MatchingPairableAsyncEvents[] {
+  sortTraceEventsInPlace(unpairedEvents);
   // map to store begin and end of the event
-  const matchedPairs = new Map<string, MatchingPairableAsyncEvents>();
+  const matches: MatchingPairableAsyncEvents[] = [];
 
-  // looking for start and end
+  const beginEventsById = new Map<string, Types.Events.PairableAsyncBegin[]>();
+  const instantEventsById = new Map<string, Types.Events.PairableAsyncInstant[]>();
   for (const event of unpairedEvents) {
-    const syntheticId = getSyntheticId(event);
-    if (syntheticId === undefined) {
+    const id = getSyntheticId(event);
+    if (id === undefined) {
       continue;
     }
-    // Create a synthetic id to prevent collisions across categories.
-    // Console timings can be dispatched with the same id, so use the
-    // event name as well to generate unique ids.
-    const otherEventsWithID = Platform.MapUtilities.getWithDefault(matchedPairs, syntheticId, () => {
-      return {begin: null, end: null, instant: []};
-    });
-
-    const isStartEvent = event.ph === Types.Events.Phase.ASYNC_NESTABLE_START;
-    const isEndEvent = event.ph === Types.Events.Phase.ASYNC_NESTABLE_END;
-    const isInstantEvent = event.ph === Types.Events.Phase.ASYNC_NESTABLE_INSTANT;
-
-    if (isStartEvent) {
-      otherEventsWithID.begin = event as Types.Events.PairableAsyncBegin;
-    } else if (isEndEvent) {
-      otherEventsWithID.end = event as Types.Events.PairableAsyncEnd;
-    } else if (isInstantEvent) {
-      if (!otherEventsWithID.instant) {
-        otherEventsWithID.instant = [];
+    if (Types.Events.isPairableAsyncBegin(event)) {
+      const existingEvents = beginEventsById.get(id) ?? [];
+      existingEvents.push(event);
+      beginEventsById.set(id, existingEvents);
+    } else if (Types.Events.isPairableAsyncInstant(event)) {
+      const existingEvents = instantEventsById.get(id) ?? [];
+      existingEvents.push(event);
+      instantEventsById.set(id, existingEvents);
+    } else if (Types.Events.isPairableAsyncEnd(event)) {
+      // Find matching begin event by ID
+      const beginEventsWithMatchingId = beginEventsById.get(id) ?? [];
+      const beginEvent = beginEventsWithMatchingId.pop();
+      if (!beginEvent) {
+        continue;
       }
-      otherEventsWithID.instant.push(event as Types.Events.PairableAsyncInstant);
+      const instantEventsWithMatchingId = instantEventsById.get(id) ?? [];
+      // Find all instant events after the begin event ts.
+      const instantEventsForThisGroup: Types.Events.PairableAsyncInstant[] = [];
+      while (instantEventsWithMatchingId.length > 0) {
+        if (instantEventsWithMatchingId[0].ts >= beginEvent.ts) {
+          const event = instantEventsWithMatchingId.pop();
+          if (event) {
+            instantEventsForThisGroup.push(event);
+          }
+        } else {
+          break;
+        }
+      }
+      const matchingGroup: MatchingPairableAsyncEvents = {
+        begin: beginEvent,
+        end: event,
+        instant: instantEventsForThisGroup,
+        syntheticId: id,
+      };
+      matches.push(matchingGroup);
     }
   }
-  return matchedPairs;
+
+  // At this point we know we have paired up all the Begin & End & Instant
+  // events. But it is possible to see only begin & instant events with the
+  // same ID, and no end event. So now we do a second pass through our begin
+  // events to find any that did not have an end event. If we find some
+  // instant events for the begin event, we create a new group.
+  // Also, because there were no end events, we know that the IDs will be
+  // unique now; e.g. each key in the map should have no more than one item in
+  // it.
+  for (const [id, beginEvents] of beginEventsById) {
+    const beginEvent = beginEvents.pop();
+    if (!beginEvent) {
+      continue;
+    }
+    const matchingInstantEvents = instantEventsById.get(id);
+    if (matchingInstantEvents?.length) {
+      matches.push({
+        syntheticId: id,
+        begin: beginEvent,
+        end: null,
+        instant: matchingInstantEvents,
+      });
+    }
+  }
+
+  return matches;
 }
 
-function getSyntheticId(event: Types.Events.PairableAsync): string|undefined {
+export function getSyntheticId(event: Types.Events.PairableAsync): string|undefined {
   const id = extractId(event);
   return id && `${event.cat}:${id}:${event.name}`;
 }
 
-export function createSortedSyntheticEvents<T extends Types.Events.PairableAsync>(
-    matchedPairs: Map<string, {
-      begin: Types.Events.PairableAsyncBegin | null,
-      end: Types.Events.PairableAsyncEnd | null,
-      instant?: Types.Events.PairableAsyncInstant[],
-    }>,
-    syntheticEventCallback?: (syntheticEvent: Types.Events.SyntheticEventPair<T>) => void,
+function createSortedSyntheticEvents<T extends Types.Events.PairableAsync>(
+    matchedPairs: MatchingPairableAsyncEvents[],
     ): Array<Types.Events.SyntheticEventPair<T>> {
   const syntheticEvents: Array<Types.Events.SyntheticEventPair<T>> = [];
-  for (const [id, eventsTriplet] of matchedPairs.entries()) {
+  for (const eventsTriplet of matchedPairs) {
+    const id = eventsTriplet.syntheticId;
     const beginEvent = eventsTriplet.begin;
     const endEvent = eventsTriplet.end;
     const instantEvents = eventsTriplet.instant;
@@ -368,17 +451,21 @@ export function createSortedSyntheticEvents<T extends Types.Events.PairableAsync
       // crbug.com/1472375
       continue;
     }
-    syntheticEventCallback?.(event);
     syntheticEvents.push(event);
   }
-  return syntheticEvents.sort((a, b) => a.ts - b.ts);
+  sortTraceEventsInPlace(syntheticEvents);
+  return syntheticEvents;
 }
 
-export function createMatchedSortedSyntheticEvents<T extends Types.Events.PairableAsync>(
-    unpairedAsyncEvents: T[], syntheticEventCallback?: (syntheticEvent: Types.Events.SyntheticEventPair<T>) => void):
+/**
+ * Groups up sets of async events into synthetic events.
+ * @param unpairedAsyncEvents the raw array of begin, end and async instant
+ * events. These MUST be sorted in timestamp ASC order.
+ */
+export function createMatchedSortedSyntheticEvents<T extends Types.Events.PairableAsync>(unpairedAsyncEvents: T[]):
     Array<Types.Events.SyntheticEventPair<T>> {
   const matchedPairs = matchEvents(unpairedAsyncEvents);
-  const syntheticEvents = createSortedSyntheticEvents<T>(matchedPairs, syntheticEventCallback);
+  const syntheticEvents = createSortedSyntheticEvents<T>(matchedPairs);
   return syntheticEvents;
 }
 
@@ -440,23 +527,52 @@ export function getZeroIndexedStackTraceInEventPayload(event: Types.Events.Event
   if (!stack) {
     return null;
   }
-  return stack.map(callFrame => {
-    switch (event.name) {
-      case Types.Events.Name.SCHEDULE_STYLE_RECALCULATION:
-      case Types.Events.Name.INVALIDATE_LAYOUT:
-      case Types.Events.Name.FUNCTION_CALL:
-      case Types.Events.Name.LAYOUT:
-      case Types.Events.Name.UPDATE_LAYOUT_TREE: {
-        return makeZeroBasedCallFrame(callFrame);
-      }
-      default: {
-        if (Types.Events.isUserTiming(event) || Types.Extensions.isSyntheticExtensionEntry(event)) {
-          return makeZeroBasedCallFrame(callFrame);
-        }
-      }
+
+  switch (event.name) {
+    case Types.Events.Name.SCHEDULE_STYLE_RECALCULATION:
+    case Types.Events.Name.INVALIDATE_LAYOUT:
+    case Types.Events.Name.FUNCTION_CALL:
+    case Types.Events.Name.LAYOUT:
+    case Types.Events.Name.RECALC_STYLE: {
+      return stack.map(makeZeroBasedCallFrame);
     }
-    return callFrame;
-  });
+
+    default: {
+      if (Types.Events.isUserTiming(event) || Types.Extensions.isSyntheticExtensionEntry(event)) {
+        return stack.map(makeZeroBasedCallFrame);
+      }
+
+      return stack;
+    }
+  }
+}
+
+/**
+ * Same as getZeroIndexedStackTraceInEventPayload, but only returns the top call frame.
+ */
+export function getStackTraceTopCallFrameInEventPayload(event: Types.Events.Event): Types.Events.CallFrame|null {
+  const stack = stackTraceInEvent(event);
+  if (!stack || stack.length === 0) {
+    return null;
+  }
+
+  switch (event.name) {
+    case Types.Events.Name.SCHEDULE_STYLE_RECALCULATION:
+    case Types.Events.Name.INVALIDATE_LAYOUT:
+    case Types.Events.Name.FUNCTION_CALL:
+    case Types.Events.Name.LAYOUT:
+    case Types.Events.Name.RECALC_STYLE: {
+      return makeZeroBasedCallFrame(stack[0]);
+    }
+
+    default: {
+      if (Types.Events.isUserTiming(event) || Types.Extensions.isSyntheticExtensionEntry(event)) {
+        return makeZeroBasedCallFrame(stack[0]);
+      }
+
+      return stack[0];
+    }
+  }
 }
 
 /**
@@ -502,7 +618,7 @@ function getRawLineAndColumnNumbersForEvent(event: Types.Events.Event): {
 }
 
 export function frameIDForEvent(event: Types.Events.Event): string|null {
-  // There are a few events (for example UpdateLayoutTree, ParseHTML) that have
+  // There are a few events (for example RecalcStyle, ParseHTML) that have
   // the frame stored in args.beginData
   // Rather than list them all we just check for the presence of the field, so
   // we are robust against future trace events also doing this.
@@ -527,6 +643,10 @@ export function isTopLevelEvent(event: Types.Events.Event): boolean {
   return event.cat.includes(DevToolsTimelineEventCategory) && event.name === Types.Events.Name.RUN_TASK;
 }
 
+export function isExtensionUrl(url: string): boolean {
+  return url.startsWith('extensions:') || url.startsWith('chrome-extension:');
+}
+
 function topLevelEventIndexEndingAfter(events: Types.Events.Event[], time: Types.Timing.Micro): number {
   let index = Platform.ArrayUtilities.upperBound(events, time, (time, event) => time - event.ts) - 1;
   while (index > 0 && !isTopLevelEvent(events[index])) {
@@ -534,14 +654,14 @@ function topLevelEventIndexEndingAfter(events: Types.Events.Event[], time: Types
   }
   return Math.max(index, 0);
 }
-export function findUpdateLayoutTreeEvents(
+export function findRecalcStyleEvents(
     events: Types.Events.Event[], startTime: Types.Timing.Micro,
-    endTime?: Types.Timing.Micro): Types.Events.UpdateLayoutTree[] {
-  const foundEvents: Types.Events.UpdateLayoutTree[] = [];
+    endTime?: Types.Timing.Micro): Types.Events.RecalcStyle[] {
+  const foundEvents: Types.Events.RecalcStyle[] = [];
   const startEventIndex = topLevelEventIndexEndingAfter(events, startTime);
   for (let i = startEventIndex; i < events.length; i++) {
     const event = events[i];
-    if (!Types.Events.isUpdateLayoutTree(event)) {
+    if (!Types.Events.isRecalcStyle(event)) {
       continue;
     }
     if (event.ts >= (endTime || Infinity)) {
@@ -702,7 +822,7 @@ export function extractSampleTraceId(event: Types.Events.Event): number|null {
   return event.args?.sampleTraceId ?? event.args?.data?.sampleTraceId ?? null;
 }
 
-// This exactly matches EntryStyles.visibleTypes. See the runtime verification in maybeInitSylesMap.
+// This exactly matches Trace.Styles.visibleTypes. See the runtime verification in maybeInitStylesMap.
 // TODO(crbug.com/410884528)
 export const VISIBLE_TRACE_EVENT_TYPES = new Set<Types.Events.Name>([
   Types.Events.Name.ABORT_POST_TASK_CALLBACK,
@@ -785,7 +905,7 @@ export const VISIBLE_TRACE_EVENT_TYPES = new Set<Types.Events.Name>([
   Types.Events.Name.TIMER_INSTALL,
   Types.Events.Name.TIMER_REMOVE,
   Types.Events.Name.UPDATE_LAYER_TREE,
-  Types.Events.Name.UPDATE_LAYOUT_TREE,
+  Types.Events.Name.RECALC_STYLE,
   Types.Events.Name.USER_TIMING,
   Types.Events.Name.V8_CONSOLE_RUN_TASK,
   Types.Events.Name.WASM_CACHED_MODULE,

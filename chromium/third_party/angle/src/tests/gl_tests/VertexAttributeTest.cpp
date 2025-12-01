@@ -3,6 +3,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
+
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "anglebase/numerics/safe_conversions.h"
 #include "common/mathutil.h"
 #include "test_utils/ANGLETest.h"
@@ -2569,7 +2574,7 @@ void main() {
                            reinterpret_cast<const void *>(0));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(colorLocation);
 
     drawQuad(program, "a_position", 0.5f);
 

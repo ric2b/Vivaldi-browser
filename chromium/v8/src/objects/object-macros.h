@@ -283,15 +283,15 @@
     CONDITIONAL_WRITE_BARRIER(*this, offset, value, mode);     \
   }
 
-#define RENAME_TORQUE_ACCESSORS(holder, name, torque_name, type)      \
-  inline type holder::name() const {                                  \
-    return TorqueGeneratedClass::torque_name();                       \
-  }                                                                   \
-  inline type holder::name(PtrComprCageBase cage_base) const {        \
-    return TorqueGeneratedClass::torque_name(cage_base);              \
-  }                                                                   \
-  inline void holder::set_##name(type value, WriteBarrierMode mode) { \
-    TorqueGeneratedClass::set_##torque_name(value, mode);             \
+#define RENAME_TORQUE_ACCESSORS(holder, name, torque_name, ...)              \
+  inline __VA_ARGS__ holder::name() const {                                  \
+    return TorqueGeneratedClass::torque_name();                              \
+  }                                                                          \
+  inline __VA_ARGS__ holder::name(PtrComprCageBase cage_base) const {        \
+    return TorqueGeneratedClass::torque_name(cage_base);                     \
+  }                                                                          \
+  inline void holder::set_##name(__VA_ARGS__ value, WriteBarrierMode mode) { \
+    TorqueGeneratedClass::set_##torque_name(value, mode);                    \
   }
 
 #define RENAME_PRIMITIVE_TORQUE_ACCESSORS(holder, name, torque_name, type)  \
@@ -572,7 +572,7 @@
   }                                                                            \
   Tagged<type> holder::name(IsolateForSandbox isolate, AcquireLoadTag) const { \
     DCHECK(has_##name());                                                      \
-    return Cast<type>(ReadTrustedPointerField<tag>(offset, isolate));          \
+    return ReadTrustedPointerField<tag>(offset, isolate);                      \
   }                                                                            \
   void holder::set_##name(Tagged<type> value, WriteBarrierMode mode) {         \
     set_##name(value, kReleaseStore, mode);                                    \
@@ -610,7 +610,7 @@
   static_assert(std::is_base_of_v<TrustedObject, holder>);                   \
   Tagged<type> holder::name() const {                                        \
     DCHECK(has_##name());                                                    \
-    return Cast<type>(ReadProtectedPointerField(offset));                    \
+    return ReadProtectedPointerField<type>(offset);                          \
   }                                                                          \
   void holder::set_##name(Tagged<type> value, WriteBarrierMode mode) {       \
     WriteProtectedPointerField(offset, value);                               \
@@ -633,7 +633,7 @@
   static_assert(std::is_base_of_v<TrustedObject, holder>);                   \
   Tagged<type> holder::name(AcquireLoadTag tag) const {                      \
     DCHECK(has_##name(tag));                                                 \
-    return Cast<type>(ReadProtectedPointerField(offset, tag));               \
+    return ReadProtectedPointerField<type>(offset, tag);                     \
   }                                                                          \
   void holder::set_##name(Tagged<type> value, ReleaseStoreTag tag,           \
                           WriteBarrierMode mode) {                           \
@@ -706,7 +706,7 @@
 #else
 #define WRITE_BARRIER(object, offset, value)                                   \
   do {                                                                         \
-    DCHECK(HeapLayout::IsOwnedByAnyHeap(object));                              \
+    DCHECK(TrustedHeapLayout::IsOwnedByAnyHeap(object));                       \
     static_assert(kTaggedCanConvertToRawObjects);                              \
     /* For write barriers, it doesn't matter if the slot is strong or weak, */ \
     /* so use the most generic slot (a maybe weak one). */                     \
@@ -720,7 +720,7 @@
 #else
 #define EXTERNAL_POINTER_WRITE_BARRIER(object, offset, tag)           \
   do {                                                                \
-    DCHECK(HeapLayout::IsOwnedByAnyHeap(object));                     \
+    DCHECK(TrustedHeapLayout::IsOwnedByAnyHeap(object));              \
     WriteBarrier::ForExternalPointer(                                 \
         object, Tagged(object)->RawExternalPointerField(offset, tag), \
         UPDATE_WRITE_BARRIER);                                        \
@@ -732,7 +732,7 @@
 #else
 #define INDIRECT_POINTER_WRITE_BARRIER(object, offset, tag, value)           \
   do {                                                                       \
-    DCHECK(HeapLayout::IsOwnedByAnyHeap(object));                            \
+    DCHECK(TrustedHeapLayout::IsOwnedByAnyHeap(object));                     \
     WriteBarrier::ForIndirectPointer(                                        \
         object, Tagged(object)->RawIndirectPointerField(offset, tag), value, \
         UPDATE_WRITE_BARRIER);                                               \
@@ -744,7 +744,7 @@
 #else
 #define JS_DISPATCH_HANDLE_WRITE_BARRIER(object, handle)                     \
   do {                                                                       \
-    DCHECK(HeapLayout::IsOwnedByAnyHeap(object));                            \
+    DCHECK(TrustedHeapLayout::IsOwnedByAnyHeap(object));                     \
     WriteBarrier::ForJSDispatchHandle(object, handle, UPDATE_WRITE_BARRIER); \
   } while (false)
 #endif
@@ -757,7 +757,7 @@
 #else
 #define CONDITIONAL_WRITE_BARRIER(object, offset, value, mode)                 \
   do {                                                                         \
-    DCHECK(HeapLayout::IsOwnedByAnyHeap(object));                              \
+    DCHECK(TrustedHeapLayout::IsOwnedByAnyHeap(object));                       \
     /* For write barriers, it doesn't matter if the slot is strong or weak, */ \
     /* so use the most generic slot (a maybe weak one). */                     \
     WriteBarrier::ForValue(object, (object)->RawMaybeWeakField(offset), value, \
@@ -770,7 +770,7 @@
 #else
 #define CONDITIONAL_EXTERNAL_POINTER_WRITE_BARRIER(object, offset, tag, mode) \
   do {                                                                        \
-    DCHECK(HeapLayout::IsOwnedByAnyHeap(object));                             \
+    DCHECK(TrustedHeapLayout::IsOwnedByAnyHeap(object));                      \
     WriteBarrier::ForExternalPointer(                                         \
         object, Tagged(object)->RawExternalPointerField(offset, tag), mode);  \
   } while (false)
@@ -782,7 +782,7 @@
 #define CONDITIONAL_INDIRECT_POINTER_WRITE_BARRIER(object, offset, tag, value, \
                                                    mode)                       \
   do {                                                                         \
-    DCHECK(HeapLayout::IsOwnedByAnyHeap(object));                              \
+    DCHECK(TrustedHeapLayout::IsOwnedByAnyHeap(object));                       \
     WriteBarrier::ForIndirectPointer(                                          \
         object, (object).RawIndirectPointerField(offset, tag), value, mode);   \
   } while (false)
@@ -804,7 +804,7 @@
 #define CONDITIONAL_PROTECTED_POINTER_WRITE_BARRIER(object, offset, value, \
                                                     mode)                  \
   do {                                                                     \
-    DCHECK(HeapLayout::IsOwnedByAnyHeap(object));                          \
+    DCHECK(TrustedHeapLayout::IsOwnedByAnyHeap(object));                   \
     WriteBarrier::ForProtectedPointer(                                     \
         object, (object).RawProtectedPointerField(offset), value, mode);   \
   } while (false)
@@ -814,7 +814,7 @@
 #else
 #define CONDITIONAL_JS_DISPATCH_HANDLE_WRITE_BARRIER(object, handle, mode) \
   do {                                                                     \
-    DCHECK(HeapLayout::IsOwnedByAnyHeap(object));                          \
+    DCHECK(TrustedHeapLayout::IsOwnedByAnyHeap(object));                   \
     WriteBarrier::ForJSDispatchHandle(object, handle, mode);               \
   } while (false)
 #endif
@@ -957,7 +957,7 @@ static_assert(sizeof(unsigned) == sizeof(uint32_t),
 
 #define DEFINE_DEOPT_ELEMENT_ACCESSORS(name, type)         \
   auto DeoptimizationData::name() const -> Tagged<type> {  \
-    return Cast<type>(get(k##name##Index));                \
+    return TrustedCast<type>(get(k##name##Index));         \
   }                                                        \
   void DeoptimizationData::Set##name(Tagged<type> value) { \
     set(k##name##Index, value);                            \

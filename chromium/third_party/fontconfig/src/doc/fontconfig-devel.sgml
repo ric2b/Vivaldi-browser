@@ -218,6 +218,8 @@ convenience for the application's rendering mechanism.
     desktop        FC_DESKTOP_NAME        String  Current desktop name
     namedinstance  FC_NAMED_INSTANCE      Bool    Whether font is a named instance
     fontwrapper    FC_FONT_WRAPPER        String  The font wrapper format
+    genericfamily  FC_GENERIC_FAMILY      Int     Type of Generic Family corresponding
+                                                  to FC_FAMILY_* constants
     </programlisting>
   </sect2>
 </sect1>

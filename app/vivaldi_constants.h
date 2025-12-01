@@ -55,15 +55,18 @@ extern const char kVivaldiUIDataHost[];
 extern const char kVivaldiWebUIHost[];
 extern const char kVivaldiThumbDataHost[];
 extern const char kVivaldiUIDataURL[];
-extern const char kVivaldiUIWindowURL[];
 extern const char kVivaldiWebUIURL[];
 extern const char kVivaldiThumbURL[];
+
 extern const char kWindowExtDataKey[];
 
 extern const char kSparkleAutoInstallSettingName[];
 extern const char kSparkleLastCheckTimeSettingName[];
 
 inline constexpr int kVivaldiCrashLoopDetectionTimeoutInSeconds = 10;
+
+constexpr char kVivaldiSiteSettingsURL[] = "vivaldi://settings/privacy";
+
 }  // namespace vivaldi
 
 #endif  // APP_VIVALDI_CONSTANTS_H_

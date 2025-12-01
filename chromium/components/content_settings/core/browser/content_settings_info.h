@@ -40,15 +40,19 @@ class ContentSettingsInfo {
   class Delegate : public PermissionSettingsInfo::Delegate {
    public:
     bool IsValid(const PermissionSetting& setting) const override;
+    bool IsDefaultSettingValid(const PermissionSetting& setting) const override;
     PermissionSetting InheritInIncognito(
         const PermissionSetting& setting) const override;
     bool ShouldCoalesceEphemeralState() const override;
-    bool IsAnyPermissionAllowed(PermissionSetting setting) const override;
-    bool IsUndecided(PermissionSetting setting) const override;
+    bool IsAnyPermissionAllowed(
+        const PermissionSetting& setting) const override;
+    bool IsUndecided(const PermissionSetting& setting) const override;
     bool CanTrackLastVisit() const override;
     base::Value ToValue(const PermissionSetting& setting) const override;
     std::optional<PermissionSetting> FromValue(
         const base::Value& value) const override;
+    PermissionSetting ApplyPermissionEmbargo(
+        const PermissionSetting& setting) const override;
 
     void set_content_settings_info(const ContentSettingsInfo* info) {
       info_ = info;

@@ -21,6 +21,8 @@ using mail_client::MailClientService;
 using mail_client::MailClientServiceFactory;
 using mail_client::StatusCB;
 
+using ResponseAction = ExtensionFunction::ResponseAction;
+
 namespace {
 const base::FilePath::CharType kMailDirectory[] = FILE_PATH_LITERAL("Mail");
 
@@ -199,7 +201,7 @@ void MailAPI::OnListenerAdded(const EventListenerInfo& details) {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-ExtensionFunction::ResponseAction MailPrivateGetFilePathsFunction::Run() {
+ResponseAction MailPrivateGetFilePathsFunction::Run() {
   std::optional<mail_private::GetFilePaths::Params> params(
       mail_private::GetFilePaths::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -234,7 +236,7 @@ void MailPrivateGetFilePathsFunction::GetFilePaths(bool directory_exists) {
       base::BindOnce(&MailPrivateGetFilePathsFunction::OnFinished, this));
 }
 
-ExtensionFunction::ResponseAction MailPrivateGetFullPathFunction::Run() {
+ResponseAction MailPrivateGetFullPathFunction::Run() {
   std::optional<mail_private::GetFullPath::Params> params(
       mail_private::GetFullPath::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -263,7 +265,7 @@ void MailPrivateGetFilePathsFunction::OnFinished(
       ArgumentList(mail_private::GetFilePaths::Results::Create(string_paths)));
 }
 
-ExtensionFunction::ResponseAction MailPrivateGetMailFilePathsFunction::Run() {
+ResponseAction MailPrivateGetMailFilePathsFunction::Run() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
   base::FilePath file_path = profile->GetPath();
 
@@ -384,8 +386,7 @@ GetDirectoryResult CreateDirectory(base::FilePath file_path,
   return result;
 }
 
-ExtensionFunction::ResponseAction
-MailPrivateWriteTextToMessageFileFunction::Run() {
+ResponseAction MailPrivateWriteTextToMessageFileFunction::Run() {
   std::optional<mail_private::WriteTextToMessageFile::Params> params(
       mail_private::WriteTextToMessageFile::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -419,8 +420,7 @@ void MailPrivateWriteTextToMessageFileFunction::OnFinished(bool result) {
   }
 }
 
-ExtensionFunction::ResponseAction
-MailPrivateWriteBufferToMessageFileFunction::Run() {
+ResponseAction MailPrivateWriteBufferToMessageFileFunction::Run() {
   std::optional<mail_private::WriteBufferToMessageFile::Params> params(
       mail_private::WriteBufferToMessageFile::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -457,7 +457,7 @@ bool Delete(base::FilePath file_path, base::FilePath::StringType file_name) {
   return deleteFile(file_path, file_name);
 }
 
-ExtensionFunction::ResponseAction MailPrivateDeleteMessageFileFunction::Run() {
+ResponseAction MailPrivateDeleteMessageFileFunction::Run() {
   std::optional<mail_private::DeleteMessageFile::Params> params(
       mail_private::DeleteMessageFile::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -492,7 +492,7 @@ void MailPrivateDeleteMessageFileFunction::OnFinished(bool result) {
   }
 }
 
-ExtensionFunction::ResponseAction MailPrivateRenameMessageFileFunction::Run() {
+ResponseAction MailPrivateRenameMessageFileFunction::Run() {
   std::optional<mail_private::RenameMessageFile::Params> params(
       mail_private::RenameMessageFile::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -545,7 +545,7 @@ ReadFileResult Read(base::FilePath file_path) {
   return result;
 }
 
-ExtensionFunction::ResponseAction MailPrivateReadFileToBufferFunction::Run() {
+ResponseAction MailPrivateReadFileToBufferFunction::Run() {
   std::optional<mail_private::ReadFileToBuffer::Params> params(
       mail_private::ReadFileToBuffer::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -577,7 +577,7 @@ void MailPrivateReadFileToBufferFunction::OnFinished(ReadFileResult result) {
     Respond(Error(base::StringPrintf("Error reading file")));
   }
 }
-ExtensionFunction::ResponseAction MailPrivateMessageFileExistsFunction::Run() {
+ResponseAction MailPrivateMessageFileExistsFunction::Run() {
   std::optional<mail_private::MessageFileExists::Params> params(
       mail_private::MessageFileExists::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -604,8 +604,7 @@ ExtensionFunction::ResponseAction MailPrivateMessageFileExistsFunction::Run() {
       ArgumentList(mail_private::MessageFileExists::Results::Create(exists)));
 }
 
-ExtensionFunction::ResponseAction
-MailPrivateReadMessageFileToBufferFunction::Run() {
+ResponseAction MailPrivateReadMessageFileToBufferFunction::Run() {
   std::optional<mail_private::ReadMessageFileToBuffer::Params> params(
       mail_private::ReadMessageFileToBuffer::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -646,7 +645,7 @@ void MailPrivateReadMessageFileToBufferFunction::OnFinished(
   }
 }
 
-ExtensionFunction::ResponseAction MailPrivateReadFileToTextFunction::Run() {
+ResponseAction MailPrivateReadFileToTextFunction::Run() {
   std::optional<mail_private::ReadFileToText::Params> params(
       mail_private::ReadFileToText::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -687,7 +686,7 @@ GetDirectoryResult GetDirectory(base::FilePath file_path) {
   return result;
 }
 
-ExtensionFunction::ResponseAction MailPrivateGetFileDirectoryFunction::Run() {
+ResponseAction MailPrivateGetFileDirectoryFunction::Run() {
   std::optional<mail_private::GetFileDirectory::Params> params(
       mail_private::GetFileDirectory::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -719,8 +718,7 @@ void MailPrivateGetFileDirectoryFunction::OnFinished(
   }
 }
 
-ExtensionFunction::ResponseAction
-MailPrivateCreateFileDirectoryFunction::Run() {
+ResponseAction MailPrivateCreateFileDirectoryFunction::Run() {
   std::optional<mail_private::CreateFileDirectory::Params> params(
       mail_private::CreateFileDirectory::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -763,7 +761,7 @@ mail_client::MessageRow GetMessageRow(const mail_private::Message& message) {
   return row;
 }
 
-ExtensionFunction::ResponseAction MailPrivateCreateMessagesFunction::Run() {
+ResponseAction MailPrivateCreateMessagesFunction::Run() {
   std::optional<mail_private::CreateMessages::Params> params(
       mail_private::CreateMessages::Params::Create(args()));
 
@@ -798,7 +796,7 @@ void MailPrivateCreateMessagesFunction::CreateMessagesComplete(bool result) {
   Respond(ArgumentList(mail_private::CreateMessages::Results::Create(result)));
 }
 
-ExtensionFunction::ResponseAction MailPrivateDeleteMessagesFunction::Run() {
+ResponseAction MailPrivateDeleteMessagesFunction::Run() {
   std::optional<mail_private::DeleteMessages::Params> params(
       mail_private::DeleteMessages::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -825,7 +823,7 @@ void MailPrivateDeleteMessagesFunction::DeleteMessagesComplete(bool result) {
   Respond(ArgumentList(mail_private::DeleteMessages::Results::Create(result)));
 }
 
-ExtensionFunction::ResponseAction MailPrivateUpdateMessageFunction::Run() {
+ResponseAction MailPrivateUpdateMessageFunction::Run() {
   std::optional<mail_private::UpdateMessage::Params> params(
       mail_private::UpdateMessage::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -854,7 +852,7 @@ void MailPrivateUpdateMessageFunction::UpdateMessageComplete(StatusCB status) {
   }
 }
 
-ExtensionFunction::ResponseAction MailPrivateSearchMessagesFunction::Run() {
+ResponseAction MailPrivateSearchMessagesFunction::Run() {
   std::optional<mail_private::SearchMessages::Params> params(
       mail_private::SearchMessages::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -892,7 +890,7 @@ void MailPrivateSearchMessagesFunction::MessagesSearchComplete(
   }
 }
 
-ExtensionFunction::ResponseAction MailPrivateMatchMessageFunction::Run() {
+ResponseAction MailPrivateMatchMessageFunction::Run() {
   std::optional<mail_private::MatchMessage::Params> params(
       mail_private::MatchMessage::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -919,7 +917,7 @@ void MailPrivateMatchMessageFunction::MatchMessageComplete(bool match) {
   Respond(ArgumentList(mail_private::MatchMessage::Results::Create(match)));
 }
 
-ExtensionFunction::ResponseAction MailPrivateGetDBVersionFunction::Run() {
+ResponseAction MailPrivateGetDBVersionFunction::Run() {
   MailClientService* service =
       MailClientServiceFactory::GetForProfile(GetProfile());
 
@@ -939,7 +937,7 @@ void MailPrivateGetDBVersionFunction::OnGetDBVersionFinished(
   Respond(ArgumentList(mail_private::GetDBVersion::Results::Create(migration)));
 }
 
-ExtensionFunction::ResponseAction MailPrivateStartMigrationFunction::Run() {
+ResponseAction MailPrivateStartMigrationFunction::Run() {
   MailClientService* service =
       MailClientServiceFactory::GetForProfile(GetProfile());
 
@@ -954,7 +952,7 @@ void MailPrivateStartMigrationFunction::OnMigrationFinished(bool success) {
   Respond(ArgumentList(mail_private::StartMigration::Results::Create(success)));
 }
 
-ExtensionFunction::ResponseAction MailPrivateDeleteMailSearchDBFunction::Run() {
+ResponseAction MailPrivateDeleteMailSearchDBFunction::Run() {
   MailClientService* service =
       MailClientServiceFactory::GetForProfile(GetProfile());
 
@@ -970,8 +968,7 @@ void MailPrivateDeleteMailSearchDBFunction::OnDeleteFinished(bool success) {
       ArgumentList(mail_private::DeleteMailSearchDB::Results::Create(success)));
 }
 
-ExtensionFunction::ResponseAction
-MailPrivateCheckMailSearchDBHealthFunction::Run() {
+ResponseAction MailPrivateCheckMailSearchDBHealthFunction::Run() {
   MailClientService* service =
       MailClientServiceFactory::GetForProfile(GetProfile());
 
@@ -990,6 +987,22 @@ void MailPrivateCheckMailSearchDBHealthFunction::OnCheckDBFinished(
   api_result.message = status.message;
 
   Respond(ArgumentList(CheckMailSearchDBHealth::Results::Create(api_result)));
+}
+
+ResponseAction MailPrivateGetMailSearchDBCountFunction::Run() {
+  MailClientService* service =
+      MailClientServiceFactory::GetForProfile(GetProfile());
+
+  service->CountMailSearchMessages(
+      base::BindOnce(&MailPrivateGetMailSearchDBCountFunction::OnCountFinished,
+                     this),
+      &task_tracker_);
+  return RespondLater();
+}
+
+void MailPrivateGetMailSearchDBCountFunction::OnCountFinished(int count) {
+  Respond(ArgumentList(
+      mail_private::GetMailSearchDBCount::Results::Create(count)));
 }
 
 }  //  namespace extensions

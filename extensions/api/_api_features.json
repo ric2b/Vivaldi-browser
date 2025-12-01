@@ -177,6 +177,11 @@
     "dependencies": [ "permission:settings" ],
     "contexts": [ "privileged_extension" ]
   },
+  "sitePermissions": {
+    "vivaldi": true,
+    "dependencies": [ "permission:sitePermissions" ],
+    "contexts": [ "privileged_extension" ]
+  },
   "sync": {
     "vivaldi": true,
     "dependencies": [ "permission:sync" ],
@@ -201,8 +206,7 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://game/*",
-      "chrome://privacy-report/*"
+      "chrome://game/*"
     ]
   }],
    "translateHistory": {

@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">Zaznamek je shranjen v mapi <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Videz</translation>
 <translation id="2501278716633472235">Pojdi nazaj</translation>
+<translation id="2546283357679194313">Piškotki in podatki spletnega mesta</translation>
 <translation id="2633278372998075009">Zasebni zavihki</translation>
 <translation id="2650751991977523696">Ponovno prenesti datoteko?</translation>
 <translation id="265156376773362237">Standardno prednalaganje</translation>
@@ -54,6 +55,9 @@
 <translation id="4269820728363426813">Kopiraj naslov povezave</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Vklop zaklepanja zaslona v nastavitvah za Android<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Upravitelj gesel</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, množina,
+          =1 {Zavihki in skupine, ki niso bili uporabljeni 1 dan ali več}
+          other {drugo {Zavihki in skupine niso bili uporabljeni # dni ali več}}</translation>
 <translation id="451872707440238414">Iščite med zaznamki</translation>
 <translation id="4526803704855831732">Zasebni zavihki</translation>
 <translation id="4532845899244822526">Izberite mapo</translation>
@@ -62,6 +66,7 @@
 
 Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot privzeti iskalnik v Vivaldiju.</translation>
 <translation id="4759238208242260848">Prenosi</translation>
+<translation id="4777866634702576038">Želite izbrisati skupino zavihkov?</translation>
 <translation id="4850886885716139402">Pogled</translation>
 <translation id="4883379392681899581">Zapusti zasebni način</translation>
 <translation id="4943872375798546930">Ni rezultatov</translation>
@@ -80,7 +85,6 @@ Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot p
 <translation id="5375131951310889874">Spoznajte teme na spletnih mestih, ne da bi zapustili stran. Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot privzeti iskalnik v Vivaldiju. Iskanju Google pošlje besedo in njen kontekst, ki vrne definicije, slike, rezultate iskanja in druge podrobnosti.
 
 Če želite prilagoditi iskalni izraz, dolgo pritisnite, da izberete. Če želite izboljšati iskanje, povlecite panel do konca navzgor in tapnite iskalno polje.</translation>
-<translation id="543338862236136125">Uredi geslo</translation>
 <translation id="572328651809341494">Nedavni zavihki</translation>
 <translation id="5833984609253377421">Deli povezavo</translation>
 <translation id="6150320133806434356">Zaznamek je shranjen</translation>
@@ -88,6 +92,7 @@ Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot p
 <translation id="6336451774241870485">Nov zasebni zavihek</translation>
 <translation id="6337323516034698937">Če želite poslati ta zavihek v drugo napravo, se prijavite v Vivaldi sinhronizacijo na obeh napravah. Po potrebi vnesite geslo za šifriranje.</translation>
 <translation id="6341580099087024258">Vprašaj kam shraniti datoteke</translation>
+<translation id="6364438453358674297">Želite predlog odstraniti iz zgodovine?</translation>
 <translation id="6404511346730675251">Uredi zaznamek</translation>
 <translation id="650224091954855786">{FILE_COUNT,plural, =1{Datoteka je prenesena}one{# prenos je končan.}two{# prenosa sta končana.}few{# prenosi so končani.}other{# prenosov je končanih.}}</translation>
 <translation id="6585139692466700358">Ponudite prevod strani v druge jezike z uporabo storitve prevajanja Vivaldi</translation>
@@ -113,6 +118,9 @@ Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot p
 <translation id="8062594758852531064">Razširjeno prednalaganje:</translation>
 <translation id="8073388330009372546">Odpri sliko v novem zavihku</translation>
 <translation id="8127542551745560481">Uredi domačo stran</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+          =1 {(1)neaktiven element}
+          other {(#) neaktivni elementi}}</translation>
 <translation id="8266862848225348053">Lokacija prenosa</translation>
 <translation id="8348430946834215779">Uporabite HTTPS, kadar koli je to mogoče, in prejmite opozorilo, preden naložite spletna mesta, ki tega ne podpirajo</translation>
 <translation id="8560602726703398413">Poiščite svoj bralni seznam v zaznamkih</translation>
@@ -122,6 +130,9 @@ Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot p
 <translation id="9042893549633094279">Zasebnost in varnost</translation>
 <translation id="9063523880881406963">Izklop možnosti Zahteva za namizno spletno mesto</translation>
 <translation id="9080642952018487277">Vstopi v zasebni način</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+          =1 {Ni uporabljeno 1 ali več dni}
+          other {drugo {Ni uporabljeno # ali več dni}}</translation>
 <translation id="930124987204876019">Brisanje zgodovine, piškotkov, podatkov spletnih mest, predpomnilnika…</translation>
 <translation id="961856697154696964">Brisanje podatkov brskanja</translation>
 </translationbundle>

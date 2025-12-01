@@ -12,7 +12,8 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list_observer.h"
-#include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+#include "chrome/browser/ui/interaction/browser_elements.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -26,7 +27,7 @@ using BrowserListBrowserTest = InProcessBrowserTest;
 IN_PROC_BROWSER_TEST_F(BrowserListBrowserTest, TestMinimized) {
   const BrowserList* browser_list = BrowserList::GetInstance();
   EXPECT_EQ(1U, browser_list->size());
-  EXPECT_EQ(browser(), browser_list->GetLastActive());
+  EXPECT_EQ(browser(), GetLastActiveBrowserWindowInterfaceWithAnyProfile());
 
   // Create a minimized browser window. It should be prepended to the active
   // list, so browser() should still be at the end of the list.
@@ -34,14 +35,14 @@ IN_PROC_BROWSER_TEST_F(BrowserListBrowserTest, TestMinimized) {
   params.initial_show_state = ui::mojom::WindowShowState::kMinimized;
   Browser::Create(params);
   EXPECT_EQ(2U, browser_list->size());
-  EXPECT_EQ(browser(), browser_list->GetLastActive());
+  EXPECT_EQ(browser(), GetLastActiveBrowserWindowInterfaceWithAnyProfile());
 }
 
 // This tests that inactive windows do not get added to the active list.
 IN_PROC_BROWSER_TEST_F(BrowserListBrowserTest, TestInactive) {
   const BrowserList* browser_list = BrowserList::GetInstance();
   EXPECT_EQ(1U, browser_list->size());
-  EXPECT_EQ(browser(), browser_list->GetLastActive());
+  EXPECT_EQ(browser(), GetLastActiveBrowserWindowInterfaceWithAnyProfile());
 
   // Create an inactive browser window. It should be prepended to
   // |BrowserList::browsers_ordered_by_activation_| so the default browser
@@ -50,7 +51,7 @@ IN_PROC_BROWSER_TEST_F(BrowserListBrowserTest, TestInactive) {
   params.initial_show_state = ui::mojom::WindowShowState::kInactive;
   Browser::Create(params);
   EXPECT_EQ(2U, browser_list->size());
-  EXPECT_EQ(browser(), browser_list->GetLastActive());
+  EXPECT_EQ(browser(), GetLastActiveBrowserWindowInterfaceWithAnyProfile());
 }
 
 // This tests if the browser list is returning the correct browser reference
@@ -61,17 +62,18 @@ IN_PROC_BROWSER_TEST_F(BrowserListBrowserTest,
   EXPECT_EQ(1U, browser_list->size());
 
   Browser* result = chrome::FindBrowserWithUiElementContext(
-      browser_list->get(0)->window()->GetElementContext());
+      BrowserElements::From(browser_list->get(0))->GetContext());
   EXPECT_EQ(browser_list->get(0), result);
 
   Browser* browser2 =
       Browser::Create(Browser::CreateParams(GetProfile(), true));
   ASSERT_EQ(2U, browser_list->size());
   result = chrome::FindBrowserWithUiElementContext(
-      browser2->window()->GetElementContext());
+      BrowserElements::From(browser2)->GetContext());
   EXPECT_EQ(browser2, result);
 
-  result = chrome::FindBrowserWithUiElementContext(ui::ElementContext(100));
+  result = chrome::FindBrowserWithUiElementContext(
+      ui::ElementContext::CreateFakeContextForTesting(100));
   EXPECT_EQ(nullptr, result);
 }
 

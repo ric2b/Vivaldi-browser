@@ -26,7 +26,11 @@ bool SkSVGPath::parseAndSetAttribute(const char* n, const char* v) {
 
 template <>
 bool SkSVGAttributeParser::parse<SkPath>(SkPath* path) {
-    return SkParsePath::FromSVGString(fCurPos, path);
+    if (auto result = SkParsePath::FromSVGString(fCurPos)) {
+        *path = *result;
+        return true;
+    }
+    return false;
 }
 
 void SkSVGPath::onDraw(SkCanvas* canvas, const SkSVGLengthContext&, const SkPaint& paint,
@@ -41,8 +45,7 @@ SkPath SkSVGPath::onAsPath(const SkSVGRenderContext& ctx) const {
     SkPath path = fPath;
     // clip-rule can be inherited and needs to be applied at clip time.
     path.setFillType(ctx.presentationContext().fInherited.fClipRule->asFillType());
-    this->mapToParent(&path);
-    return path;
+    return this->mapToParent(path);
 }
 
 SkRect SkSVGPath::onTransformableObjectBoundingBox(const SkSVGRenderContext& ctx) const {

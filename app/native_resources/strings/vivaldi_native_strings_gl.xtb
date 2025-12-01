@@ -20,7 +20,6 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Propiedades da imaxe...</translation>
 <translation id="1920297417712412573">Copiar a Notas</translation>
-<translation id="1921101374471252440">&amp;Recargar a imaxe</translation>
 <translation id="1924750141060565109">Paisaxe 15</translation>
 <translation id="19598411548897379">Xenérico</translation>
 <translation id="1973351931613083086">autoreproducir</translation>
@@ -34,7 +33,6 @@
 <translation id="2501278716633472235">Volver</translation>
 <translation id="2612127540243995147">Listo para instalar. Vivaldi pecharase e logo reiniciarase automaticamente.</translation>
 <translation id="2613387515621326337">Amosar sitio web actualizado</translation>
-<translation id="2647368062414805334">Lamentablemente as túas preferencias de Edge non estarán dispoñibles mentres o navegador estea executándose. Para importalas a Vivaldi, garda o teu traballo, pecha todas as xanelas de Edge e logo prema en Continuar.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Animal 3</translation>
 <translation id="2873951654529031587">Colector do lixo</translation>
@@ -43,7 +41,6 @@
 <translation id="2953943267837858202">Non dar permiso para reproducir automaticamente os vídeos</translation>
 <translation id="2977472760057091832">Abrir a ligazón nunha xanela privada</translation>
 <translation id="2989805286512600854">Abrir nunha nova lapela</translation>
-<translation id="3027988479108856431">Lamentablemente as túas preferencias de Yandex non estarán dispoñibles mentres o navegador estea executándose. Para poder importalas a Vivaldi, garda o teu traballo, pecha todas as xanelas de Yandex e logo prema en Continuar.</translation>
 <translation id="3084011186245865060">Paisaxe 6</translation>
 <translation id="3093931836425623631">Vivaldi fíxose grazas ao proxecto de código abierto Chromium e a outros programas de código aberto.</translation>
 <translation id="3127383884976966729">Animal 7</translation>
@@ -56,6 +53,7 @@
 <translation id="3334610655141903168">(non título)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> é a versión máis recente dispoñible.</translation>
 <translation id="3383198080133834965">Vivaldi foi actualizado!</translation>
+<translation id="3402602684546832928">Selecciona o ficheiro de marcadores Ópera</translation>
 <translation id="3451317331714872347">Pasaixe 8</translation>
 <translation id="3457498675806041407">Confirmar saída</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> foi instalado, activiarase despois de que reinicies o navegador.</translation>
@@ -71,7 +69,6 @@
 <translation id="3732157130969736834">Gardar en marcadores</translation>
 <translation id="3732388226447288666">Animal 2</translation>
 <translation id="3732439195215136813">Animal 5</translation>
-<translation id="3795800845758778870">Lamentablemente as túas preferencias de Brave non estarán dispoñibles mentres o navegador estea executándose. Para importalas a Vivaldi, garda o teu traballo, pecha todas as xanelas de Brave e logo prema en Continuar.</translation>
 <translation id="3822431842304177896">Novo separador</translation>
 <translation id="3832132597516774400">Paisaxe 5</translation>
 <translation id="3894751534882749287">Se desexa ver a páxina de todos os xeitos, pode cambiar o seu nivel de protección de seguimento na xanela emerxente bloqueador de seguimento ou premendo no botón Permitir</translation>
@@ -114,10 +111,10 @@
 <translation id="5770433027661640693">Paisaxe 10</translation>
 <translation id="5857090052475505287">Novo cartafol</translation>
 <translation id="588258955323874662">Pantalla completa</translation>
-<translation id="5916080360077521750">Lamentablemente as túas preferencias de Chrome non estarán dispoñibles mentres o navegador estea executándose. Para importalas a Vivaldi, garda o teu traballo, pecha todas as xanelas de Chrome e logo prema en Continuar.</translation>
 <translation id="6040143037577758943">Pechar</translation>
 <translation id="6229528619562190452">Prema aquí para actualizar Vivaldi.</translation>
 <translation id="6234173136417926046">Usar imaxe como fondo da páxina de inicio</translation>
+<translation id="630690498669249215">Ficheiro de marcadores de Ópera</translation>
 <translation id="6339818817272922368">Conta local</translation>
 <translation id="6438786710866753178">Paisaxe 4</translation>
 <translation id="6477028720702061455">Selecciona o cartafol do perfil de Opera a importar</translation>
@@ -158,7 +155,6 @@
 <translation id="8539196077526389150">Paisaxe 13</translation>
 <translation id="8562339533180097902">Pechar Vivaldi e instalar agora</translation>
 <translation id="8567452685425968223">Extraendo actualización...</translation>
-<translation id="8624587806981488221">&amp;Recargar a imaxe</translation>
 <translation id="8651348004684669199">Engadir a lapela activa</translation>
 <translation id="8669345741879513971">Monstro 10</translation>
 <translation id="867544375504146191">Yandex</translation>

@@ -28,6 +28,8 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
+
 namespace extensions {
 
 ChromeExtensionWebContentsObserver::ChromeExtensionWebContentsObserver(

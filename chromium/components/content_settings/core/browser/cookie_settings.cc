@@ -245,8 +245,6 @@ void CookieSettings::ResetThirdPartyCookieSetting(const GURL& first_party_url) {
   // created manually, or through the previous UI. Resetting should support
   // both of these.
 
-  // TODO(crbug.com/40064612): Log metrics when there is pattern that has domain
-  // as wildcard.
   auto pattern =
       ContentSettingsPattern::FromURLToSchemefulSitePattern(first_party_url);
 
@@ -393,10 +391,8 @@ bool CookieSettings::ShouldBlockThirdPartyCookiesInternal() const {
     case CookieControlsMode::kLimited:
       return true;
     case CookieControlsMode::kIncognitoOnly:
-      return is_incognito_;
     case CookieControlsMode::kOff:
-      return is_incognito_ && base::FeatureList::IsEnabled(
-                                  privacy_sandbox::kAlwaysBlock3pcsIncognito);
+      return is_incognito_;
   }
 #endif
 }
@@ -462,15 +458,6 @@ void CookieSettings::OnTrackingProtection3pcdChanged() {
   for (Observer& obs : observers_) {
     obs.OnTrackingProtectionEnabledFor3pcdChanged(
         new_tracking_protection_enabled_for_3pcd);
-  }
-  // If the user opted to block all 3PC while in the experiment, preserve that
-  // preference if they are offboarded.
-  if (!new_tracking_protection_enabled_for_3pcd &&
-      pref_change_registrar_->prefs()->GetBoolean(
-          prefs::kBlockAll3pcToggleEnabled)) {
-    pref_change_registrar_->prefs()->SetInteger(
-        prefs::kCookieControlsMode,
-        static_cast<int>(CookieControlsMode::kBlockThirdParty));
   }
   OnCookiePreferencesChanged();
 }

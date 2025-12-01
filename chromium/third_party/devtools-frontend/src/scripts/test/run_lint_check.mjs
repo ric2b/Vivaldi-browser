@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -149,7 +149,7 @@ async function runStylelint(files) {
  * The configuration for the `lit-analyzer` is parsed from the options for
  * the "ts-lit-plugin" from the toplevel `tsconfig.json` file.
  *
- * @param files - the input files to analyze.
+ * @param files the input files to analyze.
  */
 async function runLitAnalyzer(files) {
   debugLogging('[lint]: Running LitAnalyzer...');

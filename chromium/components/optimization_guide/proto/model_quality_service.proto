@@ -6,6 +6,7 @@ syntax = "proto3";
 
 package optimization_guide.proto;
 
+import "components/optimization_guide/proto/features/amount_extraction.proto";
 import "components/optimization_guide/proto/features/bling_prototyping.proto";
 import "components/optimization_guide/proto/features/compose.proto";
 import "components/optimization_guide/proto/features/default.proto";
@@ -19,9 +20,12 @@ import "components/optimization_guide/proto/features/notification_content_detect
 import "components/optimization_guide/proto/features/password_change_submission.proto";
 import "components/optimization_guide/proto/features/permissions_ai.proto";
 import "components/optimization_guide/proto/features/product_specifications.proto";
+import "components/optimization_guide/proto/features/prompt_api.proto";
 import "components/optimization_guide/proto/features/proofreader_api.proto";
 import "components/optimization_guide/proto/features/scam_detection.proto";
+import "components/optimization_guide/proto/features/summarize.proto";
 import "components/optimization_guide/proto/features/tab_organization.proto";
+import "components/optimization_guide/proto/features/walletable_pass_extraction.proto";
 import "components/optimization_guide/proto/features/wallpaper_search.proto";
 import "components/optimization_guide/proto/features/writing_assistance_api.proto";
 import "components/optimization_guide/proto/features/zero_state_suggestions.proto";
@@ -84,6 +88,14 @@ message LogAiDataRequest {
     WritingAssistanceApiLoggingData writing_assistance_api = 23;
 
     ProofreaderApiLoggingData proofreader_api = 25;
+
+    PromptApiLoggingData prompt_api = 26;
+
+    SummarizeLoggingData summarize = 27;
+
+    WalletablePassExtractionLoggingData walletable_pass_extraction = 28;
+
+    AmountExtractionLoggingData amount_extraction = 29;
 
     DefaultLoggingData default = 1000;
   }

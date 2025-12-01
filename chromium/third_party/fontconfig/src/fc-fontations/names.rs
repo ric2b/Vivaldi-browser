@@ -27,14 +27,42 @@ use skrifa::{string::StringId, MetadataProvider};
 
 use fcint_bindings::{
     FC_FAMILYLANG_OBJECT, FC_FAMILY_OBJECT, FC_FULLNAMELANG_OBJECT, FC_FULLNAME_OBJECT,
-    FC_INVALID_OBJECT, FC_POSTSCRIPT_NAME_OBJECT, FC_STYLELANG_OBJECT, FC_STYLE_OBJECT,
+    FC_GENERIC_FAMILY_OBJECT, FC_INVALID_OBJECT, FC_POSTSCRIPT_NAME_OBJECT, FC_STYLELANG_OBJECT,
+    FC_STYLE_OBJECT,
+};
+use fontconfig_bindings::{
+    FC_FAMILY_EMOJI, FC_FAMILY_MATH, FC_FAMILY_MONO, FC_FAMILY_SANS, FC_FAMILY_SERIF,
+    FC_FAMILY_UNKNOWN,
 };
 
 use crate::{name_records::FcSortedNameRecords, FcPatternBuilder, InstanceMode, PatternElement};
 use read_fonts::{FontRef, TableProvider};
-use std::ffi::CString;
+use std::ffi::CStr;
+use std::{
+    error::Error,
+    ffi::{CString, OsStr},
+    fmt,
+    path::Path,
+};
 
 use std::collections::HashSet;
+
+#[derive(Debug, Clone)]
+pub enum NameAddingError {
+    NoFamilyName,
+    NoNameTable,
+}
+
+impl fmt::Display for NameAddingError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            NameAddingError::NoFamilyName => write!(f, "Could not determine font family name."),
+            NameAddingError::NoNameTable => write!(f, "Font has no 'name' table."),
+        }
+    }
+}
+
+impl Error for NameAddingError {}
 
 fn object_ids_for_name_id(string_id: StringId) -> Option<(i32, i32)> {
     match string_id {
@@ -138,13 +166,34 @@ fn mangle_full_name_for_named_instance(font: &FontRef, named_instance_id: i32) -
     CString::new(full_name + &subfam).ok()
 }
 
-pub fn add_names(font: &FontRef, instance_mode: InstanceMode, pattern: &mut FcPatternBuilder) {
+fn get_generic_family(family_name: &CStr) -> i32 {
+    [
+        ("mono", FC_FAMILY_MONO),
+        ("sans", FC_FAMILY_SANS),
+        ("serif", FC_FAMILY_SERIF),
+        ("emoji", FC_FAMILY_EMOJI),
+        ("math", FC_FAMILY_MATH),
+    ]
+    .into_iter()
+    .find_map(|(font_sub_name, generic_family_id)| {
+        family_name
+            .to_string_lossy()
+            .into_owned()
+            .to_lowercase()
+            .contains(font_sub_name)
+            .then_some(generic_family_id)
+    })
+    .unwrap_or(FC_FAMILY_UNKNOWN) as i32
+}
+
+pub fn add_names(
+    font: &FontRef,
+    font_file: &Path,
+    instance_mode: InstanceMode,
+    pattern: &mut FcPatternBuilder,
+) -> Result<(), NameAddingError> {
     let mut already_encountered_names: HashSet<(i32, String)> = HashSet::new();
-    let name_table = font.name();
-    if name_table.is_err() {
-        return;
-    }
-    let name_table = name_table.unwrap();
+    let name_table = font.name().map_err(|_| NameAddingError::NoNameTable)?;
 
     for name_record in FcSortedNameRecords::new(&name_table) {
         let string_id = name_record.name_id();
@@ -194,17 +243,58 @@ pub fn add_names(font: &FontRef, instance_mode: InstanceMode, pattern: &mut FcPa
             };
 
             if let (Some(name), Some(language)) = (name, language) {
-                let normalized_name = normalize_name(&name);
-                if already_encountered_names.contains(&(object_ids.0, normalized_name.clone())) {
-                    continue;
-                }
-                already_encountered_names.insert((object_ids.0, normalized_name));
-                pattern.append_element(PatternElement::new(object_ids.0, name.into()));
-                // Postscriptname for example does not attach a language.
-                if object_ids.1 != FC_INVALID_OBJECT as i32 {
-                    pattern.append_element(PatternElement::new(object_ids.1, language.into()));
+                if !name.is_empty() {
+                    let normalized_name = normalize_name(&name);
+                    if already_encountered_names.contains(&(object_ids.0, normalized_name.clone()))
+                    {
+                        continue;
+                    }
+                    already_encountered_names.insert((object_ids.0, normalized_name));
+                    pattern.append_element(PatternElement::new(object_ids.0, name.into()));
+                    // Postscriptname for example does not attach a language.
+                    if object_ids.1 != FC_INVALID_OBJECT as i32 {
+                        pattern.append_element(PatternElement::new(object_ids.1, language.into()));
+                    }
                 }
             }
         }
     }
+
+    // Fallback to a family name based on filename.
+    if pattern.family_names().next().is_none() {
+        let basename = font_file
+            .file_stem()
+            .and_then(OsStr::to_str)
+            .and_then(|s| CString::new(s).ok())
+            .ok_or(NameAddingError::NoFamilyName)?;
+        pattern.append_element(PatternElement::new(
+            FC_FAMILY_OBJECT as i32,
+            basename.into(),
+        ));
+        if let Ok(lang) = CString::new("en") {
+            pattern.append_element(PatternElement::new(
+                FC_FAMILYLANG_OBJECT as i32,
+                lang.into(),
+            ));
+        }
+    }
+
+    // Determine generic family and append.
+    let generic_family = pattern
+        .family_names()
+        .find_map(|family_name| {
+            let id = get_generic_family(family_name);
+            if id != FC_FAMILY_UNKNOWN as i32 {
+                Some(id)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(FC_FAMILY_UNKNOWN as i32);
+    pattern.append_element(PatternElement::new(
+        FC_GENERIC_FAMILY_OBJECT as i32,
+        generic_family.into(),
+    ));
+
+    Ok(())
 }

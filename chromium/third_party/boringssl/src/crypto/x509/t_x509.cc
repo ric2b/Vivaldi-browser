@@ -26,7 +26,7 @@
 #include "internal.h"
 
 
-int X509_print_ex_fp(FILE *fp, X509 *x, unsigned long nmflag,
+int X509_print_ex_fp(FILE *fp, const X509 *x, unsigned long nmflag,
                      unsigned long cflag) {
   BIO *b = BIO_new_fp(fp, BIO_NOCLOSE);
   if (b == NULL) {
@@ -38,15 +38,15 @@ int X509_print_ex_fp(FILE *fp, X509 *x, unsigned long nmflag,
   return ret;
 }
 
-int X509_print_fp(FILE *fp, X509 *x) {
+int X509_print_fp(FILE *fp, const X509 *x) {
   return X509_print_ex_fp(fp, x, XN_FLAG_COMPAT, X509_FLAG_COMPAT);
 }
 
-int X509_print(BIO *bp, X509 *x) {
+int X509_print(BIO *bp, const X509 *x) {
   return X509_print_ex(bp, x, XN_FLAG_COMPAT, X509_FLAG_COMPAT);
 }
 
-int X509_print_ex(BIO *bp, X509 *x, unsigned long nmflags,
+int X509_print_ex(BIO *bp, const X509 *x, unsigned long nmflags,
                   unsigned long cflag) {
   char mlch = ' ';
   int nmindent = 0;
@@ -59,7 +59,6 @@ int X509_print_ex(BIO *bp, X509 *x, unsigned long nmflags,
     nmindent = 16;
   }
 
-  const X509_CINF *ci = x->cert_info;
   if (!(cflag & X509_FLAG_NO_HEADER)) {
     if (BIO_write(bp, "Certificate:\n", 13) <= 0) {
       return 0;
@@ -107,7 +106,7 @@ int X509_print_ex(BIO *bp, X509 *x, unsigned long nmflags,
   }
 
   if (!(cflag & X509_FLAG_NO_SIGNAME)) {
-    if (X509_signature_print(bp, ci->signature, NULL) <= 0) {
+    if (X509_signature_print(bp, &x->tbs_sig_alg, NULL) <= 0) {
       return 0;
     }
   }
@@ -131,13 +130,13 @@ int X509_print_ex(BIO *bp, X509 *x, unsigned long nmflags,
     if (BIO_write(bp, "            Not Before: ", 24) <= 0) {
       return 0;
     }
-    if (!ASN1_TIME_print(bp, X509_get_notBefore(x))) {
+    if (!ASN1_TIME_print(bp, X509_get0_notBefore(x))) {
       return 0;
     }
     if (BIO_write(bp, "\n            Not After : ", 25) <= 0) {
       return 0;
     }
-    if (!ASN1_TIME_print(bp, X509_get_notAfter(x))) {
+    if (!ASN1_TIME_print(bp, X509_get0_notAfter(x))) {
       return 0;
     }
     if (BIO_write(bp, "\n", 1) <= 0) {
@@ -163,7 +162,7 @@ int X509_print_ex(BIO *bp, X509 *x, unsigned long nmflags,
     if (BIO_printf(bp, "%12sPublic Key Algorithm: ", "") <= 0) {
       return 0;
     }
-    if (i2a_ASN1_OBJECT(bp, ci->key->algor->algorithm) <= 0) {
+    if (i2a_ASN1_OBJECT(bp, x->key.algor.algorithm) <= 0) {
       return 0;
     }
     if (BIO_puts(bp, "\n") <= 0) {
@@ -180,30 +179,30 @@ int X509_print_ex(BIO *bp, X509 *x, unsigned long nmflags,
   }
 
   if (!(cflag & X509_FLAG_NO_IDS)) {
-    if (ci->issuerUID) {
+    if (x->issuerUID) {
       if (BIO_printf(bp, "%8sIssuer Unique ID: ", "") <= 0) {
         return 0;
       }
-      if (!X509_signature_dump(bp, ci->issuerUID, 12)) {
+      if (!X509_signature_dump(bp, x->issuerUID, 12)) {
         return 0;
       }
     }
-    if (ci->subjectUID) {
+    if (x->subjectUID) {
       if (BIO_printf(bp, "%8sSubject Unique ID: ", "") <= 0) {
         return 0;
       }
-      if (!X509_signature_dump(bp, ci->subjectUID, 12)) {
+      if (!X509_signature_dump(bp, x->subjectUID, 12)) {
         return 0;
       }
     }
   }
 
   if (!(cflag & X509_FLAG_NO_EXTENSIONS)) {
-    X509V3_extensions_print(bp, "X509v3 extensions", ci->extensions, cflag, 8);
+    X509V3_extensions_print(bp, "X509v3 extensions", x->extensions, cflag, 8);
   }
 
   if (!(cflag & X509_FLAG_NO_SIGDUMP)) {
-    if (X509_signature_print(bp, x->sig_alg, x->signature) <= 0) {
+    if (X509_signature_print(bp, &x->sig_alg, &x->signature) <= 0) {
       return 0;
     }
   }

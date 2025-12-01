@@ -274,6 +274,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/url_loader/url_loader_factory.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/scheduling_policy.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
@@ -889,9 +890,10 @@ gfx::PointF WebLocalFrameImpl::GetScrollOffset() const {
 
 bool WebLocalFrameImpl::SetScrollOffset(const gfx::PointF& offset) {
   if (ScrollableArea* scrollable_area = LayoutViewport()) {
+    // TODO(crbug.com/414556050): Pass the correct `ScrollSourceType`.
     return scrollable_area->SetScrollOffset(
         scrollable_area->ScrollPositionToOffset(offset),
-        mojom::blink::ScrollType::kProgrammatic);
+        mojom::blink::ScrollType::kProgrammatic, cc::ScrollSourceType::kNone);
   }
   return false;
 }
@@ -1258,6 +1260,12 @@ void WebLocalFrameImpl::RequestNetworkIdleCallback(base::OnceClosure callback) {
   GetFrame()->RequestNetworkIdleCallback(std::move(callback));
 }
 
+void WebLocalFrameImpl::PostIdleTask(
+    const base::Location& location,
+    base::OnceCallback<void(base::TimeTicks deadline)> callback) {
+  ThreadScheduler::Current()->PostIdleTask(location, std::move(callback));
+}
+
 void WebLocalFrameImpl::ReplaceSelection(const WebString& text) {
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited.  See http://crbug.com/590369 for more details.
@@ -1404,6 +1412,10 @@ bool WebLocalFrameImpl::IsSelectionAnchorFirst() const {
 void WebLocalFrameImpl::SetTextDirectionForTesting(
     base::i18n::TextDirection direction) {
   frame_->SetTextDirection(direction);
+}
+
+void WebLocalFrameImpl::SetIsCaretBrowsingOverridden(bool overridden) {
+  GetFrame()->SetIsCaretBrowsingOverridden(overridden);
 }
 
 void WebLocalFrameImpl::ReplaceMisspelledRange(const WebString& text) {
@@ -1687,7 +1699,8 @@ bool WebLocalFrameImpl::SetEditableSelectionOffsets(int start, int end) {
   TRACE_EVENT0("blink", "WebLocalFrameImpl::setEditableSelectionOffsets");
   if (EditContext* edit_context =
           GetFrame()->GetInputMethodController().GetActiveEditContext()) {
-    edit_context->SetSelection(start, end, /*dispatch_text_update_event=*/true);
+    edit_context->SetSelection(start, end, /*sync_selection=*/true,
+                               /*dispatch_text_update_event=*/true);
     return true;
   }
 
@@ -3183,8 +3196,8 @@ void WebLocalFrameImpl::AddUserReidentificationIssueImpl(
     std::optional<std::string> devtools_request_id,
     const WebURL& affected_request_url) {
   DCHECK(GetFrame());
-  AuditsIssue::ReportUserReidentificationIssue(GetFrame(), devtools_request_id,
-                                               affected_request_url);
+  AuditsIssue::ReportUserReidentificationResourceBlockedIssue(
+      GetFrame(), devtools_request_id, affected_request_url);
 }
 
 void WebLocalFrameImpl::AddGenericIssueImpl(
@@ -3327,14 +3340,14 @@ WebLocalFrameImpl::ConvertNotRestoredReasons(
     for (const auto& reason_to_copy : reasons_to_copy->reasons) {
       mojom::blink::BFCacheBlockingDetailedReasonPtr reason =
           mojom::blink::BFCacheBlockingDetailedReason::New();
-      reason->name = WTF::String(reason_to_copy->name);
+      reason->name = String(reason_to_copy->name);
       if (reason_to_copy->source) {
         CHECK_GT(reason_to_copy->source->line_number, 0U);
         CHECK_GT(reason_to_copy->source->column_number, 0U);
         mojom::blink::ScriptSourceLocationPtr source_location =
             mojom::blink::ScriptSourceLocation::New(
                 KURL(reason_to_copy->source->url),
-                WTF::String(reason_to_copy->source->function_name),
+                String(reason_to_copy->source->function_name),
                 reason_to_copy->source->line_number,
                 reason_to_copy->source->column_number);
         reason->source = std::move(source_location);

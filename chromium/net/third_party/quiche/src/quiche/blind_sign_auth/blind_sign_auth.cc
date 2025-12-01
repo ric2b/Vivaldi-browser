@@ -4,6 +4,7 @@
 
 #include "quiche/blind_sign_auth/blind_sign_auth.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -14,6 +15,7 @@
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "absl/cleanup/cleanup.h"
 #include "absl/functional/bind_front.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -31,6 +33,7 @@
 #include "quiche/blind_sign_auth/blind_sign_auth_protos.h"
 #include "quiche/blind_sign_auth/blind_sign_message_interface.h"
 #include "quiche/blind_sign_auth/blind_sign_message_response.h"
+#include "quiche/blind_sign_auth/blind_sign_tracing_hooks.h"
 #include "quiche/common/platform/api/quiche_logging.h"
 #include "quiche/common/quiche_random.h"
 
@@ -81,7 +84,11 @@ using anonymous_tokens::ValidateExtensionsOrderAndValues;
 void BlindSignAuth::GetTokens(std::optional<std::string> oauth_token,
                               int num_tokens, ProxyLayer proxy_layer,
                               BlindSignAuthServiceType service_type,
-                              SignedTokenCallback callback) {
+                              SignedTokenCallback callback,
+                              std::unique_ptr<BlindSignTracingHooks> hooks) {
+  if (hooks != nullptr) {
+    hooks->OnGetInitialDataStart();
+  }
   // Create GetInitialData RPC.
   GetInitialDataRequest request;
   request.set_use_attestation(false);
@@ -96,7 +103,7 @@ void BlindSignAuth::GetTokens(std::optional<std::string> oauth_token,
   std::string body_bytes = request.SerializeAsString();
   BlindSignMessageCallback initial_data_callback = absl::bind_front(
       &BlindSignAuth::GetInitialDataCallback, this, oauth_token, num_tokens,
-      proxy_layer, service_type, std::move(callback));
+      proxy_layer, service_type, std::move(callback), std::move(hooks));
   fetcher_->DoRequest(BlindSignMessageRequestType::kGetInitialData, oauth_token,
                       body_bytes, std::move(initial_data_callback));
 }
@@ -104,8 +111,11 @@ void BlindSignAuth::GetTokens(std::optional<std::string> oauth_token,
 void BlindSignAuth::GetInitialDataCallback(
     std::optional<std::string> oauth_token, int num_tokens,
     ProxyLayer proxy_layer, BlindSignAuthServiceType service_type,
-    SignedTokenCallback callback,
+    SignedTokenCallback callback, std::unique_ptr<BlindSignTracingHooks> hooks,
     absl::StatusOr<BlindSignMessageResponse> response) {
+  if (hooks != nullptr) {
+    hooks->OnGetInitialDataEnd();
+  }
   absl::StatusOr<GetInitialDataResponse> initial_data_response =
       ParseGetInitialDataResponseMessage(response);
   if (!initial_data_response.ok()) {
@@ -122,7 +132,7 @@ void BlindSignAuth::GetInitialDataCallback(
     QUICHE_DVLOG(1) << "Using Privacy Pass client";
     GeneratePrivacyPassTokens(*initial_data_response, std::move(oauth_token),
                               num_tokens, proxy_layer, service_type,
-                              std::move(callback));
+                              std::move(callback), std::move(hooks));
   } else {
     QUICHE_LOG(ERROR) << "Non-Privacy Pass tokens are no longer supported";
     std::move(callback)(absl::UnimplementedError(
@@ -135,7 +145,8 @@ void BlindSignAuth::GeneratePrivacyPassTokens(
     privacy::ppn::GetInitialDataResponse initial_data_response,
     std::optional<std::string> oauth_token, int num_tokens,
     ProxyLayer proxy_layer, BlindSignAuthServiceType service_type,
-    SignedTokenCallback callback) {
+    SignedTokenCallback callback,
+    std::unique_ptr<BlindSignTracingHooks> hooks) {
   absl::StatusOr<PrivacyPassContext> pp_context =
       CreatePrivacyPassContext(initial_data_response);
   if (!pp_context.ok()) {
@@ -156,10 +167,16 @@ void BlindSignAuth::GeneratePrivacyPassTokens(
     return;
   }
 
+  if (hooks != nullptr) {
+    hooks->OnGenerateBlindedTokenRequestsStart();
+  }
   absl::StatusOr<GeneratedTokenRequests> token_requests_data =
       GenerateBlindedTokenRequests(num_tokens, *pp_context->rsa_public_key,
                                    *token_challenge, pp_context->token_key_id,
                                    pp_context->extensions);
+  if (hooks != nullptr) {
+    hooks->OnGenerateBlindedTokenRequestsEnd();
+  }
   if (!token_requests_data.ok()) {
     std::move(callback)(token_requests_data.status());
     return;
@@ -179,11 +196,14 @@ void BlindSignAuth::GeneratePrivacyPassTokens(
   sign_request.set_do_not_use_rsa_public_exponent(true);
   sign_request.set_proxy_layer(QuicheProxyLayerToPpnProxyLayer(proxy_layer));
 
+  if (hooks != nullptr) {
+    hooks->OnAuthAndSignStart();
+  }
   BlindSignMessageCallback auth_and_sign_callback =
       absl::bind_front(&BlindSignAuth::PrivacyPassAuthAndSignCallback, this,
                        *std::move(pp_context),
                        std::move(token_requests_data->privacy_pass_clients),
-                       std::move(callback));
+                       std::move(callback), std::move(hooks));
   // TODO(b/304811277): remove other usages of string.data()
   fetcher_->DoRequest(BlindSignMessageRequestType::kAuthAndSign, oauth_token,
                       sign_request.SerializeAsString(),
@@ -195,20 +215,22 @@ void BlindSignAuth::PrivacyPassAuthAndSignCallback(
     std::vector<std::unique_ptr<anonymous_tokens::
                                     PrivacyPassRsaBssaPublicMetadataClient>>
         privacy_pass_clients,
-    SignedTokenCallback callback,
+    SignedTokenCallback callback, std::unique_ptr<BlindSignTracingHooks> hooks,
     absl::StatusOr<BlindSignMessageResponse> response) {
+  if (hooks != nullptr) {
+    hooks->OnAuthAndSignEnd();
+  }
   // Validate response.
   if (!response.ok()) {
     QUICHE_LOG(WARNING) << "AuthAndSign failed: " << response.status();
-    std::move(callback)(
-        absl::InvalidArgumentError("AuthAndSign failed: invalid response"));
+    std::move(callback)(absl::Status(response.status().code(),
+                                     "AuthAndSign failed: invalid response"));
     return;
   }
   absl::StatusCode code = response->status_code();
   if (code != absl::StatusCode::kOk) {
-    std::string message = absl::StrCat("AuthAndSign failed with code: ", code);
-    QUICHE_LOG(WARNING) << message;
-    std::move(callback)(absl::InvalidArgumentError(message));
+    QUICHE_LOG(WARNING) << "AuthAndSign failed with code: " << code;
+    std::move(callback)(absl::Status(code, "AuthAndSign failed"));
     return;
   }
 
@@ -229,6 +251,15 @@ void BlindSignAuth::PrivacyPassAuthAndSignCallback(
         "Privacy Pass tokens sent"));
     return;
   }
+
+  if (hooks != nullptr) {
+    hooks->OnUnblindTokensStart();
+  }
+  absl::Cleanup unblind_tokens_end = [hooks = std::move(hooks)]() {
+    if (hooks != nullptr) {
+      hooks->OnUnblindTokensEnd();
+    }
+  };
 
   // Create tokens using blinded signatures.
   std::vector<BlindSignToken> tokens_vec;
@@ -337,8 +368,9 @@ void BlindSignAuth::GetAttestationTokensCallback(
 
 void BlindSignAuth::AttestAndSign(
     int num_tokens, privacy::ppn::GetInitialDataResponse initial_data_response,
-    SignedTokenCallback callback, absl::StatusOr<std::string> attestation_data,
-    std::optional<std::string> token_challenge) {
+    SignedTokenCallback callback,
+    absl::StatusOr<absl::Span<const std::string>> attestation_data,
+    std::optional<const absl::string_view> token_challenge) {
   absl::StatusOr<PrivacyPassContext> pp_context =
       CreatePrivacyPassContext(initial_data_response);
   if (!pp_context.ok()) {
@@ -381,7 +413,14 @@ void BlindSignAuth::AttestAndSign(
     std::move(callback)(attestation_data.status());
     return;
   }
-  android_attestation_data.add_hardware_backed_certs(*attestation_data);
+  if (attestation_data->empty()) {
+    std::move(callback)(
+        absl::InvalidArgumentError("Attestation data is empty"));
+    return;
+  }
+  for (absl::string_view cert : *attestation_data) {
+    android_attestation_data.add_hardware_backed_certs(cert);
+  }
 
   Any attestation_data_proto_any;
   attestation_data_proto_any.set_type_url(kAttestationProtoTypeUrl);
@@ -426,16 +465,14 @@ void BlindSignAuth::AttestAndSignCallback(
   // Validate response.
   if (!response.ok()) {
     QUICHE_LOG(WARNING) << "AttestAndSign failed: " << response.status();
-    std::move(callback)(
-        absl::InvalidArgumentError("AttestAndSign failed: invalid response"));
+    std::move(callback)(absl::Status(response.status().code(),
+                                     "AttestAndSign failed: invalid response"));
     return;
   }
   absl::StatusCode code = response->status_code();
   if (code != absl::StatusCode::kOk) {
-    std::string message =
-        absl::StrCat("AttestAndSign failed with code: ", code);
-    QUICHE_LOG(WARNING) << message;
-    std::move(callback)(absl::InvalidArgumentError(message));
+    QUICHE_LOG(WARNING) << "AttestAndSign failed with code: " << code;
+    std::move(callback)(absl::Status(code, "AttestAndSign failed"));
     return;
   }
 
@@ -506,15 +543,13 @@ BlindSignAuth::ParseGetInitialDataResponseMessage(
   if (!response.ok()) {
     QUICHE_LOG(WARNING) << "GetInitialDataRequest failed: "
                         << response.status();
-    return absl::InvalidArgumentError(
-        "GetInitialDataRequest failed: invalid response");
+    return absl::Status(response.status().code(),
+                        "GetInitialDataRequest failed: invalid response");
   }
   if (absl::StatusCode code = response->status_code();
       code != absl::StatusCode::kOk) {
-    std::string message =
-        absl::StrCat("GetInitialDataRequest failed with code: ", code);
-    QUICHE_LOG(WARNING) << message;
-    return absl::InvalidArgumentError(message);
+    QUICHE_LOG(WARNING) << "GetInitialDataRequest failed with code: " << code;
+    return absl::Status(code, "GetInitialDataRequest failed");
   }
   // Parse GetInitialDataResponse.
   GetInitialDataResponse initial_data_response;

@@ -4,6 +4,7 @@
 
 #include "base/memory/values_equivalent.h"
 #include "third_party/blink/renderer/core/animation/timeline_offset.h"
+#include "third_party/blink/renderer/core/css/css_color.h"
 #include "third_party/blink/renderer/core/css/css_content_distribution_value.h"
 #include "third_party/blink/renderer/core/css/css_gap_decoration_property_utils.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
@@ -1092,12 +1093,27 @@ bool Columns::ParseShorthand(
     HeapVector<CSSPropertyValue, 64>& properties) const {
   CSSValue* column_width = nullptr;
   CSSValue* column_count = nullptr;
+  CSSValue* column_height = nullptr;
+
   if (!css_parsing_utils::ConsumeColumnWidthOrCount(
           stream, context, column_width, column_count)) {
     return false;
   }
   css_parsing_utils::ConsumeColumnWidthOrCount(stream, context, column_width,
                                                column_count);
+
+  if (RuntimeEnabledFeatures::MulticolColumnWrappingEnabled() &&
+      css_parsing_utils::ConsumeSlashIncludingWhitespace(stream)) {
+    column_height = css_parsing_utils::ConsumeIdent<CSSValueID::kAuto>(stream);
+    if (!column_height) {
+      column_height = css_parsing_utils::ConsumeLength(
+          stream, context, CSSPrimitiveValue::ValueRange::kNonNegative);
+      if (!column_height) {
+        return false;
+      }
+    }
+  }
+
   if (!column_width) {
     column_width = CSSIdentifierValue::Create(CSSValueID::kAuto);
   }
@@ -1112,6 +1128,19 @@ bool Columns::ParseShorthand(
       CSSPropertyID::kColumnCount, CSSPropertyID::kInvalid, *column_count,
       important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
       properties);
+  if (RuntimeEnabledFeatures::MulticolColumnWrappingEnabled()) {
+    if (!column_height) {
+      column_height = CSSIdentifierValue::Create(CSSValueID::kAuto);
+    }
+    css_parsing_utils::AddProperty(
+        CSSPropertyID::kColumnHeight, CSSPropertyID::kInvalid, *column_height,
+        important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
+        properties);
+    css_parsing_utils::AddProperty(
+        CSSPropertyID::kColumnWrap, CSSPropertyID::kInvalid,
+        *CSSIdentifierValue::Create(CSSValueID::kAuto), important,
+        css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
+  }
   return true;
 }
 
@@ -1120,9 +1149,55 @@ const CSSValue* Columns::CSSValueFromComputedStyleInternal(
     const LayoutObject* layout_object,
     bool allow_visited_style,
     CSSValuePhase value_phase) const {
-  return ComputedStyleUtils::ValuesForShorthandProperty(
-      columnsShorthand(), style, layout_object, allow_visited_style,
-      value_phase);
+  const CSSValue* width = GetCSSPropertyColumnWidth().CSSValueFromComputedStyle(
+      style, layout_object, allow_visited_style, value_phase);
+  const CSSValue* count = GetCSSPropertyColumnCount().CSSValueFromComputedStyle(
+      style, layout_object, allow_visited_style, value_phase);
+
+  auto* width_keyword = DynamicTo<CSSIdentifierValue>(width);
+  auto* count_keyword = DynamicTo<CSSIdentifierValue>(count);
+
+  bool width_is_auto =
+      width_keyword && width_keyword->GetValueID() == CSSValueID::kAuto;
+  bool count_is_auto =
+      count_keyword && count_keyword->GetValueID() == CSSValueID::kAuto;
+
+  const CSSValue* height = nullptr;
+  bool height_is_auto = true;
+  if (RuntimeEnabledFeatures::MulticolColumnWrappingEnabled()) {
+    height = GetCSSPropertyColumnHeight().CSSValueFromComputedStyle(
+        style, layout_object, allow_visited_style, value_phase);
+    auto* height_keyword = DynamicTo<CSSIdentifierValue>(height);
+    height_is_auto =
+        height_keyword && height_keyword->GetValueID() == CSSValueID::kAuto;
+  }
+
+  if (width_is_auto && count_is_auto && height_is_auto) {
+    return CSSIdentifierValue::Create(CSSValueID::kAuto);
+  }
+
+  CSSValue* pre_slash;
+  if (width_is_auto && count_is_auto) {
+    pre_slash = CSSIdentifierValue::Create(CSSValueID::kAuto);
+  } else if (width_is_auto) {
+    pre_slash = const_cast<CSSValue*>(count);
+  } else if (count_is_auto) {
+    pre_slash = const_cast<CSSValue*>(width);
+  } else {
+    CSSValueList* list = CSSValueList::CreateSpaceSeparated();
+    list->Append(*width);
+    list->Append(*count);
+    pre_slash = list;
+  }
+
+  if (height_is_auto) {
+    return pre_slash;
+  }
+
+  CSSValueList* list = CSSValueList::CreateSlashSeparated();
+  list->Append(*pre_slash);
+  list->Append(*height);
+  return list;
 }
 
 bool ContainIntrinsicSize::ParseShorthand(
@@ -1480,11 +1555,8 @@ bool Flex::ParseShorthand(bool important,
         if (css_parsing_utils::IdentMatches<
                 CSSValueID::kAuto, CSSValueID::kContent,
                 CSSValueID::kMinContent, CSSValueID::kMaxContent,
-                CSSValueID::kFitContent>(stream.Peek().Id())) {
-          flex_basis = css_parsing_utils::ConsumeIdent(stream);
-        }
-        if (RuntimeEnabledFeatures::LayoutStretchEnabled() &&
-            CSSValueID::kStretch == stream.Peek().Id()) {
+                CSSValueID::kFitContent, CSSValueID::kStretch>(
+                stream.Peek().Id())) {
           flex_basis = css_parsing_utils::ConsumeIdent(stream);
         }
 
@@ -1682,6 +1754,12 @@ bool ConsumeFont(bool important,
     css_parsing_utils::AddProperty(
         CSSPropertyID::kFontSizeAdjust, CSSPropertyID::kFont,
         *CSSIdentifierValue::Create(CSSValueID::kNone), important,
+        css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
+  }
+  if (RuntimeEnabledFeatures::FontLanguageOverrideEnabled()) {
+    css_parsing_utils::AddProperty(
+        CSSPropertyID::kFontLanguageOverride, CSSPropertyID::kFont,
+        *CSSIdentifierValue::Create(CSSValueID::kNormal), important,
         css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
   }
   css_parsing_utils::AddProperty(
@@ -2397,7 +2475,7 @@ bool Grid::ParseShorthand(bool important,
 
 bool Grid::IsLayoutDependent(const ComputedStyle* style,
                              LayoutObject* layout_object) const {
-  return layout_object && layout_object->IsLayoutGrid();
+  return layout_object && layout_object->IsLayoutGridOrMasonry();
 }
 
 const CSSValue* Grid::CSSValueFromComputedStyleInternal(
@@ -2485,7 +2563,7 @@ bool GridTemplate::ParseShorthand(
 
 bool GridTemplate::IsLayoutDependent(const ComputedStyle* style,
                                      LayoutObject* layout_object) const {
-  return layout_object && layout_object->IsLayoutGrid();
+  return layout_object && layout_object->IsLayoutGridOrMasonry();
 }
 
 const CSSValue* GridTemplate::CSSValueFromComputedStyleInternal(
@@ -2924,6 +3002,11 @@ const CSSValue* Masonry::CSSValueFromComputedStyleInternal(
   return ComputedStyleUtils::ValuesForMasonryShorthand(
       masonryShorthand(), style, layout_object, allow_visited_style,
       value_phase);
+}
+
+bool Masonry::IsLayoutDependent(const ComputedStyle* style,
+                                LayoutObject* layout_object) const {
+  return layout_object && layout_object->IsLayoutMasonry();
 }
 
 bool MasonryFlow::ParseShorthand(
@@ -3879,12 +3962,13 @@ const CSSValue* TextDecoration::CSSValueFromComputedStyleInternal(
 
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
   for (const CSSProperty* const longhand : shorthand.properties()) {
+    const CSSPropertyID property_id = longhand->PropertyID();
     const CSSValue* value = longhand->CSSValueFromComputedStyle(
         style, layout_object, allow_visited_style, value_phase);
     // Do not include initial value 'auto' for thickness.
     // TODO(https://crbug.com/1093826): general shorthand serialization issues
     // remain, in particular for text-decoration.
-    if (longhand->PropertyID() == CSSPropertyID::kTextDecorationThickness) {
+    if (property_id == CSSPropertyID::kTextDecorationThickness) {
       if (auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
         CSSValueID value_id = identifier_value->GetValueID();
         if (value_id == CSSValueID::kAuto) {
@@ -3893,25 +3977,34 @@ const CSSValue* TextDecoration::CSSValueFromComputedStyleInternal(
       }
     } else if (RuntimeEnabledFeatures::
                    TextDecorationShortSerializationEnabled()) {
-      if (longhand->PropertyID() == CSSPropertyID::kTextDecorationLine) {
+      if (property_id == CSSPropertyID::kTextDecorationLine) {
         if (auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
           // Skip the initial value.
           if (identifier_value->GetValueID() == CSSValueID::kNone) {
             continue;
           }
         }
-      } else if (longhand->PropertyID() ==
-                 CSSPropertyID::kTextDecorationStyle) {
+      } else if (property_id == CSSPropertyID::kTextDecorationStyle) {
         if (auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
           // Skip the initial value.
           if (identifier_value->GetValueID() == CSSValueID::kSolid) {
             continue;
           }
         }
+      } else if (RuntimeEnabledFeatures::
+                     TextDecorationOmitCurrentColorEnabled() &&
+                 property_id == CSSPropertyID::kTextDecorationColor) {
+        // Skip currentColor, which is the initial value.
+        if (style.TextDecorationColor().IsCurrentColor()) {
+          continue;
+        }
       }
     }
     DCHECK(value);
     list->Append(*value);
+  }
+  if (list->length() == 0) {
+    list->Append(*CSSIdentifierValue::Create(CSSValueID::kNone));
   }
   return list;
 }
@@ -3964,7 +4057,7 @@ const CSSValue* TimelineTrigger::CSSValueFromComputedStyleInternal(
                : *CSSIdentifierValue::Create(CSSValueID::kNone));
 
       list->Append(*ComputedStyleUtils::ValueForAnimationTimeline(
-          animation_data->TimelineTriggerTimelineList().at(i), style));
+          animation_data->TimelineTriggerSourceList().at(i), style));
 
       list->Append(*ComputedStyleUtils::ValueForAnimationTriggerBehavior(
           animation_data->TimelineTriggerBehaviorList().at(i)));
@@ -3990,7 +4083,7 @@ const CSSValue* TimelineTrigger::CSSValueFromComputedStyleInternal(
   CSSValueList* default_list = CSSValueList::CreateSpaceSeparated();
   default_list->Append(*CSSIdentifierValue::Create(CSSValueID::kNone));
   default_list->Append(*ComputedStyleUtils::ValueForAnimationTimeline(
-      CSSAnimationData::InitialTimelineTriggerTimeline(), style));
+      CSSAnimationData::InitialTimelineTriggerSource(), style));
   default_list->Append(*ComputedStyleUtils::ValueForAnimationTriggerBehavior(
       CSSAnimationData::InitialTimelineTriggerBehavior()));
   default_list->Append(*ComputedStyleUtils::ValueForAnimationRange(
@@ -4290,26 +4383,27 @@ bool LineClamp::ParseShorthand(
     const CSSParserLocalContext&,
     HeapVector<CSSPropertyValue, 64>& properties) const {
   const CSSValue* max_lines = nullptr;
+  const CSSValue* block_ellipsis = nullptr;
   const CSSValue* continue_value = nullptr;
 
   if (stream.Peek().Id() == CSSValueID::kNone) {
     max_lines = css_parsing_utils::ConsumeIdent(stream);
+    block_ellipsis = CSSIdentifierValue::Create(CSSValueID::kNoEllipsis);
     continue_value = CSSIdentifierValue::Create(CSSValueID::kAuto);
   } else {
-    // We must support the `auto` keyword for the `block-ellipsis` longhand,
-    // although we don't yet support that longhand.
-    bool parsed_auto = false;
-
     do {
       if (stream.Peek().Id() == CSSValueID::kWebkitLegacy) {
         continue_value = css_parsing_utils::ConsumeIdent(stream);
         break;
       }
 
-      if (!parsed_auto && stream.Peek().Id() == CSSValueID::kAuto) {
-        css_parsing_utils::ConsumeIdent(stream);
-        parsed_auto = true;
-        continue;
+      if (!block_ellipsis) {
+        block_ellipsis =
+            css_parsing_utils::ConsumeIdent<CSSValueID::kAuto,
+                                            CSSValueID::kNoEllipsis>(stream);
+        if (block_ellipsis) {
+          continue;
+        }
       }
 
       if (!max_lines) {
@@ -4322,12 +4416,15 @@ bool LineClamp::ParseShorthand(
       return false;
     } while (!stream.AtEnd());
 
-    if (!max_lines && !parsed_auto) {
+    if (!max_lines && !block_ellipsis) {
       return false;
     }
 
     if (!max_lines) {
       max_lines = CSSIdentifierValue::Create(CSSValueID::kNone);
+    }
+    if (!block_ellipsis) {
+      block_ellipsis = CSSIdentifierValue::Create(CSSValueID::kAuto);
     }
     if (!continue_value) {
       continue_value = CSSIdentifierValue::Create(CSSValueID::kCollapse);
@@ -4337,6 +4434,9 @@ bool LineClamp::ParseShorthand(
   AddProperty(CSSPropertyID::kMaxLines, CSSPropertyID::kLineClamp, *max_lines,
               important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
               properties);
+  AddProperty(CSSPropertyID::kBlockEllipsis, CSSPropertyID::kLineClamp,
+              *block_ellipsis, important,
+              css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
   AddProperty(CSSPropertyID::kContinue, CSSPropertyID::kLineClamp,
               *continue_value, important,
               css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
@@ -4348,19 +4448,24 @@ const CSSValue* LineClamp::CSSValueFromComputedStyleInternal(
     const LayoutObject* layout_object,
     bool allow_visited_style,
     CSSValuePhase value_phase) const {
-  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
   if (style.Continue() == EContinue::kAuto) {
-    if (style.MaxLines() == 0) {
+    if (style.MaxLines() == 0 &&
+        style.BlockEllipsis() == EBlockEllipsis::kNoEllipsis) {
       return CSSIdentifierValue::Create(CSSValueID::kNone);
     }
     return nullptr;
   }
 
+  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
+
   if (style.MaxLines() != 0) {
     list->Append(*GetCSSPropertyMaxLines().CSSValueFromComputedStyle(
         style, layout_object, allow_visited_style, value_phase));
-  } else {
-    list->Append(*CSSIdentifierValue::Create(CSSValueID::kAuto));
+  }
+
+  if (!list->length() || style.BlockEllipsis() != EBlockEllipsis::kAuto) {
+    list->Append(*GetCSSPropertyBlockEllipsis().CSSValueFromComputedStyle(
+        style, layout_object, allow_visited_style, value_phase));
   }
 
   if (style.Continue() == EContinue::kWebkitLegacy) {
@@ -4368,6 +4473,7 @@ const CSSValue* LineClamp::CSSValueFromComputedStyleInternal(
         style, layout_object, allow_visited_style, value_phase));
   }
 
+  DCHECK(list->length());
   return list;
 }
 
@@ -4378,24 +4484,31 @@ bool AlternativeWebkitLineClamp::ParseShorthand(
     const CSSParserLocalContext&,
     HeapVector<CSSPropertyValue, 64>& properties) const {
   const CSSValue* max_lines = nullptr;
+  const CSSValue* block_ellipsis = nullptr;
   const CSSValue* continue_value = nullptr;
 
   // `none` is a keyword with a custom mapping, but it's also a valid value of
   // the `block-ellipsis` longhand.
   if (stream.Peek().Id() == CSSValueID::kNone) {
     max_lines = css_parsing_utils::ConsumeIdent(stream);
+    block_ellipsis = CSSIdentifierValue::Create(CSSValueID::kNoEllipsis);
     continue_value = CSSIdentifierValue::Create(CSSValueID::kAuto);
   } else {
     max_lines = css_parsing_utils::ConsumePositiveInteger(stream, context);
     if (!max_lines) {
       return false;
     }
+    block_ellipsis = CSSIdentifierValue::Create(CSSValueID::kAuto);
     continue_value = CSSIdentifierValue::Create(CSSValueID::kWebkitLegacy);
   }
 
   AddProperty(CSSPropertyID::kMaxLines,
               CSSPropertyID::kAlternativeWebkitLineClamp, *max_lines, important,
               css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
+  AddProperty(CSSPropertyID::kBlockEllipsis,
+              CSSPropertyID::kAlternativeWebkitLineClamp, *block_ellipsis,
+              important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
+              properties);
   AddProperty(CSSPropertyID::kContinue,
               CSSPropertyID::kAlternativeWebkitLineClamp, *continue_value,
               important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
@@ -4408,10 +4521,13 @@ const CSSValue* AlternativeWebkitLineClamp::CSSValueFromComputedStyleInternal(
     const LayoutObject* layout_object,
     bool allow_visited_style,
     CSSValuePhase value_phase) const {
-  if (style.Continue() == EContinue::kAuto && style.MaxLines() == 0) {
+  if (style.Continue() == EContinue::kAuto &&
+      style.BlockEllipsis() == EBlockEllipsis::kNoEllipsis &&
+      style.MaxLines() == 0) {
     return CSSIdentifierValue::Create(CSSValueID::kNone);
   }
-  if (style.Continue() == EContinue::kWebkitLegacy && style.MaxLines() != 0) {
+  if (style.Continue() == EContinue::kWebkitLegacy &&
+      style.BlockEllipsis() == EBlockEllipsis::kAuto && style.MaxLines() != 0) {
     return GetCSSPropertyMaxLines().CSSValueFromComputedStyle(
         style, layout_object, allow_visited_style, value_phase);
   }

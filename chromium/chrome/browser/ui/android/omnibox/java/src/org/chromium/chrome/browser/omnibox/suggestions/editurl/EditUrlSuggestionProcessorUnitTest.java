@@ -35,13 +35,17 @@ import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 
 import org.chromium.base.ContextUtils;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.UserActionTester;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
 import org.chromium.chrome.browser.omnibox.R;
+import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxImageSupplier;
+import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteUIContext;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProperties;
+import org.chromium.chrome.browser.omnibox.suggestions.basic.BasicSuggestionProcessor.BookmarkState;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewProperties;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegate.ShareOrigin;
@@ -51,6 +55,7 @@ import org.chromium.components.dom_distiller.core.DomDistillerUrlUtilsJni;
 import org.chromium.components.omnibox.AutocompleteInput;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.AutocompleteMatchBuilder;
+import org.chromium.components.omnibox.OmniboxFeatureList;
 import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.components.omnibox.OmniboxSuggestionType;
 import org.chromium.components.omnibox.suggestions.OmniboxSuggestionUiType;
@@ -64,6 +69,7 @@ import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
 
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /** Unit tests for the "edit url" omnibox suggestion. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -108,6 +114,8 @@ public final class EditUrlSuggestionProcessorUnitTest {
     private @Mock WebContents mWebContents;
     private @Mock Supplier<Tab> mTabSupplier;
     private @Mock Supplier<ShareDelegate> mShareDelegateSupplier;
+    private @Mock UrlBarEditingTextStateProvider mTextProvider;
+    private @Mock BookmarkState mBookmarkState;
     private @Mock UkmRecorder.Natives mUkmRecorderJniMock;
     private @Mock AutocompleteInput mInput;
     private @Mock DomDistillerUrlUtilsJni mDomDistillerUrlUtilsJni;
@@ -145,13 +153,17 @@ public final class EditUrlSuggestionProcessorUnitTest {
                         .setUrl(CHROME_DISTILLER_URL)
                         .build();
 
-        mProcessor =
-                new EditUrlSuggestionProcessor(
+        AutocompleteUIContext uiContext =
+                new AutocompleteUIContext(
                         mContext,
                         mSuggestionHost,
+                        mTextProvider,
                         Optional.of(mImageSupplier),
+                        mBookmarkState,
                         mTabSupplier,
-                        mShareDelegateSupplier);
+                        mShareDelegateSupplier,
+                        () -> ControlsPosition.TOP);
+        mProcessor = new EditUrlSuggestionProcessor(uiContext);
         mModel = mProcessor.createModel();
 
         doReturn(mTab).when(mTabSupplier).get();
@@ -187,6 +199,7 @@ public final class EditUrlSuggestionProcessorUnitTest {
     }
 
     @Test
+    @DisableFeatures(OmniboxFeatureList.REMOVE_SEARCH_READY_OMNIBOX)
     public void doesProcessSuggestion_acceptMatchingUrlWhatYouTyped() {
         // URL_WHAT_YOU_TYPED
         assertTrue(mProcessor.doesProcessSuggestion(mMatch, 0));
@@ -202,6 +215,7 @@ public final class EditUrlSuggestionProcessorUnitTest {
     }
 
     @Test
+    @DisableFeatures(OmniboxFeatureList.REMOVE_SEARCH_READY_OMNIBOX)
     public void doesProcessSuggestion_acceptMatchingWhatYouTypedWhenRetainOmniboxOnFocusDisabled() {
         // URL_WHAT_YOU_TYPED
         OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(false);

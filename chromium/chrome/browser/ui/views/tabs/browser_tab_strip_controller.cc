@@ -27,8 +27,10 @@
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_source.h"
 #include "chrome/browser/search/search.h"
+#include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
@@ -399,7 +401,7 @@ void BrowserTabStripController::RecordMetricsOnTabSelectionChange(
   }
 
   tab_groups::TabGroupSyncService* tab_group_service =
-      tab_groups::SavedTabGroupUtils::GetServiceForProfile(
+      tab_groups::TabGroupSyncServiceFactory::GetForProfile(
           browser_view_->GetProfile());
 
   if (!tab_group_service) {
@@ -439,9 +441,9 @@ void BrowserTabStripController::OnCloseTab(
   }
 
 #if BUILDFLAG(IS_CHROMEOS)
-  // Tabs cannot be closed when the app is locked for OnTask. Only relevant for
-  // non-web browser scenarios.
-  if (browser_view_->browser()->IsLockedForOnTask()) {
+  // Tabs cannot be closed when the app is in locked fullscreen, which is
+  // available only on ChromeOS.
+  if (browser_view_->IsTrustedPinned()) {
     return;
   }
 #endif
@@ -553,7 +555,12 @@ void BrowserTabStripController::ToggleTabGroupCollapsedState(
       } else {
         // Create a new tab that will automatically be activated
         should_toggle_group = false;
-        CreateNewTab();
+        // We intentionally do not call CreateNewTab() here because it
+        // respects the IsNewTabAddsToActiveGroupEnabled() feature, which would
+        // add the new tab to the same group as the currently active tab.
+        // In the "collapse group" scenario, we want the new tab to be created
+        // outside of any group to avoid it being collapsed immediately.
+        model_->delegate()->AddTabAt(GURL(), -1, true);
       }
     } else {
       // If the active tab is not in the group that is toggling to collapse,
@@ -623,7 +630,7 @@ void BrowserTabStripController::OnDropIndexUpdate(
 }
 
 void BrowserTabStripController::CreateNewTab() {
-  model_->delegate()->AddTabAt(GURL(), -1, true);
+  chrome::NewTab(GetBrowser());
 }
 
 void BrowserTabStripController::CreateNewTabWithLocation(
@@ -650,13 +657,18 @@ void BrowserTabStripController::OnStartedDragging(bool dragging_window) {
             ImmersiveModeController::ANIMATE_REVEAL_NO);
   }
 
-  browser_view_->frame()->SetTabDragKind(dragging_window ? TabDragKind::kAllTabs
-                                                         : TabDragKind::kTab);
+  browser_view_->browser_widget()->SetTabDragKind(
+      dragging_window ? TabDragKind::kAllTabs : TabDragKind::kTab);
   // We also use fast resize for the source browser window as the source browser
   // window may also change bounds during dragging.
   BrowserView* source_browser_view = GetSourceBrowserViewInTabDragging();
   if (source_browser_view && source_browser_view != browser_view_) {
-    source_browser_view->frame()->SetTabDragKind(TabDragKind::kTab);
+    source_browser_view->browser_widget()->SetTabDragKind(TabDragKind::kTab);
+#if BUILDFLAG(IS_CHROMEOS)
+    browser_view_->GetWidget()->GetNativeWindow()->SetProperty(
+        ash::kTabDraggingSourceWindowKey,
+        source_browser_view->GetNativeWindow());
+#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -672,15 +684,25 @@ void BrowserTabStripController::OnStoppedDragging() {
   // Only reset the source window's fast resize bit after the entire drag
   // ends.
   if (browser_view_ != source_browser_view) {
-    browser_view_->frame()->SetTabDragKind(TabDragKind::kNone);
+    browser_view_->browser_widget()->SetTabDragKind(TabDragKind::kNone);
   }
   if (source_browser_view && !TabDragController::IsActive()) {
-    source_browser_view->frame()->SetTabDragKind(TabDragKind::kNone);
+    source_browser_view->browser_widget()->SetTabDragKind(TabDragKind::kNone);
   }
 
 #if BUILDFLAG(IS_CHROMEOS)
-  browser_view_->GetWidget()->GetNativeWindow()->ClearProperty(
-      ash::kIsDraggingTabsKey);
+  // Clear the drag properties unless the drag browser's tabs got merged into
+  // another browser, in which case SplitViewController::TabDragWindowObserver
+  // still needs to read the properties. We detect this case by checking if the
+  // tab strip model is now empty. Since it was non-empty originally and the
+  // drag browser can't have any pending downloads. we know that it's about to
+  // get destroyed anyways.
+  if (!browser_view_->browser()->tab_strip_model()->empty()) {
+    browser_view_->GetWidget()->GetNativeWindow()->ClearProperty(
+        ash::kIsDraggingTabsKey);
+    browser_view_->GetWidget()->GetNativeWindow()->ClearProperty(
+        ash::kTabDraggingSourceWindowKey);
+  }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
@@ -987,13 +1009,12 @@ void BrowserTabStripController::SetTabNeedsAttentionAt(int index,
   tabstrip_->SetTabNeedsAttention(index, attention);
 }
 
-bool BrowserTabStripController::IsFrameButtonsRightAligned() const {
-#if BUILDFLAG(IS_MAC)
-  return false;
-#else
-  return true;
-#endif  // BUILDFLAG(IS_MAC)
+void BrowserTabStripController::SetTabGroupNeedsAttention(
+    const tab_groups::TabGroupId& group,
+    bool attention) {
+  tabstrip_->SetTabGroupNeedsAttention(group, attention);
 }
+
 
 void BrowserTabStripController::OnSplitTabChanged(
     const SplitTabChange& change) {
@@ -1010,7 +1031,7 @@ void BrowserTabStripController::OnSplitTabChanged(
     // Stop animating if we are updating an active split.
     if (change.GetAddedChange()->reason() !=
         SplitTabChange::SplitTabAddReason::kNewSplitTabAdded) {
-      tabstrip_->StopAnimating(true);
+      tabstrip_->StopAnimating();
     }
   } else if (change.type == SplitTabChange::Type::kRemoved) {
     std::vector<int> split_indices;
@@ -1025,7 +1046,7 @@ void BrowserTabStripController::OnSplitTabChanged(
     // Stop animating if we are updating an active split.
     if (change.GetRemovedChange()->reason() !=
         SplitTabChange::SplitTabRemoveReason::kSplitTabRemoved) {
-      tabstrip_->StopAnimating(true);
+      tabstrip_->StopAnimating();
     }
   } else if (change.type == SplitTabChange::Type::kContentsChanged) {
     std::vector<int> split_indices;
@@ -1035,17 +1056,16 @@ void BrowserTabStripController::OnSplitTabChanged(
         std::back_inserter(split_indices),
         [](const std::pair<tabs::TabInterface*, int>& p) { return p.second; });
     tabstrip_->OnSplitContentsChanged(split_indices);
-    tabstrip_->StopAnimating(true);
+    tabstrip_->StopAnimating();
   }
 }
 
-BrowserNonClientFrameView* BrowserTabStripController::GetFrameView() {
-  return browser_view_->frame()->GetFrameView();
+BrowserFrameView* BrowserTabStripController::GetFrameView() {
+  return browser_view_->browser_widget()->GetFrameView();
 }
 
-const BrowserNonClientFrameView* BrowserTabStripController::GetFrameView()
-    const {
-  return browser_view_->frame()->GetFrameView();
+const BrowserFrameView* BrowserTabStripController::GetFrameView() const {
+  return browser_view_->browser_widget()->GetFrameView();
 }
 
 void BrowserTabStripController::SetTabDataAt(content::WebContents* web_contents,

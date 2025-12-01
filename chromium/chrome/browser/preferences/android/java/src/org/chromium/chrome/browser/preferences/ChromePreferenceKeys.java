@@ -199,6 +199,22 @@ public final class ChromePreferenceKeys {
     public static final String NTP_CUSTOMIZATION_BACKGROUND_IMAGE_TYPE =
             "Chrome.NtpCustomization.NtpBackgroundImageType";
 
+    /** The background color of NTP. */
+    public static final String NTP_CUSTOMIZATION_BACKGROUND_COLOR =
+            "Chrome.NtpCustomization.NtpBackgroundColor";
+
+    /** The primary color for customizing NTP. */
+    public static final String NTP_CUSTOMIZATION_PRIMARY_COLOR =
+            "Chrome.NtpCustomization.NtpCustomizationPrimaryColor";
+
+    /** The transformation matrix for the NTP background image in portrait orientation. */
+    public static final String NTP_BACKGROUND_IMAGE_PORTRAIT_MATRIX =
+            "Chrome.NtpCustomization.BackgroundImagePortraitMatrix";
+
+    /** The transformation matrix for the NTP background image in landscape orientation. */
+    public static final String NTP_BACKGROUND_IMAGE_LANDSCAPE_MATRIX =
+            "Chrome.NtpCustomization.BackgroundImageLandscapeMatrix";
+
     public static final String CRASH_UPLOAD_FAILURE_BROWSER = "browser_crash_failure_upload";
     public static final String CRASH_UPLOAD_FAILURE_GPU = "gpu_crash_failure_upload";
     public static final String CRASH_UPLOAD_FAILURE_OTHER = "other_crash_failure_upload";
@@ -292,6 +308,10 @@ public final class ChromePreferenceKeys {
     public static final String EXPLORE_OFFLINE_CONTENT_AVAILABILITY_STATUS =
             "Chrome.NTPExploreOfflineCard.HasExploreOfflineContent";
 
+    /** Indicates whether a chrome page URL has been overridden by an extension. */
+    public static final KeyPrefix EXTENSIONS_CHROME_PAGE_URL_OVERRIDE_ENABLED =
+            new KeyPrefix("Chrome.ExtensionsUrlOverrides.Page.*");
+
     public static final String FIRST_RUN_FLOW_COMPLETE = "first_run_flow";
     // BACKUP_FLOW_SIGNIN_ACCOUNT_NAME used to be employed for the FRE too, thus the "first_run_"
     // prefix. The string should NOT be changed without some sort of migration.
@@ -334,17 +354,20 @@ public final class ChromePreferenceKeys {
 
     public static final String HOMEPAGE_LOCATION_POLICY_GURL = "Chrome.Policy.HomepageLocationGurl";
 
-    public static final String HOMEPAGE_IS_NEW_TAB_PAGE_POLICY_MANAGED =
-            "Chrome.Policy.HomepageIsNewTabPageManaged";
-    public static final String HOMEPAGE_IS_NEW_TAB_PAGE_POLICY_VALUE =
-            "Chrome.Policy.HomepageIsNewTabPageValue";
-
     /**
      * Stores the state of the ShowHomeButton policy.
      *
      * @see org.chromium.components.browser_ui.settings.ManagedPreferencesUtils.BooleanPolicyState
      */
     public static final String SHOW_HOME_BUTTON_POLICY_STATE = "Chrome.Policy.ShowHomeButtonState";
+
+    /**
+     * Stores the combined state of the homepage location and HomepageIsNewTabPage policies.
+     *
+     * @see org.chromium.components.browser_ui.settings.ManagedPreferencesUtils.BooleanPolicyState
+     */
+    public static final String HOMEPAGE_SELECTION_POLICY_STATE =
+            "Chrome.Policy.HomepageSelectionPolicyState";
 
     /** Used for get image descriptions feature, track "Just once"/"Don't ask again" choice. */
     public static final String IMAGE_DESCRIPTIONS_JUST_ONCE_COUNT =
@@ -434,6 +457,8 @@ public final class ChromePreferenceKeys {
             "Chrome.MultiWindow.MaxInstanceLimit";
     public static final String MULTI_INSTANCE_INSTANCE_LIMIT_DOWNGRADE_TRIGGERED =
             "Chrome.MultiWindow.InstanceLimitDowngradeTriggered";
+    public static final KeyPrefix MULTI_INSTANCE_PROFILE_TYPE =
+            new KeyPrefix("Chrome.MultiInstance.ProfileType.*");
     public static final String MULTI_INSTANCE_RESTORATION_MESSAGE_SHOWN =
             "Chrome.MultiWindow.RestorationMessageShown";
 
@@ -457,8 +482,12 @@ public final class ChromePreferenceKeys {
     // terminated.
     public static final KeyPrefix MULTI_INSTANCE_TAB_COUNT_FOR_RELAUNCH =
             new KeyPrefix("Chrome.MultiInstance.TabCountForRelaunch.*");
+    // The default window title, equivalent to the active tab title.
     public static final KeyPrefix MULTI_INSTANCE_TITLE =
             new KeyPrefix("Chrome.MultiInstance.Title.*");
+    // A custom window title set by the user.
+    public static final KeyPrefix MULTI_INSTANCE_CUSTOM_TITLE =
+            new KeyPrefix("Chrome.MultiInstance.CustomTitle.*");
     public static final KeyPrefix MULTI_INSTANCE_LAST_ACCESSED_TIME =
             new KeyPrefix("Chrome.MultiInstance.LastAccessedTime.*");
     public static final KeyPrefix MULTI_INSTANCE_URL = new KeyPrefix("Chrome.MultiInstance.Url.*");
@@ -711,6 +740,27 @@ public final class ChromePreferenceKeys {
      * promo.
      */
     public static final String PWA_RESTORE_PROMO_STAGE = "Chrome.PwaRestore.PromoStage";
+
+    /**
+     * The number of times the reader mode contextual page action has been shown in the current
+     * tracking window.
+     */
+    public static final String READER_MODE_ACTION_SHOW_COUNT = "Chrome.ReaderMode.ActionShowCount";
+
+    /**
+     * The timestamp of the first time the reader mode contextual page action was shown in the
+     * current tracking window.
+     */
+    public static final String READER_MODE_ACTION_FIRST_SHOWN_TIMESTAMP =
+            "Chrome.ReaderMode.ActionFirstShownTimestamp";
+
+    /** The timestamp until which the reader mode contextual page action should be suppressed. */
+    public static final String READER_MODE_ACTION_SUPPRESSION_COUNT =
+            "Chrome.ReaderMode.ActionSuppressionCount";
+
+    /** The timestamp until which the reader mode contextual page action should be suppressed. */
+    public static final String READER_MODE_ACTION_SUPPRESSION_END_TIMESTAMP =
+            "Chrome.ReaderMode.ActionSuppressionEndTimestamp";
 
     public static final String IS_MVT_VISIBLE = "Chrome.NtpCustomization.IsMvtVisible";
 
@@ -1031,6 +1081,10 @@ public final class ChromePreferenceKeys {
                 CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS_CLICKED,
                 CONTEXT_MENU_SHOP_IMAGE_WITH_GOOGLE_LENS_CLICKED,
                 NTP_CUSTOMIZATION_BACKGROUND_IMAGE_TYPE,
+                NTP_CUSTOMIZATION_BACKGROUND_COLOR,
+                NTP_CUSTOMIZATION_PRIMARY_COLOR,
+                NTP_BACKGROUND_IMAGE_PORTRAIT_MATRIX,
+                NTP_BACKGROUND_IMAGE_LANDSCAPE_MATRIX,
                 CUSTOM_TABS_LAST_CLIENT_PACKAGE,
                 CUSTOM_TABS_LAST_CLOSE_TAB_INTERACTION,
                 CUSTOM_TABS_LAST_CLOSE_TIMESTAMP,
@@ -1051,6 +1105,7 @@ public final class ChromePreferenceKeys {
                 DSE_NEW_TAB_URL,
                 HOME_MODULES_IMPRESSION_COUNT_BEFORE_INTERACTION.pattern(),
                 EXPLORE_OFFLINE_CONTENT_AVAILABILITY_STATUS,
+                EXTENSIONS_CHROME_PAGE_URL_OVERRIDE_ENABLED.pattern(),
                 FIRST_RUN_SKIPPED_BY_POLICY,
                 FIRST_CTA_START_TIMESTAMP,
                 FLAGS_LAST_CACHED_MINIMAL_BROWSER_FLAGS_TIME_MILLIS,
@@ -1062,8 +1117,7 @@ public final class ChromePreferenceKeys {
                 HOMEPAGE_LOCATION_POLICY_GURL,
                 HOMEPAGE_USE_CHROME_NTP,
                 HOMEPAGE_PARTNER_CUSTOMIZED_DEFAULT_GURL,
-                HOMEPAGE_IS_NEW_TAB_PAGE_POLICY_MANAGED,
-                HOMEPAGE_IS_NEW_TAB_PAGE_POLICY_VALUE,
+                HOMEPAGE_SELECTION_POLICY_STATE,
                 IMAGE_DESCRIPTIONS_JUST_ONCE_COUNT,
                 IMAGE_DESCRIPTIONS_DONT_ASK_AGAIN,
                 INCOGNITO_REAUTH_PROMO_CARD_ENABLED,
@@ -1080,6 +1134,7 @@ public final class ChromePreferenceKeys {
                 MULTI_INSTANCE_CLOSE_WINDOW_SKIP_CONFIRM,
                 MULTI_INSTANCE_MAX_INSTANCE_LIMIT,
                 MULTI_INSTANCE_INSTANCE_LIMIT_DOWNGRADE_TRIGGERED,
+                MULTI_INSTANCE_PROFILE_TYPE.pattern(),
                 MULTI_INSTANCE_RESTORATION_MESSAGE_SHOWN,
                 MULTI_INSTANCE_IS_INCOGNITO_SELECTED.pattern(),
                 MULTI_INSTANCE_INCOGNITO_TAB_COUNT.pattern(),
@@ -1091,6 +1146,7 @@ public final class ChromePreferenceKeys {
                 MULTI_INSTANCE_TAB_COUNT_FOR_RELAUNCH.pattern(),
                 MULTI_INSTANCE_TASK_MAP.pattern(),
                 MULTI_INSTANCE_TITLE.pattern(),
+                MULTI_INSTANCE_CUSTOM_TITLE.pattern(),
                 MULTI_INSTANCE_URL.pattern(),
                 NOTIFICATION_PERMISSION_RATIONALE_TIMESTAMP_KEY,
                 NOTIFICATION_PERMISSION_REQUEST_COUNT,
@@ -1130,6 +1186,10 @@ public final class ChromePreferenceKeys {
                 PROMO_TIMES_SEEN.pattern(),
                 PWA_RESTORE_APPS_AVAILABLE,
                 PWA_RESTORE_PROMO_STAGE,
+                READER_MODE_ACTION_FIRST_SHOWN_TIMESTAMP,
+                READER_MODE_ACTION_SHOW_COUNT,
+                READER_MODE_ACTION_SUPPRESSION_COUNT,
+                READER_MODE_ACTION_SUPPRESSION_END_TIMESTAMP,
                 SEARCH_ENGINE_CHOICE_OS_CHOICE_APPLIED_TIMESTAMP,
                 SEARCH_ENGINE_CHOICE_PENDING_OS_CHOICE_DIALOG_SHOWN_ATTEMPTS,
                 SEGMENTATION_FEED_ACTIVE_USER,

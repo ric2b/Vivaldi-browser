@@ -107,6 +107,10 @@ class LensSearchController {
       const gfx::Rect& region_bounds,
       const SkBitmap& region_bitmap);
 
+  // Opens the Lens overlay in the current session. This is a no-op if the
+  // overlay is already open or if the current Lens session is not active.
+  void OpenLensOverlayInCurrentSession();
+
   // Starts the contextualization flow without the overlay being shown to the
   // user. Virtual for testing.
   virtual void StartContextualization(
@@ -124,10 +128,13 @@ class LensSearchController {
       AutocompleteMatchType::Type match_type,
       bool is_zero_prefix_suggestion);
 
-  // Issues a text search request for Lens to fulfill using query text.
-  // Starts contextualization flow if its not already in progress. If the Lens
-  // Overlay is in the process of opening, the request will be queued until the
-  // overlay is fully opened.
+  // Issues a zero state request for Lens to fulfill. Starts contextualization
+  // flow and once contextualization is complete, issues a Lens region request
+  // with the entire viewport selected as the region. Does not open the overlay
+  // UI.
+  void IssueZeroStateRequest(
+      lens::LensOverlayInvocationSource invocation_source);
+
   // If `suppress_contextualization` is true, queries will not be performed with
   // contextualization for the duration of the session. However,
   // contextualization may still be initialized as normal.
@@ -166,6 +173,9 @@ class LensSearchController {
 
   // Returns true if Lens is currently active on this tab.
   bool IsActive();
+
+  // Returns true if either the overlay or the side panel is showing.
+  bool IsShowingUI();
 
   // Returns true if Lens is currently off on this tab.
   bool IsOff();
@@ -390,6 +400,12 @@ class LensSearchController {
   void WillDetach(tabs::TabInterface* tab,
                   tabs::TabInterface::DetachReason reason);
 
+  // Callback to run when the page context has been updated as part of a zero
+  // state request and the region search request should now be issued.
+  void OnPageContextUpdatedForZeroStateRequest(
+      lens::LensOverlayInvocationSource invocation_source,
+      base::Time query_start_time);
+
   // Whether the LensSearchController has been initialized. Meaning, all the
   // dependencies have been initialized and the controller is ready to use.
   bool initialized_ = false;
@@ -420,9 +436,6 @@ class LensSearchController {
   std::unique_ptr<lens::LensPermissionBubbleController>
       lens_permission_bubble_controller_;
 
-  // The overlay controller for the Lens Search feature on this tab.
-  std::unique_ptr<LensOverlayController> lens_overlay_controller_;
-
   // The controller for sending gen204 pings. Owned by this class so it can
   // outlive the query controller, allowing gen204 requests to be sent upon
   // query end.
@@ -450,6 +463,9 @@ class LensSearchController {
   // is used by both the overlay and the WebUI to share common event handling
   // logic.
   std::unique_ptr<lens::LensOverlayEventHandler> lens_overlay_event_handler_;
+
+    // The overlay controller for the Lens Search feature on this tab.
+  std::unique_ptr<LensOverlayController> lens_overlay_controller_;
 
   // Holds subscriptions for TabInterface callbacks.
   std::vector<base::CallbackListSubscription> tab_subscriptions_;

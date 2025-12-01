@@ -15,11 +15,10 @@ class BwgService;
 
 namespace {
 
-std::unique_ptr<KeyedService> BuildBwgService(web::BrowserState* context) {
+std::unique_ptr<KeyedService> BuildBwgService(ProfileIOS* profile) {
   if (!IsPageActionMenuEnabled()) {
     return nullptr;
   }
-  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
   return std::make_unique<BwgService>(
       profile, AuthenticationServiceFactory::GetForProfile(profile),
       IdentityManagerFactory::GetForProfile(profile), profile->GetPrefs());
@@ -48,12 +47,11 @@ BwgServiceFactory::BwgServiceFactory()
 BwgServiceFactory::~BwgServiceFactory() = default;
 
 // static
-BrowserStateKeyedServiceFactory::TestingFactory
-BwgServiceFactory::GetDefaultFactory() {
-  return base::BindRepeating(&BuildBwgService);
+BwgServiceFactory::TestingFactory BwgServiceFactory::GetDefaultFactory() {
+  return base::BindOnce(&BuildBwgService);
 }
 
 std::unique_ptr<KeyedService> BwgServiceFactory::BuildServiceInstanceFor(
-    web::BrowserState* context) const {
-  return BuildBwgService(context);
+    ProfileIOS* profile) const {
+  return BuildBwgService(profile);
 }

@@ -11,12 +11,16 @@ import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaym
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.DISMISS_HANDLER;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.FOCUSED_VIEW_ID_FOR_ACCESSIBILITY;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ItemType.ALL_LOYALTY_CARDS;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ItemType.BNPL;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ItemType.BNPL_ISSUER;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ItemType.BNPL_SELECTION_PROGRESS_HEADER;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ItemType.CREDIT_CARD;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ItemType.FILL_BUTTON;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ItemType.FOOTER;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ItemType.HEADER;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ItemType.IBAN;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ItemType.LOYALTY_CARD;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ItemType.PROGRESS_ICON;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ItemType.TERMS_LABEL;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ItemType.WALLET_SETTINGS_BUTTON;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.SHEET_ITEMS;
@@ -29,6 +33,7 @@ import android.graphics.drawable.Drawable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.chrome.browser.autofill.AutofillImageFetcher;
+import org.chromium.chrome.browser.autofill.PersonalDataManager.BnplIssuer;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.Iban;
 import org.chromium.chrome.browser.touch_to_fill.common.BottomSheetFocusHelper;
 import org.chromium.components.autofill.AutofillSuggestion;
@@ -86,10 +91,10 @@ public class TouchToFillPaymentMethodCoordinator implements TouchToFillPaymentMe
     }
 
     @Override
-    public void showCreditCards(
+    public void showPaymentMethods(
             List<AutofillSuggestion> suggestions, boolean shouldShowScanCreditCard) {
         assert mCardImageFunction != null : "Attempting to call showCreditCards before initialize.";
-        mMediator.showCreditCards(suggestions, shouldShowScanCreditCard, mCardImageFunction);
+        mMediator.showPaymentMethods(suggestions, shouldShowScanCreditCard, mCardImageFunction);
     }
 
     @Override
@@ -104,6 +109,22 @@ public class TouchToFillPaymentMethodCoordinator implements TouchToFillPaymentMe
             boolean firstTimeUsage) {
         mMediator.showLoyaltyCards(
                 affiliatedLoyaltyCards, allLoyaltyCards, mValuableImageFunction, firstTimeUsage);
+    }
+
+    @Override
+    public void updateBnplPaymentMethod(
+            Long extractedAmount, boolean isAmountSupportedByAnyIssuer) {
+        mMediator.updateBnplPaymentMethod(extractedAmount, isAmountSupportedByAnyIssuer);
+    }
+
+    @Override
+    public void showProgressScreen() {
+        mMediator.showProgressScreen();
+    }
+
+    @Override
+    public void showBnplIssuers(List<BnplIssuer> bnplIssuers) {
+        mMediator.showBnplIssuers(bnplIssuers);
     }
 
     @Override
@@ -161,6 +182,22 @@ public class TouchToFillPaymentMethodCoordinator implements TouchToFillPaymentMe
                 TERMS_LABEL,
                 TouchToFillPaymentMethodViewBinder::createTermsLabelView,
                 TouchToFillPaymentMethodViewBinder::bindTermsLabelView);
+        adapter.registerType(
+                BNPL,
+                TouchToFillPaymentMethodViewBinder::createBnplItemView,
+                TouchToFillPaymentMethodViewBinder::bindBnplItemView);
+        adapter.registerType(
+                PROGRESS_ICON,
+                TouchToFillPaymentMethodViewBinder::createProgressIconView,
+                TouchToFillPaymentMethodViewBinder::bindProgressIconView);
+        adapter.registerType(
+                BNPL_SELECTION_PROGRESS_HEADER,
+                TouchToFillPaymentMethodViewBinder::createBnplSelectionProgressHeaderItemView,
+                TouchToFillPaymentMethodViewBinder::bindBnplSelectionProgressHeaderView);
+        adapter.registerType(
+                BNPL_ISSUER,
+                TouchToFillPaymentMethodViewBinder::createBnplIssuerItemView,
+                TouchToFillPaymentMethodViewBinder::bindBnplIssuerItemView);
         view.setSheetItemListAdapter(adapter);
     }
 

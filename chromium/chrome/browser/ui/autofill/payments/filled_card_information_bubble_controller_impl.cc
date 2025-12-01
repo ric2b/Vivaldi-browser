@@ -65,19 +65,31 @@ void FilledCardInformationBubbleControllerImpl::SetupAndShowBubble(
     HideBubble();
   }
 
-  DCHECK(options.IsValid());
-  options_ = options;
-  is_user_gesture_ = false;
-  should_icon_be_visible_ = true;
+  if (!MaySetUpBubble()) {
+    // This will early return when bubble manager is enabled but doesn't exist
+    // for the tab.
+    return;
+  }
+
+  SetupBubbleState(options);
 
   // Delay the showing of the filled card information bubble so that the form
-  // filling and the filled card information bubble appearance do not happen at
-  // the same time.
+  // filling and the filled card information bubble appearance do not happen
+  // at the same time.
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
-      base::BindOnce(&FilledCardInformationBubbleControllerImpl::ShowBubble,
-                     weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(
+          &FilledCardInformationBubbleControllerImpl::QueueOrShowBubble,
+          weak_ptr_factory_.GetWeakPtr(), /*force_show=*/false),
       kFilledCardInformationBubbleDelay);
+}
+
+void FilledCardInformationBubbleControllerImpl::SetupBubbleState(
+    FilledCardInformationBubbleOptions options) {
+  DCHECK(options.IsValid());
+  options_ = std::move(options);
+  is_user_gesture_ = false;
+  should_icon_be_visible_ = true;
 }
 
 void FilledCardInformationBubbleControllerImpl::ReshowBubble() {
@@ -88,7 +100,7 @@ void FilledCardInformationBubbleControllerImpl::ReshowBubble() {
 
   is_user_gesture_ = true;
   should_icon_be_visible_ = true;
-  ShowBubble();
+  QueueOrShowBubble(/*force_show=*/true);
 }
 
 AutofillBubbleBase* FilledCardInformationBubbleControllerImpl::GetBubble()
@@ -219,7 +231,7 @@ void FilledCardInformationBubbleControllerImpl::OnLinkClicked() {
 
 void FilledCardInformationBubbleControllerImpl::OnBubbleClosed(
     PaymentsUiClosedReason closed_reason) {
-  set_bubble_view(nullptr);
+  ResetBubbleViewAndInformBubbleManager();
 
   // Log bubble result according to the closed reason.
   autofill_metrics::FilledCardInformationBubbleResult metric;
@@ -348,18 +360,24 @@ void FilledCardInformationBubbleControllerImpl::PrimaryPageChanged(
 
 void FilledCardInformationBubbleControllerImpl::OnVisibilityChanged(
     content::Visibility visibility) {
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillShowBubblesBasedOnPriorities)) {
+    // BubbleManager will handle the effects of tab changes.
+    return;
+  }
+
   // If the bubble hasn't been shown yet due to changing the tab during
   // kFilledCardInformationBubbleDelay, show the bubble after switching back
   // to the tab.
   if (visibility == content::Visibility::VISIBLE && !bubble_has_been_shown_ &&
       should_icon_be_visible_) {
-    ShowBubble();
+    QueueOrShowBubble();
   } else if (visibility == content::Visibility::HIDDEN) {
     HideBubble();
   }
 }
 
-PageActionIconType
+std::optional<PageActionIconType>
 FilledCardInformationBubbleControllerImpl::GetPageActionIconType() {
   return PageActionIconType::kFilledCardInformation;
 }
@@ -374,10 +392,10 @@ void FilledCardInformationBubbleControllerImpl::DoShowBubble() {
   weak_ptr_factory_.InvalidateWeakPtrs();
 
   Browser* browser = chrome::FindBrowserWithTab(web_contents());
-  set_bubble_view(browser->window()
-                      ->GetAutofillBubbleHandler()
-                      ->ShowFilledCardInformationBubble(web_contents(), this,
-                                                        is_user_gesture_));
+  SetBubbleView(*browser->window()
+                     ->GetAutofillBubbleHandler()
+                     ->ShowFilledCardInformationBubble(web_contents(), this,
+                                                       is_user_gesture_));
   DCHECK(bubble_view());
   bubble_has_been_shown_ = true;
 
@@ -412,6 +430,15 @@ GURL FilledCardInformationBubbleControllerImpl::GetLearnMoreUrl() const {
 
 bool FilledCardInformationBubbleControllerImpl::IsBnplFlow() const {
   return options_.filled_card.is_bnpl_card();
+}
+
+BubbleType FilledCardInformationBubbleControllerImpl::GetBubbleType() const {
+  return BubbleType::kFilledCardInformation;
+}
+
+base::WeakPtr<BubbleControllerBase>
+FilledCardInformationBubbleControllerImpl::GetBubbleControllerBaseWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(FilledCardInformationBubbleControllerImpl);

@@ -14,6 +14,10 @@ bundle_data_xcassets("vivaldi_context_menu_assets") {
     "VivaldiContextMenuAssets.xcassets/vivaldi_new_background_tab.symbolset/Contents.json",
     "VivaldiContextMenuAssets.xcassets/vivaldi_new_background_tab.symbolset/vivaldi_new_background_tab.svg",
 
+    # vivaldi_new_window
+    "VivaldiContextMenuAssets.xcassets/vivaldi_new_window.symbolset/Contents.json",
+    "VivaldiContextMenuAssets.xcassets/vivaldi_new_window.symbolset/vivaldi_new_window.svg",
+
     # vivaldi_private_tab
     "VivaldiContextMenuAssets.xcassets/vivaldi_private_tab.imageset/Contents.json",
     "VivaldiContextMenuAssets.xcassets/vivaldi_private_tab.imageset/vivaldi_private_tab.pdf",
@@ -88,6 +92,14 @@ bundle_data_xcassets("vivaldi_context_menu_assets") {
     "VivaldiContextMenuAssets.xcassets/vivaldi_add_reading_list.imageset/vivaldi_add_reading_list.pdf",
     "VivaldiContextMenuAssets.xcassets/vivaldi_add_reading_list.imageset/vivaldi_add_reading_list_dark.pdf",
 
+    # vivaldi_show_bookmarks
+    "VivaldiContextMenuAssets.xcassets/vivaldi_show_bookmarks.symbolset/Contents.json",
+    "VivaldiContextMenuAssets.xcassets/vivaldi_show_bookmarks.symbolset/vivaldi_show_bookmarks.svg",
+
+    # vivaldi_show_reading_list
+    "VivaldiContextMenuAssets.xcassets/vivaldi_show_reading_list.symbolset/Contents.json",
+    "VivaldiContextMenuAssets.xcassets/vivaldi_show_reading_list.symbolset/vivaldi_show_reading_list.svg",
+
     # vivaldi_qr_code
     "VivaldiContextMenuAssets.xcassets/vivaldi_qr_code.imageset/Contents.json",
     "VivaldiContextMenuAssets.xcassets/vivaldi_qr_code.imageset/vivaldi_qr_code.pdf",
@@ -129,8 +141,8 @@ bundle_data_xcassets("vivaldi_context_menu_assets") {
     "VivaldiContextMenuAssets.xcassets/vivaldi_print.imageset/vivaldi_print_dark.pdf",
 
     # vivaldi_search
-    "VivaldiContextMenuAssets.xcassets/vivaldi_search.imageset/Contents.json",
-    "VivaldiContextMenuAssets.xcassets/vivaldi_search.imageset/vivaldi_search.pdf",
+    "VivaldiContextMenuAssets.xcassets/vivaldi_search.symbolset/Contents.json",
+    "VivaldiContextMenuAssets.xcassets/vivaldi_search.symbolset/vivaldi_search.svg",
 
     # vivaldi_clear_history_autofill
     "VivaldiContextMenuAssets.xcassets/vivaldi_clear_history_autofill.imageset/Contents.json",

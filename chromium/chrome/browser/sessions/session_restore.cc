@@ -51,6 +51,7 @@
 #include "chrome/browser/sessions/session_service_log.h"
 #include "chrome/browser/sessions/session_service_lookup.h"
 #include "chrome/browser/sessions/session_service_utils.h"
+#include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -370,7 +371,8 @@ class SessionRestoreImpl : public BrowserListObserver {
   // NEW_WINDOW, in which case the tab will be opened in a new browser. Returns
   // the WebContents of the restored tab.
   WebContents* RestoreForeignTab(const sessions::SessionTab& tab,
-                                 WindowOpenDisposition disposition) {
+                                 WindowOpenDisposition disposition,
+                                 bool vivaldi_load_content = false) {
     DCHECK(!tab.navigations.empty());
     int selected_index = tab.current_navigation_index;
     selected_index = std::max(
@@ -397,6 +399,11 @@ class SessionRestoreImpl : public BrowserListObserver {
     } else {
       int tab_index =
           use_new_window ? 0 : browser->tab_strip_model()->active_index() + 1;
+      if (vivaldi::IsVivaldiRunning() && !use_new_window) {
+        // Allows opening more than one tab in proper sequence without
+        // activating each tab, one after another.
+        tab_index = browser->tab_strip_model()->count() + 1;
+      }
       web_contents = chrome::AddRestoredTab(
           browser, tab.navigations, tab_index, selected_index,
           tab.extension_app_id, std::nullopt,
@@ -408,7 +415,13 @@ class SessionRestoreImpl : public BrowserListObserver {
           // Vivaldi
           tab.viv_page_action_overrides, tab.viv_ext_data);
       // Start loading the tab immediately.
+      if (vivaldi::IsVivaldiRunning()) {
+        if (vivaldi_load_content) {
+          web_contents->GetController().LoadIfNecessary();
+        }
+      } else {
       web_contents->GetController().LoadIfNecessary();
+      }
     }
 
     if (use_new_window) {
@@ -1126,7 +1139,7 @@ class SessionRestoreImpl : public BrowserListObserver {
                          const tab_groups::LocalTabGroupID& local_id,
                          std::optional<std::string> sync_id) {
     tab_groups::TabGroupSyncService* service =
-        tab_groups::SavedTabGroupUtils::GetServiceForProfile(profile);
+        tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile);
     if (!service) {
       return;
     }
@@ -1461,7 +1474,8 @@ WebContents* SessionRestore::RestoreForeignSessionTab(
     content::WebContents* source_web_contents,
     const sessions::SessionTab& tab,
     WindowOpenDisposition disposition,
-    bool skip_renderer_creation) {
+    bool skip_renderer_creation,
+    bool vivaldi_load_content) {
   Browser* browser = chrome::FindBrowserWithTab(source_web_contents);
   Profile* profile = browser->profile();
   StartupTabs startup_tabs;
@@ -1469,7 +1483,7 @@ WebContents* SessionRestore::RestoreForeignSessionTab(
                               /* restore_apps */ false,
                               /* restore_browser */ true,
                               /* log_event */ false, startup_tabs);
-  return restorer.RestoreForeignTab(tab, disposition);
+  return restorer.RestoreForeignTab(tab, disposition, vivaldi_load_content);
 }
 
 // static

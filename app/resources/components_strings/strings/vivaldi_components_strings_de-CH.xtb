@@ -19,17 +19,14 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proxy und Firewall prüfen<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Ausgestellt für: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Diese Website kann keine sichere Verbindung bereitstellen</translation>
-<translation id="2187317261103489799">Erkennen (Standardeinstellung)</translation>
 <translation id="2224337661447660594">Kein Internet</translation>
 <translation id="2292556288342944218">Ihre Internetverbindung ist gesperrt</translation>
 <translation id="2317259163369394535">Für <ph name="DOMAIN" /> sind ein Nutzername und ein Passwort erforderlich.</translation>
 <translation id="2337852623177822836">Einstellung wird von Ihrem Administrator gesteuert</translation>
 <translation id="2355395290879513365">Angreifer können unter Umständen die Bilder sehen, die Sie sich auf dieser Website ansehen, und könnten dann versuchen, Sie durch Ändern der Bilder zu täuschen.</translation>
-<translation id="2356070529366658676">Nachfragen</translation>
 <translation id="2359808026110333948">Weiter</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Eine Netzwerkdiagnose durchführen<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Diese Seite wurde von einer Erweiterung blockiert</translation>
-<translation id="2539524384386349900">Erkennen</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> hat eine ungültige Antwort gesendet.</translation>
 <translation id="2634124572758952069">Die IP-Adresse des Servers <ph name="HOST_NAME" /> wurde nicht gefunden.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -52,9 +49,7 @@
       Falls Sie keinen Proxyserver verwenden möchten, deaktivieren Sie ihn wie
       folgt: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Klicken Sie auf die Schaltfläche zum erneuten Laden, um die für das Laden der Seite erforderlichen Daten erneut zu senden.</translation>
-<translation id="3234666976984236645">Wichtige Inhalte auf dieser Website immer erkennen</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> ist momentan nicht erreichbar.</translation>
-<translation id="3427092606871434483">Zulassen (Standardeinstellung)</translation>
 <translation id="3447661539832366887">Der Besitzer dieses Geräts hat das Antonio-Spiel deaktiviert.</translation>
 <translation id="3447884698081792621">Zertifikat anzeigen (ausgestellt von <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Erweiterte Informationen ausblenden</translation>
@@ -73,7 +68,6 @@
 <translation id="4075732493274867456">Client und Server unterstützen keine gemeinsamen SSL-Protokollversionen oder Verschlüsselungsverfahren.</translation>
 <translation id="4116663294526079822">Auf dieser Website immer zulassen</translation>
 <translation id="4130226655945681476">Prüfen Sie Netzwerkkabel, Modem und Router</translation>
-<translation id="4151403195736952345">Globalen Standard verwenden (Erkennen)</translation>
 <translation id="4165986682804962316">Website-Einstellungen</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Firewall und Antivirenkonfiguration prüfen<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Versuchen Sie eine Netzwerkdiagnose durchzuführen<ph name="END_LINK" />.</translation>
@@ -81,7 +75,6 @@
 <translation id="4250431568374086873">Die Verbindung zu dieser Website ist nicht volkommen sicher</translation>
 <translation id="4265872034478892965">Von Ihrem Administrator zugelassen</translation>
 <translation id="4305666528087210886">Zugriff auf die Datei nicht möglich</translation>
-<translation id="4312866146174492540">Blockieren (Standardeinstellung)</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> hat Ihr Anmeldezertifikat nicht akzeptiert oder es wurde keines bereitgestellt.</translation>
 <translation id="4506599922270137252">Kontakt mit dem Systemadministrator aufnehmen</translation>
@@ -97,7 +90,6 @@
 <translation id="483241715238664915">Warnmeldungen aktivieren</translation>
 <translation id="4943872375798546930">Keine Ergebnisse</translation>
 <translation id="5023310440958281426">Informieren Sie sich über die von Ihrem Administrator festgelegten Richtlinien</translation>
-<translation id="5039804452771397117">Zulassen</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 wird verwendet)}other{(# werden verwendet)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Proxyadresse prüfen<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-Bit)</translation>
@@ -143,7 +135,6 @@
 <translation id="6757797048963528358">Ihr Gerät geht in den Ruhemodus.</translation>
 <translation id="6890956352250146925">Optionen für Cookies und Websitedaten</translation>
 <translation id="6897140037006041989">User-Agent</translation>
-<translation id="7053983685419859001">Blockieren</translation>
 <translation id="7096937462164235847">Die Identität dieser Website ist nicht verifiziert.</translation>
 <translation id="7108819624672055576">Von einer Erweiterung zugelassen</translation>
 <translation id="7111012039238467737">(Gültig)</translation>
@@ -166,7 +157,6 @@
 <translation id="7834399512844817676"><ph name="SITE" /> schützt Ihre Daten in der Regel durch Verschlüsselung. Als Vivaldi dieses Mal versuchte, eine Verbindung zu <ph name="SITE" /> herzustellen, sendete die Website ungewöhnliche und falsche Informationen zurück, um sich zu identifizieren. Entweder versucht ein Angreifer, sich als <ph name="SITE" /> auszugeben, oder die Verbindung wurde durch eine WLAN-Anmeldeseite unterbrochen. Da Vivaldi die Verbindung vor dem Austausch von Daten unterbrochen hat, sind Ihre Informationen weiterhin sicher.</translation>
 <translation id="7878562273885520351">Ihr Passwort könnte kompromittiert sein</translation>
 <translation id="7951415247503192394">(32-Bit)</translation>
-<translation id="8037357227543935929">Nachfragen (Standardeinstellung)</translation>
 <translation id="8041940743680923270">Globalen Standard verwenden (Nachfragen)</translation>
 <translation id="808894953321890993">Passwort ändern</translation>
 <translation id="8149426793427495338">Ihr Computer geht in den Ruhemodus.</translation>

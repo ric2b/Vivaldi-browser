@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,6 @@ import childProcess from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {performance} from 'node:perf_hooks';
-import util from 'node:util';
 
 import {
   autoninjaPyPath,
@@ -16,7 +15,65 @@ import {
   vpython3ExecutablePath,
 } from './devtools_paths.js';
 
-const execFile = util.promisify(childProcess.execFile);
+/**
+ * Errors returned from `spawn()` will have additional `stderr` and `stdout`
+ * properties, similar to what we'd get from `child_process.execFile()`.
+ */
+class SpawnError extends Error {
+  /**
+   * Constructor for errors generated from `spawn()`.
+   *
+   * @param {string} message The actual error message.
+   * @param {string} stderr The child process' error output.
+   * @param {string} stdout The child process' regular output.
+   */
+  constructor(message, stderr, stdout) {
+    super(message);
+    this.stderr = stderr;
+    this.stdout = stdout;
+  }
+}
+
+/**
+ * Promisified wrapper around `child_process.spawn()`.
+ *
+ * In addition to forwarding the `options` to `child_process.spawn()`, it'll also
+ * set the `shell` option to `true`, to ensure that on Windows we can correctly
+ * invoke `.bat` files (necessary for the Python3 wrapper script).
+ *
+ * @param {string} command The command to run.
+ * @param {Array<string>} args List of string arguments to pass to the `command`.
+ * @param {Object} options Passed directly to `child_process.spawn()`.
+ * @returns {Promise<{stdout: string, stderr: string}>}
+ */
+function spawn(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = childProcess.spawn(command, args, {...options, shell: true});
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', data => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on('data', data => {
+      stderr += data.toString();
+    });
+
+    child.on('exit', (code, signal) => {
+      if (signal) {
+        reject(new SpawnError(`Process terminated due to signal ${signal}`, stderr, stdout));
+      } else if (code) {
+        reject(new SpawnError(`Process exited with code ${code}`, stderr, stdout));
+      } else {
+        resolve({stdout, stderr});
+      }
+    });
+
+    child.on('error', reject);
+  });
+}
 
 /**
  * Representation of the feature set that is configured for Chrome. This
@@ -33,7 +90,7 @@ export class FeatureSet {
   /**
    * Disables the given `feature`.
    *
-   * @param feature - the name of the feature to disable.
+   * @param feature the name of the feature to disable.
    */
   disable(feature) {
     this.#disabled.add(feature);
@@ -48,8 +105,8 @@ export class FeatureSet {
    * ```
    * The parameters are additive.
    *
-   * @param feature - the name of the feature to enable.
-   * @param parameters - the additional parameters to pass to it, in
+   * @param feature the name of the feature to enable.
+   * @param parameters the additional parameters to pass to it, in
    *                            the form of key/value pairs.
    */
   enable(feature, parameters = {}) {
@@ -65,7 +122,7 @@ export class FeatureSet {
   /**
    * Merge the other `featureSet` into this.
    *
-   * @param featureSet - the other `FeatureSet` to apply.
+   * @param featureSet the other `FeatureSet` to apply.
    */
   merge(featureSet) {
     for (const feature of featureSet.#disabled) {
@@ -132,9 +189,9 @@ export class FeatureSet {
 /**
  * Constructs a human readable error message for the given build `error`.
  *
- * @param error - the `Error` from the failed `autoninja` invocation.
- * @param outDir - the absolute path to the `target` out directory.
- * @param target - the target relative to `//out`.
+ * @param error the `Error` from the failed `autoninja` invocation.
+ * @param outDir the absolute path to the `target` out directory.
+ * @param target the target relative to `//out`.
  * @returns the human readable error message.
  */
 function buildErrorMessageForNinja(error, outDir, target) {
@@ -187,11 +244,11 @@ export class BuildError extends Error {
   /**
    * Constructs a new `BuildError` with the given parameters.
    *
-   * @param step - the build step that failed.
-   * @param options - additional options for the `BuildError`.
-   * @param options.cause - the actual cause for the build error.
-   * @param options.outDir - the absolute path to the `target` out directory.
-   * @param options.target - the target relative to `//out`.
+   * @param step the build step that failed.
+   * @param {object} options additional options for the `BuildError`.
+   * @param options.cause the actual cause for the build error.
+   * @param options.outDir the absolute path to the `target` out directory.
+   * @param options.target the target relative to `//out`.
    */
   constructor(step, options) {
     const {cause, outDir, target} = options;
@@ -212,7 +269,7 @@ export class BuildError extends Error {
  */
 
 /**
- * @param target - the target relative to `//out`.
+ * @param target the target relative to `//out`.
  * @returns the GN args for the `target`.
  */
 export async function prepareBuild(target) {
@@ -225,7 +282,7 @@ export async function prepareBuild(target) {
     try {
       const gnExe = vpython3ExecutablePath();
       const gnArgs = [gnPyPath(), '-q', 'gen', outDir];
-      await execFile(gnExe, gnArgs);
+      await spawn(gnExe, gnArgs);
     } catch (cause) {
       throw new BuildError(BuildStep.GN, {cause, outDir, target});
     }
@@ -246,7 +303,7 @@ function gnArgsForTarget(target) {
         const cwd = rootPath();
         const gnExe = vpython3ExecutablePath();
         const gnArgs = [gnPyPath(), '-q', 'args', outDir, '--json', '--list', '--short'];
-        const {stdout} = await execFile(gnExe, gnArgs, {cwd});
+        const {stdout} = await spawn(gnExe, gnArgs, {cwd});
         return new Map(JSON.parse(stdout).map(arg => [arg.name, arg.current?.value ?? arg.default?.value]));
       } catch {
         return new Map();
@@ -273,7 +330,7 @@ function gnRefsForTarget(target, filename) {
       const outDir = path.join(rootPath(), 'out', target);
       const gnExe = vpython3ExecutablePath();
       const gnArgs = [gnPyPath(), 'refs', outDir, '--as=output', filename];
-      const {stdout} = await execFile(gnExe, gnArgs, {cwd});
+      const {stdout} = await spawn(gnExe, gnArgs, {cwd});
       return stdout.trim().split('\n');
     })();
     gnRefsPerTarget.set(filename, gnRef);
@@ -325,7 +382,7 @@ export async function build(target, signal, filenames) {
   try {
     const autoninjaExe = vpython3ExecutablePath();
     const autoninjaArgs = [autoninjaPyPath(), '-C', outDir, ...buildTargets];
-    await execFile(autoninjaExe, autoninjaArgs, {signal});
+    await spawn(autoninjaExe, autoninjaArgs, {shell: true, signal});
   } catch (cause) {
     if (cause.name === 'AbortError') {
       throw cause;

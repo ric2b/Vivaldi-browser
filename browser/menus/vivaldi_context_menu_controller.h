@@ -136,8 +136,6 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   typedef std::map<int, std::string> IdToStringMap;
   typedef std::map<int, ui::Accelerator> IdToAcceleratorMap;
 
-  static std::unique_ptr<ContextMenuController> active_controller_;
-
   raw_ptr<VivaldiBrowserWindow> browser_window_;
   const raw_ptr<content::WebContents> window_web_contents_;
   raw_ptr<VivaldiRenderViewContextMenu> rv_context_menu_;

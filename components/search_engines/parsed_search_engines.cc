@@ -69,6 +69,7 @@ constexpr char kGoogle[] = "google";
 
 #if defined(OEM_LYNKCO_BUILD)
 constexpr char kEcosia[] = "ecosia";
+constexpr char kEcosiaNoPrompt[] = "ecosia_no_prompt";
 #endif  // defined(OEM_LYNKCO_BUILD)
 
 namespace {
@@ -304,9 +305,9 @@ GetEnginesListWithDefaultsForLocale(
 #if defined(OEM_POLESTAR_BUILD)
     is_default = search_engine_name == kGoogle;
 #elif defined(OEM_LYNKCO_BUILD)
-    is_default = search_engine_name == kEcosia;
+    is_default = search_engine_name == kEcosia ||
+                 search_engine_name == kEcosiaNoPrompt;
 #endif
-
     if (is_default) {
       if (default_index) {
         error = base::StrCat(

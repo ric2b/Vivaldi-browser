@@ -47,7 +47,7 @@
 #include "chrome/browser/devtools/features.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/download/download_stats.h"
-#include "chrome/browser/glic/glic_enabling.h"
+#include "chrome/browser/glic/public/glic_enabling.h"
 #include "chrome/browser/language/language_model_manager_factory.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_features.h"
@@ -237,9 +237,16 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "url/origin.h"
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+#include "components/webapps/isolated_web_apps/scheme.h"
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(USE_RENDERER_SPELLCHECKER)
 #include "chrome/browser/renderer_context_menu/spelling_options_submenu_observer.h"
@@ -268,6 +275,7 @@
 #if BUILDFLAG(ENABLE_GLIC)
 #include "chrome/browser/glic/public/glic_keyed_service.h"
 #include "chrome/browser/glic/public/glic_keyed_service_factory.h"
+#include "chrome/browser/glic/resources/grit/glic_browser_resources.h"
 #endif  // BUILDFLAG(ENABLE_GLIC)
 
 #if BUILDFLAG(ENABLE_PDF)
@@ -362,6 +370,8 @@ namespace {
 constexpr char kOpenLinkAsProfileHistogram[] =
     "RenderViewContextMenu.OpenLinkAsProfile";
 
+constexpr int kTabMenuIconSize = 16;
+
 base::OnceCallback<void(RenderViewContextMenu*)>* GetMenuShownCallback() {
   static base::NoDestructor<base::OnceCallback<void(RenderViewContextMenu*)>>
       callback;
@@ -389,6 +399,7 @@ const std::map<int, int>& GetIdcToUmaMap(UmaEnumIdLookupType type) {
   // These maps are from IDC_* -> UMA value. Never alter UMA ids. You may remove
   // items, but add a line to keep the old value from being reused.
 
+  // LINT.IfChange(RenderViewContextMenuItem)
   // These UMA values are for the RenderViewContextMenuItem enum, used for
   // the RenderViewContextMenu.Shown and RenderViewContextMenu.Used histograms.
   static const base::NoDestructor<std::map<int, int>> kGeneralMap(
@@ -544,14 +555,17 @@ const std::map<int, int>& GetIdcToUmaMap(UmaEnumIdLookupType type) {
        {IDC_CONTENT_CONTEXT_RELOAD_GLIC, 154},
        {IDC_CONTENT_CONTEXT_CLOSE_GLIC, 155},
        {IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW, 156},
+       {IDC_CONTENT_CONTEXT_GLICSHAREIMAGE, 157},
        // To add new items:
        //   - Add one more line above this comment block, using the UMA value
        //     from the line below this comment block.
        //   - Increment the UMA value in that latter line.
        //   - Add the new item to the RenderViewContextMenuItem enum in
        //     tools/metrics/histograms/metadata/ui/enums.xml.
-       {0, 157}});
+       {0, 158}});
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/ui/enums.xml:RenderViewContextMenuItem)
 
+  // LINT.IfChange(ContextMenuOptionDesktop)
   // These UMA values are for the ContextMenuOptionDesktop enum, used for
   // the ContextMenu.SelectedOptionDesktop histograms.
   static const base::NoDestructor<std::map<int, int>> kSpecificMap(
@@ -587,13 +601,15 @@ const std::map<int, int>& GetIdcToUmaMap(UmaEnumIdLookupType type) {
        {IDC_CONTENT_CONTEXT_SEARCHWEBFORNEWTAB, 29},
        {IDC_CONTENT_CONTEXT_OPENLINKPREVIEW, 30},
        {IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW, 31},
+       {IDC_CONTENT_CONTEXT_GLICSHAREIMAGE, 32},
        // To add new items:
        //   - Add one more line above this comment block, using the UMA value
        //     from the line below this comment block.
        //   - Increment the UMA value in that latter line.
        //   - Add the new item to the ContextMenuOptionDesktop enum in
        //     tools/metrics/histograms/metadata/enums.xml.
-       {0, 31}});
+       {0, 32}});
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/ui/enums.xml:ContextMenuOptionDesktop)
 
   return *(type == UmaEnumIdLookupType::GeneralEnumId ? kGeneralMap
                                                       : kSpecificMap);
@@ -868,6 +884,8 @@ DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(RenderViewContextMenu,
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(RenderViewContextMenu,
                                       kGlicReloadMenuItem);
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(RenderViewContextMenu,
+                                      kGlicShareImageMenuItem);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(RenderViewContextMenu,
                                       kOpenLinkInSplitMenuItem);
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(RenderViewContextMenu, kRegionSearchItem);
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(RenderViewContextMenu,
@@ -1079,6 +1097,11 @@ void RenderViewContextMenu::InitMenu() {
   }
 
   if (content_type_->SupportsGroup(
+          ContextMenuContentType::ITEM_GROUP_GLICSHAREIMAGE)) {
+    AppendGlicShareImageItem();
+  }
+
+  if (content_type_->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_MEDIA_VIDEO)) {
     AppendVideoItems();
   }
@@ -1151,7 +1174,7 @@ void RenderViewContextMenu::InitMenu() {
   if (content_type_->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_SMART_SELECTION) &&
       !content_type_->SupportsGroup(ContextMenuContentType::ITEM_GROUP_PAGE)) {
-    AppendReadingModeItem();
+    AppendReadAnythingItem();
   }
 
   // Partial Translate is not supported on ChromeOS.
@@ -1682,6 +1705,32 @@ void RenderViewContextMenu::AppendLinkItems() {
           IDC_CONTENT_CONTEXT_OPENLINKNEWTAB,
           in_app ? IDS_CONTENT_CONTEXT_OPENLINKNEWTAB_INAPP
                  : IDS_CONTENT_CONTEXT_OPENLINKNEWTAB);
+
+#if !BUILDFLAG(IS_ANDROID)
+      // Opening a link in split view should also go through the same
+      // constraints as opening a link in a new tab since a split view tab is a
+      // new tab that is then joined with the current active tab.
+      Browser* const browser = GetBrowser();
+      if (base::FeatureList::IsEnabled(features::kSideBySide) && browser &&
+          browser->is_type_normal()) {
+        menu_model_.AddItemWithStringIdAndIcon(
+            IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW,
+            IDS_CONTENT_CONTEXT_OPENLINKSPLITVIEW,
+            ui::ImageModel::FromVectorIcon(kSplitSceneIcon, ui::kColorMenuIcon,
+                                           kTabMenuIconSize));
+        const int command_index =
+            menu_model_
+                .GetIndexOfCommandId(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW)
+                .value();
+        menu_model_.SetIsNewFeatureAt(
+            command_index,
+            UserEducationService::MaybeShowNewBadge(
+                GetBrowserContext(), features::kSideBySideLinkMenuNewBadge));
+        menu_model_.SetElementIdentifierAt(command_index,
+                                           kOpenLinkInSplitMenuItem);
+      }
+
+#endif
     }
 
     if (show_open_in_new_window) {
@@ -1701,25 +1750,6 @@ void RenderViewContextMenu::AppendLinkItems() {
     }
 
 #if !BUILDFLAG(IS_ANDROID)
-    // Opening a link in split view should also go through the same constraints
-    // as opening a link in a new tab since a split view tab is a new tab that
-    // is then joined with the current active tab.
-    Browser* const browser = GetBrowser();
-    if (base::FeatureList::IsEnabled(features::kSideBySide) && browser &&
-        browser->is_type_normal() && show_open_in_new_tab) {
-      menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW,
-                                      IDS_CONTENT_CONTEXT_OPENLINKSPLITVIEW);
-      const int command_index =
-          menu_model_.GetIndexOfCommandId(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW)
-              .value();
-      menu_model_.SetIsNewFeatureAt(
-          command_index,
-          UserEducationService::MaybeShowNewBadge(
-              GetBrowserContext(), features::kSideBySideLinkMenuNewBadge));
-      menu_model_.SetElementIdentifierAt(command_index,
-                                         kOpenLinkInSplitMenuItem);
-    }
-
     if (base::FeatureList::IsEnabled(blink::features::kLinkPreview) &&
         !is_link_to_iwa) {
       menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_OPENLINKPREVIEW,
@@ -2025,6 +2055,33 @@ void RenderViewContextMenu::AppendSearchWebForImageItems() {
   MaybePrepareForLensQuery();
 }
 
+void RenderViewContextMenu::AppendGlicShareImageItem() {
+#if BUILDFLAG(ENABLE_GLIC)
+  if (glic::GlicEnabling::IsEnabledForProfile(GetProfile()) &&
+      base::FeatureList::IsEnabled(features::kGlicShareImage) &&
+      !IsGlicWindow(this, browser_context_)) {
+    tabs::TabInterface* tab =
+        tabs::TabInterface::MaybeGetFromContents(source_web_contents_);
+    // Ensure we're in a tab for these items.
+    if (tab) {
+      menu_model_.AddItemWithIcon(
+          IDC_CONTENT_CONTEXT_GLICSHAREIMAGE,
+          l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_GLICSHAREIMAGE),
+          ui::ImageModel::FromImageSkia(
+              gfx::ImageSkiaOperations::CreateResizedImage(
+                  *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+                      IDR_GLIC_SHARE_IMAGE_ICON),
+                  skia::ImageOperations::RESIZE_BEST,
+                  gfx::Size(gfx::kFaviconSize, gfx::kFaviconSize))));
+      menu_model_.SetElementIdentifierAt(
+          menu_model_.GetIndexOfCommandId(IDC_CONTENT_CONTEXT_GLICSHAREIMAGE)
+              .value(),
+          kGlicShareImageMenuItem);
+    }
+  }
+#endif  // BUILDFLAG(ENABLE_GLIC)
+}
+
 void RenderViewContextMenu::AppendAudioItems() {
   AppendMediaItems();
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
@@ -2168,7 +2225,7 @@ void RenderViewContextMenu::AppendPageItems() {
   if (IsRegionSearchEnabled()) {
     AppendRegionSearchItem();
   }
-  AppendReadingModeItem();
+  AppendReadAnythingItem();
 
   // Note: `has_sharing_menu_items = true` also implies a separator was added
   // for sharing section.
@@ -2290,7 +2347,7 @@ void RenderViewContextMenu::AppendMediaRouterItem() {
   }
 }
 
-void RenderViewContextMenu::AppendReadingModeItem() {
+void RenderViewContextMenu::AppendReadAnythingItem() {
   // Show Read Anything option if it's not already open in the side panel.
   if (GetBrowser() && GetBrowser()->is_type_normal() &&
       !IsReadAnythingEntryShowing(GetBrowser())) {
@@ -2499,7 +2556,7 @@ void RenderViewContextMenu::AppendOtherEditableItems() {
                                     IDS_CONTENT_CONTEXT_SELECTALL);
   }
 
-  AppendReadingModeItem();
+  AppendReadAnythingItem();
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
 }
 
@@ -2860,8 +2917,12 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     case IDC_CONTENT_CONTEXT_OPENLINKNEWTAB:
     case IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW:
     case IDC_CONTENT_CONTEXT_OPENLINKPREVIEW:
+      return navigation_allowed && params_.link_url.is_valid() &&
+             IsOpenLinkAllowedByDlp(params_.link_url);
+
     case IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW:
       return navigation_allowed && params_.link_url.is_valid() &&
+             params_.link_url.IsStandard() &&
              IsOpenLinkAllowedByDlp(params_.link_url);
 
     case IDC_CONTENT_CONTEXT_COPYLINKLOCATION:
@@ -2883,6 +2944,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     case IDC_CONTENT_CONTEXT_OPENIMAGENEWTAB:
     case IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE:
     case IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE:
+    case IDC_CONTENT_CONTEXT_GLICSHAREIMAGE:
       return navigation_allowed && params_.src_url.is_valid() &&
              (params_.src_url.scheme() != content::kChromeUIScheme);
 
@@ -3269,6 +3331,10 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
 
     case IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE:
       ExecSearchWebForImage();
+      break;
+
+    case IDC_CONTENT_CONTEXT_GLICSHAREIMAGE:
+      ExecGlicShareImage();
       break;
 
     case IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE:
@@ -4270,6 +4336,21 @@ void RenderViewContextMenu::ExecSaveAs() {
                                              target_frame_host, is_subresource);
 }
 
+void RenderViewContextMenu::ExecGlicShareImage() {
+#if BUILDFLAG(ENABLE_GLIC)
+  if (!glic::GlicEnabling::IsEnabledForProfile(GetProfile()) ||
+      !base::FeatureList::IsEnabled(features::kGlicShareImage)) {
+    // If this has changed since the context menu was summoned, bail early.
+    return;
+  }
+  if (auto* glic_service = glic::GlicKeyedService::Get(browser_context_)) {
+    glic_service->ShareContextImage(
+        tabs::TabInterface::MaybeGetFromContents(source_web_contents_),
+        GetRenderFrameHost(), params().src_url);
+  }
+#endif  // BUILDLFLAG(ENABLE_GLIC)
+}
+
 void RenderViewContextMenu::ExecExitFullscreen() {
   Browser* browser = GetBrowser();
   if (!browser) {
@@ -4348,6 +4429,7 @@ void RenderViewContextMenu::ExecSearchLensForImage(int event_flags) {
     frame->RequestBitmapForContextNodeWithBoundsHint(base::BindOnce(
         &RenderViewContextMenu::OpenLensOverlayWithPreselectedRegion,
         weak_pointer_factory_.GetWeakPtr(), std::move(chrome_render_frame),
+        lens::LensOverlayInvocationSource::kContentAreaContextMenuImage,
         tab_bounds, view_bounds, device_scale_factor));
   } else {
     // If keyboard selection in Lens Overlay is disabled, when the Lens image
@@ -4369,6 +4451,7 @@ void RenderViewContextMenu::ExecSearchLensForImage(int event_flags) {
 void RenderViewContextMenu::OpenLensOverlayWithPreselectedRegion(
     mojo::AssociatedRemote<chrome::mojom::ChromeRenderFrame>
         chrome_render_frame,
+    lens::LensOverlayInvocationSource invocation_source,
     const gfx::Rect& tab_bounds,
     const gfx::Rect& view_bounds,
     float device_scale_factor,
@@ -4381,8 +4464,8 @@ void RenderViewContextMenu::OpenLensOverlayWithPreselectedRegion(
       LensSearchController::FromTabWebContents(source_web_contents_);
   CHECK(controller);
   controller->OpenLensOverlayWithPendingRegionFromBounds(
-      lens::LensOverlayInvocationSource::kContentAreaContextMenuImage,
-      tab_bounds, view_bounds, scaled_region_bounds, region_bitmap);
+      invocation_source, tab_bounds, view_bounds, scaled_region_bounds,
+      region_bitmap);
 }
 
 void RenderViewContextMenu::ExecRegionSearch(
@@ -4426,11 +4509,6 @@ void RenderViewContextMenu::ExecRegionSearch(
   // TODO(crbug.com/428031945): Clean up once LensOverlayKeyboardSelection
   // lands.
   const bool use_fullscreen_capture = use_keyboard_accessibility_fallback;
-
-  if (!lens_region_search_controller_) {
-    lens_region_search_controller_ =
-        std::make_unique<lens::LensRegionSearchController>();
-  }
   const lens::AmbientSearchEntryPoint entry_point =
       lens_overlay_for_region_search_enabled
           ? lens::AmbientSearchEntryPoint::
@@ -4439,9 +4517,10 @@ void RenderViewContextMenu::ExecRegionSearch(
           ? lens::AmbientSearchEntryPoint::
                 CONTEXT_MENU_SEARCH_REGION_WITH_GOOGLE_LENS
           : lens::AmbientSearchEntryPoint::CONTEXT_MENU_SEARCH_REGION_WITH_WEB;
-  lens_region_search_controller_->Start(
+  browser->GetFeatures().lens_region_search_controller()->Start(
       embedder_web_contents_, use_fullscreen_capture,
       is_google_default_search_provider, entry_point);
+  lens_region_search_controller_started_for_testing_ = true;
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
 
@@ -4712,6 +4791,7 @@ void RenderViewContextMenu::SearchForVideoFrame(
     OpenLensOverlayWithPreselectedRegion(
         /*chrome_render_frame=*/mojo::AssociatedRemote<
             chrome::mojom::ChromeRenderFrame>(),
+        lens::LensOverlayInvocationSource::kContentAreaContextMenuVideo,
         tab_bounds, view_bounds, device_scale_factor, bitmap, region_bounds);
     return;
   }
@@ -4887,37 +4967,44 @@ void RenderViewContextMenu::OpenLinkInSplitView() {
       if (tab != source_tab) {
         // Navigate the tab that wasn't the source of the context menu to the
         // URL
-        tab->GetContents()->GetController().LoadURL(
-            params_.link_url, content::Referrer(),
-            ui::PageTransition::PAGE_TRANSITION_LINK, std::string());
+        content::NavigationController::LoadURLParams params(params_.link_url);
+        params.initiator_origin = params_.frame_origin;
+        params.started_from_context_menu = true;
+        params.transition_type = ui::PAGE_TRANSITION_LINK;
+        params.referrer = CreateReferrer(params_.link_url, params_);
+        tab->GetContents()->GetController().LoadURLWithParams(params);
         break;
       }
     }
-  } else {  // Create new split tab
-    const int active_index = tab_strip_model->active_index();
-    // AddTabAt always adds an unpinned tab so if adding to an index within the
-    // pinned tabs, it will add to the first unpinned index instead.
-    // Additionally, it does not return a tab pointer or index, so we have to
-    // insert at the end of the tab strip, since it is the only place we can
-    // insert a tab and be guaranteed the final destination index is the same as
-    // the provided index.
-    const int new_tab_index = tab_strip_model->count();
-    tab_strip_model->delegate()->AddTabAt(
-        params_.link_url, new_tab_index, false,
-        tab_strip_model->GetTabGroupForTab(active_index));
-    tabs::TabInterface* new_tab = tab_strip_model->GetTabAtIndex(new_tab_index);
+  } else {
+    // Create new background tab.
+    OpenURLParams params = GetOpenURLParamsWithExtraHeaders(
+        params_.link_url, params_.frame_url, params_.frame_origin,
+        WindowOpenDisposition::NEW_BACKGROUND_TAB, ui::PAGE_TRANSITION_LINK,
+        /*extra_headers=*/std::string(), /*started_from_context_menu=*/true);
+    const WebContents* new_web_contents =
+        browser->OpenURL(params, /*navigation_handle_callback=*/{});
+    const int new_tab_index =
+        tab_strip_model->GetIndexOfWebContents(new_web_contents);
+
+    // Create split and activate new tab.
     tab_strip_model->AddToNewSplit(
         {new_tab_index}, split_tabs::SplitTabVisualData(),
         split_tabs::SplitTabCreatedSource::kLinkContextMenu);
-    tab_strip_model->ActivateTabAt(tab_strip_model->GetIndexOfTab(new_tab));
+    tab_strip_model->ActivateTabAt(
+        tab_strip_model->GetIndexOfWebContents(new_web_contents));
   }
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
 bool RenderViewContextMenu::IsLinkToIsolatedWebApp() const {
   // Using `unfiltered_link_url`, because `link_url` is being replaced with
   // about:blank#blocked if the source is a normal site.
   return params_.unfiltered_link_url.has_scheme() &&
          params_.unfiltered_link_url.scheme_piece() ==
-             chrome::kIsolatedAppScheme;
+             webapps::kIsolatedAppScheme;
 }
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)

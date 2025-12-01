@@ -30,9 +30,9 @@ SyncedFileStoreFactory::SyncedFileStoreFactory()
 SyncedFileStoreFactory::~SyncedFileStoreFactory() = default;
 
 std::unique_ptr<KeyedService> SyncedFileStoreFactory::BuildServiceInstanceFor(
-    web::BrowserState* context) const {
+    ProfileIOS* profile) const {
   auto synced_file_store =
-      std::make_unique<file_sync::SyncedFileStoreImpl>(context->GetStatePath());
+      std::make_unique<file_sync::SyncedFileStoreImpl>(profile->GetStatePath());
   synced_file_store->Load();
   return synced_file_store;
 }

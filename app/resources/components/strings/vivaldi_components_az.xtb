@@ -3,16 +3,6 @@
 <translationbundle lang="az">
 <translation id="3830627370375585318">Vivaldiyə sizin şəbəkə təhlükəsizlik divarı və ya antivirus ayarlarına
           girişə icazə verin.</translation>
-<translation id="4200102020577305737">İrəli,
-          Vivaldi menyusu &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          LAN Ayarları, üzrə hərəkət edərək
-          "LAN üçün proksi istifadə edin" seçimini ləğv edin.</translation>
 <translation id="4932161901409251843">İrəli,
           Vivaldi menyusu &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@
           Əgər bu problemi həll etmədisə, səhifənin daha tez yüklənə bilməsi
           üçün bu seçimi bərpa edin.</translation>
 <translation id="7496505986576158197">Vivaldi, <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> açıq qaynaq layihəsi və başqa <ph name="BEGIN_LINK_OSS" />açıq qaynaqlı proqram təminatı<ph name="END_LINK_OSS" /> əsasında yaradılb.</translation>
+<translation id="89559930087159128">Burada;
+          Vivaldi menyu &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Şəbəkə və internet &gt; Proksi
+          və "Ayarları avtomatik aşkarlamaq" seçimini ləğv edin.</translation>
 </translationbundle>

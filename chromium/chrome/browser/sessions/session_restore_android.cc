@@ -26,7 +26,8 @@ content::WebContents* SessionRestore::RestoreForeignSessionTab(
     content::WebContents* web_contents,
     const sessions::SessionTab& session_tab,
     WindowOpenDisposition disposition,
-    bool skip_renderer_creation) {
+    bool skip_renderer_creation,
+    bool vivaldi_load_content) {
   DCHECK(session_tab.navigations.size() > 0);
   content::BrowserContext* context = web_contents->GetBrowserContext();
   Profile* profile = Profile::FromBrowserContext(context);

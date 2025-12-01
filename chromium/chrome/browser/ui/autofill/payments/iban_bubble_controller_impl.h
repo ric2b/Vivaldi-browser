@@ -88,7 +88,7 @@ class IbanBubbleControllerImpl
   void OnLegalMessageLinkClicked(const GURL& url) override;
   void OnManageSavedIbanExtraButtonClicked() override;
   void OnBubbleClosed(PaymentsUiClosedReason closed_reason) override;
-  IbanBubbleType GetBubbleType() const override;
+  IbanBubbleType GetIbanBubbleType() const override;
 
   // SavePaymentIconController:
   std::u16string GetSavePaymentIconTooltipText() const override;
@@ -101,6 +101,10 @@ class IbanBubbleControllerImpl
   const SavePaymentMethodAndVirtualCardEnrollConfirmationUiParams&
   GetConfirmationUiParams() const override;
 
+  // BubbleControllerBase:
+  BubbleType GetBubbleType() const override;
+  base::WeakPtr<BubbleControllerBase> GetBubbleControllerBaseWeakPtr() override;
+
   // For testing.
   void SetEventObserverForTesting(ObserverForTest* observer) {
     observer_for_testing_ = observer;
@@ -110,7 +114,7 @@ class IbanBubbleControllerImpl
   explicit IbanBubbleControllerImpl(content::WebContents* web_contents);
 
   // AutofillBubbleControllerBase:
-  PageActionIconType GetPageActionIconType() override;
+  std::optional<PageActionIconType> GetPageActionIconType() override;
   void DoShowBubble() override;
   using AutofillBubbleControllerBase::HideBubble;
 
@@ -118,6 +122,17 @@ class IbanBubbleControllerImpl
   friend class content::WebContentsUserData<IbanBubbleControllerImpl>;
 
   Profile* GetProfile();
+
+  // Sets up the controller's state for a local IBAN save prompt.
+  void SetupLocalSave(Iban iban,
+                      payments::PaymentsAutofillClient::SaveIbanPromptCallback
+                          save_iban_prompt_callback);
+
+  // Sets up the controller's state for an upload-to-server IBAN save prompt.
+  void SetupUploadSave(Iban iban,
+                       LegalMessageLines legal_message_lines,
+                       payments::PaymentsAutofillClient::SaveIbanPromptCallback
+                           save_iban_prompt_callback);
 
   // Displays omnibox icon only.
   void ShowIconOnly();

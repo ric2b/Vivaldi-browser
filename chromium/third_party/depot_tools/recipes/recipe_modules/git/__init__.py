@@ -1,4 +1,3 @@
-PYTHON_VERSION_COMPATIBILITY = 'PY3'
 
 DEPS = [
   'depot_tools',
@@ -11,3 +10,6 @@ DEPS = [
   'recipe_engine/raw_io',
   'recipe_engine/step',
 ]
+
+from .api import GitApi as API
+from .test_api import GitTestApi as TEST_API

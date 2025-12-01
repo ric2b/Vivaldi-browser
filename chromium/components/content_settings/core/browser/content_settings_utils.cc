@@ -214,21 +214,32 @@ base::TimeDelta GetCoarseVisitedTimePrecision() {
   return base::Days(7);
 }
 
-bool CanBeAutoRevoked(ContentSettingsType type,
-                      const base::Value& value,
-                      bool is_one_time) {
+bool IsPermissionEligibleForAutoRevocation(ContentSettingsType type) {
+  DCHECK(WebsiteSettingsRegistry::GetInstance()->Get(type)) << type;
+
+  auto* permission_settings_info =
+      PermissionSettingsRegistry::GetInstance()->Get(type);
+  return (permission_settings_info && CanTrackLastVisit(type)) ||
+         IsChooserPermissionEligibleForAutoRevocation(type);
+}
+
+bool CanBeAutoRevokedAsUnusedPermission(ContentSettingsType type,
+                                        const base::Value& value,
+                                        bool is_one_time) {
   DCHECK(WebsiteSettingsRegistry::GetInstance()->Get(type)) << type;
 
   // The Permissions module in Safety check will revoke permissions after
   // a finite amount of time.
   // We're only interested in expiring permissions that are either
   // A. permission settings (= PermissionSettingsRegistry-based), which
-  //    1. query the delegate.
-  // B. regular permissions (= ContentSettingsRegistry-based), which
   //    1. Are ALLOWed.
-  //    2. Fall back to ASK.
+  //    2. Are of eligible ContentSettingsType.
+  //      (That includes the default value being ASK. By definition, all
+  //      Permissions are ASK by default. If that changes in the future,
+  //      consider whether revocation for such permission makes sense. If not,
+  //      make sure last_visited is not unnecessarily tracked for them.)
   //    3. Are not already a one-time grant.
-  // C. chooser permissions (= WebsiteSettingsRegistry-based), which
+  // B. chooser permissions (= WebsiteSettingsRegistry-based), which
   //    1. Are allowlisted.
   //    2. Have a non-empty value.
   if (is_one_time) {
@@ -239,19 +250,29 @@ bool CanBeAutoRevoked(ContentSettingsType type,
       PermissionSettingsRegistry::GetInstance()->Get(type);
   if (permission_settings_info) {
     auto setting = permission_settings_info->delegate().FromValue(value);
-    DCHECK(setting) << value.DebugString();
+    // If the setting is already DEFAULT or the value is corrupt, no need to
+    // revoke the permission.
     if (!setting.has_value()) {
       return false;
     }
+
+    // Currently Safety Check does not store the actual value of a permission
+    // and restores all permissions as ALLOW.
+    // TODO(crbug.com/441689815): Store PermissionSettings in Safety Check and
+    // remove this check.
+    if (setting != PermissionSetting{CONTENT_SETTING_ALLOW}) {
+      return false;
+    }
+
     return permission_settings_info->delegate().IsAnyPermissionAllowed(
                setting.value()) &&
            CanTrackLastVisit(type);
   } else {
-      // If the value is already empty, no need to revoke the permission.
-      return IsChooserPermissionEligibleForAutoRevocation(type) &&
-             !value.is_none();
-    }
+    // If the value is already empty, no need to revoke the permission.
+    return IsChooserPermissionEligibleForAutoRevocation(type) &&
+           !value.is_none();
   }
+}
 
 bool IsChooserPermissionEligibleForAutoRevocation(ContentSettingsType type) {
   // Currently, only File System Access is allowlisted for auto-revoking unused

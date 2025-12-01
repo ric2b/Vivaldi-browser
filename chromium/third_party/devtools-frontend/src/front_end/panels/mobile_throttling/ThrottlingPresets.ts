@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,19 +7,19 @@ import * as SDK from '../../core/sdk/sdk.js';
 
 const UIStrings = {
   /**
-   *@description Text for no network throttling
+   * @description Text for no network throttling
    */
   noThrottling: 'No CPU and no network throttling',
   /**
-   *@description Text in Throttling Presets of the Network panel
+   * @description Text in Throttling Presets of the Network panel
    */
   noInternetConnectivity: 'No internet connectivity',
   /**
-   *@description Text in Throttling Presets of the Network panel
+   * @description Text in Throttling Presets of the Network panel
    */
   lowTierMobile: 'Low-tier mobile',
   /**
-   *@description Text in Throttling Presets of the Network panel
+   * @description Text in Throttling Presets of the Network panel
    */
   slowGXCpuSlowdown: 'Slow 3G & 6x CPU slowdown',
   /**
@@ -28,11 +28,11 @@ const UIStrings = {
    */
   slowGXCpuSlowdownCalibrated: 'Slow 3G & {PH1}x CPU slowdown',
   /**
-   *@description Text in Throttling Presets of the Network panel
+   * @description Text in Throttling Presets of the Network panel
    */
   midtierMobile: 'Mid-tier mobile',
   /**
-   *@description Text in Throttling Presets of the Network panel
+   * @description Text in Throttling Presets of the Network panel
    */
   fastGXCpuSlowdown: 'Fast 3G & 4x CPU slowdown',
   /**
@@ -41,11 +41,11 @@ const UIStrings = {
    */
   fastGXCpuSlowdownCalibrated: 'Fast 3G & {PH1}x CPU slowdown',
   /**
-   *@description Text in Network Throttling Selector of the Network panel
+   * @description Text in Network Throttling Selector of the Network panel
    */
   custom: 'Custom',
   /**
-   *@description Text in Throttling Presets of the Network panel
+   * @description Text in Throttling Presets of the Network panel
    */
   checkNetworkAndPerformancePanels: 'Check Network and Performance panels',
 } as const;
@@ -133,42 +133,6 @@ export class ThrottlingPresets {
     return [
       ThrottlingPresets.getOfflineConditions(),
     ];
-  }
-
-  static getRecommendedNetworkPreset(rtt: number): SDK.NetworkManager.Conditions|null {
-    const RTT_COMPARISON_THRESHOLD = 200;
-    const RTT_MINIMUM = 60;
-
-    if (!Number.isFinite(rtt)) {
-      return null;
-    }
-
-    if (rtt < RTT_MINIMUM) {
-      return null;
-    }
-
-    let closestPreset: SDK.NetworkManager.Conditions|null = null;
-    let smallestDiff = Infinity;
-    for (const preset of ThrottlingPresets.networkPresets) {
-      const {targetLatency} = preset;
-      if (!targetLatency) {
-        continue;
-      }
-
-      const diff = Math.abs(targetLatency - rtt);
-      if (diff > RTT_COMPARISON_THRESHOLD) {
-        continue;
-      }
-
-      if (smallestDiff < diff) {
-        continue;
-      }
-
-      closestPreset = preset;
-      smallestDiff = diff;
-    }
-
-    return closestPreset;
   }
 
   static networkPresets: SDK.NetworkManager.Conditions[] = [

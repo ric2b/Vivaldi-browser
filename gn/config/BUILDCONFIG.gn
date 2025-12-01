@@ -8,12 +8,14 @@ declare_args() {
   is_vivaldi_volvo = false
   # GAS = Google Automotive Services - is_vivaldi_gas is set to true for the generic AAOS build
   is_vivaldi_gas = false
+  # is_vivaldi_gas2 is set to true for generic AAOS builds with cpu arch as part of the package name
+  is_vivaldi_gas2 = false
   is_vivaldi_mahindra = false
 }
 
 declare_args() {
   # is_vivaldi_automotive is true for all OEM builds
-  is_vivaldi_automotive = is_vivaldi_polestar || is_vivaldi_renault || is_vivaldi_lynkco || is_vivaldi_mercedes || is_vivaldi_volvo || is_vivaldi_gas || is_vivaldi_mahindra
+  is_vivaldi_automotive = is_vivaldi_polestar || is_vivaldi_renault || is_vivaldi_lynkco || is_vivaldi_mercedes || is_vivaldi_volvo || is_vivaldi_gas || is_vivaldi_gas2 || is_vivaldi_mahindra
   is_vivaldi_preloaded = is_vivaldi_mercedes
 }
 
@@ -39,4 +41,9 @@ default_chrome_lint_targets = ["//chrome/android:chrome_public_apk__lint"]
 
 if (vivaldi_notarytool_password != "") {
   vivaldi_notarytool_password = string_replace(vivaldi_notarytool_password, "@keychain:", "")
+}
+
+if (is_vivaldi_gas2) {
+  # This is in fact a GAS build
+  is_vivaldi_gas = true
 }

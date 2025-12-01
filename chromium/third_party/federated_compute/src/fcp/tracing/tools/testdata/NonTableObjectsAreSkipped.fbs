@@ -1,0 +1,15 @@
+include "fcp/tracing/tracing_schema_common.fbs";
+
+attribute "priority";
+
+enum Color : byte { Red, Green, Blue }
+
+struct Vec3 {
+  x: float;
+  y: float;
+  z: float;
+}
+
+table Monster(tag: "MONS") {
+  hp: int32;
+}

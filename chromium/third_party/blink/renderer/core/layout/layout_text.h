@@ -81,11 +81,6 @@ class CORE_EXPORT LayoutText : public LayoutObject {
     return "LayoutText";
   }
 
-  bool IsLayoutNGObject() const override {
-    NOT_DESTROYED();
-    return true;
-  }
-
   bool IsTextFragment() const {
     NOT_DESTROYED();
     return is_text_fragment_;
@@ -377,9 +372,13 @@ class CORE_EXPORT LayoutText : public LayoutObject {
  protected:
   void WillBeDestroyed() override;
 
-  void StyleWillChange(StyleDifference, const ComputedStyle&) final;
+  void StyleWillChange(StyleDifference,
+                       const ComputedStyle& new_style,
+                       StyleChangeContext&) override;
 
-  void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
+  void StyleDidChange(StyleDifference,
+                      const ComputedStyle* old_style,
+                      const StyleChangeContext&) override;
 
   void InLayoutNGInlineFormattingContextWillChange(bool) final;
 

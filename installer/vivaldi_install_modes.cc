@@ -9,7 +9,7 @@
 #include <objbase.h>
 #include <stdlib.h>
 
-#include <Rpc.h>
+#include <rpc.h>
 
 #include "chrome/app/chrome_dll_resource.h"
 #include "chrome/common/chrome_icon_resources_win.h"

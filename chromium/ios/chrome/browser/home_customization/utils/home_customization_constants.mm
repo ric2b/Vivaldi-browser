@@ -7,6 +7,9 @@
 CustomizationSection* const kCustomizationSectionBackground =
     @"kCustomizationSectionBackground";
 
+CustomizationSection* const kCustomizationSectionEnterprise =
+    @"kCustomizationSectionEnterprise";
+
 CustomizationSection* const kCustomizationSectionMainToggles =
     @"kCustomizationSectionMainToggles";
 
@@ -37,8 +40,6 @@ NSString* const kCustomizationToggleSafetyCheckIdentifier =
     @"kCustomizationToggleSafetyCheckIdentifier";
 NSString* const kCustomizationToggleTabResumptionIdentifier =
     @"kCustomizationToggleTabResumptionIdentifier";
-NSString* const kCustomizationToggleParcelTrackingIdentifier =
-    @"kCustomizationToggleParcelTrackingIdentifier";
 NSString* const kCustomizationToggleShopCardPriceTrackingIdentifier =
     @"kCustomizationToggleShopCardPriceTrackingIdentifier";
 NSString* const kCustomizationToggleShopCardReviewsIdentifier =
@@ -73,6 +74,8 @@ NSString* const kBackgroundCellIdentifier = @"kBackgroundCellIdentifier";
 
 NSString* const kBackgroundPickerCellIdentifier =
     @"kBackgroundPickerCellIdentifier";
+
+NSString* const kEnterpriseCellIdentifier = @"kEnterpriseCellIdentifier";
 
 const char kDiscoverFollowingURL[] =
     "https://google.com/preferences/interests/yourinterests";

@@ -38,6 +38,7 @@
 <translation id="4026745073321351206">🙄 Sástu villu?</translation>
 <translation id="4216644171369573466">Flipabunki, <ph name="GROUP_TITLE" />, Valmynd.</translation>
 <translation id="4304713468139749426">Lykilorðastýring</translation>
+<translation id="4439281775431634915">Flipabunkarnir þínir eru vistaðir hér</translation>
 <translation id="4569525137269575065">Loka bunka</translation>
 <translation id="473775607612524610">Uppfæra</translation>
 <translation id="4755216899422789286">Opna vefföng í Vivaldi</translation>
@@ -50,6 +51,8 @@
             other {{count} flipabunkum lokað og þeir vistaðir}}</translation>
 <translation id="5019787757991745254">Litur á flipabunka <ph name="COLOR" /></translation>
 <translation id="5022440170224170365">Flipabunki. Minnkaður.</translation>
+<translation id="5132327651247938019">Þú getur skrunað til hægri til þess að vafra í einkaham.</translation>
+<translation id="5204006339739481307">Þú getur skrunað til vinstri til þess að vafra í einkaham.</translation>
 <translation id="5217245356412073535">Þú getur breytt sjálfgefinni birtingu vefsvæðis í skjáborðsútgáfu með því að fara í Stillingar &gt; Efnisstillingar</translation>
 <translation id="5271549068863921519">Vista lykilorð</translation>
 <translation id="5317780077021120954">Vista</translation>
@@ -63,6 +66,7 @@
 <translation id="5962477178930921574">Líma og leita</translation>
 <translation id="6163856768888310791">Leysa upp bunka</translation>
 <translation id="6168969409902608220">Nefna bunka</translation>
+<translation id="6192561334825788389">Þú getur strokið til hægri til þess að vafra í einkaham.</translation>
 <translation id="6233792867654386826">Opna innslegin vefföng í Vivaldi.</translation>
 <translation id="6271462272606946663">Fela boð um farsímaútgáfu</translation>
 <translation id="6478587527114893588">Loka bunka.</translation>
@@ -75,6 +79,8 @@
 <translation id="6827597288286078054">Einka leit</translation>
 <translation id="6851516051005285358">Nota borðtölvuútlit</translation>
 <translation id="6890907822330704077">Flipabunki, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> flipar.</translation>
+<translation id="7004032350256606903">Fyrirtækið þitt krefst þess að þú vafrir í einkaham.
+<ph name="BEGIN_LINK" />Kynntu þér málið<ph name="END_LINK" /></translation>
 <translation id="7307970171564921489">Aflæstu einkaflipum með <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Opna í einkaham?</translation>
 <translation id="7363285031331302144">Búa til flipabunka til þess að skipuleggja opna flipa</translation>
@@ -94,6 +100,7 @@
         =1 {Bæta flipa í nýjan bunka}
         other {Bæta flipum í nýjan bunka}}</translation>
 <translation id="8465550436083180511">Minnka flipabunka.</translation>
+<translation id="8499954848910902473">Þú getur strokið til vinstri til þess að vafra í einkaham.</translation>
 <translation id="8685478989144570078">Flipabunkar</translation>
 <translation id="8756969031206844760">Uppfæra lykilorð?</translation>
 <translation id="8852861335827546438">Nýr flipabunki</translation>

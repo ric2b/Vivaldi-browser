@@ -7,6 +7,7 @@
 
 // A protocol implemented by consumers to handle address bar
 // preference state change.
+NS_SWIFT_UI_ACTOR
 @protocol VivaldiAddressBarSettingsConsumer
 
 // Updates the state with the show full address preference value.

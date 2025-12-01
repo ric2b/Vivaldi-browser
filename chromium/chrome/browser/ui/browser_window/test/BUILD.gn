@@ -15,10 +15,14 @@ if (is_android) {
     sources = [ "android/java/src/org/chromium/chrome/browser/ui/browser_window/ChromeAndroidTaskUnitTestSupport.java" ]
     deps = [
       "//build/android:build_java",
-      "//chrome/browser/ui/browser_window:java",
+      "//chrome/browser/android/lifecycle:java",
+      "//chrome/browser/profiles/android:java",
+      "//chrome/browser/tabmodel:java",
       "//chrome/browser/ui/browser_window/internal:java",
+      "//chrome/browser/ui/browser_window/public/android:java",
       "//third_party/mockito:mockito_java",
       "//ui/android:ui_no_recycler_view_java",
+      "//ui/base/mojom:ui_base_types_java",
     ]
   }
 
@@ -27,14 +31,23 @@ if (is_android) {
     testonly = true
     sources = [
       "android/java/src/org/chromium/chrome/browser/ui/browser_window/AndroidBaseWindowNativeUnitTestSupport.java",
+      "android/java/src/org/chromium/chrome/browser/ui/browser_window/AndroidBrowserWindowEnumeratorNativeUnitTestSupport.java",
       "android/java/src/org/chromium/chrome/browser/ui/browser_window/AndroidBrowserWindowNativeUnitTestSupport.java",
+      "android/java/src/org/chromium/chrome/browser/ui/browser_window/BrowserWindowInterfaceIteratorAndroidNativeUnitTestSupport.java",
     ]
     deps = [
+      ":junit_test_support",
+      "//base:tasks_java",
       "//build/android:build_java",
-      "//chrome/browser/ui/browser_window:java",
+      "//chrome/browser/android/lifecycle:java",
+      "//chrome/browser/profiles/android:java",
+      "//chrome/browser/tabmodel:java",
+      "//chrome/browser/ui/android/tab_model:test_support",
       "//chrome/browser/ui/browser_window/internal:java",
+      "//chrome/browser/ui/browser_window/public/android:java",
       "//third_party/jni_zero:jni_zero_java",
       "//third_party/mockito:mockito_java",
+      "//ui/android:ui_no_recycler_view_java",
     ]
     srcjar_deps = [ ":native_unit_test_support_jni" ]
   }
@@ -44,7 +57,9 @@ if (is_android) {
     testonly = true
     sources = [
       "android/java/src/org/chromium/chrome/browser/ui/browser_window/AndroidBaseWindowNativeUnitTestSupport.java",
+      "android/java/src/org/chromium/chrome/browser/ui/browser_window/AndroidBrowserWindowEnumeratorNativeUnitTestSupport.java",
       "android/java/src/org/chromium/chrome/browser/ui/browser_window/AndroidBrowserWindowNativeUnitTestSupport.java",
+      "android/java/src/org/chromium/chrome/browser/ui/browser_window/BrowserWindowInterfaceIteratorAndroidNativeUnitTestSupport.java",
     ]
   }
 }

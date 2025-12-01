@@ -5,7 +5,6 @@
 from recipe_engine.post_process import (DropExpectation, StatusSuccess,
                                         StepCommandContains)
 
-PYTHON_VERSION_COMPATIBILITY = 'PY3'
 
 DEPS = [
     'gerrit',

@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -8,7 +8,7 @@ import * as SDK from '../../core/sdk/sdk.js';
 
 const UIStrings = {
   /**
-   *@description Text to display to user while a calibration process is running.
+   * @description Text to display to user while a calibration process is running.
    */
   runningCalibration: 'Running CPU calibration, please do not leave this tab or close DevTools.',
 } as const;
@@ -299,7 +299,6 @@ export class CalibrationController {
  *  - 800+ is a high-end Android phone, Galaxy S8, low-end Chromebook, etc
  *  - 125+ is a mid-tier Android phone, Moto G4, etc
  *  - <125 is a budget Android phone, Alcatel Ideal, Galaxy J2, etc
- * @returns
  */
 function computeBenchmarkIndex(duration = 1000): number {
   const halfTime = duration / 2;

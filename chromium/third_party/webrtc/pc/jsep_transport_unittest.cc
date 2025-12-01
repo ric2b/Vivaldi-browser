@@ -52,7 +52,6 @@
 #include "rtc_base/ssl_fingerprint.h"
 #include "rtc_base/ssl_identity.h"
 #include "rtc_base/ssl_stream_adapter.h"
-#include "rtc_base/third_party/sigslot/sigslot.h"
 #include "rtc_base/thread.h"
 #include "test/create_test_field_trials.h"
 #include "test/gtest.h"
@@ -96,7 +95,7 @@ scoped_refptr<IceTransportInterface> CreateIceTransport(
   return make_ref_counted<FakeIceTransportWrapper>(std::move(internal));
 }
 
-class JsepTransport2Test : public ::testing::Test, public sigslot::has_slots<> {
+class JsepTransport2Test : public ::testing::Test {
  protected:
   std::unique_ptr<SrtpTransport> CreateSdesTransport(
       PacketTransportInternal* rtp_packet_transport,
@@ -471,19 +470,31 @@ TEST_P(JsepTransport2WithRtcpMux, ValidDtlsRoleNegotiation) {
 
   // Parameters which set the SSL role to SSL_CLIENT.
   NegotiateRoleParams valid_client_params[] = {
-      {CONNECTIONROLE_ACTIVE, CONNECTIONROLE_ACTPASS, SdpType::kAnswer,
-       SdpType::kOffer},
-      {CONNECTIONROLE_ACTIVE, CONNECTIONROLE_ACTPASS, SdpType::kPrAnswer,
-       SdpType::kOffer},
-      {CONNECTIONROLE_ACTPASS, CONNECTIONROLE_PASSIVE, SdpType::kOffer,
-       SdpType::kAnswer},
-      {CONNECTIONROLE_ACTPASS, CONNECTIONROLE_PASSIVE, SdpType::kOffer,
-       SdpType::kPrAnswer},
+      {.local_role = CONNECTIONROLE_ACTIVE,
+       .remote_role = CONNECTIONROLE_ACTPASS,
+       .local_type = SdpType::kAnswer,
+       .remote_type = SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_ACTIVE,
+       .remote_role = CONNECTIONROLE_ACTPASS,
+       .local_type = SdpType::kPrAnswer,
+       .remote_type = SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_ACTPASS,
+       .remote_role = CONNECTIONROLE_PASSIVE,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kAnswer},
+      {.local_role = CONNECTIONROLE_ACTPASS,
+       .remote_role = CONNECTIONROLE_PASSIVE,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kPrAnswer},
       // Combinations permitted by RFC 8842 section 5.3
-      {CONNECTIONROLE_ACTIVE, CONNECTIONROLE_PASSIVE, SdpType::kAnswer,
-       SdpType::kOffer},
-      {CONNECTIONROLE_ACTIVE, CONNECTIONROLE_PASSIVE, SdpType::kPrAnswer,
-       SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_ACTIVE,
+       .remote_role = CONNECTIONROLE_PASSIVE,
+       .local_type = SdpType::kAnswer,
+       .remote_type = SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_ACTIVE,
+       .remote_role = CONNECTIONROLE_PASSIVE,
+       .local_type = SdpType::kPrAnswer,
+       .remote_type = SdpType::kOffer},
   };
 
   for (auto& param : valid_client_params) {
@@ -518,17 +529,27 @@ TEST_P(JsepTransport2WithRtcpMux, ValidDtlsRoleNegotiation) {
 
   // Parameters which set the SSL role to SSL_SERVER.
   NegotiateRoleParams valid_server_params[] = {
-      {CONNECTIONROLE_PASSIVE, CONNECTIONROLE_ACTPASS, SdpType::kAnswer,
-       SdpType::kOffer},
-      {CONNECTIONROLE_PASSIVE, CONNECTIONROLE_ACTPASS, SdpType::kPrAnswer,
-       SdpType::kOffer},
-      {CONNECTIONROLE_ACTPASS, CONNECTIONROLE_ACTIVE, SdpType::kOffer,
-       SdpType::kAnswer},
-      {CONNECTIONROLE_ACTPASS, CONNECTIONROLE_ACTIVE, SdpType::kOffer,
-       SdpType::kPrAnswer},
+      {.local_role = CONNECTIONROLE_PASSIVE,
+       .remote_role = CONNECTIONROLE_ACTPASS,
+       .local_type = SdpType::kAnswer,
+       .remote_type = SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_PASSIVE,
+       .remote_role = CONNECTIONROLE_ACTPASS,
+       .local_type = SdpType::kPrAnswer,
+       .remote_type = SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_ACTPASS,
+       .remote_role = CONNECTIONROLE_ACTIVE,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kAnswer},
+      {.local_role = CONNECTIONROLE_ACTPASS,
+       .remote_role = CONNECTIONROLE_ACTIVE,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kPrAnswer},
       // Combinations permitted by RFC 8842 section 5.3
-      {CONNECTIONROLE_PASSIVE, CONNECTIONROLE_ACTIVE, SdpType::kPrAnswer,
-       SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_PASSIVE,
+       .remote_role = CONNECTIONROLE_ACTIVE,
+       .local_type = SdpType::kPrAnswer,
+       .remote_type = SdpType::kOffer},
   };
 
   for (auto& param : valid_server_params) {
@@ -576,30 +597,54 @@ TEST_P(JsepTransport2WithRtcpMux, InvalidDtlsRoleNegotiation) {
       rtcp_mux_enabled, kIceUfrag2, kIcePwd2, certificate);
 
   NegotiateRoleParams duplicate_params[] = {
-      {CONNECTIONROLE_ACTIVE, CONNECTIONROLE_ACTIVE, SdpType::kAnswer,
-       SdpType::kOffer},
-      {CONNECTIONROLE_ACTPASS, CONNECTIONROLE_ACTPASS, SdpType::kAnswer,
-       SdpType::kOffer},
-      {CONNECTIONROLE_PASSIVE, CONNECTIONROLE_PASSIVE, SdpType::kAnswer,
-       SdpType::kOffer},
-      {CONNECTIONROLE_ACTIVE, CONNECTIONROLE_ACTIVE, SdpType::kPrAnswer,
-       SdpType::kOffer},
-      {CONNECTIONROLE_ACTPASS, CONNECTIONROLE_ACTPASS, SdpType::kPrAnswer,
-       SdpType::kOffer},
-      {CONNECTIONROLE_PASSIVE, CONNECTIONROLE_PASSIVE, SdpType::kPrAnswer,
-       SdpType::kOffer},
-      {CONNECTIONROLE_ACTIVE, CONNECTIONROLE_ACTIVE, SdpType::kOffer,
-       SdpType::kAnswer},
-      {CONNECTIONROLE_ACTPASS, CONNECTIONROLE_ACTPASS, SdpType::kOffer,
-       SdpType::kAnswer},
-      {CONNECTIONROLE_PASSIVE, CONNECTIONROLE_PASSIVE, SdpType::kOffer,
-       SdpType::kAnswer},
-      {CONNECTIONROLE_ACTIVE, CONNECTIONROLE_ACTIVE, SdpType::kOffer,
-       SdpType::kPrAnswer},
-      {CONNECTIONROLE_ACTPASS, CONNECTIONROLE_ACTPASS, SdpType::kOffer,
-       SdpType::kPrAnswer},
-      {CONNECTIONROLE_PASSIVE, CONNECTIONROLE_PASSIVE, SdpType::kOffer,
-       SdpType::kPrAnswer}};
+      {.local_role = CONNECTIONROLE_ACTIVE,
+       .remote_role = CONNECTIONROLE_ACTIVE,
+       .local_type = SdpType::kAnswer,
+       .remote_type = SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_ACTPASS,
+       .remote_role = CONNECTIONROLE_ACTPASS,
+       .local_type = SdpType::kAnswer,
+       .remote_type = SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_PASSIVE,
+       .remote_role = CONNECTIONROLE_PASSIVE,
+       .local_type = SdpType::kAnswer,
+       .remote_type = SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_ACTIVE,
+       .remote_role = CONNECTIONROLE_ACTIVE,
+       .local_type = SdpType::kPrAnswer,
+       .remote_type = SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_ACTPASS,
+       .remote_role = CONNECTIONROLE_ACTPASS,
+       .local_type = SdpType::kPrAnswer,
+       .remote_type = SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_PASSIVE,
+       .remote_role = CONNECTIONROLE_PASSIVE,
+       .local_type = SdpType::kPrAnswer,
+       .remote_type = SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_ACTIVE,
+       .remote_role = CONNECTIONROLE_ACTIVE,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kAnswer},
+      {.local_role = CONNECTIONROLE_ACTPASS,
+       .remote_role = CONNECTIONROLE_ACTPASS,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kAnswer},
+      {.local_role = CONNECTIONROLE_PASSIVE,
+       .remote_role = CONNECTIONROLE_PASSIVE,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kAnswer},
+      {.local_role = CONNECTIONROLE_ACTIVE,
+       .remote_role = CONNECTIONROLE_ACTIVE,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kPrAnswer},
+      {.local_role = CONNECTIONROLE_ACTPASS,
+       .remote_role = CONNECTIONROLE_ACTPASS,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kPrAnswer},
+      {.local_role = CONNECTIONROLE_PASSIVE,
+       .remote_role = CONNECTIONROLE_PASSIVE,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kPrAnswer}};
 
   for (auto& param : duplicate_params) {
     jsep_transport_ = CreateJsepTransport2(rtcp_mux_enabled);
@@ -633,23 +678,39 @@ TEST_P(JsepTransport2WithRtcpMux, InvalidDtlsRoleNegotiation) {
   // state
   NegotiateRoleParams offerer_without_actpass_params[] = {
       // Cannot use ACTPASS in an answer
-      {CONNECTIONROLE_ACTPASS, CONNECTIONROLE_PASSIVE, SdpType::kAnswer,
-       SdpType::kOffer},
-      {CONNECTIONROLE_ACTPASS, CONNECTIONROLE_PASSIVE, SdpType::kPrAnswer,
-       SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_ACTPASS,
+       .remote_role = CONNECTIONROLE_PASSIVE,
+       .local_type = SdpType::kAnswer,
+       .remote_type = SdpType::kOffer},
+      {.local_role = CONNECTIONROLE_ACTPASS,
+       .remote_role = CONNECTIONROLE_PASSIVE,
+       .local_type = SdpType::kPrAnswer,
+       .remote_type = SdpType::kOffer},
       // Cannot send ACTIVE or PASSIVE in an offer (must handle, must not send)
-      {CONNECTIONROLE_ACTIVE, CONNECTIONROLE_PASSIVE, SdpType::kOffer,
-       SdpType::kAnswer},
-      {CONNECTIONROLE_PASSIVE, CONNECTIONROLE_ACTIVE, SdpType::kOffer,
-       SdpType::kAnswer},
-      {CONNECTIONROLE_PASSIVE, CONNECTIONROLE_ACTPASS, SdpType::kOffer,
-       SdpType::kAnswer},
-      {CONNECTIONROLE_ACTIVE, CONNECTIONROLE_PASSIVE, SdpType::kOffer,
-       SdpType::kPrAnswer},
-      {CONNECTIONROLE_PASSIVE, CONNECTIONROLE_ACTIVE, SdpType::kOffer,
-       SdpType::kPrAnswer},
-      {CONNECTIONROLE_PASSIVE, CONNECTIONROLE_ACTPASS, SdpType::kOffer,
-       SdpType::kPrAnswer}};
+      {.local_role = CONNECTIONROLE_ACTIVE,
+       .remote_role = CONNECTIONROLE_PASSIVE,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kAnswer},
+      {.local_role = CONNECTIONROLE_PASSIVE,
+       .remote_role = CONNECTIONROLE_ACTIVE,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kAnswer},
+      {.local_role = CONNECTIONROLE_PASSIVE,
+       .remote_role = CONNECTIONROLE_ACTPASS,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kAnswer},
+      {.local_role = CONNECTIONROLE_ACTIVE,
+       .remote_role = CONNECTIONROLE_PASSIVE,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kPrAnswer},
+      {.local_role = CONNECTIONROLE_PASSIVE,
+       .remote_role = CONNECTIONROLE_ACTIVE,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kPrAnswer},
+      {.local_role = CONNECTIONROLE_PASSIVE,
+       .remote_role = CONNECTIONROLE_ACTPASS,
+       .local_type = SdpType::kOffer,
+       .remote_type = SdpType::kPrAnswer}};
 
   for (auto& param : offerer_without_actpass_params) {
     jsep_transport_ = CreateJsepTransport2(rtcp_mux_enabled);

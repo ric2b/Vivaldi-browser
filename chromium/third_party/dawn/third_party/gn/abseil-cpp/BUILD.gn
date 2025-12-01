@@ -112,8 +112,6 @@ group("absl_component_deps") {
     # "//third_party/abseil-cpp/absl/functional:bind_front",
     ":function_ref",
     ":has_ostream_operator",
-
-    # "//third_party/abseil-cpp/absl/functional:overload",
     ":hash",
     ":inlined_vector",
     ":int128",
@@ -127,6 +125,7 @@ group("absl_component_deps") {
     ":no_destructor",
     ":nullability",
     ":optional",
+    ":overload",
     ":prefetch",
     ":span",
 
@@ -632,9 +631,11 @@ absl_source_set("layout") {
 absl_source_set("raw_hash_map") {
   public = [ "${dawn_abseil_dir}/absl/container/internal/raw_hash_map.h" ]
   deps = [
+    ":common_policy_traits",
     ":container_memory",
     ":raw_hash_set",
     ":throw_delegate",
+    ":type_traits",
   ]
 }
 
@@ -880,6 +881,7 @@ absl_source_set("stacktrace") {
     ":core_headers",
     ":debugging_internal",
     ":dynamic_annotations",
+    ":malloc_internal",
     ":raw_logging_internal",
   ]
 }
@@ -927,6 +929,7 @@ absl_source_set("any_invocable") {
   deps = [
     ":config",
     ":core_headers",
+    ":nullability",
     ":type_traits",
     ":utility",
   ]
@@ -1114,6 +1117,7 @@ absl_source_set("check_op") {
     ":base",
     ":config",
     ":core_headers",
+    ":has_ostream_operator",
     ":leak_check",
     ":nullability",
     ":nullguard",
@@ -1210,7 +1214,6 @@ absl_source_set("log_message") {
   sources = [ "${dawn_abseil_dir}/absl/log/internal/log_message.cc" ]
   public = [ "${dawn_abseil_dir}/absl/log/internal/log_message.h" ]
   deps = [
-    ":_log_globals",
     ":_log_globals",
     ":append_truncated",
     ":base",
@@ -1362,7 +1365,10 @@ absl_source_set("vlog_is_on") {
 
 absl_source_set("voidify") {
   public = [ "${dawn_abseil_dir}/absl/log/internal/voidify.h" ]
-  deps = [ ":config" ]
+  deps = [
+    ":config",
+    ":core_headers",
+  ]
 }
 
 #

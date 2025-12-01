@@ -110,12 +110,6 @@ config("tint_public_config") {
     defines += [ "TINT_BUILD_GLSL_VALIDATOR=0" ]
   }
 
-  if (tint_build_syntax_tree_writer) {
-    defines += [ "TINT_BUILD_SYNTAX_TREE_WRITER=1" ]
-  } else {
-    defines += [ "TINT_BUILD_SYNTAX_TREE_WRITER=0" ]
-  }
-
   if (tint_build_ir_binary) {
     defines += [ "TINT_BUILD_IR_BINARY=1" ]
   } else {
@@ -308,23 +302,6 @@ source_set("dxcompiler-for-fuzzer") {
 }
 
 ###############################################################################
-# Fuzzers
-###############################################################################
-if (tint_has_fuzzers) {
-  action("tint_generate_wgsl_corpus") {
-    testonly = true
-    script = "${tint_src_dir}/cmd/fuzz/generate_tint_corpus.py"
-    sources = [ "${script}" ]
-    deps = []
-    args = [
-      rebase_path("${tint_root_dir}/test/tint", root_build_dir),
-      rebase_path("${fuzzer_corpus_dir}/wgsl_corpus", root_build_dir),
-    ]
-    outputs = [ fuzzer_corpus_wgsl_stamp ]
-  }
-}
-
-###############################################################################
 # Groups
 ###############################################################################
 group("libs") {
@@ -354,21 +331,32 @@ group("cmds") {
 
 group("fuzzers") {
   testonly = true
-  deps = []
+  data_deps = []
   if (tint_has_fuzzers) {
-    deps += [ "${tint_src_dir}/cmd/fuzz/wgsl" ]
+    if (tint_build_wgsl_reader) {
+      data_deps += [ "${tint_src_dir}/cmd/fuzz/wgsl" ]
+    }
     if (tint_build_ir_binary) {
-      deps += [ "${tint_src_dir}/cmd/fuzz/ir" ]
+      data_deps += [ "${tint_src_dir}/cmd/fuzz/ir" ]
     }
   }
 }
 
 group("fuzzer_corpus_tools") {
   testonly = true
-  deps = [ ":fuzzers" ]
+  data_deps = [ ":fuzzers" ]
   if (tint_has_fuzzers && tint_build_ir_binary) {
-    deps += [ "${tint_src_dir}/cmd/fuzz/ir/as" ]
+    data_deps += [ "${tint_src_dir}/cmd/fuzz/ir/as" ]
   }
+}
+
+group("fuzzer_corpus_tests") {
+  testonly = true
+  data_deps = [
+    ":fuzzer_corpus_tools",
+    "${dawn_root}/tools:go_tools",
+  ]
+  data = [ "${dawn_root}/test/tint/" ]
 }
 
 group("tests") {

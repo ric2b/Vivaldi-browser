@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">Lesezeichen wurde im Ordner <ph name="FOLDER_NAME" /> gespeichert</translation>
 <translation id="2433507940547922241">Darstellung</translation>
 <translation id="2501278716633472235">Zurück</translation>
+<translation id="2546283357679194313">Cookies und Websitedaten</translation>
 <translation id="2633278372998075009">Private Tabs</translation>
 <translation id="2650751991977523696">Datei noch einmal herunterladen?</translation>
 <translation id="265156376773362237">Standard-Vorabladen</translation>
@@ -54,6 +55,9 @@
 <translation id="4269820728363426813">Link-Adresse kopieren</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Displaysperre in den Android-Einstellungen aktivieren<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Passwortverwaltung</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, plural,
+          =1 {Tabs und Gruppen, die seit einem Tag oder länger nicht verwendet wurden}
+          other {Tabs und Gruppen, die seit # Tagen oder länger nicht verwendet wurden}}</translation>
 <translation id="451872707440238414">Lesezeichen durchsuchen</translation>
 <translation id="4526803704855831732">Private Tabs</translation>
 <translation id="4532845899244822526">Ordner auswählen</translation>
@@ -62,6 +66,7 @@
 
 "Zum Suchen berühren" kann nur ausgeführt werden, wenn Google als Standardsuchmaschine in Vivaldi definiert ist.</translation>
 <translation id="4759238208242260848">Downloads</translation>
+<translation id="4777866634702576038">Tabgruppe löschen?</translation>
 <translation id="4850886885716139402">Anzeigen</translation>
 <translation id="4883379392681899581">Privatmodus verlassen</translation>
 <translation id="4943872375798546930">Keine Ergebnisse</translation>
@@ -77,7 +82,6 @@
 <translation id="5375131951310889874">Erfahren Sie mehr über Themen auf Websites, ohne die Seite zu verlassen. Touch to Search ist eine Funktion, die nur verfügbar ist, wenn Google in Vivaldi als Standardsuchmaschine festgelegt ist. Es sendet ein Wort und seinen umgebenden Kontext an Google Search und gibt Definitionen, Bilder, Suchergebnisse und andere Details zurück.
 
 Drücken Sie lange, um Ihren Suchbegriff anzupassen. Um Ihre Suche zu verfeinern, schieben Sie das Bedienfeld ganz nach oben und tippen Sie auf das Suchfeld.</translation>
-<translation id="543338862236136125">Passwort ändern</translation>
 <translation id="572328651809341494">Zuletzt geöffnete Tabs</translation>
 <translation id="5833984609253377421">Link teilen</translation>
 <translation id="6150320133806434356">Lesezeichen gespeichert</translation>
@@ -85,6 +89,7 @@ Drücken Sie lange, um Ihren Suchbegriff anzupassen. Um Ihre Suche zu verfeinern
 <translation id="6336451774241870485">Neuer privater Tab</translation>
 <translation id="6337323516034698937">Um diesen Tab an ein anderes Gerät zu senden, melden Sie sich bei Vivaldi Sync auf beiden Geräten an. Falls erforderlich, geben Sie das Verschlüsselungspasswort ein.</translation>
 <translation id="6341580099087024258">Fragen, wo Dateien gespeichert werden sollen</translation>
+<translation id="6364438453358674297">Vorschlag aus dem Verlauf entfernen?</translation>
 <translation id="6404511346730675251">Lesezeichen bearbeiten</translation>
 <translation id="650224091954855786">{FILE_COUNT, plural,
           =1 {Datei heruntergeladen}
@@ -112,6 +117,9 @@ Drücken Sie lange, um Ihren Suchbegriff anzupassen. Um Ihre Suche zu verfeinern
 <translation id="8062594758852531064">Erweitertes Vorabladen:</translation>
 <translation id="8073388330009372546">Bild in neuem Tab öffnen</translation>
 <translation id="8127542551745560481">Startseite bearbeiten</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+          =1 {(1) inaktives Element}
+          other {(#) inaktive Elemente}}</translation>
 <translation id="8266862848225348053">Download-Ordner</translation>
 <translation id="8348430946834215779">Nach Möglichkeit HTTPS verwenden und vor dem Laden von Websites warnen, die das Protokoll nicht unterstützen</translation>
 <translation id="8560602726703398413">Finden Sie Ihre Leseliste in den Lesezeichen</translation>
@@ -121,6 +129,9 @@ Drücken Sie lange, um Ihren Suchbegriff anzupassen. Um Ihre Suche zu verfeinern
 <translation id="9042893549633094279">Datenschutz und Sicherheit</translation>
 <translation id="9063523880881406963">“Desktopversion ansehen” deaktivieren</translation>
 <translation id="9080642952018487277">In den Privatmodus wechseln</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+          =1 {Nicht verwendet seit mindestens einem Tag}
+          other {Nicht verwendet seit mindestens # Tagen}}</translation>
 <translation id="930124987204876019">Verlauf, Cookies, Websitedaten löschen, Cache leeren…</translation>
 <translation id="961856697154696964">Browserdaten löschen</translation>
 </translationbundle>

@@ -130,6 +130,56 @@ inline void UmaHistogramSiteToClearDomainLength(
       site_to_clear.length());
 }
 
+void RecordRedirectMetrics(const BtmRedirectInfo& redirect,
+                           const BtmRedirectChainInfo& chain) {
+  DCHECK(redirect.site_had_user_activation.has_value());
+  DCHECK(redirect.site_had_webauthn_assertion.has_value());
+  DCHECK(redirect.chain_id.has_value());
+  DCHECK(redirect.chain_index.has_value());
+  DCHECK_LT(redirect.chain_index.value(), chain.length);
+
+  bool initial_site_same = (redirect.site == chain.initial_site);
+  bool final_site_same = (redirect.site == chain.final_site);
+
+  if (!chain.are_3pcs_generally_enabled) {
+    ukm::builders::BTM_Redirect(redirect.redirector_source_id)
+        .SetSiteHadUserActivation(redirect.site_had_user_activation.value())
+        .SetSiteHadWebAuthnAssertion(
+            redirect.site_had_webauthn_assertion.value())
+        .SetRedirectType(static_cast<int64_t>(redirect.redirect_type))
+        .SetCookieAccessType(static_cast<int64_t>(redirect.access_type))
+        .SetRedirectAndInitialSiteSame(initial_site_same)
+        .SetRedirectAndFinalSiteSame(final_site_same)
+        .SetInitialAndFinalSitesSame(chain.initial_and_final_sites_same)
+        .SetRedirectChainIndex(redirect.chain_index.value())
+        .SetRedirectChainLength(chain.length)
+        .SetIsPartialRedirectChain(chain.is_partial_chain)
+        .SetClientBounceDelay(
+            BucketizeBtmBounceDelay(redirect.client_bounce_delay))
+        .SetHasStickyActivation(redirect.has_sticky_activation)
+        .SetWebAuthnAssertionRequestSucceeded(
+            redirect.web_authn_assertion_request_succeeded)
+        .SetChainId(redirect.chain_id.value())
+        .Record(ukm::UkmRecorder::Get());
+  }
+
+  // Don't record UMA metrics for same-site redirects.
+  if (initial_site_same || final_site_same) {
+    return;
+  }
+
+  BtmRedirectCategory category = ClassifyRedirect(
+      redirect.access_type, redirect.site_had_user_activation.value());
+  UmaHistogramBounceCategory(category, chain.cookie_mode.value(),
+                             redirect.redirect_type);
+
+  if (redirect.redirect_type == BtmRedirectType::kServer) {
+    UmaHistogramBounceDelay(redirect.server_bounce_delay);
+    UmaHistogramBounceStatusCode(redirect.response_code,
+                                 redirect.was_response_cached);
+  }
+}
+
 net::CookiePartitionKeyCollection CookiePartitionKeyCollectionForSites(
     const std::vector<std::string>& sites) {
   std::vector<net::CookiePartitionKey> keys;
@@ -282,7 +332,7 @@ DipsTimerStorage::~DipsTimerStorage() = default;
 
 }  // namespace
 
-/* static */
+// static
 BtmService* BtmService::Get(BrowserContext* context) {
   return BtmServiceImpl::Get(context);
 }
@@ -341,7 +391,7 @@ BtmServiceImpl::~BtmServiceImpl() {
   ClearAllUserData();
 }
 
-/* static */
+// static
 BtmServiceImpl* BtmServiceImpl::Get(BrowserContext* context) {
   return BrowserContextImpl::From(context)->GetBtmService();
 }
@@ -388,16 +438,16 @@ void BtmServiceImpl::HandleRedirectChain(
   }
 
   if (!chain->are_3pcs_generally_enabled &&
-      chain->initial_url.source_id != ukm::kInvalidSourceId) {
-    ukm::builders::BTM_ChainBegin(chain->initial_url.source_id)
+      chain->initial_source_id != ukm::kInvalidSourceId) {
+    ukm::builders::BTM_ChainBegin(chain->initial_source_id)
         .SetChainId(chain->chain_id)
         .SetInitialAndFinalSitesSame(chain->initial_and_final_sites_same)
         .Record(ukm::UkmRecorder::Get());
   }
 
   if (!chain->are_3pcs_generally_enabled &&
-      chain->final_url.source_id != ukm::kInvalidSourceId) {
-    ukm::builders::BTM_ChainEnd(chain->final_url.source_id)
+      chain->final_source_id != ukm::kInvalidSourceId) {
+    ukm::builders::BTM_ChainEnd(chain->final_source_id)
         .SetChainId(chain->chain_id)
         .SetInitialAndFinalSitesSame(chain->initial_and_final_sites_same)
         .Record(ukm::UkmRecorder::Get());
@@ -409,7 +459,7 @@ void BtmServiceImpl::HandleRedirectChain(
     if (redirect->redirect_type == BtmRedirectType::kServer) {
       total_server_bounce_delay += redirect->server_bounce_delay;
     }
-    redirect_sites.insert(GetSiteForBtm(redirect->redirector.url));
+    redirect_sites.insert(GetSiteForBtm(redirect->redirector_url));
   }
   UmaHistogramBounceChainDelay(total_server_bounce_delay);
 
@@ -448,18 +498,19 @@ void BtmServiceImpl::HandleRedirects(
     DCHECK(!redirect.chain_index.has_value());
     redirect.chain_index = chain->length - redirects.size() + index;
 
-    // TODO(https://crbug.com/434005972): Can `BtmServiceImpl::HandleRedirect`
-    // be inlined? For the most part, it's only recording metrics; the
-    // interesting work happens in the callback. And it's only being used
-    // separately for one test. If inlined, this function could be able to
-    // invoke `BtmServiceImpl::RecordBounce` directly without having to pass it
-    // as an argument.
-    HandleRedirect(
-        redirect, *chain,
-        // Unretained is safe here because the callback is called synchronously
-        // in `HandleRedirect`.
-        base::BindRepeating(&BtmServiceImpl::RecordBounce,
-                            base::Unretained(this), stateful_bounce_callback));
+    RecordRedirectMetrics(redirect, *chain);
+
+    bool initial_site_same = (redirect.site == chain->initial_site);
+    bool final_site_same = (redirect.site == chain->final_site);
+
+    if (initial_site_same || final_site_same) {
+      continue;
+    }
+    if (redirect.access_type == BtmDataAccessType::kUnknown) {
+      continue;
+    }
+
+    RecordBounce(stateful_bounce_callback, redirect, *chain);
   }
 
   // All redirects handled.
@@ -474,7 +525,7 @@ void BtmServiceImpl::RecordBounce(
     StatefulBounceCallback stateful_bounce_callback,
     const BtmRedirectInfo& redirect,
     const BtmRedirectChainInfo& chain) {
-  const GURL& url = redirect.redirector.url;
+  const GURL& url = redirect.redirector_url;
   bool stateful = redirect.access_type > BtmDataAccessType::kRead;
 
   // If the bounced URL has a 3PC exception when embedded under the initial or
@@ -520,69 +571,18 @@ void BtmServiceImpl::RecordBounce(
   // If the bounce is stateful and not excepted by cookie settings, run the
   // callback.
   if (stateful) {
-    stateful_bounce_callback.Run(chain.final_url.url);
+    stateful_bounce_callback.Run(chain.final_url);
   }
 
   // Record the bounce at the storage layer.
-  storage_.AsyncCall(&BtmStorage::RecordBounce)
-      .WithArgs(url, redirect.time, stateful);
+  storage_.AsyncCall(&BtmStorage::RecordBounce).WithArgs(url, redirect.time);
 }
 
-/*static*/
-void BtmServiceImpl::HandleRedirect(const BtmRedirectInfo& redirect,
-                                    const BtmRedirectChainInfo& chain,
-                                    RecordBounceCallback record_bounce) {
-  DCHECK(redirect.site_had_user_activation.has_value());
-  DCHECK(redirect.site_had_webauthn_assertion.has_value());
-  DCHECK(redirect.chain_id.has_value());
-  DCHECK(redirect.chain_index.has_value());
-  DCHECK_LT(redirect.chain_index.value(), chain.length);
-
-  bool initial_site_same = (redirect.site == chain.initial_site);
-  bool final_site_same = (redirect.site == chain.final_site);
-
-  if (!chain.are_3pcs_generally_enabled) {
-    ukm::builders::BTM_Redirect(redirect.redirector.source_id)
-        .SetSiteHadUserActivation(redirect.site_had_user_activation.value())
-        .SetSiteHadWebAuthnAssertion(
-            redirect.site_had_webauthn_assertion.value())
-        .SetRedirectType(static_cast<int64_t>(redirect.redirect_type))
-        .SetCookieAccessType(static_cast<int64_t>(redirect.access_type))
-        .SetRedirectAndInitialSiteSame(initial_site_same)
-        .SetRedirectAndFinalSiteSame(final_site_same)
-        .SetInitialAndFinalSitesSame(chain.initial_and_final_sites_same)
-        .SetRedirectChainIndex(redirect.chain_index.value())
-        .SetRedirectChainLength(chain.length)
-        .SetIsPartialRedirectChain(chain.is_partial_chain)
-        .SetClientBounceDelay(
-            BucketizeBtmBounceDelay(redirect.client_bounce_delay))
-        .SetHasStickyActivation(redirect.has_sticky_activation)
-        .SetWebAuthnAssertionRequestSucceeded(
-            redirect.web_authn_assertion_request_succeeded)
-        .SetChainId(redirect.chain_id.value())
-        .Record(ukm::UkmRecorder::Get());
-  }
-
-  if (initial_site_same || final_site_same) {
-    // Don't record UMA metrics for same-site redirects.
-    return;
-  }
-
-  // Record this bounce in the BTM database.
-  if (redirect.access_type != BtmDataAccessType::kUnknown) {
-    record_bounce.Run(redirect, chain);
-  }
-
-  BtmRedirectCategory category = ClassifyRedirect(
-      redirect.access_type, redirect.site_had_user_activation.value());
-  UmaHistogramBounceCategory(category, chain.cookie_mode.value(),
-                             redirect.redirect_type);
-
-  if (redirect.redirect_type == BtmRedirectType::kServer) {
-    UmaHistogramBounceDelay(redirect.server_bounce_delay);
-    UmaHistogramBounceStatusCode(redirect.response_code,
-                                 redirect.was_response_cached);
-  }
+// static
+void BtmServiceImpl::RecordRedirectMetricsForTesting(
+    const BtmRedirectInfo& redirect,
+    const BtmRedirectChainInfo& chain) {
+  RecordRedirectMetrics(redirect, chain);
 }
 
 void BtmServiceImpl::OnTimerFired() {

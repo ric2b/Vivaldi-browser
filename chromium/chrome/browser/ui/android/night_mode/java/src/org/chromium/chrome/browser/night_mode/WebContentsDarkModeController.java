@@ -10,7 +10,7 @@ import org.chromium.build.annotations.NullMarked;
 import org.chromium.components.browser_ui.site_settings.AutoDarkMetrics;
 import org.chromium.components.browser_ui.site_settings.AutoDarkMetrics.AutoDarkSettingsChangeSource;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
-import org.chromium.components.content_settings.ContentSettingValues;
+import org.chromium.components.content_settings.ContentSetting;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.ukm.UkmRecorder;
 import org.chromium.content_public.browser.BrowserContextHandle;
@@ -19,8 +19,11 @@ import org.chromium.ui.util.ColorUtils;
 import org.chromium.url.GURL;
 
 // Vivaldi
-import org.chromium.chrome.browser.night_mode.settings.ThemeSettingsFragment;
+import org.chromium.build.BuildConfig;
+import org.chromium.components.content_settings.ContentSetting;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * A controller class could enable or disable web content dark mode feature based on the content
@@ -35,11 +38,11 @@ public class WebContentsDarkModeController {
      * @return Whether auto dark mode is enable for a given URL.
      */
     public static boolean isEnabledForUrl(BrowserContextHandle browserContextHandle, GURL url) {
-        @ContentSettingValues
+        @ContentSetting
         int contentSetting =
                 WebsitePreferenceBridge.getContentSetting(
                         browserContextHandle, ContentSettingsType.AUTO_DARK_WEB_CONTENT, url, url);
-        return contentSetting != ContentSettingValues.BLOCK;
+        return contentSetting != ContentSetting.BLOCK;
     }
 
     /**
@@ -50,16 +53,23 @@ public class WebContentsDarkModeController {
      */
     public static void setEnabledForUrl(
             BrowserContextHandle browserContextHandle, GURL url, boolean enabled) {
+
+        // Vivaldi
+        @ContentSetting
+        int enabledValue = vivaldiShouldForceAutoDarkContentSetting() ?
+                ContentSetting.DEFAULT : ContentSetting.ALLOW ;
+
+        if (!BuildConfig.IS_VIVALDI)
         // This is only called when a user disables/enables the feature for a site from the app
         // menu. The app menu item should only be visible (and thus clickable) if Auto Dark is
         // enabled. If it is enabled, the default content setting should be ALLOW.
         assert WebsitePreferenceBridge.getDefaultContentSetting(
                         browserContextHandle, ContentSettingsType.AUTO_DARK_WEB_CONTENT)
-                == ContentSettingValues.ALLOW;
+                == ContentSetting.ALLOW;
 
-        @ContentSettingValues
+        @ContentSetting
         int contentSettingValue =
-                enabled ? ContentSettingValues.DEFAULT : ContentSettingValues.BLOCK;
+                enabled ? enabledValue : ContentSetting.BLOCK; // Vivaldi
 
         WebsitePreferenceBridge.setContentSettingDefaultScope(
                 browserContextHandle,
@@ -97,7 +107,7 @@ public class WebContentsDarkModeController {
         return WebsitePreferenceBridge.isContentSettingEnabled(
                 browserContextHandle, ContentSettingsType.AUTO_DARK_WEB_CONTENT)
                 && ChromeSharedPreferences.getInstance().readBoolean(
-                ThemeSettingsFragment.KEY_DARK_MODE_FOR_WEBPAGES, false); // Vivaldi
+                VivaldiPreferences.KEY_DARK_MODE_FOR_WEBPAGES, false); // Vivaldi
     }
 
     /**
@@ -149,5 +159,23 @@ public class WebContentsDarkModeController {
             return false;
         }
         return true;
+    }
+
+    // Returns if the page should be forced to auto dark mode or not
+    public static boolean vivaldiShouldForceAutoDarkContentSetting() {
+        @ThemeType
+        int websiteTheme = VivaldiPreferences.getSharedPreferencesManager().readInt(
+                VivaldiPreferences.PREF_WEBSITE_THEME_APPEARANCE, ThemeType.SYSTEM_DEFAULT);
+
+        switch (websiteTheme) {
+            case ThemeType.LIGHT:
+                return false;
+            case ThemeType.DARK:
+                return true;
+            case ThemeType.SYSTEM_DEFAULT:
+                return GlobalNightModeStateProviderHolder.getInstance().isInNightMode();
+            default:
+                return false;
+        }
     }
 }

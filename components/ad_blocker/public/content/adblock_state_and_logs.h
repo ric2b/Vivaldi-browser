@@ -6,15 +6,12 @@
 #include <map>
 #include <set>
 #include <string>
-#include <vector>
 
-#include "base/observer_list.h"
-#include "base/timer/timer.h"
+#include "base/observer_list_types.h"
 #include "base/values.h"
+#include "components/ad_blocker/public/content/adblock_navigation_tracker.h"
 #include "components/ad_blocker/public/content/adblock_tab_state_and_logs.h"
 #include "components/ad_blocker/public/core/adblock_types.h"
-#include "url/gurl.h"
-#include "url/origin.h"
 
 namespace content {
 class RenderFrameHost;
@@ -46,13 +43,11 @@ class StateAndLogs {
       RuleGroup group,
       const std::string& domain) const = 0;
 
-  virtual std::array<std::optional<TabStateAndLogs::RuleData>, kRuleGroupCount>
-  WasNavigationBlocked(const content::NavigationHandle* navigation) const = 0;
-
+  virtual void CreateTabHelper(content::WebContents* contents) = 0;
   virtual TabStateAndLogs* GetTabHelper(
       content::WebContents* contents) const = 0;
-
-  virtual TabStateAndLogs* CreateTabHelper(content::WebContents* contents) = 0;
+  virtual NavigationTracker* GetNavigationTracker(
+      content::NavigationHandle& navigation_handle) const = 0;
 
   virtual void AddObserver(Observer* observer) = 0;
   virtual void RemoveObserver(Observer* observer) = 0;

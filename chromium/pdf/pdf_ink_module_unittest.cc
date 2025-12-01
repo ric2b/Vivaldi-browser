@@ -271,11 +271,16 @@ class FakeClient : public PdfInkModuleClient {
               (const gfx::PointF& point),
               (override));
 
+  MOCK_METHOD(gfx::Transform,
+              GetCanonicalToPdfTransform,
+              (int page_index),
+              (override));
+
   MOCK_METHOD(ui::Cursor, GetCursor, (), (override));
 
   PageOrientation GetOrientation() const override { return orientation_; }
 
-  MOCK_METHOD(std::vector<gfx::Rect>, GetSelectionRects, (), (override));
+  MOCK_METHOD(SelectionRectMap, GetSelectionRectMap, (), (override));
 
   gfx::Size GetThumbnailSize(int page_index) override {
     CHECK_GE(page_index, 0);
@@ -1648,13 +1653,13 @@ TEST_P(PdfInkModuleStrokeTest, BasicLayoutInvalidationsFromStroke) {
   RunStrokeCheckTest(/*annotation_mode_enabled=*/true);
 
   // The default brush param size is 3.0.
-  const gfx::Rect kInvalidationAreaMouseDown(gfx::Point(8.0f, 13.0f),
-                                             gfx::Size(4.0f, 4.0f));
-  const gfx::Rect kInvalidationAreaMouseMove(gfx::Point(8.0f, 13.0f),
-                                             gfx::Size(14.0f, 14.0f));
-  const gfx::Rect kInvalidationAreaMouseUp(gfx::Point(18.0f, 15.0f),
-                                           gfx::Size(14.0f, 12.0f));
-  const gfx::Rect kInvalidationAreaFinishedStroke(8.0f, 13.0f, 25.0f, 7.0f);
+  constexpr gfx::Rect kInvalidationAreaMouseDown(gfx::Point(8, 13),
+                                                 gfx::Size(4, 4));
+  constexpr gfx::Rect kInvalidationAreaMouseMove(gfx::Point(8, 13),
+                                                 gfx::Size(14, 14));
+  constexpr gfx::Rect kInvalidationAreaMouseUp(gfx::Point(18, 15),
+                                               gfx::Size(14, 12));
+  constexpr gfx::Rect kInvalidationAreaFinishedStroke(7, 12, 27, 9);
   EXPECT_THAT(
       client().invalidations(),
       ElementsAre(kInvalidationAreaMouseDown, kInvalidationAreaMouseMove,
@@ -1677,13 +1682,13 @@ TEST_P(PdfInkModuleStrokeTest, TransformedLayoutInvalidationsFromStroke) {
   RunStrokeCheckTest(/*annotation_mode_enabled=*/true);
 
   // The default brush param size is 3.0.
-  const gfx::Rect kInvalidationAreaMouseDown(gfx::Point(8.0f, 13.0f),
-                                             gfx::Size(4.0f, 4.0f));
-  const gfx::Rect kInvalidationAreaMouseMove(gfx::Point(8.0f, 13.0f),
-                                             gfx::Size(14.0f, 14.0f));
-  const gfx::Rect kInvalidationAreaMouseUp(gfx::Point(18.0f, 15.0f),
-                                           gfx::Size(14.0f, 12.0f));
-  const gfx::Rect kInvalidationAreaFinishedStroke(7.0f, 12.0f, 27.0f, 9.0f);
+  constexpr gfx::Rect kInvalidationAreaMouseDown(gfx::Point(8, 13),
+                                                 gfx::Size(4, 4));
+  constexpr gfx::Rect kInvalidationAreaMouseMove(gfx::Point(8, 13),
+                                                 gfx::Size(14, 14));
+  constexpr gfx::Rect kInvalidationAreaMouseUp(gfx::Point(18, 15),
+                                               gfx::Size(14, 12));
+  constexpr gfx::Rect kInvalidationAreaFinishedStroke(6, 11, 29, 11);
   EXPECT_THAT(
       client().invalidations(),
       ElementsAre(kInvalidationAreaMouseDown, kInvalidationAreaMouseMove,
@@ -2620,17 +2625,17 @@ TEST_P(PdfInkModuleUndoRedoTest, UndoRedoInvalidationsBasic) {
 
   // The default brush param size is 3.0.  Invalidation areas are in screen
   // coordinates.
-  const gfx::Rect kInvalidationAreaMouseDown(gfx::Point(8.0f, 13.0f),
-                                             gfx::Size(4.0f, 4.0f));
-  const gfx::Rect kInvalidationAreaMouseMove(gfx::Point(8.0f, 13.0f),
-                                             gfx::Size(14.0f, 14.0f));
-  const gfx::Rect kInvalidationAreaMouseUp(gfx::Point(18.0f, 15.0f),
-                                           gfx::Size(14.0f, 12.0f));
+  constexpr gfx::Rect kInvalidationAreaMouseDown(gfx::Point(8, 13),
+                                                 gfx::Size(4, 4));
+  constexpr gfx::Rect kInvalidationAreaMouseMove(gfx::Point(8, 13),
+                                                 gfx::Size(14, 14));
+  constexpr gfx::Rect kInvalidationAreaMouseUp(gfx::Point(18, 15),
+                                               gfx::Size(14, 12));
   // This size is smaller than the area of the merged invalidation constants
   // above because InkStrokeModeler modeled the "V" shaped input into an input
   // with a much gentler line slope.
-  const gfx::Rect kInvalidationAreaEntireStroke(gfx::Point(8.0f, 13.0f),
-                                                gfx::Size(25.0f, 7.0f));
+  constexpr gfx::Rect kInvalidationAreaEntireStroke(gfx::Point(7, 12),
+                                                    gfx::Size(27, 9));
   EXPECT_THAT(
       client().invalidations(),
       ElementsAre(kInvalidationAreaMouseDown, kInvalidationAreaMouseMove,
@@ -2660,17 +2665,17 @@ TEST_P(PdfInkModuleUndoRedoTest, UndoRedoInvalidationsScaledRotated90) {
 
   // The default brush param size is 3.0.  Invalidation areas are in screen
   // coordinates.
-  const gfx::Rect kInvalidationAreaMouseDown(gfx::Point(8.0f, 13.0f),
-                                             gfx::Size(4.0f, 4.0f));
-  const gfx::Rect kInvalidationAreaMouseMove(gfx::Point(8.0f, 13.0f),
-                                             gfx::Size(14.0f, 14.0f));
-  const gfx::Rect kInvalidationAreaMouseUp(gfx::Point(18.0f, 15.0f),
-                                           gfx::Size(14.0f, 12.0f));
+  constexpr gfx::Rect kInvalidationAreaMouseDown(gfx::Point(8, 13),
+                                                 gfx::Size(4, 4));
+  constexpr gfx::Rect kInvalidationAreaMouseMove(gfx::Point(8, 13),
+                                                 gfx::Size(14, 14));
+  constexpr gfx::Rect kInvalidationAreaMouseUp(gfx::Point(18, 15),
+                                               gfx::Size(14, 12));
   // This size is smaller than the area of the merged invalidation constants
   // above because InkStrokeModeler modeled the "V" shaped input into an input
   // with a much gentler line slope.
-  const gfx::Rect kInvalidationAreaEntireStroke(gfx::Point(7.0f, 12.0f),
-                                                gfx::Size(27.0f, 9.0f));
+  constexpr gfx::Rect kInvalidationAreaEntireStroke(gfx::Point(6, 11),
+                                                    gfx::Size(29, 11));
   EXPECT_THAT(
       client().invalidations(),
       ElementsAre(kInvalidationAreaMouseDown, kInvalidationAreaMouseMove,
@@ -3393,6 +3398,8 @@ class PdfInkModuleTextHighlightTest : public PdfInkModuleUndoRedoTest {
  protected:
   // Helper method for running a simple text highlighting test using text
   // selected by mouse with a single selection rect on page zero.
+  // `selection_rect` is in screen coordinates, so it is easier to see the
+  // relationship between `selection_rect` and `expected_inputs`.
   void RunSingleSelectionWithMouseTest(
       const gfx::Rect& selection_rect,
       base::span<const PdfInkInputData> expected_inputs,
@@ -3407,9 +3414,40 @@ class PdfInkModuleTextHighlightTest : public PdfInkModuleUndoRedoTest {
   }
 
   // Sets the selection rects that will be given by the client.
-  void SetSelectionRects(base::span<const gfx::Rect> selection_rects) {
-    EXPECT_CALL(client(), GetSelectionRects())
-        .WillRepeatedly(Return(base::ToVector(selection_rects)));
+  // `selection_map` uses screen coordinates.
+  void SetSelectionRectMap(
+      const std::map<int, std::vector<gfx::Rect>>& selection_map) {
+    // Do screen to PDF coordinate conversion. Set GetCanonicalToPdfTransform()
+    // to return an identity transform to simplify testing. Now a screen to
+    // canonical conversion is sufficient.
+    EXPECT_CALL(client(), GetCanonicalToPdfTransform(_))
+        .WillRepeatedly(Return(gfx::Transform()));
+
+    PdfInkModuleClient::SelectionRectMap pdf_selection_map;
+    for (const auto& [page_index, selection_rects] : selection_map) {
+      const gfx::Transform transform = GetEventToCanonicalTransform(
+          client().GetOrientation(), client().GetPageContentsRect(page_index),
+          client().GetZoom());
+      std::vector<PdfRect>& pdf_rects = pdf_selection_map[page_index];
+      pdf_rects.reserve(selection_rects.size());
+      for (const gfx::Rect& selection_rect : selection_rects) {
+        gfx::RectF mapped_rect = transform.MapRect(gfx::RectF(selection_rect));
+        pdf_rects.push_back(PdfRect(mapped_rect));
+      }
+    }
+
+    EXPECT_CALL(client(), GetSelectionRectMap())
+        .WillRepeatedly(Return(pdf_selection_map));
+  }
+
+  // Wrapper for SetSelectionRectMap() that puts all the rects on page 0.
+  // `selection_rects` uses screen coordinates.
+  void SetSelectionRectsOnFirstPage(
+      base::span<const gfx::Rect> selection_rects) {
+    // Call `SetSelectionRectMap({})` if there are no selections at all.
+    CHECK(!selection_rects.empty());
+
+    SetSelectionRectMap({{0, base::ToVector(selection_rects)}});
   }
 
   // Sets `points` as selectable text areas. Any points not included will be
@@ -3431,7 +3469,7 @@ class PdfInkModuleTextHighlightTest : public PdfInkModuleUndoRedoTest {
 
     SelectBrushTool(PdfInkBrush::Type::kHighlighter, kOrangeBrushParams);
 
-    SetSelectionRects(base::span_from_ref(selection_rect));
+    SetSelectionRectsOnFirstPage(base::span_from_ref(selection_rect));
     SetTextAreaPoints(base::span_from_ref(kStartPointInsidePage0));
 
     EXPECT_CALL(client(), OnTextOrLinkAreaClick(kStartPointInsidePage0,
@@ -3498,7 +3536,7 @@ TEST_P(PdfInkModuleTextHighlightTest, PenDoesNotSelectText) {
   // Select the pen tool with a "Light Red" color.
   SelectBrushTool(PdfInkBrush::Type::kPen, kRedBrushParams);
 
-  EXPECT_CALL(client(), GetSelectionRects()).Times(0);
+  EXPECT_CALL(client(), GetSelectionRectMap()).Times(0);
   SetTextAreaPoints(base::span_from_ref(kStartPointInsidePage0));
 
   EXPECT_CALL(client(), OnTextOrLinkAreaClick(_, _)).Times(0);
@@ -3652,7 +3690,8 @@ TEST_P(PdfInkModuleTextHighlightTest, MultipleSelection) {
 
   SelectBrushTool(PdfInkBrush::Type::kHighlighter, kOrangeBrushParams);
 
-  SetSelectionRects({kHorizontalSelection, gfx::Rect(15, 25, 10, 5)});
+  SetSelectionRectsOnFirstPage(
+      {kHorizontalSelection, gfx::Rect(15, 25, 10, 5)});
   constexpr gfx::PointF kEndPoint2InsidePage0{25.0, 30.0};
   SetTextAreaPoints({kStartPointInsidePage0, kEndPoint2InsidePage0});
 
@@ -3712,7 +3751,7 @@ TEST_P(PdfInkModuleTextHighlightTest, OneClickCount) {
   SelectBrushTool(PdfInkBrush::Type::kHighlighter, kOrangeBrushParams);
 
   // There will be no text selection rects.
-  SetSelectionRects({});
+  SetSelectionRectMap({});
   SetTextAreaPoints(base::span_from_ref(kStartPointInsidePage0));
 
   EXPECT_CALL(client(), OnTextOrLinkAreaClick(kStartPointInsidePage0,
@@ -3739,7 +3778,7 @@ TEST_P(PdfInkModuleTextHighlightTest, TwoClickCount) {
   ClickTextAtPoint(kStartPointInsidePage0, /*click_count=*/1);
 
   // The second text click will select the word.
-  SetSelectionRects(base::span_from_ref(kHorizontalSelection));
+  SetSelectionRectsOnFirstPage(base::span_from_ref(kHorizontalSelection));
 
   EXPECT_CALL(client(), OnTextOrLinkAreaClick(kStartPointInsidePage0,
                                               /*click_count=*/2));
@@ -3794,12 +3833,12 @@ TEST_P(PdfInkModuleTextHighlightTest, ThreeClickCount) {
 
   ClickTextAtPoint(kStartPointInsidePage0, /*click_count=*/1);
 
-  SetSelectionRects(base::span_from_ref(kHorizontalSelection));
+  SetSelectionRectsOnFirstPage(base::span_from_ref(kHorizontalSelection));
   ClickTextAtPoint(kStartPointInsidePage0, /*click_count=*/2);
 
   // The third text click will remove the original word text highlight and
   // select the line.
-  SetSelectionRects(base::span_from_ref(gfx::Rect(5, 15, 45, 12)));
+  SetSelectionRectsOnFirstPage(base::span_from_ref(gfx::Rect(5, 15, 45, 12)));
 
   EXPECT_CALL(client(), OnTextOrLinkAreaClick(kStartPointInsidePage0,
                                               /*click_count=*/3));
@@ -3872,7 +3911,7 @@ TEST_P(PdfInkModuleTextHighlightTest, MouseUpOnNonSelection) {
 
   // Move and end in a non-text area. Make the mock selection rect smaller than
   // the distance between the mousedown and mouseup points.
-  SetSelectionRects(base::span_from_ref(gfx::Rect(10, 15, 2, 10)));
+  SetSelectionRectsOnFirstPage(base::span_from_ref(gfx::Rect(10, 15, 2, 10)));
 
   EXPECT_CALL(client(), ExtendSelectionByPoint(kEndPointInsidePage0));
 
@@ -3926,7 +3965,8 @@ TEST_P(PdfInkModuleTextHighlightTest, MultiplePages) {
 
   // Move to page 1. Select rects from both pages.
   constexpr gfx::Rect kHorizontalSelectionInPage1{10, 75, 15, 14};
-  SetSelectionRects({kHorizontalSelection, kHorizontalSelectionInPage1});
+  SetSelectionRectMap(
+      {{0, {kHorizontalSelection}}, {1, {kHorizontalSelectionInPage1}}});
   EXPECT_CALL(client(),
               PageIndexFromPoint(gfx::PointF(kHorizontalSelection.origin())))
       .WillRepeatedly(Return(0));
@@ -3983,7 +4023,7 @@ TEST_P(PdfInkModuleTextHighlightTest,
 
   SelectBrushTool(PdfInkBrush::Type::kHighlighter, kOrangeBrushParams);
 
-  SetSelectionRects(base::span_from_ref(gfx::Rect(9, 14, 5, 10)));
+  SetSelectionRectsOnFirstPage(base::span_from_ref(gfx::Rect(9, 14, 5, 10)));
   EXPECT_CALL(client(), IsSelectableTextOrLinkArea(_))
       .WillRepeatedly(Return(true));
 
@@ -4015,7 +4055,7 @@ TEST_P(PdfInkModuleTextHighlightTest, TouchOneClickCount) {
   SelectBrushTool(PdfInkBrush::Type::kHighlighter, kOrangeBrushParams);
 
   // There will be no text selection rects.
-  SetSelectionRects({});
+  SetSelectionRectMap({});
   SetTextAreaPoints(base::span_from_ref(kStartPointInsidePage0));
 
   EXPECT_CALL(client(), OnTextOrLinkAreaClick(kStartPointInsidePage0,
@@ -4074,7 +4114,7 @@ TEST_P(PdfInkModuleTextHighlightTest, PenOneClickCount) {
   SelectBrushTool(PdfInkBrush::Type::kHighlighter, kOrangeBrushParams);
 
   // There will be no text selection rects.
-  SetSelectionRects({});
+  SetSelectionRectMap({});
   SetTextAreaPoints(base::span_from_ref(kStartPointInsidePage0));
 
   EXPECT_CALL(client(), OnTextOrLinkAreaClick(kStartPointInsidePage0,
@@ -4245,6 +4285,32 @@ TEST_P(PdfInkModuleTextHighlightTest, CursorOnMouseMoveWhileBrushDrawing) {
   EXPECT_TRUE(ink_module().HandleInputEvent(mouse_up_event));
 }
 
+TEST_P(PdfInkModuleTextHighlightTest, IgnoreVerySmallTextSelection) {
+  EnableDrawAnnotationMode();
+  InitializeSimpleSinglePageBasicLayout();
+
+  SelectBrushTool(PdfInkBrush::Type::kHighlighter, kOrangeBrushParams);
+
+  static constexpr PdfRect kVerySmallSelectionRect(
+      kStartPointInsidePage0.x(), kStartPointInsidePage0.y(),
+      kStartPointInsidePage0.x() + 1.0f, kStartPointInsidePage0.y() + 0.001f);
+  PdfInkModuleClient::SelectionRectMap pdf_selection_map;
+  pdf_selection_map[0].push_back(kVerySmallSelectionRect);
+  EXPECT_CALL(client(), GetSelectionRectMap())
+      .WillRepeatedly(Return(pdf_selection_map));
+  SetTextAreaPoints({kStartPointInsidePage0, kEndPointInsidePage0});
+  ApplyStrokeWithMouseAtPoints(kStartPointInsidePage0, {kEndPointInsidePage0},
+                               kEndPointInsidePage0);
+
+  // The test case should not crash. Instead, the very small text selection
+  // simply gets ignored.
+  EXPECT_EQ(1, client().stroke_started_count());
+  EXPECT_EQ(1, client().modified_stroke_finished_count());
+  EXPECT_EQ(0, client().unmodified_stroke_finished_count());
+  EXPECT_TRUE(updated_ink_thumbnail_page_indices().empty());
+  EXPECT_TRUE(CollectVisibleStrokes().empty());
+}
+
 class PdfInkModuleTextHighlightMetricsTest
     : public PdfInkModuleMetricsTestBase,
       public PdfInkModuleTextHighlightTest {
@@ -4343,7 +4409,7 @@ TEST_P(PdfInkModuleTextHighlightMetricsTest, Color) {
 
   histograms().ExpectTotalCount(kTextHighlightColorMetric, 0);
 
-  SetSelectionRects(base::span_from_ref(kHorizontalSelection));
+  SetSelectionRectsOnFirstPage(base::span_from_ref(kHorizontalSelection));
   SetTextAreaPoints({kStartPointInsidePage0, kEndPointInsidePage0});
 
   ApplyStrokeWithMouseAtPoints(kStartPointInsidePage0, {kEndPointInsidePage0},
@@ -4372,7 +4438,7 @@ TEST_P(PdfInkModuleTextHighlightMetricsTest, InputDevice) {
 
   histograms().ExpectTotalCount(kTextHighlightInputDeviceMetric, 0);
 
-  SetSelectionRects(base::span_from_ref(kHorizontalSelection));
+  SetSelectionRectsOnFirstPage(base::span_from_ref(kHorizontalSelection));
   SetTextAreaPoints({kStartPointInsidePage0, kEndPointInsidePage0});
 
   // Apply a text highlight stroke with mouse.
@@ -4416,7 +4482,7 @@ TEST_P(PdfInkModuleTextHighlightMetricsTest, TwoClickDelay) {
 
   // Click twice.
   ClickTextAtPoint(kStartPointInsidePage0, /*click_count=*/1);
-  SetSelectionRects(base::span_from_ref(kHorizontalSelection));
+  SetSelectionRectsOnFirstPage(base::span_from_ref(kHorizontalSelection));
   ClickTextAtPoint(kStartPointInsidePage0, /*click_count=*/2);
 
   EXPECT_EQ(2, client().stroke_started_count());
@@ -4452,7 +4518,7 @@ TEST_P(PdfInkModuleTextHighlightMetricsTest, TwoClickMove) {
   ClickTextAtPoint(kStartPointInsidePage0, /*click_count=*/1);
 
   // Click the second time, but without mouseup.
-  SetSelectionRects(base::span_from_ref(kHorizontalSelection));
+  SetSelectionRectsOnFirstPage(base::span_from_ref(kHorizontalSelection));
   blink::WebMouseEvent mouse_event =
       MouseEventBuilder()
           .CreateLeftClickAtPosition(kStartPointInsidePage0)
@@ -4500,7 +4566,7 @@ TEST_P(PdfInkModuleTextHighlightMetricsTest, TwoClickMoveHighlight) {
 
   // Click twice.
   ClickTextAtPoint(kStartPointInsidePage0, /*click_count=*/1);
-  SetSelectionRects(base::span_from_ref(kHorizontalSelection));
+  SetSelectionRectsOnFirstPage(base::span_from_ref(kHorizontalSelection));
   ClickTextAtPoint(kStartPointInsidePage0, /*click_count=*/2);
 
   EXPECT_EQ(2, client().stroke_started_count());
@@ -4540,7 +4606,7 @@ TEST_P(PdfInkModuleTextHighlightMetricsTest, ThreeClickDelay) {
 
   // Click twice.
   ClickTextAtPoint(kStartPointInsidePage0, /*click_count=*/1);
-  SetSelectionRects(base::span_from_ref(kHorizontalSelection));
+  SetSelectionRectsOnFirstPage(base::span_from_ref(kHorizontalSelection));
   ClickTextAtPoint(kStartPointInsidePage0, /*click_count=*/2);
 
   EXPECT_EQ(2, client().stroke_started_count());
@@ -4582,7 +4648,7 @@ TEST_P(PdfInkModuleTextHighlightMetricsTest, ThreeClickMove) {
 
   // Click twice.
   ClickTextAtPoint(kStartPointInsidePage0, /*click_count=*/1);
-  SetSelectionRects(base::span_from_ref(kHorizontalSelection));
+  SetSelectionRectsOnFirstPage(base::span_from_ref(kHorizontalSelection));
   ClickTextAtPoint(kStartPointInsidePage0, /*click_count=*/2);
 
   EXPECT_EQ(2, client().stroke_started_count());

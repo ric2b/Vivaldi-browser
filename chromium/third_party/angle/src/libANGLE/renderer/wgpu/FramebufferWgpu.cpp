@@ -7,6 +7,10 @@
 //    Implements the class methods for FramebufferWgpu.
 //
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "libANGLE/renderer/wgpu/FramebufferWgpu.h"
 #include <__config>
 
@@ -208,8 +212,6 @@ angle::Result FramebufferWgpu::readPixels(const gl::Context *context,
     ContextWgpu *contextWgpu = GetImplAs<ContextWgpu>(context);
 
     ANGLE_TRY(flushDeferredClears(contextWgpu));
-
-    ANGLE_TRY(contextWgpu->flush(webgpu::RenderPassClosureReason::GLReadPixels));
 
     GLuint outputSkipBytes = 0;
     PackPixelsParams params;

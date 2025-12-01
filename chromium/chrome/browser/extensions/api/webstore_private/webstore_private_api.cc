@@ -13,6 +13,7 @@
 
 #include "base/auto_reset.h"
 #include "base/base64.h"
+#include "base/check_is_test.h"
 #include "base/functional/bind.h"
 #include "base/json/values_util.h"
 #include "base/lazy_instance.h"
@@ -32,16 +33,16 @@
 #include "chrome/browser/extensions/extension_allowlist.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/install_approval.h"
-#include "chrome/browser/extensions/install_tracker.h"
+#include "chrome/browser/extensions/install_tracker_factory.h"
 #include "chrome/browser/extensions/manifest_v2_experiment_manager.h"
 #include "chrome/browser/extensions/mv2_experiment_stage.h"
-#include "chrome/browser/extensions/scoped_active_install.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
 #include "chrome/browser/safe_browsing/safe_browsing_metrics_collector_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_browser_utils.h"
+#include "chrome/browser/ui/extensions/extensions_dialogs.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -62,6 +63,9 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/extensions_browser_client.h"
+#include "extensions/browser/install_tracker.h"
+#include "extensions/browser/scoped_active_install.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
@@ -72,13 +76,14 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "chrome/browser/ui/extensions/extensions_dialogs.h"
 #include "extensions/browser/api/management/management_api.h"
 #endif
 
 #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #endif
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 using safe_browsing::SafeBrowsingNavigationObserverManager;
 
@@ -441,7 +446,8 @@ WebstorePrivateBeginInstallWithManifest3Function::Run() {
     }
   }
 
-  InstallTracker* tracker = InstallTracker::Get(browser_context());
+  InstallTracker* tracker =
+      InstallTrackerFactory::GetForBrowserContext(browser_context());
   DCHECK(tracker);
   bool is_installed =
       ExtensionRegistry::Get(browser_context())
@@ -564,7 +570,6 @@ void WebstorePrivateBeginInstallWithManifest3Function::OnWebstoreParseFailure(
   Release();
 }
 
-
 void WebstorePrivateBeginInstallWithManifest3Function::RequestExtensionApproval(
     content::WebContents* web_contents) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -580,7 +585,6 @@ void WebstorePrivateBeginInstallWithManifest3Function::RequestExtensionApproval(
   supervised_user_extensions_delegate->RequestToAddExtensionOrShowError(
       *dummy_extension_, web_contents,
       gfx::ImageSkia::CreateFrom1xBitmap(icon_),
-      SupervisedUserExtensionParentApprovalEntryPoint::kOnWebstoreInstallation,
       std::move(extension_approval_callback));
 #else
   // TODO(crbug.com/410616937): Support supervised user install controls on
@@ -681,7 +685,6 @@ bool WebstorePrivateBeginInstallWithManifest3Function::
 
   return true;
 }
-
 
 void WebstorePrivateBeginInstallWithManifest3Function::OnFrictionPromptDone(
     bool result) {
@@ -873,16 +876,38 @@ bool WebstorePrivateBeginInstallWithManifest3Function::ShouldShowFrictionDialog(
 void WebstorePrivateBeginInstallWithManifest3Function::
     ShowInstallFrictionDialog(content::WebContents* contents) {
   friction_dialog_shown_ = true;
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+
+  // Tests can auto confirm the dialog.
+  auto auto_confirm_value = ScopedTestDialogAutoConfirm::GetAutoConfirmValue();
+  switch (auto_confirm_value) {
+    case ScopedTestDialogAutoConfirm::NONE:
+      // Continue, auto confirm has not been set.
+      break;
+    case ScopedTestDialogAutoConfirm::ACCEPT:
+      CHECK_IS_TEST();
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(&WebstorePrivateBeginInstallWithManifest3Function::
+                             OnFrictionPromptDone,
+                         this, true));
+      return;
+    case ScopedTestDialogAutoConfirm::CANCEL:
+      CHECK_IS_TEST();
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(&WebstorePrivateBeginInstallWithManifest3Function::
+                             OnFrictionPromptDone,
+                         this, false));
+      return;
+    case ScopedTestDialogAutoConfirm::AutoConfirm::ACCEPT_AND_OPTION:
+      NOTREACHED();
+  }
+
   ShowExtensionInstallFrictionDialog(
       contents,
       base::BindOnce(&WebstorePrivateBeginInstallWithManifest3Function::
                          OnFrictionPromptDone,
                      this));
-#else
-  NOTIMPLEMENTED() << "ShowInstallFrictionDialog not supported on Android";
-  OnFrictionPromptDone(true);
-#endif
 }
 
 void WebstorePrivateBeginInstallWithManifest3Function::ShowInstallDialog(
@@ -900,9 +925,9 @@ void WebstorePrivateBeginInstallWithManifest3Function::ShowInstallDialog(
     // to configure the install prompt to indicate that this is a child
     // asking a parent for installation permission.
     prompt->set_requires_parent_permission(requires_parent_permission);
-    // Record metrics for supervised users that are in "Skip parent approval"-mode
-    // and use the Extension install dialog (that is used by non-supervised
-    // users).
+    // Record metrics for supervised users that are in "Skip parent
+    // approval"-mode and use the Extension install dialog (that is used by
+    // non-supervised users).
     if (supervised_user::AreExtensionsPermissionsEnabled(profile_)) {
       prompt->AddObserver(&supervised_user_extensions_metrics_recorder_);
     }
@@ -960,15 +985,9 @@ void WebstorePrivateBeginInstallWithManifest3Function::
     return;
   }
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
   ShowExtensionInstallBlockedDialog(extension->id(), extension->name(),
                                     blocked_by_policy_error_message_, image,
                                     contents, std::move(done_callback));
-#else
-  LOG(ERROR) << "Install blocked. Dialog not supported on Android. Extension: "
-             << extension->name()
-             << ", message: " << blocked_by_policy_error_message_;
-#endif
 }
 
 WebstorePrivateCompleteInstallFunction::
@@ -1005,7 +1024,8 @@ WebstorePrivateCompleteInstallFunction::Run() {
   }
 
   scoped_active_install_ = std::make_unique<ScopedActiveInstall>(
-      InstallTracker::Get(browser_context()), params->expected_id);
+      InstallTrackerFactory::GetForBrowserContext(browser_context()),
+      params->expected_id);
 
   // Balanced in OnExtensionInstallSuccess() or OnExtensionInstallFailure().
   AddRef();
@@ -1084,7 +1104,7 @@ WebstorePrivateGetBrowserLoginFunction::Run() {
   info.login =
       IdentityManagerFactory::GetForProfile(
           Profile::FromBrowserContext(browser_context())->GetOriginalProfile())
-          ->GetPrimaryAccountInfo(signin::ConsentLevel::kSync)
+          ->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin)
           .email;
   return RespondNow(ArgumentList(GetBrowserLogin::Results::Create(info)));
 }
@@ -1213,9 +1233,10 @@ WebstorePrivateGetReferrerChainFunction::Run() {
 #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   Profile* profile = Profile::FromBrowserContext(browser_context());
   if (!SafeBrowsingNavigationObserverManager::IsEnabledAndReady(
-          profile->GetPrefs(), g_browser_process->safe_browsing_service()))
+          profile->GetPrefs(), g_browser_process->safe_browsing_service())) {
     return RespondNow(ArgumentList(
         api::webstore_private::GetReferrerChain::Results::Create("")));
+  }
 
   content::RenderFrameHost* outermost_render_frame_host =
       render_frame_host() ? render_frame_host()->GetOutermostMainFrame()
@@ -1364,9 +1385,6 @@ WebstorePrivateGetMV2DeprecationStatusFunction::Run() {
   api::webstore_private::MV2DeprecationStatus api_status =
       api::webstore_private::MV2DeprecationStatus::kInactive;
   switch (current_stage) {
-    case MV2ExperimentStage::kNone:
-      api_status = api::webstore_private::MV2DeprecationStatus::kInactive;
-      break;
     case MV2ExperimentStage::kWarning:
       api_status = api::webstore_private::MV2DeprecationStatus::kWarning;
       break;

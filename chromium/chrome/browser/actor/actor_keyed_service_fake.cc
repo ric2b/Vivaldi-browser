@@ -7,13 +7,12 @@
 #include "chrome/browser/actor/actor_test_util.h"
 #include "chrome/browser/actor/execution_engine.h"
 #include "chrome/browser/actor/ui/event_dispatcher.h"
-#include "chrome/browser/actor/ui/mock_event_dispatcher.h"
+#include "chrome/browser/actor/ui/mocks/mock_event_dispatcher.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/actor/action_result.h"
 
 namespace actor {
 using ::testing::_;
-using ::testing::Invoke;
 
 ActorKeyedServiceFake::ActorKeyedServiceFake(Profile* profile)
     : ActorKeyedService(profile) {}
@@ -32,20 +31,16 @@ TaskId ActorKeyedServiceFake::CreateTaskForTesting() {
       static_cast<ui::MockUiEventDispatcher*>(task_ui_event_dispatcher.get());
 
   for (auto& mock : {mock_ui_dispatcher, mock_task_ui_dispatcher}) {
-    ON_CALL(*mock, OnPreFirstAct(_, _))
-        .WillByDefault(Invoke(Invoke(
-            UiEventDispatcherCallback<ui::UiEventDispatcher::FirstActInfo>(
-                base::BindRepeating(MakeOkResult)))));
     ON_CALL(*mock, OnPreTool(_, _))
-        .WillByDefault(Invoke(UiEventDispatcherCallback<ToolRequest>(
-            base::BindRepeating(MakeOkResult))));
+        .WillByDefault(UiEventDispatcherCallback<ToolRequest>(
+            base::BindRepeating(MakeOkResult)));
     ON_CALL(*mock, OnPostTool(_, _))
-        .WillByDefault(Invoke(UiEventDispatcherCallback<ToolRequest>(
-            base::BindRepeating(MakeOkResult))));
+        .WillByDefault(UiEventDispatcherCallback<ToolRequest>(
+            base::BindRepeating(MakeOkResult)));
     ON_CALL(*mock, OnActorTaskAsyncChange(_, _))
-        .WillByDefault(Invoke(UiEventDispatcherCallback<
-                              ui::UiEventDispatcher::ActorTaskAsyncChange>(
-            base::BindRepeating(MakeOkResult))));
+        .WillByDefault(UiEventDispatcherCallback<
+                       ui::UiEventDispatcher::ActorTaskAsyncChange>(
+            base::BindRepeating(MakeOkResult)));
   }
   auto execution_engine = ExecutionEngine::CreateForTesting(
       GetProfile(), std::move(ui_event_dispatcher));

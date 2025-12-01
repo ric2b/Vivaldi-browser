@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">Obeleživač je sačuvan u fascikli <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Izgled</translation>
 <translation id="2501278716633472235">Idi nazad</translation>
+<translation id="2546283357679194313">Kolačići i podaci o sajtovima</translation>
 <translation id="2633278372998075009">Privatne kartice</translation>
 <translation id="2650751991977523696">Preuzeti datoteku ponovo?</translation>
 <translation id="265156376773362237">Standardno predučitavanje</translation>
@@ -54,6 +55,9 @@
 <translation id="4269820728363426813">Kopiraj adresu veze</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Uključite zaključavanje ekrana u Android podešavanjima<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Upravljač lozinkama</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, plural,
+          =1 {Kartice i grupe koje nisu korišćene 1 dan ili duže}
+          other {Kartice i grupe koje nisu korišćene # dana ili duže}}</translation>
 <translation id="451872707440238414">Pretraži obeleživače</translation>
 <translation id="4526803704855831732">Privatne kartice</translation>
 <translation id="4532845899244822526">Odaberite fasciklu</translation>
@@ -62,6 +66,7 @@
 
 Dodirnite za pretragu je funkcija koja je dostupna samo kada je Google postavljen kao podrazumevani pretraživač u Vivaldi pregledaču.</translation>
 <translation id="4759238208242260848">Preuzimanja</translation>
+<translation id="4777866634702576038">Izbrisati grupu kartica?</translation>
 <translation id="4850886885716139402">Prikaži</translation>
 <translation id="4883379392681899581">Napusti privatni režim</translation>
 <translation id="4943872375798546930">Nema rezultata</translation>
@@ -78,7 +83,6 @@ Dodirnite za pretragu je funkcija koja je dostupna samo kada je Google postavlje
 <translation id="5375131951310889874">Saznajte više o temama na veb sajtovima bez napuštanja stranice. Dodirnite za pretragu je funkcija koja je dostupna samo kada je Google postavljen kao podrazumevani pretraživač u Vivaldi pregledaču. Šalje reč i njen okolni kontekst Google pretrazi, vraćajući definicije, slike, rezultate pretrage i druge detalje.
 
 Za podešavanje termina za pretragu, dugo pritisnite da biste ga izabrali. Za precizirnje pretrage, povucite panel do kraja i dodirnite polje za pretragu.</translation>
-<translation id="543338862236136125">Uređivanje lozinke</translation>
 <translation id="572328651809341494">Nedavne kartice</translation>
 <translation id="5833984609253377421">Podeli vezu</translation>
 <translation id="6150320133806434356">Obeleživač je sačuvan</translation>
@@ -86,6 +90,7 @@ Za podešavanje termina za pretragu, dugo pritisnite da biste ga izabrali. Za pr
 <translation id="6336451774241870485">Nova privatna kartica</translation>
 <translation id="6337323516034698937">Da biste poslali ovu karticu na drugi uređaj, prijavite se na Vivaldi sinhronizaciju na oba uređaja. Uverite se da ste uneli lozinku za šifrovanje ako je potrebno.</translation>
 <translation id="6341580099087024258">Pitaj gde sačuvati datoteke</translation>
+<translation id="6364438453358674297">Ukloniti predlog iz istorije?</translation>
 <translation id="6404511346730675251">Uredi obeleživač</translation>
 <translation id="650224091954855786">{FILE_COUNT, plural,
             =1 {Datoteka je preuzeta}
@@ -114,6 +119,10 @@ Za podešavanje termina za pretragu, dugo pritisnite da biste ga izabrali. Za pr
 <translation id="8062594758852531064">Prošireno predučitavanje:</translation>
 <translation id="8073388330009372546">Otvori sliku u novoj kartici</translation>
 <translation id="8127542551745560481">Uredi matičnu stranicu</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+          =1 {(1) neaktivna stavka}
+          few {(#) neaktivne stavke}
+          other {(#) neaktivnih stavki}}</translation>
 <translation id="8266862848225348053">Lokacija preuzimanja</translation>
 <translation id="8348430946834215779">Koristite HTTPS kad god je to moguće i dobijajte upozorenje pre učitavanja sajtova koji ga ne podržavaju</translation>
 <translation id="8560602726703398413">Pronađite svoju listu za čitanje u obeleživačima</translation>
@@ -123,6 +132,9 @@ Za podešavanje termina za pretragu, dugo pritisnite da biste ga izabrali. Za pr
 <translation id="9042893549633094279">Privatnost i bezbednost</translation>
 <translation id="9063523880881406963">Isključi zahtevanje desktop verzije sajta</translation>
 <translation id="9080642952018487277">Uđi u privatni režim</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+          =1 {Nije korišćeno 1 ili više dana}
+          other {Nije korišćeno # ili više dana}}</translation>
 <translation id="930124987204876019">Brisanje istorije, kolačića, podataka o sajtovima, keša…</translation>
 <translation id="961856697154696964">Brisanje podataka pregledanja</translation>
 </translationbundle>

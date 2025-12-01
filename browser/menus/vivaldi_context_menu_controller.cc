@@ -1,18 +1,16 @@
 //
 // Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved.
 //
+
 #include "browser/menus/vivaldi_context_menu_controller.h"
+#include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
 #include "browser/menus/vivaldi_menu_enums.h"
 #include "browser/menus/vivaldi_render_view_context_menu.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
-#include "chrome/common/chrome_switches.h"
-#include "chrome/grit/generated_resources.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/context_menu_params.h"
-#include "content/public/browser/web_contents.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_browser_window.h"
@@ -21,11 +19,17 @@
 
 namespace vivaldi {
 
+namespace {
+std::unique_ptr<ContextMenuController>& GetInstanceOwner() {
+  static base::NoDestructor<std::unique_ptr<ContextMenuController>>
+      active_controller;
+  return *active_controller;
+}
+}  // namespace
+
 bool ContextMenuPostitionDelegate::CanSetPosition() const {
   return false;
 }
-
-std::unique_ptr<ContextMenuController> ContextMenuController::active_controller_;
 
 // Creates a new instance. Previous instance is kept in memory until new is
 // created or browser window is closed as releasing too early can lead to
@@ -36,14 +40,14 @@ ContextMenuController* ContextMenuController::Create(
     VivaldiBrowserWindow* browser_window,
     VivaldiRenderViewContextMenu* rv_context_menu,
     std::optional<Params> params) {
-  active_controller_.reset(new ContextMenuController(
+  GetInstanceOwner().reset(new ContextMenuController(
       browser_window, rv_context_menu, std::move(params)));
-  return active_controller_.get();
+  return GetActive();
 }
 
 // static
 ContextMenuController* ContextMenuController::GetActive() {
-  return active_controller_.get();
+  return GetInstanceOwner().get();
 }
 
 ContextMenuController::ContextMenuController(
@@ -106,7 +110,7 @@ ContextMenuController::~ContextMenuController() {
 void ContextMenuController::OnWidgetDestroying(views::Widget* widget) {
   browser_window_->GetWidget()->RemoveObserver(this);
   browser_window_ = nullptr;
-  active_controller_.reset(nullptr);
+  GetInstanceOwner().reset();
 }
 
 Profile* ContextMenuController::GetProfile() {
@@ -168,12 +172,13 @@ void ContextMenuController::InitModel() {
 std::string ContextMenuController::GetEmptyIcon() {
   // Base64 of a 1x1 transparent PNG.
   std::string icon =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAsTAAALEwEAmpwYAAA"\
-  "AAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAQSURBVHgBAQUA+v8AAAAAAAAFAAFkeJU4AA"\
-  "AAAElFTkSuQmCC";
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAsTAAALEwEAmpwY"
+      "AAA"
+      "AAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAQSURBVHgBAQUA+"
+      "v8AAAAAAAAFAAFkeJU4AA"
+      "AAAElFTkSuQmCC";
   return icon;
 }
-
 
 void ContextMenuController::PopulateModel(const Element& child,
                                           bool dark_text_color,
@@ -453,13 +458,14 @@ void ContextMenuController::OnFaviconDataAvailable(
     auto index = root_menu_model_->GetIndexOfCommandId(command_id);
     if (index.has_value()) {
       root_menu_model_->SetIcon(index.value(),
-        ui::ImageModel::FromImage(image_result.image));
+                                ui::ImageModel::FromImage(image_result.image));
     } else {
-      for (unsigned i = 0; i < models_.size(); i++ ) {
+      for (unsigned i = 0; i < models_.size(); i++) {
         ui::SimpleMenuModel* model = models_[i].get();
         index = model->GetIndexOfCommandId(command_id);
         if (index.has_value()) {
-          model->SetIcon(index.value(), ui::ImageModel::FromImage(image_result.image));
+          model->SetIcon(index.value(),
+                         ui::ImageModel::FromImage(image_result.image));
           break;
         }
       }
@@ -519,8 +525,8 @@ bool ContextMenuController::GetAcceleratorForCommandId(
 
 void ContextMenuController::VivaldiCommandIdHighlighted(int command_id) {
   auto it = id_to_url_map_.find(command_id);
-  extensions::MenubarMenuAPI::SendHover(GetProfile(),
-      params_->properties.window_id,
+  extensions::MenubarMenuAPI::SendHover(
+      GetProfile(), params_->properties.window_id,
       it != id_to_url_map_.end() ? it->second : "");
 }
 
@@ -528,8 +534,7 @@ void ContextMenuController::ExecuteCommand(int command_id, int event_flags) {
   if (developertools_controller_->HandleCommand(command_id)) {
   } else if (pwa_controller_ && pwa_controller_->HandleCommand(command_id)) {
   } else {
-    extensions::MenubarMenuAPI::SendAction(GetProfile(),
-                                           command_id,
+    extensions::MenubarMenuAPI::SendAction(GetProfile(), command_id,
                                            event_flags,
                                            IsCommandIdPersistent(command_id));
   }

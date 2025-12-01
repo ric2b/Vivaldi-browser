@@ -30,6 +30,14 @@
 #include "threadpool-object.h"
 #include "threadpool-utils.h"
 
+size_t pthreadpool_set_threads_count(struct pthreadpool* threadpool,
+                                     size_t num_threads) {
+  if (threadpool == NULL) {
+    return 1;
+  }
+  return threadpool->threads_count.value;
+}
+
 static void thread_main(void* arg, size_t thread_index) {
   struct pthreadpool* threadpool = (struct pthreadpool*)arg;
   struct thread_info* thread = &threadpool->threads[thread_index];

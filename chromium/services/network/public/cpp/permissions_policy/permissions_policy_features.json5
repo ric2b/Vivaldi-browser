@@ -291,6 +291,11 @@
       depends_on: ["DeviceAttributes"],
     },
     {
+      name: "DigitalCredentialsCreate",
+      permissions_policy_name: "digital-credentials-create",
+      depends_on: ["WebIdentityDigitalCredentialsCreation"],
+    },
+    {
       name: "DigitalCredentialsGet",
       permissions_policy_name: "digital-credentials-get",
       depends_on: ["WebIdentityDigitalCredentials"],
@@ -429,6 +434,12 @@
       permissions_policy_name: "midi",
     },
     {
+      name: "MulticastInDirectSockets",
+      permissions_policy_name: "direct-sockets-multicast",
+      depends_on: ["MulticastInDirectSockets"],
+      visibility: "IsolatedContext",
+    },
+    {
       name: "OnDeviceSpeechRecognition",
       permissions_policy_name: "on-device-speech-recognition",
       depends_on: ["OnDeviceWebSpeechAvailable"],
@@ -447,7 +458,6 @@
     {
       name: "Payment",
       permissions_policy_name: "payment",
-      depends_on: ["PaymentRequest"],
     },
     {
       name: "PictureInPicture",
@@ -621,5 +631,5 @@
       depends_on: ["AIWriterAPI"],
     },
   ],
-  // LINT.ThenChange(//third_party/blink/public/devtools_protocol/browser_protocol.pdl:PermissionsPolicyFeature)
+  // LINT.ThenChange(//third_party/blink/public/devtools_protocol/domains/Page.pdl:PermissionsPolicyFeature)
 }

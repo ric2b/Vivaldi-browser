@@ -32,7 +32,6 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.build.annotations.Initializer;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
-import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.components.browser_ui.widget.FadingShadow;
 import org.chromium.components.browser_ui.widget.FadingShadowView;
 import org.chromium.components.browser_ui.widget.R;
@@ -43,6 +42,7 @@ import org.chromium.components.browser_ui.widget.displaystyle.UiConfig.DisplaySt
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate.SelectionObserver;
 import org.chromium.ui.display.DisplayUtil;
+import org.chromium.ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.ui.widget.LoadingView;
 
 import java.util.HashSet;
@@ -128,6 +128,16 @@ public class SelectableListLayout<E> extends FrameLayout
     public SelectableListLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
         onBackPressStateChanged(); // Initialize back press state.
+    }
+
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        if (visibility == VISIBLE
+                && mToolbar != null
+                && (mToolbar.isSearching() || mToolbar.isLargeScreenWithKeyboard())) {
+            mToolbar.requestSearchFocus(/* showKeyboard= */ true);
+        }
     }
 
     @Override
@@ -592,7 +602,7 @@ public class SelectableListLayout<E> extends FrameLayout
             return true;
         }
 
-        if (mToolbar.isSearching()) {
+        if (mToolbar.isSearching() && !mToolbar.isLargeScreenWithKeyboard()) {
             mToolbar.hideSearchView();
             return true;
         }
@@ -621,6 +631,10 @@ public class SelectableListLayout<E> extends FrameLayout
                 mToolbar.getSelectionDelegate().isSelectionEnabled() || mToolbar.isSearching());
     }
 
+    public RecyclerView getRecyclerViewForTesting() {
+        return mRecyclerView;
+    }
+
     /** Vivaldi **/
     public FadingShadowView getToolbarShadow() {
         return  mToolbarShadow;
@@ -629,4 +643,9 @@ public class SelectableListLayout<E> extends FrameLayout
     public SelectableListToolbar<E> getToolbarForVivaldi() {
         return mToolbar;
     }
+
+    public void setFixedSize(boolean fixed) {
+        mRecyclerView.setHasFixedSize(fixed);
+    }
+    // End Vivaldi
 }

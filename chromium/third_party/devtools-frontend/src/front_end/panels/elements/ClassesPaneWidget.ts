@@ -1,4 +1,4 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -47,10 +47,12 @@ export class ClassesPaneWidget extends UI.Widget.Widget {
   private previousTarget: SDK.DOMModel.DOMNode|null;
 
   constructor() {
-    super({useShadowDom: true});
+    super({
+      jslog: `${VisualLogging.pane('elements-classes')}`,
+      useShadowDom: true,
+    });
     this.registerRequiredCSS(classesPaneWidgetStyles);
     this.contentElement.className = 'styles-element-classes-pane';
-    this.contentElement.setAttribute('jslog', `${VisualLogging.pane('elements-classes')}`);
     const container = this.contentElement.createChild('div', 'title-container');
     this.input = container.createChild('div', 'new-class-input monospace');
     this.setDefaultFocusedElement(this.input);
@@ -91,7 +93,7 @@ export class ClassesPaneWidget extends UI.Widget.Widget {
     }
 
     const eventTarget = (event.target as HTMLElement);
-    let text: ''|string = (eventTarget.textContent as string);
+    let text = eventTarget.textContent;
     if (Platform.KeyboardUtilities.isEscKey(event)) {
       if (!Platform.StringUtilities.isWhitespace(text)) {
         event.consume(true);

@@ -7,14 +7,17 @@
 #include <optional>
 #include <string>
 
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "base/types/expected.h"
 #include "components/ip_protection/mojom/data_types.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "net/base/net_errors.h"
 #include "net/base/network_anonymization_key.h"
 #include "net/base/proxy_chain.h"
 #include "net/base/proxy_string_util.h"
@@ -152,18 +155,26 @@ TEST_F(NetworkServiceProxyDelegateTest, NullConfigDoesNotCrash) {
   auto request = CreateRequest(GURL(kHttpUrl));
 }
 
+void DoNotCallCallback(
+    base::expected<net::HttpRequestHeaders, net::Error> result) {
+  // This should never be called since
+  // NetworkServiceProxyDelegate::OnBeforeTunnelRequest never returns
+  // net::ERR_IO_PENDING.
+  NOTREACHED();
+}
+
 TEST_F(NetworkServiceProxyDelegateTest, AddsHeadersToTunnelRequest) {
   auto config = mojom::CustomProxyConfig::New();
   config->rules.ParseFromString("https://proxy");
   config->connect_tunnel_headers.SetHeader("connect", "baz");
   auto delegate = CreateDelegate(std::move(config));
 
-  net::HttpRequestHeaders headers;
   auto proxy_chain =
       net::ProxyChain(net::PacResultElementToProxyServer("HTTPS proxy"));
-  delegate->OnBeforeTunnelRequest(proxy_chain, /*chain_index=*/0, &headers);
-
-  EXPECT_THAT(headers, Contain("connect", "baz"));
+  auto result = delegate->OnBeforeTunnelRequest(
+      proxy_chain, /*chain_index=*/0, base::BindOnce(DoNotCallCallback));
+  ASSERT_TRUE(result.has_value());
+  EXPECT_THAT(result.value(), Contain("connect", "baz"));
 }
 
 TEST_F(NetworkServiceProxyDelegateTest, OnResolveProxySuccessHttpProxy) {
@@ -489,8 +500,9 @@ TEST_F(NetworkServiceProxyDelegateTest, OnTunnelHeadersReceivedObserved) {
   auto delegate = CreateDelegate(std::move(config));
 
   EXPECT_FALSE(TestObserver()->HeadersReceivedArgs());
-  EXPECT_EQ(net::OK, delegate->OnTunnelHeadersReceived(
-                         proxy_chain, /*chain_index=*/2, *headers));
+  EXPECT_EQ(net::OK,
+            delegate->OnTunnelHeadersReceived(proxy_chain, /*chain_index=*/2,
+                                              *headers, base::DoNothing()));
   RunUntilIdle();
   ASSERT_TRUE(TestObserver()->HeadersReceivedArgs());
   EXPECT_EQ(TestObserver()->HeadersReceivedArgs()->proxy_chain, proxy_chain);

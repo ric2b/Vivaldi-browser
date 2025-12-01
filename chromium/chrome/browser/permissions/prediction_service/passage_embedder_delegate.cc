@@ -20,8 +20,16 @@ Embedder* PassageEmbedderDelegate::get_passage_embedder() {
   if (auto* prediction_model_handler_provider =
           PredictionModelHandlerProviderFactory::GetForBrowserContext(
               profile_)) {
+    bool is_ready = prediction_model_handler_provider->IsPassageEmbedderReady();
+    PermissionUmaUtil::RecordPassageEmbedderMetadataValid(is_ready);
+    if (!is_ready) {
+      VLOG(1) << "[PermissionsAIv4] "
+                 "PassageEmbedderDelegate::get_passage_embedder is not ready.";
+      return nullptr;
+    }
     return prediction_model_handler_provider->GetPassageEmbedder();
   }
+  PermissionUmaUtil::RecordPassageEmbedderMetadataValid(false);
   return nullptr;
 }
 
@@ -29,6 +37,8 @@ void PassageEmbedderDelegate::CreatePassageEmbeddingFromRenderedText(
     std::string rendered_text,
     PassageEmbeddingsComputedCallback on_passage_embeddings_computed,
     base::OnceCallback<void()> fallback_callback) {
+  VLOG(1) << "[PermissionsAIv4] "
+             "PassageEmbedderDelegate::CreatePassageEmbeddingFromRenderedText";
   DCHECK(rendered_text.size() != 0);
 
   fallback_callback_ = std::move(fallback_callback);
@@ -45,6 +55,8 @@ void PassageEmbedderDelegate::CreatePassageEmbeddingFromRenderedText(
       passage_embedder->TryCancel(*passage_embeddings_task_id_);
     }
 
+    VLOG(1)
+        << "[PermissionsAIv4]: Starting Embedder::ComputePassagesEmbeddings";
     passage_embeddings_task_id_ = passage_embedder->ComputePassagesEmbeddings(
         passage_embeddings::PassagePriority::kUserInitiated,
         {std::move(rendered_text)},
@@ -52,6 +64,8 @@ void PassageEmbedderDelegate::CreatePassageEmbeddingFromRenderedText(
                        weak_ptr_factory_.GetWeakPtr(),
                        /*model_inquire_start_time=*/base::TimeTicks::Now()));
 
+    VLOG(1) << "[PermissionsAIv4]: Starting "
+               "Embedder::ComputePassagesEmbeddings 1-second timeout_timer_";
     // We start a timer here, in case the passage embeddings computation takes
     // more than |kPassageEmbedderDelegateTimeout| seconds. It will call the
     // fallback callback if the passages embeddings computation doesn't return
@@ -73,6 +87,7 @@ void PassageEmbedderDelegate::Reset() {
 }
 
 void PassageEmbedderDelegate::OnTimeout() {
+  VLOG(1) << "[PermissionsAIv4] PassageEmbedderDelegate::OnTimeout";
   PermissionUmaUtil::RecordPassageEmbeddingsCalculationTimeout(
       /*timeout=*/true);
   if (fallback_callback_) {

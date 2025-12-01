@@ -26,7 +26,6 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.EnormousTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Manual;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
@@ -45,7 +44,6 @@ import org.chromium.chrome.test.transit.ChromeTransitTestRules;
 import org.chromium.chrome.test.transit.FreshCtaTransitTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
-import org.chromium.components.omnibox.OmniboxFeatureList;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -92,7 +90,7 @@ public class OmniboxTest {
         omnibox.checkSuggestionsShown();
 
         ChromeTabUtils.waitForTabPageLoadStart(
-                mActivityTestRule.getActivity().getActivityTab(),
+                mActivityTestRule.getActivityTab(),
                 null,
                 () -> omnibox.sendKey(KeyEvent.KEYCODE_ENTER),
                 20L);
@@ -105,7 +103,6 @@ public class OmniboxTest {
     @Test
     @MediumTest
     @Feature({"Omnibox"})
-    @EnableFeatures(OmniboxFeatureList.OMNIBOX_MOBILE_PARITY_UPDATE)
     public void testDefaultText() {
         mActivityTestRule.startOnNtp();
 
@@ -143,7 +140,7 @@ public class OmniboxTest {
     public void testAltEnterOpensSearchResultInNewTab() {
         mActivityTestRule.startOnBlankPage();
         int tabCount = ChromeTabUtils.getNumOpenTabs(mActivityTestRule.getActivity());
-        Tab currentTab = mActivityTestRule.getActivity().getActivityTab();
+        Tab currentTab = mActivityTestRule.getActivityTab();
 
         OmniboxTestUtils omnibox = new OmniboxTestUtils(mActivityTestRule.getActivity());
         omnibox.requestFocus();
@@ -153,7 +150,7 @@ public class OmniboxTest {
         // Dispatch ALT + ENTER key event.
         omnibox.sendKey(KeyEvent.KEYCODE_ENTER, KeyEvent.META_ALT_ON);
 
-        Tab resultTab = mActivityTestRule.getActivity().getActivityTab();
+        Tab resultTab = mActivityTestRule.getActivityTab();
         Assert.assertNotEquals(
                 "The result should be loaded in a new tab that is brought to the foreground.",
                 currentTab,

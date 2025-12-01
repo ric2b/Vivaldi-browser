@@ -11,9 +11,9 @@ import android.util.Pair;
 
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.supplier.OneshotSupplier;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.Initializer;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -43,12 +43,16 @@ import org.chromium.chrome.browser.tabmodel.TabbedModeTabPersistencePolicy;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.widget.Toast;
 
+import java.util.function.Supplier;
+
 /**
  * Glue-level class that manages lifetime of root .tabmodel objects: {@link TabPersistentStore} and
  * {@link TabModelSelectorImpl} for tabbed mode.
  */
 @NullMarked
 public class TabbedModeTabModelOrchestrator extends TabModelOrchestrator {
+    private static final String TAG = "TMTMOrchestrator";
+
     private final boolean mTabMergingEnabled;
     private final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
     private final CipherFactory mCipherFactory;
@@ -62,6 +66,7 @@ public class TabbedModeTabModelOrchestrator extends TabModelOrchestrator {
 
     // Currently used to perform shadow operations for an alternative storage. Not always enabled.
     private @Nullable TabStateStore mTabStateStore;
+    private @Nullable Boolean mTabStateStoreIsAuthoritative;
 
     /**
      * Constructor.
@@ -114,6 +119,7 @@ public class TabbedModeTabModelOrchestrator extends TabModelOrchestrator {
             OneshotSupplier<ProfileProvider> profileProviderSupplier,
             TabCreatorManager tabCreatorManager,
             NextTabPolicySupplier nextTabPolicySupplier,
+            MultiInstanceManager multiInstanceManager,
             MismatchedIndicesHandler mismatchedIndicesHandler,
             int selectorIndex) {
         mProfileProviderSupplier = profileProviderSupplier;
@@ -131,6 +137,7 @@ public class TabbedModeTabModelOrchestrator extends TabModelOrchestrator {
                                 profileProviderSupplier,
                                 tabCreatorManager,
                                 nextTabPolicySupplier,
+                                multiInstanceManager,
                                 mismatchedIndicesHandler,
                                 selectorIndex);
         if (selectorAssignment == null) {
@@ -228,7 +235,15 @@ public class TabbedModeTabModelOrchestrator extends TabModelOrchestrator {
         }
 
         if (ChromeFeatureList.sTabStorageSqlitePrototype.isEnabled()) {
-            assert mProfileProviderSupplier.hasValue();
+            mTabStateStoreIsAuthoritative =
+                    ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
+                            ChromeFeatureList.TAB_STORAGE_SQLITE_PROTOTYPE,
+                            "authoritative_read_source",
+                            false);
+            // Temporary variable usage to avoid unused variable warning.
+            Log.i(TAG, "mTabStateStoreIsAuthoritative: " + mTabStateStoreIsAuthoritative);
+
+            assert mProfileProviderSupplier.get() != null;
             ProfileProvider profileProvider = mProfileProviderSupplier.get();
             Profile profile = profileProvider.getOriginalProfile();
             assert profile != null;
@@ -259,7 +274,7 @@ public class TabbedModeTabModelOrchestrator extends TabModelOrchestrator {
         if (mActivityLifecycleDispatcher.isActivityFinishingOrDestroyed()) return;
         ThreadUtils.assertOnUiThread();
         // The profile will be available because native is initialized.
-        assert mProfileProviderSupplier.hasValue();
+        assert mProfileProviderSupplier.get() != null;
         assert tabContentManager != null;
 
         Profile profile = mProfileProviderSupplier.get().getOriginalProfile();

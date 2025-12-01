@@ -11,6 +11,7 @@
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/optimization_guide/model_execution/optimization_guide_global_state.h"
 #include "chrome/browser/permissions/system/platform_handle.h"
 #include "chrome/common/chrome_features.h"
 #include "components/application_locale_storage/application_locale_storage.h"
@@ -19,9 +20,9 @@
 // This causes a gn error on Android builds, because gn does not understand
 // buildflags, so we include it only on platforms where it is used.
 #include "chrome/browser/background/glic/glic_background_mode_manager.h"  // nogncheck
-#include "chrome/browser/glic/glic_enabling.h"         // nogncheck
-#include "chrome/browser/glic/glic_profile_manager.h"  // nogncheck
+#include "chrome/browser/glic/glic_profile_manager.h"               // nogncheck
 #include "chrome/browser/glic/host/glic_synthetic_trial_manager.h"  // nogncheck
+#include "chrome/browser/glic/public/glic_enabling.h"               // nogncheck
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
@@ -98,6 +99,8 @@ void GlobalFeatures::Init() {
             &ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled)));
   }
 #endif
+  optimization_guide_global_feature_ =
+      std::make_unique<optimization_guide::OptimizationGuideGlobalFeature>();
 }
 
 void GlobalFeatures::Shutdown() {
@@ -112,6 +115,7 @@ void GlobalFeatures::Shutdown() {
   }
   synthetic_trial_manager_.reset();
 #endif
+  optimization_guide_global_feature_.reset();
 }
 
 std::unique_ptr<system_permission_settings::PlatformHandle>

@@ -45,15 +45,13 @@ if (tint_build_unittests || tint_build_benchmarks) {
 if (tint_build_wgsl_writer) {
   libtint_source_set("writer") {
     sources = [
-      "options.cc",
-      "options.h",
       "output.cc",
       "output.h",
       "writer.cc",
       "writer.h",
     ]
     deps = [
-      "${dawn_root}/src/utils:utils",
+      "${dawn_root}/src/utils",
       "${tint_src_dir}/api/common",
       "${tint_src_dir}/lang/core",
       "${tint_src_dir}/lang/core/constant",
@@ -63,9 +61,9 @@ if (tint_build_wgsl_writer) {
       "${tint_src_dir}/lang/wgsl/ast",
       "${tint_src_dir}/lang/wgsl/program",
       "${tint_src_dir}/lang/wgsl/sem",
+      "${tint_src_dir}/lang/wgsl/writer/common",
       "${tint_src_dir}/lang/wgsl/writer/ir_to_program",
       "${tint_src_dir}/lang/wgsl/writer/raise",
-      "${tint_src_dir}/lang/wgsl/writer/syntax_tree_printer",
       "${tint_src_dir}/utils",
       "${tint_src_dir}/utils/containers",
       "${tint_src_dir}/utils/diagnostic",
@@ -87,12 +85,9 @@ if (tint_build_wgsl_writer) {
 if (tint_build_unittests) {
   if (tint_build_wgsl_writer) {
     tint_unittests_source_set("unittests") {
-      sources = [
-        "options_test.cc",
-        "writer_test.cc",
-      ]
+      sources = [ "writer_test.cc" ]
       deps = [
-        "${dawn_root}/src/utils:utils",
+        "${dawn_root}/src/utils",
         "${tint_src_dir}:gmock_and_gtest",
         "${tint_src_dir}/api/common",
         "${tint_src_dir}/lang/core",
@@ -105,6 +100,7 @@ if (tint_build_unittests) {
         "${tint_src_dir}/lang/wgsl/ast",
         "${tint_src_dir}/lang/wgsl/program",
         "${tint_src_dir}/lang/wgsl/sem",
+        "${tint_src_dir}/lang/wgsl/writer/common",
         "${tint_src_dir}/lang/wgsl/writer/ir_to_program",
         "${tint_src_dir}/lang/wgsl/writer/raise",
         "${tint_src_dir}/utils",
@@ -129,7 +125,7 @@ if (tint_build_wgsl_writer) {
   tint_fuzz_source_set("fuzz") {
     sources = []
     deps = [
-      "${dawn_root}/src/utils:utils",
+      "${dawn_root}/src/utils",
       "${tint_src_dir}/api/common",
       "${tint_src_dir}/lang/core",
       "${tint_src_dir}/lang/core/constant",
@@ -138,7 +134,7 @@ if (tint_build_wgsl_writer) {
       "${tint_src_dir}/lang/wgsl/ast",
       "${tint_src_dir}/lang/wgsl/program",
       "${tint_src_dir}/lang/wgsl/sem",
-      "${tint_src_dir}/lang/wgsl/writer/ir_to_program",
+      "${tint_src_dir}/lang/wgsl/writer/common",
       "${tint_src_dir}/utils",
       "${tint_src_dir}/utils/bytes",
       "${tint_src_dir}/utils/containers",

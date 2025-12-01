@@ -91,7 +91,7 @@
 #define LEVEL_ENDED                   3 /* return value of ebml_parse when the
                                          * syntax level used for parsing ended. */
 #define SKIP_THRESHOLD      1024 * 1024 /* In non-seekable mode, if more than SKIP_THRESHOLD
-                                         * of unkown, potentially damaged data is encountered,
+                                         * of unknown, potentially damaged data is encountered,
                                          * it is considered an error. */
 #define UNKNOWN_EQUIV         50 * 1024 /* An unknown element is considered equivalent
                                          * to this many bytes of unknown data for the
@@ -1424,7 +1424,7 @@ static int ebml_parse(MatroskaDemuxContext *matroska,
         }
 
         if (!(pb->seekable & AVIO_SEEKABLE_NORMAL)) {
-            // Loosing sync will likely manifest itself as encountering unknown
+            // Losing sync will likely manifest itself as encountering unknown
             // elements which are not reliably distinguishable from elements
             // belonging to future extensions of the format.
             // We use a heuristic to detect such situations: If the current
@@ -1442,7 +1442,7 @@ static int ebml_parse(MatroskaDemuxContext *matroska,
             // UNKNOWN_EQUIV of skipped bytes for the check.
             // The whole check is only done for non-seekable output, because
             // in this situation skipped data can't simply be rechecked later.
-            // This is especially important when using unkown length elements
+            // This is especially important when using unknown length elements
             // as the check for whether a child exceeds its containing master
             // element is not effective in this situation.
             if (update_pos) {
@@ -3959,7 +3959,7 @@ static int matroska_parse_block_additional(MatroskaDemuxContext *matroska,
         provider_code = bytestream2_get_be16u(&bc);
 
         if (country_code != ITU_T_T35_COUNTRY_CODE_US ||
-            provider_code != ITU_T_T35_PROVIDER_CODE_SMTPE)
+            provider_code != ITU_T_T35_PROVIDER_CODE_SAMSUNG)
             break; // ignore
 
         provider_oriented_code = bytestream2_get_be16u(&bc);

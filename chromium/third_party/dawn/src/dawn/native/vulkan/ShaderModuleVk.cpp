@@ -41,6 +41,7 @@
 #include "dawn/native/CacheRequest.h"
 #include "dawn/native/ComputePipeline.h"
 #include "dawn/native/Device.h"
+#include "dawn/native/DynamicArrayState.h"
 #include "dawn/native/ImmediateConstantsLayout.h"
 #include "dawn/native/Instance.h"
 #include "dawn/native/PhysicalDevice.h"
@@ -142,7 +143,7 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
 #if TINT_BUILD_SPV_WRITER
     // Creation of module and spirv is deferred to this point when using tint generator
 
-    tint::spirv::writer::Bindings bindings;
+    tint::Bindings bindings;
     std::unordered_set<tint::BindingPoint> statically_paired_texture_binding_points;
 
     const BindingInfoArray& moduleBindingInfo =
@@ -168,19 +169,13 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
                 [&](const BufferBindingInfo& bindingInfo) {
                     switch (bindingInfo.type) {
                         case wgpu::BufferBindingType::Uniform:
-                            bindings.uniform.emplace(
-                                srcBindingPoint,
-                                tint::spirv::writer::binding::Uniform{dstBindingPoint.group,
-                                                                      dstBindingPoint.binding});
+                            bindings.uniform.emplace(srcBindingPoint, dstBindingPoint);
                             break;
                         case kInternalStorageBufferBinding:
                         case wgpu::BufferBindingType::Storage:
                         case wgpu::BufferBindingType::ReadOnlyStorage:
                         case kInternalReadOnlyStorageBufferBinding:
-                            bindings.storage.emplace(
-                                srcBindingPoint,
-                                tint::spirv::writer::binding::Storage{dstBindingPoint.group,
-                                                                      dstBindingPoint.binding});
+                            bindings.storage.emplace(srcBindingPoint, dstBindingPoint);
                             break;
                         case wgpu::BufferBindingType::BindingNotUsed:
                         case wgpu::BufferBindingType::Undefined:
@@ -189,9 +184,7 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
                     }
                 },
                 [&](const SamplerBindingInfo& bindingInfo) {
-                    bindings.sampler.emplace(srcBindingPoint,
-                                             tint::spirv::writer::binding::Sampler{
-                                                 dstBindingPoint.group, dstBindingPoint.binding});
+                    bindings.sampler.emplace(srcBindingPoint, dstBindingPoint);
                 },
                 [&](const TextureBindingInfo& bindingInfo) {
                     if (auto samplerIndex = bgl->GetStaticSamplerIndexForTexture(
@@ -199,14 +192,14 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
                         dstBindingPoint.binding = static_cast<uint32_t>(samplerIndex.value());
                         statically_paired_texture_binding_points.insert(srcBindingPoint);
                     }
-                    bindings.texture.emplace(srcBindingPoint,
-                                             tint::spirv::writer::binding::Texture{
-                                                 dstBindingPoint.group, dstBindingPoint.binding});
+                    bindings.texture.emplace(srcBindingPoint, dstBindingPoint);
                 },
                 [&](const StorageTextureBindingInfo& bindingInfo) {
-                    bindings.storage_texture.emplace(
-                        srcBindingPoint, tint::spirv::writer::binding::StorageTexture{
-                                             dstBindingPoint.group, dstBindingPoint.binding});
+                    bindings.storage_texture.emplace(srcBindingPoint, dstBindingPoint);
+                },
+                [&](const TexelBufferBindingInfo& bindingInfo) {
+                    // TODO(crbug/382544164): Prototype texel buffer feature
+                    DAWN_UNREACHABLE();
                 },
                 [&](const ExternalTextureBindingInfo& bindingInfo) {
                     const auto& bindingMap = bgl->GetExternalTextureBindingExpansionMap();
@@ -214,26 +207,57 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
                     DAWN_ASSERT(expansion != bindingMap.end());
 
                     const auto& bindingExpansion = expansion->second;
-                    tint::spirv::writer::binding::BindingInfo plane0{
+                    tint::BindingPoint plane0{
                         static_cast<uint32_t>(group),
                         static_cast<uint32_t>(bgl->GetBindingIndex(bindingExpansion.plane0))};
-                    tint::spirv::writer::binding::BindingInfo plane1{
+                    tint::BindingPoint plane1{
                         static_cast<uint32_t>(group),
                         static_cast<uint32_t>(bgl->GetBindingIndex(bindingExpansion.plane1))};
-                    tint::spirv::writer::binding::BindingInfo metadata{
+                    tint::BindingPoint metadata{
                         static_cast<uint32_t>(group),
                         static_cast<uint32_t>(bgl->GetBindingIndex(bindingExpansion.params))};
 
                     bindings.external_texture.emplace(
-                        srcBindingPoint,
-                        tint::spirv::writer::binding::ExternalTexture{metadata, plane0, plane1});
+                        srcBindingPoint, tint::ExternalTexture{metadata, plane0, plane1});
                 },
                 [&](const InputAttachmentBindingInfo& bindingInfo) {
-                    bindings.input_attachment.emplace(
-                        srcBindingPoint, tint::spirv::writer::binding::InputAttachment{
-                                             dstBindingPoint.group, dstBindingPoint.binding});
+                    bindings.input_attachment.emplace(srcBindingPoint, dstBindingPoint);
                 });
         }
+    }
+
+    // Add options for dynamic binding arrays. They need remapping like all regular bindings but
+    // also need to give information about additional bindings for the metadata buffer and the
+    // default bindings.
+    tint::ResourceBindingConfig resourceBindingConfig;
+    for (BindGroupIndex group : layout->GetBindGroupLayoutsMask()) {
+        const BindGroupLayout* bgl = ToBackend(layout->GetBindGroupLayout(group));
+        if (!bgl->HasDynamicArray()) {
+            continue;
+        }
+
+        tint::BindingPoint wgslDynamicArrayBindPoint = {
+            .group = uint32_t(group), .binding = uint32_t(bgl->GetAPIDynamicArrayStart())};
+        tint::BindingPoint remappedDynamicArrayBindPoint = {
+            .group = uint32_t(group),
+            .binding = uint32_t(bgl->GetDynamicArrayStart()),
+        };
+        tint::BindingPoint metadataBindPoint = {
+            .group = uint32_t(group),
+            .binding = uint32_t(bgl->GetDynamicArrayMetadataBinding()),
+        };
+
+        // TODO(https://crbug.com/442483669): This uses the texture binding remapper support to
+        // remap a `resource_binding`. It is a hack until Tint adds support for `resource_binding`
+        // to the binding remapper.
+        bindings.texture.emplace(wgslDynamicArrayBindPoint, remappedDynamicArrayBindPoint);
+
+        // The resourceBindingConfig only uses remapped bind points.
+        auto bindingTypeOrder = GetDefaultBindingOrder(bgl->GetDynamicArrayKind());
+        resourceBindingConfig.bindings[remappedDynamicArrayBindPoint] = {
+            .storage_buffer_binding = metadataBindPoint,
+            .default_binding_type_order = {bindingTypeOrder.begin(), bindingTypeOrder.end()},
+        };
     }
 
     const bool hasInputAttachment = !bindings.input_attachment.empty();
@@ -267,6 +291,7 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
     req.tintOptions.use_storage_input_output_16 =
         GetDevice()->IsToggleEnabled(Toggle::VulkanUseStorageInputOutput16);
     req.tintOptions.bindings = std::move(bindings);
+    req.tintOptions.resource_binding = std::move(resourceBindingConfig);
     req.tintOptions.disable_image_robustness =
         GetDevice()->IsToggleEnabled(Toggle::VulkanUseImageRobustAccess2);
     // Currently we can disable index clamping on all runtime-sized arrays in Tint robustness
@@ -277,6 +302,10 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
         GetDevice()->IsToggleEnabled(Toggle::PolyFillPacked4x8DotProduct);
     req.tintOptions.polyfill_pack_unpack_4x8_norm =
         GetDevice()->IsToggleEnabled(Toggle::PolyfillPackUnpack4x8Norm);
+    req.tintOptions.polyfill_case_switch =
+        GetDevice()->IsToggleEnabled(Toggle::VulkanPolyfillSwitchWithIf);
+    req.tintOptions.polyfill_subgroup_broadcast_f16 =
+        GetDevice()->IsToggleEnabled(Toggle::EnableSubgroupsIntelGen9);
     req.tintOptions.disable_polyfill_integer_div_mod =
         GetDevice()->IsToggleEnabled(Toggle::DisablePolyfillsOnIntegerDivisonAndModulo);
     req.tintOptions.scalarize_max_min_clamp =

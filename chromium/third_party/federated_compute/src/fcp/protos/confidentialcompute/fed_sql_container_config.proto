@@ -1,0 +1,126 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.confidentialcompute;
+
+import "google/protobuf/any.proto";
+import "fcp/protos/confidentialcompute/access_policy.proto";
+import "fcp/protos/confidentialcompute/private_inference.proto";
+import "tensorflow_federated/cc/core/impl/aggregation/protocol/configuration.proto";
+
+// Configures the FedSQL container initialization. This configuration will last
+// for the lifetime of the TEE and includes the privacy-relevant properties.
+message FedSqlContainerInitializeConfiguration {
+  tensorflow_federated.aggregation.Configuration agg_configuration = 1;
+
+  // The numerical identifier for the result of serializing the FedSQL session.
+  // This field is only used by trusted services. If this field is empty then
+  // the trusted FedSQL service will not encrypt its outputs that are created
+  // with FINALIZATION_TYPE_SERIALIZE.
+  // This field is only required when using Ledger API, it is ignored when using
+  // the KeyManagementService API since outputs are always encrypted.
+  uint32 serialize_output_access_policy_node_id = 2;
+
+  // The numerical identifier for the reported result of the FedSQL session.
+  // This field is only used by trusted services. If this field is empty then
+  // the trusted FedSQL service will not encrypt its outputs that are created
+  // with FINALIZATION_TYPE_REPORT.
+  // This field is only required when using Ledger API, it is ignored when using
+  // the KeyManagementService API since outputs are always encrypted.
+  uint32 report_output_access_policy_node_id = 3;
+
+  // The table schema for the data that can be joined with the device uploaded
+  // data by the per-client query. This is an `Any` because using a TableSchema
+  // would require using the `tf_proto_library` build rule for
+  // fed_sql_container_config.proto and all its dependencies.
+  google.protobuf.Any joiner_table_schema = 4;
+
+  // The data that can be joined with the device uploaded data by the per-client
+  // query. The FedSQL container expects this data to be in the Federated
+  // Compute client wire format.
+  bytes joiner_data = 5;
+
+  // Configuration for running private inference in FedSQL container.
+  InferenceInitializeConfiguration inference_init_config = 6;
+}
+
+enum AggCoreAggregationType {
+  AGGREGATION_TYPE_UNSPECIFIED = 0;
+  AGGREGATION_TYPE_ACCUMULATE = 1;
+  AGGREGATION_TYPE_MERGE = 2;
+}
+
+// Configures how a blob should be aggregated by the trusted AggCore container.
+// This is specified through `WriteRequest.first_request_configuration`.
+message FedSqlContainerWriteConfiguration {
+  AggCoreAggregationType type = 1;
+}
+
+// Configures the range of blobs to commit. This is specified through
+// `CommitRequest.configuration`.
+message FedSqlContainerCommitConfiguration {
+  message Range {
+    uint64 start = 1;
+    uint64 end = 2;
+  }
+  // The range of blobs to commit.
+  Range range = 1;
+}
+
+enum AggCoreFinalizationType {
+  FINALIZATION_TYPE_UNSPECIFIED = 0;
+  // Return noised results from the checkpoint aggregator.
+  FINALIZATION_TYPE_REPORT = 1;
+  // Return the serialized internal state of the checkpoint aggregator.
+  FINALIZATION_TYPE_SERIALIZE = 2;
+}
+
+// Configures how a result should be output by the trusted AggCore container.
+// This is specified through `FinalizeRequest.configuration`.
+message FedSqlContainerFinalizeConfiguration {
+  AggCoreFinalizationType type = 1;
+
+  reserved 2;
+}
+
+// Config constraints for the FedSQL container that must be validated before any
+// of the blobs written to the container are decrypted.
+// This is required when using the KeyManagementService API, it is ignored when
+// using the Ledger API.
+message FedSqlContainerConfigConstraints {
+  // DP parameters for the FedSQL container.
+  double epsilon = 1;
+  double delta = 2;
+  // The column names that are part of the DP unit.
+  repeated string dp_column_names = 5;
+  // The fcp.confidentialcompute.WindowingSchedule for the DP unit. This is an
+  // `Any` because using a WindowingSchedule would require using the
+  // `tf_proto_library` build rule for
+  // fed_sql_container_config.proto and all its dependencies.
+  // TODO: b/425744048 - Change this to a WindowingSchedule once we remove the
+  // dependency on plan.proto from sql_query.proto.
+  google.protobuf.Any dp_windowing_schedule = 6;
+
+  // The uri of the aggregation intrinsic to use with AggCore.
+  string intrinsic_uri = 3;
+
+  // Defines limits on the accesses to blobs.
+  AccessBudget access_budget = 4;
+
+  // The uris of the aggregation intrinsics to use with AggCore. If non-empty,
+  // this field is used instead of `intrinsic_uri`.
+  repeated string intrinsic_uris = 7;
+}

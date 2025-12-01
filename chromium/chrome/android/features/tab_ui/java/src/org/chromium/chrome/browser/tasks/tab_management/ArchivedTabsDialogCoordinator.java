@@ -34,7 +34,6 @@ import org.chromium.base.lifetime.DestroyChecker;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.build.annotations.EnsuresNonNull;
@@ -46,7 +45,6 @@ import org.chromium.chrome.browser.app.tabmodel.ArchivedTabModelOrchestrator;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.hub.PaneId;
 import org.chromium.chrome.browser.hub.PaneManager;
 import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
 import org.chromium.chrome.browser.tab.Tab;
@@ -59,24 +57,21 @@ import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.tasks.tab_management.MessageService.MessageType;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListItemSizeChangedObserver;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
 import org.chromium.chrome.browser.tasks.tab_management.TabListEditorCoordinator.CreationMode;
 import org.chromium.chrome.browser.tasks.tab_management.TabListEditorCoordinator.NavigationProvider;
 import org.chromium.chrome.browser.tasks.tab_management.TabListEditorCoordinator.TabListEditorController;
 import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.GridCardOnClickListenerProvider;
-import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActionListener;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.TabActionState;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.UiType;
-import org.chromium.chrome.browser.theme.SurfaceColorUpdateUtils;
+import org.chromium.chrome.browser.tasks.tab_management.TabSwitcherMessageManager.MessageType;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeControllerFactory;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.undo_tab_close_snackbar.SavedTabGroupUndoBarController;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
-import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.util.motion.MotionEventInfo;
 import org.chromium.components.browser_ui.widget.ActionConfirmationDialog;
@@ -91,6 +86,7 @@ import org.chromium.components.tab_group_sync.TabGroupSyncService;
 import org.chromium.components.tab_group_sync.TabGroupUiActionHandler;
 import org.chromium.components.tab_group_sync.TriggerSource;
 import org.chromium.ui.base.LocalizationUtils;
+import org.chromium.ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.ui.interpolators.Interpolators;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.LayoutViewBuilder;
@@ -102,10 +98,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-
-// Vivaldi
-import org.vivaldi.browser.preferences.AutomaticCloseTabsMainPreference;
-import org.chromium.chrome.browser.ChromeApplicationImpl;
+import java.util.function.Supplier;
 
 @NullMarked
 public class ArchivedTabsDialogCoordinator implements SnackbarManager.SnackbarManageable {
@@ -154,11 +147,6 @@ public class ArchivedTabsDialogCoordinator implements SnackbarManager.SnackbarMa
 
                 @Override
                 public void openArchiveSettings() {
-                    // Vivaldi (ref. VAB-11191)
-                    if (ChromeApplicationImpl.isVivaldi())
-                        SettingsNavigationFactory.createSettingsNavigation()
-                                .startSettings(mActivity, AutomaticCloseTabsMainPreference.class);
-                    else
                     SettingsNavigationFactory.createSettingsNavigation()
                             .startSettings(mActivity, TabArchiveSettingsFragment.class);
                     RecordUserAction.record("Tabs.OpenArchivedTabsSettingsMenuItem");
@@ -269,9 +257,7 @@ public class ArchivedTabsDialogCoordinator implements SnackbarManager.SnackbarMa
 
                             TabSwitcherPaneBase tabSwitcherPaneBase =
                                     (TabSwitcherPaneBase)
-                                            mPaneManagerSupplier
-                                                    .get()
-                                                    .getPaneForId(PaneId.TAB_SWITCHER);
+                                            mPaneManagerSupplier.get().getDefaultPane();
                             assumeNonNull(tabSwitcherPaneBase);
                             Callback<Integer> requestOpenTabGroupDialog =
                                     (rootId) -> {
@@ -317,7 +303,11 @@ public class ArchivedTabsDialogCoordinator implements SnackbarManager.SnackbarMa
                                 // Post task to allow the tab to be unregistered.
                                 PostTask.postTask(
                                         TaskTraits.UI_DEFAULT,
-                                        () -> mOnTabSelectingListener.onTabSelecting(tab.getId()));
+                                        () -> {
+                                            if (mOnTabSelectingListener != null) {
+                                                mOnTabSelectingListener.onTabSelecting(tab.getId());
+                                            }
+                                        });
                                 RecordUserAction.record("Tabs.RestoreSingleTab");
                             });
                 }
@@ -438,7 +428,7 @@ public class ArchivedTabsDialogCoordinator implements SnackbarManager.SnackbarMa
     private WeakReference<TabListRecyclerView> mTabSwitcherRecyclerView;
     private @TabActionState int mTabActionState = TabActionState.CLOSABLE;
     private @Nullable TabListEditorCoordinator mTabListEditorCoordinator;
-    private OnTabSelectingListener mOnTabSelectingListener;
+    private @Nullable OnTabSelectingListener mOnTabSelectingListener;
     private @Nullable PropertyModel mIphMessagePropertyModel;
     private int mSnackbarOverrideToken;
     private boolean mIsOpeningLastItem;
@@ -521,12 +511,6 @@ public class ArchivedTabsDialogCoordinator implements SnackbarManager.SnackbarMa
         mShadowView = mDialogView.findViewById(R.id.close_all_tabs_button_container_shadow);
         mShadowView.init(
                 mActivity.getColor(R.color.toolbar_shadow_color), FadingShadow.POSITION_BOTTOM);
-
-        // TODO(crbug.com/410040707): Set the color in the layout file.
-        getCloseAllTabsButtonContainer()
-                .setBackgroundColor(
-                        SurfaceColorUpdateUtils.getGridTabSwitcherBackgroundColor(
-                                mActivity, /* isIncognito= */ false));
 
         // Initialize the confirmation dialog for when the last archived tab is removed.
         mActionConfirmationDialog = new ActionConfirmationDialog(mActivity, mModalDialogManager);
@@ -742,11 +726,15 @@ public class ArchivedTabsDialogCoordinator implements SnackbarManager.SnackbarMa
         animateOut(
                 animationDuration,
                 () -> {
-                    assumeNonNull(mTabListEditorCoordinator);
-                    mTabListEditorCoordinator.removeTabListItemSizeChangedObserver(
-                            mTabListItemSizeChangedObserver);
-                    TabListEditorController controller = mTabListEditorCoordinator.getController();
-                    controller.hide();
+                    // The mTabListEditorCoordinator may be teared down and destroyed after
+                    // the animation finished.
+                    if (mTabListEditorCoordinator != null) {
+                        mTabListEditorCoordinator.removeTabListItemSizeChangedObserver(
+                                mTabListItemSizeChangedObserver);
+                        TabListEditorController controller =
+                                mTabListEditorCoordinator.getController();
+                        controller.hide();
+                    }
                     animationFinishCallback.run();
                 });
     }
@@ -769,7 +757,7 @@ public class ArchivedTabsDialogCoordinator implements SnackbarManager.SnackbarMa
 
     void moveToState(@TabActionState int tabActionState) {
         mTabActionState = tabActionState;
-        assumeNonNull(mTabListEditorCoordinator);
+        if (mTabListEditorCoordinator == null) return;
         mTabListEditorCoordinator.getController().setTabActionState(mTabActionState);
         updateTitle();
 
@@ -788,6 +776,7 @@ public class ArchivedTabsDialogCoordinator implements SnackbarManager.SnackbarMa
 
     @VisibleForTesting
     void updateTitle() {
+        if (mTabListEditorCoordinator == null) return;
         int numInactiveTabs = getArchivedTabCount();
         String title =
                 mActivity
@@ -796,7 +785,6 @@ public class ArchivedTabsDialogCoordinator implements SnackbarManager.SnackbarMa
                                 R.plurals.archived_tabs_dialog_title,
                                 numInactiveTabs,
                                 numInactiveTabs);
-        assumeNonNull(mTabListEditorCoordinator);
         mTabListEditorCoordinator.getController().setToolbarTitle(title);
     }
 
@@ -911,18 +899,15 @@ public class ArchivedTabsDialogCoordinator implements SnackbarManager.SnackbarMa
                         /* areTabsBeingOpened= */ false);
         for (String syncId : tabGroupSyncIds) {
             mTabGroupUiActionHandlerSupplier.get().openTabGroup(syncId);
-            assumeNonNull(mTabListEditorCoordinator);
-            mTabListEditorCoordinator.removeListItem(
-                    UiType.TAB_GROUP, TabListEditorItemSelectionId.createTabGroupSyncId(syncId));
+            if (mTabListEditorCoordinator != null) {
+                mTabListEditorCoordinator.removeListItem(
+                        UiType.TAB_GROUP,
+                        TabListEditorItemSelectionId.createTabGroupSyncId(syncId));
+            }
         }
     }
 
     private void onIphReviewClicked() {
-        // Vivaldi (ref. VAB-11347)
-        if (ChromeApplicationImpl.isVivaldi())
-            SettingsNavigationFactory.createSettingsNavigation()
-                    .startSettings(mActivity, AutomaticCloseTabsMainPreference.class);
-        else
         SettingsNavigationFactory.createSettingsNavigation()
                 .startSettings(mActivity, TabArchiveSettingsFragment.class);
         RecordUserAction.record("Tabs.ArchivedTabsDialogIphClicked");
@@ -930,9 +915,11 @@ public class ArchivedTabsDialogCoordinator implements SnackbarManager.SnackbarMa
 
     private void onIphDismissClicked(@MessageType int messageType) {
         mTabArchiveSettings.markDialogIphDismissed();
-        assumeNonNull(mTabListEditorCoordinator);
-        mTabListEditorCoordinator.removeSpecialListItem(
-                UiType.ARCHIVED_TABS_IPH_MESSAGE, MessageType.ARCHIVED_TABS_IPH_MESSAGE);
+        if (mTabListEditorCoordinator != null) {
+            mTabListEditorCoordinator.removeSpecialListItem(
+                    UiType.ARCHIVED_TABS_IPH_MESSAGE, MessageType.ARCHIVED_TABS_IPH_MESSAGE);
+        }
+
         RecordUserAction.record("Tabs.ArchivedTabsDialogIphDismissed");
     }
 
@@ -944,7 +931,7 @@ public class ArchivedTabsDialogCoordinator implements SnackbarManager.SnackbarMa
     }
 
     private void refreshArchivedTabList() {
-        assumeNonNull(mTabListEditorCoordinator);
+        if (mTabListEditorCoordinator == null) return;
         mTabListEditorCoordinator.resetWithListOfTabs(
                 TabModelUtils.convertTabListToListOfTabs(mArchivedTabModel),
                 getArchivedTabGroupSyncIds(),
@@ -1029,10 +1016,11 @@ public class ArchivedTabsDialogCoordinator implements SnackbarManager.SnackbarMa
         if (mTabGroupSyncService != null) {
             for (String syncGroupId : archivedTabGroupSyncIds) {
                 mTabGroupSyncService.updateArchivalStatus(syncGroupId, false);
-                assumeNonNull(mTabListEditorCoordinator);
-                mTabListEditorCoordinator.removeListItem(
-                        UiType.TAB_GROUP,
-                        TabListEditorItemSelectionId.createTabGroupSyncId(syncGroupId));
+                if (mTabListEditorCoordinator != null) {
+                    mTabListEditorCoordinator.removeListItem(
+                            UiType.TAB_GROUP,
+                            TabListEditorItemSelectionId.createTabGroupSyncId(syncGroupId));
+                }
             }
 
             moveToState(TabActionState.CLOSABLE);

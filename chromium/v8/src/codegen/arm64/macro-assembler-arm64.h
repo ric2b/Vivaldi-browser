@@ -955,6 +955,16 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
       Register object, Register slot_address, SaveFPRegsMode fp_mode,
       StubCallMode mode = StubCallMode::kCallBuiltinPointer);
 
+  void CallVerifySkippedWriteBarrierStubSaveRegisters(Register object,
+                                                      Register value,
+                                                      SaveFPRegsMode fp_mode);
+  void CallVerifySkippedWriteBarrierStub(Register object, Register value);
+
+  void CallVerifySkippedIndirectWriteBarrierStubSaveRegisters(
+      Register object, Register value, SaveFPRegsMode fp_mode);
+  void CallVerifySkippedIndirectWriteBarrierStub(Register object,
+                                                 Register value);
+
   // For a given |object| and |offset|:
   //   - Move |object| to |dst_object|.
   //   - Compute the address of the slot pointed to by |offset| in |object| and
@@ -1073,6 +1083,9 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void LoadRootRegisterOffset(Register destination, intptr_t offset) final;
   void LoadRootRelative(Register destination, int32_t offset) final;
   void StoreRootRelative(int32_t offset, Register value) final;
+
+  void PreCheckSkippedWriteBarrier(Register object, Register value,
+                                   Register scratch, Label* ok);
 
   // Operand pointing to an external reference.
   // May emit code to set up the scratch register. The operand is
@@ -1666,6 +1679,14 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   // pointer table. Otherwise they are regular tagged fields.
   void LoadTrustedPointerField(Register destination, MemOperand field_operand,
                                IndirectPointerTag tag);
+  // As above, but for kUnknownIndirectPointerTag. The type of the loaded object
+  // is unknown, so this helper will check for a series of expected types and
+  // jump to the given labels if the loaded object has a matching type. If the
+  // object has none of the expected types, the destination register will be
+  // zeroed and execution continues as fall-through.
+  void LoadTrustedUnknownPointerField(
+      Register destination, MemOperand field_operand, Register scratch,
+      const std::initializer_list<std::tuple<InstanceType, Label*>>& cases);
   // Store a trusted pointer field.
   void StoreTrustedPointerField(Register value, MemOperand dst_field_operand);
 
@@ -2351,6 +2372,10 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
 
   // ---------------------------------------------------------------------------
   // Garbage collector support (GC).
+
+  // Performs a fast check for whether `value` is a read-only object or a small
+  // Smi. Only enabled in some configurations.
+  void MaybeJumpIfReadOnlyOrSmallSmi(Register value, Label* dest);
 
   // Notify the garbage collector that we wrote a pointer into an object.
   // |object| is the object being stored into, |value| is the object being

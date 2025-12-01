@@ -8,6 +8,7 @@
 #include "base/memory/raw_ptr.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
+#include "third_party/blink/public/mojom/content_extraction/ai_page_content_metadata.mojom-blink.h"
 #include "third_party/blink/public/mojom/content_extraction/frame_metadata_observer_registry.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
@@ -21,7 +22,10 @@
 
 namespace blink {
 
+class HTMLMetaElement;
+class HTMLScriptElement;
 class LocalFrame;
+class MutationObserver;
 
 // Registry used to Add Observers for when frame metadata changes.
 class MODULES_EXPORT FrameMetadataObserverRegistry final
@@ -56,18 +60,35 @@ class MODULES_EXPORT FrameMetadataObserverRegistry final
 
  private:
   class DomContentLoadedListener;
+  class MetaTagAttributeObserver;
+  class MetaTagsMutationObserver;
+  class PaidContentAttributeObserver;
+  class PaidContentMutationObserver;
   friend class DomContentLoadedListener;
 
   void Bind(mojo::PendingReceiver<mojom::blink::FrameMetadataObserverRegistry>
                 receiver);
 
+  void DisconnectAllAttributeObservers();
+  void ObserveMetaTagAttributes(HTMLMetaElement* meta);
+  void StopObservingMetaTagAttributes(HTMLMetaElement* meta);
+  void DisconnectAllPaidContentAttributeObservers();
+  void ObservePaidContentScriptAttributes(HTMLScriptElement* script);
+  void StopObservingPaidContentScriptAttributes(HTMLScriptElement* script);
+
   void OnDomContentLoaded();
   void OnPaidContentMetadataChanged();
   void OnMetaTagsChanged();
 
+  // Returns true if there are observers.
+  bool UpdateMetaTagsObserver();
+  // Returns true if there are observers.
+  bool UpdatePaidContentObserver();
+
   void ListenForDomContentLoaded();
 
-  void DisconnectHandler(mojo::RemoteSetElementId id);
+  void DisconnectHandler(mojo::RemoteSetElementId);
+  void PaidContentDisconnectHandler(mojo::RemoteSetElementId);
 
   HeapMojoReceiverSet<mojom::blink::FrameMetadataObserverRegistry,
                       FrameMetadataObserverRegistry>
@@ -78,9 +99,29 @@ class MODULES_EXPORT FrameMetadataObserverRegistry final
 
   HeapMojoRemoteSet<mojom::blink::MetaTagsObserver> metatags_observers_;
 
-  HeapHashMap<uint32_t, HeapVector<String>> metatags_observer_names_;
+  struct MetaTagsObserverData : public GarbageCollected<MetaTagsObserverData> {
+    void Trace(Visitor* visitor) const { visitor->Trace(names_to_observe); }
+
+    HeapVector<String> names_to_observe;
+    Vector<mojom::blink::MetaTagPtr> last_sent_meta_tags;
+  };
+
+  // Data for each metatags observer, keyed by RemoteSetElementId.
+  HeapHashMap<uint32_t, Member<MetaTagsObserverData>>
+      remote_id_to_observer_data_;
+  // A map from metatag name to the number of observers that are interested in
+  // it.
+  HashMap<String, int> all_metatag_name_counts_;
 
   Member<DomContentLoadedListener> dom_content_loaded_observer_;
+
+  Member<MetaTagsMutationObserver> meta_tags_mutation_observer_;
+  Member<PaidContentMutationObserver> paid_content_mutation_observer_;
+
+  HeapHashMap<WeakMember<HTMLMetaElement>, Member<MutationObserver>>
+      meta_tag_attribute_observers_;
+  HeapHashMap<WeakMember<HTMLScriptElement>, Member<MutationObserver>>
+      paid_content_attribute_observers_;
 };
 
 }  // namespace blink

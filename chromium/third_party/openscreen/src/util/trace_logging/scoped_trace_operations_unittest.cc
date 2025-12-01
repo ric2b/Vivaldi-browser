@@ -24,7 +24,6 @@ MATCHER_P(HasSameNameAndLocation, expected, "") {
 
 using ::testing::_;
 using ::testing::DoAll;
-using ::testing::Invoke;
 
 // These tests validate that parameters are passed correctly by using the Trace
 // Internals.
@@ -39,8 +38,8 @@ TEST(TraceLoggingInternalTest, TestMacroStyleInitializationTrue) {
   constexpr uint32_t delay_in_ms = 50;
   MockLoggingPlatform platform;
   EXPECT_CALL(platform, LogTrace(_, _))
-      .WillOnce(DoAll(Invoke(ValidateTraceTimestampDiff<delay_in_ms>),
-                      Invoke(ValidateTraceErrorCode<Error::Code::kNone>)));
+      .WillOnce(DoAll(ValidateTraceTimestampDiff<delay_in_ms>,
+                      ValidateTraceErrorCode<Error::Code::kNone>));
 
   {
     uint8_t temp[sizeof(SynchronousTraceLogger)];
@@ -82,7 +81,7 @@ TEST(TraceLoggingInternalTest, ExpectParametersPassedToResult) {
   expected.file_name = __FILE__;
 
   EXPECT_CALL(platform, LogTrace(HasSameNameAndLocation(expected), _))
-      .WillOnce(Invoke(ValidateTraceErrorCode<Error::Code::kNone>));
+      .WillOnce(ValidateTraceErrorCode<Error::Code::kNone>);
 
   { SynchronousTraceLogger{category, "Name", __FILE__, line}; }
 }

@@ -6,8 +6,8 @@ include_rules = [
   "+components/live_caption",
   "+components/tabs/public",
   "+components/app_icon_loader",
-  "+dbus",
   "+extensions/strings/grit/extensions_strings.h",
+  "+components/webapps/isolated_web_apps/scheme.h",
   "+services/network/public",
 
   # Fuzzer tests require ICU initialization.
@@ -102,7 +102,7 @@ specific_include_rules = {
     "+components/services/storage/privileged/mojom/indexed_db_control_test.mojom.h",
   ],
 
-  "window_open_apitest\.cc": [
+  "locked_fullscreen_window_apitest\.cc": [
     "+ash/wm/window_pin_util.h",
   ]
 }

@@ -27,7 +27,6 @@ constexpr Clock::duration kOneSecond =
 using testing::_;
 using testing::Args;
 using testing::DoAll;
-using testing::Invoke;
 using testing::Return;
 using testing::StrictMock;
 using testing::WithArgs;

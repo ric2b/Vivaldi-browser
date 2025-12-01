@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import {assert} from 'chai';
@@ -43,6 +43,10 @@ export class InspectedPage extends PageWrapper {
 
   getOopifResourcesPath() {
     return this.getResourcesPath('devtools.oopif.test');
+  }
+
+  async overridePermissions(permissions: puppeteer.Permission[]) {
+    await this.page.browserContext().overridePermissions(`https://localhost:${this.serverPort}`, permissions);
   }
 }
 

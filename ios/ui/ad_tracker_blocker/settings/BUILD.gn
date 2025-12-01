@@ -19,7 +19,6 @@ source_set("settings") {
     "//base:i18n",
     "//ios/chrome/app/strings",
     "//ios/chrome/common/ui/util",
-    "//ios/third_party/material_components_ios",
   ]
 
   frameworks = [

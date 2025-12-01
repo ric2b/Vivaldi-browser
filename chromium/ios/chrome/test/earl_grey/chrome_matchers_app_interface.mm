@@ -49,19 +49,21 @@
 #import "ios/chrome/browser/settings/ui_bundled/tabs/tabs_settings_constants.h"
 #import "ios/chrome/browser/share_kit/model/test_constants.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/public/snackbar/snackbar_constants.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/tab_switcher/tab_strip/ui/swift_constants_for_objective_c.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/inactive_tabs/inactive_tabs_constants.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_groups/tab_groups_constants.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/swift_constants_for_objective_c.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/buttons/buttons_constants.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_view.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_constants.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/confirmation_alert/constants.h"
 #import "ios/chrome/common/ui/promo_style/constants.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
@@ -254,19 +256,43 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
                     foregroundColorMatcher, nil);
 }
 
-+ (id<GREYMatcher>)buttonWithBackgroundColor:(NSString*)colorName {
++ (id<GREYMatcher>)buttonWithPrimaryColor {
+  return grey_allOf([self buttonWithForegroundColor:kSolidButtonTextColor],
+                    [self buttonWithBackgroundColorNamed:kBlueColor], nil);
+}
+
++ (id<GREYMatcher>)buttonWithSecondaryColor {
+  if (@available(iOS 26, *)) {
+    return grey_allOf([self buttonWithForegroundColor:kSolidBlackColor],
+                      [self buttonWithBackgroundColor:UIColor.clearColor], nil);
+  }
+  return grey_allOf([self buttonWithForegroundColor:kBlueColor], nil);
+}
+
++ (id<GREYMatcher>)buttonWithEqualWeightColor {
+  return grey_allOf([self buttonWithForegroundColor:kBlueColor],
+                    [self buttonWithBackgroundColorNamed:kBlueHaloColor], nil);
+}
+
++ (id<GREYMatcher>)buttonWithBackgroundColorNamed:(NSString*)colorName {
+  return [self buttonWithBackgroundColor:[UIColor colorNamed:colorName]];
+}
+
++ (id<GREYMatcher>)buttonWithBackgroundColor:(UIColor*)color {
   GREYMatchesBlock matches = ^BOOL(id element) {
     if (![element isKindOfClass:UIButton.class]) {
       return NO;
     }
     UIButton* button = base::apple::ObjCCastStrict<UIButton>(element);
+    if (@available(iOS 26, *)) {
+      return CGColorEqualToColor(color.CGColor, button.tintColor.CGColor);
+    }
     return CGColorEqualToColor(
-        [UIColor colorNamed:colorName].CGColor,
-        button.configuration.background.backgroundColor.CGColor);
+        color.CGColor, button.configuration.background.backgroundColor.CGColor);
   };
 
   NSString* descriptionString =
-      [NSString stringWithFormat:@"Background color %@", colorName];
+      [NSString stringWithFormat:@"Background color %@", color];
 
   GREYDescribeToBlock describe = ^(id<GREYDescription> description) {
     [description appendText:descriptionString];
@@ -1149,11 +1175,7 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 }
 
 + (id<GREYMatcher>)swipeActionDeleteButton {
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   NSString* buttonClass = @"_UISwipeActionDynamicButton";
-#else
-  NSString* buttonClass = @"UISwipeActionStandardButton";
-#endif
   return grey_allOf(
       [ChromeMatchersAppInterface
           buttonWithAccessibilityLabelID:IDS_IOS_DELETE_ACTION_TITLE],
@@ -1176,6 +1198,10 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 
 + (id<GREYMatcher>)fakeOmnibox {
   return grey_accessibilityID(ntp_home::FakeOmniboxAccessibilityID());
+}
+
++ (id<GREYMatcher>)snackbarViewMatcher {
+  return grey_accessibilityID(kSnackbarAccessibilityId);
 }
 
 + (id<GREYMatcher>)discoverHeaderLabel {
@@ -1364,13 +1390,12 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
   NSString* messageLabel =
       base::SysUTF16ToNSString(l10n_util::GetPluralStringFUTF16(
           IDS_IOS_TAB_GROUP_SNACKBAR_LABEL, tabGroupCount));
-  return grey_allOf(
-      grey_accessibilityID(@"MDCSnackbarMessageTitleAutomationIdentifier"),
-      grey_text(messageLabel), nil);
+  return grey_allOf([ChromeMatchersAppInterface snackbarViewMatcher],
+                    grey_descendant(grey_text(messageLabel)), nil);
 }
 
 + (id<GREYMatcher>)tabGroupSnackBarAction {
-  return grey_allOf(grey_kindOfClassName(@"M3CButton"),
+  return grey_allOf(grey_accessibilityID(kSnackbarButtonAccessibilityId),
                     grey_buttonTitle(l10n_util::GetNSString(
                         IDS_IOS_TAB_GROUP_SNACKBAR_ACTION)),
                     nil);
@@ -1804,16 +1829,8 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 }
 
 + (id<GREYMatcher>)closeTabGroupButton {
-  if (IsContainedTabGroupEnabled()) {
-    return grey_allOf(grey_accessibilityID(kTabGroupCloseButtonIdentifier),
-                      grey_sufficientlyVisible(), nil);
-  } else {
-    return grey_allOf(
-        [ChromeMatchersAppInterface
-            buttonWithAccessibilityLabel:l10n_util::GetNSString(
-                                             IDS_IOS_ICON_ARROW_BACK)],
-        grey_kindOfClassName(@"UIAccessibilityBackButtonElement"), nil);
-  }
+  return grey_allOf(grey_accessibilityID(kTabGroupCloseButtonIdentifier),
+                    grey_sufficientlyVisible(), nil);
 }
 
 + (id<GREYMatcher>)tabGroupActivitySummaryCell {

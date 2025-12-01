@@ -21,6 +21,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import static org.chromium.chrome.test.util.ChromeTabUtils.getTabCountOnUiThread;
 import static org.chromium.ui.test.util.ViewUtils.onViewWaiting;
 
 import android.os.Build;
@@ -83,12 +84,14 @@ import java.util.concurrent.TimeoutException;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
 @Restriction({Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE, DeviceFormFactor.TABLET_OR_DESKTOP})
+// TODO(crbug.com/439491767): Fix broken tests caused by desktop-like incognito window.
 @Features.DisableFeatures({
     ChromeFeatureList.ANDROID_SURFACE_COLOR_UPDATE,
     ChromeFeatureList.GRID_TAB_SWITCHER_SURFACE_COLOR_UPDATE,
     ChromeFeatureList.GRID_TAB_SWITCHER_UPDATE,
     ChromeFeatureList.ANDROID_THEME_MODULE,
-    ChromeFeatureList.TAB_STRIP_INCOGNITO_MIGRATION
+    ChromeFeatureList.TAB_STRIP_INCOGNITO_MIGRATION,
+    ChromeFeatureList.ANDROID_OPEN_INCOGNITO_AS_WINDOW
 })
 @Batch(Batch.PER_CLASS)
 public class TabSwitcherTabletTest {
@@ -113,7 +116,7 @@ public class TabSwitcherTabletTest {
         if (layoutManager.isLayoutVisible(LayoutType.TAB_SWITCHER)
                 && !layoutManager.isLayoutStartingToHide(LayoutType.TAB_SWITCHER)) {
             TabModelSelector selector = cta.getTabModelSelectorSupplier().get();
-            if (selector.getModel(false).getCount() == 0) {
+            if (getTabCountOnUiThread(selector.getModel(false)) == 0) {
                 ThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             TabCreator tabCreator = cta.getTabCreator(/* incognito= */ false);
@@ -171,7 +174,8 @@ public class TabSwitcherTabletTest {
         // Toggle to normal switcher.
         clickIncognitoToggleButton();
 
-        final Tab newTab = cta.getCurrentTabModel().getTabAt(0);
+        final Tab newTab =
+                ThreadUtils.runOnUiThreadBlocking(() -> cta.getCurrentTabModel().getTabAt(0));
         assertFalse(newTab.isIncognito());
 
         exitSwitcherWithTabClick(0);
@@ -241,7 +245,8 @@ public class TabSwitcherTabletTest {
                                             .build(),
                                     /* allowDialog= */ false);
                 });
-        assertEquals("Expected to be 0 tabs in regular model", 0, regularModel.getCount());
+        assertEquals(
+                "Expected to be 0 tabs in regular model", 0, getTabCountOnUiThread(regularModel));
         assertTrue("Expected to be in Incognito model", cta.getCurrentTabModel().isIncognito());
 
         // Assert the grid tab switcher is not yet showing.

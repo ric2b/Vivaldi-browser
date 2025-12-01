@@ -2,12 +2,20 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# This file contains suite definitions that can be used in
-# //testing/buildbot/waterfalls.pyl and will also be usable for builders that
-# set their tests in starlark (once that is ready). The legacy_ prefix on the
-# declarations indicates the capability to be used in //testing/buildbot. Once a
-# suite is no longer needed in //testing/buildbot, targets.bundle (which does
-# not yet exist) can be used for grouping tests in a more flexible manner.
+"""Basic suite definitions
+
+Basic suites are a collection of tests that can be referenced by a builder in
+//testing/buildbot/waterfalls.pyl or by compound suites and matrix compound
+suites (defined in ./compound_suites.star and ./matrix_compound_suites.star
+respectively). Suites also define a bundle containing the same tests as the
+suite, so they can be used wherever a bundle is expected.
+
+The legacy_ prefix denotes the ability for basic suites to be referenced in
+//testing/buildbot. Once a suite is no longer referenced via //testing/buildbot,
+targets.bundle can be used for grouping tests in a more flexible manner (mixing
+test types and/or compile targets and arbitrary nesting). Named bundles are
+defined in ./bundles.star.
+"""
 
 load("@chromium-luci//targets.star", "targets")
 
@@ -26,7 +34,7 @@ targets.legacy_basic_suite(
 targets.legacy_basic_suite(
     name = "blink_unittests_suite",
     tests = {
-        "blink_unit_tests": targets.legacy_test_config(),
+        "blink_unittests": targets.legacy_test_config(),
     },
 )
 
@@ -82,26 +90,6 @@ targets.legacy_basic_suite(
 )
 
 targets.legacy_basic_suite(
-    name = "chromeos_chrome_all_tast_tests",
-    tests = {
-        "chrome_all_tast_tests": targets.legacy_test_config(
-            skylab = targets.skylab(
-                # `tast_expr` must be a non-empty string to run the tast tests. But the value of
-                # would be overridden by `tast_arrt_expr` defined in chromeos/BUILD.gn, so that we
-                # put the stub string here.
-                tast_expr = "STUB_STRING_TO_RUN_TAST_TESTS",
-                # Temporary increases the maximum retries due to the unstable cloudbots (b/377616158)
-                test_level_retries = 2,
-                # Number of shards. Might be overriden for slower boards.
-                shards = 15,
-                # Timeout including DUT privisioning.
-                timeout_sec = 14400,
-            ),
-        ),
-    },
-)
-
-targets.legacy_basic_suite(
     name = "chromeos_chrome_all_tast_tests_tfc",
     tests = {
         "chrome_all_tast_tests": targets.legacy_test_config(
@@ -111,6 +99,7 @@ targets.legacy_basic_suite(
                 # tast-specific logic relying on tast_expr to be non-empty.
                 tast_expr = "STUB_STRING_TO_RUN_TAST_TESTS",
                 timeout_sec = 14400,
+                cros_ctp_suite_name = "chrome-uprev-hw",
                 cros_test_names_exclude_from_file = ["chromeos/tast_control_disabled_tests.txt"],
                 cros_test_tags = ["group:mainline", "dep:chrome"],
                 cros_test_tags_exclude = ["informational", "dep:no_chrome_dcheck"],
@@ -120,25 +109,6 @@ targets.legacy_basic_suite(
 )
 
 # Test suite for running critical Tast tests.
-targets.legacy_basic_suite(
-    name = "chromeos_chrome_criticalstaging_tast_tests",
-    tests = {
-        "chrome_criticalstaging_tast_tests": targets.legacy_test_config(
-            ci_only = True,
-            skylab = targets.skylab(
-                # `tast_expr` must be a non-empty string to run the tast tests. But the value of
-                # would be overridden by `tast_arrt_expr` defined in chromeos/BUILD.gn, so that we
-                # put the stub string here.
-                tast_expr = "STUB_STRING_TO_RUN_TAST_TESTS",
-                test_level_retries = 2,
-                shards = 3,
-                timeout_sec = 14400,
-            ),
-            experiment_percentage = 100,
-        ),
-    },
-)
-
 targets.legacy_basic_suite(
     name = "chromeos_chrome_criticalstaging_tast_tests_tfc",
     tests = {
@@ -161,25 +131,6 @@ targets.legacy_basic_suite(
 
 # Test suite for running disabled Tast tests to collect data to re-enable
 # them. The test suite should not be critical to builders.
-targets.legacy_basic_suite(
-    name = "chromeos_chrome_disabled_tast_tests",
-    tests = {
-        "chrome_disabled_tast_tests": targets.legacy_test_config(
-            ci_only = True,
-            skylab = targets.skylab(
-                # `tast_expr` must be a non-empty string to run the tast tests. But the value of
-                # would be overridden by `tast_arrt_expr` defined in chromeos/BUILD.gn, so that we
-                # put the stub string here.
-                tast_expr = "STUB_STRING_TO_RUN_TAST_TESTS",
-                test_level_retries = 1,
-                shards = 2,
-                timeout_sec = 14400,
-            ),
-            experiment_percentage = 100,
-        ),
-    },
-)
-
 targets.legacy_basic_suite(
     name = "chromeos_chrome_disabled_tast_tests_tfc",
     tests = {
@@ -257,7 +208,6 @@ targets.legacy_basic_suite(
         "google_apis_unittests": targets.legacy_test_config(),
         "ipc_tests": targets.legacy_test_config(),
         "latency_unittests": targets.legacy_test_config(),
-        "libcups_unittests": targets.legacy_test_config(),
         "media_unittests": targets.legacy_test_config(
             args = [
                 "--test-launcher-filter-file=../../testing/buildbot/filters/chromeos.media_unittests.filter",
@@ -344,7 +294,6 @@ targets.legacy_basic_suite(
         "google_apis_unittests": targets.legacy_test_config(),
         "ipc_tests": targets.legacy_test_config(),
         "latency_unittests": targets.legacy_test_config(),
-        "libcups_unittests": targets.legacy_test_config(),
         "media_unittests": targets.legacy_test_config(
             args = [
                 # TODO(b/351276191): Switch to gerneral chromeos.betty.media_unittests.filter
@@ -428,6 +377,11 @@ targets.legacy_basic_suite(
         "blink_common_unittests": targets.legacy_test_config(),
         "blink_heap_unittests": targets.legacy_test_config(),
         "blink_platform_unittests": targets.legacy_test_config(),
+        "blink_unittests": targets.legacy_test_config(
+            android_swarming = targets.swarming(
+                shards = 6,
+            ),
+        ),
         "boringssl_crypto_tests": targets.legacy_test_config(),
         "boringssl_ssl_tests": targets.legacy_test_config(),
         "capture_unittests": targets.legacy_test_config(
@@ -496,11 +450,6 @@ targets.legacy_basic_suite(
         "ui_base_unittests": targets.legacy_test_config(),
         "ui_touch_selection_unittests": targets.legacy_test_config(),
         "url_unittests": targets.legacy_test_config(),
-        "webkit_unit_tests": targets.legacy_test_config(
-            android_swarming = targets.swarming(
-                shards = 6,
-            ),
-        ),
         "wtf_unittests": targets.legacy_test_config(),
         "zlib_unittests": targets.legacy_test_config(),
     },
@@ -1348,6 +1297,17 @@ targets.legacy_basic_suite(
             ],
             linux_args = [
                 "--no-xvfb",
+            ],
+        ),
+    },
+)
+
+targets.legacy_basic_suite(
+    name = "ondevice_model_benchmark_tests_suite",
+    tests = {
+        "ondevice_model_benchmark_tests": targets.legacy_test_config(
+            mixins = [
+                "has_native_resultdb_integration",
             ],
         ),
     },

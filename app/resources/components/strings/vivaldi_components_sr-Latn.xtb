@@ -3,16 +3,6 @@
 <translationbundle lang="sr-Latn">
 <translation id="3830627370375585318">Dozvoli Vivaldi pregledaču pristup mreži u podešavanjima
 zaštitnog zida ili antivirusa.</translation>
-<translation id="4200102020577305737">Idite u
-          Vivaldi meni &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Podešavanja lokalne mreže
-          i opozovite izbor opcije „Koristi proksi server za lokalnu mrežu".</translation>
 <translation id="4932161901409251843">Idite u
           Vivaldi meni &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@ zaštitnog zida ili antivirusa.</translation>
           Ako vam to ne reši problem, preporučujemo da ponovo izaberete
           ovu opciju radi boljih performansi.</translation>
 <translation id="7496505986576158197">Vivaldi su omogućili projekat otvorenog koda <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> i drugi <ph name="BEGIN_LINK_OSS" />softver otvorenog koda<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Idite u
+          Vivaldi meni &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Mreža i internet &gt; Proksi
+          i opozovite izbor opcije „Automatski otkrij podešavanja”.</translation>
 </translationbundle>

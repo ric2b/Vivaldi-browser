@@ -22,16 +22,16 @@ jobs:
         config: [Debug, Release]
         os: [ ubuntu-22.04, ubuntu-24.04, windows-latest, macos-latest ]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python 3.8
         if: matrix.os != 'macos-latest'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.8'
       # MacOS machine can run on arm64 and it doesn't support 3.8
       - name: Set up Python 3.10.11
         if: matrix.os == 'macos-latest'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.10.11'
       - name: Test CMake Minimum
@@ -51,7 +51,7 @@ jobs:
     env:
       CMAKE_GENERATOR: Ninja
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: amd64_arm64
@@ -67,8 +67,8 @@ jobs:
       matrix:
         abi: [ armeabi-v7a, arm64-v8a ]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.8'
       - uses: lukka/get-cmake@latest
@@ -90,7 +90,7 @@ jobs:
   reuse:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: REUSE Compliance Check
       uses: fsfe/reuse-action@v5
 
@@ -99,8 +99,8 @@ jobs:
     needs: generate_source
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.10'
       - name: Install WSI dependencies
@@ -111,8 +111,8 @@ jobs:
   generate_source:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.10'
       - name: Generate source

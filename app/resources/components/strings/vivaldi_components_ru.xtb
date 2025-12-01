@@ -2,16 +2,6 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ru">
 <translation id="3830627370375585318">Разрешите доступ к сети для Vivaldi в настройках брандмауэра или антивируса.</translation>
-<translation id="4200102020577305737">Выберите
-          меню Vivaldi &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Настройка сети
-          и снимите флажок "Использовать прокси-сервер для локальных подключений".</translation>
 <translation id="4932161901409251843">Выберите
           меню Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -27,4 +17,14 @@
 <translation id="6690242244468452299">На этой странице отображается информация о недавних сбоях, если вы разрешили отправку отчётов.</translation>
 <translation id="7023871570427738255">Откройте меню Vivaldi, нажмите "<ph name="SETTINGS_TITLE" />" &gt; "<ph name="ADVANCED_TITLE" />" и снимите флажок "<ph name="NO_PREFETCH_DESCRIPTION" />". Если устранить проблему не удалось, снова установите флажок, чтобы страницы загружались быстрее.</translation>
 <translation id="7496505986576158197">Vivaldi создан на базе открытого проекта <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> и другого <ph name="BEGIN_LINK_OSS" />открытого ПО<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Перейдите в
+          меню Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Сеть &gt; Proxy
+          и отключите опцию "Определять настройки автоматически".</translation>
 </translationbundle>

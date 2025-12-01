@@ -1303,6 +1303,8 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
         kTrustedVaultRecoverabilityDegradedForEverything:
       return SyncTrustedVaultRecoverabilityDegradedErrorItemType;
     case syncer::SyncService::UserActionableError::kNone:
+    // UI not implemented for this case.
+    case syncer::SyncService::UserActionableError::kNeedsClientUpgrade:
       return std::nullopt;
   }
   NOTREACHED();

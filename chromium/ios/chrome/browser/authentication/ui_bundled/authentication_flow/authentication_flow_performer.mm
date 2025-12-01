@@ -170,6 +170,8 @@ policy::ProfileSeparationPolicies GetFakePolicyResponseForTesting() {
                                                          (UIView*)anchorView
                                                      anchorRect:
                                                          (CGRect)anchorRect {
+  // Sign-in related work should be done on regular browser.
+  CHECK_EQ(browser->type(), Browser::Type::kRegular, base::NotFatalUntil::M145);
   __weak __typeof(self) weakSelf = self;
   _leavingPrimaryAccountConfirmationDialogCoordinator =
       GetLeavingPrimaryAccountConfirmationDialog(
@@ -182,6 +184,7 @@ policy::ProfileSeparationPolicies GetFakePolicyResponseForTesting() {
 
 - (void)fetchManagedStatus:(ProfileIOS*)profile
                forIdentity:(id<SystemIdentity>)identity {
+  CHECK(identity, base::NotFatalUntil::M147);
   SystemIdentityManager* systemIdentityManager =
       GetApplicationContext()->GetSystemIdentityManager();
   if (NSString* hostedDomain =
@@ -290,6 +293,8 @@ policy::ProfileSeparationPolicies GetFakePolicyResponseForTesting() {
                     mergeBrowsingDataByDefault:(BOOL)mergeBrowsingDataByDefault
          browsingDataMigrationDisabledByPolicy:
              (BOOL)browsingDataMigrationDisabledByPolicy {
+  // Sign-in related work should be done on regular browser.
+  CHECK_EQ(browser->type(), Browser::Type::kRegular, base::NotFatalUntil::M145);
   [self checkNoDialog];
 
   base::RecordAction(

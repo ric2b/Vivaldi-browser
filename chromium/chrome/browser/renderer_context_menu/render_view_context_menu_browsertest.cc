@@ -35,6 +35,7 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/lens/region_search/lens_region_search_controller.h"
 #include "chrome/browser/pdf/pdf_extension_test_base.h"
 #include "chrome/browser/pdf/pdf_extension_test_util.h"
 #include "chrome/browser/pdf/test_pdf_viewer_stream_manager.h"
@@ -1003,7 +1004,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuForLockedFullscreenBrowserTest,
   }
 
   // Set locked fullscreen state.
-  PinWindow(browser()->window()->GetNativeWindow(), /*trusted=*/true);
+  ash::PinWindow(browser()->window()->GetNativeWindow(), /*trusted=*/true);
 
   // Verify aforementioned commands are disabled in locked fullscreen.
   for (int command_id : kCommandsToTest) {
@@ -1039,7 +1040,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuForLockedFullscreenBrowserTest,
   browser()->SetLockedForOnTask(true);
 
   // Set locked fullscreen state.
-  PinWindow(browser()->window()->GetNativeWindow(), /*trusted=*/true);
+  ash::PinWindow(browser()->window()->GetNativeWindow(), /*trusted=*/true);
 
   // Verify page navigation commands and some contextual content commands remain
   // enabled.
@@ -2132,8 +2133,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, OpenLinkInProfileEntryPresent) {
   }
 
   // Open new window for the additional profile. This profile becomes active.
-  ui_test_utils::BrowserChangeObserver new_browser_observer(
-      nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
+  ui_test_utils::BrowserCreatedObserver browser_created_observer;
   profiles::FindOrCreateNewWindowForProfile(
       profile, chrome::startup::IsProcessStartup::kNo,
       chrome::startup::IsFirstRun::kNo, false);
@@ -2143,7 +2143,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, OpenLinkInProfileEntryPresent) {
   // is observed if the active profile has not switched to `profile` yet.
   bool wait_for_set_last_active_observed =
       ProfileManager::GetLastUsedProfileIfLoaded() != profile;
-  ui_test_utils::WaitForBrowserSetLastActive(new_browser_observer.Wait(),
+  ui_test_utils::WaitForBrowserSetLastActive(browser_created_observer.Wait(),
                                              wait_for_set_last_active_observed);
 
   // On Lacros SessionStartupPref::ShouldRestoreLastSession() returns true for
@@ -2267,12 +2267,11 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, MAYBE_OpenLinkInProfile) {
       // In order for the profile to be counted as active, it needs to have a
       // created browser window. The profile isn't marked active until the
       // browser is actually open, which we need.
-      ui_test_utils::BrowserChangeObserver observer(
-          nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
+      ui_test_utils::BrowserCreatedObserver browser_created_observer;
       profiles::FindOrCreateNewWindowForProfile(
           profile, chrome::startup::IsProcessStartup::kNo,
           chrome::startup::IsFirstRun::kNo, false);
-      observer.Wait();
+      browser_created_observer.Wait();
       profiles_in_menu.push_back(profile);
     }
   }
@@ -2471,9 +2470,10 @@ class LensBrowserBaseTest : public InProcessBrowserTest {
   void SimulateDragAndVerifyOverlayUI(RenderViewContextMenu* menu) {
     // Verify Lens Region Search Controller was created after using the menu
     // item.
-    lens::LensRegionSearchController* controller =
-        menu->GetLensRegionSearchControllerForTesting();
+    lens::LensRegionSearchController* const controller =
+        browser()->GetFeatures().lens_region_search_controller();
     ASSERT_NE(controller, nullptr);
+    ASSERT_TRUE(menu->lens_region_search_controller_started_for_testing());
     ASSERT_TRUE(controller->IsOverlayUIVisibleForTesting());
     SimulateDrag();
     // The UI should be closed after the drag.
@@ -2484,9 +2484,10 @@ class LensBrowserBaseTest : public InProcessBrowserTest {
   void AssertOverlayUIHidden(RenderViewContextMenu* menu) {
     // Verify Lens Region Search Controller was created after using the menu
     // item.
-    lens::LensRegionSearchController* controller =
-        menu->GetLensRegionSearchControllerForTesting();
+    lens::LensRegionSearchController* const controller =
+        browser()->GetFeatures().lens_region_search_controller();
     ASSERT_NE(controller, nullptr);
+    ASSERT_TRUE(menu->lens_region_search_controller_started_for_testing());
     ASSERT_FALSE(controller->IsOverlayUIVisibleForTesting());
   }
 
@@ -2741,12 +2742,12 @@ IN_PROC_BROWSER_TEST_F(LensOverlayBrowserTest,
                                              base::NullCallback());
       }));
 
-  // Clicking the search for text entrypoint should eventually result in CSB
-  // state.
-  ASSERT_TRUE(base::test::RunUntil([&]() {
-    return controller->state() ==
-           LensOverlayController::State::kLivePageAndResults;
-  }));
+  // Wait for the side panel to load.
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->GetSidePanelWebContentsForTesting(); }));
+  EXPECT_TRUE(content::WaitForLoadStop(
+      controller->GetSidePanelWebContentsForTesting()));
+  ASSERT_EQ(controller->state(), LensOverlayController::State::kOff);
 }
 
 IN_PROC_BROWSER_TEST_F(LensOverlayBrowserTest,
@@ -2757,9 +2758,7 @@ IN_PROC_BROWSER_TEST_F(LensOverlayBrowserTest,
       // Callback that will be called after the context menu item is clicked.
       base::BindLambdaForTesting([&](RenderViewContextMenu* menu) {
         // Verify the normal region search flow does not activate
-        lens::LensRegionSearchController* controller =
-            menu->GetLensRegionSearchControllerForTesting();
-        ASSERT_EQ(controller, nullptr);
+        ASSERT_FALSE(menu->lens_region_search_controller_started_for_testing());
         run = true;
       }));
 
@@ -2776,9 +2775,7 @@ IN_PROC_BROWSER_TEST_F(LensOverlayBrowserTest,
       // Callback that will be called after the context menu item is clicked.
       base::BindLambdaForTesting([&](RenderViewContextMenu* menu) {
         // Verify the normal region search flow activates.
-        lens::LensRegionSearchController* controller =
-            menu->GetLensRegionSearchControllerForTesting();
-        ASSERT_NE(controller, nullptr);
+        ASSERT_TRUE(menu->lens_region_search_controller_started_for_testing());
         run = true;
       }));
 
@@ -2795,9 +2792,7 @@ IN_PROC_BROWSER_TEST_F(LensOverlayBrowserTest,
       // Callback that will be called after the context menu item is clicked.
       base::BindLambdaForTesting([&](RenderViewContextMenu* menu) {
         // Verify the normal image search flow does not activate.
-        lens::LensRegionSearchController* controller =
-            menu->GetLensRegionSearchControllerForTesting();
-        ASSERT_EQ(controller, nullptr);
+        ASSERT_FALSE(menu->lens_region_search_controller_started_for_testing());
         run = true;
       }));
 
@@ -3026,7 +3021,7 @@ class LoadImageRequestObserver : public content::WebContentsObserver {
       const content::GlobalRequestID& request_id,
       const blink::mojom::ResourceLoadInfo& resource_load_info) override {
     if (resource_load_info.original_url.path() == path_) {
-      ASSERT_GT(resource_load_info.raw_body_bytes, 0);
+      ASSERT_TRUE(resource_load_info.raw_body_bytes.is_positive());
       ASSERT_EQ(resource_load_info.mime_type, "image/png");
       run_loop_.Quit();
     }
@@ -3408,12 +3403,78 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, BackAfterBackEntryRemoved) {
   menu_observer.WaitForMenuOpenAndClose();
 }
 
-// Given a URL, produces an HTML document which contains a cross-origin child
-// iframe which contains a link to that URL. Both the cross-origin child iframe
-// and the link inside that iframe fill the entire size of the parent frame so
-// they are easy to target with clicks.
-static std::string BuildCrossOriginChildFrameHTML(const GURL& link) {
-  constexpr char kMainFrameSource[] = R"(
+class SubframeContextMenuBrowserTest : public ContextMenuBrowserTest {
+ public:
+  void RunSubframeInitiatorTestForCommand(int command_id) {
+    // If a frame on example.com opens a subframe with a different opaque
+    // origin, the subframe origin should be passed through to a context menu on
+    // that initiator, so:
+    // 1. A request back to example.com from the subframe should be cross-origin
+    //    (which is what this test checks), and
+    // 2. The context menu on the subframe should have the initiator as an
+    // opaque
+    //    origin whose precursor origin is example.com (not tested here)
+    using BasicHttpResponse = net::test_server::BasicHttpResponse;
+    using HttpRequest = net::test_server::HttpRequest;
+    using HttpResponse = net::test_server::HttpResponse;
+    HttpRequest::HeaderMap logged_headers;
+
+    base::RunLoop danger_request_wait_loop;
+    embedded_test_server()->RegisterRequestHandler(base::BindLambdaForTesting(
+        [&](const HttpRequest& req) -> std::unique_ptr<HttpResponse> {
+          if (req.relative_url == "/danger") {
+            logged_headers = req.headers;
+            danger_request_wait_loop.Quit();
+            return nullptr;
+          } else if (req.relative_url == "/main") {
+            auto response = std::make_unique<BasicHttpResponse>();
+            response->set_code(net::HTTP_OK);
+            response->set_content_type("text/html");
+            response->set_content(BuildCrossOriginChildFrameHTML(
+                embedded_test_server()->GetURL("/danger")));
+            return response;
+          } else {
+            return nullptr;
+          }
+        }));
+
+    auto handle = embedded_test_server()->StartAndReturnHandle();
+    ASSERT_TRUE(handle);
+
+    WebContents* web_contents =
+        browser()->tab_strip_model()->GetActiveWebContents();
+    GURL url(embedded_test_server()->GetURL("/main"));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+
+    content::RenderFrameHost* main_frame =
+        ConvertToRenderFrameHost(web_contents);
+    content::RenderFrameHost* child_frame = ChildFrameAt(main_frame, 0);
+
+    EXPECT_FALSE(main_frame->GetLastCommittedOrigin().IsSameOriginWith(
+        child_frame->GetLastCommittedOrigin()));
+
+    ContextMenuWaiter menu_observer(command_id);
+    content::SimulateMouseClickAt(web_contents, 0,
+                                  blink::WebMouseEvent::Button::kRight,
+                                  gfx::Point(15, 15));
+    menu_observer.WaitForMenuOpenAndClose();
+
+    // Wait for the request to "/danger" to be issued by the context menu click
+    // and handled by the EmbeddedTestServer, which logs the request headers as
+    // a side effect. Since that request is issued by a click on a link in a
+    // cross-origin iframe but is back to the same origin as "/main" was served
+    // from, it should be marked as cross-origin.
+    danger_request_wait_loop.Run();
+    EXPECT_EQ(logged_headers.at("sec-fetch-site"), "cross-site");
+  }
+
+ private:
+  // Given a URL, produces an HTML document which contains a cross-origin child
+  // iframe which contains a link to that URL. Both the cross-origin child
+  // iframe and the link inside that iframe fill the entire size of the parent
+  // frame so they are easy to target with clicks.
+  std::string BuildCrossOriginChildFrameHTML(const GURL& link) {
+    constexpr char kMainFrameSource[] = R"(
       <html>
         <!-- This document looks like:
           -
@@ -3446,7 +3507,7 @@ static std::string BuildCrossOriginChildFrameHTML(const GURL& link) {
       </html>
   )";
 
-  constexpr char kCrossOriginChildFrameSource[] = R"(
+    constexpr char kCrossOriginChildFrameSource[] = R"(
     <html>
       <head>
         <style>
@@ -3461,72 +3522,50 @@ static std::string BuildCrossOriginChildFrameHTML(const GURL& link) {
     </html>
   )";
 
-  std::string encoded_payload =
-      base::Base64Encode(base::ReplaceStringPlaceholders(
-          kCrossOriginChildFrameSource, {link.spec()}, nullptr));
-  return base::ReplaceStringPlaceholders(kMainFrameSource, {encoded_payload},
-                                         nullptr);
+    std::string encoded_payload =
+        base::Base64Encode(base::ReplaceStringPlaceholders(
+            kCrossOriginChildFrameSource, {link.spec()}, nullptr));
+    return base::ReplaceStringPlaceholders(kMainFrameSource, {encoded_payload},
+                                           nullptr);
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         SubframeContextMenuBrowserTest,
+                         testing::Bool(),
+                         [](const testing::TestParamInfo<bool>& info) {
+                           return info.param ? "LinkPreviewEnabled"
+                                             : "LinkPreviewDisabled";
+                         });
+
+IN_PROC_BROWSER_TEST_P(SubframeContextMenuBrowserTest,
+                       SubframeNewTabInitiator) {
+  RunSubframeInitiatorTestForCommand(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB);
 }
 
-IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, SubframeNewTabInitiator) {
-  // If a frame on example.com opens a subframe with a different opaque origin,
-  // the subframe origin should be passed through to a context menu on that
-  // initiator, so:
-  // 1. A request back to example.com from the subframe should be cross-origin
-  //    (which is what this test checks), and
-  // 2. The context menu on the subframe should have the initiator as an opaque
-  //    origin whose precursor origin is example.com (not tested here)
-  using BasicHttpResponse = net::test_server::BasicHttpResponse;
-  using HttpRequest = net::test_server::HttpRequest;
-  using HttpResponse = net::test_server::HttpResponse;
-  HttpRequest::HeaderMap logged_headers;
+IN_PROC_BROWSER_TEST_P(SubframeContextMenuBrowserTest,
+                       SubframeNewSplitInitiator) {
+  RunSubframeInitiatorTestForCommand(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW);
+}
 
-  base::RunLoop danger_request_wait_loop;
-  embedded_test_server()->RegisterRequestHandler(base::BindLambdaForTesting(
-      [&](const HttpRequest& req) -> std::unique_ptr<HttpResponse> {
-        if (req.relative_url == "/danger") {
-          logged_headers = req.headers;
-          danger_request_wait_loop.Quit();
-          return nullptr;
-        } else if (req.relative_url == "/main") {
-          auto response = std::make_unique<BasicHttpResponse>();
-          response->set_code(net::HTTP_OK);
-          response->set_content_type("text/html");
-          response->set_content(BuildCrossOriginChildFrameHTML(
-              embedded_test_server()->GetURL("/danger")));
-          return response;
-        } else {
-          return nullptr;
-        }
-      }));
+IN_PROC_BROWSER_TEST_P(SubframeContextMenuBrowserTest,
+                       SubframeExistingSplitInitiator) {
+  chrome::NewSplitTab(browser(),
+                      split_tabs::SplitTabCreatedSource::kLinkContextMenu);
+  browser()->tab_strip_model()->ActivateTabAt(0);
+  RunSubframeInitiatorTestForCommand(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW);
+}
 
-  auto handle = embedded_test_server()->StartAndReturnHandle();
-  ASSERT_TRUE(handle);
+IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, OpenNonStandardLink) {
+  std::unique_ptr<TestRenderViewContextMenu> menu1 =
+      CreateContextMenuMediaTypeNone(
+          /*unfiltered_url=*/GURL("mailto:me@google.com"),
+          /*url=*/GURL("mailto:me@google.com"));
 
-  WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  GURL url(embedded_test_server()->GetURL("/main"));
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-
-  content::RenderFrameHost* main_frame = ConvertToRenderFrameHost(web_contents);
-  content::RenderFrameHost* child_frame = ChildFrameAt(main_frame, 0);
-
-  EXPECT_FALSE(main_frame->GetLastCommittedOrigin().IsSameOriginWith(
-      child_frame->GetLastCommittedOrigin()));
-
-  ContextMenuWaiter menu_observer(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB);
-  content::SimulateMouseClickAt(web_contents, 0,
-                                blink::WebMouseEvent::Button::kRight,
-                                gfx::Point(15, 15));
-  menu_observer.WaitForMenuOpenAndClose();
-
-  // Wait for the request to "/danger" to be issued by the context menu click
-  // and handled by the EmbeddedTestServer, which logs the request headers as a
-  // side effect. Since that request is issued by a click on a link in a
-  // cross-origin iframe but is back to the same origin as "/main" was served
-  // from, it should be marked as cross-origin.
-  danger_request_wait_loop.Run();
-  EXPECT_EQ(logged_headers.at("sec-fetch-site"), "cross-site");
+  EXPECT_TRUE(menu1->IsItemEnabled(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
+  EXPECT_TRUE(menu1->IsItemEnabled(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  ASSERT_FALSE(menu1->IsItemEnabled(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
+  EXPECT_TRUE(menu1->IsItemEnabled(IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD));
 }
 
 IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest,

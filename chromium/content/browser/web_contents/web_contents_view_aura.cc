@@ -832,7 +832,7 @@ void WebContentsViewAura::EndDrag(
   CHECK(window);
 
   gfx::PointF screen_loc =
-      gfx::PointF(display::Screen::GetScreen()->GetCursorScreenPoint());
+      gfx::PointF(display::Screen::Get()->GetCursorScreenPoint());
   gfx::PointF client_loc = screen_loc;
   aura::client::ScreenPositionClient* screen_position_client =
       aura::client::GetScreenPositionClient(window->GetRootWindow());
@@ -1424,7 +1424,7 @@ void WebContentsViewAura::DragEnteredCallback(
   }
 
   DCHECK(transformed_pt.has_value());
-  gfx::PointF screen_pt(display::Screen::GetScreen()->GetCursorScreenPoint());
+  gfx::PointF screen_pt(display::Screen::Get()->GetCursorScreenPoint());
   current_rwh_for_drag_->DragTargetDragEnter(
       *current_drag_data_, transformed_pt.value(), screen_pt, op_mask,
       ui::EventFlagsToWebEventModifiers(drop_metadata.flags),
@@ -1664,7 +1664,7 @@ void WebContentsViewAura::PerformDropCallback(
 
   DCHECK(transformed_pt.has_value());
 
-  gfx::PointF screen_pt(display::Screen::GetScreen()->GetCursorScreenPoint());
+  gfx::PointF screen_pt(display::Screen::Get()->GetCursorScreenPoint());
   if (target_rwh != current_rwh_for_drag_.get()) {
     if (current_rwh_for_drag_)
       current_rwh_for_drag_->DragTargetDragLeave(transformed_pt.value(),
@@ -1787,9 +1787,9 @@ void WebContentsViewAura::CompleteDrop(OnPerformingDropContext drop_context) {
              key_modifiers,
              /*drop_allowed=*/true);
   }
-  VivaldiEventHooks::HandleDragEnd(web_contents_, ui::mojom::DragOperation::kNone,
-                                   drop_context.screen_pt.x(),
-                                   drop_context.screen_pt.y());
+  VivaldiEventHooks::HandleDragEnd(web_contents_, false,
+                                   drop_context.transformed_pt->x(),
+                                   drop_context.transformed_pt->y());
 }
 
 void WebContentsViewAura::PerformDropOrExitDrag(

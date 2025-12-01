@@ -5,8 +5,8 @@
 #import "base/feature_list.h"
 #import "components/signin/internal/identity_manager/account_capabilities_constants.h"
 #import "components/supervised_user/core/common/supervised_user_constants.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_ui_test_util.h"
+#import "ios/chrome/browser/authentication/test/signin_earl_grey.h"
+#import "ios/chrome/browser/authentication/test/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/browser/policy/model/policy_earl_grey_matchers.h"
 #import "ios/chrome/browser/popup_menu/ui_bundled/popup_menu_constants.h"
@@ -102,14 +102,6 @@ id<GREYMatcher> SupervisedIncognitoMessage() {
 
   [[EarlGrey selectElementWithMatcher:ShowTabsButton()]
       performAction:grey_longPress()];
-  if (@available(iOS 26, *)) {
-    // TODO(crbug.com/428928323): Investigate why the keyboard appears. Remove
-    // this workaround when it's not needed anymore.
-    // On iOS 26, the keyboard appears when the change font family button is
-    // tapped and it hides the elements behind. Close the keyboard by typing a
-    // return key.
-    [ChromeEarlGrey simulatePhysicalKeyboardEvent:@"\\n" flags:0];
-  }
 
   policy::AssertButtonInCollectionEnabled(IDS_IOS_TOOLS_MENU_NEW_TAB);
   policy::AssertButtonInCollectionDisabled(
@@ -123,14 +115,6 @@ id<GREYMatcher> SupervisedIncognitoMessage() {
 
   [[EarlGrey selectElementWithMatcher:ShowTabsButton()]
       performAction:grey_longPress()];
-  if (@available(iOS 26, *)) {
-    // TODO(crbug.com/428928323): Investigate why the keyboard appears. Remove
-    // this workaround when it's not needed anymore.
-    // On iOS 26, the keyboard appears when the change font family button is
-    // tapped and it hides the elements behind. Close the keyboard by typing a
-    // return key.
-    [ChromeEarlGrey simulatePhysicalKeyboardEvent:@"\\n" flags:0];
-  }
 
   policy::AssertButtonInCollectionEnabled(IDS_IOS_TOOLS_MENU_NEW_TAB);
   policy::AssertButtonInCollectionEnabled(IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB);
@@ -171,17 +155,15 @@ id<GREYMatcher> SupervisedIncognitoMessage() {
                                    grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
 
-  // Wait for the Family Link page to finish loading.
-  [ChromeEarlGrey waitForPageToFinishLoading];
+  // The Family Link url will load in a new tab.
+  [ChromeEarlGrey waitForMainTabCount:2];
 
-  // For testing, there will be a redirect to the main Family Link website and
-  // thus we only compare the hostnames.
-  std::string expectedHostname =
-      GURL(supervised_user::kManagedByParentUiMoreInfoUrl).host();
-  GREYAssertEqual([ChromeEarlGrey webStateLastCommittedURL].host(),
-                  expectedHostname,
-                  @"Did not open the correct Learn more URL with hostname %s",
-                  expectedHostname.c_str());
+  GURL currentURL = [ChromeEarlGrey webStateVisibleURL];
+  GURL expectedURL = GURL(supervised_user::kManagedByParentUiMoreInfoUrl);
+  GREYAssertEqual(
+      expectedURL, currentURL,
+      @"Page navigated unexpectedly to %s, instead of the Family Link website",
+      currentURL.spec().c_str());
 
   GREYAssertNil([MetricsAppInterface
                     expectTotalCount:1

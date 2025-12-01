@@ -120,6 +120,7 @@ static constexpr base::TimeDelta kConfirmationStateDurationIfVoiceOverRunning =
   NSString* cardNumber = [NSString
       stringWithFormat:@"•••• %@", base::SysUTF16ToNSString(
                                        delegate->card_last_four_digits())];
+  NSString* cardCvc = base::SysUTF16ToNSString(delegate->card_cvc());
 
   // Only allow editing if the card will be uploaded and it hasn't been
   // previously saved.
@@ -135,6 +136,7 @@ static constexpr base::TimeDelta kConfirmationStateDurationIfVoiceOverRunning =
         base::SysUTF16ToNSString(delegate->expiration_date_month()),
     kExpirationYearPrefKey :
         base::SysUTF16ToNSString(delegate->expiration_date_year()),
+    kCardCvcPrefKey : cardCvc,
     kLegalMessagesPrefKey : [self legalMessages],
     kCurrentCardSaveAcceptedPrefKey : @(infobar->accepted()),
     kSupportsEditingPrefKey : @(supportsEditing),
@@ -171,7 +173,7 @@ static constexpr base::TimeDelta kConfirmationStateDurationIfVoiceOverRunning =
 - (void)creditCardUploadCompleted:(BOOL)card_saved {
   if (!_loadingDismissedByUser) {
     autofill::autofill_metrics::LogCreditCardUploadLoadingViewResultMetric(
-        autofill::autofill_metrics::SaveCardPromptResult::kNotInteracted);
+        autofill::autofill_metrics::LegacySaveCardPromptResult::kNotInteracted);
   }
   if (card_saved) {
     autofill::autofill_metrics::LogCreditCardUploadConfirmationViewShownMetric(
@@ -208,7 +210,8 @@ static constexpr base::TimeDelta kConfirmationStateDurationIfVoiceOverRunning =
 
 - (void)saveCardWithCardholderName:(NSString*)cardholderName
                    expirationMonth:(NSString*)month
-                    expirationYear:(NSString*)year {
+                    expirationYear:(NSString*)year
+                           cardCvc:(NSString*)cardCvc {
   autofill::AutofillSaveCardInfoBarDelegateIOS* delegate =
       self.saveCardDelegate;
   InfoBarIOS* infobar = GetOverlayRequestInfobar(self.request);
@@ -219,7 +222,7 @@ static constexpr base::TimeDelta kConfirmationStateDurationIfVoiceOverRunning =
 
   infobar->set_accepted(delegate->UpdateAndAccept(
       base::SysNSStringToUTF16(cardholderName), base::SysNSStringToUTF16(month),
-      base::SysNSStringToUTF16(year), /*cvc=*/u""));
+      base::SysNSStringToUTF16(year), base::SysNSStringToUTF16(cardCvc)));
 
   if (delegate->is_for_upload()) {
     autofill::autofill_metrics::LogCreditCardUploadLoadingViewShownMetric(
@@ -270,7 +273,7 @@ static constexpr base::TimeDelta kConfirmationStateDurationIfVoiceOverRunning =
     } else {
       _loadingDismissedByUser = YES;
       autofill::autofill_metrics::LogCreditCardUploadLoadingViewResultMetric(
-          autofill::autofill_metrics::SaveCardPromptResult::kClosed);
+          autofill::autofill_metrics::LegacySaveCardPromptResult::kClosed);
     }
   } else {
     autofill::AutofillSaveCardInfoBarDelegateIOS* delegate =
@@ -304,8 +307,9 @@ static constexpr base::TimeDelta kConfirmationStateDurationIfVoiceOverRunning =
 - (void)onConfirmationClosedWithAutoClose:(BOOL)autoClosed {
   autofill::autofill_metrics::LogCreditCardUploadConfirmationViewResultMetric(
       autoClosed
-          ? autofill::autofill_metrics::SaveCardPromptResult::kNotInteracted
-          : autofill::autofill_metrics::SaveCardPromptResult::kClosed,
+          ? autofill::autofill_metrics::LegacySaveCardPromptResult::
+                kNotInteracted
+          : autofill::autofill_metrics::LegacySaveCardPromptResult::kClosed,
       /*is_card_uploaded=*/true);
   _autoCloseConfirmationTimer.Stop();
   if (!self.saveCardDelegate) {

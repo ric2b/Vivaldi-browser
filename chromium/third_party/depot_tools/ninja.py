@@ -32,7 +32,7 @@ def find_ninja_in_path():
             return ninja_path
 
 
-def check_out_dir(ninja_args):
+def parse_args(ninja_args):
     out_dir = "."
     tool = ""
     for i, arg in enumerate(ninja_args):
@@ -44,6 +44,10 @@ def check_out_dir(ninja_args):
             out_dir = ninja_args[i + 1]
         elif arg.startswith("-C"):
             out_dir = arg[2:]
+    return tool, out_dir
+
+
+def check_out_dir(tool, out_dir):
     if tool in ["list", "commands", "inputs", "targets"]:
         # These tools are just inspect ninja rules and not modify out dir.
         # TODO: b/339320220 - implement these in siso
@@ -68,11 +72,11 @@ def check_out_dir(ninja_args):
             sys.exit(1)
 
 
-def fallback(ninja_args):
+def fallback(tool, out_dir, ninja_args):
     # Try to find ninja in PATH.
     ninja_path = find_ninja_in_path()
     if ninja_path:
-        check_out_dir(ninja_args)
+        check_out_dir(tool, out_dir)
         return caffeinate.run([ninja_path] + ninja_args)
 
     print(
@@ -105,9 +109,11 @@ def main(args):
         os.environ.pop("LIBRARY_PATH", None)
         os.environ.pop("SDKROOT", None)
 
+    tool, out_dir = parse_args(args[1:])
+
     # Get gclient root + src.
-    primary_solution_path = gclient_paths.GetPrimarySolutionPath()
-    gclient_root_path = gclient_paths.FindGclientRoot(os.getcwd())
+    primary_solution_path = gclient_paths.GetPrimarySolutionPath(out_dir)
+    gclient_root_path = gclient_paths.FindGclientRoot(out_dir)
     gclient_src_root_path = None
     if gclient_root_path:
         gclient_src_root_path = os.path.join(gclient_root_path, "src")
@@ -123,10 +129,10 @@ def main(args):
             "ninja" + gclient_paths.GetExeSuffix(),
         )
         if os.path.isfile(ninja_path):
-            check_out_dir(args[1:])
+            check_out_dir(tool, out_dir)
             return caffeinate.run([ninja_path] + args[1:])
 
-    return fallback(args[1:])
+    return fallback(tool, out_dir, args[1:])
 
 
 if __name__ == "__main__":

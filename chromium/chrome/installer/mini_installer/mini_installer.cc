@@ -924,13 +924,6 @@ ProcessExitResult WMain(HMODULE module) {
       UnpackBinaryResources(module, base_path.get(), setup_path, setup_type,
                             archive_path, archive_type, max_delete_attempts);
 
-#ifdef VIVALDI_BUILD
-  if (g_vivaldi_has_unpack_switch) {
-    // Exit now as we unpacked the files.
-    return exit_code;
-  }
-#endif
-
   // If a compressed setup patch was found, run the previous setup.exe to
   // patch and generate the new setup.exe.
   if (exit_code.IsSuccess() && setup_type.compare(kLZMAResourceType) == 0) {
@@ -947,6 +940,13 @@ ProcessExitResult WMain(HMODULE module) {
       setup_path.clear();
     }
   }
+
+#ifdef VIVALDI_BUILD
+  if (g_vivaldi_has_unpack_switch) {
+    // Exit now as we unpacked the files.
+    return exit_code;
+  }
+#endif
 
   // While unpacking the binaries, we paged in a whole bunch of memory that
   // we don't need anymore.  Let's give it back to the pool before running

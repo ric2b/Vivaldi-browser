@@ -37,38 +37,23 @@ static int cbs_apv_get_num_comp(const APVRawFrameHeader *fh)
     }
 }
 
-static void cbs_apv_derive_tile_info(APVDerivedTileInfo *ti,
+static void cbs_apv_derive_tile_info(CodedBitstreamContext *ctx,
                                      const APVRawFrameHeader *fh)
 {
+    CodedBitstreamAPVContext *priv = ctx->priv_data;
     int frame_width_in_mbs   = (fh->frame_info.frame_width  + 15) / 16;
     int frame_height_in_mbs  = (fh->frame_info.frame_height + 15) / 16;
-    int start_mb, i;
+    int tile_cols = (frame_width_in_mbs  + fh->tile_info.tile_width_in_mbs - 1)  / fh->tile_info.tile_width_in_mbs;
+    int tile_rows = (frame_height_in_mbs + fh->tile_info.tile_height_in_mbs - 1) / fh->tile_info.tile_height_in_mbs;
 
-    start_mb = 0;
-    for (i = 0; start_mb < frame_width_in_mbs; i++) {
-        ti->col_starts[i] = start_mb * APV_MB_WIDTH;
-        start_mb += fh->tile_info.tile_width_in_mbs;
-    }
-    av_assert0(i <= APV_MAX_TILE_COLS);
-    ti->col_starts[i] = frame_width_in_mbs * APV_MB_WIDTH;
-    ti->tile_cols = i;
+    av_assert0(tile_cols <= APV_MAX_TILE_COLS && tile_rows <= APV_MAX_TILE_ROWS);
 
-    start_mb = 0;
-    for (i = 0; start_mb < frame_height_in_mbs; i++) {
-        av_assert0(i < APV_MAX_TILE_ROWS);
-        ti->row_starts[i] = start_mb * APV_MB_HEIGHT;
-        start_mb += fh->tile_info.tile_height_in_mbs;
-    }
-    av_assert0(i <= APV_MAX_TILE_ROWS);
-    ti->row_starts[i] = frame_height_in_mbs * APV_MB_HEIGHT;
-    ti->tile_rows = i;
-
-    ti->num_tiles = ti->tile_cols * ti->tile_rows;
+    priv->num_tiles = tile_cols * tile_rows;
 }
 
 
 #define HEADER(name) do { \
-        ff_cbs_trace_header(ctx, name); \
+        CBS_FUNC(trace_header)(ctx, name); \
     } while (0)
 
 #define CHECK(call) do { \
@@ -95,6 +80,7 @@ static void cbs_apv_derive_tile_info(APVDerivedTileInfo *ti,
     } while (0)
 
 
+#if CBS_READ
 #define READ
 #define READWRITE read
 #define RWContext GetBitContext
@@ -102,7 +88,7 @@ static void cbs_apv_derive_tile_info(APVDerivedTileInfo *ti,
 
 #define xu(width, name, var, range_min, range_max, subs, ...) do { \
         uint32_t value; \
-        CHECK(ff_cbs_read_unsigned(ctx, rw, width, #name, \
+        CHECK(CBS_FUNC(read_unsigned)(ctx, rw, width, #name, \
                                    SUBSCRIPTS(subs, __VA_ARGS__), \
                                    &value, range_min, range_max)); \
         var = value; \
@@ -123,7 +109,9 @@ static void cbs_apv_derive_tile_info(APVDerivedTileInfo *ti,
 #undef xu
 #undef infer
 #undef byte_alignment
+#endif // CBS_READ
 
+#if CBS_WRITE
 #define WRITE
 #define READWRITE write
 #define RWContext PutBitContext
@@ -131,7 +119,7 @@ static void cbs_apv_derive_tile_info(APVDerivedTileInfo *ti,
 
 #define xu(width, name, var, range_min, range_max, subs, ...) do { \
         uint32_t value = var; \
-        CHECK(ff_cbs_write_unsigned(ctx, rw, width, #name, \
+        CHECK(CBS_FUNC(write_unsigned)(ctx, rw, width, #name, \
                                     SUBSCRIPTS(subs, __VA_ARGS__), \
                                     value, range_min, range_max)); \
     } while (0)
@@ -157,12 +145,14 @@ static void cbs_apv_derive_tile_info(APVDerivedTileInfo *ti,
 #undef xu
 #undef infer
 #undef byte_alignment
+#endif // CBS_WRITE
 
 
 static int cbs_apv_split_fragment(CodedBitstreamContext *ctx,
                                   CodedBitstreamFragment *frag,
                                   int header)
 {
+#if CBS_READ
     uint8_t *data = frag->data;
     size_t   size = frag->data_size;
     uint32_t signature;
@@ -234,7 +224,7 @@ static int cbs_apv_split_fragment(CodedBitstreamContext *ctx,
 
         // Could select/skip frames based on type/group_id here.
 
-        err = ff_cbs_append_unit_data(frag, pbu_header.pbu_type,
+        err = CBS_FUNC(append_unit_data)(frag, pbu_header.pbu_type,
                                       data, pbu_size, frag->data_ref);
         if (err < 0)
             goto fail;
@@ -247,11 +237,15 @@ static int cbs_apv_split_fragment(CodedBitstreamContext *ctx,
 fail:
     ctx->trace_enable = trace;
     return err;
+#else
+    return AVERROR(ENOSYS);
+#endif
 }
 
 static int cbs_apv_read_unit(CodedBitstreamContext *ctx,
                              CodedBitstreamUnit *unit)
 {
+#if CBS_READ
     GetBitContext gbc;
     int err;
 
@@ -259,7 +253,7 @@ static int cbs_apv_read_unit(CodedBitstreamContext *ctx,
     if (err < 0)
         return err;
 
-    err = ff_cbs_alloc_unit_content(ctx, unit);
+    err = CBS_FUNC(alloc_unit_content)(ctx, unit);
     if (err < 0)
         return err;
 
@@ -310,12 +304,16 @@ static int cbs_apv_read_unit(CodedBitstreamContext *ctx,
     }
 
     return 0;
+#else
+    return AVERROR(ENOSYS);
+#endif
 }
 
 static int cbs_apv_write_unit(CodedBitstreamContext *ctx,
                               CodedBitstreamUnit *unit,
                               PutBitContext *pbc)
 {
+#if CBS_WRITE
     int err;
 
     switch (unit->type) {
@@ -358,11 +356,15 @@ static int cbs_apv_write_unit(CodedBitstreamContext *ctx,
     }
 
     return 0;
+#else
+    return AVERROR(ENOSYS);
+#endif
 }
 
 static int cbs_apv_assemble_fragment(CodedBitstreamContext *ctx,
                                      CodedBitstreamFragment *frag)
 {
+#if CBS_WRITE
     size_t size = 4, pos;
 
     for (int i = 0; i < frag->nb_units; i++)
@@ -388,6 +390,9 @@ static int cbs_apv_assemble_fragment(CodedBitstreamContext *ctx,
     frag->data_size = size;
 
     return 0;
+#else
+    return AVERROR(ENOSYS);
+#endif
 }
 
 
@@ -441,7 +446,7 @@ static const CodedBitstreamUnitTypeDescriptor cbs_apv_unit_types[] = {
     CBS_UNIT_TYPE_END_OF_LIST
 };
 
-const CodedBitstreamType ff_cbs_type_apv = {
+const CodedBitstreamType CBS_FUNC(type_apv) = {
     .codec_id          = AV_CODEC_ID_APV,
 
     .priv_data_size    = sizeof(CodedBitstreamAPVContext),

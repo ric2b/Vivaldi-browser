@@ -56,6 +56,7 @@ using GainMapPtr = std::unique_ptr<avifGainMap, UniquePtrDeleter>;
 "IOStats" = "avifIOStats"
 "ImageTiming" = "avifImageTiming"
 "MatrixCoefficients" = "avifMatrixCoefficients"
+"HeaderFormat" = "avifHeaderFormat"
 "PixelFormat" = "avifPixelFormat"
 "ProgressiveState" = "avifProgressiveState"
 "ScalingMode" = "avifScalingMode"
@@ -82,7 +83,6 @@ include = [
   "avifChannelIndex",
   "avifCodecFlag",
   "avifCodecFlags",
-  "avifHeaderFormat",
   "avifPlanesFlag",
   "avifPlanesFlags",
   "avifStrictFlag",

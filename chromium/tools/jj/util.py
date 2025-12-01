@@ -2,7 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import collections
 import logging
+import re
 import subprocess
 
 # CSV-file like separators. The templating language doesn't support escaping,
@@ -10,6 +12,8 @@ import subprocess
 # https://en.wikipedia.org/wiki/C0_and_C1_control_codes#Field_separators
 _NEWLINE = '\x1e'
 _COMMA = '\x1f'
+
+_TRAILER = re.compile(r'([a-zA-Z0-9\-_]+): (.*)')
 
 
 def run_command(args: list[str],
@@ -23,8 +27,17 @@ def run_command(args: list[str],
   return ps
 
 
+def run_jj(args: list[str],
+           ignore_working_copy=False,
+           **kwargs) -> subprocess.CompletedProcess:
+  prefix = ['jj', '--no-pager']
+  if ignore_working_copy:
+    prefix.append('--ignore-working-copy')
+  return run_command(prefix + args, **kwargs)
+
+
 def _log(args: list[str], templates: dict[str, str],
-         ignore_working_copy: bool) -> list[dict[str, str]]:
+         **kwargs) -> list[dict[str, str]]:
   """Log acts akin to a database query on a table.
 
   The user will provide templates such as {
@@ -44,13 +57,12 @@ def _log(args: list[str], templates: dict[str, str],
   # We're just creating a jj template that outputs CSV files.
   template = f' ++ "{_COMMA}" ++ '.join(templates)
   template += f' ++ "{_NEWLINE}"'
-  if ignore_working_copy:
-    args.append('--ignore-working-copy')
 
-  stdout = run_command(
-      ['jj', *args, '--no-pager', '--no-graph', '-T', template],
+  stdout = run_jj(
+      [*args, '--no-graph', '-T', template],
       stdout=subprocess.PIPE,
       text=True,
+      **kwargs,
   ).stdout
 
   # Now we parse our CSV file.
@@ -63,10 +75,24 @@ def _log(args: list[str], templates: dict[str, str],
 def jj_log(*,
            templates: dict[str, str],
            revisions='@',
-           ignore_working_copy=False) -> list[dict[str, str]]:
+           **kwargs) -> list[dict[str, str]]:
   """Retrieves information about jj revisions.
 
   See _log for details."""
-  return _log(['log', '-r', revisions],
-              templates,
-              ignore_working_copy=ignore_working_copy)
+  return _log(['log', '-r', revisions], templates, **kwargs)
+
+
+def split_description(description: str) -> tuple[str, dict[str, list[str]]]:
+  """Splits a description into the description and git trailers."""
+  trailers = collections.defaultdict(list)
+  user_desc, sep, trailer_paragraph = description.rstrip().rpartition('\n\n')
+
+  trailer_lines = trailer_paragraph.lstrip().split('\n')
+  # Note: for multiline values, we only retrieve the first line here.
+  for line in trailer_lines:
+    match = _TRAILER.match(line)
+    if match is not None:
+      trailers[match.group(1)].append(match.group(2))
+  if not trailers:
+    return description, {}
+  return user_desc, trailers

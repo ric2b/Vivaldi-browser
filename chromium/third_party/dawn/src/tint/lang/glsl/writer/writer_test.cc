@@ -110,8 +110,7 @@ TEST_F(GlslWriterTest, StripAllNames_CombinedTextureSamplerName) {
     Options options;
     options.strip_all_names = true;
     options.bindings.sampler_texture_to_name.insert(
-        {binding::CombinedTextureSamplerPair{texture_bp, sampler_bp},
-         "tint_combined_texture_sampler"});
+        {CombinedTextureSamplerPair{texture_bp, sampler_bp}, "tint_combined_texture_sampler"});
     ASSERT_TRUE(Generate(options)) << err_ << output_.glsl;
     EXPECT_EQ(output_.glsl, GlslHeader() + R"(precision highp float;
 precision highp int;
@@ -121,6 +120,18 @@ void main() {
   vec4 v = texture(tint_combined_texture_sampler, vec2(0.0f));
 }
 )");
+}
+
+TEST_F(GlslWriterTest, CanGenerate_TexelBufferUnsupported) {
+    auto* buffer_ty = ty.texel_buffer(core::TexelFormat::kRgba8Unorm, core::Access::kRead);
+    auto* var = b.Var("buf", ty.ptr<handle>(buffer_ty));
+    mod.root_block->Append(var);
+
+    Options options;
+    auto result = CanGenerate(mod, options);
+    ASSERT_NE(result, Success);
+    EXPECT_THAT(result.Failure().reason,
+                testing::HasSubstr("texel buffers are not supported by the GLSL backend"));
 }
 
 }  // namespace

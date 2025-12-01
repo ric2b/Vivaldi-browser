@@ -6,6 +6,7 @@
 
 #include <tuple>
 
+#include "base/notreached.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
@@ -13,6 +14,7 @@
 #include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/texture_manager.h"
+#include "gpu/config/gpu_finch_features.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/gpu/MutableTextureState.h"
@@ -26,6 +28,10 @@
 
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "gpu/vulkan/vulkan_fence_helper.h"
+#endif
+
+#if BUILDFLAG(IS_WIN)
+#include "ui/gfx/win/d3d_shared_fence.h"
 #endif
 
 namespace gpu {
@@ -71,6 +77,13 @@ CreateGraphiteSkImageReleaseProc(
   return {wrapped_release_proc, wrapped_release_context};
 }
 }  // namespace
+
+SkiaImageRepresentation::GraphiteTextureHolder::GraphiteTextureHolder(
+    skgpu::graphite::BackendTexture texture)
+    : texture_(std::move(texture)) {}
+
+SkiaImageRepresentation::GraphiteTextureHolder::~GraphiteTextureHolder() =
+    default;
 
 ///////////////////////////////////////////////////////////////////////////////
 // SharedImageRepresentation
@@ -214,6 +227,21 @@ bool SkiaImageRepresentation::SupportsMultipleConcurrentReadAccess() {
   return false;
 }
 
+bool SkiaImageRepresentation::SupportsDeferredGraphiteSubmit() {
+  return false;
+}
+
+bool SkiaImageRepresentation::NeedGraphiteContextSubmitBeforeEndAccess() {
+  if (!features::kSkiaGraphiteEnableDeferredSubmit.Get()) {
+    // If deferred submit is disabled, then a submit is always required.
+    return true;
+  }
+
+  //  If the backing can support deferred submissions, then we don't need to
+  //  submit before EndAccess().
+  return !SupportsDeferredGraphiteSubmit();
+}
+
 SkiaImageRepresentation::ScopedWriteAccess::ScopedWriteAccess(
     SkiaImageRepresentation* representation,
     std::vector<sk_sp<SkSurface>> surfaces)
@@ -287,11 +315,6 @@ SkiaGaneshImageRepresentation::SkiaGaneshImageRepresentation(
     MemoryTypeTracker* tracker)
     : SkiaImageRepresentation(manager, backing, tracker),
       gr_context_(gr_context) {}
-
-bool SkiaGaneshImageRepresentation::NeedGraphiteContextSubmitBeforeEndAccess() {
-  // Ganesh shouldn't need a Graphite context submit.
-  return false;
-}
 
 SkiaGaneshImageRepresentation::ScopedGaneshWriteAccess::ScopedGaneshWriteAccess(
     base::PassKey<SkiaGaneshImageRepresentation> /* pass_key */,
@@ -567,12 +590,6 @@ SkiaGraphiteImageRepresentation::SkiaGraphiteImageRepresentation(
     MemoryTypeTracker* tracker)
     : SkiaImageRepresentation(manager, backing, tracker) {}
 
-bool SkiaGraphiteImageRepresentation::
-    NeedGraphiteContextSubmitBeforeEndAccess() {
-  // As default, assume Graphite context submit is needed.
-  return true;
-}
-
 SkiaGraphiteImageRepresentation::ScopedGraphiteWriteAccess::
     ScopedGraphiteWriteAccess(
         base::PassKey<SkiaGraphiteImageRepresentation> /* pass_key */,
@@ -808,12 +825,48 @@ std::string SkiaGraphiteImageRepresentation::WrappedTextureDebugLabel(
 ///////////////////////////////////////////////////////////////////////////////
 // WebNNTensorRepresentation
 
+WebNNTensorRepresentation::ScopedAccess::ScopedAccess(
+    base::PassKey<WebNNTensorRepresentation> /* pass_key */,
+    WebNNTensorRepresentation* representation,
+    AccessMode access_mode)
+    : ScopedAccessBase(representation, access_mode) {}
+
+WebNNTensorRepresentation::ScopedAccess::~ScopedAccess() {
+  representation()->EndAccess();
+}
+
+#if BUILDFLAG(IS_WIN)
+scoped_refptr<gfx::D3DSharedFence>
+WebNNTensorRepresentation::ScopedAccess::GetAcquireFence() const {
+  return representation()->GetAcquireFence();
+}
+void WebNNTensorRepresentation::ScopedAccess::SetReleaseFence(
+    scoped_refptr<gfx::D3DSharedFence> release_fence) {
+  representation()->SetReleaseFence(std::move(release_fence));
+}
+#endif
+
+std::unique_ptr<WebNNTensorRepresentation::ScopedAccess>
+WebNNTensorRepresentation::BeginScopedAccess() {
+  if (!BeginAccess()) {
+    return nullptr;
+  }
+  return std::make_unique<ScopedAccess>(
+      base::PassKey<WebNNTensorRepresentation>(), this, AccessMode::kWrite);
+}
+
 #if BUILDFLAG(IS_WIN)
 Microsoft::WRL::ComPtr<ID3D12Resource>
 WebNNTensorRepresentation::GetD3D12Buffer() const {
   NOTREACHED();
 }
 #endif
+
+#if BUILDFLAG(IS_APPLE)
+IOSurfaceRef WebNNTensorRepresentation::GetIOSurface() const {
+  NOTREACHED();
+}
+#endif  // BUILDFLAG(IS_APPLE)
 
 ///////////////////////////////////////////////////////////////////////////////
 // OverlayImageRepresentation

@@ -5,12 +5,21 @@
 #ifndef COMPONENTS_ENTERPRISE_CONNECTORS_CORE_REPORTING_UTILS_H_
 #define COMPONENTS_ENTERPRISE_CONNECTORS_CORE_REPORTING_UTILS_H_
 
+#include "components/enterprise/buildflags/buildflags.h"
 #include "components/enterprise/common/proto/synced/browser_events.pb.h"
 #include "components/enterprise/connectors/core/common.h"
 #include "components/safe_browsing/core/common/proto/realtimeapi.pb.h"
 #include "components/url_matcher/url_matcher.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
+
+#if BUILDFLAG(ENTERPRISE_DATA_CONTROLS)
+#include "components/enterprise/data_controls/core/browser/verdict.h"
+#endif  // BUILDFLAG(ENTERPRISE_DATA_CONTROLS)
+
+namespace base {
+class Time;
+}
 
 namespace enterprise_connectors {
 
@@ -19,6 +28,8 @@ inline constexpr int kReferrerUserGestureLimit = 5;
 
 using ReferrerChain =
     google::protobuf::RepeatedPtrField<safe_browsing::ReferrerChainEntry>;
+
+using FrameUrlChain = google::protobuf::RepeatedPtrField<std::string>;
 
 // Helper functions that compiles information into event protos. The
 // logic is shared across platforms to ensure event consistency.
@@ -132,14 +143,35 @@ chrome::cros::reporting::proto::DlpSensitiveDataEvent GetDlpSensitiveDataEvent(
     const std::string& trigger,
     const std::string& scan_id,
     const std::string& content_transfer_method,
-    const std::string& source_email,
+    const std::string& source_active_user_email,
     const std::string& content_area_account_email,
     const std::string& profile_identifier,
     const std::string& profile_username,
+    std::optional<std::u16string> user_justification,
     const int64_t content_size,
     const ContentAnalysisResponse::Result& result,
     const ReferrerChain& referrer_chain,
+    const FrameUrlChain& frame_url_chain,
     EventResult event_result);
+
+chrome::cros::reporting::proto::SafeBrowsingDangerousDownloadEvent
+GetDangerousDownloadEvent(const GURL& url,
+                          const GURL& tab_url,
+                          const std::string& source,
+                          const std::string& destination,
+                          const std::string& file_name,
+                          const std::string& download_digest_sha256,
+                          const std::string& threat_type,
+                          const std::string& mime_type,
+                          const std::string& trigger,
+                          const std::string& scan_id,
+                          const std::string& content_transfer_method,
+                          const std::string& profile_identifier,
+                          const std::string& profile_username,
+                          const int64_t content_size,
+                          const ReferrerChain& referrer_chain,
+                          const FrameUrlChain& frame_url_chain,
+                          EventResult event_result);
 
 chrome::cros::reporting::proto::BrowserCrashEvent GetBrowserCrashEvent(
     const std::string& channel,
@@ -147,11 +179,33 @@ chrome::cros::reporting::proto::BrowserCrashEvent GetBrowserCrashEvent(
     const std::string& report_id,
     const std::string& platform);
 
+#if BUILDFLAG(ENTERPRISE_DATA_CONTROLS)
+chrome::cros::reporting::proto::DlpSensitiveDataEvent
+GetDataControlsSensitiveDataEvent(
+    const GURL& url,
+    const GURL& tab_url,
+    const std::string& source,
+    const std::string& destination,
+    const std::string& mime_type,
+    const std::string& trigger,
+    const std::string& source_active_user_email,
+    const std::string& content_area_account_email,
+    const std::string& profile_identifier,
+    const std::string& profile_username,
+    int64_t content_size,
+    const data_controls::Verdict::TriggeredRules& triggered_rules,
+    EventResult event_result);
+#endif  // BUILDFLAG(ENTERPRISE_DATA_CONTROLS)
+
 // Returns a list of the local IPv4 and IPv6 addresses of the device.
 std::vector<std::string> GetLocalIpAddresses();
 
 void AddReferrerChainToEvent(const ReferrerChain& referrer_chain,
                              base::Value::Dict& event);
+
+void AddFrameUrlChainToEvent(
+    const google::protobuf::RepeatedPtrField<std::string>& frame_url_chain,
+    base::Value::Dict& event);
 
 }  // namespace enterprise_connectors
 

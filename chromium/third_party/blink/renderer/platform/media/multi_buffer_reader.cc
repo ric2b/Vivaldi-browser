@@ -161,8 +161,8 @@ void MultiBufferReader::CheckWait() {
     // there are no callbacks from us after we've been destroyed.
     current_wait_size_ = 0;
     task_runner_->PostTask(
-        FROM_HERE, WTF::BindOnce(&MultiBufferReader::Call,
-                                 weak_factory_.GetWeakPtr(), std::move(cb_)));
+        FROM_HERE, blink::BindOnce(&MultiBufferReader::Call,
+                                   weak_factory_.GetWeakPtr(), std::move(cb_)));
   }
 }
 
@@ -171,13 +171,15 @@ void MultiBufferReader::Call(base::OnceClosure cb) const {
 }
 
 void MultiBufferReader::UpdateEnd(MultiBufferBlockId p) {
-  auto i = multibuffer_->map().find(p - 1);
-  if (i != multibuffer_->map().end() && i->second->end_of_stream()) {
-    // This is an upper limit because the last-to-one block is allowed
-    // to be smaller than the rest of the blocks.
-    int64_t size_upper_limit = static_cast<int64_t>(p)
-                               << multibuffer_->block_size_shift();
-    end_ = std::min(end_, size_upper_limit);
+  if (p > 0) {
+    auto i = multibuffer_->map().find(p - 1);
+    if (i != multibuffer_->map().end() && i->value->end_of_stream()) {
+      // This is an upper limit because the last-to-one block is allowed
+      // to be smaller than the rest of the blocks.
+      int64_t size_upper_limit = static_cast<int64_t>(p)
+                                 << multibuffer_->block_size_shift();
+      end_ = std::min(end_, size_upper_limit);
+    }
   }
 }
 
@@ -191,12 +193,12 @@ void MultiBufferReader::NotifyAvailableRange(
   if (!progress_callback_.is_null()) {
     task_runner_->PostTask(
         FROM_HERE,
-        WTF::BindOnce(progress_callback_,
-                      static_cast<int64_t>(range.begin)
-                          << multibuffer_->block_size_shift(),
-                      (static_cast<int64_t>(range.end)
-                       << multibuffer_->block_size_shift()) +
-                          multibuffer_->UncommittedBytesAt(range.end)));
+        blink::BindOnce(progress_callback_,
+                        static_cast<int64_t>(range.begin)
+                            << multibuffer_->block_size_shift(),
+                        (static_cast<int64_t>(range.end)
+                         << multibuffer_->block_size_shift()) +
+                            multibuffer_->UncommittedBytesAt(range.end)));
   }
 }
 

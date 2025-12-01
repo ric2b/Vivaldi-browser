@@ -189,7 +189,7 @@ MotionEventAndroid::MotionEventAndroid(
       for_touch_handle_(for_touch_handle),
       cached_oldest_event_time_(FromAndroidTime(oldest_event_time)),
       cached_latest_event_time_(FromAndroidTime(latest_event_time)),
-      cached_down_time_ms_(FromAndroidTime(down_time_ms)),
+      cached_down_time_ms_(down_time_ms),
       cached_action_(FromAndroidAction(android_action)),
       cached_pointer_count_(pointer_count),
       cached_history_size_(ToValidHistorySize(history_size, cached_action_)),
@@ -279,6 +279,22 @@ float MotionEventAndroid::GetTickMultiplier() const {
 
 float MotionEventAndroid::GetRawXPix(size_t pointer_index) const {
   return GetRawX(pointer_index) / pix_to_dip();
+}
+
+float MotionEventAndroid::GetXPix(size_t pointer_index) const {
+  DCHECK_LT(pointer_index, GetPointerCount());
+  if (IsPointerCacheable(pointer_index)) {
+    return GetCachedPointerPosition(pointer_index).x() / pix_to_dip();
+  }
+  return source()->GetXPix(pointer_index);
+}
+
+float MotionEventAndroid::GetYPix(size_t pointer_index) const {
+  DCHECK_LT(pointer_index, GetPointerCount());
+  if (IsPointerCacheable(pointer_index)) {
+    return GetCachedPointerPosition(pointer_index).y() / pix_to_dip();
+  }
+  return source()->GetYPix(pointer_index);
 }
 
 ScopedJavaLocalRef<jobject> MotionEventAndroid::GetJavaObject() const {
@@ -386,9 +402,17 @@ float MotionEventAndroid::GetTiltY(size_t pointer_index) const {
   return tilt_y;
 }
 
-base::TimeTicks MotionEventAndroid::GetDownTime() const {
+base::TimeTicks MotionEventAndroid::GetRawDownTime() const {
   CHECK(!cached_down_time_ms_.is_null());
   return cached_down_time_ms_;
+}
+
+float MotionEventAndroid::GetPressure(size_t pointer_index) const {
+  DCHECK_LT(pointer_index, GetPointerCount());
+  if (IsPointerCacheable(pointer_index)) {
+    return GetCachedPointerPressure(pointer_index);
+  }
+  return source()->GetPressure(pointer_index);
 }
 
 float MotionEventAndroid::GetTangentialPressure(size_t pointer_index) const {

@@ -367,10 +367,15 @@ fn find_conversion_function(
     }
 }
 
-#[cfg_attr(feature = "disable_cfi", no_sanitize(cfi))]
-pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResult<bool> {
+// Converts YUV(A) samples to RGB(A).
+// Returns Ok(Some(true)) if the whole conversion was performed.
+// Returns Ok(Some(false)) if only YUV was converted and alpha
+// needs to be imported separately.
+// Returns Ok(None) if the conversion is not implemented.
+#[cfg_attr(feature = "disable_cfi", sanitize(cfi = "off"))]
+pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResult<Option<bool>> {
     if (rgb.depth != 8 && rgb.depth != 10) || !image.depth_valid() {
-        return Err(AvifError::NotImplemented);
+        return Ok(None); // Not implemented.
     }
     if rgb.depth == 10
         && (!matches!(
@@ -378,14 +383,19 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
             PixelFormat::AndroidP010 | PixelFormat::Yuv420
         ) || rgb.format != Format::Rgba1010102)
     {
-        return Err(AvifError::NotImplemented);
+        return Ok(None); // Not implemented.
     }
 
-    let (matrix_yuv, matrix_yvu) = find_constants(image).ok_or(AvifError::NotImplemented)?;
+    let (matrix_yuv, matrix_yvu) = match find_constants(image) {
+        Some((matrix_yuv, matrix_yvu)) => (matrix_yuv, matrix_yvu),
+        None => return Ok(None), // Not implemented.
+    };
     let alpha_preferred = rgb.has_alpha() && image.has_alpha();
     let conversion_function =
-        find_conversion_function(image.yuv_format, image.depth, rgb, alpha_preferred)
-            .ok_or(AvifError::NotImplemented)?;
+        match find_conversion_function(image.yuv_format, image.depth, rgb, alpha_preferred) {
+            Some(conversion_function) => conversion_function,
+            None => return Ok(None), // Not implemented.
+        };
     let is_yvu = matches!(rgb.format, Format::Rgb | Format::Rgba | Format::Argb);
     let matrix = if is_yvu { matrix_yvu } else { matrix_yuv };
     let u_plane_index: usize = if is_yvu { 2 } else { 1 };
@@ -529,9 +539,9 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
         };
         if high_bd_matched {
             return if result == 0 {
-                Ok(!image.has_alpha() || conversion_function.is_yuva())
+                Ok(Some(!image.has_alpha() || conversion_function.is_yuva()))
             } else {
-                Err(AvifError::ReformatFailed)
+                AvifError::reformat_failed()
             };
         }
         let mut image8 = image::Image::default();
@@ -625,9 +635,9 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
         };
     }
     if result == 0 {
-        Ok(!image.has_alpha() || conversion_function.is_yuva())
+        Ok(Some(!image.has_alpha() || conversion_function.is_yuva()))
     } else {
-        Err(AvifError::ReformatFailed)
+        AvifError::reformat_failed()
     }
 }
 
@@ -677,11 +687,11 @@ fn downshift_to_8bit(
 
 pub(crate) fn process_alpha(rgb: &mut rgb::Image, multiply: bool) -> AvifResult<()> {
     if rgb.depth != 8 {
-        return Err(AvifError::NotImplemented);
+        return AvifError::not_implemented();
     }
     match rgb.format {
         Format::Rgba | Format::Bgra => {}
-        _ => return Err(AvifError::NotImplemented),
+        _ => return AvifError::not_implemented(),
     }
     let result = unsafe {
         if multiply {
@@ -707,11 +717,11 @@ pub(crate) fn process_alpha(rgb: &mut rgb::Image, multiply: bool) -> AvifResult<
     if result == 0 {
         Ok(())
     } else {
-        Err(AvifError::ReformatFailed)
+        AvifError::reformat_failed()
     }
 }
 
-pub(crate) fn convert_to_half_float(rgb: &mut rgb::Image, scale: f32) -> AvifResult<()> {
+pub(crate) fn convert_to_half_float(rgb: &mut rgb::Image, scale: f32) -> AvifResult<Option<()>> {
     let res = unsafe {
         HalfFloatPlane(
             rgb.pixels_mut() as *const u16,
@@ -724,9 +734,9 @@ pub(crate) fn convert_to_half_float(rgb: &mut rgb::Image, scale: f32) -> AvifRes
         )
     };
     if res == 0 {
-        Ok(())
+        Ok(Some(()))
     } else {
-        Err(AvifError::InvalidArgument)
+        AvifError::invalid_argument()
     }
 }
 
@@ -746,7 +756,7 @@ enum RGBToYUVConversionFunction {
 fn rgb_to_yuv_conversion_function(
     rgb: &rgb::Image,
     image: &mut image::Image,
-) -> AvifResult<RGBToYUVConversionFunction> {
+) -> Option<RGBToYUVConversionFunction> {
     if image.depth != 8
         || rgb.depth != 8
         || !matches!(
@@ -754,78 +764,81 @@ fn rgb_to_yuv_conversion_function(
             MatrixCoefficients::Bt470bg | MatrixCoefficients::Bt601
         )
     {
-        return Err(AvifError::NotImplemented);
+        return None; // Not implemented.
     }
     // TODO: b/410088660 - Implement 2-step RGB conversion for functions which aren't directly
     // available in libyuv.
     match (image.yuv_format, image.yuv_range, rgb.format) {
         (PixelFormat::Yuv400, YuvRange::Limited, Format::Bgra) => {
-            Ok(RGBToYUVConversionFunction::RGBToY(ARGBToI400))
+            Some(RGBToYUVConversionFunction::RGBToY(ARGBToI400))
         }
         (PixelFormat::Yuv400, YuvRange::Full, Format::Rgb) => {
-            Ok(RGBToYUVConversionFunction::RGBToY(RAWToJ400))
+            Some(RGBToYUVConversionFunction::RGBToY(RAWToJ400))
         }
         (PixelFormat::Yuv400, YuvRange::Full, Format::Rgba) => {
-            Ok(RGBToYUVConversionFunction::RGBToY(ABGRToJ400))
+            Some(RGBToYUVConversionFunction::RGBToY(ABGRToJ400))
         }
         (PixelFormat::Yuv400, YuvRange::Full, Format::Bgr) => {
-            Ok(RGBToYUVConversionFunction::RGBToY(RGB24ToJ400))
+            Some(RGBToYUVConversionFunction::RGBToY(RGB24ToJ400))
         }
         (PixelFormat::Yuv400, YuvRange::Full, Format::Bgra) => {
-            Ok(RGBToYUVConversionFunction::RGBToY(ARGBToJ400))
+            Some(RGBToYUVConversionFunction::RGBToY(ARGBToJ400))
         }
         (PixelFormat::Yuv400, YuvRange::Full, Format::Abgr) => {
-            Ok(RGBToYUVConversionFunction::RGBToY(RGBAToJ400))
+            Some(RGBToYUVConversionFunction::RGBToY(RGBAToJ400))
         }
         (PixelFormat::Yuv420, YuvRange::Limited, Format::Rgb) => {
-            Ok(RGBToYUVConversionFunction::RGBToYUV(RAWToI420))
+            Some(RGBToYUVConversionFunction::RGBToYUV(RAWToI420))
         }
         (PixelFormat::Yuv420, YuvRange::Limited, Format::Rgba) => {
-            Ok(RGBToYUVConversionFunction::RGBToYUV(ABGRToI420))
+            Some(RGBToYUVConversionFunction::RGBToYUV(ABGRToI420))
         }
         (PixelFormat::Yuv420, YuvRange::Limited, Format::Argb) => {
-            Ok(RGBToYUVConversionFunction::RGBToYUV(BGRAToI420))
+            Some(RGBToYUVConversionFunction::RGBToYUV(BGRAToI420))
         }
         (PixelFormat::Yuv420, YuvRange::Limited, Format::Bgr) => {
-            Ok(RGBToYUVConversionFunction::RGBToYUV(RGB24ToI420))
+            Some(RGBToYUVConversionFunction::RGBToYUV(RGB24ToI420))
         }
         (PixelFormat::Yuv420, YuvRange::Limited, Format::Bgra) => {
-            Ok(RGBToYUVConversionFunction::RGBToYUV(ARGBToI420))
+            Some(RGBToYUVConversionFunction::RGBToYUV(ARGBToI420))
         }
         (PixelFormat::Yuv420, YuvRange::Limited, Format::Abgr) => {
-            Ok(RGBToYUVConversionFunction::RGBToYUV(RGBAToI420))
+            Some(RGBToYUVConversionFunction::RGBToYUV(RGBAToI420))
         }
         (PixelFormat::Yuv422, YuvRange::Limited, Format::Bgra) => {
-            Ok(RGBToYUVConversionFunction::RGBToYUV(ARGBToI422))
+            Some(RGBToYUVConversionFunction::RGBToYUV(ARGBToI422))
         }
         (PixelFormat::Yuv444, YuvRange::Limited, Format::Bgra) => {
-            Ok(RGBToYUVConversionFunction::RGBToYUV(ARGBToI444))
+            Some(RGBToYUVConversionFunction::RGBToYUV(ARGBToI444))
         }
         (PixelFormat::Yuv420, YuvRange::Full, Format::Rgb) => {
-            Ok(RGBToYUVConversionFunction::RGBToYUV(RAWToJ420))
+            Some(RGBToYUVConversionFunction::RGBToYUV(RAWToJ420))
         }
         (PixelFormat::Yuv420, YuvRange::Full, Format::Rgba) => {
-            Ok(RGBToYUVConversionFunction::RGBToYUV(ABGRToJ420))
+            Some(RGBToYUVConversionFunction::RGBToYUV(ABGRToJ420))
         }
         (PixelFormat::Yuv420, YuvRange::Full, Format::Bgr) => {
-            Ok(RGBToYUVConversionFunction::RGBToYUV(RGB24ToJ420))
+            Some(RGBToYUVConversionFunction::RGBToYUV(RGB24ToJ420))
         }
         (PixelFormat::Yuv420, YuvRange::Full, Format::Bgra) => {
-            Ok(RGBToYUVConversionFunction::RGBToYUV(ARGBToJ420))
+            Some(RGBToYUVConversionFunction::RGBToYUV(ARGBToJ420))
         }
         (PixelFormat::Yuv422, YuvRange::Full, Format::Rgba) => {
-            Ok(RGBToYUVConversionFunction::RGBToYUV(ABGRToJ422))
+            Some(RGBToYUVConversionFunction::RGBToYUV(ABGRToJ422))
         }
         (PixelFormat::Yuv422, YuvRange::Full, Format::Bgra) => {
-            Ok(RGBToYUVConversionFunction::RGBToYUV(ARGBToJ422))
+            Some(RGBToYUVConversionFunction::RGBToYUV(ARGBToJ422))
         }
-        _ => Err(AvifError::NotImplemented),
+        _ => None, // Not implemented.
     }
 }
 
-#[cfg_attr(feature = "disable_cfi", no_sanitize(cfi))]
-pub(crate) fn rgb_to_yuv(rgb: &rgb::Image, image: &mut image::Image) -> AvifResult<()> {
-    let conversion_function = rgb_to_yuv_conversion_function(rgb, image)?;
+#[cfg_attr(feature = "disable_cfi", sanitize(cfi = "off"))]
+pub(crate) fn rgb_to_yuv(rgb: &rgb::Image, image: &mut image::Image) -> AvifResult<Option<()>> {
+    let conversion_function = match rgb_to_yuv_conversion_function(rgb, image) {
+        Some(conversion_function) => conversion_function,
+        None => return Ok(None), // Not implemented.
+    };
     let plane_u8 = image.plane_ptrs_mut();
     let plane_row_bytes = image.plane_row_bytes()?;
     let width = i32_from_u32(image.width)?;
@@ -856,8 +869,8 @@ pub(crate) fn rgb_to_yuv(rgb: &rgb::Image, image: &mut image::Image) -> AvifResu
         }
     };
     if result == 0 {
-        Ok(())
+        Ok(Some(()))
     } else {
-        Err(AvifError::ReformatFailed)
+        AvifError::reformat_failed()
     }
 }

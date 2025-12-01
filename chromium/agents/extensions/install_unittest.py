@@ -5,199 +5,383 @@
 # found in the LICENSE file.
 """Unit tests for install.py."""
 
-import unittest
-import os
-import shutil
-import tempfile
 import io
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+import pathlib
+import subprocess
+import unittest
+import unittest.mock
 
 import install
+from pyfakefs import fake_filesystem_unittest
 
 
-class InstallTest(unittest.TestCase):
-    """Tests for the MCP server installation script."""
+class InstallTest(fake_filesystem_unittest.TestCase):
+    """Tests for the extension installation script."""
 
     def setUp(self):
         """Sets up the test environment."""
-        self.tmpdir = tempfile.mkdtemp()
-        self.mcp_dir = Path(self.tmpdir) / 'agents' / 'mcp'
-        self.mcp_dir.mkdir(parents=True)
-        self.extension_dir = Path(self.tmpdir) / '.gemini' / 'extensions'
-        self.extension_dir.mkdir(parents=True)
-        self.global_extension_dir = Path(
-            self.tmpdir) / 'home' / '.gemini' / 'extensions'
-        self.global_extension_dir.mkdir(parents=True)
+        self.setUpPyfakefs(additional_skip_names=['subprocess'])
+        self.tmpdir = '/tmp/test'
+        self.project_root = pathlib.Path(self.tmpdir) / 'src'
+        self.fs.create_dir(self.project_root)
 
-        # Create sample servers
-        self.server1_dir = self.mcp_dir / 'sample_server_1'
-        self.server1_dir.mkdir()
-        with open(self.server1_dir / 'gemini-extension.json',
-                  'w',
-                  encoding='utf-8') as f:
-            f.write('{"name": "sample_server_1", "version": "1.0.0"}')
-        with open(self.server1_dir / 'main.py', 'w', encoding='utf-8') as f:
-            f.write('print("hello")')
+        self.source_extensions_dir = self.project_root / 'agents' / 'extensions'
+        self.fs.create_dir(self.source_extensions_dir)
+        self.install_script_path = self.source_extensions_dir / 'install.py'
+        self.fs.create_file(self.install_script_path)
 
-        self.server2_dir = self.mcp_dir / 'sample_server_2'
-        self.server2_dir.mkdir()
-        with open(self.server2_dir / 'gemini-extension.json',
-                  'w',
-                  encoding='utf-8') as f:
-            f.write('{"name": "sample_server_2", "version": "2.0.0"}')
+        self.testing_extensions_dir = (self.project_root / 'agents' /
+                                       'testing' / 'extensions')
+        self.fs.create_dir(self.testing_extensions_dir)
 
-        self.internal_mcp_dir = Path(
-            self.tmpdir) / 'internal' / 'agents' / 'extensions'
-        self.internal_mcp_dir.mkdir(parents=True)
-        self.server3_dir = self.internal_mcp_dir / 'sample_server_3'
-        self.server3_dir.mkdir()
-        with open(self.server3_dir / 'gemini-extension.json',
-                  'w',
-                  encoding='utf-8') as f:
-            f.write('{"name": "sample_server_3", "version": "3.0.0"}')
+        self.internal_extensions_dir = (self.project_root / 'internal' /
+                                        'agents' / 'extensions')
+        self.fs.create_dir(self.internal_extensions_dir)
 
-    def tearDown(self):
-        """Tears down the test environment."""
-        shutil.rmtree(self.tmpdir)
+        # Create sample extensions
+        self.extension1_dir = self.source_extensions_dir / 'sample_1'
+        self.fs.create_dir(self.extension1_dir)
+        self.fs.create_file(
+            self.extension1_dir / 'gemini-extension.json',
+            contents='{"name": "sample_1", "version": "1.0.0"}',
+        )
 
-    def test_get_dir_hash(self):
-        """Tests the get_dir_hash function."""
-        hash1 = install.get_dir_hash(self.server1_dir)
-        hash2 = install.get_dir_hash(self.server1_dir)
-        self.assertEqual(hash1, hash2)
+        self.test_extension_dir = self.testing_extensions_dir / 'test_sample'
+        self.fs.create_dir(self.test_extension_dir)
+        self.fs.create_file(
+            self.test_extension_dir / 'gemini-extension.json',
+            contents='{"name": "test_sample", "version": "1.0.0"}',
+        )
 
-        # Test that a change in content changes the hash
-        with open(self.server1_dir / 'main.py', 'w', encoding='utf-8') as f:
-            f.write('print("world")')
-        hash3 = install.get_dir_hash(self.server1_dir)
-        self.assertNotEqual(hash1, hash3)
+        self.mock_run_command_patcher = unittest.mock.patch(
+            'install._run_command')
+        self.mock_run_command = self.mock_run_command_patcher.start()
+        self.addCleanup(self.mock_run_command_patcher.stop)
 
-    def test_find_mcp_dir_for_server(self):
-        """Tests the find_mcp_dir_for_server function."""
-        mcp_dirs = [self.mcp_dir, self.internal_mcp_dir]
-        self.assertEqual(
-            install.find_mcp_dir_for_server('sample_server_1', mcp_dirs),
-            self.mcp_dir)
-        self.assertEqual(
-            install.find_mcp_dir_for_server('sample_server_3', mcp_dirs),
-            self.internal_mcp_dir)
-        self.assertIsNone(
-            install.find_mcp_dir_for_server('non_existent_server', mcp_dirs))
+        self.mock_check_version = unittest.mock.patch(
+            'install.check_gemini_version')
+        self.mock_check_version.start()
+        self.addCleanup(self.mock_check_version.stop)
 
-    @patch('install.get_git_repo_root')
-    @patch('pathlib.Path.resolve')
-    def test_get_mcp_dirs(self, mock_resolve, mock_get_git_repo_root):
-        """Tests the get_mcp_dirs function."""
-        mock_resolve.return_value = self.mcp_dir
-        mock_get_git_repo_root.return_value = Path(self.tmpdir)
-        mcp_dirs = install.get_mcp_dirs()
-        self.assertIn(self.mcp_dir, mcp_dirs)
-        self.assertIn(self.internal_mcp_dir, mcp_dirs)
+    def test_find_extensions_dir_for_extension(self):
+        """Tests finding an extension directory."""
+        extensions_dirs = install.get_extensions_dirs(self.project_root)
+        # Extension in source directory
+        ext_dir = install.find_extensions_dir_for_extension(
+            'sample_1', extensions_dirs)
+        self.assertEqual(ext_dir, self.source_extensions_dir)
 
-    @patch('subprocess.check_output', side_effect=FileNotFoundError)
-    def test_get_dir_hash_fallback(self, mock_check_output):
-        """Tests the get_dir_hash function's fallback mechanism."""
-        hash1 = install.get_dir_hash(self.server1_dir)
-        hash2 = install.get_dir_hash(self.server1_dir)
-        self.assertEqual(hash1, hash2)
-        self.assertIsNotNone(hash1)
+        # Extension in internal directory
+        internal_extension_dir = self.internal_extensions_dir / 'internal_ext'
+        self.fs.create_dir(internal_extension_dir)
+        self.fs.create_file(
+            internal_extension_dir / 'gemini-extension.json',
+            contents='{"name": "internal_ext", "version": "1.0.0"}',
+        )
+        extensions_dirs = install.get_extensions_dirs(self.project_root)
+        ext_dir = install.find_extensions_dir_for_extension(
+            'internal_ext', extensions_dirs)
+        self.assertEqual(ext_dir, self.internal_extensions_dir)
 
-    @patch('install.get_dir_hash')
-    def test_is_up_to_date(self, mock_get_dir_hash):
-        """Tests the is_up_to_date() function."""
-        mock_get_dir_hash.return_value = b'some_hash'
-        self.assertFalse(
-            install.is_up_to_date('sample_server_1', self.mcp_dir,
-                                  self.extension_dir))
+        # Extension in testing directory
+        extensions_dirs = install.get_extensions_dirs(
+            self.project_root,
+            extra_extensions_dirs=[self.testing_extensions_dir])
+        ext_dir = install.find_extensions_dir_for_extension(
+            'test_sample', extensions_dirs)
+        self.assertEqual(ext_dir, self.testing_extensions_dir)
 
-        install.add_server('sample_server_1', self.mcp_dir, self.extension_dir)
-        mock_get_dir_hash.side_effect = [b'some_hash', b'some_hash']
-        self.assertTrue(
-            install.is_up_to_date('sample_server_1', self.mcp_dir,
-                                  self.extension_dir))
+    def test_get_extensions_dirs(self):
+        """Tests that get_extensions_dirs returns correct directories."""
+        # By default, test extensions should not be included
+        dirs = install.get_extensions_dirs(self.project_root)
+        self.assertIn(self.source_extensions_dir, dirs)
+        self.assertIn(self.internal_extensions_dir, dirs)
+        self.assertNotIn(self.testing_extensions_dir, dirs)
 
-        mock_get_dir_hash.side_effect = [b'new_hash', b'old_hash']
-        self.assertFalse(
-            install.is_up_to_date('sample_server_1', self.mcp_dir,
-                                  self.extension_dir))
+        dirs = install.get_extensions_dirs(
+            self.project_root,
+            extra_extensions_dirs=[self.testing_extensions_dir])
+        self.assertIn(self.source_extensions_dir, dirs)
+        self.assertIn(self.internal_extensions_dir, dirs)
+        self.assertIn(self.testing_extensions_dir, dirs)
 
-    @patch('builtins.input', return_value='y')
-    def test_add_server(self, mock_input):
-        """Tests the add_server function."""
-        install.add_server('sample_server_1', self.mcp_dir, self.extension_dir)
-        self.assertTrue((self.extension_dir / 'sample_server_1').exists())
+    def test_get_extensions_dirs_no_project_root(self):
+        """Tests get_extensions_dirs() when no project root is found."""
+        extensions_dirs = install.get_extensions_dirs(None)
+        self.assertEqual(extensions_dirs, [])
 
-    @patch('builtins.input', return_value='n')
-    @patch('install.is_up_to_date', return_value=False)
-    def test_add_server_decline_update(self, mock_is_up_to_date, mock_input):
-        """Tests that adding an existing server is skipped if the user
-        declines."""
-        install.add_server('sample_server_1', self.mcp_dir, self.extension_dir)
-        with patch('shutil.copytree') as mock_copy:
-            install.add_server('sample_server_1', self.mcp_dir,
-                               self.extension_dir)
-            mock_copy.assert_not_called()
+    @unittest.mock.patch('install.get_project_root')
+    @unittest.mock.patch('install.find_extensions_dir_for_extension')
+    def test_add_extension_copy(self, mock_find_dir, mock_get_project_root):
+        """Tests add command with copy."""
+        mock_get_project_root.return_value = self.project_root
+        mock_find_dir.return_value = self.source_extensions_dir
+        with unittest.mock.patch('sys.argv',
+                                 ['install.py', 'add', '--copy', 'sample_1']):
+            install.main()
+        self.mock_run_command.assert_called_once_with([
+            'gemini', 'extensions', 'install', '--path',
+            str(self.source_extensions_dir / 'sample_1')
+        ])
 
-    def test_update_server(self):
-        """Tests the update_server function."""
-        # Test updating a non-existent server
-        with patch('sys.stderr', new_callable=io.StringIO) as mock_stderr:
-            install.update_server('sample_server_1', self.mcp_dir,
-                                  self.extension_dir)
-            self.assertIn('not installed', mock_stderr.getvalue())
+    @unittest.mock.patch('install.get_project_root')
+    @unittest.mock.patch('install.find_extensions_dir_for_extension')
+    def test_add_extension_link(self, mock_find_dir, mock_get_project_root):
+        """Tests add command."""
+        mock_get_project_root.return_value = self.project_root
+        mock_find_dir.return_value = self.source_extensions_dir
+        with unittest.mock.patch('sys.argv',
+                                 ['install.py', 'add', 'sample_1']):
+            install.main()
+        self.mock_run_command.assert_called_once_with([
+            'gemini', 'extensions', 'link',
+            str(self.source_extensions_dir / 'sample_1')
+        ])
 
-        # Test updating an up-to-date server
-        install.add_server('sample_server_1', self.mcp_dir, self.extension_dir)
-        with patch('install.is_up_to_date', return_value=True):
-            with patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
-                install.update_server('sample_server_1', self.mcp_dir,
-                                      self.extension_dir)
-                self.assertIn('already up to date', mock_stdout.getvalue())
+    @unittest.mock.patch('install.get_project_root')
+    @unittest.mock.patch('install.find_extensions_dir_for_extension')
+    def test_add_extension_skip_prompt(self, mock_find_dir,
+                                       mock_get_project_root):
+        """Tests that the skip_prompt flag is accepted."""
+        mock_get_project_root.return_value = self.project_root
+        mock_find_dir.return_value = self.source_extensions_dir
+        with unittest.mock.patch(
+                'sys.argv',
+            ['install.py', 'add', '--skip-prompt', 'sample_1']):
+            install.main()
+        self.mock_run_command.assert_called_once_with([
+            'gemini', 'extensions', 'link',
+            str(self.source_extensions_dir / 'sample_1')
+        ])
 
-    def test_remove_server_not_installed(self):
-        """Tests removing a server that is not installed."""
-        with patch('sys.stderr', new_callable=io.StringIO) as mock_stderr:
-            install.remove_server('sample_server_1', self.extension_dir)
-            self.assertIn('not found', mock_stderr.getvalue())
+    @unittest.mock.patch('install.get_project_root')
+    def test_add_test_extension(self, mock_get_project_root):
+        """Tests add command with a test extension."""
+        mock_get_project_root.return_value = self.project_root
+        with unittest.mock.patch('sys.argv', [
+                'install.py', '--extra-extensions-dir',
+                str(self.testing_extensions_dir), 'add', 'test_sample'
+        ]):
+            install.main()
+        self.mock_run_command.assert_called_once_with([
+            'gemini', 'extensions', 'link',
+            str(self.testing_extensions_dir / 'test_sample')
+        ])
 
-    @patch('install.get_extension_dir')
-    @patch('install.add_server')
-    @patch('install.find_mcp_dir_for_server')
-    def test_main_add_global(self, mock_find_mcp, mock_add_server,
-                             mock_get_extension_dir):
-        """Tests the main function with the add command and --global flag."""
-        mock_find_mcp.return_value = self.mcp_dir
-        mock_get_extension_dir.return_value = self.global_extension_dir
-        with patch('sys.argv', ['install.py', 'add', '-g', 'sample_server_1']):
-            with patch('install.get_mcp_dirs', return_value=[self.mcp_dir]):
+    @unittest.mock.patch('install.get_project_root')
+    def test_add_test_extension_without_flag_fails(self,
+                                                   mock_get_project_root):
+        """Tests add command with a test extension."""
+        mock_get_project_root.return_value = self.project_root
+        with unittest.mock.patch('sys.argv',
+                                 ['install.py', 'add', 'test_sample']):
+            with self.assertRaises(SystemExit):
                 install.main()
-        mock_add_server.assert_called_once_with('sample_server_1',
-                                                self.mcp_dir,
-                                                self.global_extension_dir)
 
-    @patch('install.update_server')
-    @patch('install.get_installed_servers', return_value=['sample_server_1'])
-    @patch('install.find_mcp_dir_for_server')
-    def test_main_update_all(self, mock_find_mcp, mock_get_installed,
-                             mock_update_server):
-        """Tests the main function with the update command and no servers."""
-        mock_find_mcp.return_value = self.mcp_dir
-        with patch('sys.argv', ['install.py', 'update']):
-            with patch('install.get_mcp_dirs', return_value=[self.mcp_dir]):
-                install.main()
-        mock_update_server.assert_called_once()
 
-    @patch('sys.stderr', new_callable=io.StringIO)
-    @patch('install.find_mcp_dir_for_server')
-    def test_main_invalid_server(self, mock_find_mcp, mock_stderr):
-        """Tests that main handles invalid server names gracefully."""
-        mock_find_mcp.return_value = None
-        with patch('sys.argv', ['install.py', 'add', 'invalid_server']):
-            with patch('install.get_mcp_dirs', return_value=[self.mcp_dir]):
+    @unittest.mock.patch('install.get_project_root')
+    def test_add_invalid_extension(self, mock_get_project_root):
+        """Tests add command with an invalid extension."""
+        mock_get_project_root.return_value = self.project_root
+        with unittest.mock.patch('sys.argv',
+                                 ['install.py', 'add', 'nonexistent']):
+            with unittest.mock.patch('sys.stderr',
+                                     new_callable=io.StringIO) as mock_stderr:
+                with self.assertRaises(SystemExit) as e:
+                    install.main()
+                self.assertEqual(e.exception.code, 1)
+                self.assertIn("Extension 'nonexistent' not found.",
+                              mock_stderr.getvalue())
+        self.mock_run_command.assert_not_called()
+
+    @unittest.mock.patch('install.get_project_root')
+    def test_update_extension(self, mock_get_project_root):
+        """Tests update command."""
+        mock_get_project_root.return_value = self.project_root
+        with unittest.mock.patch('sys.argv',
+                                 ['install.py', 'update', 'sample_1']):
+            install.main()
+        self.mock_run_command.assert_called_once_with(
+            ['gemini', 'extensions', 'update', 'sample_1'])
+
+    @unittest.mock.patch('install.get_project_root')
+    def test_update_all_extensions(self, mock_get_project_root):
+        """Tests update command with no extension specified."""
+        mock_get_project_root.return_value = self.project_root
+        with unittest.mock.patch('sys.argv', ['install.py', 'update']):
+            install.main()
+        self.mock_run_command.assert_called_once_with(
+            ['gemini', 'extensions', 'update', '--all'])
+
+    @unittest.mock.patch('install.get_project_root')
+    def test_remove_extension(self, mock_get_project_root):
+        """Tests remove command."""
+        mock_get_project_root.return_value = self.project_root
+        with unittest.mock.patch('sys.argv',
+                                 ['install.py', 'remove', 'sample_1']):
+            install.main()
+        self.mock_run_command.assert_called_once_with(
+            ['gemini', 'extensions', 'uninstall', 'sample_1'])
+
+    @unittest.mock.patch('install.get_project_root')
+    def test_list_extensions(self, mock_get_project_root):
+        """Tests that list command calls gemini extensions list."""
+        mock_get_project_root.return_value = self.project_root
+        with unittest.mock.patch('sys.argv', ['install.py', 'list']):
+            install.main()
+        self.mock_run_command.assert_called_once_with(
+            ['gemini', 'extensions', 'list'])
+
+    def test_find_extensions_dir_for_nonexistent_extension(self):
+        """Tests finding a non-existent extension."""
+        extensions_dirs = install.get_extensions_dirs(self.project_root)
+        ext_dir = install.find_extensions_dir_for_extension(
+            'nonexistent', extensions_dirs)
+        self.assertIsNone(ext_dir)
+
+    @unittest.mock.patch('install.get_project_root')
+    @unittest.mock.patch('install.find_extensions_dir_for_extension')
+    def test_fix_extensions(self, mock_find_dir, mock_get_project_root):
+        """Tests fix command."""
+        mock_get_project_root.return_value = self.project_root
+        mock_find_dir.return_value = self.source_extensions_dir
+        project_extensions_dir = self.project_root / '.gemini' / 'extensions'
+        self.fs.create_dir(project_extensions_dir)
+        self.fs.create_file(
+            project_extensions_dir / 'sample_1' / 'gemini-extension.json',
+            contents='{"name": "sample_1", "version": "1.0.0"}',
+        )
+
+        with unittest.mock.patch('sys.argv', ['install.py', 'fix']):
+            install.main()
+
+        calls = [
+            unittest.mock.call([
+                'gemini', 'extensions', 'link',
+                str(self.source_extensions_dir / 'sample_1')
+            ]),
+            unittest.mock.call([
+                'gemini', 'extensions', 'disable', 'sample_1', '--scope=User'
+            ]),
+            unittest.mock.call([
+                'gemini', 'extensions', 'enable', 'sample_1',
+                '--scope=Workspace'
+            ]),
+        ]
+        self.mock_run_command.assert_has_calls(calls)
+        self.assertFalse(project_extensions_dir.exists())
+
+    @unittest.mock.patch('install.get_project_root')
+    def test_fix_extensions_no_project_dir(self, mock_get_project_root):
+        """Tests fix command when no project-level directory exists."""
+        mock_get_project_root.return_value = self.project_root
+        with unittest.mock.patch('sys.stdout',
+                                 new_callable=io.StringIO) as mock_stdout:
+            with unittest.mock.patch('sys.argv', ['install.py', 'fix']):
                 install.main()
-        self.assertIn("Error: Server 'invalid_server' not found",
-                      mock_stderr.getvalue())
+            self.assertIn('No project-level extensions found to fix.',
+                          mock_stdout.getvalue())
+
+        self.mock_run_command.assert_not_called()
+
+    @unittest.mock.patch('install.get_project_root')
+    def test_fix_extensions_no_extensions(self, mock_get_project_root):
+        """Tests fix command when no project-level extensions are found."""
+        mock_get_project_root.return_value = self.project_root
+        project_extensions_dir = self.project_root / '.gemini' / 'extensions'
+        self.fs.create_dir(project_extensions_dir)
+
+        with unittest.mock.patch('sys.stdout',
+                                 new_callable=io.StringIO) as mock_stdout:
+            with unittest.mock.patch('sys.argv', ['install.py', 'fix']):
+                install.main()
+            self.assertIn(
+                'No valid project-level extensions found.',
+                mock_stdout.getvalue(),
+            )
+
+        self.mock_run_command.assert_not_called()
+        self.assertFalse(project_extensions_dir.exists())
+
+    @unittest.mock.patch('pathlib.Path.home')
+    @unittest.mock.patch('install.get_project_root')
+    def test_fix_skips_existing_user_extension(self, mock_get_project_root,
+                                               mock_home):
+        """Tests that fix skips extensions that already exist for the user."""
+        mock_get_project_root.return_value = self.project_root
+        fake_home = pathlib.Path(self.tmpdir) / 'home'
+        mock_home.return_value = fake_home
+
+        # Set up a user-level extension
+        (install.get_global_extension_dir() / 'sample_1').mkdir(parents=True)
+
+        # Create a project-level extension with the same name
+        project_extensions_dir = self.project_root / '.gemini' / 'extensions'
+        self.fs.create_dir(project_extensions_dir)
+        self.fs.create_file(
+            project_extensions_dir / 'sample_1' / 'gemini-extension.json',
+            contents='{"name": "sample_1", "version": "1.0.0"}',
+        )
+
+        with unittest.mock.patch('sys.stderr',
+                                 new_callable=io.StringIO) as mock_stderr:
+            with unittest.mock.patch('sys.argv', ['install.py', 'fix']):
+                install.main()
+            self.assertIn(
+                'Warning: User extension "sample_1" already exists.',
+                mock_stderr.getvalue(),
+            )
+
+        self.mock_run_command.assert_not_called()
+        self.assertFalse(project_extensions_dir.exists())
+
+    @unittest.mock.patch('install.get_project_root')
+    def test_prompt_for_fix(self, mock_get_project_root):
+        """Tests that the user is prompted to run fix."""
+        mock_get_project_root.return_value = self.project_root
+        project_extensions_dir = self.project_root / '.gemini' / 'extensions'
+        self.fs.create_dir(project_extensions_dir)
+        with unittest.mock.patch('sys.stderr',
+                                 new_callable=io.StringIO) as mock_stderr:
+            with unittest.mock.patch('sys.argv', ['install.py', 'list']):
+                install.main()
+            self.assertIn('WARNING: Project-level extensions are deprecated.',
+                          mock_stderr.getvalue())
+
+    def test_get_project_root(self):
+        """Tests the get_project_root function."""
+        with unittest.mock.patch('install.__file__', self.install_script_path):
+            project_root = install.get_project_root()
+            self.assertEqual(project_root, self.project_root)
+
+    def test_get_project_root_error(self):
+        """Tests the get_project_root function when an error occurs."""
+        with unittest.mock.patch('install.__file__',
+                                 pathlib.Path('invalid/path')):
+            with unittest.mock.patch('sys.stderr',
+                                     new_callable=io.StringIO) as mock_stderr:
+                project_root = install.get_project_root()
+                self.assertIsNone(project_root)
+                self.assertIn('Could not determine project root',
+                              mock_stderr.getvalue())
+
+    @unittest.mock.patch('subprocess.run')
+    def test_get_gemini_version_success(self, mock_run):
+        """Test that we can successfully get the gemini version."""
+        mock_run.return_value.stdout = '0.5.1'
+        self.assertEqual(install.get_gemini_version(), '0.5.1')
+
+    @unittest.mock.patch('subprocess.run', side_effect=FileNotFoundError)
+    def test_get_gemini_version_file_not_found(self, _mock_run):
+        """Test that we return none when gemini is not found."""
+        self.assertIsNone(install.get_gemini_version())
+
+    @unittest.mock.patch('subprocess.run',
+                         side_effect=subprocess.CalledProcessError(1, 'cmd'))
+    def test_get_gemini_version_called_process_error(self, _mock_run):
+        """Test that we return none when there is a process error."""
+        self.assertIsNone(install.get_gemini_version())
 
 
 if __name__ == '__main__':

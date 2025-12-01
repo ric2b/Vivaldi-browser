@@ -222,7 +222,6 @@ _NAMED_TYPE_INFO = {
       'GL_TEXTURE_BINDING_2D',
       'GL_TEXTURE_BINDING_CUBE_MAP',
       'GL_UNPACK_ALIGNMENT',
-      'GL_BIND_GENERATES_RESOURCE_CHROMIUM',
       # we can add this because we emulate it if the driver does not support it.
       'GL_VERTEX_ARRAY_BINDING_OES',
       'GL_VIEWPORT',
@@ -1633,11 +1632,13 @@ _FUNCTION_INFO = {
     'type': 'Bind',
     'decoder_func': 'DoBindBuffer',
     'gen_func': 'GenBuffersARB',
+    'client_test': False,
   },
   'BindBufferBase': {
     'type': 'Bind',
     'decoder_func': 'DoBindBufferBase',
     'gen_func': 'GenBuffersARB',
+    'client_test': False,
     'unit_test': False,
     'es3': True,
   },
@@ -1645,6 +1646,7 @@ _FUNCTION_INFO = {
     'type': 'Bind',
     'decoder_func': 'DoBindBufferRange',
     'gen_func': 'GenBuffersARB',
+    'client_test': False,
     'unit_test': False,
     'valid_args': {
       '3': '4',
@@ -1657,6 +1659,7 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoBindFramebuffer',
     'gl_test_func': 'glBindFramebufferEXT',
     'gen_func': 'GenFramebuffersEXT',
+    'client_test': False,
     'trace_level': 1,
   },
   'BindImageTexture':{
@@ -1671,10 +1674,12 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoBindRenderbuffer',
     'gl_test_func': 'glBindRenderbufferEXT',
     'gen_func': 'GenRenderbuffersEXT',
+    'client_test': False,
   },
   'BindSampler': {
     'type': 'Bind',
     'decoder_func': 'DoBindSampler',
+    'client_test': False,
     'es3': True,
   },
   'BindTexture': {

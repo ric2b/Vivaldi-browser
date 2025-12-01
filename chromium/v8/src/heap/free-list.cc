@@ -36,7 +36,8 @@ Tagged<FreeSpace> FreeListCategory::PickNodeFromList(size_t minimum_size,
                                                      size_t* node_size) {
   Tagged<FreeSpace> node = top();
   DCHECK(!node.is_null());
-  DCHECK(MemoryChunkMetadata::FromHeapObject(node)->CanAllocateOnChunk());
+  DCHECK(MemoryChunkMetadata::FromHeapObject(Isolate::Current(), node)
+             ->CanAllocateOnChunk());
   if (static_cast<size_t>(node->Size()) < minimum_size) {
     *node_size = 0;
     return Tagged<FreeSpace>();
@@ -53,7 +54,8 @@ Tagged<FreeSpace> FreeListCategory::SearchForNodeInList(const Heap* heap,
   Tagged<FreeSpace> prev_non_evac_node;
   for (Tagged<FreeSpace> cur_node = top(); !cur_node.is_null();
        cur_node = cur_node->next()) {
-    DCHECK(MemoryChunkMetadata::FromHeapObject(cur_node)->CanAllocateOnChunk());
+    DCHECK(MemoryChunkMetadata::FromHeapObject(heap->isolate(), cur_node)
+               ->CanAllocateOnChunk());
     size_t size = cur_node->size(kRelaxedLoad);
     if (size >= minimum_size) {
       DCHECK_GE(available_, size);
@@ -62,7 +64,9 @@ Tagged<FreeSpace> FreeListCategory::SearchForNodeInList(const Heap* heap,
         set_top(cur_node->next());
       }
       if (!prev_non_evac_node.is_null()) {
-        if (MemoryChunk::FromHeapObject(prev_non_evac_node)->executable()) {
+        if (MemoryChunk::FromHeapObject(prev_non_evac_node)
+                ->Metadata()
+                ->is_executable()) {
           WritableJitPage jit_page(prev_non_evac_node->address(),
                                    prev_non_evac_node->Size());
           WritableFreeSpace free_space = jit_page.FreeRange(
@@ -463,7 +467,7 @@ void FreeList::ResetForNonBlackAllocatedPages() {
   ForAllFreeListCategories([this](FreeListCategory* category) {
     if (!category->is_empty()) {
       auto* chunk = MemoryChunk::FromHeapObject(category->top());
-      if (chunk->IsFlagSet(MemoryChunk::BLACK_ALLOCATED)) {
+      if (chunk->IsBlackAllocatedPage()) {
         category->Unlink(this);
         return;
       }

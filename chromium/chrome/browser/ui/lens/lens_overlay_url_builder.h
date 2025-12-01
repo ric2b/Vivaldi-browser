@@ -88,8 +88,11 @@ bool IsAimQuery(const GURL& url);
 
 // Returns whether the `url` is a valid lens overlay search URL but contains
 // parameters known not to be supported in the side panel and thus should be
-// opened in a new tab.
-bool ShouldOpenSearchURLInNewTab(const GURL& url);
+// opened in a new tab. `is_aim_feature_enabled` indicates whether the AIM M3
+// feature is enabled, and should be passed in via the lens::IsAimM3Enabled from
+// lens_search_feature_flag_utils. This function keeps a bool to keep
+// dependencies light and testing easy
+bool ShouldOpenSearchURLInNewTab(const GURL& url, bool is_aim_feature_enabled);
 
 // Returns whether the given |url| is a valid lens overlay search redirect URL.
 // This could differ from values in common APIs since the search URL is set via
@@ -136,10 +139,12 @@ GURL AddPDFScrollToParametersToUrl(
     const std::vector<std::string>& text_fragments,
     int pdf_page_number);
 
-// Returns a key-value map of all parameters in `url` except the query
-// parameter.
-std::map<std::string, std::string> GetParametersMapWithoutQuery(
-    const GURL& url);
+// Return the time from a `t=` parameter if it exists.
+std::optional<base::TimeDelta> ExtractTimeInSecondsFromQueryIfExists(
+    const GURL& target);
+
+// Return the video ID if it's set in `url`.
+std::optional<std::string> ExtractVideoNameIfExists(const GURL& url);
 
 }  // namespace lens
 

@@ -51,9 +51,16 @@
  */
 typedef atomic_uint_fast32_t PTHREADPOOL_CACHELINE_ALIGNED
     pthreadpool_atomic_uint32_t;
+typedef atomic_int_least32_t PTHREADPOOL_CACHELINE_ALIGNED
+    pthreadpool_atomic_int32_t;
 typedef atomic_size_t PTHREADPOOL_CACHELINE_ALIGNED pthreadpool_atomic_size_t;
 typedef atomic_uintptr_t PTHREADPOOL_CACHELINE_ALIGNED
     pthreadpool_atomic_void_p;
+
+static inline int32_t pthreadpool_load_relaxed_int32_t(
+    pthreadpool_atomic_int32_t* address) {
+  return atomic_load_explicit(address, memory_order_relaxed);
+}
 
 static inline uint32_t pthreadpool_load_relaxed_uint32_t(
     pthreadpool_atomic_uint32_t* address) {
@@ -73,6 +80,31 @@ static inline void* pthreadpool_load_relaxed_void_p(
 static inline uint32_t pthreadpool_load_acquire_uint32_t(
     pthreadpool_atomic_uint32_t* address) {
   return atomic_load_explicit(address, memory_order_acquire);
+}
+
+static inline uint32_t pthreadpool_load_consume_uint32_t(
+    pthreadpool_atomic_uint32_t* address) {
+  return atomic_load_explicit(address, memory_order_consume);
+}
+
+static inline uint32_t pthreadpool_load_sequentially_consistent_uint32_t(
+    pthreadpool_atomic_uint32_t* address) {
+  return atomic_load_explicit(address, memory_order_seq_cst);
+}
+
+static inline int32_t pthreadpool_load_acquire_int32_t(
+    pthreadpool_atomic_int32_t* address) {
+  return atomic_load_explicit(address, memory_order_acquire);
+}
+
+static inline int32_t pthreadpool_load_consume_int32_t(
+    pthreadpool_atomic_int32_t* address) {
+  return atomic_load_explicit(address, memory_order_consume);
+}
+
+static inline uint32_t pthreadpool_load_sequentially_consistent_int32_t(
+    pthreadpool_atomic_int32_t* address) {
+  return atomic_load_explicit(address, memory_order_seq_cst);
 }
 
 static inline size_t pthreadpool_load_acquire_size_t(
@@ -98,6 +130,21 @@ static inline void pthreadpool_store_relaxed_void_p(
 static inline void pthreadpool_store_release_uint32_t(
     pthreadpool_atomic_uint32_t* address, uint32_t value) {
   atomic_store_explicit(address, value, memory_order_release);
+}
+
+static inline void pthreadpool_store_sequentially_consistent_uint32_t(
+    pthreadpool_atomic_uint32_t* address, uint32_t value) {
+  atomic_store_explicit(address, value, memory_order_seq_cst);
+}
+
+static inline void pthreadpool_store_release_int32_t(
+    pthreadpool_atomic_int32_t* address, int32_t value) {
+  atomic_store_explicit(address, value, memory_order_release);
+}
+
+static inline void pthreadpool_store_sequentially_consistent_int32_t(
+    pthreadpool_atomic_int32_t* address, int32_t value) {
+  atomic_store_explicit(address, value, memory_order_seq_cst);
 }
 
 static inline void pthreadpool_store_release_size_t(
@@ -130,11 +177,16 @@ static inline size_t pthreadpool_decrement_fetch_acquire_release_size_t(
   return atomic_fetch_sub_explicit(address, 1, memory_order_acq_rel) - 1;
 }
 
+static inline uint32_t pthreadpool_decrement_fetch_acquire_release_uint32_t(
+    pthreadpool_atomic_uint32_t* address) {
+  return atomic_fetch_sub_explicit(address, 1, memory_order_acq_rel) - 1;
+}
+
 static inline bool pthreadpool_try_decrement_relaxed_size_t(
     pthreadpool_atomic_size_t* value) {
   size_t actual_value = atomic_load_explicit(value, memory_order_acquire);
   while (actual_value != 0) {
-    if (atomic_compare_exchange_weak_explicit(
+    if (atomic_compare_exchange_strong_explicit(
             value, &actual_value, actual_value - 1, memory_order_relaxed,
             memory_order_relaxed)) {
       return true;
@@ -146,6 +198,57 @@ static inline bool pthreadpool_try_decrement_relaxed_size_t(
 static inline size_t pthreadpool_fetch_add_relaxed_size_t(
     pthreadpool_atomic_size_t* address, size_t value) {
   return atomic_fetch_add_explicit(address, value, memory_order_relaxed);
+}
+
+static inline uint32_t pthreadpool_fetch_add_acquire_release_uint32_t(
+    pthreadpool_atomic_uint32_t* address, uint32_t value) {
+  return atomic_fetch_add_explicit(address, value, memory_order_acq_rel);
+}
+
+static inline int32_t pthreadpool_fetch_add_acquire_release_int32_t(
+    pthreadpool_atomic_int32_t* address, uint32_t value) {
+  return atomic_fetch_add_explicit(address, value, memory_order_acq_rel);
+}
+
+static inline int32_t pthreadpool_fetch_add_sequentially_consistent_int32_t(
+    pthreadpool_atomic_int32_t* address, uint32_t value) {
+  return atomic_fetch_add_explicit(address, value, memory_order_seq_cst);
+}
+
+static inline uint32_t pthreadpool_exchange_acquire_uint32_t(
+    pthreadpool_atomic_uint32_t* address, uint32_t value) {
+  return atomic_exchange_explicit(address, value, memory_order_acquire);
+}
+
+static inline int32_t pthreadpool_exchange_release_int32_t(
+    pthreadpool_atomic_int32_t* address, uint32_t value) {
+  return atomic_exchange_explicit(address, value, memory_order_release);
+}
+
+static inline uint32_t pthreadpool_exchange_acquire_release_uint32_t(
+    pthreadpool_atomic_uint32_t* address, uint32_t value) {
+  return atomic_exchange_explicit(address, value, memory_order_acq_rel);
+}
+
+static inline uint32_t pthreadpool_exchange_sequentially_consistent_uint32_t(
+    pthreadpool_atomic_uint32_t* address, uint32_t value) {
+  return atomic_exchange_explicit(address, value, memory_order_seq_cst);
+}
+
+static inline bool pthreadpool_compare_exchange_acquire_release_int32_t(
+    pthreadpool_atomic_int32_t* address, int_least32_t* expected_value,
+    int32_t new_value) {
+  return atomic_compare_exchange_strong_explicit(address, expected_value,
+                                               new_value, memory_order_acq_rel,
+                                               memory_order_acquire);
+}
+
+static inline bool pthreadpool_compare_exchange_sequentially_consistent_int32_t(
+    pthreadpool_atomic_int32_t* address, int_least32_t* expected_value,
+    int32_t new_value) {
+  return atomic_compare_exchange_strong_explicit(address, expected_value,
+                                               new_value, memory_order_seq_cst,
+                                               memory_order_seq_cst);
 }
 
 static inline void pthreadpool_fence_acquire() {

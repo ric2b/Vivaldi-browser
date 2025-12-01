@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <list>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -43,6 +44,7 @@ TINT_BEGIN_DISABLE_WARNING(SIGN_CONVERSION);
 TINT_BEGIN_DISABLE_WARNING(WEAK_VTABLES);
 TINT_BEGIN_DISABLE_WARNING(UNSAFE_BUFFER_USAGE);
 #include "source/opt/build_module.h"
+#include "source/opt/resolve_binding_conflicts_pass.h"
 #include "source/opt/split_combined_image_sampler_pass.h"
 TINT_END_DISABLE_WARNING(UNSAFE_BUFFER_USAGE);
 TINT_END_DISABLE_WARNING(WEAK_VTABLES);
@@ -107,11 +109,19 @@ class Parser {
             return Failure("failed to build the internal representation of the module");
         }
 
+        // Run SPIR-V opt transforms to make the input friendlier for the SPIR-V frontend.
         {
             spvtools::opt::SplitCombinedImageSamplerPass pass;
             auto status = pass.Run(spirv_context_.get());
             if (status == spvtools::opt::Pass::Status::Failure) {
                 return Failure("failed to run SplitCombinedImageSamplerPass in SPIR-V opt");
+            }
+        }
+        if (options_.sampler_mappings.empty()) {
+            spvtools::opt::ResolveBindingConflictsPass pass;
+            auto status = pass.Run(spirv_context_.get());
+            if (status == spvtools::opt::Pass::Status::Failure) {
+                return Failure("failed to run ResolveBindingConflictsPass in SPIR-V opt");
             }
         }
 
@@ -120,6 +130,7 @@ class Parser {
             auto name = ext.GetOperand(0).AsString();
             if (name != "SPV_KHR_storage_buffer_storage_class" &&
                 name != "SPV_KHR_non_semantic_info" &&     //
+                name != "SPV_KHR_16bit_storage" &&         //
                 name != "SPV_KHR_terminate_invocation" &&  //
                 // TODO(423644565): We assume the barriers are correct. We should check for any
                 // operation that makes barrier assumptions that aren't consistent with WGSL and
@@ -133,7 +144,6 @@ class Parser {
         for (const auto& import : spirv_context_->ext_inst_imports()) {
             auto name = import.GetInOperand(0).AsString();
 
-            // TODO(dneto): Handle other extended instruction sets when needed.
             if (name == "GLSL.std.450") {
                 glsl_std_450_imports_.insert(import.result_id());
             } else if (name.find("NonSemantic.") == 0) {
@@ -154,8 +164,6 @@ class Parser {
 
         EmitFunctions();
         EmitEntryPointAttributes();
-
-        // TODO(crbug.com/tint/1907): Handle annotation instructions.
 
         RemapSamplers();
         RemapBufferBlockAddressSpace();
@@ -578,6 +586,8 @@ class Parser {
                 return core::AddressSpace::kHandle;
             case spv::StorageClass::Workgroup:
                 return core::AddressSpace::kWorkgroup;
+            case spv::StorageClass::PushConstant:
+                return core::AddressSpace::kImmediate;
             default:
                 TINT_UNIMPLEMENTED()
                     << "unhandled SPIR-V storage class: " << static_cast<uint32_t>(sc);
@@ -626,6 +636,8 @@ class Parser {
                 return core::BuiltinValue::kClipDistances;
             case spv::BuiltIn::CullDistance:
                 return core::BuiltinValue::kCullDistance;
+            case spv::BuiltIn::PrimitiveId:
+                return core::BuiltinValue::kPrimitiveIndex;
             default:
                 TINT_UNIMPLEMENTED() << "unhandled SPIR-V BuiltIn: " << static_cast<uint32_t>(b);
         }
@@ -636,23 +648,14 @@ class Parser {
     /// @returns a Tint type object
     const core::type::Type* Type(const spvtools::opt::analysis::Type* type,
                                  core::Access access_mode = core::Access::kUndefined) {
+        // Only use the access mode for the map key if it is used as part of the type in Tint IR.
         auto key_mode = core::Access::kUndefined;
-        if (type->kind() == spvtools::opt::analysis::Type::kImage) {
+        if (type->kind() == spvtools::opt::analysis::Type::kImage ||
+            type->kind() == spvtools::opt::analysis::Type::kPointer) {
             key_mode = access_mode;
-        } else if (type->kind() == spvtools::opt::analysis::Type::kPointer) {
-            // Pointers use the access mode, unless they're handle pointers in which case they get
-            // Read.
-            key_mode = access_mode;
-
-            auto* ptr = type->AsPointer();
-            if (ptr->pointee_type()->kind() == spvtools::opt::analysis::Type::kSampler ||
-                ptr->pointee_type()->kind() == spvtools::opt::analysis::Type::kImage) {
-                key_mode = core::Access::kRead;
-            }
         }
 
         return types_.GetOrAdd(TypeKey{type, key_mode}, [&]() -> const core::type::Type* {
-            // TODO(crbug.com/1907): Handle decorations that affect the type
             uint32_t array_stride = 0;
             bool set_as_storage_buffer = false;
             for (auto& deco : type->decorations()) {
@@ -735,7 +738,7 @@ class Parser {
                     }
 
                     return ty_.Get<spirv::type::ExplicitLayoutArray>(
-                        elem_ty, ty_.Get<core::type::RuntimeArrayCount>(), elem_ty->Align(),
+                        elem_ty, ty_.Get<core::type::RuntimeArrayCount>(),
                         static_cast<uint32_t>(array_stride), array_stride);
                 }
                 case spvtools::opt::analysis::Type::kStruct: {
@@ -787,6 +790,9 @@ class Parser {
                     }
                     if (img->sampled() == 0) {
                         TINT_ICE() << "Unsupported texture sample setting: Known at Runtime";
+                    }
+                    if (depth == type::Depth::kDepth && !sampled_ty->Is<core::type::F32>()) {
+                        TINT_ICE() << "Unsupported depth texture sampled type (must be f32)";
                     }
 
                     return ty_.Get<spirv::type::Image>(sampled_ty, dim, depth, arrayed, ms, sampled,
@@ -885,7 +891,7 @@ class Parser {
 
         return ty_.Get<spirv::type::ExplicitLayoutArray>(
             elem_ty, ty_.Get<core::type::ConstantArrayCount>(static_cast<uint32_t>(count_val)),
-            elem_ty->Align(), static_cast<uint32_t>(array_stride * count_val), array_stride);
+            static_cast<uint32_t>(array_stride * count_val), array_stride);
     }
 
     /// Calculate the size of a struct member type that has a matrix stride decoration.
@@ -1177,7 +1183,6 @@ class Parser {
 
                         auto* loop = cont->Loop();
                         loop->Continuing()->AddParam(param);
-
                         cont->PushOperand(src);
 
                         // Set `src` as the `param` so it's returned as the new value
@@ -1315,7 +1320,7 @@ class Parser {
     ///
     /// @param id a SPIR-V result ID
     /// @returns a Tint value object
-    core::ir::Value* ValueNoPropagate(uint32_t id) {
+    std::optional<core::ir::Value*> ValueNoPropagate(uint32_t id) {
         auto v = values_.Get(id);
         if (v) {
             return *v;
@@ -1342,7 +1347,7 @@ class Parser {
             return construct->Result();
         }
 
-        TINT_UNREACHABLE() << "missing value for result ID " << id;
+        return std::nullopt;
     }
 
     /// Attempts to retrieve the current Tint IR value for `id`. If the value exists and is not in
@@ -1352,13 +1357,13 @@ class Parser {
     /// @returns a Tint value object
     core::ir::Value* Value(uint32_t id, bool add_to_scope = true) {
         auto v = ValueNoPropagate(id);
-        TINT_ASSERT(v);
+        TINT_ASSERT(v.has_value());
 
-        if (v->Is<core::ir::Constant>() || IdIsInScope(id)) {
-            return v;
+        if (v.value()->Is<core::ir::Constant>() || IdIsInScope(id)) {
+            return v.value();
         }
 
-        auto* new_v = Propagate(id, v);
+        auto* new_v = Propagate(id, v.value());
         if (add_to_scope) {
             AddValue(id, new_v);
         }
@@ -1692,8 +1697,9 @@ class Parser {
         // in the block.
         auto replace = values_to_replace_.back();
         for (auto& val : replace) {
-            auto* value = ValueNoPropagate(val.value_id);
-            val.terminator->SetOperand(val.idx, value);
+            auto v = ValueNoPropagate(val.value_id);
+            TINT_ASSERT(v.has_value());
+            val.terminator->SetOperand(val.idx, v.value());
         }
 
         values_to_replace_.pop_back();
@@ -1705,6 +1711,21 @@ class Parser {
         // Emit the continuing block. The continue block is within the scope of the body block,
         // so we don't pop the id stack yet.
         auto continue_id = loop_merge_inst->GetSingleWordInOperand(1);
+
+        // Capture any continue PHi header values before emitting the continue because the value
+        // will get re-written to be the continue block param, so we have to capture first.
+        auto continue_loop_phi_ids = block_phi_values_[continue_id];
+        std::vector<core::ir::Value*> continue_loop_phi_values;
+        if (!continue_loop_phi_ids.empty()) {
+            continue_loop_phi_values.reserve(continue_loop_phi_ids.size());
+            for (auto& id : continue_loop_phi_ids) {
+                auto v = ValueNoPropagate(id);
+                if (v.has_value()) {
+                    continue_loop_phi_values.push_back(v.value());
+                }
+            }
+        }
+
         EmitContinueBlock(src.id(), continue_id, loop);
 
         // Remove the body block id stack before emitting the merge block.
@@ -1717,17 +1738,37 @@ class Parser {
             for (auto incoming : loop->Continuing()->InboundSiblingBranches()) {
                 TINT_ASSERT(incoming->Is<core::ir::Continue>());
 
+                if (incoming->Args().Length() == loop->Continuing()->Params().Length()) {
+                    continue;
+                }
+
                 // Check if the block this instruction exists in has default phi result that we
                 // can append.
                 auto inst_to_blk_iter = inst_to_spirv_block_.find(incoming);
                 if (inst_to_blk_iter != inst_to_spirv_block_.end()) {
                     uint32_t spirv_blk = inst_to_blk_iter->second;
+
                     auto phi_values_from_loop_header = block_phi_values_[spirv_blk];
-                    // If there were phi values, push them to this instruction
-                    for (auto value_id : phi_values_from_loop_header) {
-                        auto* value = Value(value_id);
-                        incoming->PushOperand(value);
+
+                    // We require a PHI value, but the current block doesn't have any from the
+                    // header. In this case, check the `continue` target to see if it has header
+                    // provided phi values. If so, use that one.
+                    if (phi_values_from_loop_header.empty()) {
+                        TINT_ASSERT(!continue_loop_phi_values.empty());
+
+                        for (auto* value : continue_loop_phi_values) {
+                            incoming->PushOperand(value);
+                        }
+
+                    } else {
+                        // If there were phi values, push them to this instruction
+                        for (auto value_id : phi_values_from_loop_header) {
+                            auto* value = Value(value_id);
+                            incoming->PushOperand(value);
+                        }
                     }
+                } else {
+                    TINT_UNREACHABLE() << "unable to provide needed continue arguments";
                 }
             }
         }
@@ -2220,6 +2261,17 @@ class Parser {
                     EmitPhi(inst);
                     break;
 
+                case spv::Op::OpGroupNonUniformBroadcast:
+                    EmitSubgroupBuiltinConstantId(inst,
+                                                  spirv::BuiltinFn::kGroupNonUniformBroadcast);
+                    break;
+                case spv::Op::OpGroupNonUniformQuadBroadcast:
+                    EmitSubgroupBuiltinConstantId(inst,
+                                                  spirv::BuiltinFn::kGroupNonUniformQuadBroadcast);
+                    break;
+                case spv::Op::OpGroupNonUniformQuadSwap:
+                    EmitSubgroupBuiltinConstantId(inst, spirv::BuiltinFn::kGroupNonUniformQuadSwap);
+                    break;
                 case spv::Op::OpGroupNonUniformAll:
                     EmitSubgroupBuiltin(inst, core::BuiltinFn::kSubgroupAll);
                     break;
@@ -2235,9 +2287,6 @@ class Parser {
                 case spv::Op::OpGroupNonUniformBroadcastFirst:
                     EmitSubgroupBuiltin(inst, spirv::BuiltinFn::kGroupNonUniformBroadcastFirst);
                     break;
-                case spv::Op::OpGroupNonUniformBroadcast:
-                    EmitSubgroupBuiltin(inst, spirv::BuiltinFn::kGroupNonUniformBroadcast);
-                    break;
                 case spv::Op::OpGroupNonUniformShuffle:
                     EmitSubgroupBuiltin(inst, spirv::BuiltinFn::kGroupNonUniformShuffle);
                     break;
@@ -2249,12 +2298,6 @@ class Parser {
                     break;
                 case spv::Op::OpGroupNonUniformShuffleUp:
                     EmitSubgroupBuiltin(inst, spirv::BuiltinFn::kGroupNonUniformShuffleUp);
-                    break;
-                case spv::Op::OpGroupNonUniformQuadBroadcast:
-                    EmitSubgroupBuiltin(inst, spirv::BuiltinFn::kGroupNonUniformQuadBroadcast);
-                    break;
-                case spv::Op::OpGroupNonUniformQuadSwap:
-                    EmitSubgroupBuiltin(inst, spirv::BuiltinFn::kGroupNonUniformQuadSwap);
                     break;
                 case spv::Op::OpGroupNonUniformSMin:
                     EmitSubgroupMinMax(inst, spirv::BuiltinFn::kGroupNonUniformSMin);
@@ -2383,18 +2426,24 @@ class Parser {
             inst.result_id());
     }
 
-    void EmitSubgroupBuiltin(spvtools::opt::Instruction& inst, spirv::BuiltinFn fn) {
-        auto val = Value(inst.GetSingleWordInOperand(1));
+    void EmitSubgroupBuiltinConstantId(spvtools::opt::Instruction& inst, spirv::BuiltinFn fn) {
+        auto id = Value(inst.GetSingleWordInOperand(2));
 
         // TODO(431054356): Convert core::BuiltinFn::kSubgroupBroadcast non-constant values into a
         // `subgroupShuffle` when we support SPIR-V >= 1.5 source.
         //
         // For QuadBroadcast this will remain an error as there is no WGSL equivalent.
         // For QuadSwap this will remain an error as there is no WGSL equivalent.
-        if (!val->Is<core::ir::Constant>()) {
-            TINT_ICE() << "non-constant GroupNonUniform `value` not supported";
+        if (!id->Is<core::ir::Constant>()) {
+            TINT_ICE() << "non-constant GroupNonUniform `Invocation Id` not supported";
         }
 
+        ValidateScope(inst);
+        Emit(b_.Call<spirv::ir::BuiltinCall>(Type(inst.type_id()), fn, Args(inst, 2)),
+             inst.result_id());
+    }
+
+    void EmitSubgroupBuiltin(spvtools::opt::Instruction& inst, spirv::BuiltinFn fn) {
         ValidateScope(inst);
         Emit(b_.Call<spirv::ir::BuiltinCall>(Type(inst.type_id()), fn, Args(inst, 2)),
              inst.result_id());
@@ -2669,7 +2718,6 @@ class Parser {
                 if (sibling->Operands().Length() >= param_count) {
                     continue;
                 }
-
                 // We haven't updated the sibling yet
                 auto* term = sibling->As<core::ir::Terminator>();
                 TINT_ASSERT(term);
@@ -2730,6 +2778,19 @@ class Parser {
             auto value_id = inst.GetSingleWordInOperand(i);
             auto blk_id = inst.GetSingleWordInOperand(i + 1);
 
+            if (block_phi_values_.contains(blk_id)) {
+                block_phi_values_[blk_id].push_back(value_id);
+            } else {
+                block_phi_values_[blk_id] = {value_id};
+            }
+
+            auto v = values_.Get(value_id);
+            if (v) {
+                // If the value exists, then try to get it to force the propagation. If it doesn't
+                // exist, then it will come later in the header and we'll deal with it later.
+                Value(value_id);
+            }
+
             core::ir::Terminator* term = nullptr;
             // The referenced block hasn't been emitted yet (continue blocks have this
             // behaviour). So, store the fact that it needs to return a given value away for
@@ -2746,7 +2807,7 @@ class Parser {
                     continue;
                 }
 
-                // The loop header is the terminator, so synthesize a continue blockhand append
+                // The loop header is the terminator, so synthesize a continue block and append
                 // to that a next iteration.
                 if (loop->Continuing()->IsEmpty()) {
                     b_.Append(loop->Continuing(), [&] { term = b_.NextIteration(loop); });
@@ -2939,6 +3000,12 @@ class Parser {
 
     void EmitSampledImage(const spvtools::opt::Instruction& inst) {
         auto* tex = Value(inst.GetSingleWordInOperand(0));
+        auto* img_type = tex->Type()->As<type::Image>();
+        TINT_ASSERT(img_type);
+        if (img_type->GetMultisampled() == type::Multisampled::kMultisampled) {
+            TINT_ICE()
+                << "Creating an OpTypeSampledImage from a multisampled image is not supported";
+        }
         Emit(b_.CallExplicit<spirv::ir::BuiltinCall>(Type(inst.type_id()),
                                                      spirv::BuiltinFn::kSampledImage,
                                                      Vector{tex->Type()}, Args(inst, 2)),
@@ -3258,7 +3325,7 @@ class Parser {
         return nullptr;
     }
 
-    void EmitBranch(const spvtools::opt::Instruction& inst) {
+    void EmitBranch(spvtools::opt::Instruction& inst) {
         auto dest_id = inst.GetSingleWordInOperand(0);
 
         // Disallow fallthrough
@@ -3270,7 +3337,10 @@ class Parser {
 
         // The destination is a continuing block, so insert a `continue`
         if (auto* loop = ContinueTarget(dest_id)) {
-            EmitWithoutResult(b_.Continue(loop));
+            auto* new_inst = b_.Continue(loop);
+            auto id = spirv_context_->get_instr_block(&inst)->id();
+            inst_to_spirv_block_[new_inst] = id;
+            EmitWithoutResult(new_inst);
             return;
         }
         // If this is branching to a previous merge block then we're done. It can be a previous
@@ -3622,12 +3692,12 @@ class Parser {
         auto merge_id = merge_inst->GetSingleWordInOperand(0);
         walk_stop_blocks_.insert({merge_id, switch_});
 
+        size_t switch_blocks_id = current_switch_blocks_.size();
         current_switch_blocks_.push_back({});
-        auto& switch_blocks = current_switch_blocks_.back();
 
         auto* default_blk = b_.DefaultCase(switch_);
         if (default_id != merge_id) {
-            switch_blocks.emplace(default_id);
+            current_switch_blocks_[switch_blocks_id].emplace(default_id);
 
             const auto& bb_default = current_spirv_function_->FindBlock(default_id);
             EmitBlockParent(default_blk, *bb_default);
@@ -3643,7 +3713,7 @@ class Parser {
             auto blk_id = inst.GetSingleWordInOperand(i + 1);
 
             if (blk_id != merge_id) {
-                switch_blocks.emplace(blk_id);
+                current_switch_blocks_[switch_blocks_id].emplace(blk_id);
             }
         }
 
@@ -3746,8 +3816,14 @@ class Parser {
     /// @param inst the SPIR-V instruction for OpCopyObject
     void EmitCopyObject(const spvtools::opt::Instruction& inst) {
         // Make the result Id a pointer to the original copied value.
-        auto* l = b_.Let(Value(inst.GetSingleWordOperand(2)));
-        Emit(l, inst.result_id());
+        auto* v = Value(inst.GetSingleWordOperand(2));
+
+        if (v->Type()->IsHandle() || v->Type()->Is<spirv::type::SampledImage>()) {
+            values_.Add(inst.result_id(), v);
+        } else {
+            auto* l = b_.Let(v);
+            Emit(l, inst.result_id());
+        }
     }
 
     /// @param inst the SPIR-V instruction for OpCopyMemory
@@ -4146,69 +4222,67 @@ class Parser {
         auto* vector1 = Value(inst.GetSingleWordOperand(2));
         auto* vector2 = Value(inst.GetSingleWordOperand(3));
         auto* result_ty = Type(inst.type_id());
+        auto* el_ty = result_ty->DeepestElement();
 
         uint32_t n1 = vector1->Type()->As<core::type::Vector>()->Width();
         uint32_t n2 = vector2->Type()->As<core::type::Vector>()->Width();
 
-        Vector<uint32_t, 4> literals;
+        Vector<core::ir::Value*, 4> swizzles;
+
+        // Track the current swizzle that we are building from consecutive indices that fall within
+        // the same vector.
+        Vector<uint32_t, 4> current_indices;
+        core::ir::Value* current_vector = nullptr;
+
+        // Emit the current swizzle that we have constructed so far, and add it to the list.
+        auto flush_swizzle = [&] {
+            if (current_vector == nullptr) {
+                return;
+            }
+            auto* swizzle_type = ty_.MatchWidth(el_ty, current_indices.Length());
+            auto* swizzle = b_.Swizzle(swizzle_type, current_vector, current_indices);
+            EmitWithoutSpvResult(swizzle);
+            swizzles.Push(swizzle->Result());
+            current_indices.Clear();
+        };
+
         for (uint32_t i = 4; i < inst.NumOperandWords(); i++) {
-            literals.Push(inst.GetSingleWordOperand(i));
-        }
+            uint32_t literal = inst.GetSingleWordOperand(i);
 
-        // Check if all literals fall entirely within `vector1` or `vector2`,
-        // which would allow us to use a single-vector swizzle.
-        bool swizzle_from_vector1_only = true;
-        bool swizzle_from_vector2_only = true;
-        for (auto& literal : literals) {
-            if (literal == ~0u) {
-                // A `0xFFFFFFFF` literal represents an undefined index,
-                // fallback to first index.
-                literal = 0;
-            }
-            if (literal >= n1) {
-                swizzle_from_vector1_only = false;
-            }
-            if (literal < n1) {
-                swizzle_from_vector2_only = false;
-            }
-        }
-
-        // If only one vector is used, we can swizzle it.
-        if (swizzle_from_vector1_only) {
-            // Indices are already within `[0, n1)`, as expected by `Swizzle` IR
-            // for `vector1`.
-            Emit(b_.Swizzle(result_ty, vector1, literals), inst.result_id());
-            return;
-        }
-        if (swizzle_from_vector2_only) {
-            // Map logical concatenated indices' range `[n1, n1 + n2)` into the range
-            // `[0, n2)`, as expected by `Swizzle` IR for `vector2`.
-            for (auto& literal : literals) {
-                literal -= n1;
-            }
-            Emit(b_.Swizzle(result_ty, vector2, literals), inst.result_id());
-            return;
-        }
-
-        // Swizzle is not possible, construct the result vector out of elements
-        // from both vectors.
-        auto* element_ty = vector1->Type()->DeepestElement();
-        Vector<core::ir::Value*, 4> result;
-        for (auto idx : literals) {
-            TINT_ASSERT(idx < n1 + n2);
-
-            if (idx < n1) {
-                auto* access_inst = b_.Access(element_ty, vector1, b_.Constant(u32(idx)));
-                EmitWithoutSpvResult(access_inst);
-                result.Push(access_inst->Result());
+            // Determine which vector this index falls within.
+            uint32_t next_index;
+            core::ir::Value* next_vector = nullptr;
+            if (literal == 0xFFFFFFFF) {
+                // Undefined component, so just use the first component of the first vector.
+                next_vector = vector1;
+                next_index = 0;
+            } else if (literal < n1) {
+                next_vector = vector1;
+                next_index = literal;
+            } else if (literal < n1 + n2) {
+                next_vector = vector2;
+                next_index = literal - n1;
             } else {
-                auto* access_inst = b_.Access(element_ty, vector2, b_.Constant(u32(idx - n1)));
-                EmitWithoutSpvResult(access_inst);
-                result.Push(access_inst->Result());
+                TINT_ICE() << "invalid vector shuffle index";
             }
+
+            // If the vector has changed from the previous index, flush the swizzle.
+            if (next_vector != current_vector) {
+                flush_swizzle();
+            }
+            current_vector = next_vector;
+            current_indices.Push(next_index);
         }
 
-        Emit(b_.Construct(result_ty, result), inst.result_id());
+        flush_swizzle();
+
+        if (swizzles.Length() == 1) {
+            // There was only one swizzle, so we can just use it directly.
+            AddValue(inst.result_id(), swizzles[0]);
+        } else {
+            // There were multiple swizzles, so we combine them all to produce the final result.
+            Emit(b_.Construct(result_ty, swizzles), inst.result_id());
+        }
     }
 
     /// @param inst the SPIR-V instruction for OpFunctionCall
@@ -4277,6 +4351,9 @@ class Parser {
                     break;
                 case spv::Decoration::Coherent:
                     // Tint has coherent memory semantics, so this is a no-op.
+                    break;
+                case spv::Decoration::Restrict:
+                    // Hint to the compiler that it may compile as if there is no aliasing. Ignore.
                     break;
                 default:
                     TINT_UNIMPLEMENTED() << "unhandled decoration " << d;
@@ -4439,7 +4516,7 @@ class Parser {
     // are defined after the `OpPhi` instruction.
     std::vector<std::vector<ReplacementValue>> values_to_replace_;
 
-    // A map of loop header to phi values returned by that loop header
+    // A map of block to phi values returned by the loop header
     std::unordered_map<uint32_t, std::vector<uint32_t>> block_phi_values_;
 
     // Map of certain instructions back to their originating spirv block

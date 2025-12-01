@@ -500,7 +500,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void ShowSharePicker(
       const std::string& title,
       const std::string& text,
-      const std::string& url,
+      const GURL& url,
       const std::vector<std::string>& file_paths,
       blink::mojom::ShareService::ShareCallback callback) override;
 
@@ -565,6 +565,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // `screen_infos_` was changed. The second boolean returns true if the current
   // ScreenInfo element was changed.
   std::pair<bool, bool> MaybeUpdateScreenInfosForHiDPI();
+
+  // Returns true if running with no associated platform window, i.e. has NSView
+  // but no NSWindow, like when in headless.
+  bool IsHeadless() const;
 
   // Interface through which the NSView is to be manipulated. This points either
   // to |in_process_ns_view_bridge_| or to |remote_ns_view_|.

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The Chromium Authors. All rights reserved.
+ * Copyright 2016 The Chromium Authors
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
@@ -71,7 +71,7 @@
   }
 
   &.child-editing {
-    word-wrap: break-word !important; /* stylelint-disable-line declaration-no-important */
+    overflow-wrap: break-word !important; /* stylelint-disable-line declaration-no-important */
     white-space: normal !important; /* stylelint-disable-line declaration-no-important */
     padding-left: 0;
   }
@@ -220,13 +220,14 @@ devtools-icon.icon-link {
 }
 
 .styles-pane-button {
-  height: 15px;
-  margin: 0 0 0 6px;
+  width: var(--sys-size-8);
+  height: var(--sys-size-8);
+  margin-left: var(--sys-size-4);
   position: absolute;
-  top: -1px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  user-select: none;
 }
 /* Matched styles */
 

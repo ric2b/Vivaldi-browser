@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import rule from '../lib/inject-checkbox-styles.ts';
@@ -65,29 +65,6 @@ export class SettingCheckbox extends HTMLElement {
     Lit.render(
         Lit.html\`
       <style>\${Input.checkboxStyles}</style>
-      <p>
-        <label>
-          <input type="checkbox" />
-        </label>
-      </p>\`, this.#shadow, {host: this});
-  }
-}`,
-      filename: 'front_end/ui/components/settings/SettingsCheckbox.ts',
-    },
-    {
-      code: `import * as ComponentHelpers from '../../components/helpers/helpers.js';
-import * as Lit from '../../lit/lit.js';
-import * as Input from '../input/input.js';
-
-
-export class SettingCheckbox extends HTMLElement {
-  static readonly litTagName = Lit.literal\`setting-checkbox\`;
-  readonly #shadow = this.attachShadow({mode: 'open'});
-
-  #render(): void {
-    Lit.render(
-        Lit.html\`
-      <style>\${UI.Widget.widgetScoped(Input.checkboxStyles)}</style>
       <p>
         <label>
           <input type="checkbox" />

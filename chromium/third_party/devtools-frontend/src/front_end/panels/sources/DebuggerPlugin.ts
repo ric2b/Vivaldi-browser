@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2011 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2011 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
@@ -36,6 +10,7 @@ import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
+import * as Badges from '../../models/badges/badges.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Breakpoints from '../../models/breakpoints/breakpoints.js';
 import * as Formatter from '../../models/formatter/formatter.js';
@@ -61,117 +36,117 @@ const {EMPTY_BREAKPOINT_CONDITION, NEVER_PAUSE_HERE_CONDITION} = Breakpoints.Bre
 
 const UIStrings = {
   /**
-   *@description Text in Debugger Plugin of the Sources panel
+   * @description Text in Debugger Plugin of the Sources panel
    */
   thisScriptIsOnTheDebuggersIgnore: 'This script is on the debugger\'s ignore list',
   /**
-   *@description Text to stop preventing the debugger from stepping into library code
+   * @description Text to stop preventing the debugger from stepping into library code
    */
   removeFromIgnoreList: 'Remove from ignore list',
   /**
-   *@description Text of a button in the Sources panel Debugger Plugin to configure ignore listing in Settings
+   * @description Text of a button in the Sources panel Debugger Plugin to configure ignore listing in Settings
    */
   configure: 'Configure',
   /**
-   *@description Text to add a breakpoint
+   * @description Text to add a breakpoint
    */
   addBreakpoint: 'Add breakpoint',
   /**
-   *@description A context menu item in the Debugger Plugin of the Sources panel
+   * @description A context menu item in the Debugger Plugin of the Sources panel
    */
   addConditionalBreakpoint: 'Add conditional breakpoint…',
   /**
-   *@description A context menu item in the Debugger Plugin of the Sources panel
+   * @description A context menu item in the Debugger Plugin of the Sources panel
    */
   addLogpoint: 'Add logpoint…',
   /**
-   *@description A context menu item in the Debugger Plugin of the Sources panel
+   * @description A context menu item in the Debugger Plugin of the Sources panel
    */
   neverPauseHere: 'Never pause here',
   /**
-   *@description Context menu command to delete/remove a breakpoint that the user
+   * @description Context menu command to delete/remove a breakpoint that the user
    *has set. One line of code can have multiple breakpoints. Always >= 1 breakpoint.
    */
   removeBreakpoint: '{n, plural, =1 {Remove breakpoint} other {Remove all breakpoints in line}}',
   /**
-   *@description A context menu item in the Debugger Plugin of the Sources panel
+   * @description A context menu item in the Debugger Plugin of the Sources panel
    */
   editBreakpoint: 'Edit breakpoint…',
   /**
-   *@description Context menu command to disable (but not delete) a breakpoint
+   * @description Context menu command to disable (but not delete) a breakpoint
    *that the user has set. One line of code can have multiple breakpoints. Always
    *>= 1 breakpoint.
    */
   disableBreakpoint: '{n, plural, =1 {Disable breakpoint} other {Disable all breakpoints in line}}',
   /**
-   *@description Context menu command to enable a breakpoint that the user has
+   * @description Context menu command to enable a breakpoint that the user has
    *set. One line of code can have multiple breakpoints. Always >= 1 breakpoint.
    */
   enableBreakpoint: '{n, plural, =1 {Enable breakpoint} other {Enable all breakpoints in line}}',
   /**
-   *@description Text in Debugger Plugin of the Sources panel
+   * @description Text in Debugger Plugin of the Sources panel
    */
   addSourceMap: 'Add source map…',
   /**
-   *@description Text in Debugger Plugin of the Sources panel
+   * @description Text in Debugger Plugin of the Sources panel
    */
   addWasmDebugInfo: 'Add DWARF debug info…',
   /**
-   *@description Text in Debugger Plugin of the Sources panel
+   * @description Text in Debugger Plugin of the Sources panel
    */
   sourceMapLoaded: 'Source map loaded',
   /**
-   *@description Title of the Filtered List WidgetProvider of Quick Open
-   *@example {Ctrl+P Ctrl+O} PH1
+   * @description Title of the Filtered List WidgetProvider of Quick Open
+   * @example {Ctrl+P Ctrl+O} PH1
    */
   associatedFilesAreAvailable: 'Associated files are available via file tree or {PH1}.',
   /**
-   *@description Text in Debugger Plugin of the Sources panel
+   * @description Text in Debugger Plugin of the Sources panel
    */
   associatedFilesShouldBeAdded:
       'Associated files should be added to the file tree. You can debug these resolved source files as regular JavaScript files.',
   /**
-   *@description Text in Debugger Plugin of the Sources panel
+   * @description Text in Debugger Plugin of the Sources panel
    */
   theDebuggerWillSkipStepping: 'The debugger will skip stepping through this script, and will not stop on exceptions.',
   /**
-   *@description Text in Debugger Plugin of the Sources panel
+   * @description Text in Debugger Plugin of the Sources panel
    */
   sourceMapSkipped: 'Source map skipped for this file',
   /**
-   *@description Text in Debugger Plugin of the Sources panel
+   * @description Text in Debugger Plugin of the Sources panel
    */
   sourceMapFailed: 'Source map failed to load',
   /**
-   *@description Text in Debugger Plugin of the Sources panel
+   * @description Text in Debugger Plugin of the Sources panel
    */
   debuggingPowerReduced: 'DevTools can\'t show authored sources, but you can debug the deployed code.',
   /**
-   *@description Text in Debugger Plugin of the Sources panel
+   * @description Text in Debugger Plugin of the Sources panel
    */
   reloadForSourceMap: 'To enable again, make sure the file isn\'t on the ignore list and reload.',
   /**
-   *@description Text in Debugger Plugin of the Sources panel
-   *@example {http://site.com/lib.js.map} PH1
-   *@example {HTTP error: status code 404, net::ERR_UNKNOWN_URL_SCHEME} PH2
+   * @description Text in Debugger Plugin of the Sources panel
+   * @example {http://site.com/lib.js.map} PH1
+   * @example {HTTP error: status code 404, net::ERR_UNKNOWN_URL_SCHEME} PH2
    */
   errorLoading: 'Error loading url {PH1}: {PH2}',
   /**
-   *@description Error message that is displayed in UI when a file needed for debugging information for a call frame is missing
-   *@example {src/myapp.debug.wasm.dwp} PH1
+   * @description Error message that is displayed in UI when a file needed for debugging information for a call frame is missing
+   * @example {src/myapp.debug.wasm.dwp} PH1
    */
   debugFileNotFound: 'Failed to load debug file "{PH1}".',
   /**
-   *@description Error message that is displayed when no debug info could be loaded
-   *@example {app.wasm} PH1
+   * @description Error message that is displayed when no debug info could be loaded
+   * @example {app.wasm} PH1
    */
   debugInfoNotFound: 'Failed to load any debug info for {PH1}',
   /**
-   *@description Text of a button to open up details on a request when no debug info could be loaded
+   * @description Text of a button to open up details on a request when no debug info could be loaded
    */
   showRequest: 'Show request',
   /**
-   *@description Tooltip text that shows on hovering over a button to see more details on a request
+   * @description Tooltip text that shows on hovering over a button to see more details on a request
    */
   openDeveloperResources: 'Opens the request in the Developer resource panel',
 } as const;
@@ -455,13 +430,13 @@ export class DebuggerPlugin extends Plugin {
 
   attachInfobar(bar: UI.Infobar.Infobar): void {
     if (this.editor) {
-      this.editor.dispatch({effects: SourceFrame.SourceFrame.addInfobar.of(bar)});
+      this.editor.dispatch({effects: SourceFrame.SourceFrame.addSourceFrameInfobar.of({element: bar.element})});
     }
   }
 
   removeInfobar(bar: UI.Infobar.Infobar|null): void {
     if (this.editor && bar) {
-      this.editor.dispatch({effects: SourceFrame.SourceFrame.removeInfobar.of(bar)});
+      this.editor.dispatch({effects: SourceFrame.SourceFrame.removeSourceFrameInfobar.of({element: bar.element})});
     }
   }
 
@@ -1654,6 +1629,9 @@ export class DebuggerPlugin extends Plugin {
         this.uiSourceCode, lineNumber, columnNumber, condition, enabled, isLogpoint,
         Breakpoints.BreakpointManager.BreakpointOrigin.USER_ACTION);
     this.breakpointWasSetForTest(lineNumber, columnNumber, condition, enabled);
+    if (bp) {
+      Badges.UserBadges.instance().recordAction(Badges.BadgeAction.BREAKPOINT_ADDED);
+    }
     return bp;
   }
 

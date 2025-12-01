@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -20,11 +20,11 @@ const CHANGES_VIEW_URL = 'https://developer.chrome.com/docs/devtools/changes' as
 
 const UIStrings = {
   /**
-   *@description Text in Changes View of the Changes tab if no change has been made so far.
+   * @description Text in Changes View of the Changes tab if no change has been made so far.
    */
   noChanges: 'No changes yet',
   /**
-   *@description Text in Changes View of the Changes tab to explain the Changes panel.
+   * @description Text in Changes View of the Changes tab to explain the Changes panel.
    */
   changesViewDescription: 'On this page you can track code changes made within DevTools.',
 } as const;

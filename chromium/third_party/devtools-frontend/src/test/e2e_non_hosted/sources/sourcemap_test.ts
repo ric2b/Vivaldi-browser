@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,7 +39,6 @@ import {
   STEP_OVER_BUTTON,
   waitForStackTopMatch
 } from '../../e2e/helpers/sources-helpers.js';
-import {getVisibleTextContents} from '../../shared/helper.js';
 import type {DevToolsPage} from '../shared/frontend-helper.js';
 
 async function waitForTextContent(selector: string, devToolsPage: DevToolsPage) {
@@ -428,7 +427,7 @@ describe('The Sources Tab', function() {
     await openFileInEditor('sourcemap-origin.min.js', devToolsPage);
     await devToolsPage.waitFor('.infobar-warning');
     await devToolsPage.waitFor('.infobar-info');
-    const infobarTexts = await getVisibleTextContents(INFOBAR_TEXT, devToolsPage);
+    const infobarTexts = await devToolsPage.getVisibleTextContents(INFOBAR_TEXT);
     assert.deepEqual(
         infobarTexts, ['This script is on the debugger\'s ignore list', 'Source map skipped for this file']);
   });

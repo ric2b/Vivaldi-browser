@@ -144,14 +144,11 @@ struct State {
                         padded_structures.Add(element_struct);
                     }
 
-                    return ty.Get<core::type::Array>(new_element_type, arr->Count(), arr->Align(),
-                                                     arr->Size(), arr->Stride(), arr->Stride());
+                    return ty.Get<core::type::Array>(new_element_type, arr->Count(), arr->Size());
                 },
                 [&](const core::type::Array* arr) {
                     auto* new_element_type = RewriteType(arr->ElemType());
-                    TINT_ASSERT(arr->IsStrideImplicit());
-                    return ty.Get<core::type::Array>(new_element_type, arr->Count(), arr->Align(),
-                                                     arr->Size(), arr->Stride(), arr->Stride());
+                    return ty.Get<core::type::Array>(new_element_type, arr->Count(), arr->Size());
                 },
                 [&](const core::type::Struct* str) -> const core::type::Struct* {
                     // Rewrite members of the struct that contain arrays with non-default strides.
@@ -256,8 +253,10 @@ struct State {
 Result<SuccessType> DecomposeStridedArray(core::ir::Module& ir) {
     auto result = ValidateAndDumpIfNeeded(ir, "spirv.DecomposeStridedArray",
                                           core::ir::Capabilities{
+                                              core::ir::Capability::kAllowMultipleEntryPoints,
                                               core::ir::Capability::kAllowNonCoreTypes,
                                               core::ir::Capability::kAllowOverrides,
+                                              core::ir::Capability::kAllowPointerToHandle,
                                           });
     if (result != Success) {
         return result.Failure();

@@ -370,7 +370,7 @@ TEST_F(SQLitePersistentCookieStoreTest, TestInvalidVersionRecovery) {
     ASSERT_TRUE(meta_table.Init(&db, 1, 1));
     // Keep in sync with latest unsupported version from:
     // net/extras/sqlite/sqlite_persistent_cookie_store.cc
-    ASSERT_TRUE(meta_table.SetVersionNumber(17));
+    ASSERT_TRUE(meta_table.SetVersionNumber(18));
   }
 
   // Upon loading, the database should be reset to a good, blank state.
@@ -1459,142 +1459,6 @@ TEST_F(SQLitePersistentCookieStoreTest, NoCoalesceUnrelated) {
   db_thread_event_.Signal();
 }
 
-// Test that cookies with __host-http- or __http- prefixes that are not httponly
-// are deleted during load.
-TEST_F(SQLitePersistentCookieStoreTest, TestInsecurePrefixedCookiesDeletion) {
-  InitializeStore(/*crypt=*/false, /*restore_old_session_cookies=*/false);
-
-  base::Time t = base::Time::Now();
-  base::Time future = t + base::Days(1);
-
-  // Add cookies that should be deleted (insecure prefixed cookies)
-  // __host-http- prefix without httponly
-  auto dom_host_http_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
-      "__host-http-test", "value1", "example.com", "/", t, future,
-      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
-      /*secure=*/true, /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
-      COOKIE_PRIORITY_DEFAULT);
-  store_->AddCookie(*dom_host_http_cookie);
-
-  // __http- prefix without httponly
-  auto dom_http_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
-      "__http-test", "value2", "example.com", "/", t, future,
-      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
-      /*secure=*/true, /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
-      COOKIE_PRIORITY_DEFAULT);
-  store_->AddCookie(*dom_http_cookie);
-
-  // __host-http- prefix without secure
-  auto insecure_host_http_cookie =
-      CanonicalCookie::CreateUnsafeCookieForTesting(
-          "__host-http-test2", "value1", "example.com", "/", t, future,
-          /*last_access=*/base::Time(), /*last_update=*/base::Time(),
-          /*secure=*/false, /*httponly=*/true, CookieSameSite::NO_RESTRICTION,
-          COOKIE_PRIORITY_DEFAULT);
-  store_->AddCookie(*insecure_host_http_cookie);
-
-  // __http- prefix without secure
-  auto insecure_http_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
-      "__http-test2", "value2", "example.com", "/", t, future,
-      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
-      /*secure=*/false, /*httponly=*/true, CookieSameSite::NO_RESTRICTION,
-      COOKIE_PRIORITY_DEFAULT);
-  store_->AddCookie(*insecure_http_cookie);
-
-  // Mixed case __HOST-HTTP- prefix without httponly
-  auto insecure_mixed_case_cookie =
-      CanonicalCookie::CreateUnsafeCookieForTesting(
-          "__HOST-HTTP-mixed", "value3", "example.com", "/", t, future,
-          /*last_access=*/base::Time(), /*last_update=*/base::Time(),
-          /*secure=*/true, /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
-          COOKIE_PRIORITY_DEFAULT);
-  store_->AddCookie(*insecure_mixed_case_cookie);
-
-  // __http- prefix WITHOUT httponly nor secure
-  auto insecure_edge_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
-      "__http-insecure", "value4", "example.com", "/", t, future,
-      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
-      /*secure=*/false, /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
-      COOKIE_PRIORITY_DEFAULT);
-  store_->AddCookie(*insecure_edge_cookie);
-
-  // Add cookies that should NOT be deleted
-  // __host-http- prefix WITH httponly and secure
-  auto secure_host_http_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
-      "__host-http-secure", "value5", "example.com", "/", t, future,
-      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
-      /*secure=*/true, /*httponly=*/true, CookieSameSite::NO_RESTRICTION,
-      COOKIE_PRIORITY_DEFAULT);
-  store_->AddCookie(*secure_host_http_cookie);
-
-  // __http- prefix WITH httponly and secure
-  auto secure_http_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
-      "__http-secure", "value6", "example.com", "/", t, future,
-      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
-      /*secure=*/true, /*httponly=*/true, CookieSameSite::NO_RESTRICTION,
-      COOKIE_PRIORITY_DEFAULT);
-  store_->AddCookie(*secure_http_cookie);
-
-  // __host- (without http-)
-  auto host_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
-      "__host-other", "value7", "example.com", "/", t, future,
-      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
-      /*secure=*/true, /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
-      COOKIE_PRIORITY_DEFAULT);
-  store_->AddCookie(*host_cookie);
-
-  // No prefix
-  auto normal_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
-      "normal", "value8", "example.com", "/", t, future,
-      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
-      /*secure=*/false, /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
-      COOKIE_PRIORITY_DEFAULT);
-  store_->AddCookie(*normal_cookie);
-
-  // "Prefix" in the middle of name
-  auto middle_prefix_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
-      "test__http-middle_name", "value9", "example.com", "/", t, future,
-      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
-      /*secure=*/false, /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
-      COOKIE_PRIORITY_DEFAULT);
-  store_->AddCookie(*middle_prefix_cookie);
-
-  DestroyStore();
-
-  // Reload the store - this should trigger the deletion of insecure prefixed
-  // cookies
-  store_ = base::MakeRefCounted<SQLitePersistentCookieStore>(
-      temp_dir_.GetPath().Append(kCookieFilename), client_task_runner_,
-      background_task_runner_, false, nullptr, false);
-
-  CanonicalCookieVector cookies = Load();
-
-  // Verify that only the secure cookies and non-prefixed cookies remain
-  // Should have 5 cookies remaining (6 insecure cookies deleted)
-  EXPECT_EQ(5u, cookies.size());
-
-  // Find cookies by name to verify correct ones remain
-  std::set<std::string> remaining_names;
-  for (const auto& cookie : cookies) {
-    remaining_names.insert(cookie->Name());
-  }
-
-  // Cookies that should have been deleted
-  EXPECT_EQ(0u, remaining_names.count("__host-http-test"));
-  EXPECT_EQ(0u, remaining_names.count("__http-test"));
-  EXPECT_EQ(0u, remaining_names.count("__host-http-test2"));
-  EXPECT_EQ(0u, remaining_names.count("__http-test2"));
-  EXPECT_EQ(0u, remaining_names.count("__HOST-HTTP-mixed"));
-  EXPECT_EQ(0u, remaining_names.count("__http-insecure"));
-
-  // Cookies that should remain
-  EXPECT_EQ(1u, remaining_names.count("__host-http-secure"));
-  EXPECT_EQ(1u, remaining_names.count("__http-secure"));
-  EXPECT_EQ(1u, remaining_names.count("__host-other"));
-  EXPECT_EQ(1u, remaining_names.count("normal"));
-  EXPECT_EQ(1u, remaining_names.count("test__http-middle_name"));
-}
-
 // Locking is only supported on Windows.
 #if BUILDFLAG(IS_WIN)
 
@@ -1694,13 +1558,13 @@ TEST_F(SQLitePersistentCookieStoreTest, CorruptStore) {
                                 sql::SqliteLoggedResultCode::kNotADatabase, 1);
 }
 
-bool CreateV18Schema(sql::Database* db) {
+bool CreateV19Schema(sql::Database* db) {
   sql::MetaTable meta_table;
-  if (!meta_table.Init(db, 18, 18)) {
+  if (!meta_table.Init(db, 19, 19)) {
     return false;
   }
 
-  // Version 18 schema
+  // Version 19 schema
   static constexpr char kCreateSql[] =
       "CREATE TABLE cookies("
       "creation_utc INTEGER NOT NULL,"
@@ -1938,11 +1802,7 @@ std::vector<CanonicalCookie> CookiesForMigrationTest() {
   return cookies;
 }
 
-// Versions 18, 19, and 20 use the same schema so they can reuse this function.
-// AddV20CookiesToDB (and future versions) need to set max_expiration_delta to
-// base::Days(400) to simulate expiration limits introduced in version 19.
-bool AddV18CookiesToDB(sql::Database* db,
-                       base::TimeDelta max_expiration_delta) {
+bool AddV19or20CookiesToDB(sql::Database* db) {
   std::vector<CanonicalCookie> cookies = CookiesForMigrationTest();
   sql::Statement statement(db->GetCachedStatement(
       SQL_FROM_HERE,
@@ -1959,7 +1819,7 @@ bool AddV18CookiesToDB(sql::Database* db,
     return false;
   }
   for (const CanonicalCookie& cookie : cookies) {
-    base::Time max_expiration(cookie.CreationDate() + max_expiration_delta);
+    base::Time max_expiration(cookie.CreationDate() + base::Days(400));
 
     statement.Reset(true);
     statement.BindTime(0, cookie.CreationDate());
@@ -1998,10 +1858,6 @@ bool AddV18CookiesToDB(sql::Database* db,
     }
   }
   return transaction.Commit();
-}
-
-bool AddV20CookiesToDB(sql::Database* db) {
-  return AddV18CookiesToDB(db, base::Days(400));
 }
 
 bool AddV21CookiesToDB(sql::Database* db) {
@@ -2320,29 +2176,6 @@ void ConfirmDatabaseVersionAfterMigration(const base::FilePath path,
   ASSERT_GE(GetDBCurrentVersionNumber(&connection), version);
 }
 
-TEST_F(SQLitePersistentCookieStoreTest, UpgradeToSchemaVersion19) {
-  // Open db.
-  const base::FilePath database_path =
-      temp_dir_.GetPath().Append(kCookieFilename);
-  {
-    sql::Database connection(sql::test::kTestTag);
-    ASSERT_TRUE(connection.Open(database_path));
-    ASSERT_TRUE(CreateV18Schema(&connection));
-    ASSERT_EQ(GetDBCurrentVersionNumber(&connection), 18);
-    ASSERT_TRUE(AddV18CookiesToDB(&connection, base::TimeDelta::Max()));
-  }
-
-  CanonicalCookieVector read_in_cookies = CreateAndLoad(
-      /*crypt_cookies=*/false, /*restore_old_session_cookies=*/false);
-  ASSERT_NO_FATAL_FAILURE(
-      ConfirmCookiesAfterMigrationTest(std::move(read_in_cookies),
-                                       /*expect_last_update_date=*/true));
-  DestroyStore();
-
-  ASSERT_NO_FATAL_FAILURE(
-      ConfirmDatabaseVersionAfterMigration(database_path, 19));
-}
-
 TEST_F(SQLitePersistentCookieStoreTest, UpgradeToSchemaVersion20) {
   // Open db.
   const base::FilePath database_path =
@@ -2350,10 +2183,9 @@ TEST_F(SQLitePersistentCookieStoreTest, UpgradeToSchemaVersion20) {
   {
     sql::Database connection(sql::test::kTestTag);
     ASSERT_TRUE(connection.Open(database_path));
-    // V19's schema is the same as V18, so we can reuse the creation function.
-    ASSERT_TRUE(CreateV18Schema(&connection));
-    ASSERT_EQ(GetDBCurrentVersionNumber(&connection), 18);
-    ASSERT_TRUE(AddV18CookiesToDB(&connection, base::TimeDelta::Max()));
+    ASSERT_TRUE(CreateV19Schema(&connection));
+    ASSERT_EQ(GetDBCurrentVersionNumber(&connection), 19);
+    ASSERT_TRUE(AddV19or20CookiesToDB(&connection));
   }
 
   CanonicalCookieVector read_in_cookies = CreateAndLoad(
@@ -2376,7 +2208,7 @@ TEST_F(SQLitePersistentCookieStoreTest, UpgradeToSchemaVersion21) {
     ASSERT_TRUE(connection.Open(database_path));
     ASSERT_TRUE(CreateV20Schema(&connection));
     ASSERT_EQ(GetDBCurrentVersionNumber(&connection), 20);
-    ASSERT_TRUE(AddV20CookiesToDB(&connection));
+    ASSERT_TRUE(AddV19or20CookiesToDB(&connection));
   }
 
   CanonicalCookieVector read_in_cookies = CreateAndLoad(

@@ -1181,6 +1181,11 @@ ui::AXNodeData GetFocusedAccessibilityNodeInfo(WebContents* web_contents);
 // until any change happens to the accessibility tree.
 void WaitForAccessibilityTreeToChange(WebContents* web_contents);
 
+// Waits for any change to the accessibility tree, with a timeout.
+// Returns true if a change occurred, false if the timeout was reached.
+bool WaitForAccessibilityTreeToChange(WebContents* web_contents,
+                                      base::TimeDelta timeout);
+
 // Searches the accessibility tree to see if any node's accessible name
 // is equal to the given name. If not, repeatedly calls
 // WaitForAccessibilityTreeToChange, above, and then checks again.
@@ -1581,7 +1586,7 @@ class RenderFrameSubmissionObserver
   // OnRenderFrameMetadataChangedAfterActivation.
   bool break_on_any_frame_ = false;
 
-  const raw_ptr<RenderFrameMetadataProviderImpl>
+  const base::WeakPtr<RenderFrameMetadataProviderImpl>
       render_frame_metadata_provider_;
   base::OnceClosure quit_closure_;
   // If non-null, run when metadata changes.
@@ -2618,6 +2623,9 @@ std::optional<int> GetDOMNodeIdFromSubframe(
 // call.
 [[nodiscard]] bool WaitForDOMContentLoaded(RenderFrameHost* rfh);
 
+// Returns a list of the `RenderWidgetHost` for popups in the `web_contents`.
+std::vector<RenderWidgetHost*> GetPopupWidgets(WebContents* web_contents);
+
 // One-shot helper that listens for creation of a new popup widget.
 class CreateNewPopupWidgetInterceptor
     : public blink::mojom::LocalFrameHostInterceptorForTesting {
@@ -2716,6 +2724,24 @@ class ShowPopupWidgetWaiter
   int32_t routing_id_ = IPC::mojom::kRoutingIdNone;
   int32_t process_id_ = 0;
   const raw_ptr<RenderFrameHost> frame_host_;
+};
+
+// Intercepts `RequestClosePopup()` method. By default `RequestClosePopup()`
+// discards the message. Individual test should override `RequestClosePopup()`
+// to customize the behavior.
+class RequestCloseWidgetInterceptor
+    : public blink::mojom::PopupWidgetHostInterceptorForTesting {
+ public:
+  explicit RequestCloseWidgetInterceptor(RenderWidgetHost* render_widget_host);
+  ~RequestCloseWidgetInterceptor() override;
+
+  // `blink::mojom::PopupWidgetHostInterceptorForTesting`:
+  blink::mojom::PopupWidgetHost* GetForwardingInterface() override;
+  void RequestClosePopup() override;
+
+ private:
+  mojo::test::ScopedSwapImplForTesting<blink::mojom::PopupWidgetHost>
+      swapped_impl_;
 };
 
 }  // namespace content

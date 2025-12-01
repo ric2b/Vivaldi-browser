@@ -166,16 +166,20 @@ std::string DawnTestBase::PrintToStringParamName::SanitizeParamName(
         sanitizedName.resize(sanitizedName.length() - 1);
     }
 
-    // We don't know the test name at this point, but the format usually looks like
-    // this.
-    std::string prefix = mTest + ".TheTestNameUsuallyGoesHere/";
-    std::string testFormat = prefix + sanitizedName;
-    if (testFormat.length() > 220) {
+    // We don't know the test name, so assume that it is the longest one we
+    // have found in the wild for the purposes of calculating length.
+    std::string longestKnownTest =
+        (std::string("OpenGLES_EGLSync/SharedTextureMemoryTests.") +
+         std::string("GetPropertiesAHardwareBufferPropertiesRequiresAHBFeature/"));
+    std::string testFormat = longestKnownTest + sanitizedName;
+    if (testFormat.length() > 240) {
         // The bots don't support test names longer than 256. Shorten the name and append a unique
         // index if we're close. The failure log will still print the full param name.
+        // We use a number < 256 to leave a bit of buffer in case a new test gets added that is
+        // slightly longer than our longest known test.
         std::string suffix = std::string("__") + std::to_string(index);
         size_t targetLength = sanitizedName.length();
-        targetLength -= testFormat.length() - 220;
+        targetLength -= testFormat.length() - 240;
         targetLength -= suffix.length();
         sanitizedName.resize(targetLength);
         sanitizedName = sanitizedName + suffix;
@@ -244,6 +248,12 @@ void DawnTestEnvironment::ParseArgs(int argc, char** argv) {
 
         if (strcmp("--run-suppressed-tests", argv[i]) == 0) {
             mRunSuppressedTests = true;
+            continue;
+        }
+
+        // This is passed in by the bots on the dawn CQ for dawn end2end tests.
+        if (strcmp("--test-launcher-bot-mode", argv[i]) == 0) {
+            mIsTestLauncherBotMode = true;
             continue;
         }
 
@@ -427,15 +437,12 @@ std::unique_ptr<native::Instance> DawnTestEnvironment::CreateInstance(
     wgpu::InstanceDescriptor instanceDesc{};
     instanceDesc.nextInChain = &dawnInstanceDesc;
     std::vector<wgpu::InstanceFeatureName> features = {
-        wgpu::InstanceFeatureName::MultipleDevicesPerAdapter};
-    if (!UsesWire()) {
-        features.push_back(wgpu::InstanceFeatureName::TimedWaitAny);
-    }
+        wgpu::InstanceFeatureName::MultipleDevicesPerAdapter,
+        wgpu::InstanceFeatureName::TimedWaitAny};
     instanceDesc.requiredFeatureCount = features.size();
     instanceDesc.requiredFeatures = features.data();
 
-    auto instance = std::make_unique<native::Instance>(
-        reinterpret_cast<const WGPUInstanceDescriptor*>(&instanceDesc));
+    auto instance = std::make_unique<native::Instance>(&instanceDesc);
 
 #ifdef DAWN_ENABLE_BACKEND_OPENGLES
     if (GetEnvironmentVar("ANGLE_DEFAULT_PLATFORM").first.empty()) {
@@ -702,6 +709,10 @@ bool DawnTestEnvironment::RunSuppressedTests() const {
     return mRunSuppressedTests;
 }
 
+bool DawnTestEnvironment::IsTestLauncherBotMode() const {
+    return mIsTestLauncherBotMode;
+}
+
 native::BackendValidationLevel DawnTestEnvironment::GetBackendValidationLevel() const {
     return mBackendValidationLevel;
 }
@@ -916,8 +927,8 @@ bool DawnTestBase::IsNvidia() const {
 }
 
 bool DawnTestBase::IsQualcomm() const {
-    return gpu_info::IsQualcomm_PCI(mParam.adapterProperties.vendorID) ||
-           gpu_info::IsQualcomm_ACPI(mParam.adapterProperties.vendorID);
+    return gpu_info::IsQualcommPCI(mParam.adapterProperties.vendorID) ||
+           gpu_info::IsQualcommACPI(mParam.adapterProperties.vendorID);
 }
 
 bool DawnTestBase::IsSwiftshader() const {
@@ -1058,6 +1069,10 @@ bool DawnTestBase::RunSuppressedTests() const {
     return gTestEnv->RunSuppressedTests();
 }
 
+bool DawnTestBase::IsTestLauncherBotMode() const {
+    return gTestEnv->IsTestLauncherBotMode();
+}
+
 bool DawnTestBase::IsDXC() const {
     return HasToggleEnabled("use_dxc");
 }
@@ -1111,6 +1126,10 @@ native::Adapter DawnTestBase::GetAdapter() const {
     return mBackendAdapter;
 }
 
+utils::WireHelper* DawnTestBase::GetWireHelper() const {
+    return mWireHelper.get();
+}
+
 std::vector<wgpu::FeatureName> DawnTestBase::GetRequiredFeatures() {
     return {};
 }
@@ -1140,18 +1159,22 @@ bool DawnTestBase::SupportsFeatures(const std::vector<wgpu::FeatureName>& featur
     native::GetProcs().adapterGetFeatures(
         mBackendAdapter.Get(), reinterpret_cast<WGPUSupportedFeatures*>(&supportedFeatures));
 
-    std::unordered_set<wgpu::FeatureName> supportedSet;
-    for (uint32_t i = 0; i < supportedFeatures.featureCount; ++i) {
-        wgpu::FeatureName f = supportedFeatures.features[i];
-        supportedSet.insert(f);
-    }
-
+    auto supportedSet = GetSupportedFeatures();
     for (wgpu::FeatureName f : features) {
-        if (supportedSet.count(f) == 0) {
+        if (!supportedSet.contains(f)) {
             return false;
         }
     }
     return true;
+}
+
+std::set<wgpu::FeatureName> DawnTestBase::GetSupportedFeatures() {
+    DAWN_ASSERT(mBackendAdapter);
+    wgpu::SupportedFeatures supportedFeatures;
+    native::GetProcs().adapterGetFeatures(
+        mBackendAdapter.Get(), reinterpret_cast<WGPUSupportedFeatures*>(&supportedFeatures));
+    return std::set<wgpu::FeatureName>(supportedFeatures.features,
+                                       supportedFeatures.features + supportedFeatures.featureCount);
 }
 
 uint64_t DawnTestBase::GetDeprecationWarningCountForTesting() const {
@@ -1280,6 +1303,9 @@ void DawnTestBase::SetUp() {
     // By default we enable all the WGSL language features (including experimental, testing and
     // unsafe ones) in the tests.
     WGPUInstanceDescriptor instanceDesc = {};
+    std::vector<WGPUInstanceFeatureName> features = {WGPUInstanceFeatureName_TimedWaitAny};
+    instanceDesc.requiredFeatureCount = features.size();
+    instanceDesc.requiredFeatures = features.data();
     WGPUDawnWireWGSLControl wgslControl;
     wgslControl.chain.sType = WGPUSType_DawnWireWGSLControl;
     wgslControl.enableExperimental = 1u;
@@ -1785,20 +1811,12 @@ void DawnTestBase::WaitABit(wgpu::Instance targetInstance) {
 void DawnTestBase::FlushWire() {
     if (gTestEnv->UsesWire()) {
         bool C2SFlushed = mWireHelper->FlushClient();
-        bool S2CFlushed = mWireHelper->FlushServer();
         DAWN_ASSERT(C2SFlushed);
-        DAWN_ASSERT(S2CFlushed);
     }
 }
 
 void DawnTestBase::WaitForAllOperations() {
-    do {
-        FlushWire();
-        if (UsesWire() && instance != nullptr) {
-            instance.ProcessEvents();
-        }
-    } while (dawn::native::InstanceProcessEvents(gTestEnv->GetInstance()->Get()) ||
-             !mWireHelper->IsIdle());
+    mWireHelper->WaitUntilIdle(gTestEnv->GetInstance(), instance);
 }
 
 DawnTestBase::ReadbackReservation DawnTestBase::ReserveReadback(wgpu::Device targetDevice,

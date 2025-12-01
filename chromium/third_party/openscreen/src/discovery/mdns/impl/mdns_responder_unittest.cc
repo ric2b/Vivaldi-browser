@@ -62,7 +62,6 @@ void ExpectContainsNsecRecordType(const std::vector<MdnsRecord>& records,
 
 using testing::_;
 using testing::Args;
-using testing::Invoke;
 using testing::Return;
 using testing::StrictMock;
 

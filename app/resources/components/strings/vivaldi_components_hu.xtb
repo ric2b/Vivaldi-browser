@@ -3,16 +3,6 @@
 <translationbundle lang="hu">
 <translation id="3830627370375585318">A hálózat elérésének engedélyezése a Vivaldi számára a tűzfal-
           vagy vírusirtó-beállításokban.</translation>
-<translation id="4200102020577305737">Lépj ide:
-          Vivaldi menü &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          A helyi hálózat (LAN) beállításai,
-          és töröld a jelet innen: "Proxykiszolgáló használata a helyi hálózaton”.</translation>
 <translation id="4932161901409251843">Lépj ide:
           Vivaldi menü &gt;
           <ph name="SETTINGS_TITLE" />

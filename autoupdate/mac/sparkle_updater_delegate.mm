@@ -6,8 +6,10 @@
 #include "base/logging.h"
 #include "base/strings/sys_string_conversions.h"
 #include "browser/init_sparkle.h"
+#ifndef VIVALDI_SPARKLE_DISABLED
 #include "extensions/api/auto_update/auto_update_api.h"
 #include "extensions/api/auto_update/auto_update_status.h"
+#endif
 #include "extensions/tools/vivaldi_tools.h"
 
 #import "vivaldi/Sparkle/SUErrors.h"
@@ -31,6 +33,9 @@ AutoUpdateStatus status_;
 NSString* version_;
 NSString* feedURL_;
 NSURL* rel_notes_url_;
+
+uint64_t _totalLength;
+uint64_t _bytesDownloaded;
 }
 
 @synthesize invocationBlock = _invocationBlock;
@@ -130,13 +135,9 @@ NSURL* rel_notes_url_;
   std::string desc = "";
   std::string reason = "";
 
-  if (error.code == SUDownloadError ||
-      error.code == SUAppcastError ||
-      error.code == SUNoUpdateError) {
-    // Don't report these errors to the UI, instead send updateFinished
+  if (error.code == SUNoUpdateError) {
+    // Don't report this errors to the UI, instead send updateFinished
     // notification:
-    // SUDownloadError - will try again when internet connection is restored
-    // SUAppcastError - will try again when internet connection is restored
     // SUNoUpdateError - No update was found, no need to report that to the UI
     extensions::AutoUpdateAPI::SendUpdateFinished();
     return;
@@ -146,6 +147,14 @@ NSURL* rel_notes_url_;
   reason = [error localizedFailureReason]
                ? [[error localizedFailureReason] UTF8String]
                : "";
+
+  if (error.code == SUDownloadError || error.code == SUAppcastError) {
+    // Report these as SUDownloadError to the UI. The update button in the
+    // address bar will ignore these but the new about page will show an error.
+    // SUDownloadError - will try again when internet connection is restored
+    // SUAppcastError - will try again when internet connection is restored
+    reason = "SUDownloadError";
+  }
 
   extensions::AutoUpdateAPI::SendDidAbortWithError(desc, reason);
 }
@@ -182,6 +191,23 @@ NSURL* rel_notes_url_;
 
 - (std::string)getUpdateReleaseNotesUrl {
   return base::SysNSStringToUTF8(rel_notes_url_.absoluteString);
+}
+
+- (void)vivaldiExpectedContentLength:(uint64_t)totalLength {
+  _totalLength = totalLength;
+  _bytesDownloaded = 0;
+}
+
+- (void)vivaldiUpdateDidReceiveDataOfLength:(uint64_t)length {
+  _bytesDownloaded += length;
+  int progress = 0;
+  if (_totalLength > 0) {
+    progress = (int)((double)_bytesDownloaded * 100 / (double)_totalLength);
+  }
+
+  extensions::AutoUpdateAPI::SendUpdateProgress(
+      AutoUpdateStatus::kWillDownloadUpdate, base::SysNSStringToUTF8(version_),
+      progress);
 }
 
 @end  // @implementation SparkleUpdaterDelegate

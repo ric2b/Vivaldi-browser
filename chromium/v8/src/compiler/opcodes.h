@@ -189,6 +189,7 @@
   V(JSSetKeyedProperty)                \
   V(JSDefineKeyedOwnProperty)          \
   V(JSSetNamedProperty)                \
+  V(JSSetPrototypeProperties)          \
   V(JSDefineNamedOwnProperty)          \
   V(JSStoreGlobal)                     \
   V(JSDefineKeyedOwnPropertyInLiteral) \
@@ -272,6 +273,7 @@
   V(ChangeTaggedToUint32)                     \
   V(ChangeTaggedToFloat64)                    \
   V(ChangeTaggedToTaggedSigned)               \
+  V(ChangeNumberOrHoleToFloat64)              \
   V(ChangeInt31ToTaggedSigned)                \
   V(ChangeInt32ToTagged)                      \
   V(ChangeInt64ToTagged)                      \
@@ -285,7 +287,8 @@
   V(ChangeInt64ToBigInt)                      \
   V(ChangeUint64ToBigInt)                     \
   V(TruncateBigIntToWord64)                   \
-  V(TruncateTaggedToWord32)                   \
+  V(TruncateNumberOrOddballToWord32)          \
+  V(TruncateNumberOrOddballOrHoleToWord32)    \
   V(TruncateTaggedToFloat64)                  \
   V(TruncateTaggedToFloat64PreserveUndefined) \
   V(TruncateTaggedToBit)                      \
@@ -1473,12 +1476,12 @@ class V8_EXPORT_PRIVATE IrOpcode {
       case kJSCreateEmptyLiteralArray:
       case kJSCreateLiteralArray:
       case kJSCreateLiteralObject:
+      case kJSSetPrototypeProperties:
       case kJSCreateLiteralRegExp:
       case kJSDefineKeyedOwnProperty:
       case kJSForInNext:
       case kJSForInPrepare:
       case kJSGetIterator:
-      case kJSForOfNext:
       case kJSGetTemplateObject:
       case kJSHasProperty:
       case kJSInstanceOf:

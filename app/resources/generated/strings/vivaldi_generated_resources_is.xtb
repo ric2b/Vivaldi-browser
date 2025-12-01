@@ -12,6 +12,7 @@
 <translation id="1163931534039071049">&amp;Skoða frumkóða ramma</translation>
 <translation id="1165039591588034296">Villa</translation>
 <translation id="1175364870820465910">&amp;Prenta...</translation>
+<translation id="1177548198167638471">Ekki spyrja aftur</translation>
 <translation id="1181037720776840403">Fjarlægja</translation>
 <translation id="1184037892196730210">Get ekki varpað skjá</translation>
 <translation id="1187722533808055681">Vakning úr dvala</translation>
@@ -28,9 +29,10 @@
 <translation id="1451375123200651445">Vefsíða, stök skrá</translation>
 <translation id="1465176863081977902">A&amp;frita hljóðhlekk</translation>
 <translation id="1476607407192946488">&amp;Tungumálastillingar</translation>
-<translation id="1546280085599573572">Þessi viðbót hefur breytt síðu sem sýnd er þegar þú ýtir á heimasíðuhnapp.</translation>
+<translation id="1478607704480248626">Uppsetning er ekki virkjuð</translation>
 <translation id="1552752544932680961">Vinna með viðbót</translation>
 <translation id="15662109988763471">Valinn prentari er ekki aðgengilegur eða ekki rétt upp settur. Athugaðu prentarann eða veldu annan.</translation>
+<translation id="1581962803218266616">Sýna í skráarkerfi</translation>
 <translation id="1588438908519853928">Meðal</translation>
 <translation id="1588870296199743671">Opna hlekk með...</translation>
 <translation id="1589055389569595240">Sýna stafsetningu og málfræði</translation>
@@ -49,14 +51,18 @@
 <translation id="176587472219019965">&amp;Nýr gluggi</translation>
 <translation id="1769104665586091481">Opna hlekk í nýjum &amp;glugga</translation>
 <translation id="1779468444204342338">Lágmark prentara</translation>
+<translation id="1805822111539868586">Rannsaka</translation>
 <translation id="1815083418640426271">Líma sem venjulegan texta</translation>
 <translation id="1828901632669367785">Prenta með því að nota kerfisglugga...</translation>
+<translation id="1843048149176045210">Afrita niðurhalshlekk</translation>
 <translation id="1850508293116537636">Snúa &amp;réttsælis</translation>
 <translation id="1886996562706621347">Leyfa síðu að bjóðast til að verða sjálfgildi fyrir ákveðin samskiptasnið (mælt með)</translation>
 <translation id="1901303067676059328">Velja &amp;allt</translation>
+<translation id="1906488504371069394">Skoðaðu fleiri viðbætur og þemu í <ph name="BEGIN_LINK" />Vefverslun Chrome<ph name="END_LINK" /></translation>
 <translation id="1921584744613111023"><ph name="DPI" />punktar á tommu</translation>
 <translation id="1925021887439448749">Færðu inn sérsniðna vefslóð</translation>
 <translation id="1932098463447129402">Ekki fyrir</translation>
+<translation id="1936157145127842922">Sýna í möppu</translation>
 <translation id="1936931585862840749">Notaðu tölu til að gefa til kynna fjölda eintaka sem á að prenta (1 upp í <ph name="MAX_COPIES" />).</translation>
 <translation id="2019718679933488176">&amp;Opna hljóðskrá í nýjum flipa</translation>
 <translation id="2050339315714019657">Lóðrétt</translation>
@@ -70,7 +76,7 @@
 <translation id="215753907730220065">Hætta í útfylltum skjá</translation>
 <translation id="2158475082070321257">Afrita tengil í merktan texta</translation>
 <translation id="2177950615300672361">Hulinn flipi: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Staðbundinn biðlara forritseining: <ph name="NEXE_NAME" /></translation>
+<translation id="2187906491731510095">Viðbætur uppfærðar</translation>
 <translation id="2218515861914035131">Líma sem venjulegan texta</translation>
 <translation id="2249605167705922988">t.d. 1-5, 8, 11-13</translation>
 <translation id="2280486287150724112">Hægri spássíða</translation>
@@ -81,9 +87,12 @@
 <translation id="2326931316514688470">&amp;Endurhlaða smáforrit</translation>
 <translation id="2327492829706409234">Virkja app</translation>
 <translation id="2348176352564285430">App: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="2378602615417849384">{NUM_EXTENSIONS, plural,
+      =1 {Innan skamms verður þessi viðbót ekki studd}
+      other{Innan skamms verða þessar viðbætur ekki studdar}
+    }</translation>
 <translation id="2378982052244864789">Veldu staðsetningu viðbótar.</translation>
 <translation id="2379281330731083556">Prenta með stýrikerfisviðmóti... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Óþekkt viðbót</translation>
 <translation id="2423578206845792524">Vi&amp;sta mynd sem...</translation>
 <translation id="2439110203301358333">Annað forrit á tölvunni þinni bætti við viðbót sem gæti breytt virkni Vivaldi.</translation>
 <translation id="2443487764245141020">Vefsvæði þurfa hugsanlega að staðfesta tækið þitt með auðkenni</translation>
@@ -95,6 +104,7 @@
 <translation id="2550212893339833758">Skiptiminni</translation>
 <translation id="2553440850688409052">Fela þessa viðbót</translation>
 <translation id="2607101320794533334">Upplýsingar opinbers lykils viðfangs</translation>
+<translation id="261305050785128654">Segðu vefsíðum hvaða tungumál þú talar. Þá sýnar þær innihald á því tungumáli þegar það er hægt.</translation>
 <translation id="26224892172169984">Ekki leyfa síðum að sjá um samskiptasnið</translation>
 <translation id="2653275834716714682">Útskipting texta</translation>
 <translation id="265390580714150011">Gildi reits</translation>
@@ -102,12 +112,12 @@
 <translation id="2678063897982469759">Endurvirkja</translation>
 <translation id="2719936478972253983">Eftirfarandi kökur voru útilokaðar</translation>
 <translation id="2721037002783622288">&amp;Leita að mynd með <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2722547199758472013">ID: <ph name="EXTENSION_ID" /></translation>
 <translation id="2738771556149464852">Ekki eftir</translation>
 <translation id="2749881179542288782">Athuga málfræði og stafsetningu</translation>
 <translation id="2785873697295365461">Skráalýsingar</translation>
 <translation id="2825758591930162672">Opinber lykill viðfangs</translation>
 <translation id="2850541429955027218">Bæta við þema</translation>
-<translation id="2861941300086904918">Staðbundin biðlara öryggis stýring</translation>
 <translation id="2881076733170862447">Þegar þú smellir á viðbót</translation>
 <translation id="2889064240420137087">Opna hlekk með...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> gat ekki haft samband við þenna prentara. Athugaðu að prentarinn sé í gangi og reyndu svo aftur.</translation>
@@ -131,6 +141,10 @@
 <translation id="3129173833825111527">Vinstri spássíða</translation>
 <translation id="3144647712221361880">Opna hlekk sem</translation>
 <translation id="3222066309010235055">Forkeyra: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3228985231489269630">{NUM_EXTENSIONS, plural,
+      =1 {Fjarlægja eða skipta út fyrir svipaðar viðbætur úr <ph name="BEGIN_LINK" />Chrome vefverslun<ph name="END_LINK" />.}
+      other {Fjarlægja eða skipta út fyrir svipaðar viðbætur úr <ph name="BEGIN_LINK" />Chrome vefverslun<ph name="END_LINK" />}
+    }</translation>
 <translation id="3241680850019875542">Veldu rótarmöppu viðbótar til þess að pakka. Til þess að uppfæra viðbót, veldu líka einkalyklaskrá til þess að endurnota.</translation>
 <translation id="3275778913554317645">Opna sem glugga</translation>
 <translation id="3280237271814976245">Vista &amp;sem...</translation>
@@ -153,8 +167,10 @@
 <translation id="3493881266323043047">Gildi</translation>
 <translation id="3511307672085573050">Afrita vef&amp;fang hlekks</translation>
 <translation id="354068948465830244">Getur lesið og breytt gögnum síðu</translation>
+<translation id="3555812735919707620">Fjarlægja viðbót</translation>
 <translation id="3560034655160545939">&amp;Villuleit</translation>
-<translation id="3587482841069643663">Allar</translation>
+<translation id="3581861561942370740">Leita í niðurhalssögu</translation>
+<translation id="3612673635130633812">Hlaðið niður af &lt;a href="<ph name="URL" />"&gt;<ph name="EXTENSION" />&lt;/a&gt;</translation>
 <translation id="3627588569887975815">Opna hlekk í hu&amp;liðs glugga</translation>
 <translation id="3678156199662914018">Viðbót: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> biður þig um að deila skjánum</translation>
@@ -170,6 +186,7 @@
 <translation id="3838085852053358637">Mistókst að hlaða upp viðbót</translation>
 <translation id="383891835335927981">Engin síða hefur verið þysjuð út eða inn</translation>
 <translation id="385051799172605136">Til baka</translation>
+<translation id="3855441664322950881">Pakka viðbót inn</translation>
 <translation id="3858860766373142691">Heiti</translation>
 <translation id="3861977424605124250">Birta við ræsingu</translation>
 <translation id="3867944738977021751">Vottorðsreitir</translation>
@@ -183,6 +200,7 @@
 <translation id="3948116654032448504">&amp;Leita að <ph name="SEARCH_ENGINE" />mynd</translation>
 <translation id="3979395879372752341">Nýrri vafaviðbót bætt við (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">Afrita tengil í merktan texta</translation>
+<translation id="399788104667917863">Festa á tækjastiku</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Bæta í orðalista</translation>
 <translation id="4058793769387728514">Kanna skjal núna</translation>
@@ -197,7 +215,6 @@
 <translation id="4131410914670010031">Svarthvítt</translation>
 <translation id="4165986682804962316">Síðustillingar</translation>
 <translation id="4170314459383239649">Hreinsa við lokun</translation>
-<translation id="4176463684765177261">Óvirkt</translation>
 <translation id="4200983522494130825">Nýr &amp;flipi</translation>
 <translation id="4225397296022057997">Á öllum síðum</translation>
 <translation id="4256316378292851214">Vi&amp;sta myndband sem...</translation>
@@ -221,15 +238,19 @@
 <translation id="4613271546271159013">Viðbót hefur breytt því hvaða síða er sýnd þegar þú opnar nýjan flipa.</translation>
 <translation id="4616405296204756919">Þú getur notað vistuð lykilorð á hvaða tæki sem er. Þau eru vistuð í <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Opna myndband í nýjum flipa</translation>
+<translation id="4644205769234414680">Leyfa í einkaham</translation>
+<translation id="4654801841330730814">Allar</translation>
 <translation id="4677772697204437347">GPU minni</translation>
 <translation id="4681930562518940301">Opna upphaflega &amp;mynd í nýjum flipa</translation>
 <translation id="4711638718396952945">Endurkalla fyrri stillingar</translation>
 <translation id="4726710629007580002">Upp komu viðvaranir við uppsetningu viðbótar:</translation>
+<translation id="473775607612524610">Uppfæra</translation>
 <translation id="4763408175235639573">Eftirfarandi kökur voru vistaðar þegar þú skoðaðir þessa síðu</translation>
 <translation id="479536056609751218">Vefsíður, einungis HTML</translation>
 <translation id="4827904420700932487">Búa til QR-kóða fyrir þessa mynd</translation>
 <translation id="4839303808932127586">Vi&amp;sta myndband sem...</translation>
 <translation id="4840096453115567876">Viltu samt loka einkaviðmóti?</translation>
+<translation id="4885692421645694729">Þessi viðbót er ekki með aðgang að síðum</translation>
 <translation id="488785315393301722">Sýna frekari upplýsingar</translation>
 <translation id="4895799941222633551">Búa til &amp; flýtileið...</translation>
 <translation id="4912643508233590958">Vakning úr dvala</translation>
@@ -246,13 +267,13 @@
 <translation id="5059526285558225588">Veldu hverju þú deilir</translation>
 <translation id="5063480226653192405">Notkun</translation>
 <translation id="5116628073786783676">Vi&amp;sta hljóð sem...</translation>
-<translation id="5143374789336132547">Viðbót "<ph name="EXTENSION_NAME" />" hefur breytt hvaða síða er sýnd þegar þú ýtir á heimasíðuhnapp.</translation>
 <translation id="5154108062446123722">Nánari stillingar fyrir <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5154702632169343078">Viðfang</translation>
+<translation id="5170568018924773124">Sýna í möppu</translation>
 <translation id="5171343362375269016">Skiptiminni</translation>
-<translation id="5233019165164992427">NaCl aflúsunargátt</translation>
 <translation id="5233231016133573565">Auðkennisnúmer ferlis</translation>
 <translation id="5233736638227740678">&amp;Líma</translation>
+<translation id="5244466461749935369">Ekki henda strax</translation>
 <translation id="5256861893479663409">Á öllum síðum</translation>
 <translation id="5260334392110301220">Snjallar gæsalappir</translation>
 <translation id="5269977353971873915">Prentun mistókst</translation>
@@ -273,7 +294,6 @@
 <translation id="5485102783864353244">Bæta við smáforriti</translation>
 <translation id="5486561344817861625">Líkja eftir endurræsingu vafra</translation>
 <translation id="5509693895992845810">Vista &amp;sem...</translation>
-<translation id="5521078259930077036">Er þetta heimasíðan sem þú bjóst við?</translation>
 <translation id="5542132724887566711">Sniðmát</translation>
 <translation id="5556459405103347317">Endurhlaða</translation>
 <translation id="5575473780076478375">Hulin viðbót: <ph name="EXTENSION_NAME" /></translation>
@@ -285,15 +305,14 @@
 <translation id="5677928146339483299">Hamlað</translation>
 <translation id="5707185214361380026">Mistókst að hlaða upp viðbót frá:</translation>
 <translation id="5713171467967533494">Opna í Vivaldi vafra</translation>
-<translation id="5715711091495208045">Miðlari viðbótar: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Vista sem PDF</translation>
 <translation id="5747809636523347288">Líma og opna <ph name="URL" /></translation>
 <translation id="5759728514498647443">Skjöl sem þú sendir til prentunar með <ph name="APP_NAME" /> getur <ph name="APP_NAME" /> lesið.</translation>
 <translation id="5764483294734785780">Vi&amp;sta hljóð sem...</translation>
+<translation id="577313026359983030">Mínar viðbætur</translation>
 <translation id="5780973441651030252">Forgangur ferla</translation>
 <translation id="5804241973901381774">Leyfi</translation>
 <translation id="5828633471261496623">Prenta...</translation>
-<translation id="583281660410589416">Óþekkt</translation>
 <translation id="5851868085455377790">Útgefandi</translation>
 <translation id="5860491529813859533">Kveikja á</translation>
 <translation id="5910363049092958439">Vi&amp;sta mynd sem...</translation>
@@ -329,6 +348,7 @@
 <translation id="6374469231428023295">Reyndu aftur</translation>
 <translation id="6398765197997659313">Hætta í fullum skjá</translation>
 <translation id="6406303162637086258">Líkja eftir endurræsingu vafra</translation>
+<translation id="6419546358665792306">Hlaða inn ópakkaðri</translation>
 <translation id="6445450263907939268">If þú vildir ekki þessar breytingar getur þú skipt aftur í fyrri stillingar þínar.</translation>
 <translation id="6447842834002726250">Vafrakökur</translation>
 <translation id="6498249116389603658">&amp;Öll þín tungumál</translation>
@@ -345,7 +365,6 @@
 <translation id="6691936601825168937">&amp;Áfram</translation>
 <translation id="6786747875388722282">Viðbætur</translation>
 <translation id="6787839852456839824">Flýtilyklar</translation>
-<translation id="6798954102094737107">Viðbót: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Geyma breytingar</translation>
 <translation id="6824564591481349393">Afrita n&amp;etfang</translation>
 <translation id="6840155290835956714">Spyrja áður en sent er</translation>
@@ -378,10 +397,10 @@
 <translation id="7453008956351770337">Með því að velja þennan prentara veitir þú eftirfarandi viðbót aðgengi að honum:</translation>
 <translation id="7564847347806291057">Enda ferli</translation>
 <translation id="7576690715254076113">Bunka saman</translation>
+<translation id="7612050744024016345">Allar viðbætur</translation>
 <translation id="7629827748548208700">Flipi: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Hætta við</translation>
 <translation id="7659154729610375585">Viltu samt loka einkastillingu?</translation>
-<translation id="7661259717474717992">Leyfa síðum að vista og lesa efni frá vefkökum</translation>
 <translation id="7663719505383602579">Viðtakandi: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Sett upp af kerfisstjóra</translation>
 <translation id="7685038817958445325">Mistókst að varpa</translation>
@@ -415,6 +434,7 @@ Lyklaskrá: <ph name="KEY_FILE" />
 Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að halda til þess að búa til nýja útgáfur af viðbótinni þinni.</translation>
 <translation id="8004582292198964060">Vafri</translation>
 <translation id="8018313076035239964">Hafðu stjórn á hvaða upplýsingar vefsíður geta notað og hvaða efni þær geta sýnt þér</translation>
+<translation id="8023801379949507775">Uppfæra viðbætur núna</translation>
 <translation id="8071432093239591881">Prenta sem mynd</translation>
 <translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
         =1 {# bookmark}
@@ -427,7 +447,6 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="8261378640211443080">Þessi viðbót er ekki skráð í <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> og henni gæti hafa verið bætt við án þinnar vitundar.</translation>
 <translation id="8351419472474436977">Þessi viðbót hefur tekið yfir stjórn á vefsels (proxy) stillingum þínum sem þýðir að viðbótin getur breytt, brotið eða hlerað allt sem að þú gerir þetta þú ert nettengur. Ef þú ert ekki viss um afhverju þessi breyting átti sér stað þá viltu líklega ekki hafa hana.</translation>
 <translation id="8382913212082956454">Afrita n&amp;etfang</translation>
-<translation id="8434480141477525001">NaCl aflúsunargátt</translation>
 <translation id="8449008133205184768">Líma og halda útliti</translation>
 <translation id="8477178913400731244">Eyða gögnum</translation>
 <translation id="8477384620836102176">&amp;Almennt</translation>
@@ -437,6 +456,7 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="8546306075665861288">Skyndiminni mynda</translation>
 <translation id="8569682776816196752">Engir áfangastaðir fundnir</translation>
 <translation id="8584280235376696778">&amp;Opna myndband í nýjum flipa</translation>
+<translation id="8587660243683137365">Settu þessa síðu upp sem app</translation>
 <translation id="8605428685123651449">SQLite minni</translation>
 <translation id="8615618338313291042">Hulið forrit: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">Skyndiminni fyrir CSS</translation>
@@ -446,6 +466,7 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="8708000541097332489">Henda við lokun</translation>
 <translation id="8714838604780058252">Bakgrunnur</translation>
 <translation id="8725066075913043281">Reyna aftur</translation>
+<translation id="8770406935328356739">Rótarmappa viðbótar</translation>
 <translation id="8774934320277480003">Spássíða uppi</translation>
 <translation id="8798099450830957504">Sjálfgefið</translation>
 <translation id="8808478386290700967">Vefverslun</translation>
@@ -456,6 +477,7 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="8899851313684471736">Opna hlekk í nýjum &amp;glugga</translation>
 <translation id="8915370057835397490">Hleð tillögum</translation>
 <translation id="8916476537757519021">Einkaundirgluggi: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8926389886865778422">Ekki spyrja aftur</translation>
 <translation id="8929696694736010839">Aðeins yfirstandandi einkalota</translation>
 <translation id="895944840846194039">JavaScript minni</translation>
 <translation id="8962083179518285172">Fela frekari upplýsingar</translation>

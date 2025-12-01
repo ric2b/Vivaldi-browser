@@ -8,12 +8,12 @@ potentially limited native resources.
 import { Fixture } from '../../../../common/framework/fixture.js';
 import { makeTestGroup } from '../../../../common/framework/test_group.js';
 import { getGPU } from '../../../../common/util/navigator_gpu.js';
-import { assert, assertReject } from '../../../../common/util/util.js';
+import { assert, assertReject, typedEntries } from '../../../../common/util/util.js';
 import {
   getDefaultLimitsForCTS,
   kFeatureNames,
-  kLimits,
   kLimitClasses,
+  kPossibleLimits,
 } from '../../../capability_info.js';
 import { clamp, isPowerOfTwo } from '../../../util/math.js';
 
@@ -54,11 +54,11 @@ g.test('default')
       );
     }
     // All limits should be defaults.
-    const limitInfo = getDefaultLimitsForCTS();
-    for (const limit of kLimits) {
+    const limitInfos = getDefaultLimitsForCTS();
+    for (const [limit, limitInfo] of typedEntries(limitInfos)) {
       t.expect(
-        device.limits[limit] === limitInfo[limit].default,
-        `Expected ${limit} == default: ${device.limits[limit]} != ${limitInfo[limit].default}`
+        device.limits[limit] === limitInfo.default,
+        `Expected ${limit} == default: ${device.limits[limit]} != ${limitInfo.default}`
       );
     }
   });
@@ -246,7 +246,7 @@ g.test('limits,supported')
   )
   .params(u =>
     u
-      .combine('limit', kLimits)
+      .combine('limit', kPossibleLimits)
       .beginSubcases()
       .combine('limitValue', ['default', 'adapter', 'undefined'])
   )
@@ -257,12 +257,14 @@ g.test('limits,supported')
     const adapter = await gpu.requestAdapter();
     assert(adapter !== null);
 
-    const limitInfo = getDefaultLimitsForCTS();
+    const limitInfo = getDefaultLimitsForCTS()[limit];
+    // MAINTENANCE_TODO: Remove this skip when compatibility limits are merged into spec.
+    t.skipIf(limitInfo === undefined, 'limit is currently compatibility only');
     let value: number | undefined = -1;
     let result: number = -1;
     switch (limitValue) {
       case 'default':
-        value = limitInfo[limit].default;
+        value = limitInfo.default;
         result = value;
         break;
       case 'adapter':
@@ -271,25 +273,11 @@ g.test('limits,supported')
         break;
       case 'undefined':
         value = undefined;
-        result = limitInfo[limit].default;
+        result = limitInfo.default;
         break;
     }
 
     const requiredLimits: Record<string, number | undefined> = { [limit]: value };
-
-    if (
-      limit === 'maxStorageBuffersInFragmentStage' ||
-      limit === 'maxStorageBuffersInVertexStage'
-    ) {
-      requiredLimits['maxStorageBuffersPerShaderStage'] = value;
-    }
-
-    if (
-      limit === 'maxStorageTexturesInFragmentStage' ||
-      limit === 'maxStorageTexturesInVertexStage'
-    ) {
-      requiredLimits['maxStorageTexturesPerShaderStage'] = value;
-    }
 
     const device = await t.requestDeviceTracked(adapter, { requiredLimits });
     assert(device !== null);
@@ -309,7 +297,7 @@ g.test('limit,better_than_supported')
   )
   .params(u =>
     u
-      .combine('limit', kLimits)
+      .combine('limit', kPossibleLimits)
       .beginSubcases()
       .expandWithParams(p => {
         switch (kLimitClasses[p.limit]) {
@@ -335,6 +323,8 @@ g.test('limit,better_than_supported')
     assert(adapter !== null);
 
     const limitInfo = getDefaultLimitsForCTS();
+    // MAINTENANCE_TODO: Remove this skip when compatibility limits are merged into spec.
+    t.skipIf(limitInfo[limit] === undefined, 'limit is currently compatibility only');
     const value = adapter.limits[limit]! * mul + add;
     const requiredLimits = {
       [limit]: clamp(value, { min: 0, max: limitInfo[limit].maximumValue }),
@@ -352,7 +342,7 @@ g.test('limit,out_of_range')
   )
   .params(u =>
     u
-      .combine('limit', kLimits)
+      .combine('limit', kPossibleLimits)
       .beginSubcases()
       .expand('value', function* () {
         yield -(2 ** 64);
@@ -381,6 +371,8 @@ g.test('limit,out_of_range')
     const adapter = await gpu.requestAdapter();
     assert(adapter !== null);
     const limitInfo = getDefaultLimitsForCTS()[limit];
+    // MAINTENANCE_TODO: Remove this skip when compatibility limits are merged into spec.
+    t.skipIf(limitInfo === undefined, 'limit is currently compatibility only');
 
     const requiredLimits = {
       [limit]: value,
@@ -413,7 +405,7 @@ g.test('limit,worse_than_default')
   )
   .params(u =>
     u
-      .combine('limit', kLimits)
+      .combine('limit', kPossibleLimits)
       .beginSubcases()
       .expandWithParams(p => {
         switch (kLimitClasses[p.limit]) {
@@ -438,14 +430,17 @@ g.test('limit,worse_than_default')
     const adapter = await gpu.requestAdapter();
     assert(adapter !== null);
 
-    const limitInfo = getDefaultLimitsForCTS();
-    const value = limitInfo[limit].default * mul + add;
+    const limitInfo = getDefaultLimitsForCTS()[limit];
+    // MAINTENANCE_TODO: Remove this skip when compatibility limits are merged into spec.
+    t.skipIf(limitInfo === undefined, 'limit is currently compatibility only');
+
+    const value = limitInfo.default * mul + add;
     const requiredLimits = {
-      [limit]: clamp(value, { min: 0, max: limitInfo[limit].maximumValue }),
+      [limit]: clamp(value, { min: 0, max: limitInfo.maximumValue }),
     };
 
     let success;
-    switch (limitInfo[limit].class) {
+    switch (limitInfo.class) {
       case 'alignment':
         success = isPowerOfTwo(value);
         break;
@@ -459,7 +454,7 @@ g.test('limit,worse_than_default')
       const device = await devicePromise;
       assert(device !== null);
       t.expect(
-        device.limits[limit] === limitInfo[limit].default,
+        device.limits[limit] === limitInfo.default,
         'Devices reported limit should match the default limit'
       );
       device.destroy();

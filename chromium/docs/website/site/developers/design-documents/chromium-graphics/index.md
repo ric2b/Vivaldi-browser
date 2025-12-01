@@ -41,7 +41,7 @@ Presentations:
 *   List of [Googler-only presentation slides and
             videos](http://go/gpu-tech-talk-schedule)
 
-*   [Life of a Pixel](http://bit.ly/chromium-loap)
+*   [Life of a Pixel](https://docs.google.com/presentation/d/1boPxbgNrTU0ddsc144rcXayGA_WF53k96imRH8Mp34Y/edit?slide=id.ga884fe665f_64_6#slide=id.ga884fe665f_64_6)
 *   [Surface
             Aggregation](https://docs.google.com/presentation/d/14FlKgkh0-4VvM5vLeCV8OTA7YoBasWlwKIJyNnUJltM)
             \[[googler-only

@@ -7,8 +7,7 @@
 
 // TableViewCell that displays NoteItem data.
 // Used in note home table view
-@interface TableViewNoteCell
-    : TableViewCell
+@interface TableViewNoteCell: LegacyTableViewCell
 
 // Getter
 - (NSString*)accessibilityLabelString;

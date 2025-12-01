@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -59,7 +59,8 @@ describeWithEnvironment('DataGrid', () => {
   }
 
   async function renderDataGridContent(template: Lit.TemplateResult): Promise<HTMLElement> {
-    return await renderDataGrid(html`<devtools-data-grid striped name="Display Name">${template}</devtools-data-grid>`);
+    return await renderDataGrid(
+        html`<devtools-data-grid striped name="Display Name" .template=${template}></devtools-data-grid>`);
   }
 
   async function renderDataGridWithData(columns: Lit.TemplateResult, rows: Lit.TemplateResult): Promise<HTMLElement> {

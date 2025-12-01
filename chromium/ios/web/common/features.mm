@@ -10,32 +10,22 @@
 namespace web {
 namespace features {
 
-BASE_FEATURE(kCrashOnUnexpectedURLChange,
-             "CrashOnUnexpectedURLChange",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kCrashOnUnexpectedURLChange, base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kBlockUniversalLinksInOffTheRecordMode,
              "BlockUniversalLinksInOffTheRecord",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kKeepsRenderProcessAlive,
-             "KeepsRenderProcessAlive",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kKeepsRenderProcessAlive, base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kClearOldNavigationRecordsWorkaround,
-             "ClearOldNavigationRecordsWorkaround",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kEnablePersistentDownloads,
-             "EnablePersistentDownloads",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kEnablePersistentDownloads, base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kSetRequestAttribution,
-             "SetRequestAttribution",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kSetRequestAttribution, base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kIOSSharedHighlightingColorChange,
-             "IOSSharedHighlightingColorChange",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableMeasurements,
@@ -43,20 +33,16 @@ BASE_FEATURE(kEnableMeasurements,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kScrollViewProxyScrollEnabledWorkaround,
-             "ScrollViewProxyScrollEnabledWorkaround",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPreventNavigationWithoutUserInteraction,
-             "PreventNavigationWithoutUserInteraction",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kAllowCrossWindowExternalAppNavigation,
              "kAllowCrossWindowExternalAppNavigation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kEnableWebInspector,
-             "EnableWebInspector",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kEnableWebInspector, base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSmoothScrollingDefault,
              "FullscreenSmoothScrollingDefault",
@@ -67,9 +53,7 @@ BASE_FEATURE(kSmoothScrollingDefault,
 #endif
 );
 
-BASE_FEATURE(kFullscreenScrollThreshold,
-             "FullscreenScrollThreshold",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kFullscreenScrollThreshold, base::FEATURE_DISABLED_BY_DEFAULT);
 
 const char kFullscreenScrollThresholdAmount[] =
     "fullscreen_scroll_threshold_amount";
@@ -81,11 +65,9 @@ bool IsFullscreenScrollThresholdEnabled() {
 
 // This feature will always be disabled and will only be enabled by tests.
 BASE_FEATURE(kForceSynthesizedRestoreSession,
-             "ForceSynthesizedRestoreSession",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kDetectDestroyedNavigationContexts,
-             "DetectDestroyedNavigationContexts",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsWebInspectorSupportEnabled() {
@@ -95,33 +77,24 @@ bool IsWebInspectorSupportEnabled() {
   return false;
 }
 
-BASE_FEATURE(kDisableRaccoon,
-             "DisableRaccoon",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kDisableRaccoon, base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kUserAgentBugFixVersion,
-             "UserAgentBugFixVersion",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kUserAgentBugFixVersion, base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kLogJavaScriptErrors,
-             "LogJavaScriptErrors",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kLogJavaScriptErrors, base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kWebKitHandlesMarketplaceKitLinks,
-             "WebKitHandlesMarketplaceKitLinks",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kRestoreWKWebViewEditMenuHandler,
-             "RestoreWKWebViewEditMenuHandler",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kLogCrWebJavaScriptErrors,
-             "LogCrWebJavaScriptErrors",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kLogCrWebJavaScriptErrors, base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kAssertOnJavaScriptErrors,
-             "AssertOnJavaScriptErrors",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kAssertOnJavaScriptErrors, base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kUpdateSSLStatusOnNavigationItemLazyCreation,
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace features
 }  // namespace web

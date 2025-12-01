@@ -18,14 +18,6 @@
 #include "ui/gfx/image/image.h"
 #include "ui/snapshot/snapshot_mac.h"
 
-// The API that allows an app TCC-less access to its own windows is new in macOS
-// 14.4. While this has been tested extensively on 14.4 betas, because this is a
-// new API added in an OS dot release, have a "break in case of emergency" off-
-// switch.
-BASE_FEATURE(kUseScreenCaptureKitForSnapshots,
-             "UseScreenCaptureKitForSnapshots",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 namespace ui {
 
 namespace {
@@ -196,13 +188,17 @@ void GrabViewSnapshot(gfx::NativeView view,
                       GrabSnapshotImageCallback callback) {
   SnapshotAPI api = g_snapshot_api;
   if (api == SnapshotAPI::kUnspecified) {
-    if (base::mac::MacOSVersion() >= 14'04'00 &&
-        base::FeatureList::IsEnabled(kUseScreenCaptureKitForSnapshots) &&
-        !ShouldForceOldAPIUse()) {
+    if (base::mac::MacOSVersion() >= 14'04'00 && !ShouldForceOldAPIUse()) {
       api = SnapshotAPI::kNewAPI;
     } else {
       api = SnapshotAPI::kOldAPI;
     }
+  }
+
+  // On macOS 26, the CGWindowList API is not supported for snapshots - in
+  // existing tests, no screenshot is returned when using the CGWindowList API.
+  if (base::mac::MacOSVersion() >= 26'00'00) {
+    api = SnapshotAPI::kNewAPI;
   }
 
   if (@available(macOS 14.4, *)) {

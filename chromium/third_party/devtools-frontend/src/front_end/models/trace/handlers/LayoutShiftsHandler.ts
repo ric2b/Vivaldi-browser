@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -37,15 +37,14 @@ import type {HandlerName} from './types.js';
 // score for the given recording, and almost certainly not the
 // navigation-to-unload CLS score.
 
-interface LayoutShifts {
+interface LayoutShiftsData {
   clusters: readonly Types.Events.SyntheticLayoutShiftCluster[];
   clustersByNavigationId: Map<Types.Events.NavigationId, Types.Events.SyntheticLayoutShiftCluster[]>;
   sessionMaxScore: number;
   // The session window which contains the SessionMaxScore
   clsWindowID: number;
   // We use these to calculate root causes for a given LayoutShift
-  // TODO(crbug/41484172): should be readonly
-  prePaintEvents: Types.Events.PrePaint[];
+  prePaintEvents: readonly Types.Events.PrePaint[];
   paintImageEvents: Types.Events.PaintImage[];
   layoutInvalidationEvents: readonly Types.Events.LayoutInvalidationTracking[];
   scheduleStyleInvalidationEvents: readonly Types.Events.ScheduleStyleInvalidationTracking[];
@@ -55,8 +54,7 @@ interface LayoutShifts {
   layoutImageUnsizedEvents: readonly Types.Events.LayoutImageUnsized[];
   remoteFonts: readonly RemoteFont[];
   scoreRecords: readonly ScoreRecord[];
-  // TODO(crbug/41484172): should be readonly
-  backendNodeIds: Protocol.DOM.BackendNodeId[];
+  backendNodeIds: Set<Protocol.DOM.BackendNodeId>;
 }
 
 interface RemoteFont {
@@ -81,34 +79,34 @@ export const MAX_SHIFT_TIME_DELTA = Helpers.Timing.milliToMicro(Types.Timing.Mil
 // will be reported together. In the case of multiple renderers (frames across
 // different origins), we offer the developer the ability to switch renderer in
 // the UI.
-const layoutShiftEvents: Types.Events.LayoutShift[] = [];
+let layoutShiftEvents: Types.Events.LayoutShift[] = [];
 
 // These events denote potential node resizings. We store them to link captured
 // layout shifts to the resizing of unsized elements.
-const layoutInvalidationEvents: Types.Events.LayoutInvalidationTracking[] = [];
-const scheduleStyleInvalidationEvents: Types.Events.ScheduleStyleInvalidationTracking[] = [];
-const styleRecalcInvalidationEvents: Types.Events.StyleRecalcInvalidationTracking[] = [];
-const renderFrameImplCreateChildFrameEvents: Types.Events.RenderFrameImplCreateChildFrame[] = [];
-const domLoadingEvents: Types.Events.DomLoading[] = [];
-const layoutImageUnsizedEvents: Types.Events.LayoutImageUnsized[] = [];
-const remoteFonts: RemoteFont[] = [];
+let layoutInvalidationEvents: Types.Events.LayoutInvalidationTracking[] = [];
+let scheduleStyleInvalidationEvents: Types.Events.ScheduleStyleInvalidationTracking[] = [];
+let styleRecalcInvalidationEvents: Types.Events.StyleRecalcInvalidationTracking[] = [];
+let renderFrameImplCreateChildFrameEvents: Types.Events.RenderFrameImplCreateChildFrame[] = [];
+let domLoadingEvents: Types.Events.DomLoading[] = [];
+let layoutImageUnsizedEvents: Types.Events.LayoutImageUnsized[] = [];
+let remoteFonts: RemoteFont[] = [];
 
-const backendNodeIds = new Set<Protocol.DOM.BackendNodeId>();
+let backendNodeIds = new Set<Protocol.DOM.BackendNodeId>();
 
 // Layout shifts happen during PrePaint as part of the rendering lifecycle.
 // We determine if a LayoutInvalidation event is a potential root cause of a layout
 // shift if the next PrePaint after the LayoutInvalidation is the parent
 // node of such shift.
-const prePaintEvents: Types.Events.PrePaint[] = [];
+let prePaintEvents: Types.Events.PrePaint[] = [];
 
-const paintImageEvents: Types.Events.PaintImage[] = [];
+let paintImageEvents: Types.Events.PaintImage[] = [];
 
 let sessionMaxScore = 0;
 
 let clsWindowID = -1;
 
-const clusters: Types.Events.SyntheticLayoutShiftCluster[] = [];
-const clustersByNavigationId = new Map<Types.Events.NavigationId, Types.Events.SyntheticLayoutShiftCluster[]>();
+let clusters: Types.Events.SyntheticLayoutShiftCluster[] = [];
+let clustersByNavigationId = new Map<Types.Events.NavigationId, Types.Events.SyntheticLayoutShiftCluster[]>();
 
 // Represents a point in time in which a  LS score change
 // was recorded.
@@ -119,25 +117,25 @@ interface ScoreRecord {
 
 // The complete timeline of LS score changes in a trace.
 // Includes drops to 0 when session windows end.
-const scoreRecords: ScoreRecord[] = [];
+let scoreRecords: ScoreRecord[] = [];
 
 export function reset(): void {
-  layoutShiftEvents.length = 0;
-  layoutInvalidationEvents.length = 0;
-  scheduleStyleInvalidationEvents.length = 0;
-  styleRecalcInvalidationEvents.length = 0;
-  prePaintEvents.length = 0;
-  paintImageEvents.length = 0;
-  renderFrameImplCreateChildFrameEvents.length = 0;
-  layoutImageUnsizedEvents.length = 0;
-  domLoadingEvents.length = 0;
-  remoteFonts.length = 0;
-  backendNodeIds.clear();
-  clusters.length = 0;
+  layoutShiftEvents = [];
+  layoutInvalidationEvents = [];
+  scheduleStyleInvalidationEvents = [];
+  styleRecalcInvalidationEvents = [];
+  prePaintEvents = [];
+  paintImageEvents = [];
+  renderFrameImplCreateChildFrameEvents = [];
+  layoutImageUnsizedEvents = [];
+  domLoadingEvents = [];
+  remoteFonts = [];
+  backendNodeIds = new Set();
+  clusters = [];
   sessionMaxScore = 0;
-  scoreRecords.length = 0;
+  scoreRecords = [];
   clsWindowID = -1;
-  clustersByNavigationId.clear();
+  clustersByNavigationId = new Map();
 }
 
 export function handleEvent(event: Types.Events.Event): void {
@@ -352,23 +350,26 @@ async function buildLayoutShiftsClusters(): Promise<void> {
       // event type. Can we make this typing stronger? In the meantime, we allow
       // `navigationId` to include undefined values.
 
-      clusters.push({
-        name: 'SyntheticLayoutShiftCluster',
-        events: [],
-        clusterWindow: traceWindowFromTime(clusterStartTime),
-        clusterCumulativeScore: 0,
-        scoreWindows: {
-          good: traceWindowFromTime(clusterStartTime),
-        },
-        navigationId,
-        // Set default Event so that this event is treated accordingly for the track appender.
-        ts: event.ts,
-        pid: event.pid,
-        tid: event.tid,
-        ph: Types.Events.Phase.COMPLETE,
-        cat: '',
-        dur: Types.Timing.Micro(-1),  // This `cluster.dur` is updated below.
-      });
+      clusters.push(Helpers.SyntheticEvents.SyntheticEventsManager
+                        .registerSyntheticEvent<Types.Events.SyntheticLayoutShiftCluster>({
+                          name: 'SyntheticLayoutShiftCluster',
+                          // Will be replaced by the worst layout shift in the next for loop.
+                          rawSourceEvent: event,
+                          events: [],
+                          clusterWindow: traceWindowFromTime(clusterStartTime),
+                          clusterCumulativeScore: 0,
+                          scoreWindows: {
+                            good: traceWindowFromTime(clusterStartTime),
+                          },
+                          navigationId,
+                          // Set default Event so that this event is treated accordingly for the track appender.
+                          ts: event.ts,
+                          pid: event.pid,
+                          tid: event.tid,
+                          ph: Types.Events.Phase.COMPLETE,
+                          cat: '',
+                          dur: Types.Timing.Micro(-1),  // This `cluster.dur` is updated below.
+                        }));
 
       firstShiftTime = clusterStartTime;
     }
@@ -497,6 +498,7 @@ async function buildLayoutShiftsClusters(): Promise<void> {
     // Update the cluster's worst layout shift.
     if (worstShiftEvent) {
       cluster.worstShiftEvent = worstShiftEvent;
+      cluster.rawSourceEvent = worstShiftEvent;
     }
 
     // layout shifts are already sorted by time ascending.
@@ -520,7 +522,7 @@ async function buildLayoutShiftsClusters(): Promise<void> {
   }
 }
 
-export function data(): LayoutShifts {
+export function data(): LayoutShiftsData {
   return {
     clusters,
     sessionMaxScore,
@@ -528,15 +530,14 @@ export function data(): LayoutShifts {
     prePaintEvents,
     layoutInvalidationEvents,
     scheduleStyleInvalidationEvents,
-    styleRecalcInvalidationEvents: [],
+    styleRecalcInvalidationEvents,
     renderFrameImplCreateChildFrameEvents,
     domLoadingEvents,
     layoutImageUnsizedEvents,
     remoteFonts,
     scoreRecords,
-    // TODO(crbug/41484172): change the type so no need to clone
-    backendNodeIds: [...backendNodeIds],
-    clustersByNavigationId: new Map(clustersByNavigationId),
+    backendNodeIds,
+    clustersByNavigationId,
     paintImageEvents,
   };
 }

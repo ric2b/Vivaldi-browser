@@ -45,7 +45,7 @@ class NoteSyncService : public KeyedService {
   ~NoteSyncService() override;
 
   // Analgous to Encode/Decode methods in NoteClient.
-  std::string EncodeNoteSyncMetadata();
+  std::string EncodeNoteSyncMetadata() const;
   void DecodeNoteSyncMetadata(
       const std::string& metadata_str,
       const base::RepeatingClosure& schedule_save_closure,
@@ -67,7 +67,7 @@ class NoteSyncService : public KeyedService {
   // returns null until notes are loaded, i.e. until DecodeNoteSyncMetadata() is
   // invoked. It must not be invoked after Shutdown(), i.e. during profile
   // destruction.
-  sync_notes::NoteModelView* note_model_view();
+  sync_notes::NoteModelView* note_model_view() const;
 
   // For integration tests.
   void SetIsTrackingMetadataForTesting();

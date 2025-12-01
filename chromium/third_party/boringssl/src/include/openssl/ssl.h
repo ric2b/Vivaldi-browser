@@ -2528,17 +2528,20 @@ OPENSSL_EXPORT size_t SSL_CTX_get_num_tickets(const SSL_CTX *ctx);
 #define SSL_GROUP_X25519 29
 #define SSL_GROUP_X25519_MLKEM768 0x11ec
 #define SSL_GROUP_X25519_KYBER768_DRAFT00 0x6399
+#define SSL_GROUP_MLKEM1024 0x0202
 
 // SSL_CTX_set1_group_ids sets the preferred groups for |ctx| to |group_ids|.
-// Each element of |group_ids| should be one of the |SSL_GROUP_*| constants. It
+// Each element of |group_ids| should be a unique one of the |SSL_GROUP_*|
+// constants. If |group_ids| is empty, a default list will be set instead. It
 // returns one on success and zero on failure.
 OPENSSL_EXPORT int SSL_CTX_set1_group_ids(SSL_CTX *ctx,
                                           const uint16_t *group_ids,
                                           size_t num_group_ids);
 
 // SSL_set1_group_ids sets the preferred groups for |ssl| to |group_ids|. Each
-// element of |group_ids| should be one of the |SSL_GROUP_*| constants. It
-// returns one on success and zero on failure.
+// element of |group_ids| should be a unique one of the |SSL_GROUP_*| constants.
+// If |group_ids| is empty, a default list will be set instead. It returns one
+// on success and zero on failure.
 OPENSSL_EXPORT int SSL_set1_group_ids(SSL *ssl, const uint16_t *group_ids,
                                       size_t num_group_ids);
 
@@ -2572,30 +2575,75 @@ OPENSSL_EXPORT size_t SSL_get_all_group_names(const char **out, size_t max_out);
 // library.
 
 // SSL_CTX_set1_groups sets the preferred groups for |ctx| to be |groups|. Each
-// element of |groups| should be a |NID_*| constant from nid.h. It returns one
-// on success and zero on failure.
+// element of |groups| should be a unique |NID_*| constant from nid.h. If
+// |groups| is empty, a default list will be set instead. It returns one on
+// success and zero on failure.
 OPENSSL_EXPORT int SSL_CTX_set1_groups(SSL_CTX *ctx, const int *groups,
                                        size_t num_groups);
 
 // SSL_set1_groups sets the preferred groups for |ssl| to be |groups|. Each
-// element of |groups| should be a |NID_*| constant from nid.h. It returns one
-// on success and zero on failure.
+// element of |groups| should be a unique |NID_*| constant from nid.h. If
+// |groups| is empty, a default list will be set instead. It returns one on
+// success and zero on failure.
 OPENSSL_EXPORT int SSL_set1_groups(SSL *ssl, const int *groups,
                                    size_t num_groups);
 
-// SSL_CTX_set1_groups_list decodes |groups| as a colon-separated list of group
-// names (e.g. "X25519" or "P-256") and sets |ctx|'s preferred groups to the
-// result. It returns one on success and zero on failure.
+// SSL_CTX_set1_groups_list decodes |groups| as a non-empty colon-separated list
+// of group names (e.g. "X25519" or "P-256") and sets |ctx|'s preferred groups
+// to the result. The list must not contain duplicates. It returns one on
+// success and zero on failure.
 OPENSSL_EXPORT int SSL_CTX_set1_groups_list(SSL_CTX *ctx, const char *groups);
 
-// SSL_set1_groups_list decodes |groups| as a colon-separated list of group
-// names (e.g. "X25519" or "P-256") and sets |ssl|'s preferred groups to the
-// result. It returns one on success and zero on failure.
+// SSL_set1_groups_list decodes |groups| as a non-empty colon-separated list of
+// group names (e.g. "X25519" or "P-256") and sets |ssl|'s preferred groups to
+// the result. The list must not contain duplicates. It returns one on success
+// and zero on failure.
 OPENSSL_EXPORT int SSL_set1_groups_list(SSL *ssl, const char *groups);
 
 // SSL_get_negotiated_group returns the NID of the group used by |ssl|'s most
 // recently completed handshake, or |NID_undef| if not applicable.
 OPENSSL_EXPORT int SSL_get_negotiated_group(const SSL *ssl);
+
+
+// Client key shares.
+//
+// The key_share extension in TLS 1.3 (RFC 8446 section 4.2.8) may be sent in
+// the initial ClientHello to provide key exchange parameters for a subset of
+// the groups offered in the client's supported_groups extension, in hopes of
+// saving a round-trip by having proactively started a key exchange for the
+// ultimately-negotiated group.
+//
+// If not otherwise configured, the default client key share selection logic
+// outputs key shares for up to two supported groups, at most one of which is
+// post-quantum.
+
+// SSL_set1_client_key_shares, when called by a client before the handshake,
+// configures |ssl| to send a key_share extension in the initial ClientHello
+// containing exactly the groups given by |group_ids|, in the order given. Each
+// member of |group_ids| should be one of the |SSL_GROUP_*| constants, and they
+// must be unique. This function returns one on success and zero on failure.
+//
+// If non-empty, the sequence of |group_ids| must be a (not necessarily
+// contiguous) subsequence of the groups supported by |ssl|, which may have been
+// configured explicitly on |ssl| or its context, or populated by default.
+// Caller should finish configuring the group list before calling this function.
+// Changing the supported groups for |ssl| after having set client key shares
+// will result in the key share selections being reset if this constraint no
+// longer holds.
+//
+// Setting an empty sequence of |group_ids| results in an empty client
+// key_share, which will cause the handshake to always take an extra round-trip
+// for HelloRetryRequest.
+//
+// An extra round-trip will be needed if the server's choice of group is not
+// among the key shares sent; conversely, sending any key shares other than the
+// server's choice wastes CPU and bandwidth (the latter is particularly costly
+// for post-quantum key exchanges). To avoid these sub-optimal outcomes,
+// key shares should be chosen such that they are likely to be supported by the
+// peer server.
+OPENSSL_EXPORT int SSL_set1_client_key_shares(SSL *ssl,
+                                              const uint16_t *group_ids,
+                                              size_t num_group_ids);
 
 
 // Certificate verification.
@@ -3057,7 +3105,7 @@ OPENSSL_EXPORT int SSL_add_bio_cert_subjects_to_stack(STACK_OF(X509_NAME) *out,
 // issuer of the final certificate in |cred|'s certificate chain.
 //
 // Additionally, |cred| must enable issuer matching (see
-// SSL_CREDENTIAL_set_must_match_issuer|) for this value to take effect.
+// |SSL_CREDENTIAL_set_must_match_issuer|) for this value to take effect.
 //
 // For better extensibility, callers are recommended to configure this
 // information with a CertificatePropertyList instead. See
@@ -5353,12 +5401,12 @@ OPENSSL_EXPORT int SSL_get_shared_sigalgs(SSL *ssl, int idx, int *psign,
 // Use |SSL_SESSION_to_bytes| instead.
 OPENSSL_EXPORT int i2d_SSL_SESSION(SSL_SESSION *in, uint8_t **pp);
 
-// d2i_SSL_SESSION parses a serialized session from the |length| bytes pointed
-// to by |*pp|, as described in |d2i_SAMPLE|.
+// d2i_SSL_SESSION parses a serialized session from the |len| bytes pointed to
+// by |*inp|, as described in |d2i_SAMPLE|.
 //
 // Use |SSL_SESSION_from_bytes| instead.
-OPENSSL_EXPORT SSL_SESSION *d2i_SSL_SESSION(SSL_SESSION **a, const uint8_t **pp,
-                                            long length);
+OPENSSL_EXPORT SSL_SESSION *d2i_SSL_SESSION(SSL_SESSION **out,
+                                            const uint8_t **inp, long len);
 
 // i2d_SSL_SESSION_bio serializes |session| and writes the result to |bio|. It
 // returns the number of bytes written on success and <= 0 on error.
@@ -5918,7 +5966,7 @@ enum ssl_compliance_policy_t BORINGSSL_ENUM_INT {
   //   * For TLS 1.3, only AES-GCM
   //   * P-256 or P-384 for key agreement.
   //   * For server signatures, only PKCS#1/PSS with SHA256/384/512, or ECDSA
-  //     with P-256 or P-384.
+  //     with P-256 or P-384 and SHA256/SHA384.
   //
   // Note: this policy can be configured even if BoringSSL has not been built in
   // FIPS mode. Call |FIPS_mode| to check that.
@@ -6468,6 +6516,7 @@ BSSL_NAMESPACE_END
 #define SSL_R_UNSUPPORTED_CREDENTIAL_LIST 327
 #define SSL_R_INVALID_TRUST_ANCHOR_LIST 328
 #define SSL_R_INVALID_CERTIFICATE_PROPERTY_LIST 329
+#define SSL_R_DUPLICATE_GROUP 330
 #define SSL_R_SSLV3_ALERT_CLOSE_NOTIFY 1000
 #define SSL_R_SSLV3_ALERT_UNEXPECTED_MESSAGE 1010
 #define SSL_R_SSLV3_ALERT_BAD_RECORD_MAC 1020

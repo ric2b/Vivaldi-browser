@@ -8,6 +8,8 @@
 #ifndef BROWSER_MENUS_VIVALDI_DEVICE_MENU_CONTROLLER_H_
 #define BROWSER_MENUS_VIVALDI_DEVICE_MENU_CONTROLLER_H_
 
+#include <map>
+
 #include "ui/menus/simple_menu_model.h"
 #include "url/gurl.h"
 

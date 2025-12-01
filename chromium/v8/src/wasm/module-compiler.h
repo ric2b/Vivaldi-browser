@@ -10,9 +10,7 @@
 #endif  // !V8_ENABLE_WEBASSEMBLY
 
 #include <atomic>
-#include <functional>
 #include <memory>
-#include <optional>
 
 #include "include/v8-metrics.h"
 #include "src/base/platform/time.h"
@@ -69,7 +67,7 @@ V8_EXPORT_PRIVATE WasmError ValidateAndSetBuiltinImports(
 V8_EXPORT_PRIVATE
 std::shared_ptr<wasm::WasmImportWrapperHandle> CompileImportWrapperForTest(
     Isolate* isolate, ImportCallKind kind, const CanonicalSig* sig,
-    CanonicalTypeIndex type_index, int expected_arity, Suspend suspend);
+    int expected_arity, Suspend suspend);
 
 // Triggered by the WasmCompileLazy builtin. The return value indicates whether
 // compilation was successful. Lazy compilation can fail only if validation is

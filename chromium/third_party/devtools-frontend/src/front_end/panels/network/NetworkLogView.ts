@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -45,6 +45,7 @@ import * as Protocol from '../../generated/protocol.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as HAR from '../../models/har/har.js';
 import * as Logs from '../../models/logs/logs.js';
+import * as NetworkTimeCalculator from '../../models/network_time_calculator/network_time_calculator.js';
 import * as Persistence from '../../models/persistence/persistence.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as NetworkForward from '../../panels/network/forward/forward.js';
@@ -65,32 +66,27 @@ import {
   type NetworkLogViewInterface,
   type NetworkNode,
   NetworkRequestNode,
+  RequestPanelBehavior,
 } from './NetworkDataGridNode.js';
 import {NetworkFrameGrouper} from './NetworkFrameGrouper.js';
 import networkLogViewStyles from './networkLogView.css.js';
 import {NetworkLogViewColumns} from './NetworkLogViewColumns.js';
-import {
-  NetworkTimeBoundary,
-  type NetworkTimeCalculator,
-  NetworkTransferDurationCalculator,
-  NetworkTransferTimeCalculator,
-} from './NetworkTimeCalculator.js';
 
 const UIStrings = {
   /**
-   *@description Text in Network Log View of the Network panel
+   * @description Text in Network Log View of the Network panel
    */
   invertFilter: 'Invert',
   /**
-   *@description Tooltip for the 'invert' checkbox in the Network panel.
+   * @description Tooltip for the 'invert' checkbox in the Network panel.
    */
   invertsFilter: 'Inverts the search filter',
   /**
-   *@description Text in Network Log View of the Network panel
+   * @description Text in Network Log View of the Network panel
    */
   hideDataUrls: 'Hide data URLs',
   /**
-   *@description Data urlfilter ui element title in Network Log View of the Network panel
+   * @description Data urlfilter ui element title in Network Log View of the Network panel
    */
   hidesDataAndBlobUrls: 'Hide \'data:\' and \'blob:\' URLs',
   /**
@@ -102,63 +98,63 @@ const UIStrings = {
    */
   hideChromeExtension: 'Hide \'chrome-extension://\' URLs',
   /**
-   *@description Aria accessible name in Network Log View of the Network panel
+   * @description Aria accessible name in Network Log View of the Network panel
    */
   requestTypesToInclude: 'Request types to include',
   /**
-   *@description Label for a checkbox in the Network panel. When checked, only requests with
+   * @description Label for a checkbox in the Network panel. When checked, only requests with
    *             blocked response cookies are shown.
    */
   hasBlockedCookies: 'Blocked response cookies',
   /**
-   *@description Tooltip for a checkbox in the Network panel. The response to a network request may include a
+   * @description Tooltip for a checkbox in the Network panel. The response to a network request may include a
    *             cookie (https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies). Such response cookies can
    *             be malformed or otherwise invalid and the browser may choose to ignore or not accept invalid cookies.
    */
   onlyShowRequestsWithBlockedCookies: 'Show only requests with blocked response cookies',
   /**
-   *@description Label for a filter in the Network panel
+   * @description Label for a filter in the Network panel
    */
   blockedRequests: 'Blocked requests',
   /**
-   *@description Tooltip for a filter in the Network panel
+   * @description Tooltip for a filter in the Network panel
    */
   onlyShowBlockedRequests: 'Show only blocked requests',
   /**
-   *@description Label for a filter in the Network panel
+   * @description Label for a filter in the Network panel
    */
   thirdParty: '3rd-party requests',
   /**
-   *@description Tooltip for a filter in the Network panel
+   * @description Tooltip for a filter in the Network panel
    */
   onlyShowThirdPartyRequests: 'Show only requests with origin different from page origin',
   /**
-   *@description Label for a filter in the Network panel
+   * @description Label for a filter in the Network panel
    */
   ippRequests: 'IP Protected requests',
   /**
-   *@description Tooltip for a filter in the Network panel
+   * @description Tooltip for a filter in the Network panel
    */
-  onlyShowIPProtectedRequests: '(Incognito Only) Show only requests sent to IP Protection proxies',
+  onlyShowIPProtectedRequests: 'Show only requests sent to IP Protection proxies. Has no effect in regular browsing.',
   /**
-   *@description Text that appears when user drag and drop something (for example, a file) in Network Log View of the Network panel
+   * @description Text that appears when user drag and drop something (for example, a file) in Network Log View of the Network panel
    */
   dropHarFilesHere: 'Drop HAR files here',
   /**
-   *@description Recording text content in Network Log View of the Network panel
+   * @description Recording text content in Network Log View of the Network panel
    */
   recordingNetworkActivity: 'Currently recording network activity',
   /**
-   *@description Shown in the Network Log View of the Network panel when the user has not yet
+   * @description Shown in the Network Log View of the Network panel when the user has not yet
    *             recorded any network activity. This is an instruction to the user to reload the page in order to
    *             show network activity in the current UI.
-   *@example {Reload page} PH1
-   *@example {Ctrl + R} PH2
+   * @example {Reload page} PH1
+   * @example {Ctrl + R} PH2
    */
   performARequestOrHitSToRecordThe:
       'Perform a request or reload the page by using the "{PH1}" button or by pressing {PH2}.',
   /**
-   *@description Shown in the Network Log View of the Network panel when the user has not yet
+   * @description Shown in the Network Log View of the Network panel when the user has not yet
    * recorded any network activity. This is an instruction to the user to start recording in order to
    * show network activity in the current UI.
    * @example {Start recording} PH1
@@ -167,41 +163,41 @@ const UIStrings = {
   recordToDisplayNetworkActivity:
       'Record network log to display network activity by using the "{PH1}" button or by pressing {PH2}.',
   /**
-   *@description Label of a button in the Network Log View of the Network panel.
+   * @description Label of a button in the Network Log View of the Network panel.
    */
   reloadPage: 'Reload page',
   /**
-   *@description Label of a button in the Network Log View of the Network panel.
+   * @description Label of a button in the Network Log View of the Network panel.
    */
   startRecording: 'Start recording',
   /**
-   *@description Shown in the Network Log View of the Network panel when the user has not yet
+   * @description Shown in the Network Log View of the Network panel when the user has not yet
    *             recorded any network activity.
    */
   noNetworkActivityRecorded: 'No network activity recorded',
   /**
-   *@description Text to announce to screen readers that network data is available.
+   * @description Text to announce to screen readers that network data is available.
    */
   networkDataAvailable: 'Network Data Available',
   /**
-   *@description Text in Network Log View of the Network panel
-   *@example {3} PH1
-   *@example {5} PH2
+   * @description Text in Network Log View of the Network panel
+   * @example {3} PH1
+   * @example {5} PH2
    */
   sSRequests: '{PH1} / {PH2} requests',
   /**
-   *@description Message in the summary toolbar at the bottom of the Network log that shows the compressed size of the
+   * @description Message in the summary toolbar at the bottom of the Network log that shows the compressed size of the
    * resources transferred during a selected time frame over the compressed size of all resources transferred during
    * the whole network log.
-   *@example {5 B} PH1
-   *@example {10 B} PH2
+   * @example {5 B} PH1
+   * @example {10 B} PH2
    */
   sSTransferred: '{PH1} / {PH2} transferred',
   /**
-   *@description Message in a tooltip that shows the compressed size of the resources transferred during a selected
+   * @description Message in a tooltip that shows the compressed size of the resources transferred during a selected
    * time frame over the compressed size of all resources transferred during the whole network log.
-   *@example {10} PH1
-   *@example {15} PH2
+   * @example {10} PH1
+   * @example {15} PH2
    */
   sBSBTransferredOverNetwork: '{PH1} B / {PH2} B transferred over network',
   /**
@@ -213,75 +209,75 @@ const UIStrings = {
    */
   sSResources: '{PH1} / {PH2} resources',
   /**
-   *@description Text in Network Log View of the Network panel
-   *@example {40} PH1
-   *@example {50} PH2
+   * @description Text in Network Log View of the Network panel
+   * @example {40} PH1
+   * @example {50} PH2
    */
   sBSBResourcesLoadedByThePage: '{PH1} B / {PH2} B resources loaded by the page',
   /**
-   *@description Text in Network Log View of the Network panel
-   *@example {6} PH1
+   * @description Text in Network Log View of the Network panel
+   * @example {6} PH1
    */
   sRequests: '{PH1} requests',
   /**
-   *@description Message in the summary toolbar at the bottom of the Network log that shows the compressed size of
+   * @description Message in the summary toolbar at the bottom of the Network log that shows the compressed size of
    * all resources transferred over network during a network activity log.
-   *@example {4 B} PH1
+   * @example {4 B} PH1
    */
   sTransferred: '{PH1} transferred',
   /**
-   *@description Message in a tooltip that shows the compressed size of all resources transferred over network during
+   * @description Message in a tooltip that shows the compressed size of all resources transferred over network during
    * a network activity log.
-   *@example {4} PH1
+   * @example {4} PH1
    */
   sBTransferredOverNetwork: '{PH1} B transferred over network',
   /**
-   *@description Text in Network Log View of the Network panel
-   *@example {4} PH1
+   * @description Text in Network Log View of the Network panel
+   * @example {4} PH1
    */
   sResources: '{PH1} resources',
   /**
-   *@description Text in Network Log View of the Network panel
-   *@example {10} PH1
+   * @description Text in Network Log View of the Network panel
+   * @example {10} PH1
    */
   sBResourcesLoadedByThePage: '{PH1} B resources loaded by the page',
   /**
-   *@description Text in Network Log View of the Network panel
-   *@example {120ms} PH1
+   * @description Text in Network Log View of the Network panel
+   * @example {120ms} PH1
    */
   finishS: 'Finish: {PH1}',
   /**
-   *@description Text in Network Log View of the Network panel
-   *@example {3000ms} PH1
+   * @description Text in Network Log View of the Network panel
+   * @example {3000ms} PH1
    */
   domcontentloadedS: 'DOMContentLoaded: {PH1}',
   /**
-   *@description Text in Network Log View of the Network panel
-   *@example {40ms} PH1
+   * @description Text in Network Log View of the Network panel
+   * @example {40ms} PH1
    */
   loadS: 'Load: {PH1}',
   /**
-   *@description Text for copying
+   * @description Text for copying
    */
   copy: 'Copy',
   /**
-   *@description A context menu command in the Network panel, for copying the URL of the selected request to the clipboard.
+   * @description A context menu command in the Network panel, for copying the URL of the selected request to the clipboard.
    */
   copyURL: 'Copy URL',
   /**
-   *@description Text in Network Log View of the Network panel
+   * @description Text in Network Log View of the Network panel
    */
   copyRequestHeaders: 'Copy request headers',
   /**
-   *@description Text in Network Log View of the Network panel
+   * @description Text in Network Log View of the Network panel
    */
   copyResponseHeaders: 'Copy response headers',
   /**
-   *@description Text in Network Log View of the Network panel
+   * @description Text in Network Log View of the Network panel
    */
   copyResponse: 'Copy response',
   /**
-   *@description Text in Network Log View of the Network panel
+   * @description Text in Network Log View of the Network panel
    */
   copyStacktrace: 'Copy stack trace',
   /**
@@ -290,7 +286,7 @@ const UIStrings = {
    */
   copyAsPowershell: 'Copy as `PowerShell`',
   /**
-   *@description A context menu command in the Network panel, for copying to the clipboard. 'fetch'
+   * @description A context menu command in the Network panel, for copying to the clipboard. 'fetch'
    * refers to the format the data will be copied as, which is compatible with the fetch web API.
    */
   copyAsFetch: 'Copy as `fetch`',
@@ -302,100 +298,100 @@ const UIStrings = {
    */
   copyAsNodejsFetch: 'Copy as `fetch` (`Node.js`)',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with cURL (a program, not
    *translatable).
    */
   copyAsCurlCmd: 'Copy as `cURL` (`cmd`)',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with a Bash script.
    */
   copyAsCurlBash: 'Copy as `cURL` (`bash`)',
   /**
-   *@description A context menu command in the Network panel, for copying the URLs of all requestes to the clipboard.
+   * @description A context menu command in the Network panel, for copying the URLs of all requestes to the clipboard.
    */
   copyAllURLs: 'Copy all URLs',
   /**
-   *@description A context menu command in the Network panel, for copying the URLs of all requestes
+   * @description A context menu command in the Network panel, for copying the URLs of all requestes
    * (after applying the Network filter) to the clipboard.
    */
   copyAllListedURLs: 'Copy all listed URLs',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with a PowerShell script to
    *represent all network requests.
    */
   copyAllAsPowershell: 'Copy all as `PowerShell`',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with a PowerShell script to
    *represent all network requests (after applying the Network filter).
    */
   copyAllListedAsPowershell: 'Copy all listed as `PowerShell`',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with a 'fetch' command (fetch
    *should not be translated) to represent all network requests.
    */
   copyAllAsFetch: 'Copy all as `fetch`',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with a 'fetch' command (fetch
    *should not be translated) to represent all network requests (after applying the Network filter).
    */
   copyAllListedAsFetch: 'Copy all listed as `fetch`',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with a Node.js 'fetch' command
    *(fetch and Node.js should not be translated) to represent all network requests.
    */
   copyAllAsNodejsFetch: 'Copy all as `fetch` (`Node.js`)',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with a Node.js 'fetch' command
    *(fetch and Node.js should not be translated) to represent all network requests (after applying
    *the Network filter).
    */
   copyAllListedAsNodejsFetch: 'Copy all listed as `fetch` (`Node.js`)',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with cURL (a program, not
    *translatable) to represent all network requests.
    */
   copyAllAsCurlCmd: 'Copy all as `cURL` (`cmd`)',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with cURL (a program, not
    *translatable) to represent all network requests (after applying the Network filter).
    */
   copyAllListedAsCurlCmd: 'Copy all listed as `cURL` (`cmd`)',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with a Bash script to represent
    *all network requests.
    */
   copyAllAsCurlBash: 'Copy all as `cURL` (`bash`)',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with a Bash script to represent
    *all network requests (after applying the Network filter).
    */
   copyAllListedAsCurlBash: 'Copy all listed as `cURL` (`bash`)',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with cURL (a program, not
    *translatable).
    */
   copyAsCurl: 'Copy as `cURL`',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with cURL (a program, not
    *translatable) to represent all network requests.
    */
   copyAllAsCurl: 'Copy all as `cURL`',
   /**
-   *@description Text in Network Log View of the Network panel. An action that copies a command to
+   * @description Text in Network Log View of the Network panel. An action that copies a command to
    *the clipboard. It will copy the command in the format compatible with cURL (a program, not
    *translatable) to represent all network requests (after applying the Network filter).
    */
@@ -429,40 +425,40 @@ const UIStrings = {
    */
   copyAllListedAsHarWithSensitiveData: 'Copy all listed as `HAR` (with sensitive data)',
   /**
-   *@description A context menu item in the Network Log View of the Network panel
+   * @description A context menu item in the Network Log View of the Network panel
    */
   clearBrowserCache: 'Clear browser cache',
   /**
-   *@description A context menu item in the Network Log View of the Network panel
+   * @description A context menu item in the Network Log View of the Network panel
    */
   clearBrowserCookies: 'Clear browser cookies',
   /**
-   *@description A context menu item in the Network Log View of the Network panel
+   * @description A context menu item in the Network Log View of the Network panel
    */
   blockRequestUrl: 'Block request URL',
   /**
-   *@description A context menu item in the Network Log View of the Network panel
-   *@example {example.com} PH1
+   * @description A context menu item in the Network Log View of the Network panel
+   * @example {example.com} PH1
    */
   unblockS: 'Unblock {PH1}',
   /**
-   *@description A context menu item in the Network Log View of the Network panel
+   * @description A context menu item in the Network Log View of the Network panel
    */
   blockRequestDomain: 'Block request domain',
   /**
-   *@description Text to replay an XHR request
+   * @description Text to replay an XHR request
    */
   replayXhr: 'Replay XHR',
   /**
-   *@description Text in Network Log View of the Network panel
+   * @description Text in Network Log View of the Network panel
    */
   areYouSureYouWantToClearBrowser: 'Are you sure you want to clear browser cache?',
   /**
-   *@description Text in Network Log View of the Network panel
+   * @description Text in Network Log View of the Network panel
    */
   areYouSureYouWantToClearBrowserCookies: 'Are you sure you want to clear browser cookies?',
   /**
-   *@description A context menu item in the Network Log View of the Network panel
+   * @description A context menu item in the Network Log View of the Network panel
    * for creating a header override
    */
   overrideHeaders: 'Override headers',
@@ -475,23 +471,23 @@ const UIStrings = {
    */
   moreFilters: 'More filters',
   /**
-   *@description Text of a context menu item to redirect to the AI assistance panel and to start a chat.
+   * @description Text of a context menu item to redirect to the AI assistance panel and to start a chat.
    */
   startAChat: 'Start a chat',
   /**
-   *@description Context menu item in Network panel to explain the purpose of a request via AI.
+   * @description Context menu item in Network panel to explain the purpose of a request via AI.
    */
   explainPurpose: 'Explain purpose',
   /**
-   *@description Context menu item in Network panel to explain why a request is slow via AI.
+   * @description Context menu item in Network panel to explain why a request is slow via AI.
    */
   explainSlowness: 'Explain slowness',
   /**
-   *@description Context menu item in Network panel to explain why a request is failing via AI.
+   * @description Context menu item in Network panel to explain why a request is failing via AI.
    */
   explainFailures: 'Explain failures',
   /**
-   *@description Context menu item in Network panel to assess security headers of a request via AI.
+   * @description Context menu item in Network panel to assess security headers of a request via AI.
    */
   assessSecurityHeaders: 'Assess security headers',
 } as const;
@@ -517,9 +513,9 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
   private readonly progressBarContainer: Element;
   private readonly networkLogLargeRowsSetting: Common.Settings.Setting<boolean>;
   private rowHeightInternal: number;
-  private readonly timeCalculatorInternal: NetworkTransferTimeCalculator;
-  private readonly durationCalculator: NetworkTransferDurationCalculator;
-  private calculatorInternal: NetworkTransferTimeCalculator;
+  private readonly timeCalculatorInternal: NetworkTimeCalculator.NetworkTransferTimeCalculator;
+  private readonly durationCalculator: NetworkTimeCalculator.NetworkTimeCalculator;
+  private calculatorInternal: NetworkTimeCalculator.NetworkTimeCalculator;
   private readonly columnsInternal: NetworkLogViewColumns;
   private staleRequests: Set<SDK.NetworkRequest.NetworkRequest>;
   private mainRequestLoadTime: number;
@@ -586,8 +582,8 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     this.rowHeightInternal = 0;
     updateRowHeight.call(this);
 
-    this.timeCalculatorInternal = new NetworkTransferTimeCalculator();
-    this.durationCalculator = new NetworkTransferDurationCalculator();
+    this.timeCalculatorInternal = new NetworkTimeCalculator.NetworkTransferTimeCalculator();
+    this.durationCalculator = new NetworkTimeCalculator.NetworkTransferDurationCalculator();
     this.calculatorInternal = this.timeCalculatorInternal;
 
     this.columnsInternal = new NetworkLogViewColumns(
@@ -1022,7 +1018,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
       this.timeCalculatorInternal.setWindow(null);
     } else {
       this.timeFilter = NetworkLogView.requestTimeFilter.bind(null, start, end);
-      this.timeCalculatorInternal.setWindow(new NetworkTimeBoundary(start, end));
+      this.timeCalculatorInternal.setWindow(new NetworkTimeCalculator.NetworkTimeBoundary(start, end));
     }
     this.filterRequests();
   }
@@ -1136,7 +1132,6 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     this.dataGrid.setName('network-log');
     this.dataGrid.setResizeMethod(DataGrid.DataGrid.ResizeMethod.LAST);
     this.dataGrid.element.classList.add('network-log-grid');
-    this.dataGrid.element.addEventListener('mousedown', this.dataGridMouseDown.bind(this), true);
     this.dataGrid.element.addEventListener('mousemove', this.dataGridMouseMove.bind(this), true);
     this.dataGrid.element.addEventListener('mouseleave', () => this.setHoveredNode(null), true);
     this.dataGrid.element.addEventListener('keydown', event => {
@@ -1148,7 +1143,8 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
       }
 
       if (Platform.KeyboardUtilities.isEnterOrSpaceKey(event)) {
-        this.dispatchEventToListeners(Events.RequestActivated, {showPanel: true, takeFocus: true});
+        this.dispatchEventToListeners(
+            Events.RequestActivated, {showPanel: RequestPanelBehavior.ShowPanel, takeFocus: true});
         event.consume(true);
       }
     });
@@ -1170,8 +1166,8 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     return this.dataGrid;
   }
 
-  private dataGridMouseMove(event: Event): void {
-    const mouseEvent = (event as MouseEvent);
+  private dataGridMouseMove(event: MouseEvent): void {
+    const mouseEvent = event;
     const node = (this.dataGrid.dataGridNodeFromNode((mouseEvent.target as Node)));
     const highlightInitiatorChain = mouseEvent.shiftKey;
     this.setHoveredNode(node as NetworkNode, highlightInitiatorChain);
@@ -1188,13 +1184,6 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     this.hoveredNodeInternal = node;
     if (this.hoveredNodeInternal) {
       this.hoveredNodeInternal.setHovered(true, Boolean(highlightInitiatorChain));
-    }
-  }
-
-  private dataGridMouseDown(event: Event): void {
-    const mouseEvent = (event as MouseEvent);
-    if (!this.dataGrid.selectedNode && mouseEvent.button) {
-      mouseEvent.consume();
     }
   }
 
@@ -1341,15 +1330,15 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     }
   }
 
-  timeCalculator(): NetworkTimeCalculator {
+  timeCalculator(): NetworkTimeCalculator.NetworkTransferTimeCalculator {
     return this.timeCalculatorInternal;
   }
 
-  calculator(): NetworkTimeCalculator {
+  calculator(): NetworkTimeCalculator.NetworkTimeCalculator {
     return this.calculatorInternal;
   }
 
-  setCalculator(x: NetworkTimeCalculator): void {
+  setCalculator(x: NetworkTimeCalculator.NetworkTimeCalculator): void {
     if (!x || this.calculatorInternal === x) {
       return;
     }
@@ -1557,7 +1546,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
   }
 
   private reset(): void {
-    this.dispatchEventToListeners(Events.RequestActivated, {showPanel: false});
+    this.dispatchEventToListeners(Events.RequestActivated, {showPanel: RequestPanelBehavior.HidePanel});
 
     this.setHoveredNode(null);
     this.columnsInternal.reset();
@@ -1972,10 +1961,9 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
       return;
     }
 
-    const progressIndicator = new UI.ProgressIndicator.ProgressIndicator();
-    this.progressBarContainer.appendChild(progressIndicator.element);
+    const progressIndicator = this.progressBarContainer.createChild('devtools-progress');
     await HAR.Writer.Writer.write(stream, this.harRequests(), options, progressIndicator);
-    progressIndicator.done();
+    progressIndicator.done = true;
     void stream.close();
   }
 
@@ -2403,6 +2391,10 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
          Lastly we replace new lines with ^ and TWO new lines because the first
          new line is there to enact the escape command the second is the character
          to escape (in this case new line).
+
+         All other whitespace characters are replaced with a single space, as there
+         is no way to enter their literal values in a command line, and they do break
+         the command allowing for injection.
         */
       const encapsChars = '^"';
       return encapsChars +
@@ -2410,7 +2402,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
               .replace(/"/g, '\\"')
               .replace(/[^a-zA-Z0-9\s_\-:=+~'\/.',?;()*`]/g, '^$&')
               .replace(/%(?=[a-zA-Z0-9_])/g, '%^')
-              .replace(/[^\S \r\n]/g, '^$&')
+              .replace(/[^\S \r\n]/g, ' ')
               .replace(/\r?\n|\r/g, '^\n\n') +
           encapsChars;
     }
@@ -2754,7 +2746,6 @@ export class MoreFiltersDropDownUI extends Common.ObjectWrapper.ObjectWrapper<UI
           i18nString(UIStrings.ippRequests),
           () => this.networkOnlyIPProtectedRequestsSetting.set(!this.networkOnlyIPProtectedRequestsSetting.get()), {
             checked: this.networkOnlyIPProtectedRequestsSetting.get(),
-            disabled: !Root.Runtime.hostConfig.isOffTheRecord,
             tooltip: i18nString(UIStrings.onlyShowIPProtectedRequests),
             jslogContext: 'only-ip-protected-requests',
           });

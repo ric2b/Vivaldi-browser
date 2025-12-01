@@ -735,7 +735,7 @@ static int resolve_content_path(AVFormatContext *s, const char *url, int *max_ur
     }
 
     tmp_max_url_size = aligned(tmp_max_url_size);
-    text = av_mallocz(tmp_max_url_size);
+    text = av_mallocz(tmp_max_url_size + 1);
     if (!text) {
         updated = AVERROR(ENOMEM);
         goto end;
@@ -747,7 +747,7 @@ static int resolve_content_path(AVFormatContext *s, const char *url, int *max_ur
     }
     av_free(text);
 
-    path = av_mallocz(tmp_max_url_size);
+    path = av_mallocz(tmp_max_url_size + 2);
     tmp_str = av_mallocz(tmp_max_url_size);
     if (!tmp_str || !path) {
         updated = AVERROR(ENOMEM);
@@ -769,6 +769,15 @@ static int resolve_content_path(AVFormatContext *s, const char *url, int *max_ur
 
     node = baseurl_nodes[rootId];
     baseurl = xmlNodeGetContent(node);
+    if (baseurl) {
+        size_t len = xmlStrlen(baseurl)+2;
+        char *tmp = xmlRealloc(baseurl, len);
+        if (!tmp) {
+            updated = AVERROR(ENOMEM);
+            goto end;
+        }
+        baseurl = tmp;
+    }
     root_url = (av_strcasecmp(baseurl, "")) ? baseurl : path;
     if (node) {
         xmlNodeSetContent(node, root_url);
@@ -862,7 +871,7 @@ static int parse_manifest_representation(AVFormatContext *s, const char *url,
         type = get_content_type(adaptionset_node);
     if (type != AVMEDIA_TYPE_VIDEO && type != AVMEDIA_TYPE_AUDIO &&
         type != AVMEDIA_TYPE_SUBTITLE) {
-        av_log(s, AV_LOG_VERBOSE, "Parsing '%s' - skipp not supported representation type\n", url);
+        av_log(s, AV_LOG_VERBOSE, "Parsing '%s' - skip not supported representation type\n", url);
         return 0;
     }
 

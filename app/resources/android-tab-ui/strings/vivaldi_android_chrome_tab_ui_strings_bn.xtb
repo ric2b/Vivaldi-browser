@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="bn">
+<translation id="2330212241471632770">{TABS_COUNT,plural, =1{ট্যাব বুকমার্ক করুন}few{ট্যাব বুকমার্ক করুন}other{ট্যাব বুকমার্ক করুন}}</translation>
 </translationbundle>

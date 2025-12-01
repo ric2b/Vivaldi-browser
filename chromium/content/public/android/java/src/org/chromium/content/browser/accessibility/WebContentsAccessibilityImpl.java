@@ -556,6 +556,15 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
                 .getChildIdsForTesting(mNativeObj, virtualViewId);
     }
 
+    public int @Nullable [] getLabeledByNodeIdsForTesting(int virtualViewId) {
+        if (!isNativeInitialized()) return null;
+        assert isRootManagerConnected()
+                : "Accessibility root manager should be connected when the native object is"
+                        + " initialized.";
+        return WebContentsAccessibilityImplJni.get()
+                .getLabeledByNodeIdsForTesting(mNativeObj, virtualViewId); // IN-TEST
+    }
+
     public int getRootIdForTesting() {
         assert isNativeInitialized() : "native object is not initialized";
         assert isRootManagerConnected()
@@ -1415,11 +1424,11 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
                             .getIdForElementAfterElementHostingAutofillPopup(mNativeObj);
             if (id == 0) return;
             if (ContentFeatureList.sAccessibilityDeprecateJavaNodeCacheOptimizeScroll.getValue()) {
-                scrollToMakeNodeVisible(mAccessibilityFocusId);
+                scrollToMakeNodeVisible(id);
                 moveAccessibilityFocusToId(id);
             } else {
                 moveAccessibilityFocusToId(id);
-                scrollToMakeNodeVisible(mAccessibilityFocusId);
+                scrollToMakeNodeVisible(id);
             }
         }
     }
@@ -1465,8 +1474,13 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
     @Override
     public void restoreFocus() {
         if (isAccessibilityEnabled() && mLastAccessibilityFocusId != View.NO_ID) {
-            moveAccessibilityFocusToId(mLastAccessibilityFocusId);
-            scrollToMakeNodeVisible(mLastAccessibilityFocusId);
+            if (ContentFeatureList.sAccessibilityDeprecateJavaNodeCacheOptimizeScroll.getValue()) {
+                scrollToMakeNodeVisible(mLastAccessibilityFocusId);
+                moveAccessibilityFocusToId(mLastAccessibilityFocusId);
+            } else {
+                moveAccessibilityFocusToId(mLastAccessibilityFocusId);
+                scrollToMakeNodeVisible(mLastAccessibilityFocusId);
+            }
         }
     }
 
@@ -1517,8 +1531,13 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
             WebContentsAccessibilityImplJni.get().setSequentialFocusStartingPoint(mNativeObj, id);
         }
 
-        moveAccessibilityFocusToId(id);
-        scrollToMakeNodeVisible(mAccessibilityFocusId);
+        if (ContentFeatureList.sAccessibilityDeprecateJavaNodeCacheOptimizeScroll.getValue()) {
+            scrollToMakeNodeVisible(id);
+            moveAccessibilityFocusToId(id);
+        } else {
+            moveAccessibilityFocusToId(id);
+            scrollToMakeNodeVisible(mAccessibilityFocusId);
+        }
         return true;
     }
 
@@ -2442,6 +2461,9 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
                 long nativeWebContentsAccessibilityAndroid, int id, int start, int len);
 
         int[] getChildIdsForTesting(long nativeWebContentsAccessibilityAndroid, int virtualViewId);
+
+        int[] getLabeledByNodeIdsForTesting( // IN-TEST
+                long nativeWebContentsAccessibilityAndroid, int virtualViewId);
 
         int getTextLength(long nativeWebContentsAccessibilityAndroid, int id);
 

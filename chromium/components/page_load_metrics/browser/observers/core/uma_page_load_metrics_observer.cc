@@ -12,6 +12,7 @@
 #include <string_view>
 #include <utility>
 
+#include "base/byte_count.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -81,15 +82,6 @@ std::unique_ptr<base::trace_event::TracedValue> FirstInputDelayTraceData(
   return data;
 }
 
-#define TRACE_WITH_TIMESTAMP0(category_group, name, trace_id, begin_time,   \
-                              end_time)                                     \
-  do {                                                                      \
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(category_group, name,  \
-                                                     trace_id, begin_time); \
-    TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(category_group, name,    \
-                                                   trace_id, end_time);     \
-  } while (0)
-
 }  // namespace
 
 namespace internal {
@@ -117,6 +109,9 @@ const char kHistogramFirstContentfulPaint[] =
     "PageLoad.PaintTiming.NavigationToFirstContentfulPaint";
 const char kBackgroundHistogramFirstContentfulPaint[] =
     "PageLoad.PaintTiming.NavigationToFirstContentfulPaint.Background";
+const char kHistogramFirstContentfulPaintExcludeReloadAfterDiscard[] =
+    "PageLoad.PaintTiming.NavigationToFirstContentfulPaint."
+    "ExcludeReloadAfterDiscard";
 const char kHistogramFirstContentfulPaintInitiatingProcess[] =
     "PageLoad.Internal.PaintTiming.NavigationToFirstContentfulPaint."
     "InitiatingProcess";
@@ -125,6 +120,9 @@ const char kHistogramLargestContentfulPaint[] =
 const char kBackgroundHttpsOrDataOrFileSchemeHistogramLargestContentfulPaint[] =
     "PageLoad.PaintTiming.NavigationToLargestContentfulPaint2.Background."
     "HttpsOrDataOrFileScheme";
+const char kHistogramLargestContentfulPaintExcludeReloadAfterDiscard[] =
+    "PageLoad.PaintTiming.NavigationToLargestContentfulPaint2."
+    "ExcludeReloadAfterDiscard";
 const char kHistogramLargestContentfulPaintContentType[] =
     "PageLoad.Internal.PaintTiming.LargestContentfulPaint.ContentType";
 const char kHistogramLargestContentfulPaintMainFrame[] =
@@ -458,6 +456,12 @@ void UmaPageLoadMetricsObserver::OnFirstContentfulPaintInPage(
                           timing.paint_timing->first_contentful_paint.value());
     }
 
+    if (!GetDelegate().IsReloadAfterDiscard()) {
+      PAGE_LOAD_HISTOGRAM(
+          internal::kHistogramFirstContentfulPaintExcludeReloadAfterDiscard,
+          timing.paint_timing->first_contentful_paint.value());
+    }
+
     PAGE_LOAD_HISTOGRAM(
         internal::kHistogramTotalSubresourceLoadTimeAtFirstContentfulPaint,
         total_subresource_load_time_);
@@ -466,16 +470,20 @@ void UmaPageLoadMetricsObserver::OnFirstContentfulPaintInPage(
     // paint.
     if (timing.paint_timing->first_contentful_paint.value() >
         kFirstContentfulPaintTraceThreshold) {
-      auto trace_id = TRACE_ID_WITH_SCOPE(
-          "UmaPageLoadMetricsObserver::OnFirstContentfulPaintInPage_for_"
-          "LongNavigation",
-          TRACE_ID_LOCAL(this));
       base::TimeTicks navigation_start = GetDelegate().GetNavigationStart();
-      TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(
-          "latency", "Long Navigation to First Contentful Paint", trace_id,
+      TRACE_EVENT_BEGIN(
+          "latency", "Long Navigation to First Contentful Paint",
+          perfetto::NamedTrack(
+              "UmaPageLoadMetricsObserver::OnFirstContentfulPaintInPage_for_"
+              "LongNavigation",
+              reinterpret_cast<uintptr_t>(this)),
           navigation_start);
-      TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
-          "latency", "Long Navigation to First Contentful Paint", trace_id,
+      TRACE_EVENT_END(
+          "latency", /* Long Navigation to First Contentful Paint */
+          perfetto::NamedTrack(
+              "UmaPageLoadMetricsObserver::OnFirstContentfulPaintInPage_for_"
+              "LongNavigation",
+              reinterpret_cast<uintptr_t>(this)),
           navigation_start +
               timing.paint_timing->first_contentful_paint.value());
     }
@@ -759,11 +767,16 @@ void UmaPageLoadMetricsObserver::OnLoadedResource(
         internal::kHistogramCommitSentToFirstSubresourceLoadStart,
         timing_info.request_start - commit_sent_time);
 
-    TRACE_WITH_TIMESTAMP0(
+    TRACE_EVENT_BEGIN(
         "loading", "CommitSentToFirstSubresourceLoadStart",
-        TRACE_ID_WITH_SCOPE("CommitSentToFirstSubresourceLoadStart",
-                            TRACE_ID_LOCAL(this)),
-        commit_sent_time, timing_info.request_start);
+        perfetto::NamedTrack("CommitSentToFirstSubresourceLoadStart",
+                             reinterpret_cast<uintptr_t>(this)),
+        commit_sent_time);
+    TRACE_EVENT_END(
+        "loading", /* CommitSentToFirstSubresourceLoadStart */
+        perfetto::NamedTrack("CommitSentToFirstSubresourceLoadStart",
+                             reinterpret_cast<uintptr_t>(this)),
+        timing_info.request_start);
   }
 }
 
@@ -940,6 +953,12 @@ void UmaPageLoadMetricsObserver::RecordTimingHistograms(
                             lcp_time);
       }
 
+      if (!GetDelegate().IsReloadAfterDiscard()) {
+        PAGE_LOAD_HISTOGRAM(
+            internal::kHistogramLargestContentfulPaintExcludeReloadAfterDiscard,
+            lcp_time);
+      }
+
       if (content::WebContents* web_contents = GetDelegate().GetWebContents()) {
         if (content::PreloadingData* preloading_data =
                 content::PreloadingData::GetForWebContents(web_contents)) {
@@ -1066,8 +1085,8 @@ void UmaPageLoadMetricsObserver::OnCpuTimingUpdate(
 
 void UmaPageLoadMetricsObserver::RecordByteAndResourceHistograms(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
-  DCHECK_GE(network_bytes_, 0);
-  DCHECK_GE(cache_bytes_, 0);
+  DCHECK(!network_bytes_.is_negative());
+  DCHECK(!cache_bytes_.is_negative());
   click_tracker_.RecordClickBurst(GetDelegate().GetPageUkmSourceId());
 }
 
@@ -1137,7 +1156,8 @@ void UmaPageLoadMetricsObserver::RecordV8MemoryHistograms() {
   }
 }
 
-void UmaPageLoadMetricsObserver::MemoryUsage::UpdateUsage(int64_t delta_bytes) {
+void UmaPageLoadMetricsObserver::MemoryUsage::UpdateUsage(
+    base::ByteCount delta_bytes) {
   current_bytes_used_ += delta_bytes;
   max_bytes_used_ = std::max(max_bytes_used_, current_bytes_used_);
 }

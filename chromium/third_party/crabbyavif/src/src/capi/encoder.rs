@@ -74,7 +74,7 @@ impl Default for avifEncoder {
             scalingMode: settings.mutable.scaling_mode,
             ioStats: Default::default(),
             diag: Default::default(),
-            qualityGainMap: settings.mutable.quality,
+            qualityGainMap: AVIF_QUALITY_DEFAULT,
             rust_encoder: Default::default(),
             rust_encoder_initialized: false,
             codec_specific_options: Default::default(),
@@ -94,8 +94,21 @@ impl From<&avifEncoder> for MutableSettings {
             } else {
                 encoder.quality
             },
-            // TODO - b/416560730: Convert to proper tiling mode.
-            tiling_mode: TilingMode::Auto,
+            quality_alpha: if encoder.qualityAlpha == -1 {
+                quality_from_quantizers(encoder.minQuantizerAlpha, encoder.maxQuantizerAlpha)
+            } else {
+                encoder.qualityAlpha
+            },
+            quality_gainmap: if encoder.qualityGainMap == -1 {
+                quality_from_quantizers(encoder.minQuantizer, encoder.maxQuantizer)
+            } else {
+                encoder.qualityGainMap
+            },
+            tiling_mode: if encoder.autoTiling == AVIF_TRUE {
+                TilingMode::Auto
+            } else {
+                TilingMode::Manual(encoder.tileRowsLog2, encoder.tileColsLog2)
+            },
             scaling_mode: encoder.scalingMode,
         }
     }
@@ -110,10 +123,12 @@ impl From<&avifEncoder> for Settings {
             } else {
                 None
             },
+            header_format: HeaderFormat::default(),
             keyframe_interval: encoder.keyframeInterval,
             timescale: if encoder.timescale == 0 { 1 } else { encoder.timescale },
             repetition_count: RepetitionCount::create_from(encoder.repetitionCount),
             extra_layer_count: encoder.extraLayerCount,
+            sample_transform_recipe: SampleTransformRecipe::None,
             mutable: encoder.into(),
         }
     }
@@ -287,7 +302,7 @@ pub unsafe extern "C" fn crabby_avifEncoderAddImageGrid(
         rust_encoder(encoder).add_image_grid(gridCols, gridRows, &image_refs)
     } else {
         // Some cells had GainMap and some did not. This is invalid.
-        Err(AvifError::InvalidArgument)
+        AvifError::invalid_argument()
     };
     encoder_ref.diag.set_from_result(&res);
     res.into()

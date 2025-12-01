@@ -60,7 +60,7 @@ impl Item {
     pub(crate) fn stream<'a>(&'a mut self, io: &'a mut GenericIO) -> AvifResult<IStream<'a>> {
         if !self.idat.is_empty() {
             match self.extents.len() {
-                0 => return Err(AvifError::UnknownError("no extent".into())),
+                0 => return AvifError::unknown_error("no extent"),
                 1 => {
                     let idat = self.idat.as_slice();
                     let offset = usize_from_u64(self.extents[0].offset)?;
@@ -69,15 +69,13 @@ impl Item {
                     return Ok(IStream::create(&idat[range]));
                 }
                 _ => {
-                    return Err(AvifError::UnknownError(
-                        "idat with multiple extents is not supported".into(),
-                    ));
+                    return AvifError::unknown_error("idat with multiple extents is not supported");
                 }
             }
         }
 
         let io_data = match self.extents.len() {
-            0 => return Err(AvifError::UnknownError("no extent".into())),
+            0 => return AvifError::unknown_error("no extent"),
             1 => io.read_exact(self.extents[0].offset, self.size)?,
             _ => {
                 if self.data_buffer.is_none() {
@@ -102,9 +100,7 @@ impl Item {
         dimension_limit: Option<NonZero<u32>>,
     ) -> AvifResult<()> {
         if width == 0 || height == 0 || !check_limits(width, height, size_limit, dimension_limit) {
-            return Err(AvifError::InvalidImageGrid(
-                "invalid derived image dimensions".into(),
-            ));
+            return AvifError::invalid_image_grid("invalid derived image dimensions");
         }
         Ok(())
     }
@@ -122,7 +118,7 @@ impl Item {
             // unsigned int(8) version = 0;
             let version = stream.read_u8()?;
             if version != 0 {
-                return Err(AvifError::NotImplemented);
+                return AvifError::not_implemented();
             }
             // unsigned int(8) flags;
             let flags = stream.read_u8()?;
@@ -148,9 +144,7 @@ impl Item {
                 dimension_limit,
             )?;
             if stream.has_bytes_left()? {
-                return Err(AvifError::InvalidImageGrid(
-                    "found unknown extra bytes in the grid box".into(),
-                ));
+                return AvifError::invalid_image_grid("found unknown extra bytes in the grid box");
             }
         } else if self.is_overlay_item() {
             let overlay = &mut tile_info.overlay;
@@ -159,7 +153,7 @@ impl Item {
             // unsigned int(8) version = 0;
             let version = stream.read_u8()?;
             if version != 0 {
-                return Err(AvifError::NotImplemented);
+                return AvifError::not_implemented();
             }
             // unsigned int(8) flags;
             let flags = stream.read_u8()?;
@@ -198,9 +192,7 @@ impl Item {
                 }
             }
             if stream.has_bytes_left()? {
-                return Err(AvifError::InvalidImageGrid(
-                    "found unknown extra bytes in the iovl box".into(),
-                ));
+                return AvifError::invalid_image_grid("found unknown extra bytes in the iovl box");
             }
         } else if self.is_tone_mapped_item() {
             let mut stream = self.stream(io)?;
@@ -234,9 +226,7 @@ impl Item {
                 self.width = image_spatial_extents.width;
                 self.height = image_spatial_extents.height;
                 if self.width == 0 || self.height == 0 {
-                    return Err(AvifError::BmffParseFailed(
-                        "item id has invalid size.".into(),
-                    ));
+                    return AvifError::bmff_parse_failed("item id has invalid size.");
                 }
                 if !check_limits(
                     image_spatial_extents.width,
@@ -244,23 +234,19 @@ impl Item {
                     size_limit,
                     dimension_limit,
                 ) {
-                    return Err(AvifError::BmffParseFailed(
-                        "item dimensions too large".into(),
-                    ));
+                    return AvifError::bmff_parse_failed("item dimensions too large");
                 }
             }
             None => {
                 // No ispe was found.
                 if self.is_auxiliary_alpha() {
                     if alpha_ispe_required {
-                        return Err(AvifError::BmffParseFailed(
-                            "alpha auxiliary image item is missing mandatory ispe".into(),
-                        ));
+                        return AvifError::bmff_parse_failed(
+                            "alpha auxiliary image item is missing mandatory ispe",
+                        );
                     }
                 } else {
-                    return Err(AvifError::BmffParseFailed(
-                        "item is missing mandatory ispe property".into(),
-                    ));
+                    return AvifError::bmff_parse_failed("item is missing mandatory ispe property");
                 }
             }
         }
@@ -288,19 +274,18 @@ impl Item {
                 if (self.is_grid_item() || self.is_overlay_item())
                     && codec_config != source_codec_config
                 {
-                    return Err(AvifError::BmffParseFailed(
-                        "codec config of derived items do not match".into(),
-                    ));
+                    return AvifError::bmff_parse_failed(
+                        "codec config of derived items do not match",
+                    );
                 }
                 if self.is_sample_transform_item()
                     && (codec_config.pixel_format() != source_codec_config.pixel_format()
                         || source_item.width != self.width
                         || source_item.height != self.height)
                 {
-                    return Err(AvifError::BmffParseFailed(
+                    return AvifError::bmff_parse_failed(
                             "pixel format or dimensions of input images for sato derived item do not match"
-                                .into(),
-                        ));
+                        );
                 }
             }
         }
@@ -311,15 +296,15 @@ impl Item {
                     // For derived image items, the codec config comes from the first source item.
                     // Sample transform items can have a depth different from their source items.
                     if *depth != codec_config.depth() && !self.is_sample_transform_item() {
-                        return Err(AvifError::BmffParseFailed(
-                            "pixi depth does not match codec config depth".into(),
-                        ));
+                        return AvifError::bmff_parse_failed(
+                            "pixi depth does not match codec config depth",
+                        );
                     }
                 }
             }
             None => {
                 if pixi_required {
-                    return Err(AvifError::BmffParseFailed("missing pixi property".into()));
+                    return AvifError::bmff_parse_failed("missing pixi property");
                 }
             }
         }
@@ -374,7 +359,7 @@ impl Item {
     }
 
     pub(crate) fn is_sample_transform_item(&self) -> bool {
-        cfg!(feature = "sample_transform") && self.item_type == "sato"
+        self.item_type == "sato"
     }
 
     pub(crate) fn is_derived_image_item(&self) -> bool {
@@ -420,13 +405,13 @@ impl Item {
             return Ok(Extent::default());
         }
         if sample.size == 0 {
-            return Err(AvifError::TruncatedData);
+            return AvifError::truncated_data();
         }
         let mut remaining_offset = sample.offset;
         let mut min_offset = u64::MAX;
         let mut max_offset = 0;
         if self.extents.is_empty() {
-            return Err(AvifError::TruncatedData);
+            return AvifError::truncated_data();
         } else if self.extents.len() == 1 {
             min_offset = sample.offset;
             max_offset = checked_add!(sample.offset, u64_from_usize(sample.size)?)?;
@@ -457,7 +442,7 @@ impl Item {
                 }
             }
             if remaining_size != 0 {
-                return Err(AvifError::TruncatedData);
+                return AvifError::truncated_data();
             }
         }
         Ok(Extent {
@@ -499,9 +484,7 @@ pub(crate) fn construct_items(meta: &MetaBox) -> AvifResult<Items> {
         insert_item_if_not_exists(iloc.item_id, &mut items);
         let item = items.get_mut(&iloc.item_id).unwrap();
         if !item.extents.is_empty() {
-            return Err(AvifError::BmffParseFailed(
-                "item already has extents".into(),
-            ));
+            return AvifError::bmff_parse_failed("item already has extents");
         }
         if iloc.construction_method == 1 {
             item.idat.clone_from(&meta.idat);
@@ -520,9 +503,7 @@ pub(crate) fn construct_items(meta: &MetaBox) -> AvifResult<Items> {
             continue;
         }
         if ipma_seen.contains(&association.item_id) {
-            return Err(AvifError::BmffParseFailed(
-                "item has duplicate ipma entry".into(),
-            ));
+            return AvifError::bmff_parse_failed("item has duplicate ipma entry");
         }
         ipma_seen.insert(association.item_id);
 
@@ -533,26 +514,24 @@ pub(crate) fn construct_items(meta: &MetaBox) -> AvifResult<Items> {
             let essential = *essential_ref;
             if property_index == 0 {
                 if essential {
-                    return Err(AvifError::BmffParseFailed(format!(
+                    return AvifError::bmff_parse_failed(format!(
                         "item id {} contains an illegal essential property index 0",
                         { item.id }
-                    )));
+                    ));
                 }
                 continue;
             }
             // property_index is 1-based.
             if property_index > meta.iprp.properties.len() {
-                return Err(AvifError::BmffParseFailed(
-                    "invalid property_index in ipma".into(),
-                ));
+                return AvifError::bmff_parse_failed("invalid property_index in ipma");
             }
 
             match (&meta.iprp.properties[property_index - 1], essential) {
                 (ItemProperty::Unknown(_), true) => item.has_unsupported_essential_property = true,
                 (ItemProperty::AV1LayeredImageIndexing(_), true) => {
-                    return Err(AvifError::BmffParseFailed(
-                        "invalid essential property".into(),
-                    ));
+                    return AvifError::bmff_parse_failed(
+                        "invalid essential property"
+                    );
                 }
                 (
                     ItemProperty::OperatingPointSelector(_)
@@ -565,9 +544,9 @@ pub(crate) fn construct_items(meta: &MetaBox) -> AvifResult<Items> {
                     | ItemProperty::ImageMirror(_),
                     false,
                 ) => {
-                    return Err(AvifError::BmffParseFailed(
-                        "required essential property not marked as essential".into(),
-                    ));
+                    return AvifError::bmff_parse_failed(
+                        "required essential property not marked as essential"
+                    );
                 }
                 (property, _) => item.properties.push(property.clone()),
             }

@@ -3,11 +3,11 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//vivaldi/gn/config/features.gni")
 
 # Common sources that are both bundled and compiled.
 schema_sources = [
   "access_keys.json",
-  "autoupdate.json",
   "bookmark_context_menu.json",
   "bookmarks_private.json",
   "browser_action_utilities.json",
@@ -38,6 +38,7 @@ schema_sources = [
   "savedpasswords.json",
   "search_engines.json",
   "settings.json",
+  "site_permissions.json",
   "sync.json",
   "tabs_private.json",
   "theme_private.json",
@@ -50,6 +51,13 @@ schema_sources = [
   "window_private.json",
   "zoom.json",
 ]
+
+if (!vivaldi_disable_sparkle) {
+  schema_sources += [
+    "autoupdate.json",
+  ]
+}
+
 
 uncompiled_sources = []
 

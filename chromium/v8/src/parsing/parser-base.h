@@ -2274,7 +2274,7 @@ ParserBase<Impl>::ParsePrimaryExpression() {
       return ParseTemplateLiteral(impl()->NullExpression(), beg_pos, false);
 
     case Token::kMod:
-      if (flags().allow_natives_syntax() || impl()->ParsingExtension()) {
+      if (flags().allow_natives_syntax()) {
         return ParseV8Intrinsic();
       }
       break;
@@ -6260,6 +6260,7 @@ typename ParserBase<Impl>::StatementT ParserBase<Impl>::ParseWithStatement(
     ReportMessage(MessageTemplate::kStrictWith);
     return impl()->NullStatement();
   }
+  impl()->CountUsage(v8::Isolate::kWithStatement);
 
   Expect(Token::kLeftParen);
   ExpressionT expr = ParseExpression();

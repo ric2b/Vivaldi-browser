@@ -1589,10 +1589,6 @@ static inline void prepare_enc_workers(AV1_COMP *cpi, AVxWorkerHook hook,
       thread_data->td->mb.obmc_buffer = thread_data->td->obmc_buffer;
 
       for (int x = 0; x < 2; x++) {
-        memcpy(thread_data->td->hash_value_buffer[x],
-               cpi->td.mb.intrabc_hash_info.hash_value_buffer[x],
-               AOM_BUFFER_SIZE_FOR_BLOCK_HASH *
-                   sizeof(*thread_data->td->hash_value_buffer[x]));
         thread_data->td->mb.intrabc_hash_info.hash_value_buffer[x] =
             thread_data->td->hash_value_buffer[x];
       }

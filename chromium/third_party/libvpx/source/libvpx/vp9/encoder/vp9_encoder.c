@@ -1060,11 +1060,6 @@ static void dealloc_compressor_data(VP9_COMP *cpi) {
     lc->rc_twopass_stats_in.sz = 0;
   }
 
-  if (cpi->source_diff_var != NULL) {
-    vpx_free(cpi->source_diff_var);
-    cpi->source_diff_var = NULL;
-  }
-
   for (i = 0; i < MAX_LAG_BUFFERS; ++i) {
     vpx_free_frame_buffer(&cpi->svc.scaled_frames[i]);
   }
@@ -2371,57 +2366,6 @@ static void update_initial_width(VP9_COMP *cpi, int use_highbitdepth,
   }
 }
 
-// TODO(angiebird): Check whether we can move this function to vpx_image.c
-static INLINE void vpx_img_chroma_subsampling(vpx_img_fmt_t fmt,
-                                              unsigned int *subsampling_x,
-                                              unsigned int *subsampling_y) {
-  switch (fmt) {
-    case VPX_IMG_FMT_I420:
-    case VPX_IMG_FMT_YV12:
-    case VPX_IMG_FMT_NV12:
-    case VPX_IMG_FMT_I422:
-    case VPX_IMG_FMT_I42016:
-    case VPX_IMG_FMT_I42216: *subsampling_x = 1; break;
-    default: *subsampling_x = 0; break;
-  }
-
-  switch (fmt) {
-    case VPX_IMG_FMT_I420:
-    case VPX_IMG_FMT_I440:
-    case VPX_IMG_FMT_YV12:
-    case VPX_IMG_FMT_NV12:
-    case VPX_IMG_FMT_I42016:
-    case VPX_IMG_FMT_I44016: *subsampling_y = 1; break;
-    default: *subsampling_y = 0; break;
-  }
-}
-
-// TODO(angiebird): Check whether we can move this function to vpx_image.c
-static INLINE int vpx_img_use_highbitdepth(vpx_img_fmt_t fmt) {
-  return fmt & VPX_IMG_FMT_HIGHBITDEPTH;
-}
-
-void vp9_update_compressor_with_img_fmt(VP9_COMP *cpi, vpx_img_fmt_t img_fmt) {
-  const VP9EncoderConfig *oxcf = &cpi->oxcf;
-  unsigned int subsampling_x, subsampling_y;
-  const int use_highbitdepth = vpx_img_use_highbitdepth(img_fmt);
-  vpx_img_chroma_subsampling(img_fmt, &subsampling_x, &subsampling_y);
-
-  update_initial_width(cpi, use_highbitdepth, subsampling_x, subsampling_y);
-#if CONFIG_VP9_TEMPORAL_DENOISING
-  setup_denoiser_buffer(cpi);
-#endif
-
-  assert(cpi->lookahead == NULL);
-  cpi->lookahead = vp9_lookahead_init(oxcf->width, oxcf->height, subsampling_x,
-                                      subsampling_y,
-#if CONFIG_VP9_HIGHBITDEPTH
-                                      use_highbitdepth,
-#endif
-                                      oxcf->lag_in_frames);
-  alloc_raw_frame_buffers(cpi);
-}
-
 VP9_COMP *vp9_create_compressor(const VP9EncoderConfig *oxcf,
                                 BufferPool *const pool) {
   unsigned int i;
@@ -2703,11 +2647,6 @@ VP9_COMP *vp9_create_compressor(const VP9EncoderConfig *oxcf,
     cpi->tpl_stats[i].tpl_stats_ptr = NULL;
   }
 
-  // Allocate memory to store variances for a frame.
-  CHECK_MEM_ERROR(&cm->error, cpi->source_diff_var,
-                  vpx_calloc(cm->MBs, sizeof(cpi->source_diff_var)));
-  cpi->source_var_thresh = 0;
-  cpi->frames_till_next_var_check = 0;
 #define BFP(BT, SDF, SDSF, SDAF, VF, SVF, SVAF, SDX4DF, SDSX4DF) \
   cpi->fn_ptr[BT].sdf = SDF;                                     \
   cpi->fn_ptr[BT].sdsf = SDSF;                                   \
@@ -2985,9 +2924,11 @@ int vp9_get_psnr(const VP9_COMP *cpi, PSNR_STATS *psnr) {
   if (is_psnr_calc_enabled(cpi)) {
 #if CONFIG_VP9_HIGHBITDEPTH
     vpx_calc_highbd_psnr(cpi->raw_source_frame, cpi->common.frame_to_show, psnr,
-                         cpi->td.mb.e_mbd.bd, cpi->oxcf.input_bit_depth);
+                         cpi->td.mb.e_mbd.bd, cpi->oxcf.input_bit_depth,
+                         cpi->svc.spatial_layer_id);
 #else
-    vpx_calc_psnr(cpi->raw_source_frame, cpi->common.frame_to_show, psnr);
+    vpx_calc_psnr(cpi->raw_source_frame, cpi->common.frame_to_show, psnr,
+                  cpi->svc.spatial_layer_id);
 #endif
     return 1;
   } else {
@@ -4135,14 +4076,12 @@ static int encode_without_recode_loop(VP9_COMP *cpi, size_t *size,
   }
 
   // Avoid scaling last_source unless its needed.
-  // Last source is needed if avg_source_sad() is used, or if
-  // partition_search_type == SOURCE_VAR_BASED_PARTITION, or if noise
-  // estimation is enabled.
+  // Last source is needed if avg_source_sad() is used, or if noise estimation
+  // is enabled.
   if (cpi->unscaled_last_source != NULL &&
       (cpi->oxcf.content == VP9E_CONTENT_SCREEN ||
        (cpi->oxcf.pass == 0 && cpi->oxcf.rc_mode == VPX_VBR &&
         cpi->oxcf.mode == REALTIME && cpi->oxcf.speed >= 5) ||
-       cpi->sf.partition_search_type == SOURCE_VAR_BASED_PARTITION ||
        (cpi->noise_estimate.enabled && !cpi->oxcf.noise_sensitivity) ||
        cpi->compute_source_sad_onepass))
     cpi->Last_Source = vp9_scale_if_required(
@@ -5302,15 +5241,16 @@ static void set_mb_wiener_variance(VP9_COMP *cpi) {
 static PSNR_STATS compute_psnr_stats(const YV12_BUFFER_CONFIG *source_frame,
                                      const YV12_BUFFER_CONFIG *coded_frame,
                                      uint32_t bit_depth,
-                                     uint32_t input_bit_depth) {
+                                     uint32_t input_bit_depth,
+                                     int spatial_layer_id) {
   PSNR_STATS psnr;
 #if CONFIG_VP9_HIGHBITDEPTH
   vpx_calc_highbd_psnr(source_frame, coded_frame, &psnr, bit_depth,
-                       input_bit_depth);
+                       input_bit_depth, spatial_layer_id);
 #else   // CONFIG_VP9_HIGHBITDEPTH
   (void)bit_depth;
   (void)input_bit_depth;
-  vpx_calc_psnr(source_frame, coded_frame, &psnr);
+  vpx_calc_psnr(source_frame, coded_frame, &psnr, spatial_layer_id);
 #endif  // CONFIG_VP9_HIGHBITDEPTH
   return psnr;
 }
@@ -5563,9 +5503,9 @@ static void encode_frame_to_data_rate(
     update_encode_frame_result_basic(update_type, coded_frame_buf->frame_index,
                                      quantize_index, encode_frame_result);
     if (cpi->ext_ratectrl.ready && cpi->ext_ratectrl.log_file) {
-      PSNR_STATS psnr =
-          compute_psnr_stats(cpi->Source, &coded_frame_buf->buf, cm->bit_depth,
-                             cpi->oxcf.input_bit_depth);
+      PSNR_STATS psnr = compute_psnr_stats(
+          cpi->Source, &coded_frame_buf->buf, cm->bit_depth,
+          cpi->oxcf.input_bit_depth, cpi->svc.spatial_layer_id);
       fprintf(cpi->ext_ratectrl.log_file,
               "ENCODE_FRAME_RESULT gop_index %d psnr %f bits %zu\n",
               cpi->twopass.gf_group.index, psnr.psnr[0], (*size) << 3);
@@ -6577,9 +6517,9 @@ int vp9_get_compressed_data(VP9_COMP *cpi, unsigned int *frame_flags,
         PSNR_STATS psnr;
 #if CONFIG_VP9_HIGHBITDEPTH
         vpx_calc_highbd_psnr(orig, recon, &psnr, cpi->td.mb.e_mbd.bd,
-                             in_bit_depth);
+                             in_bit_depth, cpi->svc.spatial_layer_id);
 #else
-        vpx_calc_psnr(orig, recon, &psnr);
+        vpx_calc_psnr(orig, recon, &psnr, cpi->svc.spatial_layer_id);
 #endif  // CONFIG_VP9_HIGHBITDEPTH
 
         adjust_image_stat(psnr.psnr[1], psnr.psnr[2], psnr.psnr[3],
@@ -6615,9 +6555,10 @@ int vp9_get_compressed_data(VP9_COMP *cpi, unsigned int *frame_flags,
 
 #if CONFIG_VP9_HIGHBITDEPTH
           vpx_calc_highbd_psnr(orig, pp, &psnr2, cpi->td.mb.e_mbd.bd,
-                               cpi->oxcf.input_bit_depth);
+                               cpi->oxcf.input_bit_depth,
+                               cpi->svc.spatial_layer_id);
 #else
-          vpx_calc_psnr(orig, pp, &psnr2);
+          vpx_calc_psnr(orig, pp, &psnr2, cpi->svc.spatial_layer_id);
 #endif  // CONFIG_VP9_HIGHBITDEPTH
 
           cpi->totalp_sq_error += psnr2.sse[0];

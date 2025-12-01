@@ -17,14 +17,38 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 libc = { version = "0.2.152", optional = true }
-ndk-sys = { version = "0.1.0", path = "sys/ndk-sys", optional = true }
-dav1d-sys = { version = "0.1.0", path = "sys/dav1d-sys", optional = true }
-libgav1-sys = { version = "0.1.0", path = "sys/libgav1-sys", optional = true }
-libyuv-sys = { version = "0.1.0", path = "sys/libyuv-sys", optional = true }
-libsharpyuv-sys = { version = "0.1.0", path = "sys/libsharpyuv-sys", optional = true }
-aom-sys = { version = "0.1.0", path = "sys/aom-sys", optional = true }
+
+# The dependencies below are also workspace members in order to include their
+# custom wrappers (lib.rs) in this project. However, even if their respective
+# features are disabled, workspace members are still parsed by rust-analyzer
+# (for example with cargo check --workspace, which is VSCode's default behavior)
+# and some of the build scripts (build.rs) can panic or return errors when they
+# cannot find the underlying dependency. To avoid that, the wrappers and build
+# scripts are guarded by a dependency-level feature, which is only enabled if
+# the dependency itself is enabled, and that is only the case if the top-level
+# feature is enabled too. The dependency-level features and the top-level
+# features have the same names for simplicity, they are just "forwarded down".
+ndk-sys = { version = "0.1.0", path = "sys/ndk-sys", features = [
+  "android_mediacodec",
+], optional = true }
+dav1d-sys = { version = "0.1.0", path = "sys/dav1d-sys", features = [
+  "dav1d",
+], optional = true }
+libgav1-sys = { version = "0.1.0", path = "sys/libgav1-sys", features = [
+  "libgav1",
+], optional = true }
+libyuv-sys = { version = "0.1.0", path = "sys/libyuv-sys", features = [
+  "libyuv",
+], optional = true }
+libsharpyuv-sys = { version = "0.1.0", path = "sys/libsharpyuv-sys", features = [
+  "libsharpyuv",
+], optional = true }
+aom-sys = { version = "0.1.0", path = "sys/aom-sys", features = [
+  "aom",
+], optional = true }
+
 png = { version = "0.17.16", optional = true }
-image = { version = "0.24.0", features = ["jpeg"], optional = true }
+image = { version = "0.25.6", features = ["jpeg"], optional = true }
 gif = { version = "0.13.1", optional = true }
 gif-dispose = { version = "5.0.1", optional = true }
 

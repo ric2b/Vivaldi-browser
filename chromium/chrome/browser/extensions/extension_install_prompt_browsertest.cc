@@ -13,13 +13,12 @@
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #endif
 
 using extensions::ScopedTestDialogAutoConfirm;
@@ -70,13 +69,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallPromptBrowserTest,
                        TrackParentWindowDestruction) {
   // Create a second browser to prevent the app from exiting when the browser is
   // closed.
-  CreateBrowser(browser()->profile());
+  CreateBrowser(profile());
 
   scoped_refptr<const extensions::Extension> extension(BuildTestExtension());
 
   ScopedTestDialogAutoConfirm auto_confirm(ScopedTestDialogAutoConfirm::ACCEPT);
 
-  ExtensionInstallPrompt prompt(browser()->profile(),
+  ExtensionInstallPrompt prompt(profile(),
                                 browser()->window()->GetNativeWindow());
   browser()->window()->Close();
   content::RunAllPendingInMessageLoop();

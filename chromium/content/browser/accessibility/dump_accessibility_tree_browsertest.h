@@ -48,7 +48,6 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
   DumpAccessibilityTreeTest();
   ~DumpAccessibilityTreeTest() override;
 
-  std::vector<ui::AXPropertyFilter> DefaultFilters() const override;
 
   void SetUpCommandLine(base::CommandLine* command_line) override;
 
@@ -97,8 +96,6 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
   // TODO(accessibility): Replace all tests using RunPopoverHintTest to just
   // RunHtmlTest when `interestfor` is enabled by default.
   void RunPopoverHintTest(const base::FilePath::CharType* file_path) {
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kEnableBlinkFeatures, "HTMLCommandAttributes");
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
         switches::kEnableBlinkFeatures, "HTMLInterestForAttribute");
     RunTypedTest<kHtml>(file_path);

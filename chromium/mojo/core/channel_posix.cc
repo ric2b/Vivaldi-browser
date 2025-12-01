@@ -175,13 +175,13 @@ void ChannelPosix::LeakHandle() {
   leak_handle_ = true;
 }
 
-bool ChannelPosix::GetReadPlatformHandles(const void* payload,
-                                          size_t payload_size,
-                                          size_t num_handles,
-                                          const void* extra_header,
-                                          size_t extra_header_size,
-                                          std::vector<PlatformHandle>* handles,
-                                          bool* deferred) {
+bool ChannelPosix::GetReadPlatformHandles(
+    const void* payload,
+    size_t payload_size,
+    size_t num_handles,
+    const void* extra_header,
+    size_t extra_header_size,
+    std::vector<PlatformHandle>* handles) {
   if (num_handles > std::numeric_limits<uint16_t>::max())
     return false;
 
@@ -442,7 +442,7 @@ bool ChannelPosix::FlushOutgoingMessagesNoLock() {
   std::swap(outgoing_messages_, messages);
 
   if (!messages.empty()) {
-    UMA_HISTOGRAM_COUNTS_1000("Mojo.Channel.WriteQueuePendingMessages",
+    UMA_HISTOGRAM_COUNTS_1000("Mojo.Channel.WriteQueuePendingMessages2",
                               messages.size());
   }
 

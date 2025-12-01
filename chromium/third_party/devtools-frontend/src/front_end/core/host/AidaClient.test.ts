@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -559,10 +559,6 @@ describeWithEnvironment('AidaClient', () => {
       });
     }
 
-    beforeEach(() => {
-      sinon.restore();
-    });
-
     it('should return NO_INTERNET when navigator is not online', async () => {
       const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')!;
       Object.defineProperty(globalThis, 'navigator', {
@@ -631,10 +627,6 @@ describeWithEnvironment('AidaClient', () => {
   });
 
   describe('completeCode', () => {
-    beforeEach(() => {
-      sinon.restore();
-    });
-
     it('handles successful response', async () => {
       const mockResult: AidaCodeCompleteResult = {
         response: JSON.stringify({

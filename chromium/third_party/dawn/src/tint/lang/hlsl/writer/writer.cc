@@ -29,12 +29,16 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "src/tint/lang/core/ir/function.h"
 #include "src/tint/lang/core/ir/module.h"
+#include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/core/ir/var.h"
+#include "src/tint/lang/core/type/binding_array.h"
 #include "src/tint/lang/core/type/input_attachment.h"
 #include "src/tint/lang/core/type/pointer.h"
+#include "src/tint/lang/core/type/texel_buffer.h"
 #include "src/tint/lang/hlsl/writer/common/option_helpers.h"
 #include "src/tint/lang/hlsl/writer/printer/printer.h"
 #include "src/tint/lang/hlsl/writer/raise/raise.h"
@@ -47,24 +51,68 @@ Result<SuccessType> CanGenerate(const core::ir::Module& ir, const Options& optio
         if (ty->Is<core::type::SubgroupMatrix>()) {
             return Failure("subgroup matrices are not supported by the HLSL backend");
         }
-    }
-
-    // Check for unsupported module-scope variable address spaces and types.
-    for (auto* inst : *ir.root_block) {
-        auto* var = inst->As<core::ir::Var>();
-        auto* ptr = var->Result()->Type()->As<core::type::Pointer>();
-        if (ptr->AddressSpace() == core::AddressSpace::kPixelLocal) {
-            // Check the pixel_local variables have corresponding entries in the PLS attachment map.
-            auto* str = ptr->StoreType()->As<core::type::Struct>();
-            for (uint32_t i = 0; i < str->Members().Length(); i++) {
-                if (options.pixel_local.attachments.count(i) == 0) {
-                    return Failure("missing pixel local attachment for member index " +
-                                   std::to_string(i));
+        if (ty->Is<core::type::ResourceBinding>()) {
+            return Failure("resource_binding not supported by the HLSL backend");
+        }
+        if (ty->Is<core::type::TexelBuffer>()) {
+            // TODO(crbug/382544164): Prototype texel buffer feature
+            return Failure("texel buffers are not supported by the HLSL backend");
+        }
+        if (options.compiler == Options::Compiler::kFXC) {
+            if (auto* ba = ty->As<core::type::BindingArray>()) {
+                if (ba->Count()->Is<core::type::RuntimeArrayCount>()) {
+                    return Failure("runtime binding array not supported by the HLSL FXC backend");
                 }
             }
         }
-        if (ptr->StoreType()->Is<core::type::InputAttachment>()) {
-            return Failure("input attachments are not supported by the HLSL backend");
+    }
+
+    // Check for unsupported module-scope variable address spaces and types.
+    {
+        for (auto* inst : *ir.root_block) {
+            auto* var = inst->As<core::ir::Var>();
+            auto* ptr = var->Result()->Type()->As<core::type::Pointer>();
+            if (ptr->AddressSpace() == core::AddressSpace::kPixelLocal) {
+                // Check the pixel_local variables have corresponding entries in the PLS attachment
+                // map.
+                auto* str = ptr->StoreType()->As<core::type::Struct>();
+                for (uint32_t i = 0; i < str->Members().Length(); i++) {
+                    if (options.pixel_local.attachments.count(i) == 0) {
+                        return Failure("missing pixel local attachment for member index " +
+                                       std::to_string(i));
+                    }
+                }
+            }
+            if (ptr->StoreType()->Is<core::type::InputAttachment>()) {
+                return Failure("input attachments are not supported by the HLSL backend");
+            }
+        }
+    }
+
+    auto user_immediate_res = core::ir::ValidateSingleUserImmediate(ir);
+    if (user_immediate_res != Success) {
+        return user_immediate_res.Failure();
+    }
+
+    uint32_t user_immediate_size = user_immediate_res.Get();
+
+    // Validate internal immediate offsets using shared helper.
+    {
+        std::vector<core::ir::ImmediateInfo> immediates;
+        if (options.first_index_offset) {
+            immediates.push_back({*options.first_index_offset, 4u});
+        }
+        if (options.first_instance_offset) {
+            immediates.push_back({*options.first_instance_offset, 4u});
+        }
+        if (options.num_workgroups_start_offset) {
+            immediates.push_back({*options.num_workgroups_start_offset, 4u});
+        }
+        // Pass user immediate size so internal offsets don't overlap user region.
+        if (auto res =
+                core::ir::ValidateInternalImmediateOffset(0x1000, user_immediate_size, immediates);
+            res != Success) {
+            return res.Failure();
         }
     }
 
@@ -77,13 +125,30 @@ Result<SuccessType> CanGenerate(const core::ir::Module& ir, const Options& optio
         for (auto* param : func->Params()) {
             if (auto* str = param->Type()->As<core::type::Struct>()) {
                 for (auto* member : str->Members()) {
+                    if (member->Attributes().color.has_value()) {
+                        return Failure("@color attribute is not supported by the HLSL backend");
+                    }
                     if (member->Attributes().builtin == core::BuiltinValue::kSubgroupId) {
                         return Failure("subgroup_id is not yet supported by the HLSL backend");
                     }
+
+                    if (member->Attributes().builtin == core::BuiltinValue::kBarycentricCoord &&
+                        options.compiler == Options::Compiler::kFXC) {
+                        return Failure(
+                            "barycentric_coord is not supported by the FXC HLSL backend");
+                    }
                 }
             } else {
+                if (param->Color().has_value()) {
+                    return Failure("@color attribute is not supported by the HLSL backend");
+                }
                 if (param->Builtin() == core::BuiltinValue::kSubgroupId) {
                     return Failure("subgroup_id is not yet supported by the HLSL backend");
+                }
+
+                if (param->Builtin() == core::BuiltinValue::kBarycentricCoord &&
+                    options.compiler == Options::Compiler::kFXC) {
+                    return Failure("barycentric_coord is not supported by the FXC HLSL backend");
                 }
             }
         }

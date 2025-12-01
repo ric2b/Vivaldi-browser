@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,11 +11,11 @@ import type * as Issues from './issues.js';
 
 const UIStrings = {
   /**
-   *@description Label for the issues pane
+   * @description Label for the issues pane
    */
   issues: 'Issues',
   /**
-   *@description Command for showing the 'Issues' tool
+   * @description Command for showing the 'Issues' tool
    */
   showIssues: 'Show Issues',
 } as const;

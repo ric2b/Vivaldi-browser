@@ -1,17 +1,6 @@
-fn f(x_100 : texture_2d<f32>) {
-  return;
-}
+SKIP: FAILED
 
-fn caller(caller_arg : texture_2d<f32>) -> f32 {
-  f(caller_arg);
-  return 0.0f;
-}
-
-fn main_1() {
-  return;
-}
-
-@compute @workgroup_size(1i, 1i, 1i)
+// BUG(441874372)
+@compute @workgroup_size(1u, 1u, 1u)
 fn main() {
-  main_1();
 }

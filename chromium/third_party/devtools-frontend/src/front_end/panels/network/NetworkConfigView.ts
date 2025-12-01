@@ -1,4 +1,4 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -17,35 +17,35 @@ import networkConfigViewStyles from './networkConfigView.css.js';
 
 const UIStrings = {
   /**
-   *@description Text in the Network conditions panel shown in the dropdown where the user chooses the user agent.
+   * @description Text in the Network conditions panel shown in the dropdown where the user chooses the user agent.
    */
   custom: 'Custom…',
   /**
-   *@description Placeholder text shown in the input box where a user is expected to add a custom user agent.
+   * @description Placeholder text shown in the input box where a user is expected to add a custom user agent.
    */
   enterACustomUserAgent: 'Enter a custom user agent',
   /**
-   *@description Error message when the custom user agent field is empty.
+   * @description Error message when the custom user agent field is empty.
    */
   customUserAgentFieldIsRequired: 'Custom user agent field is required',
   /**
-   *@description Header for the caching settings within the network conditions panel.
+   * @description Header for the caching settings within the network conditions panel.
    */
   caching: 'Caching',
   /**
-   *@description Option in the network conditions panel to disable the cache.
+   * @description Option in the network conditions panel to disable the cache.
    */
   disableCache: 'Disable cache',
   /**
-   *@description Header in Network conditions panel for the network throttling and emulation settings.
+   * @description Header in Network conditions panel for the network throttling and emulation settings.
    */
   networkThrottling: 'Network',
   /**
-   *@description Header in the network conditions panel for the user agent settings.
+   * @description Header in the network conditions panel for the user agent settings.
    */
   userAgent: 'User agent',
   /**
-   *@description User agent setting in the network conditions panel to use the browser's default value.
+   * @description User agent setting in the network conditions panel to use the browser's default value.
    */
   selectAutomatically: 'Use browser default',
   /**
@@ -197,7 +197,7 @@ export class NetworkConfigView extends UI.Widget.VBox {
     return {select: userAgentSelectElement, input: otherUserAgentElement, error: errorElement};
   }
 
-  private createSection(title: string, className?: string): Element {
+  private createSection(title: string, className?: string): HTMLElement {
     const section = this.contentElement.createChild('section', 'network-config-group');
     if (className) {
       section.classList.add(className);
@@ -215,9 +215,7 @@ export class NetworkConfigView extends UI.Widget.VBox {
   private createNetworkThrottlingSection(): void {
     const title = i18nString(UIStrings.networkThrottling);
     const section = this.createSection(title, 'network-config-throttling');
-    const networkThrottlingSelect = section.createChild('select');
-    MobileThrottling.ThrottlingManager.throttlingManager().createNetworkThrottlingSelector(networkThrottlingSelect);
-    UI.ARIAUtils.setLabel(networkThrottlingSelect, title);
+    MobileThrottling.NetworkThrottlingSelector.NetworkThrottlingSelect.createForGlobalConditions(section, title);
     const saveDataSelect =
         MobileThrottling.ThrottlingManager.throttlingManager().createSaveDataOverrideSelector('chrome-select').element;
     section.appendChild(saveDataSelect);
@@ -276,7 +274,7 @@ export class NetworkConfigView extends UI.Widget.VBox {
       userAgentUpdateButtonStatusText.textContent = '';
     });
 
-    clientHints.addEventListener('clienthintssubmit', (event: Event) => {
+    clientHints.addEventListener('clienthintssubmit', event => {
       const metaData: Protocol.Emulation.UserAgentMetadata = (event as CustomEvent).detail.value;
       const customUA = customUserAgentSetting.get();
       userAgentMetadataSetting.set(metaData);

@@ -81,8 +81,6 @@ update_target("//ios/chrome/browser/shared/ui/table_view/cells:cells") {
     "//vivaldi/ios/ui/table_view/cells/vivaldi_table_view_illustrated_item.mm",
     "//vivaldi/ios/ui/table_view/cells/vivaldi_table_view_segmented_control_item.h",
     "//vivaldi/ios/ui/table_view/cells/vivaldi_table_view_segmented_control_item.mm",
-    "//vivaldi/ios/ui/table_view/cells/vivaldi_table_view_text_button_item.h",
-    "//vivaldi/ios/ui/table_view/cells/vivaldi_table_view_text_button_item.mm",
     "//vivaldi/ios/ui/table_view/cells/vivaldi_table_view_text_spinner_button_item.h",
     "//vivaldi/ios/ui/table_view/cells/vivaldi_table_view_text_spinner_button_item.mm",
     "//vivaldi/ios/ui/table_view/cells/vivaldi_input_error_item.h",
@@ -256,7 +254,7 @@ update_target("//ios/chrome/browser/recent_tabs/ui_bundled:ui") {
   ]
 }
 
-update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui:swift_constants") {
+update_target("//ios/chrome/browser/tab_switcher/tab_strip/ui:swift_constants") {
   sources -= [
     "tab_strip_constants.swift"
   ]
@@ -266,7 +264,7 @@ update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui:swift_c
   ]
 }
 
-update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui:swift") {
+update_target("//ios/chrome/browser/tab_switcher/tab_strip/ui:swift") {
   sources -= [
     "tab_strip_layout.swift",
     "tab_strip_new_tab_button.swift",
@@ -280,7 +278,7 @@ update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui:swift")
   ]
 }
 
-update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui:ui") {
+update_target("//ios/chrome/browser/tab_switcher/tab_strip/ui:ui") {
   sources -= [
     "tab_strip_group_cell.mm",
   ]
@@ -291,5 +289,18 @@ update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui:ui") {
     "//vivaldi/ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/vivaldi_tab_strip_group_stroke_view.mm",
     "//vivaldi/ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/vivaldi_tab_strip_tab_cell.h",
     "//vivaldi/ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/vivaldi_tab_strip_tab_cell.mm",
+  ]
+}
+
+# Swap out the implementation of the iPad main menu
+update_target("//ios/chrome/browser/keyboard/ui_bundled:ui_bundled") {
+  sources -= [
+    "UIKeyCommand+Chrome.mm",
+    "menu_builder.mm",
+  ]
+
+  sources += [
+    "//vivaldi/ios/ui/main_menu/UIKeyCommand+Chrome.mm",
+    "//vivaldi/ios/ui/main_menu/vivaldi_menu_builder.mm",
   ]
 }

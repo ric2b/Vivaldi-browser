@@ -4,7 +4,6 @@
 
 import 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.js';
 import '/shared/settings/prefs/prefs.js';
-import '../basic_page/basic_page.js';
 import '../safety_hub/safety_hub_entry_point.js';
 import '../settings_page/settings_section.js';
 import '../settings_shared.css.js';
@@ -13,9 +12,11 @@ import './privacy_page.js';
 
 import {PrefsMixin} from '/shared/settings/prefs/prefs_mixin.js';
 import type {CrViewManagerElement} from 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {beforeNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {loadTimeData} from '../i18n_setup.js';
 import {pageVisibility} from '../page_visibility.js';
 import type {PageVisibility} from '../page_visibility.js';
 import {routes} from '../route.js';
@@ -62,7 +63,7 @@ export class SettingsPrivacyPageIndexElement extends
 
       pageVisibility_: {
         type: Object,
-        value() {
+        value: () => {
           return pageVisibility || {};
         },
       },
@@ -75,6 +76,128 @@ export class SettingsPrivacyPageIndexElement extends
       showPrivacyGuidePromo_: {
         type: Boolean,
         value: false,
+      },
+
+      autoPictureInPictureEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('autoPictureInPictureEnabled'),
+      },
+
+      capturedSurfaceControlEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('capturedSurfaceControlEnabled'),
+      },
+
+      enableBundledSecuritySettings_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableBundledSecuritySettings'),
+      },
+
+      enableFederatedIdentityApiContentSetting_: {
+        type: Boolean,
+        value: () => {
+          return loadTimeData.getBoolean(
+              'enableFederatedIdentityApiContentSetting');
+        },
+      },
+
+      enableExperimentalWebPlatformFeatures_: {
+        type: Boolean,
+        value: () => {
+          return loadTimeData.getBoolean(
+              'enableExperimentalWebPlatformFeatures');
+        },
+      },
+
+      enableHandTrackingContentSetting_: {
+        type: Boolean,
+        value: () => {
+          return loadTimeData.getBoolean('enableHandTrackingContentSetting');
+        },
+      },
+
+      enableIncognitoTrackingProtections_: {
+        type: Boolean,
+        value: () =>
+            loadTimeData.getBoolean('enableIncognitoTrackingProtections'),
+      },
+
+      enablePaymentHandlerContentSetting_: {
+        type: Boolean,
+        value: () => {
+          return loadTimeData.getBoolean('enablePaymentHandlerContentSetting');
+        },
+      },
+
+      enableSecurityKeysSubpage_: {
+        type: Boolean,
+        readOnly: true,
+        value: () => loadTimeData.getBoolean('enableSecurityKeysSubpage'),
+      },
+
+      // <if expr="is_chromeos">
+      enableSmartCardReadersContentSetting_: {
+        type: Boolean,
+        value: () => {
+          return loadTimeData.getBoolean(
+              'enableSmartCardReadersContentSetting');
+        },
+      },
+      // </if>
+
+      enableSafeBrowsingSubresourceFilter_: {
+        type: Boolean,
+        value: () => {
+          return loadTimeData.getBoolean('enableSafeBrowsingSubresourceFilter');
+        },
+      },
+
+      enableKeyboardLockPrompt_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableKeyboardLockPrompt'),
+      },
+
+      enableLocalNetworkAccessSetting_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableLocalNetworkAccessSetting'),
+      },
+
+      enableWebAppInstallation_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableWebAppInstallation'),
+      },
+
+      enableWebBluetoothNewPermissionsBackend_: {
+        type: Boolean,
+        value: () =>
+            loadTimeData.getBoolean('enableWebBluetoothNewPermissionsBackend'),
+      },
+
+      enableWebPrintingContentSetting_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableWebPrintingContentSetting'),
+      },
+
+      isAdPrivacyAvailable_: {
+        type: Boolean,
+        readOnly: true,
+        value: () => {
+          return !loadTimeData.getBoolean('isPrivacySandboxRestricted') ||
+              loadTimeData.getBoolean(
+                  'isPrivacySandboxRestrictedNoticeEnabled');
+        },
+      },
+
+      isPrivacySandboxRestricted_: {
+        type: Boolean,
+        readOnly: true,
+        value: () => loadTimeData.getBoolean('isPrivacySandboxRestricted'),
+      },
+
+      showPersistentPermissions_: {
+        type: Boolean,
+        readOnly: true,
+        value: () => loadTimeData.getBoolean('showPersistentPermissions'),
       },
     };
   }
@@ -89,6 +212,27 @@ export class SettingsPrivacyPageIndexElement extends
   declare private pageVisibility_: PageVisibility;
   declare private routes_: SettingsRoutes;
   declare private showPrivacyGuidePromo_: boolean;
+  declare private autoPictureInPictureEnabled_: boolean;
+  declare private capturedSurfaceControlEnabled_: boolean;
+  declare private enableBundledSecuritySettings_: boolean;
+  declare private enableFederatedIdentityApiContentSetting_: boolean;
+  declare private enableExperimentalWebPlatformFeatures_: boolean;
+  declare private enableHandTrackingContentSetting_: boolean;
+  declare private enableIncognitoTrackingProtections_: boolean;
+  // <if expr="is_chromeos">
+  declare private enableSmartCardReadersContentSetting_: boolean;
+  // </if>
+  declare private enableSafeBrowsingSubresourceFilter_: boolean;
+  declare private enableKeyboardLockPrompt_: boolean;
+  declare private enableLocalNetworkAccessSetting_: boolean;
+  declare private enablePaymentHandlerContentSetting_: boolean;
+  declare private enableSecurityKeysSubpage_: boolean;
+  declare private enableWebAppInstallation_: boolean;
+  declare private enableWebBluetoothNewPermissionsBackend_: boolean;
+  declare private enableWebPrintingContentSetting_: boolean;
+  declare private isAdPrivacyAvailable_: boolean;
+  declare private isPrivacySandboxRestricted_: boolean;
+  declare private showPersistentPermissions_: boolean;
 
   private pendingViewSwitching_: PromiseResolver<void> = new PromiseResolver();
   private privacyGuidePromoWasShown_: boolean;
@@ -102,7 +246,7 @@ export class SettingsPrivacyPageIndexElement extends
   }
 
   private getDefaultViews_(): string[] {
-    const defaultViews = ['old'];
+    const defaultViews = ['privacy'];
 
     if (this.isPrivacyGuideAvailable) {
       //defaultViews.push('privacyGuidePromo');
@@ -115,11 +259,18 @@ export class SettingsPrivacyPageIndexElement extends
     return defaultViews;
   }
 
-  private isNonMigratedPrivacyRoute_(route: Route): boolean {
-    return routes.PRIVACY.contains(route) && !route.hasMigratedToPlugin;
+  private isRouteHostedWithinPrivacyView_(route: Route): boolean {
+    const nestedRoutes = [routes.CLEAR_BROWSER_DATA];
+    if (loadTimeData.getBoolean('showPrivacyGuide')) {
+      nestedRoutes.push(routes.PRIVACY_GUIDE);
+    }
+    return nestedRoutes.includes(route);
   }
 
-  private getViewIdsForRoute_(route: Route): string[] {
+  // Return the list of view IDs to be displayed, or null if a view should
+  // exist but was not found. Caller is responsible for re-querying the DOM
+  // after any conditional elements have been stamped.
+  private getViewIdsForRoute_(route: Route): string[]|null {
     switch (route) {
       case routes.PRIVACY:
         return this.getDefaultViews_();
@@ -136,10 +287,17 @@ export class SettingsPrivacyPageIndexElement extends
         // of search results.
         return this.inSearchMode ? this.getDefaultViews_() : [];
       default: {
-        if (this.isNonMigratedPrivacyRoute_(route)) {
-          // Handle case where Privacy child route has not migrated to the new
-          // architecture.
-          return ['old'];
+        // Handle case of routes whose UIs are still hosted within
+        // settings-privacy-page.
+        if (this.isRouteHostedWithinPrivacyView_(route)) {
+          return ['privacy'];
+        }
+
+        // Handle case of a Privacy child route.
+        if (routes.PRIVACY.contains(route)) {
+          const view = this.$.viewManager.querySelector(
+              `[slot='view'][route-path='${route.path}']`);
+          return view ? [view.id] : null;
         }
 
         // Nothing to do. Other parent elements are responsible for updating
@@ -161,18 +319,18 @@ export class SettingsPrivacyPageIndexElement extends
     // Need to wait for currentRouteChanged observers on child views to run
     // first, before switching views.
     queueMicrotask(async () => {
-      const viewIds = this.getViewIdsForRoute_(newRoute);
+      let viewIds = this.getViewIdsForRoute_(newRoute);
 
-      if (viewIds.length === 0) {
+      if (viewIds !== null && viewIds.length === 0) {
         // Nothing to do. Other parent elements are responsible for updating
         // the displayed contents.
         this.pendingViewSwitching_.resolve();
         return;
       }
 
-      const allViewsExist =
+      const allViewsExist = viewIds !== null &&
           this.$.viewManager.querySelectorAll(viewIds.join(',')).length ===
-          viewIds.length;
+              viewIds.length;
       if (!allViewsExist) {
         // Wait once for any lazy render <dom-if>s to render.
         await this.beforeNextRenderPromise_();
@@ -183,8 +341,12 @@ export class SettingsPrivacyPageIndexElement extends
           this.pendingViewSwitching_.resolve();
           return;
         }
+
+        // Re-query for the elements to be displayed, as they must exist.
+        viewIds = this.getViewIdsForRoute_(newRoute);
       }
 
+      assert(viewIds !== null);
       await this.$.viewManager.switchViews(
           viewIds, 'no-animation', 'no-animation');
       this.pendingViewSwitching_.resolve();
@@ -207,7 +369,7 @@ export class SettingsPrivacyPageIndexElement extends
         (!!this.currentRoute && this.currentRoute === route);
   }
 
-  private renderOldView_(): boolean {
+  private renderPrivacyView_(): boolean {
     // <if expr="is_chromeos">
     if (getTopLevelRoute() === routes.PRIVACY &&
         this.currentRoute === routes.BASIC) {
@@ -219,7 +381,8 @@ export class SettingsPrivacyPageIndexElement extends
 
     return this.inSearchMode ||
         (!!this.currentRoute &&
-         this.isNonMigratedPrivacyRoute_(this.currentRoute));
+         (this.currentRoute === routes.PRIVACY ||
+          this.isRouteHostedWithinPrivacyView_(this.currentRoute)));
   }
 
   private updatePrivacyGuidePromoVisibility_() {

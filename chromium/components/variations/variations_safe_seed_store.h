@@ -36,9 +36,8 @@ class VariationsSafeSeedStore {
   // used was fetched. (See VariationsSeedStore::GetTimeForStudyDateChecks().)
   virtual base::Time GetTimeForStudyDateChecks() const = 0;
 
-  // Getter and setter for the compressed and base64-encoded safe seed.
-  virtual StoredSeed GetCompressedSeed() const = 0;
-  virtual void SetCompressedSeed(ValidatedSeedInfo seed_info) = 0;
+  // Setter for the safe seed and other seed-related info.
+  virtual StoreSeedResult SetCompressedSeed(ValidatedSeedInfo seed_info) = 0;
 
   // Getter and setter for the locale associated with the safe seed in the
   // underlying storage.
@@ -68,6 +67,13 @@ class VariationsSafeSeedStore {
   // Side-effect: If the read fails, clears the prefs associated with the seed.
   virtual LoadSeedResult ReadSeedData(std::string* seed_data,
                                       std::string* base64_seed_signature) = 0;
+
+  // Reads and processes seed data and calls `done_callback` with the result of
+  // the load, the seed data, and the signature. The seed data and signature
+  // should only be used if the result is `LoadSeedResult::kSuccess`.
+  // Side-effect: If the read fails, clears the prefs associated with the seed.
+  virtual void ReadSeedData(
+      SeedReaderWriter::ReadSeedDataCallback done_callback) = 0;
 };
 
 }  // namespace variations

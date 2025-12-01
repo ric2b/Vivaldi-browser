@@ -41,7 +41,7 @@ const CGSize kPreferredPopoverSize = {420.0, 420.0};
 - (void)start {
   // Create the view provider and view controller
   self.viewProvider = [[VivaldiReaderModeViewProvider alloc] init];
-  self.viewController = [VivaldiReaderModeViewProvider makeViewController];
+  self.viewController = [self.viewProvider makeViewController];
   self.viewController.title = l10n_util::GetNSString(IDS_IOS_READER_MODE_TITLE);
   self.viewController.navigationItem.largeTitleDisplayMode =
       UINavigationItemLargeTitleDisplayModeNever;

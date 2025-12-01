@@ -15,12 +15,13 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/content_settings/generated_cookie_prefs.h"
+#include "chrome/browser/content_settings/generated_javascript_optimizer_pref.h"
 #include "chrome/browser/content_settings/generated_permission_prompting_behavior_pref.h"
 #include "chrome/browser/extensions/api/settings_private/generated_prefs.h"
 #include "chrome/browser/extensions/api/settings_private/generated_prefs_factory.h"
 #include "chrome/browser/extensions/settings_api_helpers.h"
-#include "chrome/browser/glic/glic_enabling.h"
 #include "chrome/browser/glic/glic_pref_names.h"
+#include "chrome/browser/glic/public/glic_enabling.h"
 #include "chrome/browser/metrics/profile_pref_names.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_prefs.h"
 #include "chrome/browser/password_manager/generated_password_leak_detection_pref.h"
@@ -65,6 +66,7 @@
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/spellcheck/browser/pref_names.h"
 #include "components/supervised_user/core/common/pref_names.h"
+#include "components/themes/pref_names.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/unified_consent/pref_names.h"
@@ -226,11 +228,14 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::kBoolean;
   (*s_allowlist)[::prefs::kPinSplitTabButton] =
       settings_api::PrefType::kBoolean;
+  (*s_allowlist)[::prefs::kSplitViewDragAndDropEnabled] =
+      settings_api::PrefType::kBoolean;
 
   // Appearance settings.
   (*s_allowlist)[::prefs::kCurrentThemeID] = settings_api::PrefType::kString;
   (*s_allowlist)[::prefs::kPinnedActions] = settings_api::PrefType::kList;
-  (*s_allowlist)[::prefs::kPolicyThemeColor] = settings_api::PrefType::kNumber;
+  (*s_allowlist)[themes::prefs::kPolicyThemeColor] =
+      settings_api::PrefType::kNumber;
 #if BUILDFLAG(IS_LINUX)
   (*s_allowlist)[::prefs::kSystemTheme] = settings_api::PrefType::kNumber;
 #endif
@@ -494,6 +499,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   (*s_allowlist)[::content_settings::kGeneratedNotificationPref] =
       settings_api::PrefType::kNumber;
   (*s_allowlist)[::content_settings::kGeneratedGeolocationPref] =
+      settings_api::PrefType::kNumber;
+  (*s_allowlist)[::content_settings::kGeneratedJavascriptOptimizerPref] =
       settings_api::PrefType::kNumber;
   (*s_allowlist)[::prefs::kPluginsAlwaysOpenPdfExternally] =
       settings_api::PrefType::kBoolean;
@@ -1312,6 +1319,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
     (*s_allowlist)[glic::prefs::kGlicMicrophoneEnabled] =
         settings_api::PrefType::kBoolean;
     (*s_allowlist)[glic::prefs::kGlicTabContextEnabled] =
+        settings_api::PrefType::kBoolean;
+    (*s_allowlist)[glic::prefs::kGlicDefaultTabContextEnabled] =
         settings_api::PrefType::kBoolean;
     (*s_allowlist)[glic::prefs::kGlicUserStatus] =
         settings_api::PrefType::kDictionary;

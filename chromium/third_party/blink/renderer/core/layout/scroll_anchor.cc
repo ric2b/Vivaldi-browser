@@ -32,9 +32,8 @@ namespace blink {
 
 namespace {
 
-bool IsNGBlockFragmentationRoot(const LayoutBlockFlow* block_flow) {
-  return block_flow && block_flow->IsFragmentationContextRoot() &&
-         block_flow->IsLayoutNGObject();
+bool IsBlockFragmentationRoot(const LayoutBlockFlow* block_flow) {
+  return block_flow && block_flow->IsFragmentationContextRoot();
 }
 
 gfx::Vector2d ToRoundedVector2d(const LogicalOffset& o) {
@@ -484,7 +483,7 @@ ScrollAnchor::WalkStatus ScrollAnchor::FindAnchorRecursive(
     return status;
 
   bool is_block_fragmentation_context_root =
-      IsNGBlockFragmentationRoot(DynamicTo<LayoutBlockFlow>(candidate));
+      IsBlockFragmentationRoot(DynamicTo<LayoutBlockFlow>(candidate));
 
   for (LayoutObject* child = candidate->SlowFirstChild(); child;
        child = child->NextSibling()) {
@@ -531,7 +530,7 @@ ScrollAnchor::WalkStatus ScrollAnchor::FindAnchorInOOFs(
   // the LayoutObject associated with the fragment will be set to nullptr, so we
   // need to check for that.
   bool is_block_fragmentation_context_root =
-      IsNGBlockFragmentationRoot(DynamicTo<LayoutBlockFlow>(layout_block));
+      IsBlockFragmentationRoot(DynamicTo<LayoutBlockFlow>(layout_block));
   for (const PhysicalBoxFragment& fragment :
        layout_block->PhysicalFragments()) {
     if (!fragment.HasOutOfFlowFragmentChild() &&
@@ -553,7 +552,8 @@ ScrollAnchor::WalkStatus ScrollAnchor::FindAnchorInOOFs(
         continue;
 
       // Look for OOFs inside a fragmentainer.
-      for (const PhysicalFragmentLink& grandchild : child->Children()) {
+      for (const PhysicalFragmentLink& grandchild :
+           To<PhysicalBoxFragment>(child.get())->Children()) {
         if (!grandchild->IsOutOfFlowPositioned())
           continue;
         LayoutObject* layout_object = grandchild->GetMutableLayoutObject();
@@ -718,7 +718,8 @@ void ScrollAnchor::Adjust() {
   TRACE_EVENT_INSTANT(TRACE_DISABLED_BY_DEFAULT("blink.debug"), "Adjust",
                       "new_offset", new_offset.ToString());
 
-  scroller_->SetScrollOffset(new_offset, mojom::blink::ScrollType::kAnchoring);
+  scroller_->SetScrollOffset(new_offset, mojom::blink::ScrollType::kAnchoring,
+                             cc::ScrollSourceType::kStationaryScroll);
 
   UseCounter::Count(ScrollerLayoutBox(scroller_)->GetDocument(),
                     WebFeature::kScrollAnchored);
@@ -795,14 +796,16 @@ bool ScrollAnchor::RestoreAnchor(const SerializedAnchor& serialized_anchor) {
                         "RestoreAnchor", "anchor_object",
                         anchor_object->DebugName());
     scroller_->SetScrollOffset(desired_offset,
-                               mojom::blink::ScrollType::kAnchoring);
+                               mojom::blink::ScrollType::kAnchoring,
+                               cc::ScrollSourceType::kStationaryScroll);
     FindAnchor();
 
     // If the above FindAnchor call failed, reset the scroll position and try
     // again with the next found element.
     if (!anchor_object_) {
       scroller_->SetScrollOffset(current_offset,
-                                 mojom::blink::ScrollType::kAnchoring);
+                                 mojom::blink::ScrollType::kAnchoring,
+                                 cc::ScrollSourceType::kStationaryScroll);
       continue;
     }
 

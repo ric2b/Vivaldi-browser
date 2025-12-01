@@ -9,7 +9,7 @@
 // static
 Browser::CreateParams Browser::CreateParams::CreateForDevToolsForVivaldi(
     Profile* profile) {
-  CreateParams params(TYPE_POPUP, profile, true);
+  CreateParams params(TYPE_DEVTOOLS, profile, true);
   params.app_name = DevToolsWindow::kDevToolsApp;
   params.trusted_source = true;
   params.is_vivaldi = true;

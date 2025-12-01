@@ -140,28 +140,25 @@ impl Y4MReader {
                 ChromaSamplePosition::default(),
                 false,
             ),
-            _ => return Err(AvifError::UnknownError("invalid colorspace string".into())),
+            _ => return AvifError::unknown_error("invalid colorspace string"),
         };
         Ok(())
     }
 
     pub fn create(filename: &str) -> AvifResult<Y4MReader> {
-        let mut reader = BufReader::new(File::open(filename).or(Err(AvifError::UnknownError(
-            "error opening input file".into(),
-        )))?);
+        let mut reader =
+            BufReader::new(File::open(filename).map_err(AvifError::map_unknown_error)?);
         let mut y4m_line = String::new();
         let bytes_read = reader
             .read_line(&mut y4m_line)
-            .or(Err(AvifError::UnknownError(
-                "error reading y4m line".into(),
-            )))?;
+            .map_err(AvifError::map_unknown_error)?;
         if bytes_read == 0 {
-            return Err(AvifError::UnknownError("no bytes in y4m line".into()));
+            return AvifError::unknown_error("no bytes in y4m line");
         }
         y4m_line.pop();
         let parts: Vec<&str> = y4m_line.split(" ").collect();
         if parts[0] != "YUV4MPEG2" {
-            return Err(AvifError::UnknownError("Not a Y4M file".into()));
+            return AvifError::unknown_error("Not a Y4M file");
         }
         let mut y4m = Y4MReader {
             range: YuvRange::Limited,
@@ -184,7 +181,7 @@ impl Y4MReader {
             }
         }
         if y4m.width == 0 || y4m.height == 0 || y4m.depth == 0 {
-            return Err(AvifError::InvalidArgument);
+            return AvifError::invalid_argument();
         }
         y4m.reader = Some(reader);
         Ok(y4m)
@@ -200,19 +197,13 @@ impl Reader for Y4MReader {
             .as_mut()
             .unwrap()
             .read_line(&mut frame_marker)
-            .or(Err(AvifError::UnknownError(
-                "could not read frame marker".into(),
-            )))?;
+            .map_err(AvifError::map_unknown_error)?;
         if bytes_read == 0 {
-            return Err(AvifError::UnknownError(
-                "could not read frame marker".into(),
-            ));
+            return AvifError::unknown_error("could not read frame marker");
         }
         frame_marker.pop();
         if frame_marker != FRAME_MARKER {
-            return Err(AvifError::UnknownError(
-                "could not find frame marker".into(),
-            ));
+            return AvifError::unknown_error("could not find frame marker");
         }
         let mut image = image::Image {
             width: self.width,
@@ -238,14 +229,14 @@ impl Reader for Y4MReader {
                     let row = image.row_exact_mut(plane, y)?;
                     reader
                         .read_exact(row)
-                        .or(Err(AvifError::UnknownError("".into())))?;
+                        .map_err(AvifError::map_unknown_error)?;
                 } else {
                     let row = image.row16_exact_mut(plane, y)?;
                     let mut pixel_bytes: [u8; 2] = [0, 0];
                     for pixel in row {
                         reader
                             .read_exact(&mut pixel_bytes)
-                            .or(Err(AvifError::UnknownError("".into())))?;
+                            .map_err(AvifError::map_unknown_error)?;
                         // y4m is always little endian.
                         *pixel = u16::from_le_bytes(pixel_bytes);
                     }

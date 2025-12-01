@@ -14,6 +14,7 @@
 #include "base/observer_list_types.h"
 #include "base/scoped_observation_traits.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/values.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/console_message.h"
@@ -107,7 +108,8 @@ class ServiceWorkerContextObserverSynchronous : public base::CheckedObserver {
 
   // Called when a console message is reported for the service worker with id
   // |version_id|.
-  virtual void OnReportConsoleMessageSync(int64_t version_id,
+  virtual void OnReportConsoleMessageSync(int render_process_id,
+                                          int64_t version_id,
                                           const GURL& scope,
                                           const ConsoleMessage& message) {}
 

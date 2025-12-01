@@ -206,11 +206,13 @@ void AutoPipSettingView::InitBubbleTitleView(const GURL& origin) {
 }
 
 void AutoPipSettingView::OnButtonPressed(UiResult result) {
-  CHECK(result_cb_);
+  if (!result_cb_) {
+    CHECK(GetWidget()->IsClosed());
+    return;
+  }
 
+  // Notify of the result and close the widget.
   std::move(result_cb_).Run(result);
-
-  // Close the widget.
   GetWidget()->Close();
 }
 
@@ -244,8 +246,8 @@ gfx::Rect AutoPipSettingView::GetAnchorRect() const {
 
 ///////////////////////////////////////////////////////////////////////////////
 // views::WidgetDelegate:
-std::unique_ptr<views::NonClientFrameView>
-AutoPipSettingView::CreateNonClientFrameView(views::Widget* widget) {
+std::unique_ptr<views::FrameView> AutoPipSettingView::CreateFrameView(
+    views::Widget* widget) {
   // Create the customized bubble border.
   std::unique_ptr<views::BubbleBorder> bubble_border =
       std::make_unique<views::BubbleBorder>(
@@ -255,7 +257,7 @@ AutoPipSettingView::CreateNonClientFrameView(views::Widget* widget) {
   bubble_border->set_md_shadow_elevation(kBubbleBorderMdShadowElevation);
   bubble_border->set_draw_border_stroke(true);
 
-  auto frame = BubbleDialogDelegate::CreateNonClientFrameView(widget);
+  auto frame = BubbleDialogDelegate::CreateFrameView(widget);
   static_cast<views::BubbleFrameView*>(frame.get())
       ->SetBubbleBorder(std::move(bubble_border));
   return frame;

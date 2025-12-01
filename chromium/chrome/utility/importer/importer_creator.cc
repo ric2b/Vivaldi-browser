@@ -48,6 +48,7 @@ scoped_refptr<Importer> CreateImporterByType(
       return new SafariImporter(base::apple::GetUserLibraryPath());
 #endif
     case user_data_importer::TYPE_OPERA:
+    case user_data_importer::TYPE_OPERA_BOOKMARK_FILE:
       return new OperaImporter();
     case user_data_importer::TYPE_CHROME:
     case user_data_importer::TYPE_CHROMIUM:

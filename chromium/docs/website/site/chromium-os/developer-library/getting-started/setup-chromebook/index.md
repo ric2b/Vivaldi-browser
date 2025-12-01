@@ -31,7 +31,7 @@ appropriately, to download the latest test image for your board in the current
 directory.
 
 ```shell
-$ cros flash file://`pwd`/chromium_test_image.bin xbuddy://remote/<board>/latest-dev
+$ cros flash ./chromium_test_image.bin xbuddy://remote/<board>/latest-dev
 ```
 
 If you downloaded the image on a remote machine (e.g., a virtualized

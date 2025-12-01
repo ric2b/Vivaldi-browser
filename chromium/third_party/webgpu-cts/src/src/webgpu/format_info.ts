@@ -1660,6 +1660,7 @@ type TextureFormatInfo_TypeCheck = {
  * * isTextureFormatPossiblyStorageReadable
  * * isTextureFormatPossiblyStorageReadWritable
  * * isTextureFormatPossiblyFilterableAsTextureF32
+ * * isTextureFormatPossiblyUsableWithCopyExternalImageToTexture
  *
  * These are also usable before or during a test
  *
@@ -1683,6 +1684,7 @@ type TextureFormatInfo_TypeCheck = {
  * * isTextureFormatUsableAsStorageTexture
  * * isTextureFormatUsableAsReadWriteStorageTexture
  * * isTextureFormatUsableAsStorageFormatInCreateShaderModule
+ * * isTextureFormatUsableWithCopyExternalImageToTexture
  *
  * Per-GPUTextureFormat info.
  */
@@ -1715,6 +1717,15 @@ export const kTextureFormatTier1AllowsResolve: readonly ColorTextureFormat[] = [
   'rg8snorm',
   'rgba8snorm',
   'rg11b10ufloat',
+] as const;
+
+export const kTextureFormatTier1ThrowsWhenNotEnabled: readonly ColorTextureFormat[] = [
+  'r16unorm',
+  'r16snorm',
+  'rg16unorm',
+  'rg16snorm',
+  'rgba16unorm',
+  'rgba16snorm',
 ] as const;
 
 export const kTextureFormatTier1AllowsRenderAttachmentBlendableMultisample: readonly ColorTextureFormat[] =
@@ -1818,8 +1829,49 @@ export const kOptionalTextureFormats = kAllTextureFormats.filter(
   t => kTextureFormatInfo[t].feature !== undefined
 );
 
-/** Valid GPUTextureFormats for `copyExternalImageToTexture`, by spec. */
-export const kValidTextureFormatsForCopyE2T = [
+/** Formats added from 'texture-formats-tier1' to be usable with `copyExternalImageToTexture`.
+ * DO NOT EXPORT. Use kPossibleValidTextureFormatsForCopyE2T and
+ * filter with `isTextureFormatUsableWithCopyExternalImageToTexture`
+ * or `GPUTest.skipIfTextureFormatNotUsableWithCopyExternalImageToTexture`
+ */
+const kValidTextureFormatsForCopyE2TTier1 = [
+  'r16unorm',
+  'r16snorm',
+  'rg16unorm',
+  'rg16snorm',
+  'rgba16unorm',
+  'rgba16snorm',
+  'r8snorm',
+  'rg8snorm',
+  'rgba8snorm',
+  'rg11b10ufloat',
+] as const;
+
+/** Possibly Valid GPUTextureFormats for `copyExternalImageToTexture`, by spec. */
+export const kPossibleValidTextureFormatsForCopyE2T = [
+  'r8unorm',
+  'r16float',
+  'r32float',
+  'rg8unorm',
+  'rg16float',
+  'rg32float',
+  'rgba8unorm',
+  'rgba8unorm-srgb',
+  'bgra8unorm',
+  'bgra8unorm-srgb',
+  'rgb10a2unorm',
+  'rgba16float',
+  'rgba32float',
+  ...kValidTextureFormatsForCopyE2TTier1,
+] as const;
+
+/**
+ * Valid GPUTextureFormats for `copyExternalImageToTexture` for core and compat.
+ * DO NOT EXPORT. Use kPossibleValidTextureFormatsForCopyE2T and
+ * filter with `isTextureFormatUsableWithCopyExternalImageToTexture`
+ * or `GPUTest.skipIfTextureFormatNotUsableWithCopyExternalImageToTexture`
+ */
+const kValidTextureFormatsForCopyE2T = [
   'r8unorm',
   'r16float',
   'r32float',
@@ -1834,6 +1886,21 @@ export const kValidTextureFormatsForCopyE2T = [
   'rgba16float',
   'rgba32float',
 ] as const;
+
+/**
+ * Returns true if a texture can be used with copyExternalImageToTexture.
+ */
+export function isTextureFormatUsableWithCopyExternalImageToTexture(
+  device: GPUDevice,
+  format: GPUTextureFormat
+): boolean {
+  if (device.features.has('texture-formats-tier1')) {
+    if ((kValidTextureFormatsForCopyE2TTier1 as readonly string[]).includes(format)) {
+      return true;
+    }
+  }
+  return (kValidTextureFormatsForCopyE2T as readonly string[]).includes(format);
+}
 
 //
 // Other related stuff
@@ -2324,6 +2391,9 @@ export function isTextureFormatUsableAsRenderAttachment(
 ) {
   if (format === 'rg11b10ufloat') {
     return device.features.has('rg11b10ufloat-renderable');
+  }
+  if (isTextureFormatTier1EnablesRenderAttachmentBlendableMultisample(format)) {
+    return device.features.has('texture-formats-tier1');
   }
   return kTextureFormatInfo[format].colorRender || isDepthOrStencilTextureFormat(format);
 }

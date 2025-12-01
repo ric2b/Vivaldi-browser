@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -371,7 +371,7 @@ export class MetricsSidebarPane extends ElementsSidebarPane {
     UI.InplaceEditor.InplaceEditor.startEditing(targetElement, config);
 
     const selection = targetElement.getComponentSelection();
-    selection && selection.selectAllChildren(targetElement);
+    selection?.selectAllChildren(targetElement);
   }
 
   private handleKeyDown(

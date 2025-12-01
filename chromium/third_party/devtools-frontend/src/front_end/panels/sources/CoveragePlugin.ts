@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -20,20 +20,20 @@ import {Plugin} from './Plugin.js';
 
 const UIStrings = {
   /**
-   *@description Text for Coverage Status Bar Item in Sources Panel
+   * @description Text for Coverage Status Bar Item in Sources Panel
    */
   clickToShowCoveragePanel: 'Click to show Coverage Panel',
   /**
-   *@description Text for Coverage Status Bar Item in Sources Panel
+   * @description Text for Coverage Status Bar Item in Sources Panel
    */
   showDetails: 'Show Details',
   /**
-   *@description Text to show in the status bar if coverage data is available
-   *@example {12.3} PH1
+   * @description Text to show in the status bar if coverage data is available
+   * @example {12.3} PH1
    */
   coverageS: 'Coverage: {PH1}',
   /**
-   *@description Text to be shown in the status bar if no coverage data is available
+   * @description Text to be shown in the status bar if no coverage data is available
    */
   coverageNa: 'Coverage: n/a',
 } as const;

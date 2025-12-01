@@ -1592,13 +1592,21 @@ void av1_nonrd_pick_intra_mode(AV1_COMP *cpi, MACROBLOCK *x, RD_STATS *rd_cost,
   bmode_costs = x->mode_costs.y_mode_costs[above_ctx][left_ctx];
   const int mi_row = xd->mi_row;
   const int mi_col = xd->mi_col;
-
+  // Use this flag to signal large flat blocks that may need special
+  // treatment: in the current case H/V/SMOOTH may not be skipped if
+  // DC has nonzero distortion and skippable is set. This is to remove
+  // visual artifacts observed for screen in realtime mode.
+  const bool flat_blocks_screen =
+      cpi->oxcf.tune_cfg.content == AOM_CONTENT_SCREEN &&
+      cpi->oxcf.mode == REALTIME && x->source_variance == 0 &&
+      bsize >= BLOCK_32X32;
   av1_invalid_rd_stats(&best_rdc);
   av1_invalid_rd_stats(&this_rdc);
 
   init_mbmi_nonrd(mi, DC_PRED, INTRA_FRAME, NONE_FRAME, cm);
   mi->mv[0].as_int = mi->mv[1].as_int = INVALID_MV;
 
+  bool allow_skip_nondc = true;
   // Change the limit of this loop to add other intra prediction
   // mode tests.
   for (int mode_index = 0; mode_index < RTC_INTRA_MODES; ++mode_index) {
@@ -1617,7 +1625,7 @@ void av1_nonrd_pick_intra_mode(AV1_COMP *cpi, MACROBLOCK *x, RD_STATS *rd_cost,
     // the presence of a vertically dominant pattern. Hence, H_PRED mode is not
     // evaluated.
     if (cpi->sf.rt_sf.prune_h_pred_using_best_mode_so_far &&
-        this_mode == H_PRED && best_mode == V_PRED)
+        this_mode == H_PRED && best_mode == V_PRED && allow_skip_nondc)
       continue;
 
     if (should_prune_intra_modes_using_neighbors(
@@ -1625,13 +1633,15 @@ void av1_nonrd_pick_intra_mode(AV1_COMP *cpi, MACROBLOCK *x, RD_STATS *rd_cost,
             this_mode, A, L)) {
       // Prune V_PRED and H_PRED if source variance of the block is less than
       // or equal to 50. The source variance threshold is obtained empirically.
-      if ((this_mode == V_PRED || this_mode == H_PRED) && source_variance <= 50)
+      if ((this_mode == V_PRED || this_mode == H_PRED) &&
+          source_variance <= 50 && allow_skip_nondc)
         continue;
 
       // As per the statistics, probability of SMOOTH_PRED being the winner is
       // low when best mode so far is DC_PRED (out of DC_PRED, V_PRED and
       // H_PRED). Hence, SMOOTH_PRED mode is not evaluated.
-      if (best_mode == DC_PRED && this_mode == SMOOTH_PRED) continue;
+      if (best_mode == DC_PRED && this_mode == SMOOTH_PRED && allow_skip_nondc)
+        continue;
     }
 
     this_rdc.dist = this_rdc.rate = 0;
@@ -1652,14 +1662,22 @@ void av1_nonrd_pick_intra_mode(AV1_COMP *cpi, MACROBLOCK *x, RD_STATS *rd_cost,
     }
     this_rdc.rate += bmode_costs[this_mode];
     this_rdc.rdcost = RDCOST(x->rdmult, this_rdc.rate, this_rdc.dist);
-
     if (this_rdc.rdcost < best_rdc.rdcost) {
       best_rdc = this_rdc;
       best_mode = this_mode;
       if (!this_rdc.skip_txfm) {
-        memset(ctx->blk_skip, 0,
-               sizeof(x->txfm_search_info.blk_skip[0]) * ctx->num_4x4_blk);
+        if (flat_blocks_screen && args.skippable && best_rdc.dist < 20000) {
+          memcpy(ctx->blk_skip, x->txfm_search_info.blk_skip,
+                 sizeof(x->txfm_search_info.blk_skip[0]) * ctx->num_4x4_blk);
+        } else {
+          memset(ctx->blk_skip, 0,
+                 sizeof(x->txfm_search_info.blk_skip[0]) * ctx->num_4x4_blk);
+        }
       }
+    }
+    if (this_mode == DC_PRED) {
+      if (flat_blocks_screen && args.skippable && this_rdc.dist > 0)
+        allow_skip_nondc = false;
     }
   }
 

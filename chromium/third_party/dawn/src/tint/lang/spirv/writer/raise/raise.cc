@@ -43,6 +43,7 @@
 #include "src/tint/lang/core/ir/transform/prepare_immediate_data.h"
 #include "src/tint/lang/core/ir/transform/preserve_padding.h"
 #include "src/tint/lang/core/ir/transform/prevent_infinite_loops.h"
+#include "src/tint/lang/core/ir/transform/resource_binding.h"
 #include "src/tint/lang/core/ir/transform/robustness.h"
 #include "src/tint/lang/core/ir/transform/signed_integer_polyfill.h"
 #include "src/tint/lang/core/ir/transform/std140.h"
@@ -51,6 +52,7 @@
 #include "src/tint/lang/core/type/f32.h"
 #include "src/tint/lang/spirv/writer/common/option_helpers.h"
 #include "src/tint/lang/spirv/writer/raise/builtin_polyfill.h"
+#include "src/tint/lang/spirv/writer/raise/case_switch_to_if_else.h"
 #include "src/tint/lang/spirv/writer/raise/expand_implicit_splats.h"
 #include "src/tint/lang/spirv/writer/raise/fork_explicit_layout_types.h"
 #include "src/tint/lang/spirv/writer/raise/handle_matrix_arithmetic.h"
@@ -58,6 +60,7 @@
 #include "src/tint/lang/spirv/writer/raise/merge_return.h"
 #include "src/tint/lang/spirv/writer/raise/pass_matrix_by_pointer.h"
 #include "src/tint/lang/spirv/writer/raise/remove_unreachable_in_loop_continuing.h"
+#include "src/tint/lang/spirv/writer/raise/resource_binding.h"
 #include "src/tint/lang/spirv/writer/raise/shader_io.h"
 #include "src/tint/lang/spirv/writer/raise/var_for_dynamic_index.h"
 
@@ -89,6 +92,12 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
         RUN_TRANSFORM(core::ir::transform::Robustness, module, config);
 
         RUN_TRANSFORM(core::ir::transform::PreventInfiniteLoops, module);
+    }
+
+    if (options.resource_binding.has_value()) {
+        spirv::writer::raise::ResourceBindingHelper helper;
+        RUN_TRANSFORM(core::ir::transform::ResourceBinding, module,
+                      options.resource_binding.value(), &helper);
     }
 
     // PrepareImmediateData must come before any transform that needs internal immediate data.
@@ -127,6 +136,7 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     core_polyfills.pack_4xu8_clamp = true;
     core_polyfills.pack_unpack_4x8_norm = options.polyfill_pack_unpack_4x8_norm;
     core_polyfills.abs_signed_int = true;
+    core_polyfills.subgroup_broadcast_f16 = options.polyfill_subgroup_broadcast_f16;
     RUN_TRANSFORM(core::ir::transform::BuiltinPolyfill, module, core_polyfills);
 
     core::ir::transform::ConversionPolyfillConfig conversion_polyfills;
@@ -195,6 +205,9 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     // kAllowAnyInputAttachmentIndexType required after ExpandImplicitSplats
     RUN_TRANSFORM(raise::HandleMatrixArithmetic, module);
     RUN_TRANSFORM(raise::MergeReturn, module);
+    if (options.polyfill_case_switch) {
+        RUN_TRANSFORM(raise::CaseSwitchToIfElse, module);
+    }
     RUN_TRANSFORM(raise::RemoveUnreachableInLoopContinuing, module);
     RUN_TRANSFORM(
         raise::ShaderIO, module,

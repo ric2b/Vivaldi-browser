@@ -3,16 +3,6 @@
 <translationbundle lang="ko">
 <translation id="3830627370375585318">Vivaldi이 방화벽이나 백신 프로그램이 설정된
         네트워크에 액세스할 수 있도록 허용합니다.</translation>
-<translation id="4200102020577305737">다음과 같이 설정해주세요.
-          Vivaldi 메뉴 열기 &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          LAN 설정
-          그리고 "LAN에 프록시 서버 사용" 선택을 해제해주세요.</translation>
 <translation id="4932161901409251843">다음과 같이 설정해주세요.
           Vivaldi 메뉴 열기 &gt;
           <ph name="SETTINGS_TITLE" />
@@ -21,6 +11,9 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           그리고 설정이 "프록시 없음" 또는 "직접" 연결로 설정되었는지 확인해주세요.</translation>
+<translation id="4949828774841497663">애플리케이션 &gt; 시스템 설정 &gt; 네트워크로 이동하여
+          활성 네트워크를 선택하고 세부정보... 버튼을 클릭한 후
+          선택되어 있을 수 있는 프록시를 선택 해제합니다.</translation>
 <translation id="5248344925342018662">안전한 Vivaldi 페이지를 보는 중</translation>
 <translation id="6690242244468452299">오류 보고를 활성화했다면 이 페이지에서 최근 오류가 표시됩니다.</translation>
 <translation id="7023871570427738255">Vivaldi 메뉴 &gt;

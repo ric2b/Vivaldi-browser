@@ -15,6 +15,7 @@ source_set("request_filter_registry") {
   deps = [
     "//base:base",
     "//content/public/browser",
+    "//components/web_cache/browser",
   ]
 }
 
@@ -33,7 +34,6 @@ source_set("request_filter") {
   deps = [
     "//base:base",
     "//components/keyed_service/content",
-    "//components/web_cache/browser",
     "//content/public/browser",
     "//content/public/common",
     "//extensions/buildflags",

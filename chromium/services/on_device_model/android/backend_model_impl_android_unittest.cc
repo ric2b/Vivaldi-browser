@@ -4,17 +4,15 @@
 
 #include "services/on_device_model/android/backend_model_impl_android.h"
 
-#include "base/android/jni_android.h"
-#include "base/android/jni_string.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "components/optimization_guide/proto/model_execution.pb.h"
+#include "services/on_device_model/android/backend_session_impl_android.h"
+#include "services/on_device_model/android/on_device_model_bridge_native_unittest_helper.h"
 #include "services/on_device_model/public/cpp/test_support/test_response_holder.h"
 #include "services/on_device_model/public/mojom/on_device_model.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-// Must come after all headers that specialize FromJniType() / ToJniType().
-#include "services/on_device_model/android/native_j_unittests_jni_headers/OnDeviceModelBridgeNativeUnitTestHelper_jni.h"
 
 namespace on_device_model {
 namespace {
@@ -31,9 +29,6 @@ class BackendModelImplAndroidTest : public testing::Test {
   ~BackendModelImplAndroidTest() override = default;
 
   void SetUp() override {
-    env_ = base::android::AttachCurrentThread();
-    java_helper_ = Java_OnDeviceModelBridgeNativeUnitTestHelper_create(env_);
-
     model_ = std::make_unique<BackendModelImplAndroid>(kFeature);
   }
 
@@ -44,6 +39,12 @@ class BackendModelImplAndroidTest : public testing::Test {
     return params;
   }
 
+  mojom::GenerateOptionsPtr MakeGenerateOptions(int max_output_tokens) {
+    auto options = mojom::GenerateOptions::New();
+    options->max_output_tokens = max_output_tokens;
+    return options;
+  }
+
   mojom::AppendOptionsPtr MakeInput(std::vector<ml::InputPiece> input) {
     auto options = mojom::AppendOptions::New();
     options->input = mojom::Input::New(std::move(input));
@@ -52,8 +53,8 @@ class BackendModelImplAndroidTest : public testing::Test {
 
  protected:
   base::test::TaskEnvironment task_environment_;
-  raw_ptr<JNIEnv> env_;
-  base::android::ScopedJavaGlobalRef<jobject> java_helper_;
+  base::HistogramTester histogram_tester_;
+  OnDeviceModelBridgeNativeUnitTestHelper java_helper_;
   std::unique_ptr<BackendModel> model_;
 };
 
@@ -63,21 +64,27 @@ TEST_F(BackendModelImplAndroidTest, GenerateWithDefaultFactory) {
       MakeSessionParams(/*top_k=*/3, /*temperature=*/1.0f));
 
   TestResponseHolder response_holder;
-  session->Generate(mojom::GenerateOptions::New(), response_holder.BindRemote(),
+  session->Generate(MakeGenerateOptions(/*max_output_tokens=*/100),
+                    response_holder.BindRemote(),
                     /*on_complete=*/base::DoNothing());
   response_holder.WaitForCompletion();
-  EXPECT_THAT(response_holder.responses(), ElementsAre("AiCore response"));
+  EXPECT_TRUE(response_holder.responses().empty());
+  histogram_tester_.ExpectUniqueSample(
+      "OnDeviceModel.Android.GenerateResult",
+      BackendSessionImplAndroid::GenerateResult::kApiNotAvailable, 1);
+  histogram_tester_.ExpectUniqueSample(
+      "OnDeviceModel.Android.GenerateResult.ScamDetection",
+      BackendSessionImplAndroid::GenerateResult::kApiNotAvailable, 1);
 }
 
 TEST_F(BackendModelImplAndroidTest, AppendAndGenerate) {
-  Java_OnDeviceModelBridgeNativeUnitTestHelper_setMockAiCoreSessionFactory(
-      env_, java_helper_);
+  java_helper_.SetMockAiCoreFactory();
 
   std::unique_ptr<BackendSession> session = model_->CreateSession(
       /*adaptation=*/nullptr,
       MakeSessionParams(/*top_k=*/3, /*temperature=*/1.0f));
-  Java_OnDeviceModelBridgeNativeUnitTestHelper_verifySessionParams(
-      env_, java_helper_, kFeature, /*topK=*/3, /*temperature=*/1.0f);
+  java_helper_.VerifySessionParams(/*index=*/0, kFeature, /*top_k=*/3,
+                                   /*temperature=*/1.0f);
 
   {
     std::vector<ml::InputPiece> pieces;
@@ -103,18 +110,48 @@ TEST_F(BackendModelImplAndroidTest, AppendAndGenerate) {
   }
 
   TestResponseHolder response_holder;
-  session->Generate(mojom::GenerateOptions::New(), response_holder.BindRemote(),
+  session->Generate(MakeGenerateOptions(/*max_output_tokens=*/100),
+                    response_holder.BindRemote(),
                     /*on_complete=*/base::DoNothing());
   response_holder.WaitForCompletion();
   EXPECT_THAT(
       response_holder.responses(),
       ElementsAre(
           "<system>mock system input<end><user>mock user input<end><model>"));
+  java_helper_.VerifyGenerateOptions(/*index=*/0, /*max_output_tokens=*/100);
+  histogram_tester_.ExpectUniqueSample(
+      "OnDeviceModel.Android.GenerateResult",
+      BackendSessionImplAndroid::GenerateResult::kSuccess, 1);
+  histogram_tester_.ExpectUniqueSample(
+      "OnDeviceModel.Android.GenerateResult.ScamDetection",
+      BackendSessionImplAndroid::GenerateResult::kSuccess, 1);
+}
+
+TEST_F(BackendModelImplAndroidTest, GenerateWithUnknownError) {
+  java_helper_.SetMockAiCoreFactory();
+
+  std::unique_ptr<BackendSession> session = model_->CreateSession(
+      /*adaptation=*/nullptr,
+      MakeSessionParams(/*top_k=*/3, /*temperature=*/1.0f));
+  java_helper_.SetGenerateResult(
+      BackendSessionImplAndroid::GenerateResult::kUnknownError);
+
+  TestResponseHolder response_holder;
+  session->Generate(MakeGenerateOptions(/*max_output_tokens=*/100),
+                    response_holder.BindRemote(),
+                    /*on_complete=*/base::DoNothing());
+  response_holder.WaitForCompletion();
+  EXPECT_THAT(response_holder.responses(), ElementsAre(""));
+  histogram_tester_.ExpectUniqueSample(
+      "OnDeviceModel.Android.GenerateResult",
+      BackendSessionImplAndroid::GenerateResult::kUnknownError, 1);
+  histogram_tester_.ExpectUniqueSample(
+      "OnDeviceModel.Android.GenerateResult.ScamDetection",
+      BackendSessionImplAndroid::GenerateResult::kUnknownError, 1);
 }
 
 TEST_F(BackendModelImplAndroidTest, ContextIsNotClearedOnNewGenerate) {
-  Java_OnDeviceModelBridgeNativeUnitTestHelper_setMockAiCoreSessionFactory(
-      env_, java_helper_);
+  java_helper_.SetMockAiCoreFactory();
 
   std::unique_ptr<BackendSession> session = model_->CreateSession(
       /*adaptation=*/nullptr,
@@ -138,34 +175,125 @@ TEST_F(BackendModelImplAndroidTest, ContextIsNotClearedOnNewGenerate) {
 
   {
     TestResponseHolder response_holder;
-    session->Generate(mojom::GenerateOptions::New(),
+    session->Generate(MakeGenerateOptions(/*max_output_tokens=*/100),
                       response_holder.BindRemote(),
                       /*on_complete=*/base::DoNothing());
     response_holder.WaitForCompletion();
     EXPECT_THAT(response_holder.responses(), ElementsAre("mock input"));
   }
+  histogram_tester_.ExpectUniqueSample(
+      "OnDeviceModel.Android.GenerateResult",
+      BackendSessionImplAndroid::GenerateResult::kSuccess, 2);
+  histogram_tester_.ExpectUniqueSample(
+      "OnDeviceModel.Android.GenerateResult.ScamDetection",
+      BackendSessionImplAndroid::GenerateResult::kSuccess, 2);
 }
 
-TEST_F(BackendModelImplAndroidTest, NativeSessionDeletionIsSafe) {
-  Java_OnDeviceModelBridgeNativeUnitTestHelper_setMockAiCoreSessionFactory(
-      env_, java_helper_);
+TEST_F(BackendModelImplAndroidTest, GenerateCallbacksOnDifferentThread) {
+  java_helper_.SetMockAiCoreFactory();
 
   std::unique_ptr<BackendSession> session = model_->CreateSession(
       /*adaptation=*/nullptr,
       MakeSessionParams(/*top_k=*/3, /*temperature=*/1.0f));
 
-  Java_OnDeviceModelBridgeNativeUnitTestHelper_setCompleteAsync(env_,
-                                                                java_helper_);
+  {
+    std::vector<ml::InputPiece> pieces;
+    pieces.push_back("mock input");
+    session->Append(MakeInput(std::move(pieces)), /*client=*/{},
+                    /*on_complete=*/base::DoNothing());
+  }
+
+  java_helper_.SetCallbackOnDifferentThread();
 
   TestResponseHolder response_holder;
-  session->Generate(mojom::GenerateOptions::New(), response_holder.BindRemote(),
+  session->Generate(MakeGenerateOptions(/*max_output_tokens=*/100),
+                    response_holder.BindRemote(),
+                    /*on_complete=*/base::DoNothing());
+  response_holder.WaitForCompletion();
+  EXPECT_THAT(response_holder.responses(), ElementsAre("mock input"));
+  histogram_tester_.ExpectUniqueSample(
+      "OnDeviceModel.Android.GenerateResult",
+      BackendSessionImplAndroid::GenerateResult::kSuccess, 1);
+}
+
+TEST_F(BackendModelImplAndroidTest, NativeSessionDeletionIsSafe) {
+  java_helper_.SetMockAiCoreFactory();
+
+  std::unique_ptr<BackendSession> session = model_->CreateSession(
+      /*adaptation=*/nullptr,
+      MakeSessionParams(/*top_k=*/3, /*temperature=*/1.0f));
+
+  java_helper_.SetCompleteAsync();
+
+  TestResponseHolder response_holder;
+  session->Generate(MakeGenerateOptions(/*max_output_tokens=*/100),
+                    response_holder.BindRemote(),
                     /*on_complete=*/base::DoNothing());
 
   // Delete the native session manually and ensure async completion doesn't
   // cause a crash.
   session.reset();
-  Java_OnDeviceModelBridgeNativeUnitTestHelper_resumeOnCompleteCallback(
-      env_, java_helper_);
+  java_helper_.ResumeOnCompleteCallback();
+}
+
+TEST_F(BackendModelImplAndroidTest, CloneSession) {
+  java_helper_.SetMockAiCoreFactory();
+
+  std::unique_ptr<BackendSession> session = model_->CreateSession(
+      /*adaptation=*/nullptr,
+      MakeSessionParams(/*top_k=*/3, /*temperature=*/1.0f));
+  java_helper_.VerifySessionParams(/*index=*/0, kFeature, /*top_k=*/3,
+                                   /*temperature=*/1.0f);
+
+  {
+    std::vector<ml::InputPiece> pieces;
+    pieces.push_back("mock input");
+    session->Append(MakeInput(std::move(pieces)), /*client=*/{},
+                    /*on_complete=*/base::DoNothing());
+  }
+
+  std::unique_ptr<BackendSession> cloned_session = session->Clone();
+  // A new Java session should be created for the cloned session.
+  java_helper_.VerifySessionParams(/*index=*/1, kFeature, /*top_k=*/3,
+                                   /*temperature=*/1.0f);
+
+  // Generate with the cloned session. The context should be cloned too.
+  {
+    TestResponseHolder response_holder;
+    cloned_session->Generate(MakeGenerateOptions(/*max_output_tokens=*/100),
+                             response_holder.BindRemote(),
+                             /*on_complete=*/base::DoNothing());
+    response_holder.WaitForCompletion();
+    EXPECT_THAT(response_holder.responses(), ElementsAre("mock input"));
+    java_helper_.VerifyGenerateOptions(/*index=*/1, /*max_output_tokens=*/100);
+  }
+
+  // Add more context to the original session and generate.
+  {
+    std::vector<ml::InputPiece> pieces;
+    pieces.push_back(" more context");
+    session->Append(MakeInput(std::move(pieces)), /*client=*/{},
+                    /*on_complete=*/base::DoNothing());
+  }
+  {
+    TestResponseHolder response_holder;
+    session->Generate(MakeGenerateOptions(/*max_output_tokens=*/100),
+                      response_holder.BindRemote(),
+                      /*on_complete=*/base::DoNothing());
+    response_holder.WaitForCompletion();
+    EXPECT_THAT(response_holder.responses(),
+                ElementsAre("mock input more context"));
+  }
+
+  // Generate with the cloned session again to ensure its context is unchanged.
+  {
+    TestResponseHolder response_holder;
+    cloned_session->Generate(MakeGenerateOptions(/*max_output_tokens=*/100),
+                             response_holder.BindRemote(),
+                             /*on_complete=*/base::DoNothing());
+    response_holder.WaitForCompletion();
+    EXPECT_THAT(response_holder.responses(), ElementsAre("mock input"));
+  }
 }
 
 }  // namespace

@@ -9,9 +9,10 @@
 #include <utility>
 #include <vector>
 
+#include "base/android/android_info.h"
 #include "base/android/apk_assets.h"
+#include "base/android/apk_info.h"
 #include "base/android/application_status_listener.h"
-#include "base/android/build_info.h"
 #include "base/android/jni_array.h"
 #include "base/base_switches.h"
 #include "base/feature_list.h"
@@ -48,9 +49,7 @@ namespace internal {
 namespace {
 
 // Controls whether to explicitly enable service group importance logic.
-BASE_FEATURE(kServiceGroupImportance,
-             "ServiceGroupImportance",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kServiceGroupImportance, base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Stops a child process based on the handle returned from StartChildProcess.
 void StopChildProcess(base::ProcessHandle handle) {
@@ -114,17 +113,18 @@ bool ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
 
   // The child processes can't correctly retrieve host package information so we
   // rather feed this information through the command line.
-  auto* build_info = base::android::BuildInfo::GetInstance();
-  command_line()->AppendSwitchASCII(switches::kHostPackageName,
-                                    build_info->host_package_name());
+  command_line()->AppendSwitchASCII(
+      switches::kHostPackageName, base::android::apk_info::host_package_name());
   command_line()->AppendSwitchASCII(switches::kPackageName,
-                                    build_info->package_name());
-  command_line()->AppendSwitchASCII(switches::kHostPackageLabel,
-                                    build_info->host_package_label());
-  command_line()->AppendSwitchASCII(switches::kHostVersionCode,
-                                    build_info->host_version_code());
-  command_line()->AppendSwitchASCII(switches::kPackageVersionName,
-                                    build_info->package_version_name());
+                                    base::android::apk_info::package_name());
+  command_line()->AppendSwitchASCII(
+      switches::kHostPackageLabel,
+      base::android::apk_info::host_package_label());
+  command_line()->AppendSwitchASCII(
+      switches::kHostVersionCode, base::android::apk_info::host_version_code());
+  command_line()->AppendSwitchASCII(
+      switches::kPackageVersionName,
+      base::android::apk_info::package_version_name());
 
   return true;
 }
@@ -134,6 +134,7 @@ ChildProcessLauncherHelper::LaunchProcessOnLauncherThread(
     const base::LaunchOptions* options,
     std::unique_ptr<PosixFileDescriptorInfo> files_to_register,
     bool can_use_warm_up_connection,
+    bool is_spare_renderer,
     bool* is_synchronous_launch,
     int* launch_result) {
   DCHECK(!options);
@@ -177,7 +178,7 @@ ChildProcessLauncherHelper::LaunchProcessOnLauncherThread(
   AddRef();  // Balanced by OnChildProcessStarted.
   java_peer_.Reset(Java_ChildProcessLauncherHelperImpl_createAndStart(
       env, reinterpret_cast<intptr_t>(this), j_argv, j_file_infos,
-      can_use_warm_up_connection));
+      can_use_warm_up_connection, is_spare_renderer));
 
   client_task_runner_->PostTask(
       FROM_HERE,

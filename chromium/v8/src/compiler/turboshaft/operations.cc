@@ -890,6 +890,15 @@ void CallOp::Validate(const Graph& graph) const {
   // "ifndef GOOGLE3" check), which requires linking the dynamically generated
   // builtins-effects.cc in the final v8 binary.
 #ifndef GOOGLE3
+#if V8_ENABLE_WEBASSEMBLY
+  if (const ConstantOp* target_ptr_cst =
+          graph.Get(callee()).TryCast<Opmask::kWasmStubCallConstant>()) {
+    uint64_t target_val = target_ptr_cst->integral();
+    DCHECK_LE(target_val, Builtins::kBuiltinCount);
+    CHECK_IMPLIES(!callee_effects.can_allocate,
+                  !BuiltinCanAllocate(static_cast<Builtin>(target_val)));
+  }
+#endif  // V8_ENABLE_WEBASSEMBLY
   if (!graph.has_broker()) return;
   if (const ConstantOp* target =
           graph.Get(callee()).TryCast<Opmask::kHeapConstant>()) {
@@ -899,8 +908,8 @@ void CallOp::Validate(const Graph& graph) const {
                     !BuiltinCanAllocate(*builtin));
     }
   }
-#endif
-#endif
+#endif  // GOOGLE3
+#endif  // DEBUG
 }
 
 void DidntThrowOp::Validate(const Graph& graph) const {
@@ -1224,12 +1233,12 @@ std::ostream& operator<<(std::ostream& os, NumericKind kind) {
   switch (kind) {
     case NumericKind::kFloat64Hole:
       return os << "Float64Hole";
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
     case NumericKind::kFloat64Undefined:
       return os << "Float64Undefined";
     case NumericKind::kFloat64UndefinedOrHole:
       return os << "Float64UndefinedOrHole";
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
     case NumericKind::kFinite:
       return os << "Finite";
     case NumericKind::kInteger:
@@ -1345,10 +1354,10 @@ std::ostream& operator<<(std::ostream& os,
       return os << "Bit";
     case ConvertJSPrimitiveToUntaggedOp::UntaggedKind::kFloat64:
       return os << "Float64";
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
     case ConvertJSPrimitiveToUntaggedOp::UntaggedKind::kHoleyFloat64:
       return os << "HoleyFloat64";
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
   }
 }
 
@@ -1360,6 +1369,8 @@ std::ostream& operator<<(
       return os << "Boolean";
     case ConvertJSPrimitiveToUntaggedOp::InputAssumptions::kSmi:
       return os << "Smi";
+    case ConvertJSPrimitiveToUntaggedOp::InputAssumptions::kNumberOrHole:
+      return os << "NumberOrHole";
     case ConvertJSPrimitiveToUntaggedOp::InputAssumptions::kNumberOrOddball:
       return os << "NumberOrOddball";
     case ConvertJSPrimitiveToUntaggedOp::InputAssumptions::kPlainPrimitive:
@@ -1380,10 +1391,10 @@ std::ostream& operator<<(
       return os << "Int64";
     case ConvertJSPrimitiveToUntaggedOrDeoptOp::UntaggedKind::kFloat64:
       return os << "Float64";
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
     case ConvertJSPrimitiveToUntaggedOrDeoptOp::UntaggedKind::kHoleyFloat64:
       return os << "HoleyFloat64";
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
     case ConvertJSPrimitiveToUntaggedOrDeoptOp::UntaggedKind::kArrayIndex:
       return os << "ArrayIndex";
   }
@@ -1435,6 +1446,9 @@ std::ostream& operator<<(
       return os << "BigInt";
     case TruncateJSPrimitiveToUntaggedOp::InputAssumptions::kNumberOrOddball:
       return os << "NumberOrOddball";
+    case TruncateJSPrimitiveToUntaggedOp::InputAssumptions::
+        kNumberOrOddballOrHole:
+      return os << "NumberOrOddballOrHole";
     case TruncateJSPrimitiveToUntaggedOp::InputAssumptions::kHeapObject:
       return os << "HeapObject";
     case TruncateJSPrimitiveToUntaggedOp::InputAssumptions::kObject:
@@ -2004,8 +2018,13 @@ void WasmAllocateArrayOp::PrintOptions(std::ostream& os) const {
 }
 
 void StructGetOp::PrintOptions(std::ostream& os) const {
-  os << '[' << type << ", " << type_index << ", " << field_index << ", "
-     << (is_signed ? "signed, " : "") << null_check << ", ";
+  os << '[' << type << ", " << type_index << ", ";
+  if (is_get_desc()) {
+    os << "get_desc, ";
+  } else {
+    os << field_index << ", ";
+  }
+  os << (is_signed ? "signed, " : "") << null_check << ", ";
   if (memory_order.has_value()) {
     os << *memory_order;
   } else {

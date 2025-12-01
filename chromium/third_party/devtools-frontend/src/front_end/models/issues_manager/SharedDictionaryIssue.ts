@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,7 @@ import {
 
 const UIStrings = {
   /**
-   *@description Title for Compression Dictionary Transport specification url link
+   * @description Title for Compression Dictionary Transport specification url link
    */
   compressionDictionaryTransport: 'Compression Dictionary Transport',
 } as const;

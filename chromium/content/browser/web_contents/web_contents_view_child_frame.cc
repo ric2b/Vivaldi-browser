@@ -113,19 +113,25 @@ gfx::Rect WebContentsViewChildFrame::GetContainerBounds() const {
 
 void WebContentsViewChildFrame::SetInitialFocus() {
   // Expected in Vivaldi as all webviews are ChildFrames.
-  if (!vivaldi::IsVivaldiRunning()) {
-  NOTREACHED();
-  } // End Vivaldi
+  if (vivaldi::IsVivaldiRunning())
+  	return;
+
+  // This should only be reachable in Webium, not other uses.
+  CHECK(base::FeatureList::IsEnabled(features::kAttachUnownedInnerWebContents));
+
+  if (web_contents_->FocusLocationBarByDefault()) {
+    web_contents_->SetFocusToLocationBar();
+  } else {
+    Focus();
+  }
 }
 
 gfx::Rect WebContentsViewChildFrame::GetViewBounds() const {
-  if (vivaldi::IsVivaldiRunning()) {
-    return web_contents_->GetRenderWidgetHostView()
-               ? web_contents_->GetRenderWidgetHostView()->GetViewBounds()
-               : gfx::Rect();
-  } // End Vivaldi
+  if (RenderWidgetHostView* view = web_contents_->GetRenderWidgetHostView()) {
+    return view->GetViewBounds();
+  }
 
-  NOTREACHED();
+  return gfx::Rect();
 }
 
 void WebContentsViewChildFrame::CreateView(gfx::NativeView context) {
@@ -186,10 +192,20 @@ void WebContentsViewChildFrame::RestoreFocus() {
 }
 
 void WebContentsViewChildFrame::Focus() {
-  // VB-108626. To be examined (hard to reproduce)
-  if (!vivaldi::IsVivaldiRunning()) {
-  NOTIMPLEMENTED();
-  } // End Vivaldi
+  if (!base::FeatureList::IsEnabled(features::kAttachUnownedInnerWebContents)) {
+    return;
+  }
+
+  if (delegate_ && delegate_->Focus()) {
+    return;
+  }
+
+  RenderWidgetHostView* rwhv = web_contents_->GetRenderWidgetHostView();
+  if (rwhv) {
+    rwhv->Focus();
+  }
+
+  web_contents_->SetAsFocusedWebContentsIfNecessary();
 }
 
 void WebContentsViewChildFrame::StoreFocus() {
@@ -235,7 +251,10 @@ void WebContentsViewChildFrame::TakeFocus(bool reverse) {
 void WebContentsViewChildFrame::ShowContextMenu(
     RenderFrameHost& render_frame_host,
     const ContextMenuParams& params) {
-  NOTREACHED();
+  if (delegate_) {
+    delegate_->ShowContextMenu(render_frame_host, params);
+    // WARNING: we may have been deleted during the call to ShowContextMenu().
+  }
 }
 
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)

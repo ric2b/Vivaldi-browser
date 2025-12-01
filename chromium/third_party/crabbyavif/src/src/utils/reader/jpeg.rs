@@ -42,26 +42,22 @@ impl JpegReader {
 
 impl Reader for JpegReader {
     fn read_frame(&mut self, config: &Config) -> AvifResult<(Image, u64)> {
-        let mut reader = BufReader::new(File::open(self.filename.clone()).or(Err(
-            AvifError::UnknownError("error opening input file".into()),
-        ))?);
-        let decoder = jpeg::JpegDecoder::new(&mut reader).or(Err(AvifError::UnknownError(
-            "failed to create jpeg decoder".into(),
-        )))?;
+        let mut reader = BufReader::new(
+            File::open(self.filename.clone()).map_err(AvifError::map_unknown_error)?,
+        );
+        let decoder = jpeg::JpegDecoder::new(&mut reader).map_err(AvifError::map_unknown_error)?;
         let color_type = decoder.color_type();
         if color_type != ColorType::Rgb8 {
-            return Err(AvifError::UnknownError(format!(
+            return AvifError::unknown_error(format!(
                 "jpeg color type was something other than rgb8: {color_type:#?}"
-            )));
+            ));
         }
         let (width, height) = decoder.dimensions();
         let total_bytes = decoder.total_bytes() as usize;
         let mut rgb_bytes = vec![0u8; total_bytes];
         decoder
             .read_image(&mut rgb_bytes)
-            .or(Err(AvifError::UnknownError(
-                "failed to read jpeg pixels".into(),
-            )))?;
+            .map_err(AvifError::map_unknown_error)?;
         let rgb = rgb::Image {
             width,
             height,

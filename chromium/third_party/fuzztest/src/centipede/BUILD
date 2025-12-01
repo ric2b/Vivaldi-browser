@@ -16,6 +16,10 @@
 #   Centipede: an experimental distributed fuzzing engine.
 
 load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_static_library.bzl", "cc_static_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load(":instrument.bzl", "cc_uninstrumented_binary")
 
 VISIBILITY = ["//visibility:public"]
@@ -63,8 +67,7 @@ cc_binary(
         ":util",
         "@abseil-cpp//absl/base:nullability",
         "@abseil-cpp//absl/flags:flag",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
     ],
 )
@@ -77,8 +80,6 @@ cc_binary(
         ":rusage_profiler",
         "@abseil-cpp//absl/base:nullability",
         "@abseil-cpp//absl/flags:flag",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/time",
@@ -109,15 +110,22 @@ cc_proto_library(
 #                             C++ libraries
 ################################################################################
 
+# TODO: b/436366556 - Remove and replace once this is standardized.
+DISABLE_SANCOV_COPTS = [
+    "-fsanitize-coverage=0",
+]
+
 # This lib must have zero non-trivial dependencies (other than libc).
 cc_library(
     name = "int_utils",
     hdrs = ["int_utils.h"],
+    copts = DISABLE_SANCOV_COPTS,
 )
 
 cc_library(
     name = "rolling_hash",
     hdrs = ["rolling_hash.h"],
+    copts = DISABLE_SANCOV_COPTS,
 )
 
 cc_library(
@@ -132,8 +140,6 @@ cc_library(
         ":thread_pool",
         ":util",
         "@abseil-cpp//absl/container:node_hash_set",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/types:span",
         "@com_google_fuzztest//common:logging",
@@ -143,6 +149,7 @@ cc_library(
 cc_library(
     name = "foreach_nonzero",
     hdrs = ["foreach_nonzero.h"],
+    copts = DISABLE_SANCOV_COPTS,
 )
 
 # This lib must have zero non-trivial dependencies (other than libc). See feature.h.
@@ -155,6 +162,7 @@ cc_library(
         "feature.h",
         "hashed_ring_buffer.h",  # TODO(kcc): consider moving to a separate cc_library.
     ],
+    copts = DISABLE_SANCOV_COPTS,
     visibility = PUBLIC_API_VISIBILITY,
     deps = [
         ":rolling_hash",
@@ -168,9 +176,9 @@ cc_library(
     hdrs = ["pc_info.h"],
     visibility = PUBLIC_API_VISIBILITY,
     deps = [
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/types:span",
         "@com_google_fuzztest//common:defs",
+        "@com_google_fuzztest//common:logging",
     ],
 )
 
@@ -178,6 +186,7 @@ cc_library(
     name = "knobs",
     srcs = ["knobs.cc"],
     hdrs = ["knobs.h"],
+    copts = DISABLE_SANCOV_COPTS,
     # Avoid non-trivial dependencies here, as this library will be linked to target binaries.
     deps = [
         "@abseil-cpp//absl/types:span",
@@ -195,6 +204,7 @@ cc_library(
 cc_library(
     name = "callstack",
     hdrs = ["callstack.h"],
+    copts = DISABLE_SANCOV_COPTS,
     # Avoid non-trivial dependencies here, as this library will be linked to target binaries.
     deps = [
         ":rolling_hash",
@@ -211,7 +221,6 @@ cc_library(
         ":feature",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/base:nullability",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/synchronization",
@@ -264,8 +273,6 @@ cc_library(
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
         "@abseil-cpp//absl/flags:reflection",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
@@ -278,8 +285,8 @@ cc_library(
     deps = [
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/functional:any_invocable",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/synchronization",
+        "@com_google_fuzztest//common:logging",
     ],
 )
 
@@ -290,10 +297,10 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "@abseil-cpp//absl/base:nullability",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/time",
+        "@com_google_fuzztest//common:logging",
     ],
 )
 
@@ -307,12 +314,11 @@ cc_library(
         ":rusage_stats",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/base:nullability",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/synchronization",
         "@abseil-cpp//absl/time",
+        "@com_google_fuzztest//common:logging",
     ],
 )
 
@@ -323,12 +329,11 @@ cc_library(
     deps = [
         ":rusage_stats",
         "@abseil-cpp//absl/base:core_headers",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/synchronization",
         "@abseil-cpp//absl/time",
+        "@com_google_fuzztest//common:logging",
     ],
 )
 
@@ -360,8 +365,6 @@ cc_library(
         "@abseil-cpp//absl/base:nullability",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/time",
@@ -385,8 +388,6 @@ cc_library(
         ":util",
         ":workdir",
         "@abseil-cpp//absl/base:core_headers",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/synchronization",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:hash",
@@ -410,8 +411,6 @@ cc_library(
         ":workdir",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
@@ -422,6 +421,7 @@ cc_library(
     name = "shared_memory_blob_sequence",
     srcs = ["shared_memory_blob_sequence.cc"],
     hdrs = ["shared_memory_blob_sequence.h"],
+    copts = DISABLE_SANCOV_COPTS,
     linkopts = select({
         "@platforms//os:macos": [],
         "//conditions:default": [
@@ -437,6 +437,7 @@ cc_library(
     name = "execution_metadata",
     srcs = ["execution_metadata.cc"],
     hdrs = ["execution_metadata.h"],
+    copts = DISABLE_SANCOV_COPTS,
     deps = [
         # This target must have a minimal set of dependencies since it is
         # used in centipede_runner.
@@ -449,6 +450,7 @@ cc_library(
     name = "runner_result",
     srcs = ["runner_result.cc"],
     hdrs = ["runner_result.h"],
+    copts = DISABLE_SANCOV_COPTS,
     visibility = PUBLIC_API_VISIBILITY,
     deps = [
         # This target must have a minimal set of dependencies since it is
@@ -464,6 +466,7 @@ cc_library(
     name = "runner_request",
     srcs = ["runner_request.cc"],
     hdrs = ["runner_request.h"],
+    copts = DISABLE_SANCOV_COPTS,
     deps = [
         # This target must have a minimal set of dependencies since it is
         # used in centipede_runner.
@@ -477,6 +480,7 @@ cc_library(
 cc_library(
     name = "mutation_input",
     hdrs = ["mutation_input.h"],
+    copts = DISABLE_SANCOV_COPTS,
     visibility = EXTENDED_API_VISIBILITY,
     deps = [
         # This target must have a minimal set of dependencies since it is
@@ -490,6 +494,7 @@ cc_library(
     name = "byte_array_mutator",
     srcs = ["byte_array_mutator.cc"],
     hdrs = ["byte_array_mutator.h"],
+    copts = DISABLE_SANCOV_COPTS,
     visibility = PUBLIC_API_VISIBILITY,
     # Avoid non-trivial dependencies here, as this library will be linked to target binaries.
     deps = [
@@ -519,9 +524,9 @@ cc_library(
         ":symbol_table",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/container:flat_hash_set",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/synchronization",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
         "@com_google_fuzztest//common:status_macros",
     ],
@@ -544,8 +549,6 @@ cc_library(
         ":util",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
@@ -569,7 +572,6 @@ cc_library(
         ":pc_info",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
-        "@abseil-cpp//absl/log:check",
         "@com_google_fuzztest//common:logging",
     ],
 )
@@ -582,8 +584,6 @@ cc_library(
         ":control_flow",
         ":feature",
         ":util",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@com_google_fuzztest//common:logging",
     ],
@@ -602,8 +602,6 @@ cc_library(
         ":feature",
         ":feature_set",
         ":util",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
@@ -621,8 +619,6 @@ cc_library(
         ":stop",
         ":util",
         "@abseil-cpp//absl/base:core_headers",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
@@ -647,9 +643,8 @@ cc_library(
         ":pc_info",
         ":symbol_table",
         ":util",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
     ],
 )
@@ -677,10 +672,10 @@ cc_library(
         ":util",
         ":workdir",
         "@abseil-cpp//absl/base:nullability",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/memory",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/synchronization",
         "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:blob_file",
         "@com_google_fuzztest//common:defs",
@@ -697,8 +692,6 @@ cc_library(
         ":feature",
         ":rusage_profiler",
         ":util",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/time",
         "@abseil-cpp//absl/types:span",
@@ -737,8 +730,6 @@ cc_library(
         ":centipede_flags",
         ":environment",
         "@abseil-cpp//absl/flags:flag",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:logging",
@@ -783,8 +774,6 @@ cc_library(
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/base:nullability",
         "@abseil-cpp//absl/container:flat_hash_set",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
@@ -801,12 +790,8 @@ cc_library(
 
 cc_library(
     name = "centipede_interface",
-    srcs = [
-        "centipede_interface.cc",
-    ],
-    hdrs = [
-        "centipede_interface.h",
-    ],
+    srcs = ["centipede_interface.cc"],
+    hdrs = ["centipede_interface.h"],
     visibility = PUBLIC_API_VISIBILITY,
     deps = [
         ":analyze_corpora",
@@ -831,8 +816,6 @@ cc_library(
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/cleanup",
         "@abseil-cpp//absl/container:flat_hash_set",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
@@ -873,8 +856,6 @@ cc_library(
         "@abseil-cpp//absl/base:no_destructor",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/flags:marshalling",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:defs",
@@ -903,8 +884,6 @@ cc_library(
         ":workdir",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/container:flat_hash_set",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/synchronization",
         "@abseil-cpp//absl/time",
@@ -928,8 +907,6 @@ cc_library(
         ":mutation_input",
         ":runner_result",
         ":stop",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@com_google_fuzztest//common:defs",
@@ -977,6 +954,7 @@ cc_library(
 cc_library(
     name = "runner_fork_server",
     srcs = ["runner_fork_server.cc"],
+    copts = DISABLE_SANCOV_COPTS,
     visibility = PUBLIC_API_VISIBILITY,
     deps = ["@abseil-cpp//absl/base:nullability"],
     alwayslink = 1,  # Otherwise the linker drops the fork server.
@@ -985,6 +963,7 @@ cc_library(
 cc_library(
     name = "runner_cmp_trace",
     hdrs = ["runner_cmp_trace.h"],
+    copts = DISABLE_SANCOV_COPTS,
 )
 
 # Library for manipulating centipede runner flags. This is not used by the
@@ -1024,52 +1003,30 @@ cc_library(
 #  e.g. feature.cc. These files are compiled by the engine and the runner
 #  separately, with different compiler flags.
 RUNNER_SOURCES_NO_MAIN = [
-    "byte_array_mutator.cc",
-    "byte_array_mutator.h",
-    "callstack.h",
-    "concurrent_bitset.h",
-    "concurrent_byteset.h",
-    "execution_metadata.cc",
-    "execution_metadata.h",
-    "runner_request.cc",
-    "runner_request.h",
-    "runner_result.cc",
-    "runner_result.h",
-    "feature.cc",
-    "feature.h",
-    "foreach_nonzero.h",
-    "hashed_ring_buffer.h",
-    "int_utils.h",
-    "knobs.h",
-    "knobs.cc",
-    "mutation_input.h",
     "pc_info.h",
     "reverse_pc_table.h",
-    "rolling_hash.h",
     "runner.cc",
     "runner.h",
-    "runner_dl_info.h",
     "runner_dl_info.cc",
-    "runner_sancov_object.h",
-    "runner_sancov_object.cc",
-    "runner_utils.h",
-    "runner_utils.cc",
-    "runner_cmp_trace.h",
-    "runner_fork_server.cc",
-    "runner_interceptors.cc",
+    "runner_dl_info.h",
     "runner_interface.h",
-    "runner_sancov.cc",
-    "shared_memory_blob_sequence.cc",
-    "shared_memory_blob_sequence.h",
-    "@com_google_fuzztest//common:defs.h",
+    "runner_utils.cc",
+    "runner_utils.h",
+    "sancov_callbacks.cc",
+    "sancov_interceptors.cc",
+    "sancov_object_array.cc",
+    "sancov_object_array.h",
+    "sancov_runtime.h",
+    "sancov_state.cc",
+    "sancov_state.h",
 ]
 
-RUNNER_SOURCES_WITH_MAIN = RUNNER_SOURCES_NO_MAIN + ["runner_main.cc"]
-
-# Disable sancov and sanitizer instrumentation
+# Disable sancov and sanitizer instrumentation.
+#
+# Need to allow MSAN to avoid false positives when interacting with dependencies.
 RUNNER_COPTS = [
     "-fsanitize-coverage=0",
-    "-fno-sanitize=address,hwaddress,memory,thread,undefined",
+    "-fno-sanitize=address,hwaddress,thread,undefined",
 ]
 
 RUNNER_SANITIZED_COPTS = [
@@ -1089,12 +1046,29 @@ RUNNER_LINKOPTS = [
     ],
 })
 
+# TODO: b/436308818 - Let the runner depend on sancov_runtime as well.
 # WARNING: be careful with more deps here. Use only the most trivial ones.
 RUNNER_DEPS = [
-    "@abseil-cpp//absl/base:nullability",
-    "@abseil-cpp//absl/types:span",
+    ":byte_array_mutator",
+    ":callstack",
+    ":dispatcher_flag_helper",
+    ":execution_metadata",
+    ":feature",
+    ":foreach_nonzero",
+    ":int_utils",
+    ":knobs",
+    ":mutation_input",
+    ":rolling_hash",
+    ":runner_cmp_trace",
+    ":runner_fork_server",
+    ":runner_request",
+    ":runner_result",
+    ":shared_memory_blob_sequence",
+    "@com_google_fuzztest//common:defs",
     "@abseil-cpp//absl/base:core_headers",
+    "@abseil-cpp//absl/base:nullability",
     "@abseil-cpp//absl/numeric:bits",
+    "@abseil-cpp//absl/types:span",
 ]
 
 # A fuzz target needs to link with this library in order to run with Centipede.
@@ -1111,6 +1085,8 @@ cc_library(
     linkstatic = True,  # Must be linked statically even when dynamic_mode=on.
     visibility = ["//visibility:public"],
     deps = RUNNER_DEPS,
+    alwayslink = 1,  # Avoid runner from getting dropped by the linker due to no reference from the
+    # sancov runtime.
 )
 
 # Same as :centipede_runner_no_main, except it can be sanitized to avoid false
@@ -1138,18 +1114,29 @@ cc_binary(
     deps = RUNNER_DEPS,
 )
 
-# A full self-contained library archive that external clients should link to
-# their fuzz targets to make them compatible with the Centipede fuzzing engine
-# (the `:centipede` target in this BUILD).
+# Centipede runner library with a main function for LLVM fuzzers.
 cc_library(
     name = "centipede_runner",
-    srcs = RUNNER_SOURCES_WITH_MAIN,
+    srcs = ["runner_main.cc"],
     hdrs = ["runner_interface.h"],
     copts = RUNNER_COPTS,
     linkopts = RUNNER_LINKOPTS,
     linkstatic = True,  # Must be linked statically even when dynamic_mode=on.
     visibility = ["//visibility:public"],
-    deps = RUNNER_DEPS,
+    deps = [
+        ":centipede_runner_no_main",
+        ":mutation_input",
+        "@abseil-cpp//absl/base:nullability",
+        "@com_google_fuzztest//common:defs",
+    ],
+)
+
+# A full self-contained library archive that external clients should link to
+# their fuzz targets to make them compatible with the Centipede fuzzing engine
+# (the `:centipede` target in this BUILD).
+cc_static_library(
+    name = "centipede_runner_static",
+    deps = [":centipede_runner"],
 )
 
 # Utilities for seed corpus generation.
@@ -1166,8 +1153,6 @@ cc_library(
         ":util",
         ":workdir",
         "@abseil-cpp//absl/container:flat_hash_set",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/random",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -1191,7 +1176,6 @@ cc_library(
         ":seed_corpus_config_cc_proto",
         ":seed_corpus_maker_lib",
         ":workdir",
-        "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
@@ -1199,6 +1183,51 @@ cc_library(
         "@com_google_fuzztest//common:remote_file",
         "@com_google_fuzztest//common:status_macros",
         "@protobuf",
+    ],
+)
+
+cc_library(
+    name = "dispatcher_flag_helper",
+    hdrs = ["dispatcher_flag_helper.h"],
+    copts = DISABLE_SANCOV_COPTS,
+    deps = [
+        "@abseil-cpp//absl/base:nullability",
+    ],
+)
+
+cc_library(
+    name = "sancov_runtime",
+    srcs = [
+        "pc_info.h",
+        "reverse_pc_table.h",
+        "runner_dl_info.cc",
+        "runner_dl_info.h",
+        "runner_utils.cc",
+        "runner_utils.h",
+        "sancov_callbacks.cc",
+        "sancov_interceptors.cc",
+        "sancov_object_array.cc",
+        "sancov_object_array.h",
+        "sancov_state.cc",
+        "sancov_state.h",
+        "@com_google_fuzztest//common:defs.h",
+    ],
+    hdrs = [
+        "sancov_runtime.h",
+    ],
+    copts = DISABLE_SANCOV_COPTS,
+    deps = [
+        ":callstack",
+        ":dispatcher_flag_helper",
+        ":execution_metadata",
+        ":feature",
+        ":foreach_nonzero",
+        ":int_utils",
+        ":runner_cmp_trace",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/numeric:bits",
+        "@abseil-cpp//absl/types:span",
     ],
 )
 
@@ -1221,8 +1250,6 @@ cc_library(
     visibility = PUBLIC_API_VISIBILITY,
     deps = [
         ":environment",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
         "@com_google_fuzztest//common:logging",
@@ -1242,8 +1269,8 @@ cc_library(
         ":mutation_input",
         ":runner_result",
         ":util",
-        "@abseil-cpp//absl/log:check",
         "@com_google_fuzztest//common:defs",
+        "@com_google_fuzztest//common:logging",
     ],
 )
 
@@ -1279,8 +1306,8 @@ cc_test(
     srcs = ["environment_test.cc"],
     deps = [
         ":environment",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/time",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//fuzztest/internal:configuration",
         "@googletest//:gtest_main",
     ],
@@ -1333,9 +1360,9 @@ cc_test(
         ":thread_pool",
         ":util",
         "@abseil-cpp//absl/container:flat_hash_map",
-        "@abseil-cpp//absl/log",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:hash",
+        "@com_google_fuzztest//common:logging",
         "@googletest//:gtest_main",
     ],
 )
@@ -1375,7 +1402,6 @@ cc_test(
         ":thread_pool",
         "@abseil-cpp//absl/base:nullability",
         "@abseil-cpp//absl/flags:flag",
-        "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/synchronization",
         "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:logging",
@@ -1394,9 +1420,9 @@ cc_test(
         ":util",
         ":workdir",
         "@abseil-cpp//absl/flags:reflection",
-        "@abseil-cpp//absl/log:check",
         "@com_google_fuzztest//common:blob_file",
         "@com_google_fuzztest//common:defs",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:test_util",
         "@googletest//:gtest_main",
     ],
@@ -1412,8 +1438,8 @@ cc_test(
         ":rusage_profiler",
         ":rusage_stats",
         "@abseil-cpp//absl/flags:flag",
-        "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/time",
+        "@com_google_fuzztest//common:logging",
         "@googletest//:gtest_main",
     ],
 )
@@ -1425,7 +1451,6 @@ cc_test(
         ":environment",
         ":stats",
         ":util",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/log:log_entry",
         "@abseil-cpp//absl/log:log_sink",
         "@abseil-cpp//absl/log:log_sink_registry",
@@ -1468,8 +1493,7 @@ cc_test(
         ":environment",
         ":symbol_table",
         ":test_coverage_util",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
         "@com_google_fuzztest//common:test_util",
         "@googletest//:gtest_main",
@@ -1621,10 +1645,10 @@ cc_test(
         ":feature",
         ":util",
         ":workdir",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/types:span",
         "@com_google_fuzztest//common:blob_file",
         "@com_google_fuzztest//common:defs",
+        "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:test_util",
         "@googletest//:gtest_main",
     ],
@@ -1665,7 +1689,6 @@ cc_test(
         ":command",
         ":stop",
         ":util",
-        "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:test_util",
@@ -1698,8 +1721,6 @@ cc_test(
         ":symbol_table",
         ":thread_pool",
         "@abseil-cpp//absl/container:flat_hash_map",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:test_util",
         "@googletest//:gtest_main",
@@ -1735,7 +1756,6 @@ cc_test(
         ":feature",
         ":seed_corpus_maker_lib",
         ":workdir",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
@@ -1793,7 +1813,6 @@ cc_test(
         ":resource_pool",
         ":rusage_stats",
         ":thread_pool",
-        "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:logging",
@@ -1860,7 +1879,7 @@ cc_test(
     srcs = ["crash_summary_test.cc"],
     deps = [
         ":crash_summary",
-        "@abseil-cpp//absl/log:check",
+        "@com_google_fuzztest//common:logging",
         "@googletest//:gtest_main",
     ],
 )
@@ -1896,8 +1915,6 @@ cc_test(
         ":workdir",
         "@abseil-cpp//absl/base:nullability",
         "@abseil-cpp//absl/container:flat_hash_set",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:defs",

@@ -45,9 +45,7 @@ constexpr int kCustomCertificateMaxValidityDays = 14;
 constexpr base::TimeDelta kMaxCloseTimeout = base::Seconds(2);
 
 // Enables custom congestion control for WebTransport over HTTP/3.
-BASE_FEATURE(kWebTransportCongestionControl,
-             "WebTransportCongestionControl",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kWebTransportCongestionControl, base::FEATURE_DISABLED_BY_DEFAULT);
 constexpr base::FeatureParam<quic::CongestionControlType>::Option
     kWebTransportCongestionControlAlgorithms[] = {
         {quic::kCubicBytes, "CUBIC"},
@@ -61,10 +59,11 @@ constexpr base::FeatureParam<quic::CongestionControlType>
         /*default_value=*/quic::kCubicBytes,
         &kWebTransportCongestionControlAlgorithms};
 
-std::set<std::string> HostsFromOrigins(std::set<HostPortPair> origins) {
+std::set<std::string> HostsFromSchemeHostPorts(
+    const std::set<url::SchemeHostPort>& scheme_host_ports) {
   std::set<std::string> hosts;
-  for (const auto& origin : origins) {
-    hosts.insert(origin.host());
+  for (const auto& scheme_host_port : scheme_host_ports) {
+    hosts.insert(scheme_host_port.host());
   }
   return hosts;
 }
@@ -93,9 +92,11 @@ std::unique_ptr<quic::ProofVerifier> CreateProofVerifier(
     URLRequestContext* context,
     const WebTransportParameters& parameters) {
   if (parameters.server_certificate_fingerprints.empty()) {
-    std::set<std::string> hostnames_to_allow_unknown_roots = HostsFromOrigins(
-        context->quic_context()->params()->origins_to_force_quic_on);
-    if (context->quic_context()->params()->webtransport_developer_mode) {
+    std::set<std::string> hostnames_to_allow_unknown_roots =
+        HostsFromSchemeHostPorts(
+            context->quic_context()->params()->origins_to_force_quic_on);
+    if (context->quic_context()->params()->force_quic_everywhere ||
+        context->quic_context()->params()->webtransport_developer_mode) {
       hostnames_to_allow_unknown_roots.insert("");
     }
     return std::make_unique<ProofVerifierChromium>(
@@ -242,10 +243,11 @@ class DedicatedWebTransportHttp3ClientSession
     return stream_ptr;
   }
 
-  void OnDatagramProcessed(std::optional<quic::MessageStatus> status) override {
+  void OnDatagramProcessed(
+      std::optional<quic::DatagramStatus> status) override {
     client_->OnDatagramProcessed(
-        status.has_value() ? std::optional<quic::MessageStatus>(*status)
-                           : std::optional<quic::MessageStatus>());
+        status.has_value() ? std::optional<quic::DatagramStatus>(*status)
+                           : std::optional<quic::DatagramStatus>());
   }
 
  private:
@@ -470,6 +472,12 @@ void DedicatedWebTransportHttp3Client::DoLoop(int rv) {
       case CONNECT_STATE_RESOLVE_HOST_COMPLETE:
         rv = DoResolveHostComplete(rv);
         break;
+      case CONNECT_STATE_CHECK_LOCAL_NETWORK_ACCESS:
+        rv = DoLocalNetworkAccessCheck();
+        break;
+      case CONNECT_STATE_CHECK_LOCAL_NETWORK_ACCESS_COMPLETE:
+        rv = DoLocalNetworkAccessCheckComplete(rv);
+        break;
       case CONNECT_STATE_CONNECT:
         DCHECK_EQ(rv, OK);
         rv = DoConnect();
@@ -571,6 +579,26 @@ int DedicatedWebTransportHttp3Client::DoResolveHostComplete(int rv) {
     return rv;
 
   DCHECK(!resolve_host_request_->GetAddressResults().empty());
+  next_connect_state_ = CONNECT_STATE_CHECK_LOCAL_NETWORK_ACCESS;
+  return OK;
+}
+
+int DedicatedWebTransportHttp3Client::DoLocalNetworkAccessCheck() {
+  next_connect_state_ = CONNECT_STATE_CHECK_LOCAL_NETWORK_ACCESS_COMPLETE;
+  IPEndPoint server_address =
+      resolve_host_request_->GetAddressResults().front();
+  visitor_->OnLocalNetworkAccessCheck(
+      server_address, base::BindOnce(&DedicatedWebTransportHttp3Client::DoLoop,
+                                     base::Unretained(this)));
+  return ERR_IO_PENDING;
+}
+
+int DedicatedWebTransportHttp3Client::DoLocalNetworkAccessCheckComplete(
+    int rv) {
+  if (rv != OK) {
+    return rv;
+  }
+
   next_connect_state_ = CONNECT_STATE_CONNECT;
   return OK;
 }
@@ -992,7 +1020,7 @@ void DedicatedWebTransportHttp3Client::OnConnectionClosed(
 }
 
 void DedicatedWebTransportHttp3Client::OnDatagramProcessed(
-    std::optional<quic::MessageStatus> status) {
+    std::optional<quic::DatagramStatus> status) {
   visitor_->OnDatagramProcessed(status);
 }
 

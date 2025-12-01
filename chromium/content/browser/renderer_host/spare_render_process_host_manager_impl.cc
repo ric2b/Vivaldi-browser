@@ -34,14 +34,12 @@ namespace {
 
 // Enables killing spare renders when memory pressure signal is received.
 BASE_FEATURE(kKillSpareRenderOnMemoryPressure,
-             "KillSpareRenderOnMemoryPressure",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled, MEMORY_PRESSURE_LEVEL_CRITICAL is used as the threshold that
 // determines when a spare RPH can be created or killed. By default,
 // MEMORY_PRESSURE_LEVEL_MODERATE is used.
 BASE_FEATURE(kSpareRPHUseCriticalMemoryPressure,
-             "SpareRPHUseCriticalMemoryPressure",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled, only the extra RPHs (controlled by the MultipleSpareRPHs
@@ -50,6 +48,36 @@ BASE_FEATURE(kSpareRPHUseCriticalMemoryPressure,
 BASE_FEATURE(kSpareRPHKeepOneAliveOnMemoryPressure,
              "kSpareRPHKeepOneAliveOnMemoryPressure",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_ANDROID)
+// Enables the available memory threshold for creating a spare renderer.
+BASE_FEATURE_PARAM(bool,
+                   kSpareRendererAvailableMemoryThresholdEnabled,
+                   &features::kAndroidWarmUpSpareRendererWithTimeout,
+                   "spare_renderer_available_memory_threshold_enabled",
+                   false);
+
+// Memory threshold for considering a device as "large memory".
+BASE_FEATURE_PARAM(int,
+                   kLargeMemoryDeviceThresholdMb,
+                   &features::kAndroidWarmUpSpareRendererWithTimeout,
+                   "large_memory_device_threshold_mb",
+                   4200);
+
+// Available memory threshold for "limited memory devices".
+BASE_FEATURE_PARAM(int,
+                   kLimitedMemoryDeviceAvailableMemoryThresholdMb,
+                   &features::kAndroidWarmUpSpareRendererWithTimeout,
+                   "limited_memory_device_available_memory_threshold_mb",
+                   100);
+
+// Available memory threshold for "large memory devices".
+BASE_FEATURE_PARAM(int,
+                   kLargeMemoryDeviceAvailableMemoryThresholdMb,
+                   &features::kAndroidWarmUpSpareRendererWithTimeout,
+                   "large_memory_device_available_memory_threshold_mb",
+                   150);
+#endif  // BUILDFLAG(IS_ANDROID)
 
 constexpr char kSpareProcessMaybeTakeActionUmaName[] =
     "BrowserRenderProcessHost.SpareProcessMaybeTakeAction";
@@ -196,16 +224,16 @@ bool IsCurrentlyUnderMemoryPressure() {
     return false;
   }
 
-  return memory_pressure_monitor->GetCurrentPressureLevel() !=
+  return memory_pressure_monitor->GetCurrentPressureLevel(
+             base::MemoryPressureMonitorTag::kSpareRendererHostManager) !=
          base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE;
 }
 
 // Returns the number of spare hosts that should be created. Ensures the field
 // trial is not activated on excluded machines.
 size_t GetSpareRPHCount() {
-  static int64_t available_ram = base::SysInfo::AmountOfPhysicalMemoryMB();
   // Exclude machines with less than 4gigs of ram.
-  if (available_ram < 4 * 1024) {
+  if (base::SysInfo::AmountOfPhysicalMemory() < base::GiB(4)) {
     return 1u;
   }
   return features::kMultipleSpareRPHsCount.Get();
@@ -309,6 +337,7 @@ GetMemoryPressureLevelThreshold() {
 SpareRenderProcessHostManagerImpl::SpareRenderProcessHostManagerImpl()
     : memory_pressure_listener_(
           FROM_HERE,
+          base::MemoryPressureListenerTag::kSpareRenderProcessHostManagerImpl,
           base::BindRepeating(
               &SpareRenderProcessHostManagerImpl::OnMemoryPressure,
               base::Unretained(this))),
@@ -422,6 +451,11 @@ void SpareRenderProcessHostManagerImpl::CleanupSparesForTesting() {
   CleanupSpares(std::nullopt);
 }
 
+const std::optional<LastSpareRendererCreationInfo>&
+SpareRenderProcessHostManagerImpl::GetLastSpareRendererCreationInfo() const {
+  return last_spare_renderer_creation_info_;
+}
+
 RenderProcessHost* SpareRenderProcessHostManagerImpl::WarmupSpare(
     BrowserContext* browser_context,
     std::optional<base::TimeDelta> timeout) {
@@ -491,8 +525,10 @@ RenderProcessHost* SpareRenderProcessHostManagerImpl::WarmupSpare(
   // currently approximated by only looking at the memory pressure.  See also
   // https://crbug.com/852905.
   auto* memory_monitor = base::MemoryPressureMonitor::Get();
-  if (memory_monitor && memory_monitor->GetCurrentPressureLevel() >=
-                            GetMemoryPressureLevelThreshold()) {
+  if (memory_monitor &&
+      memory_monitor->GetCurrentPressureLevel(
+          base::MemoryPressureMonitorTag::kSpareRendererHostManager) >=
+          GetMemoryPressureLevelThreshold()) {
     no_spare_renderer_reason_ = NoSpareRendererReason::kMemoryPressure;
     return nullptr;
   }
@@ -503,6 +539,21 @@ RenderProcessHost* SpareRenderProcessHostManagerImpl::WarmupSpare(
     no_spare_renderer_reason_ = NoSpareRendererReason::kOnceBackgrounded;
     return nullptr;
   }
+
+  base::SystemMemoryInfo meminfo;
+  base::GetSystemMemoryInfo(&meminfo);
+  if (!ShouldCreateSpareRendererWithAvailableMemory(
+          static_cast<int>(meminfo.available.InMiB()))) {
+    no_spare_renderer_reason_ = NoSpareRendererReason::kMemoryPressure;
+    return nullptr;
+  }
+
+  base::UmaHistogramMemoryLargeMB(
+      "BrowserRenderProcessHost.AvailableMemoryBeforeCreation.SpareRenderer",
+      meminfo.available);
+  last_spare_renderer_creation_info_ = LastSpareRendererCreationInfo{
+      .creation_time = base::TimeTicks::Now(),
+      .available_memory_mb = static_cast<int>(meminfo.available.InMiB())};
 #endif
 
   process_startup_timer_ = std::make_unique<base::ElapsedTimer>();
@@ -513,7 +564,7 @@ RenderProcessHost* SpareRenderProcessHostManagerImpl::WarmupSpare(
     spare_renderer_maybe_take_timer_ = std::make_unique<base::ElapsedTimer>();
   }
   RenderProcessHost* new_spare_rph =
-      RenderProcessHostImpl::CreateRenderProcessHost(
+      RenderProcessHostImpl::CreateSpareRenderProcessHost(
           browser_context, nullptr /* site_instance */);
   new_spare_rph->AddObserver(this);
   new_spare_rph->Init();
@@ -657,7 +708,7 @@ RenderProcessHost* SpareRenderProcessHostManagerImpl::MaybeTakeSpare(
   // further updates are made. For navigation requests we will keep the priority
   // until the RenderFrameHostImpl constructor sets the priority.
   if (returned_process && !allocation_context.IsForNavigation()) {
-    returned_process->SetHasSpareRendererPriority(false);
+    returned_process->GraduateSpareToNormalRendererPriority();
   }
 
   return returned_process;
@@ -695,7 +746,7 @@ SpareRenderProcessHostManagerImpl::DoesEmbedderAllowSpareUsage(
   // is disabled for the site then it's not possible to use this as the JIT
   // policy will differ.
   if (GetContentClient()->browser()->IsJitDisabledForSite(
-          browser_context, site_instance->GetSiteInfo().process_lock_url())) {
+          browser_context, site_instance->GetSiteInfo().GetProcessLockURL())) {
     return ContentBrowserClient::SpareProcessRefusedByEmbedderReason::
         JitDisabled;
   }
@@ -704,7 +755,7 @@ SpareRenderProcessHostManagerImpl::DoesEmbedderAllowSpareUsage(
   // and spare renderers always have V8 optimizations enabled, so we can never
   // use them if they're supposed to be disabled for this site.
   if (GetContentClient()->browser()->AreV8OptimizationsDisabledForSite(
-          browser_context, site_instance->GetSiteInfo().process_lock_url())) {
+          browser_context, site_instance->GetSiteInfo().GetProcessLockURL())) {
     return ContentBrowserClient::SpareProcessRefusedByEmbedderReason::
         V8OptimizationsDisabled;
   }
@@ -714,7 +765,7 @@ SpareRenderProcessHostManagerImpl::DoesEmbedderAllowSpareUsage(
   // As such spare renderers should not be used when v8 flag overrides are
   // disabled.
   if (GetContentClient()->browser()->DisallowV8FeatureFlagOverridesForSite(
-          site_instance->GetSiteInfo().process_lock_url())) {
+          site_instance->GetSiteInfo().GetProcessLockURL())) {
     return ContentBrowserClient::SpareProcessRefusedByEmbedderReason::
         DisallowV8FeatureFlagOverrides;
   }
@@ -855,10 +906,6 @@ void SpareRenderProcessHostManagerImpl::RenderProcessReady(
   CHECK(process_startup_timer_);
   UMA_HISTOGRAM_TIMES("BrowserRenderProcessHost.SpareProcessStartupTime",
                       process_startup_timer_->Elapsed());
-
-  if (base::FeatureList::IsEnabled(features::kSpareRendererProcessPriority)) {
-    host->SetHasSpareRendererPriority(true);
-  }
 
   process_startup_timer_.reset();
 
@@ -1001,7 +1048,7 @@ void SpareRenderProcessHostManagerImpl::MaybeCreateExtraSpare() {
 
   process_startup_timer_ = std::make_unique<base::ElapsedTimer>();
   RenderProcessHost* new_spare_rph =
-      RenderProcessHostImpl::CreateRenderProcessHost(
+      RenderProcessHostImpl::CreateSpareRenderProcessHost(
           browser_context, nullptr /* site_instance */);
   new_spare_rph->AddObserver(this);
   new_spare_rph->Init();
@@ -1014,6 +1061,22 @@ void SpareRenderProcessHostManagerImpl::OnMetricsHeartbeatTimerFired() {
 }
 
 #if BUILDFLAG(IS_ANDROID)
+bool SpareRenderProcessHostManagerImpl::
+    ShouldCreateSpareRendererWithAvailableMemory(
+        int available_memory_mb) const {
+  if (!kSpareRendererAvailableMemoryThresholdEnabled.Get()) {
+    return true;
+  }
+
+  const int total_memory_mb = base::SysInfo::AmountOfPhysicalMemory().InMiB();
+  const int available_memory_threshold_mb =
+      total_memory_mb >= kLargeMemoryDeviceThresholdMb.Get()
+          ? kLargeMemoryDeviceAvailableMemoryThresholdMb.Get()
+          : kLimitedMemoryDeviceAvailableMemoryThresholdMb.Get();
+
+  return available_memory_mb >= available_memory_threshold_mb;
+}
+
 void SpareRenderProcessHostManagerImpl::OnApplicationStateChange(
     base::android::ApplicationState state) {
   if (!features::kAndroidSpareRendererKillWhenBackgrounded.Get()) {

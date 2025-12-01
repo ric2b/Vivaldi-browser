@@ -13,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
@@ -85,7 +86,7 @@ void MoveGroupAcrossWindows(Browser* source_browser,
   }
 
   tab_groups::TabGroupSyncService* tab_group_service =
-      tab_groups::SavedTabGroupUtils::GetServiceForProfile(
+      tab_groups::TabGroupSyncServiceFactory::GetForProfile(
           source_browser->profile());
 
   std::unique_ptr<tab_groups::ScopedLocalObservationPauser> observation_pauser;
@@ -228,23 +229,25 @@ bool DropTabsInNewBrowser(Browser* new_browser,
     if (!source_group_id) {
       return false;
     }
-    TabGroup* source_group = source_group_model->GetTabGroup(*source_group_id);
-    tab_indices_to_move = source_group->ListTabs();
 
     TabGroupModel* new_group_model =
         new_browser->tab_strip_model()->group_model();
     if (!new_group_model) {
       return false;
     }
-    new_browser->tab_strip_model()->AddTabGroup(*source_group_id,
-                                                *source_group->visual_data());
   }
 
-  const int source_index = tab_indices_to_move.start();
-  for (size_t i = 0; i < tab_indices_to_move.length(); ++i) {
-    MoveTabAcrossWindows(source_browser, source_index, new_browser, i,
-                         source_group_id);
+  if (source_group_id.has_value()) {
+    MoveGroupAcrossWindows(source_browser, new_browser, 0,
+                           source_group_id.value());
+  } else {
+    const int source_index = tab_indices_to_move.start();
+    for (size_t i = 0; i < tab_indices_to_move.length(); ++i) {
+      MoveTabAcrossWindows(source_browser, source_index, new_browser, i,
+                           source_group_id);
+    }
   }
+
   new_browser->tab_strip_model()->ActivateTabAt(0);
   return true;
 }

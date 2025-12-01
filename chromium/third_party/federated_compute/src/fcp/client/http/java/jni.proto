@@ -1,0 +1,62 @@
+// Copyright 2022 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.client.http.java;
+
+option java_package = "com.google.fcp.client.http";
+option java_multiple_files = true;
+option java_outer_classname = "JniProto";
+
+// This file defines protos that are used to serialize data across the JNI
+// boundary, for use by `fcp::client::http::java::JavaHttpClient`.
+
+// Represents a serialized `fcp::client::http::HttpRequest` object.
+message JniHttpRequest {
+  string uri = 1;
+  JniHttpMethod method = 2;
+  repeated JniHttpHeader extra_headers = 3;
+  bool has_body = 4;
+}
+
+// Represents a serialized `fcp::client::http::Header` object.
+message JniHttpHeader {
+  string name = 1;
+  string value = 2;
+}
+
+// Represents a serialized `fcp::client::http::HttpRequest::Method` enum.
+enum JniHttpMethod {
+  HTTP_METHOD_UNKNOWN = 0;
+  HTTP_METHOD_HEAD = 1;
+  HTTP_METHOD_GET = 2;
+  HTTP_METHOD_POST = 3;
+  HTTP_METHOD_PUT = 4;
+  HTTP_METHOD_PATCH = 5;
+  HTTP_METHOD_DELETE = 6;
+}
+
+// Represents a serialized `fcp::client::http::HttpResponse` object.
+message JniHttpResponse {
+  int32 code = 1;
+  repeated JniHttpHeader headers = 2;
+}
+
+// Represents a serialized
+// `fcp::client::http::HttpRequestHandle::SentReceivesBytes` object.
+message JniHttpSentReceivedBytes {
+  int64 sent_bytes = 1;
+  int64 received_bytes = 2;
+}

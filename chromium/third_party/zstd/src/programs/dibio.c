@@ -280,8 +280,15 @@ static fileStats DiB_fileStats(const char** fileNamesTable, int nbFiles, size_t 
     for (n=0; n<nbFiles; n++) {
       S64 const fileSize = DiB_getFileSize(fileNamesTable[n]);
       /* TODO: is there a minimum sample size? What if the file is 1-byte? */
-      if (fileSize == 0) {
-        DISPLAYLEVEL(3, "Sample file '%s' has zero size, skipping...\n", fileNamesTable[n]);
+      /* Skip empty or invalid files */
+      if (fileSize <= 0) {
+        if (fileSize < 0) {
+          DISPLAYLEVEL(3, "Sample file '%s' is unreadable or stat failed, skipping...\n",
+                       fileNamesTable[n]);
+        } else {
+          DISPLAYLEVEL(3, "Sample file '%s' has zero size, skipping...\n",
+                     fileNamesTable[n]);
+        }
         continue;
       }
 

@@ -373,7 +373,7 @@ void VivaldiImageStore::LoadMappingsOnFileThread() {
     return;
 
   auto root = base::JSONReader::ReadAndReturnValueWithError(
-      base::as_string_view(*data));
+      base::as_string_view(*data), base::JSON_PARSE_RFC);
   if (!root.has_value()) {
     LOG(ERROR) << file_path.value() << " is not a valid JSON - "
                << root.error().message;

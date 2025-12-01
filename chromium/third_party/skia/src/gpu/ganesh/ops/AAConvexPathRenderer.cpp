@@ -21,7 +21,6 @@
 #include "include/private/base/SkTDArray.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/base/SkArenaAlloc.h"
-#include "src/base/SkTLazy.h"
 #include "src/core/SkColorData.h"
 #include "src/core/SkGeometry.h"
 #include "src/core/SkMatrixPriv.h"
@@ -372,9 +371,8 @@ bool get_segments(const SkPath& path,
                 if (!SkPathPriv::AllPointsEq(src)) {
                     SkPoint dst[3];
                     m.mapPoints(dst, src);
-                    SkScalar weight = rec->fConicWeight;
                     SkAutoConicToQuads converter;
-                    const SkPoint* quadPts = converter.computeQuads(dst, weight, 0.25f);
+                    const SkPoint* quadPts = converter.computeQuads(dst, rec->conicWeight(), 0.25f);
                     for (int i = 0; i < converter.countQuads(); ++i) {
                         update_degenerate_test(&degenerateData, quadPts[2*i + 1]);
                         update_degenerate_test(&degenerateData, quadPts[2*i + 2]);
@@ -832,13 +830,12 @@ private:
 
             // We avoid initializing the path unless we have to
             const SkPath* pathPtr = &args.fPath;
-            SkTLazy<SkPath> tmpPath;
+            std::optional<SkPath> tmpPath;
             if (viewMatrix->hasPerspective()) {
-                SkPath* tmpPathPtr = tmpPath.init(*pathPtr);
-                tmpPathPtr->setIsVolatile(true);
-                tmpPathPtr->transform(*viewMatrix);
+                tmpPath.emplace(pathPtr->makeTransform(*viewMatrix));
+                tmpPath->setIsVolatile(true);
+                pathPtr = &tmpPath.value();
                 viewMatrix = &SkMatrix::I();
-                pathPtr = tmpPathPtr;
             }
 
             int vertexCount;
@@ -972,8 +969,7 @@ bool AAConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
     SkASSERT(args.fSurfaceDrawContext->numSamples() <= 1);
     SkASSERT(!args.fShape->isEmpty());
 
-    SkPath path;
-    args.fShape->asPath(&path);
+    SkPath path = args.fShape->asPath();
 
     GrOp::Owner op = AAConvexPathOp::Make(args.fContext, std::move(args.fPaint),
                                           *args.fViewMatrix,

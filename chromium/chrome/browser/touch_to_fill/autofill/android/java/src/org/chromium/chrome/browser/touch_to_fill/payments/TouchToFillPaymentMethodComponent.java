@@ -6,6 +6,8 @@ package org.chromium.chrome.browser.touch_to_fill.payments;
 
 import android.content.Context;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.autofill.AutofillImageFetcher;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
@@ -50,14 +52,14 @@ interface TouchToFillPaymentMethodComponent {
         /**
          * Called when the user selects a local IBAN.
          *
-         * @param GUID of the selected local IBAN.
+         * @param guid The selected local IBAN.
          */
         void localIbanSuggestionSelected(String guid);
 
         /**
          * Called when the user selects a server IBAN.
          *
-         * @param InstrumentId of the selected server IBAN.
+         * @param instrumentId The selected server IBAN.
          */
         void serverIbanSuggestionSelected(long instrumentId);
 
@@ -90,7 +92,7 @@ interface TouchToFillPaymentMethodComponent {
             BottomSheetFocusHelper bottomSheetFocusHelper);
 
     /**
-     * Displays a new credit card bottom sheet.
+     * Displays a new payment methods bottom sheet.
      *
      * @param suggestions A list of {@link AutofillSuggestion}, each generated from a corresponding
      *     credit card. It includes a boolean that denotes if the card is acceptable for the given
@@ -98,7 +100,7 @@ interface TouchToFillPaymentMethodComponent {
      * @param shouldShowScanCreditCard A boolean that conveys whether 'ScanCreditCard' should be
      *     shown.
      */
-    void showCreditCards(List<AutofillSuggestion> suggestions, boolean shouldShowScanCreditCard);
+    void showPaymentMethods(List<AutofillSuggestion> suggestions, boolean shouldShowScanCreditCard);
 
     /** Displays a new IBAN bottom sheet. */
     void showIbans(List<PersonalDataManager.Iban> ibans);
@@ -117,6 +119,31 @@ interface TouchToFillPaymentMethodComponent {
             List<LoyaltyCard> affiliatedLoyaltyCards,
             List<LoyaltyCard> allLoyaltyCards,
             boolean firstTimeUsage);
+
+    /**
+     * Updates BNPL suggestions on payment methods bottom sheet based on the results of amount
+     * extraction.
+     *
+     * @param extractedAmount The amount extracted from the checkout page, or {@code null} if
+     *     extraction failed or timed out.
+     * @param isAmountSupportedByAnyIssuer Whether the {@code extractedAmount} is supported by at
+     *     least one BNPL issuer. This is only relevant if {@code extractedAmount} is not {@code
+     *     null}.
+     */
+    void updateBnplPaymentMethod(
+            @Nullable Long extractedAmount, boolean isAmountSupportedByAnyIssuer);
+
+    /** Displays a progress screen bottomsheet. */
+    void showProgressScreen();
+
+    /**
+     * Displays a new BNPL issuers bottom sheet.
+     *
+     * @param bnplIssuers A list of {@link PersonalDataManager.BnplIssuer} objects, each
+     *     representing a BNPL issuer, to be displayed on the bottom sheet for the user to select
+     *     from.
+     */
+    void showBnplIssuers(List<PersonalDataManager.BnplIssuer> bnplIssuers);
 
     /** Hides the bottom sheet if shown. */
     void hideSheet();

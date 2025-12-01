@@ -95,9 +95,12 @@ def _GetPrimarySolutionPathInternal(cwd):
     return None
 
 
-def GetPrimarySolutionPath():
+def GetPrimarySolutionPath(from_dir=None):
     """Returns the full path to the primary solution. (gclient_root + src)"""
-    return _GetPrimarySolutionPathInternal(os.getcwd())
+    if not from_dir:
+        from_dir = os.getcwd()
+    from_dir = os.path.abspath(from_dir)
+    return _GetPrimarySolutionPathInternal(from_dir)
 
 
 @functools.lru_cache

@@ -50,7 +50,7 @@
 #include "ui/events/blink/did_overscroll_params.h"
 #include "ui/events/event_constants.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 #include "ui/gfx/range/range.h"
 #include "ui/surface/transport_dib.h"
 #include "url/origin.h"
@@ -215,6 +215,11 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // that handle content embedded within other RenderWidgetHostViews.
   gfx::PointF TransformPointToRootCoordSpaceF(
       const gfx::PointF& point) const override;
+
+  // This only needs to be overridden by RenderWidgetHostViewBase subclasses
+  // that handle content embedded within other RenderWidgetHostViews.
+  gfx::PointF TransformRootPointToViewCoordSpace(
+      const gfx::PointF& point) override;
 
   // Returns the value for whether the auto-resize has been enabled or not.
   bool IsAutoResizeEnabled();

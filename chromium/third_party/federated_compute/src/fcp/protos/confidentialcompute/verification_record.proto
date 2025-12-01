@@ -1,0 +1,45 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.confidentialcompute;
+
+import "fcp/protos/confidentialcompute/access_policy.proto";
+import "proto/attestation/endorsement.proto";
+import "proto/attestation/evidence.proto";
+
+option java_multiple_files = true;
+
+// A record containing the key pieces of information that were verified by the
+// `AttestationVerifier` implementation during the course of a
+// `ConfidentialAggregations` session, and which the verifier deemed valid.
+message AttestationVerificationRecord {
+  // The attestation evidence that was verified. This corresponds to the
+  // server-provided `ConfidentialEncryptionConfig.attestation_evidence` field
+  // in the `ConfidentialAggregations` protocol.
+  oak.attestation.v1.Evidence attestation_evidence = 1;
+
+  // The attestation endorsements that were passed to the verifier. This
+  // corresponds to the server-provided
+  // `ConfidentialEncryptionConfig.attestation_endorsements` field in the
+  // `ConfidentialAggregations` protocol.
+  oak.attestation.v1.Endorsements attestation_endorsements = 2;
+
+  // The data access policy that was verified. This corresponds to the
+  // server-provided
+  // `TaskAssignment.ConfidentialAggregationInfo.data_access_policy` field in
+  // the `TaskAssignments` protocol.
+  DataAccessPolicy data_access_policy = 3;
+}

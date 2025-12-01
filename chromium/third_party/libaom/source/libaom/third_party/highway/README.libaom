@@ -1,8 +1,12 @@
+Name: Highway: C++ library for SIMD
+Short Name: highway
 URL: https://github.com/google/highway
 
 Version: e92c12750d18c372867809b882dd3ec6874ecc73
-License: BSD-3-clause clear
+License: BSD-3-Clause
 License File: LICENSE-BSD3
+Shipped in Chromium: no
+Security Critical: yes
 
 Description:
 Highway is a C++ library that provides portable SIMD/vector intrinsics.

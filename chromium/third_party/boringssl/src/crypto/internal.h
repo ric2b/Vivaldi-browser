@@ -23,6 +23,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <type_traits>
+
 #if defined(BORINGSSL_CONSTANT_TIME_VALIDATION)
 #include <valgrind/memcheck.h>
 #endif
@@ -44,6 +46,8 @@
 
 #if defined(OPENSSL_THREADS)
 #include <atomic>
+#else
+#include <utility>
 #endif
 
 #if defined(OPENSSL_WINDOWS_THREADS)
@@ -103,8 +107,6 @@ typedef __uint128_t uint128_t;
 #define BORINGSSL_CAN_DIVIDE_UINT128
 #endif
 #endif
-
-#define OPENSSL_ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
 
 // GCC-like compilers indicate SSE2 with |__SSE2__|. MSVC leaves the caller to
 // know that x86_64 has SSE2, and uses _M_IX86_FP to indicate SSE2 on x86.
@@ -524,58 +526,55 @@ OPENSSL_EXPORT void CRYPTO_once(CRYPTO_once_t *once, void (*init)(void));
 
 // Atomics.
 //
-// The following functions provide an API analogous to <stdatomic.h> from C11
-// and abstract between a few variations on atomics we need to support.
+// This is a thin wrapper over std::atomic because some embedded platforms do
+// not support threads and don't provide a trivial std::atomic implementation.
+// For now, this does not wrap std::memory_order. If we ever use non-default
+// std::memory_order, we will need to wrap these too, or fix the embedded
+// platforms to provide a no-op std::atomic. See https://crbug.com/442112336.
 
+extern "C++" {
+BSSL_NAMESPACE_BEGIN
 #if defined(OPENSSL_THREADS)
-
-using CRYPTO_atomic_u32 = std::atomic<uint32_t>;
-
-static_assert(sizeof(CRYPTO_atomic_u32) == sizeof(uint32_t));
-
-inline uint32_t CRYPTO_atomic_load_u32(const CRYPTO_atomic_u32 *val) {
-  return val->load(std::memory_order_seq_cst);
-}
-
-inline bool CRYPTO_atomic_compare_exchange_weak_u32(CRYPTO_atomic_u32 *val,
-                                                    uint32_t *expected,
-                                                    uint32_t desired) {
-  return val->compare_exchange_weak(
-      *expected, desired, std::memory_order_seq_cst, std::memory_order_seq_cst);
-}
-
-inline void CRYPTO_atomic_store_u32(CRYPTO_atomic_u32 *val, uint32_t desired) {
-  val->store(desired, std::memory_order_seq_cst);
-}
-
+template <typename T>
+using Atomic = std::atomic<T>;
 #else
+template <typename T>
+class Atomic {
+ public:
+  static_assert(std::is_integral_v<T> || std::is_pointer_v<T>);
 
-typedef uint32_t CRYPTO_atomic_u32;
-
-inline uint32_t CRYPTO_atomic_load_u32(CRYPTO_atomic_u32 *val) { return *val; }
-
-inline int CRYPTO_atomic_compare_exchange_weak_u32(CRYPTO_atomic_u32 *val,
-                                                   uint32_t *expected,
-                                                   uint32_t desired) {
-  if (*val != *expected) {
-    *expected = *val;
-    return 0;
+  Atomic() = default;
+  constexpr Atomic(T value) : value_(value) {}
+  Atomic(const Atomic &) = delete;
+  Atomic &operator=(const Atomic &) = delete;
+  T operator=(T value) {
+    value_ = value;
+    return value_;
   }
-  *val = desired;
-  return 1;
-}
 
-inline void CRYPTO_atomic_store_u32(CRYPTO_atomic_u32 *val, uint32_t desired) {
-  *val = desired;
-}
+  T load() const { return value_; }
+  void store(T desired) { value_ = desired; }
 
+  bool compare_exchange_strong(T &expected, T desired) {
+    if (value_ != expected) {
+      expected = value_;
+      return false;
+    }
+    value_ = desired;
+    return true;
+  }
+  bool compare_exchange_weak(T &expected, T desired) {
+    return compare_exchange_strong(expected, desired);
+  }
+
+  T exchange(T desired) { return std::exchange(value_, desired); }
+
+ private:
+  T value_;
+};
 #endif
-
-// See the comment in the |__cplusplus| section above.
-static_assert(sizeof(CRYPTO_atomic_u32) == sizeof(uint32_t),
-              "CRYPTO_atomic_u32 does not match uint32_t size");
-static_assert(alignof(CRYPTO_atomic_u32) == alignof(uint32_t),
-              "CRYPTO_atomic_u32 does not match uint32_t alignment");
+BSSL_NAMESPACE_END
+}  // extern "C++"
 
 
 // Reference counting.
@@ -583,7 +582,7 @@ static_assert(alignof(CRYPTO_atomic_u32) == alignof(uint32_t),
 // CRYPTO_REFCOUNT_MAX is the value at which the reference count saturates.
 #define CRYPTO_REFCOUNT_MAX 0xffffffff
 
-using CRYPTO_refcount_t = CRYPTO_atomic_u32;
+using CRYPTO_refcount_t = bssl::Atomic<uint32_t>;
 
 // CRYPTO_refcount_inc atomically increments the value at |*count| unless the
 // value would overflow. It's safe for multiple threads to concurrently call
@@ -735,7 +734,7 @@ typedef struct {
   // final entry of |funcs|, or NULL if empty.
   CRYPTO_EX_DATA_FUNCS *funcs, *last;
   // num_funcs is the number of entries in |funcs|.
-  CRYPTO_atomic_u32 num_funcs;
+  bssl::Atomic<uint32_t> num_funcs;
   // num_reserved is one if the ex_data index zero is reserved for legacy
   // |TYPE_get_app_data| functions.
   uint8_t num_reserved;
@@ -1604,6 +1603,30 @@ static inline uint64_t CRYPTO_subc_u64(uint64_t x, uint64_t y, uint64_t borrow,
 #define CRYPTO_addc_w CRYPTO_addc_u32
 #define CRYPTO_subc_w CRYPTO_subc_u32
 #endif
+
+
+BSSL_NAMESPACE_BEGIN
+// Cleanup implements a custom scope guard, when the cleanup logic does not fit
+// in a destructor. Usage:
+//
+//     bssl::Cleanup cleanup = [&] { SomeCleanupWork(local_var); };
+template <typename F>
+class Cleanup {
+ public:
+  static_assert(std::is_invocable_v<F>);
+  static_assert(std::is_same_v<std::invoke_result_t<F>, void>);
+
+  Cleanup(F func) : func_(func) {}
+  Cleanup(const Cleanup &) = delete;
+  Cleanup &operator=(const Cleanup &) = delete;
+  ~Cleanup() { func_(); }
+
+ private:
+  F func_;
+};
+template <typename F>
+Cleanup(F func) -> Cleanup<F>;
+BSSL_NAMESPACE_END
 
 
 #endif  // OPENSSL_HEADER_CRYPTO_INTERNAL_H

@@ -40,6 +40,7 @@
 #include "dawn/common/FutureUtils.h"
 #include "dawn/common/StringViewUtils.h"
 #include "dawn/common/ityp_span.h"
+#include "dawn/native/BindGroup.h"
 #include "dawn/native/BlitBufferToDepthStencil.h"
 #include "dawn/native/Buffer.h"
 #include "dawn/native/CommandBuffer.h"
@@ -113,11 +114,11 @@ class ErrorQueue : public QueueBase {
     MaybeError SubmitPendingCommandsImpl() override { DAWN_UNREACHABLE(); }
     ResultOrError<ExecutionSerial> CheckAndUpdateCompletedSerials() override { DAWN_UNREACHABLE(); }
     void ForceEventualFlushOfCommands() override { DAWN_UNREACHABLE(); }
-    ResultOrError<bool> WaitForQueueSerialImpl(ExecutionSerial serial,
-                                               Nanoseconds timeout) override {
+    ResultOrError<ExecutionSerial> WaitForQueueSerialImpl(ExecutionSerial waitSerial,
+                                                          Nanoseconds timeout) override {
         DAWN_UNREACHABLE();
     }
-    MaybeError WaitForIdleForDestruction() override { DAWN_UNREACHABLE(); }
+    MaybeError WaitForIdleForDestructionImpl() override { DAWN_UNREACHABLE(); }
 };
 
 }  // namespace
@@ -131,12 +132,12 @@ void TrackTaskCallback::SetFinishedSerial(ExecutionSerial serial) {
 // QueueBase
 
 QueueBase::QueueBase(DeviceBase* device, const QueueDescriptor* descriptor)
-    : ApiObjectBase(device, descriptor->label) {
+    : ExecutionQueueBase(device, descriptor->label) {
     GetObjectTrackingList()->Track(this);
 }
 
 QueueBase::QueueBase(DeviceBase* device, ObjectBase::ErrorTag tag, StringView label)
-    : ApiObjectBase(device, tag, label) {}
+    : ExecutionQueueBase(device, tag, label) {}
 
 QueueBase::~QueueBase() {
     DAWN_ASSERT(mTasksInFlight->Empty());
@@ -490,22 +491,19 @@ MaybeError QueueBase::ValidateSubmit(uint32_t commandCount,
 
         const CommandBufferResourceUsage& usages = commands[i]->GetResourceUsages();
 
-        for (const BufferBase* buffer : usages.topLevelBuffers) {
-            DAWN_TRY(buffer->ValidateCanUseOnQueueNow());
-        }
-
         // Maybe track last usage for other resources, and use it to release resources earlier?
         for (const SyncScopeResourceUsage& scope : usages.renderPasses) {
             for (const BufferBase* buffer : scope.buffers) {
                 DAWN_TRY(buffer->ValidateCanUseOnQueueNow());
             }
-
             for (const TextureBase* texture : scope.textures) {
                 DAWN_TRY(texture->ValidateCanUseInSubmitNow());
             }
-
             for (const ExternalTextureBase* externalTexture : scope.externalTextures) {
                 DAWN_TRY(externalTexture->ValidateCanUseInSubmitNow());
+            }
+            for (const BindGroupBase* dynamicArray : scope.dynamicBindingArrays) {
+                DAWN_TRY(dynamicArray->ValidateCanUseOnQueueNow());
             }
         }
 
@@ -519,8 +517,14 @@ MaybeError QueueBase::ValidateSubmit(uint32_t commandCount,
             for (const ExternalTextureBase* externalTexture : pass.referencedExternalTextures) {
                 DAWN_TRY(externalTexture->ValidateCanUseInSubmitNow());
             }
+            for (const BindGroupBase* dynamicArray : pass.referencedDynamicBindingArrays) {
+                DAWN_TRY(dynamicArray->ValidateCanUseOnQueueNow());
+            }
         }
 
+        for (const BufferBase* buffer : usages.topLevelBuffers) {
+            DAWN_TRY(buffer->ValidateCanUseOnQueueNow());
+        }
         for (const TextureBase* texture : usages.topLevelTextures) {
             DAWN_TRY(texture->ValidateCanUseInSubmitNow());
         }

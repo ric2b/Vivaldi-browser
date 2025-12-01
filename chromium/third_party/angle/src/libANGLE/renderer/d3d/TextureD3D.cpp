@@ -6,6 +6,10 @@
 
 // TextureD3D.cpp: Implementations of the Texture interfaces shared betweeen the D3D backends.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "libANGLE/renderer/d3d/TextureD3D.h"
 
 #include "common/mathutil.h"
@@ -713,9 +717,8 @@ angle::Result TextureD3D::setBaseLevel(const gl::Context *context, GLuint baseLe
             while (iterator.hasNext())
             {
                 const gl::ImageIndex index    = iterator.next();
-                const GLsizei samples         = getRenderToTextureSamples();
                 RenderTargetD3D *renderTarget = nullptr;
-                ANGLE_TRY(mTexStorage->findRenderTarget(context, index, samples, &renderTarget));
+                ANGLE_TRY(mTexStorage->findRenderTarget(context, index, &renderTarget));
                 if (renderTarget)
                 {
                     ANGLE_TRY(getImage(index)->copyFromTexStorage(context, index, mTexStorage));
@@ -850,7 +853,7 @@ angle::Result TextureD3D::initializeContents(const gl::Context *context,
         ANGLE_TRY(ensureRenderTarget(context));
         ASSERT(mTexStorage);
         RenderTargetD3D *renderTarget = nullptr;
-        ANGLE_TRY(mTexStorage->getRenderTarget(context, index, 0, &renderTarget));
+        ANGLE_TRY(mTexStorage->getRenderTarget(context, index, &renderTarget));
         ANGLE_TRY(mRenderer->initRenderTarget(context, renderTarget));
 
         // Force image clean again, the texture storage may have been re-created and the image used.
@@ -901,15 +904,6 @@ angle::Result TextureD3D::initializeContents(const gl::Context *context,
         }
     }
     return angle::Result::Continue;
-}
-
-GLsizei TextureD3D::getRenderToTextureSamples()
-{
-    if (mTexStorage)
-    {
-        return mTexStorage->getRenderToTextureSamples();
-    }
-    return 0;
 }
 
 void TextureD3D::onSubjectStateChange(angle::SubjectIndex index, angle::SubjectMessage message)
@@ -1021,14 +1015,13 @@ angle::Result TextureD3D_2D::setImage(const gl::Context *context,
     // Attempt a fast gpu copy of the pixel data to the surface
     if (mTexStorage)
     {
-        ANGLE_TRY(mTexStorage->releaseMultisampledTexStorageForLevel(index.getLevelIndex()));
     }
     if (isFastUnpackable(unpackBuffer, unpack, internalFormatInfo.sizedInternalFormat) &&
         isLevelComplete(index.getLevelIndex()))
     {
         // Will try to create RT storage if it does not exist
         RenderTargetD3D *destRenderTarget = nullptr;
-        ANGLE_TRY(getRenderTarget(context, index, getRenderToTextureSamples(), &destRenderTarget));
+        ANGLE_TRY(getRenderTarget(context, index, 0, &destRenderTarget));
 
         gl::Box destArea(0, 0, 0, getWidth(index.getLevelIndex()), getHeight(index.getLevelIndex()),
                          1);
@@ -1064,12 +1057,11 @@ angle::Result TextureD3D_2D::setSubImage(const gl::Context *context,
     GLenum mipFormat = getInternalFormat(index.getLevelIndex());
     if (mTexStorage)
     {
-        ANGLE_TRY(mTexStorage->releaseMultisampledTexStorageForLevel(index.getLevelIndex()));
     }
     if (isFastUnpackable(unpackBuffer, unpack, mipFormat) && isLevelComplete(index.getLevelIndex()))
     {
         RenderTargetD3D *renderTarget = nullptr;
-        ANGLE_TRY(getRenderTarget(context, index, getRenderToTextureSamples(), &renderTarget));
+        ANGLE_TRY(getRenderTarget(context, index, 0, &renderTarget));
         ASSERT(!mImageArray[index.getLevelIndex()]->isDirty());
 
         return fastUnpackPixels(context, unpack, unpackBuffer, pixels, area, mipFormat, type,
@@ -1489,7 +1481,7 @@ angle::Result TextureD3D_2D::getRenderTarget(const gl::Context *context,
     ANGLE_TRY(ensureRenderTarget(context));
     ANGLE_TRY(updateStorageLevel(context, index.getLevelIndex()));
 
-    return mTexStorage->getRenderTarget(context, index, samples, outRT);
+    return mTexStorage->getRenderTarget(context, index, outRT);
 }
 
 bool TextureD3D_2D::isValidLevel(int level) const
@@ -2220,7 +2212,7 @@ angle::Result TextureD3D_Cube::getRenderTarget(const gl::Context *context,
     ANGLE_TRY(ensureRenderTarget(context));
     ANGLE_TRY(updateStorageFaceLevel(context, index.cubeMapFaceIndex(), index.getLevelIndex()));
 
-    return mTexStorage->getRenderTarget(context, index, samples, outRT);
+    return mTexStorage->getRenderTarget(context, index, outRT);
 }
 
 angle::Result TextureD3D_Cube::initializeStorage(const gl::Context *context, BindFlags bindFlags)
@@ -2593,7 +2585,7 @@ angle::Result TextureD3D_3D::setImage(const gl::Context *context,
     {
         // Will try to create RT storage if it does not exist
         RenderTargetD3D *destRenderTarget = nullptr;
-        ANGLE_TRY(getRenderTarget(context, index, getRenderToTextureSamples(), &destRenderTarget));
+        ANGLE_TRY(getRenderTarget(context, index, 0, &destRenderTarget));
 
         gl::Box destArea(0, 0, 0, getWidth(index.getLevelIndex()), getHeight(index.getLevelIndex()),
                          getDepth(index.getLevelIndex()));
@@ -2631,7 +2623,7 @@ angle::Result TextureD3D_3D::setSubImage(const gl::Context *context,
     if (isFastUnpackable(unpackBuffer, unpack, mipFormat) && isLevelComplete(index.getLevelIndex()))
     {
         RenderTargetD3D *destRenderTarget = nullptr;
-        ANGLE_TRY(getRenderTarget(context, index, getRenderToTextureSamples(), &destRenderTarget));
+        ANGLE_TRY(getRenderTarget(context, index, 0, &destRenderTarget));
         ASSERT(!mImageArray[index.getLevelIndex()]->isDirty());
 
         return fastUnpackPixels(context, unpack, unpackBuffer, pixels, area, mipFormat, type,
@@ -2926,7 +2918,7 @@ angle::Result TextureD3D_3D::getRenderTarget(const gl::Context *context,
         ANGLE_TRY(updateStorageLevel(context, index.getLevelIndex()));
     }
 
-    return mTexStorage->getRenderTarget(context, index, samples, outRT);
+    return mTexStorage->getRenderTarget(context, index, outRT);
 }
 
 angle::Result TextureD3D_3D::initializeStorage(const gl::Context *context, BindFlags bindFlags)
@@ -3667,7 +3659,7 @@ angle::Result TextureD3D_2DArray::getRenderTarget(const gl::Context *context,
     // ensure the underlying texture is created
     ANGLE_TRY(ensureRenderTarget(context));
     ANGLE_TRY(updateStorageLevel(context, index.getLevelIndex()));
-    return mTexStorage->getRenderTarget(context, index, samples, outRT);
+    return mTexStorage->getRenderTarget(context, index, outRT);
 }
 
 angle::Result TextureD3D_2DArray::initializeStorage(const gl::Context *context, BindFlags bindFlags)
@@ -4232,7 +4224,7 @@ angle::Result TextureD3D_2DMultisample::getRenderTarget(const gl::Context *conte
     // ensure the underlying texture is created
     ANGLE_TRY(ensureRenderTarget(context));
 
-    return mTexStorage->getRenderTarget(context, index, samples, outRT);
+    return mTexStorage->getRenderTarget(context, index, outRT);
 }
 
 gl::ImageIndexIterator TextureD3D_2DMultisample::imageIterator() const
@@ -4350,7 +4342,7 @@ angle::Result TextureD3D_2DMultisampleArray::getRenderTarget(const gl::Context *
     // ensure the underlying texture is created
     ANGLE_TRY(ensureRenderTarget(context));
 
-    return mTexStorage->getRenderTarget(context, index, samples, outRT);
+    return mTexStorage->getRenderTarget(context, index, outRT);
 }
 
 gl::ImageIndexIterator TextureD3D_2DMultisampleArray::imageIterator() const

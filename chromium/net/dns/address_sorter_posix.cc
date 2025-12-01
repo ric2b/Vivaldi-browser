@@ -364,7 +364,7 @@ AddressSorterPosix::AddressSorterPosix(ClientSocketFactory* socket_factory)
       ipv4_scope_table_(LoadPolicy(kDefaultIPv4ScopeTable,
                                    std::size(kDefaultIPv4ScopeTable))) {
   NetworkChangeNotifier::AddIPAddressObserver(this);
-  OnIPAddressChanged();
+  OnIPAddressChanged(NetworkChangeNotifier::IP_ADDRESS_CHANGE_NORMAL);
 }
 
 AddressSorterPosix::~AddressSorterPosix() {
@@ -407,7 +407,8 @@ void AddressSorterPosix::Sort(const std::vector<IPEndPoint>& endpoints,
   }
 }
 
-void AddressSorterPosix::OnIPAddressChanged() {
+void AddressSorterPosix::OnIPAddressChanged(
+    NetworkChangeNotifier::IPAddressChangeType change_type) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   source_map_.clear();
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)

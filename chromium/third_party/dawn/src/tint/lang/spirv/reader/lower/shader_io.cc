@@ -552,6 +552,7 @@ struct State {
                     break;
                 }
                 case core::BuiltinValue::kInstanceIndex:
+                case core::BuiltinValue::kPrimitiveIndex:
                 case core::BuiltinValue::kVertexIndex:
                 case core::BuiltinValue::kLocalInvocationIndex:
                 case core::BuiltinValue::kSubgroupInvocationId:
@@ -609,6 +610,7 @@ struct State {
                     break;
                 }
                 case core::BuiltinValue::kInstanceIndex:
+                case core::BuiltinValue::kPrimitiveIndex:
                 case core::BuiltinValue::kVertexIndex:
                 case core::BuiltinValue::kLocalInvocationIndex:
                 case core::BuiltinValue::kSubgroupInvocationId:
@@ -744,14 +746,17 @@ struct State {
 }  // namespace
 
 Result<SuccessType> ShaderIO(core::ir::Module& ir) {
-    auto result = ValidateAndDumpIfNeeded(ir, "spirv.ShaderIO",
-                                          core::ir::Capabilities{
-                                              core::ir::Capability::kAllowMultipleEntryPoints,
-                                              core::ir::Capability::kAllowOverrides,
-                                              core::ir::Capability::kAllowPhonyInstructions,
-                                              core::ir::Capability::kAllowNonCoreTypes,
-                                              core::ir::Capability::kAllowStructMatrixDecorations,
-                                          });
+    auto result =
+        ValidateAndDumpIfNeeded(ir, "spirv.ShaderIO",
+                                core::ir::Capabilities{
+                                    core::ir::Capability::kAllowMultipleEntryPoints,
+                                    core::ir::Capability::kAllowOverrides,
+                                    core::ir::Capability::kAllowPhonyInstructions,
+                                    core::ir::Capability::kAllowNonCoreTypes,
+                                    core::ir::Capability::kAllowStructMatrixDecorations,
+                                    core::ir::Capability::kAllowLocationForNumericElements,
+                                    core::ir::Capability::kAllowPointerToHandle,
+                                });
     if (result != Success) {
         return result.Failure();
     }

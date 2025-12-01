@@ -3,14 +3,11 @@
 #include "components/ad_blocker/core/adblock_rule_source_handler.h"
 
 #include <algorithm>
-#include <map>
 #include <memory>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "base/check.h"
-#include "base/containers/span.h"
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_string_value_serializer.h"
@@ -24,7 +21,6 @@
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
-#include "services/network/public/cpp/simple_url_loader_stream_consumer.h"
 
 namespace adblock_filter {
 

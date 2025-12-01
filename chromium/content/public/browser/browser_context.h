@@ -27,13 +27,11 @@
 #include "content/public/browser/zoom_level_delegate.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "net/http/http_no_vary_search_data.h"
 #include "net/http/http_request_headers.h"
 #include "third_party/blink/public/mojom/blob/blob.mojom-forward.h"
 #include "third_party/blink/public/mojom/push_messaging/push_messaging.mojom-forward.h"
 #include "third_party/blink/public/mojom/push_messaging/push_messaging_status.mojom-forward.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
-#include "url/origin.h"
 
 class GURL;
 
@@ -49,10 +47,18 @@ namespace storage {
 class ExternalMountPoints;
 }
 
+namespace leveldb_proto {
+class ProtoDatabaseProvider;
+}
+
 namespace media {
 class VideoDecodePerfHistory;
 class WebrtcVideoPerfHistory;
 }  // namespace media
+
+namespace net {
+class HttpNoVarySearchData;
+}  // namespace net
 
 namespace storage {
 class BlobStorageContext;
@@ -261,12 +267,15 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
       const std::string& uuid);
 
   // Delivers a push message with |data| to the Service Worker identified by
-  // |origin| and |service_worker_registration_id|.
+  // |origin| and |service_worker_registration_id|. |record_network_requests|
+  // indicates whether network request urls should be recorded during the push
+  // event.
   void DeliverPushMessage(
       const GURL& origin,
       int64_t service_worker_registration_id,
       const std::string& message_id,
       std::optional<std::string> payload,
+      bool record_network_requests,
       base::OnceCallback<void(blink::mojom::PushEventStatus)> callback);
 
   // Fires a push subscription change event to the Service Worker identified by
@@ -371,7 +380,7 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
       const base::FilePath& partition_path) = 0;
 
   // Returns the path of the directory where this context's data is stored.
-  virtual base::FilePath GetPath() = 0;
+  virtual base::FilePath GetPath() const = 0;
 
   // Return whether this context is off the record. Default is false.
   // Note that for Chrome this does not imply Incognito as Guest sessions are
@@ -490,6 +499,12 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // Returns the OriginTrialsControllerDelegate associated with the context if
   // any, nullptr otherwise.
   virtual OriginTrialsControllerDelegate* GetOriginTrialsControllerDelegate();
+
+  // Takes the ProtoDatabaseProvider, if any, for the default storage partition.
+  // Embedders may choose to create a ProtoDatabaseProvider early, so this
+  // provides a way to reuse it.
+  virtual std::unique_ptr<leveldb_proto::ProtoDatabaseProvider>
+  TakeDefaultProtoDatabaseProvider();
 
 #if BUILDFLAG(IS_ANDROID)
   // Returns extra request headers to be set when navigation happens for `url`.

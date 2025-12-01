@@ -175,15 +175,9 @@ std::string GetAltText(const ui::AXNode* ax_node) {
   return alt_text;
 }
 
-std::string GetImageDataUrl(const ui::AXNode* ax_node) {
-  std::string url =
-      ax_node->GetStringAttribute(ax::mojom::StringAttribute::kImageDataUrl);
-  return url;
-}
-
 std::u16string GetTextContent(const ui::AXNode* ax_node,
-                              bool is_docs,
-                              bool is_pdf) {
+                              bool is_pdf,
+                              bool is_docs) {
   // For Google Docs, because the content is rendered in canvas, we distill
   // text from the "Annotated Canvas"
   // (https://sites.google.com/corp/google.com/docs-canvas-migration/home)

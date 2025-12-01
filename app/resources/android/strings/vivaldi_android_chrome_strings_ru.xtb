@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">Закладка сохранена в папке <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Внешний вид</translation>
 <translation id="2501278716633472235">Переход назад</translation>
+<translation id="2546283357679194313">Cookies и данные сайта</translation>
 <translation id="2633278372998075009">Приватные вкладки</translation>
 <translation id="2650751991977523696">Повторить загрузку?</translation>
 <translation id="265156376773362237">Стандартная предзагрузка</translation>
@@ -54,6 +55,10 @@
 <translation id="4269820728363426813">Копировать как ссылку</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Включить блокировку экрана в настройках Android<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Менеджер паролей</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, plural,
+          =1 {Вкладки и группы не использовались 1 день или дольше}
+          few {Вкладки и группы не использовались # дня или дольше}
+          many {Вкладки и группы не использовались # дней или дольше}}</translation>
 <translation id="451872707440238414">Искать в закладках</translation>
 <translation id="4526803704855831732">Приватные вкладки</translation>
 <translation id="4532845899244822526">Выбор папки</translation>
@@ -62,6 +67,7 @@
 
 Быстрый поиск доступен только в случае, если Google выбран поиском по умолчанию в Vivaldi.</translation>
 <translation id="4759238208242260848">Загрузки</translation>
+<translation id="4777866634702576038">Удалить группу?</translation>
 <translation id="4850886885716139402">Читать</translation>
 <translation id="4883379392681899581">Выйти из приватного режима</translation>
 <translation id="4943872375798546930">Нет результатов</translation>
@@ -77,7 +83,6 @@
 <translation id="5375131951310889874">Получайте больше информации не покидая страницы. Быстрый поиск доступен только в случае, если Google выбран поиском по умолчанию в Vivaldi. Эта функция отправляет слово и его контекст в поиск Google, возвращая описания, картинки, результаты поиска и другие сведения.
 
 Для поиска используйте долгое нажатие. Чтобы уточнить запрос, прокрутите панель вверх до упора и коснитесь поля поиска.</translation>
-<translation id="543338862236136125">Сменить пароль</translation>
 <translation id="572328651809341494">Недавние вкладки</translation>
 <translation id="5833984609253377421">Поделиться ссылкой</translation>
 <translation id="6150320133806434356">Закладка сохранена</translation>
@@ -85,6 +90,7 @@
 <translation id="6336451774241870485">Приватная вкладка</translation>
 <translation id="6337323516034698937">Чтобы отправить эту вкладку на другое устройство, войдите в Vivaldi Sync на обоих устройствах. Убедитесь, что вы ввели пароль шифрования, если необходимо.</translation>
 <translation id="6341580099087024258">Спрашивать, куда сохранять файлы</translation>
+<translation id="6364438453358674297">Удалить подсказку из истории?</translation>
 <translation id="6404511346730675251">Изменить закладку</translation>
 <translation id="650224091954855786">{FILE_COUNT, plural,
           =1 {Файл загружен}
@@ -112,6 +118,10 @@
 <translation id="8062594758852531064">Расширенная предзагрузка:</translation>
 <translation id="8073388330009372546">Открыть картинку в новой вкладке</translation>
 <translation id="8127542551745560481">Изменить главную страницу</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+          =1 {(1) неактивный элемент}
+          few {(#) неактивных элемента}
+          other {(#) неактивных элементов}}</translation>
 <translation id="8266862848225348053">Каталог загрузки</translation>
 <translation id="8348430946834215779">Использовать по возможности протокол HTTPS и предупреждать перед загрузкой сайтов, которые его не поддерживают</translation>
 <translation id="8560602726703398413">Список чтения находится в закладках</translation>
@@ -121,6 +131,10 @@
 <translation id="9042893549633094279">Приватность и безопасность</translation>
 <translation id="9063523880881406963">Отключить полную версию сайта</translation>
 <translation id="9080642952018487277">Работать приватно</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+          =1 {Не использовалось 1 день или дольше}
+          few {Не использовалось # дня или дольше}
+          many {Не использовалось # дней или дольше}}</translation>
 <translation id="930124987204876019">Удалить историю, файлы cookie, данные сайтов, кэш и другие данные…</translation>
 <translation id="961856697154696964">Удалить данные просмотра</translation>
 </translationbundle>

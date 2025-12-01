@@ -5,14 +5,15 @@
 package org.chromium.components.browser_ui.site_settings;
 
 import static org.chromium.build.NullUtil.assumeNonNull;
+import static org.chromium.components.permissions.PermissionUtil.getGeolocationType;
 
 import org.jni_zero.CalledByNative;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.Callback;
 import org.chromium.build.annotations.NullMarked;
+import org.chromium.components.content_settings.ContentSetting;
 import org.chromium.components.content_settings.ContentSettingSource;
-import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.content_settings.ProviderType;
 import org.chromium.components.content_settings.SessionModel;
@@ -33,7 +34,7 @@ public class WebsitePreferenceBridge {
     /** Interface for an object that listens to storage info is cleared callback. */
     public interface StorageInfoClearedCallback {
         @CalledByNative("StorageInfoClearedCallback")
-        public void onStorageInfoCleared();
+        void onStorageInfoCleared();
     }
 
     /**
@@ -381,9 +382,11 @@ public class WebsitePreferenceBridge {
         return WebsitePreferenceBridgeJni.get().getLocationAllowedByPolicy(browserContextHandle);
     }
 
-    /** @return Whether location is enabled system-wide and the Chrome location setting is enabled. */
+    /**
+     * @return Whether location is enabled system-wide and the Chrome location setting is enabled.
+     */
     public static boolean areAllLocationSettingsEnabled(BrowserContextHandle browserContextHandle) {
-        return isContentSettingEnabled(browserContextHandle, ContentSettingsType.GEOLOCATION)
+        return isContentSettingEnabled(browserContextHandle, getGeolocationType())
                 && LocationUtils.getInstance().isSystemLocationSettingEnabled();
     }
 
@@ -401,7 +404,7 @@ public class WebsitePreferenceBridge {
      * Returns the ContentSetting for a specific site. See
      * HostContentSettingsMap::GetContentSetting() for more details.
      */
-    public static @ContentSettingValues int getContentSetting(
+    public static @ContentSetting int getContentSetting(
             BrowserContextHandle browserContextHandle,
             @ContentSettingsType.EnumType int contentSettingType,
             GURL primaryUrl,
@@ -434,7 +437,7 @@ public class WebsitePreferenceBridge {
             @ContentSettingsType.EnumType int contentSettingType,
             GURL primaryUrl,
             GURL secondaryUrl,
-            @ContentSettingValues int setting) {
+            @ContentSetting int setting) {
         WebsitePreferenceBridgeJni.get()
                 .setContentSettingDefaultScope(
                         browserContextHandle,
@@ -454,7 +457,7 @@ public class WebsitePreferenceBridge {
             @ContentSettingsType.EnumType int contentSettingType,
             String primaryPattern,
             String secondaryPattern,
-            @ContentSettingValues int setting) {
+            @ContentSetting int setting) {
         if (contentSettingType == ContentSettingsType.STORAGE_ACCESS) {
             // StorageAccess exceptions should always specify a primary pattern. The secondary
             // pattern might or not be empty depending if the exception is normal or embargoed.
@@ -567,7 +570,7 @@ public class WebsitePreferenceBridge {
                 Object list,
                 boolean managedOnly);
 
-        @ContentSettingValues
+        @ContentSetting
         int getPermissionSettingForOrigin(
                 BrowserContextHandle browserContextHandle,
                 @ContentSettingsType.EnumType int contentSettingsType,
@@ -579,7 +582,7 @@ public class WebsitePreferenceBridge {
                 @ContentSettingsType.EnumType int contentSettingsType,
                 String origin,
                 String embedder,
-                @ContentSettingValues int value);
+                @ContentSetting int value);
 
         boolean canAddExceptionsForJavascriptOptimizerSetting();
 
@@ -594,8 +597,8 @@ public class WebsitePreferenceBridge {
                 @ContentSettingsType.EnumType int contentSettingsType,
                 String origin,
                 String embedder,
-                @ContentSettingValues int approximate,
-                @ContentSettingValues int precise);
+                @ContentSetting int approximate,
+                @ContentSetting int precise);
 
         void setEphemeralGrantForTesting( // IN-TEST
                 BrowserContextHandle browserContextHandle,
@@ -620,7 +623,7 @@ public class WebsitePreferenceBridge {
                 @ContentSettingsType.EnumType int contentSettingsType,
                 List<ContentSettingException> list);
 
-        @ContentSettingValues
+        @ContentSetting
         int getContentSetting(
                 BrowserContextHandle browserContextHandle,
                 @ContentSettingsType.EnumType int contentSettingType,
@@ -638,16 +641,16 @@ public class WebsitePreferenceBridge {
                 @ContentSettingsType.EnumType int contentSettingType,
                 GURL primaryUrl,
                 GURL secondaryUrl,
-                @ContentSettingValues int setting);
+                @ContentSetting int setting);
 
         void setContentSettingCustomScope(
                 BrowserContextHandle browserContextHandle,
                 @ContentSettingsType.EnumType int contentSettingType,
                 String primaryPattern,
                 String secondaryPattern,
-                @ContentSettingValues int setting);
+                @ContentSetting int setting);
 
-        @ContentSettingValues
+        @ContentSetting
         int getDefaultContentSetting(
                 BrowserContextHandle browserContextHandle,
                 @ContentSettingsType.EnumType int contentSettingType);
@@ -655,7 +658,7 @@ public class WebsitePreferenceBridge {
         void setDefaultContentSetting(
                 BrowserContextHandle browserContextHandle,
                 @ContentSettingsType.EnumType int contentSettingType,
-                @ContentSettingValues int setting);
+                @ContentSetting int setting);
 
         boolean isContentSettingUserModifiable(
                 BrowserContextHandle browserContextHandle, int contentSettingType);

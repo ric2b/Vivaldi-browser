@@ -45,6 +45,7 @@ static_library("ui") {
     "//components/translate/content/browser",
     "//content/public/browser",
     "//skia",
+    "//vivaldi/components/ad_blocker/public/content",
     "//vivaldi/prefs:prefs_files_generator",
     "//ui/webui/resources/js:build_ts",
   ]

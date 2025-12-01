@@ -16,17 +16,21 @@
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/base/signin_metrics.h"
-#include "google_apis/gaia/core_account_id.h"
-#include "google_apis/gaia/gaia_auth_fetcher.h"
 
 namespace signin {
 class BoundSessionOAuthMultiLoginDelegate;
 }
 
+class GaiaAuthConsumer;
+class GaiaAuthFetcher;
 class PrefService;
 
 namespace content_settings {
 class Observer;
+}
+
+namespace gaia {
+class GaiaSource;
 }
 
 namespace network {
@@ -82,7 +86,7 @@ class SigninClient : public KeyedService {
 
   // Returns true if clearing the primary account is allowed regardless of the
   // consent level.
-  virtual bool IsClearPrimaryAccountAllowed(bool has_sync_account) const;
+  virtual bool IsClearPrimaryAccountAllowed() const;
   virtual bool IsRevokeSyncConsentAllowed() const;
 
   bool is_clear_primary_account_allowed_for_testing() const;
@@ -97,8 +101,7 @@ class SigninClient : public KeyedService {
   // Sign-out is always allowed by default.
   virtual void PreSignOut(
       base::OnceCallback<void(SignoutDecision)> on_signout_decision_reached,
-      signin_metrics::ProfileSignout signout_source_metric,
-      bool has_sync_account);
+      signin_metrics::ProfileSignout signout_source_metric);
 
   // Returns true if GAIA cookies are allowed in the content area.
   virtual bool AreSigninCookiesAllowed() = 0;

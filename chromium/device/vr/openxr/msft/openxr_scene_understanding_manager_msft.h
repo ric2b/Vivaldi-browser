@@ -8,6 +8,7 @@
 #include <optional>
 #include <vector>
 
+#include "device/vr/openxr/msft/openxr_anchor_manager_msft.h"
 #include "device/vr/openxr/msft/openxr_hit_test_manager_msft.h"
 #include "device/vr/openxr/msft/openxr_plane_manager_msft.h"
 #include "device/vr/openxr/msft/openxr_scene_bounds_msft.h"
@@ -35,14 +36,16 @@ class OpenXRSceneUnderstandingManagerMSFT
 
  protected:
   // OpenXRSceneUnderstandingManager
+  OpenXrSceneUnderstandingManagerType GetType() const override;
   OpenXrPlaneManager* GetPlaneManager() override;
+  OpenXrAnchorManager* GetAnchorManager() override;
   OpenXrHitTestManager* GetHitTestManager() override;
 
  private:
-  const raw_ref<const OpenXrExtensionHelper> extension_helper_;
   XrSpace mojo_space_;
 
   std::unique_ptr<OpenXrPlaneManagerMsft> plane_manager_;
+  std::unique_ptr<OpenXrAnchorManagerMsft> anchor_manager_;
   std::unique_ptr<OpenXrHitTestManagerMsft> hit_test_manager_;
 };
 
@@ -54,13 +57,21 @@ class OpenXrSceneUnderstandingManagerMsftFactory
 
   const base::flat_set<std::string_view>& GetRequestedExtensions()
       const override;
-  std::set<device::mojom::XRSessionFeature> GetSupportedFeatures(
-      const OpenXrExtensionEnumeration* extension_enum) const override;
+  std::set<device::mojom::XRSessionFeature> GetSupportedFeatures()
+      const override;
+
+  void CheckAndUpdateEnabledState(
+      const OpenXrExtensionEnumeration* extension_enum,
+      XrInstance instance,
+      XrSystemId system) override;
 
   std::unique_ptr<OpenXRSceneUnderstandingManager>
   CreateSceneUnderstandingManager(const OpenXrExtensionHelper& extension_helper,
-                                  XrSession session,
+                                  OpenXrApiWrapper* openxr,
                                   XrSpace mojo_space) const override;
+
+ private:
+  std::set<device::mojom::XRSessionFeature> supported_features_;
 };
 
 }  // namespace device

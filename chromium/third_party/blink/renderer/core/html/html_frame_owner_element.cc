@@ -201,6 +201,11 @@ Node::InsertionNotificationRequest HTMLFrameOwnerElement::InsertedInto(
     ContainerNode& insertion_point) {
   InsertionNotificationRequest result =
       HTMLElement::InsertedInto(insertion_point);
+
+  if (display_ad_element_monitor_) {
+    display_ad_element_monitor_->EnsureStarted();
+  }
+
   // If a state-preserving atomic move is in progress, then we have to manually
   // perform some bookkeeping that ordinarily would only be done deeper in the
   // frame setup logic that gets triggered in the *NON* state-preserving atomic
@@ -222,6 +227,10 @@ Node::InsertionNotificationRequest HTMLFrameOwnerElement::InsertedInto(
 }
 
 void HTMLFrameOwnerElement::RemovedFrom(ContainerNode& insertion_point) {
+  if (display_ad_element_monitor_) {
+    display_ad_element_monitor_->OnElementRemovedOrUntagged();
+  }
+
   // See documentation in `InsertedInto()` above. In the state-preserving atomic
   // move case, we don't invoke `ClearContentFrame()`, which would normally do
   // at least two things:
@@ -426,12 +435,14 @@ void HTMLFrameOwnerElement::UpdateRequiredPolicy() {
   }
 }
 
-void HTMLFrameOwnerElement::UpdateDeferredFetchPolicy(const KURL& to_url) {
+void HTMLFrameOwnerElement::UpdateDeferredFetchPolicy(
+    scoped_refptr<const SecurityOrigin> to_origin) {
   if (!IsFetchLaterUseDeferredFetchPolicyEnabled()) {
     return;
   }
   frame_policy_.deferred_fetch_policy =
-      FetchLaterUtil::GetContainerDeferredFetchPolicyOnNavigation(this, to_url);
+      FetchLaterUtil::GetContainerDeferredFetchPolicyOnNavigation(this,
+                                                                  to_origin);
   DidChangeContainerPolicy();
 }
 
@@ -465,7 +476,7 @@ void HTMLFrameOwnerElement::FrameOwnerPropertiesChanged() {
   mojom::blink::FrameOwnerPropertiesPtr properties =
       mojom::blink::FrameOwnerProperties::New();
   properties->name = BrowsingContextContainerName().IsNull()
-                         ? WTF::g_empty_string
+                         ? g_empty_string
                          : BrowsingContextContainerName(),
   properties->scrollbar_mode = ScrollbarMode();
   properties->margin_width = MarginWidth();
@@ -534,13 +545,13 @@ void HTMLFrameOwnerElement::ReportFallbackResourceTimingIfNeeded() {
 void HTMLFrameOwnerElement::DispatchLoad() {
   ReportFallbackResourceTimingIfNeeded();
   DispatchScopedEvent(*Event::Create(event_type_names::kLoad));
-  if (RuntimeEnabledFeatures::PotentialPermissionsPolicyReportingEnabled()) {
+  if (RuntimeEnabledFeatures::PotentialPermissionsPolicyReportingEnabled() &&
+      GetExecutionContext()) {
     CheckPotentialPermissionsPolicyViolation();
   }
 }
 
-Document* HTMLFrameOwnerElement::getSVGDocument(
-    ExceptionState& exception_state) const {
+Document* HTMLFrameOwnerElement::getSVGDocument() const {
   Document* doc = contentDocument();
   if (doc && doc->IsSVGDocument())
     return doc;
@@ -695,6 +706,26 @@ bool HTMLFrameOwnerElement::LoadOrRedirectSubframe(
 
   KURL url_to_request = url.IsNull() ? BlankURL() : url;
   ResourceRequestHead request(url_to_request);
+
+  // Hack to set referrer on data-url documents used in the Vivaldi mailer.
+  // VB-120817.
+  bool embedder_is_data_url = false;
+  Frame* frame = GetDocument().GetFrame();
+  if (frame) {
+    for (Frame* child = &(frame->Tree().Top()); child;
+         child = child->Tree().Parent()) {
+      auto* outermost_frame = DynamicTo<LocalFrame>(child);
+      if (!outermost_frame)
+        continue;
+      KURL document_url = outermost_frame->GetDocument()->Url();
+      embedder_is_data_url = document_url.ProtocolIsData();
+    }
+  }
+
+  if (embedder_is_data_url && frame_name == "vivaldi-youtube-frame") {
+    request.SetReferrerString(String("https://com.vivaldi.mail"));
+  }
+
   request.SetReferrerPolicy(ReferrerPolicyAttribute());
   request.SetHasUserGesture(
       LocalFrame::HasTransientUserActivation(GetDocument().GetFrame()));
@@ -818,6 +849,21 @@ void HTMLFrameOwnerElement::ParseAttribute(
   }
 }
 
+void HTMLFrameOwnerElement::DidSetAdStatus() {
+  if (display_ad_element_monitor_) {
+    if (!IsAdRelated()) {
+      display_ad_element_monitor_->OnElementRemovedOrUntagged();
+      display_ad_element_monitor_.Clear();
+    }
+    return;
+  }
+
+  if (IsAdRelated()) {
+    display_ad_element_monitor_ =
+        MakeGarbageCollected<DisplayAdElementMonitor>(this);
+  }
+}
+
 bool HTMLFrameOwnerElement::IsAdRelated() const {
   if (!content_frame_)
     return false;
@@ -866,6 +912,7 @@ void HTMLFrameOwnerElement::Trace(Visitor* visitor) const {
   visitor->Trace(content_frame_);
   visitor->Trace(embedded_content_view_);
   visitor->Trace(lazy_load_frame_observer_);
+  visitor->Trace(display_ad_element_monitor_);
   HTMLElement::Trace(visitor);
   FrameOwner::Trace(visitor);
 }

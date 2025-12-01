@@ -9,14 +9,14 @@
 #include <string>
 
 #include "base/functional/callback_forward.h"
-#include "base/types/expected.h"
 #include "components/unexportable_keys/unexportable_key_service.h"
 #include "net/base/isolation_info.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_export.h"
 #include "net/device_bound_sessions/registration_fetcher_param.h"
+#include "net/device_bound_sessions/registration_result.h"
+#include "net/device_bound_sessions/session.h"
 #include "net/device_bound_sessions/session_error.h"
-#include "net/device_bound_sessions/session_params.h"
 #include "net/http/http_response_headers.h"
 #include "net/log/net_log_source.h"
 #include "url/gurl.h"
@@ -31,30 +31,28 @@ class UnexportableKeyService;
 
 namespace net::device_bound_sessions {
 
+class SessionService;
 class RegistrationRequestParam;
 
 // This class creates a new unexportable key, creates a registration JWT and
 // signs it with the new key, and makes the network request to the DBSC
 // registration endpoint with this signed JWT to get the registration
-// instructions. It is also used for calling the refresh endpoint.
+// instructions. It is also used for calling the refresh endpoint. It delegates
+// most of the validation to `Session::CreateIfValid`, and returns a full
+// `Session`, a request to leave the session config unchanged, or an error.
 class NET_EXPORT RegistrationFetcher {
  public:
   using RegistrationCompleteCallback =
-      base::OnceCallback<void(RegistrationFetcher*,
-                              base::expected<SessionParams, SessionError>)>;
+      base::OnceCallback<void(RegistrationFetcher*, RegistrationResult)>;
 
-  using FetcherType =
-      base::RepeatingCallback<base::expected<SessionParams, SessionError>()>;
+  using FetcherType = base::RepeatingCallback<RegistrationResult()>;
 
-  // TODO(kristianm): Add more parameters when the returned JSON is parsed.
-  struct NET_EXPORT RegistrationTokenResult {
-    std::string registration_token;
-    unexportable_keys::UnexportableKeyId key_id;
-  };
+  using RegistrationToken = std::string;
 
   // Creates a fetcher that can be used to do registration or refresh.
   static std::unique_ptr<RegistrationFetcher> CreateFetcher(
       RegistrationRequestParam& request_params,
+      SessionService& session_service,
       unexportable_keys::UnexportableKeyService& key_service,
       const URLRequestContext* context,
       const IsolationInfo& isolation_info,
@@ -79,22 +77,26 @@ class NET_EXPORT RegistrationFetcher {
   // will be called with a std::nullopt.
   virtual void StartFetchWithExistingKey(
       RegistrationRequestParam& request_params,
-      unexportable_keys::ServiceErrorOr<unexportable_keys::UnexportableKeyId>
-          key_id,
+      unexportable_keys::UnexportableKeyId key_id,
+      RegistrationCompleteCallback callback) = 0;
+
+  // Starts the network request to the DBSC registration endpoint for a
+  // federated session. `callback` is called with the fetch results upon
+  // completion.
+  virtual void StartFetchWithFederatedKey(
+      RegistrationRequestParam& request_params,
+      unexportable_keys::UnexportableKeyId key_id,
+      const GURL& provider_url,
       RegistrationCompleteCallback callback) = 0;
 
   // Helper function for generating a new binding key and a registration token
   // to bind the key on the server. unexportable_key_service must outlive the
   // callback result
-  static void CreateTokenAsyncForTesting(
+  static void CreateRegistrationTokenAsyncForTesting(
       unexportable_keys::UnexportableKeyService& unexportable_key_service,
       std::string challenge,
-      const GURL& registration_url,
       std::optional<std::string> authorization,
-      std::optional<std::string> session_identifier,
-      base::OnceCallback<
-          void(std::optional<RegistrationFetcher::RegistrationTokenResult>)>
-          callback);
+      base::OnceCallback<void(std::optional<RegistrationToken>)> callback);
 
   static void SetFetcherForTesting(FetcherType* fetcher);
 

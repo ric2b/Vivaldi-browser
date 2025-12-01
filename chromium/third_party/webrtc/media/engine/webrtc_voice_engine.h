@@ -38,6 +38,7 @@
 #include "api/crypto/frame_decryptor_interface.h"
 #include "api/crypto/frame_encryptor_interface.h"
 #include "api/environment/environment.h"
+#include "api/field_trials_view.h"
 #include "api/frame_transformer_interface.h"
 #include "api/media_types.h"
 #include "api/rtc_error.h"
@@ -96,6 +97,7 @@ class WebRtcVoiceEngine final : public VoiceEngineInterface {
   scoped_refptr<AudioState> GetAudioState() const override;
 
   std::unique_ptr<VoiceMediaSendChannelInterface> CreateSendChannel(
+      const Environment& env,
       Call* call,
       const MediaConfig& config,
       const AudioOptions& options,
@@ -103,6 +105,7 @@ class WebRtcVoiceEngine final : public VoiceEngineInterface {
       AudioCodecPairId codec_pair_id) override;
 
   std::unique_ptr<VoiceMediaReceiveChannelInterface> CreateReceiveChannel(
+      const Environment& env,
       Call* call,
       const MediaConfig& config,
       const AudioOptions& options,
@@ -118,8 +121,8 @@ class WebRtcVoiceEngine final : public VoiceEngineInterface {
   AudioDecoderFactory* decoder_factory() const override {
     return decoder_factory_.get();
   }
-  std::vector<RtpHeaderExtensionCapability> GetRtpHeaderExtensions()
-      const override;
+  std::vector<RtpHeaderExtensionCapability> GetRtpHeaderExtensions(
+      const webrtc::FieldTrialsView* field_trials) const override;
 
   // Starts AEC dump using an existing file. A maximum file size in bytes can be
   // specified. When the maximum file size is reached, logging is stopped and
@@ -148,19 +151,20 @@ class WebRtcVoiceEngine final : public VoiceEngineInterface {
   SequenceChecker signal_thread_checker_{SequenceChecker::kDetached};
   SequenceChecker worker_thread_checker_{SequenceChecker::kDetached};
 
+  // Field trial flags.
+  const bool minimized_remsampling_on_mobile_trial_enabled_;
+  const bool payload_types_in_transport_trial_enabled_;
+
   // The audio device module.
-  scoped_refptr<AudioDeviceModule> adm_;
+  const scoped_refptr<AudioDeviceModule> adm_;
   scoped_refptr<AudioEncoderFactory> encoder_factory_;
   scoped_refptr<AudioDecoderFactory> decoder_factory_;
-  scoped_refptr<AudioMixer> audio_mixer_;
   // The audio processing module.
   scoped_refptr<AudioProcessing> apm_;
-  // Asynchronous audio processing.
-  std::unique_ptr<AudioFrameProcessor> audio_frame_processor_;
   // The primary instance of WebRtc VoiceEngine.
   scoped_refptr<AudioState> audio_state_;
-  std::vector<Codec> send_codecs_;
-  std::vector<Codec> recv_codecs_;
+  const std::vector<Codec> legacy_send_codecs_;
+  const std::vector<Codec> legacy_recv_codecs_;
   bool is_dumping_aec_ = false;
   bool initialized_ = false;
 
@@ -168,15 +172,13 @@ class WebRtcVoiceEngine final : public VoiceEngineInterface {
   size_t audio_jitter_buffer_max_packets_ = 200;
   bool audio_jitter_buffer_fast_accelerate_ = false;
   int audio_jitter_buffer_min_delay_ms_ = 0;
-
-  const bool minimized_remsampling_on_mobile_trial_enabled_;
-  const bool payload_types_in_transport_trial_enabled_;
 };
 
 class WebRtcVoiceSendChannel final : public MediaChannelUtil,
                                      public VoiceMediaSendChannelInterface {
  public:
-  WebRtcVoiceSendChannel(WebRtcVoiceEngine* engine,
+  WebRtcVoiceSendChannel(const Environment& env,
+                         WebRtcVoiceEngine* engine,
                          const MediaConfig& config,
                          const AudioOptions& options,
                          const CryptoOptions& crypto_options,
@@ -285,6 +287,7 @@ class WebRtcVoiceSendChannel final : public MediaChannelUtil,
   bool SetMaxSendBitrate(int bps);
   void SetupRecording();
 
+  const Environment env_;
   TaskQueueBase* const worker_thread_;
   ScopedTaskSafety task_safety_;
   SequenceChecker network_thread_checker_{SequenceChecker::kDetached};
@@ -306,6 +309,7 @@ class WebRtcVoiceSendChannel final : public MediaChannelUtil,
 
   std::map<uint32_t, WebRtcAudioSendStream*> send_streams_;
   std::vector<RtpExtension> send_rtp_extensions_;
+  std::optional<RtcpFeedbackType> rtcp_cc_ack_type_;
   std::string mid_;
   RtcpMode rtcp_mode_;
 
@@ -333,7 +337,8 @@ class WebRtcVoiceReceiveChannel final
     : public MediaChannelUtil,
       public VoiceMediaReceiveChannelInterface {
  public:
-  WebRtcVoiceReceiveChannel(WebRtcVoiceEngine* engine,
+  WebRtcVoiceReceiveChannel(const Environment& env,
+                            WebRtcVoiceEngine* engine,
                             const MediaConfig& config,
                             const AudioOptions& options,
                             const CryptoOptions& crypto_options,
@@ -432,6 +437,7 @@ class WebRtcVoiceReceiveChannel final
   // unsignaled anymore (i.e. it is now removed, or signaled), and return true.
   bool MaybeDeregisterUnsignaledRecvStream(uint32_t ssrc);
 
+  const Environment env_;
   TaskQueueBase* const worker_thread_;
   ScopedTaskSafety task_safety_;
   SequenceChecker network_thread_checker_{SequenceChecker::kDetached};

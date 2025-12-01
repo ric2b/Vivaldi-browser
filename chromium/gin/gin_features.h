@@ -46,7 +46,6 @@ GIN_EXPORT extern const base::FeatureParam<int>
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8IncrementalMarkingStartUserVisible);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8IdleGcOnContextDisposal);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8IgnitionElideRedundantTdzChecks);
-GIN_EXPORT BASE_DECLARE_FEATURE(kV8IntelJCCErratumMitigation);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8LazyFeedbackAllocation);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8Maglev);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8ConcurrentMaglevHighPriorityThreads);
@@ -54,6 +53,7 @@ GIN_EXPORT BASE_DECLARE_FEATURE(kV8MemoryReducer);
 GIN_EXPORT extern const base::FeatureParam<int> kV8MemoryReducerGCCount;
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8PreconfigureOldGen);
 GIN_EXPORT extern const base::FeatureParam<int> kV8PreconfigureOldGenSize;
+GIN_EXPORT BASE_DECLARE_FEATURE(kV8MemoryPoolReleaseOnMallocFailures);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8MinorMS);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8MegaDomIC);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8NoReclaimUnmodifiedWrappers);
@@ -71,7 +71,6 @@ GIN_EXPORT BASE_DECLARE_FEATURE(
     kV8SingleThreadedGCInBackgroundNoIncrementalMarking);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8SlowHistograms);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8SlowHistogramsCodeMemoryWriteProtection);
-GIN_EXPORT BASE_DECLARE_FEATURE(kV8SlowHistogramsIntelJCCErratumMitigation);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8SlowHistogramsNoTurbofan);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8SlowHistogramsSparkplug);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8SlowHistogramsSparkplugAndroid);

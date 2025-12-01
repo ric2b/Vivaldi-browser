@@ -48,6 +48,10 @@ std::string GetToastName(ToastId toast_id) {
       return "GeminiWorkingOnTask";
     case ToastId::kDiceUserMigrated:
       return "DiceUserMigrated";
+    case ToastId::kEmailVerified:
+      return "EmailVerified";
+    case ToastId::kGlicShareImageFailed:
+      return "GlicShareImageFailed";
   }
 
   NOTREACHED();

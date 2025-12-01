@@ -658,6 +658,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
       kTranslateSwitchAccessibilityIdentifier;
   translateDisableInfobarSwitchItem.text = l10n_util::GetNSString(
       IDS_IOS_LANGUAGE_SETTINGS_DISABLE_TRANSLATE_INFOBAR_SWITCH_TITLE);
+  translateDisableInfobarSwitchItem.detailText = l10n_util::GetNSString(
+      IDS_IOS_LANGUAGE_SETTINGS_DISABLE_TRANSLATE_INFOBAR_SWITCH_DESCRIPTION);
   translateDisableInfobarSwitchItem.on =
       [self.dataSource translateInfobarDisabled];
   [self.tableViewModel addItem:translateDisableInfobarSwitchItem

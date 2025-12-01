@@ -57,6 +57,15 @@ void BookmarkContextMenuAPI::SendClose(
                             browser_context);
 }
 
+// static
+void BookmarkContextMenuAPI::SendStartDrag(
+    content::BrowserContext* browser_context,int64_t id) {
+  ::vivaldi::BroadcastEvent(
+      vivaldi::bookmark_context_menu::OnDragStart::kEventName,
+      vivaldi::bookmark_context_menu::OnDragStart::Create(std::to_string(id)),
+      browser_context);
+}
+
 BookmarkContextMenuShowFunction::BookmarkContextMenuShowFunction() = default;
 BookmarkContextMenuShowFunction::~BookmarkContextMenuShowFunction() = default;
 
@@ -123,6 +132,19 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
       break;
   };
   bookmark_menu_container_->support.initIcons(params_->properties.icons);
+
+  bookmark_menu_container_->dragged_ids.clear();
+  for (const auto& id : params_->properties.dragged) {
+    int64_t val;
+    if (!base::StringToInt64(id, &val) || val <= 0) {
+      bookmark_menu_container_->dragged_ids.clear();
+      return RespondNow(Error("Not a valid dragged bookmark id - " + id));
+    }
+    bookmark_menu_container_->dragged_ids.push_back(val);
+  }
+  Profile* profile = Profile::FromBrowserContext(
+      window->web_contents()->GetBrowserContext());
+  bookmark_menu_container_->dragged_path = profile->GetPath();
   bookmark_menu_container_->sort_field = sortField;
   bookmark_menu_container_->sort_order = sortOrder;
   bookmark_menu_container_->siblings.reserve(
@@ -232,13 +254,24 @@ void BookmarkContextMenuShowFunction::OnOpenMenu(int64_t bookmark_id) {
   BookmarkContextMenuAPI::SendOpen(browser_context(), bookmark_id);
 }
 
-void BookmarkContextMenuShowFunction::BookmarkMenuClosed(
+void BookmarkContextMenuShowFunction::OnStartDrag(int64_t bookmark_id) {
+  BookmarkContextMenuAPI::SendStartDrag(browser_context(), bookmark_id);
+}
+
+void BookmarkContextMenuShowFunction::BookmarkMenuWillDelete(
     ::vivaldi::VivaldiBookmarkMenu* menu) {
   namespace Results = vivaldi::bookmark_context_menu::Show::Results;
 
   BookmarkContextMenuAPI::SendClose(browser_context());
   Respond(ArgumentList(Show::Results::Create()));
   Release();
+}
+
+ExtensionFunction::ResponseAction BookmarkContextMenuCloseFunction::Run() {
+  if (::vivaldi::VivaldiBookmarkMenu::GetActive()) {
+    ::vivaldi::VivaldiBookmarkMenu::GetActive()->Close();
+  }
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

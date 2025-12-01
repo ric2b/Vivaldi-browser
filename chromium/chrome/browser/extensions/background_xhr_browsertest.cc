@@ -21,7 +21,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
@@ -82,7 +81,7 @@ class BackgroundXhrTest : public ExtensionBrowserTest {
     ResultCatcher catcher;
     GURL test_url = net::AppendQueryParameter(extension->GetResourceURL(path),
                                               "url", url.spec());
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), test_url));
+    ASSERT_TRUE(NavigateToURL(GetActiveWebContents(), test_url));
     profile()->GetDefaultStoragePartition()->FlushNetworkInterfaceForTesting();
     static constexpr char kSendXHRScript[] = R"(
       var xhr = new XMLHttpRequest();
@@ -102,7 +101,7 @@ class BackgroundXhrTest : public ExtensionBrowserTest {
 IN_PROC_BROWSER_TEST_F(BackgroundXhrTest, TlsClientAuth) {
   // Install a FakeClientCertStore so the client auth prompt isn't bypassed due
   // to the system certificate store returning no certificates.
-  ProfileNetworkContextServiceFactory::GetForContext(browser()->profile())
+  ProfileNetworkContextServiceFactory::GetForContext(profile())
       ->set_client_cert_store_factory_for_testing(
           base::BindRepeating(&CreateFakeClientCertStore));
 

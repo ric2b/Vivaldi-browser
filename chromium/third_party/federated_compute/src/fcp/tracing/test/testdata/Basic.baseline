@@ -1,0 +1,18 @@
+${TIME} 0: BEGIN
+${TIME} 0: INFO EventFoo{ first: 10, second: 20 }
+${TIME} 1: BEGIN SpanWithId { id: 111 } parent: 0
+${TIME} 1: INFO EventFoo{ first: 222, second: 333 }
+${TIME} 1: ERROR ErrorEvent{ cause: "Oops!" }
+${TIME} 2: BEGIN SpanWithId { id: 999 } parent: 1
+${TIME} 2: INFO EventFoo{ first: 555, second: 666 }
+${TIME} 2: END SpanWithId { id: 999 }
+${TIME} 1: END SpanWithId { id: 111 }
+${TIME} 3: BEGIN SpanWithNoData {  } parent: 0
+${TIME} 3: WARNING EventWithNoData{  }
+${TIME} 3: END SpanWithNoData {  }
+${TIME} 4: BEGIN SpanWithNoData {  } parent: 0
+${TIME} 5: BEGIN SpanWithId { id: 222 } parent: 4
+${TIME} 5: INFO EventBar{ first: 333, second: "Hello world!" }
+${TIME} 5: END SpanWithId { id: 222 }
+${TIME} 4: END SpanWithNoData {  }
+${TIME} 0: END

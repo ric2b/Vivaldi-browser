@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -16,8 +16,8 @@ import changesSidebarStyles from './changesSidebar.css.js';
 
 const UIStrings = {
   /**
-   *@description Name of an item from source map
-   *@example {compile.html} PH1
+   * @description Name of an item from source map
+   * @example {compile.html} PH1
    */
   sFromSourceMap: '{PH1} (from source map)',
 } as const;
@@ -35,7 +35,7 @@ export class ChangesSidebar extends Common.ObjectWrapper.eventMixin<EventTypes, 
     this.treeoutline = new UI.TreeOutline.TreeOutlineInShadow(UI.TreeOutline.TreeVariant.NAVIGATION_TREE);
     this.treeoutline.registerRequiredCSS(changesSidebarStyles);
     this.treeoutline.setFocusable(false);
-    this.treeoutline.hideOverflow();
+    this.treeoutline.setHideOverflow(true);
     this.treeoutline.addEventListener(UI.TreeOutline.Events.ElementSelected, this.selectionChanged, this);
     UI.ARIAUtils.markAsTablist(this.treeoutline.contentElement);
 

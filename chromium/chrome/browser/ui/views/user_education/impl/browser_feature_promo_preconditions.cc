@@ -14,20 +14,20 @@
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
+#include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
+#include "chrome/browser/ui/omnibox/omnibox_popup_view.h"
+#include "chrome/browser/ui/omnibox/omnibox_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_controller.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "components/omnibox/browser/omnibox_edit_model.h"
-#include "components/omnibox/browser/omnibox_popup_view.h"
-#include "components/omnibox/browser/omnibox_view.h"
 #include "components/user_education/common/feature_promo/feature_promo_controller.h"
 #include "components/user_education/common/feature_promo/feature_promo_precondition.h"
 #include "components/user_education/common/feature_promo/feature_promo_result.h"
 #include "components/user_education/common/feature_promo/impl/common_preconditions.h"
 #include "components/user_education/common/user_education_features.h"
 #include "components/user_education/webui/help_bubble_handler.h"
-#include "components/user_education/webui/tracked_element_webui.h"
+#include "components/user_education/webui/tracked_element_help_bubble_webui_anchor.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/events/types/event_type.h"
 #include "ui/views/interaction/element_tracker_views.h"
@@ -62,7 +62,8 @@ user_education::FeaturePromoResult WindowActivePrecondition::CheckPrecondition(
   if (auto* const view_el = element_ref.get_as<views::TrackedElementViews>()) {
     widget = view_el->view()->GetWidget();
   } else if (auto* web_el =
-                 element_ref.get_as<user_education::TrackedElementWebUI>()) {
+                 element_ref.get_as<
+                     user_education::TrackedElementHelpBubbleWebUIAnchor>()) {
     auto* const contents = web_el->handler()->GetWebContents();
     widget = views::Widget::GetWidgetForNativeWindow(
         contents->GetTopLevelNativeWindow());
@@ -109,10 +110,8 @@ OmniboxNotOpenPrecondition::~OmniboxNotOpenPrecondition() = default;
 user_education::FeaturePromoResult
 OmniboxNotOpenPrecondition::CheckPrecondition(
     ui::UnownedTypedDataCollection&) const {
-  const OmniboxPopupView* const popup = browser_view_->GetLocationBarView()
-                                            ->GetOmniboxView()
-                                            ->model()
-                                            ->get_popup_view();
+  const OmniboxPopupView* const popup =
+      browser_view_->GetLocationBarView()->GetOmniboxPopupView();
   return popup && popup->IsOpen()
              ? user_education::FeaturePromoResult::kBlockedByUi
              : user_education::FeaturePromoResult::Success();

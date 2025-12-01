@@ -317,10 +317,8 @@ UIImageView* ImageViewForSymbol(NSString* symbol_name,
 
   _scrolledToEdge = scrolledToEdge;
 
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
   } else {
-#endif
     if (IsVivaldiRunning()) {
       self.background.backgroundColor = [UIColor colorNamed:vBackgroundColor];
     } else {
@@ -329,9 +327,7 @@ UIImageView* ImageViewForSymbol(NSString* symbol_name,
     self.background.backgroundColor = [UIColor colorWithWhite:1
                                                         alpha:backgroundAlpha];
     } // End Vivaldi
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   }
-#endif
 }
 
 #pragma mark - Public Properties
@@ -833,15 +829,12 @@ UIImageView* ImageViewForSymbol(NSString* symbol_name,
 
   }
 
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     iconNotSelected.tintColor = UIColor.whiteColor;
   } else {
-#endif
     iconNotSelected.tintColor = [UIColor colorNamed:kStaticGrey300Color];
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   }
-#endif
+
   iconSelected.tintColor = UIColor.blackColor;
 
   if (IsVivaldiRunning()) {
@@ -857,25 +850,30 @@ UIImageView* ImageViewForSymbol(NSString* symbol_name,
 - (void)setupViews {
   self.scrolledToEdge = YES;
 
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     UIGlassEffect* glassEffect =
         [UIGlassEffect effectWithStyle:UIGlassEffectStyleRegular];
     glassEffect.interactive = YES;
+
+    if (IsVivaldiRunning()) {
+      glassEffect.tintColor =
+          [UIColor.systemBackgroundColor colorWithAlphaComponent:0.25];
+    } else {
     glassEffect.tintColor = TabGridGlassButtonTintColor();
+    } // End Vivaldi
+
     UIVisualEffectView* backgroundView =
         [[UIVisualEffectView alloc] initWithEffect:glassEffect];
     backgroundView.frame = CGRectMake(0, 0, kOverallWidth, kSegmentHeight);
     [self addSubview:backgroundView];
     backgroundView.center =
         CGPointMake(kOverallWidth / 2.0, kOverallHeight / 2.0);
+    backgroundView.layer.cornerRadius = kSegmentHeight / 2;
+    backgroundView.layer.masksToBounds = YES;
 
     if (IsVivaldiRunning()) {
       backgroundView.frame = CGRectMake(0, 0, vOverallWidth, vOverallHeight);
-      backgroundView.cornerConfiguration =
-          [UICornerConfiguration configurationWithRadius:
-              [UICornerRadius fixedRadius:vCornerRadius]];
-
+      backgroundView.layer.cornerRadius = vCornerRadius;
       backgroundView.center =
         CGPointMake(vOverallWidth / 2.0, vOverallHeight / 2.0);
     } // End Vivaldi
@@ -883,7 +881,6 @@ UIImageView* ImageViewForSymbol(NSString* symbol_name,
     self.background = backgroundView;
     self.contentView = backgroundView.contentView;
   } else {
-#endif
     UIView* backgroundView = [[UIView alloc]
         initWithFrame:CGRectMake(0, 0, kOverallWidth, kSegmentHeight)];
     backgroundView.backgroundColor =
@@ -906,9 +903,7 @@ UIImageView* ImageViewForSymbol(NSString* symbol_name,
 
     self.background = backgroundView;
     self.contentView = backgroundView;
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   }
-#endif
 
   // Set up the layout guides for the segments.
   UILayoutGuide* incognitoGuide = [[UILayoutGuide alloc] init];
@@ -1014,7 +1009,7 @@ UIImageView* ImageViewForSymbol(NSString* symbol_name,
   } // End Vivaldi
 
   UIView* slider = [[UIView alloc] initWithFrame:sliderFrame];
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+
   if (@available(iOS 26, *)) {
     if (IsVivaldiRunning()) {
       slider.layer.cornerRadius = vSliderCornerRadius;
@@ -1022,7 +1017,7 @@ UIImageView* ImageViewForSymbol(NSString* symbol_name,
     slider.layer.cornerRadius = kSliderHeight / 2.0;
     } // End Vivaldi
   } else {
-#endif
+    slider.layer.cornerRadius = kSliderCornerRadius;
 
     if (IsVivaldiRunning()) {
       slider.layer.cornerRadius = vSliderCornerRadius;
@@ -1030,9 +1025,8 @@ UIImageView* ImageViewForSymbol(NSString* symbol_name,
     slider.layer.cornerRadius = kSliderCornerRadius;
     } // End Vivaldi
 
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   }
-#endif
+
   slider.layer.masksToBounds = YES;
   if (IsVivaldiRunning()) {
     slider.backgroundColor = vSliderColor;
@@ -1127,6 +1121,10 @@ UIImageView* ImageViewForSymbol(NSString* symbol_name,
       TextForTabCount(_tabCount, kLabelSize * kLabelSizeToFontSize);
   self.regularSelectedLabel.attributedText =
       TextForTabCount(_tabCount, kSelectedLabelSize * kLabelSizeToFontSize);
+
+  if (IsVivaldiRunning()) {
+    self.regularLabel.textColor = UIColor.labelColor;
+  } // End Vivaldi
 }
 
 // Creates a label for use in this control.

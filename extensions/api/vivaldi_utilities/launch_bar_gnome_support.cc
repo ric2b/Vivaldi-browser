@@ -101,7 +101,7 @@ bool FindVivaldi(std::vector<std::string>& pinned) {
          }) != pinned.end();
 }
 
-std::array<std::string, 10> kBrowserPrefixes = {
+const std::array<std::string_view, 10> kBrowserPrefixes = {
     "epiphany", "org.gnome.Epiphany",    "safari",  "edge",  "chrome",
     "chromium", "org.chromium.Chromium", "firefox", "brave", "konqueror"};
 
@@ -113,7 +113,7 @@ bool AddVivaldiToPins(std::vector<std::string>* pins) {
   // Find any browser already in there or the end of the pins.
   auto pos =
       std::find_if(pins->begin(), pins->end(), [](const std::string& pin) {
-        for (const std::string& prefix : kBrowserPrefixes) {
+        for (const std::string_view& prefix : kBrowserPrefixes) {
           if (pin.starts_with(prefix)) {
             return true;
           }

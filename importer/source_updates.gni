@@ -31,3 +31,18 @@ update_target("//chrome/common:common_lib") {
     "//vivaldi/importer/profile_vivaldi_import_process_param_traits_macros.h",
   ]
 }
+
+if (is_android) {
+  update_target("//chrome/browser:browser") {
+    sources += [
+      "bookmarks/bookmark_html_writer.cc",
+      "bookmarks/bookmark_html_writer.h",
+      "//chromium/chrome/browser/importer/profile_writer.cc",
+      "//chromium/chrome/browser/importer/profile_writer.h",
+    ]
+    deps += [
+      "//components/user_data_importer/common",
+      "//chrome/app:generated_resources",
+    ]
+  }
+}

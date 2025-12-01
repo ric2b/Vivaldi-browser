@@ -93,8 +93,9 @@ class TestVariationsServiceClient : public VariationsServiceClient {
     return nullptr;
   }
   bool OverridesRestrictParameter(std::string* parameter) override {
-    if (restrict_parameter_.empty())
+    if (restrict_parameter_.empty()) {
       return false;
+    }
     *parameter = restrict_parameter_;
     return true;
   }
@@ -323,9 +324,8 @@ class VariationsServiceTest : public ::testing::Test {
       : network_tracker_(network::TestNetworkConnectionTracker::GetInstance()),
         enabled_state_provider_(
             new metrics::TestEnabledStateProvider(false, false)) {
-    metrics::CleanExitBeacon::RegisterPrefs(prefs_.registry());
-    VariationsService::RegisterPrefs(prefs_.registry());
     metrics::MetricsStateManager::RegisterPrefs(prefs_.registry());
+    VariationsService::RegisterPrefs(prefs_.registry());
   }
 
   VariationsServiceTest(const VariationsServiceTest&) = delete;
@@ -349,7 +349,7 @@ class VariationsServiceTest : public ::testing::Test {
 
  private:
   base::test::TaskEnvironment task_environment_;
-  variations::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
+  variations::test::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
       variations::VariationsIdsProvider::Mode::kUseSignedInState};
   std::unique_ptr<metrics::TestEnabledStateProvider> enabled_state_provider_;
   std::unique_ptr<metrics::MetricsStateManager> metrics_state_manager_;

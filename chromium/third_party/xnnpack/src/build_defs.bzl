@@ -215,6 +215,32 @@ def xnnpack_kleidiai_defines():
 def xnnpack_slow_benchmark_tags():
     return ["manual"]
 
+def xnnpack_lib_srcs():
+    return [
+        "src/init.c",
+    ]
+
+def xnnpack_lib_deps():
+    return [
+        ":allocator",
+        ":build_identifier",  # build_cleaner: keep
+        ":common",  # build_cleaner: keep
+        ":init_once",
+        ":logging",
+        ":math",  # build_cleaner: keep
+        ":microkernel_hdrs",  # build_cleaner: keep
+        ":microparams_h",  # build_cleaner: keep
+        ":microparams_init",  # build_cleaner: keep
+        ":operators",  # build_cleaner: keep
+        ":params",
+        ":subgraph",  # build_cleaner: keep
+        "//src/configs:hardware_config",
+        "//src/configs:microkernel_configs",  # build_cleaner: keep
+        "@pthreadpool",
+    ] + xnnpack_if_kleidiai_enabled([
+        "@KleidiAI//:common",
+    ])
+
 def xnnpack_cc_library(
         name,
         srcs = [],
@@ -324,7 +350,8 @@ def xnnpack_cc_library(
             "//build_config:macos_x86_64": gcc_x86_copts,
             "//build_config:macos_x86_64_legacy": gcc_x86_copts,
             "//build_config:macos_arm64": aarch64_copts,
-            "//build_config:windows_x86_64_clang": ["/clang:" + opt for opt in gcc_x86_copts],
+            "//build_config:windows_x86_64_clangcl": ["/clang:" + opt for opt in gcc_x86_copts],
+            "//build_config:windows_x86_64_clang": gcc_x86_copts,
             "//build_config:windows_x86_64_mingw": mingw_copts + gcc_x86_copts,
             "//build_config:windows_x86_64_msys": msys_copts + gcc_x86_copts,
             "//build_config:windows_x86_64": msvc_x86_64_copts,
@@ -345,7 +372,8 @@ def xnnpack_cc_library(
             "//build_config:emscripten_wasmrelaxedsimd": wasmrelaxedsimd_copts,
             "//conditions:default": [],
         }) + select({
-            "//build_config:windows_x86_64_clang": ["/clang:" + opt for opt in gcc_copts],
+            "//build_config:windows_x86_64_clangcl": ["/clang:" + opt for opt in gcc_copts],
+            "//build_config:windows_x86_64_clang": gcc_copts,
             "//build_config:windows_x86_64_mingw": gcc_copts,
             "//build_config:windows_x86_64_msys": gcc_copts,
             "//build_config:windows_x86_64": msvc_copts,
@@ -414,7 +442,8 @@ def xnnpack_unit_test(name, srcs, copts = [], mingw_copts = [], msys_copts = [],
             "//build_config:windows_x86_64_msys": msys_copts,
             "//conditions:default": [],
         }) + select({
-            "//build_config:windows_x86_64_clang": ["/clang:-Wno-unused-function"],
+            "//build_config:windows_x86_64_clangcl": ["/clang:-Wno-unused-function"],
+            "//build_config:windows_x86_64_clang": ["-Wno-unused-function"],
             "//build_config:windows_x86_64_mingw": ["-Wno-unused-function"],
             "//build_config:windows_x86_64_msys": ["-Wno-unused-function"],
             "//build_config:windows_x86_64": [],
@@ -480,7 +509,8 @@ def xnnpack_benchmark(name, srcs, copts = [], deps = [], tags = [], defines = []
         name = name,
         srcs = srcs,
         copts = xnnpack_std_cxxopts() + select({
-            "//build_config:windows_x86_64_clang": ["/clang:-Wno-unused-function"],
+            "//build_config:windows_x86_64_clangcl": ["/clang:-Wno-unused-function"],
+            "//build_config:windows_x86_64_clang": ["-Wno-unused-function"],
             "//build_config:windows_x86_64_mingw": ["-Wno-unused-function"],
             "//build_config:windows_x86_64_msys": ["-Wno-unused-function"],
             "//build_config:windows_x86_64": [],

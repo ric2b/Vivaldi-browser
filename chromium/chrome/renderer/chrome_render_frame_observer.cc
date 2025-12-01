@@ -25,12 +25,14 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/open_search_description_document_handler.mojom.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/renderer/chrome_content_settings_agent_delegate.h"
 #include "chrome/renderer/media/media_feeds.h"
+#include "chrome/renderer/process_state.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/lens/lens_metadata.mojom.h"
 #include "components/no_state_prefetch/renderer/no_state_prefetch_helper.h"
@@ -73,6 +75,7 @@
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/renderer/accessibility/read_anything/read_anything_app_controller.h"
 #include "chrome/renderer/actor/journal.h"
+#include "chrome/renderer/actor/page_stability_monitor.h"
 #include "chrome/renderer/actor/tool_executor.h"
 #include "chrome/renderer/searchbox/searchbox_extension.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
@@ -246,12 +249,10 @@ void ChromeRenderFrameObserver::ReadyToCommitNavigation(
   if (render_frame()->IsMainFrame() && web_cache_impl_)
     web_cache_impl_->ExecutePendingClearCache();
 
-  // Let translate_agent do any preparatory work for loading a URL.
-  if (!translate_agent_)
-    return;
-
-  translate_agent_->PrepareForUrl(
-      render_frame()->GetWebFrame()->GetDocument().Url());
+  // Let translate_agent do any preparatory work before the new document loads.
+  if (translate_agent_) {
+    translate_agent_->PrepareForNewDocument();
+  }
 }
 
 void ChromeRenderFrameObserver::DidSetPageLifecycleState(
@@ -332,10 +333,9 @@ void ChromeRenderFrameObserver::DidCommitProvisionalLoad(
 
 void ChromeRenderFrameObserver::DidClearWindowObject() {
 #if !BUILDFLAG(IS_ANDROID)
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(switches::kInstantProcess))
+  if (process_state::IsInstantProcess()) {
     SearchBoxExtension::Install(render_frame()->GetWebFrame());
+  }
 
   // Install ReadAnythingAppController on render frames with the Read Anything
   // url, which is chrome-untrusted. ReadAnythingAppController installs v8
@@ -642,6 +642,21 @@ void ChromeRenderFrameObserver::StartActorJournal(
     mojo::PendingAssociatedRemote<actor::mojom::JournalClient> client) {
   actor_journal_->Bind(std::move(client));
 }
+
+void ChromeRenderFrameObserver::CreatePageStabilityMonitor(
+    mojo::PendingReceiver<actor::mojom::PageStabilityMonitor> monitor,
+    const actor::TaskId& task_id,
+    bool supports_paint_stability) {
+  if (features::kActorGeneralPageStabilityMode.Get() ==
+      features::ActorGeneralPageStabilityMode::kDisabled) {
+    return;
+  }
+
+  page_stability_monitor_ = std::make_unique<actor::PageStabilityMonitor>(
+      *render_frame(), supports_paint_stability, task_id, *actor_journal_);
+  page_stability_monitor_->Bind(std::move(monitor));
+}
+
 #endif
 
 void ChromeRenderFrameObserver::SetClientSidePhishingDetection() {

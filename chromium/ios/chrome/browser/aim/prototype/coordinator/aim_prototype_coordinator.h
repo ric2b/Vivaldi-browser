@@ -5,21 +5,41 @@
 #ifndef IOS_CHROME_BROWSER_AIM_PROTOTYPE_COORDINATOR_AIM_PROTOTYPE_COORDINATOR_H_
 #define IOS_CHROME_BROWSER_AIM_PROTOTYPE_COORDINATOR_AIM_PROTOTYPE_COORDINATOR_H_
 
+#import <PhotosUI/PhotosUI.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+
 #import "ios/chrome/browser/aim/prototype/ui/aim_prototype_view_controller.h"
 #import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 
-@class AIMPrototypeCoordinator;
+@protocol AIMPrototypeAnimationContextProvider;
+enum class AIMPrototypeEntrypoint;
+class Browser;
+@protocol OmniboxPopupPresenterDelegate;
 
-// Delegate for the AIM prototype coordinator.
-@protocol AIMPrototypeCoordinatorDelegate
-- (void)aimPrototypeCoordinatorDidFinish:(AIMPrototypeCoordinator*)coordinator;
-@end
+/// AIMPrototypeCoordinator presents AIM with an omnibox.
+@interface AIMPrototypeCoordinator : ChromeCoordinator
 
-// LensOverlayCoordinator presents the public interface for the Lens Overlay.
-@interface AIMPrototypeCoordinator
-    : ChromeCoordinator <AIMPrototypeViewControllerDelegate>
+// The context provider for the animations.
+@property(nonatomic, readonly) id<AIMPrototypeAnimationContextProvider>
+    contextProvider;
 
-@property(nonatomic, weak) id<AIMPrototypeCoordinatorDelegate> delegate;
+// The view controller managed by this coordinator.
+@property(nonatomic, readonly) UIViewController* inputViewController;
+
+// Delegate for positioning the omnibox popup.
+@property(nonatomic, weak) id<OmniboxPopupPresenterDelegate>
+    omniboxPopupPresenterDelegate;
+
+/// Init the AIM Prototype opened from `entrypoint` with an optional `query` in
+/// the omnibox.
+- (instancetype)initWithBaseViewController:(UIViewController*)baseViewController
+                                   browser:(Browser*)browser
+                                entrypoint:(AIMPrototypeEntrypoint)entrypoint
+                                     query:(NSString*)query
+    NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)initWithBaseViewController:(UIViewController*)viewController
+                                   browser:(Browser*)browser NS_UNAVAILABLE;
 
 @end
 

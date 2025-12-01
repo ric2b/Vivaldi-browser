@@ -11,7 +11,6 @@
 #include "content/public/browser/web_contents_user_data.h"
 
 namespace content {
-class NavigationHandle;
 class WebContents;
 }  // namespace content
 
@@ -32,6 +31,20 @@ void InterventionsWebContentsHelper::CreateForWebContents(
                                                             is_incognito);
 }
 
+void InterventionsWebContentsHelper::ReadyToCommitNavigation(
+    content::NavigationHandle* navigation_handle) {
+  auto& mutable_runtime_feature_state =
+      navigation_handle->GetMutableRuntimeFeatureStateContext();
+  bool canvas_base_feature_enabled =
+      features::ShouldBlockCanvasReadbackForIncognitoState(is_incognito_);
+
+  if (mutable_runtime_feature_state.IsBlockCanvasReadbackEnabled() !=
+      canvas_base_feature_enabled) {
+    mutable_runtime_feature_state.SetBlockCanvasReadbackEnabled(
+        canvas_base_feature_enabled);
+  }
+}
+
 // private
 InterventionsWebContentsHelper::InterventionsWebContentsHelper(
     content::WebContents* web_contents,
@@ -42,21 +55,6 @@ InterventionsWebContentsHelper::InterventionsWebContentsHelper(
       is_incognito_(is_incognito) {}
 
 InterventionsWebContentsHelper::~InterventionsWebContentsHelper() = default;
-
-void InterventionsWebContentsHelper::ReadyToCommitNavigation(
-    content::NavigationHandle* navigation_handle) {
-  // TODO(crbug.com/380461005): Add URL-level exceptions.
-  auto& mutable_runtime_feature_state =
-      navigation_handle->GetMutableRuntimeFeatureStateContext();
-  bool canvas_base_feature_enabled =
-      features::IsCanvasInterventionsEnabledForIncognitoState(is_incognito_);
-
-  if (mutable_runtime_feature_state.IsCanvasInterventionsEnabled() !=
-      canvas_base_feature_enabled) {
-    mutable_runtime_feature_state.SetCanvasInterventionsEnabled(
-        canvas_base_feature_enabled);
-  }
-}
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(InterventionsWebContentsHelper);
 

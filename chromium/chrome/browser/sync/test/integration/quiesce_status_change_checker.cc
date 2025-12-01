@@ -16,6 +16,8 @@
 #include "components/sync/service/sync_service_impl.h"
 #include "components/sync/test/fake_server.h"
 
+#include "base/logging.h"
+
 namespace {
 
 // Compares two serialized progress markers for equivalence to determine client

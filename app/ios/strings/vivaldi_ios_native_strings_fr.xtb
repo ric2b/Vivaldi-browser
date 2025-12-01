@@ -49,6 +49,7 @@
 <translation id="1521731267649138856">votre adresse mail de secours.</translation>
 <translation id="1534183273237573805">En sélectionnant l’un de ces moteurs de recherche, vous soutenez le développement de Vivaldi.</translation>
 <translation id="1535446875484049224">Le mode sombre a des ratés ou ne fonctionne pas correctement</translation>
+<translation id="1558430487788094817">Vous devez fournir un protocole valide.</translation>
 <translation id="1567659716528258242">Vivaldi fait surchauffer mon appareil</translation>
 <translation id="156793582229023040">Je suis concerné par le traçage et la collecte de données</translation>
 <translation id="1573784689611551537">Gérer les sources de blocage de publicités</translation>
@@ -68,7 +69,6 @@
 <translation id="1752547299766512813">Enregistrer les mots de passe</translation>
 <translation id="1754797958074421486">Conditions d’utilisation</translation>
 <translation id="1755590309862395270">Pour des suggestions d’autocomplétion supprimables.</translation>
-<translation id="1763111582687651119">Activer les alias de moteurs de recherche</translation>
 <translation id="1771413903824396513">Par alias</translation>
 <translation id="1771605894228673800">Je veux un VPN intégré an navigateur</translation>
 <translation id="1800685789463945995">Vivaldi ne cesse de se bloquer ou de se figer</translation>
@@ -92,6 +92,7 @@
 <translation id="2079545284768500474">Annuler</translation>
 <translation id="2138901399878617625">Plantez des arbres en cherchant</translation>
 <translation id="2148384276939959392">Synchroniser les éléments sélectionnés</translation>
+<translation id="2179052183774520942">Ajouter un moteur de recherche</translation>
 <translation id="2195713384412091023">Cela supprimera toutes les données de synchronisation stockées sur notre serveur, réinitialisera votre mot de passe de cryptage et vous déconnectera.</translation>
 <translation id="2228584369802328636">Jeux vidéo</translation>
 <translation id="2240680014596059312">Privé. Rapide. Peu de publicités.</translation>
@@ -133,7 +134,9 @@ bloquées</translation>
 <translation id="2701366016894985129">Publicités dans les résultats de recherche</translation>
 <translation id="2702801445560668637">Liste de lecture</translation>
 <translation id="2709516037105925701">Autocomplétion</translation>
+<translation id="271033894570825754">Nouveau</translation>
 <translation id="2712076950889800659">En poursuivant, vous acceptez le <ph name="BEGIN_LINK" />Contrat le Licence Utilisateur Final<ph name="END_LINK" /> et la <ph name="BEGIN_LINK" />politique de confidentialité<ph name="END_LINK" /> de Vivaldi</translation>
+<translation id="2720646732332242062">Autoriser les alias</translation>
 <translation id="2725892265692641195">Nouveau<ph name="ITEM_TYPE" /></translation>
 <translation id="2745324713975967671">Mot de passe de chiffrement</translation>
 <translation id="276436995507680929">Synchroniser la liste de lecture</translation>
@@ -141,6 +144,7 @@ bloquées</translation>
 <translation id="2767124759205735526">Synchroniser l’historique et les URL saisies</translation>
 <translation id="2770868136620962117">Nous sommes très heureux d’entendre cela !</translation>
 <translation id="2818665331928314854">Autoriser les signets</translation>
+<translation id="2820889731327284977">L’alias est déjà utilisé par <ph name="ENGINE_NAME" />.</translation>
 <translation id="2825232297853754349">Vous devez accepter les conditions d’utilisation.</translation>
 <translation id="2842985007712546952">Dossier parent</translation>
 <translation id="2843343418360315034">Hongrois (<ph name="ORIGIN" />)</translation>
@@ -163,6 +167,7 @@ bloquées</translation>
 <translation id="309084557304084991">Je ne veux pas de signets pu de Speed Dials préchargés</translation>
 <translation id="3091563570137981919">Blocage des traceurs et des publicités</translation>
 <translation id="3097968995088564986">Afficher le bouton d’ajout</translation>
+<translation id="3102790820790869053">Rechercher dans les onglets récents</translation>
 <translation id="3134385238404760368">Pas d’onglet récent</translation>
 <translation id="3142562627629111859">Nouveau groupe</translation>
 <translation id="3157931365184549694">Restaurer</translation>
@@ -184,6 +189,7 @@ bloquées</translation>
 <translation id="3368960138304620657">Lituanien (<ph name="ORIGIN" />)</translation>
 <translation id="3377025655491224618">Onglet privé</translation>
 <translation id="3394474617110693560">Catégories</translation>
+<translation id="3405080914346191957">Vous trouverez vos piles d’onglets ici</translation>
 <translation id="3435896845095436175">Activer</translation>
 <translation id="3438160227308459316">Roumain (<ph name="ORIGIN" />)</translation>
 <translation id="3451109402849920193">Motorisé par Lingvanex, hébergé par Vivaldi.</translation>
@@ -195,6 +201,8 @@ bloquées</translation>
 <translation id="3527085408025491307">Dossier</translation>
 <translation id="3530991200302302959">Bulgare (<ph name="ORIGIN" />)</translation>
 <translation id="3588477659268085586">Ouvrir le traducteur</translation>
+<translation id="3591006724568464696">Les onglets récents ne sont pas disponibles</translation>
+<translation id="3597069850377878155">Utilisez %s dans l’URL là ou le mot de recherche doit être inséré.</translation>
 <translation id="3601414719864711130">Par date</translation>
 <translation id="3602290021589620013">Prévisualisation</translation>
 <translation id="3607176258839749451">L’inscription a échoué à cause d’une erreur. Merci de réessayer plus tard.</translation>
@@ -208,6 +216,7 @@ bloquées</translation>
 <translation id="3694122362646626770">Sites Web</translation>
 <translation id="3699026013955941879">Le code a expiré. Veuillez demander un nouveau code d’activation.</translation>
 <translation id="3700829948786686853">Bienvenue dans Vivaldi</translation>
+<translation id="3712857387170726625">L’alias ne peut contenir d’espace.</translation>
 <translation id="3719826155360621982">Page d’accueil</translation>
 <translation id="373855430416507951">Chercher dans la page</translation>
 <translation id="3745190878148784130">Masquer le zoom de texte</translation>
@@ -301,12 +310,14 @@ bloqués</translation>
 <translation id="462860218383788109">Date de modification</translation>
 <translation id="4640946580087069269">Copier dans une note</translation>
 <translation id="4643117005422448078">Top Sites</translation>
+<translation id="4654428449690716275">Ne pas afficher de bannière avant ou après la traduction</translation>
 <translation id="4654578955713250802">Blocage des publicités et des traqueurs</translation>
 <translation id="4655510151391078468">Ce code ne correspond pas à celui que nous vous avons envoyé.
 Vous avez <ph name="ATTEMPTS" /> tentatives restantes.</translation>
 <translation id="466494460776294423">Le code de vérification requis</translation>
 <translation id="4700341416469973823">Supprimer la sélecion</translation>
 <translation id="4714431804859029826">Restaurer par défaut</translation>
+<translation id="4726767815033517343">l’URL ne peut être vide.</translation>
 <translation id="4727698999970341158">Islandais (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">Mettre à jour</translation>
 <translation id="4739712911308055817">Non récupéré</translation>
@@ -335,6 +346,7 @@ bloqué</translation>
 <translation id="4950266778127803750">Afficher le bouton X dans sur les onglets en arrière-plan</translation>
 <translation id="495421405224926623">J’ai lu et j’accepte les conditions d’utilisation et la politique de respect de la vie privée</translation>
 <translation id="497942794017668482">Blocage des traqueurs et des publicités</translation>
+<translation id="4983968022327077496">Votre organisation vous demande de naviguer en mode privé. Les onglets ne sont pas enregistrés en mode privé. <ph name="BEGIN_LINK" />En savoir plus<ph name="END_LINK" /></translation>
 <translation id="4993477362660748586">Synchronisation</translation>
 <translation id="500392125908657603">Options du champ d’adresses</translation>
 <translation id="5037761343305489956">Copié dans la note</translation>
@@ -356,6 +368,7 @@ bloqué</translation>
 <translation id="5271549068863921519">Enregistrer le mot de passe</translation>
 <translation id="5290452628447338707">Aucune note</translation>
 <translation id="5317780077021120954">Enregistrer</translation>
+<translation id="5327248766486351172">Nom</translation>
 <translation id="5349678548463426691">Par description</translation>
 <translation id="5350737901534958404">Autoriser les publicités de nos partenaires (qui aident Vivaldi)</translation>
 <translation id="5351912500249789547">Vivaldi.net a rejeté vos identifiants : Code d’erreur <ph name="ERROR_CODE" /></translation>
@@ -389,9 +402,11 @@ bloqué</translation>
 <translation id="5823830882692559950">Vivaldi.net a rejeté vos identifiants : <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">Nouveau dossier</translation>
 <translation id="5859825823508296659">Modifier le domaine</translation>
-<translation id="5867841422488265304">Saisir une adresse Web ou une expression à rechercher</translation>
 <translation id="5869217094746242845">En savoir plus sur la confidentialité et la sécurité</translation>
 <translation id="5871497086027727873">1 élément déplacé</translation>
+<translation id="5881883194519164706">Nouveau moteur</translation>
+<translation id="5894313460141624172">Piles d’onglets</translation>
+<translation id="5896446121684606536">L’alias ne peut être vide.</translation>
 <translation id="5898502570200301364">Vous pouvez utiliser les mots de passe que vous avez enregistrés dans le gestionnaire de mots de passe de Vivaldi dans d'autres applications sur votre iPhone.</translation>
 <translation id="5900160494089383343">Ce nom d’utilisateur n’est pas disponible.</translation>
 <translation id="5907851754429991366">Nous aimerions connaître votre retour d’expérience sur l’App Store.</translation>
@@ -399,12 +414,14 @@ bloqué</translation>
 <translation id="591684450784861763">Ajouter la page à…</translation>
 <translation id="5922915428124940994">(modifiée)</translation>
 <translation id="5939518447894949180">Réinitialiser</translation>
+<translation id="5957613098218939406">Plus d’options</translation>
 <translation id="6005497458542935062">Déplacer hors du dossier</translation>
 <translation id="603230602684548091">Sélectionnez la langue d’origine</translation>
 <translation id="6040304352785030331">Je veux utiliser des extensions de navigateur</translation>
 <translation id="6042308850641462728">Plus</translation>
 <translation id="6048889899469181614">La synchronisation ne fonctionne pas actuellement
  Ouvrez les paramètres pour corriger cela.</translation>
+<translation id="6049087555594742200">Paramètres POST</translation>
 <translation id="604930981600990598">Traduction copiée !</translation>
 <translation id="6052689967593623141">Vivaldi peut percevoir une commission d’affiliation si vous effectuez un achat après avoir cliqué sur certains de ces liens. Cela aide à soutenir le développement de Vivaldi et à maintenir l’indépendance du navigateur. Merci pour votre soutien !</translation>
 <translation id="6056094614114332761">Suggestions dans le champ d’adresses</translation>
@@ -433,7 +450,7 @@ bloqué</translation>
 <translation id="641394169129472837">Sélectionner la page qui doit s’ouvrir quand le bouton Nouvel Onglet est pressé.</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> sélectionnée</translation>
 <translation id="6442584491342758233">Direct Match</translation>
-<translation id="6443682944493983866">Accepter les langues</translation>
+<translation id="6464909711355014884">Ajouter une moteur de recherche personnalisé</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importer<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Sauvegarde de la clé de chiffrement</translation>
 <translation id="6527303717912515753">Partager</translation>
@@ -469,8 +486,10 @@ bloqué</translation>
 <translation id="6878199227380123461">Préférer le panneau de traduction</translation>
 <translation id="6887143077297974801">Échec de début de synchronisation.</translation>
 <translation id="6896758677409633944">Copier</translation>
+<translation id="6898471994345402432">URL de recherche d’images</translation>
 <translation id="691132463664340655">Thème du navigateur</translation>
 <translation id="6918338082370824763">Page spécifique</translation>
+<translation id="6933380551253627905">Typographie</translation>
 <translation id="6937750621455385628">Vous devez utiliser un compte Vivaldi pour vous connecter.</translation>
 <translation id="6941852195052765076">Santé</translation>
 <translation id="6945221475159498467">Sélectionner</translation>
@@ -479,6 +498,7 @@ bloqué</translation>
 <translation id="6951948201878750661">Presser pour sélectionner cette couleur</translation>
 <translation id="6967884871145366229">Gérer les options de respect de la vie privée</translation>
 <translation id="6973630695168034713">Dossiers</translation>
+<translation id="7000227144065890583">URL des suggestions</translation>
 <translation id="7006864796794806241">Récupération de mot de passe</translation>
 <translation id="7029809446516969842">Mots de passe</translation>
 <translation id="7041964446309059643">Manuel</translation>
@@ -554,6 +574,7 @@ bloqué</translation>
 <translation id="7801204999757211519">Vous possédez déjà un compte ? <ph name="BEGIN_LINK" />Connexion ➔<ph name="END_LINK" /></translation>
 <translation id="780301667611848630">Non merci</translation>
 <translation id="7850070199083838600">Créer un nouveau groupe ?</translation>
+<translation id="7856347297971871396">Liste des onglets synchronisés</translation>
 <translation id="7862984977194621600">Activer les suggestions de recherche</translation>
 <translation id="7870765213383950011">Premier groupe</translation>
 <translation id="7914995060146784406">Modifier la note</translation>
@@ -601,16 +622,18 @@ Vous avez atteint la limite maximale de mauvaises tentatives. Veuillez demander 
 <translation id="8404556771547317369">Veuillez saisir l’URL</translation>
 <translation id="8414685983518053656">Notes</translation>
 <translation id="8423076545503792640">La requête a échoué à cause d’une erreur. Merci de réessayer plus tard.</translation>
+<translation id="8427509694325373907">Paramètres POST de recherche d’images</translation>
 <translation id="8428213095426709021">Réglages</translation>
 <translation id="8458397775385147834">1 élément supprimé</translation>
 <translation id="846569642435104154">Cela définira ce facteur de zoom pour toutes les pages</translation>
 <translation id="8466547766474747336">Une fonctionnalité souhaitée me manque</translation>
 <translation id="8500459200727969761">Restaurer les listes d’origine</translation>
 <translation id="8503813439785031346">Nom d’utilisateur</translation>
+<translation id="851451113245350202">Liste des onglets récemment fermés</translation>
 <translation id="8515808232153642813">Déchiffrer</translation>
 <translation id="8517852590337319813">Activer votre compte</translation>
+<translation id="8529159259480052204">Masquer les bannières de confirmation</translation>
 <translation id="8546963963006468833">Avec Vivaldi, vous pouvez ouvrir facilement des liens, rechercher à partir de widgets et remplir automatiquement les mots de passe dans d'autres applications.</translation>
-<translation id="8546995005405883065">Langues préférées, acceptées par les sites Web compatibles dans l’ordre donné.</translation>
 <translation id="8562452229998620586">Les mots de passe enregistrés apparaitront ici.</translation>
 <translation id="856439694359429369">Appuyez pour plus d’options ou appuyez deux fois pour ouvrir.</translation>
 <translation id="8591818185775466306">Supprimer <ph name="ITEM_TYPE" /></translation>
@@ -620,6 +643,7 @@ Vous avez atteint la limite maximale de mauvaises tentatives. Veuillez demander 
 <translation id="8684294196284714094">Souhaitez-vous définir Vivaldi en tant que navigateur par défaut ?</translation>
 <translation id="8687583747694652488">Copier la source</translation>
 <translation id="8696653005998192569">Les images ou les vidéos sur les sites ne chargent pas</translation>
+<translation id="872451400847464257">Modifier le moteur de recherche</translation>
 <translation id="8730621377337864115">Terminé</translation>
 <translation id="8733945742171960420">Dès que vous commencerez à naviguer, vos Top Sites s’afficheront ici.</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> éléments supprimés</translation>
@@ -633,6 +657,7 @@ Vous avez atteint la limite maximale de mauvaises tentatives. Veuillez demander 
 <translation id="8828442094222036738">Résultats Google privés, fait en Europe</translation>
 <translation id="8855707633300847215">Afficher la barre d’onglets</translation>
 <translation id="8861211142470908937">Le mot de passe doit avoir au moins 12 caractères</translation>
+<translation id="8885321570279617421">Le nom ne peut être vide.</translation>
 <translation id="8892354889971902600">Les onglets récemment fermés apparaîtront ici.</translation>
 <translation id="89390081013973080">Tout est prêt !C’est le moment de décider quelles données seront synchronisées entre vos appareils.</translation>
 <translation id="8948792607467387336">Sélectionner en tant que fond d’écran</translation>
@@ -651,9 +676,11 @@ bloquées</translation>
 <translation id="9091665118798175641">Synchroniser les informations de remplissage automatique du formulaire</translation>
 <translation id="9097127519290088802">Mot de passe de chiffrement requis</translation>
 <translation id="9139318394846604261">Commerce</translation>
+<translation id="9148058034647219655">Quitter</translation>
 <translation id="9152984048904392513">Tout ouvrir en arrière-plan</translation>
 <translation id="9157459516617966251">Modifier le lien</translation>
 <translation id="9157539936604258187">Ouvrir le lien</translation>
+<translation id="9165758833825521812">Mode Lecture</translation>
 <translation id="9195659219948942754">Continuer à utiliser les données synchronisées de votre compte Vivaldi</translation>
 <translation id="9195802773917252923">Autoriser les alias de signets</translation>
 <translation id="9212737146310746733">Farsi (<ph name="ORIGIN" />)</translation>

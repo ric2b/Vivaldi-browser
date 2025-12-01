@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import * as SDK from '../core/sdk/sdk.js';
@@ -36,7 +36,7 @@ export interface RenderFlameChartOptions {
    * name so that the TraceLoader can take care of loading and caching the
    * trace.
    */
-  traceFile: string|Trace.Handlers.Types.ParsedTrace;
+  fileNameOrParsedTrace: string|Trace.TraceModel.ParsedTrace;
   /**
    * Filter the tracks that will be rendered by their name. The name here is
    * the user visible name that is drawn onto the flame chart.
@@ -75,7 +75,7 @@ export async function renderFlameChartIntoDOM(context: Mocha.Context|null, optio
   dataProvider: Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider |
       Timeline.TimelineFlameChartNetworkDataProvider.TimelineFlameChartNetworkDataProvider,
   target: HTMLElement,
-  parsedTrace: Trace.Handlers.Types.ParsedTrace,
+  parsedTrace: Trace.TraceModel.ParsedTrace,
 }> {
   const targetManager = SDK.TargetManager.TargetManager.instance({forceNew: true});
   const workspace = Workspace.Workspace.WorkspaceImpl.instance({forceNew: true});
@@ -88,18 +88,18 @@ export async function renderFlameChartIntoDOM(context: Mocha.Context|null, optio
     ignoreListManager,
   });
 
-  let parsedTrace: Trace.Handlers.Types.ParsedTrace|null = null;
+  let parsedTrace: Trace.TraceModel.ParsedTrace|null = null;
 
-  if (typeof options.traceFile === 'string') {
-    parsedTrace = (await TraceLoader.traceEngine(context, options.traceFile)).parsedTrace;
+  if (typeof options.fileNameOrParsedTrace === 'string') {
+    parsedTrace = await TraceLoader.traceEngine(context, options.fileNameOrParsedTrace);
   } else {
-    parsedTrace = options.traceFile;
+    parsedTrace = options.fileNameOrParsedTrace;
   }
 
   if (options.preloadScreenshots) {
-    await Timeline.Utils.ImageCache.preload(parsedTrace.Screenshots.screenshots ?? []);
+    await Timeline.Utils.ImageCache.preload(parsedTrace?.data.Screenshots.screenshots ?? []);
   }
-  const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+  const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
   const dataProvider = options.dataProvider === 'MAIN' ?
       new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider() :
       new Timeline.TimelineFlameChartNetworkDataProvider.TimelineFlameChartNetworkDataProvider();
@@ -116,8 +116,8 @@ export async function renderFlameChartIntoDOM(context: Mocha.Context|null, optio
   }
   const delegate = new MockFlameChartDelegate();
   const flameChart = new PerfUI.FlameChart.FlameChart(dataProvider, delegate);
-  const minTime = options.customStartTime ?? Trace.Helpers.Timing.microToMilli(parsedTrace.Meta.traceBounds.min);
-  const maxTime = options.customEndTime ?? Trace.Helpers.Timing.microToMilli(parsedTrace.Meta.traceBounds.max);
+  const minTime = options.customStartTime ?? Trace.Helpers.Timing.microToMilli(parsedTrace.data.Meta.traceBounds.min);
+  const maxTime = options.customEndTime ?? Trace.Helpers.Timing.microToMilli(parsedTrace.data.Meta.traceBounds.max);
 
   flameChart.setWindowTimes(minTime, maxTime);
   flameChart.markAsRoot();
@@ -144,9 +144,9 @@ export async function renderFlameChartIntoDOM(context: Mocha.Context|null, optio
 /**
  * Draws the network track in the flame chart using the legacy system.
  *
- * @param traceFileName - The name of the trace file to be loaded to the flame
+ * @param traceFileName The name of the trace file to be loaded to the flame
  * chart.
- * @param expanded - if the track is expanded
+ * @param expanded if the track is expanded
  * @returns a flame chart element and its corresponding data provider.
  */
 export async function getNetworkFlameChart(traceFileName: string, expanded: boolean): Promise<{
@@ -155,10 +155,11 @@ export async function getNetworkFlameChart(traceFileName: string, expanded: bool
 }> {
   await initializeGlobalVars();
 
-  const {parsedTrace} = await TraceLoader.traceEngine(/* context= */ null, traceFileName);
-  const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
-  const minTime = Trace.Helpers.Timing.microToMilli(parsedTrace.Meta.traceBounds.min);
-  const maxTime = Trace.Helpers.Timing.microToMilli(parsedTrace.Meta.traceBounds.max);
+  const parsedTrace = await TraceLoader.traceEngine(/* context= */ null, traceFileName);
+  const data = parsedTrace.data;
+  const entityMapper = new Trace.EntityMapper.EntityMapper(parsedTrace);
+  const minTime = Trace.Helpers.Timing.microToMilli(data.Meta.traceBounds.min);
+  const maxTime = Trace.Helpers.Timing.microToMilli(data.Meta.traceBounds.max);
   const dataProvider = new Timeline.TimelineFlameChartNetworkDataProvider.TimelineFlameChartNetworkDataProvider();
   dataProvider.setModel(parsedTrace, entityMapper);
   dataProvider.setWindowTimes(minTime, maxTime);
@@ -453,7 +454,7 @@ export function makeMockRendererHandlerData(
     entries,
     profileCalls: entries.filter(Trace.Types.Events.isProfileCall),
     layoutEvents: entries.filter(Trace.Types.Events.isLayout),
-    updateLayoutTreeEvents: entries.filter(Trace.Types.Events.isUpdateLayoutTree),
+    recalcStyleEvents: entries.filter(Trace.Types.Events.isRecalcStyle),
   };
 
   const mockProcess: Trace.Handlers.ModelHandlers.Renderer.RendererProcess = {
@@ -462,22 +463,15 @@ export function makeMockRendererHandlerData(
     threads: new Map([[tid as Trace.Types.Events.ThreadID, mockThread]]),
   };
 
-  const renderereEvents: Trace.Types.Events.RendererEvent[] = [];
-  for (const entry of entries) {
-    if (Trace.Types.Events.isRendererEvent(entry)) {
-      renderereEvents.push(entry);
-    }
-  }
-
   return {
     processes: new Map([[pid as Trace.Types.Events.ProcessID, mockProcess]]),
     compositorTileWorkers: new Map(),
     entryToNode,
-    allTraceEntries: renderereEvents,
     entityMappings: {
       entityByEvent: new Map(),
       eventsByEntity: new Map(),
       createdEntityCache: new Map(),
+      entityByUrlCache: new Map(),
     },
   };
 }
@@ -600,8 +594,8 @@ export interface FlameChartWithFakeProviderOptions {
 
 /**
  * Renders a flame chart using a fake provider and mock delegate.
- * @param provider - The fake flame chart provider.
- * @param options - Optional parameters.  Includes windowTimes, an array specifying the minimum and maximum window times. Defaults to [0, 100].
+ * @param provider The fake flame chart provider.
+ * @param options Optional parameters.  Includes windowTimes, an array specifying the minimum and maximum window times. Defaults to [0, 100].
  * @returns A promise that resolves when the flame chart is rendered.
  */
 export async function renderFlameChartWithFakeProvider(
@@ -666,10 +660,9 @@ export function getMainThread(data: Trace.Handlers.ModelHandlers.Renderer.Render
   return mainThread;
 }
 
-type ParsedTrace = Trace.Handlers.Types.ParsedTrace;
-
-export function getBaseTraceParseModelData(overrides: Partial<ParsedTrace> = {}): ParsedTrace {
-  return {
+export function getBaseTraceHandlerData(overrides: Partial<Trace.Handlers.Types.HandlerData> = {}):
+    Trace.TraceModel.ParsedTrace {
+  const data = {
     Animations: {animations: []},
     AnimationFrames: {
       animationFrames: [],
@@ -722,11 +715,11 @@ export function getBaseTraceParseModelData(overrides: Partial<ParsedTrace> = {})
       processes: new Map(),
       compositorTileWorkers: new Map(),
       entryToNode: new Map(),
-      allTraceEntries: [],
       entityMappings: {
         entityByEvent: new Map(),
         eventsByEntity: new Map(),
         createdEntityCache: new Map(),
+        entityByUrlCache: new Map(),
       },
     },
     Screenshots: {
@@ -756,6 +749,7 @@ export function getBaseTraceParseModelData(overrides: Partial<ParsedTrace> = {})
         entityByEvent: new Map(),
         eventsByEntity: new Map(),
         createdEntityCache: new Map(),
+        entityByUrlCache: new Map(),
       },
       linkPreconnectEvents: [],
     },
@@ -813,7 +807,7 @@ export function getBaseTraceParseModelData(overrides: Partial<ParsedTrace> = {})
       frames: new Map(),
     },
     SelectorStats: {
-      dataForUpdateLayoutEvent: new Map(),
+      dataForRecalcStyleEvent: new Map(),
       invalidatedNodeList: [],
     },
     Warnings: {
@@ -837,6 +831,14 @@ export function getBaseTraceParseModelData(overrides: Partial<ParsedTrace> = {})
       scripts: [],
     },
     ...overrides,
+  } as Trace.Handlers.Types.HandlerData;
+  return {
+    data,
+    insights: null,
+    traceEvents: [],
+    metadata: {},
+    // @ts-expect-error
+    syntheticEventsManager: null,
   };
 }
 
@@ -900,4 +902,110 @@ export function getAllNetworkRequestsByHost(
   });
 
   return reqs;
+}
+
+const allThreadEntriesForTraceCache = new WeakMap<Trace.TraceModel.ParsedTrace, Trace.Types.Events.Event[]>();
+
+/**
+ * A function to get a list of all thread entries that exist. This is
+ * reasonably expensive, so it's cached to avoid a huge impact on our test suite
+ * speed.
+ */
+export function allThreadEntriesInTrace(parsedTrace: Trace.TraceModel.ParsedTrace): Trace.Types.Events.Event[] {
+  const fromCache = allThreadEntriesForTraceCache.get(parsedTrace);
+  if (fromCache) {
+    return fromCache;
+  }
+
+  const allEvents: Trace.Types.Events.Event[] = [];
+
+  for (const process of parsedTrace.data.Renderer.processes.values()) {
+    for (const thread of process.threads.values()) {
+      for (const entry of thread.entries) {
+        allEvents.push(entry);
+      }
+    }
+  }
+
+  Trace.Helpers.Trace.sortTraceEventsInPlace(allEvents);
+  allThreadEntriesForTraceCache.set(parsedTrace, allEvents);
+  return allEvents;
+}
+
+export interface PerformanceAPIExtensionTestData {
+  detail: {devtools?: Trace.Types.Extensions.DevToolsObj};
+  name: string;
+  start?: string|number;
+  end?: string|number;
+  ts: number;
+  dur?: number;
+}
+
+export interface ConsoleAPIExtensionTestData {
+  name: string;
+  start?: string|number;
+  end?: string|number;
+  track?: string;
+  trackGroup?: string;
+  color?: string;
+  ts: number;
+}
+
+let idCounter = 0;
+
+export function makeTimingEventWithPerformanceExtensionData(
+    {name, ts: tsMicro, detail, dur: durMicro}: PerformanceAPIExtensionTestData): Trace.Types.Events.Event[] {
+  const isMark = durMicro === undefined;
+  const currentId = idCounter++;
+  const traceEventBase = {
+    cat: 'blink.user_timing',
+    pid: Trace.Types.Events.ProcessID(2017),
+    tid: Trace.Types.Events.ThreadID(259),
+    id2: {local: `${currentId}`},
+  };
+
+  const stringDetail = JSON.stringify(detail);
+  const args = isMark ? {data: {detail: stringDetail}} : {detail: stringDetail};
+  const firstEvent = {
+    args,
+    name,
+    ph: isMark ? Trace.Types.Events.Phase.INSTANT : Trace.Types.Events.Phase.ASYNC_NESTABLE_START,
+    ts: Trace.Types.Timing.Micro(tsMicro),
+    ...traceEventBase,
+  } as Trace.Types.Events.Event;
+  if (isMark) {
+    return [firstEvent];
+  }
+  return [
+    firstEvent,
+    {
+      name,
+      ...traceEventBase,
+      ts: Trace.Types.Timing.Micro(tsMicro + (durMicro || 0)),
+      ph: Trace.Types.Events.Phase.ASYNC_NESTABLE_END,
+    },
+  ];
+}
+
+export function makeTimingEventWithConsoleExtensionData(
+    {name, ts, start, end, track, trackGroup, color}: ConsoleAPIExtensionTestData):
+    Trace.Types.Events.ConsoleTimeStamp {
+  return {
+    cat: 'devtools.timeline',
+    pid: Trace.Types.Events.ProcessID(2017),
+    tid: Trace.Types.Events.ThreadID(259),
+    name: Trace.Types.Events.Name.TIME_STAMP,
+    args: {
+      data: {
+        message: name,
+        start,
+        end,
+        track,
+        trackGroup,
+        color,
+      }
+    },
+    ts: Trace.Types.Timing.Micro(ts),
+    ph: Trace.Types.Events.Phase.INSTANT,
+  };
 }

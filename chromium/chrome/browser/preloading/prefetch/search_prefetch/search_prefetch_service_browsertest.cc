@@ -35,6 +35,9 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
+#include "chrome/browser/ui/omnibox/omnibox_controller.h"
+#include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
+#include "chrome/browser/ui/omnibox/omnibox_view.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/search_test_utils.h"
@@ -43,9 +46,6 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/omnibox/browser/autocomplete_input.h"
-#include "components/omnibox/browser/omnibox_controller.h"
-#include "components/omnibox/browser/omnibox_edit_model.h"
-#include "components/omnibox/browser/omnibox_view.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/security_state/content/security_state_tab_helper.h"
@@ -495,13 +495,6 @@ class SearchPrefetchServiceEnabledBrowserTest
   std::unique_ptr<content::test::PreloadingAttemptUkmEntryBuilder>
       attempt_entry_builder_;
 };
-
-IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
-                       ServiceNotCreatedWhenIncognito) {
-  EXPECT_EQ(nullptr, SearchPrefetchServiceFactory::GetForProfile(
-                         browser()->profile()->GetPrimaryOTRProfile(
-                             /*create_if_needed=*/true)));
-}
 
 IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
                        BasicPrefetchFunctionality) {
@@ -2164,7 +2157,7 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   ASSERT_TRUE(prefetch_status.has_value());
   EXPECT_EQ(SearchPrefetchStatus::kCanBeServed, prefetch_status.value());
 
-  omnibox->model()->OpenSelection();
+  omnibox->model()->OpenSelectionForTesting();
 
   WaitUntilStatusChangesTo(canonical_search_url, std::nullopt);
 
@@ -2206,7 +2199,7 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   ASSERT_TRUE(prefetch_status.has_value());
   EXPECT_EQ(SearchPrefetchStatus::kCanBeServed, prefetch_status.value());
 
-  omnibox->model()->OpenSelection();
+  omnibox->model()->OpenSelectionForTesting();
 
   WaitUntilStatusChangesTo(canonical_search_url, std::nullopt);
 
@@ -2240,7 +2233,7 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   GURL canonical_search_url = GetCanonicalSearchURL(
       autocomplete_controller->result().match_at(0).destination_url);
 
-  omnibox->model()->OpenSelection();
+  omnibox->model()->OpenSelectionForTesting();
   WaitUntilStatusChangesTo(canonical_search_url, std::nullopt);
   DispatchDelayedResponseTask();
 
@@ -2285,7 +2278,7 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   WaitUntilStatusChangesTo(canonical_search_url,
                            SearchPrefetchStatus::kCanBeServed);
 
-  omnibox->model()->OpenSelection();
+  omnibox->model()->OpenSelectionForTesting();
 
   // Wait until it is served to a real navigation.
   WaitUntilStatusChangesTo(canonical_search_url, std::nullopt);
@@ -2354,7 +2347,7 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
       SecurityStateTabHelper::FromWebContents(GetWebContents());
   WaitUntilStatusChangesTo(canonical_search_url,
                            SearchPrefetchStatus::kCanBeServed);
-  omnibox->model()->OpenSelection();
+  omnibox->model()->OpenSelectionForTesting();
 
   // Wait until it is served to a real navigation.
   WaitUntilStatusChangesTo(canonical_search_url, std::nullopt);
@@ -2400,7 +2393,7 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceEnabledBrowserTest,
   WaitUntilStatusChangesTo(canonical_search_url,
                            SearchPrefetchStatus::kCanBeServed);
 
-  omnibox->model()->OpenSelection();
+  omnibox->model()->OpenSelectionForTesting();
   // Wait until it is served to the navigation.
   WaitUntilStatusChangesTo(canonical_search_url, std::nullopt);
 
@@ -3905,7 +3898,7 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceNavigationPrefetchBrowserTest,
   ASSERT_TRUE(prefetch_status.has_value());
   EXPECT_EQ(SearchPrefetchStatus::kComplete, prefetch_status.value());
 
-  omnibox->model()->OpenSelection();
+  omnibox->model()->OpenSelectionForTesting();
 
   // Wait until it is served to the navigation.
   WaitUntilStatusChangesTo(canonical_search_url, std::nullopt);
@@ -3950,7 +3943,7 @@ IN_PROC_BROWSER_TEST_F(SearchPrefetchServiceNavigationPrefetchBrowserTest,
           canonical_search_url);
   EXPECT_FALSE(prefetch_status.has_value());
 
-  omnibox->model()->OpenSelection();
+  omnibox->model()->OpenSelectionForTesting();
 
   // Suggestion server does not suggest the user agent to prefetch the resource,
   // so there should be no prefetch attempt.

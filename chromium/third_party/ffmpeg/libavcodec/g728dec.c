@@ -44,9 +44,9 @@
 
 static float g728_gq_db[8];
 static float g728_y_db[128];
-static float g728_wnr_r[FFALIGN(NSBSZ,16)];
-static float g728_wnrg_r[FFALIGN(NSBGSZ, 16)];
-static float g728_facv_f[FFALIGN(LPC, 16)];
+static DECLARE_ALIGNED(32, float, g728_wnr_r)[FFALIGN(NSBSZ,16)];
+static DECLARE_ALIGNED(32, float, g728_wnrg_r)[FFALIGN(NSBGSZ, 16)];
+static DECLARE_ALIGNED(32, float, g728_facv_f)[FFALIGN(LPC, 16)];
 
 static av_cold void g728_init_static_data(void)
 {
@@ -96,6 +96,8 @@ static av_cold int g728_decode_init(AVCodecContext *avctx)
         s->sbg[NSBGSZ - 1 -i] = -GOFF;
 
     avctx->sample_fmt = AV_SAMPLE_FMT_FLT;
+    if (!avctx->sample_rate)
+        avctx->sample_rate = 8000;
 
     av_channel_layout_uninit(&avctx->ch_layout);
     avctx->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_MONO;

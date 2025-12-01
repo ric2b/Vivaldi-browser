@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2011 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2011 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../core/common/common.js';
@@ -42,7 +16,7 @@ import requestCookiesViewStyles from './requestCookiesView.css.js';
 
 const UIStrings = {
   /**
-   *@description Text in Request Cookies View of the Network panel
+   * @description Text in Request Cookies View of the Network panel
    */
   thisRequestHasNoCookies: 'This request has no cookies.',
   /**
@@ -51,28 +25,28 @@ const UIStrings = {
    */
   requestCookies: 'Request Cookies',
   /**
-   *@description Tooltip to explain what request cookies are
+   * @description Tooltip to explain what request cookies are
    */
   cookiesThatWereSentToTheServerIn: 'Cookies that were sent to the server in the \'cookie\' header of the request',
   /**
-   *@description Label for showing request cookies that were not actually sent
+   * @description Label for showing request cookies that were not actually sent
    */
   showFilteredOutRequestCookies: 'show filtered out request cookies',
   /**
-   *@description Text in Request Headers View of the Network Panel
+   * @description Text in Request Headers View of the Network Panel
    */
   noRequestCookiesWereSent: 'No request cookies were sent.',
   /**
-   *@description Text in Request Cookies View of the Network panel
+   * @description Text in Request Cookies View of the Network panel
    */
   responseCookies: 'Response Cookies',
   /**
-   *@description Tooltip to explain what response cookies are
+   * @description Tooltip to explain what response cookies are
    */
   cookiesThatWereReceivedFromThe:
       'Cookies that were received from the server in the \'`set-cookie`\' header of the response',
   /**
-   *@description Label for response cookies with invalid syntax
+   * @description Label for response cookies with invalid syntax
    */
   malformedResponseCookies: 'Malformed Response Cookies',
   /**
@@ -306,8 +280,8 @@ export class RequestCookiesView extends UI.Widget.Widget {
       for (const malformedCookie of malformedResponseCookies) {
         const listItem = this.malformedResponseCookiesList.createChild('span', 'cookie-line source-code');
         const icon = new IconButton.Icon.Icon();
-        icon.data = {iconName: 'cross-circle-filled', color: 'var(--icon-error)', width: '14px', height: '14px'};
-        icon.classList.add('cookie-warning-icon');
+        icon.name = 'cross-circle-filled';
+        icon.classList.add('cookie-warning-icon', 'small');
         listItem.appendChild(icon);
         UI.UIUtils.createTextChild(listItem, malformedCookie.cookieLine);
 

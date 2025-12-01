@@ -36,7 +36,7 @@ using vivaldi::IsVivaldiRunning;
 @end
 
 @implementation PasswordInfobarModalOverlayMediator {
-  raw_ptr<IOSChromeSavePasswordInfoBarDelegate> delegate_;
+  raw_ptr<IOSChromeSavePasswordInfoBarDelegate, DanglingUntriaged> delegate_;
   InfobarType infobarType_;
 }
 

@@ -6,9 +6,10 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
-from flask import Flask, request as flask_request, make_response
+from flask import Flask, request as flask_request, make_response, redirect
 import logging
 
+from google.appengine.api import users
 from google.appengine.api import wrap_wsgi_app
 import google.cloud.logging
 try:
@@ -56,6 +57,7 @@ from dashboard.api import describe
 from dashboard.api import test_suites
 from dashboard.api import timeseries2
 from dashboard.common import datastore_hooks
+from dashboard.common import utils
 
 google.cloud.logging.Client().setup_logging(log_level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.INFO)
@@ -63,6 +65,77 @@ logging.getLogger("urllib3").setLevel(logging.INFO)
 datastore_hooks.InstallHooks()
 
 flask_app = Flask(__name__)
+
+@flask_app.before_request
+def CheckUser():
+  # Exclude static assets (required for the pages to render correctly)
+  # and API with its own authentication.
+  exempt_paths = {
+      '/alert_groups_update',
+      '/delete_expired_entities',
+      '/favicon.ico',
+      '/graph_json',
+      '/group_report',
+      '/list_tests',
+      '/load_from_prod',
+      '/mark_recovered_alerts',
+      '/migrate_test_names_tasks',
+      '/update_dashboard_stats',
+      '/update_test_suites',
+      '/update_test_suite_descriptors',
+  }
+  # Prefixes for Exempt Paths
+  exempt_prefixes = [
+      '/_ah/',
+      '/add_histograms',
+      '/add_point',
+      '/api/',
+      '/buildbucket_job_status/',
+      '/components/',
+      '/configs/',
+      '/cron/',
+      '/dashboard/elements/',
+      '/dashboard/static/',
+      '/flot/',
+      '/internal/',
+      '/jquery/',
+      '/migrate_test_names',
+      '/pinpoint/',
+      '/tracing/',
+      '/update_pinpoint_job_culprits',
+  ] + utils.OAUTH_ENDPOINTS + utils.DUAL_AUTH_ENDPOINTS
+
+  path = flask_request.path
+  if path in exempt_paths or any(path.startswith(p) for p in exempt_prefixes):
+    return None
+
+  email = utils.GetEmail()
+  if not email:
+    return redirect(users.create_login_url(path))
+
+  if not utils.IsInternalUser():
+    logging.debug('Blocked user access: %s %s', email, path)
+    return make_response(
+        'The performance dashboard is deprecated and access is limited. '
+        'Please use the new dashboard (public instance for Chromium: '
+        'https://perf.luci.app/, public instance for WebRTC: https://webrtc-perf.luci.app).'
+        ' If you are an internal user, you can (for now) authorize with your '
+        'Google account to access this page.', 403)
+
+  if utils.IsGroupMember(email, 'chromeperf-access-eligible'):
+    # Access on Demand is enabled for this user.
+    # Check if they have permissions at the moment.
+    if utils.IsGroupMember(email, 'chromeperf-access-granted'):
+      logging.debug('Allowed (on-demand) user access: %s %s', email, path)
+      return None
+    logging.debug('Blocked (on-demand) user access: %s %s', email, path)
+    return make_response(
+        'The performance dashboard is deprecated and access is limited. '
+        'See go/legacy-chromeperf-aod.', 403)
+
+  # Legacy code path. Should be removed when all users are enrolled in AoD.
+  logging.debug('Allowed user access: %s %s', email, path)
+  return None
 
 flask_app.wsgi_app = wrap_wsgi_app(flask_app.wsgi_app, use_deferred=True)
 

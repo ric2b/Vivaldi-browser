@@ -216,7 +216,7 @@ of the "update" step to see exactly what gclient sync pulled in.
 ## Tree state
 
 The "tree" is the sum of the various source repositories used to build the
-project, being Chromium, ChromiumOS, NativeClient, etc. In Chromium case, it's
+project, being Chromium, ChromiumOS, etc. In Chromium case, it's
 chrome/src/ plus everything listed in its
 [DEPS](http://src.chromium.org/viewvc/chrome/trunk/src/DEPS?view=markup) file,
 and a bit more for Google Chrome like trademarked graphics. The tree can be

@@ -18,8 +18,8 @@
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 
 namespace blink {
-class SchedulerTaskContext;
 class SoftNavigationContext;
+class WebSchedulingTaskState;
 }  // namespace blink
 
 namespace v8 {
@@ -39,22 +39,14 @@ class CORE_EXPORT TaskAttributionTrackerImpl : public TaskAttributionTracker {
  public:
   static std::unique_ptr<TaskAttributionTracker> Create(v8::Isolate*);
 
-  TaskAttributionInfo* CurrentTaskState() const override;
-
-  TaskScope CreateTaskScope(TaskAttributionInfo* task_state,
-                            TaskScopeType type) override;
-
-  TaskScope CreateTaskScope(SoftNavigationContext*) override;
-
-  TaskScope CreateTaskScope(
+  // TaskAttributionTracker overrides:
+  std::optional<TaskScope> SetCurrentTaskStateIfTopLevel(
       TaskAttributionInfo* task_state,
-      TaskScopeType type,
-      SchedulerTaskContext* continuation_context) override;
-
-  std::optional<TaskScope> MaybeCreateTaskScopeForCallback(
-      TaskAttributionInfo* task_state) override;
-
-  ObserverScope RegisterObserver(Observer* observer) override;
+      TaskScopeType type) override;
+  TaskScope SetCurrentTaskState(WebSchedulingTaskState* task_state,
+                                TaskScopeType type) override;
+  TaskScope SetTaskStateVariable(SoftNavigationContext*) override;
+  TaskAttributionInfo* CurrentTaskState() const override;
   std::optional<TaskAttributionId> AsyncSameDocumentNavigationStarted()
       override;
   TaskAttributionInfo* CommitSameDocumentNavigation(TaskAttributionId) override;
@@ -63,11 +55,11 @@ class CORE_EXPORT TaskAttributionTrackerImpl : public TaskAttributionTracker {
  private:
   explicit TaskAttributionTrackerImpl(v8::Isolate*);
 
+  TaskScope SetCurrentTaskStateImpl(TaskAttributionTaskState* task_state,
+                                    TaskScopeType type);
   void OnTaskScopeDestroyed(const TaskScope&) override;
-  void OnObserverScopeDestroyed(const ObserverScope&) override;
 
-  TaskAttributionId next_task_id_;
-  Persistent<Observer> observer_ = nullptr;
+  TaskAttributionId next_task_id_{1};
 
   // A queue of TaskAttributionInfo objects representing tasks that initiated a
   // same-document navigation that was sent to the browser side. They are kept

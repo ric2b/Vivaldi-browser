@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #![allow(warnings)]
+#[cfg(feature = "android_mediacodec")]
 pub mod bindings {
     #[cfg(not(android_soong))]
     include!(env!("CRABBYAVIF_ANDROID_NDK_MEDIA_BINDINGS_RS"));

@@ -1,12 +1,12 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as Platform from '../../core/platform/platform.js';
+import type * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import {dispatchClickEvent} from '../../testing/DOMHelpers.js';
-import {createTarget} from '../../testing/EnvironmentHelpers.js';
+import {createTarget, registerActions} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
@@ -35,13 +35,13 @@ describeWithMockConnection('BackgroundServiceView', () => {
     target = createTarget();
     backgroundServiceModel = target.model(Resources.BackgroundServiceModel.BackgroundServiceModel);
     manager = target.model(SDK.StorageKeyManager.StorageKeyManager);
-    UI.ActionRegistration.maybeRemoveActionExtension('background-service.toggle-recording');
-    UI.ActionRegistration.registerActionExtension({
+    registerActions([{
       actionId: 'background-service.toggle-recording',
       category: UI.ActionRegistration.ActionCategory.BACKGROUND_SERVICES,
       title: () => 'mock' as Platform.UIString.LocalizedString,
       toggleable: true,
-    });
+    }]);
+
     sinon.stub(UI.ShortcutRegistry.ShortcutRegistry, 'instance').returns({
       shortcutTitleForAction: () => {},
       shortcutsForAction: () => [new UI.KeyboardShortcut.KeyboardShortcut(
@@ -49,10 +49,6 @@ describeWithMockConnection('BackgroundServiceView', () => {
     } as unknown as UI.ShortcutRegistry.ShortcutRegistry);
     assert.exists(backgroundServiceModel);
     view = new Resources.BackgroundServiceView.BackgroundServiceView(serviceName, backgroundServiceModel);
-  });
-
-  afterEach(() => {
-    UI.ActionRegistration.maybeRemoveActionExtension('background-service.toggle-recording');
   });
 
   it('updates event list when main storage key changes', () => {
@@ -98,8 +94,8 @@ describeWithMockConnection('BackgroundServiceView', () => {
 
   it('Triggers record on button click', () => {
     const recordButton = view.contentElement.querySelector('.empty-state devtools-button');
-    Platform.assertNotNullOrUndefined(recordButton);
-    assert.deepEqual(recordButton?.textContent, 'Start recording events');
+    assert.exists(recordButton);
+    assert.deepEqual(recordButton.textContent, 'Start recording events');
 
     const recordingSpy = sinon.spy(view, 'toggleRecording');
     dispatchClickEvent(recordButton);

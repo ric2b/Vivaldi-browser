@@ -49,6 +49,7 @@
 <translation id="1521731267649138856">Ihre Wiederherstellungs-E-Mail-Adresse.</translation>
 <translation id="1534183273237573805">Indem Sie eine dieser Suchmaschinen auswählen, unterstützen Sie die Entwicklung von Vivaldi.</translation>
 <translation id="1535446875484049224">Der dunkle Modus ist fehlerhaft oder sieht nicht richtig aus</translation>
+<translation id="1558430487788094817">Sie müssen ein gültiges Protokoll angeben.</translation>
 <translation id="1567659716528258242">Vivaldi heizt mein Gerät auf</translation>
 <translation id="156793582229023040">Ich bin besorgt über die Überwachung oder Datensammlung</translation>
 <translation id="1573784689611551537">Werbeblocker-Quellen verwalten</translation>
@@ -68,7 +69,6 @@
 <translation id="1752547299766512813">Passwörter speichern</translation>
 <translation id="1754797958074421486">Nutzungsbedingungen</translation>
 <translation id="1755590309862395270">Für löschbare Vorschläge zur automatischen Vervollständigung.</translation>
-<translation id="1763111582687651119">Suchmaschinen-Kürzel aktivieren</translation>
 <translation id="1771413903824396513">Nach Kürzel</translation>
 <translation id="1771605894228673800">Ich möchte eine integrierte VPN-Funktion</translation>
 <translation id="1800685789463945995">Vivaldi stürzt ständig ab oder friert ein</translation>
@@ -92,6 +92,7 @@
 <translation id="2079545284768500474">Rückgängig</translation>
 <translation id="2138901399878617625">Bäume pflanzen bei der Suche</translation>
 <translation id="2148384276939959392">Auswahl synchronisieren</translation>
+<translation id="2179052183774520942">Suchmaschine hinzufügen</translation>
 <translation id="2195713384412091023">Dadurch werden alle auf unserem Server gespeicherten Synchronisierungsdaten entfernt, Ihr Verschlüsselungskennwort zurückgesetzt und Sie abgemeldet.</translation>
 <translation id="2228584369802328636">Spiele</translation>
 <translation id="2240680014596059312">Privat. Schnell. Weniger Werbung.</translation>
@@ -133,7 +134,9 @@ blockiert</translation>
 <translation id="2701366016894985129">Werbung in Suchergebnissen</translation>
 <translation id="2702801445560668637">Leseliste</translation>
 <translation id="2709516037105925701">Automatisches Ausfüllen</translation>
+<translation id="271033894570825754">Neu</translation>
 <translation id="2712076950889800659">Wenn Sie fortfahren, stimmen Sie der <ph name="BEGIN_LINK" />Endbenutzer Lizenzvereinbarung<ph name="END_LINK" /> und der <ph name="BEGIN_LINK" />Datenschutzerklärung<ph name="END_LINK" /> von Vivaldi zu</translation>
+<translation id="2720646732332242062">Kürzel aktivieren</translation>
 <translation id="2725892265692641195">Neu <ph name="ITEM_TYPE" /></translation>
 <translation id="2745324713975967671">Verschlüsselungspasswort</translation>
 <translation id="276436995507680929">Leseliste synchronisieren</translation>
@@ -141,6 +144,7 @@ blockiert</translation>
 <translation id="2767124759205735526">Verlauf und getippte Urls synchronisieren</translation>
 <translation id="2770868136620962117">Wow, das freut uns natürlich sehr!</translation>
 <translation id="2818665331928314854">Lesezeichen aktivieren</translation>
+<translation id="2820889731327284977">Kürzel bereits von<ph name="ENGINE_NAME" /> verwendet.</translation>
 <translation id="2825232297853754349">Sie müssen den Nutzungsbedingungen zustimmen.</translation>
 <translation id="2842985007712546952">Übergeordneter Ordner</translation>
 <translation id="2843343418360315034">Ungarisch (<ph name="ORIGIN" />)</translation>
@@ -163,6 +167,7 @@ blockiert</translation>
 <translation id="309084557304084991">Ich möchte keine vorinstallierten Lesezeichen und Schnellwahlen</translation>
 <translation id="3091563570137981919">Tracker- und Werbeblocker</translation>
 <translation id="3097968995088564986">„Hinzufügen“-Schaltfläche anzeigen</translation>
+<translation id="3102790820790869053">Letzte Tabs durchsuchen</translation>
 <translation id="3134385238404760368">Keine aktuellen Tabs</translation>
 <translation id="3142562627629111859">Neue Gruppe</translation>
 <translation id="3157931365184549694">Wiederherstellen</translation>
@@ -184,6 +189,7 @@ blockiert</translation>
 <translation id="3368960138304620657">Litauisch (<ph name="ORIGIN" />)</translation>
 <translation id="3377025655491224618">Privater Tab</translation>
 <translation id="3394474617110693560">Kategorien</translation>
+<translation id="3405080914346191957">Sie finden ihre Tabgruppen hier</translation>
 <translation id="3435896845095436175">Aktivieren</translation>
 <translation id="3438160227308459316">Rumänisch (<ph name="ORIGIN" />)</translation>
 <translation id="3451109402849920193">Unterstützt von Lingvanex, bereitgestellt von Vivaldi.</translation>
@@ -195,6 +201,8 @@ blockiert</translation>
 <translation id="3527085408025491307">Ordner</translation>
 <translation id="3530991200302302959">Bulgarisch (<ph name="ORIGIN" />)</translation>
 <translation id="3588477659268085586">Übersetzer öffnen</translation>
+<translation id="3591006724568464696">Letzte Tabs sind nicht verfügbar</translation>
+<translation id="3597069850377878155">Verwenden Sie %s in der URL anstelle der Suchanfrage.</translation>
 <translation id="3601414719864711130">Nach Datum</translation>
 <translation id="3602290021589620013">Vorschau</translation>
 <translation id="3607176258839749451">Die Registrierung ist aufgrund eines Fehlers fehlgeschlagen. Bitte versuchen Sie es später noch einmal.</translation>
@@ -208,6 +216,7 @@ blockiert</translation>
 <translation id="3694122362646626770">Websites</translation>
 <translation id="3699026013955941879">Der Code ist abgelaufen. Bitte fordern Sie einen neuen Aktivierungscode an.</translation>
 <translation id="3700829948786686853">Willkommen bei Vivaldi</translation>
+<translation id="3712857387170726625">Kürzel darf keine Leerzeichen enthalten.</translation>
 <translation id="3719826155360621982">Startseite</translation>
 <translation id="373855430416507951">Auf Seite suchen</translation>
 <translation id="3745190878148784130">Text-Zoom ausblenden</translation>
@@ -301,12 +310,14 @@ blockiert</translation>
 <translation id="462860218383788109">Geändert</translation>
 <translation id="4640946580087069269">Als Notiz kopieren</translation>
 <translation id="4643117005422448078">Top-Sites</translation>
+<translation id="4654428449690716275">Vor oder nach der Übersetzung kein Banner anzeigen ***</translation>
 <translation id="4654578955713250802">Werbung und Tracker blockieren</translation>
 <translation id="4655510151391078468">Dieser Code stimmt nicht mit dem überein, den wir Ihnen geschickt haben.
         Sie haben noch <ph name="ATTEMPTS" /> verbleibende Versuche.</translation>
 <translation id="466494460776294423">Verifizierungscode ist erforderlich</translation>
 <translation id="4700341416469973823">Ausgewählte löschen</translation>
 <translation id="4714431804859029826">Standardeinstellungen wiederherstellen</translation>
+<translation id="4726767815033517343">URL darf nicht leer sein.</translation>
 <translation id="4727698999970341158">Isländisch (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">Update</translation>
 <translation id="4739712911308055817">Nicht abgerufen</translation>
@@ -335,6 +346,7 @@ blockiert</translation>
 <translation id="4950266778127803750">X-Schaltfläche für Hintergrund-Tabs anzeigen</translation>
 <translation id="495421405224926623">Ich habe die Nutzungsbedingungen und die Datenschutzrichtlinie gelesen und stimme ihnen zu</translation>
 <translation id="497942794017668482">Tracker und Werbung blockieren</translation>
+<translation id="4983968022327077496">Ihre Organisation erfordert, dass Sie privat surfen. Tabs werden im privaten Modus nicht gespeichert. <ph name="BEGIN_LINK" />Weitere Informationen<ph name="END_LINK" /></translation>
 <translation id="4993477362660748586">Synchronisierung</translation>
 <translation id="500392125908657603">Adressfeld-Optionen</translation>
 <translation id="5037761343305489956">Als Notiz kopiert</translation>
@@ -356,6 +368,7 @@ blockiert</translation>
 <translation id="5271549068863921519">Passwort speichern</translation>
 <translation id="5290452628447338707">Keine Notizen</translation>
 <translation id="5317780077021120954">Speichern</translation>
+<translation id="5327248766486351172">Name</translation>
 <translation id="5349678548463426691">Nach Beschreibung</translation>
 <translation id="5350737901534958404">Werbung von unseren Partnern zulassen (Vivaldi unterstützen)</translation>
 <translation id="5351912500249789547">Vivaldi.net hat Ihre Anmeldedaten abgelehnt: Error code <ph name="ERROR_CODE" /></translation>
@@ -389,9 +402,11 @@ blockiert</translation>
 <translation id="5823830882692559950">Vivaldi.net hat Ihre Anmeldedaten abgelehnt: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">Neuer Ordner</translation>
 <translation id="5859825823508296659">Domain bearbeiten</translation>
-<translation id="5867841422488265304">Suche oder URL eingeben</translation>
 <translation id="5869217094746242845">Erfahren Sie mehr über Datenschutz &amp; Sicherheit</translation>
 <translation id="5871497086027727873">1 Element verschoben</translation>
+<translation id="5881883194519164706">Neue Suchmaschine</translation>
+<translation id="5894313460141624172">Tabgruppen</translation>
+<translation id="5896446121684606536">Kürzel darf nicht leer sein.</translation>
 <translation id="5898502570200301364">Sie können die in Vivaldi Passwort Manager gespeicherten Passwörter in anderen Anwendungen auf Ihrem iPhone verwenden.</translation>
 <translation id="5900160494089383343">Dieser Benutzername ist nicht verfügbar.</translation>
 <translation id="5907851754429991366">Wir würden uns über Ihr Feedback im App Store freuen.</translation>
@@ -399,12 +414,14 @@ blockiert</translation>
 <translation id="591684450784861763">Seite hinzufügen zu...</translation>
 <translation id="5922915428124940994">(Geändert)</translation>
 <translation id="5939518447894949180">Zurücksetzen</translation>
+<translation id="5957613098218939406">Weitere Optionen</translation>
 <translation id="6005497458542935062">Aus dem Ordner verschieben</translation>
 <translation id="603230602684548091">Quellsprache auswählen</translation>
 <translation id="6040304352785030331">Ich möchte Browser-Erweiterungen/Add-ons verwenden</translation>
 <translation id="6042308850641462728">Mehr</translation>
 <translation id="6048889899469181614">Die Synchronisierung funktioniert im Moment nicht.
  Öffnen Sie die Einstellungen, um das Problem zu beheben.</translation>
+<translation id="6049087555594742200">POST Parameter</translation>
 <translation id="604930981600990598">Übersetzung kopiert!</translation>
 <translation id="6052689967593623141">Vivaldi kann eine Provision erhalten, wenn Sie einen Kauf tätigen, nachdem Sie auf einige dieser Links geklickt haben. Dies hilft, die Entwicklung von Vivaldi zu unterstützen und den Browser unabhängig zu halten. Vielen Dank für Ihre Unterstützung!</translation>
 <translation id="6056094614114332761">Adressfeld Vorschläge</translation>
@@ -433,7 +450,7 @@ blockiert</translation>
 <translation id="641394169129472837">Wählen Sie aus, welche Seite geöffnet werden soll, wenn Sie auf die Schaltfläche Neuer Tab tippen.</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> ausgewählt</translation>
 <translation id="6442584491342758233">Direct Match</translation>
-<translation id="6443682944493983866">Akzeptierte Sprachen</translation>
+<translation id="6464909711355014884">Benutzerdefinierte Suchmaschine hinzufügen</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importieren<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Wiederherstellungsschlüssel</translation>
 <translation id="6527303717912515753">Teilen</translation>
@@ -469,8 +486,10 @@ blockiert</translation>
 <translation id="6878199227380123461">Übersetzungspaneel bevorzugen</translation>
 <translation id="6887143077297974801">Sync konnte nicht gestartet werden.</translation>
 <translation id="6896758677409633944">Kopieren</translation>
+<translation id="6898471994345402432">Bildsuche-URL</translation>
 <translation id="691132463664340655">Browser-Thema</translation>
 <translation id="6918338082370824763">Bestimmte Seite</translation>
+<translation id="6933380551253627905">Typografie</translation>
 <translation id="6937750621455385628">Zur Anmeldung müssen Sie ein Vivaldi-Konto verwenden.</translation>
 <translation id="6941852195052765076">Gesundheit</translation>
 <translation id="6945221475159498467">Auswählen</translation>
@@ -479,6 +498,7 @@ blockiert</translation>
 <translation id="6951948201878750661">Tippen, um diese Farbe auszuwählen</translation>
 <translation id="6967884871145366229">Datenschutzeinstellungen verwalten</translation>
 <translation id="6973630695168034713">Ordner</translation>
+<translation id="7000227144065890583">URL für Suchvorschläge</translation>
 <translation id="7006864796794806241">Passwort wiederherstellen</translation>
 <translation id="7029809446516969842">Passwörter</translation>
 <translation id="7041964446309059643">Manuell</translation>
@@ -554,6 +574,7 @@ blockiert</translation>
 <translation id="7801204999757211519">Sie haben bereits ein Konto? <ph name="BEGIN_LINK" />Anmelden ➔<ph name="END_LINK" /></translation>
 <translation id="780301667611848630">Nein Danke</translation>
 <translation id="7850070199083838600">Eine neue Gruppe erstellen?</translation>
+<translation id="7856347297971871396">Liste der synchronisierten Tabs</translation>
 <translation id="7862984977194621600">Suchvorschläge aktivieren</translation>
 <translation id="7870765213383950011">Erste Gruppe</translation>
 <translation id="7914995060146784406">Notiz bearbeiten</translation>
@@ -601,16 +622,18 @@ blockiert</translation>
 <translation id="8404556771547317369">Bitte die URL eingeben</translation>
 <translation id="8414685983518053656">Notizen</translation>
 <translation id="8423076545503792640">Die Bearbeitung ist aufgrund eines Fehlers fehlgeschlagen. Bitte versuchen Sie es später noch einmal.</translation>
+<translation id="8427509694325373907">Bildsuche POST-Parameter</translation>
 <translation id="8428213095426709021">Einstellungen</translation>
 <translation id="8458397775385147834">1 Element gelöscht</translation>
 <translation id="846569642435104154">Damit wird die gewählte Zoomstufe für alle Seiten festgelegt</translation>
 <translation id="8466547766474747336">Eine von mir gewünschte Funktion fehlt</translation>
 <translation id="8500459200727969761">Integrierte Listen wiederherstellen</translation>
 <translation id="8503813439785031346">Benutzername</translation>
+<translation id="851451113245350202">Liste der zuletzt geschlossenen Tabs</translation>
 <translation id="8515808232153642813">Entschlüsseln</translation>
 <translation id="8517852590337319813">Aktivieren Sie Ihr Konto</translation>
+<translation id="8529159259480052204">Bestätigungsbanner ausblenden</translation>
 <translation id="8546963963006468833">Mit Vivaldi können Sie nahtlos Links öffnen, mit Widgets suchen und Passwörter in anderen Anwendungen automatisch ausfüllen.</translation>
-<translation id="8546995005405883065">Reihenfolge der bevorzugten Sprachen für die Darstellung von kompatiblen Websites.</translation>
 <translation id="8562452229998620586">Gespeicherte Passwörter werden hier angezeigt.</translation>
 <translation id="856439694359429369">Für weitere Optionen tippen, oder doppeltippen, um sie zu öffnen.</translation>
 <translation id="8591818185775466306"><ph name="ITEM_TYPE" /> löschen</translation>
@@ -620,6 +643,7 @@ blockiert</translation>
 <translation id="8684294196284714094">Sind Sie bereit, Vivaldi als Ihren Standardbrowser festzulegen?</translation>
 <translation id="8687583747694652488">Quelletext kopieren</translation>
 <translation id="8696653005998192569">Bilder oder Videos auf Websites werden nicht geladen</translation>
+<translation id="872451400847464257">Suchmaschine bearbeiten</translation>
 <translation id="8730621377337864115">Fertig</translation>
 <translation id="8733945742171960420">Sobald Sie lossurfen, werden Ihre Top-Sites hier angezeigt.</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> Elemente gelöscht</translation>
@@ -633,6 +657,7 @@ blockiert</translation>
 <translation id="8828442094222036738">Private Google-Ergebnisse, made in Europa</translation>
 <translation id="8855707633300847215">Tableiste einblenden</translation>
 <translation id="8861211142470908937">Das Passwort muss mindestens 12 Zeichen lang sein</translation>
+<translation id="8885321570279617421">Name darf nicht leer sein.</translation>
 <translation id="8892354889971902600">Kürzlich geschlossene Tabs werden hier angezeigt.</translation>
 <translation id="89390081013973080">Alles bereit! Nun müssen Sie entscheiden, welche Daten zwischen den Geräten synchronisiert werden sollen.</translation>
 <translation id="8948792607467387336">Als Hintergrundbild auswählen</translation>
@@ -651,9 +676,11 @@ blockiert</translation>
 <translation id="9091665118798175641">Informationen zum automatischen Ausfüllen von Formularen synchronisieren</translation>
 <translation id="9097127519290088802">Verschlüsselungspasswort erforderlich</translation>
 <translation id="9139318394846604261">Einkaufen</translation>
+<translation id="9148058034647219655">Beenden</translation>
 <translation id="9152984048904392513">Alle im Hintergrund öffnen</translation>
 <translation id="9157459516617966251">Link bearbeiten</translation>
 <translation id="9157539936604258187">Link öffnen</translation>
+<translation id="9165758833825521812">Leseansicht</translation>
 <translation id="9195659219948942754">Verwenden Sie weiterhin die synchronisierten Daten in Ihrem Vivaldi-Account</translation>
 <translation id="9195802773917252923">Lesezeichen-Kürzel aktivieren</translation>
 <translation id="9212737146310746733">Farsi (<ph name="ORIGIN" />)</translation>

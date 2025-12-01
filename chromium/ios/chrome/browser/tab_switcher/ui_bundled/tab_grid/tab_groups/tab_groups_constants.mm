@@ -29,7 +29,12 @@ NSString* const kTabGroupFacePileButtonIdentifier =
     @"kTabGroupFacePileButtonIdentifier";
 
 UIColor* TabGroupViewButtonBackgroundColor() {
+#if defined(VIVALDI_BUILD)
+  // We support both light and dark mode on Tab Switcher.
+  return [[UIColor labelColor] colorWithAlphaComponent:0.35];
+#else
   return [[UIColor colorNamed:kGrey200Color] colorWithAlphaComponent:0.35];
+#endif // End Vivaldi
 }
 const CGFloat kTabGroupButtonHeight = 26;
 

@@ -36,6 +36,7 @@
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "internal/platform/implementation/account_manager.h"
+#include "internal/platform/mac_address.h"
 #include "internal/test/fake_account_manager.h"
 #include "proto/identity/v1/resources.pb.h"
 #include "proto/identity/v1/rpcs.pb.h"
@@ -51,7 +52,6 @@
 #include "sharing/contacts/fake_nearby_share_contact_manager.h"
 #include "sharing/internal/api/fake_nearby_share_client.h"
 #include "sharing/internal/api/mock_sharing_platform.h"
-#include "sharing/internal/public/logging.h"
 #include "sharing/internal/test/fake_bluetooth_adapter.h"
 #include "sharing/internal/test/fake_context.h"
 #include "sharing/internal/test/fake_preference_manager.h"
@@ -67,6 +67,9 @@
 namespace nearby {
 namespace sharing {
 namespace {
+using ::google::nearby::identity::v1::Device;
+using ::google::nearby::identity::v1::PublishDeviceRequest;
+using ::google::nearby::identity::v1::PublishDeviceResponse;
 using ::google::nearby::identity::v1::QuerySharedCredentialsRequest;
 using ::google::nearby::identity::v1::QuerySharedCredentialsResponse;
 using ::nearby::sharing::proto::DeviceVisibility;
@@ -105,13 +108,10 @@ class NearbyShareCertificateManagerImplTest
         .WillByDefault(ReturnRef(fake_account_manager_));
     // Set time to t0.
     FastForward(t0 - fake_context_.GetClock()->Now());
-
+    preference_manager_.SetString(prefs::kNearbySharingDeviceIdName, kDeviceId);
     local_device_data_manager_ =
         std::make_unique<FakeNearbyShareLocalDeviceDataManager>(
             kDefaultDeviceName);
-    local_device_data_manager_->set_is_sync_mode(true);
-    local_device_data_manager_->SetId(kDeviceId);
-
     contact_manager_ = std::make_unique<FakeNearbyShareContactManager>();
 
     AccountManager::Account account{
@@ -131,8 +131,10 @@ class NearbyShareCertificateManagerImplTest
     // Set default device data.
     local_device_data_manager_->SetDeviceName(
         GetNearbyShareTestMetadata().device_name());
-    SetBluetoothMacAddress(kTestUnparsedBluetoothMacAddress);
-    SetMockBluetoothAddress(kTestUnparsedBluetoothMacAddress);
+    MacAddress mac_address;
+    MacAddress::FromString(kTestUnparsedBluetoothMacAddress, mac_address);
+    bluetooth_mac_address_ = mac_address;
+    SetMockBluetoothAddress(mac_address);
   }
 
   void TearDown() override {
@@ -145,7 +147,7 @@ class NearbyShareCertificateManagerImplTest
     // Setup Identity API.
     cert_manager_ = NearbyShareCertificateManagerImpl::Factory::Create(
         &fake_context_, mock_sharing_platform_,
-        local_device_data_manager_.get(), contact_manager_.get(),
+        local_device_data_manager_.get(),
         /*profile_path=*/{}, &client_factory_);
     cert_manager_->AddObserver(this);
 
@@ -176,16 +178,16 @@ class NearbyShareCertificateManagerImplTest
     cert_manager_->Start();
   }
 
-  void SetBluetoothMacAddress(absl::string_view bluetooth_mac_address) {
-    bluetooth_mac_address_ = bluetooth_mac_address;
-  }
-
   // NearbyShareCertificateManager::Observer:
   void OnPublicCertificatesDownloaded() override {
     ++num_public_certs_downloaded_notifications_;
   }
   void OnPrivateCertificatesChanged() override {
     ++num_private_certs_changed_notifications_;
+  }
+
+  FakeNearbyIdentityClient* GetIdentityClient() {
+    return client_factory_.identity_instances().back();
   }
 
  protected:
@@ -208,7 +210,7 @@ class NearbyShareCertificateManagerImplTest
         absl::Milliseconds(1000)));
   }
 
-  void SetMockBluetoothAddress(absl::string_view bluetooth_mac_address) {
+  void SetMockBluetoothAddress(MacAddress bluetooth_mac_address) {
     FakeBluetoothAdapter& bluetooth_adapter =
         *fake_context_.fake_bluetooth_adapter();
     bluetooth_adapter.SetAddress(bluetooth_mac_address);
@@ -218,7 +220,7 @@ class NearbyShareCertificateManagerImplTest
     if (!is_present) {
       FakeBluetoothAdapter& bluetooth_adapter =
           *fake_context_.fake_bluetooth_adapter();
-      bluetooth_adapter.SetAddress("");
+      bluetooth_adapter.SetAddress(MacAddress{});
     }
   }
 
@@ -233,15 +235,27 @@ class NearbyShareCertificateManagerImplTest
   }
 
   void VerifyCertificatesUpload(bool expected_force_update_contacts) {
-    ASSERT_FALSE(local_device_data_manager_->publish_device_calls().empty());
-    EXPECT_EQ(local_device_data_manager_->publish_device_calls()
-                  .back()
-                  .certificates.size(),
-              2 * kNearbyShareNumPrivateCertificates);
-    EXPECT_EQ(local_device_data_manager_->publish_device_calls()
-                  .back()
-                  .force_update_contacts,
-              expected_force_update_contacts);
+    FakeNearbyIdentityClient* identity_client = GetIdentityClient();
+    ASSERT_FALSE(identity_client->publish_device_requests().empty());
+    const PublishDeviceRequest& publish_device_request =
+        identity_client->publish_device_requests().back();
+    EXPECT_EQ(publish_device_request.device().name(),
+              absl::StrCat("devices/", kDeviceId));
+    EXPECT_EQ(publish_device_request.device()
+                  .per_visibility_shared_credentials_size(),
+              2);
+    EXPECT_EQ(publish_device_request.device()
+                  .per_visibility_shared_credentials(0)
+                  .shared_credentials_size(),
+              kNearbyShareNumPrivateCertificates);
+    EXPECT_EQ(publish_device_request.device()
+                  .per_visibility_shared_credentials(1)
+                  .shared_credentials_size(),
+              kNearbyShareNumPrivateCertificates);
+    EXPECT_EQ(publish_device_request.device().contact(),
+              expected_force_update_contacts
+                  ? Device::CONTACT_GOOGLE_CONTACT_LATEST
+                  : Device::CONTACT_GOOGLE_CONTACT);
   }
 
   void InvokePrivateCertificateRefresh(bool expected_success) {
@@ -253,6 +267,7 @@ class NearbyShareCertificateManagerImplTest
     EXPECT_EQ(expected_success ? 1u : 0u,
               num_private_certs_changed_notifications_);
     EXPECT_EQ(0u, upload_scheduler_->num_immediate_requests());
+    Sync();
     if (expected_success) {
       VerifyCertificatesUpload(/*expected_force_update_contacts=*/false);
     }
@@ -262,7 +277,7 @@ class NearbyShareCertificateManagerImplTest
       const nearby::sharing::proto::EncryptedMetadata& expected_metadata) {
     // Expect a full set of certificates for all-contacts and self-share
     std::vector<NearbySharePrivateCertificate> certs =
-        *cert_store_->GetPrivateCertificates();
+        cert_store_->GetPrivateCertificates();
     EXPECT_EQ(2 * kNearbyShareNumPrivateCertificates, certs.size());
 
     absl::Time min_not_before_all_contacts = absl::InfiniteFuture();
@@ -308,17 +323,29 @@ class NearbyShareCertificateManagerImplTest
 
   void InvokeCertUploadPublishDevice(bool contacts_removed,
                                      bool publish_device_success) {
-    local_device_data_manager_->SetPublishDeviceResult(publish_device_success);
-    local_device_data_manager_->SetPublishDeviceContactsRemoved(
-        contacts_removed);
+    FakeNearbyIdentityClient* identity_client = GetIdentityClient();
+    std::vector<absl::StatusOr<PublishDeviceResponse>> responses;
+    if (contacts_removed) {
+      // When contacts are removed, a second publish device call is scheduled.
+      PublishDeviceResponse response;
+      response.add_contact_updates(
+          PublishDeviceResponse::CONTACT_UPDATE_REMOVED);
+      responses.push_back(response);
+    }
+    PublishDeviceResponse response;
+    response.add_contact_updates(
+                         PublishDeviceResponse::CONTACT_UPDATE_ADDED);
+    responses.push_back(response);
+    identity_client->SetPublishDeviceResponses(std::move(responses));
 
     upload_scheduler_->InvokeRequestCallback();
     Sync();
     // If contacts are removed, a second publish device call is scheduled.
     if (contacts_removed) {
       Sync();
+      Sync();
     }
-    EXPECT_EQ(local_device_data_manager_->publish_device_calls().size(),
+    EXPECT_EQ(identity_client->publish_device_requests().size(),
               contacts_removed ? 2 : 1);
 
     VerifyCertificatesUpload(
@@ -352,18 +379,15 @@ class NearbyShareCertificateManagerImplTest
           BuildQuerySharedCredentialsResponse(page_number, page_token));
     }
 
-    client_factory_.identity_instances()
-        .back()
-        ->SetQuerySharedCredentialsResponses(responses);
+    FakeNearbyIdentityClient* identity_client = GetIdentityClient();
+    identity_client->SetQuerySharedCredentialsResponses(responses);
     cert_store_->SetAddPublicCertificatesResult(
         result != DownloadPublicCertificatesResult::kStorageError);
     download_scheduler_->InvokeRequestCallback();
     Sync();
 
     std::vector<QuerySharedCredentialsRequest> requests =
-        client_factory_.identity_instances()
-            .back()
-            ->query_shared_credentials_requests();
+        identity_client->query_shared_credentials_requests();
     EXPECT_EQ(requests.size(), num_pages);
     EXPECT_EQ(requests.back().name(), absl::StrCat("devices/", kDeviceId));
     ASSERT_EQ(download_scheduler_->handled_results().size(),
@@ -455,7 +479,7 @@ class NearbyShareCertificateManagerImplTest
   FakeNearbyShareScheduler* public_cert_exp_scheduler_ = nullptr;
   FakeNearbyShareScheduler* upload_scheduler_ = nullptr;
   FakeNearbyShareScheduler* download_scheduler_ = nullptr;
-  std::string bluetooth_mac_address_ = kTestUnparsedBluetoothMacAddress;
+  MacAddress bluetooth_mac_address_;
   size_t num_public_certs_downloaded_notifications_ = 0;
   size_t num_private_certs_changed_notifications_ = 0;
   std::vector<NearbySharePrivateCertificate> private_certificates_;
@@ -495,9 +519,9 @@ TEST_F(NearbyShareCertificateManagerImplTest,
               kNearbyShareCertificateValidityPeriod * 0.5 - Now());
 
   // Sanity check that the cert storage is as expected.
-  std::optional<std::vector<NearbySharePrivateCertificate>> stored_certs =
+  std::vector<NearbySharePrivateCertificate> stored_certs =
       cert_store_->GetPrivateCertificates();
-  EXPECT_EQ(stored_certs->at(0).ToCertificateData(),
+  EXPECT_EQ(stored_certs.at(0).ToCertificateData(),
             private_certificate.ToCertificateData());
 
   std::optional<NearbyShareEncryptedMetadataKey> encrypted_metadata_key =
@@ -509,7 +533,7 @@ TEST_F(NearbyShareCertificateManagerImplTest,
             encrypted_metadata_key->salt());
 
   // Verify that storage is updated when salts are consumed during encryption.
-  EXPECT_NE(cert_store_->GetPrivateCertificates()->at(0).ToCertificateData(),
+  EXPECT_NE(cert_store_->GetPrivateCertificates().at(0).ToCertificateData(),
             private_certificate.ToCertificateData());
 
   // Set up valid all-contacts visibility certificate. Then test with everyone
@@ -713,8 +737,6 @@ TEST_F(NearbyShareCertificateManagerImplTest,
   Initialize();
   // All private certificates are valid.
   cert_store_->ReplacePrivateCertificates(private_certificates_);
-  local_device_data_manager_->SetPublishDeviceContactsRemoved(
-      /*contact_removed=*/true);
   cert_manager_->ForceUploadPrivateCertificates();
   Sync();
 
@@ -733,8 +755,8 @@ TEST_F(NearbyShareCertificateManagerImplTest,
   Sync();
 
   EXPECT_EQ(0, upload_scheduler_->num_immediate_requests());
-  EXPECT_EQ(cert_store_->GetPrivateCertificates()->size(), 0);
-  EXPECT_EQ(local_device_data_manager_->publish_device_calls().size(), 0);
+  EXPECT_TRUE(cert_store_->GetPrivateCertificates().empty());
+  EXPECT_TRUE(GetIdentityClient()->publish_device_requests().empty());
 }
 
 TEST_F(NearbyShareCertificateManagerImplTest,
@@ -752,7 +774,7 @@ TEST_F(NearbyShareCertificateManagerImplTest,
         Sync();
 
         std::vector<NearbySharePrivateCertificate> certs =
-            *cert_store_->GetPrivateCertificates();
+            cert_store_->GetPrivateCertificates();
         std::vector<std::string> cert_ids;
         for (const auto& cert : certs) {
           cert_ids.push_back(std::string(cert.id().begin(), cert.id().end()));
@@ -784,7 +806,32 @@ TEST_F(NearbyShareCertificateManagerImplTest,
 
   Sync();
   std::vector<NearbySharePrivateCertificate> certs =
-      *cert_store_->GetPrivateCertificates();
+      cert_store_->GetPrivateCertificates();
+  std::vector<std::string> cert_ids;
+  for (const auto& cert : certs) {
+    cert_ids.push_back(std::string(cert.id().begin(), cert.id().end()));
+  }
+  // New certificates should be generated.
+  EXPECT_EQ(private_certificate_ids_.size(), cert_ids.size());
+  EXPECT_THAT(cert_ids,
+              Not(UnorderedElementsAreArray(private_certificate_ids_)));
+
+  auto metadata = GetNearbyShareTestMetadata();
+  metadata.set_vendor_id(12345);
+  VerifyPrivateCertificates(/*expected_metadata=*/metadata);
+}
+
+TEST_F(NearbyShareCertificateManagerImplTest,
+       SetVendorId_WhenNoPrivateCertificates) {
+  Initialize();
+  cert_store_->ReplacePrivateCertificates({});
+  cert_manager_->Start();
+
+  cert_manager_->SetVendorId(12345);
+
+  Sync();
+  std::vector<NearbySharePrivateCertificate> certs =
+      cert_store_->GetPrivateCertificates();
   std::vector<std::string> cert_ids;
   for (const auto& cert : certs) {
     cert_ids.push_back(std::string(cert.id().begin(), cert.id().end()));
@@ -821,8 +868,8 @@ TEST_F(NearbyShareCertificateManagerImplTest,
 
   cert_manager_->Start();
 
-  // Expect failure because a Bluetooth MAC address is required.
-  InvokePrivateCertificateRefresh(/*expected_success=*/false);
+  // Bluetooth MAC address is optional, so the refresh should still succeed.
+  InvokePrivateCertificateRefresh(/*expected_success=*/true);
 }
 
 TEST_F(NearbyShareCertificateManagerImplTest,
@@ -872,13 +919,13 @@ TEST_F(
   Sync();
 
   EXPECT_EQ(0, upload_scheduler_->num_immediate_requests());
-  std::optional<absl::Time> next_schedule_time =
+  absl::Time next_schedule_time =
       scheduler_factory_.pref_name_to_expiration_instance()
           .find(prefs::kNearbySharingSchedulerPrivateCertificateExpirationName)
           ->second.expiration_time_functor();
 
-  // Next expiration time is set to nullopt to disable the timer.
-  EXPECT_FALSE(next_schedule_time.has_value());
+  // Next expiration time is set to InfiniteFuture to disable the timer.
+  EXPECT_EQ(next_schedule_time, absl::InfiniteFuture());
 }
 
 TEST_F(NearbyShareCertificateManagerImplTest,
@@ -888,7 +935,7 @@ TEST_F(NearbyShareCertificateManagerImplTest,
 
   upload_scheduler_->InvokeRequestCallback();
   Sync();
-  EXPECT_EQ(local_device_data_manager_->publish_device_calls().size(), 0);
+  EXPECT_TRUE(GetIdentityClient()->publish_device_requests().empty());
   EXPECT_EQ(upload_scheduler_->handled_results().size(), 1);
   EXPECT_EQ(upload_scheduler_->handled_results().back(), false);
 }

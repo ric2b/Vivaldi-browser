@@ -66,10 +66,11 @@ declare_overrides() {
   }
 
   if (is_android) {
-    treat_warnings_as_errors = is_debug # Temp 140
     if (is_official_build) {
       symbol_level = 1
       use_relr_relocations = false
+    } if (is_debug) {
+      android_static_analysis = "off"
     } else {
       android_static_analysis = "on"
     }
@@ -102,7 +103,7 @@ declare_overrides() {
       # AUTO-208: Avoid using unrar because of its license.
       safe_browsing_use_unrar = false
     }
-    use_login_database_as_backend = true
+    dfmify_dev_ui = false
   }
 
   if(!is_ios) {
@@ -121,6 +122,13 @@ declare_overrides() {
     #  mac_use_sdk = "12.3"
     #}
   }
+  if (is_ios) {
+    use_system_xcode = true
+    #if (getenv("CHROME_HEADLESS") == "1") {
+    #  ios_use_sdk = "18.4"
+    #}
+  }
+
 
   if (is_win) {
     fast_archive_compression = is_component_build
@@ -139,6 +147,10 @@ declare_overrides() {
     enable_cdm_storage_id = (is_mac || is_win) && is_official_build && !vivaldi_disable_widevine_verification
   }
   if(is_ios) {
+    # Needed when IOS has translate_genders false, otherwise there will be a mismatch
+    # in translation files built for the host-specific toolchain
+    # Check for each Chromium update
+    translate_genders = false
     if (release_kind == "final" || test_ios_app_as_final) {
       ios_app_bundle_id_prefix = "com.vivaldi"
     } else {
@@ -149,9 +161,11 @@ declare_overrides() {
     ios_code_signing_identity_description = ""
     is_component_build = false
     # Needed until we understand chromium partition allocator better.
-    ios_partition_alloc_enabled = false
+    # TODO: @tomas/prio: This flag is removed on Cr142. We need to modify the info.plist
+    # Chr commit: 13ef863afc9ba24afe903ee391e22cbf474851cb
+    # ios_partition_alloc_enabled = false
 
-    ios_application_icons_target_legacy = "//vivaldi/ios/app/resources:vivaldi_appicons"
+    ios_application_icons_target = "//vivaldi/ios/app/resources:vivaldi_appicons"
     ios_launchscreen_assets_target = "//vivaldi/ios/app/resources:launchscreen_assets"
 
     # Just making sure it stays off

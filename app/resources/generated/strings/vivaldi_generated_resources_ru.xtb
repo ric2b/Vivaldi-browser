@@ -12,6 +12,7 @@
 <translation id="1163931534039071049">&amp;Просмотр кода фрейма</translation>
 <translation id="1165039591588034296">Ошибка</translation>
 <translation id="1175364870820465910">&amp;Печать...</translation>
+<translation id="1177548198167638471">Больше не спрашивать</translation>
 <translation id="1181037720776840403">Удалить</translation>
 <translation id="1184037892196730210">Не удалось запустить трансляцию экрана</translation>
 <translation id="1187722533808055681">Переходы в активный режим</translation>
@@ -28,9 +29,10 @@
 <translation id="1451375123200651445">Веб-страница, один файл</translation>
 <translation id="1465176863081977902">&amp;Копировать адрес аудио</translation>
 <translation id="1476607407192946488">&amp;Настройки языка</translation>
-<translation id="1546280085599573572">Расширение изменило домашнюю страницу по умолчанию.</translation>
+<translation id="1478607704480248626">Установка отключена</translation>
 <translation id="1552752544932680961">Настройки расширения</translation>
 <translation id="15662109988763471">Принтер недоступен или установлен неправильно. Проверьте его или выберите другой.</translation>
+<translation id="1581962803218266616">Показать в Finder</translation>
 <translation id="1588438908519853928">Обычный</translation>
 <translation id="1588870296199743671">Открыть ссылку с помощью...</translation>
 <translation id="1589055389569595240">Показать правописание и грамматику</translation>
@@ -49,14 +51,18 @@
 <translation id="176587472219019965">&amp;Новое окно</translation>
 <translation id="1769104665586091481">Открыть ссылку в новом &amp;окне</translation>
 <translation id="1779468444204342338">Минимальные</translation>
+<translation id="1805822111539868586">Инспектировать</translation>
 <translation id="1815083418640426271">Вставить как обычный текст</translation>
 <translation id="1828901632669367785">Печать используя системный диалог...</translation>
+<translation id="1843048149176045210">Копировать ссылку загрузки</translation>
 <translation id="1850508293116537636">Повернуть по &amp;часовой стрелке</translation>
 <translation id="1886996562706621347">Разрешить запросы на установку обработчиков протоколов (рекомендуется)</translation>
 <translation id="1901303067676059328">Выделить &amp;всё</translation>
+<translation id="1906488504371069394">Найдите больше расширений и тем оформления в <ph name="BEGIN_LINK" />Магазине Chrome<ph name="END_LINK" /></translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1925021887439448749">Введите веб-адрес</translation>
 <translation id="1932098463447129402">Не ранее</translation>
+<translation id="1936157145127842922">Показать в папке</translation>
 <translation id="1936931585862840749">Укажите количество копий для печати, используя цифры (от 1 до <ph name="MAX_COPIES" />).</translation>
 <translation id="2019718679933488176">&amp;Открыть аудио в новой вкладке</translation>
 <translation id="2050339315714019657">Книжная</translation>
@@ -70,7 +76,7 @@
 <translation id="215753907730220065">Выход из полноэкранного режима</translation>
 <translation id="2158475082070321257">Копировать ссылку на выделенный текст</translation>
 <translation id="2177950615300672361">Вкладка в приватном режиме: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Модуль Native Client: <ph name="NEXE_NAME" /></translation>
+<translation id="2187906491731510095">Расширения обновлены</translation>
 <translation id="2218515861914035131">Вставить как обычный текст</translation>
 <translation id="2249605167705922988">Например: 1–5, 8, 11–13</translation>
 <translation id="2280486287150724112">Правое поле</translation>
@@ -81,9 +87,12 @@
 <translation id="2326931316514688470">&amp;Перезагрузить приложение</translation>
 <translation id="2327492829706409234">Включить приложение</translation>
 <translation id="2348176352564285430">Приложение: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="2378602615417849384">{NUM_EXTENSIONS, plural,
+      =1 {Поддержка этого расширения скоро прекратится}
+      other {Поддержка этих расширений скоро прекратится}
+    }</translation>
 <translation id="2378982052244864789">Выберите каталог расширения.</translation>
 <translation id="2379281330731083556">Печатать с помощью системного диалогового окна <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Неизвестный плагин</translation>
 <translation id="2423578206845792524">&amp;Сохранить картинку как...</translation>
 <translation id="2439110203301358333">Одна из программ на вашем компьютере установила расширение, которое может влиять на работу Vivaldi.</translation>
 <translation id="2443487764245141020">Возможно, сайтам потребуется распознавать ваше устройство с помощью идентификатора</translation>
@@ -95,6 +104,7 @@
 <translation id="2550212893339833758">Память подкачки</translation>
 <translation id="2553440850688409052">Скрыть этот плагин</translation>
 <translation id="2607101320794533334">Информация об открытом ключе субъекта</translation>
+<translation id="261305050785128654">Сообщите веб-сайтам о предпочтительных языках. Вы по возможности получите контент на этих языках.</translation>
 <translation id="26224892172169984">Запретить обработку протоколов на всех сайтах</translation>
 <translation id="2653275834716714682">Замена текста</translation>
 <translation id="265390580714150011">Значение поля</translation>
@@ -102,12 +112,12 @@
 <translation id="2678063897982469759">Включить снова</translation>
 <translation id="2719936478972253983">Заблокированные файлы cookie</translation>
 <translation id="2721037002783622288">&amp;Найти картинку в <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2722547199758472013">ID: <ph name="EXTENSION_ID" /></translation>
 <translation id="2738771556149464852">Не позже</translation>
 <translation id="2749881179542288782">Проверять грамматику и правописание</translation>
 <translation id="2785873697295365461">Дескрипторы файлов</translation>
 <translation id="2825758591930162672">Открытый ключ субъекта</translation>
 <translation id="2850541429955027218">Добавить тему</translation>
-<translation id="2861941300086904918">Менеджер безопасности – Native Client</translation>
 <translation id="2881076733170862447">При нажатии на расширение</translation>
 <translation id="2889064240420137087">Открыть ссылку с помощью...</translation>
 <translation id="2902127500170292085">Расширение "<ph name="EXTENSION_NAME" />" не может установить связь с принтером. Убедитесь, что он подключён и повторите попытку.</translation>
@@ -131,6 +141,10 @@
 <translation id="3129173833825111527">Левое поле</translation>
 <translation id="3144647712221361880">Открыть ссылку как</translation>
 <translation id="3222066309010235055">Предварительная обработка: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3228985231489269630">{NUM_EXTENSIONS, plural,
+      =1 {Удалить или заменить его на подобное из <ph name="BEGIN_LINK" />Магазина Chrome<ph name="END_LINK" />.}
+      other {Удалить или заменить их на подобное из <ph name="BEGIN_LINK" />Магазина Chrome<ph name="END_LINK" />}
+    }</translation>
 <translation id="3241680850019875542">Выберите корневой каталог упаковываемого расширения. Для обновления расширения также укажите закрытый ключ.</translation>
 <translation id="3275778913554317645">Открыть в отдельном окне</translation>
 <translation id="3280237271814976245">Сохранить &amp;как...</translation>
@@ -153,8 +167,10 @@
 <translation id="3493881266323043047">Срок действия</translation>
 <translation id="3511307672085573050">&amp;Копировать адрес ссылки</translation>
 <translation id="354068948465830244">Возможно чтение и изменение данных сайта</translation>
+<translation id="3555812735919707620">Удалить расширение</translation>
 <translation id="3560034655160545939">&amp;Проверка правописания</translation>
-<translation id="3587482841069643663">Все</translation>
+<translation id="3581861561942370740">Искать в истории загрузок</translation>
+<translation id="3612673635130633812">Загружено с помощью &lt;a href="<ph name="URL" />"&gt;<ph name="EXTENSION" />&lt;/a&gt;</translation>
 <translation id="3627588569887975815">Открыть ссылку в &amp;приватном окне</translation>
 <translation id="3678156199662914018">Расширение: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Запрос доступа к экрану от <ph name="APP_NAME" /></translation>
@@ -170,6 +186,7 @@
 <translation id="3838085852053358637">Ошибка загрузки расширения</translation>
 <translation id="383891835335927981">Нет сайтов с изменённым масштабом</translation>
 <translation id="385051799172605136">Назад</translation>
+<translation id="3855441664322950881">Упаковать расширение</translation>
 <translation id="3858860766373142691">Имя</translation>
 <translation id="3861977424605124250">Показывать при запуске</translation>
 <translation id="3867944738977021751">Поля сертификата</translation>
@@ -183,6 +200,7 @@
 <translation id="3948116654032448504">&amp;Найти картинку в <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3979395879372752341">Добавлено новое расширение (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">Копировать ссылку на выделенный текст</translation>
+<translation id="399788104667917863">Закрепить на панели</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Добавить в словарь</translation>
 <translation id="4058793769387728514">Проверить документ</translation>
@@ -197,7 +215,6 @@
 <translation id="4131410914670010031">Чёрно-белая печать</translation>
 <translation id="4165986682804962316">Настройки сайтов</translation>
 <translation id="4170314459383239649">Удалять при выходе</translation>
-<translation id="4176463684765177261">Отключено</translation>
 <translation id="4200983522494130825">Новая &amp;вкладка</translation>
 <translation id="4225397296022057997">На всех сайтах</translation>
 <translation id="4256316378292851214">&amp;Сохранить видео как...</translation>
@@ -221,15 +238,19 @@
 <translation id="4613271546271159013">Расширение изменило новую вкладку по умолчанию.</translation>
 <translation id="4616405296204756919">Вы можете использовать сохранённые пароли на любых устройствах. Они сохранены в <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Открыть видео в новой вкладке</translation>
+<translation id="4644205769234414680">Разрешить в приватном режиме</translation>
+<translation id="4654801841330730814">Все</translation>
 <translation id="4677772697204437347">Память ГП</translation>
 <translation id="4681930562518940301">Открыть оригинал &amp;картинки в новой вкладке</translation>
 <translation id="4711638718396952945">Восстановить настройки</translation>
 <translation id="4726710629007580002">При установке расширения были следующие предупреждения:</translation>
+<translation id="473775607612524610">Обновить</translation>
 <translation id="4763408175235639573">Эта страница установила следующие файлы cookie</translation>
 <translation id="479536056609751218">Веб-страница, только HTML</translation>
 <translation id="4827904420700932487">Создать QR-код для этого изображения</translation>
 <translation id="4839303808932127586">&amp;Сохранить видео как...</translation>
 <translation id="4840096453115567876">Выйти из приватного режима?</translation>
+<translation id="4885692421645694729">Расширение не имеет доступа к сайтам</translation>
 <translation id="488785315393301722">Показать детали</translation>
 <translation id="4895799941222633551">Создать &amp;ярлык...</translation>
 <translation id="4912643508233590958">Переходы в активный режим</translation>
@@ -246,13 +267,13 @@
 <translation id="5059526285558225588">Выберите часть экрана для демонстрации</translation>
 <translation id="5063480226653192405">Использование</translation>
 <translation id="5116628073786783676">&amp;Сохранить аудио как...</translation>
-<translation id="5143374789336132547">Расширение "<ph name="EXTENSION_NAME" />" изменило домашнюю страницу по умолчанию.</translation>
 <translation id="5154108062446123722">Дополнительные настройки для<ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5154702632169343078">Субъект</translation>
+<translation id="5170568018924773124">Показать в папке</translation>
 <translation id="5171343362375269016">Память подкачки</translation>
-<translation id="5233019165164992427">Порт отладки NaCl</translation>
 <translation id="5233231016133573565">ID процесса</translation>
 <translation id="5233736638227740678">&amp;Вставить</translation>
+<translation id="5244466461749935369">Пока оставить</translation>
 <translation id="5256861893479663409">На всех сайтах</translation>
 <translation id="5260334392110301220">Умные кавычки</translation>
 <translation id="5269977353971873915">Печать не удалась</translation>
@@ -273,7 +294,6 @@
 <translation id="5485102783864353244">Установить</translation>
 <translation id="5486561344817861625">Симулировать перезапуск браузера</translation>
 <translation id="5509693895992845810">Сохранить &amp;как...</translation>
-<translation id="5521078259930077036">Установить новую домашнюю страницу?</translation>
 <translation id="5542132724887566711">Профиль</translation>
 <translation id="5556459405103347317">Обновить</translation>
 <translation id="5575473780076478375">Расширение в приватном режиме: <ph name="EXTENSION_NAME" /></translation>
@@ -285,15 +305,14 @@
 <translation id="5677928146339483299">Заблокировано</translation>
 <translation id="5707185214361380026">Не удалась загрузка расширения с:</translation>
 <translation id="5713171467967533494">Открывать в браузере Vivaldi</translation>
-<translation id="5715711091495208045">Посредник: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Сохранить как PDF</translation>
 <translation id="5747809636523347288">Вс&amp;тавить и перейти на <ph name="URL" /></translation>
 <translation id="5759728514498647443"><ph name="APP_NAME" />" может читать документы, отправленные на печать через приложение "<ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">&amp;Сохранить аудио как...</translation>
+<translation id="577313026359983030">Мои расширения</translation>
 <translation id="5780973441651030252">Приоритет процессов</translation>
 <translation id="5804241973901381774">Разрешения</translation>
 <translation id="5828633471261496623">Печать...</translation>
-<translation id="583281660410589416">Неизвестен</translation>
 <translation id="5851868085455377790">Издатель</translation>
 <translation id="5860491529813859533">Включить</translation>
 <translation id="5910363049092958439">&amp;Сохранить картинку как...</translation>
@@ -329,6 +348,7 @@
 <translation id="6374469231428023295">Повторить</translation>
 <translation id="6398765197997659313">Обычный режим</translation>
 <translation id="6406303162637086258">Симулировать перезапуск браузера</translation>
+<translation id="6419546358665792306">Загрузить распакованным</translation>
 <translation id="6445450263907939268">Вы можете восстановить прежние настройки.</translation>
 <translation id="6447842834002726250">Файлы сookie</translation>
 <translation id="6498249116389603658">&amp;Все ваши языки</translation>
@@ -345,7 +365,6 @@
 <translation id="6691936601825168937">&amp;Вперёд</translation>
 <translation id="6786747875388722282">Расширения</translation>
 <translation id="6787839852456839824">Комбинации клавиш</translation>
-<translation id="6798954102094737107">Плагин: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Сохранить изменения</translation>
 <translation id="6824564591481349393">&amp;Скопировать адрес электронной почты</translation>
 <translation id="6840155290835956714">Спрашивать разрешение перед отправкой</translation>
@@ -378,10 +397,10 @@
 <translation id="7453008956351770337">Выбирая этот принтер, вы предоставляете к нему доступ следующему расширению:</translation>
 <translation id="7564847347806291057">Завершить процесс</translation>
 <translation id="7576690715254076113">Разобрать по копиям</translation>
+<translation id="7612050744024016345">Все расширения</translation>
 <translation id="7629827748548208700">Вкладка: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Отмена</translation>
 <translation id="7659154729610375585">Выйти из приватного режима?</translation>
-<translation id="7661259717474717992">Разрешить сайтам сохранять и читать файлы cookie</translation>
 <translation id="7663719505383602579">Получатель: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Установлено администратором</translation>
 <translation id="7685038817958445325">Не удалось запустить трансляцию</translation>
@@ -415,6 +434,7 @@
 Храните файл ключей в надёжном месте. Он потребуется для создания новых версий расширения.</translation>
 <translation id="8004582292198964060">Браузер</translation>
 <translation id="8018313076035239964">Управляйте отправкой данных сайтам и отображением контента на веб-страницах</translation>
+<translation id="8023801379949507775">Обновить расширения сейчас</translation>
 <translation id="8071432093239591881">Печатать как картинку</translation>
 <translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
         =1 {# заклакда}
@@ -428,7 +448,6 @@
 <translation id="8261378640211443080">В <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> нет сведений об этом расширении, оно могло быть установлено без вашего ведома.</translation>
 <translation id="8351419472474436977">Расширение изменило настройки прокси. Теперь оно может отследить или изменить передаваемые вами данные, а также прервать интернет-соединение. Если вы не знали об этом, вам следует отключить расширение.</translation>
 <translation id="8382913212082956454">&amp;Копировать адрес электронной почты</translation>
-<translation id="8434480141477525001">Порт отладки NaCl</translation>
 <translation id="8449008133205184768">Вставить с соблюдением стиля</translation>
 <translation id="8477178913400731244">Удалить данные</translation>
 <translation id="8477384620836102176">&amp;Общие</translation>
@@ -438,6 +457,7 @@
 <translation id="8546306075665861288">Кэш изображений</translation>
 <translation id="8569682776816196752">Места назначения не найдены</translation>
 <translation id="8584280235376696778">&amp;Открыть видео в новой вкладке</translation>
+<translation id="8587660243683137365">Установить страницу как приложение</translation>
 <translation id="8605428685123651449">Память SQLite</translation>
 <translation id="8615618338313291042">Приложение в приватном режиме: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">Кэш CSS</translation>
@@ -447,6 +467,7 @@
 <translation id="8708000541097332489">Удалять при выходе</translation>
 <translation id="8714838604780058252">Фоновая графика</translation>
 <translation id="8725066075913043281">Повторить</translation>
+<translation id="8770406935328356739">Корневая папка расширения</translation>
 <translation id="8774934320277480003">Верхнее поле</translation>
 <translation id="8798099450830957504">По умолчанию</translation>
 <translation id="8808478386290700967">Интернет-магазин</translation>
@@ -457,6 +478,7 @@
 <translation id="8899851313684471736">Открыть ссылку в новом &amp;окне</translation>
 <translation id="8915370057835397490">Загрузка подсказки</translation>
 <translation id="8916476537757519021">Субфрейм в приватном режиме: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8926389886865778422">Больше не спрашивать</translation>
 <translation id="8929696694736010839">Только для текущего сеанса приватного режима</translation>
 <translation id="895944840846194039">Память JavaScript</translation>
 <translation id="8962083179518285172">Скрыть детали</translation>

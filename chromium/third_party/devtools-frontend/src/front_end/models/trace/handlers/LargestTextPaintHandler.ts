@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,10 +9,10 @@ import * as Types from '../types/types.js';
  * LargestTextPaint. If an LCP event is text, it will point to one of these
  * candidates, so we store them by their DOM Node ID.
  **/
-const textPaintByDOMNodeId = new Map<Protocol.DOM.BackendNodeId, Types.Events.LargestTextPaintCandidate>();
+let textPaintByDOMNodeId = new Map<Protocol.DOM.BackendNodeId, Types.Events.LargestTextPaintCandidate>();
 
 export function reset(): void {
-  textPaintByDOMNodeId.clear();
+  textPaintByDOMNodeId = new Map();
 }
 
 export function handleEvent(event: Types.Events.Event): void {

@@ -31,6 +31,7 @@
 #include "components/device_event_log/device_event_log.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
+#include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/device/public/cpp/device_features.h"
@@ -253,8 +254,7 @@ void NetworkLocationRequest::MakeRequest(
   url_loader_->SetAllowHttpErrorResults(true);
 
   request_data_ = FormUploadData(wifi_data, wifi_timestamp);
-  std::string upload_data;
-  base::JSONWriter::Write(request_data_, &upload_data);
+  std::string upload_data = base::WriteJson(request_data_).value_or("");
   url_loader_->AttachStringForUpload(upload_data, "application/json");
 
   url_loader_->DownloadToString(
@@ -303,7 +303,8 @@ void NetworkLocationRequest::OnRequestComplete(
     DVLOG(1) << "NetworkLocationRequest::OnRequestComplete() : "
                 "Parsing response "
              << *data;
-    auto response_result = base::JSONReader::ReadAndReturnValueWithError(*data);
+    auto response_result = base::JSONReader::ReadAndReturnValueWithError(
+        *data, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
     if (!response_result.has_value()) {
       LOG(WARNING) << "NetworkLocationRequest::OnRequestComplete() : "
                       "JSONReader failed : "

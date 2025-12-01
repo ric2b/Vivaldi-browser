@@ -17,7 +17,6 @@
 #include "base/base64.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
-#include "base/debug/dump_without_crashing.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_file_value_serializer.h"
@@ -175,12 +174,6 @@ void MaybeExtendVariationsSafeMode(
       /*is_extended_safe_mode=*/true);
 }
 
-}  // namespace
-
-BASE_FEATURE(kForceFieldTrialSetupCrashForTesting,
-             "ForceFieldTrialSetupCrashForTesting",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 Study::Channel ConvertProductChannelToStudyChannel(
     version_info::Channel product_channel) {
   switch (product_channel) {
@@ -198,6 +191,18 @@ Study::Channel ConvertProductChannelToStudyChannel(
   NOTREACHED();
 }
 
+}  // namespace
+
+BASE_FEATURE(kForceFieldTrialSetupCrashForTesting,
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool CreateTrialsResult::AppliedSeedHasActiveLimitedLayer() const {
+  if (!applied_seed) {
+    return false;
+  }
+  return seed_has_active_limited_layer.value_or(false);
+}
+
 VariationsFieldTrialCreator::VariationsFieldTrialCreator(
     VariationsServiceClient* client,
     std::unique_ptr<VariationsSeedStore> seed_store,
@@ -206,7 +211,9 @@ VariationsFieldTrialCreator::VariationsFieldTrialCreator(
       seed_store_(std::move(seed_store)),
       application_locale_(
           language::GetApplicationLocale(seed_store_->local_state())),
-      ui_string_overrider_(ui_string_overrider) {}
+      ui_string_overrider_(ui_string_overrider),
+      sticky_activation_manager_(seed_store_->local_state(),
+                                 client->IsStickyActivationEnabled()) {}
 
 VariationsFieldTrialCreator::~VariationsFieldTrialCreator() = default;
 
@@ -226,7 +233,7 @@ bool VariationsFieldTrialCreator::SetUpFieldTrials(
     std::unique_ptr<base::FeatureList> feature_list,
     metrics::MetricsStateManager* metrics_state_manager,
     PlatformFieldTrials* platform_field_trials,
-    SafeSeedManagerBase* safe_seed_manager,
+    SafeSeedManager* safe_seed_manager,
     bool add_entropy_source_to_variations_ids,
     const EntropyProviders& entropy_providers) {
   DCHECK(feature_list);
@@ -243,10 +250,6 @@ bool VariationsFieldTrialCreator::SetUpFieldTrials(
   VariationsIdsProvider* http_header_provider =
       VariationsIdsProvider::GetInstance();
 
-  if (add_entropy_source_to_variations_ids) {
-    http_header_provider->SetLowEntropySourceValue(
-        metrics_state_manager->GetLowEntropySource());
-  }
   // Force the variation ids selected in chrome://flags and/or specified using
   // the command-line flag.
   auto result = http_header_provider->ForceVariationIds(
@@ -315,9 +318,19 @@ bool VariationsFieldTrialCreator::SetUpFieldTrials(
 
   CreateTrialsResult create_trials_result = {.applied_seed = false};
   if (!used_testing_config && client_filterable_state) {
+    // TODO(crbug.com/410008879): Make use of the result's
+    // seed_has_active_limited_layer field.
     create_trials_result = CreateTrialsFromSeed(
         entropy_providers, feature_list.get(), safe_seed_manager,
         std::move(client_filterable_state));
+  }
+
+  if (add_entropy_source_to_variations_ids &&
+      !create_trials_result.AppliedSeedHasActiveLimitedLayer()) {
+    // TODO(crbug.com/424154785): Consider no longer transmitting LES values
+    // alongside VariationsIDs.
+    http_header_provider->SetLowEntropySourceValue(
+        metrics_state_manager->GetLowEntropySource());
   }
 
   platform_field_trials->SetUpClientSideFieldTrials(
@@ -381,6 +394,7 @@ VariationsFieldTrialCreator::GetClientFilterableStateForVersion(
   permanent_consistency_country_initialized_ = true;
 
   state->policy_restriction = GetVariationPolicyRestriction(local_state());
+  state->is_sticky_activation_enabled = client_->IsStickyActivationEnabled();
   return state;
 }
 
@@ -650,10 +664,8 @@ VariationsFieldTrialCreator::GetGoogleGroupsFromPrefs() {
 CreateTrialsResult VariationsFieldTrialCreator::CreateTrialsFromSeed(
     const EntropyProviders& entropy_providers,
     base::FeatureList* feature_list,
-    SafeSeedManagerBase* safe_seed_manager,
+    SafeSeedManager* safe_seed_manager,
     std::unique_ptr<ClientFilterableState> client_state) {
-  // This histogram name uses "VariationsFieldTrialCreator" rather than
-  // "VariationsFieldTrialCreator" for consistency with historical data
   TRACE_EVENT0("startup", "VariationsFieldTrialCreator::CreateTrialsFromSeed");
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(!create_trials_from_seed_called_);
@@ -703,9 +715,6 @@ CreateTrialsResult VariationsFieldTrialCreator::CreateTrialsFromSeed(
                          : SeedUsage::kRegularSeedForFutureMilestoneNotUsed);
     return CreateTrialsResult{.applied_seed = false};
   }
-  RecordVariationsSeedUsage(run_in_safe_mode ? SeedUsage::kSafeSeedUsed
-                                             : SeedUsage::kRegularSeedUsed);
-  SetSeedVersion(seed.version());
 
   VariationsLayers layers(seed, entropy_providers);
 
@@ -720,23 +729,30 @@ CreateTrialsResult VariationsFieldTrialCreator::CreateTrialsFromSeed(
   // is the case for clients on platforms, like Android WebView, that do not
   // support limited entropy randomization. For such clients,
   // `SeedHasMisconfiguredEntropy()`is always false.
-  if (SeedHasMisconfiguredEntropy(*client_state, seed)) {
-    base::debug::DumpWithoutCrashing();
-    return CreateTrialsResult{
-        .applied_seed = false,
-        .seed_has_limited_layer = layers.seed_has_limited_layer()};
+  const MisconfiguredEntropyResult result =
+      SeedHasMisconfiguredEntropy(*client_state, seed);
+  if (result.is_misconfigured) {
+    RecordVariationsSeedUsage(
+        run_in_safe_mode ? SeedUsage::kMisconfiguredSafeSeedNotUsed
+                         : SeedUsage::kMisconfiguredRegularSeedNotUsed);
+    return CreateTrialsResult{.applied_seed = false};
   }
+  SetSeedVersion(seed.version());
+  RecordVariationsSeedUsage(run_in_safe_mode ? SeedUsage::kSafeSeedUsed
+                                             : SeedUsage::kRegularSeedUsed);
 
   // Note that passing base::Unretained(this) below is safe because the callback
   // is executed synchronously. It is not possible to pass UIStringOverrider
   // directly to VariationsSeedProcessor (which is in components/variations and
   // not components/variations/service) as the variations component should not
   // depend on //ui/base.
-  VariationsSeedProcessor().CreateTrialsFromSeed(
-      seed, *client_state,
-      base::BindRepeating(&VariationsFieldTrialCreator::OverrideUIString,
-                          base::Unretained(this)),
-      entropy_providers, layers, feature_list);
+  VariationsSeedProcessor(sticky_activation_manager_)
+      .CreateTrialsFromSeed(
+          seed, *client_state,
+          base::BindRepeating(&VariationsFieldTrialCreator::OverrideUIString,
+                              base::Unretained(this)),
+          entropy_providers, layers, feature_list);
+  sticky_activation_manager_.StartMonitoring();
 
   VLOG(1) << "CreateTrialsFromSeed complete with "
           << "seed.version='" << seed.version() << "'";
@@ -761,7 +777,7 @@ CreateTrialsResult VariationsFieldTrialCreator::CreateTrialsFromSeed(
                           base::TimeTicks::Now() - start_time);
   return CreateTrialsResult{
       .applied_seed = true,
-      .seed_has_limited_layer = layers.seed_has_limited_layer()};
+      .seed_has_active_limited_layer = result.seed_has_active_limited_layer};
 }
 
 void VariationsFieldTrialCreator::LoadSeedFromJsonFile(
@@ -808,12 +824,11 @@ void VariationsFieldTrialCreator::LoadSeedFromJsonFile(
         base::StrCat({"Failed to decode seed data in contents of \"",
                       json_seed_path.AsUTF8Unsafe(), "\""}));
   }
-  seed_store_->StoreSeedData(decoded_seed, seed_signature->GetString(),
-                             /*country_code=*/"",
+  seed_store_->StoreSeedData(/*done_callback=*/base::DoNothing(), decoded_seed,
+                             seed_signature->GetString(), /*country_code=*/"",
                              /*date_fetched=*/base::Time(),
                              /*is_delta_compressed=*/false,
                              /*is_gzip_compressed=*/true,
-                             /*done_callback=*/base::DoNothing(),
                              /*require_synchronous=*/true);
 }
 

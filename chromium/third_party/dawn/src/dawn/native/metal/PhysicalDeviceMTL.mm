@@ -29,7 +29,6 @@
 
 #include "dawn/common/CoreFoundationRef.h"
 #include "dawn/common/GPUInfo.h"
-#include "dawn/common/GPUInfo_autogen.h"
 #include "dawn/common/Log.h"
 #include "dawn/common/NSRef.h"
 #include "dawn/common/Platform.h"
@@ -444,6 +443,16 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
         deviceToggles->Default(Toggle::MetalDisableModuleConstantF16, true);
     }
 
+    // chromium:407109055: Signed unpacking is inaccurate on AMD only.
+    if (gpu_info::IsAMD(vendorId)) {
+        deviceToggles->Default(Toggle::MetalPolyfillUnpack2x16snorm, true);
+    }
+
+    // chromium:407109056: Floating point clamp is slightly inaccurate for subnormal values.
+    if (gpu_info::IsAMD(vendorId)) {
+        deviceToggles->Default(Toggle::MetalPolyfillClampFloat, true);
+    }
+
     // On some Intel GPUs vertex only render pipeline get wrong depth result if no fragment
     // shader provided. Create a placeholder fragment shader module to work around this issue.
     if (gpu_info::IsIntel(vendorId)) {
@@ -541,6 +550,9 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
     deviceToggles->Default(
         Toggle::EnableIntegerRangeAnalysisInRobustness,
         platform->IsFeatureEnabled(platform::Features::kWebGPUEnableRangeAnalysisForRobustness));
+
+    // Metal waiting is already thread safe.
+    deviceToggles->Default(Toggle::WaitIsThreadSafe, true);
 }
 
 MaybeError PhysicalDevice::InitializeImpl() {
@@ -673,10 +685,6 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     EnableFeature(Feature::FlexibleTextureViews);
     EnableFeature(Feature::TextureFormatsTier1);
 
-    // The function subgroupBroadcast(f16) fails for some edge cases on intel gen-9 devices.
-    // See crbug.com/391680973
-    const bool kForceDisableSubgroups = gpu_info::IsIntelGen9(GetVendorId(), GetDeviceId());
-
     // SIMD-scoped permute operations is supported by GPU family Metal3, Apple6, Apple7, Apple8,
     // and Mac2.
     // https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf
@@ -687,8 +695,8 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     // Note that supportsFamily: method requires macOS 10.15+ or iOS 13.0+
     // TODO(380326541): Check that reduction operations are supported in Apple6. The support
     // table says Apple7.
-    if (!kForceDisableSubgroups && ([*mDevice supportsFamily:MTLGPUFamilyApple6] ||
-                                    [*mDevice supportsFamily:MTLGPUFamilyMac2])) {
+    if (([*mDevice supportsFamily:MTLGPUFamilyApple6] ||
+         [*mDevice supportsFamily:MTLGPUFamilyMac2])) {
         EnableFeature(Feature::Subgroups);
     }
 
@@ -696,7 +704,7 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
         EnableFeature(Feature::ChromiumExperimentalSubgroupMatrix);
         // TODO(342172182): This may be available in more places?
         // (mwyrzykowski says "Apple7 and all Macs")
-        EnableFeature(Feature::ChromiumExperimentalPrimitiveId);
+        EnableFeature(Feature::PrimitiveIndex);
     }
 
     EnableFeature(Feature::SharedTextureMemoryIOSurface);
@@ -717,8 +725,12 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     }
 #endif
 
-    if ([*mDevice supportsFamily:MTLGPUFamilyMac2]) {
+    if (SupportTextureComponentSwizzle(*mDevice)) {
         EnableFeature(Feature::TextureComponentSwizzle);
+    }
+
+    if ([*mDevice readWriteTextureSupport] == MTLReadWriteTextureTier2) {
+        EnableFeature(Feature::TextureFormatsTier2);
     }
 }
 
@@ -891,6 +903,10 @@ MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits)
     limits->v1.maxUniformBufferBindingSize = maxBufferSize;
     limits->v1.maxStorageBufferBindingSize = maxBufferSize;
 
+    // Metal doesn't have limits for SetBytes, only suggested less than 4096 bytes.
+    // The size is large enough to support 64 bytes customer immediate data.
+    limits->v1.maxImmediateSize = kMaxSupportedImmediateDataBytes;
+
     // Using base limits for:
     // TODO(crbug.com/dawn/685):
     // - maxBindGroups
@@ -910,6 +926,22 @@ MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits)
 FeatureValidationResult PhysicalDevice::ValidateFeatureSupportedWithTogglesImpl(
     wgpu::FeatureName feature,
     const TogglesState& toggles) const {
+    switch (feature) {
+        // The function subgroupBroadcast(f16) fails for some edge cases on Intel Gen-9 devices.
+        // See crbug.com/391680973. We disable subgroups on this device unless the user has
+        // explicitly enabled the 'EnableSubgroupsIntelGen9' toggle.
+        case wgpu::FeatureName::Subgroups:
+            if (gpu_info::IsIntelGen9(GetVendorId(), GetDeviceId()) &&
+                !toggles.IsEnabled(Toggle::EnableSubgroupsIntelGen9)) {
+                return FeatureValidationResult(
+                    absl::StrFormat("Intel Gen-9 devices require `enable_subgroups_intel_gen9`"
+                                    " to enable %s.",
+                                    feature));
+            }
+            break;
+        default:
+            break;
+    }
     return {};
 }
 

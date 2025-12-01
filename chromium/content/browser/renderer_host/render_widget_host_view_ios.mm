@@ -32,7 +32,7 @@
 #include "ui/display/screen.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 #include "ui/gfx/geometry/size_conversions.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 
 #if BUILDFLAG(IS_IOS_TVOS)
 #include "content/browser/renderer_host/render_widget_host_view_tvos_uiview.h"
@@ -99,7 +99,7 @@ RenderWidgetHostViewIOS::RenderWidgetHostViewIOS(RenderWidgetHost* widget)
   ui_view_->view_ =
       [[RenderWidgetUIView alloc] initWithWidget:weak_factory_.GetWeakPtr()];
 
-  auto* screen = display::Screen::GetScreen();
+  auto* screen = display::Screen::Get();
   screen_infos_ =
       screen->GetScreenInfosNearestDisplay(screen->GetPrimaryDisplay().id());
 
@@ -419,7 +419,7 @@ void RenderWidgetHostViewIOS::UpdateScreenInfo() {
     host()->delegate()->SendScreenRects();
   }
 
-  auto* display_screen = display::Screen::GetScreen();
+  auto* display_screen = display::Screen::Get();
   display::ScreenInfos new_screen_infos =
       display_screen->GetScreenInfosNearestDisplay(
           display_screen->GetPrimaryDisplay().id());
@@ -454,6 +454,7 @@ void RenderWidgetHostViewIOS::UpdateCALayerTree(
 void RenderWidgetHostViewIOS::OnOldViewDidNavigatePreCommit() {
   CHECK(browser_compositor_) << "Shouldn't be called during destruction!";
   browser_compositor_->DidNavigateMainFramePreCommit();
+  gesture_provider_.ResetDetection();
 }
 
 void RenderWidgetHostViewIOS::OnNewViewDidNavigatePostCommit() {
@@ -955,16 +956,6 @@ void RenderWidgetHostViewIOS::ExtendSelectionAndReplace(
     return;
   }
   input_handler->ExtendSelectionAndReplace(before, after, replacement_text);
-}
-
-void RenderWidgetHostViewIOS::DeleteSurroundingText(int before, int after) {
-  if (auto* widget_host = GetActiveWidget()) {
-    auto* input_handler = widget_host->GetFrameWidgetInputHandler();
-    if (!input_handler) {
-      return;
-    }
-    input_handler->DeleteSurroundingTextInCodePoints(before, after);
-  }
 }
 
 void RenderWidgetHostViewIOS::ExecuteEditCommand(const std::string& command) {

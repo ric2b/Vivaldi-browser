@@ -41,6 +41,7 @@ function_registration("generated_api_registration") {
     "//skia",
     "//third_party/flatbuffers",
     "//third_party/tflite_support:tflite_support_proto",
+    "//vivaldi/components/ad_blocker/public/content",
     "//vivaldi/renderer/mojo:frame_service",
   ]
   deps += schema_dependencies

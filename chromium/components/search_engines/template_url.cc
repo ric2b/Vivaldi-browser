@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "components/search_engines/template_url.h"
 
 #include <algorithm>
@@ -50,15 +45,22 @@
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_starter_pack_data.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/sync/base/features.h"
 #include "components/url_formatter/url_formatter.h"
 #include "google_apis/google_api_keys.h"
 #include "net/base/mime_util.h"
 #include "net/base/url_util.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 //#include "third_party/search_engines_data/resources/definitions/prepopulated_engines.h"
 #include "ui/base/device_form_factor.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(ENABLE_BUILTIN_SEARCH_PROVIDER_ASSETS) && !BUILDFLAG(IS_ANDROID)
+#include "third_party/search_engines_data/search_engine_descriptions_strings_map.h"
+#endif
 
 namespace {
 
@@ -1376,6 +1378,7 @@ std::string TemplateURLRef::HandleReplacements(
           case RequestSource::NTP_MODULE:
           case RequestSource::SEARCHBOX:
           case RequestSource::CROS_APP_LIST:
+          case RequestSource::NTP_COMPOSEBOX:
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
             HandleReplacement("sourceid", "chrome-mobile", replacement, &url);
 #else
@@ -1383,7 +1386,8 @@ std::string TemplateURLRef::HandleReplacements(
 #endif
             break;
           case RequestSource::LENS_OVERLAY:
-            // No replacement.
+            // Lens Overlay searchboxes don't rely on TemplateURL replacement
+            // and set `source=` in //c/b/u/lens/lens_overlay_url_builder.cc.
             break;
         }
         break;
@@ -1429,8 +1433,20 @@ std::string TemplateURLRef::HandleReplacements(
             HandleReplacement(std::string(), "chrome-omni", replacement, &url);
 #endif
             break;
+          case RequestSource::NTP_COMPOSEBOX:
+            if (base::FeatureList::IsEnabled(
+                    omnibox::kComposeboxUsesChromeComposeClient)) {
+              HandleReplacement(std::string(), "chrome-compose", replacement,
+                                &url);
+            } else {
+              HandleReplacement(std::string(), "chrome-omni", replacement,
+                                &url);
+            }
+            break;
           case RequestSource::LENS_OVERLAY:
-            // No replacement.
+            // No replacement. Lens Overlay searchboxes don't rely on
+            // TemplateURL replacement and set `client=` in
+            // //components/omnibox/browser/remote_suggestions_service.cc.
             break;
         }
         break;
@@ -1446,12 +1462,21 @@ std::string TemplateURLRef::HandleReplacements(
               break;
             }
 #endif
+            if (search_terms_args.page_classification ==
+                    metrics::OmniboxEventProto::NTP_REALBOX &&
+                search_terms_args.lens_overlay_suggest_inputs.has_value()) {
+              // No replacement. `gs_ri` is not recommended for contextual
+              // queries.
+              break;
+            }
             HandleReplacement(std::string(), "chrome-ext-ansg", replacement,
                               &url);
             break;
           case RequestSource::NTP_MODULE:
           case RequestSource::LENS_OVERLAY:
-            // No replacement.
+          case RequestSource::NTP_COMPOSEBOX:
+            // No replacement. `gs_ri` is longer recommended for new clients.
+            // New identifiers should be based on their client names.
             break;
         }
         break;
@@ -1679,6 +1704,8 @@ bool TemplateURL::IsBetterThanConflictingEngine(
 
   auto get_sort_key = [](const TemplateURL* engine) {
     return std::make_tuple(
+        // Prefer active engines over inactive engines.
+        engine->is_active() != TemplateURLData::ActiveStatus::kFalse,
         // Policy-created engines always win over non-policy created engines.
         // At this point, managed search engine should be created by DSP policy.
         engine->CreatedByDefaultSearchProviderPolicy(),
@@ -1820,16 +1847,33 @@ std::optional<std::string_view> TemplateURL::GetBaseBuiltinResourceId() const {
   if constexpr (!kEnableBuiltinSearchProviderAssets) {
     return std::nullopt;
   }
+
+  // User-defined engines should not be decorated with branded icons.
+  if (data().prepopulate_id == 0) {
+    return std::nullopt;
+  }
+
   if (!base_builtin_resource_id_.has_value()) {
+    // 1. Attempt to identify the definition by keyword.
+    // This is going to handle 99% of the cases correctly, including Yahoo
+    // variants, where different countries may use different assets.
     const TemplateURLPrepopulateData::PrepopulatedEngine*
         reference_builtin_engine =
             TemplateURLPrepopulateData::GetPrepopulatedEngineFromBuiltInData(
-                data().prepopulate_id,
-                // We are deliberately not providing a list of regional engines.
-                // It would be useful to disambiguate between regional variants
-                // of some engines that could be using different icons. It is
-                // not a use case we have for now, so that's unnecessary.
+                data().keyword(),
                 /*regional_prepopulated_engines=*/{});
+
+    if (!reference_builtin_engine) {
+      // 2. Attempt to identify the definition by prepopulate_id.
+      // Failed to look up engine by keyword. Fall back to identifying engine by
+      // matching prepopulate id. This might cause some assets to be incorrectly
+      // assigned if the regional variant of a search engine expects to use a
+      // different asset which has not been supplied (see: Yahoo vs Yahoo JP).
+      reference_builtin_engine =
+          TemplateURLPrepopulateData::GetPrepopulatedEngineFromBuiltInData(
+              data().prepopulate_id,
+              /*regional_prepopulated_engines=*/{});
+    }
 
     if (reference_builtin_engine &&
         reference_builtin_engine->base_builtin_resource_id) {
@@ -1847,9 +1891,38 @@ std::optional<std::string_view> TemplateURL::GetBaseBuiltinResourceId() const {
 std::string TemplateURL::GetBuiltinImageResourceId() const {
   std::optional<std::string_view> base_resource_id = GetBaseBuiltinResourceId();
   if (base_resource_id.has_value()) {
-    return base::StrCat({base_resource_id.value(), "_IMAGE"});
+    return base::StrCat({"IDR_", base_resource_id.value(), "_IMAGE"});
   }
   return "IDR_DEFAULT_FAVICON";
+}
+
+std::string TemplateURL::GetBuiltinDescriptionResourceId() const {
+  std::optional<std::string_view> base_resource_id = GetBaseBuiltinResourceId();
+  if (base_resource_id.has_value()) {
+    return base::StrCat({"IDS_", base_resource_id.value(), "_DESCRIPTION"});
+  }
+  return {};
+}
+
+std::optional<std::u16string> TemplateURL::GetBuiltinMarketingSnippet() const {
+#if BUILDFLAG(ENABLE_BUILTIN_SEARCH_PROVIDER_ASSETS) && !BUILDFLAG(IS_ANDROID)
+  auto resource_id = GetBuiltinDescriptionResourceId();
+  if (!resource_id.empty()) {
+    auto iter = std::ranges::find_if(
+        kSearchEngineDescriptionsStrings,
+        [&](const auto& resource) { return resource.path == resource_id; });
+
+    if (iter != std::end(kSearchEngineDescriptionsStrings)) {
+      return l10n_util::GetStringUTF16(iter->id);
+    }
+  }
+#endif
+  return std::nullopt;
+}
+
+std::u16string TemplateURL::GetMarketingSnippet() const {
+  return GetBuiltinMarketingSnippet().value_or(l10n_util::GetStringFUTF16(
+      IDS_SEARCH_ENGINE_FALLBACK_MARKETING_SNIPPET, short_name()));
 }
 
 SearchEngineType TemplateURL::GetEngineType(

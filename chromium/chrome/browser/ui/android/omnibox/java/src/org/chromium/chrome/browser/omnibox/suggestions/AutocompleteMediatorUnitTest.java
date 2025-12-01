@@ -13,6 +13,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -51,18 +52,20 @@ import org.robolectric.shadows.ShadowPausedSystemClock;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.omnibox.DeferredIMEWindowInsetApplicationCallback;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.OmniboxMetrics;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
+import org.chromium.chrome.browser.omnibox.navattach.NavigationAttachmentsCoordinator;
+import org.chromium.chrome.browser.omnibox.navattach.NavigationFulfillmentType;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
-import org.chromium.chrome.browser.omnibox.suggestions.action.OmniboxActionFactoryImpl;
-import org.chromium.chrome.browser.omnibox.suggestions.action.OmniboxAnswerAction;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderProcessor;
 import org.chromium.chrome.browser.omnibox.test.R;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -96,8 +99,8 @@ import org.chromium.url.JUnitTestGURLs;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 /** Tests for {@link AutocompleteMediator}. */
@@ -142,6 +145,7 @@ public class AutocompleteMediatorUnitTest {
     private @Mock AutocompleteCoordinator.OmniboxSuggestionsVisualStateObserver
             mVisualStateObserver;
     private @Mock DeferredIMEWindowInsetApplicationCallback mDeferredImeCallback;
+    private @Mock NavigationAttachmentsCoordinator mNavigationAttachmentsCoordinator;
     private @Captor ArgumentCaptor<OmniboxLoadUrlParams> mOmniboxLoadUrlParamsCaptor;
 
     private PropertyModel mListModel;
@@ -150,6 +154,7 @@ public class AutocompleteMediatorUnitTest {
     private AutocompleteResult mAutocompleteResult;
     private ModelList mSuggestionModels;
     private ObservableSupplierImpl<TabWindowManager> mTabWindowManagerSupplier;
+    private ObservableSupplier<@ControlsPosition Integer> mToolbarPositionSupplier;
     private Context mContext;
 
     // Interface abstracting calls to CachedZeroSuggestionsManager, making interactions with that
@@ -163,6 +168,7 @@ public class AutocompleteMediatorUnitTest {
     // CachedZeroSuggestionsManager shadow that helps us intercept interactions with manager's
     // static methods.
     @Implements(CachedZeroSuggestionsManager.class)
+    @SuppressWarnings("DirectInvocationOnMock")
     public static class ShadowCachedSuggestionsManager {
         public static CachedZeroSuggestionsManagerCalls mock =
                 mock(CachedZeroSuggestionsManagerCalls.class);
@@ -187,6 +193,7 @@ public class AutocompleteMediatorUnitTest {
         LargeIconBridgeJni.setInstanceForTesting(mLargeIconBridgeJniMock);
         OmniboxActionFactoryJni.setInstanceForTesting(mActionFactoryJni);
         AutocompleteControllerJni.setInstanceForTesting(mControllerJniMock);
+        mToolbarPositionSupplier = new ObservableSupplierImpl(ControlsPosition.TOP);
 
         lenient().doReturn(mAutocompleteController).when(mControllerJniMock).getForProfile(any());
 
@@ -197,9 +204,14 @@ public class AutocompleteMediatorUnitTest {
                         .build();
 
         mTabWindowManagerSupplier = new ObservableSupplierImpl<>();
+        lenient().doAnswer(inv -> Collections.emptyList().iterator()).when(mTabModel).iterator();
         lenient().doReturn(mInsetObserver).when(mWindowAndroid).getInsetObserver();
         lenient().doReturn(mWindow).when(mWindowAndroid).getWindow();
         lenient().doReturn(mDecorView).when(mWindow).getDecorView();
+        lenient()
+                .doReturn(mToolbarPositionSupplier)
+                .when(mLocationBarDataProvider)
+                .getToolbarPositionSupplier();
 
         mMediator =
                 new AutocompleteMediator(
@@ -220,7 +232,9 @@ public class AutocompleteMediatorUnitTest {
                         mActivityLifecycleDispatcher,
                         mEmbedder,
                         mWindowAndroid,
-                        mDeferredImeCallback);
+                        mDeferredImeCallback,
+                        mNavigationAttachmentsCoordinator,
+                        false);
         mMediator
                 .getDropdownItemViewInfoListBuilderForTest()
                 .registerSuggestionProcessor(mMockProcessor);
@@ -252,7 +266,7 @@ public class AutocompleteMediatorUnitTest {
         setUpLocationBarDataProvider(
                 JUnitTestGURLs.NTP_URL, "New Tab Page", PageClassification.NTP_VALUE);
 
-        mMediator.setOmniboxSuggestionsVisualStateObserver(Optional.of(mVisualStateObserver));
+        mMediator.setOmniboxSuggestionsVisualStateObserver(mVisualStateObserver);
         mMediator.onTopResumedActivityChanged(true);
     }
 
@@ -482,13 +496,14 @@ public class AutocompleteMediatorUnitTest {
     public void verifyAutocompleteStartZeroSuggest(
             String userText, GURL url, int pageClass, String pageTitle) {
         var captor = ArgumentCaptor.forClass(AutocompleteInput.class);
-        verify(mAutocompleteController).startZeroSuggest(captor.capture(), eq(pageTitle));
-        verify(mAutocompleteController, times(1)).startZeroSuggest(any(), any());
+        verify(mAutocompleteController).startZeroSuggest(captor.capture());
+        verify(mAutocompleteController, times(1)).startZeroSuggest(any());
 
         AutocompleteInput input = captor.getValue();
         assertEquals(pageClass, input.getPageClassification());
         assertEquals(userText, input.getUserText());
         assertEquals(url.getSpec(), input.getPageUrl().getSpec());
+        assertEquals(pageTitle, input.getPageTitle());
 
         clearInvocations(mAutocompleteController);
     }
@@ -599,7 +614,7 @@ public class AutocompleteMediatorUnitTest {
         mMediator.onOmniboxSessionStateChange(false);
         mMediator.onOmniboxSessionStateChange(true);
         ShadowLooper.runUiThreadTasks();
-        verify(mAutocompleteController, never()).startZeroSuggest(any(), any());
+        verify(mAutocompleteController, never()).startZeroSuggest(any());
 
         // Simulate native being initialized. Make sure we only ever issue one request, even if
         // there are multiple requests to activate the autocomplete session.
@@ -621,12 +636,12 @@ public class AutocompleteMediatorUnitTest {
         mMediator.onOmniboxSessionStateChange(true);
         mMediator.onOmniboxSessionStateChange(false);
         ShadowLooper.runUiThreadTasks();
-        verify(mAutocompleteController, never()).startZeroSuggest(any(), any());
+        verify(mAutocompleteController, never()).startZeroSuggest(any());
 
         // Simulate native being inititalized. Make sure no suggest requests are sent.
         mMediator.onNativeInitialized();
         ShadowLooper.runUiThreadTasks();
-        verify(mAutocompleteController, never()).startZeroSuggest(any(), any());
+        verify(mAutocompleteController, never()).startZeroSuggest(any());
     }
 
     @Test
@@ -652,12 +667,12 @@ public class AutocompleteMediatorUnitTest {
 
         ShadowLooper.runUiThreadTasks();
         verify(mAutocompleteController, never()).start(any(), anyInt(), anyBoolean());
-        verify(mAutocompleteController, never()).startZeroSuggest(any(), any());
+        verify(mAutocompleteController, never()).startZeroSuggest(any());
 
         mMediator.onNativeInitialized();
         ShadowLooper.runUiThreadTasks();
         verifyAutocompleteStart(url, pageClassification, "A", 0, true);
-        verify(mAutocompleteController, never()).startZeroSuggest(any(), any());
+        verify(mAutocompleteController, never()).startZeroSuggest(any());
     }
 
     @Test
@@ -690,6 +705,7 @@ public class AutocompleteMediatorUnitTest {
 
     @Test
     @SmallTest
+    @SuppressWarnings("DirectInvocationOnMock")
     public void onSuggestionsReceived_sendsOnSuggestionsChanged() {
         mMediator.onNativeInitialized();
         mMediator.onOmniboxSessionStateChange(true);
@@ -930,7 +946,7 @@ public class AutocompleteMediatorUnitTest {
         // Signal focus prior to initializing native; confirm that zero suggest is not triggered.
         mMediator.onOmniboxSessionStateChange(true);
         ShadowLooper.runUiThreadTasks();
-        verify(mAutocompleteController, never()).startZeroSuggest(any(), any());
+        verify(mAutocompleteController, never()).startZeroSuggest(any());
 
         // Initialize native and ensure zero suggest is triggered.
         mMediator.onNativeInitialized();
@@ -1004,6 +1020,7 @@ public class AutocompleteMediatorUnitTest {
 
     @Test
     @SmallTest
+    @SuppressWarnings("DirectInvocationOnMock")
     public void switchToTab_invalidTabModelAssociation() {
         mMediator.setAutocompleteProfile(mProfile);
 
@@ -1035,6 +1052,7 @@ public class AutocompleteMediatorUnitTest {
         doReturn(ActivityState.RESUMED).when(mMockWindowAndroid).getActivityState();
         doReturn(mTabModel).when(mTabManager).getTabModelForTab(any());
         doReturn(1).when(mTabModel).getCount();
+        doAnswer(inv -> List.of(mTab).iterator()).when(mTabModel).iterator();
         doReturn(mTab).when(mTabModel).getTabAt(anyInt());
         assertTrue(mMediator.maybeSwitchToTab(null));
     }
@@ -1469,7 +1487,7 @@ public class AutocompleteMediatorUnitTest {
         verifyAutocompleteStartZeroSuggest("", url, pageClassification, title);
 
         mMediator.onTopResumedActivityChanged(false);
-        verify(mAutocompleteController, never()).startZeroSuggest(any(), any());
+        verify(mAutocompleteController, never()).startZeroSuggest(any());
 
         when(mTextStateProvider.getTextWithoutAutocomplete()).thenReturn("");
 
@@ -1625,9 +1643,9 @@ public class AutocompleteMediatorUnitTest {
 
     @Test
     public void propagateOmniboxSessionStateChange_informsVisualStateObserver() {
-        mMediator
-                .getAutocompleteInputForTesting()
-                .setPageClassification(PageClassification.NTP_VALUE);
+        setUpLocationBarDataProvider(
+                new GURL("https://abc.xyz"), "title", PageClassification.ANDROID_HUB_VALUE);
+        mMediator.initAutocompleteInput();
 
         mMediator.propagateOmniboxSessionStateChange(true);
         verify(mVisualStateObserver, atLeastOnce()).onOmniboxSessionStateChange(eq(true));
@@ -1638,44 +1656,29 @@ public class AutocompleteMediatorUnitTest {
 
     @Test
     public void propagateOmniboxSessionStateChange_hubSearchContainerVisible() {
-        GURL url = new GURL("https://www.google.com");
-        String title = "title";
-        int pageClassification = PageClassification.ANDROID_HUB_VALUE;
-        setUpLocationBarDataProvider(url, title, pageClassification);
-
-        mMediator.propagateOmniboxSessionStateChange(true);
+        setUpLocationBarDataProvider(
+                new GURL("https://abc.xyz"), "title", PageClassification.ANDROID_HUB_VALUE);
+        mMediator.initAutocompleteInput();
         assertTrue(mListModel.get(SuggestionListProperties.CONTAINER_ALWAYS_VISIBLE));
+
+        setUpLocationBarDataProvider(
+                new GURL("https://abc.xyz"),
+                "title",
+                PageClassification.ANDROID_SEARCH_WIDGET_VALUE);
+        mMediator.initAutocompleteInput();
+        assertFalse(mListModel.get(SuggestionListProperties.CONTAINER_ALWAYS_VISIBLE));
     }
 
     @Test
     public void onTopResumedActivityChanged_hubSearchContainerVisible() {
-        GURL url = new GURL("https://www.google.com");
-        String title = "title";
-        int pageClassification = PageClassification.ANDROID_HUB_VALUE;
-        setUpLocationBarDataProvider(url, title, pageClassification);
+        setUpLocationBarDataProvider(
+                new GURL("https://abc.xyz"), "title", PageClassification.ANDROID_HUB_VALUE);
 
-        // Ensure that the ACTIVITY_WINDOW_FOCUSED property always remains true.
-        mMediator.onTopResumedActivityChanged(true);
+        mMediator.initAutocompleteInput();
         assertTrue(mListModel.get(SuggestionListProperties.ACTIVITY_WINDOW_FOCUSED));
+
         mMediator.onTopResumedActivityChanged(false);
         assertTrue(mListModel.get(SuggestionListProperties.ACTIVITY_WINDOW_FOCUSED));
-    }
-
-    @Test
-    public void onOmniboxAnswerActionClicked() {
-        mMediator.setAutocompleteProfile(mProfile);
-        mMediator.onNativeInitialized();
-        mMediator.onOmniboxSessionStateChange(true);
-        OmniboxAnswerAction answerAction =
-                (OmniboxAnswerAction)
-                        OmniboxActionFactoryImpl.get()
-                                .buildOmniboxAnswerAction(123L, "7 day forecast", "7 day forecast");
-
-        mMediator.onSuggestionsReceived(
-                AutocompleteResult.fromCache(mSuggestionsList, null), /* isFinal= */ true);
-        mMediator.onOmniboxActionClicked(answerAction, 0);
-
-        verify(mAutocompleteDelegate).loadUrl(mOmniboxLoadUrlParamsCaptor.capture());
     }
 
     @Test
@@ -1742,5 +1745,36 @@ public class AutocompleteMediatorUnitTest {
         when(mTextStateProvider.wasLastEditPaste()).thenReturn(true);
         mMediator.onSuggestionClicked(match, 0, url);
         verify(mAutocompleteDelegate).maybeShowDefaultBrowserPromo();
+    }
+
+    @Test
+    @SmallTest
+    public void loadTypedOmniboxText_aimUrl() {
+        mMediator.setAutocompleteProfile(mProfile);
+        mMediator.onNativeInitialized();
+        mMediator.onOmniboxSessionStateChange(true);
+        when(mTextStateProvider.getTextWithoutAutocomplete()).thenReturn("test");
+        when(mTextStateProvider.getTextWithAutocomplete()).thenReturn("test");
+        ObservableSupplierImpl<Integer> supplier = new ObservableSupplierImpl<>();
+        supplier.set(NavigationFulfillmentType.AI_MODE);
+        when(mNavigationAttachmentsCoordinator.getNavigationFulfillmentTypeSupplier())
+                .thenReturn(supplier);
+        GURL url = JUnitTestGURLs.BLUE_2;
+        when(mNavigationAttachmentsCoordinator.getAimUrl("test")).thenReturn(url);
+
+        AutocompleteMatch defaultMatch =
+                AutocompleteMatchBuilder.searchWithType(OmniboxSuggestionType.SEARCH_SUGGEST)
+                        .setDisplayText("test suggestion")
+                        .setInlineAutocompletion("")
+                        .setAllowedToBeDefaultMatch(true)
+                        .setUrl(JUnitTestGURLs.GOOGLE_URL)
+                        .build();
+        mSuggestionsList.add(0, defaultMatch);
+        mMediator.onSuggestionsReceived(AutocompleteResult.fromCache(mSuggestionsList, null), true);
+
+        mMediator.loadTypedOmniboxText(123L, false);
+
+        verify(mAutocompleteDelegate).loadUrl(mOmniboxLoadUrlParamsCaptor.capture());
+        assertEquals(mOmniboxLoadUrlParamsCaptor.getValue().url, url.getSpec());
     }
 }

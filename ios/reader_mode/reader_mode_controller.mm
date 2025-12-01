@@ -3,15 +3,55 @@
 #import "ios/reader_mode/reader_mode_controller.h"
 
 #import "base/check.h"
+#import "base/memory/weak_ptr.h"
 #import "base/no_destructor.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/reader_mode/vivaldi_reader_mode_java_script_feature.h"
+#import "ios/ui/settings/reader_mode/vivaldi_reader_mode_animator.h"
 #import "ios/ui/settings/reader_mode/vivaldi_reader_mode_floating_ui.h"
 #import "ios/ui/settings/reader_mode/vivaldi_reader_mode_prefs.h"
+#import "ios/ui/settings/appearance/vivaldi_appearance_settings_prefs_helper.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/web/public/web_state.h"
 #import "prefs/vivaldi_pref_names.h"
+
+namespace {
+// Returns the content view for the current WebState.
+UIView* ContentViewForWebState(web::WebState* web_state) {
+  return web_state ? web_state->GetView() : nil;
+}
+
+// Returns the container for a given content view.
+UIView* ContainerViewForContent(UIView* content_view) {
+  return content_view ? (content_view.superview ?: content_view) : nil;
+}
+
+// Applies saved preferences (font size/family/theme) to current page.
+void ApplySavedPrefsToPage(ReaderModeController* controller, web::WebState* ws){
+  if (!controller || !ws)
+    return;
+  ProfileIOS* profile =
+      ProfileIOS::FromBrowserState(ws->GetBrowserState());
+  PrefService* prefs = profile ? profile->GetPrefs() : nullptr;
+  if (!prefs)
+    return;
+  int font_size =
+      [VivaldiReaderModePrefs getReaderModeFontSizeWithPrefService:prefs];
+  NSString* font_family =
+      [VivaldiReaderModePrefs getReaderModeFontFamilyWithPrefService:prefs];
+  NSString* theme =
+      [VivaldiReaderModePrefs getReaderModeThemeWithPrefService:prefs];
+  controller->SetFontSize(font_size);
+  if (font_family) {
+    controller->SetFontFamily(base::SysNSStringToUTF8(font_family));
+  }
+  if (theme) {
+    controller->SetTheme(base::SysNSStringToUTF8(theme));
+  }
+}
+}  // namespace
 
 // Registry to map WebState to ReaderModeController
 // Using base::NoDestructor to avoid exit-time destructor issues
@@ -156,47 +196,56 @@ bool ReaderModeController::ToggleReaderMode() {
 }
 
 void ReaderModeController::ApplyReaderMode() {
-  // Don't apply if reader mode is disabled in settings
-  if (!IsReaderModeEnabledInSettings()) {
+  if (!IsReaderModeEnabledInSettings() || !web_state_) {
     return;
   }
 
-  VivaldiReaderModeJavaScriptFeature::
-      GetInstance()->ApplyReaderMode(web_state_);
-  // Apply settings through controller from PrefService
-  if (web_state_) {
-    ProfileIOS* profile =
-        ProfileIOS::FromBrowserState(web_state_->GetBrowserState());
-    PrefService* prefs = profile ? profile->GetPrefs() : nullptr;
-    if (prefs) {
-      int font_size =
-          [VivaldiReaderModePrefs getReaderModeFontSizeWithPrefService:prefs];
-      NSString* font_family =
-          [VivaldiReaderModePrefs getReaderModeFontFamilyWithPrefService:prefs];
-      NSString* theme =
-          [VivaldiReaderModePrefs getReaderModeThemeWithPrefService:prefs];
-      SetFontSize(font_size);
-      if (font_family) {
-        SetFontFamily(base::SysNSStringToUTF8(font_family));
-      }
-      if (theme) {
-        SetTheme(base::SysNSStringToUTF8(theme));
-      }
-    }
-  }
-  // Update our internal state
-  is_reader_mode_enabled_ = true;
-  CreateFloatingUI();
-  NotifyEnabledStateObservers(true);
+  // Prepare container and content views for animation.
+  UIView* contentView = ContentViewForWebState(web_state_);
+  UIView* contentContainerView = ContainerViewForContent(contentView);
+
+  base::WeakPtr<ReaderModeController> weak_ptr = weak_factory_.GetWeakPtr();
+  [VivaldiReaderModeAnimator
+    playTransitionOnContentContainerView:contentContainerView
+                             contentView:contentView
+                              startPoint:CGPointMake(0.5, 0.0)
+                               wipeColor:web_state_->GetThemeColor()
+                                 toggler:^{
+                      if (!weak_ptr) return;
+                      ReaderModeController* controller = weak_ptr.get();
+                      VivaldiReaderModeJavaScriptFeature::GetInstance()
+                          ->ApplyReaderMode(controller->web_state_);
+                      ApplySavedPrefsToPage(controller, controller->web_state_);
+                      controller->is_reader_mode_enabled_ = true;
+                      controller->CreateFloatingUI();
+                      controller->NotifyEnabledStateObservers(true);
+                    }
+   ];
 }
 
 void ReaderModeController::DisableReaderMode() {
-  VivaldiReaderModeJavaScriptFeature::
-      GetInstance()->DisableReaderMode(web_state_);
-  // Update our internal state
-  is_reader_mode_enabled_ = false;
-  RemoveFloatingUI();
-  NotifyEnabledStateObservers(false);
+  if (!web_state_)
+    return;
+  UIView* contentView = ContentViewForWebState(web_state_);
+  UIView* contentContainerView = ContainerViewForContent(contentView);
+
+  base::WeakPtr<ReaderModeController> weak_ptr = weak_factory_.GetWeakPtr();
+  [VivaldiReaderModeAnimator
+      playTransitionOnContentContainerView:contentContainerView
+                               contentView:contentView
+                                startPoint:CGPointMake(0.5, 0.0)
+                                 wipeColor:web_state_->GetThemeColor()
+                                   toggler:^{
+                       if (!weak_ptr)
+                         return;
+                       ReaderModeController* controller = weak_ptr.get();
+                       VivaldiReaderModeJavaScriptFeature::GetInstance()
+                            ->DisableReaderMode(controller->web_state_);
+                       controller->is_reader_mode_enabled_ = false;
+                       controller->RemoveFloatingUI();
+                       controller->NotifyEnabledStateObservers(false);
+                     }
+   ];
 }
 
 bool ReaderModeController::SetFontSize(int size) {

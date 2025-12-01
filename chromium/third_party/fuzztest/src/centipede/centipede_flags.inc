@@ -178,6 +178,9 @@ CENTIPEDE_FLAG(
     "'%f' to disable the fork server. --fork_server applies to binaries "
     "passed via these flags: --binary, --extra_binaries, "
     "--input_filter.")
+CENTIPEDE_FLAG(bool, persistent_mode, true,
+               "If true (default), enables the persistent mode to run multiple "
+               "execute/mutate batches without exiting the process.")
 CENTIPEDE_FLAG(
     bool, full_sync, false,
     "Perform a full corpus sync on startup. If true, feature sets and "
@@ -434,10 +437,10 @@ CENTIPEDE_FLAG(bool, load_shards_only, false,
                "If set, load/merge shards without fuzzing new inputs. For "
                "FuzzTest framework only, do not use from end-users.")
 CENTIPEDE_FLAG(
-    bool, fuzztest_single_test_mode, false,
-    "If set, operate on the corpus database for a single test specified by "
-    "FuzzTest instead of all the tests. For FuzzTest framework only, do not "
-    "use from end-users.")
+    bool, fuzztest_multi_test_mode_soon_to_be_removed, true,
+    "If set, operate on multiple fuzz tests queried from the binary if it is "
+    "using FuzzTest. This mode is going to be removed soon, and Centipede will "
+    "operate on only one fuzz test per invocation after that.")
 CENTIPEDE_FLAG(
     std::string, fuzztest_configuration, "",
     "If set, deserializes the FuzzTest configuration from the value as a "
@@ -466,3 +469,7 @@ CENTIPEDE_FLAG(
     std::string, export_crash_file, "",
     "The path to export the input contents of `crash_id` for `export_crash`. "
     "For FuzzTest framework only, do not use from end-users.")
+CENTIPEDE_FLAG(
+    bool, report_crash_summary, true,
+    "If set, reports a summary of crashes found during fuzzing or replay."
+)

@@ -28,12 +28,17 @@ DeveloperToolsMenuController::DeveloperToolsMenuController(
     content::WebContents* web_contents,
     const gfx::Point& location)
     : web_contents_(web_contents),
-      browser_(FindBrowserForEmbedderWebContents(web_contents)),
+      browser_(FindBrowserForEmbedderWebContents(web_contents)
+                   ? FindBrowserForEmbedderWebContents(web_contents)->AsWeakPtr()
+                   : nullptr),
       location_(location),
       enabled_(HasFeature()) {}
 
 const extensions::Extension* DeveloperToolsMenuController::GetExtension()
     const {
+  if (!browser_) {
+    return nullptr;
+  }
   extensions::ProcessManager* process_manager =
       extensions::ProcessManager::Get(browser_->profile());
   return process_manager->GetExtensionForWebContents(web_contents_);
@@ -74,7 +79,7 @@ bool DeveloperToolsMenuController::IsCommand(int command_id) const {
 }
 
 bool DeveloperToolsMenuController::HandleCommand(int command_id) {
-  if (enabled_) {
+  if (enabled_ && browser_) {
     const extensions::Extension* platform_app = GetExtension();
 
     switch (command_id) {

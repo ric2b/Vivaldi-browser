@@ -408,3 +408,35 @@ TEST(ResolvedTargetDataTest, SharedInheritance) {
   EXPECT_EQ(&inter, exe_inherited[0].target());
   EXPECT_EQ(&pub, exe_inherited[1].target());
 }
+
+TEST(ResolvedTargetDataTest, ModuleDepsInheritance) {
+  TestWithScope setup;
+  Err err;
+
+  // Create a dependency chain:
+  //   A (executable) -> G (group) -> B (static_library) -> C (source_set)
+  TestTarget a(setup, "//foo:a", Target::EXECUTABLE);
+  TestTarget g(setup, "//foo:g", Target::GROUP);
+  TestTarget b(setup, "//foo:b", Target::STATIC_LIBRARY);
+  TestTarget c(setup, "//foo:c", Target::SOURCE_SET);
+
+  c.sources().push_back(SourceFile("//foo/c.modulemap"));
+  c.source_types_used().Set(SourceFile::SOURCE_MODULEMAP);
+
+  a.public_deps().push_back(LabelTargetPair(&g));
+  g.public_deps().push_back(LabelTargetPair(&b));
+  b.public_deps().push_back(LabelTargetPair(&c));
+
+  ASSERT_TRUE(c.OnResolved(&err));
+  ASSERT_TRUE(b.OnResolved(&err));
+  ASSERT_TRUE(g.OnResolved(&err));
+  ASSERT_TRUE(a.OnResolved(&err));
+
+  ResolvedTargetData resolved;
+
+  const auto& a_module_deps = resolved.GetModuleDepsInformation(&a);
+  ASSERT_EQ(3u, a_module_deps.size());
+  EXPECT_EQ(&g, a_module_deps[0].target());
+  EXPECT_EQ(&b, a_module_deps[1].target());
+  EXPECT_EQ(&c, a_module_deps[2].target());
+}

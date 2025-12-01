@@ -3,16 +3,6 @@
 <translationbundle lang="en-GB">
 <translation id="3830627370375585318">Allow Vivaldi to access the network in your firewall or antivirus
           settings.</translation>
-<translation id="4200102020577305737">Go to
-          the Vivaldi menu &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          LAN Settings
-          and deselect "Use a proxy server for your LAN".</translation>
 <translation id="4932161901409251843">Go to
           the Vivaldi menu &gt;
           <ph name="SETTINGS_TITLE" />

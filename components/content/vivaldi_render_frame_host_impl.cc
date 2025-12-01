@@ -56,4 +56,8 @@ void TextInputManager::VisibleSelectionChanged(RenderWidgetHostViewBase* view,
   visible_text_selection_map_[view] = std::u16string(text);
 }
 
+void RenderFrameHostImpl::SetSupportsDraggableRegions(bool b) {
+  GetVivaldiFrameService()->SetSupportsDraggableRegions(b);
+}
+
 }  // namespace content

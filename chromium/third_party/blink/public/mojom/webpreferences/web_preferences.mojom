@@ -510,6 +510,11 @@ struct WebPreferences {
 
   bool content_based_fingerprinting_protection_enabled = false;
 
+  bool ai_prompt_api_enabled = false; // Vivaldi Keep disabled
+
+  [EnableIf=is_android]
+  bool increment_local_surface_id_for_mainframe_same_doc_navigation = true;
+
   // Vivaldi specific preferences:
   // Maps to the Cycle focus setting in Vivaldi.
   bool allow_tab_cycle_from_webpage_into_ui;

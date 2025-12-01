@@ -149,6 +149,13 @@ class BundleData {
     return post_processing_script_;
   }
 
+  void set_post_processing_manifest(const SourceFile& manifest_file) {
+    post_processing_manifest_ = manifest_file;
+  }
+  const SourceFile& post_processing_manifest() const {
+    return post_processing_manifest_;
+  }
+
   std::vector<SourceFile>& post_processing_sources() {
     return post_processing_sources_;
   }
@@ -236,9 +243,10 @@ class BundleData {
   // (corresponds to {{bundle_partial_info_plist}} expansion).
   SourceFile partial_info_plist_;
 
-  // Holds the values (script name, sources, outputs, script arguments) for the
-  // post-processing step if defined.
+  // Holds the values (script name, manifest path, sources, outputs, script
+  // arguments) for the post-processing step if defined.
   SourceFile post_processing_script_;
+  SourceFile post_processing_manifest_;
   std::vector<SourceFile> post_processing_sources_;
   SubstitutionList post_processing_outputs_;
   SubstitutionList post_processing_args_;

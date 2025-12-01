@@ -9,3 +9,6 @@ pkg-config = "0.3.29"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(google3)'] }
+
+[features]
+libyuv = []

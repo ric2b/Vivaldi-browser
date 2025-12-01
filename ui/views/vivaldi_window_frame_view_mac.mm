@@ -90,7 +90,7 @@ gfx::Size VivaldiWindowFrameViewMac::GetMinimumSize() const {
 
 }  // namespace
 
-std::unique_ptr<views::NonClientFrameView> CreateVivaldiWindowFrameView(
+std::unique_ptr<views::FrameView> CreateVivaldiWindowFrameView(
     VivaldiBrowserWindow* window) {
   return std::make_unique<VivaldiWindowFrameViewMac>(window);
 }

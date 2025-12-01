@@ -1,0 +1,9 @@
+include "fcp/tracing/tracing_schema_common.fbs";
+namespace foo.bar;
+
+enum Color : int { Red = 0, Green = 1, Blue = 2 }
+
+table TestTable (tag: "TETB", span) {
+  id: int;
+  color: Color;
+}

@@ -71,11 +71,6 @@ static inline bool operator==(const DecoderCacheKey& a,
          a.alpha_option_ == b.alpha_option_ && a.client_id_ == b.client_id_;
 }
 
-static inline bool operator!=(const DecoderCacheKey& a,
-                              const DecoderCacheKey& b) {
-  return !(a == b);
-}
-
 // Base class for all cache entries.
 class CacheEntry : public DoublyLinkedListNode<CacheEntry> {
   USING_FAST_MALLOC(CacheEntry);
@@ -324,7 +319,7 @@ class PLATFORM_EXPORT ImageDecodingStore final {
   size_t heap_memory_usage_in_bytes_ GUARDED_BY(lock_);
 
   // A listener to global memory pressure events.
-  base::MemoryPressureListener memory_pressure_listener_;
+  base::AsyncMemoryPressureListener memory_pressure_listener_;
 
   // Also protects:
   // - the CacheEntry in |decoder_cache_map_|.

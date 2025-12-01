@@ -27,6 +27,7 @@ if (parentOrigin === 'chrome-untrusted://print') {
 
 // Plugin-to-parent message handlers. All messages are passed through, but some
 // messages may affect this frame, too.
+let caretBrowsingEnabled: boolean = false;
 let isFormFieldFocused: boolean = false;
 plugin.addEventListener('message', e => {
   const message = (e as MessageEvent).data;
@@ -36,6 +37,11 @@ plugin.addEventListener('message', e => {
       // interesting keyboard events first.
       const focusedData = convertFormFocusChangeMessage(message);
       isFormFieldFocused = focusedData.focused !== FormFieldFocusType.NONE;
+      break;
+    case 'rendererPreferencesUpdated':
+      const caretBrowsingEnabledData =
+          message as unknown as {caretBrowsingEnabled: boolean};
+      caretBrowsingEnabled = caretBrowsingEnabledData.caretBrowsingEnabled;
       break;
   }
 
@@ -48,14 +54,6 @@ plugin.addEventListener('message', e => {
 let isPresentationMode = false;
 channel.port1.onmessage = e => {
   switch (e.data.type) {
-    case 'loadArray':
-      if (plugin.src.startsWith('blob:')) {
-        URL.revokeObjectURL(plugin.src);
-      }
-      plugin.src = URL.createObjectURL(new Blob([e.data.dataToLoad]));
-      plugin.setAttribute('has-edits', '');
-      return;
-
     case 'setPresentationMode':
       isPresentationMode = e.data.enablePresentationMode;
 
@@ -194,6 +192,12 @@ document.addEventListener('keydown', e => {
     case 'ArrowLeft':
     case 'ArrowRight':
     case 'ArrowUp':
+      if (caretBrowsingEnabled) {
+        // Do not prevent default, otherwise the plugin will not handle
+        // directional key events.
+        break;
+      }
+
       // Don't prevent arrow navigation in form fields, or if modified.
       if (!isFormFieldFocused && !hasKeyModifiers(e)) {
         e.preventDefault();

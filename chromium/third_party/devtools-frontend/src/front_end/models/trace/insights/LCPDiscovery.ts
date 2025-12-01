@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@ import * as Handlers from '../handlers/handlers.js';
 import * as Helpers from '../helpers/helpers.js';
 import * as Types from '../types/types.js';
 
+import {calculateDocFirstByteTs} from './Common.js';
 import {
   type Checklist,
   InsightCategory,
@@ -19,11 +20,11 @@ import {
 
 export const UIStrings = {
   /**
-   *@description Title of an insight that provides details about the LCP metric, and the network requests necessary to load it. Details how the LCP request was discoverable - in other words, the path necessary to load it (ex: network requests, JavaScript)
+   * @description Title of an insight that provides details about the LCP metric, and the network requests necessary to load it. Details how the LCP request was discoverable - in other words, the path necessary to load it (ex: network requests, JavaScript)
    */
   title: 'LCP request discovery',
   /**
-   *@description Description of an insight that provides details about the LCP metric, and the network requests necessary to load it.
+   * @description Description of an insight that provides details about the LCP metric, and the network requests necessary to load it.
    */
   description:
       'Optimize LCP by making the LCP image [discoverable](https://web.dev/articles/optimize-lcp#1_eliminate_resource_load_delay) from the HTML immediately, and [avoiding lazy-loading](https://web.dev/articles/lcp-lazy-loading)',
@@ -61,7 +62,7 @@ export const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('models/trace/insights/LCPDiscovery.ts', UIStrings);
 export const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-export function isLCPDiscovery(model: InsightModel): model is LCPDiscoveryInsightModel {
+export function isLCPDiscoveryInsight(model: InsightModel): model is LCPDiscoveryInsightModel {
   return model.insightKey === 'LCPDiscovery';
 }
 export type LCPDiscoveryInsightModel = InsightModel<typeof UIStrings, {
@@ -94,14 +95,14 @@ function finalize(partialModel: PartialInsightModel<LCPDiscoveryInsightModel>): 
 }
 
 export function generateInsight(
-    parsedTrace: Handlers.Types.ParsedTrace, context: InsightSetContext): LCPDiscoveryInsightModel {
+    data: Handlers.Types.HandlerData, context: InsightSetContext): LCPDiscoveryInsightModel {
   if (!context.navigation) {
     return finalize({});
   }
 
-  const networkRequests = parsedTrace.NetworkRequests;
+  const networkRequests = data.NetworkRequests;
 
-  const frameMetrics = parsedTrace.PageLoadMetrics.metricScoresByFrameId.get(context.frameId);
+  const frameMetrics = data.PageLoadMetrics.metricScoresByFrameId.get(context.frameId);
   if (!frameMetrics) {
     throw new Error('no frame metrics');
   }
@@ -121,7 +122,7 @@ export function generateInsight(
     return finalize({warnings: [InsightWarning.NO_DOCUMENT_REQUEST]});
   }
 
-  const lcpRequest = parsedTrace.LargestImagePaint.lcpRequestByNavigationId.get(context.navigationId);
+  const lcpRequest = data.LargestImagePaint.lcpRequestByNavigationId.get(context.navigationId);
   if (!lcpRequest) {
     return finalize({lcpEvent});
   }
@@ -135,11 +136,8 @@ export function generateInsight(
 
   const imageLoadingAttr = lcpEvent.args.data?.loadingAttr;
   const imageFetchPriorityHint = lcpRequest?.args.data.fetchPriorityHint;
-  // This is the earliest discovery time an LCP request could have - it's TTFB.
-  const earliestDiscoveryTime = docRequest?.args.data.timing ?
-      Helpers.Timing.secondsToMicro(docRequest.args.data.timing.requestTime) +
-          Helpers.Timing.milliToMicro(docRequest.args.data.timing.receiveHeadersStart) :
-      undefined;
+  // This is the earliest discovery time an LCP request could have - it's TTFB (as an absolute timestamp).
+  const earliestDiscoveryTime = calculateDocFirstByteTs(docRequest);
 
   const priorityHintFound = imageFetchPriorityHint === 'high';
 
@@ -203,7 +201,7 @@ export function getImageData(model: LCPDiscoveryInsightModel): LCPImageDiscovery
 
 export function createOverlays(model: LCPDiscoveryInsightModel): Types.Overlays.Overlay[] {
   const imageResults = getImageData(model);
-  if (!imageResults || !imageResults.discoveryDelay) {
+  if (!imageResults?.discoveryDelay) {
     return [];
   }
 

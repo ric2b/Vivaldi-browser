@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -15,6 +15,7 @@ copy_to_gen("traces") {
     "basic.json.gz",
     "byte-efficiency.json.gz",
     "changing-priority.json.gz",
+    "chrome-ext-sourcemap-script-content.json.gz",
     "cls-cluster-max-duration.json.gz",
     "cls-cluster-max-timeout.json.gz",
     "cls-cluster-navigation.json.gz",
@@ -22,6 +23,7 @@ copy_to_gen("traces") {
     "cls-multiple-frames.json.gz",
     "cls-no-nav.json.gz",
     "cls-single-frame.json.gz",
+    "collapsible-tracks.json.gz",
     "crux.json.gz",
     "dom-size-long.json.gz",
     "dom-size-overlap.json.gz",
@@ -29,6 +31,7 @@ copy_to_gen("traces") {
     "dpr.json.gz",
     "dupe-js-inline-maps.json.gz",
     "dupe-js.json.gz",
+    "enhanced-paul.json.gz",
     "enhanced-traces.json.gz",
     "example-dot-com.json.gz",
     "extension-tracks-and-marks.json.gz",
@@ -44,6 +47,7 @@ copy_to_gen("traces") {
     "iframe-shift.json.gz",
     "image-delivery.json.gz",
     "instant-animation-events.json.gz",
+    "interaction-events-with-shared-ids.json.gz",
     "interactive-time.json.gz",
     "invalid-animation-events.json.gz",
     "invalidate-style-class-name-change.json.gz",
@@ -57,6 +61,7 @@ copy_to_gen("traces") {
     "large-profile.cpuprofile.gz",
     "large-recalc-style.json.gz",
     "layout-shifts-root-causes.json.gz",
+    "layout-shifts-with-animation-culprit.json.gz",
     "lcp-discovery-delay.json.gz",
     "lcp-fetchpriority-high.json.gz",
     "lcp-images-rasterizer.json.gz",
@@ -89,6 +94,7 @@ copy_to_gen("traces") {
     "one-second-interaction.json.gz",
     "over-20-invalidations-per-event.json.gz",
     "parser-blocking-after-paint.json.gz",
+    "perfettotrace-track.json.gz",
     "postmessage-initiators.json.gz",
     "preconnect-advice.json.gz",
     "primary-page-frame.json.gz",
@@ -131,6 +137,7 @@ copy_to_gen("traces") {
     "unsized-images.json.gz",
     "user-timings-complex.json.gz",
     "user-timings-details.json.gz",
+    "user-timings-overlaps.json.gz",
     "user-timings.json.gz",
     "web-dev-animation-frames.json.gz",
     "web-dev-initial-url.json.gz",

@@ -35,6 +35,7 @@
 <translation id="1249250836236328755">ژانر</translation>
 <translation id="1254593899333212300">اتصال اینترنتی مستقیم</translation>
 <translation id="1272293450992660632">مقادیر پین مطابقت ندارند.</translation>
+<translation id="1279040297980392566">درانتظار اتمام اسکن؛ بعداً دوباره امتحان کنید</translation>
 <translation id="1280820357415527819">درحال جستجوی شبکه‌های دستگاه همراه</translation>
 <translation id="1293556467332435079">Files</translation>
 <translation id="1297922636971898492">‏Google Drive در حال حاضر در دسترس نیست. به محض در دسترس قرار گرفتن Google Drive بارگذاری کردن به صورت خودکار دوباره شروع می‌شود.</translation>
@@ -261,7 +262,7 @@
 <translation id="3124404833828281817">شخصی درحال رویاپردازی</translation>
 <translation id="3126026824346185272">Ctrl</translation>
 <translation id="3138624403379688522">پین نامعتبر است. <ph name="RETRIES" /> تلاش دیگر دارید.</translation>
-<translation id="3157931365184549694">بازیابی</translation>
+<translation id="3157931365184549694">بازگرداندن</translation>
 <translation id="3160842278951476457"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />] (پشتیبان‌گیری‌شده در سخت‌افزار)</translation>
 <translation id="3188257591659621405">فایل‌های من</translation>
 <translation id="3194553149358267393">هیچ فایل صوتی‌ای در موارد اخیر وجود ندارد</translation>
@@ -487,7 +488,7 @@
 <translation id="485316830061041779">آلمانی</translation>
 <translation id="4862885579661885411">‏تنظیمات Files</translation>
 <translation id="4867079195717347957">کلیک کنید تا ستون به‌صورت نزولی مرتب شود.</translation>
-<translation id="4867297348137739678">هفته قبل</translation>
+<translation id="4867297348137739678">هفته پیش</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> بایت</translation>
 <translation id="4874569719830985133">حذف برای همیشه</translation>
 <translation id="4880214202172289027">اسلایدر میزان صدا</translation>
@@ -542,7 +543,7 @@
 <translation id="5194713942430106590">کلیک کنید تا ستون به‌صورت صعودی مرتب شود.</translation>
 <translation id="5211614973734216083">فاروئی</translation>
 <translation id="5218183485292899140">فرانسوی سوئیس</translation>
-<translation id="5234764350956374838">رد کردن</translation>
+<translation id="5234764350956374838">بستن</translation>
 <translation id="5253070652067921974">ایجاد شده توسط</translation>
 <translation id="5254207638927440400">فایل منتقل نشد. فایل درحال استفاده است.</translation>
 <translation id="5257456363153333584">سنجاقک</translation>
@@ -611,7 +612,7 @@
 <translation id="5700087501958648444">اطلاعات صوتی</translation>
 <translation id="5720028165859493293"><ph name="FILE_NAME" /> به حذف‌شده‌ها منتقل شد</translation>
 <translation id="5724172041621205163">‏تایلندی با صفحه‌کلید Pattachote</translation>
-<translation id="57383366388012121">ماه گذشته</translation>
+<translation id="57383366388012121">ماه پیش</translation>
 <translation id="575175778971367197">درحال‌حاضر امکان همگام‌سازی این فایل وجود ندارد</translation>
 <translation id="5756666464756035725">‏QWERTY مجارستانی</translation>
 <translation id="5760252553414789727"><ph name="SELECTED_FILES_COUNT" /> مورد انتخاب شده است</translation>
@@ -1078,6 +1079,7 @@
 <translation id="9213073329713032541">نصب باموفقیت شروع شد.</translation>
 <translation id="9219103736887031265">تصاویر</translation>
 <translation id="9219908252191632183">منظره سطح ماه</translation>
+<translation id="931652069802536959">شبکه توسط خط‌مشی مسدود شده است</translation>
 <translation id="938470336146445890">لطفاً یک مجوز کاربر نصب کنید.</translation>
 <translation id="939736085109172342">پوشهٔ جدید</translation>
 <translation id="943972244133411984">اصلاح‌شده توسط</translation>

@@ -36,10 +36,9 @@
     });
   }
 
-  async function firstEntryAfter(
-      timeStamp, entryType, includeSoftNavigationObservations = false) {
+  async function firstEntryAfter(timeStamp, entryType) {
     return session.evaluateAsync(
-        function(timeStamp, entryType, includeSoftNavigationObservations) {
+      function (timeStamp, entryType) {
           return new Promise(resolve => {
             new PerformanceObserver((list, observer) => {
               const e =
@@ -50,13 +49,11 @@
               }
             }).observe({
               type: entryType,
-              includeSoftNavigationObservations:
-                  includeSoftNavigationObservations,
               buffered: true
             });
           });
         },
-        timeStamp, entryType, includeSoftNavigationObservations);
+      timeStamp, entryType);
   }
 
   // Start tracing and observe the devtools.timeline category.
@@ -175,10 +172,6 @@
     navigationId: lcpAfterBfCacheRestore.navigationId,
     name: 'hard-lcp (entry)'
   });
-
-  // There's no principled way to wait for the trace events to arrive,
-  // so we give it a second here, before we stop tracing.
-  await new Promise(resolve => setTimeout(resolve, 1000));
 
   const unfilteredEvents = await tracingHelper.stopTracing();
 

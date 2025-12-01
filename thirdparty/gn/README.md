@@ -148,7 +148,7 @@ and the Fuchsia setup:
 ## Reporting bugs
 
 If you find a bug, you can see if it is known or report it in the [bug
-database](https://bugs.chromium.org/p/gn/issues/list).
+database](https://gn.g-issues.chromium.org/issues/new).
 
 ## Sending patches
 

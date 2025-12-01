@@ -140,14 +140,14 @@ public class BookmarkImageFetcher {
     public void fetchImageForBookmarkWithFaviconFallback(
             BookmarkItem item, int imageSize, Callback<Drawable> callback) {
         Callback<@Nullable Drawable> imageCallback =
-                mCallbackController.makeCancelable(
-                        drawable -> {
-                            if (drawable == null) {
-                                fetchFaviconForBookmark(item, callback);
-                            } else {
-                                callback.onResult(drawable);
-                            }
-                        });
+                drawable -> {
+                    if (drawable == null) {
+                        fetchFaviconForBookmark(item, callback);
+                    } else {
+                        callback.onResult(drawable);
+                    }
+                };
+        imageCallback = mCallbackController.makeCancelable(imageCallback);
 
         fetchImageForBookmark(item, imageSize, imageCallback);
     }
@@ -185,16 +185,15 @@ public class BookmarkImageFetcher {
 
     private void fetchImageForBookmark(
             BookmarkItem item, int imageSize, Callback<@Nullable Drawable> callback) {
-        final Callback<@Nullable Bitmap> imageCallback =
-                mCallbackController.makeCancelable(
-                        (image) -> {
-                            if (image == null) {
-                                callback.onResult(null);
-                            } else {
-                                callback.onResult(
-                                        new BitmapDrawable(mContext.getResources(), image));
-                            }
-                        });
+        Callback<@Nullable Bitmap> imageCallback =
+                image -> {
+                    if (image == null) {
+                        callback.onResult(null);
+                    } else {
+                        callback.onResult(new BitmapDrawable(mContext.getResources(), image));
+                    }
+                };
+        imageCallback = mCallbackController.makeCancelable(imageCallback);
 
         // Price-tracable bookmarks already have image URLs in their metadata. Prioritize that meta
         // when it's available because the coverage is much higher.
@@ -238,22 +237,22 @@ public class BookmarkImageFetcher {
         }
 
         Callback<@Nullable Drawable> imageCallback =
-                mCallbackController.makeCancelable(
-                        drawable -> {
-                            Drawable newFirstDrawable = firstDrawable;
-                            Drawable newSecondDrawable = secondDrawable;
-                            if (newFirstDrawable == null) {
-                                newFirstDrawable = drawable;
-                            } else {
-                                newSecondDrawable = drawable;
-                            }
-                            fetchFirstTwoImagesForFolderImpl(
-                                    childIdIterator,
-                                    newFirstDrawable,
-                                    newSecondDrawable,
-                                    imageSize,
-                                    callback);
-                        });
+                drawable -> {
+                    Drawable newFirstDrawable = firstDrawable;
+                    Drawable newSecondDrawable = secondDrawable;
+                    if (newFirstDrawable == null) {
+                        newFirstDrawable = drawable;
+                    } else {
+                        newSecondDrawable = drawable;
+                    }
+                    fetchFirstTwoImagesForFolderImpl(
+                            childIdIterator,
+                            newFirstDrawable,
+                            newSecondDrawable,
+                            imageSize,
+                            callback);
+                };
+        imageCallback = mCallbackController.makeCancelable(imageCallback);
 
         fetchImageForBookmark(item, imageSize, imageCallback);
     }

@@ -1421,8 +1421,19 @@ static vpx_codec_err_t encoder_encode(vpx_codec_alg_priv_t *ctx,
     size_t size, cx_data_sz;
     unsigned char *cx_data;
 
+    // Per-frame PSNR is not supported when g_lag_in_frames is greater than 0.
+    if ((flags & VPX_EFLAG_CALCULATE_PSNR) && ctx->cfg.g_lag_in_frames != 0) {
+      vpx_internal_error(
+          &ctx->cpi->common.error, VPX_CODEC_INCAPABLE,
+          "Cannot calculate per-frame PSNR when g_lag_in_frames is nonzero");
+    }
     // Set up internal flags
-    if (ctx->base.init_flags & VPX_CODEC_USE_PSNR) cpi->b_calculate_psnr = 1;
+#if CONFIG_INTERNAL_STATS
+    assert(cpi->b_calculate_psnr == 1);
+#else
+    cpi->b_calculate_psnr = (ctx->base.init_flags & VPX_CODEC_USE_PSNR) ||
+                            (flags & VPX_EFLAG_CALCULATE_PSNR);
+#endif
 
     if (img != NULL) {
       YV12_BUFFER_CONFIG sd;
@@ -1536,10 +1547,8 @@ static vpx_codec_err_t encoder_encode(vpx_codec_alg_priv_t *ctx,
                                            cx_data_sz, &dst_time_stamp,
                                            &dst_end_time_stamp, !img,
                                            &encode_frame_result)) {
-        // Pack psnr pkt
-        if (size > 0 && !cpi->use_svc) {
-          // TODO(angiebird): Figure out while we don't need psnr pkt when
-          // use_svc is on
+        // Pack psnr pkt.
+        if (size > 0) {
           PSNR_STATS psnr;
           if (vp9_get_psnr(cpi, &psnr)) {
             vpx_codec_cx_pkt_t psnr_pkt = get_psnr_pkt(&psnr);

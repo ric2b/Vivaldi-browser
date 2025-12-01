@@ -42,7 +42,7 @@
 // defined as either (1) horizontally laid out side-by-side and filling the full
 // width of the cell or (2) vertically laid out and filling the full height of
 // the cell. Labels are truncated as needed to fit in the cell.
-@interface VivaldiAppIconItemCell : TableViewCell
+@interface VivaldiAppIconItemCell : LegacyTableViewCell
 
 // UILabel corresponding to `text` from the item.
 @property(nonatomic, readonly, strong) UILabel* textLabel;

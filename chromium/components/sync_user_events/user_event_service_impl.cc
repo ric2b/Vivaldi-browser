@@ -47,7 +47,7 @@ NavigationPresence GetNavigationPresence(
 
 bool NavigationPresenceValid(UserEventSpecifics::EventCase event_case,
                              bool has_navigation_id) {
-  NavigationPresence presence = GetNavigationPresence(event_case);
+  const NavigationPresence presence = GetNavigationPresence(event_case);
   return presence == kEitherOkay ||
          (presence == kMustHave && has_navigation_id) ||
          (presence == kCannotHave && !has_navigation_id);
@@ -116,18 +116,13 @@ void UserEventServiceImpl::RecordUserEvent(
   bridge_->RecordUserEvent(std::move(specifics));
 }
 
-void UserEventServiceImpl::RecordUserEvent(
-    const UserEventSpecifics& specifics) {
-  RecordUserEvent(std::make_unique<UserEventSpecifics>(specifics));
-}
-
 base::WeakPtr<syncer::DataTypeControllerDelegate>
 UserEventServiceImpl::GetControllerDelegate() {
   return bridge_->change_processor()->GetControllerDelegate();
 }
 
 bool UserEventServiceImpl::ShouldRecordEvent(
-    const UserEventSpecifics& specifics) {
+    const UserEventSpecifics& specifics) const {
   if (vivaldi::IsVivaldiRunning())
     return false;
 

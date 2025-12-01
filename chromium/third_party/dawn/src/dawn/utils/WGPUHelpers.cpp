@@ -213,7 +213,8 @@ wgpu::TexelCopyBufferLayout CreateTexelCopyBufferLayout(uint64_t offset,
 }
 
 wgpu::PipelineLayout MakeBasicPipelineLayout(const wgpu::Device& device,
-                                             const wgpu::BindGroupLayout* bindGroupLayout) {
+                                             const wgpu::BindGroupLayout* bindGroupLayout,
+                                             uint32_t immediateDataByteSize) {
     wgpu::PipelineLayoutDescriptor descriptor;
     if (bindGroupLayout != nullptr) {
         descriptor.bindGroupLayoutCount = 1;
@@ -222,6 +223,11 @@ wgpu::PipelineLayout MakeBasicPipelineLayout(const wgpu::Device& device,
         descriptor.bindGroupLayoutCount = 0;
         descriptor.bindGroupLayouts = nullptr;
     }
+
+    if (immediateDataByteSize > 0) {
+        descriptor.immediateSize = immediateDataByteSize;
+    }
+
     return device.CreatePipelineLayout(&descriptor);
 }
 
@@ -299,6 +305,7 @@ BindingLayoutEntryInitializationHelper::BindingLayoutEntryInitializationHelper(
 // ExternalTextureBindingLayout never contains data, so just make one that can be reused instead
 // of declaring a new one every time it's needed.
 wgpu::ExternalTextureBindingLayout kExternalTextureBindingLayout = {};
+wgpu::TexelBufferBindingLayout kTexelBufferBindingLayout = {};
 
 BindingLayoutEntryInitializationHelper::BindingLayoutEntryInitializationHelper(
     uint32_t entryBinding,
@@ -309,11 +316,29 @@ BindingLayoutEntryInitializationHelper::BindingLayoutEntryInitializationHelper(
     nextInChain = bindingLayout;
 }
 
+BindingLayoutEntryInitializationHelper::BindingLayoutEntryInitializationHelper(
+    uint32_t entryBinding,
+    wgpu::ShaderStage entryVisibility,
+    wgpu::TexelBufferBindingLayout* bindingLayout) {
+    binding = entryBinding;
+    visibility = entryVisibility;
+    nextInChain = bindingLayout;
+}
+
 BindingInitializationHelper::BindingInitializationHelper(
     uint32_t binding,
     const wgpu::ExternalTexture& externalTexture)
     : binding(binding) {
     externalTextureBindingEntry.externalTexture = externalTexture;
+}
+#endif  // __EMSCRIPTEN__
+
+#ifndef __EMSCRIPTEN__
+BindingInitializationHelper::BindingInitializationHelper(
+    uint32_t binding,
+    const wgpu::TexelBufferView& texelBufferView)
+    : binding(binding) {
+    texelBufferBindingEntry.texelBufferView = texelBufferView;
 }
 #endif  // __EMSCRIPTEN__
 
@@ -349,9 +374,22 @@ wgpu::BindGroupEntry BindingInitializationHelper::GetAsBinding() const {
     result.buffer = buffer;
     result.offset = offset;
     result.size = size;
+
 #ifndef __EMSCRIPTEN__
     if (externalTextureBindingEntry.externalTexture != nullptr) {
+        // Similarly to texel buffers, external textures have their layout
+        // specified on the bind group layout entry. Chain only the binding entry
+        // here.
+        externalTextureBindingEntry.nextInChain = result.nextInChain;
         result.nextInChain = &externalTextureBindingEntry;
+    }
+    if (texelBufferBindingEntry.texelBufferView != nullptr) {
+        // Insert the texel buffer binding entry at the head of the chain while
+        // preserving any existing chained structures on `result`. The layout is
+        // specified on the bind group *layout* entry, so no TexelBufferBindingLayout
+        // should be chained here.
+        texelBufferBindingEntry.nextInChain = result.nextInChain;
+        result.nextInChain = &texelBufferBindingEntry;
     }
 #endif  // __EMSCRIPTEN__
 

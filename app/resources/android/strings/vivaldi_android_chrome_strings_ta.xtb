@@ -31,10 +31,16 @@
 <translation id="49576331685473090">உள்ளடக்க தடுப்பான்</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> இன் சேமிப்பகம்</translation>
 <translation id="5186185447130319458">தனிப்பட்ட</translation>
+<translation id="5206168361184759344">{FILE_COUNT,plural,
+            =1 {ஃபைலைப் பதிவிறக்குகிறது…}
+            other {# ஃபைல்களைப் பதிவிறக்குகிறது…}}</translation>
 <translation id="5233638681132016545">புதிய தாவல்</translation>
 <translation id="572328651809341494">சமீபத்திய தாவல்கள்</translation>
 <translation id="6150320133806434356">புத்தககுறி சேமிக்கப்பட்டது</translation>
 <translation id="6336451774241870485">புதிய தனிப்பட்ட தாவல்</translation>
+<translation id="650224091954855786">{FILE_COUNT,plural,
+          =1 {ஃபைல் பதிவிறக்கப்பட்டது}
+          other {# பதிவிறக்கங்கள் முடிந்தன}}</translation>
 <translation id="6585139692466700358">விவால்டியின் மொழிபெயர்ப்பு சேவையைப் பயன்படுத்தி பிற மொழிகளில் பக்கங்களை மொழிபெயர்க்க சலுகை</translation>
 <translation id="6593061639179217415">கணினி தளம்</translation>
 <translation id="6610147964972079463">தனிப்பட்ட தாவல்களை மூடு</translation>

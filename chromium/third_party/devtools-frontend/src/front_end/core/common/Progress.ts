@@ -1,47 +1,21 @@
-/*
- * Copyright (C) 2012 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2012 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
-export class Progress {
-  setTotalWork(_totalWork: number): void {
-  }
-  setTitle(_title: string): void {
-  }
-  setWorked(_worked: number, _title?: string): void {
-  }
-  incrementWorked(_worked?: number): void {
-  }
-  done(): void {
-  }
-  isCanceled(): boolean {
-    return false;
-  }
+export interface Progress {
+  totalWork: number;
+  worked: number;
+  title: string|undefined;
+  canceled: boolean;
+  done: boolean;
+}
+
+export class Progress implements Progress {
+  totalWork = 0;
+  worked = 0;
+  title: string|undefined = undefined;
+  canceled = false;
+  done = false;
 }
 
 export class CompositeProgress {
@@ -53,15 +27,15 @@ export class CompositeProgress {
     this.parent = parent;
     this.#children = [];
     this.#childrenDone = 0;
-    this.parent.setTotalWork(1);
-    this.parent.setWorked(0);
+    this.parent.totalWork = 1;
+    this.parent.worked = 0;
   }
 
   childDone(): void {
     if (++this.#childrenDone !== this.#children.length) {
       return;
     }
-    this.parent.done();
+    this.parent.done = true;
   }
 
   createSubProgress(weight?: number): SubProgress {
@@ -76,12 +50,12 @@ export class CompositeProgress {
 
     for (let i = 0; i < this.#children.length; ++i) {
       const child = this.#children[i];
-      if (child.getTotalWork()) {
-        done += child.getWeight() * child.getWorked() / child.getTotalWork();
+      if (child.totalWork) {
+        done += child.weight * child.worked / child.totalWork;
       }
-      totalWeights += child.getWeight();
+      totalWeights += child.weight;
     }
-    this.parent.setWorked(done / totalWeights);
+    this.parent.worked = done / totalWeights;
   }
 }
 
@@ -98,45 +72,41 @@ export class SubProgress implements Progress {
     this.#totalWork = 0;
   }
 
-  isCanceled(): boolean {
-    return this.#composite.parent.isCanceled();
+  get canceled(): boolean {
+    return this.#composite.parent.canceled;
   }
 
-  setTitle(title: string): void {
-    this.#composite.parent.setTitle(title);
+  set title(title: string) {
+    this.#composite.parent.title = title;
   }
 
-  done(): void {
-    this.setWorked(this.#totalWork);
+  set done(done: boolean) {
+    if (!done) {
+      return;
+    }
+    this.worked = this.#totalWork;
     this.#composite.childDone();
   }
 
-  setTotalWork(totalWork: number): void {
+  set totalWork(totalWork: number) {
     this.#totalWork = totalWork;
     this.#composite.update();
   }
 
-  setWorked(worked: number, title?: string): void {
+  set worked(worked: number) {
     this.#worked = worked;
-    if (typeof title !== 'undefined') {
-      this.setTitle(title);
-    }
     this.#composite.update();
   }
 
-  incrementWorked(worked?: number): void {
-    this.setWorked(this.#worked + (worked || 1));
-  }
-
-  getWeight(): number {
+  get weight(): number {
     return this.#weight;
   }
 
-  getWorked(): number {
+  get worked(): number {
     return this.#worked;
   }
 
-  getTotalWork(): number {
+  get totalWork(): number {
     return this.#totalWork;
   }
 }
@@ -144,45 +114,67 @@ export class SubProgress implements Progress {
 export class ProgressProxy implements Progress {
   readonly #delegate: Progress|null|undefined;
   readonly #doneCallback: (() => void)|undefined;
-  constructor(delegate?: Progress|null, doneCallback?: (() => void)) {
+  readonly #updateCallback: (() => void)|undefined;
+
+  constructor(delegate?: Progress|null, doneCallback?: (() => void), updateCallback?: (() => void)) {
     this.#delegate = delegate;
     this.#doneCallback = doneCallback;
+    this.#updateCallback = updateCallback;
   }
 
-  isCanceled(): boolean {
-    return this.#delegate ? this.#delegate.isCanceled() : false;
+  get canceled(): boolean {
+    return this.#delegate ? this.#delegate.canceled : false;
   }
 
-  setTitle(title: string): void {
+  set title(title: string) {
     if (this.#delegate) {
-      this.#delegate.setTitle(title);
+      this.#delegate.title = title;
+    }
+    if (this.#updateCallback) {
+      this.#updateCallback();
     }
   }
 
-  done(): void {
+  get title(): string {
+    return this.#delegate?.title ?? '';
+  }
+
+  set done(done: boolean) {
     if (this.#delegate) {
-      this.#delegate.done();
+      this.#delegate.done = done;
     }
-    if (this.#doneCallback) {
+    if (done && this.#doneCallback) {
       this.#doneCallback();
     }
   }
 
-  setTotalWork(totalWork: number): void {
+  get done(): boolean {
+    return this.#delegate ? this.#delegate.done : false;
+  }
+
+  set totalWork(totalWork: number) {
     if (this.#delegate) {
-      this.#delegate.setTotalWork(totalWork);
+      this.#delegate.totalWork = totalWork;
+    }
+    if (this.#updateCallback) {
+      this.#updateCallback();
     }
   }
 
-  setWorked(worked: number, title?: string): void {
+  get totalWork(): number {
+    return this.#delegate ? this.#delegate.totalWork : 0;
+  }
+
+  set worked(worked: number) {
     if (this.#delegate) {
-      this.#delegate.setWorked(worked, title);
+      this.#delegate.worked = worked;
+    }
+    if (this.#updateCallback) {
+      this.#updateCallback?.();
     }
   }
 
-  incrementWorked(worked?: number): void {
-    if (this.#delegate) {
-      this.#delegate.incrementWorked(worked);
-    }
+  get worked(): number {
+    return this.#delegate ? this.#delegate.worked : 0;
   }
 }

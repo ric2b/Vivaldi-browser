@@ -22,6 +22,10 @@
  * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
  */
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <fontconfig/fontconfig.h>
 
 #include <json.h>
@@ -181,28 +185,58 @@ build_pattern (json_object *obj)
 			v.type = FcTypeVoid;
 		    }
 		    continue;
+		} else if (fc_o && fc_o->type == FcTypeInteger) {
+		    for (i = 0; i < n; i++) {
+			o = json_object_array_get_idx (iter.val, i);
+			type = json_object_get_type (o);
+			if (type == json_type_string) {
+			    const FcConstant *c = FcNameGetConstant ((const FcChar8 *)json_object_get_string (o));
+			    if (!c) {
+		                fprintf (stderr, "E: value is not a known constant\n");
+		                fprintf (stderr, "   key: %s\n", iter.key);
+		                fprintf (stderr, "   val: %s (idx: %d)\n", json_object_get_string (iter.val), i);
+		                continue;
+		            }
+		            if (strcmp (c->object, iter.key) != 0) {
+		                fprintf (stderr, "E: value is a constant of different object\n");
+		                fprintf (stderr, "   key: %s\n", iter.key);
+		                fprintf (stderr, "   val: %s (idx: %d)\n", json_object_get_string (iter.val), i);
+		                fprintf (stderr, "   key implied by value: %s\n", c->object);
+		                continue;
+		            }
+			    v.u.i = c->value;
+			} else if (type != json_type_int) {
+			    fprintf (stderr, "E: unable to convert to int\n");
+			    continue;
+			} else {
+			    v.u.i = json_object_get_int(o);
+			}
+			v.type = FcTypeInteger;
+			FcPatternAdd (pat, iter.key, v, FcTrue);
+			v.type = FcTypeVoid;
+		    }
 		} else {
 		    FcLangSet *ls = FcLangSetCreate();
 		    if (!ls) {
-			fprintf (stderr, "E: failed to create langset\n");
-			continue;
+		        fprintf (stderr, "E: failed to create langset\n");
+		        continue;
 		    }
 		    v.type = FcTypeLangSet;
 		    v.u.l = ls;
 		    destroy_v = FcTrue;
 		    for (i = 0; i < n; i++) {
-			o = json_object_array_get_idx (iter.val, i);
-			type = json_object_get_type (o);
-			if (type != json_type_string) {
+		        o = json_object_array_get_idx (iter.val, i);
+		        type = json_object_get_type (o);
+		        if (type != json_type_string) {
 			    fprintf (stderr, "E: langset value not string\n");
 			    FcValueDestroy (v);
 			    continue;
-			}
-			if (FcLangSetAdd (ls, (const FcChar8 *)json_object_get_string (o)) == FcFalse) {
+		        }
+		        if (FcLangSetAdd (ls, (const FcChar8 *)json_object_get_string (o)) == FcFalse) {
 			    fprintf (stderr, "E: failed to add to langset\n");
 			    FcValueDestroy (v);
 			    continue;
-			}
+		        }
 		    }
 		}
 	    } else if (type == json_type_double || type == json_type_int) {
@@ -565,8 +599,8 @@ process_pattern (FcConfig  *config,
                  FcPattern *query,
                  FcPattern *result)
 {
-    FcPatternIter iter;
-    int           x, vc, fail = 0;
+    FcPatternIter  iter1, iter2;
+    int            vc1, vc2, fail = 0, i;
 
     if (!query) {
 	fprintf (stderr, "E: no query defined.\n");
@@ -580,32 +614,41 @@ process_pattern (FcConfig  *config,
     }
     FcConfigSubstitute (config, query, FcMatchPattern);
 
-    FcPatternIterStart (result, &iter);
+    FcPatternIterStart (query, &iter1);
+    FcPatternIterStart (result, &iter2);
     do {
-	vc = FcPatternIterValueCount (result, &iter);
-	for (x = 0; x < vc; x++) {
-	    FcValue vr, vp;
+	const char *obj = FcPatternIterGetObject (result, &iter2);
 
-	    if (FcPatternIterGetValue (result, &iter, x, &vr, NULL) != FcResultMatch) {
-		fprintf (stderr, "E: unable to obtain a value from the expected result\n");
-		fail++;
-		goto bail;
-	    }
-	    if (FcPatternGet (query, FcPatternIterGetObject (result, &iter), x, &vp) != FcResultMatch) {
-		vp.type = FcTypeVoid;
-	    }
-	    if (!FcValueEqual (vp, vr)) {
-		printf ("E: failed to compare %s:\n", FcPatternIterGetObject (result, &iter));
-		printf ("   actual result:");
-		FcValuePrint (vp);
-		printf ("\n   expected result:");
-		FcValuePrint (vr);
-		printf ("\n");
-		fail++;
-		goto bail;
+	if (!FcPatternFindIter (query, &iter1, obj)) {
+	    fprintf (stderr, "E: object (%s) not found in actual result\n", obj);
+	} else {
+	    vc1 = FcPatternIterValueCount (query, &iter1);
+	    vc2 = FcPatternIterValueCount (result, &iter2);
+	    if (vc1 != vc2 || !FcPatternIterEqual (query, &iter1, result, &iter2)) {
+		FcValue v1, v2;
+		FcValueBinding b1, b2;
+
+	        fprintf (stderr, "E: object (%s) mismatched:\n", obj);
+		fprintf (stderr, "   actual result: %d\n    ", vc1);
+		for (i = 0; i < vc1; i++) {
+		    if (FcPatternIterGetValue (query, &iter1, i, &v1, &b1) != FcResultMatch)
+			v1.type = FcTypeVoid;
+		    FcValuePrint (v1);
+		    fprintf (stderr, " ");
+		}
+		fprintf (stderr, "\n");
+	        fprintf (stderr, "   expected result: %d\n    ", vc2);
+		for (i = 0; i < vc1; i++) {
+		    if (FcPatternIterGetValue (result, &iter2, i, &v2, &b2) != FcResultMatch)
+			v2.type = FcTypeVoid;
+		    FcValuePrint (v2);
+		    fprintf (stderr, " ");
+		}
+	        fail++;
+	        goto bail;
 	    }
 	}
-    } while (FcPatternIterNext (result, &iter));
+    } while (FcPatternIterNext (result, &iter2));
  bail:
     return fail;
 }

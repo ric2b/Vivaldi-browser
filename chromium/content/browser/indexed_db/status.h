@@ -10,7 +10,12 @@
 
 #include "base/types/expected.h"
 #include "content/common/content_export.h"
+#include "sql/sqlite_result_code.h"
 #include "third_party/leveldatabase/src/include/leveldb/status.h"
+
+namespace sql {
+class Database;
+}
 
 namespace content::indexed_db {
 
@@ -24,6 +29,9 @@ class CONTENT_EXPORT Status {
   Status(Status&& rhs) noexcept;
   // Wraps the given LevelDB status.
   Status(leveldb::Status&& rhs) noexcept;
+  // Wraps the SQLite error code and message associated with the last operation
+  // on `db`.
+  explicit Status(sql::Database& db) noexcept;
   ~Status();
 
   Status& operator=(const Status& rhs);
@@ -32,11 +40,11 @@ class CONTENT_EXPORT Status {
 
   // Create a success or error status that didn't originate in the database
   // engine.
-  static Status OK();
-  static Status InvalidArgument(std::string_view msg);
-  static Status NotFound(std::string_view msg);
-  static Status IOError(std::string_view msg = {});
-  static Status Corruption(std::string_view msg);
+  [[nodiscard]] static Status OK();
+  [[nodiscard]] static Status InvalidArgument(std::string_view msg);
+  [[nodiscard]] static Status NotFound(std::string_view msg);
+  [[nodiscard]] static Status IOError(std::string_view msg = {});
+  [[nodiscard]] static Status Corruption(std::string_view msg);
 
   // Returns true iff the status indicates the corresponding success or error.
   bool ok() const;
@@ -99,10 +107,10 @@ class CONTENT_EXPORT Status {
   // in the future, i.e. with the SQLite backend.
   Type type_;
 
-  // Exactly one of the two statements should be true:
-  // * `leveldb_status_` is null
-  // * `msg_` is empty
+  // The LevelDB status and SQLite result code are mutually exclusive, and both
+  // may be null if the error originated in engine-agnostic Chromium code.
   std::optional<leveldb::Status> leveldb_status_;
+  std::optional<sql::SqliteResultCode> sqlite_code_;
   std::string msg_;
 };
 

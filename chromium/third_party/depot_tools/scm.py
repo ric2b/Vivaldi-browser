@@ -1020,7 +1020,9 @@ class GIT(object):
                      branch: Optional[str] = None,
                      branch_head: str = 'HEAD',
                      full_move: bool = False,
-                     files: Optional[Iterable[str]] = None) -> str:
+                     files: Optional[Iterable[str]] = None,
+                     allow_prefix: bool = False,
+                     context: int = 3) -> str:
         """Diffs against the upstream branch or optionally another branch.
 
         full_move means that move or copy operations should completely recreate the
@@ -1034,10 +1036,19 @@ class GIT(object):
             'diff',
             '-p',
             '--no-color',
-            '--no-prefix',
             '--no-ext-diff',
-            branch + "..." + branch_head,
+            f'-U{context}',
         ]
+
+        if allow_prefix:
+            # explicitly setting --src-prefix and --dst-prefix is necessary in the
+            # case that diff.noprefix is set in the user's git config.
+            command.extend(['--src-prefix=a/', '--dst-prefix=b/'])
+        else:
+            command.extend(['--no-prefix'])
+
+        command.append(branch + "..." + branch_head)
+
         if full_move:
             command.append('--no-renames')
         else:

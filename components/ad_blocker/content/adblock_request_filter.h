@@ -3,13 +3,12 @@
 #ifndef COMPONENTS_AD_BLOCKER_CONTENT_ADBLOCK_REQUEST_FILTER_H_
 #define COMPONENTS_AD_BLOCKER_CONTENT_ADBLOCK_REQUEST_FILTER_H_
 
-#include <map>
-#include <vector>
-
 #include "base/functional/callback.h"
 #include "components/ad_blocker/public/content/adblock_rule_service.h"
 #include "components/ad_blocker/public/core/adblock_types.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/request_filter/request_filter.h"
+#include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
 
 namespace content {
 class RenderFrameHost;
@@ -18,21 +17,15 @@ class RenderFrameHost;
 namespace adblock_filter {
 class RuleServiceImpl;
 
-class AdBlockRequestFilter : public vivaldi::RequestFilter {
+class AdBlockRequestFilter : public vivaldi::RequestFilter,
+                             RuleService::Observer {
  public:
   AdBlockRequestFilter(base::WeakPtr<RuleServiceImpl> rule_service,
-                       RuleGroup group);
+                       RuleGroup group,
+                       PrefService* prefs);
   ~AdBlockRequestFilter() override;
   AdBlockRequestFilter(const AdBlockRequestFilter&) = delete;
   AdBlockRequestFilter& operator=(const AdBlockRequestFilter&) = delete;
-
-  void set_allow_blocking_documents(bool allow) {
-    allow_blocking_documents_ = allow;
-  }
-
-  void set_block_pings(bool block_pings) { block_pings_ = block_pings; }
-
-  void OnIndexLoaded();
 
   // Implementing vivaldi::RequestFilter
   bool WantsExtraHeadersForAnyRequest() const override;
@@ -62,18 +55,26 @@ class AdBlockRequestFilter : public vivaldi::RequestFilter {
   void OnErrorOccured(content::BrowserContext* browser_context,
                       const vivaldi::FilteredRequestInfo* request,
                       int net_error) override;
+  void OnRequestWillBeDestroyed(
+      content::BrowserContext* browser_context,
+      const vivaldi::FilteredRequestInfo* request) override;
 
  private:
-  bool DoesAdAttributionMatch(content::RenderFrameHost* frame,
-                              std::string_view tracker_url_spec,
-                              std::string_view ad_domain_and_query_trigger);
+  void OnEnableDocumentBlockingChanged();
+  void OnPingBlockingChanged();
+
+  // Implementing RuleService::Observer
+  void OnRulesIndexLoaded(RuleGroup group) override;
+
   base::WeakPtr<RuleServiceImpl> rule_service_;
 
+  PrefChangeRegistrar pref_change_registrar_;
   RuleGroup group_;
   bool allow_blocking_documents_ = false;
   bool block_pings_ = false;
 
-  std::vector<base::OnceClosure> pending_;
+  absl::flat_hash_map<uint64_t, base::OnceClosure> pending_;
+  base::WeakPtrFactory<AdBlockRequestFilter> weak_factory_{this};
 };
 
 }  // namespace adblock_filter

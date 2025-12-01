@@ -150,6 +150,7 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
   const std::u16string GetTitledUrlNodeNickName() const override;
   const std::u16string GetTitledUrlNodeDescription() const override;
   const GURL GetTitledUrlDisplayURL() const override;
+  int64_t GetId() const override;
 
   // TODO(sky): Consider adding last visit time here, it'll greatly simplify
   // HistoryContentsProvider.

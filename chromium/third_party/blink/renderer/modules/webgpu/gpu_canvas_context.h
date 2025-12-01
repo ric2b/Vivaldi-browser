@@ -19,6 +19,7 @@
 namespace blink {
 
 class ExceptionState;
+class ExecutionContext;
 class GPUDevice;
 class GPUCanvasConfiguration;
 class GPUSwapChain;
@@ -44,6 +45,7 @@ class GPUCanvasContext : public ScriptWrappable,
     ~Factory() override;
 
     CanvasRenderingContext* Create(
+        ExecutionContext*,
         CanvasRenderingContextHost*,
         const CanvasContextCreationAttributesCore&) override;
     CanvasRenderingContext::CanvasRenderingAPI GetRenderingAPI() const override;
@@ -115,8 +117,9 @@ class GPUCanvasContext : public ScriptWrappable,
   bool IsGPUDeviceDestroyed() override;
 
  private:
-  CanvasResourceProvider* GetOrCreateCanvasResourceProvider();
-  CanvasResourceProvider* PaintRenderingResultsToCanvas(SourceDrawingBuffer);
+  CanvasResourceProviderSharedImage* GetOrCreateCanvasResourceProvider();
+  CanvasResourceProviderSharedImage* PaintRenderingResultsToCanvas(
+      SourceDrawingBuffer);
   scoped_refptr<WebGPUMailboxTexture> GetFrontBufferMailboxTexture();
   void DetachSwapBuffers();
   void ReplaceDrawingBuffer(bool destroy_swap_buffers);
@@ -129,7 +132,7 @@ class GPUCanvasContext : public ScriptWrappable,
 
   bool CopyTextureToResourceProvider(
       const wgpu::Texture& texture,
-      CanvasResourceProvider* resource_provider) const;
+      CanvasResourceProviderSharedImage* resource_provider) const;
 
   void CopyToSwapTexture();
 
@@ -141,7 +144,7 @@ class GPUCanvasContext : public ScriptWrappable,
 
   Member<GPUDevice> device_;
 
-  std::unique_ptr<CanvasResourceProvider> resource_provider_;
+  std::unique_ptr<CanvasResourceProviderSharedImage> resource_provider_;
 
   // `did_fail_to_create_resource_provider_` prevents repeated attempts in
   // allocating resources after the first attempt failed.

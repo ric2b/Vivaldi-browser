@@ -8,6 +8,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/threading/sequence_bound.h"
 #include "components/password_manager/core/browser/import/password_importer.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_data_importer/utility/bookmark_parser.h"
 #include "components/user_data_importer/utility/importer_metrics_recorder.h"
 #include "components/user_data_importer/utility/parsing_ffi/lib.rs.h"
@@ -64,6 +65,7 @@ class SafariDataImporter {
                      bookmarks::BookmarkModel* bookmark_model,
                      ReadingListModel* reading_list_model,
                      syncer::SyncService* sync_service,
+                     PrefService* pref_service,
                      std::unique_ptr<BookmarkParser> bookmark_parser,
                      std::string app_locale);
   ~SafariDataImporter();
@@ -72,6 +74,9 @@ class SafariDataImporter {
   // (passwords, payment cards, bookmarks, and history) contained inside. Each
   // data type is optional and may or may not be present.
   void PrepareImport(const base::FilePath& path);
+
+  // Logs the file size of the uncompressed ZIP file.
+  void LogFileSize(int64_t file_size_bytes);
 
   // Called after calling `PrepareImport` in order to complete the import
   // process. In case of password conflicts, `selected_password_ids` provides
@@ -108,6 +113,9 @@ class SafariDataImporter {
 
     // Returns the uncompressed size of a file within the zip file archive.
     size_t GetUncompressedFileSizeInBytes(FileType filetype);
+
+    // Gets the size of the file at `path`. Returns nullopt on failure.
+    std::optional<int64_t> GetInitialFileSize(const base::FilePath& path);
 
     struct BookmarkUnzipResult {
       std::optional<base::FilePath> path;
@@ -259,6 +267,10 @@ class SafariDataImporter {
 
   // Stores pointer to `SyncService` instance.
   raw_ptr<syncer::SyncService> sync_service_;
+
+  // The PrefService that this instance uses to read and write preferences.
+  // Must outlive this instance.
+  raw_ptr<PrefService> pref_service_ = nullptr;
 
   // Internal state
 

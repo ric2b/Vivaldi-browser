@@ -44,6 +44,9 @@ enum MenuScenarioHistogram {
   kMenuScenarioHistogramAutofillManualFallbackPlusAddressEntry = 31,
   kMenuScenarioHistogramTabGroupIndicatorNTPEntry = 32,
   kMenuScenarioHistogramLastVisitedHistoryEntry = 33,
+  kMenuScenarioHistogramReaderModeContextMenuImage = 34,
+  kMenuScenarioHistogramReaderModeContextMenuImageLink = 35,
+  kMenuScenarioHistogramReaderModeContextMenuLink = 36,
 
   kMenuScenarioHistogramNoteEntry, // Vivaldi
   kMenuScenarioHistogramNoteFolder, // Vivaldi

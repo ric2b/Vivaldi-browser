@@ -14,15 +14,20 @@
 #include "components/page_load_metrics/browser/navigation_handle_user_data.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "ui/base/window_open_disposition.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 
 class Browser;
 struct NavigateParams;
+class TabGroup;
 
 namespace content {
 class BrowserContext;
 class NavigationHandle;
 }  // namespace content
+
+namespace tab_groups {
+class TabGroupSyncService;
+}  // namespace tab_groups
 
 namespace bookmarks {
 class BookmarkNode;
@@ -46,6 +51,9 @@ class BookmarkNavigationWrapper {
   // Provide an instance for use in testing.
   static void SetInstanceForTesting(BookmarkNavigationWrapper* instance);
 };
+
+// Set whether to override connected group to skip UI for testing.
+void SetOverrideConnectedGroupForTesting(bool value);
 
 using TabGroupData =
     std::pair<std::optional<tab_groups::TabGroupId>, std::u16string>;
@@ -99,6 +107,13 @@ bool ConfirmDeleteBookmarkNode(gfx::NativeWindow window,
 // Shows the bookmark all tabs dialog.
 void ShowBookmarkAllTabsDialog(Browser* browser);
 
+// Shows the bookmark tab group dialog.
+void ShowBookmarkTabGroupDialog(
+    Browser* browser,
+    const TabGroup& tab_group,
+    base::OnceCallback<void(Browser*, const tab_groups::TabGroupId&)>
+        on_save_callback = base::DoNothing());
+
 // Returns true if OpenAll() can open at least one bookmark of type url
 // in |selection|.
 bool HasBookmarkURLs(const std::vector<raw_ptr<const bookmarks::BookmarkNode,
@@ -116,6 +131,17 @@ void GetURLsAndFoldersForTabEntries(
     std::vector<BookmarkEditor::EditDetails::BookmarkData>* folder_data,
     std::vector<std::pair<GURL, std::u16string>> tab_entries,
     base::flat_map<int, TabGroupData> groups_by_index);
+
+// Populates |folder_data| with all tabs from the tab group.
+void GetURLsAndFoldersForTabGroup(
+    const Browser* browser,
+    const TabGroup& tab_group,
+    std::vector<BookmarkEditor::EditDetails::BookmarkData>* folder_data);
+
+// Suggest a unique name for tab group based on the bookmark folder's name.
+std::u16string SuggestUniqueTabGroupName(
+    std::u16string folder_title,
+    const tab_groups::TabGroupSyncService* tab_group_sync_service);
 
 }  // namespace bookmarks
 

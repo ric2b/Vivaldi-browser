@@ -26,6 +26,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/history/core/browser/features.h"
 #include "components/history/core/browser/history_database.h"
 #include "components/history/core/browser/history_db_task.h"
 #include "components/history/core/browser/history_service.h"
@@ -240,12 +241,6 @@ class PageContentAnnotationsServiceBrowserTest : public InProcessBrowserTest {
             optimization_guide::features::kPreventLongRunningPredictionModels});
   }
   ~PageContentAnnotationsServiceBrowserTest() override = default;
-
-  // TODO(crbug.com/40285326): This fails with the field trial testing config.
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    InProcessBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch("disable-field-trial-config");
-  }
 
   void set_load_model_on_startup(bool load_model_on_startup) {
     load_model_on_startup_ = load_model_on_startup;
@@ -946,15 +941,8 @@ IN_PROC_BROWSER_TEST_F(PageContentAnnotationsServiceNoHistoryTest,
   EXPECT_FALSE(ModelAnnotationsFieldsAreSetForURL(url));
 }
 
-// Times out on Linux Tests (dbg)(1); see https://crbug.com/40229591.
-#if BUILDFLAG(IS_LINUX) && !defined(NDEBUG)
-#define MAYBE_ModelExecutesAndUsesCachedResult \
-  DISABLED_ModelExecutesAndUsesCachedResult
-#else
-#define MAYBE_ModelExecutesAndUsesCachedResult ModelExecutesAndUsesCachedResult
-#endif
 IN_PROC_BROWSER_TEST_F(PageContentAnnotationsServiceNoHistoryTest,
-                       MAYBE_ModelExecutesAndUsesCachedResult) {
+                       ModelExecutesAndUsesCachedResult) {
   TestPageContentAnnotator test_annotator;
   test_annotator.UseVisibilityScores(std::nullopt, {{"Test Page", 0.5}});
   service()->OverridePageContentAnnotatorForTesting(&test_annotator);
@@ -968,7 +956,7 @@ IN_PROC_BROWSER_TEST_F(PageContentAnnotationsServiceNoHistoryTest,
     optimization_guide::RetryForHistogramUntilCountReached(
         &histogram_tester,
         "OptimizationGuide.PageContentAnnotationsService.ContentAnnotated", 1);
-
+    base::RunLoop().RunUntilIdle();
     histogram_tester.ExpectUniqueSample(
         "OptimizationGuide.PageContentAnnotations.AnnotateVisitResultCached",
         false, 1);
@@ -1385,11 +1373,11 @@ IN_PROC_BROWSER_TEST_F(PageContentAnnotationsServiceContentExtractionTest,
   optimization_guide::RetryForHistogramUntilCountReached(
       &histogram_tester, "OptimizationGuide.AIPageContent.TotalLatency", 1);
   histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.AnnotatedPageContent.TotalSize2", 1);
+      "OptimizationGuide.AnnotatedPageContent.TotalSize2.Default", 1);
   histogram_tester.ExpectTotalCount(
       "OptimizationGuide.AnnotatedPageContent.TotalWordCount", 1);
   histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.AnnotatedPageContent.TotalNodeCount", 1);
+      "OptimizationGuide.AnnotatedPageContent.TotalNodeCount.Default", 1);
   histogram_tester.ExpectTotalCount(
       "OptimizationGuide.AnnotatedPageContent.ComputeMetricsLatency", 1);
 
@@ -1462,11 +1450,9 @@ class PageContentAnnotationsServiceContentExtractionResponseCodeTest
 
     bool are_404_navigations_saved_to_history = GetParam();
     if (are_404_navigations_saved_to_history) {
-      enabled_features_with_params.push_back(
-          {blink::features::kVisitedLinksOnErrorNavigation, {}});
+      enabled_features_with_params.push_back({history::kVisitedLinksOn404, {}});
     } else {
-      disabled_features.push_back(
-          blink::features::kVisitedLinksOnErrorNavigation);
+      disabled_features.push_back(history::kVisitedLinksOn404);
     }
 
     scoped_feature_list_.InitWithFeaturesAndParameters(
@@ -1560,11 +1546,11 @@ IN_PROC_BROWSER_TEST_P(
   // that brought us to the current document, so we should *not* trigger a page
   // content extraction from this navigation.
   histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.AnnotatedPageContent.TotalSize2", 0);
+      "OptimizationGuide.AnnotatedPageContent.TotalSize2.Default", 0);
   histogram_tester.ExpectTotalCount(
       "OptimizationGuide.AnnotatedPageContent.TotalWordCount", 0);
   histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.AnnotatedPageContent.TotalNodeCount", 0);
+      "OptimizationGuide.AnnotatedPageContent.TotalNodeCount.Default", 0);
   histogram_tester.ExpectTotalCount(
       "OptimizationGuide.AnnotatedPageContent.ComputeMetricsLatency", 0);
 
@@ -1585,20 +1571,19 @@ class PageContentAnnotationsServiceContentExtractionPdfTest
     : public PageContentAnnotationsServiceContentExtractionTest {
  public:
   void InitializeFeatureList() override {
+    const char* capture_delay = "5s";
+#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER) || !defined(NDEBUG)
+    capture_delay = "10s";
+#endif  // defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER) ||
+        // !defined(NDEBUG)
     scoped_feature_list_.InitAndEnableFeatureWithParameters(
-        features::kAnnotatedPageContentExtraction, {{"capture_delay", "4s"}});
+        features::kAnnotatedPageContentExtraction,
+        {{"capture_delay", capture_delay}});
   }
 };
 
-// TODO(crbug.com/410068541): Test is slow for debug/sanitized builds.
-// Reenable once timeouts are fixed.
-#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER) || !defined(NDEBUG)
-#define MAYBE_PdfPageCount DISABLED_PdfPageCount
-#else
-#define MAYBE_PdfPageCount PdfPageCount
-#endif
 IN_PROC_BROWSER_TEST_F(PageContentAnnotationsServiceContentExtractionPdfTest,
-                       MAYBE_PdfPageCount) {
+                       PdfPageCount) {
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   base::test::TestFuture<void> future;
   ukm_recorder.SetOnAddEntryCallback(
@@ -1618,15 +1603,8 @@ IN_PROC_BROWSER_TEST_F(PageContentAnnotationsServiceContentExtractionPdfTest,
                               kPdfPageCountName));
 }
 
-// TODO(crbug.com/410068541): Test is slow for debug/sanitized builds.
-// Reenable once timeouts are fixed.
-#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER) || !defined(NDEBUG)
-#define MAYBE_TwoPdfPageLoads DISABLED_TwoPdfPageLoads
-#else
-#define MAYBE_TwoPdfPageLoads TwoPdfPageLoads
-#endif
 IN_PROC_BROWSER_TEST_F(PageContentAnnotationsServiceContentExtractionPdfTest,
-                       MAYBE_TwoPdfPageLoads) {
+                       TwoPdfPageLoads) {
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   base::test::TestFuture<void> future;
   ukm_recorder.SetOnAddEntryCallback(
@@ -1707,6 +1685,55 @@ IN_PROC_BROWSER_TEST_F(
   // Make sure cached content is cleared with a new navigation.
   ASSERT_FALSE(service->GetExtractedPageContentAndEligibilityForPage(
       web_contents->GetPrimaryPage()));
+}
+
+class PageContentAnnotationsServiceContentExtractionTestActionable
+    : public InProcessBrowserTest {
+ public:
+  virtual void InitializeFeatureList() {
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        features::kAnnotatedPageContentExtraction,
+        {{"capture_delay", "0s"}, {"mode", "actionable"}});
+  }
+
+  void SetUp() override {
+    InitializeFeatureList();
+    InProcessBrowserTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+    InProcessBrowserTest::SetUpOnMainThread();
+
+    embedded_test_server()->ServeFilesFromSourceDirectory(
+        GetChromeTestDataDir());
+    ASSERT_TRUE(embedded_test_server()->Start());
+  }
+
+ protected:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(
+    PageContentAnnotationsServiceContentExtractionTestActionable,
+    Basic) {
+  FakeExtractionServiceObserver observer;
+  auto* service =
+      PageContentExtractionServiceFactory::GetForProfile(browser()->profile());
+  service->AddObserver(&observer);
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  GURL url(embedded_test_server()->GetURL("a.test",
+                                          "/optimization_guide/hello.html"));
+  content::NavigateToURLBlockUntilNavigationsComplete(web_contents, url, 1);
+
+  observer.Wait();
+  auto& page_content = observer.page_content_future_.Get();
+  EXPECT_TRUE(page_content.IsInitialized());
+  EXPECT_EQ(page_content.mode(),
+            optimization_guide::proto::
+                ANNOTATED_PAGE_CONTENT_MODE_ACTIONABLE_ELEMENTS);
 }
 
 }  // namespace page_content_annotations

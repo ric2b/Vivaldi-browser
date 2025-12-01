@@ -373,7 +373,12 @@ counter `L1-dcache-load-misses`
 
 #### Visual Studio
 
-TODO
+Build Zstd with symbols first (for example `cmake -B build -S build/cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo && ninja -C build zstd`) so the profiler resolves call stacks.
+
+* Launch Visual Studio’s Performance Profiler (`Alt+F2`), enable CPU Usage (optionally Instrumentation), and point it at the `programs/zstd` benchmark you want to run.
+* If you prefer to start the benchmark from a terminal, use “Attach to running process” to latch onto it mid-run; keep frame pointers (`-fno-omit-frame-pointer`) for clean stacks.
+* When you stop the capture, review the call tree, hot path, and annotated source panes
+* Microsoft’s [Performance Profiling docs](https://learn.microsoft.com/en-us/visualstudio/profiling/?view=vs-2022) cover deeper sampling, ETW, and collection options if required.
 
 ## Issues
 We use GitHub issues to track public bugs. Please ensure your description is

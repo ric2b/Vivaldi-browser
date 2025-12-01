@@ -6,7 +6,7 @@ import { makeTestGroup } from '../../../common/framework/test_group.js';
 import { raceWithRejectOnTimeout } from '../../../common/util/util.js';
 import {
   getBaseFormatForRegularTextureFormat,
-  kValidTextureFormatsForCopyE2T,
+  kPossibleValidTextureFormatsForCopyE2T,
 } from '../../format_info.js';
 import * as ttu from '../../texture_test_utils.js';
 import { TextureUploadingUtils, kCopySubrectInfo } from '../../util/copy_to_texture.js';
@@ -58,7 +58,7 @@ g.test('from_image')
   .params(u =>
     u
       .combine('srcDoFlipYDuringCopy', [true, false])
-      .combine('dstColorFormat', kValidTextureFormatsForCopyE2T)
+      .combine('dstColorFormat', kPossibleValidTextureFormatsForCopyE2T)
       .combine('dstPremultiplied', [true, false])
       .beginSubcases()
       .combine('width', [1, 2, 4, 15, 255, 256])
@@ -70,6 +70,7 @@ g.test('from_image')
   .fn(async t => {
     const { width, height, dstColorFormat, dstPremultiplied, srcDoFlipYDuringCopy } = t.params;
     t.skipIfTextureFormatNotSupported(dstColorFormat);
+    t.skipIfTextureFormatPossiblyNotUsableWithCopyExternalImageToTexture(dstColorFormat);
 
     const imageCanvas = document.createElement('canvas');
     imageCanvas.width = width;

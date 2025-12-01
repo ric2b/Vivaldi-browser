@@ -931,6 +931,11 @@ bool Target::HasRealInputs() const {
   std::vector<OutputFile> tool_outputs;
   return std::any_of(
       sources().begin(), sources().end(), [&, this](const auto& source) {
+        // Swift files always results in output files, but the name cannot
+        // be derived from the source file via GetOutputFilesForSource(...).
+        if (source.GetType() == SourceFile::SOURCE_SWIFT) {
+          return true;
+        }
         const char* tool_name = Tool::kToolNone;
         return GetOutputFilesForSource(source, &tool_name, &tool_outputs);
       });

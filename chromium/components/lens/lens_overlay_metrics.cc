@@ -13,6 +13,8 @@
 #include "components/lens/lens_features.h"
 #include "components/lens/lens_overlay_invocation_source.h"
 #include "components/lens/lens_overlay_mime_type.h"
+#include "components/lens/lens_side_panel_iframe_load_status.h"
+#include "net/base/net_errors.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 
 namespace lens {
@@ -50,6 +52,8 @@ std::string InvocationSourceToString(
       return "FREPromo";
     case LensOverlayInvocationSource::kContentAreaContextMenuText:
       return "ContentAreaContextMenuText";
+    case LensOverlayInvocationSource::kContentAreaContextMenuVideo:
+      return "ContentAreaContextMenuVideo";
   }
 }
 
@@ -329,9 +333,15 @@ void RecordAimSessionEndMetrics(AimSessionEndMetrics aim_session_end_metrics) {
   }
 
   // UMA AIM searchbox query submitted in session.
-  if (aim_session_end_metrics.query_issued_) {
+  if (aim_session_end_metrics.query_submitted_) {
     base::UmaHistogramEnumeration("Lens.Composebox.UserActionInSession",
                                   LensComposeboxUserAction::kQuerySubmitted);
+  }
+
+  // UMA AIM searchbox query issued in session.
+  if (aim_session_end_metrics.query_issued_) {
+    base::UmaHistogramEnumeration("Lens.Composebox.UserActionInSession",
+                                  LensComposeboxUserAction::kQueryIssued);
   }
 }
 
@@ -445,6 +455,11 @@ void RecordTimeToFirstInteraction(
     case lens::LensOverlayInvocationSource::kContentAreaContextMenuText:
       event.SetContentAreaContextMenuText(
           time_to_first_interaction.InMilliseconds());
+      break;
+    case lens::LensOverlayInvocationSource::kContentAreaContextMenuVideo:
+      // Not recorded since the video context menu entry point results in a
+      // search without the user having to interact with the overlay. Time to
+      // first interaction in this case is essentially zero.
       break;
   }
   event.SetFirstInteractionType(static_cast<int64_t>(first_interaction_type))
@@ -563,6 +578,93 @@ void RecordSidePanelMenuOptionSelected(
 void RecordHandleTextDirectiveResult(
     lens::LensOverlayTextDirectiveResult result) {
   base::UmaHistogramEnumeration("Lens.Overlay.TextDirectiveResult", result);
+}
+
+void RecordIframeLoadStatus(bool is_error_page, net::Error net_error_code) {
+  lens::IframeLoadStatus status = lens::IframeLoadStatus::kSuccess;
+  if (is_error_page) {
+    switch (net_error_code) {
+      case net::ERR_CONNECTION_REFUSED:
+        status = lens::IframeLoadStatus::kFailedConnectionRefused;
+        break;
+      case net::ERR_CONNECTION_RESET:
+        status = lens::IframeLoadStatus::kFailedConnectionReset;
+        break;
+      case net::ERR_CONNECTION_TIMED_OUT:
+        status = lens::IframeLoadStatus::kFailedConnectionTimedOut;
+        break;
+      case net::ERR_TIMED_OUT:
+        status = lens::IframeLoadStatus::kFailedTimedOut;
+        break;
+      case net::ERR_NAME_NOT_RESOLVED:
+        status = lens::IframeLoadStatus::kFailedNameNotResolved;
+        break;
+      default:
+        status = lens::IframeLoadStatus::kFailedOther;
+        break;
+    }
+  }
+  base::UmaHistogramEnumeration("Lens.Overlay.SidePanel.IframeLoadStatus",
+                                status);
+}
+
+void RecordTimeToCloseOpenedSidePanel(base::TimeDelta duration) {
+  // UMA unsliced TimeToFirstInteraction.
+  base::UmaHistogramCustomTimes("Lens.Overlay.TimeToCloseOpenedSidePanel",
+                                duration,
+                                /*min=*/base::Milliseconds(1),
+                                /*max=*/base::Minutes(10), /*buckets=*/50);
+}
+
+void RecordTimeToScreenshot(base::TimeDelta duration) {
+  // UMA unsliced TimeToFirstInteraction.
+  base::UmaHistogramCustomTimes("Lens.Overlay.TimeToScreenshot", duration,
+                                /*min=*/base::Milliseconds(1),
+                                /*max=*/base::Minutes(10), /*buckets=*/50);
+}
+
+void RecordTimeToFetchBoundingBoxes(base::TimeDelta duration) {
+  // UMA unsliced TimeToFirstInteraction.
+  base::UmaHistogramCustomTimes("Lens.Overlay.TimeToFetchBoundingBoxes",
+                                duration,
+                                /*min=*/base::Milliseconds(1),
+                                /*max=*/base::Minutes(10), /*buckets=*/50);
+}
+
+void RecordTimeToFetchPdfPage(base::TimeDelta duration) {
+  // UMA unsliced TimeToFirstInteraction.
+  base::UmaHistogramCustomTimes("Lens.Overlay.TimeToFetchPdfPage", duration,
+                                /*min=*/base::Milliseconds(1),
+                                /*max=*/base::Minutes(10), /*buckets=*/50);
+}
+
+void RecordTimeToCheckPageContextEligibility(base::TimeDelta duration) {
+  // UMA unsliced TimeToFirstInteraction.
+  base::UmaHistogramCustomTimes(
+      "Lens.Overlay.TimeToCheckPageContextEligibility", duration,
+      /*min=*/base::Milliseconds(1),
+      /*max=*/base::Minutes(10), /*buckets=*/50);
+}
+
+void RecordTimeToCreateScreenshotBitmap(base::TimeDelta duration) {
+  // UMA unsliced TimeToFirstInteraction.
+  base::UmaHistogramCustomTimes("Lens.Overlay.TimeToCreateScreenshotBitmap",
+                                duration, /*min=*/base::Milliseconds(1),
+                                /*max=*/base::Minutes(10), /*buckets=*/50);
+}
+
+void RecordTimeToGetPageContext(base::TimeDelta duration) {
+  // UMA unsliced TimeToFirstInteraction.
+  base::UmaHistogramCustomTimes("Lens.Overlay.TimeToGetPageContext", duration,
+                                /*min=*/base::Milliseconds(1),
+                                /*max=*/base::Minutes(10), /*buckets=*/50);
+}
+
+void RecordTimeToWebuiBound(base::TimeDelta duration) {
+  // UMA unsliced TimeToFirstInteraction.
+  base::UmaHistogramCustomTimes("Lens.Overlay.TimeToWebuiBound", duration,
+                                /*min=*/base::Milliseconds(1),
+                                /*max=*/base::Minutes(10), /*buckets=*/50);
 }
 
 }  // namespace lens

@@ -77,7 +77,7 @@ AC_DEFINE_UNQUOTED([FC_VERSION_MINOR], [$minor], [minor version])
 AC_DEFINE_UNQUOTED([FC_VERSION_MICRO], [$revision], [revision])
 
 dnl cache version
-CACHE_VERSION=10
+CACHE_VERSION=11
 AC_SUBST(CACHE_VERSION)
 
 dnl libtool versioning

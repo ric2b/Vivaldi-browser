@@ -6,6 +6,11 @@
 // FrameCaptureCL.cpp:
 //   ANGLE CL Frame capture implementation.
 //
+
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "libANGLE/capture/FrameCapture.h"
 
 #include "common/angle_version_info.h"
@@ -2401,7 +2406,9 @@ void FrameCaptureShared::saveCLGetInfo(const CallCapture &call)
                     json.addScalar(infoString, *static_cast<const cl_uint *>(data));
                     break;
                 case CL_PLATFORM_HOST_TIMER_RESOLUTION:
+#ifdef CL_ENABLE_BETA_EXTENSIONS
                 case CL_PLATFORM_COMMAND_BUFFER_CAPABILITIES_KHR:
+#endif
                     json.addScalar(infoString, *static_cast<const cl_ulong *>(data));
                     break;
                 case CL_PLATFORM_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR:

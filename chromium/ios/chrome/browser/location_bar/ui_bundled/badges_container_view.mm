@@ -59,8 +59,7 @@ void SetViewHiddenIfNecessary(UIView* view, BOOL hidden) {
 - (NSArray*)accessibilityElements {
   NSMutableArray* accessibleElements = [[NSMutableArray alloc] init];
 
-  if (IsContextualPanelEnabled() && self.contextualPanelEntrypointView &&
-      !self.contextualPanelEntrypointView.hidden) {
+  if (IsContextualPanelEnabled() && self.contextualPanelEntrypointView) {
     [accessibleElements addObject:self.contextualPanelEntrypointView];
   }
 
@@ -199,7 +198,8 @@ void SetViewHiddenIfNecessary(UIView* view, BOOL hidden) {
     return;
   }
 
-  if ([_placeholderView superview] == _containerStackView) {
+  if (_placeholderView && [_placeholderView superview] == _containerStackView) {
+    [_containerStackView removeArrangedSubview:_placeholderView];
     [_placeholderView removeFromSuperview];
   }
 

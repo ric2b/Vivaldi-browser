@@ -87,3 +87,29 @@ it('does not mutate the DOM when we scroll the component', async () => {
 ```
 
 The above test will fail if any DOM mutations are detected.
+
+## SnapshotTester
+
+For Karma unit tests, you can add regression tests for string output (similar to Jest snapshots) via SnapshotTester.
+
+> Note: Prefer unit tests that test behavior more directly when possible. Some good candidates for snapshot tests is code that formats long strings. A bad candidate would be a `JSON.stringify` of a complex object structure (prefer explicit asserts instead).
+
+Results for all snapshots for a test file `MyFile.test.ts` are written to `MyFile.snapshot.txt`.
+
+To add snapshot tests to a new test file, add a before and after hook to the describe test suite:
+
+```
+let snapshotTester: SnapshotTester;
+before(async () => {
+  snapshotTester = new SnapshotTester(import.meta);
+  await snapshotTester.load();
+});
+
+after(async () => {
+  await snapshotTester.finish();
+});
+```
+
+Then inside a test, call `snapshotTester.assert(this, output)`. For an example, see SnapshotTester.test.ts.
+
+To update snapshots, run `npm run test -- --on-diff=update ...`

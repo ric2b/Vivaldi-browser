@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -290,7 +290,6 @@ describeWithMockConnection('SharedStorageItemsView', function() {
 
     const keys = getCleanTextContentFromElements(metadataView.shadowRoot, 'devtools-report-key');
     assert.deepEqual(keys, [
-      'Origin',
       'Creation Time',
       'Number of Entries',
       'Number of Bytes Used',
@@ -299,7 +298,6 @@ describeWithMockConnection('SharedStorageItemsView', function() {
 
     const values = getCleanTextContentFromElements(metadataView.shadowRoot, 'devtools-report-value');
     assert.deepEqual(values, [
-      TEST_ORIGIN,
       (new Date(100 * 1e3)).toLocaleString(),
       '3',
       '30',
@@ -327,7 +325,6 @@ describeWithMockConnection('SharedStorageItemsView', function() {
 
     const keys = getCleanTextContentFromElements(metadataView.shadowRoot, 'devtools-report-key');
     assert.deepEqual(keys, [
-      'Origin',
       'Creation Time',
       'Number of Entries',
       'Number of Bytes Used',
@@ -336,7 +333,6 @@ describeWithMockConnection('SharedStorageItemsView', function() {
 
     const values = getCleanTextContentFromElements(metadataView.shadowRoot, 'devtools-report-value');
     assert.deepEqual(values, [
-      TEST_ORIGIN,
       'Not yet created',
       '0',
       '0',

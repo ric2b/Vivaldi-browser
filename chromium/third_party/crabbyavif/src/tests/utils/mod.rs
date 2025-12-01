@@ -128,30 +128,36 @@ pub fn generate_gradient_image(
     Ok(image)
 }
 
-pub fn are_images_equal(image1: &Image, image2: &Image) -> AvifResult<()> {
-    assert!(image1.has_same_properties_and_cicp(image2));
-    for plane in image::ALL_PLANES {
-        assert_eq!(image1.has_plane(plane), image2.has_plane(plane));
-        if !image1.has_plane(plane) {
-            continue;
-        }
-        let width = image1.width(plane);
-        let height = image1.height(plane);
-        for y in 0..height as u32 {
-            if image1.depth > 8 {
-                assert_eq!(
-                    image1.row16(plane, y)?[..width],
-                    image2.row16(plane, y)?[..width]
-                );
-            } else {
-                assert_eq!(
-                    image1.row(plane, y)?[..width],
-                    image2.row(plane, y)?[..width]
-                );
+pub fn are_planes_equal(image1: &Image, image2: &Image, plane: Plane) -> AvifResult<bool> {
+    if !image1.has_same_properties_and_cicp(image2)
+        || image1.has_plane(plane) != image2.has_plane(plane)
+    {
+        return Ok(false);
+    }
+    if !image1.has_plane(plane) {
+        return Ok(true);
+    }
+    let width = image1.width(plane);
+    let height = image1.height(plane);
+    for y in 0..height as u32 {
+        if image1.depth > 8 {
+            if image1.row16(plane, y)?[..width] != image2.row16(plane, y)?[..width] {
+                return Ok(false);
             }
+        } else if image1.row(plane, y)?[..width] != image2.row(plane, y)?[..width] {
+            return Ok(false);
         }
     }
-    Ok(())
+    Ok(true)
+}
+
+pub fn are_images_equal(image1: &Image, image2: &Image) -> AvifResult<bool> {
+    for plane in image::ALL_PLANES {
+        if !are_planes_equal(image1, image2, plane)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 fn squared_diff_sum(pixel1: u16, pixel2: u16) -> u64 {

@@ -3,16 +3,6 @@
 <translationbundle lang="sl">
 <translation id="3830627370375585318">V nastavitvah požarnega zidu ali protivirusnega programa omogočite dostop do
         omrežja.</translation>
-<translation id="4200102020577305737">Odprite
-          Vivaldi meni &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Nastavitve LAN
-          in počistite potrditveno polje »Uporabi proxy strežnik za LAN«.</translation>
 <translation id="4932161901409251843">Odprite
           Vivaldi meni &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@
         Če s tem težave ne odpravite, priporočamo, da to možnost
         znova izberete.</translation>
 <translation id="7496505986576158197">Vivaldija sta omogočila odprtokodni projekt <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> in druga <ph name="BEGIN_LINK_OSS" />odprtokodna programska oprema<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Pojdite v
+meni Vivaldi &gt;
+<ph name="SETTINGS_TITLE" />
+
+<ph name="SYSTEM_TITLE" />
+
+<ph name="PROXIES_TITLE" />
+
+Omrežje in internet &gt; Proxy
+in prekličite izbiro možnosti »Samodejno zaznaj nastavitve«.</translation>
 </translationbundle>

@@ -8,6 +8,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/webui/settings/public/constants/routes.mojom-forward.h"
+#include "base/byte_count.h"
 #include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/strings/utf_string_conversions.h"
@@ -537,22 +538,24 @@ void CrostiniSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
           IDS_SETTINGS_CROSTINI_SHARED_PATHS_INSTRUCTIONS_LOCATE,
           base::ASCIIToUTF16(
               crostini::ContainerChromeOSBaseDirectory().value())));
-  html_source->AddString(
-      "crostiniDiskResizeRecommended",
-      l10n_util::GetStringFUTF16(
-          IDS_SETTINGS_CROSTINI_DISK_RESIZE_RECOMMENDED,
-          ui::FormatBytes(crostini::disk::kRecommendedDiskSizeBytes)));
+  html_source->AddString("crostiniDiskResizeRecommended",
+                         l10n_util::GetStringFUTF16(
+                             IDS_SETTINGS_CROSTINI_DISK_RESIZE_RECOMMENDED,
+                             ui::FormatBytes(base::ByteCount(
+                                 crostini::disk::kRecommendedDiskSizeBytes))));
   html_source->AddString(
       "crostiniDiskResizeRecommendedWarning",
       l10n_util::GetStringFUTF16(
           IDS_SETTINGS_CROSTINI_DISK_RESIZE_RECOMMENDED_WARNING,
-          ui::FormatBytes(crostini::disk::kRecommendedDiskSizeBytes)));
+          ui::FormatBytes(
+              base::ByteCount(crostini::disk::kRecommendedDiskSizeBytes))));
 
   html_source->AddBoolean("showCrostiniExportImport", IsExportImportAllowed());
   html_source->AddBoolean("arcAdbSideloadingSupported",
                           IsAdbSideloadingAllowed());
   html_source->AddBoolean("showCrostiniPortForwarding",
                           IsPortForwardingAllowed());
+  html_source->AddBoolean("isBaguette", IsBaguette());
   html_source->AddBoolean("showCrostiniExtraContainers",
                           IsMultiContainerAllowed());
   html_source->AddBoolean("isOwnerProfile",
@@ -701,6 +704,10 @@ bool CrostiniSection::IsContainerUpgradeAllowed() const {
 
 bool CrostiniSection::IsPortForwardingAllowed() const {
   return crostini::CrostiniFeatures::Get()->IsPortForwardingAllowed(profile_);
+}
+
+bool CrostiniSection::IsBaguette() const {
+  return crostini::CrostiniFeatures::Get()->IsBaguette(profile_);
 }
 
 bool CrostiniSection::IsMultiContainerAllowed() const {

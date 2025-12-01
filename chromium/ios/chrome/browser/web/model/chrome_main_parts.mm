@@ -28,7 +28,6 @@
 #import "components/content_settings/core/common/content_settings_pattern.h"
 #import "components/crash/core/common/crash_key.h"
 #import "components/crash/core/common/reporter_running_ios.h"
-#import "components/keyed_service/ios/browser_state_dependency_manager.h"
 #import "components/memory_system/initializer.h"
 #import "components/memory_system/parameters.h"
 #import "components/metrics/call_stacks/call_stack_profile_builder.h"
@@ -67,6 +66,7 @@
 #import "ios/chrome/browser/segmentation_platform/model/ukm_database_client.h"
 #import "ios/chrome/browser/shared/model/paths/paths.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_dependency_manager_ios.h"
 #import "ios/chrome/browser/signin/model/signin_util.h"
 #import "ios/chrome/browser/translate/model/translate_service_ios.h"
 #import "ios/chrome/browser/web/model/ios_thread_profiler.h"
@@ -139,7 +139,7 @@ IOSChromeMainParts::IOSChromeMainParts(
 IOSChromeMainParts::~IOSChromeMainParts() {
 #if DCHECK_IS_ON()
   display::ScreenBase* screen =
-      static_cast<display::ScreenBase*>(display::Screen::GetScreen());
+      static_cast<display::ScreenBase*>(display::Screen::Get());
   DCHECK(!screen->HasDisplayObservers());
 #endif
 }
@@ -368,7 +368,7 @@ void IOSChromeMainParts::PreMainMessageLoopRun() {
 
   // Ensure that the KeyedService factories are registered.
   EnsureProfileKeyedServiceFactoriesBuilt();
-  BrowserStateDependencyManager::GetInstance()
+  ProfileDependencyManagerIOS::GetInstance()
       ->DisallowKeyedServiceFactoryRegistration(
           "EnsureProfileKeyedServiceFactoriesBuilt()");
 
@@ -444,7 +444,7 @@ void IOSChromeMainParts::SetUpFieldTrials(
 // This will occur inside //content for blink.
 #if !BUILDFLAG(USE_BLINK)
   // FeatureList requires VariationsIdsProvider to be created.
-  variations::VariationsIdsProvider::Create(
+  variations::VariationsIdsProvider::CreateInstance(
       variations::VariationsIdsProvider::Mode::kUseSignedInState);
 #endif
 

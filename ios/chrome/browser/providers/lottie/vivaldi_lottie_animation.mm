@@ -76,6 +76,13 @@ _lottieAnimation.loopAnimationCount = config.loopAnimationCount;
 #endif  // BUILDFLAG(IS_IOS_MACCATALYST)
 }
 
+- (void)setGradientValue:(NSArray<UIColor*>*)colors
+              forKeypath:(NSString*)keypath {
+  // CR142
+  // TODO: @tomas - We should update the Lottie framework and implement this.
+  // No op.
+}
+
 - (void)setDictionaryTextProvider:
     (NSDictionary<NSString*, NSString*>*)dictionaryTextProvider {
   _lottieAnimation.compatibleDictionaryTextProvider =

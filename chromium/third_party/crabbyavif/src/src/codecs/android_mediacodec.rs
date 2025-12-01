@@ -302,10 +302,13 @@ fn prefer_hardware_decoder(config: &DecoderConfig) -> bool {
         //    hardware for that is unreliable.
         // 3) profile is 0. As of Sep 2024, there are no AV1 hardware decoders that support
         //    anything other than profile 0.
+        // 4) depth is 8. Since we query for decoder simply by mime type, there is no way to know
+        //    if an AV1 hardware decoder supports 10-bit or not.
         prefer_hw
             && config.category != Category::Alpha
             && config.category != Category::Gainmap
             && config.codec_config.profile() == 0
+            && config.codec_config.depth() == 8
     } else {
         // We will return true when one of the following conditions are true:
         // 1) prefer_hw is true.
@@ -389,11 +392,11 @@ impl MediaCodec {
     fn initialize_impl(&mut self, low_latency: bool) -> AvifResult<()> {
         let config = self.config.unwrap_ref();
         if self.codec_index >= self.codec_initializers.len() {
-            return Err(AvifError::NoCodecAvailable);
+            return AvifError::no_codec_available();
         }
         let format = unsafe { AMediaFormat_new() };
         if format.is_null() {
-            return Err(AvifError::UnknownError("".into()));
+            return AvifError::unknown_error("");
         }
         c_str!(
             mime_type,
@@ -457,7 +460,7 @@ impl MediaCodec {
         };
         if codec.is_null() {
             unsafe { AMediaFormat_delete(format) };
-            return Err(AvifError::NoCodecAvailable);
+            return AvifError::no_codec_available();
         }
         let status =
             unsafe { AMediaCodec_configure(codec, format, ptr::null_mut(), ptr::null_mut(), 0) };
@@ -466,7 +469,7 @@ impl MediaCodec {
                 AMediaCodec_delete(codec);
                 AMediaFormat_delete(format);
             }
-            return Err(AvifError::NoCodecAvailable);
+            return AvifError::no_codec_available();
         }
         let status = unsafe { AMediaCodec_start(codec) };
         if status != media_status_t_AMEDIA_OK {
@@ -474,7 +477,7 @@ impl MediaCodec {
                 AMediaCodec_delete(codec);
                 AMediaFormat_delete(format);
             }
-            return Err(AvifError::NoCodecAvailable);
+            return AvifError::no_codec_available();
         }
         self.codec = Some(codec);
         Ok(())
@@ -487,7 +490,7 @@ impl MediaCodec {
         category: Category,
     ) -> AvifResult<()> {
         if self.format.is_none() {
-            return Err(AvifError::UnknownError("format is none".into()));
+            return AvifError::unknown_error("format is none");
         }
         let format = self.format.unwrap_ref();
         image.width = format.width()? as u32;
@@ -519,33 +522,62 @@ impl MediaCodec {
                     _ => MatrixCoefficients::Unspecified,
                 };
 
-                for i in 0usize..3 {
-                    if i == 2
-                        && matches!(
-                            image.yuv_format,
-                            PixelFormat::AndroidP010
-                                | PixelFormat::AndroidNv12
-                                | PixelFormat::AndroidNv21
-                        )
+                if image.yuv_format == PixelFormat::AndroidNv21 {
+                    #[cfg(feature = "libyuv")]
                     {
-                        // V plane is not needed for these formats.
-                        break;
+                        // Convert Nv21 images into Nv12 for the following reasons:
+                        // * Many of the yuv -> rgb conversions are optimized for Nv12 (Nv21 is also
+                        //   missing several cases).
+                        // * In Nv21 mode, some hardware decoders (e.g. c2.mtk.av1.decoder) will output
+                        //   Nv21 for the first few frames and then switch to Nv12. crabbyavif does not
+                        //   support cells within a same image to be of different pixel formats.
+                        image.yuv_format = PixelFormat::AndroidNv12;
+                        image.allocate_planes(category)?;
+                        let planes = image.plane_ptrs_mut();
+                        let row_bytes = image.plane_row_bytes()?;
+                        if unsafe {
+                            libyuv_sys::bindings::NV21ToNV12(
+                                buffer.offset(plane_info.offset[0]),
+                                i32_from_u32(plane_info.row_stride[0])?,
+                                buffer.offset(plane_info.offset[2]),
+                                i32_from_u32(plane_info.row_stride[2])?,
+                                planes[0],
+                                row_bytes[0],
+                                planes[1],
+                                row_bytes[1],
+                                i32_from_u32(image.width)?,
+                                i32_from_u32(image.height)?,
+                            )
+                        } != 0
+                        {
+                            return AvifError::reformat_failed();
+                        }
                     }
-                    image.row_bytes[i] = plane_info.row_stride[i];
-                    let plane_height = if i == 0 { image.height } else { (image.height + 1) / 2 };
-                    let offset_index = if i == 1 && image.yuv_format == PixelFormat::AndroidNv21 {
-                        // For Nv21, V plane comes before the U plane, so the UV plane offset
-                        // should point to the V plane.
-                        2
-                    } else {
-                        i
-                    };
-                    image.planes[i] = Some(Pixels::from_raw_pointer(
-                        unsafe { buffer.offset(plane_info.offset[offset_index]) },
-                        image.depth as u32,
-                        plane_height,
-                        image.row_bytes[i],
-                    )?);
+                    #[cfg(not(feature = "libyuv"))]
+                    {
+                        return AvifError::not_implemented();
+                    }
+                } else {
+                    for i in 0usize..3 {
+                        if i == 2
+                            && matches!(
+                                image.yuv_format,
+                                PixelFormat::AndroidP010 | PixelFormat::AndroidNv12
+                            )
+                        {
+                            // V plane is not needed for these formats.
+                            break;
+                        }
+                        image.row_bytes[i] = plane_info.row_stride[i];
+                        let plane_height =
+                            if i == 0 { image.height } else { (image.height + 1) / 2 };
+                        image.planes[i] = Some(Pixels::from_raw_pointer(
+                            unsafe { buffer.offset(plane_info.offset[i]) },
+                            image.depth as u32,
+                            plane_height,
+                            image.row_bytes[i],
+                        )?);
+                    }
                 }
             }
         }
@@ -563,9 +595,9 @@ impl MediaCodec {
             )
         };
         if input_buffer.is_null() {
-            return Err(AvifError::UnknownError(format!(
+            return AvifError::unknown_error(format!(
                 "input buffer at index {input_index} was null"
-            )));
+            ));
         }
         let hevc_whole_nal_units = self.hevc_whole_nal_units(payload)?;
         let codec_payload = match &hevc_whole_nal_units {
@@ -573,10 +605,10 @@ impl MediaCodec {
             None => payload,
         };
         if input_buffer_size < codec_payload.len() {
-            return Err(AvifError::UnknownError(format!(
+            return AvifError::unknown_error(format!(
                 "input buffer (size {input_buffer_size}) was not big enough. required size: {}",
                 codec_payload.len()
-            )));
+            ));
         }
         unsafe {
             ptr::copy_nonoverlapping(codec_payload.as_ptr(), input_buffer, codec_payload.len());
@@ -590,7 +622,7 @@ impl MediaCodec {
                 flags,
             ) != media_status_t_AMEDIA_OK
             {
-                return Err(AvifError::UnknownError("".into()));
+                return AvifError::unknown_error("");
             }
         }
         Ok(())
@@ -624,9 +656,7 @@ impl MediaCodec {
                 } else if input_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER as isize {
                     continue;
                 } else {
-                    return Err(AvifError::UnknownError(format!(
-                        "got input index < 0: {input_index}"
-                    )));
+                    return AvifError::unknown_error(format!("got input index < 0: {input_index}"));
                 }
             }
         }
@@ -649,7 +679,7 @@ impl MediaCodec {
                         &mut buffer_size as *mut _,
                     );
                     if output_buffer.is_null() {
-                        return Err(AvifError::UnknownError("output buffer is null".into()));
+                        return AvifError::unknown_error("output buffer is null");
                     }
                     buffer = Some(output_buffer);
                     self.output_buffer_index = Some(usize_from_isize(output_index)?);
@@ -659,23 +689,21 @@ impl MediaCodec {
                 } else if output_index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED as isize {
                     let format = AMediaCodec_getOutputFormat(codec);
                     if format.is_null() {
-                        return Err(AvifError::UnknownError("output format was null".into()));
+                        return AvifError::unknown_error("output format was null");
                     }
                     self.format = Some(MediaFormat { format });
                     continue;
                 } else if output_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER as isize {
                     continue;
                 } else {
-                    return Err(AvifError::UnknownError(format!(
+                    return AvifError::unknown_error(format!(
                         "mediacodec dequeue_output_buffer failed: {output_index}"
-                    )));
+                    ));
                 }
             }
         }
         if buffer.is_none() {
-            return Err(AvifError::UnknownError(
-                "did not get buffer from mediacodec".into(),
-            ));
+            return AvifError::unknown_error("did not get buffer from mediacodec");
         }
         self.output_buffer_to_image(buffer.unwrap(), image, category)?;
         Ok(())
@@ -701,7 +729,7 @@ impl MediaCodec {
                     let input_index = AMediaCodec_dequeueInputBuffer(codec, 0);
                     if input_index < 0 {
                         if retry_count >= Self::MAX_RETRIES {
-                            return Err(AvifError::UnknownError("max retries exceeded".into()));
+                            return AvifError::unknown_error("max retries exceeded");
                         }
                         break;
                     }
@@ -728,18 +756,18 @@ impl MediaCodec {
                     } else if output_index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED as isize {
                         let format = AMediaCodec_getOutputFormat(codec);
                         if format.is_null() {
-                            return Err(AvifError::UnknownError("output format was null".into()));
+                            return AvifError::unknown_error("output format was null");
                         }
                         self.format = Some(MediaFormat { format });
                         continue;
                     } else if output_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER as isize {
                         retry_count += 1;
                         if retry_count >= Self::MAX_RETRIES {
-                            return Err(AvifError::UnknownError("max retries exceeded".into()));
+                            return AvifError::unknown_error("max retries exceeded");
                         }
                         break;
                     } else if output_index < 0 {
-                        return Err(AvifError::UnknownError("".into()));
+                        return AvifError::unknown_error("");
                     } else {
                         let mut buffer_size: usize = 0;
                         let output_buffer = AMediaCodec_getOutputBuffer(
@@ -748,7 +776,7 @@ impl MediaCodec {
                             &mut buffer_size as *mut _,
                         );
                         if output_buffer.is_null() {
-                            return Err(AvifError::UnknownError("output buffer is null".into()));
+                            return AvifError::unknown_error("output buffer is null");
                         }
                         let mut cell_image = Image::default();
                         self.output_buffer_to_image(
@@ -820,9 +848,7 @@ impl Decoder for MediaCodec {
             self.drop_impl();
             self.codec_index += 1;
         }
-        Err(AvifError::UnknownError(
-            "all the codecs failed to extract an image".into(),
-        ))
+        AvifError::unknown_error("all the codecs failed to extract an image")
     }
 
     fn get_next_image_grid(
@@ -831,6 +857,7 @@ impl Decoder for MediaCodec {
         _spatial_id: u8,
         grid_image_helper: &mut GridImageHelper,
     ) -> AvifResult<()> {
+        let starting_cell_index = grid_image_helper.cell_index;
         while self.codec_index < self.codec_initializers.len() {
             let res = self.get_next_image_grid_impl(payloads, grid_image_helper);
             if res.is_ok() {
@@ -839,10 +866,12 @@ impl Decoder for MediaCodec {
             // Drop the current codec and try the next one.
             self.drop_impl();
             self.codec_index += 1;
+            // Reset the cell_index so that each codec starts from the first cell. Mixing cells
+            // between codecs could result in different color formats for each cell which is not
+            // supported.
+            grid_image_helper.cell_index = starting_cell_index;
         }
-        Err(AvifError::UnknownError(
-            "all the codecs failed to extract an image".into(),
-        ))
+        AvifError::unknown_error("all the codecs failed to extract an image")
     }
 }
 

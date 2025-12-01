@@ -9,10 +9,10 @@
 #include <sstream>
 #include <string>
 
+#include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
-#include "base/environment.h"
 #include "base/logging.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
@@ -31,8 +31,10 @@ namespace vivaldi {
 namespace sandbox {
 
 namespace {
-const base::FilePath kFlatpakAppPath("/app");
-const base::FilePath kFlatpakInfoPath("/.flatpak-info");
+constexpr base::FilePath::StringViewType kFlatpakAppPath =
+    FILE_PATH_LITERAL("/app");
+constexpr base::FilePath::StringViewType kFlatpakInfoPath =
+    FILE_PATH_LITERAL("/.flatpak-info");
 
 const char kFlatpakPortalServiceName[] = "org.freedesktop.portal.Flatpak";
 const char kFlatpakPortalObjectPath[] = "/org/freedesktop/portal/Flatpak";
@@ -60,9 +62,9 @@ struct PortalProperties : dbus::PropertySet {
 };
 
 void WriteStringAsByteArray(dbus::MessageWriter* writer,
-                            const std::string& str) {
-  writer->AppendArrayOfBytes(base::span(
-      reinterpret_cast<const uint8_t*>(str.c_str()), str.size() + 1));
+                            const std::string_view& str) {
+  writer->AppendArrayOfBytes(
+      base::span(reinterpret_cast<const uint8_t*>(str.data()), str.size() + 1));
 }
 
 void WriteFdPairMap(dbus::MessageWriter* writer, int source_fd, int dest_fd) {
@@ -128,7 +130,7 @@ FlatpakSandbox::SandboxLevel FlatpakSandbox::GetSandboxLevel() {
   // as .flatpak-info is on a tmpfs.
   base::VivaldiScopedAllowBlocking scoped_allow_blocking;
 
-  if (!base::PathExists(kFlatpakInfoPath)) {
+  if (!base::PathExists(base::FilePath(kFlatpakInfoPath))) {
     sandbox_level_ = SandboxLevel::kNone;
   } else {
     // chrome has an INI parser, but sandbox can't depend on anything inside
@@ -136,7 +138,7 @@ FlatpakSandbox::SandboxLevel FlatpakSandbox::GetSandboxLevel() {
     // option.
 
     std::string contents;
-    CHECK(ReadFileToString(kFlatpakInfoPath, &contents));
+    CHECK(ReadFileToString(base::FilePath(kFlatpakInfoPath), &contents));
     DCHECK(!contents.empty());
 
     std::istringstream iss(contents);
@@ -427,13 +429,13 @@ void FlatpakSandbox::SpawnOnBusThread(base::ProcessId* out_external_pid,
   dbus::MethodCall method_call(kFlatpakPortalInterfaceName, "Spawn");
   dbus::MessageWriter writer(&method_call);
 
-  const base::FilePath& current_directory =
+  const base::FilePath::StringViewType current_directory =
       !launch_options->current_directory.empty()
-          ? launch_options->current_directory
+          ? launch_options->current_directory.value()
           // Change to /app since it's guaranteed to always be present in
           // the sandbox.
           : kFlatpakAppPath;
-  WriteStringAsByteArray(&writer, current_directory.value());
+  WriteStringAsByteArray(&writer, current_directory);
 
   dbus::MessageWriter argv_writer(nullptr);
   writer.OpenArray("ay", &argv_writer);

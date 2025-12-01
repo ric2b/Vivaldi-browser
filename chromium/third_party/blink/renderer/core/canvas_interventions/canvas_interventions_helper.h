@@ -22,6 +22,36 @@ inline constexpr std::string_view kCanvasSizeMetricName =
     "FingerprintingProtection.CanvasNoise.NoisedCanvasSize";
 inline constexpr std::string_view kCanvasOperationMetricName =
     "FingerprintingProtection.CanvasNoise.OperationTriggered";
+inline constexpr std::string_view kCanvasNoiseReadbacksPerContextMetricName =
+    "FingerprintingProtection.CanvasNoise.NoisedReadbacksPerContext";
+
+inline constexpr std::string_view kBlockCanvasReadbackErrorMessage =
+    "https://issues.chromium.org/issues/"
+    "new?component=1456351&title=Breakage%20due%20to%20blocked%20canvas"
+    "%20readback. The feature can be disabled through "
+    "chrome://flags/#enable-block-canvas-readback";
+
+enum class CanvasNoiseReason {
+  kAllConditionsMet = 0,
+  kNoRenderContext = 1,  // Deprecated; this is now implied by the trigger.
+  kNoTrigger = 2,
+  kNo2d = 4,   // Deprecated; this is now implied by the trigger.
+  kNoGpu = 8,  // Deprecated; this is now implied by the trigger.
+  kNotEnabledInMode = 16,
+  kNoExecutionContext = 32,
+  kMaxValue = kNoExecutionContext
+};
+
+inline constexpr CanvasNoiseReason operator|(CanvasNoiseReason a,
+                                             CanvasNoiseReason b) {
+  return static_cast<CanvasNoiseReason>(static_cast<int>(a) |
+                                        static_cast<int>(b));
+}
+inline constexpr CanvasNoiseReason& operator|=(CanvasNoiseReason& a,
+                                               CanvasNoiseReason b) {
+  a = a | b;
+  return a;
+}
 
 class CORE_EXPORT CanvasInterventionsHelper
     : public GarbageCollected<CanvasInterventionsHelper>,
@@ -42,8 +72,7 @@ class CORE_EXPORT CanvasInterventionsHelper
   // If allowed, performs noising on a copy of the snapshot StaticBitmapImage
   // and returns the noised snapshot, otherwise it will return the original
   // inputted snapshot.
-  static bool MaybeNoiseSnapshot(CanvasRenderingContext* rendering_context,
-                                 ExecutionContext* execution_context,
+  static bool MaybeNoiseSnapshot(ExecutionContext* execution_context,
                                  scoped_refptr<StaticBitmapImage>& snapshot);
 
   void Trace(Visitor* visitor) const override {

@@ -33,7 +33,9 @@ def ProcessGNDefinesItems(items):
     # Some GN variables have hyphens, which we don't support.
     if len(tokens) == 2:
       val = tokens[1]
-      if val[0] == '"' and val[-1] == '"':
+      if not val:
+        pass
+      elif val[0] == '"' and val[-1] == '"':
         val = val[1:-1]
       elif val[0] == "'" and val[-1] == "'":
         val = val[1:-1]
@@ -63,12 +65,15 @@ def IsReclientEnabled(host_os):
     return False
   if "FETCH_RECLIENT" in os.environ:
     return True
-  return os.access(os.path.join(SRC,".enable_gn_reclient"), os.F_OK)
+  return os.access(os.path.join(SRC,".enable_gn_reclient"), os.F_OK) or os.access(os.path.join(SRC,".enable_gn_siso"), os.F_OK)
 
 def IsIOSEnabled():
   if "IOS_ENABLED" in os.environ:
     return True
   return os.access(os.path.join(SRC,".enable_ios"), os.F_OK)
+
+def IsClangdCompDBEnabled():
+  return os.access(os.path.join(SRC,".enable_clangd_compdb"), os.F_OK)
 
 def get_variables(a_checkout_os=None, a_target_cpu=None):
   host_os = VivaldiBaseDeps.DEPS_OS_CHOICES.get(sys.platform, 'linux')
@@ -108,6 +113,7 @@ def get_variables(a_checkout_os=None, a_target_cpu=None):
     "checkout_pgo_profiles": False,
     "build_with_chromium": True,
     "checkout_reclient": IsReclientEnabled(host_os),
+    "clangd_compdb": IsClangdCompDBEnabled()
   }
   for x in checkout_cpu:
     global_vars["checkout_"+x] = True
@@ -142,6 +148,7 @@ def get_chromium_variables():
   global_vars["checkout_src_internal"]=False
   global_vars["checkout_nacl"]=False
   global_vars["checkout_press_benchmarks"]=False
+  global_vars["checkout_clangd"]=IsClangdCompDBEnabled()
   global_vars["git_dependencies"]="DEPS"
 
   return global_vars

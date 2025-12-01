@@ -23,6 +23,7 @@
 #include "chrome/common/extensions/permissions/chrome_permission_message_provider.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/version_info/version_info.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
@@ -37,6 +38,8 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #include "extensions/permissions/vivaldi_skip_api_permission_enums.inc"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 using extension_test_util::LoadManifest;
 using extensions::mojom::APIPermissionID;
@@ -686,8 +689,10 @@ TEST(PermissionsTest, IsPrivilegeIncrease) {
       {"plugin2", false},      // plugin -> none
       {"plugin3", false},      // none -> plugin
 
-      {"storage", false},           // none -> storage
-      {"notifications", true},      // none -> notifications
+      {"storage", false},       // none -> storage
+      {"notifications", true},  // none -> notifications
+#if BUILDFLAG(ENABLE_PLATFORM_APPS)
+      // All of the below are platform app permissions.
       {"platformapp1", false},      // host permissions for platform apps
       {"platformapp2", true},       // API permissions for platform apps
       {"media_galleries1", true},   // all -> read|all
@@ -700,6 +705,7 @@ TEST(PermissionsTest, IsPrivilegeIncrease) {
       {"sockets1", true},           // none -> tcp:*:*
       {"sockets2", false},          // tcp:*:* -> tcp:*:*
       {"sockets3", true},           // tcp:a.com:80 -> tcp:*:*
+#endif
   });
 
   for (size_t i = 0; i < std::size(kTests); ++i) {
@@ -747,7 +753,8 @@ TEST(PermissionsTest,
 
 TEST(PermissionsTest, PermissionMessages) {
   // Ensure that all permissions that needs to show install UI actually have
-  // strings associated with them.
+  // strings associated with them. Permissions that require support for
+  // platform apps are ifdef'd out.
   APIPermissionSet skip;
 
   // These are considered "nuisance" or "trivial" permissions that don't need
@@ -774,7 +781,9 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermissionID::kLoginState);
   skip.insert(APIPermissionID::kOffscreen);
   skip.insert(APIPermissionID::kOverrideEscFullscreen);
+#if BUILDFLAG(ENABLE_PLATFORM_APPS)
   skip.insert(APIPermissionID::kPointerLock);
+#endif
   skip.insert(APIPermissionID::kPower);
   skip.insert(APIPermissionID::kPrinterProvider);
   skip.insert(APIPermissionID::kSearch);
@@ -819,9 +828,11 @@ TEST(PermissionsTest, PermissionMessages) {
   // so we won't prompt for it for now.
   skip.insert(APIPermissionID::kFileBrowserHandler);
 
+#if BUILDFLAG(ENABLE_PLATFORM_APPS)
   // These permissions require explicit user action (configuration dialog)
   // so we don't prompt for them at install time.
   skip.insert(APIPermissionID::kMediaGalleries);
+#endif
 
   // If you've turned on the experimental command-line flag, we don't need
   // to warn you further.
@@ -843,7 +854,9 @@ TEST(PermissionsTest, PermissionMessages) {
   // These are private.
   skip.insert(APIPermissionID::kAccessibilityPrivate);
   skip.insert(APIPermissionID::kAccessibilityServicePrivate);
+#if BUILDFLAG(ENABLE_PLATFORM_APPS)
   skip.insert(APIPermissionID::kArcAppsPrivate);
+#endif
   skip.insert(APIPermissionID::kAutoTestPrivate);
   skip.insert(APIPermissionID::kBrailleDisplayPrivate);
   skip.insert(APIPermissionID::kCecPrivate);
@@ -855,7 +868,9 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermissionID::kEnterprisePlatformKeysPrivate);
   skip.insert(APIPermissionID::kFeedbackPrivate);
   skip.insert(APIPermissionID::kFileManagerPrivate);
+#if BUILDFLAG(ENABLE_PLATFORM_APPS)
   skip.insert(APIPermissionID::kFirstRunPrivate);
+#endif
   skip.insert(APIPermissionID::kImageLoaderPrivate);
   skip.insert(APIPermissionID::kInputMethodPrivate);
   skip.insert(APIPermissionID::kLanguageSettingsPrivate);
@@ -884,8 +899,11 @@ TEST(PermissionsTest, PermissionMessages) {
   // Warned as part of host permissions.
   skip.insert(APIPermissionID::kDevtools);
 
-  // Platform apps.
+  // Platform apps. Most platform app permissions are not yet behind the build
+  // flag, which is being gradually added.
+#if BUILDFLAG(ENABLE_PLATFORM_APPS)
   skip.insert(APIPermissionID::kBrowser);
+#endif
   skip.insert(APIPermissionID::kHid);
   skip.insert(APIPermissionID::kFileSystem);
   skip.insert(APIPermissionID::kFileSystemProvider);
@@ -1036,6 +1054,8 @@ TEST(PermissionsTest, SuppressedPermissionMessages) {
   }
 }
 
+#if BUILDFLAG(ENABLE_PLATFORM_APPS)
+// "serial" is a platform app permission and not supported on desktop Android.
 TEST(PermissionsTest, AccessToDevicesMessages) {
   {
     APIPermissionSet api_permissions;
@@ -1076,6 +1096,7 @@ TEST(PermissionsTest, AccessToDevicesMessages) {
             IDS_EXTENSION_PROMPT_WARNING_BLUETOOTH_SERIAL)));
   }
 }
+#endif  // BUILDFLAG(ENABLE_PLATFORM_APPS)
 
 TEST(PermissionsTest, MergedFileSystemPermissionComparison) {
   APIPermissionSet write_api_permissions;
@@ -1204,6 +1225,11 @@ TEST(PermissionsTest, GetWarningMessages_CombinedSessions) {
   }
 }
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+// TODO(crbug.com/441574787): Port this test to desktop Android. The error
+// message is "Read and change all your data on all websites" instead of
+// "Block parts of web pages". It's possible this is a manifest v2 versus
+// manifest v3 issue.
 TEST(PermissionsTest, GetWarningMessages_DeclarativeWebRequest) {
   // Test that if the declarativeWebRequest permission is present
   // in combination with all hosts permission, then only the warning
@@ -1242,7 +1268,10 @@ TEST(PermissionsTest, GetWarningMessages_DeclarativeWebRequest) {
       "Read and change all your data on all websites"));
   }
 }
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
+#if BUILDFLAG(ENABLE_PLATFORM_APPS)
+// "serial" is a platform app API.
 TEST(PermissionsTest, GetWarningMessages_Serial) {
   scoped_refptr<Extension> extension =
       LoadManifest("permissions", "serial.json");
@@ -1254,6 +1283,7 @@ TEST(PermissionsTest, GetWarningMessages_Serial) {
                                          "Access your serial devices"));
 }
 
+// "socket" is a platform app API.
 TEST(PermissionsTest, GetWarningMessages_Socket_AnyHost) {
   ScopedCurrentChannel channel(version_info::Channel::DEV);
 
@@ -1267,6 +1297,7 @@ TEST(PermissionsTest, GetWarningMessages_Socket_AnyHost) {
       "Exchange data with any device on the local network or internet"));
 }
 
+// "socket" is a platform app API.
 TEST(PermissionsTest, GetWarningMessages_Socket_OneDomainTwoHostnames) {
   ScopedCurrentChannel channel(version_info::Channel::DEV);
 
@@ -1289,6 +1320,7 @@ TEST(PermissionsTest, GetWarningMessages_Socket_OneDomainTwoHostnames) {
       true));
 }
 
+// "socket" is a platform app API.
 TEST(PermissionsTest, GetWarningMessages_Socket_TwoDomainsOneHostname) {
   ScopedCurrentChannel channel(version_info::Channel::DEV);
 
@@ -1321,6 +1353,7 @@ TEST(PermissionsTest, GetWarningMessages_PlatformAppHosts) {
   EXPECT_TRUE(extension->is_platform_app());
   EXPECT_TRUE(VerifyNoPermissionMessages(extension->permissions_data()));
 }
+#endif  // BUILDFLAG(ENABLE_PLATFORM_APPS)
 
 testing::AssertionResult ShowsAllHostsWarning(const std::string& pattern) {
   scoped_refptr<const Extension> extension =
@@ -1771,6 +1804,8 @@ TEST(PermissionsTest, IsEmpty) {
   EXPECT_FALSE(perm_set->IsEmpty());
 }
 
+#if BUILDFLAG(ENABLE_PLATFORM_APPS)
+// "syncFileSystem" is a platform app permission.
 TEST(PermissionsTest, SyncFileSystemPermission) {
   scoped_refptr<Extension> extension = LoadManifest(
       "permissions", "sync_file_system.json");
@@ -1783,6 +1818,7 @@ TEST(PermissionsTest, SyncFileSystemPermission) {
       VerifyOnePermissionMessage(extension->permissions_data(),
                                  "Store data in your Google Drive account"));
 }
+#endif  // BUILDFLAG(ENABLE_PLATFORM_APPS)
 
 // Make sure that we don't crash when we're trying to show the permissions
 // even though everything with a chrome:// scheme except chrome://favicon is

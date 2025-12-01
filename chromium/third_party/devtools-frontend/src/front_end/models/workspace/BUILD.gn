@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -47,6 +47,7 @@ devtools_entrypoint("bundle") {
     "../../panels/network/*",
     "../../panels/profiler/*",
     "../../panels/search/*",
+    "../../panels/settings/*",
     "../../panels/snippets/*",
     "../../panels/sources/*",
     "../../panels/timeline/*",
@@ -65,6 +66,8 @@ devtools_entrypoint("bundle") {
     "../issues_manager/*",
     "../persistence/*",
     "../source_map_scopes/*",
+    "../stack_trace/*",
+    "../trace_source_maps_resolver/*",
     "../workspace_diff/*",
   ]
 

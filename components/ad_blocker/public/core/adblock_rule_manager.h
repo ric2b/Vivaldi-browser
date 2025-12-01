@@ -3,14 +3,11 @@
 #ifndef COMPONENTS_AD_BLOCKER_PUBLIC_CORE_ADBLOCK_RULE_MANAGER_H_
 #define COMPONENTS_AD_BLOCKER_PUBLIC_CORE_ADBLOCK_RULE_MANAGER_H_
 
-#include <array>
 #include <map>
-#include <memory>
 #include <set>
 #include <string>
-#include <vector>
 
-#include "base/files/file_path.h"
+#include "base/containers/enum_array.h"
 #include "base/observer_list_types.h"
 #include "components/ad_blocker/public/core/adblock_types.h"
 #include "url/origin.h"
@@ -28,12 +25,10 @@ class RuleManager {
     kFirstExceptionList = kProcessList,
     kLastExceptionList = kExemptList,
   };
-  static constexpr size_t kExceptionListCount = kLastExceptionList + 1;
-
-  using ActiveExceptionsLists = std::array<ExceptionsList, kRuleGroupCount>;
-  using Exceptions =
-      std::array<std::array<std::set<std::string>, kExceptionListCount>,
-                 kRuleGroupCount>;
+  using Exceptions = RuleGroupArray<base::EnumArray<std::set<std::string>,
+                                                    ExceptionsList,
+                                                    kFirstExceptionList,
+                                                    kLastExceptionList>>;
 
   class Observer : public base::CheckedObserver {
    public:

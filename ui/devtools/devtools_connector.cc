@@ -287,7 +287,7 @@ bool DevtoolsConnectorItem::HandleContextMenu(
 }
 
 #if BUILDFLAG(IS_MAC)
-const std::vector<std::string> commands_to_fwd = {
+constexpr std::array<std::string_view, 14> commands_to_fwd = {
   "COMMAND_CLOSE_TAB",
   "COMMAND_CLOSE_WINDOW",
   "COMMAND_DEVELOPER_TOOLS",
@@ -311,8 +311,8 @@ bool ShouldForwardKeyCombo(std::string shortcut_text,
   auto& vivaldi_actions = prefs->GetList(vivaldiprefs::kActions);
   const base::Value::Dict* dict = vivaldi_actions[0].GetIfDict();
 
-  for (int i = 0; i < (int)commands_to_fwd.size(); i++) {
-    const base::Value::Dict* shortcut = dict->FindDict(commands_to_fwd.at(i));
+  for (const auto& cmd : commands_to_fwd) {
+    const base::Value::Dict* shortcut = dict->FindDict(cmd);
     if (!shortcut) {
       continue;
     }

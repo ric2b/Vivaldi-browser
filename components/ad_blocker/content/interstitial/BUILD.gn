@@ -34,6 +34,13 @@ source_set("interstitial") {
     "//components/site_engagement/core/mojom:mojo_bindings",
     "//components/security_interstitials/core/common/mojom",
     "//content/public/browser",
+    "//vivaldi/app:resources",
     "//vivaldi/components/ad_blocker/public/content"
   ]
+  if(!is_android) {
+    deps += [
+      "//chrome/browser/extensions:cws_item_service_proto",
+      "//extensions/common/api",
+    ]
+  }
 }

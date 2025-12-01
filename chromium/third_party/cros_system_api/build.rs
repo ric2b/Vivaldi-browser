@@ -216,6 +216,9 @@ fn main() {
     for (_, directory, _) in BINDINGS_TO_GENERATE {
         println!("cargo:rerun-if-changed=../{}", directory);
     }
+    for (_, directory) in PROTOS_TO_GENERATE {
+        println!("cargo:rerun-if-changed=../{}", directory);
+    }
     generate_module(Path::new(SOURCE_DIR), BINDINGS_TO_GENERATE).unwrap();
     generate_protos(Path::new(SOURCE_DIR), PROTOS_TO_GENERATE).unwrap();
 }

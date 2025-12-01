@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -167,6 +167,8 @@ export function traceWindowFromOverlay(overlay: Types.Overlays.Overlay): Types.T
       return traceWindowFromMicroSeconds(overlay.timestamp, overlay.timestamp);
     case 'TIMINGS_MARKER':
       return traceWindowFromMicroSeconds(overlay.adjustedTimestamp, overlay.adjustedTimestamp);
+    case 'BOTTOM_INFO_BAR':
+      return null;
 
     default:
       Platform.TypeScriptUtilities.assertNever(overlay, `Unexpected overlay ${overlay}`);
@@ -219,7 +221,7 @@ export function boundsIncludeTimeRange(data: BoundsIncludeTimeRange): boolean {
 /** Checks to see if the event is within or overlaps the bounds */
 export function eventIsInBounds(event: Types.Events.Event, bounds: Types.Timing.TraceWindowMicro): boolean {
   const startTime = event.ts;
-  return startTime <= bounds.max && bounds.min <= (startTime + (event.dur ?? 0));
+  return startTime <= bounds.max && bounds.min < (startTime + (event.dur ?? 0));
 }
 
 export function timestampIsInBounds(bounds: Types.Timing.TraceWindowMicro, timestamp: Types.Timing.Micro): boolean {

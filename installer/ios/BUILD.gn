@@ -44,6 +44,14 @@ template("sign_bundle") {
   }
 }
 
+sign_bundle("sign_EarlyMallocZoneRegistration") {
+  bindir = "$root_out_dir/obj/ios/chrome/app"
+
+  binary = "$bindir/EarlyMallocZoneRegistration"
+  extra_args = ["--disable-embedded-mobileprovision"]
+  app = "${vivaldi_app}/Frameworks/EarlyMallocZoneRegistration.framework"
+}
+
 sign_bundle("sign_open_extension") {
   bindir = "$root_out_dir/ios_clang_arm64_app_ext/obj/ios/chrome/open_extension/appex"
   gendir = "$root_out_dir/ios_clang_arm64_app_ext/gen/ios/chrome/open_extension/appex"
@@ -122,14 +130,6 @@ sign_bundle("sign_push_notification_service_extension") {
   ]
 }
 
-sign_bundle("sign_MaterialComponents") {
-  bindir = "$root_out_dir/obj/ios/third_party/material_components_ios"
-
-  binary = "$bindir/MaterialComponents"
-  extra_args = ["--disable-embedded-mobileprovision"]
-  app = "${vivaldi_app}/Frameworks/MaterialComponents.framework"
-}
-
 action("sign_Lottie") {
   script = "//build/config/apple/codesign.py"
 
@@ -165,12 +165,12 @@ sign_bundle("sign_ios") {
   ]
   deps = [
     ":sign_Lottie",
-    ":sign_MaterialComponents",
     ":sign_open_extension",
     ":sign_credential_provider_extension",
     ":sign_widget_kit_extension",
     ":sign_intents_extension",
     ":sign_share_extension",
     ":sign_push_notification_service_extension",
+    ":sign_EarlyMallocZoneRegistration",
   ]
 }

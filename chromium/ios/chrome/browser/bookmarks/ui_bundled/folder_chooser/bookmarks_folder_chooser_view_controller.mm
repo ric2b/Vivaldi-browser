@@ -23,7 +23,6 @@
 #import "ios/chrome/browser/bookmarks/ui_bundled/cells/table_view_bookmarks_folder_item.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/folder_chooser/bookmarks_folder_chooser_mutator.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/folder_chooser/bookmarks_folder_chooser_view_controller_presentation_delegate.h"
-#import "ios/chrome/browser/shared/ui/symbols/chrome_icon.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller_constants.h"
@@ -185,10 +184,13 @@ using bookmarks::BookmarkNode;
   self.tableView.estimatedRowHeight = kEstimatedFolderCellHeight;
   self.tableView.rowHeight = UITableViewAutomaticDimension;
 
-  // Vivaldi
-  [self setUpTableHeaderView];
-  [self updateTableHeaderViewState];
-  // End Vivaldi
+  if (IsVivaldiRunning()) {
+    [self setUpTableHeaderView];
+    [self updateTableHeaderViewState];
+    // VIB-1430: Remove the search controller from the navigation item.
+    // We are using a custom search bar in the table header view.
+    self.navigationItem.searchController = nil;
+  } // End Vivaldi
 
 }
 

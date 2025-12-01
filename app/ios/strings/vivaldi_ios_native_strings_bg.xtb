@@ -49,6 +49,7 @@
 <translation id="1521731267649138856">вашият възстановяващ адрес за е-поща.</translation>
 <translation id="1534183273237573805">Избирайки някоя от тези търсачки, подкрепяте развитието на Vivaldi.</translation>
 <translation id="1535446875484049224">Тъмният облик е бъгав или не изглежда добре</translation>
+<translation id="1558430487788094817">Въведете действителен протокол.</translation>
 <translation id="1567659716528258242">Vivaldi загрява устройството</translation>
 <translation id="156793582229023040">Притеснява ме следенето или събирането на данни</translation>
 <translation id="1573784689611551537">Организирай блокиращите реклама източници</translation>
@@ -68,7 +69,6 @@
 <translation id="1752547299766512813">Записани пароли</translation>
 <translation id="1754797958074421486">Условия на ползване</translation>
 <translation id="1755590309862395270">За изтриваеми предложения за довършване.</translation>
-<translation id="1763111582687651119">Разреши търсачка по псевдоним</translation>
 <translation id="1771413903824396513">Подреди по псевдоним</translation>
 <translation id="1771605894228673800">Искам възможност с вградена VPN</translation>
 <translation id="1800685789463945995">Vivaldi продължава да забива или замръзва</translation>
@@ -92,6 +92,7 @@
 <translation id="2079545284768500474">Отмени</translation>
 <translation id="2138901399878617625">Посаждате дървета, докато търсите</translation>
 <translation id="2148384276939959392">Сверявай избраните</translation>
+<translation id="2179052183774520942">Добави търсачка</translation>
 <translation id="2195713384412091023">TAKA премахвате всички съхранявани в нашия сървър сверени данни, нулирате шифроващата парола и се отписвате.</translation>
 <translation id="2228584369802328636">Игри</translation>
 <translation id="2240680014596059312">Поверителна. Бърза. С по-малко реклами.</translation>
@@ -133,7 +134,9 @@
 <translation id="2701366016894985129">Реклами в резултатите</translation>
 <translation id="2702801445560668637">Списъка за четене</translation>
 <translation id="2709516037105925701">Запълващи данни</translation>
+<translation id="271033894570825754">нов</translation>
 <translation id="2712076950889800659">Продължавайки, приемате <ph name="BEGIN_LINK" />Лицензионно споразумение с крайния потребител<ph name="END_LINK" /> и <ph name="BEGIN_LINK" /> Политика на поверителност<ph name="END_LINK" /> на Vivaldi</translation>
+<translation id="2720646732332242062">Разреши псевдоними</translation>
 <translation id="2725892265692641195">Създай <ph name="ITEM_TYPE" /></translation>
 <translation id="2745324713975967671">Шифроваща парола</translation>
 <translation id="276436995507680929">Сверяване на списъка за четене.</translation>
@@ -141,6 +144,7 @@
 <translation id="2767124759205735526">Сверяване на историята и въведените адреси.</translation>
 <translation id="2770868136620962117">О, щастливи сме да го научим!</translation>
 <translation id="2818665331928314854">Разреши отметки</translation>
+<translation id="2820889731327284977">Псевдонимът е зает от <ph name="ENGINE_NAME" />.</translation>
 <translation id="2825232297853754349">Трябва да приемете условията на ползване.</translation>
 <translation id="2842985007712546952">Покажи родителската папка</translation>
 <translation id="2843343418360315034">унгарски (<ph name="ORIGIN" />)</translation>
@@ -163,6 +167,7 @@
 <translation id="309084557304084991">Не искам предзаредени отметки и номератори</translation>
 <translation id="3091563570137981919">Блокер на тракери и реклами</translation>
 <translation id="3097968995088564986">Показвай бутон за добавяне</translation>
+<translation id="3102790820790869053">Търси в последни раздели</translation>
 <translation id="3134385238404760368">Няма последни раздели</translation>
 <translation id="3142562627629111859">Създай нов каталог</translation>
 <translation id="3157931365184549694">Възстанови</translation>
@@ -184,6 +189,7 @@
 <translation id="3368960138304620657">литовски (<ph name="ORIGIN" />)</translation>
 <translation id="3377025655491224618">Частен раздел</translation>
 <translation id="3394474617110693560">Категории</translation>
+<translation id="3405080914346191957">Тук са вашите купове с раздели.</translation>
 <translation id="3435896845095436175">Разреши</translation>
 <translation id="3438160227308459316">румънски (<ph name="ORIGIN" />)</translation>
 <translation id="3451109402849920193">Разработчик Lingvanex; домакин — Vivaldi.</translation>
@@ -195,6 +201,8 @@
 <translation id="3527085408025491307">Папка</translation>
 <translation id="3530991200302302959">български (<ph name="ORIGIN" />)</translation>
 <translation id="3588477659268085586">Отвори преводача</translation>
+<translation id="3591006724568464696">Недостъпни последни раздели</translation>
+<translation id="3597069850377878155">Поставете %s в адреса там, където следва да се вмъкне заявката за търсене.</translation>
 <translation id="3601414719864711130">Подреди по дата</translation>
 <translation id="3602290021589620013">Прегледай</translation>
 <translation id="3607176258839749451">Регистрирането се провали поради грешка. Моля, по-късно опитайте отново.</translation>
@@ -208,6 +216,7 @@
 <translation id="3694122362646626770">Сайтове</translation>
 <translation id="3699026013955941879">Кодът е изтекъл. Моля, заявете нов активиращ код.</translation>
 <translation id="3700829948786686853">Добре дошли във Vivaldi!</translation>
+<translation id="3712857387170726625">Псевдонимът не може да съдържа интервал.</translation>
 <translation id="3719826155360621982">Начална страница</translation>
 <translation id="373855430416507951">Намери в страницата</translation>
 <translation id="3745190878148784130">Скрий увеличаването на текста</translation>
@@ -301,12 +310,14 @@
 <translation id="462860218383788109">Подреди по дата на промяна</translation>
 <translation id="4640946580087069269">Копирай в записка</translation>
 <translation id="4643117005422448078">Водещи сайтове</translation>
+<translation id="4654428449690716275">Скриване на банерите преди или след предлагане на превод</translation>
 <translation id="4654578955713250802">Блокер на тракери и реклами</translation>
 <translation id="4655510151391078468">Кодът не съвпада с изпратения до вас.
         Остават <ph name="ATTEMPTS" /> опита.</translation>
 <translation id="466494460776294423">Задължително въведете код за потвърждение</translation>
 <translation id="4700341416469973823">Изтрий избрания текст</translation>
 <translation id="4714431804859029826">Възстанови фабричните</translation>
+<translation id="4726767815033517343">Адресът не може да е празен.</translation>
 <translation id="4727698999970341158">исландски (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">Обнови</translation>
 <translation id="4739712911308055817">неизвлечен</translation>
@@ -335,6 +346,7 @@
 <translation id="4950266778127803750">Показвай бутон Х към фоновите раздели</translation>
 <translation id="495421405224926623">Прочетох и приемам Условия на ползване и Политика на поверителност</translation>
 <translation id="497942794017668482">Блокиране на тракери и реклами</translation>
+<translation id="4983968022327077496">Вашата организация изисква да сърфирате поверително. Разделите не се записват в частен режим. <ph name="BEGIN_LINK" />Повече<ph name="END_LINK" /></translation>
 <translation id="4993477362660748586">Сверяване</translation>
 <translation id="500392125908657603">Настройки на адресното поле</translation>
 <translation id="5037761343305489956">Копирано в записка</translation>
@@ -356,6 +368,7 @@
 <translation id="5271549068863921519">Запиши паролата</translation>
 <translation id="5290452628447338707">Няма записки</translation>
 <translation id="5317780077021120954">Запиши</translation>
+<translation id="5327248766486351172">Название</translation>
 <translation id="5349678548463426691">Подреди по описание</translation>
 <translation id="5350737901534958404">Позволи партньорски реклами (в подкрепа на Vivaldi)</translation>
 <translation id="5351912500249789547">Vivaldi.net отхвърля вписващите данни: код на грешката <ph name="ERROR_CODE" />.</translation>
@@ -389,9 +402,11 @@
 <translation id="5823830882692559950">Vivaldi.net отхвърля вписващите данни: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />).</translation>
 <translation id="5857090052475505287">Създай папка</translation>
 <translation id="5859825823508296659">Редактирай домейна</translation>
-<translation id="5867841422488265304">Потърсете или въведете адрес</translation>
 <translation id="5869217094746242845">Повече за поверителността и защитата</translation>
 <translation id="5871497086027727873">1 преместен елемент</translation>
+<translation id="5881883194519164706">Нова търсачка</translation>
+<translation id="5894313460141624172">Купове с раздели</translation>
+<translation id="5896446121684606536">Псевдонимът не може да е празен.</translation>
 <translation id="5898502570200301364">Може да ползвате паролите, записани в диспечера на пароли на Vivaldi, в други приложения на вашия iPhone.</translation>
 <translation id="5900160494089383343">Това име на потребител не е налично.</translation>
 <translation id="5907851754429991366">Ще се радваме да видим вашия отзив в App Store.</translation>
@@ -399,12 +414,14 @@
 <translation id="591684450784861763">Добави страницата към…</translation>
 <translation id="5922915428124940994">(променена)</translation>
 <translation id="5939518447894949180">Занули</translation>
+<translation id="5957613098218939406">Още настройки</translation>
 <translation id="6005497458542935062">Извади от папката</translation>
 <translation id="603230602684548091">Избери изходен език</translation>
 <translation id="6040304352785030331">Искам да ползвам разширения/добавки към браузъра</translation>
 <translation id="6042308850641462728">Още</translation>
 <translation id="6048889899469181614">Свер не работи в момента.
  Отворете Настройки и го поправете.</translation>
+<translation id="6049087555594742200">Параметри POST</translation>
 <translation id="604930981600990598">Преводът е копиран!</translation>
 <translation id="6052689967593623141">Vivaldi може да получи партньорска комисионна, ако направите покупка, след като щракнете върху някоя от тези препратки. Това подпомага развитието на Vivaldi и поддържа независимостта на браузъра. Благодарим за подкрепата!</translation>
 <translation id="6056094614114332761">Предложения в адресното поле</translation>
@@ -433,7 +450,7 @@
 <translation id="641394169129472837">Изберете коя страница ще се отвори при докосване на бутон Създай раздел.</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> избрани</translation>
 <translation id="6442584491342758233">Direct Match</translation>
-<translation id="6443682944493983866">Приемани езици</translation>
+<translation id="6464909711355014884">Добави потребителска търсачка</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Внеси<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Резервен шифроващ ключ</translation>
 <translation id="6527303717912515753">Сподели</translation>
@@ -469,8 +486,10 @@
 <translation id="6878199227380123461">Предпочитай панел Преводач</translation>
 <translation id="6887143077297974801">Провален пуск на Cвер.</translation>
 <translation id="6896758677409633944">Копирай</translation>
+<translation id="6898471994345402432">Картини от адрес</translation>
 <translation id="691132463664340655">Тема на браузъра</translation>
 <translation id="6918338082370824763">като посочена страница</translation>
+<translation id="6933380551253627905">Начертание</translation>
 <translation id="6937750621455385628">Трябва да се впишете с профил във Vivaldi.</translation>
 <translation id="6941852195052765076">Здраве</translation>
 <translation id="6945221475159498467">Избери</translation>
@@ -479,6 +498,7 @@
 <translation id="6951948201878750661">Изберете цвета с докосване</translation>
 <translation id="6967884871145366229">Организирай настройките на поверителност</translation>
 <translation id="6973630695168034713">Папки</translation>
+<translation id="7000227144065890583">Предложения от адрес</translation>
 <translation id="7006864796794806241">Възстанови паролата</translation>
 <translation id="7029809446516969842">Пароли</translation>
 <translation id="7041964446309059643">Подреди по добавяне</translation>
@@ -554,6 +574,7 @@
 <translation id="7801204999757211519">Вече имате профил? <ph name="BEGIN_LINK" />Впиши ме ➔<ph name="END_LINK" /></translation>
 <translation id="780301667611848630">Не, благодаря</translation>
 <translation id="7850070199083838600">Създаване на нов каталог?</translation>
+<translation id="7856347297971871396">Списък със сверени раздели</translation>
 <translation id="7862984977194621600">Разреши предложения при търсене</translation>
 <translation id="7870765213383950011">на първия каталог</translation>
 <translation id="7914995060146784406">Редактирай записката</translation>
@@ -601,16 +622,18 @@
 <translation id="8404556771547317369">Моля, въведете адреса</translation>
 <translation id="8414685983518053656">Записки</translation>
 <translation id="8423076545503792640">Заявката се провали поради грешка. Моля, по-късно опитайте отново.</translation>
+<translation id="8427509694325373907">Параметри POST за картини</translation>
 <translation id="8428213095426709021">Настройки</translation>
 <translation id="8458397775385147834">1 изтрит елемент</translation>
 <translation id="846569642435104154">ТАКА задавате избраната степен на увеличаване във всички страници.</translation>
 <translation id="8466547766474747336">Възможността, която искам, липсва</translation>
 <translation id="8500459200727969761">Възстанови вградените списъци</translation>
 <translation id="8503813439785031346">Потребител</translation>
+<translation id="851451113245350202">Списък с последно затворени раздели</translation>
 <translation id="8515808232153642813">Разшифровай</translation>
 <translation id="8517852590337319813">Активиране на профила</translation>
+<translation id="8529159259480052204">Скривай банерите за потвърждение</translation>
 <translation id="8546963963006468833">С Vivaldi може плавно да отваряте препратки, да търсите чрез изпълними модули и автоматично да запълвате пароли в други приложения.</translation>
-<translation id="8546995005405883065">Поредност на предпочитаните приемани езици в съвместими сайтове.</translation>
 <translation id="8562452229998620586">Записаните пароли ще се покажат тук.</translation>
 <translation id="856439694359429369">Докоснете за още настройки или докоснете 2-кратно за отваряне.</translation>
 <translation id="8591818185775466306">Изтрий <ph name="ITEM_TYPE" /></translation>
@@ -620,6 +643,7 @@
 <translation id="8684294196284714094">Готов ли сте да зададете Vivaldi като водещ браузър?</translation>
 <translation id="8687583747694652488">Копирай изходния текст</translation>
 <translation id="8696653005998192569">В сайтовете не се зареждат картини или клипове</translation>
+<translation id="872451400847464257">Редактирай търсачката</translation>
 <translation id="8730621377337864115">Готово</translation>
 <translation id="8733945742171960420">Щом разгледате интернет, водещите сайтове ще се покажат тук.</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> изтрити елемента</translation>
@@ -633,6 +657,7 @@
 <translation id="8828442094222036738">Резултатите от Google, направени поверителни в Европа.</translation>
 <translation id="8855707633300847215">Покажи лентата с раздели</translation>
 <translation id="8861211142470908937">Задължителна минимална дължина на паролата 12 знака</translation>
+<translation id="8885321570279617421">Названието не може да е празно.</translation>
 <translation id="8892354889971902600">Последно затворените раздели ще се покажат тук.</translation>
 <translation id="89390081013973080">Всичко е настроено! Време е да решите кои данни ще сверявате между устройствата.</translation>
 <translation id="8948792607467387336">Избери като тапет</translation>
@@ -651,9 +676,11 @@
 <translation id="9091665118798175641">Сверяване на запълващите данни на формуляри.</translation>
 <translation id="9097127519290088802">Задължително въведете шифроваща парола</translation>
 <translation id="9139318394846604261">Пазаруване</translation>
+<translation id="9148058034647219655">Изход</translation>
 <translation id="9152984048904392513">Отвори всички фоново</translation>
 <translation id="9157459516617966251">Редактирай препратката</translation>
 <translation id="9157539936604258187">Отвори препратката</translation>
+<translation id="9165758833825521812">Режим на четене</translation>
 <translation id="9195659219948942754">Продължавате да ползвате сверени данни от своя профил във Vivaldi</translation>
 <translation id="9195802773917252923">Разреши отметки по псевдоним</translation>
 <translation id="9212737146310746733">персийски (<ph name="ORIGIN" />)</translation>

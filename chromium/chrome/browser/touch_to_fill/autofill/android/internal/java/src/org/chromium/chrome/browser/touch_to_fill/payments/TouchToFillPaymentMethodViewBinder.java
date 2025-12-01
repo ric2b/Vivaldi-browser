@@ -5,6 +5,18 @@
 package org.chromium.chrome.browser.touch_to_fill.payments;
 
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.BACK_PRESS_HANDLER;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.BnplIssuerProperties.ISSUER_ICON_ID;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.BnplIssuerProperties.ISSUER_LINKED;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.BnplIssuerProperties.ISSUER_NAME;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.BnplIssuerProperties.ON_ISSUER_CLICK_ACTION;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.BnplSelectionProgressHeaderProperties.BNPL_BACK_BUTTON_ENABLED;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.BnplSelectionProgressHeaderProperties.BNPL_ON_BACK_BUTTON_CLICKED;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.BnplSuggestionProperties.BNPL_ICON_ID;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.BnplSuggestionProperties.BNPL_ITEM_COLLECTION_INFO;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.BnplSuggestionProperties.IS_ENABLED;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.BnplSuggestionProperties.ON_BNPL_CLICK_ACTION;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.BnplSuggestionProperties.PRIMARY_TEXT;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.BnplSuggestionProperties.SECONDARY_TEXT;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ButtonProperties.ON_CLICK_ACTION;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ButtonProperties.TEXT_ID;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.CURRENT_SCREEN;
@@ -33,6 +45,7 @@ import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaym
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.LoyaltyCardProperties.LOYALTY_CARD_NUMBER;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.LoyaltyCardProperties.MERCHANT_NAME;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.LoyaltyCardProperties.ON_LOYALTY_CARD_CLICK_ACTION;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.ProgressIconProperties.PROGRESS_CONTENT_DESCRIPTION_ID;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.SHEET_CLOSED_DESCRIPTION_ID;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.SHEET_CONTENT_DESCRIPTION_ID;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.SHEET_FULL_HEIGHT_DESCRIPTION_ID;
@@ -48,6 +61,7 @@ import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -65,8 +79,8 @@ import org.chromium.ui.modelutil.PropertyModel;
  * PropertyModel} to the suitable method in {@link TouchToFillPaymentMethodView}.
  */
 class TouchToFillPaymentMethodViewBinder {
-    private static final float GRAYED_OUT_OPACITY_ALPHA = 0.38f;
-    private static final float COMPLETE_OPACITY_ALPHA = 1.0f;
+    static final float GRAYED_OUT_OPACITY_ALPHA = 0.38f;
+    static final float COMPLETE_OPACITY_ALPHA = 1.0f;
 
     /**
      * The collection info is added by setting an instance of this delegate on the last text view
@@ -341,6 +355,43 @@ class TouchToFillPaymentMethodViewBinder {
     }
 
     /**
+     * Factory used to create a new BNPL header for selection and progress screens inside the
+     * ListView inside the {@link TouchToFillPaymentMethodView}.
+     *
+     * @param parent The parent {@link ViewGroup} of the new item.
+     */
+    static View createBnplSelectionProgressHeaderItemView(ViewGroup parent) {
+        return LayoutInflater.from(parent.getContext())
+                .inflate(
+                        R.layout.touch_to_fill_bnpl_selection_and_progress_screen_header_item,
+                        parent,
+                        false);
+    }
+
+    /**
+     * Called whenever a property in the given model changes. It updates the given view accordingly.
+     *
+     * @param model The observed {@link PropertyModel}. Its data need to be reflected in the view.
+     * @param view The {@link View} of the header to update.
+     * @param key The {@link PropertyKey} which changed.
+     */
+    static void bindBnplSelectionProgressHeaderView(
+            PropertyModel model, View view, PropertyKey propertyKey) {
+        ImageView back_button = view.findViewById(R.id.bnpl_header_back_button);
+
+        if (propertyKey == BNPL_BACK_BUTTON_ENABLED) {
+            final boolean isEnabled = model.get(BNPL_BACK_BUTTON_ENABLED);
+            back_button.setEnabled(isEnabled);
+            back_button.setAlpha(isEnabled ? COMPLETE_OPACITY_ALPHA : GRAYED_OUT_OPACITY_ALPHA);
+        } else if (propertyKey == BNPL_ON_BACK_BUTTON_CLICKED) {
+            back_button.setOnClickListener(
+                    unusedView -> model.get(BNPL_ON_BACK_BUTTON_CLICKED).run());
+        } else {
+            assert false : "Unhandled update to property:" + propertyKey;
+        }
+    }
+
+    /**
      * Factory used to create a new "Continue" or "Autofill" button that fills in data into the
      * focused field.
      *
@@ -415,6 +466,118 @@ class TouchToFillPaymentMethodViewBinder {
                 termsLabelTextView.setText(
                         R.string.autofill_payment_method_bottom_sheet_benefits_terms_label);
             }
+        } else {
+            assert false : "Unhandled update to property:" + propertyKey;
+        }
+    }
+
+    /**
+     * Factory used to create a BNPL suggestion item inside the ListView inside the
+     * TouchToFillPaymentMethodView.
+     *
+     * @param parent The parent {@link ViewGroup} of the new item.
+     */
+    static View createBnplItemView(ViewGroup parent) {
+        return LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.touch_to_fill_bnpl_sheet_item, parent, false);
+    }
+
+    /**
+     * Called whenever a property in the given model changes. It updates the given view accordingly.
+     *
+     * @param model The observed {@link PropertyModel}. Its data need to be reflected in the view.
+     * @param view The {@link View} of the header to update.
+     * @param propertyKey The {@link PropertyKey} which changed.
+     */
+    static void bindBnplItemView(PropertyModel model, View view, PropertyKey propertyKey) {
+        ImageView icon = view.findViewById(R.id.bnpl_icon);
+        TextView primaryText = view.findViewById(R.id.primary_text);
+        TextView secondaryText = view.findViewById(R.id.secondary_text);
+
+        if (propertyKey == BNPL_ICON_ID) {
+            int iconId = model.get(BNPL_ICON_ID);
+            icon.setImageDrawable(AppCompatResources.getDrawable(view.getContext(), iconId));
+        } else if (propertyKey == PRIMARY_TEXT) {
+            primaryText.setText(model.get(PRIMARY_TEXT));
+        } else if (propertyKey == SECONDARY_TEXT) {
+            secondaryText.setText(model.get(SECONDARY_TEXT));
+        } else if (propertyKey == ON_BNPL_CLICK_ACTION) {
+            view.setOnClickListener(unusedView -> model.get(ON_BNPL_CLICK_ACTION).run());
+        } else if (propertyKey == IS_ENABLED) {
+            if (model.get(IS_ENABLED)) {
+                view.setEnabled(true);
+                primaryText.setTextAppearance(R.style.TextAppearance_TextMedium_Primary);
+                secondaryText.setTextAppearance(R.style.TextAppearance_TextMedium_Secondary);
+                icon.setAlpha(COMPLETE_OPACITY_ALPHA);
+            } else {
+                view.setEnabled(false);
+                primaryText.setTextAppearance(R.style.TextAppearance_TextMedium_Disabled);
+                secondaryText.setTextAppearance(R.style.TextAppearance_TextMedium_Disabled);
+                icon.setAlpha(GRAYED_OUT_OPACITY_ALPHA);
+            }
+        } else if (propertyKey == BNPL_ITEM_COLLECTION_INFO) {
+            FillableItemCollectionInfo collectionInfo = model.get(BNPL_ITEM_COLLECTION_INFO);
+            if (collectionInfo != null) {
+                secondaryText.setAccessibilityDelegate(
+                        new TextViewCollectionInfoAccessibilityDelegate(collectionInfo));
+            }
+        } else {
+            assert false : "Unhandled update to property:" + propertyKey;
+        }
+    }
+
+    static View createBnplIssuerItemView(ViewGroup parent) {
+        return LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.touch_to_fill_bnpl_issuer_selection_sheet_item, parent, false);
+    }
+
+    static void bindBnplIssuerItemView(PropertyModel model, View view, PropertyKey propertyKey) {
+        TextView issuerName = view.findViewById(R.id.bnpl_issuer_name);
+        TextView linkedStatusPill = view.findViewById(R.id.bnpl_issuer_linked_status_pill);
+        ImageView issuerIcon = view.findViewById(R.id.bnpl_issuer_icon);
+        // TODO(crbug.com/430575808): Handle `ISSUER_SELECTION_TEXT` property
+        // keys once we get this value from the native side.
+        // TODO(crbug.com/430575808): Handle `APPLY_ISSUER_DEACTIVATED_STYLE`
+        // property key once we get this value from the native side.
+        if (propertyKey == ISSUER_NAME) {
+            issuerName.setText(model.get(ISSUER_NAME));
+        } else if (propertyKey == ISSUER_ICON_ID) {
+            issuerIcon.setImageDrawable(
+                    AppCompatResources.getDrawable(view.getContext(), model.get(ISSUER_ICON_ID)));
+        } else if (propertyKey == ISSUER_LINKED) {
+            linkedStatusPill.setVisibility(model.get(ISSUER_LINKED) ? View.VISIBLE : View.GONE);
+        } else if (propertyKey == ON_ISSUER_CLICK_ACTION) {
+            view.setOnClickListener(v -> model.get(ON_ISSUER_CLICK_ACTION).run());
+        } else {
+            assert false : "Unhandled update to property:" + propertyKey;
+        }
+    }
+
+    /**
+     * Factory used to create a progress icon item inside the ListView inside the
+     * TouchToFillPaymentMethodView.
+     *
+     * @param parent The parent {@link ViewGroup} of the new item.
+     * @return A new {@link View} for the progress icon item.
+     */
+    static View createProgressIconView(ViewGroup parent) {
+        return LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.touch_to_fill_progress_icon_sheet_item, parent, false);
+    }
+
+    /**
+     * Called whenever a property in the given model changes. It updates the given view accordingly.
+     *
+     * @param model The observed {@link PropertyModel}. Its data need to be reflected in the view.
+     * @param view The {@link View} of the progress icon to update.
+     * @param propertyKey The {@link PropertyKey} which changed.
+     */
+    static void bindProgressIconView(PropertyModel model, View view, PropertyKey propertyKey) {
+        ProgressBar progressSpinner = view.findViewById(R.id.progress_spinner);
+
+        if (propertyKey == PROGRESS_CONTENT_DESCRIPTION_ID) {
+            progressSpinner.setContentDescription(
+                    view.getContext().getString(model.get(PROGRESS_CONTENT_DESCRIPTION_ID)));
         } else {
             assert false : "Unhandled update to property:" + propertyKey;
         }

@@ -16,6 +16,7 @@
 #include "chrome/browser/actor/tools/tool_request.h"
 #include "chrome/common/actor.mojom-forward.h"
 #include "chrome/common/actor/action_result.h"
+#include "chrome/common/actor/journal_details_builder.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "components/optimization_guide/content/browser/page_content_proto_provider.h"
 #include "components/optimization_guide/content/browser/page_content_proto_util.h"
@@ -23,12 +24,15 @@
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/abseil-cpp/absl/strings/str_format.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/point_conversions.h"
 
 namespace actor {
 
@@ -187,7 +191,8 @@ bool ValidateTargetFrameCandidate(
 // TargetNodeInfo struct.
 mojom::ObservedToolTargetPtr ToMojoObservedToolTarget(
     const std::optional<optimization_guide::TargetNodeInfo>&
-        observed_target_node_info) {
+        observed_target_node_info,
+    RenderFrameHost& target_frame) {
   if (!observed_target_node_info) {
     return nullptr;
   }
@@ -204,16 +209,23 @@ mojom::ObservedToolTargetPtr ToMojoObservedToolTarget(
   if (content_attributes.has_geometry()) {
     observed_target->node_attribute->geometry =
         blink::mojom::AIPageContentGeometry::New();
-    observed_target->node_attribute->geometry->outer_bounding_box =
-        gfx::Rect(content_attributes.geometry().outer_bounding_box().x(),
-                  content_attributes.geometry().outer_bounding_box().y(),
-                  content_attributes.geometry().outer_bounding_box().width(),
-                  content_attributes.geometry().outer_bounding_box().height());
+    // Transform to frame's widget coordinate space.
+    const gfx::Point outer_box_origin_point = gfx::ToRoundedPoint(
+        target_frame.GetView()->TransformRootPointToViewCoordSpace(gfx::PointF(
+            content_attributes.geometry().outer_bounding_box().x(),
+            content_attributes.geometry().outer_bounding_box().y())));
+    observed_target->node_attribute->geometry->outer_bounding_box = gfx::Rect(
+        outer_box_origin_point,
+        {content_attributes.geometry().outer_bounding_box().width(),
+         content_attributes.geometry().outer_bounding_box().height()});
+    const gfx::Point visible_box_origin_point = gfx::ToRoundedPoint(
+        target_frame.GetView()->TransformRootPointToViewCoordSpace(gfx::PointF(
+            content_attributes.geometry().visible_bounding_box().x(),
+            content_attributes.geometry().visible_bounding_box().y())));
     observed_target->node_attribute->geometry->visible_bounding_box = gfx::Rect(
-        content_attributes.geometry().visible_bounding_box().x(),
-        content_attributes.geometry().visible_bounding_box().y(),
-        content_attributes.geometry().visible_bounding_box().width(),
-        content_attributes.geometry().visible_bounding_box().height());
+        visible_box_origin_point,
+        {content_attributes.geometry().visible_bounding_box().width(),
+         content_attributes.geometry().visible_bounding_box().height()});
     observed_target->node_attribute->geometry->is_fixed_or_sticky_position =
         content_attributes.geometry().is_fixed_or_sticky_position();
   }
@@ -225,26 +237,41 @@ mojom::ObservedToolTargetPtr ToMojoObservedToolTarget(
 // Observer to track if the a given RenderFrameHost is changed.
 class RenderFrameChangeObserver : public WebContentsObserver {
  public:
-  RenderFrameChangeObserver(RenderFrameHost& rfh, base::OnceClosure callback)
+  RenderFrameChangeObserver(RenderFrameHost& rfh,
+                            base::OnceClosure on_frame_navigated_callback,
+                            base::OnceClosure on_frame_process_gone_callback)
       : WebContentsObserver(WebContents::FromRenderFrameHost(&rfh)),
         rfh_id_(rfh.GetGlobalId()),
-        callback_(std::move(callback)) {}
+        on_frame_navigated_callback_(std::move(on_frame_navigated_callback)),
+        on_frame_process_gone_callback_(
+            std::move(on_frame_process_gone_callback)) {}
 
-  // WebContentsObserver
+  // `WebContentsObserver`:
   void RenderFrameHostChanged(RenderFrameHost* old_host,
                               RenderFrameHost* /*new_host*/) override {
-    if (!callback_) {
+    if (!on_frame_navigated_callback_) {
       return;
     }
 
     if (old_host && old_host->GetGlobalId() == rfh_id_) {
-      std::move(callback_).Run();
+      std::move(on_frame_navigated_callback_).Run();
+    }
+  }
+  void RenderFrameDeleted(RenderFrameHost* rfh) override {
+    // The scoped frame has exited. It is not safe to continue the task.
+    // TODO(crbug.com/423932492): Ideally the task could continue and the model
+    // should be able to refresh the page. Currently the model is not aware of
+    // the crashed frame because the screenshot does not include the sad tab
+    // WebUI.
+    if (rfh->GetGlobalId() == rfh_id_) {
+      std::move(on_frame_process_gone_callback_).Run();
     }
   }
 
  private:
-  GlobalRenderFrameHostId rfh_id_;
-  base::OnceClosure callback_;
+  const GlobalRenderFrameHostId rfh_id_;
+  base::OnceClosure on_frame_navigated_callback_;
+  base::OnceClosure on_frame_process_gone_callback_;
 };
 
 PageTool::PageTool(TaskId task_id,
@@ -267,24 +294,38 @@ mojom::ActionResultPtr PageTool::TimeOfUseValidation(
     return MakeResult(mojom::ActionResultCode::kTabWentAway);
   }
 
-  journal().Log(JournalURL(), task_id(), mojom::JournalTrack::kActor,
-                "TimeOfUseValidation",
-                "TabHandle:" + base::ToString(tab->GetHandle()));
+  journal().Log(
+      JournalURL(), task_id(), mojom::JournalTrack::kActor,
+      "TimeOfUseValidation",
+      JournalDetailsBuilder().Add("tab_handle", tab->GetHandle()).Build());
 
   RenderFrameHost* frame =
       FindTargetLocalRootFrame(request_->GetTabHandle(), request_->GetTarget());
   if (!frame) {
     return MakeResult(mojom::ActionResultCode::kFrameWentAway);
   }
+
+  if (std::holds_alternative<gfx::Point>(request_->GetTarget())) {
+    const gfx::Point& point = std::get<gfx::Point>(request_->GetTarget());
+    gfx::Size content_size = tab->GetContents()->GetSize();
+    if (!gfx::Rect(content_size).Contains(point)) {
+      return MakeResult(mojom::ActionResultCode::kCoordinatesOutOfBounds);
+    }
+  }
+
   // TODO(crbug.com/426021822): FindNodeAtPoint does not handle corner cases
   // like clip paths. Need more checks to ensure we don't drop actions
   // unnecessarily.
-  observed_target_node_info_ = FindLastObservedNodeForActionTarget(
-      last_observation, request_->GetTarget());
+  std::optional<TargetNodeInfo> observed_target_node_info =
+      FindLastObservedNodeForActionTarget(last_observation,
+                                          request_->GetTarget());
 
-  if (!observed_target_node_info_) {
+  if (!observed_target_node_info) {
     journal().Log(JournalURL(), task_id(), mojom::JournalTrack::kActor,
-                  "TimeOfUseValidation", "No observed target found in APC.");
+                  "TimeOfUseValidation",
+                  JournalDetailsBuilder()
+                      .Add("details", "No observed target found in APC.")
+                      .Build());
   }
 
   // Perform validation for coordinate based target only.
@@ -294,12 +335,14 @@ mojom::ActionResultPtr PageTool::TimeOfUseValidation(
       last_observation) {
     if (!ValidateTargetFrameCandidate(request_->GetTarget(), frame,
                                       *tab->GetContents(),
-                                      observed_target_node_info_)) {
+                                      observed_target_node_info)) {
       return MakeResult(
           mojom::ActionResultCode::kFrameLocationChangedSinceObservation);
     }
   }
 
+  observed_target_ =
+      ToMojoObservedToolTarget(observed_target_node_info, *frame);
   has_completed_time_of_use_ = true;
   target_document_ = frame->GetWeakDocumentPtr();
 
@@ -316,14 +359,29 @@ void PageTool::Invoke(InvokeCallback callback) {
   invoke_callback_ = std::move(callback);
 
   auto invocation = actor::mojom::ToolInvocation::New();
-  invocation->action = request_->ToMojoToolAction();
-  invocation->target = ToMojo(request_->GetTarget());
-  invocation->observed_target =
-      ToMojoObservedToolTarget(observed_target_node_info_);
-  invocation->task_id = task_id().value();
+  invocation->action = request_->ToMojoToolAction(frame);
+
+  // Transform coordinate target from viewport space to widget space for use
+  // within renderer.
+  if (std::holds_alternative<gfx::Point>(request_->GetTarget())) {
+    PageTarget transformed_target =
+        gfx::ToRoundedPoint(frame.GetView()->TransformRootPointToViewCoordSpace(
+            gfx::PointF(std::get<gfx::Point>(request_->GetTarget()))));
+    invocation->target = ToMojo(transformed_target);
+  } else {
+    invocation->target = ToMojo(request_->GetTarget());
+  }
+
+  invocation->observed_target = std::move(observed_target_);
+
+  invocation->task_id = task_id();
 
   // ToolRequest params are checked for validity at creation.
   CHECK(invocation->action);
+
+  // Ensure the renderer believes it has focus. This ensures a realistic state
+  // needed for e.g. firing 'focus' events.
+  frame.GetRenderWidgetHost()->Focus();
 
   frame.GetRemoteAssociatedInterfaces()->GetInterface(&chrome_render_frame_);
 
@@ -340,21 +398,17 @@ void PageTool::Invoke(InvokeCallback callback) {
   // rather than the tool use. In that case we'll return success as if the tool
   // completed successfully (expecting that's fine, as a new observation will be
   // taken).
+  // The observer also listens to the process exit signal from the renderer
+  // (i.e., crashed). The invoke is finished with an error in this case.
   // `this` Unretained because the observer is owned by this class and thus
   // removed on destruction.
   frame_change_observer_ = std::make_unique<RenderFrameChangeObserver>(
-      frame, base::BindOnce(&PageTool::FinishInvoke, base::Unretained(this),
-                            MakeOkResult()));
+      frame,
+      base::BindOnce(&PageTool::OnRenderFrameHostChanged,
+                     base::Unretained(this)),
+      base::BindOnce(&PageTool::OnRenderFrameGone,
+                     base::Unretained(this)));
 
-  // `this` Unretained because this class owns the mojo pipe that invokes the
-  // callbacks.
-  // TODO(crbug.com/423932492): It's not clear why but it appears that sometimes
-  // the frame goes away before the RenderFrameChangeObserver fires. It should
-  // be ok to assume this happens as a result of a navigation and treat the tool
-  // invocation as successful but might be worth better understanding how this
-  // can happen.
-  chrome_render_frame_.set_disconnect_handler(base::BindOnce(
-      &PageTool::FinishInvoke, base::Unretained(this), MakeOkResult()));
   chrome_render_frame_->InvokeTool(
       std::move(invocation),
       base::BindOnce(&PageTool::FinishInvoke, base::Unretained(this)));
@@ -380,8 +434,9 @@ std::string PageTool::JournalEvent() const {
   return request_->JournalEvent();
 }
 
-std::unique_ptr<ObservationDelayController> PageTool::GetObservationDelayer()
-    const {
+std::unique_ptr<ObservationDelayController> PageTool::GetObservationDelayer(
+    std::optional<ObservationDelayController::PageStabilityConfig>
+        page_stability_config) const {
   CHECK(has_completed_time_of_use_);
 
   RenderFrameHost* frame = GetFrame();
@@ -390,7 +445,8 @@ std::unique_ptr<ObservationDelayController> PageTool::GetObservationDelayer()
   // this method.
   CHECK(frame);
 
-  return std::make_unique<ObservationDelayController>(*frame);
+  return std::make_unique<ObservationDelayController>(*frame, task_id(),
+                                                      page_stability_config);
 }
 
 void PageTool::UpdateTaskBeforeInvoke(ActorTask& task,
@@ -398,9 +454,39 @@ void PageTool::UpdateTaskBeforeInvoke(ActorTask& task,
   task.AddTab(request_->GetTabHandle(), std::move(callback));
 }
 
+tabs::TabHandle PageTool::GetTargetTab() const {
+  return request_->GetTabHandle();
+}
+
+void PageTool::OnRenderFrameHostChanged() {
+  // Return error if tab itself is closed or the WebContents hosted in the tab
+  // is being destroyed.
+  if (!request_->GetTabHandle().Get() ||
+      request_->GetTabHandle().Get()->GetContents()->IsBeingDestroyed()) {
+    FinishInvoke(MakeResult(mojom::ActionResultCode::kTabWentAway));
+    return;
+  }
+
+  // The RenderFrameHost has been swapped out. This is likely due to a
+  // navigation. Finish the invocation successfully as the ToolController will
+  // wait on the new page to load if needed.
+  FinishInvoke(MakeOkResult());
+}
+
+void PageTool::OnRenderFrameGone() {
+  FinishInvoke(MakeResult(mojom::ActionResultCode::kFrameWentAway));
+}
+
 void PageTool::FinishInvoke(mojom::ActionResultPtr result) {
   if (!invoke_callback_) {
     return;
+  }
+
+  // Blink state was set to focused as part of invocation. Reset Blink focus
+  // back to match the Views focus state.
+  if (GetFrame() && GetFrame()->GetRenderWidgetHost()->GetView() &&
+      !GetFrame()->GetRenderWidgetHost()->GetView()->HasFocus()) {
+    GetFrame()->GetRenderWidgetHost()->Blur();
   }
 
   frame_change_observer_.reset();
@@ -408,14 +494,6 @@ void PageTool::FinishInvoke(mojom::ActionResultPtr result) {
   std::move(invoke_callback_).Run(std::move(result));
 
   // WARNING: `this` may now be destroyed.
-}
-
-void PageTool::PostFinishInvoke(mojom::ActionResultCode result_code) {
-  CHECK(invoke_callback_);
-  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&PageTool::FinishInvoke, weak_ptr_factory_.GetWeakPtr(),
-                     MakeResult(result_code)));
 }
 
 content::RenderFrameHost* PageTool::GetFrame() const {

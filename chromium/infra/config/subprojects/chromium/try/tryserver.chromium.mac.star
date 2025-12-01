@@ -573,6 +573,8 @@ ios_builder(
         "ci/ios-catalyst",
     ],
     gn_args = "ci/ios-catalyst",
+    builderless = True,
+    cpu = cpu.ARM64,
     siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
 )
 
@@ -728,7 +730,27 @@ ios_builder(
     builderless = True,
     cpu = cpu.ARM64,
     contact_team_email = "cobalt-appletv@google.com",
-    xcode = xcode.x16betabots,
+    xcode = xcode.x26betabots,
+)
+
+ios_builder(
+    name = "ios-structured-test-ids-simulator-fyi",
+    mirrors = [
+        "ci/ios-structured-test-ids-simulator-fyi",
+    ],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/ios-structured-test-ids-simulator-fyi",
+        ],
+    ),
+    builderless = True,
+    cpu = cpu.ARM64,
+    contact_team_email = "chrome-browser-infra-team@google.com",
+    experiments = {
+        "chromium_tests.resultdb_module": 100,
+    },
+    main_list_view = "try",
+    xcode = xcode.xcode_default,
 )
 
 ios_builder(
@@ -781,7 +803,6 @@ ios_builder(
     gn_args = gn_args.config(
         configs = [
             "ci/ios-simulator-code-coverage",
-            "ios_simulator",
         ],
     ),
     builderless = True,
@@ -808,7 +829,6 @@ gpu.try_.optional_tests_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-gpu-fyi-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -836,6 +856,7 @@ gpu.try_.optional_tests_builder(
     cpu = None,
     ssd = None,
     free_space = None,
+    alerts_enabled = False,
     contact_team_email = "chrome-gpu-infra@google.com",
     main_list_view = "try",
     max_concurrent_builds = 7,

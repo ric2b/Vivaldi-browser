@@ -109,9 +109,9 @@ class CORE_EXPORT AuditsIssue {
 
   static void ReportCorsIssue(ExecutionContext* execution_context,
                               RendererCorsIssueCode code,
-                              WTF::String url,
-                              WTF::String initiator_origin,
-                              WTF::String failedParameter,
+                              String url,
+                              String initiator_origin,
+                              String failedParameter,
                               std::optional<base::UnguessableToken> issue_id);
 
   static void ReportAttributionIssue(
@@ -173,7 +173,7 @@ class CORE_EXPORT AuditsIssue {
                                  const String& violating_node_attribute);
   static void ReportPartitioningBlobURLIssue(
       LocalDOMWindow* window,
-      WTF::String blob_url,
+      String blob_url,
       mojom::blink::PartitioningBlobURLInfo info);
   static void ReportStylesheetLoadingLateImportIssue(Document* document,
                                                      const KURL& url,
@@ -203,10 +203,14 @@ class CORE_EXPORT AuditsIssue {
       ElementAccessibilityIssueReason issue_reason,
       bool has_disallowed_attributes);
 
-  static void ReportUserReidentificationIssue(
+  static void ReportUserReidentificationResourceBlockedIssue(
       LocalFrame* frame,
       std::optional<std::string> devtools_request_id,
       const KURL& affected_request_url);
+
+  static void ReportUserReidentificationCanvasNoisedIssue(
+      SourceLocation* source_location,
+      ExecutionContext* execution_context);
 
  private:
 

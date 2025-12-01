@@ -20,10 +20,3 @@ namespace IPC {
 #undef IMPORTER_PROFILE_VIVALDI_IMPORT_PROCESS_PARAM_TRAITS_MACROS_H_
 #include "importer/profile_vivaldi_import_process_param_traits_macros.h"
 }  // namespace IPC
-
-// Generate param traits log methods.
-#include "ipc/param_traits_log_macros.h"
-namespace IPC {
-#undef IMPORTER_PROFILE_VIVALDI_IMPORT_PROCESS_PARAM_TRAITS_MACROS_H_
-#include "importer/profile_vivaldi_import_process_param_traits_macros.h"
-}  // namespace IPC

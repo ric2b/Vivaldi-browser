@@ -739,6 +739,8 @@ static int benchMem(slice_collection_t dstBlocks, slice_collection_t srcBlocks,
     /* BMK_benchTimedFn may not run exactly nbRounds iterations */
     double speedAggregated =
         aggregateData(speedPerRound, roundNb + 1, metricAggregatePref);
+    free(speedPerRound);
+    
     if (metricAggregatePref == fastest)
       DISPLAY("Fastest Speed : %.1f MB/s \n", speedAggregated);
     else

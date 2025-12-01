@@ -124,8 +124,13 @@ void ConstantExpressionInterface::RefFunc(FullDecoder* decoder,
   bool function_is_shared = module_->type(sig_index).is_shared;
   CanonicalValueType type =
       CanonicalValueType::Ref(module_->canonical_type_id(sig_index),
-                              function_is_shared, RefTypeKind::kFunction)
-          .AsExactIfEnabled(decoder->enabled_);
+                              function_is_shared, RefTypeKind::kFunction);
+  // Imported functions can be subtypes of their static import type,
+  // for non-imported functions we can return an exact type.
+  if (decoder->enabled_.has_custom_descriptors() &&
+      function_index >= module_->num_imported_functions) {
+    type = type.AsExact();
+  }
   DirectHandle<WasmFuncRef> func_ref =
       WasmTrustedInstanceData::GetOrCreateFuncRef(
           isolate_,
@@ -165,14 +170,14 @@ DirectHandle<Map> ConstantExpressionInterface::GetRtt(
 
   DCHECK(type.has_descriptor());
   WasmValue desc = descriptor.runtime_value;
-  DCHECK_EQ(desc.type().ref_index(),
-            module_->canonical_type_id(type.descriptor));
   DirectHandle<Object> maybe_obj = desc.to_ref();
   if (!IsWasmStruct(*maybe_obj)) {
-    DCHECK(IsNull(*maybe_obj));
+    DCHECK(IsWasmNull(*maybe_obj));
     error_ = MessageTemplate::kWasmTrapNullDereference;
     return {};
   }
+  DCHECK_EQ(desc.type().ref_index(),
+            module_->canonical_type_id(type.descriptor));
   return direct_handle(Cast<WasmStruct>(*maybe_obj)->described_rtt(), isolate_);
 }
 

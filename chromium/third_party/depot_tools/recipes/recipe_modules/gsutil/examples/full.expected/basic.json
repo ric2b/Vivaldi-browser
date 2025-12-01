@@ -22,7 +22,8 @@
     "infra_step": true,
     "name": "gsutil upload",
     "~followup_annotations": [
-      "@@@STEP_LINK@gsutil.upload@https://storage.googleapis.com/example/some/random/path/to/boom@@@"
+      "@@@STEP_LINK@gsutil.upload@https://storage.googleapis.com/example/some/random/path/to/boom@@@",
+      "@@@SET_BUILD_PROPERTY@gsutil_urls@{\"gsutil upload\": \"gs://example/some/random/path/to/boom\"}@@@"
     ]
   },
   {
@@ -49,7 +50,8 @@
     "infra_step": true,
     "name": "gsutil upload (2)",
     "~followup_annotations": [
-      "@@@STEP_LINK@gsutil.upload@https://storage.googleapis.com/example/some/random/path/to/boom@@@"
+      "@@@STEP_LINK@gsutil.upload@https://storage.googleapis.com/example/some/random/path/to/boom@@@",
+      "@@@SET_BUILD_PROPERTY@gsutil_urls@{\"gsutil upload\": \"gs://example/some/random/path/to/boom\", \"gsutil upload (2)\": \"gs://example/some/random/path/to/boom\"}@@@"
     ]
   },
   {
@@ -68,7 +70,8 @@
     "infra_step": true,
     "name": "gsutil upload -r",
     "~followup_annotations": [
-      "@@@STEP_LINK@gsutil.upload@https://console.cloud.google.com/storage/browser/example/some/random/path@@@"
+      "@@@STEP_LINK@gsutil.upload@https://console.cloud.google.com/storage/browser/example/some/random/path@@@",
+      "@@@SET_BUILD_PROPERTY@gsutil_urls@{\"gsutil upload\": \"gs://example/some/random/path/to/boom\", \"gsutil upload (2)\": \"gs://example/some/random/path/to/boom\", \"gsutil upload -r\": \"gs://example/some/random/path\"}@@@"
     ]
   },
   {
@@ -87,7 +90,8 @@
     "infra_step": true,
     "name": "gsutil upload --recursive",
     "~followup_annotations": [
-      "@@@STEP_LINK@gsutil.upload@https://console.cloud.google.com/storage/browser/example/some/other/random/path@@@"
+      "@@@STEP_LINK@gsutil.upload@https://console.cloud.google.com/storage/browser/example/some/other/random/path@@@",
+      "@@@SET_BUILD_PROPERTY@gsutil_urls@{\"gsutil upload\": \"gs://example/some/random/path/to/boom\", \"gsutil upload (2)\": \"gs://example/some/random/path/to/boom\", \"gsutil upload --recursive\": \"gs://example/some/other/random/path\", \"gsutil upload -r\": \"gs://example/some/random/path\"}@@@"
     ]
   },
   {

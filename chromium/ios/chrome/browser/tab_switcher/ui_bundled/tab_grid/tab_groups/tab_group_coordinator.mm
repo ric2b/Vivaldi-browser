@@ -63,7 +63,6 @@ constexpr CGFloat kTabGroupPresentationDuration = 0.3;
 constexpr CGFloat kTabGroupDismissalDuration = 0.25;
 constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
 // The preferred size in points for the avatar icons.
-constexpr CGFloat kLegacyFacePileAvatarSize = 24;
 constexpr CGFloat kFacePileAvatarSize = 26;
 }  // namespace
 
@@ -81,7 +80,7 @@ constexpr CGFloat kFacePileAvatarSize = 26;
   // Context Menu helper for the tabs.
   TabContextMenuHelper* _tabContextMenuHelper;
   // Tab group to display.
-  raw_ptr<const TabGroup> _tabGroup;
+  raw_ptr<const TabGroup, DanglingUntriaged> _tabGroup;
   // The coordinator for the user education half screen.
   SharedTabGroupUserEducationCoordinator* _userEducationCoordinator;
   // Coordinator that handles confirmation dialog when the last tab of a group
@@ -532,12 +531,7 @@ constexpr CGFloat kFacePileAvatarSize = 26;
   FacePileConfiguration* config = [[FacePileConfiguration alloc] init];
   config.showsEmptyState = YES;
   config.groupID = data_sharing::GroupId(groupID);
-
-  if (IsContainedTabGroupEnabled()) {
-    config.avatarSize = kFacePileAvatarSize;
-  } else {
-    config.avatarSize = kLegacyFacePileAvatarSize;
-  }
+  config.avatarSize = kFacePileAvatarSize;
 
   FacePileCoordinator* facePileCoordinator =
       [[FacePileCoordinator alloc] initWithFacePileConfiguration:config

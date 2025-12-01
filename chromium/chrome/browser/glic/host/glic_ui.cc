@@ -7,15 +7,19 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/version_info/version_info.h"
-#include "chrome/browser/glic/glic_enabling.h"
 #include "chrome/browser/glic/glic_net_log.h"
+#include "chrome/browser/glic/host/auth_controller.h"
 #include "chrome/browser/glic/host/glic_page_handler.h"
 #include "chrome/browser/glic/host/guest_util.h"
+#include "chrome/browser/glic/public/glic_enabling.h"
 #include "chrome/browser/glic/public/glic_keyed_service_factory.h"
 #include "chrome/browser/glic/resources/glic_resources.h"
 #include "chrome/browser/glic/resources/grit/glic_browser_resources.h"
+#include "chrome/browser/glic/shared/webui_shared.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -29,6 +33,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/webui/webui_allowlist.h"
 #include "ui/webui/webui_util.h"
@@ -79,9 +84,17 @@ GlicUI::GlicUI(content::WebUI* web_ui) : ui::MojoWebUIController(web_ui) {
 
   // Add required resources.
   webui::SetupWebUIDataSource(source, kGlicResources, IDR_GLIC_GLIC_HTML);
+  ConfigureSharedWebUISource(*source);
 
   // Add localized strings.
   source->AddLocalizedStrings(kStrings);
+
+  // Add parameterized admin notice string.
+  source->AddString("disabledByAdminNoticeWithLink",
+                    l10n_util::GetStringFUTF16(
+                        IDS_GLIC_DISABLED_BY_ADMIN_NOTICE_WITH_LINK,
+                        base::UTF8ToUTF16(features::kGlicCaaLinkUrl.Get()),
+                        base::UTF8ToUTF16(features::kGlicCaaLinkText.Get())));
 
   // Register auto-granted permissions.
   auto* allowlist = WebUIAllowlist::GetOrCreate(browser_context);
@@ -89,11 +102,7 @@ GlicUI::GlicUI(content::WebUI* web_ui) : ui::MojoWebUIController(web_ui) {
                                            ContentSettingsType::GEOLOCATION);
 
   auto* command_line = base::CommandLine::ForCurrentProcess();
-  const bool is_glic_dev = command_line->HasSwitch(::switches::kGlicDev);
 
-  source->AddString("chromeVersion", version_info::GetVersionNumber());
-  source->AddString("chromeChannel",
-                    version_info::GetChannelString(chrome::GetChannel()));
   source->AddBoolean("loggingEnabled",
                      command_line->HasSwitch(::switches::kGlicHostLogging));
 
@@ -102,16 +111,6 @@ GlicUI::GlicUI(content::WebUI* web_ui) : ui::MojoWebUIController(web_ui) {
   source->AddString("glicGuestURL", guest_url.spec());
   net_log::LogDummyNetworkRequestForTrafficAnnotation(guest_url,
                                                       net_log::GlicPage::kGlic);
-
-  // Set up loading notice timeout values.
-  source->AddInteger("preLoadingTimeMs", features::kGlicPreLoadingTimeMs.Get());
-  source->AddInteger("minLoadingTimeMs", features::kGlicMinLoadingTimeMs.Get());
-  int max_loading_time_ms = features::kGlicMaxLoadingTimeMs.Get();
-  if (is_glic_dev) {
-    // Bump up timeout value, as dev server may be slow.
-    max_loading_time_ms *= 100;
-  }
-  source->AddInteger("maxLoadingTimeMs", max_loading_time_ms);
   source->AddBoolean("simulateNoConnection", simulate_no_connection_);
 
   source->AddResourcePath("glic_logo.svg", GetResourceID(IDR_GLIC_LOGO));
@@ -133,9 +132,20 @@ GlicUI::GlicUI(content::WebUI* web_ui) : ui::MojoWebUIController(web_ui) {
     // TODO(crbug.com/396147389): Replace with the correct default.
     allowed_origins = "https://*.google.com/";
   }
+
+  // Allow corp origins for @google accounts.
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(
+          Profile::FromBrowserContext(browser_context));
+  if (identity_manager && IsPrimaryAccountGoogleInternal(*identity_manager)) {
+    allowed_origins += " https://*.corp.google.com";
+  }
+
   source->AddString("glicAllowedOrigins", allowed_origins);
 
-  source->AddBoolean("devMode", is_glic_dev);
+  bool reload_after_navigation =
+      !command_line->HasSwitch(::switches::kGlicSkipReloadAfterNavigation);
+  source->AddBoolean("reloadAfterNavigation", reload_after_navigation);
 
   source->AddBoolean("enableDebug",
                      base::FeatureList::IsEnabled(features::kGlicDebugWebview));
@@ -157,6 +167,17 @@ GlicUI::GlicUI(content::WebUI* web_ui) : ui::MojoWebUIController(web_ui) {
   source->AddBoolean("enableWebClientUnresponsiveMetrics",
                      base::FeatureList::IsEnabled(
                          features::kGlicWebClientUnresponsiveMetrics));
+  std::string admin_blocked_redirect_patterns;
+  if (base::FeatureList::IsEnabled(features::kGlicCaaGuestError)) {
+    admin_blocked_redirect_patterns = command_line->GetSwitchValueASCII(
+        ::switches::kGlicAdminRedirectPatterns);
+    if (admin_blocked_redirect_patterns.empty()) {
+      admin_blocked_redirect_patterns =
+          features::kGlicCaaGuestRedirectPatterns.Get();
+    }
+  }
+  source->AddString("adminBlockedRedirectPatterns",
+                    admin_blocked_redirect_patterns);
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(GlicUI)

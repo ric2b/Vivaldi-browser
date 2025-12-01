@@ -10,15 +10,34 @@
 
 #include "sdk/android/src/jni/pc/session_description.h"
 
+#include <jni.h>
+
+#include <memory>
+#include <optional>
 #include <string>
 
+#include "api/jsep.h"
 #include "rtc_base/logging.h"
 #include "sdk/android/generated_peerconnection_jni/SessionDescription_jni.h"
 #include "sdk/android/native_api/jni/java_types.h"
-#include "sdk/android/src/jni/jni_helpers.h"
+#include "sdk/android/native_api/jni/scoped_java_ref.h"
 
 namespace webrtc {
 namespace jni {
+namespace {
+// Maps enum names from SessionDescription.java to SdpType.
+SdpType SdpTypeFromJavaEnumName(absl::string_view name) {
+  if (name == "offer")
+    return SdpType::kOffer;
+  if (name == "pranswer")
+    return SdpType::kPrAnswer;
+  if (name == "answer")
+    return SdpType::kAnswer;
+  if (name == "rollback")
+    return SdpType::kRollback;
+  RTC_CHECK(false);
+}
+}  // namespace
 
 std::unique_ptr<SessionDescriptionInterface> JavaToNativeSessionDescription(
     JNIEnv* jni,
@@ -27,20 +46,18 @@ std::unique_ptr<SessionDescriptionInterface> JavaToNativeSessionDescription(
       jni, Java_SessionDescription_getTypeInCanonicalForm(jni, j_sdp));
   std::string std_description =
       JavaToStdString(jni, Java_SessionDescription_getDescription(jni, j_sdp));
-  std::optional<SdpType> sdp_type_maybe = SdpTypeFromString(std_type);
-  if (!sdp_type_maybe) {
-    RTC_LOG(LS_ERROR) << "Unexpected SDP type: " << std_type;
-    return nullptr;
-  }
-  return CreateSessionDescription(*sdp_type_maybe, std_description);
+  return CreateSessionDescription(SdpTypeFromJavaEnumName(std_type),
+                                  std_description);
 }
 
 ScopedJavaLocalRef<jobject> NativeToJavaSessionDescription(
     JNIEnv* jni,
     const std::string& sdp,
-    const std::string& type) {
+    SdpType type) {
   return Java_SessionDescription_Constructor(
-      jni, Java_Type_fromCanonicalForm(jni, NativeToJavaString(jni, type)),
+      jni,
+      Java_Type_fromCanonicalForm(
+          jni, NativeToJavaString(jni, SdpTypeToString(type))),
       NativeToJavaString(jni, sdp));
 }
 

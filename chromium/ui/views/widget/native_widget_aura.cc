@@ -320,7 +320,7 @@ void NativeWidgetAura::InitNativeWidget(Widget::InitParams params) {
       // If a parent or context is specified but no bounds are given, use the
       // origin of the display so that the widget will be added to the same
       // display as the parent or context.
-      gfx::Rect bounds = display::Screen::GetScreen()
+      gfx::Rect bounds = display::Screen::Get()
                              ->GetDisplayNearestWindow(parent_or_context)
                              .bounds();
       window_bounds.set_origin(bounds.origin());
@@ -384,8 +384,7 @@ void NativeWidgetAura::ReparentNativeViewImpl(gfx::NativeView new_parent) {
   ReparentAuraWindow(GetNativeView(), new_parent);
 }
 
-std::unique_ptr<NonClientFrameView>
-NativeWidgetAura::CreateNonClientFrameView() {
+std::unique_ptr<FrameView> NativeWidgetAura::CreateFrameView() {
   return nullptr;
 }
 
@@ -490,9 +489,8 @@ void NativeWidgetAura::CenterWindow(const gfx::Size& size) {
   // When centering window, we take the intersection of the host and
   // the parent. We assume the root window represents the visible
   // rect of a single screen.
-  gfx::Rect work_area = display::Screen::GetScreen()
-                            ->GetDisplayNearestWindow(window_)
-                            .work_area();
+  gfx::Rect work_area =
+      display::Screen::Get()->GetDisplayNearestWindow(window_).work_area();
 
   aura::client::ScreenPositionClient* screen_position_client =
       aura::client::GetScreenPositionClient(window_->GetRootWindow());
@@ -626,7 +624,12 @@ gfx::Rect NativeWidgetAura::GetRestoredBounds() const {
 }
 
 std::string NativeWidgetAura::GetWorkspace() const {
-  int desk_index = window_->GetProperty(aura::client::kWindowWorkspaceKey);
+  if (!window_) {
+    return std::string();
+  }
+
+  const int desk_index =
+      window_->GetProperty(aura::client::kWindowWorkspaceKey);
   if (desk_index == aura::client::kWindowWorkspaceUnassignedWorkspace ||
       desk_index == aura::client::kWindowWorkspaceVisibleOnAllWorkspaces) {
     return std::string();
@@ -645,7 +648,7 @@ void NativeWidgetAura::SetBounds(const gfx::Rect& bounds) {
 void NativeWidgetAura::SetBoundsInternal(const gfx::Rect& bounds,
                                          std::optional<int64_t> display_id) {
   display::Display dst_display;
-  auto* screen = display::Screen::GetScreen();
+  auto* screen = display::Screen::Get();
   // TODO(crbug.com/40281188): Call SetBoundsInScreen directly.
   if (!display_id ||
       !screen->GetDisplayWithDisplayId(display_id.value(), &dst_display)) {
@@ -997,9 +1000,7 @@ gfx::Rect NativeWidgetAura::GetWorkAreaBoundsInScreen() const {
   if (!window_) {
     return gfx::Rect();
   }
-  return display::Screen::GetScreen()
-      ->GetDisplayNearestWindow(window_)
-      .work_area();
+  return display::Screen::Get()->GetDisplayNearestWindow(window_).work_area();
 }
 
 Widget::MoveLoopResult NativeWidgetAura::RunMoveLoop(
@@ -1450,12 +1451,11 @@ namespace {
 #if BUILDFLAG(ENABLE_DESKTOP_AURA) && (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_OZONE))
 void CloseWindow(aura::Window* window) {
   if (window) {
-    Widget* widget = Widget::GetWidgetForNativeView(window);
-    if (widget && widget->is_secondary_widget()) {
-      // To avoid the delay in shutdown caused by using Close which may wait
-      // for animations, use CloseNow. Because this is only used on secondary
-      // widgets it seems relatively safe to skip the extra processing of
-      // Close.
+    if (Widget* widget = Widget::GetWidgetForNativeView(window)) {
+      // To avoid the delay in shutdown caused by using Close() which may wait
+      // for animations, use CloseNow(). Because this is only called during
+      // application exit and NativeWidgets have lifetimes decoupled from their
+      // associated Widget it is safe to call CloseNow() here.
       widget->CloseNow();
     }
   }
@@ -1473,7 +1473,7 @@ BOOL CALLBACK WindowCallbackProc(HWND hwnd, LPARAM lParam) {
 }  // namespace
 
 // static
-void Widget::CloseAllSecondaryWidgets() {
+void Widget::CloseAllWidgets() {
 #if BUILDFLAG(IS_WIN)
   EnumThreadWindows(GetCurrentThreadId(), WindowCallbackProc, 0);
 #endif

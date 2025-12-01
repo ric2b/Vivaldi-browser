@@ -22,6 +22,7 @@ limitations under the License.
 
 #include <gtest/gtest.h>
 #include "absl/status/status.h"
+#include "absl/status/status_matchers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/types/span.h"
 #include "xla/hlo/ir/hlo_sharding.h"
@@ -54,7 +55,6 @@ namespace ifrt_serving {
 namespace {
 
 using tensorflow::test::TensorEq;
-using tsl::testing::StatusIs;
 
 struct ReshardToTensorTestParam {
   // split tensors in natural device order.

@@ -11,7 +11,7 @@
 "%@ of %@" = "%1$@ de %2$@";
 
 /* No comment provided by engineer. */
-"%1$@ can’t be updated, because it was opened from a read-only or a temporary location." = "%1$@ no es pot actualitzar quan funciona des d'un disc d'imatge.";
+"%1$@ can’t be updated because it was opened from a read-only or a temporary location." = "%1$@ no es pot actualitzar quan funciona des d'un disc d'imatge.";
 
 /* No comment provided by engineer. */
 "A new version of %@ is available!" = "Hi ha una nova versió de %@ disponible!";
@@ -60,3 +60,18 @@
 
 /* Status message shown when the user checks for updates but is already current or the feed doesn't contain any updates. */
 "You’re up to date!" = "Ja esteu al dia!";
+
+/* Software Update title/label */
+"Software Update" = "Actualització del programari";
+
+/* Remind Me Later choice for update alert */
+"Remind Me Later" = "Recorda-m'ho més tard";
+
+/* Skip This Version choice for update alert */
+"Skip This Version" = "Omet aquesta versió";
+
+/* Install Update choice for update alert */
+"Install Update" = "Instal·la l'actualització";
+
+/* Automatically download and install updates in the future option for update alert */
+"Automatically download and install updates in the future" = "Descarrega i instal·la les actualitzacions automàticament en el futur";

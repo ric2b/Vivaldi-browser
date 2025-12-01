@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -20,8 +20,9 @@ export class ObjectEventListenersSidebarPane extends UI.ThrottledWidget.Throttle
     super();
     this.contentElement.setAttribute('jslog', `${VisualLogging.section('sources.global-listeners')}`);
 
-    this.eventListenersView = new EventListeners.EventListenersView.EventListenersView(
-        this.update.bind(this), /* enableDefaultTreeFocus */ true);
+    this.eventListenersView = new EventListeners.EventListenersView.EventListenersView();
+    this.eventListenersView.changeCallback = this.update.bind(this);
+    this.eventListenersView.enableDefaultTreeFocus = true;
     this.eventListenersView.show(this.element);
     this.setDefaultFocusedChild(this.eventListenersView);
     this.update();

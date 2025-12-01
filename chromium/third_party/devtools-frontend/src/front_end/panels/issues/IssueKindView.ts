@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -94,8 +94,8 @@ export class IssueKindView extends UI.TreeOutline.TreeElement {
     header.classList.add('header');
 
     const issueKindIcon = new IconButton.Icon.Icon();
-    issueKindIcon.data = IssueCounter.IssueCounter.getIssueKindIconData(this.#kind);
-    issueKindIcon.classList.add('leading-issue-icon');
+    issueKindIcon.name = IssueCounter.IssueCounter.getIssueKindIconName(this.#kind);
+    issueKindIcon.classList.add('leading-issue-icon', 'extra-large');
 
     const countAdorner = new Adorners.Adorner.Adorner();
     countAdorner.data = {

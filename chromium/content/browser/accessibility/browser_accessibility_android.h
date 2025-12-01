@@ -59,6 +59,7 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid
   bool IsContentInvalid() const;
   bool IsDisabledDescendant() const;
   bool IsEnabled() const;
+  bool IsEditable() const;
   bool IsExpanded() const;
   bool IsFocusable() const override;
   bool IsFormDescendant() const;
@@ -243,6 +244,17 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid
                                 std::vector<int32_t>* ends,
                                 int offset);
 
+  // Enumerates all possible mappings of ax::mojom::StringAttribute::kName to
+  // Android accessibility properties.
+  enum class AndroidNameTo {
+    kUnset = 0,
+    kContainerTitle,
+    kContentDescription,
+    kLabeledBy,
+    kSupplementalDescription,
+    kText,
+  };
+
   // Append line start and end indices for the text of this node
   // (as returned by GetTextContentUTF16()), adding |offset| to each one.
   void GetLineBoundaries(std::vector<int32_t>* line_starts,
@@ -274,6 +286,10 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid
   // Used by Android XR.
   int GetPaintOrder() const;
 
+  // Returns a list of Android IDs that were set on the node using
+  // aria-labelledby.
+  const std::vector<int> GetLabelledByAndroidIds() const;
+
  protected:
   BrowserAccessibilityAndroid(ui::BrowserAccessibilityManager* manager,
                               ui::AXNode* node);
@@ -296,10 +312,6 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid
   bool HasOnlyTextChildren() const;
   bool HasOnlyTextAndImageChildren() const;
   bool HasListMarkerChild() const;
-
-  // Returns true if the accessible name source (kNameFrom) comes from
-  // kAttribute.
-  bool IsAccessibleNameFromAttribute() const;
 
   // This method determines if a node should expose its value as a name, which
   // is placed in the Android API's "text" attribute. For controls that can take
@@ -325,8 +337,17 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid
                                            std::optional<size_t> min_length,
                                            AXStyleData* style_data) const;
 
+  // This method determines if a node should expose its editable value.
+  bool ShouldExposeEditableValue() const;
+
+  // Computes the name-to-property mapping on Android.
+  AndroidNameTo ComputeAndroidNameTo() const;
+
   std::u16string old_value_;
   std::u16string new_value_;
+
+  // A cached value for the result of `ComputeAndroidNameTo`.
+  mutable std::optional<AndroidNameTo> name_to_cache_;
 };
 
 }  // namespace content

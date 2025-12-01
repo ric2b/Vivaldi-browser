@@ -16,6 +16,7 @@
 #include "base/time/time.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/base/io_buffer.h"
+#include "net/http/http_response_headers.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_session.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_time.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_types.h"
@@ -572,6 +573,15 @@ void WebTransport::CloseIfNonceMatches(base::UnguessableToken nonce) {
   transport_->CloseIfNonceMatches(nonce);
 }
 
+void WebTransport::OnLocalNetworkAccessCheck(
+    const net::IPEndPoint& server_address,
+    net::CompletionOnceCallback callback) {
+  // TODO(crbug.com/421216834): Implement actual LNA check, flag-guarded, once
+  // the URL network observer and the client security state are threaded through
+  // to make this check feasible.
+  std::move(callback).Run(net::OK);
+}
+
 void WebTransport::OnBeforeConnect(const net::IPEndPoint& server_address) {
   if (torn_down_ || closing_) {
     return;
@@ -762,11 +772,11 @@ void WebTransport::OnCanCreateNewOutgoingUnidirectionalStream() {
 }
 
 void WebTransport::OnDatagramProcessed(
-    std::optional<quic::MessageStatus> status) {
+    std::optional<quic::DatagramStatus> status) {
   DCHECK(!datagram_callbacks_.empty());
 
   std::move(datagram_callbacks_.front())
-      .Run(status == quic::MESSAGE_STATUS_SUCCESS);
+      .Run(status == quic::DATAGRAM_STATUS_SUCCESS);
   datagram_callbacks_.pop();
 }
 

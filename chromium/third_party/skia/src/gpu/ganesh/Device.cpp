@@ -54,7 +54,7 @@
 #include "src/base/SkTLazy.h"
 #include "src/core/SkColorData.h"
 #include "src/core/SkDevice.h"
-#include "src/core/SkDrawBase.h"
+#include "src/core/SkDraw.h"
 #include "src/core/SkImageFilterTypes.h"  // IWYU pragma: keep
 #include "src/core/SkImageInfoPriv.h"
 #include "src/core/SkLatticeIter.h"
@@ -406,9 +406,7 @@ void Device::android_utils_clipAsRgn(SkRegion* region) const {
         if (e.fShape.isRect() && e.fLocalToDevice.isIdentity()) {
             tmp.setRect(e.fShape.rect().roundOut());
         } else {
-            SkPath tmpPath;
-            e.fShape.asPath(&tmpPath);
-            tmpPath.transform(e.fLocalToDevice);
+            SkPath tmpPath = e.fShape.asPath().makeTransform(e.fLocalToDevice);
             tmp.setPath(tmpPath, deviceBounds);
         }
 
@@ -477,10 +475,8 @@ void Device::drawPoints(SkCanvas::PointMode mode, SkSpan<const SkPoint> pts, con
                                  paint,
                                  this->localToDevice(),
                                  &grPaint)) {
-                SkPath path;
+                SkPath path = SkPath::Line(pts[0], pts[1]);
                 path.setIsVolatile(true);
-                path.moveTo(pts[0]);
-                path.lineTo(pts[1]);
                 fSurfaceDrawContext->drawPath(this->clip(),
                                               std::move(grPaint),
                                               aa,
@@ -529,7 +525,7 @@ void Device::drawPoints(SkCanvas::PointMode mode, SkSpan<const SkPoint> pts, con
         paint.getMaskFilter() ||
         fSurfaceDrawContext->chooseAAType(aa) == GrAAType::kCoverage) {
         SkRasterClip rc(this->devClipBounds());
-        SkDrawBase draw;
+        skcpu::Draw draw;
         // don't need to set fBlitterChoose, as it should never get used
         draw.fDst = SkPixmap(SkImageInfo::MakeUnknown(this->width(), this->height()), nullptr, 0);
         draw.fCTM = &this->localToDevice();
@@ -687,11 +683,11 @@ void Device::drawDRRect(const SkRRect& outer, const SkRRect& inner, const SkPain
         }
     }
 
-    SkPath path;
+    auto path = SkPathBuilder(SkPathFillType::kEvenOdd)
+                .addRRect(outer)
+                .addRRect(inner)
+                .detach();
     path.setIsVolatile(true);
-    path.addRRect(outer);
-    path.addRRect(inner);
-    path.setFillType(SkPathFillType::kEvenOdd);
 
     // TODO: We are losing the possible mutability of the path here but this should probably be
     // fixed by upgrading GrStyledShape to handle DRRects.

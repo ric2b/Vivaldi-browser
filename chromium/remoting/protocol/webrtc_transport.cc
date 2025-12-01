@@ -394,7 +394,7 @@ class WebrtcTransport::PeerConnectionWrapper
       transport_->OnIceGatheringChange(new_state);
     }
   }
-  void OnIceCandidate(const webrtc::IceCandidateInterface* candidate) override {
+  void OnIceCandidate(const webrtc::IceCandidate* candidate) override {
     if (transport_) {
       transport_->OnIceCandidate(candidate);
     }
@@ -462,7 +462,8 @@ WebrtcAudioModule* WebrtcTransport::audio_module() {
 std::unique_ptr<MessagePipe> WebrtcTransport::CreateOutgoingChannel(
     const std::string& name) {
   webrtc::DataChannelInit config;
-  config.reliable = true;
+  // We don't set maxRetransmits or maxRetransmitTime,
+  // so the channel is reliable.
   auto result = peer_connection()->CreateDataChannelOrError(name, &config);
   if (!result.ok()) {
     LOG(ERROR) << "CreateDataChannelOrError() failed: "
@@ -614,9 +615,8 @@ bool WebrtcTransport::ProcessTransportInfo(XmlElement* transport_info) {
     }
 
     webrtc::SdpParseError error;
-    std::unique_ptr<webrtc::IceCandidateInterface> candidate(
-        webrtc::CreateIceCandidate(sdp_mid, sdp_mlineindex, candidate_str,
-                                   &error));
+    std::unique_ptr<webrtc::IceCandidate> candidate(webrtc::CreateIceCandidate(
+        sdp_mid, sdp_mlineindex, candidate_str, &error));
     if (!candidate) {
       LOG(ERROR) << "Failed to parse incoming candidate: " << error.description
                  << " line: " << error.line;
@@ -812,6 +812,7 @@ void WebrtcTransport::OnLocalSessionDescriptionCreated(
   }
   description_sdp = sdp_message.ToString();
   webrtc::SdpParseError parse_error;
+
   description = webrtc::CreateSessionDescription(description->GetType(),
                                                  description_sdp, &parse_error);
   if (!description) {
@@ -841,10 +842,15 @@ void WebrtcTransport::OnLocalSessionDescriptionCreated(
 
   send_transport_info_callback_.Run(std::move(transport_info));
 
-  peer_connection()->SetLocalDescription(
-      SetSessionDescriptionObserver::Create(base::BindOnce(
-          &WebrtcTransport::OnLocalDescriptionSet, weak_factory_.GetWeakPtr())),
-      description.release());
+  {
+    // Addresses an issue reported on ChromeOS M140 with DCHECKs enabled.
+    ScopedAllowSyncPrimitivesForWebRtcTransport allow_sync_primitives;
+    peer_connection()->SetLocalDescription(
+        SetSessionDescriptionObserver::Create(
+            base::BindOnce(&WebrtcTransport::OnLocalDescriptionSet,
+                           weak_factory_.GetWeakPtr())),
+        description.release());
+  }
 }
 
 void WebrtcTransport::OnLocalDescriptionSet(bool success,
@@ -1003,14 +1009,13 @@ void WebrtcTransport::OnIceGatheringChange(
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 }
 
-void WebrtcTransport::OnIceCandidate(
-    const webrtc::IceCandidateInterface* candidate) {
+void WebrtcTransport::OnIceCandidate(const webrtc::IceCandidate* candidate) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   std::unique_ptr<XmlElement> candidate_element(
       new XmlElement(QName(kTransportNamespace, "candidate")));
-  std::string candidate_str;
-  if (!candidate->ToString(&candidate_str)) {
+  std::string candidate_str = candidate->ToString();
+  if (candidate_str.empty()) {
     LOG(ERROR) << "Failed to serialize local candidate.";
     return;
   }

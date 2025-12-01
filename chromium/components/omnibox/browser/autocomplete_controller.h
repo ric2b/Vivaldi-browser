@@ -331,6 +331,7 @@ class AutocompleteController : public AutocompleteProviderListener,
  private:
   friend class FakeAutocompleteController;
   friend class AutocompleteProviderTest;
+  friend class OmniboxRowGroupedViewBrowserTest;
   friend class OmniboxSuggestionButtonRowBrowserTest;
   friend class ZeroSuggestPrefetchTabHelperBrowserTest;
 #if BUILDFLAG(IS_IOS)
@@ -340,6 +341,8 @@ class AutocompleteController : public AutocompleteProviderListener,
                            FilterMatchesForInstantKeywordWithBareAt);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteControllerTest,
                            NoActionsAttachedToLensSearchboxMatches);
+  FRIEND_TEST_ALL_PREFIXES(AutocompleteControllerTest,
+                           NoActionsAttachedToNtpComposeboxMatches);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteControllerTest,
                            ContextualQueryAppendsSearchboxStats);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteControllerTest,

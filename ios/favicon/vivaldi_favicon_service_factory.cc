@@ -16,10 +16,7 @@
 namespace ios {
 
 // Creates a VivaldiFaviconService instance with dependency injection.
-std::unique_ptr<KeyedService> BuildVivaldiFaviconService(
-    web::BrowserState* context) {
-  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
-
+std::unique_ptr<KeyedService> BuildVivaldiFaviconService(ProfileIOS* profile) {
   // Get required dependencies from their respective factories.
   favicon::LargeIconService* large_icon_service =
       IOSChromeLargeIconServiceFactory::GetForProfile(profile);
@@ -76,8 +73,8 @@ VivaldiFaviconServiceFactory::~VivaldiFaviconServiceFactory() = default;
 
 std::unique_ptr<KeyedService>
 VivaldiFaviconServiceFactory::BuildServiceInstanceFor(
-    web::BrowserState* context) const {
-  return BuildVivaldiFaviconService(context);
+    ProfileIOS* profile) const {
+  return BuildVivaldiFaviconService(profile);
 }
 
 }  // namespace ios

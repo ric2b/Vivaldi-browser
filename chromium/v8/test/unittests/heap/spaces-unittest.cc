@@ -125,16 +125,14 @@ TEST_F(SpacesTest, WriteBarriers) {
     EXPECT_EQ(1, compaction_space->CountTotalPages());
 
     MemoryChunk* chunk = MemoryChunk::FromHeapObject(object);
-    MutablePageMetadata* metadata = MutablePageMetadata::FromHeapObject(object);
+    MutablePageMetadata* metadata =
+        MutablePageMetadata::FromHeapObject(i_isolate(), object);
 
     // Marking states.
-    EXPECT_FALSE(chunk->IsFlagSet(MemoryChunk::INCREMENTAL_MARKING));
     EXPECT_FALSE(chunk->IsMarking());
     metadata->SetFlagNonExecutable(MemoryChunk::INCREMENTAL_MARKING);
-    EXPECT_TRUE(chunk->IsFlagSet(MemoryChunk::INCREMENTAL_MARKING));
     EXPECT_TRUE(chunk->IsMarking());
     metadata->ClearFlagNonExecutable(MemoryChunk::INCREMENTAL_MARKING);
-    EXPECT_FALSE(chunk->IsFlagSet(MemoryChunk::INCREMENTAL_MARKING));
     EXPECT_FALSE(chunk->IsMarking());
 
     // In young generation for TO space.
@@ -429,7 +427,7 @@ TEST_F(SpacesTest, TrustedSpaceNullPage) {
   v8::Context::New(v8_isolate())->Enter();
 
   Address trusted_space_base =
-      TrustedRange::GetProcessWideTrustedRange()->base();
+      i_isolate()->isolate_group()->GetTrustedPtrComprCageBase();
   const size_t size_of_reserved_area = 1 * MB;
 
   // Test that no objects are allocated in the reserved area.

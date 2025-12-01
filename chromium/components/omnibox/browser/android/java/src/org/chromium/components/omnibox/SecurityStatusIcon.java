@@ -8,6 +8,7 @@ import androidx.annotation.DrawableRes;
 import androidx.annotation.StringRes;
 
 import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 
 /** Utility class to get security state info for the omnibox. */
@@ -20,7 +21,7 @@ public class SecurityStatusIcon {
             boolean isSmallDevice,
             boolean skipIconForNeutralState,
             boolean useLockIconForSecureState,
-            Integer trackerBlockerIcon) { // Vivaldi
+            @Nullable Integer trackerBlockerIcon) { // Vivaldi
         // Vivaldi: We replace the pageInfo icon with VivaldiTrackerBlocker icon in the url bar.
         int validRefreshIcon = trackerBlockerIcon == null ? R.drawable.omnibox_https_valid_refresh
                                                           : trackerBlockerIcon;

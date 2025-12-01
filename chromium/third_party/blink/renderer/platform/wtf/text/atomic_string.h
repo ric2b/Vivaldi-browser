@@ -250,8 +250,8 @@ inline bool operator==(const AtomicString& a, const AtomicString& b) {
   return a.Impl() == b.Impl();
 }
 inline bool operator==(const AtomicString& a, const String& b) {
-  // We don't use equalStringView so we get the isAtomic() optimization inside
-  // WTF::equal.
+  // We don't use EqualStringView so we get the IsAtomic() optimization inside
+  // blink::Equal.
   return Equal(a.Impl(), b.Impl());
 }
 inline bool operator==(const String& a, const AtomicString& b) {
@@ -262,22 +262,6 @@ inline bool operator==(const AtomicString& a, const char* b) {
 }
 inline bool operator==(const char* a, const AtomicString& b) {
   return b == a;
-}
-
-inline bool operator!=(const AtomicString& a, const AtomicString& b) {
-  return a.Impl() != b.Impl();
-}
-inline bool operator!=(const AtomicString& a, const String& b) {
-  return !(a == b);
-}
-inline bool operator!=(const String& a, const AtomicString& b) {
-  return !(a == b);
-}
-inline bool operator!=(const AtomicString& a, const char* b) {
-  return !(a == b);
-}
-inline bool operator!=(const char* a, const AtomicString& b) {
-  return !(a == b);
 }
 
 // Define external global variables for the commonly used atomic strings.

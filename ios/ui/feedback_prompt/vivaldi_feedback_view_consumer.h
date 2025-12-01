@@ -4,6 +4,7 @@
 #define IOS_UI_FEEDBACK_PROMPT_VIVALDI_FEEDBACK_VIEW_CONSUMER_H_
 
 /// A protocol implemented by consumers to handle changes feedback view.
+NS_SWIFT_UI_ACTOR
 @protocol VivaldiFeedbackViewConsumer
 
 - (void)issueDidSubmitSuccessfully:(BOOL)success;

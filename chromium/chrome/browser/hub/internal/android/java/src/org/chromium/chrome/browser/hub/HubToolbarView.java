@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.hub;
 
+import static org.chromium.build.NullUtil.assertNonNull;
 import static org.chromium.build.NullUtil.assumeNonNull;
 import static org.chromium.chrome.browser.hub.HubAnimationConstants.PANE_COLOR_BLEND_ANIMATION_DURATION_MS;
 import static org.chromium.chrome.browser.hub.HubAnimationConstants.PANE_FADE_ANIMATION_DURATION_MS;
@@ -49,6 +50,7 @@ import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.HubToolbarProperties.PaneButtonLookup;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButton;
+import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.ui.animation.AnimationHandler;
 import org.chromium.ui.interpolators.Interpolators;
 
@@ -80,6 +82,7 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
     private final AnimationHandler mHubSearchAnimatorHandler;
     private final Handler mHandler;
     private @Nullable ObservableSupplier<Boolean> mXrSpaceModeObservableSupplier;
+    private @Nullable List<FullButtonData> mCachedButtonDataList;
 
     /** Default {@link LinearLayout} constructor called by inflation. */
     public HubToolbarView(Context context, AttributeSet attributeSet) {
@@ -120,18 +123,75 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
             assertNonNull(menuButtonContainer);
             menuButtonContainer.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
         } else
-        mMenuButtonWrapper.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+        if (OmniboxFeatures.sAndroidHubSearchTabGroups.isEnabled()
+                && OmniboxFeatures.sAndroidHubSearchEnableOnTabGroupsPane.getValue()) {
+            mMenuButtonWrapper.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+        } else {
+            mMenuButtonContainer.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+        }
     }
 
     void setPaneSwitcherButtonData(
             @Nullable List<FullButtonData> buttonDataList, int selectedIndex) {
+        if (canPerformPaneSwitcherUpdate(buttonDataList)) {
+            updatePaneSwitcherButtonList(assumeNonNull(buttonDataList), selectedIndex);
+        } else {
+            buildPaneSwitcherButtonList(buttonDataList, selectedIndex);
+        }
+
+        mCachedButtonDataList = buttonDataList;
+    }
+
+    private void updatePaneSwitcherButtonData(FullButtonData buttonData, int index) {
+        // Currently, we only support in-place updates for panel switchers. Therefore, the index
+        // should remain valid.
+        assert index < mPaneSwitcher.getTabCount();
+
+        Tab tab = mPaneSwitcher.getTabAt(index);
+        assertNonNull(tab);
+
+        Context context = getContext();
+        Drawable drawable = buttonData.resolveIcon(context);
+        tab.setIcon(drawable);
+        tab.setContentDescription(buttonData.resolveContentDescription(context));
+    }
+
+    /**
+     * Determines if we can perform an update of the existing pane switcher button list instead of
+     * rebuilding it. We can only do this if the new list is non-null, the same size as the existing
+     * list, and has more than one button.
+     */
+    private boolean canPerformPaneSwitcherUpdate(@Nullable List<FullButtonData> newList) {
+        if (mCachedButtonDataList == null || newList == null) return false;
+
+        // Currently, we only support updating the pane switcher when the button count remains
+        // unchanged. If there exist more pane addition/creation cases, we should revisit this.
+        if (mCachedButtonDataList.size() != newList.size()) return false;
+
+        return newList.size() > 1;
+    }
+
+    private void updatePaneSwitcherButtonList(
+            List<FullButtonData> buttonDataList, int selectedIndex) {
+        for (int i = 0; i < buttonDataList.size(); i++) {
+            FullButtonData newButtonData = buttonDataList.get(i);
+            FullButtonData oldButtonData = assumeNonNull(mCachedButtonDataList).get(i);
+
+            if (!oldButtonData.buttonDataEquals(newButtonData)) {
+                updatePaneSwitcherButtonData(newButtonData, i);
+            }
+        }
+
+        setPaneSwitcherTabSelectedListenerAndSetIndex(buttonDataList, selectedIndex);
+    }
+
+    private void buildPaneSwitcherButtonList(
+            @Nullable List<FullButtonData> buttonDataList, int selectedIndex) {
         // Null can safely be passed here.
-        mPaneSwitcher.removeOnTabSelectedListener(assumeNonNull(mOnTabSelectedListener));
         mPaneSwitcher.removeAllTabs();
 
         if (buttonDataList == null || buttonDataList.size() <= 1) {
             mPaneSwitcher.setVisibility(View.GONE);
-            mOnTabSelectedListener = null;
         } else {
             Context context = getContext();
             Resources resources = getResources();
@@ -171,8 +231,6 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
                 }
             }
             mPaneSwitcher.setVisibility(View.VISIBLE);
-            mOnTabSelectedListener = makeTabSelectedListener(buttonDataList);
-            mPaneSwitcher.addOnTabSelectedListener(mOnTabSelectedListener);
 
             if (HubUtils.isGtsUpdateEnabled()) {
                 @Px
@@ -204,6 +262,22 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
                                 context, R.drawable.hub_pane_switcher_item_selector));
             }
         }
+
+        setPaneSwitcherTabSelectedListenerAndSetIndex(buttonDataList, selectedIndex);
+    }
+
+    private void setPaneSwitcherTabSelectedListenerAndSetIndex(
+            @Nullable List<FullButtonData> buttonDataList, int selectedIndex) {
+        if (mOnTabSelectedListener != null) {
+            mPaneSwitcher.removeOnTabSelectedListener(mOnTabSelectedListener);
+        }
+        if (buttonDataList == null || buttonDataList.size() <= 1) {
+            mOnTabSelectedListener = null;
+            return;
+        }
+
+        mOnTabSelectedListener = makeTabSelectedListener(buttonDataList);
+        mPaneSwitcher.addOnTabSelectedListener(mOnTabSelectedListener);
 
         setPaneSwitcherIndex(selectedIndex);
     }
@@ -485,10 +559,13 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
     private void updateSearchBoxElements(boolean isIncognito) {
         Context context = getContext();
         @StringRes
-        int emptyHintRes =
-                isIncognito
-                        ? R.string.hub_search_empty_hint_incognito
+        int regularEmptyHintRes =
+                OmniboxFeatures.sAndroidHubSearchTabGroups.isEnabled()
+                        ? R.string.hub_search_empty_hint_with_tab_groups
                         : R.string.hub_search_empty_hint;
+        @StringRes
+        int emptyHintRes =
+                isIncognito ? R.string.hub_search_empty_hint_incognito : regularEmptyHintRes;
 
         // Delay the text from changing until the hub search animation is finished to prevent the
         // incorrect text from showing too early on pane toggles.
@@ -535,5 +612,6 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
     public void setXrSpaceModeObservableSupplier(
             @Nullable ObservableSupplier<Boolean> xrSpaceModeObservableSupplier) {
         mXrSpaceModeObservableSupplier = xrSpaceModeObservableSupplier;
+        HubColors.setXrSpaceModeObservableSupplier(xrSpaceModeObservableSupplier);
     }
 }

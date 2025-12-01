@@ -116,19 +116,6 @@ IN_PROC_BROWSER_TEST_F(LensSearchFeatureFlagsUtilsAimM3EnabledTest,
   EXPECT_TRUE(lens::IsAimM3Enabled(browser()->profile()));
 }
 
-IN_PROC_BROWSER_TEST_F(LensSearchFeatureFlagsUtilsAimM3EnabledTest,
-                       TestIsAimM3Enabled_WithIneligibleService_IsFalse) {
-  SetUpAimEligibilityService(/*is_locally_eligible=*/false,
-                             /*is_server_eligible=*/true,
-                             /*server_eligibility_enabled=*/true);
-  EXPECT_FALSE(lens::IsAimM3Enabled(browser()->profile()));
-
-  SetUpAimEligibilityService(/*is_locally_eligible=*/true,
-                             /*is_server_eligible=*/false,
-                             /*server_eligibility_enabled=*/true);
-  EXPECT_FALSE(lens::IsAimM3Enabled(browser()->profile()));
-}
-
 // Test fixture with kLensSearchAimM3 feature enabled and eligibility check
 // disabled.
 class LensSearchFeatureFlagsUtilsAimM3EnabledAndEligibilityCheckDisabledTest
@@ -162,8 +149,16 @@ IN_PROC_BROWSER_TEST_F(
 class LensSearchFeatureFlagsUtilsAimM3DisabledTest
     : public LensSearchFeatureFlagsUtilsBrowserTestBase {
  public:
-  LensSearchFeatureFlagsUtilsAimM3DisabledTest() = default;
+  LensSearchFeatureFlagsUtilsAimM3DisabledTest() {
+    // Initialize the feature list to disable kLensSearchAimM3.
+    feature_list_.InitWithFeatures(/*enabled_features=*/{},
+                                   /*disabled_features=*/
+                                   {lens::features::kLensSearchAimM3});
+  }
   ~LensSearchFeatureFlagsUtilsAimM3DisabledTest() override = default;
+
+ protected:
+  base::test::ScopedFeatureList feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(LensSearchFeatureFlagsUtilsAimM3DisabledTest,

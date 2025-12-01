@@ -27,6 +27,7 @@
 #include "extensions/test/test_extension_dir.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/theme_provider.h"
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 #include "base/test/scoped_feature_list.h"
@@ -158,8 +159,8 @@ TEST_F(NewTabFooterHandlerExtensionTest, SetNtpExtensionName_ReadyExtension) {
   std::string name = "will change";
   EXPECT_CALL(document_, SetNtpExtensionName)
       .Times(2)
-      .WillRepeatedly(testing::Invoke(
-          [&name](const std::string& name_arg) { name = name_arg; }));
+      .WillRepeatedly(
+          [&name](const std::string& name_arg) { name = name_arg; });
 
   // Load the NTP extension and verify it's enabled.
   auto extension = LoadNtpExtension();
@@ -616,10 +617,10 @@ TEST_F(NewTabFooterHandlerEnterpriseTest, SetCustomBackground_None) {
   new_tab_footer::mojom::BackgroundAttributionPtr attribution;
   EXPECT_CALL(document_, SetBackgroundAttribution)
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&attribution](new_tab_footer::mojom::BackgroundAttributionPtr arg) {
             attribution = std::move(arg);
-          }));
+          });
   ON_CALL(*mock_ntp_custom_background_service_.get(), GetCustomBackground())
       .WillByDefault(testing::Return(std::make_optional<CustomBackground>()));
   ON_CALL(mock_theme_provider_, HasCustomImage(IDR_THEME_NTP_BACKGROUND))
@@ -635,10 +636,10 @@ TEST_F(NewTabFooterHandlerEnterpriseTest,
        SetCustomBackground_ThemeWithCustomImagePresent) {
   EXPECT_CALL(document_, SetBackgroundAttribution)
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [](new_tab_footer::mojom::BackgroundAttributionPtr attribution) {
             EXPECT_FALSE(attribution);
-          }));
+          });
   CustomBackground custom_background;
   custom_background.custom_background_attribution_line_1 = "foo line";
   custom_background.custom_background_attribution_action_url =
@@ -656,12 +657,12 @@ TEST_F(NewTabFooterHandlerEnterpriseTest,
        SetCustomBackground_TwoLinesAttribution) {
   EXPECT_CALL(document_, SetBackgroundAttribution)
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [](new_tab_footer::mojom::BackgroundAttributionPtr attribution) {
             ASSERT_TRUE(attribution);
             EXPECT_EQ("foo line, bar line", attribution->name);
             EXPECT_EQ(attribution->url->spec(), "https://foo.com/action");
-          }));
+          });
 
   CustomBackground custom_background;
   custom_background.custom_background_attribution_line_1 = "foo line";
@@ -681,12 +682,12 @@ TEST_F(NewTabFooterHandlerEnterpriseTest,
        SetCustomBackground_OneLineAtribution) {
   EXPECT_CALL(document_, SetBackgroundAttribution)
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [](new_tab_footer::mojom::BackgroundAttributionPtr attribution) {
             ASSERT_TRUE(attribution);
             EXPECT_EQ("foo line", attribution->name);
             EXPECT_EQ(attribution->url->spec(), "https://foo.com/action");
-          }));
+          });
 
   CustomBackground custom_background;
   custom_background.custom_background_attribution_line_1 = "foo line";

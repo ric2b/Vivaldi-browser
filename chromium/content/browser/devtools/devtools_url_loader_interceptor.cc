@@ -38,10 +38,12 @@
 #include "net/base/mime_sniffer.h"
 #include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_util.h"
+#include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/redirect_util.h"
 #include "net/url_request/referrer_policy.h"
+#include "net/url_request/url_request_job.h"  // For static util methods.
 #include "services/network/public/cpp/content_decoding_interceptor.h"
 #include "services/network/public/cpp/cors/cors.h"
 #include "services/network/public/cpp/header_util.h"
@@ -55,6 +57,7 @@
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "third_party/blink/public/platform/resource_request_blocked_reason.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 
 namespace content {
 
@@ -997,7 +1000,8 @@ void InterceptionJob::Detach() {
   if (state_ == State::kAuthRequired) {
     state_ = State::kRequestSent;
     waiting_for_resolution_ = false;
-    TRACE_EVENT_NESTABLE_ASYNC_END0("devtools", "Fetch.requestPaused", this);
+    // Corresponds to the TRACE_EVENT_BEGIN in CompleteNotifyingClient.
+    TRACE_EVENT_END("devtools", perfetto::Track::FromPointer(this));
     std::move(pending_auth_callback_).Run(true, std::nullopt);
     return;
   }
@@ -1011,7 +1015,8 @@ Response InterceptionJob::InnerContinueRequest(
         "Invalid state for continueInterceptedRequest");
   }
   waiting_for_resolution_ = false;
-  TRACE_EVENT_NESTABLE_ASYNC_END0("devtools", "Fetch.requestPaused", this);
+  // Corresponds to the TRACE_EVENT_BEGIN in CompleteNotifyingClient.
+  TRACE_EVENT_END("devtools", perfetto::Track::FromPointer(this));
   if (modifications->intercept_response.has_value()) {
     stages_.PutOrRemove(InterceptionStage::kResponse,
                         modifications->intercept_response.value());
@@ -1154,8 +1159,25 @@ void InterceptionJob::ApplyModificationsToRequest(
   if (modifications->modified_url.has_value()) {
     DCHECK_EQ(url_chain_.back(), request->url);
     const GURL new_url(modifications->modified_url.value());
+    const bool is_same_site =
+        net::SchemefulSite::IsSameSite(request->url, new_url);
     request->url = new_url;
     url_chain_.back() = new_url;
+
+    if (!is_same_site) {
+      GURL new_referrer = net::URLRequestJob::ComputeReferrerForPolicy(
+          request->referrer_policy, request->referrer, new_url,
+          /* same_origin_out_for_metrics*/ nullptr);
+      // net/ has a similar check but would block a request with wrong referrer,
+      // so help clients a bit.
+      if (new_referrer != request->referrer) {
+        request->referrer = {};
+      }
+      request->site_for_cookies = net::SiteForCookies::FromUrl(new_url);
+      if (request->trusted_params) {
+        request->trusted_params->isolation_info = {};
+      }
+    }
   }
 
   if (modifications->modified_method.has_value()) {
@@ -1542,7 +1564,8 @@ void InterceptionJob::CompleteNotifyingClient(
           create_loader_params_->request,
           request_cookies_.value_or(std::string()), request_bodies_);
 
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("devtools", "Fetch.requestPaused", this);
+  TRACE_EVENT_BEGIN("devtools", "Fetch.requestPaused",
+                    perfetto::Track::FromPointer(this));
   waiting_for_resolution_ = true;
   interceptor_->request_intercepted_callback_.Run(std::move(request_info));
 }

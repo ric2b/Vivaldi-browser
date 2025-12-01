@@ -25,11 +25,9 @@
 namespace blink {
 
 BASE_FEATURE(kBreakoutBoxPreferCaptureTimestampInVideoFrames,
-             "BreakoutBoxPreferCaptureTimestampInVideoFrames",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kBreakoutBoxInsertVideoCaptureTimestamp,
-             "BreakoutBoxInsertVideoCaptureTimestamp",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 namespace {
@@ -103,9 +101,9 @@ ScriptPromise<IDLUndefined> FrameQueueUnderlyingSource<NativeFrameType>::Pull(
     // the frame on another task. See https://crbug.com/1216445#c1
     realm_task_runner_->PostTask(
         FROM_HERE,
-        WTF::BindOnce(&FrameQueueUnderlyingSource<
-                          NativeFrameType>::MaybeSendFrameFromQueueToStream,
-                      WrapPersistent(this)));
+        blink::BindOnce(&FrameQueueUnderlyingSource<
+                            NativeFrameType>::MaybeSendFrameFromQueueToStream,
+                        WrapPersistent(this)));
   }
   return ToResolvedUndefinedPromise(script_state);
 }
@@ -325,7 +323,7 @@ void FrameQueueUnderlyingSource<
     // See https://crbug.com/1490501
     realm_task_runner_->PostTask(
         FROM_HERE,
-        WTF::BindOnce(
+        blink::BindOnce(
             &FrameQueueUnderlyingSource::EnqueueBlinkFrame,
             WrapPersistent(this),
             WrapPersistent(MakeBlinkFrame(std::move(media_frame.value())))));

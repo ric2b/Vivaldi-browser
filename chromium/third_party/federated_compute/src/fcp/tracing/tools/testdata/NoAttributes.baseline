@@ -1,0 +1,9 @@
+============== NoAttributes.fbs ============
+include "${DIR}/tracing_schema_common.fbs";
+
+table NoAttributes {}
+============== diagnosis ============
+ERROR: ${DIR}/tools/testdata/NoAttributes.fbs contains table NoAttributes without a tag. All tables must have a tag defined.
+
+============== result ============
+

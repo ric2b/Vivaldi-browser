@@ -8,15 +8,30 @@ import os
 import sys
 import itertools
 from typing import Dict, List, Set, Tuple, Union, Optional, Literal, Any
+from urllib.parse import urlparse
 
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 # The repo's root directory.
 _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, ".."))
 
+# Used to identify git clonable domains.
+GIT_DOMAIN_INDICATORS = ["git", "googlesource", "bitbucket", "github", "gitlab"]
+
+# Substrings for supported package manager URLs.
+PACKAGE_MANAGER_PATHS = (
+    "crates.io/crates/",
+    "npmjs.com/package/",
+    "developer.android.com/jetpack/androidx/releases/",
+    "/maven2/",
+    "/artifacts/repository/",
+)
+
+
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
 
 import metadata.fields.field_types as field_types
+import metadata.fields.custom.cpe_prefix as cpe_prefix_util
 import metadata.fields.custom.license as license_util
 import metadata.fields.custom.version as version_util
 import metadata.fields.custom.mitigated as mitigated_util
@@ -236,6 +251,19 @@ class DependencyMetadata:
                     reason=f"Required field '{field_name}' is missing.")
                 results.append(error)
 
+        # If CPEPrefix is provided without a version, the Version field must be
+        # present.
+        if self._cpe_prefix_lacks_version():
+            error = vr.ValidationWarning(
+                reason="CPEPrefix is missing a version, and no Version is "
+                "specified.",
+                additional=[
+                    "When the 'Version' field is not provided, the 'CPEPrefix' "
+                    "must include a version component."
+                ])
+            error.set_lines(self.get_field_line_numbers(known_fields.CPE_PREFIX))
+            results.append(error)
+
         # If the repository is hosted somewhere (i.e. Chromium isn't the
         # canonical repositroy of the dependency), at least one of the fields
         # Version, Date or Revision must be provided.
@@ -314,6 +342,17 @@ class DependencyMetadata:
                     ]))
 
         return results
+
+    def _cpe_prefix_lacks_version(self) -> List[vr.ValidationResult]:
+        """Validates that if CPEPrefix is provided without a version, the
+        Version field must be present."""
+        cpe_prefix = self._metadata.get(known_fields.CPE_PREFIX)
+        version = self._metadata.get(known_fields.VERSION)
+        cpe_provided = cpe_prefix and not util.is_unknown(cpe_prefix)
+        version_is_valid = version and not util.is_not_applicable(version)
+        cpe_has_version = cpe_prefix and cpe_prefix_util.has_version_component(
+            cpe_prefix)
+        return cpe_provided and not (version_is_valid or cpe_has_version)
 
     def _mitigations_from_entries(self) -> Dict[str, str]:
         result = {}
@@ -453,13 +492,49 @@ class DependencyMetadata:
         return self._return_as_property(known_fields.UPDATE_MECHANISM)
 
     @property
+    def url_is_git_clonable(self) -> bool:
+        """
+        Checks if any of the provided URLs appear to be a clonable Git repository.
+
+        This is determined by checking for:
+        - The 'git://' protocol.
+        - A path ending in '.git'.
+        - subdomain matching. See GIT_DOMAIN_INDICATORS for the full list.
+        """
+        for u in self.url:
+            if not u:
+                continue
+            parsed = urlparse(u)
+            if parsed.scheme == "git" or parsed.path.endswith(".git"):
+                return True
+            if parsed.netloc:
+                domain_parts = parsed.netloc.split(".")
+                if any(gi in domain_parts for gi in GIT_DOMAIN_INDICATORS):
+                    return True
+        return False
+
+    @property
+    def url_is_package_manager(self) -> bool:
+        """
+        Checks if any URL contains a known package manager path substring. See PACKAGE_MANAGER_PATHS for the supported list.
+        """
+        for u in self.url:
+            if not u:
+                continue
+            for p in PACKAGE_MANAGER_PATHS:
+                if p in u and u.split(p)[-1]:
+                    return True
+        return False
+
+
+    @property
     def vuln_scan_sufficiency(self) -> str:
         """Determines if the dependency metadata is sufficient for vulnerability scanning.
 
         Returns:
             A string indicating the sufficiency status:
-            - 'sufficient:CPE' if a CPE prefix is provided.
-            - 'sufficient:URL and Revision' if URL and Revision are provided.
+            - 'sufficient:CPE' if a CPE prefix is provided and a version is included in the README.
+            - 'sufficient:URL and Revision' if URL is a git url and a Revision is provided.
             - 'sufficient:URL and Revision[DEPS]' as above, but 'Revision:DEPS'.
             - 'sufficient:URL and Version' if URL and version are provided.
             - 'ignore:Canonical' if the dependency is the canonical repository.
@@ -467,15 +542,19 @@ class DependencyMetadata:
             - 'ignore:Static' if the dependency's update mechanism is static.
             - 'insufficient' otherwise.
         """
-        if self.cpe_prefix:
+
+        if self.cpe_prefix and not self._cpe_prefix_lacks_version():
             return "sufficient:CPE"
         if self.url:
-            if self.revision:
+            if self.revision and self.url_is_git_clonable:
                 return "sufficient:URL and Revision"
             if self.revision_in_deps:
                 return "sufficient:URL and Revision[DEPS]"
             if self.version:
-                return "sufficient:URL and Version"
+                if self.url_is_git_clonable:
+                    return "sufficient:Git URL and Version"
+                if self.url_is_package_manager:
+                    return "sufficient:Package Manager URL and Version"
 
         raw_url = self._metadata.get(known_fields.URL, None)
         if raw_url is not None and known_fields.URL.repo_is_canonical(raw_url):

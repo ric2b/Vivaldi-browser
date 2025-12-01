@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,7 +44,8 @@ export default createRule({
   },
   defaultOptions: [],
   create: function(context) {
-    function reportError(node: TSESTree.CallExpression, calleeText: string, messageId) {
+    function reportError(
+        node: TSESTree.CallExpression, calleeText: string, messageId: 'useAssertInstanceOf'|'useAssertNotInstanceOf') {
       context.report({
         node,
         messageId,

@@ -103,7 +103,8 @@ enum class SharedImageBackingType {
   kDCompSurface = 16,
   kDXGISwapChain = 17,
   kWrappedGraphiteTexture = 18,
-  kMaxValue = kWrappedGraphiteTexture
+  kDawn = 19,
+  kMaxValue = kDawn
 };
 
 #if BUILDFLAG(IS_WIN)
@@ -313,7 +314,8 @@ class GPU_GLES2_EXPORT SharedImageBacking {
       SharedImageManager* manager,
       MemoryTypeTracker* tracker,
       const wgpu::Device& device,
-      wgpu::BackendType backend_type);
+      wgpu::BackendType backend_type,
+      scoped_refptr<SharedContextState> context_state);
   virtual std::unique_ptr<WebNNTensorRepresentation> ProduceWebNNTensor(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker);

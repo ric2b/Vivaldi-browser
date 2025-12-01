@@ -481,7 +481,7 @@ class TemplateURLService::Scoper {
 
  private:
   std::unique_ptr<KeywordWebDataService::BatchModeScoper> batch_mode_scoper_;
-  raw_ptr<TemplateURLService> service_;
+  raw_ptr<TemplateURLService, DanglingUntriaged> service_;
 };
 
 // TemplateURLService::PreLoadingProviders -------------------------------------
@@ -1809,10 +1809,6 @@ void TemplateURLService::OnWebDataServiceRequestDone(
                   regional_capabilities::CountryAccessReason::
                       kTemplateURLServiceDatabaseMetadataCaching)));
 
-      // Added 20/08/2024.
-      // This is used for database cleanup.
-      // TODO(b/361013517): Remove the call and cleanup the code in a year.
-      web_data_service_->ClearBuiltinKeywordMilestone();
     }
 
     if (updated_keywords_metadata.HasStarterPackData()) {

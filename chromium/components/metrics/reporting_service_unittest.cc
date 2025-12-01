@@ -14,10 +14,8 @@
 #include "base/functional/bind.h"
 #include "base/hash/sha1.h"
 #include "base/strings/string_util.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "components/metrics/log_store.h"
-#include "components/metrics/metrics_features.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_scheduler.h"
 #include "components/metrics/metrics_upload_scheduler.h"
@@ -77,8 +75,9 @@ class TestLogStore : public LogStore {
     }
   }
   void DiscardStagedLog(std::string_view reason) override {
-    if (!has_staged_log())
+    if (!has_staged_log()) {
       return;
+    }
     logs_.pop_front();
     staged_log_hash_.clear();
   }
@@ -248,10 +247,6 @@ TEST_F(ReportingServiceTest, ForceDiscard) {
 
 #if BUILDFLAG(IS_ANDROID)
 TEST_F(ReportingServiceTest, ResetMetricsUploadBackoffOnForeground) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kResetMetricsUploadBackoffOnForeground);
-
   TestReportingService service(&client_, GetLocalState());
   service.AddLog(TestLog("log1"));
   service.AddLog(TestLog("log2"));

@@ -25,6 +25,9 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+# Include Windows SDK DLL copying utilities
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/CopyWindowsSDKDLL.cmake")
+
 DawnJSONGenerator(
     TARGET "native_utils"
     PRINT_NAME "Dawn native utilities"
@@ -80,6 +83,7 @@ set(private_headers
     "dawn_platform.h"
     "Device.h"
     "DeviceGuard.h"
+    "DynamicArrayState.h"
     "DynamicUploader.h"
     "EncodingContext.h"
     "EnumClassBitmasks.h"
@@ -149,6 +153,7 @@ set(private_headers
     "SystemEvent.h"
     "SystemHandle.h"
     "Texture.h"
+    "TexelBufferView.h"
     "TintUtils.h"
     "ToBackend.h"
     "Toggles.h"
@@ -200,6 +205,7 @@ set(sources
     "CreatePipelineAsyncEvent.cpp"
     "Device.cpp"
     "DeviceGuard.cpp"
+    "DynamicArrayState.cpp"
     "DynamicUploader.cpp"
     "EncodingContext.cpp"
     "Error.cpp"
@@ -256,6 +262,7 @@ set(sources
     "SystemEvent.cpp"
     "SystemHandle.cpp"
     "Texture.cpp"
+    "TexelBufferView.cpp"
     "TintUtils.cpp"
     "Toggles.cpp"
     "utils/WGPUHelpers.cpp"
@@ -581,22 +588,40 @@ if (DAWN_ENABLE_WEBGPU_ON_WEBGPU)
     )
     list(APPEND private_headers
         "webgpu/BackendWGPU.h"
+        "webgpu/BindGroupWGPU.h"
+        "webgpu/BindGroupLayoutWGPU.h"
         "webgpu/BufferWGPU.h"
         "webgpu/CommandBufferWGPU.h"
+        "webgpu/ComputePipelineWGPU.h"
         "webgpu/DeviceWGPU.h"
         "webgpu/Forward.h"
         "webgpu/ObjectWGPU.h"
         "webgpu/PhysicalDeviceWGPU.h"
+        "webgpu/PipelineLayoutWGPU.h"
         "webgpu/QueueWGPU.h"
+        "webgpu/RenderPipelineWGPU.h"
+        "webgpu/SamplerWGPU.h"
+        "webgpu/ShaderModuleWGPU.h"
+        "webgpu/ToWGPU.h"
+        "webgpu/TextureWGPU.h"
         "webgpu/WebGPUError.h"
     )
     list(APPEND sources
         "webgpu/BackendWGPU.cpp"
+        "webgpu/BindGroupWGPU.cpp"
+        "webgpu/BindGroupLayoutWGPU.cpp"
         "webgpu/BufferWGPU.cpp"
         "webgpu/CommandBufferWGPU.cpp"
+        "webgpu/ComputePipelineWGPU.cpp"
         "webgpu/DeviceWGPU.cpp"
         "webgpu/PhysicalDeviceWGPU.cpp"
+        "webgpu/PipelineLayoutWGPU.cpp"
         "webgpu/QueueWGPU.cpp"
+        "webgpu/RenderPipelineWGPU.cpp"
+        "webgpu/SamplerWGPU.cpp"
+        "webgpu/ShaderModuleWGPU.cpp"
+        "webgpu/ToWGPU.cpp"
+        "webgpu/TextureWGPU.cpp"
     )
 endif()
 
@@ -1006,4 +1031,10 @@ endif ()
 # doesn't work well with shared libs
 if (DAWN_USE_BUILT_DXC)
     target_link_libraries(dawn_native PRIVATE dxcompiler)
+endif()
+
+# Copy d3dcompiler_47.dll from Windows SDK when not using system component loading
+if (WIN32 AND NOT DAWN_FORCE_SYSTEM_COMPONENT_LOAD AND (DAWN_ENABLE_D3D11 OR DAWN_ENABLE_D3D12))
+    AddCopyWindowsSDKDLLTarget(copy_d3dcompiler_dll "d3dcompiler_47.dll")
+    add_dependencies(dawn_native copy_d3dcompiler_dll)
 endif()

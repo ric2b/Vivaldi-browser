@@ -56,7 +56,7 @@ static void fill_rect(const SkMatrix& ctm, const SkRasterClip& rc,
         ctm.mapPoints(raw.fStorage);
         if (auto bounds = SkRect::Bounds(raw.fStorage)) {
             raw.fBounds = *bounds;
-            SkScan::FillPathRaw(raw, rc, blitter);
+            SkScan::FillPath(raw, rc, blitter);
         }
     }
 }
@@ -69,11 +69,12 @@ static void load_color(SkRasterPipelineContexts::UniformColorCtx* ctx, const flo
     ctx->rgba[3] = SkScalarRoundToInt(rgba[3]*255); ctx->a = rgba[3];
 }
 
-void SkDraw::drawAtlas(SkSpan<const SkRSXform> xform,
-                       SkSpan<const SkRect> textures,
-                       SkSpan<const SkColor> colors,
-                       sk_sp<SkBlender> blender,
-                       const SkPaint& paint) {
+namespace skcpu {
+void Draw::drawAtlas(SkSpan<const SkRSXform> xform,
+                     SkSpan<const SkRect> textures,
+                     SkSpan<const SkColor> colors,
+                     sk_sp<SkBlender> blender,
+                     const SkPaint& paint) {
     SkASSERT(xform.size() == textures.size());
     SkASSERT(colors.empty() || (xform.size() == colors.size()));
 
@@ -97,8 +98,13 @@ void SkDraw::drawAtlas(SkSpan<const SkRSXform> xform,
 
     SkRasterPipeline pipeline(&alloc);
     SkSurfaceProps props = SkSurfacePropsCopyOrDefault(fProps);
-    SkStageRec rec = {&pipeline, &alloc, fDst.colorType(), fDst.colorSpace(),
-                      p.getColor4f(), props};
+    SkStageRec rec = {&pipeline,
+                      &alloc,
+                      fDst.colorType(),
+                      fDst.colorSpace(),
+                      p.getColor4f(),
+                      props,
+                      SkRect::MakeEmpty()};
     // We pass an identity matrix here rather than the CTM. The CTM gets folded into the
     // per-triangle matrix.
     if (!as_SB(transformShader)->appendRootStages(rec, SkMatrix::I())) {
@@ -151,3 +157,4 @@ void SkDraw::drawAtlas(SkSpan<const SkRSXform> xform,
         }
     }
 }
+}  // namespace skcpu

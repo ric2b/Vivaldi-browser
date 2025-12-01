@@ -75,12 +75,14 @@ class NET_EXPORT_PRIVATE AddressTrackerLinux : public AddressMapOwnerLinux {
   // should run on a sequence that can block, e.g. a base::SequencedTaskRunner
   // with base::MayBlock(). If nullptr, SetDiffCallback() cannot be used off of
   // the AddressTrackerLinux's sequence.
-  AddressTrackerLinux(const base::RepeatingClosure& address_callback,
-                      const base::RepeatingClosure& link_callback,
-                      const base::RepeatingClosure& tunnel_callback,
-                      const std::unordered_set<std::string>& ignored_interfaces,
-                      scoped_refptr<base::SequencedTaskRunner>
-                          blocking_thread_runner = nullptr);
+  AddressTrackerLinux(
+      const base::RepeatingCallback<
+          void(NetworkChangeNotifier::IPAddressChangeType)>& address_callback,
+      const base::RepeatingClosure& link_callback,
+      const base::RepeatingClosure& tunnel_callback,
+      const std::unordered_set<std::string>& ignored_interfaces,
+      scoped_refptr<base::SequencedTaskRunner> blocking_thread_runner =
+          nullptr);
   ~AddressTrackerLinux() override;
 
   // In tracking mode, it starts watching the system configuration for
@@ -173,8 +175,9 @@ class NET_EXPORT_PRIVATE AddressTrackerLinux : public AddressMapOwnerLinux {
   // of initialization. Expects |netlink_fd_| to exist already.
   void DumpInitialAddressesAndWatch();
 
-  // Sets |*address_changed| to indicate whether |address_map_| changed and
-  // sets |*link_changed| to indicate if |online_links_| changed and sets
+  // Sets |*address_change_type| to indicate whether |address_map_| changed and
+  // whether only IPv6 temporary addresses changed in |address_map_|, sets
+  // |*link_changed| to indicate if |online_links_| changed, and sets
   // |*tunnel_changed| to indicate if |online_links_| changed with regards to a
   // tunnel interface while reading messages from |netlink_fd_|.
   //
@@ -183,11 +186,13 @@ class NET_EXPORT_PRIVATE AddressTrackerLinux : public AddressMapOwnerLinux {
   // Similarly, if |online_links_| has changed and |online_links_diff_| is not
   // nullopt, |*online_links_diff| is populated with the changes to the set of
   // online links.
-  void ReadMessages(bool* address_changed,
-                    bool* link_changed,
-                    bool* tunnel_changed);
+  void ReadMessages(
+      NetworkChangeNotifier::IPAddressChangeType* address_change_type,
+      bool* link_changed,
+      bool* tunnel_changed);
 
-  // Sets |*address_changed| to true if |address_map_| changed, sets
+  // Sets |*address_change_type| to indicate whether |address_map_| changed and
+  // whether only IPv6 temporary addresses changed in |address_map_|, sets
   // |*link_changed| to true if |online_links_| changed, sets |*tunnel_changed|
   // to true if |online_links_| changed with regards to a tunnel interface while
   // reading the message from |buffer|.
@@ -197,11 +202,12 @@ class NET_EXPORT_PRIVATE AddressTrackerLinux : public AddressMapOwnerLinux {
   // Similarly, if |online_links_| has changed and |online_links_diff_| is not
   // nullopt, |*online_links_diff| is populated with the changes to the set of
   // online links.
-  void HandleMessage(const char* buffer,
-                     int length,
-                     bool* address_changed,
-                     bool* link_changed,
-                     bool* tunnel_changed);
+  void HandleMessage(
+      const char* buffer,
+      int length,
+      NetworkChangeNotifier::IPAddressChangeType* address_change_type,
+      bool* link_changed,
+      bool* tunnel_changed);
 
   // Call when some part of initialization failed; forces online and unblocks.
   void AbortAndForceOnline();
@@ -245,8 +251,8 @@ class NET_EXPORT_PRIVATE AddressTrackerLinux : public AddressMapOwnerLinux {
   GetInterfaceNameFunction get_interface_name_;
 
   DiffCallback diff_callback_ GUARDED_BY_CONTEXT(sequence_checker_);
-  base::RepeatingClosure address_callback_
-      GUARDED_BY_CONTEXT(sequence_checker_);
+  base::RepeatingCallback<void(NetworkChangeNotifier::IPAddressChangeType)>
+      address_callback_ GUARDED_BY_CONTEXT(sequence_checker_);
   base::RepeatingClosure link_callback_ GUARDED_BY_CONTEXT(sequence_checker_);
   base::RepeatingClosure tunnel_callback_ GUARDED_BY_CONTEXT(sequence_checker_);
 

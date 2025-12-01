@@ -2,7 +2,6 @@
 
 #include "components/ad_blocker/core/adblock_rule_parser.h"
 
-#include <algorithm>
 #include <map>
 #include <string>
 #include <string_view>
@@ -15,7 +14,6 @@
 #include "base/i18n/char_iterator.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -23,6 +21,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "components/ad_blocker/core/parse_utils.h"
+#include "components/ad_blocker/public/core/adblock_request_filter_rule_types.h"
 #include "net/base/ip_address.h"
 #include "third_party/re2/src/re2/re2.h"
 
@@ -43,6 +42,7 @@ enum class OptionType {
   kAll,
   kThirdParty,
   kStrictThirdParty,
+  kMethod,
   kMatchCase,
   kDomain,
   kCSP,
@@ -53,6 +53,7 @@ enum class OptionType {
   kImportant,
   // Document can be both an activation and an explicit type
   kDocument,
+  kElemHide,
   kAdQueryTrigger,
   kAdAttributionTracker,
 };
@@ -80,6 +81,8 @@ constexpr auto kOptionMap = base::MakeFixedFlatMap<std::string_view,
       {.type = OptionType::kStrictThirdParty,
        .invert = true,
        .allow_invert = false}},
+     {"method",
+      {.type = OptionType::kMethod, .value = OptionDefinition::kRequired}},
      {"match-case", {.type = OptionType::kMatchCase}},
      {"domain",
       {.type = OptionType::kDomain, .value = OptionDefinition::kRequired}},
@@ -107,25 +110,46 @@ constexpr auto kOptionMap = base::MakeFixedFlatMap<std::string_view,
       {.type = OptionType::kDocument,
        .allow_invert = true,
        .value = OptionDefinition::kForbidden}},
+     {"ehide",
+      {.type = OptionType::kElemHide,
+       .allow_invert = true,
+       .value = OptionDefinition::kForbidden}},
+     {"elemhide",
+      {.type = OptionType::kElemHide,
+       .allow_invert = true,
+       .value = OptionDefinition::kForbidden}},
      {"ad-query-trigger",
       {.type = OptionType::kAdQueryTrigger,
        .value = OptionDefinition::kRequiredForModify}},
      {"ad-attribution-tracker",
       {.type = OptionType::kAdAttributionTracker,
        .value = OptionDefinition::kRequired}}});
+
+constexpr auto kRequestMethodStringMap =
+    base::MakeFixedFlatMap<std::string_view, RequestMethod>(
+        {{"connect", RequestMethod::KConnect},
+         {"delete", RequestMethod::kDelete},
+         {"get", RequestMethod::kGet},
+         {"head", RequestMethod::kHead},
+         {"options", RequestMethod::kOptions},
+         {"patch", RequestMethod::kPatch},
+         {"post", RequestMethod::kPost},
+         {"put", RequestMethod::kPut},
+         {"other", RequestMethod::kOther}});
+
 constexpr auto kExplicitTypeStringMap =
-    base::MakeFixedFlatMap<std::string_view, int>(
-        {{"popup", RequestFilterRule::kPopup},
-         {"popunder", RequestFilterRule::kPopunder}});
+    base::MakeFixedFlatMap<std::string_view, ResourceType>(
+        {{"popup", ResourceType::kPopup},
+         {"popunder", ResourceType::kPopunder}});
 
 constexpr auto kActivationStringMap =
-    base::MakeFixedFlatMap<std::string_view, int>(
-        {{"elemhide", RequestFilterRule::kElementHide},
-         {"ehide", RequestFilterRule::kElementHide},
-         {"generichide", RequestFilterRule::kGenericHide},
-         {"ghide", RequestFilterRule::kGenericHide},
-         {"genericblock", RequestFilterRule::kGenericBlock},
-         {"attribute-ads", RequestFilterRule::kAttributeAds}});
+    base::MakeFixedFlatMap<std::string_view, ActivationType>(
+        {{"specifichide", ActivationType::kSpecificHide},
+         {"shide", ActivationType::kSpecificHide},
+         {"generichide", ActivationType::kGenericHide},
+         {"ghide", ActivationType::kGenericHide},
+         {"genericblock", ActivationType::kGenericBlock},
+         {"attribute-ads", ActivationType::kAttributeAds}});
 
 constexpr auto kAbpMainSnippetNames = base::MakeFixedFlatSet<std::string_view>({
 #include "vivaldi/components/ad_blocker/core/abp_snippets_lists/main.inc"
@@ -415,16 +439,16 @@ bool ParseDomains(std::string_view domain_string,
 }
 
 bool SetModifier(RequestFilterRule& rule,
-                 RequestFilterRule::ModifierType type,
+                 ModifierType type,
                  std::set<std::string> value) {
-  CHECK(type != RequestFilterRule::kNoModifier);
-  if (rule.modifier != RequestFilterRule::kNoModifier) {
+  CHECK(type != ModifierType::kNoModifier);
+  if (rule.modifier != ModifierType::kNoModifier) {
     return false;
   }
 
   // Only Pass rules can have an empty modifier value, which negates
   // all Modify rules for the given modifier.
-  CHECK(!value.empty() || rule.decision == RequestFilterRule::kPass);
+  CHECK(!value.empty() || rule.decision == RuleDecision::kPass);
 
   rule.modifier = type;
   rule.modifier_values = std::move(value);
@@ -432,7 +456,7 @@ bool SetModifier(RequestFilterRule& rule,
 }
 
 bool SetModifier(RequestFilterRule& rule,
-                 RequestFilterRule::ModifierType type,
+                 ModifierType type,
                  std::optional<std::string_view> value) {
   if (value) {
     return SetModifier(rule, type, std::set<std::string>{std::string(*value)});
@@ -764,7 +788,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
     RequestFilterRule& rule) {
   rule.original_rule_text = rule_string;
   if (base::StartsWith(rule_string, "@@")) {
-    rule.decision = RequestFilterRule::kPass;
+    rule.decision = RuleDecision::kPass;
     rule_string.remove_prefix(2);
   }
 
@@ -897,7 +921,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
   }
 
   if (!process_hostname) {
-    if (rule.modifier == RequestFilterRule::kAdQueryTrigger) {
+    if (rule.modifier == ModifierType::kAdQueryTrigger) {
       // ad-query-trigger rules should have host-matching pattern
       return kError;
     }
@@ -931,7 +955,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
   size_t authority_end = pattern.find_first_of("/^*?");
   size_t authority_length;
 
-  if (rule.modifier == RequestFilterRule::kAdQueryTrigger &&
+  if (rule.modifier == ModifierType::kAdQueryTrigger &&
       pattern[authority_end] == '*') {
     // ad-query-trigger rules should have host-matching pattern
     return kError;
@@ -958,7 +982,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRule(
     if (!validation_url.has_port() && maybe_pure_host) {
       rule.host = validation_url.host();
       if (source_settings_.pure_host_is_document_block && can_strict_block) {
-        rule.explicit_types.set(RequestFilterRule::kDocument);
+        rule.explicit_types.Put(ResourceType::kDocument);
       }
     }
     canonicalized_pattern += validation_url.host();
@@ -1030,12 +1054,12 @@ bool RuleParser::MaybeAddPureHostRule(std::string_view maybe_hostname,
   rule.original_rule_text = original_rule_text;
   rule.anchor_type.set(RequestFilterRule::kAnchorHost);
   rule.host = maybe_hostname;
-  rule.resource_types.set();
+  rule.resource_types.PutAll(RegularResourceTypes::All());
   rule.pattern_type = RequestFilterRule::kPlain;
   rule.pattern = maybe_hostname;
   rule.pattern.append("^");
   if (source_settings_.pure_host_is_document_block) {
-    rule.explicit_types.set(RequestFilterRule::kDocument);
+    rule.explicit_types.Put(ResourceType::kDocument);
   }
   parse_result_->request_filter_rules.push_back(std::move(rule));
 
@@ -1101,7 +1125,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
 
   bool add_implicit_types = true;
 
-  enum class Party {
+  enum class StrictParty {
     kNone,
     kFirst,
     kThird,
@@ -1109,14 +1133,14 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
 
   bool first_party = false;
   bool third_party = false;
-  Party strict_party = Party::kNone;
+  StrictParty strict_party = StrictParty::kNone;
 
-  std::bitset<RequestFilterRule::kTypeCount> types_set;
-  std::bitset<RequestFilterRule::kTypeCount> types_unset;
-  std::bitset<RequestFilterRule::kExplicitTypeCount> explicit_types_set;
-  std::bitset<RequestFilterRule::kExplicitTypeCount> explicit_types_unset;
-  std::bitset<RequestFilterRule::kActivationCount> activations_set;
-  std::bitset<RequestFilterRule::kActivationCount> activations_unset;
+  RegularResourceTypes types_set;
+  RegularResourceTypes types_unset;
+  ExplicitResourceTypes explicit_types_set;
+  ExplicitResourceTypes explicit_types_unset;
+  ActivationTypes activations_set;
+  ActivationTypes activations_unset;
   for (auto parsed_option : base::Reversed(parsed_options_reversed)) {
     auto type_option = kTypeStringMap.find(parsed_option.name);
     if (type_option != kTypeStringMap.end()) {
@@ -1124,9 +1148,9 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
         return kError;
       }
       if (parsed_option.invert)
-        types_unset.set(type_option->second);
+        types_unset.Put(type_option->second);
       else
-        types_set.set(type_option->second);
+        types_set.Put(type_option->second);
       continue;
     }
 
@@ -1136,9 +1160,9 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
         return kError;
       }
       if (parsed_option.invert)
-        explicit_types_unset.set(explicit_type_option->second);
+        explicit_types_unset.Put(explicit_type_option->second);
       else
-        explicit_types_set.set(explicit_type_option->second);
+        explicit_types_set.Put(explicit_type_option->second);
       // Only add implicit types if we haven't added any otherwise.
       add_implicit_types = false;
       continue;
@@ -1150,9 +1174,9 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
         return kError;
       }
       if (parsed_option.invert)
-        activations_unset.set(activation_option->second);
+        activations_unset.Put(activation_option->second);
       else
-        activations_set.set(activation_option->second);
+        activations_set.Put(activation_option->second);
       // Rules with activation types don't create regular filtering rules by
       // default. Don't add types.
       add_implicit_types = false;
@@ -1181,7 +1205,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
       return kError;
     }
     if (option_definition.value == OptionDefinition::kRequiredForModify &&
-        rule.decision != RequestFilterRule::kPass && !parsed_option.value) {
+        rule.decision != RuleDecision::kPass && !parsed_option.value) {
       return kError;
     }
 
@@ -1193,32 +1217,41 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
         break;
       case OptionType::kAll:
         add_implicit_types = false;
-        types_set.set();
-        explicit_types_set.set(RequestFilterRule::kDocument);
-        explicit_types_set.set(RequestFilterRule::kPopup);
+        types_set.PutAll(RegularResourceTypes::All());
+        explicit_types_set.Put(ResourceType::kDocument);
+        explicit_types_set.Put(ResourceType::kPopup);
         break;
 
       case OptionType::kDocument:
         add_implicit_types = false;
-        if (parsed_option.value) {
-          return kError;
-        }
 
         if (parsed_option.invert)
-          explicit_types_unset.set(RequestFilterRule::kDocument);
+          explicit_types_unset.Put(ResourceType::kDocument);
         else
-          explicit_types_set.set(RequestFilterRule::kDocument);
+          explicit_types_set.Put(ResourceType::kDocument);
         // Block rules are irrelevant for the document activation, since a
         // blocked document doesn't load any resource by definition.
         if (source_settings_.use_whole_document_allow &&
-            rule.decision == RequestFilterRule::kPass) {
+            rule.decision == RuleDecision::kPass) {
           if (parsed_option.invert)
-            activations_unset.set(RequestFilterRule::kWholeDocument);
+            activations_unset.Put(ActivationType::kWholeDocument);
           else
-            activations_set.set(RequestFilterRule::kWholeDocument);
+            activations_set.Put(ActivationType::kWholeDocument);
           break;
         }
         break;
+
+      case OptionType::kElemHide: {
+        if (parsed_option.invert) {
+          activations_unset.Put(ActivationType::kGenericHide);
+          activations_unset.Put(ActivationType::kSpecificHide);
+        } else {
+          activations_set.Put(ActivationType::kGenericHide);
+          activations_set.Put(ActivationType::kSpecificHide);
+        }
+        add_implicit_types = false;
+        break;
+      }
 
       case OptionType::kThirdParty:
         if (parsed_option.invert) {
@@ -1230,19 +1263,55 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
 
       case OptionType::kStrictThirdParty:
         if (parsed_option.invert) {
-          strict_party =
-              (strict_party == Party::kThird) ? Party::kNone : Party::kFirst;
+          strict_party = (strict_party == StrictParty::kThird)
+                             ? StrictParty::kNone
+                             : StrictParty::kFirst;
         } else {
-          strict_party =
-              (strict_party == Party::kFirst) ? Party::kNone : Party::kThird;
+          strict_party = (strict_party == StrictParty::kFirst)
+                             ? StrictParty::kNone
+                             : StrictParty::kThird;
         }
         break;
 
+      case OptionType::kMethod: {
+        RequestMethods methods_set;
+        RequestMethods methods_unset;
+        for (auto method : base::SplitStringPiece(*parsed_option.value, "|",
+                                                  base::TRIM_WHITESPACE,
+                                                  base::SPLIT_WANT_NONEMPTY)) {
+          bool inverted = method.starts_with('~');
+          if (inverted) {
+            method.remove_prefix(1);
+          }
+
+          auto request_method = kRequestMethodStringMap.find(method);
+          if (request_method == kRequestMethodStringMap.end()) {
+            continue;
+          }
+          if (inverted) {
+            methods_unset.Put(request_method->second);
+          } else {
+            methods_set.Put(request_method->second);
+          }
+        }
+
+        if (!methods_unset.empty()) {
+          rule.request_methods = RequestMethods::All();
+          rule.request_methods.RemoveAll(methods_unset);
+        } else if (!methods_set.empty()) {
+          rule.request_methods = methods_set;
+        } else {
+          rule.request_methods = RequestMethods::All();
+        }
+
+        break;
+      }
+
       case OptionType::kImportant:
-        if (rule.decision == RequestFilterRule::kPass) {
+        if (rule.decision == RuleDecision::kPass) {
           return kError;
         }
-        rule.decision = RequestFilterRule::kModifyImportant;
+        rule.decision = RuleDecision::kModifyImportant;
         break;
 
       case OptionType::kMatchCase:
@@ -1261,8 +1330,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
           return kError;
         parsed_option.value =
             parsed_option.value->substr(std::size(kRewritePrefix) - 1);
-        if (!SetModifier(rule, RequestFilterRule::kRedirect,
-                         parsed_option.value)) {
+        if (!SetModifier(rule, ModifierType::kRedirect, parsed_option.value)) {
           return kError;
         }
         break;
@@ -1272,12 +1340,11 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
         [[fallthrough]];
       case OptionType::kRedirect:
         if (!parsed_option.value) {
-          CHECK(rule.decision == RequestFilterRule::kPass);
+          CHECK(rule.decision == RuleDecision::kPass);
           // uBlock makes all redirect allow rules affect only redirect.
           rule.modify_block = false;
         }
-        if (!SetModifier(rule, RequestFilterRule::kRedirect,
-                         parsed_option.value)) {
+        if (!SetModifier(rule, ModifierType::kRedirect, parsed_option.value)) {
           return kError;
         }
         break;
@@ -1294,7 +1361,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
               return kError;
           }
         }
-        if (!SetModifier(rule, RequestFilterRule::kCsp, parsed_option.value)) {
+        if (!SetModifier(rule, ModifierType::kCsp, parsed_option.value)) {
           return kError;
         }
         break;
@@ -1331,7 +1398,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
                               base::SPLIT_WANT_NONEMPTY);
 
         if (!SetModifier(
-                rule, RequestFilterRule::kAdQueryTrigger,
+                rule, ModifierType::kAdQueryTrigger,
                 std::set<std::string>(std::make_move_iterator(params.begin()),
                                       std::make_move_iterator(params.end())))) {
           return kError;
@@ -1344,7 +1411,7 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
           return kUnsupported;
         }
 
-        if (rule.decision != RequestFilterRule::kPass) {
+        if (rule.decision != RuleDecision::kPass) {
           return kError;
         }
 
@@ -1377,76 +1444,80 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
   // we cannot redirect WebSocket requests. We allow it to be turned on
   // implicity further down however, because having the bit set on won't have
   // any effect.
-  if (rule.modifier == RequestFilterRule::kRedirect &&
-      (rule.resource_types.test(RequestFilterRule::kWebSocket))) {
+  if (rule.modifier == ModifierType::kRedirect &&
+      (rule.resource_types.Has(ResourceType::kWebSocket))) {
     return kUnsupported;
   }
 
-  rule.activation_types = activations_set & ~activations_unset;
-  rule.explicit_types = explicit_types_set & ~explicit_types_unset;
+  rule.activation_types = activations_set;
+  rule.activation_types.RemoveAll(activations_unset);
+  rule.explicit_types = explicit_types_set;
+  rule.explicit_types.RemoveAll(explicit_types_unset);
 
-  if (rule.activation_types.test(RequestFilterRule::kAttributeAds) &&
+  if (rule.activation_types.Has(ActivationType::kAttributeAds) &&
       !source_settings_.allow_attribution_tracker_rules) {
     return kUnsupported;
   }
 
-  can_strict_block =
-      types_set.all() || (add_implicit_types && types_set.none());
+  can_strict_block = types_set.HasAll(RegularResourceTypes::All()) ||
+                     (add_implicit_types && types_set.empty());
 
-  if (types_unset.any()) {
-    rule.resource_types = ~types_unset | types_set;
-  } else if (types_set.any()) {
+  if (types_unset.HasAny(RegularResourceTypes::All())) {
+    rule.resource_types.PutAll(RegularResourceTypes::All());
+    rule.resource_types.RemoveAll(types_unset);
+    rule.resource_types.PutAll(types_set);
+  } else if (types_set.HasAny(RegularResourceTypes::All())) {
     rule.resource_types = types_set;
   } else if (add_implicit_types) {
-    CHECK(rule.resource_types.none());
-    rule.resource_types.set();
+    CHECK(rule.resource_types.empty());
+    rule.resource_types.PutAll(RegularResourceTypes::All());
   }
 
-  if (rule.modifier == RequestFilterRule::kAdQueryTrigger) {
-    if (rule.explicit_types.any() || rule.resource_types.any() ||
-        rule.activation_types.any()) {
+  if (rule.modifier == ModifierType::kAdQueryTrigger) {
+    if (rule.explicit_types.HasAny(ExplicitResourceTypes::All()) ||
+        rule.resource_types.HasAny(RegularResourceTypes::All()) ||
+        !rule.activation_types.empty()) {
       return kError;
     }
 
-    rule.explicit_types.set(RequestFilterRule::kDocument);
+    rule.explicit_types.Put(ResourceType::kDocument);
     rule.modify_block = false;
   }
 
-  if (rule.resource_types.none() && rule.explicit_types.none() &&
-      rule.activation_types.none() &&
-      rule.modifier != RequestFilterRule::kCsp) {
+  if (rule.resource_types.empty() && rule.explicit_types.empty() &&
+      rule.activation_types.empty() && rule.modifier != ModifierType::kCsp) {
     // This rule wouldn't match anything.
     return kError;
   }
 
-  if (rule.resource_types.none() && rule.explicit_types.none()) {
-    if (rule.modifier == RequestFilterRule::kRedirect) {
+  if (rule.resource_types.empty() && rule.explicit_types.empty()) {
+    if (rule.modifier == ModifierType::kRedirect) {
       return kError;
     }
     rule.modify_block = false;
   }
 
   switch (strict_party) {
-    case Party::kNone:
+    case StrictParty::kNone:
       if (first_party && !third_party) {
-        rule.party = RequestFilterRule::kFirstParty;
+        rule.party = Party::kFirst;
       } else if (third_party && !first_party) {
-        rule.party = RequestFilterRule::kThirdParty;
+        rule.party = Party::kThird;
       }
       break;
 
-    case Party::kFirst:
+    case StrictParty::kFirst:
       if (third_party && !first_party) {
         // This rule wouldn't match anything
         return kError;
       }
-      rule.party = RequestFilterRule::kStrictFirstParty;
+      rule.party = Party::kStrictFirst;
       break;
 
-    case Party::kThird:
-      rule.party = RequestFilterRule::kStrictThirdParty;
+    case StrictParty::kThird:
+      rule.party = Party::kStrictThird;
       if (first_party && !third_party) {
-        rule.party = RequestFilterRule::kFirstPartyAndStrictThirdParty;
+        rule.party = Party::kFirstAndStrictThird;
       }
       break;
   }

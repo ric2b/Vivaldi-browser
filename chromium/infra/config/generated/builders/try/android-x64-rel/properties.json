@@ -14,10 +14,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-12l-x64-rel-cq",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-android-archive",
               "builder_group": "chromium.android",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_android_config": {
@@ -45,10 +44,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-15-x64-rel",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-android-archive",
               "builder_group": "chromium.android",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_android_config": {
@@ -76,10 +74,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-webview-13-x64-hostside-rel",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-android-archive",
               "builder_group": "chromium.android",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_android_config": {
@@ -109,17 +106,17 @@
         {
           "bucket": "ci",
           "builder": "android-12l-x64-rel-cq",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         },
         {
           "bucket": "ci",
           "builder": "android-15-x64-rel",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         },
         {
           "bucket": "ci",
           "builder": "android-webview-13-x64-hostside-rel",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/android-x64-rel/targets"

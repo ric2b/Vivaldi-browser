@@ -16,10 +16,8 @@
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_manager.h"
 #include "components/autofill/core/browser/single_field_fillers/payments/merchant_promo_code_manager.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
-#include "components/autofill/core/browser/ui/payments/bnpl_tos_controller.h"
 #include "components/autofill/core/browser/ui/payments/bubble_show_options.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_options.h"
-#include "components/autofill/core/browser/ui/payments/select_bnpl_issuer_dialog_controller.h"
 
 #if !BUILDFLAG(IS_IOS)
 #include "components/webauthn/core/browser/internal_authenticator.h"
@@ -179,12 +177,6 @@ void PaymentsAutofillClient::ShowUnmaskPrompt(
 void PaymentsAutofillClient::OnUnmaskVerificationResult(
     PaymentsRpcResult result) {}
 
-void PaymentsAutofillClient::ShowBnplTos(BnplTosModel bnpl_tos_model,
-                                         base::OnceClosure accept_callback,
-                                         base::OnceClosure cancel_callback) {}
-
-void PaymentsAutofillClient::CloseBnplTos() {}
-
 VirtualCardEnrollmentManager*
 PaymentsAutofillClient::GetVirtualCardEnrollmentManager() {
   return nullptr;
@@ -258,6 +250,23 @@ bool PaymentsAutofillClient::ShowTouchToFillLoyaltyCard(
   return false;
 }
 
+bool PaymentsAutofillClient::UpdateTouchToFillBnplPaymentMethod(
+    std::optional<uint64_t> extracted_amount,
+    bool is_amount_supported_by_any_issuer) {
+  return false;
+}
+
+bool PaymentsAutofillClient::ShowTouchToFillProgress(
+    base::WeakPtr<TouchToFillDelegate> delegate) {
+  return false;
+}
+
+bool PaymentsAutofillClient::ShowTouchToFillBnplIssuers(
+    base::WeakPtr<TouchToFillDelegate> delegate,
+    base::span<const BnplIssuer> bnpl_issuers_to_suggest) {
+  return false;
+}
+
 void PaymentsAutofillClient::HideTouchToFillPaymentMethod() {}
 
 const PaymentsDataManager& PaymentsAutofillClient::GetPaymentsDataManager()
@@ -282,6 +291,14 @@ PaymentsAutofillClient::UserProvidedCardSaveAndFillDetails::
     UserProvidedCardSaveAndFillDetails() = default;
 
 PaymentsAutofillClient::UserProvidedCardSaveAndFillDetails::
+    UserProvidedCardSaveAndFillDetails(
+        const UserProvidedCardSaveAndFillDetails&) = default;
+
+PaymentsAutofillClient::UserProvidedCardSaveAndFillDetails&
+PaymentsAutofillClient::UserProvidedCardSaveAndFillDetails::operator=(
+    const UserProvidedCardSaveAndFillDetails&) = default;
+
+PaymentsAutofillClient::UserProvidedCardSaveAndFillDetails::
     ~UserProvidedCardSaveAndFillDetails() = default;
 
 void PaymentsAutofillClient::ShowCreditCardLocalSaveAndFillDialog(
@@ -293,20 +310,22 @@ void PaymentsAutofillClient::ShowCreditCardUploadSaveAndFillDialog(
 
 void PaymentsAutofillClient::ShowCreditCardSaveAndFillPendingDialog() {}
 
+void PaymentsAutofillClient::HideCreditCardSaveAndFillDialog() {}
+
 payments::SaveAndFillManager* PaymentsAutofillClient::GetSaveAndFillManager() {
   return nullptr;
 }
 
-void PaymentsAutofillClient::ShowSelectBnplIssuerDialog(
-    std::vector<BnplIssuerContext> bnpl_issuer_context,
-    std::string app_locale,
-    base::OnceCallback<void(BnplIssuer)> selected_issuer_callback,
-    base::OnceClosure cancel_callback) {}
-
-void PaymentsAutofillClient::DismissSelectBnplIssuerDialog() {}
-
 bool PaymentsAutofillClient::IsTabModalPopupDeprecated() const {
   return false;
+}
+
+BnplStrategy* PaymentsAutofillClient::GetBnplStrategy() {
+  return nullptr;
+}
+
+BnplUiDelegate* PaymentsAutofillClient::GetBnplUiDelegate() {
+  return nullptr;
 }
 
 }  // namespace autofill::payments

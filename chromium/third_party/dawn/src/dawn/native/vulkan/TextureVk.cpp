@@ -410,6 +410,33 @@ VkComponentSwizzle VulkanComponentSwizzle(wgpu::ComponentSwizzle swizzle) {
             DAWN_UNREACHABLE();
     }
 }
+
+void MaybeConvertDepthStencilSwizzleOneToAlpha(bool isDepthOrStencilFormat,
+                                               const VulkanDeviceInfo& deviceInfo,
+                                               wgpu::TextureComponentSwizzle* swizzle) {
+    // Exit early if the format isn't depth or stencil.
+    if (!isDepthOrStencilFormat) {
+        return;
+    }
+
+    // Exit early if the device supports VK_COMPONENT_SWIZZLE_ONE for depth/stencil formats.
+    // This is enabled by the VK_KHR_maintenance5 extension.
+    // https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html#textures-component-swizzle
+    if (deviceInfo.HasExt(DeviceExt::Maintenance5) &&
+        deviceInfo.propertiesMaintenance5.depthStencilSwizzleOneSupport == VK_TRUE) {
+        return;
+    }
+
+    for (auto* componentPtr : {&swizzle->r, &swizzle->g, &swizzle->b, &swizzle->a}) {
+        if (*componentPtr == wgpu::ComponentSwizzle::One) {
+            // Convert 'One' to 'Alpha' (which typically samples as 1.0)
+            // if the underlying Vulkan implementation doesn't support 'One' directly
+            // for depth/stencil formats.
+            *componentPtr = wgpu::ComponentSwizzle::A;
+        }
+    }
+}
+
 }  // namespace
 
 #define SIMPLE_FORMAT_MAPPING(X)                                                      \
@@ -935,6 +962,14 @@ void Texture::TransitionUsageForPassImpl(
                                                               TextureSyncInfo* lastSyncInfo,
                                                               const TextureSyncInfo& newSyncInfo) {
         wgpu::TextureUsage newUsage = newSyncInfo.usage;
+
+        // This is an ASSERT in lieu of validation that pinned resources are only used with their
+        // pinned usage. A resource being pinned means that it should stay as a single usage until
+        // it is unpinned / repinned.
+        // TODO(https://crbug.com/435317394): When the validation is implemented, consider removing
+        // this ASSERT.
+        DAWN_ASSERT(!HasPinnedUsage() || IsSubset(newUsage, GetPinnedUsage()));
+
         if (newSyncInfo.shaderStages == wgpu::ShaderStage::None) {
             // If the image isn't used in any shader stages, ignore shader usages. Eg. ignore a
             // texture binding that isn't actually sampled in any shader.
@@ -1041,6 +1076,13 @@ void Texture::TransitionUsageAndGetResourceBarrierImpl(
     DAWN_ASSERT(imageBarriers != nullptr);
     const Format& format = GetFormat();
 
+    // This is an ASSERT in lieu of validation that pinned resources are only used with their pinned
+    // usage. A resource being pinned means that it should stay as a single usage until it is
+    // unpinned / repinned.
+    // TODO(https://crbug.com/435317394): When the validation is implemented, consider removing this
+    // ASSERT.
+    DAWN_ASSERT(!HasPinnedUsage() || IsSubset(usage, GetPinnedUsage()));
+
     if (shaderStages == wgpu::ShaderStage::None) {
         // If the image isn't used in any shader stages, ignore shader usages. Eg. ignore a texture
         // binding that isn't actually sampled in any shader.
@@ -1126,11 +1168,12 @@ MaybeError Texture::ClearTexture(CommandRecordingContext* recordingContext,
                 viewDesc.mipLevelCount = 1u;
                 viewDesc.baseArrayLayer = layer;
                 viewDesc.arrayLayerCount = 1u;
-                viewDesc.usage = wgpu::TextureUsage::RenderAttachment;
+                // Inherit wgpu::TextureUsage::RenderAttachment, which may be an internal usage.
+                viewDesc.usage = wgpu::TextureUsage::None;
 
                 ColorAttachmentIndex ca0(uint8_t(0));
                 DAWN_TRY_ASSIGN(beginCmd.colorAttachments[ca0].view,
-                                TextureView::Create(this, Unpack(&viewDesc)));
+                                device->CreateTextureView(this, &viewDesc));
 
                 RenderPassColorAttachment colorAttachment{};
                 colorAttachment.view = beginCmd.colorAttachments[ca0].view.Get();
@@ -1255,6 +1298,33 @@ MaybeError Texture::ClearTexture(CommandRecordingContext* recordingContext,
         device->IncrementLazyClearCountForTesting();
     }
     return {};
+}
+
+MaybeError Texture::PinImpl(wgpu::TextureUsage usage) {
+    // Pinning means that until unpinned, the texture will have specific usage and can be used
+    // freely in shaders without any further check or memory barrier tracking. Ensure all
+    // subresources are cleared and transitioned to the usage.
+    DAWN_ASSERT(!HasPinnedUsage());
+    SubresourceRange pinnedSubresources = GetAllSubresources();
+
+    CommandRecordingContext* recordingContext =
+        ToBackend(GetDevice()->GetQueue())->GetPendingRecordingContext(Queue::SubmitMode::Passive);
+    DAWN_TRY(EnsureSubresourceContentInitialized(recordingContext, pinnedSubresources));
+
+    TransitionUsageNow(recordingContext, usage, kAllStages, pinnedSubresources);
+
+    // TODO(https://crbug.com/435317394): Investigate what to do for imported textures. Should we
+    // consider a pin/unpin pair similar to an access on a queue such that we need to wait on fences
+    // or export them?
+    return {};
+}
+
+void Texture::UnpinImpl() {
+    DAWN_ASSERT(HasPinnedUsage());
+
+    // TODO(https://crbug.com/435317394): Investigate what to do for imported textures. Should we
+    // consider a pin/unpin pair similar to an access on a queue such that we need to wait on fences
+    // or export them?
 }
 
 MaybeError Texture::EnsureSubresourceContentInitialized(CommandRecordingContext* recordingContext,
@@ -1947,8 +2017,9 @@ MaybeError SharedTexture::OnBeforeSubmit(CommandRecordingContext* context) {
 // static
 ResultOrError<Ref<TextureView>> TextureView::Create(
     TextureBase* texture,
+    uint64_t textureViewId,
     const UnpackedPtr<TextureViewDescriptor>& descriptor) {
-    Ref<TextureView> view = AcquireRef(new TextureView(texture, descriptor));
+    Ref<TextureView> view = AcquireRef(new TextureView(texture, textureViewId, descriptor));
     DAWN_TRY(view->Initialize(descriptor));
     return view;
 }
@@ -2009,8 +2080,10 @@ MaybeError TextureView::Initialize(const UnpackedPtr<TextureViewDescriptor>& des
     return {};
 }
 
-TextureView::TextureView(TextureBase* texture, const UnpackedPtr<TextureViewDescriptor>& descriptor)
-    : TextureViewBase(texture, descriptor) {}
+TextureView::TextureView(TextureBase* texture,
+                         uint64_t textureViewId,
+                         const UnpackedPtr<TextureViewDescriptor>& descriptor)
+    : TextureViewBase(texture, descriptor), mTextureViewId(textureViewId) {}
 TextureView::~TextureView() {}
 
 void TextureView::DestroyImpl() {
@@ -2072,9 +2145,23 @@ VkImageViewCreateInfo TextureView::GetCreateInfo(wgpu::TextureFormat format,
         createInfo.format = VulkanImageFormat(device, format);
     }
 
-    createInfo.components = VkComponentMapping{
-        VulkanComponentSwizzle(GetSwizzleRed()), VulkanComponentSwizzle(GetSwizzleGreen()),
-        VulkanComponentSwizzle(GetSwizzleBlue()), VulkanComponentSwizzle(GetSwizzleAlpha())};
+    bool isDepthOrStencilFormat = GetTexture()->GetFormat().HasDepthOrStencil();
+    const wgpu::TextureComponentSwizzle kDefaultSwizzle =
+        isDepthOrStencilFormat ? kR001Swizzle : kRGBASwizzle;
+
+    auto swizzle = ComposeSwizzle(kDefaultSwizzle, GetSwizzle());
+    if (AreSwizzleEquivalent(swizzle, kDefaultSwizzle)) {
+        // We must use identity swizzle for render views.
+        // https://docs.vulkan.org/spec/latest/chapters/renderpass.html#VUID-VkFramebufferCreateInfo-pAttachments-00884
+        createInfo.components = VkComponentMapping{VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G,
+                                                   VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A};
+    } else {
+        MaybeConvertDepthStencilSwizzleOneToAlpha(isDepthOrStencilFormat, device->GetDeviceInfo(),
+                                                  &swizzle);
+        createInfo.components = VkComponentMapping{
+            VulkanComponentSwizzle(swizzle.r), VulkanComponentSwizzle(swizzle.g),
+            VulkanComponentSwizzle(swizzle.b), VulkanComponentSwizzle(swizzle.a)};
+    }
 
     const SubresourceRange& subresources = GetSubresourceRange();
     createInfo.subresourceRange.baseMipLevel = subresources.baseMipLevel;

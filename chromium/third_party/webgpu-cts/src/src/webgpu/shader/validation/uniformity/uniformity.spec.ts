@@ -394,6 +394,10 @@ const kFragmentBuiltinValues = [
     builtin: `subgroup_size`,
     type: `u32`,
   },
+  {
+    builtin: `primitive_id`,
+    type: `u32`,
+  },
 ];
 
 g.test('fragment_builtin_values')
@@ -428,7 +432,13 @@ g.test('fragment_builtin_values')
         unreachable(`Unhandled type`);
       }
     }
-    const enable = t.params.builtin.includes('subgroup') ? 'enable subgroups;' : '';
+    let enable = '';
+    if (t.params.builtin.includes('subgroup')) {
+      enable = 'enable subgroups;\n';
+    } else if (t.params.builtin === 'primitive_id') {
+      enable = 'enable chromium_experimental_primitive_id;\n';
+    }
+
     const code = `
 ${enable}
 @group(0) @binding(0) var s : sampler;

@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">ブックマーク、<ph name="FOLDER_NAME" /> フォルダーに保存したで</translation>
 <translation id="2433507940547922241">ええ格好つける</translation>
 <translation id="2501278716633472235">戻る</translation>
+<translation id="2546283357679194313">Cookieとサイトデータ</translation>
 <translation id="2633278372998075009">プライベートタブ</translation>
 <translation id="2650751991977523696">ファイルもっかいダウンロードする？</translation>
 <translation id="265156376773362237">標準プリロード</translation>
@@ -54,6 +55,9 @@
 <translation id="4269820728363426813">リンクアドレスコピー</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Androidの設定で画面ロック有効にする<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">パスワードマネージャー</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, plural,
+          =1 {1 日以上使ってないタブとグループ}
+          other {# 日以上使ってないタブとグループ}}</translation>
 <translation id="451872707440238414">ブックマーク検索</translation>
 <translation id="4526803704855831732">プライベートタブ</translation>
 <translation id="4532845899244822526">フォルダー選んで</translation>
@@ -62,6 +66,7 @@
 
 VivaldiでGoogleがデフォルトの検索エンジンに設定されてたら、タッチ検索機能が使えるねん。</translation>
 <translation id="4759238208242260848">ダウンロード</translation>
+<translation id="4777866634702576038">タブグループほかす？</translation>
 <translation id="4850886885716139402">表示</translation>
 <translation id="4883379392681899581">プライベートモードを離れるで</translation>
 <translation id="4943872375798546930">見つからへんわ</translation>
@@ -77,7 +82,6 @@ VivaldiでGoogleがデフォルトの検索エンジンに設定されてたら�
 <translation id="5375131951310889874">ウェブページから離れんでも、気になるトピック調べられるで。VivaldiでGoogleがデフォルトの検索エンジンに設定されてたら、タッチ検索機能が使えるねん。その単語と周りのコンテキストをGoogle検索に送って、定義、画像、検索結果なんかが帰ってくるねん。
 
 検索ワード調整するんやったら、長押しして選択して。検索精度上げるんやったら、パネルを一番上までスライドさせて、検索ボックスタップして。</translation>
-<translation id="543338862236136125">パスワード変える</translation>
 <translation id="572328651809341494">最近つこたタブ</translation>
 <translation id="5833984609253377421">リンクわけわけ</translation>
 <translation id="6150320133806434356">ブックマーク作ったわ</translation>
@@ -85,6 +89,7 @@ VivaldiでGoogleがデフォルトの検索エンジンに設定されてたら�
 <translation id="6336451774241870485">さらのプライベートタブ</translation>
 <translation id="6337323516034698937">このタブ別のデバイスに送るんやったら、両方のデバイスでVivaldi同期にサインインしてな。必要やったら暗号化パスワードも入れなあかんで。</translation>
 <translation id="6341580099087024258">ファイル保存する所確認する</translation>
+<translation id="6364438453358674297">履歴から候補ほかす？</translation>
 <translation id="6404511346730675251">ブックマークいらう</translation>
 <translation id="650224091954855786">{FILE_COUNT, plural,
           =1 {ファイルダウンロードしたで}
@@ -112,6 +117,9 @@ VivaldiでGoogleがデフォルトの検索エンジンに設定されてたら�
 <translation id="8062594758852531064">拡張プリロード：</translation>
 <translation id="8073388330009372546">さらのタブで画像開く</translation>
 <translation id="8127542551745560481">ホームページいらう</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+          =1 {(1) 個の使ってないアイテム}
+          other {(#) 個の使ってないアイテム}}</translation>
 <translation id="8266862848225348053">ダウンロード先</translation>
 <translation id="8348430946834215779">できるだけHTTPS使うて、HTTPSサポートしていないサイトやったら読込前に警告出すで</translation>
 <translation id="8560602726703398413">リーディングリストはブックマークにあるで</translation>
@@ -121,6 +129,9 @@ VivaldiでGoogleがデフォルトの検索エンジンに設定されてたら�
 <translation id="9042893549633094279">プライバシーとセキュリティ</translation>
 <translation id="9063523880881406963">[デスクトップ版サイトを見る] 切っとくわ</translation>
 <translation id="9080642952018487277">忍者モードにする</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+          =1 {1日以上使われてへんで}
+          other {# 日以上使われてへんで}}</translation>
 <translation id="930124987204876019">履歴、Cookie、サイトデータ、キャッシュほかす…</translation>
 <translation id="961856697154696964">閲覧履歴データほかす</translation>
 </translationbundle>

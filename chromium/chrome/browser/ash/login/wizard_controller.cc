@@ -60,7 +60,6 @@
 #include "chrome/browser/ash/login/screens/app_downloading_screen.h"
 #include "chrome/browser/ash/login/screens/app_launch_splash_screen.h"
 #include "chrome/browser/ash/login/screens/arc_vm_data_migration_screen.h"
-#include "chrome/browser/ash/login/screens/assistant_optin_flow_screen.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
 #include "chrome/browser/ash/login/screens/categories_selection_screen.h"
 #include "chrome/browser/ash/login/screens/choobe_screen.h"
@@ -78,6 +77,7 @@
 #include "chrome/browser/ash/login/screens/error_screen.h"
 #include "chrome/browser/ash/login/screens/family_link_notice_screen.h"
 #include "chrome/browser/ash/login/screens/fingerprint_setup_screen.h"
+#include "chrome/browser/ash/login/screens/fjord_station_setup_screen.h"
 #include "chrome/browser/ash/login/screens/fjord_touch_controller_screen.h"
 #include "chrome/browser/ash/login/screens/gaia_info_screen.h"
 #include "chrome/browser/ash/login/screens/gaia_screen.h"
@@ -162,7 +162,6 @@
 #include "chrome/browser/ui/webui/ash/login/app_downloading_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/app_launch_splash_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/arc_vm_data_migration_screen_handler.h"
-#include "chrome/browser/ui/webui/ash/login/assistant_optin_flow_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/auto_enrollment_check_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/categories_selection_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/choobe_screen_handler.h"
@@ -184,6 +183,7 @@
 #include "chrome/browser/ui/webui/ash/login/family_link_notice_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/fingerprint_setup_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/fjord_oobe_util.h"
+#include "chrome/browser/ui/webui/ash/login/fjord_station_setup_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/fjord_touch_controller_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/gaia_info_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
@@ -777,10 +777,7 @@ WizardController::CreateScreens() {
       oobe_ui->GetErrorScreen(),
       base::BindRepeating(&WizardController::OnUpdateRequiredScreenExit,
                           weak_factory_.GetWeakPtr())));
-  append(std::make_unique<AssistantOptInFlowScreen>(
-      oobe_ui->GetView<AssistantOptInFlowScreenHandler>()->AsWeakPtr(),
-      base::BindRepeating(&WizardController::OnAssistantOptInFlowScreenExit,
-                          weak_factory_.GetWeakPtr())));
+
   append(std::make_unique<MultiDeviceSetupScreen>(
       oobe_ui->GetView<MultiDeviceSetupScreenHandler>()->AsWeakPtr(),
       base::BindRepeating(&WizardController::OnMultiDeviceSetupScreenExit,
@@ -1033,6 +1030,10 @@ WizardController::CreateScreens() {
   if (fjord_util::ShouldShowFjordOobe()) {
     append(std::make_unique<FjordTouchControllerScreen>(
         oobe_ui->GetView<FjordTouchControllerScreenHandler>()->AsWeakPtr()));
+    append(std::make_unique<FjordStationSetupScreen>(
+        oobe_ui->GetView<FjordStationSetupScreenHandler>()->AsWeakPtr(),
+        base::BindRepeating(&WizardController::OnFjordStationSetupScreenExit,
+                            weak_factory_.GetWeakPtr())));
   }
 
   return result;
@@ -1285,10 +1286,6 @@ void WizardController::ShowUpdateRequiredScreen() {
   SetCurrentScreen(GetScreen(UpdateRequiredView::kScreenId));
 }
 
-void WizardController::ShowAssistantOptInFlowScreen() {
-  SetCurrentScreen(GetScreen(AssistantOptInFlowScreenView::kScreenId));
-}
-
 void WizardController::ShowMultiDeviceSetupScreen() {
   SetCurrentScreen(GetScreen(MultiDeviceSetupScreenView::kScreenId));
 }
@@ -1395,6 +1392,10 @@ void WizardController::ShowAppLaunchSplashScreen() {
 
 void WizardController::ShowFjordTouchControllerScreen() {
   SetCurrentScreen(GetScreen(FjordTouchControllerScreenView::kScreenId));
+}
+
+void WizardController::ShowFjordStationSetupScreen() {
+  SetCurrentScreen(GetScreen(FjordStationSetupScreenView::kScreenId));
 }
 
 void WizardController::OnUserCreationScreenExit(
@@ -1519,14 +1520,17 @@ void WizardController::OnGaiaScreenExit(GaiaScreen::Result result) {
         }
       }
 
+      GetScreen<GaiaScreen>()->Reset();
       // If a default redirection to third party IdP is set we can hide the
       // dialog.
       const bool gaia_page_defaults_to_saml = IsGaiaPageDefaultsToSAML();
-      if ((LoginDisplayHost::default_host()->HasUserPods() &&
-           !wizard_context_->is_user_creation_enabled) ||
-          (!LoginDisplayHost::default_host()->HasUserPods() &&
-           gaia_page_defaults_to_saml)) {
-        GetScreen<GaiaScreen>()->Reset();
+      const bool no_previous_screen =
+          LoginDisplayHost::default_host()->HasUserPods() &&
+          !wizard_context_->is_user_creation_enabled;
+      const bool new_user_saml_redirect =
+          !LoginDisplayHost::default_host()->HasUserPods() &&
+          gaia_page_defaults_to_saml;
+      if (no_previous_screen || new_user_saml_redirect) {
         LoginDisplayHost::default_host()->HideOobeDialog(
             gaia_page_defaults_to_saml);
       } else {
@@ -2781,13 +2785,6 @@ void WizardController::OnGeminiIntroScreenExit(
     return;
   }
 
-  ShowAssistantOptInFlowScreen();
-}
-
-void WizardController::OnAssistantOptInFlowScreenExit(
-    AssistantOptInFlowScreen::Result result) {
-  OnScreenExit(AssistantOptInFlowScreenView::kScreenId,
-               AssistantOptInFlowScreen::GetResultString(result));
   AdvanceToScreen(SmartPrivacyProtectionView::kScreenId);
 }
 
@@ -2887,6 +2884,29 @@ void WizardController::OnPackagedLicenseScreenExit(
 void WizardController::OnAppLaunchSplashScreenExit() {
   // TODO(b/343483938): Exit AppLaunchSplashScreen before launching the app.
   NOTIMPLEMENTED();
+}
+
+void WizardController::OnFjordStationSetupScreenExit() {
+  OnScreenExit(FjordStationSetupScreenView::kScreenId, kDefaultExitReason);
+  auto app = KioskController::Get().GetAutoLaunchApp();
+  if (app.has_value()) {
+    AutoLaunchKioskApp(app.value());
+    return;
+  }
+
+  NOTREACHED() << "Expected a kiosk app to be available";
+}
+
+bool WizardController::ExitFjordTouchControllerScreen() {
+  if (current_screen()->screen_id() ==
+      FjordTouchControllerScreenView::kScreenId) {
+    OnScreenExit(FjordTouchControllerScreenView::kScreenId, kDefaultExitReason);
+    ShowFjordStationSetupScreen();
+    return true;
+  }
+
+  LOG(ERROR) << "Can't exit: Fjord touch controller screen is not showing.";
+  return false;
 }
 
 void WizardController::OnOobeFlowFinished() {
@@ -3249,8 +3269,6 @@ void WizardController::AdvanceToScreen(OobeScreenId screen_id) {
     ShowEncryptionMigrationScreen();
   } else if (screen_id == UpdateRequiredView::kScreenId) {
     ShowUpdateRequiredScreen();
-  } else if (screen_id == AssistantOptInFlowScreenView::kScreenId) {
-    ShowAssistantOptInFlowScreen();
   } else if (screen_id == MultiDeviceSetupScreenView::kScreenId) {
     ShowMultiDeviceSetupScreen();
   } else if (screen_id == GestureNavigationScreenView::kScreenId) {
@@ -3321,7 +3339,8 @@ void WizardController::AdvanceToScreen(OobeScreenId screen_id) {
              screen_id == ThemeSelectionScreenView::kScreenId ||
              screen_id == SamlConfirmPasswordView::kScreenId ||
              screen_id == LocalStateErrorScreenView::kScreenId ||
-             screen_id == QuickStartView::kScreenId) {
+             screen_id == QuickStartView::kScreenId ||
+             screen_id == FjordStationSetupScreenView::kScreenId) {
     SetCurrentScreen(GetScreen(screen_id));
   } else {
     NOTREACHED();

@@ -22,7 +22,6 @@
 namespace openscreen::osp {
 
 using ::testing::_;
-using ::testing::Invoke;
 using ::testing::NiceMock;
 
 namespace {
@@ -96,31 +95,31 @@ TEST_F(ConnectionTest, ConnectAndSend) {
   Connection receiver(Connection::PresentationInfo{id, url},
                       &mock_receiver_delegate, &mock_receiver_);
   ON_CALL(mock_controller_, OnPresentationTerminated(_, _, _))
-      .WillByDefault(Invoke([&receiver](const std::string& presentation_id,
-                                        TerminationSource source,
-                                        TerminationReason reason) {
+      .WillByDefault([&receiver](const std::string& presentation_id,
+                                 TerminationSource source,
+                                 TerminationReason reason) {
         receiver.OnTerminated();
         return Error::None();
-      }));
+      });
   ON_CALL(mock_controller_, CloseConnection(_, _))
-      .WillByDefault(Invoke(
+      .WillByDefault(
           [&receiver](Connection* connection, Connection::CloseReason reason) {
             receiver.OnClosedByRemote();
             return Error::None();
-          }));
+          });
   ON_CALL(mock_receiver_, OnPresentationTerminated(_, _, _))
-      .WillByDefault(Invoke([&controller](const std::string& presentation_id,
-                                          TerminationSource source,
-                                          TerminationReason reason) {
+      .WillByDefault([&controller](const std::string& presentation_id,
+                                   TerminationSource source,
+                                   TerminationReason reason) {
         controller.OnTerminated();
         return Error::None();
-      }));
+      });
   ON_CALL(mock_receiver_, CloseConnection(_, _))
-      .WillByDefault(Invoke([&controller](Connection* connection,
-                                          Connection::CloseReason reason) {
+      .WillByDefault([&controller](Connection* connection,
+                                   Connection::CloseReason reason) {
         controller.OnClosedByRemote();
         return Error::None();
-      }));
+      });
 
   EXPECT_EQ(id, controller.presentation_info().id);
   EXPECT_EQ(url, controller.presentation_info().url);
@@ -138,17 +137,17 @@ TEST_F(ConnectionTest, ConnectAndSend) {
                                         &mock_connect_request_callback);
   EXPECT_TRUE(request);
   EXPECT_CALL(mock_connect_request_callback, OnConnectSucceed(_, _, _))
-      .WillOnce(Invoke([&controller_stream](uint64_t request_id,
-                                            std::string_view instance_name,
-                                            uint64_t instance_id) {
+      .WillOnce([&controller_stream](uint64_t request_id,
+                                     std::string_view instance_name,
+                                     uint64_t instance_id) {
         controller_stream = CreateClientProtocolConnection(instance_id);
-      }));
+      });
 
   EXPECT_CALL(quic_bridge_.mock_server_observer(), OnIncomingConnectionMock(_))
-      .WillOnce(testing::WithArgs<0>(testing::Invoke(
+      .WillOnce(testing::WithArgs<0>(
           [&receiver_stream](std::unique_ptr<ProtocolConnection>& connection) {
             receiver_stream = std::move(connection);
-          })));
+          }));
 
   quic_bridge_.RunTasksUntilIdle();
   ASSERT_TRUE(controller_stream);
@@ -177,8 +176,7 @@ TEST_F(ConnectionTest, ConnectAndSend) {
   std::string received;
   EXPECT_CALL(mock_receiver_delegate,
               OnStringMessage(static_cast<std::string_view>(expected_message)))
-      .WillOnce(Invoke(
-          [&received](std::string_view s) { received = std::string(s); }));
+      .WillOnce([&received](std::string_view s) { received = std::string(s); });
   quic_bridge_.RunTasksUntilIdle();
 
   std::string string_response = MakeEchoResponse(received);
@@ -198,9 +196,9 @@ TEST_F(ConnectionTest, ConnectAndSend) {
 
   std::vector<uint8_t> received_data;
   EXPECT_CALL(mock_receiver_delegate, OnBinaryMessage(expected_data))
-      .WillOnce(Invoke([&received_data](std::vector<uint8_t> d) {
+      .WillOnce([&received_data](std::vector<uint8_t> d) {
         received_data = std::move(d);
-      }));
+      });
   quic_bridge_.RunTasksUntilIdle();
 
   receiver.SendBinary(MakeEchoResponse(received_data));

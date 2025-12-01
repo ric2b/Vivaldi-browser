@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.dragdrop;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -24,6 +25,7 @@ import org.mockito.junit.MockitoRule;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.IntentUtils;
 import org.chromium.base.Token;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.IntentHandler;
@@ -32,12 +34,14 @@ import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.MultiTabMetadata;
 import org.chromium.chrome.browser.tabmodel.TabGroupMetadata;
 import org.chromium.chrome.browser.tabwindow.TabWindowManager;
 import org.chromium.ui.dragdrop.DragDropMetricUtils.UrlIntentSource;
 import org.chromium.url.JUnitTestGURLs;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -129,6 +133,20 @@ public class DragAndDropLauncherActivityUnitTest {
     }
 
     @Test
+    public void testGetMultiTabIntent_specificWindowId() {
+        testGetTabOrGroupIntent(
+                /* isGroupDrag= */ false, /* isMultiTabDrag= */ true, /* destWindowId= */ 2);
+    }
+
+    @Test
+    public void testGetMultiTabIntent_defaultWindowId() {
+        testGetTabOrGroupIntent(
+                /* isGroupDrag= */ false,
+                /* isMultiTabDrag= */ true,
+                /* destWindowId= */ TabWindowManager.INVALID_WINDOW_ID);
+    }
+
+    @Test
     public void testIsIntentValid_invalidIntentAction() {
         Intent intent =
                 DragAndDropLauncherActivity.getLinkLauncherIntent(
@@ -158,15 +176,26 @@ public class DragAndDropLauncherActivityUnitTest {
     }
 
     private void testGetTabOrGroupIntent(boolean isGroupDrag, int destWindowId) {
+        testGetTabOrGroupIntent(isGroupDrag, /* isMultiTabDrag= */ false, destWindowId);
+    }
+
+    private void testGetTabOrGroupIntent(
+            boolean isGroupDrag, boolean isMultiTabDrag, int destWindowId) {
         Tab tab = MockTab.createAndInitialize(1, mProfile);
-        ChromeDropDataAndroid dropData =
-                isGroupDrag
-                        ? createTabGroupDropData(/* allowDragToCreateNewInstance= */ true)
-                        : createTabDropData(tab, /* allowDragToCreateNewInstance= */ true);
+        tab.setIsPinned(true);
+        ChromeDropDataAndroid dropData;
+        if (isGroupDrag) {
+            dropData = createTabGroupDropData(/* allowDragToCreateNewInstance= */ true);
+        } else if (isMultiTabDrag) {
+            dropData = createMultiTabDropData(tab, /* allowDragToCreateNewInstance= */ true);
+        } else {
+            dropData = createTabDropData(tab, /* allowDragToCreateNewInstance= */ true);
+        }
         int sourceWindowId = 1;
         Intent intent =
                 DragAndDropLauncherActivity.buildTabOrGroupIntent(
                         dropData, mContext, sourceWindowId, destWindowId);
+        IntentUtils.addTrustedIntentExtras(intent);
         assertEquals(
                 "The intent action should be DragAndDropLauncherActivity.ACTION_DRAG_DROP_VIEW.",
                 DragAndDropLauncherActivity.ACTION_DRAG_DROP_VIEW,
@@ -205,6 +234,25 @@ public class DragAndDropLauncherActivityUnitTest {
                     "The TabGroupMetadata intent extra value should match.",
                     buildTabGroupMetadata(),
                     IntentHandler.getTabGroupMetadata(intent));
+        } else if (isMultiTabDrag) {
+            MultiTabMetadata multiTabMetadata = IntentHandler.getMultiTabMetadata(intent);
+            assertEquals(
+                    "The EXTRA_URL_SOURCE intent extra value should match.",
+                    UrlIntentSource.MULTI_TAB_IN_STRIP,
+                    intent.getIntExtra(
+                            IntentHandler.EXTRA_URL_DRAG_SOURCE, UrlIntentSource.UNKNOWN));
+            assertEquals(
+                    "The intent data value should match - Urls.",
+                    Collections.singletonList(tab.getUrl().getSpec()),
+                    multiTabMetadata.urls);
+            assertEquals(
+                    "The intent data value should match - Tab Ids.",
+                    Collections.singletonList(tab.getId()),
+                    multiTabMetadata.tabIds);
+            assertArrayEquals(
+                    "The intent data value should match - Is Pinned.",
+                    new boolean[] {tab.getIsPinned()},
+                    multiTabMetadata.isPinned);
         } else {
             assertEquals(
                     "The EXTRA_URL_SOURCE intent extra value should match.",
@@ -219,12 +267,24 @@ public class DragAndDropLauncherActivityUnitTest {
                     "The intent data value should match.",
                     Uri.parse(tab.getUrl().getSpec()),
                     intent.getData());
+            assertEquals(
+                    "The intent data value should match - Is Pinned.",
+                    tab.getIsPinned(),
+                    IntentHandler.getPinnedState(intent));
         }
     }
 
     private ChromeDropDataAndroid createTabDropData(Tab tab, boolean allowDragToCreateNewInstance) {
         return new ChromeTabDropDataAndroid.Builder()
                 .withTab(tab)
+                .withAllowDragToCreateInstance(allowDragToCreateNewInstance)
+                .build();
+    }
+
+    private ChromeDropDataAndroid createMultiTabDropData(
+            Tab tab, boolean allowDragToCreateNewInstance) {
+        return new ChromeMultiTabDropDataAndroid.Builder()
+                .withTabs(List.of(tab))
                 .withAllowDragToCreateInstance(allowDragToCreateNewInstance)
                 .build();
     }

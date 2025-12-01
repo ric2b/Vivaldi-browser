@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -117,12 +117,12 @@ const getXPathIndexInParent = (node: Node): number => {
 /**
  * Computes the XPath for a node.
  *
- * @param node - The node to compute.
- * @param optimized - Whether to optimize the XPath for the node. Does not imply
+ * @internal
+ * @param node The node to compute.
+ * @param optimized Whether to optimize the XPath for the node. Does not imply
  * the XPath is shorter; implies the XPath will be highly-scoped to the node.
  * @returns The computed XPath.
  *
- * @internal
  */
 export const computeXPath = (
     node: Node,

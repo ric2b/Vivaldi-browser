@@ -62,28 +62,28 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		},
 		{Var: "skia_codec_rust_png_public",
 			Rules: []string{
-				"//experimental/rust_png/decoder:hdrs",
+				"//include/codec:rust_png_public_hdrs",
 			},
 		},
 		{Var: "skia_codec_rust_png",
 			Rules: []string{
-				"//experimental/rust_png/decoder:srcs",
-				"//experimental/rust_png/ffi:utils",
+				"//src/codec:rust_png_srcs",
+				"//rust/png:utils",
 			},
 		},
 		{Var: "skia_codec_rust_png_ffi_rs_srcs",
 			Rules: []string{
-				"//experimental/rust_png/ffi:rs_srcs",
+				"//rust/png:rs_srcs",
 			},
 		},
 		{Var: "skia_codec_rust_png_ffi_cxx_bridge_srcs",
 			Rules: []string{
-				"//experimental/rust_png/ffi:cxx_bridge_srcs",
+				"//rust/png:cxx_bridge_srcs",
 			},
 		},
 		{Var: "skia_codec_rust_png_ffi_cpp_hdrs",
 			Rules: []string{
-				"//experimental/rust_png/ffi:ffi_cpp",
+				"//rust/png:ffi_cpp",
 			},
 		},
 	}},
@@ -131,11 +131,13 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			Rules: []string{"//src/encode:jpeg_encode_srcs",
 				"//src/encode:jpeg_encode_hdrs"}},
 		{Var: "skia_encode_rust_png_public",
-			Rules: []string{"//experimental/rust_png/encoder:hdrs"}},
+			Rules: []string{
+				"//include/encode:rust_png_public_hdrs",
+			}},
 		{Var: "skia_encode_rust_png_srcs",
 			Rules: []string{
-				"//experimental/rust_png/encoder:srcs",
-				"//experimental/rust_png/ffi:utils",
+				"//src/encode:rust_png_srcs",
+				"//rust/png:utils",
 			}},
 		{Var: "skia_encode_png_base",
 			Rules: []string{
@@ -267,7 +269,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			Rules: []string{
 				"//src/gpu/graphite/precompile:_precompile_hdrs",
 				"//src/gpu/graphite/precompile:_precompile_srcs",
-				"//src/gpu/graphite:precompile_hdrs",
 				"//src/gpu/graphite:precompile_srcs",
 			}},
 	}},

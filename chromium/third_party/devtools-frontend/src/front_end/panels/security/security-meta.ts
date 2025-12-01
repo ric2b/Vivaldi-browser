@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,19 +11,19 @@ import * as Security from './security.js';
 
 const UIStrings = {
   /**
-   *@description Default Title of the security panel
+   * @description Default Title of the security panel
    */
   security: 'Security',
   /**
-   *@description Title of privacy and security panel. This is used when the kDevToolsPrivacyUI feature flag is enabled.
+   * @description Title of privacy and security panel. This is used when the kDevToolsPrivacyUI feature flag is enabled.
    */
   PrivacyAndSecurity: 'Privacy and security',
   /**
-   *@description Default command to open the security panel
+   * @description Default command to open the security panel
    */
   showSecurity: 'Show Security',
   /**
-   *@description Command to open the privacy and security panel. This is used when the kDevToolPrivacyUI feature flag is enabled
+   * @description Command to open the privacy and security panel. This is used when the kDevToolPrivacyUI feature flag is enabled
    */
   showPrivacyAndSecurity: 'Show Privacy and security',
 } as const;

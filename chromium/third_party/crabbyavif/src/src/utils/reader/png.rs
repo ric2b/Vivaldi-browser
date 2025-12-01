@@ -37,19 +37,13 @@ impl PngReader {
 
 impl Reader for PngReader {
     fn read_frame(&mut self, config: &Config) -> AvifResult<(Image, u64)> {
-        let file = File::open(self.filename.clone()).or(Err(AvifError::UnknownError(
-            "error opening input file".into(),
-        )))?;
+        let file = File::open(self.filename.clone()).map_err(AvifError::map_unknown_error)?;
         let decoder = png::Decoder::new(file);
-        let mut reader = decoder.read_info().or(Err(AvifError::UnknownError(
-            "error reading png info".into(),
-        )))?;
+        let mut reader = decoder.read_info().map_err(AvifError::map_unknown_error)?;
         let mut decoded_bytes = vec![0u8; reader.output_buffer_size()];
         let info = reader
             .next_frame(&mut decoded_bytes)
-            .or(Err(AvifError::UnknownError(
-                "error reading png frame".into(),
-            )))?;
+            .map_err(AvifError::map_unknown_error)?;
         let rgb_bytes = &decoded_bytes[..info.buffer_size()];
         let rgb = rgb::Image {
             width: info.width,
@@ -58,20 +52,20 @@ impl Reader for PngReader {
                 png::BitDepth::Eight => 8,
                 png::BitDepth::Sixteen => 16,
                 _ => {
-                    return Err(AvifError::UnknownError(format!(
+                    return AvifError::unknown_error(format!(
                         "png bit depth is not supported: {:#?}",
                         info.bit_depth
-                    )))
+                    ));
                 }
             },
             format: match info.color_type {
                 png::ColorType::Rgb => rgb::Format::Rgb,
                 png::ColorType::Rgba => rgb::Format::Rgba,
                 _ => {
-                    return Err(AvifError::UnknownError(format!(
+                    return AvifError::unknown_error(format!(
                         "png color type not supported: {:#?}",
                         info.color_type
-                    )))
+                    ));
                 }
             },
             pixels: match info.bit_depth {
@@ -84,10 +78,10 @@ impl Reader for PngReader {
                     Some(Pixels::Buffer16(rgb_bytes16))
                 }
                 _ => {
-                    return Err(AvifError::UnknownError(format!(
+                    return AvifError::unknown_error(format!(
                         "png bit depth is not supported: {:#?}",
                         info.bit_depth
-                    )))
+                    ));
                 }
             },
             row_bytes: info.line_size as u32,
@@ -96,7 +90,7 @@ impl Reader for PngReader {
         let mut yuv = Image {
             width: info.width,
             height: info.height,
-            depth: config.depth.unwrap_or(std::cmp::min(rgb.depth, 12)),
+            depth: config.depth.unwrap_or(std::cmp::min(rgb.depth, 16)),
             yuv_format: config.yuv_format.unwrap_or(PixelFormat::Yuv420),
             yuv_range: YuvRange::Full,
             matrix_coefficients: config

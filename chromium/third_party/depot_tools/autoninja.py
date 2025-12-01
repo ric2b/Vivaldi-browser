@@ -85,9 +85,9 @@ def _is_google_corp_machine():
     return shutil.which("gcert") is not None
 
 
-def _has_internal_checkout():
+def _has_internal_checkout(output_dir):
     """Check if internal is checked out."""
-    root_dir = gclient_paths.GetPrimarySolutionPath()
+    root_dir = gclient_paths.GetPrimarySolutionPath(output_dir)
     if not root_dir:
         return False
     return os.path.exists(os.path.join(root_dir, "internal", ".git"))
@@ -111,12 +111,12 @@ def _reclient_rbe_project():
     return ""
 
 
-def _siso_rbe_project():
+def _siso_rbe_project(output_dir):
     """Returns RBE project used by siso."""
     siso_project = os.environ.get('SISO_PROJECT')
     if siso_project:
         return siso_project
-    root_dir = gclient_paths.GetPrimarySolutionPath()
+    root_dir = gclient_paths.GetPrimarySolutionPath(output_dir)
     if not root_dir:
         return ""
     sisoenv_path = os.path.join(root_dir, 'build/config/siso/.sisoenv')
@@ -151,8 +151,8 @@ def _print_cmd(cmd):
     print(*[shell_quoter(arg) for arg in cmd], file=sys.stderr)
 
 
-def _get_remoteexec_defaults():
-    root_dir = gclient_paths.GetPrimarySolutionPath()
+def _get_remoteexec_defaults(output_dir):
+    root_dir = gclient_paths.GetPrimarySolutionPath(output_dir)
     if not root_dir:
         return None
     default_file = os.path.join(root_dir,
@@ -179,7 +179,7 @@ def _get_remoteexec_defaults():
 # this logic should match with //build/toolchain/siso.gni
 def _get_use_siso_default(output_dir):
     """Returns use_siso default value."""
-    root_dir = gclient_paths.GetPrimarySolutionPath()
+    root_dir = gclient_paths.GetPrimarySolutionPath(output_dir)
     if not root_dir:
         return False
 
@@ -252,6 +252,14 @@ def _convert_ninja_j_to_siso_flags(j_value, use_remoteexec, args):
 
 
 def _main_inner(input_args, build_id):
+    # If running in the Gemini CLI, automatically add --quiet if it's not
+    # already present to avoid filling the context window.
+    if os.environ.get('GEMINI_CLI') == '1':
+        if not any(arg in ('--quiet', '-q') for arg in input_args):
+            print('Adding --quiet because we\'re running under gemini-cli ('
+                  'GEMINI_CLI=1)')
+            input_args.append('--quiet')
+
     # if user doesn't set PYTHONPYCACHEPREFIX and PYTHONDONTWRITEBYTECODE
     # set PYTHONDONTWRITEBYTECODE=1 not to create many *.pyc in workspace
     # and keep workspace clean.
@@ -356,7 +364,7 @@ def _main_inner(input_args, build_id):
                 use_siso = False
 
         if use_reclient is None and use_remoteexec:
-            if values := _get_remoteexec_defaults():
+            if values := _get_remoteexec_defaults(output_dir):
                 if use_siso:
                     use_reclient = values["use_reclient_on_siso"]
                 else:
@@ -373,9 +381,9 @@ def _main_inner(input_args, build_id):
         elif use_siso and project is None:
             # siso runs locally if empty project is given
             # even if use_remoteexec=true is set.
-            project = _siso_rbe_project()
+            project = _siso_rbe_project(output_dir)
 
-        if _has_internal_checkout():
+        if _has_internal_checkout(output_dir):
             # user may login on non-@google.com account on corp,
             # but need to use @google.com and rbe-chrome-untrusted
             # with src-internal.

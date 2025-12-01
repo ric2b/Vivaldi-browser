@@ -42,11 +42,13 @@ static_library("impl") {
 
   deps = [
     "//chrome/browser:browser_public_dependencies",
+    "//chrome/browser/devtools",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui:browser_navigator_params_headers",
     "//chrome/browser/ui/autofill",
     "//chrome/browser/ui/tabs:tab_strip",
     "//chrome/browser/ui/web_applications",
+    "//chrome/browser/ui/web_applications:launch_utils",
     "//chrome/browser/web_applications",
     "//chromeos/ash/components/browser_context_helper",
     "//components/sessions:session_id",

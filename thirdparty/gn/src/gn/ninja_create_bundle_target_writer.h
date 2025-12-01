@@ -24,6 +24,9 @@ class NinjaCreateBundleTargetWriter : public NinjaTargetWriter {
   // if defined, otherwise returns an empty string.
   std::string WritePostProcessingRuleDefinition();
 
+  // Writes the post processing manifest file if needed.
+  void WritePostProcessingManifestFile();
+
   // Writes the steps to copy files into the bundle.
   //
   // The list of newly created files will be added to |output_files|.

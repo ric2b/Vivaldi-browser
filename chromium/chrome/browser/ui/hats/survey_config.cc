@@ -21,8 +21,8 @@
 #include "components/page_info/core/features.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_hats_trigger_helper.h"
-#include "components/plus_addresses/features.h"
-#include "components/plus_addresses/plus_address_hats_utils.h"
+#include "components/plus_addresses/core/browser/plus_address_hats_utils.h"
+#include "components/plus_addresses/core/common/features.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/variations/service/google_groups_manager.h"
@@ -42,6 +42,10 @@
 #if BUILDFLAG(ENABLE_COMPOSE)
 #include "components/compose/core/browser/compose_features.h"
 #endif  // #if !BUILDFLAG(ENABLE_COMPOSE)
+
+#if BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
+#include "pdf/pdf_features.h"  // nogncheck
+#endif                         // BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
 
 #if !BUILDFLAG(IS_ANDROID)
 constexpr char kHatsSurveyTriggerAutofillAddress[] = "autofill-address";
@@ -162,6 +166,11 @@ constexpr char kHatsSurveyOrganicTriggerSafetyHubAndroid[] =
     "safety_hub_android_organic_survey";
 #endif  // #if !BUILDFLAG(IS_ANDROID)
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+constexpr char kHatsSurveyTriggerPrivacySandboxWhatsNewSurvey[] =
+    "privacy-sandbox-whats-new-survey";
+#endif  // !BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
 #if BUILDFLAG(ENABLE_COMPOSE)
 constexpr char kHatsSurveyTriggerComposeAcceptance[] = "compose-acceptance";
 constexpr char kHatsSurveyTriggerComposeClose[] = "compose-close";
@@ -208,6 +217,10 @@ constexpr char kHatsSurveyTriggerOnFocusZpsSuggestionsHappiness[] =
 constexpr char kHatsSurveyTriggerOnFocusZpsSuggestionsUtility[] =
     "omnibox-on-focus-utility";
 
+#if BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
+constexpr char kHatsSurveyTriggerPdfSaveToDrive[] = "save-to-drive";
+#endif  // BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
+
 namespace {
 
 constexpr char kHatsSurveyProbability[] = "probability";
@@ -239,10 +252,7 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
       kHatsSurveyTriggerPermissionsPrompt,
       /*presupplied_trigger_id=*/std::nullopt,
       std::vector<std::string>{
-          permissions::kPermissionsPromptSurveyHadGestureKey,
-          permissions::kPermissionPromptSurveyPreviewVisibleKey,
-          permissions::kPermissionPromptSurveyPreviewDropdownInteractedKey,
-          permissions::kPermissionPromptSurveyPreviewWasCombinedKey},
+          permissions::kPermissionsPromptSurveyHadGestureKey},
       std::vector<std::string>{
           permissions::kPermissionsPromptSurveyPromptDispositionKey,
           permissions::kPermissionsPromptSurveyPromptDispositionReasonKey,
@@ -254,8 +264,8 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
           permissions::kPermissionPromptSurveyUrlKey,
           permissions::kPermissionPromptSurveyPepcPromptPositionKey,
           permissions::kPermissionPromptSurveyInitialPermissionStatusKey,
-          permissions::kPermissionPromptSurveyPreviewTimeToDecisionKey,
-          permissions::kPermissionPromptSurveyPreviewTimeToVisibleKey});
+          permissions::kPermissionPromptSurveyPromptOptionsKey,
+          permissions::kPermissionPromptSurveyPromptDisplayDurationKey});
 
   // Privacy sandbox always on sentiment survey
   survey_configs.emplace_back(
@@ -555,6 +565,16 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
       &switches::kChromeIdentitySurveySwitchProfileFromProfilePicker,
       kHatsSurveyTriggerIdentitySwitchProfileFromProfilePicker, std::nullopt,
       std::vector<std::string>{}, identity_string_psd_fields);
+
+  // Privacy sandbox What's New survey
+  survey_configs.emplace_back(  //
+      &privacy_sandbox::kPrivacySandboxWhatsNewSurvey,
+      kHatsSurveyTriggerPrivacySandboxWhatsNewSurvey,
+      /*presupplied_trigger_id=*/std::nullopt,
+      /*product_specific_bits_data_fields=*/
+      std::vector<std::string>{},
+      /*product_specific_string_data_fields=*/
+      std::vector<std::string>{"What's New Scroll Depth"}),
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
 #if BUILDFLAG(ENABLE_COMPOSE)
@@ -725,7 +745,9 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
       password_manager::features::kPasswordChangeSuccessSurveyTriggerId.Get(),
       /*product_specific_bits_data_fields=*/
       std::vector<std::string>{password_manager::features_util::
-                                   kPasswordChangeSuggestedPasswordsAdoption},
+                                   kPasswordChangeSuggestedPasswordsAdoption,
+                               password_manager::features_util::
+                                   kPasswordChangeBlockingChallengeDetected},
       /*product_specific_string_data_fields=*/
       std::vector<std::string>{
           password_manager::features_util::
@@ -738,7 +760,9 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
       password_manager::features::kPasswordChangeErrorSurveyTriggerId.Get(),
       /*product_specific_bits_data_fields=*/
       std::vector<std::string>{password_manager::features_util::
-                                   kPasswordChangeSuggestedPasswordsAdoption},
+                                   kPasswordChangeSuggestedPasswordsAdoption,
+                               password_manager::features_util::
+                                   kPasswordChangeBlockingChallengeDetected},
       /*product_specific_string_data_fields=*/
       std::vector<std::string>{
           password_manager::features_util::
@@ -751,7 +775,9 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
       password_manager::features::kPasswordChangeCanceledSurveyTriggerId.Get(),
       /*product_specific_bits_data_fields=*/
       std::vector<std::string>{password_manager::features_util::
-                                   kPasswordChangeSuggestedPasswordsAdoption},
+                                   kPasswordChangeSuggestedPasswordsAdoption,
+                               password_manager::features_util::
+                                   kPasswordChangeBlockingChallengeDetected},
       /*product_specific_string_data_fields=*/
       std::vector<std::string>{
           password_manager::features_util::
@@ -934,6 +960,15 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
       /*product_specific_bits_data_fields=*/std::vector<std::string>{},
       /*product_specific_string_data_fields=*/
       std::vector<std::string>{"page classification", "channel"});
+
+#if BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
+  survey_configs.emplace_back(
+      &chrome_pdf::features::kPdfSaveToDrive, kHatsSurveyTriggerPdfSaveToDrive,
+      /*presupplied_trigger_id=*/"etKhHztBR0ugnJ3q1cK0TKzkyTyw",
+      /*product_specific_bits_data_fields=*/
+      std::vector<std::string>{"Upload status", "Multipart upload",
+                               "Resumable upload"});
+#endif  // BUILDFLAG(ENABLE_PDF_SAVE_TO_DRIVE)
 
   return survey_configs;
 }

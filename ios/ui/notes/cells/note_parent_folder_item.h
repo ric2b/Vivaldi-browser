@@ -17,7 +17,7 @@
 @end
 
 // Cell class associated to NoteParentFolderItem.
-@interface NoteParentFolderCell : TableViewCell
+@interface NoteParentFolderCell : LegacyTableViewCell
 
 // Label that displays the item's title.
 @property(nonatomic, readonly, strong) UILabel* parentFolderNameLabel;

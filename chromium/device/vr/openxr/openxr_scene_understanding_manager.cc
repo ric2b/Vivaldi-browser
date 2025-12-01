@@ -4,11 +4,16 @@
 
 #include "device/vr/openxr/openxr_scene_understanding_manager.h"
 
+#include <algorithm>
+
 #include "device/vr/openxr/openxr_extension_helper.h"
 
 namespace device {
 
 OpenXRSceneUnderstandingManager::OpenXRSceneUnderstandingManager() = default;
 OpenXRSceneUnderstandingManager::~OpenXRSceneUnderstandingManager() = default;
+
+void OpenXRSceneUnderstandingManager::OnDiscoveryRecommended(
+    const XrEventDataSpatialDiscoveryRecommendedEXT* event_data) {}
 
 }  // namespace device

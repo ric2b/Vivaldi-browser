@@ -35,7 +35,6 @@ IPAddress GetAddressV6(const DnsSdInstanceEndpoint endpoint) {
 }  // namespace
 
 using testing::_;
-using testing::Invoke;
 using testing::Return;
 using testing::StrictMock;
 

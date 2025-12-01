@@ -17,7 +17,6 @@
 
 class HttpsUpgradeService;
 class PrefService;
-class PrerenderService;
 
 // This tab helper handles HTTP main frame navigation upgrades to HTTPS.
 // When it encounters an eligible HTTP navigation, it cancels the navigation,
@@ -66,7 +65,6 @@ class HttpsOnlyModeUpgradeTabHelper
 
   HttpsOnlyModeUpgradeTabHelper(web::WebState* web_state,
                                 PrefService* prefs,
-                                PrerenderService* prerender_service,
                                 HttpsUpgradeService* service);
 
   // Returns true if url can be loaded over HTTP (e.g. it was previously
@@ -122,9 +120,8 @@ class HttpsOnlyModeUpgradeTabHelper
   base::OneShotTimer timer_;
 
   raw_ptr<web::WebState> web_state_;
-  raw_ptr<PrefService> prefs_;
-  raw_ptr<PrerenderService> prerender_service_;
-  raw_ptr<HttpsUpgradeService> service_;
+  raw_ptr<PrefService, DanglingUntriaged> prefs_;
+  raw_ptr<HttpsUpgradeService, DanglingUntriaged> service_;
 };
 
 #endif  // IOS_CHROME_BROWSER_HTTPS_UPGRADES_MODEL_HTTPS_ONLY_MODE_UPGRADE_TAB_HELPER_H_

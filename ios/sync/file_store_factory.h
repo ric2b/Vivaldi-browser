@@ -28,9 +28,9 @@ class SyncedFileStoreFactory : public ProfileKeyedServiceFactoryIOS {
   SyncedFileStoreFactory();
   ~SyncedFileStoreFactory() override;
 
-  // BrowserContextKeyedServiceFactory:
+  // ProfileKeyedServiceFactoryIOS:
   std::unique_ptr<KeyedService> BuildServiceInstanceFor(
-      web::BrowserState* context) const override;
+      ProfileIOS* profile) const override;
 };
 
 #endif  // IOS_SYNC_FILE_STORE_FACTORY_H_

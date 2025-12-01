@@ -21,21 +21,17 @@
 #include "components/webapps/common/web_app_id.h"
 
 class PrefService;
+class Profile;
 
 namespace message_center {
 class Notification;
 }
 
-namespace web_app {
-class WebAppProvider;
-}  // namespace web_app
-
 namespace multi_capture {
 
 class MultiCaptureUsageIndicatorService
     : public KeyedService,
-      public MultiCaptureDataService::Observer,
-      public NotificationDisplayService::Observer {
+      public MultiCaptureDataService::Observer {
  public:
   struct AllowListedAppNames {
     AllowListedAppNames(
@@ -54,9 +50,8 @@ class MultiCaptureUsageIndicatorService
   ~MultiCaptureUsageIndicatorService() override;
 
   static std::unique_ptr<MultiCaptureUsageIndicatorService> Create(
+      Profile* profile,
       PrefService* prefs,
-      web_app::WebAppProvider* provider,
-      NotificationDisplayService* notification_display_service,
       MultiCaptureDataService* data_service);
 
   void MultiCaptureStarted(const std::string& label,
@@ -67,19 +62,10 @@ class MultiCaptureUsageIndicatorService
   void MultiCaptureDataChanged() override;
   void MultiCaptureDataServiceDestroyed() override;
 
-  // NotificationDisplayService::Observer:
-  void OnNotificationDisplayed(
-      const message_center::Notification& notification,
-      const NotificationCommon::Metadata* const metadata) override;
-  void OnNotificationClosed(const std::string& notification_id) override;
-  void OnNotificationDisplayServiceDestroyed(
-      NotificationDisplayService* service) override;
-
  protected:
   explicit MultiCaptureUsageIndicatorService(
+      Profile* profile,
       PrefService* prefs,
-      web_app::WebAppProvider* provider,
-      NotificationDisplayService* notification_display_service,
       MultiCaptureDataService* data_service);
 
  private:
@@ -110,15 +96,17 @@ class MultiCaptureUsageIndicatorService
   GetAllCaptureWithoutNotificationApps(
       const MultiCaptureUsageIndicatorService::AllowListedAppNames& apps) const;
 
-  // As the keyed service is bound to the profile / browser context and the
-  // web app provider keyed service is listed as dependency for this service,
-  // these raw pointers are safe because the profile and provider objects are
-  // guaranteed by the keyed service system to be alive at least until the
-  // `Shutdown` function is called.
+  NotificationDisplayService& notification_display_service() const;
+
+  // As the keyed service is bound to the browser context and the
+  // multi capture data service and notification display service keyed
+  // servicesare listed as dependency for this service, these raw pointers are
+  // safe because the profile and provider objects are guaranteed by the keyed
+  // service system to be alive at least until the `Shutdown` function is
+  // called.
   const raw_ptr<PrefService> pref_service_;
-  const raw_ptr<web_app::WebAppProvider> provider_;
-  raw_ptr<NotificationDisplayService> notification_display_service_;
   const raw_ptr<MultiCaptureDataService> data_service_;
+  const raw_ptr<Profile> profile_;
   base::Value::List multi_screen_capture_allow_list_on_login_;
 
   // Stores started captures and stores a mapping `app_id` --> `label`.
@@ -131,9 +119,6 @@ class MultiCaptureUsageIndicatorService
   base::ScopedObservation<MultiCaptureDataService,
                           MultiCaptureDataService::Observer>
       data_service_observer_{this};
-  base::ScopedObservation<NotificationDisplayService,
-                          NotificationDisplayService::Observer>
-      notification_service_observer_{this};
 
   base::WeakPtrFactory<MultiCaptureUsageIndicatorService> weak_ptr_factory_{
       this};

@@ -20,7 +20,6 @@
 #import "ios/web/content/web_state/content_web_state_builder.h"
 #import "ios/web/content/web_state/crc_web_view_proxy_impl.h"
 #import "ios/web/content/web_state/crc_web_viewport_container_view.h"
-#import "ios/web/find_in_page/java_script_find_in_page_manager_impl.h"
 #import "ios/web/public/favicon/favicon_url.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/navigation_util.h"
@@ -162,9 +161,6 @@ ContentWebState::ContentWebState(const CreateParams& params,
 
   [web_view_ addSubview:web_contents_view];
 
-  // These should be moved when the are removed from CRWWebController.
-  web::JavaScriptFindInPageManagerImpl::CreateForWebState(this);
-
   session_storage_ = session_storage;
   if (session_storage) {
     UUID_ = [session_storage.stableIdentifier copy];
@@ -265,9 +261,9 @@ WebState* ContentWebState::ForceRealizedWithPolicy(RealizationPolicy policy) {
     ExtractContentSessionStorage(this, web_contents_->GetController(),
                                  GetBrowserState(), session_storage_);
     session_storage_ = nil;
-    for (auto& observer : observers_) {
-      observer.WebStateRealized(this);
-    }
+    // Notify all observers that the WebState has become realized but take
+    // care to not notify any observer that is registered while iterating.
+    NotifyWebStateRealized(observers_);
   }
   return this;
 }
@@ -749,7 +745,7 @@ content::WebContents* ContentWebState::AddNewContents(
 int ContentWebState::GetTopControlsHeight() {
   return ([web_view_ maxViewportInsets].top -
           [web_view_ minViewportInsets].top) *
-         display::Screen::GetScreen()
+         display::Screen::Get()
              ->GetDisplayNearestWindow(web_contents_->GetTopLevelNativeWindow())
              .device_scale_factor();
 }
@@ -761,7 +757,7 @@ int ContentWebState::GetTopControlsMinHeight() {
 int ContentWebState::GetBottomControlsHeight() {
   return ([web_view_ maxViewportInsets].bottom -
           [web_view_ minViewportInsets].bottom) *
-         display::Screen::GetScreen()
+         display::Screen::Get()
              ->GetDisplayNearestWindow(web_contents_->GetTopLevelNativeWindow())
              .device_scale_factor();
 }

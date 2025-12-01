@@ -17,6 +17,8 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/ui/vivaldi_infobar_badges/vivaldi_infobar_badges_constants.h"
 #import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
@@ -105,8 +107,9 @@ UIAction* GetOverflowMenuElementForBadgeType(
     case kBadgeTypeReaderMode:
       action_identifier = kBadgeButtonReaderModeActionIdentifier;
       title = l10n_util::GetNSString(IDS_IOS_READER_MODE_TITLE);
-      image = CustomSymbolWithPointSize(vOverflowReaderMode,
+      image = CustomSymbolWithPointSize(vInfobarBadgeReaderMode,
                                         kInfobarSymbolPointSize);
+      image = [image imageWithTintColor:[UIColor colorNamed:kTextPrimaryColor]];
       break; //End Vivaldi
 
     case kBadgeTypeIncognito:

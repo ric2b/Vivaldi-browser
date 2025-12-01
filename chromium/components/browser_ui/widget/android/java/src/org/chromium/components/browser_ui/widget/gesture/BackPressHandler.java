@@ -47,7 +47,8 @@ public interface BackPressHandler {
         Type.SHOW_READING_LIST,
         Type.VIVALDI_DOUBLE_BACK_PRESS, // Vivaldi
         Type.MINIMIZE_APP_AND_CLOSE_TAB,
-        Type.ARCHIVED_TABS_DIALOG
+        Type.ARCHIVED_TABS_DIALOG,
+        Type.NATIVE_PAGE
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface Type {
@@ -70,10 +71,12 @@ public interface BackPressHandler {
         int FIND_TOOLBAR = 15;
         int BOTTOM_CONTROLS = 16;
         int TAB_HISTORY = 17;
-        int SHOW_READING_LIST = 18;
-        int VIVALDI_DOUBLE_BACK_PRESS = 19; // Vivaldi
+        int NATIVE_PAGE = 18;
+        int SHOW_READING_LIST = 19;
         int MINIMIZE_APP_AND_CLOSE_TAB = 20;
-        int NUM_TYPES = MINIMIZE_APP_AND_CLOSE_TAB + 1;
+
+        int VIVALDI_DOUBLE_BACK_PRESS = 21; // Vivaldi
+        int NUM_TYPES = VIVALDI_DOUBLE_BACK_PRESS + 1;
     }
 
     /** Result of back press handling. */

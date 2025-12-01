@@ -154,14 +154,14 @@ TEST_F(DigitalIdentityCredentialTest, IdentityDigitalCredentialUseCounter) {
   auto mock_request_ptr = mock_request.get();
   context.GetWindow().GetBrowserInterfaceBroker().SetBinderForTesting(
       mojom::DigitalIdentityRequest::Name_,
-      WTF::BindRepeating(
+      BindRepeating(
           [](MockDigitalIdentityRequest* mock_request_ptr,
              mojo::ScopedMessagePipeHandle handle) {
             mock_request_ptr->Bind(
                 mojo::PendingReceiver<mojom::DigitalIdentityRequest>(
                     std::move(handle)));
           },
-          WTF::Unretained(mock_request_ptr)));
+          Unretained(mock_request_ptr)));
 
   ScriptState* script_state = context.GetScriptState();
   auto* resolver =
@@ -169,8 +169,7 @@ TEST_F(DigitalIdentityCredentialTest, IdentityDigitalCredentialUseCounter) {
           script_state);
 
   DiscoverDigitalIdentityCredentialFromExternalSource(
-      resolver, *CreateValidGetOptions(context.GetScriptState()),
-      context.GetExceptionState());
+      resolver, *CreateValidGetOptions(context.GetScriptState()));
 
   test::RunPendingTasks();
 
@@ -178,6 +177,9 @@ TEST_F(DigitalIdentityCredentialTest, IdentityDigitalCredentialUseCounter) {
       blink::mojom::WebFeature::kIdentityDigitalCredentials));
   EXPECT_TRUE(context.GetWindow().document()->IsUseCounted(
       blink::mojom::WebFeature::kIdentityDigitalCredentialsSuccess));
+
+  context.GetWindow().GetBrowserInterfaceBroker().SetBinderForTesting(
+      mojom::DigitalIdentityRequest::Name_, {});
 }
 
 // Test that navigator.credentials.create() increments the feature use counter
@@ -193,21 +195,21 @@ TEST_F(DigitalIdentityCredentialTest,
   auto mock_request_ptr = mock_request.get();
   context.GetWindow().GetBrowserInterfaceBroker().SetBinderForTesting(
       mojom::DigitalIdentityRequest::Name_,
-      WTF::BindRepeating(
+      BindRepeating(
           [](MockDigitalIdentityRequest* mock_request_ptr,
              mojo::ScopedMessagePipeHandle handle) {
             mock_request_ptr->Bind(
                 mojo::PendingReceiver<mojom::DigitalIdentityRequest>(
                     std::move(handle)));
           },
-          WTF::Unretained(mock_request_ptr)));
+          Unretained(mock_request_ptr)));
 
   ScriptState* script_state = context.GetScriptState();
   auto* resolver =
       MakeGarbageCollected<ScriptPromiseResolver<IDLNullable<Credential>>>(
           script_state);
-  CreateDigitalIdentityCredentialInExternalSource(
-      resolver, *CreateValidCreateOptions(), context.GetExceptionState());
+  CreateDigitalIdentityCredentialInExternalSource(resolver,
+                                                  *CreateValidCreateOptions());
 
   test::RunPendingTasks();
 
@@ -258,8 +260,7 @@ TEST_F(DigitalIdentityCredentialTest,
             script_state);
 
     DiscoverDigitalIdentityCredentialFromExternalSource(
-        resolver, *CreateGetOptionsWithRequests(requests),
-        context.GetExceptionState());
+        resolver, *CreateGetOptionsWithRequests(requests));
 
     ScriptPromiseTester tester(script_state, resolver->Promise());
 
@@ -305,8 +306,7 @@ TEST_F(DigitalIdentityCredentialTest,
             script_state);
 
     CreateDigitalIdentityCredentialInExternalSource(
-        resolver, *CreateCreateOptionsWithRequests(requests),
-        context.GetExceptionState());
+        resolver, *CreateCreateOptionsWithRequests(requests));
 
     ScriptPromiseTester tester(script_state, resolver->Promise());
 

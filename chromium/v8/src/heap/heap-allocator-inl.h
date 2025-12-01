@@ -83,7 +83,11 @@ HeapAllocator::AllocateRaw(int size_in_bytes, AllocationOrigin origin,
   DCHECK_EQ(heap_->isolate(), Isolate::TryGetCurrent());
 #if DEBUG
   local_heap_->VerifyCurrent();
-#endif
+#endif  // DEBUG
+
+#if V8_VERIFY_WRITE_BARRIERS
+  local_heap_->AssertNoWriteBarrierModeScope();
+#endif  // V8_VERIFY_WRITE_BARRIERS
 
   if (v8_flags.single_generation.value() && type == AllocationType::kYoung) {
     return AllocateRaw(size_in_bytes, AllocationType::kOld, origin, alignment);
@@ -154,6 +158,14 @@ HeapAllocator::AllocateRaw(int size_in_bytes, AllocationOrigin origin,
         break;
     }
   }
+
+#if V8_VERIFY_WRITE_BARRIERS
+  if (type == AllocationType::kYoung && !allocation.IsFailure()) {
+    set_last_young_allocation(allocation.ToAddress());
+  } else {
+    set_last_young_allocation(kNullAddress);
+  }
+#endif  // V8_VERIFY_WRITE_BARRIERS
 
   if (allocation.To(&object)) {
     if (heap::ShouldZapGarbage() && AllocationType::kCode == type) {
@@ -304,6 +316,13 @@ HeapAllocator::CollectGarbageAndRetryAllocation(AllocateFunction&& Allocate,
                                             : PerformHeapLimitCheck::kYes;
 
   for (int i = 0; i < 2; i++) {
+    if (v8_flags.ineffective_gcs_forces_last_resort &&
+        allocation != AllocationType::kYoung &&
+        heap_for_allocation(allocation)
+            ->HasConsecutiveIneffectiveMarkCompact()) {
+      return {};
+    }
+
     // Skip the heap limit check in the GC if enabled. The heap limit needs to
     // be enforced by the caller.
     CollectGarbage(allocation, perform_heap_limit_check);

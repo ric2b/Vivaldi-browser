@@ -11,6 +11,7 @@
 #import "base/strings/utf_string_conversions.h"
 #import "base/test/bind.h"
 #import "components/history/core/browser/history_service.h"
+#import "components/history/core/browser/history_types.h"
 #import "components/keyed_service/core/service_access_type.h"
 #import "ios/chrome/browser/history/model/history_service_factory.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
@@ -44,19 +45,20 @@ class HistoryTabHelperTest : public PlatformTest {
 
   // Queries the history service for information about the given `url` and
   // returns the response.  Spins the runloop until a response is received.
-  void QueryURL(const GURL& url) {
+  void QueryURLAndVisits(const GURL& url) {
     history::HistoryService* service =
         ios::HistoryServiceFactory::GetForProfile(
             profile_.get(), ServiceAccessType::EXPLICIT_ACCESS);
 
     base::RunLoop loop;
-    service->QueryURL(
-        url, /*want_visits=*/true,
-        base::BindLambdaForTesting([&](history::QueryURLResult result) {
-          latest_row_result_ = std::move(result.row);
-          latest_visits_result_ = std::move(result.visits);
-          loop.Quit();
-        }),
+    service->QueryURLAndVisits(
+        url, history::VisitQuery404sPolicy::kInclude404s,
+        base::BindLambdaForTesting(
+            [&](history::QueryURLAndVisitsResult result) {
+              latest_row_result_ = std::move(result.row);
+              latest_visits_result_ = std::move(result.visits);
+              loop.Quit();
+            }),
         &tracker_);
     loop.Run();
   }
@@ -68,7 +70,8 @@ class HistoryTabHelperTest : public PlatformTest {
             profile_.get(), ServiceAccessType::EXPLICIT_ACCESS);
     service->AddPage(
         url, base::Time::Now(), 0, 0, GURL(), history::RedirectList(),
-        ui::PAGE_TRANSITION_MANUAL_SUBFRAME, history::SOURCE_BROWSED, false);
+        ui::PAGE_TRANSITION_MANUAL_SUBFRAME, history::SOURCE_BROWSED,
+        history::VisitResponseCodeCategory::kNot404, false);
   }
 
  protected:
@@ -78,7 +81,7 @@ class HistoryTabHelperTest : public PlatformTest {
   raw_ptr<web::FakeNavigationManager> navigation_manager_;
   base::CancelableTaskTracker tracker_;
 
-  // Cached data from the last call to `QueryURL()`.
+  // Cached data from the last call to `QueryURLAndVisits()`.
   history::URLRow latest_row_result_;
   history::VisitVector latest_visits_result_;
 };
@@ -110,12 +113,12 @@ TEST_F(HistoryTabHelperTest, MultipleURLsWithTitles) {
   helper->UpdateHistoryPageTitle(*second_item);
 
   // Verify that the first title was set properly.
-  QueryURL(first_url);
+  QueryURLAndVisits(first_url);
   EXPECT_EQ(first_url, latest_row_result_.url());
   EXPECT_EQ(base::UTF8ToUTF16(first_title), latest_row_result_.title());
 
   // Verify that the first title was set properly.
-  QueryURL(second_url);
+  QueryURLAndVisits(second_url);
   EXPECT_EQ(second_url, latest_row_result_.url());
   EXPECT_EQ(base::UTF8ToUTF16(second_title), latest_row_result_.title());
 }
@@ -134,7 +137,7 @@ TEST_F(HistoryTabHelperTest, TitleUpdateForOneURL) {
   item->SetVirtualURL(test_url);
   item->SetTitle(base::UTF8ToUTF16(first_title));
   helper->UpdateHistoryPageTitle(*item);
-  QueryURL(test_url);
+  QueryURLAndVisits(test_url);
   EXPECT_EQ(test_url, latest_row_result_.url());
   EXPECT_EQ(base::UTF8ToUTF16(first_title), latest_row_result_.title());
 
@@ -143,7 +146,7 @@ TEST_F(HistoryTabHelperTest, TitleUpdateForOneURL) {
   update->SetVirtualURL(test_url);
   update->SetTitle(base::UTF8ToUTF16(second_title));
   helper->UpdateHistoryPageTitle(*update);
-  QueryURL(test_url);
+  QueryURLAndVisits(test_url);
   EXPECT_EQ(base::UTF8ToUTF16(second_title), latest_row_result_.title());
 }
 
@@ -161,7 +164,7 @@ TEST_F(HistoryTabHelperTest, EmptyTitleIsNotWrittenToHistory) {
 
   AddVisitForURL(test_url);
   helper->UpdateHistoryPageTitle(*item);
-  QueryURL(test_url);
+  QueryURLAndVisits(test_url);
 
   EXPECT_EQ(test_url, latest_row_result_.url());
   EXPECT_FALSE(latest_row_result_.title().empty());
@@ -180,14 +183,14 @@ TEST_F(HistoryTabHelperTest, EmptyTitleOverwritesPreviousTitle) {
 
   AddVisitForURL(test_url);
   helper->UpdateHistoryPageTitle(*item);
-  QueryURL(test_url);
+  QueryURLAndVisits(test_url);
   EXPECT_EQ(test_url, latest_row_result_.url());
   EXPECT_EQ(base::UTF8ToUTF16(test_title), latest_row_result_.title());
 
   // Set the empty title and make sure the title is updated.
   item->SetTitle(std::u16string());
   helper->UpdateHistoryPageTitle(*item);
-  QueryURL(test_url);
+  QueryURLAndVisits(test_url);
   EXPECT_NE(base::UTF8ToUTF16(test_title), latest_row_result_.title());
 }
 
@@ -200,14 +203,14 @@ TEST_F(HistoryTabHelperTest, TestNTPNotAdded) {
   GURL test_url("https://www.google.com/");
   item->SetVirtualURL(test_url);
   AddVisitForURL(test_url);
-  QueryURL(test_url);
+  QueryURLAndVisits(test_url);
   EXPECT_EQ(test_url, latest_row_result_.url());
 
   item = web::NavigationItem::Create();
   GURL ntp_url(kChromeUIAboutNewTabURL);
   item->SetVirtualURL(ntp_url);
   AddVisitForURL(ntp_url);
-  QueryURL(ntp_url);
+  QueryURLAndVisits(ntp_url);
   EXPECT_NE(ntp_url, latest_row_result_.url());
 }
 
@@ -220,14 +223,14 @@ TEST_F(HistoryTabHelperTest, TestFileNotAdded) {
   GURL test_url("https://www.google.com/");
   item->SetVirtualURL(test_url);
   AddVisitForURL(test_url);
-  QueryURL(test_url);
+  QueryURLAndVisits(test_url);
   EXPECT_EQ(test_url, latest_row_result_.url());
 
   item = web::NavigationItem::Create();
   GURL file_url("file://path/to/file");
   item->SetVirtualURL(file_url);
   AddVisitForURL(file_url);
-  QueryURL(file_url);
+  QueryURLAndVisits(file_url);
   EXPECT_NE(file_url, latest_row_result_.url());
 }
 
@@ -254,7 +257,7 @@ TEST_F(HistoryTabHelperTest, ShouldUpdateVisitDurationInHistory) {
       &web_state_, &navigation_context);
 
   // Make sure the visit showed up.
-  QueryURL(url1);
+  QueryURLAndVisits(url1);
   ASSERT_EQ(latest_row_result_.url(), url1);
   ASSERT_FALSE(latest_visits_result_.empty());
   // The duration shouldn't be set yet, since the visit is still open.
@@ -269,19 +272,19 @@ TEST_F(HistoryTabHelperTest, ShouldUpdateVisitDurationInHistory) {
       &web_state_, &navigation_context);
 
   // The duration of the first visit should be populated now.
-  QueryURL(url1);
+  QueryURLAndVisits(url1);
   ASSERT_EQ(latest_row_result_.url(), url1);
   ASSERT_FALSE(latest_visits_result_.empty());
   EXPECT_FALSE(latest_visits_result_.back().visit_duration.is_zero());
   // ...but not the duration of the second visit yet.
-  QueryURL(url2);
+  QueryURLAndVisits(url2);
   ASSERT_EQ(latest_row_result_.url(), url2);
   ASSERT_FALSE(latest_visits_result_.empty());
   EXPECT_TRUE(latest_visits_result_.back().visit_duration.is_zero());
 
   // Closing the tab should finish the second visit and populate its duration.
   static_cast<web::WebStateObserver*>(helper)->WebStateDestroyed(&web_state_);
-  QueryURL(url2);
+  QueryURLAndVisits(url2);
   ASSERT_EQ(latest_row_result_.url(), url2);
   ASSERT_FALSE(latest_visits_result_.empty());
   EXPECT_FALSE(latest_visits_result_.back().visit_duration.is_zero());
@@ -314,4 +317,47 @@ TEST_F(HistoryTabHelperTest,
   // other TabHelpers, etc). At least check the response code that was set up
   // above.
   EXPECT_EQ(args.context_annotations->response_code, 234);
+}
+
+TEST_F(HistoryTabHelperTest, CreateAddPageArgsPopulatesResponseCodeCategory) {
+  GURL test_url("https://www.google.com/");
+
+  std::unique_ptr<web::NavigationItem> item_403 = web::NavigationItem::Create();
+  item_403->SetVirtualURL(test_url);
+
+  web::FakeNavigationContext context_403;
+  context_403.SetUrl(test_url);
+  context_403.SetHasCommitted(true);
+
+  std::string raw_response_headers_403 = "HTTP/1.1 403 Forbidden\r\n\r\n";
+  scoped_refptr<net::HttpResponseHeaders> response_headers_403 =
+      net::HttpResponseHeaders::TryToCreate(raw_response_headers_403);
+  DCHECK(response_headers_403);
+  context_403.SetResponseHeaders(response_headers_403);
+
+  HistoryTabHelper* helper = HistoryTabHelper::FromWebState(&web_state_);
+  history::HistoryAddPageArgs args_403 =
+      helper->CreateHistoryAddPageArgs(item_403.get(), &context_403);
+
+  EXPECT_EQ(args_403.response_code_category,
+            history::VisitResponseCodeCategory::kNot404);
+
+  std::unique_ptr<web::NavigationItem> item_404 = web::NavigationItem::Create();
+  item_404->SetVirtualURL(test_url);
+
+  web::FakeNavigationContext context_404;
+  context_404.SetUrl(test_url);
+  context_404.SetHasCommitted(true);
+
+  std::string raw_response_headers_404 = "HTTP/1.1 404 Not Found\r\n\r\n";
+  scoped_refptr<net::HttpResponseHeaders> response_headers_404 =
+      net::HttpResponseHeaders::TryToCreate(raw_response_headers_404);
+  DCHECK(response_headers_404);
+  context_404.SetResponseHeaders(response_headers_404);
+
+  history::HistoryAddPageArgs args_404 =
+      helper->CreateHistoryAddPageArgs(item_404.get(), &context_404);
+
+  EXPECT_EQ(args_404.response_code_category,
+            history::VisitResponseCodeCategory::k404);
 }

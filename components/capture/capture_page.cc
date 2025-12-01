@@ -150,7 +150,7 @@ class PaintPreviewCaptureState {
     auto* state =
         new PaintPreviewCaptureState(web_contents, std::move(callback));
     client->CapturePaintPreview(
-        params, render_frame_host,
+        std::move(params), render_frame_host,
         base::BindOnce(&PaintPreviewCaptureState::OnCaptureResult,
                        state->weak_factory_.GetWeakPtr()));
   }
@@ -334,7 +334,7 @@ void CapturePage::CaptureVisible(content::WebContents* web_contents,
   // want to capture all physical pixels. So scale the bitmap size accordingly.
   gfx::SizeF size_f = rect.size();
   const gfx::NativeView native_view = view->GetNativeView();
-  display::Screen* const screen = display::Screen::GetScreen();
+  display::Screen* const screen = display::Screen::Get();
   const float device_scale_factor =
       screen->GetDisplayNearestView(native_view).device_scale_factor();
   size_f.Scale(device_scale_factor);

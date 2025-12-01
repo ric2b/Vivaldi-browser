@@ -14,6 +14,7 @@ load("@chromium-luci//chromium_luci.star", "chromium_luci")
 load(
     "//lib/builder_exemptions.star",
     "exempted_from_contact_builders",
+    "exempted_from_description_builders",
     "exempted_gardened_mirrors_in_cq_builders",
     "mega_cq_excluded_builders",
     "mega_cq_excluded_gardener_rotations",
@@ -36,6 +37,7 @@ lucicfg.config(
     tracked_files = [
         "builders/*/*/*",
         "builders/*/*/*/*",
+        "builders/alerting-builders.txt",
         "builders/gn_args_locations.json",
         "builder-owners/*.txt",
         "cq-builders.md",
@@ -161,6 +163,11 @@ chromium_luci.configure_project(
     ref = settings.ref,
     is_main = settings.is_main,
     platforms = settings.platforms,
+    experiments = [
+        "targets.module_name_without_slash",
+        "targets.module_scheme_junit_tests",
+        "targets.module_scheme_script_tests",
+    ],
 )
 
 chromium_luci.configure_per_builder_outputs(
@@ -182,6 +189,7 @@ chromium_luci.configure_builder_health_indicators(
 )
 
 chromium_luci.configure_builders(
+    enable_alerts_configuration = True,
     os_dimension_overrides = {
         os.LINUX_DEFAULT: chromium_luci.os_dimension_overrides(
             default = os.LINUX_JAMMY,
@@ -191,6 +199,7 @@ chromium_luci.configure_builders(
         os.MAC_BETA: "Mac-15|Mac-26",
         os.WINDOWS_DEFAULT: os.WINDOWS_10,
     },
+    exempted_from_description_builders = exempted_from_description_builders,
 )
 
 chromium_luci.configure_ci(

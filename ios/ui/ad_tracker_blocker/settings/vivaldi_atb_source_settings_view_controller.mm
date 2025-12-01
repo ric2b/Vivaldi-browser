@@ -37,6 +37,14 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeSource = kItemTypeEnumZero
 };
 
+CGFloat buttonCornerRadius() {
+  if (@available(iOS 26,*)) {
+    return iOS26ActionButtonCornerRadius;
+  } else {
+    return actionButtonCornerRadius;
+  }
+}
+
 }
 
 @interface VivaldiATBSourceSettingsViewController()<VivaldiATBConsumer>
@@ -95,9 +103,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
                                 tableFooterHeight);
   self.tableView.tableFooterView = footerView;
 
-  UIButton* addSourceButton = [UIButton new];
+  UIButton* addSourceButton = [UIButton buttonWithType:UIButtonTypeSystem];
   addSourceButton.backgroundColor = [UIColor colorNamed:kBackgroundColor];
-  addSourceButton.layer.cornerRadius = actionButtonCornerRadius;
+  addSourceButton.layer.cornerRadius = buttonCornerRadius();
 
   NSString* buttonTitleString = GetNSString(IDS_ADD_NEW_SOURCE);
   [addSourceButton setTitle:buttonTitleString

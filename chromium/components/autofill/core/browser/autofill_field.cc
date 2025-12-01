@@ -21,10 +21,12 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/types/cxx23_to_underlying.h"
+#include "components/autofill/core/browser/data_model/data_model_utils.h"
 #include "components/autofill/core/browser/field_type_utils.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/heuristic_source.h"
 #include "components/autofill/core/browser/ml_model/field_classification_model_handler.h"
+#include "components/autofill/core/browser/proto/api_v1.pb.h"
 #include "components/autofill/core/browser/proto/server.pb.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_features.h"
@@ -34,9 +36,6 @@
 #include "components/autofill/core/common/signatures.h"
 
 namespace autofill {
-
-using FieldPrediction =
-    AutofillQueryResponse::FormSuggestion::FieldSuggestion::FieldPrediction;
 
 template <>
 struct DenseSetTraits<FieldPrediction::Source>
@@ -189,23 +188,92 @@ bool PreferHeuristicOverHtml(FieldType heuristic_type,
 // likely to be accurate. By prioritizing the local heuristics predictions, we
 // can help the server to "learn" the correct classification for these fields.
 bool PreferHeuristicOverServer(FieldType heuristic_type,
-                               FieldType server_type) {
+                               FieldType server_type,
+                               FieldType password_ml_classification_type) {
+  if (server_type == NO_SERVER_DATA) {
+    return true;
+  }
+
   if (base::FeatureList::IsEnabled(
           features::kAutofillEnableEmailOrLoyaltyCardsFilling) &&
       heuristic_type == EMAIL_OR_LOYALTY_MEMBERSHIP_ID &&
       server_type == EMAIL_ADDRESS) {
     return true;
   }
-  // Until we gain confidence in the precision of AutofillAI predictions, they
-  // should not overrule local heuristics. The AutofillAI prediction itself can
-  // always be retrieved via `GetAutofillAiServerTypePredictions`. The
-  // killswitch below is meant to experiment with removing this logic.
-  return base::Contains(kAutofillHeuristicsVsServerOverrides,
-                        std::make_pair(heuristic_type, server_type)) ||
-         (heuristic_type != UNKNOWN_TYPE &&
-          GroupTypeOfFieldType(server_type) == FieldTypeGroup::kAutofillAi &&
-          !base::FeatureList::IsEnabled(
-              features::kAutofillAiPreferModelResponseOverHeuristics));
+
+  if (base::Contains(kAutofillHeuristicsVsServerOverrides,
+                     std::make_pair(heuristic_type, server_type))) {
+    return true;
+  }
+
+  // AutofillAI predictions overrule local heuristics unless
+  // kAutofillAiPreferModelResponseOverHeuristics is disabled.
+  if (heuristic_type != UNKNOWN_TYPE &&
+      GroupTypeOfFieldType(server_type) == FieldTypeGroup::kAutofillAi &&
+      !base::FeatureList::IsEnabled(
+          features::kAutofillAiPreferModelResponseOverHeuristics)) {
+    return true;
+  }
+
+  // Sometimes the server and heuristics disagree on whether a name field
+  // should be associated with an address or a credit card. There was a
+  // decision to prefer the heuristics in these cases, but it looks like
+  // it might be better to fix this server-side.
+  // See http://crbug.com/429236 for background.
+  if ((server_type == CREDIT_CARD_NAME_FULL && heuristic_type == NAME_FULL) ||
+      (server_type == NAME_FULL && heuristic_type == CREDIT_CARD_NAME_FULL) ||
+      (server_type == NAME_FIRST && heuristic_type == CREDIT_CARD_NAME_FIRST) ||
+      (server_type == NAME_LAST && heuristic_type == CREDIT_CARD_NAME_LAST)) {
+    return true;
+  }
+
+  // Either way, retain a preference for the CVC heuristic over the
+  // server's password predictions (http://crbug.com/469007)
+  if (GroupTypeOfFieldType(server_type) == FieldTypeGroup::kPasswordField &&
+      heuristic_type == CREDIT_CARD_VERIFICATION_CODE) {
+    return true;
+  }
+
+  // For structured last name tokens the heuristic predictions get precedence
+  // over the server predictions.
+  if (heuristic_type == NAME_LAST_SECOND || heuristic_type == NAME_LAST_FIRST) {
+    return true;
+  }
+
+  // For structured address tokens the heuristic predictions get precedence
+  // over the server predictions.
+  if (heuristic_type == ADDRESS_HOME_STREET_NAME ||
+      heuristic_type == ADDRESS_HOME_HOUSE_NUMBER) {
+    return true;
+  }
+
+  // For merchant promo code fields the heuristic predictions get precedence
+  // over the server predictions.
+  if (heuristic_type == MERCHANT_PROMO_CODE) {
+    return true;
+  }
+
+  // For international bank account number (IBAN) fields the heuristic
+  // predictions get precedence over the server predictions.
+  if (heuristic_type == IBAN_VALUE) {
+    return true;
+  }
+
+  // For loyalty card fields the heuristic predictions get precedence over
+  // `UNKNOWN_TYPE` server prediction.
+  if (heuristic_type == LOYALTY_MEMBERSHIP_ID && server_type == UNKNOWN_TYPE) {
+    return true;
+  }
+
+  // Password server predictions are ignored when the field is parsed to
+  // be an OTP field with the clientside model, as incorrect server
+  // password predictions are common in this case.
+  if (password_ml_classification_type == ONE_TIME_CODE &&
+      GroupTypeOfFieldType(server_type) == FieldTypeGroup::kPasswordField) {
+    return true;
+  }
+
+  return false;
 }
 
 // Util function for `ComputedType`. Returns the values of HtmlFieldType that
@@ -213,7 +281,7 @@ bool PreferHeuristicOverServer(FieldType heuristic_type,
 // exceptions. Check function `ComputedType` for more details.
 DenseSet<HtmlFieldType> BelievedHtmlTypes(FieldType heuristic_prediction,
                                           FieldType server_prediction) {
-  DenseSet<HtmlFieldType> believed_html_types = kAllHtmlFieldTypes;
+  HtmlFieldTypeSet believed_html_types = HtmlFieldTypeSet::all();
   // We always override unspecified autocomplete attribute.
   believed_html_types.erase(HtmlFieldType::kUnspecified);
   auto is_street_name_or_house_number_type = [](FieldType field_type) {
@@ -346,6 +414,27 @@ std::ostream& operator<<(std::ostream& os, const Section& section) {
   return os << section.ToString();
 }
 
+AutofillFormatString::AutofillFormatString() = default;
+
+AutofillFormatString::AutofillFormatString(std::u16string v,
+                                           FormatString_Type type)
+    : value(std::move(v)), type(type) {
+  // TODO(crbug.com/446883719): Add a DCHECK that the format is valid.
+}
+
+AutofillFormatString::AutofillFormatString(const AutofillFormatString&) =
+    default;
+
+AutofillFormatString& AutofillFormatString::operator=(
+    const AutofillFormatString&) = default;
+
+AutofillFormatString::AutofillFormatString(AutofillFormatString&&) = default;
+
+AutofillFormatString& AutofillFormatString::operator=(AutofillFormatString&&) =
+    default;
+
+AutofillFormatString::~AutofillFormatString() = default;
+
 AutofillField::AutofillField() {
   local_type_predictions_.fill(NO_SERVER_DATA);
 }
@@ -357,9 +446,7 @@ AutofillField::AutofillField(FieldSignature field_signature) : AutofillField() {
 AutofillField::AutofillField(const FormFieldData& field)
     : FormFieldData(field),
       field_signature_(
-          CalculateFieldSignatureByNameAndType(name(), form_control_type())),
-      parseable_name_(name()),
-      parseable_label_(label()) {
+          CalculateFieldSignatureByNameAndType(name(), form_control_type())) {
   local_type_predictions_.fill(NO_SERVER_DATA);
 }
 
@@ -451,9 +538,7 @@ void AutofillField::set_server_predictions(
   }
 }
 
-void AutofillField::MaybeAddServerPrediction(
-    AutofillQueryResponse::FormSuggestion::FieldSuggestion::FieldPrediction
-        prediction) {
+void AutofillField::MaybeAddServerPrediction(FieldPrediction prediction) {
   overall_type_ = std::nullopt;
   if (server_predictions_.size() == 1 &&
       server_predictions_[0].type() == NO_SERVER_DATA &&
@@ -496,9 +581,7 @@ void AutofillField::MaybeAddServerPrediction(
   if (IsDefaultPrediction(prediction)) {
     server_predictions_.push_back(std::move(prediction));
   } else if (IsAutofillAiPrediction(prediction)) {
-    if (base::FeatureList::IsEnabled(features::kAutofillAiWithDataSchema) &&
-        (!IsTagType(field_type) ||
-         !base::FeatureList::IsEnabled(features::kAutofillAiNoTagTypes))) {
+    if (base::FeatureList::IsEnabled(features::kAutofillAiWithDataSchema)) {
       server_predictions_.push_back(std::move(prediction));
     }
   } else {
@@ -531,8 +614,8 @@ std::optional<AutofillPredictionSource> AutofillField::PredictionSource()
   return GetOverallPredictionResult().source;
 }
 
-AutofillType AutofillField::MakeAutofillType(
-    FieldType primary_field_type) const {
+AutofillType AutofillField::MakeAutofillType(FieldType primary_field_type,
+                                             bool is_country_code) const {
   // Indicates whether `ft` may be part of the union type.
   auto is_union_type_candidate = [](FieldType ft) {
     return GroupTypeOfFieldType(ft) == FieldTypeGroup::kAutofillAi &&
@@ -564,7 +647,7 @@ AutofillType AutofillField::MakeAutofillType(
         base::span(server_predictions_).first(prefix_length));
   } while (!AutofillType::TestConstraints(field_types) && prefix_length-- > 0);
   DCHECK(field_types.contains(primary_field_type));
-  return AutofillType(field_types);
+  return AutofillType(field_types, is_country_code);
 }
 
 AutofillField::PredictionResult AutofillField::GetOverallPredictionResult()
@@ -587,7 +670,7 @@ AutofillField::PredictionResult AutofillField::GetComputedPredictionResult()
   const HtmlFieldType html_type_local = html_type();
   const FieldType server_type_local = server_type();
   const FieldType heuristic_type_local = heuristic_type();
-  const FieldType password_classification_type_local =
+  const FieldType password_ml_classification_type_local =
       heuristic_type(HeuristicSource::kPasswordManagerMachineLearning);
 
   // If autocomplete=tel/tel-* and server confirms it really is a phone field,
@@ -636,85 +719,24 @@ AutofillField::PredictionResult AutofillField::GetComputedPredictionResult()
     // and `HtmlFieldTypeToBestCorrespondingFieldType(html_type_local)` behave
     // differently (crbug.com/436013479). In all other cases, they are
     // identical, except for AutofillType::ToString().
-    // TODO(crbug.com/436013479): Remove HtmlFieldType from AutofillType.
+    // TODO(crbug.com/436013479): Remove AutofillType::is_country_code().
     AutofillType type = MakeAutofillType(
-        HtmlFieldTypeToBestCorrespondingFieldType(html_type_local));
-    if (type.GetTypes().size() <= 1 ||
-        html_type_local == HtmlFieldType::kCountryCode) {
-      type = AutofillType(html_type_local);
-    }
+        HtmlFieldTypeToBestCorrespondingFieldType(html_type_local),
+        /*is_country_code=*/html_type_local == HtmlFieldType::kCountryCode);
     return {type, AutofillPredictionSource::kAutocomplete};
   }
 
-  if (server_type_local != NO_SERVER_DATA &&
-      !PreferHeuristicOverServer(heuristic_type_local, server_type_local)) {
-    // Sometimes the server and heuristics disagree on whether a name field
-    // should be associated with an address or a credit card. There was a
-    // decision to prefer the heuristics in these cases, but it looks like
-    // it might be better to fix this server-side.
-    // See http://crbug.com/429236 for background.
-    bool believe_server = !(server_type_local == NAME_FULL &&
-                            heuristic_type_local == CREDIT_CARD_NAME_FULL) &&
-                          !(server_type_local == CREDIT_CARD_NAME_FULL &&
-                            heuristic_type_local == NAME_FULL) &&
-                          !(server_type_local == NAME_FIRST &&
-                            heuristic_type_local == CREDIT_CARD_NAME_FIRST) &&
-                          !(server_type_local == NAME_LAST &&
-                            heuristic_type_local == CREDIT_CARD_NAME_LAST);
-
-    // Either way, retain a preference for the CVC heuristic over the
-    // server's password predictions (http://crbug.com/469007)
-    believe_server = believe_server &&
-                     !(GroupTypeOfFieldType(server_type_local) ==
-                           FieldTypeGroup::kPasswordField &&
-                       heuristic_type_local == CREDIT_CARD_VERIFICATION_CODE);
-
-    // For structured last name tokens the heuristic predictions get precedence
-    // over the server predictions.
-    believe_server = believe_server &&
-                     heuristic_type_local != NAME_LAST_SECOND &&
-                     heuristic_type_local != NAME_LAST_FIRST;
-
-    // For structured address tokens the heuristic predictions get precedence
-    // over the server predictions.
-    believe_server = believe_server &&
-                     heuristic_type_local != ADDRESS_HOME_STREET_NAME &&
-                     heuristic_type_local != ADDRESS_HOME_HOUSE_NUMBER;
-
-    // For merchant promo code fields the heuristic predictions get precedence
-    // over the server predictions.
-    believe_server =
-        believe_server && (heuristic_type_local != MERCHANT_PROMO_CODE);
-
-    // For international bank account number (IBAN) fields the heuristic
-    // predictions get precedence over the server predictions.
-    believe_server = believe_server && (heuristic_type_local != IBAN_VALUE);
-
-    // For loyalty card fields the heuristic predictions get precedence over
-    // `UNKNOWN_TYPE` server prediction.
-    believe_server =
-        believe_server && !(heuristic_type_local == LOYALTY_MEMBERSHIP_ID &&
-                            server_type_local == UNKNOWN_TYPE);
-
-    // Password server predictions are ignored when the field is parsed to
-    // be an OTP field with the clientside model, as incorrect server
-    // password predictions are common in this case.
-    believe_server = believe_server &&
-                     !(password_classification_type_local == ONE_TIME_CODE &&
-                       GroupTypeOfFieldType(server_type_local) ==
-                           FieldTypeGroup::kPasswordField);
-
-    if (believe_server) {
-      return {MakeAutofillType(server_type_local),
-              AutofillPredictionSource::kServerCrowdsourcing};
-    }
+  if (!PreferHeuristicOverServer(heuristic_type_local, server_type_local,
+                                 password_ml_classification_type_local)) {
+    return {MakeAutofillType(server_type_local),
+            AutofillPredictionSource::kServerCrowdsourcing};
   }
 
   // If the field was classified as an OTP field by PasswordManager and
   // `server_type_local` and `html_type_local` did not contradict it,
   // return PasswordManager prediction.
-  if (password_classification_type_local == ONE_TIME_CODE) {
-    return {AutofillType(password_classification_type_local),
+  if (password_ml_classification_type_local == ONE_TIME_CODE) {
+    return {AutofillType(password_ml_classification_type_local),
             AutofillPredictionSource::kHeuristics};
   }
 
@@ -767,16 +789,19 @@ void AutofillField::SetPasswordRequirements(PasswordRequirementsSpec spec) {
   password_requirements_ = std::move(spec);
 }
 
-base::optional_ref<const std::u16string> AutofillField::format_string() const {
+base::optional_ref<const AutofillFormatString> AutofillField::format_string()
+    const {
   if (form_control_type() == FormControlType::kInputDate) {
-    static const base::NoDestructor<std::u16string> kFormat(u"YYYY-MM-DD");
+    static const base::NoDestructor<AutofillFormatString> kFormat(
+        AutofillFormatString(u"YYYY-MM-DD", FormatString_Type_DATE));
     return *kFormat;
   }
   if (form_control_type() == FormControlType::kInputMonth) {
-    static const base::NoDestructor<std::u16string> kFormat(u"YYYY-MM");
+    static const base::NoDestructor<AutofillFormatString> kFormat(
+        AutofillFormatString(u"YYYY-MM", FormatString_Type_DATE));
     return *kFormat;
   }
-  if (format_string_source_ == FormatStringSource::kUnset) {
+  if (format_string_source_ == AutofillFormatStringSource::kUnset) {
     return std::nullopt;
   }
   return format_string_;

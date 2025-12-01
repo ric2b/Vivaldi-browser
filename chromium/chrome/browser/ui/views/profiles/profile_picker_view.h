@@ -11,7 +11,6 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/time/time.h"
 #include "build/buildflag.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/profiles/profile_picker.h"
@@ -39,6 +38,8 @@ class NavigationHandle;
 class RenderFrameHost;
 class WebContents;
 }  // namespace content
+
+class SkRegion;
 
 // Dialog widget that contains the Desktop Profile picker webui.
 class ProfilePickerView : public views::WidgetDelegateView,
@@ -120,6 +121,15 @@ class ProfilePickerView : public views::WidgetDelegateView,
 
   State state_for_testing() { return state_; }
 
+  // NOTE(ondrej@vivaldi.com)
+  void DraggableRegionsChanged(
+      const std::vector<blink::mojom::DraggableRegionPtr>& regions,
+      content::WebContents* contents) override;
+  const SkRegion* GetDraggableRegion() const;
+  std::unique_ptr<views::FrameView> CreateFrameView(
+      views::Widget* widget) override;
+  bool UsesVivaldiFrame() const override;
+  void InitVivaldiFrame();
  protected:
   // To display the Profile picker, use ProfilePicker::Show().
   explicit ProfilePickerView(ProfilePicker::Params&& params);
@@ -266,16 +276,16 @@ class ProfilePickerView : public views::WidgetDelegateView,
 
   std::unique_ptr<ProfileManagementFlowController> flow_controller_;
 
-  // Creation time of the picker, to measure performance on startup. Only set
-  // when the picker is shown on startup.
-  base::TimeTicks creation_time_on_startup_;
-
   // Manages IPH promos displayed through the Profile Picker.
   std::unique_ptr<ProfilePickerFeaturePromoController> feature_promo_;
 
   base::CallbackListSubscription web_contents_attached_subscription_;
 
   base::WeakPtrFactory<ProfilePickerView> weak_ptr_factory_{this};
+
+  // NOTE(ondrej@vivaldi.com) VB-119563
+  std::unique_ptr<SkRegion> draggable_region_;
+  bool uses_vivaldi_frame_ = false;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_PROFILES_PROFILE_PICKER_VIEW_H_

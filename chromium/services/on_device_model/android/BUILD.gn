@@ -11,13 +11,18 @@ source_set("android") {
     "backend_model_impl_android.h",
     "backend_session_impl_android.cc",
     "backend_session_impl_android.h",
+    "model_downloader_android.cc",
+    "model_downloader_android.h",
     "on_device_model_bridge.cc",
     "on_device_model_bridge.h",
+    "sequence_checker_helper.cc",
+    "sequence_checker_helper.h",
   ]
 
   deps = [
     ":jni_headers",
     "//base",
+    "//components/optimization_guide/core:core_util",
     "//components/optimization_guide/proto:optimization_guide_proto",
     "//mojo/public/cpp/bindings",
     "//services/on_device_model:backend_interfaces",
@@ -26,13 +31,30 @@ source_set("android") {
   ]
 }
 
-source_set("unit_tests") {
+source_set("test_support") {
   testonly = true
-  sources = [ "backend_model_impl_android_unittest.cc" ]
+  sources = [
+    "on_device_model_bridge_native_unittest_helper.cc",
+    "on_device_model_bridge_native_unittest_helper.h",
+  ]
   deps = [
     ":android",
     ":native_j_unittests_jni_headers",
+    "//base",
+    "//components/optimization_guide/proto:optimization_guide_proto",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "backend_model_impl_android_unittest.cc",
+    "model_downloader_android_unittest.cc",
+  ]
+  deps = [
+    ":android",
     ":native_java_unittests_java",
+    ":test_support",
     "//base/test:test_support",
     "//components/optimization_guide/proto:optimization_guide_proto",
     "//services/on_device_model/public/cpp/test_support",
@@ -43,11 +65,19 @@ source_set("unit_tests") {
 
 android_library("java") {
   sources = [
-    "java/src/org/chromium/on_device_model/AiCoreSession.java",
-    "java/src/org/chromium/on_device_model/AiCoreSessionFactory.java",
-    "java/src/org/chromium/on_device_model/AiCoreSessionUpstreamImpl.java",
+    "java/src/org/chromium/on_device_model/AiCoreFactory.java",
+    "java/src/org/chromium/on_device_model/AiCoreModelDownloaderBackend.java",
+    "java/src/org/chromium/on_device_model/AiCoreModelDownloaderBackendUpstreamImpl.java",
+    "java/src/org/chromium/on_device_model/AiCoreModelDownloaderWrapper.java",
+    "java/src/org/chromium/on_device_model/AiCoreSessionBackend.java",
+    "java/src/org/chromium/on_device_model/AiCoreSessionBackendUpstreamImpl.java",
+    "java/src/org/chromium/on_device_model/AiCoreSessionWrapper.java",
+    "java/src/org/chromium/on_device_model/DownloaderResponder.java",
+    "java/src/org/chromium/on_device_model/GenerateOptionsHelper.java",
     "java/src/org/chromium/on_device_model/InputPieceHelper.java",
+    "java/src/org/chromium/on_device_model/JniSafeCallback.java",
     "java/src/org/chromium/on_device_model/OnDeviceModelBridge.java",
+    "java/src/org/chromium/on_device_model/SessionResponder.java",
   ]
   deps = [
     "//base:base_java",
@@ -57,7 +87,10 @@ android_library("java") {
     "//third_party/androidx:androidx_annotation_annotation_java",
     "//third_party/jni_zero:jni_zero_java",
   ]
-  srcjar_deps = [ ":jni_headers" ]
+  srcjar_deps = [
+    ":java_enum_srcjar",
+    ":jni_headers",
+  ]
 }
 
 android_library("native_java_unittests_java") {
@@ -78,7 +111,9 @@ android_library("native_java_unittests_java") {
 
 generate_jni("jni_headers") {
   sources = [
-    "java/src/org/chromium/on_device_model/AiCoreSession.java",
+    "java/src/org/chromium/on_device_model/AiCoreModelDownloaderWrapper.java",
+    "java/src/org/chromium/on_device_model/AiCoreSessionWrapper.java",
+    "java/src/org/chromium/on_device_model/GenerateOptionsHelper.java",
     "java/src/org/chromium/on_device_model/InputPieceHelper.java",
     "java/src/org/chromium/on_device_model/OnDeviceModelBridge.java",
   ]
@@ -87,4 +122,11 @@ generate_jni("jni_headers") {
 generate_jni("native_j_unittests_jni_headers") {
   testonly = true
   sources = [ "native_java_unittests/src/org/chromium/on_device_model/OnDeviceModelBridgeNativeUnitTestHelper.java" ]
+}
+
+java_cpp_enum("java_enum_srcjar") {
+  sources = [
+    "backend_session_impl_android.h",
+    "model_downloader_android.h",
+  ]
 }

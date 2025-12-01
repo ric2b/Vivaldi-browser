@@ -222,6 +222,7 @@ class CORE_EXPORT WebLocalFrameImpl final
                               base::i18n::TextDirection& end) const override;
   bool IsSelectionAnchorFirst() const override;
   void SetTextDirectionForTesting(base::i18n::TextDirection direction) override;
+  void SetIsCaretBrowsingOverridden(bool overridden) override;
   bool HasSelection() const override;
   WebRange SelectionRange() const override;
   WebString SelectionAsText() const override;
@@ -311,6 +312,9 @@ class CORE_EXPORT WebLocalFrameImpl final
   FrameScheduler* Scheduler() const override;
   scheduler::WebAgentGroupScheduler* GetAgentGroupScheduler() const override;
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(TaskType) override;
+  void PostIdleTask(
+      const base::Location&,
+      base::OnceCallback<void(base::TimeTicks deadline)>) override;
   WebInputMethodController* GetInputMethodController() override;
   std::unique_ptr<WebAssociatedURLLoader> CreateAssociatedURLLoader(
       const WebAssociatedURLLoaderOptions&) override;

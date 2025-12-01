@@ -214,7 +214,8 @@ HloSharding HloSharding::Subgroup(
                        /*replicate_on_last_tile_dim=*/false, metadata);
   }
   // If there is only one type of subgrouping and there is no tiling on data
-  // dimensions, it can be canonicalized to a simple manual/replicated sharding.
+  // dimensions, it can be canonicalized to a simple manual/replicated/unreduced
+  // sharding.
   if (absl::c_all_of(
           subgroup_types,
           [&](const OpSharding::Type t) { return t == subgroup_types[0]; }) &&
@@ -225,6 +226,9 @@ HloSharding HloSharding::Subgroup(
     }
     if (subgroup_types[0] == OpSharding::REPLICATED) {
       return Replicate(metadata);
+    }
+    if (subgroup_types[0] == OpSharding::UNREDUCED) {
+      return Unreduced(metadata);
     }
   }
   // Normalize the subgroups to simplify two cases:
@@ -908,6 +912,9 @@ absl::Status HloSharding::ValidateNonTuple(
   if (proto.type() == OpSharding::MANUAL) {
     return std::move(Manual(metadata).SetShardGroupFromProto(proto));
   }
+  if (proto.type() == OpSharding::UNREDUCED) {
+    return std::move(Unreduced(metadata).SetShardGroupFromProto(proto));
+  }
   if (proto.type() == OpSharding::UNKNOWN) {
     return std::move(Unknown(metadata).SetShardGroupFromProto(proto));
   }
@@ -1011,12 +1018,6 @@ OpSharding HloSharding::ToProto() const {
     *result.add_metadata() = metadata;
   }
 
-  result.mutable_tile_assignment_dimensions()->Reserve(
-      tile_assignment_.num_dimensions());
-  absl::c_copy(tile_assignment_.dimensions(),
-               tsl::protobuf::RepeatedFieldBackInserter(
-                   result.mutable_tile_assignment_dimensions()));
-
   if (tile_assignment_.iota_) {
     result.mutable_iota_reshape_dims()->Reserve(
         tile_assignment_.iota_->reshape_dims().size());
@@ -1035,23 +1036,28 @@ OpSharding HloSharding::ToProto() const {
                  tsl::protobuf::RepeatedFieldBackInserter(
                      result.mutable_tile_assignment_devices()));
   }
+
   if (IsReplicated()) {
     result.set_type(OpSharding::REPLICATED);
-    result.clear_tile_assignment_dimensions();
   } else if (IsTileMaximal()) {
     result.set_type(OpSharding::MAXIMAL);
   } else if (IsManual()) {
     result.set_type(OpSharding::MANUAL);
-    result.clear_tile_assignment_dimensions();
+  } else if (IsUnreduced()) {
+    result.set_type(OpSharding::UNREDUCED);
   } else if (IsUnknown()) {
     result.set_type(OpSharding::UNKNOWN);
-    result.clear_tile_assignment_dimensions();
   } else {
     result.set_type(OpSharding::OTHER);
     result.set_replicate_on_last_tile_dim(ReplicateOnLastTileDim());
     for (auto type : subgroup_types_) {
       result.add_last_tile_dims(type);
     }
+    result.mutable_tile_assignment_dimensions()->Reserve(
+        tile_assignment_.num_dimensions());
+    absl::c_copy(tile_assignment_.dimensions(),
+                 tsl::protobuf::RepeatedFieldBackInserter(
+                     result.mutable_tile_assignment_dimensions()));
   }
 
   if (IsShardGroup()) {

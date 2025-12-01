@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -30,19 +30,19 @@ import {SelectWorkspaceDialog} from './SelectWorkspaceDialog.js';
 */
 const UIStringsNotTranslate = {
   /**
-   *@description Text displayed for showing patch widget view.
+   * @description Text displayed for showing patch widget view.
    */
   unsavedChanges: 'Unsaved changes',
   /**
-   *@description Loading text displayed as a summary title when the patch suggestion is getting loaded
+   * @description Loading text displayed as a summary title when the patch suggestion is getting loaded
    */
   applyingToWorkspace: 'Applying to workspace…',
   /**
-   *@description Button text for staging changes to workspace.
+   * @description Button text for staging changes to workspace.
    */
   applyToWorkspace: 'Apply to workspace',
   /**
-   *@description Button text to change the selected workspace
+   * @description Button text to change the selected workspace
    */
   change: 'Change',
   /**
@@ -51,58 +51,59 @@ const UIStringsNotTranslate = {
    */
   changeRootFolder: 'Change project root folder',
   /**
-   *@description Button text to cancel applying to workspace
+   * @description Button text to cancel applying to workspace
    */
   cancel: 'Cancel',
   /**
-   *@description Button text to discard the suggested changes and not save them to file system
+   * @description Button text to discard the suggested changes and not save them to file system
    */
   discard: 'Discard',
   /**
-   *@description Button text to save all the suggested changes to file system
+   * @description Button text to save all the suggested changes to file system
    */
   saveAll: 'Save all',
   /**
-   *@description Header text after the user saved the changes to the disk.
+   * @description Header text after the user saved the changes to the disk.
    */
   savedToDisk: 'Saved to disk',
   /**
-   *@description Disclaimer text shown for using code snippets with caution
+   * @description Disclaimer text shown for using code snippets with caution
    */
   codeDisclaimer: 'Use code snippets with caution',
   /**
-   *@description Tooltip text for the info icon beside the "Apply to workspace" button
+   * @description Tooltip text for the info icon beside the "Apply to workspace" button
    */
   applyToWorkspaceTooltip: 'Source code from the selected folder is sent to Google to generate code suggestions.',
   /**
-   *@description Tooltip text for the info icon beside the "Apply to workspace" button when enterprise logging is off
+   * @description Tooltip text for the info icon beside the "Apply to workspace" button when enterprise logging is off
    */
   applyToWorkspaceTooltipNoLogging:
       'Source code from the selected folder is sent to Google to generate code suggestions. This data will not be used to improve Google’s AI models.',
   /**
-   *@description The footer disclaimer that links to more information
+   * @description The footer disclaimer that links to more information
    * about the AI feature. Same text as in ChatView.
    */
-  learnMore: 'Learn about AI in DevTools',
+  learnMore: 'Learn more',
   /**
-   *@description Header text for the AI-powered code suggestions disclaimer dialog.
+   * @description Header text for the AI-powered code suggestions disclaimer dialog.
    */
-  freDisclaimerHeader: 'Get AI-powered code suggestions for your workspace',
+  freDisclaimerHeader: 'Apply changes directly to your project’s source code',
   /**
-   *@description First disclaimer item text for the fre dialog.
+   * @description First disclaimer item text for the fre dialog.
    */
   freDisclaimerTextAiWontAlwaysGetItRight: 'This feature uses AI and won’t always get it right',
   /**
-   *@description Second disclaimer item text for the fre dialog.
+   * @description Second disclaimer item text for the fre dialog.
    */
-  freDisclaimerTextPrivacy: 'Source code from the selected folder is sent to Google to generate code suggestions',
+  freDisclaimerTextPrivacy:
+      'To generate code suggestions, source code from the selected folder is sent to Google. This data may be seen by human reviewers to improve this feature.',
   /**
-   *@description Second disclaimer item text for the fre dialog when enterprise logging is off.
+   * @description Second disclaimer item text for the fre dialog when enterprise logging is off.
    */
   freDisclaimerTextPrivacyNoLogging:
-      'Source code from the selected folder is sent to Google to generate code suggestions. This data will not be used to improve Google’s AI models.',
+      'To generate code suggestions, source code from the selected folder is sent to Google. This data will not be used to improve Google’s AI models. Your organization may change these settings at any time.',
   /**
-   *@description Third disclaimer item text for the fre dialog.
+   * @description Third disclaimer item text for the fre dialog.
    */
   freDisclaimerTextUseWithCaution: 'Use generated code snippets with caution',
   /**
@@ -181,7 +182,6 @@ export interface ViewInput {
 }
 
 export interface ViewOutput {
-  tooltipRef?: Directives.Ref<HTMLElement>;
   changeRef?: Directives.Ref<HTMLElement>;
   summaryRef?: Directives.Ref<HTMLElement>;
 }
@@ -210,7 +210,6 @@ export class PatchWidget extends UI.Widget.Widget {
   #automaticFileSystem =
       Persistence.AutomaticFileSystemManager.AutomaticFileSystemManager.instance().automaticFileSystem;
   #applyToDisconnectedAutomaticWorkspace = false;
-  #popoverHelper: UI.PopoverHelper.PopoverHelper|null = null;
   // `rpcId` from the `applyPatch` request
   #rpcId: Host.AidaClient.RpcGlobalId|null = null;
 
@@ -227,7 +226,7 @@ export class PatchWidget extends UI.Widget.Widget {
       if (!input.changeSummary && input.patchSuggestionState === PatchSuggestionState.INITIAL) {
         return;
       }
-      output.tooltipRef = output.tooltipRef ?? Directives.createRef<HTMLElement>();
+
       output.changeRef = output.changeRef ?? Directives.createRef<HTMLElement>();
       output.summaryRef = output.summaryRef ?? Directives.createRef<HTMLElement>();
 
@@ -248,7 +247,7 @@ export class PatchWidget extends UI.Widget.Widget {
       function renderHeader(): LitTemplate {
         if (input.savedToDisk) {
           return html`
-            <devtools-icon class="green-bright-icon summary-badge" .name=${'check-circle'}></devtools-icon>
+            <devtools-icon class="green-bright-icon summary-badge" name="check-circle"></devtools-icon>
             <span class="header-text">
               ${lockedString(UIStringsNotTranslate.savedToDisk)}
             </span>
@@ -257,25 +256,25 @@ export class PatchWidget extends UI.Widget.Widget {
 
         if (input.patchSuggestionState === PatchSuggestionState.SUCCESS) {
           return html`
-            <devtools-icon class="on-tonal-icon summary-badge" .name=${'difference'}></devtools-icon>
+            <devtools-icon class="on-tonal-icon summary-badge" name="difference"></devtools-icon>
             <span class="header-text">
               ${lockedString(`File changes in ${input.projectName}`)}
             </span>
             <devtools-icon
               class="arrow"
-              .name=${'chevron-down'}
+              name="chevron-down"
             ></devtools-icon>
           `;
         }
 
         return html`
-          <devtools-icon class="on-tonal-icon summary-badge" .name=${'pen-spark'}></devtools-icon>
+          <devtools-icon class="on-tonal-icon summary-badge" name="pen-spark"></devtools-icon>
           <span class="header-text">
             ${lockedString(UIStringsNotTranslate.unsavedChanges)}
           </span>
           <devtools-icon
             class="arrow"
-            .name=${'chevron-down'}
+            name="chevron-down"
           ></devtools-icon>
         `;
       }
@@ -300,7 +299,7 @@ export class PatchWidget extends UI.Widget.Widget {
         ></devtools-code-block>
         ${input.patchSuggestionState === PatchSuggestionState.ERROR
           ? html`<div class="error-container">
-              <devtools-icon .name=${'cross-circle-filled'}></devtools-icon>${
+              <devtools-icon name="cross-circle-filled"></devtools-icon>${
               lockedString(UIStringsNotTranslate.genericErrorMessage)
               } ${renderSourcesLink()}
             </div>`
@@ -389,8 +388,23 @@ export class PatchWidget extends UI.Widget.Widget {
               .jslogContext=${'patch-widget.info-tooltip-trigger'}
               .iconName=${'info'}
               .variant=${Buttons.Button.Variant.ICON}
-              .title=${input.applyToWorkspaceTooltipText}
             ></devtools-button>
+            <devtools-tooltip
+                id="info-tooltip"
+                variant=${'rich'}
+              >
+             <div class="info-tooltip-container">
+               ${input.applyToWorkspaceTooltipText}
+               <button
+                 class="link tooltip-link"
+                 role="link"
+                 jslog=${VisualLogging.link('open-ai-settings').track({
+                   click: true,
+                 })}
+                 @click=${input.onLearnMoreTooltipClick}
+               >${lockedString(UIStringsNotTranslate.learnMore)}</button>
+             </div>
+            </devtools-tooltip>
           </div>
         </div>`;
       }
@@ -416,62 +430,11 @@ export class PatchWidget extends UI.Widget.Widget {
 
       render(template, target, {host: target});
     });
-    // We're using PopoverHelper as a workaround instead of using <devtools-tooltip>. See the bug for more details.
-    // TODO: Update here when b/409965560 is fixed.
-    this.#popoverHelper = new UI.PopoverHelper.PopoverHelper(this.contentElement, event => {
-      // There are two ways this event is received for showing a popover case:
-      // * The latest element on the composed path is `<devtools-button>`
-      // * The 2nd element on the composed path is `<devtools-button>` (the last element is the `<button>` inside it.)
-      const hoveredNode = event.composedPath()[0];
-      const maybeDevToolsButton = event.composedPath()[2];
-
-      const popoverShownNode = hoveredNode instanceof HTMLElement && hoveredNode.getAttribute('aria-details') === 'info-tooltip' ? hoveredNode
-        : maybeDevToolsButton instanceof HTMLElement && maybeDevToolsButton.getAttribute('aria-details') === 'info-tooltip' ? maybeDevToolsButton
-        : null;
-      if (!popoverShownNode) {
-        return null;
-      }
-      return {
-        box: popoverShownNode.boxInWindow(),
-        show: async (popover: UI.GlassPane.GlassPane) => {
-          // clang-format off
-          render(html`
-            <style>
-              .info-tooltip-container {
-                max-width: var(--sys-size-28);
-                padding: var(--sys-size-4) var(--sys-size-5);
-
-                .tooltip-link {
-                  display: block;
-                  margin-top: var(--sys-size-4);
-                  color: var(--sys-color-primary);
-                  padding-left: 0;
-                }
-              }
-            </style>
-            <div class="info-tooltip-container">
-              ${UIStringsNotTranslate.applyToWorkspaceTooltip}
-              <button
-                class="link tooltip-link"
-                role="link"
-                jslog=${VisualLogging.link('open-ai-settings').track({
-                  click: true,
-                })}
-                @click=${this.#onLearnMoreTooltipClick}
-              >${lockedString(UIStringsNotTranslate.learnMore)}</button>
-            </div>`, popover.contentElement, {host: this});
-          // clang-forat on
-          return true;
-        },
-      };
-    }, 'patch-widget.info-tooltip');
-    this.#popoverHelper.setTimeout(0);
     // clang-format on
     this.requestUpdate();
   }
 
   #onLearnMoreTooltipClick(): void {
-    this.#viewOutput.tooltipRef?.value?.hidePopover();
     void UI.ViewManager.ViewManager.instance().showView('chrome-ai');
   }
 
@@ -598,7 +561,7 @@ export class PatchWidget extends UI.Widget.Widget {
         void UI.ViewManager.ViewManager.instance().showView('chrome-ai');
       },
       ariaLabel: lockedString(UIStringsNotTranslate.freDisclaimerHeader),
-      learnMoreButtonTitle: lockedString(UIStringsNotTranslate.learnMore),
+      learnMoreButtonText: lockedString(UIStringsNotTranslate.learnMore),
     });
 
     if (result) {

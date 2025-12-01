@@ -6,15 +6,15 @@
 #define CHROME_BROWSER_UI_VIEWS_FRAME_TAB_STRIP_REGION_VIEW_H_
 
 #include "base/memory/raw_ptr.h"
+#include "chrome/browser/ui/views/frame/tab_strip_view_interface.h"
 #include "chrome/browser/ui/views/tabs/tab_search_container.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/views/accessible_pane_view.h"
 
-namespace glic {
-class GlicButton;
-}
+class BrowserView;
+
 namespace views {
 class Button;
 }
@@ -28,7 +28,7 @@ class TabSearchPositionMetricsLogger;
 
 // Container for the tabstrip and the other views sharing space with it -
 // with the exception of the caption buttons.
-class TabStripRegionView final : public views::AccessiblePaneView {
+class TabStripRegionView final : public TabStripViewInterface {
   METADATA_HEADER(TabStripRegionView, views::AccessiblePaneView)
 
  public:
@@ -43,6 +43,7 @@ class TabStripRegionView final : public views::AccessiblePaneView {
   };
   // LINT.ThenChange(//tools/metrics/histograms/metadata/tab/enums.xml:TabSearchPosition)
 
+  explicit TabStripRegionView(BrowserView* browser_view);
   explicit TabStripRegionView(std::unique_ptr<TabStrip> tab_strip);
   TabStripRegionView(const TabStripRegionView&) = delete;
   TabStripRegionView& operator=(const TabStripRegionView&) = delete;
@@ -60,19 +61,7 @@ class TabStripRegionView final : public views::AccessiblePaneView {
 
   views::Button* GetNewTabButton();
 
-  TabSearchButton* GetTabSearchButton();
-
-  TabStripActionContainer* GetTabStripActionContainer();
-
-  ProductSpecificationsButton* GetProductSpecificationsButton();
-
-  glic::GlicButton* GetGlicButton();
-
   views::Button* new_tab_button_for_testing() { return new_tab_button_; }
-
-  TabSearchContainer* tab_search_container_for_testing() {
-    return tab_search_container_;
-  }
 
   views::View* reserved_grab_handle_space_for_testing() {
     return reserved_grab_handle_space_;
@@ -104,12 +93,32 @@ class TabStripRegionView final : public views::AccessiblePaneView {
 
   // views::AccessiblePaneView:
   void ChildPreferredSizeChanged(views::View* child) override;
-  gfx::Size GetMinimumSize() const override;
   views::View* GetDefaultFocusableChild() override;
 
   views::View* GetTabStripContainerForTesting() { return tab_strip_container_; }
 
   const Profile* profile() { return profile_; }
+
+  TabStrip* tab_strip() { return tab_strip_; }
+
+  // TabStripViewInterface:
+  gfx::Size GetMinimumSize() const override;
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override;
+  bool IsTabStripEditable() const override;
+  void SetTabStripNotEditableForTesting() const override;
+  bool IsTabStripCloseable() const override;
+  bool IsAnimating() const override;
+  void StopAnimating() override;
+  void UpdateLoadingAnimations(const base::TimeDelta& elapsed_time) override;
+  std::optional<int> GetFocusedTabIndex() const override;
+  Tab* GetTabAnchorViewAt(int tab_index) override;
+  views::View* GetTabGroupAnchorView(
+      const tab_groups::TabGroupId& group) override;
+  TabDragContext* GetDragContext() override;
+  void SetTabStripObserver(TabStripObserver* observer) override;
+
+  void LogTabSearchPositionForTesting();
 
  private:
   // Updates the border padding for `new_tab_button_` and

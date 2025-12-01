@@ -54,9 +54,9 @@ class CommandQueue final : public _cl_command_queue, public Object
 
     angle::Result enqueueReadBufferRect(cl_mem buffer,
                                         cl_bool blockingRead,
-                                        const cl::MemOffsets &bufferOrigin,
-                                        const cl::MemOffsets &hostOrigin,
-                                        const cl::Coordinate &region,
+                                        const cl::Offset &bufferOrigin,
+                                        const cl::Offset &hostOrigin,
+                                        const cl::Extents &region,
                                         size_t bufferRowPitch,
                                         size_t bufferSlicePitch,
                                         size_t hostRowPitch,
@@ -68,9 +68,9 @@ class CommandQueue final : public _cl_command_queue, public Object
 
     angle::Result enqueueWriteBufferRect(cl_mem buffer,
                                          cl_bool blockingWrite,
-                                         const cl::MemOffsets &bufferOrigin,
-                                         const cl::MemOffsets &hostOrigin,
-                                         const cl::Coordinate &region,
+                                         const cl::Offset &bufferOrigin,
+                                         const cl::Offset &hostOrigin,
+                                         const cl::Extents &region,
                                          size_t bufferRowPitch,
                                          size_t bufferSlicePitch,
                                          size_t hostRowPitch,
@@ -91,9 +91,9 @@ class CommandQueue final : public _cl_command_queue, public Object
 
     angle::Result enqueueCopyBufferRect(cl_mem srcBuffer,
                                         cl_mem dstBuffer,
-                                        const cl::MemOffsets &srcOrigin,
-                                        const cl::MemOffsets &dstOrigin,
-                                        const cl::Coordinate &region,
+                                        const cl::Offset &srcOrigin,
+                                        const cl::Offset &dstOrigin,
+                                        const cl::Extents &region,
                                         size_t srcRowPitch,
                                         size_t srcSlicePitch,
                                         size_t dstRowPitch,
@@ -123,8 +123,8 @@ class CommandQueue final : public _cl_command_queue, public Object
 
     angle::Result enqueueReadImage(cl_mem image,
                                    cl_bool blockingRead,
-                                   const cl::MemOffsets &origin,
-                                   const cl::Coordinate &region,
+                                   const cl::Offset &origin,
+                                   const cl::Extents &region,
                                    size_t rowPitch,
                                    size_t slicePitch,
                                    void *ptr,
@@ -134,8 +134,8 @@ class CommandQueue final : public _cl_command_queue, public Object
 
     angle::Result enqueueWriteImage(cl_mem image,
                                     cl_bool blockingWrite,
-                                    const cl::MemOffsets &origin,
-                                    const cl::Coordinate &region,
+                                    const cl::Offset &origin,
+                                    const cl::Extents &region,
                                     size_t inputRowPitch,
                                     size_t inputSlicePitch,
                                     const void *ptr,
@@ -145,25 +145,25 @@ class CommandQueue final : public _cl_command_queue, public Object
 
     angle::Result enqueueCopyImage(cl_mem srcImage,
                                    cl_mem dstImage,
-                                   const cl::MemOffsets &srcOrigin,
-                                   const cl::MemOffsets &dstOrigin,
-                                   const cl::Coordinate &region,
+                                   const cl::Offset &srcOrigin,
+                                   const cl::Offset &dstOrigin,
+                                   const cl::Extents &region,
                                    cl_uint numEventsInWaitList,
                                    const cl_event *eventWaitList,
                                    cl_event *event);
 
     angle::Result enqueueFillImage(cl_mem image,
                                    const void *fillColor,
-                                   const cl::MemOffsets &origin,
-                                   const cl::Coordinate &region,
+                                   const cl::Offset &origin,
+                                   const cl::Extents &region,
                                    cl_uint numEventsInWaitList,
                                    const cl_event *eventWaitList,
                                    cl_event *event);
 
     angle::Result enqueueCopyImageToBuffer(cl_mem srcImage,
                                            cl_mem dstBuffer,
-                                           const cl::MemOffsets &srcOrigin,
-                                           const cl::Coordinate &region,
+                                           const cl::Offset &srcOrigin,
+                                           const cl::Extents &region,
                                            size_t dstOffset,
                                            cl_uint numEventsInWaitList,
                                            const cl_event *eventWaitList,
@@ -172,8 +172,8 @@ class CommandQueue final : public _cl_command_queue, public Object
     angle::Result enqueueCopyBufferToImage(cl_mem srcBuffer,
                                            cl_mem dstImage,
                                            size_t srcOffset,
-                                           const cl::MemOffsets &dstOrigin,
-                                           const cl::Coordinate &region,
+                                           const cl::Offset &dstOrigin,
+                                           const cl::Extents &region,
                                            cl_uint numEventsInWaitList,
                                            const cl_event *eventWaitList,
                                            cl_event *event);
@@ -181,8 +181,8 @@ class CommandQueue final : public _cl_command_queue, public Object
     angle::Result enqueueMapImage(cl_mem image,
                                   cl_bool blockingMap,
                                   MapFlags mapFlags,
-                                  const cl::MemOffsets &origin,
-                                  const cl::Coordinate &region,
+                                  const cl::Offset &origin,
+                                  const cl::Extents &region,
                                   size_t *imageRowPitch,
                                   size_t *imageSlicePitch,
                                   cl_uint numEventsInWaitList,
@@ -241,8 +241,21 @@ class CommandQueue final : public _cl_command_queue, public Object
     angle::Result flush();
     angle::Result finish();
 
+    angle::Result enqueueAcquireExternalMemObjectsKHR(cl_uint numMemObjects,
+                                                      const cl_mem *memObjects,
+                                                      cl_uint numEventsInWaitList,
+                                                      const cl_event *eventWaitList,
+                                                      cl_event *event);
+
+    angle::Result enqueueReleaseExternalMemObjectsKHR(cl_uint numMemObjects,
+                                                      const cl_mem *memObjects,
+                                                      cl_uint numEventsInWaitList,
+                                                      const cl_event *eventWaitList,
+                                                      cl_event *event);
+
   public:
     using PropArray = std::vector<cl_queue_properties>;
+    using Priority  = cl_queue_priority_khr;
 
     static constexpr cl_uint kNoSize = std::numeric_limits<cl_uint>::max();
 
@@ -262,6 +275,8 @@ class CommandQueue final : public _cl_command_queue, public Object
     bool hasSize() const;
     cl_uint getSize() const;
 
+    Priority getPriority() const;
+
     template <typename T = rx::CLCommandQueueImpl>
     T &getImpl() const;
 
@@ -271,6 +286,7 @@ class CommandQueue final : public _cl_command_queue, public Object
     CommandQueue(Context &context,
                  Device &device,
                  PropArray &&propArray,
+                 Priority priority,
                  CommandQueueProperties properties,
                  cl_uint size);
 
@@ -281,6 +297,7 @@ class CommandQueue final : public _cl_command_queue, public Object
     const PropArray mPropArray;
     angle::SynchronizedValue<CommandQueueProperties> mProperties;
     const cl_uint mSize = kNoSize;
+    const Priority mPriority;
     rx::CLCommandQueueImpl::Ptr mImpl;
 
     friend class Object;
@@ -324,6 +341,11 @@ inline bool CommandQueue::hasSize() const
 inline cl_uint CommandQueue::getSize() const
 {
     return mSize;
+}
+
+inline CommandQueue::Priority CommandQueue::getPriority() const
+{
+    return mPriority;
 }
 
 template <typename T>

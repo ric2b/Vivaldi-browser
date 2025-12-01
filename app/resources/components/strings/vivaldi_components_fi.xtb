@@ -3,16 +3,6 @@
 <translationbundle lang="fi">
 <translation id="3830627370375585318">Salli Vivaldin käyttää verkkoyhteyttä palomuurin tai
 virustorjuntaohjelmiston asetuksista.</translation>
-<translation id="4200102020577305737">Avaa
-Vivaldi-valikko &gt;
-<ph name="SETTINGS_TITLE" />
-&gt;
-<ph name="ADVANCED_TITLE" />
-&gt;
-<ph name="PROXIES_TITLE" />
-&gt;
-Lähiverkon asetukset
-ja poista valinta "Käytä välityspalvelinta lähiverkossa".</translation>
 <translation id="4932161901409251843">Avaa
 Vivaldi-valikko &gt;
 <ph name="SETTINGS_TITLE" />
@@ -34,4 +24,14 @@ ja poista valinta kohdasta <ph name="NO_PREFETCH_DESCRIPTION" />.
 Jos ongelma ei ratkea, palauta asetus käyttöön
 suorituskyvyn parantamiseksi.</translation>
 <translation id="7496505986576158197">Vivaldin ovat mahdollistaneet avoimen lähdekoodin <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />-projekti ja muut <ph name="BEGIN_LINK_OSS" />avoimen lähdekoodin ohjelmat<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Siirry
+          Vivaldi-valikkoon &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Verkko ja internet &gt; Välimuisti
+          ja poista valinta ”Tunnista asetukset automaattisesti”.</translation>
 </translationbundle>

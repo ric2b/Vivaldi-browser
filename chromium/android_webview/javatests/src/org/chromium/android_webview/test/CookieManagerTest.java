@@ -35,7 +35,7 @@ import org.chromium.android_webview.common.AwSwitches;
 import org.chromium.android_webview.test.util.CookieUtils;
 import org.chromium.android_webview.test.util.CookieUtils.TestCallback;
 import org.chromium.android_webview.test.util.JSUtils;
-import org.chromium.base.BuildInfo;
+import org.chromium.base.ApkInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
@@ -76,17 +76,17 @@ public class CookieManagerTest extends AwParameterizedTest {
     @Retention(RetentionPolicy.SOURCE)
     @interface CookieLifetime {
         /** Longer than the limit of tests, so cookies will not expire during the test. */
-        final int OUTLIVE_THE_TEST_SEC = 10 * 60; // 10 minutes
+        int OUTLIVE_THE_TEST_SEC = 10 * 60; // 10 minutes
 
         /**
          * Shorter than the limit of tests, so cookies may expire during the test. Be sure to wait
          * at least this duration after <b>setting</b> the cookie (ex. via {@link
          * AwCookieManager#setCookie(String)}).
          */
-        final int EXPIRE_DURING_TEST_SEC = 1;
+        int EXPIRE_DURING_TEST_SEC = 1;
 
         /** Guarantees the cookie is expired, immediately when set. */
-        final int ALREADY_EXPIRED_SEC = -1;
+        int ALREADY_EXPIRED_SEC = -1;
     }
 
     private AwCookieManager mCookieManager;
@@ -2295,8 +2295,7 @@ public class CookieManagerTest extends AwParameterizedTest {
                                         }
                                 }]
                         """,
-                        BuildInfo.getInstance().hostPackageName,
-                        BuildInfo.getInstance().getHostSigningCertSha256()),
+                        ApkInfo.getHostPackageName(), ApkInfo.getHostSigningCertSha256()),
                 null);
     }
 

@@ -1,0 +1,13 @@
+syntax = "proto3";  // Our OSS build does not support editions.
+
+package fcp.confidentialcompute;
+
+import "proto/attestation/reference_value.proto";
+
+option java_package = "com.google.intelligence.fcp.confidentialcompute";
+option java_multiple_files = true;
+
+message AccessPolicyEndorsementOptions {
+  repeated oak.attestation.v1.EndorsementReferenceValue
+      endorsement_reference_values = 1;
+}

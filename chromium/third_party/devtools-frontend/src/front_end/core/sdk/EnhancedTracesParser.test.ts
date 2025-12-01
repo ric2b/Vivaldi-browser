@@ -1,15 +1,15 @@
 
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import type * as Protocol from '../../generated/protocol.js';
 import {TraceLoader} from '../../testing/TraceLoader.js';
 
-import * as EnhancedTraces from './EnhancedTracesParser.js';
 import type {RehydratingExecutionContext, RehydratingScript, RehydratingTarget} from './RehydratingObject.js';
+import * as SDK from './sdk.js';
 
 describe('EnhancedTracesParser', () => {
-  let enhancedTracesParser: EnhancedTraces.EnhancedTracesParser;
+  let enhancedTracesParser: SDK.EnhancedTracesParser.EnhancedTracesParser;
   const target1: RehydratingTarget = {
     targetId: '21D58E83A5C17916277166140F6A464B' as Protocol.Target.TargetID,
     type: 'page',
@@ -33,6 +33,8 @@ describe('EnhancedTracesParser', () => {
     id: 1 as Protocol.Runtime.ExecutionContextId,
     origin: 'http://localhost:8080',
     v8Context: 'example context 1',
+    name: 'http://localhost:8080',
+    uniqueId: 'example context 1-12345',
     auxData: {
       frameId: '21D58E83A5C17916277166140F6A464B' as Protocol.Page.FrameId,
       isDefault: true,
@@ -45,6 +47,8 @@ describe('EnhancedTracesParser', () => {
     id: 2 as Protocol.Runtime.ExecutionContextId,
     origin: 'http://localhost:8080',
     v8Context: 'example context 2',
+    name: 'http://localhost:8080',
+    uniqueId: 'example context 2-12345',
     auxData: {
       frameId: '21D58E83A5C17916277166140F6A464B' as Protocol.Page.FrameId,
       isDefault: true,
@@ -57,6 +61,8 @@ describe('EnhancedTracesParser', () => {
     id: 1 as Protocol.Runtime.ExecutionContextId,
     origin: 'http://localhost:8080',
     v8Context: 'example context 3',
+    name: 'http://localhost:8080',
+    uniqueId: 'example context 3-6789',
     auxData: {
       frameId: '3E1717BE677B75D0536E292E00D6A34A' as Protocol.Page.FrameId,
       isDefault: true,
@@ -69,6 +75,8 @@ describe('EnhancedTracesParser', () => {
     id: 1 as Protocol.Runtime.ExecutionContextId,
     origin: '',
     v8Context: '',
+    name: '',
+    uniqueId: '6A7611591E1EBABAACBAB2B23F0AEC93-1357',
     auxData: {
       frameId: '6A7611591E1EBABAACBAB2B23F0AEC93' as Protocol.Page.FrameId,
       isDefault: false,
@@ -86,15 +94,16 @@ describe('EnhancedTracesParser', () => {
     endLine: 1,
     endColumn: 10,
     hash: '',
+    buildId: '',
     isModule: false,
     url: 'http://localhost:8080/index.html',
     hasSourceURL: false,
-    sourceURL: undefined,
+    sourceURL: '',
     sourceMapURL: 'http://localhost:8080/source.map.json',
     length: 13,
     pid: 8050,
     sourceText: 'source text 1',
-    auxData: {
+    executionContextAuxData: {
       frameId: '21D58E83A5C17916277166140F6A464B' as Protocol.Page.FrameId,
       isDefault: true,
       type: 'type',
@@ -110,15 +119,16 @@ describe('EnhancedTracesParser', () => {
     endLine: 1,
     endColumn: 10,
     hash: '',
+    buildId: '',
     isModule: false,
     url: 'http://localhost:8080/index.html',
     hasSourceURL: false,
-    sourceURL: undefined,
+    sourceURL: '',
     sourceMapURL: undefined,
     length: 13,
     pid: 8050,
     sourceText: 'source text 2',
-    auxData: {
+    executionContextAuxData: {
       frameId: '21D58E83A5C17916277166140F6A464B' as Protocol.Page.FrameId,
       isDefault: true,
       type: 'type',
@@ -134,15 +144,16 @@ describe('EnhancedTracesParser', () => {
     endLine: 1,
     endColumn: 10,
     hash: '',
+    buildId: '',
     isModule: false,
     url: 'http://localhost:8080/index.html',
     hasSourceURL: false,
-    sourceURL: undefined,
+    sourceURL: '',
     sourceMapURL: undefined,
     length: 13,
     pid: 8051,
     sourceText: 'source text 3',
-    auxData: {
+    executionContextAuxData: {
       frameId: '3E1717BE677B75D0536E292E00D6A34A' as Protocol.Page.FrameId,
       isDefault: true,
       type: 'type',
@@ -158,13 +169,14 @@ describe('EnhancedTracesParser', () => {
     endLine: 1,
     endColumn: 10,
     hash: '',
+    buildId: '',
     isModule: false,
     url: 'http://localhost:8080/index.html',
     hasSourceURL: false,
-    sourceURL: undefined,
+    sourceURL: '',
     sourceMapURL: 'http://localhost:8080/source.map.json',
     pid: 8050,
-    auxData: {
+    executionContextAuxData: {
       frameId: '21D58E83A5C17916277166140F6A464B' as Protocol.Page.FrameId,
       isDefault: true,
       type: 'type',
@@ -180,13 +192,14 @@ describe('EnhancedTracesParser', () => {
     endLine: 1,
     endColumn: 10,
     hash: '',
+    buildId: '',
     isModule: false,
     url: 'http://localhost:8080/index.html',
     hasSourceURL: false,
-    sourceURL: undefined,
+    sourceURL: '',
     sourceMapURL: 'http://localhost:8080/source.map.json',
     pid: 8050,
-    auxData: {
+    executionContextAuxData: {
       frameId: '21D58E83A5C17916277166140F6A464B' as Protocol.Page.FrameId,
       isDefault: true,
       type: 'type',
@@ -202,17 +215,19 @@ describe('EnhancedTracesParser', () => {
     endLine: 1,
     endColumn: 10,
     hash: '',
+    buildId: '',
     isModule: false,
     url: 'http://localhost:8080/index.html',
     hasSourceURL: false,
-    sourceURL: undefined,
+    sourceURL: '',
     sourceMapURL: 'http://localhost:8080/source.map.json',
     pid: 8052,
   };
 
   beforeEach(async function() {
     const events = await TraceLoader.rawEvents(this, 'enhanced-traces.json.gz');
-    enhancedTracesParser = new EnhancedTraces.EnhancedTracesParser({traceEvents: events as object[], metadata: {}});
+    enhancedTracesParser =
+        new SDK.EnhancedTracesParser.EnhancedTracesParser({traceEvents: events as object[], metadata: {}});
   });
 
   it('captures correct targets', async function() {
@@ -315,4 +330,5 @@ describe('EnhancedTracesParser', () => {
       }
     }
   });
+
 });

@@ -3,15 +3,12 @@
 #ifndef COMPONENTS_AD_BLOCKER_CORE_ADBLOCK_RULE_MANAGER_IMPL_H_
 #define COMPONENTS_AD_BLOCKER_CORE_ADBLOCK_RULE_MANAGER_IMPL_H_
 
-#include <array>
 #include <map>
 #include <memory>
 #include <set>
 #include <string>
-#include <vector>
 
 #include "base/files/file_path.h"
-#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/ad_blocker/core/adblock_rule_source_handler.h"
 #include "components/ad_blocker/public/core/adblock_rule_manager.h"
@@ -25,11 +22,13 @@ class SequencedTaskRunner;
 namespace adblock_filter {
 class RuleManagerImpl : public RuleManager {
  public:
+  using ActiveExceptionsLists = RuleGroupArray<ExceptionsList>;
+
   explicit RuleManagerImpl(
       scoped_refptr<base::SequencedTaskRunner> file_task_runner,
       const base::FilePath& profile_path,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      std::array<ActiveRuleSources, kRuleGroupCount> rule_sources,
+      RuleGroupArray<ActiveRuleSources> rule_sources,
       ActiveExceptionsLists active_exceptions_lists,
       Exceptions exceptions,
       base::RepeatingClosure schedule_save,
@@ -79,10 +78,9 @@ class RuleManagerImpl : public RuleManager {
 
   void AddRequestFilter(RuleGroup group);
 
-  std::array<std::map<int64_t, std::unique_ptr<RuleSourceHandler>>,
-             kRuleGroupCount>
+  RuleGroupArray<std::map<int64_t, std::unique_ptr<RuleSourceHandler>>>
       rule_sources_;
-  ActiveExceptionsLists active_exceptions_lists_ = {kProcessList, kProcessList};
+  ActiveExceptionsLists active_exceptions_lists_{kProcessList, kProcessList};
   Exceptions exceptions_;
   base::RepeatingClosure schedule_save_;
 

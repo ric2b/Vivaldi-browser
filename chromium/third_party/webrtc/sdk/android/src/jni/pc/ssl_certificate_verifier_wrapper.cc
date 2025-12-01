@@ -10,10 +10,13 @@
 
 #include "sdk/android/src/jni/pc/ssl_certificate_verifier_wrapper.h"
 
+#include <jni.h>
+
+#include "rtc_base/buffer.h"
+#include "rtc_base/ssl_certificate.h"
 #include "sdk/android/generated_peerconnection_jni/SSLCertificateVerifier_jni.h"
-#include "sdk/android/native_api/jni/class_loader.h"
-#include "sdk/android/native_api/jni/java_types.h"
 #include "sdk/android/native_api/jni/jvm.h"
+#include "sdk/android/native_api/jni/scoped_java_ref.h"
 
 namespace webrtc {
 namespace jni {
@@ -31,8 +34,9 @@ bool SSLCertificateVerifierWrapper::Verify(const SSLCertificate& certificate) {
   // Serialize the der encoding of the cert into a jbyteArray
   Buffer cert_der_buffer;
   certificate.ToDER(&cert_der_buffer);
-  ScopedJavaLocalRef<jbyteArray> jni_buffer(
-      jni, jni->NewByteArray(cert_der_buffer.size()));
+  ScopedJavaLocalRef<jbyteArray> jni_buffer =
+      ScopedJavaLocalRef<jbyteArray>::Adopt(
+          jni, jni->NewByteArray(cert_der_buffer.size()));
   jni->SetByteArrayRegion(
       jni_buffer.obj(), 0, cert_der_buffer.size(),
       reinterpret_cast<const jbyte*>(cert_der_buffer.data()));

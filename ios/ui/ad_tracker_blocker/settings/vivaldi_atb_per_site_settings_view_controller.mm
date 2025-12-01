@@ -37,6 +37,14 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeSite = kItemTypeEnumZero,
 };
 
+CGFloat buttonCornerRadius() {
+  if (@available(iOS 26,*)) {
+    return iOS26ActionButtonCornerRadius;
+  } else {
+    return actionButtonCornerRadius;
+  }
+}
+
 }
 
 @interface VivaldiATBPerSiteSettingsViewController()<VivaldiATBConsumer>
@@ -104,7 +112,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   UIButton* addDomainButton = [UIButton new];
   addDomainButton.backgroundColor = [UIColor colorNamed:kBackgroundColor];
-  addDomainButton.layer.cornerRadius = actionButtonCornerRadius;
+  addDomainButton.layer.cornerRadius = buttonCornerRadius();
 
   NSString* buttonTitleString = GetNSString(IDS_ADD_NEW_DOMAIN);
   [addDomainButton setTitle:buttonTitleString

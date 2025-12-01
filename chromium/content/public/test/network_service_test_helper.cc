@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "content/public/test/network_service_test_helper.h"
 
 #include <optional>
@@ -14,6 +9,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/environment.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -119,7 +115,7 @@ class SimpleCacheEntry : public network::mojom::SimpleCacheEntry {
 
     auto data_to_pass =
         base::MakeRefCounted<net::IOBufferWithSize>(data.size());
-    memcpy(data_to_pass->data(), data.data(), data.size());
+    UNSAFE_TODO(memcpy(data_to_pass->data(), data.data(), data.size()));
     int rv = entry_->WriteData(index, offset, data_to_pass.get(), data.size(),
                                base::BindOnce(&SimpleCacheEntry::OnDataWritten,
                                               weak_factory_.GetWeakPtr(),
@@ -168,7 +164,7 @@ class SimpleCacheEntry : public network::mojom::SimpleCacheEntry {
 
     auto data_to_pass =
         base::MakeRefCounted<net::IOBufferWithSize>(data.size());
-    memcpy(data_to_pass->data(), data.data(), data.size());
+    UNSAFE_TODO(memcpy(data_to_pass->data(), data.data(), data.size()));
     int rv =
         entry_->WriteSparseData(offset, data_to_pass.get(), data.size(),
                                 base::BindOnce(&SimpleCacheEntry::OnDataWritten,
@@ -227,7 +223,7 @@ class SimpleCacheEntry : public network::mojom::SimpleCacheEntry {
       return;
     }
     std::vector<uint8_t> data(result);
-    memcpy(data.data(), buffer->data(), result);
+    UNSAFE_TODO(memcpy(data.data(), buffer->data(), result));
     std::move(callback).Run(data, result);
   }
 
@@ -434,7 +430,7 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
  public:
   NetworkServiceTestImpl() : test_host_resolver_(new TestHostResolver()) {
     memory_pressure_listener_.emplace(
-        FROM_HERE, base::DoNothing(),
+        base::MemoryPressureListenerTag::kTest,
         base::BindRepeating(
             &NetworkServiceTestHelper::NetworkServiceTestImpl::OnMemoryPressure,
             weak_factory_.GetWeakPtr()));
@@ -563,13 +559,12 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
     std::move(callback).Run();
   }
 
-  void SetTransportSecurityStateSource(
-      uint16_t reporting_port,
-      SetTransportSecurityStateSourceCallback callback) override {
-    if (reporting_port) {
+  void SetTransportSecurityStateTestSource(
+      bool enable_unittest_source,
+      SetTransportSecurityStateTestSourceCallback callback) override {
+    if (enable_unittest_source) {
       transport_security_state_source_ =
-          std::make_unique<net::ScopedTransportSecurityStateSource>(
-              reporting_port);
+          std::make_unique<net::ScopedTransportSecurityStateSource>();
     } else {
       transport_security_state_source_.reset();
     }
@@ -841,7 +836,7 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
   std::unique_ptr<net::MockCertVerifier> mock_cert_verifier_;
   std::unique_ptr<net::ScopedTransportSecurityStateSource>
       transport_security_state_source_;
-  std::optional<base::MemoryPressureListener> memory_pressure_listener_;
+  std::optional<base::SyncMemoryPressureListener> memory_pressure_listener_;
   base::MemoryPressureListener::MemoryPressureLevel
       latest_memory_pressure_level_ =
           base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE;

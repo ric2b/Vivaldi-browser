@@ -57,6 +57,7 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 
 using blink::WebMediaSource;
 using blink::WebSourceBuffer;
@@ -77,14 +78,9 @@ bool IsMp2tCodecSupported(std::string_view codec_id) {
     return true;
   }
 
-  auto audio_codec = media::AudioCodec::kUnknown;
-  bool is_codec_ambiguous = false;
-  if (media::ParseAudioCodecString("", codec_id, &is_codec_ambiguous,
-                                   &audio_codec)) {
-    if (is_codec_ambiguous) {
-      return false;
-    }
-
+  if (auto audio_type = media::ParseAudioCodecString(
+          "", codec_id, /*allow_ambiguous_matches=*/false)) {
+    const auto& audio_codec = audio_type->codec;
     if (audio_codec != media::AudioCodec::kAAC &&
         audio_codec != media::AudioCodec::kMP3) {
       return false;
@@ -236,11 +232,10 @@ SourceBuffer* MediaSource::addSourceBuffer(const String& type,
   SourceBuffer* source_buffer = nullptr;
 
   // Note, here we must be open, therefore we must have an attachment.
-  if (!RunUnlessElementGoneOrClosingUs(WTF::BindOnce(
+  if (!RunUnlessElementGoneOrClosingUs(blink::BindOnce(
           &MediaSource::AddSourceBuffer_Locked, WrapPersistent(this), type,
           nullptr /* audio_config */, nullptr /* video_config */,
-          WTF::Unretained(&exception_state),
-          WTF::Unretained(&source_buffer)))) {
+          Unretained(&exception_state), Unretained(&source_buffer)))) {
     // TODO(https://crbug.com/878133): Determine in specification what the
     // specific, app-visible, exception should be for this case.
     LogAndThrowDOMException(exception_state,
@@ -358,11 +353,10 @@ SourceBuffer* MediaSource::AddSourceBufferUsingConfig(
   String null_type;
 
   // Note, here we must be open, therefore we must have an attachment.
-  if (!RunUnlessElementGoneOrClosingUs(WTF::BindOnce(
+  if (!RunUnlessElementGoneOrClosingUs(blink::BindOnce(
           &MediaSource::AddSourceBuffer_Locked, WrapPersistent(this), null_type,
           std::move(audio_config), std::move(video_config),
-          WTF::Unretained(&exception_state),
-          WTF::Unretained(&source_buffer)))) {
+          Unretained(&exception_state), Unretained(&source_buffer)))) {
     // TODO(https://crbug.com/878133): Determine in specification what the
     // specific, app-visible, exception should be for this case.
     LogAndThrowDOMException(exception_state,
@@ -452,8 +446,8 @@ void MediaSource::removeSourceBuffer(SourceBuffer* buffer,
   // case). Note, we must not be closed (since closing clears our SourceBuffer
   // collections), therefore we must have an attachment.
   if (!RunUnlessElementGoneOrClosingUs(
-          WTF::BindOnce(&MediaSource::RemoveSourceBuffer_Locked,
-                        WrapPersistent(this), WrapPersistent(buffer)))) {
+          blink::BindOnce(&MediaSource::RemoveSourceBuffer_Locked,
+                          WrapPersistent(this), WrapPersistent(buffer)))) {
     // TODO(https://crbug.com/878133): Determine in specification what the
     // specific, app-visible, exception should be for this case.
     LogAndThrowDOMException(exception_state,
@@ -775,14 +769,10 @@ void MediaSource::CompleteAttachingToMediaElement(
 
     if (attachment_tracer_) {
       // Use of a tracer means we must be using same-thread attachment.
-      TRACE_EVENT_NESTABLE_ASYNC_END0(
-          "media", "MediaSource::StartAttachingToMediaElement",
-          TRACE_ID_LOCAL(this));
+      TRACE_EVENT_END("media", perfetto::Track::FromPointer(this));
     } else {
       // Otherwise, we must be using a cross-thread MSE-in-Workers attachment.
-      TRACE_EVENT_NESTABLE_ASYNC_END0(
-          "media", "MediaSource::StartWorkerAttachingToMainThreadMediaElement",
-          TRACE_ID_LOCAL(this));
+      TRACE_EVENT_END("media", perfetto::Track::FromPointer(this));
     }
     DCHECK(web_media_source);
     DCHECK(!web_media_source_);
@@ -979,9 +969,9 @@ void MediaSource::setDuration(double duration,
   // Do remainder of steps only if attachment is usable and underlying demuxer
   // is protected from destruction (applicable especially for MSE-in-Worker
   // case). Note, we must be open, therefore we must have an attachment.
-  if (!RunUnlessElementGoneOrClosingUs(WTF::BindOnce(
+  if (!RunUnlessElementGoneOrClosingUs(blink::BindOnce(
           &MediaSource::DurationChangeAlgorithm, WrapPersistent(this), duration,
-          WTF::Unretained(&exception_state)))) {
+          Unretained(&exception_state)))) {
     // TODO(https://crbug.com/878133): Determine in specification what the
     // specific, app-visible, exception should be for this case.
     LogAndThrowDOMException(exception_state,
@@ -996,12 +986,12 @@ double MediaSource::duration() {
     return duration_result;
 
   // Note, here we must be open or ended, therefore we must have an attachment.
-  if (!RunUnlessElementGoneOrClosingUs(WTF::BindOnce(
+  if (!RunUnlessElementGoneOrClosingUs(BindOnce(
           [](MediaSource* self, double* result,
              MediaSourceAttachmentSupplement::ExclusiveKey pass_key) {
             *result = self->GetDuration_Locked(pass_key);
           },
-          WrapPersistent(this), WTF::Unretained(&duration_result)))) {
+          WrapPersistent(this), Unretained(&duration_result)))) {
     // TODO(https://crbug.com/878133): Determine in specification what the
     // specific, app-visible, result should be in this case. It seems reasonable
     // to behave is if we are in "closed" readyState and report NaN to the app
@@ -1148,7 +1138,7 @@ void MediaSource::endOfStream(std::optional<V8EndOfStreamError> error,
   // Do remainder of steps only if attachment is usable and underlying demuxer
   // is protected from destruction (applicable especially for MSE-in-Worker
   // case). Note, we must be open, therefore we must have an attachment.
-  if (!RunUnlessElementGoneOrClosingUs(WTF::BindOnce(
+  if (!RunUnlessElementGoneOrClosingUs(blink::BindOnce(
           &MediaSource::EndOfStreamAlgorithm, WrapPersistent(this), status))) {
     // TODO(https://crbug.com/878133): Determine in specification what the
     // specific, app-visible, exception should be for this case.
@@ -1188,8 +1178,8 @@ void MediaSource::setLiveSeekableRange(double start,
 
   // Note, here we must be open, therefore we must have an attachment.
   if (!RunUnlessElementGoneOrClosingUs(
-          WTF::BindOnce(&MediaSource::SetLiveSeekableRange_Locked,
-                        WrapPersistent(this), start, end))) {
+          blink::BindOnce(&MediaSource::SetLiveSeekableRange_Locked,
+                          WrapPersistent(this), start, end))) {
     // TODO(https://crbug.com/878133): Determine in specification what the
     // specific, app-visible, exception should be for this case.
     LogAndThrowDOMException(exception_state,
@@ -1229,7 +1219,7 @@ void MediaSource::clearLiveSeekableRange(ExceptionState& exception_state) {
     return;
 
   // Note, here we must be open, therefore we must have an attachment.
-  if (!RunUnlessElementGoneOrClosingUs(WTF::BindOnce(
+  if (!RunUnlessElementGoneOrClosingUs(blink::BindOnce(
           &MediaSource::ClearLiveSeekableRange_Locked, WrapPersistent(this)))) {
     // TODO(https://crbug.com/878133): Determine in specification what the
     // specific, app-visible, exception should be for this case.
@@ -1410,9 +1400,8 @@ MediaSourceTracer* MediaSource::StartAttachingToMediaElement(
   DCHECK(!context_already_destroyed_);
   DCHECK(IsClosed());
 
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("media",
-                                    "MediaSource::StartAttachingToMediaElement",
-                                    TRACE_ID_LOCAL(this));
+  TRACE_EVENT_BEGIN("media", "MediaSource::StartAttachingToMediaElement",
+                    perfetto::Track::FromPointer(this));
   media_source_attachment_ = attachment;
   attachment_tracer_ =
       MakeGarbageCollected<SameThreadMediaSourceTracer>(element, this);
@@ -1437,9 +1426,9 @@ bool MediaSource::StartWorkerAttachingToMainThreadMediaElement(
   }
 
   DCHECK(IsClosed());
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
-      "media", "MediaSource::StartWorkerAttachingToMainThreadMediaElement",
-      TRACE_ID_LOCAL(this));
+  TRACE_EVENT_BEGIN("media",
+                    "MediaSource::StartWorkerAttachingToMainThreadMediaElement",
+                    perfetto::Track::FromPointer(this));
   media_source_attachment_ = attachment;
   return true;
 }
@@ -1547,17 +1536,17 @@ void MediaSource::ContextDestroyed() {
   // doing this detachment.
   bool cb_ran = attachment->RunExclusively(
       true /* abort if unsafe to use underlying demuxer */,
-      WTF::BindOnce(&MediaSource::DetachWorkerOnContextDestruction_Locked,
-                    WrapPersistent(this),
-                    true /* safe to notify underlying demuxer */));
+      blink::BindOnce(&MediaSource::DetachWorkerOnContextDestruction_Locked,
+                      WrapPersistent(this),
+                      true /* safe to notify underlying demuxer */));
 
   if (!cb_ran) {
     // Main-thread is already detaching or destructing the underlying demuxer.
     CHECK(attachment->RunExclusively(
         false /* do not abort */,
-        WTF::BindOnce(&MediaSource::DetachWorkerOnContextDestruction_Locked,
-                      WrapPersistent(this),
-                      false /* do not notify underlying demuxer */)));
+        blink::BindOnce(&MediaSource::DetachWorkerOnContextDestruction_Locked,
+                        WrapPersistent(this),
+                        false /* do not notify underlying demuxer */)));
   }
 }
 

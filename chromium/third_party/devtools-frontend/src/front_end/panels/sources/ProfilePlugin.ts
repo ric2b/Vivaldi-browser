@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -17,15 +17,15 @@ import {Plugin} from './Plugin.js';
 
 const UIStrings = {
   /**
-   *@description The milisecond unit
+   * @description The milisecond unit
    */
   ms: 'ms',
   /**
-   *@description Unit for data size in DevTools
+   * @description Unit for data size in DevTools
    */
   mb: 'MB',
   /**
-   *@description A unit
+   * @description A unit
    */
   kb: 'kB',
 } as const;

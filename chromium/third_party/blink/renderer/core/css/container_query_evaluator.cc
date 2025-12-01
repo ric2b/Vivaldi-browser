@@ -48,7 +48,7 @@ bool NameMatches(const ComputedStyle& style,
   if (const ScopedCSSNameList* container_name = style.ContainerName()) {
     const HeapVector<Member<const ScopedCSSName>>& names =
         container_name->GetNames();
-    for (auto scoped_name : names) {
+    for (const auto& scoped_name : names) {
       if (scoped_name->GetName() == name) {
         const TreeScope* name_tree_scope = scoped_name->GetTreeScope();
         if (!name_tree_scope || !selector_tree_scope) {
@@ -65,6 +65,13 @@ bool NameMatches(const ComputedStyle& style,
           if (match_scope == name_tree_scope) {
             return true;
           }
+        }
+        // Keeping the TreeScope matching above to be able to count when this
+        // is a behavioral change.
+        selector_tree_scope->GetDocument().CountUse(
+            WebFeature::kContainerNameQueryFailedTreeScope);
+        if (RuntimeEnabledFeatures::CSSContainerNameNotTreeScopedEnabled()) {
+          return true;
         }
       }
     }

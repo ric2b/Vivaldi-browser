@@ -204,6 +204,9 @@ void VideoOverlayWindowViews::HandleVivaldiKeyboardEvents(ui::KeyEvent* event) {
 
 void VideoOverlayWindowViews::HandleVivaldiGestureEvent(
     ui::GestureEvent* event) {
+  if (!vivaldi::IsVivaldiRunning())
+    return;
+
   bool handled = false;
   if (vivaldi_progress_view_) {
     handled = vivaldi_progress_view_->HandleGestureEvent(event);
@@ -214,6 +217,9 @@ void VideoOverlayWindowViews::HandleVivaldiGestureEvent(
 }
 
 bool VideoOverlayWindowViews::IsPointInVivaldiControl(const gfx::Point& point) {
+  if (!vivaldi::IsVivaldiRunning())
+    return false;
+
   if ((vivaldi_progress_view_ &&
        vivaldi_progress_view_->GetMirroredBounds().Contains(point)) ||
       (mute_button_ && mute_button_->GetMirroredBounds().Contains(point)) ||

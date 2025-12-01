@@ -1,0 +1,387 @@
+// Copyright 2022 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package google.internal.federatedcompute.v1;
+
+import "google/api/annotations.proto";
+import "google/longrunning/operations.proto";
+import "google/protobuf/duration.proto";
+import "google/rpc/status.proto";
+import "fcp/protos/federatedcompute/common.proto";
+import "fcp/secagg/shared/secagg_messages.proto";
+
+option java_package = "com.google.internal.federatedcompute.v1";
+option java_multiple_files = true;
+
+service SecureAggregations {
+  // A request sent by the client after completing local (on-device) task
+  // computation to notify the server that the client has Aggregation data to
+  // upload via the Secure Aggregation protocol. If a client's result is no
+  // longer needed (e.g. the reporting goal was already reached for the task),
+  // the server will respond with an ABORTED error in the operation status. The
+  // operation is completed successfully when the Secure Aggregation protocol is
+  // ready to begin.
+  rpc StartSecureAggregation(StartSecureAggregationRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v1/secureaggregations/{aggregation_id}/clients/{authorization_token}:start"
+      body: "*"
+    };
+    option (google.longrunning.operation_info) = {
+      response_type: "StartSecureAggregationResponse"
+      metadata_type: "StartSecureAggregationMetadata"
+    };
+  }
+
+  // A request sent by the client indicating the client is ending its
+  // participation in the Secure Aggregation protocol.
+  //
+  // Clients must only call this if they've previously called
+  // `StartSecureAggregation`.
+  //
+  // If clients have already received a `StartSecureAggregationResponse`
+  // they should use the `ForwardingInfo` from the
+  // `StartSecureAggregationResponse.secagg_protocol_forwarding_info`
+  // response field to construct the URI for this request. Otherwise, clients
+  // should use the same `ForwardingInfo` as was used to construct the
+  // `StartSecureAggregation` request URI.
+  rpc AbortSecureAggregation(AbortSecureAggregationRequest)
+      returns (AbortSecureAggregationResponse) {
+    option (google.api.http) = {
+      post: "/v1/secureaggregations/{aggregation_id}/clients/{client_token}:abort"
+      body: "*"
+    };
+  }
+
+  // A request sent by the client to advertise its pair of public keys. The
+  // server responds with a list of the (pairs of) public keys of all other
+  // participating clients.
+  //
+  // Clients should use the `ForwardingInfo` from the
+  // `StartSecureAggregationResponse.secagg_protocol_forwarding_info`
+  // response field to construct the URI for this request.
+  //
+  // If the returned operation is not complete, clients should poll for status
+  // at the rate specified in the AdvertiseKeysMetadata.
+  rpc AdvertiseKeys(AdvertiseKeysRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v1/secureaggregations/{aggregation_id}/clients/{client_token}:advertisekeys"
+      body: "*"
+    };
+    option (google.longrunning.operation_info) = {
+      response_type: "AdvertiseKeysResponse"
+      metadata_type: "AdvertiseKeysMetadata"
+    };
+  }
+
+  // A request sent by the client to secret-share its
+  // own noise_sk and prf_sk with all the other clients (encrypting shares for
+  // client j with their own enc_pk). The server responds with the client's
+  // shares of the keys of each other client that sent a ShareKeysRequest.
+  //
+  // Clients should use the `ForwardingInfo` from the
+  // `StartSecureAggregationResponse.secagg_protocol_forwarding_info`
+  // response field to construct the URI for this request.
+  //
+  // If the returned operation is not complete, clients should poll for status
+  // at the rate specified in the ShareKeysMetadata.
+  rpc ShareKeys(ShareKeysRequest) returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v1/secureaggregations/{aggregation_id}/clients/{client_token}:sharekeys"
+      body: "*"
+    };
+    option (google.longrunning.operation_info) = {
+      response_type: "ShareKeysResponse"
+      metadata_type: "ShareKeysMetadata"
+    };
+  }
+
+  // A request sent by the client indicating the successful upload of the
+  // client's masked and unmasked results. The server responds with a list of
+  // clients that did not successfully upload their results (and therefore are
+  // considered dead).
+  //
+  // Clients should use the `ForwardingInfo` from the
+  // `StartSecureAggregationResponse.secagg_protocol_forwarding_info`
+  // response field to construct the URI for this request.
+  //
+  // If the returned operation is not complete, clients should poll for status
+  // at the rate specified in the SubmitSecureAggregationResultMetadata.
+  rpc SubmitSecureAggregationResult(SubmitSecureAggregationResultRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v1/secureaggregations/{aggregation_id}/clients/{client_token}:submit"
+      body: "*"
+    };
+    option (google.longrunning.operation_info) = {
+      response_type: "SubmitSecureAggregationResultResponse"
+      metadata_type: "SubmitSecureAggregationResultMetadata"
+    };
+  }
+
+  // A request sent by the client containing information for each other client
+  // j. For each client j, The client provides either the share of noise_sk (if
+  // client j is dead) OR share of prf_sk (if client j is still alive).
+  //
+  // If a client's aggregation result is no longer needed for the aggregation
+  // (e.g. the reporting goal was already reached for the task), the server will
+  // respond with an ABORTED error.
+  //
+  // Clients should use the `ForwardingInfo` from the
+  // `StartSecureAggregationResponse.secagg_protocol_forwarding_info`
+  // response field to construct the URI for this request.
+  rpc Unmask(UnmaskRequest) returns (UnmaskResponse) {
+    option (google.api.http) = {
+      post: "/v1/secureaggregations/{aggregation_id}/clients/{client_token}:unmask"
+      body: "*"
+    };
+  }
+}
+
+// --- StartSecureAggregation ---
+message StartSecureAggregationRequest {
+  // The id of the aggregation session this client participates in. This value
+  // was returned by the server when the client was assigned a task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string aggregation_id = 1
+      ;
+
+  // The authorization token returned by the server when the client was assigned
+  // a task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string authorization_token = 2
+      ;
+}
+
+message StartSecureAggregationMetadata {}
+
+message StartSecureAggregationResponse {
+  // Information to construct the URI to use for continuing the secure
+  // aggregation protocol.
+  ForwardingInfo secagg_protocol_forwarding_info = 1;
+
+  // Per-aggregand information.
+  map<string, SecureAggregandExecutionInfo> secure_aggregands = 2;
+
+  // Protocol execution information.
+  SecureAggregationProtocolExecutionInfo protocol_execution_info = 3;
+
+  // Information about where to upload masked result.
+  ByteStreamResource masked_result_resource = 4;
+
+  // Information about where to upload unmasked result (e.g. metrics).
+  ByteStreamResource nonmasked_result_resource = 5;
+
+  // Unique token that the client must include in the subsequent protocol
+  // requests.
+  string client_token = 6;
+}
+
+// Per-aggregand configuration information.
+message SecureAggregandExecutionInfo {
+  // Modulus for secure aggregation.
+  //
+  // The secure aggregation protocol will compute the sum modulo this modulus.
+  //
+  // To achieve equivalence with non-modular summation, the modulus must be
+  // larger than the sum of all client inputs, given the number of clients
+  // participating in the aggregation shard.
+  uint64 modulus = 1;
+}
+
+// Dynamic configuration of the Secure Aggregation protocol.
+message SecureAggregationProtocolExecutionInfo {
+  // Number of clients that a client may exchange data with while running
+  // Secure Aggregation protocol. In the case of a full graph SecAgg protocol
+  // this is a total number of clients that started the protocol.
+  // In the case of subgraph SecAgg protocol this is a number of neighbours
+  // that each client has.
+  int32 expected_number_of_clients = 1;
+
+  // Secure Aggregation client completion threshold. This is a parameter
+  // communicated by the server side of Secure Aggregation protocol to each
+  // client to establish Shamir sharing of secrets.
+  // Additionally, at least `minimum_surviving_clients_for_reconstruction` out
+  // of the initial `expected_number_of_clients` must 'survive' in order for
+  // the protocol to continue on the client side; otherwise the client will
+  // abort its connection.
+  int32 minimum_surviving_clients_for_reconstruction = 2;
+}
+
+// --- AbortSecureAggregation ---
+message AbortSecureAggregationRequest {
+  // The id of the aggregation session this client participates in. This value
+  // was returned by the server when the client was assigned a task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string aggregation_id = 1
+      ;
+
+  // The client token returned by the server when the client was assigned a
+  // task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string client_token = 2
+      ;
+
+  // Status code and optional message for why the secure aggregation protocol
+  // was aborted.
+  google.rpc.Status status = 3;
+}
+
+message AbortSecureAggregationResponse {}
+
+// --- AdvertiseKeys ---
+message AdvertiseKeysRequest {
+  // The id of the aggregation session this client participates in. This value
+  // was returned by the server when the client was assigned a task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string aggregation_id = 1
+      ;
+
+  // The client token returned by the server when the client was assigned a
+  // task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string client_token = 2
+      ;
+
+  // A pair of public keys for this client.
+  fcp.secagg.AdvertiseKeys advertise_keys = 3;
+}
+
+message AdvertiseKeysMetadata {
+  // The suggested duration between instances of polling the AdvertiseKeys LRO.
+  google.protobuf.Duration polling_interval = 1;
+}
+
+message AdvertiseKeysResponse {
+  // Information from the server so that the client can participate in the
+  // ShareKeys protocol stage. Contains a list of pairs of public keys, as well
+  // as the logging ID for the SecAgg execution.
+  fcp.secagg.ShareKeysRequest share_keys_server_request = 1;
+}
+
+// --- ShareKeys ---
+message ShareKeysRequest {
+  // The id of the aggregation session this client participates in. This value
+  // was returned by the server when the client was assigned a task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string aggregation_id = 1
+      ;
+
+  // The client token returned by the server when the client was assigned a
+  // task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string client_token = 2
+      ;
+
+  // Information about the client's participation in the ShareKeys protocol
+  // stage. Contains a list of encrypted pairs of key shares (one for each other
+  // client).
+  fcp.secagg.ShareKeysResponse share_keys_client_response = 3;
+}
+
+message ShareKeysMetadata {
+  // The suggested duration between instances of polling the ShareKeys LRO.
+  google.protobuf.Duration polling_interval = 1;
+}
+
+message ShareKeysResponse {
+  // Information from the server so that the client can submit its masked
+  // result. Contains a list of shares of other clients' keys encrypted and
+  // intended for the client who receives this message.
+  fcp.secagg.MaskedInputCollectionRequest
+      masked_input_collection_server_request = 1;
+}
+
+// --- SubmitSecureAggregationResult ---
+message SubmitSecureAggregationResultRequest {
+  // The id of the aggregation session this client participates in. This value
+  // was returned by the server when the client was assigned a task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string aggregation_id = 1
+      ;
+
+  // The client token returned by the server when the client was assigned a
+  // task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string client_token = 2
+      ;
+
+  // Name of the resource to which the masked result was uploaded. The blob
+  // uploaded at masked_input_resource name must contain a serialized
+  // fcp.secagg.MaskedInputCollectionResponse message.
+  string masked_result_resource_name = 3;
+
+  // Name of the resource to which the nonmasked result was uploaded.
+  string nonmasked_result_resource_name = 4;
+}
+
+message SubmitSecureAggregationResultMetadata {
+  // The suggested duration between instances of polling the
+  // SubmitSecureAggregationResult LRO.
+  google.protobuf.Duration polling_interval = 1;
+}
+
+message SubmitSecureAggregationResultResponse {
+  // Information from the server so that the client can participate in the
+  // Unmasking protocol stage.
+  fcp.secagg.UnmaskingRequest unmasking_server_request = 1;
+}
+
+// --- Unmask ---
+message UnmaskRequest {
+  // The id of the aggregation session this client participates in. This value
+  // was returned by the server when the client was assigned a task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string aggregation_id = 1
+      ;
+
+  // The client token returned by the server when the client was assigned a
+  // task.
+  //
+  // Note that HTTP clients set this value in the request URL instead of the
+  // request body.
+  string client_token = 2
+      ;
+
+  // Information about the client's participation in the Unmasking protocol
+  // stage.
+  fcp.secagg.UnmaskingResponse unmasking_client_response = 3;
+}
+
+message UnmaskResponse {}

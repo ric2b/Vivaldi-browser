@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "components/gwp_asan/client/guarded_page_allocator.h"
 
 #include <algorithm>
@@ -17,6 +12,7 @@
 
 #include "base/allocator/buildflags.h"
 #include "base/bits.h"
+#include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/memory/page_size.h"
 #include "base/rand_util.h"
@@ -56,10 +52,6 @@ T RandomEviction(std::vector<T>* list) {
 }
 
 }  // namespace
-
-// TODO: Delete out-of-line constexpr defininitons once C++17 is in use.
-constexpr size_t GuardedPageAllocator::kOutOfMemoryCount;
-constexpr size_t GuardedPageAllocator::kGpaAllocAlignment;
 
 template <typename T>
 void GuardedPageAllocator::SimpleFreeList<T>::Initialize(T max_entries) {
@@ -479,8 +471,8 @@ void GuardedPageAllocator::RecordDeallocationMetadata(
   size_t len = AllocationInfo::GetStackTrace(trace);
   metadata_[metadata_idx].dealloc.trace_len =
       Pack(reinterpret_cast<uintptr_t*>(trace), len,
-           metadata_[metadata_idx].stack_trace_pool +
-               metadata_[metadata_idx].alloc.trace_len,
+           UNSAFE_TODO(metadata_[metadata_idx].stack_trace_pool +
+                       metadata_[metadata_idx].alloc.trace_len),
            sizeof(metadata_[metadata_idx].stack_trace_pool) -
                metadata_[metadata_idx].alloc.trace_len);
   metadata_[metadata_idx].dealloc.tid = base::PlatformThread::CurrentId();

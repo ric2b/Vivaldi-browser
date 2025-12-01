@@ -61,6 +61,10 @@ namespace cc::slim {
 class SurfaceLayer;
 }
 
+namespace gpu {
+class ClientSharedImage;
+}
+
 namespace input {
 struct NativeWebKeyboardEvent;
 }  // namespace input
@@ -70,9 +74,14 @@ struct BrowserControlsOffsetTagDefinitions;
 class MotionEventAndroid;
 class OverscrollRefreshHandler;
 struct DidOverscrollParams;
-}
+}  // namespace ui
+
+namespace viz {
+class RasterContextProvider;
+}  // namespace viz
 
 namespace content {
+class CompositorImpl;
 class GestureListenerManager;
 class ImeAdapterAndroid;
 class OverscrollControllerAndroid;
@@ -177,6 +186,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       const gfx::Rect& src_rect,
       const gfx::Size& output_size,
       base::OnceCallback<void(const SkBitmap&)> callback) override;
+  void CopySharedImageFromExactSurface(
+      const gfx::Rect& src_rect,
+      const gfx::Size& output_size,
+      base::OnceCallback<void(scoped_refptr<gpu::ClientSharedImage>)> callback);
+
   void EnsureSurfaceSynchronizedForWebTest() override;
   uint32_t GetCaptureSequenceNumber() const override;
   int GetMouseWheelMinimumGranularity() const override;
@@ -273,6 +287,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnSizeChanged() override;
   void OnPhysicalBackingSizeChanged(
       std::optional<base::TimeDelta> deadline_override) override;
+  void OnWindowPositionChanged() override;
   void NotifyVirtualKeyboardOverlayRect(
       const gfx::Rect& keyboard_rect) override;
   void ShowInterestInElement(int) override;
@@ -463,6 +478,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   const cc::slim::SurfaceLayer* GetSurfaceLayer() const;
 
+  scoped_refptr<viz::RasterContextProvider> GetRasterContextProvider();
+
   void RegisterOffsetTags(
       const ui::BrowserControlsOffsetTagDefinitions& tag_definitions);
   void UnregisterOffsetTags(const cc::BrowserControlsOffsetTags& tags);
@@ -505,6 +522,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void UnlockOrientation() override;
   void SetHasPersistentVideo(bool has_persistent_video) override;
 
+  // This method is used as a callback for `ViewAndroid::HitTest` to determine
+  // if the View is actually ready to send event.
+  bool IsHitTestReady();
+
  private:
   friend class RenderWidgetHostViewAndroidTest;
   friend class RenderWidgetHostViewAndroidFullscreenRotationTest;
@@ -512,6 +533,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            GestureManagerListensToChildFrames);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAndroidTest, DisplayFeature);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAndroidTest, UpdateControls);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAndroidFluidResizeBrowserTest,
+                           ResizeDefersSynchronizationToNextFrame);
 
   class ScreenStateChangeHandler {
    public:
@@ -631,6 +655,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void BeginRotationEmbed();
   void EndRotationAndSyncIfNecessary();
   void EvictInternal();
+  CompositorImpl* GetCompositorImpl();
 
   // DevicePosturePlatformProvider::Observer.
   void OnDisplayFeatureBoundsChanged(
@@ -731,6 +756,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   float prev_top_controls_translate_;
   float prev_top_controls_min_height_offset_pix_;
   float prev_bottom_shown_pix_;
+  float prev_bottom_controls_pix_;
   float prev_bottom_controls_translate_;
   float prev_bottom_controls_min_height_offset_pix_;
   float page_scale_;
@@ -809,8 +835,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   ScreenStateChangeHandler screen_state_change_handler_;
 
-  bool keyboard_locked_ = false;
   std::optional<base::flat_set<ui::DomCode>> locked_keyboard_keys_;
+
+  // Used to schedule a single visual properties update on the next vsync tick
+  // to achieve fluid resizing.
+  bool visual_properties_update_pending_ = false;
 
   base::WeakPtrFactory<RenderWidgetHostViewAndroid> weak_ptr_factory_{this};
 };

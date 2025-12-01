@@ -98,7 +98,8 @@ class SessionRestore {
       content::WebContents* source_web_contents,
       const sessions::SessionTab& tab,
       WindowOpenDisposition disposition,
-      bool skip_renderer_creation = false);
+      bool skip_renderer_creation = false,
+      bool vivaldi_load_content = false);
 
   // Returns true if we're in the process of restoring |profile|.
   static bool IsRestoring(const Profile* profile);

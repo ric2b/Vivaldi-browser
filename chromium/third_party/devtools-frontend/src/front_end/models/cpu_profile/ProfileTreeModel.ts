@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@ export class ProfileNode {
   total: number;
   id: number;
   parent: ProfileNode|null;
-  children: ProfileNode[];
+  children: this[];
   functionName: string;
   depth!: number;
   deoptReason!: string|null;

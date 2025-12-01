@@ -54,19 +54,21 @@ class CORE_EXPORT ColumnLayoutAlgorithm
       const BlockBreakToken* next_column_token,
       MarginStrut*);
 
-  // Lay out one row of columns. The layout result returned is for the last
-  // column that was laid out. The rows themselves don't create fragments. If
+  // Lay out one line of columns. The layout result returned is for the last
+  // column that was laid out. The lines themselves don't create fragments. If
   // we're in a nested fragmentation context, and a break is inserted before the
-  // row, nullptr is returned.
-  const LayoutResult* LayoutRow(const BlockBreakToken* next_column_token,
-                                LayoutUnit row_offset,
-                                LayoutUnit miminum_column_block_size,
-                                bool has_wrapped,
-                                MarginStrut*);
+  // line, nullptr is returned.
+  //
+  // `line_offset` is the block-offset from the start of the multicol fragment.
+  const LayoutResult* LayoutLine(const BlockBreakToken* next_column_token,
+                                 LayoutUnit line_offset,
+                                 LayoutUnit miminum_column_block_size,
+                                 bool has_wrapped,
+                                 MarginStrut*);
 
   // Lay out a column spanner. The return value will tell whether to break
-  // before the spanner or not. If |BreakStatus::kContinue| is returned, and
-  // no break token was set, it means that we can proceed to the next row of
+  // before the spanner or not. If `BreakStatus::kContinue` is returned, and no
+  // break token was set, it means that we can proceed to the next line of
   // columns.
   BreakStatus LayoutSpanner(BlockNode spanner_node,
                             const BlockBreakToken* break_token,
@@ -126,6 +128,30 @@ class CORE_EXPORT ColumnLayoutAlgorithm
   void BuildRowGapIntersections(const LogicalRect& column_logical_rect,
                                 GapIntersectionList& row_gap_intersections);
 
+  // TODO(crbug.com/436140061): The following are for the optimized version of
+  // GapDecorations. Once the optimized version is implemented, we can remove
+  // all the other unused methods and members from the old version.
+
+  // Gap decorations:
+  // * `CrossGap`s are the column gaps. The presence of a spanner will create a
+  // new `CrossGap` for each column gap.
+  // * `MainGap`s are the row gaps created by `column-wrap: wrap`. We will
+  // also have a `MainGap` for each spanner.
+  // See third_party/blink/renderer/core/layout/gap/README.md for more info.
+  void AddCrossGapForColumn(LayoutUnit inline_offset, LayoutUnit block_offset);
+
+  void AddMainGapForSpanner(LayoutUnit block_offset,
+                            LayoutUnit logical_fragment_block_size);
+
+  // Populates `range_of_cross_gaps_before_current_main_gap_` with
+  // `CrossGapRanges` for each group of `CrossGap`s before each `MainGap`.
+  // For each `MainGap` we say that the `CrossGaps` associated with it are any
+  // that start before that main gap (and after a spanner). This information is
+  // needed by Paint to calculate the intersection points of row gaps and column
+  // gaps.
+  void CommitRangeOfCrossGapsBeforeCurrentMainGap();
+  void ResetRangeOfCrossGapsBeforeCurrentMainGap();
+
   // Attempt to position the list-item marker (if any) beside the child
   // fragment. This requires the fragment to have a baseline. If it doesn't,
   // we'll keep the unpositioned marker around, so that we can retry with a
@@ -150,26 +176,27 @@ class CORE_EXPORT ColumnLayoutAlgorithm
   // out until the desired result is achieved). For column-fill:auto and
   // unconstrained block-size, we also need to go through this, since we need to
   // know the column block-size before performing "real" layout, since all
-  // columns in a row need to have the same block-size.
+  // columns in a line need to have the same block-size.
   LayoutUnit ResolveColumnAutoBlockSize(
       const LogicalSize& column_size,
-      LayoutUnit row_offset,
+      LayoutUnit line_offset,
       LayoutUnit available_outer_space,
       const BlockBreakToken* child_break_token,
       bool balance_columns);
 
   LayoutUnit ResolveColumnAutoBlockSizeInternal(
       const LogicalSize& column_size,
-      LayoutUnit row_offset,
+      LayoutUnit line_offset,
       LayoutUnit available_outer_space,
       const BlockBreakToken* child_break_token,
       bool balance_columns);
 
   LayoutUnit ConstrainColumnBlockSize(LayoutUnit size,
-                                      LayoutUnit row_offset,
+                                      LayoutUnit line_offset,
                                       LayoutUnit available_outer_space) const;
-  LayoutUnit CurrentContentBlockOffset(LayoutUnit border_box_row_offset) const {
-    return border_box_row_offset - BorderScrollbarPadding().block_start;
+  LayoutUnit CurrentContentBlockOffset(
+      LayoutUnit border_box_line_offset) const {
+    return border_box_line_offset - BorderScrollbarPadding().block_start;
   }
 
   // Get the percentage resolution size to use for column content (i.e. not
@@ -218,18 +245,16 @@ class CORE_EXPORT ColumnLayoutAlgorithm
   LayoutUnit tallest_unbreakable_block_size_;
   bool is_constrained_by_outer_fragmentation_context_ = false;
 
-  // This is used to determine whether we need to add new intersections for
-  // the edge of the container and the column gaps, or whether we need to
-  // modify the last intersection in each column gap. For instance, if we have
-  // a row of columns with fewer columns than the previous row.
-  bool need_to_add_final_intersections_to_column_gaps_ = false;
-  wtf_size_t num_columns_in_last_processed_row_ = 0;
-
-  Vector<GapIntersectionList> column_gaps_;
-  Vector<GapIntersectionList> row_gaps_;
-
   LayoutUnit column_gap_size_;
   LayoutUnit row_gap_size_;
+
+  //`main_gaps_` are the row gaps, while `cross_gaps_` are the column gaps.
+  Vector<MainGap> main_gaps_;
+  Vector<CrossGap> cross_gaps_;
+  CrossGapRange range_of_cross_gaps_before_current_main_gap_;
+
+  std::optional<LayoutUnit> content_inline_start_;
+  std::optional<LayoutUnit> content_block_start_;
 
   // This will be set during (outer) block fragmentation once we've processed
   // the first piece of content of the multicol container. It is used to check

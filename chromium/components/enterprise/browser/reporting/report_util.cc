@@ -52,7 +52,6 @@ base::Value::Dict AvProductToDict(
       break;
   }
   antivirus_dict.Set("display_name", av_product.display_name());
-  antivirus_dict.Set("product_id", av_product.product_id());
 
   return antivirus_dict;
 }
@@ -143,7 +142,6 @@ std::unique_ptr<em::AntiVirusProduct> TranslateAvProduct(
   }
 
   av_product_in_report->set_display_name(av_product.display_name);
-  av_product_in_report->set_product_id(av_product.product_id);
 
   return av_product_in_report;
 }
@@ -204,6 +202,12 @@ std::string GetSecuritySignalsInReport(
       signals_dict.Set("distribution_version",
                        os_report.distribution_version());
     }
+#elif BUILDFLAG(IS_ANDROID)
+    signals_dict.Set("has_potentially_harmful_apps",
+                     os_report.has_potentially_harmful_apps());
+    signals_dict.Set("verified_apps_enabled",
+                     os_report.verified_apps_enabled());
+    signals_dict.Set("security_patch", os_report.security_patch());
 #endif  // BUILDFLAG(IS_WIN)
   }
 

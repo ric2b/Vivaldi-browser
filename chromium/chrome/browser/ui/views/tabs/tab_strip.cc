@@ -101,7 +101,6 @@
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/skia_conversions.h"
-#include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/range/range.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/cascading_property.h"
@@ -112,7 +111,7 @@
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/window/non_client_view.h"
+#include "ui/views/window/frame_view.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "ui/display/win/screen_win.h"
@@ -1386,6 +1385,10 @@ void TabStrip::OnSplitRemoved(const std::vector<int>& split_indices) {
 }
 
 void TabStrip::OnSplitContentsChanged(const std::vector<int>& split_indices) {
+  for (const int split_index : split_indices) {
+    tab_at(split_index)->UpdateAccessibleName();
+  }
+
   tab_container_->OnSplitContentsChanged(split_indices);
 }
 
@@ -1584,25 +1587,8 @@ TabDragContext* TabStrip::GetDragContext() {
   return base::to_address(drag_context_);
 }
 
-bool TabStrip::IsAnimating() const {
-  return tab_container_->IsAnimating() || drag_context_->IsAnimatingDragEnd();
-}
-
-void TabStrip::StopAnimating(bool layout) {
-  if (layout) {
-    tab_container_->CompleteAnimationAndLayout();
-  } else {
-    tab_container_->CancelAnimation();
-  }
-}
-
-std::optional<int> TabStrip::GetFocusedTabIndex() const {
-  for (int i = 0; i < GetTabCount(); ++i) {
-    if (tab_at(i)->HasFocus()) {
-      return i;
-    }
-  }
-  return std::nullopt;
+void TabStrip::StopAnimating() {
+  tab_container_->CompleteAnimationAndLayout();
 }
 
 views::View* TabStrip::GetTabViewForPromoAnchor(int index_hint) {
@@ -1662,7 +1648,7 @@ const views::View* TabStrip::GetTabClosingModeMouseWatcherHostView() const {
 }
 
 bool TabStrip::IsAnimatingInTabStrip() const {
-  return IsAnimating();
+  return tab_container_->IsAnimating() || drag_context_->IsAnimatingDragEnd();
 }
 
 void TabStrip::UpdateAnimationTarget(TabSlotView* tab_slot_view,
@@ -1886,7 +1872,12 @@ bool TabStrip::IsFocusInTabs() const {
 
 bool TabStrip::ShouldCompactLeadingEdge() const {
   return !features::HasTabSearchToolbarButton() &&
-         controller_->IsFrameButtonsRightAligned() &&
+         !controller_->GetBrowser()
+              ->window()
+              ->AsBrowserView()
+              ->browser_widget()
+              ->GetFrameView()
+              ->CaptionButtonsOnLeadingEdge() &&
          tabs::GetTabSearchTrailingTabstrip(controller_->GetProfile());
 }
 
@@ -1898,9 +1889,18 @@ void TabStrip::MaybeStartDrag(
   // mouse is down... during an animation tabs are being resized automatically,
   // so the View system can misinterpret this easily if the mouse is down that
   // the user is dragging.
-  if (IsAnimating() || controller_->HasAvailableDragActions() == 0) {
+  if (IsAnimatingInTabStrip() || controller_->HasAvailableDragActions() == 0) {
     return;
   }
+
+#if BUILDFLAG(IS_CHROMEOS)
+  // Block drag operation if the web app is locked for OnTask. This prevents the
+  // window from moving along with the tab when in locked fullsceeen mode. Only
+  // relevant for non-web browser scenarios.
+  if (IsLockedForOnTask()) {
+    return;
+  }
+#endif
 
   // Check that the source is either a valid tab or a tab group header, which
   // are the only valid drag targets.
@@ -2045,7 +2045,8 @@ bool TabStrip::CanPaintThrobberToLayer() const {
   // could be sliding in or out; for other modes, there's no tab strip.
   const bool dragging = drag_context_->IsDragStarted();
   const views::Widget* widget = GetWidget();
-  return widget && !dragging && !IsAnimating() && !widget->IsFullscreen();
+  return widget && !dragging && !IsAnimatingInTabStrip() &&
+         !widget->IsFullscreen();
 }
 
 bool TabStrip::HasVisibleBackgroundTabShapes() const {
@@ -2322,7 +2323,7 @@ const Tab* TabStrip::GetLastVisibleTab() const {
 }
 
 void TabStrip::CloseTabInternal(int model_index, CloseTabSource source) {
-  if (!tab_container_->InTabClose() && IsAnimating()) {
+  if (!tab_container_->InTabClose() && IsAnimatingInTabStrip()) {
     // Cancel any current animations. We do this as remove uses the current
     // ideal bounds and we need to know ideal bounds is in a good state.
     tab_container_->CompleteAnimationAndLayout();
@@ -2343,6 +2344,10 @@ void TabStrip::CloseTabInternal(int model_index, CloseTabSource source) {
       // Prevent the browser from closing when the last grouped tab is closed
       // from the browser by adding a new tab.
       controller_->CreateNewTab();
+      // In some situations the new tab is assigned a group. So if it is in a
+      // group, we remove it from the group so that after closing the tab at
+      // `model_index`, the browser shows a tab without a group.
+      controller_->RemoveTabFromGroup(1);
     }
   }
   controller_->CloseTab(model_index);
@@ -2610,7 +2615,6 @@ ADD_PROPERTY_METADATA(int, BackgroundOffset)
 ADD_READONLY_PROPERTY_METADATA(int, TabCount)
 ADD_READONLY_PROPERTY_METADATA(int, ModelCount)
 ADD_READONLY_PROPERTY_METADATA(int, ModelPinnedTabCount)
-ADD_READONLY_PROPERTY_METADATA(std::optional<int>, FocusedTabIndex)
 ADD_READONLY_PROPERTY_METADATA(int, StrokeThickness)
 ADD_READONLY_PROPERTY_METADATA(SkColor,
                                TabSeparatorColor,

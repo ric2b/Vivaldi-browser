@@ -191,7 +191,8 @@ void ResolvedTargetData::ComputeModuleDepsInformationFor(
   for (const Target* dep : deps) {
     if (dep->output_type() != Target::STATIC_LIBRARY &&
         dep->output_type() != Target::SHARED_LIBRARY &&
-        dep->output_type() != Target::SOURCE_SET) {
+        dep->output_type() != Target::SOURCE_SET &&
+        dep->output_type() != Target::GROUP) {
       continue;
     }
 

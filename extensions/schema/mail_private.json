@@ -636,6 +636,22 @@
             }
           ]
         }
+      },
+      {
+        "name": "getMailSearchDBCount",
+        "type": "function",
+        "description": "Returns count of messages in the mail search database.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "count",
+              "description": "Count of messages in mail search database.",
+              "type": "integer"
+            }
+          ]
+        }
       }
     ],
     "events": [

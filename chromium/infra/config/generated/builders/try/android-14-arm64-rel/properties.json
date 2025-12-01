@@ -10,10 +10,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-14-arm64-rel",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-android-archive",
               "builder_group": "chromium.android",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_android_config": {
@@ -44,7 +43,7 @@
         {
           "bucket": "ci",
           "builder": "android-14-arm64-rel",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/android-14-arm64-rel/targets"

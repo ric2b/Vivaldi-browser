@@ -26,7 +26,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/test/test_file_util.h"
 #include "base/test/test_switches.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -61,6 +60,7 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar_controller_util.h"
 #include "chrome/common/chrome_constants.h"
@@ -78,7 +78,6 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/captive_portal/core/buildflags.h"
 #include "components/custom_handlers/test_protocol_handler_registry_delegate.h"
-#include "components/embedder_support/switches.h"
 #include "components/feature_engagement/public/feature_list.h"
 #include "components/google/core/common/google_util.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -107,6 +106,7 @@
 #endif
 
 #if BUILDFLAG(IS_WIN)
+#include "base/test/test_file_util.h"
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/windows_version.h"
 #include "components/version_info/version_info.h"
@@ -371,6 +371,10 @@ void InProcessBrowserTest::Initialize() {
   launch_browser_for_testing_ =
       std::make_unique<ash::full_restore::ScopedLaunchBrowserForTesting>();
 #endif
+#if BUILDFLAG(IS_WIN)
+  base::GetPathsAllowedToLeak() = {L"\\Sync Data", L"\\Local Storage\\leveldb",
+                                   L"\\DataSharing", L"\\Collaboration"};
+#endif  // BUILDFLAG(IS_WIN)
 }
 
 InProcessBrowserTest::~InProcessBrowserTest() {
@@ -393,7 +397,7 @@ void InProcessBrowserTest::SetUp() {
   // reloaded out from under them. Tests that expect or desire this behavior can
   // append embedder_support::kEnableAutoReload, which will override the disable
   // here.
-  command_line->AppendSwitch(embedder_support::kDisableAutoReload);
+  command_line->AppendSwitch(switches::kDisableAutoReload);
 
   // Allow subclasses to change the command line before running any tests.
   SetUpCommandLine(command_line);
@@ -628,13 +632,15 @@ Profile* InProcessBrowserTest::GetProfile() const {
   return browser() ? browser()->profile() : nullptr;
 }
 
-void InProcessBrowserTest::CloseBrowserSynchronously(Browser* browser) {
+void InProcessBrowserTest::CloseBrowserSynchronously(
+    BrowserWindowInterface* browser) {
   CloseBrowserAsynchronously(browser);
   ui_test_utils::WaitForBrowserToClose(browser);
 }
 
-void InProcessBrowserTest::CloseBrowserAsynchronously(Browser* browser) {
-  browser->window()->Close();
+void InProcessBrowserTest::CloseBrowserAsynchronously(
+    BrowserWindowInterface* browser) {
+  browser->GetWindow()->Close();
 #if BUILDFLAG(IS_MAC)
   // BrowserWindowController depends on the auto release pool being recycled
   // in the message loop to delete itself.

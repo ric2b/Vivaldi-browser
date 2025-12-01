@@ -29,3 +29,11 @@ class GlicWebUIBrowserTest : public WebUIMochaBrowserTest {
 IN_PROC_BROWSER_TEST_F(GlicWebUIBrowserTest, UnitTestWebview) {
   RunTest("glic/unit_tests/webview_test.js", "mocha.run()");
 }
+
+IN_PROC_BROWSER_TEST_F(GlicWebUIBrowserTest, UnitTestObservable) {
+  RunTest("glic/unit_tests/observable_test.js", "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(GlicWebUIBrowserTest, UnitTestGlicApiHost) {
+  RunTest("glic/unit_tests/glic_api_host_test.js", "mocha.run()");
+}

@@ -7,6 +7,10 @@
 // renderer11_utils.cpp: Conversion functions and other utility routines
 // specific to the D3D11 renderer.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "libANGLE/renderer/d3d/d3d11/renderer11_utils.h"
 
 #include <algorithm>
@@ -1709,10 +1713,6 @@ void GenerateCaps(ID3D11Device *device,
     extensions->baseVertexBaseInstanceShaderBuiltinANGLE = true;
     extensions->drawElementsBaseVertexOES                = true;
     extensions->drawElementsBaseVertexEXT                = true;
-    if (!strstr(description, "Adreno"))
-    {
-        extensions->multisampledRenderToTextureEXT = true;
-    }
     extensions->videoTextureWEBGL = true;
 
     // D3D11 cannot support reading depth texture as a luminance texture.

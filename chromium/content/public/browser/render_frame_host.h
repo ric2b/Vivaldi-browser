@@ -25,7 +25,6 @@
 #include "content/public/common/extra_mojo_js_features.mojom.h"
 #include "content/public/common/isolated_world_ids.h"
 #include "ipc/ipc_listener.h"
-#include "ipc/ipc_sender.h"
 #include "net/cookies/cookie_setting_override.h"
 #include "net/storage_access_api/status.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -46,14 +45,14 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "ui/accessibility/ax_node_id_forward.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/image/image_skia.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "third_party/jni_zero/jni_zero.h"
 #endif
 
 class GURL;
+class SkBitmap;
 
 namespace network {
 class PermissionsPolicy;
@@ -191,6 +190,9 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener {
 
 #if BUILDFLAG(IS_ANDROID)
   // Returns the RenderFrameHost object associated with a Java native pointer.
+  // Note: It is recommended to use jni_zero::FromJniType<RenderFrameHost*>()
+  // instead of this method. This enables the use of @JniType for automatic
+  // conversion in Java.
   static RenderFrameHost* FromJavaRenderFrameHost(
       const base::android::JavaRef<jobject>& jrender_frame_host_android);
 #endif
@@ -835,8 +837,16 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener {
       int max_length) = 0;
 
   // Generates an intervention report in this frame.
+  //
+  // The report is associated with this frame unless `child_frame` is provided.
+  // If `child_frame` is provided, `message` may be modified to include
+  // additional information about `child_frame`.
+  //
+  // Prerequisite: If `child_frame` is provided, it must be a direct child frame
+  // of this frame.
   virtual void SendInterventionReport(const std::string& id,
-                                      const std::string& message) = 0;
+                                      const std::string& message,
+                                      RenderFrameHost* child_frame) = 0;
 
   // Returns the WebUI object associated wit this RenderFrameHost or nullptr
   // otherwise.
@@ -856,6 +866,8 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener {
 
 #if BUILDFLAG(IS_ANDROID)
   // Returns the Java object of this instance.
+  // Note: It is recommended to use jni_zero::ToJniType() instead. This enables
+  // the use of @JniType for automatic conversion in Java.
   virtual jni_zero::ScopedJavaLocalRef<jobject> GetJavaRenderFrameHost() = 0;
 
   // Returns an InterfaceProvider for Java-implemented interfaces that are
@@ -946,9 +958,9 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener {
   // embedding frame.
   virtual bool IsSandboxed(network::mojom::WebSandboxFlags flags) = 0;
 
-  // Calls |FlushForTesting()| on Network Service and FrameNavigationControl
-  // related interfaces to make sure all in-flight mojo messages have been
-  // received by the other end. For test use only.
+  // Calls |FlushForTesting()| on Network Service related interfaces to make
+  // sure all in-flight mojo messages have been received by the other end. For
+  // test use only.
   //
   // It is usually an error to call this method when the frame doesn't have any
   // NetworkService connection.  OTOH, tests that can't easily tell when this
@@ -1180,6 +1192,10 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener {
   virtual void SetStorageAccessApiStatus(
       net::StorageAccessApiStatus status) = 0;
 
+
+  // Vivaldi
+  virtual void SetSupportsDraggableRegions(bool) {}
+
  private:
   // This interface should only be implemented inside content.
   friend class RenderFrameHostImpl;
@@ -1187,5 +1203,24 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener {
 };
 
 }  // namespace content
+
+#if BUILDFLAG(IS_ANDROID)
+namespace jni_zero {
+
+// @JniType conversion function.
+template <>
+inline content::RenderFrameHost* FromJniType<content::RenderFrameHost*>(
+    JNIEnv* env,
+    const JavaRef<jobject>& j_obj) {
+  return content::RenderFrameHost::FromJavaRenderFrameHost(j_obj);
+}
+template <>
+inline ScopedJavaLocalRef<jobject> ToJniType(JNIEnv* env,
+                                             content::RenderFrameHost* obj) {
+  return obj->GetJavaRenderFrameHost();
+}
+
+}  // namespace jni_zero
+#endif
 
 #endif  // CONTENT_PUBLIC_BROWSER_RENDER_FRAME_HOST_H_

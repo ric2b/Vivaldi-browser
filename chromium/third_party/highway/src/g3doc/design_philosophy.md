@@ -41,9 +41,9 @@
     sizes increase, and matches the direction taken by
     [Arm SVE](https://alastairreid.github.io/papers/sve-ieee-micro-2017.pdf) and
     RiscV V as well as Agner Fog's
-    [ForwardCom instruction set proposal](https://goo.gl/CFizWu). However, some
-    applications may require fixed sizes, so we also guarantee support for <=
-    128-bit vectors in each instruction set.
+    [ForwardCom instruction set proposal](https://www.agner.org/optimize/forwardcom.pdf).
+    However, some applications may require fixed sizes, so we also guarantee
+    support for <= 128-bit vectors in each instruction set.
 
 *   The API and its implementation should be usable and efficient with commonly
     used compilers, including MSVC. For example, we write `ShiftLeft<3>(v)`
@@ -67,8 +67,7 @@
 *   Not every CPU need be supported. To reduce code size and compile time, we
     group x86 targets into clusters. In particular, SSE3 instructions are only
     used/available if S-SSE3 is also available, and AVX only if AVX2 is also
-    supported. Code generation for AVX3_DL also requires opting-in by defining
-    HWY_WANT_AVX3_DL.
+    supported.
 
 *   Access to platform-specific intrinsics is necessary for acceptance in
     performance-critical projects. We provide conversions to and from intrinsics

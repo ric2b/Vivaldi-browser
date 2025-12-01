@@ -5,17 +5,10 @@
 #ifndef V8_HEAP_MEMORY_CHUNK_METADATA_H_
 #define V8_HEAP_MEMORY_CHUNK_METADATA_H_
 
-#include <bit>
-#include <type_traits>
-#include <unordered_map>
-
-#include "src/base/atomic-utils.h"
-#include "src/base/flags.h"
+#include "src/base/bit-field.h"
 #include "src/base/hashing.h"
 #include "src/common/globals.h"
-#include "src/flags/flags.h"
-#include "src/heap/marking.h"
-#include "src/heap/memory-chunk-layout.h"
+#include "src/heap/base-space.h"
 #include "src/heap/memory-chunk.h"
 #include "src/objects/heap-object.h"
 #include "src/utils/allocation.h"
@@ -31,19 +24,16 @@ class BaseSpace;
 
 class MemoryChunkMetadata {
  public:
-  // Only works if the pointer is in the first kPageSize of the MemoryChunk.
-  V8_INLINE static MemoryChunkMetadata* FromAddress(Address a);
+  // Only works if the pointer is in the first kPageSize of the MemoryChunk.k
   V8_INLINE static MemoryChunkMetadata* FromAddress(const Isolate* isolate,
                                                     Address a);
 
-  // Only works if the object is in the first kPageSize of the MemoryChunk.
-  V8_INLINE static MemoryChunkMetadata* FromHeapObject(Tagged<HeapObject> o);
+  // Objects pointers always point within the first kPageSize, so these calls
+  // always succeed.
   V8_INLINE static MemoryChunkMetadata* FromHeapObject(const Isolate* i,
                                                        Tagged<HeapObject> o);
-
-  // Only works if the object is in the first kPageSize of the MemoryChunk.
   V8_INLINE static MemoryChunkMetadata* FromHeapObject(
-      const HeapObjectLayout* o);
+      const Isolate* i, const HeapObjectLayout* o);
 
   V8_INLINE static void UpdateHighWaterMark(Address mark);
 
@@ -75,17 +65,27 @@ class MemoryChunkMetadata {
   // Gets the chunk's owner or null if the space has been detached.
   BaseSpace* owner() const { return owner_; }
   void set_owner(BaseSpace* space) { owner_ = space; }
-
-  bool InSharedSpace() const;
-  bool InTrustedSpace() const;
-
-  bool IsWritable() const {
-    // If this is a read-only space chunk but heap_ is non-null, it has not yet
-    // been sealed and can be written to.
-    return !Chunk()->InReadOnlySpace() || heap_ != nullptr;
+  // Gets the chunk's allocation space, potentially dealing with a null owner_
+  // (like read-only chunks have).
+  inline AllocationSpace owner_identity() const {
+    if (!owner()) {
+      return RO_SPACE;
+    }
+    return owner()->identity();
   }
 
-  bool IsMutablePageMetadata() const { return owner() != nullptr; }
+  bool IsWritable() const {
+    const bool is_sealed_ro = IsSealedReadOnlySpaceField::decode(flags_);
+#ifdef DEBUG
+    DCHECK_IMPLIES(is_sealed_ro, Chunk()->InReadOnlySpace());
+    DCHECK_IMPLIES(is_sealed_ro, heap_ == nullptr);
+    DCHECK_IMPLIES(is_sealed_ro, owner_ == nullptr);
+#endif  // DEBUG
+    return !is_sealed_ro;
+  }
+
+  bool IsMutablePageMetadata() const { return owner_identity() != RO_SPACE; }
+  bool IsReadOnlyPageMetadata() const { return owner_identity() == RO_SPACE; }
 
   bool Contains(Address addr) const {
     return addr >= area_start() && addr < area_end();
@@ -178,6 +178,13 @@ class MemoryChunkMetadata {
     return IsEvacuationCandidateField::decode(flags_);
   }
 
+  bool evacuation_was_aborted() const {
+    const bool value = EvacuationWasAbortedField::decode(flags_);
+    // Aborted evacuation candidates are still evacuation candidates.
+    DCHECK_IMPLIES(value, is_evacuation_candidate());
+    return value;
+  }
+
   bool never_evacuate() const { return NeverEvacuateField::decode(flags_); }
 
   bool never_allocate_on_chunk() const {
@@ -198,6 +205,16 @@ class MemoryChunkMetadata {
     flags_ = ForceEvacuationCandidateForTestingField::update(flags_, value);
   }
 
+#ifdef DEBUG
+  V8_EXPORT_PRIVATE bool is_trusted() const;
+#else
+  bool is_trusted() const { return IsTrustedField::decode(flags_); }
+#endif
+
+  bool is_writable_shared() const {
+    return IsWritableSharedSpaceField::decode(flags_);
+  }
+
  protected:
 #ifdef THREAD_SANITIZER
   // Perform a dummy acquire load to tell TSAN that there is no data race in
@@ -212,12 +229,27 @@ class MemoryChunkMetadata {
                       Address area_start, Address area_end,
                       VirtualMemory reservation, Executability executability);
 
+  void set_evacuation_was_aborted(bool value) {
+    // Only support toggling the value as we should always know which state we
+    // are in.
+    DCHECK_EQ(value, !evacuation_was_aborted());
+    flags_ = EvacuationWasAbortedField::update(flags_, value);
+  }
+
   void set_is_evacuation_candidate(bool value) {
+    // Only support toggling the value as we should always know which state we
+    // are in.
+    DCHECK_EQ(value, !is_evacuation_candidate());
     flags_ = IsEvacuationCandidateField::update(flags_, value);
   }
 
   void set_never_evacuate() {
     flags_ = NeverEvacuateField::update(flags_, true);
+  }
+
+  void set_is_sealed_ro_space() {
+    DCHECK(!IsSealedReadOnlySpaceField::decode(flags_));
+    flags_ = IsSealedReadOnlySpaceField::update(flags_, true);
   }
 
   // If the chunk needs to remember its memory reservation, it is stored here.
@@ -251,12 +283,13 @@ class MemoryChunkMetadata {
   // The space owning this memory chunk.
   std::atomic<BaseSpace*> owner_;
 
-  size_t flags_ = 0;
+  using FlagsT = uint32_t;
+  FlagsT flags_ = 0;
 
  private:
   // The memory chunk is pinned in memory and can't be moved. Only used for
   // testing at this point.
-  using IsPinnedForTestingField = v8::base::BitField<bool, 0, 1, size_t>;
+  using IsPinnedForTestingField = v8::base::BitField<bool, 0, 1, FlagsT>;
   // The memory chunk freeing bookkeeping has been performed but the chunk has
   // not yet been freed.
   using IsUnregisteredField = IsPinnedForTestingField::Next<bool, 1>;
@@ -279,8 +312,11 @@ class MemoryChunkMetadata {
   // selected for compaction. Slots to such chunks are recorded by the write
   // barrier.
   using IsEvacuationCandidateField = IsQuarantinedField::Next<bool, 1>;
+  // Evacuation was aborted on the chunk. These chunks are still evacuation
+  // candidates.
+  using EvacuationWasAbortedField = IsEvacuationCandidateField::Next<bool, 1>;
   // Indicates whether the memory chunk should never be evacuated.
-  using NeverEvacuateField = IsEvacuationCandidateField::Next<bool, 1>;
+  using NeverEvacuateField = EvacuationWasAbortedField::Next<bool, 1>;
   // Indicates whether the memory chunk can be used for allocation.
   using NeverAllocateOnChunk = NeverEvacuateField::Next<bool, 1>;
   // This flag is intended to be used for testing. Works only when
@@ -289,6 +325,14 @@ class MemoryChunkMetadata {
   // cycle.
   using ForceEvacuationCandidateForTestingField =
       NeverAllocateOnChunk::Next<bool, 1>;
+  // The memory chunk belongs to the trusted space. When the sandbox is
+  // enabled, the trusted space is located outside of the sandbox and so its
+  // content cannot be corrupted by an attacker.
+  using IsTrustedField = ForceEvacuationCandidateForTestingField::Next<bool, 1>;
+  // The memory chunk belongs to the shared space.
+  using IsWritableSharedSpaceField = IsTrustedField::Next<bool, 1>;
+  // The memory chunk belongs to a sealed read-only space.
+  using IsSealedReadOnlySpaceField = IsWritableSharedSpaceField::Next<bool, 1>;
 
   static constexpr intptr_t HeapOffset() {
     return offsetof(MemoryChunkMetadata, heap_);
@@ -298,9 +342,13 @@ class MemoryChunkMetadata {
     return offsetof(MemoryChunkMetadata, area_start_);
   }
 
+  static constexpr intptr_t FlagsOffset() {
+    return offsetof(MemoryChunkMetadata, flags_);
+  }
+
   // For HeapOffset().
   friend class debug_helper_internal::ReadStringVisitor;
-  // For AreaStartOffset().
+  // For AreaStartOffset(), FlagsOffset().
   friend class CodeStubAssembler;
   friend class MacroAssembler;
 };

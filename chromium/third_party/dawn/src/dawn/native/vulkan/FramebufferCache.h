@@ -48,9 +48,10 @@ class Device;
 class TextureView;
 
 struct FramebufferCacheTextureView {
-    // Uses a weak ref in the cache key as we need to make sure the pointer values are not reused
-    // if the texture view is no longer used and new views created.
-    WeakRef<TextureView> weakRef;
+    // TODO(crbug.com/436274255): Uses a unique ID assigned at view creation rather than a WeakRef
+    // due to the overhead of WeakRef promotion. Could switch back to using WeakRef if that was
+    // optimized.
+    uint64_t textureViewId;
     uint32_t depthSlice;
 };
 
@@ -91,8 +92,8 @@ struct FramebufferCacheFuncs {
 // attachments in the rendering pipeline matches the one of the framebuffer.
 // All the operations on FramebufferCache are guaranteed to be thread-safe.
 class FramebufferCache final
-    : public LRUCache<FramebufferCacheQuery, VkFramebuffer, ErrorData, FramebufferCacheFuncs> {
-    using Base = LRUCache<FramebufferCacheQuery, VkFramebuffer, ErrorData, FramebufferCacheFuncs>;
+    : public LRUCache<FramebufferCacheQuery, VkFramebuffer, FramebufferCacheFuncs> {
+    using Base = LRUCache<FramebufferCacheQuery, VkFramebuffer, FramebufferCacheFuncs>;
 
   public:
     static const size_t kDefaultCapacity = 32;

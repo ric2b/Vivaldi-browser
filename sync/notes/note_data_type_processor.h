@@ -102,6 +102,11 @@ class NoteDataTypeProcessor : public syncer::DataTypeProcessor,
  private:
   SEQUENCE_CHECKER(sequence_checker_);
 
+  // Returns true if the note count exceeded the limit and an error was
+  // reported. Also disconnects sync and resets the `start_callback_`.
+  bool MaybeReportNoteCountLimitExceededError(
+      syncer::ModelError::Type error_type);
+
   // If preconditions are met, inform sync that we are ready to connect.
   void ConnectIfReady();
 

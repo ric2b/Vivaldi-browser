@@ -21,7 +21,6 @@
 
 using ::testing::_;
 using ::testing::InSequence;
-using ::testing::Invoke;
 using ::testing::NiceMock;
 using ::testing::Return;
 using ::testing::StrictMock;
@@ -417,9 +416,9 @@ TEST_F(SenderSessionTest, HandlesStreamTypes) {
   // configured with the proper StreamType.
   ON_CALL(client_, OnNegotiated(session_.get(), _, _))
       .WillByDefault(
-          Invoke([&](const SenderSession* sender_session,
-                     SenderSession::ConfiguredSenders senders,
-                     capture_recommendations::Recommendations recommendations) {
+          [&](const SenderSession* sender_session,
+              SenderSession::ConfiguredSenders senders,
+              capture_recommendations::Recommendations recommendations) {
             StreamType audio_stream_type =
                 senders.audio_sender->config().stream_type;
             StreamType video_stream_type =
@@ -427,7 +426,7 @@ TEST_F(SenderSessionTest, HandlesStreamTypes) {
 
             EXPECT_EQ(audio_stream_type, StreamType::kAudio);
             EXPECT_EQ(video_stream_type, StreamType::kVideo);
-          }));
+          });
   EXPECT_CALL(client_, OnNegotiated(session_.get(), _, _));
   message_port_->ReceiveMessage(answer);
 }

@@ -186,7 +186,7 @@ class CONTENT_EXPORT ServiceWorkerMainResourceLoader
 
   void Fallback(ResponseHeadUpdateParams response_header_params);
 
-  std::string GetInitialServiceWorkerStatusString();
+  std::string_view GetInitialServiceWorkerStatusString();
   std::string GetFrameTreeNodeTypeString();
   bool IsEligibleForRecordingTimingMetrics();
   void RecordFindRegistrationToCompletedTrace();
@@ -271,6 +271,10 @@ class CONTENT_EXPORT ServiceWorkerMainResourceLoader
   void OnReceiveResponseFromSyntheticNetworkRequest(
       network::mojom::URLResponseHeadPtr response_head,
       mojo::ScopedDataPipeConsumerHandle body);
+
+  void OnReceiveRedirectFromSyntheticNetworkRequest(
+      const net::RedirectInfo& redirect_info,
+      network::mojom::URLResponseHeadPtr response_head);
 
   void OnCompleteSyntheticNetworkRequest(
       const network::URLLoaderCompletionStatus& status);

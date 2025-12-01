@@ -246,6 +246,92 @@ class HasLuciContextLocalAuthTest(unittest.TestCase):
         open.assert_called_with('path')
 
 
+class GerritAuthenticatorTest(unittest.TestCase):
+
+    def setUp(self):
+        mock.patch('subprocess2.communicate').start()
+        self.addCleanup(mock.patch.stopall)
+        self.authenticator = auth.GerritAuthenticator()
+
+    def _set_gcl_result(self, *, exitcode, stdout, stderr):
+        subprocess2.communicate.return_value = (
+            (stdout, stderr),
+            exitcode,
+        )
+
+    def testGetAccessToken(self):
+        self._set_gcl_result(exitcode=0,
+                             stdout=b"username=git-luci\npassword=decacafe\n",
+                             stderr=b"")
+        out = self.authenticator.get_access_token()
+
+        # Check ReAuth is disabled for get_acess_token().
+        subprocess2.communicate.assert_called()
+        args, kwargs = subprocess2.communicate.call_args
+        self.assertEqual(args[0], ['git-credential-luci', 'get'])
+        self.assertEqual(kwargs["env"]["LUCI_ENABLE_REAUTH"], '0')
+
+        # Check that the access token is extracted correctly.
+        self.assertEqual(out, "decacafe")
+
+    def testGetAccessTokenRequiresLogin(self):
+        self._set_gcl_result(exitcode=2,
+                             stdout=b"",
+                             stderr=b"interactive login required")
+        with self.assertRaises(auth.GitLoginRequiredError):
+            self.authenticator.get_access_token()
+
+    def testGetAuthorizationHeader_ReAuthToken(self):
+        self._set_gcl_result(exitcode=0,
+                             stdout=b"authtype=BearerReAuth\ncredential=cafe\n",
+                             stderr=b"")
+
+        context = auth.ReAuthContext(host="chromium", project="infra/infra")
+        out = self.authenticator.get_authorization_header(context)
+
+        # Check we didn't disable ReAuth.
+        subprocess2.communicate.assert_called()
+        args, kwargs = subprocess2.communicate.call_args
+        self.assertEqual(args[0], ['git-credential-luci', 'get'])
+        self.assertNotIn("env", kwargs)
+
+        # Check we pass ReAuth context to `git-credential-luci`.
+        self.assertEqual(
+            b'capability[]=authtype\nprotocol=https\nhost=chromium\npath=infra/infra\n',
+            kwargs["stdin"])
+
+        # Check the token is extracted correctly.
+        self.assertEqual(out, "BearerReAuth cafe")
+
+    def testGetAuthorizationHeader_ReAuthNotNeeded(self):
+        self._set_gcl_result(exitcode=0,
+                             stdout=b"username=git-luci\npassword=decacafe\n",
+                             stderr=b"")
+
+        context = auth.ReAuthContext(host="chromium",
+                                     project="infra/experimental")
+        out = self.authenticator.get_authorization_header(context)
+
+        # Check the access token is extracted correctly.
+        self.assertEqual(out, "Bearer decacafe")
+
+    def testGetAuthorizationHeader_ReAuthRequired(self):
+        self._set_gcl_result(exitcode=3, stdout=b"", stderr=b"ReAuth required")
+
+        context = auth.ReAuthContext(host="chromium", project="infra/infra")
+        with self.assertRaises(auth.GitReAuthRequiredError):
+            self.authenticator.get_authorization_header(context)
+
+    def testGetAuthorizationHeader_LoginRequired(self):
+        self._set_gcl_result(exitcode=2,
+                             stdout=b"",
+                             stderr=b"interactive login required")
+
+        context = auth.ReAuthContext(host="chromium", project="infra/infra")
+        with self.assertRaises(auth.GitLoginRequiredError):
+            self.authenticator.get_authorization_header(context)
+
+
 if __name__ == '__main__':
     if '-v' in sys.argv:
         logging.basicConfig(level=logging.DEBUG)

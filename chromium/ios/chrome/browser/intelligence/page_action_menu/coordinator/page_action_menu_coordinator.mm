@@ -27,12 +27,6 @@
 #import "ios/chrome/browser/shared/public/commands/reader_mode_commands.h"
 #import "ios/chrome/browser/shared/public/commands/reader_mode_options_commands.h"
 
-namespace {
-
-const CGFloat kMenuCornerRadius = 20;
-
-}
-
 @interface PageActionMenuCoordinator () <
     PageActionMenuViewControllerDelegate,
     UINavigationControllerDelegate,
@@ -66,6 +60,11 @@ const CGFloat kMenuCornerRadius = 20;
                BWGService:BwgServiceFactory::GetForProfile(self.profile)
       readerModeTabHelper:readerModeTabHelper];
 
+  id<PageActionMenuCommands> pageActionMenuHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), PageActionMenuCommands);
+  _mediator.pageActionMenuHandler = pageActionMenuHandler;
+  _mediator.consumer = _viewController;
+
   if (readerModeTabHelper) {
     DistillerService* distillerService =
         DistillerServiceFactory::GetForProfile(self.profile);
@@ -79,8 +78,7 @@ const CGFloat kMenuCornerRadius = 20;
 
   _viewController.readerModeHandler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), ReaderModeCommands);
-  _viewController.pageActionMenuHandler = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), PageActionMenuCommands);
+  _viewController.pageActionMenuHandler = pageActionMenuHandler;
   _viewController.BWGHandler =
       HandlerForProtocol(self.browser->GetCommandDispatcher(), BWGCommands);
 
@@ -93,6 +91,8 @@ const CGFloat kMenuCornerRadius = 20;
 
   _navigationController = [[UINavigationController alloc]
       initWithRootViewController:_viewController];
+  _navigationController.view.accessibilityIdentifier =
+      kAIHubBottomSheetAccessibilityIdentifier;
   _navigationController.delegate = self;
   _navigationController.presentationController.delegate = self;
   _navigationController.modalPresentationStyle = UIModalPresentationPageSheet;
@@ -112,8 +112,6 @@ const CGFloat kMenuCornerRadius = 20;
   ];
   _navigationController.sheetPresentationController.selectedDetentIdentifier =
       kAIHubDetentIdentifier;
-  _navigationController.sheetPresentationController.preferredCornerRadius =
-      kMenuCornerRadius;
   _navigationController.sheetPresentationController
       .prefersEdgeAttachedInCompactHeight = YES;
   _navigationController.sheetPresentationController.prefersGrabberVisible = NO;
@@ -136,6 +134,7 @@ const CGFloat kMenuCornerRadius = 20;
                                                 completion:completion];
   }
   _viewController = nil;
+  [_mediator disconnect];
   _mediator = nil;
   _readerModeOptionsViewController = nil;
   [_readerModeOptionsMediator disconnect];
@@ -149,7 +148,7 @@ const CGFloat kMenuCornerRadius = 20;
     (PageActionMenuViewController*)viewController {
   _readerModeOptionsViewController =
       [[ReaderModeOptionsViewController alloc] init];
-  [_readerModeOptionsViewController updateHideReaderModeButtonVisibility:YES];
+  [_readerModeOptionsViewController updateHideReaderModeButtonVisibility:NO];
   _readerModeOptionsViewController.readerModeOptionsHandler =
       HandlerForProtocol(self.browser->GetCommandDispatcher(),
                          ReaderModeOptionsCommands);

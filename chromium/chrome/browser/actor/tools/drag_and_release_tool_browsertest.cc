@@ -4,6 +4,7 @@
 
 #include "base/strings/strcat.h"
 #include "base/test/test_future.h"
+#include "build/build_config.h"
 #include "chrome/browser/actor/actor_test_util.h"
 #include "chrome/browser/actor/tools/tool_request.h"
 #include "chrome/browser/actor/tools/tools_test_util.h"
@@ -23,36 +24,6 @@ namespace actor {
 
 namespace {
 
-gfx::RectF GetBoundingClientRect(content::RenderFrameHost& rfh,
-                                 std::string_view query) {
-  double width =
-      content::EvalJs(
-          &rfh, content::JsReplace(
-                    "document.querySelector($1).getBoundingClientRect().width",
-                    query))
-          .ExtractDouble();
-  double height =
-      content::EvalJs(
-          &rfh, content::JsReplace(
-                    "document.querySelector($1).getBoundingClientRect().height",
-                    query))
-          .ExtractDouble();
-  double x =
-      content::EvalJs(
-          &rfh,
-          content::JsReplace(
-              "document.querySelector($1).getBoundingClientRect().x", query))
-          .ExtractDouble();
-  double y =
-      content::EvalJs(
-          &rfh,
-          content::JsReplace(
-              "document.querySelector($1).getBoundingClientRect().y", query))
-          .ExtractDouble();
-
-  return gfx::RectF(x, y, width, height);
-}
-
 int GetRangeValue(content::RenderFrameHost& rfh, std::string_view query) {
   return content::EvalJs(
              &rfh, content::JsReplace(
@@ -60,8 +31,28 @@ int GetRangeValue(content::RenderFrameHost& rfh, std::string_view query) {
       .ExtractInt();
 }
 
+class ActorDragAndReleaseToolBrowserTest
+    : public ActorToolsGeneralPageStabilityTest {
+ public:
+  ActorDragAndReleaseToolBrowserTest() = default;
+  ~ActorDragAndReleaseToolBrowserTest() override = default;
+
+  void SetUpOnMainThread() override {
+    ActorToolsTest::SetUpOnMainThread();
+    ASSERT_TRUE(embedded_test_server()->Start());
+    ASSERT_TRUE(embedded_https_test_server().Start());
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    ActorDragAndReleaseToolBrowserTest,
+    testing::ValuesIn(kActorGeneralPageStabilityModeValues),
+    ActorToolsGeneralPageStabilityTest::DescribeParam);
+
 // Test the drag and release tool by moving the thumb on a range slider control.
-IN_PROC_BROWSER_TEST_F(ActorToolsTest, DragAndReleaseTool_Range) {
+IN_PROC_BROWSER_TEST_P(ActorDragAndReleaseToolBrowserTest,
+                       DragAndReleaseTool_Range) {
   const GURL url = embedded_test_server()->GetURL("/actor/drag.html");
   ASSERT_TRUE(content::NavigateToURL(web_contents(), url));
 
@@ -79,7 +70,7 @@ IN_PROC_BROWSER_TEST_F(ActorToolsTest, DragAndReleaseTool_Range) {
   std::unique_ptr<ToolRequest> action =
       MakeDragAndReleaseRequest(*active_tab(), start, end);
 
-  TestFuture<mojom::ActionResultPtr, std::optional<size_t>> result_success;
+  ActResultFuture result_success;
   actor_task().Act(ToRequestList(action), result_success.GetCallback());
   ExpectOkResult(result_success);
 
@@ -87,7 +78,8 @@ IN_PROC_BROWSER_TEST_F(ActorToolsTest, DragAndReleaseTool_Range) {
 }
 
 // Ensure the drag tool sends the expected mouse down, move and up events.
-IN_PROC_BROWSER_TEST_F(ActorToolsTest, DragAndReleaseTool_Events) {
+IN_PROC_BROWSER_TEST_P(ActorDragAndReleaseToolBrowserTest,
+                       DragAndReleaseTool_Events) {
   const GURL url = embedded_test_server()->GetURL("/actor/drag.html");
   ASSERT_TRUE(content::NavigateToURL(web_contents(), url));
 
@@ -111,7 +103,7 @@ IN_PROC_BROWSER_TEST_F(ActorToolsTest, DragAndReleaseTool_Events) {
   std::unique_ptr<ToolRequest> action =
       MakeDragAndReleaseRequest(*active_tab(), start, end);
 
-  TestFuture<mojom::ActionResultPtr, std::optional<size_t>> result_success;
+  ActResultFuture result_success;
   actor_task().Act(ToRequestList(action), result_success.GetCallback());
   ExpectOkResult(result_success);
 
@@ -122,7 +114,8 @@ IN_PROC_BROWSER_TEST_F(ActorToolsTest, DragAndReleaseTool_Events) {
 }
 
 // Ensure coordinates outside of the viewport are rejected.
-IN_PROC_BROWSER_TEST_F(ActorToolsTest, DragAndReleaseTool_Offscreen) {
+IN_PROC_BROWSER_TEST_P(ActorDragAndReleaseToolBrowserTest,
+                       DragAndReleaseTool_Offscreen) {
   const GURL url = embedded_test_server()->GetURL("/actor/drag.html");
   ASSERT_TRUE(content::NavigateToURL(web_contents(), url));
 
@@ -143,10 +136,9 @@ IN_PROC_BROWSER_TEST_F(ActorToolsTest, DragAndReleaseTool_Offscreen) {
 
     std::unique_ptr<ToolRequest> action =
         MakeDragAndReleaseRequest(*active_tab(), start, end);
-    TestFuture<mojom::ActionResultPtr, std::optional<size_t>> result;
+    ActResultFuture result;
     actor_task().Act(ToRequestList(action), result.GetCallback());
-    ExpectErrorResult(result,
-                      mojom::ActionResultCode::kDragAndReleaseFromOffscreen);
+    ExpectErrorResult(result, mojom::ActionResultCode::kCoordinatesOutOfBounds);
   }
 
   // Scroll the range into the viewport.
@@ -167,12 +159,61 @@ IN_PROC_BROWSER_TEST_F(ActorToolsTest, DragAndReleaseTool_Offscreen) {
 
     std::unique_ptr<ToolRequest> action =
         MakeDragAndReleaseRequest(*active_tab(), start, end);
-    TestFuture<mojom::ActionResultPtr, std::optional<size_t>> result_success;
+    ActResultFuture result_success;
     actor_task().Act(ToRequestList(action), result_success.GetCallback());
     ExpectOkResult(result_success);
   }
 
   EXPECT_EQ(50, GetRangeValue(*main_frame(), "#offscreenRange"));
+}
+
+// TODO(crbug.com/447000769): Flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_DragAndReleaseTool_CrossOriginSubframe \
+  DISABLED_DragAndReleaseTool_CrossOriginSubframe
+#else
+#define MAYBE_DragAndReleaseTool_CrossOriginSubframe \
+  DragAndReleaseTool_CrossOriginSubframe
+#endif
+IN_PROC_BROWSER_TEST_P(ActorDragAndReleaseToolBrowserTest,
+                       MAYBE_DragAndReleaseTool_CrossOriginSubframe) {
+  const GURL url = embedded_https_test_server().GetURL(
+      "/actor/positioned_iframe_no_scroll.html");
+  ASSERT_TRUE(content::NavigateToURL(web_contents(), url));
+
+  const GURL cross_origin_iframe_url =
+      embedded_https_test_server().GetURL("foo.com", "/actor/drag.html");
+  ASSERT_TRUE(
+      NavigateIframeToURL(web_contents(), "iframe", cross_origin_iframe_url));
+
+  content::RenderFrameHost* subframe =
+      ChildFrameAt(web_contents()->GetPrimaryMainFrame(), 0);
+  // Addressing flaky test due to layout shift on the iframe
+  ASSERT_TRUE(content::ExecJs(web_contents(), "wait()"));
+  ASSERT_TRUE(subframe->IsCrossProcessSubframe());
+
+  ASSERT_EQ(0, GetRangeValue(*subframe, "#range"));
+
+  gfx::RectF range_rect = GetBoundingClientRect(*subframe, "#range");
+  const int thumb_padding = range_rect.height() / 2;
+  gfx::Point start_in_subframe(range_rect.x() + thumb_padding,
+                               range_rect.y() + thumb_padding);
+  gfx::Point end_in_subframe = gfx::ToFlooredPoint(range_rect.CenterPoint());
+
+  gfx::RectF subframe_rect = GetBoundingClientRect(*main_frame(), "#iframe");
+  gfx::Point start_in_viewport(subframe_rect.x() + start_in_subframe.x(),
+                               subframe_rect.y() + start_in_subframe.y());
+  gfx::Point end_in_viewport(subframe_rect.x() + end_in_subframe.x(),
+                             subframe_rect.y() + end_in_subframe.y());
+
+  std::unique_ptr<ToolRequest> action = MakeDragAndReleaseRequest(
+      *active_tab(), start_in_viewport, end_in_viewport);
+
+  ActResultFuture result_success;
+  actor_task().Act(ToRequestList(action), result_success.GetCallback());
+  ExpectOkResult(result_success);
+
+  EXPECT_EQ(50, GetRangeValue(*subframe, "#range"));
 }
 
 }  // namespace

@@ -28,6 +28,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/child_process_binding_types.h"
@@ -93,12 +94,16 @@ ChildProcessLauncherFileData::~ChildProcessLauncherFileData() = default;
 bool ChildProcessLauncher::Client::CanUseWarmUpConnection() {
   return true;
 }
+
+bool ChildProcessLauncher::Client::HasSpareRendererPriority() {
+  return false;
+}
 #endif
 
 ChildProcessLauncher::ChildProcessLauncher(
     std::unique_ptr<SandboxedProcessLauncherDelegate> delegate,
     std::unique_ptr<base::CommandLine> command_line,
-    int child_process_id,
+    ChildProcessId child_process_id,
     Client* client,
     mojo::OutgoingInvitation mojo_invitation,
     const mojo::ProcessErrorCallback& process_error_callback,
@@ -121,7 +126,8 @@ ChildProcessLauncher::ChildProcessLauncher(
 #endif
 {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("startup", "ChildProcessLauncher", this);
+  TRACE_EVENT_BEGIN("startup", "ChildProcessLauncher",
+                    perfetto::Track::FromPointer(this));
 
 #if BUILDFLAG(IS_WIN)
   should_launch_elevated_ = delegate->ShouldLaunchElevated();
@@ -131,7 +137,7 @@ ChildProcessLauncher::ChildProcessLauncher(
       child_process_id, std::move(command_line), std::move(delegate),
       weak_factory_.GetWeakPtr(), terminate_on_shutdown,
 #if BUILDFLAG(IS_ANDROID)
-      client_->CanUseWarmUpConnection(),
+      client_->CanUseWarmUpConnection(), client_->HasSpareRendererPriority(),
 #endif
       std::move(mojo_invitation), process_error_callback, std::move(file_data),
       std::move(histogram_memory_region),
@@ -179,7 +185,8 @@ void ChildProcessLauncher::Notify(ChildProcessLauncherHelper::Process process,
 #endif
                                   int error_code) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  TRACE_EVENT_NESTABLE_ASYNC_END0("startup", "ChildProcessLauncher", this);
+  // Corresponds to the TRACE_EVENT_BEGIN in ChildProcessLauncher.
+  TRACE_EVENT_END("startup", perfetto::Track::FromPointer(this));
 
   starting_ = false;
   process_ = std::move(process);

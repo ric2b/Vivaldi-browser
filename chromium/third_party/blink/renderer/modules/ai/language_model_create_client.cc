@@ -54,7 +54,7 @@ LanguageModelCreateClient::LanguageModelCreateClient(
 
   LanguageModel::ExecuteAvailability(
       ai_manager_remote, options, resolved_sampling_params_.Clone(),
-      WTF::BindOnce(&LanguageModelCreateClient::Create, WrapPersistent(this)));
+      BindOnce(&LanguageModelCreateClient::Create, WrapPersistent(this)));
 }
 
 LanguageModelCreateClient::~LanguageModelCreateClient() = default;
@@ -96,7 +96,7 @@ void LanguageModelCreateClient::Create(
     return;
   }
 
-  WTF::HashSet<mojom::blink::AILanguageModelPromptType> maybe_allowed_types;
+  HashSet<mojom::blink::AILanguageModelPromptType> maybe_allowed_types;
   maybe_allowed_types.insert(mojom::blink::AILanguageModelPromptType::kText);
   Vector<mojom::blink::AILanguageModelExpectedPtr> expected_in, expected_out;
   if (options_->hasExpectedInputs()) {
@@ -124,15 +124,6 @@ void LanguageModelCreateClient::Create(
     }
   }
 
-  // TODO(crbug.com/381974893): Remove this warning after a couple milestones.
-  if (options_->hasSystemPrompt()) {
-    GetExecutionContext()->AddConsoleMessage(
-        mojom::blink::ConsoleMessageSource::kJavaScript,
-        mojom::blink::ConsoleMessageLevel::kWarning,
-        "`systemPrompt` is no longer supported. Use "
-        "`initialPrompts: [{role: 'system', content: ... }, ...]` instead.");
-  }
-
   if (!options_->hasInitialPrompts() || options_->initialPrompts().empty()) {
     OnInitialPromptsResolved(std::move(expected_in), std::move(expected_out),
                              /*initial_prompts=*/{});
@@ -145,7 +136,7 @@ void LanguageModelCreateClient::Create(
         message != options_->initialPrompts().front()) {
       // Only the first prompt supports the `system` role.
       GetResolver()->RejectWithTypeError(
-          kExceptionMessageSystemPromptIsNotTheFirst);
+          kExceptionMessagePromptWithSystemRoleIsNotTheFirst);
       return;
     }
     if (message->prefix()) {
@@ -160,11 +151,11 @@ void LanguageModelCreateClient::Create(
       GetScriptState(), options_->getSignalOr(nullptr),
       MakeGarbageCollected<V8LanguageModelPrompt>(options_->initialPrompts()),
       maybe_allowed_types, /*json_schema=*/"",
-      WTF::BindOnce(&LanguageModelCreateClient::OnInitialPromptsResolved,
-                    WrapPersistent(this), std::move(expected_in),
-                    std::move(expected_out)),
-      WTF::BindOnce(&LanguageModelCreateClient::OnInitialPromptsRejected,
-                    WrapPersistent(this)));
+      BindOnce(&LanguageModelCreateClient::OnInitialPromptsResolved,
+               WrapPersistent(this), std::move(expected_in),
+               std::move(expected_out)),
+      BindOnce(&LanguageModelCreateClient::OnInitialPromptsRejected,
+               WrapPersistent(this)));
 }
 
 void LanguageModelCreateClient::OnResult(

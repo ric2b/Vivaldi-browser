@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -61,7 +61,7 @@ export const logClick = (throttler: Common.Throttler.Throttler) => (
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.recordClick(clickEvent);
     processEventForDebugging(
         'Click', loggingState, {mouseButton: clickEvent.mouseButton, doubleClick: clickEvent.doubleClick});
-  });
+  }, Common.Throttler.Scheduling.DELAYED);
 };
 
 export const logHover = (throttler: Common.Throttler.Throttler) => async (event: Event) => {

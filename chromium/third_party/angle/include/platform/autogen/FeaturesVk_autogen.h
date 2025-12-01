@@ -284,8 +284,14 @@ struct FeaturesVk : FeatureSetBase
         &members,
     };
 
-    FeatureInfo supportsExternalMemoryDmaBufAndModifiers = {
-        "supportsExternalMemoryDmaBufAndModifiers",
+    FeatureInfo supportsExternalMemoryDmaBuf = {
+        "supportsExternalMemoryDmaBuf",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo supportsImageDrmFormatModifier = {
+        "supportsImageDrmFormatModifier",
         FeatureCategory::VulkanFeatures,
         &members,
     };
@@ -488,12 +494,6 @@ struct FeaturesVk : FeatureSetBase
         &members,
     };
 
-    FeatureInfo compressVertexData = {
-        "compressVertexData",
-        FeatureCategory::VulkanWorkarounds,
-        &members,
-    };
-
     FeatureInfo preferDrawClearOverVkCmdClearAttachments = {
         "preferDrawClearOverVkCmdClearAttachments",
         FeatureCategory::VulkanWorkarounds,
@@ -544,6 +544,12 @@ struct FeaturesVk : FeatureSetBase
 
     FeatureInfo preferSubmitAtFBOBoundary = {
         "preferSubmitAtFBOBoundary",
+        FeatureCategory::VulkanWorkarounds,
+        &members,
+    };
+
+    FeatureInfo forceSubmitExceptionsAtFBOBoundary = {
+        "forceSubmitExceptionsAtFBOBoundary",
         FeatureCategory::VulkanWorkarounds,
         &members,
     };
@@ -802,6 +808,12 @@ struct FeaturesVk : FeatureSetBase
 
     FeatureInfo supportsFragmentShadingRate = {
         "supportsFragmentShadingRate",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo supportsPrimitiveFragmentShadingRate = {
+        "supportsPrimitiveFragmentShadingRate",
         FeatureCategory::VulkanFeatures,
         &members,
     };
@@ -1505,6 +1517,60 @@ struct FeaturesVk : FeatureSetBase
     FeatureInfo supportsMaintenance9 = {
         "supportsMaintenance9",
         FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo supportsShaderIntegerDotProduct = {
+        "supportsShaderIntegerDotProduct",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo convertLowpAndMediumpFloatUniformsTo16Bits = {
+        "convertLowpAndMediumpFloatUniformsTo16Bits",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo supportsUnifiedImageLayouts = {
+        "supportsUnifiedImageLayouts",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo supportsGlobalPriority = {
+        "supportsGlobalPriority",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo supportsGlobalPriorityQuery = {
+        "supportsGlobalPriorityQuery",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo supportsBufferDeviceAddress = {
+        "supportsBufferDeviceAddress",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo preferBGR565ToRGB565 = {
+        "preferBGR565ToRGB565",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo clSerializedExecution = {
+        "clSerializedExecution",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo externallySynchronizePipelineCacheAccess = {
+        "externallySynchronizePipelineCacheAccess",
+        FeatureCategory::VulkanWorkarounds,
         &members,
     };
 

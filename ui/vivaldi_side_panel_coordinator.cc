@@ -62,7 +62,7 @@ void SidePanelCoordinator::Toggle(SidePanelEntryKey key,
 
 void SidePanelCoordinator::OpenInNewTab() {}
 
-void SidePanelCoordinator::UpdatePinState() {}
+//void SidePanelCoordinator::UpdatePinState() {}
 
 std::optional<SidePanelEntryId> SidePanelCoordinator::GetCurrentEntryId()
     const {

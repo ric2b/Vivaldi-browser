@@ -12,8 +12,12 @@ NS_ASSUME_NONNULL_BEGIN
 @class SUPublicKeys;
 
 #ifndef BUILDING_SPARKLE_TESTS
-SPU_OBJC_DIRECT_MEMBERS
+#define SUHostDefinitionAttribute SPU_OBJC_DIRECT_MEMBERS
+#else
+#define SUHostDefinitionAttribute __attribute__((objc_runtime_name("SUTestHost")))
 #endif
+
+SUHostDefinitionAttribute
 @interface SUHost : NSObject
 
 @property (nonatomic, readonly) NSBundle *bundle;
@@ -33,6 +37,8 @@ SPU_OBJC_DIRECT_MEMBERS
 @property (getter=isRunningTranslocated, nonatomic, readonly) BOOL runningTranslocated;
 @property (readonly, nonatomic, copy, nullable) NSString *publicDSAKeyFileKey;
 
+@property (nonatomic, readonly) BOOL hasUpdateSecurityPolicy;
+
 - (nullable id)objectForInfoDictionaryKey:(NSString *)key;
 - (BOOL)boolForInfoDictionaryKey:(NSString *)key;
 - (nullable id)objectForUserDefaultsKey:(NSString *)defaultName;
@@ -41,6 +47,9 @@ SPU_OBJC_DIRECT_MEMBERS
 - (void)setBool:(BOOL)value forUserDefaultsKey:(NSString *)defaultName;
 - (nullable id)objectForKey:(NSString *)key;
 - (BOOL)boolForKey:(NSString *)key;
+
+- (void)observeChangesFromUserDefaultKeys:(NSSet<NSString *> *)keyPaths changeHandler:(void (^)(NSString *))changeHandler;
+
 @end
 
 NS_ASSUME_NONNULL_END

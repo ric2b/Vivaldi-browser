@@ -18,7 +18,6 @@
 
 using testing::_;
 using testing::AtLeast;
-using testing::Invoke;
 using testing::InvokeWithoutArgs;
 using testing::Mock;
 using testing::NiceMock;
@@ -178,7 +177,7 @@ TEST_F(StatisticsAnalyzerTest, FrameEncoded) {
   }
 
   EXPECT_CALL(stats_client_, OnStatisticsUpdated(_))
-      .WillOnce(Invoke([&](const SenderStats& stats) {
+      .WillOnce([&](const SenderStats& stats) {
         double expected_fps =
             kDefaultNumEvents / (kDefaultStatsAnalysisIntervalMs / 1000.0);
         ExpectStatEq(stats.video_statistics, StatisticType::kEnqueueFps,
@@ -198,7 +197,7 @@ TEST_F(StatisticsAnalyzerTest, FrameEncoded) {
             stats.video_statistics, StatisticType::kLastEventTimeMs,
             static_cast<double>(
                 to_milliseconds(last_event_time.time_since_epoch()).count()));
-      }));
+      });
 
   fake_clock_.Advance(
       milliseconds(kDefaultStatsAnalysisIntervalMs -
@@ -230,13 +229,13 @@ TEST_F(StatisticsAnalyzerTest, FrameEncodedAndAckSent) {
   }
 
   EXPECT_CALL(stats_client_, OnStatisticsUpdated(_))
-      .WillOnce(Invoke([&](const SenderStats& stats) {
+      .WillOnce([&](const SenderStats& stats) {
         double expected_avg_frame_latency =
             static_cast<double>(to_milliseconds(total_frame_latency).count()) /
             kDefaultNumEvents;
         ExpectStatEq(stats.video_statistics, StatisticType::kAvgFrameLatencyMs,
                      expected_avg_frame_latency);
-      }));
+      });
 
   fake_clock_.Advance(
       milliseconds(kDefaultStatsAnalysisIntervalMs -
@@ -275,7 +274,7 @@ TEST_F(StatisticsAnalyzerTest, FramePlayedOut) {
   }
 
   EXPECT_CALL(stats_client_, OnStatisticsUpdated(_))
-      .WillOnce(Invoke([&](const SenderStats& stats) {
+      .WillOnce([&](const SenderStats& stats) {
         ExpectStatEq(stats.video_statistics, StatisticType::kNumLateFrames,
                      total_late_frames);
 
@@ -287,7 +286,7 @@ TEST_F(StatisticsAnalyzerTest, FramePlayedOut) {
                                                          /* 80-99 */ 0};
         ExpectHistoBuckets(stats.video_histograms,
                            HistogramType::kFrameLatenessMs, kExpectedBuckets);
-      }));
+      });
 
   fake_clock_.Advance(
       milliseconds(kDefaultStatsAnalysisIntervalMs -
@@ -352,7 +351,7 @@ TEST_F(StatisticsAnalyzerTest, AllFrameEvents) {
                            {HistogramType::kFrameLatenessMs, {0, 4, 0, 1}}}};
 
   EXPECT_CALL(stats_client_, OnStatisticsUpdated(_))
-      .WillOnce(Invoke([&](const SenderStats& stats) {
+      .WillOnce([&](const SenderStats& stats) {
         for (const auto& stat_pair : kExpectedStats) {
           ExpectStatEq(stats.video_statistics, stat_pair.first,
                        stat_pair.second);
@@ -361,7 +360,7 @@ TEST_F(StatisticsAnalyzerTest, AllFrameEvents) {
           ExpectHistoBuckets(stats.video_histograms, histogram_pair.first,
                              histogram_pair.second);
         }
-      }));
+      });
 
   fake_clock_.Advance(milliseconds(kDefaultStatsAnalysisIntervalMs -
                                    (kDefaultStatIntervalMs * kNumEvents)));
@@ -390,7 +389,7 @@ TEST_F(StatisticsAnalyzerTest, FrameEncodedAndPacketSent) {
   }
 
   EXPECT_CALL(stats_client_, OnStatisticsUpdated(_))
-      .WillOnce(Invoke([&](const SenderStats& stats) {
+      .WillOnce([&](const SenderStats& stats) {
         constexpr double kExpectedKbps =
             kDefaultSizeBytes * 8 * kDefaultNumEvents /
             static_cast<double>(kDefaultStatsAnalysisIntervalMs);
@@ -414,7 +413,7 @@ TEST_F(StatisticsAnalyzerTest, FrameEncodedAndPacketSent) {
                                                          /* 100-119 */ 0};
         ExpectHistoBuckets(stats.video_histograms,
                            HistogramType::kQueueingLatencyMs, kExpectedBuckets);
-      }));
+      });
 
   fake_clock_.Advance(
       milliseconds(kDefaultStatsAnalysisIntervalMs -
@@ -447,7 +446,7 @@ TEST_F(StatisticsAnalyzerTest, PacketSentAndReceived) {
   }
 
   EXPECT_CALL(stats_client_, OnStatisticsUpdated(_))
-      .WillOnce(Invoke([&](const SenderStats& stats) {
+      .WillOnce([&](const SenderStats& stats) {
         const double expected_avg_network_latency =
             static_cast<double>(
                 to_milliseconds(total_network_latency).count()) /
@@ -465,7 +464,7 @@ TEST_F(StatisticsAnalyzerTest, PacketSentAndReceived) {
                                                          /* 100-119 */ 0};
         ExpectHistoBuckets(stats.video_histograms,
                            HistogramType::kNetworkLatencyMs, kExpectedBuckets);
-      }));
+      });
 
   fake_clock_.Advance(
       milliseconds(kDefaultStatsAnalysisIntervalMs -
@@ -504,7 +503,7 @@ TEST_F(StatisticsAnalyzerTest, FrameEncodedPacketSentAndReceived) {
   }
 
   EXPECT_CALL(stats_client_, OnStatisticsUpdated(_))
-      .WillOnce(Invoke([&](const SenderStats& stats) {
+      .WillOnce([&](const SenderStats& stats) {
         ExpectStatEq(stats.video_statistics, StatisticType::kNumPacketsSent,
                      kDefaultNumEvents);
         ExpectStatEq(stats.video_statistics, StatisticType::kNumPacketsReceived,
@@ -535,7 +534,7 @@ TEST_F(StatisticsAnalyzerTest, FrameEncodedPacketSentAndReceived) {
                                                          /* 120-139 */ 0};
         ExpectHistoBuckets(stats.video_histograms,
                            HistogramType::kPacketLatencyMs, kExpectedBuckets);
-      }));
+      });
 
   fake_clock_.Advance(
       milliseconds(kDefaultStatsAnalysisIntervalMs -
@@ -590,7 +589,7 @@ TEST_F(StatisticsAnalyzerTest, AudioAndVideoFrameEncodedPacketSentAndReceived) {
   }
 
   EXPECT_CALL(stats_client_, OnStatisticsUpdated(_))
-      .WillOnce(Invoke([&](const SenderStats& stats) {
+      .WillOnce([&](const SenderStats& stats) {
         ExpectStatEq(stats.audio_statistics, StatisticType::kNumPacketsSent,
                      total_audio_events);
         ExpectStatEq(stats.audio_statistics, StatisticType::kNumPacketsReceived,
@@ -612,7 +611,7 @@ TEST_F(StatisticsAnalyzerTest, AudioAndVideoFrameEncodedPacketSentAndReceived) {
             total_video_events;
         ExpectStatEq(stats.video_statistics, StatisticType::kAvgPacketLatencyMs,
                      expected_video_avg_packet_latency);
-      }));
+      });
 
   fake_clock_.Advance(milliseconds(kDefaultStatsAnalysisIntervalMs -
                                    (frame_interval_ms * num_events)));
@@ -663,7 +662,7 @@ TEST_F(StatisticsAnalyzerTest, LotsOfEventsStillWorksProperly) {
     testing::InSequence s;
     EXPECT_CALL(stats_client_, OnStatisticsUpdated(_)).Times(49);
     EXPECT_CALL(stats_client_, OnStatisticsUpdated(_))
-        .WillOnce(Invoke([&](const SenderStats& stats) {
+        .WillOnce([&](const SenderStats& stats) {
           for (const auto& stat_pair : kExpectedStats) {
             ExpectStatEq(stats.video_statistics, stat_pair.first,
                          stat_pair.second);
@@ -672,7 +671,7 @@ TEST_F(StatisticsAnalyzerTest, LotsOfEventsStillWorksProperly) {
             ExpectHistoBuckets(stats.video_histograms, histogram_pair.first,
                                histogram_pair.second);
           }
-        }));
+        });
   }
 
   analyzer_->ScheduleAnalysis();

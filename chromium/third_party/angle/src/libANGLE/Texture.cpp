@@ -6,6 +6,10 @@
 
 // Texture.cpp: Implements the gl::Texture class. [OpenGL ES 2.0.24] section 3.7 page 63.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "libANGLE/Texture.h"
 
 #include "common/mathutil.h"
@@ -623,15 +627,18 @@ GLuint TextureState::getEnabledLevelCount() const
     const GLuint baseLevel = getEffectiveBaseLevel();
     GLuint maxLevel        = getMipmapMaxLevel();
 
+    // Note: for cube textures, we only check the first face.
+    TextureTarget target         = TextureTypeToTarget(mType, 0);
+    const Format &expectedFormat = mImageDescs[GetImageDescIndex(target, baseLevel)].format;
+
     // The mip chain will have either one or more sequential levels, or max levels,
     // but not a sparse one.
     Optional<Extents> expectedSize;
     for (size_t enabledLevel = baseLevel; enabledLevel <= maxLevel; ++enabledLevel, ++levelCount)
     {
-        // Note: for cube textures, we only check the first face.
-        TextureTarget target     = TextureTypeToTarget(mType, 0);
         size_t descIndex         = GetImageDescIndex(target, enabledLevel);
         const Extents &levelSize = mImageDescs[descIndex].size;
+        const Format &levelFormat = mImageDescs[descIndex].format;
 
         if (levelSize.empty())
         {
@@ -652,6 +659,14 @@ GLuint TextureState::getEnabledLevelCount() const
             {
                 break;
             }
+        }
+        // If the texture is bound without mipmap filtering, the max level could be incompatible
+        // with the base level while respecifying image storage. In this case, we check the sized
+        // internal format for the compatibility and enable only the effective level when it has
+        // changed compared to the previous image.
+        if (!Format::SameSized(expectedFormat, levelFormat))
+        {
+            break;
         }
         expectedSize = levelSize;
     }
@@ -2633,16 +2648,6 @@ void Texture::onSubjectStateChange(angle::SubjectIndex index, angle::SubjectMess
 {
     switch (message)
     {
-        case angle::SubjectMessage::ContentsChanged:
-            if (index != kBufferSubjectIndex)
-            {
-                // ContentsChange originates from TextureStorage11::resolveAndReleaseTexture
-                // which resolves the underlying multisampled texture if it exists and so
-                // Texture will signal dirty storage to invalidate its own cache and the
-                // attached framebuffer's cache.
-                signalDirtyStorage(InitState::Initialized);
-            }
-            break;
         case angle::SubjectMessage::DirtyBitsFlagged:
             signalDirtyState(DIRTY_BIT_IMPLEMENTATION);
 

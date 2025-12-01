@@ -7,9 +7,11 @@
 #include "third_party/blink/renderer/core/css/css_rule_list.h"
 #include "third_party/blink/renderer/core/css/css_scope_rule.h"
 #include "third_party/blink/renderer/core/css/css_style_rule.h"
+#include "third_party/blink/renderer/core/css/css_style_sheet.h"
 #include "third_party/blink/renderer/core/css/css_test_helpers.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
+#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
@@ -74,7 +76,7 @@ TEST_F(StyleRuleTest, StyleRulePropertyCopy) {
     )CSS");
 
   ASSERT_TRUE(base_rule);
-  auto* base_copy = base_rule->Copy();
+  auto* base_copy = base_rule->Clone(nullptr, nullptr);
 
   EXPECT_NE(base_rule, base_copy);
   EXPECT_EQ(base_rule->GetType(), base_copy->GetType());
@@ -102,7 +104,7 @@ TEST_F(StyleRuleTest, StyleRuleFunctionCopy) {
     )CSS");
 
   ASSERT_TRUE(base_rule);
-  auto* base_copy = base_rule->Copy();
+  auto* base_copy = base_rule->Clone(nullptr, nullptr);
 
   EXPECT_NE(base_rule, base_copy);
   EXPECT_EQ(base_rule->GetType(), base_copy->GetType());
@@ -354,7 +356,7 @@ TEST_F(StyleRuleTest, SetPreludeTextUnexpectedTrailingTokens) {
   EXPECT_EQ(after_rule, before_rule);
 }
 
-TEST_F(StyleRuleTest, RenestStyleRule) {
+TEST_F(StyleRuleTest, CloneStyleRule) {
   auto* a = To<StyleRule>(css_test_helpers::ParseRule(GetDocument(), ".a {}"));
   auto* b = To<StyleRule>(css_test_helpers::ParseRule(GetDocument(), ".b {}"));
   auto* nested = To<StyleRule>(css_test_helpers::ParseNestedRule(
@@ -365,7 +367,7 @@ TEST_F(StyleRuleTest, RenestStyleRule) {
             nested->FirstSelector()->SelectorTextExpandingPseudoReferences(
                 /*scope_id=*/0));
 
-  auto* reparented = To<StyleRule>(nested->Renest(b));
+  auto* reparented = To<StyleRule>(nested->Clone(b, nullptr));
   EXPECT_NE(nested, reparented);
   EXPECT_EQ(":is(.a)",
             nested->FirstSelector()->SelectorTextExpandingPseudoReferences(
@@ -375,7 +377,7 @@ TEST_F(StyleRuleTest, RenestStyleRule) {
                 /*scope_id=*/0));
 }
 
-TEST_F(StyleRuleTest, RenestStyleRuleNoOp) {
+TEST_F(StyleRuleTest, CloneStyleRuleIsNeverNoOp) {
   auto* a = To<StyleRule>(css_test_helpers::ParseRule(GetDocument(), ".a {}"));
   auto* nested = To<StyleRule>(css_test_helpers::ParseNestedRule(
       GetDocument(), "& {}", CSSNestingType::kNesting,
@@ -383,11 +385,11 @@ TEST_F(StyleRuleTest, RenestStyleRuleNoOp) {
   EXPECT_EQ(":is(.a)",
             nested->FirstSelector()->SelectorTextExpandingPseudoReferences(
                 /*scope_id=*/0));
-  auto* reparented = To<StyleRule>(nested->Renest(a));
-  EXPECT_EQ(nested, reparented);
+  auto* reparented = To<StyleRule>(nested->Clone(a, nullptr));
+  EXPECT_NE(nested, reparented);
 }
 
-TEST_F(StyleRuleTest, RenestStyleRuleMedia) {
+TEST_F(StyleRuleTest, CloneStyleRuleMedia) {
   auto* a = To<StyleRule>(css_test_helpers::ParseRule(GetDocument(), ".a {}"));
   auto* b = To<StyleRule>(css_test_helpers::ParseRule(GetDocument(), ".b {}"));
   auto* media = To<StyleRuleMedia>(css_test_helpers::ParseNestedRule(
@@ -400,9 +402,9 @@ TEST_F(StyleRuleTest, RenestStyleRuleMedia) {
                 ->FirstSelector()
                 ->SelectorTextExpandingPseudoReferences(/*scope_id=*/0));
 
-  EXPECT_EQ(media->Renest(a), media);  // No-op.
+  EXPECT_NE(media->Clone(a, nullptr), media);  // No-op, but we copy anyway.
 
-  auto* reparented = To<StyleRuleMedia>(media->Renest(b));
+  auto* reparented = To<StyleRuleMedia>(media->Clone(b, nullptr));
   EXPECT_NE(media, reparented);
   EXPECT_EQ(":is(.a)",
             To<StyleRule>(media->ChildRules().front().Get())
@@ -414,7 +416,7 @@ TEST_F(StyleRuleTest, RenestStyleRuleMedia) {
                 ->SelectorTextExpandingPseudoReferences(/*scope_id=*/0));
 }
 
-TEST_F(StyleRuleTest, RenestStyleRuleStartingStyle) {
+TEST_F(StyleRuleTest, CloneStyleRuleStartingStyle) {
   auto* a = To<StyleRule>(css_test_helpers::ParseRule(GetDocument(), ".a {}"));
   auto* b = To<StyleRule>(css_test_helpers::ParseRule(GetDocument(), ".b {}"));
   auto* starting_style =
@@ -428,9 +430,11 @@ TEST_F(StyleRuleTest, RenestStyleRuleStartingStyle) {
                 ->FirstSelector()
                 ->SelectorTextExpandingPseudoReferences(/*scope_id=*/0));
 
-  EXPECT_EQ(starting_style->Renest(a), starting_style);  // No-op.
+  EXPECT_NE(starting_style->Clone(a, nullptr),
+            starting_style);  // No-op, but we copy anyway.
 
-  auto* reparented = To<StyleRuleStartingStyle>(starting_style->Renest(b));
+  auto* reparented =
+      To<StyleRuleStartingStyle>(starting_style->Clone(b, nullptr));
   EXPECT_NE(starting_style, reparented);
   EXPECT_EQ(":is(.a)",
             To<StyleRule>(starting_style->ChildRules().front().Get())
@@ -440,6 +444,16 @@ TEST_F(StyleRuleTest, RenestStyleRuleStartingStyle) {
             To<StyleRule>(reparented->ChildRules().front().Get())
                 ->FirstSelector()
                 ->SelectorTextExpandingPseudoReferences(/*scope_id=*/0));
+}
+
+TEST_F(StyleRuleTest, RouteRuleDisabled) {
+  ScopedRouteMatchingForTest enabled(false);
+  // Test both old and new syntax.
+  StyleRuleBase* rule =
+      css_test_helpers::ParseRule(GetDocument(), "@route sixtysix {}");
+  EXPECT_FALSE(rule);
+  rule = css_test_helpers::ParseRule(GetDocument(), "@route (sixtysix) {}");
+  EXPECT_FALSE(rule);
 }
 
 }  // namespace blink

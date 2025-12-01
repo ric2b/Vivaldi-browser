@@ -28,10 +28,12 @@ void CSSGlobalRuleSet::InitWatchedSelectorsRuleSet(Document& document) {
   watched_selectors_rule_set_ = MakeGarbageCollected<RuleSet>();
   MediaQueryEvaluator* medium =
       MakeGarbageCollected<MediaQueryEvaluator>(document.GetFrame());
+
+  RuleSet::ApplyMixinsStack apply_mixins_stack;
   for (unsigned i = 0; i < watched_selectors.size(); ++i) {
     watched_selectors_rule_set_->AddStyleRule(
         watched_selectors[i], /*parent_rule=*/nullptr, *medium,
-        kRuleHasNoSpecialState, /*within_mixin=*/false);
+        /*mixins=*/{}, kRuleHasNoSpecialState, apply_mixins_stack);
   }
 }
 
@@ -46,10 +48,11 @@ void CSSGlobalRuleSet::UpdateDocumentRulesSelectorsRuleSet(Document& document) {
   document_rules_selectors_rule_set_ = MakeGarbageCollected<RuleSet>();
   MediaQueryEvaluator* medium =
       MakeGarbageCollected<MediaQueryEvaluator>(document.GetFrame());
+  RuleSet::ApplyMixinsStack apply_mixins_stack;
   for (StyleRule* selector : document_rules_selectors) {
     document_rules_selectors_rule_set_->AddStyleRule(
-        selector, /*parent_rule=*/nullptr, *medium, kRuleHasNoSpecialState,
-        /*within_mixin=*/false);
+        selector, /*parent_rule=*/nullptr, *medium, /*mixins=*/{},
+        kRuleHasNoSpecialState, apply_mixins_stack);
   }
   document_rules_selectors_rule_set_->CompactRulesIfNeeded();
 }

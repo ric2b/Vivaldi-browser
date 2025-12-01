@@ -1,14 +1,79 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="el">
+<translation id="1049697408958544531">{NUM_WEEKS, plural,
+          =1 {Δημιουργήθηκε <ph name="NUM_WEEKS_ONE" /> εβδομάδα πριν}
+          other {Δημιουργήθηκε <ph name="NUM_WEEKS_MANY" /> εβδομάδες πριν}
+        }</translation>
+<translation id="1062777154504442433">Νέα στοίβα καρτελών</translation>
+<translation id="1092908249939127748">{NUM_MONTHS, plural,
+          =1 {Δημιουργήθηκε <ph name="NUM_YEARS_ONE" /> χρόνο πριν}
+          other {Δημιουργήθηκε <ph name="NUM_YEARS_MANY" /> χρόνια πριν}
+        }</translation>
+<translation id="1329584516321524826">Μόλις ενημερώθηκε</translation>
+<translation id="149054111719651807">{NUM_MINS, plural,
+          =1 {Δημιουργήθηκε <ph name="NUM_MINS_ONE" /> λεπτό πριν}
+          other {Δημιουργήθηκε <ph name="NUM_MINS_MANY" /> λεπτά πριν}
+        }</translation>
+<translation id="1625440863545383011">Αφαίρεση καρτέλας και αποχώρηση από τη στοίβα</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Αποθ. Καρτέλας στους Σελιδ.}
           other {Αποθ. Καρτελών στους Σελιδ.}
         }</translation>
+<translation id="2498435670446402865">Μετονομασία ομάδας καρτελών</translation>
+<translation id="2734252994837336591">{NUM_WEEKS, plural,
+          =1 {Ενημερώθηκε <ph name="NUM_WEEKS_ONE" /> εβδομάδα πριν}
+          other {Ενημερώθηκε <ph name="NUM_WEEKS_MANY" /> εβδομάδες πριν}
+        }</translation>
+<translation id="2753877351161418426">{NUM_HOURS, plural,
+          =1 {Ενημερώθηκε <ph name="NUM_HOURS_ONE" /> ώρα πριν}
+          other {Ενημερώθηκε <ph name="NUM_HOURS_MANY" /> ώρες πριν}
+        }</translation>
+<translation id="2776817246640326047">{NUM_HOURS, plural,
+          =1 {Δημιουργήθηκε <ph name="NUM_HOURS_ONE" /> ώρα πριν}
+          other {Δημιουργήθηκε <ph name="NUM_HOURS_MANY" /> ώρες πριν}
+        }</translation>
 <translation id="2947471979790858922">Η δραστηριότητά σας σε αυτές τις ιδιωτικές καρτέλες θα αφαιρεθεί από αυτή τη συσκευή</translation>
+<translation id="3298614730029636660">Αποχώρηση από την στοίβα</translation>
+<translation id="354698175756845966">Επεξεργασία χρώματος στοίβας</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Μπορείτε να βρείτε τις κλειστές καρτέλες σας στην ενότητα Πρόσφατες Καρτέλες στο κύριο μενού του Vivaldi. Η ιδιωτική σας καρτέλα δεν θα είναι διαθέσιμη.}
         other {Μπορείτε να βρείτε τις κλειστές καρτέλες σας στην ενότητα Πρόσφατες καρτέλες στο κύριο μενού του Vivaldi. Οι # ιδιωτικές καρτέλες σας δεν θα είναι διαθέσιμες.}}</translation>
+<translation id="4009732926939031387">{NUM_DAYS, plural,
+          =1 {Δημιουργήθηκε <ph name="NUM_DAYS_ONE" /> ημέρα πριν}
+          other {Δημιουργήθηκε <ph name="NUM_DAYS_MANY" /> ημέρες πριν}
+        }</translation>
+<translation id="4453940245650019914">{NUM_DAYS, plural,
+          =1 {Ενημερώθηκε <ph name="NUM_DAYS_ONE" /> ημέρα πριν}
+          other {Ενημερώθηκε <ph name="NUM_DAYS_MANY" /> ημέρες πριν}
+        }</translation>
+<translation id="4686942373615810936">Δημιουργήθηκε μόλις τώρα</translation>
+<translation id="4870911314065352661">Κλείσιμο όλων των καρτελών;</translation>
 <translation id="4871187110787939393">Κλείσιμο όλων των ιδιωτικών καρτελών;</translation>
 <translation id="5494920125229734069">Επιλογή όλων</translation>
+<translation id="6807841890213931603">Κατάργηση καρτέλας και διαγραφή στοίβας</translation>
+<translation id="750227952939161636">Οι στοίβες καρτελών σας αποθηκεύονται και ενημερώνονται αυτόματα σε όλες τις συσκευές στις οποίες έχετε συνδεθεί</translation>
+<translation id="7640137753339219124">Διαγραφή στοίβας</translation>
+<translation id="7653857400289671414">Οι στοίβες καρτελών σας αποθηκεύονται αυτόματα</translation>
+<translation id="775668479044571025">{NUM_MONTHS, plural,
+          =1 {Ενημερώθηκε <ph name="NUM_YEARS_ONE" /> χρόνο πριν}
+          other {Ενημερώθηκε <ph name="NUM_YEARS_MANY" /> χρόνια πριν}
+        }</translation>
+<translation id="7825973332242257878">Ομάδες καρτελών</translation>
+<translation id="8207688828622594111">{NUM_MINS, plural,
+          =1 {Ενημερώθηκε <ph name="NUM_MINS_ONE" /> λεπτό πριν}
+          other {Ενημερώθηκε <ph name="NUM_MINS_MANY" /> λεπτά πριν}
+        }</translation>
+<translation id="8374451057714760401">{NUM_MONTHS, plural,
+                =1 {Ενημερώθηκε <ph name="NUM_MONTHS_ONE" /> μήνα πριν}
+                other {Ενημερώθηκε <ph name="NUM_MONTHS_MANY" /> μήνες πριν}
+              }</translation>
+<translation id="8440938071054361204">Επεξεργασία ονόματος στοίβας</translation>
+<translation id="8602902357364871325">Κλείσιμο στοίβας</translation>
+<translation id="875848103419578654">{NUM_MONTHS, plural,
+                =1 {Δημιουργήθηκε <ph name="NUM_MONTHS_ONE" /> μήνα πριν}
+                other {Δημιουργήθηκε <ph name="NUM_MONTHS_MANY" /> μήνες πριν}
+              }</translation>
+<translation id="8851621822786801079">Αφαίρεση από τη στοίβα</translation>
+<translation id="8887921976452567404">Οι κλειστές καρτέλες και ομάδες σου μπορούν να ανοίξουν ξανά από την ενότητα Πρόσφατες καρτέλες και την ενότητα Ομάδες καρτελών.</translation>
 </translationbundle>

@@ -156,6 +156,14 @@ fn yuv_format_parser(s: &str) -> Result<PixelFormat, String> {
     }
 }
 
+fn header_format_parser(s: &str) -> Result<HeaderFormat, String> {
+    match s {
+        "meta" | "default" => Ok(HeaderFormat::Default),
+        "mini" => Ok(HeaderFormat::Mini),
+        _ => Err(format!("Invalid header format: {s}")),
+    }
+}
+
 #[derive(Parser)]
 struct CommandLineArgs {
     /// AVIF Decode only: Disable strict decoding, which disables strict validation checks and
@@ -189,6 +197,10 @@ struct CommandLineArgs {
     /// AVIF Encode only: Speed used for encoding.
     #[arg(long, short = 's', value_parser = value_parser!(u32).range(0..=10))]
     speed: Option<u32>,
+
+    /// AVIF Encode only: MetaBox- or MinimizedImageBox-flavored HEIF file.
+    #[arg(long, value_parser = header_format_parser, default_value = "meta")]
+    header: HeaderFormat,
 
     /// When decoding AVIF: Enable progressive AVIF processing. If a progressive image is
     /// encountered and --progressive is passed, --index will be used to choose which layer to
@@ -695,6 +707,7 @@ fn encode(args: &CommandLineArgs) -> AvifResult<()> {
     let mut settings = encoder::Settings {
         extra_layer_count: if args.progressive { 1 } else { 0 },
         speed: args.speed,
+        header_format: args.header,
         timescale: 1000, // ms.
         repetition_count: args.repetition_count,
         mutable: MutableSettings {

@@ -10,6 +10,7 @@
 
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkPathIter.h"
 #include "include/core/SkPathTypes.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
@@ -85,16 +86,18 @@ public:
     /** Returns an SkPath representing the current state of the SkPathBuilder. The builder is
         unchanged after returning the path.
 
+        @param mx if present, applied to the points after they are copied into the resulting path.
         @return  SkPath representing the current state of the builder.
      */
-    SkPath snapshot() const;
+    SkPath snapshot(const SkMatrix* mx = nullptr) const;
 
     /** Returns an SkPath representing the current state of the SkPathBuilder. The builder is
         reset to empty after returning the path.
 
+        @param mx if present, applied to the points after they are copied into the resulting path.
         @return  SkPath representing the current state of the builder.
      */
-    SkPath detach();
+    SkPath detach(const SkMatrix* mx = nullptr);
 
     /** Sets SkPathFillType, the rule used to fill SkPath. While there is no
         check that ft is legal, values outside of SkPathFillType are not supported.
@@ -130,20 +133,17 @@ public:
     */
     SkPathBuilder& reset();
 
-    /** Adds beginning of contour at SkPoint p.
+    /** Specifies the beginning of contour. If the previous verb was a "move" verb,
+     *  then this just replaces the point value of that move, otherwise it appends a new
+     *  "move" verb to the builder using the point.
+     *
+     *  Thus, each contour can only have 1 move verb in it (the last one specified).
+     */
+    SkPathBuilder& moveTo(SkPoint point);
 
-        @param p  contour start
-        @return   reference to SkPathBuilder
-    */
-    SkPathBuilder& moveTo(SkPoint pt);
-
-    /** Adds beginning of contour at SkPoint (x, y).
-
-        @param x  x-axis value of contour start
-        @param y  y-axis value of contour start
-        @return   reference to SkPathBuilder
-    */
-    SkPathBuilder& moveTo(SkScalar x, SkScalar y) { return this->moveTo(SkPoint::Make(x, y)); }
+    SkPathBuilder& moveTo(SkScalar x, SkScalar y) {
+        return this->moveTo(SkPoint::Make(x, y));
+    }
 
     /** Adds line from last point to SkPoint p. If SkPathBuilder is empty, or last SkPath::Verb is
         kClose_Verb, last point is set to (0, 0) before adding line.
@@ -648,6 +648,10 @@ public:
     */
     SkPathBuilder& addArc(const SkRect& oval, SkScalar startAngleDeg, SkScalar sweepAngleDeg);
 
+    SkPathBuilder& addLine(SkPoint a, SkPoint b) {
+        return this->moveTo(a).lineTo(b);
+    }
+
     /** Adds a new contour to the SkPathBuilder, defined by the rect, and wound in the
         specified direction. The verbs added to the path will be:
 
@@ -855,8 +859,13 @@ public:
         @param matrix  SkMatrix to apply to SkPath
         @param pc      whether to apply perspective clipping
     */
-    SkPathBuilder& transform(const SkMatrix& matrix,
-                             SkApplyPerspectiveClip pc = SkApplyPerspectiveClip::kYes);
+    SkPathBuilder& transform(const SkMatrix& matrix);
+
+#ifdef SK_SUPPORT_LEGACY_APPLYPERSPECTIVECLIP
+    SkPathBuilder& transform(const SkMatrix& matrix, SkApplyPerspectiveClip) {
+        return this->transform(matrix);
+    }
+#endif
 
     /*
      *  Returns true if the builder is empty, or all of its points are finite.
@@ -924,8 +933,13 @@ public:
     SkSpan<const SkPathVerb> verbs() const {
         return fVerbs;
     }
+    SkSpan<const float> conicWeights() const {
+        return fConicWeights;
+    }
 
     SkPathBuilder& addRaw(const SkPathRaw&);
+
+    SkPathIter iter() const;
 
 private:
     SkPathRef::PointsArray fPts;
@@ -941,19 +955,12 @@ private:
     int         fLastMoveIndex; // only needed until SkPath is immutable
     bool        fNeedsMoveVerb;
 
-    enum IsA {
-        kIsA_JustMoves,     // we only have 0 or more moves
-        kIsA_MoreThanMoves, // we have verbs other than just move
-        kIsA_Oval,          // we are 0 or more moves followed by an oval
-        kIsA_RRect,         // we are 0 or more moves followed by a rrect
-    };
-    IsA fIsA      = kIsA_JustMoves;
-    int fIsAStart = -1;     // tracks direction iff fIsA is not unknown
-    bool fIsACCW  = false;  // tracks direction iff fIsA is not unknown
+    SkPathIsAType fType = SkPathIsAType::kGeneral;
+    SkPathIsAData fIsA {};
 
     // called right before we add a (non-move) verb
     void ensureMove() {
-        fIsA = kIsA_MoreThanMoves;
+        fType = SkPathIsAType::kGeneral;
         if (fNeedsMoveVerb) {
             this->moveTo(fLastMovePoint);
         }

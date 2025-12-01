@@ -68,7 +68,6 @@
 namespace base {
 
 BASE_FEATURE(kPassHistogramSharedMemoryOnLaunch,
-             "PassHistogramSharedMemoryOnLaunch",
 #if BUILDFLAG(IS_ANDROID)
              FEATURE_DISABLED_BY_DEFAULT
 #else

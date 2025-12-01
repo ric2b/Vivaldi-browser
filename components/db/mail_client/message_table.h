@@ -52,6 +52,7 @@ class MessageTable {
   bool AttachDBForMigrate(base::FilePath db_dir);
   bool DetachDBAfterMigrate();
   bool DoesAttachedMessageTableExists();
+  int CountMessages();
 
  protected:
   virtual sql::Database& GetDB() = 0;

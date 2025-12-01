@@ -6,8 +6,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cerrno>
-#include <csignal>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -30,11 +28,11 @@
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
 #include "absl/time/time.h"
+#include "./common/logging.h"
 #include "./fuzztest/internal/configuration.h"
 #include "./fuzztest/internal/flag_name.h"
 #include "./fuzztest/internal/googletest_adaptor.h"
 #include "./fuzztest/internal/io.h"
-#include "./fuzztest/internal/logging.h"
 #include "./fuzztest/internal/registry.h"
 #include "./fuzztest/internal/runtime.h"
 
@@ -189,12 +187,12 @@ FUZZTEST_DEFINE_FLAG(
     "Internal-only flag - do not use directly. If set, only perform operations "
     "for the exact fuzz test regardless of other flags.")
     .OnUpdate([] {
-      FUZZTEST_INTERNAL_CHECK_PRECONDITION(
+      FUZZTEST_PRECONDITION(
           !absl::GetFlag(FUZZTEST_FLAG(internal_override_fuzz_test))
-                  .has_value() ||
-              std::getenv("CENTIPEDE_RUNNER_FLAGS") != nullptr,
-          "must not set --" FUZZTEST_FLAG_PREFIX
-          "internal_override_fuzz_test directly");
+               .has_value() ||
+          std::getenv("CENTIPEDE_RUNNER_FLAGS") != nullptr)
+          << "must not set --" FUZZTEST_FLAG_PREFIX
+             "internal_override_fuzz_test directly";
     });
 
 FUZZTEST_DEFINE_FLAG(
@@ -205,12 +203,12 @@ FUZZTEST_DEFINE_FLAG(
     "--" FUZZTEST_FLAG_PREFIX "fuzz_for / --" FUZZTEST_FLAG_PREFIX
     "replay_corpus_for with --time_budget_type set to total.")
     .OnUpdate([] {
-      FUZZTEST_INTERNAL_CHECK_PRECONDITION(
+      FUZZTEST_PRECONDITION(
           absl::GetFlag(FUZZTEST_FLAG(internal_override_total_time_limit)) ==
-                  absl::InfiniteDuration() ||
-              std::getenv("CENTIPEDE_RUNNER_FLAGS") != nullptr,
-          "must not set --" FUZZTEST_FLAG_PREFIX
-          "internal_override_total_time_limit directly");
+              absl::InfiniteDuration() ||
+          std::getenv("CENTIPEDE_RUNNER_FLAGS") != nullptr)
+          << "must not set --" FUZZTEST_FLAG_PREFIX
+             "internal_override_total_time_limit directly";
     });
 
 FUZZTEST_DEFINE_FLAG(std::optional<std::string>,
@@ -220,12 +218,12 @@ FUZZTEST_DEFINE_FLAG(std::optional<std::string>,
                      "internal_override_fuzz_test are set, replay "
                      "the input in the corpus database with the specified ID.")
     .OnUpdate([] {
-      FUZZTEST_INTERNAL_CHECK_PRECONDITION(
+      FUZZTEST_PRECONDITION(
           !absl::GetFlag(FUZZTEST_FLAG(internal_crashing_input_to_reproduce))
-                  .has_value() ||
-              std::getenv("CENTIPEDE_RUNNER_FLAGS") != nullptr,
-          "must not set --" FUZZTEST_FLAG_PREFIX
-          "internal_crashing_input_to_reproduce directly");
+               .has_value() ||
+          std::getenv("CENTIPEDE_RUNNER_FLAGS") != nullptr)
+          << "must not set --" FUZZTEST_FLAG_PREFIX
+             "internal_crashing_input_to_reproduce directly";
     });
 
 namespace fuzztest {
@@ -324,8 +322,9 @@ internal::Configuration CreateConfigurationsFromFlags(
           ? internal::TimeBudgetType::kTotal
           : absl::GetFlag(FUZZTEST_FLAG(time_budget_type));
   const std::optional<size_t> jobs = absl::GetFlag(FUZZTEST_FLAG(jobs));
-  FUZZTEST_INTERNAL_CHECK(!jobs.has_value() || *jobs > 0, "If specified, --",
-                          FUZZTEST_FLAG(jobs).Name(), " must be positive.");
+  FUZZTEST_CHECK(!jobs.has_value() || *jobs > 0)
+      << "If specified, --" << FUZZTEST_FLAG(jobs).Name()
+      << " must be positive.";
   return internal::Configuration{
       absl::GetFlag(FUZZTEST_FLAG(corpus_database)),
       /*stats_root=*/"",
@@ -378,9 +377,8 @@ void InitFuzzTest(int* argc, char*** argv, std::string_view binary_id) {
   std::optional<absl::Duration> fuzzing_time_limit = GetFuzzingTime();
   std::optional<absl::Duration> replay_corpus_time_limit =
       GetReplayCorpusTime();
-  FUZZTEST_INTERNAL_CHECK(
-      !fuzzing_time_limit || !replay_corpus_time_limit,
-      "Cannot run in fuzzing and corpus replay mode at the same time.");
+  FUZZTEST_CHECK(!fuzzing_time_limit || !replay_corpus_time_limit)
+      << "Cannot run in fuzzing and corpus replay mode at the same time.";
   const auto test_to_fuzz = absl::GetFlag(FUZZTEST_FLAG(fuzz));
   const auto test_to_replay_corpus =
       absl::GetFlag(FUZZTEST_FLAG(replay_corpus));

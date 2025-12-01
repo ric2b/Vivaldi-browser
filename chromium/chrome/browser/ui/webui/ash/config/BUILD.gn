@@ -16,6 +16,7 @@ static_library("config") {
 
   deps = [
     "//ash/constants",
+    "//ash/webui/boca_receiver_app_ui",
     "//ash/webui/color_internals",
     "//ash/webui/demo_mode_app_ui",
     "//ash/webui/diagnostics_ui",
@@ -39,6 +40,7 @@ static_library("config") {
     "//ash/webui/vc_background_ui",
     "//chrome/browser/ash/annotator",
     "//chrome/browser/ash/app_mode",
+    "//chrome/browser/ash/boca/receiver",
     "//chrome/browser/ash/eche_app",
     "//chrome/browser/ash/login/demo_mode",
     "//chrome/browser/ash/mall",
@@ -68,7 +70,6 @@ static_library("config") {
     "//chrome/browser/ui/webui/ash/app_install",
     "//chrome/browser/ui/webui/ash/arc_overview_tracing",
     "//chrome/browser/ui/webui/ash/arc_power_control",
-    "//chrome/browser/ui/webui/ash/assistant_optin",
     "//chrome/browser/ui/webui/ash/audio",
     "//chrome/browser/ui/webui/ash/bluetooth",
     "//chrome/browser/ui/webui/ash/borealis_installer",
@@ -109,6 +110,8 @@ static_library("config") {
     "//chrome/browser/ui/webui/ash/sys_internals",
     "//chrome/browser/ui/webui/ash/vm",
     "//chrome/browser/ui/webui/nearby_share",
+    "//chromeos/ash/components/boca/receiver",
+    "//chromeos/ash/experiences/guest_os/borealis/motd",
     "//components/cross_device/logging",
     "//ui/webui",
   ]

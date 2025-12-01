@@ -10,6 +10,7 @@
 
 #include "base/containers/contains.h"
 #include "base/containers/map_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/printing/cups_wrapper.h"
 #include "chrome/browser/printing/local_printer_utils_chromeos.h"
@@ -21,7 +22,9 @@
 #include "components/permissions/permission_request_data.h"
 #include "content/public/browser/permission_controller.h"
 #include "content/public/browser/permission_descriptor_util.h"
+#include "content/public/browser/permission_result.h"
 #include "content/public/browser/render_frame_host.h"
+#include "crypto/hash.h"
 #include "printing/backend/cups_ipp_constants.h"
 #include "printing/backend/print_backend.h"
 #include "printing/metafile_skia.h"
@@ -265,8 +268,8 @@ void WebPrintingServiceChromeOS::Print(
 
 void WebPrintingServiceChromeOS::OnPermissionDecidedForGetPrinters(
     GetPrintersCallback callback,
-    blink::mojom::PermissionStatus permission_status) {
-  if (permission_status != blink::mojom::PermissionStatus::GRANTED) {
+    content::PermissionResult permission_result) {
+  if (permission_result.status != blink::mojom::PermissionStatus::GRANTED) {
     std::move(callback).Run(blink::mojom::GetPrintersResult::NewError(
         blink::mojom::GetPrintersError::kUserPermissionDenied));
     return;
@@ -288,6 +291,9 @@ void WebPrintingServiceChromeOS::OnPrintersRetrieved(
 
     auto printer_info = blink::mojom::WebPrinterInfo::New();
     printer_info->printer_name = printer->name;
+    // Expose an opaque id to the web rather the internal id.
+    printer_info->printer_id =
+        base::HexEncode(crypto::hash::Sha256(printer->id));
     printer_info->printer_remote = std::move(printer_remote);
     web_printers.push_back(std::move(printer_info));
   }

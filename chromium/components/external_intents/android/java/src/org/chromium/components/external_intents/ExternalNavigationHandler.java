@@ -41,8 +41,8 @@ import org.chromium.base.PathUtils;
 import org.chromium.base.RequiredCallback;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.BuildConfig;
+import org.chromium.build.annotations.Contract;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -68,6 +68,7 @@ import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.mojom.WindowOpenDisposition;
 import org.chromium.ui.permissions.PermissionCallback;
 import org.chromium.url.GURL;
 
@@ -81,15 +82,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 // Vivaldi
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.vivaldi.browser.common.VivaldiUrlConstants;
 
 /**
- * Logic related to the URL overriding/intercepting functionality.
- * This feature supports conversion of certain navigations to Android Intents allowing
- * applications like Youtube to direct users clicking on a http(s) link to their native app.
+ * Logic related to the URL overriding/intercepting functionality. This feature supports conversion
+ * of certain navigations to Android Intents allowing applications like Youtube to direct users
+ * clicking on a http(s) link to their native app.
  */
 @NullMarked
 public class ExternalNavigationHandler {
@@ -163,16 +165,16 @@ public class ExternalNavigationHandler {
     }
 
     // A Supplier that only evaluates when needed then caches the value.
-    protected static class LazySupplier<T> implements Supplier<T> {
+    protected static class LazySupplier<T extends @Nullable Object> implements Supplier<T> {
         private @Nullable T mValue;
         private @Nullable Supplier<T> mInnerSupplier;
 
         public LazySupplier(Supplier<T> innerSupplier) {
-            assert innerSupplier != null : "innerSupplier cannot be null";
             mInnerSupplier = innerSupplier;
         }
 
         @Override
+        @SuppressWarnings("NullAway") // Using mInnerSupplier as condition for mValue.
         public T get() {
             if (mInnerSupplier != null) {
                 mValue = mInnerSupplier.get();
@@ -181,12 +183,7 @@ public class ExternalNavigationHandler {
                 // references it may have held.
                 mInnerSupplier = null;
             }
-            return assumeNonNull(mValue);
-        }
-
-        @Override
-        public boolean hasValue() {
-            return true;
+            return mValue;
         }
     }
 
@@ -194,7 +191,7 @@ public class ExternalNavigationHandler {
         protected final Intent mIntent;
         private @Nullable Intent mIntentCopy;
 
-        public IntentBasedSupplier(Intent intent, Supplier<T> innerSupplier) {
+        IntentBasedSupplier(Intent intent, Supplier<T> innerSupplier) {
             super(innerSupplier);
             mIntent = intent;
         }
@@ -341,7 +338,7 @@ public class ExternalNavigationHandler {
         // We need the query to include non-default intent filters, but should not return
         // them for clients that don't explicitly need to check non-default filters.
         private static class QueryNonDefaultSupplier extends LazySupplier<List<ResolveInfo>> {
-            public QueryNonDefaultSupplier(Intent intent) {
+            QueryNonDefaultSupplier(Intent intent) {
                 super(
                         () ->
                                 PackageManagerUtils.queryIntentActivities(
@@ -597,6 +594,13 @@ public class ExternalNavigationHandler {
         RecordHistogram.recordTimesHistogram(
                 "Android.StrictMode.OverrideUrlLoadingTime", SystemClock.elapsedRealtime() - time);
 
+        // Measure how many navigations would be affected if enabling feature flag
+        // AUXILIARY_NAVIGATION_STAYS_IN_BROWSER for all windowing modes.
+        RecordHistogram.recordBooleanHistogram(
+                "Android.Intent.OverrideBrowserAuxiliaryNavigation",
+                isBrowserAuxiliaryNavigation(params)
+                        && result.getResultType() != OverrideUrlLoadingResultType.NO_OVERRIDE);
+
         if (result.getResultType() == OverrideUrlLoadingResultType.NO_OVERRIDE) {
             result =
                     handleFallbackUrl(
@@ -719,14 +723,15 @@ public class ExternalNavigationHandler {
         return false;
     }
 
-    /** http://crbug.com/441284 : Disallow firing external intent while the app is in the background. */
-    private boolean blockExternalNavWhileBackgrounded(
-            ExternalNavigationParams params, boolean incomingIntentRedirect) {
+    /**
+     * http://crbug.com/441284 : Disallow firing external intent while the app is in the background.
+     */
+    private boolean blockExternalNavWhileBackgrounded(boolean incomingIntentRedirect) {
         // If the redirect is from an intent Chrome could still be transitioning to the foreground.
         // Alternatively, the user may have sent Chrome to the background by this point, but for
         // navigations started by another app that should still be safe.
         if (incomingIntentRedirect) return false;
-        if (params.isApplicationMustBeInForeground() && !mDelegate.isApplicationInForeground()) {
+        if (!mDelegate.isApplicationInForeground()) {
             if (debug()) Log.i(TAG, "App is not in foreground");
             return true;
         }
@@ -977,7 +982,8 @@ public class ExternalNavigationHandler {
         return false;
     }
 
-    private boolean externalIntentRequestsDisabledForUrl(ExternalNavigationParams params) {
+    private boolean externalIntentRequestsDisabledForUrl(
+            ExternalNavigationParams params, Intent intent) {
         // TODO(changwan): check if we need to handle URL even when external intent is off.
         if (CommandLine.getInstance()
                 .hasSwitch(ExternalIntentsSwitches.DISABLE_EXTERNAL_INTENT_REQUESTS)) {
@@ -985,7 +991,7 @@ public class ExternalNavigationHandler {
             return true;
         }
 
-        if (mDelegate.shouldDisableExternalIntentRequestsForUrl(params.getUrl())) {
+        if (mDelegate.shouldDisableExternalIntentRequestsForUrl(params, intent)) {
             if (debug()) Log.i(TAG, "Delegate disables external intent requests for URL.");
             return true;
         }
@@ -1197,7 +1203,8 @@ public class ExternalNavigationHandler {
                 && params.isInDesktopWindowingMode()
                 && params.isInitialNavigationInFrame()
                 && params.isTabInPWA()
-                && !params.isFromIntent()) {
+                && !params.isFromIntent()
+                && UrlUtilities.isHttpOrHttps(params.getUrl())) {
             if (debug()) Log.i(TAG, "No specialized handler found, reparent to browser.");
             return OverrideUrlLoadingResult.forReparentToBrowser();
         }
@@ -1568,9 +1575,67 @@ public class ExternalNavigationHandler {
     private boolean shouldBlockAllExternalAppLaunches(
             ExternalNavigationParams params, boolean incomingIntentRedirect) {
         return shouldBlockSubframeAppLaunches(params)
-                || blockExternalNavWhileBackgrounded(params, incomingIntentRedirect)
+                || blockExternalNavWhileBackgrounded(incomingIntentRedirect)
                 || blockExternalNavFromBackgroundTab(params, incomingIntentRedirect)
                 || ignoreBackForwardNav(params);
+    }
+
+    /** Returns whether a Tab instance should be reparented from the PWA to the browser. */
+    public boolean shouldReparentTab(
+            GURL url,
+            boolean isTabInPWA,
+            boolean isInitialNavigationInFrame,
+            boolean isInDesktopWindowingMode) {
+        WebContents webContents = mDelegate.getWebContents();
+        return ExternalIntentsFeatures.REPARENT_AUXILIARY_NAVIGATION_FROM_PWA.isEnabled()
+                && isInitialNavigationInFrame
+                && isTabInPWA
+                && isInDesktopWindowingMode
+                && webContents != null
+                && webContents.hasOpener()
+                && webContents.getOriginalWindowOpenDisposition()
+                        == WindowOpenDisposition.NEW_FOREGROUND_TAB
+                && UrlUtilities.isHttpOrHttps(url);
+    }
+
+    // A new auxiliary browsing context navigation starting in the browser should not be captured.
+    private boolean isBrowserAuxiliaryNavigation(ExternalNavigationParams params) {
+        // TODO(crbug.com/424781882): open discussion on whether self navigations in auxiliary page
+        // should be capturable or not. If opening apps is desirable, add
+        // `isInitialNavigationInFrame()` in
+        // the return statement below, otherwise remove it.
+        WebContents webContents = mDelegate.getWebContents();
+        if (params.isTabInBrowser()
+                && webContents != null
+                && webContents.hasOpener()
+                && webContents.getOriginalWindowOpenDisposition()
+                        == WindowOpenDisposition.NEW_FOREGROUND_TAB
+                && UrlUtilities.isHttpOrHttps(params.getUrl())) {
+            if (debug()) {
+                Log.i(TAG, "Auxiliary browsing context navigation from browser is not overridden.");
+            }
+            return true;
+        }
+        return false;
+    }
+
+    // A new auxiliary browsing context navigation starting in the PWA should not be captured.
+    private boolean isPWAAuxiliaryNavigationInFullscreenWM(ExternalNavigationParams params) {
+        WebContents webContents = mDelegate.getWebContents();
+        if (ExternalIntentsFeatures.AUXILIARY_NAVIGATION_STAYS_IN_PWA.isEnabled()
+                && params.isTabInPWA()
+                && !params.isInDesktopWindowingMode()
+                && webContents != null
+                && webContents.hasOpener()
+                && webContents.getOriginalWindowOpenDisposition()
+                        == WindowOpenDisposition.NEW_FOREGROUND_TAB
+                && UrlUtilities.isHttpOrHttps(params.getUrl())) {
+            if (debug()) {
+                Log.i(TAG, "Do not override auxiliary browsing context navigation from a PWA.");
+            }
+            return true;
+        }
+        return false;
     }
 
     private OverrideUrlLoadingResult shouldOverrideUrlLoadingInternal(
@@ -1629,9 +1694,34 @@ public class ExternalNavigationHandler {
             return OverrideUrlLoadingResult.forAsyncAction();
         }
 
+        // All cases where a navigation that starts in a PWA should cause a Tab reparenting towards
+        // the Chrome browser.
+        // TODO(crbug.com/416562397): consider in-scope PWAs in the reparenting process.
+        // TODO(crbug.com/415926894): do not override navigations with WindowOpenDisposition POPUP
+        if (shouldReparentTab(
+                params.getUrl(),
+                params.isTabInPWA(),
+                params.isInitialNavigationInFrame(),
+                params.isInDesktopWindowingMode())) {
+            if (debug()) {
+                Log.i(TAG, "Reparent auxiliary browsing context navigation from a PWA.");
+            }
+            return OverrideUrlLoadingResult.forReparentToBrowser();
+        }
+
+        if (ExternalIntentsFeatures.AUXILIARY_NAVIGATION_STAYS_IN_BROWSER.isEnabled(
+                params.isInDesktopWindowingMode()) &&
+                isBrowserAuxiliaryNavigation(params)) {
+            return OverrideUrlLoadingResult.forNoOverride();
+        }
+
+        if (isPWAAuxiliaryNavigationInFullscreenWM(params)) {
+            return OverrideUrlLoadingResult.forNoOverride();
+        }
+
         // This should come after file intents, but before any returns of
         // OVERRIDE_WITH_EXTERNAL_INTENT.
-        if (externalIntentRequestsDisabledForUrl(params)) {
+        if (externalIntentRequestsDisabledForUrl(params, targetIntent)) {
             return OverrideUrlLoadingResult.forNoOverride();
         }
 
@@ -2300,7 +2390,7 @@ public class ExternalNavigationHandler {
                 pickerIntent,
                 new WindowAndroid.IntentCallback() {
                     @Override
-                    public void onIntentCompleted(int resultCode, Intent data) {
+                    public void onIntentCompleted(int resultCode, @Nullable Intent data) {
                         RequiredCallback<AsyncActionTakenParams> callback =
                                 params.getRequiredAsyncActionTakenCallback();
                         assert callback != null;
@@ -2654,11 +2744,13 @@ public class ExternalNavigationHandler {
 
     /**
      * Parses the scheme out of the URL if possible, trimming and getting rid of unsafe characters.
-     * This is useful for determining if a URL has a sneaky, unsafe scheme, e.g. "java  script" or
+     * This is useful for determining if a URL has a sneaky, unsafe scheme, e.g. "java script" or
      * "j$a$r". See: http://crbug.com/248398
+     *
      * @return The sanitized URL scheme or null if no scheme is specified.
      */
-    public static @Nullable String getSanitizedUrlScheme(String url) {
+    @Contract("null -> null")
+    public static @Nullable String getSanitizedUrlScheme(@Nullable String url) {
         if (url == null) {
             return null;
         }

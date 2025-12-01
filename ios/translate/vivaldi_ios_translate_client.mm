@@ -51,8 +51,8 @@
 #import "url/gurl.h"
 
 namespace {
-std::string kTranslateBundleDir = "res/resources/";
-std::string kTranslateBundleName = "translate-bundle.js";
+constexpr char kTranslateBundleDir[] = "res/resources/";
+constexpr char kTranslateBundleName[] = "translate-bundle.js";
 
 std::string ReplaceServerUrl(std::string& script) {
   const std::string search_pattern = "$OVERRIDE_TRANSLATE_SERVER";

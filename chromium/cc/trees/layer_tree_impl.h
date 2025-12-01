@@ -69,7 +69,6 @@ struct PendingPageScaleAnimation;
 using UIResourceRequestQueue = std::vector<UIResourceRequest>;
 using SyncedScale = SyncedProperty<ScaleGroup>;
 using SyncedBrowserControls = SyncedProperty<AdditionGroup<float>>;
-using SyncedElasticOverscroll = SyncedProperty<AdditionGroup<gfx::Vector2dF>>;
 
 class LayerTreeLifecycle {
  public:
@@ -107,8 +106,7 @@ class CC_EXPORT LayerTreeImpl {
       viz::BeginFrameArgs begin_frame_args,
       scoped_refptr<SyncedScale> page_scale_factor,
       scoped_refptr<SyncedBrowserControls> top_controls_shown_ratio,
-      scoped_refptr<SyncedBrowserControls> bottom_controls_shown_ratio,
-      scoped_refptr<SyncedElasticOverscroll> elastic_overscroll);
+      scoped_refptr<SyncedBrowserControls> bottom_controls_shown_ratio);
   LayerTreeImpl(const LayerTreeImpl&) = delete;
   virtual ~LayerTreeImpl();
 
@@ -469,13 +467,6 @@ class CC_EXPORT LayerTreeImpl {
     return viewport_property_ids_;
   }
 
-  SyncedElasticOverscroll* elastic_overscroll() {
-    return elastic_overscroll_.get();
-  }
-  const SyncedElasticOverscroll* elastic_overscroll() const {
-    return elastic_overscroll_.get();
-  }
-
   SyncedBrowserControls* top_controls_shown_ratio() {
     return top_controls_shown_ratio_.get();
   }
@@ -487,9 +478,6 @@ class CC_EXPORT LayerTreeImpl {
   }
   const SyncedBrowserControls* bottom_controls_shown_ratio() const {
     return bottom_controls_shown_ratio_.get();
-  }
-  gfx::Vector2dF current_elastic_overscroll() const {
-    return elastic_overscroll()->Current(IsActiveTree());
   }
 
   void SetElementIdsForTesting();
@@ -636,6 +624,12 @@ class CC_EXPORT LayerTreeImpl {
   LayerImpl* FindLayerThatIsHitByPoint(const gfx::PointF& screen_space_point);
 
   LayerImpl* FindLayerThatIsHitByPointInTouchHandlerRegion(
+      const gfx::RectF& screen_space_touch_rect);
+
+  // TODO(crbug.com/355578906): This wrapper mostly exists because a lot of
+  // tests still use this variant of the function. Delete this once the
+  // references are updated.
+  LayerImpl* FindLayerThatIsHitByPointInTouchHandlerRegion(
       const gfx::PointF& screen_space_point);
 
   LayerImpl* FindLayerThatIsHitByPointInWheelEventHandlerRegion(
@@ -687,6 +681,7 @@ class CC_EXPORT LayerTreeImpl {
   float top_controls_height() const {
     return browser_controls_params_.top_controls_height;
   }
+  void SetLoadProgress(float progress);
   float top_controls_min_height() const {
     return browser_controls_params_.top_controls_min_height;
   }
@@ -891,7 +886,7 @@ class CC_EXPORT LayerTreeImpl {
   void UpdateTransformAnimation(ElementId element_id, int transform_node_index);
   template <typename Functor>
   LayerImpl* FindLayerThatIsHitByPointInEventHandlerRegion(
-      const gfx::PointF& screen_space_point,
+      const gfx::RectF& screen_space_touch_rect,
       const Functor& func);
 
   // Update the geometries of all scrollbars (e.g., thumb size and position).
@@ -962,8 +957,6 @@ class CC_EXPORT LayerTreeImpl {
   // pixels.
   float max_safe_area_inset_bottom_ = 0;
 
-  scoped_refptr<SyncedElasticOverscroll> elastic_overscroll_;
-
   // TODO(wangxianzhu): Combine layers_ and layer_list_ when we remove
   // support of mask layers.
 
@@ -1017,6 +1010,7 @@ class CC_EXPORT LayerTreeImpl {
       event_listener_properties_;
 
   BrowserControlsParams browser_controls_params_;
+  float load_progress_ = 0.f;
 
   OverscrollBehavior overscroll_behavior_;
 

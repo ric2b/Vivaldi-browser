@@ -11,12 +11,13 @@
 #include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr_exclusion.h"
-#include "base/task/delay_policy.h"
 #include "base/task/delayed_task_handle.h"
 #include "base/task/sequenced_task_runner_helpers.h"
 #include "base/task/task_runner.h"
-#include "base/types/pass_key.h"
 
+namespace actor {
+class PageStabilityMonitor;
+}  // namespace actor
 namespace blink {
 class LowPrecisionTimer;
 class ScriptedIdleTaskController;
@@ -56,12 +57,15 @@ class TimeTicks;
 
 namespace subtle {
 
+enum class DelayPolicy;
+
 // Restricts access to PostCancelableDelayedTask*() to authorized callers.
 class PostDelayedTaskPassKey {
  private:
   // Avoid =default to disallow creation by uniform initialization.
   PostDelayedTaskPassKey() = default;
 
+  friend class actor::PageStabilityMonitor;
   friend class base::internal::DelayTimerBase;
   friend class base::internal::DelayedTaskManager;
   friend class base::DeadlineTimer;

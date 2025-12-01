@@ -9,8 +9,9 @@
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/glic/fre/glic_fre_controller.h"
-#include "chrome/browser/glic/glic_enabling.h"
+#include "chrome/browser/glic/public/glic_enabling.h"
 #include "chrome/browser/glic/public/glic_keyed_service_factory.h"
+#include "chrome/browser/glic/widget/glic_window_controller.h"
 #include "chrome/browser/global_features.h"
 #include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/profiles/nuke_profile_directory_utils.h"
@@ -85,11 +86,18 @@ Profile* GlicProfileManager::GetProfileForLaunch() const {
   }
 
   // Look for a profile to based on most recently used browser windows
-  for (BrowserWindowInterface* browser :
-       GetBrowserWindowInterfacesOrderedByActivation()) {
-    if (GlicEnabling::IsEnabledAndConsentForProfile(browser->GetProfile())) {
-      return browser->GetProfile();
-    }
+  Profile* profile_from_browser_window = nullptr;
+  ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
+      [&](BrowserWindowInterface* browser) {
+        if (GlicEnabling::IsEnabledAndConsentForProfile(
+                browser->GetProfile())) {
+          profile_from_browser_window = browser->GetProfile();
+          return false;  // stop iterating
+        }
+        return true;  // continue iterating
+      });
+  if (profile_from_browser_window != nullptr) {
+    return profile_from_browser_window;
   }
 
   // TODO(https://crbug.com/379166075) Remove loaded profile look up once the
@@ -276,7 +284,7 @@ bool GlicProfileManager::IsShowing() const {
   if (!last_active_glic_) {
     return false;
   }
-  return last_active_glic_->window_controller().IsPanelOrFreShowing();
+  return last_active_glic_->IsWindowOrFreShowing();
 }
 
 void GlicProfileManager::OnProfileMarkedForPermanentDeletion(Profile* profile) {
@@ -313,7 +321,8 @@ bool GlicProfileManager::IsUnderMemoryPressure() const {
   if (g_forced_memory_pressure_level_) {
     memory_pressure = *g_forced_memory_pressure_level_;
   } else if (const auto* memory_monitor = base::MemoryPressureMonitor::Get()) {
-    memory_pressure = memory_monitor->GetCurrentPressureLevel();
+    memory_pressure = memory_monitor->GetCurrentPressureLevel(
+        base::MemoryPressureMonitorTag::kGlicProfileManager);
   }
   return memory_pressure >= base::MemoryPressureMonitor::MemoryPressureLevel::
                                 MEMORY_PRESSURE_LEVEL_MODERATE;

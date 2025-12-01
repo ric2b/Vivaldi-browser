@@ -24,7 +24,6 @@
 <translation id="2087822576218954668">Imprenta: <ph name="PRINT_NAME" /></translation>
 <translation id="2150139952286079145">Sèbera sas destinatziones</translation>
 <translation id="2177950615300672361">Ischeda privada: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Native Client module: <ph name="NEXE_NAME" /></translation>
 <translation id="2249605167705922988">e.g. 1-5, 8, 11-13</translation>
 <translation id="2280486287150724112">Oru de dereta</translation>
 <translation id="2282146716419988068">Protzessu GPU</translation>
@@ -35,7 +34,6 @@
 <translation id="2348176352564285430">Aplicu: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Sèbera sa cartella de estratzione.</translation>
 <translation id="2379281330731083556">Imprenta impreande su programa predefinidu de su sistema... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Plugin chi no si connoschet</translation>
 <translation id="2439110203301358333">B'at aterun'aplicu in su'elaboradore chi at agiuntu un'estensione chi podet mudare su comportamentu de Vivaldi.</translation>
 <translation id="2445081178310039857">Depes nàrrere in-ue cheres estrarre sa cartella istrinta.</translation>
 <translation id="2509495747794740764">Su valore de s'iscala depet èssere unu nùmeru intre 10 e 200.</translation>
@@ -43,7 +41,6 @@
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Torra a àtivare</translation>
 <translation id="2850541429955027218">Agiunghe unu tema</translation>
-<translation id="2861941300086904918">Manigiadore de sa seguresa pro su Client Native</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> no podet comunicare cun cust'imprentadora. Abaida si s'imprentadora est cullegada e torra-bi a provare.</translation>
 <translation id="2932883381142163287">Sinnala</translation>
 <translation id="2941112035454246133">Bassu</translation>
@@ -63,7 +60,6 @@
 <translation id="3360297538363969800">B'at istadu una faddina imprentande. Pro piaghere cuntrolla s'imprentadora tua e prova-bi ateruna borta.</translation>
 <translation id="3378572629723696641">Cust'estensione podet èssere currumpida.</translation>
 <translation id="3560034655160545939">Cuntrollu de sa sillabatzione</translation>
-<translation id="3587482841069643663">Totu</translation>
 <translation id="3678156199662914018">Estensione: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3810973564298564668">Manigia</translation>
 <translation id="3838085852053358637">No soe resurtadu a carrigare s'estensione</translation>
@@ -80,13 +76,13 @@
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4100839878934973028">B'at aterun'aplicu in su'elaboradore chi at agiuntu un'aplicu chi podet mudare su comportamentu de Vivaldi.</translation>
 <translation id="4131410914670010031">Biancu e nieddu</translation>
-<translation id="4176463684765177261">Istudadu</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K live)</translation>
 <translation id="4345587454538109430">Asseta...</translation>
 <translation id="4348766275249686434">Arregolle sas faddinas</translation>
 <translation id="4384652540891215547">Ativa s'estensione</translation>
 <translation id="4409697491990005945">Oros</translation>
 <translation id="4595560905247879544">Sos aplicos e sas estensiones podent èssere mudados dae su manager ebbia  (<ph name="CUSTODIAN_NAME" /> 1).</translation>
+<translation id="4654801841330730814">Totu</translation>
 <translation id="4726710629007580002">B'ant bistados avisos cando as provadu a assetare cust'estensione:</translation>
 <translation id="488785315393301722">Ammustra sos detallios</translation>
 <translation id="4927753642311223124">No b'at nudda de ite bìdere inighe, bae adenanti.</translation>
@@ -104,19 +100,16 @@
 <translation id="5398572795982417028">Su riferimentu de sa pàgina est foras de su limite chi est:<ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5431318178759467895">Colore</translation>
 <translation id="5485102783864353244">Agiunghe s'aplicu</translation>
-<translation id="5521078259930077036">Est custa sa pàgina printzipale chi t'ispetasti?</translation>
 <translation id="5542132724887566711">Contu</translation>
 <translation id="5556459405103347317">Torra-lu a carrigare</translation>
 <translation id="5575473780076478375">Estensione incognita: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5623842676595125836">Log</translation>
 <translation id="5677928146339483299">No dones s'òrdine</translation>
 <translation id="5707185214361380026">B'at istadu una faddina carrigande s'estensione dae:</translation>
-<translation id="5715711091495208045">Plugin Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Ammenta-lu che a PDF</translation>
 <translation id="5759728514498647443">Sos documentos chi nc'as mandadu a imprentare dae <ph name="APP_NAME" /> podent èssere ligidos ebbia dae <ph name="APP_NAME" />.</translation>
 <translation id="5804241973901381774">Ordines</translation>
 <translation id="5828633471261496623">Imprentande...</translation>
-<translation id="583281660410589416">No si connoschet</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> peak)</translation>
 <translation id="5978277834170881274">Imprea su cuntrollu de sa sillabatzione basilare</translation>
 <translation id="6042308850641462728">Ateru</translation>
@@ -131,7 +124,6 @@
 <translation id="6498249116389603658">Totus sas limbas tuas</translation>
 <translation id="6508261954199872201">Aplicu: <ph name="APP_NAME" /></translation>
 <translation id="6550675742724504774">Optziones</translation>
-<translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6840155290835956714">Pregunta-mi primu de imbiare</translation>
 <translation id="6878862640969460273">Panorama</translation>
 <translation id="6900284862687837908">Aplicu in background: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -149,7 +141,6 @@
 <translation id="7453008956351770337">Seberande cust'imprentadora ses dande a cust'estensione s'òrdine de impreare s'imprentadora:</translation>
 <translation id="7576690715254076113">Pone a pare</translation>
 <translation id="7629827748548208700">Ischeda: <ph name="TAB_NAME" /></translation>
-<translation id="7661259717474717992">Permiti a sos giassos web de ammentare e de legere sos datos de sos cookies</translation>
 <translation id="7663719505383602579">Retzidore: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7704305437604973648">Task</translation>
 <translation id="7710568461918838723">&amp;Cast...</translation>

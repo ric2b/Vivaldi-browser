@@ -131,14 +131,15 @@ D3D12_RESOURCE_FLAGS D3D12ResourceFlags(wgpu::TextureUsage usage, const Format& 
 
 D3D12_RESOURCE_DIMENSION D3D12TextureDimension(wgpu::TextureDimension dimension) {
     switch (dimension) {
-        case wgpu::TextureDimension::Undefined:
-            DAWN_UNREACHABLE();
         case wgpu::TextureDimension::e1D:
             return D3D12_RESOURCE_DIMENSION_TEXTURE1D;
         case wgpu::TextureDimension::e2D:
             return D3D12_RESOURCE_DIMENSION_TEXTURE2D;
         case wgpu::TextureDimension::e3D:
             return D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+        case wgpu::TextureDimension::Undefined:
+        default:
+            DAWN_UNREACHABLE();
     }
 }
 
@@ -170,6 +171,7 @@ D3D12_SHADER_COMPONENT_MAPPING D3D12ComponentSwizzle(wgpu::ComponentSwizzle swiz
             return D3D12_SHADER_COMPONENT_MAPPING_FROM_MEMORY_COMPONENT_3;
 
         case wgpu::ComponentSwizzle::Undefined:
+        default:
             DAWN_UNREACHABLE();
     }
 }
@@ -458,7 +460,8 @@ void Texture::TrackUsageAndTransitionNow(CommandRecordingContext* commandContext
 
     TransitionUsageAndGetResourceBarrier(commandContext, &barriers, newState, range);
     if (barriers.size()) {
-        commandContext->GetCommandList()->ResourceBarrier(barriers.size(), barriers.data());
+        commandContext->GetCommandList()->ResourceBarrier(static_cast<uint32_t>(barriers.size()),
+                                                          barriers.data());
     }
 }
 
@@ -930,31 +933,39 @@ TextureView::TextureView(TextureBase* texture, const UnpackedPtr<TextureViewDesc
     mSrvDesc.Format =
         d3d::D3DShaderResourceViewFormat(GetDevice(), textureFormat, GetFormat(), aspects);
     if (mSrvDesc.Format != DXGI_FORMAT_UNKNOWN) {
-        mSrvDesc.Shader4ComponentMapping = D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(
-            D3D12ComponentSwizzle(GetSwizzleRed()), D3D12ComponentSwizzle(GetSwizzleGreen()),
-            D3D12ComponentSwizzle(GetSwizzleBlue()), D3D12ComponentSwizzle(GetSwizzleAlpha()));
+        wgpu::TextureComponentSwizzle swizzle = {
+            .r = GetSwizzleRed(),
+            .g = GetSwizzleGreen(),
+            .b = GetSwizzleBlue(),
+            .a = GetSwizzleAlpha(),
+        };
 
-        // Stencil is accessed using the .g component in the shader. Map it to the zeroth component
-        // to match other APIs.
+        // Stencil is accessed using the .g component in the shader.
         DXGI_FORMAT textureDxgiFormat = d3d::DXGITextureFormat(GetDevice(), textureFormat.format);
         if (d3d::IsDepthStencil(textureDxgiFormat) && aspects == Aspect::Stencil) {
+            wgpu::TextureComponentSwizzle stencilSwizzle;
             if (GetDevice()->IsToggleEnabled(Toggle::D3D12ForceStencilComponentReplicateSwizzle) &&
                 textureDxgiFormat == DXGI_FORMAT_D24_UNORM_S8_UINT) {
-                // Swizzle (ssss)
-                mSrvDesc.Shader4ComponentMapping = D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(
-                    D3D12_SHADER_COMPONENT_MAPPING_FROM_MEMORY_COMPONENT_1,
-                    D3D12_SHADER_COMPONENT_MAPPING_FROM_MEMORY_COMPONENT_1,
-                    D3D12_SHADER_COMPONENT_MAPPING_FROM_MEMORY_COMPONENT_1,
-                    D3D12_SHADER_COMPONENT_MAPPING_FROM_MEMORY_COMPONENT_1);
+                stencilSwizzle = {
+                    .r = wgpu::ComponentSwizzle::G,
+                    .g = wgpu::ComponentSwizzle::G,
+                    .b = wgpu::ComponentSwizzle::G,
+                    .a = wgpu::ComponentSwizzle::G,
+                };
             } else {
-                // Swizzle (s001)
-                mSrvDesc.Shader4ComponentMapping = D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(
-                    D3D12_SHADER_COMPONENT_MAPPING_FROM_MEMORY_COMPONENT_1,
-                    D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_0,
-                    D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_0,
-                    D3D12_SHADER_COMPONENT_MAPPING_FORCE_VALUE_1);
+                stencilSwizzle = {
+                    .r = wgpu::ComponentSwizzle::G,
+                    .g = wgpu::ComponentSwizzle::Zero,
+                    .b = wgpu::ComponentSwizzle::Zero,
+                    .a = wgpu::ComponentSwizzle::One,
+                };
             }
+            swizzle = ComposeSwizzle(stencilSwizzle, swizzle);
         }
+
+        mSrvDesc.Shader4ComponentMapping = D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(
+            D3D12ComponentSwizzle(swizzle.r), D3D12ComponentSwizzle(swizzle.g),
+            D3D12ComponentSwizzle(swizzle.b), D3D12ComponentSwizzle(swizzle.a));
 
         // Currently we always use D3D12_TEX2D_ARRAY_SRV because we cannot specify base array layer
         // and layer count in D3D12_TEX2D_SRV. For 2D texture views, we treat them as 1-layer 2D

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2019 The Chromium Authors.  All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 import argparse
@@ -286,9 +286,13 @@ def main():
         tsconfig['compilerOptions']['emitDeclarationOnly'] = True
     tsconfig['compilerOptions']['outDir'] = '.'
     tsconfig['compilerOptions']['tsBuildInfoFile'] = tsbuildinfo_name
-    tsconfig['compilerOptions']['lib'] = ['esnext'] + (
-        opts.is_web_worker and ['webworker', 'webworker.iterable']
-        or ['dom', 'dom.iterable'])
+    # Restrict supported features to the ones supported by Node 22.
+    tsconfig['compilerOptions']['target'] = 'ES2023'
+    tsconfig['compilerOptions']['lib'] = [
+        'ES2023', 'ES2024.Promise', 'ESNext.Iterator', 'ESNext.Collection',
+        'ESNext.Array'
+    ] + (opts.is_web_worker and ['webworker', 'webworker.iterable']
+         or ['dom', 'dom.iterable'])
 
     if maybe_update_tsconfig_file(tsconfig_output_location, tsconfig) == 1:
         return 1

@@ -102,7 +102,9 @@ class RtcpRttStatsTestImpl : public RtcpRttStats {
   ~RtcpRttStatsTestImpl() override = default;
 
   void OnRttUpdate(int64_t rtt_ms) override { rtt_ms_ = rtt_ms; }
-  int64_t LastProcessedRtt() const override { return rtt_ms_; }
+  int64_t LastProcessedRtt() const { return rtt_ms_; }
+
+ private:
   int64_t rtt_ms_;
 };
 
@@ -362,7 +364,13 @@ class RtpRtcpImpl2Test : public ::testing::Test {
     rtp_video_header.simulcastIdx = 0;
     rtp_video_header.codec = kVideoCodecVP8;
     rtp_video_header.video_type_header = vp8_header;
-    rtp_video_header.video_timing = {0u, 0u, 0u, 0u, 0u, 0u, false};
+    rtp_video_header.video_timing = {.encode_start_delta_ms = 0u,
+                                     .encode_finish_delta_ms = 0u,
+                                     .packetization_finish_delta_ms = 0u,
+                                     .pacer_exit_delta_ms = 0u,
+                                     .network_timestamp_delta_ms = 0u,
+                                     .network2_timestamp_delta_ms = 0u,
+                                     .flags = false};
 
     const uint8_t payload[100] = {0};
     bool success = module->impl_->OnSendingRtpFrame(0, 0, kPayloadType, true);

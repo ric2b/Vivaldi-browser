@@ -210,14 +210,19 @@ void BwgTabHelper::PageLoaded(
   bool floaty_shown = profile->GetPrefs()->GetBoolean(prefs::kIOSBwgConsent);
   bool bwg_promo_shown =
       profile->GetPrefs()->GetInteger(prefs::kIOSBWGPromoImpressionCount) > 0;
-  if (!IsFirstRunRecent(base::Days(1)) && !floaty_shown && !bwg_promo_shown) {
+  bool should_wait_for_new_user =
+      !ShouldSkipBWGPromoNewUserDelay() && IsFirstRunRecent(base::Days(1));
+  if (IsGeminiNavigationPromoEnabled() && !should_wait_for_new_user &&
+      !floaty_shown && !bwg_promo_shown) {
     [bwg_commands_handler_ showBWGPromoIfPageIsEligible];
   }
 }
 
 void BwgTabHelper::WebStateDestroyed(web::WebState* web_state) {
   web_state_observation_.Reset();
-  CleanupSessionFromPrefs(GetClientId());
+  if (!IsGeminiCrossTabEnabled()) {
+    CleanupSessionFromPrefs(GetClientId());
+  }
   web_state_ = nullptr;
 }
 
@@ -301,7 +306,5 @@ void BwgTabHelper::UpdateWebStateSnapshotInStorage() {
 
   if (cached_snapshot_) {
     snapshot_tab_helper->UpdateSnapshotStorageWithImage(cached_snapshot_);
-  } else {
-    snapshot_tab_helper->UpdateSnapshotWithCallback(nil);
   }
 }

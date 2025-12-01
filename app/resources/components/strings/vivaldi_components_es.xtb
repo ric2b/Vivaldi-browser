@@ -3,16 +3,6 @@
 <translationbundle lang="es">
 <translation id="3830627370375585318">Configura tu cortafuegos o antivirus para permitir el acceso de
           Vivaldi a la red.</translation>
-<translation id="4200102020577305737">Ve al
-          menú de Vivaldi &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Configuración de LAN
-          y deselecciona "Usar un servidor proxy para tu LAN".</translation>
 <translation id="4932161901409251843">Ve al
           menú de Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@
           Si esto no resuelve el problema, te recomendamos volver a seleccionar
           esta opción para mejorar el rendimiento.</translation>
 <translation id="7496505986576158197">Vivaldi es posible gracias al proyecto de código abierto <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> y a otros <ph name="BEGIN_LINK_OSS" />programas de código abierto<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Dirígete al
+          menú Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Red &amp; internet &gt; Proxy
+          y desmarca "Detección de proxy automática".</translation>
 </translationbundle>

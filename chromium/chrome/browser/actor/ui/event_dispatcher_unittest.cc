@@ -4,6 +4,7 @@
 
 #include "chrome/browser/actor/ui/event_dispatcher.h"
 
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_future.h"
 #include "base/time/time.h"
 #include "chrome/browser/actor/shared_types.h"
@@ -12,7 +13,7 @@
 #include "chrome/browser/actor/tools/type_tool_request.h"
 #include "chrome/browser/actor/tools/wait_tool_request.h"
 #include "chrome/browser/actor/ui/actor_ui_state_manager_interface.h"
-#include "chrome/browser/actor/ui/mock_actor_ui_state_manager.h"
+#include "chrome/browser/actor/ui/mocks/mock_actor_ui_state_manager.h"
 #include "chrome/browser/actor/ui/ui_event.h"
 #include "chrome/common/actor/action_result.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -30,6 +31,11 @@ using testing::Return;
 using testing::VariantWith;
 using testing::WithArgs;
 
+constexpr std::string_view kModelPageTargetTypeHistogram =
+    "Actor.EventDispatcher.ModelPageTargetType";
+constexpr std::string_view kComputedTargetResultHistogram =
+    "Actor.EventDispatcher.ComputedTargetResult";
+
 class EventDispatcherTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -37,6 +43,7 @@ class EventDispatcherTest : public ::testing::Test {
     dispatcher_ = NewUiEventDispatcher(mock_state_manager_.get());
   }
 
+  base::HistogramTester histograms_;
   std::unique_ptr<MockActorUiStateManager> mock_state_manager_;
   std::unique_ptr<UiEventDispatcher> dispatcher_;
 };
@@ -49,8 +56,15 @@ TEST_F(EventDispatcherTest, NoEventsToDispatch) {
   EXPECT_TRUE(IsOk(*success.Get()));
 }
 
-TEST_F(EventDispatcherTest, SingleUiEvent) {
-  EXPECT_CALL(*mock_state_manager_, OnUiEvent(VariantWith<MouseMove>(_), _))
+TEST_F(EventDispatcherTest, SingleMouseMove_Point) {
+  EXPECT_CALL(
+      *mock_state_manager_,
+      OnUiEvent(
+          VariantWith<MouseMove>(AllOf(
+              Field(&MouseMove::tab_handle, tabs::TabHandle(123)),
+              Field(&MouseMove::target, gfx::Point(100, 200)),
+              Field(&MouseMove::target_source, TargetSource::kToolRequest))),
+          _))
       .Times(1)
       .WillOnce(WithArgs<1>([&](UiCompleteCallback callback) {
         std::move(callback).Run(MakeOkResult());
@@ -60,6 +74,37 @@ TEST_F(EventDispatcherTest, SingleUiEvent) {
   TestFuture<ActionResultPtr> result;
   dispatcher_->OnPreTool(tr, result.GetCallback());
   EXPECT_TRUE(IsOk(*result.Get()));
+  histograms_.ExpectBucketCount(kModelPageTargetTypeHistogram,
+                                ModelPageTargetType::kDomNode, 0);
+  histograms_.ExpectBucketCount(kModelPageTargetTypeHistogram,
+                                ModelPageTargetType::kPoint, 1);
+}
+
+TEST_F(EventDispatcherTest, SingleMouseMove_DomNode) {
+  // TODO(crbug.com/434038099): Update test when DomNode conversion is
+  // implemented.
+  EXPECT_CALL(*mock_state_manager_,
+              OnUiEvent(VariantWith<MouseMove>(AllOf(
+                            Field(&MouseMove::tab_handle, tabs::TabHandle(123)),
+                            Field(&MouseMove::target, std::nullopt),
+                            Field(&MouseMove::target_source,
+                                  TargetSource::kUnresolvableInApc))),
+                        _))
+      .Times(1)
+      .WillOnce(WithArgs<1>([&](UiCompleteCallback callback) {
+        std::move(callback).Run(MakeOkResult());
+      }));
+  MoveMouseToolRequest tr(tabs::TabHandle(123),
+                          PageTarget(DomNode(100, "abcdefg")));
+  TestFuture<ActionResultPtr> result;
+  dispatcher_->OnPreTool(tr, result.GetCallback());
+  EXPECT_TRUE(IsOk(*result.Get()));
+  histograms_.ExpectBucketCount(kModelPageTargetTypeHistogram,
+                                ModelPageTargetType::kDomNode, 1);
+  histograms_.ExpectBucketCount(kModelPageTargetTypeHistogram,
+                                ModelPageTargetType::kPoint, 0);
+  histograms_.ExpectBucketCount(kComputedTargetResultHistogram,
+                                ComputedTargetResult::kMissingActorTabData, 1);
 }
 
 TEST_F(EventDispatcherTest, TwoToolRequests) {
@@ -80,7 +125,14 @@ TEST_F(EventDispatcherTest, TwoToolRequests) {
 }
 
 TEST_F(EventDispatcherTest, TwoUiEvents) {
-  EXPECT_CALL(*mock_state_manager_, OnUiEvent(VariantWith<MouseMove>(_), _))
+  EXPECT_CALL(
+      *mock_state_manager_,
+      OnUiEvent(
+          VariantWith<MouseMove>((AllOf(
+              Field(&MouseMove::tab_handle, tabs::TabHandle(867)),
+              Field(&MouseMove::target, gfx::Point(10, 50)),
+              Field(&MouseMove::target_source, TargetSource::kToolRequest)))),
+          _))
       .WillOnce(WithArgs<1>([&](UiCompleteCallback callback) {
         std::move(callback).Run(MakeOkResult());
       }));
@@ -88,7 +140,7 @@ TEST_F(EventDispatcherTest, TwoUiEvents) {
       .WillOnce(WithArgs<1>([&](UiCompleteCallback callback) {
         std::move(callback).Run(MakeOkResult());
       }));
-  ClickToolRequest tr(tabs::TabHandle(123), PageTarget(gfx::Point(10, 50)),
+  ClickToolRequest tr(tabs::TabHandle(867), PageTarget(gfx::Point(10, 50)),
                       MouseClickType::kLeft, MouseClickCount::kSingle);
   TestFuture<ActionResultPtr> result;
   dispatcher_->OnPreTool(tr, result.GetCallback());
@@ -127,12 +179,12 @@ TEST_F(EventDispatcherTest, SyncActorTaskChange_OneEvent) {
       *mock_state_manager_,
       OnUiEvent(VariantWith<TaskStateChanged>(AllOf(
           Field(&TaskStateChanged::task_id, TaskId(999)),
-          Field(&TaskStateChanged::state, ActorTask::State::kPausedByClient)))))
+          Field(&TaskStateChanged::state, ActorTask::State::kPausedByActor)))))
       .Times(1);
   dispatcher_->OnActorTaskSyncChange(UiEventDispatcher::ChangeTaskState{
       .task_id = TaskId(999),
       .old_state = ActorTask::State::kActing,
-      .new_state = ActorTask::State::kPausedByClient});
+      .new_state = ActorTask::State::kPausedByActor});
 }
 
 TEST_F(EventDispatcherTest, SyncActorTaskChange_NewTask) {

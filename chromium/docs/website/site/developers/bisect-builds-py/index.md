@@ -159,4 +159,3 @@ GOOGLE_DEFAULT_CLIENT_SECRET=&lt;secret&gt;
 
 See <https://www.chromium.org/developers/how-tos/api-keys> for more info about
 API keys.
-

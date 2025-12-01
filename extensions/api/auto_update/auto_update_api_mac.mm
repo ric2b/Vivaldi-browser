@@ -5,9 +5,26 @@
 #import <Foundation/Foundation.h>
 #include "app/vivaldi_constants.h"
 #include "base/apple/foundation_util.h"
+#include "base/mac/mac_util.h"
 #import "chrome/browser/app_controller_mac.h"
 
 namespace extensions {
+
+// new about page api
+ExtensionFunction::ResponseAction AutoUpdateStartUpdateFunction::Run() {
+  std::optional<vivaldi::auto_update::StartUpdate::Params> params(
+      vivaldi::auto_update::StartUpdate::Params::Create(args()));
+
+  AppController* controller =
+    base::apple::ObjCCastStrict<AppController>([NSApp delegate]);
+  if (params->should_start_update) {
+    [controller checkForUpdatesInBackground];
+  } else {
+    [controller checkForUpdatesInformation];
+  }
+
+  return RespondNow(NoArguments());
+}
 
 ExtensionFunction::ResponseAction AutoUpdateCheckForUpdatesFunction::Run() {
   using vivaldi::auto_update::CheckForUpdates::Params;
@@ -115,6 +132,11 @@ ExtensionFunction::ResponseAction AutoUpdateNeedsCodecRestartFunction::Run() {
 
 ExtensionFunction::ResponseAction AutoUpdateRunStartupChecksFunction::Run() {
   return RespondNow(NoArguments());
+}
+
+
+std::string AutoUpdateGetAboutPathsInfoFunction::GetPlatformOSVersion() {
+  return base::mac::GetOSDisplayName();
 }
 
 }  // namespace extensions

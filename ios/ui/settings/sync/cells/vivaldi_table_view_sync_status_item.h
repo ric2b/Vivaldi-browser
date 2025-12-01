@@ -5,7 +5,6 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
 
 @interface VivaldiTableViewSyncStatusItem : TableViewItem
@@ -16,7 +15,7 @@
 @property(nonatomic) UIColor* statusBackgroundColor;
 @end
 
-@interface VivaldiTableViewSyncStatusCell : TableViewCell
+@interface VivaldiTableViewSyncStatusCell : LegacyTableViewCell
 
 // Label displaying the last sync data
 @property(nonatomic, readonly, strong) UILabel* lastSyncDateLabel;

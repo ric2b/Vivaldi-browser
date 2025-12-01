@@ -141,19 +141,12 @@ class SyncChannel::ReceivedSyncMsgQueue :
           it = message_queue_.begin();
           first_time = false;
         }
-        for (; it != message_queue_.end(); it++) {
-          int message_group = it->context->restrict_dispatch_group();
-          if (message_group == kRestrictDispatchGroup_None ||
-              (dispatching_context &&
-               message_group ==
-                   dispatching_context->restrict_dispatch_group())) {
-            message = std::move(it->message);
-            context = std::move(it->context);
-            it = message_queue_.erase(it);
-            message_queue_version_++;
-            expected_version = message_queue_version_;
-            break;
-          }
+        if (it != message_queue_.end()) {
+          message = std::move(it->message);
+          context = std::move(it->context);
+          it = message_queue_.erase(it);
+          message_queue_version_++;
+          expected_version = message_queue_version_;
         }
       }
       if (!message) {
@@ -275,8 +268,7 @@ SyncChannel::SyncContext::SyncContext(
     WaitableEvent* shutdown_event)
     : ChannelProxy::Context(listener, ipc_task_runner, listener_task_runner),
       received_sync_msgs_(ReceivedSyncMsgQueue::AddContext()),
-      shutdown_event_(shutdown_event),
-      restrict_dispatch_group_(kRestrictDispatchGroup_None) {}
+      shutdown_event_(shutdown_event) {}
 
 void SyncChannel::SyncContext::OnSendDoneEventSignaled(
     base::RunLoop* nested_loop,
@@ -447,7 +439,7 @@ void SyncChannel::SyncContext::OnShutdownEventSignaled(WaitableEvent* event) {
 
 // static
 std::unique_ptr<SyncChannel> SyncChannel::Create(
-    const IPC::ChannelHandle& channel_handle,
+    const mojo::MessagePipeHandle& channel_handle,
     Channel::Mode mode,
     Listener* listener,
     const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
@@ -492,21 +484,7 @@ SyncChannel::SyncChannel(
   StartWatching();
 }
 
-void SyncChannel::AddListenerTaskRunner(
-    int32_t routing_id,
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  context()->AddListenerTaskRunner(routing_id, std::move(task_runner));
-}
-
-void SyncChannel::RemoveListenerTaskRunner(int32_t routing_id) {
-  context()->RemoveListenerTaskRunner(routing_id);
-}
-
 SyncChannel::~SyncChannel() = default;
-
-void SyncChannel::SetRestrictDispatchChannelGroup(int group) {
-  sync_context()->set_restrict_dispatch_group(group);
-}
 
 bool SyncChannel::Send(Message* message) {
   TRACE_IPC_MESSAGE_SEND("ipc", "SyncChannel::Send", message);
@@ -589,7 +567,5 @@ void SyncChannel::StartWatching() {
                      base::Unretained(this)),
       sync_context()->listener_task_runner());
 }
-
-void SyncChannel::OnChannelInit() {}
 
 }  // namespace IPC

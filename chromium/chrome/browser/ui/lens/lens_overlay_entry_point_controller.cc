@@ -14,15 +14,18 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser_actions.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/lens/lens_overlay_controller.h"
+#include "chrome/browser/ui/lens/lens_overlay_side_panel_coordinator.h"
 #include "chrome/browser/ui/lens/lens_search_controller.h"
 #include "chrome/browser/ui/lens/lens_url_matcher.h"
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/user_education/browser_user_education_interface.h"
 #include "chrome/browser/ui/views/page_action/page_action_controller.h"
 #include "chrome/browser/ui/views/page_action/page_action_triggers.h"
 #include "chrome/browser/ui/views/toolbar/pinned_toolbar_actions_container.h"
@@ -156,7 +159,7 @@ bool LensOverlayEntryPointController::IsEnabled() const {
   }
 
   // Finally, only enable the overlay if user meets our minimum RAM requirement.
-  static int phys_mem_mb = base::SysInfo::AmountOfPhysicalMemoryMB();
+  static int phys_mem_mb = base::SysInfo::AmountOfPhysicalMemory().InMiB();
   return phys_mem_mb > lens::features::GetLensOverlayMinRamMb();
 }
 
@@ -205,8 +208,6 @@ void LensOverlayEntryPointController::InvokeAction(
     const actions::ActionInvocationContext& context) {
   LensSearchController* search_controller =
       LensSearchController::From(active_tab);
-  LensOverlayController* overlay_controller =
-      active_tab->GetTabFeatures()->lens_overlay_controller();
 
   std::underlying_type_t<page_actions::PageActionTrigger> page_action_trigger =
       context.GetProperty(page_actions::kPageActionTriggerKey);
@@ -239,7 +240,11 @@ void LensOverlayEntryPointController::InvokeAction(
 
   // Toggle the Lens overlay. There's no need to show or hide the side
   // panel as the overlay controller will handle that.
-  if (overlay_controller->IsOverlayActive()) {
+  const auto* entry_point_controller =
+      active_tab->GetBrowserWindowInterface()
+          ->GetFeatures()
+          .lens_overlay_entry_point_controller();
+  if (entry_point_controller->IsOverlayActive()) {
     search_controller->CloseLensAsync(
         lens::LensOverlayDismissalSource::kToolbar);
   } else {
@@ -338,12 +343,22 @@ void LensOverlayEntryPointController::UpdatePageActionState() {
 }
 
 bool LensOverlayEntryPointController::IsOverlayActive() const {
-  const auto* active_tab = browser_window_interface_->GetActiveTabInterface();
+  // TODO(crbug.com/404941800): Rename this function to make it clear that it
+  // checks both the overlay and the side panel being active.
+  auto* active_tab = browser_window_interface_->GetActiveTabInterface();
   if (!active_tab) {
     return false;
   }
-  const auto* controller =
-      active_tab->GetTabFeatures()->lens_overlay_controller();
+
+  LensSearchController* search_controller =
+      LensSearchController::From(active_tab);
+  LensOverlaySidePanelCoordinator* side_panel_coordinator =
+      search_controller->lens_overlay_side_panel_coordinator();
+  if (side_panel_coordinator && side_panel_coordinator->IsEntryShowing()) {
+    return true;
+  }
+
+  const auto* controller = search_controller->lens_overlay_controller();
   return controller && controller->IsOverlayActive();
 }
 

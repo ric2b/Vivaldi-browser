@@ -1,4 +1,4 @@
-# Copyright 2024 The Chromium Authors. All rights reserved.
+# Copyright 2024 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -6,8 +6,12 @@ import("../../../scripts/build/typescript/typescript.gni")
 
 ts_e2e_library("sources") {
   sources = [
+    "authored-deployed-grouping_test.ts",
     "breakpoint-csp-violations_test.ts",
+    "breakpoint-javascript_test.ts",
     "breakpoints-sidebarpane_test.ts",
+    "can-break-with-wasm-sourcemaps_test.ts",
+    "can-disable-auto-sources-focus_test.ts",
     "can-handle-special-characters_test.ts",
     "can-open-linear-memory-inspector_test.ts",
     "can-pretty-print-sourcecode_test.ts",
@@ -17,6 +21,7 @@ ts_e2e_library("sources") {
     "debug-raw-wasm_test.ts",
     "debugger-sidebar_test.ts",
     "eval_test.ts",
+    "header-overrides_test.ts",
     "icon-row-bucket_test.ts",
     "ignore-list_test.ts",
     "inline-breakpoint_test.ts",
@@ -25,6 +30,7 @@ ts_e2e_library("sources") {
     "link-to-correct-source-line_test.ts",
     "live-edit-moving-breakpoint_test.ts",
     "navigator-view_test.ts",
+    "overrides_test.ts",
     "pause-button_test.ts",
     "popover_test.ts",
     "restart-frame_test.ts",
@@ -35,7 +41,9 @@ ts_e2e_library("sources") {
     "sourcemap_test.ts",
     "sources-list_test.ts",
     "sourceurl_test.ts",
+    "syntax-highlighting_test.ts",
     "text-editor_test.ts",
+    "watch-expressions_test.ts",
     "worker-relative-sourcemap_test.ts",
   ]
 

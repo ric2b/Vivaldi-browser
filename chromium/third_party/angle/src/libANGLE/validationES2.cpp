@@ -6,6 +6,10 @@
 
 // validationES2.cpp: Validation functions for OpenGL ES 2.0 entry point parameters
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "libANGLE/validationES2_autogen.h"
 
 #include <cstdint>
@@ -78,6 +82,8 @@ bool IsPartialBlit(const Context *context,
 bool IsValidCopyTextureSourceInternalFormatEnum(GLenum internalFormat)
 {
     // Table 1.1 from the CHROMIUM_copy_texture spec
+    // No extension checks for the source formats because the texture has already been created and
+    // passed validation.
     switch (GetUnsizedFormat(internalFormat))
     {
         case GL_RED:
@@ -91,6 +97,14 @@ bool IsValidCopyTextureSourceInternalFormatEnum(GLenum internalFormat)
         case GL_BGRA_EXT:
         case GL_BGRA8_EXT:
         case GL_SRGB_ALPHA_EXT:
+        case GL_G8_B8R8_2PLANE_420_UNORM_ANGLE:
+        case GL_G8_B8_R8_3PLANE_420_UNORM_ANGLE:
+        case GL_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16_ANGLE:
+        case GL_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16_ANGLE:
+        case GL_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16_ANGLE:
+        case GL_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16_ANGLE:
+        case GL_G16_B16R16_2PLANE_420_UNORM_ANGLE:
+        case GL_G16_B16_R16_3PLANE_420_UNORM_ANGLE:
             return true;
 
         default:
@@ -1932,18 +1946,20 @@ bool ValidateDeleteVertexArraysOES(const Context *context,
                                    GLsizei n,
                                    const VertexArrayID *arrays)
 {
-    return ValidateGenOrDelete(context, entryPoint, n, arrays);
+    return ValidateGenOrDelete(context->getMutableErrorSetForValidation(), entryPoint, n, arrays);
 }
 
-bool ValidateGenVertexArraysOES(const Context *context,
+bool ValidateGenVertexArraysOES(const PrivateState &state,
+                                ErrorSet *errors,
                                 angle::EntryPoint entryPoint,
                                 GLsizei n,
                                 const VertexArrayID *arrays)
 {
-    return ValidateGenOrDelete(context, entryPoint, n, arrays);
+    return ValidateGenOrDelete(errors, entryPoint, n, arrays);
 }
 
-bool ValidateIsVertexArrayOES(const Context *context,
+bool ValidateIsVertexArrayOES(const PrivateState &state,
+                              ErrorSet *errors,
                               angle::EntryPoint entryPoint,
                               VertexArrayID array)
 {
@@ -2290,7 +2306,7 @@ static bool ValidateObjectIdentifierAndName(const Context *context,
             return true;
 
         case GL_VERTEX_ARRAY:
-            if (context->getVertexArray({name}) == nullptr)
+            if (context->getPrivateState().getVertexArray({name}) == nullptr)
             {
                 ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kInvalidVertexArrayName);
                 return false;
@@ -5296,7 +5312,7 @@ bool ValidateDeleteBuffers(const Context *context,
                            GLint n,
                            const BufferID *buffers)
 {
-    return ValidateGenOrDelete(context, entryPoint, n, buffers);
+    return ValidateGenOrDelete(context->getMutableErrorSetForValidation(), entryPoint, n, buffers);
 }
 
 bool ValidateDeleteFramebuffers(const Context *context,
@@ -5304,7 +5320,8 @@ bool ValidateDeleteFramebuffers(const Context *context,
                                 GLint n,
                                 const FramebufferID *framebuffers)
 {
-    return ValidateGenOrDelete(context, entryPoint, n, framebuffers);
+    return ValidateGenOrDelete(context->getMutableErrorSetForValidation(), entryPoint, n,
+                               framebuffers);
 }
 
 bool ValidateDeleteRenderbuffers(const Context *context,
@@ -5312,7 +5329,8 @@ bool ValidateDeleteRenderbuffers(const Context *context,
                                  GLint n,
                                  const RenderbufferID *renderbuffers)
 {
-    return ValidateGenOrDelete(context, entryPoint, n, renderbuffers);
+    return ValidateGenOrDelete(context->getMutableErrorSetForValidation(), entryPoint, n,
+                               renderbuffers);
 }
 
 bool ValidateDeleteTextures(const Context *context,
@@ -5320,7 +5338,7 @@ bool ValidateDeleteTextures(const Context *context,
                             GLint n,
                             const TextureID *textures)
 {
-    return ValidateGenOrDelete(context, entryPoint, n, textures);
+    return ValidateGenOrDelete(context->getMutableErrorSetForValidation(), entryPoint, n, textures);
 }
 
 bool ValidateDisable(const PrivateState &state,
@@ -5837,22 +5855,24 @@ bool ValidateTexStorage2DEXT(const Context *context,
                                              width, height, 1);
 }
 
-bool ValidateVertexAttribDivisorANGLE(const Context *context,
+bool ValidateVertexAttribDivisorANGLE(const PrivateState &privateState,
+                                      ErrorSet *errors,
                                       angle::EntryPoint entryPoint,
                                       GLuint index,
                                       GLuint divisor)
 {
-    if (index >= static_cast<GLuint>(context->getCaps().maxVertexAttributes))
+    if (index >= static_cast<GLuint>(privateState.getCaps().maxVertexAttributes))
     {
-        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kIndexExceedsMaxVertexAttribute);
+        errors->validationError(entryPoint, GL_INVALID_VALUE, kIndexExceedsMaxVertexAttribute);
         return false;
     }
 
-    if (context->getLimitations().attributeZeroRequiresZeroDivisorInEXT)
+    if (privateState.getLimitations().attributeZeroRequiresZeroDivisorInEXT)
     {
         if (index == 0 && divisor != 0)
         {
-            ANGLE_VALIDATION_ERROR(GL_INVALID_OPERATION, kAttributeZeroRequiresDivisorLimitation);
+            errors->validationError(entryPoint, GL_INVALID_OPERATION,
+                                    kAttributeZeroRequiresDivisorLimitation);
 
             // We also output an error message to the debugger window if tracing is active, so
             // that developers can see the error message.
@@ -5864,14 +5884,15 @@ bool ValidateVertexAttribDivisorANGLE(const Context *context,
     return true;
 }
 
-bool ValidateVertexAttribDivisorEXT(const Context *context,
+bool ValidateVertexAttribDivisorEXT(const PrivateState &privateState,
+                                    ErrorSet *errors,
                                     angle::EntryPoint entryPoint,
                                     GLuint index,
                                     GLuint divisor)
 {
-    if (index >= static_cast<GLuint>(context->getCaps().maxVertexAttributes))
+    if (index >= static_cast<GLuint>(privateState.getCaps().maxVertexAttributes))
     {
-        ANGLE_VALIDATION_ERROR(GL_INVALID_VALUE, kIndexExceedsMaxVertexAttribute);
+        errors->validationError(entryPoint, GL_INVALID_VALUE, kIndexExceedsMaxVertexAttribute);
         return false;
     }
 

@@ -62,6 +62,8 @@ import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.Manual;
 import org.chromium.base.test.util.RequiresRestart;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.blink_public.common.ContextMenuDataMediaFlags;
+import org.chromium.blink_public.common.ContextMenuDataMediaType;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.download.DownloadTestRule;
 import org.chromium.chrome.browser.download.DownloadTestRule.CustomMainActivityStart;
@@ -149,6 +151,13 @@ public class ContextMenuTest {
 
     private static final String TEST_PATH =
             "/chrome/test/data/android/contextmenu/context_menu_test.html";
+    // LINT.IfChange(PageScaleFactor)
+    // The initial-scale defined in the test html file meta. The setUp function
+    // will check that the page scale factor has been updated to this value.
+    // This ensures the long press/ right click is simulated at the correct
+    // coordinates of the specified element. See crbug.com/432281754.
+    private static final float PAGE_SCALE_FACTOR = 1.0f;
+    // LINT.ThenChange(//chrome/test/data/android/contextmenu/context_menu_test.html:PageScaleFactor)
 
     private EmbeddedTestServer mTestServer;
     private String mTestUrl;
@@ -221,6 +230,8 @@ public class ContextMenuTest {
         sDownloadTestRule.loadUrl(mTestUrl);
         Tab tab = sDownloadTestRule.getActivityTab();
         CriteriaHelper.pollUiThread(() -> tab.isUserInteractable() && !tab.isLoading());
+        sDownloadTestRule.assertWaitForPageScaleFactorMatch(PAGE_SCALE_FACTOR);
+
         setupLensChipDelegate();
         DownloadUtils.setIsDownloadRestrictedByPolicyForTesting(false);
         DataProtectionBridgeJni.setInstanceForTesting(mDataProtectionBridgeMock);
@@ -316,6 +327,9 @@ public class ContextMenuTest {
     @Feature({"Browser"})
     @RequiresRestart
     public void testLongPressOnImage() throws TimeoutException {
+        doAnswer(sCopyIsAllowedByPolicy)
+                .when(mDataProtectionBridgeMock)
+                .verifyGenericCopyImageActionIsAllowedByPolicy(anyString(), any(), any());
         checkOpenImageInNewTab("testImage", "/chrome/test/data/android/contextmenu/test_image.png");
     }
 
@@ -394,6 +408,9 @@ public class ContextMenuTest {
     @MediumTest
     @Feature({"Browser"})
     public void testLongPressOnImageLink() throws TimeoutException {
+        doAnswer(sCopyIsAllowedByPolicy)
+                .when(mDataProtectionBridgeMock)
+                .verifyGenericCopyImageActionIsAllowedByPolicy(anyString(), any(), any());
         checkOpenImageInNewTab(
                 "testImageLink", "/chrome/test/data/android/contextmenu/test_image.png");
     }
@@ -665,6 +682,9 @@ public class ContextMenuTest {
     @Test
     @MediumTest
     public void testCopyEmailAddress() throws Throwable {
+        doAnswer(sCopyIsAllowedByPolicy)
+                .when(mDataProtectionBridgeMock)
+                .verifyCopyTextIsAllowedByPolicy(anyString(), any(), any());
         Tab tab = sDownloadTestRule.getActivityTab();
         // Allow all thread policies temporarily in main thread to avoid
         // DiskWrite and UnBufferedIo violations during copying under
@@ -688,6 +708,9 @@ public class ContextMenuTest {
     @Test
     @MediumTest
     public void testCopyTelNumber() throws Throwable {
+        doAnswer(sCopyIsAllowedByPolicy)
+                .when(mDataProtectionBridgeMock)
+                .verifyCopyTextIsAllowedByPolicy(anyString(), any(), any());
         Tab tab = sDownloadTestRule.getActivityTab();
         // Allow DiskWrites temporarily in main thread to avoid
         // violation during copying under emulator environment.
@@ -705,7 +728,7 @@ public class ContextMenuTest {
 
     @Test
     @LargeTest
-    @Restriction(DeviceFormFactor.ONLY_TABLET)
+    @Restriction(DeviceFormFactor.TABLET_OR_DESKTOP)
     @EnableFeatures({ChromeFeatureList.CONTEXT_MENU_EMPTY_SPACE})
     @DisableFeatures({UiAndroidFeatures.ANDROID_WINDOW_OCCLUSION})
     public void testSavePageLongPress() throws TimeoutException {
@@ -782,7 +805,7 @@ public class ContextMenuTest {
         Assert.assertEquals(downloadCount, newCount);
 
         // The context menu should still show.
-        Assert.assertTrue(mMenuCoordinator.getDialogForTest().isShowing());
+        Assert.assertTrue(mMenuCoordinator.getDialogsForTest().get(0).popupWindow.isShowing());
     }
 
     /**
@@ -852,21 +875,21 @@ public class ContextMenuTest {
         // Verify that the background tabs were opened in the expected order.
         String newTabUrl =
                 mTestServer.getURL("/chrome/test/data/android/contextmenu/test_link.html");
-        Assert.assertEquals(
-                newTabUrl,
-                ChromeTabUtils.getUrlStringOnUiThread(tabModel.getTabAt(indexOfLinkPage)));
+        Tab tab1 = ThreadUtils.runOnUiThreadBlocking(() -> tabModel.getTabAt(indexOfLinkPage));
+        Assert.assertEquals(newTabUrl, ChromeTabUtils.getUrlStringOnUiThread(tab1));
 
         String imageUrl =
                 mTestServer.getURL("/chrome/test/data/android/contextmenu/test_link2.html");
-        Assert.assertEquals(
-                imageUrl,
-                ChromeTabUtils.getUrlStringOnUiThread(tabModel.getTabAt(indexOfLinkPage2)));
+        Tab tab2 = ThreadUtils.runOnUiThreadBlocking(() -> tabModel.getTabAt(indexOfLinkPage2));
+        Assert.assertEquals(imageUrl, ChromeTabUtils.getUrlStringOnUiThread(tab2));
     }
 
     @Test
     @SmallTest
     @DisableIf.Device(DeviceFormFactor.ONLY_TABLET) // https://crbug.com/338969612
     @Feature({"Browser", "ContextMenu"})
+    // TODO(crbug.com/439491767): Fix broken tests caused by desktop-like incognito window.
+    @DisableFeatures(ChromeFeatureList.ANDROID_OPEN_INCOGNITO_AS_WINDOW)
     public void testContextMenuRetrievesLinkOptions() throws TimeoutException {
         Tab tab = sDownloadTestRule.getActivityTab();
         mMenuCoordinator = ContextMenuUtils.openContextMenu(tab, "testLink");
@@ -961,6 +984,8 @@ public class ContextMenuTest {
     @SmallTest
     @DisableIf.Device(DeviceFormFactor.ONLY_TABLET) // https://crbug.com/338969612
     @Feature({"Browser", "ContextMenu"})
+    // TODO(crbug.com/439491767): Fix broken tests caused by desktop-like incognito window.
+    @DisableFeatures(ChromeFeatureList.ANDROID_OPEN_INCOGNITO_AS_WINDOW)
     public void testContextMenuRetrievesImageLinkOptions() throws TimeoutException {
         LensUtils.setFakePassableLensEnvironmentForTesting(true);
 
@@ -993,8 +1018,7 @@ public class ContextMenuTest {
     @Feature({"Browser", "ContextMenu"})
     public void testContextMenuRetrievesVideoOptions() throws TimeoutException {
         Tab tab = sDownloadTestRule.getActivityTab();
-        DOMUtils.clickNode(
-                sDownloadTestRule.getActivity().getCurrentWebContents(), "videoDOMElement");
+        DOMUtils.clickNode(sDownloadTestRule.getWebContents(), "videoDOMElement");
         mMenuCoordinator = ContextMenuUtils.openContextMenu(tab, "videoDOMElement");
 
         Integer[] expectedItems = {R.id.contextmenu_save_video};
@@ -1123,7 +1147,8 @@ public class ContextMenuTest {
                 new ContextMenuParams(
                         0,
                         mMenuModelBridge,
-                        0,
+                        ContextMenuDataMediaType.NONE,
+                        ContextMenuDataMediaFlags.MEDIA_NONE,
                         new GURL("http://example.com/"),
                         GURL.emptyGURL(),
                         "",
@@ -1259,7 +1284,7 @@ public class ContextMenuTest {
 
     @Test
     @SmallTest
-    @Restriction(DeviceFormFactor.ONLY_TABLET)
+    @Restriction(DeviceFormFactor.TABLET_OR_DESKTOP)
     @EnableFeatures({ChromeFeatureList.CONTEXT_MENU_EMPTY_SPACE})
     @DisableFeatures({UiAndroidFeatures.ANDROID_WINDOW_OCCLUSION})
     public void testSharePageLongPress() throws Exception {
@@ -1353,7 +1378,7 @@ public class ContextMenuTest {
 
     @Test
     @MediumTest
-    @Restriction(DeviceFormFactor.ONLY_TABLET)
+    @Restriction(DeviceFormFactor.TABLET_OR_DESKTOP)
     @EnableFeatures({ChromeFeatureList.CONTEXT_MENU_EMPTY_SPACE})
     @DisableFeatures({UiAndroidFeatures.ANDROID_WINDOW_OCCLUSION})
     public void testPrintPageLongPress() throws Exception {

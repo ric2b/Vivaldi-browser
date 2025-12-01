@@ -19,8 +19,15 @@ use std::env;
 use std::path::Path;
 use std::path::PathBuf;
 
-fn main() {
+fn main() -> Result<(), String> {
     println!("cargo:rerun-if-changed=build.rs");
+    // Note that https://doc.rust-lang.org/cargo/reference/features.html#build-scripts
+    // recommends using option_env!("CARGO_FEATURE_LIBSHARPYUV").is_some() instead of
+    // !cfg!(feature = "libsharpyuv") but the former did not work and the latter does.
+    if !cfg!(feature = "libsharpyuv") {
+        // The feature is disabled at the top level. Do not build this dependency.
+        return Ok(());
+    }
 
     let build_target = std::env::var("TARGET").unwrap();
     let build_dir = if build_target.contains("android") {
@@ -47,12 +54,31 @@ fn main() {
     } else {
         "libsharpyuv.a"
     });
-    let extra_includes_str = if Path::new(&library_file).exists() {
+    let mut include_paths: Vec<String> = Vec::new();
+    if Path::new(&library_file).exists() {
         println!("cargo:rustc-link-lib=static=sharpyuv");
         println!("cargo:rustc-link-search={}", abs_object_dir.display());
-        format!("-I{}", abs_library_dir.display())
+        include_paths.push(format!("-I{}", abs_library_dir.display()));
     } else {
-        panic!("libsharpyuv was not found. please run libsharpyuv.cmd");
+        match pkg_config::Config::new().probe("libsharpyuv") {
+            Ok(library) => {
+                for lib in &library.libs {
+                    println!("cargo:rustc-link-lib={lib}");
+                }
+                for link_path in &library.link_paths {
+                    println!("cargo:rustc-link-search={}", link_path.display());
+                }
+                for include_path in &library.include_paths {
+                    include_paths.push(format!("-I{}", include_path.display()));
+                }
+            }
+            Err(_) => {
+                return Err(
+                    "libsharpyuv binaries could not be found locally or with pkg-config. \
+                    Disable the libsharpyuv feature, install the libwebp-dev or libsharpyuv-dev system library, \
+                    or build the dependency locally by running libsharpyuv.cmd from sys/libsharpyuv-sys.".into());
+            }
+        }
     };
 
     // Generate bindings.
@@ -61,14 +87,13 @@ fn main() {
     let outfile = PathBuf::from(&outdir).join("libsharpyuv_bindgen.rs");
     let bindings = bindgen::Builder::default()
         .header(header_file.into_os_string().into_string().unwrap())
-        .clang_arg(extra_includes_str)
+        .clang_args(&include_paths)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .layout_tests(false)
         .generate_comments(false);
-    let bindings = bindings
-        .generate()
-        .unwrap_or_else(|_| panic!("Unable to generate bindings for libsharpyuv."));
+    let bindings = bindings.generate().map_err(|err| err.to_string())?;
     bindings
         .write_to_file(outfile.as_path())
-        .unwrap_or_else(|_| panic!("Couldn't write bindings for libsharpyuv"));
+        .map_err(|err| err.to_string())?;
+    Ok(())
 }

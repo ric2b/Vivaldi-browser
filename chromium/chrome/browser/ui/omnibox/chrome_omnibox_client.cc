@@ -115,6 +115,7 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_service.h"
 #include "chrome/browser/ui/extensions/settings_api_bubble_helpers.h"
 #endif
 
@@ -558,11 +559,11 @@ void ChromeOmniboxClient::OnResultChanged(
           base::BindOnce(on_bitmap_fetched, result_index, match.icon_url)));
     } else {
       const TemplateURL* turl = nullptr;
-      if (match.associated_keyword) {
-        turl = match.associated_keyword->GetTemplateURL(GetTemplateURLService(),
-                                                        false);
+      if (!match.associated_keyword.empty()) {
+        turl = AutocompleteMatch::GetTemplateURLWithKeyword(
+            GetTemplateURLService(), match.associated_keyword, "");
       } else if (!match.keyword.empty()) {
-        turl = match.GetTemplateURL(GetTemplateURLService(), false);
+        turl = match.GetTemplateURL(GetTemplateURLService());
       }
       // Fetch the favicon if the `TemplateURL` is from the enterprise search
       // aggregator policy. This covers both cases:
@@ -793,6 +794,13 @@ void ChromeOmniboxClient::OnAutocompleteAccept(
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::MaybeShowExtensionControlledSearchNotification(
       location_bar_->GetWebContents(), match_type);
+
+  if (AutocompleteMatch::IsSearchType(match_type)) {
+    if (auto* telemetry_service =
+            safe_browsing::ExtensionTelemetryService::Get(profile_)) {
+      telemetry_service->OnOmniboxSearch(match);
+    }
+  }
 #endif
 }
 

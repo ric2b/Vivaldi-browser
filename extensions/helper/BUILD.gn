@@ -17,6 +17,7 @@ static_library("helper") {
     "//chrome/browser/ui/webui/tab_search:mojo_bindings",
     "//components/paint_preview/buildflags",
     "//components/translate/content/common",
+    "//extensions/common:mojom",
     "//vivaldi/components:panel",
     "//vivaldi/extensions/schema",
   ]

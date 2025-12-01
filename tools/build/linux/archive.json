@@ -16,7 +16,9 @@
     "versioned": true
   },
   "dump_syms": {},
+  "minidump-2-core": {},
   "minidump_stackwalk": {},
+  "minidump_dump": {},
   "background-bundle.js.map": { "versioned": true },
   "bundle.js.map": { "versioned": true },
   "inject-root-bundle.js.map": { "versioned": true },

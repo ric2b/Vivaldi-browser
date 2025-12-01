@@ -15,6 +15,7 @@
 #include "chrome/common/buildflags.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/browser_resources.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/constants.h"
 #include "printing/buildflags/buildflags.h"
 
@@ -26,6 +27,8 @@
 #endif
 
 #include "app/vivaldi_resources.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace extensions {
 

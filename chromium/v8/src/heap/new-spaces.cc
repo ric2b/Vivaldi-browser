@@ -66,6 +66,15 @@ SemiSpace::~SemiSpace() {
   }
 }
 
+bool SemiSpace::ContainsSlow(Address address) const {
+  for (const PageMetadata* page : *this) {
+    if (page == MemoryChunkMetadata::FromAddress(heap()->isolate(), address)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void SemiSpace::ShrinkCapacityTo(size_t capacity) {
   DCHECK_IMPLIES(!IsCommitted(), CommittedMemory() == 0);
   // Only the to-space is allowed to have quarantined pages.
@@ -307,25 +316,21 @@ void SemiSpace::VerifyPageMetadata() const {
     const MemoryChunk* chunk = page->Chunk();
     CHECK_EQ(page->owner(), this);
     CHECK(chunk->InNewSpace());
-    CHECK(chunk->IsFlagSet(is_from_space ? MemoryChunk::FROM_PAGE
-                                         : MemoryChunk::TO_PAGE));
-    CHECK(!chunk->IsFlagSet(is_from_space ? MemoryChunk::TO_PAGE
-                                          : MemoryChunk::FROM_PAGE));
-    CHECK(chunk->IsFlagSet(MemoryChunk::POINTERS_TO_HERE_ARE_INTERESTING));
+    CHECK_IMPLIES(is_from_space, chunk->IsFromPage());
+    CHECK_IMPLIES(!is_from_space, chunk->IsToPage());
+    CHECK(chunk->PointersToHereAreInteresting());
     CHECK(!page->is_quarantined());
     if (!is_from_space) {
       // The pointers-from-here-are-interesting flag isn't updated dynamically
       // on from-space pages, so it might be out of sync with the marking state.
       if (page->heap()->incremental_marking()->IsMarking()) {
         CHECK(page->heap()->incremental_marking()->IsMajorMarking());
-        CHECK(
-            chunk->IsFlagSet(MemoryChunk::POINTERS_FROM_HERE_ARE_INTERESTING));
+        CHECK(chunk->PointersFromHereAreInteresting());
       } else {
-        CHECK(
-            !chunk->IsFlagSet(MemoryChunk::POINTERS_FROM_HERE_ARE_INTERESTING));
+        CHECK(!chunk->PointersFromHereAreInteresting());
       }
       CHECK_IMPLIES(actual_pages < quarantined_pages_count_,
-                    chunk->IsFlagSet(MemoryChunk::NEW_SPACE_BELOW_AGE_MARK));
+                    chunk->InNewSpaceBelowAgeMark());
     }
     ForAll<ExternalBackingStoreType>(
         [&external_backing_store_bytes, page](ExternalBackingStoreType type,
@@ -654,7 +659,7 @@ void SemiSpaceNewSpace::MakeUnusedPagesInToSpaceIterable() {
 }
 
 bool SemiSpaceNewSpace::ShouldPageBePromoted(const MemoryChunk* chunk) const {
-  if (!chunk->IsFlagSet(MemoryChunk::NEW_SPACE_BELOW_AGE_MARK)) {
+  if (!chunk->InNewSpaceBelowAgeMark()) {
     return false;
   }
   // If the page contains the current age mark, it contains both objects in the
@@ -664,12 +669,19 @@ bool SemiSpaceNewSpace::ShouldPageBePromoted(const MemoryChunk* chunk) const {
   // will also contain pinned new objects (that will prevent us from promoting
   // the page). Thus, we conservatively keep the page in new space. Pinned
   // objects on it will either die or be promoted in the next GC cycle.
-  return !chunk->Metadata()->ContainsLimit(age_mark_);
+  return !chunk->Metadata(heap()->isolate())->ContainsLimit(age_mark_);
 }
 
 std::unique_ptr<ObjectIterator> SemiSpaceNewSpace::GetObjectIterator(
     Heap* heap) {
   return std::unique_ptr<ObjectIterator>(new SemiSpaceObjectIterator(this));
+}
+
+bool SemiSpaceNewSpace::Contains(Tagged<HeapObject> object) const {
+  // Don't delegate to SemiSpace to avoid the repeated metadata lookup.
+  const auto* owner =
+      MemoryChunkMetadata::FromHeapObject(heap()->isolate(), object)->owner();
+  return owner == &to_space_ || owner == &from_space_;
 }
 
 bool SemiSpaceNewSpace::ContainsSlow(Address a) const {
@@ -988,6 +1000,10 @@ PagedNewSpace::~PagedNewSpace() {
 AllocatorPolicy* PagedNewSpace::CreateAllocatorPolicy(
     MainAllocator* allocator) {
   return new PagedNewSpaceAllocatorPolicy(this, allocator);
+}
+
+bool PagedNewSpace::Contains(Tagged<HeapObject> object) const {
+  return paged_space_.Contains(object);
 }
 
 }  // namespace internal

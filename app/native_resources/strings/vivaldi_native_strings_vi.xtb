@@ -19,7 +19,6 @@
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Thuộc tính Hình ảnh...</translation>
 <translation id="1920297417712412573">Đưa vào Ghi chú</translation>
-<translation id="1921101374471252440">&amp;Tải lại Hình ảnh</translation>
 <translation id="1924750141060565109">Phong cảnh 15</translation>
 <translation id="19598411548897379">Chung</translation>
 <translation id="1985669426322966465">Cập nhật Phần mềm</translation>
@@ -32,7 +31,6 @@
 <translation id="2501278716633472235">Trở lại</translation>
 <translation id="2612127540243995147">Sẵn sàng để cài đặt. Vivaldi sẽ bị đóng và khởi chạy lại.</translation>
 <translation id="2613387515621326337">Truy cập trang web cập nhật</translation>
-<translation id="2647368062414805334">Rất tiếc, thiết lập trên Edge của bạn không khả dụng khi trình duyệt đó đang chạy. Để nhập các thiết lập đó vào Vivaldi, hãy lưu công việc của bạn và đóng tất cả các cửa sổ Edge . Sau đó bấm Tiếp tục.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Con vật 3</translation>
 <translation id="2873951654529031587">Thùng rác</translation>
@@ -40,7 +38,6 @@
 <translation id="2923448633003185837">Dán và Truy cập</translation>
 <translation id="2977472760057091832">Mở Liên kết trong Cửa sổ Riêng tư</translation>
 <translation id="2989805286512600854">Mở trong Tab Mới</translation>
-<translation id="3027988479108856431">Rất tiếc, các thiết lập Yandex của bạn không khả dụng trong khi trình duyệt đó đang chạy. Để nhập các thiết lập đó vào Vivaldi, hãy lưu công việc của bạn và đóng tất cả các cửa sổ Yandex. Sau đó bấm Tiếp tục.</translation>
 <translation id="3084011186245865060">Phong cảnh 6</translation>
 <translation id="3127383884976966729">Con vật 7</translation>
 <translation id="3156398087075132709">Dấu trang Mới</translation>
@@ -51,6 +48,7 @@
 <translation id="3334610655141903168">(Không tiêu đề)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> hiện là phiên bản mới nhất.</translation>
 <translation id="3383198080133834965">Bạn đã cập nhật!</translation>
+<translation id="3402602684546832928">Chọn tệp dấu trang Opera</translation>
 <translation id="3451317331714872347">Phong cảnh 8</translation>
 <translation id="3457498675806041407">Xác nhận Thoát</translation>
 <translation id="3516213908976398531">Phong cảnh 11</translation>
@@ -64,7 +62,6 @@
 <translation id="3732157130969736834">Đánh dấu Liên kết</translation>
 <translation id="3732388226447288666">Con vật 2</translation>
 <translation id="3732439195215136813">Con vật 5</translation>
-<translation id="3795800845758778870">Rất tiếc, thiết lập trên Brave của bạn không khả dụng khi trình duyệt đó đang chạy. Để nhập các thiết lập đó vào Vivaldi, hãy lưu công việc của bạn và đóng tất cả các cửa sổ Brave.  Sau đó bấm Tiếp tục.</translation>
 <translation id="3832132597516774400">Phong cảnh 5</translation>
 <translation id="3894751534882749287">Nếu bạn vẫn muốn xem trang, bạn có thể thay đổi mức độ bảo vệ theo dõi của nó trong cửa sổ bật lên của Trình-Chặn-Theo-Dõi hoặc bằng cách nhấp vào nút Cho phép</translation>
 <translation id="3914946330804881301">Nhập Từ Opera</translation>
@@ -104,10 +101,10 @@
 <translation id="5770433027661640693">Phong cảnh 10</translation>
 <translation id="5857090052475505287">Thư mục Mới</translation>
 <translation id="588258955323874662">Toàn màn hình</translation>
-<translation id="5916080360077521750">Rất tiếc, các thiết lập Chrome của bạn không khả dụng trong khi trình duyệt đó đang chạy. Để nhập các thiết lập đó vào Vivaldi, hãy lưu công việc của bạn và đóng tất cả các cửa sổ Chrome. Sau đó bấm Tiếp tục.</translation>
 <translation id="6040143037577758943">Đóng</translation>
 <translation id="6229528619562190452">Nhấp vào đây để cập nhật Vivaldi.</translation>
 <translation id="6234173136417926046">Dùng Hình ảnh làm Hình nền Trang Khởi động</translation>
+<translation id="630690498669249215">Tệp Dấu trang Opera</translation>
 <translation id="6339818817272922368">Tài khoản Cục bộ</translation>
 <translation id="6438786710866753178">Phong cảnh 4</translation>
 <translation id="6477028720702061455">Chọn thư mục hồ sơ Opera để nhập</translation>
@@ -145,7 +142,6 @@
 <translation id="8539196077526389150">Phong cảnh 13</translation>
 <translation id="8562339533180097902">Đóng Vivaldi và cài đặt ngay</translation>
 <translation id="8567452685425968223">Trích xuất bản cập nhật...</translation>
-<translation id="8624587806981488221">Tải &amp;lại hình ảnh</translation>
 <translation id="8651348004684669199">Thêm Tab Hoạt động</translation>
 <translation id="8669345741879513971">Quái vật 10</translation>
 <translation id="867544375504146191">Yandex</translation>

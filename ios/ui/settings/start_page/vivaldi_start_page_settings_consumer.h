@@ -11,6 +11,7 @@
 
 // A protocol implemented by consumers to handle start page settings
 // state change.
+NS_SWIFT_UI_ACTOR
 @protocol VivaldiStartPageSettingsConsumer
 
 // Updates the state with the show frequently visited pages preference value.

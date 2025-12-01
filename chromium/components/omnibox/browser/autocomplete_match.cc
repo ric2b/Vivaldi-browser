@@ -4,12 +4,6 @@
 
 #include "components/omnibox/browser/autocomplete_match.h"
 
-#include "third_party/omnibox_proto/types.pb.h"
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include <algorithm>
 #include <string>
 #include <string_view>
@@ -38,7 +32,6 @@
 #include "components/omnibox/browser/actions/omnibox_action.h"
 #include "components/omnibox/browser/actions/omnibox_action_concepts.h"
 #include "components/omnibox/browser/actions/omnibox_action_in_suggest.h"
-#include "components/omnibox/browser/actions/omnibox_answer_action.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/document_provider.h"
@@ -56,6 +49,7 @@
 #include "third_party/omnibox_proto/answer_type.pb.h"
 #include "third_party/omnibox_proto/groups.pb.h"
 #include "third_party/omnibox_proto/suggest_template_info.pb.h"
+#include "third_party/omnibox_proto/types.pb.h"
 #include "ui/base/device_form_factor.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/vector_icon_types.h"
@@ -278,14 +272,13 @@ AutocompleteMatch::AutocompleteMatch(const AutocompleteMatch& match)
       suggest_type(match.suggest_type),
       subtypes(match.subtypes),
       has_tab_match(match.has_tab_match),
-      associated_keyword(match.associated_keyword
-                             ? new AutocompleteMatch(*match.associated_keyword)
-                             : nullptr),
+      associated_keyword(match.associated_keyword),
       keyword(match.keyword),
       from_keyword(match.from_keyword),
 
       // Vivaldi
       nickname(match.nickname),
+      folder_id(match.folder_id),
       local_favicon_path(match.local_favicon_path),
       boosted(match.boosted),
       // End Vivaldi
@@ -369,6 +362,7 @@ AutocompleteMatch& AutocompleteMatch::operator=(
 
   // Vivaldi
   nickname = std::move(match.nickname);
+  folder_id = match.folder_id,
   local_favicon_path = std::move(match.local_favicon_path);
   boosted = std::move(match.boosted);
   // End Vivaldi
@@ -450,15 +444,13 @@ AutocompleteMatch& AutocompleteMatch::operator=(
   suggest_type = match.suggest_type;
   subtypes = match.subtypes;
   has_tab_match = match.has_tab_match;
-  associated_keyword.reset(
-      match.associated_keyword
-          ? new AutocompleteMatch(*match.associated_keyword)
-          : nullptr);
+  associated_keyword = match.associated_keyword;
   keyword = match.keyword;
   from_keyword = match.from_keyword;
 
   // Vivaldi
   nickname = match.nickname;
+  folder_id = match.folder_id;
   local_favicon_path = match.local_favicon_path;
   boosted = match.boosted;
   // End Vivaldi
@@ -700,7 +692,9 @@ const gfx::VectorIcon& AutocompleteMatch::GetVectorIcon(
     case Type::FEATURED_ENTERPRISE_SEARCH:
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
       if (turl && turl->CreatedByEnterpriseSearchAggregatorPolicy()) {
-        return vector_icons::kGoogleAgentspaceMonochromeLogoIcon;
+        return base::FeatureList::IsEnabled(omnibox::kUseAgentspace25Logo)
+                   ? vector_icons::kGoogleAgentspaceMonochromeLogo25Icon
+                   : vector_icons::kGoogleAgentspaceMonochromeLogoIcon;
       }
 #endif
       return omnibox::kPageChromeRefreshIcon;
@@ -1176,7 +1170,7 @@ void AutocompleteMatch::LogSearchEngineUsed(
     TemplateURLService* template_url_service) {
   DCHECK(template_url_service);
 
-  TemplateURL* template_url = match.GetTemplateURL(template_url_service, false);
+  TemplateURL* template_url = match.GetTemplateURL(template_url_service);
   if (!template_url) {
     return;
   }
@@ -1305,12 +1299,12 @@ bool AutocompleteMatch::IsActionCompatible() const {
 }
 
 bool AutocompleteMatch::HasInstantKeyword(
-    TemplateURLService* template_url_service) const {
-  if (!associated_keyword) {
+    const TemplateURLService* template_url_service) const {
+  if (associated_keyword.empty()) {
     return false;
   }
-  TemplateURL* turl =
-      associated_keyword->GetTemplateURL(template_url_service, false);
+  const TemplateURL* turl =
+      GetTemplateURLWithKeyword(template_url_service, associated_keyword, "");
   return turl && (turl->starter_pack_id() != 0 || turl->featured_by_policy());
 }
 
@@ -1320,14 +1314,13 @@ void AutocompleteMatch::GetKeywordUIState(
     std::u16string* keyword_out,
     std::u16string* keyword_placeholder_out,
     bool* is_keyword_hint) const {
-  *is_keyword_hint = associated_keyword != nullptr;
+  *is_keyword_hint = !associated_keyword.empty();
   keyword_out->assign(
       *is_keyword_hint
-          ? associated_keyword->keyword
+          ? associated_keyword
           : GetSubstitutingExplicitlyInvokedKeyword(template_url_service));
-  *keyword_placeholder_out =
-      GetKeywordPlaceholder(GetTemplateURL(template_url_service, false),
-                            is_history_embeddings_enabled);
+  *keyword_placeholder_out = GetKeywordPlaceholder(
+      GetTemplateURL(template_url_service), is_history_embeddings_enabled);
 }
 
 std::u16string AutocompleteMatch::GetSubstitutingExplicitlyInvokedKeyword(
@@ -1337,7 +1330,7 @@ std::u16string AutocompleteMatch::GetSubstitutingExplicitlyInvokedKeyword(
     return std::u16string();
   }
 
-  const TemplateURL* t_url = GetTemplateURL(template_url_service, false);
+  const TemplateURL* t_url = GetTemplateURL(template_url_service);
   return (t_url &&
           t_url->SupportsReplacement(template_url_service->search_terms_data()))
              ? keyword
@@ -1389,12 +1382,8 @@ std::u16string AutocompleteMatch::GetKeywordPlaceholder(
 }
 
 TemplateURL* AutocompleteMatch::GetTemplateURL(
-    TemplateURLService* template_url_service,
-    bool allow_fallback_to_destination_host) const {
-  return GetTemplateURLWithKeyword(template_url_service, keyword,
-                                   allow_fallback_to_destination_host
-                                       ? destination_url.host()
-                                       : std::string());
+    TemplateURLService* template_url_service) const {
+  return GetTemplateURLWithKeyword(template_url_service, keyword, "");
 }
 
 GURL AutocompleteMatch::ImageUrl() const {
@@ -1476,7 +1465,6 @@ AutocompleteMatch::GetOmniboxEventResultType(int action_index) const {
         return OmniboxEventProto::Suggestion::TAB_SWITCH;
       case OmniboxActionId::HISTORY_CLUSTERS:
       case OmniboxActionId::ACTION_IN_SUGGEST:
-      case OmniboxActionId::ANSWER_ACTION:
       case OmniboxActionId::EXTENSION_ACTION:
       case OmniboxActionId::CONTEXTUAL_SEARCH_FULFILLMENT:
         // Preserve existing behavior by continuing on to use the match `type`.
@@ -1647,11 +1635,6 @@ int AutocompleteMatch::GetSortingOrder() const {
     return 3;
   }
 #endif  // !BUILDFLAG(IS_IOS)
-
-  if (answer_template && actions.size() > 0 &&
-      OmniboxFieldTrial::kAnswerActionsShowAboveKeyboard.Get()) {
-    return 4;
-  }
 
   switch (enterprise_search_aggregator_type) {
     case EnterpriseSearchAggregatorType::NONE:
@@ -1872,17 +1855,6 @@ void AutocompleteMatch::FilterAndSortActionsInSuggest() {
   }
 }
 
-void AutocompleteMatch::RemoveAnswerActions() {
-  if (actions.empty()) {
-    return;
-  }
-
-  std::erase_if(actions, [&](const auto& action) {
-    auto* ans_action = OmniboxAnswerAction::FromAction(action.get());
-    return ans_action != nullptr;
-  });
-}
-
 bool AutocompleteMatch::IsTrivialAutocompletion() const {
   return type == AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED ||
          type == AutocompleteMatchType::URL_WHAT_YOU_TYPED ||
@@ -2017,9 +1989,7 @@ void AutocompleteMatch::UpgradeMatchWithPropertiesFrom(
   // Absorb the `actions` and `takeover_action` so they won't be buried.
   // Don't absorb answer actions; they should always be created fresh.
   if (actions.empty() && !duplicate_match.actions.empty() &&
-      IsActionCompatible() &&
-      OmniboxAnswerAction::FromAction(duplicate_match.actions[0].get()) ==
-          nullptr) {
+      IsActionCompatible()) {
     actions = std::move(duplicate_match.actions);
     takeover_action = std::move(duplicate_match.takeover_action);
   }

@@ -20,9 +20,9 @@
 #include "src/zone/accounting-allocator.h"
 #include "src/zone/zone.h"
 #include "test/common/flag-utils.h"
+#include "test/common/wasm/fuzzer-common.h"
 #include "test/common/wasm/wasm-module-runner.h"
 #include "test/fuzzer/fuzzer-support.h"
-#include "test/fuzzer/wasm/fuzzer-common.h"
 
 // This fuzzer fuzzes deopts.
 // It generates a main function accepting a call target. The call target is then
@@ -135,8 +135,11 @@ std::vector<ExecutionResult> PerformReferenceRun(
   // with the kForDebugging liftoff option.
   EnterDebuggingScope debugging_scope(isolate);
 
-  DirectHandle<WasmModuleObject> module_object =
-      CompileReferenceModule(isolate, wire_bytes.module_bytes(), &max_steps);
+  DirectHandle<WasmModuleObject> module_object;
+  if (!CompileReferenceModule(isolate, wire_bytes.module_bytes(), &max_steps)
+           .ToHandle(&module_object)) {
+    return {};
+  }
 
   thrower.Reset();
   CHECK(!isolate->has_exception());

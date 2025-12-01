@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,25 +27,25 @@ export const UIStrings = {
    */
   title: 'INP breakdown',
   /**
-   *@description Label used for the subpart/component/stage/section of a larger duration.
+   * @description Label used for the subpart/component/stage/section of a larger duration.
    */
   subpart: 'Subpart',
   /**
-   *@description Label used for a time duration.
+   * @description Label used for a time duration.
    */
   duration: 'Duration',
 
   // TODO: these are repeated in InteractionBreakdown. Add a place for common strings?
   /**
-   *@description Text shown next to the interaction event's input delay time in the detail view.
+   * @description Text shown next to the interaction event's input delay time in the detail view.
    */
   inputDelay: 'Input delay',
   /**
-   *@description Text shown next to the interaction event's thread processing duration in the detail view.
+   * @description Text shown next to the interaction event's thread processing duration in the detail view.
    */
   processingDuration: 'Processing duration',
   /**
-   *@description Text shown next to the interaction event's presentation delay time in the detail view.
+   * @description Text shown next to the interaction event's presentation delay time in the detail view.
    */
   presentationDelay: 'Presentation delay',
   /**
@@ -62,7 +62,7 @@ export type INPBreakdownInsightModel = InsightModel<typeof UIStrings, {
   highPercentileInteractionEvent?: SyntheticInteractionPair,
 }>;
 
-export function isINPBreakdown(insight: InsightModel): insight is INPBreakdownInsightModel {
+export function isINPBreakdownInsight(insight: InsightModel): insight is INPBreakdownInsightModel {
   return insight.insightKey === InsightKeys.INP_BREAKDOWN;
 }
 
@@ -79,8 +79,8 @@ function finalize(partialModel: PartialInsightModel<INPBreakdownInsightModel>): 
 }
 
 export function generateInsight(
-    parsedTrace: Handlers.Types.ParsedTrace, context: InsightSetContext): INPBreakdownInsightModel {
-  const interactionEvents = parsedTrace.UserInteractions.interactionEventsWithNoNesting.filter(event => {
+    data: Handlers.Types.HandlerData, context: InsightSetContext): INPBreakdownInsightModel {
+  const interactionEvents = data.UserInteractions.interactionEventsWithNoNesting.filter(event => {
     return Helpers.Timing.eventIsInBounds(event, context.bounds);
   });
 

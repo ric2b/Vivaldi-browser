@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2013 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2013 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -53,35 +27,35 @@ import settingsScreenStyles from './settingsScreen.css.js';
 const UIStrings = {
 
   /**
-   *@description Card header in Experiments settings tab that list all available unstable experiments that can be turned on or off.
+   * @description Card header in Experiments settings tab that list all available unstable experiments that can be turned on or off.
    */
   unstableExperiments: 'Unstable experiments',
   /**
-   *@description Name of the Settings view
+   * @description Name of the Settings view
    */
   settings: 'Settings',
   /**
-   *@description Text for keyboard shortcuts
+   * @description Text for keyboard shortcuts
    */
   shortcuts: 'Shortcuts',
   /**
-   *@description Text of button in Settings Screen of the Settings
+   * @description Text of button in Settings Screen of the Settings
    */
   restoreDefaultsAndReload: 'Restore defaults and reload',
   /**
-   *@description Card header in Experiments settings tab that list all available stable experiments that can be turned on or off.
+   * @description Card header in Experiments settings tab that list all available stable experiments that can be turned on or off.
    */
   experiments: 'Experiments',
   /**
-   *@description Message shown in the experiments panel to warn users about any possible unstable features.
+   * @description Message shown in the experiments panel to warn users about any possible unstable features.
    */
   theseExperimentsCouldBeUnstable: 'Warning: These experiments could be unstable or unreliable.',
   /**
-   *@description Message text content in Settings Screen of the Settings
+   * @description Message text content in Settings Screen of the Settings
    */
   theseExperimentsAreParticularly: 'Warning: These experiments are particularly unstable. Enable at your own risk.',
   /**
-   *@description Message to display if a setting change requires a reload of DevTools
+   * @description Message to display if a setting change requires a reload of DevTools
    */
   oneOrMoreSettingsHaveChanged: 'One or more settings have changed which requires a reload to take effect',
   /**
@@ -90,15 +64,15 @@ const UIStrings = {
    */
   noResults: 'No experiments match the filter',
   /**
-   *@description Text that is usually a hyperlink to more documentation
+   * @description Text that is usually a hyperlink to more documentation
    */
   learnMore: 'Learn more',
   /**
-   *@description Text that is usually a hyperlink to a feedback form
+   * @description Text that is usually a hyperlink to a feedback form
    */
   sendFeedback: 'Send feedback',
   /**
-   *@description Placeholder text in search bar
+   * @description Placeholder text in search bar
    */
   searchExperiments: 'Search experiments',
 } as const;
@@ -234,7 +208,7 @@ export class SettingsScreen extends UI.Widget.VBox implements UI.View.ViewLocati
     Host.userMetrics.settingsPanelShown(tabId);
   }
 
-  private onEscapeKeyPressed(event: Event): void {
+  private onEscapeKeyPressed(event: KeyboardEvent): void {
     if (this.tabbedLocation.tabbedPane().selectedTabId === 'keybinds' && this.keybindsTab) {
       this.keybindsTab.onEscapeKeyPressed(event);
     }
@@ -250,6 +224,7 @@ export class GenericSettingsTab extends UI.Widget.VBox implements SettingsTab {
   private readonly settingToControl = new Map<Common.Settings.Setting<unknown>, HTMLElement>();
   private readonly containerElement: HTMLElement;
   #updateSyncSectionTimerId = -1;
+  #syncSectionUpdatePromise: Promise<void>|null = null;
 
   constructor() {
     super({jslog: `${VisualLogging.pane('preferences')}`});
@@ -275,7 +250,7 @@ export class GenericSettingsTab extends UI.Widget.VBox implements SettingsTab {
       Common.Settings.SettingCategory.PERSISTENCE,
       Common.Settings.SettingCategory.DEBUGGER,
       Common.Settings.SettingCategory.GLOBAL,
-      Common.Settings.SettingCategory.SYNC,
+      Common.Settings.SettingCategory.ACCOUNT,
     ];
 
     // Some settings define their initial ordering.
@@ -335,15 +310,20 @@ export class GenericSettingsTab extends UI.Widget.VBox implements SettingsTab {
       window.clearTimeout(this.#updateSyncSectionTimerId);
       this.#updateSyncSectionTimerId = -1;
     }
-    Host.InspectorFrontendHost.InspectorFrontendHostInstance.getSyncInformation(syncInfo => {
-      this.syncSection.data = {
-        syncInfo,
-        syncSetting: Common.Settings.moduleSetting('sync-preferences') as Common.Settings.Setting<boolean>,
-      };
-      if (!syncInfo.isSyncActive || !syncInfo.arePreferencesSynced) {
-        this.#updateSyncSectionTimerId = window.setTimeout(this.updateSyncSection.bind(this), 500);
-      }
-    });
+
+    this.#syncSectionUpdatePromise =
+        new Promise<Host.InspectorFrontendHostAPI.SyncInformation>(
+            resolve => Host.InspectorFrontendHost.InspectorFrontendHostInstance.getSyncInformation(resolve))
+            .then(syncInfo => {
+              this.syncSection.data = {
+                syncInfo,
+                syncSetting: Common.Settings.moduleSetting('sync-preferences') as Common.Settings.Setting<boolean>,
+                receiveBadgesSetting: Common.Settings.Settings.instance().moduleSetting('receive-gdp-badges'),
+              };
+              if (!syncInfo.isSyncActive || !syncInfo.arePreferencesSynced) {
+                this.#updateSyncSectionTimerId = window.setTimeout(this.updateSyncSection.bind(this), 500);
+              }
+            });
   }
 
   private createExtensionSection(settings: Common.Settings.SettingRegistration[]): void {
@@ -360,9 +340,9 @@ export class GenericSettingsTab extends UI.Widget.VBox implements SettingsTab {
     // Always create the EXTENSIONS section and append the link handling control.
     if (category === Common.Settings.SettingCategory.EXTENSIONS) {
       this.createExtensionSection(settings);
-    } else if (category === Common.Settings.SettingCategory.SYNC && settings.length > 0) {
+    } else if (category === Common.Settings.SettingCategory.ACCOUNT && settings.length > 0) {
       const syncCard = createSettingsCard(
-          Common.SettingRegistration.getLocalizedSettingsCategory(Common.SettingRegistration.SettingCategory.SYNC),
+          Common.SettingRegistration.getLocalizedSettingsCategory(Common.SettingRegistration.SettingCategory.ACCOUNT),
           this.syncSection);
       this.containerElement.appendChild(syncCard);
     } else if (settings.length > 0) {
@@ -395,6 +375,10 @@ export class GenericSettingsTab extends UI.Widget.VBox implements SettingsTab {
       const element = this.settingToControl.get(setting);
       if (element) {
         PanelUtils.highlightElement(element);
+      } else if (setting.name === 'receive-gdp-badges') {
+        void this.#syncSectionUpdatePromise?.then(() => {
+          void this.syncSection.highlightReceiveBadgesSetting();
+        });
       }
     }
   }

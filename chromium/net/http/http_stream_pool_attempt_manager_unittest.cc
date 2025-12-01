@@ -40,6 +40,7 @@
 #include "net/base/request_priority.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/public/resolve_error_info.h"
+#include "net/http/alternate_protocol_usage.h"
 #include "net/http/alternative_service.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_request_info.h"
@@ -156,7 +157,8 @@ class Preconnector {
             stream_key.socket_tag(), stream_key.network_anonymization_key(),
             stream_key.secure_dns_policy(),
             stream_key.disable_cert_network_fetches(),
-            alternative_service_info_, allowed_alpns_, load_flags_, proxy_info_,
+            alternative_service_info_, AdvertisedAltSvcState::kUnknown,
+            allowed_alpns_, load_flags_, proxy_info_,
             NetLogWithSource::Make(
                 pool.http_network_session()->net_log(),
                 NetLogSourceType::HTTP_STREAM_JOB_CONTROLLER)),
@@ -297,7 +299,8 @@ class StreamRequester : public HttpStreamRequest::Delegate {
             stream_key.socket_tag(), stream_key.network_anonymization_key(),
             stream_key.secure_dns_policy(),
             stream_key.disable_cert_network_fetches(),
-            alternative_service_info_, allowed_alpns_, load_flags_, proxy_info_,
+            alternative_service_info_, AdvertisedAltSvcState::kUnknown,
+            allowed_alpns_, load_flags_, proxy_info_,
             NetLogWithSource::Make(
                 pool.http_network_session()->net_log(),
                 NetLogSourceType::HTTP_STREAM_JOB_CONTROLLER)),
@@ -616,7 +619,7 @@ class HttpStreamPoolAttemptManagerTest : public TestWithTaskEnvironment {
     return raw_client_maker;
   }
 
-  std::set<HostPortPair>& origins_to_force_quic_on() {
+  std::set<url::SchemeHostPort>& origins_to_force_quic_on() {
     return origins_to_force_quic_on_;
   }
 
@@ -627,7 +630,7 @@ class HttpStreamPoolAttemptManagerTest : public TestWithTaskEnvironment {
 
   SpdySessionDependencies session_deps_;
 
-  std::set<HostPortPair> origins_to_force_quic_on_;
+  std::set<url::SchemeHostPort> origins_to_force_quic_on_;
 
   ProofVerifyDetailsChromium verify_details_;
   std::vector<std::unique_ptr<QuicTestPacketMaker>> quic_client_makers_;
@@ -1377,7 +1380,6 @@ TEST_F(HttpStreamPoolAttemptManagerTest, IPEndPointsSlow) {
 
   FastForwardBy(HttpStreamPool::GetConnectionAttemptDelay());
   ASSERT_EQ(manager->TcpBasedAttemptCount(), 2u);
-  ASSERT_EQ(manager->PendingRequestJobCount(), 0u);
   ASSERT_FALSE(request->completed());
 
   // FastForwardBy() executes non-delayed tasks so the request finishes
@@ -1602,7 +1604,6 @@ TEST_F(HttpStreamPoolAttemptManagerTest, ReachedGroupLimit) {
   ASSERT_EQ(pool().TotalActiveStreamCount(), kMaxPerGroup);
   ASSERT_EQ(group.ActiveStreamSocketCount(), kMaxPerGroup);
   ASSERT_EQ(manager->TcpBasedAttemptCount(), kMaxPerGroup);
-  ASSERT_EQ(manager->PendingRequestJobCount(), 0u);
 
   // This request should not start an attempt as the group reached its limit.
   StreamRequester stalled_requester;
@@ -1615,7 +1616,6 @@ TEST_F(HttpStreamPoolAttemptManagerTest, ReachedGroupLimit) {
   ASSERT_EQ(pool().TotalActiveStreamCount(), kMaxPerGroup);
   ASSERT_EQ(group.ActiveStreamSocketCount(), kMaxPerGroup);
   ASSERT_EQ(manager->TcpBasedAttemptCount(), kMaxPerGroup);
-  ASSERT_EQ(manager->PendingRequestJobCount(), 1u);
   ASSERT_EQ(stalled_request->GetLoadState(),
             LOAD_STATE_WAITING_FOR_AVAILABLE_SOCKET);
 
@@ -1624,7 +1624,6 @@ TEST_F(HttpStreamPoolAttemptManagerTest, ReachedGroupLimit) {
   ASSERT_EQ(pool().TotalActiveStreamCount(), kMaxPerGroup);
   ASSERT_EQ(group.ActiveStreamSocketCount(), kMaxPerGroup);
   ASSERT_EQ(manager->TcpBasedAttemptCount(), 0u);
-  ASSERT_EQ(manager->PendingRequestJobCount(), 1u);
 
   // Release one HttpStream and close it to make non-reusable.
   std::unique_ptr<StreamRequester> released_requester =
@@ -1649,14 +1648,12 @@ TEST_F(HttpStreamPoolAttemptManagerTest, ReachedGroupLimit) {
   ASSERT_EQ(pool().TotalActiveStreamCount(), kMaxPerGroup);
   ASSERT_EQ(group.ActiveStreamSocketCount(), kMaxPerGroup);
   ASSERT_EQ(manager->TcpBasedAttemptCount(), 1u);
-  ASSERT_EQ(manager->PendingRequestJobCount(), 0u);
 
   RunUntilIdle();
 
   ASSERT_EQ(pool().TotalActiveStreamCount(), kMaxPerGroup);
   ASSERT_EQ(group.ActiveStreamSocketCount(), kMaxPerGroup);
   ASSERT_EQ(manager->TcpBasedAttemptCount(), 0u);
-  ASSERT_EQ(manager->PendingRequestJobCount(), 0u);
   ASSERT_TRUE(stalled_request->completed());
   std::unique_ptr<HttpStream> stream = stalled_requester.ReleaseStream();
   ASSERT_TRUE(stream);
@@ -1734,8 +1731,6 @@ TEST_F(HttpStreamPoolAttemptManagerTest, ReachedPoolLimit) {
   ASSERT_TRUE(pool().IsPoolStalled());
   ASSERT_EQ(requester2.associated_attempt_manager()->TcpBasedAttemptCount(),
             0u);
-  ASSERT_EQ(requester2.associated_attempt_manager()->PendingRequestJobCount(),
-            1u);
 
   // Release one HttpStream from group A. It should unblock the in-flight
   // request in group B.
@@ -1745,8 +1740,6 @@ TEST_F(HttpStreamPoolAttemptManagerTest, ReachedPoolLimit) {
   requester2.WaitForResult();
 
   ASSERT_TRUE(request2->completed());
-  ASSERT_EQ(requester2.associated_attempt_manager()->PendingRequestJobCount(),
-            0u);
   ASSERT_TRUE(pool().ReachedMaxStreamLimit());
   ASSERT_FALSE(pool().IsPoolStalled());
 }
@@ -2150,9 +2143,7 @@ TEST_F(HttpStreamPoolAttemptManagerTest, UseIdleStreamSocketAfterRelease) {
   resolver()->AddFakeRequest();
   HttpStreamRequest* request = requester.RequestStream(pool());
   RunUntilIdle();
-  AttemptManager* manager = group.attempt_manager();
   ASSERT_FALSE(request->completed());
-  ASSERT_EQ(manager->PendingRequestJobCount(), 1u);
 
   // Release an active HttpStream. The underlying StreamSocket should be used
   // to the pending request.
@@ -2162,7 +2153,6 @@ TEST_F(HttpStreamPoolAttemptManagerTest, UseIdleStreamSocketAfterRelease) {
   released_stream.reset();
   requester.WaitForResult();
   ASSERT_TRUE(request->completed());
-  ASSERT_EQ(manager->PendingRequestJobCount(), 0u);
 }
 
 TEST_F(HttpStreamPoolAttemptManagerTest,
@@ -2805,9 +2795,6 @@ TEST_F(HttpStreamPoolAttemptManagerTest, SpdyReachedPoolLimit) {
       ->add_endpoint(ServiceEndpointBuilder().add_v4("192.0.2.1").endpoint())
       .CallOnServiceEndpointRequestFinished(OK);
   RunUntilIdle();
-  Group& group_c =
-      pool().GetOrCreateGroupForTesting(requester_c.GetStreamKey());
-  ASSERT_EQ(group_c.attempt_manager()->PendingRequestJobCount(), 1u);
   ASSERT_TRUE(pool().ReachedMaxStreamLimit());
   ASSERT_TRUE(pool().IsPoolStalled());
 
@@ -3149,6 +3136,58 @@ TEST_F(HttpStreamPoolAttemptManagerTest,
   RunUntilIdle();
   EXPECT_THAT(requester_b.result(), Optional(IsOk()));
   ASSERT_EQ(pool().TotalActiveStreamCount(), 2u);
+}
+
+// Test that an existing H2 session is not used if the destination requires
+// HTTP/1.1. Ideally, there would by no H2 sessions for such a destination, but
+// that's difficult to ensure.
+TEST_F(HttpStreamPoolAttemptManagerTest, IgnoreH2SessionWhenRequiresHttp11) {
+  // Set up two identical Requesters.
+  StreamRequester requester1;
+  requester1.set_destination("https://a.test");
+  auto stream_key = requester1.GetStreamKey();
+  StreamRequester requester2(stream_key);
+
+  // Set up an H2 session using the first Requester.
+  CreateFakeSpdySession(requester1.GetStreamKey());
+  requester1.RequestStream(pool());
+  requester1.WaitForResult();
+  EXPECT_THAT(requester1.WaitForResult(), IsOk());
+  EXPECT_EQ(requester1.negotiated_protocol(), NextProto::kProtoHTTP2);
+
+  // Now set HTTP/1.1 as being required for the destination.
+  http_server_properties()->SetHTTP11Required(
+      stream_key.destination(), stream_key.network_anonymization_key());
+
+  // There should still be a live H2 session.
+  EXPECT_TRUE(spdy_session_pool()->HasAvailableSession(
+      stream_key.CalculateSpdySessionKey(),
+      /*enable_ip_based_pooling_for_h2=*/false,
+      /*is_websocket=*/false));
+
+  // Set up a DNS resolution.
+  resolver()
+      ->AddFakeRequest()
+      ->add_endpoint(ServiceEndpointBuilder()
+                         .add_ip_endpoint(MakeIPEndPoint("192.0.2.1", 443))
+                         .endpoint())
+      .CompleteStartSynchronously(OK);
+
+  // Set up socket data for a new TCP connection. Only H1 should appear in
+  // the SSLConfig's NextProtos.
+  SequencedSocketData data;
+  socket_factory()->AddSocketDataProvider(&data);
+  SSLSocketDataProvider ssl(ASYNC, OK);
+  ssl.next_protos_expected_in_ssl_config = {NextProto::kProtoHTTP11};
+  socket_factory()->AddSSLSocketDataProvider(&ssl);
+
+  // Request another stream. Should get a new HTTP/1.x stream instead of a
+  // stream on the pre-existing H2 session, and there should be no CHECK
+  // failures caused by the H2 session still existing.
+  requester2.RequestStream(pool());
+  EXPECT_THAT(requester2.WaitForResult(), IsOk());
+  EXPECT_NE(requester2.negotiated_protocol(), NextProto::kProtoHTTP2);
+  EXPECT_EQ(pool().TotalActiveStreamCount(), 2u);
 }
 
 // Test that an IP pooled SPDY session is not used if the destination requires
@@ -5733,7 +5772,7 @@ TEST_F(HttpStreamPoolAttemptManagerTest,
 
 TEST_F(HttpStreamPoolAttemptManagerTest, OriginsToForceQuicOnOk) {
   origins_to_force_quic_on().insert(
-      HostPortPair::FromURL(GURL(kDefaultDestination)));
+      url::SchemeHostPort(GURL(kDefaultDestination)));
   InitializeSession();
 
   AddQuicData();
@@ -5751,7 +5790,7 @@ TEST_F(HttpStreamPoolAttemptManagerTest, OriginsToForceQuicOnOk) {
 
 TEST_F(HttpStreamPoolAttemptManagerTest, OriginsToForceQuicOnExistingSession) {
   origins_to_force_quic_on().insert(
-      HostPortPair::FromURL(GURL(kDefaultDestination)));
+      url::SchemeHostPort(GURL(kDefaultDestination)));
   InitializeSession();
 
   AddQuicData();
@@ -5784,7 +5823,7 @@ TEST_F(HttpStreamPoolAttemptManagerTest, OriginsToForceQuicOnExistingSession) {
 
 TEST_F(HttpStreamPoolAttemptManagerTest, OriginsToForceQuicOnFail) {
   origins_to_force_quic_on().insert(
-      HostPortPair::FromURL(GURL(kDefaultDestination)));
+      url::SchemeHostPort(GURL(kDefaultDestination)));
   InitializeSession();
 
   auto quic_data = std::make_unique<MockQuicData>(quic_version());
@@ -5804,7 +5843,7 @@ TEST_F(HttpStreamPoolAttemptManagerTest, OriginsToForceQuicOnFail) {
 
 TEST_F(HttpStreamPoolAttemptManagerTest, OriginsToForceQuicOnPreconnectOk) {
   origins_to_force_quic_on().insert(
-      HostPortPair::FromURL(GURL(kDefaultDestination)));
+      url::SchemeHostPort(GURL(kDefaultDestination)));
   InitializeSession();
 
   AddQuicData();
@@ -5822,7 +5861,7 @@ TEST_F(HttpStreamPoolAttemptManagerTest, OriginsToForceQuicOnPreconnectOk) {
 
 TEST_F(HttpStreamPoolAttemptManagerTest, OriginsToForceQuicOnPreconnectFail) {
   origins_to_force_quic_on().insert(
-      HostPortPair::FromURL(GURL(kDefaultDestination)));
+      url::SchemeHostPort(GURL(kDefaultDestination)));
   InitializeSession();
 
   auto quic_data = std::make_unique<MockQuicData>(quic_version());
@@ -5844,7 +5883,7 @@ TEST_F(HttpStreamPoolAttemptManagerTest, QuicSessionGoneBeforeUsing) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndDisableFeature(net::features::kAsyncQuicSession);
   origins_to_force_quic_on().insert(
-      HostPortPair::FromURL(GURL(kDefaultDestination)));
+      url::SchemeHostPort(GURL(kDefaultDestination)));
   InitializeSession();
 
   QuicTestPacketMaker* client_maker = CreateQuicClientPacketMaker();
@@ -6821,7 +6860,7 @@ TEST_F(HttpStreamPoolAttemptManagerTest, TrustAnchorIDsDisabled) {
   socket_factory()->AddSocketDataProvider(&data);
   SSLSocketDataProvider ssl(ASYNC, OK);
   // Trust Anchor IDs should not be sent because the feature is disabled.
-  ssl.expected_trust_anchor_ids = std::vector<uint8_t>();
+  ssl.expect_no_trust_anchor_ids = true;
   socket_factory()->AddSSLSocketDataProvider(&ssl);
 
   resolver()
@@ -6844,7 +6883,7 @@ TEST_F(HttpStreamPoolAttemptManagerTest, TrustAnchorIDsDisabled) {
                                     1);
   histogram_tester.ExpectUniqueSample(
       "Net.SSL.TrustAnchorIDsResult",
-      SSLClientSocket::TrustAnchorIDsResult::kSuccessInitial, 1);
+      SSLClientSocket::TrustAnchorIDsResult::kDnsSuccessInitial, 1);
 }
 
 // Tests that TLS Trust Anchor IDs are sent when the feature flag is enabled.
@@ -6886,7 +6925,7 @@ TEST_F(HttpStreamPoolAttemptManagerTest, TrustAnchorIDs) {
                                     1);
   histogram_tester.ExpectUniqueSample(
       "Net.SSL.TrustAnchorIDsResult",
-      SSLClientSocket::TrustAnchorIDsResult::kSuccessInitial, 1);
+      SSLClientSocket::TrustAnchorIDsResult::kDnsSuccessInitial, 1);
 }
 
 // Tests that TLS Trust Anchor IDs are sent even when ECH is disabled.
@@ -7414,9 +7453,14 @@ TEST_F(HttpStreamPoolAttemptManagerTest,
   EXPECT_THAT(requester.result(), Optional(IsOk()));
 }
 
-// Regression test for crbug.com/415488524. A QUIC destination may be marked
-// broken after a successful QUIC session attempt. Ensure that a request
-// doesn't use QUIC in a such situation.
+// A QUIC destination may be marked broken after a successful QUIC session
+// attempt. In that case, we can still return a QUIC session to the destination.
+// If we want to avoid this, we could link the QuicSessionPool to the
+// HttpServerProperties record of which destinations have been marked as bad,
+// but it's a fairly innocuous case - any new request won't use QUIC, and the
+// current request will either (unexpectedly) succeed, or will fail due to
+// another kQuicProtocolError, notice QUIC has been marked as broken, since the
+// transaction started, and retry without QUIC.
 TEST_F(HttpStreamPoolAttemptManagerTest, QuicBrokenWhenSessionCreated) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(net::features::kAsyncQuicSession);
@@ -7429,10 +7473,10 @@ TEST_F(HttpStreamPoolAttemptManagerTest, QuicBrokenWhenSessionCreated) {
   MockConnectCompleter quic_completer;
   AddQuicData(/*host=*/kDefaultDestination, &quic_completer);
 
+  // The TCP connection attempt hangs.
   SequencedSocketData tcp_data;
+  tcp_data.set_connect_data(MockConnect(SYNCHRONOUS, ERR_IO_PENDING));
   socket_factory()->AddSocketDataProvider(&tcp_data);
-  SSLSocketDataProvider ssl(ASYNC, OK);
-  socket_factory()->AddSSLSocketDataProvider(&ssl);
 
   StreamRequester requester;
   requester.set_destination(kDefaultDestination)
@@ -7448,7 +7492,7 @@ TEST_F(HttpStreamPoolAttemptManagerTest, QuicBrokenWhenSessionCreated) {
   quic_completer.Complete(OK);
   requester.WaitForResult();
   EXPECT_THAT(requester.result(), Optional(IsOk()));
-  EXPECT_NE(requester.negotiated_protocol(), NextProto::kProtoQUIC);
+  EXPECT_EQ(requester.negotiated_protocol(), NextProto::kProtoQUIC);
 }
 
 TEST_F(HttpStreamPoolAttemptManagerTest, SpdyOkQuicOk) {

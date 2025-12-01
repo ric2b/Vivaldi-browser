@@ -1,0 +1,32 @@
+# Suppress deduplication based on comment.
+
+# KEEPDUPS
+sources = []
+
+# KEEPDUPS
+sources = [ "a" ]
+
+# KEEPDUPS
+sources += [ "a" ]
+
+# KEEPDUPS
+# This is KEEPDUPS because reason.
+sources = [
+  "a",
+  "a",
+  "y.cc",
+  "z",
+  "z",
+  "z2",
+]
+
+# This is KEEPDUPS because reason:
+# KEEPDUPS
+sources += [
+  "a",
+  "a",
+  "y.cc",
+  "z",
+  "z",
+  "z2",
+]

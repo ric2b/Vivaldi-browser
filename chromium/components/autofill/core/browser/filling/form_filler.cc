@@ -86,7 +86,7 @@ std::optional<FieldTypeSet> GetFieldTypesToFillFromFillingProduct(
     case FillingProduct::kAddress: {
       static constexpr FieldTypeSet kFieldTypes = []() {
         FieldTypeSet field_types;
-        for (FieldType field_type : kAllFieldTypes) {
+        for (FieldType field_type : FieldTypeSet::all()) {
           if (IsAddressType(field_type)) {
             field_types.insert(field_type);
           }
@@ -98,7 +98,7 @@ std::optional<FieldTypeSet> GetFieldTypesToFillFromFillingProduct(
     case FillingProduct::kCreditCard: {
       static constexpr FieldTypeSet kFieldTypes = []() {
         FieldTypeSet field_types;
-        for (FieldType field_type : kAllFieldTypes) {
+        for (FieldType field_type : FieldTypeSet::all()) {
           if (FieldTypeGroupSet({FieldTypeGroup::kCreditCard,
                                  FieldTypeGroup::kStandaloneCvcField})
                   .contains(GroupTypeOfFieldType(field_type))) {
@@ -111,7 +111,7 @@ std::optional<FieldTypeSet> GetFieldTypesToFillFromFillingProduct(
     }
     case FillingProduct::kAutofillAi: {
       static constexpr auto kFieldTypes = []() {
-        DenseSet<FieldType> result;
+        FieldTypeSet result;
         for (AttributeType type : DenseSet<AttributeType>::all()) {
           result.insert_all(type.field_subtypes());
         }
@@ -122,7 +122,7 @@ std::optional<FieldTypeSet> GetFieldTypesToFillFromFillingProduct(
     case FillingProduct::kPassword: {
       static constexpr FieldTypeSet kFieldTypes = []() {
         FieldTypeSet field_types;
-        for (FieldType field_type : kAllFieldTypes) {
+        for (FieldType field_type : FieldTypeSet::all()) {
           if (FieldTypeGroupSet({FieldTypeGroup::kUsernameField,
                                  FieldTypeGroup::kPasswordField})
                   .contains(GroupTypeOfFieldType(field_type))) {
@@ -146,6 +146,7 @@ std::optional<FieldTypeSet> GetFieldTypesToFillFromFillingProduct(
     case FillingProduct::kAutocomplete:
     case FillingProduct::kCompose:
     case FillingProduct::kDataList:
+    case FillingProduct::kPasskey:
       return std::nullopt;
     case FillingProduct::kOneTimePassword:
       return FieldTypeSet{ONE_TIME_CODE};
@@ -238,6 +239,7 @@ bool ShouldRecordFillingHistory(FillingProduct filling_product) {
     case FillingProduct::kMerchantPromoCode:
     case FillingProduct::kIban:
     case FillingProduct::kAutocomplete:
+    case FillingProduct::kPasskey:
     case FillingProduct::kPassword:
     case FillingProduct::kCompose:
     case FillingProduct::kIdentityCredential:
@@ -365,6 +367,7 @@ struct FormFiller::AugmentedFillingPayload {
       case FillingProduct::kIdentityCredential:
       case FillingProduct::kOneTimePassword:
         return false;
+      case FillingProduct::kPasskey:
       case FillingProduct::kPassword:
       case FillingProduct::kDataList:
       case FillingProduct::kNone:
@@ -1148,7 +1151,8 @@ FormFiller::ValueAndTypeAndOverride FormFiller::GetFieldFillingData(
             return {
                 GetFillingValueForCreditCard(
                     CHECK_DEREF(credit_card), manager_->client().GetAppLocale(),
-                    action_persistence, autofill_field, failure_to_fill),
+                    action_persistence, autofill_field,
+                    manager_->client().IsCvcSavingSupported(), failure_to_fill),
                 autofill_field.Type().GetCreditCardType()};
           },
           [&](const AugmentedFillingPayload::EntityPayload&
@@ -1162,8 +1166,7 @@ FormFiller::ValueAndTypeAndOverride FormFiller::GetFieldFillingData(
                         entity, fields, autofill_field, action_persistence,
                         manager_->client().GetAppLocale(),
                         manager_->client().GetAddressNormalizer()),
-                    autofill_field.Type().GetAutofillAiTypeAndResolveTagTypes(
-                        entity.type())};
+                    autofill_field.Type().GetAutofillAiType(entity.type())};
           },
           [&](const VerifiedProfile* profile)
               -> std::pair<std::u16string, FieldType> {

@@ -65,14 +65,12 @@ using ResolverValidationDeathTest = ResolverValidationTest;
 
 class FakeStmt final : public Castable<FakeStmt, ast::Statement> {
   public:
-    FakeStmt(GenerationID pid, ast::NodeID nid, Source src) : Base(pid, nid, src) {}
-    FakeStmt* Clone(ast::CloneContext&) const override { return nullptr; }
+    FakeStmt(ast::NodeID nid, Source src) : Base(nid, src) {}
 };
 
 class FakeExpr final : public Castable<FakeExpr, ast::Expression> {
   public:
-    FakeExpr(GenerationID pid, ast::NodeID nid, Source src) : Base(pid, nid, src) {}
-    FakeExpr* Clone(ast::CloneContext&) const override { return nullptr; }
+    FakeExpr(ast::NodeID nid, Source src) : Base(nid, src) {}
 };
 
 TEST_F(ResolverValidationTest, WorkgroupMemoryUsedInVertexStage) {
@@ -1341,36 +1339,6 @@ TEST_F(ResolverValidationTest, ZeroStructMemberSizeAttribute) {
     EXPECT_FALSE(r()->Resolve());
     EXPECT_EQ(r()->error(),
               R"(12:34 error: '@size' must be at least as big as the type's size (4))");
-}
-
-TEST_F(ResolverValidationTest, OffsetAndSizeAttribute) {
-    Structure("S", Vector{
-                       Member(Source{{12, 34}}, "a", ty.f32(),
-                              Vector{MemberOffset(0_a), MemberSize(4_a)}),
-                   });
-
-    EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), R"(12:34 error: '@offset' cannot be used with '@align' or '@size')");
-}
-
-TEST_F(ResolverValidationTest, OffsetAndAlignAttribute) {
-    Structure("S", Vector{
-                       Member(Source{{12, 34}}, "a", ty.f32(),
-                              Vector{MemberOffset(0_a), MemberAlign(4_i)}),
-                   });
-
-    EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), R"(12:34 error: '@offset' cannot be used with '@align' or '@size')");
-}
-
-TEST_F(ResolverValidationTest, OffsetAndAlignAndSizeAttribute) {
-    Structure("S", Vector{
-                       Member(Source{{12, 34}}, "a", ty.f32(),
-                              Vector{MemberOffset(0_a), MemberAlign(4_i), MemberSize(4_a)}),
-                   });
-
-    EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(r()->error(), R"(12:34 error: '@offset' cannot be used with '@align' or '@size')");
 }
 
 TEST_F(ResolverTest, Expr_Initializer_Cast_Pointer) {

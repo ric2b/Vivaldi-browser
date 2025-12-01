@@ -27,7 +27,7 @@
 
 #include "src/tint/lang/wgsl/sem/load.h"
 
-#include "src/tint/lang/core/type/reference.h"
+#include "src/tint/lang/core/type/memory_view.h"
 #include "src/tint/utils/ice/ice.h"
 
 TINT_INSTANTIATE_TYPEINFO(tint::sem::Load);
@@ -39,7 +39,6 @@ Load::Load(const ValueExpression* src, const Statement* statement, core::Evaluat
            /* stage */ stage,
            /* statement */ statement,
            /* constant */ nullptr,
-           /* has_side_effects */ src->HasSideEffects(),
            /* root_ident */ src->RootIdentifier()),
       source_(src) {
     TINT_ASSERT(src->Type()->Is<core::type::MemoryView>());

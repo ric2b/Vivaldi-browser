@@ -3,7 +3,7 @@
 #ifndef EXTENSIONS_API_VIVALDI_UTILITIES_DRAG_DOWNLOAD_ITEMS_H_
 #define EXTENSIONS_API_VIVALDI_UTILITIES_DRAG_DOWNLOAD_ITEMS_H_
 
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 
 #include <vector>
 

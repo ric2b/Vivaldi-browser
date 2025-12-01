@@ -8,12 +8,16 @@
 #include <string_view>
 
 #include "base/test/mock_callback.h"
+#include "chrome/browser/ui/android/autofill/payments/payments_window_bridge.h"
+#include "chrome/browser/ui/android/autofill/payments/payments_window_delegate.h"
+#include "chrome/browser/ui/autofill/payments/android_payments_window_manager.h"
 #include "chrome/browser/ui/autofill/payments/android_payments_window_manager_test_api.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/autofill/content/browser/test_autofill_client_injector.h"
 #include "components/autofill/content/browser/test_content_autofill_client.h"
 #include "components/autofill/core/browser/payments/payments_window_manager.h"
 #include "components/autofill/core/browser/payments/test_payments_autofill_client.h"
+#include "content/public/browser/web_contents.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -34,11 +38,32 @@ class TestContentAutofillClientForWindowManagerTest
 
 namespace payments {
 
+class MockPaymentsWindowDelegate : public PaymentsWindowDelegate {
+ public:
+  MockPaymentsWindowDelegate() = default;
+
+  MOCK_METHOD(void, OnDidFinishNavigationForBnpl, (const GURL&), (override));
+  MOCK_METHOD(void, WebContentsDestroyed, (), (override));
+};
+
+class MockPaymentsWindowBridge : public PaymentsWindowBridge {
+ public:
+  explicit MockPaymentsWindowBridge(PaymentsWindowDelegate* delegate)
+      : PaymentsWindowBridge(delegate) {}
+
+  MOCK_METHOD(void,
+              OpenEphemeralTab,
+              (const GURL&, const std::u16string&, content::WebContents&),
+              (override));
+  MOCK_METHOD(void, CloseEphemeralTab, (), (override));
+};
+
 constexpr std::string_view kBnplInitialUrl = "https://www.bnplinitialurl.com/";
 constexpr std::string_view kBnplSuccessUrlPrefix =
     "https://www.bnplsuccess.com/";
 constexpr std::string_view kBnplFailureUrlPrefix =
     "https://www.bnplfailure.com/";
+constexpr std::string_view kBnplUnknownUrl = "https://www.bnplunknown.com/";
 
 class AndroidPaymentsWindowManagerTest
     : public ChromeRenderViewHostTestHarness {
@@ -62,6 +87,14 @@ class AndroidPaymentsWindowManagerTest
     window_manager().InitBnplFlow(std::move(context));
   }
 
+  void SetUpMockPaymentsWindowBridge() {
+    MockPaymentsWindowDelegate mock_delegate;
+    std::unique_ptr<MockPaymentsWindowBridge> payments_window_bridge_ptr =
+        std::make_unique<MockPaymentsWindowBridge>(&mock_delegate);
+    test_api(window_manager())
+        .SetPaymentsWindowBridge(std::move(payments_window_bridge_ptr));
+  }
+
   base::MockCallback<PaymentsWindowManager::OnBnplPopupClosedCallback>
       bnpl_tab_closed_callback_;
   base::HistogramTester histogram_tester_;
@@ -76,6 +109,14 @@ class AndroidPaymentsWindowManagerTest
 TEST_F(AndroidPaymentsWindowManagerTest, InitBnplFlow) {
   // The flow should not be ongoing initially.
   EXPECT_TRUE(test_api(window_manager()).NoOngoingFlow());
+  SetUpMockPaymentsWindowBridge();
+  EXPECT_CALL(static_cast<MockPaymentsWindowBridge&>(
+                  test_api(window_manager()).GetPaymentsWindowBridge()),
+              OpenEphemeralTab(
+                  GURL(kBnplInitialUrl),
+                  BnplIssuerIdToDisplayName(BnplIssuer::IssuerId::kBnplAffirm),
+                  testing::A<content::WebContents&>()))
+      .Times(1);
 
   InitBnplFlowForTest();
 
@@ -203,6 +244,45 @@ TEST_F(AndroidPaymentsWindowManagerTest,
   histogram_tester_.ExpectTotalCount(
       "Autofill.Bnpl.PopupWindowLatency.Affirm.UserClosed", 1);
   EXPECT_TRUE(test_api(window_manager()).NoOngoingFlow());
+}
+
+TEST_F(AndroidPaymentsWindowManagerTest,
+       OnDidFinishNavigationForBnpl_WhenSuccessUrl_ClosesTab) {
+  SetUpMockPaymentsWindowBridge();
+  InitBnplFlowForTest();
+  EXPECT_CALL(static_cast<MockPaymentsWindowBridge&>(
+                  test_api(window_manager()).GetPaymentsWindowBridge()),
+              CloseEphemeralTab())
+      .Times(1);
+
+  window_manager().OnDidFinishNavigationForBnpl(
+      GURL(std::string(kBnplSuccessUrlPrefix) + "?status=success"));
+}
+
+TEST_F(AndroidPaymentsWindowManagerTest,
+       OnDidFinishNavigationForBnpl_WhenFailureUrl_ClosesTab) {
+  SetUpMockPaymentsWindowBridge();
+  InitBnplFlowForTest();
+  EXPECT_CALL(static_cast<MockPaymentsWindowBridge&>(
+                  test_api(window_manager()).GetPaymentsWindowBridge()),
+              CloseEphemeralTab())
+      .Times(1);
+
+  window_manager().OnDidFinishNavigationForBnpl(
+      GURL(std::string(kBnplFailureUrlPrefix) + "?status=failure"));
+}
+
+TEST_F(AndroidPaymentsWindowManagerTest,
+       OnDidFinishNavigationForBnpl_WhenNotFinished_DoesNotCloseTab) {
+  SetUpMockPaymentsWindowBridge();
+  InitBnplFlowForTest();
+  EXPECT_CALL(static_cast<MockPaymentsWindowBridge&>(
+                  test_api(window_manager()).GetPaymentsWindowBridge()),
+              CloseEphemeralTab())
+      .Times(0);
+
+  window_manager().OnDidFinishNavigationForBnpl(
+      GURL(std::string(kBnplUnknownUrl)));
 }
 
 }  // namespace payments

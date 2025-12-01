@@ -90,7 +90,6 @@ struct hb_buffer_t
   hb_segment_properties_t props; /* Script, language, direction */
 
   bool successful; /* Allocations successful */
-  bool shaping_failed; /* Shaping failure */
   bool have_output; /* Whether we have an output buffer going on */
   bool have_positions; /* Whether we have positions */
 
@@ -346,7 +345,7 @@ struct hb_buffer_t
     {
       if (out_info != info || out_len != idx)
       {
-	if (unlikely (!make_room_for (1, 1))) return false;
+	if (unlikely (!ensure (out_len + 1))) return false;
 	out_info[out_len] = info[idx];
       }
       out_len++;
@@ -410,6 +409,9 @@ struct hb_buffer_t
 			 bool interior = false,
 			 bool from_out_buffer = false)
   {
+    if (unlikely (end != (unsigned) -1 && end - start > 255))
+      return;
+
     end = hb_min (end, len);
 
     if (interior && !from_out_buffer && end - start < 2)

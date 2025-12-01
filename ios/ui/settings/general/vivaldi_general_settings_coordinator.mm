@@ -45,8 +45,7 @@
 - (void)start {
   self.viewProvider = [[VivaldiGeneralSettingsViewProvider alloc] init];
   self.viewController =
-    [VivaldiGeneralSettingsViewProvider
-        makeViewControllerWithPresentationDelegate:self];
+    [self.viewProvider makeViewControllerWithPresentationDelegate:self];
   self.viewController.title =
       l10n_util::GetNSString(IDS_IOS_GENERAL_SETTING_TITLE);
   self.viewController.navigationItem.largeTitleDisplayMode =

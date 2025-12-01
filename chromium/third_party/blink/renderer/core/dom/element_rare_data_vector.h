@@ -7,6 +7,7 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/css_pseudo_element.h"
+#include "third_party/blink/renderer/core/dom/element_animation_trigger_data.h"
 #include "third_party/blink/renderer/core/dom/element_rare_data_field.h"
 #include "third_party/blink/renderer/core/dom/explicitly_set_attr_elements_map.h"
 #include "third_party/blink/renderer/core/dom/focusgroup_flags.h"
@@ -81,7 +82,7 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
     kSavedLayerScrollOffset = 22,
     kAnchorPositionScrollData = 23,
     kAnchorElementObserver = 24,
-    kImplicitlyAnchoredElementCount = 25,
+    kMayBeImplicitAnchor = 25,
     kLastRememberedBlockSize = 26,
     kLastRememberedInlineSize = 27,
     kRestrictionTargetId = 28,
@@ -94,8 +95,9 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
     kExplicitlySetElementsForAttr = 35,
     kCSSPseudoElementData = 36,
     kCustomElementRegistry = 37,
+    kAnimationTriggerData = 38,
 
-    kNumFields = 38,
+    kNumFields = 39,
   };
 
   ElementRareDataField* GetField(FieldId field_id) const;
@@ -326,9 +328,8 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
   CustomElementRegistry* GetCustomElementRegistry() const;
   void SetCustomElementRegistry(CustomElementRegistry* registry);
 
-  void IncrementImplicitlyAnchoredElementCount();
-  void DecrementImplicitlyAnchoredElementCount();
-  bool HasImplicitlyAnchoredElement() const;
+  ElementAnimationTriggerData* AnimationTriggerData();
+  ElementAnimationTriggerData& EnsureAnimationTriggerData();
 
   void SetDidAttachInternals() { fields_.did_attach_internals = true; }
   bool DidAttachInternals() const { return fields_.did_attach_internals; }
@@ -352,6 +353,8 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
   bool HasBeenExplicitlyScrolled() const {
     return fields_.has_been_explicitly_scrolled;
   }
+  bool MayBeImplicitAnchor() const { return fields_.may_be_implicit_anchor; }
+  void SetMayBeImplicitAnchor() { fields_.may_be_implicit_anchor = true; }
 
   FocusgroupFlags GetFocusgroupFlags() const {
     return fields_.focusgroup_flags;
@@ -362,7 +365,12 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
   void ClearFocusgroupFlags() {
     fields_.focusgroup_flags = FocusgroupFlags::kNone;
   }
-
+  void SetAffectedByStartingStyles() {
+    fields_.affected_by_starting_styles = true;
+  }
+  bool AffectedByStartingStyles() const {
+    return fields_.affected_by_starting_styles;
+  }
   bool AffectedBySubjectHas() const {
     return fields_.has_invalidation_flags.affected_by_subject_has;
   }
@@ -460,8 +468,10 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
     // it doesn't hurt performance much.
     unsigned has_counters_styles : 1 = false;
     unsigned has_been_explicitly_scrolled : 1 = false;
+    unsigned may_be_implicit_anchor : 1 = false;
     HasInvalidationFlags has_invalidation_flags;
     FocusgroupFlags focusgroup_flags = FocusgroupFlags::kNone;
+    unsigned affected_by_starting_styles : 1 = false;
   };
   Fields fields_;
 };

@@ -28,7 +28,6 @@
 #include "base/task/thread_pool.h"
 #include "base/types/expected_macros.h"
 #include "base/unguessable_token.h"
-#include "base/uuid.h"
 #include "build/build_config.h"
 #include "components/services/storage/public/cpp/buckets/bucket_id.h"
 #include "components/services/storage/public/cpp/buckets/bucket_locator.h"
@@ -63,6 +62,7 @@
 #include "storage/browser/file_system/file_system_url.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/common/file_system/file_system_types.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_data_transfer_token.mojom.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_error.mojom.h"
@@ -191,11 +191,6 @@ void ShowFilePickerOnUIThread(
                     });
   }
 
-  // Drop fullscreen mode so that the user sees the URL bar.
-  base::ScopedClosureRunner fullscreen_block =
-      web_contents->ForSecurityDropFullscreen(
-          /*display_id=*/display::kInvalidDisplayId);
-
 #if BUILDFLAG(IS_ANDROID)
   // Allow android WebView to handle chooser.
   WebContentsDelegate* delegate = web_contents->GetDelegate();
@@ -232,8 +227,18 @@ void ShowFilePickerOnUIThread(
   }
 #endif
 
+  FileSystemChooser::ScopedObjects scoped_objects(
+      // Drop fullscreen mode so that the user sees the URL bar.
+      /*fullscreen_block=*/web_contents->ForSecurityDropFullscreen(
+          display::kInvalidDisplayId),
+      // Maybe tuck the pip window so that it would not block the file picker
+      // UI.
+      /*pip_tucker=*/GetContentClient()
+          ->browser()
+          ->MaybeGetScopedPictureInPictureTucker(web_contents));
+
   FileSystemChooser::CreateAndShow(web_contents, options, std::move(callback),
-                                   std::move(fullscreen_block));
+                                   std::move(scoped_objects));
 }
 
 // Called after creating a file that was picked by a save file picker. If
@@ -1910,6 +1915,12 @@ FileSystemAccessManagerImpl::GetSharedHandleStateForNonSandboxedPath(
         break;
     }
   }
+
+  if (shared_handle_state_callback_for_test_) {
+    return shared_handle_state_callback_for_test_.Run(read_grant,  // IN-TEST
+                                                      write_grant);
+  }
+
   return SharedHandleState(std::move(read_grant), std::move(write_grant));
 }
 
@@ -1932,6 +1943,12 @@ FileSystemAccessManagerImpl::GetSharedHandleStateForSandboxedPath() {
   auto permission_grant =
       base::MakeRefCounted<FixedFileSystemAccessPermissionGrant>(
           PermissionStatus::GRANTED, PathInfo());
+
+  if (shared_handle_state_callback_for_test_) {
+    return shared_handle_state_callback_for_test_.Run(  // IN-TEST
+        permission_grant, permission_grant);
+  }
+
   return SharedHandleState(permission_grant, permission_grant);
 }
 
@@ -2068,6 +2085,15 @@ base::WeakPtr<FileSystemAccessManagerImpl>
 FileSystemAccessManagerImpl::AsWeakPtr() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return weak_factory_.GetWeakPtr();
+}
+
+// static
+blink::mojom::FileSystemAccessPermissionMode
+FileSystemAccessManagerImpl::GetEffectiveWritePermissionMode() {
+  return base::FeatureList::IsEnabled(
+             blink::features::kFileSystemAccessWriteMode)
+             ? blink::mojom::FileSystemAccessPermissionMode::kWrite
+             : blink::mojom::FileSystemAccessPermissionMode::kReadWrite;
 }
 
 bool FileSystemAccessManagerImpl::IsSafePathComponent(

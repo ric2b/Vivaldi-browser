@@ -18,6 +18,8 @@
 
 @protocol CRWResponderInputView;
 @class UIViewController;
+@class WKFrameInfo;
+@class WKOpenPanelParameters;
 
 namespace web {
 
@@ -57,6 +59,24 @@ class WebStateDelegate {
       FormWarningType warning_type,
       base::OnceCallback<void(bool)> callback);
 
+  // Called when a copy operation is initiated. The delegate must call
+  // `callback` with `true` to allow the copy or `false` to prevent it.
+  // By default, copy is allowed.
+  virtual void ShouldAllowCopy(WebState* source,
+                               base::OnceCallback<void(bool)> callback);
+
+  // Called when a paste operation is initiated. The delegate must call
+  // `callback` with `true` to allow the paste or `false` to prevent it.
+  // By default, paste is allowed.
+  virtual void ShouldAllowPaste(WebState* source,
+                                base::OnceCallback<void(bool)> callback);
+
+  // Called when a cut operation is initiated. The delegate must call
+  // `callback` with `true` to allow the cut or `false` to prevent it.
+  // By default, cut is allowed.
+  virtual void ShouldAllowCut(WebState* source,
+                              base::OnceCallback<void(bool)> callback);
+
   // Returns a pointer to a service to manage dialogs. May return nullptr in
   // which case dialogs aren't shown.
   // TODO(crbug.com/40473860): Find better place for this method.
@@ -83,7 +103,7 @@ class WebStateDelegate {
   virtual void OnAuthRequired(WebState* source,
                               NSURLProtectionSpace* protection_space,
                               NSURLCredential* proposed_credential,
-                              AuthCallback callback) = 0;
+                              AuthCallback callback);
 
   // Returns the UIView used to contain the WebView for sizing purposes. Can be
   // nil.
@@ -108,6 +128,22 @@ class WebStateDelegate {
   // Provides an opportunity to the delegate to react to the creation of the web
   // view.
   virtual void OnNewWebViewCreated(WebState* source);
+
+  // Whether the delegate implements the `RunOpenPanel()` method for `source`.
+  // If this returns `false`, then the native open panel will run instead.
+  virtual bool CanRunOpenPanel(web::WebState* source) const
+      API_AVAILABLE(ios(18.4));
+
+  // Displays a file upload panel and calls `completion` with file URLs selected
+  // by the user. `parameters` describe the file upload control which initiated
+  // the call from `frame`. This is not called if `OverrideOpenPanel()` returns
+  // false.
+  virtual void RunOpenPanel(
+      web::WebState* source,
+      WKOpenPanelParameters* parameters,
+      WKFrameInfo* frame,
+      base::OnceCallback<void(NSArray<NSURL*>*)> completion) const
+      API_AVAILABLE(ios(18.4));
 
  protected:
   virtual ~WebStateDelegate();

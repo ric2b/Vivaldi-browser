@@ -35,6 +35,7 @@
 #include "chrome/browser/download/download_offline_content_provider.h"
 #include "chrome/browser/download/download_offline_content_provider_factory.h"
 #include "chrome/browser/download/download_stats.h"
+#include "chrome/browser/download/download_ui_model.h"
 #include "chrome/browser/download/download_ui_safe_browsing_util.h"
 #include "chrome/browser/download/insecure_download_blocking.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
@@ -63,6 +64,7 @@
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/download_manager_delegate.h"
 #include "content/public/browser/download_request_utils.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/common/content_features.h"
@@ -511,8 +513,10 @@ void DownloadController::OnDownloadUpdated(DownloadItem* item) {
   }
 
   if (item->IsDangerous() && (item->GetState() != DownloadItem::CANCELLED)) {
+    DownloadItemModel model{item};
+    MaybeRecordDangerousDownloadWarningShown(model);
     if (ShouldShowSafeBrowsingAndroidDownloadWarnings()) {
-      ShowDangerousDownloadWarning(item);
+      ShowDangerousDownloadWarning(model);
     } else {
       // Don't show notification for a dangerous download, as user can resume
       // the download after browser crash through notification.
@@ -543,11 +547,9 @@ void DownloadController::OnDownloadDestroyed(download::DownloadItem* item) {
   }
 }
 
-void DownloadController::ShowDangerousDownloadWarning(
-    download::DownloadItem* item) {
-  DownloadItemModel model{item};
-  MaybeRecordDangerousDownloadWarningShown(model);
-
+void DownloadController::ShowDangerousDownloadWarning(DownloadUIModel& model) {
+  download::DownloadItem* item = model.GetDownloadItem();
+  CHECK(item);
   // Schedule the dangerous download to be canceled after a time delay.
   if (DownloadCoreService* download_core_service =
           DownloadCoreServiceFactory::GetForBrowserContext(

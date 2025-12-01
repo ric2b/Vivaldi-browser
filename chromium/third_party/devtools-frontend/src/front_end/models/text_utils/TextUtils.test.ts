@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -725,6 +725,39 @@ export class ApiProxy {
         new TextUtils.ContentProvider.SearchMatch(5, lines[0], 30, 3),
         new TextUtils.ContentProvider.SearchMatch(42, lines[1], 0, 3),
       ]);
+    });
+  });
+
+  describe('getOverlap', () => {
+    it('should find the correct overlap between two strings', () => {
+      assert.strictEqual(TextUtils.TextUtils.getOverlap('abcde', 'cdefg'), 'cde');
+    });
+
+    it('should return null if there is no overlap', () => {
+      assert.isNull(TextUtils.TextUtils.getOverlap('abc', 'def'));
+    });
+
+    it('should handle identical strings', () => {
+      assert.strictEqual(TextUtils.TextUtils.getOverlap('abc', 'abc'), 'abc');
+    });
+
+    it('should return null for empty strings', () => {
+      assert.isNull(TextUtils.TextUtils.getOverlap('', 'abc'));
+      assert.isNull(TextUtils.TextUtils.getOverlap('abc', ''));
+      assert.isNull(TextUtils.TextUtils.getOverlap('', ''));
+    });
+
+    it('should find a single character overlap', () => {
+      assert.strictEqual(TextUtils.TextUtils.getOverlap('abc', 'cde'), 'c');
+    });
+
+    it('should find the longest possible overlap', () => {
+      assert.strictEqual(TextUtils.TextUtils.getOverlap('banana', 'ananas'), 'anana');
+    });
+
+    it('should be case-sensitive', () => {
+      assert.strictEqual(TextUtils.TextUtils.getOverlap('aBc', 'Bcd'), 'Bc');
+      assert.isNull(TextUtils.TextUtils.getOverlap('aBc', 'bcd'));
     });
   });
 });

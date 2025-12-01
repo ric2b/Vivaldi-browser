@@ -27,7 +27,6 @@
 <translation id="1451375123200651445">Webpage, Single File</translation>
 <translation id="1465176863081977902">C&amp;opy Audio Address</translation>
 <translation id="1476607407192946488">&amp;Language Settings</translation>
-<translation id="1546280085599573572">This extension has changed the page that is shown when you click the Home button.</translation>
 <translation id="1552752544932680961">Manage extension</translation>
 <translation id="15662109988763471">The selected printer is not available or not installed correctly. Check your printer or try selecting another printer.</translation>
 <translation id="1588438908519853928">Normal</translation>
@@ -69,7 +68,6 @@
 <translation id="215753907730220065">Exit Full Screen</translation>
 <translation id="2158475082070321257">Copy link to highlight</translation>
 <translation id="2177950615300672361">Incognito Tab: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Native Client module: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Paste as plain text</translation>
 <translation id="2249605167705922988">e.g. 1-5, 8, 11-13</translation>
 <translation id="2280486287150724112">Right margin</translation>
@@ -82,7 +80,6 @@
 <translation id="2348176352564285430">App: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Select the extension directory.</translation>
 <translation id="2379281330731083556">Print using system dialogue... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Unknown plug-in</translation>
 <translation id="2423578206845792524">Sa&amp;ve image as...</translation>
 <translation id="2439110203301358333">Another programme on your computer added an extension that may change the way Vivaldi works.</translation>
 <translation id="2443487764245141020">Sites may also need to recognize your device using an identifier</translation>
@@ -106,7 +103,6 @@
 <translation id="2785873697295365461">File descriptors</translation>
 <translation id="2825758591930162672">Subject's Public Key</translation>
 <translation id="2850541429955027218">Add theme</translation>
-<translation id="2861941300086904918">Native Client security manager</translation>
 <translation id="2881076733170862447">When You Click the Extension</translation>
 <translation id="2889064240420137087">Open link with...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> could not communicate with this printer. Make sure the printer is plugged in and try again.</translation>
@@ -153,7 +149,6 @@
 <translation id="3511307672085573050">Copy Link Addr&amp;ess</translation>
 <translation id="354068948465830244">This can read and change site data</translation>
 <translation id="3560034655160545939">&amp;Spell check</translation>
-<translation id="3587482841069643663">All</translation>
 <translation id="3627588569887975815">Open link in inco&amp;gnito window</translation>
 <translation id="3678156199662914018">Extension: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Screen Sharing Request</translation>
@@ -194,7 +189,6 @@
 <translation id="4131410914670010031">Black and white</translation>
 <translation id="4165986682804962316">Site settings</translation>
 <translation id="4170314459383239649">Clear On Exit</translation>
-<translation id="4176463684765177261">Disabled</translation>
 <translation id="4200983522494130825">New &amp;tab</translation>
 <translation id="4225397296022057997">On all sites</translation>
 <translation id="4256316378292851214">Sa&amp;ve Video As...</translation>
@@ -218,6 +212,7 @@
 <translation id="4613271546271159013">An extension has changed what page is shown when you open a new tab.</translation>
 <translation id="4616405296204756919">You can use saved passwords on any device. They're saved to the <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Open Video in New Tab</translation>
+<translation id="4654801841330730814">All</translation>
 <translation id="4677772697204437347">GPU memory</translation>
 <translation id="4681930562518940301">Open original &amp;image in new tab</translation>
 <translation id="4711638718396952945">Restore settings</translation>
@@ -243,11 +238,9 @@
 <translation id="5059526285558225588">Choose what to share</translation>
 <translation id="5063480226653192405">Usage</translation>
 <translation id="5116628073786783676">Sa&amp;ve Audio As...</translation>
-<translation id="5143374789336132547">The extension "<ph name="EXTENSION_NAME" />" has changed the page that is shown when you click the Home button.</translation>
 <translation id="5154108062446123722">Advanced settings for <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5154702632169343078">Subject</translation>
 <translation id="5171343362375269016">Swapped Memory</translation>
-<translation id="5233019165164992427">NaCl debug port</translation>
 <translation id="5233231016133573565">Process ID</translation>
 <translation id="5233736638227740678">&amp;Paste</translation>
 <translation id="5256861893479663409">On All Sites</translation>
@@ -270,7 +263,6 @@
 <translation id="5485102783864353244">Add app</translation>
 <translation id="5486561344817861625">Simulate Browser Restart</translation>
 <translation id="5509693895992845810">Save &amp;As...</translation>
-<translation id="5521078259930077036">Is this the home page that you were expecting?</translation>
 <translation id="5542132724887566711">Profile</translation>
 <translation id="5556459405103347317">Reload</translation>
 <translation id="5575473780076478375">Incognito Extension: <ph name="EXTENSION_NAME" /></translation>
@@ -281,7 +273,6 @@
 <translation id="5677928146339483299">Blocked</translation>
 <translation id="5707185214361380026">Failed to load extension from:</translation>
 <translation id="5713171467967533494">Open in Vivaldi browser</translation>
-<translation id="5715711091495208045">Plug-in Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Save as PDF</translation>
 <translation id="5747809636523347288">Pa&amp;ste and go to <ph name="URL" /></translation>
 <translation id="5759728514498647443">Documents you send to print via <ph name="APP_NAME" /> can be read by <ph name="APP_NAME" />.</translation>
@@ -289,7 +280,6 @@
 <translation id="5780973441651030252">Process priority</translation>
 <translation id="5804241973901381774">Permissions</translation>
 <translation id="5828633471261496623">Printing...</translation>
-<translation id="583281660410589416">Unknown</translation>
 <translation id="5851868085455377790">Issuer</translation>
 <translation id="5860491529813859533">Turn on</translation>
 <translation id="5910363049092958439">Sa&amp;ve Image As...</translation>
@@ -341,7 +331,6 @@
 <translation id="6691936601825168937">&amp;Forward</translation>
 <translation id="6786747875388722282">Extensions</translation>
 <translation id="6787839852456839824">Keyboard shortcuts</translation>
-<translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Keep changes</translation>
 <translation id="6824564591481349393">Copy &amp;Email Address</translation>
 <translation id="6840155290835956714">Ask before sending</translation>
@@ -376,7 +365,6 @@
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Cancel</translation>
 <translation id="7659154729610375585">Exit Incognito mode anyway?</translation>
-<translation id="7661259717474717992">Allow sites to save and read cookie data</translation>
 <translation id="7663719505383602579">Receiver: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installed by Your Administrator</translation>
 <translation id="7685049629764448582">JavaScript memory</translation>
@@ -418,7 +406,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="8261378640211443080">This extension is not listed in the <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> and may have been added without your knowledge.</translation>
 <translation id="8351419472474436977">This extension has taken control of your proxy settings, which means it can change, break or eavesdrop on anything that you do online. If you aren't sure why this change happened, you probably don't want it.</translation>
 <translation id="8382913212082956454">Copy &amp;email address</translation>
-<translation id="8434480141477525001">NaCl Debug Port</translation>
 <translation id="8449008133205184768">Paste and Match Style</translation>
 <translation id="8477178913400731244">Delete data</translation>
 <translation id="8477384620836102176">&amp;General</translation>

@@ -1,10 +1,9 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import type {DevToolsFrontendReloadOptions} from '../../conductor/frontend_tab.js';
 import type {DevToolsPage} from '../../e2e_non_hosted/shared/frontend-helper.js';
-import {reloadDevTools as baseReloadDevTools, waitFor} from '../../shared/helper.js';
 import {getBrowserAndPagesWrappers} from '../../shared/non_hosted_wrappers.js';
 
 import {veImpressionForAnimationsPanel} from './animations-helpers.js';
@@ -32,8 +31,8 @@ export async function clickOnContextMenuItemFromTab(
   await devToolsPage.click(menuItemSelector);
 }
 
-export const MOVE_TO_DRAWER_SELECTOR = '[aria-label="Move to bottom"]';
-export const MOVE_TO_MAIN_PANEL_SELECTOR = '[aria-label="Move to top"]';
+export const MOVE_TO_DRAWER_SELECTOR = '[aria-label="Move to drawer"]';
+export const MOVE_TO_MAIN_TAB_BAR_SELECTOR = '[aria-label="Move to main tab bar"]';
 export const MAIN_PANEL_SELECTOR = 'div[class*="main-tabbed-pane"][slot*="main"]';
 export const DRAWER_PANEL_SELECTOR = 'div[class*="drawer-tabbed-pane"][slot*="sidebar"]';
 export const TAB_HEADER_SELECTOR = 'div[class*="tabbed-pane-header"]';
@@ -87,9 +86,9 @@ export async function reloadDevTools(
     // Navigate to a different site to make sure that back-end state will be removed.
     await inspectedPage.page.goto('about:blank');
   }
-  await baseReloadDevTools(options);
+  await devToolsPage.reloadWithParams(options?.queryParams || {});
   const selectedPanel = options?.selectedPanel?.name || options?.queryParams?.panel || 'elements';
-  await waitFor(`.panel.${selectedPanel}`);
+  await devToolsPage.waitFor(`.panel.${selectedPanel}`);
   const expectClosedPanels = options?.expectClosedPanels;
   const dockable = options?.canDock;
   const panelImpression = selectedPanel === 'elements' ? veImpressionForElementsPanel({dockable}) :

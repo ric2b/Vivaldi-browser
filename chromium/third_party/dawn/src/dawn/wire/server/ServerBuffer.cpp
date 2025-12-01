@@ -25,6 +25,11 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/439062058): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <limits>
 #include <memory>
 
@@ -115,8 +120,8 @@ WireResult Server::DoBufferMapAsync(Known<WGPUBuffer> buffer,
 
     mProcs.bufferMapAsync(
         buffer->handle, mode, offset, size,
-        {nullptr, WGPUCallbackMode_AllowProcessEvents,
-         ForwardToServer<&Server::OnBufferMapAsyncCallback>, userdata.release(), nullptr});
+        MakeCallbackInfo<WGPUBufferMapCallbackInfo, &Server::OnBufferMapAsyncCallback>(
+            userdata.release()));
 
     return WireResult::Success;
 }

@@ -1,36 +1,6 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2010 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
-/*
- * Copyright (C) 2010 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the #name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
 
 import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
 import type * as Protocol from '../../generated/protocol.js';
@@ -67,6 +37,7 @@ export interface LayoutProperties {
   isFlex: boolean;
   isGrid: boolean;
   isSubgrid: boolean;
+  isMasonry: boolean;
   isContainer: boolean;
   hasScroll: boolean;
 }
@@ -421,6 +392,7 @@ export class CSSModel extends SDKModel<EventTypes> {
                        (styles.get('grid-template-columns')?.startsWith('subgrid') ||
                         styles.get('grid-template-rows')?.startsWith('subgrid'))) ??
         false;
+    const isMasonry = display === 'masonry' || display === 'inline-masonry';
     const containerType = styles.get('container-type');
     const isContainer = Boolean(containerType) && containerType !== '' && containerType !== 'normal';
     const hasScroll = Boolean(styles.get('scroll-snap-type')) && styles.get('scroll-snap-type') !== 'none';
@@ -429,6 +401,7 @@ export class CSSModel extends SDKModel<EventTypes> {
       isFlex,
       isGrid,
       isSubgrid,
+      isMasonry,
       isContainer,
       hasScroll,
     };
@@ -487,6 +460,12 @@ export class CSSModel extends SDKModel<EventTypes> {
         new CSSStyleDeclaration(this, null, response.attributesStyle, Type.Attributes) :
         null;
     return new InlineStyleResult(inlineStyle, attributesStyle);
+  }
+
+  forceStartingStyle(node: DOMNode, forced: boolean): boolean {
+    void this.agent.invoke_forceStartingStyle({nodeId: node.id, forced});
+    this.dispatchEventToListeners(Events.StartingStylesStateForced, node);
+    return true;
   }
 
   forcePseudoState(node: DOMNode, pseudoClass: string, enable: boolean): boolean {
@@ -965,6 +944,7 @@ export enum Events {
   ModelWasEnabled = 'ModelWasEnabled',
   ModelDisposed = 'ModelDisposed',
   PseudoStateForced = 'PseudoStateForced',
+  StartingStylesStateForced = 'StartingStylesStateForced',
   StyleSheetAdded = 'StyleSheetAdded',
   StyleSheetChanged = 'StyleSheetChanged',
   StyleSheetRemoved = 'StyleSheetRemoved',
@@ -993,6 +973,7 @@ export interface EventTypes {
   [Events.ModelWasEnabled]: void;
   [Events.ModelDisposed]: CSSModel;
   [Events.PseudoStateForced]: PseudoStateForcedEvent;
+  [Events.StartingStylesStateForced]: DOMNode;
   [Events.StyleSheetAdded]: CSSStyleSheetHeader;
   [Events.StyleSheetChanged]: StyleSheetChangedEvent;
   [Events.StyleSheetRemoved]: CSSStyleSheetHeader;
@@ -1017,13 +998,13 @@ export class Edit {
 }
 
 export class CSSLocation {
-  readonly #cssModelInternal: CSSModel;
+  readonly #cssModel: CSSModel;
   styleSheetId: Protocol.CSS.StyleSheetId;
   url: Platform.DevToolsPath.UrlString;
   lineNumber: number;
   columnNumber: number;
   constructor(header: CSSStyleSheetHeader, lineNumber: number, columnNumber?: number) {
-    this.#cssModelInternal = header.cssModel();
+    this.#cssModel = header.cssModel();
     this.styleSheetId = header.id;
     this.url = header.resourceURL();
     this.lineNumber = lineNumber;
@@ -1031,11 +1012,11 @@ export class CSSLocation {
   }
 
   cssModel(): CSSModel {
-    return this.#cssModelInternal;
+    return this.#cssModel;
   }
 
   header(): CSSStyleSheetHeader|null {
-    return this.#cssModelInternal.styleSheetHeaderForId(this.styleSheetId);
+    return this.#cssModel.styleSheetHeaderForId(this.styleSheetId);
   }
 }
 

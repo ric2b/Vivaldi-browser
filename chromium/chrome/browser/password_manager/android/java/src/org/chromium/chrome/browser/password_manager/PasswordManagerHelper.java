@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.password_manager;
 
+import static org.chromium.build.NullUtil.assertNonNull;
+
 import android.app.PendingIntent;
 import android.app.PendingIntent.CanceledException;
 import android.content.Context;
@@ -25,39 +27,39 @@ import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.DeviceInfo;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.Contract;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.loading_modal.LoadingModalDialogCoordinator;
 import org.chromium.chrome.browser.password_manager.CredentialManagerLauncher.CredentialManagerBackendException;
 import org.chromium.chrome.browser.password_manager.CredentialManagerLauncher.CredentialManagerError;
-import org.chromium.chrome.browser.password_manager.PasswordCheckupClientHelper.PasswordCheckBackendException;
-import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.password_manager.PasswordCheckupClientHelper.PasswordManagerUnavailableException;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileKeyedMap;
 import org.chromium.chrome.browser.pwm_disabled.PasswordCsvDownloadFlowControllerFactory;
 import org.chromium.chrome.browser.pwm_disabled.PasswordManagerUnavailableDialogCoordinator;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.components.browser_ui.settings.SettingsCustomTabLauncher;
-import org.chromium.components.prefs.PrefService;
-import org.chromium.components.sync.DataType;
 import org.chromium.components.sync.SyncService;
-import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Optional;
+import java.util.function.Supplier;
+
+// Vivaldi
+import android.os.Bundle;
+
+import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
+import org.chromium.components.browser_ui.settings.SettingsNavigation;
 
 /** A helper class for showing PasswordSettings. TODO(crbug.com/40853413): Split up this class */
 @NullMarked
 public class PasswordManagerHelper {
-    // Key for the argument with which PasswordsSettings will be launched. The value for
-    // this argument should be part of the ManagePasswordsReferrer enum, which contains
-    // all points of entry to the passwords settings.
+    // Vivaldi
     public static final String MANAGE_PASSWORDS_REFERRER = "manage-passwords-referrer";
-
     // Indicates the operation that was requested from the {@link PasswordCheckupClientHelper}.
     @IntDef({
         PasswordCheckOperation.RUN_PASSWORD_CHECKUP,
@@ -87,37 +89,6 @@ public class PasswordManagerHelper {
     // Loading dialog is dismissed with this delay after sending an intent to prevent
     // the old activity from showing up before the new one is shown.
     private static final long LOADING_DIALOG_DISMISS_DELAY_MS = 300L;
-
-    /**
-     * The identifier of the loading dialog outcome.
-     *
-     * <p>These values are persisted to logs. Entries should not be renumbered and numeric values
-     * should never be reused. Please, keep in sync with tools/metrics/histograms/enums.xml.
-     */
-    @VisibleForTesting
-    @IntDef({
-        LoadingDialogOutcome.NOT_SHOWN_LOADED,
-        LoadingDialogOutcome.SHOWN_LOADED,
-        LoadingDialogOutcome.SHOWN_CANCELLED,
-        LoadingDialogOutcome.SHOWN_TIMED_OUT,
-        LoadingDialogOutcome.NUM_ENTRIES
-    })
-    @Retention(RetentionPolicy.SOURCE)
-    @interface LoadingDialogOutcome {
-        /** The loading dialog was requested but loading finished before it got shown. */
-        int NOT_SHOWN_LOADED = 0;
-
-        /** The loading dialog was shown, loading process finished. */
-        int SHOWN_LOADED = 1;
-
-        /** The loading dialog was shown and cancelled by user before loading finished. */
-        int SHOWN_CANCELLED = 2;
-
-        /** The loading dialog was shown and timed out before loading finished. */
-        int SHOWN_TIMED_OUT = 3;
-
-        int NUM_ENTRIES = 4;
-    }
 
     private static @Nullable ProfileKeyedMap<PasswordManagerHelper> sProfileMap;
 
@@ -161,29 +132,26 @@ public class PasswordManagerHelper {
     public void showPasswordSettings(
             Context context,
             @ManagePasswordsReferrer int referrer,
-            Supplier<ModalDialogManager> modalDialogManagerSupplier,
+            Supplier<@Nullable ModalDialogManager> modalDialogManagerSupplier,
             boolean managePasskeys,
             @Nullable String account,
             SettingsCustomTabLauncher settingsCustomTabLauncher) {
+        if (BuildConfig.IS_VIVALDI) {
+            showPasswordSettingsPreLoginDbDeprecation(context, referrer);
+            return;
+        }
+
         RecordHistogram.recordEnumeratedHistogram(
                 "PasswordManager.ManagePasswordsReferrer",
                 referrer,
                 ManagePasswordsReferrer.MAX_VALUE);
         SyncService syncService = SyncServiceFactory.getForProfile(mProfile);
 
-        PrefService prefService = UserPrefs.get(mProfile);
-
-        if (!PasswordManagerUtilBridge.isPasswordManagerAvailable(prefService)
-                && !prefService.getBoolean(Pref.UPM_UNMIGRATED_PASSWORDS_EXPORTED)) {
-            // The automatic export is ongoing. Usually a dialog offering the user to download
-            // the auto-exported CSV would be shown, but until the CSV is written, the dialog
-            // can't be shown. This is a rare corner-case.
-            return;
-        }
         if (!showPwmUnavailableOrDownloadCsvDialog(
                 context, modalDialogManagerSupplier, settingsCustomTabLauncher)) {
             LoadingModalDialogCoordinator loadingDialogCoordinator =
-                    LoadingModalDialogCoordinator.create(modalDialogManagerSupplier, context);
+                    LoadingModalDialogCoordinator.create(
+                            () -> assertNonNull(modalDialogManagerSupplier.get()), context);
             launchTheCredentialManager(
                     referrer,
                     syncService,
@@ -211,14 +179,13 @@ public class PasswordManagerHelper {
                         activity,
                         mProfile,
                         PasswordManagerUtilBridge.isGooglePlayServicesUpdatable(),
-                        PasswordManagerUtilBridge.isPasswordManagerAvailable(
-                                UserPrefs.get(mProfile)),
+                        PasswordManagerUtilBridge.isPasswordManagerAvailable(),
                         settingsCustomTabLauncher);
     }
 
     private boolean showPwmUnavailableOrDownloadCsvDialog(
             Context context,
-            Supplier<ModalDialogManager> modalDialogManagerSupplier,
+            Supplier<@Nullable ModalDialogManager> modalDialogManagerSupplier,
             SettingsCustomTabLauncher settingsCustomTabLauncher) {
         // Automotive doesn't support the export flow.
         if (!DeviceInfo.isAutomotive()
@@ -227,11 +194,11 @@ public class PasswordManagerHelper {
             return true;
         }
 
-        if (!PasswordManagerUtilBridge.isPasswordManagerAvailable(UserPrefs.get(mProfile))) {
+        if (!PasswordManagerUtilBridge.isPasswordManagerAvailable()) {
             new PasswordManagerUnavailableDialogCoordinator()
                     .showDialog(
                             context,
-                            modalDialogManagerSupplier.get(),
+                            assertNonNull(modalDialogManagerSupplier.get()),
                             PasswordManagerUtilBridge.isGooglePlayServicesUpdatable()
                                     ? GmsUpdateLauncher::launch
                                     : null);
@@ -247,20 +214,6 @@ public class PasswordManagerHelper {
         } else {
             PasswordExportLauncher.showMainSettingsAndStartExport(context);
         }
-    }
-
-    /**
-     * Checks the ability to use an AccountSettings intent to launch the password manager. This
-     * provides a fallback for users who attempt to manage passkeys when UPM is not available.
-     * Passkeys cannot be managed from the Chrome password settings page.
-     *
-     * <p>Since there is not necessarily a signed in Chrome user, the intent might show an account
-     * chooser before showing the password manager.
-     *
-     * @return True if the AccountSettings intent is available for use, false otherwise.
-     */
-    public static boolean canUseAccountSettings() {
-        return PasswordManagerBackendSupportHelper.getInstance().isBackendPresent();
     }
 
     /**
@@ -280,18 +233,17 @@ public class PasswordManagerHelper {
     public void showPasswordCheckup(
             Context context,
             @PasswordCheckReferrer int referrer,
-            Supplier<ModalDialogManager> modalDialogManagerSupplier,
+            Supplier<@Nullable ModalDialogManager> modalDialogManagerSupplier,
             @Nullable String accountEmail,
             @Nullable SettingsCustomTabLauncher settingsCustomTabLauncher) {
         assert accountEmail == null || !accountEmail.isEmpty();
 
-        // TODO(crbug.com/40945093): Change PasswordCheckupClientHelper.getPasswordCheckupIntent to
-        // take the accountEmail as String.
         Optional<String> account =
                 accountEmail == null ? Optional.empty() : Optional.of(accountEmail);
 
         LoadingModalDialogCoordinator loadingDialogCoordinator =
-                LoadingModalDialogCoordinator.create(modalDialogManagerSupplier, context);
+                LoadingModalDialogCoordinator.create(
+                        () -> assertNonNull(modalDialogManagerSupplier.get()), context);
 
         launchPasswordCheckup(
                 referrer,
@@ -471,39 +423,19 @@ public class PasswordManagerHelper {
         return PasswordManagerHelperJni.get().hasChosenToSyncPasswords(syncService);
     }
 
-    /**
-     * Checks whether the user is actively syncing passwords without a custom passphrase. The caller
-     * should make sure that the sync engine is initialized before calling this method.
-     *
-     * @param syncService the service to query about the sync status.
-     * @return true if actively syncing passwords and no custom passphrase was set.
-     */
-    public static boolean isSyncingPasswordsWithNoCustomPassphrase(SyncService syncService) {
-        assert syncService.isEngineInitialized();
-        if (syncService == null || !syncService.hasSyncConsent()) return false;
-        if (!syncService.getActiveDataTypes().contains(DataType.PASSWORDS)) return false;
-        if (syncService.isUsingExplicitPassphrase()) return false;
-        return true;
-    }
-
     @VisibleForTesting
-    public void launchTheCredentialManager(
+    void launchTheCredentialManager(
             @ManagePasswordsReferrer int referrer,
             @Nullable SyncService syncService,
             LoadingModalDialogCoordinator loadingDialogCoordinator,
-            Supplier<ModalDialogManager> modalDialogManagerSupplier,
+            Supplier<@Nullable ModalDialogManager> modalDialogManagerSupplier,
             Context context,
             @Nullable String account) {
         assert syncService != null;
-
-        CredentialManagerLauncher credentialManagerLauncher;
-        try {
-            credentialManagerLauncher = getCredentialManagerLauncher();
-        } catch (CredentialManagerBackendException exception) {
-            if (exception.errorCode != CredentialManagerError.BACKEND_VERSION_NOT_SUPPORTED) return;
-            showGmsUpdateDialog(modalDialogManagerSupplier, context);
-            return;
-        }
+        assert PasswordManagerUtilBridge.isPasswordManagerAvailable();
+        CredentialManagerLauncher credentialManagerLauncher =
+                CredentialManagerLauncherFactory.getInstance().createLauncher();
+        assert credentialManagerLauncher != null;
 
         loadingDialogCoordinator.show();
 
@@ -537,31 +469,16 @@ public class PasswordManagerHelper {
             @PasswordCheckReferrer int referrer,
             Optional<String> account,
             LoadingModalDialogCoordinator loadingDialogCoordinator,
-            Supplier<ModalDialogManager> modalDialogManagerSupplier,
+            Supplier<@Nullable ModalDialogManager> modalDialogManagerSupplier,
             Context context,
             @Nullable SettingsCustomTabLauncher settingsCustomTabLauncher) {
         PasswordCheckupClientHelper checkupClient;
         try {
             checkupClient = getPasswordCheckupClientHelper();
-        } catch (PasswordCheckBackendException exception) {
-            // This is slightly different than the access to the management UI where if there
-            // is an auto-exported CSV, a dialog shown even if the password manager is available
-            // If a checkup is possible, the results of the checkup are more important than
-            // the CSV. In addition, the CSV issue is being prominently presented on the
-            // main settings view.
-            if (exception.errorCode == CredentialManagerError.PASSWORD_MANAGER_NOT_AVAILABLE) {
-                if (!UserPrefs.get(mProfile).getBoolean(Pref.UPM_UNMIGRATED_PASSWORDS_EXPORTED)) {
-                    // The auto-exported file is not ready, so there it's not possible to show a
-                    // dialog to download the CSV.
-                    return;
-                }
-                assert settingsCustomTabLauncher != null;
-                showPwmUnavailableOrDownloadCsvDialog(
-                        context, modalDialogManagerSupplier, settingsCustomTabLauncher);
-                return;
-            }
-            if (exception.errorCode != CredentialManagerError.BACKEND_VERSION_NOT_SUPPORTED) return;
-            showGmsUpdateDialog(modalDialogManagerSupplier, context);
+        } catch (PasswordManagerUnavailableException exception) {
+            assert settingsCustomTabLauncher != null;
+            showPwmUnavailableOrDownloadCsvDialog(
+                    context, modalDialogManagerSupplier, settingsCustomTabLauncher);
             return;
         }
 
@@ -569,11 +486,9 @@ public class PasswordManagerHelper {
         PasswordCheckupClientMetricsRecorder passwordCheckupMetricsRecorder =
                 new PasswordCheckupClientMetricsRecorder(
                         PasswordCheckOperation.GET_PASSWORD_CHECKUP_INTENT);
-        // TODO(crbug.com/40945093): Change PasswordCheckupClientHelper.getPasswordCheckupIntent to
-        // take the accountEmail as String.
         checkupClient.getPasswordCheckupIntent(
                 referrer,
-                account,
+                account.orElse(null),
                 (intent) -> {
                     passwordCheckupMetricsRecorder.recordMetrics(Optional.empty());
                     maybeLaunchIntentWithLoadingDialog(
@@ -742,65 +657,31 @@ public class PasswordManagerHelper {
                 });
     }
 
-    private static void showGmsUpdateDialog(
-            Supplier<ModalDialogManager> modalDialogManagerSupplier, Context context) {
-        ModalDialogManager modalDialogManager = modalDialogManagerSupplier.get();
-        if (modalDialogManager == null) return;
-
-        OutdatedGmsCoreDialog dialog =
-                new OutdatedGmsCoreDialog(
-                        modalDialogManager,
-                        context,
-                        isAccepted -> {
-                            if (isAccepted) GmsUpdateLauncher.launch(context);
-                        });
-        dialog.show();
-    }
-
-    // TODO(crbug.com/40841269): Exceptions should be thrown by factory, remove this method.
     private PasswordCheckupClientHelper getPasswordCheckupClientHelper()
-            throws PasswordCheckBackendException {
+            throws PasswordManagerUnavailableException {
         // Callers shouldn't need to distinguish between the errors anymore, since there will be no
         // more partial support, so PASSWORD_MANGER_NOT_AVAILABLE will replace and include all the
         // errors.
-        if (!PasswordManagerUtilBridge.isPasswordManagerAvailable(UserPrefs.get(mProfile))) {
-            throw new PasswordCheckBackendException(
-                    "Password manager is not available",
-                    CredentialManagerError.PASSWORD_MANAGER_NOT_AVAILABLE);
+        if (!PasswordManagerUtilBridge.isPasswordManagerAvailable()) {
+            throw new PasswordManagerUnavailableException();
         }
 
         PasswordCheckupClientHelper helper =
                 PasswordCheckupClientHelperFactory.getInstance().createHelper();
-        if (helper != null) return helper;
-
-        throw new PasswordCheckBackendException(
-                "Can not instantiate backend client.", CredentialManagerError.UNCATEGORIZED);
+        assert helper != null;
+        return helper;
     }
 
-    // TODO(crbug.com/40854052): Exceptions should be thrown by factory, remove this method.
-    private CredentialManagerLauncher getCredentialManagerLauncher()
-            throws CredentialManagerBackendException {
-        // TODO(crbug.com/434662359): Make preconditions consistent with checkup launcher.
-        if (!PasswordManagerBackendSupportHelper.getInstance().isBackendPresent()) {
-            throw new CredentialManagerBackendException(
-                    "Backend downstream implementation is not available.",
-                    CredentialManagerError.BACKEND_NOT_AVAILABLE);
-        }
-        // This checks against the account store GMSCore version if the user is syncing and against
-        // the local version if the user is not syncing.
-        if (PasswordManagerUtilBridge.isGmsCoreUpdateRequired(
-                SyncServiceFactory.getForProfile(mProfile))) {
-            throw new CredentialManagerBackendException(
-                    "Backend version is not supported.",
-                    CredentialManagerError.BACKEND_VERSION_NOT_SUPPORTED);
-        }
+    /** Vivaldi **/
+    private void showPasswordSettingsPreLoginDbDeprecation(
+            Context context,
+            @ManagePasswordsReferrer int referrer) {
 
-        CredentialManagerLauncher launcher =
-                CredentialManagerLauncherFactory.getInstance().createLauncher();
-        if (launcher != null) return launcher;
-
-        throw new CredentialManagerBackendException(
-                "Can not instantiate backend client.", CredentialManagerError.UNCATEGORIZED);
+        Bundle fragmentArgs = new Bundle();
+        fragmentArgs.putInt(MANAGE_PASSWORDS_REFERRER, referrer);
+        context.startActivity(
+                SettingsNavigationFactory.createSettingsNavigation().createSettingsIntent(
+                        context, SettingsNavigation.SettingsFragment.PASSWORDS, fragmentArgs));
     }
 
     @NativeMethods

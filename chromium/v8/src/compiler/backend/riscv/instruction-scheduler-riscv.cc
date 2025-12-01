@@ -30,7 +30,6 @@ int InstructionScheduler::GetTargetInstructionFlags(
     case kRiscvMulHigh64:
     case kRiscvMulHighU64:
     case kRiscvAdd64:
-    case kRiscvAddOvf32:
     case kRiscvClz64:
     case kRiscvDiv64:
     case kRiscvDivU64:
@@ -45,7 +44,6 @@ int InstructionScheduler::GetTargetInstructionFlags(
     case kRiscvShl64:
     case kRiscvShr64:
     case kRiscvSub64:
-    case kRiscvSubOvf32:
     case kRiscvFloat64RoundDown:
     case kRiscvFloat64RoundTiesEven:
     case kRiscvFloat64RoundTruncate:
@@ -67,6 +65,9 @@ int InstructionScheduler::GetTargetInstructionFlags(
     case kRiscvSarPair:
     case kRiscvSub32:
 #endif
+    case kRiscvSh1add:
+    case kRiscvSh2add:
+    case kRiscvSh3add:
     case kRiscvClz:
     case kRiscvCtz:
     case kRiscvCpop:
@@ -1211,6 +1212,10 @@ int InstructionScheduler::GetInstructionLatency(const Instruction* instr) {
         return latency + 1;
       }
     }
+    case kRiscvSh1add:
+    case kRiscvSh2add:
+    case kRiscvSh3add:
+      return 1;
     case kRiscvClz32:
 #if V8_TARGET_ARCH_RISCV64
     case kRiscvClz64:

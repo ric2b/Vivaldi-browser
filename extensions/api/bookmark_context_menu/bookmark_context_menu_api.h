@@ -29,6 +29,8 @@ class BookmarkContextMenuAPI : public BrowserContextKeyedAPI {
   // Functions that will send events to JS.
   static void SendOpen(content::BrowserContext* browser_context, int64_t id);
   static void SendClose(content::BrowserContext* browser_context);
+  static void SendStartDrag(content::BrowserContext* browser_context,
+                            int64_t id);
 
  private:
   friend class BrowserContextKeyedAPIFactory<BookmarkContextMenuAPI>;
@@ -56,19 +58,32 @@ class BookmarkContextMenuShowFunction
   ResponseAction Run() override;
 
   // vivaldi::VivaldiBookmarkMenuObserver
-  void BookmarkMenuClosed(::vivaldi::VivaldiBookmarkMenu* menu) override;
+  void BookmarkMenuWillDelete(::vivaldi::VivaldiBookmarkMenu* menu) override;
 
   // vivaldi::BookmarkMenuContainer::Delegate
   void OnHover(const std::string& url) override;
   void OnOpenBookmark(int64_t bookmark_id, int event_state) override;
   void OnBookmarkAction(int64_t bookmark_id, int command) override;
   void OnOpenMenu(int64_t bookmark_id) override;
+  void OnStartDrag(int64_t bookmark_id) override;
 
   std::string Open(content::WebContents* web_contents, const std::string& id);
 
   // Parsed data from the JS layer.
   std::optional<vivaldi::bookmark_context_menu::Show::Params> params_;
   std::unique_ptr<::vivaldi::BookmarkMenuContainer> bookmark_menu_container_;
+};
+
+class BookmarkContextMenuCloseFunction
+    : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("bookmarkContextMenu.close",
+                             BOOKMARKCONTEXTMENU_CLOSE)
+  BookmarkContextMenuCloseFunction() = default;
+  ~BookmarkContextMenuCloseFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
 };
 
 }  // namespace extensions

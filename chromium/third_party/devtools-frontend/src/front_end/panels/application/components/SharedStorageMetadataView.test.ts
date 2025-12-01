@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,7 +56,6 @@ describeWithLocale('SharedStorageMetadataView', () => {
 
     const keys = getCleanTextContentFromElements(component.shadowRoot, 'devtools-report-key');
     assert.deepEqual(keys, [
-      'Origin',
       'Creation Time',
       'Number of Entries',
       'Number of Bytes Used',
@@ -65,7 +64,6 @@ describeWithLocale('SharedStorageMetadataView', () => {
 
     const values = getCleanTextContentFromElements(component.shadowRoot, 'devtools-report-value');
     assert.deepEqual(values, [
-      'https://a.test',
       (new Date(10 * 1e3)).toLocaleString(),
       '4',
       '200',
@@ -82,7 +80,6 @@ describeWithLocale('SharedStorageMetadataView', () => {
 
     const keys = getCleanTextContentFromElements(component.shadowRoot, 'devtools-report-key');
     assert.deepEqual(keys, [
-      'Origin',
       'Creation Time',
       'Number of Entries',
       'Number of Bytes Used',
@@ -91,7 +88,6 @@ describeWithLocale('SharedStorageMetadataView', () => {
 
     const values = getCleanTextContentFromElements(component.shadowRoot, 'devtools-report-value');
     assert.deepEqual(values, [
-      '',
       'Not yet created',
       '0',
       '0',

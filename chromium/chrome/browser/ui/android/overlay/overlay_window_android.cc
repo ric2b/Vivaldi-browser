@@ -12,10 +12,12 @@
 #include "cc/slim/surface_layer.h"
 #include "chrome/android/chrome_jni_headers/PictureInPictureActivity_jni.h"
 #include "chrome/browser/android/tab_android.h"
+#include "chrome/browser/picture_in_picture/auto_picture_in_picture_tab_helper.h"
 #include "components/thin_webview/compositor_view.h"
 #include "content/public/browser/overlay_window.h"
 #include "content/public/browser/video_picture_in_picture_window_controller.h"
 #include "content/public/browser/web_contents.h"
+#include "media/base/media_switches.h"
 #include "ui/android/window_android_compositor.h"
 
 using WindowMap = base::flat_map<base::UnguessableToken, OverlayWindowAndroid*>;
@@ -79,8 +81,15 @@ OverlayWindowAndroid::OverlayWindowAndroid(
                            unscaled_content_bounds.width() * dip_scale,
                            unscaled_content_bounds.height() * dip_scale);
   const bool out_of_bounds = !content_bounds.Contains(smaller_source_bounds);
+  // Use the new source location based transition when the source is not out of
+  // bound and the AllowEnhancedPipTransition feature is enabled.
+  // TODO(crbug.com/440384447): remove AllowEnhancedPipTransition check once the
+  // new transition works properly on desktop Android.
+  const bool use_source_hint_transition =
+      !out_of_bounds &&
+      base::FeatureList::IsEnabled(media::kAllowEnhancedPipTransition);
 
-  if (!out_of_bounds) {
+  if (use_source_hint_transition) {
     // Use the newer transition, if available.
     // Convert to screen space.  Since the comparison was with the inset source
     // bounds, clamp the real source bounds to the container.
@@ -206,7 +215,6 @@ void OverlayWindowAndroid::DestroyStartedByJava(JNIEnv* env) {
 }
 
 void OverlayWindowAndroid::TogglePlayPause(JNIEnv* env, bool toggleOn) {
-  DCHECK(!controller_->IsPlayerActive());
   if (toggleOn == (playback_state_ == PlaybackState::kPaused)) {
     controller_->TogglePlayPause();
   }
@@ -267,8 +275,43 @@ void OverlayWindowAndroid::OnViewSizeChanged(JNIEnv* env,
 }
 
 void OverlayWindowAndroid::OnBackToTab(JNIEnv* env) {
-  controller_->FocusInitiator();
-  Hide();
+  if (base::FeatureList::IsEnabled(media::kAutoPictureInPictureAndroid)) {
+    // Call `CloseAndFocusInitiator()` here to prevent a race condition with the
+    // auto-PiP flow. The race occurs between two paths trying to close the
+    // window:
+    // 1. This manual "back to tab" action.
+    // 2. The `AutoPictureInPictureTabHelper`, which automatically closes the
+    //    window when the originating tab becomes visible.
+    //
+    // If we were to call `FocusInitiator()` first, it would make the tab
+    // visible, triggering path (2) immediately. This `OnBackToTab` flow (path
+    // 1) would then also try to close the window, leading to a use-after-free
+    // crash.
+    //
+    // `CloseAndFocusInitiator()` solves this by ensuring the controller
+    // destroys the window (`Close()`) *before* focusing the tab
+    // (`FocusInitiator()`). This way, by the time the tab helper in path (2)
+    // runs, the window is already gone, and its attempt to close it becomes a
+    // safe no-op.
+    controller_->CloseAndFocusInitiator();
+  } else {
+    controller_->FocusInitiator();
+    Hide();
+  }
+}
+
+void OverlayWindowAndroid::OnQuickDismissal(JNIEnv* env) {
+  auto* web_contents = controller_->GetWebContents();
+  if (!web_contents) {
+    return;
+  }
+
+  auto* helper = AutoPictureInPictureTabHelper::FromWebContents(web_contents);
+  // Verify that the dismissal is for an auto-PiP session, not a user-initiated
+  // one, before triggering the embargo logic.
+  if (helper && helper->IsInAutoPictureInPicture()) {
+    helper->OnQuickDismissal();
+  }
 }
 
 void OverlayWindowAndroid::Close() {

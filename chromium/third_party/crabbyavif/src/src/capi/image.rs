@@ -508,7 +508,7 @@ fn avif_image_allocate_planes_helper(
         || image.width > decoder::DEFAULT_IMAGE_DIMENSION_LIMIT
         || image.height > decoder::DEFAULT_IMAGE_DIMENSION_LIMIT
     {
-        return Err(AvifError::InvalidArgument);
+        return AvifError::invalid_argument();
     }
     let channel_size = if image.depth == 8 { 1 } else { 2 };
     let alloc_width = round2_u32(image.width);
@@ -524,7 +524,7 @@ fn avif_image_allocate_planes_helper(
             // SAFETY: Pre-conditions are met to call this function.
             image.yuvPlanes[0] = unsafe { crabby_avifAlloc(y_size) as *mut u8 };
             if image.yuvPlanes[0].is_null() {
-                return Err(AvifError::OutOfMemory);
+                return AvifError::out_of_memory();
             }
         }
         if !image.yuvFormat.is_monochrome() {
@@ -549,7 +549,7 @@ fn avif_image_allocate_planes_helper(
                 // SAFETY: Pre-conditions are met to call this function.
                 image.yuvPlanes[plane] = unsafe { crabby_avifAlloc(uv_size) as *mut u8 };
                 if image.yuvPlanes[plane].is_null() {
-                    return Err(AvifError::OutOfMemory);
+                    return AvifError::out_of_memory();
                 }
             }
         }
@@ -560,7 +560,7 @@ fn avif_image_allocate_planes_helper(
         // SAFETY: Pre-conditions are met to call this function.
         image.alphaPlane = unsafe { crabby_avifAlloc(y_size) as *mut u8 };
         if image.alphaPlane.is_null() {
-            return Err(AvifError::OutOfMemory);
+            return AvifError::out_of_memory();
         }
     }
     Ok(())

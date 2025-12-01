@@ -46,9 +46,11 @@ to Chrome that we preserve our culture of being open by default.
   and sub-optimal workflow for non-Googlers. Similarly, other
   corp.google.com links are not OK, e.g. crbug/.
 
-  When referencing issues in corp Buganizer (that are only accessible to
-  Googlers) in commit messages or code, it is preferred to use the b/XXX format.
-  However, make every effort to use public issues to track work in Chromium.
+  If you must reference issues in corp Buganizer that are only accessible to
+  Googlers, use b:XXX in commit message footers as per the
+  [Chromium documentation](https://chromium.googlesource.com/chromium/src/+/main/docs/contributing.md#cl-footer-reference)
+  and b/XXX in code comments. However, make every effort to use public issues
+  accessible via crbug.com to track work in Chromium.
 
 - **Usage of severity and Priority should align with Chromium severity and
   priority guidelines, not Google guidelines**. For example, severity and

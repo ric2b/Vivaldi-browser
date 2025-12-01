@@ -204,6 +204,10 @@ void VivaldiUIWebContentsDelegate::ActivateContents(
 
 void VivaldiUIWebContentsDelegate::RenderFrameCreated(
     content::RenderFrameHost* render_frame_host) {
+  // VB-121208 chr 142 update
+  if (!window_ || !window_->browser()) {
+    return;
+  }
   // Follow ChromeExtensionWebContentsObserver::InitializeRenderFrame() and
   // notify the renderer about the window id so
   // chrome.extension.getViews({windowId}) works in our UI.
@@ -293,6 +297,11 @@ void VivaldiUIWebContentsDelegate::DidFinishNavigation(
 }
 
 void VivaldiUIWebContentsDelegate::DocumentOnLoadCompletedInPrimaryMainFrame() {
+  // VB-121208 chr 142 update
+  if (!window_ || !window_->browser()) {
+    return;
+  }
+
   window_->UpdateTitleBar();
   if (!window_->browser()->is_type_normal()) {
     // Settings & popup windows are shown once content is available. They are

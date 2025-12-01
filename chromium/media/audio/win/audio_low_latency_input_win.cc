@@ -629,7 +629,6 @@ WASAPIAudioInputStream::WASAPIAudioInputStream(
     const std::string& device_id,
     AudioManager::LogCallback log_callback)
     : manager_(manager),
-      glitch_reporter_(SystemGlitchReporter::StreamType::kCapture),
       peak_detector_(base::BindRepeating(&AudioManager::TraceAmplitudePeak,
                                          base::Unretained(manager_),
                                          /*trace_start=*/true)),
@@ -644,7 +643,11 @@ WASAPIAudioInputStream::WASAPIAudioInputStream(
               static_cast<void (WASAPIAudioInputStream::*)(std::string)>(
                   &WASAPIAudioInputStream::SendLogMessage),
               base::Unretained(this)))),
-      is_process_loopback_capture_(IsProcessLoopbackDevice(device_id)) {
+      is_loopback_capture_(AudioDeviceDescription::IsLoopbackDevice(device_id)),
+      is_process_loopback_capture_(IsProcessLoopbackDevice(device_id)),
+      glitch_reporter_(is_loopback_capture_
+                           ? SystemGlitchReporter::StreamType::kLoopback
+                           : SystemGlitchReporter::StreamType::kCapture) {
   DCHECK(manager_);
   DCHECK(!device_id_.empty());
   DCHECK(!log_callback_.is_null());
@@ -1074,6 +1077,12 @@ void WASAPIAudioInputStream::
   GetActivateAudioInterfaceAsyncCallback() = callback;
 }
 
+void WASAPIAudioInputStream::SimulateErrorForTesting() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(capture_thread_);
+  simulate_error_for_testing_ = true;
+}
+
 HRESULT WASAPIAudioInputStream::CreateFifoIfNeeded() {
   if (fifo_) {
     return S_OK;
@@ -1146,6 +1155,13 @@ void WASAPIAudioInputStream::Run() {
   while (recording && !error) {
     // Wait for a close-down event or a new capture event.
     DWORD wait_result = WaitForMultipleObjects(2, wait_array, FALSE, INFINITE);
+
+    // Test-only hook to simulate a failure in the capture loop.
+    if (simulate_error_for_testing_) {
+      wait_result = WAIT_FAILED;
+      simulate_error_for_testing_ = false;
+    }
+
     switch (wait_result) {
       case WAIT_OBJECT_0 + 0:
         // |stop_capture_event_| has been set.
@@ -1171,13 +1187,18 @@ void WASAPIAudioInputStream::Run() {
   }
 
   if (recording && error) {
-    // TODO(henrika): perhaps it worth improving the cleanup here by e.g.
-    // stopping the audio client, joining the thread etc.?
-    // TODO(crbug.com/417505389): We should handle pipeline errors in a more
-    // graceful way instead of using NOTREACHED() here.
     auto saved_last_error = GetLastError();
-    NOTREACHED() << "WASAPI capturing failed with error code "
-                 << saved_last_error;
+    LOG(ERROR) << "WAIS::" << __func__
+               << " => (ERROR: capturing failed with error code: "
+               << saved_last_error << ")";
+    // Stop audio rendering since something has gone wrong in our main thread
+    // loop. Note that, we are still in a "started" state, hence a Stop() call
+    // is required to join the thread properly. This approach is inline with the
+    // design in WASAPIAudioOutputStream.
+    audio_client_->Stop();
+
+    // There was an error while recording audio.
+    sink_->OnError();
   }
 
   // Disable MMCSS.
@@ -1312,7 +1333,9 @@ void WASAPIAudioInputStream::PullCaptureDataAndPushToSink() {
         glitch_reporter_.UpdateStats(glitch_duration);
         if (glitch_duration.is_positive()) {
           glitch_accumulator_.Add(AudioGlitchInfo::SingleBoundedSystemGlitch(
-              glitch_duration, AudioGlitchInfo::Direction::kCapture));
+              glitch_duration, is_loopback_capture_
+                                   ? AudioGlitchInfo::Direction::kLoopback
+                                   : AudioGlitchInfo::Direction::kCapture));
         }
       }
 

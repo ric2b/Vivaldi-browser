@@ -24,6 +24,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.Spy;
 
 import org.chromium.base.Callback;
 import org.chromium.base.IntentUtils;
@@ -113,7 +114,7 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
     @Mock public TabModelInitializer tabModelInitializer;
     @Mock public MockWebContents webContents;
     @Mock public CustomTabMinimizationManagerHolder mMinimizationManagerHolder;
-    @Mock public ProfileProvider profileProvider;
+    @Spy public ProfileProvider profileProvider;
     @Mock public CipherFactory cipherFactory;
     @Mock public PowerManager powerManager;
     @Mock private Profile mProfile;
@@ -188,6 +189,7 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
         ShadowExternalNavigationDelegateImpl.setWillChromeHandleIntent(false);
     }
 
+    @SuppressWarnings("DirectInvocationOnMock")
     public CustomTabActivityTabController createTabController() {
         OneshotSupplierImpl<ProfileProvider> profileProviderSupplier = new OneshotSupplierImpl<>();
         profileProviderSupplier.set(profileProvider);
@@ -269,16 +271,6 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
         return webContents;
     }
 
-    public WebContents prepareSpareWebcontents() {
-        WebContents webContents = mock(WebContents.class);
-        when(warmupManager.takeSpareWebContents(
-                        /* incognito= */ anyBoolean(),
-                        /* initiallyHidden= */ anyBoolean(),
-                        /* targetsNetwork= */ anyBoolean()))
-                .thenReturn(webContents);
-        return webContents;
-    }
-
     public Tab prepareHiddenTab() {
         warmUp();
         Tab hiddenTab = prepareTab();
@@ -296,6 +288,7 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
         return tab;
     }
 
+    @SuppressWarnings("DirectInvocationOnMock")
     public Tab prepareTab() {
         Tab tab = mock(Tab.class);
         when(tab.getView()).thenReturn(mock(View.class));

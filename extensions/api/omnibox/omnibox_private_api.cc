@@ -257,6 +257,7 @@ OmniboxItem CreateOmniboxItem(AutocompleteMatch match,  TemplateURLService* temp
   res.category = GetProviderCategory(type_to_string);
   res.deletable = match.deletable;
   res.type = match.type;
+  res.folder_id = match.folder_id;
   if (res.category == OmniboxItemCategory::kDirectMatch) {
     res.favicon_url = base::UTF16ToUTF8(match.local_favicon_path);
     res.favicon_type = "url";

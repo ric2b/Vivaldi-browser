@@ -1,0 +1,45 @@
+// Copyright 2020 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+include "fcp/tracing/tracing_schema_common.fbs";
+
+table RunTfOp(tag: "TFOP", span) {
+ op: string;
+}
+
+table SaveToCheckpoint(tag: "SCPT", span) {
+ before_save_op: string;
+ save_op: string;
+ after_save_op: string;
+}
+
+table RestoreFromCheckpoint(tag: "RCPT", span) {
+ before_restore_op: string;
+ restore_op: string;
+ after_restore_op: string;
+}
+
+table RestoreFromTensors(tag: "RFTS", span) {
+ before_restore_op: string;
+ after_restore_op: string;
+}
+
+table InvalidCheckpointOp (tag: "TFCO", error) {
+  field: string; // The name of the field in the checkpoint op that is invalid.
+  message: string; // Information about why the provided value is invalid.
+}
+
+table TmpFileNotDeleted (tag: "TMPD", warning) {
+  field: string; // The name of the file that could not be deleted successfully.
+}

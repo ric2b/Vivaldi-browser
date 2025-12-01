@@ -1,8 +1,7 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as IssuesManager from '../../models/issues_manager/issues_manager.js';
@@ -11,6 +10,7 @@ import {
   describeWithMockConnection,
 } from '../../testing/MockConnection.js';
 import {MockIssuesModel} from '../../testing/MockIssuesModel.js';
+import * as UI from '../../ui/legacy/legacy.js';
 
 import * as Elements from './elements.js';
 
@@ -22,7 +22,6 @@ describeWithMockConnection('ElementsTreeOutline', () => {
   beforeEach(() => {
     target = createTarget();
 
-    Root.Runtime.experiments.enableForTest(Root.Runtime.ExperimentName.HIGHLIGHT_ERRORS_ELEMENTS_PANEL);
     treeOutline = new Elements.ElementsTreeOutline.ElementsTreeOutline(/* omitRootDOMNode */ true);
     treeOutline.wireToDOMModel(target.model(SDK.DOMModel.DOMModel) as SDK.DOMModel.DOMModel);
 
@@ -214,5 +213,91 @@ describeWithMockConnection('ElementsTreeOutline', () => {
       const tagElement = treeElement.listItemElement.getElementsByClassName('webkit-html-tag-name')[0];
       assert.isFalse(tagElement.classList.contains('violating-element'));
     }
+  });
+
+  it('showContextMenu should allow default context menu on text selection', async () => {
+    const rootNode = SDK.DOMModel.DOMNode.create(model, null, false, {
+      nodeId: 1 as Protocol.DOM.NodeId,
+      backendNodeId: 1 as Protocol.DOM.BackendNodeId,
+      nodeType: Node.ELEMENT_NODE,
+      nodeName: 'BODY',
+      localName: 'body',
+      nodeValue: '',
+      childNodeCount: 1,
+      children: [{
+        nodeId: 2 as Protocol.DOM.NodeId,
+        parentId: 1 as Protocol.DOM.NodeId,
+        backendNodeId: 2 as Protocol.DOM.BackendNodeId,
+        nodeType: Node.TEXT_NODE,
+        nodeName: '#text',
+        localName: '#text',
+        nodeValue: 'Some text',
+      }],
+    });
+    assert.isNotNull(rootNode);
+    treeOutline.rootDOMNode = rootNode;
+
+    const pNode = rootNode.children()![0];
+    treeOutline.selectDOMNode(pNode);
+    const treeElement = treeOutline.findTreeElement(pNode);
+    assert.isNotNull(treeElement);
+
+    const textNodeContainer = treeElement.listItemElement.querySelector('.webkit-html-text-node');
+    assert.isNotNull(textNodeContainer);
+
+    assert.isFalse(UI.UIUtils.isEditing());
+    textNodeContainer.dispatchEvent(new MouseEvent('dblclick', {bubbles: true}));
+
+    assert.isTrue(UI.UIUtils.isEditing());
+    const event = new MouseEvent('contextmenu', {bubbles: true});
+    const preventDefaultSpy = sinon.spy(event, 'preventDefault');
+    await treeOutline.showContextMenu(treeElement, event);
+    sinon.assert.notCalled(preventDefaultSpy);
+    UI.UIUtils.markBeingEdited(textNodeContainer, false);
+  });
+
+  it('should prevent default context menu on node selection and no edit', async () => {
+    const rootNode = SDK.DOMModel.DOMNode.create(model, null, false, {
+      nodeId: 1 as Protocol.DOM.NodeId,
+      backendNodeId: 1 as Protocol.DOM.BackendNodeId,
+      nodeType: Node.ELEMENT_NODE,
+      nodeName: 'BODY',
+      localName: 'body',
+      nodeValue: '',
+      childNodeCount: 1,
+      children: [{
+        nodeId: 2 as Protocol.DOM.NodeId,
+        parentId: 1 as Protocol.DOM.NodeId,
+        backendNodeId: 2 as Protocol.DOM.BackendNodeId,
+        nodeType: Node.TEXT_NODE,
+        nodeName: '#text',
+        localName: '#text',
+        nodeValue: 'Some text',
+      }],
+    });
+    assert.isNotNull(rootNode);
+    treeOutline.rootDOMNode = rootNode;
+
+    const pNode = rootNode.children()![0];
+    treeOutline.selectDOMNode(pNode);
+    const treeElement = treeOutline.findTreeElement(pNode);
+    assert.isNotNull(treeElement);
+
+    assert.isFalse(UI.UIUtils.isEditing());
+
+    const textNodeContainer = treeElement.listItemElement.querySelector('.webkit-html-text-node');
+    assert.isNotNull(textNodeContainer);
+
+    const event = new MouseEvent('contextmenu', {
+      bubbles: true,
+    });
+    // We need to stub the tree element here, since this method
+    // determines the treeElement based on pageX and pageY coordinates which we can't directly
+    // set on the event.
+    sinon.stub(treeOutline, 'treeElementFromEventInternal').returns(treeElement);
+    const preventDefaultSpy = sinon.spy(event, 'preventDefault');
+    textNodeContainer.dispatchEvent(event);
+
+    sinon.assert.called(preventDefaultSpy);
   });
 });

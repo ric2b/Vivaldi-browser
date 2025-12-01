@@ -6,6 +6,10 @@
 // Utilities to map clspv interface variables to OpenCL and Vulkan mappings.
 //
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "libANGLE/renderer/vulkan/clspv_utils.h"
 #include "common/log_utils.h"
 #include "libANGLE/renderer/vulkan/CLDeviceVk.h"
@@ -417,6 +421,11 @@ std::string ClspvGetCompilerOptions(const CLDeviceVk *device)
         ASSERT(false);
     }
     options += addressBits == 64 ? " -arch=spir64" : " -arch=spir";
+    if (rendererVk->getFeatures().supportsBufferDeviceAddress.enabled)
+    {
+        ASSERT(addressBits == 64);
+        options += " -physical-storage-buffers ";
+    }
 
     // select SPIR-V version target
     options += " --spv-version=" + GetSpvVersionAsClspvString(device->getSpirvVersion());
@@ -533,9 +542,25 @@ std::string ClspvGetCompilerOptions(const CLDeviceVk *device)
         featureMacros.push_back("__opencl_c_read_write_images");
     }
 
+    if (rendererVk->getFeatures().supportsBufferDeviceAddress.enabled)
+    {
+        // It is for generating ConstantDataStorageBuffer without -physical-storage-buffers,
+        // ConstantDataPointerPushConstant with -physical-storage-buffers
+        // TODO: this flag is only on in case of supportsBufferDeviceAddress.enabled
+        // until ConstantDataStorageBuffer will be implemented.
+        // http://anglebug.com/442950569
+        options += " -module-constants-in-storage-buffer";
+    }
+
     if (rendererVk->getEnabledFeatures().features.shaderInt64)
     {
         featureMacros.push_back("__opencl_c_int64");
+    }
+
+    if (rendererVk->getFeatures().supportsShaderIntegerDotProduct.enabled)
+    {
+        featureMacros.push_back("__opencl_c_integer_dot_product_input_4x8bit");
+        featureMacros.push_back("__opencl_c_integer_dot_product_input_4x8bit_packed");
     }
 
     if (!rteModes.empty())

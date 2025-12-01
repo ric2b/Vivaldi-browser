@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,6 @@ import * as KeyValueStorageItemsView from './KeyValueStorageItemsView.js';
 import * as OpenedWindowDetailsView from './OpenedWindowDetailsView.js';
 import * as PreloadingView from './preloading/PreloadingView.js';
 import * as PreloadingTreeElement from './PreloadingTreeElement.js';
-import * as ReportingApiReportsView from './ReportingApiReportsView.js';
 import * as ReportingApiView from './ReportingApiView.js';
 import * as ResourcesPanel from './ResourcesPanel.js';
 import * as ServiceWorkerCacheViews from './ServiceWorkerCacheViews.js';
@@ -57,7 +56,6 @@ export {
   OpenedWindowDetailsView,
   PreloadingTreeElement,
   PreloadingView,
-  ReportingApiReportsView,
   ReportingApiView,
   ResourcesPanel,
   ServiceWorkerCacheViews,

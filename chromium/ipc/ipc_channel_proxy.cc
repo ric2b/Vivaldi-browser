@@ -194,37 +194,11 @@ void ChannelProxy::Context::OnDispatchMessage(const Message& message) {
     listener_->OnBadMessageReceived(message);
 }
 
-// Called on the listener's thread.
-void ChannelProxy::Context::AddListenerTaskRunner(
-    int32_t routing_id,
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  DCHECK(default_listener_task_runner_->BelongsToCurrentThread());
-  DCHECK(task_runner);
-  base::AutoLock lock(listener_thread_task_runners_lock_);
-  if (!base::Contains(listener_thread_task_runners_, routing_id))
-    listener_thread_task_runners_.insert({routing_id, std::move(task_runner)});
-}
-
-// Called on the listener's thread.
-void ChannelProxy::Context::RemoveListenerTaskRunner(int32_t routing_id) {
-  DCHECK(default_listener_task_runner_->BelongsToCurrentThread());
-  base::AutoLock lock(listener_thread_task_runners_lock_);
-  listener_thread_task_runners_.erase(routing_id);
-}
-
 // Called on the IPC::Channel thread.
 scoped_refptr<base::SingleThreadTaskRunner>
 ChannelProxy::Context::GetTaskRunner(int32_t routing_id) {
   DCHECK(ipc_task_runner_->BelongsToCurrentThread());
-  if (routing_id == MSG_ROUTING_NONE)
-    return default_listener_task_runner_;
-
-  base::AutoLock lock(listener_thread_task_runners_lock_);
-  auto task_runner = listener_thread_task_runners_.find(routing_id);
-  if (task_runner == listener_thread_task_runners_.end())
-    return default_listener_task_runner_;
-  DCHECK(task_runner->second);
-  return task_runner->second;
+  return default_listener_task_runner_;
 }
 
 // Called on the listener's thread
@@ -298,7 +272,7 @@ void ChannelProxy::Context::SetUrgentMessageObserver(
 
 // static
 std::unique_ptr<ChannelProxy> ChannelProxy::Create(
-    const IPC::ChannelHandle& channel_handle,
+    const mojo::MessagePipeHandle& channel_handle,
     Channel::Mode mode,
     Listener* listener,
     const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
@@ -335,7 +309,7 @@ ChannelProxy::~ChannelProxy() {
   Close();
 }
 
-void ChannelProxy::Init(const IPC::ChannelHandle& channel_handle,
+void ChannelProxy::Init(const mojo::MessagePipeHandle& channel_handle,
                         Channel::Mode mode,
                         bool create_pipe_now) {
 #if BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
@@ -374,7 +348,6 @@ void ChannelProxy::Init(std::unique_ptr<ChannelFactory> factory,
       FROM_HERE, base::BindOnce(&Context::OnChannelOpened, context_));
 
   did_init_ = true;
-  OnChannelInit();
 }
 
 void ChannelProxy::Pause() {
@@ -436,9 +409,6 @@ void ChannelProxy::GetRemoteAssociatedInterface(
 void ChannelProxy::ClearIPCTaskRunner() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   context()->ClearIPCTaskRunner();
-}
-
-void ChannelProxy::OnChannelInit() {
 }
 
 void ChannelProxy::SetUrgentMessageObserver(UrgentMessageObserver* observer) {

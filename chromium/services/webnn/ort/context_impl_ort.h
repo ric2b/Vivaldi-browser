@@ -23,20 +23,25 @@ namespace ort {
 // for creating a `GraphImplOrt` which uses ONNX Runtime for inference.
 class ContextImplOrt final : public WebNNContextImpl {
  public:
-  ContextImplOrt(mojo::PendingReceiver<mojom::WebNNContext> receiver,
+  ContextImplOrt(mojo::PendingAssociatedReceiver<mojom::WebNNContext> receiver,
                  WebNNContextProviderImpl* context_provider,
+                 const EpWorkarounds& ep_workarounds,
                  mojom::CreateContextOptionsPtr options,
-                 scoped_refptr<Environment> env);
+                 mojo::ScopedDataPipeConsumerHandle write_tensor_consumer,
+                 mojo::ScopedDataPipeProducerHandle read_tensor_producer,
+                 scoped_refptr<Environment> env,
+                 gpu::CommandBufferId command_buffer_id,
+                 std::unique_ptr<ScopedSequence> sequence,
+                 scoped_refptr<gpu::SchedulerTaskRunner> task_runner);
 
   ContextImplOrt(const WebNNContextImpl&) = delete;
   ContextImplOrt& operator=(const ContextImplOrt&) = delete;
 
-  ~ContextImplOrt() override;
 
   // WebNNContextImpl:
   base::WeakPtr<WebNNContextImpl> AsWeakPtr() override;
 
-  static ContextProperties GetContextProperties();
+  static ContextProperties GetContextProperties(bool resample2d_limit_to_nchw);
 
   scoped_refptr<Environment> env() const { return env_; }
 
@@ -49,6 +54,8 @@ class ContextImplOrt final : public WebNNContextImpl {
   }
 
  private:
+  ~ContextImplOrt() override;
+
   void CreateGraphImpl(
       mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
       mojom::GraphInfoPtr graph_info,
@@ -58,16 +65,15 @@ class ContextImplOrt final : public WebNNContextImpl {
       base::flat_map<OperandId, WebNNTensorImpl*> constant_tensor_operands,
       CreateGraphImplCallback callback) override;
 
-  void CreateTensorImpl(
-      mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
-      mojom::TensorInfoPtr tensor_info,
-      CreateTensorImplCallback callback) override;
+  base::expected<scoped_refptr<WebNNTensorImpl>, mojom::ErrorPtr>
+  CreateTensorImpl(mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
+                   mojom::TensorInfoPtr tensor_info) override;
 
-  void CreateTensorFromMailboxImpl(
+  base::expected<scoped_refptr<WebNNTensorImpl>, mojom::ErrorPtr>
+  CreateTensorFromSharedImageImpl(
       mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
       mojom::TensorInfoPtr tensor_info,
-      gpu::Mailbox mailbox,
-      CreateTensorImplCallback callback) override;
+      std::unique_ptr<gpu::WebNNTensorRepresentation> representation) override;
 
   scoped_refptr<Environment> env_;
 

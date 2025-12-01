@@ -30,6 +30,7 @@
 #import "ios/chrome/browser/photos/model/photos_availability.h"
 #import "ios/chrome/browser/photos/model/photos_metrics.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
+#import "ios/chrome/browser/reader_mode/model/reader_mode_content_tab_helper.h"
 #import "ios/chrome/browser/reader_mode/model/reader_mode_tab_helper.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_browser_agent.h"
 #import "ios/chrome/browser/search_engines/model/search_engines_util.h"
@@ -78,6 +79,8 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/context_menu/ui_bundled/link_preview/link_preview_coordinator.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/commands/activity_service_commands.h"
 #import "ios/chrome/browser/shared/public/commands/share_highlight_command.h"
 
@@ -110,6 +113,11 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
 @property(nonatomic, weak) UIViewController* baseViewController;
 
 @property(nonatomic, assign, readonly) web::WebState* webState;
+
+// Vivaldi
+// The Coordinator to display previews for link.
+@property(nonatomic, strong) LinkPreviewCoordinator* linkPreviewCoordinator;
+// End Vivaldi
 
 @end
 
@@ -158,6 +166,11 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
   _imageCopier = nil;
   _imageTranscoder = nullptr;
   _baseWebState = nullptr;
+
+  if (IsVivaldiRunning()) {
+    [self.linkPreviewCoordinator stop];;
+    self.linkPreviewCoordinator = nil;
+  } // End Vivaldi
 }
 
 - (void)dealloc {
@@ -214,6 +227,37 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
     contextMenuContentPreviewProviderForWebState:(web::WebState*)webState
                                           params:
                                               (web::ContextMenuParams)params {
+  if (IsVivaldiRunning() &&
+      self.browser->GetProfile()->GetOriginalProfile()->GetPrefs()->GetBoolean(
+          prefs::kLinkPreviewEnabled)) {
+    const GURL linkURL = params.link_url;
+    const bool isLink = linkURL.is_valid();
+    const GURL imageURL = params.src_url;
+    const bool isImage = imageURL.is_valid();
+
+    if (isLink) {
+      self.linkPreviewCoordinator =
+          [[LinkPreviewCoordinator alloc] initWithBrowser:self.browser
+                                                      URL:linkURL];
+      self.linkPreviewCoordinator.referrer =
+          web::Referrer(linkURL, web::ReferrerPolicyDefault);
+      [self.linkPreviewCoordinator start];
+      return ^() {
+        return [self.linkPreviewCoordinator linkPreviewViewController];
+      };
+    } else if (isImage) {
+      ImagePreviewViewController* previewViewController =
+          [[ImagePreviewViewController alloc]
+              initWithSrcURL:net::NSURLWithGURL(imageURL)
+                    webState:webState];
+      [previewViewController loadPreview];
+      return ^() {
+        return previewViewController;
+      };
+    } else {
+      return nil;
+    }
+  } else {
   if (!base::FeatureList::IsEnabled(kShareInWebContextMenuIOS) ||
       !params.src_url.is_valid() || params.link_url.is_valid()) {
     return nil;
@@ -227,6 +271,7 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
   return ^() {
     return previewViewController;
   };
+  }  // End Vivaldi
 }
 
 // Returns an action based contextual menu for a given web state (link, image,
@@ -257,9 +302,9 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
   NSMutableArray<UIMenuElement*>* menuElements = [[NSMutableArray alloc] init];
   // TODO(crbug.com/40823789) add scenario for not a link and not an image.
   MenuScenarioHistogram menuScenario =
-      isImage && isLink ? kMenuScenarioHistogramContextMenuImageLink
-      : isImage         ? kMenuScenarioHistogramContextMenuImage
-                        : kMenuScenarioHistogramContextMenuLink;
+      [self getMenuScenarioHistogramWithWebState:webState
+                                         isImage:isImage
+                                          isLink:isLink];
 
   NSString* menuTitle = nil;
   UIAction* showFullURL = nil;
@@ -872,7 +917,7 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
     [imageSavingElements addObject:saveImageToPhotosAction];
   }
 
-  if (IsSaveToPhotosActionImprovementEnabled() && saveToPhotosAvailable) {
+  if (saveToPhotosAvailable) {
     UIImage* image;
     if (@available(iOS 17, *)) {
       image = DefaultSymbolWithPointSize(kPhotoBadgeArrowDownSymbol,
@@ -999,6 +1044,34 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
 - (void)didOpenTabInBackground:(GURL)URL {
   [self.delegate contextMenuConfigurationProvider:self
                  didOpenNewTabInBackgroundWithURL:URL];
+}
+
+- (MenuScenarioHistogram)getMenuScenarioHistogramWithWebState:
+                             (web::WebState*)webState
+                                                      isImage:(BOOL)isImage
+                                                       isLink:(BOOL)isLink {
+  // Check that the Reader Mode web state implicitly checking that the content
+  // tab helper is attached.
+  ReaderModeContentTabHelper* readerModeContentTabHelper =
+      ReaderModeContentTabHelper::FromWebState(webState);
+  BOOL isReaderModeActive = readerModeContentTabHelper;
+  if (isReaderModeActive) {
+    if (isImage && isLink) {
+      return kMenuScenarioHistogramReaderModeContextMenuImageLink;
+    } else if (isImage) {
+      return kMenuScenarioHistogramReaderModeContextMenuImage;
+    } else {
+      return kMenuScenarioHistogramReaderModeContextMenuLink;
+    }
+  } else {
+    if (isImage && isLink) {
+      return kMenuScenarioHistogramContextMenuImageLink;
+    } else if (isImage) {
+      return kMenuScenarioHistogramContextMenuImage;
+    } else {
+      return kMenuScenarioHistogramContextMenuLink;
+    }
+  }
 }
 
 #pragma mark - Vivaldi

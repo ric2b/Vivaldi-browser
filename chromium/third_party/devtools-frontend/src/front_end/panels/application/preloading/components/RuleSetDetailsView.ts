@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -22,13 +22,13 @@ const {html} = Lit;
 
 const UIStrings = {
   /**
-   *@description Text in RuleSetDetailsView of the Application panel if no element is selected. An element here is an item in a
+   * @description Text in RuleSetDetailsView of the Application panel if no element is selected. An element here is an item in a
    *             table of speculation rules. Speculation rules define the rules when and which urls should be prefetched.
    *             https://developer.chrome.com/docs/devtools/application/debugging-speculation-rules
    */
   noElementSelected: 'No element selected',
   /**
-   *@description Text in RuleSetDetailsView of the Application panel if no element is selected. An element here is an item in a
+   * @description Text in RuleSetDetailsView of the Application panel if no element is selected. An element here is an item in a
    *             table of speculation rules. Speculation rules define the rules when and which urls should be prefetched.
    *             https://developer.chrome.com/docs/devtools/application/debugging-speculation-rules
    */
@@ -108,18 +108,12 @@ export class RuleSetDetailsView extends LegacyWrapper.LegacyWrapper.WrappableCom
     // clang-format off
     return html`
       <div class="ruleset-header">
-        <devtools-icon
-          .data=${{
-            iconName: 'cross-circle',
-            color: 'var(--icon-error)',
-            width: '16px',
-            height: '16px',
-          }}>
+        <devtools-icon name="cross-circle" class="medium">
         </devtools-icon>
         <span id="error-message-text">${this.#data.errorMessage}</span>
       </div>
     `;
-            // clang-format on
+    // clang-format on
   }
 
   #renderSource(sourceText: string): Lit.LitTemplate {

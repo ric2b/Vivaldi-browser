@@ -418,7 +418,7 @@ ProfileSignoutRequest::~ProfileSignoutRequest() {
 }
 
 ProfileSignoutRequest&& ProfileSignoutRequest::SetSnackbarMessage(
-    MDCSnackbarMessage* snackbar_message,
+    SnackbarMessage* snackbar_message,
     bool force_snackbar_over_toolbar) && {
   CHECK(!run_has_been_called_);
   snackbar_message_ = snackbar_message;
@@ -581,6 +581,16 @@ bool DifferentUserIsSignedInInAnotherScene(SceneState* scene_state) {
     }
   }
   return false;
+}
+
+Browser* GetRegularBrowser(Browser* browser) {
+  if (browser->type() == Browser::Type::kRegular) {
+    // Returning the browser directly ensure that this work in test without
+    // scene state.
+    return browser;
+  }
+  return browser->GetSceneState()
+      .browserProviderInterface.mainBrowserProvider.browser;
 }
 
 }  // namespace signin

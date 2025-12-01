@@ -292,10 +292,13 @@ RenderFrameDevToolsAgentHost::RenderFrameDevToolsAgentHost(
   g_was_ever_attached_to_any_frame = true;
   AddRef();  // Balanced in DestroyOnRenderFrameGone.
   auto* wc = WebContentsImpl::FromRenderFrameHostImpl(frame_host);
+  CHECK(!wc->IsBeingDestroyed());
   WebContentsObserver::Observe(wc);
   SetFrameTreeNode(frame_tree_node);
   ChangeFrameHostAndObservedProcess(frame_host);
   render_frame_alive_ = frame_host_ && frame_host_->IsRenderFrameLive();
+  CHECK(!render_frame_alive_ ||
+        frame_host->GetProcess()->IsInitializedAndNotDead());
   if (frame_tree_node->GetFrameType() != FrameType::kPrimaryMainFrame &&
       frame_tree_node->GetFrameType() != FrameType::kPrerenderMainFrame) {
     render_frame_crashed_ = !render_frame_alive_;
@@ -390,7 +393,8 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session) {
   session->CreateAndAddHandler<protocol::SchemaHandler>();
   const bool may_attach_to_browser = session->GetClient()->IsTrusted();
   session->CreateAndAddHandler<protocol::ServiceWorkerHandler>();
-  session->CreateAndAddHandler<protocol::StorageHandler>(session->GetClient());
+  session->CreateAndAddHandler<protocol::StorageHandler>(this,
+                                                         session->GetClient());
   session->CreateAndAddHandler<protocol::SystemInfoHandler>(
       /* is_browser_session= */ false);
   session->CreateAndAddHandler<protocol::TargetHandler>(
@@ -797,6 +801,12 @@ std::string RenderFrameDevToolsAgentHost::GetOpenerFrameId() {
       frame_tree_node_->opener_devtools_frame_token();
   return opener_devtools_frame_token ? opener_devtools_frame_token->ToString()
                                      : std::string();
+}
+
+std::string RenderFrameDevToolsAgentHost::GetParentFrameId() {
+  auto* parent =
+      frame_tree_node_ ? frame_tree_node_->GetParentOrOuterDocument() : nullptr;
+  return parent ? parent->devtools_frame_token().ToString() : std::string();
 }
 
 bool RenderFrameDevToolsAgentHost::CanAccessOpener() {

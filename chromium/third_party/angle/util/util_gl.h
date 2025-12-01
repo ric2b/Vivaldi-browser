@@ -8,6 +8,10 @@
 #ifndef UTIL_GL_H_
 #define UTIL_GL_H_
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "common/platform.h"
 
 #if defined(ANGLE_USE_UTIL_LOADER)
@@ -27,6 +31,7 @@
 #    include "angle_gl.h"
 #endif  // defined(ANGLE_USE_UTIL_LOADER)
 
+#include <cstring>
 #include <string>
 #include <utility>
 
@@ -42,7 +47,7 @@ inline bool CheckExtensionExists(const char *allExtensions, const std::string &e
 inline std::pair<EGLint, EGLint> GetCurrentContextVersion()
 {
     const char *versionString = reinterpret_cast<const char *>(glGetString(GL_VERSION));
-    if ((versionString == nullptr) || strstr(versionString, "OpenGL ES") == nullptr)
+    if ((versionString == nullptr) || std::strstr(versionString, "OpenGL ES") == nullptr)
     {
         return {0, 0};
     }

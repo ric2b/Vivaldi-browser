@@ -85,10 +85,11 @@ NSMutableArray<NSData*>* PRFOutputsFromExtensionOutputData(
 
 // Wrapper around passkey_model_utils's MakeAuthenticatorDataForAssertion
 // function.
-NSData* MakeAuthenticatorDataForAssertion(NSString* rp_id) {
+NSData* MakeAuthenticatorDataForAssertion(NSString* rp_id,
+                                          bool did_complete_uv) {
   std::vector<uint8_t> authenticator_data =
       webauthn::passkey_model_utils::MakeAuthenticatorDataForAssertion(
-          SysNSStringToUTF8(rp_id));
+          SysNSStringToUTF8(rp_id), did_complete_uv);
   return [NSData dataWithBytes:authenticator_data.data()
                         length:authenticator_data.size()];
 }
@@ -115,8 +116,8 @@ NSData* GenerateSignature(NSData* authenticator_data,
   return [NSData dataWithBytes:signature->data() length:signature->size()];
 }
 
-void SaveToIdentityStore(id<Credential> credential, ProceduralBlock completion)
-    API_AVAILABLE(ios(17.0)) {
+void SaveToIdentityStore(id<Credential> credential,
+                         ProceduralBlock completion) {
   auto stateCompletion = ^(ASCredentialIdentityStoreState* state) {
     if (state.enabled) {
       // Update ASCredentialIdentityStore to make the passkey immediately
@@ -158,12 +159,10 @@ void SaveCredential(id<Credential> credential) {
       return;
     }
 
-    if (@available(iOS 17.0, *)) {
-      SaveToIdentityStore(credential, ^{
-        // Notify Chrome that a new passkey was created
-        [CredentialProviderCreationNotifier notifyCredentialCreated];
-      });
-    }
+    SaveToIdentityStore(credential, ^{
+      // Notify Chrome that a new passkey was created
+      [CredentialProviderCreationNotifier notifyCredentialCreated];
+    });
   }];
 }
 
@@ -237,7 +236,8 @@ PasskeyCreationOutput PerformPasskeyCreation(
     NSData* user_handle,
     NSString* gaia,
     NSArray<NSData*>* security_domain_secrets,
-    NSArray<NSData*>* prf_inputs) API_AVAILABLE(ios(17.0)) {
+    NSArray<NSData*>* prf_inputs,
+    bool did_complete_uv) {
   if ([security_domain_secrets count] == 0) {
     return {};
   }
@@ -273,7 +273,7 @@ PasskeyCreationOutput PerformPasskeyCreation(
                                          length:cred_id.size()];
   std::vector<uint8_t> attestation_object_for_creation =
       webauthn::passkey_model_utils::MakeAttestationObjectForCreation(
-          rp_id_str, cred_id, public_key_spki_der);
+          rp_id_str, did_complete_uv, cred_id, public_key_spki_der);
   NSData* attestation_object =
       [NSData dataWithBytes:attestation_object_for_creation.data()
                      length:attestation_object_for_creation.size()];
@@ -295,7 +295,8 @@ PasskeyAssertionOutput PerformPasskeyAssertion(
     NSData* client_data_hash,
     NSArray<NSData*>* allowed_credentials,
     NSArray<NSData*>* security_domain_secrets,
-    NSArray<NSData*>* prf_inputs) API_AVAILABLE(ios(17.0)) {
+    NSArray<NSData*>* prf_inputs,
+    bool did_complete_uv) {
   if ([security_domain_secrets count] == 0) {
     return {};
   }
@@ -317,7 +318,7 @@ PasskeyAssertionOutput PerformPasskeyAssertion(
   webauthn::passkey_model_utils::ExtensionInputData extension_input_data =
       ExtensionInputDataFromPRFInputs(prf_inputs);
   NSData* authenticatorData =
-      MakeAuthenticatorDataForAssertion(credential.rpId);
+      MakeAuthenticatorDataForAssertion(credential.rpId, did_complete_uv);
   NSData* signature = GenerateSignature(authenticatorData, client_data_hash,
                                         credential_secrets->private_key());
 

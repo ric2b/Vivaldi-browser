@@ -20,6 +20,7 @@
   crabby_avifCleanApertureBoxConvertCropRect
 #define avifCodecChoiceFromName crabby_avifCodecChoiceFromName
 #define avifCodecName crabby_avifCodecName
+#define avifCodecVersions crabby_avifCodecVersions
 #define avifCropRectConvertCleanApertureBox \
   crabby_avifCropRectConvertCleanApertureBox
 #define avifDecoderCreate crabby_avifDecoderCreate
@@ -75,6 +76,7 @@
 #define avifImageSetViewRect crabby_avifImageSetViewRect
 #define avifImageUsesU16 crabby_avifImageUsesU16
 #define avifImageYUVToRGB crabby_avifImageYUVToRGB
+#define avifLibYUVVersion crabby_avifLibYUVVersion
 #define avifPeekCompatibleFileType crabby_avifPeekCompatibleFileType
 #define avifPixelFormatToString crabby_avifPixelFormatToString
 #define avifRGBFormatChannelCount crabby_avifRGBFormatChannelCount

@@ -15,7 +15,6 @@
 #include "platform/base/span.h"
 
 using testing::_;
-using testing::Invoke;
 using testing::Return;
 
 namespace openscreen::cast {

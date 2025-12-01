@@ -29,6 +29,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
@@ -207,7 +208,7 @@ using vivaldi::IsVivaldiRunning;
 
   if (IsVivaldiRunning() &&
       GetApplicationContext()
-          ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox)) {
+          ->GetLocalState()->GetBoolean(omnibox::kIsOmniboxInBottomPosition)) {
     // Place the infobar just below the safe area insets when omnibox is at the
     // bottom.
     return [VivaldiGlobalHelpers safeAreaInsets].top +

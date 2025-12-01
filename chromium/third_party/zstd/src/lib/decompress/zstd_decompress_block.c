@@ -1236,6 +1236,10 @@ FORCE_INLINE_TEMPLATE seq_t
 ZSTD_decodeSequence(seqState_t* seqState, const ZSTD_longOffset_e longOffsets, const int isLastSeq)
 {
     seq_t seq;
+#if defined(__aarch64__)
+    size_t prevOffset0 = seqState->prevOffset[0];
+    size_t prevOffset1 = seqState->prevOffset[1];
+    size_t prevOffset2 = seqState->prevOffset[2];
     /*
      * ZSTD_seqSymbol is a 64 bits wide structure.
      * It can be loaded in one operation
@@ -1244,7 +1248,7 @@ ZSTD_decodeSequence(seqState_t* seqState, const ZSTD_longOffset_e longOffsets, c
      * operations that cause performance drop. This can be avoided by using this
      * ZSTD_memcpy hack.
      */
-#if defined(__aarch64__) && (defined(__GNUC__) && !defined(__clang__))
+#  if defined(__GNUC__) && !defined(__clang__)
     ZSTD_seqSymbol llDInfoS, mlDInfoS, ofDInfoS;
     ZSTD_seqSymbol* const llDInfo = &llDInfoS;
     ZSTD_seqSymbol* const mlDInfo = &mlDInfoS;
@@ -1252,11 +1256,11 @@ ZSTD_decodeSequence(seqState_t* seqState, const ZSTD_longOffset_e longOffsets, c
     ZSTD_memcpy(llDInfo, seqState->stateLL.table + seqState->stateLL.state, sizeof(ZSTD_seqSymbol));
     ZSTD_memcpy(mlDInfo, seqState->stateML.table + seqState->stateML.state, sizeof(ZSTD_seqSymbol));
     ZSTD_memcpy(ofDInfo, seqState->stateOffb.table + seqState->stateOffb.state, sizeof(ZSTD_seqSymbol));
-#else
+#  else
     const ZSTD_seqSymbol* const llDInfo = seqState->stateLL.table + seqState->stateLL.state;
     const ZSTD_seqSymbol* const mlDInfo = seqState->stateML.table + seqState->stateML.state;
     const ZSTD_seqSymbol* const ofDInfo = seqState->stateOffb.table + seqState->stateOffb.state;
-#endif
+#  endif
     seq.matchLength = mlDInfo->baseValue;
     seq.litLength = llDInfo->baseValue;
     {   U32 const ofBase = ofDInfo->baseValue;
@@ -1275,10 +1279,116 @@ ZSTD_decodeSequence(seqState_t* seqState, const ZSTD_longOffset_e longOffsets, c
         assert(llBits <= MaxLLBits);
         assert(mlBits <= MaxMLBits);
         assert(ofBits <= MaxOff);
-        /*
-         * As gcc has better branch and block analyzers, sometimes it is only
-         * valuable to mark likeliness for clang, it gives around 3-4% of
-         * performance.
+        /* As GCC has better branch and block analyzers, sometimes it is only
+         * valuable to mark likeliness for Clang.
+         */
+
+        /* sequence */
+        {   size_t offset;
+            if (ofBits > 1) {
+                ZSTD_STATIC_ASSERT(ZSTD_lo_isLongOffset == 1);
+                ZSTD_STATIC_ASSERT(LONG_OFFSETS_MAX_EXTRA_BITS_32 == 5);
+                ZSTD_STATIC_ASSERT(STREAM_ACCUMULATOR_MIN_32 > LONG_OFFSETS_MAX_EXTRA_BITS_32);
+                ZSTD_STATIC_ASSERT(STREAM_ACCUMULATOR_MIN_32 - LONG_OFFSETS_MAX_EXTRA_BITS_32 >= MaxMLBits);
+                if (MEM_32bits() && longOffsets && (ofBits >= STREAM_ACCUMULATOR_MIN_32)) {
+                    /* Always read extra bits, this keeps the logic simple,
+                     * avoids branches, and avoids accidentally reading 0 bits.
+                     */
+                    U32 const extraBits = LONG_OFFSETS_MAX_EXTRA_BITS_32;
+                    offset = ofBase + (BIT_readBitsFast(&seqState->DStream, ofBits - extraBits) << extraBits);
+                    BIT_reloadDStream(&seqState->DStream);
+                    offset += BIT_readBitsFast(&seqState->DStream, extraBits);
+                } else {
+                    offset = ofBase + BIT_readBitsFast(&seqState->DStream, ofBits/*>0*/);   /* <=  (ZSTD_WINDOWLOG_MAX-1) bits */
+                    if (MEM_32bits()) BIT_reloadDStream(&seqState->DStream);
+                }
+                prevOffset2 = prevOffset1;
+                prevOffset1 = prevOffset0;
+                prevOffset0 = offset;
+            } else {
+                U32 const ll0 = (llDInfo->baseValue == 0);
+                if (LIKELY((ofBits == 0))) {
+                    if (ll0) {
+                        offset = prevOffset1;
+                        prevOffset1 = prevOffset0;
+                        prevOffset0 = offset;
+                    } else {
+                        offset = prevOffset0;
+                    }
+                } else {
+                    offset = ofBase + ll0 + BIT_readBitsFast(&seqState->DStream, 1);
+                    {   size_t temp = (offset == 1)   ? prevOffset1
+                                      : (offset == 3) ? prevOffset0 - 1
+                                      : (offset >= 2) ? prevOffset2
+                                      : prevOffset0;
+                        /* 0 is not valid: input corrupted => force offset to -1 =>
+                         * corruption detected at execSequence.
+                         */
+                        temp -= !temp;
+                        prevOffset2 = (offset == 1) ? prevOffset2 : prevOffset1;
+                        prevOffset1 = prevOffset0;
+                        prevOffset0 = offset = temp;
+            }   }   }
+            seq.offset = offset;
+        }
+
+        if (mlBits > 0) {
+            seq.matchLength += BIT_readBitsFast(&seqState->DStream, mlBits/*>0*/);
+
+            if (MEM_32bits() && (mlBits+llBits >= STREAM_ACCUMULATOR_MIN_32-LONG_OFFSETS_MAX_EXTRA_BITS_32))
+                BIT_reloadDStream(&seqState->DStream);
+            if (MEM_64bits() && (totalBits >= STREAM_ACCUMULATOR_MIN_64-(LLFSELog+MLFSELog+OffFSELog)))
+                BIT_reloadDStream(&seqState->DStream);
+        }
+
+        /* Ensure there are enough bits to read the rest of data in 64-bit mode. */
+        ZSTD_STATIC_ASSERT(16+LLFSELog+MLFSELog+OffFSELog < STREAM_ACCUMULATOR_MIN_64);
+
+        if (llBits > 0)
+            seq.litLength += BIT_readBitsFast(&seqState->DStream, llBits/*>0*/);
+
+        if (MEM_32bits())
+            BIT_reloadDStream(&seqState->DStream);
+
+        DEBUGLOG(6, "seq: litL=%u, matchL=%u, offset=%u",
+                    (U32)seq.litLength, (U32)seq.matchLength, (U32)seq.offset);
+
+        if (!isLastSeq) {
+            /* Don't update FSE state for last sequence. */
+            ZSTD_updateFseStateWithDInfo(&seqState->stateLL, &seqState->DStream, llNext, llnbBits);    /* <=  9 bits */
+            ZSTD_updateFseStateWithDInfo(&seqState->stateML, &seqState->DStream, mlNext, mlnbBits);    /* <=  9 bits */
+            if (MEM_32bits()) BIT_reloadDStream(&seqState->DStream);    /* <= 18 bits */
+            ZSTD_updateFseStateWithDInfo(&seqState->stateOffb, &seqState->DStream, ofNext, ofnbBits);  /* <=  8 bits */
+            BIT_reloadDStream(&seqState->DStream);
+        }
+    }
+    seqState->prevOffset[0] = prevOffset0;
+    seqState->prevOffset[1] = prevOffset1;
+    seqState->prevOffset[2] = prevOffset2;
+#else   /* !defined(__aarch64__) */
+    const ZSTD_seqSymbol* const llDInfo = seqState->stateLL.table + seqState->stateLL.state;
+    const ZSTD_seqSymbol* const mlDInfo = seqState->stateML.table + seqState->stateML.state;
+    const ZSTD_seqSymbol* const ofDInfo = seqState->stateOffb.table + seqState->stateOffb.state;
+    seq.matchLength = mlDInfo->baseValue;
+    seq.litLength = llDInfo->baseValue;
+    {   U32 const ofBase = ofDInfo->baseValue;
+        BYTE const llBits = llDInfo->nbAdditionalBits;
+        BYTE const mlBits = mlDInfo->nbAdditionalBits;
+        BYTE const ofBits = ofDInfo->nbAdditionalBits;
+        BYTE const totalBits = llBits+mlBits+ofBits;
+
+        U16 const llNext = llDInfo->nextState;
+        U16 const mlNext = mlDInfo->nextState;
+        U16 const ofNext = ofDInfo->nextState;
+        U32 const llnbBits = llDInfo->nbBits;
+        U32 const mlnbBits = mlDInfo->nbBits;
+        U32 const ofnbBits = ofDInfo->nbBits;
+
+        assert(llBits <= MaxLLBits);
+        assert(mlBits <= MaxMLBits);
+        assert(ofBits <= MaxOff);
+        /* As GCC has better branch and block analyzers, sometimes it is only
+         * valuable to mark likeliness for Clang.
          */
 
         /* sequence */
@@ -1340,7 +1450,7 @@ ZSTD_decodeSequence(seqState_t* seqState, const ZSTD_longOffset_e longOffsets, c
                     (U32)seq.litLength, (U32)seq.matchLength, (U32)seq.offset);
 
         if (!isLastSeq) {
-            /* don't update FSE state for last Sequence */
+            /* Don't update FSE state for last sequence. */
             ZSTD_updateFseStateWithDInfo(&seqState->stateLL, &seqState->DStream, llNext, llnbBits);    /* <=  9 bits */
             ZSTD_updateFseStateWithDInfo(&seqState->stateML, &seqState->DStream, mlNext, mlnbBits);    /* <=  9 bits */
             if (MEM_32bits()) BIT_reloadDStream(&seqState->DStream);    /* <= 18 bits */
@@ -1348,6 +1458,7 @@ ZSTD_decodeSequence(seqState_t* seqState, const ZSTD_longOffset_e longOffsets, c
             BIT_reloadDStream(&seqState->DStream);
         }
     }
+#endif  /* defined(__aarch64__) */
 
     return seq;
 }

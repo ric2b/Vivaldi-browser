@@ -18,9 +18,8 @@
 #include "ash/focus/focus_cycler.h"
 #include "ash/frame_throttler/frame_throttling_controller.h"
 #include "ash/frame_throttler/mock_frame_throttling_observer.h"
-#include "ash/multi_user/multi_user_window_manager_impl.h"
+#include "ash/multi_user/multi_user_window_manager.h"
 #include "ash/public/cpp/ash_prefs.h"
-#include "ash/public/cpp/multi_user_window_manager.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/session/session_controller_impl.h"
@@ -184,7 +183,7 @@ class WindowCycleListTestApi {
 };
 
 using aura::Window;
-using aura::test::CreateTestWindowWithId;
+
 using aura::test::TestWindowDelegate;
 
 class WindowCycleControllerTest : public AshTestBase {
@@ -402,8 +401,8 @@ TEST_F(WindowCycleControllerTest, HandleCycleWindow) {
   // When a modal window is active, cycling window does not take effect.
   aura::Window* modal_container = Shell::GetContainer(
       Shell::GetPrimaryRootWindow(), kShellWindowId_SystemModalContainer);
-  std::unique_ptr<Window> modal_window(
-      CreateTestWindowWithId(-2, modal_container));
+  std::unique_ptr<Window> modal_window = aura::test::CreateTestWindow(
+      {.parent = modal_container, .bounds = {100, 100}, .window_id = -2});
   modal_window->SetProperty(aura::client::kModalKey,
                             ui::mojom::ModalType::kSystem);
   wm::ActivateWindow(modal_window.get());
@@ -532,7 +531,8 @@ TEST_F(WindowCycleControllerTest, AlwaysOnTopWindow) {
 
   Window* top_container = Shell::GetContainer(
       Shell::GetPrimaryRootWindow(), kShellWindowId_AlwaysOnTopContainer);
-  std::unique_ptr<Window> window2(CreateTestWindowWithId(2, top_container));
+  std::unique_ptr<Window> window2 = aura::test::CreateTestWindow(
+      {.parent = top_container, .bounds = {100, 100}, .window_id = 2});
   wm::ActivateWindow(window0.get());
 
   // Simulate pressing and releasing Alt-tab.
@@ -559,8 +559,10 @@ TEST_F(WindowCycleControllerTest, AlwaysOnTopMultiWindow) {
 
   Window* top_container = Shell::GetContainer(
       Shell::GetPrimaryRootWindow(), kShellWindowId_AlwaysOnTopContainer);
-  std::unique_ptr<Window> window2(CreateTestWindowWithId(2, top_container));
-  std::unique_ptr<Window> window3(CreateTestWindowWithId(3, top_container));
+  std::unique_ptr<Window> window2 = aura::test::CreateTestWindow(
+      {.parent = top_container, .bounds = {100, 100}, .window_id = 2});
+  std::unique_ptr<Window> window3 = aura::test::CreateTestWindow(
+      {.parent = top_container, .bounds = {100, 100}, .window_id = 3});
   wm::ActivateWindow(window0.get());
 
   // Simulate pressing and releasing Alt-tab.
@@ -592,7 +594,8 @@ TEST_F(WindowCycleControllerTest, AlwaysOnTopMultipleRootWindows) {
   EXPECT_EQ(root_windows[0], window0->GetRootWindow());
   Window* top_container0 =
       Shell::GetContainer(root_windows[0], kShellWindowId_AlwaysOnTopContainer);
-  std::unique_ptr<Window> window1(CreateTestWindowWithId(1, top_container0));
+  std::unique_ptr<Window> window1 = aura::test::CreateTestWindow(
+      {.parent = top_container0, .bounds = {100, 100}, .window_id = 1});
   EXPECT_EQ(root_windows[0], window1->GetRootWindow());
 
   // Move the active root window to the secondary root and create two windows.
@@ -602,7 +605,8 @@ TEST_F(WindowCycleControllerTest, AlwaysOnTopMultipleRootWindows) {
 
   Window* top_container1 =
       Shell::GetContainer(root_windows[1], kShellWindowId_AlwaysOnTopContainer);
-  std::unique_ptr<Window> window3(CreateTestWindowWithId(3, top_container1));
+  std::unique_ptr<Window> window3 = aura::test::CreateTestWindow(
+      {.parent = top_container1, .bounds = {100, 100}, .window_id = 3});
   EXPECT_EQ(root_windows[1], window3->GetRootWindow());
 
   wm::ActivateWindow(window2.get());
@@ -691,7 +695,7 @@ TEST_F(WindowCycleControllerTest, SelectingHidesAppList) {
 // mode.
 TEST_F(WindowCycleControllerTest, SelectingDoesNotHideAppListInTabletMode) {
   TabletModeControllerTestApi().EnterTabletMode();
-  EXPECT_TRUE(display::Screen::GetScreen()->InTabletMode());
+  EXPECT_TRUE(display::Screen::Get()->InTabletMode());
   EXPECT_TRUE(Shell::Get()->app_list_controller()->IsHomeScreenVisible());
 
   std::unique_ptr<aura::Window> window0(CreateTestWindowInShellWithId(0));
@@ -1058,7 +1062,7 @@ TEST_F(WindowCycleControllerTest, AltTabMultiDisplay) {
   // TODO(crbug.com/40638870): Unit tests should be able to simulate mouse input
   // without having to call |CursorManager::SetDisplay|.
   Shell::Get()->cursor_manager()->SetDisplay(
-      display::Screen::GetScreen()->GetDisplayNearestWindow(w1.get()));
+      display::Screen::Get()->GetDisplayNearestWindow(w1.get()));
 
   // Test alt-tab activates on first display, the display for new windows, not
   // the second display where the cursor is at.
@@ -1070,10 +1074,10 @@ TEST_F(WindowCycleControllerTest, AltTabMultiDisplay) {
   ASSERT_EQ(2u, preview_items.size());
   // Ensure preview is generated in first display where the activated window
   // is at.
-  auto preview_display = display::Screen::GetScreen()->GetDisplayNearestWindow(
+  auto preview_display = display::Screen::Get()->GetDisplayNearestWindow(
       GetWindowCycleListWidget()->GetNativeWindow());
   auto activated_window =
-      display::Screen::GetScreen()->GetDisplayNearestWindow(w0.get());
+      display::Screen::Get()->GetDisplayNearestWindow(w0.get());
   EXPECT_EQ(activated_window, preview_display);
   CompleteCycling(cycle_controller);
 }
@@ -3181,7 +3185,7 @@ class MultiUserWindowCycleControllerTest : public NoSessionAshTestBase {
   ~MultiUserWindowCycleControllerTest() override = default;
 
   MultiUserWindowManager* multi_user_window_manager() {
-    return multi_user_window_manager_.get();
+    return Shell::Get()->multi_user_window_manager();
   }
 
   void SetUp() override {
@@ -3193,6 +3197,10 @@ class MultiUserWindowCycleControllerTest : public NoSessionAshTestBase {
     shelf_view_test_->SetAnimationDuration(base::Milliseconds(1));
 
     generator_ = GetEventGenerator();
+
+    CHECK(MultiUserWindowManager::Get());
+    MultiUserWindowManager::Get()->SetAnimationSpeedForTest(
+        MultiUserWindowManager::ANIMATION_SPEED_DISABLED);
   }
 
   void TearDown() override {
@@ -3244,20 +3252,6 @@ class MultiUserWindowCycleControllerTest : public NoSessionAshTestBase {
 
   void SwitchActiveUser(const AccountId& account_id) {
     GetSessionControllerClient()->SwitchActiveUser(account_id);
-  }
-
-  void SimulateUserLogin(const AccountId& account_id) {
-    AshTestBase::SimulateUserLogin(account_id);
-    // TODO(crbug.com/425160398): Currently on the production,
-    // MultiUserWindowManager is created after primary user login.
-    // We should move the initialization.
-    if (!multi_user_window_manager_) {
-      multi_user_window_manager_ = MultiUserWindowManager::Create();
-      multi_user_window_manager_->SetPrimaryUser(account_id);
-      CHECK(MultiUserWindowManagerImpl::Get());
-      MultiUserWindowManagerImpl::Get()->SetAnimationSpeedForTest(
-          MultiUserWindowManagerImpl::ANIMATION_SPEED_DISABLED);
-    }
   }
 
   const aura::Window::Windows GetWindows(WindowCycleController* controller) {

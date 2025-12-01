@@ -16,7 +16,7 @@
 #include "ui/base/mojom/window_show_state.mojom-forward.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/color/color_provider_key.h"
-#include "ui/gfx/native_widget_types.h"
+#include "ui/gfx/native_ui_types.h"
 #include "ui/views/widget/native_widget_private.h"
 #include "ui/views/widget/widget_observer.h"
 
@@ -130,7 +130,7 @@ class VIEWS_EXPORT NativeWidgetMac : public internal::NativeWidgetPrivate,
   void InitNativeWidget(Widget::InitParams params) override;
   void OnWidgetInitDone() override;
   void ReparentNativeViewImpl(gfx::NativeView new_parent) override;
-  std::unique_ptr<NonClientFrameView> CreateNonClientFrameView() override;
+  std::unique_ptr<FrameView> CreateFrameView() override;
   bool ShouldUseNativeFrame() const override;
   bool ShouldWindowContentsBeTransparent() const override;
   void FrameTypeChanged() override;

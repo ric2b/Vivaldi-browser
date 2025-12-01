@@ -4,6 +4,7 @@
 
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
@@ -87,7 +88,7 @@
 /// Sets the bottom omnibox.
 + (void)setBottomOmniboxEnabled:(BOOL)enabled
                  inPrefServices:(PrefService*)prefService {
-  prefService->SetBoolean(prefs::kBottomOmnibox, enabled);
+  prefService->SetBoolean(omnibox::kIsOmniboxInBottomPosition, enabled);
 }
 
 /// Sets the reverse search suggestion for bottom omnibox.

@@ -489,6 +489,15 @@ void StreamingSearchPrefetchURLLoader::OnReceiveResponse(
     base::UmaHistogramBoolean(histogram_name, can_be_served);
   }
 
+  if (can_be_served) {
+    base::UmaHistogramBoolean(
+        base::StrCat({"Omnibox.SearchPrefetch.HasNoVarySearchHeader2",
+                      is_in_fallback_ ? ".Fallback" : ".Initial",
+                      navigation_prefetch_ ? ".NavigationPrefetch"
+                                           : ".SuggestionPrefetch"}),
+        head->headers && head->headers->HasHeader("No-Vary-Search"));
+  }
+
   // Cached metadata is not supported for navigation loader.
   cached_metadata.reset();
 

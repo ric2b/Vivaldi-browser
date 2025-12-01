@@ -37,7 +37,7 @@ impl GainMapMetadata {
             self.base_offset[i].is_valid()?;
             self.alternate_offset[i].is_valid()?;
             if self.max[i].as_f64()? < self.min[i].as_f64()? || self.gamma[i].0 == 0 {
-                return Err(AvifError::InvalidArgument);
+                return AvifError::invalid_argument();
             }
         }
         self.base_hdr_headroom.is_valid()?;

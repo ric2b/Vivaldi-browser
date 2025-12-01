@@ -8,16 +8,16 @@
 
 #import "base/check.h"
 #import "base/feature_list.h"
+#import "base/ios/block_types.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
-#import "ios/chrome/browser/passwords/model/features.h"
 #import "ios/chrome/browser/promos_manager/model/promos_manager.h"
 #import "ios/chrome/browser/promos_manager/model/promos_manager_factory.h"
 #import "ios/chrome/browser/safari_data_import/coordinator/safari_data_import_child_coordinator_delegate.h"
 #import "ios/chrome/browser/safari_data_import/coordinator/safari_data_import_entry_point_mediator.h"
 #import "ios/chrome/browser/safari_data_import/coordinator/safari_data_import_export_coordinator.h"
-#import "ios/chrome/browser/safari_data_import/coordinator/safari_data_import_ui_handler.h"
 #import "ios/chrome/browser/safari_data_import/public/metrics.h"
 #import "ios/chrome/browser/safari_data_import/public/safari_data_import_entry_point.h"
+#import "ios/chrome/browser/safari_data_import/public/safari_data_import_ui_handler.h"
 #import "ios/chrome/browser/safari_data_import/ui/safari_data_import_entry_point_view_controller.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
@@ -53,7 +53,10 @@
 }
 
 - (void)start {
-  CHECK(ShouldShowSafariImportWorkflow(self.profile));
+  if (!self.profile) {
+    return;
+  }
+  CHECK(ShouldShowSafariDataImportEntryPoint(self.profile));
   _viewController = [[SafariDataImportEntryPointViewController alloc] init];
   _viewController.showReminderButton =
       _entryPoint != SafariDataImportEntryPoint::kSetting;
@@ -75,12 +78,17 @@
 - (void)stop {
   id<SafariDataImportUIHandler> UIHandler = self.UIHandler;
   SafariDataImportEntryPointMediator* mediator = _mediator;
-  [_viewController.presentingViewController
-      dismissViewControllerAnimated:YES
-                         completion:^{
-                           [mediator disconnect];
-                           [UIHandler safariDataImportDidDismiss];
-                         }];
+  ProceduralBlock dismissCompletionHandler = ^{
+    [mediator disconnect];
+    [UIHandler safariDataImportDidDismiss];
+  };
+  if (_viewController.presentingViewController) {
+    [_viewController.presentingViewController
+        dismissViewControllerAnimated:YES
+                           completion:dismissCompletionHandler];
+  } else {
+    dismissCompletionHandler();
+  }
   _viewController = nil;
   [_exportCoordinator stop];
   self.delegate = nil;
@@ -89,9 +97,11 @@
 #pragma mark - ConfirmationAlertActionHandler
 
 - (void)confirmationAlertPrimaryAction {
+  if (_exportCoordinator) {
+    return;
+  }
   RecordSafariImportActionOnEntryPoint(
       SafariDataImportEntryPointAction::kImport, _entryPoint);
-  CHECK(!_exportCoordinator);
   [_mediator notifyUsedOrDismissed];
   _exportCoordinator = [[SafariDataImportExportCoordinator alloc]
       initWithBaseViewController:_viewController

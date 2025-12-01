@@ -3,6 +3,7 @@ include_rules = [
   "+components/optimization_guide/proto",
   "+content/public/browser",
   "+content/public/common",
+  "+content/public/android",
   "+content/public/test",
   "+mojo/public",
   "+services/metrics/public",
@@ -20,6 +21,10 @@ specific_include_rules = {
     "+services/metrics/public/cpp/ukm_builders.h",
   ],
   "frame_metadata_observer_browsertest\.cc": [
+    "+content/shell",
+    "+components/network_session_configurator/common/network_switches.h",
+  ],
+  "page_content_metadata_observer_browsertest\.cc": [
     "+content/shell",
     "+components/network_session_configurator/common/network_switches.h",
   ],

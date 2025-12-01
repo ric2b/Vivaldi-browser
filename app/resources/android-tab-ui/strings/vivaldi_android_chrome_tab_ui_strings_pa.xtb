@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pa">
+<translation id="2330212241471632770">{TABS_COUNT,plural,
+          =1 {ਟੈਬ ਨੂੰ ਬੁੱਕਮਾਰਕ ਕਰੋ}
+          one {ਟੈਬ ਨੂੰ ਬੁੱਕਮਾਰਕ ਕਰੋ}
+          other {ਟੈਬਾਂ ਨੂੰ ਬੁੱਕਮਾਰਕ ਕਰੋ}
+        }</translation>
 </translationbundle>

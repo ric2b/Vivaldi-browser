@@ -24,6 +24,7 @@
 #include "components/autofill/core/browser/foundations/test_autofill_client.h"
 #include "components/autofill/core/browser/geo/alternative_state_name_map_test_utils.h"
 #include "components/autofill/core/browser/proto/api_v1.pb.h"
+#include "components/autofill/core/browser/proto/server.pb.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #include "components/autofill/core/browser/webdata/autofill_ai/entity_table.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service_test_helper.h"
@@ -79,14 +80,16 @@ std::u16string GetFillValueForEntity(
   // propagate to the name field.
   for (AutofillFieldWithAttributeType& field_and_type : fields_and_types) {
     if (field_and_type.field->Type().GetGroups().contains(
-            FieldTypeGroup::kName) &&
-        base::FeatureList::IsEnabled(features::kAutofillAiNoTagTypes)) {
+            FieldTypeGroup::kName)) {
       auto attribute_type = [&entity]() -> std::optional<AttributeType> {
         switch (entity.type().name()) {
           case EntityTypeName::kDriversLicense:
             return AttributeType(AttributeTypeName::kDriversLicenseName);
+          case EntityTypeName::kFlightReservation:
+            return AttributeType(
+                AttributeTypeName::kFlightReservationPassengerName);
           case EntityTypeName::kKnownTravelerNumber:
-            return AttributeType(AttributeTypeName::kKnownTravelerNumberNumber);
+            return AttributeType(AttributeTypeName::kKnownTravelerNumberName);
           case EntityTypeName::kPassport:
             return AttributeType(AttributeTypeName::kPassportName);
           case EntityTypeName::kNationalIdCard:
@@ -126,13 +129,10 @@ std::u16string GetFillValueForEntity(
 class GetFieldsFillableByAutofillAiTest : public testing::Test {
  public:
   GetFieldsFillableByAutofillAiTest() {
-    scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kAutofillAiWithDataSchema,
-                              features::kAutofillAiNoTagTypes},
-        /*disabled_features=*/{});
-
     client().set_entity_data_manager(std::make_unique<EntityDataManager>(
-        helper_.autofill_webdata_service(), /*history_service=*/nullptr,
+        client().GetPrefs(), client().GetIdentityManager(),
+        client().GetSyncService(), helper_.autofill_webdata_service(),
+        /*history_service=*/nullptr,
         /*strike_database=*/nullptr));
     client().SetUpPrefsAndIdentityForAutofillAi();
 
@@ -154,7 +154,8 @@ class GetFieldsFillableByAutofillAiTest : public testing::Test {
   FieldGlobalId field(size_t i) const { return form_.fields()[i]->global_id(); }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
+  base::test::ScopedFeatureList scoped_feature_list_{
+      features::kAutofillAiWithDataSchema};
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   test::AutofillUnitTestEnvironment autofill_environment_;
@@ -209,16 +210,9 @@ TEST_F(GetFieldsFillableByAutofillAiTest, FillingUnavailable) {
 }
 
 class GetFillValueForEntityTest : public testing::Test {
- public:
-  GetFillValueForEntityTest() {
-    feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kAutofillAiWithDataSchema,
-                              features::kAutofillAiNoTagTypes},
-        /*disabled_features=*/{});
-  }
-
  private:
-  base::test::ScopedFeatureList feature_list_;
+  base::test::ScopedFeatureList feature_list_{
+      features::kAutofillAiWithDataSchema};
   test::AutofillUnitTestEnvironment autofill_test_environment_;
 };
 
@@ -572,7 +566,8 @@ class GetFillValueForEntityTest_Date : public GetFillValueForEntityTest {
 TEST_F(GetFillValueForEntityTest_Date, FillingDateValueIntoTextInput) {
   auto field = CreateInput(FormControlType::kInputText);
   field->set_format_string_unless_overruled(
-      u"DD/MM/YYYY", AutofillField::FormatStringSource::kServer);
+      AutofillFormatString(u"DD/MM/YYYY", FormatString_Type_DATE),
+      AutofillFormatStringSource::kServer);
   EXPECT_EQ(
       GetFillValueForEntity(passport(), field, mojom::ActionPersistence::kFill,
                             /*app_locale=*/"",

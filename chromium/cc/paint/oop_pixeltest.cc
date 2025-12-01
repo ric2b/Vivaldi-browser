@@ -73,7 +73,7 @@
 #include "ui/gl/gl_implementation.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
+#include "base/android/android_info.h"
 #endif
 
 namespace cc {
@@ -150,8 +150,8 @@ class OopPixelTest : public testing::Test,
     const int raster_max_texture_size =
         raster_context_provider_->ContextCapabilities().max_texture_size;
     oop_image_cache_ = std::make_unique<GpuImageDecodeCache>(
-        raster_context_provider_.get(), true, kRGBA_8888_SkColorType,
-        kWorkingSetSize, raster_max_texture_size, nullptr);
+        raster_context_provider_.get(), kRGBA_8888_SkColorType, kWorkingSetSize,
+        raster_max_texture_size, nullptr);
   }
 
   class RasterOptions {
@@ -1358,7 +1358,7 @@ class TestMailboxBacking : public TextureBacking {
 
 TEST_F(OopPixelTest, DrawMailboxBackedImage) {
   RasterOptions options(gfx::Size(16, 16));
-  options.image_provider_raster_mode = PlaybackImageProvider::RasterMode::kOop;
+  options.image_provider_raster_mode = PlaybackImageProvider::RasterMode::kGpu;
   SkImageInfo backing_info = SkImageInfo::MakeN32Premul(
       options.resource_size.width(), options.resource_size.height());
 
@@ -2165,8 +2165,8 @@ class OopTextBlobPixelTest
 #if BUILDFLAG(IS_ANDROID)
     // The nexus5 and nexus5x bots are particularly susceptible to small changes
     // when bilerping an image (not visible).
-    const int sdk = base::android::BuildInfo::GetInstance()->sdk_int();
-    if (sdk <= base::android::SDK_VERSION_MARSHMALLOW) {
+    const int sdk = base::android::android_info::sdk_int();
+    if (sdk <= base::android::android_info::SDK_VERSION_MARSHMALLOW) {
       error_pixels_percentage = 10.f;
       max_abs_error = 20;
     } else {

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -197,3 +197,23 @@ export function getLocalizedLanguageRegion(
   return `${languageInCurrentLocale}${wrappedRegionInCurrentLocale} - ${languageInTargetLocale}${
              wrappedRegionInTargetLocale}` as Platform.UIString.LocalizedString;
 }
+
+
+// Vivaldi
+// 'Google' or 'Chrome' will be replaced by 'Vivaldi' in UI strings
+const vivaldiReplacements = /Google Chrome|Google|Chrome/g;
+
+// Vivaldi branded localized strings functions
+export function getVivaldiLazilyComputedLocalizedString(
+    registeredStrings: I18n.LocalizedStringSet.RegisteredFileStrings, id: string, values: i18nTypes.Values = {}): () =>
+    Platform.UIString.LocalizedString {
+  return (): Platform.UIString.LocalizedString => getVivaldiLocalizedString(registeredStrings, id, values);
+}
+
+export function getVivaldiLocalizedString(
+    registeredStrings: I18n.LocalizedStringSet.RegisteredFileStrings, id: string,
+    values: i18nTypes.Values = {}): Platform.UIString.LocalizedString {
+  return registeredStrings.getLocalizedStringSetFor(DevToolsLocale.instance().locale).getLocalizedString(id, values).replace(vivaldiReplacements, "Vivaldi") as
+      Platform.UIString.LocalizedString;
+}
+// End Vivaldi

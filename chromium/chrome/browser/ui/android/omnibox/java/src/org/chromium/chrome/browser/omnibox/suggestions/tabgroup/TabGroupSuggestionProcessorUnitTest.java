@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.omnibox.suggestions.tabgroup;
 
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.graphics.drawable.ShapeDrawable;
 import android.text.style.ImageSpan;
 
@@ -25,12 +24,18 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
+import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxImageSupplier;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.styles.SuggestionSpannable;
+import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteUIContext;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProperties;
+import org.chromium.chrome.browser.omnibox.suggestions.basic.BasicSuggestionProcessor.BookmarkState;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewProperties;
+import org.chromium.chrome.browser.share.ShareDelegate;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.metrics.OmniboxEventProtos.OmniboxEventProto.PageClassification;
 import org.chromium.components.omnibox.AutocompleteInput;
@@ -43,6 +48,7 @@ import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.JUnitTestGURLs;
 
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /** Tests for {@link TabGroupSuggestionProcessor}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -56,8 +62,11 @@ public class TabGroupSuggestionProcessorUnitTest {
     public @Rule MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     private @Mock SuggestionHost mSuggestionHost;
-    private @Mock Bitmap mBitmap;
     private @Mock OmniboxImageSupplier mImageSupplier;
+    private @Mock UrlBarEditingTextStateProvider mTextProvider;
+    private @Mock Supplier<Tab> mTabSupplier;
+    private @Mock Supplier<ShareDelegate> mShareDelegateSupplier;
+    private @Mock BookmarkState mBookmarkState;
 
     private Context mContext;
     private TabGroupSuggestionProcessor mProcessor;
@@ -70,9 +79,17 @@ public class TabGroupSuggestionProcessorUnitTest {
         mContext = ContextUtils.getApplicationContext();
         mContext.setTheme(R.style.Theme_BrowserUI_DayNight);
 
-        mProcessor =
-                new TabGroupSuggestionProcessor(
-                        mContext, mSuggestionHost, Optional.of(mImageSupplier));
+        AutocompleteUIContext uiContext =
+                new AutocompleteUIContext(
+                        mContext,
+                        mSuggestionHost,
+                        mTextProvider,
+                        Optional.of(mImageSupplier),
+                        mBookmarkState,
+                        mTabSupplier,
+                        mShareDelegateSupplier,
+                        () -> ControlsPosition.TOP);
+        mProcessor = new TabGroupSuggestionProcessor(uiContext);
         mInput = new AutocompleteInput();
         OmniboxResourceProvider.disableCachesForTesting();
     }
@@ -129,5 +146,13 @@ public class TabGroupSuggestionProcessorUnitTest {
                         .subSequence(
                                 3, mModel.get(SuggestionViewProperties.TEXT_LINE_1_TEXT).length())
                         .toString());
+
+        String targetString =
+                mContext.getString(
+                        R.string.accessibility_tab_group_suggestion_description,
+                        TITLE,
+                        "Red",
+                        DESCRIPTION);
+        Assert.assertEquals(targetString, mModel.get(SuggestionViewProperties.CONTENT_DESCRIPTION));
     }
 }

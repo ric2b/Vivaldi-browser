@@ -339,5 +339,6 @@ enum APIPermissionID {
   kZoom,
   kOmniboxPrivate,
   kDirectMatch,
+  kSitePermissions,
   kProtonVPN,
 };

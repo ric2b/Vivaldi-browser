@@ -3,11 +3,11 @@
 <translationbundle lang="cs">
 <translation id="1062777154504442433">Nová skupina</translation>
 <translation id="1625440863545383011">Odstranit list a ponechat skupinu</translation>
-<translation id="2330212241471632770">{TABS_COUNT,plural,
-          =1{Přidat list do záložek}
-          few{Přidat listy do záložek}
-          many{Přidat listů do záložek}
-          other{Přidat listy do záložek}
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+          =1 {Přidat list do záložek}
+          few {Přidat listy do záložek}
+          many {Přidat listů do záložek}
+          other {Přidat listy do záložek}
 }</translation>
 <translation id="2947471979790858922">Vaše aktivita v těchto soukromých listech bude odstraněna z tohoto zařízení</translation>
 <translation id="3298614730029636660">Zachovat skupinu</translation>

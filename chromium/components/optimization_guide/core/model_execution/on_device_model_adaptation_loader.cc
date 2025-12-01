@@ -18,6 +18,7 @@
 #include "components/optimization_guide/core/model_execution/model_execution_util.h"
 #include "components/optimization_guide/core/model_execution/on_device_model_feature_adapter.h"
 #include "components/optimization_guide/core/model_execution/on_device_model_service_controller.h"
+#include "components/optimization_guide/core/model_execution/usage_tracker.h"
 #include "components/optimization_guide/core/optimization_guide_constants.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
 #include "components/optimization_guide/core/optimization_guide_switches.h"
@@ -162,32 +163,41 @@ OnDeviceModelAdaptationMetadata::asset_paths() const {
   return base::OptionalToPtr(asset_paths_);
 }
 
+AdaptationMetadataMap::AdaptationMetadataMap() = default;
+AdaptationMetadataMap::~AdaptationMetadataMap() = default;
+MaybeAdaptationMetadata& AdaptationMetadataMap::Get(
+    ModelBasedCapabilityKey feature) {
+  auto it =
+      metadata_
+          .emplace(feature,
+                   base::unexpected(AdaptationUnavailability::kUpdatePending))
+          .first;
+  return it->second;
+}
+
+bool AdaptationMetadataMap::MaybeUpdate(ModelBasedCapabilityKey feature,
+                                        MaybeAdaptationMetadata metadata) {
+  MaybeAdaptationMetadata& current_metadata = Get(feature);
+  if (current_metadata == metadata) {
+    // Duplicate update (can be caused by multiple profiles providing updates).
+    // Keep the existing copy.
+    return false;
+  }
+  current_metadata = std::move(metadata);
+  return true;
+}
+
 OnDeviceModelAdaptationLoader::OnDeviceModelAdaptationLoader(
     ModelBasedCapabilityKey feature,
-    OptimizationGuideModelProvider* model_provider,
-    base::WeakPtr<OnDeviceModelComponentStateManager>
-        on_device_component_state_manager,
-    PrefService* local_state,
+    OptimizationGuideModelProvider& model_provider,
     OnLoadFn on_load_fn)
     : feature_(feature),
       target_(
           *features::internal::GetOptimizationTargetForCapability(feature_)),
-      model_provider_(model_provider),
-      on_device_component_state_manager_(on_device_component_state_manager),
-      local_state_(local_state),
+      model_provider_observation_(&model_provider, this),
       on_load_fn_(on_load_fn),
       background_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
-          {base::MayBlock(), base::TaskPriority::BEST_EFFORT})) {
-  if (!on_device_component_state_manager) {
-    return;
-  }
-
-  component_state_manager_observation_.Observe(
-      on_device_component_state_manager.get());
-  if (auto* state = on_device_component_state_manager->GetState()) {
-    StateChanged(state);
-  }
-}
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT})) {}
 
 OnDeviceModelAdaptationLoader::~OnDeviceModelAdaptationLoader() {
   Unregister();
@@ -195,24 +205,14 @@ OnDeviceModelAdaptationLoader::~OnDeviceModelAdaptationLoader() {
 
 void OnDeviceModelAdaptationLoader::Unregister() {
   if (registered_spec_) {
-    model_provider_->RemoveObserverForOptimizationTargetModel(target_, this);
+    model_provider_observation_.Reset();
     registered_spec_.reset();
   }
 }
 
-void OnDeviceModelAdaptationLoader::StateChanged(
-    const OnDeviceModelComponentState* state) {
-  MaybeRegisterModelDownload(
-      state, WasOnDeviceEligibleFeatureRecentlyUsed(feature_, *local_state_));
-}
-
 void OnDeviceModelAdaptationLoader::MaybeRegisterModelDownload(
-    const OnDeviceModelComponentState* state,
+    base::optional_ref<const OnDeviceBaseModelSpec> new_spec,
     bool was_feature_recently_used) {
-  CHECK(model_provider_);
-
-  std::optional<OnDeviceBaseModelSpec> new_spec =
-      state ? std::make_optional(state->GetBaseModelSpec()) : std::nullopt;
   if (new_spec && *new_spec == registered_spec_) {
     return;
   }
@@ -248,21 +248,7 @@ void OnDeviceModelAdaptationLoader::MaybeRegisterModelDownload(
     model_metadata.SerializeToString(any_metadata.mutable_value());
   }
 
-  model_provider_->AddObserverForOptimizationTargetModel(target_, any_metadata,
-                                                         this);
-}
-
-void OnDeviceModelAdaptationLoader::OnDeviceEligibleFeatureFirstUsed(
-    ModelBasedCapabilityKey feature) {
-  if (feature != feature_) {
-    return;
-  }
-  if (!on_device_component_state_manager_) {
-    return;
-  }
-  MaybeRegisterModelDownload(
-      on_device_component_state_manager_->GetState(),
-      WasOnDeviceEligibleFeatureRecentlyUsed(feature_, *local_state_));
+  model_provider_observation_.Observe(target_, any_metadata);
 }
 
 void OnDeviceModelAdaptationLoader::OnModelUpdated(
@@ -306,6 +292,30 @@ void OnDeviceModelAdaptationLoader::OnModelUpdated(
           .Then(
               base::BindOnce(&OnDeviceModelAdaptationMetadataCreated, feature_))
           .Then(on_load_fn_));
+}
+
+AdaptationLoaderMap::AdaptationLoaderMap(
+    OptimizationGuideModelProvider& provider,
+    OnLoadFn on_load_fn) {
+  for (const auto feature : kAllModelBasedCapabilityKeys) {
+    if (!features::internal::GetOptimizationTargetForCapability(feature)) {
+      continue;
+    }
+    loaders_[feature] = std::make_unique<OnDeviceModelAdaptationLoader>(
+        feature, provider, base::BindRepeating(on_load_fn, feature));
+  }
+}
+AdaptationLoaderMap::~AdaptationLoaderMap() = default;
+
+void AdaptationLoaderMap::MaybeRegisterModelDownload(
+    ModelBasedCapabilityKey feature,
+    base::optional_ref<const OnDeviceBaseModelSpec> spec,
+    bool was_feature_recently_used) {
+  auto it = loaders_.find(feature);
+  if (it != loaders_.end()) {
+    it->second->MaybeRegisterModelDownload(std::move(spec),
+                                           was_feature_recently_used);
+  }
 }
 
 }  // namespace optimization_guide

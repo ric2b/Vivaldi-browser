@@ -9,6 +9,9 @@
 #include "components/omnibox/composebox/composebox_query.mojom.h"
 #include "components/omnibox/composebox/composebox_query_controller.h"
 
+using composebox::SessionMetrics;
+using composebox::SessionState;
+
 namespace {
 const char kComposeboxFileDeleted[] = "Composebox.Session.File.DeletedCount";
 const char kComposeboxSessionDuration[] = "Composebox.Session.Duration.Total";
@@ -28,7 +31,7 @@ const char kComposeboxFileValidationErrorTypes[] =
     "Composebox.Session.File.Browser.ValidationFailureCount.";
 const char kComposeboxQueryTextLength[] = "Composebox.Query.TextLength";
 const char kComposeboxQueryFileCount[] = "Composebox.Query.FileCount";
-const char kComposeboxQueryModality[] = "Composebox.Query.Modality";
+const char kComposeboxQueryModality[] = "Composebox.Query.Modality.V2";
 const char kComposeboxQueryCount[] = "Composebox.Session.QueryCount";
 const char kComposeboxFileSizePerType[] = "Composebox.File.Size.";
 
@@ -38,6 +41,8 @@ std::string UploadStatusToString(FileUploadStatus status) {
       return "NotUploaded";
     case FileUploadStatus::kProcessing:
       return "Processing";
+    case FileUploadStatus::kProcessingSuggestSignalsReady:
+      return "ProcessingSuggestSignalsReady";
     case FileUploadStatus::kValidationFailed:
       return "ValidationFailed";
     case FileUploadStatus::kUploadStarted:
@@ -120,6 +125,7 @@ void ComposeboxMetricsRecorder::OnFileUploadStatusChanged(
     case FileUploadStatus::kNotUploaded:
     case FileUploadStatus::kUploadStarted:
     case FileUploadStatus::kUploadExpired:
+    case FileUploadStatus::kProcessingSuggestSignalsReady:
       break;
   }
 }

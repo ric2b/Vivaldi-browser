@@ -62,6 +62,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter size
 [Worker]     getter type
 [Worker]     method arrayBuffer
+[Worker]     method bytes
 [Worker]     method constructor
 [Worker]     method slice
 [Worker]     method stream
@@ -1607,28 +1608,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter quota
 [Worker]     getter requested
 [Worker]     method constructor
-[Worker] interface RTCRtpAcks
-[Worker]     attribute @@toStringTag
-[Worker]     getter explicitCongestionNotification
-[Worker]     getter receivedTime
-[Worker]     getter remoteSendTimestamp
-[Worker]     method acks
-[Worker]     method constructor
-[Worker] interface RTCRtpSendResult
-[Worker]     attribute @@toStringTag
-[Worker]     getter sent
-[Worker]     getter unsent
-[Worker]     method constructor
-[Worker] interface RTCRtpSendStream
-[Worker]     attribute @@toStringTag
-[Worker]     method constructor
-[Worker]     method sendRtp
-[Worker] interface RTCRtpSent
-[Worker]     attribute @@toStringTag
-[Worker]     getter ackId
-[Worker]     getter size
-[Worker]     getter time
-[Worker]     method constructor
 [Worker] interface ReadableByteStreamController
 [Worker]     attribute @@toStringTag
 [Worker]     getter byobRequest
@@ -1711,6 +1690,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method clone
 [Worker]     method constructor
 [Worker]     method formData
+[Worker]     method getRetryOptions
 [Worker]     method json
 [Worker]     method text
 [Worker] interface Response
@@ -1737,6 +1717,17 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker] interface RestrictionTarget
 [Worker]     attribute @@toStringTag
 [Worker]     method constructor
+[Worker] interface RtcReceivedPacket
+[Worker]     attribute @@toStringTag
+[Worker]     getter data
+[Worker]     method constructor
+[Worker] interface RtcTransport
+[Worker]     attribute @@toStringTag
+[Worker]     getter onicecandidate
+[Worker]     method constructor
+[Worker]     method getReceivedPackets
+[Worker]     method sendPackets
+[Worker]     setter onicecandidate
 [Worker] interface Scheduler
 [Worker]     attribute @@toStringTag
 [Worker]     method constructor
@@ -1749,6 +1740,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter disposition
 [Worker]     getter documentURI
 [Worker]     getter effectiveDirective
+[Worker]     getter evalHash
 [Worker]     getter lineNumber
 [Worker]     getter originalPolicy
 [Worker]     getter referrer
@@ -1955,12 +1947,11 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method createHTML
 [Worker]     method createScript
 [Worker]     method createScriptURL
-[Worker] interface TrustedTypePolicyFactory : EventTarget
+[Worker] interface TrustedTypePolicyFactory
 [Worker]     attribute @@toStringTag
 [Worker]     getter defaultPolicy
 [Worker]     getter emptyHTML
 [Worker]     getter emptyScript
-[Worker]     getter onbeforecreatepolicy
 [Worker]     method constructor
 [Worker]     method createPolicy
 [Worker]     method getAttributeType
@@ -1969,7 +1960,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method isHTML
 [Worker]     method isScript
 [Worker]     method isScriptURL
-[Worker]     setter onbeforecreatepolicy
 [Worker] interface URL
 [Worker]     static method canParse
 [Worker]     static method createObjectURL
@@ -2783,6 +2773,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method stencilOp
 [Worker]     method stencilOpSeparate
 [Worker]     method texElement2D
+[Worker]     method texElementImage2D
 [Worker]     method texImage2D
 [Worker]     method texImage3D
 [Worker]     method texParameterf
@@ -3287,6 +3278,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method stencilOp
 [Worker]     method stencilOpSeparate
 [Worker]     method texElement2D
+[Worker]     method texElementImage2D
 [Worker]     method texImage2D
 [Worker]     method texParameterf
 [Worker]     method texParameteri
@@ -3393,6 +3385,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter datagrams
 [Worker]     getter incomingBidirectionalStreams
 [Worker]     getter incomingUnidirectionalStreams
+[Worker]     getter protocol
 [Worker]     getter ready
 [Worker]     method close
 [Worker]     method constructor

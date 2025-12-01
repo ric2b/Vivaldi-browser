@@ -32,6 +32,7 @@
 #include "content/public/browser/media_player_id.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/page.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -393,9 +394,12 @@ void MetricsWebContentsObserver::WillStartNavigationRequestImpl(
   auto insertion_result = provisional_loads_.insert(std::make_pair(
       navigation_handle,
       std::make_unique<PageLoadTracker>(
-          in_foreground, embedder_interface_.get(), currently_committed_url,
-          !has_navigated_, navigation_handle, user_initiated_info, source_id,
-          parent_tracker)));
+          PageLoadTracker::InForegroundBool{in_foreground},
+          embedder_interface_.get(), currently_committed_url,
+          PageLoadTracker::IsFirstNavigationInWebContentsBool{!has_navigated_},
+          PageLoadTracker::IsReloadAfterDiscardBool{
+              navigation_handle->ExistingDocumentWasDiscarded()},
+          navigation_handle, user_initiated_info, source_id, parent_tracker)));
   CHECK(insertion_result.second)
       << "provisional_loads_ already contains NavigationHandle.";
   for (auto& observer : lifecycle_observers_) {
@@ -496,7 +500,7 @@ void MetricsWebContentsObserver::ResourceLoadComplete(
     //     was_cached ? 0
     //                : data_reduction_proxy::util::EstimateOriginalBodySize(
     //                      request, lofi_decider);
-    int original_content_length = 0;
+    base::ByteCount original_content_length;
 
     const blink::mojom::CommonNetworkInfoPtr& network_info =
         resource_load_info.network_info;
@@ -1307,8 +1311,10 @@ bool MetricsWebContentsObserver::ShouldTrackMainFrameNavigation(
   }
 
   const GURL& url = navigation_handle->GetURL();
-  if (embedder_interface_->IsNonTabWebUI(url) ||
-      embedder_interface_->IsNewTabPageUrl(url)) {
+  if (embedder_interface_->IsNewTabPageUrl(url) ||
+      (embedder_interface_->HasWebUIConfig(url) &&
+       !embedder_interface_->IsInternalWebUI(url)) ||
+      embedder_interface_->IsNonTabWebUI(url)) {
     return true;
   }
 

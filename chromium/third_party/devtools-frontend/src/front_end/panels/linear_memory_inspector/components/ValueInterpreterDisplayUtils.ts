@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,7 @@ import * as Platform from '../../../core/platform/platform.js';
 
 const UIStrings = {
   /**
-   *@description Text that is shown in the LinearMemoryInspector if a value could not be correctly formatted
+   * @description Text that is shown in the LinearMemoryInspector if a value could not be correctly formatted
    *             for the requested mode (e.g. we do not floats to be represented as hexadecimal numbers).
    *             Abbreviation stands for 'not applicable'.
    */

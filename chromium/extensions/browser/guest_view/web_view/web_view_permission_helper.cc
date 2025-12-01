@@ -42,6 +42,9 @@
 #include "extensions/vivaldi_browser_component_wrapper.h"
 #include "ui/content/vivaldi_tab_check.h"
 
+// VB-111008
+#include "components/permissions/vivaldi_permission_persistence.h"
+
 using base::UserMetricsAction;
 using content::BrowserPluginGuestDelegate;
 using guest_view::GuestViewEvent;
@@ -515,8 +518,20 @@ void WebViewPermissionHelper::RequestGeolocationPermission(
     const GURL& requesting_frame_url,
     bool user_gesture,
     base::OnceCallback<void(bool)> callback) {
+  // VB-111008: Wrap callback with geolocation persistence
+  auto wrapped_callback = base::BindOnce(
+      [](base::WeakPtr<WebViewPermissionHelper> helper,
+         base::OnceCallback<void(bool)> original_callback, bool allow) {
+        if (helper && ::vivaldi::IsVivaldiRunning()) {
+          ::vivaldi::PersistGeolocationPermission(helper->web_view_guest(),
+                                                  allow);
+        }
+        std::move(original_callback).Run(allow);
+      },
+      weak_factory_.GetWeakPtr(), std::move(callback));
+
   web_view_permission_helper_delegate_->RequestGeolocationPermission(
-      requesting_frame_url, user_gesture, std::move(callback));
+      requesting_frame_url, user_gesture, std::move(wrapped_callback));
 }
 
 void WebViewPermissionHelper::RequestHidPermission(

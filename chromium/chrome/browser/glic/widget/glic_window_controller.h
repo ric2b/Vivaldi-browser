@@ -15,16 +15,17 @@
 #include "base/observer_list_types.h"
 #include "base/scoped_observation.h"
 #include "base/scoped_observation_traits.h"
-#include "chrome/browser/glic/glic_enabling.h"
 #include "chrome/browser/glic/host/glic.mojom.h"
 #include "chrome/browser/glic/host/glic_web_client_access.h"
 #include "chrome/browser/glic/host/host.h"
+#include "chrome/browser/glic/public/glic_enabling.h"
+#include "chrome/browser/glic/public/glic_instance.h"
 #include "chrome/browser/glic/widget/local_hotkey_manager.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/interaction/element_tracker.h"
+#include "ui/gfx/native_ui_types.h"
 #include "ui/views/widget/widget.h"
 
 class Browser;
@@ -32,6 +33,10 @@ namespace gfx {
 class Size;
 class Point;
 }  // namespace gfx
+
+namespace tabs {
+class TabInterface;
+}
 
 namespace glic {
 // Distance the detached window should be from the top and the right of the
@@ -44,8 +49,6 @@ class GlicWidget;
 class GlicKeyedService;
 class GlicView;
 class GlicWindowAnimator;
-class GlicFreController;
-class Host;
 enum class AttachChangeReason;
 
 // This class owns and manages the glic window. This class has the same lifetime
@@ -54,19 +57,30 @@ enum class AttachChangeReason;
 // See the |State| enum below for the lifecycle of the window. When the glic
 // window is open |attached_browser_| indicates if the window is attached or
 // standalone. See |IsAttached|
-class GlicWindowController : public Host::Delegate {
+class GlicWindowController : public GlicInstance::UIDelegate {
  public:
-  // Observes the state of the glic window.
+  struct PanelStateContext {
+    raw_ptr<Browser> attached_browser = nullptr;
+    raw_ptr<views::Widget> glic_widget = nullptr;
+  };
+
+  // Observes the state of the glic panel.
   class StateObserver : public base::CheckedObserver {
    public:
     virtual void PanelStateChanged(const mojom::PanelState& panel_state,
-                                   Browser* attached_browser) = 0;
+                                   const PanelStateContext& context) = 0;
   };
 
   GlicWindowController(const GlicWindowController&) = delete;
   GlicWindowController& operator=(const GlicWindowController&) = delete;
   GlicWindowController() = default;
-  virtual ~GlicWindowController() = default;
+
+  virtual HostManager& host_manager() = 0;
+  virtual std::vector<GlicInstance*> GetInstances() = 0;
+  virtual GlicInstance* GetInstanceForTab(tabs::TabInterface* tab) = 0;
+  virtual void FindInstanceFromGlicContentsAndBindToTab(
+      content::WebContents* source_glic_web_contents,
+      tabs::TabInterface* tab_to_bind) = 0;
 
   // Show, summon, or activate the panel if needed, or close it if it's already
   // active and prevent_close is false.
@@ -86,28 +100,8 @@ class GlicWindowController : public Host::Delegate {
 
   virtual void FocusIfOpen() = 0;
 
-  // Attaches glic to the last focused Chrome window.
-  virtual void Attach() = 0;
-
-  // Detaches glic if attached and moves it to the top right of the current
-  // display.
-  virtual void Detach() = 0;
-
   // Destroy the glic panel and its web contents.
   virtual void Shutdown() = 0;
-
-  // Sets the size of the glic window to the specified dimensions. Callback runs
-  // when the animation finishes or is destroyed, or soon if the window
-  // doesn't exist yet. In this last case `size` will be used for the initial
-  // size when creating the widget later.
-  virtual void Resize(const gfx::Size& size,
-                      base::TimeDelta duration,
-                      base::OnceClosure callback) = 0;
-
-  // Allows the user to manually resize the widget by dragging. If the widget
-  // hasn't been created yet, apply this setting when it is created. No effect
-  // if the widget doesn't exist or the feature flag is disabled.
-  virtual void EnableDragResize(bool enabled) = 0;
 
   // Update the resize state of the widget if it is needed and safe to do so.
   // On Windows make sure that the client area size remains the same even if
@@ -117,19 +111,17 @@ class GlicWindowController : public Host::Delegate {
   // Returns the current size of the glic window.
   virtual gfx::Size GetSize() = 0;
 
-  // Sets the areas of the view from which it should be draggable.
-  virtual void SetDraggableAreas(
-      const std::vector<gfx::Rect>& draggable_areas) = 0;
-
-  // Sets the minimum widget size that the widget will allow the user to resize
-  // to.
-  virtual void SetMinimumWidgetSize(const gfx::Size& size) = 0;
-
   // Close the panel but keep the glic WebContents alive in the background.
   virtual void Close() = 0;
 
   // Used when the native window is closed directly.
   virtual void CloseWithReason(views::Widget::ClosedReason reason) = 0;
+
+  // Activates the browser window that the glic panel is associated with. If
+  // the panel is not attached to a browser, it will attempt to activate the
+  // last active browser. Returns true if a browser was successfully
+  // activated.
+  virtual bool ActivateBrowser() = 0;
 
   // Displays a context menu when the user right clicks on the title bar.
   // This is probably Windows only.
@@ -141,13 +133,7 @@ class GlicWindowController : public Host::Delegate {
   virtual bool ShouldStartDrag(const gfx::Point& initial_press_loc,
                                const gfx::Point& mouse_location) = 0;
 
-  // Drags the glic window following the current mouse location with the given
-  // `mouse_offset` and checks if the glic window is at a position where it
-  // could attach to a browser window when a drag ends.
-  virtual void HandleWindowDragWithOffset(gfx::Vector2d mouse_offset) = 0;
-
-  // Host::Delegate implementation.
-  const mojom::PanelState& GetPanelState() const override = 0;
+  virtual const mojom::PanelState& GetPanelState() const = 0;
 
   virtual void AddStateObserver(StateObserver* observer) = 0;
   virtual void RemoveStateObserver(StateObserver* observer) = 0;
@@ -156,17 +142,11 @@ class GlicWindowController : public Host::Delegate {
   // (e.g. will receive keyboard events).
   virtual bool IsActive() = 0;
 
-  // Returns true if the state is anything other than kClosed.
-  virtual bool IsShowing() const = 0;
-
-  // Returns true if either the glic panel or the FRE are showing.
-  virtual bool IsPanelOrFreShowing() const = 0;
-
   // Returns whether or not the glic window is currently attached to a browser.
-  // Virtual for testing.
   virtual bool IsAttached() const = 0;
 
   // Returns wehether or not the glic window is currently showing detached.
+  // When True |GetGlicWidget| will return a valid ptr.
   virtual bool IsDetached() const = 0;
 
   using WindowActivationChangedCallback =
@@ -178,9 +158,6 @@ class GlicWindowController : public Host::Delegate {
 
   // Warms the glic web contents.
   virtual void Preload() = 0;
-
-  // Warms the fre web contents.
-  virtual void PreloadFre() = 0;
 
   // Reloads the glic web contents or the FRE's web contents (depending on
   // which is currently visible).
@@ -194,16 +171,14 @@ class GlicWindowController : public Host::Delegate {
   // profile is deleted or if the browser shuts down.
   virtual base::WeakPtr<GlicWindowController> GetWeakPtr() = 0;
 
-  virtual GlicView* GetGlicView() = 0;
+  virtual GlicView* GetGlicView() const = 0;
 
   virtual base::WeakPtr<views::View> GetGlicViewAsView() = 0;
 
   // Returns the widget that backs the glic window.
-  virtual GlicWidget* GetGlicWidget() = 0;
+  virtual GlicWidget* GetGlicWidget() const = 0;
 
-  // Returns the WebContents used for the first-run experience, or nullptr if
-  // none.
-  virtual content::WebContents* GetFreWebContents() = 0;
+  virtual gfx::NativeWindow GetHostNativeWindow() = 0;
 
   // Return the Browser to which the panel is attached, or null if detached.
   virtual Browser* attached_browser() = 0;
@@ -213,26 +188,31 @@ class GlicWindowController : public Host::Delegate {
   //   * Waiting for glic to load (the open animation has finished, but the
   //     glic window contents is not yet ready)
   //   * Open (aka showing, visible)
+  //   * Detaching - the panel should not be considered open since the view
+  //     might not exist.
+  //   * Waiting for side panel - in the process of setting up side panel to
+  //   show.
   enum class State {
     kClosed,
     kWaitingForGlicToLoad,
     kOpen,
+    kDetaching,
+    kWaitingForSidePanelToShow,
   };
   virtual State state() const = 0;
-
-  virtual GlicFreController* fre_controller() = 0;
 
   virtual GlicWindowAnimator* window_animator() = 0;
 
   virtual Profile* profile() = 0;
 
-  virtual bool IsDragging() = 0;
-
   virtual gfx::Rect GetInitialBounds(Browser* browser) = 0;
 
   virtual void ShowDetachedForTesting() = 0;
   virtual void SetPreviousPositionForTesting(gfx::Point position) = 0;
+  virtual std::unique_ptr<views::View> CreateViewForSidePanel(
+      tabs::TabInterface& tab) = 0;
 
+  virtual void SidePanelShown(BrowserWindowInterface* browser) = 0;
   // Helper function to get the always detached flag.
   static bool AlwaysDetached() {
     return base::FeatureList::IsEnabled(features::kGlicDetached);

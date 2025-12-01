@@ -1,0 +1,66 @@
+{
+  "fonts": [
+  ],
+  "tests": [
+    {
+      "method": "pattern",
+      "query": {
+        "genericfamily": "sans-serif"
+      },
+      "result": {
+        "genericfamily": "sans-serif",
+        "family": ["sans-serif"]
+      }
+    },
+    {
+      "method": "pattern",
+      "query": {
+        "genericfamily": "monospace"
+      },
+      "result": {
+        "genericfamily": "monospace",
+        "family": ["monospace"]
+      }
+    },
+    {
+      "method": "pattern",
+      "query": {
+        "genericfamily": "serif"
+      },
+      "result": {
+        "genericfamily": "serif",
+        "family": ["serif"]
+      }
+    },
+    {
+      "method": "pattern",
+      "query": {
+        "genericfamily": "emoji"
+      },
+      "result": {
+        "genericfamily": "emoji",
+        "family": ["emoji", "sans-serif"]
+      }
+    },
+    {
+      "method": "pattern",
+      "query": {
+        "genericfamily": "math"
+      },
+      "result": {
+        "genericfamily": "math",
+        "family": ["math", "sans-serif"]
+      }
+    },
+    {
+      "method": "pattern",
+      "query": {
+        "genericfamily": ["monospace", "sans-serif"]
+      },
+      "result": {
+        "genericfamily": ["monospace", "sans-serif"],
+        "family": ["monospace", "sans-serif"]
+      }
+    }
+  ]
+}

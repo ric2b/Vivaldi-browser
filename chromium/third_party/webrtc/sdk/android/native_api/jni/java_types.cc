@@ -10,10 +10,21 @@
 
 #include "sdk/android/native_api/jni/java_types.h"
 
-#include <memory>
-#include <string>
-#include <utility>
+#include <jni.h>
 
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <map>
+#include <optional>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+#include "api/array_view.h"
+#include "api/sequence_checker.h"
+#include "rtc_base/checks.h"
 #include "sdk/android/generated_external_classes_jni/ArrayList_jni.h"
 #include "sdk/android/generated_external_classes_jni/Boolean_jni.h"
 #include "sdk/android/generated_external_classes_jni/Double_jni.h"
@@ -25,6 +36,7 @@
 #include "sdk/android/generated_external_classes_jni/Long_jni.h"
 #include "sdk/android/generated_external_classes_jni/Map_jni.h"
 #include "sdk/android/generated_native_api_jni/JniHelper_jni.h"
+#include "sdk/android/native_api/jni/scoped_java_ref.h"
 #include "third_party/jni_zero/jni_zero.h"
 
 namespace webrtc {
@@ -203,12 +215,17 @@ ScopedJavaLocalRef<jobject> NativeToJavaLong(JNIEnv* env, int64_t u) {
 ScopedJavaLocalRef<jstring> NativeToJavaString(JNIEnv* env, const char* str) {
   jstring j_str = env->NewStringUTF(str);
   CHECK_EXCEPTION(env) << "error during NewStringUTF";
-  return jni_zero::ScopedJavaLocalRef<jstring>(env, j_str);
+  return jni_zero::ScopedJavaLocalRef<jstring>::Adopt(env, j_str);
 }
 
 ScopedJavaLocalRef<jstring> NativeToJavaString(JNIEnv* jni,
                                                const std::string& str) {
   return NativeToJavaString(jni, str.c_str());
+}
+
+ScopedJavaLocalRef<jstring> NativeToJavaString(JNIEnv* jni,
+                                               absl::string_view str) {
+  return NativeToJavaString(jni, str.data());
 }
 
 ScopedJavaLocalRef<jobject> NativeToJavaDouble(
@@ -232,8 +249,9 @@ ScopedJavaLocalRef<jstring> NativeToJavaString(
 ScopedJavaLocalRef<jbyteArray> NativeToJavaByteArray(
     JNIEnv* env,
     ArrayView<int8_t> container) {
-  jni_zero::ScopedJavaLocalRef<jbyteArray> jarray(
-      env, env->NewByteArray(container.size()));
+  jni_zero::ScopedJavaLocalRef<jbyteArray> jarray =
+      jni_zero::ScopedJavaLocalRef<jbyteArray>::Adopt(
+          env, env->NewByteArray(container.size()));
   int8_t* array_ptr =
       env->GetByteArrayElements(jarray.obj(), /*isCopy=*/nullptr);
   memcpy(array_ptr, container.data(), container.size() * sizeof(int8_t));
@@ -244,8 +262,9 @@ ScopedJavaLocalRef<jbyteArray> NativeToJavaByteArray(
 ScopedJavaLocalRef<jintArray> NativeToJavaIntArray(
     JNIEnv* env,
     ArrayView<int32_t> container) {
-  jni_zero::ScopedJavaLocalRef<jintArray> jarray(
-      env, env->NewIntArray(container.size()));
+  jni_zero::ScopedJavaLocalRef<jintArray> jarray =
+      jni_zero::ScopedJavaLocalRef<jintArray>::Adopt(
+          env, env->NewIntArray(container.size()));
   int32_t* array_ptr =
       env->GetIntArrayElements(jarray.obj(), /*isCopy=*/nullptr);
   memcpy(array_ptr, container.data(), container.size() * sizeof(int32_t));
@@ -373,7 +392,7 @@ std::vector<std::string> JavaToStdVectorStrings(
   if (!list.is_null()) {
     for (const jni_zero::JavaRef<jobject>& str : Iterable(jni, list)) {
       converted_list.push_back(
-          JavaToStdString(jni, jni_zero::JavaParamRef<jstring>(
+          JavaToStdString(jni, jni_zero::JavaParamRef<jstring>::CreateLeaky(
                                    jni, static_cast<jstring>(str.obj()))));
     }
   }

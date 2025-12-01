@@ -102,6 +102,7 @@ constexpr const char* kOESSampleVariables = "GL_OES_sample_variables";
 constexpr const char* kEXTBlendFuncExtended = "GL_EXT_blend_func_extended";
 constexpr const char* kEXTTextureShadowLod = "GL_EXT_texture_shadow_lod";
 constexpr const char* kEXTGeometryShader = "GL_EXT_geometry_shader";
+constexpr const char* kEXTFragmentShaderBarycentric = "GL_EXT_fragment_shader_barycentric";
 
 enum class LayoutFormat : uint8_t {
     kStd140,
@@ -268,7 +269,7 @@ class Printer : public tint::TextGenerator {
     std::string StructName(const core::type::Struct* s) {
         return names_.GetOrAdd(s, [&] {
             auto name = s->Name().Name();
-            if (HasPrefix(name, "__")) {
+            if (name.starts_with("__")) {
                 name = builtin_struct_names_.GetOrAdd(
                     s, [&] { return UniqueIdentifier(name.substr(2)); });
             }
@@ -1104,9 +1105,8 @@ class Printer : public tint::TextGenerator {
         // If this is a combined texture sampler variable, check the provided map to see if we need
         // to give it a specific name.
         if (auto* combined_texture_sampler = var->As<ir::CombinedTextureSamplerVar>()) {
-            binding::CombinedTextureSamplerPair key{
-                combined_texture_sampler->TextureBindingPoint(),
-                combined_texture_sampler->SamplerBindingPoint()};
+            CombinedTextureSamplerPair key{combined_texture_sampler->TextureBindingPoint(),
+                                           combined_texture_sampler->SamplerBindingPoint()};
             auto itr = options_.bindings.sampler_texture_to_name.find(key);
             if (itr != options_.bindings.sampler_texture_to_name.end()) {
                 names_.Add(var->Result(), itr->second);
@@ -1985,13 +1985,16 @@ class Printer : public tint::TextGenerator {
             }
             case core::BuiltinValue::kPointSize:
                 return "gl_PointSize";
-            case core::BuiltinValue::kPrimitiveId:
+            case core::BuiltinValue::kPrimitiveIndex:
                 if (options_.version.IsES() && options_.version.major_version == 3 &&
                     options_.version.minor_version == 1) {
                     EmitExtension(kEXTGeometryShader);
                 }
 
                 return "gl_PrimitiveID";
+            case core::BuiltinValue::kBarycentricCoord:
+                EmitExtension(kEXTFragmentShaderBarycentric);
+                return "gl_BaryCoordEXT";
             default:
                 TINT_UNREACHABLE();
         }

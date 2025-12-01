@@ -79,8 +79,7 @@ import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.ui.accessibility.AccessibilityFeatures;
 import org.chromium.ui.accessibility.AccessibilityFeaturesMap;
 
-import java.util.Collections;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -145,16 +144,6 @@ public class AccessibilityNodeInfoBuilder {
             "Accessibility.Android.Performance.SpannableCreationTime2";
     private static final int MAX_TIME_BUCKET = 5 * 1000; // 5,000 microseconds = 5ms.
 
-    // Static instances of the three types of extra data keys that can be added to nodes.
-    private static final List<String> sTextCharacterLocation =
-            Collections.singletonList(EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY);
-
-    private static final List<String> sTextCharacterLocationInWindow =
-            Collections.singletonList(EXTRA_DATA_TEXT_CHARACTER_LOCATION_IN_WINDOW_KEY);
-
-    private static final List<String> sRequestImageData =
-            Collections.singletonList(EXTRAS_DATA_REQUEST_IMAGE_DATA_KEY);
-
     /** Delegate interface for any client that wants to use the node builder. */
     interface BuilderDelegate {
         // The view that contains the content this builder is used for.
@@ -203,6 +192,7 @@ public class AccessibilityNodeInfoBuilder {
             boolean clickable,
             boolean contentInvalid,
             boolean enabled,
+            boolean editable,
             boolean focusable,
             boolean focused,
             boolean hasImage,
@@ -215,6 +205,7 @@ public class AccessibilityNodeInfoBuilder {
             boolean isHeading) {
         node.setCheckable(checkable);
         node.setClickable(clickable);
+        node.setEditable(editable);
         node.setEnabled(enabled);
         node.setFocusable(focusable);
         node.setFocused(focused);
@@ -226,16 +217,18 @@ public class AccessibilityNodeInfoBuilder {
         node.setContentInvalid(contentInvalid);
         node.setHeading(isHeading);
 
+        List<String> availableExtraData = new ArrayList<>();
         if (hasImage) {
             Bundle bundle = node.getExtras();
             bundle.putCharSequence(EXTRAS_KEY_HAS_IMAGE, "true");
-            node.setAvailableExtraData(sRequestImageData);
+            availableExtraData.add(EXTRAS_DATA_REQUEST_IMAGE_DATA_KEY);
         }
 
         if (hasCharacterLocations) {
-            node.setAvailableExtraData(sTextCharacterLocation);
-            node.setAvailableExtraData(sTextCharacterLocationInWindow);
+            availableExtraData.add(EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY);
+            availableExtraData.add(EXTRA_DATA_TEXT_CHARACTER_LOCATION_IN_WINDOW_KEY);
         }
+        node.setAvailableExtraData(availableExtraData);
 
         node.setMovementGranularities(
                 MOVEMENT_GRANULARITY_CHARACTER
@@ -258,8 +251,9 @@ public class AccessibilityNodeInfoBuilder {
             boolean canScrollLeft,
             boolean canScrollRight,
             boolean clickable,
-            boolean editableText,
+            boolean isText,
             boolean enabled,
+            boolean editable,
             boolean focusable,
             boolean focused,
             boolean isCollapsed,
@@ -285,16 +279,17 @@ public class AccessibilityNodeInfoBuilder {
             node.addAction(ACTION_PREVIOUS_AT_MOVEMENT_GRANULARITY);
         }
 
-        if (editableText && enabled) {
-            // TODO: don't support actions that modify it if it's read-only (but
-            // SET_SELECTION and COPY are okay).
-            node.addAction(ACTION_SET_TEXT);
-            node.addAction(ACTION_PASTE);
-            node.addAction(ACTION_IME_ENTER);
-
+        if (isText && enabled) {
+            if (editable) {
+                node.addAction(ACTION_SET_TEXT);
+                node.addAction(ACTION_PASTE);
+                node.addAction(ACTION_IME_ENTER);
+            }
             if (hasNonEmptyValue) {
                 node.addAction(ACTION_SET_SELECTION);
-                node.addAction(ACTION_CUT);
+                if (editable) {
+                    node.addAction(ACTION_CUT);
+                }
                 node.addAction(ACTION_COPY);
             }
         }
@@ -379,7 +374,8 @@ public class AccessibilityNodeInfoBuilder {
             String brailleLabel,
             String brailleRoleDescription,
             int expandedState,
-            int checked) {
+            int checked,
+            int[] labelledByIds) {
         node.setUniqueId(String.valueOf(virtualViewId));
         node.setClassName(className);
 
@@ -436,6 +432,10 @@ public class AccessibilityNodeInfoBuilder {
         }
 
         node.setChecked(checked);
+
+        for (int id : labelledByIds) {
+            node.addLabeledBy(mDelegate.getView(), id);
+        }
     }
 
     @SuppressLint("NewApi")
@@ -672,7 +672,6 @@ public class AccessibilityNodeInfoBuilder {
     @CalledByNative
     protected void setAccessibilityNodeInfoSelectionAttrs(
             AccessibilityNodeInfoCompat node, int startIndex, int endIndex) {
-        node.setEditable(true);
         node.setTextSelection(startIndex, endIndex);
     }
 
@@ -864,7 +863,7 @@ public class AccessibilityNodeInfoBuilder {
     }
 
     @FunctionalInterface
-    private static interface SpanFactory<T> {
+    private interface SpanFactory<T> {
         @Nullable ParcelableSpan createSpan(T param);
     }
 
@@ -958,36 +957,5 @@ public class AccessibilityNodeInfoBuilder {
         } else if (rect.right < clippedLeft) {
             rect.right = clippedLeft;
         }
-    }
-
-    @CalledByNative
-    public static <K> Map<K, int[][]> createTextAttributeRangesMap() {
-        return new HashMap<K, int[][]>();
-    }
-
-    @CalledByNative
-    public static void setTextAttributeRangesMapFloatValue(
-            Map<Float, int[][]> map, float value, int[] starts, int[] ends) {
-        setTextAttributeRangesMapValue(map, value, starts, ends);
-    }
-
-    @CalledByNative
-    public static void setTextAttributeRangesMapIntValue(
-            Map<Integer, int[][]> map, int value, int[] starts, int[] ends) {
-        setTextAttributeRangesMapValue(map, value, starts, ends);
-    }
-
-    @CalledByNative
-    public static void setTextAttributeRangesMapStringValue(
-            Map<String, int[][]> map, String value, int[] starts, int[] ends) {
-        setTextAttributeRangesMapValue(map, value, starts, ends);
-    }
-
-    public static <T> void setTextAttributeRangesMapValue(
-            Map<T, int[][]> map, T value, int[] starts, int[] ends) {
-        if (map == null || value == null || starts == null || ends == null) {
-            return;
-        }
-        map.put(value, new int[][] {starts, ends});
     }
 }

@@ -7,7 +7,8 @@
 
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/actor/aggregated_journal.h"
-#include "chrome/browser/actor/task_id.h"
+#include "chrome/common/actor/task_id.h"
+#include "chrome/common/actor_webui.mojom-forward.h"
 #include "content/public/browser/navigation_throttle.h"
 
 namespace content {
@@ -38,6 +39,8 @@ class ActorNavigationThrottle : public content::NavigationThrottle {
   content::NavigationThrottle::ThrottleCheckResult WillStartRequest() override;
   content::NavigationThrottle::ThrottleCheckResult WillRedirectRequest()
       override;
+  content::NavigationThrottle::ThrottleCheckResult WillProcessResponse()
+      override;
   const char* GetNameForLogging() override;
 
  private:
@@ -51,6 +54,9 @@ class ActorNavigationThrottle : public content::NavigationThrottle {
   void OnMayActOnUrlResult(
       std::unique_ptr<AggregatedJournal::PendingAsyncEntry> journal_entry,
       bool may_act);
+
+  void OnUserConfirmationDialogDecision(
+      webui::mojom::UserConfirmationDialogResponsePtr response);
 
   Profile* GetProfile();
   AggregatedJournal& GetJournal();

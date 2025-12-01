@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -16,7 +16,7 @@ import {ShortcutTreeElement} from './ShortcutTreeElement.js';
 
 const UIStrings = {
   /**
-   *@description Link text content in Elements Tree Outline of the Elements panel. When clicked, it "reveals" the true location of an element.
+   * @description Link text content in Elements Tree Outline of the Elements panel. When clicked, it "reveals" the true location of an element.
    */
   reveal: 'reveal',
 } as const;

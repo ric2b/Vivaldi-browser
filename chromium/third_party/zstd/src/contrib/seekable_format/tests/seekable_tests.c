@@ -316,6 +316,10 @@ int main(int argc, const char** argv)
         for (pos = 0; pos < inSize; pos += 2) {
             size_t const decStatus = ZSTD_seekable_decompress(stream, outBuffer, 1, pos);
             if (decStatus != 1 || outBuffer[0] != inBuffer[pos]) {
+                free(seekBuffer);
+                free(outBuffer);
+                ZSTD_seekable_freeCStream(zscs);
+                ZSTD_seekable_free(stream);
                 goto _test_error;
             }
         }
@@ -323,6 +327,10 @@ int main(int argc, const char** argv)
             /* We read more than the compressed size, meaning there were some rereads.
                This is unneeded because we only seeked forward. */
             printf("Too much data read: %zu read, with compressed size %zu\n", buffWrapper.totalRead, seekSize);
+            free(seekBuffer);
+            free(outBuffer);
+            ZSTD_seekable_freeCStream(zscs);
+            ZSTD_seekable_free(stream);
             goto _test_error;
         }
 
@@ -342,6 +350,10 @@ int main(int argc, const char** argv)
         for (idx = 0; idx < sizeof(tests) / sizeof(tests[0]); idx++) {
             size_t const decStatus = ZSTD_seekable_decompress(stream, outBuffer, tests[idx].size, tests[idx].offset);
             if (decStatus != tests[idx].size || memcmp(outBuffer, inBuffer + tests[idx].offset, tests[idx].size) != 0) {
+                free(seekBuffer);
+                free(outBuffer);
+                ZSTD_seekable_freeCStream(zscs);
+                ZSTD_seekable_free(stream);
                 goto _test_error;
             }
         }

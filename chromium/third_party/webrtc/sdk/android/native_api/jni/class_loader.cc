@@ -10,12 +10,15 @@
 
 #include "sdk/android/native_api/jni/class_loader.h"
 
+#include <jni.h>
+
 #include <algorithm>
 #include <string>
 
 #include "rtc_base/checks.h"
 #include "sdk/android/generated_native_api_jni/WebRtcClassLoader_jni.h"
 #include "sdk/android/native_api/jni/java_types.h"
+#include "sdk/android/native_api/jni/scoped_java_ref.h"
 #include "third_party/jni_zero/jni_zero.h"
 
 // Abort the process if `jni` has a Java exception pending. This macros uses the
@@ -51,7 +54,7 @@ class ClassLoader {
     const jclass clazz = static_cast<jclass>(env->CallObjectMethod(
         class_loader_.obj(), load_class_method_, j_name.obj()));
     CHECK_EXCEPTION(env);
-    return ScopedJavaLocalRef<jclass>(env, clazz);
+    return ScopedJavaLocalRef<jclass>::Adopt(env, clazz);
   }
 
  private:
@@ -89,7 +92,7 @@ ScopedJavaLocalRef<jclass> GetClass(JNIEnv* env, const char* c_name) {
 
   std::string name(c_name);
   std::replace(name.begin(), name.end(), '.', '/');
-  return ScopedJavaLocalRef<jclass>(env, env->FindClass(name.c_str()));
+  return ScopedJavaLocalRef<jclass>::Adopt(env, env->FindClass(name.c_str()));
 }
 
 }  // namespace webrtc

@@ -82,11 +82,13 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chromeos/ash/components/dbus/anomaly_detector/anomaly_detector_client.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/dbus/vm_applications/apps.pb.h"
 #include "chromeos/ash/components/dbus/vm_concierge/concierge_service.pb.h"
 #include "chromeos/ash/components/network/device_state.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/scheduler_config/scheduler_configuration_manager.h"
+#include "chromeos/dbus/common/dbus_callback.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -218,6 +220,30 @@ void EmitTimeInStageHistogram(base::TimeDelta duration,
   DCHECK(!name.empty());
   base::UmaHistogramCustomTimes(name, duration, base::Milliseconds(10),
                                 base::Hours(6), 50);
+}
+
+vm_tools::concierge::VmInfo::VmType ToConciergeServiceVmType(
+    vm_tools::apps::VmType type) {
+  // Keep in sync with
+  // https://source.chromium.org/chromiumos/chromiumos/codesearch/+/HEAD:src/platform2/vm_tools/concierge/vm_util.cc;l=1303
+  using VmType = vm_tools::concierge::VmInfo::VmType;
+  using AppsVmType = vm_tools::apps::VmType;
+  switch (type) {
+    case AppsVmType::TERMINA:
+      return VmType::VmInfo_VmType_TERMINA;
+    case AppsVmType::PLUGIN_VM:
+      return VmType::VmInfo_VmType_PLUGIN_VM;
+    case AppsVmType::BOREALIS:
+      return VmType::VmInfo_VmType_BOREALIS;
+    case AppsVmType::ARCVM:
+      return VmType::VmInfo_VmType_ARC_VM;
+    case AppsVmType::BRUSCHETTA:
+      return VmType::VmInfo_VmType_BRUSCHETTA;
+    case AppsVmType::BAGUETTE:
+      return VmType::VmInfo_VmType_BAGUETTE;
+    default:
+      return VmType::VmInfo_VmType_UNKNOWN;
+  }
 }
 
 }  // namespace
@@ -719,9 +745,8 @@ void CrostiniManager::CrostiniRestarter::ContinueRestart() {
   }
 
   StartStage(mojom::InstallerState::kInstallImageLoader);
-  if (base::FeatureList::IsEnabled(ash::features::kCrostiniContainerless)) {
-    // TODO(crbug.com/377377749):  do we need to check for existence of any
-    // previous installs here, or has that already happened?
+
+  if (container_id_.vm_type == kBaguetteDefaultVmType) {
     crostini_manager_->InstallBaguette(
         base::BindOnce(&CrostiniRestarter::LoadComponentFinished,
                        weak_ptr_factory_.GetWeakPtr()));
@@ -904,9 +929,7 @@ void CrostiniManager::CrostiniRestarter::SharePathsFinished(
   if (!success) {
     LOG(WARNING) << "Failed to share paths: " << failure_reason;
   }
-
-  // TODO: crbug.com/425735422 - use VM type instead of feature to decide branch
-  if (base::FeatureList::IsEnabled(ash::features::kCrostiniContainerless)) {
+  if (container_id_.vm_type == kBaguetteDefaultVmType) {
     StartStage(mojom::InstallerState::kConfigureContainer);
     crostini_manager_->SetUpBaguetteUser(
         container_id_.vm_name, requests_[0].options.container_username,
@@ -955,6 +978,9 @@ void CrostiniManager::CrostiniRestarter::SetUpBaguetteUserFinished(
   if (ReturnEarlyIfNeeded()) {
     return;
   }
+
+  // If arc sideloading is enabled, configure the guest for that.
+  crostini_manager_->ConfigureForArcSideload();
 
   // Wait for Baguette's 'services are ready' signals
   WaitUntilBaguetteReady(result, kBaguetteVmReadyWaitTimeout);
@@ -1127,6 +1153,53 @@ void CrostiniManager::UpdateVmState(std::string vm_name, VmState vm_state) {
   }
   // This can happen normally when StopVm is called right after start up.
   LOG(WARNING) << "Attempted to set state for unknown vm: " << vm_name;
+}
+
+CrostiniManager::TerminaFlavor CrostiniManager::GetTerminaFlavor(
+    Profile* profile) {
+  TerminaFlavor termina_flavor = TerminaFlavor::UNINSTALLED;
+  const base::Value::List& container_list =
+      profile->GetPrefs()->GetList(guest_os::prefs::kGuestOsContainers);
+  if (container_list.empty()) {
+    return termina_flavor;
+  }
+
+  termina_flavor = TerminaFlavor::UNKNOWN;
+
+  // We are uninterested in bru and plugin vm types here.
+  for (const auto& container : container_list) {
+    guest_os::GuestId id(container);
+    if (id.vm_type == vm_tools::apps::VmType::BAGUETTE) {
+      if (termina_flavor != TerminaFlavor::UNKNOWN) {
+        if (termina_flavor == TerminaFlavor::CROSTINI) {
+          LOG(ERROR) << "Simultaneous baguette and crostini installation, this "
+                        "is an unsupported state";
+        } else {
+          LOG(ERROR) << "Multiple termina guests exist with a baguette guest, "
+                        "this is an unsupported state.";
+        }
+        termina_flavor = TerminaFlavor::UNKNOWN;
+        break;
+      }
+      termina_flavor = TerminaFlavor::BAGUETTE;
+    } else if (id.vm_type == vm_tools::apps::VmType::TERMINA) {
+      if (termina_flavor != TerminaFlavor::UNKNOWN) {
+        if (termina_flavor == TerminaFlavor::BAGUETTE) {
+          LOG(ERROR) << "Simultaneous baguette and crostini installation, this "
+                        "is an unsupported state";
+          termina_flavor = TerminaFlavor::UNKNOWN;
+          break;
+        } else {
+          LOG(WARNING)
+              << "Multiple crostini-style termina guests exist, we are likely "
+                 "in a multi-container state which will be deprecated soon.";
+        }
+      }
+      termina_flavor = TerminaFlavor::CROSTINI;
+    }
+  }
+
+  return termina_flavor;
 }
 
 bool CrostiniManager::IsVmRunning(std::string vm_name) {
@@ -1595,7 +1668,7 @@ void CrostiniManager::CancelInstallTermina() {
 }
 
 void CrostiniManager::UninstallTermina(BoolCallback callback) {
-  if (base::FeatureList::IsEnabled(ash::features::kCrostiniContainerless)) {
+  if (GetTerminaFlavor(profile_) == TerminaFlavor::BAGUETTE) {
     baguette_installer_.Uninstall(std::move(callback));
   } else {
     termina_installer_.Uninstall(std::move(callback));
@@ -1630,7 +1703,7 @@ void CrostiniManager::CreateDiskImage(
   // The logical size of the new disk image, in bytes.
   request.set_disk_size(std::move(disk_size_bytes));
 
-  if (base::FeatureList::IsEnabled(ash::features::kCrostiniContainerless)) {
+  if (GetTerminaFlavor(profile_) == TerminaFlavor::BAGUETTE) {
     if (!disk_image.has_value()) {
       // CreateDiskImage will still run, as a no-op that provides the location
       // of the disk image.
@@ -1683,8 +1756,9 @@ void CrostiniManager::StartTerminaVm(std::string name,
     observer.OnVmStarting();
   }
 
+  TerminaFlavor termina_flavor = GetTerminaFlavor(profile_);
   vm_tools::concierge::StartVmRequest request;
-  if (base::FeatureList::IsEnabled(ash::features::kCrostiniContainerless)) {
+  if (termina_flavor == TerminaFlavor::BAGUETTE) {
     request.mutable_vm()->set_tools_dlc_id(kToolsDlcName);
     request.set_vm_type(
         ::vm_tools::concierge::VmInfo_VmType::VmInfo_VmType_BAGUETTE);
@@ -1695,7 +1769,7 @@ void CrostiniManager::StartTerminaVm(std::string name,
     }
   }
   request.set_name(std::move(name));
-  if (!base::FeatureList::IsEnabled(ash::features::kCrostiniContainerless)) {
+  if (termina_flavor != TerminaFlavor::BAGUETTE) {
     request.set_start_termina(true);
   }
   request.set_owner_id(owner_id_);
@@ -1713,7 +1787,7 @@ void CrostiniManager::StartTerminaVm(std::string name,
 
   vm_tools::concierge::DiskImage* disk_image = request.add_disks();
   disk_image->set_path(std::move(disk_path_string));
-  if (base::FeatureList::IsEnabled(ash::features::kCrostiniContainerless)) {
+  if (termina_flavor == TerminaFlavor::BAGUETTE) {
     disk_image->set_image_type(vm_tools::concierge::DISK_IMAGE_RAW);
   } else {
     disk_image->set_image_type(vm_tools::concierge::DISK_IMAGE_AUTO);
@@ -2088,20 +2162,40 @@ void CrostiniManager::ExportDiskImage(guest_os::GuestId vm_id,
   request.set_generate_sha256_digest(false);
   request.set_force(force);
 
-  std::vector<base::ScopedFD> fds;
-  base::File file(export_path,
-                  base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
-  if (!file.IsValid()) {
-    LOG(ERROR) << "Failed to open " << export_path;
-    return;
-  }
-
-  fds.emplace_back(file.TakePlatformFile());
-
-  GetConciergeClient()->ExportDiskImage(
-      std::move(fds), std::move(request),
+  // Blocking calls may not be made from the main thread (base::File() here),
+  // but dbus calls MUST be made from the main thread so we have to get a little
+  // sneaky with our routing here.
+  auto cb = base::BindPostTaskToCurrentDefault(
       base::BindOnce(&CrostiniManager::OnExportDiskImage,
                      weak_ptr_factory_.GetWeakPtr(), vm_id));
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(
+          [](base::FilePath export_path) {
+            return base::File(export_path, base::File::FLAG_CREATE_ALWAYS |
+                                               base::File::FLAG_WRITE |
+                                               base::File::FLAG_READ);
+          },
+          export_path),
+      base::BindOnce(
+          [](base::FilePath export_path,
+             vm_tools::concierge::ExportDiskImageRequest request,
+             chromeos::DBusMethodCallback<
+                 vm_tools::concierge::ExportDiskImageResponse> cb,
+             base::File file) {
+            std::vector<base::ScopedFD> fds;
+            if (!file.IsValid()) {
+              LOG(ERROR) << "Failed to open " << export_path;
+              return;
+            }
+
+            fds.emplace_back(file.TakePlatformFile());
+
+            GetConciergeClient()->ExportDiskImage(
+                std::move(fds), std::move(request), std::move(cb));
+          },
+          export_path, std::move(request), std::move(cb)));
 }
 
 void CrostiniManager::OnExportDiskImage(
@@ -2128,6 +2222,7 @@ void CrostiniManager::OnExportDiskImage(
                << ", failure_reason=" << response->failure_reason();
     std::move(it->second).Run(CrostiniResult::DISK_IMAGE_FAILED);
     disk_image_callbacks_.erase(it);
+    return;
   }
 
   disk_image_uuid_to_guest_id_.emplace(response->command_uuid(), vm_id);
@@ -2154,24 +2249,54 @@ void CrostiniManager::ImportDiskImage(guest_os::GuestId vm_id,
   }
   disk_image_callbacks_.emplace(vm_id, std::move(callback));
 
-  base::File file(import_path, base::File::FLAG_OPEN | base::File::FLAG_READ);
-  if (!file.IsValid()) {
-    LOG(ERROR) << "Failed to open " << import_path;
-    return;
-  }
-
   vm_tools::concierge::ImportDiskImageRequest request;
   request.set_vm_name(vm_id.vm_name);
   request.set_cryptohome_id(user_id_hash);
+  request.set_vm_type(ToConciergeServiceVmType(vm_id.vm_type));
   // All vm's are stored in root except pluginvm, which is not supported in this
   // flow.
   request.set_storage_location(vm_tools::concierge::STORAGE_CRYPTOHOME_ROOT);
-  request.set_source_size(file.GetLength());
 
-  GetConciergeClient()->ImportDiskImage(
-      base::ScopedFD(file.TakePlatformFile()), std::move(request),
+  // Blocking calls may not be made from the main thread (base::File() here),
+  // but dbus calls MUST be made from the main thread so we have to get a little
+  // sneaky with our routing here.
+  auto cb = base::BindPostTaskToCurrentDefault(
       base::BindOnce(&CrostiniManager::OnImportDiskImage,
                      weak_ptr_factory_.GetWeakPtr(), vm_id));
+
+  struct ImportFileInfo {
+    int64_t file_length;
+    base::File file;
+  };
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(
+          [](base::FilePath import_path) {
+            base::File file(import_path,
+                            base::File::FLAG_OPEN | base::File::FLAG_READ);
+            return (struct ImportFileInfo){file.GetLength(), std::move(file)};
+          },
+          import_path),
+      base::BindOnce(
+          [](base::FilePath import_path,
+             vm_tools::concierge::ImportDiskImageRequest request,
+             chromeos::DBusMethodCallback<
+                 vm_tools::concierge::ImportDiskImageResponse> cb,
+             struct ImportFileInfo file_info) {
+            if (!file_info.file.IsValid()) {
+              LOG(ERROR) << "Failed to open " << import_path;
+              return;
+            }
+            if (file_info.file_length >= 0) {
+              request.set_source_size(file_info.file_length);
+            }
+
+            GetConciergeClient()->ImportDiskImage(
+                base::ScopedFD(file_info.file.TakePlatformFile()),
+                std::move(request), std::move(cb));
+          },
+          import_path, std::move(request), std::move(cb)));
 }
 
 void CrostiniManager::OnImportDiskImage(
@@ -2196,8 +2321,23 @@ void CrostiniManager::OnImportDiskImage(
   if (response->status() != vm_tools::concierge::DISK_STATUS_IN_PROGRESS) {
     LOG(ERROR) << "Failed to import image: status=" << response->status()
                << ", failure_reason=" << response->failure_reason();
-    std::move(it->second).Run(CrostiniResult::DISK_IMAGE_FAILED);
+    CrostiniResult result;
+    switch (response->status()) {
+      case vm_tools::concierge::DISK_STATUS_FAILED:
+        result = CrostiniResult::DISK_IMAGE_FAILED;
+        break;
+      case vm_tools::concierge::DISK_STATUS_BAD_IMAGE:
+        result = CrostiniResult::DISK_IMAGE_BAD_IMAGE;
+        break;
+      case vm_tools::concierge::DISK_STATUS_NOT_ENOUGH_SPACE:
+        result = CrostiniResult::DISK_IMAGE_FAILED_NO_SPACE;
+        break;
+      default:
+        result = CrostiniResult::DISK_IMAGE_FAILED;
+    }
+    std::move(it->second).Run(result);
     disk_image_callbacks_.erase(it);
+    return;
   }
 
   disk_image_uuid_to_guest_id_.emplace(response->command_uuid(), vm_id);
@@ -2717,7 +2857,6 @@ CrostiniManager::RestartId CrostiniManager::RestartCrostiniWithOptions(
   create_options.stop_after_lxd_available = options.stop_after_lxd_available;
 
   bool obsolete_create_options = true;
-  // TODO(crbug.com/377377749) dont need this for baguette?
   AddNewLxdContainerToPrefs(profile_, container_id);
   RegisterContainer(container_id);
   if (!RegisterCreateOptions(container_id, options)) {
@@ -2920,6 +3059,20 @@ void CrostiniManager::OnStartTerminaVm(
       break;
   }
 
+  uint32_t seneschal_server_handle =
+      response->vm_info().seneschal_server_handle();
+
+  if (response->status() == vm_tools::concierge::VM_STATUS_RUNNING) {
+    // Baguette does not start containers (which is the only case we get a
+    // VM_STATUS_STARTING), so we need to share fonts as soon as possible.
+    if (GetTerminaFlavor(profile_) == TerminaFlavor::BAGUETTE) {
+      guest_os::GuestOsSharePathFactory::GetForProfile(profile_)->SharePath(
+          vm_name, seneschal_server_handle,
+          base::FilePath(file_manager::util::kSystemFontsPath),
+          base::DoNothing());
+    }
+  }
+
   // The UI can only resize the default VM, so only (maybe) show the
   // notification for the default VM, if we got a value, and if the value isn't
   // an error (the API we call for space returns -1 on error).
@@ -2968,8 +3121,6 @@ void CrostiniManager::OnStartTerminaVm(
   DCHECK_EQ(response->status(), vm_tools::concierge::VM_STATUS_STARTING);
   bool wait_for_tremplin = running_vms_.find(vm_name) == running_vms_.end();
 
-  uint32_t seneschal_server_handle =
-      response->vm_info().seneschal_server_handle();
   running_vms_[vm_name] =
       VmInfo{VmState::STARTING, std::move(response->vm_info()), false};
   // If we thought a container was running for this VM, we're wrong. This can
@@ -3893,12 +4044,12 @@ void CrostiniManager::OnRemoveTermina(bool success) {
     return;
   }
 
-  if (base::FeatureList::IsEnabled(ash::features::kCrostiniContainerless)) {
-    // container prefs seem to be wiped as some part of lxd container removal
-    // callbacks in the regular flow, so we must remove them manually here for
-    // baguette.
+  // Container prefs are wiped as part of lxd container removal callbacks in the
+  // regular crostini flow, so we must remove them manually here for baguette.
+  if (GetTerminaFlavor(profile_) == TerminaFlavor::BAGUETTE) {
     guest_os::RemoveVmFromPrefs(profile_, kBaguetteDefaultVmType);
   }
+
   profile_->GetPrefs()->SetBoolean(prefs::kCrostiniEnabled, false);
   profile_->GetPrefs()->ClearPref(prefs::kCrostiniLastDiskSize);
   guest_os::RemoveVmFromPrefs(profile_, kCrostiniDefaultVmType);

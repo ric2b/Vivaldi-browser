@@ -27,6 +27,7 @@
 #import "ios/chrome/browser/discover_feed/model/discover_feed_visibility_observer.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/home_customization/model/home_background_customization_service_factory.h"
+#import "ios/chrome/browser/home_customization/model/user_uploaded_image_manager_factory.h"
 #import "ios/chrome/browser/image_fetcher/model/image_fetcher_service_factory.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/search_engine_logo/ui/search_engine_logo_state.h"
@@ -121,6 +122,9 @@ class NewTabPageMediatorTest : public PlatformTest {
             profile_.get());
     image_fetcher::ImageFetcherService* image_fetcher_service =
         ImageFetcherServiceFactory::GetForProfile(profile_.get());
+    UserUploadedImageManager* user_uploaded_image_manager =
+        UserUploadedImageManagerFactory::GetForProfile(profile_.get());
+
     mediator_ = [[NewTabPageMediator alloc]
                 initWithTemplateURLService:ios::TemplateURLServiceFactory::
                                                GetForProfile(profile_.get())
@@ -137,6 +141,7 @@ class NewTabPageMediatorTest : public PlatformTest {
                        profile_.get())
             backgroundCustomizationService:background_customization_service
                        imageFetcherService:image_fetcher_service
+                  userUploadedImageManager:user_uploaded_image_manager
              browserViewVisibilityNotifier:browser_view_visibility_notifier_
         discoverFeedVisibilityBrowserAgent:
             discover_feed_visibility_browser_agent
@@ -195,7 +200,7 @@ class NewTabPageMediatorTest : public PlatformTest {
   FeedMetricsRecorder* feed_metrics_recorder_;
   FakeDiscoverFeedEligibilityHandler* eligibility_handler_;
   NewTabPageMediator* mediator_;
-  raw_ptr<ToolbarTestNavigationManager> navigation_manager_;
+  raw_ptr<ToolbarTestNavigationManager, DanglingUntriaged> navigation_manager_;
   raw_ptr<FakeUrlLoadingBrowserAgent> url_loader_;
   raw_ptr<BrowserViewVisibilityNotifierBrowserAgent>
       browser_view_visibility_notifier_;

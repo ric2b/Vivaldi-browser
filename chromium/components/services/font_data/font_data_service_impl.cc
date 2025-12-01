@@ -4,11 +4,19 @@
 
 #include "components/services/font_data/font_data_service_impl.h"
 
+#if BUILDFLAG(IS_WIN)
+#include <windows.h>
+#endif  // BUILDFLAG(IS_WIN)
+
 #include <algorithm>
 #include <utility>
 
 #include "base/check.h"
 #include "base/containers/heap_array.h"
+#include "base/debug/dump_without_crashing.h"
+#include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/task/thread_pool.h"
@@ -26,6 +34,8 @@ namespace {
 // Value is arbitrary. The number should be small to conserve memory but large
 // enough to fit a meaningful amount of fonts.
 constexpr int kMemoryMapCacheSize = 128;
+
+BASE_FEATURE(kDumpOnOOBFontDataServiceCache, base::FEATURE_DISABLED_BY_DEFAULT);
 
 base::SequencedTaskRunner* GetFontDataServiceTaskRunner() {
   static base::NoDestructor<scoped_refptr<base::SequencedTaskRunner>>
@@ -83,13 +93,23 @@ void FontDataServiceImpl::BindReceiver(
 base::File FontDataServiceImpl::GetFileHandle(SkTypeface& typeface) {
   SkString font_path;
   typeface.getResourceName(&font_path);
+  base::UmaHistogramBoolean("Chrome.FontDataService.EmptyPathOnGetFileHandle",
+                            font_path.isEmpty());
   if (font_path.isEmpty()) {
     return {};
   }
 
-  return base::File(base::FilePath::FromUTF8Unsafe(font_path.c_str()),
-                    base::File::FLAG_OPEN | base::File::FLAG_READ |
-                        base::File::FLAG_WIN_EXCLUSIVE_WRITE);
+  auto font_file = base::File(base::FilePath::FromUTF8Unsafe(font_path.c_str()),
+                              base::File::FLAG_OPEN | base::File::FLAG_READ |
+                                  base::File::FLAG_WIN_EXCLUSIVE_WRITE);
+#if BUILDFLAG(IS_WIN)
+  if (!font_file.IsValid()) {
+    base::UmaHistogramSparse("Chrome.FontDataService.WinLastError",
+                             ::GetLastError());
+  }
+#endif  // BUILDFLAG(IS_WIN)
+
+  return font_file;
 }
 
 void FontDataServiceImpl::MatchFamilyName(const std::string& family_name,
@@ -251,7 +271,13 @@ FontDataServiceImpl::CreateMatchFamilyNameResult(sk_sp<SkTypeface> typeface) {
         // return an invalid memory map region.
         // TODO(crbug.com/335680565): Improve cache by transitioning to LRU.
         if (stream && stream->hasLength() && (stream->getLength() > 0u) &&
-            stream->getMemoryBase() && assets_.size() < kMemoryMapCacheSize) {
+            stream->getMemoryBase()) {
+          UMA_HISTOGRAM_COUNTS_10000(
+              "Chrome.FontDataService.MemoryMapCacheSize", assets_.size());
+          if (assets_.size() >= kMemoryMapCacheSize &&
+              base::FeatureList::IsEnabled(kDumpOnOOBFontDataServiceCache)) {
+            base::debug::DumpWithoutCrashing();
+          }
           const size_t asset_index = GetOrCreateAssetIndex(std::move(stream));
           base::ReadOnlySharedMemoryRegion region =
               assets_[asset_index]->shared_memory.region.Duplicate();

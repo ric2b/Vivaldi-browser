@@ -8,7 +8,6 @@
 #include <memory>
 #include <string>
 
-#include "base/time/time.h"
 #include "components/ad_blocker/public/content/adblock_tab_state_and_logs.h"
 #include "components/security_interstitials/content/security_interstitial_page.h"
 

@@ -105,7 +105,11 @@ void StackMemory::Iterate(v8::internal::RootVisitor* v, Isolate* isolate) {
   }
   v->VisitRootPointer(
       Root::kStackRoots, nullptr,
-      FullObjectSlot(reinterpret_cast<Address>(&this->current_cont_)));
+      FullObjectSlot(reinterpret_cast<Address>(&current_cont_)));
+  if (v8_flags.experimental_wasm_wasmfx && !func_ref_.is_null()) {
+    v->VisitRootPointer(Root::kStackRoots, nullptr,
+                        FullObjectSlot(reinterpret_cast<Address>(&func_ref_)));
+  }
 }
 
 bool StackMemory::Grow(Address current_fp, size_t min_size) {

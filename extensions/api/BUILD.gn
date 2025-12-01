@@ -3,6 +3,7 @@ import("//vivaldi/gn/config/features.gni")
 import("//chromium/build/config/features.gni")
 
 import("//build/config/ui.gni")
+import("//build/config/compiler/compiler.gni")
 
 config("delay_load_mf") {
   ldflags = [
@@ -119,6 +120,8 @@ static_library("apis") {
     "//components/web_modal",
     "//components/webapps/common:mojo_bindings",
     "//components/zoom",
+    "//services/data_decoder/public/cpp",
+    "//services/network/public/cpp",
     "//vivaldi/components/capture:capture_page",
     #"//content/browser",
     "//content/public/browser",
@@ -183,9 +186,6 @@ static_library("apis") {
   sources = [
     "access_keys/access_keys_api.cc",
     "access_keys/access_keys_api.h",
-    "auto_update/auto_update_api.cc",
-    "auto_update/auto_update_api.h",
-    "auto_update/auto_update_status.h",
     "bookmark_context_menu/bookmark_context_menu_api.cc",
     "bookmark_context_menu/bookmark_context_menu_api.h",
     "bookmarks/bookmarks_private_api.cc",
@@ -252,6 +252,8 @@ static_library("apis") {
     "sessions/vivaldi_sessions_api.h",
     "settings/settings_api.cc",
     "settings/settings_api.h",
+    "site_permissions/site_permissions_api.cc",
+    "site_permissions/site_permissions_api.h",
     "sync/sync_api.cc",
     "sync/sync_api.h",
     "tabs/tabs_private_api.cc",
@@ -273,9 +275,33 @@ static_library("apis") {
     "zoom/zoom_api.h",
   ]
 
+  if (!vivaldi_disable_sparkle) {
+    sources += [
+      "auto_update/auto_update_api.cc",
+      "auto_update/auto_update_api.h",
+      "auto_update/auto_update_status.h",
+    ]
+    if (is_mac) {
+      sources += [
+        "auto_update/auto_update_api_mac.mm",
+      ]
+    }
+    if (is_win) {
+      sources += [
+        "auto_update/auto_update_api_win.cc",
+      ]
+    }
+    if (is_linux) {
+      sources += [
+        "auto_update/auto_update_api_linux.cc",
+        "auto_update/linux_update_checker.cc",
+        "auto_update/linux_update_checker.h",
+      ]
+    }
+  }
+
   if (is_linux) {
     sources += [
-      "auto_update/auto_update_api_linux.cc",
       "vivaldi_utilities/vivaldi_utilities_api_linux.cc",
       "window/window_private_api_linux.cc",
       "vivaldi_utilities/launch_bar_gnome_support.cc",
@@ -288,15 +314,20 @@ static_library("apis") {
   }
   if (is_mac) {
     sources += [
-      "auto_update/auto_update_api_mac.mm",
       "vivaldi_utilities/drag_download_items_mac.mm",
       "vivaldi_utilities/vivaldi_utilities_api_mac.mm",
       "window/window_private_api_mac.mm",
     ]
+
+    # For auto_update_api.cc:
+    if (use_lld) {
+      defines = [ "CHROMIUM_LINKER_NAME=\"lld\"" ]
+    } else {
+      defines = [ "CHROMIUM_LINKER_NAME=\"ld\"" ]
+    }
   }
   if (is_win) {
     sources += [
-      "auto_update/auto_update_api_win.cc",
       "vivaldi_utilities/vivaldi_utilities_api_win.cc",
       "window/window_private_api_win.cc",
     ]

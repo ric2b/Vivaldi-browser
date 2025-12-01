@@ -303,7 +303,7 @@ void MutableBigInt::Canonicalize(Tagged<MutableBigInt> result) {
   uint32_t to_trim = old_length - new_length;
   if (to_trim != 0) {
     Heap* heap = Isolate::Current()->heap();
-    if (!heap->IsLargeObject(result)) {
+    if (!HeapLayout::InAnyLargeSpace(result)) {
       uint32_t old_size =
           ALIGN_TO_ALLOCATION_ALIGNMENT(BigInt::SizeFor(old_length));
       uint32_t new_size =
@@ -360,7 +360,10 @@ MaybeDirectHandle<BigInt> BigInt::Exponentiate(Isolate* isolate,
                                                DirectHandle<BigInt> exponent) {
   // 1. If exponent is < 0, throw a RangeError exception.
   if (exponent->sign()) {
-    THROW_NEW_ERROR(isolate, NewRangeError(MessageTemplate::kMustBePositive));
+    THROW_NEW_ERROR(
+        isolate, NewRangeError(
+                     MessageTemplate::kMustBePositive,
+                     isolate->factory()->NewStringFromStaticChars("Exponent")));
   }
   // 2. If base is 0n and exponent is 0n, return 1n.
   if (exponent->is_zero()) {
@@ -820,7 +823,7 @@ void RightTrimString(Isolate* isolate, DirectHandle<SeqOneByteString> string,
       ALIGN_TO_ALLOCATION_ALIGNMENT(SeqOneByteString::SizeFor(chars_allocated));
   int needed_size =
       ALIGN_TO_ALLOCATION_ALIGNMENT(SeqOneByteString::SizeFor(chars_written));
-  if (needed_size < string_size && !isolate->heap()->IsLargeObject(*string)) {
+  if (needed_size < string_size && !HeapLayout::InAnyLargeSpace(*string)) {
     isolate->heap()->NotifyObjectSizeChange(*string, string_size, needed_size,
                                             ClearRecordedSlots::kNo);
   }

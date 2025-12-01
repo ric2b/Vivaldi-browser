@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -15,19 +15,19 @@ const {html, Directives: {ifDefined}} = Lit;
 
 const UIStrings = {
   /**
-   *@description Header text for the feature reminder dialog.
+   * @description Header text for the feature reminder dialog.
    */
   thingsToConsider: 'Things to consider',
   /**
-   *@description Text for the learn more button in the feature reminder dialog.
+   * @description Text for the learn more button in the feature reminder dialog.
    */
   learnMore: 'Learn more',
   /**
-   *@description Text for the cancel button in the feature reminder dialog.
+   * @description Text for the cancel button in the feature reminder dialog.
    */
   cancel: 'Cancel',
   /**
-   *@description Text for the got it button in the feature reminder dialog.
+   * @description Text for the got it button in the feature reminder dialog.
    */
   gotIt: 'Got it',
 } as const;
@@ -36,7 +36,7 @@ const str_ = i18n.i18n.registerUIStrings('panels/common/FreDialog.ts', UIStrings
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 export class FreDialog {
-  static show({header, reminderItems, onLearnMoreClick, ariaLabel, learnMoreButtonTitle, learnMoreButtonAriaLabel}: {
+  static show({header, reminderItems, onLearnMoreClick, ariaLabel, learnMoreButtonText, learnMoreButtonAriaLabel}: {
     header: {
       iconName: string,
       text: Platform.UIString.LocalizedString,
@@ -47,7 +47,7 @@ export class FreDialog {
     }>,
     onLearnMoreClick: () => void,
     ariaLabel?: string,
-    learnMoreButtonTitle?: string,
+    learnMoreButtonText?: string,
     learnMoreButtonAriaLabel?: string,
   }): Promise<boolean> {
     const dialog = new UI.Dialog.Dialog();
@@ -83,8 +83,9 @@ export class FreDialog {
             @click=${onLearnMoreClick}
             .jslogContext=${'fre-disclaimer.learn-more'}
             .variant=${Buttons.Button.Variant.OUTLINED}
+            .title=${learnMoreButtonAriaLabel ?? i18nString(UIStrings.learnMore)}
             aria-label=${ifDefined(learnMoreButtonAriaLabel)}>
-            ${learnMoreButtonTitle ?? i18nString(UIStrings.learnMore)}
+            ${learnMoreButtonText ?? i18nString(UIStrings.learnMore)}
           </devtools-button>
           <div class="right-buttons">
             <devtools-button

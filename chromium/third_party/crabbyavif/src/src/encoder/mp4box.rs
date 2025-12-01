@@ -243,7 +243,7 @@ impl Encoder {
                 }
                 "uri " => {
                     // utf8string item_uri_type;
-                    return Err(AvifError::NotImplemented);
+                    return AvifError::not_implemented();
                 }
                 _ => {}
             }
@@ -329,17 +329,26 @@ impl Encoder {
         stream.start_box("ipco")?;
         let mut property_streams = Vec::new();
         for item in &mut self.items {
-            item.get_property_streams(
-                &self.image_metadata,
-                if item.is_tmap() {
-                    &self.alt_image_metadata
-                } else if item.category == Category::Gainmap {
-                    &self.gainmap_image_metadata
-                } else {
-                    &self.image_metadata
-                },
-                &mut property_streams,
-            )?;
+            let mut bit_depth_extension_metadata;
+            let item_metadata = if item.is_tmap() {
+                &self.alt_image_metadata
+            } else if item.category == Category::Gainmap {
+                &self.gainmap_image_metadata
+            } else {
+                match self.settings.sample_transform_recipe {
+                    SampleTransformRecipe::None => &self.image_metadata,
+                    SampleTransformRecipe::BitDepthExtension8b8b => {
+                        if item.is_sato() {
+                            &self.image_metadata
+                        } else {
+                            bit_depth_extension_metadata = self.image_metadata.shallow_clone();
+                            bit_depth_extension_metadata.depth = 8;
+                            &bit_depth_extension_metadata
+                        }
+                    }
+                }
+            };
+            item.get_property_streams(&self.image_metadata, item_metadata, &mut property_streams)?;
         }
         // Deduplicate the property streams.
         let mut property_index_map = Vec::new();
@@ -386,15 +395,15 @@ impl Encoder {
             stream.write_u8(u8_from_usize(item.associations.len())?)?;
             for (property_index, essential) in &item.associations {
                 // bit(1) essential;
-                stream.write_bits(*essential as u8, 1)?;
+                stream.write_bool(*essential)?;
                 // property_index_map is 0-indexed whereas the index stored in item.associations is
                 // 1-indexed.
                 let index = property_index_map[*property_index as usize - 1];
                 if index >= (1 << 7) {
-                    return Err(AvifError::UnknownError("".into()));
+                    return AvifError::unknown_error("");
                 }
                 // unsigned int(7) property_index;
-                stream.write_bits(index, 7)?;
+                stream.write_bits(index.into(), 7)?;
             }
         }
         stream.finish_box()?;
@@ -649,7 +658,7 @@ impl Encoder {
         } else {
             let loop_count = self.settings.repetition_count.loop_count();
             if frames_duration_in_timescales == 0 {
-                return Err(AvifError::InvalidArgument);
+                return AvifError::invalid_argument();
             }
             checked_mul!(frames_duration_in_timescales, loop_count)?
         };

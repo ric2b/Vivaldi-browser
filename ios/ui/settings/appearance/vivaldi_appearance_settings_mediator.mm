@@ -2,6 +2,7 @@
 
 #import "ios/ui/settings/appearance/vivaldi_appearance_settings_mediator.h"
 
+#import "components/omnibox/browser/omnibox_pref_names.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
@@ -60,7 +61,7 @@
     _bottomOmniboxEnabled =
         [[PrefBackedBoolean alloc]
             initWithPrefService:GetApplicationContext()->GetLocalState()
-                prefName:prefs::kBottomOmnibox];
+                prefName:omnibox::kIsOmniboxInBottomPosition];
     [_bottomOmniboxEnabled setObserver:self];
 
     _tabBarEnabled =

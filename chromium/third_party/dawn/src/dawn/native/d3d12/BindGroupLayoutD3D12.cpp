@@ -53,6 +53,7 @@ D3D12_DESCRIPTOR_RANGE_TYPE WGPUBindingInfoToDescriptorRangeType(const BindingIn
                     return D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
                 case wgpu::BufferBindingType::BindingNotUsed:
                 case wgpu::BufferBindingType::Undefined:
+                default:
                     DAWN_UNREACHABLE();
             }
         },
@@ -74,23 +75,33 @@ D3D12_DESCRIPTOR_RANGE_TYPE WGPUBindingInfoToDescriptorRangeType(const BindingIn
                     return D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
                 case wgpu::StorageTextureAccess::BindingNotUsed:
                 case wgpu::StorageTextureAccess::Undefined:
+                default:
                     DAWN_UNREACHABLE();
             }
         },
+        [](const TexelBufferBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_TYPE {
+            // D3D12 does not support texel buffers.
+            // TODO(crbug/382544164): Prototype texel buffer feature
+            DAWN_UNREACHABLE();
+        },
         [](const InputAttachmentBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_TYPE {
             DAWN_UNREACHABLE();
-            return D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        },
+        [](const ExternalTextureBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_TYPE {
+            DAWN_UNREACHABLE();
         });
 }
 }  // anonymous namespace
 
 // static
-Ref<BindGroupLayout> BindGroupLayout::Create(Device* device,
-                                             const BindGroupLayoutDescriptor* descriptor) {
+Ref<BindGroupLayout> BindGroupLayout::Create(
+    Device* device,
+    const UnpackedPtr<BindGroupLayoutDescriptor>& descriptor) {
     return AcquireRef(new BindGroupLayout(device, descriptor));
 }
 
-BindGroupLayout::BindGroupLayout(Device* device, const BindGroupLayoutDescriptor* descriptor)
+BindGroupLayout::BindGroupLayout(Device* device,
+                                 const UnpackedPtr<BindGroupLayoutDescriptor>& descriptor)
     : BindGroupLayoutInternalBase(device, descriptor),
       mDescriptorHeapOffsets(GetBindingCount()),
       mShaderRegisters(GetBindingCount()),
@@ -189,9 +200,16 @@ BindGroupLayout::BindGroupLayout(Device* device, const BindGroupLayoutDescriptor
             [](const StorageTextureBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
                 return D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
             },
+            [](const TexelBufferBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
+                // D3D12 does not support texel buffers.
+                // TODO(crbug/382544164): Prototype texel buffer feature
+                DAWN_UNREACHABLE();
+            },
             [](const InputAttachmentBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
                 DAWN_UNREACHABLE();
-                return D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
+            },
+            [](const ExternalTextureBindingInfo&) -> D3D12_DESCRIPTOR_RANGE_FLAGS {
+                DAWN_UNREACHABLE();
             });
 
         std::vector<D3D12_DESCRIPTOR_RANGE1>& descriptorRanges =
@@ -220,7 +238,7 @@ BindGroupLayout::BindGroupLayout(Device* device, const BindGroupLayoutDescriptor
 
 ResultOrError<Ref<BindGroup>> BindGroupLayout::AllocateBindGroup(
     Device* device,
-    const BindGroupDescriptor* descriptor) {
+    const UnpackedPtr<BindGroupDescriptor>& descriptor) {
     CPUDescriptorHeapAllocation viewAllocation;
     if (GetCbvUavSrvDescriptorCount() > 0) {
         auto* viewAllocator =

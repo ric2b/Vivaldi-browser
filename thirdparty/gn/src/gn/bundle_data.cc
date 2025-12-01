@@ -149,6 +149,9 @@ bool BundleData::GetOutputsAsSourceFiles(const Settings* settings,
                               post_processing_output_files.end());
   }
 
+  if (!post_processing_manifest_.is_null())
+    outputs_as_source->push_back(post_processing_manifest_);
+
   if (!root_dir_.is_null())
     outputs_as_source->push_back(GetBundleRootDirOutput(settings));
 

@@ -3,8 +3,6 @@
 #ifndef COMPONENTS_AD_BLOCKER_CONTENT_ADBLOCK_TAB_STATE_AND_LOGS_IMPL_H_
 #define COMPONENTS_AD_BLOCKER_CONTENT_ADBLOCK_TAB_STATE_AND_LOGS_IMPL_H_
 
-#include <array>
-#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -12,8 +10,9 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "components/ad_blocker/content/adblock_rules_index.h"
+#include "components/ad_blocker/content/index/adblock_rules_index.h"
 #include "components/ad_blocker/public/content/adblock_tab_state_and_logs.h"
+#include "components/ad_blocker/public/core/adblock_request_filter_rule_types.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -30,35 +29,23 @@ class TabStateAndLogsImpl
   TabStateAndLogsImpl(const TabStateAndLogsImpl&) = delete;
   TabStateAndLogsImpl& operator=(const TabStateAndLogsImpl&) = delete;
 
-  void OnBlockedNavigation(RuleGroup group,
-                           RulesIndex::RuleAndSource rule_and_source,
-                           int64_t navigation_id);
-
   void OnUrlBlocked(RuleGroup group, GURL url);
   void OnTrackerBlocked(RuleGroup group,
                         const std::string& domain,
                         const GURL& url);
+  void OnMatchedAttributionTracker(const GURL& url);
 
   void SetAdQueryTriggers(const GURL& ad_url,
                           std::vector<std::string> triggers);
-  bool DoesAdAttributionMatch(std::string_view tracker_url_spec,
-                              std::string_view ad_domain_and_query_trigger);
 
-  RulesIndex::ActivationResults GetActivationsForLoadingFrame(
-      RuleGroup group,
-      int64_t navigation_id,
-      const content::RenderFrameHost* parent_frame,
-      const GURL& url);
+  std::optional<RulesIndex::AdAttributionMatchParams>
+  GetAdAttributionMatchParams() const;
 
   // TabStateAndLogs implementation
   const std::string& GetCurrentAdLandingDomain() const override;
   const std::set<std::string>& GetAllowedAttributionTrackers() const override;
   bool IsOnAdLandingSite() const override;
   const TabBlockedUrlInfo& GetBlockedUrlsInfo(RuleGroup group) const override;
-  std::array<std::optional<TabStateAndLogs::RuleData>, kRuleGroupCount>
-  WasNavigationBlocked(
-      const content::NavigationHandle* navigation) const override;
-  TabActivations GetTabActivations(RuleGroup group) const override;
   void MaybeAddNavigationThrottle(
       content::NavigationThrottleRegistry& registry) const override;
 
@@ -68,13 +55,11 @@ class TabStateAndLogsImpl
 
   struct ActivationsDetails {
     GURL determined_for_url;
-    RulesIndex::ActivationResults activations;
+    ActivationResults activations;
   };
 
   TabStateAndLogsImpl(content::WebContents* contents,
                       base::WeakPtr<StateAndLogsImpl> state_and_logs);
-
-  void HasStartedNavigation();
 
   void DoQueryTriggerCheck(const GURL& url);
   void ResetAdAttribution();
@@ -90,12 +75,6 @@ class TabStateAndLogsImpl
 
   void UpdatePotentialPopup(RuleGroup group,
                             content::NavigationHandle* navigation_handle);
-
-  void UpdateActivationsForNavigation(
-      RuleGroup group,
-      int64_t navigation_id,
-      const content::RenderFrameHost* parent_frame,
-      const GURL& url);
 
   // content::WebContentsObserver implementation
   void DidStartNavigation(
@@ -116,18 +95,12 @@ class TabStateAndLogsImpl
 
   const base::WeakPtr<StateAndLogsImpl> state_and_logs_;
 
-  std::array<std::map<int64_t /*navigation_id*/, RuleData>, kRuleGroupCount>
-      blocked_navigations_;
   std::set<std::string> allowed_attribution_trackers_;
   std::set<std::string> new_allowed_attribution_trackers_;
 
   bool has_ongoing_navigation_ = false;
-  std::array<TabBlockedUrlInfo, kRuleGroupCount> blocked_urls_;
-  std::array<TabBlockedUrlInfo, kRuleGroupCount> new_blocked_urls_;
-
-  std::map<int64_t /*navigation_id*/,
-           std::array<ActivationsDetails, kRuleGroupCount>>
-      activations_for_navigations_;
+  RuleGroupArray<TabBlockedUrlInfo> blocked_urls_;
+  RuleGroupArray<TabBlockedUrlInfo> new_blocked_urls_;
 
   // Should we check if the next load is an ad?
   bool ad_attribution_enabled_ = false;
@@ -145,10 +118,8 @@ class TabStateAndLogsImpl
   base::OneShotTimer ad_attribution_expiration_;
 
   // Popup detection
-  std::array<std::unique_ptr<PotentialPopupRecord>, kRuleGroupCount>
-      potential_popup_record_;
-  std::array<std::set<raw_ptr<content::WebContents>>, kRuleGroupCount>
-      potential_popups_;
+  RuleGroupArray<std::unique_ptr<PotentialPopupRecord>> potential_popup_record_;
+  RuleGroupArray<std::set<raw_ptr<content::WebContents>>> potential_popups_;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

@@ -49,7 +49,6 @@
 
 // FFmpeg forward declarations.
 struct AVFormatContext;
-struct AVRational;
 struct AVStream;
 
 namespace media {
@@ -158,10 +157,6 @@ class MEDIA_EXPORT FFmpegDemuxerStream : public DemuxerStream {
   // NotifyCapacityAvailable() if capacity is still available.
   void SatisfyPendingRead();
 
-  // Converts an FFmpeg stream timestamp into a base::TimeDelta.
-  static base::TimeDelta ConvertStreamTimestamp(const AVRational& time_base,
-                                                int64_t timestamp);
-
   // Resets any currently active bitstream converter.
   void ResetBitstreamConverter();
 
@@ -186,6 +181,15 @@ class MEDIA_EXPORT FFmpegDemuxerStream : public DemuxerStream {
   bool is_enabled_ = true;
   bool waiting_for_keyframe_ = false;
   bool aborted_ = false;
+
+  // Used to correct packets which end up with a negative calculated timestamp
+  // (adjusted for start time) in cases where the first packet had discard
+  // padding which extended beyond itself.
+  //
+  // If set, any packets with a raw stream timestamp before this value which
+  // also have a negative calcuated timestamp, will have their timestamp set to
+  // `last_packet_timestamp_`.
+  std::optional<base::TimeDelta> fixup_negative_timestamps_until_;
 
   DecoderBufferQueue buffer_queue_;
   ReadCB read_cb_;

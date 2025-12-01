@@ -1,4 +1,4 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -7,6 +7,7 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as SDK from '../../core/sdk/sdk.js';
+import * as Geometry from '../../models/geometry/geometry.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 import * as MobileThrottling from '../mobile_throttling/mobile_throttling.js';
@@ -15,158 +16,158 @@ import sensorsStyles from './sensors.css.js';
 
 const UIStrings = {
   /**
-   *@description Title for a group of cities
+   * @description Title for a group of cities
    */
   location: 'Location',
   /**
-   *@description An option that appears in a drop-down to prevent the GPS location of the user from being overridden.
+   * @description An option that appears in a drop-down to prevent the GPS location of the user from being overridden.
    */
   noOverride: 'No override',
   /**
-   *@description Title of a section that contains overrides for the user's GPS location.
+   * @description Title of a section that contains overrides for the user's GPS location.
    */
   overrides: 'Overrides',
   /**
-   *@description Text of button in Sensors View, takes the user to the custom location setting screen
+   * @description Text of button in Sensors View, takes the user to the custom location setting screen
    *where they can enter/edit custom locations.
    */
   manage: 'Manage',
   /**
-   *@description Aria-label for location manage button in Sensors View
+   * @description Aria-label for location manage button in Sensors View
    */
   manageTheListOfLocations: 'Manage the list of locations',
   /**
-   *@description Option in a drop-down input for selecting the GPS location of the user. As an
+   * @description Option in a drop-down input for selecting the GPS location of the user. As an
    *alternative to selecting a location from the list, the user can select this option and they are
    *prompted to enter the details for a new custom location.
    */
   other: 'Other…',
   /**
-   *@description Title of a section in a drop-down input that contains error locations, e.g. to select
+   * @description Title of a section in a drop-down input that contains error locations, e.g. to select
    *a location override that says 'the location is not available'. A noun.
    */
   error: 'Error',
   /**
-   *@description A type of override where the geographic location of the user is not available.
+   * @description A type of override where the geographic location of the user is not available.
    */
   locationUnavailable: 'Location unavailable',
   /**
-   *@description Tooltip text telling the user how to change the value of a latitude/longitude input
+   * @description Tooltip text telling the user how to change the value of a latitude/longitude input
    *text box. several shortcuts are provided for convenience. The placeholder can be different
    *keyboard keys, depending on the user's settings.
-   *@example {Ctrl} PH1
+   * @example {Ctrl} PH1
    */
   adjustWithMousewheelOrUpdownKeys: 'Adjust with mousewheel or up/down keys. {PH1}: ±10, Shift: ±1, Alt: ±0.01',
   /**
-   *@description Label for latitude of a GPS location.
+   * @description Label for latitude of a GPS location.
    */
   latitude: 'Latitude',
   /**
-   *@description Label for Longitude of a GPS location.
+   * @description Label for Longitude of a GPS location.
    */
   longitude: 'Longitude',
   /**
-   *@description Label for the ID of a timezone for a particular location.
+   * @description Label for the ID of a timezone for a particular location.
    */
   timezoneId: 'Timezone ID',
   /**
-   *@description Label for the locale relevant to a custom location.
+   * @description Label for the locale relevant to a custom location.
    */
   locale: 'Locale',
   /**
-   *@description Label for Accuracy of a GPS location.
+   * @description Label for Accuracy of a GPS location.
    */
   accuracy: 'Accuracy',
   /**
-   *@description Label the orientation of a user's device e.g. tilt in 3D-space.
+   * @description Label the orientation of a user's device e.g. tilt in 3D-space.
    */
   orientation: 'Orientation',
   /**
-   *@description Option that when chosen, turns off device orientation override.
+   * @description Option that when chosen, turns off device orientation override.
    */
   off: 'Off',
   /**
-   *@description Option that when chosen, allows the user to enter a custom orientation for the device e.g. tilt in 3D-space.
+   * @description Option that when chosen, allows the user to enter a custom orientation for the device e.g. tilt in 3D-space.
    */
   customOrientation: 'Custom orientation',
   /**
-   *@description Warning to the user they should enable the device orientation override, in order to
+   * @description Warning to the user they should enable the device orientation override, in order to
    *enable this input which allows them to interactively select orientation by dragging a 3D phone
    *model.
    */
   enableOrientationToRotate: 'Enable orientation to rotate',
   /**
-   *@description Text telling the user how to use an input which allows them to interactively select
+   * @description Text telling the user how to use an input which allows them to interactively select
    *orientation by dragging a 3D phone model.
    */
   shiftdragHorizontallyToRotate: 'Shift+drag horizontally to rotate around the y-axis',
   /**
-   *@description Message in the Sensors tool that is alerted (for screen readers) when the device orientation setting is changed
-   *@example {180} PH1
-   *@example {-90} PH2
-   *@example {0} PH3
+   * @description Message in the Sensors tool that is alerted (for screen readers) when the device orientation setting is changed
+   * @example {180} PH1
+   * @example {-90} PH2
+   * @example {0} PH3
    */
   deviceOrientationSetToAlphaSBeta: 'Device orientation set to alpha: {PH1}, beta: {PH2}, gamma: {PH3}',
   /**
-   *@description Text of orientation reset button in Sensors View of the Device Toolbar
+   * @description Text of orientation reset button in Sensors View of the Device Toolbar
    */
   reset: 'Reset',
   /**
-   *@description Aria-label for orientation reset button in Sensors View. Command.
+   * @description Aria-label for orientation reset button in Sensors View. Command.
    */
   resetDeviceOrientation: 'Reset device orientation',
   /**
-   *@description Description of the Touch select in Sensors tab
+   * @description Description of the Touch select in Sensors tab
    */
   forcesTouchInsteadOfClick: 'Forces touch instead of click',
   /**
-   *@description Description of the Emulate Idle State select in Sensors tab
+   * @description Description of the Emulate Idle State select in Sensors tab
    */
   forcesSelectedIdleStateEmulation: 'Forces selected idle state emulation',
   /**
-   *@description Description of the Emulate CPU Pressure State select in Sensors tab
+   * @description Description of the Emulate CPU Pressure State select in Sensors tab
    */
   forcesSelectedPressureStateEmulation: 'Forces selected pressure state emulation',
   /**
-   *@description Title for a group of configuration options in a drop-down input.
+   * @description Title for a group of configuration options in a drop-down input.
    */
   presets: 'Presets',
   /**
-   *@description Drop-down input option for the orientation of a device in 3D space.
+   * @description Drop-down input option for the orientation of a device in 3D space.
    */
   portrait: 'Portrait',
   /**
-   *@description Drop-down input option for the orientation of a device in 3D space.
+   * @description Drop-down input option for the orientation of a device in 3D space.
    */
   portraitUpsideDown: 'Portrait upside down',
   /**
-   *@description Drop-down input option for the orientation of a device in 3D space.
+   * @description Drop-down input option for the orientation of a device in 3D space.
    */
   landscapeLeft: 'Landscape left',
   /**
-   *@description Drop-down input option for the orientation of a device in 3D space.
+   * @description Drop-down input option for the orientation of a device in 3D space.
    */
   landscapeRight: 'Landscape right',
   /**
-   *@description Drop-down input option for the orientation of a device in 3D space. Noun indicating
+   * @description Drop-down input option for the orientation of a device in 3D space. Noun indicating
    *the display of the device is pointing up.
    */
   displayUp: 'Display up',
   /**
-   *@description Drop-down input option for the orientation of a device in 3D space. Noun indicating
+   * @description Drop-down input option for the orientation of a device in 3D space. Noun indicating
    *the display of the device is pointing down.
    */
   displayDown: 'Display down',
   /**
-   *@description Label for one dimension of device orientation that the user can override.
+   * @description Label for one dimension of device orientation that the user can override.
    */
   alpha: '\u03B1 (alpha)',
   /**
-   *@description Label for one dimension of device orientation that the user can override.
+   * @description Label for one dimension of device orientation that the user can override.
    */
   beta: '\u03B2 (beta)',
   /**
-   *@description Label for one dimension of device orientation that the user can override.
+   * @description Label for one dimension of device orientation that the user can override.
    */
   gamma: '\u03B3 (gamma)',
 } as const;
@@ -208,7 +209,7 @@ export class SensorsView extends UI.Widget.VBox {
   private orientationLayer!: HTMLDivElement;
   private boxElement?: HTMLElement;
   private boxMatrix?: DOMMatrix;
-  private mouseDownVector?: UI.Geometry.Vector|null;
+  private mouseDownVector?: Geometry.Vector|null;
   private originalBoxMatrix?: DOMMatrix;
 
   constructor() {
@@ -384,6 +385,7 @@ export class SensorsView extends UI.Widget.VBox {
   #locationSelectChanged(): void {
     this.fieldsetElement.disabled = false;
     this.timezoneError.textContent = '';
+    this.accuracyError.textContent = '';
     const value = this.locationSelectElement.options[this.locationSelectElement.selectedIndex].value;
     if (value === NonPresetOptions.NoOverride) {
       this.#locationOverrideEnabled = false;
@@ -430,6 +432,7 @@ export class SensorsView extends UI.Widget.VBox {
     }
 
     this.timezoneError.textContent = '';
+    this.accuracyError.textContent = '';
 
     this.setSelectElementLabel(this.locationSelectElement, NonPresetOptions.Custom);
     this.#location = location;
@@ -451,6 +454,10 @@ export class SensorsView extends UI.Widget.VBox {
           }
           case 'emulation-set-locale': {
             this.localeError.textContent = err.message;
+            break;
+          }
+          case 'emulation-set-accuracy': {
+            this.accuracyError.textContent = err.message;
             break;
           }
         }
@@ -714,7 +721,7 @@ export class SensorsView extends UI.Widget.VBox {
     //
     // |this.boxMatrix| is set in the Device Orientation coordinate space
     // because it represents the phone model we show users and also because the
-    // calculations in UI.Geometry.EulerAngles assume this coordinate space (so
+    // calculations in Geometry.EulerAngles assume this coordinate space (so
     // we apply the rotations in the Z-X'-Y'' order).
     // The CSS transforms, on the other hand, are done in the CSS coordinate
     // space, so we need to convert 2) to 1) while keeping 3) in mind. We can
@@ -737,11 +744,11 @@ export class SensorsView extends UI.Widget.VBox {
     event.consume(true);
     let axis, angle;
     if (event.shiftKey) {
-      axis = new UI.Geometry.Vector(0, 0, 1);
+      axis = new Geometry.Vector(0, 0, 1);
       angle = (mouseMoveVector.x - this.mouseDownVector.x) * ShiftDragOrientationSpeed;
     } else {
-      axis = UI.Geometry.crossProduct(this.mouseDownVector, mouseMoveVector);
-      angle = UI.Geometry.calculateAngle(this.mouseDownVector, mouseMoveVector);
+      axis = Geometry.crossProduct(this.mouseDownVector, mouseMoveVector);
+      angle = Geometry.calculateAngle(this.mouseDownVector, mouseMoveVector);
     }
 
     // See the comment in setBoxOrientation() for a longer explanation about
@@ -752,7 +759,7 @@ export class SensorsView extends UI.Widget.VBox {
     const currentMatrix =
         new DOMMatrixReadOnly().rotateAxisAngle(-axis.x, axis.z, axis.y, angle).multiply(this.originalBoxMatrix);
 
-    const eulerAngles = UI.Geometry.EulerAngles.fromDeviceOrientationRotationMatrix(currentMatrix);
+    const eulerAngles = Geometry.EulerAngles.fromDeviceOrientationRotationMatrix(currentMatrix);
     const newOrientation =
         new SDK.EmulationModel.DeviceOrientation(eulerAngles.alpha, eulerAngles.beta, eulerAngles.gamma);
     this.setDeviceOrientation(newOrientation, DeviceOrientationModificationSource.USER_DRAG);
@@ -776,17 +783,17 @@ export class SensorsView extends UI.Widget.VBox {
     return true;
   }
 
-  private calculateRadiusVector(x: number, y: number): UI.Geometry.Vector|null {
+  private calculateRadiusVector(x: number, y: number): Geometry.Vector|null {
     const rect = this.stageElement.getBoundingClientRect();
     const radius = Math.max(rect.width, rect.height) / 2;
     const sphereX = (x - rect.left - rect.width / 2) / radius;
     const sphereY = (y - rect.top - rect.height / 2) / radius;
     const sqrSum = sphereX * sphereX + sphereY * sphereY;
     if (sqrSum > 0.5) {
-      return new UI.Geometry.Vector(sphereX, sphereY, 0.5 / Math.sqrt(sqrSum));
+      return new Geometry.Vector(sphereX, sphereY, 0.5 / Math.sqrt(sqrSum));
     }
 
-    return new UI.Geometry.Vector(sphereX, sphereY, Math.sqrt(1 - sqrSum));
+    return new Geometry.Vector(sphereX, sphereY, Math.sqrt(1 - sqrSum));
   }
 
   private appendTouchControl(): void {

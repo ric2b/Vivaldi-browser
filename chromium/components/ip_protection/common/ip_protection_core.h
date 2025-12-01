@@ -18,13 +18,14 @@ namespace net {
 
 class ProxyChain;
 class NetworkAnonymizationKey;
+class SchemefulSite;
 
 }  // namespace net
 
 namespace ip_protection {
 
 struct BlindSignedAuthToken;
-
+enum class IpProxyStatus;
 // Core business logic for IP Protection.
 class IpProtectionCore {
  public:
@@ -44,11 +45,6 @@ class IpProtectionCore {
   //
   // This function is called on every URL load, so it should complete quickly.
   virtual bool AreAuthTokensAvailable() = 0;
-
-  // Check whether probabilistic reveal tokens are available.
-  // This function is called during the URL loads, so it should complete
-  // quickly.
-  virtual bool IsProbabilisticRevealTokenAvailable() = 0;
 
   // Check whether the tokens in either cache have ever been filled.
   //
@@ -71,8 +67,8 @@ class IpProtectionCore {
   // Returns `nullopt` if no token is available, whether for a transient or
   // permanent reason, or if the serialization fails.
   virtual std::optional<std::string> GetProbabilisticRevealToken(
-      const std::string& top_level,
-      const std::string& third_party) = 0;
+      const GURL& url,
+      const net::SchemefulSite& top_frame_site) = 0;
 
   // Check whether a proxy chain list is available.
   virtual bool IsProxyListAvailable() = 0;
@@ -109,6 +105,18 @@ class IpProtectionCore {
   // ProbabilisticRevealToken headers.
   virtual bool ShouldRequestIncludeProbabilisticRevealToken(
       const GURL& request_url) = 0;
+
+  // Returns the status of the IP Protection Proxy.
+  virtual IpProxyStatus GetIpProxyStatus() = 0;
+
+  // Check whether IP Protection Proxy has been bypassed
+  virtual bool IsProxyBypassed() = 0;
+
+  // Sets the bypass status for the IP Protection proxy.
+  virtual void SetBypassProxy(bool bypass_proxy) = 0;
+
+  // Signal that a token was demanded by the proxy delegate, for metrics.
+  virtual void RecordTokenDemand(size_t chain_index) = 0;
 };
 
 }  // namespace ip_protection

@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import '../../../../ui/components/icon_button/icon_button.js';
@@ -15,7 +15,7 @@ import entriesLinkOverlayStyles from './entriesLinkOverlay.css.js';
 
 const UIStrings = {
   /**
-   *@description Accessible label used to explain to a user that they are viewing an arrow representing a link between two entries.
+   * @description Accessible label used to explain to a user that they are viewing an arrow representing a link between two entries.
    */
   diagram: 'Links between entries',
 } as const;

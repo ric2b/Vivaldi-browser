@@ -6,20 +6,17 @@ package org.chromium.chrome.browser.omnibox.suggestions.editurl;
 
 import static org.chromium.build.NullUtil.assumeNonNull;
 
-import android.content.Context;
 import android.text.TextUtils;
 
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.history_clusters.HistoryClustersTabHelper;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxDrawableState;
-import org.chromium.chrome.browser.omnibox.styles.OmniboxImageSupplier;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.styles.SuggestionSpannable;
-import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
+import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteUIContext;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProperties.Action;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewProperties;
@@ -39,7 +36,7 @@ import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.GURL;
 
 import java.util.Arrays;
-import java.util.Optional;
+import java.util.function.Supplier;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -54,16 +51,13 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
     private final @Nullable Supplier<ShareDelegate> mShareDelegateSupplier;
     private final Supplier<@Nullable Tab> mTabSupplier;
 
-    public EditUrlSuggestionProcessor(
-            Context context,
-            SuggestionHost suggestionHost,
-            Optional<OmniboxImageSupplier> imageSupplier,
-            Supplier<@Nullable Tab> tabSupplier,
-            @Nullable Supplier<ShareDelegate> shareDelegateSupplier) {
-        super(context, suggestionHost, imageSupplier);
-
-        mTabSupplier = tabSupplier;
-        mShareDelegateSupplier = shareDelegateSupplier;
+    /**
+     * @param uiContext Context object containing common UI dependencies.
+     */
+    public EditUrlSuggestionProcessor(AutocompleteUIContext uiContext) {
+        super(uiContext);
+        mTabSupplier = uiContext.activityTabSupplier;
+        mShareDelegateSupplier = uiContext.shareDelegateSupplier;
     }
 
     @Override
@@ -71,6 +65,8 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
         // The what-you-typed suggestion can potentially appear as the second suggestion in some
         // cases. If the first suggestion isn't the one we want, ignore all subsequent suggestions.
         if (position != 0) return false;
+
+        if (OmniboxFeatures.sRemoveSearchReadyOmnibox.isEnabled()) return false;
 
         // Note(david@vivaldi.com): We always want to show the actions on mobile. We activated the
         // omnibox feature RETAIN_OMNIBOX_ON_FOCUS in Vivaldi for VAB-10175, but in this case we are

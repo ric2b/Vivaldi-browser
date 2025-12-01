@@ -132,6 +132,11 @@ if (!is_ios) {
         data_deps -= [ "//third_party/screen-ai:screen_ai" ]
       }
     }
+    update_template_instance("//ui/views:views_unittests") {
+      deps += [
+        "//printing/buildflags",
+      ]
+    }
   }
 
   update_target("//components/autofill/core/browser:browser") {
@@ -202,7 +207,7 @@ if (!is_ios) {
 
   update_target("//content/gpu:gpu_sources") {
     deps -= [ "//media/gpu/ipc/service" ]
-    public_deps = [ "//media/gpu/ipc/service" ]
+    public_deps += [ "//media/gpu/ipc/service" ]
   }
 
   if (!is_android) {
@@ -219,6 +224,50 @@ if (!is_ios) {
 
   update_target("//content/browser/private_aggregation:mojo_bindings") {
     deps += [ "//components/services/storage" ]
+  }
+
+  update_target("//net:net_deps") {
+    deps += [
+      "//net:disk_cache_buildflags",
+    ]
+  }
+
+  if (!is_linux) {
+    update_target("//sandbox/policy:policy") {
+      deps += [
+        "//media/gpu:buildflags",
+      ]
+    }
+  }
+
+  update_target("//components/services/paint_preview_compositor:paint_preview_compositor") {
+    deps += [
+      "//pdf:buildflags",
+    ]
+  }
+
+  update_target("//content/gpu:gpu_sources") {
+    deps += [
+      "//pdf:buildflags",
+    ]
+  }
+
+  update_target("//content/utility:utility") {
+    deps += [
+      "//pdf:buildflags",
+    ]
+  }
+
+  update_target("//content/renderer:renderer") {
+    deps += [
+      "//pdf:buildflags",
+    ]
+  }
+
+  update_target("//ui/gfx:gfx") {
+    deps += [
+      "//printing/buildflags",
+    ]
   }
 
 } else { # !is_ios

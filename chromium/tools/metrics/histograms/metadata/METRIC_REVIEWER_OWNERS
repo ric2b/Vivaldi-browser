@@ -132,6 +132,7 @@ julietlevesque@google.com
 bhartmire@google.com
 # crostini
 drmasquatch@google.com
+uekawa@chromium.org
 # cryptohome
 jorgelo@chromium.org
 hcyang@google.com
@@ -291,6 +292,9 @@ jdonnelly@chromium.org
 mahmadi@chromium.org
 manukh@chromium.org
 toyoshim@chromium.org
+# on_device_model
+cduvall@chromium.org
+xinghuilu@chromium.org
 # oobe
 bohdanty@google.com
 ziegltrum@google.com
@@ -322,7 +326,6 @@ drubery@chromium.org
 thefrog@chromium.org
 xinghuilu@chromium.org
 # payment
-rouslan@chromium.org
 smcgruer@chromium.org
 # performance_controls
 agale@chromium.org

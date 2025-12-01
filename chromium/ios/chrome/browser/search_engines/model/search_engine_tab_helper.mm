@@ -95,16 +95,9 @@ void SearchEngineTabHelper::OnFaviconUpdated(
   TemplateURLService* url_service =
       ios::TemplateURLServiceFactory::GetForProfile(profile);
   const GURL potential_search_url = driver->GetActiveURL();
-
-  // Note: (prio@vivaldi.com) - This favicon updating could lead to having no
-  // favicons for the search engine. We will rely on the bundled favicons
-  // for the time being until we figure out the reason.
-  if (!vivaldi::IsVivaldiRunning()) {
   if (url_service && url_service->loaded() && potential_search_url.is_valid()) {
     url_service->UpdateProviderFavicons(potential_search_url, icon_url);
   }
-  }  // End Vivaldi
-
 }
 
 // When the page is loaded, checks if `searchable_url_` has a value generated

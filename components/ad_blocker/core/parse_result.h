@@ -3,14 +3,10 @@
 #ifndef COMPONENTS_AD_BLOCKER_CORE_PARSE_RESULT_H_
 #define COMPONENTS_AD_BLOCKER_CORE_PARSE_RESULT_H_
 
-#include <string>
-#include <vector>
-
 #include "base/values.h"
 #include "components/ad_blocker/core/adblock_content_injection_rule.h"
-#include "components/ad_blocker/public/core/adblock_request_filter_rule.h"
+#include "components/ad_blocker/core/adblock_request_filter_rule.h"
 #include "components/ad_blocker/public/core/adblock_types.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace adblock_filter {
 struct ParseResult {

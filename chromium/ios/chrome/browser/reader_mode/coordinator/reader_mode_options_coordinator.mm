@@ -4,12 +4,16 @@
 
 #import "ios/chrome/browser/reader_mode/coordinator/reader_mode_options_coordinator.h"
 
+#import "components/feature_engagement/public/event_constants.h"
+#import "components/feature_engagement/public/tracker.h"
 #import "ios/chrome/browser/dom_distiller/model/distiller_service.h"
 #import "ios/chrome/browser/dom_distiller/model/distiller_service_factory.h"
+#import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/reader_mode/coordinator/reader_mode_options_mediator.h"
 #import "ios/chrome/browser/reader_mode/ui/reader_mode_options_controls_view.h"
 #import "ios/chrome/browser/reader_mode/ui/reader_mode_options_view_controller.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/reader_mode_commands.h"
 #import "ios/chrome/browser/shared/public/commands/reader_mode_options_commands.h"
@@ -36,6 +40,12 @@ NSString* const kReaderModeOptionsViewControllerCustomDetentIdentifier =
 #pragma mark - ChromeCoordinator
 
 - (void)start {
+  feature_engagement::Tracker* tracker =
+      feature_engagement::TrackerFactory::GetForProfile(
+          self.browser->GetProfile());
+  tracker->NotifyEvent(
+      feature_engagement::events::kIOSIPHReaderModeOptionsUsed);
+
   _viewController = [[ReaderModeOptionsViewController alloc] init];
   _viewController.readerModeOptionsHandler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), ReaderModeOptionsCommands);
@@ -52,6 +62,9 @@ NSString* const kReaderModeOptionsViewControllerCustomDetentIdentifier =
 
   _navigationController = [[UINavigationController alloc]
       initWithRootViewController:_viewController];
+  if (self.browser->GetProfile()->IsOffTheRecord()) {
+    _navigationController.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+  }
   _navigationController.presentationController.delegate = self;
   // Initialize custom content detent.
   UISheetPresentationControllerDetent* contentDetent =

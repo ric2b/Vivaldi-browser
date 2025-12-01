@@ -22,13 +22,14 @@
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/payments/core/payment_prefs.h"
-#include "components/plus_addresses/plus_address_prefs.h"
+#include "components/plus_addresses/core/common/plus_address_prefs.h"
 #include "components/privacy_sandbox/tracking_protection_prefs.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/saved_tab_groups/public/pref_names.h"
 #include "components/sharing_message/pref_names.h"
 #include "components/sync/base/data_type.h"
 #include "components/sync/base/features.h"
+#include "components/sync_preferences/cross_device_pref_tracker/prefs/cross_device_pref_names.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/variations/service/google_groups_manager_prefs.h"
@@ -138,7 +139,12 @@ enum {
   kAutofillWorkMetadata = 89,
   kFacilitatedPaymentsA2AEnabled = 90,
   kFacilitatedPaymentsA2ATriggeredOnce = 91,
-  kFingerprintingProtectionEnabled = 92
+  kFingerprintingProtectionEnabled = 92,
+  kAutofillNameAndEmailProfileSignature = 93,
+  kAutofillNameAndEmailProfileNotSelectedCounter = 94,
+  kAutofillAiLastVersionDeduped = 96,
+  kCrossDeviceOmniboxIsInBottomPosition = 97,
+  kAutofillWasNameAndEmailProfileUsed = 98,
   // See components/sync_preferences/README.md about adding new entries here.
   // vvvvv IMPORTANT! vvvvv
   // Note to the reviewer: IT IS YOUR RESPONSIBILITY to ensure that new syncable
@@ -161,9 +167,27 @@ constexpr auto kCommonSyncablePrefsAllowlist =
         {autofill::prefs::kAutofillLastVersionDeduped,
          {syncable_prefs_ids::kAutofillLastVersionDeduped, syncer::PREFERENCES,
           PrefSensitivity::kNone, MergeBehavior::kNone}},
+        {autofill::prefs::kAutofillAiLastVersionDeduped,
+         {syncable_prefs_ids::kAutofillAiLastVersionDeduped,
+          syncer::PREFERENCES, PrefSensitivity::kNone, MergeBehavior::kNone}},
         {autofill::prefs::kAutofillProfileEnabled,
          {syncable_prefs_ids::kAutofillProfileEnabled, syncer::PREFERENCES,
           PrefSensitivity::kNone, MergeBehavior::kNone}},
+        {autofill::prefs::kAutofillNameAndEmailProfileSignature,
+         {syncable_prefs_ids::kAutofillNameAndEmailProfileSignature,
+          syncer::PRIORITY_PREFERENCES,
+          PrefSensitivity::kExemptFromUserControlWhileSignedIn,
+          MergeBehavior::kNone}},
+        {autofill::prefs::kAutofillNameAndEmailProfileNotSelectedCounter,
+         {syncable_prefs_ids::kAutofillNameAndEmailProfileNotSelectedCounter,
+          syncer::PRIORITY_PREFERENCES,
+          PrefSensitivity::kExemptFromUserControlWhileSignedIn,
+          MergeBehavior::kNone}},
+        {autofill::prefs::kAutofillWasNameAndEmailProfileUsed,
+         {syncable_prefs_ids::kAutofillWasNameAndEmailProfileUsed,
+          syncer::PRIORITY_PREFERENCES,
+          PrefSensitivity::kExemptFromUserControlWhileSignedIn,
+          MergeBehavior::kNone}},
         {bookmarks::prefs::kShowAppsShortcutInBookmarkBar,
          {syncable_prefs_ids::kShowAppsShortcutInBookmarkBar,
           syncer::PREFERENCES, PrefSensitivity::kNone, MergeBehavior::kNone}},
@@ -237,6 +261,10 @@ constexpr auto kCommonSyncablePrefsAllowlist =
         {prefs::kCookieControlsMode,
          {syncable_prefs_ids::kCookieControlsMode, syncer::PREFERENCES,
           PrefSensitivity::kNone, MergeBehavior::kNone}},
+        {prefs::kCrossDeviceOmniboxIsInBottomPosition,
+         {syncable_prefs_ids::kCrossDeviceOmniboxIsInBottomPosition,
+          syncer::PREFERENCES, PrefSensitivity::kNone,
+          MergeBehavior::kMergeableDict}},
         {prefs::kSafeBrowsingEnabled,
          {syncable_prefs_ids::kSafeBrowsingEnabled, syncer::PREFERENCES,
           PrefSensitivity::kNone, MergeBehavior::kNone}},
@@ -337,7 +365,7 @@ constexpr auto kCommonSyncablePrefsAllowlist =
           syncer::PREFERENCES, PrefSensitivity::kNone, MergeBehavior::kNone}},
 #endif  // BUILDFLAG(IS_ANDROID)
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS)
+    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
         {autofill::prefs::kAutofillBnplEnabled,
          {syncable_prefs_ids::kAutofillBnplEnabled, syncer::PREFERENCES,
           PrefSensitivity::kNone, MergeBehavior::kNone}},
@@ -345,7 +373,7 @@ constexpr auto kCommonSyncablePrefsAllowlist =
          {syncable_prefs_ids::kAutofillHasSeenBnpl, syncer::PREFERENCES,
           PrefSensitivity::kNone, MergeBehavior::kNone}},
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
-        // BUILDFLAG(IS_CHROMEOS)
+        // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
         {kSyncablePriorityPrefForTesting,
          {syncable_prefs_ids::kSyncablePriorityPrefForTesting,
           syncer::PRIORITY_PREFERENCES, PrefSensitivity::kNone,

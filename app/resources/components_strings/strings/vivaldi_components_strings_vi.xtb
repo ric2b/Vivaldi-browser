@@ -19,16 +19,13 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kiểm tra proxy và tường lửa<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Cấp cho: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Trang web này không thể cung cấp kết nối an toàn</translation>
-<translation id="2187317261103489799">Phát hiện (mặc định)</translation>
 <translation id="2224337661447660594">Không có kết nối Internet</translation>
 <translation id="2292556288342944218">Quyền truy cập Internet của bạn bị chặn</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> yêu cầu tên đăng nhập và mật khẩu.</translation>
 <translation id="2337852623177822836">Cài đặt do quản trị viên của bạn kiểm soát</translation>
 <translation id="2355395290879513365">Kẻ tấn công có thể thấy những hình ảnh mà bạn đang xem trên trang web này và lừa bạn bằng cách sửa đổi những hình ảnh đó.</translation>
-<translation id="2356070529366658676">Yêu cầu</translation>
 <translation id="2359808026110333948">Tiếp tục</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Đang thực thi Chẩn đoán Mạng<ph name="END_LINK" /></translation>
-<translation id="2539524384386349900">Phát hiện</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> đã gửi phản hồi không hợp lệ.</translation>
 <translation id="2634124572758952069">Không thể tìm thấy địa chỉ IP của máy chủ <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -51,9 +48,7 @@
       sử dụng máy chủ proxy:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Nhấn nút tải lại để gửi lại các dữ liệu cần thiết để tải trang.</translation>
-<translation id="3234666976984236645">Luôn luôn phát hiện nội dung quan trọng trên trang web này</translation>
 <translation id="3422472998109090673">Hiện không thể truy cập <ph name="HOST_NAME" />.</translation>
-<translation id="3427092606871434483">Cho phép (mặc định)</translation>
 <translation id="3447661539832366887">Chủ sở hữu của thiết bị này đã tắt trò chơi khủng long.</translation>
 <translation id="3447884698081792621">Hiển thị chứng chỉ (do <ph name="ISSUER" /> cấp)</translation>
 <translation id="3462200631372590220">Ẩn chi tiết</translation>
@@ -73,7 +68,6 @@
 <translation id="4075732493274867456">Ứng dụng khách và máy chủ không hỗ trợ bộ mã hóa hoặc phiên bản giao thức SSL thông thường.</translation>
 <translation id="4116663294526079822">Luôn cho phép trên trang web này</translation>
 <translation id="4130226655945681476">Kiểm tra cáp mạng, modem và bộ định tuyến</translation>
-<translation id="4151403195736952345">Sử dụng cài đặt mặc định chung (Phát hiện)</translation>
 <translation id="4165986682804962316">Cài đặt trang web</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Kiểm tra tường lửa và cấu hình diệt vi-rút<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Thử thực thi Chẩn đoán Mạng<ph name="END_LINK" />.</translation>
@@ -81,7 +75,6 @@
 <translation id="4250431568374086873">Kết nối của bạn tới trang web này không đủ an toàn</translation>
 <translation id="4265872034478892965">Được quản trị viên của bạn cho phép</translation>
 <translation id="4305666528087210886">Không thể truy cập vào tệp của bạn</translation>
-<translation id="4312866146174492540">Chặn (mặc định)</translation>
 <translation id="4408413947728134509">Cookie <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> không chấp nhận chứng chỉ đăng nhập của bạn hoặc có thể bạn chưa cung cấp chứng chỉ đăng nhập.</translation>
 <translation id="4506599922270137252">Liên hệ với quản trị viên hệ thống</translation>
@@ -96,7 +89,6 @@
 <translation id="4764776831041365478">Trang web tại <ph name="URL" /> có thể tạm thời không hoạt động hay được chuyển vĩnh viễn sang địa chỉ web mới.</translation>
 <translation id="4943872375798546930">Không tìm thấy kết quả nào</translation>
 <translation id="5023310440958281426">Kiểm tra chính sách của quản trị viên của bạn</translation>
-<translation id="5039804452771397117">Cho phép</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1 {(1 cookie đang được dùng)} other {(# cookie đang được dùng)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Kiểm tra địa chỉ proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bit)</translation>
@@ -139,7 +131,6 @@
 <translation id="6711464428925977395">Đã xảy ra sự cố với máy chủ proxy hoặc địa chỉ không chính xác.</translation>
 <translation id="6757797048963528358">Thiết bị của bạn đã chuyển sang chế độ ngủ.</translation>
 <translation id="6897140037006041989">Tác nhân Người dùng</translation>
-<translation id="7053983685419859001">Chặn</translation>
 <translation id="7108819624672055576">Được một tiện ích cho phép</translation>
 <translation id="7111012039238467737">(Hợp lệ)</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> không tuân thủ các tiêu chuẩn bảo mật.</translation>
@@ -160,7 +151,6 @@
 <translation id="7834399512844817676"><ph name="SITE" /> thường sử dụng mã hóa để bảo vệ thông tin của bạn. Khi Vivaldi cố gắng kết nối với <ph name="SITE" /> tại thời điểm này, trang web đã gửi lại thông tin đăng nhập không chính xác và bất thường. Điều này có thể xảy ra khi kẻ tấn công đang cố gắng giả mạo là <ph name="SITE" /> hoặc màn hình đăng nhập Wi-Fi đã làm gián đoạn kết nối. Thông tin của bạn vẫn an toàn do Vivaldi đã ngừng kết nối trước khi bất kỳ dữ liệu nào được trao đổi.</translation>
 <translation id="7878562273885520351">Mật khẩu của bạn có thể bị xâm phạm</translation>
 <translation id="7951415247503192394">(32 bit)</translation>
-<translation id="8037357227543935929">Yêu cầu (mặc định)</translation>
 <translation id="8041940743680923270">Sử dụng cài đặt mặc định chung (Hỏi)</translation>
 <translation id="808894953321890993">Đổi mật khẩu</translation>
 <translation id="8149426793427495338">Máy tính của bạn đã chuyển sang chế độ ngủ.</translation>

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import * as Common from '../../core/common/common.js';
@@ -19,6 +19,7 @@ import {dispatchClickEvent, raf, renderElementIntoDOM} from '../../testing/DOMHe
 import {
   createTarget,
   describeWithEnvironment,
+  registerActions,
   registerNoopActions,
   stubNoopSettings,
   updateHostConfig
@@ -194,6 +195,20 @@ describeWithMockConnection('NetworkLogView', () => {
     );
   });
 
+  it('generates a valid curl command when header values contain tabs or form feed', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {
+      requestHeaders: [{name: 'cookie', value: 'query=evil\t\v\f\r\n & cmd /c calc.exe \n\n'}],
+    });
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' -b $\'query=evil\\u0009\\u000b\\u000c\\r\\n & cmd /c calc.exe \\n\\n\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^\"http://localhost^\" -b ^\"query=evil   ^\n\n ^& cmd /c calc.exe ^\n\n^\n\n^\"',
+    );
+  });
+
   it('generates a valid curl command when header values contain CR only', async () => {
     const request = createNetworkRequest(urlString`http://localhost`, {
       requestHeaders: [{name: 'cookie', value: 'query=evil\r & cmd /c calc.exe'}],
@@ -205,6 +220,129 @@ describeWithMockConnection('NetworkLogView', () => {
     assert.strictEqual(
         await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
         'curl ^\"http://localhost^\" -b ^\"query=evil^\n\n ^& cmd /c calc.exe^\"',
+    );
+  });
+
+  it('generates a valid curl command for a POST request with data', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {});
+    request.requestMethod = 'POST';
+    request.setRequestFormData(true, '123');
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' --data-raw \'123\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^"http://localhost^" --data-raw ^"123^"');
+  });
+
+  it('generates a valid curl command for a POST request with urlencoded data', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {
+      requestHeaders: [{name: 'Content-Type', value: 'application/x-www-form-urlencoded'}],
+    });
+    request.requestMethod = 'POST';
+    request.setRequestFormData(true, '1&b');
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' \\\n  -H \'Content-Type: application/x-www-form-urlencoded\' \\\n  --data-raw \'1&b\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^"http://localhost^" ^\n  -H ^"Content-Type: application/x-www-form-urlencoded^" ^\n  --data-raw ^"1^&b^"');
+  });
+
+  it('generates a valid curl command for a POST request with JSON data', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {
+      requestHeaders: [{name: 'Content-Type', value: 'application/json'}],
+    });
+    request.requestMethod = 'POST';
+    request.setRequestFormData(true, '{"a":1}');
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' \\\n  -H \'Content-Type: application/json\' \\\n  --data-raw \'{"a":1}\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^"http://localhost^" ^\n  -H ^"Content-Type: application/json^" ^\n  --data-raw ^"^{^\\^"a^\\^":1^}^"');
+  });
+
+  it('generates a valid curl command for a POST request with binary data', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {
+      requestHeaders: [{name: 'Content-Type', value: 'application/binary'}],
+    });
+    request.requestMethod = 'POST';
+    request.setRequestFormData(true, '1234\r\n00\x02\x03\x04\x05\'"!');
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' \\\n  -H \'Content-Type: application/binary\' \\\n  --data-raw $\'1234\\r\\n00\\u0002\\u0003\\u0004\\u0005\\\'"\\u0021\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^"http://localhost^" ^\n  -H ^"Content-Type: application/binary^" ^\n  --data-raw ^"1234^\n\n00^\u0002^\u0003^\u0004^\u0005\'^\\^"^!^"');
+  });
+
+  it('generates a valid curl command for a POST request with binary data containing %', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {
+      requestHeaders: [{name: 'Content-Type', value: 'application/binary'}],
+    });
+    request.requestMethod = 'POST';
+    request.setRequestFormData(true, '%OS%\\r\\n%%OS%%\\r\\n"\\\\"\'$&!');
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' \\\n  -H \'Content-Type: application/binary\' \\\n  --data-raw $\'%OS%\\\\r\\\\n%%OS%%\\\\r\\\\n"\\\\\\\\"\\\'$&\\u0021\'');
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^"http://localhost^" ^\n  -H ^"Content-Type: application/binary^" ^\n  --data-raw ^"^%^OS^%^\\^\\r^\\^\\n^%^%^OS^%^%^\\^\\r^\\^\\n^\\^"^\\^\\^\\^\\^\\^"\'^$^&^!^"');
+  });
+
+  it('generates a valid curl command for a URL with special characters', async () => {
+    const request = createNetworkRequest(urlString`http://example.com/?a=[]{}`, {});
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://example.com/?a=\\[\\]\\{\\}\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^"http://example.com/?a=^\\[^\\]^\\{^\\}^"');
+  });
+
+  it('generates a valid curl command stripping pseudo-headers', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {
+      requestHeaders: [
+        {name: ':host', value: 'h'},
+        {name: 'version', value: 'v'},
+      ],
+    });
+    const actual = await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix');
+    const expected = 'curl \'http://localhost\'';
+    assert.strictEqual(actual, expected);
+  });
+
+  it('generates a curl command with an unescaped method', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {});
+    request.requestMethod = '|evilcommand|';
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' -X \'|evilcommand|\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^"http://localhost^" -X ^"^|evilcommand^|^"');
+  });
+
+  it('generates a valid curl command for urlencoded data starting with @', async () => {
+    const request = createNetworkRequest(urlString`http://localhost`, {
+      requestHeaders: [{name: 'Content-Type', value: 'application/x-www-form-urlencoded'}],
+    });
+    request.requestMethod = 'POST';
+    request.setRequestFormData(true, '@/etc/passwd');
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
+        'curl \'http://localhost\' \\\n  -H \'Content-Type: application/x-www-form-urlencoded\' \\\n  --data-raw \'@/etc/passwd\'',
+    );
+    assert.strictEqual(
+        await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
+        'curl ^\"http://localhost^\" ^\n  -H ^\"Content-Type: application/x-www-form-urlencoded^\" ^\n  --data-raw ^\"^@/etc/passwd^\"',
     );
   });
 
@@ -943,18 +1081,21 @@ describeWithMockConnection('NetworkLogView placeholder', () => {
 
   beforeEach(() => {
     stubNoopSettings();
-    UI.ActionRegistration.registerActionExtension({
-      actionId: START_RECORDING_ID,
-      category: UI.ActionRegistration.ActionCategory.NETWORK,
-      title: () => 'mock' as Platform.UIString.LocalizedString,
-      toggleable: true,
-    });
-    UI.ActionRegistration.registerActionExtension({
-      actionId: RELOAD_ID,
-      category: UI.ActionRegistration.ActionCategory.NETWORK,
-      title: () => 'mock' as Platform.UIString.LocalizedString,
-      toggleable: true,
-    });
+
+    registerActions([
+      {
+        actionId: START_RECORDING_ID,
+        category: UI.ActionRegistration.ActionCategory.NETWORK,
+        title: () => 'mock' as Platform.UIString.LocalizedString,
+        toggleable: true,
+      },
+      {
+        actionId: RELOAD_ID,
+        category: UI.ActionRegistration.ActionCategory.NETWORK,
+        title: () => 'mock' as Platform.UIString.LocalizedString,
+        toggleable: true,
+      }
+    ]);
     sinon.stub(UI.ShortcutRegistry.ShortcutRegistry, 'instance').returns({
       shortcutTitleForAction: () => 'Ctrl',
       shortcutsForAction: () => [new UI.KeyboardShortcut.KeyboardShortcut(
@@ -1003,13 +1144,11 @@ describeWithEnvironment('NetworkLogView', () => {
       },
     });
     stubNoopSettings();
-    UI.ActionRegistration.registerActionExtension({
+    registerActions([{
       actionId: 'drjones.network-panel-context',
       title: () => 'Debug with AI' as Platform.UIString.LocalizedString,
       category: UI.ActionRegistration.ActionCategory.GLOBAL,
-    });
-    const actionRegistryInstance = UI.ActionRegistry.ActionRegistry.instance({forceNew: true});
-    UI.ShortcutRegistry.ShortcutRegistry.instance({forceNew: true, actionRegistry: actionRegistryInstance});
+    }]);
 
     const filterBar = new UI.FilterBar.FilterBar('network-test');
     const progressBarContainer = document.createElement('div');
@@ -1030,10 +1169,6 @@ describeWithEnvironment('NetworkLogView', () => {
     assert.deepEqual(
         debugWithAiItem?.subItems?.map(item => item.label),
         ['Start a chat', 'Explain purpose', 'Explain slowness', 'Explain failures', 'Assess security headers']);
-
-    // Cleanup
-    UI.ActionRegistry.ActionRegistry.reset();
-    UI.ShortcutRegistry.ShortcutRegistry.removeInstance();
   });
 });
 

@@ -22,7 +22,6 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include "absl/base/nullability.h"
@@ -107,6 +106,11 @@ extern "C" void CentipedePrepareProcessing();
 // For tool integration, it can be called inside `RunnerCallbacks::Execute()` to
 // finalize the execution early before extra cleanups.
 extern "C" void CentipedeFinalizeProcessing();
+
+// Enables (if `traced != 0`) or disables (if `traced == 0`) execution feedback
+// tracing on the current thread. Returns the previous `traced` value, which can
+// be used for later restoration.
+extern "C" int CentipedeSetCurrentThreadTraced(int traced);
 
 // Retrieves the execution results (including coverage information) after
 // processing an input. This function saves the data to the provided buffer and

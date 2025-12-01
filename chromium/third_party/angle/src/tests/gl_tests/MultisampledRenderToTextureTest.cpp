@@ -6,6 +6,10 @@
 
 // MultisampledRenderToTextureTest: Tests of EXT_multisampled_render_to_texture extension
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "test_utils/ANGLETest.h"
 #include "test_utils/gl_raii.h"
 
@@ -472,10 +476,6 @@ TEST_P(MultisampledRenderToTextureTest, FramebufferCompleteness)
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
                               colorRenderbuffer);
     EXPECT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
-
-    // D3D backend doesn't implement multisampled render to texture renderbuffers correctly.
-    // http://anglebug.com/42261786
-    ANGLE_SKIP_TEST_IF(IsD3D());
 
     if (getClientMajorVersion() >= 3 &&
         EnsureGLExtensionEnabled("GL_EXT_multisampled_render_to_texture2"))
@@ -1095,10 +1095,6 @@ TEST_P(MultisampledRenderToTextureES3Test, ReadPixelsTest)
 // Read pixels with pack buffer from renderbuffer. ES3+.
 TEST_P(MultisampledRenderToTextureES3Test, RenderbufferReadPixelsTest)
 {
-    // D3D backend doesn't implement multisampled render to texture renderbuffers correctly.
-    // http://anglebug.com/42261786
-    ANGLE_SKIP_TEST_IF(IsD3D());
-
     readPixelsTestCommon(true);
 }
 
@@ -1912,9 +1908,6 @@ void MultisampledRenderToTextureES3Test::drawCopyDrawAttachDepthStencilClearThen
                        !EnsureGLExtensionEnabled("GL_EXT_multisampled_render_to_texture2"));
     constexpr GLsizei kSize = 64;
 
-    // http://anglebug.com/42263509
-    ANGLE_SKIP_TEST_IF(IsD3D11());
-
     setupCopyTexProgram();
 
     GLFramebuffer fboMS;
@@ -2502,10 +2495,6 @@ TEST_P(MultisampledRenderToTextureES3Test, RenderbufferClearThenBlitDepthStencil
 {
     ANGLE_SKIP_TEST_IF(!EnsureGLExtensionEnabled("GL_EXT_multisampled_render_to_texture"));
 
-    // D3D backend doesn't implement multisampled render to texture renderbuffers correctly.
-    // http://anglebug.com/42261786
-    ANGLE_SKIP_TEST_IF(IsD3D());
-
     constexpr GLsizei kSize = 64;
 
     setupCopyTexProgram();
@@ -2820,9 +2809,6 @@ TEST_P(MultisampledRenderToTextureES3Test, RenderbufferDrawThenBlitDepthStencilO
 
     // http://anglebug.com/42263663
     ANGLE_SKIP_TEST_IF(IsLinux() && IsIntel() && IsVulkan());
-
-    // http://anglebug.com/42263677
-    ANGLE_SKIP_TEST_IF(IsD3D());
 
     constexpr GLsizei kSize = 64;
 
@@ -3715,9 +3701,6 @@ TEST_P(MultisampledRenderToTextureTest, DrawNonMultisampledThenMultisampled)
 {
     ANGLE_SKIP_TEST_IF(!EnsureGLExtensionEnabled("GL_EXT_multisampled_render_to_texture"));
     constexpr GLsizei kSize = 64;
-
-    // http://anglebug.com/42263509
-    ANGLE_SKIP_TEST_IF(IsD3D11());
 
     // Texture attachment to the two framebuffers.
     GLTexture color;

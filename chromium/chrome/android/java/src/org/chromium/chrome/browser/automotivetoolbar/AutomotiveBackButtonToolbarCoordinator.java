@@ -28,6 +28,9 @@ import org.chromium.components.browser_ui.widget.TouchEventProvider;
 import org.chromium.ui.animation.EmptyAnimationListener;
 import org.chromium.ui.display.DisplayUtil;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * The automotive back button toolbar allows users to navigate backwards. This coordinator supports
  * the back button toolbar disappearing on fullscreen, appearing on swipe.
@@ -105,6 +108,8 @@ public class AutomotiveBackButtonToolbarCoordinator {
                 public void onEnterFullscreen(Tab tab, FullscreenOptions options) {
                     // TODO(https://crbug.com/376737727): Evaluate if lazy inflation is needed.
                     mTouchEventProvider.addTouchEventObserver(mEdgeSwipeGestureDetector);
+                    // Vivaldi
+                    if (!BuildConfig.IS_OEM_GAS_BUILD)
                     mBackButtonToolbarForAutomotive.setVisibility(View.GONE);
                     mIsFullscreen = true;
                     mEdgeSwipeGestureDetector.setIsReadyForNewScroll(true);
@@ -115,6 +120,8 @@ public class AutomotiveBackButtonToolbarCoordinator {
                     mOnSwipeAutomotiveToolbar.setVisibility(View.GONE);
                     mHandler.removeCallbacks(mHideToolbar);
                     mTouchEventProvider.removeTouchEventObserver(mEdgeSwipeGestureDetector);
+                    // Vivaldi
+                    if (!BuildConfig.IS_OEM_GAS_BUILD)
                     if (isAutomotiveBackButtonBarStreamlineSupported(mContext)) {
                         mBackButtonToolbarForAutomotive.setVisibility(View.GONE);
                     } else {

@@ -1,0 +1,149 @@
+/*
+ * Copyright 2019 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package fcp.secagg;
+
+option java_package = "fcp.secagg.server";
+option java_outer_classname = "SecAggServerEnums";
+
+// Describes current state of SecAggServer.
+enum SecAggServerStateKind {
+  UNKNOWN_STATE = 0;
+  R0_ADVERTISE_KEYS = 1;
+  R1_SHARE_KEYS = 2;
+  R2_MASKED_INPUT_COLLECTION = 3;
+  R3_UNMASKING = 4;
+  PRNG_RUNNING = 5;
+  COMPLETED = 6;
+  ABORTED = 7;
+}
+
+// Describes version of SecAggServer implementation.
+enum ServerVariant {
+  UNKNOWN_VERSION = 0;
+  OBSOLETE_JAVA = 1;
+  NATIVE_V1 = 2;
+  RLWE_HOMOMORPHIC_KEYS = 3;
+  NATIVE_SUBGRAPH = 4;
+}
+
+// Describes the outcome of running SecAgg protocol on server.
+enum SecAggServerOutcome {
+  // A public abort() method of SecAggServerImpl was called.
+  EXTERNAL_REQUEST = 0;
+  // Too many clients dropped out for the protocol to continue.
+  NOT_ENOUGH_CLIENTS_REMAINING = 1;
+  // Some error occurred and was not otherwise handled.
+  UNHANDLED_ERROR = 2;
+  // The protocol ran to success and the server produced an output value.
+  SUCCESS = 3;
+}
+
+// Used by descendants of SecAggServerState to track the status of clients. This
+// is referred to as a "status" rather than a "state" because it does not
+// necessarily correspond with the client's actual state in the FSM.
+enum ClientStatus {
+  READY_TO_START = 0;
+  DEAD_BEFORE_SENDING_ANYTHING = 1;
+  ADVERTISE_KEYS_RECEIVED = 2;
+  DEAD_AFTER_ADVERTISE_KEYS_RECEIVED = 3;
+  SHARE_KEYS_RECEIVED = 4;
+  DEAD_AFTER_SHARE_KEYS_RECEIVED = 5;
+  MASKED_INPUT_RESPONSE_RECEIVED = 6;
+  DEAD_AFTER_MASKED_INPUT_RESPONSE_RECEIVED = 7;
+  UNMASKING_RESPONSE_RECEIVED = 8;
+  DEAD_AFTER_UNMASKING_RESPONSE_RECEIVED = 9;
+}
+
+// Error codes summarizing the reason why a client was dropped.
+enum ClientDropReason {
+  // Received abort message from the client.
+  SENT_ABORT_MESSAGE = 0;
+  // Message type received different from expected.
+  UNEXPECTED_MESSAGE_TYPE = 1;
+  // Message type not recognized or not set.
+  UNKNOWN_MESSAGE_TYPE = 2;
+  // Not expecting an AdvertiseKeys message from this client.
+  ADVERTISE_KEYS_UNEXPECTED = 3;
+  // One of the public keys in an AdvertiseKeys message has length 0.
+  EMPTY_PUBLIC_KEY = 4;
+  // Did not send an AdvertiseKeys message before round ended.
+  NO_ADVERTISE_KEYS = 5;
+  // Not expecting a ShareKeysResponse message from this client.
+  SHARE_KEYS_UNEXPECTED = 6;
+  // ShareKeysResponse did not have the expected number of key shares.
+  WRONG_NUMBER_OF_KEY_SHARES = 7 [deprecated = true];
+  // ShareKeysResponse does not include key shares for all clients it should.
+  MISSING_KEY_SHARE = 8 [deprecated = true];
+  // ShareKeysResponse sent a key share for a client it shouldn't have.
+  EXTRA_KEY_SHARE = 9 [deprecated = true];
+  // Did not send a ShareKeysResponse message before round ended.
+  NO_SHARE_KEYS = 10;
+  // Not expecting a MaskedInputResponse message from this client.
+  MASKED_INPUT_UNEXPECTED = 11;
+  // Masked input received does not match the input specification.
+  INVALID_MASKED_INPUT = 12;
+  // Did not send a MaskedInputResponse message before round ended.
+  NO_MASKED_INPUT = 13;
+  // Not expecting an UnmaskingResponse message from this client.
+  UNMASKING_RESPONSE_UNEXPECTED = 14;
+  // UnmaskingResponse received does not contain the correct type of key shares.
+  INVALID_UNMASKING_RESPONSE = 15;
+  // Did not send an UnmaskingResponse message before round ended.
+  NO_UNMASKING_RESPONSE = 16;
+  // AdvertiseKeys message contained a public key of invalid size.
+  INVALID_PUBLIC_KEY = 17;
+  // Protocol aborted the client either due to early success or internal errors.
+  SERVER_PROTOCOL_ABORT_CLIENT = 18;
+  // Client is no longer needed but marks the protocol as success.
+  EARLY_SUCCESS = 19;
+  // Client connection closed.
+  CONNECTION_CLOSED = 20;
+  // Invalid ShareKeysResponse (e.g. one that doesn't have the expected number
+  // of key shares, doesn't include key shares for all clients it should, or
+  // has a key share for a client it shouldn't have).
+  INVALID_SHARE_KEYS_RESPONSE = 21;
+}
+
+// Error codes describing why the client was aborted by the protocol.
+enum ClientAbortReason {
+  // Client was aborted because it sent an invalid message.
+  INVALID_MESSAGE = 0;
+  // Client never checked-in with a handshake message.
+  NOT_CHECKED_IN = 1;
+  // Client connection dropped over the wire.
+  CONNECTION_DROPPED = 2;
+  // Client is running an obsolete version.
+  OBSOLETE_VERSION = 3 [deprecated = true];
+}
+enum AdversaryClass {
+  NONE = 0;
+  // A semi-honest/honest-but-curious adversary controlling the server and a
+  // fraction of the clients
+  CURIOUS_SERVER = 1;
+  // A semi-honest adversary controlling the server and a fraction of the
+  // clients that might perform the following malicious attack:
+  // Consider a client i that submits its masked input y. The server
+  // requests t (the shamir threshold) shares to recover the self-mask of i, and
+  // additionally (and this is the malicious behaviour)
+  // obtains another t shares to recover the pairwise masks of i from the
+  // number_of_neighbors - t clients from with a share of a self-mask had not
+  // been requested. Using both pairwise and self masks the value of i can be
+  // recovered by the server.
+  SEMI_MALICIOUS_SERVER = 2;
+}

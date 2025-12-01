@@ -7,6 +7,7 @@
 #include "ui/views/controls/video_progress.h"
 
 #include "base/strings/utf_string_conversions.h"
+#include "ui/base/cursor/cursor.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/color_palette.h"

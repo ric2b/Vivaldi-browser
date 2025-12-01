@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,19 +23,19 @@ const {live, classMap, repeat} = Directives;
 
 const UIStrings = {
   /**
-   *@description The title of a button that deletes a parameter.
+   * @description The title of a button that deletes a parameter.
    */
   deleteParameter: 'Delete parameter',
   /**
-   *@description The title of a button that adds a parameter.
+   * @description The title of a button that adds a parameter.
    */
   addParameter: 'Add a parameter',
   /**
-   *@description The title of a button that reset the value of a parameters to its default value.
+   * @description The title of a button that reset the value of a parameters to its default value.
    */
   resetDefaultValue: 'Reset to default value',
   /**
-   *@description The title of a button to add custom key/value pairs to object parameters with no keys defined
+   * @description The title of a button to add custom key/value pairs to object parameters with no keys defined
    */
   addCustomProperty: 'Add custom property',
   /**
@@ -1021,15 +1021,7 @@ function renderInlineButton(opts: {
 }
 
 function renderWarningIcon(): Lit.TemplateResult|undefined {
-  return html`<devtools-icon
-    .data=${{
-    iconName: 'warning-filled', color: 'var(--icon-warning)', width: '14px', height: '14px',
-  }
-  }
-    class=${classMap({
-    'warning-icon': true,
-  })}
-  >
+  return html`<devtools-icon name='warning-filled' class='warning-icon small'>
   </devtools-icon>`;
 }
 

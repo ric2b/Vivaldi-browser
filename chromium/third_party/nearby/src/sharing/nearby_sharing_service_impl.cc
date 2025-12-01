@@ -42,9 +42,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
-#include "internal/base/bluetooth_address.h"
 #include "internal/base/file_path.h"
-#include "internal/base/observer_list.h"
 #include "internal/flags/nearby_flags.h"
 #include "internal/network/url.h"
 #include "internal/platform/device_info.h"
@@ -74,7 +72,6 @@
 #include "sharing/incoming_share_session.h"
 #include "sharing/internal/api/bluetooth_adapter.h"
 #include "sharing/internal/api/sharing_platform.h"
-#include "sharing/internal/api/wifi_adapter.h"
 #include "sharing/internal/base/encode.h"
 #include "sharing/internal/public/connectivity_manager.h"
 #include "sharing/internal/public/context.h"
@@ -227,8 +224,7 @@ NearbySharingServiceImpl::NearbySharingServiceImpl(
                                                          &analytics_recorder_)),
       local_device_data_manager_(
           NearbyShareLocalDeviceDataManagerImpl::Factory::Create(
-              context_, preference_manager_, account_manager_, device_info_,
-              nearby_share_client_factory_.get())),
+              preference_manager_, account_manager_, device_info_)),
       contact_manager_(NearbyShareContactManagerImpl::Factory::Create(
           context_, account_manager_, nearby_share_client_factory_.get())),
       nearby_fast_initiation_(
@@ -248,7 +244,7 @@ NearbySharingServiceImpl::NearbySharingServiceImpl(
 
   certificate_manager_ = NearbyShareCertificateManagerImpl::Factory::Create(
       context_, sharing_platform, local_device_data_manager_.get(),
-      contact_manager_.get(), profile_path, nearby_share_client_factory_.get()),
+      profile_path, nearby_share_client_factory_.get()),
 
   certificate_manager_->AddObserver(this);
   context_->GetConnectivityManager()->RegisterConnectionListener(
@@ -276,7 +272,6 @@ NearbySharingServiceImpl::NearbySharingServiceImpl(
   LOG(INFO) << __func__ << ": Set custom save path: " << custom_save_path;
   nearby_connections_manager_->SetCustomSavePath(custom_save_path);
 
-  local_device_data_manager_->Start();
   certificate_manager_->Start();
   update_file_paths_in_progress_ = false;
 
@@ -291,11 +286,7 @@ void NearbySharingServiceImpl::Shutdown(
       "api_shutdown",
       [this, status_codes_callback = std::move(status_codes_callback)]() {
         *is_shutting_down_ = true;
-        for (auto* observer : observers_.GetObservers()) {
-          observer->OnShutdown();
-        }
-
-        observers_.Clear();
+        service_observers_.Clear();
 
         StopAdvertising();
         StopFastInitiationScanning();
@@ -321,7 +312,6 @@ void NearbySharingServiceImpl::Shutdown(
 
         settings_->RemoveSettingsObserver(this);
 
-        local_device_data_manager_->Stop();
         certificate_manager_->Stop();
 
         is_shutting_down_ = nullptr;
@@ -377,7 +367,7 @@ void NearbySharingServiceImpl::SendInitialAdapterState(
         // |observer| may have been removed before the task is run.  This is not
         // sufficient to catch all cases, but without taking some form of
         // ownership of the observer, this is the best we can do.
-        if (!observers_.HasObserver(observer)) {
+        if (!service_observers_.HasObserver(observer)) {
           return;
         }
         observer->OnBluetoothStatusChanged(
@@ -393,17 +383,12 @@ void NearbySharingServiceImpl::SendInitialAdapterState(
 void NearbySharingServiceImpl::AddObserver(
     NearbySharingService::Observer* observer) {
   SendInitialAdapterState(observer);
-  observers_.AddObserver(observer);
+  service_observers_.AddObserver(observer);
 }
 
 void NearbySharingServiceImpl::RemoveObserver(
     NearbySharingService::Observer* observer) {
-  observers_.RemoveObserver(observer);
-}
-
-bool NearbySharingServiceImpl::HasObserver(
-    NearbySharingService::Observer* observer) {
-  return observers_.HasObserver(observer);
+  service_observers_.RemoveObserver(observer);
 }
 
 void NearbySharingServiceImpl::RegisterSendSurface(
@@ -454,14 +439,6 @@ void NearbySharingServiceImpl::RegisterSendSurface(
             discovery_callback, blocked_vendor_id, disable_wifi_hotspot);
 
         if (state == SendSurfaceState::kForeground) {
-          // Only check this error case for foreground senders
-          if (!HasAvailableConnectionMediums()) {
-            VLOG(1) << __func__ << ": No available connection medium.";
-            std::move(status_codes_callback)(
-                StatusCodes::kNoAvailableConnectionMedium);
-            return;
-          }
-
           foreground_send_surface_map_.insert(
               {transfer_callback, wrapped_callback});
         } else {
@@ -588,13 +565,6 @@ void NearbySharingServiceImpl::RegisterReceiveSurface(
                   << ", transfer_callback: " << transfer_callback
                   << ", vendor_id: " << static_cast<uint32_t>(vendor_id);
 
-        // Check available mediums.
-        if (!HasAvailableConnectionMediums()) {
-          VLOG(1) << __func__ << ": No available connection medium.";
-          std::move(status_codes_callback)(
-              StatusCodes::kNoAvailableConnectionMedium);
-          return;
-        }
         BlockedVendorId before_registration_vendor_id = GetReceivingVendorId();
 
         // We specifically allow re-registering without error, so it is clear to
@@ -652,9 +622,7 @@ void NearbySharingServiceImpl::RegisterReceiveSurface(
           } else {
             VLOG(1)
                 << __func__ << ": This device's MAC address is: "
-                << nearby::device::CanonicalizeBluetoothAddress(
-                       context_->GetBluetoothAdapter().GetAddress().value_or(
-                           std::array<uint8_t, 6>{}));
+                << context_->GetBluetoothAdapter().GetAddress().ToString();
           }
         }
 
@@ -1344,9 +1312,7 @@ void NearbySharingServiceImpl::OnLogoutSucceeded(absl::string_view account_id,
         // Reset all settings.
         ResetAllSettings(/*logout=*/true);
         if (credential_error) {
-          for (auto& observer : observers_.GetObservers()) {
-            observer->OnCredentialError();
-          }
+          service_observers_.NotifyCredentialError();
         }
       });
 }
@@ -1395,9 +1361,7 @@ void NearbySharingServiceImpl::AdapterPresentChanged(
                 << present << ")";
         NearbySharingService::Observer::AdapterState state =
             MapAdapterState(present, adapter->IsPowered());
-        for (auto& observer : observers_.GetObservers()) {
-          observer->OnBluetoothStatusChanged(state);
-        }
+        service_observers_.NotifyBluetoothStatusChanged(state);
         InvalidateSurfaceState();
       });
 }
@@ -1410,39 +1374,7 @@ void NearbySharingServiceImpl::AdapterPoweredChanged(
                 << powered << ")";
         NearbySharingService::Observer::AdapterState state =
             MapAdapterState(adapter->IsPresent(), powered);
-        for (auto& observer : observers_.GetObservers()) {
-          observer->OnBluetoothStatusChanged(state);
-        }
-        InvalidateSurfaceState();
-      });
-}
-
-void NearbySharingServiceImpl::AdapterPresentChanged(
-    sharing::api::WifiAdapter* adapter, bool present) {
-  RunOnNearbySharingServiceThread(
-      "wifi_adapter_present_changed", [this, adapter, present]() {
-        VLOG(1) << __func__ << ": Wifi adapter present state changed. ("
-                << present << ")";
-        NearbySharingService::Observer::AdapterState state =
-            MapAdapterState(present, adapter->IsPowered());
-        for (auto& observer : observers_.GetObservers()) {
-          observer->OnWifiStatusChanged(state);
-        }
-        InvalidateSurfaceState();
-      });
-}
-
-void NearbySharingServiceImpl::AdapterPoweredChanged(
-    sharing::api::WifiAdapter* adapter, bool powered) {
-  RunOnNearbySharingServiceThread(
-      "wifi_adapter_power_changed", [this, adapter, powered]() {
-        VLOG(1) << __func__ << ": Wifi adapter power state changed. ("
-                << powered << ")";
-        NearbySharingService::Observer::AdapterState state =
-            MapAdapterState(adapter->IsPresent(), powered);
-        for (auto& observer : observers_.GetObservers()) {
-          observer->OnWifiStatusChanged(state);
-        }
+        service_observers_.NotifyBluetoothStatusChanged(state);
         InvalidateSurfaceState();
       });
 }
@@ -1451,9 +1383,7 @@ void NearbySharingServiceImpl::HardwareErrorReported(
     NearbyFastInitiation* fast_init) {
   RunOnNearbySharingServiceThread("hardware_error_reported", [this]() {
     VLOG(1) << __func__ << ": Hardware error reported, need to restart PC.";
-    for (auto& observer : observers_.GetObservers()) {
-      observer->OnIrrecoverableHardwareErrorReported();
-    }
+    service_observers_.NotifyIrrecoverableHardwareErrorReported();
     InvalidateSurfaceState();
   });
 }
@@ -1888,14 +1818,6 @@ bool NearbySharingServiceImpl::IsLanConnected() const {
   return context_->GetConnectivityManager()->IsLanConnected();
 }
 
-bool NearbySharingServiceImpl::IsWifiPresent() const {
-  return context_->GetWifiAdapter().IsPresent();
-}
-
-bool NearbySharingServiceImpl::IsWifiPowered() const {
-  return context_->GetWifiAdapter().IsPowered();
-}
-
 bool NearbySharingServiceImpl::HasAvailableConnectionMediums() {
   // Check if Wi-Fi or Ethernet LAN is off.  Advertisements won't work, so
   // disable them, unless bluetooth is known to be enabled. Not all platforms
@@ -2088,9 +2010,7 @@ void NearbySharingServiceImpl::InvalidateAdvertisingState() {
     return;
   }
   if (device_name.has_value()) {
-    for (auto& observer : observers_.GetObservers()) {
-      observer->OnHighVisibilityChangeRequested();
-    }
+    service_observers_.NotifyHighVisibilityChangeRequested();
   }
 
   advertising_session_id_ = analytics_recorder_.GenerateNextId();
@@ -2307,24 +2227,9 @@ void NearbySharingServiceImpl::StartFastInitiationScanning() {
   }
 
   nearby_fast_initiation_->StartScanning(
-      [this]() { OnFastInitiationDevicesDetected(); },
-      [this]() { OnFastInitiationDevicesNotDetected(); },
+      /*devices_discovered_callback=*/[]() {},
+      /*devices_not_discovered_callback=*/[]() {},
       [this]() { StopFastInitiationScanning(); });
-}
-
-void NearbySharingServiceImpl::OnFastInitiationDevicesDetected() {
-  VLOG(1) << __func__;
-
-  for (auto& observer : observers_.GetObservers()) {
-    observer->OnFastInitiationDevicesDetected();
-  }
-}
-
-void NearbySharingServiceImpl::OnFastInitiationDevicesNotDetected() {
-  VLOG(1) << __func__;
-  for (auto& observer : observers_.GetObservers()) {
-    observer->OnFastInitiationDevicesNotDetected();
-  }
 }
 
 void NearbySharingServiceImpl::StopFastInitiationScanning() {
@@ -2335,10 +2240,6 @@ void NearbySharingServiceImpl::StopFastInitiationScanning() {
 
   nearby_fast_initiation_->StopScanning(
       []() { VLOG(1) << __func__ << ": Stopped fast initiation scanning."; });
-
-  for (auto& observer : observers_.GetObservers()) {
-    observer->OnFastInitiationScanningStopped();
-  }
   VLOG(1) << __func__ << ": Stopped background scanning.";
 }
 
@@ -2894,7 +2795,8 @@ void NearbySharingServiceImpl::OnFrameRead(
       break;
 
     default:
-      LOG(ERROR) << __func__ << ": Discarding unknown frame of type";
+      LOG(ERROR) << __func__ << ": Discarding unknown frame of type: "
+                 << static_cast<int>(frame->type());
       break;
   }
 
@@ -3456,9 +3358,7 @@ void NearbySharingServiceImpl::OnStartAdvertisingResult(bool used_device_name,
                << ": StartAdvertising over Nearby Connections failed: "
                << NearbyConnectionsManager::ConnectionsStatusToString(status);
     SetInHighVisibility(false);
-    for (auto& observer : observers_.GetObservers()) {
-      observer->OnStartAdvertisingFailure();
-    }
+    service_observers_.NotifyStartAdvertisingFailure();
   }
 }
 
@@ -3497,9 +3397,7 @@ void NearbySharingServiceImpl::OnStartDiscoveryResult(Status status) {
                << ": StartDiscovery over Nearby Connections failed: "
                << NearbyConnectionsManager::ConnectionsStatusToString(status);
   }
-  for (auto& observer : observers_.GetObservers()) {
-    observer->OnStartDiscoveryResult(success);
-  }
+  service_observers_.NotifyStartDiscoveryResult(success);
 }
 
 void NearbySharingServiceImpl::SetInHighVisibility(
@@ -3509,9 +3407,7 @@ void NearbySharingServiceImpl::SetInHighVisibility(
   }
 
   in_high_visibility_ = new_in_high_visibility;
-  for (auto& observer : observers_.GetObservers()) {
-    observer->OnHighVisibilityChanged(in_high_visibility_);
-  }
+  service_observers_.NotifyHighVisibilityChanged(in_high_visibility_);
 }
 
 void NearbySharingServiceImpl::OnNetworkChanged(
@@ -3531,9 +3427,7 @@ void NearbySharingServiceImpl::OnLanConnectedChanged(bool connected) {
         NearbySharingService::Observer::AdapterState state =
             connected ? NearbySharingService::Observer::AdapterState::ENABLED
                       : NearbySharingService::Observer::AdapterState::DISABLED;
-        for (auto& observer : observers_.GetObservers()) {
-          observer->OnLanStatusChanged(state);
-        }
+        service_observers_.NotifyLanStatusChanged(state);
       });
 }
 
@@ -3544,7 +3438,6 @@ void NearbySharingServiceImpl::ResetAllSettings(bool logout) {
   StopAdvertising();
   StopScanning();
   nearby_connections_manager_->Shutdown();
-  local_device_data_manager_->Stop();
   certificate_manager_->Stop();
 
   // Reset preferences for logout.
@@ -3589,7 +3482,6 @@ void NearbySharingServiceImpl::ResetAllSettings(bool logout) {
   }
 
   // Start services again.
-  local_device_data_manager_->Start();
   certificate_manager_->Start();
 
   InvalidateSurfaceState();
@@ -3659,8 +3551,8 @@ void NearbySharingServiceImpl::RunOnNearbySharingServiceThreadDelayed(
 void NearbySharingServiceImpl::UpdateFilePathsInProgress(
     bool update_file_paths) {
   update_file_paths_in_progress_ = update_file_paths;
-  LOG(INFO) << __func__
-            << ": Update file paths in progress: " << update_file_paths;
+  VLOG(1) << __func__
+          << ": Update file paths in progress: " << update_file_paths;
 }
 
 }  // namespace nearby::sharing

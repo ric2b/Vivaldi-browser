@@ -3169,7 +3169,7 @@
                    FT_UInt    num_coords,
                    FT_Fixed*  coords )
   {
-    FT_Error  error = FT_Err_Ok;
+    FT_Error  error;
 
 
     error = tt_set_mm_blend( (TT_Face)face, num_coords, coords, 1 );
@@ -4431,6 +4431,9 @@
       tupleDataSize = FT_NEXT_USHORT( p );
       tupleIndex    = FT_NEXT_USHORT( p );
 
+      if ( tupleIndex & GX_TI_INTERMEDIATE_TUPLE )
+        tupleScalars = NULL;
+
       if ( tupleIndex & GX_TI_EMBEDDED_TUPLE_COORD )
       {
         if ( 2 * blend->num_axis > (FT_UInt)( stream->limit - p ) )
@@ -4449,7 +4452,10 @@
       }
       else if ( ( tupleIndex & GX_TI_TUPLE_INDEX_MASK ) < blend->tuplecount )
       {
-        FT_Fixed  scalar = tupleScalars[tupleIndex & GX_TI_TUPLE_INDEX_MASK];
+        FT_Fixed  scalar =
+                    tupleScalars
+                      ? tupleScalars[tupleIndex & GX_TI_TUPLE_INDEX_MASK]
+                      : (FT_Fixed)-0x20000;
 
 
         if ( scalar != (FT_Fixed)-0x20000 )
@@ -4485,8 +4491,6 @@
           im_start_coords[j] = FT_fdot14ToFixed( FT_NEXT_SHORT( p ) );
         for ( j = 0; j < blend->num_axis; j++ )
           im_end_coords[j] = FT_fdot14ToFixed( FT_NEXT_SHORT( p ) );
-
-        tupleScalars = NULL;
       }
 
       apply = ft_var_apply_tuple( blend,

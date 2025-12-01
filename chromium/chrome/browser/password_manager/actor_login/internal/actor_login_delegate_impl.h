@@ -64,7 +64,8 @@ class ActorLoginDelegateImpl
 
   // Private helper methods for handling task completion. They should be
   // invoked asynchronously.
-  void OnGetCredentialsCompleted();
+  void OnGetCredentialsCompleted(CredentialsOrErrorReply callback,
+                                 CredentialsOrError result);
   void OnAttemptLoginCompleted(
       base::expected<LoginStatusResult, ActorLoginError> result);
 
@@ -79,7 +80,7 @@ class ActorLoginDelegateImpl
   // primary main frame of the passed-in `WebContents`.
   PasswordDriverSupplierForPrimaryMainFrame driver_supplier_;
 
-  raw_ptr<::password_manager::PasswordManagerClient> client_ = nullptr;
+  raw_ptr<password_manager::PasswordManagerClient> client_ = nullptr;
 
   // Fills credentials into a form. Scoped to one `AttemptLogin` request.
   std::unique_ptr<ActorLoginCredentialFiller> credential_filler_;

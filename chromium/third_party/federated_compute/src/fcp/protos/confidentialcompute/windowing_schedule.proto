@@ -1,0 +1,134 @@
+// Copyright 2025 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+syntax = "proto3";
+
+package fcp.confidentialcompute;
+
+option java_multiple_files = true;
+
+// A schedule that defines time windows.
+//
+// This will be used to define trusted pipeline aggregation windows, DP time
+// units, and privacy ID rotation windows.
+message WindowingSchedule {
+  oneof schedule {
+    CivilTimeWindowSchedule civil_time_window_schedule = 1;
+  }
+
+  // Forked from
+  // https://github.com/googleapis/googleapis/blob/master/google/type/date.proto
+  // This was forked because WindowingSchedule must be a tf_proto_library
+  // target, and all its dependencies must also be tf_proto_library targets.
+  // TODO: b/425744048 - Switch to the originals once we can switch from
+  // tf_proto_library to proto_library.
+  //
+  // Represents a whole or partial calendar date, such as a birthday. The time
+  // of day and time zone are either specified elsewhere or are insignificant.
+  // The date is relative to the Gregorian Calendar. This can represent one of
+  // the following:
+  //
+  // * A full date, with non-zero year, month, and day values.
+  // * A month and day, with a zero year (for example, an anniversary).
+  // * A year on its own, with a zero month and a zero day.
+  // * A year and month, with a zero day (for example, a credit card expiration
+  //   date).
+  message Date {
+    // Year of the date. Must be from 1 to 9999, or 0 to specify a date without
+    // a year.
+    int32 year = 1;
+    // Month of a year. Must be from 1 to 12, or 0 to specify a year without a
+    // month and day.
+    int32 month = 2;
+    // Day of a month. Must be from 1 to 31 and valid for the year and month, or
+    // 0 to specify a year by itself or a year and month where the day isn't
+    // significant.
+    int32 day = 3;
+  }
+
+  // Forked from
+  // https://github.com/googleapis/googleapis/blob/master/google/type/timeofday.proto
+  // This was forked because WindowingSchedule must be a tf_proto_library
+  // target, and all its dependencies must also be tf_proto_library targets.
+  // TODO: b/425744048 - Switch to the originals once we can switch from
+  // tf_proto_library to proto_library.
+  //
+  // Represents a time of day. The date and time zone are either not significant
+  // or are specified elsewhere. An API may choose to allow leap seconds.
+  message TimeOfDay {
+    // Hours of a day in 24 hour format. Must be greater than or equal to 0 and
+    // typically must be less than or equal to 23. An API may choose to allow
+    // the value "24:00:00" for scenarios like business closing time.
+    int32 hours = 1;
+    // Minutes of an hour. Must be greater than or equal to 0 and less than or
+    // equal to 59.
+    int32 minutes = 2;
+    // Seconds of a minute. Must be greater than or equal to 0 and typically
+    // must be less than or equal to 59. An API may allow the value 60 if it
+    // allows leap-seconds.
+    int32 seconds = 3;
+    // Fractions of seconds, in nanoseconds. Must be greater than or equal to 0
+    // and less than or equal to 999,999,999.
+    int32 nanos = 4;
+  }
+
+  // A schedule that defines windows in terms of civil time.
+  message CivilTimeWindowSchedule {
+    // Together, the start date and start time define the start of the window.
+    // They must match the `TimePeriod.Unit` below:
+    // - TimePeriod.Unit.DAYS: `start_time` fields must all be 0 (ie. the field
+    // is unset).
+    // - TimePeriod.Unit.MONTHS: `start_date.day` and all `start_time` fields
+    // must be 0.
+    // - TimePeriod.Unit.YEARS: `start_date.month`, `start_date.day`, and all
+    // `start_time` fields must be 0.
+    Date start_date = 1;
+    TimeOfDay start_time = 2;
+    enum TimeZoneScheme {
+      // The time zone is ignored.
+      IGNORE = 0;
+    }
+    // Defines how the time zone is handled.
+    TimeZoneScheme time_zone_scheme = 3;
+
+    message TimePeriod {
+      enum Unit {
+        UNIT_UNSPECIFIED = 0;
+        HOURS = 1;
+        DAYS = 2;
+        MONTHS = 3;
+        YEARS = 4;
+      }
+      int32 size = 1;
+      Unit unit = 2;
+    }
+
+    // The size of each window, as a civil time period. When `shift` is equal to
+    // `size`, CivilTimeWindowSchedule defines tumbling windows. Initially we
+    // will only support tumbling windows.
+    //
+    // Note that this time period does not necessarily correspond
+    // to the duration in physical time. For example, if the time_zone_scheme =
+    // IGNORE, the duration of a window with the size = {size:
+    // 1, unit: HOURS} is longer than 1 physical hour.
+    TimePeriod size = 4;
+
+    // The time period by which each subsequent window is shifted from the
+    // previous window.
+    //
+    // For sliding windows, this is often refered to as the "period" of the
+    // window, however, we don't use that term to avoid confusion with civil
+    // time periods.
+    TimePeriod shift = 5;
+  }
+}

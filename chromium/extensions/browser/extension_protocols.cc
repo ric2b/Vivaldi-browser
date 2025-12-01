@@ -17,7 +17,6 @@
 #include "base/base64.h"
 #include "base/compiler_specific.h"
 #include "base/containers/span.h"
-#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
@@ -120,10 +119,6 @@ using extensions::SharedModuleInfo;
 
 namespace extensions {
 namespace {
-
-BASE_FEATURE(kOverrideExtensionFilesMimeTypes,
-             "OverrideExtensionFilesMimeTypes",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 ExtensionProtocolTestHandler* g_test_handler = nullptr;
 
@@ -656,6 +651,7 @@ class ExtensionURLLoader : public network::mojom::URLLoader {
   }
 
   void OnResourceInfoRead(const extensions::ExtensionResource& resource,
+                          const base::Version& extension_version,
                           scoped_refptr<net::HttpResponseHeaders> headers,
                           scoped_refptr<ContentVerifier> content_verifier,
                           const ResourceInfo& resource_info) {
@@ -666,12 +662,7 @@ class ExtensionURLLoader : public network::mojom::URLLoader {
     request_.url = net::FilePathToFileURL(read_file_path);
 
     AddCacheHeaders(*headers, last_modified_time);
-
-    // TODO(crbug.com/400647848): Remove this if-check and always override mime
-    // type headers in M139.
-    if (base::FeatureList::IsEnabled(kOverrideExtensionFilesMimeTypes)) {
-      AddMimeTypeHeaders(*headers, read_file_path);
-    }
+    AddMimeTypeHeaders(*headers, read_file_path);
 
     // TODO(crbug.com/405286894, crbug.com/410916670): Properly implement
     // content verification for range headers which return a subset of the
@@ -699,7 +690,7 @@ class ExtensionURLLoader : public network::mojom::URLLoader {
     scoped_refptr<ContentVerifyJob> verify_job;
     if (content_verifier && should_verify_content) {
       verify_job = ContentVerifier::CreateAndStartJobFor(
-          resource.extension_id(), resource.extension_root(),
+          resource.extension_id(), resource.extension_root(), extension_version,
           resource.relative_path(), content_verifier);
     }
 
@@ -871,7 +862,8 @@ class ExtensionURLLoader : public network::mojom::URLLoader {
         base::BindOnce(&ReadResourceInfo, resource, directory_path),
         base::BindOnce(&ExtensionURLLoader::OnResourceInfoRead,
                        weak_ptr_factory_.GetWeakPtr(), resource,
-                       std::move(headers), std::move(content_verifier)));
+                       extension->version(), std::move(headers),
+                       std::move(content_verifier)));
   }
 
   void OnMojoDisconnect() { DeleteThis(); }

@@ -188,6 +188,274 @@ TEST_F(IR_BuiltinPolyfillTest, Saturate_Vec4F16) {
     EXPECT_EQ(expect, str());
 }
 
+TEST_F(IR_BuiltinPolyfillTest, Clamp_NoPolyfill_Float) {
+    Build(core::BuiltinFn::kClamp, ty.f32(), Vector{ty.f32(), ty.f32(), ty.f32()});
+    auto* src = R"(
+%foo = func(%arg:f32, %arg_1:f32, %arg_2:f32):f32 {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %result:f32 = clamp %arg, %arg_1, %arg_2
+    ret %result
+  }
+}
+)";
+    auto* expect = src;
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.clamp_float = false;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, Clamp_F32) {
+    Build(core::BuiltinFn::kClamp, ty.f32(), Vector{ty.f32(), ty.f32(), ty.f32()});
+    auto* src = R"(
+%foo = func(%arg:f32, %arg_1:f32, %arg_2:f32):f32 {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %result:f32 = clamp %arg, %arg_1, %arg_2
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:f32, %arg_1:f32, %arg_2:f32):f32 {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %5:f32 = max %arg, %arg_1
+    %result:f32 = min %5, %arg_2
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.clamp_float = true;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, Clamp_F16) {
+    Build(core::BuiltinFn::kClamp, ty.f16(), Vector{ty.f16(), ty.f16(), ty.f16()});
+    auto* src = R"(
+%foo = func(%arg:f16, %arg_1:f16, %arg_2:f16):f16 {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %result:f16 = clamp %arg, %arg_1, %arg_2
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:f16, %arg_1:f16, %arg_2:f16):f16 {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %5:f16 = max %arg, %arg_1
+    %result:f16 = min %5, %arg_2
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.clamp_float = true;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, Clamp_Vec2F32) {
+    Build(core::BuiltinFn::kClamp, ty.vec2<f32>(),
+          Vector{ty.vec2<f32>(), ty.vec2<f32>(), ty.vec2<f32>()});
+    auto* src = R"(
+%foo = func(%arg:vec2<f32>, %arg_1:vec2<f32>, %arg_2:vec2<f32>):vec2<f32> {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %result:vec2<f32> = clamp %arg, %arg_1, %arg_2
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:vec2<f32>, %arg_1:vec2<f32>, %arg_2:vec2<f32>):vec2<f32> {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %5:vec2<f32> = max %arg, %arg_1
+    %result:vec2<f32> = min %5, %arg_2
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.clamp_float = true;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, Clamp_Vec4F16) {
+    Build(core::BuiltinFn::kClamp, ty.vec4<f16>(),
+          Vector{ty.vec4<f16>(), ty.vec4<f16>(), ty.vec4<f16>()});
+    auto* src = R"(
+%foo = func(%arg:vec4<f16>, %arg_1:vec4<f16>, %arg_2:vec4<f16>):vec4<f16> {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %result:vec4<f16> = clamp %arg, %arg_1, %arg_2
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:vec4<f16>, %arg_1:vec4<f16>, %arg_2:vec4<f16>):vec4<f16> {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %5:vec4<f16> = max %arg, %arg_1
+    %result:vec4<f16> = min %5, %arg_2
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.clamp_float = true;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, Clamp_NoPolyfill_Integer) {
+    Build(core::BuiltinFn::kClamp, ty.i32(), Vector{ty.i32(), ty.i32(), ty.i32()});
+    auto* src = R"(
+%foo = func(%arg:i32, %arg_1:i32, %arg_2:i32):i32 {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %result:i32 = clamp %arg, %arg_1, %arg_2
+    ret %result
+  }
+}
+)";
+    auto* expect = src;
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.clamp_int = false;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, Clamp_I32) {
+    Build(core::BuiltinFn::kClamp, ty.i32(), Vector{ty.i32(), ty.i32(), ty.i32()});
+    auto* src = R"(
+%foo = func(%arg:i32, %arg_1:i32, %arg_2:i32):i32 {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %result:i32 = clamp %arg, %arg_1, %arg_2
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:i32, %arg_1:i32, %arg_2:i32):i32 {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %5:i32 = max %arg, %arg_1
+    %result:i32 = min %5, %arg_2
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.clamp_int = true;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, Clamp_U32) {
+    Build(core::BuiltinFn::kClamp, ty.u32(), Vector{ty.u32(), ty.u32(), ty.u32()});
+    auto* src = R"(
+%foo = func(%arg:u32, %arg_1:u32, %arg_2:u32):u32 {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %result:u32 = clamp %arg, %arg_1, %arg_2
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:u32, %arg_1:u32, %arg_2:u32):u32 {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %5:u32 = max %arg, %arg_1
+    %result:u32 = min %5, %arg_2
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.clamp_int = true;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, Clamp_Vec2I32) {
+    Build(core::BuiltinFn::kClamp, ty.vec2<i32>(),
+          Vector{ty.vec2<i32>(), ty.vec2<i32>(), ty.vec2<i32>()});
+    auto* src = R"(
+%foo = func(%arg:vec2<i32>, %arg_1:vec2<i32>, %arg_2:vec2<i32>):vec2<i32> {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %result:vec2<i32> = clamp %arg, %arg_1, %arg_2
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:vec2<i32>, %arg_1:vec2<i32>, %arg_2:vec2<i32>):vec2<i32> {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %5:vec2<i32> = max %arg, %arg_1
+    %result:vec2<i32> = min %5, %arg_2
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.clamp_int = true;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, Clamp_Vec4U32) {
+    Build(core::BuiltinFn::kClamp, ty.vec4<u32>(),
+          Vector{ty.vec4<u32>(), ty.vec4<u32>(), ty.vec4<u32>()});
+    auto* src = R"(
+%foo = func(%arg:vec4<u32>, %arg_1:vec4<u32>, %arg_2:vec4<u32>):vec4<u32> {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %result:vec4<u32> = clamp %arg, %arg_1, %arg_2
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:vec4<u32>, %arg_1:vec4<u32>, %arg_2:vec4<u32>):vec4<u32> {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %5:vec4<u32> = max %arg, %arg_1
+    %result:vec4<u32> = min %5, %arg_2
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.clamp_int = true;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
 TEST_F(IR_BuiltinPolyfillTest, Smoothstep_F32) {
     Build(core::BuiltinFn::kSmoothstep, ty.f32(), Vector{ty.f32(), ty.f32(), ty.f32()});
     auto* src = R"(
@@ -1890,12 +2158,10 @@ TEST_F(IR_BuiltinPolyfillTest, InsertBits_Full_U32) {
     %17:u32 = shl %arg_1, %16
     %18:bool = lt %arg_2, 32u
     %19:u32 = select 0u, %17, %18
-    %20:u32 = construct %15
-    %21:u32 = and %19, %20
-    %22:u32 = complement %15
-    %23:u32 = construct %22
-    %24:u32 = and %arg, %23
-    %result:u32 = or %21, %24
+    %20:u32 = and %19, %15
+    %21:u32 = complement %15
+    %22:u32 = and %arg, %21
+    %result:u32 = or %20, %22
     ret %result
   }
 }
@@ -1936,10 +2202,10 @@ TEST_F(IR_BuiltinPolyfillTest, InsertBits_Full_I32) {
     %17:i32 = shl %arg_1, %16
     %18:bool = lt %arg_2, 32u
     %19:i32 = select 0i, %17, %18
-    %20:i32 = construct %15
+    %20:i32 = convert %15
     %21:i32 = and %19, %20
     %22:u32 = complement %15
-    %23:i32 = construct %22
+    %23:i32 = convert %22
     %24:i32 = and %arg, %23
     %result:i32 = or %21, %24
     ret %result
@@ -2030,12 +2296,14 @@ TEST_F(IR_BuiltinPolyfillTest, InsertBits_Full_Vec4I32) {
     %17:vec4<i32> = shl %arg_1, %16
     %18:bool = lt %arg_2, 32u
     %19:vec4<i32> = select vec4<i32>(0i), %17, %18
-    %20:vec4<i32> = construct %15
-    %21:vec4<i32> = and %19, %20
-    %22:u32 = complement %15
-    %23:vec4<i32> = construct %22
-    %24:vec4<i32> = and %arg, %23
-    %result:vec4<i32> = or %21, %24
+    %20:i32 = convert %15
+    %21:vec4<i32> = construct %20
+    %22:vec4<i32> = and %19, %21
+    %23:u32 = complement %15
+    %24:i32 = convert %23
+    %25:vec4<i32> = construct %24
+    %26:vec4<i32> = and %arg, %25
+    %result:vec4<i32> = or %22, %26
     ret %result
   }
 }
@@ -2578,6 +2846,198 @@ TEST_F(IR_BuiltinPolyfillTest, Dot4U8Packed) {
 
     BuiltinPolyfillConfig config;
     config.dot_4x8_packed = true;
+    Run(BuiltinPolyfill, config);
+
+    EXPECT_EQ(expect, str());
+}
+
+class IR_SubgroupBroadcastPolyfillTest : public TransformTest {
+  protected:
+    /// Helper to build a function that calls subgroupBroadcast with the given type.
+    /// @param type the type
+    void Build(const core::type::Type* type) {
+        auto* param = b.FunctionParam("arg", type);
+        auto* func = b.Function("foo", type);
+        func->SetParams({param});
+        b.Append(func->Block(), [&] {
+            auto* result = b.Call(type, BuiltinFn::kSubgroupBroadcast, param, 1_u);
+            b.Return(func, result);
+            mod.SetName(result, "result");
+        });
+    }
+};
+
+TEST_F(IR_SubgroupBroadcastPolyfillTest, SubgroupBroadcastF16_NoPolyfill) {
+    Build(ty.f16());
+
+    auto* src = R"(
+%foo = func(%arg:f16):f16 {
+  $B1: {
+    %result:f16 = subgroupBroadcast %arg, 1u
+    ret %result
+  }
+}
+)";
+    auto* expect = src;
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.subgroup_broadcast_f16 = false;
+    Run(BuiltinPolyfill, config);
+
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_SubgroupBroadcastPolyfillTest, SubgroupBroadcastF32_NoPolyfill) {
+    Build(ty.f32());
+
+    auto* src = R"(
+%foo = func(%arg:f32):f32 {
+  $B1: {
+    %result:f32 = subgroupBroadcast %arg, 1u
+    ret %result
+  }
+}
+)";
+    auto* expect = src;
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.subgroup_broadcast_f16 = true;
+    Run(BuiltinPolyfill, config);
+
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_SubgroupBroadcastPolyfillTest, SubgroupBroadcastF16_Scalar) {
+    Build(ty.f16());
+
+    auto* src = R"(
+%foo = func(%arg:f16):f16 {
+  $B1: {
+    %result:f16 = subgroupBroadcast %arg, 1u
+    ret %result
+  }
+}
+)";
+
+    auto* expect = R"(
+%foo = func(%arg:f16):f16 {
+  $B1: {
+    %3:vec2<f16> = construct %arg, 0.0h
+    %4:u32 = bitcast %3
+    %5:u32 = subgroupBroadcast %4, 1u
+    %6:vec2<f16> = bitcast %5
+    %7:f16 = access %6, 0u
+    ret %7
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.subgroup_broadcast_f16 = true;
+    Run(BuiltinPolyfill, config);
+
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_SubgroupBroadcastPolyfillTest, SubgroupBroadcastF16_Vec2) {
+    Build(ty.vec2<f16>());
+
+    auto* src = R"(
+%foo = func(%arg:vec2<f16>):vec2<f16> {
+  $B1: {
+    %result:vec2<f16> = subgroupBroadcast %arg, 1u
+    ret %result
+  }
+}
+)";
+
+    auto* expect = R"(
+%foo = func(%arg:vec2<f16>):vec2<f16> {
+  $B1: {
+    %3:u32 = bitcast %arg
+    %4:u32 = subgroupBroadcast %3, 1u
+    %5:vec2<f16> = bitcast %4
+    ret %5
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.subgroup_broadcast_f16 = true;
+    Run(BuiltinPolyfill, config);
+
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_SubgroupBroadcastPolyfillTest, SubgroupBroadcastF16_Vec3) {
+    Build(ty.vec3<f16>());
+
+    auto* src = R"(
+%foo = func(%arg:vec3<f16>):vec3<f16> {
+  $B1: {
+    %result:vec3<f16> = subgroupBroadcast %arg, 1u
+    ret %result
+  }
+}
+)";
+
+    auto* expect = R"(
+%foo = func(%arg:vec3<f16>):vec3<f16> {
+  $B1: {
+    %3:vec4<f16> = construct %arg, 0.0h
+    %4:vec2<u32> = bitcast %3
+    %5:vec2<u32> = subgroupBroadcast %4, 1u
+    %6:vec4<f16> = bitcast %5
+    %7:vec3<f16> = swizzle %6, xyz
+    ret %7
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.subgroup_broadcast_f16 = true;
+    Run(BuiltinPolyfill, config);
+
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_SubgroupBroadcastPolyfillTest, SubgroupBroadcastF16_Vec4) {
+    Build(ty.vec4<f16>());
+
+    auto* src = R"(
+%foo = func(%arg:vec4<f16>):vec4<f16> {
+  $B1: {
+    %result:vec4<f16> = subgroupBroadcast %arg, 1u
+    ret %result
+  }
+}
+)";
+
+    auto* expect = R"(
+%foo = func(%arg:vec4<f16>):vec4<f16> {
+  $B1: {
+    %3:vec2<u32> = bitcast %arg
+    %4:vec2<u32> = subgroupBroadcast %3, 1u
+    %5:vec4<f16> = bitcast %4
+    ret %5
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.subgroup_broadcast_f16 = true;
     Run(BuiltinPolyfill, config);
 
     EXPECT_EQ(expect, str());

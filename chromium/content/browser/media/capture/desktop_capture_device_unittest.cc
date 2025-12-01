@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "content/browser/media/capture/desktop_capture_device.h"
 
 #include <stddef.h>
@@ -21,6 +16,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
@@ -94,14 +90,14 @@ const char kFrameIsRefresh[] = "WebRTC.DesktopCapture.FrameIsRefresh.Screen";
 // content of frames should affect the updated region part of each frame.
 std::unique_ptr<webrtc::BasicDesktopFrame> CreateBasicFrame(
     const webrtc::DesktopSize& size) {
-  std::unique_ptr<webrtc::BasicDesktopFrame> frame(
-      new webrtc::BasicDesktopFrame(size));
+  auto frame =
+      std::make_unique<webrtc::BasicDesktopFrame>(size, webrtc::FOURCC_ARGB);
   DCHECK_EQ(frame->size().width() * webrtc::DesktopFrame::kBytesPerPixel,
             frame->stride());
-  memset(frame->data(), kFakePixelValue,
-         frame->stride() * frame->size().height());
-  memset(frame->data(), kFakePixelValueFirst,
-         webrtc::DesktopFrame::kBytesPerPixel);
+  UNSAFE_TODO(memset(frame->data(), kFakePixelValue,
+                     frame->stride() * frame->size().height()));
+  UNSAFE_TODO(memset(frame->data(), kFakePixelValueFirst,
+                     webrtc::DesktopFrame::kBytesPerPixel));
   frame->mutable_updated_region()->SetRect(webrtc::DesktopRect::MakeSize(size));
   return frame;
 }
@@ -115,7 +111,9 @@ class InvertedDesktopFrame : public webrtc::DesktopFrame {
       : webrtc::DesktopFrame(
             frame->size(),
             -frame->stride(),
-            frame->data() + (frame->size().height() - 1) * frame->stride(),
+            frame->pixel_format(),
+            UNSAFE_TODO(frame->data() +
+                        (frame->size().height() - 1) * frame->stride()),
             frame->shared_memory()) {
     set_dpi(frame->dpi());
     set_capture_time_ms(frame->capture_time_ms());
@@ -141,10 +139,11 @@ class UnpackedDesktopFrame : public webrtc::DesktopFrame {
       : webrtc::DesktopFrame(
             frame->size(),
             frame->stride() * 2,
+            frame->pixel_format(),
             new uint8_t[frame->stride() * 2 * frame->size().height()],
             nullptr) {
     set_device_scale_factor(frame->device_scale_factor());
-    memset(data(), kFramePaddingValue, stride() * size().height());
+    UNSAFE_TODO(memset(data(), kFramePaddingValue, stride() * size().height()));
     CopyPixelsFrom(*frame, webrtc::DesktopVector(),
                    webrtc::DesktopRect::MakeSize(size()));
   }
@@ -299,7 +298,7 @@ class DesktopCaptureDeviceTest : public testing::Test {
     ASSERT_EQ(metadata->source_size->width(), output_frame_->size().width());
     ASSERT_EQ(metadata->source_size->height(), output_frame_->size().height());
     ASSERT_EQ(metadata->device_scale_factor, 2.0f);
-    memcpy(output_frame_->data(), frame, size);
+    UNSAFE_TODO(memcpy(output_frame_->data(), frame, size));
   }
 
  protected:
@@ -308,13 +307,12 @@ class DesktopCaptureDeviceTest : public testing::Test {
     auto result =
         std::make_unique<NiceMock<media::MockVideoCaptureDeviceClient>>();
     ON_CALL(*result, ReserveOutputBuffer(_, _, _, _, _, _))
-        .WillByDefault(Invoke([](const gfx::Size&,
-                                 media::VideoPixelFormat format, int,
-                                 media::VideoCaptureDevice::Client::Buffer*,
-                                 int*, int*) {
+        .WillByDefault([](const gfx::Size&, media::VideoPixelFormat format, int,
+                          media::VideoCaptureDevice::Client::Buffer*, int*,
+                          int*) {
           EXPECT_TRUE(format == media::PIXEL_FORMAT_I420);
           return media::VideoCaptureDevice::Client::ReserveResult::kSucceeded;
-        }));
+        });
     return result;
   }
 
@@ -324,7 +322,9 @@ class DesktopCaptureDeviceTest : public testing::Test {
 };
 
 // Capturer implementation for Fuchsia is not fully functional.
-#if !BUILDFLAG(IS_FUCHSIA)
+// TODO(crbug.com/445218901): Capturer implementation for Android needs user
+// input to work.
+#if !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_ANDROID)
 TEST_F(DesktopCaptureDeviceTest, Capture) {
   std::unique_ptr<webrtc::DesktopCapturer> capturer(
       desktop_capture::CreateScreenCapturer(
@@ -372,7 +372,7 @@ TEST_F(DesktopCaptureDeviceTest, Capture) {
 
   EXPECT_EQ(format.frame_size.GetArea() * 4, frame_size);
 }
-#endif  // !BUILDFLAG(IS_FUCHSIA)
+#endif  // !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_ANDROID)
 
 // Test that screen capturer behaves correctly if the source frame size changes
 // but the caller cannot cope with variable resolution output.
@@ -534,7 +534,8 @@ TEST_F(DesktopCaptureDeviceTest, UnpackedFrame) {
 
   int frame_size = 0;
   output_frame_ = std::make_unique<webrtc::BasicDesktopFrame>(
-      webrtc::DesktopSize(kTestFrameWidth1, kTestFrameHeight1));
+      webrtc::DesktopSize(kTestFrameWidth1, kTestFrameHeight1),
+      webrtc::FOURCC_ARGB);
 
   std::unique_ptr<media::MockVideoCaptureDeviceClient> client(
       CreateMockVideoCaptureDeviceClient());
@@ -565,8 +566,8 @@ TEST_F(DesktopCaptureDeviceTest, UnpackedFrame) {
       webrtc::DesktopSize(kTestFrameWidth1, kTestFrameHeight1));
   EXPECT_EQ(output_frame_->stride() * output_frame_->size().height(),
             frame_size);
-  EXPECT_EQ(
-      0, memcmp(output_frame_->data(), expected_frame->data(), frame_size));
+  UNSAFE_TODO(EXPECT_EQ(
+      0, memcmp(output_frame_->data(), expected_frame->data(), frame_size)));
 }
 
 // The test verifies that a bottom-to-top frame is converted to top-to-bottom.
@@ -583,7 +584,8 @@ TEST_F(DesktopCaptureDeviceTest, InvertedFrame) {
 
   int frame_size = 0;
   output_frame_ = std::make_unique<webrtc::BasicDesktopFrame>(
-      webrtc::DesktopSize(kTestFrameWidth1, kTestFrameHeight1));
+      webrtc::DesktopSize(kTestFrameWidth1, kTestFrameHeight1),
+      webrtc::FOURCC_ARGB);
 
   std::unique_ptr<media::MockVideoCaptureDeviceClient> client(
       CreateMockVideoCaptureDeviceClient());
@@ -615,10 +617,10 @@ TEST_F(DesktopCaptureDeviceTest, InvertedFrame) {
   EXPECT_EQ(output_frame_->stride() * output_frame_->size().height(),
             frame_size);
   for (int i = 0; i < output_frame_->size().height(); ++i) {
-    EXPECT_EQ(0,
-        memcmp(inverted_frame->data() + i * inverted_frame->stride(),
-               output_frame_->data() + i * output_frame_->stride(),
-               output_frame_->stride()));
+    UNSAFE_TODO(EXPECT_EQ(
+        0, memcmp(inverted_frame->data() + i * inverted_frame->stride(),
+                  output_frame_->data() + i * output_frame_->stride(),
+                  output_frame_->stride())));
   }
 }
 
@@ -874,9 +876,8 @@ class DesktopCaptureDeviceThrottledTest : public DesktopCaptureDeviceTest {
         .WillRepeatedly(DoAll(
             WithArg<2>(
                 Invoke(&format_checker, &FormatChecker::ExpectAcceptableSize)),
-            WithArg<7>(Invoke([&done_event, &nb_frames, &task_runner,
-                               &message_loop_task_runner](
-                                  base::TimeDelta timestamp) {
+            WithArg<7>([&done_event, &nb_frames, &task_runner,
+                        &message_loop_task_runner](base::TimeDelta timestamp) {
               ++nb_frames;
 
               // Simulate real device capture time. Indeed the time spent
@@ -906,7 +907,7 @@ class DesktopCaptureDeviceThrottledTest : public DesktopCaptureDeviceTest {
                         },
                         task_runner));
               }
-            }))));
+            })));
     media::VideoCaptureParams capture_params;
     capture_params.requested_format.frame_size.SetSize(kTestFrameWidth3,
                                                        kTestFrameHeight3);

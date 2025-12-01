@@ -9,8 +9,11 @@
 
 #include "base/android/scoped_java_ref.h"
 #include "chrome/browser/extensions/browser_extension_window_controller.h"
+#include "chrome/browser/extensions/window_controller.h"
 
 class BrowserWindowInterface;
+class WindowControllerListObserverForTesting;
+enum class ExtensionInternalWindowEventForTesting;
 
 // Native class for the Java |ExtensionWindowControllerBridge|.
 //
@@ -32,14 +35,39 @@ class ExtensionWindowControllerBridge final {
   // Implements Java |ExtensionWindowControllerBridgeImpl.Natives#destroy|.
   void Destroy(JNIEnv* env);
 
+  // Implements Java
+  // |ExtensionWindowControllerBridgeImpl.Natives#onTaskBoundsChanged|.
+  void OnTaskBoundsChanged(JNIEnv* env);
+
+  // Implements Java
+  // |ExtensionWindowControllerBridgeImpl.Natives#onTaskFocusChanged|.
+  void OnTaskFocusChanged(JNIEnv* env, bool has_focus);
+
+  // Implements the Java |getExtensionWindowIdForTesting| method in
+  // |ExtensionWindowControllerBridgeImpl.Natives|.
+  int GetExtensionWindowIdForTesting(JNIEnv* env);
+
   const extensions::BrowserExtensionWindowController&
   GetExtensionWindowControllerForTesting();
 
  private:
+  friend class WindowControllerListObserverForTesting;
+
+  // Records window events received by |WindowControllerListObserverForTesting|
+  // so that tests can verify the events.
+  // |window_controller| is the |extensions::WindowController| that received
+  // the |event|.
+  static void RecordExtensionInternalEventForTesting(
+      extensions::WindowController* window_controller,
+      ExtensionInternalWindowEventForTesting event);
+
   base::android::ScopedJavaGlobalRef<jobject>
       java_extension_window_controller_bridge_;
 
   extensions::BrowserExtensionWindowController extension_window_controller_;
+
+  raw_ptr<WindowControllerListObserverForTesting>
+      window_controller_list_observer_for_testing_;
 };
 
 #endif  // CHROME_BROWSER_UI_ANDROID_EXTENSIONS_WINDOWING_INTERNAL_EXTENSION_WINDOW_CONTROLLER_BRIDGE_H_

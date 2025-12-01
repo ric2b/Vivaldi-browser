@@ -111,7 +111,17 @@ GetNextStepQuality(optimization_guide::proto::LogAiDataRequest& log) {
           PasswordChangeQuality_StepQuality_SubmissionStatus_UNKNOWN_STATUS) {
     return quality->mutable_submit_form();
   }
-  return quality->mutable_open_form();
+
+  // TODO(crbug.com/446883346): Remove flag after feature is launched.
+  if (!base::FeatureList::IsEnabled(
+          password_manager::features::kCheckLoginStateBeforePasswordChange) ||
+      (quality->logged_in_check().status() !=
+       ModelQualityLogsUploader::QualityStatus::
+           PasswordChangeQuality_StepQuality_SubmissionStatus_UNKNOWN_STATUS)) {
+    return quality->mutable_open_form();
+  }
+
+  return quality->mutable_logged_in_check();
 }
 
 optimization_guide::proto::PasswordChangeQuality_StepQuality* GetStepQuality(
@@ -120,6 +130,9 @@ optimization_guide::proto::PasswordChangeQuality_StepQuality* GetStepQuality(
   optimization_guide::proto::PasswordChangeQuality* quality =
       log.mutable_password_change_submission()->mutable_quality();
   switch (step) {
+    case ModelQualityLogsUploader::FlowStep::
+        PasswordChangeRequest_FlowStep_IS_LOGGED_IN_STEP:
+      return quality->mutable_logged_in_check();
     case ModelQualityLogsUploader::FlowStep::
         PasswordChangeRequest_FlowStep_OPEN_FORM_STEP:
       return quality->mutable_open_form();
@@ -179,7 +192,8 @@ LoginPasswordType GetLoginAttemptPasswordType(
 
 ModelQualityLogsUploader::ModelQualityLogsUploader(
     content::WebContents* web_contents,
-    const GURL& change_password_url) {
+    const GURL& change_password_url)
+    : flow_start_time_(base::Time::Now()) {
   CHECK(web_contents);
   profile_ = Profile::FromBrowserContext(web_contents->GetBrowserContext());
 
@@ -191,6 +205,22 @@ ModelQualityLogsUploader::ModelQualityLogsUploader(
 }
 ModelQualityLogsUploader::~ModelQualityLogsUploader() = default;
 
+void ModelQualityLogsUploader::SetLoggedInCheckQuality(
+    int state_checks_count,
+    QualityStatus quality_status) {
+  final_log_data_.mutable_password_change_submission()
+      ->mutable_quality()
+      ->mutable_logged_in_check()
+      ->set_status(quality_status);
+  // If the initial login check wasn't performed because the page content failed
+  // to be requested, the state_checks_count can be 0.
+  const int retry_count = std::max(0, state_checks_count - 1);
+  final_log_data_.mutable_password_change_submission()
+      ->mutable_quality()
+      ->mutable_logged_in_check()
+      ->set_retry_count(retry_count);
+}
+
 void ModelQualityLogsUploader::SetOpenFormQuality(
     const std::optional<optimization_guide::proto::PasswordChangeResponse>&
         response,
@@ -200,12 +230,19 @@ void ModelQualityLogsUploader::SetOpenFormQuality(
     return;
   }
 
+  optimization_guide::proto::PasswordChangeQuality_StepQuality*
+      open_form_quality = final_log_data_.mutable_password_change_submission()
+                              ->mutable_quality()
+                              ->mutable_open_form();
+
   QualityStatus quality_status = QualityStatus::
       PasswordChangeQuality_StepQuality_SubmissionStatus_UNKNOWN_STATUS;
+
   if (response.has_value()) {
-    PageType open_form = response.value().open_form_data().page_type();
+    open_form_quality->mutable_response()->CopyFrom(*response);
+    PageType open_form = response->open_form_data().page_type();
     if (open_form == PageType::OpenFormResponseData_PageType_SETTINGS_PAGE) {
-      if (response.value().open_form_data().dom_node_id_to_click()) {
+      if (response->open_form_data().dom_node_id_to_click()) {
         // Assume success at this point. If it fails to actuate on it the state
         // will be changed to ELEMENT_NOT_FOUND if the element does not exist
         // or FORM_NOT_FOUND if after clicking a form was not seen.
@@ -223,16 +260,79 @@ void ModelQualityLogsUploader::SetOpenFormQuality(
 
   final_log_data_.mutable_password_change_submission()->MergeFrom(
       *logging_data);
+
+  open_form_quality->mutable_request()->CopyFrom(logging_data->request());
+  open_form_quality->set_status(quality_status);
+  open_form_quality->set_request_latency_ms(
+      ComputeRequestLatencyMs(server_request_start_time));
+}
+
+void ModelQualityLogsUploader::SetSubmitFormQuality(
+    const std::optional<optimization_guide::proto::PasswordChangeResponse>&
+        response,
+    std::unique_ptr<LoggingData> logging_data,
+    base::Time server_request_start_time) {
+  if (!logging_data) {
+    return;
+  }
+  optimization_guide::proto::PasswordChangeQuality_StepQuality*
+      submit_form_quality =
+          final_log_data_.mutable_password_change_submission()
+              ->mutable_quality()
+              ->mutable_submit_form();
+
+  QualityStatus quality_status = QualityStatus::
+      PasswordChangeQuality_StepQuality_SubmissionStatus_UNKNOWN_STATUS;
+  if (response.has_value()) {
+    submit_form_quality->mutable_response()->CopyFrom(*response);
+    if (response.value().submit_form_data().dom_node_id_to_click()) {
+      quality_status = QualityStatus::
+          PasswordChangeQuality_StepQuality_SubmissionStatus_ACTION_SUCCESS;
+    } else {
+      quality_status = QualityStatus::
+          PasswordChangeQuality_StepQuality_SubmissionStatus_ELEMENT_NOT_FOUND;
+    }
+  }
+
+  final_log_data_.mutable_password_change_submission()->MergeFrom(
+      *logging_data);
+
+  submit_form_quality->mutable_request()->CopyFrom(logging_data->request());
+  submit_form_quality->set_status(quality_status);
+  submit_form_quality->set_request_latency_ms(
+      ComputeRequestLatencyMs(server_request_start_time));
+}
+
+void ModelQualityLogsUploader::SetVerifySubmissionQuality(
+    const std::optional<optimization_guide::proto::PasswordChangeResponse>&
+        response,
+    std::unique_ptr<LoggingData> logging_data,
+    base::Time server_request_start_time) {
+  if (!logging_data) {
+    return;
+  }
+  optimization_guide::proto::PasswordChangeQuality_StepQuality*
+      verify_submission_quality =
+          final_log_data_.mutable_password_change_submission()
+              ->mutable_quality()
+              ->mutable_verify_submission();
+
+  QualityStatus quality_status = GetVerifySubmissionQualityStatus(response);
+  final_log_data_.mutable_password_change_submission()->MergeFrom(
+      *logging_data);
+
   final_log_data_.mutable_password_change_submission()
       ->mutable_quality()
-      ->mutable_open_form()
-      ->set_status(quality_status);
-  // Set latency
-  final_log_data_.mutable_password_change_submission()
-      ->mutable_quality()
-      ->mutable_open_form()
-      ->set_request_latency_ms(
-          ComputeRequestLatencyMs(server_request_start_time));
+      ->set_final_model_status(GetFinalModelStatus(response));
+
+  if (response.has_value()) {
+    verify_submission_quality->mutable_response()->CopyFrom(*response);
+  }
+  verify_submission_quality->mutable_request()->CopyFrom(
+      logging_data->request());
+  verify_submission_quality->set_status(quality_status);
+  verify_submission_quality->set_request_latency_ms(
+      ComputeRequestLatencyMs(server_request_start_time));
 }
 
 void ModelQualityLogsUploader::FormNotDetectedAfterOpening() {
@@ -293,66 +393,11 @@ void ModelQualityLogsUploader::SubmitFormTargetElementNotFound() {
               PasswordChangeQuality_StepQuality_SubmissionStatus_ELEMENT_NOT_FOUND);
 }
 
-void ModelQualityLogsUploader::SetSubmitFormQuality(
-    const std::optional<optimization_guide::proto::PasswordChangeResponse>&
-        response,
-    std::unique_ptr<LoggingData> logging_data,
-    base::Time server_request_start_time) {
-  if (!logging_data) {
-    return;
-  }
-  QualityStatus quality_status = QualityStatus::
-      PasswordChangeQuality_StepQuality_SubmissionStatus_UNKNOWN_STATUS;
-  if (response.has_value()) {
-    if (response.value().submit_form_data().dom_node_id_to_click()) {
-      quality_status = QualityStatus::
-          PasswordChangeQuality_StepQuality_SubmissionStatus_ACTION_SUCCESS;
-    } else {
-      quality_status = QualityStatus::
-          PasswordChangeQuality_StepQuality_SubmissionStatus_ELEMENT_NOT_FOUND;
-    }
-  }
-
-  final_log_data_.mutable_password_change_submission()->MergeFrom(
-      *logging_data);
+void ModelQualityLogsUploader::LoginCheckSkipped() {
   final_log_data_.mutable_password_change_submission()
       ->mutable_quality()
-      ->mutable_submit_form()
-      ->set_status(quality_status);
-  // Set latency
-  final_log_data_.mutable_password_change_submission()
-      ->mutable_quality()
-      ->mutable_submit_form()
-      ->set_request_latency_ms(
-          ComputeRequestLatencyMs(server_request_start_time));
-}
-
-void ModelQualityLogsUploader::SetVerifySubmissionQuality(
-    const std::optional<optimization_guide::proto::PasswordChangeResponse>&
-        response,
-    std::unique_ptr<LoggingData> logging_data,
-    base::Time server_request_start_time) {
-  if (!logging_data) {
-    return;
-  }
-  FinalModelStatus final_model_status = GetFinalModelStatus(response);
-  QualityStatus quality_status = GetVerifySubmissionQualityStatus(response);
-
-  final_log_data_.mutable_password_change_submission()->MergeFrom(
-      *logging_data);
-  final_log_data_.mutable_password_change_submission()
-      ->mutable_quality()
-      ->mutable_verify_submission()
-      ->set_status(quality_status);
-  final_log_data_.mutable_password_change_submission()
-      ->mutable_quality()
-      ->set_final_model_status(final_model_status);
-  // Set latency
-  final_log_data_.mutable_password_change_submission()
-      ->mutable_quality()
-      ->mutable_verify_submission()
-      ->set_request_latency_ms(
-          ComputeRequestLatencyMs(server_request_start_time));
+      ->mutable_logged_in_check()
+      ->set_classification_overridden_by_user(true);
 }
 
 // static
@@ -384,6 +429,10 @@ void ModelQualityLogsUploader::UploadFinalLog() {
       std::make_unique<optimization_guide::ModelQualityLogEntry>(
           mqls_service->GetWeakPtr());
 
+  final_log_data_.mutable_password_change_submission()
+      ->mutable_quality()
+      ->set_total_flow_time_ms(ComputeRequestLatencyMs(flow_start_time_));
   new_log_entry->log_ai_data_request()->MergeFrom(final_log_data_);
+
   optimization_guide::ModelQualityLogEntry::Upload(std::move(new_log_entry));
 }

@@ -16,6 +16,7 @@
 #import "base/files/file_util.h"
 #import "base/ios/ios_util.h"
 #import "base/json/json_writer.h"
+#import "base/strings/string_number_conversions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "base/test/scoped_feature_list.h"
@@ -89,6 +90,7 @@
 #import "ios/testing/open_url_context.h"
 #import "ios/testing/verify_custom_webkit.h"
 #import "ios/web/common/features.h"
+#import "ios/web/common/uikit_ui_util.h"
 #import "ios/web/js_messaging/web_view_js_utils.h"
 #import "ios/web/public/browser_state_utils.h"
 #import "ios/web/public/js_messaging/content_world.h"
@@ -140,6 +142,11 @@ NSString* SerializedValue(const base::Value* value) {
 
   return base::SysUTF8ToNSString(
       base::WriteJson(*result).value_or(std::string()));
+}
+
+NSString* GetIdForWebState(web::WebState* web_state) {
+  return base::SysUTF8ToNSString(base::NumberToString(
+      web_state->GetUniqueIdentifier().ToSessionID().id()));
 }
 
 }  // namespace
@@ -436,13 +443,11 @@ NSString* SerializedValue(const base::Value* value) {
 }
 
 + (NSString*)currentTabID {
-  web::WebState* web_state = chrome_test_util::GetCurrentWebState();
-  return web_state->GetStableIdentifier();
+  return GetIdForWebState(chrome_test_util::GetCurrentWebState());
 }
 
 + (NSString*)nextTabID {
-  web::WebState* web_state = chrome_test_util::GetNextWebState();
-  return web_state->GetStableIdentifier();
+  return GetIdForWebState(chrome_test_util::GetNextWebState());
 }
 
 + (NSUInteger)indexOfActiveNormalTab {
@@ -1235,6 +1240,10 @@ NSString* SerializedValue(const base::Value* value) {
 + (BOOL)isEnhancedSafeBrowsingInfobarEnabled {
   return base::FeatureList::IsEnabled(
       safe_browsing::kEnhancedSafeBrowsingPromo);
+}
+
++ (UIInterfaceOrientation)interfaceOrientation {
+  return GetInterfaceOrientation();
 }
 
 #pragma mark - ContentSettings

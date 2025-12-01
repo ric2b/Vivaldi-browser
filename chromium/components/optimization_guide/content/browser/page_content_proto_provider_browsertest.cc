@@ -8,7 +8,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/test_future.h"
 #include "components/network_session_configurator/common/network_switches.h"
+#include "components/optimization_guide/content/browser/mock_media_transcript_provider.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
+#include "components/optimization_guide/proto/features/common_quality_data.pb.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/media_session.h"
 #include "content/public/browser/web_contents.h"
@@ -90,14 +92,15 @@ void AssertValidOrigin(
 }
 
 blink::mojom::AIPageContentOptionsPtr GetAIPageContentOptions() {
-  auto request = DefaultAIPageContentOptions();
-  request->on_critical_path = true;
+  auto request = DefaultAIPageContentOptions(/*on_critical_path =*/true);
   return request;
 }
 
-blink::mojom::AIPageContentOptionsPtr GetActionableAIPageContentOptions() {
-  auto request = ActionableAIPageContentOptions();
-  request->on_critical_path = true;
+blink::mojom::AIPageContentOptionsPtr GetActionableAIPageContentOptions(
+    bool include_same_site_only = false) {
+  auto request = ActionableAIPageContentOptions(
+      /*on_critical_path =*/true);
+  request->include_same_site_only = include_same_site_only;
   return request;
 }
 
@@ -227,7 +230,7 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest, BasicDefault) {
 IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest, BasicActionable) {
   const gfx::Size window_bounds(web_contents()->GetSize());
   LoadPage(https_server()->GetURL("/simple.html"),
-           ActionableAIPageContentOptions());
+           GetActionableAIPageContentOptions());
 
   EXPECT_EQ(page_content().version(),
             optimization_guide::proto::
@@ -350,7 +353,7 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestActionableElements,
 
 IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest, ForLabel) {
   LoadPage(https_server()->GetURL("/for_label.html"),
-           ActionableAIPageContentOptions());
+           GetActionableAIPageContentOptions());
   EXPECT_EQ(page_content().version(),
             optimization_guide::proto::
                 ANNOTATED_PAGE_CONTENT_VERSION_ONLY_ACTIONABLE_ELEMENTS_1_0);
@@ -379,7 +382,7 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest, ForLabel) {
 IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
                        ClickabilityReason) {
   LoadPage(https_server()->GetURL("/clickability_reason.html"),
-           ActionableAIPageContentOptions());
+           GetActionableAIPageContentOptions());
   EXPECT_EQ(page_content().version(),
             optimization_guide::proto::
                 ANNOTATED_PAGE_CONTENT_VERSION_ONLY_ACTIONABLE_ELEMENTS_1_0);
@@ -394,6 +397,8 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
           optimization_guide::proto::CLICKABILITY_REASON_CLICKABLE_CONTROL,
           optimization_guide::proto::CLICKABILITY_REASON_CLICK_HANDLER,
           optimization_guide::proto::CLICKABILITY_REASON_MOUSE_EVENTS,
+          optimization_guide::proto::CLICKABILITY_REASON_MOUSE_HOVER,
+          optimization_guide::proto::CLICKABILITY_REASON_MOUSE_CLICK,
           optimization_guide::proto::CLICKABILITY_REASON_KEY_EVENTS,
           optimization_guide::proto::CLICKABILITY_REASON_EDITABLE,
           optimization_guide::proto::CLICKABILITY_REASON_CURSOR_POINTER,
@@ -408,6 +413,8 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
           optimization_guide::proto::CLICKABILITY_REASON_CLICKABLE_CONTROL,
           optimization_guide::proto::CLICKABILITY_REASON_CLICK_HANDLER,
           optimization_guide::proto::CLICKABILITY_REASON_MOUSE_EVENTS,
+          optimization_guide::proto::CLICKABILITY_REASON_MOUSE_HOVER,
+          optimization_guide::proto::CLICKABILITY_REASON_MOUSE_CLICK,
           optimization_guide::proto::CLICKABILITY_REASON_KEY_EVENTS,
           optimization_guide::proto::CLICKABILITY_REASON_EDITABLE,
           optimization_guide::proto::CLICKABILITY_REASON_CURSOR_POINTER,
@@ -433,7 +440,7 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
 IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
                        LabelNotActionable) {
   LoadPage(https_server()->GetURL("/label_not_actionable.html"),
-           ActionableAIPageContentOptions());
+           GetActionableAIPageContentOptions());
   EXPECT_EQ(page_content().version(),
             optimization_guide::proto::
                 ANNOTATED_PAGE_CONTENT_VERSION_ONLY_ACTIONABLE_ELEMENTS_1_0);
@@ -457,7 +464,7 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest, AriaRole) {
   LoadPage(https_server()->GetURL("/aria_role.html"),
-           ActionableAIPageContentOptions());
+           GetActionableAIPageContentOptions());
   EXPECT_EQ(page_content().version(),
             optimization_guide::proto::
                 ANNOTATED_PAGE_CONTENT_VERSION_ONLY_ACTIONABLE_ELEMENTS_1_0);
@@ -476,7 +483,7 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest, AriaRole) {
 
 IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest, ZOrder) {
   LoadPage(https_server()->GetURL("/simple.html"),
-           ActionableAIPageContentOptions());
+           GetActionableAIPageContentOptions());
 
   EXPECT_EQ(page_content()
                 .root_node()
@@ -690,8 +697,8 @@ IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestSiteIsolation,
                             QueryParam())),
            nullptr);
 
-  auto request = optimization_guide::DefaultAIPageContentOptions();
-  request->on_critical_path = false;
+  auto request = optimization_guide::DefaultAIPageContentOptions(
+      /*on_critical_path =*/false);
   LoadData(std::move(request));
   content::FetchHistogramsFromChildProcesses();
 
@@ -738,7 +745,7 @@ IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestSiteIsolation,
                "a.com", base::StringPrintf(
                             "/paragraph_iframe_partially_offscreen.html%s",
                             QueryParam())),
-           ActionableAIPageContentOptions());
+           GetActionableAIPageContentOptions());
 
   const auto& root_node = ActionableContentRootNode();
   ASSERT_EQ(root_node.children_nodes().size(), 1);
@@ -772,7 +779,7 @@ IN_PROC_BROWSER_TEST_P(
           "a.com", base::StringPrintf(
                        "/paragraph_iframe_partially_scrolled_offscreen.html%s",
                        QueryParam())),
-      ActionableAIPageContentOptions());
+      GetActionableAIPageContentOptions());
 
   const auto& root_node = ActionableContentRootNode();
   ASSERT_EQ(root_node.children_nodes().size(), 2);
@@ -850,8 +857,9 @@ class PageContentProtoProviderBrowserTestMultiProcess
   content::test::FencedFrameTestHelper fenced_frame_helper_;
 };
 
+// TODO(crbug.com/438250758): Test is flaky.
 IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestMultiProcess,
-                       AIPageContentMultipleCrossSiteFrames) {
+                       DISABLED_AIPageContentMultipleCrossSiteFrames) {
   LoadPage(https_server()->GetURL("a.com", "/iframe_cross_site.html"),
            GetActionableAIPageContentOptions());
 
@@ -902,6 +910,67 @@ IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestMultiProcess,
                    c_geometry.outer_bounding_box().y());
   EXPECT_NE(b_geometry.outer_bounding_box().x(),
             c_geometry.outer_bounding_box().x());
+}
+
+IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestMultiProcess,
+                       AIPageContentMultipleMixedCrossSiteFrames) {
+  LoadPage(https_server()->GetURL("a.com", "/iframe_mixed_cross_site.html"),
+           GetActionableAIPageContentOptions(/*include_same_site_only=*/true));
+
+  const auto& root_node = ActionableContentRootNode();
+
+  EXPECT_EQ(root_node.children_nodes().size(), 2);
+
+  const auto& same_site_frame = root_node.children_nodes()[0];
+  EXPECT_EQ(same_site_frame.content_attributes().attribute_type(),
+            optimization_guide::proto::CONTENT_ATTRIBUTE_IFRAME);
+  const auto& same_site_frame_data =
+      same_site_frame.content_attributes().iframe_data();
+  AssertValidOrigin(same_site_frame_data.frame_data().security_origin(),
+                    ChildFrameAt(web_contents()->GetPrimaryMainFrame(), 0)
+                        ->GetLastCommittedOrigin());
+  EXPECT_FALSE(same_site_frame_data.likely_ad_frame());
+
+  const auto& same_site_frame_root = ContentRootNodeForFrameActionableMode(
+      same_site_frame.children_nodes()[0]);
+  EXPECT_EQ(same_site_frame_root.children_nodes().size(), 1);
+  AssertIsTextNode(same_site_frame_root.children_nodes()[0],
+                   "This page has no title.\n\n");
+  const auto& same_site_geometry =
+      same_site_frame.content_attributes().geometry();
+  AssertRectsEqual(same_site_geometry.outer_bounding_box(),
+                   same_site_geometry.visible_bounding_box());
+
+  const auto& cross_site_frame = root_node.children_nodes()[1];
+  EXPECT_EQ(cross_site_frame.content_attributes().attribute_type(),
+            optimization_guide::proto::CONTENT_ATTRIBUTE_IFRAME);
+  const auto& cross_site_frame_data =
+      cross_site_frame.content_attributes().iframe_data();
+
+  // Ensure the frame data isn't populated and a redaction reason is included.
+  EXPECT_FALSE(cross_site_frame_data.likely_ad_frame());
+  EXPECT_FALSE(cross_site_frame_data.has_frame_data());
+  EXPECT_TRUE(cross_site_frame_data.has_redacted_frame_metadata());
+  EXPECT_EQ(cross_site_frame_data.redacted_frame_metadata().reason(),
+            optimization_guide::proto::IframeData_RedactedFrameMetadata::
+                REASON_CROSS_SITE);
+
+  // The cross-site frame itself should have no children.
+  EXPECT_EQ(cross_site_frame.children_nodes().size(), 0);
+
+  const auto& cross_site_frame_geometry =
+      cross_site_frame.content_attributes().geometry();
+  AssertRectsEqual(cross_site_frame_geometry.outer_bounding_box(),
+                   cross_site_frame_geometry.visible_bounding_box());
+
+  EXPECT_ALMOST_EQ(same_site_geometry.outer_bounding_box().width(),
+                   cross_site_frame_geometry.outer_bounding_box().width());
+  EXPECT_ALMOST_EQ(same_site_geometry.outer_bounding_box().height(),
+                   cross_site_frame_geometry.outer_bounding_box().height());
+  EXPECT_ALMOST_EQ(same_site_geometry.outer_bounding_box().y(),
+                   cross_site_frame_geometry.outer_bounding_box().y());
+  EXPECT_NE(same_site_geometry.outer_bounding_box().x(),
+            cross_site_frame_geometry.outer_bounding_box().x());
 }
 
 INSTANTIATE_TEST_SUITE_P(All,
@@ -1176,6 +1245,36 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestScriptTools, Basic) {
   EXPECT_TRUE(tool.annotations().read_only());
 }
 
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestScriptTools,
+                       NoAnnotations) {
+  LoadPage(https_server()->GetURL("/script_tool_no_annotation.html"));
+
+  const auto& frame_data = page_content().main_frame_data();
+  ASSERT_EQ(frame_data.script_tools().size(), 1u);
+
+  const auto& tool = frame_data.script_tools().at(0);
+  EXPECT_EQ(tool.name(), "echo");
+  EXPECT_EQ(tool.description(), "echo input");
+  EXPECT_EQ(tool.input_schema(),
+            "{\"type\":\"object\",\"properties\":{\"text\":{\"description\":"
+            "\"Value to echo\",\"type\":\"string\"}},\"required\":[\"text\"]}");
+  EXPECT_FALSE(tool.annotations().read_only());
+}
+
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestScriptTools,
+                       NoInputSchema) {
+  LoadPage(https_server()->GetURL("/script_tool_no_input_schema.html"));
+
+  const auto& frame_data = page_content().main_frame_data();
+  ASSERT_EQ(frame_data.script_tools().size(), 1u);
+
+  const auto& tool = frame_data.script_tools().at(0);
+  EXPECT_EQ(tool.name(), "echo");
+  EXPECT_EQ(tool.description(), "echo input");
+  EXPECT_FALSE(tool.has_input_schema());
+  EXPECT_FALSE(tool.annotations().read_only());
+}
+
 class PageContentProtoProviderBrowserTestMediaData
     : public PageContentProtoProviderBrowserTest {
  public:
@@ -1212,7 +1311,7 @@ class PageContentProtoProviderBrowserTestMediaData
 };
 
 IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestMediaData,
-                       NoDataForEmptyDuration) {
+                       NoMediaData) {
   LoadPage(https_server()->GetURL("/media_data/video.html"));
   EXPECT_FALSE(page_content().main_frame_data().has_media_data());
 }
@@ -1222,6 +1321,15 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestMediaData,
   media_session::test::MockMediaSessionMojoObserver observer(
       *content::MediaSession::Get(web_contents()));
   LoadPage(https_server()->GetURL("/media_data/video.html"), nullptr);
+
+  auto mock_provider = std::make_unique<MockMediaTranscriptProvider>();
+  proto::MediaTranscript transcript;
+  transcript.set_text("foo");
+  transcript.set_start_timestamp_milliseconds(1000);
+  EXPECT_CALL(*mock_provider, GetTranscriptsForFrame)
+      .WillOnce(
+          testing::Return(std::vector<proto::MediaTranscript>{transcript}));
+  MediaTranscriptProvider::SetFor(web_contents(), std::move(mock_provider));
 
   WaitForMediaPlaybackStart(web_contents());
   ASSERT_EQ(base::Value(), content::EvalJs(web_contents(), "setupPosition()"));
@@ -1238,6 +1346,9 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestMediaData,
             optimization_guide::proto::MediaDataType::MEDIA_DATA_TYPE_VIDEO);
   EXPECT_EQ(media_data.duration_milliseconds(), 10000);
   EXPECT_TRUE(media_data.is_playing());
+  EXPECT_EQ(media_data.transcripts().size(), 1);
+  EXPECT_EQ(media_data.transcripts(0).text(), "foo");
+  EXPECT_EQ(media_data.transcripts(0).start_timestamp_milliseconds(), 1000);
 
   // The metadata title is default to the page title if not set.
   EXPECT_EQ(media_data.title(), "Test page showing a video");
@@ -1274,6 +1385,7 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestMediaData,
   EXPECT_EQ(media_data.title(), "test title");
   EXPECT_EQ(media_data.artist(), "test artist");
   EXPECT_EQ(media_data.album(), "test album");
+  EXPECT_EQ(media_data.transcripts().size(), 0);
 }
 
 IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestMediaData,
@@ -1304,6 +1416,96 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestMediaData,
             optimization_guide::proto::MediaDataType::MEDIA_DATA_TYPE_VIDEO);
   EXPECT_EQ(media_data.duration_milliseconds(), 10000);
   EXPECT_TRUE(media_data.is_playing());
+  EXPECT_EQ(media_data.transcripts().size(), 0);
+}
+
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestMediaData,
+                       VideoHasOnlyTranscripts) {
+  LoadPage(https_server()->GetURL("/media_data/video.html"), nullptr);
+
+  auto mock_provider = std::make_unique<MockMediaTranscriptProvider>();
+  proto::MediaTranscript transcript;
+  transcript.set_text("foo");
+  transcript.set_start_timestamp_milliseconds(1000);
+  EXPECT_CALL(*mock_provider, GetTranscriptsForFrame)
+      .WillOnce(
+          testing::Return(std::vector<proto::MediaTranscript>{transcript}));
+  MediaTranscriptProvider::SetFor(web_contents(), std::move(mock_provider));
+
+  LoadData();
+
+  // Check that the main frame has media data with transcripts.
+  EXPECT_TRUE(page_content().main_frame_data().has_media_data());
+  const auto& media_data = page_content().main_frame_data().media_data();
+  EXPECT_EQ(media_data.media_data_type(),
+            optimization_guide::proto::MediaDataType::MEDIA_DATA_TYPE_UNKNOWN);
+  EXPECT_EQ(media_data.transcripts().size(), 1);
+  EXPECT_EQ(media_data.transcripts(0).text(), "foo");
+  EXPECT_EQ(media_data.transcripts(0).start_timestamp_milliseconds(), 1000);
+}
+
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
+                       FormRedactionDecisions) {
+  LoadPage(https_server()->GetURL("/redaction.html"));
+
+  EXPECT_EQ(page_content().root_node().children_nodes().size(), 1);
+  const auto& form_node = page_content().root_node().children_nodes()[0];
+  EXPECT_EQ(form_node.content_attributes().attribute_type(),
+            optimization_guide::proto::CONTENT_ATTRIBUTE_FORM);
+
+  ASSERT_EQ(form_node.children_nodes().size(), 3);
+
+  // Text input should have no redaction necessary
+  const auto& text_input = form_node.children_nodes()[0];
+  EXPECT_EQ(text_input.content_attributes().attribute_type(),
+            optimization_guide::proto::CONTENT_ATTRIBUTE_FORM_CONTROL);
+  ASSERT_TRUE(text_input.content_attributes().has_form_control_data());
+  EXPECT_EQ(
+      text_input.content_attributes().form_control_data().redaction_decision(),
+      optimization_guide::proto::REDACTION_DECISION_NO_REDACTION_NECESSARY);
+
+  // Empty password should be unredacted
+  const auto& empty_password = form_node.children_nodes()[1];
+  EXPECT_EQ(empty_password.content_attributes().attribute_type(),
+            optimization_guide::proto::CONTENT_ATTRIBUTE_FORM_CONTROL);
+  ASSERT_TRUE(empty_password.content_attributes().has_form_control_data());
+  EXPECT_EQ(
+      empty_password.content_attributes()
+          .form_control_data()
+          .redaction_decision(),
+      optimization_guide::proto::REDACTION_DECISION_UNREDACTED_EMPTY_PASSWORD);
+
+  // Filled password should be redacted
+  const auto& filled_password = form_node.children_nodes()[2];
+  EXPECT_EQ(filled_password.content_attributes().attribute_type(),
+            optimization_guide::proto::CONTENT_ATTRIBUTE_FORM_CONTROL);
+  ASSERT_TRUE(filled_password.content_attributes().has_form_control_data());
+  EXPECT_EQ(
+      filled_password.content_attributes()
+          .form_control_data()
+          .redaction_decision(),
+      optimization_guide::proto::REDACTION_DECISION_REDACTED_HAS_BEEN_PASSWORD);
+
+  // Change the filled password field to text type and verify it's still
+  // redacted
+  ASSERT_TRUE(content::ExecJs(
+      web_contents(),
+      "document.getElementById('filled-password').type = 'text';"));
+  LoadData();
+
+  // Re-examine the form after the type change
+  const auto& form_node_after = page_content().root_node().children_nodes()[0];
+  ASSERT_EQ(form_node_after.children_nodes().size(), 3);
+  const auto& changed_field = form_node_after.children_nodes()[2];
+  EXPECT_EQ(changed_field.content_attributes().attribute_type(),
+            optimization_guide::proto::CONTENT_ATTRIBUTE_FORM_CONTROL);
+  ASSERT_TRUE(changed_field.content_attributes().has_form_control_data());
+  // Should still be redacted even though type changed to text
+  EXPECT_EQ(
+      changed_field.content_attributes()
+          .form_control_data()
+          .redaction_decision(),
+      optimization_guide::proto::REDACTION_DECISION_REDACTED_HAS_BEEN_PASSWORD);
 }
 
 }  // namespace

@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,7 +13,7 @@ const {html, render} = Lit;
 
 const UIStrings = {
   /**
-   *@description prefix shown next to related insight chips
+   * @description prefix shown next to related insight chips
    */
   insightKeyword: 'Insight',
   /**
@@ -86,7 +86,7 @@ export const DEFAULT_VIEW: (input: ViewInput, output: object, target: HTMLElemen
       const {activeEvent, eventToInsightsMap} = input;
       const relatedInsights = activeEvent ? eventToInsightsMap.get(activeEvent) ?? [] : [];
       if (!activeEvent || eventToInsightsMap.size === 0 || relatedInsights.length === 0) {
-        render(html``, target);
+        render(Lit.nothing, target);
         return;
       }
 

@@ -7,18 +7,38 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/aim/prototype/ui/aim_prototype_animation_context_provider.h"
+#import "ios/chrome/browser/aim/prototype/ui/aim_prototype_consumer.h"
+#import "ios/chrome/browser/aim/prototype/ui/aim_prototype_mutator.h"
+
+@protocol AIMPrototypeMutator;
 @class AIMPrototypeViewController;
+@protocol TextFieldViewContaining;
 
 // Delegate for the AIM prototype view controller.
 @protocol AIMPrototypeViewControllerDelegate
-- (void)aimPrototypeViewControllerDidTapCloseButton:
+- (void)aimPrototypeViewControllerDidTapGalleryButton:
+    (AIMPrototypeViewController*)viewController;
+- (void)aimPrototypeViewControllerDidTapMicButton:
+    (AIMPrototypeViewController*)viewController;
+- (void)aimPrototypeViewControllerDidTapCameraButton:
+    (AIMPrototypeViewController*)viewController;
+- (void)aimPrototypeViewControllerMayShowGalleryPicker:
+    (AIMPrototypeViewController*)viewController;
+- (void)aimPrototypeViewControllerDidTapFileButton:
     (AIMPrototypeViewController*)viewController;
 @end
 
 // View controller for the AIM prototype.
-@interface AIMPrototypeViewController : UIViewController
+@interface AIMPrototypeViewController
+    : UIViewController <AIMPrototypeAnimationContextProvider,
+                        AIMPrototypeConsumer>
 
 @property(nonatomic, weak) id<AIMPrototypeViewControllerDelegate> delegate;
+@property(nonatomic, weak) id<AIMPrototypeMutator> mutator;
+
+/// Sets the omnibox edit view.
+- (void)setEditView:(UIView<TextFieldViewContaining>*)editView;
 
 @end
 

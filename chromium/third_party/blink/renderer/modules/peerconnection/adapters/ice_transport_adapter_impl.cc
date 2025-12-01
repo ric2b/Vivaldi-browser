@@ -94,8 +94,10 @@ void IceTransportAdapterImpl::SetupIceTransportChannel() {
       this, &IceTransportAdapterImpl::OnStateChanged);
   ice_transport_channel()->SignalNetworkRouteChanged.connect(
       this, &IceTransportAdapterImpl::OnNetworkRouteChanged);
-  ice_transport_channel()->SignalRoleConflict.connect(
-      this, &IceTransportAdapterImpl::OnRoleConflict);
+  ice_transport_channel()->SubscribeRoleConflict(
+      [this](webrtc::IceTransportInternal* transport) {
+        OnRoleConflict(transport);
+      });
 }
 
 void IceTransportAdapterImpl::OnGatheringStateChanged(

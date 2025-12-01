@@ -34,7 +34,10 @@ config("wxwidgets_common_config") {
 }
 
 static_library("wxwidgets") {
-  configs += [ ":wxwidgets_common_config" ]
+  configs += [
+    ":wxwidgets_common_config",
+    "//build/config/compiler:no_exit_time_destructors"
+  ]
 
   # Disable chromium-style plugin to prevent errors on absence of override
   # keywords, non-inline complex contructors etc.
@@ -253,6 +256,9 @@ static_library("wxwidgets") {
 
 # Parts of WinSparkle that do not depend on wxWidgets
 source_set("winsparkle_no_gui") {
+  configs += [
+    "//build/config/compiler:no_exit_time_destructors"
+  ]
   sources = [
     "appcast.cc",
     "appcast.h",
@@ -279,7 +285,10 @@ source_set("winsparkle_no_gui") {
 }
 
 source_set("winsparkle") {
-  configs += [ ":wxwidgets_common_config" ]
+  configs += [
+    ":wxwidgets_common_config",
+    "//build/config/compiler:no_exit_time_destructors",
+  ]
   if (is_clang) {
     configs -= [ "//build/config/clang:find_bad_constructs" ]
   }

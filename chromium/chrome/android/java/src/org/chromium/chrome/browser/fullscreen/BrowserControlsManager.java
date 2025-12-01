@@ -314,7 +314,7 @@ public class BrowserControlsManager implements ActivityStateListener, BrowserCon
                     }
 
                     @Override
-                    public void onBrowserControlsConstraintsChanged(
+                    public void onOffsetTagsInfoChanged(
                             Tab tab,
                             BrowserControlsOffsetTagsInfo oldOffsetTagsInfo,
                             BrowserControlsOffsetTagsInfo offsetTagsInfo,
@@ -380,6 +380,10 @@ public class BrowserControlsManager implements ActivityStateListener, BrowserCon
                 // Treat the case of no controls as controls always being totally offscreen.
                 mControlOffsetRatio = 1.0f;
                 break;
+        }
+
+        if (doSyncMinHeightWithTotalHeight()) {
+            mTopControlsMinHeight = mTopControlsHeight;
         }
 
         mRendererTopContentOffset = mTopControlsHeight;
@@ -553,6 +557,10 @@ public class BrowserControlsManager implements ActivityStateListener, BrowserCon
 
     @Override
     public void setTopControlsHeight(int topControlsHeight, int topControlsMinHeight) {
+        if (doSyncMinHeightWithTotalHeight()) {
+            topControlsMinHeight = topControlsHeight;
+        }
+
         if (mTopControlsHeight == topControlsHeight
                 && mTopControlsMinHeight == topControlsMinHeight) {
             return;
@@ -1025,7 +1033,7 @@ public class BrowserControlsManager implements ActivityStateListener, BrowserCon
             BrowserControlsOffsetTagsInfo offsetTagsInfo,
             @BrowserControlsState int constraints) {
         for (BrowserControlsStateProvider.Observer obs : mControlsObservers) {
-            obs.onControlsConstraintsChanged(
+            obs.onOffsetTagsInfoChanged(
                     oldOffsetTagsInfo,
                     offsetTagsInfo,
                     constraints,
@@ -1381,6 +1389,13 @@ public class BrowserControlsManager implements ActivityStateListener, BrowserCon
         if (mActiveTabObserver != null) mActiveTabObserver.destroy();
         mBrowserVisibilityDelegate.destroy();
         if (mTabControlsObserver != null) mTabControlsObserver.destroy();
+    }
+
+    private boolean doSyncMinHeightWithTotalHeight() {
+        // When V2 flag is enabled, this logic is coordinated in TopControlsStacker.
+        if (ChromeFeatureList.sLockTopControlsOnLargeTabletsV2.isEnabled()) return false;
+
+        return BrowserControlsUtils.doSyncMinHeightWithTotalHeight(mActivity);
     }
 
     @NullUnmarked

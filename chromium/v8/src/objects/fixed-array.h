@@ -197,7 +197,8 @@ class TaggedArrayBase : public detail::TaggedArrayHeader<ShapeT, Super> {
   static Handle<Derived> Allocate(
       IsolateT* isolate, int capacity,
       std::optional<DisallowGarbageCollection>* no_gc_out,
-      AllocationType allocation = AllocationType::kYoung);
+      AllocationType allocation = AllocationType::kYoung,
+      AllocationHint hint = AllocationHint());
 
   static constexpr int NewCapacityForIndex(int index, int old_capacity);
 
@@ -224,7 +225,8 @@ V8_OBJECT class FixedArray
   template <class IsolateT>
   static inline Handle<FixedArray> New(
       IsolateT* isolate, int capacity,
-      AllocationType allocation = AllocationType::kYoung);
+      AllocationType allocation = AllocationType::kYoung,
+      AllocationHint hint = AllocationHint());
 
   using Super::CopyElements;
   using Super::MoveElements;
@@ -470,10 +472,10 @@ V8_OBJECT class FixedDoubleArray
   static inline Handle<Object> get(Tagged<FixedDoubleArray> array, int index,
                                    Isolate* isolate);
   inline void set(int index, double value);
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
   inline void set_undefined(int index);
   inline bool is_undefined(int index);
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
 
   inline void set_the_hole(Isolate* isolate, int index);
   inline void set_the_hole(int index);

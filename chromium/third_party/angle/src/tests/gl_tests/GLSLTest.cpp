@@ -4,6 +4,10 @@
 // found in the LICENSE file.
 //
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "test_utils/ANGLETest.h"
 
 #include "test_utils/angle_test_configs.h"
@@ -535,6 +539,9 @@ class GLSLTestNoValidation : public GLSLTest
     GLSLTestNoValidation() { setNoErrorEnabled(true); }
 };
 
+class GLSLTest_ClampPointSize : public GLSLTest
+{};
+
 class GLSLTest_ES3 : public GLSLTest
 {};
 
@@ -565,6 +572,24 @@ std::string BuildBigInitialStackShader(int length)
         result += "} \n";
     }
     return result;
+}
+
+// Test that an empty shader fails to compile
+TEST_P(GLSLTest, EmptyShader)
+{
+    constexpr char kFS[] = "";
+
+    GLuint shader = CompileShader(GL_FRAGMENT_SHADER, kFS);
+    EXPECT_EQ(0u, shader);
+}
+
+// Test that a shader with no main in it fails to compile
+TEST_P(GLSLTest, MissingMain)
+{
+    constexpr char kFS[] = R"(precision mediump float;)";
+
+    GLuint shader = CompileShader(GL_FRAGMENT_SHADER, kFS);
+    EXPECT_EQ(0u, shader);
 }
 
 // Tests a shader from conformance.olges/GL/build/build_017_to_024
@@ -608,6 +633,22 @@ void main()
 })";
 
     ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Simple(), kFS);
+}
+
+// Test relational operations between bools is rejected.
+TEST_P(GLSLTest, BoolLessThan)
+{
+    constexpr char kFS[] = R"(uniform mediump vec4 u;
+void main() {
+  bool a = bool(u.x);
+  bool b = bool(u.y);
+  bool c = a < b;
+  gl_FragColor = vec4(c, !c, c, !c);
+}
+)";
+
+    GLuint shader = CompileShader(GL_FRAGMENT_SHADER, kFS);
+    EXPECT_EQ(0u, shader);
 }
 
 TEST_P(GLSLTest_ES3, CompareEqualityOfArrayOfVectors)
@@ -1990,6 +2031,41 @@ void main(){
     s2.s = vec4(2);
     S s3 = s;
     s.s = s3.s;
+})";
+
+    GLuint shader = CompileShader(GL_VERTEX_SHADER, kVS);
+    EXPECT_NE(0u, shader);
+    glDeleteShader(shader);
+}
+
+// Verify that using a struct as both invariant and non-invariant output works.
+// The shader interface block has a variable name in this variant.
+TEST_P(GLSLTest_ES31, StructBothInvariantAndNot2)
+{
+    ANGLE_SKIP_TEST_IF(!IsGLExtensionEnabled("GL_EXT_shader_io_blocks"));
+
+    constexpr char kVS[] = R"(#version 310 es
+#extension GL_EXT_shader_io_blocks : require
+
+struct S
+{
+    vec4 s;
+};
+
+out Output
+{
+    vec4 x;
+    invariant S s;
+} o;
+
+out S s2;
+
+void main(){
+    o.x = vec4(0);
+    o.s.s = vec4(1);
+    s2.s = vec4(2);
+    S s3 = o.s;
+    o.s.s = s3.s;
 })";
 
     GLuint shader = CompileShader(GL_VERTEX_SHADER, kVS);
@@ -3387,6 +3463,79 @@ void main()
     EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::white);
 }
 
+// Test that textureLod in a discontinuous loop does not generate HLSL loop unrolling errors.
+TEST_P(GLSLTest_ES3, TextureLODShadowSamplerInDiscontinuousLoop)
+{
+    constexpr char kVS[] =
+        R"(#version 300 es
+out float vLoop;
+void main()
+{
+    gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+    vLoop = 10.0;
+})";
+
+    constexpr char kFS0[] =
+        R"(#version 300 es
+precision highp float;
+precision highp sampler2DShadow;
+
+uniform sampler2DShadow shadowMap;
+in float vLoop;
+out vec4 fragColor;
+
+void main()
+{
+    int loopCount = int(vLoop); /* Each fragment may have a different value here.
+                                   This makes it invalid to use gradient functions
+                                   inside the loop! */
+
+    float shadowSum = 0.0;
+    int i = 0;
+    while (i < loopCount)
+    {
+        float x = float(i) + 1.0; /* Makes sure sample operation cannot be optimized
+                                     to be outside of the loop */
+        shadowSum += textureLod(shadowMap, vec3(1.0 / x, 1.0 / x, 0.5), 0.0);
+        ++i;
+    }
+
+    fragColor = vec4(shadowSum, shadowSum, shadowSum, 1.0);
+})";
+
+    ANGLE_GL_PROGRAM(program0, kVS, kFS0);
+    ASSERT_TRUE(program0.valid());
+
+    constexpr char kFS1[] =
+        R"(#version 300 es
+precision highp float;
+precision highp sampler2DShadow;
+
+uniform sampler2DShadow u_testSampler;
+
+out vec4 fragOut4f;
+
+void main() {
+    float a = texture(u_testSampler, vec3(10.0, 10.0, 0.5));
+    for(;;) {
+        if (a != 10.0) {
+            a = textureLod(u_testSampler, vec3(4.0, 4.0, 0.1), 0.0);
+            break;
+        }
+        if (a != 4.0) {
+            a = textureLod(u_testSampler, vec3(10.0, 10.0, 0.4), 0.0);
+            break;
+        }
+        fragOut4f = vec4(0.0);
+        return;
+    }
+    fragOut4f = vec4(a);
+})";
+
+    ANGLE_GL_PROGRAM(program1, kVS, kFS1);
+    ASSERT_TRUE(program1.valid());
+}
+
 // Test that == and != for structs and array types work.
 TEST_P(GLSLTest_ES31, StructAndArrayEqualOperator)
 {
@@ -4120,6 +4269,32 @@ void main() {
     f(green);
 })";
     CompileShader(GL_FRAGMENT_SHADER, kFS);
+    ASSERT_GL_NO_ERROR();
+}
+
+// Tests that a vertex shader retrieving values from a 2D texture to
+// use as an offset for gl_PointSize successfully compiles.
+// https://issues.angleproject.org/444653099
+TEST_P(GLSLTest_ClampPointSize, MonomorphizeMainPrototypeNoCrash)
+{
+    constexpr char kVS[] = R"(
+attribute vec2 a_texCoord;
+struct Wrapper{
+    sampler2D sampler;
+};
+float getRedValue(Wrapper wrapper){
+    return texture2D(wrapper.sampler, a_texCoord).r;
+}
+uniform Wrapper u_wrappedSampler;
+
+void main();
+void main(){
+    float offset = getRedValue(u_wrappedSampler);
+    gl_PointSize = 10.0 + offset;
+    return;
+}
+)";
+    CompileShader(GL_VERTEX_SHADER, kVS);
     ASSERT_GL_NO_ERROR();
 }
 
@@ -21476,6 +21651,11 @@ GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(GLSLTestLoops);
 ANGLE_INSTANTIATE_TEST_ES3(GLSLTestLoops);
 
 ANGLE_INSTANTIATE_TEST_ES2(WebGLGLSLTest);
+
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(GLSLTest_ClampPointSize);
+ANGLE_INSTANTIATE_TEST_ES2_AND(GLSLTest_ClampPointSize,
+                               ES2_OPENGL().enable(Feature::ClampPointSize),
+                               ES2_VULKAN().enable(Feature::ClampPointSize));
 
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(WebGL2GLSLTest);
 ANGLE_INSTANTIATE_TEST_ES3(WebGL2GLSLTest);

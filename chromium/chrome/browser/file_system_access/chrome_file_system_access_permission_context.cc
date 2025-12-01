@@ -36,6 +36,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/download/download_prefs.h"
+#include "chrome/browser/file_system_access/file_system_access_features.h"
 #include "chrome/browser/file_system_access/file_system_access_permission_request_manager.h"
 #include "chrome/browser/permissions/one_time_permissions_tracker_factory.h"
 #include "chrome/browser/permissions/one_time_permissions_tracker_observer.h"
@@ -66,13 +67,14 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/buildflags/buildflags.h"
+#include "third_party/blink/public/common/features_generated.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_manager.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
+#include "base/android/apk_info.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/ui/android/tab_model/tab_model.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
@@ -221,7 +223,8 @@ void ShowFileSystemAccessDangerousFileDialogOnUIThread(
 bool ContainsInvalidDNSCharacter(base::FilePath::StringType hostname) {
   for (base::FilePath::CharType c : hostname) {
     if (!((c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z') ||
-          (c >= L'0' && c <= L'9') || (c == L'.') || (c == L'-'))) {
+          (c >= L'0' && c <= L'9') || (c == L'.') || (c == L'-') ||
+          (c == L'_'))) {
       return true;
     }
   }
@@ -1004,18 +1007,24 @@ class ChromeFileSystemAccessPermissionContext::PermissionGrantImpl
     return value;
   }
 
+  // Updates the in-memory permission grant for the `new_path` in the `grants`
+  // map using the same grant from the `old_path`, and removes the grant entry
+  // for the `old_path`.
+  // If `allow_overwrite` is true, this will replace any pre-existing grant at
+  // `new_path`.
   static void UpdateGrantPath(
       std::map<base::FilePath, raw_ptr<PermissionGrantImpl, CtnExperimental>>&
           grants,
       const content::PathInfo& old_path,
-      const content::PathInfo& new_path) {
+      const content::PathInfo& new_path,
+      bool allow_overwrite) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-    auto entry_it =
+    auto old_path_it =
         std::ranges::find_if(grants, [&old_path](const auto& entry) {
           return entry.first == old_path.path;
         });
 
-    if (entry_it == grants.end()) {
+    if (old_path_it == grants.end()) {
       // There must be an entry for an ancestor of this entry. Nothing to do
       // here.
       //
@@ -1024,15 +1033,94 @@ class ChromeFileSystemAccessPermissionContext::PermissionGrantImpl
       return;
     }
 
-    DCHECK_EQ(entry_it->second->GetActivePermissionStatus(),
+    DCHECK_EQ(old_path_it->second->GetActivePermissionStatus(),
               PermissionStatus::GRANTED);
 
-    auto* const grant_impl = entry_it->second.get();
-    grant_impl->SetPath(new_path);
+    auto* const grant_to_move = old_path_it->second.get();
 
-    // Update the permission grant's key in the map of active permissions.
-    grants.erase(entry_it);
-    grants.emplace(new_path.path, grant_impl);
+    if (allow_overwrite) {
+      // Check for a collision at the new path. If a different grant already
+      // exists at the destination, its status must be set to DENIED before it
+      // is replaced in the `grants` map.
+      //
+      // This prevents a DCHECK failure in `PermissionGrantDestroyed()` that can
+      // occur depending on object destruction order. Consider this scenario:
+      //   1. `grant1` (for `handle1`) exists for `path1`.
+      //   2. `handle2` (with `grant2`) is moved to `path1`.
+      //   3. The `grants` map entry for `path1` is updated to point to
+      //   `grant2`,
+      //      orphaning `grant1`. `grant1` is now untracked but still `GRANTED`.
+      //   4. If `handle2` is destroyed first, the map entry for `path1` is
+      //   removed.
+      //   5. When `handle1` is later destroyed, `PermissionGrantDestroyed()` is
+      //      called for `grant1`. It fails a DCHECK because the grant is not in
+      //      the map and its status is `GRANTED` instead of the expected
+      //      `DENIED`.
+      //
+      // By setting the orphaned grant's status to DENIED here, the DCHECK will
+      // pass regardless of destruction order.
+      auto new_path_it = grants.find(new_path.path);
+      if (new_path_it != grants.end() &&
+          new_path_it->second.get() != grant_to_move) {
+        // A different grant exists at the destination. Revoke it before it gets
+        // orphaned.
+        new_path_it->second->SetStatus(
+            PermissionStatus::DENIED,
+            // Only update the in-memory permission, as the persistent
+            // permission should be updated by the call site.
+            PersistedPermissionOptions::kDoNotUpdatePersistedPermission);
+      }
+    }
+
+    grant_to_move->SetPath(new_path);
+
+    // `insert_or_assign` is used when overwriting is allowed, as it will
+    // replace any grant that already exists at the destination path. `emplace`
+    // is used otherwise to preserve the old behavior of not overwriting
+    // existing grants.
+    grants.erase(old_path_it);
+    if (allow_overwrite) {
+      grants.insert_or_assign(new_path.path, grant_to_move);
+    } else {
+      grants.emplace(new_path.path, grant_to_move);
+    }
+  }
+
+  // Downgrades the in-memory read permission grant for the `path` if it exist
+  //  in `grants`. This is different from
+  // ChromeFileSystemAccessPermissionContext::RevokeGrant in that this method
+  // does not reset the persisted permission state.
+  static void DowngradeReadGrantInMemory(
+      std::map<base::FilePath, raw_ptr<PermissionGrantImpl, CtnExperimental>>&
+          grants,
+      const content::PathInfo& path) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    auto entry_it = std::ranges::find_if(grants, [&path](const auto& entry) {
+      return entry.first == path.path;
+    });
+    if (entry_it == grants.end()) {
+      return;
+    }
+
+    DCHECK_EQ(entry_it->second->GetActivePermissionStatus(),
+              PermissionStatus::GRANTED);
+    auto* const grant_impl = entry_it->second.get();
+    // Updates the in-memory status of the grant synchronously. This ensures
+    // that any existing handle instances that hold a `scoped_refptr` to this
+    // grant will immediately see the updated permission status.
+    //
+    // The status is set to `DENIED` instead of `ASK`. This is critical to
+    // prevent a race condition. The race may occur in
+    // `PermissionGrantImpl::GetStatus()`, which checks
+    // `CanAutoGrantViaPersistentPermission()` if the in-memory status is
+    // `ASK`. Because the on-disk persisted permission is updated
+    // asynchronously after a `remove()`, a subsequent query for a new handle
+    // (e.g., from IndexedDB) could read the stale on-disk state and
+    // incorrectly return `GRANTED`.
+    grant_impl->SetStatus(
+        PermissionStatus::DENIED,
+        PersistedPermissionOptions::kDoNotUpdatePersistedPermission);
   }
 
  protected:
@@ -1259,6 +1347,10 @@ struct ChromeFileSystemAccessPermissionContext::OriginState {
   std::map<base::FilePath, raw_ptr<PermissionGrantImpl, CtnExperimental>>
       write_grants;
 
+  // Stores paths whose read grants have been downgraded to ASK after a
+  // remove() call and are eligible for restoration.
+  std::set<base::FilePath> downgraded_read_paths;
+
   PersistedGrantStatus persisted_grant_status = PersistedGrantStatus::kLoaded;
 
   // Cached data about whether this origin has an actively installed web app.
@@ -1325,15 +1417,21 @@ ChromeFileSystemAccessPermissionContext::
     }
   }
 #endif
-
-  ResetBlockPaths();
 }
 
 ChromeFileSystemAccessPermissionContext::
     ~ChromeFileSystemAccessPermissionContext() = default;
 
-void ChromeFileSystemAccessPermissionContext::ResetBlockPaths() {
-  is_block_path_rules_init_complete_ = false;
+void ChromeFileSystemAccessPermissionContext::InitializeBlockPaths() {
+  // This method should only be called when the `block_path_rules_status_` are
+  // not initialized.
+  CHECK_EQ(block_path_rules_status_, ChromeFileSystemAccessPermissionContext::
+                                         BlockPathRulesStatus::kNotInitialized);
+  InitializeBlockPathsInternal();
+}
+
+void ChromeFileSystemAccessPermissionContext::InitializeBlockPathsInternal() {
+  block_path_rules_status_ = BlockPathRulesStatus::kInitializationStarted;
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&GenerateBlockPaths, should_normalize_file_path_),
@@ -1342,13 +1440,13 @@ void ChromeFileSystemAccessPermissionContext::ResetBlockPaths() {
 }
 
 void ChromeFileSystemAccessPermissionContext::ResetBlockPathsForTesting() {
-  ResetBlockPaths();
+  InitializeBlockPathsInternal();
 }
 
 void ChromeFileSystemAccessPermissionContext::UpdateBlockPaths(
     std::unique_ptr<BlockPathRules> block_path_rules) {
   block_path_rules_ = std::move(block_path_rules);
-  is_block_path_rules_init_complete_ = true;
+  block_path_rules_status_ = BlockPathRulesStatus::kInitialized;
   block_rules_check_callbacks_.Notify(*block_path_rules_.get());
 }
 
@@ -1961,10 +2059,10 @@ void ChromeFileSystemAccessPermissionContext::CheckPathAgainstBlocklist(
   // The only check for content-URIs is that they are not from an internal
   // FileProvider.
   if (path_info.path.IsContentUri()) {
-    base::android::BuildInfo* info = base::android::BuildInfo::GetInstance();
     std::move(callback).Run(base::StartsWith(
         path_info.path.value(),
-        base::StrCat({"content://", info->package_name(), "."}),
+        base::StrCat(
+            {"content://", base::android::apk_info::package_name(), "."}),
         base::CompareCase::INSENSITIVE_ASCII));
     return;
   }
@@ -1984,20 +2082,32 @@ void ChromeFileSystemAccessPermissionContext::CheckPathAgainstBlocklist(
         BlockType::kBlockAllChildren);
   }
 
-  if (is_block_path_rules_init_complete_) {
-    // The rules initialization is completed, we can just post the task to a
-    // anonymous blocking traits.
-    CheckShouldBlockAccessToPathAndReply(path_info.path, handle_type,
-                                         extra_rules, std::move(callback),
-                                         *block_path_rules_.get());
-    return;
+  switch (block_path_rules_status_) {
+    case BlockPathRulesStatus::kInitialized:
+      // If the `block_path_rules_status_` is already initilizaed, we can just
+      // post the task to a anonymous blocking traits.
+      CheckShouldBlockAccessToPathAndReply(path_info.path, handle_type,
+                                           extra_rules, std::move(callback),
+                                           *block_path_rules_.get());
+      return;
+
+    case BlockPathRulesStatus::kNotInitialized:
+      // If the `block_path_rules_status_` is `kNotInitialized`, lazy initialize
+      // the `block_path_rules_`.
+      // This will make the status `kInitializationStarted`, so fallthrough to
+      // the next block.
+      InitializeBlockPaths();
+      [[fallthrough]];
+
+    case BlockPathRulesStatus::kInitializationStarted:
+      // The check must be performed after the rules initialization is done.
+      block_rules_check_subscription_.push_back(
+          block_rules_check_callbacks_.Add(
+              base::BindOnce(&ChromeFileSystemAccessPermissionContext::
+                                 CheckShouldBlockAccessToPathAndReply,
+                             weak_factory_.GetWeakPtr(), path_info.path,
+                             handle_type, extra_rules, std::move(callback))));
   }
-  // The check must be performed after the rules initialization is done.
-  block_rules_check_subscription_.push_back(block_rules_check_callbacks_.Add(
-      base::BindOnce(&ChromeFileSystemAccessPermissionContext::
-                         CheckShouldBlockAccessToPathAndReply,
-                     weak_factory_.GetWeakPtr(), path_info.path, handle_type,
-                     extra_rules, std::move(callback))));
 }
 
 void ChromeFileSystemAccessPermissionContext::PerformAfterWriteChecks(
@@ -2305,14 +2415,19 @@ void ChromeFileSystemAccessPermissionContext::NotifyEntryMoved(
     return;
   }
 
+  // It's possible `new_path` already has existing persistent permission.
+  // See crbug.com/423663220.
+  bool allow_overwrite = base::FeatureList::IsEnabled(
+      features::kFileSystemAccessMoveWithOverwrite);
+
   bool updated = false;
   auto it = active_permissions_map_.find(origin);
   if (it != active_permissions_map_.end()) {
     // TODO(crbug.com/40245144): Consolidate superfluous child grants.
     PermissionGrantImpl::UpdateGrantPath(it->second.write_grants, old_path,
-                                         new_path);
+                                         new_path, allow_overwrite);
     PermissionGrantImpl::UpdateGrantPath(it->second.read_grants, old_path,
-                                         new_path);
+                                         new_path, allow_overwrite);
     updated = true;
   }
   if (base::FeatureList::IsEnabled(
@@ -2322,6 +2437,14 @@ void ChromeFileSystemAccessPermissionContext::NotifyEntryMoved(
     const std::unique_ptr<Object> object =
         GetGrantedObject(origin, PathAsPermissionKey(old_path.path));
     if (object) {
+      if (allow_overwrite) {
+        // Revoke any pre-existing permission at the destination first. This is
+        // a no-op if no permission exists. Otherwise this will notify
+        // permission observers twice: once for revocation and once for update.
+        const std::string new_key(PathAsPermissionKey(new_path.path));
+        RevokeObjectPermission(origin, new_key);
+      }
+
       base::Value::Dict new_object = object->value.Clone();
       new_object.Set(kPermissionPathKey, base::FilePathToValue(new_path.path));
       new_object.Set(kPermissionDisplayNameKey, new_path.display_name);
@@ -2332,6 +2455,93 @@ void ChromeFileSystemAccessPermissionContext::NotifyEntryMoved(
 
   if (updated) {
     ScheduleUsageIconUpdate();
+  }
+
+  if (base::FeatureList::IsEnabled(
+          blink::features::kFileSystemAccessRevokeReadOnRemove)) {
+    MaybeRestoreReadPermission(origin, new_path.path);
+  }
+}
+
+void ChromeFileSystemAccessPermissionContext::NotifyEntryRemoved(
+    const url::Origin& origin,
+    const content::PathInfo& path) {
+  CHECK(base::FeatureList::IsEnabled(
+      blink::features::kFileSystemAccessRevokeReadOnRemove));
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (AncestorHasActivePermission(origin, path.path, GrantType::kRead)) {
+    // If `path` has an active read grant inherited from its ancestor, don't
+    // downgrade its permission, as it will still get ancestor grant by default.
+    return;
+  }
+
+  bool updated = false;
+  auto it = active_permissions_map_.find(origin);
+  if (it != active_permissions_map_.end()) {
+    PermissionGrantImpl::DowngradeReadGrantInMemory(it->second.read_grants,
+                                                    path);
+    // Marks the path as downgraded so that it can be restored later.
+    it->second.downgraded_read_paths.insert(path.path);
+    updated = true;
+  }
+
+  if (base::FeatureList::IsEnabled(
+          features::kFileSystemAccessPersistentPermissions)) {
+    // Active grants are a subset of persisted grants, so we also need to update
+    // persisted grants, which is not covered by
+    // `PermissionGrantImpl::DowngradeReadGrantInMemory()` above.
+    const std::unique_ptr<Object> object =
+        GetGrantedObject(origin, PathAsPermissionKey(path.path));
+    if (object) {
+      base::Value::Dict new_object = object->value.Clone();
+      new_object.Set(GetGrantKeyFromGrantType(GrantType::kRead), false);
+      UpdateObjectPermission(origin, object->value, std::move(new_object));
+      updated = true;
+    }
+  }
+
+  if (updated) {
+    ScheduleUsageIconUpdate();
+  }
+}
+
+void ChromeFileSystemAccessPermissionContext::NotifyEntryModified(
+    const url::Origin& origin,
+    const content::PathInfo& path) {
+  CHECK(base::FeatureList::IsEnabled(
+      blink::features::kFileSystemAccessRevokeReadOnRemove));
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  MaybeRestoreReadPermission(origin, path.path);
+}
+
+void ChromeFileSystemAccessPermissionContext::MaybeRestoreReadPermission(
+    const url::Origin& origin,
+    const base::FilePath& path) {
+  auto it = active_permissions_map_.find(origin);
+  if (it == active_permissions_map_.end()) {
+    return;
+  }
+  OriginState& origin_state = it->second;
+
+  // Return early if the path was not previously downgraded.
+  if (origin_state.downgraded_read_paths.find(path) ==
+      origin_state.downgraded_read_paths.end()) {
+    return;
+  }
+
+  origin_state.downgraded_read_paths.erase(path);
+
+  // Set the grant's status back to GRANTED if it was previously downgraded.
+  auto grant_it = origin_state.read_grants.find(path);
+  // Exclude the case where the path does not exist in the read_grants map.
+  if (grant_it != origin_state.read_grants.end()) {
+    // Since `NotifyEntryRemoved()` revokes both the active and persistent read
+    // permissions, this call must restore both to ensure consistency.
+    grant_it->second->SetStatus(
+        PermissionStatus::GRANTED,
+        PersistedPermissionOptions::kUpdatePersistedPermission);
   }
 }
 
@@ -3368,5 +3578,15 @@ void ChromeFileSystemAccessPermissionContext::UpdatePageAction(
     FileSystemAccessPageActionController* controller) {
   CHECK(controller);
   controller->UpdateVisibility();
+}
+
+bool ChromeFileSystemAccessPermissionContext::
+    IsPathInDowngradedReadPathsForTesting(const url::Origin& origin,
+                                          const base::FilePath& path) {
+  auto it = active_permissions_map_.find(origin);
+  if (it == active_permissions_map_.end()) {
+    return false;
+  }
+  return it->second.downgraded_read_paths.count(path) > 0;
 }
 #endif

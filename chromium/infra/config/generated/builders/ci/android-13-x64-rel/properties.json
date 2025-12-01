@@ -10,10 +10,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-13-x64-rel",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-android-archive",
               "builder_group": "chromium.android",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_android_config": {
@@ -43,7 +42,7 @@
         {
           "bucket": "ci",
           "builder": "android-13-x64-rel",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         }
       ],
       "mirroring_builder_group_and_names": [

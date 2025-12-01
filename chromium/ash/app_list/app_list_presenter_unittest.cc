@@ -39,7 +39,6 @@
 #include "ash/app_list/views/search_result_list_view.h"
 #include "ash/app_list/views/search_result_page_anchored_dialog.h"
 #include "ash/app_list/views/search_result_page_view.h"
-#include "ash/assistant/ui/assistant_ui_constants.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/display/display_configuration_controller_test_api.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
@@ -122,7 +121,7 @@ SearchModel* GetSearchModel() {
 }
 
 int64_t GetPrimaryDisplayId() {
-  return display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  return display::Screen::Get()->GetPrimaryDisplay().id();
 }
 
 void EnableTabletMode(bool enable) {
@@ -680,8 +679,7 @@ class PopulatedAppListTest : public AshTestBase {
   }
 
   void RotateScreen() {
-    display::Display display =
-        display::Screen::GetScreen()->GetPrimaryDisplay();
+    display::Display display = display::Screen::Get()->GetPrimaryDisplay();
     display_manager()->SetDisplayRotation(
         display.id(), display::Display::ROTATE_90,
         display::Display::RotationSource::ACTIVE);
@@ -1658,41 +1656,6 @@ TEST_P(AppListBubbleAndTabletTest, ClearSearchButtonClearsSearch) {
             client->GetAndResetPastSearchQueries());
 }
 
-// Regression test for b/204482740.
-TEST_P(AppListBubbleAndTabletTest, AppListEventTargeterForAssistantScrolling) {
-  EnableTabletMode(tablet_mode_param());
-  EnsureLauncherShown();
-
-  // A custom event targeter is installed.
-  aura::Window* window = Shell::Get()->app_list_controller()->GetWindow();
-  ASSERT_TRUE(window);
-  aura::WindowTargeter* targeter = window->targeter();
-  ASSERT_TRUE(targeter);
-
-  // Simulate an assistant card with a webview being shown, which sets a window
-  // property on its window. See AssistantCardElementView::AddedToWidget().
-  aura::Window* child =
-      aura::test::CreateTestWindowWithBounds(gfx::Rect(100, 100), window);
-  child->SetProperty(assistant::ui::kOnlyAllowMouseClickEvents, true);
-
-  // Scroll events are blocked for that window.
-  constexpr int offset = 10;
-  ui::ScrollEvent scroll_down(ui::EventType::kScroll, gfx::Point(),
-                              base::TimeTicks::Now(), ui::EF_NONE, 0, offset, 0,
-                              offset, /*finger_count=*/2);
-  EXPECT_FALSE(targeter->SubtreeShouldBeExploredForEvent(child, scroll_down));
-
-  // Click events are not blocked.
-  ui::MouseEvent press(ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
-                       base::TimeTicks::Now(), ui::EF_NONE,
-                       ui::EF_LEFT_MOUSE_BUTTON);
-  ui::MouseEvent release(ui::EventType::kMouseReleased, gfx::Point(),
-                         gfx::Point(), base::TimeTicks::Now(), ui::EF_NONE,
-                         ui::EF_LEFT_MOUSE_BUTTON);
-  EXPECT_TRUE(targeter->SubtreeShouldBeExploredForEvent(child, press));
-  EXPECT_TRUE(targeter->SubtreeShouldBeExploredForEvent(child, press));
-}
-
 // Tests that apps container/page does not have a separator between apps grid
 // and recent apps/continue section if neither continue section nor recent apps
 // are shown.
@@ -2286,7 +2249,7 @@ TEST_P(AppListBubbleAndTabletTest, RotationAnimationSmoke) {
   EnableTabletMode(tablet_mode_param());
   EnsureLauncherShown();
 
-  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
+  display::Display display = display::Screen::Get()->GetPrimaryDisplay();
   ScreenRotationAnimator* animator =
       DisplayConfigurationControllerTestApi(
           Shell::Get()->display_configuration_controller())
@@ -2307,7 +2270,7 @@ TEST_P(AppListBubbleAndTabletTest, ShutdownDuringRotationAnimationSmoke) {
   EnableTabletMode(tablet_mode_param());
   EnsureLauncherShown();
 
-  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
+  display::Display display = display::Screen::Get()->GetPrimaryDisplay();
   ScreenRotationAnimator* animator =
       DisplayConfigurationControllerTestApi(
           Shell::Get()->display_configuration_controller())
@@ -2333,7 +2296,7 @@ TEST_P(AppListBubbleAndTabletTest, RotationAnimationWithFolderSmoke) {
   GestureTapOn(apps_grid_view_->GetItemViewAt(1));
   ASSERT_TRUE(AppListIsInFolderView());
 
-  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
+  display::Display display = display::Screen::Get()->GetPrimaryDisplay();
   ScreenRotationAnimator* animator =
       DisplayConfigurationControllerTestApi(
           Shell::Get()->display_configuration_controller())
@@ -2372,7 +2335,7 @@ TEST_P(AppListBubbleAndTabletTest, RotationAnimationInSearchSmoke) {
   // The result list is updated asynchronously.
   base::RunLoop().RunUntilIdle();
 
-  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
+  display::Display display = display::Screen::Get()->GetPrimaryDisplay();
   ScreenRotationAnimator* animator =
       DisplayConfigurationControllerTestApi(
           Shell::Get()->display_configuration_controller())
@@ -3162,8 +3125,8 @@ TEST_P(AppListPresenterTest, RemainVisibleWhenFocusingToApplistContainer) {
 
   aura::Window* applist_container = Shell::GetContainer(
       Shell::GetPrimaryRootWindow(), kShellWindowId_AppListContainer);
-  std::unique_ptr<aura::Window> window(
-      aura::test::CreateTestWindowWithId(0, applist_container));
+  std::unique_ptr<aura::Window> window = aura::test::CreateTestWindow(
+      {.parent = applist_container, .bounds = {100, 100}, .window_id = 0});
   wm::ActivateWindow(window.get());
   GetAppListTestHelper()->WaitUntilIdle();
 

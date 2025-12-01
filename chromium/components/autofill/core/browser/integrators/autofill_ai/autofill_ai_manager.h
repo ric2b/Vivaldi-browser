@@ -7,7 +7,6 @@
 
 #include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
-#include "base/uuid.h"
 #include "components/autofill/core/browser/foundations/autofill_client.h"
 #include "components/autofill/core/browser/integrators/autofill_ai/metrics/autofill_ai_logger.h"
 #include "components/autofill/core/browser/strike_databases/autofill_ai/autofill_ai_save_strike_database_by_attribute.h"
@@ -18,10 +17,6 @@
 #include "components/autofill/core/common/unique_ids.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "url/gurl.h"
-
-namespace base {
-class Uuid;
-}  // namespace base
 
 namespace autofill {
 
@@ -35,8 +30,8 @@ struct Suggestion;
 // class is an interface.
 class AutofillAiManager {
  public:
-  AutofillAiManager(autofill::AutofillClient* client,
-                    autofill::StrikeDatabase* strike_database);
+  AutofillAiManager(AutofillClient* client,
+                    strike_database::StrikeDatabaseBase* strike_database);
   AutofillAiManager(const AutofillAiManager&) = delete;
   AutofillAiManager& operator=(const AutofillAiManager&) = delete;
   virtual ~AutofillAiManager();
@@ -87,27 +82,47 @@ class AutofillAiManager {
 
   // Strike database related methods:
   void AddStrikeForSaveAttempt(const GURL& url, const EntityInstance& entity);
-  void AddStrikeForUpdateAttempt(const base::Uuid& entity_uuid);
+  void AddStrikeForUpdateAttempt(const EntityInstance::EntityId& entity_uuid);
   void ClearStrikesForSave(const GURL& url, const EntityInstance& entity);
-  void ClearStrikesForUpdate(const base::Uuid& entity_uuid);
+  void ClearStrikesForUpdate(const EntityInstance::EntityId& entity_uuid);
   bool IsSaveBlockedByStrikeDatabase(const GURL& url,
                                      const EntityInstance& entity) const;
-  bool IsUpdateBlockedByStrikeDatabase(const base::Uuid& entity_uuid) const;
+  bool IsUpdateBlockedByStrikeDatabase(
+      const EntityInstance::EntityId& entity_uuid) const;
+
+  // Given `form` that is observed at submission, returns candidates for showing
+  // either save or update prompts. The returned list of candidates is ordered
+  // by decreasing priority.
+  //
+  // The function returns two possible type of candidates:
+  // - A single EntityInstance (and std::nullopt) if the entity qualifies for a
+  //   save prompt.
+  // - A pair of two entities if the entity qualifies for an update prompt. In
+  //   that case, the first entity in the pair would be the new entity (after
+  //   update) and the second one the old entity (before update).
+  std::vector<std::pair<EntityInstance, std::optional<EntityInstance>>>
+  GetEntitySaveAndUpdatePromptCandidates(const FormStructure& form);
 
   // Attempts to display an import bubble for `form` if Autofill AI is
   // interested in the form. Returns whether an import bubble will be shown.
-  bool MaybeImportForm(const FormStructure& form);
+  bool MaybeImportForm(const FormStructure& form, ukm::SourceId ukm_source_id);
 
   // Updates the `EntityDataManager` and the save strike database depending on
   // the prompt `result`.
   void HandleSavePromptResult(
       const GURL& form_url,
+      uint64_t form_session_id,
+      const std::string& domain,
+      ukm::SourceId ukm_source_id,
       const EntityInstance& entity,
       AutofillClient::EntitySaveOrUpdatePromptResult result);
   // Updates the `EntityDataManager` and the update strike database depending on
   // the prompt `result`.
   void HandleUpdatePromptResult(
-      const base::Uuid& entity_uuid,
+      uint64_t form_session_id,
+      const std::string& domain,
+      ukm::SourceId ukm_source_id,
+      const EntityInstance::EntityId& entity_uuid,
       AutofillClient::EntitySaveOrUpdatePromptResult result);
 
   LogManager* GetCurrentLogManager();

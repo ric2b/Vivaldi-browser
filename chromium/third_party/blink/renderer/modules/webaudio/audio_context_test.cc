@@ -132,13 +132,11 @@ class MockMediaDevicesDispatcherHost final
   void SetPreferredSinkId(const String& sink_id,
                           SetPreferredSinkIdCallback callback) override {}
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   void CloseFocusWindowOfOpportunity(const String& label) override {}
 
   void ProduceSubCaptureTargetId(
       SubCaptureTarget::Type type,
       ProduceSubCaptureTargetIdCallback callback) override {}
-#endif
 
  private:
   mojo::RemoteSet<mojom::blink::MediaDevicesListener> listeners_;
@@ -241,9 +239,8 @@ class AudioContextTest : public PageTestBase {
 
     GetFrame().DomWindow()->GetBrowserInterfaceBroker().SetBinderForTesting(
         mojom::blink::MediaDevicesDispatcherHost::Name_,
-        WTF::BindRepeating(
-            &MockMediaDevicesDispatcherHost::BindRequest,
-            WTF::Unretained(mock_media_devices_dispatcher_host_.get())));
+        BindRepeating(&MockMediaDevicesDispatcherHost::BindRequest,
+                      Unretained(mock_media_devices_dispatcher_host_.get())));
   }
 
   void TearDown() override {

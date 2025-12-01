@@ -56,7 +56,6 @@
   if (keyWindow) {
     [keyWindow showPageZoomViewController:self.viewController];
   } else {
-    NSLog(@"Warning: Could not find key window to present zoom controller");
     [self stop];
   }
 }
@@ -85,7 +84,6 @@
   // Find the root view controller
   UIViewController *rootViewController = keyWindow.rootViewController;
   if (!rootViewController) {
-    NSLog(@"Error: Could not find root view controller to present settings");
     return;
   }
 

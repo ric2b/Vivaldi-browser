@@ -70,42 +70,6 @@ using IR_RobustnessWithIntegerRangeAnalysisTest = TransformTest;
 // Test signed vs unsigned indices.
 ////////////////////////////////////////////////////////////////
 
-TEST_P(IR_RobustnessTest, VectorLoad_ConstIndex) {
-    auto* func = b.Function("foo", ty.u32());
-    b.Append(func->Block(), [&] {
-        auto* vec = b.Var("vec", ty.ptr(function, ty.vec4<u32>()));
-        auto* load = b.LoadVectorElement(vec, b.Constant(5_u));
-        b.Return(func, load);
-    });
-
-    auto* src = R"(
-%foo = func():u32 {
-  $B1: {
-    %vec:ptr<function, vec4<u32>, read_write> = var undef
-    %3:u32 = load_vector_element %vec, 5u
-    ret %3
-  }
-}
-)";
-    EXPECT_EQ(src, str());
-
-    auto* expect = R"(
-%foo = func():u32 {
-  $B1: {
-    %vec:ptr<function, vec4<u32>, read_write> = var undef
-    %3:u32 = load_vector_element %vec, 3u
-    ret %3
-  }
-}
-)";
-
-    RobustnessConfig cfg;
-    cfg.clamp_function = GetParam();
-    Run(Robustness, cfg);
-
-    EXPECT_EQ(GetParam() ? expect : src, str());
-}
-
 TEST_P(IR_RobustnessTest, VectorLoad_ConstIndexViaLet) {
     auto* func = b.Function("foo", ty.u32());
     b.Append(func->Block(), [&] {
@@ -214,42 +178,6 @@ TEST_P(IR_RobustnessTest, VectorLoad_DynamicIndex_Signed) {
     %5:u32 = min %4, 3u
     %6:u32 = load_vector_element %vec, %5
     ret %6
-  }
-}
-)";
-
-    RobustnessConfig cfg;
-    cfg.clamp_function = GetParam();
-    Run(Robustness, cfg);
-
-    EXPECT_EQ(GetParam() ? expect : src, str());
-}
-
-TEST_P(IR_RobustnessTest, VectorStore_ConstIndex) {
-    auto* func = b.Function("foo", ty.void_());
-    b.Append(func->Block(), [&] {
-        auto* vec = b.Var("vec", ty.ptr(function, ty.vec4<u32>()));
-        b.StoreVectorElement(vec, b.Constant(5_u), b.Constant(0_u));
-        b.Return(func);
-    });
-
-    auto* src = R"(
-%foo = func():void {
-  $B1: {
-    %vec:ptr<function, vec4<u32>, read_write> = var undef
-    store_vector_element %vec, 5u, 0u
-    ret
-  }
-}
-)";
-    EXPECT_EQ(src, str());
-
-    auto* expect = R"(
-%foo = func():void {
-  $B1: {
-    %vec:ptr<function, vec4<u32>, read_write> = var undef
-    store_vector_element %vec, 3u, 0u
-    ret
   }
 }
 )";
@@ -3556,6 +3484,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixLoad_i8_StorageRuntimeArray_ConstStride_ColMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(storage, ty.array<i32>()));
     arr->SetBindingPoint(0, 0);
     mod.root_block->Append(arr);
@@ -3632,6 +3562,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixLoad_u8_StorageRuntimeArray_ConstStride_ColMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(storage, ty.array<u32>()));
     arr->SetBindingPoint(0, 0);
     mod.root_block->Append(arr);
@@ -3787,6 +3719,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixLoad_i8_StorageRuntimeArray_DynamicStride_ColMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(storage, ty.array<i32>()));
     arr->SetBindingPoint(0, 0);
     mod.root_block->Append(arr);
@@ -3867,6 +3801,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixLoad_u8_StorageRuntimeArray_DynamicStride_ColMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(storage, ty.array<u32>()));
     arr->SetBindingPoint(0, 0);
     mod.root_block->Append(arr);
@@ -4026,6 +3962,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixLoad_i8_StorageRuntimeArray_DynamicStride_RowMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(storage, ty.array<i32>()));
     arr->SetBindingPoint(0, 0);
     mod.root_block->Append(arr);
@@ -4106,6 +4044,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixLoad_u8_StorageRuntimeArray_DynamicStride_RowMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(storage, ty.array<u32>()));
     arr->SetBindingPoint(0, 0);
     mod.root_block->Append(arr);
@@ -4263,6 +4203,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixLoad_i8_WorkgroupFixedArray_DynamicStride_ColMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(workgroup, ty.array<i32, 1024>()));
     mod.root_block->Append(arr);
 
@@ -4340,6 +4282,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixLoad_u8_WorkgroupFixedArray_DynamicStride_ColMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(workgroup, ty.array<u32, 1024>()));
     mod.root_block->Append(arr);
 
@@ -4457,6 +4401,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixLoad_i8_WorkgroupFixedArray_ConstStrideAndOffset) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(workgroup, ty.array<i32, 1024>()));
     mod.root_block->Append(arr);
 
@@ -4495,6 +4441,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixLoad_u8_WorkgroupFixedArray_ConstStrideAndOffset) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(workgroup, ty.array<u32, 1024>()));
     mod.root_block->Append(arr);
 
@@ -4606,6 +4554,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixStore_i8_StorageRuntimeArray_ConstStride_ColMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(storage, ty.array<i32>()));
     arr->SetBindingPoint(0, 0);
     mod.root_block->Append(arr);
@@ -4680,6 +4630,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixStore_u8_StorageRuntimeArray_ConstStride_ColMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(storage, ty.array<u32>()));
     arr->SetBindingPoint(0, 0);
     mod.root_block->Append(arr);
@@ -4831,6 +4783,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixStore_i8_StorageRuntimeArray_DynamicStride_ColMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(storage, ty.array<i32>()));
     arr->SetBindingPoint(0, 0);
     mod.root_block->Append(arr);
@@ -4909,6 +4863,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixStore_u8_StorageRuntimeArray_DynamicStride_ColMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(storage, ty.array<u32>()));
     arr->SetBindingPoint(0, 0);
     mod.root_block->Append(arr);
@@ -5064,6 +5020,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixStore_i8_StorageRuntimeArray_DynamicStride_RowMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(storage, ty.array<i32>()));
     arr->SetBindingPoint(0, 0);
     mod.root_block->Append(arr);
@@ -5142,6 +5100,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixStore_u8_StorageRuntimeArray_DynamicStride_RowMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(storage, ty.array<u32>()));
     arr->SetBindingPoint(0, 0);
     mod.root_block->Append(arr);
@@ -5295,6 +5255,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixStore_i8_WorkgroupFixedArray_DynamicStride_ColMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(workgroup, ty.array<i32, 1024>()));
     mod.root_block->Append(arr);
 
@@ -5370,6 +5332,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixStore_u8_WorkgroupFixedArray_DynamicStride_ColMajor) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(workgroup, ty.array<u32, 1024>()));
     mod.root_block->Append(arr);
 
@@ -5486,6 +5450,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixStore_i8_WorkgroupFixedArray_ConstStrideAndOffset) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(workgroup, ty.array<i32, 1024>()));
     mod.root_block->Append(arr);
 
@@ -5525,6 +5491,8 @@ $B1: {  # root
 }
 
 TEST_P(IR_RobustnessTest, SubgroupMatrixStore_u8_WorkgroupFixedArray_ConstStrideAndOffset) {
+    capabilities = core::ir::Capability::kAllow8BitIntegers;
+
     auto* arr = b.Var("arr", ty.ptr(workgroup, ty.array<u32, 1024>()));
     mod.root_block->Append(arr);
 

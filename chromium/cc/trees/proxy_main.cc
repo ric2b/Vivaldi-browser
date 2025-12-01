@@ -37,6 +37,7 @@
 #include "cc/trees/trace_utils.h"
 #include "components/viz/common/view_transition_element_resource_id.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 
 namespace cc {
 
@@ -530,16 +531,6 @@ void ProxyMain::NotifyImageDecodeRequestFinished(int request_id,
   layer_tree_host_->NotifyImageDecodeFinished(request_id, decode_succeeded);
 }
 
-bool ProxyMain::SpeculativeDecodeRequestInFlight() const {
-  CHECK(proxy_impl_);
-  return proxy_impl_->SpeculativeDecodeRequestInFlight();
-}
-
-void ProxyMain::SetSpeculativeDecodeRequestInFlight(bool value) {
-  CHECK(proxy_impl_);
-  proxy_impl_->SetSpeculativeDecodeRequestInFlight(value);
-}
-
 void ProxyMain::NotifyTransitionRequestFinished(
     uint32_t sequence_id,
     const viz::ViewTransitionElementResourceRects& rects) {
@@ -655,11 +646,11 @@ void ProxyMain::SetDeferMainFrameUpdate(bool defer_main_frame_update) {
 
   defer_main_frame_update_ = defer_main_frame_update;
   if (defer_main_frame_update_) {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
-        "cc", "ProxyMain::SetDeferMainFrameUpdate", TRACE_ID_LOCAL(this));
+    TRACE_EVENT_BEGIN("cc", "ProxyMain::SetDeferMainFrameUpdate",
+                      perfetto::Track::FromPointer(this));
   } else {
-    TRACE_EVENT_NESTABLE_ASYNC_END0("cc", "ProxyMain::SetDeferMainFrameUpdate",
-                                    TRACE_ID_LOCAL(this));
+    TRACE_EVENT_END("cc", /*"ProxyMain::SetDeferMainFrameUpdate"*/
+                    perfetto::Track::FromPointer(this));
   }
 
   // Notify dependent systems that the deferral status has changed.
@@ -679,11 +670,11 @@ void ProxyMain::SetPauseRendering(bool pause_rendering) {
 
   pause_rendering_ = pause_rendering;
   if (pause_rendering_) {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("cc", "ProxyMain::SetPauseRendering",
-                                      TRACE_ID_LOCAL(this));
+    TRACE_EVENT_BEGIN("cc", "ProxyMain::SetPauseRendering",
+                      perfetto::Track::FromPointer(this));
   } else {
-    TRACE_EVENT_NESTABLE_ASYNC_END0("cc", "ProxyMain::SetPauseRendering",
-                                    TRACE_ID_LOCAL(this));
+    TRACE_EVENT_END("cc", /*"ProxyMain::SetPauseRendering"*/
+                    perfetto::Track::FromPointer(this));
   }
 
   // The impl thread needs to know that it should not issue BeginFrames.
@@ -710,8 +701,8 @@ bool ProxyMain::StartDeferringCommits(base::TimeDelta timeout,
   if (IsDeferringCommits())
     return false;
 
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("cc", "ProxyMain::SetDeferCommits",
-                                    TRACE_ID_LOCAL(this));
+  TRACE_EVENT_BEGIN("cc", "ProxyMain::SetDeferCommits",
+                    perfetto::Track::FromPointer(this));
 
   paint_holding_reason_ = reason;
   commits_restart_time_ = base::TimeTicks::Now() + timeout;
@@ -728,8 +719,8 @@ void ProxyMain::StopDeferringCommits(PaintHoldingCommitTrigger trigger) {
   paint_holding_reason_.reset();
   UMA_HISTOGRAM_ENUMERATION("PaintHolding.CommitTrigger2", trigger);
   commits_restart_time_ = base::TimeTicks();
-  TRACE_EVENT_NESTABLE_ASYNC_END0("cc", "ProxyMain::SetDeferCommits",
-                                  TRACE_ID_LOCAL(this));
+  TRACE_EVENT_END("cc", /*"ProxyMain::SetDeferCommits"*/
+                  perfetto::Track::FromPointer(this));
 
   // Notify depended systems that the deferral status has changed.
   layer_tree_host_->OnDeferCommitsChanged(false, reason, trigger);
@@ -807,10 +798,6 @@ void ProxyMain::Stop() {
 void ProxyMain::QueueImageDecode(int request_id,
                                  const DrawImage& image,
                                  bool speculative) {
-  CHECK(!speculative || !SpeculativeDecodeRequestInFlight());
-  if (speculative) {
-    SetSpeculativeDecodeRequestInFlight(true);
-  }
   TRACE_EVENT1("cc", "ProxyMain::QueueImageDecode", "request_id", request_id);
   ImplThreadTaskRunner()->PostTask(
       FROM_HERE,

@@ -4,8 +4,6 @@
 #define COMPONENTS_AD_BLOCKER_CORE_ADBLOCK_RULE_PARSER_H_
 
 #include <optional>
-#include <set>
-#include <string>
 #include <string_view>
 
 #include "base/memory/raw_ptr.h"

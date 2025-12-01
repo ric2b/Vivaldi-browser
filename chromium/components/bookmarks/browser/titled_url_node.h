@@ -38,6 +38,9 @@ class TitledUrlNode {
   // Vivaldi: Returns the display url for the node.
   virtual const GURL GetTitledUrlDisplayURL() const;
 
+  // Vivaldi: Returns the id the node.
+  virtual int64_t GetId() const;
+
  protected:
   virtual ~TitledUrlNode() = default;
 };

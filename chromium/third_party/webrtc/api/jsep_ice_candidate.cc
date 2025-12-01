@@ -23,6 +23,7 @@
 #include "api/candidate.h"
 #include "api/jsep.h"
 #include "rtc_base/checks.h"
+#include "rtc_base/logging.h"
 
 namespace webrtc {
 namespace {
@@ -43,7 +44,11 @@ IceCandidate::IceCandidate(absl::string_view sdp_mid,
                            const Candidate& candidate)
     : sdp_mid_(sdp_mid),
       sdp_mline_index_(EnsureValidMLineIndex(sdp_mline_index)),
-      candidate_(candidate) {}
+      candidate_(candidate) {
+  if (sdp_mid_.empty() && sdp_mline_index_ < 0) {
+    RTC_LOG(LS_ERROR) << "Neither mid nor index supplied for IceCandidate.";
+  }
+}
 
 void IceCandidateCollection::add(std::unique_ptr<IceCandidate> candidate) {
   candidates_.push_back(std::move(candidate));
@@ -51,6 +56,12 @@ void IceCandidateCollection::add(std::unique_ptr<IceCandidate> candidate) {
 
 void IceCandidateCollection::add(IceCandidate* candidate) {
   candidates_.push_back(absl::WrapUnique(candidate));
+}
+
+void IceCandidateCollection::Append(IceCandidateCollection collection) {
+  candidates_.insert(candidates_.end(),
+                     std::make_move_iterator(collection.candidates_.begin()),
+                     std::make_move_iterator(collection.candidates_.end()));
 }
 
 const IceCandidate* IceCandidateCollection::at(size_t index) const {

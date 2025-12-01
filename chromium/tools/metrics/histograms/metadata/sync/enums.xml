@@ -77,7 +77,11 @@ chromium-metrics-reviews@google.com.
   <int value="0" label="Password manager settings"/>
   <int value="1" label="Password promo card"/>
   <int value="2" label="Bookmark manager promo card"/>
-  <int value="3" label="Profile menu button"/>
+  <int value="3" label="Profile menu row button"/>
+  <int value="4" label="Profile menu primary button action"/>
+  <int value="5" label="Profile menu primary button with bookmarks action"/>
+  <int value="6"
+      label="Profile menu priamry button with Windows10 depreciation action"/>
 </enum>
 
 <!-- LINT.ThenChange(/chrome/browser/profiles/batch_upload/batch_upload_service.h:EntryPoint) -->
@@ -258,6 +262,23 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(/components/sync_bookmarks/bookmark_model_merger.cc:RemoteBookmarkUpdateError) -->
 
+<!-- LINT.IfChange(SessionSpecificsInvalidReason) -->
+
+<enum name="SessionSpecificsInvalidReason">
+  <summary>
+    The validity (or reason for non-validity) of a SessionSpecifics.
+  </summary>
+  <int value="0" label="Missing session_tag"/>
+  <int value="1" label="Both header and tab specified"/>
+  <int value="2" label="Neither header nor tab specified"/>
+  <int value="3" label="Tab with invalid tab_node_id"/>
+  <int value="4" label="Tab with invalid tab_id"/>
+  <int value="5" label="Header with duplicate tab IDs"/>
+  <int value="6" label="Header with tab_node_id"/>
+</enum>
+
+<!-- LINT.ThenChange(/components/sync_sessions/session_store.h:SessionSpecificsInvalidReason) -->
+
 <enum name="SyncablePref">
 <!-- LINT.IfChange(CommonSyncablePref) -->
 
@@ -355,6 +376,11 @@ chromium-metrics-reviews@google.com.
   <int value="90" label="FacilitatedPaymentsA2AEnabled"/>
   <int value="91" label="FacilitatedPaymentsA2ATriggeredOnce"/>
   <int value="92" label="FingerprintingProtectionEnabled"/>
+  <int value="93" label="AutofillNameAndEmailProfileSignature"/>
+  <int value="94" label="AutofillNameAndEmailProfileNotSelectedCounter"/>
+  <int value="96" label="AutofillAiLastVersionDeduped"/>
+  <int value="97" label="CrossDeviceOmniboxIsInBottomPosition"/>
+  <int value="98" label="AutofillWasNameAndEmailProfileUsed"/>
 <!-- LINT.ThenChange(/components/sync_preferences/common_syncable_prefs_database.cc:CommonSyncablePref)-->
 
 <!-- LINT.IfChange(ChromeSyncablePref) -->
@@ -724,6 +750,13 @@ chromium-metrics-reviews@google.com.
   <int value="100328" label="GlicRolloutEligibility"/>
   <int value="100329" label="ShelfNotebookLmAppPinRolls"/>
   <int value="100330" label="VerticalTabsEnabled"/>
+  <int value="100331" label="SplitViewDragAndDropEnabled"/>
+  <int value="100332" label="iOSEnhancedBrowsingPromoLastImpressionTimestamp"/>
+  <int value="100333" label="iOSEnhancedBrowsingPromoImpressionsCounter"/>
+  <int value="100334" label="iOSEnhancedBrowsingPromoOptOut"/>
+  <int value="100335" label="iOSLensPromoLastImpressionTimestamp"/>
+  <int value="100336" label="iOSLensPromoImpressionsCounter"/>
+  <int value="100337" label="iOSLensPromoOptOut"/>
 <!-- LINT.ThenChange(/chrome/browser/sync/prefs/chrome_syncable_prefs_database.cc:ChromeSyncablePref)-->
 
 <!-- LINT.IfChange(IosSyncablePref) -->
@@ -890,7 +923,7 @@ chromium-metrics-reviews@google.com.
   <int value="54" label="Autofill Wallet Usage"/>
   <int value="55" label="(Obsolete) Segmentation"/>
   <int value="56" label="Saved Tab Groups"/>
-  <int value="57" label="Power Bookmark"/>
+  <int value="57" label="(Obsolete) Power Bookmark"/>
   <int value="58" label="WebAuthn Credentials"/>
   <int value="59" label="Incoming Password Sharing Invitations"/>
   <int value="60" label="Outgoing Password Sharing Invitations"/>
@@ -905,6 +938,9 @@ chromium-metrics-reviews@google.com.
   <int value="69" label="Autofill Valuable"/>
   <int value="70" label="Shared Tab Group Account Data"/>
   <int value="71" label="SharedComment"/>
+  <int value="72" label="Account Setting"/>
+  <int value="73" label="AI Thread"/>
+  <int value="74" label="Contextual Task"/>
 
   <int value="300" label="Notes"/>
 </enum>
@@ -1175,7 +1211,7 @@ chromium-metrics-reviews@google.com.
   <int value="37" label="kAutofillValuableFailedToLoadDatabase"/>
   <int value="38" label="kAutofillValuableFailedToLoadMetadata"/>
   <int value="39" label="kAutofillValuableFailedToReadMetadata"/>
-  <int value="40" label="kAutofillValuableFailedToSetLoyaltyCards"/>
+  <int value="40" label="kAutofillValuableFailedToWriteToDatabase"/>
   <int value="41" label="kAutofillValuableUnsupportedActionType"/>
   <int value="42" label="kAutofillWalletFailedToLoadBenefitsFromTable"/>
   <int value="43" label="kAutofillWalletFailedToLoadDatabase"/>
@@ -1258,13 +1294,13 @@ chromium-metrics-reviews@google.com.
   <int value="129" label="kPlusAddressTransactionCommitFailedOnDisableSync"/>
   <int value="130"
       label="kPlusAddressTransactionCommitFailedOnIncrementalSync"/>
-  <int value="131" label="kPowerBookmarkDatabaseCommitFailed"/>
-  <int value="132" label="kPowerBookmarkDatabaseInitFailed"/>
-  <int value="133" label="kPowerBookmarkFailedToBeginTransaction"/>
-  <int value="134" label="kPowerBookmarkFailedToCommitTransaction"/>
-  <int value="135" label="kPowerBookmarkFailedToDeleteLocalPowers"/>
-  <int value="136" label="kPowerBookmarkFailedToLoadMetadata"/>
-  <int value="137" label="kPowerBookmarkFailedToMergeLocalPowers"/>
+  <int value="131" label="(Obsolete) kPowerBookmarkDatabaseCommitFailed"/>
+  <int value="132" label="(Obsolete) kPowerBookmarkDatabaseInitFailed"/>
+  <int value="133" label="(Obsolete) kPowerBookmarkFailedToBeginTransaction"/>
+  <int value="134" label="(Obsolete) kPowerBookmarkFailedToCommitTransaction"/>
+  <int value="135" label="(Obsolete) kPowerBookmarkFailedToDeleteLocalPowers"/>
+  <int value="136" label="(Obsolete) kPowerBookmarkFailedToLoadMetadata"/>
+  <int value="137" label="(Obsolete) kPowerBookmarkFailedToMergeLocalPowers"/>
   <int value="138" label="kPrefFailedToDeserializeValue"/>
   <int value="139" label="kPrefModelsNotAssociated"/>
   <int value="140" label="kPrintersFailedToDeserializeSpecifics"/>
@@ -1464,6 +1500,20 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(/chrome/browser/themes/theme_syncable_service.h:ThemePrefInMigration) -->
 
+<!-- LINT.IfChange(TriggerRefreshSource) -->
+
+<enum name="TriggerRefreshSource">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Browser Tabs Model Provider"/>
+  <int value="2" label="Android Sync Service Bridge"/>
+  <int value="3" label="Sync Invalidations Service"/>
+  <int value="4" label="Local Sync"/>
+  <int value="5" label="Sync Internals"/>
+  <int value="6" label="Foreign Session Helper"/>
+</enum>
+
+<!-- LINT.ThenChange(/components/sync/service/sync_service.h:TriggerRefreshSource) -->
+
 <!-- LINT.IfChange(TrustedVaultDegradedRecoverabilityValue) -->
 
 <enum name="TrustedVaultDegradedRecoverabilityValue">
@@ -1473,15 +1523,6 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(/components/trusted_vault/proto/local_trusted_vault.proto:TrustedVaultDegradedRecoverabilityValue) -->
-
-<!-- LINT.IfChange(TrustedVaultFetchKeysAttempt) -->
-
-<enum name="TrustedVaultFetchKeysAttempt">
-  <int value="0" label="First attempt"/>
-  <int value="1" label="Second attempt"/>
-</enum>
-
-<!-- LINT.ThenChange(/components/sync/service/sync_service_crypto.cc:TrustedVaultFetchKeysAttempt) -->
 
 <!-- LINT.IfChange(TrustedVaultHintDegradedRecoverabilityChangedReason) -->
 
@@ -1516,6 +1557,10 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="Needs trusted vault key for everything"/>
   <int value="5" label="Trusted vault recoverability degraded for passwords"/>
   <int value="6" label="Trusted vault recoverability degraded for everything"/>
+  <int value="7" label="Needs settings confirmation"/>
+  <int value="8" label="Unrecoverable error"/>
+  <int value="9" label="Needs UPM backend upgrade"/>
+  <int value="10" label="Needs client upgrade"/>
 </enum>
 
 <!-- LINT.ThenChange(/components/sync/service/sync_service.h:UserActionableError) -->

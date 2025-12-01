@@ -150,9 +150,7 @@ using DocumentElementSetMap =
 namespace {
 
 // When enabled, CSS media queries are supported in <source> elements.
-BASE_FEATURE(kVideoSourceMediaQuerySupport,
-             "VideoSourceMediaQuerySupport",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kVideoSourceMediaQuerySupport, base::FEATURE_ENABLED_BY_DEFAULT);
 
 // This enum is used to record histograms. Do not reorder.
 enum class MediaControlsShow {
@@ -442,12 +440,12 @@ HTMLMediaElement::HTMLMediaElement(const QualifiedName& tag_name,
           &HTMLMediaElement::OnRemovedFromDocumentTimerFired),
       progress_event_timer_(
           document.GetTaskRunner(TaskType::kInternalMedia),
-          WTF::BindRepeating(&HTMLMediaElement::ProgressEventTimerFired,
-                             WrapWeakPersistent(this))),
+          BindRepeating(&HTMLMediaElement::ProgressEventTimerFired,
+                        WrapWeakPersistent(this))),
       playback_progress_timer_(
           document.GetTaskRunner(TaskType::kInternalMedia),
-          WTF::BindRepeating(&HTMLMediaElement::PlaybackProgressTimerFired,
-                             WrapWeakPersistent(this))),
+          BindRepeating(&HTMLMediaElement::PlaybackProgressTimerFired,
+                        WrapWeakPersistent(this))),
       async_event_queue_(
           MakeGarbageCollected<EventQueue>(GetExecutionContext(),
                                            TaskType::kMediaElementEvent)),
@@ -2719,8 +2717,8 @@ void HTMLMediaElement::SetOfficialPlaybackPosition(double position) const {
   // officialPlaybackPosition().
   official_playback_position_needs_update_ = false;
   GetDocument().GetAgent().event_loop()->EnqueueMicrotask(
-      WTF::BindOnce(&HTMLMediaElement::RequireOfficialPlaybackPositionUpdate,
-                    WrapWeakPersistent(this)));
+      BindOnce(&HTMLMediaElement::RequireOfficialPlaybackPositionUpdate,
+               WrapWeakPersistent(this)));
 }
 
 void HTMLMediaElement::RequireOfficialPlaybackPositionUpdate() const {
@@ -4302,7 +4300,7 @@ SpeechSynthesisBase* HTMLMediaElement::SpeechSynthesis() {
   if (!speech_synthesis_) {
     speech_synthesis_ =
         SpeechSynthesisBase::Create(*(GetDocument().domWindow()));
-    speech_synthesis_->SetOnSpeakingCompletedCallback(WTF::BindRepeating(
+    speech_synthesis_->SetOnSpeakingCompletedCallback(BindRepeating(
         &HTMLMediaElement::OnSpeakingCompleted, WrapWeakPersistent(this)));
   }
   return speech_synthesis_.Get();
@@ -4626,8 +4624,8 @@ void HTMLMediaElement::ScheduleResolvePlayPromises() {
 
   play_promise_resolve_task_handle_ = PostCancellableTask(
       *GetDocument().GetTaskRunner(TaskType::kMediaElementEvent), FROM_HERE,
-      WTF::BindOnce(&HTMLMediaElement::ResolveScheduledPlayPromises,
-                    WrapWeakPersistent(this)));
+      BindOnce(&HTMLMediaElement::ResolveScheduledPlayPromises,
+               WrapWeakPersistent(this)));
 }
 
 void HTMLMediaElement::ScheduleRejectPlayPromises(PlayPromiseError code) {
@@ -4653,8 +4651,8 @@ void HTMLMediaElement::ScheduleRejectPlayPromises(PlayPromiseError code) {
   play_promise_error_code_ = code;
   play_promise_reject_task_handle_ = PostCancellableTask(
       *GetDocument().GetTaskRunner(TaskType::kMediaElementEvent), FROM_HERE,
-      WTF::BindOnce(&HTMLMediaElement::RejectScheduledPlayPromises,
-                    WrapWeakPersistent(this)));
+      BindOnce(&HTMLMediaElement::RejectScheduledPlayPromises,
+               WrapWeakPersistent(this)));
 }
 
 void HTMLMediaElement::ScheduleNotifyPlaying() {
@@ -5067,14 +5065,14 @@ void HTMLMediaElement::OnRemotePlaybackMetadataChange() {
   for (auto& observer : media_player_observer_remote_set_->Value()) {
     observer->OnRemotePlaybackMetadataChange(
         media_session::mojom::blink::RemotePlaybackMetadata::New(
-            WTF::String(media::GetCodecName(video_codec_
-                                                ? video_codec_.value()
-                                                : media::VideoCodec::kUnknown)),
-            WTF::String(media::GetCodecName(audio_codec_
-                                                ? audio_codec_.value()
-                                                : media::AudioCodec::kUnknown)),
+            String(media::GetCodecName(video_codec_
+                                           ? video_codec_.value()
+                                           : media::VideoCodec::kUnknown)),
+            String(media::GetCodecName(audio_codec_
+                                           ? audio_codec_.value()
+                                           : media::AudioCodec::kUnknown)),
             is_remote_playback_disabled_, is_remote_rendering_,
-            WTF::String(remote_device_friendly_name_), is_encrypted_media_));
+            String(remote_device_friendly_name_), is_encrypted_media_));
   }
 }
 

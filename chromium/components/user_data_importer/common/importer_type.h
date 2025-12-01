@@ -31,8 +31,7 @@ enum ImporterType {
 
   // Identifies an old Opera
   TYPE_OPERA = 7,
-  // DEPRECATED
-  // TYPE_OPERA_BOOKMARK_FILE = 8,
+  TYPE_OPERA_BOOKMARK_FILE = 8,
   TYPE_CHROME = 9,
   TYPE_CHROMIUM = 10,
   TYPE_VIVALDI = 11,

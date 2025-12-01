@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,7 +11,8 @@ let runtimePlatform = '';
 let runtimeInstance: Runtime|undefined;
 let isNode: boolean|undefined;
 
-/** Returns the base URL (similar to `<base>`).
+/**
+ * Returns the base URL (similar to `<base>`).
  * Used to resolve the relative URLs of any additional DevTools files (locale strings, etc) needed.
  * See: https://cs.chromium.org/remoteBase+f:devtools_window
  */
@@ -305,6 +306,10 @@ export class Experiment {
 // This must be constructed after the query parameters have been parsed.
 export const experiments = new ExperimentsSupport();
 
+/**
+ * @deprecated Experiments should not be used anymore, instead use base::Feature.
+ * See docs/contributing/settings-experiments-features.md
+ */
 export const enum ExperimentName {
   CAPTURE_NODE_CREATION_STACKS = 'capture-node-creation-stacks',
   CSS_OVERVIEW = 'css-overview',
@@ -316,14 +321,11 @@ export const enum ExperimentName {
   INSTRUMENTATION_BREAKPOINTS = 'instrumentation-breakpoints',
   AUTHORED_DEPLOYED_GROUPING = 'authored-deployed-grouping',
   JUST_MY_CODE = 'just-my-code',
-  HIGHLIGHT_ERRORS_ELEMENTS_PANEL = 'highlight-errors-elements-panel',
   USE_SOURCE_MAP_SCOPES = 'use-source-map-scopes',
   TIMELINE_SHOW_POST_MESSAGE_EVENTS = 'timeline-show-postmessage-events',
   TIMELINE_DEBUG_MODE = 'timeline-debug-mode',
   TIMELINE_ENHANCED_TRACES = 'timeline-enhanced-traces',
   TIMELINE_COMPILED_SOURCES = 'timeline-compiled-sources',
-  TIMELINE_SAVE_AS_GZ = 'timeline-save-as-gz',
-  VERTICAL_DRAWER = 'vertical-drawer',
   // Adding or removing an entry from this enum?
   // You will need to update:
   // 1. REGISTERED_EXPERIMENTS in EnvironmentHelpers.ts (to create this experiment in the test env)
@@ -441,6 +443,10 @@ export interface HostConfigThirdPartyCookieControls {
   managedBlockThirdPartyCookies: string|boolean;
 }
 
+export interface HostConfigIPProtection {
+  enabled: boolean;
+}
+
 interface AiGeneratedTimelineLabels {
   enabled: boolean;
 }
@@ -461,6 +467,41 @@ interface IpProtectionInDevTools {
 interface AiDebugWithAi {
   enabled: boolean;
   featureName?: string;
+}
+
+interface GlobalAiButton {
+  enabled: boolean;
+  promotionEnabled: boolean;
+}
+
+interface GdpProfiles {
+  enabled: boolean;
+  badgesEnabled: boolean;
+  starterBadgeEnabled: boolean;
+}
+
+export enum GdpProfilesEnterprisePolicyValue {
+  ENABLED = 0,
+  ENABLED_WITHOUT_BADGES = 1,
+  DISABLED = 2,
+}
+
+interface GdpProfilesAvailability {
+  // Whether GDP profiles can be enabled on this host (only possible on branded builds).
+  enabled: boolean;
+  enterprisePolicyValue: GdpProfilesEnterprisePolicyValue;
+}
+
+interface LiveEdit {
+  enabled: boolean;
+}
+
+interface DevToolsFlexibleLayout {
+  verticalDrawerEnabled: boolean;
+}
+
+interface DevToolsStartingStyleDebugging {
+  enabled: boolean;
 }
 
 /**
@@ -490,6 +531,7 @@ export type HostConfig = Platform.TypeScriptUtilities.RecursivePartial<{
   devToolsVeLogging: HostConfigVeLogging,
   devToolsWellKnown: HostConfigWellKnown,
   devToolsPrivacyUI: HostConfigPrivacyUI,
+  devToolsIpProtectionPanelInDevTools: HostConfigIPProtection,
   /**
    * OffTheRecord here indicates that the user's profile is either incognito,
    * or guest mode, rather than a "normal" profile.
@@ -502,6 +544,12 @@ export type HostConfig = Platform.TypeScriptUtilities.RecursivePartial<{
   devToolsAllowPopoverForcing: AllowPopoverForcing,
   devToolsAiSubmenuPrompts: AiSubmenuPrompts,
   devToolsIpProtectionInDevTools: IpProtectionInDevTools,
+  devToolsGlobalAiButton: GlobalAiButton,
+  devToolsGdpProfiles: GdpProfiles,
+  devToolsGdpProfilesAvailability: GdpProfilesAvailability,
+  devToolsLiveEdit: LiveEdit,
+  devToolsFlexibleLayout: DevToolsFlexibleLayout,
+  devToolsStartingStyleDebugging: DevToolsStartingStyleDebugging,
 }>;
 
 /**

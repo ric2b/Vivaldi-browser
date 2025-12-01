@@ -23,6 +23,7 @@
 #include "third_party/blink/renderer/platform/graphics/dom_node_id.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/prefinalizer.h"
+#include "third_party/blink/renderer/platform/text/layout_locale.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace blink {
@@ -48,7 +49,6 @@ class CORE_EXPORT OffscreenCanvas final
   static OffscreenCanvas* Create(ScriptState*, unsigned width, unsigned height);
 
   OffscreenCanvas(ExecutionContext*, gfx::Size);
-  ~OffscreenCanvas() override;
   void Dispose();
 
   bool IsOffscreenCanvas() const override { return true; }
@@ -70,7 +70,7 @@ class CORE_EXPORT OffscreenCanvas final
                                     const ImageEncodeOptions* options,
                                     ExceptionState& exception_state);
 
-  void SetSize(gfx::Size) override;
+  void SetSize(gfx::Size);
   void RecordTransfer();
 
   void SetPlaceholderCanvasId(DOMNodeId canvas_id);
@@ -114,9 +114,6 @@ class CORE_EXPORT OffscreenCanvas final
   CanvasRenderingContext* RenderingContext() const override {
     return context_.Get();
   }
-  // TODO(fserb): Merge this with HTMLCanvasElement::UpdateMemoryUsage
-  void UpdateMemoryUsage() override;
-  size_t GetMemoryUsage() const override;
   // Because OffscreenCanvas is not tied to a DOM, it's visibility cannot be
   // determined synchronously.
   // TODO(junov): Propagate changes in visibility from the placeholder canvas.
@@ -241,8 +238,6 @@ class CORE_EXPORT OffscreenCanvas final
   };
 
  private:
-  int32_t memory_usage_ = 0;
-
   friend class OffscreenCanvasTest;
   using ContextFactoryVector =
       Vector<std::unique_ptr<CanvasRenderingContextFactory>>;
@@ -288,8 +283,6 @@ class CORE_EXPORT OffscreenCanvas final
   uint32_t sink_id_ = 0;
 
   bool transfer_to_gpu_texture_was_invoked_ = false;
-
-  NO_UNIQUE_ADDRESS V8ExternalMemoryAccounterBase external_memory_accounter_;
 };
 
 }  // namespace blink

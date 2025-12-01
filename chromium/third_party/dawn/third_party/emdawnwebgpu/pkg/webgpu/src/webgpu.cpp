@@ -620,6 +620,7 @@ class EventManager : NonMovable {
         auto eventIt = mEvents.find(futureId);
         if (eventIt == mEvents.end()) {
           infos[i].completed = true;
+          anyCompleted = true;
           continue;
         }
 
@@ -1537,12 +1538,12 @@ void WGPUBufferImpl::AbortPendingMap(const char* message) {
   mMapState = WGPUBufferMapState_Unmapped;
 
   FutureID futureId = mPendingMapRequest.futureID;
+  mPendingMapRequest = {};
   if (futureId == kNullFutureId) {
     // If we were mappedAtCreation, then there is no pending map request so we
     // don't need to resolve any futures.
     return;
   }
-  mPendingMapRequest = {};
   GetEventManager().SetFutureReady<MapAsyncEvent>(
       futureId, WGPUMapAsyncStatus_Aborted, message);
 }

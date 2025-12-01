@@ -108,7 +108,8 @@ size_t FrameEvictionManager::GetMaxNumberOfSavedFrames() const {
 
   // Until we have a global OnMemoryPressureChanged event we need to query the
   // value from our specific pressure monitor.
-  switch (monitor->GetCurrentPressureLevel()) {
+  switch (monitor->GetCurrentPressureLevel(
+      base::MemoryPressureMonitorTag::kFrameEvictionManager)) {
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE:
       percentage = 100;
       break;
@@ -124,17 +125,20 @@ size_t FrameEvictionManager::GetMaxNumberOfSavedFrames() const {
 }
 
 FrameEvictionManager::FrameEvictionManager()
-    : memory_pressure_listener_(new base::MemoryPressureListener(
+    : memory_pressure_listener_(
           FROM_HERE,
+          base::MemoryPressureListenerTag::kFrameEvictionManager,
           base::BindRepeating(&FrameEvictionManager::OnMemoryPressure,
-                              base::Unretained(this)))) {
+                              base::Unretained(this))) {
   max_number_of_saved_frames_ =
 #if BUILDFLAG(IS_ANDROID)
       // If the amount of memory on the device is >= 3.5 GB, save up to 5
       // frames.
-      base::SysInfo::AmountOfPhysicalMemoryMB() < 1024 * 3.5f ? 1 : 5;
+      base::SysInfo::AmountOfPhysicalMemory().InGiBF() < 3.5f ? 1 : 5;
 #else
-      std::min(5, 2 + (base::SysInfo::AmountOfPhysicalMemoryMB() / 256));
+      std::min(
+          5, static_cast<int>(
+                 2 + (base::SysInfo::AmountOfPhysicalMemory().InMiB() / 256)));
 #endif
 
   // For WebView, we may not have a default task runner.

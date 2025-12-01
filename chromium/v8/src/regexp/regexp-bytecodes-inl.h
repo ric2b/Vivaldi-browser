@@ -8,8 +8,11 @@
 #include "src/regexp/regexp-bytecodes.h"
 // Include the non-inl header before the rest of the headers.
 
+#include <array>
 #include <limits>
 #include <type_traits>
+
+#include "src/regexp/regexp-macro-assembler.h"  // For StackCheckFlag
 
 namespace v8 {
 namespace internal {
@@ -126,6 +129,51 @@ class RegExpBytecodeOperandsBase {
     return Traits::kOperandTypes[Index(op)];
   }
 
+  // Returns a tuple of all "real" (non-padding) operands.
+  static consteval auto GetOperandsTuple() {
+    return []<size_t... Is>(std::index_sequence<Is...>) {
+      return std::tuple_cat([]<size_t I>() {
+        constexpr auto id = static_cast<Operand>(I);
+        if constexpr (Type(id) == ReBcOpType::kPadding1 ||
+                      Type(id) == ReBcOpType::kPadding2) {
+          return std::tuple<>();
+        } else {
+          return std::tuple(std::integral_constant<Operand, id>{});
+        }
+      }.template operator()<Is>()...);
+    }(std::make_index_sequence<kCount>{});
+  }
+
+  static constexpr int kCountWithoutPadding =
+      std::tuple_size_v<decltype(GetOperandsTuple())>;
+
+  // Calls |f| templatized by Operand for each Operand in the Operands list,
+  // ignoring padding.
+  // Example:
+  // using Operands = RegExpBytecodeOperands<RegExpBytecode::...>;
+  // size_t op_sizes = 0;
+  // Operands::ForEachOperand([]<auto op>() {
+  //   op_sizes += Operands::Size(op);
+  // });
+  // Note that this gets evaluated at compile time, so op_sizes in the example
+  // above is essentially a constant.
+  template <typename Func>
+  static constexpr void ForEachOperand(Func&& f) {
+    constexpr auto filtered_ops = GetOperandsTuple();
+    std::apply([&](auto... ops) { (..., f.template operator()<ops.value>()); },
+               filtered_ops);
+  }
+
+  // Similar to above, but calls |f| only for operands of a given type.
+  template <RegExpBytecodeOperandType OpType, typename Func>
+  static constexpr void ForEachOperandOfType(Func&& f) {
+    ForEachOperand([&]<auto operand>() {
+      if constexpr (Type(operand) == OpType) {
+        f.template operator()<operand>();
+      }
+    });
+  }
+
  private:
   template <RegExpBytecodeOperandType OperandType>
     requires(RegExpOperandTypeTraits<OperandType>::kIsBasic)
@@ -209,6 +257,20 @@ static constexpr uint8_t kBytecodeSizes[] = {
 #undef DECLARE_BYTECODE_SIZES
 
 }  // namespace detail
+
+// static
+template <typename Func>
+decltype(auto) RegExpBytecodes::DispatchOnBytecode(RegExpBytecode bytecode,
+                                                   Func&& f) {
+  switch (bytecode) {
+#define CASE(CamelName, ...)         \
+  case RegExpBytecode::k##CamelName: \
+    return f.template operator()<RegExpBytecode::k##CamelName>();
+    REGEXP_BYTECODE_LIST(CASE)
+#undef CASE
+  }
+  UNREACHABLE();
+}
 
 // static
 constexpr const char* RegExpBytecodes::Name(RegExpBytecode bytecode) {

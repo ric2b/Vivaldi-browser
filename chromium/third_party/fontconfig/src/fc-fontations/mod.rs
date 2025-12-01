@@ -55,6 +55,7 @@ use skrifa::MetadataProvider;
 use std::str::FromStr;
 
 use read_fonts::{FileRef, FontRef, TableProvider};
+use std::path::{self, Path};
 
 use std::{
     ffi::{CStr, CString, OsStr},
@@ -63,6 +64,16 @@ use std::{
 };
 
 use instance_enumerate::{all_instances, fonts_and_indices};
+
+/// Path normalization similar to FcStrCanonAbsoluteFilename.
+/// # Safety
+/// The `font_file` pointer must be a valid, null-terminated C string.
+unsafe fn font_path_from_c_str(font_file: *const libc::c_char) -> Option<std::path::PathBuf> {
+    unsafe {
+        let font_path_os_str = OsStr::from_bytes(CStr::from_ptr(font_file).to_bytes());
+        path::absolute(Path::new(font_path_os_str)).ok()
+    }
+}
 
 #[no_mangle]
 /// Externally called in fcfontations.c as the file scanner function
@@ -76,15 +87,15 @@ pub unsafe extern "C" fn add_patterns_to_fontset(
     font_file: *const libc::c_char,
     font_set: *mut FcFontSet,
 ) -> libc::c_int {
-    let font_path = unsafe { OsStr::from_bytes(CStr::from_ptr(font_file).to_bytes()) };
-    let bytes = std::fs::read(font_path).ok().unwrap_or_default();
+    let font_path = unsafe { font_path_from_c_str(font_file).unwrap_or_default() };
+    let bytes = std::fs::read(&font_path).ok().unwrap_or_default();
     let fileref = FileRef::new(&bytes).ok();
 
     let fonts = fonts_and_indices(fileref);
 
     let mut patterns_added: u32 = 0;
     for (font, ttc_index) in fonts {
-        for pattern in build_patterns_for_font(&font, font_file, ttc_index) {
+        for pattern in build_patterns_for_font(&font, &font_path, ttc_index) {
             unsafe {
                 if FcFontSetAdd(font_set, pattern) == 0 {
                     return 0;
@@ -98,7 +109,8 @@ pub unsafe extern "C" fn add_patterns_to_fontset(
     // if we are asked to scan one of those, only add wrapper information
     // and filename.
     if patterns_added == 0 {
-        try_append_woff_pattern(font_set, bytes.as_slice(), font_file);
+        return try_append_woff_pattern(font_set, bytes.as_slice(), &font_path).is_some()
+            as libc::c_int;
     }
 
     1
@@ -116,22 +128,23 @@ enum InstanceMode {
     Variable,
 }
 
-fn try_append_woff_pattern(font_set: *mut FcFontSet, bytes: &[u8], font_file: *const libc::c_char) {
-    let wrapper: Option<CString> = match bytes.get(0..4) {
+fn try_append_woff_pattern(font_set: *mut FcFontSet, bytes: &[u8], font_file: &Path) -> Option<()> {
+    let wrapper = (match bytes.get(0..4) {
         Some(b"wOFF") => CString::new("WOFF").ok(),
         Some(b"wOF2") => CString::new("WOFF2").ok(),
         _ => None,
-    };
+    })?;
 
-    if let Some(w) = wrapper {
-        let mut pattern = FcPatternBuilder::new();
-        pattern.append_element(PatternElement::new(FC_FONT_WRAPPER_OBJECT as i32, w.into()));
-        add_font_file_name(&mut pattern, font_file);
+    let mut pattern = FcPatternBuilder::new();
+    pattern.append_element(PatternElement::new(
+        FC_FONT_WRAPPER_OBJECT as i32,
+        wrapper.into(),
+    ));
+    add_font_file_name(&mut pattern, font_file);
 
-        pattern
-            .create_fc_pattern()
-            .map(|p| unsafe { FcFontSetAdd(font_set, p.into_raw() as *mut FcPattern) });
-    }
+    pattern.create_fc_pattern().map(|p| {
+        unsafe { FcFontSetAdd(font_set, p.into_raw() as *mut FcPattern) };
+    })
 }
 
 fn has_one_of_tables<I>(font_ref: &FontRef, tags: I) -> bool
@@ -159,27 +172,40 @@ fn has_hint(font_ref: &FontRef) -> bool {
     false
 }
 
-fn add_font_file_name(pattern: &mut FcPatternBuilder, font_file: *const libc::c_char) {
-    if !font_file.is_null() {
-        let filename = unsafe { std::ffi::CStr::from_ptr(font_file) };
-
-        pattern.append_element(PatternElement::new(
-            FC_FILE_OBJECT as i32,
-            filename.to_owned().into(),
-        ));
+fn add_font_file_name(pattern: &mut FcPatternBuilder, font_file: &Path) {
+    let path = font_file.to_string_lossy().into_owned();
+    if let Ok(cpath) = CString::new(path) {
+        pattern.append_element(PatternElement::new(FC_FILE_OBJECT as i32, cpath.into()));
     }
 }
 
 fn build_patterns_for_font(
     font: &FontRef,
-    font_file: *const libc::c_char,
+    font_file: &Path,
     ttc_index: Option<i32>,
 ) -> Vec<*mut FcPattern> {
     let mut pattern = FcPatternBuilder::new();
 
     let has_glyf = has_one_of_tables(font, ["glyf"]);
-    let has_cff = has_one_of_tables(font, ["CFF ", "CFF2"]);
+    let has_cff1 = has_one_of_tables(font, ["CFF"]);
+    let has_cff2 = has_one_of_tables(font, ["CFF2"]);
+    let has_cff = has_cff1 | has_cff2;
     let has_color = has_one_of_tables(font, ["COLR", "SVG ", "CBLC", "SBIX"]);
+
+    // Just like FreeType in cffload.c cff_font_load(), reject CFF fonts with
+    // a major version not equal to 1.
+    if has_cff1 {
+        match font.cff() {
+            Ok(cff) => {
+                if cff.header().major() != 1 {
+                    return vec![];
+                }
+            }
+            Err(_) => {
+                return vec![];
+            }
+        }
+    }
 
     // Color and Outlines
     let has_outlines = has_glyf | has_cff;
@@ -294,7 +320,7 @@ fn build_patterns_for_font(
 
             // Family, full name, postscript name, etc.
             // Includes adding style name to the pattern, which is then used by append_style_elements.
-            add_names(font, instance_mode, &mut instance_pattern);
+            add_names(font, font_file, instance_mode, &mut instance_pattern).ok()?;
 
             // Style names: fcfreetype adds TT_NAME_ID_WWS_SUBFAMILY, TT_NAME_ID_TYPOGRAPHIC_SUBFAMILY,
             // TT_NAME_ID_FONT_SUBFAMILY as FC_STYLE_OBJECT, FC_STYLE_OBJECT_LANG unless a named instance
@@ -315,10 +341,10 @@ mod test {
     use std::ffi::CString;
 
     #[test]
-    fn basic_pattern_construction() {
+    fn empty_filename_pattern_construction() {
         unsafe {
             let font_set = FcFontSetCreate();
-            assert!(add_patterns_to_fontset(CString::new("").unwrap().into_raw(), font_set) == 1);
+            assert!(add_patterns_to_fontset(CString::new("").unwrap().into_raw(), font_set) == 0);
             FcFontSetDestroy(font_set);
         }
     }

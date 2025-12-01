@@ -26,7 +26,6 @@ namespace openscreen::osp {
 namespace {
 
 using ::testing::_;
-using ::testing::Invoke;
 
 class MockConnectionObserver final : public ProtocolConnection::Observer {
  public:
@@ -72,10 +71,9 @@ class QuicClientTest : public ::testing::Test {
     client_ = quic_bridge_.GetQuicClient();
     quic_bridge_.CreateNetworkServiceManager(nullptr, nullptr);
     ON_CALL(quic_bridge_.mock_server_observer(), OnIncomingConnectionMock(_))
-        .WillByDefault(
-            Invoke([this](std::unique_ptr<ProtocolConnection>& connection) {
-              server_connections_.push_back(std::move(connection));
-            }));
+        .WillByDefault([this](std::unique_ptr<ProtocolConnection>& connection) {
+          server_connections_.push_back(std::move(connection));
+        });
   }
 
   void SendTestMessage(ProtocolConnection* connection) {
@@ -99,16 +97,16 @@ class QuicClientTest : public ::testing::Test {
         mock_message_callback,
         OnStreamMessage(1, connection->GetID(),
                         msgs::Type::kPresentationConnectionMessage, _, _, _))
-        .WillOnce(Invoke([&decode_result, &received_message](
-                             uint64_t instance_id, uint64_t connection_id,
-                             msgs::Type message_type, const uint8_t* b,
-                             size_t buffer_size, Clock::time_point now) {
+        .WillOnce([&decode_result, &received_message](
+                      uint64_t instance_id, uint64_t connection_id,
+                      msgs::Type message_type, const uint8_t* b,
+                      size_t buffer_size, Clock::time_point now) {
           decode_result = msgs::DecodePresentationConnectionMessage(
               b, buffer_size, received_message);
           if (decode_result < 0)
             return ErrorOr<size_t>(Error::Code::kCborParsing);
           return ErrorOr<size_t>(decode_result);
-        }));
+        });
     quic_bridge_.RunTasksUntilIdle();
 
     ASSERT_GT(decode_result, 0);

@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,92 +22,92 @@ import * as Utils from './utils/utils.js';
 
 const UIStrings = {
   /**
-   *@description Label for selector stats data table
+   * @description Label for selector stats data table
    */
   selectorStats: 'Selector stats',
   /**
-   *@description Column name and time unit for elapsed time spent computing a style rule
+   * @description Column name and time unit for elapsed time spent computing a style rule
    */
   elapsed: 'Elapsed (ms)',
   /**
-   *@description Tooltip description 'Elapsed (ms)'
+   * @description Tooltip description 'Elapsed (ms)'
    */
   elapsedExplanation: 'Elapsed time spent matching a selector against the DOM in milliseconds.',
   /**
-   *@description Column name and percentage of slow mach non-matches computing a style rule
+   * @description Column name and percentage of slow mach non-matches computing a style rule
    */
   slowPathNonMatches: '% of slow-path non-matches',
   /**
-   *@description Tooltip description '% of slow-path non-matches'
+   * @description Tooltip description '% of slow-path non-matches'
    */
   slowPathNonMatchesExplanation:
       'The percentage of non-matching nodes (Match Attempts - Match Count) that couldn\'t be quickly ruled out by the bloom filter due to high selector complexity. Lower is better.',
   /**
-   *@description Column name for count of elements that the engine attempted to match against a style rule
+   * @description Column name for count of elements that the engine attempted to match against a style rule
    */
   matchAttempts: 'Match attempts',
   /**
-   *@description Tooltip description 'Match attempts'
+   * @description Tooltip description 'Match attempts'
    */
   matchAttemptsExplanation: 'Count of nodes that the engine attempted to match against a style rule.',
   /**
-   *@description Column name for count of elements that matched a style rule
+   * @description Column name for count of elements that matched a style rule
    */
   matchCount: 'Match count',
   /**
-   *@description Tooltip description 'Match count'
+   * @description Tooltip description 'Match count'
    */
   matchCountExplanation: 'Count of nodes that matched a style rule.',
   /**
-   *@description Column name for a style rule's CSS selector text
+   * @description Column name for a style rule's CSS selector text
    */
   selector: 'Selector',
   /**
-   *@description Tooltip description 'Selector'
+   * @description Tooltip description 'Selector'
    */
   selectorExplanation: 'CSS selector text of a style rule.',
   /**
-   *@description Column name for a style rule's CSS selector text
+   * @description Column name for a style rule's CSS selector text
    */
   styleSheetId: 'Style Sheet',
   /**
-   *@description Tooltip description 'Style Sheet'
+   * @description Tooltip description 'Style Sheet'
    */
   styleSheetIdExplanation:
       'Links to the selector rule definition in the style sheets. Note that a selector rule could be defined in multiple places in a style sheet or defined in multiple style sheets. Selector rules from browser user-agent style sheet or dynamic style sheets don\'t have a link.',
   /**
-   *@description A context menu item in data grids to copy entire table to clipboard
+   * @description A context menu item in data grids to copy entire table to clipboard
    */
   copyTable: 'Copy table',
   /**
-   *@description A cell value displayed in table when no source file can be traced via css style
+   * @description A cell value displayed in table when no source file can be traced via css style
    */
   unableToLink: 'Unable to link',
   /**
-   *@description Tooltip for the cell that no source file can be traced via style sheet id
-   *@example {style-sheet-4} PH1
+   * @description Tooltip for the cell that no source file can be traced via style sheet id
+   * @example {style-sheet-4} PH1
    */
   unableToLinkViaStyleSheetId: 'Unable to link via {PH1}',
   /**
-   *@description Text for announcing that the entire table was copied to clipboard
+   * @description Text for announcing that the entire table was copied to clipboard
    */
   tableCopiedToClipboard: 'Table copied to clipboard',
   /**
-   *@description Text shown as the "Selectelector" cell value for one row of the Selector Stats table, however this particular row is the totals. While normally the Selector cell is values like "div.container", the parenthesis can denote this description is not an actual selector, but a general row description.
+   * @description Text shown as the "Selectelector" cell value for one row of the Selector Stats table, however this particular row is the totals. While normally the Selector cell is values like "div.container", the parenthesis can denote this description is not an actual selector, but a general row description.
    */
   totalForAllSelectors: '(Totals for all selectors)',
   /**
-   *@description Text for showing the location of a selector in the style sheet
-   *@example {256} PH1
-   *@example {14} PH2
+   * @description Text for showing the location of a selector in the style sheet
+   * @example {256} PH1
+   * @example {14} PH2
    */
   lineNumber: 'Line {PH1}:{PH2}',
   /**
-   *@description Count of invalidation for a specific selector. Note that a node can be invalidated multiple times.
+   * @description Count of invalidation for a specific selector. Note that a node can be invalidated multiple times.
    */
   invalidationCount: 'Invalidation count',
   /**
-   *@description Tooltip description 'Invalidation count'
+   * @description Tooltip description 'Invalidation count'
    */
   invalidationCountExplanation:
       'Aggregated count of invalidations on nodes and subsequently had style recalculated, all of which are matched by this selector. Note that a node can be invalidated multiple times and by multiple selectors.',
@@ -128,7 +128,7 @@ type View = (input: ViewInput, output: object, target: HTMLElement) => void;
 
 export class TimelineSelectorStatsView extends UI.Widget.VBox {
   #selectorLocations: Map<string, Protocol.CSS.SourceRange[]>;
-  #parsedTrace: Trace.Handlers.Types.ParsedTrace|null = null;
+  #parsedTrace: Trace.TraceModel.ParsedTrace|null = null;
   /**
    * We store the last event (or array of events) that we renderered. We do
    * this because as the user zooms around the panel this view is updated,
@@ -137,11 +137,11 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
    * If the user views a single event, this will be set to that single event, but if they are viewing a range of events, this will be set to an array.
    * If it's null, that means we have not rendered yet.
    */
-  #lastStatsSourceEventOrEvents: Trace.Types.Events.UpdateLayoutTree|Trace.Types.Events.UpdateLayoutTree[]|null = null;
+  #lastStatsSourceEventOrEvents: Trace.Types.Events.RecalcStyle|Trace.Types.Events.RecalcStyle[]|null = null;
   #view: View;
   #timings: SelectorTiming[] = [];
 
-  constructor(parsedTrace: Trace.Handlers.Types.ParsedTrace|null, view: View = (input, _, target) => {
+  constructor(parsedTrace: Trace.TraceModel.ParsedTrace|null, view: View = (input, _, target) => {
     render(
         html`
       <devtools-data-grid striped name=${i18nString(UIStrings.selectorStats)}
@@ -292,12 +292,12 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
     return numberOfDescendentNode;
   }
 
-  private async updateInvalidationCount(events: Trace.Types.Events.UpdateLayoutTree[]): Promise<void> {
+  private async updateInvalidationCount(events: Trace.Types.Events.RecalcStyle[]): Promise<void> {
     if (!this.#parsedTrace) {
       return;
     }
 
-    const invalidatedNodes = this.#parsedTrace.SelectorStats.invalidatedNodeList;
+    const invalidatedNodes = this.#parsedTrace.data.SelectorStats.invalidatedNodeList;
     const invalidatedNodeMap = new Map<string, {subtree: boolean, nodeList: Array<SDK.DOMModel.DOMNode|null>}>();
 
     const frameIdBackendNodeIdsMap = new Map<String, Set<Protocol.DOM.BackendNodeId>>();
@@ -322,7 +322,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
       // aggregate invalidated nodes per (Selector + Recalc timestamp + Frame)
       for (const selector of invalidatedNode.selectorList) {
         const key = [
-          selector.selector, selector.styleSheetId, invalidatedNode.frame, invalidatedNode.lastUpdateLayoutTreeEventTs
+          selector.selector, selector.styleSheetId, invalidatedNode.frame, invalidatedNode.lastRecalcStyleEventTs
         ].join('-');
         if (invalidatedNodeMap.has(key)) {
           const nodes = invalidatedNodeMap.get(key);
@@ -334,7 +334,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
     }
 
     for (const event of events) {
-      const selectorStats = event ? this.#parsedTrace.SelectorStats.dataForUpdateLayoutEvent.get(event) : undefined;
+      const selectorStats = event ? this.#parsedTrace.data.SelectorStats.dataForRecalcStyleEvent.get(event) : undefined;
       if (!selectorStats) {
         continue;
       }
@@ -361,7 +361,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
     }
   }
 
-  private async aggregateEvents(events: Trace.Types.Events.UpdateLayoutTree[]): Promise<void> {
+  private async aggregateEvents(events: Trace.Types.Events.RecalcStyle[]): Promise<void> {
     if (!this.#parsedTrace) {
       return;
     }
@@ -388,7 +388,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
             // This is true due to the isArray check, but without this cast TS
             // would want us to repeat the isArray() check inside this callback,
             // but we want to avoid that extra work.
-            const previousEvents = this.#lastStatsSourceEventOrEvents as Trace.Types.Events.UpdateLayoutTree[];
+            const previousEvents = this.#lastStatsSourceEventOrEvents as Trace.Types.Events.RecalcStyle[];
             return event === previousEvents[index];
           })) {
         return;
@@ -399,7 +399,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
     await this.updateInvalidationCount(events);
     for (let i = 0; i < events.length; i++) {
       const event = events[i];
-      const selectorStats = event ? this.#parsedTrace.SelectorStats.dataForUpdateLayoutEvent.get(event) : undefined;
+      const selectorStats = event ? this.#parsedTrace.data.SelectorStats.dataForRecalcStyleEvent.get(event) : undefined;
       if (!selectorStats) {
         continue;
       }
@@ -451,7 +451,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
     this.#timings = await this.processSelectorTimings(timings);
   }
 
-  setAggregatedEvents(events: Trace.Types.Events.UpdateLayoutTree[]): void {
+  setAggregatedEvents(events: Trace.Types.Events.RecalcStyle[]): void {
     if (!this.#parsedTrace) {
       return;
     }
@@ -470,7 +470,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
         return undefined;
       }
       const styleSheetHeader = cssModel.styleSheetHeaderForId(styleSheetId);
-      if (!styleSheetHeader || !styleSheetHeader.resourceURL()) {
+      if (!styleSheetHeader?.resourceURL()) {
         return undefined;
       }
 

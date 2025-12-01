@@ -60,7 +60,7 @@ constexpr char kDonationTierKey[] = "donator";
 
 constexpr char kErrorDescriptionKey[] = "error_description";
 
-const std::u16string kVivaldiDomain = u"vivaldi.net";
+constexpr char16_t kVivaldiDomain[] = u"vivaldi.net";
 
 std::optional<base::Value::Dict> ParseServerResponse(
     std::unique_ptr<std::string> data) {

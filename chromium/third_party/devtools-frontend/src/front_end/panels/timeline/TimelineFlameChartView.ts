@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -7,6 +7,7 @@ import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
+import * as AIAssistance from '../../models/ai_assistance/ai_assistance.js';
 import * as CrUXManager from '../../models/crux-manager/crux-manager.js';
 import * as Trace from '../../models/trace/trace.js';
 import * as Workspace from '../../models/workspace/workspace.js';
@@ -44,14 +45,13 @@ import {
 } from './TimelineSelection.js';
 import {AggregatedTimelineTreeView, TimelineTreeView} from './TimelineTreeView.js';
 import type {TimelineMarkerStyle} from './TimelineUIUtils.js';
-import {keyForTraceConfig} from './TrackConfiguration.js';
 import * as Utils from './utils/utils.js';
 
 const UIStrings = {
   /**
-   *@description Text in Timeline Flame Chart View of the Performance panel
-   *@example {Frame} PH1
-   *@example {10ms} PH2
+   * @description Text in Timeline Flame Chart View of the Performance panel
+   * @example {Frame} PH1
+   * @example {10ms} PH2
    */
   sAtS: '{PH1} at {PH2}',
 } as const;
@@ -131,9 +131,7 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
   private needsResizeToPreferredHeights?: boolean;
   private selectedSearchResult?: PerfUI.FlameChart.DataProviderSearchResult;
   private searchRegex?: RegExp;
-  #parsedTrace: Trace.Handlers.Types.ParsedTrace|null;
-  #traceMetadata: Trace.Types.File.MetaData|null;
-  #traceInsightSets: Trace.Insights.Types.TraceInsightSets|null = null;
+  #parsedTrace: Trace.TraceModel.ParsedTrace|null;
   #eventToRelatedInsightsMap: TimelineComponents.RelatedInsightChips.EventToRelatedInsightsMap|null = null;
   #selectedGroupName: string|null = null;
   #onTraceBoundsChangeBound = this.#onTraceBoundsChange.bind(this);
@@ -167,7 +165,7 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
   #onMainEntryInvoked: (event: Common.EventTarget.EventTargetEvent<number>) => void;
   #onNetworkEntryInvoked: (event: Common.EventTarget.EventTargetEvent<number>) => void;
   #currentSelection: TimelineSelection|null = null;
-  #entityMapper: Utils.EntityMapper.EntityMapper|null = null;
+  #entityMapper: Trace.EntityMapper.EntityMapper|null = null;
 
   // Only one dimmer is used at a time. The first dimmer, as defined by the following
   // order, that is `active` within this array is used.
@@ -188,9 +186,13 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
 
   /**
    * Persist the visual configuration of the tracks/groups into memory.
+   * Note that the user cannot hide/show/re-order the network track; so storing
+   * its configuration like this is a little overkill. But we use the
+   * configuration to check if the network track is collapsed or expanded, and
+   * it's easier to use the same configuration types for both.
    */
-  #networkPersistedGroupConfigSetting: Common.Settings.Setting<PerfUI.FlameChart.PersistedConfigPerTrace>;
-  #mainPersistedGroupConfigSetting: Common.Settings.Setting<PerfUI.FlameChart.PersistedConfigPerTrace>;
+  #networkPersistedGroupConfigSetting: Common.Settings.Setting<PerfUI.FlameChart.PersistedGroupConfig[]|null>;
+  #mainPersistedGroupConfigSetting: Common.Settings.Setting<PerfUI.FlameChart.PersistedGroupConfig[]|null>;
 
   constructor(delegate: TimelineModeViewDelegate) {
     super({jslog: `${VisualLogging.section('timeline.flame-chart-view')}`});
@@ -200,7 +202,6 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     this.delegate = delegate;
     this.eventListeners = [];
     this.#parsedTrace = null;
-    this.#traceMetadata = null;
 
     const flameChartsContainer = new UI.Widget.VBox();
     flameChartsContainer.element.classList.add('flame-charts-container');
@@ -219,12 +220,12 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     this.networkSplitWidget.sidebarElement().style.zIndex = '120';
 
     this.#mainPersistedGroupConfigSetting =
-        Common.Settings.Settings.instance().createSetting<PerfUI.FlameChart.PersistedConfigPerTrace>(
-            'timeline-main-flame-group-config', {});
+        Common.Settings.Settings.instance().createSetting<PerfUI.FlameChart.PersistedGroupConfig[]|null>(
+            'timeline-persisted-main-flamechart-track-config', null);
 
     this.#networkPersistedGroupConfigSetting =
-        Common.Settings.Settings.instance().createSetting<PerfUI.FlameChart.PersistedConfigPerTrace>(
-            'timeline-network-flame-group-config', {});
+        Common.Settings.Settings.instance().createSetting<PerfUI.FlameChart.PersistedGroupConfig[]|null>(
+            'timeline-persisted-network-flamechart-track-config', null);
 
     this.mainDataProvider = new TimelineFlameChartDataProvider();
     this.mainDataProvider.setPersistedGroupConfigSetting(this.#mainPersistedGroupConfigSetting);
@@ -374,7 +375,7 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     this.chartSplitWidget.setMainWidget(flameChartsContainer);
     this.chartSplitWidget.setSidebarWidget(this.countersView);
     this.chartSplitWidget.hideDefaultResizer();
-    this.chartSplitWidget.installResizer((this.countersView.resizerElement() as Element));
+    this.chartSplitWidget.installResizer(this.countersView.resizerElement());
 
     // Create top level properties splitter.
     this.detailsSplitWidget = new UI.SplitWidget.SplitWidget(false, true, 'timeline-panel-details-split-view-state');
@@ -614,17 +615,19 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
   }
 
   #amendMarkerWithFieldData(): void {
-    if (!this.#traceMetadata?.cruxFieldData || !this.#traceInsightSets) {
+    const metadata = this.#parsedTrace?.metadata;
+    const insights = this.#parsedTrace?.insights;
+    if (!metadata?.cruxFieldData || !insights) {
       return;
     }
 
     const fieldMetricResultsByNavigationId = new Map<string, Trace.Insights.Common.CrUXFieldMetricResults|null>();
-    for (const [key, insightSet] of this.#traceInsightSets) {
+    for (const [key, insightSet] of insights) {
       if (insightSet.navigation) {
         fieldMetricResultsByNavigationId.set(
             key,
             Trace.Insights.Common.getFieldMetricsForInsightSet(
-                insightSet, this.#traceMetadata, CrUXManager.CrUXManager.instance().getSelectedScope()));
+                insightSet, metadata, CrUXManager.CrUXManager.instance().getSelectedScope()));
       }
     }
 
@@ -656,13 +659,13 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     }
   }
 
-  setMarkers(parsedTrace: Trace.Handlers.Types.ParsedTrace|null): void {
+  setMarkers(parsedTrace: Trace.TraceModel.ParsedTrace|null): void {
     if (!parsedTrace) {
       return;
     }
     // Clear out any markers.
     this.bulkRemoveOverlays(this.#markers);
-    const markerEvents = parsedTrace.PageLoadMetrics.allMarkerEvents;
+    const markerEvents = parsedTrace.data.PageLoadMetrics.allMarkerEvents;
     // Set markers for Navigations, LCP, FCP, DCL, L.
     const markers = markerEvents.filter(
         event => event.name === Trace.Types.Events.Name.NAVIGATION_START ||
@@ -676,9 +679,9 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     markers.forEach(marker => {
       const adjustedTimestamp = Trace.Helpers.Timing.timeStampForEventAdjustedByClosestNavigation(
           marker,
-          parsedTrace.Meta.traceBounds,
-          parsedTrace.Meta.navigationsByNavigationId,
-          parsedTrace.Meta.navigationsByFrameId,
+          parsedTrace.data.Meta.traceBounds,
+          parsedTrace.data.Meta.navigationsByNavigationId,
+          parsedTrace.data.Meta.navigationsByFrameId,
       );
       // If any of the markers overlap in timing, lets put them on the same marker.
       let matchingOverlay = false;
@@ -915,7 +918,8 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
       type: 'TIME_RANGE',
       label: '',
     };
-    ModificationsManager.activeManager()?.createAnnotation(this.#timeRangeSelectionAnnotation);
+    ModificationsManager.activeManager()?.createAnnotation(
+        this.#timeRangeSelectionAnnotation, {muteAriaNotifications: false, loadedFromFile: false});
   }
 
   /**
@@ -1132,8 +1136,8 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
   }
 
   /**
-   * @param startTime - the start time of the selection in MilliSeconds
-   * @param endTime - the end time of the selection in MilliSeconds
+   * @param startTime the start time of the selection in MilliSeconds
+   * @param endTime the end time of the selection in MilliSeconds
    * TODO(crbug.com/346312365): update the type definitions in ChartViewport.ts
    */
   updateRangeSelection(startTime: number, endTime: number): void {
@@ -1163,7 +1167,8 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
       };
       // Before creating a new range, make sure to delete the empty ranges.
       ModificationsManager.activeManager()?.deleteEmptyRangeAnnotations();
-      ModificationsManager.activeManager()?.createAnnotation(this.#timeRangeSelectionAnnotation);
+      ModificationsManager.activeManager()?.createAnnotation(
+          this.#timeRangeSelectionAnnotation, {muteAriaNotifications: false, loadedFromFile: false});
     }
   }
 
@@ -1185,51 +1190,33 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     this.#updateDetailViews();
   }
 
-  setModel(newParsedTrace: Trace.Handlers.Types.ParsedTrace, traceMetadata: Trace.Types.File.MetaData|null): void {
+  setModel(
+      newParsedTrace: Trace.TraceModel.ParsedTrace,
+      eventToRelatedInsightsMap: TimelineComponents.RelatedInsightChips.EventToRelatedInsightsMap): void {
     if (newParsedTrace === this.#parsedTrace) {
       return;
     }
 
     this.#parsedTrace = newParsedTrace;
-    this.#traceMetadata = traceMetadata;
-    if (traceMetadata?.visualTrackConfig) {
-      this.#addPersistedConfigToSettings(newParsedTrace, traceMetadata.visualTrackConfig);
-    }
+    this.#eventToRelatedInsightsMap = eventToRelatedInsightsMap;
     for (const dimmer of this.#flameChartDimmers) {
       dimmer.active = false;
       dimmer.mainChartIndices = [];
       dimmer.networkChartIndices = [];
     }
-    this.rebuildDataForTrace();
-  }
-
-  /**
-   * When the user imports a new trace and it has the visual config metadata, we add that data into the DevTools setting.
-   * NOTE: if the user has modifications for this trace already in memory,
-   * those are preferred over the modifications stored in the trace file itself.
-   */
-  #addPersistedConfigToSettings(
-      trace: Trace.Handlers.Types.ParsedTrace,
-      visualConfigForTrace: Trace.Types.File.PersistedTraceVisualConfig): void {
-    const key = keyForTraceConfig(trace);
-
-    if (visualConfigForTrace.main) {
-      const mainSetting = this.#mainPersistedGroupConfigSetting.get();
-      mainSetting[key] = mainSetting[key] ?? visualConfigForTrace.main;
-      this.#mainPersistedGroupConfigSetting.set(mainSetting);
-    }
-    if (visualConfigForTrace.network) {
-      const networkSetting = this.#networkPersistedGroupConfigSetting.get();
-      networkSetting[key] = networkSetting[key] ?? visualConfigForTrace.network;
-      this.#networkPersistedGroupConfigSetting.set(networkSetting);
-    }
+    this.rebuildDataForTrace({updateType: 'NEW_TRACE'});
   }
 
   /**
    * Resets the state of the UI data and initializes it again with the
    * current parsed trace.
+   * @param opts.updateType determines if we are redrawing because we need to show a new trace,
+   * or redraw an existing trace (if the user changed a setting).
+   * This distinction is needed because in the latter case we do not want to
+   * trigger some code such as Aria announcements for annotations if we are
+   * just redrawing.
    */
-  rebuildDataForTrace(): void {
+  rebuildDataForTrace(opts: {updateType: 'NEW_TRACE'|'REDRAW_EXISTING_TRACE'}): void {
     if (!this.#parsedTrace) {
       return;
     }
@@ -1237,7 +1224,7 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     this.#selectedGroupName = null;
     Common.EventTarget.removeEventListeners(this.eventListeners);
     this.#selectedEvents = null;
-    this.#entityMapper = new Utils.EntityMapper.EntityMapper(this.#parsedTrace);
+    this.#entityMapper = new Trace.EntityMapper.EntityMapper(this.#parsedTrace);
     // order is important: |reset| needs to be called after the trace
     // model has been set in the data providers.
     this.mainDataProvider.setModel(this.#parsedTrace, this.#entityMapper);
@@ -1248,12 +1235,11 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     // any state in the flame charts. We then need to provide it with any
     // persisted group settings here, before it recalculates the timeline data
     // and draws the UI.
-    const mainChartConfig = this.#getPersistedConfigForTrace(this.#parsedTrace, this.#mainPersistedGroupConfigSetting);
+    const mainChartConfig = this.#mainPersistedGroupConfigSetting.get();
     if (mainChartConfig) {
       this.mainFlameChart.setPersistedConfig(mainChartConfig);
     }
-    const networkChartConfig =
-        this.#getPersistedConfigForTrace(this.#parsedTrace, this.#networkPersistedGroupConfigSetting);
+    const networkChartConfig = this.#networkPersistedGroupConfigSetting.get();
     if (networkChartConfig) {
       this.networkFlameChart.setPersistedConfig(networkChartConfig);
     }
@@ -1265,44 +1251,18 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     this.resizeToPreferredHeights();
     this.setMarkers(this.#parsedTrace);
     this.dimThirdPartiesIfRequired();
-    ModificationsManager.activeManager()?.applyAnnotationsFromCache();
+    ModificationsManager.activeManager()?.applyAnnotationsFromCache(
+        {muteAriaNotifications: opts.updateType === 'REDRAW_EXISTING_TRACE'});
   }
 
   /**
    * Gets the persisted config (if the user has made any visual changes) in
    * order to save it to disk as part of the trace.
    */
-  getPersistedConfigMetadata(
-      trace: Trace.Handlers.Types.ParsedTrace,
-      ): Trace.Types.File.PersistedTraceVisualConfig {
-    const main = this.#getPersistedConfigForTrace(trace, this.#mainPersistedGroupConfigSetting);
-    const network = this.#getPersistedConfigForTrace(trace, this.#networkPersistedGroupConfigSetting);
+  getPersistedConfigMetadata(): Trace.Types.File.PersistedTraceVisualConfig {
+    const main = this.#mainPersistedGroupConfigSetting.get();
+    const network = this.#networkPersistedGroupConfigSetting.get();
     return {main, network};
-  }
-
-  #getPersistedConfigForTrace(
-      trace: Trace.Handlers.Types.ParsedTrace,
-      setting: Common.Settings.Setting<PerfUI.FlameChart.PersistedConfigPerTrace>):
-      PerfUI.FlameChart.PersistedGroupConfig[]|null {
-    const value = setting.get();
-    const key = trace.Meta.traceBounds.min;
-    if (value[key]) {
-      return value[key];
-    }
-    return null;
-  }
-
-  setInsights(
-      insights: Trace.Insights.Types.TraceInsightSets|null,
-      eventToRelatedInsightsMap: TimelineComponents.RelatedInsightChips.EventToRelatedInsightsMap): void {
-    if (this.#traceInsightSets === insights) {
-      return;
-    }
-
-    this.#traceInsightSets = insights;
-    this.#eventToRelatedInsightsMap = eventToRelatedInsightsMap;
-    // The DetailsView is provided with the InsightSets, so make sure we update it.
-    this.#updateDetailViews();
   }
 
   reset(): void {
@@ -1344,7 +1304,6 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     void this.detailsView.setModel({
       parsedTrace: this.#parsedTrace,
       selectedEvents: this.#selectedEvents,
-      traceInsightsSets: this.#traceInsightSets,
       eventToRelatedInsightsMap: this.#eventToRelatedInsightsMap,
       entityMapper: this.#entityMapper,
     });
@@ -1355,6 +1314,15 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     this.networkFlameChart.scheduleUpdate();
 
     this.#registerLoggableGroups();
+  }
+
+  hasHiddenTracks(): boolean {
+    const groups = [
+      ...this.mainFlameChart.timelineData()?.groups ?? [],
+      ...this.networkFlameChart.timelineData()?.groups ?? [],
+    ];
+
+    return groups.some(g => g.hidden);
   }
 
   #registerLoggableGroups(): void {
@@ -1542,22 +1510,25 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     // supports (currently, only main thread events), then set the context's
     // "flavor" to be the AI Call Tree of the active event.
     // This is listened to by the AI Assistance panel to update its state.
-    // Note that we do not change the Context back to `null` if the user picks
-    // an invalid event - we don't want to reset it back as it may be they are
-    // clicking around in order to understand something.
     // We also do this in a rAF to not block the UI updating to show the selected event first.
-    if (selectionIsEvent(selection) && this.#parsedTrace) {
-      requestAnimationFrame(() => {
-        if (!this.#parsedTrace) {
-          return;
-        }
-        const aiCallTree = Utils.AICallTree.AICallTree.fromEvent(selection.event, this.#parsedTrace);
-        if (aiCallTree) {
-          const context = Utils.AIContext.AgentFocus.fromCallTree(aiCallTree);
-          UI.Context.Context.instance().setFlavor(Utils.AIContext.AgentFocus, context);
-        }
-      });
-    }
+    requestAnimationFrame(() => {
+      if (!this.#parsedTrace) {
+        return;
+      }
+
+      const event = selectionIsEvent(selection) ? selection.event : null;
+
+      let focus = UI.Context.Context.instance().flavor(AIAssistance.AgentFocus);
+      if (focus) {
+        focus = focus.withEvent(event);
+      } else if (event) {
+        focus = AIAssistance.AgentFocus.fromEvent(this.#parsedTrace, event);
+      } else {
+        focus = null;
+      }
+
+      UI.Context.Context.instance().setFlavor(AIAssistance.AgentFocus, focus);
+    });
   }
 
   // Only opens the details view of a selection. This is used for Timing Markers. Timing markers replace
@@ -1614,17 +1585,27 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     this.#overlays.bringLabelForward(overlay);
   }
 
+  enterMainChartTrackConfigurationMode(): void {
+    this.mainFlameChart.enterTrackConfigurationMode();
+  }
+
+  showAllMainChartTracks(): void {
+    this.mainFlameChart.showAllGroups();
+  }
+
   private onAddEntryLabelAnnotation(
       dataProvider: TimelineFlameChartDataProvider|TimelineFlameChartNetworkDataProvider,
       event: Common.EventTarget.EventTargetEvent<{entryIndex: number, withLinkCreationButton: boolean}>): void {
     const selection = dataProvider.createSelection(event.data.entryIndex);
     if (selectionIsEvent(selection)) {
       this.setSelectionAndReveal(selection);
-      ModificationsManager.activeManager()?.createAnnotation({
-        type: 'ENTRY_LABEL',
-        entry: selection.event,
-        label: '',
-      });
+      ModificationsManager.activeManager()?.createAnnotation(
+          {
+            type: 'ENTRY_LABEL',
+            entry: selection.event,
+            label: '',
+          },
+          {loadedFromFile: false, muteAriaNotifications: false});
       if (event.data.withLinkCreationButton) {
         this.onEntriesLinkAnnotationCreate(dataProvider, event.data.entryIndex, true);
       }
@@ -1644,7 +1625,8 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
                                     Trace.Types.File.EntriesLinkState.PENDING_TO_EVENT,
       });
       if (this.#linkSelectionAnnotation) {
-        ModificationsManager.activeManager()?.createAnnotation(this.#linkSelectionAnnotation);
+        ModificationsManager.activeManager()?.createAnnotation(
+            this.#linkSelectionAnnotation, {loadedFromFile: false, muteAriaNotifications: false});
       }
     }
   }
@@ -1781,6 +1763,10 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
   }
 
   supportsCaseSensitiveSearch(): boolean {
+    return true;
+  }
+
+  supportsWholeWordSearch(): boolean {
     return true;
   }
 
@@ -1935,17 +1921,17 @@ export const FlameChartStyle = {
 };
 
 export class TimelineFlameChartMarker implements PerfUI.FlameChart.FlameChartMarker {
-  private readonly startTimeInternal: number;
+  readonly #startTime: number;
   private readonly startOffset: number;
   private style: TimelineMarkerStyle;
   constructor(startTime: number, startOffset: number, style: TimelineMarkerStyle) {
-    this.startTimeInternal = startTime;
+    this.#startTime = startTime;
     this.startOffset = startOffset;
     this.style = style;
   }
 
   startTime(): number {
-    return this.startTimeInternal;
+    return this.#startTime;
   }
 
   color(): string {

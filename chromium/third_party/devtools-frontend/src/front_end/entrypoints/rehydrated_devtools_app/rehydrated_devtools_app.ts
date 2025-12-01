@@ -1,5 +1,5 @@
 
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import '../main/main-meta.js';
@@ -9,6 +9,7 @@ import '../../Images/Images.js';
 import '../../models/logs/logs-meta.js';
 import '../../models/persistence/persistence-meta.js';
 import '../../panels/browser_debugger/browser_debugger-meta.js';
+import '../../panels/developer_resources/developer_resources-meta.js';
 // panels/timeline depends on mobile_throttling for settings UI
 import '../../panels/mobile_throttling/mobile_throttling-meta.js';
 import '../../panels/protocol_monitor/protocol_monitor-meta.js';

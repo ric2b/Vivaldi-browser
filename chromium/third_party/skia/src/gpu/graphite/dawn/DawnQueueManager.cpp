@@ -78,10 +78,7 @@ DawnWorkSubmissionWithFuture::DawnWorkSubmissionWithFuture(std::unique_ptr<Comma
 bool DawnWorkSubmissionWithFuture::onIsFinished(const SharedContext* sharedContext) {
     wgpu::FutureWaitInfo waitInfo{};
     waitInfo.future = fSubmittedWorkDoneFuture;
-    const auto& instance = static_cast<const DawnSharedContext*>(sharedContext)
-                                   ->device()
-                                   .GetAdapter()
-                                   .GetInstance();
+    const auto& instance = static_cast<const DawnSharedContext*>(sharedContext)->instance();
     if (instance.WaitAny(1, &waitInfo, /*timeoutNS=*/0) != wgpu::WaitStatus::Success) {
         return false;
     }
@@ -92,10 +89,7 @@ bool DawnWorkSubmissionWithFuture::onIsFinished(const SharedContext* sharedConte
 void DawnWorkSubmissionWithFuture::onWaitUntilFinished(const SharedContext* sharedContext) {
     wgpu::FutureWaitInfo waitInfo{};
     waitInfo.future = fSubmittedWorkDoneFuture;
-    const auto& instance = static_cast<const DawnSharedContext*>(sharedContext)
-                                   ->device()
-                                   .GetAdapter()
-                                   .GetInstance();
+    const auto& instance = static_cast<const DawnSharedContext*>(sharedContext)->instance();
     [[maybe_unused]] auto status =
             instance.WaitAny(1, &waitInfo, /*timeoutNS=*/std::numeric_limits<uint64_t>::max());
     SkASSERT(status == wgpu::WaitStatus::Success);
@@ -119,7 +113,7 @@ std::unique_ptr<CommandBuffer> DawnQueueManager::getNewCommandBuffer(
                                    static_cast<DawnResourceProvider*>(resourceProvider));
 }
 
-QueueManager::OutstandingSubmission DawnQueueManager::onSubmitToGpu() {
+QueueManager::OutstandingSubmission DawnQueueManager::onSubmitToGpu(const SubmitInfo&) {
     SkASSERT(fCurrentCommandBuffer);
     DawnCommandBuffer* dawnCmdBuffer = static_cast<DawnCommandBuffer*>(fCurrentCommandBuffer.get());
     auto wgpuCmdBuffer = dawnCmdBuffer->finishEncoding();

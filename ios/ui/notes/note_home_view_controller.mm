@@ -1462,11 +1462,17 @@ const int kRowsHiddenByNavigationBar = 3;
 }
 
 - (void)setNotesContextBarButtonsDefaultState {
+  // Determine button style based on iOS version
+  UIBarButtonItemStyle buttonStyle = UIBarButtonItemStyleDone;
+  if (@available(iOS 26, *)) {
+    buttonStyle = UIBarButtonItemStylePlain;
+  }
+
   // Set Context Menu button for sorting and new folder
   UIImage* dotsIcon = [UIImage imageNamed:vPanelMoreAction];
   UIBarButtonItem* contextMenu =
       [[UIBarButtonItem alloc] initWithImage:dotsIcon
-                                       style:UIBarButtonItemStyleDone
+                                       style:buttonStyle
                                       target:self
                                       action:nil];
   contextMenu.menu = [self contextMenuForNotesSortButton];
@@ -1494,7 +1500,7 @@ const int kRowsHiddenByNavigationBar = 3;
     UIImage* image = [UIImage systemImageNamed:@"plus"];
     UIBarButtonItem* plusButton = [[UIBarButtonItem alloc]
         initWithImage:image
-                style:UIBarButtonItemStyleDone
+                style:buttonStyle
                target:self
                action:@selector(handleAddBarButtonTap)];
     [self setToolbarItems:@[
@@ -2633,11 +2639,19 @@ const int kRowsHiddenByNavigationBar = 3;
 }
 
 - (UIBarButtonItem*)customizedDoneButton {
-  UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
+  UIBarButtonItem* doneButton;
+  if (@available(iOS 26, *)) {
+    doneButton = [[UIBarButtonItem alloc]
+        initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+                             target:self
+                             action:@selector(navigationBarCancel:)];
+  } else {
+    doneButton = [[UIBarButtonItem alloc]
       initWithTitle:GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)
               style:UIBarButtonItemStyleDone
              target:self
              action:@selector(navigationBarCancel:)];
+  }
   doneButton.accessibilityLabel =
       GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON);
   doneButton.accessibilityIdentifier =
@@ -2647,11 +2661,19 @@ const int kRowsHiddenByNavigationBar = 3;
 }
 
 - (UIBarButtonItem*)customizedDoneTextButton {
-  UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
+  UIBarButtonItem* doneButton;
+  if (@available(iOS 26, *)) {
+    doneButton = [[UIBarButtonItem alloc]
+        initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+                             target:self
+                             action:@selector(navigationBarCancel:)];
+  } else {
+    doneButton = [[UIBarButtonItem alloc]
       initWithTitle:GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)
               style:UIBarButtonItemStyleDone
              target:self
              action:@selector(navigationBarCancel:)];
+  }
   doneButton.accessibilityLabel =
       GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON);
   doneButton.accessibilityIdentifier =

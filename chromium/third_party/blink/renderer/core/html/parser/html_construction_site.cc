@@ -71,7 +71,7 @@
 #include "third_party/blink/renderer/core/html_element_factory.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
-#include "third_party/blink/renderer/core/patching/dom_patch_status.h"
+#include "third_party/blink/renderer/core/patching/patch.h"
 #include "third_party/blink/renderer/core/script/ignore_destructive_write_count_incrementer.h"
 #include "third_party/blink/renderer/core/svg/svg_script_element.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
@@ -80,6 +80,7 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/text/text_break_iterator.h"
+#include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_visitor.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
@@ -179,11 +180,10 @@ static String CheckWhitespaceAndConvertToString(const StringView& string,
                                                 RecomputeMode recompute_mode) {
   switch (whitespace_mode) {
     case WhitespaceMode::kNewlineThenWhitespace:
-      DCHECK(WTF::NewlineThenWhitespaceStringsTable::IsNewlineThenWhitespaces(
-          string));
-      if (string.length() <
-          WTF::NewlineThenWhitespaceStringsTable::kTableSize) {
-        return WTF::NewlineThenWhitespaceStringsTable::GetStringForLength(
+      DCHECK(
+          NewlineThenWhitespaceStringsTable::IsNewlineThenWhitespaces(string));
+      if (string.length() < NewlineThenWhitespaceStringsTable::kTableSize) {
+        return NewlineThenWhitespaceStringsTable::GetStringForLength(
             string.length());
       }
       [[fallthrough]];
@@ -497,7 +497,8 @@ HTMLConstructionSite::HTMLConstructionSite(
     Document& document,
     ParserContentPolicy parser_content_policy,
     ContainerNode* fragment_target,
-    Element* context_element)
+    Element* context_element,
+    CustomElementRegistry* registry)
     : reentry_permit_(reentry_permit),
       document_(&document),
       attachment_root_(fragment_target && fragment_target->IsDocumentFragment()
@@ -512,7 +513,8 @@ HTMLConstructionSite::HTMLConstructionSite(
           ScriptingContentIsAllowed(parser_content_policy)),
       is_parsing_fragment_(fragment_target),
       redirect_attach_to_foster_parent_(false),
-      in_quirks_mode_(document.InQuirksMode()) {
+      in_quirks_mode_(document.InQuirksMode()),
+      custom_element_registry_(registry) {
   DCHECK(document_->IsHTMLDocument() || document_->IsXHTMLDocument() ||
          is_parsing_fragment_);
 
@@ -551,6 +553,7 @@ void HTMLConstructionSite::Trace(Visitor* visitor) const {
   visitor->Trace(pending_text_);
   visitor->Trace(pending_dom_parts_);
   visitor->Trace(patch_scope_);
+  visitor->Trace(custom_element_registry_);
 }
 
 void HTMLConstructionSite::Detach() {
@@ -910,44 +913,34 @@ void HTMLConstructionSite::InsertHTMLTemplateElement(
   HTMLStackItem* template_stack_item =
       HTMLStackItem::Create(template_element, token);
   bool should_attach_template = true;
-  if (RuntimeEnabledFeatures::DocumentPatchingEnabled()) {
-    if (Attribute* patchfor_attribute =
-            token->GetAttributeItem(html_names::kPatchforAttr)) {
-      const AtomicString& id = patchfor_attribute->Value();
-      Element* patch_target = nullptr;
-      // If we have a patch scope, it is used as a scope to resolve patch
-      // target IDs.
-      if (patch_scope_) {
-        patch_target = patch_scope_->getElementById(id);
-      } else {
-        TreeScope* scope = &CurrentNode()->GetTreeScope();
-        if (HTMLTemplateElement* template_parent =
-                DynamicTo<HTMLTemplateElement>(CurrentNode())) {
-          if (ShadowRoot* shadow_root =
-                  DynamicTo<ShadowRoot>(template_parent->InsertionTarget())) {
-            scope = shadow_root;
-          }
+  if (RuntimeEnabledFeatures::DocumentPatchingEnabled() &&
+      template_element->FastHasAttribute(html_names::kPatchforAttr)) {
+    const AtomicString& id =
+        template_element->FastGetAttribute(html_names::kPatchforAttr);
+    Element* patch_target = nullptr;
+    // If we have a patch scope, it is used as a scope to resolve patch
+    // target IDs.
+    if (patch_scope_) {
+      patch_target = patch_scope_->getElementById(id);
+    } else {
+      TreeScope* scope = &CurrentNode()->GetTreeScope();
+      if (HTMLTemplateElement* template_parent =
+              DynamicTo<HTMLTemplateElement>(CurrentNode())) {
+        if (ShadowRoot* shadow_root =
+                DynamicTo<ShadowRoot>(template_parent->InsertionTarget())) {
+          scope = shadow_root;
         }
-
-        patch_target = scope->getElementById(id);
       }
-      if (patch_target) {
-        // For now, a template is either targeting a shadow root or a patch.
-        declarative_shadow_root_mode = String();
 
-        // Like with shadowrootmode, the template is discarded.
-        should_attach_template = false;
+      patch_target = scope->getElementById(id);
+    }
 
-        String patch_src;
-        if (Attribute* patchsrc_attribute =
-                token->GetAttributeItem(html_names::kPatchsrcAttr)) {
-          patch_src = patchsrc_attribute->Value();
-        }
+    if (patch_target && template_element->ProcessPatch(*patch_target)) {
+      // For now, a template is either targeting a shadow root or a patch.
+      declarative_shadow_root_mode = String();
 
-        // From now on, parsed children of the template are inserted directly to
-        // the patch target, and patch_src will be fetched.
-        template_element->BeginPatch(*patch_target, patch_src);
-      }
+      // Like with shadowrootmode, the template is discarded.
+      should_attach_template = false;
     }
   }
 
@@ -975,9 +968,15 @@ void HTMLConstructionSite::InsertHTMLTemplateElement(
     const auto& reference_target =
         reference_target_attr ? reference_target_attr->Value() : g_null_atom;
 
+    bool waiting_for_scoped_registry =
+        RuntimeEnabledFeatures::ScopedCustomElementRegistryEnabled() &&
+        template_stack_item->GetAttributeItem(
+            html_names::kShadowrootcustomelementregistryAttr);
+
     bool success = host->AttachDeclarativeShadowRoot(
         *template_element, declarative_shadow_root_mode, focus_delegation,
-        slot_assignment_mode, serializable, clonable, reference_target);
+        slot_assignment_mode, serializable, clonable, reference_target,
+        waiting_for_scoped_registry);
     // If the shadow root attachment fails, e.g. if the host element isn't a
     // valid shadow host, then we leave should_attach_template true, so that
     // a "normal" template element gets attached to the DOM tree.
@@ -1081,7 +1080,7 @@ void HTMLConstructionSite::InsertTextNode(const StringView& string,
                                           WhitespaceMode whitespace_mode) {
   if (HTMLTemplateElement* current =
           DynamicTo<HTMLTemplateElement>(CurrentNode())) {
-    if (DOMPatchStatus* patch = current->OutgoingPatch()) {
+    if (Patch* patch = current->OutgoingPatch()) {
       patch->Append(string.ToString());
       return;
     }
@@ -1171,21 +1170,31 @@ Document& HTMLConstructionSite::OwnerDocumentForCurrentNode() {
 CustomElementDefinition* HTMLConstructionSite::LookUpCustomElementDefinition(
     Document& document,
     const QualifiedName& tag_name,
-    const AtomicString& is) {
-  // "1. If namespace is not the HTML namespace, return null."
+    const AtomicString& is,
+    CustomElementRegistry* registry) {
+  // "2. If namespace is not the HTML namespace, return null."
   if (tag_name.NamespaceURI() != html_names::xhtmlNamespaceURI)
     return nullptr;
 
-  // "2. If document does not have a browsing context, return null."
-  LocalDOMWindow* window = document.domWindow();
-  if (!window)
-    return nullptr;
+  if (RuntimeEnabledFeatures::ScopedCustomElementRegistryEnabled()) {
+    if (!registry) {
+      return nullptr;
+    }
+  } else {
+    // "1. (pre-scoped registry old spec) If document does not have a browsing
+    // context, return null."
+    LocalDOMWindow* window = document.domWindow();
+    if (!window) {
+      return nullptr;
+    }
 
-  // "3. Let registry be document's browsing context's Window's
-  // CustomElementRegistry object."
-  CustomElementRegistry* registry = window->MaybeCustomElements();
-  if (!registry)
-    return nullptr;
+    // "3. (pre-scoped registry old spec) Let registry be document's browsing
+    // context's Window's CustomElementRegistry object."
+    registry = window->MaybeCustomElements();
+    if (!registry) {
+      return nullptr;
+    }
+  }
 
   const AtomicString& local_name = tag_name.LocalName();
   const AtomicString& name = !is.IsNull() ? is : local_name;
@@ -1200,21 +1209,38 @@ CustomElementDefinition* HTMLConstructionSite::LookUpCustomElementDefinition(
 Element* HTMLConstructionSite::CreateElement(
     AtomicHTMLToken* token,
     const AtomicString& namespace_uri) {
-  // "1. Let document be intended parent's node document."
+  // "3. Let document be intended parent's node document."
   Document& document = OwnerDocumentForCurrentNode();
 
-  // "2. Let local name be the tag name of the token."
+  // "4. Let local name be the tag name of the token."
   QualifiedName tag_name =
       ((token->IsValidHTMLTag() &&
         namespace_uri == html_names::xhtmlNamespaceURI)
            ? static_cast<const QualifiedName&>(
                  html_names::TagToQualifiedName(token->GetHTMLTag()))
            : QualifiedName(g_null_atom, token->GetName(), namespace_uri));
-  // "3. Let is be the value of the "is" attribute in the given token ..." etc.
+  // "5. Let is be the value of the "is" attribute in the given token ..." etc.
   const Attribute* is_attribute = token->GetAttributeItem(html_names::kIsAttr);
   const AtomicString& is = is_attribute ? is_attribute->Value() : g_null_atom;
-  // "4. Let definition be the result of looking up a custom element ..." etc.
-  auto* definition = LookUpCustomElementDefinition(document, tag_name, is);
+  // "6. Let registry be the result of looking up a custom element registry
+  // given intended parent."
+  CustomElementRegistry* registry = custom_element_registry_;
+  if (RuntimeEnabledFeatures::ScopedCustomElementRegistryEnabled()) {
+    // Look up intended parent's custom element registry. Note that if the
+    // intended parent is a template element, which means it will create a
+    // document fragment, the custom element registry should be null.
+    if (open_elements_.StackDepth() > 1) {
+      if (IsA<HTMLTemplateElement>(CurrentNode())) {
+        registry = nullptr;
+      } else {
+        registry = CurrentElement()->customElementRegistry();
+      }
+    }
+  }
+  // 8. Let definition be the result of looking up a custom element definition
+  // given registry, given namespace, local name and is.
+  auto* definition =
+      LookUpCustomElementDefinition(document, tag_name, is, registry);
   // "5. If definition is non-null and the parser was not originally created
   // for the HTML fragment parsing algorithm, then let will execute script
   // be true."
@@ -1269,8 +1295,7 @@ Element* HTMLConstructionSite::CreateElement(
                                           GetCreateElementFlags());
     } else {
       element = CustomElement::CreateUncustomizedOrUndefinedElement(
-          document, tag_name, GetCreateElementFlags(), is,
-          /*registry*/ nullptr);
+          document, tag_name, GetCreateElementFlags(), is, registry);
     }
     // Definition for the created element does not exist here and it cannot be
     // custom, precustomized, or failed.

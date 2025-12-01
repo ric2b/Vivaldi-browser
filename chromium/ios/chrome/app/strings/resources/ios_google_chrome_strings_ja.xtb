@@ -193,6 +193,7 @@
 <translation id="6145223986912084844">chrome</translation>
 <translation id="6177442314419606057">Chrome で検索</translation>
 <translation id="6181652351336379338">Chrome で画像を検索します。</translation>
+<translation id="6187085551300363958">Chrome のヒント: パスワードを保存</translation>
 <translation id="6200694931081795166">Chrome を既定のブラウザにするには:
   1. [設定] を開く
   2. [デフォルトのブラウザアプリ] をタップする
@@ -264,6 +265,7 @@ Chrome を使いやすくするためにデータを使用するその他の設�
 <translation id="7599894504325210080">Chrome の自動入力拡張ビュー</translation>
 <translation id="7617512710641355143">Chrome は管理されています</translation>
 <translation id="7626032353295482388">Chrome へようこそ</translation>
+<translation id="7641448682796883218">Chrome のヒント: セーフ ブラウジング保護強化機能</translation>
 <translation id="7642373780953416937">Chrome で自動的に検出されたプライバシーとセキュリティの問題がある場合は、アラートが表示されます。</translation>
 <translation id="7660356333829433649">Chrome を最大限に活用するヒントをこちらで随時ご紹介します。</translation>
 <translation id="7662994914830945754">どのデバイスからでも Chrome で自分のタブにアクセスするには、ログインして同期をオンにしてください</translation>
@@ -314,7 +316,7 @@ Chrome を使いやすくするためにデータを使用するその他の設�
 <translation id="855027533751209304">Chrome のヒント: 見たものをそのまま検索</translation>
 <translation id="8558480467877843976">ブラウジングするときや、メッセージ、ドキュメント、他のアプリのリンクをタップしたときに、常に Chrome が使えるようになります。</translation>
 <translation id="8603022514504485810">Google パスワード マネージャーですべてのパスワードを確認できませんでした。明日もう一度お試しいただくか、<ph name="BEGIN_LINK" />Google アカウント内のパスワードをご確認ください<ph name="END_LINK" />。</translation>
-<translation id="8610372330814566250">Safari のパスワード、履歴、ブックマーク、クレジット カードを Chrome で使用する</translation>
+<translation id="8610372330814566250">Safari のパスワード、履歴、ブックマーク、クレジット カードを Chrome で使用できます</translation>
 <translation id="8630122478628016441">[Chrome を終了するときにシークレット タブをロックする] をオンにする。</translation>
 <translation id="8673726683583791503">Google レンズを使用して購入</translation>
 <translation id="8765470054473112089">Chrome でアドレスバーや検索ボックスに入力を始めると、入力内容がデフォルトの検索エンジンに送信され、より関連性の高い検索候補が表示されます。シークレット モードの場合、この設定はオフになっています。</translation>

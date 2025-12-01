@@ -15,28 +15,63 @@
  */
 
 #include "src/trace_processor/importers/proto/graphics_event_module.h"
-#include "src/trace_processor/importers/common/trace_parser.h"
 
-namespace perfetto {
-namespace trace_processor {
+#include <cstdint>
+
+#include "perfetto/trace_processor/ref_counted.h"
+#include "src/trace_processor/importers/common/parser_types.h"
+#include "src/trace_processor/importers/proto/packet_sequence_state_generation.h"
+#include "src/trace_processor/importers/proto/proto_importer_module.h"
+#include "src/trace_processor/types/trace_processor_context.h"
+
+#include "protos/perfetto/trace/gpu/gpu_counter_event.pbzero.h"
+#include "protos/perfetto/trace/trace_packet.pbzero.h"
+
+namespace perfetto::trace_processor {
 
 using perfetto::protos::pbzero::TracePacket;
 
-GraphicsEventModule::GraphicsEventModule(TraceProcessorContext* context)
-    : parser_(context),
+GraphicsEventModule::GraphicsEventModule(
+    ProtoImporterModuleContext* module_context,
+    TraceProcessorContext* context)
+    : ProtoImporterModule(module_context),
+      parser_(context),
       frame_parser_(context),
       frame_timeline_parser_(context) {
-  RegisterForField(TracePacket::kFrameTimelineEventFieldNumber, context);
-  RegisterForField(TracePacket::kGpuCounterEventFieldNumber, context);
-  RegisterForField(TracePacket::kGpuRenderStageEventFieldNumber, context);
-  RegisterForField(TracePacket::kGpuLogFieldNumber, context);
-  RegisterForField(TracePacket::kGpuMemTotalEventFieldNumber, context);
-  RegisterForField(TracePacket::kGraphicsFrameEventFieldNumber, context);
-  RegisterForField(TracePacket::kVulkanMemoryEventFieldNumber, context);
-  RegisterForField(TracePacket::kVulkanApiEventFieldNumber, context);
+  RegisterForField(TracePacket::kFrameTimelineEventFieldNumber);
+  RegisterForField(TracePacket::kGpuCounterEventFieldNumber);
+  RegisterForField(TracePacket::kGpuRenderStageEventFieldNumber);
+  RegisterForField(TracePacket::kGpuLogFieldNumber);
+  RegisterForField(TracePacket::kGpuMemTotalEventFieldNumber);
+  RegisterForField(TracePacket::kGraphicsFrameEventFieldNumber);
+  RegisterForField(TracePacket::kVulkanMemoryEventFieldNumber);
+  RegisterForField(TracePacket::kVulkanApiEventFieldNumber);
 }
 
 GraphicsEventModule::~GraphicsEventModule() = default;
+
+ModuleResult GraphicsEventModule::TokenizePacket(
+    const protos::pbzero::TracePacket::Decoder& decoder,
+    TraceBlobView*,
+    int64_t,
+    RefPtr<PacketSequenceStateGeneration>,
+    uint32_t field_id) {
+  switch (field_id) {
+    case TracePacket::kGpuCounterEventFieldNumber:
+      parser_.TokenizeGpuCounterEvent(decoder.gpu_counter_event());
+      break;
+    case TracePacket::kFrameTimelineEventFieldNumber:
+    case TracePacket::kGpuRenderStageEventFieldNumber:
+    case TracePacket::kGpuLogFieldNumber:
+    case TracePacket::kGraphicsFrameEventFieldNumber:
+    case TracePacket::kVulkanMemoryEventFieldNumber:
+    case TracePacket::kVulkanApiEventFieldNumber:
+    case TracePacket::kGpuMemTotalEventFieldNumber:
+    default:
+      break;
+  }
+  return ModuleResult::Ignored();
+}
 
 void GraphicsEventModule::ParseTracePacketData(
     const TracePacket::Decoder& decoder,
@@ -74,5 +109,4 @@ void GraphicsEventModule::ParseTracePacketData(
   }
 }
 
-}  // namespace trace_processor
-}  // namespace perfetto
+}  // namespace perfetto::trace_processor

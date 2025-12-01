@@ -102,7 +102,7 @@ NSString* GetPromoLabelString(
     case signin_metrics::AccessPoint::kAvatarBubbleSignIn:
     case signin_metrics::AccessPoint::kUserManager:
     case signin_metrics::AccessPoint::kDevicesPage:
-    case signin_metrics::AccessPoint::kSigninPromo:
+    case signin_metrics::AccessPoint::kFullscreenSigninPromo:
     case signin_metrics::AccessPoint::kUnknown:
     case signin_metrics::AccessPoint::kPasswordBubble:
     case signin_metrics::AccessPoint::kAutofillDropdown:
@@ -153,8 +153,6 @@ NSString* GetPromoLabelString(
     case signin_metrics::AccessPoint::kHistorySyncOptinExpansionPillOnStartup:
     case signin_metrics::AccessPoint::kWidget:
     case signin_metrics::AccessPoint::kCollaborationLeaveOrDeleteTabGroup:
-    case signin_metrics::AccessPoint::
-        kHistorySyncOptinExpansionPillOnInactivity:
     case signin_metrics::AccessPoint::kHistorySyncEducationalTip:
     case signin_metrics::AccessPoint::kManagedProfileAutoSigninIos:
     case signin_metrics::AccessPoint::kNonModalSigninPasswordPromo:
@@ -273,9 +271,10 @@ NSString* GetPromoLabelString(
           : l10n_util::GetNSString(IDS_CANCEL);
   [_consumer setSkipButtonText:skipButtonText];
 
-  [self selectSelectedIdentity];
+  [self selectDefaultIdentity];
 }
 
+// Sets `self.selectedIdentity` and update the UI.
 - (void)setSelectedIdentity:(id<SystemIdentity>)identity {
   if ([_selectedIdentity isEqual:identity]) {
     return;
@@ -286,9 +285,11 @@ NSString* GetPromoLabelString(
 
 #pragma mark - Private
 
-// Updates the default identity, or hide the default identity if there isn't
-// one present on the device.
-- (void)selectSelectedIdentity {
+// Selects the default identity to be either:
+// * the device default identity if any,
+// * otherwise nil.
+// Also updates the UI accordingly.
+- (void)selectDefaultIdentity {
   if (!_identityManager || !_accountManagerService) {
     return;
   }
@@ -309,6 +310,7 @@ NSString* GetPromoLabelString(
   id<SystemIdentity> selectedIdentity = self.selectedIdentity;
   UIImage* avatar = _accountManagerService->GetIdentityAvatarWithIdentity(
       selectedIdentity, IdentityAvatarSize::TableViewIcon);
+  CHECK(self.selectedIdentity, base::NotFatalUntil::M147);
   BOOL isManaged = [self isIdentityKnownToBeManaged:selectedIdentity];
   [self.consumer showDefaultAccountWithFullName:selectedIdentity.userFullName
                                       givenName:selectedIdentity.userGivenName
@@ -330,6 +332,7 @@ NSString* GetPromoLabelString(
 // called asynchronously when the management status if retrieved and the
 // identity is managed.
 - (BOOL)isIdentityKnownToBeManaged:(id<SystemIdentity>)identity {
+  CHECK(identity, base::NotFatalUntil::M147);
   if (std::optional<BOOL> managed = IsIdentityManaged(identity);
       managed.has_value()) {
     return managed.value();
@@ -352,10 +355,10 @@ NSString* GetPromoLabelString(
         !_accountManagerService->IsValidIdentity(self.selectedIdentity)) {
       // The currently selected identity is not valid anymore. Let’s select the
       // default identity instead.
-      [self selectSelectedIdentity];
+      [self selectDefaultIdentity];
     }
   } else {
-    [self selectSelectedIdentity];
+    [self selectDefaultIdentity];
   }
 }
 

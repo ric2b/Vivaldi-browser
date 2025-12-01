@@ -302,6 +302,10 @@ class WebIdlSchemaTest(unittest.TestCase):
         'optional': True,
         '$ref': 'ExampleType'
     }], getFunctionParameters(schema, 'takesOptionalCustomType'))
+    self.assertEqual([{
+        'name': 'enumArgument',
+        '$ref': 'EnumType'
+    }], getFunctionParameters(schema, 'takesEnum'))
 
   # Tests function descriptions are processed as expected.
   def testFunctionDescriptions(self):
@@ -444,8 +448,8 @@ class WebIdlSchemaTest(unittest.TestCase):
             'description': 'An ExampleType passed to the event listener.'
         }], event_two['parameters'])
 
-  # Tests that Dictionaries defined on the top level of the IDL file are
-  # processed into types on the resulting namespace.
+  # Tests that Dictionaries and Enums defined on the top level of the IDL file
+  # are processed into types on the resulting namespace.
   def testApiTypesOnNamespace(self):
     schema = self.idl_basics
     custom_type = getType(schema, 'ExampleType')
@@ -490,6 +494,19 @@ class WebIdlSchemaTest(unittest.TestCase):
             'description': 'Comment on sequence type.',
         }, custom_type['properties']['booleanSequence'])
 
+    enum_expected = {
+        'enum': [{
+            'name': 'name1',
+            'description': 'Comment1.'
+        }, {
+            'name': 'name2'
+        }],
+        'description': 'Enum description.',
+        'type': 'string',
+        'id': 'EnumType'
+    }
+    self.assertEqual(enum_expected, getType(schema, 'EnumType'))
+
   # Tests that a top level API comment is processed into a description
   # attribute, with HTML paragraph nodes added due to the blank commented line.
   def testApiDescriptionComment(self):
@@ -502,10 +519,66 @@ class WebIdlSchemaTest(unittest.TestCase):
         ' line or non-comment is reached.</p>')
     self.assertEqual(expected_description, schema['description'])
 
+  # Tests that constants defined on an API Interface are processed into the
+  # 'properties' object.
+  def testConstantProperties(self):
+    schema = self.idl_basics
+    properties = schema['properties']
+    # Properties are an ordered dict, so ordering matches order in the IDL file.
+    self.assertEqual(
+        ['CONSTANT_LONG', 'CONSTANT_DOUBLE', 'DESCRIBED_CONSTANT'],
+        list(properties.keys()),
+    )
+    self.assertEqual({
+        'type': 'integer',
+        'value': 39
+    }, properties['CONSTANT_LONG'])
+    self.assertEqual({
+        'type': 'number',
+        'value': 3.9
+    }, properties['CONSTANT_DOUBLE'])
+    self.assertEqual(
+        {
+            'type': 'integer',
+            'value': 9,
+            'description': 'Comment on a constant property with a value.',
+        },
+        properties['DESCRIBED_CONSTANT'],
+    )
+
   # Tests that if the nodoc extended attribute is not specified on the API
   # interface the related attribute is set to false after processing.
   def testNodocUnspecifiedOnNamespace(self):
     self.assertFalse(self.idl_basics['nodoc'])
+
+  # Test loading a schema for an API with a nested namespace comes through with
+  # a dot separator in its name after processing (nested.example).
+  def testNestedNamespaceName(self):
+    idl = web_idl_schema.Load('test/web_idl/nested_namespace.idl')
+    self.assertEqual(1, len(idl))
+    schema = idl[0]
+
+    self.assertEqual('nested.example', schema['namespace'])
+    self.assertEqual(
+        'Schema to test nested namespacee names types in IDL (API names with a'
+        ' dot in them). API should end up on `<Browser>.nested.example`.',
+        schema['description'],
+    )
+
+  # Similar to above, but testing a triple nested namespace with 2 dots
+  # (multi.nested.example).
+  def testMultiNestedNamespaceName(self):
+    idl = web_idl_schema.Load('test/web_idl/multi_nested_namespace.idl')
+    self.assertEqual(1, len(idl))
+    schema = idl[0]
+
+    self.assertEqual('multi.nested.example', schema['namespace'])
+    self.assertEqual(
+        'Schema to test triple nested namespacee names types in IDL (API names'
+        ' with 2 dots in them). API should end up on `<Browser>.multi.nested.'
+        'example`.',
+        schema['description'],
+    )
 
   # TODO(crbug.com/340297705): This will eventually be relaxed when adding
   # support for shared types to the new parser.
@@ -550,7 +623,7 @@ class WebIdlSchemaTest(unittest.TestCase):
   # doesn't support yet throws an error.
   def testUnsupportedTypeClassError(self):
     expected_error_regex = (
-        r'.* Any\(\): Unsupported type class when processing type\.')
+        r'.* FrozenArray\(\): Unsupported type class when processing type\.')
     self.assertRaisesRegex(
         SchemaCompilerError,
         expected_error_regex,
@@ -647,19 +720,6 @@ class WebIdlSchemaTest(unittest.TestCase):
         'test/web_idl/void_unsupported.idl',
     )
 
-  # Tests that a namespace with an extended attribute that we don't have
-  # processing for results in a schema compiler error.
-  def testUnknownNamespaceExtendedAttributeNameError(self):
-    expected_error_regex = (
-        r'.* Interface\(TestWebIdl\): Unknown extended attribute with name'
-        r' "UnknownExtendedAttribute" when processing namespace.')
-    self.assertRaisesRegex(
-        SchemaCompilerError,
-        expected_error_regex,
-        web_idl_schema.Load,
-        'test/web_idl/unknown_namespace_extended_attribute.idl',
-    )
-
   # Tests that an API interface that uses the nodoc extended attribute has the
   # related nodoc attribute set to true after processing.
   def testNoDocOnNamespace(self):
@@ -675,6 +735,46 @@ class WebIdlSchemaTest(unittest.TestCase):
         ' itself.',
         schema['description'],
     )
+
+  # Tests that an enum that uses the nodoc extended attribute has the related
+  # nodoc attribute set to true after processing.
+  def testNoDocOnEnum(self):
+    schema = self.idl_basics
+    nodoc_enum = getType(schema, 'EnumTypeWithNoDoc')
+    self.assertEqual(True, nodoc_enum['nodoc'])
+    # An enum without the extended attribute will not have a nodoc attribute.
+    no_nodoc_enum = getType(schema, 'EnumType')
+    self.assertFalse(hasattr(no_nodoc_enum, 'nodoc'))
+
+  # Tests that the deprecated extended attribute used in various places get the
+  # related attribute set to the provided string after processing.
+  # TODO(crbug.com/340297705): Enum values are not allowed to have extended
+  # attributes preceding them, so we need to find some other way to mark a
+  # specific enum value as deprecated.
+  def testDeprecatedExtendedAttribute(self):
+    idl = web_idl_schema.Load('test/web_idl/deprecated.idl')
+    self.assertEqual(1, len(idl))
+    schema = idl[0]
+
+    self.assertEqual('This API is deprecated', schema['deprecated'])
+
+    deprecated_enum = getType(schema, 'DeprecatedEnum')
+    self.assertEqual('This enum is deprecated', deprecated_enum['deprecated'])
+
+    deprecated_dict = getType(schema, 'DictWithDeprecatedMember')
+    self.assertEqual(
+        'This dict member is deprecated',
+        deprecated_dict['properties']['deprecatedDictMember']['deprecated'])
+
+    deprecated_function = getFunction(schema, 'deprecatedFunction')
+    self.assertEqual(
+        'This function is deprecated and it has such a long message that\n  it'
+        ' requires line wrapping',
+        deprecated_function['deprecated'],
+    )
+
+    deprecated_event = getEvent(schema, 'onDeprecatedEvent')
+    self.assertEqual('This event is deprecated', deprecated_event['deprecated'])
 
   # Tests that a function defined with the requiredCallback extended attribute
   # does not have the returns_async field marked as optional after processing.
@@ -741,6 +841,27 @@ class WebIdlSchemaTest(unittest.TestCase):
     expected = ['chromeos']
     self.assertEqual(expected, platforms_schema[0]['platforms'])
 
+  # Tests that the 'implemented_in' extended attribute on an interface
+  # definition is copied into the resulting namespace after processing.
+  def testImplementedInExtendedAttribute(self):
+    idl = web_idl_schema.Load('test/web_idl/implemented_in.idl')
+    self.assertEqual(1, len(idl))
+    schema = idl[0]
+
+    self.assertEqual('implementedInAPI', schema['namespace'])
+    self.assertEqual('path/to/implementation.h',
+                     schema['compiler_options']['implemented_in'])
+
+  # Tests that an API interface using the 'generate_error_messages' extended
+  # attribute has the associated attribute set to true after processing.
+  def testGenerateErrorMessages(self):
+    idl = web_idl_schema.Load('test/web_idl/generate_error_messages.idl')
+    self.assertEqual(1, len(idl))
+    schema = idl[0]
+
+    self.assertEqual('generateErrorMessagesAPI', schema['namespace'])
+    self.assertTrue(schema['compiler_options']['generate_error_messages'])
+
   # Tests a variety of default values that are set on an API namespace when they
   # are not specified in the source IDL file.
   def testNonSpecifiedDefaultValues(self):
@@ -759,6 +880,274 @@ class WebIdlSchemaTest(unittest.TestCase):
             'properties': {},
             'types': [],
         }, defaults_schema)
+
+  # Tests that Enum and Dictionary types defined in a schema file retain their
+  # ordering in the resulting processed API object.
+  def testEnumAndTypeOrdering(self):
+    idl = web_idl_schema.Load('test/web_idl/enum_and_type_ordering.idl')
+    self.assertEqual(1, len(idl))
+    schema = idl[0]
+    # Types are interleaved in the schema.
+    types = schema['types']
+    self.assertEqual('ExampleDictOne', types[0]['id'])
+    self.assertEqual('EnumTypeOne', types[1]['id'])
+    self.assertEqual('ExampleDictTwo', types[2]['id'])
+    self.assertEqual('EnumTypeTwo', types[3]['id'])
+
+  # Tests various 'any' and 'object' types on Dictionaries.
+  def testObjectTypes(self):
+    idl = web_idl_schema.Load('test/web_idl/object_types.idl')
+    self.assertEqual(1, len(idl))
+    schema = idl[0]
+
+    object_dict = getType(schema, 'ObjectDict')
+    self.assertEqual('object', object_dict['type'])
+    self.assertEqual(
+        {
+            'type': 'object',
+            'name': 'requiredObject',
+            'additionalProperties': {
+                'type': 'any'
+            }
+        }, object_dict['properties']['requiredObject'])
+    self.assertEqual(
+        {
+            'type': 'object',
+            'optional': True,
+            'name': 'optionalObject',
+            'additionalProperties': {
+                'type': 'any'
+            }
+        }, object_dict['properties']['optionalObject'])
+    self.assertEqual(
+        {
+            'type': 'object',
+            'name': 'instanceOfObject',
+            'additionalProperties': {
+                'type': 'any'
+            },
+            'isInstanceOf': 'Blob'
+        }, object_dict['properties']['instanceOfObject'])
+
+    any_dict = getType(schema, 'AnyDict')
+    self.assertEqual('object', any_dict['type'])
+    self.assertEqual({
+        'type': 'any',
+        'name': 'requiredAny'
+    }, any_dict['properties']['requiredAny'])
+    self.assertEqual({
+        'type': 'any',
+        'optional': True,
+        'name': 'optionalAny'
+    }, any_dict['properties']['optionalAny'])
+
+  # Tests 'object' and 'any' types used as function parameters.
+  def testObjectFunctionParams(self):
+    idl = web_idl_schema.Load('test/web_idl/object_types.idl')
+    self.assertEqual(1, len(idl))
+    schema = idl[0]
+
+    object_params = getFunctionParameters(schema, 'objectParamFunction')
+    self.assertEqual(
+        {
+            'type': 'object',
+            'name': 'requiredObjectParam',
+            'additionalProperties': {
+                'type': 'any'
+            }
+        }, object_params[0])
+    self.assertEqual(
+        {
+            'type': 'object',
+            'optional': True,
+            'name': 'optionalObjectParam',
+            'additionalProperties': {
+                'type': 'any'
+            }
+        }, object_params[1])
+
+    any_params = getFunctionParameters(schema, 'anyParamFunction')
+    self.assertEqual({'type': 'any', 'name': 'requiredAnyParam'}, any_params[0])
+    self.assertEqual(
+        {
+            'type': 'any',
+            'optional': True,
+            'name': 'optionalAnyParam'
+        }, any_params[1])
+
+    instance_of_params = getFunctionParameters(schema,
+                                               'instanceOfFunctionParam')
+    self.assertEqual(
+        {
+            'type': 'object',
+            'name': 'instanceOfParam',
+            'additionalProperties': {
+                'type': 'any'
+            },
+            'isInstanceOf': 'Entry'
+        }, instance_of_params[0])
+
+  # Tests various Union types on Dictionaries.
+  def testUnionTypes(self):
+    schema = self.idl_basics
+    union_dict = getType(schema, 'UnionTypes')
+
+    self.assertEqual(
+        {
+            'name':
+            'stringLongOrBoolean',
+            'choices': [
+                {
+                    'type': 'string'
+                },
+                {
+                    'type': 'integer'
+                },
+                {
+                    'type': 'boolean'
+                },
+            ],
+        }, union_dict['properties']['stringLongOrBoolean'])
+    self.assertEqual(
+        {
+            'name': 'stringOrEnum',
+            'choices': [
+                {
+                    'type': 'string'
+                },
+                {
+                    '$ref': 'EnumType'
+                },
+            ],
+        }, union_dict['properties']['stringOrEnum'])
+    self.assertEqual(
+        {
+            'name': 'optionalEnumOrString',
+            'optional': True,
+            'choices': [
+                {
+                    '$ref': 'EnumType'
+                },
+                {
+                    'type': 'string'
+                },
+            ],
+        }, union_dict['properties']['optionalEnumOrString'])
+    self.assertEqual(
+        {
+            'name':
+            'optionalStringOrStringSequence',
+            'optional':
+            True,
+            'choices': [
+                {
+                    'type': 'string'
+                },
+                {
+                    'type': 'array',
+                    'items': {
+                        'type': 'string'
+                    }
+                },
+            ],
+        }, union_dict['properties']['optionalStringOrStringSequence'])
+    self.assertEqual(
+        {
+            'name': 'dictTypeOrLong',
+            'choices': [{
+                '$ref': 'ExampleType'
+            }, {
+                'type': 'integer'
+            }]
+        }, union_dict['properties']['dictTypeOrLong'])
+
+  # Tests 'ArrayBuffer' types on Dictionaries.
+  def testArrayBufferTypes(self):
+    idl = web_idl_schema.Load('test/web_idl/array_buffer.idl')
+    self.assertEqual(1, len(idl))
+    schema = idl[0]
+
+    array_buffer_dict = getType(schema, 'ArrayBufferDict')
+    self.assertEqual('object', array_buffer_dict['type'])
+    self.assertEqual(
+        {
+            'type': 'binary',
+            'name': 'requiredArrayBuffer',
+            'isInstanceOf': 'ArrayBuffer'
+        }, array_buffer_dict['properties']['requiredArrayBuffer'])
+    self.assertEqual(
+        {
+            'type': 'binary',
+            'optional': True,
+            'name': 'optionalArrayBuffer',
+            'isInstanceOf': 'ArrayBuffer'
+        }, array_buffer_dict['properties']['optionalArrayBuffer'])
+
+  # Test 'ArrayBuffer' types used as function parameters.
+  def testArrayBufferFunctionParams(self):
+    idl = web_idl_schema.Load('test/web_idl/array_buffer.idl')
+    self.assertEqual(1, len(idl))
+    schema = idl[0]
+
+    array_buffer_params = getFunctionParameters(schema,
+                                                'arrayBufferParamFunction')
+    self.assertEqual(
+        {
+            'type': 'binary',
+            'name': 'requiredArrayBufferParam',
+            'isInstanceOf': 'ArrayBuffer'
+        }, array_buffer_params[0])
+    self.assertEqual(
+        {
+            'type': 'binary',
+            'optional': True,
+            'name': 'optionalArrayBufferParam',
+            'isInstanceOf': 'ArrayBuffer'
+        }, array_buffer_params[1])
+
+  # Tests Manifest keys defined on a partial 'Manifest' dictionary are
+  # extracted and put into the manifest keys details and not into the Types.
+  def testManifestKeys(self):
+    schema = self.idl_basics
+    # The 'Manifest' dictionary shouldn't get put into the custom types.
+    self.assertFalse(any(obj['id'] == 'Manifest' for obj in schema['types']))
+    manifest_keys = schema['manifest_keys']
+
+    # We should have 3 manifest keys of varying types.
+    self.assertEqual(['string_key', 'custom_type_key', 'union_type_key'],
+                     list(manifest_keys.keys()))
+    self.assertEqual(
+        {
+            'type': 'string',
+            'name': 'string_key',
+            'description': 'Description of a manifest key.'
+        }, manifest_keys['string_key'])
+    self.assertEqual({
+        '$ref': 'ExampleType',
+        'name': 'custom_type_key'
+    }, manifest_keys['custom_type_key'])
+    self.assertEqual(
+        {
+            'choices': [{
+                'type': 'string'
+            }, {
+                'type': 'integer'
+            }],
+            'name': 'union_type_key'
+        }, manifest_keys['union_type_key'])
+
+  # Tests that if 'partial' is left off the 'Manifest' dictionary, we throw an
+  # error.
+  def testNonPartialManifestDictError(self):
+    expected_error_regex = (
+        r'.* Dictionary\(Manifest\): If using a "Manifest" dictionary to define'
+        r' manifest keys, it must be declared "partial"\.')
+    self.assertRaisesRegex(
+        SchemaCompilerError,
+        expected_error_regex,
+        web_idl_schema.Load,
+        'test/web_idl/non_partial_manifest_dict.idl',
+    )
 
 
 if __name__ == '__main__':

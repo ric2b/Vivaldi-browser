@@ -57,6 +57,8 @@
 <translation id="1828800626900562968">Հպեք պլյուսի նշանը ստորև՝ նոր ներդիր ստեղծելու համար։</translation>
 <translation id="1861262398884155592">Այս պանակը դատարկ է</translation>
 <translation id="1929299157575856072">ՍՏԱՆԴԱՐՏ ԱՐԳԵԼԱՓԱԿՄԱՆ ՄԱԿԱՐԴԱԿ</translation>
+<translation id="1968240832686794952">Բացել պատկերը հետին ներդիրում</translation>
+<translation id="1994506778397655062">Բացել նոր հետին ներդիրում</translation>
 <translation id="2030706494969937066">Չհաջողվեց ստանալ Ձեր մուտքի տվյալները։ Խնդրում ենք նորից մուտք գործել։</translation>
 <translation id="2034405583989639424">Խմբագրել արագ կոճակը</translation>
 <translation id="2048247880942380698">Արաբերեն (<ph name="ORIGIN" />)</translation>
@@ -226,12 +228,14 @@
 <translation id="4818836520802586445">Շեշտման գույն</translation>
 <translation id="4821701638681626529">Vivaldi-ն չի գրանցում դիտման պատմությունը գաղտնի ներդիրներ օգտագործելիս</translation>
 <translation id="4833044618885331665">Դուք պետք է թարմացնեք Vivaldi-ն՝ սինքրոնացումն օգտագործելու համար։</translation>
+<translation id="484344804915260122">Ինձ պետք է ներկառուցված թարգմանիչ</translation>
 <translation id="484462545196658690">Ավտոմատ</translation>
 <translation id="4852383705713307704">Գովազդ է արգելափակված</translation>
 <translation id="4903325570808402486">Սինքրոնացնել Vivaldi-ի կարգավորումները (դեռ ոչ բոլոր կարգավորումներն են ներառված)</translation>
 <translation id="4929196061847506605">Հզոր։ Անձնական։ Անվտանգ։</translation>
 <translation id="4936710149174207991">Չի սինքրոնացված</translation>
 <translation id="4943266325467647391">Vivaldi-ի ներկառուցված հետևիչների ու գովազդի արգելափակիչը պաշտպանում է Ձեզ վնասագրերից և գովազդից։</translation>
+<translation id="4950266778127803750">Ցույց տալ X կոճակը հետին ներդիրների համար</translation>
 <translation id="495421405224926623">Ես կարդացել եմ և համաձայն եմ օգտագործման պայմաններին ու գաղտնիության դրույթներին</translation>
 <translation id="497942794017668482">Արգելափակված են հետևիչներն ու գովազդը</translation>
 <translation id="500392125908657603">Հասցեի դաշտի ընտրանքներ</translation>
@@ -274,7 +278,6 @@
 <translation id="5823830882692559950">Vivaldi.net-ը մերժեց Ձեր մուտքի տվյալները. <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">Նոր պանակ</translation>
 <translation id="5859825823508296659">Խմբագրել դոմենը</translation>
-<translation id="5867841422488265304">Որոնեք կամ մուտքագրեք հասցե</translation>
 <translation id="5869217094746242845">Իմացեք ավելին գաղտնիության և անվտանգության մասին</translation>
 <translation id="5871497086027727873">1 նոթ տեղափոխված է</translation>
 <translation id="5898502570200301364">Դուք կարող եք Vivaldi-ի գաղտնաբառերի կառավարչում Ձեր պահպանած գաղտնաբառերն օգտագործել iPhone-ի այլ հավելվածներում։</translation>
@@ -294,7 +297,6 @@
 <translation id="6365929278691047681">Գերմաներեն (<ph name="ORIGIN" />)</translation>
 <translation id="6406506848690869874">Սինքրոնացում</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> ընտրված</translation>
-<translation id="6443682944493983866">Նախընտրելի լեզուներ</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Ներկրել<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Պահուստային գաղտնագրման բանալի</translation>
 <translation id="6527303717912515753">Կիսվել</translation>

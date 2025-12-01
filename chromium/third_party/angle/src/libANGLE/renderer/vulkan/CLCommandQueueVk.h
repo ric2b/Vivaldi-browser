@@ -15,6 +15,7 @@
 #include "common/PackedCLEnums_autogen.h"
 #include "common/hash_containers.h"
 
+#include "libANGLE/CLBuffer.h"
 #include "libANGLE/renderer/vulkan/CLContextVk.h"
 #include "libANGLE/renderer/vulkan/CLEventVk.h"
 #include "libANGLE/renderer/vulkan/CLKernelVk.h"
@@ -56,32 +57,104 @@ class CLCommandQueueVk;
 
 namespace
 {
-
-struct HostTransferConfig
+template <typename T>
+class HostTransferConfig
 {
-    HostTransferConfig()
-        : srcRect(cl::Offset{}, cl::Extents{}, 0, 0, 0), dstRect(cl::Offset{}, cl::Extents{}, 0, 0)
-    {}
-    cl_command_type type{0};
-    size_t size            = 0;
-    size_t offset          = 0;
-    void *dstHostPtr       = nullptr;
+  public:
+    // HostTransferConfig is only relevant for certain commands that has host ptr involved, its
+    // state is only setup for those cases.
+    HostTransferConfig(cl_command_type type, size_t size, size_t offset, T *ptr)
+        : mType(type),
+          mSize(size),
+          mOffset(offset),
+          mHostPtr(ptr),
+          mBufferRect(cl::Offset{}, cl::Extents{}, 0, 0, 0),
+          mHostRect(cl::Offset{}, cl::Extents{}, 0, 0, 0)
+    {
+        ASSERT(type == CL_COMMAND_READ_BUFFER || type == CL_COMMAND_WRITE_BUFFER);
+    }
+    HostTransferConfig(cl_command_type type,
+                       size_t size,
+                       T *ptr,
+                       cl::BufferRect bufferRect,
+                       cl::BufferRect hostRect)
+        : mType(type), mSize(size), mHostPtr(ptr), mBufferRect(bufferRect), mHostRect(hostRect)
+    {
+        ASSERT(type == CL_COMMAND_READ_BUFFER_RECT || type == CL_COMMAND_WRITE_BUFFER_RECT);
+    }
+    HostTransferConfig(cl_command_type type,
+                       size_t size,
+                       size_t offset,
+                       T *pattern,
+                       size_t patternSize)
+        : mType(type),
+          mSize(size),
+          mOffset(offset),
+          mHostPtr(pattern),
+          mPatternSize(patternSize),
+          mBufferRect(cl::Offset{}, cl::Extents{}, 0, 0, 0),
+          mHostRect(cl::Offset{}, cl::Extents{}, 0, 0, 0)
+    {
+        ASSERT(type == CL_COMMAND_FILL_BUFFER);
+    }
+    HostTransferConfig(cl_command_type type,
+                       size_t size,
+                       void *ptr,
+                       size_t rowPitch,
+                       size_t slicePitch,
+                       size_t elementSize,
+                       cl::Offset origin,
+                       cl::Extents region)
+        : mType(type),
+          mSize(size),
+          mHostPtr(ptr),
+          mRowPitch(rowPitch),
+          mSlicePitch(slicePitch),
+          mElementSize(elementSize),
+          mOrigin(origin),
+          mRegion(region),
+          mBufferRect(cl::Offset{}, cl::Extents{}, 0, 0, 0),
+          mHostRect(cl::kOffsetZero, region, rowPitch, slicePitch, elementSize)
+    {
+        ASSERT(type == CL_COMMAND_READ_IMAGE || type == CL_COMMAND_WRITE_IMAGE);
+    }
+    cl_command_type getType() const { return mType; }
+    size_t getSize() const { return mSize; }
+    size_t getOffset() const { return mOffset; }
+    T *getHostPtr() const { return mHostPtr; }
+    size_t getPatternSize() const { return mPatternSize; }
+    size_t getRowPitch() const { return mRowPitch; }
+    size_t getSlicePitch() const { return mSlicePitch; }
+    size_t getElementSize() const { return mElementSize; }
+    const cl::Offset &getOrigin() const { return mOrigin; }
+    const cl::Extents &getRegion() const { return mRegion; }
+    const cl::BufferRect &getBufferRect() const { return mBufferRect; }
+    const cl::BufferRect &getHostRect() const { return mHostRect; }
 
-    // Source host pointer that can contain data/pattern/etc
-    const void *srcHostPtr = nullptr;
+  private:
+    cl_command_type mType{0};
+    size_t mSize   = 0;
+    size_t mOffset = 0;
 
-    size_t patternSize     = 0;
-    size_t rowPitch        = 0;
-    size_t slicePitch      = 0;
-    size_t elementSize     = 0;
-    cl::MemOffsets origin;
-    cl::Coordinate region;
-    cl::BufferRect srcRect;
-    cl::BufferRect dstRect;
+    T *mHostPtr = nullptr;
+
+    size_t mPatternSize = 0;
+    size_t mRowPitch    = 0;
+    size_t mSlicePitch  = 0;
+    size_t mElementSize = 0;
+    cl::Offset mOrigin  = cl::kOffsetZero;
+    cl::Extents mRegion = cl::kExtentsZero;
+    cl::BufferRect mBufferRect;
+    cl::BufferRect mHostRect;
 };
+
+// We use HostTransferConfig for enqueueing a staged op for read/write operations to/from host
+// pointers. As such we set up two instances one as const void and other as void.
+using HostWriteTransferConfig = HostTransferConfig<const void>;
+using HostReadTransferConfig  = HostTransferConfig<void>;
 struct HostTransferEntry
 {
-    HostTransferConfig transferConfig;
+    std::variant<HostReadTransferConfig, HostWriteTransferConfig> transferConfig;
     cl::MemoryPtr transferBufferHandle;
 };
 using HostTransferEntries = std::vector<HostTransferEntry>;
@@ -144,7 +217,7 @@ class CLCommandQueueVk : public CLCommandQueueImpl
                                     size_t size,
                                     void *ptr,
                                     const cl::EventPtrs &waitEvents,
-                                    CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                    cl::EventPtr &event) override;
 
     angle::Result enqueueWriteBuffer(const cl::Buffer &buffer,
                                      bool blocking,
@@ -152,33 +225,33 @@ class CLCommandQueueVk : public CLCommandQueueImpl
                                      size_t size,
                                      const void *ptr,
                                      const cl::EventPtrs &waitEvents,
-                                     CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                     cl::EventPtr &event) override;
 
     angle::Result enqueueReadBufferRect(const cl::Buffer &buffer,
                                         bool blocking,
-                                        const cl::MemOffsets &bufferOrigin,
-                                        const cl::MemOffsets &hostOrigin,
-                                        const cl::Coordinate &region,
+                                        const cl::Offset &bufferOrigin,
+                                        const cl::Offset &hostOrigin,
+                                        const cl::Extents &region,
                                         size_t bufferRowPitch,
                                         size_t bufferSlicePitch,
                                         size_t hostRowPitch,
                                         size_t hostSlicePitch,
                                         void *ptr,
                                         const cl::EventPtrs &waitEvents,
-                                        CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                        cl::EventPtr &event) override;
 
     angle::Result enqueueWriteBufferRect(const cl::Buffer &buffer,
                                          bool blocking,
-                                         const cl::MemOffsets &bufferOrigin,
-                                         const cl::MemOffsets &hostOrigin,
-                                         const cl::Coordinate &region,
+                                         const cl::Offset &bufferOrigin,
+                                         const cl::Offset &hostOrigin,
+                                         const cl::Extents &region,
                                          size_t bufferRowPitch,
                                          size_t bufferSlicePitch,
                                          size_t hostRowPitch,
                                          size_t hostSlicePitch,
                                          const void *ptr,
                                          const cl::EventPtrs &waitEvents,
-                                         CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                         cl::EventPtr &event) override;
 
     angle::Result enqueueCopyBuffer(const cl::Buffer &srcBuffer,
                                     const cl::Buffer &dstBuffer,
@@ -186,19 +259,19 @@ class CLCommandQueueVk : public CLCommandQueueImpl
                                     size_t dstOffset,
                                     size_t size,
                                     const cl::EventPtrs &waitEvents,
-                                    CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                    cl::EventPtr &event) override;
 
     angle::Result enqueueCopyBufferRect(const cl::Buffer &srcBuffer,
                                         const cl::Buffer &dstBuffer,
-                                        const cl::MemOffsets &srcOrigin,
-                                        const cl::MemOffsets &dstOrigin,
-                                        const cl::Coordinate &region,
+                                        const cl::Offset &srcOrigin,
+                                        const cl::Offset &dstOrigin,
+                                        const cl::Extents &region,
                                         size_t srcRowPitch,
                                         size_t srcSlicePitch,
                                         size_t dstRowPitch,
                                         size_t dstSlicePitch,
                                         const cl::EventPtrs &waitEvents,
-                                        CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                        cl::EventPtr &event) override;
 
     angle::Result enqueueFillBuffer(const cl::Buffer &buffer,
                                     const void *pattern,
@@ -206,7 +279,7 @@ class CLCommandQueueVk : public CLCommandQueueImpl
                                     size_t offset,
                                     size_t size,
                                     const cl::EventPtrs &waitEvents,
-                                    CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                    cl::EventPtr &event) override;
 
     angle::Result enqueueMapBuffer(const cl::Buffer &buffer,
                                    bool blocking,
@@ -214,89 +287,89 @@ class CLCommandQueueVk : public CLCommandQueueImpl
                                    size_t offset,
                                    size_t size,
                                    const cl::EventPtrs &waitEvents,
-                                   CLEventImpl::CreateFunc *eventCreateFunc,
+                                   cl::EventPtr &event,
                                    void *&mapPtr) override;
 
     angle::Result enqueueReadImage(const cl::Image &image,
                                    bool blocking,
-                                   const cl::MemOffsets &origin,
-                                   const cl::Coordinate &region,
+                                   const cl::Offset &origin,
+                                   const cl::Extents &region,
                                    size_t rowPitch,
                                    size_t slicePitch,
                                    void *ptr,
                                    const cl::EventPtrs &waitEvents,
-                                   CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                   cl::EventPtr &event) override;
 
     angle::Result enqueueWriteImage(const cl::Image &image,
                                     bool blocking,
-                                    const cl::MemOffsets &origin,
-                                    const cl::Coordinate &region,
+                                    const cl::Offset &origin,
+                                    const cl::Extents &region,
                                     size_t inputRowPitch,
                                     size_t inputSlicePitch,
                                     const void *ptr,
                                     const cl::EventPtrs &waitEvents,
-                                    CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                    cl::EventPtr &event) override;
 
     angle::Result enqueueCopyImage(const cl::Image &srcImage,
                                    const cl::Image &dstImage,
-                                   const cl::MemOffsets &srcOrigin,
-                                   const cl::MemOffsets &dstOrigin,
-                                   const cl::Coordinate &region,
+                                   const cl::Offset &srcOrigin,
+                                   const cl::Offset &dstOrigin,
+                                   const cl::Extents &region,
                                    const cl::EventPtrs &waitEvents,
-                                   CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                   cl::EventPtr &event) override;
 
     angle::Result enqueueFillImage(const cl::Image &image,
                                    const void *fillColor,
-                                   const cl::MemOffsets &origin,
-                                   const cl::Coordinate &region,
+                                   const cl::Offset &origin,
+                                   const cl::Extents &region,
                                    const cl::EventPtrs &waitEvents,
-                                   CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                   cl::EventPtr &event) override;
 
     angle::Result enqueueCopyImageToBuffer(const cl::Image &srcImage,
                                            const cl::Buffer &dstBuffer,
-                                           const cl::MemOffsets &srcOrigin,
-                                           const cl::Coordinate &region,
+                                           const cl::Offset &srcOrigin,
+                                           const cl::Extents &region,
                                            size_t dstOffset,
                                            const cl::EventPtrs &waitEvents,
-                                           CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                           cl::EventPtr &event) override;
 
     angle::Result enqueueCopyBufferToImage(const cl::Buffer &srcBuffer,
                                            const cl::Image &dstImage,
                                            size_t srcOffset,
-                                           const cl::MemOffsets &dstOrigin,
-                                           const cl::Coordinate &region,
+                                           const cl::Offset &dstOrigin,
+                                           const cl::Extents &region,
                                            const cl::EventPtrs &waitEvents,
-                                           CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                           cl::EventPtr &event) override;
 
     angle::Result enqueueMapImage(const cl::Image &image,
                                   bool blocking,
                                   cl::MapFlags mapFlags,
-                                  const cl::MemOffsets &origin,
-                                  const cl::Coordinate &region,
+                                  const cl::Offset &origin,
+                                  const cl::Extents &region,
                                   size_t *imageRowPitch,
                                   size_t *imageSlicePitch,
                                   const cl::EventPtrs &waitEvents,
-                                  CLEventImpl::CreateFunc *eventCreateFunc,
+                                  cl::EventPtr &event,
                                   void *&mapPtr) override;
 
     angle::Result enqueueUnmapMemObject(const cl::Memory &memory,
                                         void *mappedPtr,
                                         const cl::EventPtrs &waitEvents,
-                                        CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                        cl::EventPtr &event) override;
 
     angle::Result enqueueMigrateMemObjects(const cl::MemoryPtrs &memObjects,
                                            cl::MemMigrationFlags flags,
                                            const cl::EventPtrs &waitEvents,
-                                           CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                           cl::EventPtr &event) override;
 
     angle::Result enqueueNDRangeKernel(const cl::Kernel &kernel,
                                        const cl::NDRange &ndrange,
                                        const cl::EventPtrs &waitEvents,
-                                       CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                       cl::EventPtr &event) override;
 
     angle::Result enqueueTask(const cl::Kernel &kernel,
                               const cl::EventPtrs &waitEvents,
-                              CLEventImpl::CreateFunc *eventCreateFunc) override;
+                              cl::EventPtr &event) override;
 
     angle::Result enqueueNativeKernel(cl::UserFunc userFunc,
                                       void *args,
@@ -304,23 +377,31 @@ class CLCommandQueueVk : public CLCommandQueueImpl
                                       const cl::BufferPtrs &buffers,
                                       const std::vector<size_t> &bufferPtrOffsets,
                                       const cl::EventPtrs &waitEvents,
-                                      CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                      cl::EventPtr &event) override;
 
     angle::Result enqueueMarkerWithWaitList(const cl::EventPtrs &waitEvents,
-                                            CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                            cl::EventPtr &event) override;
 
-    angle::Result enqueueMarker(CLEventImpl::CreateFunc &eventCreateFunc) override;
+    angle::Result enqueueMarker(cl::EventPtr &event) override;
 
     angle::Result enqueueWaitForEvents(const cl::EventPtrs &events) override;
 
     angle::Result enqueueBarrierWithWaitList(const cl::EventPtrs &waitEvents,
-                                             CLEventImpl::CreateFunc *eventCreateFunc) override;
+                                             cl::EventPtr &event) override;
 
     angle::Result enqueueBarrier() override;
 
     angle::Result flush() override;
 
     angle::Result finish() override;
+
+    angle::Result enqueueAcquireExternalMemObjectsKHR(const cl::MemoryPtrs &memObjects,
+                                                      const cl::EventPtrs &waitEvents,
+                                                      cl::EventPtr &event) override;
+
+    angle::Result enqueueReleaseExternalMemObjectsKHR(const cl::MemoryPtrs &memObjects,
+                                                      const cl::EventPtrs &waitEvents,
+                                                      cl::EventPtr &event) override;
 
     CLPlatformVk *getPlatform() { return mContext->getPlatform(); }
     CLContextVk *getContext() { return mContext; }
@@ -335,8 +416,6 @@ class CLCommandQueueVk : public CLCommandQueueImpl
     {
         return mLastFlushedQueueSerial != mLastSubmittedQueueSerial;
     }
-
-    void addEventReference(CLEventVk &eventVk);
 
   private:
     static constexpr size_t kMaxDependencyTrackerSize    = 64;
@@ -359,33 +438,37 @@ class CLCommandQueueVk : public CLCommandQueueImpl
     // event status updates etc. This is a blocking call.
     angle::Result finishQueueSerialInternal(const QueueSerial queueSerial);
 
-    angle::Result syncHostBuffers(HostTransferEntries &hostTransferList);
+    angle::Result syncPendingHostTransfers(HostTransferEntries &hostTransferList);
     angle::Result flushComputePassCommands();
     angle::Result processWaitlist(const cl::EventPtrs &waitEvents);
-    angle::Result createEvent(CLEventImpl::CreateFunc *createFunc,
-                              cl::ExecutionStatus initialStatus);
+    angle::Result preEnqueueOps(cl::EventPtr &event, cl::ExecutionStatus initialStatus);
+    angle::Result postEnqueueOps(const cl::EventPtr &event);
 
-    angle::Result onResourceAccess(const vk::CommandBufferAccess &access);
-    angle::Result getCommandBuffer(const vk::CommandBufferAccess &access,
+    angle::Result onResourceAccess(const vk::CommandResources &resources);
+    angle::Result getCommandBuffer(const vk::CommandResources &resources,
                                    vk::OutsideRenderPassCommandBuffer **commandBufferOut)
     {
-        ANGLE_TRY(onResourceAccess(access));
+        ANGLE_TRY(onResourceAccess(resources));
         *commandBufferOut = &mComputePassCommands->getCommandBuffer();
         return angle::Result::Continue;
     }
 
     angle::Result processPrintfBuffer();
     angle::Result copyImageToFromBuffer(CLImageVk &imageVk,
-                                        vk::BufferHelper &buffer,
-                                        const cl::MemOffsets &origin,
-                                        const cl::Coordinate &region,
-                                        size_t bufferOffset,
+                                        CLBufferVk &buffer,
+                                        VkBufferImageCopy copyRegion,
                                         ImageBufferCopyDirection writeToBuffer);
 
     bool hasUserEventDependency() const;
 
     angle::Result insertBarrier();
-    angle::Result addMemoryDependencies(cl::Memory *clMem);
+    angle::Result addMemoryDependencies(const CLKernelArgument *arg);
+    enum class MemoryHandleAccess
+    {
+        ReadOnly,
+        Writeable,
+    };
+    angle::Result addMemoryDependencies(cl::Memory *mem, MemoryHandleAccess access);
 
     angle::Result submitEmptyCommand();
 
@@ -407,17 +490,22 @@ class CLCommandQueueVk : public CLCommandQueueImpl
     cl::EventPtrs mExternalEvents;
 
     // Keep track of kernel resources on prior kernel enqueues
-    angle::HashSet<cl::Object *> mDependencyTracker;
+    angle::HashSet<cl::Object *> mWriteDependencyTracker;
+    angle::HashSet<cl::Object *> mReadDependencyTracker;
 
     CommandsStateMap mCommandsStateMap;
+    angle::Result setEventsWithQueueSerialToState(const QueueSerial &queueSerial,
+                                                  cl::ExecutionStatus state);
 
     // printf handling
     bool mNeedPrintfHandling;
     const angle::HashMap<uint32_t, ClspvPrintfInfo> *mPrintfInfos;
 
     // Host buffer transferring routines
-    angle::Result addToHostTransferList(CLBufferVk *srcBuffer, HostTransferConfig transferEntry);
-    angle::Result addToHostTransferList(CLImageVk *srcImage, HostTransferConfig transferEntry);
+    template <class T>
+    angle::Result addToHostTransferList(CLBufferVk *srcBuffer, HostTransferConfig<T> transferEntry);
+    template <class T>
+    angle::Result addToHostTransferList(CLImageVk *srcImage, HostTransferConfig<T> transferEntry);
 
     DispatchWorkThread mFinishHandler;
 };

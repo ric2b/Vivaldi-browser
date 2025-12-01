@@ -155,12 +155,6 @@ namespace internal {
     return *isolate->factory()->undefined_value();                        \
   }
 
-#ifdef TEMPORAL_CAPI_VERSION_0_0_12
-#define CONVERT_MAYBE_RESULT CONVERT_SMI
-#else
-#define CONVERT_MAYBE_RESULT CONVERT_FALLIBLE_INTEGER_AS_NULLABLE
-#endif
-
 #define TEMPORAL_GET_NUMBER_AFTER_DIVID(T, M, field, scale, name)        \
   BUILTIN(Temporal##T##Prototype##M) {                                   \
     HandleScope scope(isolate);                                          \
@@ -220,7 +214,7 @@ TEMPORAL_GET_RUST(PlainDate, date, MonthCode, monthCode, month_code,
                   CONVERT_ASCII_STRING)
 TEMPORAL_GET_RUST(PlainDate, date, Day, day, day, CONVERT_SMI)
 TEMPORAL_GET_RUST(PlainDate, date, DayOfWeek, dayOfWeek, day_of_week,
-                  CONVERT_MAYBE_RESULT)
+                  CONVERT_SMI)
 TEMPORAL_GET_RUST(PlainDate, date, DayOfYear, dayOfYear, day_of_year,
                   CONVERT_SMI)
 TEMPORAL_GET_RUST(PlainDate, date, WeekOfYear, weekOfYear, week_of_year,
@@ -228,7 +222,7 @@ TEMPORAL_GET_RUST(PlainDate, date, WeekOfYear, weekOfYear, week_of_year,
 TEMPORAL_GET_RUST(PlainDate, date, YearOfWeek, YearOfWeek, year_of_week,
                   CONVERT_NULLABLE_INTEGER)
 TEMPORAL_GET_RUST(PlainDate, date, DaysInWeek, daysInWeek, days_in_week,
-                  CONVERT_MAYBE_RESULT)
+                  CONVERT_SMI)
 TEMPORAL_GET_RUST(PlainDate, date, DaysInMonth, daysInMonth, days_in_month,
                   CONVERT_SMI)
 TEMPORAL_GET_RUST(PlainDate, date, DaysInYear, daysInYear, days_in_year,
@@ -335,7 +329,7 @@ TEMPORAL_GET_RUST(PlainDateTime, date_time, Microsecond, microsecond,
 TEMPORAL_GET_RUST(PlainDateTime, date_time, Nanosecond, nanosecond, nanosecond,
                   CONVERT_SMI)
 TEMPORAL_GET_RUST(PlainDateTime, date_time, DayOfWeek, dayOfWeek, day_of_week,
-                  CONVERT_MAYBE_RESULT)
+                  CONVERT_SMI)
 TEMPORAL_GET_RUST(PlainDateTime, date_time, DayOfYear, dayOfYear, day_of_year,
                   CONVERT_SMI)
 TEMPORAL_GET_RUST(PlainDateTime, date_time, WeekOfYear, weekOfYear,
@@ -343,7 +337,7 @@ TEMPORAL_GET_RUST(PlainDateTime, date_time, WeekOfYear, weekOfYear,
 TEMPORAL_GET_RUST(PlainDateTime, date_time, YearOfWeek, YearOfWeek,
                   year_of_week, CONVERT_NULLABLE_INTEGER)
 TEMPORAL_GET_RUST(PlainDateTime, date_time, DaysInWeek, daysInWeek,
-                  days_in_week, CONVERT_MAYBE_RESULT)
+                  days_in_week, CONVERT_SMI)
 TEMPORAL_GET_RUST(PlainDateTime, date_time, DaysInMonth, daysInMonth,
                   days_in_month, CONVERT_SMI)
 TEMPORAL_GET_RUST(PlainDateTime, date_time, DaysInYear, daysInYear,
@@ -434,7 +428,7 @@ TEMPORAL_METHOD2(PlainMonthDay, From)
 
 TEMPORAL_GET_RUST(PlainMonthDay, month_day, CalendarId, calendarId,
                   calendar().identifier, CONVERT_ASCII_STRING)
-TEMPORAL_GET_RUST(PlainMonthDay, month_day, Day, day, iso_day, CONVERT_SMI)
+TEMPORAL_GET_RUST(PlainMonthDay, month_day, Day, day, day, CONVERT_SMI)
 TEMPORAL_GET_RUST(PlainMonthDay, month_day, MonthCode, monthCode, month_code,
                   CONVERT_ASCII_STRING)
 
@@ -490,7 +484,7 @@ TEMPORAL_GET_RUST(ZonedDateTime, zoned_date_time, EpochMilliseconds,
                   epochMilliseconds, epoch_milliseconds, CONVERT_DOUBLE)
 TEMPORAL_PROTOTYPE_METHOD0(ZonedDateTime, EpochNanoseconds, nanoseconds)
 TEMPORAL_GET_RUST(ZonedDateTime, zoned_date_time, DayOfWeek, dayOfWeek,
-                  day_of_week, CONVERT_FALLIBLE_INTEGER_AS_NULLABLE)
+                  day_of_week, CONVERT_SMI)
 TEMPORAL_GET_RUST(ZonedDateTime, zoned_date_time, DayOfYear, dayOfYear,
                   day_of_year, CONVERT_SMI)
 TEMPORAL_GET_RUST(ZonedDateTime, zoned_date_time, WeekOfYear, weekOfYear,
@@ -499,7 +493,7 @@ TEMPORAL_GET_RUST(ZonedDateTime, zoned_date_time, YearOfWeek, YearOfWeek,
                   year_of_week, CONVERT_NULLABLE_INTEGER)
 TEMPORAL_PROTOTYPE_METHOD0(ZonedDateTime, HoursInDay, hoursInDay)
 TEMPORAL_GET_RUST(ZonedDateTime, zoned_date_time, DaysInWeek, daysInWeek,
-                  days_in_week, CONVERT_FALLIBLE_INTEGER_AS_NULLABLE)
+                  days_in_week, CONVERT_SMI)
 TEMPORAL_GET_RUST(ZonedDateTime, zoned_date_time, DaysInMonth, daysInMonth,
                   days_in_month, CONVERT_SMI)
 TEMPORAL_GET_RUST(ZonedDateTime, zoned_date_time, DaysInYear, daysInYear,

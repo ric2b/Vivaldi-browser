@@ -96,17 +96,17 @@ TestingModuleBuilder::TestingModuleBuilder(
     const wasm::CanonicalSig* sig =
         GetTypeCanonicalizer()->LookupFunctionSignature(sig_index);
     ResolvedWasmImport resolved({}, -1, maybe_import->js_function, sig,
-                                sig_index, WellKnownImport::kUninstantiated);
+                                WellKnownImport::kUninstantiated);
     ImportCallKind kind = resolved.kind();
     DirectHandle<JSReceiver> callable = resolved.callable();
     std::shared_ptr<wasm::WasmImportWrapperHandle> wrapper_handle =
         GetWasmImportWrapperCache()->GetCompiled(
-            isolate, kind, sig_index, static_cast<int>(sig->parameter_count()),
-            kNoSuspend, sig);
+            isolate, kind, static_cast<int>(sig->parameter_count()), kNoSuspend,
+            sig);
 
     ImportedFunctionEntry(trusted_instance_data_, maybe_import_index)
         .SetWasmToWrapper(isolate_, callable, std::move(wrapper_handle),
-                          resolved.suspend(), sig, sig_index);
+                          resolved.suspend(), sig);
   }
 }
 
@@ -307,7 +307,8 @@ void TestingModuleBuilder::AddIndirectFunctionTable(
 
       if (maybe_wrapper) {
         trusted_instance_data_->dispatch_table(table_index)
-            ->SetForWrapper(i, Cast<WasmImportData>(*entry.implicit_arg()),
+            ->SetForWrapper(i,
+                            TrustedCast<WasmImportData>(*entry.implicit_arg()),
                             std::move(*maybe_wrapper), sig_id,
 #if V8_ENABLE_DRUMBRAKE
                             function.func_index,
@@ -316,7 +317,7 @@ void TestingModuleBuilder::AddIndirectFunctionTable(
       } else {
         trusted_instance_data_->dispatch_table(table_index)
             ->SetForNonWrapper(
-                i, Cast<WasmTrustedInstanceData>(*entry.implicit_arg()),
+                i, TrustedCast<WasmTrustedInstanceData>(*entry.implicit_arg()),
                 entry.call_target(), sig_id,
 #if V8_ENABLE_DRUMBRAKE
                 function.func_index,

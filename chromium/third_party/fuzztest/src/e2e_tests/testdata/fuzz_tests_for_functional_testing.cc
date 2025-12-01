@@ -16,7 +16,6 @@
 //
 // Specifically, used by `functional_test` only.
 
-#include <cerrno>
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
@@ -39,7 +38,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
-#include "./fuzztest/internal/logging.h"
+#include "./common/logging.h"
 #include "./fuzztest/internal/test_flatbuffers_generated.h"
 #include "./fuzztest/internal/test_protobuf.pb.h"
 #include "google/protobuf/descriptor.h"
@@ -52,6 +51,7 @@ using ::fuzztest::Arbitrary;
 using ::fuzztest::FlatMap;
 using ::fuzztest::InRange;
 using ::fuzztest::Just;
+using ::fuzztest::Map;
 using ::fuzztest::OptionalOf;
 using ::fuzztest::PairOf;
 using ::fuzztest::StringOf;
@@ -692,6 +692,64 @@ FUZZ_TEST(MySuite, FlatMapCorrectlyPrintsValues)
         },
         Just(3)));
 
+namespace {
+struct MyCustomPrintableTestType {
+ public:
+  static MyCustomPrintableTestType BuildWithValue(std::string inp) {
+    return MyCustomPrintableTestType(inp + "_foo", inp + "_bar");
+  }
+  absl::string_view foo() const { return foo_; }
+  absl::string_view bar() const { return bar_; }
+  bool correctly_built() const {
+    auto ends_with = [](absl::string_view s, absl::string_view suffix) {
+      return s.size() >= suffix.size() &&
+             s.substr(s.size() - suffix.size()) == suffix;
+    };
+    return ends_with(foo(), "_foo") && ends_with(bar(), "_bar") &&
+           foo().substr(0, foo().size() - 4) ==
+               bar().substr(0, bar().size() - 4);
+  }
+
+  template <typename Sink>
+  friend void AbslStringify(Sink& sink, const MyCustomPrintableTestType& v) {
+    if (v.correctly_built()) {
+      absl::Format(&sink, "MyCustomPrintableTestType - input=%s",
+                   v.foo().substr(0, v.foo().size() - 4));
+      return;
+    }
+    absl::Format(&sink, "MyCustomPrintableTestType - foo=%s bar=%s", v.foo(),
+                 v.bar());
+  }
+
+ private:
+  MyCustomPrintableTestType(std::string foo, std::string bar)
+      : foo_(foo), bar_(bar) {}
+  std::string foo_;
+  std::string bar_;
+};
+void FuzzTestPrintSourceCode(const MyCustomPrintableTestType& v,  // NOLINT
+                             std::ostream* os) {
+  if (v.correctly_built()) {
+    *os << "MyCustomPrintableTestType::BuildWithValue(\""
+        << v.foo().substr(0, v.foo().size() - 4) << "\")";
+    return;
+  }
+  // NB Not actually valid constructor.
+  *os << "MyCustomPrintableTestType{.foo=\"" << v.foo() << "\", .bar=\""
+      << v.bar() << "\"}";
+}
+}  // namespace
+void CustomSourceCodePrinterCorrectlyPrintsValue(
+    const MyCustomPrintableTestType& v) {
+  std::abort();
+}
+FUZZ_TEST(MySuite, CustomSourceCodePrinterCorrectlyPrintsValue)
+    .WithDomains(Map(
+        [](const std::string& s) -> MyCustomPrintableTestType {
+          return MyCustomPrintableTestType::BuildWithValue(s);
+        },
+        Just(std::string("abcd"))));
+
 void UnpacksTupleOfOne(const std::string&) { std::abort(); }
 FUZZ_TEST(MySuite, UnpacksTupleOfOne)
     .WithDomains(TupleOf(Arbitrary<std::string>()));
@@ -738,12 +796,11 @@ class AlternateSignalStackFixture {
     // where the callbacks from the signal handler happen in a separate stack.
     new_sigact.sa_flags = SA_SIGINFO | SA_ONSTACK;
 
-    FUZZTEST_INTERNAL_CHECK(sigaction(SIGUSR1, &new_sigact, nullptr) == 0,
-                            errno);
+    FUZZTEST_PCHECK(sigaction(SIGUSR1, &new_sigact, nullptr) == 0);
     stack_t test_stack = {};
     test_stack.ss_size = 1 << 20;
     test_stack.ss_sp = malloc(test_stack.ss_size);
-    FUZZTEST_INTERNAL_CHECK(sigaltstack(&test_stack, &old_stack) == 0, errno);
+    FUZZTEST_PCHECK(sigaltstack(&test_stack, &old_stack) == 0);
   }
 
   void StackCalculationWorksWithAlternateStackForSignalHandlers(int i) {
@@ -753,7 +810,7 @@ class AlternateSignalStackFixture {
     // "stack overflow" detection and we will continue here.
     raise(SIGUSR1);
     // Just make sure the signal handler ran.
-    FUZZTEST_INTERNAL_CHECK(dummy_to_trigger_cmp_in_handler != 0, "");
+    FUZZTEST_CHECK(dummy_to_trigger_cmp_in_handler != 0);
 
     if (i == 123456789) {
       std::abort();
@@ -763,7 +820,7 @@ class AlternateSignalStackFixture {
   ~AlternateSignalStackFixture() {
     stack_t test_stack = {};
     // Resume to the old signal stack.
-    FUZZTEST_INTERNAL_CHECK(sigaltstack(&old_stack, &test_stack) == 0, errno);
+    FUZZTEST_PCHECK(sigaltstack(&old_stack, &test_stack) == 0);
     free(test_stack.ss_sp);
   }
 

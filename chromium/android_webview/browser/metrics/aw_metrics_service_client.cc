@@ -64,7 +64,6 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
-#include "android_webview/browser_jni_headers/AndroidMetricsServiceClient_jni.h"
 #include "android_webview/browser_jni_headers/AwMetricsServiceClient_jni.h"
 
 namespace android_webview {
@@ -153,31 +152,35 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
   file_metrics_provider->RegisterSource(browser_metrics_params,
                                         metrics_reporting_enabled);
 
+  // WebView never configured Crashpad to actually create these metrics files,
+  // so it's not useful to try to upload them.
+  // TODO(crbug.com/440359722): decide if we want these metrics and either
+  // configure Crashpad appropriately or clean up this code.
+
   // Register the Crashpad metrics files:
   // 1. Data from the previous run if crashpad_handler didn't exit cleanly.
-  base::FilePath crashpad_metrics_file =
-      base::GlobalHistogramAllocator::ConstructFilePath(
-          user_data_dir, kCrashpadHistogramAllocatorName);
-  file_metrics_provider->RegisterSource(
-      FileMetricsProvider::Params(
-          crashpad_metrics_file,
-          FileMetricsProvider::SOURCE_HISTOGRAMS_ATOMIC_FILE,
-          FileMetricsProvider::ASSOCIATE_INTERNAL_PROFILE_OR_PREVIOUS_RUN,
-          kCrashpadHistogramAllocatorName),
-      metrics_reporting_enabled);
+  // base::FilePath crashpad_metrics_file =
+  //     base::GlobalHistogramAllocator::ConstructFilePath(
+  //         user_data_dir, kCrashpadHistogramAllocatorName);
+  // file_metrics_provider->RegisterSource(
+  //     FileMetricsProvider::Params(
+  //         crashpad_metrics_file,
+  //         FileMetricsProvider::SOURCE_HISTOGRAMS_ATOMIC_FILE,
+  //         FileMetricsProvider::ASSOCIATE_INTERNAL_PROFILE_OR_PREVIOUS_RUN,
+  //         kCrashpadHistogramAllocatorName),
+  //     metrics_reporting_enabled);
 
   // 2. Data from the current run. Note: "Active" files don't set "prefs_key"
   // because they update the file itself.
-  base::FilePath crashpad_active_path =
-      base::GlobalHistogramAllocator::ConstructFilePathForActiveFile(
-          user_data_dir, kCrashpadHistogramAllocatorName);
-  file_metrics_provider->RegisterSource(
-      FileMetricsProvider::Params(
-          crashpad_active_path,
-          FileMetricsProvider::SOURCE_HISTOGRAMS_ACTIVE_FILE,
-          FileMetricsProvider::ASSOCIATE_CURRENT_RUN),
-      metrics_reporting_enabled);
-
+  // base::FilePath crashpad_active_path =
+  //     base::GlobalHistogramAllocator::ConstructFilePathForActiveFile(
+  //         user_data_dir, kCrashpadHistogramAllocatorName);
+  // file_metrics_provider->RegisterSource(
+  //     FileMetricsProvider::Params(
+  //         crashpad_active_path,
+  //         FileMetricsProvider::SOURCE_HISTOGRAMS_ACTIVE_FILE,
+  //         FileMetricsProvider::ASSOCIATE_CURRENT_RUN),
+  //     metrics_reporting_enabled);
   return file_metrics_provider;
 }
 
@@ -201,25 +204,14 @@ base::OnceClosure CreateChainedClosure(base::OnceClosure cb1,
 // Sample at 2%, based on storage concerns. We sample at a different rate than
 // Chrome because we have more metrics "clients" (each app on the device counts
 // as a separate client).
-const int kStableSampledInRatePerMille = 20;
+const int kStableUnfilteredSampledInRatePerMille = 20;
 
 // Sample non-stable channels at 99%, to boost volume for pre-stable
 // experiments. We choose 99% instead of 100% for consistency with Chrome and to
 // exercise the out-of-sample code path.
-const int kBetaDevCanarySampledInRatePerMille = 990;
+const int kBetaDevCanaryUnfilteredSampledInRatePerMille = 990;
 
 AwMetricsServiceClient* g_aw_metrics_service_client = nullptr;
-
-int GetBaseSampleRatePerMille() {
-  // Down-sample unknown channel as a precaution in case it ends up being
-  // shipped to Stable users.
-  version_info::Channel channel = version_info::android::GetChannel();
-  if (channel == version_info::Channel::STABLE ||
-      channel == version_info::Channel::UNKNOWN) {
-    return kStableSampledInRatePerMille;
-  }
-  return kBetaDevCanarySampledInRatePerMille;
-}
 
 }  // namespace
 
@@ -370,7 +362,7 @@ void AwMetricsServiceClient::RegisterMetricsProvidersAndInitState() {
       std::make_unique<metrics::GPUMetricsProvider>());
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<metrics::SamplingMetricsProvider>(
-          GetSampleRatePerMille()));
+          GetUnfilteredSampleRatePerMille()));
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<metrics::ContentStabilityMetricsProvider>(
           pref_service_, /*extensions_helper=*/nullptr));
@@ -417,7 +409,7 @@ bool AwMetricsServiceClient::IsReportingEnabled() const {
     return false;
   }
   return IsMetricsReportingForceEnabled() ||
-         (EnabledStateProvider::IsReportingEnabled() && IsInSample());
+         EnabledStateProvider::IsReportingEnabled();
 }
 
 metrics::MetricsService* AwMetricsServiceClient::GetMetricsServiceIfStarted() {
@@ -598,17 +590,11 @@ int AwMetricsServiceClient::GetSampleBucketValue() const {
   return UintToPerMille(base::PersistentHash(metrics_service_->GetClientId()));
 }
 
-bool AwMetricsServiceClient::IsInSample() const {
-  // Called in MaybeStartMetrics(), after |metrics_service_| is created.
-  return GetSampleBucketValue() < GetSampleRatePerMille();
-}
-
 InstallerPackageType AwMetricsServiceClient::GetInstallerPackageType() {
   // Check with Java side, to see if it's OK to log the package name for this
   // type of app (see Java side for the specific requirements).
   JNIEnv* env = base::android::AttachCurrentThread();
-  int type =
-      metrics::Java_AndroidMetricsServiceClient_getInstallerPackageType(env);
+  int type = Java_AwMetricsServiceClient_getInstallerPackageType(env);
   return static_cast<InstallerPackageType>(type);
 }
 
@@ -630,7 +616,7 @@ std::string AwMetricsServiceClient::GetAppPackageNameIfLoggable() {
 std::string AwMetricsServiceClient::GetAppPackageName() {
   JNIEnv* env = base::android::AttachCurrentThread();
   base::android::ScopedJavaLocalRef<jstring> j_app_name =
-      metrics::Java_AndroidMetricsServiceClient_getAppPackageName(env);
+      Java_AwMetricsServiceClient_getAppPackageName(env);
   if (j_app_name) {
     return base::android::ConvertJavaStringToUTF8(env, j_app_name);
   }
@@ -657,13 +643,22 @@ void AwMetricsServiceClient::OnDidStartLoading() {
   metrics_service->OnPageLoadStarted();
 }
 
-int AwMetricsServiceClient::GetSampleRatePerMille() const {
-  return 1000;
+int AwMetricsServiceClient::GetUnfilteredSampleRatePerMille() const {
+  // Down-sample unknown channel as a precaution in case it ends up being
+  // shipped to Stable users.
+  version_info::Channel channel = version_info::android::GetChannel();
+  if (channel == version_info::Channel::STABLE ||
+      channel == version_info::Channel::UNKNOWN) {
+    return kStableUnfilteredSampledInRatePerMille;
+  }
+  return kBetaDevCanaryUnfilteredSampledInRatePerMille;
 }
 
 bool AwMetricsServiceClient::ShouldApplyMetricsFiltering() const {
-  bool used_to_sample_in = GetSampleBucketValue() < GetBaseSampleRatePerMille();
-  return !used_to_sample_in;
+  bool in_unfiltered_sample =
+      GetSampleBucketValue() < GetUnfilteredSampleRatePerMille();
+  bool force_enabled = IsMetricsReportingForceEnabled();
+  return !(in_unfiltered_sample || force_enabled);
 }
 
 void AwMetricsServiceClient::OnAppStateChanged(

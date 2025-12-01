@@ -3,10 +3,14 @@
 // found in the LICENSE file.
 
 import type {ForeignSession, HistorySyncedDeviceCardElement, HistorySyncedDeviceManagerElement} from 'chrome://history/history.js';
-import {BrowserServiceImpl, ensureLazyLoaded} from 'chrome://history/history.js';
+import {BrowserServiceImpl, ensureLazyLoaded, HistorySignInState} from 'chrome://history/history.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {microtasksFinished} from 'chrome://webui-test/test_util.js';
+
+// <if expr="not is_chromeos">
+import { isChildVisible } from 'chrome://webui-test/test_util.js';
+// </if>
 
 import {TestBrowserService} from './test_browser_service.js';
 import {createSession, createWindow} from './test_util.js';
@@ -51,8 +55,11 @@ suite('<history-synced-device-manager>', function() {
       // the same order in tests, in order to catch regressions like
       // https://crbug.com/915641.
       element.searchTerm = '';
-      element.configureSignInForTest(
-          {signInState: true, signInAllowed: true, guestSession: false});
+      element.configureSignInForTest({
+        signInState: HistorySignInState.SIGNED_IN_SYNCING_TABS,
+        signInAllowed: true,
+        guestSession: false,
+      });
       document.body.appendChild(element);
     });
   });
@@ -250,20 +257,29 @@ suite('<history-synced-device-manager>', function() {
   });
 
   test('show sign in promo', async () => {
-    element.configureSignInForTest(
-        {signInState: false, signInAllowed: true, guestSession: false});
+    element.configureSignInForTest({
+      signInState: HistorySignInState.SIGNED_OUT,
+      signInAllowed: true,
+      guestSession: false,
+    });
     await microtasksFinished();
     assertFalse(element.$['sign-in-guide'].hidden);
-    element.configureSignInForTest(
-        {signInState: true, signInAllowed: true, guestSession: false});
+    element.configureSignInForTest({
+      signInState: HistorySignInState.SIGNED_IN_SYNCING_TABS,
+      signInAllowed: true,
+      guestSession: false,
+    });
     await microtasksFinished();
     assertTrue(element.$['sign-in-guide'].hidden);
   });
 
   test('no synced tabs message', async () => {
     // When user is not logged in, there is no synced tabs.
-    element.configureSignInForTest(
-        {signInState: false, signInAllowed: true, guestSession: false});
+    element.configureSignInForTest({
+      signInState: HistorySignInState.SIGNED_OUT,
+      signInAllowed: true,
+      guestSession: false,
+    });
     element.clearSyncedDevicesForTest();
     await microtasksFinished();
     assertTrue(element.$['no-synced-tabs'].hidden);
@@ -271,8 +287,11 @@ suite('<history-synced-device-manager>', function() {
     let cards = getCards(element);
     assertEquals(0, cards.length);
 
-    element.configureSignInForTest(
-        {signInState: true, signInAllowed: true, guestSession: false});
+    element.configureSignInForTest({
+      signInState: HistorySignInState.SIGNED_IN_SYNCING_TABS,
+      signInAllowed: true,
+      guestSession: false,
+    });
 
     await microtasksFinished();
     // When user signs in, first show loading message.
@@ -295,23 +314,32 @@ suite('<history-synced-device-manager>', function() {
     // If there are any synced tabs, hide the 'no synced tabs' message.
     assertTrue(element.$['no-synced-tabs'].hidden);
 
-    element.configureSignInForTest(
-        {signInState: false, signInAllowed: true, guestSession: false});
+    element.configureSignInForTest({
+      signInState: HistorySignInState.SIGNED_OUT,
+      signInAllowed: true,
+      guestSession: false,
+    });
     await microtasksFinished();
     // When user signs out, don't show the message.
     assertTrue(element.$['no-synced-tabs'].hidden);
   });
 
   test('hide sign in promo in guest mode', async () => {
-    element.configureSignInForTest(
-        {signInState: false, signInAllowed: true, guestSession: true});
+    element.configureSignInForTest({
+      signInState: HistorySignInState.SIGNED_OUT,
+      signInAllowed: true,
+      guestSession: true,
+    });
     await microtasksFinished();
     assertTrue(element.$['sign-in-guide'].hidden);
   });
 
   test('hide sign-in promo if sign-in is disabled', async function() {
-    element.configureSignInForTest(
-        {signInState: false, signInAllowed: false, guestSession: false});
+    element.configureSignInForTest({
+      signInState: HistorySignInState.SIGNED_OUT,
+      signInAllowed: false,
+      guestSession: false,
+    });
     await microtasksFinished();
     assertTrue(element.$['sign-in-guide'].hidden);
   });
@@ -326,3 +354,178 @@ suite('<history-synced-device-manager>', function() {
     assertEquals(0, cards.length);
   });
 });
+
+// <if expr="not is_chromeos">
+// history-sync-optin elements is not shown for ChromeOS.
+suite('<history-sync-optin>', function() {
+  let element: HistorySyncedDeviceManagerElement;
+  let testService: TestBrowserService;
+
+  setup(async function() {
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    window.history.replaceState({}, '', '/');
+    testService = new TestBrowserService();
+    BrowserServiceImpl.setInstance(testService);
+
+    // history-sync-optin elements are only shown when the
+    // replaceSyncPromosWithSignInPromos is true
+    loadTimeData.overrideValues({
+      replaceSyncPromosWithSignInPromos: true,
+    });
+
+    // Need to ensure lazy_load.html has been imported so that the device
+    // manager custom element is defined.
+    await ensureLazyLoaded();
+    element = document.createElement('history-synced-device-manager');
+    // |signInState| is generally set after |searchTerm| in Polymer 2. Set in
+    // the same order in tests, in order to catch regressions like
+    // https://crbug.com/915641.
+    element.searchTerm = '';
+    element.configureSignInForTest({
+      // Setting the sign in state to WEB_ONLY_SIGNED_IN, because user's name,
+      // email and profile icon are only shown on the page when the sign in
+      // state is WEB_ONLY_SIGNED_IN.
+      signInState: HistorySignInState.WEB_ONLY_SIGNED_IN,
+      signInAllowed: true,
+      guestSession: false,
+    });
+    document.body.appendChild(element);
+  });
+
+  test('check history sync optin elements are visible', async () => {
+    await microtasksFinished();
+
+    // The old promo should not be visible.
+    assertFalse(isChildVisible(element, '#turn-on-sync-promo'));
+
+    // The new promo elements for WEB_ONLY_SIGNED_IN state are shown correctly.
+    assertTrue(isChildVisible(element, '#sync-history-button'));
+    assertTrue(isChildVisible(element, '#history-sync-optin'));
+    assertTrue(isChildVisible(element, '#account-name'));
+    assertTrue(isChildVisible(element, '#account-email'));
+    assertTrue(isChildVisible(element, '#profile-icon'));
+  });
+
+  test('check elements in pending signin without tabs sync state', async () => {
+    element.configureSignInForTest({
+      signInState: HistorySignInState.SIGN_IN_PENDING_NOT_SYNCING_TABS,
+      signInAllowed: true,
+      guestSession: false,
+    });
+    await microtasksFinished();
+
+    // The other states promo elements should not be visible.
+    assertFalse(isChildVisible(element, '#signed-out-sync-history-promo-desc'));
+    assertFalse(isChildVisible(element, '#signed-in-sync-history-promo-desc'));
+    assertFalse(isChildVisible(element, '#verify-its-you-button'));
+    assertFalse(isChildVisible(
+        element, '#sign-in-pending-sync-history-promo-desc-sync-history-on'));
+
+    // The promo elements for SIGN_IN_PENDING_NOT_SYNCING_TABS state are
+    // shown correctly.
+    assertTrue(isChildVisible(element, '#sign-in-pending-avatar'));
+    assertTrue(
+        isChildVisible(element, '#sign-in-pending-sync-history-promo-desc'));
+    assertTrue(isChildVisible(element, '#sync-history-button'));
+  });
+
+  test('check elements in pending signin with tabs sync state', async () => {
+    element.configureSignInForTest({
+      signInState: HistorySignInState.SIGN_IN_PENDING_SYNCING_TABS,
+      signInAllowed: true,
+      guestSession: false,
+    });
+    await microtasksFinished();
+
+    // The other states promo elements should not be visible.
+    assertFalse(isChildVisible(element, '#sync-history-button'));
+    assertFalse(
+        isChildVisible(element, '#sign-in-pending-sync-history-promo-desc'));
+
+    // The promo elements for SIGN_IN_PENDING_SYNCING_TABS state are
+    // shown correctly.
+    assertTrue(isChildVisible(element, '#sign-in-pending-avatar'));
+    assertTrue(isChildVisible(
+        element, '#sign-in-pending-sync-history-promo-desc-sync-history-on'));
+    assertTrue(isChildVisible(element, '#verify-its-you-button'));
+  });
+
+  test('check elements in SYNC_DISABLED sign in state', async () => {
+    element.configureSignInForTest({
+      signInState: HistorySignInState.SYNC_DISABLED,
+      signInAllowed: true,
+      guestSession: false,
+    });
+    await microtasksFinished();
+
+    // The 'no synced tabs' message should be shown.
+    assertTrue(isChildVisible(element, '#no-synced-tabs'));
+
+    // The promo elements are not shown
+    assertFalse(isChildVisible(element, '#history-sync-optin'));
+    assertFalse(isChildVisible(element, '#sync-history-button'));
+    assertFalse(isChildVisible(element, '#verify-its-you-button'));
+  });
+
+  test('initializes account info', async () => {
+    await testService.handler.whenCalled('requestAccountInfo');
+    await microtasksFinished();
+
+    assertEquals(
+        'Test User',
+        element.shadowRoot.querySelector<HTMLElement>(
+                              '#account-name')!.textContent!.trim());
+    assertEquals(
+        'test@google.com',
+        element.shadowRoot.querySelector<HTMLElement>(
+                              '#account-email')!.textContent!.trim());
+    assertEquals(
+        'http://example.com/image.png',
+        element.shadowRoot.querySelector<HTMLImageElement>(
+                              '#profile-icon')!.src);
+  });
+
+  test('updates account info', async () => {
+    await testService.handler.whenCalled('requestAccountInfo');
+    await microtasksFinished();
+
+    const newAccountInfo = {
+      name: 'Test User 2',
+      email: 'test2@google.com',
+      accountImageSrc: {url: 'http://image.com/img2.png'},
+    };
+
+    testService.pageRemote.sendAccountInfo(newAccountInfo);
+    await microtasksFinished();
+
+    assertEquals(
+        newAccountInfo.name,
+        element.shadowRoot.querySelector<HTMLElement>(
+                              '#account-name')!.textContent!.trim());
+    assertEquals(
+        newAccountInfo.email,
+        element.shadowRoot.querySelector<HTMLElement>(
+                              '#account-email')!.textContent!.trim());
+    assertEquals(
+        newAccountInfo.accountImageSrc.url,
+        element.shadowRoot.querySelector<HTMLImageElement>(
+                              '#profile-icon')!.src);
+  });
+
+  test('calls turnOnHistorySync when button is clicked', async () => {
+    element.configureSignInForTest({
+      // For the sake of diversity, using other signin state in this test,
+      // different from WEB_ONLY_SIGN_IN
+      signInState: HistorySignInState.SIGNED_IN_NOT_SYNCING_TABS,
+      signInAllowed: true,
+      guestSession: false,
+    });
+    const button =
+        element.shadowRoot.querySelector<HTMLElement>('#sync-history-button');
+    assertTrue(!!button);
+    button.click();
+
+    await testService.handler.whenCalled('turnOnHistorySync');
+  });
+});
+// </if>

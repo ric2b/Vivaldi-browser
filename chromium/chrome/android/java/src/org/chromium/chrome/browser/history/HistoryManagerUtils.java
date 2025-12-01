@@ -9,8 +9,8 @@ import android.content.Context;
 import android.content.Intent;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileIntentUtils;
 import org.chromium.chrome.browser.tab.Tab;
@@ -25,6 +25,7 @@ import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /** Utility methods for the browsing history manager. */
+@NullMarked
 public class HistoryManagerUtils {
     public static final int HISTORY_REQUEST_CODE = 723649;
 
@@ -46,14 +47,9 @@ public class HistoryManagerUtils {
         if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(activity)) {
             // History shows up as a tab on tablets.
             LoadUrlParams params = new LoadUrlParams(UrlConstants.NATIVE_HISTORY_URL);
-            if (ChromeFeatureList.sAndroidNativePagesInNewTab.isEnabled()
-                    && ChromeFeatureList.sAndroidNativePagesInNewTabHistoryEnabled.getValue()) {
-                ChromeAsyncTabLauncher delegate = new ChromeAsyncTabLauncher(
-                        /* incognito= */ profile.isOffTheRecord());
-                delegate.launchNewTab(params, TabLaunchType.FROM_CHROME_UI, /* parent= */ tab);
-            } else {
-                tab.loadUrl(params);
-            }
+            ChromeAsyncTabLauncher delegate =
+                    new ChromeAsyncTabLauncher(/* incognito= */ profile.isOffTheRecord());
+            delegate.launchNewTab(params, TabLaunchType.FROM_CHROME_UI, /* parent= */ tab);
         } else {
             Intent intent = new Intent();
             intent.setClass(appContext, HistoryActivity.class);

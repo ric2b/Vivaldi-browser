@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notimplemented.h"
 #include "base/numerics/checked_math.h"
+#include "base/trace_event/trace_event.h"
 #include "base/types/expected.h"
 #include "base/types/expected_macros.h"
 #include "base/types/pass_key.h"
@@ -185,8 +186,11 @@ enum class MLGraphOperatorUma {
   kWhere = 90,
   kReverse = 91,
   kNotEqual = 92,
+  kRoundEven = 93,
+  kIsNaN = 94,
+  kIsInfinite = 95,
   kMinValue = kGraphBuilt,
-  kMaxValue = kNotEqual,
+  kMaxValue = kIsInfinite,
 };
 
 using MLGraphOperatorUmaSet = base::EnumSet<MLGraphOperatorUma,
@@ -272,12 +276,18 @@ MLGraphOperatorUma GetUmaValueForOperation(
           return MLGraphOperatorUma::kIdentity;
         case blink_mojom::ElementWiseUnary::Kind::kLog:
           return MLGraphOperatorUma::kLog;
+        case blink_mojom::ElementWiseUnary::Kind::kIsNaN:
+          return MLGraphOperatorUma::kIsNaN;
+        case blink_mojom::ElementWiseUnary::Kind::kIsInfinite:
+          return MLGraphOperatorUma::kIsInfinite;
         case blink_mojom::ElementWiseUnary::Kind::kLogicalNot:
           return MLGraphOperatorUma::kLogicalNot;
         case blink_mojom::ElementWiseUnary::Kind::kNeg:
           return MLGraphOperatorUma::kNeg;
         case blink_mojom::ElementWiseUnary::Kind::kReciprocal:
           return MLGraphOperatorUma::kReciprocal;
+        case blink_mojom::ElementWiseUnary::Kind::kRoundEven:
+          return MLGraphOperatorUma::kRoundEven;
         case blink_mojom::ElementWiseUnary::Kind::kSign:
           return MLGraphOperatorUma::kSign;
         case blink_mojom::ElementWiseUnary::Kind::kSin:
@@ -994,6 +1004,7 @@ MLOperand* BuildUnaryOperator(MLGraphBuilder* builder,
 }
 
 MLOperand* BuildElementWiseUnaryOperator(
+    const webnn::ContextProperties& context_properties,
     MLGraphBuilder* builder,
     ExceptionState& exception_state,
     blink_mojom::ElementWiseUnary::Kind kind,
@@ -1009,11 +1020,22 @@ MLOperand* BuildElementWiseUnaryOperator(
     return nullptr;
   }
 
+  // Logical operator outputs are bools, otherwise output operators are the same
+  // type as input operators.
+  webnn::OperandDataType data_type = IsLogicalUnaryOperator(kind)
+                                         ? webnn::OperandDataType::kUint8
+                                         : input->DataType();
+
+  ASSIGN_OR_THROW_AND_RETURN_IF_ERROR(
+      webnn::OperandDescriptor output_descriptor,
+      webnn::OperandDescriptor::Create(context_properties, data_type,
+                                       input->Shape(), label));
+
   auto* unary = MakeGarbageCollected<MLOperator>(
       builder, /*kind=*/blink_mojom::Operation::Tag::kElementWiseUnary, options,
       /*sub_kind=*/kind);
   MLOperand* output =
-      MLOperand::CreateOutput(builder, input->Descriptor(), unary);
+      MLOperand::CreateOutput(builder, std::move(output_descriptor), unary);
   unary->Connect({input}, {output});
   return output;
 }
@@ -1620,8 +1642,8 @@ MLGraphBuilder::MLGraphBuilder(
 
   remote_.Bind(std::move(pending_remote),
                execution_context->GetTaskRunner(TaskType::kMachineLearning));
-  remote_.set_disconnect_handler(WTF::BindOnce(
-      &MLGraphBuilder::OnConnectionError, WrapWeakPersistent(this)));
+  remote_.set_disconnect_handler(
+      BindOnce(&MLGraphBuilder::OnConnectionError, WrapWeakPersistent(this)));
 }
 
 MLGraphBuilder::~MLGraphBuilder() = default;
@@ -1710,9 +1732,10 @@ MLOperand* MLGraphBuilder::constant(ScriptState* script_state,
     return nullptr;
   }
 
-  if (!ml_context_->GetProperties().data_type_limits.constant.Has(data_type)) {
-    exception_state.ThrowTypeError(String(webnn::NotSupportedConstantTypeError(
-        data_type, ml_context_->GetProperties().data_type_limits.constant)));
+  if (!ml_context_->GetProperties().data_type_limits.constant.Supports(
+          descriptor)) {
+    exception_state.ThrowTypeError(String(webnn::NotSupportedConstantError(
+        descriptor, ml_context_->GetProperties().data_type_limits.constant)));
     return nullptr;
   }
 
@@ -1720,15 +1743,13 @@ MLOperand* MLGraphBuilder::constant(ScriptState* script_state,
       MakeGarbageCollected<MLConstantOperand>(this, std::move(descriptor));
 
   UMA_HISTOGRAM_MEMORY_KB("WebNN.ConstantDataSizeInKB", bytes.size() / 1024);
-  scoped_trace.AddStep(
-      String::Format("copy constant bytes into BigBuffer, size: %zu",
-                     bytes.size())
-          .Utf8()
-          .c_str());
+  TRACE_EVENT_BEGIN("webnn", "copy constant bytes into BigBuffer",
+                    scoped_trace.track(), "size", bytes.size());
   mojo_base::BigBuffer constant_data = mojo_base::BigBuffer(bytes);
   scoped_trace.AddStep("post mojo message: CreatePendingConstant");
   remote_->CreatePendingConstant(constant->handle(), data_type,
                                  std::move(constant_data));
+  TRACE_EVENT_END("webnn", scoped_trace.track());
   return constant;
 }
 
@@ -1876,7 +1897,18 @@ MLOperand* MLGraphBuilder::clamp(MLOperand* input,
     return nullptr;
   }
 
-  if (min_value->IsGreaterThan(*max_value, input->DataType())) {
+  // The behavior on different backends and hardware is inconsistent when NaN is
+  // used for min_value or max_value. So we normalize it with minValue:NaN
+  // coerced to -Infinity and maxValue:NaN coerced to Infinity.
+  // This is being discussed in WG:
+  // https://github.com/webmachinelearning/webnn/issues/874
+  webnn::MLNumber coerced_min_value = min_value->IsNaN()
+                                          ? webnn::MLNumber::NegativeInfinity()
+                                          : std::move(*min_value);
+  webnn::MLNumber coerced_max_value =
+      max_value->IsNaN() ? webnn::MLNumber::Infinity() : std::move(*max_value);
+
+  if (coerced_min_value.IsGreaterThan(coerced_max_value, input->DataType())) {
     exception_state.ThrowTypeError(
         String::FromUTF8(webnn::GetErrorLabelPrefix(options->label().Utf8())) +
         "The min value should be less than or equal to "
@@ -1885,7 +1917,8 @@ MLOperand* MLGraphBuilder::clamp(MLOperand* input,
   }
 
   auto* clamp = MakeGarbageCollected<MLClampOperator>(
-      this, options->label(), std::move(*min_value), std::move(*max_value));
+      this, options->label(), std::move(coerced_min_value),
+      std::move(coerced_max_value));
   MLOperand* output = MLOperand::CreateOutput(this, input->Descriptor(), clamp);
 
   clamp->Connect({input}, {output});
@@ -2022,42 +2055,37 @@ BUILD_ELEMENTWISE_BINARY_OP(logicalAnd, logical_and, kLogicalAnd)
 BUILD_ELEMENTWISE_BINARY_OP(logicalOr, logical_or, kLogicalOr)
 BUILD_ELEMENTWISE_BINARY_OP(logicalXor, logical_xor, kLogicalXor)
 
-#define BUILD_ELEMENTWISE_UNARY_OP(op, op_kind)                               \
-  MLOperand* MLGraphBuilder::op(MLOperand* input, MLOperatorOptions* options, \
-                                ExceptionState& exception_state) {            \
-    THROW_AND_RETURN_IF_ERROR(ValidateGraphBuilderState(), nullptr);          \
-    THROW_AND_RETURN_TYPE_IF_ERROR(ValidateInput(input), nullptr);            \
-    return BuildElementWiseUnaryOperator(                                     \
-        this, exception_state, blink_mojom::ElementWiseUnary::Kind::op_kind,  \
-        ml_context_->GetProperties().data_type_limits.op##_input, input,      \
-        options);                                                             \
+#define BUILD_ELEMENTWISE_UNARY_OP(op_camel, op_snake, op_kind)                \
+  MLOperand* MLGraphBuilder::op_camel(MLOperand* input,                        \
+                                      MLOperatorOptions* options,              \
+                                      ExceptionState& exception_state) {       \
+    THROW_AND_RETURN_IF_ERROR(ValidateGraphBuilderState(), nullptr);           \
+    THROW_AND_RETURN_TYPE_IF_ERROR(ValidateInput(input), nullptr);             \
+    return BuildElementWiseUnaryOperator(                                      \
+        ml_context_->GetProperties(), this, exception_state,                   \
+        blink_mojom::ElementWiseUnary::Kind::op_kind,                          \
+        ml_context_->GetProperties().data_type_limits.op_snake##_input, input, \
+        options);                                                              \
   }
 
-BUILD_ELEMENTWISE_UNARY_OP(abs, kAbs)
-BUILD_ELEMENTWISE_UNARY_OP(ceil, kCeil)
-BUILD_ELEMENTWISE_UNARY_OP(cos, kCos)
-BUILD_ELEMENTWISE_UNARY_OP(exp, kExp)
-BUILD_ELEMENTWISE_UNARY_OP(floor, kFloor)
-BUILD_ELEMENTWISE_UNARY_OP(log, kLog)
-BUILD_ELEMENTWISE_UNARY_OP(neg, kNeg)
-BUILD_ELEMENTWISE_UNARY_OP(sign, kSign)
-BUILD_ELEMENTWISE_UNARY_OP(sin, kSin)
-BUILD_ELEMENTWISE_UNARY_OP(tan, kTan)
-BUILD_ELEMENTWISE_UNARY_OP(erf, kErf)
-BUILD_ELEMENTWISE_UNARY_OP(identity, kIdentity)
-BUILD_ELEMENTWISE_UNARY_OP(reciprocal, kReciprocal)
-BUILD_ELEMENTWISE_UNARY_OP(sqrt, kSqrt)
-
-MLOperand* MLGraphBuilder::logicalNot(MLOperand* input,
-                                      MLOperatorOptions* options,
-                                      ExceptionState& exception_state) {
-  THROW_AND_RETURN_IF_ERROR(ValidateGraphBuilderState(), nullptr);
-  THROW_AND_RETURN_TYPE_IF_ERROR(ValidateInput(input), nullptr);
-  return BuildElementWiseUnaryOperator(
-      this, exception_state, blink_mojom::ElementWiseUnary::Kind::kLogicalNot,
-      ml_context_->GetProperties().data_type_limits.logical_not_input, input,
-      options);
-}
+BUILD_ELEMENTWISE_UNARY_OP(abs, abs, kAbs)
+BUILD_ELEMENTWISE_UNARY_OP(ceil, ceil, kCeil)
+BUILD_ELEMENTWISE_UNARY_OP(cos, cos, kCos)
+BUILD_ELEMENTWISE_UNARY_OP(exp, exp, kExp)
+BUILD_ELEMENTWISE_UNARY_OP(floor, floor, kFloor)
+BUILD_ELEMENTWISE_UNARY_OP(log, log, kLog)
+BUILD_ELEMENTWISE_UNARY_OP(isNaN, is_nan, kIsNaN)
+BUILD_ELEMENTWISE_UNARY_OP(isInfinite, is_infinite, kIsInfinite)
+BUILD_ELEMENTWISE_UNARY_OP(logicalNot, logical_not, kLogicalNot)
+BUILD_ELEMENTWISE_UNARY_OP(neg, neg, kNeg)
+BUILD_ELEMENTWISE_UNARY_OP(roundEven, round_even, kRoundEven)
+BUILD_ELEMENTWISE_UNARY_OP(sign, sign, kSign)
+BUILD_ELEMENTWISE_UNARY_OP(sin, sin, kSin)
+BUILD_ELEMENTWISE_UNARY_OP(tan, tan, kTan)
+BUILD_ELEMENTWISE_UNARY_OP(erf, erf, kErf)
+BUILD_ELEMENTWISE_UNARY_OP(identity, identity, kIdentity)
+BUILD_ELEMENTWISE_UNARY_OP(reciprocal, reciprocal, kReciprocal)
+BUILD_ELEMENTWISE_UNARY_OP(sqrt, sqrt, kSqrt)
 
 MLOperand* MLGraphBuilder::cast(MLOperand* input,
                                 const V8MLOperandDataType output_data_type,
@@ -2815,6 +2843,17 @@ MLOperand* MLGraphBuilder::reshape(MLOperand* input,
     return nullptr;
   }
 
+  if (!ml_context_->GetProperties()
+           .data_type_limits.reshape_input.ranks.Supports(new_shape.size())) {
+    exception_state.ThrowTypeError(
+        String::FromUTF8(webnn::GetErrorLabelPrefix(label)) +
+        String(NotSupportedOpOutputRankError(
+            static_cast<uint32_t>(new_shape.size()),
+            ml_context_->GetProperties()
+                .data_type_limits.reshape_input.ranks)));
+    return nullptr;
+  }
+
   // Setting the initial number of elements to 1 would cover the 0-D scalar with
   // empty dimensions.
   base::CheckedNumeric<size_t> checked_newshape_number_of_elements = 1;
@@ -3286,10 +3325,10 @@ ScriptPromise<MLGraph> MLGraphBuilder::build(ScriptState* script_state,
                                  ScriptPromise<MLGraph>());
 
   for (const auto& named_output : named_outputs) {
-    if (!ml_context_->GetProperties().data_type_limits.output().Has(
-            named_output.second->DataType())) {
-      exception_state.ThrowTypeError(String(webnn::NotSupportedOutputTypeError(
-          named_output.first.Utf8(), named_output.second->DataType(),
+    if (!ml_context_->GetProperties().data_type_limits.output().Supports(
+            named_output.second->Descriptor())) {
+      exception_state.ThrowTypeError(String(webnn::NotSupportedOutputError(
+          named_output.first.Utf8(), named_output.second->Descriptor(),
           ml_context_->GetProperties().data_type_limits.output())));
       return EmptyPromise();
     }
@@ -3343,11 +3382,11 @@ ScriptPromise<MLGraph> MLGraphBuilder::build(ScriptState* script_state,
       script_state, exception_state.GetContext());
 
   scoped_trace.AddStep("post mojo message: CreateGraph");
-  remote_->CreateGraph(
-      std::move(graph_info),
-      WTF::BindOnce(&MLGraphBuilder::DidCreateWebNNGraph, WrapPersistent(this),
-                    WrapPersistent(pending_resolver_.Get()),
-                    *std::move(graph_constraints)));
+  remote_->CreateGraph(std::move(graph_info),
+                       blink::BindOnce(&MLGraphBuilder::DidCreateWebNNGraph,
+                                       WrapPersistent(this),
+                                       WrapPersistent(pending_resolver_.Get()),
+                                       *std::move(graph_constraints)));
   return pending_resolver_->Promise();
 }
 

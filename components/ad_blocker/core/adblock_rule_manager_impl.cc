@@ -2,15 +2,10 @@
 
 #include "components/ad_blocker/core/adblock_rule_manager_impl.h"
 
-#include <algorithm>
 #include <memory>
 #include <utility>
-#include <vector>
 
-#include "base/task/task_traits.h"
-#include "base/task/thread_pool.h"
 #include "components/ad_blocker/core/adblock_rule_source_handler.h"
-#include "components/ad_blocker/public/core/adblock_known_sources_handler.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace adblock_filter {
@@ -18,7 +13,7 @@ RuleManagerImpl::RuleManagerImpl(
     scoped_refptr<base::SequencedTaskRunner> file_task_runner,
     const base::FilePath& profile_path,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-    std::array<ActiveRuleSources, kRuleGroupCount> rule_sources,
+    RuleGroupArray<ActiveRuleSources> rule_sources,
     ActiveExceptionsLists active_exceptions_lists,
     Exceptions exceptions,
     base::RepeatingClosure schedule_save,
@@ -38,8 +33,8 @@ RuleManagerImpl::RuleManagerImpl(
   // callbacks to objects that we own, calling to either this or other objects
   // that we own.
 
-  for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
-    for (const auto& rule_source : rule_sources[static_cast<size_t>(group)]) {
+  for (auto [group, sources] : rule_sources) {
+    for (const auto& rule_source : sources) {
       GetSourceMap(group)[rule_source.core.id()] =
           std::make_unique<RuleSourceHandler>(
               group, rule_source, profile_path_, url_loader_factory_,
@@ -62,12 +57,12 @@ void RuleManagerImpl::RemoveObserver(Observer* observer) {
 
 std::map<int64_t, std::unique_ptr<RuleSourceHandler>>&
 RuleManagerImpl::GetSourceMap(RuleGroup group) {
-  return rule_sources_[static_cast<size_t>(group)];
+  return rule_sources_[group];
 }
 
 const std::map<int64_t, std::unique_ptr<RuleSourceHandler>>&
 RuleManagerImpl::GetSourceMap(RuleGroup group) const {
-  return rule_sources_[static_cast<size_t>(group)];
+  return rule_sources_[group];
 }
 
 bool RuleManagerImpl::AddRulesSource(RuleGroup group,
@@ -139,7 +134,7 @@ void RuleManagerImpl::DeleteRuleSource(RuleGroup group,
 
 void RuleManagerImpl::SetActiveExceptionList(RuleGroup group,
                                              ExceptionsList list) {
-  active_exceptions_lists_[static_cast<size_t>(group)] = list;
+  active_exceptions_lists_[group] = list;
 
   for (Observer& observer : observers_)
     observer.OnExceptionListStateChanged(group);
@@ -149,7 +144,7 @@ void RuleManagerImpl::SetActiveExceptionList(RuleGroup group,
 
 RuleManagerImpl::ExceptionsList RuleManagerImpl::GetActiveExceptionList(
     RuleGroup group) const {
-  return active_exceptions_lists_[static_cast<size_t>(group)];
+  return active_exceptions_lists_[group];
 }
 
 void RuleManagerImpl::AddExceptionForDomain(RuleGroup group,
@@ -159,8 +154,7 @@ void RuleManagerImpl::AddExceptionForDomain(RuleGroup group,
   if (canonicalized_domain.back() == '.')
     canonicalized_domain.remove_suffix(1);
 
-  exceptions_[static_cast<size_t>(group)][list].insert(
-      std::string(canonicalized_domain));
+  exceptions_[group][list].insert(std::string(canonicalized_domain));
 
   for (Observer& observer : observers_)
     observer.OnExceptionListChanged(group, list);
@@ -176,7 +170,7 @@ void RuleManagerImpl::RemoveExceptionForDomain(RuleGroup group,
 
   for (size_t position = 0;; ++position) {
     const std::string_view subdomain = canonicalized_domain.substr(position);
-    exceptions_[static_cast<size_t>(group)][list].erase(std::string(subdomain));
+    exceptions_[group][list].erase(std::string(subdomain));
 
     position = canonicalized_domain.find('.', position);
     if (position == std::string_view::npos)
@@ -191,7 +185,7 @@ void RuleManagerImpl::RemoveExceptionForDomain(RuleGroup group,
 
 void RuleManagerImpl::RemoveAllExceptions(RuleGroup group,
                                           ExceptionsList list) {
-  exceptions_[static_cast<size_t>(group)][list].clear();
+  exceptions_[group][list].clear();
 
   for (Observer& observer : observers_)
     observer.OnExceptionListChanged(group, list);
@@ -202,7 +196,7 @@ void RuleManagerImpl::RemoveAllExceptions(RuleGroup group,
 const std::set<std::string>& RuleManagerImpl::GetExceptions(
     RuleGroup group,
     ExceptionsList list) const {
-  return exceptions_[static_cast<size_t>(group)][list];
+  return exceptions_[group][list];
 }
 
 bool RuleManagerImpl::IsExemptOfFiltering(RuleGroup group,
@@ -211,8 +205,7 @@ bool RuleManagerImpl::IsExemptOfFiltering(RuleGroup group,
   if (origin.scheme() == "chrome-extension")
     return true;
 
-  bool default_exempt =
-      active_exceptions_lists_[static_cast<size_t>(group)] == kProcessList;
+  bool default_exempt = active_exceptions_lists_[group] == kProcessList;
   if (origin.opaque())
     return default_exempt;
 
@@ -227,9 +220,8 @@ bool RuleManagerImpl::IsExemptOfFiltering(RuleGroup group,
   for (size_t position = 0;; ++position) {
     const std::string_view subdomain = canonicalized_host.substr(position);
 
-    if (exceptions_[static_cast<size_t>(group)]
-                   [active_exceptions_lists_[static_cast<size_t>(group)]]
-                       .count(std::string(subdomain)) != 0)
+    if (exceptions_[group][active_exceptions_lists_[group]].count(
+            std::string(subdomain)) != 0)
       return !default_exempt;
 
     position = canonicalized_host.find('.', position);

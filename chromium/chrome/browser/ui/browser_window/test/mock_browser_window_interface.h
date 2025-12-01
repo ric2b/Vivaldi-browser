@@ -15,17 +15,23 @@ class MockBrowserWindowInterface : public BrowserWindowInterface {
 
   MOCK_METHOD(views::WebView*, GetWebView, (), (override));
   MOCK_METHOD(Profile*, GetProfile, (), (override));
+  MOCK_METHOD(const Profile*, GetProfile, (), (const override));
   MOCK_METHOD(void,
               OpenGURL,
               (const GURL& gurl, WindowOpenDisposition disposition),
               (override));
   MOCK_METHOD(const SessionID&, GetSessionID, (), (const override));
   MOCK_METHOD(TabStripModel*, GetTabStripModel, (), (override));
+  MOCK_METHOD(const TabStripModel*, GetTabStripModel, (), (const, override));
   MOCK_METHOD(bool, IsTabStripVisible, (), (override));
   MOCK_METHOD(bool, ShouldHideUIForFullscreen, (), (const, override));
   MOCK_METHOD(base::CallbackListSubscription,
               RegisterBrowserDidClose,
               (BrowserDidCloseCallback callback),
+              (override));
+  MOCK_METHOD(base::CallbackListSubscription,
+              RegisterBrowserCloseCancelled,
+              (BrowserCloseCancelledCallback callback),
               (override));
   MOCK_METHOD(views::View*, TopContainer, (), (override));
   MOCK_METHOD(base::WeakPtr<BrowserWindowInterface>,
@@ -50,6 +56,10 @@ class MockBrowserWindowInterface : public BrowserWindowInterface {
   MOCK_METHOD(web_modal::WebContentsModalDialogHost*,
               GetWebContentsModalDialogHostForWindow,
               (),
+              (override));
+  MOCK_METHOD(web_modal::WebContentsModalDialogHost*,
+              GetWebContentsModalDialogHostForTab,
+              (tabs::TabInterface * tab_interface),
               (override));
   MOCK_METHOD(bool, IsActive, (), (const, override));
   MOCK_METHOD(base::CallbackListSubscription,
@@ -85,6 +95,7 @@ class MockBrowserWindowInterface : public BrowserWindowInterface {
   MOCK_METHOD(Browser*, GetBrowserForMigrationOnly, (), (override));
   MOCK_METHOD(bool, IsTabModalPopupDeprecated, (), (const, override));
   MOCK_METHOD(ui::BaseWindow*, GetWindow, (), (override));
+  MOCK_METHOD(const ui::BaseWindow*, GetWindow, (), (const override));
   MOCK_METHOD(DesktopBrowserWindowCapabilities*, capabilities, (), (override));
   MOCK_METHOD(const DesktopBrowserWindowCapabilities*,
               capabilities,

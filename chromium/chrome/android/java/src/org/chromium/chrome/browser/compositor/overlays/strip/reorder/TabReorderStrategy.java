@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 package org.chromium.chrome.browser.compositor.overlays.strip.reorder;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.graphics.PointF;
@@ -12,7 +14,8 @@ import org.chromium.base.MathUtils;
 import org.chromium.base.Token;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplierImpl;
-import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.compositor.overlays.strip.AnimationHost;
 import org.chromium.chrome.browser.compositor.overlays.strip.ScrollDelegate;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutGroupTitle;
@@ -32,11 +35,13 @@ import org.chromium.ui.base.LocalizationUtils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Supplier;
 
 /** Tab reorder - drag tab past other tabs or into/out of groups within the tab strip. */
+@NullMarked
 public class TabReorderStrategy extends ReorderStrategyBase {
     // Tab being reordered.
-    private StripLayoutTab mInteractingTab;
+    private @Nullable StripLayoutTab mInteractingTab;
 
     // Dependencies
     private final Supplier<Boolean> mInReorderModeSupplier;
@@ -49,7 +54,7 @@ public class TabReorderStrategy extends ReorderStrategyBase {
             TabModel model,
             TabGroupModelFilter tabGroupModelFilter,
             View containerView,
-            ObservableSupplierImpl<Token> groupIdToHideSupplier,
+            ObservableSupplierImpl<@Nullable Token> groupIdToHideSupplier,
             Supplier<Float> tabWidthSupplier,
             Supplier<Long> lastReorderScrollTimeSupplier,
             Supplier<Boolean> inReorderModeSupplier) {
@@ -106,6 +111,7 @@ public class TabReorderStrategy extends ReorderStrategyBase {
             float endX,
             float deltaX,
             @ReorderType int reorderType) {
+        assumeNonNull(mInteractingTab);
         // 1. Return if interacting tab is no longer part of strip tabs.
         int curIndex = StripLayoutUtils.findIndexForTab(stripTabs, mInteractingTab.getTabId());
         if (curIndex == TabModel.INVALID_TAB_INDEX) return;
@@ -180,7 +186,7 @@ public class TabReorderStrategy extends ReorderStrategyBase {
     }
 
     @Override
-    public StripLayoutView getInteractingView() {
+    public @Nullable StripLayoutView getInteractingView() {
         return mInteractingTab;
     }
 
@@ -212,17 +218,15 @@ public class TabReorderStrategy extends ReorderStrategyBase {
                 curIndex);
 
         // Animate the reordering view and ensure it's foregrounded.
-        // TODO(crbug.com/402775002): Replace the temporary multi-selected visuals once the reorder
-        //  specs are finalized.
-        tabDelegate.setIsTabMultiSelected(tab, /* isMultiSelected= */ true, /* animate= */ false);
+        tabDelegate.setIsTabNonDragReordering(tab, /* isNonDragReordering= */ true);
         reorderingView.setIsForegrounded(/* isForegrounded= */ true);
         animateViewSliding(
                 reorderingView,
                 new AnimatorListenerAdapter() {
                     @Override
                     public void onAnimationEnd(Animator animation) {
-                        tabDelegate.setIsTabMultiSelected(
-                                tab, /* isMultiSelected= */ false, /* animate= */ false);
+                        tabDelegate.setIsTabNonDragReordering(
+                                tab, /* isNonDragReordering= */ false);
                         reorderingView.setIsForegrounded(/* isForegrounded= */ false);
                     }
                 });
@@ -257,7 +261,7 @@ public class TabReorderStrategy extends ReorderStrategyBase {
             float offset,
             int curIndex) {
         boolean towardEnd = isOffsetTowardEnd(offset);
-        Tab curTab = mModel.getTabAt(curIndex);
+        Tab curTab = mModel.getTabAtChecked(curIndex);
         Tab adjTab = mModel.getTabAt(/* index= */ curIndex + (towardEnd ? 1 : -1));
         boolean isInGroup = mTabGroupModelFilter.isTabInTabGroup(curTab);
         boolean mayDragInOrOutOfGroup =
@@ -266,9 +270,16 @@ public class TabReorderStrategy extends ReorderStrategyBase {
                         : StripLayoutUtils.notRelatedAndEitherTabInGroup(
                                 mTabGroupModelFilter, curTab, adjTab);
 
+        // Do not allow reorder between pinned and unpinned tabs.
+        boolean curTabPinned = curTab != null && curTab.getIsPinned();
+        boolean adjTabPinned = adjTab != null && adjTab.getIsPinned();
+        if (curTabPinned != adjTabPinned) return false;
+
         // Case A: Not interacting with tab groups.
         if (!mayDragInOrOutOfGroup) {
-            if (adjTab == null || Math.abs(offset) <= getTabSwapThreshold()) return false;
+            if (adjTab == null || Math.abs(offset) <= getTabSwapThreshold(curTabPinned)) {
+                return false;
+            }
 
             int destIndex = towardEnd ? curIndex + 1 : curIndex - 1;
             mModel.moveTab(interactingTab.getTabId(), destIndex);
@@ -280,6 +291,7 @@ public class TabReorderStrategy extends ReorderStrategyBase {
         if (isInGroup) {
             StripLayoutGroupTitle interactingGroupTitle =
                     StripLayoutUtils.findGroupTitle(groupTitles, curTab.getTabGroupId());
+            assumeNonNull(interactingGroupTitle);
             float threshold = getDragOutThreshold(interactingGroupTitle, towardEnd);
             if (Math.abs(offset) <= threshold) return false;
 
@@ -293,8 +305,10 @@ public class TabReorderStrategy extends ReorderStrategyBase {
             return true;
         }
 
+        assumeNonNull(adjTab);
         StripLayoutGroupTitle interactingGroupTitle =
                 StripLayoutUtils.findGroupTitle(groupTitles, adjTab.getTabGroupId());
+        assumeNonNull(interactingGroupTitle);
         if (interactingGroupTitle.isCollapsed()) {
             // Case C.1: Maybe drag past collapsed group.
             float threshold =
@@ -303,15 +317,14 @@ public class TabReorderStrategy extends ReorderStrategyBase {
             if (Math.abs(offset) <= threshold) return false;
 
             movePastCollapsedGroup(interactingTab, interactingGroupTitle, curIndex, towardEnd);
-            return true;
         } else {
             // Case C.2: Maybe merge to group.
             if (Math.abs(offset) <= getDragInThreshold()) return false;
 
             mergeInteractingTabToGroup(
                     adjTab.getId(), interactingTab, interactingGroupTitle, towardEnd);
-            return true;
         }
+        return true;
     }
 
     /**

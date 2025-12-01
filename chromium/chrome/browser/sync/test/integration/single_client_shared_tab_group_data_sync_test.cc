@@ -45,8 +45,8 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
-#endif  // BUILDFLAG(IS_ANDROID)
+#include "base/android/device_info.h"
+#endif
 
 namespace tab_groups {
 namespace {
@@ -176,11 +176,9 @@ class SingleClientSharedTabGroupDataSyncTest : public SyncTest {
 
   void SetUp() override {
     feature_overrides_.InitWithFeatures(
-        {data_sharing::features::kDataSharingFeature,
-         tab_groups::kTabGroupSyncServiceDesktopMigration},
-        {});
+        {data_sharing::features::kDataSharingFeature}, {});
 #if BUILDFLAG(IS_ANDROID)
-    if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+    if (base::android::device_info::is_automotive()) {
       // TODO(crbug.com/399444939): Re-enable once automotive is supported.
       GTEST_SKIP() << "Test shouldn't run on automotive builders.";
     }
@@ -263,7 +261,7 @@ class SingleClientSharedTabGroupDataSyncTest : public SyncTest {
 
   void InjectTombstoneToFakeServer(
       const sync_pb::SharedTabGroupDataSpecifics& shared_group_specifics,
-      const CollaborationId& collaboration_id) {
+      const syncer::CollaborationId& collaboration_id) {
     const syncer::ClientTagHash shared_group_client_tag_hash =
         syncer::ClientTagHash::FromUnhashed(
             syncer::SHARED_TAB_GROUP_DATA,
@@ -577,7 +575,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
                        ShouldIgnoreTabGroupWithSameGuid) {
   ASSERT_TRUE(SetupSync());
 
-  const CollaborationId kCollaborationId("collaboration");
+  const syncer::CollaborationId kCollaborationId("collaboration");
   const base::Uuid kGroupGuid = base::Uuid::GenerateRandomV4();
 
   // Add a saved tab group locally and simulate a remote creation of a shared
@@ -629,7 +627,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
                        ShouldIgnoreTabUpdatesWithGuidOfSavedGroup) {
   ASSERT_TRUE(SetupSync());
 
-  const CollaborationId kCollaborationId("collaboration");
+  const syncer::CollaborationId kCollaborationId("collaboration");
 
   tab_groups::SavedTabGroup saved_group(u"Saved Title", TabGroupColorId::kGrey,
                                         /*urls=*/{}, /*position=*/0);
@@ -682,7 +680,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
 IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
                        ShouldRestoreOriginatingSavedGroupOnShareFailure) {
   const GURL kUrl = embedded_test_server()->GetURL(kDefaultURLPath);
-  const CollaborationId kCollaborationId("collaboration");
+  const syncer::CollaborationId kCollaborationId("collaboration");
 
   ASSERT_TRUE(SetupClients());
   RegisterCollaboration(kCollaborationId);
@@ -850,14 +848,12 @@ class SingleClientSharedTabGroupVersioningSyncTest
     if (version_out_of_date) {
       feature_overrides_.InitWithFeatures(
           {data_sharing::features::kDataSharingFeature,
-           tab_groups::kTabGroupSyncServiceDesktopMigration,
            data_sharing::features::kDataSharingEnableUpdateChromeUI,
            data_sharing::features::kSharedDataTypesKillSwitch},
           {});
     } else {
       feature_overrides_.InitWithFeatures(
-          {data_sharing::features::kDataSharingFeature,
-           tab_groups::kTabGroupSyncServiceDesktopMigration},
+          {data_sharing::features::kDataSharingFeature},
           {data_sharing::features::kSharedDataTypesKillSwitch,
            data_sharing::features::kDataSharingEnableUpdateChromeUI});
     }

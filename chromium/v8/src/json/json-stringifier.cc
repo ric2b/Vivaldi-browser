@@ -962,7 +962,7 @@ JsonStringifier::Result JsonStringifier::Serialize_(Handle<JSAny> object,
                                                     Handle<Object> key) {
   StackLimitCheck interrupt_check(isolate_);
   if (interrupt_check.InterruptRequested() &&
-      IsException(isolate_->stack_guard()->HandleInterrupts(), isolate_)) {
+      IsExceptionHole(isolate_->stack_guard()->HandleInterrupts(), isolate_)) {
     return EXCEPTION;
   }
 
@@ -1238,7 +1238,8 @@ JsonStringifier::Result JsonStringifier::SerializeFixedArrayWithInterruptCheck(
     DCHECK_LT(limit, kMaxAllowedFastPackedLength);
     limit = std::min(length, limit + kInterruptLength);
     if (interrupt_check.InterruptRequested() &&
-        IsException(isolate_->stack_guard()->HandleInterrupts(), isolate_)) {
+        IsExceptionHole(isolate_->stack_guard()->HandleInterrupts(),
+                        isolate_)) {
       return EXCEPTION;
     }
   }
@@ -2965,7 +2966,7 @@ FastJsonStringifier<Char>::SerializeFixedArrayWithInterruptCheck(
                                     FixedDoubleArray, FixedArray>;
 
   StackLimitCheck interrupt_check(isolate_);
-  uint32_t limit = std::min(length, kArrayInterruptLength);
+  uint32_t limit = std::min(length, start_index + kArrayInterruptLength);
   constexpr uint32_t kMaxAllowedFastPackedLength =
       std::numeric_limits<uint32_t>::max() - kArrayInterruptLength;
   static_assert(FixedArray::kMaxLength < kMaxAllowedFastPackedLength);
@@ -2992,9 +2993,9 @@ FastJsonStringifier<Char>::SerializeFixedArrayWithInterruptCheck(
       // encountered an exception, so this is fine.
       AllowGarbageCollection allow_gc;
       if (interrupt_check.InterruptRequested() &&
-          IsException(isolate_->stack_guard()->HandleInterrupts(
-                          StackGuard::InterruptLevel::kNoGC),
-                      isolate_)) {
+          IsExceptionHole(isolate_->stack_guard()->HandleInterrupts(
+                              StackGuard::InterruptLevel::kNoGC),
+                          isolate_)) {
         return EXCEPTION;
       }
     }
@@ -3271,9 +3272,9 @@ FastJsonStringifier<Char>::HandleInterruptAndCheckCycle() {
     // encountered an exception, so this is fine.
     AllowGarbageCollection allow_gc;
     if (V8_UNLIKELY(interrupt_check.InterruptRequested() &&
-                    IsException(isolate_->stack_guard()->HandleInterrupts(
-                                    StackGuard::InterruptLevel::kNoGC),
-                                isolate_))) {
+                    IsExceptionHole(isolate_->stack_guard()->HandleInterrupts(
+                                        StackGuard::InterruptLevel::kNoGC),
+                                    isolate_))) {
       return EXCEPTION;
     }
   }
@@ -3376,7 +3377,7 @@ bool FastJsonStringifier<Char>::AppendStringSIMD(
   const SrcChar* block = chars;
   const SrcChar* end = chars + length;
   hw::FixedTag<SrcChar, 16> tag;
-  static constexpr size_t stride = hw::Lanes(tag);
+  static const size_t stride = hw::Lanes(tag);
 
   const auto mask_0x20 = hw::Set(tag, 0x20);
   const auto mask_0x22 = hw::Set(tag, 0x22);

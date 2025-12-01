@@ -19,6 +19,7 @@
 
 namespace autofill {
 
+class BnplIssuer;
 class ContentAutofillClient;
 class Iban;
 class LoyaltyCard;
@@ -43,9 +44,9 @@ class TouchToFillPaymentMethodControllerImpl
   ~TouchToFillPaymentMethodControllerImpl() override;
 
   // TouchToFillPaymentMethodController:
-  bool ShowCreditCards(std::unique_ptr<TouchToFillPaymentMethodView> view,
-                       base::WeakPtr<TouchToFillDelegate> delegate,
-                       base::span<const Suggestion> suggestions) override;
+  bool ShowPaymentMethods(std::unique_ptr<TouchToFillPaymentMethodView> view,
+                          base::WeakPtr<TouchToFillDelegate> delegate,
+                          base::span<const Suggestion> suggestions) override;
   bool ShowIbans(std::unique_ptr<TouchToFillPaymentMethodView> view,
                  base::WeakPtr<TouchToFillDelegate> delegate,
                  base::span<const Iban> ibans_to_suggest) override;
@@ -54,6 +55,13 @@ class TouchToFillPaymentMethodControllerImpl
                         base::span<const LoyaltyCard> affiliated_loyalty_cards,
                         base::span<const LoyaltyCard> all_loyalty_cards,
                         bool first_time_usage) override;
+  bool UpdateBnplPaymentMethod(std::optional<uint64_t> extracted_amount,
+                               bool is_amount_supported_by_any_issuer) override;
+  bool ShowProgressScreen(std::unique_ptr<TouchToFillPaymentMethodView> view,
+                          base::WeakPtr<TouchToFillDelegate> delegate) override;
+  bool ShowBnplIssuers(
+      base::WeakPtr<TouchToFillDelegate> delegate,
+      base::span<const BnplIssuer> bnpl_issuers_to_suggest) override;
   void Hide() override;
 
   // content::WebContentsObserver:

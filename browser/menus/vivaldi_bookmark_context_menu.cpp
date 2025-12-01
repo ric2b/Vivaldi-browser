@@ -3,6 +3,7 @@
 #include "browser/menus/vivaldi_bookmark_context_menu.h"
 
 #include "app/vivaldi_resources.h"
+#include "base/no_destructor.h"
 #include "browser/menus/vivaldi_menu_enums.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_merged_surface_service.h"
@@ -11,7 +12,6 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "components/prefs/pref_service.h"
-#include "extensions/api/bookmark_context_menu/bookmark_context_menu_api.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/image_model.h"
 #include "ui/color/color_id.h"
@@ -22,7 +22,22 @@
 #include "ui/vivaldi_context_menu.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
+namespace vivaldi {
+
 namespace {
+// Owned by the active menu api instance. Always present while a menu is open.
+static const BookmarkMenuContainer* container;
+// Index of active menu bar element.
+static unsigned int current_index = 0;
+
+using MenuIdToNodeMap = std::map<int, const bookmarks::BookmarkNode*>;
+static int NextMenuId = 0;
+
+MenuIdToNodeMap& GetMenuIdToBookmarkMap() {
+  static base::NoDestructor<MenuIdToNodeMap> menu_id_to_bookmark_map;
+
+  return *menu_id_to_bookmark_map;
+}
 
 SkColor TextColorForMenu(views::MenuItemView* menu, views::Widget* widget) {
   if (widget && widget->GetNativeTheme()) {
@@ -31,19 +46,7 @@ SkColor TextColorForMenu(views::MenuItemView* menu, views::Widget* widget) {
     return SK_ColorBLACK;
   }
 }
-
 }  // namespace
-
-namespace vivaldi {
-
-// Owned by the active menu api instance. Always present while a menu is open.
-static const BookmarkMenuContainer* Container;
-// Index of active menu bar element.
-static unsigned int CurrentIndex = 0;
-
-typedef std::map<int, const bookmarks::BookmarkNode*> MenuIdToNodeMap;
-static int NextMenuId = 0;
-static MenuIdToNodeMap MenuIdToBookmarkMap;
 
 void BuildBookmarkContextMenu(Profile* profile,
                               ui::SimpleMenuModel* menu_model) {
@@ -69,7 +72,7 @@ void BuildBookmarkContextMenu(Profile* profile,
                                   IDS_VIV_BOOKMARK_BAR_NEW_BOOKMARK);
   menu_model->AddItemWithStringId(IDC_BOOKMARK_BAR_NEW_FOLDER,
                                   IDS_VIV_BOOKMARK_BAR_NEW_FOLDER);
-  if (Container->sort_field == BookmarkSorter::FIELD_NONE) {
+  if (container->sort_field == BookmarkSorter::FIELD_NONE) {
     menu_model->AddItemWithStringId(IDC_VIV_BOOKMARK_BAR_NEW_SEPARATOR,
                                     IDS_VIV_BOOKMARK_BAR_NEW_SEPARATOR);
   }
@@ -111,7 +114,7 @@ void ExecuteBookmarkContextMenuCommand(Browser* browser,
     case IDC_CUT:
     case IDC_COPY:
     case IDC_PASTE:
-      Container->delegate->OnBookmarkAction(bookmark_id, menu_id);
+      container->delegate->OnBookmarkAction(bookmark_id, menu_id);
       break;
     case IDC_BOOKMARK_BAR_REMOVE:
       // Handle locally so we can use chrome's code to keep menu open.
@@ -127,18 +130,24 @@ void ExecuteBookmarkMenuCommand(Browser* browser,
   if (IsVivaldiMenuItem(menu_id)) {
     // Currently, and probably forever, we only have one specific menu item so
     // no more tests.
-    Container->delegate->OnBookmarkAction(MenuIdToBookmarkMap[menu_id]->id(),
-                                          IDC_VIV_BOOKMARK_BAR_ADD_ACTIVE_TAB);
+    container->delegate->OnBookmarkAction(
+        GetMenuIdToBookmarkMap()[menu_id]->id(),
+        IDC_VIV_BOOKMARK_BAR_ADD_ACTIVE_TAB);
   } else if (bookmark_id != -1) {
-    Container->delegate->OnOpenBookmark(bookmark_id, mouse_event_flags);
+    container->delegate->OnOpenBookmark(bookmark_id, mouse_event_flags);
   }
 }
 
 void HandleHoverUrl(Browser* browser, const std::string& url) {
-  Container->delegate->OnHover(url);
+  container->delegate->OnHover(url);
 }
 
-const bookmarks::BookmarkNode* GetNodeByFolder(bookmarks::BookmarkModel* model,
+void HandleStartDrag(int64_t id) {
+  container->delegate->OnStartDrag(id);
+}
+
+const bookmarks::BookmarkNode* GetNodeByFolder(
+    bookmarks::BookmarkModel* model,
     const BookmarkParentFolder& folder) {
   const bookmarks::BookmarkNode* node = folder.as_non_permanent_folder();
   if (!node) {
@@ -174,9 +183,9 @@ void HandleOpenMenu(bookmarks::BookmarkModel* model,
     return;
   }
   int64_t id = node->id();
-  for (const ::vivaldi::BookmarkMenuContainerEntry& e : Container->siblings) {
+  for (const ::vivaldi::BookmarkMenuContainerEntry& e : container->siblings) {
     if (e.id == id) {
-      Container->delegate->OnOpenMenu(id);
+      container->delegate->OnOpenMenu(id);
       break;
     }
   }
@@ -188,9 +197,9 @@ const bookmarks::BookmarkNode* GetNodeByPosition(
     int* start_index,
     gfx::Rect* rect) {
   unsigned int i = 0;
-  for (const ::vivaldi::BookmarkMenuContainerEntry& e : Container->siblings) {
+  for (const ::vivaldi::BookmarkMenuContainerEntry& e : container->siblings) {
     if (e.rect.Contains(screen_point)) {
-      CurrentIndex = i;
+      current_index = i;
       *rect = e.rect;
       *start_index = e.offset;
       return bookmarks::GetBookmarkNodeByID(model, e.id);
@@ -204,34 +213,34 @@ const bookmarks::BookmarkNode* GetNextNode(bookmarks::BookmarkModel* model,
                                            bool next,
                                            int* start_index,
                                            gfx::Rect* rect) {
-  if (Container->siblings.size() <= 1) {
+  if (container->siblings.size() <= 1) {
     return nullptr;
   }
   if (next) {
-    CurrentIndex++;
-    if (CurrentIndex >= Container->siblings.size()) {
-      CurrentIndex = 0;
+    current_index++;
+    if (current_index >= container->siblings.size()) {
+      current_index = 0;
     }
   } else {
-    if (CurrentIndex == 0) {
-      CurrentIndex = Container->siblings.size() - 1;
+    if (current_index == 0) {
+      current_index = container->siblings.size() - 1;
     } else {
-      CurrentIndex--;
+      current_index--;
     }
   }
   const ::vivaldi::BookmarkMenuContainerEntry& e =
-      Container->siblings.at(CurrentIndex);
+      container->siblings.at(current_index);
   *rect = e.rect;
   *start_index = e.offset;
   return bookmarks::GetBookmarkNodeByID(model, e.id);
 }
 
-void SetBookmarkContainer(const BookmarkMenuContainer* container,
-                          int current_index) {
-  Container = container;
-  CurrentIndex = current_index;
+void SetBookmarkContainer(const BookmarkMenuContainer* new_container,
+                          int new_current_index) {
+  container = new_container;
+  current_index = new_current_index;
   NextMenuId = 0;
-  MenuIdToBookmarkMap.clear();
+  GetMenuIdToBookmarkMap().clear();
 }
 
 void SortBookmarkNodes(const bookmarks::BookmarkNode* parent,
@@ -241,10 +250,10 @@ void SortBookmarkNodes(const bookmarks::BookmarkNode* parent,
     nodes.push_back(const_cast<bookmarks::BookmarkNode*>(it.get()));
   }
   bool folder_group =
-      (CurrentIndex >= 0 && CurrentIndex < Container->siblings.size())
-          ? Container->siblings[CurrentIndex].folder_group
+      (current_index >= 0 && current_index < container->siblings.size())
+          ? container->siblings[current_index].folder_group
           : false;
-  BookmarkSorter sorter(Container->sort_field, Container->sort_order,
+  BookmarkSorter sorter(container->sort_field, container->sort_order,
                         folder_group);
   sorter.sort(nodes);
 }
@@ -254,10 +263,9 @@ void AddExtraBookmarkMenuItems(Profile* profile,
                                size_t menu_index,
                                const bookmarks::BookmarkNode* parent,
                                bool on_top) {
-
   BookmarkMenuContainer::Edge edge =
       on_top ? BookmarkMenuContainer::Above : BookmarkMenuContainer::Below;
-  if (edge == Container->edge) {
+  if (edge == container->edge) {
     if (edge == BookmarkMenuContainer::Below) {
       AddSeparator(menu, menu_index);
       menu_index += 1;
@@ -267,7 +275,7 @@ void AddExtraBookmarkMenuItems(Profile* profile,
         l10n_util::GetStringUTF16(IDS_VIV_BOOKMARK_ADD_ACTIVE_TAB),
         std::u16string(), std::u16string(), ui::ImageModel(), ui::ImageModel(),
         views::MenuItemView::Type::kNormal, ui::NORMAL_SEPARATOR);
-    MenuIdToBookmarkMap[NextMenuId] = parent;
+    GetMenuIdToBookmarkMap()[NextMenuId] = parent;
     NextMenuId++;
     menu_index += 1;
 
@@ -278,7 +286,7 @@ void AddExtraBookmarkMenuItems(Profile* profile,
   }
   // Add an extra separator if requsted by the api setup code.
   if (edge == BookmarkMenuContainer::Below) {
-    for (const ::vivaldi::BookmarkMenuContainerEntry& e : Container->siblings) {
+    for (const ::vivaldi::BookmarkMenuContainerEntry& e : container->siblings) {
       if (e.id == parent->id()) {
         if (e.tweak_separator) {
           AddSeparator(menu, menu_index);
@@ -290,14 +298,14 @@ void AddExtraBookmarkMenuItems(Profile* profile,
 }
 
 bool IsVivaldiMenuItem(int id) {
-  return MenuIdToBookmarkMap[id] != nullptr;
+  return GetMenuIdToBookmarkMap()[id] != nullptr;
 }
 
 bool AddIfSeparator(const bookmarks::BookmarkNode* node,
                     views::MenuItemView* menu,
                     size_t menu_index) {
   if (vivaldi_bookmark_kit::IsSeparator(node)) {
-    if (Container->sort_field == BookmarkSorter::FIELD_NONE) {
+    if (container->sort_field == BookmarkSorter::FIELD_NONE) {
       AddSeparator(menu, menu_index);
     }
     return true;
@@ -313,15 +321,14 @@ void AddSeparator(views::MenuItemView* menu, size_t menu_index) {
 }
 
 views::MenuItemView* AddMenuItem(views::MenuItemView* menu,
-                                 size_t/*unsigned int*/* menu_index,
+                                 size_t /*unsigned int*/* menu_index,
                                  int id,
                                  const std::u16string& label,
                                  const ui::ImageModel& icon,
                                  views::MenuItemView::Type type) {
   views::MenuItemView* item = menu->AddMenuItemAt(
       *menu_index, id, label, std::u16string(), std::u16string(),
-      ui::ImageModel(), icon, type,
-      ui::NORMAL_SEPARATOR);
+      ui::ImageModel(), icon, type, ui::NORMAL_SEPARATOR);
   *menu_index += 1;
   return item;
 }
@@ -329,7 +336,7 @@ views::MenuItemView* AddMenuItem(views::MenuItemView* menu,
 unsigned int GetStartIndexForBookmarks(views::MenuItemView* menu, int64_t id) {
   unsigned int menu_index = 0;
   if (menu->HasSubmenu()) {
-    for (const ::vivaldi::BookmarkMenuContainerEntry& e : Container->siblings) {
+    for (const ::vivaldi::BookmarkMenuContainerEntry& e : container->siblings) {
       if (e.id == id) {
         menu_index = e.menu_index;
         break;
@@ -340,12 +347,12 @@ unsigned int GetStartIndexForBookmarks(views::MenuItemView* menu, int64_t id) {
 }
 
 const gfx::Image GetBookmarkDefaultIcon() {
-  return Container->support.icons[BookmarkSupport::kUrl];
+  return container->support.icons[BookmarkSupport::kUrl];
 }
 
 const gfx::Image GetBookmarkletIcon(views::MenuItemView* menu,
-                                         views::Widget* widget) {
-  return Container->support
+                                    views::Widget* widget) {
+  return container->support
       .icons[color_utils::IsDark(TextColorForMenu(menu, widget))
                  ? BookmarkSupport::kBookmarklet
                  : BookmarkSupport::kBookmarkletDark];
@@ -354,7 +361,7 @@ const gfx::Image GetBookmarkletIcon(views::MenuItemView* menu,
 ui::ImageModel GetBookmarkFolderIcon(views::MenuItemView* menu,
                                      views::Widget* widget) {
   return ui::ImageModel::FromImage(
-      Container->support
+      container->support
           .icons[color_utils::IsDark(TextColorForMenu(menu, widget))
                      ? BookmarkSupport::kFolder
                      : BookmarkSupport::kFolderDark]);
@@ -363,10 +370,29 @@ ui::ImageModel GetBookmarkFolderIcon(views::MenuItemView* menu,
 ui::ImageModel GetBookmarkSpeeddialIcon(views::MenuItemView* menu,
                                         views::Widget* widget) {
   return ui::ImageModel::FromImage(
-      Container->support
+      container->support
           .icons[color_utils::IsDark(TextColorForMenu(menu, widget))
                      ? BookmarkSupport::kSpeeddial
                      : BookmarkSupport::kSpeeddialDark]);
+}
+
+// Make an array of nodes using ids dragged from JS.
+void GetDraggedNodes(
+    bookmarks::BookmarkModel* model,
+    std::vector<raw_ptr<const bookmarks::BookmarkNode, VectorExperimental>>&
+        nodes) {
+  for (auto id : container->dragged_ids) {
+    const bookmarks::BookmarkNode* node =
+        bookmarks::GetBookmarkNodeByID(model, id);
+    if (node) {
+      nodes.push_back(node);
+    }
+  }
+}
+
+// The profile path from where the dragged nodes came.
+base::FilePath GetDraggedPath() {
+  return container->dragged_path;
 }
 
 }  // namespace vivaldi

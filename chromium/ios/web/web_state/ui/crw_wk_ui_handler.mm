@@ -86,6 +86,32 @@ void RecordHistogramForPermissionRequestForWKMediaCaptureType(
   return self;
 }
 
+#pragma mark - NSObject
+
+// Overriden to return NO for
+// -webView:runOpenPanelWithParameters:initiatedByFrame:completionHandler:
+// if there is no delegate or `delegate->CanRunOpenPanel()` returns false.
+- (BOOL)respondsToSelector:(SEL)selector {
+  SEL runOpenPanelWithParametersSelector = @selector
+      (webView:runOpenPanelWithParameters:initiatedByFrame:completionHandler:);
+  if (selector == runOpenPanelWithParametersSelector) {
+    if (@available(iOS 18.4, *)) {
+      web::WebStateDelegate* delegate = self.webStateImpl->GetDelegate();
+      if (delegate) {
+        return delegate->CanRunOpenPanel(self.webStateImpl);
+      } else {
+        // If there is no delegate, then fall back to native behaviour.
+        return NO;
+      }
+    } else {
+      NOTREACHED() << "@selector(-webView:runOpenPanelWithParameters:"
+                      "initiatedByFrame:completionHandler:) only exists on "
+                      "18.4+ so it should not be used in former versions.";
+    }
+  }
+  return [super respondsToSelector:selector];
+}
+
 #pragma mark - CRWWebViewHandler
 
 - (void)close {
@@ -304,6 +330,26 @@ void RecordHistogramForPermissionRequestForWKMediaCaptureType(
   }
 
   delegate->ContextMenuWillCommitWithAnimator(self.webStateImpl, animator);
+}
+
+- (void)webView:(WKWebView*)webView
+    runOpenPanelWithParameters:(WKOpenPanelParameters*)parameters
+              initiatedByFrame:(WKFrameInfo*)frame
+             completionHandler:(void (^)(NSArray<NSURL*>*))completionHandler
+    API_AVAILABLE(ios(18.4)) {
+  web::WebStateDelegate* delegate = self.webStateImpl->GetDelegate();
+  CHECK(delegate) << "-[CRWWKUIHandler "
+                     "webView:runOpenPanelWithParameters:initiatedByFrame:"
+                     "completionHandler:] was called while the associated "
+                     "WebState has no delegate to show an open panel.";
+  CHECK(delegate->CanRunOpenPanel(self.webStateImpl))
+      << "-[CRWWKUIHandler "
+         "webView:runOpenPanelWithParameters:initiatedByFrame:"
+         "completionHandler:] was called while the associated WebState's "
+         "delegate cannot show an open panel (delegate->CanRunOpenPanel() "
+         "returned false).";
+  delegate->RunOpenPanel(self.webStateImpl, parameters, frame,
+                         base::BindOnce(completionHandler));
 }
 
 #pragma mark - CRWMediaCapturePermissionPresenter

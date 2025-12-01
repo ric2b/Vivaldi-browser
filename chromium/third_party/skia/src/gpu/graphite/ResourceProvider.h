@@ -38,6 +38,7 @@ class ComputePipeline;
 class ComputePipelineDesc;
 class GlobalCache;
 class GraphicsPipelineDesc;
+class GraphicsPipelineHandle;
 class GraphiteResourceKey;
 class ResourceCache;
 class RuntimeEffectDictionary;
@@ -51,13 +52,13 @@ class ResourceProvider {
 public:
     virtual ~ResourceProvider();
 
-    // The runtime effect dictionary provides a link between SkCodeSnippetIds referenced in the
-    // paint key and the current SkRuntimeEffect that provides the SkSL for that id.
-    sk_sp<GraphicsPipeline> findOrCreateGraphicsPipeline(
-            const RuntimeEffectDictionary*,
+    GraphicsPipelineHandle createGraphicsPipelineHandle(
             const GraphicsPipelineDesc&,
             const RenderPassDesc&,
-            SkEnumBitMask<PipelineCreationFlags> = PipelineCreationFlags::kNone);
+            SkEnumBitMask<PipelineCreationFlags>);
+    void startPipelineCreationTask(sk_sp<const RuntimeEffectDictionary>,
+                                   const GraphicsPipelineHandle&);
+    sk_sp<GraphicsPipeline> resolveHandle(const GraphicsPipelineHandle&);
 
     sk_sp<ComputePipeline> findOrCreateComputePipeline(const ComputePipelineDesc&);
 
@@ -110,6 +111,8 @@ public:
     const SharedContext* sharedContext() { return fSharedContext; }
 #endif
 
+    const Caps* caps() const;
+
 #ifdef SK_BUILD_FOR_ANDROID
     virtual BackendTexture createBackendTexture(AHardwareBuffer*,
                                                 bool isRenderable,
@@ -130,6 +133,8 @@ protected:
     sk_sp<ResourceCache> fResourceCache;
 
 private:
+    friend class SharedContext; // for createGraphicsPipeline
+
     virtual sk_sp<GraphicsPipeline> createGraphicsPipeline(
             const RuntimeEffectDictionary*,
             const UniqueKey&,

@@ -19,17 +19,14 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />sjå over mellomtenaren og brannmuren<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Utferda til: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Denne nettstaden tilbyr ikkje eit trygt samband</translation>
-<translation id="2187317261103489799">Oppdag (standard)</translation>
 <translation id="2224337661447660594">Ingen Internett</translation>
 <translation id="2292556288342944218">Internettilgangen din er blokkert</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> krev eit brukarnamn og passord.</translation>
 <translation id="2337852623177822836">Innstillinga er kontrollert av administratoren din</translation>
 <translation id="2355395290879513365">Åtakarar kan vera i stand til å sjå bilda du ser på på denne nettstaden og lura deg ved å endra dei.</translation>
-<translation id="2356070529366658676">Spør</translation>
 <translation id="2359808026110333948">Hald fram</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />køyr nettverksdiagnostikk<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Ei utviding blokkerte denne sida</translation>
-<translation id="2539524384386349900">Oppdag</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sende eit ugyldig svar.</translation>
 <translation id="2634124572758952069">Fann ikkje <ph name="HOST_NAME" /> si IP-adresse .</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -52,9 +49,7 @@
       å bruka ein mellomtenar:
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Trykk på last om att-knappen for å senda dataa som trengst for å lasta sida.</translation>
-<translation id="3234666976984236645">Oppdag alltid viktig innhald på denne sida</translation>
 <translation id="3422472998109090673">Klarer ikkje å nå <ph name="HOST_NAME" /> no.</translation>
-<translation id="3427092606871434483">Tillat (standard)</translation>
 <translation id="3447661539832366887">Eigaren av eininga har slått av dinosaurspelet.</translation>
 <translation id="3447884698081792621">Syn sertifikatet (utferda av <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Gøym avansert</translation>
@@ -74,7 +69,6 @@
 <translation id="4075732493274867456">Klienten og tenaren støttar ikkje sams SSL-protokollutgåve eller krypteringsmetodar.</translation>
 <translation id="4116663294526079822">Tillat alltid på denne sida</translation>
 <translation id="4130226655945681476">å sjå over nettverkskablane, modemet og rutaren</translation>
-<translation id="4151403195736952345">Bruk systemstandarden (oppdag)</translation>
 <translation id="4165986682804962316">Nettstadinnstillingar</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />sjå over brannmur- og antivirus-innstillingane<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Prøv å køyra nettverksdiagnostikk<ph name="END_LINK" />.</translation>
@@ -82,7 +76,6 @@
 <translation id="4250431568374086873">Tilkoplinga til denne nettstaden er ikkje heilt trygg</translation>
 <translation id="4265872034478892965">Tillate av administratoren din</translation>
 <translation id="4305666528087210886">Fikk ikkje tilgang til fila</translation>
-<translation id="4312866146174492540">Blokker (standard)</translation>
 <translation id="4408413947728134509">Informasjonskapslar <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> godtok ikkje påloggingssertifikatet ditt eller det vart ikkje oppgjeve.</translation>
 <translation id="4506599922270137252">kontakt systemadministratoren</translation>
@@ -98,7 +91,6 @@
 <translation id="483241715238664915">Slå på åtvaringar</translation>
 <translation id="4943872375798546930">Ingen resultat</translation>
 <translation id="5023310440958281426">Sjå over administratoren sine reglar</translation>
-<translation id="5039804452771397117">Tillat</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 i bruk)} other {(# i bruk)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />sjå over mellomtenaradressa<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
@@ -143,7 +135,6 @@
 <translation id="6711464428925977395">Det er noko galt med mellomtenaren eller adressa er feil.</translation>
 <translation id="6757797048963528358">Eininga di er i kvilemodus.</translation>
 <translation id="6897140037006041989">Brukaragent</translation>
-<translation id="7053983685419859001">Blokker</translation>
 <translation id="7096937462164235847">Identiteten til denne nettstaden er ikkje stadfesta.</translation>
 <translation id="7108819624672055576">Tillate av ei utviding</translation>
 <translation id="7111012039238467737">(Gyldig)</translation>
@@ -166,7 +157,6 @@
 <translation id="7834399512844817676"><ph name="SITE" /> bruker vanlegvis kryptering for å verna opplysningane dine. Då Vivaldi denne gongen prøvde å kopla til <ph name="SITE" />, sende nettstaden attende uvanleg og feil påloggingsinformasjon. Dette kan skje om ein åtakar prøver å stå fram som <ph name="SITE" /> eller ein påloggingsskjerm for trådlaust nettverk har brote seg inn på sambandet. Opplysningane dine er framleis trygge fordi Vivaldi stoppa sambandet før data vart utveksla.</translation>
 <translation id="7878562273885520351">Passordet ditt er kanskje blitt avslørt</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
-<translation id="8037357227543935929">Spør (standard)</translation>
 <translation id="8041940743680923270">Bruk systemstandarden (spør)</translation>
 <translation id="808894953321890993">Endra passordet</translation>
 <translation id="8149426793427495338">Datamaskina di er i kvilemodus.</translation>

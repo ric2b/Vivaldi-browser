@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,11 +9,11 @@ import type * as Autofill from './autofill.js';
 
 const UIStrings = {
   /**
-   *@description Label for the autofill pane
+   * @description Label for the autofill pane
    */
   autofill: 'Autofill',
   /**
-   *@description Command for showing the 'Autofill' pane
+   * @description Command for showing the 'Autofill' pane
    */
   showAutofill: 'Show Autofill',
 } as const;

@@ -1,30 +1,6 @@
-# Copyright (C) 2014 Google Inc. All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are
-# met:
-#
-#     * Redistributions of source code must retain the above copyright
-# notice, this list of conditions and the following disclaimer.
-#     * Redistributions in binary form must reproduce the above
-# copyright notice, this list of conditions and the following disclaimer
-# in the documentation and/or other materials provided with the
-# distribution.
-#     * Neither the name of Google Inc. nor the names of its
-# contributors may be used to endorse or promote products derived from
-# this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-# A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-# OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# Copyright 2014 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 """
 DevTools presubmit script
 
@@ -37,15 +13,37 @@ for more details about the presubmit API built into gcl.
 `git cl presubmit -v -v` to debug presubmit checks.
 """
 
+import re
 import sys
 import six
 import time
 
 from pathlib import Path
 
-AUTOROLL_ACCOUNT = "devtools-ci-autoroll-builder@chops-service-accounts.iam.gserviceaccount.com"
 USE_PYTHON3 = True
 PRESUBMIT_VERSION = '2.0.0'
+
+_EXCLUDED_PATHS = [
+    r'^extensions[\\/]cxx_debugging[\\/]e2e[\\/]runner\.py$',  # Lines too long
+    r'^front_end[\\/]core[\\/]common[\\/]Color\.ts$',  # Apple copyright
+    r'^front_end[\\/]core[\\/]common[\\/]Object\.ts$',  # Apple copyright
+    r'^front_end[\\/]core[\\/]common[\\/]ResourceType\.ts$',  # Apple copyright
+    # Apple copyright
+    r'^front_end[\\/]core[\\/]dom_extension[\\/]DOMExtension\.ts$',
+    r'^front_end[\\/]core[\\/]platform[\\/]UIString\.ts$',  # Apple copyright
+    r'^front_end[\\/]core[\\/]sdk[\\/]Resource\.ts$',  # Apple copyright
+    r'^front_end[\\/]core[\\/]sdk[\\/]Script\.ts$',  # Apple copyright
+    r'^front_end[\\/]third_party[\\/].*',  # 3rd party code
+    # Apple copyright
+    r'^front_end[\\/]ui[\\/]legacy[\\/]components[\\/]data_grid[\\/]DataGrid\.ts$',
+    r'^node_modules[\\/].*',  # 3rd party code
+    r'^scripts[\\/]build[\\/]build_inspector_overlay\.py$',  # Lines too long
+    r'^scripts[\\/]build[\\/]code_generator_frontend\.py$',
+    r'^scripts[\\/]deps[\\/]manage_node_deps\.py$',  # Lines too long
+    r'front_end[\\/]generated[\\/]ARIAProperties\.ts$'  # Auto-generated files
+    # Auto-generated files
+    r'front_end[\\/]generated[\\/]InspectorBackendCommands\.ts$'
+]
 
 
 def _ExecuteSubProcess(input_api,
@@ -257,13 +255,7 @@ def CheckDevToolsLint(input_api, output_api):
     ]
 
     lint_related_directories = [
-        input_api.os_path.join(input_api.PresubmitLocalPath(), 'node_modules',
-                               'eslint'),
-        input_api.os_path.join(input_api.PresubmitLocalPath(), 'node_modules',
-                               'stylelint'),
-        input_api.os_path.join(input_api.PresubmitLocalPath(), 'node_modules',
-                               '@typescript-eslint'),
-        input_api.os_path.join(scripts_directory, 'eslint_rules'),
+        input_api.os_path.join(input_api.PresubmitLocalPath(), 'node_modules'),
     ]
 
     lint_config_files = _GetAffectedFiles(
@@ -293,50 +285,6 @@ def CheckDevToolsLint(input_api, output_api):
 
     results.extend(_CheckFormat(input_api, output_api))
     return results
-
-
-def CheckDevToolsNonJSFileLicenseHeaders(input_api, output_api):
-    lint_path = input_api.os_path.join(input_api.PresubmitLocalPath(),
-                                       'scripts', 'test',
-                                       'run_header_check_non_js_files.js')
-
-    front_end_directory = input_api.os_path.join(
-        input_api.PresubmitLocalPath(), 'front_end')
-    inspector_overlay_directory = input_api.os_path.join(
-        input_api.PresubmitLocalPath(), 'inspector_overlay')
-    test_directory = input_api.os_path.join(input_api.PresubmitLocalPath(),
-                                            'test')
-    scripts_directory = input_api.os_path.join(input_api.PresubmitLocalPath(),
-                                               'scripts')
-    config_directory = input_api.os_path.join(input_api.PresubmitLocalPath(),
-                                              'config')
-
-    default_linted_directories = [
-        front_end_directory, test_directory, scripts_directory,
-        inspector_overlay_directory, config_directory
-    ]
-
-    check_related_files = [lint_path]
-
-    lint_config_files = _GetAffectedFiles(input_api, check_related_files, [],
-                                          ['.js'])
-
-    should_bail_out, files_to_lint = _GetFilesToLint(
-        input_api, lint_config_files, default_linted_directories,
-        ['BUILD.gn', '.gni', '.css'])
-    if should_bail_out:
-        return []
-
-    # If there are more than 50 files to check, don't bother and check
-    # everything, so as to not run into command line length limits on Windows.
-    if len(files_to_lint) > 50:
-        files_to_lint = []
-
-    return _CheckWithNodeScript(input_api,
-                                output_api,
-                                lint_path,
-                                files_to_lint,
-                                message='License headers')
 
 
 def CheckGeneratedFiles(input_api, output_api):
@@ -455,9 +403,38 @@ def CheckNodeModules(input_api, output_api):
         if not Path(file_path).is_file():
             results.extend([
                 output_api.PresubmitError(
-                    "node_modules/%s is missing. Use npm run install-deps to re-create it."
+                    "node_modules/%s is missing. Use `npm run install-deps` to re-create it."
                     % file)
             ])
+
+    node_module_files = _GetAffectedFiles(input_api, [
+        input_api.os_path.join(input_api.PresubmitLocalPath(), 'node_modules')
+    ], [], [])
+
+    # If the changes are above 100 assume that touching the node_modules
+    # was intentional
+    if len(node_module_files) == 0 or len(node_module_files) > 100:
+        return results
+
+    message = (
+        "Changes to `node_modules` detected.\n" +
+        "This is third party code and should not be modified.\n" +
+        "`node_module` are mainly used in testing infra\n" +
+        "For bug fixes and features usually you should not need this change.\n"
+        + "Was this change intentional?")
+    results.extend([
+        output_api.PresubmitPromptWarning(
+            message,
+            locations=[
+                output_api.PresubmitResultLocation(
+                    # Location expects relative path
+                    # But _GetAffectedFiles returns us absolute path
+                    input_api.os_path.relpath(
+                        node_module_files[0],
+                        input_api.PresubmitLocalPath()), ),
+            ])
+    ])
+
     return results
 
 
@@ -471,7 +448,7 @@ def CheckNoUncheckedFiles(input_api, output_api):
     out, _ = process.communicate()
     if process.returncode != 0:
         files_changed_process = input_api.subprocess.Popen(
-            ['git', 'diff', '--name-only'],
+            ['git', 'diff'],
             stdout=input_api.subprocess.PIPE,
             stderr=input_api.subprocess.STDOUT)
         files_changed, _ = files_changed_process.communicate()
@@ -483,6 +460,50 @@ def CheckNoUncheckedFiles(input_api, output_api):
         ]
 
     return []
+
+
+def CheckKnownContextValues(input_api, output_api):
+    """Ensure all additions to `KnownContextValues.ts` following the naming convention.
+
+    This check ensures that all new cases added to the enum in `KnownContextValues.ts`
+    follow the extended Kebab Case naming convention. Specifically it doesn't look at
+    unchanged lines, because there are various existing values that cannot be changed
+    (easily).
+    """
+    # This regexp matches the one we use in `StringUtilities.isExtendedKebabCase()`.
+    kebab_case_re = re.compile(
+        r"^([a-z0-9]+(?:-[a-z0-9]+)*\.)*[a-z0-9]+(?:-[a-z0-9]+)*$")
+    local_path = input_api.os_path.join('front_end', 'ui', 'visual_logging',
+                                        'KnownContextValues.ts')
+    invalid_contexts = []
+    for f in filter(
+            lambda x: (x.LocalPath() == local_path and x.Action() == 'M'),
+            input_api.AffectedFiles()):
+        # Loop only through the changed lines of the affected file.
+        for _, line in f.ChangedContents():
+            match = re.search(r"\s+'(.+)',", line)
+            if match:
+                context = match.group(1)
+                if not kebab_case_re.match(context):
+                    invalid_contexts.append(context)
+                    continue
+
+    if not invalid_contexts:
+        return []
+    return [
+        output_api.PresubmitError(
+            message=f"Invalid jslog context(s): {', '.join(invalid_contexts)}",
+            long_text=
+            ("""The jslog contexts must follow the extended Kebab Case naming convention, where
+words are separated with either a dash (`-`) or a dot (`.`), and all characters
+must be lower-case alphanumeric.
+"""),
+            locations=[
+                output_api.PresubmitResultLocation(file_path=local_path)
+            ],
+        )
+    ]
+
 
 
 # Canned check wrappers below.
@@ -521,13 +542,16 @@ def CheckGenderNeutral(input_api, output_api):
     return input_api.canned_checks.CheckGenderNeutral(input_api, output_api)
 
 
-
 def CheckAuthorizedAuthor(input_api, output_api):
     return input_api.canned_checks.CheckAuthorizedAuthor(
-        input_api, output_api, bot_allowlist=[AUTOROLL_ACCOUNT])
+        input_api,
+        output_api,
+        bot_allowlist=[
+            'chrome-cherry-picker@chops-service-accounts.iam.gserviceaccount.com',
+            'devtools-ci-autoroll-builder@chops-service-accounts.iam.gserviceaccount.com',
+        ])
 
 
 def CheckPanProjectChecksOnCommit(input_api, output_api):
-    return input_api.canned_checks.PanProjectChecks(input_api,
-                                                    output_api,
-                                                    maxlen=120)
+    return input_api.canned_checks.PanProjectChecks(
+        input_api, output_api, excluded_paths=_EXCLUDED_PATHS, maxlen=120)

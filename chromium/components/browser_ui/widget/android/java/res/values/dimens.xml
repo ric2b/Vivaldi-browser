@@ -17,7 +17,6 @@ found in the LICENSE file.
     <dimen name="dialog_corner_radius">24dp</dimen>
     <dimen name="large_icon_background_size">40dp</dimen>
     <dimen name="small_icon_background_size">32dp</dimen>
-    <dimen name="focused_icon_background_stroke_width">2dp</dimen>
     <dimen name="focused_list_item_background_radius">16dp</dimen>
     <dimen name="cpa_button_background_radius_is_checked">12dp</dimen>
     <dimen name="toolbar_progress_bar_height">2dp</dimen>
@@ -200,7 +199,6 @@ found in the LICENSE file.
     <dimen name="chip_list_side_padding">16dp</dimen>
 
     <!-- Misc. app menu dimens -->
-    <dimen name="app_menu_corner_size">24dp</dimen>
     <dimen name="app_menu_shadow_length">6dp</dimen>
     <dimen name="app_menu_elevation">3dp</dimen>
     <!-- app_menu_shadow_length + padding(4dp) -->

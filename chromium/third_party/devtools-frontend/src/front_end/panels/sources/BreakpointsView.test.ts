@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -748,8 +748,7 @@ describeWithMockConnection('BreakpointsSidebarController', () => {
             Breakpoints.BreakpointManager.BreakpointOrigin.USER_ACTION,
           ];
 
-  // Flaky
-  it.skip('[crbug.com/345456307] auto-expands if a user adds a new  breakpoint', async () => {
+  it('auto-expands if a user adds a new  breakpoint', async () => {
     const breakpointManager = Breakpoints.BreakpointManager.BreakpointManager.instance();
     const settings = Common.Settings.Settings.instance();
     const {uiSourceCode, project} =

@@ -155,10 +155,12 @@ class EnclaveManager : public EnclaveManagerInterface {
     kJoiningToDomain = 8,
     kSecurityDomainReportsNoPin = 9,
     kSecurityDomainReset = 10,
+    kCohortNotYetDeprecated = 11,
+    kRecoveryKeyStoreDowngrade = 12,
 
-    kMaxValue = kSecurityDomainReset,
+    kMaxValue = kRecoveryKeyStoreDowngrade,
   };
-  // LINT.ThenChange(//tools/metrics/histograms/metadata/webauthn/enums.xml:PinRenewalFailureCauseEnum)
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/webauthn/enums.xml:WebAuthenticationPinRenewalFailureCause)
 
   class UvKeyCreationLock {
    public:
@@ -292,7 +294,9 @@ class EnclaveManager : public EnclaveManagerInterface {
   // Returns a copy of the wrapped PIN for passing to `MakeClaimedPINSlowly`.
   // Requires `has_wrapped_pin`.
   std::unique_ptr<webauthn_pb::EnclaveLocalState_WrappedPIN> GetWrappedPIN();
-
+  // Replaces the wrapped PIN data.
+  // Requires `has_wrapped_pin`.
+  void SetWrappedPINDataForTesting(std::vector<uint8_t> wrapped_pin_data);
   // Enumerates the types of user verifying signing keys that the EnclaveManager
   // might have for the currently signed-in user.
   enum class UvKeyState {
@@ -378,6 +382,12 @@ class EnclaveManager : public EnclaveManagerInterface {
   static std::string MakeWrappedPINForTesting(
       base::span<const uint8_t> security_domain_secret,
       std::string_view pin);
+
+  // Encrypts `cbor_bytes` representing a wrapped PIN with
+  // `security_domain_secret`.
+  static std::vector<uint8_t> EncryptWrappedPIN(
+      base::span<const uint8_t> security_domain_secret,
+      base::span<const uint8_t> cbor_bytes);
 
   base::WeakPtr<EnclaveManager> GetWeakPtr();
 

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/download/bubble/download_bubble_security_view.h"
 
+#include "base/command_line.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/download/bubble/download_bubble_ui_controller.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
@@ -178,10 +179,10 @@ class DownloadBubbleSecurityViewTest : public ChromeViewsTestBase {
     profile_ = testing_profile_manager_.CreateTestingProfile("testing_profile");
     EXPECT_CALL(*manager_.get(), GetBrowserContext())
         .WillRepeatedly(testing::Return(profile_.get()));
-    window_ = std::make_unique<TestBrowserWindow>();
+    auto window = std::make_unique<TestBrowserWindow>();
     Browser::CreateParams params(profile_, true);
     params.type = Browser::TYPE_NORMAL;
-    params.window = window_.get();
+    params.window = window.release();
     browser_ = Browser::DeprecatedCreateOwnedForTesting(params);
 
     security_view_info_ = std::make_unique<DownloadBubbleSecurityViewInfo>();
@@ -298,7 +299,6 @@ class DownloadBubbleSecurityViewTest : public ChromeViewsTestBase {
   std::unique_ptr<testing::NiceMock<content::MockDownloadManager>> manager_;
   TestingProfileManager testing_profile_manager_;
   raw_ptr<Profile> profile_ = nullptr;
-  std::unique_ptr<TestBrowserWindow> window_;
   std::unique_ptr<Browser> browser_;
 };
 

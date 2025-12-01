@@ -9,7 +9,7 @@ endif
 # Factor our pattern manipulation code into its own library
 # to break the depedency cycle:
 # FontConfig pattern handling - Fontations code - FontConfig.
-pattern_sources = [ 'fcpat.c', fcstdint_h, fclang_h ]
+pattern_sources = [ 'fcpat.c', fcstdint_h, fclang_h, alias_headers, ft_alias_headers ]
 pattern_lib = static_library('patternlib_internal',
                                     pattern_sources,
                                     include_directories: incbase,

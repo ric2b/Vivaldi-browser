@@ -194,7 +194,9 @@ using net::test_server::RegisterDefaultHandlers;
 using testing::_;
 using testing::AnyOf;
 using testing::ElementsAre;
+using testing::HasSubstr;
 using testing::IsEmpty;
+using testing::Not;
 using testing::Optional;
 using testing::UnorderedElementsAre;
 
@@ -2195,13 +2197,7 @@ TEST_F(URLRequestTest, DoNotSendCookies_ViaPolicy) {
   }
 }
 
-// TODO(crbug.com/41225288) This test is flaky on iOS.
-#if BUILDFLAG(IS_IOS)
-#define MAYBE_DoNotSaveCookies_ViaPolicy FLAKY_DoNotSaveCookies_ViaPolicy
-#else
-#define MAYBE_DoNotSaveCookies_ViaPolicy DoNotSaveCookies_ViaPolicy
-#endif
-TEST_F(URLRequestTest, MAYBE_DoNotSaveCookies_ViaPolicy) {
+TEST_F(URLRequestTest, DoNotSaveCookies_ViaPolicy) {
   HttpTestServer test_server;
   ASSERT_TRUE(test_server.Start());
 
@@ -7477,6 +7473,58 @@ TEST_F(URLRequestTestHTTP, AuthWithNetworkAnonymizationKey) {
   }
 }
 
+TEST_F(URLRequestTestHTTP, EmbeddedAuthCredentialsRedacted) {
+  ASSERT_TRUE(http_test_server()->Start());
+  const std::string_view kUsername = "jiminy";
+  // Default password for "/auth-basic".
+  const std::string_view kPassword = "secret";
+
+  RecordingNetLogObserver redacted_net_log_observer(
+      NetLogCaptureMode::kDefault);
+
+  GURL url_without_credentials = http_test_server()->GetURL("/auth-basic");
+  GURL::Replacements replacements;
+  replacements.SetUsernameStr(kUsername);
+  replacements.SetPasswordStr(kPassword);
+  GURL url = url_without_credentials.ReplaceComponents(replacements);
+
+  TestDelegate d;
+  std::unique_ptr<URLRequest> req(default_context().CreateRequest(
+      url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+  req->Start();
+  d.RunUntilComplete();
+  EXPECT_THAT(d.request_status(), IsOk());
+  ASSERT_TRUE(req->response_headers());
+  EXPECT_EQ(200, req->response_headers()->response_code());
+
+  // Make sure the NetLogObservers are hooked up properly.
+  EXPECT_GT(redacted_net_log_observer.GetSize(), 0u);
+  EXPECT_GT(net_log_observer_.GetSize(), 0u);
+
+  // Check that only the version of the URL with credentials redacted appears
+  // was passed to the NetLogObserver with the default capture mode.
+  std::string url_with_redacted_credentials =
+      url_without_credentials.spec() + " (credentials redacted)";
+  std::string observed_redacted_json = redacted_net_log_observer.GetJson();
+  EXPECT_THAT(observed_redacted_json, Not(HasSubstr(url.spec())));
+  EXPECT_THAT(observed_redacted_json, HasSubstr(url_with_redacted_credentials));
+  // Also search individually for the username and password. While this doesn't
+  // guarantee there's no code that logs the unredacted HTTP auth credentials,
+  // either embedded in the URLs or provided in some other way, it does provide
+  // some defence against it.
+  EXPECT_THAT(observed_redacted_json, Not(HasSubstr(kUsername)));
+  EXPECT_THAT(observed_redacted_json, Not(HasSubstr(kPassword)));
+
+  // Check that the NetLogObserver set to receive sensitive information
+  // never displays the redacted URL string (though at some layers, the URL
+  // may appear without credentials, it never logs the redacted message),
+  // and the full URL appears in at least some locations.
+  std::string observed_json = net_log_observer_.GetJson();
+  EXPECT_NE(observed_json.find(url.spec()), std::string::npos);
+  EXPECT_EQ(observed_json.find(url_with_redacted_credentials),
+            std::string::npos);
+}
+
 TEST_F(URLRequestTest, ReportCookieActivity) {
   EmbeddedTestServer test_server(EmbeddedTestServer::TYPE_HTTPS);
   RegisterDefaultHandlers(&test_server);
@@ -8693,15 +8741,7 @@ TEST_F(URLRequestTestHTTP, DefaultUserAgent) {
             d.data_received());
 }
 
-// Check that if request overrides the User-Agent header,
-// the default is not appended.
-// TODO(crbug.com/41225288) This test is flaky on iOS.
-#if BUILDFLAG(IS_IOS)
-#define MAYBE_OverrideUserAgent FLAKY_OverrideUserAgent
-#else
-#define MAYBE_OverrideUserAgent OverrideUserAgent
-#endif
-TEST_F(URLRequestTestHTTP, MAYBE_OverrideUserAgent) {
+TEST_F(URLRequestTestHTTP, OverrideUserAgent) {
   ASSERT_TRUE(http_test_server()->Start());
 
   TestDelegate d;
@@ -11474,7 +11514,10 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevokedBySubject) {
   std::string common_name = test_server.GetCertificate()->subject().common_name;
 
   {
-    auto crl_set = CRLSet::ForTesting(false, nullptr, "", common_name, {});
+    auto crl_set = CRLSet::ForTesting(
+        /*is_expired=*/false, /*issuer_spki=*/nullptr, /*serial_number=*/{},
+        common_name,
+        /*acceptable_spki_hashes_for_cn=*/{});
     ASSERT_TRUE(crl_set);
     UpdateCertVerifier(crl_set);
 
@@ -11501,8 +11544,9 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevokedBySubject) {
       test_server.GetCertificate()->cert_buffer(), &spki_hash_value));
   std::string spki_hash(base::as_string_view(spki_hash_value));
   {
-    auto crl_set =
-        CRLSet::ForTesting(false, nullptr, "", common_name, {spki_hash});
+    auto crl_set = CRLSet::ForTesting(
+        /*is_expired=*/false, /*issuer_spki=*/nullptr, /*serial_number=*/{},
+        common_name, {spki_hash});
     ASSERT_TRUE(crl_set);
     UpdateCertVerifier(crl_set);
 
@@ -11768,15 +11812,9 @@ TEST_F(URLRequestTest, URLRequestRedirectJobCancelRequest) {
   EXPECT_EQ(0, d.received_redirect_count());
 }
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
-#define MAYBE_HeadersCallbacks DISABLED_HeadersCallbacks
-#else
-#define MAYBE_HeadersCallbacks HeadersCallbacks
-#endif
-TEST_F(URLRequestTestHTTP, MAYBE_HeadersCallbacks) {
+TEST_F(URLRequestTestHTTP, HeadersCallbacks) {
   ASSERT_TRUE(http_test_server()->Start());
   GURL url(http_test_server()->GetURL("/cachetime"));
-  TestDelegate delegate;
   HttpRequestHeaders extra_headers;
   extra_headers.SetHeader("X-Foo", "bar");
 
@@ -11784,15 +11822,25 @@ TEST_F(URLRequestTestHTTP, MAYBE_HeadersCallbacks) {
     HttpRawRequestHeaders raw_req_headers;
     scoped_refptr<const HttpResponseHeaders> raw_resp_headers;
 
+    TestDelegate delegate;
     std::unique_ptr<URLRequest> r(default_context().CreateRequest(
         url, DEFAULT_PRIORITY, &delegate, TRAFFIC_ANNOTATION_FOR_TESTS));
     r->SetExtraRequestHeaders(extra_headers);
-    r->SetRequestHeadersCallback(base::BindRepeating(
-        &HttpRawRequestHeaders::Assign, base::Unretained(&raw_req_headers)));
-    r->SetResponseHeadersCallback(base::BindRepeating(
-        [](scoped_refptr<const HttpResponseHeaders>* left,
-           scoped_refptr<const HttpResponseHeaders> right) { *left = right; },
-        base::Unretained(&raw_resp_headers)));
+    r->SetRequestHeadersCallback(base::BindLambdaForTesting(
+        [&delegate, &raw_req_headers](HttpRawRequestHeaders request_headers) {
+          // This should happen before the delegate is informed the response has
+          // started.
+          EXPECT_EQ(delegate.response_started_count(), 0);
+          raw_req_headers = std::move(request_headers);
+        }));
+    r->SetResponseHeadersCallback(base::BindLambdaForTesting(
+        [&delegate, &raw_resp_headers](
+            scoped_refptr<const HttpResponseHeaders> response_headers) {
+          // This should happen before the delegate is informed the response has
+          // started.
+          EXPECT_EQ(delegate.response_started_count(), 0);
+          raw_resp_headers = response_headers;
+        }));
     r->set_isolation_info(isolation_info1_);
     r->Start();
     delegate.RunUntilComplete();
@@ -11808,6 +11856,7 @@ TEST_F(URLRequestTestHTTP, MAYBE_HeadersCallbacks) {
     EXPECT_EQ(raw_resp_headers.get(), r->response_headers());
   }
   {
+    TestDelegate delegate;
     std::unique_ptr<URLRequest> r(default_context().CreateRequest(
         url, DEFAULT_PRIORITY, &delegate, TRAFFIC_ANNOTATION_FOR_TESTS));
     r->SetExtraRequestHeaders(extra_headers);

@@ -42,7 +42,7 @@ using display::DisplayList;
 void SetScreenAndroid(bool use_display_wide_color_gamut) {
   TRACE_EVENT0("startup", "SetScreenAndroid");
   // Do not override existing Screen.
-  DCHECK_EQ(display::Screen::GetScreen(), nullptr);
+  DCHECK_EQ(display::Screen::Get(), nullptr);
 
   DisplayAndroidManager* manager =
       new DisplayAndroidManager(use_display_wide_color_gamut);
@@ -74,7 +74,7 @@ Display DisplayAndroidManager::GetDisplayNearestView(
 
 Display DisplayAndroidManager::GetDisplayNearestPoint(
     const gfx::Point& point) const {
-  if (base::FeatureList::IsEnabled(kAndroidWindowManagementWebApi)) {
+  if (base::FeatureList::IsEnabled(kAndroidUseDisplayTopology)) {
     return ScreenBase::GetDisplayNearestPoint(point);
   }
 
@@ -84,7 +84,7 @@ Display DisplayAndroidManager::GetDisplayNearestPoint(
 
 Display DisplayAndroidManager::GetDisplayMatching(
     const gfx::Rect& match_rect) const {
-  if (base::FeatureList::IsEnabled(kAndroidWindowManagementWebApi)) {
+  if (base::FeatureList::IsEnabled(kAndroidUseDisplayTopology)) {
     return ScreenBase::GetDisplayMatching(match_rect);
   }
 
@@ -103,6 +103,8 @@ void DisplayAndroidManager::DoUpdateDisplay(display::Display* display,
                                             const gfx::Rect& work_area,
                                             const gfx::Size& size_in_pixels,
                                             float dip_scale,
+                                            float pixels_per_inch_x,
+                                            float pixels_per_inch_y,
                                             int rotation_degrees,
                                             int bits_per_pixel,
                                             int bits_per_component,
@@ -118,6 +120,7 @@ void DisplayAndroidManager::DoUpdateDisplay(display::Display* display,
   }
   display->set_size_in_pixels(size_in_pixels);
   display->set_device_scale_factor(dip_scale);
+  display->set_pixels_per_inch(pixels_per_inch_x, pixels_per_inch_y);
 
   {
     // Decide the color space to use for sRGB, WCG, and HDR content. By default,
@@ -128,11 +131,7 @@ void DisplayAndroidManager::DoUpdateDisplay(display::Display* display,
       // If the device supports WCG, then use P3 for the output surface when
       // there is WCG content on screen.
       cs_for_wcg = gfx::ColorSpace::CreateDisplayP3D65();
-      // If dynamically changing color gamut is disallowed, then use P3 even
-      // when all content is sRGB.
-      if (!features::IsDynamicColorGamutEnabled()) {
-        cs_for_srgb = cs_for_wcg;
-      }
+      cs_for_srgb = cs_for_wcg;
     }
     // The color space for HDR is scaled to reach the maximum luminance ratio.
     gfx::ColorSpace cs_for_hdr = cs_for_wcg;
@@ -190,10 +189,14 @@ void DisplayAndroidManager::UpdateDisplay(
     jint sdkDisplayId,
     const base::android::JavaRef<jstring>& label,
     const base::android::JavaRef<jintArray>&
-        jBounds,  // the order is: left, top, right, bottom
+        jBounds,  // {left, top, right, bottom} in dip
     const base::android::JavaRef<jintArray>&
-        jInsets,  // the order is: left, top, right, bottom
+        jWorkArea,  // {left, top, right, bottom} in dip
+    jint width,     // in physical pixels
+    jint height,    // in physical pixels
     jfloat dipScale,
+    jfloat pixelsPerInchX,
+    jfloat pixelsPerInchY,
     jint rotationDegrees,
     jint bitsPerPixel,
     jint bitsPerComponent,
@@ -205,26 +208,25 @@ void DisplayAndroidManager::UpdateDisplay(
     dipScale = Display::GetForcedDeviceScaleFactor();
   }
 
-  std::vector<int> bounds, insets;
-  base::android::JavaIntArrayToIntVector(env, jBounds, &bounds);
-  base::android::JavaIntArrayToIntVector(env, jInsets, &insets);
+  std::vector<int> bounds_array, work_area_array;
+  base::android::JavaIntArrayToIntVector(env, jBounds, &bounds_array);
+  base::android::JavaIntArrayToIntVector(env, jWorkArea, &work_area_array);
 
-  gfx::Rect bounds_in_pixels;
-  bounds_in_pixels.SetByBounds(bounds[0], bounds[1], bounds[2], bounds[3]);
+  CHECK(bounds_array.size() == 4);
+  CHECK(work_area_array.size() == 4);
 
-  const gfx::Rect dip_bounds =
-      gfx::ScaleToEnclosingRect(bounds_in_pixels, 1.0f / dipScale);
-
-  gfx::Rect work_area_in_pixels = bounds_in_pixels;
-  work_area_in_pixels.Inset(
-      gfx::Insets::TLBR(insets[1], insets[0], insets[3], insets[2]));
-  const gfx::Rect dip_work_area =
-      gfx::ScaleToEnclosingRect(work_area_in_pixels, 1.0f / dipScale);
+  gfx::Rect bounds, work_area;
+  bounds.SetByBounds(bounds_array[0], bounds_array[1], bounds_array[2],
+                     bounds_array[3]);
+  work_area.SetByBounds(work_area_array[0], work_area_array[1],
+                        work_area_array[2], work_area_array[3]);
+  const gfx::Size size_in_pixels(width, height);
 
   display::Display display(sdkDisplayId);
   DoUpdateDisplay(&display, base::android::ConvertJavaStringToUTF8(env, label),
-                  dip_bounds, dip_work_area, bounds_in_pixels.size(), dipScale,
-                  rotationDegrees, bitsPerPixel, bitsPerComponent,
+                  bounds, work_area, size_in_pixels, dipScale, pixelsPerInchX,
+                  pixelsPerInchY, rotationDegrees, bitsPerPixel,
+                  bitsPerComponent,
                   isWideColorGamut && use_display_wide_color_gamut_, isHdr,
                   hdrMaxLuminanceRatio);
 
@@ -246,6 +248,14 @@ void DisplayAndroidManager::SetPrimaryDisplayId(
     JNIEnv* env,
     jint sdkDisplayId) {
   primary_display_id_ = sdkDisplayId;
+}
+
+jint DisplayAndroidManager::GetDisplaySdkMatching(JNIEnv* env,
+                                                  jint x,
+                                                  jint y,
+                                                  jint width,
+                                                  jint height) {
+  return GetDisplayMatching(gfx::Rect(x, y, width, height)).id();
 }
 
 }  // namespace ui

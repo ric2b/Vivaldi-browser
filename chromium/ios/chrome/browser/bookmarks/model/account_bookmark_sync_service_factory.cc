@@ -47,17 +47,19 @@ AccountBookmarkSyncServiceFactory::~AccountBookmarkSyncServiceFactory() =
 
 std::unique_ptr<KeyedService>
 AccountBookmarkSyncServiceFactory::BuildServiceInstanceFor(
-    web::BrowserState* context) const {
+    ProfileIOS* profile) const {
+
+#if defined(VIVALDI_BUILD)
   std::unique_ptr<sync_bookmarks::BookmarkSyncService> bookmark_sync_service(
       new sync_bookmarks::BookmarkSyncService(
           syncer::WipeModelUponSyncDisabledBehavior::kAlways));
-#if defined(VIVALDI_BUILD)
-  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
   bookmark_sync_service->SetVivaldiSyncedFileStore(
       SyncedFileStoreFactory::GetForProfile(profile));
-#endif // End Vivaldi
-
   return bookmark_sync_service;
+#else
+  return std::make_unique<sync_bookmarks::BookmarkSyncService>(
+      syncer::WipeModelUponSyncDisabledBehavior::kAlways);
+#endif // End Vivaldi
 }
 
 }  // namespace ios

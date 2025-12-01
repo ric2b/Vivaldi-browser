@@ -2,7 +2,7 @@
 
 #include "components/datasource/desktop_data_source_win.h"
 
-#include <Shobjidl.h>
+#include <ShObjIdl.h>
 #include <wrl/client.h>
 
 #include "base/base64.h"

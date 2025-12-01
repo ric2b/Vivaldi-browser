@@ -2,6 +2,8 @@
 
 static_library("content") {
   sources = [
+    "adblock_navigation_tracker.cc",
+    "adblock_navigation_tracker.h",
     "adblock_rule_service.cc",
     "adblock_rule_service.h",
     "adblock_state_and_logs.cc",

@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/bookmarks/bookmark_html_writer.h"
 
 #include <stddef.h>
@@ -48,7 +43,6 @@
 #include "components/user_data_importer/content/content_bookmark_parser_utils.h"
 #include "components/user_data_importer/content/fake_bookmark_html_parser.h"
 #include "content/public/test/browser_task_environment.h"
-#include "skia/rusty_png_feature.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -302,11 +296,8 @@ TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenBookmarksInLocalBookmarkBar) {
   ASSERT_EQ(WriteBookmarksAndWait(), bookmark_html_writer::Result::kSuccess);
 
   // Check against the golden file.
-  const char* kGoldenFilename =
-      skia::IsRustyPngEnabled() ? "bookmarks_in_bookmarks_bar.html"
-                                : "bookmarks_in_bookmarks_bar_with_libpng.html";
   EXPECT_TRUE(base::TextContentsEqual(
-      path_, test_data_path_.AppendASCII(kGoldenFilename)));
+      path_, test_data_path_.AppendASCII("bookmarks_in_bookmarks_bar.html")));
 }
 
 TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenBookmarksInAccountBookmarkBar) {
@@ -328,11 +319,8 @@ TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenBookmarksInAccountBookmarkBar) {
   ASSERT_EQ(WriteBookmarksAndWait(), bookmark_html_writer::Result::kSuccess);
 
   // Check against the golden file.
-  const char* kGoldenFilename =
-      skia::IsRustyPngEnabled() ? "bookmarks_in_bookmarks_bar.html"
-                                : "bookmarks_in_bookmarks_bar_with_libpng.html";
   EXPECT_TRUE(base::TextContentsEqual(
-      path_, test_data_path_.AppendASCII(kGoldenFilename)));
+      path_, test_data_path_.AppendASCII("bookmarks_in_bookmarks_bar.html")));
 }
 
 TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenBookmarksInLocalOther) {
@@ -350,11 +338,8 @@ TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenBookmarksInLocalOther) {
   ASSERT_EQ(WriteBookmarksAndWait(), bookmark_html_writer::Result::kSuccess);
 
   // Check against the golden file.
-  const char* kGoldenFilename = skia::IsRustyPngEnabled()
-                                    ? "bookmarks_in_other.html"
-                                    : "bookmarks_in_other_with_libpng.html";
   EXPECT_TRUE(base::TextContentsEqual(
-      path_, test_data_path_.AppendASCII(kGoldenFilename)));
+      path_, test_data_path_.AppendASCII("bookmarks_in_other.html")));
 }
 
 TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenBookmarksInAccountOther) {
@@ -376,11 +361,8 @@ TEST_F(BookmarkHTMLWriterTest, CheckOutputWhenBookmarksInAccountOther) {
   ASSERT_EQ(WriteBookmarksAndWait(), bookmark_html_writer::Result::kSuccess);
 
   // Check against the golden file.
-  const char* kGoldenFilename = skia::IsRustyPngEnabled()
-                                    ? "bookmarks_in_other.html"
-                                    : "bookmarks_in_other_with_libpng.html";
   EXPECT_TRUE(base::TextContentsEqual(
-      path_, test_data_path_.AppendASCII(kGoldenFilename)));
+      path_, test_data_path_.AppendASCII("bookmarks_in_other.html")));
 }
 
 // Tests bookmark_html_writer by populating a BookmarkModel, writing it out by

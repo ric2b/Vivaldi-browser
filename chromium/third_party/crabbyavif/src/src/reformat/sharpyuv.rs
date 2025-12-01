@@ -35,7 +35,7 @@ pub(crate) fn rgb_to_yuv(rgb: &rgb::Image, image: &mut image::Image) -> AvifResu
                 SharpYuvRange_kSharpYuvRangeFull
             },
         },
-        _ => return Err(AvifError::NotImplemented),
+        _ => return AvifError::not_implemented(),
     };
     let mut matrix_uninit: MaybeUninit<SharpYuvConversionMatrix> = MaybeUninit::uninit();
     // SAFETY: Calling into a C function with pointers that are guaranteed to be not null.
@@ -71,7 +71,7 @@ pub(crate) fn rgb_to_yuv(rgb: &rgb::Image, image: &mut image::Image) -> AvifResu
     let (r_ptr, g_ptr, b_ptr) = if rgb.depth == 8 {
         let rgb_pixels = rgb.pixels();
         if rgb_pixels.is_null() {
-            return Err(AvifError::InvalidArgument);
+            return AvifError::invalid_argument();
         }
         // SAFETY: Computing pointer offset with non-null pointers and positive offsets.
         unsafe {
@@ -84,7 +84,7 @@ pub(crate) fn rgb_to_yuv(rgb: &rgb::Image, image: &mut image::Image) -> AvifResu
     } else {
         let rgb_pixels = rgb.pixels16();
         if rgb_pixels.is_null() {
-            return Err(AvifError::InvalidArgument);
+            return AvifError::invalid_argument();
         }
         // SAFETY: Computing pointer offset with non-null pointers and positive offsets.
         unsafe {
@@ -118,7 +118,7 @@ pub(crate) fn rgb_to_yuv(rgb: &rgb::Image, image: &mut image::Image) -> AvifResu
         )
     } == 0
     {
-        Err(AvifError::ReformatFailed)
+        AvifError::reformat_failed()
     } else {
         Ok(())
     }

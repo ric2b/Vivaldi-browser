@@ -37,41 +37,37 @@
 #include "services/webnn/webnn_context_provider_impl.h"
 #include "services/webnn/webnn_graph_impl.h"
 #include "services/webnn/webnn_object_impl.h"
+#include "services/webnn/webnn_tensor_impl.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 
 namespace webnn {
 
 class WebNNGraphBuilderImpl;
 class WebNNTensorImpl;
+class ScopedSequence;
 
 class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNContextImpl
-    : public mojom::WebNNContext,
-      public WebNNObjectImpl<blink::WebNNContextToken> {
+    : public WebNNObjectImpl<mojom::WebNNContext, blink::WebNNContextToken> {
  public:
   using CreateGraphImplCallback = base::OnceCallback<void(
       base::expected<scoped_refptr<WebNNGraphImpl>, mojom::ErrorPtr>)>;
 
-  using CreateTensorImplCallback = base::OnceCallback<void(
-      base::expected<scoped_refptr<WebNNTensorImpl>, mojom::ErrorPtr>)>;
-
-  WebNNContextImpl(mojo::PendingReceiver<mojom::WebNNContext> receiver,
-                   WebNNContextProviderImpl* context_provider,
-                   ContextProperties properties,
-                   mojom::CreateContextOptionsPtr options);
+  WebNNContextImpl(
+      mojo::PendingAssociatedReceiver<mojom::WebNNContext> receiver,
+      WebNNContextProviderImpl* context_provider,
+      ContextProperties properties,
+      mojom::CreateContextOptionsPtr options,
+      mojo::ScopedDataPipeConsumerHandle write_tensor_consumer,
+      mojo::ScopedDataPipeProducerHandle read_tensor_producer,
+      gpu::CommandBufferId command_buffer_id,
+      std::unique_ptr<ScopedSequence> sequence,
+      scoped_refptr<gpu::SchedulerTaskRunner> task_runner);
 
   WebNNContextImpl(const WebNNContextImpl&) = delete;
   WebNNContextImpl& operator=(const WebNNContextImpl&) = delete;
 
-  ~WebNNContextImpl() override;
-
   virtual base::WeakPtr<WebNNContextImpl> AsWeakPtr()
-      VALID_CONTEXT_REQUIRED(sequence_checker_) = 0;
-
-#if DCHECK_IS_ON()
-  // Callers which obtain a WeakPtr from the method above may use this helper to
-  // assert that the WeakPtr is being used correctly.
-  void AssertCalledOnValidSequence() const;
-#endif  // DCHECK_IS_ON()
+      VALID_CONTEXT_REQUIRED(gpu_sequence_checker_) = 0;
 
   // Disassociates a `WebNNTensor` instance owned by this context by its handle.
   // Called when a `WebNNTensor` instance has a connection error. After this
@@ -140,8 +136,30 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNContextImpl
     return scheduler_task_runner_;
   }
 
+  // Waits for the given SyncToken to release before executing WebNN operations.
+  void WaitSyncToken(const gpu::SyncToken& fence);
+
+  // Generates a verified SyncToken that will be released once pending WebNN
+  // operations complete execution.
+  gpu::SyncToken GenVerifiedSyncToken();
+
+  // Returns true if the data pipe consumer handle for WriteTensor() is valid.
+  bool HasValidWriteTensorConsumer() const;
+
+  // Returns true if the data pipe producer handle for ReadTensor() is valid.
+  bool HasValidReadTensorProducer() const;
+
+  // Reads data from either a BigBuffer or the data pipe into the provided span.
+  void ReadDataFromBigBufferOrDataPipe(mojo_base::BigBuffer src_buffer,
+                                       base::span<uint8_t> dst_span);
+
+  // Writes data from the given span into the data pipe producer if it is valid
+  // and return an empty BigBuffer, or into a new BigBuffer otherwise.
+  mojo_base::BigBuffer WriteDataToDataPipeOrBigBuffer(
+      base::span<const uint8_t> src_span);
+
  protected:
-  void OnConnectionError();
+  ~WebNNContextImpl() override;
 
   // mojom::WebNNContext
   void CreateGraphBuilder(
@@ -150,8 +168,6 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNContextImpl
   void CreateTensor(mojom::TensorInfoPtr tensor_info,
                     mojo_base::BigBuffer tensor_data,
                     CreateTensorCallback callback) override;
-  void WaitSyncToken(const gpu::SyncToken& fence) override;
-  void GenVerifiedSyncToken(GenVerifiedSyncTokenCallback callback) override;
   void CreateTensorFromMailbox(mojom::TensorInfoPtr tensor_info,
                                const gpu::Mailbox& mailbox,
                                const gpu::SyncToken& fence,
@@ -159,28 +175,19 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNContextImpl
 
   // This method will be called by `CreateTensor()` after the tensor info is
   // validated. A backend subclass should implement this method to create and
-  // initialize a platform specific tensor asynchronously.
-  virtual void CreateTensorImpl(
-      mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
-      mojom::TensorInfoPtr tensor_info,
-      CreateTensorImplCallback callback) = 0;
+  // initialize a platform specific tensor.
+  virtual base::expected<scoped_refptr<WebNNTensorImpl>, mojom::ErrorPtr>
+  CreateTensorImpl(mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
+                   mojom::TensorInfoPtr tensor_info) = 0;
 
   // Similar to `CreateTensorImpl()`, but creates a tensor from a shared image
   // for WebGPU interop. Backend subclasses should implement this to
   // asynchronously create a platform-specific tensor from a shared image.
-  virtual void CreateTensorFromMailboxImpl(
+  virtual base::expected<scoped_refptr<WebNNTensorImpl>, mojom::ErrorPtr>
+  CreateTensorFromSharedImageImpl(
       mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
       mojom::TensorInfoPtr tensor_info,
-      gpu::Mailbox mailbox,
-      CreateTensorImplCallback callback) = 0;
-
-  void DidCreateWebNNTensorImpl(
-      CreateTensorCallback callback,
-      mojo::PendingAssociatedRemote<mojom::WebNNTensor> remote,
-      mojo_base::BigBuffer tensor_data,
-      base::expected<scoped_refptr<WebNNTensorImpl>, mojom::ErrorPtr> result);
-
-  SEQUENCE_CHECKER(sequence_checker_);
+      std::unique_ptr<gpu::WebNNTensorRepresentation> representation) = 0;
 
   // Owns this object.
   raw_ptr<WebNNContextProviderImpl> context_provider_;
@@ -198,11 +205,11 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNContextImpl
   // by the lifetime of the tensors it contains.
   base::flat_set<
       scoped_refptr<WebNNTensorImpl>,
-      WebNNObjectImpl<blink::WebNNTensorToken>::Comparator<WebNNTensorImpl>>
+      WebNNObjectImpl<mojom::WebNNTensor, blink::WebNNTensorToken>::Comparator>
       tensor_impls_;
 
  private:
-  void ResetReceiverWithReason(const std::string& message);
+  void OnDisconnect() override;
 
   // Graph builders owned by this context.
   mojo::UniqueAssociatedReceiverSet<mojom::WebNNGraphBuilder>
@@ -212,7 +219,7 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNContextImpl
   // context during operations.
   base::flat_set<
       scoped_refptr<WebNNGraphImpl>,
-      WebNNObjectImpl<blink::WebNNGraphToken>::Comparator<WebNNGraphImpl>>
+      WebNNObjectImpl<mojom::WebNNGraph, blink::WebNNGraphToken>::Comparator>
       graph_impls_;
 
   const gpu::CommandBufferId command_buffer_id_;
@@ -220,23 +227,21 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNContextImpl
   // WebNN context API operations execute tasks in a sequence.
   // Within a WebNN context, tasks are orderered, but remain async with respect
   // to tasks in other WebNN contexts or sequences.
-  const gpu::SequenceId sequence_id_;
+  std::unique_ptr<ScopedSequence> sequence_;
 
   // WebNN IPC operations without a SyncToken are re-posted to the scheduled
   // task runner to ensure they execute in the same sequence and order as those
   // with a SyncToken.
   const scoped_refptr<gpu::SchedulerTaskRunner> scheduler_task_runner_;
 
-  mojo::Receiver<mojom::WebNNContext> receiver_;
-
   // Marks the completion of previously scheduled tasks.
   // Used to generate a SyncToken for the renderer which can be passed
   // to another message pipe to wait on WebNN work.
   uint64_t last_sync_token_release_id_ = 0;
 
-  // Ensures ResetWithReason() runs on the correct sequence, even if OnLost()
-  // is called from another thread.
-  base::OnceCallback<void(const std::string&)> on_lost_callback_;
+  // Data pipe handles for transferring tensor data across processes.
+  mojo::ScopedDataPipeConsumerHandle write_tensor_consumer_;
+  mojo::ScopedDataPipeProducerHandle read_tensor_producer_;
 };
 
 }  // namespace webnn

@@ -98,8 +98,11 @@ const size_t kParallelize6DTile2DRangeN = 23;
 const size_t kParallelize6DTile2DTileM = 3;
 const size_t kParallelize6DTile2DTileN = 2;
 
+const int kNumMultiThreads = 8;
+
 TEST(Parallelize1D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_1d(
@@ -107,7 +110,8 @@ TEST(Parallelize1D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize1D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_1d(
@@ -118,7 +122,8 @@ TEST(Parallelize1D, AllItemsInBounds) {
 TEST(Parallelize1D, AllItemsProcessed) {
   std::vector<std::atomic_bool> indicators(kParallelize1DRange);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_1d(
@@ -137,7 +142,8 @@ TEST(Parallelize1D, AllItemsProcessed) {
 TEST(Parallelize1D, EachItemProcessedOnce) {
   std::vector<std::atomic_int> counters(kParallelize1DRange);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_1d(
@@ -156,7 +162,8 @@ TEST(Parallelize1D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize1DTile1D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_1d_tile_1d(
@@ -165,7 +172,8 @@ TEST(Parallelize1DTile1D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize1DTile1D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_1d_tile_1d(
@@ -178,7 +186,8 @@ TEST(Parallelize1DTile1D, AllItemsInBounds) {
 }
 
 TEST(Parallelize1DTile1D, UniformTiling) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_1d_tile_1d(
@@ -197,7 +206,8 @@ TEST(Parallelize1DTile1D, UniformTiling) {
 TEST(Parallelize1DTile1D, AllItemsProcessed) {
   std::vector<std::atomic_bool> indicators(kParallelize1DTile1DRange);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_1d_tile_1d(
@@ -218,7 +228,8 @@ TEST(Parallelize1DTile1D, AllItemsProcessed) {
 TEST(Parallelize1DTile1D, EachItemProcessedOnce) {
   std::vector<std::atomic_int> counters(kParallelize1DTile1DRange);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_1d_tile_1d(
@@ -239,7 +250,8 @@ TEST(Parallelize1DTile1D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize1DTile1DDynamic, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(2), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_1d_tile_1d_dynamic(
@@ -248,7 +260,8 @@ TEST(Parallelize1DTile1DDynamic, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize1DTile1DDynamic, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(2), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_1d_tile_1d_dynamic(
@@ -266,7 +279,8 @@ TEST(Parallelize1DTile1DDynamic, AllItemsInBounds) {
 TEST(Parallelize1DTile1DDynamic, AllItemsProcessed) {
   std::vector<std::atomic_bool> indicators(kParallelize1DTile1DRange);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(2), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_1d_tile_1d_dynamic(
@@ -287,7 +301,8 @@ TEST(Parallelize1DTile1DDynamic, AllItemsProcessed) {
 TEST(Parallelize1DTile1DDynamic, EachItemProcessedOnce) {
   std::vector<std::atomic_int> counters(kParallelize1DTile1DRange);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(2), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_1d_tile_1d_dynamic(
@@ -308,7 +323,8 @@ TEST(Parallelize1DTile1DDynamic, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize2D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d(
@@ -317,7 +333,8 @@ TEST(Parallelize2D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize2D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d(
@@ -333,7 +350,8 @@ TEST(Parallelize2D, AllItemsProcessed) {
   std::vector<std::atomic_bool> indicators(kParallelize2DRangeI *
                                            kParallelize2DRangeJ);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d(
@@ -357,7 +375,8 @@ TEST(Parallelize2D, EachItemProcessedOnce) {
   std::vector<std::atomic_int> counters(kParallelize2DRangeI *
                                         kParallelize2DRangeJ);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d(
@@ -380,7 +399,8 @@ TEST(Parallelize2D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize2DTile1D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_1d(
@@ -390,7 +410,8 @@ TEST(Parallelize2DTile1D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize2DTile1D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_1d(
@@ -405,7 +426,8 @@ TEST(Parallelize2DTile1D, AllItemsInBounds) {
 }
 
 TEST(Parallelize2DTile1D, UniformTiling) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_1d(
@@ -426,7 +448,8 @@ TEST(Parallelize2DTile1D, AllItemsProcessed) {
   std::vector<std::atomic_bool> indicators(kParallelize2DTile1DRangeI *
                                            kParallelize2DTile1DRangeJ);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_1d(
@@ -453,7 +476,8 @@ TEST(Parallelize2DTile1D, EachItemProcessedOnce) {
   std::vector<std::atomic_int> counters(kParallelize2DTile1DRangeI *
                                         kParallelize2DTile1DRangeJ);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_1d(
@@ -479,7 +503,8 @@ TEST(Parallelize2DTile1D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize2DTile1DDynamic, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(2), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_1d_dynamic(
@@ -489,7 +514,8 @@ TEST(Parallelize2DTile1DDynamic, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize2DTile1DDynamic, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(2), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_1d_dynamic(
@@ -509,7 +535,8 @@ TEST(Parallelize2DTile1DDynamic, AllItemsProcessed) {
   std::vector<std::atomic_bool> indicators(kParallelize2DTile1DRangeI *
                                            kParallelize2DTile1DRangeJ);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(2), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_1d_dynamic(
@@ -536,7 +563,8 @@ TEST(Parallelize2DTile1DDynamic, EachItemProcessedOnce) {
   std::vector<std::atomic_int> counters(kParallelize2DTile1DRangeI *
                                         kParallelize2DTile1DRangeJ);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(2), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_1d_dynamic(
@@ -562,7 +590,8 @@ TEST(Parallelize2DTile1DDynamic, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize2DTile2D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_2d(
@@ -572,7 +601,8 @@ TEST(Parallelize2DTile2D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize2DTile2D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_2d(
@@ -588,7 +618,8 @@ TEST(Parallelize2DTile2D, AllItemsInBounds) {
 }
 
 TEST(Parallelize2DTile2D, UniformTiling) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_2d(
@@ -616,7 +647,8 @@ TEST(Parallelize2DTile2D, AllItemsProcessed) {
   std::vector<std::atomic_bool> indicators(kParallelize2DTile2DRangeI *
                                            kParallelize2DTile2DRangeJ);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_2d(
@@ -646,7 +678,8 @@ TEST(Parallelize2DTile2D, EachItemProcessedOnce) {
   std::vector<std::atomic_int> counters(kParallelize2DTile2DRangeI *
                                         kParallelize2DTile2DRangeJ);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_2d(
@@ -675,7 +708,8 @@ TEST(Parallelize2DTile2D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize2DTile2DDynamic, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_2d_dynamic(
@@ -685,7 +719,8 @@ TEST(Parallelize2DTile2DDynamic, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize2DTile2DDynamic, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_2d_dynamic(
@@ -708,7 +743,8 @@ TEST(Parallelize2DTile2DDynamic, AllItemsProcessed) {
   std::vector<std::atomic_bool> indicators(kParallelize2DTile2DRangeI *
                                            kParallelize2DTile2DRangeJ);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_2d_dynamic(
@@ -738,7 +774,8 @@ TEST(Parallelize2DTile2DDynamic, EachItemProcessedOnce) {
   std::vector<std::atomic_int> counters(kParallelize2DTile2DRangeI *
                                         kParallelize2DTile2DRangeJ);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_2d_tile_2d(
@@ -767,7 +804,8 @@ TEST(Parallelize2DTile2DDynamic, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize3D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d(
@@ -776,7 +814,8 @@ TEST(Parallelize3D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize3D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d(
@@ -793,7 +832,8 @@ TEST(Parallelize3D, AllItemsProcessed) {
   std::vector<std::atomic_bool> indicators(
       kParallelize3DRangeI * kParallelize3DRangeJ * kParallelize3DRangeK);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d(
@@ -821,7 +861,8 @@ TEST(Parallelize3D, EachItemProcessedOnce) {
   std::vector<std::atomic_int> counters(
       kParallelize3DRangeI * kParallelize3DRangeJ * kParallelize3DRangeK);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d(
@@ -848,7 +889,8 @@ TEST(Parallelize3D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize3DTile1D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d_tile_1d(
@@ -858,7 +900,8 @@ TEST(Parallelize3DTile1D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize3DTile1D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d_tile_1d(
@@ -874,7 +917,8 @@ TEST(Parallelize3DTile1D, AllItemsInBounds) {
 }
 
 TEST(Parallelize3DTile1D, UniformTiling) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d_tile_1d(
@@ -896,7 +940,8 @@ TEST(Parallelize3DTile1D, AllItemsProcessed) {
                                            kParallelize3DTile1DRangeJ *
                                            kParallelize3DTile1DRangeK);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d_tile_1d(
@@ -930,7 +975,8 @@ TEST(Parallelize3DTile1D, EachItemProcessedOnce) {
                                         kParallelize3DTile1DRangeJ *
                                         kParallelize3DTile1DRangeK);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d_tile_1d(
@@ -962,7 +1008,8 @@ TEST(Parallelize3DTile1D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize3DTile2D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d_tile_2d(
@@ -973,7 +1020,8 @@ TEST(Parallelize3DTile2D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize3DTile2D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d_tile_2d(
@@ -992,7 +1040,8 @@ TEST(Parallelize3DTile2D, AllItemsInBounds) {
 }
 
 TEST(Parallelize3DTile2D, UniformTiling) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d_tile_2d(
@@ -1023,7 +1072,8 @@ TEST(Parallelize3DTile2D, AllItemsProcessed) {
                                            kParallelize3DTile2DRangeJ *
                                            kParallelize3DTile2DRangeK);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d_tile_2d(
@@ -1061,7 +1111,8 @@ TEST(Parallelize3DTile2D, EachItemProcessedOnce) {
                                         kParallelize3DTile2DRangeJ *
                                         kParallelize3DTile2DRangeK);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d_tile_2d(
@@ -1097,7 +1148,8 @@ TEST(Parallelize3DTile2D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize3DTile2DDynamic, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(2), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d_tile_2d(
@@ -1108,7 +1160,8 @@ TEST(Parallelize3DTile2DDynamic, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize3DTile2DDynamic, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(2), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d_tile_2d(
@@ -1135,7 +1188,8 @@ TEST(Parallelize3DTile2DDynamic, AllItemsProcessed) {
                                            kParallelize3DTile2DRangeJ *
                                            kParallelize3DTile2DRangeK);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(2), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d_tile_2d(
@@ -1173,7 +1227,8 @@ TEST(Parallelize3DTile2DDynamic, EachItemProcessedOnce) {
                                         kParallelize3DTile2DRangeJ *
                                         kParallelize3DTile2DRangeK);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(2), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_3d_tile_2d(
@@ -1209,7 +1264,8 @@ TEST(Parallelize3DTile2DDynamic, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize4D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d(
@@ -1219,7 +1275,8 @@ TEST(Parallelize4D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize4D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d(
@@ -1239,7 +1296,8 @@ TEST(Parallelize4D, AllItemsProcessed) {
       kParallelize4DRangeI * kParallelize4DRangeJ * kParallelize4DRangeK *
       kParallelize4DRangeL);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d(
@@ -1276,7 +1334,8 @@ TEST(Parallelize4D, EachItemProcessedOnce) {
       kParallelize4DRangeI * kParallelize4DRangeJ * kParallelize4DRangeK *
       kParallelize4DRangeL);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d(
@@ -1311,7 +1370,8 @@ TEST(Parallelize4D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize4DTile1D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_1d(
@@ -1322,7 +1382,8 @@ TEST(Parallelize4DTile1D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize4DTile1D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_1d(
@@ -1340,7 +1401,8 @@ TEST(Parallelize4DTile1D, AllItemsInBounds) {
 }
 
 TEST(Parallelize4DTile1D, UniformTiling) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_1d(
@@ -1363,7 +1425,8 @@ TEST(Parallelize4DTile1D, AllItemsProcessed) {
       kParallelize4DTile1DRangeI * kParallelize4DTile1DRangeJ *
       kParallelize4DTile1DRangeK * kParallelize4DTile1DRangeL);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_1d(
@@ -1406,7 +1469,8 @@ TEST(Parallelize4DTile1D, EachItemProcessedOnce) {
       kParallelize4DTile1DRangeI * kParallelize4DTile1DRangeJ *
       kParallelize4DTile1DRangeK * kParallelize4DTile1DRangeL);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_1d(
@@ -1446,7 +1510,8 @@ TEST(Parallelize4DTile1D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize4DTile2D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_2d(
@@ -1457,7 +1522,8 @@ TEST(Parallelize4DTile2D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize4DTile2D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_2d(
@@ -1477,7 +1543,8 @@ TEST(Parallelize4DTile2D, AllItemsInBounds) {
 }
 
 TEST(Parallelize4DTile2D, UniformTiling) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_2d(
@@ -1508,7 +1575,8 @@ TEST(Parallelize4DTile2D, AllItemsProcessed) {
       kParallelize4DTile2DRangeI * kParallelize4DTile2DRangeJ *
       kParallelize4DTile2DRangeK * kParallelize4DTile2DRangeL);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_2d(
@@ -1553,7 +1621,8 @@ TEST(Parallelize4DTile2D, EachItemProcessedOnce) {
       kParallelize4DTile2DRangeI * kParallelize4DTile2DRangeJ *
       kParallelize4DTile2DRangeK * kParallelize4DTile2DRangeL);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_2d(
@@ -1596,7 +1665,8 @@ TEST(Parallelize4DTile2D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize4DTile2DDynamic, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_2d(
@@ -1607,7 +1677,8 @@ TEST(Parallelize4DTile2DDynamic, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize4DTile2DDynamic, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_2d(
@@ -1627,7 +1698,8 @@ TEST(Parallelize4DTile2DDynamic, AllItemsInBounds) {
 }
 
 TEST(Parallelize4DTile2DDynamic, UniformTiling) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_2d(
@@ -1650,7 +1722,8 @@ TEST(Parallelize4DTile2DDynamic, AllItemsProcessed) {
       kParallelize4DTile2DRangeI * kParallelize4DTile2DRangeJ *
       kParallelize4DTile2DRangeK * kParallelize4DTile2DRangeL);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_2d(
@@ -1695,7 +1768,8 @@ TEST(Parallelize4DTile2DDynamic, EachItemProcessedOnce) {
       kParallelize4DTile2DRangeI * kParallelize4DTile2DRangeJ *
       kParallelize4DTile2DRangeK * kParallelize4DTile2DRangeL);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_4d_tile_2d(
@@ -1738,7 +1812,8 @@ TEST(Parallelize4DTile2DDynamic, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize5D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_5d(
@@ -1748,7 +1823,8 @@ TEST(Parallelize5D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize5D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_5d(
@@ -1769,7 +1845,8 @@ TEST(Parallelize5D, AllItemsProcessed) {
       kParallelize5DRangeI * kParallelize5DRangeJ * kParallelize5DRangeK *
       kParallelize5DRangeL * kParallelize5DRangeM);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_5d(
@@ -1812,7 +1889,8 @@ TEST(Parallelize5D, EachItemProcessedOnce) {
       kParallelize5DRangeI * kParallelize5DRangeJ * kParallelize5DRangeK *
       kParallelize5DRangeL * kParallelize5DRangeM);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_5d(
@@ -1853,7 +1931,8 @@ TEST(Parallelize5D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize5DTile1D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_5d_tile_1d(
@@ -1864,7 +1943,8 @@ TEST(Parallelize5DTile1D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize5DTile1D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_5d_tile_1d(
@@ -1884,7 +1964,8 @@ TEST(Parallelize5DTile1D, AllItemsInBounds) {
 }
 
 TEST(Parallelize5DTile1D, UniformTiling) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_5d_tile_1d(
@@ -1909,7 +1990,8 @@ TEST(Parallelize5DTile1D, AllItemsProcessed) {
       kParallelize5DTile1DRangeK * kParallelize5DTile1DRangeL *
       kParallelize5DTile1DRangeM);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_5d_tile_1d(
@@ -1959,7 +2041,8 @@ TEST(Parallelize5DTile1D, EachItemProcessedOnce) {
       kParallelize5DTile1DRangeK * kParallelize5DTile1DRangeL *
       kParallelize5DTile1DRangeM);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_5d_tile_1d(
@@ -2006,7 +2089,8 @@ TEST(Parallelize5DTile1D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize5DTile2D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_5d_tile_2d(
@@ -2019,7 +2103,8 @@ TEST(Parallelize5DTile2D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize5DTile2D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_5d_tile_2d(
@@ -2041,7 +2126,8 @@ TEST(Parallelize5DTile2D, AllItemsInBounds) {
 }
 
 TEST(Parallelize5DTile2D, UniformTiling) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_5d_tile_2d(
@@ -2074,7 +2160,8 @@ TEST(Parallelize5DTile2D, AllItemsProcessed) {
       kParallelize5DTile2DRangeK * kParallelize5DTile2DRangeL *
       kParallelize5DTile2DRangeM);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_5d_tile_2d(
@@ -2127,7 +2214,8 @@ TEST(Parallelize5DTile2D, EachItemProcessedOnce) {
       kParallelize5DTile2DRangeK * kParallelize5DTile2DRangeL *
       kParallelize5DTile2DRangeM);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_5d_tile_2d(
@@ -2177,7 +2265,8 @@ TEST(Parallelize5DTile2D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize6D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_6d(
@@ -2187,7 +2276,8 @@ TEST(Parallelize6D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize6D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_6d(
@@ -2209,7 +2299,8 @@ TEST(Parallelize6D, AllItemsProcessed) {
       kParallelize6DRangeI * kParallelize6DRangeJ * kParallelize6DRangeK *
       kParallelize6DRangeL * kParallelize6DRangeM * kParallelize6DRangeN);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_6d(
@@ -2261,7 +2352,8 @@ TEST(Parallelize6D, EachItemProcessedOnce) {
       kParallelize6DRangeI * kParallelize6DRangeJ * kParallelize6DRangeK *
       kParallelize6DRangeL * kParallelize6DRangeM * kParallelize6DRangeN);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_6d(
@@ -2309,7 +2401,8 @@ TEST(Parallelize6D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize6DTile1D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_6d_tile_1d(
@@ -2322,7 +2415,8 @@ TEST(Parallelize6DTile1D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize6DTile1D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_6d_tile_1d(
@@ -2344,7 +2438,8 @@ TEST(Parallelize6DTile1D, AllItemsInBounds) {
 }
 
 TEST(Parallelize6DTile1D, UniformTiling) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_6d_tile_1d(
@@ -2370,7 +2465,8 @@ TEST(Parallelize6DTile1D, AllItemsProcessed) {
       kParallelize6DTile1DRangeK * kParallelize6DTile1DRangeL *
       kParallelize6DTile1DRangeM * kParallelize6DTile1DRangeN);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_6d_tile_1d(
@@ -2429,7 +2525,8 @@ TEST(Parallelize6DTile1D, EachItemProcessedOnce) {
       kParallelize6DTile1DRangeK * kParallelize6DTile1DRangeL *
       kParallelize6DTile1DRangeM * kParallelize6DTile1DRangeN);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_6d_tile_1d(
@@ -2484,7 +2581,8 @@ TEST(Parallelize6DTile1D, EachItemProcessedOnce) {
 }
 
 TEST(Parallelize6DTile2D, ThreadPoolCompletes) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_6d_tile_2d(
@@ -2497,7 +2595,8 @@ TEST(Parallelize6DTile2D, ThreadPoolCompletes) {
 }
 
 TEST(Parallelize6DTile2D, AllItemsInBounds) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_6d_tile_2d(
@@ -2520,7 +2619,8 @@ TEST(Parallelize6DTile2D, AllItemsInBounds) {
 }
 
 TEST(Parallelize6DTile2D, UniformTiling) {
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_6d_tile_2d(
@@ -2553,7 +2653,8 @@ TEST(Parallelize6DTile2D, AllItemsProcessed) {
       kParallelize6DTile2DRangeK * kParallelize6DTile2DRangeL *
       kParallelize6DTile2DRangeM * kParallelize6DTile2DRangeN);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_6d_tile_2d(
@@ -2614,7 +2715,8 @@ TEST(Parallelize6DTile2D, EachItemProcessedOnce) {
       kParallelize6DTile2DRangeK * kParallelize6DTile2DRangeL *
       kParallelize6DTile2DRangeM * kParallelize6DTile2DRangeN);
 
-  auto_pthreadpool_t threadpool(pthreadpool_create(1), pthreadpool_destroy);
+  auto_pthreadpool_t threadpool(pthreadpool_create(kNumMultiThreads),
+                                pthreadpool_destroy);
   ASSERT_TRUE(threadpool.get());
 
   pthreadpool_parallelize_6d_tile_2d(

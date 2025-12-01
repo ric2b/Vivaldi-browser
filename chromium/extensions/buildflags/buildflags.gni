@@ -27,7 +27,7 @@ declare_args() {
   #
   # TODO(https://crbug.com/356905053): Continue expanding the scope of
   # enable_desktop_android_extensions.
-  enable_desktop_android_extensions = is_desktop_android
+  enable_desktop_android_extensions = false # Vivaldi
 }
 
 # Note: GN forbids relying on args from the same declare_args() block, so we

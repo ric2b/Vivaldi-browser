@@ -32,6 +32,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -48,7 +49,6 @@
 #include "chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_factory.h"
 #include "chrome/browser/buildflags.h"
-#include "chrome/browser/extensions/chrome_content_browser_client_extensions_part.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service_factory.h"
 #include "chrome/browser/navigation_predictor/preloading_model_keyed_service_factory.h"
@@ -65,13 +65,11 @@
 #include "chrome/browser/profiles/profile_selections.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
-#include "chrome/browser/signin/accounts_policy_manager_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_service_factory.h"
 #include "chrome/browser/supervised_user/child_accounts/list_family_members_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
-#include "chrome/browser/ui/tabs/organization/tab_organization_service_factory.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/unified_consent/unified_consent_service_factory.h"
 #include "chrome/common/buildflags.h"
@@ -117,6 +115,7 @@
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/browser/extensions/chrome_content_browser_client_extensions_part.h"
 #include "extensions/browser/api/management/management_api.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension_set.h"
@@ -1230,7 +1229,7 @@ std::unique_ptr<Profile> ProfileManager::CreateProfileAsyncHelper(
   return Profile::CreateProfile(path, this, Profile::CreateMode::kAsynchronous);
 }
 
-bool ProfileManager::HasKeepAliveForTesting(const Profile* profile,
+bool ProfileManager::HasKeepAliveForTesting(Profile* profile,
                                             ProfileKeepAliveOrigin origin) {
   DCHECK(profile);
   ProfileInfo* info = GetProfileInfoByPath(profile->GetPath());
@@ -1259,7 +1258,7 @@ void ProfileManager::RecordZombieMetrics() {
   base::UmaHistogramCounts100("Profile.ZombieProfileCount", zombie_count);
 }
 
-void ProfileManager::AddKeepAlive(const Profile* profile,
+void ProfileManager::AddKeepAlive(Profile* profile,
                                   ProfileKeepAliveOrigin origin) {
   DCHECK_NE(ProfileKeepAliveOrigin::kWaitingForFirstBrowserWindow, origin);
 
@@ -1302,7 +1301,7 @@ void ProfileManager::AddKeepAlive(const Profile* profile,
   }
 }
 
-void ProfileManager::RemoveKeepAlive(const Profile* profile,
+void ProfileManager::RemoveKeepAlive(Profile* profile,
                                      ProfileKeepAliveOrigin origin) {
   DCHECK_NE(ProfileKeepAliveOrigin::kWaitingForFirstBrowserWindow, origin);
 
@@ -1319,7 +1318,7 @@ void ProfileManager::RemoveKeepAlive(const Profile* profile,
             << "ProfileManager. The keepalive was not removed.";
     // DumpWithoutCrashing turned off for a couple milestones until we fix the
     // root cause, due to the high volume of reports. See crbug.com/368360956.
-    if (version_info::GetMajorVersionNumberAsInt() >= 141) {
+    if (version_info::GetMajorVersionNumberAsInt() >= 144) {
       // TODO(crbug.com/368360956): Not incrementing the refcount will cause
       // `profile` to get destroyed too early. Remove or convert to a CHECK()
       // once the root cause is fixed.
@@ -1356,7 +1355,7 @@ void ProfileManager::RemoveKeepAlive(const Profile* profile,
   UnloadProfileIfNoKeepAlive(info);
 }
 
-void ProfileManager::ClearFirstBrowserWindowKeepAlive(const Profile* profile) {
+void ProfileManager::ClearFirstBrowserWindowKeepAlive(Profile* profile) {
   CHECK(profile);
   CHECK(!profile->IsOffTheRecord());
 
@@ -1424,11 +1423,6 @@ void ProfileManager::DoFinalInit(ProfileInfo* profile_info,
 
   for (auto& observer : observers_)
     observer.OnProfileAdded(profile);
-
-  if (AccountsPolicyManager* accounts_policy_manager =
-          AccountsPolicyManagerFactory::GetForProfile(profile)) {
-    accounts_policy_manager->Initialize();
-  }
 
 #if !BUILDFLAG(IS_ANDROID)
   // The caret browsing command-line switch toggles caret browsing on

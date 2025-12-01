@@ -285,8 +285,10 @@ void CodeGenerator::AssembleCode() {
     // Align loop headers on vendor recommended boundaries.
     if (block->ShouldAlignLoopHeader()) {
       masm()->LoopHeaderAlign();
-    } else if (block->ShouldAlignCodeTarget()) {
-      masm()->CodeTargetAlign();
+    } else if (block->ShouldAlignSwitchTarget()) {
+      masm()->SwitchTargetAlign();
+    } else if (block->ShouldAlignBranchTarget()) {
+      masm()->BranchTargetAlign();
     }
 
     if (info->trace_turbo_json()) {
@@ -333,7 +335,7 @@ void CodeGenerator::AssembleCode() {
         masm()->InitializeRootRegister();
       }
     }
-#ifdef CAN_USE_RVV_INSTRUCTIONS
+#if defined(V8_TARGET_ARCH_RISCV32) || defined(V8_TARGET_ARCH_RISCV64)
     // RVV uses VectorUnit to emit vset{i}vl{i}, reducing the static and dynamic
     // overhead of the vset{i}vl{i} instruction. However there are some jumps
     // back between blocks. the Rvv instruction may get an incorrect vtype. so
@@ -466,7 +468,7 @@ void CodeGenerator::AssembleCode() {
   result_ = kSuccess;
 }
 
-#ifndef V8_TARGET_ARCH_X64
+#if !defined(V8_TARGET_ARCH_X64) && !defined(V8_TARGET_ARCH_RISCV64)
 void CodeGenerator::AssembleArchBinarySearchSwitchRange(
     Register input, RpoNumber def_block, std::pair<int32_t, Label*>* begin,
     std::pair<int32_t, Label*>* end) {
@@ -485,7 +487,7 @@ void CodeGenerator::AssembleArchBinarySearchSwitchRange(
   masm()->bind(&less_label);
   AssembleArchBinarySearchSwitchRange(input, def_block, begin, middle);
 }
-#endif  // V8_TARGET_ARCH_X64
+#endif  // V8_TARGET_ARCH_X64/V8_TARGET_ARCH_RISCV64
 
 void CodeGenerator::AssembleArchJump(RpoNumber target) {
   if (!IsNextInAssemblyOrder(target))

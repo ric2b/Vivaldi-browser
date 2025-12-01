@@ -109,12 +109,22 @@ MetricsRenderFrameObserver::MetricsRenderFrameObserver(
       blink::WebLocalFrameObserver(render_frame ? render_frame->GetWebFrame()
                                                 : nullptr) {
   if (base::FeatureList::IsEnabled(
-          features::kDidObserveNewFeatureUsageImprovement) &&
+          features::kMetricsRenderFrameObserverImprovement) &&
       render_frame) {
     // If the optimization is enabled, `DidObserveNewFeatureUsage()` will be
     // called as a callback instead of the observer interface.
     render_frame->SetNewFeatureUsageCallback(base::BindRepeating(
         &MetricsRenderFrameObserver::DidObserveNewFeatureUsage,
+        weak_factory_.GetWeakPtr()));
+    // If the optimization is enabled, `DidObserveSubresourceLoad()` will be
+    // called as a callback instead of the observer interface.
+    render_frame->SetSubresourceLoadCallback(base::BindRepeating(
+        &MetricsRenderFrameObserver::DidObserveSubresourceLoad,
+        weak_factory_.GetWeakPtr()));
+    // If the optimization is enabled, `DidLoadResourceFromMemoryCache()` will
+    // be called as a callback instead of the observer interface.
+    render_frame->SetLoadFromMemoryCacheCallback(base::BindRepeating(
+        &MetricsRenderFrameObserver::DidLoadResourceFromMemoryCache,
         weak_factory_.GetWeakPtr()));
   }
 }
@@ -256,7 +266,7 @@ void MetricsRenderFrameObserver::DidCancelResponse(int request_id) {
 
 void MetricsRenderFrameObserver::DidReceiveTransferSizeUpdate(
     int request_id,
-    int received_data_length) {
+    base::ByteCount received_data_length) {
   if (provisional_frame_resource_data_use_ &&
       provisional_frame_resource_data_use_->resource_id() == request_id) {
     provisional_frame_resource_data_use_->DidReceiveTransferSizeUpdate(
@@ -271,7 +281,7 @@ void MetricsRenderFrameObserver::DidReceiveTransferSizeUpdate(
 void MetricsRenderFrameObserver::DidLoadResourceFromMemoryCache(
     const GURL& response_url,
     int request_id,
-    int64_t encoded_body_length,
+    base::ByteCount encoded_body_length,
     const std::string& mime_type,
     bool from_archive) {
   // Resources from archives, such as subresources from a MHTML archive, do not
@@ -418,12 +428,12 @@ void MetricsRenderFrameObserver::OnMainFrameViewportRectangleChanged(
   }
 }
 
-void MetricsRenderFrameObserver::OnMainFrameImageAdRectangleChanged(
+void MetricsRenderFrameObserver::OnMainFrameAdRectangleChanged(
     int element_id,
-    const gfx::Rect& image_ad_rect) {
+    const gfx::Rect& ad_rect) {
   if (page_timing_metrics_sender_) {
-    page_timing_metrics_sender_->OnMainFrameImageAdRectangleChanged(
-        element_id, image_ad_rect);
+    page_timing_metrics_sender_->OnMainFrameAdRectangleChanged(element_id,
+                                                               ad_rect);
   }
 }
 

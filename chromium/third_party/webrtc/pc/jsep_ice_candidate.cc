@@ -52,7 +52,7 @@ std::unique_ptr<IceCandidate> IceCandidate::Create(absl::string_view mid,
                                                    SdpParseError* absl_nullable
                                                        error /*= nullptr*/) {
   Candidate candidate;
-  if (!SdpDeserializeCandidate(mid, sdp, &candidate, error)) {
+  if (!ParseCandidate(sdp, &candidate, error, true)) {
     return nullptr;
   }
   return std::make_unique<IceCandidate>(mid, sdp_mline_index, candidate);
@@ -60,6 +60,7 @@ std::unique_ptr<IceCandidate> IceCandidate::Create(absl::string_view mid,
 
 IceCandidateCollection IceCandidateCollection::Clone() const {
   IceCandidateCollection new_collection;
+  new_collection.candidates_.reserve(candidates_.size());
   for (const auto& candidate : candidates_) {
     new_collection.candidates_.push_back(std::make_unique<IceCandidate>(
         candidate->sdp_mid(), candidate->sdp_mline_index(),

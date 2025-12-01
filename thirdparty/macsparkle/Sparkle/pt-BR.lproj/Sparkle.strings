@@ -38,7 +38,7 @@
 "%1$@ can’t be updated if it’s running from the location it was downloaded to." = "O app %1$@ não pode ser atualizado se ele estiver aberto do local onde foi baixado.";
 
 /* No comment provided by engineer. */
-"%1$@ can’t be updated, because it was opened from a read-only or a temporary location." = "O app %1$@ não pode ser atualizado porque foi aberto de um volume somente leitura ou local temporário.";
+"%1$@ can’t be updated because it was opened from a read-only or a temporary location." = "O app %1$@ não pode ser atualizado porque foi aberto de um volume somente leitura ou local temporário.";
 
 /* No comment provided by engineer. */
 "A new version of %@ is available!" = "Uma nova versão do app %@ está disponível!";
@@ -147,3 +147,36 @@
 
 /* No comment provided by engineer. */
 "Your macOS version is too old" = "A versão do macOS é antiga demais";
+
+/* Software Update title/label */
+"Software Update" = "Atualização de Software";
+
+/* Remind Me Later choice for update alert */
+"Remind Me Later" = "Mais Tarde";
+
+/* Skip This Version choice for update alert */
+"Skip This Version" = "Ignorar Esta Versão";
+
+/* Install Update choice for update alert */
+"Install Update" = "Instalar Atualização";
+
+/* Automatically download and install updates in the future option for update alert */
+"Automatically download and install updates in the future" = "Baixar e instalar atualizações futuras automaticamente";
+
+/* Check for updates automatically response for update permission dialog */
+"Check Automatically" = "Buscar Automaticamente";
+
+/* Don't check for updates automatically response for update permission dialog */
+"Don’t Check" = "Não Buscar";
+
+/* Title question for update permission dialog */
+"Check for updates automatically?" = "Buscar atualizações automaticamente?";
+
+/* Include anonymous system profile choice for update permission dialog */
+"Include anonymous system profile" = "Incluir perfil anônimo do sistema";
+
+/* Automatically download and install updates choice for update permission dialog */
+"Automatically download and install updates" = "Baixar e instalar atualizações automaticamente";
+
+/* Anonymous system profile information disclosure for update permission dialog */
+"Anonymous system profile information is used to help us plan future development work. Please contact us if you have any questions about this.\n\nThis is the information that would be sent:" = "As informações anônimas do sistema são usadas para nos ajudar a planejar o desenvolvimento futuro do aplicativo. Contate-nos caso tenha dúvidas sobre este procedimento.\n\nAs seguintes informações seriam enviadas:";

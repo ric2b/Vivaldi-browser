@@ -27,7 +27,7 @@
 #include "media/audio/audio_io.h"
 #include "media/audio/audio_manager.h"
 #include "media/base/audio_power_monitor.h"
-#include "services/audio/loopback_group_member.h"
+#include "services/audio/loopback_source.h"
 
 // An OutputController controls an AudioOutputStream and provides data to this
 // output stream. It executes audio operations like play, pause, stop, etc. on
@@ -60,7 +60,7 @@
 
 namespace audio {
 class OutputController : public media::AudioOutputStream::AudioSourceCallback,
-                         public LoopbackGroupMember {
+                         public LoopbackSource {
  public:
   // An event handler that receives events from the OutputController. The
   // following methods are called on the audio manager thread.
@@ -242,7 +242,7 @@ class OutputController : public media::AudioOutputStream::AudioSourceCallback,
     void RegisterError();
 
     // This function should be called from the stream callback thread.
-    void OnMoreDataCalled();
+    void OnMoreDataCalled(const media::AudioGlitchInfo& glitch_info);
 
    private:
     void WedgeCheck();
@@ -252,6 +252,10 @@ class OutputController : public media::AudioOutputStream::AudioSourceCallback,
     RAW_PTR_EXCLUSION OutputController* const controller_;
 
     const base::TimeTicks start_time_;
+
+    // Accumulates AudioGlitchInfo provided in OnMoreData callbacks. Only used
+    // for logging purposes.
+    media::AudioGlitchInfo glitch_info_;
 
     bool error_during_callback_ = false;
 

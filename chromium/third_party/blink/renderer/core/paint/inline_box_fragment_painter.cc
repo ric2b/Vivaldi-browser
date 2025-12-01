@@ -75,7 +75,11 @@ void InlineBoxFragmentPainter::Paint(const PaintInfo& paint_info,
       PaintBackgroundBorderShadow(paint_info, adjusted_paint_offset);
     }
   } else {
-    svg_paint_state.emplace(layout_object, paint_info);
+    // SVG filters only apply to container and graphics elements, so using only
+    // kContent to avoid ensuring a paint chunk for filters.
+    svg_paint_state.emplace(layout_object, paint_info,
+                            ScopedSVGPaintState::PaintBehavior{
+                                ScopedSVGPaintState::PaintComponent::kContent});
   }
   const bool suppress_box_decoration_background = true;
   DCHECK(inline_context_);
@@ -124,7 +128,7 @@ void InlineBoxFragmentPainter::PaintMask(const PaintInfo& paint_info,
   SlicePaintingType border_painting_type =
       GetSlicePaintType(style_.MaskBoxImage(), adjusted_frame_rect,
                         adjusted_clip_rect, object_may_have_multiple_boxes);
-  WTF::String failing_url;
+  String failing_url;
   if (border_painting_type == kDontPaint ||
       (paint_info.IsPrivacyPreserving() && style_.MaskBoxImage().GetImage() &&
        !style_.MaskBoxImage().GetImage()->IsAccessAllowed(failing_url))) {

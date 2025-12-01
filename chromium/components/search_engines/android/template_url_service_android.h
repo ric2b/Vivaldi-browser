@@ -136,6 +136,48 @@ class TemplateUrlServiceAndroid : public TemplateURLServiceObserver {
   base::android::ScopedJavaLocalRef<jobjectArray> GetImageUrlAndPostContent(
       JNIEnv* env);
 
+  void AddCustomSearchEngine(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& short_name,
+      const base::android::JavaParamRef<jstring>& nickname,
+      const base::android::JavaParamRef<jobject>& searchable_jurl,
+      const base::android::JavaParamRef<jobject>& suggest_jurl,
+      const base::android::JavaParamRef<jstring>& jsearch_url_post_params,
+      const base::android::JavaParamRef<jstring>& jimage_url,
+      const base::android::JavaParamRef<jstring>& jimage_url_post_params);
+
+  base::android::ScopedJavaLocalRef<jobject> GetTemplateUrlFromKeywordNative(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& jkeyword);
+
+  void RemoveTemplateUrl(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj,
+                         const base::android::JavaParamRef<jstring>& jkeyword);
+
+  jboolean UpdateTemplateUrl(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& jkeyword,
+      const base::android::JavaParamRef<jstring>& jnew_keyword,
+      const base::android::JavaParamRef<jstring>& jshort_name,
+      const base::android::JavaParamRef<jobject>& searchable_jurl,
+      const base::android::JavaParamRef<jobject>& suggestion_jurl,
+      const base::android::JavaParamRef<jstring>& jsearch_url_post_params,
+      const base::android::JavaParamRef<jstring>& jimage_url,
+      const base::android::JavaParamRef<jstring>& jimage_url_post_params);
+
+  base::android::ScopedJavaLocalRef<jstring> GetUrlToDisplayBridge(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& jurl);
+
+  base::android::ScopedJavaLocalRef<jstring> GetUrlFromDisplayBridge(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& jurl);
+
  private:
   FRIEND_TEST_ALL_PREFIXES(TemplateUrlServiceAndroidUnitTest,
                            FilterUserSelectableTemplateUrls);

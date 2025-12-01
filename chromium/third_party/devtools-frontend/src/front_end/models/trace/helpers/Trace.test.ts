@@ -1,9 +1,10 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {
+  allThreadEntriesInTrace,
   getMainThread,
   makeAsyncEndEvent,
   makeAsyncStartEvent,
@@ -16,20 +17,20 @@ import * as Trace from '../trace.js';
 describeWithEnvironment('Trace helpers', function() {
   describe('extractOriginFromTrace', () => {
     it('extracts the origin of a parsed trace correctly', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
-      const origin = Trace.Helpers.Trace.extractOriginFromTrace(parsedTrace.Meta.mainFrameURL);
+      const parsedTrace = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
+      const origin = Trace.Helpers.Trace.extractOriginFromTrace(parsedTrace.data.Meta.mainFrameURL);
       assert.strictEqual(origin, 'web.dev');
     });
 
     it('will remove the `www` if it is present', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'multiple-navigations.json.gz');
-      const origin = Trace.Helpers.Trace.extractOriginFromTrace(parsedTrace.Meta.mainFrameURL);
+      const parsedTrace = await TraceLoader.traceEngine(this, 'multiple-navigations.json.gz');
+      const origin = Trace.Helpers.Trace.extractOriginFromTrace(parsedTrace.data.Meta.mainFrameURL);
       assert.strictEqual(origin, 'google.com');
     });
 
     it('returns null when no origin is found', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'missing-url.json.gz');
-      const origin = Trace.Helpers.Trace.extractOriginFromTrace(parsedTrace.Meta.mainFrameURL);
+      const parsedTrace = await TraceLoader.traceEngine(this, 'missing-url.json.gz');
+      const origin = Trace.Helpers.Trace.extractOriginFromTrace(parsedTrace.data.Meta.mainFrameURL);
       assert.isNull(origin);
     });
   });
@@ -107,8 +108,8 @@ describeWithEnvironment('Trace helpers', function() {
 
   describe('getNavigationForTraceEvent', () => {
     it('returns the correct navigation for a request', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'multiple-navigations.json.gz');
-      const {NetworkRequests, Meta} = parsedTrace;
+      const parsedTrace = await TraceLoader.traceEngine(this, 'multiple-navigations.json.gz');
+      const {NetworkRequests, Meta} = parsedTrace.data;
       const request1 = NetworkRequests.byTime[0];
       const navigationForFirstRequest =
           Trace.Helpers.Trace.getNavigationForTraceEvent(request1, request1.args.data.frame, Meta.navigationsByFrameId);
@@ -121,8 +122,8 @@ describeWithEnvironment('Trace helpers', function() {
     });
 
     it('returns the correct navigation for a page load event', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'multiple-navigations.json.gz');
-      const {Meta, PageLoadMetrics} = parsedTrace;
+      const parsedTrace = await TraceLoader.traceEngine(this, 'multiple-navigations.json.gz');
+      const {Meta, PageLoadMetrics} = parsedTrace.data;
       const firstNavigationId = Meta.navigationsByNavigationId.keys().next().value!;
 
       const fcp = PageLoadMetrics.metricScoresByFrameId.get(Meta.mainFrameId)
@@ -370,13 +371,13 @@ describeWithEnvironment('Trace helpers', function() {
   });
   describe('activeURLForFrameAtTime', () => {
     it('extracts the active url for a frame at a given time', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'simple-js-program.json.gz');
+      const parsedTrace = await TraceLoader.traceEngine(this, 'simple-js-program.json.gz');
       const frameId = '1F729458403A23CF1D8D246095129AC4';
       const firstURL = Trace.Helpers.Trace.activeURLForFrameAtTime(
-          frameId, Trace.Types.Timing.Micro(251126654355), parsedTrace.Meta.rendererProcessesByFrame);
+          frameId, Trace.Types.Timing.Micro(251126654355), parsedTrace.data.Meta.rendererProcessesByFrame);
       assert.strictEqual(firstURL, 'about:blank');
       const secondURL = Trace.Helpers.Trace.activeURLForFrameAtTime(
-          frameId, Trace.Types.Timing.Micro(251126663398), parsedTrace.Meta.rendererProcessesByFrame);
+          frameId, Trace.Types.Timing.Micro(251126663398), parsedTrace.data.Meta.rendererProcessesByFrame);
       assert.strictEqual(secondURL, 'https://www.google.com');
     });
   });
@@ -414,13 +415,14 @@ describeWithEnvironment('Trace helpers', function() {
         '@ 40735.508 for    3.667: ReceiveCompositorFrameToStartDraw',
         '@ 40739.175 for   54.136: StartDrawToSwapStart',
         '@ 40793.311 for    0.461: Swap',
-        '@ 40810.809 for  205.424: first measure',
         '@ 40810.809 for  606.224: second measure',
+        '@ 40810.809 for  205.424: first measure',
         '@ 40825.971 for   11.802: InputLatency::MouseMove',
         '@ 41818.833 for 2005.601: third measure',
       ]);
       assert.lengthOf(synthEvents, 237);
     });
+
     describe('createSortedSyntheticEvents()', () => {
       it('correctly creates synthetic events when instant animation events are present', async function() {
         const events = await TraceLoader.rawEvents(this, 'instant-animation-events.json.gz');
@@ -473,6 +475,125 @@ describeWithEnvironment('Trace helpers', function() {
         });
       });
     });
+
+    describe('dealing with duplicate IDs and overlapping events', () => {
+      const {createMatchedSortedSyntheticEvents} = Trace.Helpers.Trace;
+
+      // Helper functions for creating async begin/instant/end events.
+      function makeBeginEvent(id: string, tsMicro: number): Trace.Types.Events.PairableAsyncBegin {
+        return {
+          name: `fake-event:${id}`,
+          ts: tsMicro,
+          id2: {local: id},
+          ph: Trace.Types.Events.Phase.ASYNC_NESTABLE_START,
+          pid: Trace.Types.Events.ProcessID(1),
+          tid: Trace.Types.Events.ThreadID(1),
+          cat: 'blink.user_timing',
+        } as unknown as Trace.Types.Events.PairableAsyncBegin;
+      }
+
+      function makeEndEvent(id: string, tsMicro: number): Trace.Types.Events.PairableAsyncEnd {
+        const event = makeBeginEvent(id, tsMicro) as unknown as Trace.Types.Events.PairableAsyncEnd;
+        event.ph = Trace.Types.Events.Phase.ASYNC_NESTABLE_END;
+        return event;
+      }
+
+      function makeInstantEvent(id: string, tsMicro: number): Trace.Types.Events.PairableAsyncInstant {
+        const event = makeBeginEvent(id, tsMicro) as unknown as Trace.Types.Events.PairableAsyncInstant;
+        event.ph = Trace.Types.Events.Phase.ASYNC_NESTABLE_INSTANT;
+        return event;
+      }
+
+      it('can match up begin and end events with any instant events in the time period', async () => {
+        const b1 = makeBeginEvent('1', 1);
+        const i1 = makeInstantEvent('1', 5);
+        const e1 = makeEndEvent('1', 10);
+        const b2 = makeBeginEvent('2', 11);
+        const i2 = makeInstantEvent('2', 12);
+        const e2 = makeEndEvent('2', 13);
+
+        const pairedEvents = createMatchedSortedSyntheticEvents([b1, i1, e1, b2, i2, e2]);
+        assert.lengthOf(pairedEvents, 2);
+        assert.strictEqual(pairedEvents[0].name, 'fake-event:1');
+        assert.strictEqual(pairedEvents[0].args.data.beginEvent, b1);
+        assert.strictEqual(pairedEvents[0].args.data.endEvent, e1);
+        assert.deepEqual(pairedEvents[0].args.data.instantEvents, [i1]);
+
+        assert.strictEqual(pairedEvents[1].name, 'fake-event:2');
+        assert.strictEqual(pairedEvents[1].args.data.beginEvent, b2);
+        assert.strictEqual(pairedEvents[1].args.data.endEvent, e2);
+        assert.deepEqual(pairedEvents[1].args.data.instantEvents, [i2]);
+      });
+
+      it('deals with the fact that IDs can be re-used if the events do not overlap', async () => {
+        const b1 = makeBeginEvent('1', 1);
+        const i1 = makeInstantEvent('1', 5);
+        const e1 = makeEndEvent('1', 10);
+        // This can happen: Perfetto may reuse IDs if they are not overlapping.
+        const b2 = makeBeginEvent('1', 11);
+        b2.name = 'fake-event:2';
+        const i2 = makeInstantEvent('1', 12);
+        i2.name = 'fake-event:2';
+        const e2 = makeEndEvent('1', 13);
+        e2.name = 'fake-event:2';
+
+        const pairedEvents = createMatchedSortedSyntheticEvents([b1, i1, e1, b2, i2, e2]);
+        assert.lengthOf(pairedEvents, 2);
+        assert.strictEqual(pairedEvents[0].name, 'fake-event:1');
+        assert.strictEqual(pairedEvents[0].args.data.beginEvent, b1);
+        assert.strictEqual(pairedEvents[0].args.data.endEvent, e1);
+        assert.deepEqual(pairedEvents[0].args.data.instantEvents, [i1]);
+
+        assert.strictEqual(pairedEvents[1].name, 'fake-event:2');
+        assert.strictEqual(pairedEvents[1].args.data.beginEvent, b2);
+        assert.strictEqual(pairedEvents[1].args.data.endEvent, e2);
+        assert.deepEqual(pairedEvents[1].args.data.instantEvents, [i2]);
+      });
+
+      it('deals with overlapping events', async () => {
+        // event1 here: 1=>10, event2: 5=>15.
+        const b1 = makeBeginEvent('1', 1);
+        const i1 = makeInstantEvent('1', 5);
+        const b2 = makeBeginEvent('2', 5);
+        const e1 = makeEndEvent('1', 10);
+        const i2 = makeInstantEvent('2', 12);
+        const e2 = makeEndEvent('2', 15);
+
+        const pairedEvents = createMatchedSortedSyntheticEvents([b1, i1, b2, e1, i2, e2]);
+        assert.lengthOf(pairedEvents, 2);
+        assert.strictEqual(pairedEvents[0].name, 'fake-event:1');
+        assert.strictEqual(pairedEvents[0].args.data.beginEvent, b1);
+        assert.strictEqual(pairedEvents[0].args.data.endEvent, e1);
+        assert.deepEqual(pairedEvents[0].args.data.instantEvents, [i1]);
+
+        assert.strictEqual(pairedEvents[1].name, 'fake-event:2');
+        assert.strictEqual(pairedEvents[1].args.data.beginEvent, b2);
+        assert.strictEqual(pairedEvents[1].args.data.endEvent, e2);
+        assert.deepEqual(pairedEvents[1].args.data.instantEvents, [i2]);
+      });
+
+      it('deals with events that are visually nested', async () => {
+        // event1 here: 1=>10, event2: 5=>8.
+        const b1 = makeBeginEvent('1', 1);
+        const i1 = makeInstantEvent('1', 5);
+        const b2 = makeBeginEvent('2', 5);
+        const i2 = makeInstantEvent('2', 6);
+        const e2 = makeEndEvent('2', 8);
+        const e1 = makeEndEvent('1', 10);
+
+        const pairedEvents = createMatchedSortedSyntheticEvents([b1, i1, b2, i2, e2, e1]);
+        assert.lengthOf(pairedEvents, 2);
+        assert.strictEqual(pairedEvents[0].name, 'fake-event:1');
+        assert.strictEqual(pairedEvents[0].args.data.beginEvent, b1);
+        assert.strictEqual(pairedEvents[0].args.data.endEvent, e1);
+        assert.deepEqual(pairedEvents[0].args.data.instantEvents, [i1]);
+
+        assert.strictEqual(pairedEvents[1].name, 'fake-event:2');
+        assert.strictEqual(pairedEvents[1].args.data.beginEvent, b2);
+        assert.strictEqual(pairedEvents[1].args.data.endEvent, e2);
+        assert.deepEqual(pairedEvents[1].args.data.instantEvents, [i2]);
+      });
+    });
   });
 
   describe('getZeroIndexedLineAndColumnNumbersForEvent', () => {
@@ -504,8 +625,8 @@ describeWithEnvironment('Trace helpers', function() {
 
   describe('frameIDForEvent', () => {
     it('returns the frame ID from beginData if the event has it', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
-      const parseHTMLEvent = parsedTrace.Renderer.allTraceEntries.find(Trace.Types.Events.isParseHTML);
+      const parsedTrace = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+      const parseHTMLEvent = allThreadEntriesInTrace(parsedTrace).find(Trace.Types.Events.isParseHTML);
       assert.isOk(parseHTMLEvent);
       const frameId = Trace.Helpers.Trace.frameIDForEvent(parseHTMLEvent);
       assert.isNotNull(frameId);
@@ -513,8 +634,8 @@ describeWithEnvironment('Trace helpers', function() {
     });
 
     it('returns the frame ID from args.data if the event has it', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
-      const invalidateLayoutEvent = parsedTrace.Renderer.allTraceEntries.find(Trace.Types.Events.isInvalidateLayout);
+      const parsedTrace = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+      const invalidateLayoutEvent = allThreadEntriesInTrace(parsedTrace).find(Trace.Types.Events.isInvalidateLayout);
       assert.isOk(invalidateLayoutEvent);
       const frameId = Trace.Helpers.Trace.frameIDForEvent(invalidateLayoutEvent);
       assert.isNotNull(frameId);
@@ -522,21 +643,21 @@ describeWithEnvironment('Trace helpers', function() {
     });
 
     it('returns null if the event does not have a frame', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
-      const v8CompileEvent = parsedTrace.Renderer.allTraceEntries.find(Trace.Types.Events.isV8Compile);
+      const parsedTrace = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+      const v8CompileEvent = allThreadEntriesInTrace(parsedTrace).find(Trace.Types.Events.isV8Compile);
       assert.isOk(v8CompileEvent);
       const frameId = Trace.Helpers.Trace.frameIDForEvent(v8CompileEvent);
       assert.isNull(frameId);
     });
   });
 
-  describe('findUpdateLayoutTreeEvents', () => {
-    it('returns the set of UpdateLayoutTree events within the right time range', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'selector-stats.json.gz');
-      const mainThread = getMainThread(parsedTrace.Renderer);
-      const foundEvents = Trace.Helpers.Trace.findUpdateLayoutTreeEvents(
+  describe('findRecalcStyleEvents', () => {
+    it('returns the set of RecalcStyle events within the right time range', async function() {
+      const parsedTrace = await TraceLoader.traceEngine(this, 'selector-stats.json.gz');
+      const mainThread = getMainThread(parsedTrace.data.Renderer);
+      const foundEvents = Trace.Helpers.Trace.findRecalcStyleEvents(
           mainThread.entries,
-          parsedTrace.Meta.traceBounds.min,
+          parsedTrace.data.Meta.traceBounds.min,
       );
       assert.lengthOf(foundEvents, 11);
 
@@ -545,9 +666,9 @@ describeWithEnvironment('Trace helpers', function() {
 
       // Check we can filter by endTime by making the endTime less than the start
       // time of the last event:
-      const filteredByEndTimeEvents = Trace.Helpers.Trace.findUpdateLayoutTreeEvents(
+      const filteredByEndTimeEvents = Trace.Helpers.Trace.findRecalcStyleEvents(
           mainThread.entries,
-          parsedTrace.Meta.traceBounds.min,
+          parsedTrace.data.Meta.traceBounds.min,
           Trace.Types.Timing.Micro(lastEvent.ts - 1_000),
       );
       assert.lengthOf(filteredByEndTimeEvents, 10);
@@ -718,8 +839,8 @@ describeWithEnvironment('Trace helpers', function() {
 
   describe('isTopLevelEvent', () => {
     it('is true for a RunTask event', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
-      const runTask = parsedTrace.Renderer.allTraceEntries.find(Trace.Types.Events.isRunTask);
+      const parsedTrace = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
+      const runTask = allThreadEntriesInTrace(parsedTrace).find(Trace.Types.Events.isRunTask);
       assert.isOk(runTask);
 
       assert.isTrue(Trace.Helpers.Trace.isTopLevelEvent(runTask));
@@ -728,9 +849,9 @@ describeWithEnvironment('Trace helpers', function() {
 
   describe('findNextEventAfterTimestamp', () => {
     it('gets the first screenshot after a trace', async function() {
-      const {parsedTrace} = await TraceLoader.traceEngine(this, 'cls-multiple-frames.json.gz');
-      const screenshots = parsedTrace.Screenshots.legacySyntheticScreenshots ?? [];
-      const {clusters} = parsedTrace.LayoutShifts;
+      const parsedTrace = await TraceLoader.traceEngine(this, 'cls-multiple-frames.json.gz');
+      const screenshots = parsedTrace.data.Screenshots.legacySyntheticScreenshots ?? [];
+      const {clusters} = parsedTrace.data.LayoutShifts;
       const shifts = clusters.flatMap(cluster => cluster.events);
       assert.isAtLeast(shifts.length, 10);
 

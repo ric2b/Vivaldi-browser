@@ -9,6 +9,7 @@
 #import "base/notreached.h"
 #import "build/build_config.h"
 #import "components/autofill/core/browser/form_import/addresses/autofill_save_update_address_profile_delegate_ios.h"
+#import "ios/chrome/browser/badges/model/features.h"
 #import "ios/chrome/browser/badges/ui_bundled/badge_button.h"
 #import "ios/chrome/browser/badges/ui_bundled/badge_constants.h"
 #import "ios/chrome/browser/badges/ui_bundled/badge_delegate.h"
@@ -22,6 +23,7 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
+#import "ios/ui/vivaldi_infobar_badges/vivaldi_infobar_badges_constants.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -44,43 +46,70 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 
 - (BadgeButton*)badgeButtonForBadgeType:(BadgeType)badgeType
                            usingInfoBar:(InfoBarIOS*)infoBar {
-  switch (badgeType) {
-    case kBadgeTypePasswordSave:
-      return [self passwordsSaveBadgeButton];
-    case kBadgeTypePasswordUpdate:
-      return [self passwordsUpdateBadgeButton];
-    case kBadgeTypeSaveCard:
-      return [self saveCardBadgeButton];
-    case kBadgeTypeTranslate:
-      return [self translateBadgeButton];
-    case kBadgeTypeIncognito:
+  if (base::FeatureList::IsEnabled(kAutofillBadgeRemoval)) {
+    switch (badgeType) {
+      case kBadgeTypeTranslate:
+        return [self translateBadgeButton];
+      case kBadgeTypeIncognito:
+        return [self incognitoBadgeButton];
+      case kBadgeTypeOverflow:
+        return [self overflowBadgeButton];
+      case kBadgeTypePermissionsCamera:
+        return [self permissionsCameraBadgeButton];
+      case kBadgeTypePermissionsMicrophone:
+        return [self permissionsMicrophoneBadgeButton];
+      case kBadgeTypeNone:
+      case kBadgeTypePasswordSave:
+      case kBadgeTypePasswordUpdate:
+      case kBadgeTypeSaveCard:
+      case kBadgeTypeSaveAddressProfile:
 
-      if (IsVivaldiRunning()) {
-        // Do not show Private tab badge.
-        return nil;
-      } // End Vivaldi
+      // Vivaldi
+      case kBadgeTypeReaderMode:
+      // End Vivaldi
 
-      return [self incognitoBadgeButton];
-    case kBadgeTypeOverflow:
-      return [self overflowBadgeButton];
-    case kBadgeTypeSaveAddressProfile:
-      return [self saveAddressProfileBadgeButton:infoBar];
-    case kBadgeTypePermissionsCamera:
-      return [self permissionsCameraBadgeButton];
-    case kBadgeTypePermissionsMicrophone:
-      return [self permissionsMicrophoneBadgeButton];
+        NOTREACHED() << "Badge of type " << badgeType << " should not be used.";
+    }
+  } else {
+    switch (badgeType) {
+      case kBadgeTypePasswordSave:
+        return [self passwordsSaveBadgeButton];
+      case kBadgeTypePasswordUpdate:
+        return [self passwordsUpdateBadgeButton];
+      case kBadgeTypeSaveCard:
+        return [self saveCardBadgeButton];
+      case kBadgeTypeTranslate:
+        return [self translateBadgeButton];
+      case kBadgeTypeIncognito:
 
-    // Vivaldi
-    case kBadgeTypeReaderMode:
-      return [self readerModeBadgeButton];
-    // End Vivaldi
+        if (IsVivaldiRunning()) {
+          // Do not show Private tab badge.
+          return nil;
+        } // End Vivaldi
 
-    case kBadgeTypeNone:
-      NOTREACHED() << "A badge should not have kBadgeTypeNone";
+        return [self incognitoBadgeButton];
+      case kBadgeTypeOverflow:
+        return [self overflowBadgeButton];
+      case kBadgeTypeSaveAddressProfile:
+        return [self saveAddressProfileBadgeButton:infoBar];
+      case kBadgeTypePermissionsCamera:
+        return [self permissionsCameraBadgeButton];
+      case kBadgeTypePermissionsMicrophone:
+        return [self permissionsMicrophoneBadgeButton];
+
+      // Vivaldi
+      case kBadgeTypeReaderMode:
+        return [self readerModeBadgeButton];
+      // End Vivaldi
+
+      case kBadgeTypeNone:
+        NOTREACHED() << "A badge should not have kBadgeTypeNone";
+    }
   }
 }
 
 #pragma mark - Private
+
 - (BadgeButton*)passwordsSaveBadgeButton {
   UIImage* image =
 #if BUILDFLAG(IS_IOS_MACCATALYST)
@@ -89,6 +118,13 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
       CustomSymbolWithPointSize(kMulticolorPasswordSymbol,
                                 kInfobarSymbolPointSize);
 #endif  // BUILDFLAG(IS_IOS_MACCATALYST)
+
+  if (IsVivaldiRunning()) {
+    image =
+        [CustomSymbolWithPointSize(vInfobarBadgeKey, kInfobarSymbolPointSize)
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } // End Vivaldi
+
   BadgeButton* button = [self createButtonForType:kBadgeTypePasswordSave
                                             image:image];
   [button addTarget:self.delegate
@@ -109,6 +145,13 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
       CustomSymbolWithPointSize(kMulticolorPasswordSymbol,
                                 kInfobarSymbolPointSize);
 #endif  // BUILDFLAG(IS_IOS_MACCATALYST)
+
+  if (IsVivaldiRunning()) {
+    image =
+        [CustomSymbolWithPointSize(vInfobarBadgeKey, kInfobarSymbolPointSize)
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } // End Vivaldi
+
   BadgeButton* button = [self createButtonForType:kBadgeTypePasswordUpdate
                                             image:image];
   [button addTarget:self.delegate
@@ -124,6 +167,14 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 - (BadgeButton*)saveCardBadgeButton {
   UIImage* image =
       DefaultSymbolWithPointSize(kCreditCardSymbol, kInfobarSymbolPointSize);
+
+  if (IsVivaldiRunning()) {
+    image =
+        [CustomSymbolWithPointSize(vInfobarBadgeCreditCard,
+                                   kInfobarSymbolPointSize)
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } // End Vivaldi
+
   BadgeButton* button = [self createButtonForType:kBadgeTypeSaveCard
                                             image:image];
   [button addTarget:self.delegate
@@ -141,7 +192,8 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 
   if (IsVivaldiRunning()) {
     image =
-        [CustomSymbolWithPointSize(vOverflowTranslate, kInfobarSymbolPointSize)
+        [CustomSymbolWithPointSize(vInfobarBadgeTranslate,
+                                   kInfobarSymbolPointSize)
             imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
   } // End Vivaldi
 
@@ -193,6 +245,12 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 - (BadgeButton*)overflowBadgeButton {
   UIImage* image = DefaultSymbolWithPointSize(kEllipsisCircleFillSymbol,
                                               kInfobarSymbolPointSize);
+  if (IsVivaldiRunning()) {
+    image =
+        [CustomSymbolWithPointSize(vInfobarBadgeMore, kInfobarSymbolPointSize)
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } // End Vivaldi
+
   BadgeButton* button = [self createButtonForType:kBadgeTypeOverflow
                                             image:image];
   button.accessibilityIdentifier = kBadgeButtonOverflowAccessibilityIdentifier;
@@ -261,6 +319,13 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
       createButtonForType:kBadgeTypePermissionsCamera
                     image:CustomSymbolTemplateWithPointSize(
                               kCameraFillSymbol, kInfobarSymbolPointSize)];
+
+  if (IsVivaldiRunning()) {
+    button.image =
+      [CustomSymbolWithPointSize(vInfobarBadgeCamera, kInfobarSymbolPointSize)
+          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } // End Vivaldi
+
   [button addTarget:self.delegate
                 action:@selector(permissionsBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
@@ -276,6 +341,13 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
       createButtonForType:kBadgeTypePermissionsMicrophone
                     image:DefaultSymbolTemplateWithPointSize(
                               kMicrophoneFillSymbol, kInfobarSymbolPointSize)];
+
+  if (IsVivaldiRunning()) {
+    button.image =
+        [CustomSymbolWithPointSize(vInfobarBadgeMic, kInfobarSymbolPointSize)
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } // End Vivaldi
+
   [button addTarget:self.delegate
                 action:@selector(permissionsBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
@@ -307,7 +379,7 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 - (BadgeButton*)readerModeBadgeButton {
   // Use a book symbol for reader mode
   UIImage* image =
-    [CustomSymbolWithPointSize(vOverflowReaderMode, kInfobarSymbolPointSize)
+    [CustomSymbolWithPointSize(vInfobarBadgeReaderMode, kInfobarSymbolPointSize)
       imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
   BadgeButton* button = [self createButtonForType:kBadgeTypeReaderMode
                                             image:image];

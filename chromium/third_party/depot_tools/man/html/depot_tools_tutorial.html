@@ -1257,17 +1257,27 @@ updating, and committing multiple CLs.</p></div>
 </code></pre></div></div><p><div class="paragraph"> Let's fix something!</p></div><div class="listingblock"><div class="content"><pre><code><span style="font-weight: bold; color: #BFBFBF">$ git new-branch fix_typo</span>
 
 <span style="font-weight: bold; color: #BFBFBF">$ echo -e '/Banana\ns/Banana/Kuun\nwq' | ed build/whitespace_file.txt</span>
-1503
-It was a Domo-Banana.
-It was a Domo-Kuun.
-1501
+1772
+?
+?
+1772
 <span style="font-weight: bold; color: #BFBFBF">$ git commit -am 'Fix terrible typo.'</span>
-[fix_typo 615ffa7] Fix terrible typo.
- 1 file changed, 1 insertion(+), 1 deletion(-)
+On branch fix_typo
+Your branch is up to date with 'origin/master'.
+
+nothing to commit, working tree clean
 
 <span style="font-weight: bold; color: #BFBFBF">$ git map</span>
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">615ffa720f</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">HEAD -&gt; fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Fix terrible typo.
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">beec6f4746</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Make ReflectorImpl use mailboxes
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">59cdb7335b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">HEAD -&gt; fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Refactor data interchange format.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">34676a3583</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Ensure FS is exited for all not-in-same-page navigations.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">7d4784e867</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Add best chapter2 ever!
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">5d26fec369</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Finish chapter 2
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">df7fefbf06</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Revert 255617, due to it not tracking use of the link doctor page properly.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">4b39cda0ac</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Fix terrible typo.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">248c5b6fe3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Temporarily CHECK(trial) in ChromeRenderProcessObserver::OnSetFieldTrialGroup.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">8171df8af9</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Remove AMD family check for the flapper crypto accelerator.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">d6a30d2e56</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Change the Pica load benchmark to listen for the polymer-ready event
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">beec6f4746</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Make ReflectorImpl use mailboxes    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">41290e02b7</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ don't use glibc-specific execinfo.h on uclibc builds
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">a76fde7b7b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ [fsp] Add requestUnmount() method together with the request manager.
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">9de7a713b3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ linux_aura: Use system configuration for middle clicking the titlebar.
@@ -1278,8 +1288,7 @@ It was a Domo-Kuun.
 
 <span style="font-weight: bold; color: #BFBFBF">$ git status</span>
 On branch fix_typo
-Your branch is ahead of 'origin/main' by 1 commit.
-  (use "git push" to publish your local commits)
+Your branch is up to date with 'origin/master'.
 
 nothing to commit, working tree clean
 
@@ -1288,9 +1297,10 @@ nothing to commit, working tree clean
 </code></pre></div></div><p><div class="paragraph"> While we wait for feedback, let's do something else.</p></div><div class="listingblock"><div class="content"><pre><code><span style="font-weight: bold; color: #BFBFBF">$ git new-branch chap2</span>
 
 <span style="font-weight: bold; color: #BFBFBF">$ git map-branches</span>
-<span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">origin/main
+<span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">origin/master
 </span><span style="font-weight: bold; color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">  chap2 *
-</span><span style="font-weight: bold; color: #50FA7B"></span><span style="color: #50FA7B">  fix_typo
+</span><span style="font-weight: bold; color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">  fix_typo
+</span><span style="font-weight: bold; color: #50FA7B"></span><span style="color: #50FA7B">  master
 </span>
 <span style="font-weight: bold; color: #BFBFBF">$ cat &gt;&gt; build/whitespace_file.txt &lt;&lt;EOF</span>
 
@@ -1300,7 +1310,7 @@ when the fan was last cleaned.
 EOF
 <span style="font-weight: bold; color: #BFBFBF">$ git status</span>
 On branch chap2
-Your branch is up to date with 'origin/main'.
+Your branch is up to date with 'origin/master'.
 
 Changes not staged for commit:
   (use "git add &lt;file&gt;..." to update what will be committed)
@@ -1313,41 +1323,36 @@ no changes added to commit (use "git add" and/or "git commit -a")
 
 <span style="font-weight: bold; color: #BFBFBF">$ git checkout fix_typo</span>
 Switched to branch 'fix_typo'
-Your branch is ahead of 'origin/main' by 1 commit.
-  (use "git push" to publish your local commits)
+Your branch is up to date with 'origin/master'.
 
 <span style="font-weight: bold; color: #BFBFBF">$ echo -e '/Kuun\ns/Kuun/Kun\nwq' | ed build/whitespace_file.txt</span>
-1501
-It was a Domo-Kuun.
-It was a Domo-Kun.
-1500
+1772
+?
+?
+1772
 <span style="font-weight: bold; color: #BFBFBF">$ git upstream-diff --wordwise</span>
-<span style="font-weight: bold">diff --git a/build/whitespace_file.txt b/build/whitespace_file.txt</span>
-<span style="font-weight: bold">index 3eba355..57cdcee 100644</span>
-<span style="font-weight: bold">--- a/build/whitespace_file.txt</span>
-<span style="font-weight: bold">+++ b/build/whitespace_file.txt</span>
-<span style="color: #8BE9FD">@@ -17,7 +17,7 @@</span> swept up the streets (for it is in London that our scene lies), rattling along
-the housetops, and fiercely agitating the scanty flame of the lamps that
-struggled against the elements. A hooded figure emerged.
-
-It was a Domo-<span style="color: #FF5555">Banana</span><span style="color: #50FA7B">Kun</span>.
-
-"What took you so long?", inquired his wife.
-
 
 <span style="font-weight: bold; color: #BFBFBF">$ git commit -am 'Fix typo for good!'</span>
-[fix_typo 2c0ad9c] Fix typo for good!
- 1 file changed, 1 insertion(+), 1 deletion(-)
+On branch fix_typo
+Your branch is up to date with 'origin/master'.
+
+nothing to commit, working tree clean
 
 <span style="font-weight: bold; color: #BFBFBF">$ git cl upload</span>
 ... truncated output ...
 </code></pre></div></div><p><div class="paragraph"> Since we got lgtm, let the CQ land it.</p></div><div class="listingblock"><div class="content"><pre><code><span style="font-weight: bold; color: #BFBFBF">$ git cl set_commit</span>
 <span style="font-weight: bold; color: #BFBFBF">$ git map</span>
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">0e2e52e72e</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ FREEZE.unindexed
-<span style="color: #FF5555">|</span> * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">2c0ad9c59b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">HEAD -&gt; fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Fix typo for good!
-<span style="color: #FF5555">|</span> * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">615ffa720f</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Fix terrible typo.
-<span style="color: #FF5555">|</span><span style="color: #FF5555">/</span>
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">beec6f4746</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Make ReflectorImpl use mailboxes    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">a939958dff</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ FREEZE.unindexed
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">59cdb7335b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">HEAD -&gt; fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Refactor data interchange format.    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">34676a3583</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Ensure FS is exited for all not-in-same-page navigations.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">7d4784e867</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Add best chapter2 ever!
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">5d26fec369</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Finish chapter 2
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">df7fefbf06</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Revert 255617, due to it not tracking use of the link doctor page properly.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">4b39cda0ac</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Fix terrible typo.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">248c5b6fe3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Temporarily CHECK(trial) in ChromeRenderProcessObserver::OnSetFieldTrialGroup.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">8171df8af9</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Remove AMD family check for the flapper crypto accelerator.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">d6a30d2e56</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Change the Pica load benchmark to listen for the polymer-ready event
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">beec6f4746</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Make ReflectorImpl use mailboxes    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">41290e02b7</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ don't use glibc-specific execinfo.h on uclibc builds
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">a76fde7b7b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ [fsp] Add requestUnmount() method together with the request manager.
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">9de7a713b3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ linux_aura: Use system configuration for middle clicking the titlebar.
@@ -1357,90 +1362,82 @@ It was a Domo-<span style="color: #FF5555">Banana</span><span style="color: #50F
 
 
 </code></pre></div></div><p><div class="paragraph"> Switch back to where we were using the nav* commands (for fun... git checkout would work here too)</p></div><div class="listingblock"><div class="content"><pre><code><span style="font-weight: bold; color: #BFBFBF">$ git map-branches</span>
-<span style="color: #FF5555"></span><span style="color: #FF5555">origin/main
-</span><span style="color: #50FA7B"></span><span style="color: #50FA7B">  chap2
+<span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">origin/master
+</span><span style="font-weight: bold; color: #50FA7B"></span><span style="color: #50FA7B">  chap2
 </span><span style="color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">  fix_typo *
+</span><span style="font-weight: bold; color: #50FA7B"></span><span style="color: #50FA7B">  master
 </span>
 <span style="font-weight: bold; color: #BFBFBF">$ git nav-upstream</span>
-Note: switching to 'origin/main'.
-
-You are in 'detached HEAD' state. You can look around, make experimental
-changes and commit them, and you can discard any commits you make in this
-state without impacting any branches by switching back to a branch.
-
-If you want to create a new branch to retain commits you create, you may
-do so (now or later) by using -c with the switch command. Example:
-
-  git switch -c &lt;new-branch-name&gt;
-
-Or undo this operation with:
-
-  git switch -
-
-Turn off this advice by setting config variable advice.detachedHead to false
-
-HEAD is now at beec6f4 Make ReflectorImpl use mailboxes
+HEAD is now at 59cdb73 Refactor data interchange format.
 
 <span style="font-weight: bold; color: #BFBFBF">$ git nav-downstream</span>
-Previous HEAD position was beec6f4 Make ReflectorImpl use mailboxes
+Previous HEAD position was 59cdb73 Refactor data interchange format.
 Switched to branch 'chap2'
-Your branch is ahead of 'origin/main' by 1 commit.
+Your branch is ahead of 'origin/master' by 1 commit.
   (use "git push" to publish your local commits)
 Please select a downstream branch
   0. chap2
   1. fix_typo
-Selection (0-1)[0]: 0
+  2. master
+Selection (0-2)[0]: 0
 <span style="font-weight: bold; color: #BFBFBF">$ git map-branches</span>
-<span style="color: #FF5555"></span><span style="color: #FF5555">origin/main
+<span style="color: #FF5555"></span><span style="color: #FF5555">origin/master
 </span><span style="color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">  chap2 *
 </span><span style="font-weight: bold; color: #50FA7B"></span><span style="color: #50FA7B">  fix_typo
+</span><span style="color: #50FA7B"></span><span style="color: #50FA7B">  master
 </span>
 </code></pre></div></div><p><div class="paragraph"> Now we can pick up on chapter2 where we left off.</p></div><div class="listingblock"><div class="content"><pre><code><span style="font-weight: bold; color: #BFBFBF">$ git thaw</span>
 
 <span style="font-weight: bold; color: #BFBFBF">$ git diff</span>
-<span style="font-weight: bold">diff --git a/build/whitespace_file.txt b/build/whitespace_file.txt</span>
-<span style="font-weight: bold">index 3eba355..9d08d9d 100644</span>
-<span style="font-weight: bold">--- a/build/whitespace_file.txt</span>
-<span style="font-weight: bold">+++ b/build/whitespace_file.txt</span>
-<span style="color: #8BE9FD">@@ -34,3 +34,7 @@</span> with his fork, watching the runny jelly spread and pool across his plate,
- like the blood of a dying fawn. \"It reminds me of that time --\" he started, as
- his wife cut in quickly: \"-- please. I can't bear to hear it.\". A flury of
- images coming from the past flowed through his mind.
-<span style="color: #50FA7B">+</span>
-<span style="color: #50FA7B">+</span><span style="color: #50FA7B">"You recall what happened on Mulholland drive?" The ceiling fan rotated slowly</span>
-<span style="color: #50FA7B">+</span><span style="color: #50FA7B">overhead, barely disturbing the thick cigarette smoke. No doubt was left about</span>
-<span style="color: #50FA7B">+</span><span style="color: #50FA7B">when the fan was last cleaned.</span>
+diff --git a/build/whitespace_file.txt b/build/whitespace_file.txt
+index 1293282..0ae5a14 100644
+--- a/build/whitespace_file.txt
++++ b/build/whitespace_file.txt
+@@ -43,3 +43,7 @@ There was an poignant pause.
+
+ CHAPTER 3:
+ Hilariousness! This chapter is awesome!
++
++"You recall what happened on Mulholland drive?" The ceiling fan rotated slowly
++overhead, barely disturbing the thick cigarette smoke. No doubt was left about
++when the fan was last cleaned.
 
 <span style="font-weight: bold; color: #BFBFBF">$ cat &gt;&gt; build/whitespace_file.txt &lt;&lt;EOF</span>
 
 There was an poignant pause.
 EOF
 <span style="font-weight: bold; color: #BFBFBF">$ git diff</span>
-<span style="font-weight: bold">diff --git a/build/whitespace_file.txt b/build/whitespace_file.txt</span>
-<span style="font-weight: bold">index 3eba355..e3a55de 100644</span>
-<span style="font-weight: bold">--- a/build/whitespace_file.txt</span>
-<span style="font-weight: bold">+++ b/build/whitespace_file.txt</span>
-<span style="color: #8BE9FD">@@ -34,3 +34,9 @@</span> with his fork, watching the runny jelly spread and pool across his plate,
- like the blood of a dying fawn. \"It reminds me of that time --\" he started, as
- his wife cut in quickly: \"-- please. I can't bear to hear it.\". A flury of
- images coming from the past flowed through his mind.
-<span style="color: #50FA7B">+</span>
-<span style="color: #50FA7B">+</span><span style="color: #50FA7B">"You recall what happened on Mulholland drive?" The ceiling fan rotated slowly</span>
-<span style="color: #50FA7B">+</span><span style="color: #50FA7B">overhead, barely disturbing the thick cigarette smoke. No doubt was left about</span>
-<span style="color: #50FA7B">+</span><span style="color: #50FA7B">when the fan was last cleaned.</span>
-<span style="color: #50FA7B">+</span>
-<span style="color: #50FA7B">+</span><span style="color: #50FA7B">There was an poignant pause.</span>
+diff --git a/build/whitespace_file.txt b/build/whitespace_file.txt
+index 1293282..a63d04e 100644
+--- a/build/whitespace_file.txt
++++ b/build/whitespace_file.txt
+@@ -43,3 +43,9 @@ There was an poignant pause.
+
+ CHAPTER 3:
+ Hilariousness! This chapter is awesome!
++
++"You recall what happened on Mulholland drive?" The ceiling fan rotated slowly
++overhead, barely disturbing the thick cigarette smoke. No doubt was left about
++when the fan was last cleaned.
++
++There was an poignant pause.
 
 <span style="font-weight: bold; color: #BFBFBF">$ git commit -am 'Finish chapter 2'</span>
-[chap2 ceef712] Finish chapter 2
+[chap2 d4a9451] Finish chapter 2
  1 file changed, 6 insertions(+)
 
 <span style="font-weight: bold; color: #BFBFBF">$ git map</span>
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">ceef712d7f</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">HEAD -&gt; chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Finish chapter 2
-<span style="color: #FF5555">|</span> * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">2c0ad9c59b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Fix typo for good!
-<span style="color: #FF5555">|</span> * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">615ffa720f</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Fix terrible typo.
-<span style="color: #FF5555">|</span><span style="color: #FF5555">/</span>
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">beec6f4746</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Make ReflectorImpl use mailboxes    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">d4a945118e</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">HEAD -&gt; chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Finish chapter 2
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">59cdb7335b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Refactor data interchange format.    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">34676a3583</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Ensure FS is exited for all not-in-same-page navigations.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">7d4784e867</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Add best chapter2 ever!
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">5d26fec369</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Finish chapter 2
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">df7fefbf06</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Revert 255617, due to it not tracking use of the link doctor page properly.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">4b39cda0ac</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Fix terrible typo.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">248c5b6fe3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Temporarily CHECK(trial) in ChromeRenderProcessObserver::OnSetFieldTrialGroup.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">8171df8af9</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Remove AMD family check for the flapper crypto accelerator.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">d6a30d2e56</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Change the Pica load benchmark to listen for the polymer-ready event
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">beec6f4746</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Make ReflectorImpl use mailboxes    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">41290e02b7</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ don't use glibc-specific execinfo.h on uclibc builds
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">a76fde7b7b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ [fsp] Add requestUnmount() method together with the request manager.
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">9de7a713b3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ linux_aura: Use system configuration for middle clicking the titlebar.
@@ -1461,16 +1458,22 @@ Mr. Usagi felt that something wasn't right. Shortly after the Domo-Kun left he
 began feeling sick.
 EOF
 <span style="font-weight: bold; color: #BFBFBF">$ git commit -am 'beginning of chapter 3'</span>
-[chap3 7d4238a] beginning of chapter 3
+[chap3 d2902ef] beginning of chapter 3
  1 file changed, 4 insertions(+)
 
 <span style="font-weight: bold; color: #BFBFBF">$ git map</span>
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">7d4238a1e2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">HEAD -&gt; chap3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ beginning of chapter 3
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">ceef712d7f</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Finish chapter 2
-<span style="color: #FF5555">|</span> * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">2c0ad9c59b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Fix typo for good!
-<span style="color: #FF5555">|</span> * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">615ffa720f</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Fix terrible typo.
-<span style="color: #FF5555">|</span><span style="color: #FF5555">/</span>
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">beec6f4746</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Make ReflectorImpl use mailboxes    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">chap2, fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">d2902efc4d</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">HEAD -&gt; chap3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ beginning of chapter 3
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">d4a945118e</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Finish chapter 2
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">59cdb7335b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Refactor data interchange format.    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">chap2, fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">34676a3583</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Ensure FS is exited for all not-in-same-page navigations.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">7d4784e867</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Add best chapter2 ever!
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">5d26fec369</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Finish chapter 2
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">df7fefbf06</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Revert 255617, due to it not tracking use of the link doctor page properly.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">4b39cda0ac</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Fix terrible typo.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">248c5b6fe3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Temporarily CHECK(trial) in ChromeRenderProcessObserver::OnSetFieldTrialGroup.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">8171df8af9</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Remove AMD family check for the flapper crypto accelerator.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">d6a30d2e56</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Change the Pica load benchmark to listen for the polymer-ready event
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">beec6f4746</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Make ReflectorImpl use mailboxes    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">41290e02b7</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ don't use glibc-specific execinfo.h on uclibc builds
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">a76fde7b7b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ [fsp] Add requestUnmount() method together with the request manager.
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">9de7a713b3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ linux_aura: Use system configuration for middle clicking the titlebar.
@@ -1482,21 +1485,23 @@ EOF
 </code></pre></div></div><p><div class="paragraph"> We haven't updated the code in a while, so let's do that now.</p></div><div class="listingblock"><div class="content"><pre><code><span style="font-weight: bold; color: #BFBFBF">$ git rebase-update</span>
 Fetching origin
 From https://upstream
-   beec6f4..59cdb73  main       -&gt; origin/main
-Rebasing: <span style="font-weight: bold">chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>
-Rebasing: <span style="font-weight: bold">fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>
-Failed! Attempting to squash <span style="font-weight: bold">fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span> ... Success!
-Rebasing: <span style="font-weight: bold">chap3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>
-Reparented chap3 to track origin/main (was tracking chap2)
-Deleted branch fix_typo (was 5d26fec).
-Deleted branch chap2 (was 5d26fec).
+<span style="font-weight: bold">chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span> up-to-date
+<span style="font-weight: bold">fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span> up-to-date
+Rebasing: <span style="font-weight: bold">master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>
+<span style="font-weight: bold">chap3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span> up-to-date
+Deleted branch fix_typo (was 59cdb73).
+Deleted branch master (was 59cdb73).
 
 Running `git gc --auto` - Ctrl-C to abort is OK.
 </code></pre></div></div><p><div class="paragraph"> Well look at that. The CQ landed our typo and chapter2 branches  already and git rebase-update cleaned them up for us.</p></div><div class="listingblock"><div class="content"><pre><code><span style="font-weight: bold; color: #BFBFBF">$ gclient sync</span>
 ... truncated output ...
 <span style="font-weight: bold; color: #BFBFBF">$ git map</span>
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">93fe917ad1</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">HEAD -&gt; chap3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ beginning of chapter 3
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">5d26fec369</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Finish chapter 2
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">d2902efc4d</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">HEAD -&gt; chap3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ beginning of chapter 3
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">d4a945118e</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Finish chapter 2
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">59cdb7335b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Refactor data interchange format.    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">34676a3583</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Ensure FS is exited for all not-in-same-page navigations.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">7d4784e867</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Add best chapter2 ever!
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">5d26fec369</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Finish chapter 2
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">df7fefbf06</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Revert 255617, due to it not tracking use of the link doctor page properly.
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">4b39cda0ac</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Fix terrible typo.
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">248c5b6fe3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Temporarily CHECK(trial) in ChromeRenderProcessObserver::OnSetFieldTrialGroup.
@@ -1514,48 +1519,21 @@ Running `git gc --auto` - Ctrl-C to abort is OK.
 </code></pre></div></div><p><div class="paragraph"> Someone on IRC mentions that they actually landed a chapter 3 already! We should pull their changes before continuing. Brace for a code conflict!</p></div><div class="listingblock"><div class="content"><pre><code><span style="font-weight: bold; color: #BFBFBF">$ git rebase-update</span>
 Fetching origin
 From https://upstream
-   5d26fec..59cdb73  main       -&gt; origin/main
 Rebasing: chap2
 ... lots of output, it's a conflict alright :(...
 <span style="font-weight: bold; color: #BFBFBF">$ git diff</span>
-<span style="font-weight: bold">diff --cc build/whitespace_file.txt</span>
-<span style="font-weight: bold">index 1293282,f903ea2..0000000</span>
-<span style="font-weight: bold">--- a/build/whitespace_file.txt</span>
-<span style="font-weight: bold">+++ b/build/whitespace_file.txt</span>
-<span style="color: #8BE9FD">@@@ -42,4 -42,5 +42,9 @@@</span> when the fan was last cleaned
-  There was an poignant pause.
-
-  CHAPTER 3:
-<span style="color: #50FA7B">++&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</span>
-<span style="color: #50FA7B"> +Hilariousness! This chapter is awesome!</span>
-<span style="color: #50FA7B">++=======</span>
-<span style="color: #50FA7B">+ Mr. Usagi felt that something wasn't right. Shortly after the Domo-Kun left he</span>
-<span style="color: #50FA7B">+ began feeling sick.</span>
-<span style="color: #50FA7B">++&gt;&gt;&gt;&gt;&gt;&gt;&gt; 93fe917 (beginning of chapter 3)</span>
 
 </code></pre></div></div><p><div class="paragraph"> Oh, well, that's not too bad. In fact... that's a terrible chapter 3!</p></div><div class="listingblock"><div class="content"><pre><code><span style="font-weight: bold; color: #BFBFBF">$ $EDITOR build/whitespace_file.txt</span>
 ... /me deletes bad chapter 3 ...
 <span style="font-weight: bold; color: #BFBFBF">$ git add build/whitespace_file.txt</span>
 
 <span style="font-weight: bold; color: #BFBFBF">$ git diff --cached</span>
-<span style="font-weight: bold">diff --git a/build/whitespace_file.txt b/build/whitespace_file.txt</span>
-<span style="font-weight: bold">index 1293282..f903ea2 100644</span>
-<span style="font-weight: bold">--- a/build/whitespace_file.txt</span>
-<span style="font-weight: bold">+++ b/build/whitespace_file.txt</span>
-<span style="color: #8BE9FD">@@ -42,4 +42,5 @@</span> when the fan was last cleaned.
- There was an poignant pause.
-
- CHAPTER 3:
-<span style="color: #FF5555">-Hilariousness! This chapter is awesome!</span>
-<span style="color: #50FA7B">+</span><span style="color: #50FA7B">Mr. Usagi felt that something wasn't right. Shortly after the Domo-Kun left he</span>
-<span style="color: #50FA7B">+</span><span style="color: #50FA7B">began feeling sick.</span>
 
 </code></pre></div></div><p><div class="paragraph"> Much better</p></div><div class="listingblock"><div class="content"><pre><code><span style="font-weight: bold; color: #BFBFBF">$ git rebase --continue</span>
-[detached HEAD 1cb4f5b] beginning of chapter 3
- 1 file changed, 2 insertions(+), 1 deletion(-)
 
 <span style="font-weight: bold; color: #BFBFBF">$ git rebase-update</span>
 Fetching origin
+<span style="font-weight: bold">chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span> up-to-date
 <span style="font-weight: bold">chap3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span> up-to-date
 
 Running `git gc --auto` - Ctrl-C to abort is OK.
@@ -1563,11 +1541,12 @@ Running `git gc --auto` - Ctrl-C to abort is OK.
 <span style="font-weight: bold; color: #BFBFBF">$ gclient sync</span>
 ... truncated output ...
 <span style="font-weight: bold; color: #BFBFBF">$ git map</span>
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">1cb4f5b622</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">HEAD -&gt; chap3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ beginning of chapter 3
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">59cdb7335b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Refactor data interchange format.
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">d2902efc4d</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #8BE9FD"></span><span style="font-weight: bold; color: #8BE9FD">HEAD -&gt; chap3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ beginning of chapter 3
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">d4a945118e</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Finish chapter 2
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">59cdb7335b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/master</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Refactor data interchange format.    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">34676a3583</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Ensure FS is exited for all not-in-same-page navigations.
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">7d4784e867</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Add best chapter2 ever!
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">5d26fec369</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Finish chapter 2
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">5d26fec369</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Finish chapter 2
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">df7fefbf06</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Revert 255617, due to it not tracking use of the link doctor page properly.
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">4b39cda0ac</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Fix terrible typo.
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">248c5b6fe3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Temporarily CHECK(trial) in ChromeRenderProcessObserver::OnSetFieldTrialGroup.
@@ -1647,7 +1626,7 @@ by checking out the <a href="https://chromium.googlesource.com/chromium/tools/de
 <div id="footer">
 <div id="footer-text">
 Last updated
- 2025-05-07 21:15:19 UTC
+ 2025-08-05 23:24:40 UTC
 </div>
 </div>
 </body>

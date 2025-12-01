@@ -13,6 +13,7 @@ declare_args() {
   skia_compile_modules = false
   skia_compile_sksl_tests = false
   skia_dwritecore_sdk = ""
+  skia_dump_tasks = false
   skia_enable_api_available_macro = true
   skia_enable_android_utils = is_skia_dev_build
   skia_enable_discrete_gpu = true
@@ -57,7 +58,6 @@ declare_args() {
   skia_use_jpeg_gainmaps = is_skia_dev_build
   skia_use_libavif = false
   skia_use_libgrapheme = false
-  skia_use_libheif = is_skia_dev_build
   skia_use_libjpeg_turbo_decode = true
   skia_use_libjpeg_turbo_encode = true
   skia_use_no_jpeg_encode = false

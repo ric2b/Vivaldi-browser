@@ -5,6 +5,7 @@
 #import <UIKit/UIKit.h>
 #import <XCTest/XCTest.h>
 
+#import "base/ios/ios_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/settings/ui_bundled/content_settings/block_popups_app_interface.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -82,6 +83,10 @@ class ScopedBlockPopupsException {
 // Opens the block popups settings page and verifies that accessibility is set
 // up properly.
 - (void)testAccessibilityOfBlockPopupSettings {
+  // TODO(crbug.com/444168578): Re-enable the test.
+  if (base::ios::IsRunningOnIOS26OrLater()) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 26.");
+  }
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:ContentSettingsButton()];
   [[EarlGrey selectElementWithMatcher:BlockPopupsSettingsButton()]
@@ -92,12 +97,14 @@ class ScopedBlockPopupsException {
       assertWithMatcher:grey_notNil()];
   [ChromeEarlGrey verifyAccessibilityForCurrentScreen];
 
-  // Disable EarlGrey synchronization to avoid infinite spinner loop.
-  ScopedSynchronizationDisabler disabler;
+  {
+    // Disable EarlGrey synchronization to avoid infinite spinner loop.
+    ScopedSynchronizationDisabler disabler;
 
-  // Close the settings menu.
-  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
-      performAction:grey_tap()];
+    // Close the settings menu.
+    [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
+        performAction:grey_tap()];
+  }
   [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
@@ -172,7 +179,15 @@ class ScopedBlockPopupsException {
 
 // Tests that the "exceptions" section on the settings page is hidden and
 // revealed properly when the preference switch is toggled.
-- (void)testSettingsPageWithExceptions {
+// TODO(crbug.com/441738071): Flaky on device.
+#if TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR
+#define MAYBE_testSettingsPageWithExceptions \
+  FLAKY_testSettingsPageWithExceptions
+#else
+#define MAYBE_testSettingsPageWithExceptions \
+  testSettingsPageWithExceptions
+#endif
+- (void)MAYBE_testSettingsPageWithExceptions {
   std::string allowedPattern = "[*.]example.com";
   ScopedBlockPopupsPref prefSetter(CONTENT_SETTING_BLOCK);
   ScopedBlockPopupsException exceptionSetter(allowedPattern);

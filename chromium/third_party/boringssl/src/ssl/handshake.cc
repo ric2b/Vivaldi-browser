@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <utility>
 
+#include <openssl/err.h>
 #include <openssl/rand.h>
 
 #include "../crypto/internal.h"
@@ -548,9 +549,8 @@ int ssl_run_handshake(SSL_HANDSHAKE *hs, bool *out_early_return) {
         }
         if (ret == ssl_open_record_error &&
             hs->wait == ssl_hs_read_server_hello) {
-          uint32_t err = ERR_peek_error();
-          if (ERR_GET_LIB(err) == ERR_LIB_SSL &&
-              ERR_GET_REASON(err) == SSL_R_SSLV3_ALERT_HANDSHAKE_FAILURE) {
+          if (ERR_equals(ERR_peek_error(), ERR_LIB_SSL,
+                         SSL_R_SSLV3_ALERT_HANDSHAKE_FAILURE)) {
             // Add a dedicated error code to the queue for a handshake_failure
             // alert in response to ClientHello. This matches NSS's client
             // behavior and gives a better error on a (probable) failure to

@@ -10,13 +10,14 @@
 #import "components/autofill/ios/common/features.h"
 #import "components/policy/policy_constants.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_ui_test_util.h"
+#import "ios/chrome/browser/authentication/test/signin_earl_grey.h"
+#import "ios/chrome/browser/authentication/test/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/autofill/ui_bundled/address_editor/autofill_constants.h"
 #import "ios/chrome/browser/autofill/ui_bundled/autofill_app_interface.h"
 #import "ios/chrome/browser/policy/model/policy_earl_grey_utils.h"
 #import "ios/chrome/browser/settings/ui_bundled/autofill/autofill_settings_constants.h"
 #import "ios/chrome/browser/settings/ui_bundled/settings_root_table_constants.h"
+#import "ios/chrome/browser/shared/public/snackbar/snackbar_constants.h"
 #import "ios/chrome/browser/shared/ui/elements/activity_overlay_egtest_util.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -54,8 +55,9 @@ struct DisplayStringIDToExpectedResult {
 NSString* const kCountryForSelection = @"Germany";
 
 constexpr base::TimeDelta kSnackbarAppearanceTimeout = base::Seconds(5);
-// kSnackbarDisappearanceTimeout = MDCSnackbarMessageDurationMax + 1
-constexpr base::TimeDelta kSnackbarDisappearanceTimeout = base::Seconds(10 + 1);
+
+constexpr base::TimeDelta kSnackbarDisappearanceTimeout =
+    kSnackbarMessageDuration + base::Seconds(1);
 
 const DisplayStringIDToExpectedResult kExpectedFields[] = {
     {IDS_IOS_AUTOFILL_FULLNAME, @"John H. Doe"},
@@ -151,16 +153,11 @@ id<GREYMatcher> SettingsToolbarDoneButton() {
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config = [super appConfigurationForTestCase];
 
-  if ([self isRunningTest:@selector(testBottomToolbarAddButtonVisibility)] ||
-      [self isRunningTest:@selector(testToggleToolbarAddButtonBySwitch)] ||
-      [self isRunningTest:@selector(testToggleToolbarAddButtonByPolicy)]) {
-    config.features_enabled.push_back(kAddAddressManually);
-    config.features_enabled.push_back(
-        kAutofillDynamicallyLoadsFieldsForAddressInput);
-  }
   if ([self isRunningTest:@selector(testHomeAndWorkProfileEditPage)] ||
       [self isRunningTest:@selector(testHomeAndWorkProfileDeleteOnEdit)] ||
-      [self isRunningTest:@selector(testHomeAndWorkProfileRemove)]) {
+      [self isRunningTest:@selector(testHomeAndWorkProfileRemove)] ||
+      [self isRunningTest:@selector(testConfirmationShownOnDeletion)] ||
+      [self isRunningTest:@selector(testConfirmationShownOnSwipeToDelete)]) {
     config.features_enabled.push_back(
         autofill::features::kAutofillEnableSupportForHomeAndWork);
   }
@@ -214,13 +211,11 @@ id<GREYMatcher> SettingsToolbarDoneButton() {
       performAction:grey_tap()];
 }
 
-// Returns the delete button on the deletion confirmation action sheet.
-- (id<GREYMatcher>)confirmButtonForNumberOfAddressesBeingDeleted:
-    (int)numberOfAddresses {
+// Returns the matcher for the delete button in the deletion confirmation sheet.
+- (id<GREYMatcher>)confirmButtonForDeleteAddress {
   id<GREYMatcher> baseMatcher = grey_allOf(
-      grey_accessibilityLabel(l10n_util::GetPluralNSStringF(
-          IDS_IOS_SETTINGS_AUTOFILL_DELETE_ADDRESS_CONFIRMATION_BUTTON,
-          numberOfAddresses)),
+      grey_accessibilityLabel(l10n_util::GetNSString(
+          IDS_IOS_SETTINGS_AUTOFILL_DELETE_ADDRESSES_CONFIRMATION_BUTTON)),
       grey_accessibilityTrait(UIAccessibilityTraitButton),
       grey_userInteractionEnabled(), nil);
 
@@ -489,8 +484,7 @@ id<GREYMatcher> SettingsToolbarDoneButton() {
                                           SettingsBottomToolbarDeleteButton()]
       performAction:grey_tap()];
 
-  [[EarlGrey selectElementWithMatcher:
-                 [self confirmButtonForNumberOfAddressesBeingDeleted:1]]
+  [[EarlGrey selectElementWithMatcher:[self confirmButtonForDeleteAddress]]
       performAction:grey_tap()];
   WaitForActivityOverlayToDisappear();
 
@@ -522,8 +516,7 @@ id<GREYMatcher> SettingsToolbarDoneButton() {
                                        UIAccessibilityTraitNotEnabled)),
                                    nil)] performAction:grey_tap()];
 
-  [[EarlGrey selectElementWithMatcher:
-                 [self confirmButtonForNumberOfAddressesBeingDeleted:1]]
+  [[EarlGrey selectElementWithMatcher:[self confirmButtonForDeleteAddress]]
       performAction:grey_tap()];
   WaitForActivityOverlayToDisappear();
 
@@ -836,8 +829,7 @@ id<GREYMatcher> SettingsToolbarDoneButton() {
   [[EarlGrey selectElementWithMatcher:MigrateToAccountButton()]
       performAction:grey_tap()];
   // Wait for the snackbar to appear.
-  id<GREYMatcher> snackbar_matcher =
-      grey_accessibilityID(@"MDCSnackbarMessageTitleAutomationIdentifier");
+  id<GREYMatcher> snackbar_matcher = chrome_test_util::SnackbarViewMatcher();
   ConditionBlock wait_for_appearance = ^{
     NSError* error = nil;
     [[EarlGrey selectElementWithMatcher:snackbar_matcher]
@@ -933,8 +925,7 @@ id<GREYMatcher> SettingsToolbarDoneButton() {
       performAction:grey_tap()];
 
   // Wait for the snackbar to appear.
-  id<GREYMatcher> snackbar_matcher =
-      grey_accessibilityID(@"MDCSnackbarMessageTitleAutomationIdentifier");
+  id<GREYMatcher> snackbar_matcher = chrome_test_util::SnackbarViewMatcher();
   ConditionBlock wait_for_appearance = ^{
     NSError* error = nil;
     [[EarlGrey selectElementWithMatcher:snackbar_matcher]

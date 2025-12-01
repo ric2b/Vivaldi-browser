@@ -25,6 +25,11 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/439062058): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "dawn/wire/client/Adapter.h"
 
 #include <memory>
@@ -289,7 +294,7 @@ WGPUFuture Adapter::APIRequestDevice(const WGPUDeviceDescriptor* descriptor,
     Client* client = GetClient();
     Ref<Device> device = client->Make<Device>(GetEventManagerHandle(), this, descriptor);
     auto [futureIDInternal, tracked] =
-        GetEventManager().TrackEvent(std::make_unique<RequestDeviceEvent>(callbackInfo, device));
+        GetEventManager().TrackEvent(AcquireRef(new RequestDeviceEvent(callbackInfo, device)));
     if (!tracked) {
         return {futureIDInternal};
     }
@@ -304,10 +309,10 @@ WGPUFuture Adapter::APIRequestDevice(const WGPUDeviceDescriptor* descriptor,
     }
 
     AdapterRequestDeviceCmd cmd;
-    cmd.adapterId = GetWireId();
+    cmd.adapterId = GetWireHandle(client).id;
     cmd.eventManagerHandle = GetEventManagerHandle();
     cmd.future = {futureIDInternal};
-    cmd.deviceObjectHandle = device->GetWireHandle();
+    cmd.deviceObjectHandle = device->GetWireHandle(client);
     cmd.deviceLostFuture = device->APIGetLostFuture();
     cmd.descriptor = &wireDescriptor;
 
@@ -322,9 +327,8 @@ WireResult Client::DoAdapterRequestDeviceCallback(ObjectHandle eventManager,
                                                   const WGPULimits* limits,
                                                   uint32_t featuresCount,
                                                   const WGPUFeatureName* features) {
-    return GetEventManager(eventManager)
-        .SetFutureReady<RequestDeviceEvent>(future.id, status, message, limits, featuresCount,
-                                            features);
+    return SetFutureReady<RequestDeviceEvent>(eventManager, future.id, status, message, limits,
+                                              featuresCount, features);
 }
 
 WGPUInstance Adapter::APIGetInstance() const {

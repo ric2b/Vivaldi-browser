@@ -177,6 +177,11 @@ void LogNewProfileImportDecision(
     const AutofillProfile& import_candidate,
     std::string_view app_locale);
 
+// Logs the user decision for importing a new profile created as a merge of
+// `kAccountNameEmail` with either `kAccountHome` or `kAccountWork` profile.
+void LogHomeWorkNameEmailMergeImportDecision(
+    AutofillClient::AddressPromptUserDecision decision);
+
 // Logs the user decision for updating an exiting profile with variants for
 // users who have a quasi-duplicate profile stored (that is not
 // `import_candidate`), and also in a separate histogram for all users
@@ -186,9 +191,21 @@ void LogProfileUpdateImportDecision(
     const AutofillProfile& import_candidate,
     std::string_view app_locale);
 
+// Logs the user decision for saving a name email profile superset.
+void LogNameEmailSupersetImportDecision(
+    AutofillClient::AddressPromptUserDecision decision);
+
 // Logs the user decision for saving a home/work profile superset.
 void LogHomeAndWorkSupersetImportDecision(
     AutofillClient::AddressPromptUserDecision decision);
+
+// Logs that a home/work superset prompt was shown because a certain type
+// has changed/was added.
+void LogHomeAndWorkSupersetAffectedType(FieldType affected_type);
+
+// Logs that a type was edited manually for a specified import type.
+void LogProfileImportTypeEditedType(AutofillProfileImportType type,
+                                    FieldType edited_type);
 
 // Logs if at least one setting-inaccessible field was removed on import.
 void LogRemovedSettingInaccessibleFields(bool did_remove);
@@ -202,9 +219,6 @@ void LogRemovedSettingInaccessibleField(FieldType field);
 // only emitted when a number is present.
 void LogPhoneNumberImportParsingResult(bool parsed_successfully);
 
-// Logs that a specific type was edited in a save prompt.
-void LogNewProfileEditedType(FieldType edited_type);
-
 // Logs which storage a newly imported profile will be saved to.
 void LogNewProfileStorageLocation(const AutofillProfile& import_candidate);
 
@@ -214,9 +228,6 @@ void LogNewProfileStorageLocation(const AutofillProfile& import_candidate);
 void LogProfileUpdateAffectedType(
     FieldType affected_type,
     AutofillClient::AddressPromptUserDecision decision);
-
-// Logs that a specific type was edited in an update prompt.
-void LogProfileUpdateEditedType(FieldType edited_type);
 
 // Logs the number of changed fields for a profile update that received the
 // user |decision|. Note that additional manual edits in the update prompt are
@@ -229,9 +240,6 @@ void LogUpdateProfileNumberOfAffectedFields(
 // to `kAccount`.
 void LogProfileMigrationImportDecision(
     AutofillClient::AddressPromptUserDecision decision);
-
-// Logs that a specific type was edited in a migration prompt.
-void LogProfileMigrationEditedType(FieldType edited_type);
 
 // Logs the length of a zip code found in a valid and complete
 // profile considered for import.

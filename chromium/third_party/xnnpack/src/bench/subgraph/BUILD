@@ -10,22 +10,48 @@ load(
     "xnnpack_slow_benchmark_tags",
 )
 
+BENCHMARKS_SLOW_LARGE = {
+    "attention": (True, False),
+    "binary": (False, False),
+    "depthwise_separable": (False, False),
+    "convolution": (True, False),
+    "elementwise": (False, False),
+    "fully_connected": (True, True),
+    "l2_norm": (False, False),
+    "layer_norm": (False, False),
+    "mobilenet": (False, False),
+    "softmax": (False, False),
+    "transformer": (True, False),
+    "unary": (False, False),
+}
+
+xnnpack_cxx_library(
+    name = "benchmark",
+    srcs = [
+        "benchmark.cc",
+    ],
+    hdrs = [
+        "benchmark.h",
+    ],
+    deps = [
+        "//:XNNPACK",
+        "//:subgraph_h",
+        "//bench:bench_utils",
+        "@com_google_benchmark//:benchmark",
+        "@pthreadpool",
+    ],
+    alwayslink = True,
+)
+
 xnnpack_cxx_library(
     name = "models",
     testonly = 1,
     srcs = [
-        "fp32-attention.cc",
-        "fp32-depthwise-separable.cc",
-        "fp32-elementwise.cc",
-        "fp32-l2-norm.cc",
-        "fp32-layer-norm.cc",
         "fp32-mobilenet-v1.cc",
         "fp32-mobilenet-v2.cc",
         "fp32-mobilenet-v3-large.cc",
         "fp32-mobilenet-v3-small.cc",
-        "fp32-softmax.cc",
         "fp32-transformer.cc",
-        "qd8-attention.cc",
         "qd8-transformer.cc",
         "qs8-mobilenet-v2.cc",
     ],
@@ -37,16 +63,48 @@ xnnpack_cxx_library(
     ],
 )
 
+[[
+    xnnpack_cxx_library(
+        name = name + "_lib",
+        testonly = 1,
+        srcs = [name.replace("_", "-") + ".cc"],
+        deps = [
+            ":benchmark",
+            ":models",
+            "//:datatype",
+            "//:math",
+            "//:operator_utils",
+            "//:xnnpack_h",
+            "//bench:bench_utils",
+            "@com_google_benchmark//:benchmark",
+        ],
+        alwayslink = True,
+    ),
+    xnnpack_benchmark(
+        name = name,
+        srcs = [],
+        tags = xnnpack_slow_benchmark_tags() if is_slow else None,
+        deps = [
+            ":" + name + "_lib",
+            ":models",
+            "//:xnnpack_h",
+            "//bench:bench_utils",
+        ],
+    ),
+] for name, (is_slow, is_large) in BENCHMARKS_SLOW_LARGE.items()]
+
 xnnpack_benchmark(
-    name = "benchmark",
-    srcs = ["benchmark.cc"],
+    name = "all_benchmarks",
+    srcs = [],
     tags = xnnpack_slow_benchmark_tags(),
     deps = [
+        ":" + name + "_lib"
+        for name, (is_slow, is_large) in BENCHMARKS_SLOW_LARGE.items()
+        if not is_large
+    ] + [
+        ":benchmark",
         ":models",
-        "//:allocator",
-        "//:subgraph_h",
         "//:xnnpack_h",
         "//bench:bench_utils",
-        "@pthreadpool",
     ],
 )

@@ -17,6 +17,7 @@
 <translation id="2306442503286132111">Bokmarke sparat i <ph name="FOLDER_NAME" />-mappen</translation>
 <translation id="2433507940547922241">Utseende</translation>
 <translation id="2501278716633472235">Gå tillbaka</translation>
+<translation id="2546283357679194313">Cookies och webbplatsdata</translation>
 <translation id="2633278372998075009">Privata flikar</translation>
 <translation id="2650751991977523696">Ladda ned filen igen?</translation>
 <translation id="265156376773362237">Standardförinläsning</translation>
@@ -54,6 +55,9 @@
 <translation id="4269820728363426813">Kopiera länkadress</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Aktivera skärmlås i Android-inställningar<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Lösenordshanterare</translation>
+<translation id="4401432223274567153">{INACTIVE_TIME_DAYS, plural,
+          =1 {Flikar och grupper som inte använts på 1 dag eller mer}
+          other {Flikar och grupper som inte använts på # dagar eller mer}}</translation>
 <translation id="451872707440238414">Sök bland dina bokmärken</translation>
 <translation id="4526803704855831732">Privata flikar</translation>
 <translation id="4532845899244822526">Välj mapp</translation>
@@ -62,6 +66,7 @@
 
 Tryck för Sök är en funktion som enbart är tillgänglig när Google är vald som standardsökmotorn i Vivaldi.</translation>
 <translation id="4759238208242260848">Nedladdningar</translation>
+<translation id="4777866634702576038">Ta bort flikgruppen?</translation>
 <translation id="4850886885716139402">Visa</translation>
 <translation id="4883379392681899581">Lämna privat läge</translation>
 <translation id="4943872375798546930">Inga resultat</translation>
@@ -77,7 +82,6 @@ Tryck för Sök är en funktion som enbart är tillgänglig när Google är vald
 <translation id="5375131951310889874">Lär dig om ämnen på webbsidor utan att lämna sidan. Tryck för Sök är en funktion som bara är tillgänglig när Google är vald som standardsökmotor i Vivaldi. Den skickar ett ord och dess omkringliggande kontext till Google Sök, och presenterar definitioner, bilder, sökresultat och andra detaljer.
 
 Gör ett långt tryck för att justera din sökterm. För att förfina sökningen kan du dra panelen hela vägen till toppen och trycka på sökrutan.</translation>
-<translation id="543338862236136125">Redigera lösenord</translation>
 <translation id="572328651809341494">Senaste flikar</translation>
 <translation id="5833984609253377421">Dela länk</translation>
 <translation id="6150320133806434356">Bokmärke sparat</translation>
@@ -85,6 +89,7 @@ Gör ett långt tryck för att justera din sökterm. För att förfina sökninge
 <translation id="6336451774241870485">Ny privat flik</translation>
 <translation id="6337323516034698937">För att skicka den här fliken till en annan enhet, logga in på Vivaldi Sync på båda enheterna. Se till att du anger krypteringslösenordet om det behövs.</translation>
 <translation id="6341580099087024258">Fråga var filer ska sparas</translation>
+<translation id="6364438453358674297">Ta bort förslaget från historiken?</translation>
 <translation id="6404511346730675251">Redigera bokmärke</translation>
 <translation id="650224091954855786">{FILE_COUNT, plural,
  =1 {Fil nedladdad}
@@ -112,6 +117,9 @@ Gör ett långt tryck för att justera din sökterm. För att förfina sökninge
 <translation id="8062594758852531064">Utökad förinläsning:</translation>
 <translation id="8073388330009372546">Öppna bild i ny flik</translation>
 <translation id="8127542551745560481">Redigera startsida</translation>
+<translation id="8175940240143658258">{ARCHIVED_TAB_COUNT, plural,
+          =1 {(1) inaktivt objekt}
+          other {(#) inaktiva objekt}}</translation>
 <translation id="8266862848225348053">Nedladdningsplats</translation>
 <translation id="8348430946834215779">Använd HTTPS när det är möjligt och bli varnad innan du laddar webbplatser som inte stöder det</translation>
 <translation id="8560602726703398413">Hitta din läslista i Bokmärken</translation>
@@ -121,6 +129,9 @@ Gör ett långt tryck för att justera din sökterm. För att förfina sökninge
 <translation id="9042893549633094279">Integritet och säkerhet</translation>
 <translation id="9063523880881406963">Inaktivera webbplats förfrågan</translation>
 <translation id="9080642952018487277">Gå in i privat läge</translation>
+<translation id="9104858485806491627">{INACTIVE_TIME_DAYS, plural,
+          =1 {Används inte på 1 dag eller mer}
+          other {Används inte på # dagar eller mer}}</translation>
 <translation id="930124987204876019">Radera historik, cookies, webbplatsdata, cacheminne …</translation>
 <translation id="961856697154696964">Radera webbinformation</translation>
 </translationbundle>

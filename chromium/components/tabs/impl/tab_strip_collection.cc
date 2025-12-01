@@ -64,6 +64,35 @@ void TabStripCollection::AddTabRecursive(
   // been added.
   CHECK(index >= 0 && index <= TabCountRecursive());
 
+  if (new_group_id.has_value()) {
+    CHECK(GetTabGroupCollection(new_group_id.value()));
+  }
+
+  std::pair<tabs::TabCollection*, int> insertion_details =
+      GetInsertionDetails(index, new_pinned_state, new_group_id,
+          tab->IsVivaldiPanel());
+  auto [tab_collection_ptr, insert_index] = insertion_details;
+
+  TabInterface* tab_ptr =
+      tab_collection_ptr->AddTab(std::move(tab), insert_index);
+
+  TabCollectionNodes handles_added;
+  handles_added.push_back(tab_ptr->GetHandle());
+
+  tab_collection_ptr->NotifyOnChildrenAdded(GetPassKey(), handles_added,
+                                            insertion_details, this);
+}
+
+void TabStripCollection::AddTabRecursiveImpl(
+    std::unique_ptr<TabInterface> tab,
+    size_t index,
+    std::optional<tab_groups::TabGroupId> new_group_id,
+    bool new_pinned_state) {
+  CHECK(tab);
+  // `index` can be equal to the tab count as at this point the tab has not yet
+  // been added.
+  CHECK(index >= 0 && index <= TabCountRecursive());
+
   // First tab needs to be added to the group. In this case we need to create a
   // group collection.
   if (new_group_id.has_value() &&
@@ -108,8 +137,8 @@ void TabStripCollection::MoveTabRecursive(
   } else {
     std::unique_ptr<TabInterface> moved_data =
         RemoveTabRecursive(tab, old_group != new_group_id);
-    AddTabRecursive(std::move(moved_data), final_index, new_group_id,
-                    new_pinned_state);
+    AddTabRecursiveImpl(std::move(moved_data), final_index, new_group_id,
+                        new_pinned_state);
   }
 }
 
@@ -151,7 +180,10 @@ void TabStripCollection::MoveTabsRecursive(
   // `tab_collection_ptr` is the final collection to insert `moved_datas`
   // starting at `insert_index`.
   auto [tab_collection_ptr, insert_index] =
-      GetInsertionDetails(destination_index, new_pinned_state, new_group_id);
+      GetInsertionDetails(destination_index, new_pinned_state, new_group_id,
+      // NOTE(ondrej@vivaldi.com): Only the regular tabs are moving. Those
+      // are not panels nor widgets.
+      false);
   CHECK(tab_collection_ptr);
 
   // Insert tabs and collections left to right so destination index can be used
@@ -313,13 +345,6 @@ void TabStripCollection::MoveTabGroupTo(const tab_groups::TabGroupId& group,
       to_index - pinned_collection_->TabCountRecursive(), group_collection);
 }
 
-void TabStripCollection::InsertTabGroupAt(
-    std::unique_ptr<TabGroupTabCollection> group_collection,
-    int index) {
-  CHECK(index >= static_cast<int>(pinned_collection_->TabCountRecursive()));
-  AddTabGroup(std::move(group_collection), index);
-}
-
 std::unique_ptr<TabInterface> TabStripCollection::RemoveTabAtIndexRecursive(
     size_t index) {
   TabInterface* tab_to_be_removed = GetTabAtIndexRecursive(index);
@@ -436,17 +461,26 @@ void TabStripCollection::Unsplit(split_tabs::SplitTabId split_id) {
   parent_collection->MaybeRemoveCollection(split).reset();
 }
 
-void TabStripCollection::InsertSplitTabAt(
-    std::unique_ptr<SplitTabCollection> split_collection,
+void TabStripCollection::InsertTabCollectionAt(
+    std::unique_ptr<TabCollection> collection,
     int index,
     int pinned,
-    std::optional<tab_groups::TabGroupId> group) {
-  AddCollectionMapping(split_collection.get());
+    std::optional<tab_groups::TabGroupId> parent_group) {
+  TabCollection* collection_ptr = collection.get();
+  AddCollectionMapping(collection_ptr);
 
-  auto [tab_collection_ptr, insert_index] =
-      GetInsertionDetails(index, pinned, group);
-  CHECK(tab_collection_ptr);
-  tab_collection_ptr->AddCollection(std::move(split_collection), insert_index);
+  std::pair<tabs::TabCollection*, int> insertion_details =
+      GetInsertionDetails(index, pinned, parent_group, false);
+  auto [tab_collection_ptr, insert_index] = insertion_details;
+
+  CHECK(insertion_details.first);
+  tab_collection_ptr->AddCollection(std::move(collection), insert_index);
+
+  TabCollectionNodes handles_added;
+  handles_added.push_back(collection_ptr->GetHandle());
+
+  tab_collection_ptr->NotifyOnChildrenAdded(GetPassKey(), handles_added,
+                                            insertion_details, this);
 }
 
 std::unique_ptr<TabCollection> TabStripCollection::RemoveSplit(

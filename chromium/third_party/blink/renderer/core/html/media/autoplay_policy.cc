@@ -208,8 +208,8 @@ void AutoplayPolicy::StartAutoplayMutedWhenVisible() {
 
   autoplay_intersection_observer_ = IntersectionObserver::Create(
       element_->GetDocument(),
-      WTF::BindRepeating(&AutoplayPolicy::OnIntersectionChangedForAutoplay,
-                         WrapWeakPersistent(this)),
+      BindRepeating(&AutoplayPolicy::OnIntersectionChangedForAutoplay,
+                    WrapWeakPersistent(this)),
       LocalFrameUkmAggregator::kMediaIntersectionObserver,
       IntersectionObserver::Params{
           .thresholds = {IntersectionObserver::kMinimumThreshold}});
@@ -415,8 +415,8 @@ void AutoplayPolicy::OnIntersectionChangedForAutoplay(
 
     element_->GetDocument()
         .GetTaskRunner(TaskType::kInternalMedia)
-        ->PostTask(FROM_HERE, WTF::BindOnce(pause_and_preserve_autoplay,
-                                            WrapWeakPersistent(this)));
+        ->PostTask(FROM_HERE, BindOnce(pause_and_preserve_autoplay,
+                                       WrapWeakPersistent(this)));
     return;
   }
 
@@ -436,8 +436,7 @@ void AutoplayPolicy::OnIntersectionChangedForAutoplay(
 
   element_->GetDocument()
       .GetTaskRunner(TaskType::kInternalMedia)
-      ->PostTask(FROM_HERE,
-                 WTF::BindOnce(maybe_autoplay, WrapWeakPersistent(this)));
+      ->PostTask(FROM_HERE, BindOnce(maybe_autoplay, WrapWeakPersistent(this)));
 }
 
 bool AutoplayPolicy::IsUsingDocumentUserActivationRequiredPolicy() const {

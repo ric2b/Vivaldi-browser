@@ -106,14 +106,14 @@ void SysInfo::OverrideHardwareModelName(std::string name) {
 }
 
 // static
-uint64_t SysInfo::AmountOfAvailablePhysicalMemoryImpl() {
-  SystemMemoryInfoKB info;
+ByteCount SysInfo::AmountOfAvailablePhysicalMemoryImpl() {
+  SystemMemoryInfo info;
   if (!GetSystemMemoryInfo(&info)) {
-    return 0;
+    return ByteCount(0);
   }
   // We should add inactive file-backed memory also but there is no such
   // information from iOS unfortunately.
-  return checked_cast<uint64_t>(info.free + info.speculative) * 1024;
+  return info.free + info.speculative;
 }
 
 // static

@@ -16,7 +16,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/canvas.h"
-#include "ui/native_theme/overlay_scrollbar_constants_aura.h"
+#include "ui/native_theme/overlay_scrollbar_constants.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/layout/fill_layout.h"
@@ -190,7 +190,7 @@ void OverlayScrollBar::Show() {
 
 void OverlayScrollBar::Hide() {
   ui::ScopedLayerAnimationSettings settings(layer()->GetAnimator());
-  settings.SetTransitionDuration(ui::kOverlayScrollbarFadeDuration);
+  settings.SetTransitionDuration(ui::GetOverlayScrollbarFadeDuration());
   layer()->SetOpacity(0.0f);
 }
 
@@ -199,7 +199,7 @@ void OverlayScrollBar::StartHideCountdown() {
     return;
   }
   hide_timer_.Start(
-      FROM_HERE, ui::kOverlayScrollbarFadeDelay,
+      FROM_HERE, ui::GetOverlayScrollbarFadeDelay(),
       base::BindOnce(&OverlayScrollBar::Hide, base::Unretained(this)));
 }
 

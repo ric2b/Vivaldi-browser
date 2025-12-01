@@ -88,13 +88,14 @@ void EncoderTest::InitializeConfig(TestMode mode) {
   int usage = AOM_USAGE_GOOD_QUALITY;
   switch (mode) {
     case kOnePassGood:
-    case kTwoPassGood: break;
+    case kTwoPassGood:
+    case kLowComplexityDecode: break;
     case kRealTime: usage = AOM_USAGE_REALTIME; break;
     case kAllIntra: usage = AOM_USAGE_ALL_INTRA; break;
     default: ASSERT_TRUE(false) << "Unexpected mode " << mode;
   }
   mode_ = mode;
-  passes_ = (mode == kTwoPassGood) ? 2 : 1;
+  passes_ = (mode == kTwoPassGood || mode == kLowComplexityDecode) ? 2 : 1;
 
   const aom_codec_err_t res = codec_->DefaultEncoderConfig(&cfg_, usage);
   ASSERT_EQ(AOM_CODEC_OK, res);

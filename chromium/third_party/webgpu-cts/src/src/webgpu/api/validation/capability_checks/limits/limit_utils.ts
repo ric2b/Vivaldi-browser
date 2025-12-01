@@ -2,7 +2,7 @@ import { kUnitCaseParamsBuilder } from '../../../../../common/framework/params_b
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
 import { getGPU } from '../../../../../common/util/navigator_gpu.js';
 import { assert, range, reorder, ReorderOrder } from '../../../../../common/util/util.js';
-import { getDefaultLimitsForCTS, kLimits } from '../../../../capability_info.js';
+import { getDefaultLimitsForCTS, kPossibleLimits } from '../../../../capability_info.js';
 import { GPUConst } from '../../../../constants.js';
 import { GPUTestBase } from '../../../../gpu_test.js';
 
@@ -405,7 +405,8 @@ export class LimitTestsImpl extends GPUTestBase {
     const limit = this.limit;
     // MAINTENANCE_TODO: consider removing this skip if the spec has no optional limits.
     this.skipIf(
-      this._adapter?.limits[limit] === undefined && !!this.limitTestParams.limitOptional,
+      (this._adapter?.limits[limit] === undefined && !!this.limitTestParams.limitOptional) ||
+        getDefaultLimitsForCTS()[limit] === undefined,
       `${limit} is missing but optional for now`
     );
     this.defaultLimit = getDefaultLimitForAdapter(this.adapter, limit);
@@ -428,7 +429,7 @@ export class LimitTestsImpl extends GPUTestBase {
     return getDefaultLimitsForCTS();
   }
 
-  getDefaultLimit(limit: (typeof kLimits)[number]) {
+  getDefaultLimit(limit: (typeof kPossibleLimits)[number]) {
     return this.getDefaultLimits()[limit].default;
   }
 

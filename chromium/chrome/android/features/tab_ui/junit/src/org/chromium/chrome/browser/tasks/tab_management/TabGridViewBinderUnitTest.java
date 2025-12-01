@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
 
 import static org.hamcrest.CoreMatchers.equalTo;
+import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -15,6 +16,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -24,7 +26,6 @@ import static org.mockito.Mockito.when;
 import static org.chromium.ui.test.util.MockitoHelper.doCallback;
 
 import android.content.Context;
-import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
 import android.graphics.Matrix;
@@ -63,10 +64,8 @@ import org.chromium.chrome.browser.tab.state.ShoppingPersistedTabData.PriceDrop;
 import org.chromium.chrome.browser.tab_ui.TabListFaviconProvider.TabFavicon;
 import org.chromium.chrome.browser.tab_ui.TabListFaviconProvider.TabFaviconFetcher;
 import org.chromium.chrome.browser.tab_ui.TabThumbnailView;
+import org.chromium.chrome.browser.tasks.tab_management.TabActionButtonData.TabActionButtonType;
 import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.ShoppingPersistedTabDataFetcher;
-import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActionButtonData;
-import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActionButtonData.TabActionButtonType;
-import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActionListener;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.TabActionState;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.TabCardHighlightState;
 import org.chromium.components.browser_ui.util.motion.MotionEventInfo;
@@ -90,7 +89,6 @@ public final class TabGridViewBinderUnitTest {
     @Mock private ViewStub mTabCardLabelStub;
     @Mock private TabCardLabelView mTabCardLabelView;
     @Mock private ImageView mActionButton;
-    @Mock private TypedArray mTypedArray;
     @Mock private TabFavicon mTabFavicon;
     @Mock private PriceCardView mPriceCardView;
     @Mock private Drawable mDrawable;
@@ -168,7 +166,7 @@ public final class TabGridViewBinderUnitTest {
     public void bindClosableTabWithCardWidth_updateNullFetcher() {
         mModel.set(TabProperties.THUMBNAIL_FETCHER, null);
         TabGridViewBinder.bindTab(mModel, mViewGroup, TabProperties.THUMBNAIL_FETCHER);
-        verify(mThumbnailView).updateThumbnailPlaceholder(false, true, /* colorId */ null);
+        verify(mThumbnailView).updateThumbnailPlaceholder(false, true, /* colorId= */ null);
         verify(mThumbnailView).setImageDrawable(null);
 
         // Update width.
@@ -179,7 +177,7 @@ public final class TabGridViewBinderUnitTest {
         TabGridViewBinder.bindTab(mModel, mViewGroup, TabProperties.GRID_CARD_SIZE);
         verify(mViewGroup).setMinimumWidth(updatedCardWidth);
         verify(mThumbnailView, times(2))
-                .updateThumbnailPlaceholder(false, true, /* colorId */ null);
+                .updateThumbnailPlaceholder(false, true, /* colorId= */ null);
         assertThat(mLayoutParams.width, equalTo(updatedCardWidth));
 
         verify(mThumbnailView, times(2)).setImageDrawable(null);
@@ -196,7 +194,7 @@ public final class TabGridViewBinderUnitTest {
         TabGridViewBinder.bindTab(mModel, mViewGroup, TabProperties.GRID_CARD_SIZE);
 
         verify(mViewGroup).setMinimumWidth(updatedCardWidth);
-        verify(mThumbnailView).updateThumbnailPlaceholder(false, true, /* colorId */ null);
+        verify(mThumbnailView).updateThumbnailPlaceholder(false, true, /* colorId= */ null);
         assertThat(mLayoutParams.width, equalTo(updatedCardWidth));
 
         verify(mFetcher).fetch(any(), eq(true), mCallbackCaptor.capture());
@@ -272,7 +270,7 @@ public final class TabGridViewBinderUnitTest {
         TabGridViewBinder.bindTab(mModel, mViewGroup, TabProperties.GRID_CARD_SIZE);
 
         verify(mViewGroup).setMinimumWidth(updatedCardWidth);
-        verify(mThumbnailView).updateThumbnailPlaceholder(false, false, /* colorId */ null);
+        verify(mThumbnailView).updateThumbnailPlaceholder(false, false, /* colorId= */ null);
         assertThat(mLayoutParams.width, equalTo(updatedCardWidth));
 
         verify(mFetcher).fetch(any(), eq(false), mCallbackCaptor.capture());
@@ -306,7 +304,7 @@ public final class TabGridViewBinderUnitTest {
 
         // Verify.
         verify(mViewGroup).setMinimumWidth(updatedCardWidth);
-        verify(mThumbnailView).updateThumbnailPlaceholder(false, true, /* colorId */ null);
+        verify(mThumbnailView).updateThumbnailPlaceholder(false, true, /* colorId= */ null);
         assertThat(mLayoutParams.width, equalTo(updatedCardWidth));
         verify(mFetcher).fetch(any(), eq(true), mCallbackCaptor.capture());
 
@@ -340,7 +338,7 @@ public final class TabGridViewBinderUnitTest {
 
         // Verify.
         verify(mViewGroup).setMinimumHeight(updatedCardHeight);
-        verify(mThumbnailView).updateThumbnailPlaceholder(false, true, /* colorId */ null);
+        verify(mThumbnailView).updateThumbnailPlaceholder(false, true, /* colorId= */ null);
         assertThat(mLayoutParams.height, equalTo(updatedCardHeight));
         verify(mFetcher).fetch(any(), eq(true), mCallbackCaptor.capture());
 
@@ -544,8 +542,34 @@ public final class TabGridViewBinderUnitTest {
     public void testMediaIndicator() {
         mModel.set(TabProperties.MEDIA_INDICATOR, MediaState.AUDIBLE);
         TabGridViewBinder.bindTab(mModel, mViewGroup, TabProperties.MEDIA_INDICATOR);
-
         verify(mViewGroup).setMediaIndicator(eq(MediaState.AUDIBLE));
+
+        mModel.set(TabProperties.MEDIA_INDICATOR, MediaState.MUTED);
+        TabGridViewBinder.bindTab(mModel, mViewGroup, TabProperties.MEDIA_INDICATOR);
+        verify(mViewGroup).setMediaIndicator(eq(MediaState.MUTED));
+
+        mModel.set(TabProperties.MEDIA_INDICATOR, MediaState.NONE);
+        TabGridViewBinder.bindTab(mModel, mViewGroup, TabProperties.MEDIA_INDICATOR);
+        verify(mViewGroup).setMediaIndicator(eq(MediaState.NONE));
+    }
+
+    @Test
+    public void testBindContextClickListener() {
+        TabActionListener listener = mock();
+        mModel.set(TabProperties.TAB_CONTEXT_CLICK_LISTENER, listener);
+
+        TabGridViewBinder.bindTab(mModel, mViewGroup, TabProperties.TAB_CONTEXT_CLICK_LISTENER);
+
+        verify(mViewGroup).setContextClickable(true);
+        ArgumentCaptor<View.OnContextClickListener> captor =
+                ArgumentCaptor.forClass(View.OnContextClickListener.class);
+        verify(mViewGroup).setOnContextClickListener(captor.capture());
+        assertNotNull(captor.getValue());
+
+        mModel.set(TabProperties.TAB_CONTEXT_CLICK_LISTENER, null);
+        TabGridViewBinder.bindTab(mModel, mViewGroup, TabProperties.TAB_CONTEXT_CLICK_LISTENER);
+        verify(mViewGroup).setContextClickable(false);
+        verify(mViewGroup).setOnContextClickListener(eq(null));
     }
 
     private void assertImageMatrix(

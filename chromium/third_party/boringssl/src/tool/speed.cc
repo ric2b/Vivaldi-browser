@@ -38,8 +38,6 @@
 #include <openssl/ecdsa.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
-#define OPENSSL_UNSTABLE_EXPERIMENTAL_KYBER
-#include <openssl/experimental/kyber.h>
 #include <openssl/hrss.h>
 #include <openssl/mem.h>
 #include <openssl/mldsa.h>
@@ -50,6 +48,7 @@
 #include <openssl/siphash.h>
 #include <openssl/slhdsa.h>
 #include <openssl/trust_token.h>
+#include <openssl/x509.h>
 
 #if defined(OPENSSL_WINDOWS)
 #include <windows.h>
@@ -312,11 +311,11 @@ static bool SpeedRSA(const std::string &selected) {
       {"RSA 4096", kDERRSAPrivate4096, kDERRSAPrivate4096Len},
   };
 
-  for (size_t i = 0; i < OPENSSL_ARRAY_SIZE(kRSAKeys); i++) {
-    const std::string name = kRSAKeys[i].name;
+  for (const auto &key_info : kRSAKeys) {
+    const std::string name = key_info.name;
 
     bssl::UniquePtr<RSA> key(
-        RSA_private_key_from_bytes(kRSAKeys[i].key, kRSAKeys[i].key_len));
+        RSA_private_key_from_bytes(key_info.key, key_info.key_len));
     if (key == nullptr) {
       fprintf(stderr, "Failed to parse %s key.\n", name.c_str());
       ERR_print_errors_fp(stderr);
@@ -387,7 +386,7 @@ static bool SpeedRSA(const std::string &selected) {
 
     if (!TimeFunctionParallel(&results, [&]() -> bool {
           return bssl::UniquePtr<RSA>(RSA_private_key_from_bytes(
-                     kRSAKeys[i].key, kRSAKeys[i].key_len)) != nullptr;
+                     key_info.key, key_info.key_len)) != nullptr;
         })) {
       fprintf(stderr, "Failed to parse %s key.\n", name.c_str());
       ERR_print_errors_fp(stderr);
@@ -1079,55 +1078,6 @@ static bool SpeedHRSS(const std::string &selected) {
   return true;
 }
 
-static bool SpeedKyber(const std::string &selected) {
-  if (!selected.empty() && selected != "Kyber") {
-    return true;
-  }
-
-  TimeResults results;
-
-  uint8_t ciphertext[KYBER_CIPHERTEXT_BYTES];
-  // This ciphertext is nonsense, but Kyber decap is constant-time so, for the
-  // purposes of timing, it's fine.
-  memset(ciphertext, 42, sizeof(ciphertext));
-  if (!TimeFunctionParallel(&results, [&]() -> bool {
-        KYBER_private_key priv;
-        uint8_t encoded_public_key[KYBER_PUBLIC_KEY_BYTES];
-        KYBER_generate_key(encoded_public_key, &priv);
-        uint8_t shared_secret[KYBER_SHARED_SECRET_BYTES];
-        KYBER_decap(shared_secret, ciphertext, &priv);
-        return true;
-      })) {
-    fprintf(stderr, "Failed to time KYBER_generate_key + KYBER_decap.\n");
-    return false;
-  }
-
-  results.Print("Kyber generate + decap");
-
-  KYBER_private_key priv;
-  uint8_t encoded_public_key[KYBER_PUBLIC_KEY_BYTES];
-  KYBER_generate_key(encoded_public_key, &priv);
-  KYBER_public_key pub;
-  if (!TimeFunctionParallel(&results, [&]() -> bool {
-        CBS encoded_public_key_cbs;
-        CBS_init(&encoded_public_key_cbs, encoded_public_key,
-                 sizeof(encoded_public_key));
-        if (!KYBER_parse_public_key(&pub, &encoded_public_key_cbs)) {
-          return false;
-        }
-        uint8_t shared_secret[KYBER_SHARED_SECRET_BYTES];
-        KYBER_encap(ciphertext, shared_secret, &pub);
-        return true;
-      })) {
-    fprintf(stderr, "Failed to time KYBER_encap.\n");
-    return false;
-  }
-
-  results.Print("Kyber parse + encap");
-
-  return true;
-}
-
 static bool SpeedMLDSA(const std::string &selected) {
   if (!selected.empty() && selected != "ML-DSA") {
     return true;
@@ -1531,9 +1481,9 @@ static bool SpeedTrustToken(std::string name, const TRUST_TOKEN_METHOD *method,
   uint8_t public_key[32], private_key[64];
   ED25519_keypair(public_key, private_key);
   bssl::UniquePtr<EVP_PKEY> priv(
-      EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, nullptr, private_key, 32));
+      EVP_PKEY_from_raw_private_key(EVP_pkey_ed25519(), private_key, 32));
   bssl::UniquePtr<EVP_PKEY> pub(
-      EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, public_key, 32));
+      EVP_PKEY_from_raw_public_key(EVP_pkey_ed25519(), public_key, 32));
   if (!priv || !pub) {
     fprintf(stderr, "failed to generate trust token SRR key.\n");
     return false;
@@ -1693,6 +1643,53 @@ static bool SpeedTrustToken(std::string name, const TRUST_TOKEN_METHOD *method,
   bssl::UniquePtr<uint8_t> free_client_data(client_data);
   bssl::UniquePtr<TRUST_TOKEN> free_rtoken(rtoken);
 
+  return true;
+}
+
+static bool SpeedX509(const std::string &selected) {
+  if (!selected.empty() && selected.find("x509") == std::string::npos) {
+    return true;
+  }
+
+  static const uint8_t kCert[] = {
+      0x30, 0x82, 0x01, 0x3b, 0x30, 0x81, 0xe2, 0xa0, 0x03, 0x02, 0x01, 0x02,
+      0x02, 0x01, 0x01, 0x30, 0x0a, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d,
+      0x04, 0x03, 0x02, 0x30, 0x1c, 0x31, 0x1a, 0x30, 0x18, 0x06, 0x03, 0x55,
+      0x04, 0x03, 0x13, 0x11, 0x42, 0x61, 0x73, 0x69, 0x63, 0x20, 0x43, 0x6f,
+      0x6e, 0x73, 0x74, 0x72, 0x61, 0x69, 0x6e, 0x74, 0x73, 0x30, 0x20, 0x17,
+      0x0d, 0x30, 0x30, 0x30, 0x31, 0x30, 0x31, 0x30, 0x30, 0x30, 0x30, 0x30,
+      0x30, 0x5a, 0x18, 0x0f, 0x32, 0x31, 0x30, 0x30, 0x30, 0x31, 0x30, 0x31,
+      0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x5a, 0x30, 0x1c, 0x31, 0x1a, 0x30,
+      0x18, 0x06, 0x03, 0x55, 0x04, 0x03, 0x13, 0x11, 0x42, 0x61, 0x73, 0x69,
+      0x63, 0x20, 0x43, 0x6f, 0x6e, 0x73, 0x74, 0x72, 0x61, 0x69, 0x6e, 0x74,
+      0x73, 0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d,
+      0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07,
+      0x03, 0x42, 0x00, 0x04, 0x91, 0x2a, 0xd8, 0xbc, 0x55, 0x6d, 0x91, 0x92,
+      0x66, 0xbe, 0x2a, 0xdf, 0x63, 0x42, 0x43, 0x0d, 0x8a, 0xd9, 0x42, 0xb3,
+      0x49, 0x79, 0xc3, 0xcb, 0xb7, 0x49, 0x2c, 0x26, 0xec, 0x76, 0x51, 0x12,
+      0xf9, 0x9c, 0x04, 0x22, 0x41, 0x8d, 0x52, 0x11, 0x11, 0xa7, 0x11, 0xa8,
+      0x8d, 0x2e, 0x9a, 0x1c, 0xd1, 0xd9, 0x5e, 0x4d, 0x2f, 0x30, 0x41, 0x3f,
+      0xdc, 0x8f, 0x0f, 0xf0, 0x3e, 0x0a, 0x1e, 0x57, 0xa3, 0x13, 0x30, 0x11,
+      0x30, 0x0f, 0x06, 0x03, 0x55, 0x1d, 0x13, 0x01, 0x01, 0xff, 0x04, 0x05,
+      0x30, 0x03, 0x01, 0x01, 0xff, 0x30, 0x0a, 0x06, 0x08, 0x2a, 0x86, 0x48,
+      0xce, 0x3d, 0x04, 0x03, 0x02, 0x03, 0x48, 0x00, 0x30, 0x45, 0x02, 0x20,
+      0x4c, 0xdb, 0x36, 0x69, 0x03, 0xc3, 0x66, 0xcf, 0x8f, 0x6a, 0x5e, 0x4b,
+      0x03, 0x57, 0xc0, 0x2b, 0x20, 0xb8, 0x00, 0xa4, 0xcd, 0x37, 0xe2, 0x44,
+      0xfe, 0xf1, 0x18, 0x9d, 0xd2, 0xa1, 0x17, 0x16, 0x02, 0x21, 0x00, 0xdf,
+      0x6f, 0xb2, 0x23, 0x0e, 0x85, 0xf1, 0xff, 0x71, 0x81, 0x9e, 0xca, 0xe1,
+      0xb7, 0x5e, 0x0d, 0x52, 0x6c, 0xd4, 0x05, 0xda, 0xa4, 0x41, 0xa7, 0xc9,
+      0xbc, 0x2f, 0x9e, 0x1c, 0x87, 0x6d, 0x40};
+  TimeResults results;
+  if (!TimeFunctionParallel(&results, [&]() -> bool {
+        const uint8_t *inp = kCert;
+        bssl::UniquePtr<X509> x509(d2i_X509(nullptr, &inp, sizeof(kCert)));
+        return x509 != nullptr;
+      })) {
+    fprintf(stderr, "d2i_X509 failed.\n");
+    ERR_print_errors_fp(stderr);
+    return false;
+  }
+  results.Print("Parse X.509 certificate");
   return true;
 }
 
@@ -1857,7 +1854,6 @@ bool Speed(const std::vector<std::string> &args) {
       !SpeedScrypt(selected) ||       //
       !SpeedRSAKeyGen(selected) ||    //
       !SpeedHRSS(selected) ||         //
-      !SpeedKyber(selected) ||        //
       !SpeedMLDSA(selected) ||        //
       !SpeedMLKEM(selected) ||        //
       !SpeedMLKEM1024(selected) ||    //
@@ -1875,8 +1871,9 @@ bool Speed(const std::vector<std::string> &args) {
                        TRUST_TOKEN_experiment_v2_pmb(), 1, selected) ||
       !SpeedTrustToken("TrustToken-Exp2PMB-Batch10",
                        TRUST_TOKEN_experiment_v2_pmb(), 10, selected) ||
-      !SpeedBase64(selected) ||  //
-      !SpeedSipHash(selected)) {
+      !SpeedBase64(selected) ||   //
+      !SpeedSipHash(selected) ||  //
+      !SpeedX509(selected)) {
     return false;
   }
 #if defined(BORINGSSL_FIPS)

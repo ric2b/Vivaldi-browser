@@ -8,6 +8,7 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/callback.h"
+#include "base/types/expected.h"
 #include "components/optimization_guide/content/browser/page_content_proto_provider.h"
 #include "components/optimization_guide/proto/common_types.pb.h"
 #include "components/optimization_guide/proto/features/model_prototyping.pb.h"
@@ -36,11 +37,17 @@ struct TargetNodeInfo {
   raw_ptr<const optimization_guide::proto::ContentNode> node = nullptr;
 };
 
-using AIPageContentMap = base::flat_map<content::GlobalRenderFrameHostToken,
-                                        blink::mojom::AIPageContentPtr>;
+using AIPageContentMap =
+    base::flat_map<content::GlobalRenderFrameHostToken,
+                   std::variant<blink::mojom::AIPageContentPtr,
+                                blink::mojom::RedactedFrameMetadataPtr>>;
 
 // A set of frame tokens that have been seen during conversion.
 using FrameTokenSet = base::flat_set<content::GlobalRenderFrameHostToken>;
+
+using FrameOrRedaction =
+    std::variant<const blink::mojom::AIPageContentFrameData*,
+                 const blink::mojom::RedactedFrameMetadata*>;
 
 // A callback to get the RenderFrameInfo for a given frame token.
 using GetRenderFrameInfo =
@@ -48,10 +55,9 @@ using GetRenderFrameInfo =
                                                            blink::FrameToken)>;
 
 // Converts the mojom data structure for AIPageContent to its equivalent proto
-// mapping.
-// Returns false if the conversion failed because the renderer provided invalid
-// inputs.
-bool ConvertAIPageContentToProto(
+// mapping. If conversion fails, the returned base::expected contains a
+// descriptive error message.
+base::expected<void, std::string> ConvertAIPageContentToProto(
     blink::mojom::AIPageContentOptionsPtr main_frame_options,
     content::GlobalRenderFrameHostToken main_frame_token,
     const AIPageContentMap& page_content_map,

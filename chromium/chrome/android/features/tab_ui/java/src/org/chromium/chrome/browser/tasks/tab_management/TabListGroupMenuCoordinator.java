@@ -16,7 +16,6 @@ import androidx.annotation.IdRes;
 import androidx.annotation.StringRes;
 
 import org.chromium.base.Token;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -32,6 +31,8 @@ import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.widget.RectProvider;
 import org.chromium.ui.widget.ViewRectProvider;
+
+import java.util.function.Supplier;
 
 /**
  * A coordinator for the menu on tab group cards in GTS. It is responsible for creating a list of
@@ -59,6 +60,7 @@ public class TabListGroupMenuCoordinator extends TabGroupOverflowMenuCoordinator
                 R.layout.tab_switcher_action_menu_layout,
                 onItemClicked,
                 tabModelSupplier,
+                /* multiInstanceManager= */ null,
                 tabGroupSyncService,
                 collaborationService,
                 activity);
@@ -66,12 +68,9 @@ public class TabListGroupMenuCoordinator extends TabGroupOverflowMenuCoordinator
         mShouldShowIcons = ChromeFeatureList.sTabGroupParityBottomSheetAndroid.isEnabled();
     }
 
-    /**
-     * Creates a {@link TabListMediator.TabActionListener} that creates the menu and shows it when
-     * clicked.
-     */
-    TabListMediator.TabActionListener getTabActionListener() {
-        return new TabListMediator.TabActionListener() {
+    /** Creates a {@link TabActionListener} that creates the menu and shows it when clicked. */
+    TabActionListener getTabActionListener() {
+        return new TabActionListener() {
             @Override
             public void run(View view, int tabId, @Nullable MotionEventInfo triggeringMotion) {
                 @Nullable TabModel tabModel = getTabModel();

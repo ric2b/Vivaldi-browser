@@ -88,9 +88,11 @@ bool ExtensionMediaAccessHandler::CheckMediaAccessPermission(
       return false;
     }
 
-    return delegate->GetPermissionStatusForCurrentDocument(content::PermissionDescriptorUtil::
-                     CreatePermissionDescriptorForPermissionType(permission), render_frame_host,
-               /*should_include_device_status=*/false) ==
+    return delegate->GetPermissionResultForCurrentDocument(
+               content::PermissionDescriptorUtil::
+                   CreatePermissionDescriptorForPermissionType(permission),
+               render_frame_host,
+               /*should_include_device_status=*/false).status ==
            blink::mojom::PermissionStatus::GRANTED;
   }
 

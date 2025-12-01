@@ -129,7 +129,7 @@ try:
 
   setuptools.setup(
       name='google-re2',
-      version='1.1.20250722',
+      version='1.1.20250812',
       description='RE2 Python bindings',
       long_description=long_description,
       long_description_content_type='text/plain',
@@ -144,11 +144,11 @@ try:
           'Intended Audience :: Developers',
           'License :: OSI Approved :: BSD License',
           'Programming Language :: C++',
-          'Programming Language :: Python :: 3.8',
+          'Programming Language :: Python :: 3.9',
       ],
       options=options(),
       cmdclass={'build_ext': BuildExt},
-      python_requires='~=3.8',
+      python_requires='~=3.9',
   )
 except:
   raise

@@ -261,7 +261,7 @@ Device::Device(const ObjectBaseParams& params,
     if (descriptor != nullptr && descriptor->deviceLostCallbackInfo.callback != nullptr) {
         deviceLostCallbackInfo = descriptor->deviceLostCallbackInfo;
     }
-    mDeviceLostInfo.event = std::make_unique<DeviceLostEvent>(deviceLostCallbackInfo, this);
+    mDeviceLostInfo.event = AcquireRef(new DeviceLostEvent(deviceLostCallbackInfo, this));
 
     mUncapturedErrorCallbackInfo = kDefaultUncapturedErrorCallbackInfo;
     if (descriptor != nullptr && descriptor->uncapturedErrorCallbackInfo.callback != nullptr) {
@@ -352,20 +352,19 @@ WireResult Client::DoDeviceLostCallback(ObjectHandle eventManager,
                                         WGPUFuture future,
                                         WGPUDeviceLostReason reason,
                                         WGPUStringView message) {
-    return GetEventManager(eventManager)
-        .SetFutureReady<Device::DeviceLostEvent>(future.id, reason, message);
+    return SetFutureReady<Device::DeviceLostEvent>(eventManager, future.id, reason, message);
 }
 
 WGPUFuture Device::APIPopErrorScope(const WGPUPopErrorScopeCallbackInfo& callbackInfo) {
     Client* client = GetClient();
     auto [futureIDInternal, tracked] =
-        GetEventManager().TrackEvent(std::make_unique<PopErrorScopeEvent>(callbackInfo));
+        GetEventManager().TrackEvent(AcquireRef(new PopErrorScopeEvent(callbackInfo)));
     if (!tracked) {
         return {futureIDInternal};
     }
 
     DevicePopErrorScopeCmd cmd;
-    cmd.deviceId = GetWireId();
+    cmd.deviceId = GetWireHandle(client).id;
     cmd.eventManagerHandle = GetEventManagerHandle();
     cmd.future = {futureIDInternal};
     client->SerializeCommand(cmd);
@@ -377,8 +376,7 @@ WireResult Client::DoDevicePopErrorScopeCallback(ObjectHandle eventManager,
                                                  WGPUPopErrorScopeStatus status,
                                                  WGPUErrorType errorType,
                                                  WGPUStringView message) {
-    return GetEventManager(eventManager)
-        .SetFutureReady<PopErrorScopeEvent>(future.id, status, errorType, message);
+    return SetFutureReady<PopErrorScopeEvent>(eventManager, future.id, status, errorType, message);
 }
 
 void Device::APIInjectError(WGPUErrorType type, WGPUStringView message) {
@@ -414,7 +412,7 @@ WGPUQueue Device::APIGetQueue() {
 
         DeviceGetQueueCmd cmd;
         cmd.self = ToAPI(this);
-        cmd.result = mQueue->GetWireHandle();
+        cmd.result = mQueue->GetWireHandle(client);
 
         client->SerializeCommand(cmd);
     }
@@ -431,17 +429,17 @@ WGPUFuture Device::CreatePipelineAsync(Descriptor const* descriptor,
     Client* client = GetClient();
     Ref<Pipeline> pipeline = client->Make<Pipeline>();
     auto [futureIDInternal, tracked] =
-        GetEventManager().TrackEvent(std::make_unique<Event>(callbackInfo, pipeline));
+        GetEventManager().TrackEvent(AcquireRef(new Event(callbackInfo, pipeline)));
     if (!tracked) {
         return {futureIDInternal};
     }
 
     Cmd cmd;
-    cmd.deviceId = GetWireId();
+    cmd.deviceId = GetWireHandle(client).id;
     cmd.descriptor = descriptor;
     cmd.eventManagerHandle = GetEventManagerHandle();
     cmd.future = {futureIDInternal};
-    cmd.pipelineObjectHandle = pipeline->GetWireHandle();
+    cmd.pipelineObjectHandle = pipeline->GetWireHandle(client);
 
     client->SerializeCommand(cmd);
     return {futureIDInternal};
@@ -458,8 +456,7 @@ WireResult Client::DoDeviceCreateComputePipelineAsyncCallback(ObjectHandle event
                                                               WGPUFuture future,
                                                               WGPUCreatePipelineAsyncStatus status,
                                                               WGPUStringView message) {
-    return GetEventManager(eventManager)
-        .SetFutureReady<CreateComputePipelineEvent>(future.id, status, message);
+    return SetFutureReady<CreateComputePipelineEvent>(eventManager, future.id, status, message);
 }
 
 WGPUFuture Device::APICreateRenderPipelineAsync(
@@ -473,8 +470,7 @@ WireResult Client::DoDeviceCreateRenderPipelineAsyncCallback(ObjectHandle eventM
                                                              WGPUFuture future,
                                                              WGPUCreatePipelineAsyncStatus status,
                                                              WGPUStringView message) {
-    return GetEventManager(eventManager)
-        .SetFutureReady<CreateRenderPipelineEvent>(future.id, status, message);
+    return SetFutureReady<CreateRenderPipelineEvent>(eventManager, future.id, status, message);
 }
 
 void Device::APIDestroy() {

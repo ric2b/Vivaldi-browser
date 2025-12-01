@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "absl/memory/memory.h"
 #include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
 #include "api/array_view.h"
@@ -51,6 +52,7 @@
 #include "rtc_base/network.h"
 #include "rtc_base/network/received_packet.h"
 #include "rtc_base/network/sent_packet.h"
+#include "rtc_base/platform_thread_types.h"
 #include "rtc_base/socket.h"
 #include "rtc_base/socket_address.h"
 #include "rtc_base/ssl_certificate.h"
@@ -298,10 +300,6 @@ TurnPort::~TurnPort() {
 
   if (socket_)
     socket_->UnsubscribeCloseEvent(this);
-
-  if (!SharedSocket()) {
-    delete socket_;
-  }
 }
 
 void TurnPort::set_realm(absl::string_view realm) {
@@ -435,8 +433,10 @@ bool TurnPort::CreateTurnClientSocket() {
   RTC_DCHECK(!socket_ || SharedSocket());
 
   if (server_address_.proto == PROTO_UDP && !SharedSocket()) {
-    socket_ = socket_factory()->CreateUdpSocket(
-        SocketAddress(Network()->GetBestIP(), 0), min_port(), max_port());
+    owned_socket_ = socket_factory()->CreateUdpSocket(
+        env(), SocketAddress(Network()->GetBestIP(), 0), min_port(),
+        max_port());
+    socket_ = owned_socket_.get();
   } else if (server_address_.proto == PROTO_TCP ||
              server_address_.proto == PROTO_TLS) {
     RTC_DCHECK(!SharedSocket());
@@ -457,9 +457,10 @@ bool TurnPort::CreateTurnClientSocket() {
     tcp_options.tls_alpn_protocols = tls_alpn_protocols_;
     tcp_options.tls_elliptic_curves = tls_elliptic_curves_;
     tcp_options.tls_cert_verifier = tls_cert_verifier_;
-    socket_ = socket_factory()->CreateClientTcpSocket(
-        SocketAddress(Network()->GetBestIP(), 0), server_address_.address,
-        tcp_options);
+    owned_socket_ = socket_factory()->CreateClientTcpSocket(
+        env(), SocketAddress(Network()->GetBestIP(), 0),
+        server_address_.address, tcp_options);
+    socket_ = owned_socket_.get();
   }
 
   if (!socket_) {
@@ -489,7 +490,8 @@ bool TurnPort::CreateTurnClientSocket() {
   // while UDP port is ready to do so once the socket is created.
   if (server_address_.proto == PROTO_TCP ||
       server_address_.proto == PROTO_TLS) {
-    socket_->SignalConnect.connect(this, &TurnPort::OnSocketConnect);
+    socket_->SubscribeConnect(
+        [this](AsyncPacketSocket* socket) { OnSocketConnect(socket); });
     socket_->SubscribeCloseEvent(
         this, [this](AsyncPacketSocket* s, int err) { OnSocketClose(s, err); });
   } else {
@@ -587,9 +589,8 @@ void TurnPort::OnAllocateMismatch() {
 
   if (SharedSocket()) {
     ResetSharedSocket();
-  } else {
-    delete socket_;
   }
+  owned_socket_ = nullptr;
   socket_ = nullptr;
 
   ResetNonce();
@@ -623,7 +624,7 @@ Connection* TurnPort::CreateConnection(const Candidate& remote_candidate,
     if (local_candidate.is_relay() && local_candidate.address().family() ==
                                           remote_candidate.address().family()) {
       ProxyConnection* conn =
-          new ProxyConnection(NewWeakPtr(), index, remote_candidate);
+          new ProxyConnection(env(), NewWeakPtr(), index, remote_candidate);
       // Create an entry, if needed, so we can get our permissions set up
       // correctly.
       if (CreateOrRefreshEntry(conn, next_channel_number_)) {
@@ -940,8 +941,7 @@ void TurnPort::OnAllocateError(int error_code, absl::string_view reason) {
     port = 0;
   }
   if (error_code != STUN_ERROR_NOT_AN_ERROR) {
-    SignalCandidateError(
-        this,
+    SendCandidateError(
         IceCandidateErrorEvent(address, port, server_url_, error_code, reason));
   }
 }
@@ -1016,7 +1016,7 @@ void TurnPort::TryAlternateServer() {
     RTC_DCHECK(server_address().proto == PROTO_TCP ||
                server_address().proto == PROTO_TLS);
     RTC_DCHECK(!SharedSocket());
-    delete socket_;
+    owned_socket_ = nullptr;
     socket_ = nullptr;
     PrepareAddress();
   }
@@ -1163,7 +1163,7 @@ bool TurnPort::ScheduleRefresh(uint32_t lifetime) {
 }
 
 void TurnPort::SendRequest(StunRequest* req, int delay) {
-  request_manager_.SendDelayed(req, delay);
+  request_manager_.Send(absl::WrapUnique(req), TimeDelta::Millis(delay));
 }
 
 void TurnPort::AddRequestAuthInfo(StunMessage* msg) {
@@ -1339,7 +1339,8 @@ void TurnPort::MaybeAddTurnLoggingId(StunMessage* msg) {
 }
 
 TurnAllocateRequest::TurnAllocateRequest(TurnPort* port)
-    : StunRequest(port->request_manager(),
+    : StunRequest(port->env(),
+                  port->request_manager(),
                   std::make_unique<TurnMessage>(TURN_ALLOCATE_REQUEST)),
       port_(port) {
   StunMessage* message = mutable_msg();
@@ -1537,7 +1538,8 @@ void TurnAllocateRequest::OnTryAlternate(StunMessage* response, int code) {
 }
 
 TurnRefreshRequest::TurnRefreshRequest(TurnPort* port, int lifetime /*= -1*/)
-    : StunRequest(port->request_manager(),
+    : StunRequest(port->env(),
+                  port->request_manager(),
                   std::make_unique<TurnMessage>(TURN_REFRESH_REQUEST)),
       port_(port) {
   StunMessage* message = mutable_msg();
@@ -1624,6 +1626,7 @@ TurnCreatePermissionRequest::TurnCreatePermissionRequest(
     TurnEntry* entry,
     const SocketAddress& ext_addr)
     : StunRequest(
+          port->env(),
           port->request_manager(),
           std::make_unique<TurnMessage>(TURN_CREATE_PERMISSION_REQUEST)),
       port_(port),
@@ -1693,7 +1696,8 @@ TurnChannelBindRequest::TurnChannelBindRequest(TurnPort* port,
                                                TurnEntry* entry,
                                                uint16_t channel_id,
                                                const SocketAddress& ext_addr)
-    : StunRequest(port->request_manager(),
+    : StunRequest(port->env(),
+                  port->request_manager(),
                   std::make_unique<TurnMessage>(TURN_CHANNEL_BIND_REQUEST)),
       port_(port),
       entry_(entry),

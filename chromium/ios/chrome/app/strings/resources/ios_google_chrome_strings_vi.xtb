@@ -43,7 +43,7 @@ Những yếu tố cần xem xét:
 <translation id="1830634592642484976">Địa chỉ này hiện được lưu vào Chrome. Để sử dụng địa chỉ này trên các sản phẩm của Google, hãy lưu địa chỉ vào Tài khoản Google của bạn (<ph name="USER_EMAIL" />).</translation>
 <translation id="1891812034154776216">Ẩn thẻ ẩn danh đang mở khi bạn thoát Chrome</translation>
 <translation id="1894434821386148799">Bạn có thể tìm thấy các chế độ cài đặt của Chrome và nhiều chế độ cài đặt khác tại đây</translation>
-<translation id="1917964099031477364">Tài khoản này và mọi dữ liệu chưa lưu sẽ bị xóa khỏi Chrome cũng như các ứng dụng khác của Google trên thiết bị này.</translation>
+<translation id="1917964099031477364">Tài khoản này và mọi dữ liệu chưa lưu sẽ bị xoá khỏi Chrome cũng như các ứng dụng khác của Google trên thiết bị này.</translation>
 <translation id="1919130412786645364">Cho phép đăng nhập vào Chrome</translation>
 <translation id="1965935827552890526">Hoàn thành những việc bạn đang làm trong cửa sổ Chrome đang mở khác.</translation>
 <translation id="1966638102563776885">Mẹo dùng Chrome: Truy cập mật khẩu trong mọi ứng dụng</translation>
@@ -131,7 +131,7 @@ Trước khi đăng xuất, hãy đợi một vài phút. Nếu bạn đăng xu�
 <translation id="4633328489441962921">Chrome không thể kiểm tra xem có bản cập nhật mới nào không</translation>
 <translation id="4636900170638246267">Đăng nhập vào trang web này và Chrome.</translation>
 <translation id="4647910807533196601">Mở thẻ mà tôi mở gần đây nhất trong Chrome.</translation>
-<translation id="4693084815234024320">Bạn đang ở trong chế độ ẩn danh trên Chrome</translation>
+<translation id="4693084815234024320">Bạn đang ở chế độ ẩn danh của Chrome</translation>
 <translation id="4713740144985377441">Quay lại Chrome để tải tệp lên</translation>
 <translation id="4713907610796204963">Tìm hiểu những thông tin cơ bản hữu ích về Chrome để bắt đầu</translation>
 <translation id="4724297637870447613">Sử dụng Chrome ở mọi nơi</translation>
@@ -193,6 +193,7 @@ Hãy thử đợi ít phút rồi chuyển đổi tài khoản. Nếu bạn chuy
 <translation id="6145223986912084844">chrome</translation>
 <translation id="6177442314419606057">Tìm trong Chrome</translation>
 <translation id="6181652351336379338">Tìm kiếm hình ảnh trong Chrome.</translation>
+<translation id="6187085551300363958">Mẹo khi dùng Chrome: Lưu mật khẩu</translation>
 <translation id="6200694931081795166">Cách đặt Chrome làm trình duyệt mặc định:
   1. Mở phần Cài đặt
   2. Nhấn vào Ứng dụng trình duyệt mặc định
@@ -264,6 +265,7 @@ Dữ liệu của bạn được mã hoá bằng cụm mật khẩu. Nhập cụ
 <translation id="7599894504325210080">Chế độ xem mở rộng về tính năng tự động điền của Chrome</translation>
 <translation id="7617512710641355143">Chrome được quản lý</translation>
 <translation id="7626032353295482388">Chào mừng bạn đến với Chrome</translation>
+<translation id="7641448682796883218">Mẹo khi dùng Chrome: Duyệt web an toàn có tăng cường bảo vệ</translation>
 <translation id="7642373780953416937">Nhận cảnh báo về mọi vấn đề liên quan đến quyền riêng tư hoặc bảo mật mà Chrome tự động phát hiện ra.</translation>
 <translation id="7660356333829433649">Quay lại đây để xem thêm các mẹo hữu ích giúp khai thác tối đa Chrome.</translation>
 <translation id="7662994914830945754">Để xem các thẻ của bạn trên bất cứ thiết bị nào mà bạn có dùng Chrome, hãy đăng nhập và bật tính năng đồng bộ hóa</translation>
@@ -300,7 +302,7 @@ Chỉ những người có cụm mật khẩu mới đọc được dữ liệu 
 <translation id="8370517070665726704">Bản quyền <ph name="YEAR" /> Google LLC. Mọi quyền được bảo lưu.</translation>
 <translation id="8371138994040262994">Mở chế độ cài đặt trong Chrome.</translation>
 <translation id="8387459386171870978">Tiếp tục sử dụng Chrome</translation>
-<translation id="8392023217086447677">Đã mở trong chế độ Ẩn danh của Chrome</translation>
+<translation id="8392023217086447677">Đã mở trong chế độ ẩn danh của Chrome</translation>
 <translation id="840168496893712993">Một số tiện ích bổ sung khiến Chrome trục trặc. Hãy thử gỡ cài đặt chúng.</translation>
 <translation id="8413500425974960807">Mẹo dùng Chrome: Di chuyển Chrome vào thanh dock</translation>
 <translation id="8413795581997394485">Bảo vệ bạn khỏi các trang web, nội dung tải xuống và tiện ích được xác định là nguy hiểm. Khi bạn truy cập vào một trang web, Chrome sẽ gửi cho Google một phần URL đã làm rối mã nguồn thông qua một máy chủ đảm bảo quyền riêng tư giúp ẩn địa chỉ IP của bạn. Nếu một trang web có hành vi đáng ngờ, thì Chrome cũng sẽ gửi URL đầy đủ và các đoạn nội dung trên trang cho Google.</translation>

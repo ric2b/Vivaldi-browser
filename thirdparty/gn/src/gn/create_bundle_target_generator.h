@@ -35,6 +35,7 @@ class CreateBundleTargetGenerator : public TargetGenerator {
   bool FillXcodeTestApplicationName();
 
   bool FillPostProcessingScript();
+  bool FillPostProcessingManifest();
   bool FillPostProcessingSources();
   bool FillPostProcessingOutputs();
   bool FillPostProcessingArgs();

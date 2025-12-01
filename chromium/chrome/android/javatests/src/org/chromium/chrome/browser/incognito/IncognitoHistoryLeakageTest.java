@@ -28,8 +28,10 @@ import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.chrome.browser.customtabs.CustomTabsIntentTestUtils;
 import org.chromium.chrome.browser.customtabs.IncognitoCustomTabActivityTestRule;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.history.BrowsingHistoryBridge;
 import org.chromium.chrome.browser.history.HistoryItem;
@@ -130,7 +132,7 @@ public class IncognitoHistoryLeakageTest {
         mChromeActivityTestRule.startOnBlankPage();
         mChromeActivityTestRule.loadUrlInNewTab(mTestPage1, /* incognito= */ true);
         List<HistoryItem> historyEntriesOfIncognitoMode =
-                getBrowsingHistory(mChromeActivityTestRule.getActivity().getActivityTab());
+                getBrowsingHistory(mChromeActivityTestRule.getActivityTab());
         assertTrue(historyEntriesOfIncognitoMode.isEmpty());
     }
 
@@ -143,13 +145,15 @@ public class IncognitoHistoryLeakageTest {
                         ApplicationProvider.getApplicationContext(), mTestPage1);
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
         List<HistoryItem> historyEntriesOfIncognitoMode =
-                getBrowsingHistory(mCustomTabActivityTestRule.getActivity().getActivityTab());
+                getBrowsingHistory(mCustomTabActivityTestRule.getActivityTab());
         assertTrue(historyEntriesOfIncognitoMode.isEmpty());
     }
 
     @Test
     @LargeTest
     @UseMethodParameter(AllTypesToAllTypes.class)
+    // TODO(crbug.com/439491767): Fix broken tests caused by desktop-like incognito window.
+    @DisableFeatures(ChromeFeatureList.ANDROID_OPEN_INCOGNITO_AS_WINDOW)
     public void testTabNavigationHistoryDoNotLeakBetweenActivities(
             String activityType1, String activityType2) throws TimeoutException {
         ActivityType activity1 = ActivityType.valueOf(activityType1);

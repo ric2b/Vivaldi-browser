@@ -38,6 +38,7 @@
 namespace blink {
 
 class InterfaceRegistry;
+class NoiseToken;
 class WorkerClients;
 
 // GlobalScopeCreationParams contains parameters for initializing
@@ -93,7 +94,8 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
       mojo::PendingReceiver<mojom::blink::ReportingObserver>
           coep_reporting_observer = mojo::NullReceiver(),
       mojo::PendingReceiver<mojom::blink::ReportingObserver>
-          dip_reporting_observer = mojo::NullReceiver());
+          dip_reporting_observer = mojo::NullReceiver(),
+      std::optional<NoiseToken> canvas_noise_token = std::nullopt);
   GlobalScopeCreationParams(const GlobalScopeCreationParams&) = delete;
   GlobalScopeCreationParams& operator=(const GlobalScopeCreationParams&) =
       delete;
@@ -262,6 +264,11 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
   mojo::PendingReceiver<mojom::blink::ReportingObserver>
       coep_reporting_observer;
   mojo::PendingReceiver<mojom::blink::ReportingObserver> dip_reporting_observer;
+
+  // Used by CanvasInterventionsHelper to trigger canvas noising and providing a
+  // seed for NoiseHash calculations. This should not be piped to Worklet scopes
+  // as canvas readbacks cannot be performed in Worklet threads.
+  std::optional<NoiseToken> canvas_noise_token;
 };
 
 }  // namespace blink

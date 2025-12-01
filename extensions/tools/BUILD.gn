@@ -6,11 +6,13 @@ source_set("tools") {
   deps = [
     "//components/sharing_message/proto",
     "//chrome/common",
+    "//chrome/browser/ui/webui/tab_search:mojo_bindings",
     "//components/zoom",
     "//extensions/buildflags",
     # "//extensions/browser",
     "//net",
     "//skia",
+    "//ui/views:buildflags",
     # "//vivaldi/ui",
   ]
   allow_circular_includes_from = [

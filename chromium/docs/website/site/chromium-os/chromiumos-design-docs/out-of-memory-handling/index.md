@@ -162,7 +162,7 @@ processes as follows:
 |  -100 | CrOS daemons that can recover (shill, system metrics) |
 |  -100 | Android system processes |
 |     0 | Chrome browser and zygote |
-|   100 | Plugins, NaCl loader |
+|   100 | Plugins |
 |   200 | Chrome GPU process, workers, plugin broker process |
 |   300 | Chrome extensions |
 | 300-1000 | Chrome renderers |

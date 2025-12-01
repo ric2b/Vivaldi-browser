@@ -165,9 +165,10 @@ In the hardware accelerated architecture, compositing happens on the GPU via cal
 
 Before we go any further exploring the GPU commands the compositor generates, its important to understand how the renderer process issues any commands to the GPU at all. In Chrome’s multi-process model, we have a dedicated process for this task: the GPU process. The GPU process exists primarily for security reasons. Note that Android is an exception, where Chrome uses an in-process GPU implementation that runs as a thread in the Browser process. The GPU thread on Android otherwise behaves the same way as the GPU process on other platforms.
 
-Restricted by its sandbox, the Renderer process (which contains an instance of Blink and of cc) cannot directly issue calls to the 3D APIs provided by the OS (GL / D3D). For that reason we use a separate process to access the device. We call this process the GPU Process. The GPU process is specifically designed to provide access to the system's 3D APIs from within the Renderer sandbox or the even more restrictive [Native Client](/nativeclient) "jail". It works via a client-server model as follows:
+Restricted by its sandbox, the Renderer process (which contains an instance of Blink and of cc) cannot directly issue calls to the 3D APIs provided by the OS (GL / D3D). For that reason we use a separate process to access the device. We call this process the GPU Process. The GPU process is specifically designed to provide access to the system's 3D APIs from within the Renderer sandbox.
+It works via a client-server model as follows:
 
-    The client (code running in the Renderer or within a NaCl module),
+    The client (code running in the Renderer),
     instead of issuing calls directly to the system APIs, serializes them and
     puts them in a ring buffer (the command buffer) residing in memory shared
     between itself and the server process.

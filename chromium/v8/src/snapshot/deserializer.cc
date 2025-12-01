@@ -99,7 +99,8 @@ class SlotAccessorForHeapObject {
     // we must have one of these objects here. See the comments in
     // trusted-object.h for more details.
     DCHECK(IsExposedTrustedObject(value));
-    Tagged<ExposedTrustedObject> object = Cast<ExposedTrustedObject>(value);
+    Tagged<ExposedTrustedObject> object =
+        TrustedCast<ExposedTrustedObject>(value);
 
     InstanceType instance_type = value->map()->instance_type();
     bool shared = HeapLayout::InAnySharedSpace(value);
@@ -115,7 +116,7 @@ class SlotAccessorForHeapObject {
   int WriteProtectedPointerTo(Tagged<TrustedObject> value,
                               WriteBarrierMode mode) {
     DCHECK(IsTrustedObject(*object_));
-    Tagged<TrustedObject> host = Cast<TrustedObject>(*object_);
+    Tagged<TrustedObject> host = TrustedCast<TrustedObject>(*object_);
     ProtectedPointerSlot dest = host->RawProtectedPointerField(offset_);
     dest.store(value);
     WriteBarrier::ForProtectedPointer(host, dest, value, mode);
@@ -238,7 +239,7 @@ int Deserializer<IsolateT>::WriteHeapPointer(
   } else if (descr.is_protected_pointer) {
     DCHECK(IsTrustedObject(*heap_object));
     return slot_accessor.WriteProtectedPointerTo(
-        Cast<TrustedObject>(*heap_object), mode);
+        TrustedCast<TrustedObject>(*heap_object), mode);
   } else {
     return slot_accessor.Write(heap_object, descr.type, 0, mode);
   }
@@ -655,10 +656,10 @@ void Deserializer<IsolateT>::PostProcessNewObject(DirectHandle<Map> map,
     // Hence we only remember each individual code object when deserializing
     // user code.
     if (deserializing_user_code()) {
-      new_code_objects_.push_back(Cast<InstructionStream>(obj));
+      new_code_objects_.push_back(TrustedCast<InstructionStream>(obj));
     }
   } else if (InstanceTypeChecker::IsCode(instance_type)) {
-    Tagged<Code> code = Cast<Code>(raw_obj);
+    Tagged<Code> code = TrustedCast<Code>(raw_obj);
     if (!code->has_instruction_stream()) {
       code->SetInstructionStartForOffHeapBuiltin(
           main_thread_isolate(), EmbeddedData::FromBlob(main_thread_isolate())
@@ -843,8 +844,8 @@ Handle<HeapObject> Deserializer<IsolateT>::ReadObject(SnapshotSpace space) {
     Tagged<JSObject> js_obj = Cast<JSObject>(raw_obj);
     for (int i = 0; i < js_obj->GetEmbedderFieldCount(); ++i) {
       void* pointer;
-      CHECK(EmbedderDataSlot(js_obj, i).ToAlignedPointer(main_thread_isolate(),
-                                                         &pointer));
+      CHECK(EmbedderDataSlot(js_obj, i).DeprecatedToAlignedPointer(
+          main_thread_isolate(), &pointer));
       CHECK_NULL(pointer);
     }
   } else if (IsEmbedderDataArray(raw_obj, cage_base)) {
@@ -853,7 +854,7 @@ Handle<HeapObject> Deserializer<IsolateT>::ReadObject(SnapshotSpace space) {
     EmbedderDataSlot end(array, array->length());
     for (EmbedderDataSlot slot = start; slot < end; ++slot) {
       void* pointer;
-      CHECK(slot.ToAlignedPointer(main_thread_isolate(), &pointer));
+      CHECK(slot.DeprecatedToAlignedPointer(main_thread_isolate(), &pointer));
       CHECK_NULL(pointer);
     }
   }
@@ -1485,7 +1486,7 @@ int Deserializer<IsolateT>::ReadInitializeSelfIndirectPointer(
             ExposedTrustedObject::kSelfIndirectPointerOffset);
 
   Tagged<ExposedTrustedObject> host =
-      Cast<ExposedTrustedObject>(*slot_accessor.object());
+      TrustedCast<ExposedTrustedObject>(*slot_accessor.object());
   host->init_self_indirect_pointer(isolate());
 
   return 1;
@@ -1509,7 +1510,7 @@ int Deserializer<IsolateT>::ReadAllocateJSDispatchEntry(
     PrintF("%*sAllocateJSDispatchEntry [%u]\n", depth_, "", parameter_count);
   }
 
-  DirectHandle<Code> code = Cast<Code>(ReadObject());
+  DirectHandle<Code> code = TrustedCast<Code>(ReadObject());
 
   JSDispatchTable::Space* space =
       isolate()->GetJSDispatchTableSpaceFor(host->address());

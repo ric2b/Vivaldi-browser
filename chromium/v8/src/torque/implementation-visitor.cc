@@ -2561,11 +2561,11 @@ VisitResult ImplementationVisitor::GenerateFetchFromLocation(
     const Type* referenced_type = *reference.ReferencedType();
     if (referenced_type == TypeOracle::GetFloat64OrUndefinedOrHoleType()) {
       return GenerateCall(QualifiedName({TORQUE_INTERNAL_NAMESPACE_STRING},
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
                                         "LoadFloat64OrUndefinedOrHole"
 #else
                                         "LoadFloat64OrHole"
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
                                         ),
                           Arguments{{reference.heap_reference()}, {}});
     } else if (auto struct_type = referenced_type->StructSupertype()) {
@@ -2631,11 +2631,11 @@ void ImplementationVisitor::GenerateAssignToLocation(
     if (referenced_type == TypeOracle::GetFloat64OrUndefinedOrHoleType()) {
       GenerateCall(
           QualifiedName({TORQUE_INTERNAL_NAMESPACE_STRING},
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
                         "StoreFloat64OrUndefinedOrHole"
 #else
                         "StoreFloat64OrHole"
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
                         ),
           Arguments{{reference.heap_reference(), assignment_value}, {}});
     } else if (auto struct_type = referenced_type->StructSupertype()) {
@@ -4236,8 +4236,8 @@ void CppClassGenerator::GenerateClass() {
     impl_ << "\ntemplate <>\n";
     impl_ << "void " << gen_name_I_ << "::" << name_
           << "Verify(Isolate* isolate) {\n";
-    impl_ << "  TorqueGeneratedClassVerifiers::" << name_ << "Verify(Cast<"
-          << name_
+    impl_ << "  TorqueGeneratedClassVerifiers::" << name_
+          << "Verify(TrustedCast<" << name_
           << ">(*this), "
              "isolate);\n";
     impl_ << "}\n\n";
@@ -4462,7 +4462,13 @@ std::string GenerateRuntimeTypeCheck(const Type* type,
     type_check << value << ".IsCleared()";
     at_start = false;
   }
-  for (const TypeChecker& runtime_type : type->GetTypeCheckers()) {
+  std::vector<TypeChecker> type_checkers = type->GetTypeCheckers();
+  std::partition(type_checkers.begin(), type_checkers.end(),
+                 [](const TypeChecker& runtime_type) {
+                   return runtime_type.type == "Hole" ||
+                          runtime_type.type == "TheHole";
+                 });
+  for (const TypeChecker& runtime_type : type_checkers) {
     if (!at_start) type_check << " || ";
     at_start = false;
     if (maybe_object) {

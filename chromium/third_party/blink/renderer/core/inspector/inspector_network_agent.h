@@ -196,14 +196,15 @@ class CORE_EXPORT InspectorNetworkAgent final
       network::mojom::blink::WebSocketHandshakeRequest*,
       network::mojom::blink::WebSocketHandshakeResponse*);
   void DidCloseWebSocket(ExecutionContext*, uint64_t identifier);
-  void DidReceiveWebSocketMessage(uint64_t identifier,
-                                  int op_code,
-                                  bool masked,
-                                  const Vector<base::span<const char>>& data);
+  void DidReceiveWebSocketMessage(
+      uint64_t identifier,
+      int op_code,
+      bool masked,
+      const Vector<base::span<const uint8_t>>& data);
   void DidSendWebSocketMessage(uint64_t identifier,
                                int op_code,
                                bool masked,
-                               base::span<const char> payload);
+                               base::span<const uint8_t> payload);
   void DidReceiveWebSocketMessageError(uint64_t identifier, const String&);
 
   void WebTransportCreated(ExecutionContext*,
@@ -268,7 +269,8 @@ class CORE_EXPORT InspectorNetworkAgent final
       std::optional<int> total_buffer_size,
       std::optional<int> resource_buffer_size,
       std::optional<int> max_post_data_size,
-      std::optional<bool> report_direct_socket_traffic) override;
+      std::optional<bool> report_direct_socket_traffic,
+      std::optional<bool> enable_durable_messages) override;
   protocol::Response disable() override;
   protocol::Response setExtraHTTPHeaders(
       std::unique_ptr<protocol::Network::Headers>) override;
@@ -301,6 +303,17 @@ class CORE_EXPORT InspectorNetworkAgent final
       std::optional<double> packet_loss,
       std::optional<int> packet_queue_length,
       std::optional<bool> packet_reordering) override;
+  protocol::Response emulateNetworkConditionsByRule(
+      bool offline,
+      std::unique_ptr<protocol::Array<protocol::Network::NetworkConditions>>
+          matched_network_conditions,
+      std::unique_ptr<protocol::Array<String>>* rule_ids_result) override;
+  protocol::Response overrideNetworkState(
+      bool offline,
+      double latency,
+      double download_throughput,
+      double upload_throughput,
+      std::optional<String> connection_type) override;
   protocol::Response setCacheDisabled(bool) override;
   protocol::Response setBypassServiceWorker(bool) override;
   protocol::Response getCertificate(

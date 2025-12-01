@@ -108,16 +108,18 @@ BASE_FEATURE(kLocationOverride,
              "VivaldiLocationOverride",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kNewAboutPage,
+             "VivaldiNewAboutPage",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 BASE_FEATURE(
     kNewPrivacyReport,
     "VivaldiNewPrivacyReport",
     FeatureDefaults()
         .WithAndroid(BuildTypeDefaults()
                          .Sopranos(base::FEATURE_ENABLED_BY_DEFAULT)
-                         .Snapshot(base::FEATURE_ENABLED_BY_DEFAULT))
-        .WithDesktop(BuildTypeDefaults()
-                         .Sopranos(base::FEATURE_ENABLED_BY_DEFAULT)
-                         .Snapshot(base::FEATURE_DISABLED_BY_DEFAULT))
+                         .Snapshot(base::FEATURE_ENABLED_BY_DEFAULT)) // Disabled only for final on Android
+        .WithDesktop(BuildTypeDefaults(base::FEATURE_ENABLED_BY_DEFAULT)) // Enabled for all on desktop
         .Get());
 
 BASE_FEATURE(kShowTopSites,
@@ -138,10 +140,6 @@ bool IsNewSpeedDialDialogEnabled() {
 
 BASE_FEATURE(kSpeeddialWidgets,
              "VivaldiSpeeddialWidgets",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kTabsButton,
-             "VivaldiTabsButton",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kViewMarkdownAsHTML,

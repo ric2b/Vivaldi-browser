@@ -25,7 +25,6 @@
 <translation id="1451375123200651445">Webseite, Einzeldatei (MHTML)</translation>
 <translation id="1465176863081977902">Audioadresse kopieren</translation>
 <translation id="1476607407192946488">&amp;Spracheinstellungen</translation>
-<translation id="1546280085599573572">Durch diese Erweiterung wurde die Seite geändert, die beim Klick auf die Schaltfläche "Startseite" erscheint.</translation>
 <translation id="1552752544932680961">Erweiterung verwalten</translation>
 <translation id="15662109988763471">Der ausgewählte Drucker ist entweder nicht verfügbar oder nicht ordnungsgemäss installiert. Überprüfen Sie den Drucker oder wählen Sie einen anderen Drucker aus.</translation>
 <translation id="1588438908519853928">Normal</translation>
@@ -65,7 +64,6 @@
 <translation id="215753907730220065">Vollbildmodus aus</translation>
 <translation id="2158475082070321257">Link zum markierten Text kopieren</translation>
 <translation id="2177950615300672361">Privater Tab: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Natives Client-Modul: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Als unformatierten Text einfügen</translation>
 <translation id="2249605167705922988">z. B. 1-5, 8, 11-13</translation>
 <translation id="2280486287150724112">Rechter Rand</translation>
@@ -78,7 +76,6 @@
 <translation id="2348176352564285430">App: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Erweiterungsverzeichnis auswählen.</translation>
 <translation id="2379281330731083556">Über das Systemdialogfeld drucken… <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Unbekanntes Plug-in</translation>
 <translation id="2423578206845792524">Bi&amp;ld speichern unter...</translation>
 <translation id="2439110203301358333">Ein anderes Programm auf Ihrem Computer hat eine Erweiterung hinzugefügt, die sich möglicherweise auf die Funktionsweise von Vivaldi auswirkt.</translation>
 <translation id="2443487764245141020">Websites müssen Ihr Gerät möglicherweise auch anhand einer eindeutigen Kennung erkennen</translation>
@@ -101,7 +98,6 @@
 <translation id="2785873697295365461">Dateideskriptoren</translation>
 <translation id="2825758591930162672">Öffentlicher Schlüssel des Antragstellers</translation>
 <translation id="2850541429955027218">Design hinzufügen</translation>
-<translation id="2861941300086904918">Sicherheitsmanager für native Clients</translation>
 <translation id="2881076733170862447">Wenn die Erweiterung angeklickt wird</translation>
 <translation id="2889064240420137087">Link öffnen mit…</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> konnte nicht mit diesem Drucker kommunizieren. Vergewissern Sie sich, dass der Drucker angeschlossen ist, und versuchen Sie es dann erneut.</translation>
@@ -147,7 +143,6 @@
 <translation id="3511307672085573050">Adr&amp;esse des Links kopieren</translation>
 <translation id="354068948465830244">Kann Websitedaten lesen und ändern</translation>
 <translation id="3560034655160545939">&amp;Rechtschreibprüfung</translation>
-<translation id="3587482841069643663">Alle</translation>
 <translation id="3627588569887975815">Link in &amp;privatem Fenster öffnen</translation>
 <translation id="3678156199662914018">Erweiterung: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Anfrage zur Bildschirmfreigabe durch <ph name="APP_NAME" /></translation>
@@ -182,7 +177,6 @@
 <translation id="4131410914670010031">Schwarz-Weiss</translation>
 <translation id="4165986682804962316">Website–Einstellungen</translation>
 <translation id="4170314459383239649">Beim Beenden löschen</translation>
-<translation id="4176463684765177261">Deaktiviert</translation>
 <translation id="4200983522494130825">&amp;Neuer Tab</translation>
 <translation id="4225397296022057997">Auf allen Websites</translation>
 <translation id="4256316378292851214">Video &amp;speichern unter...</translation>
@@ -201,6 +195,7 @@
 <translation id="4613271546271159013">Die Seite, die beim Öffnen eines neuen Tabs angezeigt wird, wurde durch eine Erweiterung geändert.</translation>
 <translation id="4616405296204756919">Sie können gespeicherte Passwörter auf jedem Gerät verwenden. Sie werden im <ph name="VIVALDI_PASSWORD_MANAGER" /> gespeichert.</translation>
 <translation id="4643612240819915418">&amp;Video in neuem Tab öffnen</translation>
+<translation id="4654801841330730814">Alle</translation>
 <translation id="4677772697204437347">GPU-Speicher</translation>
 <translation id="4681930562518940301">Bild in neuem Tab öffnen</translation>
 <translation id="4711638718396952945">Einstellungen wiederherstellen</translation>
@@ -225,11 +220,9 @@
 <translation id="5059526285558225588">Auswählen, was geteilt werden soll</translation>
 <translation id="5063480226653192405">Verwendung</translation>
 <translation id="5116628073786783676">Audio &amp;speichern unter...</translation>
-<translation id="5143374789336132547">Die Erweiterung "<ph name="EXTENSION_NAME" />" hat die Seite geändert, die beim Klick auf die Schaltfläche „Startseite” angezeigt wird.</translation>
 <translation id="5154108062446123722">Erweiterte Einstellungen für <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5154702632169343078">Betreff</translation>
 <translation id="5171343362375269016">Swap-Speicher</translation>
-<translation id="5233019165164992427">NaCl-Debug-Port</translation>
 <translation id="5233231016133573565">Prozess-ID</translation>
 <translation id="5233736638227740678">&amp;Einfügen</translation>
 <translation id="5256861893479663409">Auf allen Websites</translation>
@@ -250,7 +243,6 @@
 <translation id="5485102783864353244">App hinzufügen</translation>
 <translation id="5486561344817861625">Browser-Neustart simulieren</translation>
 <translation id="5509693895992845810">Speichern &amp;unter...</translation>
-<translation id="5521078259930077036">Ist dies Ihre erwartete Startseite?</translation>
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Neu laden</translation>
 <translation id="5575473780076478375">Anonyme Erweiterung: <ph name="EXTENSION_NAME" /></translation>
@@ -261,7 +253,6 @@
 <translation id="5677928146339483299">Blockiert</translation>
 <translation id="5707185214361380026">Fehler beim Laden der Erweiterung aus:</translation>
 <translation id="5713171467967533494">Im Vivaldi-Browser öffnen</translation>
-<translation id="5715711091495208045">Plug-in-Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Als PDF speichern</translation>
 <translation id="5747809636523347288">Einfügen und <ph name="URL" /> aufrufen</translation>
 <translation id="5759728514498647443">Dokumente, die Sie über <ph name="APP_NAME" /> zum Druck senden, können von <ph name="APP_NAME" /> gelesen werden.</translation>
@@ -269,7 +260,6 @@
 <translation id="5780973441651030252">Prozesspriorität</translation>
 <translation id="5804241973901381774">Berechtigungen</translation>
 <translation id="5828633471261496623">Wird gedruckt…</translation>
-<translation id="583281660410589416">Unbekannt</translation>
 <translation id="5851868085455377790">Aussteller</translation>
 <translation id="5860491529813859533">Aktivieren</translation>
 <translation id="5910363049092958439">Bi&amp;ld speichern unter...</translation>
@@ -318,7 +308,6 @@
 <translation id="6686817083349815241">Passwort speichern</translation>
 <translation id="6786747875388722282">Erweiterungen</translation>
 <translation id="6787839852456839824">Tastenkombinationen</translation>
-<translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Änderungen beibehalten</translation>
 <translation id="6824564591481349393">E-Mail-Adr&amp;esse kopieren</translation>
 <translation id="6840155290835956714">Vor dem Senden nachfragen</translation>
@@ -349,7 +338,6 @@
 <translation id="7576690715254076113">Sortieren</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
 <translation id="7659154729610375585">Privater Modus trotzdem beenden?</translation>
-<translation id="7661259717474717992">Speichern und Lesen von Cookiedaten zulassen</translation>
 <translation id="7663719505383602579">Empfänger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Von Ihrem Administrator installiert</translation>
 <translation id="7685049629764448582">JavaScript-Speicher</translation>
@@ -388,7 +376,6 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8261378640211443080">Diese Erweiterung ist nicht im <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> aufgeführt und wurde möglicherweise ohne Ihr Wissen hinzugefügt.</translation>
 <translation id="8351419472474436977">Diese Erweiterung hat die Kontrolle über Ihre Proxyeinstellungen übernommen. Das bedeutet, dass sie sämtliche Online-Aktivitäten ändern, stören oder überwachen kann. Wenn Sie nicht sicher sind, wie es zu dieser Änderung gekommen ist, war sie wahrscheinlich nicht gewollt.</translation>
 <translation id="8382913212082956454">E-Mail-Adr&amp;esse kopieren</translation>
-<translation id="8434480141477525001">NaCl-Debug-Port</translation>
 <translation id="8449008133205184768">Einfügen und Stil anpassen</translation>
 <translation id="8477384620836102176">&amp;Allgemein</translation>
 <translation id="8496717697661868878">Dieses Plug-in ausführen</translation>

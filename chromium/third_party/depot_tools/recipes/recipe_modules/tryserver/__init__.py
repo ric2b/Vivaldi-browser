@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-PYTHON_VERSION_COMPATIBILITY = 'PY3'
 
 DEPS = [
   'gerrit',
@@ -18,3 +17,6 @@ DEPS = [
   'recipe_engine/raw_io',
   'recipe_engine/step',
 ]
+
+from .api import TryserverApi as API
+from .test_api import TryserverTestApi as TEST_API

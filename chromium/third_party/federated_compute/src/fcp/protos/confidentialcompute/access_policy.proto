@@ -1,0 +1,254 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.confidentialcompute;
+
+import "google/protobuf/any.proto";
+import "proto/attestation/reference_value.proto";
+
+option java_package = "com.google.intelligence.fcp.confidentialcompute";
+option java_multiple_files = true;
+
+// A `DataAccessPolicy` governs access to client uploads. It authorizes a set of
+// named `LogicalPipelinePolicies` to process such uploads. Each
+// `LogicalPipelinePolicy` represents a permissible logical pipeline for client
+// upload processing, defining a high-level workflow.
+
+// Within each `LogicalPipelinePolicy`, one or more `PipelineVariantPolicy`
+// instances may be defined. Each `PipelineVariantPolicy` specifies a concrete
+// data processing graph, where nodes represent data blobs and edges represent
+// permissible transformations between them.
+
+// Access to client uploads is granted independently to each
+// `LogicalPipelinePolicy`. However, within a given `LogicalPipelinePolicy`,
+// only one of its associated `PipelineVariantPolicy` instances may process a
+// specific client upload.
+//
+// Historically, this root message represented the policy for a single logical
+// pipeline variant, but now supports multiple logical pipelines and their
+// variants. The legacy fields are included for compatibility with existing
+// policies, but are deprecated. All new policies will use
+// `PipelineVariantPolicy` and `PipelineVariantPolicy.Transform` instead.
+//
+// TODO: b/390344558 - rename DataAccessPolicy to
+// AuthorizedLogicalPipelinePolicies.
+message DataAccessPolicy {
+  // A list of all transforms that are allowed on this data and its derivatives.
+  repeated Transform transforms = 1 [deprecated = true];
+
+  // Access budget that are shared between multiple transforms (if any).
+  repeated AccessBudget shared_access_budgets = 2 [deprecated = true];
+
+  // A transform that is allowed on this data and its derivatives.
+  message Transform {
+    // Deprecated. Use PipelineVariantPolicy and PipelineVariantPolicy.Transform
+    // instead.
+    option deprecated = true;
+
+    // The numeric id of the source blob in the graph.
+    uint32 src = 1;
+
+    // A matcher for the properties of the application being authorized.
+    // If the transform should encrypt outputs, this should include fields that
+    // represent the possible node IDs in this policy graph that the application
+    // will assign to the outputs, which is necessary to ensure that the outputs
+    // will be subject to the correct rules for further transformation.
+    ApplicationMatcher application = 3;
+
+    // Limits on the application's access to the data.
+    AccessBudget access_budget = 4;
+
+    // The indices of shared AccessBudgets this transform is also subject to.
+    // *All* budgets must allow the usage for access to be granted.
+    repeated uint32 shared_access_budget_indices = 5;
+
+    reserved 2;
+  }
+
+  // A map of names to the policies of the logical pipelines that are authorized
+  // to access the client upload.
+  //
+  // If this field is set, values in the deprecated fields above will be
+  // ignored. If this field is unset, the policy is considered to be legacy and
+  // only supports a single logical pipeline. The above deprecated fields will
+  // be used.
+  map<string, LogicalPipelinePolicy> pipelines = 3;
+}
+
+// A copy of DataAccessPolicy that contains the PipelineVariantPolicy messages
+// as bytes. This message is useful for extracting serialized
+// PipelineVariantPolicy messages without deserializing and re-serializing them,
+// which can result in different representations because proto serialization is
+// not canonical:
+// https://protobuf.dev/programming-guides/serialization-not-canonical/.
+//
+// This message should contain the subset of DataAccessPolicy fields needed to
+// extract the serialized PipelineVariantPolicy messages; all tags must match.
+// TODO: b/390344558 - rename DataAccessPolicyWithSerializedVariants to
+// AuthorizedLogicalPipelinePoliciesWithSerializedVariants.
+message DataAccessPolicyWithSerializedVariants {
+  message LogicalPipelinePolicy {
+    repeated bytes instances = 1 [ctype = CORD];
+  }
+
+  map<string, LogicalPipelinePolicy> pipelines = 3;
+}
+
+message LogicalPipelinePolicy {
+  // Policies for each pipeline instance that can serve as this logical
+  // pipeline. This fully specifies the data flow between worker stages as well
+  // as the binary hashes for each worker stage.
+  repeated PipelineVariantPolicy instances = 1;
+}
+
+// A policy imposing limits on what can access a data blob and how many times,
+// as well as limits on all derived artifacts. The PipelineVariantPolicy defines
+// a graph, where each node is a data blob and each edge ("transform") specifies
+// a permitted usage of that blob.
+//
+// The blobs are identified by a numeric id; the initial blob has id 0, and
+// derived blobs receive arbitrary positive values.
+//
+// For example:
+//                        [ 0 ]
+//            3 times by /     \ 1 time by
+//                app A /       \ app B
+//                   [ 1 ]      [ 2 ]
+//                                | 2 times by
+//                                | app C
+//                              [ 3 ]
+message PipelineVariantPolicy {
+  // A list of all transforms that are allowed on this data and its derivatives.
+  repeated Transform transforms = 1;
+
+  // Access budget that are shared between multiple transforms (if any).
+  repeated AccessBudget shared_access_budgets = 2;
+
+  message Transform {
+    // The numeric id(s) of the source blobs in the graph that this transform
+    // may access.
+    repeated uint32 src_node_ids = 6;
+
+    // The numeric id(s) of output blobs in the graph that this transform may
+    // produce. This field is ignored by the Ledger API.
+    repeated uint32 dst_node_ids = 7;
+
+    // A matcher for the properties of the application being authorized.
+    // If the transform should encrypt outputs, this should include fields that
+    // represent the possible node IDs in this policy graph that the application
+    // will assign to the outputs, which is necessary to ensure that the outputs
+    // will be subject to the correct rules for further transformation.
+    // This field is required when using the KeyManagementService API.
+    ApplicationMatcher application = 2;
+
+    // Application-specific constraints on the transform's configuration. The
+    // transform will verify these constraints before processing any encrypted
+    // data.
+    //
+    // This field replaces `application.config_properties` when using the
+    // KeyManagementService API; it is ignored when using the Ledger API.
+    google.protobuf.Any config_constraints = 5;
+
+    // Limits on the application's access to the data accessed by this pipeline
+    // as described by `src`/`src_node_ids`. The budget applies to all source
+    // ids in the same way; if sources should have separate budgets, they should
+    // be listed in separate transforms.
+    AccessBudget access_budget = 3;
+
+    // The indices of shared AccessBudgets this transform is also subject to.
+    // *All* budgets must allow the usage for access to be granted to a source
+    // blob.
+    repeated uint32 shared_access_budget_indices = 4;
+
+    reserved 1;
+  }
+}
+
+// Describes the properties of the authorized application. Fields that are
+// omitted are considered to match all applications.
+message ApplicationMatcher {
+  // An unvalidated tag associated with the application, used to disambiguate
+  // otherwise identical applications.
+  optional string tag = 1;
+
+  // Oak ReferenceValues specifying the binaries running at each layer of the
+  // DICE attestation. This field is required when using the
+  // KeyManagementService API.
+  oak.attestation.v1.ReferenceValues reference_values = 2;
+
+  // Matchers for the application's configuration-derived properties.
+  // Configuration checks are skipped if this field is not set.
+  StructMatcher config_properties = 3;
+}
+
+// Describes conditions on a google.protobuf.Struct.
+message StructMatcher {
+  repeated FieldMatcher fields = 1;
+
+  // Matcher for a field in a google.protobuf.Struct.
+  message FieldMatcher {
+    // The path to the field, with path segments separated by '.'.
+    string path = 1;
+
+    // A matcher for the value. The path must exist in the struct for the
+    // FieldMatcher to match -- even if the ValueMatcher would match any value.
+    ValueMatcher matcher = 2;
+  }
+}
+
+// Describes conditions on a google.protobuf.Value.
+// This message only contains currently-needed matchers; it should be extended
+// when necessary.
+message ValueMatcher {
+  // If unset, the matcher matches any value.
+  oneof kind {
+    // Matches a numeric value.
+    NumberMatcher number_value = 1;
+    // Matches a string value.
+    StringMatcher string_value = 2;
+  }
+
+  // Matchers for a numeric value.
+  message NumberMatcher {
+    // If unset, the matcher matches any numeric value.
+    oneof kind {
+      double lt = 1;  // Matches values < the given value.
+      double le = 2;  // Matches values <= the given value.
+      double eq = 3;  // Matches values == the given value.
+      double ge = 4;  // Matches values >= the given value.
+      double gt = 5;  // Matches values > the given value.
+    }
+  }
+
+  // Matchers for a string value.
+  message StringMatcher {
+    // If unset, the matcher matches any string value.
+    oneof kind {
+      string eq = 3;  // Matches strings equal to the given value.
+    }
+  }
+}
+
+// Defines limits on the accesses to a blob. This currently only supports
+// limiting the number of times access occurs, but it may be extended in the
+// future to support DP-based budgets.
+message AccessBudget {
+  // If kind is unset, the access is unlimited.
+  oneof kind {
+    // The blob can be accessed a limited number of times.
+    uint32 times = 1;
+  }
+}

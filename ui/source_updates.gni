@@ -37,6 +37,8 @@ update_target("//chrome/browser/ui:ui") {
   ]
   if (!is_android) {
     sources += [
+      "//vivaldi/ui/views/profile_picker_frame.cc",
+      "//vivaldi/ui/views/profile_picker_frame.h",
       "//vivaldi/extensions/api/events/vivaldi_ui_events.cc",
       "//vivaldi/extensions/api/events/vivaldi_ui_events.h",
       "//vivaldi/ui/views/video_pip_controller.cc",
@@ -49,6 +51,7 @@ update_target("//chrome/browser/ui:ui") {
       "//vivaldi/ui/views/vivaldi_native_widget.h",
       "//vivaldi/ui/views/vivaldi_overlay_window_views.cc",
       "//vivaldi/ui/views/vivaldi_overlay_window_views.h",
+      "//vivaldi/ui/views/vivaldi_profile_picker_view.cc",
       "//vivaldi/ui/views/vivaldi_window_frame_view.h",
       "//vivaldi/ui/vivaldi_ui_web_contents_delegate.cc",
       "//vivaldi/ui/vivaldi_ui_web_contents_delegate.h",

@@ -1,0 +1,149 @@
+// Copyright 2021 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.client;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+
+option java_package = "com.google.intelligence.fcp.client";
+option java_multiple_files = true;
+
+message SelectorContext {
+  QueryTimeComputationProperties computation_properties = 1;
+
+  // Platform-specific context to be forwarded to ExampleIterators.
+  google.protobuf.Any platform_extras = 2;
+}
+
+// Properties about the computation exposed to the iterator.
+message QueryTimeComputationProperties {
+  // Session name, if applicable.
+  string session_name = 1;
+
+  // Different kinds of computation types.
+  oneof computation_type {
+    // Local computation type.
+    LocalComputation local_compute = 2;
+
+    // EligibilityEval computation type.
+    EligibilityEvalComputation eligibility_eval = 3;
+
+    // Federated computation type.
+    FederatedComputation federated = 4;
+  }
+
+  // A unique ID identifying the computation run.
+  int64 run_id = 5;
+
+  // Additional context data.
+  bytes context_data = 6;
+
+  enum ExampleIteratorOutputFormat {
+    // The specific serialization format is left unspecified and up to the
+    // ExampleStore implementation and TensorFlow-based tasks.
+    // In most cases, data is encoded in binary-serialized `tf.train.Example`
+    // protos.
+    EXAMPLE_ITERATOR_OUTPUT_FORMAT_UNSPECIFIED = 0;
+
+    // Data encoded in binary-serialized `fcp.client.ExampleQueryResult` protos.
+    EXAMPLE_QUERY_RESULT = 1;
+  }
+
+  // Expected output format from the example iterator.
+  ExampleIteratorOutputFormat example_iterator_output_format = 7;
+}
+
+// On-device, local computation only. No aggregation.
+message LocalComputation {
+  // The absolute path to the input directory.
+  string input_dir = 1;
+  // The absolute path to the output directory.
+  string output_dir = 2;
+  // The map of input resources where the key is the name of the resource, and
+  // the value is the absolute paths to the resource.
+  map<string, string> input_resource_map = 3;
+}
+
+// ElgibilityEval computation, no aggregation.
+message EligibilityEvalComputation {
+  // Population name.
+  string population_name = 1;
+  // Identity representing the computation e.g. its hash.
+  // Optional, currently it is only set for data availability policies.
+  bytes computation_id = 2;
+}
+
+// Federated computation with server aggregation.
+message FederatedComputation {
+  // Population name.
+  string population_name = 1;
+  // Name of the task that was executed.
+  string task_name = 2;
+
+  // Identity representing the computation e.g. its plan hash.
+  bytes computation_id = 5;
+
+  // Details about previous executions for the currently executing task.
+  HistoricalContext historical_context = 6;
+
+  // Types of server aggregation.
+  oneof aggregation_type {
+    // Simple aggregation. At least one value is aggregated with simple
+    // aggregation. This includes the mixed case where some values are
+    // aggregated with simple aggregation while others are aggregated with
+    // secure aggregation.
+    SimpleAggregation simple_aggregation = 3;
+
+    // Secure aggregation. All values are aggregated with secure aggregation.
+    SecureAggregation secure_aggregation = 4;
+
+    // Confidential aggregation. All values are aggregated with confidential
+    // aggregation. See
+    // https://github.com/google-parfait/confidential-federated-compute for more
+    // information.
+    ConfidentialAggregation confidential_aggregation = 7;
+  }
+}
+
+// Simple aggregation.
+message SimpleAggregation {}
+
+// Secure aggregation.
+message SecureAggregation {
+  // The minimum number of clients' values that must be aggregated together
+  // before the server can gain access to the aggregate,
+  // even transiently (e.g. in RAM).
+  // This isn't needed by Secure Aggregation protocol on the client side but
+  // shared by the server with clients for transparency and/or policy reasons.
+  // See `federated_api.proto`.
+  int32 minimum_clients_in_server_visible_aggregate = 1;
+}
+
+// Confidential aggregation. See
+// https://github.com/google-parfait/confidential-federated-compute for more
+// information.
+message ConfidentialAggregation {}
+
+// Details about previous executions for the currently executing task.
+message HistoricalContext {
+  // Timestamp of when this task was last successfully contributed to.
+  google.protobuf.Timestamp last_successful_contribution_time = 1;
+
+  // The map of collection URIs to the timestamp of when this task first
+  // accessed the collection on the previous successful execution.
+  map<string, google.protobuf.Timestamp> collection_first_access_times = 2;
+}

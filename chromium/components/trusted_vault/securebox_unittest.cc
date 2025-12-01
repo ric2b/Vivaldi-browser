@@ -12,7 +12,8 @@
 #include <string_view>
 #include <vector>
 
-#include "base/compiler_specific.h"
+#include "base/containers/span.h"
+#include "base/containers/to_vector.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -24,13 +25,13 @@ namespace {
 
 using testing::Eq;
 using testing::IsEmpty;
+using testing::IsNull;
 using testing::Ne;
 using testing::NotNull;
 using testing::SizeIs;
 
 std::vector<uint8_t> StringToBytes(std::string_view str) {
-  const uint8_t* raw_data = reinterpret_cast<const uint8_t*>(str.data());
-  return std::vector<uint8_t>(raw_data, UNSAFE_TODO(raw_data + str.length()));
+  return base::ToVector(base::as_byte_span(str));
 }
 
 class SecureBoxTest : public testing::Test {
@@ -42,6 +43,16 @@ class SecureBoxTest : public testing::Test {
   const std::vector<uint8_t> kTestHeader = StringToBytes("TEST_HEADER");
   const std::vector<uint8_t> kTestPayload = StringToBytes("TEST_PAYLOAD");
 };
+
+TEST_F(SecureBoxTest, ShouldReturnNullIfCreateByImportWithIncorrectSize) {
+  // Sizes other than `kPublicKeyLengthInBytes` should return null.
+  EXPECT_THAT(SecureBoxPublicKey::CreateByImport(std::vector<uint8_t>(64, 1)),
+              IsNull());
+  EXPECT_THAT(SecureBoxPublicKey::CreateByImport(std::vector<uint8_t>(66, 1)),
+              IsNull());
+  EXPECT_THAT(SecureBoxPublicKey::CreateByImport(std::vector<uint8_t>()),
+              IsNull());
+}
 
 TEST_F(SecureBoxTest, ShouldExportAndImportPublicKey) {
   std::unique_ptr<SecureBoxKeyPair> key_pair =

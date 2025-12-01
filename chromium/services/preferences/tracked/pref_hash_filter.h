@@ -101,6 +101,9 @@ class PrefHashFilter final : public InterceptablePrefFilter {
   // preferences.
   static void ClearResetTime(PrefService* user_prefs);
 
+  // Sets the time of the last reset event to now.
+  static void SetResetTime(PrefService* user_prefs);
+
   // Initializes the PrefHashStore with hashes of the tracked preferences in
   // |pref_store_contents|. |pref_store_contents| will be the |storage| passed
   // to PrefHashStore::BeginTransaction().
@@ -125,6 +128,13 @@ class PrefHashFilter final : public InterceptablePrefFilter {
   void SetPrefService(PrefService* pref_service) override;
 
  private:
+  // Friend fixtures for unit testing.
+  FRIEND_TEST_ALL_PREFIXES(PrefHashFilterTest,
+                           RecordTrackedPreferenceResetCount_NoResets);
+  FRIEND_TEST_ALL_PREFIXES(PrefHashFilterTest,
+                           RecordTrackedPreferenceResetCount_WithResets);
+  FRIEND_TEST_ALL_PREFIXES(PrefHashFilterTest,
+                           MaybeRecordTrackedPreferenceResetCount_LogsOnce);
   // InterceptablePrefFilter implementation.
   void FinalizeFilterOnLoad(
       PostFilterOnLoadCallback post_filter_on_load_callback,
@@ -156,8 +166,20 @@ class PrefHashFilter final : public InterceptablePrefFilter {
 
   // Performs the deferred work of re-validating preferences after the
   // encryptor has been fetched. This is posted from FinalizeFilterOnLoad.
+  // |pref_store_contents_at_load| is a copy of the preference dictionary as
+  //     it was read from disk, before any resets. This is used to validate
+  //     against the original state.
+  // |already_reset_paths| is a set of preference paths that were already
+  //     found to be invalid and were reset during the initial synchronous
+  //     validation pass. These paths will be skipped.
   void DeferredEncryptorRevalidation(
-      base::Value::Dict pref_store_contents_at_load);
+      base::Value::Dict pref_store_contents_at_load,
+      const std::set<std::string>& already_reset_paths);
+
+  // Logs the metric of the number of preferences that were reset. Ensures this
+  // metric is only logged once per filter instance.
+  void MaybeRecordTrackedPreferenceResetCount(
+      const base::Value::Dict& pref_store_contents);
 
   // Callback to be invoked only once (and subsequently reset) on the next
   // FilterOnLoad event. It will be allowed to modify the |prefs| handed to
@@ -187,6 +209,9 @@ class PrefHashFilter final : public InterceptablePrefFilter {
   // The set of all paths whose value has changed since the last call to
   // FilterSerializeData.
   ChangedPathsMap changed_paths_;
+
+  // A flag that recordes if the reset pref has been recorded.
+  bool reset_metric_recorded_ = false;
 
   // A deferred task runner to defer and start the async encryptor related
   // validation task.

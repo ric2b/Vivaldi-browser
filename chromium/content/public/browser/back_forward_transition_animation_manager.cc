@@ -17,7 +17,11 @@ namespace content {
 
 // static
 bool BackForwardTransitionAnimationManager::AreBackForwardTransitionsEnabled() {
+#if BUILDFLAG(IS_ANDROID)
   return NavigationTransitionConfig::AreBackForwardTransitionsEnabled();
+#else
+  return false;
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 // static
@@ -25,7 +29,7 @@ bool BackForwardTransitionAnimationManager::ShouldAnimateNavigationTransition(
     NavigationDirection navigation_direction,
     ui::BackGestureEventSwipeEdge edge) {
 #if BUILDFLAG(IS_ANDROID)
-  if (!base::FeatureList::IsEnabled(blink::features::kBackForwardTransitions)) {
+  if (!AreBackForwardTransitionsEnabled()) {
     return false;
   }
 

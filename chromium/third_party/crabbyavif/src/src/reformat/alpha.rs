@@ -51,10 +51,10 @@ macro_rules! alpha_index_in_rgba_1010102 {
 impl rgb::Image {
     pub(crate) fn premultiply_alpha(&mut self) -> AvifResult<()> {
         if self.pixels_mut().is_null() || self.row_bytes == 0 {
-            return Err(AvifError::ReformatFailed);
+            return AvifError::reformat_failed();
         }
         if !self.has_alpha() {
-            return Err(AvifError::InvalidArgument);
+            return AvifError::invalid_argument();
         }
 
         #[cfg(feature = "libyuv")]
@@ -125,10 +125,10 @@ impl rgb::Image {
 
     pub(crate) fn unpremultiply_alpha(&mut self) -> AvifResult<()> {
         if self.pixels_mut().is_null() || self.row_bytes == 0 {
-            return Err(AvifError::ReformatFailed);
+            return AvifError::reformat_failed();
         }
         if !self.has_alpha() {
-            return Err(AvifError::InvalidArgument);
+            return AvifError::invalid_argument();
         }
 
         #[cfg(feature = "libyuv")]
@@ -202,7 +202,7 @@ impl rgb::Image {
             return Ok(());
         }
         if self.format == rgb::Format::Rgb565 {
-            return Err(AvifError::NotImplemented);
+            return AvifError::not_implemented();
         }
         let alpha_offset = self.format.alpha_offset();
         let width = usize_from_u32(self.width)?;
@@ -238,7 +238,7 @@ impl rgb::Image {
             || self.width != image.width
             || self.height != image.height
         {
-            return Err(AvifError::InvalidArgument);
+            return AvifError::invalid_argument();
         }
         let width = usize_from_u32(self.width)?;
         if self.format == Format::Rgba1010102 {
@@ -269,13 +269,14 @@ impl rgb::Image {
             return Ok(());
         }
         let dst_alpha_offset = self.format.alpha_offset();
+        let channel_count = self.format.channel_count() as usize;
         if self.depth == image.depth {
             if self.depth > 8 {
                 for y in 0..self.height {
                     let dst_row = self.row16_mut(y)?;
                     let src_row = image.row16_exact(Plane::A, y)?;
                     for x in 0..width {
-                        dst_row[(x * 4) + dst_alpha_offset] = src_row[x];
+                        dst_row[(x * channel_count) + dst_alpha_offset] = src_row[x];
                     }
                 }
                 return Ok(());
@@ -284,7 +285,7 @@ impl rgb::Image {
                 let dst_row = self.row_mut(y)?;
                 let src_row = image.row_exact(Plane::A, y)?;
                 for x in 0..width {
-                    dst_row[(x * 4) + dst_alpha_offset] = src_row[x];
+                    dst_row[(x * channel_count) + dst_alpha_offset] = src_row[x];
                 }
             }
             return Ok(());
@@ -297,7 +298,7 @@ impl rgb::Image {
                     let dst_row = self.row16_mut(y)?;
                     let src_row = image.row16_exact(Plane::A, y)?;
                     for x in 0..width {
-                        dst_row[(x * 4) + dst_alpha_offset] = Self::rescale_alpha_value(
+                        dst_row[(x * channel_count) + dst_alpha_offset] = Self::rescale_alpha_value(
                             src_row[x],
                             image.max_channel_f(),
                             max_channel,
@@ -311,7 +312,7 @@ impl rgb::Image {
                 let dst_row = self.row_mut(y)?;
                 let src_row = image.row16_exact(Plane::A, y)?;
                 for x in 0..width {
-                    dst_row[(x * 4) + dst_alpha_offset] =
+                    dst_row[(x * channel_count) + dst_alpha_offset] =
                         Self::rescale_alpha_value(src_row[x], image.max_channel_f(), max_channel)
                             as u8;
                 }
@@ -323,7 +324,7 @@ impl rgb::Image {
             let dst_row = self.row16_mut(y)?;
             let src_row = image.row_exact(Plane::A, y)?;
             for x in 0..width {
-                dst_row[(x * 4) + dst_alpha_offset] = Self::rescale_alpha_value(
+                dst_row[(x * channel_count) + dst_alpha_offset] = Self::rescale_alpha_value(
                     src_row[x] as u16,
                     image.max_channel_f(),
                     max_channel,
@@ -399,9 +400,10 @@ impl image::Image {
             || self.height != rgb.height
             || rgb.format == rgb::Format::Rgba1010102
         {
-            return Err(AvifError::InvalidArgument);
+            return AvifError::invalid_argument();
         }
         let src_alpha_offset = rgb.format.alpha_offset();
+        let channel_count = rgb.format.channel_count() as usize;
         let width = usize_from_u32(self.width)?;
         if self.depth == rgb.depth {
             if self.depth > 8 {
@@ -409,7 +411,7 @@ impl image::Image {
                     let dst_row = self.row16_exact_mut(Plane::A, y)?;
                     let src_row = rgb.row16(y)?;
                     for x in 0..width {
-                        dst_row[x] = src_row[(x * 4) + src_alpha_offset];
+                        dst_row[x] = src_row[(x * channel_count) + src_alpha_offset];
                     }
                 }
                 return Ok(());
@@ -418,7 +420,7 @@ impl image::Image {
                 let dst_row = self.row_exact_mut(Plane::A, y)?;
                 let src_row = rgb.row(y)?;
                 for x in 0..width {
-                    dst_row[x] = src_row[(x * 4) + src_alpha_offset];
+                    dst_row[x] = src_row[(x * channel_count) + src_alpha_offset];
                 }
             }
             return Ok(());
@@ -432,7 +434,7 @@ impl image::Image {
                     let src_row = rgb.row16(y)?;
                     for x in 0..width {
                         dst_row[x] = rgb::Image::rescale_alpha_value(
-                            src_row[(x * 4) + src_alpha_offset],
+                            src_row[(x * channel_count) + src_alpha_offset],
                             rgb.max_channel_f(),
                             max_channel,
                         );
@@ -446,7 +448,7 @@ impl image::Image {
                 let src_row = rgb.row(y)?;
                 for x in 0..width {
                     dst_row[x] = rgb::Image::rescale_alpha_value(
-                        src_row[(x * 4) + src_alpha_offset] as u16,
+                        src_row[(x * channel_count) + src_alpha_offset] as u16,
                         rgb.max_channel_f(),
                         max_channel,
                     );
@@ -460,7 +462,7 @@ impl image::Image {
             let src_row = rgb.row16(y)?;
             for x in 0..width {
                 dst_row[x] = rgb::Image::rescale_alpha_value(
-                    src_row[(x * 4) + src_alpha_offset],
+                    src_row[(x * channel_count) + src_alpha_offset],
                     rgb.max_channel_f(),
                     max_channel,
                 ) as u8;
@@ -470,23 +472,7 @@ impl image::Image {
     }
 
     pub(crate) fn set_opaque(&mut self) -> AvifResult<()> {
-        if let Some(plane_data) = self.plane_data(Plane::A) {
-            let opaque_value = self.max_channel();
-            if self.depth == 8 {
-                for y in 0..plane_data.height {
-                    let row =
-                        &mut self.row_exact_mut(Plane::A, y).unwrap()[..plane_data.width as usize];
-                    row.fill(opaque_value as u8);
-                }
-            } else {
-                for y in 0..plane_data.height {
-                    let row = &mut self.row16_exact_mut(Plane::A, y).unwrap()
-                        [..plane_data.width as usize];
-                    row.fill(opaque_value);
-                }
-            }
-        }
-        Ok(())
+        self.fill_plane_with_value(Plane::A, self.max_channel())
     }
 }
 

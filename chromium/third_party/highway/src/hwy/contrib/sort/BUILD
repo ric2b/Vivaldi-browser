@@ -1,3 +1,5 @@
+# Placeholder for cc_test, do not remove
+
 package(
     default_applicable_licenses = ["//:license"],
     default_visibility = ["//visibility:public"],
@@ -82,7 +84,6 @@ cc_library(
 )
 
 VQSORT_SRCS = [
-    "vqsort.cc",
     # Split into separate files to reduce MSVC build time.
     "vqsort_128a.cc",
     "vqsort_128d.cc",
@@ -98,8 +99,7 @@ VQSORT_SRCS = [
     "vqsort_i32d.cc",
     "vqsort_i64a.cc",
     "vqsort_i64d.cc",
-    "vqsort_kv64a.cc",
-    "vqsort_kv64d.cc",
+    # vqsort_kv64a.cc is in :vqsort_k32v32 and vqsort.cc is in :vqsort_shared.
     "vqsort_kv128a.cc",
     "vqsort_kv128d.cc",
     "vqsort_u16a.cc",
@@ -119,6 +119,45 @@ VQSORT_TEXTUAL_HDRS = [
     # Placeholder for internal instrumentation. Do not remove.
 ]
 
+# both :vqsort_k32v32 and :vqsort depend on this.
+cc_library(
+    name = "vqsort_shared",
+    srcs = [
+        "vqsort.cc",
+    ],
+    hdrs = [
+        "order.h",  # part of public interface, included by vqsort.h
+        "vqsort.h",  # public interface
+    ],
+    compatible_with = [],
+    local_defines = ["hwy_contrib_EXPORTS"],
+    textual_hdrs = VQSORT_TEXTUAL_HDRS,
+    deps = [
+        "//:algo",
+        "//:hwy",
+    ],
+)
+
+cc_library(
+    name = "vqsort_k32v32",
+    srcs = [
+        "vqsort_kv64a.cc",
+        "vqsort_kv64d.cc",
+    ],
+    hdrs = [
+        "order.h",  # part of public interface, included by vqsort.h
+        "vqsort.h",  # public interface
+    ],
+    compatible_with = [],
+    local_defines = ["hwy_contrib_EXPORTS"],
+    textual_hdrs = VQSORT_TEXTUAL_HDRS,
+    deps = [
+        ":vqsort_shared",
+        "//:algo",
+        "//:hwy",
+    ],
+)
+
 cc_library(
     name = "vqsort",
     srcs = VQSORT_SRCS,
@@ -131,9 +170,12 @@ cc_library(
     textual_hdrs = VQSORT_TEXTUAL_HDRS,
     deps = [
         ":intel",  # required if HAVE_INTEL
+        ":vqsort_k32v32",
+        ":vqsort_shared",
         ":vxsort",  # required if HAVE_VXSORT
         "//:algo",
         "//:hwy",
+        "//:nanobenchmark",
     ],
 )
 
@@ -160,6 +202,7 @@ cc_library(
     deps = [
         "//:algo",
         "//:hwy",
+        "//:nanobenchmark",
     ],
 )
 
@@ -245,6 +288,7 @@ cc_test(
         "//:hwy",
         "//:hwy_test_util",
         "//:nanobenchmark",
+        "//:thread_pool",
     ] + TEST_MAIN,
 )
 

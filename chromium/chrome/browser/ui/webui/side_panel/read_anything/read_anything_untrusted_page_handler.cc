@@ -29,6 +29,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/browser/ui/webui/side_panel/read_anything/read_anything_prefs.h"
+#include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/read_anything/read_anything.mojom-forward.h"
 #include "chrome/common/read_anything/read_anything.mojom.h"
 #include "chrome/common/read_anything/read_anything_util.h"
@@ -43,7 +44,6 @@
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/scoped_accessibility_mode.h"
-#include "content/public/browser/web_contents_user_data.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/extension_registry.h"
 #include "net/http/http_status_code.h"
@@ -70,11 +70,11 @@
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "ash/public/cpp/session/session_controller.h"
-#include "chromeos/ash/components/language_packs/language_pack_manager.h"
+#include "extensions/browser/process_manager.h"
 using ash::language_packs::LanguagePackManager;
-using ash::language_packs::PackResult;
 #else
-#include "chrome/common/extensions/extension_constants.h"
+#include "chrome/browser/component_updater/wasm_tts_engine_component_installer.h"
+#include "chrome/browser/extensions/component_loader.h"
 #endif
 
 using content::TtsController;
@@ -155,31 +155,6 @@ void OnGetPackStateResponse(
   std::move(callback).Run(std::move(voicePackInfo));
 }
 
-// Called when LanguagePackManager::InstallPack is complete.
-void OnInstallPackResponse(
-    base::OnceCallback<void(read_anything::mojom::VoicePackInfoPtr)> callback,
-    const PackResult& pack_result) {
-  // Convert the LanguagePackManager's response object into a mojo object
-  read_anything::mojom::VoicePackInfoPtr voicePackInfo =
-      read_anything::mojom::VoicePackInfo::New();
-
-  // TODO(crbug.com/40927698): Investigate the fact that VoicePackManager
-  // doesn't return the expected pack_state. Even when a voice is unavailable
-  // and not installed, it responds "INSTALLED" in the InstallVoicePackCallback.
-  // So we probably need to rely on GetVoicePackInfo for the pack_state.
-  if (pack_result.operation_error == PackResult::ErrorCode::kNone) {
-    LanguagePackManager::GetPackState(
-        ash::language_packs::kTtsFeatureId, pack_result.language_code,
-        base::BindOnce(&OnGetPackStateResponse, std::move(callback)));
-    return;
-  }
-
-  voicePackInfo->pack_state = VoicePackInstallationState::NewErrorCode(
-      GetMojoErrorFromPackError(pack_result.operation_error));
-  voicePackInfo->language = pack_result.language_code;
-  std::move(callback).Run(std::move(voicePackInfo));
-}
-
 #else
 constexpr char kReadingModeName[] = "Reading mode";
 
@@ -199,48 +174,6 @@ InstallationState GetInstallationStateFromStatusCode(
 }
 #endif
 
-class PersistentAccessibilityHelper
-    : public content::WebContentsUserData<PersistentAccessibilityHelper> {
- public:
-  ~PersistentAccessibilityHelper() override = default;
-
-  // Persists `scoped_accessibility_mode` for `web_contents`.
-  static void PersistForWebContents(
-      content::WebContents& web_contents,
-      std::unique_ptr<content::ScopedAccessibilityMode>
-          scoped_accessibility_mode);
-
- private:
-  friend content::WebContentsUserData<PersistentAccessibilityHelper>;
-
-  PersistentAccessibilityHelper(
-      content::WebContents& web_contents,
-      std::unique_ptr<content::ScopedAccessibilityMode>
-          scoped_accessibility_mode)
-      : WebContentsUserData(web_contents),
-        scoped_accessibility_mode_(std::move(scoped_accessibility_mode)) {}
-
-  WEB_CONTENTS_USER_DATA_KEY_DECL();
-  std::unique_ptr<content::ScopedAccessibilityMode> scoped_accessibility_mode_;
-};
-
-// static
-void PersistentAccessibilityHelper::PersistForWebContents(
-    content::WebContents& web_contents,
-    std::unique_ptr<content::ScopedAccessibilityMode>
-        scoped_accessibility_mode) {
-  if (auto* const instance = FromWebContents(&web_contents); instance) {
-    instance->scoped_accessibility_mode_ = std::move(scoped_accessibility_mode);
-  } else {
-    web_contents.SetUserData(
-        UserDataKey(),
-        base::WrapUnique(new PersistentAccessibilityHelper(
-            web_contents, std::move(scoped_accessibility_mode))));
-  }
-}
-
-WEB_CONTENTS_USER_DATA_KEY_IMPL(PersistentAccessibilityHelper);
-
 }  // namespace
 
 ReadAnythingWebContentsObserver::ReadAnythingWebContentsObserver(
@@ -250,12 +183,14 @@ ReadAnythingWebContentsObserver::ReadAnythingWebContentsObserver(
     : page_handler_(page_handler) {
   Observe(web_contents);
 
-  // Enable accessibility for the top level render frame and all descendants.
-  // This causes AXTreeSerializer to reset and send accessibility events of
-  // the AXTree when it is re-serialized.
   if (!web_contents) {
     return;
   }
+
+  // Enable accessibility for the top level render frame and all descendants.
+  // This causes AXTreeSerializer to reset and send accessibility events of the
+  // AXTree when it is re-serialized.
+
   // Force a reset if web accessibility is already enabled to ensure that new
   // observers of accessibility events get the full accessibility tree from
   // scratch.
@@ -265,16 +200,6 @@ ReadAnythingWebContentsObserver::ReadAnythingWebContentsObserver(
   scoped_accessibility_mode_ =
       content::BrowserAccessibilityState::GetInstance()
           ->CreateScopedModeForWebContents(web_contents, accessibility_mode);
-
-  if (base::FeatureList::IsEnabled(
-          features::kReadAnythingPermanentAccessibility)) {
-    // If permanent accessibility for Read Anything is enabled, give ownership
-    // of the scoper to the WebContents. This ensures that those modes are kept
-    // active even when RA is no longer handling events from the WC. This
-    // codepath is to be deleted at the conclusion of the study.
-    PersistentAccessibilityHelper::PersistForWebContents(
-        *web_contents, std::move(scoped_accessibility_mode_));
-  }
 
   if (need_reset) {
     web_contents->ResetAccessibility();
@@ -327,7 +252,8 @@ ReadAnythingUntrustedPageHandler::ReadAnythingUntrustedPageHandler(
   content::TtsController::GetInstance()->AddUpdateLanguageStatusDelegate(this);
 
   extensions::ExtensionRegistry::Get(profile_)->AddObserver(this);
-
+#else
+  extension_wrapper_ = std::make_unique<ChromeOsExtensionWrapper>();
 #endif
   side_panel_controller_ = ReadAnythingSidePanelControllerGlue::FromWebContents(
                                web_ui_->GetWebContents())
@@ -428,6 +354,7 @@ ReadAnythingUntrustedPageHandler::~ReadAnythingUntrustedPageHandler() {
   if (session_controller) {
     session_controller->RemoveObserver(this);
   }
+  extension_wrapper_.reset();
 #endif
 }
 
@@ -578,32 +505,128 @@ void ReadAnythingUntrustedPageHandler::OnExtensionReady(
     const extensions::Extension* extension) {
   const auto& extensionId =
       extension_misc::kComponentUpdaterTTSEngineExtensionId;
-  if (extension->id() != extensionId || extension_installed_) {
+  if (extension->id() != extensionId) {
     return;
   }
-  // Keep track of whether or not we've gotten a signal for installing the
-  // extension. Otherwise, if reading mode is opened simultaneously in
-  // multiple profiles, there can be an infinite loop of trying to install
-  // and uninstall voices.
-  extension_installed_ = true;
+  VLOG(1) << "TTS component extension ready";
   page_->OnTtsEngineInstalled();
+}
+
+#else
+
+void ReadAnythingUntrustedPageHandler::SetChromeOsExtensionWrapperForTesting(
+    std::unique_ptr<ChromeOsExtensionWrapper> wrapper) {
+  extension_wrapper_ = std::move(wrapper);
+}
+
+// Called when LanguagePackManager::InstallPack is complete.
+void ReadAnythingUntrustedPageHandler::OnInstallPackResponse(
+    const PackResult& pack_result) {
+  // Convert the LanguagePackManager's response object into a mojo object
+  read_anything::mojom::VoicePackInfoPtr voicePackInfo =
+      read_anything::mojom::VoicePackInfo::New();
+
+  // TODO(crbug.com/40927698): Investigate the fact that VoicePackManager
+  // doesn't return the expected pack_state. Even when a voice is unavailable
+  // and not installed, it responds "INSTALLED" in the InstallVoicePackCallback.
+  // So we probably need to rely on GetVoicePackInfo for the pack_state.
+  if (pack_result.operation_error == PackResult::ErrorCode::kNone) {
+    LanguageRequest request;
+    request.language = pack_result.language_code;
+    request.type = LanguageRequestType::kInfo;
+    // Put this request at the front since it's a continuation of the current
+    // request.
+    queued_language_requests_.emplace_front(request);
+    has_pending_language_request_ = false;
+    SendNextLanguageRequest();
+    return;
+  }
+
+  voicePackInfo->pack_state = VoicePackInstallationState::NewErrorCode(
+      GetMojoErrorFromPackError(pack_result.operation_error));
+  voicePackInfo->language = pack_result.language_code;
+  OnGetVoicePackInfo(std::move(voicePackInfo));
+}
+
+void ReadAnythingUntrustedPageHandler::SendOrQueueLanguageRequest(
+    LanguageRequest request) {
+  queued_language_requests_.emplace_back(request);
+  if (!has_pending_language_request_) {
+    SendNextLanguageRequest();
+  }
+}
+
+void ReadAnythingUntrustedPageHandler::SendNextLanguageRequest() {
+  // Ensure the TTS engine is awake first. WakeEventPage returns false if it's
+  // already awake.
+  bool awake = extension_wrapper_->WakeEngine(
+      profile_,
+      base::BindOnce(&ReadAnythingUntrustedPageHandler::OnTtsEngineAwake,
+                     weak_factory_.GetWeakPtr()));
+  if (awake) {
+    OnTtsEngineAwake(true);
+  }
+}
+
+void ReadAnythingUntrustedPageHandler::OnTtsEngineAwake(bool success) {
+  if (!success) {
+    if (!queued_language_requests_.empty()) {
+      queued_language_requests_.pop_front();
+    }
+    auto voicePackInfo = read_anything::mojom::VoicePackInfo::New();
+    voicePackInfo->pack_state =
+        VoicePackInstallationState::NewErrorCode(ErrorCode::kNotReached);
+    OnGetVoicePackInfo(std::move(voicePackInfo));
+    return;
+  }
+
+  // If we're already waiting for a response for another language, do nothing.
+  // The next language will be queued up once this one is complete.
+  if (has_pending_language_request_ || queued_language_requests_.empty()) {
+    return;
+  }
+
+  // Otherwise send the corresponding request for the next language in the
+  // queue. The pending language will be cleared once we receive the response
+  // in OnGetVoicePackInfo.
+  has_pending_language_request_ = true;
+  LanguageRequest request = queued_language_requests_.front();
+  queued_language_requests_.pop_front();
+  if (request.type == LanguageRequestType::kInfo) {
+    extension_wrapper_->RequestLanguageInfo(
+        request.language,
+        base::BindOnce(
+            &OnGetPackStateResponse,
+            base::BindOnce(
+                &ReadAnythingUntrustedPageHandler::OnGetVoicePackInfo,
+                weak_factory_.GetWeakPtr())));
+  } else if (request.type == LanguageRequestType::kInstall) {
+    extension_wrapper_->RequestLanguageInstall(
+        request.language,
+        base::BindOnce(&ReadAnythingUntrustedPageHandler::OnInstallPackResponse,
+                       weak_factory_.GetWeakPtr()));
+  }
 }
 #endif
 
 void ReadAnythingUntrustedPageHandler::OnGetVoicePackInfo(
     read_anything::mojom::VoicePackInfoPtr info) {
+#if BUILDFLAG(IS_CHROMEOS)
+  has_pending_language_request_ = false;
+  if (!queued_language_requests_.empty()) {
+    SendNextLanguageRequest();
+  }
+#endif
   page_->OnGetVoicePackInfo(std::move(info));
 }
 
 void ReadAnythingUntrustedPageHandler::GetVoicePackInfo(
     const std::string& language) {
 #if BUILDFLAG(IS_CHROMEOS)
-  LanguagePackManager::GetPackState(
-      ash::language_packs::kTtsFeatureId, language,
-      base::BindOnce(
-          &OnGetPackStateResponse,
-          base::BindOnce(&ReadAnythingUntrustedPageHandler::OnGetVoicePackInfo,
-                         weak_factory_.GetWeakPtr())));
+  LanguageRequest request;
+  request.language = language;
+  request.type = LanguageRequestType::kInfo;
+  SendOrQueueLanguageRequest(request);
 #else
   TtsController::GetInstance()->LanguageStatusRequest(
       profile_, language, kReadingModeName,
@@ -614,12 +637,10 @@ void ReadAnythingUntrustedPageHandler::GetVoicePackInfo(
 void ReadAnythingUntrustedPageHandler::InstallVoicePack(
     const std::string& language) {
 #if BUILDFLAG(IS_CHROMEOS)
-  LanguagePackManager::InstallPack(
-      ash::language_packs::kTtsFeatureId, language,
-      base::BindOnce(
-          &OnInstallPackResponse,
-          base::BindOnce(&ReadAnythingUntrustedPageHandler::OnGetVoicePackInfo,
-                         weak_factory_.GetWeakPtr())));
+  LanguageRequest request;
+  request.language = language;
+  request.type = LanguageRequestType::kInstall;
+  SendOrQueueLanguageRequest(request);
 #else
   TtsController::GetInstance()->InstallLanguageRequest(
       profile_, language, kReadingModeName,
@@ -1007,6 +1028,41 @@ void ReadAnythingUntrustedPageHandler::OnLanguageDetermined(
 void ReadAnythingUntrustedPageHandler::OnTranslateDriverDestroyed(
     translate::TranslateDriver* driver) {
   translate_observation_.Reset();
+}
+
+void ReadAnythingUntrustedPageHandler::LogExtensionState() {
+#if !BUILDFLAG(IS_CHROMEOS)
+  // A system voice.
+  EngineInstallationState installation_state;
+  extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(profile_);
+  if (registry->enabled_extensions().Contains(
+          extension_misc::kComponentUpdaterTTSEngineExtensionId)) {
+    installation_state = EngineInstallationState::kEnabled;
+  } else if (registry->disabled_extensions().Contains(
+                 extension_misc::kComponentUpdaterTTSEngineExtensionId)) {
+    installation_state = EngineInstallationState::kDisabled;
+  } else if (registry->terminated_extensions().Contains(
+                 extension_misc::kComponentUpdaterTTSEngineExtensionId)) {
+    installation_state = EngineInstallationState::kTerminated;
+  } else if (registry->blocked_extensions().Contains(
+                 extension_misc::kComponentUpdaterTTSEngineExtensionId)) {
+    installation_state = EngineInstallationState::kBlocked;
+  } else if (registry->ready_extensions().Contains(
+                 extension_misc::kComponentUpdaterTTSEngineExtensionId)) {
+    installation_state = EngineInstallationState::kReady;
+  } else if (component_updater::WasmTtsEngineComponentInstallerPolicy::
+                 IsWasmTTSEngineDirectorySet()) {
+    installation_state = EngineInstallationState::kInstalling;
+  } else {
+    installation_state = EngineInstallationState::kUnknown;
+  }
+
+  base::UmaHistogramEnumeration(
+      "Accessibility.ReadAnything."
+      "SystemVoiceExtensionInstallationState",
+      installation_state);
+#endif
 }
 
 void ReadAnythingUntrustedPageHandler::LogTextStyle() {

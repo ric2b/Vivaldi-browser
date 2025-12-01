@@ -416,8 +416,7 @@ void LiftoffAssembler::LoadInstanceDataFromFrame(Register dst) {
 
 void LiftoffAssembler::LoadTrustedPointer(Register dst, Register src_addr,
                                           int offset, IndirectPointerTag tag) {
-  MemOperand src{src_addr, offset};
-  LoadTrustedPointerField(dst, src, tag, r0);
+  LoadTaggedField(dst, MemOperand{src_addr, offset}, r0);
 }
 
 void LiftoffAssembler::LoadFromInstance(Register dst, Register instance,
@@ -497,18 +496,6 @@ void LiftoffAssembler::LoadFullPointer(Register dst, Register src_addr,
   LoadU64(dst, MemOperand(src_addr, offset_imm), r0);
 }
 
-#ifdef V8_ENABLE_SANDBOX
-void LiftoffAssembler::LoadCodeEntrypointViaCodePointer(Register dst,
-                                                        Register src_addr,
-                                                        int32_t offset_imm) {
-  UseScratchRegisterScope temps(this);
-  Register scratch = temps.Acquire();
-  MemOperand src_op =
-      liftoff::GetMemOp(this, src_addr, no_reg, offset_imm, scratch);
-  MacroAssembler::LoadCodeEntrypointViaCodePointer(dst, src_op, scratch);
-}
-#endif
-
 void LiftoffAssembler::StoreTaggedPointer(Register dst_addr,
                                           Register offset_reg,
                                           int32_t offset_imm, Register src,
@@ -519,7 +506,15 @@ void LiftoffAssembler::StoreTaggedPointer(Register dst_addr,
   if (protected_store_pc) *protected_store_pc = pc_offset();
   StoreTaggedField(src, dst_op, r0);
 
-  if (skip_write_barrier || v8_flags.disable_write_barriers) return;
+  if (v8_flags.disable_write_barriers) return;
+
+  if (skip_write_barrier) {
+    if (v8_flags.verify_write_barriers) {
+      CallVerifySkippedWriteBarrierStubSaveRegisters(dst_addr, src,
+                                                     SaveFPRegsMode::kSave);
+    }
+    return;
+  }
 
   Label exit;
   JumpIfSmi(src, &exit);
@@ -2874,7 +2869,7 @@ void LiftoffAssembler::emit_v128_anytrue(LiftoffRegister dst,
 
 void LiftoffAssembler::emit_i8x16_bitmask(LiftoffRegister dst,
                                           LiftoffRegister src) {
-  I8x16BitMask(dst.gp(), src.fp().toSimd(), r0, ip, kScratchSimd128Reg);
+  I8x16BitMask(dst.gp(), src.fp().toSimd(), ip, r0, kScratchSimd128Reg);
 }
 
 void LiftoffAssembler::emit_s128_const(LiftoffRegister dst,

@@ -22,7 +22,7 @@ class BrowserFrameViewLinux : public OpaqueBrowserFrameView,
   METADATA_HEADER(BrowserFrameViewLinux, OpaqueBrowserFrameView)
 
  public:
-  BrowserFrameViewLinux(BrowserFrame* frame,
+  BrowserFrameViewLinux(BrowserWidget* widget,
                         BrowserView* browser_view,
                         BrowserFrameViewLayoutLinux* layout);
 
@@ -33,7 +33,7 @@ class BrowserFrameViewLinux : public OpaqueBrowserFrameView,
 
   BrowserFrameViewLayoutLinux* layout() { return layout_; }
 
-  // BrowserNonClientFrameView:
+  // BrowserFrameView:
   gfx::Insets RestoredMirroredFrameBorderInsets() const override;
   gfx::Insets GetInputInsets() const override;
   SkRRect GetRestoredClipRegion() const override;
@@ -53,7 +53,7 @@ class BrowserFrameViewLinux : public OpaqueBrowserFrameView,
   // ui::WindowButtonOrderObserver:
   void OnWindowButtonOrderingChange() override;
 
-  // views::NonClientFrameView:
+  // views::FrameView:
   int NonClientHitTest(const gfx::Point& point) override;
 
   // Gets the radius of the top corners when the window is restored.  The

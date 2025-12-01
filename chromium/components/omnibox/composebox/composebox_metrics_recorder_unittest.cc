@@ -10,6 +10,8 @@
 #include "components/omnibox/composebox/composebox_query_controller.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+using composebox::SessionState;
+
 namespace {
 const char kTestMetricName[] = "Test.";
 const char kComposeboxFileDeleted[] =
@@ -41,7 +43,7 @@ const char kComposeboxFileValidationErrorTypes[] =
     "Test.Composebox.Session.File.Browser.ValidationFailureCount.";
 const char kComposeboxQueryTextLength[] = "Test.Composebox.Query.TextLength";
 const char kComposeboxQueryFileCount[] = "Test.Composebox.Query.FileCount";
-const char kComposeboxQueryModality[] = "Test.Composebox.Query.Modality";
+const char kComposeboxQueryModality[] = "Test.Composebox.Query.Modality.V2";
 const char kComposeboxQueryCount[] = "Test.Composebox.Session.QueryCount";
 const char kComposeboxFileSizePdf[] = "Test.Composebox.File.Size.Pdf";
 

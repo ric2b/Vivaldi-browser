@@ -25,9 +25,11 @@ struct ImportedTabEntry;
 namespace extension_importer {
 class ChromiumExtensionsImporter;
 }
+#if !BUILDFLAG(IS_ANDROID) // Vivaldi VAB-11595
 struct ChromiumExtensionsImporterDeleter {
   void operator()(extension_importer::ChromiumExtensionsImporter* ptr);
 };
+#endif // End Vivaldi
 class ExternalProcessImporterHost;
 
 namespace autofill {
@@ -104,6 +106,7 @@ class ProfileWriter : public base::RefCountedThreadSafe<ProfileWriter> {
   virtual void AddAutocompleteFormDataEntries(
       const std::vector<autofill::AutocompleteEntry>& autocomplete_entries);
 
+#if !BUILDFLAG(IS_ANDROID) // VAB-11595
   // Vivaldi
   // Adds the |notes| to the notes model.
   virtual void AddNotes(const std::vector<ImportedNotesEntry>& notes,
@@ -116,6 +119,7 @@ class ProfileWriter : public base::RefCountedThreadSafe<ProfileWriter> {
 
   virtual void AddOpenTabs(
       const std::vector<ImportedTabEntry>& tabs);
+#endif
 
  protected:
   friend class base::RefCountedThreadSafe<ProfileWriter>;
@@ -125,10 +129,12 @@ class ProfileWriter : public base::RefCountedThreadSafe<ProfileWriter> {
  private:
   const raw_ptr<Profile> profile_;
 
+#if !BUILDFLAG(IS_ANDROID) // VAB-11595
   // Vivaldi
   std::unique_ptr<extension_importer::ChromiumExtensionsImporter,
                   ChromiumExtensionsImporterDeleter>
       vivaldi_extensions_importer_;
+#endif
 };
 
 #endif  // CHROME_BROWSER_IMPORTER_PROFILE_WRITER_H_

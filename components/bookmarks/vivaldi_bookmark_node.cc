@@ -26,6 +26,11 @@ const GURL TitledUrlNode::GetTitledUrlDisplayURL() const {
   return GURL();
 }
 
+ // Vivaldi: Returns the nodes id.
+int64_t TitledUrlNode::GetId() const {
+  return 0;
+}
+
 // BookmarkNode ---------------------------------------------------------------
 
 // Below predefined UUIDs for permanent bookmark folders, determined via named
@@ -48,6 +53,10 @@ const std::u16string BookmarkNode::GetTitledUrlNodeDescription() const {
 const GURL BookmarkNode::GetTitledUrlDisplayURL() const {
   const GURL url = GURL(vivaldi_bookmark_kit::GetDisplayURL(this));
   return url.is_valid() ? url : GetTitledUrlNodeUrl();
+}
+
+int64_t BookmarkNode::GetId() const {
+  return id();
 }
 
 // static

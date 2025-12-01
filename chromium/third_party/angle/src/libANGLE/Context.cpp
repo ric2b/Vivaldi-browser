@@ -6,6 +6,11 @@
 
 // Context.cpp: Implements the gl::Context class, managing all GL state and performing
 // rendering operations. It is the GLES2 specific implementation of EGLContext.
+
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include "libANGLE/Context.inl.h"
 
 #include <stdarg.h>
@@ -319,10 +324,11 @@ bool GetRobustAccess(const egl::AttributeMap &attribs)
     return (attribRobustAccess || contextFlagsRobustAccess);
 }
 
-bool GetDebug(const egl::AttributeMap &attribs)
+bool GetDebug(const angle::FrontendFeatures &frontendFeatures, const egl::AttributeMap &attribs)
 {
-    return (attribs.get(EGL_CONTEXT_OPENGL_DEBUG, EGL_FALSE) == EGL_TRUE) ||
-           ((attribs.get(EGL_CONTEXT_FLAGS_KHR, 0) & EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR) != 0);
+    return frontendFeatures.forceDebugContexts.enabled ||
+           attribs.get(EGL_CONTEXT_OPENGL_DEBUG, EGL_FALSE) == EGL_TRUE ||
+           (attribs.get(EGL_CONTEXT_FLAGS_KHR, 0) & EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR) != 0;
 }
 
 bool GetNoError(const egl::AttributeMap &attribs)
@@ -675,7 +681,7 @@ Context::Context(egl::Display *display,
              AllocateOrUseContextMutex(sharedContextMutex),
              &mOverlay,
              GetClientVersion(display, attribs),
-             GetDebug(attribs),
+             GetDebug(display->getFrontendFeatures(), attribs),
              GetBindGeneratesResource(attribs),
              GetClientArraysEnabled(attribs),
              GetRobustResourceInit(display, attribs),
@@ -686,6 +692,7 @@ Context::Context(egl::Display *display,
              GetIsExternal(attribs),
              GetPassthroughShaders(display, attribs)),
       mShared(shareContext != nullptr || shareTextures != nullptr || shareSemaphores != nullptr),
+      mSharedContext(shareContext != nullptr),
       mDisplayTextureShareGroup(shareTextures != nullptr),
       mDisplaySemaphoreShareGroup(shareSemaphores != nullptr),
       mErrors(&mState.getDebug(), display->getFrontendFeatures(), attribs),
@@ -970,14 +977,13 @@ egl::Error Context::onDestroy(const egl::Display *display)
     }
     mQueryMap.clear();
 
-    for (auto vertexArray : UnsafeResourceMapIter(mVertexArrayMap))
+    for (auto vertexArray : UnsafeResourceMapIter(getPrivateState().getVertexArrayMap()))
     {
         if (vertexArray.second)
         {
             vertexArray.second->onDestroy(this);
         }
     }
-    mVertexArrayMap.clear();
 
     for (auto transformFeedback : UnsafeResourceMapIter(mTransformFeedbackMap))
     {
@@ -1386,11 +1392,6 @@ Sync *Context::getSync(SyncID syncPacked) const
     return mState.mSyncManager->getSync(syncPacked);
 }
 
-VertexArray *Context::getVertexArray(VertexArrayID handle) const
-{
-    return mVertexArrayMap.query(handle);
-}
-
 Sampler *Context::getSampler(SamplerID handle) const
 {
     return mState.mSamplerManager->getSampler(handle);
@@ -1421,7 +1422,7 @@ gl::LabeledObject *Context::getLabeledObject(GLenum identifier, GLuint name) con
             return getProgramNoResolveLink({name});
         case GL_VERTEX_ARRAY:
         case GL_VERTEX_ARRAY_OBJECT_EXT:
-            return getVertexArray({name});
+            return getPrivateState().getVertexArray({name});
         case GL_QUERY:
         case GL_QUERY_OBJECT_EXT:
             return getQuery({name});
@@ -3195,10 +3196,12 @@ EGLenum Context::getRenderBuffer() const
     return backAttachment->getSurface()->getRenderBuffer();
 }
 
+// This function should only be called by the thread where the context is current (i.e., it's not
+// thread safe).
 VertexArray *Context::checkVertexArrayAllocation(VertexArrayID vertexArrayHandle)
 {
     // Only called after a prior call to Gen.
-    VertexArray *vertexArray = getVertexArray(vertexArrayHandle);
+    VertexArray *vertexArray = getPrivateState().getVertexArray(vertexArrayHandle);
     if (!vertexArray)
     {
         vertexArray = new VertexArray(mImplementation.get(), vertexArrayHandle,
@@ -3206,7 +3209,7 @@ VertexArray *Context::checkVertexArrayAllocation(VertexArrayID vertexArrayHandle
                                       mState.getCaps().maxVertexAttribBindings);
         vertexArray->setBufferAccessValidationEnabled(mBufferAccessValidationEnabled);
 
-        mVertexArrayMap.assign(vertexArrayHandle, vertexArray);
+        getMutablePrivateState()->setVertexArray(vertexArrayHandle, vertexArray);
     }
 
     return vertexArray;
@@ -3226,12 +3229,6 @@ TransformFeedback *Context::checkTransformFeedbackAllocation(
     }
 
     return transformFeedback;
-}
-
-bool Context::isVertexArrayGenerated(VertexArrayID vertexArray) const
-{
-    ASSERT(mVertexArrayMap.contains({0}));
-    return mVertexArrayMap.contains(vertexArray);
 }
 
 bool Context::isTransformFeedbackGenerated(TransformFeedbackID transformFeedback) const
@@ -3344,12 +3341,6 @@ void Context::detachSampler(SamplerID sampler)
 void Context::detachProgramPipeline(ProgramPipelineID pipeline)
 {
     mState.detachProgramPipeline(this, pipeline);
-}
-
-void Context::vertexAttribDivisor(GLuint index, GLuint divisor)
-{
-    mState.setVertexAttribDivisor(this, index, divisor);
-    mPrivateStateCache.onVertexArrayStateChange();
 }
 
 void Context::samplerParameteri(SamplerID sampler, GLenum pname, GLint param)
@@ -3763,6 +3754,7 @@ void Context::setExtensionEnabled(const char *name, bool enabled)
             enableIfRequestable("GL_EXT_draw_buffers_indexed");
             enableIfRequestable("GL_EXT_color_buffer_float");
             enableIfRequestable("GL_EXT_color_buffer_half_float");
+            enableIfRequestable("GL_EXT_shader_framebuffer_fetch_non_coherent");
             enableIfRequestable("GL_ANGLE_shader_pixel_local_storage_coherent");
             enableIfRequestable("GL_ANGLE_shader_pixel_local_storage");
         }
@@ -4470,6 +4462,10 @@ void Context::initCaps()
                   "mobile";
         extensions->depth32OES = false;
 
+        // https://issuetracker.google.com/445241477
+        INFO() << "Disabling GL_EXT_texture_norm16 during capture, which is not widely supported";
+        extensions->textureNorm16EXT = false;
+
         // The corresponding Vulkan extension is presently limited to ARM and Qualcomm
         INFO()
             << "Disabling GL_EXT_texture_compression_astc_decode_mode and "
@@ -4726,7 +4722,7 @@ void Context::updateCaps()
 
     // Cache this in the VertexArrays. They need to check it in state change notifications.
     // Note: vertex array objects are private to context and so the map doesn't need locking
-    for (auto vaoIter : UnsafeResourceMapIter(mVertexArrayMap))
+    for (auto vaoIter : UnsafeResourceMapIter(getPrivateState().getVertexArrayMap()))
     {
         VertexArray *vao = vaoIter.second;
         vao->setBufferAccessValidationEnabled(mBufferAccessValidationEnabled);
@@ -4734,7 +4730,7 @@ void Context::updateCaps()
 
     // Reinitialize state cache after extension changes.
     mStateCache.initialize(this);
-    mPrivateStateCache.initialize();
+    mPrivateStateCache.initialize(this);
 }
 
 angle::Result Context::prepareForClear(GLbitfield mask)
@@ -5246,7 +5242,8 @@ void Context::copyImageSubData(GLuint srcName,
         {
             // Destination target is a Texture
             ASSERT(dstTarget == GL_TEXTURE_2D || dstTarget == GL_TEXTURE_2D_ARRAY ||
-                   dstTarget == GL_TEXTURE_3D || dstTarget == GL_TEXTURE_CUBE_MAP);
+                   dstTarget == GL_TEXTURE_3D || dstTarget == GL_TEXTURE_CUBE_MAP ||
+                   dstTarget == GL_TEXTURE_CUBE_MAP_ARRAY);
 
             Texture *writeTexture = getTexture(PackParam<TextureID>(dstName));
             ANGLE_CONTEXT_TRY(syncTextureForCopy(writeTexture));
@@ -5262,7 +5259,8 @@ void Context::copyImageSubData(GLuint srcName,
         // Source target is a Texture
         ASSERT(srcTarget == GL_TEXTURE_2D || srcTarget == GL_TEXTURE_2D_ARRAY ||
                srcTarget == GL_TEXTURE_3D || srcTarget == GL_TEXTURE_CUBE_MAP ||
-               srcTarget == GL_TEXTURE_EXTERNAL_OES || srcTarget == GL_TEXTURE_2D_MULTISAMPLE ||
+               srcTarget == GL_TEXTURE_CUBE_MAP_ARRAY || srcTarget == GL_TEXTURE_EXTERNAL_OES ||
+               srcTarget == GL_TEXTURE_2D_MULTISAMPLE ||
                srcTarget == GL_TEXTURE_2D_MULTISAMPLE_ARRAY_OES);
 
         Texture *readTexture = getTexture(PackParam<TextureID>(srcName));
@@ -5283,7 +5281,8 @@ void Context::copyImageSubData(GLuint srcName,
             // Destination target is a Texture
             ASSERT(dstTarget == GL_TEXTURE_2D || dstTarget == GL_TEXTURE_2D_ARRAY ||
                    dstTarget == GL_TEXTURE_3D || dstTarget == GL_TEXTURE_CUBE_MAP ||
-                   dstTarget == GL_TEXTURE_EXTERNAL_OES || dstTarget == GL_TEXTURE_2D_MULTISAMPLE ||
+                   dstTarget == GL_TEXTURE_CUBE_MAP_ARRAY || dstTarget == GL_TEXTURE_EXTERNAL_OES ||
+                   dstTarget == GL_TEXTURE_2D_MULTISAMPLE ||
                    dstTarget == GL_TEXTURE_2D_MULTISAMPLE_ARRAY_OES);
 
             Texture *writeTexture = getTexture(PackParam<TextureID>(dstName));
@@ -6087,38 +6086,6 @@ void Context::activeShaderProgram(ProgramPipelineID pipeline, ShaderProgramID pr
 void Context::blendBarrier()
 {
     mImplementation->blendBarrier();
-}
-
-void Context::vertexAttribFormat(GLuint attribIndex,
-                                 GLint size,
-                                 VertexAttribType type,
-                                 GLboolean normalized,
-                                 GLuint relativeOffset)
-{
-    mState.setVertexAttribFormat(attribIndex, size, type, ConvertToBool(normalized), false,
-                                 relativeOffset);
-    mPrivateStateCache.onVertexArrayFormatChange();
-}
-
-void Context::vertexAttribIFormat(GLuint attribIndex,
-                                  GLint size,
-                                  VertexAttribType type,
-                                  GLuint relativeOffset)
-{
-    mState.setVertexAttribFormat(attribIndex, size, type, false, true, relativeOffset);
-    mPrivateStateCache.onVertexArrayFormatChange();
-}
-
-void Context::vertexAttribBinding(GLuint attribIndex, GLuint bindingIndex)
-{
-    mState.setVertexAttribBinding(this, attribIndex, bindingIndex);
-    mPrivateStateCache.onVertexArrayStateChange();
-}
-
-void Context::vertexBindingDivisor(GLuint bindingIndex, GLuint divisor)
-{
-    mState.setVertexBindingDivisor(this, bindingIndex, divisor);
-    mPrivateStateCache.onVertexArrayFormatChange();
 }
 
 void Context::vertexAttribIPointer(GLuint index,
@@ -7341,6 +7308,8 @@ void Context::getShaderPrecisionFormat(GLenum shadertype,
                                        GLint *range,
                                        GLint *precision)
 {
+    ASSERT(range != nullptr && precision != nullptr);
+
     switch (shadertype)
     {
         case GL_VERTEX_SHADER:
@@ -7726,39 +7695,14 @@ void Context::deleteVertexArrays(GLsizei n, const VertexArrayID *arrays)
         if (arrays[arrayIndex].value != 0)
         {
             VertexArray *vertexArrayObject = nullptr;
-            if (mVertexArrayMap.erase(vertexArray, &vertexArrayObject))
+            getMutablePrivateState()->eraseVertexArray(vertexArray, &vertexArrayObject);
+            if (vertexArrayObject != nullptr)
             {
-                if (vertexArrayObject != nullptr)
-                {
-                    detachVertexArray(vertexArray);
-                    vertexArrayObject->onDestroy(this);
-                }
-
-                mVertexArrayHandleAllocator.release(vertexArray.value);
+                detachVertexArray(vertexArray);
+                vertexArrayObject->onDestroy(this);
             }
         }
     }
-}
-
-void Context::genVertexArrays(GLsizei n, VertexArrayID *arrays)
-{
-    for (int arrayIndex = 0; arrayIndex < n; arrayIndex++)
-    {
-        VertexArrayID vertexArray = {mVertexArrayHandleAllocator.allocate()};
-        mVertexArrayMap.assign(vertexArray, nullptr);
-        arrays[arrayIndex] = vertexArray;
-    }
-}
-
-GLboolean Context::isVertexArray(VertexArrayID array) const
-{
-    if (array.value == 0)
-    {
-        return GL_FALSE;
-    }
-
-    VertexArray *vao = getVertexArray(array);
-    return ConvertToGLBoolean(vao != nullptr);
 }
 
 void Context::endTransformFeedback()
@@ -9015,11 +8959,6 @@ bool Context::areBlobCacheFuncsSet() const
 
 void Context::pixelLocalStorageBarrier()
 {
-    if (getExtensions().shaderPixelLocalStorageCoherentANGLE)
-    {
-        return;
-    }
-
     Framebuffer *framebuffer = mState.getDrawFramebuffer();
     ASSERT(framebuffer);
     PixelLocalStorage &pls = framebuffer->getPixelLocalStorage(this);
@@ -10036,6 +9975,15 @@ ErrorSet::ErrorSet(Debug *debug,
       mLoseContextOnOutOfMemory(frontendFeatures.loseContextOnOutOfMemory.enabled),
       mContextLostForced(false),
       mResetStatus(GraphicsResetStatus::NoError),
+      mErrorMessageCount(0),
+      // Limit the error message spam to a small number when the context is not in debug mode, as
+      // some apps make invalid but harmless calls and the spam has a non-trivial cost.
+      //
+      // Note: mMaxErrorMessages is kept far from max to avoid overflowing mErrorMessageCount in
+      // case of multiple contexts simultaneously adding (context loss) errors, hence the division
+      // by 2.
+      mMaxErrorMessages(
+          GetDebug(frontendFeatures, attribs) ? std::numeric_limits<uint32_t>::max() / 2 : 16),
       mSkipValidation(GetNoError(attribs)),
       mContextLost(0),
 #if defined(ANGLE_ENABLE_ASSERTS)
@@ -10073,9 +10021,32 @@ void ErrorSet::handleError(GLenum errorCode,
 
 void ErrorSet::validationError(angle::EntryPoint entryPoint, GLenum errorCode, const char *message)
 {
-    mDebug->insertMessage(
-        GL_DEBUG_SOURCE_API, GL_DEBUG_TYPE_ERROR, errorCode, GL_DEBUG_SEVERITY_HIGH,
-        std::string(GetEntryPointName(entryPoint)) + ": " + message, gl::LOG_INFO);
+    bool reportMessage = true;
+    bool isLastMessage = false;
+
+#if !defined(ANGLE_ENABLE_ASSERTS) && !defined(ANGLE_ALWAYS_REPORT_VALIDATION_ERRORS)
+    // In release mode, don't spam validation errors as they come with a performance cost, affecting
+    // applications that make lots of invalid but otherwise harmless calls. Instead, only report the
+    // first few messages. This can still be helpful to application developers who can fix the first
+    // few errors more easily and get more messages on the next run.
+    //
+    // The error messages are always reported for Chromium which uses the debug callback to detect
+    // errors instead of glGetError().
+    reportMessage =
+        MessageCounterBelowMaxRepeat(&mErrorMessageCount, mMaxErrorMessages, &isLastMessage);
+#endif
+
+    if (reportMessage)
+    {
+        std::string completeMessage = std::string(GetEntryPointName(entryPoint)) + ": " + message;
+        if (isLastMessage)
+        {
+            completeMessage += " (No more validation messages will be reported)";
+        }
+
+        mDebug->insertMessage(GL_DEBUG_SOURCE_API, GL_DEBUG_TYPE_ERROR, errorCode,
+                              GL_DEBUG_SEVERITY_HIGH, completeMessage, gl::LOG_INFO);
+    }
 
     pushError(errorCode);
 }
@@ -10257,12 +10228,12 @@ void StateCache::initialize(Context *context)
     updateValidBindTextureTypes(context);
     updateValidDrawElementsTypes(context);
     updateBasicDrawStatesError();
-    updateVertexAttribTypesValidation(context);
     updateCanDraw(context);
 }
 
-void PrivateStateCache::initialize()
+void PrivateStateCache::initialize(const Context *context)
 {
+    updateVertexAttribTypesValidation(context);
     mCachedBasicDrawElementsError = kInvalidPointer;
 }
 
@@ -10615,7 +10586,7 @@ void StateCache::updateTransformFeedbackActiveUnpaused(Context *context)
     mCachedTransformFeedbackActiveUnpaused = xfb && xfb->isActive() && !xfb->isPaused();
 }
 
-void StateCache::updateVertexAttribTypesValidation(Context *context)
+void PrivateStateCache::updateVertexAttribTypesValidation(const Context *context)
 {
     VertexAttribTypeCase halfFloatValidity = (context->getExtensions().vertexHalfFloatOES)
                                                  ? VertexAttribTypeCase::Valid

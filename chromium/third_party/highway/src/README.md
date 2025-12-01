@@ -29,7 +29,7 @@ functions that map well to CPU instructions without extensive compiler
 transformations. The resulting code is more predictable and robust to code
 changes/compiler updates than autovectorization.
 
-**Works on widely-used platforms**: Highway supports five architectures; the
+**Works on widely-used platforms**: Highway supports seven architectures; the
 same application code can target various instruction sets, including those with
 'scalable' vectors (size unknown at compile time). Highway only requires C++11
 and supports four families of compilers. If you would like to use Highway on
@@ -40,7 +40,8 @@ clouds or client devices, choosing the best available instruction set at
 runtime. Alternatively, developers may choose to target a single instruction set
 without any runtime overhead. In both cases, the application code is the same
 except for swapping `HWY_STATIC_DISPATCH` with `HWY_DYNAMIC_DISPATCH` plus one
-line of code.
+line of code. See also @kfjahnke's
+[introduction to dispatching](https://github.com/kfjahnke/zimt/blob/main/examples/multi_isa_example/multi_simd_isa.md).
 
 **Suitable for a variety of domains**: Highway provides an extensive set of
 operations, used for image processing (floating-point), compression, video
@@ -57,6 +58,7 @@ layouts, and aligned/padded allocations.
 
 We recommend these resources for getting started:
 
+-   [SIMD programming with Highway talk](https://www.youtube.com/watch?v=R57biOOhnJM)
 -   [SIMD for C++ Developers](http://const.me/articles/simd/simd.pdf)
 -   [Algorithms for Modern Hardware](https://en.algorithmica.org/hpc/)
 -   [Optimizing software in C++](https://agner.org/optimize/optimizing_cpp.pdf)
@@ -80,30 +82,39 @@ us via the below email.
 *   Audio: [Zimtohrli perceptual metric](https://github.com/google/zimtohrli)
 *   Browsers: Chromium (+Vivaldi), Firefox (+floorp / foxhound / librewolf /
     Waterfox)
-*   Computational biology: [RNA analysis](https://github.com/bnprks/BPCells)
-*   Computer graphics: [Sparse voxel renderer](https://github.com/rools/voxl)
+*   Computational biology: [RNA analysis](https://github.com/bnprks/BPCells),
+    [long-sequence preprocessing](https://github.com/OpenGene/fastplong)
+*   Computer graphics: ghostty-org/ghostty,
+    [Sparse voxel renderer](https://github.com/rools/voxl),
+    [tgfx 2D Graphics library](https://github.com/Tencent/tgfx)
 *   Cryptography: google/distributed_point_functions, google/shell-encryption
 *   Data structures: bkille/BitLib
 *   Image codecs: eustas/2im,
     [Grok JPEG 2000](https://github.com/GrokImageCompression/grok),
     [JPEG XL](https://github.com/libjxl/libjxl),
     [JPEGenc](https://github.com/osamu620/JPEGenc),
-    [Jpegli](https://github.com/google/jpegli), OpenHTJ2K
-*   Image processing: cloudinary/ssimulacra2, m-ab-s/media-autobuild_suite,
-    [libvips](https://github.com/libvips/libvips)
+    [Jpegli](https://github.com/google/jpegli),
+    [libaom](https://aomedia.googlesource.com/aom/),
+    [OpenHTJ2K](https://github.com/osamu620/OpenHTJ2K)
+*   Image processing: awxkee/aire, cloudinary/ssimulacra2,
+    [libvips](https://github.com/libvips/libvips), m-ab-s/media-autobuild_suite,
 *   Image viewers: AlienCowEatCake/ImageViewer, diffractor/diffractor,
-    mirillis/jpegxl-wic,
-    [Lux panorama/image viewer](https://bitbucket.org/kfj/pv/)
+    [Lux panorama/image viewer](https://bitbucket.org/kfj/pv/),
+    mirillis/jpegxl-wic
 *   Information retrieval:
     [iresearch database index](https://github.com/iresearch-toolkit/iresearch),
     michaeljclark/zvec,
     [nebula interactive analytics / OLAP](https://github.com/varchar-io/nebula),
-    [ScaNN Scalable Nearest Neighbors](https://github.com/google-research/google-research/tree/7a269cb2ce0ae1db591fe11b62cbc0be7d72532a/scann),
-    [vectorlite vector search](https://github.com/1yefuwang1/vectorlite/)
-*   Machine learning: [gemma.cpp](https://github.com/google/gemma.cpp),
-    Tensorflow, Numpy, zpye/SimpleInfer
+    [`ScaNN` Scalable Nearest Neighbors](https://github.com/google-research/google-research/tree/7a269cb2ce0ae1db591fe11b62cbc0be7d72532a/scann),
+*   Machine learning: array2d/deepx,
+    [gemma.cpp](https://github.com/google/gemma.cpp), Tensorflow, Numpy,
+    zpye/SimpleInfer
+*   Programming languages:
+    [AOT-compiled python](https://github.com/exaloop/codon), oven-sh/bun, V8/V8,
+    yinqiwen/rapidudf
 *   Robotics:
     [MIT Model-Based Design and Verification](https://github.com/RobotLocomotion/drake)
+*   Vector search: 1yefuwang1/vectorlite, vespa-engine/vespa
 
 Other
 
@@ -142,12 +153,13 @@ See also the list at https://repology.org/project/highway-simd-library/versions
 
 ### Targets
 
-Highway supports 24 targets, listed in alphabetical order of platform:
+Highway supports 27 targets, listed in alphabetical order of platform:
 
 -   Any: `EMU128`, `SCALAR`;
 -   Armv7+: `NEON_WITHOUT_AES`, `NEON`, `NEON_BF16`, `SVE`, `SVE2`, `SVE_256`,
     `SVE2_128`;
 -   IBM Z: `Z14`, `Z15`;
+-   LoongArch: `LSX`, `LASX`;
 -   POWER: `PPC8` (v2.07), `PPC9` (v3.0), `PPC10` (v3.1B, not yet supported due
     to compiler bugs, see #1207; also requires QEMU 7.2);
 -   RISC-V: `RVV` (1.0);
@@ -160,13 +172,13 @@ Highway supports 24 targets, listed in alphabetical order of platform:
     -   `SSE4` (~Nehalem, also includes AES + CLMUL).
     -   `AVX2` (~Haswell, also includes BMI2 + F16 + FMA)
     -   `AVX3` (~Skylake, AVX-512F/BW/CD/DQ/VL)
-    -   `AVX3_DL` (~Icelake, includes BitAlg + CLMUL + GFNI + VAES + VBMI +
-        VBMI2 + VNNI + VPOPCNT; requires opt-in by defining `HWY_WANT_AVX3_DL`
-        unless compiling for static dispatch),
-    -   `AVX3_ZEN4` (like AVX3_DL but optimized for AMD Zen4; requires opt-in by
-        defining `HWY_WANT_AVX3_ZEN4` if compiling for static dispatch, but
+    -   `AVX3_DL` (~Icelake, includes `BitAlg` + `CLMUL` + `GFNI` + `VAES` +
+        `VBMI` + `VBMI2` + `VNNI` + `VPOPCNT`),
+    -   `AVX3_ZEN4` (AVX3_DL plus BF16, optimized for AMD Zen4; requires opt-in
+        by defining `HWY_WANT_AVX3_ZEN4` if compiling for static dispatch, but
         enabled by default for runtime dispatch),
     -   `AVX3_SPR` (~Sapphire Rapids, includes AVX-512FP16)
+    -   `AVX10_2` (~Diamond Rapids)
 
 Our policy is that unless otherwise specified, targets will remain supported as
 long as they can be (cross-)compiled with currently supported Clang or GCC, and
@@ -300,6 +312,7 @@ alternatives for use-cases requiring an upper bound on the lanes:
     `16/sizeof(T)`.
 
 Due to ADL restrictions, user code calling Highway ops must either:
+
 *   Reside inside `namespace hwy { namespace HWY_NAMESPACE {`; or
 *   prefix each op with an alias such as `namespace hn = hwy::HWY_NAMESPACE;
     hn::Add()`; or
@@ -339,6 +352,10 @@ target-specific vector types.
     You can prevent this by calling the following before any invocation of
     `HWY_DYNAMIC_*`: `hwy::GetChosenTarget().Update(hwy::SupportedTargets());`.
 
+See also a separate
+[introduction to dynamic dispatch](https://github.com/kfjahnke/zimt/blob/multi_isa/examples/multi_isa_example/multi_simd_isa.md)
+by @kfjahnke.
+
 When using dynamic dispatch, `foreach_target.h` is included from translation
 units (.cc files), not headers. Headers containing vector code shared between
 several translation units require a special include guard, for example the
@@ -369,15 +386,15 @@ generally sufficient.
 For MSVC, we recommend compiling with `/Gv` to allow non-inlined functions to
 pass vector arguments in registers. If intending to use the AVX2 target together
 with half-width vectors (e.g. for `PromoteTo`), it is also important to compile
-with `/arch:AVX2`. This seems to be the only way to reliably generate VEX-encoded
-SSE instructions on MSVC. Sometimes MSVC generates VEX-encoded SSE instructions,
-if they are mixed with AVX, but not always, see 
+with `/arch:AVX2`. This seems to be the only way to reliably generate
+VEX-encoded SSE instructions on MSVC. Sometimes MSVC generates VEX-encoded SSE
+instructions, if they are mixed with AVX, but not always, see
 [DevCom-10618264](https://developercommunity.visualstudio.com/t/10618264).
-Otherwise, mixing VEX-encoded AVX2 instructions and non-VEX SSE may cause severe 
-performance degradation. Unfortunately, with `/arch:AVX2` option, the
-resulting binary will then require AVX2. Note that no such flag is needed for
-clang and GCC because they support target-specific attributes, which we use to
-ensure proper VEX code generation for AVX2 targets.
+Otherwise, mixing VEX-encoded AVX2 instructions and non-VEX SSE may cause severe
+performance degradation. Unfortunately, with `/arch:AVX2` option, the resulting
+binary will then require AVX2. Note that no such flag is needed for clang and
+GCC because they support target-specific attributes, which we use to ensure
+proper VEX code generation for AVX2 targets.
 
 ## Strip-mining loops
 

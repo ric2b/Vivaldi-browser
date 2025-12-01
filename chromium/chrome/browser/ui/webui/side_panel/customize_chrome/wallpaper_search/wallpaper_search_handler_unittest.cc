@@ -37,7 +37,6 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/image_fetcher/core/mock_image_decoder.h"
@@ -71,7 +70,6 @@ using optimization_guide::proto::LogAiDataRequest;
 using testing::_;
 using testing::An;
 using testing::DoAll;
-using testing::Invoke;
 using testing::Return;
 using testing::SaveArg;
 
@@ -181,7 +179,7 @@ class WallpaperSearchHandlerTest : public testing::Test {
 
     auto logs_uploader = std::make_unique<
         optimization_guide::TestModelQualityLogsUploaderService>(
-        scoped_testing_local_state_.Get());
+        TestingBrowserProcess::GetGlobal()->local_state());
     mock_optimization_guide_keyed_service_
         ->SetModelQualityLogsUploaderServiceForTesting(
             std::move(logs_uploader));
@@ -307,8 +305,6 @@ class WallpaperSearchHandlerTest : public testing::Test {
   // NOTE: The initialization order of these members matters.
   content::BrowserTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
-  ScopedTestingLocalState scoped_testing_local_state_{
-      TestingBrowserProcess::GetGlobal()};
   network::TestURLLoaderFactory test_url_loader_factory_;
   std::unique_ptr<TestingProfile> profile_;
   base::test::ScopedFeatureList feature_list_;
@@ -334,13 +330,13 @@ TEST_F(WallpaperSearchHandlerTest, GetHistory) {
   EXPECT_CALL(mock_client(), SetHistory(_))
       .WillOnce(MoveArg<0>(&history_images));
   EXPECT_CALL(mock_image_decoder(), DecodeImage(_, _, _, _))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&decoder_callback](const std::string& image_data,
                               const gfx::Size& desired_image_frame_size,
                               data_decoder::DataDecoder* data_decoder,
                               image_fetcher::ImageDecodedCallback callback) {
             decoder_callback = std::move(callback);
-          }));
+          });
 
   auto handler = MakeHandler(/*session_id=*/123);
 
@@ -399,11 +395,11 @@ TEST_F(WallpaperSearchHandlerTest,
   base::MockCallback<WallpaperSearchHandler::GetDescriptorsCallback> callback;
   EXPECT_CALL(callback, Run(_))
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&descriptors](side_panel::customize_chrome::mojom::DescriptorsPtr
                              descriptors_ptr_arg) {
             descriptors = std::move(descriptors_ptr_arg);
-          }));
+          });
   SetUpDescriptorsResponseWithData(
       R"()]}'
         {
@@ -471,18 +467,18 @@ TEST_F(WallpaperSearchHandlerTest,
   base::MockCallback<WallpaperSearchHandler::GetDescriptorsCallback> callback_2;
   EXPECT_CALL(callback, Run(_))
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&descriptors](side_panel::customize_chrome::mojom::DescriptorsPtr
                              descriptors_ptr_arg) {
             descriptors = std::move(descriptors_ptr_arg);
-          }));
+          });
   EXPECT_CALL(callback_2, Run(_))
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&descriptors_2](side_panel::customize_chrome::mojom::DescriptorsPtr
                                descriptors_2_ptr_arg) {
             descriptors_2 = std::move(descriptors_2_ptr_arg);
-          }));
+          });
   SetUpDescriptorsResponseWithData(
       R"()]}'
         {
@@ -532,11 +528,11 @@ TEST_F(WallpaperSearchHandlerTest,
   base::MockCallback<WallpaperSearchHandler::GetDescriptorsCallback> callback;
   EXPECT_CALL(callback, Run(_))
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&descriptors](side_panel::customize_chrome::mojom::DescriptorsPtr
                              descriptors_ptr_arg) {
             descriptors = std::move(descriptors_ptr_arg);
-          }));
+          });
   SetUpDescriptorsResponseWithData(
       R"()]}'
         {"descriptor_a":[
@@ -561,11 +557,11 @@ TEST_F(WallpaperSearchHandlerTest, GetDescriptors_Failure_NoValidDescriptors) {
   base::MockCallback<WallpaperSearchHandler::GetDescriptorsCallback> callback;
   EXPECT_CALL(callback, Run(_))
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&descriptors](side_panel::customize_chrome::mojom::DescriptorsPtr
                              descriptors_ptr_arg) {
             descriptors = std::move(descriptors_ptr_arg);
-          }));
+          });
   SetUpDescriptorsResponseWithData(
       R"()]}'
         {"not_a_valid_descriptor":[
@@ -592,11 +588,11 @@ TEST_F(WallpaperSearchHandlerTest, GetDescriptors_Success_MissingTranslations) {
   base::MockCallback<WallpaperSearchHandler::GetDescriptorsCallback> callback;
   EXPECT_CALL(callback, Run(_))
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&descriptors](side_panel::customize_chrome::mojom::DescriptorsPtr
                              descriptors_ptr_arg) {
             descriptors = std::move(descriptors_ptr_arg);
-          }));
+          });
   SetUpDescriptorsResponseWithData(
       R"()]}'
         {
@@ -647,11 +643,11 @@ TEST_F(WallpaperSearchHandlerTest, GetDescriptors_Failure_DataIsUnreachable) {
   base::MockCallback<WallpaperSearchHandler::GetDescriptorsCallback> callback;
   EXPECT_CALL(callback, Run(_))
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&descriptors](side_panel::customize_chrome::mojom::DescriptorsPtr
                              descriptors_ptr_arg) {
             descriptors = std::move(descriptors_ptr_arg);
-          }));
+          });
   SetUpDescriptorsResponseWithNetworkError();
   ASSERT_FALSE(descriptors);
   auto handler = MakeHandler(/*session_id=*/123);
@@ -669,7 +665,7 @@ TEST_F(WallpaperSearchHandlerTest, GetWallpaperSearchResults_Success) {
   base::OnceCallback<void(const gfx::Image&)> decoder_callback1;
   base::OnceCallback<void(const gfx::Image&)> decoder_callback2;
   EXPECT_CALL(mock_optimization_guide_keyed_service(), ExecuteModel(_, _, _, _))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&request, &done_callback](
               optimization_guide::ModelBasedCapabilityKey feature_arg,
               const google::protobuf::MessageLite& request_arg,
@@ -679,23 +675,23 @@ TEST_F(WallpaperSearchHandlerTest, GetWallpaperSearchResults_Success) {
             ASSERT_EQ(request.GetTypeName(), request_arg.GetTypeName());
             request.CheckTypeAndMergeFrom(request_arg);
             done_callback = std::move(done_callback_arg);
-          }));
+          });
   EXPECT_CALL(mock_image_decoder(), DecodeImage(_, _, _, _))
       .Times(2)
-      .WillOnce(Invoke(
+      .WillOnce(
           [&decoder_callback1](const std::string& image_data,
                                const gfx::Size& desired_image_frame_size,
                                data_decoder::DataDecoder* data_decoder,
                                image_fetcher::ImageDecodedCallback callback) {
             decoder_callback1 = std::move(callback);
-          }))
-      .WillOnce(Invoke(
+          })
+      .WillOnce(
           [&decoder_callback2](const std::string& image_data,
                                const gfx::Size& desired_image_frame_size,
                                data_decoder::DataDecoder* data_decoder,
                                image_fetcher::ImageDecodedCallback callback) {
             decoder_callback2 = std::move(callback);
-          }));
+          });
   base::MockCallback<WallpaperSearchHandler::GetWallpaperSearchResultsCallback>
       callback;
   auto handler = MakeHandler(/*session_id=*/123);
@@ -821,7 +817,7 @@ TEST_F(WallpaperSearchHandlerTest, GetWallpaperSearchResults_MultipleRequests) {
   optimization_guide::OptimizationGuideModelExecutionResultCallback
       done_callback1;
   EXPECT_CALL(mock_optimization_guide_keyed_service(), ExecuteModel(_, _, _, _))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&request1, &done_callback1](
               optimization_guide::ModelBasedCapabilityKey feature_arg,
               const google::protobuf::MessageLite& request_arg,
@@ -831,7 +827,7 @@ TEST_F(WallpaperSearchHandlerTest, GetWallpaperSearchResults_MultipleRequests) {
             ASSERT_EQ(request1.GetTypeName(), request_arg.GetTypeName());
             request1.CheckTypeAndMergeFrom(request_arg);
             done_callback1 = std::move(done_callback_arg);
-          }));
+          });
   base::MockCallback<WallpaperSearchHandler::GetWallpaperSearchResultsCallback>
       callback1;
   auto handler = MakeHandler(/*session_id=*/123);
@@ -887,7 +883,7 @@ TEST_F(WallpaperSearchHandlerTest, GetWallpaperSearchResults_MultipleRequests) {
   optimization_guide::OptimizationGuideModelExecutionResultCallback
       done_callback2;
   EXPECT_CALL(mock_optimization_guide_keyed_service(), ExecuteModel(_, _, _, _))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&request2, &done_callback2](
               optimization_guide::ModelBasedCapabilityKey feature_arg,
               const google::protobuf::MessageLite& request_arg,
@@ -897,7 +893,7 @@ TEST_F(WallpaperSearchHandlerTest, GetWallpaperSearchResults_MultipleRequests) {
             ASSERT_EQ(request2.GetTypeName(), request_arg.GetTypeName());
             request2.CheckTypeAndMergeFrom(request_arg);
             done_callback2 = std::move(done_callback_arg);
-          }));
+          });
   base::MockCallback<WallpaperSearchHandler::GetWallpaperSearchResultsCallback>
       callback2;
 
@@ -983,7 +979,7 @@ TEST_F(WallpaperSearchHandlerTest,
   optimization_guide::proto::WallpaperSearchRequest request;
   base::OnceCallback<void(const gfx::Image&)> decoder_callback1;
   EXPECT_CALL(mock_optimization_guide_keyed_service(), ExecuteModel(_, _, _, _))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&request](
               optimization_guide::ModelBasedCapabilityKey feature_arg,
               const google::protobuf::MessageLite& request_arg,
@@ -992,7 +988,7 @@ TEST_F(WallpaperSearchHandlerTest,
                   done_callback_arg) {
             ASSERT_EQ(request.GetTypeName(), request_arg.GetTypeName());
             request.CheckTypeAndMergeFrom(request_arg);
-          }));
+          });
 
   testing::NiceMock<base::MockCallback<
       WallpaperSearchHandler::GetWallpaperSearchResultsCallback>>
@@ -1018,7 +1014,7 @@ TEST_F(WallpaperSearchHandlerTest, GetWallpaperSearchResults_ConvertsHueToHex) {
   optimization_guide::proto::WallpaperSearchRequest request;
   base::OnceCallback<void(const gfx::Image&)> decoder_callback1;
   EXPECT_CALL(mock_optimization_guide_keyed_service(), ExecuteModel(_, _, _, _))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&request](
               optimization_guide::ModelBasedCapabilityKey feature_arg,
               const google::protobuf::MessageLite& request_arg,
@@ -1027,7 +1023,7 @@ TEST_F(WallpaperSearchHandlerTest, GetWallpaperSearchResults_ConvertsHueToHex) {
                   done_callback_arg) {
             ASSERT_EQ(request.GetTypeName(), request_arg.GetTypeName());
             request.CheckTypeAndMergeFrom(request_arg);
-          }));
+          });
 
   testing::NiceMock<base::MockCallback<
       WallpaperSearchHandler::GetWallpaperSearchResultsCallback>>
@@ -1055,7 +1051,7 @@ TEST_F(WallpaperSearchHandlerTest, GetWallpaperSearchResults_NoResponse) {
   base::OnceCallback<void(const gfx::Image&)> decoder_callback1;
   base::OnceCallback<void(const gfx::Image&)> decoder_callback2;
   EXPECT_CALL(mock_optimization_guide_keyed_service(), ExecuteModel(_, _, _, _))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&request, &done_callback](
               optimization_guide::ModelBasedCapabilityKey feature_arg,
               const google::protobuf::MessageLite& request_arg,
@@ -1065,7 +1061,7 @@ TEST_F(WallpaperSearchHandlerTest, GetWallpaperSearchResults_NoResponse) {
             ASSERT_EQ(request.GetTypeName(), request_arg.GetTypeName());
             request.CheckTypeAndMergeFrom(request_arg);
             done_callback = std::move(done_callback_arg);
-          }));
+          });
   base::MockCallback<WallpaperSearchHandler::GetWallpaperSearchResultsCallback>
       callback;
   auto handler = MakeHandler(/*session_id=*/123);
@@ -1125,7 +1121,7 @@ TEST_F(WallpaperSearchHandlerTest, GetWallpaperSearchResults_NoImages) {
   base::OnceCallback<void(const gfx::Image&)> decoder_callback1;
   base::OnceCallback<void(const gfx::Image&)> decoder_callback2;
   EXPECT_CALL(mock_optimization_guide_keyed_service(), ExecuteModel(_, _, _, _))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&request, &done_callback](
               optimization_guide::ModelBasedCapabilityKey feature_arg,
               const google::protobuf::MessageLite& request_arg,
@@ -1135,7 +1131,7 @@ TEST_F(WallpaperSearchHandlerTest, GetWallpaperSearchResults_NoImages) {
             ASSERT_EQ(request.GetTypeName(), request_arg.GetTypeName());
             request.CheckTypeAndMergeFrom(request_arg);
             done_callback = std::move(done_callback_arg);
-          }));
+          });
   base::MockCallback<WallpaperSearchHandler::GetWallpaperSearchResultsCallback>
       callback;
   auto handler = MakeHandler(/*session_id=*/123);
@@ -1197,7 +1193,7 @@ TEST_F(WallpaperSearchHandlerTest, GetWallpaperSearchResults_RequestThrottled) {
   base::OnceCallback<void(const gfx::Image&)> decoder_callback1;
   base::OnceCallback<void(const gfx::Image&)> decoder_callback2;
   EXPECT_CALL(mock_optimization_guide_keyed_service(), ExecuteModel(_, _, _, _))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&request, &done_callback](
               optimization_guide::ModelBasedCapabilityKey feature_arg,
               const google::protobuf::MessageLite& request_arg,
@@ -1207,7 +1203,7 @@ TEST_F(WallpaperSearchHandlerTest, GetWallpaperSearchResults_RequestThrottled) {
             ASSERT_EQ(request.GetTypeName(), request_arg.GetTypeName());
             request.CheckTypeAndMergeFrom(request_arg);
             done_callback = std::move(done_callback_arg);
-          }));
+          });
   base::MockCallback<WallpaperSearchHandler::GetWallpaperSearchResultsCallback>
       callback;
   auto handler = MakeHandler(/*session_id=*/123);
@@ -1307,13 +1303,13 @@ TEST_F(WallpaperSearchHandlerTest, SetBackgroundToHistoryImage) {
       .WillOnce(DoAll(MoveArg<0>(&token_arg), MoveArg<1>(&image_arg),
                       MoveArg<2>(&timer)));
   EXPECT_CALL(mock_image_decoder(), DecodeImage(_, _, _, _))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&decoder_callback](const std::string& image_data,
                               const gfx::Size& desired_image_frame_size,
                               data_decoder::DataDecoder* data_decoder,
                               image_fetcher::ImageDecodedCallback callback) {
             decoder_callback = std::move(callback);
-          }));
+          });
 
   auto handler = MakeHandler(/*session_id=*/123);
 
@@ -1382,7 +1378,7 @@ TEST_F(WallpaperSearchHandlerTest, SetBackgroundToWallpaperSearchResult) {
   base::OnceCallback<void(const gfx::Image&)> decoder_callback1;
   base::OnceCallback<void(const gfx::Image&)> decoder_callback2;
   EXPECT_CALL(mock_optimization_guide_keyed_service(), ExecuteModel(_, _, _, _))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&request, &done_callback](
               optimization_guide::ModelBasedCapabilityKey feature_arg,
               const google::protobuf::MessageLite& request_arg,
@@ -1392,23 +1388,23 @@ TEST_F(WallpaperSearchHandlerTest, SetBackgroundToWallpaperSearchResult) {
             ASSERT_EQ(request.GetTypeName(), request_arg.GetTypeName());
             request.CheckTypeAndMergeFrom(request_arg);
             done_callback = std::move(done_callback_arg);
-          }));
+          });
   EXPECT_CALL(mock_image_decoder(), DecodeImage(_, _, _, _))
       .Times(2)
-      .WillOnce(Invoke(
+      .WillOnce(
           [&decoder_callback1](const std::string& image_data,
                                const gfx::Size& desired_image_frame_size,
                                data_decoder::DataDecoder* data_decoder,
                                image_fetcher::ImageDecodedCallback callback) {
             decoder_callback1 = std::move(callback);
-          }))
-      .WillOnce(Invoke(
+          })
+      .WillOnce(
           [&decoder_callback2](const std::string& image_data,
                                const gfx::Size& desired_image_frame_size,
                                data_decoder::DataDecoder* data_decoder,
                                image_fetcher::ImageDecodedCallback callback) {
             decoder_callback2 = std::move(callback);
-          }));
+          });
   base::MockCallback<WallpaperSearchHandler::GetWallpaperSearchResultsCallback>
       callback;
   auto handler = MakeHandler(/*session_id=*/123);
@@ -1562,7 +1558,7 @@ TEST_F(WallpaperSearchHandlerTest, SetUserFeedback) {
   optimization_guide::OptimizationGuideModelExecutionResultCallback
       done_callback1;
   EXPECT_CALL(mock_optimization_guide_keyed_service(), ExecuteModel(_, _, _, _))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&request1, &done_callback1](
               optimization_guide::ModelBasedCapabilityKey feature_arg,
               const google::protobuf::MessageLite& request_arg,
@@ -1571,7 +1567,7 @@ TEST_F(WallpaperSearchHandlerTest, SetUserFeedback) {
                   done_callback_arg) {
             request1.CheckTypeAndMergeFrom(request_arg);
             done_callback1 = std::move(done_callback_arg);
-          }));
+          });
   base::MockCallback<WallpaperSearchHandler::GetWallpaperSearchResultsCallback>
       callback1;
   auto handler = MakeHandler(/*session_id=*/123);
@@ -1609,7 +1605,7 @@ TEST_F(WallpaperSearchHandlerTest, SetUserFeedback) {
   optimization_guide::OptimizationGuideModelExecutionResultCallback
       done_callback2;
   EXPECT_CALL(mock_optimization_guide_keyed_service(), ExecuteModel(_, _, _, _))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&request2, &done_callback2](
               optimization_guide::ModelBasedCapabilityKey feature_arg,
               const google::protobuf::MessageLite& request_arg,
@@ -1619,7 +1615,7 @@ TEST_F(WallpaperSearchHandlerTest, SetUserFeedback) {
             ASSERT_EQ(request2.GetTypeName(), request_arg.GetTypeName());
             request2.CheckTypeAndMergeFrom(request_arg);
             done_callback2 = std::move(done_callback_arg);
-          }));
+          });
   base::MockCallback<WallpaperSearchHandler::GetWallpaperSearchResultsCallback>
       callback2;
   side_panel::customize_chrome::mojom::ResultDescriptorsPtr
@@ -1686,13 +1682,13 @@ TEST_F(WallpaperSearchHandlerTest, GetInspirations_Success) {
   base::MockCallback<WallpaperSearchHandler::GetInspirationsCallback> callback;
   EXPECT_CALL(callback, Run(_))
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&inspiration_groups](
               std::optional<std::vector<
                   side_panel::customize_chrome::mojom::InspirationGroupPtr>>
                   inspiration_groups_ptr_arg) {
             inspiration_groups = std::move(inspiration_groups_ptr_arg.value());
-          }));
+          });
   SetUpInspirationsResponseWithData(
       R"()]}'
         [{
@@ -1784,13 +1780,13 @@ TEST_F(WallpaperSearchHandlerTest, GetInspirations_Success_Descriptors) {
   base::MockCallback<WallpaperSearchHandler::GetInspirationsCallback> callback;
   EXPECT_CALL(callback, Run(_))
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&inspiration_groups](
               std::optional<std::vector<
                   side_panel::customize_chrome::mojom::InspirationGroupPtr>>
                   inspiration_groups_ptr_arg) {
             inspiration_groups = std::move(inspiration_groups_ptr_arg.value());
-          }));
+          });
   SetUpInspirationsResponseWithData(
       R"()]}'[
         {
@@ -1843,13 +1839,13 @@ TEST_F(WallpaperSearchHandlerTest,
   base::MockCallback<WallpaperSearchHandler::GetInspirationsCallback> callback;
   EXPECT_CALL(callback, Run(_))
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&inspiration_groups](
               std::optional<std::vector<
                   side_panel::customize_chrome::mojom::InspirationGroupPtr>>
                   inspiration_groups_ptr_arg) {
             inspiration_groups = std::move(inspiration_groups_ptr_arg.value());
-          }));
+          });
   // First group has one valid inspiration. Second group has no "descriptor_a".
   // Third group has no images. Fourth group has no translation.
   SetUpInspirationsResponseWithData(
@@ -1951,13 +1947,13 @@ TEST_F(WallpaperSearchHandlerTest, GetInspirations_Failure_DataUnreachable) {
   base::MockCallback<WallpaperSearchHandler::GetInspirationsCallback> callback;
   EXPECT_CALL(callback, Run(_))
       .Times(1)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&inspiration_groups](
               std::optional<std::vector<
                   side_panel::customize_chrome::mojom::InspirationGroupPtr>>
                   inspiration_groups_ptr_arg) {
             inspiration_groups = std::move(inspiration_groups_ptr_arg);
-          }));
+          });
   SetUpInspirationsResponseWithNetworkError();
   ASSERT_FALSE(inspiration_groups.has_value());
 
@@ -1971,13 +1967,13 @@ TEST_F(WallpaperSearchHandlerTest, GetInspirations_Failure_DataUnreachable) {
 TEST_F(WallpaperSearchHandlerTest, SetBackgroundToInspirationImage) {
   base::OnceCallback<void(const gfx::Image&)> decoder_callback;
   EXPECT_CALL(mock_image_decoder(), DecodeImage(_, _, _, _))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&decoder_callback](const std::string& image_data,
                               const gfx::Size& desired_image_frame_size,
                               data_decoder::DataDecoder* data_decoder,
                               image_fetcher::ImageDecodedCallback callback) {
             decoder_callback = std::move(callback);
-          }));
+          });
   base::Token token_arg;
   SkBitmap bitmap_arg;
   base::ElapsedTimer timer_arg;

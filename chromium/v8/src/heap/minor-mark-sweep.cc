@@ -82,8 +82,8 @@ class YoungGenerationMarkingVerifier : public MarkingVerifierBase {
   }
 
   void Run() override {
-    // VerifyRoots will visit also visit the conservative stack and consider
-    // objects reachable from it, including old objects. This is fine since this
+    // VerifyRoots will also visit the conservative stack and consider objects
+    // reachable from it, including old objects. This is fine since this
     // verifier will only check that young objects are marked.
     VerifyRoots();
     if (v8_flags.sticky_mark_bits) {
@@ -676,9 +676,8 @@ class MinorMSConservativeStackVisitor
   static constexpr bool kOnlyVisitMainV8Cage [[maybe_unused]] = true;
 
   static bool FilterPage(const MemoryChunk* chunk) {
-    return v8_flags.sticky_mark_bits
-               ? !chunk->IsFlagSet(MemoryChunk::CONTAINS_ONLY_OLD)
-               : chunk->IsToPage();
+    return v8_flags.sticky_mark_bits ? !chunk->ContainsOnlyOldObjects()
+                                     : chunk->IsToPage();
   }
   static bool FilterLargeObject(Tagged<HeapObject>, MapWord) { return true; }
   static bool FilterNormalObject(Tagged<HeapObject>, MapWord, MarkingBitmap*) {
@@ -692,13 +691,18 @@ class MinorMSConservativeStackVisitor
 
 void MinorMarkSweepCollector::MarkRootsFromConservativeStack(
     YoungGenerationRootMarkingVisitor& root_visitor) {
-  if (!heap_->IsGCWithStack()) return;
+  const Heap::StackScanMode stack_scan_mode =
+      heap_->ConservativeStackScanningModeForMinorGC();
+  if (stack_scan_mode == Heap::StackScanMode::kNone ||
+      !heap_->IsGCWithStack()) {
+    return;
+  }
+
   TRACE_GC(heap_->tracer(), GCTracer::Scope::CONSERVATIVE_STACK_SCANNING);
 
   MinorMSConservativeStackVisitor stack_visitor(heap_->isolate(), root_visitor);
 
-  heap_->IterateConservativeStackRoots(&stack_visitor,
-                                       Heap::StackScanMode::kFull);
+  heap_->IterateConservativeStackRoots(&stack_visitor, stack_scan_mode);
 }
 
 void MinorMarkSweepCollector::MarkLiveObjects() {
@@ -802,7 +806,7 @@ void MinorMarkSweepCollector::DrainMarkingWorklist() {
       const auto visited_size = main_marking_visitor_->Visit(map, heap_object);
       if (visited_size) {
         main_marking_visitor_->IncrementLiveBytesCached(
-            MutablePageMetadata::FromHeapObject(heap_object),
+            MutablePageMetadata::FromHeapObject(heap_->isolate(), heap_object),
             ALIGN_TO_ALLOCATION_ALIGNMENT(visited_size));
       }
     }

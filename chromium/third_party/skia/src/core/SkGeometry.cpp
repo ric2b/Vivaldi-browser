@@ -1485,8 +1485,12 @@ bool SkConic::asQuadTol(SkScalar tol) const {
 // Limit the number of suggested quads to approximate a conic
 #define kMaxConicToQuadPOW2     5
 
+static inline bool bad_conic_w(float w) {
+    return w < 0 || !SkIsFinite(w);
+}
+
 int SkConic::computeQuadPOW2(SkScalar tol) const {
-    if (tol < 0 || !SkIsFinite(tol) || !SkPointPriv::AreFinite(fPts, 3)) {
+    if (tol < 0 || !SkIsFinite(tol) || !SkPointPriv::AreFinite(fPts, 3) || bad_conic_w(fW)) {
         return 0;
     }
 
@@ -1568,7 +1572,12 @@ static SkPoint* subdivide(const SkConic& src, SkPoint pts[], int level) {
 }
 
 int SkConic::chopIntoQuadsPOW2(SkPoint pts[], int pow2) const {
-    SkASSERT(pow2 >= 0);
+    SkASSERT(pow2 >= 0 && pow2 <= kMaxConicToQuadPOW2);
+
+    if (bad_conic_w(fW)) {
+        pow2 = 0;
+    }
+
     *pts = fPts[0];
     SkDEBUGCODE(SkPoint* endPts);
     if (pow2 == kMaxConicToQuadPOW2) {  // If an extreme weight generates many quads ...
@@ -1726,7 +1735,7 @@ SkScalar SkConic::TransformW(const SkPoint pts[3], SkScalar w, const SkMatrix& m
     return sk_double_to_float(sqrt(sk_ieee_double_divide(w1 * w1, w0 * w2)));
 }
 
-int SkConic::BuildUnitArc(const SkVector& uStart, const SkVector& uStop, SkRotationDirection dir,
+int SkConic::BuildUnitArc(const SkVector& uStart, const SkVector& uStop, SkPathDirection dir,
                           const SkMatrix* userMatrix, SkConic dst[kMaxConicsForArc]) {
     // rotate by x,y so that uStart is (1.0)
     SkScalar x = SkPoint::DotProduct(uStart, uStop);
@@ -1737,12 +1746,12 @@ int SkConic::BuildUnitArc(const SkVector& uStart, const SkVector& uStop, SkRotat
     // check for (effectively) coincident vectors
     // this can happen if our angle is nearly 0 or nearly 180 (y == 0)
     // ... we use the dot-prod to distinguish between 0 and 180 (x > 0)
-    if (absY <= SK_ScalarNearlyZero && x > 0 && ((y >= 0 && kCW_SkRotationDirection == dir) ||
-                                                 (y <= 0 && kCCW_SkRotationDirection == dir))) {
+    if (absY <= SK_ScalarNearlyZero && x > 0 && ((y >= 0 && SkPathDirection::kCW == dir) ||
+                                                 (y <= 0 && SkPathDirection::kCCW == dir))) {
         return 0;
     }
 
-    if (dir == kCCW_SkRotationDirection) {
+    if (dir == SkPathDirection::kCCW) {
         y = -y;
     }
 
@@ -1805,7 +1814,7 @@ int SkConic::BuildUnitArc(const SkVector& uStart, const SkVector& uStop, SkRotat
     // now handle counter-clockwise and the initial unitStart rotation
     SkMatrix    matrix;
     matrix.setSinCos(uStart.fY, uStart.fX);
-    if (dir == kCCW_SkRotationDirection) {
+    if (dir == SkPathDirection::kCCW) {
         matrix.preScale(SK_Scalar1, -SK_Scalar1);
     }
     if (userMatrix) {

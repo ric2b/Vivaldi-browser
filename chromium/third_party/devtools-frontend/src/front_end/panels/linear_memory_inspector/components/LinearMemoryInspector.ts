@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -35,9 +35,9 @@ import {
 
 const UIStrings = {
   /**
-   *@description Tooltip text that appears when hovering over an invalid address in the address line in the Linear memory inspector
-   *@example {0x00000000} PH1
-   *@example {0x00400000} PH2
+   * @description Tooltip text that appears when hovering over an invalid address in the address line in the Linear memory inspector
+   * @example {0x00000000} PH1
+   * @example {0x00400000} PH2
    */
   addressHasToBeANumberBetweenSAnd: 'Address has to be a number between {PH1} and {PH2}',
 } as const;

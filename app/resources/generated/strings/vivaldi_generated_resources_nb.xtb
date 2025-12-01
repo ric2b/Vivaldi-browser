@@ -12,6 +12,7 @@
 <translation id="1163931534039071049">&amp;Vis rammekilde</translation>
 <translation id="1165039591588034296">Feil</translation>
 <translation id="1175364870820465910">&amp;Skriv ut...</translation>
+<translation id="1177548198167638471">Ikke spør igjen</translation>
 <translation id="1181037720776840403">Fjern</translation>
 <translation id="1184037892196730210">Kan ikke caste skjermen</translation>
 <translation id="1187722533808055681">Oppvåkninger fra inaktiv</translation>
@@ -28,9 +29,10 @@
 <translation id="1451375123200651445">Nettside, enkeltfil</translation>
 <translation id="1465176863081977902">K&amp;opier lydadressen</translation>
 <translation id="1476607407192946488">&amp;Språkinnstillinger</translation>
-<translation id="1546280085599573572">Denne utvidelsen har endret hvilken side som vises når du klikker på Hjem-knappen.</translation>
+<translation id="1478607704480248626">Installering er ikke aktivert</translation>
 <translation id="1552752544932680961">Administrer utvidelsen</translation>
 <translation id="15662109988763471">Den valgte skriveren er ikke tilgjengelig, eller ikke installert riktig. Sjekk skriveren eller velg en annen skriver.</translation>
+<translation id="1581962803218266616">Vis i Finder</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Åpne lenke med...</translation>
 <translation id="1589055389569595240">Vis stavekontroll og grammatikk</translation>
@@ -49,14 +51,18 @@
 <translation id="176587472219019965">&amp;Nytt vindu</translation>
 <translation id="1769104665586091481">Åpne lenken i nytt &amp;vindu</translation>
 <translation id="1779468444204342338">Minimum</translation>
+<translation id="1805822111539868586">Undersøk utvidelsesvinduer</translation>
 <translation id="1815083418640426271">Lim inn som ren tekst</translation>
 <translation id="1828901632669367785">Skriv ut med systemvindu...</translation>
+<translation id="1843048149176045210">Kopier nedlastingslenke</translation>
 <translation id="1850508293116537636">Roter med klokken</translation>
 <translation id="1886996562706621347">Tillat sider å spørre om overtagelse av protokollhåndtering (anbefales)</translation>
 <translation id="1901303067676059328">Marker &amp;alt</translation>
+<translation id="1906488504371069394">Oppdag flere utvidelser og temaer på <ph name="BEGIN_LINK" />Chrome Nettmarked<ph name="END_LINK" /></translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1925021887439448749">Skriv inn en egendefinert nettadresse</translation>
 <translation id="1932098463447129402">Ikke før</translation>
+<translation id="1936157145127842922">Vis i mappe</translation>
 <translation id="1936931585862840749">Bruk et tall for å angi hvor mange eksemplarer som skal skrives ut (1 til <ph name="MAX_COPIES" />).</translation>
 <translation id="2019718679933488176">&amp;Åpne lyd i ny fane</translation>
 <translation id="2050339315714019657">Stående</translation>
@@ -70,7 +76,7 @@
 <translation id="215753907730220065">Avslutt fullskjermmodus</translation>
 <translation id="2158475082070321257">Kopier lenke til markert tekst</translation>
 <translation id="2177950615300672361">Privatmodus-fane: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Native Client-modul: <ph name="NEXE_NAME" /></translation>
+<translation id="2187906491731510095">Utvidelser oppdatert</translation>
 <translation id="2218515861914035131">Lim inn som ren tekst</translation>
 <translation id="2249605167705922988">f.eks 1-5, 8, 11-13</translation>
 <translation id="2280486287150724112">Høyremarg</translation>
@@ -81,9 +87,12 @@
 <translation id="2326931316514688470">&amp;Last inn appen på nytt</translation>
 <translation id="2327492829706409234">Aktiver app</translation>
 <translation id="2348176352564285430">App: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="2378602615417849384">{NUM_EXTENSIONS, plural,
+      =1 {Denne utvidelsen vil kanskje snart ikke støttes lenger}
+      other {Disse utvidelsene vil kanskje snart ikke støttes lengre}
+    }</translation>
 <translation id="2378982052244864789">Velg utvidelsens mappe.</translation>
 <translation id="2379281330731083556">Skriv ut med systemvindu...<ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Ukjent programtillegg</translation>
 <translation id="2423578206845792524">Lagre &amp;bildet som...</translation>
 <translation id="2439110203301358333">Et annet program på datamaskinen la til en utvidelse som kan endre hvordan Vivaldi virker.</translation>
 <translation id="2443487764245141020">Nettsteder trenger kanskje også å gjenkjenne enheten din ved bruk av en identifikator</translation>
@@ -95,6 +104,7 @@
 <translation id="2550212893339833758">Virtuelt minne</translation>
 <translation id="2553440850688409052">Skjul dette programtillegget</translation>
 <translation id="2607101320794533334">Informasjon om subjektets offentlige nøkkel</translation>
+<translation id="261305050785128654">La nettsteder få vite språkene du forstår. De viser innhold på disse språkene hvis mulig.</translation>
 <translation id="26224892172169984">Ikke la noe nettsted håndtere protokoller</translation>
 <translation id="2653275834716714682">Teksterstatning</translation>
 <translation id="265390580714150011">Feltverdi</translation>
@@ -102,12 +112,12 @@
 <translation id="2678063897982469759">Reaktiver</translation>
 <translation id="2719936478972253983">Følgende infokapsler er blokkert</translation>
 <translation id="2721037002783622288">&amp;Søk etter bilder med <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2722547199758472013">ID: <ph name="EXTENSION_ID" /></translation>
 <translation id="2738771556149464852">Ikke etter</translation>
 <translation id="2749881179542288782">Kontroller grammatikk og stavemåte</translation>
 <translation id="2785873697295365461">Filbeskrivelser</translation>
 <translation id="2825758591930162672">Subjektets offentlige nøkkel</translation>
 <translation id="2850541429955027218">Legg til tema</translation>
-<translation id="2861941300086904918">Sikkerhetsadministrator for Native Client</translation>
 <translation id="2881076733170862447">Når du klikker på utvidelsen</translation>
 <translation id="2889064240420137087">Åpne lenken med...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> kunne ikke kommunisere med skriveren. Sørg for at skriveren er plugget i, og prøv igjen.</translation>
@@ -131,6 +141,10 @@
 <translation id="3129173833825111527">Venstremarg</translation>
 <translation id="3144647712221361880">Åpne lenken som</translation>
 <translation id="3222066309010235055">Forhåndsrendring: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3228985231489269630">{NUM_EXTENSIONS, plural,
+      =1 {Fjern eller erstatt den med lignende utvidelser fra <ph name="BEGIN_LINK" />Chrome Nettmarked<ph name="END_LINK" />.}
+      other {Fjern eller erstatt dem med lignende utvidelser fra <ph name="BEGIN_LINK" />Chrome Nettmarked<ph name="END_LINK" />}
+    }</translation>
 <translation id="3241680850019875542">Velg rotmappen til utvidelsen som skal pakkes. For å oppdatere en utvidelse må du også velge den private nøkkelen som skal brukes.</translation>
 <translation id="3275778913554317645">Åpne som vindu</translation>
 <translation id="3280237271814976245">L&amp;agre som...</translation>
@@ -153,8 +167,10 @@
 <translation id="3493881266323043047">Gyldighet</translation>
 <translation id="3511307672085573050">Kopier lenkeadr&amp;esse</translation>
 <translation id="354068948465830244">Kan lese og endre nettstedsdata</translation>
+<translation id="3555812735919707620">Fjern utvidelse</translation>
 <translation id="3560034655160545939">&amp;Stavekontroll</translation>
-<translation id="3587482841069643663">Alle</translation>
+<translation id="3581861561942370740">Søk nedlastingshistorikk</translation>
+<translation id="3612673635130633812">Lastet ned av &lt;a href="<ph name="URL" />"&gt;<ph name="EXTENSION" />&lt;/a&gt;</translation>
 <translation id="3627588569887975815">Åpne lenken i inko&amp;gnitovindu</translation>
 <translation id="3678156199662914018">Utvidelse: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> spør om å dele skjermen</translation>
@@ -170,6 +186,7 @@
 <translation id="3838085852053358637">Utvidelsen kunne ikke lastes inn</translation>
 <translation id="383891835335927981">Ingen nettsteder er zoomet inn eller ut</translation>
 <translation id="385051799172605136">Tilbake</translation>
+<translation id="3855441664322950881">Pakk utvidelse</translation>
 <translation id="3858860766373142691">Navn</translation>
 <translation id="3861977424605124250">Vis ved oppstart</translation>
 <translation id="3867944738977021751">Sertifikatfelter</translation>
@@ -183,6 +200,7 @@
 <translation id="3948116654032448504">&amp;Søk etter bilder med <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3979395879372752341">Ny utvidelse lagt til (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">Kopier lenke til markert tekst</translation>
+<translation id="399788104667917863">Fest til verktøylinjen</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Legg til i ordliste</translation>
 <translation id="4058793769387728514">Kontroller dokument nå</translation>
@@ -197,7 +215,6 @@
 <translation id="4131410914670010031">Svart/hvitt</translation>
 <translation id="4165986682804962316">Nettstedsinnstillinger</translation>
 <translation id="4170314459383239649">Fjern ved avslutning</translation>
-<translation id="4176463684765177261">Deaktivert</translation>
 <translation id="4200983522494130825">Ny &amp;fane</translation>
 <translation id="4225397296022057997">På alle nettsteder</translation>
 <translation id="4256316378292851214">La&amp;gre video som...</translation>
@@ -221,15 +238,19 @@
 <translation id="4613271546271159013">En utvidelse har endret hvilken side som vises når du åpner en ny fane.</translation>
 <translation id="4616405296204756919">Du kan bruke lagrede passord på en hvilken som helst enhet. De lagres i <ph name="VIVALDI_PASSWORD_MANAGER" />.</translation>
 <translation id="4643612240819915418">&amp;Åpne video i ny fane</translation>
+<translation id="4644205769234414680">Tillat i privatmodus</translation>
+<translation id="4654801841330730814">Alle</translation>
 <translation id="4677772697204437347">GPU-minne</translation>
 <translation id="4681930562518940301">Åpne det opprinnelige b&amp;ildet i en ny fane</translation>
 <translation id="4711638718396952945">Gjenopprett innstillingene</translation>
 <translation id="4726710629007580002">Advarsler oppstod under installasjon av utvidelsen:</translation>
+<translation id="473775607612524610">Oppdater</translation>
 <translation id="4763408175235639573">Følgende infokapsler ble angitt da du besøkte denne siden</translation>
 <translation id="479536056609751218">Nettside, bare HTML</translation>
 <translation id="4827904420700932487">Opprett en QR-kode for dette bildet</translation>
 <translation id="4839303808932127586">La&amp;gre video som...</translation>
 <translation id="4840096453115567876">Vil du avslutte privatmodus likevel?</translation>
+<translation id="4885692421645694729">Denne utvidelsen har ingen ytterligere nettstedstilgang</translation>
 <translation id="488785315393301722">Vis detaljer</translation>
 <translation id="4895799941222633551">Opprett &amp;snarvei…</translation>
 <translation id="4912643508233590958">Oppvåkninger fra inaktiv</translation>
@@ -246,13 +267,13 @@
 <translation id="5059526285558225588">Velg hva du vil dele</translation>
 <translation id="5063480226653192405">Bruk</translation>
 <translation id="5116628073786783676">La&amp;gre lyd som...</translation>
-<translation id="5143374789336132547">Utvidelsen "<ph name="EXTENSION_NAME" />" har endret hvilken side som vises når du trykker på Hjem-knappen.</translation>
 <translation id="5154108062446123722">Avanserte innstillinger for <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5154702632169343078">Subjekt</translation>
+<translation id="5170568018924773124">Vis i mappe</translation>
 <translation id="5171343362375269016">Virtuelt minne</translation>
-<translation id="5233019165164992427">NaCl-feilsøkingsport</translation>
 <translation id="5233231016133573565">Prosess-ID</translation>
 <translation id="5233736638227740678">&amp;Lim inn</translation>
+<translation id="5244466461749935369">Behold inntil videre</translation>
 <translation id="5256861893479663409">På alle nettsteder</translation>
 <translation id="5260334392110301220">Smarte anførselstegn</translation>
 <translation id="5269977353971873915">Utskrift mislyktes</translation>
@@ -273,7 +294,6 @@
 <translation id="5485102783864353244">Legg til app</translation>
 <translation id="5486561344817861625">Simuler omstart av nettleseren</translation>
 <translation id="5509693895992845810">L&amp;agre som...</translation>
-<translation id="5521078259930077036">Er dette hjemmesiden du forventet?</translation>
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Last igjen</translation>
 <translation id="5575473780076478375">Utvidelse i privatvindu: <ph name="EXTENSION_NAME" /></translation>
@@ -285,15 +305,14 @@
 <translation id="5677928146339483299">Blokkert</translation>
 <translation id="5707185214361380026">Kunne ikke laste inn utvidelse fra:</translation>
 <translation id="5713171467967533494">Åpne i Vivaldi-nettleseren</translation>
-<translation id="5715711091495208045">Programtilleggsmegler: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Lagre som PDF</translation>
 <translation id="5747809636523347288">Lim inn og gå til <ph name="URL" /></translation>
 <translation id="5759728514498647443">Dokumenter du skriver ut via <ph name="APP_NAME" /> kan leses av <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">La&amp;gre lyd som...</translation>
+<translation id="577313026359983030">Mine utvidelser</translation>
 <translation id="5780973441651030252">Prosessprioritet</translation>
 <translation id="5804241973901381774">Tilganger</translation>
 <translation id="5828633471261496623">Skriver ut...</translation>
-<translation id="583281660410589416">Ukjent</translation>
 <translation id="5851868085455377790">Utsteder</translation>
 <translation id="5860491529813859533">Slå på</translation>
 <translation id="5910363049092958439">Lagre &amp;bildet som...</translation>
@@ -329,6 +348,7 @@
 <translation id="6374469231428023295">Prøv igjen</translation>
 <translation id="6398765197997659313">Avslutt fullskjermmodus</translation>
 <translation id="6406303162637086258">Simuler omstart av nettleseren</translation>
+<translation id="6419546358665792306">Last upakket</translation>
 <translation id="6445450263907939268">Hvis du ikke ønsker disse endringene kan du gjenopprette de gamle innstillingene.</translation>
 <translation id="6447842834002726250">Infokapsler</translation>
 <translation id="6498249116389603658">&amp;Alle dine språk</translation>
@@ -345,7 +365,6 @@
 <translation id="6691936601825168937">&amp;Frem</translation>
 <translation id="6786747875388722282">Utvidelser</translation>
 <translation id="6787839852456839824">Hurtigtaster</translation>
-<translation id="6798954102094737107">Programtillegg: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Behold endringene</translation>
 <translation id="6824564591481349393">Kopier &amp;e-postadresse</translation>
 <translation id="6840155290835956714">Spør før sending</translation>
@@ -378,10 +397,10 @@
 <translation id="7453008956351770337">Ved å velge denne skriveren, gir du følgende utvidelse tilgang til skriveren:</translation>
 <translation id="7564847347806291057">Avslutt prosess</translation>
 <translation id="7576690715254076113">Samle</translation>
+<translation id="7612050744024016345">Alle utvidelser</translation>
 <translation id="7629827748548208700">Fane: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Avbryt</translation>
 <translation id="7659154729610375585">Vil du avslutte privatmodus likevel?</translation>
-<translation id="7661259717474717992">Tillat sider å lagre og lese infokapsler</translation>
 <translation id="7663719505383602579">Mottaker: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installert av administratoren din</translation>
 <translation id="7685038817958445325">Kan ikke caste</translation>
@@ -415,6 +434,7 @@ Nøkkelfil: <ph name="KEY_FILE" />
 Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av utvidelsen.</translation>
 <translation id="8004582292198964060">Nettleser</translation>
 <translation id="8018313076035239964">Kontroller hvilken informasjon nettsider kan bruke, og hvilket innhold de kan vise deg</translation>
+<translation id="8023801379949507775">Oppdater utvidelser nå</translation>
 <translation id="8071432093239591881">Skriv ut som bilde</translation>
 <translation id="8118448640060360549">{EXTENSIONS_COUNT,plural, =1{# bokmerke}other{# bokmerker}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
@@ -425,7 +445,6 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="8261378640211443080">Denne utvidelsen finnes ikke i <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />, og kan ha blitt lagt til uten at du fikk vite om det.</translation>
 <translation id="8351419472474436977">Denne utvidelsen har tatt kontroll over proxy-innstillingene dine, noe som betyr at den kan endre, sabotere eller tjuvlytte på alt du gjør på nettet. Hvis du ikke vet hvorfor endringen skjedde, er endringen trolig uønsket.</translation>
 <translation id="8382913212082956454">Kopier &amp;e-postadresse</translation>
-<translation id="8434480141477525001">NaCl-feilsøkingsport</translation>
 <translation id="8449008133205184768">Lim inn og tilpass til stil</translation>
 <translation id="8477178913400731244">Slett data</translation>
 <translation id="8477384620836102176">&amp;Generelt</translation>
@@ -435,6 +454,7 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="8546306075665861288">Bildebuffer</translation>
 <translation id="8569682776816196752">Ingen mål funnet</translation>
 <translation id="8584280235376696778">&amp;Åpne video i ny fane</translation>
+<translation id="8587660243683137365">Installer denne siden som en app</translation>
 <translation id="8605428685123651449">SQLite-minne</translation>
 <translation id="8615618338313291042">Privatmodus-app: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">CSS-buffer</translation>
@@ -444,6 +464,7 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="8708000541097332489">Fjern ved avslutning</translation>
 <translation id="8714838604780058252">Bakgrunnsgrafikk</translation>
 <translation id="8725066075913043281">Prøv igjen</translation>
+<translation id="8770406935328356739">Rotmappe for utvidelsen</translation>
 <translation id="8774934320277480003">Toppmarg</translation>
 <translation id="8798099450830957504">Standard</translation>
 <translation id="8808478386290700967">Nettmarked</translation>
@@ -454,6 +475,7 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="8899851313684471736">Åpne lenken i et nytt &amp;vindu</translation>
 <translation id="8915370057835397490">Laster forslag</translation>
 <translation id="8916476537757519021">Privatmodus-underramme: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8926389886865778422">Ikke spør igjen</translation>
 <translation id="8929696694736010839">Bare denne privatøkten</translation>
 <translation id="895944840846194039">JavaScript-minne</translation>
 <translation id="8962083179518285172">Skjul detaljer</translation>

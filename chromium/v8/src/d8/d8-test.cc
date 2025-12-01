@@ -38,6 +38,8 @@ namespace {
     return;                                                                 \
   }
 
+constexpr v8::EmbedderDataTypeTag kFastCApiTag = 1;
+
 class FastCApiObject {
  public:
   static FastCApiObject& instance();
@@ -1463,7 +1465,8 @@ class FastCApiObject {
       return nullptr;
     }
     FastCApiObject* wrapped = reinterpret_cast<FastCApiObject*>(
-        object->GetAlignedPointerFromInternalField(kV8WrapperObjectIndex));
+        object->GetAlignedPointerFromInternalField(kV8WrapperObjectIndex,
+                                                   kFastCApiTag));
     CHECK_NOT_NULL(wrapped);
     return wrapped;
   }
@@ -1499,7 +1502,7 @@ void CreateFastCAPIObject(const FunctionCallbackInfo<Value>& info) {
   Local<Object> api_object = info.This();
   api_object->SetAlignedPointerInInternalField(
       FastCApiObject::kV8WrapperObjectIndex,
-      reinterpret_cast<void*>(&kFastCApiObject));
+      reinterpret_cast<void*>(&kFastCApiObject), kFastCApiTag);
   api_object->SetAccessorProperty(
       String::NewFromUtf8Literal(info.GetIsolate(), "supports_fp_params"),
       FunctionTemplate::New(info.GetIsolate(), FastCApiObject::SupportsFPParams)

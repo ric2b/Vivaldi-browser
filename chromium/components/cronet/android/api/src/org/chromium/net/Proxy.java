@@ -13,6 +13,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Executor;
 
 /**
  * Represents a proxy that can be used by Cronet. Throughout this file we say "tunnel establishment
@@ -38,8 +39,60 @@ public final class Proxy {
     /** Establish a secure connection to the proxy itself. */
     public static final int HTTPS = 1;
 
-    /** Controls tunnel establishment requests. */
+    /**
+     * Controls tunnel establishment requests. All methods will be invoked onto the Executor
+     * specified in {@link Proxy}'s constructor.
+     */
     public abstract static class Callback {
+        /**
+         * Represents a tunnel establishment request being sent to the proxy server.
+         *
+         * <p>All methods may be called synchronously or asynchronously, on any thread.
+         */
+        public abstract static class Request implements AutoCloseable {
+            /**
+             * Allows the tunnel establishment request to proceed with the specified extra headers.
+             *
+             * @param extraHeaders A list of headers to be added to the tunnel establishment
+             *     request. This list can be empty, in which case no headers will be added. These
+             *     headers won't be added to the actual HTTP requests that will go through the
+             *     tunnel.
+             * @throws IllegalArgumentException If any of the headers is not RFC 2616-compliant.
+             * @throws IllegalStateException If this gets called multiple times, or after {@link
+             *     Request#close} has been called.
+             */
+            public abstract void proceed(@NonNull List<Map.Entry<String, String>> extraHeaders);
+
+            /**
+             * Releases the resources associated with the tunnel establishment request. If by the
+             * time this is called, the tunnel establishment request has not been allowed to
+             * proceed, it will be canceled.
+             *
+             * <p>When a tunnel establishment request is canceled, Cronet will interpret it as a
+             * failure to connect to the associated {@link org.chromium.net.Proxy}. Cronet will then
+             * try the next {@link org.chromium.net.Proxy} in the list passed to {@link
+             * org.chromium.net.ProxyOptions} (refer to that class documentation for more info).
+             */
+            @Override
+            public abstract void close();
+        }
+
+        /**
+         * Called before sending a tunnel establishment request. Allows manipulating, or canceling,
+         * said request before Cronet sends it to the proxy. Refer to {@link Request} to learn how a
+         * request can be manipulated/canceled.
+         *
+         * @param request Represents the request that will be sent to the proxy.
+         */
+        public void onBeforeTunnelRequest(@NonNull Request request) {
+            try (request) {
+                var headers = onBeforeTunnelRequest();
+                if (headers != null) {
+                    request.proceed(headers);
+                }
+            }
+        }
+
         /**
          * Called before sending a tunnel establishment request. Allows adding headers that will be
          * sent only to the proxy as part of the tunnel establishment request. They will not be
@@ -61,8 +114,13 @@ public final class Proxy {
          *     interpret it as a failure to connect to this Proxy and will try the next Proxy in the
          *     list passed to {@link org.chromium.net.ProxyOptions} (refer to that class
          *     documentation for more info).
+         * @deprecated Override onBeforeTunnelRequest(Request) instead.
          */
-        public abstract @Nullable List<Map.Entry<String, String>> onBeforeTunnelRequest();
+        @Deprecated
+        public @Nullable List<Map.Entry<String, String>> onBeforeTunnelRequest() {
+            throw new UnsupportedOperationException(
+                    "At least one overload of onBeforeTunnelRequest must be overridden");
+        }
 
         /**
          * Called after receiving a response to the tunnel establishment request. Allows reading
@@ -72,7 +130,8 @@ public final class Proxy {
          * <p>Note: This is currently called for any response, whether it is a success or failure.
          * TODO(https://crbug.com/422429606): Do we really want this?
          *
-         * <p>Warning: This will be called directly on Cronet's network thread, do not block.
+         * <p>Throwing within the implementation of this will be considered as if {@code false} had
+         * been returned.
          *
          * @param responseHeaders The list of headers contained in the response to the tunnel
          *     establishment request.
@@ -96,17 +155,49 @@ public final class Proxy {
      * @param scheme Type of proxy, as defined in {@link Scheme}.
      * @param host Hostname of the proxy.
      * @param port Port of the proxy.
+     * @param executor Executor where {@link Callback} will be invoked.
      * @param callback Callback, as defined in {@link Callback}, that gets invoked on different
      *     events.
      */
-    public Proxy(@Scheme int scheme, @NonNull String host, int port, @NonNull Callback callback) {
+    public Proxy(
+            @Scheme int scheme,
+            @NonNull String host,
+            int port,
+            @NonNull Executor executor,
+            @NonNull Callback callback) {
         if (scheme != HTTP && scheme != HTTPS) {
             throw new IllegalArgumentException(String.format("Unknown scheme %s", scheme));
         }
         this.mScheme = scheme;
         this.mHost = Objects.requireNonNull(host);
         this.mPort = port;
+        this.mExecutor = Objects.requireNonNull(executor);
         this.mCallback = Objects.requireNonNull(callback);
+    }
+
+    /**
+     * Constructs a new proxy.
+     *
+     * @param scheme Type of proxy, as defined in {@link Scheme}.
+     * @param host Hostname of the proxy.
+     * @param port Port of the proxy.
+     * @param callback Callback, as defined in {@link Callback}, that gets invoked on different
+     *     events.
+     * @deprecated Call the new overload that requires an {@link java.util.concurrent.Executor}
+     *     instead.
+     */
+    @Deprecated
+    public Proxy(@Scheme int scheme, @NonNull String host, int port, @NonNull Callback callback) {
+        // Previously, we did not require an Executor and instead called Proxy.Callback directly
+        // onto the network thread. Maintain backward compatibility by using an inline executor.
+        this(
+                /* scheme= */ scheme,
+                /* host= */ host,
+                /* port= */ port,
+                /* executor= */ (Runnable r) -> {
+                    r.run();
+                },
+                /* callback= */ callback);
     }
 
     /** Returns the {@link Scheme} of this proxy. */
@@ -124,6 +215,11 @@ public final class Proxy {
         return mPort;
     }
 
+    /** Returns the {@link Executor} of this proxy. */
+    public @NonNull Executor getExecutor() {
+        return mExecutor;
+    }
+
     /** Returns the {@link Callback} of this proxy. */
     public @NonNull Callback getCallback() {
         return mCallback;
@@ -132,5 +228,6 @@ public final class Proxy {
     private final @Scheme int mScheme;
     private final @NonNull String mHost;
     private final int mPort;
+    private final @NonNull Executor mExecutor;
     private final @NonNull Callback mCallback;
 }

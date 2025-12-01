@@ -1,14 +1,7 @@
-To generate Assets.car for the macOS icons:
+To generate Assets.car and app.icns use chromium/tools/mac/icons/compile_car.py
+This will automatically generate and copy them to the folder containing Assets.xcassets
 
-xcrun actool \
-  --compile ./vivaldi_final/mac/ \
-  --platform macosx \
-  --minimum-deployment-target 11.0 \
-  --app-icon AppIcon \
-  --output-partial-info-plist /dev/null \
-  ./vivaldi_final/mac/Assets.xcassets
+Running in this directory:
+  python3 ../../../chromium/tools/mac/icons/compile_car.py vivaldi_final/mac/Assets.xcassets
 
-Replacing "vivaldi_final" with "vivaldi_sopranos"/"vivaldi_snapshot" as appropriate.
-
-Note: the tool wants to generate a partial plist, which we can discard,
-but we must provide the output path even if we don't want it.
+Replace "vivaldi_final" with "vivaldi_sopranos"/"vivaldi_snapshot" as appropriate.

@@ -24,11 +24,19 @@ base::FilePath GetDirectory(NSString* directoryName) {
   return base::FilePath();
 }
 
-base::FilePath GetProfileDir() {
+base::FilePath GetProfileDir(bool mail) {
+  // Standalone client not supported for modern MacOS versions as it is 32-bit
+  if (mail)
+    return base::FilePath();
+
   return GetDirectory(kOperaProfileDirectory);
 }
 
-base::FilePath GetMailDirectory() {
+base::FilePath GetMailDirectory(bool mail) {
+  // Standalone client not supported for modern MacOS versions as it is 32-bit
+  if (mail)
+    return base::FilePath();
+
   return GetDirectory(kOperaMailDirectory);
 }
 

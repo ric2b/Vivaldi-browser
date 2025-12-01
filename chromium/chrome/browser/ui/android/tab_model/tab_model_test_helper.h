@@ -16,6 +16,7 @@
 #include "chrome/browser/flags/android/chrome_session_state.h"
 #include "chrome/browser/ui/android/tab_model/tab_model.h"
 #include "content/public/test/browser_test_utils.h"
+#include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -80,7 +81,7 @@ class TestTabModel : public TabModel {
   // TabListInterface implementation.
   void OpenTab(const GURL& url, int index) override;
   void DiscardTab(tabs::TabHandle tab) override;
-  void DuplicateTab(tabs::TabHandle tab) override;
+  tabs::TabInterface* DuplicateTab(tabs::TabHandle tab) override;
   tabs::TabInterface* GetTab(int index) override;
   int GetIndexOfTab(tabs::TabHandle tab) override;
   void HighlightTabs(tabs::TabHandle tab_to_activate,
@@ -95,6 +96,18 @@ class TestTabModel : public TabModel {
       const std::set<tabs::TabHandle>& tabs) override;
   void Ungroup(const std::set<tabs::TabHandle>& tabs) override;
   void MoveGroupTo(tab_groups::TabGroupId group_id, int index) override;
+  void MoveTabToWindow(tabs::TabHandle tab,
+                       SessionID destination_window_id,
+                       int destination_index) override;
+  void MoveTabGroupToWindow(tab_groups::TabGroupId group_id,
+                            SessionID destination_window_id,
+                            int destination_index) override;
+
+// BrowserWindowInterface is available on desktop Android, but not other Android
+// builds.
+#if BUILDFLAG(IS_DESKTOP_ANDROID)
+  void AssociateWithBrowserWindow(BrowserWindowInterface* browser_window);
+#endif
 
  private:
   // A fake value for the current number of tabs.
@@ -103,6 +116,9 @@ class TestTabModel : public TabModel {
 
   raw_ptr<TabModelObserver> observer_ = nullptr;
   std::vector<raw_ptr<content::WebContents>> web_contents_list_;
+
+  std::unique_ptr<ui::ScopedUnownedUserData<TabModel>>
+      scoped_unowned_user_data_;
 };
 
 // A TabModel that owns the WebContents for each tab and simulates many of the
@@ -177,7 +193,7 @@ class OwningTestTabModel : public TabModel {
   // TabListInterface implementation.
   void OpenTab(const GURL& url, int index) override;
   void DiscardTab(tabs::TabHandle tab) override;
-  void DuplicateTab(tabs::TabHandle tab) override;
+  tabs::TabInterface* DuplicateTab(tabs::TabHandle tab) override;
   tabs::TabInterface* GetTab(int index) override;
   int GetIndexOfTab(tabs::TabHandle tab) override;
   void HighlightTabs(tabs::TabHandle tab_to_activate,
@@ -192,6 +208,12 @@ class OwningTestTabModel : public TabModel {
       const std::set<tabs::TabHandle>& tabs) override;
   void Ungroup(const std::set<tabs::TabHandle>& tabs) override;
   void MoveGroupTo(tab_groups::TabGroupId group_id, int index) override;
+  void MoveTabToWindow(tabs::TabHandle tab,
+                       SessionID destination_window_id,
+                       int destination_index) override;
+  void MoveTabGroupToWindow(tab_groups::TabGroupId group_id,
+                            SessionID destination_window_id,
+                            int destination_index) override;
 
  private:
   void SelectTab(TabAndroid* tab, TabModel::TabSelectionType selection_type);

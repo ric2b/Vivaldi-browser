@@ -23,10 +23,13 @@ class VivaldiProfilePickerUIConfig
 };
 
 class VivaldiProfilePickerUI : public content::WebUIController {
-public:
+ public:
   explicit VivaldiProfilePickerUI(content::WebUI* web_ui);
 
-private:
+  void WebUIRenderFrameCreated(
+      content::RenderFrameHost* render_frame_host) override;
+
+ private:
   raw_ptr<Profile> profile_;
 };
 

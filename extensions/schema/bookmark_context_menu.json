@@ -36,7 +36,7 @@
       {
         "id": "SortField",
         "type": "string",
-        "description": "Defines what element to use as sort key",
+        "description": "Defines what element to use as sort key.",
         "enum": ["title", "url", "nickname", "description", "dateAdded"]
       },
       {
@@ -48,7 +48,7 @@
       {
         "id": "Icons",
         "type": "array",
-        "description": "Icons encoded as base64",
+        "description": "Icons encoded as base64.",
         "items": { "type": "string" }
       }
     ],
@@ -68,10 +68,22 @@
               "edge": {"$ref": "Edge", "optional": true, "description": "Where to place extra menu items"},
               "sortField": {"$ref": "SortField", "optional": true},
               "sortOrder": {"$ref": "SortOrder", "optional": true},
-              "icons": {"$ref": "Icons", "description": "Default and folder icons."}
+              "icons": {"$ref": "Icons", "description": "Default and folder icons."},
+              "dragged": {"type": "array", "items": {"type": "string"}, "description": "List of bookmark and/or folder ids."}
             }
           }
         ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Notifies caller that menu has closed.",
+          "parameters": []
+        }
+      },
+      {
+        "name": "close",
+        "type": "function",
+        "description": "Closes active context menu.",
+        "parameters": [],
         "returns_async": {
           "name": "callback",
           "description": "Notifies caller that menu has closed.",
@@ -97,6 +109,18 @@
         "type": "function",
         "description": "Fires before menu closes.",
         "parameters": []
+      },
+      {
+        "name": "onDragStart",
+        "type": "function",
+        "description": "Fires when drag starts.",
+        "parameters": [
+          {
+            "name": "id",
+            "type": "string",
+            "description": "Bookmark or folder id."
+          }
+        ]
       }
     ]
   }

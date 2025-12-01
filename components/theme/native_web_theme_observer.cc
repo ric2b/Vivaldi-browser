@@ -67,7 +67,8 @@ void NativeWebThemeObserver::OnPreferredColorSchemeChange(
   ui::NativeTheme::PreferredColorScheme newScheme;
   switch (colorScheme) {
     case PreferredColorScheme::Auto:
-      newScheme = observed_theme->ShouldUseDarkColors()
+      newScheme = observed_theme->preferred_color_scheme() ==
+                          ui::NativeTheme::PreferredColorScheme::kDark
                       ? ui::NativeTheme::PreferredColorScheme::kDark
                       : ui::NativeTheme::PreferredColorScheme::kLight;
       break;
@@ -81,9 +82,7 @@ void NativeWebThemeObserver::OnPreferredColorSchemeChange(
       return;
   }
 
-  if (newScheme != observed_theme->GetPreferredColorScheme()) {
-    observed_theme->set_use_dark_colors(
-        newScheme == ui::NativeTheme::PreferredColorScheme::kDark);
+  if (newScheme != observed_theme->preferred_color_scheme()) {
     observed_theme->set_preferred_color_scheme(newScheme);
     observed_theme->NotifyOnNativeThemeUpdated();
   }
@@ -102,7 +101,8 @@ void NativeWebThemeObserver::OnForceDarkThemeChange() {
     if (preferredColorScheme == PreferredColorScheme::Auto) {
       auto* nativeTheme = ui::NativeTheme::GetInstanceForNativeUi();
       DCHECK(nativeTheme);
-      shouldForceDarkTheme &= nativeTheme->ShouldUseDarkColors();
+      shouldForceDarkTheme &= nativeTheme->preferred_color_scheme() ==
+                              ui::NativeTheme::PreferredColorScheme::kDark;
     } else {
       shouldForceDarkTheme &=
           preferredColorScheme == PreferredColorScheme::Dark;

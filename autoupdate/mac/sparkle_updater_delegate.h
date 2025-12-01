@@ -25,4 +25,7 @@ enum class AutoUpdateStatus;
 - (std::string)getUpdateVersion;
 - (std::string)getUpdateReleaseNotesUrl;
 
+- (void)vivaldiExpectedContentLength:(uint64_t)total_length;
+- (void)vivaldiUpdateDidReceiveDataOfLength:(uint64_t)length;
+
 @end // @interface SparkleUpdaterDelegate

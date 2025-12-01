@@ -25,6 +25,10 @@ if (perform_signing) {
   signing_deps += [ ":sign_mac" ]
   dmg__signing_deps += [ ":sign_dmg" ]
 
+  if(!is_full_signer) {
+    signing_deps += [ ":sign_generate_appcast" ]
+  }
+
   mac_packaging_dir = "$root_build_dir/Vivaldi_Packaging"
 
   signing_input_dir = "."
@@ -248,11 +252,14 @@ if (perform_signing) {
         "//vivaldi:vivaldi",
       ]
     }
+
+    __stampfile = "$root_gen_dir/chmod.done"
     command = "find"
     inputs = []
     outputs = [
-      "$root_gen_dir/chmod.done",
+      __stampfile,
     ]
+    stamp = rebase_path(__stampfile, root_build_dir)
     args = [
       rebase_path("$input_app_folder_for_dmg", root_build_dir),
       "-exec", "chmod", "-h", "a-st+rX,u+w,go-w", "{}", ";"
@@ -303,5 +310,27 @@ if (is_full_signer && enable_widevine_signing) {
     sources = [ "${app_root_out_dir}/${vivaldi_name} Framework.sig" ]
 
     outputs = [ "${app_root_out_dir}/${vivaldi_name}.app/Contents/Frameworks/${vivaldi_name} Framework.framework/Versions/$vivaldi_version_full/Resources/{{source_file_part}}" ]
+  }
+}
+
+if (perform_signing) {
+  system_command("sign_generate_appcast") {
+    command = "codesign"
+    inputs = [
+      "$root_build_dir/sparkle_lib/Build/Products/Release/generate_appcast",
+    ]
+    stamp_file = "$root_build_dir/stamp_signed_generate_appcast_stamp"
+    command_stamp = rebase_path(stamp_file, root_build_dir)
+    outputs = [
+      stamp_file,
+    ]
+    deps = [
+      "//vivaldi/thirdparty:build_sparkle",
+    ]
+    args = [
+      "--sign", vivaldi_signing_id,
+      "--timestamp",
+    ] + rebase_path(inputs, root_build_dir)
+
   }
 }

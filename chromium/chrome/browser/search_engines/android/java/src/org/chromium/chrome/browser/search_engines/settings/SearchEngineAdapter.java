@@ -25,7 +25,9 @@ import android.widget.TextView;
 import androidx.annotation.IntDef;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.JavaExceptionReporter;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.version_info.VersionInfo;
 import org.chromium.build.annotations.Initializer;
 import org.chromium.build.annotations.MonotonicNonNull;
 import org.chromium.build.annotations.NullMarked;
@@ -54,21 +56,30 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 // Vivaldi
+import android.os.Bundle;
 import android.annotation.SuppressLint;
+import android.graphics.BitmapFactory;
+import android.widget.PopupMenu;
+
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentActivity;
+
 import java.net.MalformedURLException;
 import java.net.URL;
 
 import org.chromium.base.Log;
 import org.chromium.build.BuildConfig;
+import org.chromium.ui.widget.Toast;
 
 /** A custom adapter for listing search engines. */
 @NullMarked
 public class SearchEngineAdapter extends BaseAdapter
         implements TemplateUrlService.LoadListener,
                 TemplateUrlService.TemplateUrlServiceObserver,
-                OnClickListener {
+                OnClickListener, /*Vivaldi*/ View.OnLongClickListener /*Vivaldi end*/  {
 
     @VisibleForTesting static final int VIEW_TYPE_ITEM = 0;
     @VisibleForTesting static final int VIEW_TYPE_DIVIDER = 1;
@@ -162,7 +173,9 @@ public class SearchEngineAdapter extends BaseAdapter
 
     // Vivaldi
     long mCurrentDefaultSearchEngine;
-
+    static final String EDIT_SEARCH_ENGINE_FRAGMENT =
+            "org.vivaldi.browser.preferences.search_engines."
+            + "VivaldiCustomSearchEnginePreference";
     /**
      * Construct a SearchEngineAdapter.
      *
@@ -232,7 +245,10 @@ public class SearchEngineAdapter extends BaseAdapter
         RegionalCapabilitiesService regionalCapabilities =
                 RegionalCapabilitiesServiceFactory.getForProfile(mProfile);
         List<TemplateUrl> templateUrls = templateUrlService.getTemplateUrls();
-        TemplateUrl defaultSearchEngineTemplateUrl;
+
+        // Note: DSE may be null if explicitly blocked by policy.
+        @Nullable TemplateUrl defaultSearchEngineTemplateUrl;
+
         if (mProfile.isOffTheRecord()) { // Start Vivaldi
             defaultSearchEngineTemplateUrl =
                     templateUrlService.vivaldiGetDefaultSearchEngine(
@@ -289,32 +305,60 @@ public class SearchEngineAdapter extends BaseAdapter
         // Convert the TemplateUrl index into an index of mSearchEngines.
         mSelectedSearchEnginePosition = -1;
         for (int i = 0; i < mPrepopulatedSearchEngines.size(); ++i) {
-            if (mPrepopulatedSearchEngines.get(i).equals(defaultSearchEngineTemplateUrl)) {
+            if (Objects.equals(mPrepopulatedSearchEngines.get(i), defaultSearchEngineTemplateUrl)) {
                 mSelectedSearchEnginePosition = i;
             }
         }
 
         for (int i = 0; i < mRecentSearchEngines.size(); ++i) {
-            if (mRecentSearchEngines.get(i).equals(defaultSearchEngineTemplateUrl)) {
+            if (Objects.equals(mRecentSearchEngines.get(i), defaultSearchEngineTemplateUrl)) {
                 // Add one to offset the title for the recent search engine list.
                 mSelectedSearchEnginePosition = i + computeStartIndexForRecentSearchEngines();
             }
         }
 
         if (mSelectedSearchEnginePosition == -1) {
+            if (defaultSearchEngineTemplateUrl != null) {
+                mRecentSearchEngines.add(defaultSearchEngineTemplateUrl);
+                mSelectedSearchEnginePosition = mRecentSearchEngines.size() - 1;
+            }
+
             // Vivaldi NOTE(jarle@vivaldi.com): This is not so serious for Vivaldi,
             // we allow editing the template URLs. No need to throw an exception.
             if (BuildConfig.IS_VIVALDI)
                 Log.w("SearchEngineAdapter",
                         "Default search engine is not found in available search engines");
             else
-            throw new IllegalStateException(
-                    String.format(
-                            "Default search engine is not found in available search engines:"
-                                    + " DSE is valid=%b, is managed=%b",
-                            defaultSearchEngineTemplateUrl != null,
-                            TemplateUrlServiceFactory.getForProfile(mProfile)
-                                    .isDefaultSearchManaged()));
+            if (VersionInfo.isOfficialBuild()) {
+                // TODO(crbug.com/437052188): address exceptions linked to search engine choice
+                // program and remove the diagnostics logic.
+                // It's very likely this is impacting users who have selected a search engine in a
+                // country where SEC program is in effect and have moved/relocated.
+                // If true, these engines should not be suppressed/removed, but appended to recents.
+                var knownEngines = new StringBuilder(" ");
+                for (var engine : mPrepopulatedSearchEngines) {
+                    knownEngines.append(engine.getShortName()).append(", ");
+                }
+                for (var engine : mRecentSearchEngines) {
+                    knownEngines.append(engine.getShortName()).append(", ");
+                }
+                var report =
+                        new IllegalStateException(
+                                String.format(
+                                        "Default search engine is not found in available search"
+                                                + " engines: DSE is valid=%b (%s), is managed=%b,"
+                                                + " known=%d [%s]",
+                                        defaultSearchEngineTemplateUrl != null,
+                                        defaultSearchEngineTemplateUrl != null
+                                                ? defaultSearchEngineTemplateUrl.getShortName()
+                                                : "<null>",
+                                        TemplateUrlServiceFactory.getForProfile(mProfile)
+                                                .isDefaultSearchManaged(),
+                                        mPrepopulatedSearchEngines.size()
+                                                + mRecentSearchEngines.size(),
+                                        knownEngines.toString()));
+                JavaExceptionReporter.reportException(report);
+            }
         }
 
         mInitialEnginePosition = mSelectedSearchEnginePosition;
@@ -325,7 +369,7 @@ public class SearchEngineAdapter extends BaseAdapter
     @VisibleForTesting
     public static void sortAndFilterUnnecessaryTemplateUrl(
             List<TemplateUrl> templateUrls,
-            TemplateUrl defaultSearchEngine,
+            @Nullable TemplateUrl defaultSearchEngine,
             boolean isEeaChoiceCountry) {
         // In the EEA and when the new settings design is shown, we want to avoid re-sorting, to
         // stick to the order of prepopulated engines provided by the service.
@@ -355,7 +399,7 @@ public class SearchEngineAdapter extends BaseAdapter
      * the current user selections.
      */
     private static Comparator<TemplateUrl> templateUrlsComparatorWith(
-            TemplateUrl defaultSearchEngine, boolean sortPrepopulatedEngines) {
+            @Nullable TemplateUrl defaultSearchEngine, boolean sortPrepopulatedEngines) {
         return (TemplateUrl templateUrl1, TemplateUrl templateUrl2) -> {
             // Don't change the order for duplicates.
             if (templateUrl1.getNativePtr() == templateUrl2.getNativePtr()) {
@@ -379,9 +423,9 @@ public class SearchEngineAdapter extends BaseAdapter
             }
 
             // A custom DSE should be displayed right after the prepopulated ones.
-            if (templateUrl1.equals(defaultSearchEngine)) {
+            if (Objects.equals(templateUrl1, defaultSearchEngine)) {
                 return -1;
-            } else if (templateUrl2.equals(defaultSearchEngine)) {
+            } else if (Objects.equals(templateUrl2, defaultSearchEngine)) {
                 return 1;
             }
 
@@ -392,10 +436,11 @@ public class SearchEngineAdapter extends BaseAdapter
     }
 
     private static @TemplateUrlSourceType int getSearchEngineSourceType(
-            TemplateUrl templateUrl, TemplateUrl defaultSearchEngine) {
+            TemplateUrl templateUrl, @Nullable TemplateUrl defaultSearchEngine) {
         if (templateUrl.getIsPrepopulated()) {
             return TemplateUrlSourceType.PREPOPULATED;
-        } else if (templateUrl.getNativePtr() == defaultSearchEngine.getNativePtr()) {
+        } else if (defaultSearchEngine != null
+                && templateUrl.getNativePtr() == defaultSearchEngine.getNativePtr()) {
             return TemplateUrlSourceType.DEFAULT;
         } else {
             return TemplateUrlSourceType.RECENT;
@@ -508,6 +553,7 @@ public class SearchEngineAdapter extends BaseAdapter
         }
 
         view.setOnClickListener(this);
+        view.setOnLongClickListener(this); // Vivaldi
         view.setTag(position);
 
         RadioButton radioButton = view.findViewById(R.id.radiobutton);
@@ -570,6 +616,10 @@ public class SearchEngineAdapter extends BaseAdapter
             url.setText(itemUrl.getHost());
         } catch (MalformedURLException e) {
             if (templateUrl.getURL().contains("{google:baseURL}"))
+                // Vivaldi - Handling the corner case for Google search engine. Ref: VAB-11667
+                if (BuildConfig.IS_VIVALDI && templateUrl.getKeyword() != null) {
+                    url.setText(templateUrl.getKeyword());
+                } else // Vivaldi End
                 url.setText("google.com");
         }
 
@@ -602,6 +652,12 @@ public class SearchEngineAdapter extends BaseAdapter
                         logoView.setImageBitmap(icon);
                         mIconCache.put(faviconUrl, icon);
                     }
+                    // Vivaldi - Handling the corner case for Google search engine. Ref: VAB-11667
+                    else if (BuildConfig.IS_VIVALDI
+                            && templateUrl.getURL().contains("{google:baseURL}")) {
+                        logoView.setImageBitmap(BitmapFactory.decodeResource(
+                                mContext.getResources(), R.drawable.search_engine_google));
+                    } // Vivaldi End
                 };
         GoogleFaviconServerCallback googleServerCallback =
                 (status) -> {
@@ -679,6 +735,84 @@ public class SearchEngineAdapter extends BaseAdapter
         return mPrepopulatedSearchEngines.size();
     }
 
+    // Vivaldi
+    @Override
+    public boolean onLongClick(View view) {
+        String keyword = toKeyword((int) view.getTag());
+        PopupMenu popupMenu = new PopupMenu(view.getContext(), view);
+        popupMenu.inflate(R.menu.edit_custom_search_engine);
+        popupMenu.setOnMenuItemClickListener(menuItem -> {
+            if (menuItem.getItemId() == R.id.edit_search_engine_button) {
+                Toast.makeText(mContext,
+                        mContext.getString(R.string.vivaldi_custom_search_engine_edit_text),
+                        Toast.LENGTH_LONG);
+                Fragment fragment =
+                        Fragment.instantiate(mContext, EDIT_SEARCH_ENGINE_FRAGMENT, null);
+                Bundle bundle = new Bundle();
+                bundle.putString("keyword", keyword);
+                fragment.setArguments(bundle);
+                ((FragmentActivity) mContext)
+                        .getSupportFragmentManager()
+                        .beginTransaction()
+                        .add(android.R.id.content, fragment)
+                        .commit();
+                return true;
+            } else if (menuItem.getItemId() == R.id.delete_search_engine) {
+                TemplateUrlService service = TemplateUrlServiceFactory.getForProfile(mProfile);
+                @Nullable
+                TemplateUrl defaultSearch = service.vivaldiGetDefaultSearchEngine(
+                        TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_MAIN);
+                @Nullable
+                TemplateUrl defaultSearchPrivate = service.vivaldiGetDefaultSearchEngine(
+                        TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_PRIVATE);
+                @Nullable
+                TemplateUrl defaultSearchField = service.vivaldiGetDefaultSearchEngine(
+                        TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_FIELD);
+                @Nullable
+                TemplateUrl defaultSearchFieldPrivate = service.vivaldiGetDefaultSearchEngine(
+                        TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_FIELD_PRIVATE);
+                @Nullable
+                TemplateUrl defaultSearchSpeedDial = service.vivaldiGetDefaultSearchEngine(
+                        TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_SPEED_DIALS);
+                @Nullable
+                TemplateUrl defaultSearchSpeedDialPrivate = service.vivaldiGetDefaultSearchEngine(
+                        TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_SPEED_DIALS_PRIVATE);
+                @Nullable
+                TemplateUrl defaultSearchImage = service.vivaldiGetDefaultSearchEngine(
+                        TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_IMAGE);
+                if ((defaultSearch != null && defaultSearchPrivate != null
+                            && defaultSearchField != null && defaultSearchFieldPrivate != null
+                            && defaultSearchSpeedDial != null
+                            && defaultSearchSpeedDialPrivate != null && defaultSearchImage != null)
+                        && (defaultSearch.getKeyword().equals(keyword)
+                                || defaultSearchPrivate.getKeyword().equals(keyword)
+                                || defaultSearchField.getKeyword().equals(keyword)
+                                || defaultSearchFieldPrivate.getKeyword().equals(keyword)
+                                || defaultSearchSpeedDial.getKeyword().equals(keyword)
+                                || defaultSearchSpeedDialPrivate.getKeyword().equals(keyword)
+                                || defaultSearchImage.getKeyword().equals(keyword))) {
+                    Toast.makeText(mContext,
+                                 mContext.getString(
+                                         R.string.vivaldi_custom_search_engine_cannot_remove_text),
+                                 Toast.LENGTH_LONG)
+                            .show();
+                    return true;
+                }
+                TemplateUrlServiceFactory.getForProfile(mProfile).removeTemplateUrl(keyword);
+                Toast.makeText(mContext,
+                        String.format(
+                                mContext.getString(
+                                        R.string.vivaldi_custom_search_engine_query_string_error),
+                                keyword),
+                        Toast.LENGTH_LONG);
+                notifyDataSetChanged();
+                return true;
+            }
+            return false;
+        });
+        popupMenu.show();
+        return true;
+    } // End Vivaldi
     void setDisableAutoSwitchRunnable(Runnable runnable) {
         mDisableAutoSwitchRunnable = runnable;
     }

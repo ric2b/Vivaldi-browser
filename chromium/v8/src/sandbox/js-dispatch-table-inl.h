@@ -8,6 +8,8 @@
 #include "src/sandbox/js-dispatch-table.h"
 // Include the non-inl header before the rest of the headers.
 
+#include <atomic>
+
 #include "src/builtins/builtins-inl.h"
 #include "src/common/code-memory-access-inl.h"
 #include "src/objects/objects-inl.h"
@@ -39,8 +41,8 @@ void JSDispatchEntry::MakeJSDispatchEntry(Address object, Address entrypoint,
   parameter_count_.store(parameter_count, std::memory_order_relaxed);
   next_free_entry_.store(0, std::memory_order_relaxed);
 #endif
-  encoded_word_.store(payload, std::memory_order_relaxed);
   entrypoint_.store(entrypoint, std::memory_order_relaxed);
+  encoded_word_.store(payload, std::memory_order_release);
   DCHECK(!IsFreelistEntry());
 }
 
@@ -54,13 +56,13 @@ Address JSDispatchEntry::GetCodePointer() const {
   // The pointer tag bit (LSB) of the object pointer is used as marking bit,
   // and so may be 0 or 1 here. As the return value is a tagged pointer, the
   // bit must be 1 when returned, so we need to set it here.
-  Address payload = encoded_word_.load(std::memory_order_relaxed);
+  Address payload = encoded_word_.load(std::memory_order_acquire);
   return ((payload >> kObjectPointerShift) + kObjectPointerOffset) |
          kHeapObjectTag;
 }
 
 Tagged<Code> JSDispatchEntry::GetCode() const {
-  return Cast<Code>(Tagged<Object>(GetCodePointer()));
+  return TrustedCast<Code>(Tagged<Object>(GetCodePointer()));
 }
 
 uint16_t JSDispatchEntry::GetParameterCount() const {
@@ -79,7 +81,7 @@ uint16_t JSDispatchEntry::GetParameterCount() const {
 }
 
 Tagged<Code> JSDispatchTable::GetCode(JSDispatchHandle handle) {
-  uint32_t index = HandleToIndex(handle);
+  const uint32_t index = HandleToIndex(handle);
   return at(index).GetCode();
 }
 
@@ -189,8 +191,8 @@ void JSDispatchEntry::SetCodeAndEntrypointPointer(Address new_object,
       ((new_object - kObjectPointerOffset) << kObjectPointerShift) &
       ~kMarkingBit;
   Address new_payload = object | marking_bit | parameter_count;
-  encoded_word_.store(new_payload, std::memory_order_relaxed);
   entrypoint_.store(new_entrypoint, std::memory_order_relaxed);
+  encoded_word_.store(new_payload, std::memory_order_release);
   DCHECK(!IsFreelistEntry());
 }
 
@@ -278,6 +280,15 @@ void JSDispatchTable::Mark(JSDispatchHandle handle) {
   at(index).Mark();
 }
 
+bool JSDispatchTable::IsMarked(JSDispatchHandle handle) {
+  const uint32_t index = HandleToIndex(handle);
+  // The read-only space is immortal and always considered alive.
+  if (index < kEndOfReadOnlyIndex) {
+    return true;
+  }
+  return at(index).IsMarked();
+}
+
 #if defined(DEBUG) || defined(VERIFY_HEAP)
 void JSDispatchTable::VerifyEntry(JSDispatchHandle handle, Space* space,
                                   Space* ro_space) {
@@ -328,6 +339,9 @@ bool JSDispatchTable::IsCompatibleCode(Tagged<Code> code,
     // Target code doesn't use JS linkage. This cannot be valid.
     return false;
   }
+  DCHECK_IMPLIES(code->is_builtin(),
+                 Builtins::HasJSLinkage(code->builtin_id()));
+
   if (code->parameter_count() == parameter_count) {
     DCHECK_IMPLIES(code->is_builtin(),
                    parameter_count ==
@@ -345,7 +359,7 @@ bool JSDispatchTable::IsCompatibleCode(Tagged<Code> code,
   //
   // Currently, we also allow this for testing code (from our test suites).
   // TODO(saelo): maybe we should also forbid this just to be sure.
-  if (code->kind() == CodeKind::FOR_TESTING) {
+  if (code->kind() == CodeKind::FOR_TESTING_JS) {
     return true;
   }
   DCHECK(code->is_builtin());

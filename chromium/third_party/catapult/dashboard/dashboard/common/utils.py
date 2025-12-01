@@ -48,6 +48,7 @@ LEGACY_SERVICE_ACCOUNT = ('425761728072-pa1bs18esuhp2cp2qfa1u9vb6p1v6kfu'
                           '@developer.gserviceaccount.com')
 ADC_SERVICE_ACCOUNT = 'chromeperf@appspot.gserviceaccount.com'
 _CACHE_TIME = 60*60*2 # 2 hours
+_CACHE_TIME_FAST_CHANGING = 5 * 60  # 5 minutes (we want fast AoD)
 DELAY_REPORTING_PLACEHOLDER = 'Speed>Regressions'
 DELAY_REPORTING_LABEL = 'Chromeperf-Delay-Reporting'
 
@@ -606,7 +607,9 @@ def GetCachedIsGroupMember(identity, group):
 
 def SetCachedIsGroupMember(identity, group, value):
   memcache.set(
-      _IsGroupMemberCacheKey(identity, group), value, time=_CACHE_TIME)
+      _IsGroupMemberCacheKey(identity, group),
+      value,
+      time=_CACHE_TIME_FAST_CHANGING)
 
 
 def _IsGroupMemberCacheKey(identity, group):
@@ -617,7 +620,6 @@ def ServiceAccountEmail():
   return ADC_SERVICE_ACCOUNT
 
 
-@ndb.transactional(propagation=ndb.TransactionOptions.INDEPENDENT, xg=True)
 def ServiceAccountHttp(scope=EMAIL_SCOPE, timeout=None):
   """Returns the Credentials of the service account if available."""
   assert scope, "ServiceAccountHttp scope must not be None."
@@ -631,7 +633,8 @@ def ServiceAccountHttp(scope=EMAIL_SCOPE, timeout=None):
   return http
 
 
-@ndb.transactional(propagation=ndb.TransactionOptions.INDEPENDENT, xg=True)
+@ndb.transactional(
+    propagation=ndb.TransactionOptions.INDEPENDENT, xg=True, retries=10)
 def IsValidSheriffUser(email=''):
   """Checks whether the user should be allowed to triage alerts."""
   email = email or GetEmail()
@@ -662,7 +665,8 @@ def IsAllowedToDelegate(email):
     return False
 
 
-@ndb.transactional(propagation=ndb.TransactionOptions.INDEPENDENT, xg=True)
+@ndb.transactional(
+    propagation=ndb.TransactionOptions.INDEPENDENT, xg=True, retries=10)
 def GetIpAllowlist():
   """Returns a list of IP addresses allowed to post data."""
   return stored_object.Get(IP_ALLOWLIST_KEY)
@@ -677,7 +681,8 @@ def GetRepositoryExclusions():
   return _PINPOINT_REPO_EXCLUSION_CACHED.value
 
 
-@ndb.transactional(propagation=ndb.TransactionOptions.INDEPENDENT, xg=True)
+@ndb.transactional(
+    propagation=ndb.TransactionOptions.INDEPENDENT, xg=True, retries=10)
 def _GetRepositoryExclusions():
   """Returns a list of repositories to exclude from bisection."""
   # TODO(dberris): Move this to git-hosted configurations later.

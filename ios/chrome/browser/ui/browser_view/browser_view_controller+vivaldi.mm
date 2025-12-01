@@ -3,8 +3,6 @@
 
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.h"
 
-#import <MaterialComponents/MaterialSnackbar.h>
-
 #import <memory>
 #import <objc/runtime.h>
 

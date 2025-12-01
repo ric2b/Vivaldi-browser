@@ -12,7 +12,6 @@
 #include <utility>
 
 #include "base/containers/contains.h"
-#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
@@ -28,10 +27,7 @@
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/suggestions/suggestion_type.h"
 #include "components/autofill/core/common/password_generation_util.h"
-#include "components/password_manager/core/browser/features/password_features.h"
-#include "components/password_manager/core/browser/features/password_manager_features_util.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
-#include "components/password_manager/core/browser/password_feature_manager.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_digest.h"
 #include "components/password_manager/core/browser/password_generation_frame_helper.h"
@@ -40,8 +36,6 @@
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_store/password_store_interface.h"
-#include "components/password_manager/core/browser/split_stores_and_local_upm.h"
-#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_metrics.h"
@@ -49,7 +43,6 @@
 #include "url/url_util.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/build_info.h"
 #include "components/password_manager/core/browser/password_sync_util.h"
 
 using password_manager::sync_util::IsSyncFeatureEnabledIncludingPasswords;
@@ -257,26 +250,17 @@ const PasswordForm* FindFormByUsername(
   return nullptr;
 }
 
-const password_manager::PasswordForm* FindLoginWithChangedPassword(
+const password_manager::PasswordForm* FindChangedPasswordLoginWithBackup(
     const password_manager::PasswordFormManagerForUI& submitted_manager) {
   const password_manager::PasswordForm* match = FindFormByUsername(
       submitted_manager.GetBestMatches(),
       submitted_manager.GetPendingCredentials().username_value);
-  return match && match->type ==
-                      password_manager::PasswordForm::Type::kChangeSubmission
+  return match &&
+                 match->type ==
+                     password_manager::PasswordForm::Type::kChangeSubmission &&
+                 match->GetPasswordBackup().has_value()
              ? match
              : nullptr;
-}
-
-const password_manager::PasswordForm* FindChangedPasswordLoginWithBackup(
-    const password_manager::PasswordFormManagerForUI& submitted_manager) {
-  const password_manager::PasswordForm* changed_password_form =
-      FindLoginWithChangedPassword(submitted_manager);
-  if (changed_password_form &&
-      changed_password_form->GetPasswordBackup().has_value()) {
-    return changed_password_form;
-  }
-  return nullptr;
 }
 
 const PasswordForm* GetMatchForUpdating(
@@ -370,25 +354,12 @@ PasswordForm MakeNormalizedBlocklistedForm(
 // ChromeOS.
 bool ShouldBiometricAuthenticationForFillingToggleBeVisible(
     const PrefService* local_state) {
-  bool hadBiometricsAvailable =
-      local_state->GetBoolean(password_manager::prefs::kHadBiometricsAvailable);
-#if BUILDFLAG(IS_CHROMEOS)
-  // We only want to check for feature flag if the device supports biometrics,
-  // else we dilute experiment population.
-  return hadBiometricsAvailable &&
-         base::FeatureList::IsEnabled(
-             password_manager::features::kBiometricsAuthForPwdFill);
-#else
-  return hadBiometricsAvailable;
-#endif
+  return local_state->GetBoolean(
+      password_manager::prefs::kHadBiometricsAvailable);
 }
 
 bool ShouldShowBiometricAuthenticationBeforeFillingPromo(
     password_manager::PasswordManagerClient* client) {
-  // The following order of preference checks need to happen in order for us to
-  // preserve the experiment setup. Specifically, we only want to check for
-  // feature flag if the device supports biometrics, else we dilute experiment
-  // population.
   if (!client) {
     return false;
   }
@@ -401,15 +372,6 @@ bool ShouldShowBiometricAuthenticationBeforeFillingPromo(
   if (!device_authenticator->CanAuthenticateWithBiometrics()) {
     return false;
   }
-#if BUILDFLAG(IS_CHROMEOS)
-  // Note: Hitting IsEnabled enrolls users in the experiment. Therefore, we only
-  // want to limit this call to users who can authenticate with biometrics and
-  // if we are here, then we know that to be the case.
-  if (!base::FeatureList::IsEnabled(
-          password_manager::features::kBiometricsAuthForPwdFill)) {
-    return false;
-  }
-#endif
   return !client->GetPrefs()->GetBoolean(
       password_manager::prefs::kBiometricAuthenticationBeforeFilling);
 }

@@ -735,15 +735,11 @@ class BrowserOptions():
         help='Ignored argument for compatibility with runtest.py harness')
 
     group.add_argument(
-        '--deny-permission-prompts',
-        action='store_true',
+        '--no-deny-permission-prompts',
+        action='store_false',
         dest='deny_permission_prompts',
-        help='Suppress all permission prompts by automatically denying them. '
-        'This is the default behavior.')
-    group.add_argument('--no-deny-permission-prompts',
-                       action='store_false',
-                       dest='deny_permission_prompts',
-                       help='Do not suppress permission prompts.')
+        help='Do not suppress permission prompts. Default (without '
+        'this option) is to automatically deny permission prompts')
 
   def UpdateFromParseResults(self, finder_options):
     """Copies our options from finder_options."""
@@ -776,12 +772,22 @@ class BrowserOptions():
       self.dont_override_profile = True
 
     if self.profile_dir:
-      if self.profile_type != 'clean':
+      if self.profile_type != 'clean' and self.profile_type != 'exact':
         logging.critical(
-            "It's illegal to specify both --profile-type and --profile-dir.\n"
-            "For more information see: http://goo.gl/ngdGD5")
+            "Invalid --profile-type specified when using --profile-dir."
+            "Only 'clean' and 'exact' are allowed with --profile-dir.\n"
+            "- Use --profile-type=exact to use the specified --profile-dir directly\n"
+            "- Use --profile-type=clean to copy from --profile-dir to a temporary directory"
+        )
         sys.exit(1)
       self.profile_dir = os.path.abspath(self.profile_dir)
+    else:
+      if self.profile_type == 'exact':
+        logging.critical(
+            "When using --profile-type='exact', --profile-dir must be specified.\n"
+            "Please provide a valid profile directory with the --profile-dir argument."
+        )
+        sys.exit(1)
 
     if self.profile_dir and not os.path.isdir(self.profile_dir):
       logging.critical(

@@ -9,7 +9,6 @@ import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
-import static androidx.test.espresso.matcher.ViewMatchers.withParent;
 
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.Matchers.not;
@@ -46,7 +45,6 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Features.DisableFeatures;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.app.ChromeActivity;
@@ -56,7 +54,6 @@ import org.chromium.chrome.browser.lens.LensController;
 import org.chromium.chrome.browser.lifecycle.InflationObserver;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.locale.LocaleManagerDelegate;
-import org.chromium.chrome.browser.omnibox.status.StatusProperties.StatusIconResource;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -108,7 +105,6 @@ public class LocationBarTest {
     @Mock private LensController mLensController;
     @Mock private LocaleManagerDelegate mLocaleManagerDelegate;
     @Mock private VoiceRecognitionHandler mVoiceRecognitionHandler;
-    @Mock private SearchEngineUtils mSearchEngineUtils;
 
     private ChromeTabbedActivity mActivity;
     private UrlBar mUrlBar;
@@ -234,8 +230,7 @@ public class LocationBarTest {
                     Assert.assertTrue(mLocationBarMediator.isUrlBarFocused());
                 });
 
-        CriteriaHelper.pollUiThread(
-                () -> mKeyboardDelegate.isKeyboardShowing(mUrlBar.getContext(), mUrlBar));
+        CriteriaHelper.pollUiThread(() -> mKeyboardDelegate.isKeyboardShowing(mUrlBar));
     }
 
     @Test
@@ -266,8 +261,7 @@ public class LocationBarTest {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> mLocationBarMediator.performSearchQuery(TEST_QUERY, TEST_PARAMS));
 
-        ChromeTabUtils.waitForTabPageLoaded(
-                mActivityTestRule.getActivity().getActivityTab(), mSearchUrl);
+        ChromeTabUtils.waitForTabPageLoaded(mActivityTestRule.getActivityTab(), mSearchUrl);
     }
 
     @Test
@@ -523,10 +517,13 @@ public class LocationBarTest {
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
 
         Mockito.reset(mVoiceRecognitionHandler);
-        onView(
-                allOf(
-                        withId(R.id.voice_search_button),
-                        withParent(withId(R.layout.new_tab_page_layout))));
+
+        // Proabably never worked. crbug.com/446200399
+        // onView(
+        //                 allOf(
+        //                         withId(R.id.voice_search_button),
+        //                         withParent(withId(R.layout.new_tab_page_layout))))
+        //         .check(matches(isDisplayed()));
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -545,6 +542,9 @@ public class LocationBarTest {
     @Test
     @MediumTest
     @Restriction(DeviceFormFactor.PHONE)
+    // TODO(crbug.com/423465927): Explore a better approach to make the
+    // existing tests run with the prewarm feature enabled.
+    @DisableFeatures({"Prewarm"})
     public void testFocusLogic_lenButtonVisibilityOnLocationBarOnIncognitoStateChange() {
         startActivityNormally();
         doReturn(true).when(mVoiceRecognitionHandler).isVoiceSearchEnabled();
@@ -719,7 +719,7 @@ public class LocationBarTest {
     @MediumTest
     public void testFocusLogic_keyboardVisibility() {
         startActivityNormally();
-        assertFalse(mKeyboardDelegate.isKeyboardShowing(mUrlBar.getContext(), mUrlBar));
+        assertFalse(mKeyboardDelegate.isKeyboardShowing(mUrlBar));
 
         mOmnibox.requestFocus();
         mOmnibox.checkFocus(true);
@@ -757,29 +757,18 @@ public class LocationBarTest {
     @Test
     @SmallTest
     @Restriction(DeviceFormFactor.PHONE)
-    @EnableFeatures(OmniboxFeatureList.OMNIBOX_MOBILE_PARITY_UPDATE)
-    // TODO(https://crbug.com/426594110): Removes this once feature
-    // OmniboxFeatureList.OMNIBOX_MOBILE_PARITY_UPDATE_V2 is launched.
     @DisableFeatures(OmniboxFeatureList.OMNIBOX_MOBILE_PARITY_UPDATE_V2)
     public void testOmniboxSearchEngineLogo_unfocusedOnSRP_nonGoogleSearchEngine() {
         setupSearchEngineLogo(NON_GOOGLE_URL);
         startActivityNormally();
 
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
-
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    mSearchEngineUtils.setSearchEngineIcon(
-                            new StatusIconResource(R.drawable.ic_search, 0));
-                });
-
         onView(withId(R.id.location_bar_status_icon)).check(matches(isDisplayed()));
     }
 
     @Test
     @SmallTest
     @Restriction(DeviceFormFactor.PHONE)
-    @EnableFeatures(OmniboxFeatureList.OMNIBOX_MOBILE_PARITY_UPDATE)
     public void testOmniboxSearchEngineLogo_unfocusedOnSRP_incognito() {
         setupSearchEngineLogo(GOOGLE_URL);
         startActivityNormally();

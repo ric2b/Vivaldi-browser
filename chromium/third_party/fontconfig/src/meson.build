@@ -25,7 +25,7 @@ curversion = fc_version_minor - 1
 libversion = '@0@.@1@.0'.format(soversion, curversion)
 defversion = '@0@.@1@'.format(curversion, fc_version_micro)
 osxversion = curversion + 1
-cacheversion = '10'
+cacheversion = '11'
 
 freetype_req = '>= 21.0.15'
 freetype_req_cmake = '>= 2.8.1'

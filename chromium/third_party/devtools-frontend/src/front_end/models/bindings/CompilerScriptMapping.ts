@@ -1,36 +1,11 @@
-/*
- * Copyright (C) 2012 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2012 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
+import type * as StackTraceImpl from '../stack_trace/stack_trace_impl.js';
 import * as TextUtils from '../text_utils/text_utils.js';
 import * as Workspace from '../workspace/workspace.js';
 
@@ -130,7 +105,7 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
     // Find the source location for the raw location.
     const {lineNumber, columnNumber} = script.rawLocationToRelativeLocation(rawLocation);
     const entry = sourceMap.findEntry(lineNumber, columnNumber);
-    if (!entry || !entry.sourceURL) {
+    if (!entry?.sourceURL) {
       return [];
     }
 
@@ -188,7 +163,7 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
    * If `rawLocation` points to a script with a source map managed by this `CompilerScriptMapping`, which
    * is stale (because it was overridden by a more recent mapping), `null` will be returned.
    *
-   * @param rawLocation - script location.
+   * @param rawLocation script location.
    * @returns the {@link Workspace.UISourceCode.UILocation} for the `rawLocation` if any.
    */
   rawLocationToUILocation(rawLocation: SDK.DebuggerModel.Location): Workspace.UISourceCode.UILocation|null {
@@ -214,7 +189,7 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
     }
 
     const entry = sourceMap.findEntry(lineNumber, columnNumber, rawLocation.inlineFrameIndex);
-    if (!entry || !entry.sourceURL) {
+    if (!entry?.sourceURL) {
       return null;
     }
 
@@ -242,9 +217,9 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
    * can reference the same shared source file in case of code splitting, and locations within
    * this shared source file will then resolve to locations in all the bundles).
    *
-   * @param uiSourceCode - the source mapped entity.
-   * @param lineNumber - the line number in terms of the {@link uiSourceCode}.
-   * @param columnNumber - the column number in terms of the {@link uiSourceCode}.
+   * @param uiSourceCode the source mapped entity.
+   * @param lineNumber the line number in terms of the {@link uiSourceCode}.
+   * @param columnNumber the column number in terms of the {@link uiSourceCode}.
    * @returns a list of raw locations that correspond to the UI location.
    */
   uiLocationToRawLocations(uiSourceCode: Workspace.UISourceCode.UISourceCode, lineNumber: number, columnNumber: number):
@@ -290,11 +265,18 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
     return ranges;
   }
 
+  translateRawFramesStep(
+      _rawFrames: StackTraceImpl.Trie.RawFrame[],
+      _translatedFrames: Awaited<ReturnType<StackTraceImpl.StackTraceModel.TranslateRawFrames>>): boolean {
+    // TODO(crbug.com/433162438): Implement source map stack trace translation.
+    return false;
+  }
+
   /**
    * Computes the set of line numbers which are source-mapped to a script within the
    * given {@link uiSourceCode}.
    *
-   * @param uiSourceCode - the source mapped entity.
+   * @param uiSourceCode the source mapped entity.
    * @returns a set of source-mapped line numbers or `null` if the {@link uiSourceCode}
    *         is not provided by this {@link CompilerScriptMapping} instance.
    */
@@ -321,7 +303,7 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
    * loaded to avoid showing the generated code when the DevTools front-end is stopped early (for
    * example on a breakpoint).
    *
-   * @param event - holds the {@link SDK.Script.Script} whose source map is being loaded.
+   * @param event holds the {@link SDK.Script.Script} whose source map is being loaded.
    */
   private sourceMapWillAttach(event: Common.EventTarget.EventTargetEvent<{client: SDK.Script.Script}>): void {
     const {client: script} = event.data;
@@ -340,7 +322,7 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
    * remove the {@link Workspace.UISourceCode.UISourceCode} stub, and from this time on won't
    * report any mappings for the `client` script.
    *
-   * @param event - holds the {@link SDK.Script.Script} whose source map failed to load.
+   * @param event holds the {@link SDK.Script.Script} whose source map failed to load.
    */
   private sourceMapFailedToAttach(event: Common.EventTarget.EventTargetEvent<{client: SDK.Script.Script}>): void {
     const {client: script} = event.data;
@@ -360,7 +342,7 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
    * URL). If they are considered incompatible, the original `UISourceCode` will simply be
    * removed and a new mapping will be established.
    *
-   * @param event - holds the {@link SDK.Script.Script} and its {@link SDK.SourceMap.SourceMap}.
+   * @param event holds the {@link SDK.Script.Script} and its {@link SDK.SourceMap.SourceMap}.
    */
   private sourceMapAttached(event: Common.EventTarget.EventTargetEvent<{
     client: SDK.Script.Script,
@@ -449,7 +431,7 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
    * context was destroyed, or the user manually asked to replace the source map for a given
    * script.
    *
-   * @param event - holds the {@link SDK.Script.Script} and {@link SDK.SourceMap.SourceMap} that
+   * @param event holds the {@link SDK.Script.Script} and {@link SDK.SourceMap.SourceMap} that
    *              should be detached.
    */
   private sourceMapDetached(event: Common.EventTarget.EventTargetEvent<{

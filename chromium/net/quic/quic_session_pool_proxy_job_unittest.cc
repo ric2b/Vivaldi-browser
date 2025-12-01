@@ -141,16 +141,17 @@ TEST_P(QuicSessionPoolProxyJobTest, CreateProxiedQuicSession) {
   // the default maximum of 1250. We can only observe the largest datagram that
   // could be sent to the endpoint, which would be 1250 - (packet header = 38) =
   // 1212 bytes.
-  EXPECT_EQ(session->GetGuaranteedLargestMessagePayload(), 1212);
+  EXPECT_EQ(session->GetGuaranteedLargestDatagramPayload(), 1212);
 
   // Check that the session through the proxy uses the version from the request.
   EXPECT_EQ(session->GetQuicVersion(), version_);
 
   // Check that the session to the proxy is keyed by an empty NAK and always
   // uses RFCv1.
-  QuicChromiumClientSession* proxy_session =
-      GetActiveSession(proxy_origin, PRIVACY_MODE_DISABLED, nak,
-                       ProxyChain::ForIpProtection({}), SessionUsage::kProxy);
+  QuicChromiumClientSession* proxy_session = GetActiveSession(
+      proxy_origin, PRIVACY_MODE_DISABLED, nak, ProxyChain::ForIpProtection({}),
+      SessionUsage::kProxy, /*require_dns_https_alpn=*/false,
+      /*disable_cert_verification_network_fetches=*/true);
   ASSERT_TRUE(proxy_session);
   EXPECT_EQ(proxy_session->GetQuicVersion(), quic::ParsedQuicVersion::RFCv1());
 
@@ -167,8 +168,7 @@ TEST_P(QuicSessionPoolProxyJobTest, CreateProxiedQuicSession) {
 TEST_P(QuicSessionPoolProxyJobTest, DoubleProxiedQuicSession) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
-      {net::features::kPartitionConnectionsByNetworkIsolationKey},
-      {net::features::kPartitionProxyChains});
+      {net::features::kPartitionConnectionsByNetworkIsolationKey}, {});
   Initialize();
 
   // Set up a connection via proxy1, to proxy2, to example.org, all using QUIC.
@@ -350,17 +350,18 @@ TEST_P(QuicSessionPoolProxyJobTest, DoubleProxiedQuicSession) {
   // the default maximum of 1250. We can only observe the largest datagram that
   // could be sent to the endpoint, which would be 1250 - (packet header = 38) =
   // 1212 bytes.
-  EXPECT_EQ(session->GetGuaranteedLargestMessagePayload(), 1212);
+  EXPECT_EQ(session->GetGuaranteedLargestDatagramPayload(), 1212);
 
   // Check that the session through the proxy uses the version from the request.
   EXPECT_EQ(session->GetQuicVersion(), version_);
 
-  // Check that the session to proxy1 uses an empty NAK (due to
-  // !kPartitionProxyChains) and RFCv1.
+  // Check that the session to proxy1 uses an empty NAK and RFCv1.
   auto proxy_nak = NetworkAnonymizationKey();
   QuicChromiumClientSession* proxy1_session =
       GetActiveSession(proxy1_origin, PRIVACY_MODE_DISABLED, proxy_nak,
-                       ProxyChain::ForIpProtection({}), SessionUsage::kProxy);
+                       ProxyChain::ForIpProtection({}), SessionUsage::kProxy,
+                       /*require_dns_https_alpn=*/false,
+                       /*disable_cert_verification_network_fetches=*/true);
   ASSERT_TRUE(proxy1_session);
   EXPECT_EQ(proxy1_session->quic_session_key().network_anonymization_key(),
             proxy_nak);
@@ -371,7 +372,8 @@ TEST_P(QuicSessionPoolProxyJobTest, DoubleProxiedQuicSession) {
       proxy2_origin, PRIVACY_MODE_DISABLED, endpoint_nak,
       ProxyChain::ForIpProtection({ProxyServer::FromSchemeHostAndPort(
           ProxyServer::SCHEME_QUIC, proxy1_origin.host(), 443)}),
-      SessionUsage::kProxy);
+      SessionUsage::kProxy, /*require_dns_https_alpn=*/false,
+      /*disable_cert_verification_network_fetches=*/true);
   ASSERT_TRUE(proxy2_session);
   EXPECT_EQ(proxy2_session->quic_session_key().network_anonymization_key(),
             endpoint_nak);
@@ -391,8 +393,7 @@ TEST_P(QuicSessionPoolProxyJobTest, DoubleProxiedQuicSession) {
 TEST_P(QuicSessionPoolProxyJobTest, PoolDeletedDuringSessionCreation) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
-      {net::features::kPartitionConnectionsByNetworkIsolationKey},
-      {net::features::kPartitionProxyChains});
+      {net::features::kPartitionConnectionsByNetworkIsolationKey}, {});
   Initialize();
 
   // Set up a connection via proxy1, to proxy2, to example.org, all using QUIC.

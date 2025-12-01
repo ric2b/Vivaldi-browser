@@ -33,6 +33,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.h"
 #import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 // End Vivaldi
 
@@ -40,9 +41,8 @@ namespace {
 // Font size for the selection string.
 const CGFloat kSelectionFontSize = 17;
 // Horizontal margin between the elements.
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
 const CGFloat kHorizontalMarginiOS26 = 8;
-#endif
+
 const CGFloat kHorizontalMarginPre26 = 4;
 const CGFloat kLeadingTrailingMargin = 12;
 // Button minimal width.
@@ -53,11 +53,10 @@ const CGFloat kSymbolSearchImagePointSize = 22;
 
 // Returns the horizontal margin to be used, depending on the OS version.
 CGFloat HorizontalMargin() {
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     return kHorizontalMarginiOS26;
   }
-#endif
+
   return kHorizontalMarginPre26;
 }
 
@@ -202,19 +201,15 @@ CGFloat HorizontalMargin() {
       l10n_util::GetNSString(selectAll ? IDS_IOS_TAB_GRID_SELECT_ALL_BUTTON
                                        : IDS_IOS_TAB_GRID_DESELECT_ALL_BUTTON);
   UIButton* selectAllButton = _selectAllButton;
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     UIButtonConfiguration* conf = _selectAllButton.configuration;
     conf.title = title;
     _selectAllButton.configuration = conf;
   } else {
-#endif
     [UIView performWithoutAnimation:^{
       [selectAllButton setTitle:title forState:UIControlStateNormal];
     }];
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   }
-#endif
 }
 
 - (void)highlightPageControlItem:(TabGridPage)page {
@@ -226,26 +221,20 @@ CGFloat HorizontalMargin() {
 }
 
 - (void)hide {
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
   } else {
-#endif
     self.backgroundColor = UIColor.blackColor;
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   }
-#endif
+
   self.pageControl.alpha = 0.0;
 }
 
 - (void)show {
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
   } else {
-#endif
     self.backgroundColor = UIColor.clearColor;
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   }
-#endif
+
   self.pageControl.alpha = 1.0;
 }
 
@@ -291,6 +280,15 @@ CGFloat HorizontalMargin() {
 
 #pragma mark - UIView
 
+- (CGSize)intrinsicContentSize {
+  // In portrait orientation, UIKit returns a default height of 44 on iOS 18 and
+  // earlier, while iOS 26 defaults to 48. In landscape orientation, iOS 18 and
+  // earlier return 32 by default, whereas iOS 26 defaults to 44. It is unclear
+  // what caused it. Therefore, intrinsicContentSize must be set to a fixed
+  // height.
+  return CGSizeMake(UIViewNoIntrinsicMetric, kTabGridTopToolbarHeight);
+}
+
 - (void)didMoveToSuperview {
   if (IsIOSSoftLockEnabled()) {
     if (_scrollBackgroundView) {
@@ -316,7 +314,6 @@ CGFloat HorizontalMargin() {
                     targetSelector:(SEL)targetSelector {
   UIButton* button;
 
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     UIButtonConfiguration* buttonConfiguration;
     if ([UIButtonConfiguration
@@ -326,20 +323,28 @@ CGFloat HorizontalMargin() {
     } else {
       buttonConfiguration = [UIButtonConfiguration glassButtonConfiguration];
     }
+
+    if (vivaldi::IsVivaldiRunning()) {
+      buttonConfiguration =
+          [UIButtonConfiguration glassButtonConfiguration];
+    } // End Vivaldi
+
     buttonConfiguration.title = title;
     buttonConfiguration.image = image;
     button = [UIButton buttonWithConfiguration:buttonConfiguration
                                  primaryAction:nil];
     button.tintColor = TabGridGlassButtonTintColor();
   } else {
-#endif
     button = [UIButton systemButtonWithPrimaryAction:nil];
     button.tintColor = UIColor.whiteColor;
     [button setTitle:title forState:UIControlStateNormal];
     [button setImage:image forState:UIControlStateNormal];
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   }
-#endif
+
+  if (vivaldi::IsVivaldiRunning()) {
+    button.tintColor = [UIColor colorNamed:vBackgroundColor];
+  } // End Vivaldi
+
   button.translatesAutoresizingMaskIntoConstraints = NO;
 
   [button.heightAnchor constraintGreaterThanOrEqualToConstant:kButtonMinWidth]
@@ -418,17 +423,13 @@ CGFloat HorizontalMargin() {
   [self setStandardAppearance:appearance];
 
   self.translatesAutoresizingMaskIntoConstraints = NO;
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
   } else {
-#endif
     self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
     [self createScrolledBackgrounds];
     [self setShadowImage:[[UIImage alloc] init]
         forToolbarPosition:UIBarPositionAny];
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   }
-#endif
 
   if (vivaldi::IsVivaldiRunning()) {
     // Top tool bar support for both light and dark mode
@@ -494,7 +495,8 @@ CGFloat HorizontalMargin() {
       DefaultSymbolWithPointSize(kSearchSymbol, kSymbolSearchImagePointSize);
 
   if (vivaldi::IsVivaldiRunning())
-    searchImage = [UIImage imageNamed:vSearch]; // End Vivaldi
+    searchImage = CustomSymbolWithPointSize(
+                      vSearch, kSymbolSearchImagePointSize); // End Vivaldi
 
   _searchButton = [self createButtonWithImage:searchImage
                                         title:nil
@@ -507,22 +509,19 @@ CGFloat HorizontalMargin() {
       l10n_util::GetNSString(IDS_IOS_TAB_GRID_SEARCHBAR_PLACEHOLDER);
   _searchBar.accessibilityIdentifier = kTabGridSearchBarIdentifier;
 
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     _cancelSearchButton =
         [self createButtonWithImage:DefaultCloseButtonForToolbar()
                               title:nil
                      targetSelector:@selector(cancelSearchButtonTapped:)];
   } else {
-#endif
     _cancelSearchButton =
         [self createButtonWithImage:nil
                               title:l10n_util::GetNSString(
                                         IDS_IOS_TAB_GRID_CANCEL_BUTTON)
                      targetSelector:@selector(cancelSearchButtonTapped:)];
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   }
-#endif
+
   _cancelSearchButton.accessibilityIdentifier = kTabGridCancelButtonIdentifier;
 
   [self setUpConstraintsForContainerView:containerView];
@@ -533,15 +532,12 @@ CGFloat HorizontalMargin() {
   [self addSubview:containerView];
   UILayoutGuide* safeAreaLayoutGuide = self.safeAreaLayoutGuide;
   CGFloat containerSideMargin;
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     containerSideMargin = 0;
   } else {
-#endif
     containerSideMargin = kLeadingTrailingMargin;
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   }
-#endif
+
   [NSLayoutConstraint activateConstraints:@[
     [containerView.leadingAnchor
         constraintEqualToAnchor:safeAreaLayoutGuide.leadingAnchor
@@ -650,11 +646,10 @@ CGFloat HorizontalMargin() {
 - (void)createScrolledBackgrounds {
   _scrolledToEdge = YES;
 
-#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
   if (@available(iOS 26, *)) {
     return;
   }
-#endif
+
   if (IsIOSSoftLockEnabled()) {
     _scrollBackgroundView = [[TabGridToolbarScrollingBackground alloc] init];
     _scrollBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;

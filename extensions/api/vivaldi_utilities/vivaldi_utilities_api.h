@@ -345,6 +345,18 @@ class UtilitiesSelectFileFunction : public ExtensionFunction {
   void OnFileSelected(base::FilePath path, bool cancelled);
 };
 
+class UtilitiesOpenFolderFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.openFolder", UTILITIES_OPEN_FOLDER)
+  UtilitiesOpenFolderFunction() = default;
+
+ private:
+  ~UtilitiesOpenFolderFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+};
+
 class UtilitiesSelectLocalImageFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.selectLocalImage",
@@ -1220,6 +1232,30 @@ class UtilitiesUpdatePrimarySelectionFunction : public ExtensionFunction {
 
  private:
   ~UtilitiesUpdatePrimarySelectionFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesShowAdditionalStartupPagesFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.showAdditionalStartupPages",
+                             UTILITIES_SHOW_ADDITIONAL_STARTUP_PAGES)
+  UtilitiesShowAdditionalStartupPagesFunction() = default;
+
+ private:
+  ~UtilitiesShowAdditionalStartupPagesFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesCopyToClipboardFunction
+    : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.copyToClipboard",
+                             UTILITIES_COPY_TO_CLIPBOARD)
+  UtilitiesCopyToClipboardFunction() = default;
+
+ private:
+  ~UtilitiesCopyToClipboardFunction() override = default;
+
   ResponseAction Run() override;
 };
 

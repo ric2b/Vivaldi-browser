@@ -38,12 +38,14 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.tabmodel.TabClosingSource;
 import org.chromium.chrome.browser.tabmodel.TabClosureParams;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabRemover;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
+import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.KeyboardUtils;
 
@@ -54,6 +56,7 @@ import java.util.Set;
 @Batch(Batch.UNIT_TESTS)
 @Features.EnableFeatures({
     ChromeFeatureList.TASK_MANAGER_CLANK,
+    ContentFeatureList.ANDROID_DEV_TOOLS_FRONTEND,
 })
 public class KeyboardShortcutsTest {
 
@@ -122,7 +125,11 @@ public class KeyboardShortcutsTest {
         assertTrue(isKeyEventHandled);
         verify(mTabRemover)
                 .closeTabs(
-                        eq(TabClosureParams.closeTab(mTab).allowUndo(false).build()),
+                        eq(
+                                TabClosureParams.closeTab(mTab)
+                                        .allowUndo(false)
+                                        .tabClosingSource(TabClosingSource.KEYBOARD_SHORTCUT)
+                                        .build()),
                         /* allowDialog= */ eq(true));
     }
 

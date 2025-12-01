@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -7,6 +7,8 @@ import '../../../../ui/components/markdown_view/markdown_view.js';
 
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Root from '../../../../core/root/root.js';
+import * as AIAssistance from '../../../../models/ai_assistance/ai_assistance.js';
+import * as Badges from '../../../../models/badges/badges.js';
 import type {InsightModel} from '../../../../models/trace/insights/types.js';
 import type * as Trace from '../../../../models/trace/trace.js';
 import * as Buttons from '../../../../ui/components/buttons/buttons.js';
@@ -15,10 +17,9 @@ import * as UI from '../../../../ui/legacy/legacy.js';
 import * as Lit from '../../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../../ui/visual_logging/visual_logging.js';
 import type * as Overlays from '../../overlays/overlays.js';
-import {md} from '../../utils/Helpers.js';
-import * as Utils from '../../utils/utils.js';
 
 import baseInsightComponentStyles from './baseInsightComponent.css.js';
+import {md} from './Helpers.js';
 import * as SidebarInsight from './SidebarInsight.js';
 import type {TableState} from './Table.js';
 
@@ -86,7 +87,7 @@ export abstract class BaseInsightComponent<T extends InsightModel> extends HTMLE
 
   #selected = false;
   #model: T|null = null;
-  #parsedTrace: Trace.Handlers.Types.ParsedTrace|null = null;
+  #agentFocus: AIAssistance.AgentFocus|null = null;
   #fieldMetrics: Trace.Insights.Common.CrUXFieldMetricResults|null = null;
 
   get model(): T|null {
@@ -158,8 +159,8 @@ export abstract class BaseInsightComponent<T extends InsightModel> extends HTMLE
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
-  set parsedTrace(parsedTrace: Trace.Handlers.Types.ParsedTrace) {
-    this.#parsedTrace = parsedTrace;
+  set agentFocus(agentFocus: AIAssistance.AgentFocus) {
+    this.#agentFocus = agentFocus;
   }
 
   set fieldMetrics(fieldMetrics: Trace.Insights.Common.CrUXFieldMetricResults) {
@@ -175,21 +176,27 @@ export abstract class BaseInsightComponent<T extends InsightModel> extends HTMLE
   }
 
   #dispatchInsightToggle(): void {
-    if (this.#selected) {
-      this.dispatchEvent(new SidebarInsight.InsightDeactivated());
-
-      // Clear agent (but only if currently focused on an insight).
-      const focus = UI.Context.Context.instance().flavor(Utils.AIContext.AgentFocus);
-      if (focus && focus.data.type === 'insight') {
-        UI.Context.Context.instance().setFlavor(Utils.AIContext.AgentFocus, null);
-      }
-      return;
-    }
-
     if (!this.data.insightSetKey || !this.model) {
       // Shouldn't happen, but needed to satisfy TS.
       return;
     }
+
+    const focus = UI.Context.Context.instance().flavor(AIAssistance.AgentFocus);
+    if (this.#selected) {
+      this.dispatchEvent(new SidebarInsight.InsightDeactivated());
+
+      // Clear agent (but only if currently focused on an insight).
+      if (focus) {
+        UI.Context.Context.instance().setFlavor(AIAssistance.AgentFocus, focus.withInsight(null));
+      }
+      return;
+    }
+
+    if (focus) {
+      UI.Context.Context.instance().setFlavor(AIAssistance.AgentFocus, focus.withInsight(this.model));
+    }
+
+    Badges.UserBadges.instance().recordAction(Badges.BadgeAction.PERFORMANCE_INSIGHT_CLICKED);
 
     this.sharedTableState.selectedRowEl?.classList.remove('selected');
     this.sharedTableState.selectedRowEl = null;
@@ -349,7 +356,7 @@ export abstract class BaseInsightComponent<T extends InsightModel> extends HTMLE
   }
 
   #askAIButtonClick(): void {
-    if (!this.#model || !this.#parsedTrace || !this.data.bounds) {
+    if (!this.#agentFocus) {
       return;
     }
 
@@ -359,8 +366,13 @@ export abstract class BaseInsightComponent<T extends InsightModel> extends HTMLE
       return;
     }
 
-    const context = Utils.AIContext.AgentFocus.fromInsight(this.#parsedTrace, this.#model, this.data.bounds);
-    UI.Context.Context.instance().setFlavor(Utils.AIContext.AgentFocus, context);
+    let focus = UI.Context.Context.instance().flavor(AIAssistance.AgentFocus);
+    if (focus) {
+      focus = focus.withInsight(this.model);
+    } else {
+      focus = this.#agentFocus;
+    }
+    UI.Context.Context.instance().setFlavor(AIAssistance.AgentFocus, focus);
 
     // Trigger the AI Assistance panel to open.
     const action = UI.ActionRegistry.ActionRegistry.instance().getAction(actionId);

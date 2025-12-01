@@ -3592,7 +3592,7 @@ int ff_mpeg4_parse_picture_header(Mpeg4DecContext *ctx, GetBitContext *gb,
 
     // If we have not switched to studio profile than we also did not switch bps
     // that means something else (like a previous instance) outside set bps which
-    // would be inconsistant with the currect state, thus reset it
+    // would be inconsistent with the correct state, thus reset it
     if (!s->studio_profile && s->avctx->bits_per_raw_sample != 8)
         s->avctx->bits_per_raw_sample = 0;
 
@@ -3678,6 +3678,8 @@ int ff_mpeg4_parse_picture_header(Mpeg4DecContext *ctx, GetBitContext *gb,
                 name = "Reserved";
             else if (startcode <= 0x1FF)
                 name = "System start";
+            else
+                av_unreachable("Unexpected startcode");
             av_log(s->avctx, AV_LOG_DEBUG, "startcode: %3X %s at %d\n",
                    startcode, name, get_bits_count(gb));
         }

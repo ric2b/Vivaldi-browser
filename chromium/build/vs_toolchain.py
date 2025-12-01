@@ -18,7 +18,7 @@ import sys
 
 from gn_helpers import ToGNString
 
-# VS 2022 17.13.4 with 10.0.26100.3323 SDK with ARM64 libraries and UWP support.
+# VS 2022 17.13.4 with 10.0.26100.4654 SDK with ARM64 libraries and UWP support.
 # See go/win-toolchain-reference for instructions about how to update the
 # toolchain.
 #
@@ -60,7 +60,7 @@ from gn_helpers import ToGNString
 # * docs/windows_build_instructions.md
 #   Make sure any version numbers in the documentation match the code.
 #
-TOOLCHAIN_HASH = '68a20d6dee'
+TOOLCHAIN_HASH = 'e4305f407e'
 SDK_VERSION = '10.0.26100.0'
 
 # Visual Studio versions are listed in descending order of priority.
@@ -306,7 +306,7 @@ def _SortByHighestVersionNumberFirst(list_of_str_versions):
   list_of_str_versions.sort(key=to_number_sequence, reverse=True)
 
 
-def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, suffix, options=None):
+def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, debug, options=None):
   """Copy both the msvcp and vccorlib runtime DLLs, only if the target doesn't
   exist, but the target directory does exist."""
   if target_cpu == 'arm64':
@@ -314,7 +314,7 @@ def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, suffix, options=None):
     # {x.y.z}/[debug_nonredist/]arm64/Microsoft.VC14x.CRT/.
     # Select VC toolset directory based on Visual Studio version
     vc_redist_root = FindVCRedistRoot(options=options)
-    if suffix.startswith('.'):
+    if not debug:
       vc_toolset_dir = 'Microsoft.{}.CRT' \
          .format(MSVC_TOOLSET_VERSION[GetVisualStudioVersion(options=options)])
       source_dir = os.path.join(vc_redist_root,
@@ -324,17 +324,25 @@ def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, suffix, options=None):
          .format(MSVC_TOOLSET_VERSION[GetVisualStudioVersion(options=options)])
       source_dir = os.path.join(vc_redist_root, 'debug_nonredist',
                                 'arm64', vc_toolset_dir)
-  file_parts = ('msvcp140', 'vccorlib140', 'vcruntime140')
+
+  # The filepaths may have an additional 'd' depending on whether we are in
+  # debug mode.
+  def d(s):
+    return s + 'd' if debug else s
+
+  file_parts = (d('msvcp140'), d('msvcp140') + '_atomic_wait', d('vccorlib140'),
+                d('vcruntime140'))
   if target_cpu == 'x64' and GetVisualStudioVersion(options=options) != '2017':
-    file_parts = file_parts + ('vcruntime140_1', )
+    file_parts = file_parts + (d('vcruntime140_1'), )
   for file_part in file_parts:
-    dll = file_part + suffix
+    dll = file_part + '.dll'
     target = os.path.join(target_dir, dll)
     source = os.path.join(source_dir, dll)
     _CopyRuntimeImpl(target, source)
+
   # We must copy ucrtbased.dll for all CPU types. The rest of the Universal CRT
   # is installed as part of the OS in Windows 10 and beyond.
-  if not suffix.startswith('.'):
+  if debug:
     win_sdk_dir = os.path.normpath(
         os.environ.get(
             'WINDOWSSDKDIR',
@@ -354,8 +362,10 @@ def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, suffix, options=None):
       if not os.path.isdir(source_dir):
         continue
       break
-    _CopyRuntimeImpl(os.path.join(target_dir, 'ucrtbase' + suffix),
-                     os.path.join(source_dir, 'ucrtbase' + suffix))
+    _CopyRuntimeImpl(os.path.join(target_dir,
+                                  d('ucrtbase') + '.dll'),
+                     os.path.join(source_dir,
+                                  d('ucrtbase') + '.dll'))
 
 
 def FindVCComponentRoot(component, options=None):
@@ -391,9 +401,8 @@ def FindVCRedistRoot(options=None):
 def _CopyRuntime(target_dir, source_dir, target_cpu, debug, options=None):
   """Copy the VS runtime DLLs, only if the target doesn't exist, but the target
   directory does exist. Handles VS 2015, 2017 and 2019."""
-  suffix = 'd.dll' if debug else '.dll'
   # VS 2015, 2017 and 2019 use the same CRT DLLs.
-  _CopyUCRTRuntime(target_dir, source_dir, target_cpu, suffix, options=options)
+  _CopyUCRTRuntime(target_dir, source_dir, target_cpu, debug, options=options)
 
 
 def CopyDlls(args, options=None):

@@ -5,9 +5,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "components/ad_blocker/public/content/mojom/adblock_cosmetic_filter.mojom.h"
-#include "components/ad_blocker/public/core/adblock_types.h"
 #include "content/public/browser/child_process_id.h"
-#include "mojo/public/cpp/bindings/receiver.h"
 
 namespace content {
 class RenderFrameHost;

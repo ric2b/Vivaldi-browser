@@ -3,21 +3,21 @@
 // found in the LICENSE file.
 
 #import "base/base_paths.h"
+#import "base/ios/ios_util.h"
 #import "base/path_service.h"
 #import "base/strings/escape.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
-#import "components/plus_addresses/features.h"
-#import "components/plus_addresses/grit/plus_addresses_strings.h"
-#import "components/plus_addresses/plus_address_test_utils.h"
+#import "components/plus_addresses/core/browser/grit/plus_addresses_strings.h"
+#import "components/plus_addresses/core/browser/plus_address_test_utils.h"
+#import "components/plus_addresses/core/common/features.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_ui_test_util.h"
+#import "ios/chrome/browser/authentication/test/signin_earl_grey.h"
+#import "ios/chrome/browser/authentication/test/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/autofill/ui_bundled/autofill_app_interface.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_constants.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_matchers.h"
 #import "ios/chrome/browser/plus_addresses/ui/plus_address_app_interface.h"
-#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
@@ -128,10 +128,6 @@ void CheckPlusAddressCellVisibility(std::u16string chip_button_text,
            {"server-url", {fakeLocalUrl}},
            {"manage-url", {fakeLocalUrl}},
        }}});
-
-  // Enable the Keyboard Accessory Upgrade feature.
-  config.features_enabled_and_params.push_back(
-      {kIOSKeyboardAccessoryUpgradeForIPad, {}});
 
   return config;
 }
@@ -319,6 +315,11 @@ void CheckPlusAddressCellVisibility(std::u16string chip_button_text,
 // Tests that tapping on the select plus address action shows a sheet with the
 // list of all plus addresses from the password manual fill view.
 - (void)testSelectPlusAddressActionFromPasswordFillView {
+  // TODO(crbug.com/439547642): Re-enable the test on iOS26.
+  if (base::ios::IsRunningOnIOS26OrLater()) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 26.");
+  }
+
   if ([ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Test fails for iPad");
   }

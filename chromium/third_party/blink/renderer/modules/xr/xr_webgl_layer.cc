@@ -182,6 +182,10 @@ XRWebGLLayer::~XRWebGLLayer() {
   }
 }
 
+XRLayerType XRWebGLLayer::LayerType() const {
+  return XRLayerType::kWebGLLayer;
+}
+
 uint32_t XRWebGLLayer::framebufferWidth() const {
   if (drawing_buffer_) {
     return drawing_buffer_->size().width();
@@ -310,6 +314,10 @@ HTMLCanvasElement* XRWebGLLayer::output_canvas() const {
   return nullptr;
 }
 
+const XRSharedImageData& XRWebGLLayer::CameraSharedImage() const {
+  return session()->LayerSharedImageManager().CameraSharedImage();
+}
+
 WebGLTexture* XRWebGLLayer::GetCameraTexture() {
   DVLOG(1) << __func__;
 
@@ -336,11 +344,8 @@ void XRWebGLLayer::OnFrameStart() {
     framebuffer_->MarkOpaqueBufferComplete(true);
     framebuffer_->SetContentsChanged(false);
 
-    const XRLayerSharedImages& layer_shared_images = GetSharedImages();
-    const XRSharedImageData& content_image_data =
-        layer_shared_images.content_image_data;
-    const XRSharedImageData& camera_image_data =
-        layer_shared_images.camera_image_data;
+    const XRSharedImageData& content_image_data = SharedImage();
+    const XRSharedImageData& camera_image_data = CameraSharedImage();
 
     if (content_image_data.shared_image) {
       drawing_buffer_->UseSharedBuffer(content_image_data.shared_image,
@@ -435,9 +440,10 @@ void XRWebGLLayer::OnFrameEnd() {
       // `SubmitWebGLLayer` so that we stop using it before the sync token
       // that `SubmitWebGLLayer` will generate.
       if (camera_image_shared_image_texture_) {
-        const XRLayerSharedImages& layer_shared_images = GetSharedImages();
+        const XRSharedImageData& camera_image_data = CameraSharedImage();
+
         // We shouldn't ever have a camera texture if the holder wasn't present:
-        CHECK(layer_shared_images.camera_image_data.shared_image);
+        CHECK(camera_image_data.shared_image);
 
         DVLOG(3) << __func__
                  << ": deleting camera image texture, "

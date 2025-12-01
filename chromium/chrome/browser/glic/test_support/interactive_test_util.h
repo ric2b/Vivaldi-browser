@@ -37,7 +37,7 @@ namespace internal {
 class GlicFreShowingDialogObserver
     : public ui::test::PollingStateObserver<bool> {
  public:
-  explicit GlicFreShowingDialogObserver(GlicFreController* controller);
+  explicit GlicFreShowingDialogObserver(const GlicFreController& controller);
   ~GlicFreShowingDialogObserver() override;
 };
 
@@ -83,8 +83,8 @@ DECLARE_STATE_IDENTIFIER_VALUE(GlicAppStateObserver, kGlicAppState);
 // True when the timer is not running. Use `Start()` to start the timer.
 class WaitingStateObserver : public ui::test::StateObserver<bool> {
  public:
-  WaitingStateObserver() { OnStateObserverStateChanged(true); }
-  ~WaitingStateObserver() override = default;
+  WaitingStateObserver();
+  ~WaitingStateObserver() override;
 
   void Start(base::TimeDelta timeout) {
     OnStateObserverStateChanged(false);
@@ -118,6 +118,25 @@ class WebUiStateObserver : public ui::test::StateObserver<mojom::WebUiState>,
 };
 
 DEFINE_LOCAL_STATE_IDENTIFIER_VALUE(WebUiStateObserver, kWebUiState);
+
+class OnViewChangedObserver
+    : public ui::test::StateObserver<mojom::CurrentView>,
+      public Host::Observer {
+ public:
+  explicit OnViewChangedObserver(Host* host);
+
+  ~OnViewChangedObserver() override;
+
+  mojom::CurrentView GetStateObserverInitialState() const override;
+
+  void OnViewChanged(mojom::CurrentView state) override;
+
+ private:
+  base::ScopedObservation<Host, Host::Observer> observation_{this};
+  raw_ptr<Host> host_;
+};
+
+DEFINE_LOCAL_STATE_IDENTIFIER_VALUE(OnViewChangedObserver, kFloatyViewState);
 
 }  // namespace internal
 

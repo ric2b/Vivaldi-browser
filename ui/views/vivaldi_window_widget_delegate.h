@@ -28,7 +28,7 @@ class VivaldiWindowWidgetDelegate final : public views::WidgetDelegate {
   // WidgetDelegate implementation.
   views::Widget* GetWidget() override;
   const views::Widget* GetWidget() const override;
-  std::unique_ptr<views::NonClientFrameView> CreateNonClientFrameView(
+  std::unique_ptr<views::FrameView> CreateFrameView(
       views::Widget* widget) override;
   void OnWidgetMove() override;
   views::View* GetInitiallyFocusedView() override;

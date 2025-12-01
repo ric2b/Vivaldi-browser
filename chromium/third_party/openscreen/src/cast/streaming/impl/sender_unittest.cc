@@ -44,7 +44,6 @@
 
 using testing::_;
 using testing::AtLeast;
-using testing::Invoke;
 using testing::InvokeWithoutArgs;
 using testing::Mock;
 using testing::NiceMock;
@@ -355,10 +354,10 @@ class SenderTest : public testing::Test {
     sender_environment_.set_remote_endpoint(
         receiver_to_sender_pipe_.local_endpoint());
     ON_CALL(sender_environment_, SendPacket(_, _))
-        .WillByDefault(Invoke([this](ByteView packet, PacketMetadata metadata) {
+        .WillByDefault([this](ByteView packet, PacketMetadata metadata) {
           sender_to_receiver_pipe_.StartPacketTransmission(
               std::vector<uint8_t>(packet.begin(), packet.end()));
-        }));
+        });
   }
 
   ~SenderTest() override = default;
@@ -457,14 +456,14 @@ TEST_F(SenderTest, SendsFramesEfficiently) {
   std::set<std::pair<FrameId, FramePacketId>> received_packets;
   EXPECT_CALL(*receiver(), OnRtpPacket(_))
       .WillRepeatedly(
-          Invoke([&](const RtpPacketParser::ParseResult& parsed_packet) {
+          [&](const RtpPacketParser::ParseResult& parsed_packet) {
             std::pair<FrameId, FramePacketId> id(parsed_packet.frame_id,
                                                  parsed_packet.packet_id);
             const auto insert_result = received_packets.insert(id);
             EXPECT_TRUE(insert_result.second)
                 << "Received duplicate packet: " << id.first << ':'
                 << static_cast<int>(id.second);
-          }));
+          });
 
   // Simulate normal frame ACK'ing behavior.
   ON_CALL(*receiver(), OnFrameComplete(_)).WillByDefault(InvokeWithoutArgs([&] {
@@ -510,14 +509,14 @@ TEST_F(SenderTest, WaitsUntilEndOfReportToUpdateObservers) {
   std::set<std::pair<FrameId, FramePacketId>> received_packets;
   EXPECT_CALL(*receiver(), OnRtpPacket(_))
       .WillRepeatedly(
-          Invoke([&](const RtpPacketParser::ParseResult& parsed_packet) {
+          [&](const RtpPacketParser::ParseResult& parsed_packet) {
             std::pair<FrameId, FramePacketId> id(parsed_packet.frame_id,
                                                  parsed_packet.packet_id);
             const auto insert_result = received_packets.insert(id);
             EXPECT_TRUE(insert_result.second)
                 << "Received duplicate packet: " << id.first << ':'
                 << static_cast<int>(id.second);
-          }));
+          });
 
   StrictMock<MockObserver> observer;
 
@@ -621,10 +620,10 @@ TEST_F(SenderTest, RespondsToNetworkLatencyChanges) {
   // Run one network round-trip from Sender→Receiver→Sender.
   StatusReportId sender_report_id{};
   EXPECT_CALL(*receiver(), OnSenderReport(_))
-      .WillOnce(Invoke(
+      .WillOnce(
           [&](const SenderReportParser::SenderReportWithId& sender_report) {
             sender_report_id = sender_report.report_id;
-          }));
+          });
   // Simulate the passage of time for the Sender Report to reach the Receiver.
   SimulateExecution(kOutboundDelay);
   // The Receiver should have received the Sender Report at this point.
@@ -660,12 +659,12 @@ TEST_F(SenderTest, RespondsToNetworkLatencyChanges) {
   constexpr int kNumReportIntervals = 50;
   EXPECT_CALL(*receiver(), OnSenderReport(_))
       .Times(kNumReportIntervals)
-      .WillRepeatedly(Invoke(
+      .WillRepeatedly(
           [&](const SenderReportParser::SenderReportWithId& sender_report) {
             receiver()->SetReceiverReport(sender_report.report_id,
                                           RtcpReportBlock::Delay::zero());
             receiver()->TransmitRtcpFeedbackPacket();
-          }));
+          });
   Clock::duration last_max = sender()->GetMaxInFlightMediaDuration();
   for (int i = 0; i < kNumReportIntervals; ++i) {
     SimulateExecution(kRtcpReportInterval);
@@ -922,19 +921,18 @@ TEST_F(SenderTest, ProvidesSenderReports) {
   Sequence packet_sequence;
   EXPECT_CALL(*receiver(), OnSenderReport(_))
       .InSequence(packet_sequence)
-      .WillOnce(
-          Invoke([&](const SenderReportParser::SenderReportWithId& report) {
-            sender_reports.push_back(report);
-          }))
+      .WillOnce([&](const SenderReportParser::SenderReportWithId& report) {
+        sender_reports.push_back(report);
+      })
       .RetiresOnSaturation();
   EXPECT_CALL(*receiver(), OnRtpPacket(_)).InSequence(packet_sequence);
   EXPECT_CALL(*receiver(), OnSenderReport(_))
       .Times(3)
       .InSequence(packet_sequence)
       .WillRepeatedly(
-          Invoke([&](const SenderReportParser::SenderReportWithId& report) {
+          [&](const SenderReportParser::SenderReportWithId& report) {
             sender_reports.push_back(report);
-          }));
+          });
 
   EncodedFrameWithBuffer frame;
   constexpr int kFrameDataSize = 250;
@@ -1002,13 +1000,12 @@ TEST_F(SenderTest, ProvidesKickstartPacketsIfReceiverDoesNotACK) {
   // Have the Receiver move the checkpoint forward only for the first frame, and
   // none of the later frames. This will force the Sender to eventually send a
   // Kickstart packet.
-  ON_CALL(*receiver(), OnFrameComplete(_))
-      .WillByDefault(Invoke([&](FrameId frame_id) {
-        if (frame_id == FrameId::first()) {
-          receiver()->SetCheckpointFrame(FrameId::first());
-          receiver()->TransmitRtcpFeedbackPacket();
-        }
-      }));
+  ON_CALL(*receiver(), OnFrameComplete(_)).WillByDefault([&](FrameId frame_id) {
+    if (frame_id == FrameId::first()) {
+      receiver()->SetCheckpointFrame(FrameId::first());
+      receiver()->TransmitRtcpFeedbackPacket();
+    }
+  });
 
   // Send three frames, paced to the media.
   EncodedFrameWithBuffer frames[3];
@@ -1030,11 +1027,10 @@ TEST_F(SenderTest, ProvidesKickstartPacketsIfReceiverDoesNotACK) {
   // the last packet of the latest frame.
   std::set<std::pair<FrameId, FramePacketId>> unique_received_packet_ids;
   EXPECT_CALL(*receiver(), OnRtpPacket(_))
-      .WillRepeatedly(
-          Invoke([&](const RtpPacketParser::ParseResult& parsed_packet) {
-            unique_received_packet_ids.emplace(parsed_packet.frame_id,
-                                               parsed_packet.packet_id);
-          }));
+      .WillRepeatedly([&](const RtpPacketParser::ParseResult& parsed_packet) {
+        unique_received_packet_ids.emplace(parsed_packet.frame_id,
+                                           parsed_packet.packet_id);
+      });
   SimulateExecution(kTargetPlayoutDelay);
   Mock::VerifyAndClearExpectations(receiver());
   EXPECT_EQ(size_t{1}, unique_received_packet_ids.size());
@@ -1112,10 +1108,10 @@ TEST_F(SenderTest, ResendsIndividuallyNackedPackets) {
       }));
   EXPECT_CALL(*receiver(), OnRtpPacket(_))
       .Times(3)
-      .WillRepeatedly(Invoke([&](const RtpPacketParser::ParseResult& packet) {
+      .WillRepeatedly([&](const RtpPacketParser::ParseResult& packet) {
         EXPECT_TRUE(Contains(dropped_packets,
                              PacketNack{packet.frame_id, packet.packet_id}));
-      }));
+      });
   SimulateExecution(kOneWayNetworkDelay);
   Mock::VerifyAndClearExpectations(receiver());
 

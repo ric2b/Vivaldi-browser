@@ -159,6 +159,21 @@ message VmInfo {
 
   // Status of the VM.
   VmStatus status = 8;
+
+  // Allocated memory for the VM in bytes. The value is 0 if unknown.
+  int64 allocated_memory = 9;
+}
+
+// Information about the balloon of a particular VM.
+message BalloonInfo {
+  // Available memory in the VM in bytes. The value is 0 if unknown.
+  int64 available_memory = 1;
+
+  // Free memory in the VM in bytes. The value is 0 if unknown.
+  int64 free_memory = 2;
+
+  // Balloon size of the VM in bytes. The value is 0 if unknown.
+  int64 balloon_size = 3;
 }
 
 // Optional fields for network configuration.
@@ -718,6 +733,24 @@ message GetVmInfoResponse {
   VmInfo vm_info = 2;
 }
 
+// Request for the balloon information of a VM.
+message GetBalloonInfoRequest {
+  // The name of the VM to query.
+  string name = 1;
+
+  // The owner of the vm.
+  string owner_id = 2;
+}
+
+// Response sent back by vm_concierge for a GetBalloonInfo dbus message.
+message GetBalloonInfoResponse {
+  // If true, the requested VM exists and info was returned.
+  bool success = 1;
+
+  // Balloon information of the VM that was requested.
+  BalloonInfo balloon_info = 2;
+}
+
 // Request for information about the VM that is specific to
 // enterprise reporting.
 message GetVmEnterpriseReportingInfoRequest {
@@ -809,6 +842,9 @@ enum DiskImageStatus {
 
   // Operation failed because of lack of disk space.
   DISK_STATUS_NOT_ENOUGH_SPACE = 8;
+
+  // Operation failed due to bad provided source image
+  DISK_STATUS_BAD_IMAGE = 9;
 }
 
 enum DiskImageAllocationType {
@@ -887,6 +923,9 @@ message CreateDiskImageRequest {
   // which will be decompressed and written as the disk image contents.
   // Currently this is only used for baguette vm's.
   bool copy_baguette_image = 13;
+
+  // Identify the vm type to write to the disk image.
+  VmInfo.VmType vm_type = 14;
 }
 
 // Response to a CreateDiskImageRequest.
@@ -995,6 +1034,9 @@ message ImportDiskImageRequest {
   // Size of the source image (corresponding to the passed FD).
   // Used to calculate progress of the import operation.
   uint64 source_size = 4;
+
+  // Identify the vm type to write to the disk image.
+  VmInfo.VmType vm_type = 5;
 }
 
 // Response to a ImportDiskImageRequest.

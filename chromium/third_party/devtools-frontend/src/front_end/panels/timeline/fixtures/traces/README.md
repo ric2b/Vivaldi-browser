@@ -48,6 +48,14 @@ A very barebones trace; contains info on browser processes and threads but very 
 
 A recording of a page load of the Lighthouse byte-efficiency tester. https://github.com/GoogleChrome/lighthouse/blob/main/cli/test/fixtures/byte-efficiency/tester.html
 
+### chrome-ext-sourcemap-script-content.json.gz
+
+Trace generated after installing https://chromewebstore.google.com/detail/react-developer-tools/. A regular trace that contains two sections
+not found in other traces:
+
+1. A sourcemap in the metadata array with a 'chrome-extension' protocol.
+2. 'V8SourceRundownSourcesScriptCatchupEvent' traces that have a 'chrome-extension' protocol with associated source text.
+
 ### dom-size.json.gz
 
 Generate from a recording of [this HTML file](https://gist.github.com/adamraine/bfdb3cecca2322bf74f1e725d9a4699d) with the following steps:
@@ -331,3 +339,23 @@ A trace of web.dev recorded in May 2025. Done because it contains performance ti
 
 A trace with generated with a simple html page that has three `<link rel=preconnect>`, and with
 HTTP [Link](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Link) header (by Header override)
+
+### perfettotrace-track
+
+A trace with a "PerfettoTrack" in the trace, which is a new track we want to filter out on the frontnend.
+
+### user-timings-overlaps
+
+A trace with a bunch of user timings - created from https://github.com/ChromeDevTools/performance-stories/pull/49.
+
+In July 2025 Perfetto changed how it outputs IDs, meaning that performance.measure events could have IDs that were non-unique. They were unique if the events overlap, but if they don't, then IDs can be reused. This trace exists to test our parsing code against this new code.
+
+https://chromium.googlesource.com/external/github.com/google/perfetto.git/+/aef636b27ffbf379fd722e7798030da2c5c4d699
+
+### interaction-events-with-shared-ids
+
+A trace with lots of interactions generated from https://chromedevtools.github.io/performance-stories/long-interaction/index.html?x=30.
+
+### layout-shift-with-animation-culprit
+
+A trace that has a layout shift with a root cause that is a non-composited animation. Generated from https://github.com/ChromeDevTools/performance-stories/tree/main/layout-shift-animations.

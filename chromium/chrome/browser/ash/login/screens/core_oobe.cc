@@ -16,7 +16,7 @@
 #include "chrome/browser/ui/ash/login/oobe_dialog_size_utils.h"
 #include "chrome/browser/ui/webui/ash/login/core_oobe_handler.h"
 #include "chrome/browser/ui/webui/ash/login/oobe_ui.h"
-#include "chrome/common/channel_info.h"
+#include "chromeos/ash/components/channel/channel_info.h"
 #include "components/version_info/channel.h"
 #include "ui/display/screen.h"
 #include "ui/display/tablet_state.h"
@@ -40,12 +40,11 @@ CoreOobe::CoreOobe(const std::string& display_type,
   version_info_updater_.StartUpdate(false);
 #endif
 
-  OnTabletModeChanged(display::Screen::GetScreen()->InTabletMode());
-  UpdateClientAreaSize(
-      display::Screen::GetScreen()->GetPrimaryDisplay().size());
+  OnTabletModeChanged(display::Screen::Get()->InTabletMode());
+  UpdateClientAreaSize(display::Screen::Get()->GetPrimaryDisplay().size());
 
   // Don't show version label on the stable and beta channels by default.
-  version_info::Channel channel = chrome::GetChannel();
+  version_info::Channel channel = ash::GetChannel();
   if (channel != version_info::Channel::STABLE &&
       channel != version_info::Channel::BETA) {
     if (view_) {
@@ -140,7 +139,7 @@ void CoreOobe::UpdateClientAreaSize(const gfx::Size& size) {
   view_->SetShelfHeight(ShelfConfig::Get()->shelf_size());
 
   const gfx::Size display_size =
-      display::Screen::GetScreen()->GetPrimaryDisplay().size();
+      display::Screen::Get()->GetPrimaryDisplay().size();
   const bool is_horizontal = display_size.width() > display_size.height();
   view_->SetOrientation(is_horizontal);
 

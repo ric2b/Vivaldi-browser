@@ -264,7 +264,7 @@ FakeSystemIdentityManager::CreateRefreshAccessTokenFailure(
       [storage_ detailsForGaiaID:identity.gaiaID];
   details.error = [[FakeRefreshAccessTokenError alloc]
          initWithIdentity:identity
-      isScopeLimitedError:false
+      isScopeLimitedError:NO
                  callback:std::move(callback)];
   return details.error;
 }
@@ -436,6 +436,7 @@ void FakeSystemIdentityManager::GetHostedDomain(id<SystemIdentity> identity,
 NSString* FakeSystemIdentityManager::GetCachedHostedDomainForIdentity(
     id<SystemIdentity> identity) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(identity);
   if (instantly_fill_hosted_domain_cache_ ||
       [hosted_domain_cache_ containsObject:identity]) {
     NSString* domain = FakeGetHostedDomainForIdentity(identity);

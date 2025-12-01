@@ -6,8 +6,6 @@
 #import <stdint.h>
 #import <vector>
 
-#import <MaterialComponents/MaterialSnackbar.h>
-
 #import "base/check.h"
 #import "base/hash/hash.h"
 #import "base/i18n/string_compare.h"
@@ -18,6 +16,7 @@
 #import "components/notes/notes_model.h"
 #import "components/query_parser/query_parser.h"
 #import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/shared/public/snackbar/snackbar_message.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -27,10 +26,6 @@
 #import "ui/base/models/tree_node_iterator.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 using vivaldi::NoteNode;
 using vivaldi::NotesModel;
 
@@ -39,8 +34,6 @@ namespace  {
 }
 
 namespace note_utils_ios {
-
-NSString* const kNotesSnackbarCategory = @"NotesSnackbarCategory";
 
 std::optional<NodeSet> FindNodesByIds(NotesModel* model,
                                        const std::set<int64_t>& ids) {
@@ -176,14 +169,13 @@ void DeleteNotes(const std::set<const NoteNode*>& notes,
 // Creates a toast which will undo the changes made to the note model if
 // the user presses the undo button, and the UndoManagerWrapper allows the undo
 // to go through.
-MDCSnackbarMessage* CreateToastWithWrapper(NSString* text) {
+SnackbarMessage* CreateToastWithWrapper(NSString* text) {
   TriggerHapticFeedbackForNotification(UINotificationFeedbackTypeSuccess);
-  MDCSnackbarMessage* message = [MDCSnackbarMessage messageWithText:text];
-  message.category = kNotesSnackbarCategory;
+  SnackbarMessage* message = [[SnackbarMessage alloc] initWithTitle:text];
   return message;
 }
 
-MDCSnackbarMessage* CreateOrUpdateNoteWithToast(
+SnackbarMessage* CreateOrUpdateNoteWithToast(
     const NoteNode* node,
     NSString* content,
     const GURL& url,
@@ -220,7 +212,7 @@ MDCSnackbarMessage* CreateOrUpdateNoteWithToast(
   return CreateToastWithWrapper(text);
 }
 
-MDCSnackbarMessage* CreateNoteAtPositionWithToast(
+SnackbarMessage* CreateNoteAtPositionWithToast(
     NSString* title,
     const GURL& url,
     const vivaldi::NoteNode* folder,
@@ -238,7 +230,7 @@ MDCSnackbarMessage* CreateNoteAtPositionWithToast(
   return CreateToastWithWrapper(text);
 }
 
-MDCSnackbarMessage* UpdateNotePositionWithToast(
+SnackbarMessage* UpdateNotePositionWithToast(
     const vivaldi::NoteNode* node,
     const vivaldi::NoteNode* folder,
     size_t position,
@@ -269,7 +261,7 @@ void DeleteNotes(const std::set<const NoteNode*>& notes,
   DeleteNotes(notes, model, model->root_node());
 }
 
-MDCSnackbarMessage* DeleteNotesWithToast(
+SnackbarMessage* DeleteNotesWithToast(
     const std::set<const NoteNode*>& nodes,
     vivaldi::NotesModel* model,
     ProfileIOS* profile) {
@@ -315,7 +307,7 @@ bool MoveNotes(const std::set<const NoteNode*>& notes,
   return didPerformMove;
 }
 
-MDCSnackbarMessage* MoveNotesWithToast(
+SnackbarMessage* MoveNotesWithToast(
     const std::set<const NoteNode*>& nodes,
     vivaldi::NotesModel* model,
     const NoteNode* folder,

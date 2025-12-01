@@ -276,36 +276,6 @@ class NavigationControllerBrowserTest
   base::test::ScopedFeatureList feature_list_for_back_forward_cache_;
 };
 
-// Base class for tests that need to supply modifications to EmbeddedTestServer
-// which are required to be complete before it is started.
-class NavigationControllerBrowserTestNoServer
-    : public ContentBrowserTest,
-      public ::testing::WithParamInterface<
-          std::tuple<std::string /* render_document_level */,
-                     bool /* enable_back_forward_cache*/>> {
- public:
-  NavigationControllerBrowserTestNoServer() {
-    InitAndEnableRenderDocumentFeature(&feature_list_for_render_document_,
-                                       std::get<0>(GetParam()));
-    InitBackForwardCacheFeature(&feature_list_for_back_forward_cache_,
-                                std::get<1>(GetParam()));
-  }
-
- protected:
-  void SetUpOnMainThread() override {
-    host_resolver()->AddRule("*", "127.0.0.1");
-    content::SetupCrossSiteRedirector(embedded_test_server());
-  }
-
-  WebContentsImpl* contents() const {
-    return static_cast<WebContentsImpl*>(shell()->web_contents());
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_for_render_document_;
-  base::test::ScopedFeatureList feature_list_for_back_forward_cache_;
-};
-
 // Ensure that tests can navigate subframes cross-site in both default mode and
 // --site-per-process, but that they only go cross-process in the latter.
 IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, LoadCrossSiteSubframe) {
@@ -452,6 +422,15 @@ class LoadDataWithBaseURLWithPossiblyEmptyURLsBrowserTest
  private:
   base::test::ScopedFeatureList feature_list_for_render_document_;
 };
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    LoadDataWithBaseURLWithPossiblyEmptyURLsBrowserTest,
+    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
+                     testing::Bool(),
+                     testing::Bool(),
+                     testing::Bool()),
+    LoadDataWithBaseURLWithPossiblyEmptyURLsBrowserTest::DescribeParams);
 
 // Verifies that the base, history, and data URLs for LoadDataWithBaseURL end up
 // in the expected parts of the NavigationEntry in each stage of navigation, and
@@ -1225,6 +1204,13 @@ class LoadDataWithBaseURLBrowserTest
  private:
   base::test::ScopedFeatureList feature_list_for_render_document_;
 };
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    LoadDataWithBaseURLBrowserTest,
+    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
+                     testing::Bool()),
+    LoadDataWithBaseURLBrowserTest::DescribeParams);
 
 // Tests that navigating with LoadDataWithBaseURL succeeds even when the base
 // URL given is invalid.
@@ -4527,6 +4513,13 @@ class InitialEmptyDocNavigationControllerBrowserTest
  private:
   base::test::ScopedFeatureList feature_list_for_render_document_;
 };
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    InitialEmptyDocNavigationControllerBrowserTest,
+    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
+                     testing::Bool()),
+    InitialEmptyDocNavigationControllerBrowserTest::DescribeParams);
 
 // Test various navigation cases on newly-created subframes that have only
 // loaded the initial empty document (but might have done other navigations that
@@ -12008,6 +12001,13 @@ class ValidateCommitOriginTest : public NavigationControllerBrowserTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ValidateCommitOriginTest,
+    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
+                     testing::Bool()),
+    NavigationControllerBrowserTest::DescribeParams);
+
 // This test uses ASSERT_DEATH, which is not supported on Android.
 #if !BUILDFLAG(IS_ANDROID)
 // Test that if a frame's committed origin in session history is manually
@@ -14816,6 +14816,43 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   NavigationRequest::SetCommitTimeoutForTesting(base::TimeDelta());
 }
 
+// Base class for tests that need to supply modifications to EmbeddedTestServer
+// which are required to be complete before it is started.
+class NavigationControllerBrowserTestNoServer
+    : public ContentBrowserTest,
+      public ::testing::WithParamInterface<
+          std::tuple<std::string /* render_document_level */,
+                     bool /* enable_back_forward_cache*/>> {
+ public:
+  NavigationControllerBrowserTestNoServer() {
+    InitAndEnableRenderDocumentFeature(&feature_list_for_render_document_,
+                                       std::get<0>(GetParam()));
+    InitBackForwardCacheFeature(&feature_list_for_back_forward_cache_,
+                                std::get<1>(GetParam()));
+  }
+
+ protected:
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+    content::SetupCrossSiteRedirector(embedded_test_server());
+  }
+
+  WebContentsImpl* contents() const {
+    return static_cast<WebContentsImpl*>(shell()->web_contents());
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_for_render_document_;
+  base::test::ScopedFeatureList feature_list_for_back_forward_cache_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    NavigationControllerBrowserTestNoServer,
+    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
+                     testing::Bool()),
+    NavigationControllerBrowserTest::DescribeParams);
+
 // This test simulates a same-document navigation racing with a cross-document
 // one. Historically this would have been started as a same-document navigation
 // then restarted by the renderer as a cross-document navigation (see
@@ -15067,6 +15104,13 @@ class NavigationControllerAlertDialogBrowserTest
   bool callback_called_ = false;
 };
 
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    NavigationControllerAlertDialogBrowserTest,
+    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
+                     testing::Bool()),
+    NavigationControllerBrowserTest::DescribeParams);
+
 }  // namespace
 
 // Check that swapped out frames cannot spawn JavaScript dialogs.
@@ -15175,6 +15219,13 @@ class RequestMonitoringNavigationBrowserTest
   base::WeakPtrFactory<RequestMonitoringNavigationBrowserTest> weak_factory_{
       this};
 };
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    RequestMonitoringNavigationBrowserTest,
+    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
+                     testing::Bool()),
+    NavigationControllerBrowserTest::DescribeParams);
 
 // Helper for waiting until the main frame of |web_contents| has loaded
 // |expected_url| (and all subresources have finished loading).
@@ -16828,6 +16879,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   params->post_id = 2;
   params->url_is_unreachable = true;
   params->embedding_token = base::UnguessableToken::Create();
+  params->document_sequence_number = 1;
   RenderFrameHostImpl* rfh = contents()->GetPrimaryMainFrame();
   RenderProcessHostBadIpcMessageWaiter kill_waiter(rfh->GetProcess());
   static_cast<mojom::FrameHost*>(rfh)->DidCommitProvisionalLoad(
@@ -18554,6 +18606,13 @@ class SandboxedNavigationControllerBrowserTest
   base::test::ScopedFeatureList feature_list_;
 };
 
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SandboxedNavigationControllerBrowserTest,
+    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
+                     testing::Bool()),
+    NavigationControllerBrowserTest::DescribeParams);
+
 // Tests navigations which occur from a sandboxed frame are prevented.
 IN_PROC_BROWSER_TEST_P(SandboxedNavigationControllerBrowserTest,
                        TopLevelNavigationFromSandboxSource) {
@@ -18629,6 +18688,13 @@ class SandboxedNavigationControllerWithBfcacheBrowserTest
  private:
   base::test::ScopedFeatureList feature_list_;
 };
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SandboxedNavigationControllerWithBfcacheBrowserTest,
+    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
+                     testing::Values(true)),
+    NavigationControllerBrowserTest::DescribeParams);
 
 // Tests navigations which occur from a sandboxed frame are prevented.
 IN_PROC_BROWSER_TEST_P(SandboxedNavigationControllerWithBfcacheBrowserTest,
@@ -18749,6 +18815,13 @@ class NavigationControllerMainDocumentSequenceNumberBrowserTest
  private:
   std::vector<int64_t> main_frame_document_sequence_numbers_;
 };
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    NavigationControllerMainDocumentSequenceNumberBrowserTest,
+    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
+                     testing::Bool()),
+    NavigationControllerBrowserTest::DescribeParams);
 
 IN_PROC_BROWSER_TEST_P(
     NavigationControllerMainDocumentSequenceNumberBrowserTest,
@@ -21548,6 +21621,81 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
       /*actual_navigation_start=*/base::TimeTicks::Now());
 }
 
+// Tests that the JS task that created a navigation can defer the navigation
+// until it ends.
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTestNoServer,
+                       RendererInitiatedJsTaskDefersNavigation) {
+  net::test_server::ControllableHttpResponse fetch_response(
+      embedded_test_server(), "/fetch");
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  // Navigate to a page with an iframe.
+  GURL url1(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(a)"));
+  EXPECT_TRUE(NavigateToURL(contents(), url1));
+
+  FrameTreeNode* root = contents()->GetPrimaryFrameTree().root();
+  FrameTreeNode* child = root->child_at(0);
+
+  GURL child_url = child->current_url();
+  GURL child_url_2(embedded_test_server()->GetURL("a.com", "/title1.html"));
+
+  // Now navigate the child frame to another same-site document, but defer its
+  // JS task completion using a synchronous XHR request that we can control.
+  base::HistogramTester histogram_tester;
+  TestNavigationManager nav_manager(contents(), child_url_2);
+  ExecuteScriptAsync(child, R"(
+      location.href = '/title1.html';
+      var request = new XMLHttpRequest();
+      request.open("GET", "/fetch", /*async=*/false);
+      request.send("");
+      var fetch_success = (request.readyState == 4 && request.status == 200);
+    )");
+
+  // The navigation should be able to start.
+  EXPECT_TRUE(nav_manager.WaitForRequestStart());
+  nav_manager.ResumeNavigation();
+  NavigationRequest* request =
+      static_cast<NavigationRequest*>(nav_manager.GetNavigationHandle());
+  EXPECT_EQ(request, child->navigation_request());
+
+  // The navigation should be able to reach the WillProcessResponse stage,
+  // and gets deferred by RendererCancellationThrottle after that. Wait for the
+  // first NavigationThrottle deferral.
+  base::RunLoop run_loop;
+  request->GetNavigationThrottleRegistryForTesting()
+      ->SetFirstDeferralCallbackForTesting(run_loop.QuitClosure());
+  run_loop.Run();
+
+  // Check that the deferral is caused by RendererCancellationThrottle.
+  EXPECT_TRUE(request->IsDeferredForTesting());
+  ASSERT_EQ(request->GetNavigationThrottleRegistryForTesting()
+                ->GetDeferringThrottles()
+                .size(),
+            1u);
+  EXPECT_STREQ("RendererCancellationThrottle",
+               (*request->GetNavigationThrottleRegistryForTesting()
+                     ->GetDeferringThrottles()
+                     .begin())
+                   ->GetNameForLogging());
+  EXPECT_EQ(request->state(), NavigationRequest::WILL_PROCESS_RESPONSE);
+
+  // Unblock the JS task in the renderer by sending the response for the sync
+  // XHR request.
+  fetch_response.WaitForRequest();
+  fetch_response.Send(net::HTTP_OK, "foo");
+  fetch_response.Done();
+
+  // The navigation commits successfully, without hitting timeout.
+  ASSERT_TRUE(nav_manager.WaitForNavigationFinished());
+  EXPECT_TRUE(nav_manager.was_successful());
+  histogram_tester.ExpectUniqueSample(
+      "Navigation.RendererCancellationThrottle.NavigationCancelled", false, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Navigation.RendererCancellationThrottle.NotCancelled.TimeoutIsHit",
+      false, 1);
+}
+
 // Tests that renderer-initiated navigation cancellation from the same JS task
 // that created the navigation can still be triggered after WillProcessResponse,
 // as the browser defers the navigation until the JS task that started it
@@ -21571,6 +21719,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTestNoServer,
 
   // Now navigate the child frame to another same-site document, but cancel it
   // from the JS task after a synchronous XHR request that we can control.
+  base::HistogramTester histogram_tester;
   TestNavigationManager nav_manager(contents(), child_url_2);
   ExecuteScriptAsync(child, R"(
       location.href = '/title1.html';
@@ -21622,6 +21771,8 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTestNoServer,
   EXPECT_FALSE(nav_manager.was_successful());
   EXPECT_EQ(child_url, child->current_url());
   EXPECT_EQ(true, EvalJs(child, "fetch_success"));
+  histogram_tester.ExpectUniqueSample(
+      "Navigation.RendererCancellationThrottle.NavigationCancelled", true, 1);
 }
 
 // Tests that the crash of the renderer that created a navigation will cancel
@@ -21645,6 +21796,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTestNoServer,
 
   // Now navigate the child frame to another same-site page, but cancel it
   // from the JS task after a synchronous XHR request that we can control.
+  base::HistogramTester histogram_tester;
   TestNavigationManager nav_manager(contents(), child_url_2);
   ExecuteScriptAsync(child, R"(
       location.href = '/title1.html';
@@ -21699,13 +21851,37 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTestNoServer,
   // the child frame will be gone because the main frame's process crashed.
   if (AreAllSitesIsolatedForTesting())
     EXPECT_EQ(GURL(), child->current_url());
+  histogram_tester.ExpectUniqueSample(
+      "Navigation.RendererCancellationThrottle.NavigationCancelled", true, 1);
 }
 
+class RendererCancellationThrottleImprovementsTest
+    : public NavigationControllerBrowserTestNoServer {
+ public:
+  RendererCancellationThrottleImprovementsTest() {
+    // Set the cancellation timeout to a low enough value to wait in the test.
+    feature_list_.InitWithFeaturesAndParameters(
+        {{features::kRendererCancellationThrottleImprovements,
+          {{"timeout", "100ms"}}}},
+        {});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    RendererCancellationThrottleImprovementsTest,
+    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
+                     testing::Bool()),
+    NavigationControllerBrowserTest::DescribeParams);
+
 // Tests that if waiting for a renderer-initiated navigation cancellation takes
-// too long, a warning for an unresponsive renderer will be sent.
-IN_PROC_BROWSER_TEST_P(
-    NavigationControllerBrowserTestNoServer,
-    RendererInitiatedCancellationTimeoutWarnsUnresponsiveRenderer) {
+// too long and RendererCancellationThrottleImprovements is enabled, the
+// navigation is resumed.
+IN_PROC_BROWSER_TEST_P(RendererCancellationThrottleImprovementsTest,
+                       RendererInitiatedCancellationTimeout_NavigationResumed) {
   net::test_server::ControllableHttpResponse fetch_response(
       embedded_test_server(), "/fetch");
 
@@ -21721,13 +21897,9 @@ IN_PROC_BROWSER_TEST_P(
   GURL child_url = child->current_url();
   GURL child_url_2(embedded_test_server()->GetURL("b.com", "/title1.html"));
 
-  // Set the cancellation timeout to a low enough value to wait in the test.
-  RendererCancellationThrottle::SetCancellationTimeoutForTesting(
-      base::Milliseconds(100));
-  UnresponsiveRendererObserver unresponsive_renderer_observer(contents());
-
-  // Now navigate the child frame to another same-site page, but cancel it
-  // from the JS task after a synchronous XHR request that we can control.
+  // Now navigate the child frame to another same-site page, but run a
+  // synchronous XHR request that we can control, to keep the JS task running.
+  base::HistogramTester histogram_tester;
   TestNavigationManager nav_manager(contents(), child_url_2);
   ExecuteScriptAsync(child, R"(
       location.href = '/title1.html';
@@ -21735,11 +21907,9 @@ IN_PROC_BROWSER_TEST_P(
       request.open("GET", "/fetch", /*async=*/false);
       request.send("");
       var fetch_success = (request.readyState == 4 && request.status == 200);
-      window.stop();
     )");
 
-  // The navigation should be able to start, as the synchronous XHR request
-  // hasn't completed, and the navigation hasn't been canceled yet.
+  // The navigation should be able to start.
   EXPECT_TRUE(nav_manager.WaitForRequestStart());
   nav_manager.ResumeNavigation();
   NavigationRequest* request =
@@ -21749,10 +21919,12 @@ IN_PROC_BROWSER_TEST_P(
   // The navigation should be able to reach the WillProcessResponse stage,
   // and gets deferred by RendererCancellationThrottle after that. Wait for the
   // first NavigationThrottle deferral.
-  base::RunLoop run_loop;
-  request->GetNavigationThrottleRegistryForTesting()
-      ->SetFirstDeferralCallbackForTesting(run_loop.QuitClosure());
-  run_loop.Run();
+  {
+    base::RunLoop run_loop;
+    request->GetNavigationThrottleRegistryForTesting()
+        ->SetFirstDeferralCallbackForTesting(run_loop.QuitClosure());
+    run_loop.Run();
+  }
 
   // Check that the deferral is caused by RendererCancellationThrottle.
   EXPECT_TRUE(request->IsDeferredForTesting());
@@ -21760,24 +21932,34 @@ IN_PROC_BROWSER_TEST_P(
                 ->GetDeferringThrottles()
                 .size(),
             1u);
-  EXPECT_STREQ("RendererCancellationThrottle",
-               (*request->GetNavigationThrottleRegistryForTesting()
-                     ->GetDeferringThrottles()
-                     .begin())
-                   ->GetNameForLogging());
+  auto* throttle = static_cast<RendererCancellationThrottle*>(
+      *request->GetNavigationThrottleRegistryForTesting()
+           ->GetDeferringThrottles()
+           .begin());
+  EXPECT_STREQ("RendererCancellationThrottle", throttle->GetNameForLogging());
+
   EXPECT_EQ(request->state(), NavigationRequest::WILL_PROCESS_RESPONSE);
+  {
+    // Wait for the throttle to hit the timeout.
+    base::RunLoop run_loop;
+    throttle->SetOnTimeoutCallbackForTesting(run_loop.QuitClosure());
+    run_loop.Run();
+    histogram_tester.ExpectUniqueSample(
+        "Navigation.RendererCancellationThrottle.NotCancelled.TimeoutIsHit",
+        true, 1);
+  }
 
-  // Verify that we will be notified about the unresponsive renderer.
-  RenderProcessHost* hung_process = unresponsive_renderer_observer.Wait();
-  EXPECT_EQ(hung_process, child->current_frame_host()->GetProcess());
+  // Send the fetch response, getting the renderer out of the busy loop, so that
+  // the navigation can commit.
+  fetch_response.WaitForRequest();
+  fetch_response.Send(net::HTTP_OK, "foo");
+  fetch_response.Done();
 
-  // Verify that the throttle still waits for the renderer-initiated
-  // cancellation.
-  EXPECT_TRUE(request->IsDeferredForTesting());
-
-  // Reset the cancellation timeout to the default value.
-  RendererCancellationThrottle::SetCancellationTimeoutForTesting(
-      base::TimeDelta());
+  // The navigation commits successfully.
+  ASSERT_TRUE(nav_manager.WaitForNavigationFinished());
+  EXPECT_TRUE(nav_manager.was_successful());
+  histogram_tester.ExpectUniqueSample(
+      "Navigation.RendererCancellationThrottle.NavigationCancelled", false, 1);
 }
 
 // Tests that navigating to a document that was previously sandboxed but later
@@ -23562,6 +23744,13 @@ class IgnoreDuplicateNavsBrowserTest
   base::test::ScopedFeatureList feature_list_;
 };
 
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    IgnoreDuplicateNavsBrowserTest,
+    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
+                     testing::Bool()),
+    IgnoreDuplicateNavsBrowserTest::DescribeParams);
+
 // Tests that a link click navigation that's a duplicate of an ongoing link
 // click navigation gets ignored.
 IN_PROC_BROWSER_TEST_P(IgnoreDuplicateNavsBrowserTest,
@@ -23705,78 +23894,110 @@ IN_PROC_BROWSER_TEST_P(IgnoreDuplicateNavsBrowserTest,
   EXPECT_EQ(link_url, root->current_frame_host()->GetLastCommittedURL());
 }
 
+class IgnoreDuplicateNavsUserGestureBrowserTest
+    : public NavigationControllerBrowserTestBase,
+      public testing::WithParamInterface<
+          std::tuple<std::string /* render_document_level */,
+                     bool /* ignore_duplicate_navs */,
+                     bool /* only_with_user_gesture */,
+                     bool /* has_user_gesture */>> {
+ public:
+  IgnoreDuplicateNavsUserGestureBrowserTest() {
+    InitAndEnableRenderDocumentFeature(&feature_list_for_render_document_,
+                                       std::get<0>(GetParam()));
+
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
+    if (ignore_duplicate_navs()) {
+      enabled_features.push_back(features::kIgnoreDuplicateNavs);
+    } else {
+      disabled_features.push_back(features::kIgnoreDuplicateNavs);
+    }
+
+    if (only_with_user_gesture()) {
+      enabled_features.push_back(
+          features::kIgnoreDuplicateNavsOnlyWithUserGesture);
+    } else {
+      disabled_features.push_back(
+          features::kIgnoreDuplicateNavsOnlyWithUserGesture);
+    }
+    feature_list_.InitWithFeatures(enabled_features, disabled_features);
+  }
+
+  static std::string DescribeParams(
+      const testing::TestParamInfo<ParamType>& info) {
+    auto [render_document_level, ignore_duplicate_navs, only_with_user_gesture,
+          has_user_gesture] = info.param;
+    return base::StringPrintf(
+        "%s_%s_%s_%s",
+        GetRenderDocumentLevelNameForTestParams(render_document_level).c_str(),
+        ignore_duplicate_navs ? "IgnoreDuplicateNavs" : "NoIgnoreDuplicateNavs",
+        only_with_user_gesture ? "RequireGesture" : "NoRequireGesture",
+        has_user_gesture ? "WithGesture" : "WithoutGesture");
+  }
+
+ protected:
+  bool ignore_duplicate_navs() const { return std::get<1>(GetParam()); }
+  bool only_with_user_gesture() const { return std::get<2>(GetParam()); }
+  bool has_user_gesture() const { return std::get<3>(GetParam()); }
+
+ private:
+  base::test::ScopedFeatureList feature_list_for_render_document_;
+  base::test::ScopedFeatureList feature_list_;
+};
+
 INSTANTIATE_TEST_SUITE_P(
     All,
-    NavigationControllerAlertDialogBrowserTest,
+    IgnoreDuplicateNavsUserGestureBrowserTest,
     testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
+                     testing::Bool(),
+                     testing::Bool(),
                      testing::Bool()),
-    NavigationControllerBrowserTest::DescribeParams);
+    IgnoreDuplicateNavsUserGestureBrowserTest::DescribeParams);
+
+IN_PROC_BROWSER_TEST_P(IgnoreDuplicateNavsUserGestureBrowserTest,
+                       DuplicateNavigationBehavior) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "/navigation_controller/page_with_links.html"));
+  GURL link_url(embedded_test_server()->GetURL(
+      "/navigation_controller/simple_page_1.html"));
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
+  FrameTreeNode* root = contents()->GetPrimaryFrameTree().root();
+
+  TestNavigationManager nav_manager(shell()->web_contents(), link_url);
+  // Start navigation with or without a user gesture.
+  EXPECT_TRUE(ExecJs(contents(), "document.getElementById('thelink').click()",
+                     has_user_gesture() ? EXECUTE_SCRIPT_DEFAULT_OPTIONS
+                                        : EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_TRUE(nav_manager.WaitForRequestStart());
+  // Trigger a duplicate navigation.
+  EXPECT_TRUE(ExecJs(contents(), "document.getElementById('thelink').click()",
+                     has_user_gesture() ? EXECUTE_SCRIPT_DEFAULT_OPTIONS
+                                        : EXECUTE_SCRIPT_NO_USER_GESTURE));
+
+  ASSERT_TRUE(nav_manager.WaitForNavigationFinished());
+
+  bool should_be_ignored = ignore_duplicate_navs() &&
+                           (!only_with_user_gesture() || has_user_gesture());
+  if (should_be_ignored) {
+    // The first navigation should not be ignored and should commit.
+    EXPECT_TRUE(nav_manager.was_committed());
+    // The second navigation should be ignored.
+    EXPECT_FALSE(root->navigation_request());
+  } else {
+    // The first navigation should be canceled.
+    EXPECT_FALSE(nav_manager.was_committed());
+    // The second navigation should commit.
+    EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+    EXPECT_EQ(link_url, contents()->GetLastCommittedURL());
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(
     All,
     NavigationControllerBrowserTest,
     testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
                      testing::Bool()),
     NavigationControllerBrowserTest::DescribeParams);
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    NavigationControllerBrowserTestNoServer,
-    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
-                     testing::Bool()),
-    NavigationControllerBrowserTest::DescribeParams);
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    NavigationControllerMainDocumentSequenceNumberBrowserTest,
-    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
-                     testing::Bool()),
-    NavigationControllerBrowserTest::DescribeParams);
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    RequestMonitoringNavigationBrowserTest,
-    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
-                     testing::Bool()),
-    NavigationControllerBrowserTest::DescribeParams);
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    SandboxedNavigationControllerBrowserTest,
-    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
-                     testing::Bool()),
-    NavigationControllerBrowserTest::DescribeParams);
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    SandboxedNavigationControllerWithBfcacheBrowserTest,
-    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
-                     testing::Values(true)),
-    NavigationControllerBrowserTest::DescribeParams);
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    InitialEmptyDocNavigationControllerBrowserTest,
-    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
-                     testing::Bool()),
-    InitialEmptyDocNavigationControllerBrowserTest::DescribeParams);
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    ValidateCommitOriginTest,
-    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
-                     testing::Bool()),
-    NavigationControllerBrowserTest::DescribeParams);
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    LoadDataWithBaseURLWithPossiblyEmptyURLsBrowserTest,
-    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
-                     testing::Bool(),
-                     testing::Bool(),
-                     testing::Bool()),
-    LoadDataWithBaseURLWithPossiblyEmptyURLsBrowserTest::DescribeParams);
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    LoadDataWithBaseURLBrowserTest,
-    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
-                     testing::Bool()),
-    LoadDataWithBaseURLBrowserTest::DescribeParams);
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    IgnoreDuplicateNavsBrowserTest,
-    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
-                     testing::Bool()),
-    IgnoreDuplicateNavsBrowserTest::DescribeParams);
 }  // namespace content

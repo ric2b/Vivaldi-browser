@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-lit-render-outside-of-view */
@@ -12,8 +12,11 @@ import {
   type ClickOutsideDialogEvent,
   type Dialog as DialogElement,
   DialogHorizontalAlignment,
+  DialogState,
   DialogVerticalPosition,
 } from './Dialog.js';
+
+export type ButtonDialogState = DialogState;
 
 export interface ButtonDialogData {
   openOnRender?: boolean;
@@ -29,6 +32,7 @@ export interface ButtonDialogData {
   closeOnESC?: boolean;
   closeOnScroll?: boolean;
   closeButton?: boolean;
+  state?: ButtonDialogState;
   dialogTitle: string;
 }
 
@@ -48,7 +52,15 @@ export class ButtonDialog extends HTMLElement {
     if (!this.#dialog) {
       throw new Error('Dialog not found');
     }
-    void this.#dialog.setDialogVisible(true);
+
+    if (this.#data?.state === DialogState.DISABLED) {
+      // If dialog is disabled start teardown process to return
+      // focus to caller.
+      void this.#dialog.setDialogVisible(false);
+    } else {
+      void this.#dialog.setDialogVisible(true);
+    }
+
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
@@ -61,6 +73,13 @@ export class ButtonDialog extends HTMLElement {
       evt.stopImmediatePropagation();
     }
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
+  }
+
+  set state(state: ButtonDialogState) {
+    if (this.#data) {
+      this.#data.state = state;
+      void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
+    }
   }
 
   #render(): void {
@@ -103,6 +122,7 @@ export class ButtonDialog extends HTMLElement {
         .closeButton=${this.#data.closeButton ?? false}
         .dialogTitle=${this.#data.dialogTitle}
         .jslogContext=${this.#data.jslogContext ?? ''}
+        .state=${this.#data.state ?? DialogState.EXPANDED}
         on-render=${ComponentHelpers.Directives.nodeRenderedCallback(node => {
           this.#dialog = node as DialogElement;
         })}

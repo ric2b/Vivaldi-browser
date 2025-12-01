@@ -910,40 +910,82 @@ FcReadLink (const FcChar8 *pathname,
 /* fcdbg.c */
 
 FcPrivate void
-FcValuePrintFile (FILE *f, const FcValue v);
+FcValuePrintFile (FILE *stream, const FcValue v);
+
+FcPrivate void
+FcValuePrintFileWithPosition (FILE *stream, const FcValue v, FcBool show_pos_mark);
 
 FcPrivate void
 FcValuePrintWithPosition (const FcValue v, FcBool show_pos_mark);
 
 FcPrivate void
+FcValueListPrintFileWithPosition (FILE *stream, FcValueListPtr l, const FcValueListPtr pos);
+
+FcPrivate void
 FcValueListPrintWithPosition (FcValueListPtr l, const FcValueListPtr pos);
+
+FcPrivate void
+FcValueListPrintFile (FILE *stream, FcValueListPtr l);
 
 FcPrivate void
 FcValueListPrint (FcValueListPtr l);
 
 FcPrivate void
+FcLangSetPrintFile (FILE *stream, const FcLangSet *ls);
+
+FcPrivate void
 FcLangSetPrint (const FcLangSet *ls);
+
+FcPrivate void
+FcOpPrintFile (FILE *stream, FcOp op_);
 
 FcPrivate void
 FcOpPrint (FcOp op);
 
 FcPrivate void
+FcTestPrintFile (FILE *stream, const FcTest *test);
+
+FcPrivate void
 FcTestPrint (const FcTest *test);
+
+FcPrivate void
+FcExprPrintFile (FILE *stream, const FcExpr *expr);
 
 FcPrivate void
 FcExprPrint (const FcExpr *expr);
 
 FcPrivate void
+FcEditPrintFile (FILE *stream, const FcEdit *edit);
+
+FcPrivate void
 FcEditPrint (const FcEdit *edit);
+
+FcPrivate void
+FcRulePrintFile (FILE *stream, const FcRule *rule);
 
 FcPrivate void
 FcRulePrint (const FcRule *rule);
 
 FcPrivate void
+FcCharSetPrintFile (FILE *stream, const FcCharSet *c);
+
+FcPrivate void
 FcCharSetPrint (const FcCharSet *c);
 
 FcPrivate void
+FcPatternPrintFile (FILE *stream, const FcPattern *p);
+
+FcPrivate void
+FcPatternPrint2File (FILE              *stream,
+                     FcPattern         *pp1,
+                     FcPattern         *pp2,
+                     const FcObjectSet *os);
+
+FcPrivate void
 FcPatternPrint2 (FcPattern *p1, FcPattern *p2, const FcObjectSet *os);
+
+FcPrivate void
+FcFontSetPrintFile (FILE *stream, const FcFontSet *s);
 
 extern FcPrivate int FcDebugVal;
 

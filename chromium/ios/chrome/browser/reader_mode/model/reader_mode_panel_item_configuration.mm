@@ -19,9 +19,6 @@
 
 namespace {
 
-// Duration for which the large entrypoint is displayed.
-const base::TimeDelta kLargeEntrypointDisplayedDuration = base::Seconds(4);
-
 // Activates Reader mode in the `web_state` if possible.
 void ActivateReaderModeInWebState(base::WeakPtr<web::WebState> web_state) {
   if (!web_state || web_state->IsBeingDestroyed()) {
@@ -33,17 +30,6 @@ void ActivateReaderModeInWebState(base::WeakPtr<web::WebState> web_state) {
     [reader_mode_tab_helper->GetReaderModeHandler()
         showReaderModeFromAccessPoint:ReaderModeAccessPoint::kContextualChip];
   }
-}
-
-// Helper which returns whether BWG is available in `web_state`.
-bool IsBwgAvailableForWebState(web::WebState* web_state) {
-  if (!web_state || web_state->IsBeingDestroyed()) {
-    return false;
-  }
-  ProfileIOS* profile =
-      ProfileIOS::FromBrowserState(web_state->GetBrowserState());
-  BwgService* bwg_service = BwgServiceFactory::GetForProfile(profile);
-  return bwg_service && bwg_service->IsBwgAvailableForWebState(web_state);
 }
 
 }  // namespace
@@ -64,7 +50,6 @@ ReaderModePanelItemConfiguration::ReaderModePanelItemConfiguration(
   relevance = ContextualPanelItemConfiguration::low_relevance - 1;
   entrypoint_custom_action =
       base::BindRepeating(&ActivateReaderModeInWebState, web_state->GetWeakPtr());
-  large_entrypoint_displayed_duration = kLargeEntrypointDisplayedDuration;
 
   ReaderModeTabHelper* reader_mode_tab_helper =
       ReaderModeTabHelper::FromWebState(web_state);
@@ -78,7 +63,7 @@ ReaderModePanelItemConfiguration::~ReaderModePanelItemConfiguration() = default;
 #pragma mark - ContextualPanelItemConfiguration
 
 void ReaderModePanelItemConfiguration::DidTransitionToSmallEntrypoint() {
-  if (IsBwgAvailableForWebState(web_state_observation_.GetSource())) {
+  if (IsProfileEligibleForBwg()) {
     Invalidate();
   }
 }
@@ -91,14 +76,16 @@ void ReaderModePanelItemConfiguration::ReaderModeTabHelperDestroyed(
 }
 
 void ReaderModePanelItemConfiguration::ReaderModeWebStateDidLoadContent(
-    ReaderModeTabHelper* tab_helper) {
-  if (IsBwgAvailableForWebState(web_state_observation_.GetSource())) {
+    ReaderModeTabHelper* tab_helper,
+    web::WebState* web_state) {
+  if (IsProfileEligibleForBwg()) {
     Invalidate();
   }
 }
 
 void ReaderModePanelItemConfiguration::ReaderModeWebStateWillBecomeUnavailable(
     ReaderModeTabHelper* tab_helper,
+    web::WebState* web_state,
     ReaderModeDeactivationReason reason) {}
 
 void ReaderModePanelItemConfiguration::ReaderModeDistillationFailed(
@@ -114,7 +101,7 @@ void ReaderModePanelItemConfiguration::WebStateDestroyed(
 }
 
 void ReaderModePanelItemConfiguration::WasHidden(web::WebState* web_state) {
-  if (IsBwgAvailableForWebState(web_state_observation_.GetSource())) {
+  if (IsProfileEligibleForBwg()) {
     Invalidate();
   }
 }
@@ -132,4 +119,15 @@ void ReaderModePanelItemConfiguration::Invalidate() {
     contextual_panel_tab_helper->InvalidateContextualPanelItemConfiguration(
         this);
   }
+}
+
+bool ReaderModePanelItemConfiguration::IsProfileEligibleForBwg() {
+  web::WebState* web_state = web_state_observation_.GetSource();
+  if (!web_state || web_state->IsBeingDestroyed()) {
+    return false;
+  }
+  ProfileIOS* profile =
+      ProfileIOS::FromBrowserState(web_state->GetBrowserState());
+  BwgService* bwg_service = BwgServiceFactory::GetForProfile(profile);
+  return bwg_service && bwg_service->IsProfileEligibleForBwg();
 }

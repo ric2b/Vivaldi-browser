@@ -1963,6 +1963,28 @@ TEST_F(FileUtilTest, DeleteContentUri) {
   EXPECT_FALSE(PathExists(uri_path));
 }
 
+TEST_F(FileUtilTest, WriteFileContentUri) {
+  FilePath dir = temp_dir_.GetPath().Append("dir");
+  CreateDirectory(dir);
+
+  FilePath dir_vp =
+      *test::android::GetVirtualDocumentPathFromCacheDirDirectory(dir);
+  FilePath file_vp = dir_vp.Append("file.txt");
+  ASSERT_TRUE(file_vp.IsVirtualDocumentPath());
+
+  ASSERT_FALSE(PathExists(file_vp));
+  EXPECT_TRUE(WriteFile(file_vp, "x"));
+  ASSERT_TRUE(PathExists(file_vp));
+
+  FilePath file_content_uri = *ResolveToContentUri(file_vp);
+
+  EXPECT_TRUE(WriteFile(file_content_uri, "foo"));
+
+  File::Info info;
+  ASSERT_TRUE(GetFileInfo(file_content_uri, &info));
+  ASSERT_EQ(info.size, 3u);
+}
+
 TEST_F(FileUtilTest, ResolveToContentUri) {
   FilePath dir = temp_dir_.GetPath().Append("dir");
   CreateDirectory(dir);
@@ -3268,6 +3290,24 @@ TEST_F(FileUtilTest, CreateNewTempDirectoryTest) {
   EXPECT_TRUE(DeleteFile(temp_dir));
 }
 
+TEST_F(FileUtilTest, CreateNewTempDirectoryPrefixTest) {
+  FilePath temp_dir;
+  ASSERT_TRUE(
+      CreateNewTempDirectory(FILE_PATH_LITERAL("test_dir_prefix"), &temp_dir));
+  EXPECT_TRUE(PathExists(temp_dir));
+
+  const FilePath::StringType matcher =
+#if BUILDFLAG(IS_WIN)
+      FILE_PATH_LITERAL("test_dir_prefix*");
+#else   // BUILDFLAG(IS_WIN)
+      FILE_PATH_LITERAL("*.test_dir_prefix.*");
+#endif  // BUILDFLAG(IS_WIN)
+
+  EXPECT_THAT(temp_dir.value(),
+              ::testing::HasSubstr(FILE_PATH_LITERAL("test_dir_prefix")));
+  EXPECT_TRUE(DeleteFile(temp_dir));
+}
+
 #if BUILDFLAG(IS_WIN)
 TEST_F(FileUtilTest, TempDirectoryParentTest) {
   if (!::IsUserAnAdmin()) {
@@ -3296,6 +3336,21 @@ TEST_F(FileUtilTest, CreateNewTemporaryDirInDirTest) {
   EXPECT_TRUE(temp_dir_.GetPath().IsParent(new_dir));
   EXPECT_TRUE(DeleteFile(new_dir));
 }
+
+#if BUILDFLAG(IS_WIN)
+TEST_F(FileUtilTest, GetSecureTempDirectory) {
+  FilePath temp_dir;
+  ASSERT_TRUE(GetSecureTempDirectory(&temp_dir));
+
+  FilePath expected_temp_dir;
+  if (internal::IsUserDefaultAdmin()) {
+    EXPECT_TRUE(PathService::Get(DIR_SYSTEM_TEMP, &expected_temp_dir));
+  } else {
+    EXPECT_TRUE(GetTempDir(&expected_temp_dir));
+  }
+  EXPECT_EQ(temp_dir, expected_temp_dir);
+}
+#endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
 TEST_F(FileUtilTest, GetShmemTempDirTest) {

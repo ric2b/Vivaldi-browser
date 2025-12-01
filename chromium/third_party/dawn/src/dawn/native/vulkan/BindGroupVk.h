@@ -41,10 +41,10 @@ class Device;
 class BindGroup final : public BindGroupBase, public PlacementAllocated {
   public:
     static ResultOrError<Ref<BindGroup>> Create(Device* device,
-                                                const BindGroupDescriptor* descriptor);
+                                                const UnpackedPtr<BindGroupDescriptor>& descriptor);
 
     BindGroup(Device* device,
-              const BindGroupDescriptor* descriptor,
+              const UnpackedPtr<BindGroupDescriptor>& descriptor,
               DescriptorSetAllocation descriptorSetAllocation);
 
     VkDescriptorSet GetHandle() const;
@@ -58,6 +58,9 @@ class BindGroup final : public BindGroupBase, public PlacementAllocated {
 
     // Dawn API
     void SetLabelImpl() override;
+
+    MaybeError InitializeStaticBindings();
+    MaybeError InitializeDynamicArray();
 
     // The descriptor set in this allocation outlives the BindGroup because it is owned by
     // the BindGroupLayout which is referenced by the BindGroup.

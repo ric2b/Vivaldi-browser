@@ -58,8 +58,8 @@ static constexpr uint32_t kMaxExternalImmediateConstantsPerPipeline = 16u;
 // Pick 32 here.
 static constexpr uint32_t kMaxImmediateConstantsPerPipeline = 32u;
 
-// Adapter Max limitation for user immediate constants is 64 bytes.
-static constexpr uint32_t kMaxSupportedImmediateDataBytes = 64u;
+// Adapter Max limitation for user immediate constants is 32 bytes.
+static constexpr uint32_t kMaxSupportedImmediateDataBytes = 32u;
 
 // Device Default limitation for user immediate constants is 16 bytes.
 static constexpr uint32_t kDefaultMaxImmediateDataBytes = 16u;
@@ -111,6 +111,13 @@ static constexpr uint32_t kTimestampQuantizationMask = 0xFFFF0000;
 // Max dynamic offset counts used to optimize Dawn internals.
 static constexpr uint32_t kMaxDynamicUniformBuffersPerPipelineLayout = 16u;
 static constexpr uint32_t kMaxDynamicStorageBuffersPerPipelineLayout = 16u;
+
+// Default limit for dynamic binding arrays.
+// TODO(https://issues.chromium.org/issues/435317394): Update once the spec decides on a value.
+static constexpr uint32_t kMaxDynamicBindingArraySize = 50'000;
+// TODO(https://issues.chromium.org/issues/435317394): Find if this is a reasonable amount to
+// reserve for placeholders.
+static constexpr uint32_t kReservedDynamicBindingArrayEntries = 1000;
 
 }  // namespace dawn
 

@@ -3,16 +3,6 @@
 <translationbundle lang="pt-PT">
 <translation id="3830627370375585318">Permitir que o Vivaldi aceda à rede na sua firewall ou definições
           de antivírus.</translation>
-<translation id="4200102020577305737">Aceda ao
-          menu Vivaldi &gt;
-          <ph name="SETTINGS_TITLE" />
-          &gt;
-          <ph name="ADVANCED_TITLE" />
-          &gt;
-          <ph name="PROXIES_TITLE" />
-          &gt;
-          Definições de LAN
-          e desmarque "Utilizar um servidor proxy para a rede local".</translation>
 <translation id="4932161901409251843">Aceda ao
           menu Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -35,4 +25,14 @@
         Se isto não resolver o problema, recomendamos que marque esta opção
         novamente para obter um melhor desempenho.</translation>
 <translation id="7496505986576158197">O Vivaldi existe graças ao projeto open source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> e a outro <ph name="BEGIN_LINK_OSS" />software open source<ph name="END_LINK_OSS" />.</translation>
+<translation id="89559930087159128">Vá ao
+          menu Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="SYSTEM_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Rede &amp; internet &gt; Proxy
+          e desmarque a opção "Detetar definições automaticamente".</translation>
 </translationbundle>

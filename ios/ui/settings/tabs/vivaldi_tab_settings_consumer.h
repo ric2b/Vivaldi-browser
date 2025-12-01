@@ -9,6 +9,7 @@
 
 // A protocol implemented by consumers to handle address bar and tab style
 // preference state change.
+NS_SWIFT_UI_ACTOR
 @protocol VivaldiTabsSettingsConsumer
 
 // Updates the state with the bottom omnibox preference value.

@@ -17,7 +17,6 @@
 #include "util/chrono_helpers.h"
 
 using testing::_;
-using testing::Invoke;
 using testing::Mock;
 using testing::SaveArg;
 using testing::StrictMock;
@@ -298,12 +297,12 @@ TEST_F(CompoundRtcpBuilderTest, WithEverythingThatCanFit) {
   // No ACKs could be included.
   EXPECT_CALL(*(client()), OnReceiverHasFrames(_)).Times(0);
   EXPECT_CALL(*(client()), OnReceiverIsMissingPackets(_))
-      .WillOnce(Invoke([&](std::vector<PacketNack> parsed_nacks) {
+      .WillOnce([&](std::vector<PacketNack> parsed_nacks) {
         // Some should be dropped.
         ASSERT_LT(parsed_nacks.size(), nacks.size());
         EXPECT_TRUE(std::equal(parsed_nacks.begin(), parsed_nacks.end(),
                                nacks.begin()));
-      }));
+      });
   ASSERT_TRUE(parser()->Parse(packet, max_feedback_frame_id));
   Mock::VerifyAndClearExpectations(client());
 
@@ -323,19 +322,19 @@ TEST_F(CompoundRtcpBuilderTest, WithEverythingThatCanFit) {
   EXPECT_CALL(*(client()), OnReceiverReferenceTimeAdvanced(_));
   EXPECT_CALL(*(client()), OnReceiverCheckpoint(checkpoint, _));
   EXPECT_CALL(*(client()), OnReceiverHasFrames(_))
-      .WillOnce(Invoke([&](std::vector<FrameId> parsed_acks) {
+      .WillOnce([&](std::vector<FrameId> parsed_acks) {
         // Some of the ACKs should be dropped.
         ASSERT_LT(parsed_acks.size(), acks.size());
         EXPECT_TRUE(
             std::equal(parsed_acks.begin(), parsed_acks.end(), acks.begin()));
-      }));
+      });
   EXPECT_CALL(*(client()), OnReceiverIsMissingPackets(_))
-      .WillOnce(Invoke([&](Span<const PacketNack> parsed_nacks) {
+      .WillOnce([&](Span<const PacketNack> parsed_nacks) {
         // All of the 48 NACKs provided should be present.
         ASSERT_EQ(kFewerNackCount, static_cast<int>(parsed_nacks.size()));
         EXPECT_TRUE(std::equal(parsed_nacks.begin(), parsed_nacks.end(),
                                nacks.begin()));
-      }));
+      });
   ASSERT_TRUE(parser()->Parse(second_packet, max_feedback_frame_id));
   Mock::VerifyAndClearExpectations(client());
 
@@ -351,17 +350,17 @@ TEST_F(CompoundRtcpBuilderTest, WithEverythingThatCanFit) {
   EXPECT_CALL(*(client()), OnReceiverReferenceTimeAdvanced(_));
   EXPECT_CALL(*(client()), OnReceiverCheckpoint(checkpoint, _));
   EXPECT_CALL(*(client()), OnReceiverHasFrames(_))
-      .WillOnce(Invoke([&](std::vector<FrameId> parsed_acks) {
+      .WillOnce([&](std::vector<FrameId> parsed_acks) {
         // All acks should be present.
         EXPECT_EQ(acks, parsed_acks);
-      }));
+      });
   EXPECT_CALL(*(client()), OnReceiverIsMissingPackets(_))
-      .WillOnce(Invoke([&](Span<const PacketNack> parsed_nacks) {
+      .WillOnce([&](Span<const PacketNack> parsed_nacks) {
         // Only the first 46 NACKs provided should be present.
         ASSERT_EQ(kEvenFewerNackCount, static_cast<int>(parsed_nacks.size()));
         EXPECT_TRUE(std::equal(parsed_nacks.begin(), parsed_nacks.end(),
                                nacks.begin()));
-      }));
+      });
   ASSERT_TRUE(parser()->Parse(third_packet, max_feedback_frame_id));
   Mock::VerifyAndClearExpectations(client());
 }

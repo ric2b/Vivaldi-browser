@@ -38,6 +38,9 @@ class AutofillClient;
 #if !BUILDFLAG(IS_IOS)
 class AutofillDriver;
 #endif  // !BUILDFLAG(IS_IOS)
+class AutofillProgressDialogController;
+class CardUnmaskOtpInputDialogController;
+class CardUnmaskPromptController;
 class CreditCardCvcAuthenticator;
 class CreditCardOtpAuthenticator;
 class TouchToFillDelegate;
@@ -45,6 +48,8 @@ class VirtualCardEnrollmentManager;
 
 namespace payments {
 
+class BnplStrategy;
+class BnplUiDelegate;
 class PaymentsWindowManager;
 
 // This class is for easier writing of tests. It is owned by TestAutofillClient.
@@ -80,6 +85,7 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
       base::OnceCallback<void(const std::u16string&, const std::u16string&)>
           callback) override;
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  bool LocalCardSaveIsSupported() override;
   PaymentsNetworkInterface* GetPaymentsNetworkInterface() override;
   MockMultipleRequestPaymentsNetworkInterface*
   GetMultipleRequestPaymentsNetworkInterface() override;
@@ -126,6 +132,22 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
       base::OnceCallback<void(const std::string&)>
           confirm_unmask_challenge_option_callback,
       base::OnceClosure cancel_unmasking_closure) override;
+
+#if BUILDFLAG(IS_IOS)
+  std::unique_ptr<AutofillProgressDialogController> ExtractProgressDialogModel()
+      override {
+    return nullptr;
+  }
+
+  std::unique_ptr<CardUnmaskOtpInputDialogController>
+  ExtractOtpInputDialogModel() override {
+    return nullptr;
+  }
+
+  CardUnmaskPromptController* GetCardUnmaskPromptModel() override {
+    return nullptr;
+  }
+#endif
 
   bool GetMandatoryReauthOptInPromptWasShown();
 
@@ -212,6 +234,12 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
   void SetUpDeviceBiometricAuthenticatorSuccessOnAutomotive();
 #endif
 
+  BnplStrategy* GetBnplStrategy() override;
+
+  BnplUiDelegate* GetBnplUiDelegate() override;
+
+  void set_bnpl_ui_delegate(std::unique_ptr<BnplUiDelegate> bnpl_ui_delegate);
+
  private:
   const raw_ref<AutofillClient> client_;
 
@@ -294,6 +322,16 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
   std::unique_ptr<AutofillOfferManager> autofill_offer_manager_;
   std::unique_ptr<MockMandatoryReauthManager>
       mock_payments_mandatory_reauth_manager_;
+
+  // The BnplStrategy used to determine the next step in a BNPL flow depending
+  // on the platform.
+  // Lazily initialized: access only through `GetBnplStrategy()`.
+  std::unique_ptr<BnplStrategy> bnpl_strategy_;
+
+  // The BnplUiDelegate used to handle the UI in a BNPL flow depending on the
+  // platform.
+  // Lazily initialized: access only through `GetBnplUiDelegate()`.
+  std::unique_ptr<BnplUiDelegate> bnpl_ui_delegate_;
 };
 
 }  // namespace payments

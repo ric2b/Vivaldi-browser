@@ -64,9 +64,10 @@ mojom::blink::BucketPoliciesPtr ToMojoBucketPolicies(
   }
 
   if (options->hasDurability()) {
-    policies->durability = options->durability() == "strict"
-                               ? mojom::blink::BucketDurability::kStrict
-                               : mojom::blink::BucketDurability::kRelaxed;
+    policies->durability =
+        options->durability() == V8StorageBucketDurability::Enum::kStrict
+            ? mojom::blink::BucketDurability::kStrict
+            : mojom::blink::BucketDurability::kRelaxed;
     policies->has_durability = true;
   }
 
@@ -139,8 +140,8 @@ ScriptPromise<StorageBucket> StorageBucketManager::open(
   GetBucketManager(script_state)
       ->OpenBucket(
           name, std::move(bucket_policies),
-          WTF::BindOnce(&StorageBucketManager::DidOpen, WrapPersistent(this),
-                        WrapPersistent(resolver), name));
+          BindOnce(&StorageBucketManager::DidOpen, WrapPersistent(this),
+                   WrapPersistent(resolver), name));
   return promise;
 }
 
@@ -165,8 +166,8 @@ ScriptPromise<IDLSequence<IDLString>> StorageBucketManager::keys(
   }
 
   GetBucketManager(script_state)
-      ->Keys(WTF::BindOnce(&StorageBucketManager::DidGetKeys,
-                           WrapPersistent(this), WrapPersistent(resolver)));
+      ->Keys(BindOnce(&StorageBucketManager::DidGetKeys, WrapPersistent(this),
+                      WrapPersistent(resolver)));
   return promise;
 }
 
@@ -199,8 +200,8 @@ ScriptPromise<IDLUndefined> StorageBucketManager::Delete(
 
   GetBucketManager(script_state)
       ->DeleteBucket(
-          name, WTF::BindOnce(&StorageBucketManager::DidDelete,
-                              WrapPersistent(this), WrapPersistent(resolver)));
+          name, BindOnce(&StorageBucketManager::DidDelete, WrapPersistent(this),
+                         WrapPersistent(resolver)));
   return promise;
 }
 

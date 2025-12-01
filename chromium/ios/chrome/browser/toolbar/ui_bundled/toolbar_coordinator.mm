@@ -16,8 +16,7 @@
 #import "ios/chrome/browser/orchestrator/ui_bundled/omnibox_focus_orchestrator.h"
 #import "ios/chrome/browser/orchestrator/ui_bundled/omnibox_focus_orchestrator_parity.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presentation_context.h"
-#import "ios/chrome/browser/prerender/model/prerender_service.h"
-#import "ios/chrome/browser/prerender/model/prerender_service_factory.h"
+#import "ios/chrome/browser/prerender/model/prerender_browser_agent.h"
 #import "ios/chrome/browser/segmentation_platform/model/segmentation_platform_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
@@ -36,6 +35,7 @@
 #import "ios/chrome/browser/toolbar/ui_bundled/adaptive_toolbar_view_controller.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_coordinator.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_view_controller_delegate.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/public/omnibox_position_util.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_constants.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_omnibox_consumer.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_type.h"
@@ -54,7 +54,7 @@
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/swift_constants_for_objective_c.h"
+#import "ios/chrome/browser/tab_switcher/tab_strip/ui/swift_constants_for_objective_c.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/buttons/toolbar_button.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_view.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_view_controller.h"
@@ -76,9 +76,7 @@ using vivaldi::IsVivaldiRunning;
                                   VivaldiATBConsumer,
                                   // End Vivaldi
 
-                                  ToolbarMediatorDelegate> {
-  raw_ptr<PrerenderService> _prerenderService;
-}
+                                  ToolbarMediatorDelegate>
 
 /// Whether this coordinator has been started.
 @property(nonatomic, assign) BOOL started;
@@ -264,10 +262,7 @@ using vivaldi::IsVivaldiRunning;
       self.primaryToolbarCoordinator.toolbarAnimatee;
   } // End Vivaldi
 
-  self.orchestrator.locationBarAnimatee =
-      [self.locationBarCoordinator locationBarAnimatee];
-  self.orchestrator.editViewAnimatee =
-      [self.locationBarCoordinator editViewAnimatee];
+  [self updateOrchestratorAnimatee];
 
   if (IsBottomOmniboxAvailable()) {
     [self.toolbarMediator setInitialOmniboxPosition];
@@ -282,7 +277,6 @@ using vivaldi::IsVivaldiRunning;
   }
 
   [self updateToolbarsLayout];
-  _prerenderService = PrerenderServiceFactory::GetForProfile(self.profile);
 
   [super start];
   self.started = YES;
@@ -293,7 +287,6 @@ using vivaldi::IsVivaldiRunning;
     return;
   }
   [super stop];
-  _prerenderService = nullptr;
   self.orchestrator.editViewAnimatee = nil;
   self.orchestrator.locationBarAnimatee = nil;
   self.orchestrator = nil;
@@ -327,7 +320,6 @@ using vivaldi::IsVivaldiRunning;
   // End Vivaldi
 
   [self.browser->GetCommandDispatcher() stopDispatchingToTarget:self];
-  _prerenderService = nullptr;
   self.started = NO;
 }
 
@@ -414,7 +406,13 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (BOOL)isLoadingPrerenderer {
-  return _prerenderService && _prerenderService->IsLoadingPrerender();
+  if (!_started) {
+    return NO;
+  }
+
+  PrerenderBrowserAgent* prerenderBrowserAgent =
+      PrerenderBrowserAgent::FromBrowser(self.browser);
+  return prerenderBrowserAgent && prerenderBrowserAgent->IsInsertingPrerender();
 }
 
 #pragma mark Omnibox and LocationBar
@@ -436,11 +434,14 @@ using vivaldi::IsVivaldiRunning;
   }
   [self.toolbarMediator locationBarFocusChangedTo:focused];
 
+  BOOL followSteadyState =
+      omnibox::ShouldFocusedOmniboxFollowSteadyStatePosition();
   // Disable toolbar animations when focusing the omnibox on secondary toolbar.
   // TODO(crbug.com/40275116): Add animation in OmniboxFocusOrchestrator if
   // needed.
   BOOL animateTransition = _enableAnimationsForOmniboxFocus &&
-                           _steadyStateOmniboxPosition == ToolbarType::kPrimary;
+                           (followSteadyState || _steadyStateOmniboxPosition ==
+                                                     ToolbarType::kPrimary);
 
   if (IsVivaldiRunning())
     animateTransition = _enableAnimationsForOmniboxFocus; // End Vivaldi
@@ -481,6 +482,10 @@ using vivaldi::IsVivaldiRunning;
   return [self.locationBarCoordinator showingOmniboxPopup];
 }
 
+- (void)setBottomOmniboxOffsetForPopup:(CGFloat)bottomOffset {
+  [self.toolbarMediator setBottomOmniboxOffsetForPopup:bottomOffset];
+}
+
 #pragma mark ToolbarHeightProviding
 
 - (CGFloat)collapsedPrimaryToolbarHeight {
@@ -510,21 +515,28 @@ using vivaldi::IsVivaldiRunning;
     return kDiamondToolbarHeight;
   }
 
+  if (IsVivaldiRunning()) {
+    CGFloat height =
+        self.primaryToolbarViewController.view.intrinsicContentSize.height;
+    if (!IsSplitToolbarMode(self.traitEnvironment) ||
+        CanShowTabStrip(self.traitEnvironment) ||
+        (_omniboxPosition == ToolbarType::kPrimary && _tabBarEnabled)) {
+      // When the adaptive toolbar is unsplit or the tab strip is visible, add a
+      // margin.
+      height += kTopToolbarUnsplitMargin;
+      return height;
+    } else {
+      return height;
+    }
+  } // End Vivaldi
+
   CGFloat height =
       self.primaryToolbarViewController.view.intrinsicContentSize.height;
   if (!IsSplitToolbarMode(self.traitEnvironment) ||
       CanShowTabStrip(self.traitEnvironment)) {
-
-    // Note: (prio@vivaldi.com) - Add the margin when omnibox is at the top.
-    // otherwise, it shows a gap between content view and status bar.
-    if (IsVivaldiRunning() &&
-        _omniboxPosition == ToolbarType::kPrimary) {
-
     // When the adaptive toolbar is unsplit or the tab strip is visible, add a
     // margin.
     height += kTopToolbarUnsplitMargin;
-    } // End Vivaldi
-
   }
   return height;
 }
@@ -605,7 +617,8 @@ using vivaldi::IsVivaldiRunning;
       self.browser->GetWebStateList()->GetActiveWebState();
   if (webState && IsVisibleURLNewTabPage(webState)) {
     self.primaryToolbarViewController.view.hidden =
-        IsSplitToolbarMode(self.traitEnvironment);
+        IsSplitToolbarMode(self.traitEnvironment) &&
+        !CanShowTabStrip(self.traitEnvironment);
   }
   } // End Vivaldi
 
@@ -798,6 +811,9 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)transitionOmniboxToToolbarType:(ToolbarType)toolbarType {
   _omniboxPosition = toolbarType;
+
+  [self updateOrchestratorAnimatee];
+
   OmniboxPositionBrowserAgent* positionBrowserAgent =
       OmniboxPositionBrowserAgent::FromBrowser(self.browser);
   switch (toolbarType) {
@@ -834,6 +850,20 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)transitionSteadyStateOmniboxToToolbarType:(ToolbarType)toolbarType {
   _steadyStateOmniboxPosition = toolbarType;
+}
+
+- (CGFloat)keyboardAttachedBottomOmniboxHeight {
+  BOOL followSteadyState =
+      omnibox::ShouldFocusedOmniboxFollowSteadyStatePosition();
+  if (_omniboxPosition == ToolbarType::kPrimary || !followSteadyState) {
+    return 0;
+  }
+
+  // The height of the location bar including symmetrical top and bottom
+  // margins.
+  return self.locationBarCoordinator.locationBarViewController.view.frame.size
+             .height +
+         2 * kBottomAdaptiveLocationBarTopMargin;
 }
 
 #pragma mark - Private
@@ -922,6 +952,33 @@ using vivaldi::IsVivaldiRunning;
     completion = nil;
   }
 }
+
+- (void)updateOrchestratorAnimatee {
+  id<ToolbarAnimatee> updatedToolbarAnimatee =
+      _omniboxPosition == ToolbarType::kPrimary
+          ? self.primaryToolbarCoordinator.toolbarAnimatee
+          : self.secondaryToolbarCoordinator.toolbarAnimatee;
+  BOOL willChangeToolbarAnimatee =
+      updatedToolbarAnimatee != self.orchestrator.toolbarAnimatee;
+
+  // If a change occurs, clear any previous animation effects to prevent the
+  // toolbar from remaining expanded
+  if (willChangeToolbarAnimatee) {
+    [self.orchestrator
+        transitionToStateOmniboxFocused:NO
+                        toolbarExpanded:NO
+                                trigger:OmniboxFocusTrigger::kOther
+                               animated:NO
+                             completion:nil];
+  }
+
+  self.orchestrator.toolbarAnimatee = updatedToolbarAnimatee;
+  self.orchestrator.locationBarAnimatee =
+      [self.locationBarCoordinator locationBarAnimatee];
+  self.orchestrator.editViewAnimatee =
+      [self.locationBarCoordinator editViewAnimatee];
+}
+
 
 #pragma mark - VIVALDI
 

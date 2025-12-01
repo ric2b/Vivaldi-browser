@@ -106,6 +106,12 @@ class RequestFilter {
                               const FilteredRequestInfo* request,
                               int net_error) = 0;
 
+  // All pending processing for the given id should be stopped once this is
+  // called.
+  virtual void OnRequestWillBeDestroyed(
+      content::BrowserContext* browser_context,
+      const FilteredRequestInfo* request) = 0;
+
  private:
   const Type type_;
   const int priority_;

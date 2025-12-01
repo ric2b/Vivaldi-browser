@@ -539,19 +539,15 @@ void ElementRareDataVector::SetCustomElementRegistry(CustomElementRegistry* regi
   SetField(FieldId::kCustomElementRegistry, registry);
 }
 
-void ElementRareDataVector::IncrementImplicitlyAnchoredElementCount() {
-  EnsureWrappedField<wtf_size_t>(FieldId::kImplicitlyAnchoredElementCount)++;
+ElementAnimationTriggerData* ElementRareDataVector::AnimationTriggerData() {
+  return static_cast<ElementAnimationTriggerData*>(
+      GetField(FieldId::kAnimationTriggerData));
 }
-void ElementRareDataVector::DecrementImplicitlyAnchoredElementCount() {
-  wtf_size_t& anchored_element_count =
-      EnsureWrappedField<wtf_size_t>(FieldId::kImplicitlyAnchoredElementCount);
-  DCHECK(anchored_element_count);
-  anchored_element_count--;
-}
-bool ElementRareDataVector::HasImplicitlyAnchoredElement() const {
-  wtf_size_t* anchored_element_count =
-      GetWrappedField<wtf_size_t>(FieldId::kImplicitlyAnchoredElementCount);
-  return anchored_element_count && *anchored_element_count;
+
+ElementAnimationTriggerData&
+ElementRareDataVector::EnsureAnimationTriggerData() {
+  return EnsureField<ElementAnimationTriggerData>(
+      FieldId::kAnimationTriggerData);
 }
 
 void ElementRareDataVector::Trace(blink::Visitor* visitor) const {

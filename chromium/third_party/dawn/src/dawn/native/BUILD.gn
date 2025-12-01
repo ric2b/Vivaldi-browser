@@ -173,6 +173,7 @@ source_set("sources") {
     ":utils_gen",
     "${dawn_root}/src/dawn/common",
     "${dawn_root}/src/tint/api",
+    "${dawn_root}/src/tint/api/common",
     "${dawn_root}/src/tint/lang/wgsl",
   ]
   defines = []
@@ -278,6 +279,8 @@ source_set("sources") {
     "Device.h",
     "DeviceGuard.cpp",
     "DeviceGuard.h",
+    "DynamicArrayState.cpp",
+    "DynamicArrayState.h",
     "DynamicUploader.cpp",
     "DynamicUploader.h",
     "EncodingContext.cpp",
@@ -393,6 +396,8 @@ source_set("sources") {
     "SystemEvent.h",
     "SystemHandle.cpp",
     "SystemHandle.h",
+    "TexelBufferView.cpp",
+    "TexelBufferView.h",
     "Texture.cpp",
     "Texture.h",
     "TintUtils.cpp",
@@ -714,18 +719,36 @@ source_set("sources") {
     sources += [
       "webgpu/BackendWGPU.cpp",
       "webgpu/BackendWGPU.h",
+      "webgpu/BindGroupLayoutWGPU.cpp",
+      "webgpu/BindGroupLayoutWGPU.h",
+      "webgpu/BindGroupWGPU.cpp",
+      "webgpu/BindGroupWGPU.h",
       "webgpu/BufferWGPU.cpp",
       "webgpu/BufferWGPU.h",
       "webgpu/CommandBufferWGPU.cpp",
       "webgpu/CommandBufferWGPU.h",
+      "webgpu/ComputePipelineWGPU.cpp",
+      "webgpu/ComputePipelineWGPU.h",
       "webgpu/DeviceWGPU.cpp",
       "webgpu/DeviceWGPU.h",
       "webgpu/Forward.h",
       "webgpu/ObjectWGPU.h",
       "webgpu/PhysicalDeviceWGPU.cpp",
       "webgpu/PhysicalDeviceWGPU.h",
+      "webgpu/PipelineLayoutWGPU.cpp",
+      "webgpu/PipelineLayoutWGPU.h",
       "webgpu/QueueWGPU.cpp",
       "webgpu/QueueWGPU.h",
+      "webgpu/RenderPipelineWGPU.cpp",
+      "webgpu/RenderPipelineWGPU.h",
+      "webgpu/SamplerWGPU.cpp",
+      "webgpu/SamplerWGPU.h",
+      "webgpu/ShaderModuleWGPU.cpp",
+      "webgpu/ShaderModuleWGPU.h",
+      "webgpu/TextureWGPU.cpp",
+      "webgpu/TextureWGPU.h",
+      "webgpu/ToWGPU.cpp",
+      "webgpu/ToWGPU.h",
       "webgpu/WebGPUError.h",
     ]
   }
@@ -745,7 +768,7 @@ source_set("sources") {
   if (dawn_enable_opengl) {
     public_deps += [
       ":opengl_loader_gen",
-      "${dawn_root}/src/tint/api/common:common",
+      "${dawn_root}/src/tint/api/common",
       "${dawn_root}/third_party/khronos:khronos_platform",
     ]
     sources += get_target_outputs(":opengl_loader_gen")

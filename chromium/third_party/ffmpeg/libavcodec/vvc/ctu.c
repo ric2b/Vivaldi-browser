@@ -20,6 +20,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/error.h"
 #include "libavutil/refstruct.h"
 
 #include "cabac.h"
@@ -1857,15 +1858,15 @@ static int palette_predicted(VVCLocalContext *lc, const bool local_dual_tree, in
     }
 
     for (int i = 0; i < predictor_size && nb_predicted < max_entries; i++) {
-        const int run = ff_vvc_palette_predictor_run(lc);
+        const int run = ff_vvc_palette_predictor_run(lc, predictor_size - i);
+        if (run < 0)
+            return run;
+
         if (run == 1)
             break;
 
         if (run > 1)
             i += run - 1;
-
-        if (i >= predictor_size)
-            return AVERROR_INVALIDDATA;
 
         predictor_reused[i] = true;
         for (int c = start; c < end; c++)
@@ -1885,11 +1886,11 @@ static int palette_signaled(VVCLocalContext *lc, const bool local_dual_tree,
     const VVCSPS *sps         = lc->fc->ps.sps;
     CodingUnit  *cu           = lc->cu;
     const int nb_predicted    = cu->plt[start].size;
-    const int nb_signaled     = nb_predicted < max_entries ? ff_vvc_num_signalled_palette_entries(lc) : 0;
+    const int nb_signaled     = nb_predicted < max_entries ? ff_vvc_num_signalled_palette_entries(lc, max_entries - nb_predicted) : 0;
     const int size            = nb_predicted + nb_signaled;
     const bool dual_tree_luma = local_dual_tree && cu->tree_type == DUAL_TREE_LUMA;
 
-    if (size > max_entries || nb_signaled < 0)
+    if (nb_signaled < 0)
         return AVERROR_INVALIDDATA;
 
     for (int c = start; c < end; c++) {
@@ -1965,7 +1966,7 @@ static void palette_qp(VVCLocalContext *lc, VVCTreeType tree_type, const bool es
             u16[off] = pix;                                         \
     } while (0)
 
-#define PALETTE_INDEX(x, y) index[(y) * cu->cb_width + (x)]
+#define PALETTE_INDEX(x, y) index[(y) * width + (x)]
 
 // 6.5.3 Horizontal and vertical traverse scan order array initialization process
 // The hTravScan and vTravScan tables require approximately 576 KB of memory.
@@ -1983,12 +1984,15 @@ static int palette_subblock_data(VVCLocalContext *lc,
     const CodingUnit *cu = lc->cu;
     TransformUnit *tu    = cu->tus.head;
     const VVCSPS *sps    = lc->fc->ps.sps;
+    const int width      = tu->tbs[0].tb_width;
+    const int height     = tu->tbs[0].tb_height;
     const int min_pos    = subset_id << 4;
-    const int max_pos    = FFMIN(min_pos + 16, cu->cb_width * cu->cb_height);
-    const int wmask      = cu->cb_width  - 1;
-    const int hmask      = cu->cb_height - 1;
-    const int wlog2      = av_log2(cu->cb_width);
-    const int hlog2      = av_log2(cu->cb_height);
+    const int max_pos    = FFMIN(min_pos + 16, width * height);
+    const int wmask      = width  - 1;
+    const int hmask      = height - 1;
+    const int wlog2      = av_log2(width);
+    const int hlog2      = av_log2(height);
+    const int start_idx  = tu->tbs[0].c_idx;
     const uint8_t esc    = cu->plt[tu->tbs[0].c_idx].size;
     uint8_t run_copy[16] = { 0 };
 
@@ -2039,10 +2043,11 @@ static int palette_subblock_data(VVCLocalContext *lc,
 
     for (int c = 0; c < tu->nb_tbs; c++) {
         TransformBlock *tb = &tu->tbs[c];
-        const Palette *plt = cu->plt + tb->c_idx;
+        const int c_idx    = tb->c_idx;
+        const Palette *plt = &cu->plt[c_idx];
         const int scale    = ff_vvc_palette_derive_scale(lc, tu, tb);
-        const int hs       = sps->hshift[c];
-        const int vs       = sps->vshift[c];
+        const int hs       = sps->hshift[c_idx] - sps->hshift[start_idx];
+        const int vs       = sps->vshift[c_idx] - sps->vshift[start_idx];
         uint8_t *u8        = (uint8_t *)tb->coeffs;
         uint16_t *u16      = (uint16_t *)tb->coeffs;
 
@@ -2052,8 +2057,8 @@ static int palette_subblock_data(VVCLocalContext *lc,
             if (!(xc & hs) && !(yc & vs)) {
                 const int v = PALETTE_INDEX(xc, yc);
                 if (v == esc) {
-                    const int coeff = ff_vvc_palette_escape_val(lc);
-                    if (coeff >= (1U << sps->bit_depth))
+                    const int coeff = ff_vvc_palette_escape_val(lc, (1 << sps->bit_depth) - 1);
+                    if (coeff < 0)
                         return AVERROR_INVALIDDATA;
                     const int pixel = av_clip_intp2(RSHIFT(coeff * scale, 6), sps->bit_depth);
                     PALETTE_SET_PIXEL(xc, yc, pixel);
@@ -2088,9 +2093,12 @@ static int hls_palette_coding(VVCLocalContext *lc, const VVCTreeType tree_type)
     uint8_t run_type[MAX_PALETTE_CU_SIZE * MAX_PALETTE_CU_SIZE];
     uint8_t index[MAX_PALETTE_CU_SIZE * MAX_PALETTE_CU_SIZE];
 
+    TransformUnit *tu;
+
     ff_vvc_channel_range(&start, &end, tree_type, sps->r->sps_chroma_format_idc);
 
-    if (!palette_add_tu(lc, start, end, tree_type))
+    tu = palette_add_tu(lc, start, end, tree_type);
+    if (!tu)
         return AVERROR(ENOMEM);
 
     predictor_size = pp[start].size;
@@ -2118,9 +2126,12 @@ static int hls_palette_coding(VVCLocalContext *lc, const VVCTreeType tree_type)
     palette_qp(lc, tree_type, escape_present);
 
     index[0] = 0;
-    for (int i = 0; i <= (cu->cb_width * cu->cb_height - 1) >> 4; i++)
-        palette_subblock_data(lc, max_index, i, transpose,
+    for (int i = 0; i <= (tu->tbs[0].tb_width * tu->tbs[0].tb_height - 1) >> 4; i++) {
+        ret = palette_subblock_data(lc, max_index, i, transpose,
             run_type, index, &prev_run_pos, &adjust);
+        if (ret < 0)
+            return ret;
+    }
 
     return 0;
 }

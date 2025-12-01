@@ -39,7 +39,9 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/interaction/browser_elements.h"
 #include "chrome/browser/ui/tabs/alert/tab_alert.h"
+#include "chrome/browser/ui/tabs/alert/tab_alert_controller.h"
 #include "chrome/browser/ui/tabs/organization/tab_declutter_controller.h"
 #include "chrome/browser/ui/tabs/organization/tab_organization_request.h"
 #include "chrome/browser/ui/tabs/organization/tab_organization_service.h"
@@ -49,7 +51,6 @@
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
-#include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/metrics_reporter/metrics_reporter.h"
 #include "chrome/browser/ui/webui/tab_search/tab_search_prefs.h"
@@ -72,6 +73,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
 #include "ui/color/color_provider.h"
+#include "ui/gfx/image/image_skia.h"
 
 namespace {
 constexpr base::TimeDelta kTabsChangeDelay = base::Milliseconds(50);
@@ -956,7 +958,8 @@ void TabSearchPageHandler::StartTabGroupTutorial() {
                              : nullptr;
   CHECK(tutorial_service);
 
-  const ui::ElementContext context = browser_->window()->GetElementContext();
+  const ui::ElementContext context =
+      BrowserElements::From(browser_)->GetContext();
   CHECK(context);
 
   user_education::TutorialIdentifier tutorial_id = kTabGroupTutorialId;
@@ -1405,7 +1408,7 @@ tab_search::mojom::TabPtr TabSearchPageHandler::GetTab(
     int index,
     std::string custom_last_active_text) const {
   auto tab_data = tab_search::mojom::Tab::New();
-  const tabs::TabInterface* const tab = tab_strip_model->GetTabAtIndex(index);
+  tabs::TabInterface* const tab = tab_strip_model->GetTabAtIndex(index);
 
   tab_data->active = tab->IsActivated();
   tab_data->visible = tab->IsVisible();
@@ -1452,8 +1455,12 @@ tab_search::mojom::TabPtr TabSearchPageHandler::GetTab(
 
   tab_data->show_icon = tab_renderer_data.show_icon;
 
+  // https://crbug.com/435697558: Use the max value of
+  // GetLastInteractionTimeTicks and GetLastActiveTimeTicks to account for
+  // interaction without across multiple windows without switching tabs.
   const base::TimeTicks last_active_time_ticks =
-      contents->GetLastActiveTimeTicks();
+      std::max(contents->GetLastInteractionTimeTicks(),
+               contents->GetLastActiveTimeTicks());
   tab_data->last_active_time_ticks = last_active_time_ticks;
 
   // last_active_time_for_testing can affect pixel tests depending on when the
@@ -1465,7 +1472,8 @@ tab_search::mojom::TabPtr TabSearchPageHandler::GetTab(
           ? custom_last_active_text
           : GetLastActiveElapsedText(last_active_time_ticks);
 
-  std::vector<tabs::TabAlert> alert_states = GetTabAlertStatesForTab(tab);
+  std::vector<tabs::TabAlert> alert_states =
+      tabs::TabAlertController::From(tab)->GetAllActiveAlerts();
   // Currently, we only report media alert states.
   std::ranges::copy_if(alert_states.begin(), alert_states.end(),
                        std::back_inserter(tab_data->alert_states),

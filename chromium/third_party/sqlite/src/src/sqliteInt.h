@@ -1031,8 +1031,8 @@ typedef INT16_TYPE LogEst;
 ** assuming n is a signed integer type.  UMXV(n) is similar for unsigned
 ** integer types.
 */
-#define SMXV(n) ((((i64)1)<<(sizeof(n)-1))-1)
-#define UMXV(n) ((((i64)1)<<(sizeof(n)))-1)
+#define SMXV(n) ((((i64)1)<<(sizeof(n)*8-1))-1)
+#define UMXV(n) ((((i64)1)<<(sizeof(n)*8))-1)
 
 /*
 ** Round up a number to the next larger multiple of 8.  This is used
@@ -2329,6 +2329,7 @@ struct CollSeq {
 #define SQLITE_AFF_INTEGER  0x44  /* 'D' */
 #define SQLITE_AFF_REAL     0x45  /* 'E' */
 #define SQLITE_AFF_FLEXNUM  0x46  /* 'F' */
+#define SQLITE_AFF_DEFER    0x58  /* 'X'  - defer computation until later */
 
 #define sqlite3IsNumericAffinity(X)  ((X)>=SQLITE_AFF_NUMERIC)
 
@@ -2791,7 +2792,6 @@ struct Index {
   unsigned hasStat1:1;     /* aiRowLogEst values come from sqlite_stat1 */
   unsigned bNoQuery:1;     /* Do not use this index to optimize queries */
   unsigned bAscKeyBug:1;   /* True if the bba7b69f9849b5bf bug applies */
-  unsigned bIdxRowid:1;    /* One or more of the index keys is the ROWID */
   unsigned bHasVCol:1;     /* Index references one or more VIRTUAL columns */
   unsigned bHasExpr:1;     /* Index contains an expression, either a literal
                            ** expression, or a reference to a VIRTUAL column */
@@ -2879,7 +2879,7 @@ struct AggInfo {
                           ** from source tables rather than from accumulators */
   u8 useSortingIdx;       /* In direct mode, reference the sorting index rather
                           ** than the source table */
-  u16 nSortingColumn;     /* Number of columns in the sorting index */
+  u32 nSortingColumn;     /* Number of columns in the sorting index */
   int sortingIdx;         /* Cursor number of the sorting index */
   int sortingIdxPTab;     /* Cursor number of pseudo-table */
   int iFirstReg;          /* First register in range for aCol[] and aFunc[] */
@@ -2888,8 +2888,8 @@ struct AggInfo {
     Table *pTab;             /* Source table */
     Expr *pCExpr;            /* The original expression */
     int iTable;              /* Cursor number of the source table */
-    i16 iColumn;             /* Column number within the source table */
-    i16 iSorterColumn;       /* Column number in the sorting index */
+    int iColumn;             /* Column number within the source table */
+    int iSorterColumn;       /* Column number in the sorting index */
   } *aCol;
   int nColumn;            /* Number of used entries in aCol[] */
   int nAccumulator;       /* Number of columns that show through to the output.
@@ -3064,6 +3064,7 @@ struct Expr {
     Table *pTab;           /* TK_COLUMN: Table containing column. Can be NULL
                            ** for a column of an index on an expression */
     Window *pWin;          /* EP_WinFunc: Window/Filter defn for a function */
+    int nReg;              /* TK_NULLS: Number of registers to NULL out */
     struct {               /* TK_IN, TK_SELECT, and TK_EXISTS */
       int iAddr;             /* Subroutine entry address */
       int regReturn;         /* Register used to hold return address */
@@ -5098,6 +5099,7 @@ void sqlite3ExprCodeGeneratedColumn(Parse*, Table*, Column*, int);
 void sqlite3ExprCodeCopy(Parse*, Expr*, int);
 void sqlite3ExprCodeFactorable(Parse*, Expr*, int);
 int sqlite3ExprCodeRunJustOnce(Parse*, Expr*, int);
+void sqlite3ExprNullRegisterRange(Parse*, int, int);
 int sqlite3ExprCodeTemp(Parse*, Expr*, int*);
 int sqlite3ExprCodeTarget(Parse*, Expr*, int);
 int sqlite3ExprCodeExprList(Parse*, ExprList*, int, int, u8);

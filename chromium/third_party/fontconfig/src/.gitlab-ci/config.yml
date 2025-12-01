@@ -1,4 +1,4 @@
-.default_tag: &default_tag "2025-07-02.2"
+.default_tag: &default_tag "2025-09-04.1"
 
 build_patterns:
   - name: "autotools shared expat"
@@ -62,6 +62,11 @@ test_patterns:
     parent: "meson shared libxml2"
   - name: "meson-install-static"
     parent: "meson static libxml2"
+  - name: "ASAN/UBSAN"
+    variables:
+      FC_BUILDSYS: meson
+      FC_BUILD_TYPE: shared
+      FC_BUILD_ASAN: address,undefined
 
 distributions:
   - name: alpine
@@ -184,7 +189,9 @@ packages:
         "mingw64-libxml2",
         "rust",
         "cargo",
-        "bindgen-cli"
+        "bindgen-cli",
+        "libasan",
+        "libubsan"
       ]
   freebsd:
     needed:

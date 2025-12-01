@@ -198,6 +198,10 @@ constexpr auto kPresetSources = base::MakeFixedFlatMap<std::string_view,
      {"c29c4544-679b-4335-94f2-b27c7d099803",
       {.kind = PresetKind::kRegional,
        .url = "https://secure.fanboy.co.nz/fanboy-turkish.txt"}},
+     {"dc538eac-57a7-42d5-ac12-34c810440d2b",
+      {.kind = PresetKind::kRegional,
+       .url = "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/"
+              "SerboCroatianList.txt"}},
      // Removed Jan 2025 - Was I don't care about cookies
      // https://www.i-dont-care-about-cookies.eu/abp/
      // Not maintained anymore and expired certificate.
@@ -230,17 +234,15 @@ KnownRuleSourcesHandlerImpl::KnownRuleSourcesHandlerImpl(
     RuleManager* rule_manager,
     int storage_version,
     const std::string& locale,
-    const std::array<std::vector<KnownRuleSource>, kRuleGroupCount>&
-        known_sources,
-    std::array<std::set<base::Uuid>, kRuleGroupCount> deleted_presets,
+    const RuleGroupArray<std::vector<KnownRuleSource>>& known_sources,
+    RuleGroupArray<std::set<base::Uuid>> deleted_presets,
     base::RepeatingClosure schedule_save)
     : rule_manager_(rule_manager),
       deleted_presets_(std::move(deleted_presets)),
       schedule_save_(std::move(schedule_save)) {
-  for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
-    for (const auto& source : known_sources[static_cast<size_t>(group)]) {
-      known_sources_[static_cast<size_t>(group)].insert(
-          {source.core.id(), source});
+  for (auto [group, known_sources_list] : known_sources) {
+    for (const auto& source : known_sources_list) {
+      known_sources_[group].insert({source.core.id(), source});
     }
   }
 
@@ -310,12 +312,12 @@ KnownRuleSourcesHandlerImpl::KnownRuleSourcesHandlerImpl(
 KnownRuleSourcesHandlerImpl::~KnownRuleSourcesHandlerImpl() = default;
 
 KnownRuleSources& KnownRuleSourcesHandlerImpl::GetSourceMap(RuleGroup group) {
-  return known_sources_[static_cast<size_t>(group)];
+  return known_sources_[group];
 }
 
 const KnownRuleSources& KnownRuleSourcesHandlerImpl::GetSourceMap(
     RuleGroup group) const {
-  return known_sources_[static_cast<size_t>(group)];
+  return known_sources_[group];
 }
 
 const KnownRuleSources& KnownRuleSourcesHandlerImpl::GetSources(
@@ -325,7 +327,7 @@ const KnownRuleSources& KnownRuleSourcesHandlerImpl::GetSources(
 
 const std::set<base::Uuid>& KnownRuleSourcesHandlerImpl::GetDeletedPresets(
     RuleGroup group) const {
-  return deleted_presets_[static_cast<size_t>(group)];
+  return deleted_presets_[group];
 }
 
 bool KnownRuleSourcesHandlerImpl::AddSource(RuleGroup group,
@@ -379,8 +381,7 @@ bool KnownRuleSourcesHandlerImpl::RemoveSource(RuleGroup group,
 
   DisableSource(group, source_id);
   if (known_source->second.preset_id.is_valid())
-    deleted_presets_[static_cast<size_t>(group)].insert(
-        known_source->second.preset_id);
+    deleted_presets_[group].insert(known_source->second.preset_id);
   known_sources.erase(known_source);
 
   schedule_save_.Run();
@@ -441,10 +442,8 @@ bool KnownRuleSourcesHandlerImpl::IsPresetEnabled(base::Uuid preset_id) {
 std::optional<base::Uuid> KnownRuleSourcesHandlerImpl::GetPresetIdForSourceId(
     RuleGroup group,
     uint32_t source_id) {
-  auto source_and_preset_id =
-      source_id_to_preset_maps_[static_cast<size_t>(group)].find(source_id);
-  if (source_and_preset_id ==
-      source_id_to_preset_maps_[static_cast<size_t>(group)].end()) {
+  auto source_and_preset_id = source_id_to_preset_maps_[group].find(source_id);
+  if (source_and_preset_id == source_id_to_preset_maps_[group].end()) {
     return std::nullopt;
   }
 
@@ -482,13 +481,14 @@ void KnownRuleSourcesHandlerImpl::UpdateSourcesFromPresets(
     RuleGroup group,
     bool add_deleted_presets,
     bool store_missing_as_deleted) {
-  source_id_to_preset_maps_[static_cast<size_t>(group)].clear();
+  source_id_to_preset_maps_[group].clear();
   // Doesn't make sense to do both at the same time.
   DCHECK(!add_deleted_presets || !store_missing_as_deleted);
   KnownRuleSources& known_sources = GetSourceMap(group);
 
-  if (add_deleted_presets)
-    deleted_presets_[static_cast<size_t>(group)].clear();
+  if (add_deleted_presets) {
+    deleted_presets_[group].clear();
+  }
 
   std::map<base::Uuid, uint32_t> known_presets;
 
@@ -521,8 +521,7 @@ void KnownRuleSourcesHandlerImpl::UpdateSourcesFromPresets(
       known_source->second.preset_kind = preset.kind;
       // It wasn't added manually
       if (known_source->second.preset_id.is_valid()) {
-        source_id_to_preset_maps_[static_cast<size_t>(group)]
-                                 [preset_source.core.id()] = preset_id;
+        source_id_to_preset_maps_[group][preset_source.core.id()] = preset_id;
         // Keep the |preset_id| up to date if needed. This should only ever do
         // something if there was an issue with storage.
         known_source->second.preset_id = preset_id;
@@ -550,20 +549,17 @@ void KnownRuleSourcesHandlerImpl::UpdateSourcesFromPresets(
       bool enable = IsSourceEnabled(group, known_preset->second);
       RemoveSource(group, known_preset->second);
       known_presets.erase(known_preset);
-      source_id_to_preset_maps_[static_cast<size_t>(group)]
-                               [preset_source.core.id()] = preset_id;
+      source_id_to_preset_maps_[group][preset_source.core.id()] = preset_id;
       AddSource(group, std::move(preset_source), enable);
     } else if (store_missing_as_deleted) {
       // NOTE(julien): We weren't keeping track of deleted presets before.
       // This allows us to remedy that for people who had old setups.
       // This will break addition of new presets for those people, so we
       // shouldn't add new presets too soon after this.
-      deleted_presets_[static_cast<size_t>(group)].insert(preset_id);
-    } else if (deleted_presets_[static_cast<size_t>(group)].count(preset_id) ==
-                   0 ||
+      deleted_presets_[group].insert(preset_id);
+    } else if (deleted_presets_[group].count(preset_id) == 0 ||
                !preset.removable) {
-      source_id_to_preset_maps_[static_cast<size_t>(group)]
-                               [preset_source.core.id()] = preset_id;
+      source_id_to_preset_maps_[group][preset_source.core.id()] = preset_id;
       AddSource(group, std::move(preset_source), false);
     }
   }

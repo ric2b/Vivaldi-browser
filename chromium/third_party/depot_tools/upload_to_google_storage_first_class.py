@@ -134,7 +134,7 @@ def upload_to_google_storage(file: str, base_url: str, object_name: str,
         raise Exception(
             code, 'Encountered error on uploading %s to %s\n%s' %
             (file, file_url, err))
-    pattern = re.escape(file_url) + '#(?P<generation>\d+)'
+    pattern = re.escape(file_url) + r'#(?P<generation>\d+)'
     # The geneartion number is printed as part of the progress / status info
     # which gsutil outputs to stderr to keep separated from any final output
     # data.

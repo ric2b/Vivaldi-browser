@@ -334,14 +334,13 @@ class GPU_GLES2_EXPORT SkiaImageRepresentation
   class GPU_GLES2_EXPORT GraphiteTextureHolder
       : public base::RefCountedThreadSafe<GraphiteTextureHolder> {
    public:
-    explicit GraphiteTextureHolder(skgpu::graphite::BackendTexture texture)
-        : texture_(std::move(texture)) {}
+    explicit GraphiteTextureHolder(skgpu::graphite::BackendTexture texture);
 
     const skgpu::graphite::BackendTexture& texture() { return texture_; }
 
    protected:
     friend class base::RefCountedThreadSafe<GraphiteTextureHolder>;
-    virtual ~GraphiteTextureHolder() = default;
+    virtual ~GraphiteTextureHolder();
 
     skgpu::graphite::BackendTexture texture_;
   };
@@ -508,11 +507,15 @@ class GPU_GLES2_EXPORT SkiaImageRepresentation
 
   // Return whether we need to submit graphite's commands before EndAccess.
   // NOTE: Implemented only for Graphite.
-  virtual bool NeedGraphiteContextSubmitBeforeEndAccess() = 0;
+  bool NeedGraphiteContextSubmitBeforeEndAccess();
 
   virtual bool SupportsMultipleConcurrentReadAccess();
 
  protected:
+  // Return whether the graphite context submission can be deferred even after
+  // the backing is destroyed.
+  virtual bool SupportsDeferredGraphiteSubmit();
+
   virtual void EndWriteAccess() = 0;
   virtual void EndReadAccess() = 0;
 };
@@ -626,9 +629,6 @@ class GPU_GLES2_EXPORT SkiaGaneshImageRepresentation
   std::unique_ptr<ScopedReadAccess> BeginScopedReadAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores) override;
-
-  // Return false for ganesh.
-  bool NeedGraphiteContextSubmitBeforeEndAccess() final;
 
  protected:
   friend class WrappedSkiaGaneshCompoundImageRepresentation;
@@ -765,8 +765,6 @@ class GPU_GLES2_EXPORT SkiaGraphiteImageRepresentation
   std::unique_ptr<ScopedReadAccess> BeginScopedReadAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores) override;
-
-  bool NeedGraphiteContextSubmitBeforeEndAccess() override;
 
  protected:
   friend class WrappedSkiaGraphiteCompoundImageRepresentation;
@@ -923,9 +921,37 @@ class GPU_GLES2_EXPORT WebNNTensorRepresentation
                             SharedImageBacking* backing,
                             MemoryTypeTracker* tracker)
       : SharedImageRepresentation(manager, backing, tracker) {}
+
+  class GPU_GLES2_EXPORT ScopedAccess
+      : public ScopedAccessBase<WebNNTensorRepresentation> {
+   public:
+    ScopedAccess(base::PassKey<WebNNTensorRepresentation> pass_key,
+                 WebNNTensorRepresentation* representation,
+                 AccessMode access_mode);
+    ~ScopedAccess();
+
+#if BUILDFLAG(IS_WIN)
+    scoped_refptr<gfx::D3DSharedFence> GetAcquireFence() const;
+    void SetReleaseFence(scoped_refptr<gfx::D3DSharedFence> release_fence);
+#endif
+  };
+
+  std::unique_ptr<ScopedAccess> BeginScopedAccess();
+
 #if BUILDFLAG(IS_WIN)
   virtual Microsoft::WRL::ComPtr<ID3D12Resource> GetD3D12Buffer() const;
 #endif  // BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_APPLE)
+  virtual IOSurfaceRef GetIOSurface() const;
+#endif  // BUILDFLAG(IS_APPLE)
+ protected:
+#if BUILDFLAG(IS_WIN)
+  virtual scoped_refptr<gfx::D3DSharedFence> GetAcquireFence() const = 0;
+  virtual void SetReleaseFence(
+      scoped_refptr<gfx::D3DSharedFence> release_fence) = 0;
+#endif  // BUILDFLAG(IS_WIN)
+  virtual bool BeginAccess() = 0;
+  virtual void EndAccess() = 0;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1187,6 +1213,12 @@ class GPU_GLES2_EXPORT VideoImageRepresentation
       return representation()->GetD3D11Texture();
     }
 #endif  // BUILDFLAG(IS_WIN)
+
+#if BUILDFLAG(IS_ANDROID)
+    AHardwareBuffer* GetAHardwareBuffer() const {
+      return representation()->GetAHardwareBuffer();
+    }
+#endif  // BUILDFLAG(IS_ANDROID)
   };
 
   VideoImageRepresentation(SharedImageManager* manager,
@@ -1201,6 +1233,11 @@ class GPU_GLES2_EXPORT VideoImageRepresentation
 #if BUILDFLAG(IS_WIN)
   virtual Microsoft::WRL::ComPtr<ID3D11Texture2D> GetD3D11Texture() const = 0;
 #endif  // BUILDFLAG(IS_WIN)
+
+#if BUILDFLAG(IS_ANDROID)
+  virtual AHardwareBuffer* GetAHardwareBuffer() const = 0;
+#endif  // BUILDFLAG(IS_ANDROID)
+
   virtual bool BeginWriteAccess() = 0;
   virtual void EndWriteAccess() = 0;
   virtual bool BeginReadAccess() = 0;

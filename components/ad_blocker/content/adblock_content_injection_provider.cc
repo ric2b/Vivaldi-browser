@@ -2,12 +2,14 @@
 
 #include "components/ad_blocker/content/adblock_content_injection_provider.h"
 
-#include "components/ad_blocker/content/adblock_document_activations.h"
+#include "components/ad_blocker/content/adblock_document_state.h"
+#include "components/ad_blocker/content/adblock_navigation_tracker_impl.h"
 #include "components/ad_blocker/content/adblock_rule_service_impl.h"
-#include "components/ad_blocker/content/adblock_rules_index.h"
+#include "components/ad_blocker/content/index/adblock_rules_index.h"
+#include "components/ad_blocker/content/simple_index_base_query.h"
 #include "components/ad_blocker/content/utils.h"
 #include "components/ad_blocker/public/content/adblock_rule_service.h"
-#include "components/ad_blocker/public/core/adblock_rule_manager.h"
+#include "components/ad_blocker/public/core/adblock_request_filter_rule_types.h"
 #include "components/content_injection/content_injection_service.h"
 #include "components/content_injection/content_injection_service_factory.h"
 #include "content/public/browser/render_frame_host.h"
@@ -55,23 +57,44 @@ ContentInjectionProvider::GetInjectionsForFrame(
       continue;
     }
 
-    RulesIndex::ActivationResults activations =
-        DocumentActivations::GetActivations(group, frame);
+    const ActivationResults* activations = nullptr;
+    if (url == frame->GetLastCommittedURL()) {
+      activations = &DocumentState::GetActivations(group, frame);
+    } else {
+      for (base::SafeRef<content::NavigationHandle> navigation_handle :
+           frame->GetPendingCommitCrossDocumentNavigations()) {
+        if (navigation_handle->GetURL() == url) {
+          activations =
+              &NavigationTrackerImpl::GetForNavigationHandle(*navigation_handle)
+                   ->GetActivations(group);
+        }
+      }
+    }
 
-    if (activations.IsDocumentDecision(flat::Decision_PASS) ||
-        activations.by_type[flat::ActivationType_ELEMENT_HIDE].IsDecision(
-            flat::Decision_PASS)) {
+    if (!activations) {
+      // Somehow, we are getting activations for a document for which the
+      // url doesn't match this frame. Unclear how this happens.
+      activations = &rule_index->FindActivations(
+          SimpleIndexBaseQuery(url, parent ? parent->GetLastCommittedOrigin()
+                                           : url::Origin::Create(url)));
+    }
+    CHECK(activations);
+
+    const bool disable_specific_rules =
+        activations->by_type[ActivationType::kSpecificHide].IsDecision(
+            RuleDecision::kPass);
+    const bool disable_generic_rules =
+        activations->by_type[ActivationType::kGenericHide].IsDecision(
+            RuleDecision::kPass);
+    if (activations->IsDocumentDecision(RuleDecision::kPass) ||
+        (disable_generic_rules && disable_specific_rules)) {
       continue;
     }
 
-    RulesIndex::InjectionData injection_data;
-    if (activations.by_type[flat::ActivationType_GENERIC_HIDE].IsDecision(
-            flat::Decision_PASS)) {
-      injection_data =
-          rule_index->GetInjectionDataForOrigin(document_origin, true);
-    } else {
-      injection_data =
-          rule_index->GetInjectionDataForOrigin(document_origin, false);
+    RulesIndex::InjectionData injection_data =
+        rule_index->GetInjectionDataForOrigin(
+            document_origin, disable_specific_rules, disable_generic_rules);
+    if (!disable_generic_rules) {
       stylesheet += rule_index->GetDefaultStylesheet();
     }
     stylesheet += injection_data.stylesheet;

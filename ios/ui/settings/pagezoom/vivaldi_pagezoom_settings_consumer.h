@@ -7,6 +7,7 @@
 
 // A protocol implemented by consumers for page zoom settings
 // preference state change.
+NS_SWIFT_UI_ACTOR
 @protocol VivaldiPageZoomSettingsConsumer
 - (void)setPreferenceForPageZoomLevel:(NSInteger)level;
 - (void)setPreferenceForDomainSettings:

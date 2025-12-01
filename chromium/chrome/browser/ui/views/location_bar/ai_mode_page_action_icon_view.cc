@@ -11,6 +11,9 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
+#include "chrome/browser/ui/omnibox/omnibox_controller.h"
+#include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
+#include "chrome/browser/ui/omnibox/omnibox_view.h"
 #include "chrome/browser/ui/search/omnibox_utils.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/icon_label_bubble_view.h"
@@ -18,13 +21,11 @@
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "chrome/grit/branded_strings.h"
-#include "components/omnibox/browser/omnibox_controller.h"
-#include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_triggered_feature_service.h"
-#include "components/omnibox/browser/omnibox_view.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/omnibox/common/omnibox_features.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/url_util.h"
@@ -50,7 +51,6 @@ AiModePageActionIconView::AiModePageActionIconView(
                          "AiMode",
                          kActionAiMode),
       browser_(browser) {
-  CHECK(browser_);
   image_container_view()->SetFlipCanvasOnPaintForRTLUI(false);
 
   SetProperty(views::kElementIdentifierKey, kAiModePageActionIconElementId);
@@ -59,10 +59,10 @@ AiModePageActionIconView::AiModePageActionIconView(
   SetUseTonalColorsWhenExpanded(true);
   SetBackgroundVisibility(BackgroundVisibility::kWithLabel);
 
-  // The accessible name should show the full text, independent of the what the
-  // label text is set to.
+  // The accessible name prompts the user to ask Google AI Mode.
   GetViewAccessibility().SetName(
-      l10n_util::GetStringUTF16(IDS_AI_MODE_ENTRYPOINT_LABEL),
+      l10n_util::GetStringUTF16(
+          IDS_STARTER_PACK_AI_MODE_ACTION_SUGGESTION_CONTENTS),
       ax::mojom::NameFrom::kAttribute);
 }
 
@@ -117,6 +117,11 @@ void AiModePageActionIconView::UpdateImpl() {
 }
 
 bool AiModePageActionIconView::ShouldShow() {
+  // browser_ can be null in tests
+  if (!browser_) {
+    return false;
+  }
+
   const auto* aim_eligibility_service =
       AimEligibilityServiceFactory::GetForProfile(browser_->GetProfile());
   if (!OmniboxFieldTrial::IsAimOmniboxEntrypointEnabled(
@@ -153,8 +158,24 @@ bool AiModePageActionIconView::ShouldShow() {
     return false;
   }
   const views::FocusManager* const focus_manager = GetFocusManager();
-  return focus_manager &&
-         location_bar_view->Contains(focus_manager->GetFocusedView());
+  const bool has_focus = focus_manager && location_bar_view->Contains(
+                                              focus_manager->GetFocusedView());
+
+  // ...unless the user triggers the following edge-case in the Omnibox while in
+  // a non-NTP page context. In this case, we suppress the AIM page action in
+  // order to ensure that it doesn't get visually "sandwiched" in between the
+  // other page actions that show up in this state.
+  const auto page_classification =
+      omnibox_view->model()->GetPageClassification();
+  const bool is_ntp =
+      (page_classification ==
+       metrics::OmniboxEventProto::INSTANT_NTP_WITH_OMNIBOX_AS_STARTING_FOCUS);
+  if (has_focus && !omnibox_view->model()->user_input_in_progress() &&
+      !omnibox_view->model()->PopupIsOpen() && !is_ntp) {
+    return false;
+  }
+
+  return has_focus;
 }
 
 OmniboxView* AiModePageActionIconView::GetOmniboxView() {

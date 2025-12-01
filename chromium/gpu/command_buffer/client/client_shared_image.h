@@ -15,13 +15,13 @@
 #include "base/memory/unsafe_shared_memory_pool.h"
 #include "base/task/single_thread_task_runner.h"
 #include "gpu/command_buffer/client/gpu_command_buffer_client_export.h"
+#include "gpu/command_buffer/client/internal/mappable_buffer.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/ipc/common/exported_shared_image.mojom-forward.h"
 #include "gpu/ipc/common/gpu_memory_buffer_handle_info.h"
-#include "gpu/ipc/common/gpu_memory_buffer_impl.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkPixmap.h"
 #include "third_party/skia/include/gpu/ganesh/GrTypes.h"
@@ -44,7 +44,9 @@ class CopyOutputSharedImageResult;
 namespace wgpu::dawn::wire::client {
 class Device;
 class Texture;
+class Buffer;
 struct TextureDescriptor;
+struct BufferDescriptor;
 }  // namespace wgpu::dawn::wire::client
 
 namespace gpu {
@@ -61,7 +63,7 @@ enum MailboxFlags : uint32_t;
 class SharedImageInterface;
 class ClientSharedImageInterface;
 class GpuChannelSharedImageInterface;
-class GpuMemoryBufferImpl;
+class MappableBuffer;
 class InterfaceBase;
 class RasterScopedAccess;
 struct SharedImageInfo;
@@ -69,6 +71,7 @@ class SharedImageInterfaceHolder;
 class SharedImageTexture;
 class TestSharedImageInterface;
 class WebGPUTextureScopedAccess;
+class WebGPUBufferScopedAccess;
 
 struct ExportedSharedImage;
 
@@ -116,15 +119,15 @@ class GPU_COMMAND_BUFFER_CLIENT_EXPORT ClientSharedImage
         base::WritableSharedMemoryMapping* mapping);
     static std::unique_ptr<ScopedMapping> Create(
         SharedImageMetadata metadata_,
-        GpuMemoryBufferImpl* gpu_memory_buffer,
+        MappableBuffer* mappable_buffer,
         bool is_already_mapped);
     static void StartCreateAsync(
         SharedImageMetadata metadata_,
-        GpuMemoryBufferImpl* gpu_memory_buffer,
+        MappableBuffer* mappable_buffer,
         base::OnceCallback<void(std::unique_ptr<ScopedMapping>)> result_cb);
     static void FinishCreateAsync(
         SharedImageMetadata metadata_,
-        GpuMemoryBufferImpl* gpu_memory_buffer,
+        MappableBuffer* mappable_buffer,
         base::OnceCallback<void(std::unique_ptr<ScopedMapping>)> result_cb,
         bool success);
   };
@@ -295,6 +298,14 @@ class GPU_COMMAND_BUFFER_CLIENT_EXPORT ClientSharedImage
       uint64_t usage,
       webgpu::MailboxFlags mailbox_flags);
 
+  std::unique_ptr<WebGPUBufferScopedAccess> BeginWebGPUBufferAccess(
+      webgpu::WebGPUInterface* webgpu,
+      const SyncToken& sync_token,
+      const wgpu::dawn::wire::client::Device& device,
+      const wgpu::dawn::wire::client::BufferDescriptor& desc,
+      uint64_t usage,
+      webgpu::MailboxFlags mailbox_flags);
+
 #if BUILDFLAG(IS_WIN)
   // Allows client to indicate the |gpu_memory_buffer_| to pre map its shared
   // memory region internally for performance optimization purposes. It is only
@@ -308,15 +319,15 @@ class GPU_COMMAND_BUFFER_CLIENT_EXPORT ClientSharedImage
   ~ClientSharedImage();
 
   // static
-  std::unique_ptr<GpuMemoryBufferImpl> CreateGpuMemoryBufferImplFromHandle(
+  std::unique_ptr<MappableBuffer> CreateMappableBufferFromHandle(
       gfx::GpuMemoryBufferHandle handle,
       const gfx::Size& size,
-      gfx::BufferFormat format,
+      viz::SharedImageFormat format,
       gfx::BufferUsage usage,
       gpu::SharedImageUsageSet si_usage,
-      GpuMemoryBufferImpl::CopyNativeBufferToShMemCallback
+      MappableBuffer::CopyNativeBufferToShMemCallback
           copy_native_buffer_to_shmem_callback =
-              GpuMemoryBufferImpl::CopyNativeBufferToShMemCallback(),
+              MappableBuffer::CopyNativeBufferToShMemCallback(),
       scoped_refptr<base::UnsafeSharedMemoryPool> pool = nullptr);
 
   // This constructor is used only when importing an owned ClientSharedImage,
@@ -329,6 +340,7 @@ class GPU_COMMAND_BUFFER_CLIENT_EXPORT ClientSharedImage
   friend class TestSharedImageInterface;
   friend class media::VideoFrame;
   friend class WebGPUTextureScopedAccess;
+  friend class WebGPUBufferScopedAccess;
 
   ClientSharedImage(const Mailbox& mailbox,
                     const SharedImageInfo& info,
@@ -383,7 +395,7 @@ class GPU_COMMAND_BUFFER_CLIENT_EXPORT ClientSharedImage
   SyncToken creation_sync_token_;
   SyncToken destruction_sync_token_;
 
-  std::unique_ptr<GpuMemoryBufferImpl> gpu_memory_buffer_;
+  std::unique_ptr<MappableBuffer> mappable_buffer_;
   base::WritableSharedMemoryMapping shared_memory_mapping_;
   std::optional<gfx::BufferUsage> buffer_usage_;
   scoped_refptr<SharedImageInterfaceHolder> sii_holder_;
@@ -575,6 +587,38 @@ class GPU_COMMAND_BUFFER_CLIENT_EXPORT WebGPUTextureScopedAccess {
   uint32_t texture_generation_ = 0;
   bool needs_present_ = false;
   bool readonly_;
+};
+
+class GPU_COMMAND_BUFFER_CLIENT_EXPORT WebGPUBufferScopedAccess {
+ public:
+  WebGPUBufferScopedAccess(const WebGPUBufferScopedAccess&) = delete;
+  WebGPUBufferScopedAccess& operator=(const WebGPUBufferScopedAccess&) = delete;
+  WebGPUBufferScopedAccess(WebGPUBufferScopedAccess&&) = delete;
+  WebGPUBufferScopedAccess& operator=(WebGPUBufferScopedAccess&&) = delete;
+
+  ~WebGPUBufferScopedAccess();
+
+  static SyncToken EndAccess(
+      std::unique_ptr<WebGPUBufferScopedAccess> scoped_access);
+
+  const wgpu::dawn::wire::client::Buffer& buffer();
+
+ private:
+  friend class ClientSharedImage;
+  WebGPUBufferScopedAccess(
+      webgpu::WebGPUInterface* webgpu,
+      ClientSharedImage* shared_image,
+      const SyncToken& sync_token,
+      const wgpu::dawn::wire::client::Device& device,
+      const wgpu::dawn::wire::client::BufferDescriptor& desc,
+      uint64_t usage,
+      webgpu::MailboxFlags mailbox_flags);
+
+  const raw_ptr<webgpu::WebGPUInterface> webgpu_;
+  std::unique_ptr<wgpu::dawn::wire::client::Buffer> buffer_;
+  raw_ptr<gpu::ClientSharedImage> shared_image_;
+  uint32_t wire_buffer_id_ = 0;
+  uint32_t wire_buffer_generation_ = 0;
 };
 
 }  // namespace gpu

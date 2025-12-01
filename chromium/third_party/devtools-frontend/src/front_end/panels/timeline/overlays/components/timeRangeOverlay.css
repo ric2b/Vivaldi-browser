@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 The Chromium Authors. All rights reserved.
+ * Copyright 2024 The Chromium Authors
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
@@ -71,12 +71,13 @@
   display: -webkit-box;
   white-space: break-spaces;
   background: var(--sys-color-cdt-base-container);
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
 .duration {
-  background: var(--sys-color-cdt-base-container) ;
+  background: var(--sys-color-cdt-base-container);
 }
 
 .label-text[contenteditable='true'] {

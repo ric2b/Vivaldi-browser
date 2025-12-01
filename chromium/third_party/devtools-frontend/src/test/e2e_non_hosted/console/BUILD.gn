@@ -1,4 +1,4 @@
-# Copyright 2025 The Chromium Authors. All rights reserved.
+# Copyright 2025 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -11,6 +11,7 @@ ts_e2e_library("console") {
     "console-accessors_test.ts",
     "console-autocomplete_test.ts",
     "console-clear_test.ts",
+    "console-context-menu_test.ts",
     "console-context-selector_test.ts",
     "console-errors_test.ts",
     "console-eval-blocked-by-CSP_test.ts",
@@ -20,6 +21,7 @@ ts_e2e_library("console") {
     "console-fetch-logging_test.ts",
     "console-filter_test.ts",
     "console-ignore-list_test.ts",
+    "console-insight_test.ts",
     "console-last-result_test.ts",
     "console-live-expressions_test.ts",
     "console-log_test.ts",
@@ -37,6 +39,7 @@ ts_e2e_library("console") {
   ]
 
   deps = [
+    "../../../front_end/panels/console:bundle",
     "../../e2e/helpers",
     "../shared",
   ]

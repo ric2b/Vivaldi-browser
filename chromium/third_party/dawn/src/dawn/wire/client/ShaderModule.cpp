@@ -25,6 +25,11 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/439062058): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "dawn/wire/client/ShaderModule.h"
 
 #include <memory>
@@ -120,7 +125,7 @@ ObjectType ShaderModule::GetObjectType() const {
 WGPUFuture ShaderModule::APIGetCompilationInfo(
     const WGPUCompilationInfoCallbackInfo& callbackInfo) {
     auto [futureIDInternal, tracked] =
-        GetEventManager().TrackEvent(std::make_unique<CompilationInfoEvent>(callbackInfo, this));
+        GetEventManager().TrackEvent(AcquireRef(new CompilationInfoEvent(callbackInfo, this)));
     if (!tracked) {
         return {futureIDInternal};
     }
@@ -133,7 +138,7 @@ WGPUFuture ShaderModule::APIGetCompilationInfo(
     }
 
     ShaderModuleGetCompilationInfoCmd cmd;
-    cmd.shaderModuleId = GetWireId();
+    cmd.shaderModuleId = GetWireHandle(GetClient()).id;
     cmd.eventManagerHandle = GetEventManagerHandle();
     cmd.future = {futureIDInternal};
 
@@ -145,8 +150,8 @@ WireResult Client::DoShaderModuleGetCompilationInfoCallback(ObjectHandle eventMa
                                                             WGPUFuture future,
                                                             WGPUCompilationInfoRequestStatus status,
                                                             const WGPUCompilationInfo* info) {
-    return GetEventManager(eventManager)
-        .SetFutureReady<ShaderModule::CompilationInfoEvent>(future.id, status, info);
+    return SetFutureReady<ShaderModule::CompilationInfoEvent>(eventManager, future.id, status,
+                                                              info);
 }
 
 }  // namespace dawn::wire::client

@@ -61,7 +61,8 @@ using ::testing::Matches;
 using ::testing::Pair;
 using ::testing::UnorderedElementsAre;
 using ::tsl::proto_testing::EqualsProto;
-using tsl::testing::StatusIs;
+using ::tsl::testing::IsOkAndHolds;
+using ::tsl::testing::StatusIs;
 
 constexpr absl::Duration kHeartbeatTimeout = absl::Milliseconds(2500);
 constexpr absl::Duration kBarrierTimeout = absl::Milliseconds(200);
@@ -292,10 +293,12 @@ TEST_F(ClientServerTest, EnumerateElevenDevices) {
     device->set_vendor("test_vendor");
   }
   GlobalTopologyProto expected_topology;
+  int slice_0_global_id = 0, slice_1_global_id = num_nodes / 2 + 1;
   for (int i = 0; i < num_nodes; ++i) {
     auto* node = expected_topology.add_nodes();
     *node = locals[i];
-    node->mutable_devices(0)->set_global_device_id(i);
+    node->mutable_devices(0)->set_global_device_id(
+        (i % 2 == 0) ? slice_0_global_id++ : slice_1_global_id++);
     node->mutable_devices(0)->set_partition_index(i % 2);
   }
 
@@ -1083,6 +1086,15 @@ TEST_F(ClientServerTest, KeyValueTryGet) {
   auto result = client->KeyValueTryGet("test_key");
   TF_ASSERT_OK(result.status());
   EXPECT_EQ(result.value(), "value");
+}
+
+TEST_F(ClientServerTest, KeyValueIncrement) {
+  StartService(/*num_nodes=*/1);
+  auto client = GetClient(/*node_id=*/0);
+  TF_ASSERT_OK(client->Connect());
+  TF_ASSERT_OK(client->KeyValueSet("test_key", "10"));
+  EXPECT_THAT(client->KeyValueIncrement("test_key", 1), IsOkAndHolds(11));
+  EXPECT_THAT(client->KeyValueTryGet("test_key"), IsOkAndHolds("11"));
 }
 
 TEST_F(ClientServerTest, KeyValueDelete) {

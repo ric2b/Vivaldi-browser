@@ -22,9 +22,7 @@
 #include "components/user_education/common/user_education_features.h"
 #include "components/user_education/common/user_education_storage_service.h"
 
-BASE_FEATURE(kAllowRecentSessionTracking,
-             "AllowRecentSessionTracking",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kAllowRecentSessionTracking, base::FEATURE_ENABLED_BY_DEFAULT);
 
 UserEducationService::UserEducationService(Profile* profile, bool allows_promos)
     : profile_(*profile),
@@ -57,11 +55,14 @@ UserEducationService::UserEducationService(Profile* profile, bool allows_promos)
     user_education_storage_service_->ResetRecentSessionData();
   }
 
-  if (user_education::features::NtpBrowserPromosEnabled() && allows_promos) {
+  if (allows_promos &&
+      user_education::features::GetNtpBrowserPromoType() !=
+          user_education::features::NtpBrowserPromoType::kNone) {
     ntp_promo_registry_ = std::make_unique<user_education::NtpPromoRegistry>();
     ntp_promo_controller_ =
         std::make_unique<user_education::NtpPromoController>(
-            *ntp_promo_registry_, *user_education_storage_service_);
+            *ntp_promo_registry_, *user_education_storage_service_,
+            user_education::GetNtpPromoControllerParams());
   }
 
   // This MUST be last, after all other initialization, because it relies on

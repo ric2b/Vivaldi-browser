@@ -13,6 +13,12 @@ load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("@rules_cc//cc:objc_library.bzl", "objc_library")
 load("@skia_user_config//:copts.bzl", "DEFAULT_COPTS", "DEFAULT_OBJC_COPTS")
 load("@skia_user_config//:linkopts.bzl", "DEFAULT_LINKOPTS")
+load(
+    "//bazel:generate_cpp_files_for_headers.bzl",
+    _generate_cpp_files_for_headers = "generate_cpp_files_for_headers",
+)
+
+generate_cpp_files_for_headers = _generate_cpp_files_for_headers
 
 def select_multi(values_map, default_cases = None):
     """select() but allowing multiple matches of the keys.
@@ -162,10 +168,18 @@ def skia_filegroup(**kwargs):
     """A wrapper around filegroup allowing us to customize visibility in G3."""
     native.filegroup(**kwargs)
 
+_COMPILE_HEADERS = (".h", ".hh", ".hpp", "hxx")
+
+def _headers(files):
+    return [f for f in files if f.endswith(_COMPILE_HEADERS)]
+
 def skia_objc_library(
         name,
         copts = DEFAULT_OBJC_COPTS,
+        hdrs = [],
         deps = [],
+        srcs = [],
+        non_arc_srcs = [],
         ios_frameworks = [],
         mac_frameworks = [],
         sdk_frameworks = [],
@@ -186,6 +200,9 @@ def skia_objc_library(
         sdk_frameworks: https://bazel.build/reference/be/objective-c#objc_library.sdk_frameworks
                         except this should only be a list, not a select.
         **kwargs: Normal arguments to objc_library
+
+    We re-implement the non_arc_srcs attribute because at least on a Mac with Bazel 8.2.1 it
+    crashes if we pass non_arc_srcs straight through to the objc_library (explicitly or in kwargs).
     """
     if len(ios_frameworks) > 0 or len(mac_frameworks) > 0:
         sdk_frameworks += select({
@@ -193,10 +210,24 @@ def skia_objc_library(
             "@platforms//os:macos": mac_frameworks,
             "//conditions:default": [],
         })
+    if len(non_arc_srcs) > 0:
+        objc_library(
+            name = name + "_non_arc",
+            copts = copts + ["-fno-objc-arc"],
+            deps = deps,
+            # Make sure header files in hdrs and srcs that are required by non_arc_srcs are visible.
+            srcs = non_arc_srcs + _headers(srcs) + hdrs,
+            sdk_frameworks = sdk_frameworks,
+            **kwargs
+        )
+        deps = deps + [name + "_non_arc"]
     objc_library(
         name = name,
         copts = copts,
         deps = deps,
+        hdrs = hdrs,
+        # Make sure any headers in non_arc_srcs are visible here
+        srcs = srcs + _headers(non_arc_srcs),
         sdk_frameworks = sdk_frameworks,
         **kwargs
     )

@@ -8,12 +8,14 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/containers/flat_map.h"
+#include "base/containers/span.h"
 #include "base/debug/crash_logging.h"
 #include "base/feature_list.h"
 #include "base/files/file.h"
@@ -32,7 +34,6 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
-#include "components/metrics/fre_source_trial.h"
 #include "components/metrics/metrics_features.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_pref_names.h"
@@ -139,18 +140,20 @@ bool IsPMAFile(const base::FilePath& file_path,
   return true;
 }
 
-// Clients should not delete the sources of type
+// On iOS, clients should not delete the sources of type
 // FileMetricsProvider::SOURCE_HISTOGRAMS_ATOMIC_DIR if it's FRE, since the user
 // may not have opted in to metrics reporting yet. If the client is not FRE, the
 // user has already opted in to metrics reporting, so it's safe to delete the
 // source.
-// For now, only clients with trial enabled may return true. The rest of the
-// clients will always return false.
 bool ShouldKeepSourceWhenMetricsDisabled(
     const FileMetricsProvider::Params& params,
     bool is_fre) {
+#if BUILDFLAG(IS_IOS)
   return params.type == FileMetricsProvider::SOURCE_HISTOGRAMS_ATOMIC_DIR &&
-         is_fre && fre_source_trial::IsEnabled();
+         is_fre;
+#else
+  return false;
+#endif
 }
 
 // Ensures that a given directory path has at most max_source_files amount
@@ -354,8 +357,9 @@ void FileMetricsProvider::RegisterSource(const Params& params,
 // static
 void FileMetricsProvider::RegisterSourcePrefs(PrefRegistrySimple* prefs,
                                               std::string_view prefs_key) {
-  prefs->RegisterInt64Pref(
-      metrics::prefs::kMetricsLastSeenPrefix + std::string(prefs_key), 0);
+  prefs->RegisterTimePref(
+      metrics::prefs::kMetricsLastSeenPrefix + std::string(prefs_key),
+      base::Time());
 }
 
 //  static
@@ -591,13 +595,15 @@ FileMetricsProvider::AccessResult FileMetricsProvider::CheckAndMapMetricSource(
   const bool read_only = kSourceOptions[source->type].is_read_only;
   if (!read_only) {
     constexpr int kTestSize = 16;
-    char header[kTestSize];
-    int amount = UNSAFE_TODO(file.Read(0, header, kTestSize));
-    if (amount != kTestSize)
+    std::array<char, kTestSize> header;
+    std::optional<size_t> amount =
+        file.Read(0, base::as_writable_byte_span(header));
+    if (amount.value_or(0) != kTestSize) {
       return ACCESS_RESULT_INVALID_CONTENTS;
+    }
 
-    char zeros[kTestSize] = {};
-    UNSAFE_TODO(file.Write(0, zeros, kTestSize));
+    constexpr std::array<char, kTestSize> zeros{};
+    file.Write(0, base::as_byte_span(zeros));
     file.Flush();
 
     // A crash here would be unfortunate as the file would be left invalid
@@ -605,20 +611,23 @@ FileMetricsProvider::AccessResult FileMetricsProvider::CheckAndMapMetricSource(
     // the benefit of avoiding crashes from mapping as read/write a file that
     // can't be written more than justifies the risk.
 
-    char check[kTestSize];
-    amount = UNSAFE_TODO(file.Read(0, check, kTestSize));
-    if (amount != kTestSize)
+    std::array<char, kTestSize> check;
+    amount = file.Read(0, base::as_writable_byte_span(check));
+    if (amount.value_or(0) != kTestSize) {
       return ACCESS_RESULT_INVALID_CONTENTS;
-    if (UNSAFE_TODO(memcmp(check, zeros, kTestSize)) != 0) {
+    }
+    if (check != zeros) {
       return ACCESS_RESULT_NOT_WRITABLE;
     }
 
-    UNSAFE_TODO(file.Write(0, header, kTestSize));
+    file.Write(0, base::as_byte_span(header));
     file.Flush();
-    amount = UNSAFE_TODO(file.Read(0, check, kTestSize));
-    if (amount != kTestSize)
+    amount = file.Read(0, base::as_writable_byte_span(check));
+    if (amount.value_or(0) != kTestSize) {
       return ACCESS_RESULT_INVALID_CONTENTS;
-    if (UNSAFE_TODO(memcmp(check, header, kTestSize)) != 0) {
+    }
+    // This compares the content of the two arrays.
+    if (check != header) {
       return ACCESS_RESULT_NOT_WRITABLE;
     }
   }

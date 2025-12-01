@@ -2,22 +2,32 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/extensions/install_prompt_permissions.h"
+
 #include <string>
 #include <vector>
 
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/extensions/install_prompt_permissions.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/permissions/permission_message_provider.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace extensions {
 
 InstallPromptPermissions::InstallPromptPermissions() = default;
 
 InstallPromptPermissions::~InstallPromptPermissions() = default;
+
+InstallPromptPermissions::InstallPromptPermissions(
+    const InstallPromptPermissions& other) = default;
+
+InstallPromptPermissions& InstallPromptPermissions::operator=(
+    const InstallPromptPermissions& other) = default;
 
 void InstallPromptPermissions::LoadFromPermissionSet(
     const PermissionSet* permissions_set,

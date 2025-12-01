@@ -10,10 +10,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "GPU Mac Builder",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-gpu-archive",
               "builder_group": "chromium.gpu",
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_chromium_config": {
@@ -39,10 +38,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Mac Release (Intel)",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-gpu-archive",
               "builder_group": "chromium.gpu",
               "execution_mode": "TEST",
               "legacy_chromium_config": {
@@ -60,7 +58,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "GPU Mac Builder",
-                "project": "chromium-m140"
+                "project": "chromium-m142"
               }
             }
           },
@@ -68,10 +66,9 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Mac Retina Release (AMD)",
-              "project": "chromium-m140"
+              "project": "chromium-m142"
             },
             "builder_spec": {
-              "build_gs_bucket": "chromium-gpu-archive",
               "builder_group": "chromium.gpu",
               "execution_mode": "TEST",
               "legacy_chromium_config": {
@@ -89,7 +86,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "GPU Mac Builder",
-                "project": "chromium-m140"
+                "project": "chromium-m142"
               }
             }
           }
@@ -99,19 +96,19 @@
         {
           "bucket": "ci",
           "builder": "GPU Mac Builder",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "Mac Release (Intel)",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         },
         {
           "bucket": "ci",
           "builder": "Mac Retina Release (AMD)",
-          "project": "chromium-m140"
+          "project": "chromium-m142"
         }
       ],
       "mirroring_builder_group_and_names": [

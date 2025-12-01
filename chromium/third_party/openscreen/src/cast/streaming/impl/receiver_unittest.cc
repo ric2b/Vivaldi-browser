@@ -44,7 +44,6 @@
 using testing::_;
 using testing::AtLeast;
 using testing::Gt;
-using testing::Invoke;
 using testing::SaveArg;
 
 namespace openscreen::cast {
@@ -281,14 +280,14 @@ class ReceiverTest : public testing::Test {
         sender_(task_runner_, &env_) {
     env_.SetSocketSubscriber(&socket_subscriber_);
     ON_CALL(env_, SendPacket(_, _))
-        .WillByDefault(Invoke([this](ByteView packet, PacketMetadata metadata) {
+        .WillByDefault([this](ByteView packet, PacketMetadata metadata) {
           task_runner_.PostTaskWithDelay(
               [sender = &sender_, copy_of_packet = std::vector<uint8_t>(
                                       packet.begin(), packet.end())]() mutable {
                 sender->OnPacketFromReceiver(std::move(copy_of_packet));
               },
               kOneWayNetworkDelay);
-        }));
+        });
     receiver_.SetConsumer(&consumer_);
   }
 

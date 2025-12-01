@@ -12,7 +12,7 @@
 #include "ui/accessibility/accessibility_features.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
-#include "content/public/android/content_jni_headers/ContentFeatureMap_jni.h"
+#include "content/public/android/content_main_dex_jni/ContentFeatureMap_jni.h"
 
 namespace content::android {
 
@@ -28,6 +28,7 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &blink::features::kViewportSegments,
     &input::features::kInputOnViz,
     &features::kAndroidCaptureKeyEvents,
+    &features::kAndroidDevToolsFrontend,
     &features::kAccessibilityDeprecateJavaNodeCache,
     &features::kAccessibilityDeprecateTypeAnnounce,
     &features::kAccessibilityIncludeLongClickAction,
@@ -39,7 +40,6 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kAndroidOpenPdfInline,
     &features::kStrictHighRankProcessLRU,
     &features::kFedCm,
-    &features::kGroupRebindingForGroupImportance,
     &features::kHidePastePopupOnGSB,
     &features::kReduceGpuPriorityOnBackground,
     &features::kContinueGestureOnLosingFocus,
@@ -48,6 +48,7 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kWebBluetoothNewPermissionsBackend,
     &features::kWebIdentityDigitalCredentials,
     &features::kBtmTtl,
+    &features::kEnableJavalessRenderers,
     &features::kSpareRendererProcessPriority,
 };
 

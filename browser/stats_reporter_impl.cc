@@ -787,10 +787,10 @@ void StatsReporterImpl::DoReporting(FileHolder os_profile_reporting_data_file,
 
   // Screen info should only be missing if we reach this too early in the
   // startup process.
-  DCHECK(display::Screen::GetScreen());
+  DCHECK(display::Screen::Get());
   if (!GeneratePingRequest(
           now, legacy_user_id_,
-          display::Screen::GetScreen()->GetPrimaryDisplay().GetSizeInPixel(),
+          display::Screen::Get()->GetPrimaryDisplay().GetSizeInPixel(),
           base::SysInfo::OperatingSystemArchitecture(), VIVALDI_UA_VERSION,
           GetUserAgent(), GetClientHints(), local_state_reporting_data,
           os_profile_reporting_data_json, request_url, body,

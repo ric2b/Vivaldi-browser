@@ -15,6 +15,7 @@ limitations under the License.
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include "absl/status/status_matchers.h"
 #include "xla/tsl/platform/status_matchers.h"
 #include "xla/tsl/protobuf/error_codes.pb.h"
 #include "tensorflow/core/framework/attr_value.pb.h"
@@ -30,7 +31,6 @@ namespace {
 
 using ::testing::HasSubstr;
 using ::tsl::error::UNAVAILABLE;
-using ::tsl::testing::StatusIs;
 
 class ExecutableManagerTest : public ::testing::Test {
  protected:

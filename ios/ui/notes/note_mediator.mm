@@ -2,8 +2,6 @@
 
 #import "ios/ui/notes/note_mediator.h"
 
-#import <MaterialComponents/MaterialSnackbar.h>
-
 #import "base/strings/sys_string_conversions.h"
 #import "components/notes/note_node.h"
 #import "components/notes/note_node.h"

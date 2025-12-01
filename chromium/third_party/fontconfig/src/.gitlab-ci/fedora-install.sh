@@ -16,7 +16,8 @@ fi
 
 # workaround to avoid conflict between systemd and systemd-standalone-sysusers
 dnf -y swap systemd-standalone-sysusers systemd
-dnf -y install wine
+# exclude wine-dxvk to workaround rpm transaction fails
+dnf -y install -x wine-dxvk wine
 
 # Install Android NDK
 dnf -y install unzip

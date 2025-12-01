@@ -39,6 +39,7 @@
 #include "src/compiler/turboshaft/opmasks.h"
 #include "src/compiler/turboshaft/phase.h"
 #include "src/compiler/turboshaft/representations.h"
+#include "src/compiler/turboshaft/simplified-optimization-reducer.h"
 #include "src/compiler/turboshaft/variable-reducer.h"
 #include "src/flags/flags.h"
 #include "src/heap/factory-inl.h"
@@ -67,7 +68,9 @@ struct GraphBuilder {
   Isolate* isolate;
   JSHeapBroker* broker;
   Zone* graph_zone;
-  using AssemblerT = TSAssembler<ExplicitTruncationReducer, VariableReducer>;
+  using AssemblerT =
+      TSAssembler<ExplicitTruncationReducer, SimplifiedOptimizationReducer,
+                  VariableReducer>;
   AssemblerT assembler;
   SourcePositionTable* source_positions;
   NodeOriginTable* origins;
@@ -431,7 +434,7 @@ OpIndex GraphBuilder::Process(
     case IrOpcode::kInt32Constant:
       return __ Word32Constant(static_cast<uint32_t>(OpParameter<int32_t>(op)));
     case IrOpcode::kFloat64Constant:
-      return __ Float64Constant(OpParameter<double>(op));
+      return __ Float64Constant(OpParameter<i::Float64>(op));
     case IrOpcode::kFloat32Constant:
       return __ Float32Constant(OpParameter<float>(op));
     case IrOpcode::kNumberConstant:
@@ -714,7 +717,7 @@ OpIndex GraphBuilder::Process(
       UNARY_CASE(ChangeFloat16RawBitsToFloat64, ChangeFloat16RawBitsToFloat64)
 #undef UNARY_CASE
 
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
     case IrOpcode::kNumberSilenceNaN: {
       DCHECK_EQ(SilenceNanModeOf(node->op()),
                 SilenceNanMode::kPreserveUndefined);
@@ -738,10 +741,9 @@ OpIndex GraphBuilder::Process(
       CHECK_EQ(
           convert_op->input_assumptions,
           ConvertJSPrimitiveToUntaggedOp::InputAssumptions::kNumberOrOddball);
-      CHECK_EQ(node->InputAt(0)->UseCount(), 1);
       return input;
     }
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
 
     case IrOpcode::kTruncateInt64ToInt32:
       return __ TruncateWord64ToWord32(Map(node->InputAt(0)));
@@ -1065,12 +1067,14 @@ OpIndex GraphBuilder::Process(
                                        NumberOrOddball)
       CONVERT_OBJECT_TO_PRIMITIVE_CASE(ChangeTaggedToFloat64, Float64,
                                        NumberOrOddball)
+      CONVERT_OBJECT_TO_PRIMITIVE_CASE(ChangeNumberOrHoleToFloat64, Float64,
+                                       NumberOrHole)
       CONVERT_OBJECT_TO_PRIMITIVE_CASE(TruncateTaggedToFloat64, Float64,
                                        NumberOrOddball)
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
       CONVERT_OBJECT_TO_PRIMITIVE_CASE(TruncateTaggedToFloat64PreserveUndefined,
                                        HoleyFloat64, NumberOrOddball)
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
 #undef CONVERT_OBJECT_TO_PRIMITIVE_CASE
 
 #define TRUNCATE_OBJECT_TO_PRIMITIVE_CASE(name, kind, input_assumptions) \
@@ -1080,8 +1084,10 @@ OpIndex GraphBuilder::Process(
         TruncateJSPrimitiveToUntaggedOp::UntaggedKind::k##kind,          \
         TruncateJSPrimitiveToUntaggedOp::InputAssumptions::              \
             k##input_assumptions);
-      TRUNCATE_OBJECT_TO_PRIMITIVE_CASE(TruncateTaggedToWord32, Int32,
+      TRUNCATE_OBJECT_TO_PRIMITIVE_CASE(TruncateNumberOrOddballToWord32, Int32,
                                         NumberOrOddball)
+      TRUNCATE_OBJECT_TO_PRIMITIVE_CASE(TruncateNumberOrOddballOrHoleToWord32,
+                                        Int32, NumberOrOddballOrHole)
       TRUNCATE_OBJECT_TO_PRIMITIVE_CASE(TruncateBigIntToWord64, Int64, BigInt)
       TRUNCATE_OBJECT_TO_PRIMITIVE_CASE(TruncateTaggedToBit, Bit, Object)
       TRUNCATE_OBJECT_TO_PRIMITIVE_CASE(TruncateTaggedPointerToBit, Bit,
@@ -1980,8 +1986,8 @@ OpIndex GraphBuilder::Process(
       // EffectControlLinearizer used to use `node->op()->properties()` to
       // construct the builtin call descriptor for this operation. However, this
       // always seemed to be `kEliminatable` so the Turboshaft
-      // BuiltinCallDescriptor's for those builtins have this property
-      // hard-coded.
+      // BuiltinCallDescriptor's for those builtins have this
+      // property hard-coded.
       DCHECK_EQ(node->op()->properties(), Operator::kEliminatable);
       return __ NewArgumentsElements(Map(node->InputAt(0)), p.arguments_type(),
                                      p.formal_parameter_count());
@@ -2139,7 +2145,8 @@ OpIndex GraphBuilder::Process(
       return __ Float64SameValue(Map(node->InputAt(0)), Map(node->InputAt(1)));
 
     case IrOpcode::kTypeOf:
-      return __ CallBuiltin_Typeof(isolate, Map(node->InputAt(0)));
+      return __ template CallBuiltin<builtin::Typeof>(
+          {.object = Map(node->InputAt(0))});
 
     case IrOpcode::kFastApiCall: {
       DCHECK(dominating_frame_state.valid());
@@ -2415,17 +2422,18 @@ OpIndex GraphBuilder::Process(
       CHECK(type.CanBeAsserted());
       V<TurbofanType> allocated_type;
       {
-        DCHECK(isolate->CurrentLocalHeap()->is_main_thread());
+        DCHECK(LocalHeap::Current()->is_main_thread());
         std::optional<UnparkedScope> unparked_scope;
-        if (isolate->CurrentLocalHeap()->IsParked()) {
+        if (LocalHeap::Current()->IsParked()) {
           unparked_scope.emplace(isolate->main_thread_local_isolate());
         }
         allocated_type =
             __ HeapConstant(type.AllocateOnHeap(isolate->factory()));
       }
-      __ CallBuiltin_CheckTurbofanType(isolate, __ NoContextConstant(),
-                                       Map(node->InputAt(0)), allocated_type,
-                                       __ TagSmi(node->id()));
+      __ CallBuiltin<builtin::CheckTurbofanType>(
+          __ NoContextConstant(), {.value = Map(node->InputAt(0)),
+                                   .expected_type = allocated_type,
+                                   .node_id = __ TagSmi(node->id())});
       return OpIndex::Invalid();
     }
 

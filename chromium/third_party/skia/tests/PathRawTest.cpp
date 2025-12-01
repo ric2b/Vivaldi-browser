@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Google Inc.
+ * Copyright 2025 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -10,11 +10,12 @@
 #include "include/core/SkPathTypes.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
-
 #include "src/core/SkPathPriv.h"
 #include "src/core/SkPathRaw.h"
 
 #include "tests/Test.h"
+
+#include <functional>
 
 namespace {
 
@@ -104,59 +105,60 @@ void SkSPathRawBuilder::close() {
 SkPathRaw SkSPathRawBuilder::raw(SkPathFillType ft, bool isConvex) const {
     const auto ptSpan = fPtStorage.first(fPts);
     return {
-        ptSpan,
-        fVbStorage.first(fVbs),
-        fCnStorage.first(fCns),
-        SkRect::BoundsOrEmpty(ptSpan),
-        ft,
-        isConvex,
-        SkPathPriv::ComputeSegmentMask(fVbStorage),
+            ptSpan,
+            fVbStorage.first(fVbs),
+            fCnStorage.first(fCns),
+            SkRect::BoundsOrEmpty(ptSpan),
+            ft,
+            isConvex,
+            SkPathPriv::ComputeSegmentMask(fVbStorage.first(fVbs)),
     };
 }
 
-static void check_iter(skiatest::Reporter* reporter, SkPathRaw::Iter iter,
+static void check_iter(skiatest::Reporter* reporter, const SkPathRaw& raw,
                        SkSpan<SkPoint> pts, SkSpan<const SkPathVerb> vbs, SkSpan<const float> cns) {
     size_t pIndex = 0, vIndex = 0, cIndex = 0;
     size_t moveToIndex = 0; // track the start of each contour
 
+    auto iter = raw.iter();
     while (auto r = iter.next()) {
         REPORTER_ASSERT(reporter, vIndex < vbs.size());
-        REPORTER_ASSERT(reporter, vbs[vIndex++] == r->vrb);
-        switch (r->vrb) {
+        REPORTER_ASSERT(reporter, vbs[vIndex++] == r->fVerb);
+        switch (r->fVerb) {
             case SkPathVerb::kMove:
                 moveToIndex = pIndex;
                 REPORTER_ASSERT(reporter, pIndex < pts.size());
-                REPORTER_ASSERT(reporter, pts[pIndex++] == r->pts[0]);
+                REPORTER_ASSERT(reporter, pts[pIndex++] == r->fPoints[0]);
                 break;
             case SkPathVerb::kLine:
                 REPORTER_ASSERT(reporter, pIndex < pts.size());
-                REPORTER_ASSERT(reporter, pts[pIndex-1] == r->pts[0]);
-                REPORTER_ASSERT(reporter, pts[pIndex++] == r->pts[1]);
+                REPORTER_ASSERT(reporter, pts[pIndex-1] == r->fPoints[0]);
+                REPORTER_ASSERT(reporter, pts[pIndex++] == r->fPoints[1]);
                 break;
             case SkPathVerb::kQuad:
                 REPORTER_ASSERT(reporter, pIndex+1 < pts.size());
-                REPORTER_ASSERT(reporter, pts[pIndex-1] == r->pts[0]);
-                REPORTER_ASSERT(reporter, pts[pIndex++] == r->pts[1]);
-                REPORTER_ASSERT(reporter, pts[pIndex++] == r->pts[2]);
+                REPORTER_ASSERT(reporter, pts[pIndex-1] == r->fPoints[0]);
+                REPORTER_ASSERT(reporter, pts[pIndex++] == r->fPoints[1]);
+                REPORTER_ASSERT(reporter, pts[pIndex++] == r->fPoints[2]);
                 break;
             case SkPathVerb::kConic:
                 REPORTER_ASSERT(reporter, pIndex+1 < pts.size());
-                REPORTER_ASSERT(reporter, pts[pIndex-1] == r->pts[0]);
-                REPORTER_ASSERT(reporter, pts[pIndex++] == r->pts[1]);
-                REPORTER_ASSERT(reporter, pts[pIndex++] == r->pts[2]);
+                REPORTER_ASSERT(reporter, pts[pIndex-1] == r->fPoints[0]);
+                REPORTER_ASSERT(reporter, pts[pIndex++] == r->fPoints[1]);
+                REPORTER_ASSERT(reporter, pts[pIndex++] == r->fPoints[2]);
                 REPORTER_ASSERT(reporter, cIndex < cns.size());
-                REPORTER_ASSERT(reporter, cns[cIndex++] == r->w);
+                REPORTER_ASSERT(reporter, cns[cIndex++] == r->fConicWeight);
                 break;
             case SkPathVerb::kCubic:
                 REPORTER_ASSERT(reporter, pIndex+2 < pts.size());
-                REPORTER_ASSERT(reporter, pts[pIndex-1] == r->pts[0]);
-                REPORTER_ASSERT(reporter, pts[pIndex++] == r->pts[1]);
-                REPORTER_ASSERT(reporter, pts[pIndex++] == r->pts[2]);
-                REPORTER_ASSERT(reporter, pts[pIndex++] == r->pts[3]);
+                REPORTER_ASSERT(reporter, pts[pIndex-1] == r->fPoints[0]);
+                REPORTER_ASSERT(reporter, pts[pIndex++] == r->fPoints[1]);
+                REPORTER_ASSERT(reporter, pts[pIndex++] == r->fPoints[2]);
+                REPORTER_ASSERT(reporter, pts[pIndex++] == r->fPoints[3]);
                 break;
             case SkPathVerb::kClose:
-                REPORTER_ASSERT(reporter, pts[pIndex-1]    == r->pts[0]);   // last  pt in contour
-                REPORTER_ASSERT(reporter, pts[moveToIndex] == r->pts[1]);   // first pt in contour
+                REPORTER_ASSERT(reporter, pts[pIndex-1]    == r->fPoints[0]);   // last  pt
+                REPORTER_ASSERT(reporter, pts[moveToIndex] == r->fPoints[1]);   // first pt
                 break;
         }
     }
@@ -223,4 +225,75 @@ DEF_TEST(pathraw_iter, reporter) {
     raw = SkPathPriv::Raw(path);
 
     check_iter(reporter, raw, p, verbs, cns);
+}
+
+DEF_TEST(pathraw_segmentmask, reporter) {
+    auto check_mask = [reporter](const char* desc,
+                                 uint32_t expectedMask,
+                                 const std::function<void(SkSPathRawBuilder&)>& build) {
+        skiatest::ReporterContext context(reporter, desc);
+        // Make these buffers plenty big to hold any of the paths in the tests
+        SkPoint pts[20];
+        SkPathVerb vbs[20];
+        float cns[10];
+        SkSPathRawBuilder bu(pts, vbs, cns);
+        build(bu);
+        auto raw = bu.raw(SkPathFillType::kWinding);
+        REPORTER_ASSERT(reporter, raw.fSegmentMask == expectedMask);
+    };
+
+    check_mask("move-only", 0, [](SkSPathRawBuilder& bu) { bu.moveTo({0, 0}); });
+
+    check_mask("line", SkPath::kLine_SegmentMask, [](SkSPathRawBuilder& bu) {
+        bu.moveTo({0, 0});
+        bu.lineTo({1, 1});
+    });
+
+    check_mask("quad", SkPath::kQuad_SegmentMask, [](SkSPathRawBuilder& bu) {
+        bu.moveTo({0, 0});
+        bu.quadTo({1, 1}, {2, 2});
+    });
+
+    check_mask("conic", SkPath::kConic_SegmentMask, [](SkSPathRawBuilder& bu) {
+        bu.moveTo({0, 0});
+        bu.conicTo({1, 1}, {2, 2}, 0.5f);
+    });
+
+    check_mask("cubic", SkPath::kCubic_SegmentMask, [](SkSPathRawBuilder& bu) {
+        bu.moveTo({0, 0});
+        bu.cubicTo({1, 1}, {2, 2}, {3, 3});
+    });
+
+    check_mask("line-quad",
+               SkPath::kLine_SegmentMask | SkPath::kQuad_SegmentMask,
+               [](SkSPathRawBuilder& bu) {
+                   bu.moveTo({0, 0});
+                   bu.lineTo({1, 1});
+                   bu.quadTo({2, 2}, {3, 3});
+               });
+
+    check_mask("conic-cubic",
+               SkPath::kConic_SegmentMask | SkPath::kCubic_SegmentMask,
+               [](SkSPathRawBuilder& bu) {
+                   bu.moveTo({0, 0});
+                   bu.conicTo({1, 1}, {2, 2}, 0.5f);
+                   bu.cubicTo({3, 3}, {4, 4}, {5, 5});
+               });
+
+    check_mask("all",
+               SkPath::kLine_SegmentMask | SkPath::kQuad_SegmentMask | SkPath::kConic_SegmentMask |
+                       SkPath::kCubic_SegmentMask,
+               [](SkSPathRawBuilder& bu) {
+                   bu.moveTo({0, 0});
+                   bu.lineTo({1, 1});
+                   bu.quadTo({2, 2}, {3, 3});
+                   bu.conicTo({4, 4}, {5, 5}, 0.5f);
+                   bu.cubicTo({6, 6}, {7, 7}, {8, 8});
+                   bu.close();
+               });
+
+    check_mask("empty path", 0, [](SkSPathRawBuilder& bu) {
+        bu.moveTo({0, 0});
+        bu.close();
+    });
 }

@@ -416,6 +416,19 @@ def _speedometer_main_crossbench(estimated_runtime=60, arguments=()):
                           arguments=arguments)
 
 
+def _speedometer3_a11y_crossbench(estimated_runtime=60, arguments=()):
+  """Latest Speedometer 3 with accessibility flag enabled."""
+  # TODO(crbug.com/444653101): This configuration runs the same speedometer_3
+  # benchmark as _speedometer3_crossbench, but since the benchmark name is used
+  # as the dict key inside the shard maps, we can't pass 'speedometer_3' to
+  # CrossbenchConfig constructor. We work around this by using alias 'sp3'.
+  arguments += ('--extra-browser-args=--force-renderer-accessibility', )
+  return CrossbenchConfig('speedometer3.a11y.crossbench',
+                          'sp3',
+                          estimated_runtime=estimated_runtime,
+                          arguments=arguments)
+
+
 # MotionMark:
 def _motionmark1_2_crossbench(estimated_runtime=360, arguments=()):
   return CrossbenchConfig('motionmark1.2.crossbench',
@@ -576,6 +589,7 @@ _CROSSBENCH_TANGOR = frozenset([
     ]),
 ])
 
+# pylint: disable=line-too-long
 _CROSSBENCH_WEBVIEW = frozenset([
     _crossbench_loading(
         estimated_runtime=750,
@@ -588,8 +602,7 @@ _CROSSBENCH_WEBVIEW = frozenset([
             '--repetitions=50',
             '--cool-down-threshold=moderate',
             '--stories=cnn',
-        ]
-    ),
+        ]),
     _crossbench_embedder(
         estimated_runtime=900,
         arguments=[
@@ -604,9 +617,10 @@ _CROSSBENCH_WEBVIEW = frozenset([
             '--cool-down-threshold=moderate',
             '--http-request-timeout=15s',
             '--action-runner=android',
-        ]
-    ),
+            '--ignore-partial-failures',
+        ]),
 ])
+# pylint: enable=line-too-long
 
 _CHROME_HEALTH_BENCHMARK_CONFIGS_DESKTOP = PerfSuite(
     [_GetBenchmarkConfig('system_health.common_desktop')])
@@ -654,7 +668,7 @@ _LINUX_EXECUTABLE_CONFIGS = frozenset([
     # TODO(crbug.com/40562709): Add views_perftests.
     _base_perftests(200),
     _load_library_perf_tests(),
-    _tint_benchmark(),
+    # (crbug.com/445456830) temporarily disabled _tint_benchmark(),
     _tracing_perftests(5),
 ])
 _LINUX_R350_BENCHMARK_CONFIGS = PerfSuite(
@@ -670,7 +684,7 @@ _MAC_INTEL_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
 _MAC_INTEL_EXECUTABLE_CONFIGS = frozenset([
     _base_perftests(300),
     _dawn_perf_tests(330),
-    _tint_benchmark(),
+    # (crbug.com/445456830) temporarily disabled _tint_benchmark(),
     _views_perftests(),
     _load_library_perf_tests(),
 ])
@@ -713,7 +727,7 @@ _MAC_M1_PRO_BENCHMARK_CONFIGS = PerfSuite([
 _MAC_M1_MINI_2020_EXECUTABLE_CONFIGS = frozenset([
     _base_perftests(300),
     _dawn_perf_tests(330),
-    _tint_benchmark(),
+    # (crbug.com/445456830) temporarily disabled _tint_benchmark(),
     _views_perftests(),
 ])
 _MAC_M2_PRO_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
@@ -755,7 +769,7 @@ _WIN_11_EXECUTABLE_CONFIGS = frozenset([
     _base_perftests(200),
     _components_perftests(125),
     _dawn_perf_tests(600),
-    _tint_benchmark(),
+    # (crbug.com/445456830) temporarily disabled _tint_benchmark(),
     _views_perftests(),
 ])
 _WIN_ARM64_BENCHMARK_CONFIGS = PerfSuite([
@@ -976,7 +990,8 @@ WIN_11 = PerfPlatform('win-11-perf',
                       20,
                       'win',
                       executables=_WIN_11_EXECUTABLE_CONFIGS,
-                      crossbench=_CROSSBENCH_BENCHMARKS_ALL)
+                      crossbench=_CROSSBENCH_BENCHMARKS_ALL
+                      | {_speedometer3_a11y_crossbench()})
 WIN_11_PGO = PerfPlatform('win-11-perf-pgo',
                           'Windows Dell PowerEdge R350',
                           _WIN_11_BENCHMARK_CONFIGS,
@@ -1085,7 +1100,7 @@ ANDROID_PIXEL_TANGOR = PerfPlatform(
     executables=_ANDROID_DEFAULT_EXECUTABLE_CONFIGS,
     crossbench=_CROSSBENCH_TANGOR)
 ANDROID_GO_WEMBLEY = PerfPlatform('android-go-wembley-perf', 'Android U',
-                                  _ANDROID_GO_BENCHMARK_CONFIGS, 15, 'android')
+                                  _ANDROID_GO_BENCHMARK_CONFIGS, 13, 'android')
 ANDROID_GO_WEMBLEY_WEBVIEW = PerfPlatform(
     'android-go-wembley_webview-perf', 'Android U',
     _ANDROID_GO_WEBVIEW_BENCHMARK_CONFIGS, 20, 'android')
@@ -1109,6 +1124,22 @@ ANDROID_PIXEL9_PRO_XL = PerfPlatform(
     'Android B',
     _ANDROID_PIXEL9_BENCHMARK_CONFIGS,
     4,
+    'android',
+    executables=_ANDROID_DEFAULT_EXECUTABLE_CONFIGS,
+    crossbench=_CROSSBENCH_PIXEL9)
+ANDROID_PIXEL25_ULTRA = PerfPlatform(
+    'android-pixel25-ultra-perf',
+    'Android B',
+    _ANDROID_PIXEL9_BENCHMARK_CONFIGS,
+    4,
+    'android',
+    executables=_ANDROID_DEFAULT_EXECUTABLE_CONFIGS,
+    crossbench=_CROSSBENCH_PIXEL9)
+ANDROID_PIXEL25_ULTRA_XL = PerfPlatform(
+    'android-pixel25-ultra-xl-perf',
+    'Android B',
+    _ANDROID_PIXEL9_BENCHMARK_CONFIGS,
+    3,
     'android',
     executables=_ANDROID_DEFAULT_EXECUTABLE_CONFIGS,
     crossbench=_CROSSBENCH_PIXEL9)

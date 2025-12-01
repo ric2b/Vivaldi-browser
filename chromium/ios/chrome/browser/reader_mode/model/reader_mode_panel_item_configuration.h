@@ -26,10 +26,11 @@ class ReaderModePanelItemConfiguration
 
   // ReaderModeTabHelper::Observer
   void ReaderModeTabHelperDestroyed(ReaderModeTabHelper* tab_helper) override;
-  void ReaderModeWebStateDidLoadContent(
-      ReaderModeTabHelper* tab_helper) override;
+  void ReaderModeWebStateDidLoadContent(ReaderModeTabHelper* tab_helper,
+                                        web::WebState* web_state) override;
   void ReaderModeWebStateWillBecomeUnavailable(
       ReaderModeTabHelper* tab_helper,
+      web::WebState* web_state,
       ReaderModeDeactivationReason reason) override;
   void ReaderModeDistillationFailed(ReaderModeTabHelper* tab_helper) override;
 
@@ -40,6 +41,9 @@ class ReaderModePanelItemConfiguration
  private:
   // Invalidates this configuration.
   void Invalidate();
+
+  // Helper which returns whether the profile is eligible for BWG.
+  bool IsProfileEligibleForBwg();
 
   base::ScopedObservation<web::WebState, web::WebStateObserver>
       web_state_observation_{this};

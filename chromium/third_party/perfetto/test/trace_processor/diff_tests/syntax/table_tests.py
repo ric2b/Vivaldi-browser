@@ -3,7 +3,7 @@
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
-# You may obtain a copy of the License a
+# You may obtain a copy of the License at
 #
 #      http://www.apache.org/licenses/LICENSE-2.0
 #
@@ -486,10 +486,8 @@ class PerfettoTable(TestSuite):
         trace=Path('../parser/android/surfaceflinger_layers.textproto'),
         query="""
         SELECT flat_key, key, int_value, string_value, real_value FROM __intrinsic_winscope_proto_to_args_with_defaults('surfaceflinger_layer') AS sfl
-        WHERE
-          (flat_key GLOB "*id" AND int_value = 3)
-          OR flat_key IN (
-            "id",
+        WHERE flat_key IN (
+            'id',
             "z",
             "parent",
             "name",
@@ -696,6 +694,7 @@ class PerfettoTable(TestSuite):
           OR flat_key GLOB '*_name'
           OR flat_key GLOB '*view_id'
         ORDER BY base64_proto_id, key
+        LIMIT 8
         """,
         out=Csv("""
         "flat_key","key","int_value","string_value"
@@ -706,7 +705,7 @@ class PerfettoTable(TestSuite):
         "view_id_iid","view_id_iid",3,"[NULL]"
         "class_name","class_name","[NULL]","STRING DE-INTERNING ERROR"
         "class_name_iid","class_name_iid",3,"[NULL]"
-        "view_id","view_id","[NULL]","NO_ID"
+        "view_id","view_id","[NULL]","TEST_VIEW_ID"
         """))
 
   def test_winscope_surfaceflinger_hierarchy_paths(self):

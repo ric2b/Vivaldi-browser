@@ -303,6 +303,16 @@ export function reorder<R>(order: ReorderOrder, arr: R[]): R[] {
   }
 }
 
+/**
+ * A typed version of Object.entries
+ */
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+export function typedEntries<T extends Record<string, any>>(obj: T): Array<[keyof T, T[keyof T]]> {
+  // The cast is done once, inside the helper function,
+  // keeping the call site clean and type-safe.
+  return Object.entries(obj) as Array<[keyof T, T[keyof T]]>;
+}
+
 const TypedArrayBufferViewInstances = [
   new Uint8Array(),
   new Uint8ClampedArray(),

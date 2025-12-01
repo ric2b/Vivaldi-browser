@@ -88,7 +88,6 @@ class WTF_EXPORT SegmentedBuffer {
     bool operator==(const Iterator& that) const {
       return std::ranges::equal(value_, that.value_) && buffer_ == that.buffer_;
     }
-    bool operator!=(const Iterator& that) const { return !(*this == that); }
     const base::span<const char>& operator*() const {
       DCHECK(!IsEnd());
       return value_;
@@ -141,7 +140,7 @@ class WTF_EXPORT SegmentedBuffer {
 
   // Copies the segmented data into a contiguous buffer.  Use GetSomeData() or
   // iterators if a copy is not required, as they are cheaper.
-  // Supported Ts: WTF::Vector<char>, std::vector<char>.
+  // Supported Ts: blink::Vector<char>, std::vector<char>.
   template <typename T>
   T CopyAs() const;
 

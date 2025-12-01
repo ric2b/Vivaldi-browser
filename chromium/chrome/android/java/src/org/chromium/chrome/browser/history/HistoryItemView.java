@@ -18,6 +18,9 @@ import androidx.core.view.ViewCompat;
 import androidx.core.widget.ImageViewCompat;
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
+import org.chromium.build.annotations.Initializer;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.history.AppFilterCoordinator.AppInfo;
 import org.chromium.chrome.browser.history.HistoryContentManager.AppInfoCache;
@@ -32,15 +35,22 @@ import org.chromium.components.browser_ui.widget.selectable_list.SelectableListU
 import java.util.function.BooleanSupplier;
 
 // Vivaldi
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import android.graphics.Bitmap;
+import android.widget.TextView;
+
 import org.chromium.chrome.browser.bookmarks.BookmarkViewUtils;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.components.favicon.IconType;
+import org.chromium.url.GURL;
 
 /** The SelectableItemView for items displayed in the browsing history UI. */
+@NullMarked
 public class HistoryItemView extends SelectableItemView<HistoryItem> {
     private ImageButton mRemoveButton;
-    private VectorDrawableCompat mBlockedVisitDrawable;
+    private @Nullable VectorDrawableCompat mBlockedVisitDrawable;
     private AppInfoCache mAppInfoCache;
 
     private final RoundedIconGenerator mIconGenerator;
@@ -75,6 +85,14 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
         super.onFinishInflate();
         mStartIconView.setImageResource(R.drawable.default_favicon);
 
+        // Vivaldi shows time instead of close button
+        if (ChromeApplicationImpl.isVivaldi()) {
+            mEndButtonView.setVisibility(View.GONE);
+            View dateView = findViewById(R.id.time);
+            if (dateView != null) dateView.setVisibility(View.VISIBLE);
+            mRemoveButton = mEndButtonView;
+        } else { // Vivaldi
+
         mRemoveButton = mEndButtonView;
         mRemoveButton.setImageResource(R.drawable.btn_delete_24dp);
         mRemoveButton.setContentDescription(getContext().getString(R.string.remove));
@@ -92,6 +110,8 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
                         .getDimensionPixelSize(R.dimen.history_item_remove_button_lateral_padding),
                 getPaddingBottom());
 
+        } // End Vivaldi
+
         mChipView = findViewById(R.id.chip);
         mChipView.getPrimaryTextView().setEllipsize(TextUtils.TruncateAt.END);
     }
@@ -99,14 +119,23 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
     @Override
     public void setItem(HistoryItem item) {
         if (getItem() == item) return;
-
         super.setItem(item);
 
+        if (ChromeApplicationImpl.isVivaldi()) {
+            TextView textView = findViewById(R.id.time);
+            if (textView != null && getItem() != null) {
+                textView.setVisibility(View.VISIBLE);
+                mEndButtonView.setVisibility(View.GONE);
+                String formatted = getFormattedTime();
+                textView.setText(formatted);
+            }
+        } // End Vivaldi
         mTitleView.setText(item.getTitle());
         mDescriptionView.setText(item.getDomain());
         // Try to make the TLD part of the URL string visible.
         mDescriptionView.setEllipsize(TextUtils.TruncateAt.START);
         updateChipView(item);
+        if (!ChromeApplicationImpl.isVivaldi())
         SelectableListUtils.setContentDescriptionContext(
                 getContext(),
                 mRemoveButton,
@@ -136,6 +165,7 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
         }
     }
 
+    @Initializer
     void initialize(AppInfoCache appInfoCache, BooleanSupplier showSourceApp) {
         mAppInfoCache = appInfoCache;
         // ItemView can be reused every time a new query is made. Use a supplier to
@@ -170,6 +200,7 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
     /**
      * @param helper The helper for fetching default favicons.
      */
+    @Initializer
     public void setFaviconHelper(DefaultFaviconHelper helper) {
         mFaviconHelper = helper;
     }
@@ -187,6 +218,8 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
      * @param visibility The visibility (VISIBLE, INVISIBLE, GONE) for the remove button.
      */
     public void setRemoveButtonVisiblity(int visibility) {
+        // NO remove button in history item in Vivaldi
+        if (ChromeApplicationImpl.isVivaldi()) return;
         mRemoveButton.setVisibility(visibility);
         int endPadding = visibility == View.GONE ? mEndPadding : 0;
         mContentView.setPaddingRelative(
@@ -204,28 +237,29 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
 
     private void requestIcon() {
         HistoryItem item = getItem();
-        if (item.wasBlockedVisit()) return;
+        if (item == null || item.wasBlockedVisit()) return;
+
         if (ChromeApplicationImpl.isVivaldi()) {
             int desiredSize = getResources().getDimensionPixelSize(
                     R.dimen.improved_bookmark_start_image_size_compact);
-            item.getLargeIconForUrl(
-                    desiredSize,
-                    mMinIconSize,
+            item.getLargeIconForUrl(desiredSize, mMinIconSize,
                     (icon, fallbackColor, isFallbackColorDefault, iconType) -> {
                         // Prevent stale icons from making it through to the UI.
                         if (item != getItem()) return;
-                         largeIconAvailableVivaldi(icon, fallbackColor, isFallbackColorDefault,
-                                    iconType);
+                        if (icon == null) return;
+                        largeIconAvailableVivaldi(
+                                icon, fallbackColor, isFallbackColorDefault, iconType);
                     });
             return;
         } // End Vivaldi
+
         item.getLargeIconForUrl(
                 mMinIconSize,
                 (icon, fallbackColor, isFallbackColorDefault, iconType) -> {
                     // Prevent stale icons from making it through to the UI.
                     if (item != getItem()) return;
 
-                    if (ChromeApplicationImpl.isVivaldi()) {
+                    if (ChromeApplicationImpl.isVivaldi() && icon != null) {
                         largeIconAvailableVivaldi(icon, fallbackColor, isFallbackColorDefault,
                                 iconType);
                         return;
@@ -251,8 +285,18 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
     public void largeIconAvailableVivaldi(Bitmap icon, int fallbackColor,
             boolean isFallbackColorDefault, @IconType int iconType) {
         int vivaldiIconSize = getResources().getDimensionPixelSize(R.dimen.panels_favicon_size);
-        Drawable drawable = FaviconUtils.getIconDrawableWithoutFilter(icon, getItem().getUrl(),
-                fallbackColor, mIconGenerator, getResources(), vivaldiIconSize);
+        Drawable drawable = FaviconUtils.getIconDrawableWithoutFilter(icon,
+                getItem() != null ? getItem().getUrl() : new GURL(""), fallbackColor,
+                mIconGenerator, getResources(), vivaldiIconSize);
         setStartIconDrawable(drawable);
+    }
+
+    // Vivaldi
+    private String getFormattedTime() {
+        if (getItem() == null) return "";
+        Date date = new Date(getItem().getTimestamp());
+        SimpleDateFormat format = new SimpleDateFormat("HH:mm",
+                Locale.getDefault());
+        return format.format(date);
     }
 }

@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "components/sessions/core/tab_restore_service_impl.h"
 
 #include <stddef.h>
@@ -925,7 +920,7 @@ void TabRestoreServiceImpl::PersistenceDelegate::ScheduleCommandsForTab(
     PinnedStatePayload payload = true;
     std::unique_ptr<SessionCommand> command(
         new SessionCommand(kCommandPinnedState, sizeof(payload)));
-    memcpy(command->contents(), &payload, sizeof(payload));
+    UNSAFE_TODO(memcpy(command->contents(), &payload, sizeof(payload)));
     command_storage_manager_->ScheduleCommand(std::move(command));
   }
 
@@ -1060,7 +1055,7 @@ std::unique_ptr<SessionCommand> TabRestoreServiceImpl::PersistenceDelegate::
   payload.timestamp = timestamp.ToDeltaSinceWindowsEpoch().InMicroseconds();
   std::unique_ptr<SessionCommand> command(
       new SessionCommand(kCommandSelectedNavigationInTab, sizeof(payload)));
-  memcpy(command->contents(), &payload, sizeof(payload));
+  UNSAFE_TODO(memcpy(command->contents(), &payload, sizeof(payload)));
   return command;
 }
 
@@ -1071,7 +1066,7 @@ TabRestoreServiceImpl::PersistenceDelegate::CreateRestoredEntryCommand(
   RestoredEntryPayload payload = entry_id.id();
   std::unique_ptr<SessionCommand> command(
       new SessionCommand(kCommandRestoredEntry, sizeof(payload)));
-  memcpy(command->contents(), &payload, sizeof(payload));
+  UNSAFE_TODO(memcpy(command->contents(), &payload, sizeof(payload)));
   return command;
 }
 

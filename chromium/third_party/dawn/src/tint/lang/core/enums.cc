@@ -34,6 +34,8 @@
 //                       Do not modify this file directly
 ////////////////////////////////////////////////////////////////////////////////
 
+// clang-format off
+
 #include "src/tint/lang/core/enums.h"
 
 namespace tint::core {
@@ -124,8 +126,7 @@ std::string_view ToString(AddressSpace value) {
 
 /// ParseInterpolationSampling parses a InterpolationSampling from a string.
 /// @param str the string to parse
-/// @returns the parsed enum, or InterpolationSampling::kUndefined if the string could not be
-/// parsed.
+/// @returns the parsed enum, or InterpolationSampling::kUndefined if the string could not be parsed.
 InterpolationSampling ParseInterpolationSampling(std::string_view str) {
     if (str == "center") {
         return InterpolationSampling::kCenter;
@@ -627,6 +628,9 @@ BuiltinType ParseBuiltinType(std::string_view str) {
     if (str == "ptr") {
         return BuiltinType::kPtr;
     }
+    if (str == "resource_binding") {
+        return BuiltinType::kResourceBinding;
+    }
     if (str == "sampler") {
         return BuiltinType::kSampler;
     }
@@ -879,6 +883,8 @@ std::string_view ToString(BuiltinType value) {
             return "mat4x4h";
         case BuiltinType::kPtr:
             return "ptr";
+        case BuiltinType::kResourceBinding:
+            return "resource_binding";
         case BuiltinType::kSampler:
             return "sampler";
         case BuiltinType::kSamplerComparison:
@@ -967,6 +973,9 @@ std::string_view ToString(BuiltinType value) {
 /// @param str the string to parse
 /// @returns the parsed enum, or BuiltinValue::kUndefined if the string could not be parsed.
 BuiltinValue ParseBuiltinValue(std::string_view str) {
+    if (str == "barycentric_coord") {
+        return BuiltinValue::kBarycentricCoord;
+    }
     if (str == "clip_distances") {
         return BuiltinValue::kClipDistances;
     }
@@ -994,8 +1003,8 @@ BuiltinValue ParseBuiltinValue(std::string_view str) {
     if (str == "position") {
         return BuiltinValue::kPosition;
     }
-    if (str == "primitive_id") {
-        return BuiltinValue::kPrimitiveId;
+    if (str == "primitive_index") {
+        return BuiltinValue::kPrimitiveIndex;
     }
     if (str == "sample_index") {
         return BuiltinValue::kSampleIndex;
@@ -1028,6 +1037,8 @@ std::string_view ToString(BuiltinValue value) {
             return "__cull_distance";
         case BuiltinValue::kPointSize:
             return "__point_size";
+        case BuiltinValue::kBarycentricCoord:
+            return "barycentric_coord";
         case BuiltinValue::kClipDistances:
             return "clip_distances";
         case BuiltinValue::kFragDepth:
@@ -1046,8 +1057,8 @@ std::string_view ToString(BuiltinValue value) {
             return "num_workgroups";
         case BuiltinValue::kPosition:
             return "position";
-        case BuiltinValue::kPrimitiveId:
-            return "primitive_id";
+        case BuiltinValue::kPrimitiveIndex:
+            return "primitive_index";
         case BuiltinValue::kSampleIndex:
             return "sample_index";
         case BuiltinValue::kSampleMask:
@@ -1224,6 +1235,8 @@ std::string_view ToString(ParameterUsage usage) {
             return "image";
         case ParameterUsage::kImageOperands:
             return "image_operands";
+        case ParameterUsage::kIndex:
+            return "index";
         case ParameterUsage::kInputAttachment:
             return "input_attachment";
         case ParameterUsage::kInsert:
@@ -1739,6 +1752,12 @@ BuiltinFn ParseBuiltinFn(std::string_view name) {
     if (name == "print") {
         return BuiltinFn::kPrint;
     }
+    if (name == "hasBinding") {
+        return BuiltinFn::kHasBinding;
+    }
+    if (name == "getBinding") {
+        return BuiltinFn::kGetBinding;
+    }
     return BuiltinFn::kNone;
 }
 
@@ -2046,22 +2065,12 @@ const char* str(BuiltinFn i) {
             return "subgroupMatrixMultiplyAccumulate";
         case BuiltinFn::kPrint:
             return "print";
+        case BuiltinFn::kHasBinding:
+            return "hasBinding";
+        case BuiltinFn::kGetBinding:
+            return "getBinding";
     }
     return "<unknown>";
-}
-
-bool IsCoarseDerivative(BuiltinFn f) {
-    return f == BuiltinFn::kDpdxCoarse || f == BuiltinFn::kDpdyCoarse ||
-           f == BuiltinFn::kFwidthCoarse;
-}
-
-bool IsFineDerivative(BuiltinFn f) {
-    return f == BuiltinFn::kDpdxFine || f == BuiltinFn::kDpdyFine || f == BuiltinFn::kFwidthFine;
-}
-
-bool IsDerivative(BuiltinFn f) {
-    return f == BuiltinFn::kDpdx || f == BuiltinFn::kDpdy || f == BuiltinFn::kFwidth ||
-           IsCoarseDerivative(f) || IsFineDerivative(f);
 }
 
 bool IsTexture(BuiltinFn f) {
@@ -2080,40 +2089,18 @@ bool IsTexture(BuiltinFn f) {
 }
 
 bool IsImageQuery(BuiltinFn f) {
-    return f == BuiltinFn::kTextureDimensions || f == BuiltinFn::kTextureNumLayers ||
-           f == BuiltinFn::kTextureNumLevels || f == BuiltinFn::kTextureNumSamples;
-}
-
-bool IsDataPacking(BuiltinFn f) {
-    return f == BuiltinFn::kPack4X8Snorm || f == BuiltinFn::kPack4X8Unorm ||
-           f == BuiltinFn::kPack2X16Snorm || f == BuiltinFn::kPack2X16Unorm ||
-           f == BuiltinFn::kPack2X16Float;
-}
-
-bool IsDataUnpacking(BuiltinFn f) {
-    return f == BuiltinFn::kUnpack4X8Snorm || f == BuiltinFn::kUnpack4X8Unorm ||
-           f == BuiltinFn::kUnpack2X16Snorm || f == BuiltinFn::kUnpack2X16Unorm ||
-           f == BuiltinFn::kUnpack2X16Float;
-}
-
-bool IsBarrier(BuiltinFn f) {
-    return f == BuiltinFn::kWorkgroupBarrier || f == BuiltinFn::kStorageBarrier ||
-           f == BuiltinFn::kTextureBarrier;
+    return f == BuiltinFn::kTextureDimensions ||
+           f == BuiltinFn::kTextureNumLayers || f == BuiltinFn::kTextureNumLevels ||
+           f == BuiltinFn::kTextureNumSamples;
 }
 
 bool IsAtomic(BuiltinFn f) {
     return f == BuiltinFn::kAtomicLoad || f == BuiltinFn::kAtomicStore ||
-           f == BuiltinFn::kAtomicAdd || f == BuiltinFn::kAtomicSub || f == BuiltinFn::kAtomicMax ||
-           f == BuiltinFn::kAtomicMin || f == BuiltinFn::kAtomicAnd || f == BuiltinFn::kAtomicOr ||
+           f == BuiltinFn::kAtomicAdd || f == BuiltinFn::kAtomicSub ||
+           f == BuiltinFn::kAtomicMax || f == BuiltinFn::kAtomicMin ||
+           f == BuiltinFn::kAtomicAnd || f == BuiltinFn::kAtomicOr ||
            f == BuiltinFn::kAtomicXor || f == BuiltinFn::kAtomicExchange ||
            f == BuiltinFn::kAtomicCompareExchangeWeak;
-}
-
-bool IsPacked4x8IntegerDotProductBuiltin(BuiltinFn f) {
-    return f == BuiltinFn::kDot4I8Packed || f == BuiltinFn::kDot4U8Packed ||
-           f == BuiltinFn::kPack4XI8 || f == BuiltinFn::kPack4XU8 ||
-           f == BuiltinFn::kPack4XI8Clamp || f == BuiltinFn::kPack4XU8Clamp ||
-           f == BuiltinFn::kUnpack4XI8 || f == BuiltinFn::kUnpack4XU8;
 }
 
 bool IsSubgroup(BuiltinFn f) {
@@ -2170,3 +2157,5 @@ bool HasSideEffects(BuiltinFn f) {
 }
 
 }  // namespace tint::core
+
+// clang-format on

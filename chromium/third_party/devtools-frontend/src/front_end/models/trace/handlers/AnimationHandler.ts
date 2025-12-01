@@ -1,20 +1,20 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import * as Helpers from '../helpers/helpers.js';
 import * as Types from '../types/types.js';
 
-const animations: Types.Events.Animation[] = [];
-const animationsSyntheticEvents: Types.Events.SyntheticAnimationPair[] = [];
+let animations: Types.Events.Animation[] = [];
+let animationsSyntheticEvents: Types.Events.SyntheticAnimationPair[] = [];
 
 export interface AnimationData {
   animations: readonly Types.Events.SyntheticAnimationPair[];
 }
 
 export function reset(): void {
-  animations.length = 0;
-  animationsSyntheticEvents.length = 0;
+  animations = [];
+  animationsSyntheticEvents = [];
 }
 
 export function handleEvent(event: Types.Events.Event): void {

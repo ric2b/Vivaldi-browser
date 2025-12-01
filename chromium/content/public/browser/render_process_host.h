@@ -398,8 +398,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // correctly sets the priority.
   // The function is exported only for supporting MockRenderProcessHost
   // and should not be called outside of content/.
-  virtual void SetHasSpareRendererPriority(
-      bool has_spare_renderer_priority) = 0;
+  virtual void GraduateSpareToNormalRendererPriority() = 0;
 
 #if BUILDFLAG(IS_ANDROID)
   // Return the highest importance of all widgets in this process.
@@ -417,11 +416,8 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual void ResumeSocketManagerForRenderFrameHost(
       const GlobalRenderFrameHostId& render_frame_host_id) = 0;
 
-  // Sets a flag indicating that the process can be abnormally terminated.
+  // Sets a flag indicating that the process can be fast shutdown.
   virtual void SetSuddenTerminationAllowed(bool allowed) = 0;
-  // Returns true if the process can be abnormally terminated.
-  virtual bool SuddenTerminationAllowed() = 0;
-
   // Returns how long the child has been idle. The definition of idle
   // depends on when a derived class calls mark_child_process_activity_time().
   // This is a rough indicator and its resolution should not be better than
@@ -706,9 +702,6 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
       NotificationServiceCreatorType creator_type,
       const blink::StorageKey& storage_key,
       mojo::PendingReceiver<blink::mojom::NotificationService> receiver) = 0;
-  virtual void CreateWebSocketConnector(
-      const blink::StorageKey& storage_key,
-      mojo::PendingReceiver<blink::mojom::WebSocketConnector> receiver) = 0;
 
 #if BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
   virtual void CreateOOPVideoDecoder(

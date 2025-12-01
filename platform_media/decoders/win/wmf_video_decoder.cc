@@ -111,7 +111,7 @@ Microsoft::WRL::ComPtr<IMFSample> PrepareInputSample(const DecoderBuffer& input,
   hr = buffer->Lock(&buff_ptr, nullptr, nullptr);
   RETURN_ON_HR_FAIL(hr, "IMFMediaBuffer::Lock()", nullptr);
 
-  memcpy(buff_ptr, input.data(), input.size());
+  memcpy(buff_ptr, base::span(input).data(), input.size());
 
   hr = buffer->Unlock();
   RETURN_ON_HR_FAIL(hr, "IMFMediaBuffer::Unlock()", nullptr);

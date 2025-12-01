@@ -59,6 +59,7 @@ struct VulkanExts {
     bool fSamplerFilterMinmaxEXT = true;
     bool fShaderViewportIndexLayerEXT = true;
     bool fPushDescriptorKHR = true;
+    bool fFrameBoundaryEXT = true;
 };
 
 static std::vector<VkExtensionProperties> get_device_exts(const VulkanExts& config) {
@@ -103,6 +104,7 @@ static std::vector<VkExtensionProperties> get_device_exts(const VulkanExts& conf
     ADD_EXT(fSamplerFilterMinmaxEXT, VK_EXT_SAMPLER_FILTER_MINMAX);
     ADD_EXT(fShaderViewportIndexLayerEXT, VK_EXT_SHADER_VIEWPORT_INDEX_LAYER);
     ADD_EXT(fPushDescriptorKHR, VK_KHR_PUSH_DESCRIPTOR);
+    ADD_EXT(fFrameBoundaryEXT, VK_EXT_FRAME_BOUNDARY);
 #undef ADD_EXT
     return exts;
 }
@@ -218,6 +220,10 @@ static void enable_device_features(const VulkanExts& config, void* basePNext) {
             SET_FEATURES(PIPELINE_CREATION_CACHE_CONTROL_FEATURES,
                          PipelineCreationCacheControlFeatures,
                          SET_IF(fPipelineCreationCacheControlEXT, pipelineCreationCacheControl))
+
+            SET_FEATURES(FRAME_BOUNDARY_FEATURES_EXT,
+                         FrameBoundaryFeaturesEXT,
+                         SET_IF(fFrameBoundaryEXT, frameBoundary))
 
             default:
                 break;
@@ -373,27 +379,27 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan11, reporter) {
     CHECK_EXT_DISABLED(VK_ARM_RASTERIZATION_ORDER_ATTACHMENT_ACCESS);
     CHECK_EXT_ENABLED(VK_EXT_RASTERIZATION_ORDER_ATTACHMENT_ACCESS);
     CHECK_EXT_ENABLED(VK_EXT_BLEND_OPERATION_ADVANCED);
-    //CHECK_EXT_ENABLED(VK_EXT_EXTENDED_DYNAMIC_STATE);
-    //CHECK_EXT_ENABLED(VK_EXT_EXTENDED_DYNAMIC_STATE_2);
-    //CHECK_EXT_ENABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
-    //CHECK_EXT_ENABLED(VK_EXT_GRAPHICS_PIPELINE_LIBRARY);
+    CHECK_EXT_ENABLED(VK_EXT_EXTENDED_DYNAMIC_STATE);
+    CHECK_EXT_ENABLED(VK_EXT_EXTENDED_DYNAMIC_STATE_2);
+    CHECK_EXT_ENABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
+    CHECK_EXT_ENABLED(VK_EXT_GRAPHICS_PIPELINE_LIBRARY);
     CHECK_EXT_ENABLED(VK_KHR_SAMPLER_YCBCR_CONVERSION);
     CHECK_EXT_ENABLED(VK_EXT_RGBA10X6_FORMATS);
     //CHECK_EXT_ENABLED(VK_KHR_SYNCHRONIZATION_2);
     //CHECK_EXT_ENABLED(VK_KHR_DYNAMIC_RENDERING);
     //CHECK_EXT_ENABLED(VK_KHR_DYNAMIC_RENDERING_LOCAL_READ);
-    //CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
-    //CHECK_EXT_ENABLED(VK_EXT_HOST_IMAGE_COPY);
+    CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
+    CHECK_EXT_ENABLED(VK_EXT_HOST_IMAGE_COPY);
     CHECK_EXT_ENABLED(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL);
     CHECK_EXT_ENABLED(VK_KHR_DRIVER_PROPERTIES);
     CHECK_EXT_ENABLED(VK_KHR_CREATE_RENDERPASS_2);
     CHECK_EXT_DISABLED(VK_EXT_LOAD_STORE_OP_NONE);
     CHECK_EXT_ENABLED(VK_KHR_LOAD_STORE_OP_NONE);
     CHECK_EXT_ENABLED(VK_EXT_CONSERVATIVE_RASTERIZATION);
-    //CHECK_EXT_ENABLED(VK_KHR_PIPELINE_LIBRARY);
-    //CHECK_EXT_ENABLED(VK_KHR_COPY_COMMANDS_2);
-    //CHECK_EXT_ENABLED(VK_KHR_FORMAT_FEATURE_FLAGS_2);
-    //CHECK_EXT_ENABLED(VK_KHR_DEPTH_STENCIL_RESOLVE);
+    CHECK_EXT_ENABLED(VK_KHR_PIPELINE_LIBRARY);
+    CHECK_EXT_ENABLED(VK_KHR_COPY_COMMANDS_2);
+    CHECK_EXT_ENABLED(VK_KHR_FORMAT_FEATURE_FLAGS_2);
+    CHECK_EXT_ENABLED(VK_KHR_DEPTH_STENCIL_RESOLVE);
     CHECK_EXT_DISABLED(VK_KHR_SHADER_DRAW_PARAMETERS);
     CHECK_EXT_DISABLED(VK_KHR_DRAW_INDIRECT_COUNT);
     CHECK_EXT_DISABLED(VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE);
@@ -401,6 +407,7 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan11, reporter) {
     CHECK_EXT_DISABLED(VK_EXT_SAMPLER_FILTER_MINMAX);
     CHECK_EXT_DISABLED(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER);
     CHECK_EXT_DISABLED(VK_KHR_PUSH_DESCRIPTOR);
+    CHECK_EXT_ENABLED(VK_EXT_FRAME_BOUNDARY);
 
     CHECK_FEATURE_ENABLED(RASTERIZATION_ORDER_ATTACHMENT_ACCESS_FEATURES_EXT,
                           RasterizationOrderAttachmentAccessFeaturesEXT,
@@ -416,13 +423,13 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan11, reporter) {
                           BlendOperationAdvancedFeaturesEXT,
                           advancedBlendCoherentOperations);
 
-    //CHECK_FEATURE_ENABLED(EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
-    //                      ExtendedDynamicStateFeaturesEXT,
-    //                      extendedDynamicState);
+    CHECK_FEATURE_ENABLED(EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
+                          ExtendedDynamicStateFeaturesEXT,
+                          extendedDynamicState);
 
-    //CHECK_FEATURE_ENABLED(EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT,
-    //                      ExtendedDynamicState2FeaturesEXT,
-    //                      extendedDynamicState2);
+    CHECK_FEATURE_ENABLED(EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT,
+                          ExtendedDynamicState2FeaturesEXT,
+                          extendedDynamicState2);
     CHECK_FEATURE_DISABLED(EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT,
                            ExtendedDynamicState2FeaturesEXT,
                            extendedDynamicState2LogicOp);
@@ -430,13 +437,13 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan11, reporter) {
                            ExtendedDynamicState2FeaturesEXT,
                            extendedDynamicState2PatchControlPoints);
 
-    //CHECK_FEATURE_ENABLED(VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
-    //                      VertexInputDynamicStateFeaturesEXT,
-    //                      vertexInputDynamicState);
+    CHECK_FEATURE_ENABLED(VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
+                          VertexInputDynamicStateFeaturesEXT,
+                          vertexInputDynamicState);
 
-    //CHECK_FEATURE_ENABLED(GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
-    //                      GraphicsPipelineLibraryFeaturesEXT,
-    //                      graphicsPipelineLibrary);
+    CHECK_FEATURE_ENABLED(GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
+                          GraphicsPipelineLibraryFeaturesEXT,
+                          graphicsPipelineLibrary);
 
     CHECK_FEATURE_ENABLED(SAMPLER_YCBCR_CONVERSION_FEATURES,
                           SamplerYcbcrConversionFeatures,
@@ -454,15 +461,19 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan11, reporter) {
     //                      DynamicRenderingLocalReadFeatures,
     //                      dynamicRenderingLocalRead);
 
-    //CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
-    //                      MultisampledRenderToSingleSampledFeaturesEXT,
-    //                      multisampledRenderToSingleSampled);
+    CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
+                          MultisampledRenderToSingleSampledFeaturesEXT,
+                          multisampledRenderToSingleSampled);
 
-    //CHECK_FEATURE_ENABLED(HOST_IMAGE_COPY_FEATURES, HostImageCopyFeatures, hostImageCopy);
+    CHECK_FEATURE_ENABLED(HOST_IMAGE_COPY_FEATURES, HostImageCopyFeatures, hostImageCopy);
 
     CHECK_FEATURE_ENABLED(PIPELINE_CREATION_CACHE_CONTROL_FEATURES,
                           PipelineCreationCacheControlFeatures,
                           pipelineCreationCacheControl);
+
+    CHECK_FEATURE_ENABLED(FRAME_BOUNDARY_FEATURES_EXT,
+                          FrameBoundaryFeaturesEXT,
+                          frameBoundary);
 }
 
 // A test where the application adds no features and extensions and lets Skia choose them. Uses
@@ -499,26 +510,26 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan12, reporter) {
     CHECK_EXT_DISABLED(VK_ARM_RASTERIZATION_ORDER_ATTACHMENT_ACCESS);
     CHECK_EXT_ENABLED(VK_EXT_RASTERIZATION_ORDER_ATTACHMENT_ACCESS);
     CHECK_EXT_ENABLED(VK_EXT_BLEND_OPERATION_ADVANCED);
-    //CHECK_EXT_ENABLED(VK_EXT_EXTENDED_DYNAMIC_STATE);
-    //CHECK_EXT_ENABLED(VK_EXT_EXTENDED_DYNAMIC_STATE_2);
-    //CHECK_EXT_ENABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
-    //CHECK_EXT_ENABLED(VK_EXT_GRAPHICS_PIPELINE_LIBRARY);
+    CHECK_EXT_ENABLED(VK_EXT_EXTENDED_DYNAMIC_STATE);
+    CHECK_EXT_ENABLED(VK_EXT_EXTENDED_DYNAMIC_STATE_2);
+    CHECK_EXT_ENABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
+    CHECK_EXT_ENABLED(VK_EXT_GRAPHICS_PIPELINE_LIBRARY);
     CHECK_EXT_DISABLED(VK_KHR_SAMPLER_YCBCR_CONVERSION);
     CHECK_EXT_ENABLED(VK_EXT_RGBA10X6_FORMATS);
     //CHECK_EXT_ENABLED(VK_KHR_SYNCHRONIZATION_2);
     //CHECK_EXT_ENABLED(VK_KHR_DYNAMIC_RENDERING);
     //CHECK_EXT_ENABLED(VK_KHR_DYNAMIC_RENDERING_LOCAL_READ);
-    //CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
-    //CHECK_EXT_ENABLED(VK_EXT_HOST_IMAGE_COPY);
+    CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
+    CHECK_EXT_ENABLED(VK_EXT_HOST_IMAGE_COPY);
     CHECK_EXT_ENABLED(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL);
     CHECK_EXT_DISABLED(VK_KHR_DRIVER_PROPERTIES);
     CHECK_EXT_DISABLED(VK_KHR_CREATE_RENDERPASS_2);
     CHECK_EXT_DISABLED(VK_EXT_LOAD_STORE_OP_NONE);
     CHECK_EXT_ENABLED(VK_KHR_LOAD_STORE_OP_NONE);
     CHECK_EXT_ENABLED(VK_EXT_CONSERVATIVE_RASTERIZATION);
-    //CHECK_EXT_ENABLED(VK_KHR_PIPELINE_LIBRARY);
-    //CHECK_EXT_ENABLED(VK_KHR_COPY_COMMANDS_2);
-    //CHECK_EXT_ENABLED(VK_KHR_FORMAT_FEATURE_FLAGS_2);
+    CHECK_EXT_ENABLED(VK_KHR_PIPELINE_LIBRARY);
+    CHECK_EXT_ENABLED(VK_KHR_COPY_COMMANDS_2);
+    CHECK_EXT_ENABLED(VK_KHR_FORMAT_FEATURE_FLAGS_2);
     CHECK_EXT_DISABLED(VK_KHR_DEPTH_STENCIL_RESOLVE);
     CHECK_EXT_DISABLED(VK_KHR_SHADER_DRAW_PARAMETERS);
     CHECK_EXT_DISABLED(VK_KHR_DRAW_INDIRECT_COUNT);
@@ -527,6 +538,7 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan12, reporter) {
     CHECK_EXT_DISABLED(VK_EXT_SAMPLER_FILTER_MINMAX);
     CHECK_EXT_DISABLED(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER);
     CHECK_EXT_DISABLED(VK_KHR_PUSH_DESCRIPTOR);
+    CHECK_EXT_ENABLED(VK_EXT_FRAME_BOUNDARY);
 
     CHECK_EXCLUSIVE(VULKAN_1_1_FEATURES, 16BIT_STORAGE_FEATURES);
     CHECK_EXCLUSIVE(VULKAN_1_1_FEATURES, MULTIVIEW_FEATURES);
@@ -572,13 +584,13 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan12, reporter) {
                           BlendOperationAdvancedFeaturesEXT,
                           advancedBlendCoherentOperations);
 
-    //CHECK_FEATURE_ENABLED(EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
-    //                      ExtendedDynamicStateFeaturesEXT,
-    //                      extendedDynamicState);
+    CHECK_FEATURE_ENABLED(EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
+                          ExtendedDynamicStateFeaturesEXT,
+                          extendedDynamicState);
 
-    //CHECK_FEATURE_ENABLED(EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT,
-    //                      ExtendedDynamicState2FeaturesEXT,
-    //                      extendedDynamicState2);
+    CHECK_FEATURE_ENABLED(EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT,
+                          ExtendedDynamicState2FeaturesEXT,
+                          extendedDynamicState2);
     CHECK_FEATURE_DISABLED(EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT,
                            ExtendedDynamicState2FeaturesEXT,
                            extendedDynamicState2LogicOp);
@@ -586,13 +598,13 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan12, reporter) {
                            ExtendedDynamicState2FeaturesEXT,
                            extendedDynamicState2PatchControlPoints);
 
-    //CHECK_FEATURE_ENABLED(VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
-    //                      VertexInputDynamicStateFeaturesEXT,
-    //                      vertexInputDynamicState);
+    CHECK_FEATURE_ENABLED(VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
+                          VertexInputDynamicStateFeaturesEXT,
+                          vertexInputDynamicState);
 
-    //CHECK_FEATURE_ENABLED(GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
-    //                      GraphicsPipelineLibraryFeaturesEXT,
-    //                      graphicsPipelineLibrary);
+    CHECK_FEATURE_ENABLED(GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
+                          GraphicsPipelineLibraryFeaturesEXT,
+                          graphicsPipelineLibrary);
 
     CHECK_FEATURE_DISABLED(SAMPLER_YCBCR_CONVERSION_FEATURES,
                            SamplerYcbcrConversionFeatures,
@@ -610,15 +622,19 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan12, reporter) {
     //                      DynamicRenderingLocalReadFeatures,
     //                      dynamicRenderingLocalRead);
 
-    //CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
-    //                      MultisampledRenderToSingleSampledFeaturesEXT,
-    //                      multisampledRenderToSingleSampled);
+    CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
+                          MultisampledRenderToSingleSampledFeaturesEXT,
+                          multisampledRenderToSingleSampled);
 
-    //CHECK_FEATURE_ENABLED(HOST_IMAGE_COPY_FEATURES, HostImageCopyFeatures, hostImageCopy);
+    CHECK_FEATURE_ENABLED(HOST_IMAGE_COPY_FEATURES, HostImageCopyFeatures, hostImageCopy);
 
     CHECK_FEATURE_ENABLED(PIPELINE_CREATION_CACHE_CONTROL_FEATURES,
                           PipelineCreationCacheControlFeatures,
                           pipelineCreationCacheControl);
+
+    CHECK_FEATURE_ENABLED(FRAME_BOUNDARY_FEATURES_EXT,
+                          FrameBoundaryFeaturesEXT,
+                          frameBoundary);
 }
 
 // A test where the application adds no features and extensions and lets Skia choose them. Uses
@@ -657,22 +673,22 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan13, reporter) {
     CHECK_EXT_ENABLED(VK_EXT_BLEND_OPERATION_ADVANCED);
     CHECK_EXT_DISABLED(VK_EXT_EXTENDED_DYNAMIC_STATE);
     CHECK_EXT_DISABLED(VK_EXT_EXTENDED_DYNAMIC_STATE_2);
-    //CHECK_EXT_ENABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
-    //CHECK_EXT_ENABLED(VK_EXT_GRAPHICS_PIPELINE_LIBRARY);
+    CHECK_EXT_ENABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
+    CHECK_EXT_ENABLED(VK_EXT_GRAPHICS_PIPELINE_LIBRARY);
     CHECK_EXT_DISABLED(VK_KHR_SAMPLER_YCBCR_CONVERSION);
     CHECK_EXT_ENABLED(VK_EXT_RGBA10X6_FORMATS);
     CHECK_EXT_DISABLED(VK_KHR_SYNCHRONIZATION_2);
     CHECK_EXT_DISABLED(VK_KHR_DYNAMIC_RENDERING);
     //CHECK_EXT_ENABLED(VK_KHR_DYNAMIC_RENDERING_LOCAL_READ);
-    //CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
-    //CHECK_EXT_ENABLED(VK_EXT_HOST_IMAGE_COPY);
+    CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
+    CHECK_EXT_ENABLED(VK_EXT_HOST_IMAGE_COPY);
     CHECK_EXT_DISABLED(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL);
     CHECK_EXT_DISABLED(VK_KHR_DRIVER_PROPERTIES);
     CHECK_EXT_DISABLED(VK_KHR_CREATE_RENDERPASS_2);
     CHECK_EXT_DISABLED(VK_EXT_LOAD_STORE_OP_NONE);
     CHECK_EXT_ENABLED(VK_KHR_LOAD_STORE_OP_NONE);
     CHECK_EXT_ENABLED(VK_EXT_CONSERVATIVE_RASTERIZATION);
-    //CHECK_EXT_ENABLED(VK_KHR_PIPELINE_LIBRARY);
+    CHECK_EXT_ENABLED(VK_KHR_PIPELINE_LIBRARY);
     CHECK_EXT_DISABLED(VK_KHR_COPY_COMMANDS_2);
     CHECK_EXT_DISABLED(VK_KHR_FORMAT_FEATURE_FLAGS_2);
     CHECK_EXT_DISABLED(VK_KHR_DEPTH_STENCIL_RESOLVE);
@@ -683,6 +699,7 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan13, reporter) {
     CHECK_EXT_DISABLED(VK_EXT_SAMPLER_FILTER_MINMAX);
     CHECK_EXT_DISABLED(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER);
     CHECK_EXT_DISABLED(VK_KHR_PUSH_DESCRIPTOR);
+    CHECK_EXT_ENABLED(VK_EXT_FRAME_BOUNDARY);
 
     CHECK_EXCLUSIVE(VULKAN_1_1_FEATURES, 16BIT_STORAGE_FEATURES);
     CHECK_EXCLUSIVE(VULKAN_1_1_FEATURES, MULTIVIEW_FEATURES);
@@ -757,13 +774,13 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan13, reporter) {
                            ExtendedDynamicState2FeaturesEXT,
                            extendedDynamicState2PatchControlPoints);
 
-    //CHECK_FEATURE_ENABLED(VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
-    //                      VertexInputDynamicStateFeaturesEXT,
-    //                      vertexInputDynamicState);
+    CHECK_FEATURE_ENABLED(VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
+                          VertexInputDynamicStateFeaturesEXT,
+                          vertexInputDynamicState);
 
-    //CHECK_FEATURE_ENABLED(GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
-    //                      GraphicsPipelineLibraryFeaturesEXT,
-    //                      graphicsPipelineLibrary);
+    CHECK_FEATURE_ENABLED(GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
+                          GraphicsPipelineLibraryFeaturesEXT,
+                          graphicsPipelineLibrary);
 
     CHECK_FEATURE_DISABLED(SAMPLER_YCBCR_CONVERSION_FEATURES,
                            SamplerYcbcrConversionFeatures,
@@ -781,15 +798,19 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan13, reporter) {
     //                      DynamicRenderingLocalReadFeatures,
     //                      dynamicRenderingLocalRead);
 
-    //CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
-    //                      MultisampledRenderToSingleSampledFeaturesEXT,
-    //                      multisampledRenderToSingleSampled);
+    CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
+                          MultisampledRenderToSingleSampledFeaturesEXT,
+                          multisampledRenderToSingleSampled);
 
-    //CHECK_FEATURE_ENABLED(HOST_IMAGE_COPY_FEATURES, HostImageCopyFeatures, hostImageCopy);
+    CHECK_FEATURE_ENABLED(HOST_IMAGE_COPY_FEATURES, HostImageCopyFeatures, hostImageCopy);
 
     CHECK_FEATURE_DISABLED(PIPELINE_CREATION_CACHE_CONTROL_FEATURES,
                            PipelineCreationCacheControlFeatures,
                            pipelineCreationCacheControl);
+
+    CHECK_FEATURE_ENABLED(FRAME_BOUNDARY_FEATURES_EXT,
+                          FrameBoundaryFeaturesEXT,
+                          frameBoundary);
 }
 
 // A test where the application adds no features and extensions and lets Skia choose them. Uses
@@ -828,14 +849,14 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan14, reporter) {
     CHECK_EXT_ENABLED(VK_EXT_BLEND_OPERATION_ADVANCED);
     CHECK_EXT_DISABLED(VK_EXT_EXTENDED_DYNAMIC_STATE);
     CHECK_EXT_DISABLED(VK_EXT_EXTENDED_DYNAMIC_STATE_2);
-    //CHECK_EXT_ENABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
-    //CHECK_EXT_ENABLED(VK_EXT_GRAPHICS_PIPELINE_LIBRARY);
+    CHECK_EXT_ENABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
+    CHECK_EXT_ENABLED(VK_EXT_GRAPHICS_PIPELINE_LIBRARY);
     CHECK_EXT_DISABLED(VK_KHR_SAMPLER_YCBCR_CONVERSION);
     CHECK_EXT_ENABLED(VK_EXT_RGBA10X6_FORMATS);
     CHECK_EXT_DISABLED(VK_KHR_SYNCHRONIZATION_2);
     CHECK_EXT_DISABLED(VK_KHR_DYNAMIC_RENDERING);
     CHECK_EXT_DISABLED(VK_KHR_DYNAMIC_RENDERING_LOCAL_READ);
-    //CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
+    CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
     CHECK_EXT_DISABLED(VK_EXT_HOST_IMAGE_COPY);
     CHECK_EXT_DISABLED(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL);
     CHECK_EXT_DISABLED(VK_KHR_DRIVER_PROPERTIES);
@@ -843,7 +864,7 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan14, reporter) {
     CHECK_EXT_DISABLED(VK_EXT_LOAD_STORE_OP_NONE);
     CHECK_EXT_DISABLED(VK_KHR_LOAD_STORE_OP_NONE);
     CHECK_EXT_ENABLED(VK_EXT_CONSERVATIVE_RASTERIZATION);
-    //CHECK_EXT_ENABLED(VK_KHR_PIPELINE_LIBRARY);
+    CHECK_EXT_ENABLED(VK_KHR_PIPELINE_LIBRARY);
     CHECK_EXT_DISABLED(VK_KHR_COPY_COMMANDS_2);
     CHECK_EXT_DISABLED(VK_KHR_FORMAT_FEATURE_FLAGS_2);
     CHECK_EXT_DISABLED(VK_KHR_DEPTH_STENCIL_RESOLVE);
@@ -854,6 +875,7 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan14, reporter) {
     CHECK_EXT_DISABLED(VK_EXT_SAMPLER_FILTER_MINMAX);
     CHECK_EXT_DISABLED(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER);
     CHECK_EXT_DISABLED(VK_KHR_PUSH_DESCRIPTOR);
+    CHECK_EXT_ENABLED(VK_EXT_FRAME_BOUNDARY);
 
     CHECK_EXCLUSIVE(VULKAN_1_1_FEATURES, 16BIT_STORAGE_FEATURES);
     CHECK_EXCLUSIVE(VULKAN_1_1_FEATURES, MULTIVIEW_FEATURES);
@@ -943,13 +965,13 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan14, reporter) {
                            ExtendedDynamicState2FeaturesEXT,
                            extendedDynamicState2PatchControlPoints);
 
-    //CHECK_FEATURE_ENABLED(VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
-    //                      VertexInputDynamicStateFeaturesEXT,
-    //                      vertexInputDynamicState);
+    CHECK_FEATURE_ENABLED(VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
+                          VertexInputDynamicStateFeaturesEXT,
+                          vertexInputDynamicState);
 
-    //CHECK_FEATURE_ENABLED(GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
-    //                      GraphicsPipelineLibraryFeaturesEXT,
-    //                      graphicsPipelineLibrary);
+    CHECK_FEATURE_ENABLED(GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
+                          GraphicsPipelineLibraryFeaturesEXT,
+                          graphicsPipelineLibrary);
 
     CHECK_FEATURE_DISABLED(SAMPLER_YCBCR_CONVERSION_FEATURES,
                            SamplerYcbcrConversionFeatures,
@@ -967,15 +989,19 @@ DEF_TEST(VkPreferredFeaturesTest_BasicVulkan14, reporter) {
                            DynamicRenderingLocalReadFeatures,
                            dynamicRenderingLocalRead);
 
-    //CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
-    //                      MultisampledRenderToSingleSampledFeaturesEXT,
-    //                      multisampledRenderToSingleSampled);
+    CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
+                          MultisampledRenderToSingleSampledFeaturesEXT,
+                          multisampledRenderToSingleSampled);
 
     CHECK_FEATURE_DISABLED(HOST_IMAGE_COPY_FEATURES, HostImageCopyFeatures, hostImageCopy);
 
     CHECK_FEATURE_DISABLED(PIPELINE_CREATION_CACHE_CONTROL_FEATURES,
                            PipelineCreationCacheControlFeatures,
                            pipelineCreationCacheControl);
+
+    CHECK_FEATURE_ENABLED(FRAME_BOUNDARY_FEATURES_EXT,
+                          FrameBoundaryFeaturesEXT,
+                          frameBoundary);
 }
 
 #define CHAIN(STRUCT_NAME, StructName, Feature)                              \
@@ -1003,6 +1029,7 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan11, reporter) {
     config.fGraphicsPipelineLibraryEXT = false;
     config.fExtendedDynamicState2EXT = false;
     config.fCreateRenderpass2KHR = false;
+    config.fFrameBoundaryEXT = false;
 
     const std::vector<VkExtensionProperties> exts = get_device_exts(config);
 
@@ -1043,9 +1070,9 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan11, reporter) {
     CHECK_EXT_DISABLED(VK_ARM_RASTERIZATION_ORDER_ATTACHMENT_ACCESS);
     CHECK_EXT_ENABLED(VK_EXT_RASTERIZATION_ORDER_ATTACHMENT_ACCESS);
     CHECK_EXT_ENABLED(VK_EXT_BLEND_OPERATION_ADVANCED);
-    //CHECK_EXT_ENABLED(VK_EXT_EXTENDED_DYNAMIC_STATE);
+    CHECK_EXT_ENABLED(VK_EXT_EXTENDED_DYNAMIC_STATE);
     CHECK_EXT_DISABLED(VK_EXT_EXTENDED_DYNAMIC_STATE_2);
-    //CHECK_EXT_ENABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
+    CHECK_EXT_ENABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
     CHECK_EXT_DISABLED(VK_EXT_GRAPHICS_PIPELINE_LIBRARY);
     CHECK_EXT_DISABLED(VK_KHR_SAMPLER_YCBCR_CONVERSION);
     CHECK_EXT_ENABLED(VK_EXT_RGBA10X6_FORMATS);
@@ -1053,7 +1080,7 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan11, reporter) {
     CHECK_EXT_DISABLED(VK_KHR_DYNAMIC_RENDERING);
     CHECK_EXT_DISABLED(VK_KHR_DYNAMIC_RENDERING_LOCAL_READ);
     CHECK_EXT_DISABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
-    //CHECK_EXT_ENABLED(VK_EXT_HOST_IMAGE_COPY);
+    CHECK_EXT_ENABLED(VK_EXT_HOST_IMAGE_COPY);
     CHECK_EXT_ENABLED(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL);
     CHECK_EXT_ENABLED(VK_KHR_DRIVER_PROPERTIES);
     CHECK_EXT_DISABLED(VK_KHR_CREATE_RENDERPASS_2);
@@ -1061,8 +1088,8 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan11, reporter) {
     CHECK_EXT_DISABLED(VK_KHR_LOAD_STORE_OP_NONE);
     CHECK_EXT_ENABLED(VK_EXT_CONSERVATIVE_RASTERIZATION);
     CHECK_EXT_DISABLED(VK_KHR_PIPELINE_LIBRARY);
-    //CHECK_EXT_ENABLED(VK_KHR_COPY_COMMANDS_2);
-    //CHECK_EXT_ENABLED(VK_KHR_FORMAT_FEATURE_FLAGS_2);
+    CHECK_EXT_ENABLED(VK_KHR_COPY_COMMANDS_2);
+    CHECK_EXT_ENABLED(VK_KHR_FORMAT_FEATURE_FLAGS_2);
     CHECK_EXT_DISABLED(VK_KHR_DEPTH_STENCIL_RESOLVE);
     CHECK_EXT_DISABLED(VK_KHR_SHADER_DRAW_PARAMETERS);
     CHECK_EXT_DISABLED(VK_KHR_DRAW_INDIRECT_COUNT);
@@ -1074,6 +1101,7 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan11, reporter) {
     CHECK_EXT_ENABLED(VK_EXT_SUBGROUP_SIZE_CONTROL);
     CHECK_EXT_ENABLED(VK_KHR_MAINTENANCE_4);
     CHECK_EXT_ENABLED(VK_KHR_PUSH_DESCRIPTOR);
+    CHECK_EXT_DISABLED(VK_EXT_FRAME_BOUNDARY);
 
     CHECK_FEATURE_ENABLED(RASTERIZATION_ORDER_ATTACHMENT_ACCESS_FEATURES_EXT,
                           RasterizationOrderAttachmentAccessFeaturesEXT,
@@ -1089,9 +1117,9 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan11, reporter) {
                           BlendOperationAdvancedFeaturesEXT,
                           advancedBlendCoherentOperations);
 
-    //CHECK_FEATURE_ENABLED(EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
-    //                      ExtendedDynamicStateFeaturesEXT,
-    //                      extendedDynamicState);
+    CHECK_FEATURE_ENABLED(EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
+                          ExtendedDynamicStateFeaturesEXT,
+                          extendedDynamicState);
 
     CHECK_FEATURE_DISABLED(EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT,
                            ExtendedDynamicState2FeaturesEXT,
@@ -1103,9 +1131,9 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan11, reporter) {
                            ExtendedDynamicState2FeaturesEXT,
                            extendedDynamicState2PatchControlPoints);
 
-    //CHECK_FEATURE_ENABLED(VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
-    //                      VertexInputDynamicStateFeaturesEXT,
-    //                      vertexInputDynamicState);
+    CHECK_FEATURE_ENABLED(VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
+                          VertexInputDynamicStateFeaturesEXT,
+                          vertexInputDynamicState);
 
     CHECK_FEATURE_DISABLED(GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
                            GraphicsPipelineLibraryFeaturesEXT,
@@ -1141,6 +1169,10 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan11, reporter) {
     CHECK_FEATURE_ENABLED(SHADER_OBJECT_FEATURES_EXT, ShaderObjectFeaturesEXT, shaderObject);
     CHECK_FEATURE_ENABLED(MAINTENANCE_5_FEATURES, Maintenance5Features, maintenance5);
     CHECK_FEATURE_ENABLED(HOST_IMAGE_COPY_FEATURES, HostImageCopyFeatures, hostImageCopy);
+
+    CHECK_FEATURE_DISABLED(FRAME_BOUNDARY_FEATURES_EXT,
+                          FrameBoundaryFeaturesEXT,
+                          frameBoundary);
 }
 
 // A test where the application adds some features and extensions and lets Skia add to them. At the
@@ -1154,6 +1186,7 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan12, reporter) {
     config.fVertexInputDynamicStateEXT = false;
     config.fExtendedDynamicStateEXT = false;
     config.fExtendedDynamicState2EXT = false;
+    config.fFrameBoundaryEXT = false;
 
     const std::vector<VkExtensionProperties> exts = get_device_exts(config);
 
@@ -1210,12 +1243,12 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan12, reporter) {
     CHECK_EXT_DISABLED(VK_EXT_EXTENDED_DYNAMIC_STATE);
     CHECK_EXT_DISABLED(VK_EXT_EXTENDED_DYNAMIC_STATE_2);
     CHECK_EXT_DISABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
-    //CHECK_EXT_ENABLED(VK_EXT_GRAPHICS_PIPELINE_LIBRARY);
+    CHECK_EXT_ENABLED(VK_EXT_GRAPHICS_PIPELINE_LIBRARY);
     CHECK_EXT_DISABLED(VK_KHR_SAMPLER_YCBCR_CONVERSION);
     //CHECK_EXT_ENABLED(VK_KHR_SYNCHRONIZATION_2);
     //CHECK_EXT_ENABLED(VK_KHR_DYNAMIC_RENDERING);
     //CHECK_EXT_ENABLED(VK_KHR_DYNAMIC_RENDERING_LOCAL_READ);
-    //CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
+    CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
     CHECK_EXT_DISABLED(VK_EXT_HOST_IMAGE_COPY);
     CHECK_EXT_ENABLED(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL);
     CHECK_EXT_DISABLED(VK_KHR_DRIVER_PROPERTIES);
@@ -1223,9 +1256,9 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan12, reporter) {
     CHECK_EXT_DISABLED(VK_EXT_LOAD_STORE_OP_NONE);
     CHECK_EXT_ENABLED(VK_KHR_LOAD_STORE_OP_NONE);
     CHECK_EXT_ENABLED(VK_EXT_CONSERVATIVE_RASTERIZATION);
-    //CHECK_EXT_ENABLED(VK_KHR_PIPELINE_LIBRARY);
-    //CHECK_EXT_ENABLED(VK_KHR_COPY_COMMANDS_2);
-    //CHECK_EXT_ENABLED(VK_KHR_FORMAT_FEATURE_FLAGS_2);
+    CHECK_EXT_ENABLED(VK_KHR_PIPELINE_LIBRARY);
+    CHECK_EXT_ENABLED(VK_KHR_COPY_COMMANDS_2);
+    CHECK_EXT_ENABLED(VK_KHR_FORMAT_FEATURE_FLAGS_2);
     CHECK_EXT_DISABLED(VK_KHR_DEPTH_STENCIL_RESOLVE);
     CHECK_EXT_DISABLED(VK_KHR_DRAW_INDIRECT_COUNT);
     CHECK_EXT_DISABLED(VK_EXT_SAMPLER_FILTER_MINMAX);
@@ -1237,6 +1270,7 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan12, reporter) {
     CHECK_EXT_ENABLED(VK_KHR_SHADER_DRAW_PARAMETERS);
     CHECK_EXT_ENABLED(VK_EXT_DESCRIPTOR_INDEXING);
     CHECK_EXT_ENABLED(VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE);
+    CHECK_EXT_DISABLED(VK_EXT_FRAME_BOUNDARY);
 
     CHECK_FEATURE_ENABLED(VULKAN_1_1_FEATURES, Vulkan11Features, samplerYcbcrConversion);
     CHECK_FEATURE_ENABLED(VULKAN_1_1_FEATURES, Vulkan11Features, shaderDrawParameters);
@@ -1322,9 +1356,9 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan12, reporter) {
                            VertexInputDynamicStateFeaturesEXT,
                            vertexInputDynamicState);
 
-    //CHECK_FEATURE_ENABLED(GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
-    //                      GraphicsPipelineLibraryFeaturesEXT,
-    //                      graphicsPipelineLibrary);
+    CHECK_FEATURE_ENABLED(GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
+                          GraphicsPipelineLibraryFeaturesEXT,
+                          graphicsPipelineLibrary);
 
     CHECK_FEATURE_DISABLED(RGBA10X6_FORMATS_FEATURES_EXT,
                            RGBA10X6FormatsFeaturesEXT,
@@ -1338,9 +1372,9 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan12, reporter) {
     //                      DynamicRenderingLocalReadFeatures,
     //                      dynamicRenderingLocalRead);
 
-    //CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
-    //                      MultisampledRenderToSingleSampledFeaturesEXT,
-    //                      multisampledRenderToSingleSampled);
+    CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
+                          MultisampledRenderToSingleSampledFeaturesEXT,
+                          multisampledRenderToSingleSampled);
 
     CHECK_FEATURE_DISABLED(HOST_IMAGE_COPY_FEATURES, HostImageCopyFeatures, hostImageCopy);
 
@@ -1351,6 +1385,10 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan12, reporter) {
     CHECK_FEATURE_ENABLED(PIPELINE_CREATION_CACHE_CONTROL_FEATURES,
                           PipelineCreationCacheControlFeatures,
                           pipelineCreationCacheControl);
+
+    CHECK_FEATURE_DISABLED(FRAME_BOUNDARY_FEATURES_EXT,
+                          FrameBoundaryFeaturesEXT,
+                          frameBoundary);
 }
 
 // A test where the application adds some features and extensions and lets Skia add to them. At the
@@ -1437,14 +1475,14 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan13, reporter) {
     CHECK_EXT_DISABLED(VK_EXT_RGBA10X6_FORMATS);
     CHECK_EXT_DISABLED(VK_KHR_SYNCHRONIZATION_2);
     //CHECK_EXT_ENABLED(VK_KHR_DYNAMIC_RENDERING_LOCAL_READ);
-    //CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
+    CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
     CHECK_EXT_DISABLED(VK_EXT_HOST_IMAGE_COPY);
     CHECK_EXT_DISABLED(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL);
     CHECK_EXT_DISABLED(VK_KHR_CREATE_RENDERPASS_2);
     CHECK_EXT_DISABLED(VK_EXT_LOAD_STORE_OP_NONE);
     CHECK_EXT_ENABLED(VK_KHR_LOAD_STORE_OP_NONE);
     CHECK_EXT_ENABLED(VK_EXT_CONSERVATIVE_RASTERIZATION);
-    //CHECK_EXT_ENABLED(VK_KHR_PIPELINE_LIBRARY);
+    CHECK_EXT_ENABLED(VK_KHR_PIPELINE_LIBRARY);
     CHECK_EXT_DISABLED(VK_KHR_COPY_COMMANDS_2);
     CHECK_EXT_DISABLED(VK_KHR_FORMAT_FEATURE_FLAGS_2);
     CHECK_EXT_DISABLED(VK_KHR_DEPTH_STENCIL_RESOLVE);
@@ -1459,6 +1497,7 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan13, reporter) {
     CHECK_EXT_ENABLED(VK_KHR_SHADER_DRAW_PARAMETERS);
     CHECK_EXT_ENABLED(VK_EXT_DESCRIPTOR_INDEXING);
     CHECK_EXT_ENABLED(VK_KHR_DYNAMIC_RENDERING);
+    CHECK_EXT_ENABLED(VK_EXT_FRAME_BOUNDARY);
 
     CHECK_FEATURE_ENABLED(VULKAN_1_1_FEATURES, Vulkan11Features, multiview);
     CHECK_FEATURE_DISABLED(VULKAN_1_1_FEATURES, Vulkan11Features, samplerYcbcrConversion);
@@ -1554,14 +1593,18 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan13, reporter) {
     //                      DynamicRenderingLocalReadFeatures,
     //                      dynamicRenderingLocalRead);
 
-    //CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
-    //                      MultisampledRenderToSingleSampledFeaturesEXT,
-    //                      multisampledRenderToSingleSampled);
+    CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
+                          MultisampledRenderToSingleSampledFeaturesEXT,
+                          multisampledRenderToSingleSampled);
 
     CHECK_FEATURE_DISABLED(HOST_IMAGE_COPY_FEATURES, HostImageCopyFeatures, hostImageCopy);
 
     // Features enabled by the app must remain enabled
     CHECK_FEATURE_ENABLED(SHADER_OBJECT_FEATURES_EXT, ShaderObjectFeaturesEXT, shaderObject);
+
+    CHECK_FEATURE_ENABLED(FRAME_BOUNDARY_FEATURES_EXT,
+                          FrameBoundaryFeaturesEXT,
+                          frameBoundary);
 }
 
 // A test where the application adds some features and extensions and lets Skia add to them. At the
@@ -1631,13 +1674,13 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan14, reporter) {
     CHECK_EXT_DISABLED(VK_EXT_BLEND_OPERATION_ADVANCED);
     CHECK_EXT_DISABLED(VK_EXT_EXTENDED_DYNAMIC_STATE);
     CHECK_EXT_DISABLED(VK_EXT_EXTENDED_DYNAMIC_STATE_2);
-    //CHECK_EXT_ENABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
+    CHECK_EXT_ENABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
     CHECK_EXT_DISABLED(VK_EXT_GRAPHICS_PIPELINE_LIBRARY);
     CHECK_EXT_DISABLED(VK_KHR_SAMPLER_YCBCR_CONVERSION);
     CHECK_EXT_ENABLED(VK_EXT_RGBA10X6_FORMATS);
     CHECK_EXT_DISABLED(VK_KHR_SYNCHRONIZATION_2);
     CHECK_EXT_DISABLED(VK_KHR_DYNAMIC_RENDERING);
-    //CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
+    CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
     CHECK_EXT_DISABLED(VK_EXT_HOST_IMAGE_COPY);
     CHECK_EXT_DISABLED(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL);
     CHECK_EXT_DISABLED(VK_KHR_DRIVER_PROPERTIES);
@@ -1660,6 +1703,7 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan14, reporter) {
     CHECK_EXT_ENABLED(VK_EXT_SHADER_OBJECT);
     CHECK_EXT_ENABLED(VK_EXT_DESCRIPTOR_INDEXING);
     CHECK_EXT_ENABLED(VK_KHR_DYNAMIC_RENDERING_LOCAL_READ);
+    CHECK_EXT_ENABLED(VK_EXT_FRAME_BOUNDARY);
 
     CHECK_FEATURE_ENABLED(VULKAN_1_1_FEATURES, Vulkan11Features, samplerYcbcrConversion);
     CHECK_FEATURE_DISABLED(VULKAN_1_1_FEATURES, Vulkan11Features, shaderDrawParameters);
@@ -1697,9 +1741,9 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan14, reporter) {
                            BlendOperationAdvancedFeaturesEXT,
                            advancedBlendCoherentOperations);
 
-    //CHECK_FEATURE_ENABLED(VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
-    //                      VertexInputDynamicStateFeaturesEXT,
-    //                      vertexInputDynamicState);
+    CHECK_FEATURE_ENABLED(VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
+                          VertexInputDynamicStateFeaturesEXT,
+                          vertexInputDynamicState);
 
     CHECK_FEATURE_DISABLED(GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
                            GraphicsPipelineLibraryFeaturesEXT,
@@ -1709,12 +1753,17 @@ DEF_TEST(VkPreferredFeaturesTest_CustomVulkan14, reporter) {
                           RGBA10X6FormatsFeaturesEXT,
                           formatRgba10x6WithoutYCbCrSampler);
 
-    //CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
-    //                      MultisampledRenderToSingleSampledFeaturesEXT,
-    //                      multisampledRenderToSingleSampled);
+    CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
+                          MultisampledRenderToSingleSampledFeaturesEXT,
+                          multisampledRenderToSingleSampled);
 
     // Features enabled by the app must remain enabled
     CHECK_FEATURE_ENABLED(SHADER_OBJECT_FEATURES_EXT, ShaderObjectFeaturesEXT, shaderObject);
+
+
+    CHECK_FEATURE_ENABLED(FRAME_BOUNDARY_FEATURES_EXT,
+                          FrameBoundaryFeaturesEXT,
+                          frameBoundary);
 }
 
 // A similar test to VkPreferredFeaturesTest_CustomVulkan*, except the chain passed to
@@ -1726,6 +1775,7 @@ DEF_TEST(VkPreferredFeaturesTest_EmptyEnableChain, reporter) {
     config.fGraphicsPipelineLibraryEXT = false;
     config.fPipelineLibraryKHR = false;
     config.fBlendOperationAdvancedEXT = false;
+    config.fFrameBoundaryEXT = false;
 
     const std::vector<VkExtensionProperties> exts = get_device_exts(config);
 
@@ -1782,14 +1832,14 @@ DEF_TEST(VkPreferredFeaturesTest_EmptyEnableChain, reporter) {
     CHECK_EXT_DISABLED(VK_EXT_BLEND_OPERATION_ADVANCED);
     CHECK_EXT_DISABLED(VK_EXT_EXTENDED_DYNAMIC_STATE);
     CHECK_EXT_DISABLED(VK_EXT_EXTENDED_DYNAMIC_STATE_2);
-    //CHECK_EXT_ENABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
+    CHECK_EXT_ENABLED(VK_EXT_VERTEX_INPUT_DYNAMIC_STATE);
     CHECK_EXT_DISABLED(VK_EXT_GRAPHICS_PIPELINE_LIBRARY);
     CHECK_EXT_DISABLED(VK_KHR_SAMPLER_YCBCR_CONVERSION);
     CHECK_EXT_ENABLED(VK_EXT_RGBA10X6_FORMATS);
     CHECK_EXT_DISABLED(VK_KHR_SYNCHRONIZATION_2);
     CHECK_EXT_DISABLED(VK_KHR_DYNAMIC_RENDERING);
     //CHECK_EXT_ENABLED(VK_KHR_DYNAMIC_RENDERING_LOCAL_READ);
-    //CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
+    CHECK_EXT_ENABLED(VK_EXT_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED);
     //CHECK_EXT_ENABLED(VK_EXT_HOST_IMAGE_COPY);
     CHECK_EXT_DISABLED(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL);
     CHECK_EXT_DISABLED(VK_KHR_DRIVER_PROPERTIES);
@@ -1811,6 +1861,7 @@ DEF_TEST(VkPreferredFeaturesTest_EmptyEnableChain, reporter) {
     CHECK_EXT_ENABLED(VK_KHR_MAINTENANCE_5);
     CHECK_EXT_ENABLED(VK_KHR_PUSH_DESCRIPTOR);
     CHECK_EXT_ENABLED(VK_EXT_SHADER_OBJECT);
+    CHECK_EXT_DISABLED(VK_EXT_FRAME_BOUNDARY);
 
     CHECK_FEATURE_ENABLED(VULKAN_1_1_FEATURES, Vulkan11Features, samplerYcbcrConversion);
     CHECK_FEATURE_DISABLED(VULKAN_1_1_FEATURES, Vulkan11Features, shaderDrawParameters);
@@ -1841,9 +1892,9 @@ DEF_TEST(VkPreferredFeaturesTest_EmptyEnableChain, reporter) {
                            BlendOperationAdvancedFeaturesEXT,
                            advancedBlendCoherentOperations);
 
-    //CHECK_FEATURE_ENABLED(VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
-    //                      VertexInputDynamicStateFeaturesEXT,
-    //                      vertexInputDynamicState);
+    CHECK_FEATURE_ENABLED(VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT,
+                          VertexInputDynamicStateFeaturesEXT,
+                          vertexInputDynamicState);
 
     CHECK_FEATURE_DISABLED(GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT,
                            GraphicsPipelineLibraryFeaturesEXT,
@@ -1857,13 +1908,17 @@ DEF_TEST(VkPreferredFeaturesTest_EmptyEnableChain, reporter) {
     //                      DynamicRenderingLocalReadFeatures,
     //                      dynamicRenderingLocalRead);
 
-    //CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
-    //                      MultisampledRenderToSingleSampledFeaturesEXT,
-    //                      multisampledRenderToSingleSampled);
+    CHECK_FEATURE_ENABLED(MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT,
+                          MultisampledRenderToSingleSampledFeaturesEXT,
+                          multisampledRenderToSingleSampled);
 
     // Features enabled by the app must remain enabled
     CHECK_FEATURE_ENABLED(SHADER_OBJECT_FEATURES_EXT, ShaderObjectFeaturesEXT, shaderObject);
     CHECK_FEATURE_ENABLED(MAINTENANCE_5_FEATURES, Maintenance5Features, maintenance5);
+
+    CHECK_FEATURE_DISABLED(FRAME_BOUNDARY_FEATURES_EXT,
+                           FrameBoundaryFeaturesEXT,
+                           frameBoundary);
 }
 
 #endif

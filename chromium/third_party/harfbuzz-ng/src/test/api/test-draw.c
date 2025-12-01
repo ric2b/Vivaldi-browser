@@ -96,11 +96,12 @@ test_itoa (void)
 }
 
 static void
-move_to (HB_UNUSED hb_draw_funcs_t *dfuncs, draw_data_t *draw_data,
+move_to (HB_UNUSED hb_draw_funcs_t *dfuncs, void *draw_data_,
 	 HB_UNUSED hb_draw_state_t *st,
 	 float to_x, float to_y,
 	 HB_UNUSED void *user_data)
 {
+  draw_data_t *draw_data = (draw_data_t *) draw_data_;
   /* 4 = command character space + comma + array starts with 0 index + nul character space */
   if (draw_data->consumed + 2 * ITOA_BUF_SIZE + 4 > draw_data->size) return;
   draw_data->str[draw_data->consumed++] = 'M';
@@ -110,11 +111,12 @@ move_to (HB_UNUSED hb_draw_funcs_t *dfuncs, draw_data_t *draw_data,
 }
 
 static void
-line_to (HB_UNUSED hb_draw_funcs_t *dfuncs, draw_data_t *draw_data,
+line_to (HB_UNUSED hb_draw_funcs_t *dfuncs, void *draw_data_,
 	 HB_UNUSED hb_draw_state_t *st,
 	 float to_x, float to_y,
 	 HB_UNUSED void *user_data)
 {
+  draw_data_t *draw_data = (draw_data_t *) draw_data_;
   if (draw_data->consumed + 2 * ITOA_BUF_SIZE + 4 > draw_data->size) return;
   draw_data->str[draw_data->consumed++] = 'L';
   draw_data->consumed += _hb_itoa (to_x, draw_data->str + draw_data->consumed);
@@ -123,13 +125,13 @@ line_to (HB_UNUSED hb_draw_funcs_t *dfuncs, draw_data_t *draw_data,
 }
 
 static void
-quadratic_to (HB_UNUSED hb_draw_funcs_t *dfuncs, draw_data_t *draw_data,
+quadratic_to (HB_UNUSED hb_draw_funcs_t *dfuncs, void *draw_data_,
 	      HB_UNUSED hb_draw_state_t *st,
 	      float control_x, float control_y,
 	      float to_x, float to_y,
 	      HB_UNUSED void *user_data)
 {
-
+  draw_data_t *draw_data = (draw_data_t *) draw_data_;
   if (draw_data->consumed + 4 * ITOA_BUF_SIZE + 6 > draw_data->size) return;
   draw_data->str[draw_data->consumed++] = 'Q';
   draw_data->consumed += _hb_itoa (control_x, draw_data->str + draw_data->consumed);
@@ -142,13 +144,14 @@ quadratic_to (HB_UNUSED hb_draw_funcs_t *dfuncs, draw_data_t *draw_data,
 }
 
 static void
-cubic_to (HB_UNUSED hb_draw_funcs_t *dfuncs, draw_data_t *draw_data,
+cubic_to (HB_UNUSED hb_draw_funcs_t *dfuncs, void *draw_data_,
 	  HB_UNUSED hb_draw_state_t *st,
 	  float control1_x, float control1_y,
 	  float control2_x, float control2_y,
 	  float to_x, float to_y,
 	  HB_UNUSED void *user_data)
 {
+  draw_data_t *draw_data = (draw_data_t *) draw_data_;
   if (draw_data->consumed + 6 * ITOA_BUF_SIZE + 8 > draw_data->size) return;
   draw_data->str[draw_data->consumed++] = 'C';
   draw_data->consumed += _hb_itoa (control1_x, draw_data->str + draw_data->consumed);
@@ -165,10 +168,11 @@ cubic_to (HB_UNUSED hb_draw_funcs_t *dfuncs, draw_data_t *draw_data,
 }
 
 static void
-close_path (HB_UNUSED hb_draw_funcs_t *dfuncs, draw_data_t *draw_data,
+close_path (HB_UNUSED hb_draw_funcs_t *dfuncs, void *draw_data_,
 	    HB_UNUSED hb_draw_state_t *st,
 	    HB_UNUSED void *user_data)
 {
+  draw_data_t *draw_data = (draw_data_t *) draw_data_;
   if (draw_data->consumed + 2 > draw_data->size) return;
   draw_data->str[draw_data->consumed++] = 'Z';
 }
@@ -706,7 +710,7 @@ test_hb_draw_font_kit_variations_tests (void)
 		        "C436,229 405,295 271,349L247,359C160,393 119,439 119,506"
 		        "C119,592 178,637 262,637C311,637 346,626 390,585L348,629L373,535"
 		        "C380,510 394,503 408,503C424,503 434,510 437,526C418,614 348,665 259,665"
-		        "C161,665 78,606 78,500C78,414 128,361 224,321L261,305C367,259 395,217 395,152"
+		        "C161,665 78,606 78,500C78,414 128,361 224,320L261,305C367,259 395,217 395,152"
 		        "C395,65 334,15 246,15ZM267,331L267,759L240,759L240,331L267,331ZM240,-115"
 		        "L267,-115L267,331L240,331L240,-115Z";
       g_assert_cmpmem (str, draw_data.consumed, expected, sizeof (expected) - 1);
@@ -1065,9 +1069,9 @@ static void
 test_hb_draw_immutable (void)
 {
   hb_draw_funcs_t *draw_funcs = hb_draw_funcs_create ();
-  g_assert (!hb_draw_funcs_is_immutable (draw_funcs));
+  g_assert_true (!hb_draw_funcs_is_immutable (draw_funcs));
   hb_draw_funcs_make_immutable (draw_funcs);
-  g_assert (hb_draw_funcs_is_immutable (draw_funcs));
+  g_assert_true (hb_draw_funcs_is_immutable (draw_funcs));
   hb_draw_funcs_destroy (draw_funcs);
 }
 
@@ -1084,7 +1088,7 @@ test_hb_draw_funcs (const void* user_data)
     hb_face_t *face = hb_test_open_font_file ("fonts/glyphs.ttf");
     hb_font_t *font = hb_font_create (face);
     hb_bool_t ret = hb_font_set_funcs_using (font, font_funcs_name);
-    g_assert (ret);
+    g_assert_true (ret);
     hb_face_destroy (face);
     {
       draw_data.consumed = 0;
@@ -1098,7 +1102,7 @@ test_hb_draw_funcs (const void* user_data)
     hb_face_t *face = hb_test_open_font_file ("fonts/cff1_flex.otf");
     hb_font_t *font = hb_font_create (face);
     hb_bool_t ret = hb_font_set_funcs_using (font, font_funcs_name);
-    g_assert (ret);
+    g_assert_true (ret);
     hb_face_destroy (face);
 
     draw_data.consumed = 0;
@@ -1141,7 +1145,7 @@ test_hb_draw_compare_ot_funcs (const void *user_data)
   draw_data.str[draw_data.consumed] = '\0';
 
   hb_bool_t ret = hb_font_set_funcs_using (font, font_funcs_name);
-  g_assert (ret);
+  g_assert_true (ret);
 
   hb_font_draw_glyph (font, 1, funcs, &draw_data2);
   draw_data2.str[draw_data2.consumed] = '\0';
@@ -1156,18 +1160,18 @@ int
 main (int argc, char **argv)
 {
   funcs = hb_draw_funcs_create ();
-  hb_draw_funcs_set_move_to_func (funcs, (hb_draw_move_to_func_t) move_to, NULL, NULL);
-  hb_draw_funcs_set_line_to_func (funcs, (hb_draw_line_to_func_t) line_to, NULL, NULL);
-  hb_draw_funcs_set_quadratic_to_func (funcs, (hb_draw_quadratic_to_func_t) quadratic_to, NULL, NULL);
-  hb_draw_funcs_set_cubic_to_func (funcs, (hb_draw_cubic_to_func_t) cubic_to, NULL, NULL);
-  hb_draw_funcs_set_close_path_func (funcs, (hb_draw_close_path_func_t) close_path, NULL, NULL);
+  hb_draw_funcs_set_move_to_func (funcs, move_to, NULL, NULL);
+  hb_draw_funcs_set_line_to_func (funcs, line_to, NULL, NULL);
+  hb_draw_funcs_set_quadratic_to_func (funcs, quadratic_to, NULL, NULL);
+  hb_draw_funcs_set_cubic_to_func (funcs, cubic_to, NULL, NULL);
+  hb_draw_funcs_set_close_path_func (funcs, close_path, NULL, NULL);
   hb_draw_funcs_make_immutable (funcs);
 
   funcs2 = hb_draw_funcs_create ();
-  hb_draw_funcs_set_move_to_func (funcs2, (hb_draw_move_to_func_t) move_to, NULL, NULL);
-  hb_draw_funcs_set_line_to_func (funcs2, (hb_draw_line_to_func_t) line_to, NULL, NULL);
-  hb_draw_funcs_set_cubic_to_func (funcs2, (hb_draw_cubic_to_func_t) cubic_to, NULL, NULL);
-  hb_draw_funcs_set_close_path_func (funcs2, (hb_draw_close_path_func_t) close_path, NULL, NULL);
+  hb_draw_funcs_set_move_to_func (funcs2, move_to, NULL, NULL);
+  hb_draw_funcs_set_line_to_func (funcs2, line_to, NULL, NULL);
+  hb_draw_funcs_set_cubic_to_func (funcs2, cubic_to, NULL, NULL);
+  hb_draw_funcs_set_close_path_func (funcs2, close_path, NULL, NULL);
   hb_draw_funcs_make_immutable (funcs2);
 
   hb_test_init (&argc, &argv);

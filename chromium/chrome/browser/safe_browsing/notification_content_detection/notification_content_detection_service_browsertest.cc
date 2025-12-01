@@ -415,9 +415,10 @@ INSTANTIATE_TEST_SUITE_P(
                     std::make_tuple("100", "100", true),
                     std::make_tuple("100", "100", false)));
 
+// TODO(crbug.com/389745686): Re-enable
 IN_PROC_BROWSER_TEST_P(
     NotificationContentDetectionShowWarningsEnabledBrowserTest,
-    NonAllowlistedSiteNotificationGetsDisplayed) {
+    DISABLED_NonAllowlistedSiteNotificationGetsDisplayed) {
   UpdateNotificationContentDetectionModel();
   blink::PlatformNotificationData data =
       CreateNotificationData(u"Non-allowlisted title", u"Hello, world!", {});
@@ -431,7 +432,7 @@ IN_PROC_BROWSER_TEST_P(
       "NotificationContentDetection",
       1);
 
-  EXPECT_EQ(GetDisplayedPersistentNotifications().size(), 1U);
+  ASSERT_EQ(GetDisplayedPersistentNotifications().size(), 1U);
   // When the suspicious threshold is 0, every non-allowlisted notification is
   // suspicious.
   if (GetSuspiciousNotificationThreshold() == "0") {

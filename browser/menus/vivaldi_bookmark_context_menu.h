@@ -49,6 +49,7 @@ const bookmarks::BookmarkNode* GetNodeByFolder(bookmarks::BookmarkModel* model,
     const BookmarkParentFolder& folder);
 void HandleOpenMenu(bookmarks::BookmarkModel* model,
                     const BookmarkParentFolder& folder);
+void HandleStartDrag(int64_t id);
 const bookmarks::BookmarkNode* GetNodeByPosition(
     bookmarks::BookmarkModel* model,
     const gfx::Point& screen_point,
@@ -85,6 +86,11 @@ ui::ImageModel GetBookmarkFolderIcon(views::MenuItemView* menu,
                                      views::Widget* widget);
 ui::ImageModel GetBookmarkSpeeddialIcon(views::MenuItemView* menu,
                                         views::Widget* widget);
+void GetDraggedNodes(
+      bookmarks::BookmarkModel* model,
+      std::vector<raw_ptr<const bookmarks::BookmarkNode, VectorExperimental>>&
+          nodes);
+base::FilePath GetDraggedPath();
 }  // namespace vivaldi
 
 #endif  // BROWSER_MENUS_VIVALDI_BOOKMARK_CONTEXT_MENUS_H_

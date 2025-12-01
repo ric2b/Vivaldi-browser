@@ -140,6 +140,17 @@ class CONTENT_EXPORT FileSystemAccessHandleBase {
  protected:
   virtual base::WeakPtr<FileSystemAccessHandleBase> AsWeakPtr() = 0;
 
+  // Returns the effective write permission status.
+  // This currently returns permission status for kReadWrite, but will switch to
+  // the one for kWrite only when the FileSystemAccessWriteMode feature is fully
+  // rolled out.
+  PermissionStatus GetEffectiveWritePermissionStatus();
+
+  // Calls NotifyEntryModified on the permission context for a given file, if
+  // the kFileSystemAccessRevokeReadOnRemove feature is enabled.
+  // See crbug.com/421690393.
+  void MaybeNotifyEntryModified(const storage::FileSystemURL& url);
+
   SEQUENCE_CHECKER(sequence_checker_);
 
  private:
@@ -196,6 +207,12 @@ class CONTENT_EXPORT FileSystemAccessHandleBase {
       std::unique_ptr<FileSystemAccessSafeMoveHelper> move_helper,
       base::OnceCallback<void(blink::mojom::FileSystemAccessErrorPtr)> callback,
       blink::mojom::FileSystemAccessErrorPtr result);
+
+  void DidRemove(
+      const storage::FileSystemURL& url,
+      scoped_refptr<FileSystemAccessLockManager::LockHandle> lock,
+      base::OnceCallback<void(blink::mojom::FileSystemAccessErrorPtr)> callback,
+      base::File::Error result);
 
   bool ShouldTrackUsage(const storage::FileSystemURL& url) const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);

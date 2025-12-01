@@ -1602,8 +1602,23 @@ func.func @select_float() -> tensor<4xf32> {
 
   func.return %2 : tensor<4xf32>
 }
-
 // CHECK: %cst = arith.constant dense<[1.000000e+00, 2.000000e+00, -3.000000e+00, -4.000000e+00]> : tensor<4xf32
+
+// CHECK-LABEL: ceil
+func.func @ceil() -> tensor<3xf32> {
+  %cst = arith.constant dense<[-1.0, 0.0, 0.99]> : tensor<3xf32>
+  %0 = "tfl.ceil"(%cst) : (tensor<3xf32>) -> tensor<3xf32>
+  func.return %0 : tensor<3xf32>
+}
+// CHECK: %cst = arith.constant dense<[-1.000000e+00, 0.000000e+00, 1.000000e+00]> : tensor<3xf32>
+
+// CHECK-LABEL: ceil_f64
+func.func @ceil_f64() -> tensor<3xf64> {
+  %cst = arith.constant dense<[-1.0, 0.0, 0.99]> : tensor<3xf64>
+  %0 = "tfl.ceil"(%cst) : (tensor<3xf64>) -> tensor<3xf64>
+  func.return %0 : tensor<3xf64>
+}
+// CHECK: tfl.ceil
 
 // CHECK-LABEL: floor
 func.func @floor() -> tensor<3xf32> {
@@ -1611,7 +1626,6 @@ func.func @floor() -> tensor<3xf32> {
   %0 = "tfl.floor"(%cst) : (tensor<3xf32>) -> tensor<3xf32>
   func.return %0 : tensor<3xf32>
 }
-
 // CHECK: %cst = arith.constant dense<[-1.000000e+00, 0.000000e+00, 0.000000e+00]> : tensor<3xf32>
 
 // CHECK-LABEL: floor_f64
@@ -1620,7 +1634,6 @@ func.func @floor_f64() -> tensor<3xf64> {
   %0 = "tfl.floor"(%cst) : (tensor<3xf64>) -> tensor<3xf64>
   func.return %0 : tensor<3xf64>
 }
-
 // CHECK: tfl.floor
 
 // CHECK-LABEL: exp
@@ -1852,6 +1865,29 @@ func.func @gather() -> (tensor<2x3x4x5xi16>, tensor<2x3x4x5xi16>) {
   // CHECK: return [[CST]], [[CST]]
 }
 
+// CHECK-LABEL: func @gather_nd_slices
+func.func @gather_nd_slices() -> tensor<2x2xi32> {
+  %params = arith.constant dense<[[[1, 2], [3, 4]], [[5, 6], [7, 8]]]> : tensor<2x2x2xi32>
+  %indices = arith.constant dense<[[0, 1], [1, 0]]> : tensor<2x2xi64>
+  %0 = "tfl.gather_nd"(%params, %indices) : (tensor<2x2x2xi32>, tensor<2x2xi64>) -> tensor<2x2xi32>
+  return %0 : tensor<2x2xi32>
+
+  // CHECK-NOT: tfl.gather_nd
+  // CHECK: [[CST:%.*]] = arith.constant dense<{{\[\[}}3, 4], {{\[}}5, 6]]> : tensor<2x2xi32>
+  // CHECK: return [[CST]]
+}
+
+// CHECK-LABEL: func @gather_nd_scalars
+func.func @gather_nd_scalars() -> tensor<4xf32> {
+  %params = arith.constant dense<[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]> : tensor<3x3xf32>
+  %indices = arith.constant dense<[[0, 0], [2, 2], [1, 0], [2, 0]]> : tensor<4x2xi32>
+  %0 = "tfl.gather_nd"(%params, %indices) : (tensor<3x3xf32>, tensor<4x2xi32>) -> tensor<4xf32>
+  return %0 : tensor<4xf32>
+
+  // CHECK-NOT: tfl.gather_nd
+  // CHECK: [[CST:%.+]] = arith.constant dense<[1.000000e+00, 9.000000e+00, 4.000000e+00, 7.000000e+00]> : tensor<4xf32>
+  // CHECK: return [[CST]]
+}
 
 // CHECK-LABEL: reverse_2_dims
 func.func @reverse_2_dims() -> tensor<2x3x2xi32> {

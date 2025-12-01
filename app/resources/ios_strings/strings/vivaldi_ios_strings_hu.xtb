@@ -38,6 +38,7 @@
 <translation id="4026745073321351206">🙄 Felfedeztél egy hibát?</translation>
 <translation id="4216644171369573466">Lapcsoport, <ph name="GROUP_TITLE" />, menü.</translation>
 <translation id="4304713468139749426">Jelszókezelő</translation>
+<translation id="4439281775431634915">Lapcsoportjaid ide kerülnek mentésre</translation>
 <translation id="4569525137269575065">Csoport bezárása</translation>
 <translation id="473775607612524610">Frissítés</translation>
 <translation id="4755216899422789286">Hivatkozás megnyitása Vivaldiban</translation>
@@ -50,6 +51,8 @@
             other {{count} lapcsoport bezárva és mentve}}</translation>
 <translation id="5019787757991745254">Lapcsoport színe <ph name="COLOR" /></translation>
 <translation id="5022440170224170365">Lapcsoport. Összecsukva.</translation>
+<translation id="5132327651247938019">Jobbra görgetve privát módban böngészhetsz.</translation>
+<translation id="5204006339739481307">Balra görgetve privát módban böngészhetsz.</translation>
 <translation id="5217245356412073535">A Beállítások &gt; Tartalombeállítások alatt módosíthatod a weboldalak alapértelmezett nézetét asztali nézetre</translation>
 <translation id="5271549068863921519">Jelszó mentése</translation>
 <translation id="5317780077021120954">Mentés</translation>
@@ -63,6 +66,7 @@
 <translation id="5962477178930921574">Beillesztés és keresés</translation>
 <translation id="6163856768888310791">Lapcsoport felbontása</translation>
 <translation id="6168969409902608220">Csoport neve</translation>
+<translation id="6192561334825788389">Jobbra húzva privát módban böngészhetsz.</translation>
 <translation id="6233792867654386826">A megadott hivatkozás megnyitása Vivaldiban.</translation>
 <translation id="6271462272606946663">Mobiloldal kérésének elrejtése</translation>
 <translation id="6478587527114893588">Csoport bezárása.</translation>
@@ -75,6 +79,8 @@
 <translation id="6827597288286078054">Privát keresés</translation>
 <translation id="6851516051005285358">Asztali webhely kérése</translation>
 <translation id="6890907822330704077">Lapcsoport, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> lap.</translation>
+<translation id="7004032350256606903">A szervezeted megköveteli, hogy privát módban böngéssz.
+<ph name="BEGIN_LINK" />Tudj meg többet<ph name="END_LINK" /></translation>
 <translation id="7307970171564921489">Privát lapok feloldása <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> használatával</translation>
 <translation id="7347289093190902150">Megnyitás privátban?</translation>
 <translation id="7363285031331302144">Lapcsoportok létrehozása a megnyitott lapok rendszerezéséhez</translation>
@@ -94,6 +100,7 @@
         =1 {Lap hozzáadása új csoporthoz}
         other {Lapok hozzáadása új csoporthoz}}</translation>
 <translation id="8465550436083180511">Lapcsoport összecsukása.</translation>
+<translation id="8499954848910902473">Balra húzva privát módban böngészhetsz.</translation>
 <translation id="8685478989144570078">Lapcsoportok</translation>
 <translation id="8756969031206844760">Szeretnéd frissíteni a jelszót?</translation>
 <translation id="8852861335827546438">Új lapcsoport</translation>

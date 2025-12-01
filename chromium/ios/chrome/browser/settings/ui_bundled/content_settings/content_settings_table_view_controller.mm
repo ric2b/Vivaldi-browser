@@ -367,10 +367,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
     }
   }
 
-  if (!IsVivaldiRunning()) { // Does not work, hide it.
   [model addItem:[self linkPreviewItem]
       toSectionWithIdentifier:SectionIdentifierSettings];
-  } // End Vivaldi
 
   self.defaultModeItem = [self defaultSiteMode];
   [model addItem:self.defaultModeItem

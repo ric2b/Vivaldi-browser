@@ -5,10 +5,11 @@
 package org.chromium.chrome.browser.app.download.home;
 
 import android.app.Activity;
+import android.view.ViewGroup;
 
-import org.chromium.base.ApplicationStatus;
-import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.ThreadUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.download.home.DownloadManagerCoordinator;
@@ -22,9 +23,8 @@ import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
 /** Native page for managing downloads handled through Chrome. */
+@NullMarked
 public class DownloadPage extends BasicNativePage implements DownloadManagerCoordinator.Observer {
-    private ActivityStateListener mActivityStateListener;
-
     private DownloadManagerCoordinator mDownloadCoordinator;
     private final String mTitle;
 
@@ -40,8 +40,8 @@ public class DownloadPage extends BasicNativePage implements DownloadManagerCoor
     public DownloadPage(
             Activity activity,
             SnackbarManager snackbarManager,
-            ModalDialogManager modalDialogManager,
-            OtrProfileId otrProfileId,
+            @Nullable ModalDialogManager modalDialogManager,
+            @Nullable OtrProfileId otrProfileId,
             NativePageHost host) {
         super(host);
 
@@ -61,8 +61,6 @@ public class DownloadPage extends BasicNativePage implements DownloadManagerCoor
 
         mDownloadCoordinator.addObserver(this);
         mTitle = activity.getString(R.string.menu_downloads);
-
-        ApplicationStatus.registerStateListenerForActivity(mActivityStateListener, activity);
 
         initWithView(mDownloadCoordinator.getView());
     }
@@ -84,11 +82,16 @@ public class DownloadPage extends BasicNativePage implements DownloadManagerCoor
     }
 
     @Override
+    public boolean supportsEdgeToEdge() {
+        return true;
+    }
+
+    @SuppressWarnings("NullAway")
+    @Override
     public void destroy() {
         mDownloadCoordinator.removeObserver(this);
         mDownloadCoordinator.destroy();
         mDownloadCoordinator = null;
-        ApplicationStatus.unregisterActivityStateListener(mActivityStateListener);
         super.destroy();
     }
 
@@ -100,5 +103,9 @@ public class DownloadPage extends BasicNativePage implements DownloadManagerCoor
         // times to exit download home. In the event, chrome gets killed or if user navigates away
         // from download home, we still will be able to come back to the latest filter.
         onStateChange(url, true);
+    }
+
+    public ViewGroup getListViewForTesting() {
+        return mDownloadCoordinator.getListViewForTesting();
     }
 }

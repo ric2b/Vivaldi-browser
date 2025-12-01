@@ -471,6 +471,7 @@ class ListNode : public ParseNode {
   void ShortenTargets();
   void SortAsStringsList();
   void SortAsTargetsList();
+  void DeduplicateList();
 
   struct SortRange {
     size_t begin;

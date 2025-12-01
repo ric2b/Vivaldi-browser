@@ -1,4 +1,4 @@
-# Copyright 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -29,6 +29,7 @@ generate_css("css_files") {
 devtools_module("sources") {
   sources = [
     "AddSourceMapURLDialog.ts",
+    "AiCodeCompletionPlugin.ts",
     "AiWarningInfobarPlugin.ts",
     "BreakpointEditDialog.ts",
     "BreakpointsView.ts",
@@ -68,11 +69,14 @@ devtools_module("sources") {
     "../../core/host:bundle",
     "../../core/i18n:bundle",
     "../../core/platform:bundle",
+    "../../core/root:bundle",
     "../../core/sdk:bundle",
+    "../../models/ai_code_completion:bundle",
     "../../models/bindings:bundle",
     "../../models/breakpoints:bundle",
     "../../models/extensions:bundle",
     "../../models/formatter:bundle",
+    "../../models/geometry:bundle",
     "../../models/issues_manager:bundle",
     "../../models/persistence:bundle",
     "../../models/source_map_scopes:bundle",
@@ -147,6 +151,7 @@ ts_library("unittests") {
   testonly = true
 
   sources = [
+    "AiCodeCompletionPlugin.test.ts",
     "BreakpointEditDialog.test.ts",
     "BreakpointsView.test.ts",
     "BreakpointsViewUtils.test.ts",

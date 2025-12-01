@@ -22,18 +22,15 @@
 <translation id="2119505898009119320">Verildiği kuruluş: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Bu site güvenli bağlantı sağlayamıyor</translation>
 <translation id="2178904466768126352">Ziyaret etmeye çalıştığınız sitedeki saldırganlar, parolalarınız, fotoğraflarınız, mesajlarınız veya kredi kartı numaralarınız gibi verilerinizi çalan veya silen zararlı bir yazılım yükleyebilir.</translation>
-<translation id="2187317261103489799">Algıla (varsayılan)</translation>
 <translation id="2224337661447660594">İnternet bağlantısı yok</translation>
 <translation id="2292556288342944218">İnternet erişiminiz engellendi</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> için kullanıcı adı ve parola gerekiyor.</translation>
 <translation id="2337852623177822836">Ayar, yöneticiniz tarafından denetleniyor</translation>
 <translation id="2355395290879513365">Saldırganlar bu sitede baktığınız resimleri görebilir ve bu resimler üzerinde değişiklik yaparak sizi kandırabilirler.</translation>
-<translation id="2356070529366658676">Sor</translation>
 <translation id="2359808026110333948">Devam et</translation>
 <translation id="2388886110302389394">Sayfayı yeni bir Gizli sekmede aç (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Ağ Tanılayıcıları Çalıştırmak<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Bu sayfa bir eklenti tarafından engellendi</translation>
-<translation id="2539524384386349900">Algıla</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> geçersiz bir yanıt gönderdi.</translation>
 <translation id="2634124572758952069"><ph name="HOST_NAME" /> ana makinesinin sunucu IP adresi bulunamadı.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -57,10 +54,8 @@
     kullanmamanız gerektiğini düşünüyorsanız:
     <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Sayfayı yüklemek üzere gereken verileri tekrar göndermek için yeniden yükle düğmesine basın.</translation>
-<translation id="3234666976984236645">Bu sitedeki önemli içeriği her zaman algıla</translation>
 <translation id="3384522979010096022">Kuruluşunuz bu siteyi görüntülemenize izin vermiyor</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> ana makinesine şu anda ulaşılamıyor.</translation>
-<translation id="3427092606871434483">İzin ver (varsayılan)</translation>
 <translation id="3447661539832366887">Bu cihazın sahibi dinozor oyununu kapattı.</translation>
 <translation id="3447884698081792621">Sertifikayı göster (<ph name="ISSUER" /> tarafından yayınlandı)</translation>
 <translation id="3462200631372590220">Gelişmiş bilgileri gizle</translation>
@@ -82,7 +77,6 @@
 <translation id="4075732493274867456">İstemci ve sunucu, ortak bir SSL protokolü sürümünü veya şifre setini desteklemiyor.</translation>
 <translation id="4116663294526079822">Bu sitede her zaman izin ver</translation>
 <translation id="4130226655945681476">Ağ kablolarını, modemi ve yönlendiriciyi kontrol edin</translation>
-<translation id="4151403195736952345">Genel varsayılanı kullan (Algıla)</translation>
 <translation id="4165986682804962316">Site ayarları</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Güvenlik duvarı ve antivirüs yapılandırmalarını kontrol edin<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Ağ Tanılayıcıları'nı çalıştırmayı deneyin<ph name="END_LINK" />.</translation>
@@ -91,7 +85,6 @@
 <translation id="4250431568374086873">Bu siteye bağlantınız tam olarak güvenli değil</translation>
 <translation id="4265872034478892965">Yöneticiniz tarafından izin verildi</translation>
 <translation id="4305666528087210886">Dosyanıza erişilemedi</translation>
-<translation id="4312866146174492540">Engelle (varsayılan)</translation>
 <translation id="4408413947728134509">Çerezler <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> giriş sertifikanızı kabul etmedi veya giriş sertifikası sağlanmamış olabilir.</translation>
 <translation id="4506599922270137252">Sistem yöneticisiyle iletişime geçin</translation>
@@ -109,7 +102,6 @@
 <translation id="4943872375798546930">Sonuç yok</translation>
 <translation id="5017554619425969104">Kopyaladığın metin</translation>
 <translation id="5023310440958281426">Yöneticinizin politikalarını inceleyin</translation>
-<translation id="5039804452771397117">İzin ver</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 çerez kullanımda)} other {(# çerez kullanımda)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Proxy adresini kontrol edin<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bit)</translation>
@@ -156,7 +148,6 @@
 <translation id="6890956352250146925">Çerezler ve site verileri ile ilgili seçenekler</translation>
 <translation id="6897140037006041989">Kullanıcı Aracısı</translation>
 <translation id="6957624206566198865">Sayfayı yeni bir Gizli sekmede aç</translation>
-<translation id="7053983685419859001">Engelle</translation>
 <translation id="7096937462164235847">Bu web sitesinin kimliği doğrulanmamış.</translation>
 <translation id="7108819624672055576">Bir eklenti tarafından izin verildi</translation>
 <translation id="7111012039238467737">(Geçerli)</translation>
@@ -181,7 +172,6 @@
 <translation id="7878562273885520351">Parolanızın güvenliği ihlal edilebilir</translation>
 <translation id="7951415247503192394">(32 bit)</translation>
 <translation id="7953236668995583915">Yeni ayarlarınızı bu siteye uygulamak için sayfayı yeniden yükleyin</translation>
-<translation id="8037357227543935929">Sor (varsayılan)</translation>
 <translation id="8041940743680923270">Genel varsayılanı kullan (Sor)</translation>
 <translation id="808894953321890993">Parolayı değiştir</translation>
 <translation id="8149426793427495338">Bilgisayarınız uyku moduna geçti.</translation>

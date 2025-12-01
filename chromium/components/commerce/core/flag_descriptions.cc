@@ -10,10 +10,6 @@ const char kProductSpecificationsName[] = "Product Specifications";
 const char kProductSpecificationsDescription[] =
     "Enable the Product Specifications feature.";
 
-const char kCompareConfirmationToastName[] = "Added to set confirmation toast";
-const char kCompareConfirmationToastDescription[] =
-    "Enable to show the added to set confirmation in a toast.";
-
 const char kShoppingListName[] = "Shopping List";
 const char kShoppingListDescription[] = "Enable shopping list in bookmarks.";
 
@@ -36,11 +32,6 @@ extern const char kPriceInsightsHighPriceIosDescription[] =
     "When enabled, price insight will report a high confidence when the price "
     "is high.";
 #endif
-
-const char kTrackByDefaultOnMobileName[] =
-    "Product Tracking by Default on Mobile";
-const char kTrackByDefaultOnMobileDescription[] =
-    "Enable tracking a product by default when bookmarking on mobile devices.";
 
 const char kPriceTrackingSubscriptionServiceLocaleKeyName[] =
     "Price Tracking Subscription Service Local Key";

@@ -28,14 +28,11 @@
   ReaderModeOptionsCoordinator* _optionsCoordinator;
 }
 
-- (UIView*)viewForSnapshot {
-  return _viewController.view;
-}
-
 #pragma mark - Public
 
 - (void)startAnimated:(BOOL)animated {
   _viewController = [[ReaderModeViewController alloc] init];
+  _viewController.overscrollDelegate = self.overscrollDelegate;
   ProfileIOS* profile = self.browser->GetProfile();
   BwgService* BWGService = BwgServiceFactory::GetForProfile(profile);
   DistillerService* distiller_service =

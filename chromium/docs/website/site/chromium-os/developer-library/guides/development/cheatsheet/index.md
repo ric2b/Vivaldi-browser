@@ -29,7 +29,7 @@ You can choose any name beside `Default` if you desire, but most engineers use
 ### Build chrome for a particular board, and deploy to it
 
 ```shell
-$ autoninja -C out_${BOARD}/Release chrome chrome_sandbox nacl_helper && \
+$ autoninja -C out_${BOARD}/Release chrome chrome_sandbox && \
 ./third_party/chromite/bin/deploy_chrome --build-dir=out_${BOARD}/Release \
 --device=${DUT} --nostrip --compress=always
 ```

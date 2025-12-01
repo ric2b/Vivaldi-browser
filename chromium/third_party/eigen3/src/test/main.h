@@ -343,7 +343,7 @@ static std::vector<std::string> eigen_assert_list;
 #if !defined(EIGEN_TESTING_CONSTEXPR) && !defined(EIGEN_TESTING_PLAINOBJECT_CTOR)
 #define EIGEN_INTERNAL_DEBUGGING
 #endif
-#include <Eigen/QR>  // required for createRandomPIMatrixOfRank and generateRandomMatrixSvs
+#include <Eigen/Core>
 
 inline void verify_impl(bool condition, const char* testname, const char* file, int line,
                         const char* condition_as_string) {
@@ -935,3 +935,7 @@ int main(int argc, char* argv[]) {
 #endif
 
 #include "gpu_test_helper.h"
+
+#ifndef EIGEN_TEST_MAX_SIZE
+#define EIGEN_TEST_MAX_SIZE 320
+#endif

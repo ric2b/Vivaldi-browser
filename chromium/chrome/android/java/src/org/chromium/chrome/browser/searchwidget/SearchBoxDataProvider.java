@@ -9,8 +9,11 @@ import android.content.Context;
 import androidx.annotation.ColorInt;
 import androidx.annotation.ColorRes;
 
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
@@ -22,6 +25,8 @@ import org.chromium.url.GURL;
 
 @NullMarked
 class SearchBoxDataProvider implements LocationBarDataProvider {
+    private final ObservableSupplier<@ControlsPosition Integer> mToolbarPosition =
+            new ObservableSupplierImpl(ControlsPosition.TOP);
     private /* PageClassification */ int mPageClassification;
     private @ColorInt int mPrimaryColor;
     private @Nullable GURL mGurl;
@@ -144,11 +149,16 @@ class SearchBoxDataProvider implements LocationBarDataProvider {
         mPageClassification = pageClassification;
     }
 
-    void setCurrentUrl(GURL url) {
+    void setCurrentUrl(@Nullable GURL url) {
         mGurl = url;
     }
 
     void setIsIncognitoForTesting(boolean isIncognito) {
         mIsIncognito = isIncognito;
+    }
+
+    @Override
+    public ObservableSupplier<@ControlsPosition Integer> getToolbarPositionSupplier() {
+        return mToolbarPosition;
     }
 }

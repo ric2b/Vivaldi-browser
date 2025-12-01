@@ -45,7 +45,6 @@
 #include "components/lens/lens_features.h"
 #include "components/omnibox/browser/actions/contextual_search_action.h"
 #include "components/omnibox/browser/actions/omnibox_action_in_suggest.h"
-#include "components/omnibox/browser/actions/omnibox_answer_action.h"
 #include "components/omnibox/browser/actions/omnibox_pedal_provider.h"
 #include "components/omnibox/browser/aim_eligibility_service.h"
 #include "components/omnibox/browser/autocomplete_enums.h"
@@ -116,6 +115,10 @@
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 #include "components/omnibox/browser/autocomplete_scoring_model_service.h"
+#endif
+
+#if BUILDFLAG(IS_IOS)
+#include "components/omnibox/browser/gemini_prototype_omnibox_provider.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -386,9 +389,8 @@ AutocompleteController::OldResult::OldResult(UpdateType update_type,
                                              AutocompleteResult* result) {
   if (result->default_match()) {
     last_default_match = *result->default_match();
-    if (last_default_match->associated_keyword) {
-      last_default_associated_keyword =
-          last_default_match->associated_keyword->keyword;
+    if (!last_default_match->associated_keyword.empty()) {
+      last_default_associated_keyword = last_default_match->associated_keyword;
     }
   }
 
@@ -1049,7 +1051,7 @@ void AutocompleteController::SetMatchDestinationURL(
       base::UTF16ToUTF8(match->search_terms_args->search_terms));
 
   // Append an extra header to navigations from the @gemini scope.
-  const TemplateURL* turl = match->GetTemplateURL(template_url_service_, false);
+  const TemplateURL* turl = match->GetTemplateURL(template_url_service_);
   if (turl &&
       turl->starter_pack_id() == template_url_starter_pack_data::kGemini &&
       !encoded_search_terms.empty() &&
@@ -1116,6 +1118,19 @@ bool AutocompleteController::ShouldRunProvider(
   if (omnibox::IsLensSearchbox(input_.current_page_classification())) {
     return provider->type() == AutocompleteProvider::TYPE_SEARCH ||
            provider->type() == AutocompleteProvider::TYPE_ZERO_SUGGEST;
+  }
+
+  if (omnibox::IsComposebox(input_.current_page_classification())) {
+    return provider->type() == AutocompleteProvider::TYPE_ZERO_SUGGEST ||
+           provider->type() == AutocompleteProvider::TYPE_SEARCH;
+  }
+
+  // For contextual realbox queries, we only want to run a subset of providers
+  // to filter out irrelevant suggestions (like history suggestions).
+  if (omnibox::IsNTPRealbox(input_.current_page_classification()) &&
+      input_.lens_overlay_suggest_inputs().has_value()) {
+    return provider->type() == AutocompleteProvider::TYPE_ZERO_SUGGEST ||
+           provider->type() == AutocompleteProvider::TYPE_SEARCH;
   }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -1360,6 +1375,12 @@ void AutocompleteController::InitializeSyncProviders(int provider_types) {
   if (provider_types & AutocompleteProvider::TYPE_BUILTIN) {
     providers_.push_back(new BuiltinProvider(provider_client_.get()));
   }
+#if BUILDFLAG(IS_IOS)
+  if (omnibox::IsGeminiPrototypeProviderEnabled()) {
+    providers_.push_back(
+        new GeminiPrototypeOmniboxProvider(provider_client_.get(), this));
+  }
+#endif
   if (provider_types & AutocompleteProvider::TYPE_HISTORY_QUICK) {
     history_quick_provider_ = new HistoryQuickProvider(provider_client_.get());
     providers_.push_back(history_quick_provider_.get());
@@ -1523,23 +1544,24 @@ void AutocompleteController::UpdateResult(UpdateType update_type,
   const bool mia_enabled =
       omnibox_feature_configs::MiaZPS::Get().enabled &&
       AimEligibilityService::IsAimAllowedByPolicy(provider_client_->GetPrefs());
+  const bool is_incognito = provider_client_->IsOffTheRecord();
 
   if (update_type == UpdateType::kSyncPass ||
       update_type == UpdateType::kAsyncPass ||
       update_type == UpdateType::kLastAsyncPassExceptDoc) {
-    internal_result_.SortAndCull(input_, template_url_service_,
-                                 triggered_feature_service_, is_lens_active,
-                                 can_show_contextual_suggestions, mia_enabled,
-                                 old_result.default_match_to_preserve,
+    internal_result_.SortAndCull(
+        input_, template_url_service_, triggered_feature_service_,
+        is_lens_active, can_show_contextual_suggestions, mia_enabled,
+        is_incognito, old_result.default_match_to_preserve,
                       /* vivaldi */  provider_client_.get());
     internal_result_.TransferOldMatches(input_,
                                         &old_result.matches_to_transfer);
   }
 
-  internal_result_.SortAndCull(input_, template_url_service_,
-                               triggered_feature_service_, is_lens_active,
-                               can_show_contextual_suggestions, mia_enabled,
-                               old_result.default_match_to_preserve,
+  internal_result_.SortAndCull(
+      input_, template_url_service_, triggered_feature_service_, is_lens_active,
+      can_show_contextual_suggestions, mia_enabled, is_incognito,
+      old_result.default_match_to_preserve,
       /* vivaldi */ provider_client_.get());
 
   if (update_type == UpdateType::kSyncPass) {
@@ -1604,6 +1626,13 @@ void AutocompleteController::AggregateNewMatches() {
 
     internal_result_.MergeSuggestionGroupsMap(
         provider->suggestion_groups_map());
+  }
+
+  // Smart compose will only be set by the search provider.
+  if (search_provider_ && ShouldRunProvider(search_provider_) &&
+      !search_provider_->get_smart_compose_inline_hint().empty()) {
+    internal_result_.set_smart_compose_inline_hint(
+        search_provider_->get_smart_compose_inline_hint());
   }
 }
 
@@ -1694,9 +1723,9 @@ bool AutocompleteController::CheckWhetherDefaultMatchChanged(
   const bool default_is_valid = internal_result_.default_match();
   std::u16string default_associated_keyword;
   if (default_is_valid &&
-      internal_result_.default_match()->associated_keyword) {
+      !internal_result_.default_match()->associated_keyword.empty()) {
     default_associated_keyword =
-        internal_result_.default_match()->associated_keyword->keyword;
+        internal_result_.default_match()->associated_keyword;
   }
   // We've gotten async results. Send notification that the default match
   // updated if:
@@ -1713,15 +1742,15 @@ bool AutocompleteController::CheckWhetherDefaultMatchChanged(
   // default match even if fill_into_edit remains the same (see SearchProvider
   // for an example).
   const bool notify_default_match =
-      (last_default_match.has_value() != default_is_valid) ||
+      last_default_match.has_value() != default_is_valid ||
       (last_default_match &&
-       ((internal_result_.default_match()->fill_into_edit !=
-         last_default_match->fill_into_edit) ||
-        (internal_result_.default_match()->icon_url !=
-         last_default_match->icon_url) ||
-        (default_associated_keyword != last_default_associated_keyword) ||
-        (internal_result_.default_match()->keyword !=
-         last_default_match->keyword)));
+       (internal_result_.default_match()->fill_into_edit !=
+            last_default_match->fill_into_edit ||
+        internal_result_.default_match()->icon_url !=
+            last_default_match->icon_url ||
+        default_associated_keyword != last_default_associated_keyword ||
+        internal_result_.default_match()->keyword !=
+            last_default_match->keyword));
   if (notify_default_match) {
     last_time_default_match_changed_ = base::TimeTicks::Now();
   }
@@ -1730,7 +1759,8 @@ bool AutocompleteController::CheckWhetherDefaultMatchChanged(
 
 void AutocompleteController::AttachActions() {
   // No actions should be attached for lens searchboxes.
-  if (omnibox::IsLensSearchbox(input_.current_page_classification())) {
+  if (omnibox::IsLensSearchbox(input_.current_page_classification()) ||
+      omnibox::IsComposebox(input_.current_page_classification())) {
     return;
   }
 
@@ -1840,8 +1870,7 @@ void AutocompleteController::UpdateAssociatedKeywords(
       CHECK(!added_keywords.count(keyword)) << debug_string;
     }
     added_keywords.insert(keyword);
-    match.associated_keyword = std::make_unique<AutocompleteMatch>(
-        keyword_provider_->CreateVerbatimMatch(keyword_text, keyword, input_));
+    match.associated_keyword = keyword;
   };
 
   for (AutocompleteMatch& match : *result) {
@@ -1853,7 +1882,7 @@ void AutocompleteController::UpdateAssociatedKeywords(
     }
 
     // Clear any keyword the match may have from previous passes.
-    match.associated_keyword.reset();
+    match.associated_keyword = u"";
 
     // If this match is in keyword mode (e.g. the user tabbed into a keyword
     // then continued typing), don't attach a keyword chip to it.
@@ -1909,7 +1938,7 @@ void AutocompleteController::UpdateKeywordDescriptions(
   // The Lens searchbox does not require the search engine name description
   // label since all suggestions will be from a single source.
   // TODO(crbug.com/338094774): Remove this Lens-specific change and implement a
-  // general solution.
+  //   general solution.
   if (omnibox::IsLensSearchbox(input_.current_page_classification())) {
     return;
   }
@@ -1946,7 +1975,7 @@ void AutocompleteController::UpdateKeywordDescriptions(
       bool is_contextual = i->IsContextualSearchSuggestion();
       if (i->keyword != last_keyword || is_contextual != last_contextual) {
         const TemplateURL* template_url =
-            i->GetTemplateURL(template_url_service_, false);
+            i->GetTemplateURL(template_url_service_);
         if (template_url) {
           // The search keyword description is applied except in these cases:
           // - For extension keywords, the description is the extension name.
@@ -2098,7 +2127,7 @@ void AutocompleteController::UpdateSearchboxStats(AutocompleteResult* result) {
   for (size_t index = 0; index < result->size(); ++index) {
     AutocompleteMatch* match = result->match_at(index);
     const TemplateURL* template_url =
-        match->GetTemplateURL(template_url_service_, false);
+        match->GetTemplateURL(template_url_service_);
     if (!template_url || !match->search_terms_args) {
       continue;
     }
@@ -2134,27 +2163,21 @@ void AutocompleteController::UpdateSearchboxStats(AutocompleteResult* result) {
     for (auto& scoped_action : match->actions) {
       auto* action_in_suggest =
           OmniboxActionInSuggest::FromAction(scoped_action.get());
-      auto* answer_action =
-          OmniboxAnswerAction::FromAction(scoped_action.get());
 
-      TemplateURLRef::SearchTermsArgs* search_terms_args;
       if (action_in_suggest == nullptr ||
           !action_in_suggest->search_terms_args.has_value()) {
-        if (answer_action == nullptr) {
-          continue;
-        }
-        search_terms_args = &answer_action->search_terms_args;
-      } else {
-        search_terms_args = &action_in_suggest->search_terms_args.value();
+        continue;
       }
 
+      TemplateURLRef::SearchTermsArgs* search_terms_args;
+      search_terms_args = &action_in_suggest->search_terms_args.value();
       search_terms_args->searchbox_stats.MergeFrom(
           match->search_terms_args->searchbox_stats);
 
       if (action_in_suggest != nullptr) {
         action_in_suggest->template_action.set_action_uri(
             ComputeURLFromSearchTermsArgs(
-                match->GetTemplateURL(template_url_service_, false),
+                match->GetTemplateURL(template_url_service_),
                 *search_terms_args)
                 .spec());
       }
@@ -2169,7 +2192,7 @@ void AutocompleteController::UpdateSearchboxStats(AutocompleteResult* result) {
       if (contextual_takover_action) {
         contextual_takover_action->set_fulfillment_url(
             ComputeURLFromSearchTermsArgs(
-                match->GetTemplateURL(template_url_service_, false),
+                match->GetTemplateURL(template_url_service_),
                 *match->search_terms_args));
       }
     }
@@ -2828,7 +2851,7 @@ void AutocompleteController::MaybeCleanSuggestionsForKeywordMode(
     result->EraseMatchesWhere([](const AutocompleteMatch& match) {
       // When the input is '@' exactly, keep only the trivial search, starter
       // pack, and featured enterprise suggestions.
-      return match.contents != u"@" && !match.associated_keyword &&
+      return match.contents != u"@" && match.associated_keyword.empty() &&
              !match.IsToolbelt();
     });
     // Sort is needed to restore verbatim '@' search as top/default match

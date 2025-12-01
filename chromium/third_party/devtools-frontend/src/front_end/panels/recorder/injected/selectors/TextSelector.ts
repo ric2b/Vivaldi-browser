@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,10 +29,10 @@ const collect = <T>(iter: Iterable<T>, max = Infinity): T[] => {
 /**
  * Computes the text selector for a node.
  *
- * @param node - The node to compute.
+ * @internal
+ * @param node The node to compute.
  * @returns The computed text selector.
  *
- * @internal
  */
 export const computeTextSelector = (node: Node): Selector|undefined => {
   const content = createTextContent(node).full.trim();

@@ -24,8 +24,6 @@ import org.chromium.chrome.browser.ui.signin.SigninAndHistorySyncActivityLaunche
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerBottomSheetStrings;
 import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncConfig;
 import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncHelper;
-import org.chromium.components.signin.SigninFeatureMap;
-import org.chromium.components.signin.SigninFeatures;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
@@ -121,8 +119,10 @@ public class HistoryPageSigninPromoDelegate extends SigninPromoDelegate {
     @Override
     AccountPickerBottomSheetStrings getBottomSheetStrings() {
         return new AccountPickerBottomSheetStrings.Builder(
-                        R.string.signin_account_picker_bottom_sheet_title)
-                .setSubtitleStringId(R.string.signin_account_picker_bottom_sheet_benefits_subtitle)
+                        mContext.getString(R.string.signin_account_picker_bottom_sheet_title))
+                .setSubtitleString(
+                        mContext.getString(
+                                R.string.signin_account_picker_bottom_sheet_benefits_subtitle))
                 .build();
     }
 
@@ -138,11 +138,7 @@ public class HistoryPageSigninPromoDelegate extends SigninPromoDelegate {
 
     @Override
     String getTextForPrimaryButton(@Nullable DisplayableProfileData profileData) {
-        if (SigninFeatureMap.isEnabled(SigninFeatures.HISTORY_PAGE_PROMO_CTA_STRING_VARIATION)) {
-            return mContext.getString(R.string.signin_continue);
-        } else {
-            return mContext.getString(R.string.signin_promo_turn_on);
-        }
+        return mContext.getString(R.string.signin_continue);
     }
 
     @Override

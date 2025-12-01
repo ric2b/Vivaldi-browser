@@ -1,9 +1,32 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+type TrackedAsyncOperation = 'Promise'|'requestAnimationFrame'|'setTimeout'|'setInterval'|'requestIdleCallback'|
+    'cancelIdleCallback'|'cancelAnimationFrame'|'clearTimeout'|'clearInterval';
+
+type TrackedAsyncOperations = {
+  [K in TrackedAsyncOperation]: typeof window[K];
+};
+/**
+ * Capture the original at point in creation of the module
+ * Unless something before this is loaded
+ * This should always be the original
+ */
+const originals: Readonly<TrackedAsyncOperations> = {
+  Promise,
+  requestAnimationFrame: requestAnimationFrame.bind(window),
+  requestIdleCallback: requestIdleCallback.bind(window),
+  setInterval: setInterval.bind(window),
+  setTimeout: setTimeout.bind(window),
+  cancelAnimationFrame: cancelAnimationFrame.bind(window),
+  clearInterval: clearInterval.bind(window),
+  clearTimeout: clearTimeout.bind(window),
+  cancelIdleCallback: cancelIdleCallback.bind(window)
+};
+
 interface AsyncActivity {
-  type: 'promise'|'requestAnimationFrame'|'setTimeout'|'setInterval'|'requestIdleCallback';
+  type: TrackedAsyncOperation;
   pending: boolean;
   cancelDelayed?: () => void;
   id?: string;
@@ -14,21 +37,7 @@ interface AsyncActivity {
 
 const asyncActivity: AsyncActivity[] = [];
 
-export function startTrackingAsyncActivity() {
-  // We are tracking all asynchronous activity but let it run normally during
-  // the test.
-  stub('requestAnimationFrame', trackingRequestAnimationFrame);
-  stub('setTimeout', trackingSetTimeout as unknown as typeof setTimeout);
-  stub('setInterval', trackingSetInterval as unknown as typeof setInterval);
-  stub('requestIdleCallback', trackingRequestIdleCallback);
-  stub('cancelAnimationFrame', id => cancelTrackingActivity('a' + id));
-  stub('clearTimeout', id => cancelTrackingActivity('t' + id));
-  stub('clearInterval', id => cancelTrackingActivity('i' + id));
-  stub('cancelIdleCallback', id => cancelTrackingActivity('d' + id));
-  stub('Promise', TrackingPromise);
-}
-
-export async function checkForPendingActivity() {
+export async function checkForPendingActivity(testName = '') {
   let stillPending: AsyncActivity[] = [];
   const wait = 5;
   let retries = 20;
@@ -38,13 +47,15 @@ export async function checkForPendingActivity() {
     const pendingCount = asyncActivity.filter(a => a.pending).length;
     const totalCount = asyncActivity.length;
     try {
+      const PromiseConstructor = originals.Promise;
       // First we wait for the pending async activity to finish normally
-      await original(Promise).all(asyncActivity.filter(a => a.pending).map(a => original(Promise).race([
+      await PromiseConstructor.all(asyncActivity.filter(a => a.pending).map(a => PromiseConstructor.race([
         a.promise,
-        new (original(Promise))(
-            (_, reject) => original(setTimeout)(
+        new PromiseConstructor<void>(
+            (resolve, reject) => originals.setTimeout(
                 () => {
                   if (!a.pending) {
+                    resolve();
                     return;
                   }
                   // If something is still pending after some time, we try to
@@ -80,7 +91,7 @@ export async function checkForPendingActivity() {
   }
   if (stillPending.length) {
     throw new Error(
-        'The test has completed, but there are still pending async operations\n' +
+        `The test "${testName}" has completed, but there are still pending async operations\n` +
         stillPending.map(a => `Pending '${a.type}' created at: \n${a.stack}`).join('\n\n'));
   }
 }
@@ -93,16 +104,16 @@ export function stopTrackingAsyncActivity() {
 function trackingRequestAnimationFrame(fn: FrameRequestCallback) {
   const activity: AsyncActivity = {type: 'requestAnimationFrame', pending: true, stack: getStack(new Error())};
   let id = 0;
-  activity.promise = new (original(Promise<void>))(resolve => {
+  activity.promise = new originals.Promise<void>(resolve => {
     activity.runImmediate = () => {
       fn(performance.now());
       activity.pending = false;
       resolve();
     };
-    id = original(requestAnimationFrame)(activity.runImmediate);
+    id = originals.requestAnimationFrame(activity.runImmediate);
     activity.id = 'a' + id;
     activity.cancelDelayed = () => {
-      original(cancelAnimationFrame)(id);
+      originals.cancelAnimationFrame(id);
       activity.pending = false;
       resolve();
     };
@@ -114,16 +125,16 @@ function trackingRequestAnimationFrame(fn: FrameRequestCallback) {
 function trackingRequestIdleCallback(fn: IdleRequestCallback, opts?: IdleRequestOptions): number {
   const activity: AsyncActivity = {type: 'requestIdleCallback', pending: true, stack: getStack(new Error())};
   let id = 0;
-  activity.promise = new (original(Promise<void>))(resolve => {
+  activity.promise = new originals.Promise<void>(resolve => {
     activity.runImmediate = (idleDeadline?: IdleDeadline) => {
       fn(idleDeadline ?? {didTimeout: true, timeRemaining: () => 0} as IdleDeadline);
       activity.pending = false;
       resolve();
     };
-    id = original(requestIdleCallback)(activity.runImmediate, opts);
+    id = originals.requestIdleCallback(activity.runImmediate, opts);
     activity.id = 'd' + id;
     activity.cancelDelayed = () => {
-      original(cancelIdleCallback)(id);
+      originals.cancelIdleCallback(id);
       activity.pending = false;
       resolve();
     };
@@ -134,9 +145,10 @@ function trackingRequestIdleCallback(fn: IdleRequestCallback, opts?: IdleRequest
 
 function trackingSetTimeout(arg: TimerHandler, time?: number, ...params: unknown[]) {
   const activity: AsyncActivity = {type: 'setTimeout', pending: true, stack: getStack(new Error())};
-  let id: ReturnType<typeof setTimeout>|undefined;
-  activity.promise = new (original(Promise<void>))(resolve => {
+  let id: number|undefined;
+  activity.promise = new originals.Promise<void>(resolve => {
     activity.runImmediate = () => {
+      originals.clearTimeout(id);
       if (typeof (arg) === 'function') {
         arg(...params);
       } else {
@@ -145,10 +157,10 @@ function trackingSetTimeout(arg: TimerHandler, time?: number, ...params: unknown
       activity.pending = false;
       resolve();
     };
-    id = original(setTimeout)(activity.runImmediate, time);
+    id = originals.setTimeout(activity.runImmediate, time);
     activity.id = 't' + id;
     activity.cancelDelayed = () => {
-      original(clearTimeout)(id);
+      originals.clearTimeout(id);
       activity.pending = false;
       resolve();
     };
@@ -164,11 +176,11 @@ function trackingSetInterval(arg: TimerHandler, time?: number, ...params: unknow
     stack: getStack(new Error()),
   };
   let id = 0;
-  activity.promise = new (original(Promise<void>))(resolve => {
-    id = original(setInterval)(arg, time, ...params);
+  activity.promise = new originals.Promise<void>(resolve => {
+    id = originals.setInterval(arg, time, ...params);
     activity.id = 'i' + id;
     activity.cancelDelayed = () => {
-      original(clearInterval)(id);
+      originals.clearInterval(id);
       activity.pending = false;
       resolve();
     };
@@ -198,7 +210,6 @@ const BasePromise: Omit<PromiseConstructor, UntrackedPromiseMethod> = {
   reject: Promise.reject,
   resolve: Promise.resolve,
   withResolvers: Promise.withResolvers,
-  try: Promise.try,
 };
 
 // We can't subclass native Promise here as this will cause all derived promises
@@ -207,26 +218,25 @@ const BasePromise: Omit<PromiseConstructor, UntrackedPromiseMethod> = {
 // which never settles.
 const TrackingPromise: PromiseConstructor = Object.assign(
     function<T>(arg: (resolve: (value: T|PromiseLike<T>) => void, reject: (reason?: unknown) => void) => void) {
-      const originalPromiseType = original(Promise);
-      const promise = new (originalPromiseType)(arg);
+      const promise = new originals.Promise(arg);
       const activity: AsyncActivity = {
-        type: 'promise',
+        type: 'Promise',
         promise,
         stack: getStack(new Error()),
         pending: false,
       };
       promise.then = function<TResult1 = T, TResult2 = never>(
-          onFullfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>)|undefined|null,
+          onFulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>)|undefined|null,
           onRejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>)|undefined|
           null): Promise<TResult1|TResult2> {
         activity.pending = true;
-        return originalPromiseType.prototype.then.apply(this, [
+        return originals.Promise.prototype.then.apply(this, [
           result => {
-            if (!onFullfilled) {
+            if (!onFulfilled) {
               return this;
             }
             activity.pending = false;
-            return onFullfilled(result);
+            return onFulfilled(result);
           },
           result => {
             if (!onRejected) {
@@ -244,33 +254,51 @@ const TrackingPromise: PromiseConstructor = Object.assign(
     BasePromise as PromiseConstructor,
 );
 
-function getStack(error: Error): string {
-  return (error.stack ?? 'No stack').split('\n').slice(2).join('\n');
+const stubMethods: TrackedAsyncOperations = {
+  requestAnimationFrame: trackingRequestAnimationFrame,
+  setTimeout: trackingSetTimeout as unknown as typeof setTimeout,
+  setInterval: trackingSetInterval as unknown as typeof setInterval,
+  requestIdleCallback: trackingRequestIdleCallback,
+  cancelAnimationFrame: id => cancelTrackingActivity('a' + id),
+  clearTimeout: id => cancelTrackingActivity('t' + id),
+  clearInterval: id => cancelTrackingActivity('i' + id),
+  cancelIdleCallback: id => cancelTrackingActivity('d' + id),
+  Promise: TrackingPromise,
+};
+
+export function startTrackingAsyncActivity() {
+  // Reset everything before starting a new tracking session.
+  // Do this in case something went wrong with cleanup
+  stopTrackingAsyncActivity();
+  // We are tracking all asynchronous activity but let it run normally during
+  // the test.
+  stub('requestAnimationFrame');
+  stub('setTimeout');
+  stub('setInterval');
+  stub('requestIdleCallback');
+  stub('cancelAnimationFrame');
+  stub('clearTimeout');
+  stub('clearInterval');
+  stub('cancelIdleCallback');
+  stub('Promise');
 }
 
-// We can't use Sinon for stubbing as 1) we need to double wrap sometimes and 2)
-// we need to access original values.
-interface Stub<TKey extends keyof typeof window> {
-  name: TKey;
-  original: (typeof window)[TKey];
-  stubWith: (typeof window)[TKey];
-}
-
-const stubs: Array<Stub<keyof typeof window>> = [];
-
-function stub<T extends keyof typeof window>(name: T, stubWith: (typeof window)[T]) {
-  const original = window[name];
-  window[name] = stubWith;
-  stubs.push({name, original, stubWith});
-}
-
-function original<T>(stubWith: T): T {
-  return stubs.find(s => s.stubWith === stubWith)?.original;
+const stubs = new Set<TrackedAsyncOperation>();
+function stub<T extends TrackedAsyncOperation>(name: T) {
+  (window[name] as unknown) = stubMethods[name];
+  stubs.add(name);
 }
 
 function restoreAll() {
-  for (const {name, original} of stubs) {
-    (window[name] as typeof original) = original;
+  for (const name of stubs) {
+    if (window[name] !== stubMethods[name]) {
+      throw new Error(`Unexpected stub for method ${name} found`);
+    }
+    (window[name] as unknown) = originals[name];
   }
-  stubs.length = 0;
+  stubs.clear();
+}
+
+function getStack(error: Error): string {
+  return (error.stack ?? 'No stack').split('\n').slice(2).join('\n');
 }

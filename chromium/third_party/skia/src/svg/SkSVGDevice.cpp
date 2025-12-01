@@ -32,7 +32,6 @@
 #include "include/core/SkShader.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkSpan.h"
-#include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTileMode.h"
@@ -1015,8 +1014,7 @@ void SkSVGDevice::drawPath(const SkPath& path, const SkPaint& paint, bool pathIs
 }
 
 static sk_sp<SkData> encode(const SkBitmap& src) {
-    SkDynamicMemoryWStream buf;
-    return SkPngEncoder::Encode(&buf, src.pixmap(), {}) ? buf.detachAsData() : nullptr;
+    return SkPngEncoder::Encode(src.pixmap(), {});
 }
 
 void SkSVGDevice::drawBitmapCommon(const MxCp& mc, const SkBitmap& bm, const SkPaint& paint) {
@@ -1067,7 +1065,8 @@ void SkSVGDevice::drawImageRect(const SkImage* image, const SkRect* src, const S
     }
 
     SkMatrix adjustedMatrix = this->localToDevice()
-                            * SkMatrix::RectToRect(src ? *src : SkRect::Make(bm.bounds()), dst);
+                            * SkMatrix::RectToRectOrIdentity(src ? *src : SkRect::Make(bm.bounds()),
+                                                             dst);
 
     drawBitmapCommon(MxCp(&adjustedMatrix, cs), bm, paint);
 }

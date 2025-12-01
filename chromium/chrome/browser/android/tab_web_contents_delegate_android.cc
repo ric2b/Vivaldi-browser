@@ -39,7 +39,6 @@
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
-#include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/blocked_content/chrome_popup_navigation_delegate.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
@@ -72,6 +71,8 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
+#include "third_party/blink/public/common/features_generated.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
 #include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
@@ -397,9 +398,10 @@ WebContents* TabWebContentsDelegateAndroid::AddNewContents(
     ScopedJavaLocalRef<jobject> jwindow_features =
         JNI_TabWebContentsDelegateAndroidImpl_CreateJavaWindowFeatures(
             env, window_features);
-
+    ScopedJavaLocalRef<jobject> jurl =
+        url::GURLAndroid::FromNativeGURL(env, target_url);
     handled = Java_TabWebContentsDelegateAndroidImpl_addNewContents(
-        env, obj, jsource, jnew_contents, static_cast<jint>(disposition),
+        env, obj, jsource, jnew_contents, jurl, static_cast<jint>(disposition),
         jwindow_features, user_gesture);
   }
 
@@ -640,6 +642,50 @@ bool TabWebContentsDelegateAndroid::OpenInAppOrChromeFromCct(GURL url) {
 
   return Java_TabWebContentsDelegateAndroidImpl_openInAppOrChromeFromCct(
       env, obj, jurl);
+}
+
+void TabWebContentsDelegateAndroid::RequestPointerLock(
+    WebContents* web_contents,
+    bool user_gesture,
+    bool last_unlocked_by_target) {
+  if (!base::FeatureList::IsEnabled(blink::features::kPointerLockOnAndroid)) {
+    WebContentsDelegateAndroid::RequestPointerLock(web_contents, user_gesture,
+                                                   last_unlocked_by_target);
+    return;
+  }
+
+  if (base::FeatureList::IsEnabled(features::kEnableExclusiveAccessManager)) {
+    JNIEnv* env = AttachCurrentThread();
+
+    ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+    if (obj.is_null()) {
+      return;
+    }
+
+    Java_TabWebContentsDelegateAndroidImpl_requestPointerLock(
+        env, obj, web_contents->GetJavaWebContents(), user_gesture,
+        last_unlocked_by_target);
+    return;
+  }
+
+  WebContentsDelegateAndroid::RequestPointerLock(web_contents, user_gesture,
+                                                 last_unlocked_by_target);
+}
+
+void TabWebContentsDelegateAndroid::LostPointerLock() {
+  if (!base::FeatureList::IsEnabled(features::kEnableExclusiveAccessManager)) {
+    WebContentsDelegateAndroid::LostPointerLock();
+    return;
+  }
+
+  JNIEnv* env = AttachCurrentThread();
+
+  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (obj.is_null()) {
+    return;
+  }
+
+  Java_TabWebContentsDelegateAndroidImpl_lostPointerLock(env, obj);
 }
 
 }  // namespace android

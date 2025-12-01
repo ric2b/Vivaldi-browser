@@ -119,6 +119,6 @@ fn lossless_roundtrip(
     assert!(decoder.parse().is_ok());
     assert!(decoder.next_image().is_ok());
     let decoded_image = decoder.image().expect("image was none");
-    are_images_equal(&image, decoded_image)?;
+    assert!(are_images_equal(&image, decoded_image)?);
     Ok(())
 }

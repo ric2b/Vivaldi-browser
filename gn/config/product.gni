@@ -86,6 +86,9 @@ if (is_vivaldi_automotive && !is_vivaldi_polestar) {
   if (is_vivaldi_mahindra) {
     android_vivaldi_manifest_package += ".mahindra"
   }
+  if (is_vivaldi_gas2) {
+    android_vivaldi_manifest_package += "." + target_cpu
+  }
 }
 
 if (is_ios) {

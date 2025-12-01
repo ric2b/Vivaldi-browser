@@ -42,23 +42,21 @@ export function navigateToStep(step: PrivacyGuideStep): Promise<void> {
 // Set all relevant sync status and fire a changed event and flush the UI.
 export function setupSync({
   syncBrowserProxy,
-  syncOn,
+  signedInState,
   syncAllDataTypes,
   typedUrlsSynced,
 }: {
   syncBrowserProxy: TestSyncBrowserProxy,
+  signedInState: SignedInState,
   syncAllDataTypes: boolean,
   typedUrlsSynced: boolean,
-  syncOn: boolean,
 }): void {
   if (syncAllDataTypes) {
     assertTrue(typedUrlsSynced);
   }
   if (typedUrlsSynced) {
-    assertTrue(syncOn);
+    assertTrue(signedInState !== SignedInState.SIGNED_OUT);
   }
-  const signedInState =
-      syncOn ? SignedInState.SYNCING : SignedInState.SIGNED_OUT;
   syncBrowserProxy.testSyncStatus = {
     signedInState: signedInState,
     hasError: false,
@@ -101,10 +99,7 @@ export function setThirdPartyCookieBlockingSetting(
 export function shouldShowCookiesCard(page: SettingsPrivacyGuidePageElement):
     boolean {
   return page.getPref('generated.cookie_default_content_setting').value !==
-      ContentSetting.BLOCK &&
-      (page.getPref('profile.cookie_controls_mode').value !==
-           CookieControlsMode.OFF ||
-       loadTimeData.getBoolean('isAlwaysBlock3pcsIncognitoEnabled'));
+      ContentSetting.BLOCK;
 }
 
 // Set the safe browsing setting for the privacy guide.
@@ -125,8 +120,14 @@ export function shouldShowSafeBrowsingCard(
 
 export function shouldShowHistorySyncCard(
     syncBrowserProxy: TestSyncBrowserProxy): boolean {
-  return !syncBrowserProxy.testSyncStatus ||
-      syncBrowserProxy.testSyncStatus.signedInState === SignedInState.SYNCING;
+  if (!syncBrowserProxy.testSyncStatus) {
+    return true;
+  }
+  return syncBrowserProxy.testSyncStatus.signedInState ===
+      SignedInState.SYNCING ||
+      (loadTimeData.getBoolean('replaceSyncPromosWithSignInPromos') &&
+       syncBrowserProxy.testSyncStatus.signedInState ===
+           SignedInState.SIGNED_IN);
 }
 
 // Bundles functionality to create the page object for tests.
@@ -153,9 +154,9 @@ export function setupPrivacyGuidePageForTest(
     setThirdPartyCookieSetting(page, CookieControlsMode.INCOGNITO_ONLY);
   }
   setFirstPartyCookieSetting(page, ContentSetting.ALLOW);
-    setupSync({
+  setupSync({
     syncBrowserProxy: syncBrowserProxy,
-    syncOn: true,
+    signedInState: SignedInState.SYNCING,
     syncAllDataTypes: true,
     typedUrlsSynced: true,
   });
@@ -166,7 +167,7 @@ export function setParametersForHistorySyncStep(
   if (!isEligible) {
     setupSync({
       syncBrowserProxy: syncBrowserProxy,
-      syncOn: false,
+      signedInState: SignedInState.SIGNED_OUT,
       syncAllDataTypes: false,
       typedUrlsSynced: false,
     });

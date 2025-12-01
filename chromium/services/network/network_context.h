@@ -48,6 +48,7 @@
 #include "net/storage_access_api/status.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/cors/preflight_controller.h"
+#include "services/network/devtools_durable_msg_collector.h"
 #include "services/network/first_party_sets/first_party_sets_access_delegate.h"
 #include "services/network/http_cache_data_counter.h"
 #include "services/network/http_cache_data_remover.h"
@@ -78,6 +79,7 @@
 #include "services/network/socket_factory.h"
 #include "services/network/url_request_context_owner.h"
 #include "services/network/web_bundle/web_bundle_manager.h"
+#include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
 
 #if BUILDFLAG(ENABLE_REPORTING)
 #include "net/reporting/reporting_cache_observer.h"
@@ -269,6 +271,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   void GetTrustTokenQueryAnswerer(
       mojo::PendingReceiver<mojom::TrustTokenQueryAnswerer> receiver,
       const url::Origin& top_frame_origin) override;
+  void GetIpProxyStatus(GetIpProxyStatusCallback callback) override;
+  void SetBypassIpProtectionProxy(bool bypass_proxy) override;
   void ClearTrustTokenData(mojom::ClearDataFilterPtr filter,
                            base::OnceClosure done) override;
   void ClearTrustTokenSessionOnlyData(
@@ -294,6 +298,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   void ComputeHttpCacheSize(base::Time start_time,
                             base::Time end_time,
                             ComputeHttpCacheSizeCallback callback) override;
+  void NotifyBrowserIdle() override;
   void NotifyExternalCacheHit(const GURL& url,
                               const std::string& http_method,
                               const net::NetworkIsolationKey& key,
@@ -321,8 +326,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
                               ClearDomainReliabilityCallback callback) override;
   void CloseAllConnections(CloseAllConnectionsCallback callback) override;
   void CloseIdleConnections(CloseIdleConnectionsCallback callback) override;
-  void SetNetworkConditions(const base::UnguessableToken& throttling_profile_id,
-                            mojom::NetworkConditionsPtr conditions) override;
+  void SetNetworkConditions(
+      const base::UnguessableToken& throttling_profile_id,
+      std::vector<mojom::MatchedNetworkConditionsPtr> conditions) override;
+  void EnableDurableMessageCollector(
+      const base::UnguessableToken& throttling_profile_id,
+      mojo::PendingReceiver<network::mojom::DurableMessageCollector> receiver)
+      override;
   void SetAcceptLanguage(const std::string& new_accept_language) override;
   void SetEnableReferrers(bool enable_referrers) override;
 #if BUILDFLAG(IS_CT_SUPPORTED)
@@ -349,6 +359,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       mojom::RestrictedUDPSocketParamsPtr params,
       mojo::PendingReceiver<mojom::RestrictedUDPSocket> receiver,
       mojo::PendingRemote<mojom::UDPSocketListener> listener,
+      bool allow_multicast,
       mojom::NetworkContext::CreateRestrictedUDPSocketCallback callback)
       override;
   void CreateTCPServerSocket(
@@ -389,6 +400,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       std::vector<mojom::HttpHeaderPtr> additional_headers,
       int32_t process_id,
       const url::Origin& origin,
+      network::mojom::ClientSecurityStatePtr client_security_state,
       uint32_t options,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
       mojo::PendingRemote<mojom::WebSocketHandshakeClient> handshake_client,
@@ -521,12 +533,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       const net::AuthCredentials& credentials,
       AddAuthCacheEntryCallback callback) override;
   void SetCorsNonWildcardRequestHeadersSupport(bool value) override;
-  // TODO(mmenke): Rename this method and update Mojo docs to make it clear this
-  // doesn't give proxy auth credentials.
-  void LookupServerBasicAuthCredentials(
-      const GURL& url,
-      const net::NetworkAnonymizationKey& network_anonymization_key,
-      LookupServerBasicAuthCredentialsCallback callback) override;
 #if BUILDFLAG(IS_CHROMEOS)
   void LookupProxyAuthCredentials(
       const net::ProxyServer& proxy_server,
@@ -558,9 +564,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
           preload_handle) override;
   void HasPreloadedSharedDictionaryInfoForTesting(
       HasPreloadedSharedDictionaryInfoForTestingCallback callback) override;
-  void ResourceSchedulerClientVisibilityChanged(
-      const base::UnguessableToken& client_token,
-      bool visible) override;
   void FlushCachedClientCertIfNeeded(
       const net::HostPortPair& host,
       const scoped_refptr<net::X509Certificate>& certificate) override;
@@ -615,6 +618,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   }
 
   size_t GetNumOutstandingResolveHostRequestsForTesting() const;
+
+  size_t num_devtools_durable_message_collectors_for_testing() const {
+    return devtools_profile_to_durable_message_collectors_.size();
+  }
 
   size_t pending_proxy_lookup_requests_for_testing() const {
     return proxy_lookup_requests_.size();
@@ -691,6 +698,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   SharedResourceChecker* GetSharedResourceChecker() {
     return shared_resource_checker_.get();
   }
+
+  // Create a Durable Message for the request and DevTools Profile ID,
+  // if durable message collection is enabled on the Devtools profile.
+  base::WeakPtr<DevtoolsDurableMessage> MaybeCreateDurableMessage(
+      const std::optional<base::UnguessableToken>& throttling_profile_id,
+      const std::optional<std::string>& devtools_request_id);
 
   // Returns the current same-origin-policy exceptions.  For more details see
   // network::mojom::NetworkContextParams::cors_origin_access_list and
@@ -835,6 +848,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   void InitializePrefetchURLLoaderFactory();
 
+  // Invoked when DevTools DurableMessage Clients for a profile are
+  // disconnected.
+  void OnDevToolsDurableMessageClientsDisconnected(
+      const base::UnguessableToken& throttling_profile_id);
+
   void QueueReportInternal(
       const std::string& type,
       const std::string& group,
@@ -855,7 +873,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   // a pointer to and must be defined after `ip_protection_core_`.
   std::unique_ptr<ip_protection::IpProtectionCore> ip_protection_core_;
 
-  // Used only when network::features::kCompressionDictionaryTransportBackend is
+  // Used only when network::features::kCompressionDictionaryTransport is
   // enabled.
   // Note: `url_request_context_owner_` indirectly holds a pointer to
   // `shared_dictionary_manager_` via URLRequestContext and HttpCache and
@@ -1096,6 +1114,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   // This needs to be ordered after cookie_manager_ as it maintains a reference
   // to the cookie settings object from cookie_manager_.
   std::unique_ptr<SharedResourceChecker> shared_resource_checker_;
+
+  // DevTools Durable Message Collectors. Created on first use.
+  absl::flat_hash_map<base::UnguessableToken,
+                      std::unique_ptr<DevtoolsDurableMessageCollector>>
+      devtools_profile_to_durable_message_collectors_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

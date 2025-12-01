@@ -40,9 +40,13 @@ class TabHandleLayer : public Layer {
                      ui::NinePatchResource* tab_handle_resource,
                      ui::NinePatchResource* tab_handle_outline_resource,
                      bool foreground,
+                     bool is_pinned,
                      bool shouldShowTabOutline,
                      bool close_pressed,
                      bool should_hide_favicon,
+                     bool should_show_media_indicator,
+                     ui::Resource* media_indicator_resource,
+                     float media_indicator_width,
                      float toolbar_width,
                      float x,
                      float y,
@@ -68,6 +72,7 @@ class TabHandleLayer : public Layer {
                      bool is_shown_as_favicon, // Vivaldi
                      float title_offset); // Vivaldi
   bool foreground();
+  bool is_pinned();
   scoped_refptr<cc::slim::Layer> layer() override;
 
  protected:
@@ -84,6 +89,7 @@ class TabHandleLayer : public Layer {
   scoped_refptr<cc::slim::UIResourceLayer> close_keyboard_focus_ring_;
   scoped_refptr<cc::slim::UIResourceLayer> start_divider_;
   scoped_refptr<cc::slim::UIResourceLayer> end_divider_;
+  scoped_refptr<cc::slim::UIResourceLayer> media_indicator_layer_;
   scoped_refptr<cc::slim::NinePatchLayer> decoration_tab_;
   scoped_refptr<cc::slim::NinePatchLayer> tab_outline_;
   scoped_refptr<cc::slim::Layer> title_layer_;
@@ -91,7 +97,8 @@ class TabHandleLayer : public Layer {
   scoped_refptr<cc::slim::NinePatchLayer> keyboard_focus_ring_;
 
   float opacity_;
-  bool foreground_;
+  bool foreground_ = false;
+  bool is_pinned_ = false;
 };
 
 }  // namespace android

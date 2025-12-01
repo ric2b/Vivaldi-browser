@@ -30,6 +30,7 @@
 
 #include <shared_mutex>
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <utility>
@@ -77,6 +78,7 @@ class AttachmentStateBlueprint;
 class Blob;
 class BlobCache;
 class CallbackTaskManager;
+class DynamicArrayDefaultBindings;
 class DynamicUploader;
 class ErrorScopeStack;
 class SharedTextureMemory;
@@ -174,7 +176,7 @@ class DeviceBase : public ErrorSink,
     // instead of a backend Foo object. If the blueprint doesn't match an object in the
     // cache, then the descriptor is used to make a new object.
     ResultOrError<Ref<BindGroupLayoutBase>> GetOrCreateBindGroupLayout(
-        const BindGroupLayoutDescriptor* descriptor,
+        const UnpackedPtr<BindGroupLayoutDescriptor>& descriptor,
         PipelineCompatibilityToken pipelineCompatibilityToken = kExplicitPCT);
 
     BindGroupLayoutBase* GetEmptyBindGroupLayout();
@@ -236,6 +238,9 @@ class DeviceBase : public ErrorSink,
     ResultOrError<Ref<TextureViewBase>> CreateTextureView(
         TextureBase* texture,
         const TextureViewDescriptor* descriptor = nullptr);
+    ResultOrError<Ref<TexelBufferViewBase>> CreateTexelBufferView(
+        BufferBase* buffer,
+        const TexelBufferViewDescriptor* descriptor);
 
     // Implementation of API object creation methods. DO NOT use them in a reentrant manner.
     BindGroupBase* APICreateBindGroup(const BindGroupDescriptor* descriptor);
@@ -267,6 +272,7 @@ class DeviceBase : public ErrorSink,
     TextureBase* APICreateTexture(const TextureDescriptor* descriptor);
 
     InternalPipelineStore* GetInternalPipelineStore();
+    DynamicArrayDefaultBindings* GetDynamicArrayDefaultBindings();
 
     // For Dawn Wire
     BufferBase* APICreateErrorBuffer(const BufferDescriptor* desc);
@@ -337,6 +343,7 @@ class DeviceBase : public ErrorSink,
 
     std::vector<const char*> GetTogglesUsed() const;
     const tint::wgsl::AllowedFeatures& GetWGSLAllowedFeatures() const;
+    bool AreTexelBuffersEnabled() const;
     bool IsToggleEnabled(Toggle toggle) const;
     const TogglesState& GetTogglesState() const;
     const FeaturesSet& GetEnabledFeatures() const;
@@ -474,6 +481,11 @@ class DeviceBase : public ErrorSink,
         DAWN_UNREACHABLE();
     }
 
+    // The DeviceLostEvent passed to this device in the constructor. To avoid triggering it before
+    // the Device is initialized, it's held in this 'pending' member and moved to mLostEvent after
+    // initialization. Otherwise if it were triggered during initialization, it would be
+    // double-triggered by the adapater due to device creation failure.
+    Ref<DeviceLostEvent> mPendingLostEvent = nullptr;
     // Device lost event needs to be protected for now because mock device needs it.
     // TODO(dawn:1702) Make this private and move the class in the implementation file when we mock
     // the adapter.
@@ -488,9 +500,9 @@ class DeviceBase : public ErrorSink,
     void WillDropLastExternalRef() override;
 
     virtual ResultOrError<Ref<BindGroupBase>> CreateBindGroupImpl(
-        const BindGroupDescriptor* descriptor) = 0;
+        const UnpackedPtr<BindGroupDescriptor>& descriptor) = 0;
     virtual ResultOrError<Ref<BindGroupLayoutInternalBase>> CreateBindGroupLayoutImpl(
-        const BindGroupLayoutDescriptor* descriptor) = 0;
+        const UnpackedPtr<BindGroupLayoutDescriptor>& descriptor) = 0;
     virtual ResultOrError<Ref<BufferBase>> CreateBufferImpl(
         const UnpackedPtr<BufferDescriptor>& descriptor) = 0;
     virtual ResultOrError<Ref<ExternalTextureBase>> CreateExternalTextureImpl(
@@ -515,6 +527,11 @@ class DeviceBase : public ErrorSink,
     virtual ResultOrError<Ref<TextureViewBase>> CreateTextureViewImpl(
         TextureBase* texture,
         const UnpackedPtr<TextureViewDescriptor>& descriptor) = 0;
+    // TODO(crbug/382544164): Make this pure virtual once all backends support
+    // texel buffer views.
+    virtual ResultOrError<Ref<TexelBufferViewBase>> CreateTexelBufferViewImpl(
+        BufferBase* buffer,
+        const UnpackedPtr<TexelBufferViewDescriptor>& descriptor);
     virtual Ref<ComputePipelineBase> CreateUninitializedComputePipelineImpl(
         const UnpackedPtr<ComputePipelineDescriptor>& descriptor) = 0;
     virtual Ref<RenderPipelineBase> CreateUninitializedRenderPipelineImpl(
@@ -598,7 +615,7 @@ class DeviceBase : public ErrorSink,
 
     absl::flat_hash_set<std::string> mWarnings;
 
-    State mState = State::BeingCreated;
+    std::atomic<State> mState = State::BeingCreated;
 
     PerObjectType<ApiObjectList> mObjectLists;
 
@@ -613,6 +630,7 @@ class DeviceBase : public ErrorSink,
     FeaturesSet mEnabledFeatures;
     tint::wgsl::AllowedFeatures mWGSLAllowedFeatures;
 
+    std::unique_ptr<DynamicArrayDefaultBindings> mDynamicArrayDefaultBindings;
     std::unique_ptr<InternalPipelineStore> mInternalPipelineStore;
     Ref<BufferBase> mTemporaryUniformBuffer;
 

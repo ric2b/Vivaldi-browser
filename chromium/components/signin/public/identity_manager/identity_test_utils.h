@@ -371,7 +371,7 @@ void DisableAccessTokenFetchRetries(IdentityManager* identity_manager);
 #if BUILDFLAG(IS_ANDROID)
 // Stubs AccountManagerFacade, which requires special initialization of the java
 // subsystems. Uses FakeAccountManagerFacade.
-void SetUpMockAccountManagerFacade();
+void SetUpFakeAccountManagerFacade();
 #endif
 
 // Cancels all ongoing operations related to the accounts in the Gaia cookie.
@@ -393,6 +393,10 @@ void SimulateSuccessfulFetchOfAccountInfo(IdentityManager* identity_manager,
 account_manager::AccountManagerFacade* GetAccountManagerFacade(
     IdentityManager* identity_manager);
 #endif
+
+// Allows testing some features gated by the official Chrome API keys and OAuth
+// client IDs in builds lacking those keys.
+void SetIgnoreNonOfficialApiKeys();
 }  // namespace signin
 
 #endif  // COMPONENTS_SIGNIN_PUBLIC_IDENTITY_MANAGER_IDENTITY_TEST_UTILS_H_

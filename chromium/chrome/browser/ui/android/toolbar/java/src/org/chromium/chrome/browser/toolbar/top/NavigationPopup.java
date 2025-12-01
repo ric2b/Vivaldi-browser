@@ -28,7 +28,6 @@ import androidx.core.widget.ImageViewCompat;
 import org.chromium.base.MathUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -49,6 +48,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.Supplier;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -292,7 +292,12 @@ public class NavigationPopup implements AdapterView.OnItemClickListener {
     private void onFaviconAvailable(GURL pageUrl, Bitmap favicon) {
         if (favicon == null) {
             if (mDefaultFaviconHelper == null) mDefaultFaviconHelper = new DefaultFaviconHelper();
-            favicon = mDefaultFaviconHelper.getDefaultFaviconBitmap(mContext, pageUrl, true);
+            favicon =
+                    mDefaultFaviconHelper.getDefaultFaviconBitmap(
+                            mContext,
+                            pageUrl,
+                            /* useDarkIcon= */ true,
+                            /* useIncognitoNtpIcon= */ false);
         }
         if (UrlUtilities.isNtpUrl(pageUrl) && shouldUseIncognitoResources()) {
             favicon =

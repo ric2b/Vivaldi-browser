@@ -155,10 +155,10 @@ class TestMultiBuffer : public MultiBuffer {
   void CheckPresentState() {
     IntervalMap<MultiBufferBlockId, int32_t> tmp;
     for (auto i = data_.begin(); i != data_.end(); ++i) {
-      CHECK(i->second);  // Null poineters are not allowed in data_
-      CHECK_NE(!!pinned_[i->first], lru_->Contains(this, i->first))
-          << " i->first = " << i->first;
-      tmp.IncrementInterval(i->first, i->first + 1, 1);
+      CHECK(i->value);  // Null pointers are not allowed in data_.
+      CHECK_NE(!!pinned_[i->key], lru_->Contains(this, i->key))
+          << " i->key = " << i->key;
+      tmp.IncrementInterval(i->key, i->key + 1, 1);
     }
     IntervalMap<MultiBufferBlockId, int32_t>::const_iterator tmp_iterator =
         tmp.begin();
@@ -178,10 +178,10 @@ class TestMultiBuffer : public MultiBuffer {
 
   void CheckLRUState() {
     for (auto i = data_.begin(); i != data_.end(); ++i) {
-      CHECK(i->second);  // Null poineters are not allowed in data_
-      CHECK_NE(!!pinned_[i->first], lru_->Contains(this, i->first))
-          << " i->first = " << i->first;
-      CHECK_EQ(1, present_[i->first]) << " i->first = " << i->first;
+      CHECK(i->value);  // Null pointers are not allowed in data_.
+      CHECK_NE(!!pinned_[i->key], lru_->Contains(this, i->key))
+          << " i->key = " << i->key;
+      CHECK_EQ(1, present_[i->key]) << " i->key = " << i->key;
     }
   }
 
@@ -538,8 +538,7 @@ class ReadHelper {
     CHECK_EQ(pos_, reader_.Tell());
     read_size_ = std::min(1 + rnd_->Rand() % (max_read_size_ - 1), end_ - pos_);
     if (!Read()) {
-      reader_.Wait(read_size_,
-                   WTF::BindOnce(&ReadHelper::WaitCB, WTF::Unretained(this)));
+      reader_.Wait(read_size_, BindOnce(&ReadHelper::WaitCB, Unretained(this)));
     }
   }
 

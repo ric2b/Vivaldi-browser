@@ -15,6 +15,8 @@ source_set("data_controls") {
     "chrome_dlp_rules_manager.h",
     "chrome_rules_service.cc",
     "chrome_rules_service.h",
+    "data_controls_dialog_factory.cc",
+    "data_controls_dialog_factory.h",
   ]
 
   public_deps = [
@@ -69,7 +71,6 @@ source_set("data_controls") {
       ]
     }
     deps += [
-      "//chrome/browser/enterprise/data_protection",
       "//components/constrained_window",
       "//components/guest_view/browser",
       "//components/reporting/client:report_queue",
@@ -149,7 +150,7 @@ source_set("unit_tests") {
     "//components/enterprise/data_controls/core/browser:unit_tests",
   ]
   if (!is_android) {
-    sources += [ "reporting_service_unittest.cc" ]
+    sources += [ "reporting_unittest.cc" ]
     deps += [ "//chrome/browser/enterprise/connectors/test:test_support" ]
   }
 

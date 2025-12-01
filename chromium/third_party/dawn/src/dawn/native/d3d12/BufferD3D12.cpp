@@ -244,12 +244,12 @@ MaybeError Buffer::Initialize(bool mappedAtCreation) {
 
     // Initialize the padding bytes to zero.
     if (GetDevice()->IsToggleEnabled(Toggle::LazyClearResourceOnFirstUse) && !mappedAtCreation) {
-        uint32_t paddingBytes = GetAllocatedSize() - GetSize();
+        uint64_t paddingBytes = GetAllocatedSize() - GetSize();
         if (paddingBytes > 0) {
             CommandRecordingContext* commandRecordingContext =
                 ToBackend(GetDevice()->GetQueue())->GetPendingCommandContext();
 
-            uint32_t clearSize = paddingBytes;
+            uint64_t clearSize = paddingBytes;
             uint64_t clearOffset = GetSize();
             DAWN_TRY(ClearBuffer(commandRecordingContext, 0, clearOffset, clearSize));
         }
@@ -506,6 +506,8 @@ MaybeError Buffer::MapAsyncImpl(wgpu::MapMode mode, size_t offset, size_t size) 
 
     return MapInternal(mode & wgpu::MapMode::Write, offset, size, "D3D12 map async");
 }
+
+void Buffer::FinalizeMapImpl() {}
 
 void Buffer::UnmapImpl() {
     GetD3D12Resource()->Unmap(0, &mWrittenMappedRange);

@@ -1,4 +1,4 @@
-// Copyright 2025 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@
  */
 /* eslint no-return-assign: "off" */
 import * as i18n from '../../core/i18n/i18n.js';
+import * as Geometry from '../../models/geometry/geometry.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import {Directives as LitDirectives, html, nothing, render} from '../../ui/lit/lit.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
@@ -39,7 +40,7 @@ import {StorageItemsToolbar} from './StorageItemsToolbar.js';
 const {ARIAUtils} = UI;
 const {EmptyWidget} = UI.EmptyWidget;
 const {VBox, widgetConfig} = UI.Widget;
-const {Size} = UI.Geometry;
+const {Size} = Geometry;
 const {repeat} = LitDirectives;
 
 type Widget = UI.Widget.Widget;
@@ -47,24 +48,24 @@ type VBox = UI.Widget.VBox;
 
 const UIStrings = {
   /**
-   *@description Text that shows in the Application Panel if no value is selected for preview
+   * @description Text that shows in the Application Panel if no value is selected for preview
    */
   noPreviewSelected: 'No value selected',
   /**
-   *@description Preview text when viewing storage in Application panel
+   * @description Preview text when viewing storage in Application panel
    */
   selectAValueToPreview: 'Select a value to preview',
   /**
-   *@description Text for announcing number of entries after filtering
-   *@example {5} PH1
+   * @description Text for announcing number of entries after filtering
+   * @example {5} PH1
    */
   numberEntries: 'Number of entries shown in table: {PH1}',
   /**
-   *@description Text in DOMStorage Items View of the Application panel
+   * @description Text in DOMStorage Items View of the Application panel
    */
   key: 'Key',
   /**
-   *@description Text for the value of something
+   * @description Text for the value of something
    */
   value: 'Value',
 } as const;

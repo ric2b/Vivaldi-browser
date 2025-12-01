@@ -55,8 +55,8 @@ class V8_EXPORT_PRIVATE RegExpMacroAssemblerIA32
                                      Label* on_not_in_range) override;
   void CheckBitInTable(Handle<ByteArray> table, Label* on_bit_set) override;
   void SkipUntilBitInTable(int cp_offset, Handle<ByteArray> table,
-                           Handle<ByteArray> nibble_table,
-                           int advance_by) override;
+                           Handle<ByteArray> nibble_table, int advance_by,
+                           Label* on_match, Label* on_no_match) override;
 
   // Checks whether the given offset from the current position is before
   // the end of the string.
@@ -87,6 +87,11 @@ class V8_EXPORT_PRIVATE RegExpMacroAssemblerIA32
   void WriteCurrentPositionToRegister(int reg, int cp_offset) override;
   void ClearRegisters(int reg_from, int reg_to) override;
   void WriteStackPointerToRegister(int reg) override;
+
+  void RecordComment(std::string_view comment) override {
+    masm_->RecordComment(comment);
+  }
+  MacroAssembler* masm() override { return masm_.get(); }
 
   // Called from RegExp if the stack-guard is triggered.
   // If the code object is relocated, the return address is fixed before

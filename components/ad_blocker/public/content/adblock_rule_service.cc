@@ -5,5 +5,7 @@
 namespace adblock_filter {
 RuleService::~RuleService() = default;
 
+RuleService::Client::~Client() = default;
+
 RuleService::Observer::~Observer() = default;
 }  // namespace adblock_filter

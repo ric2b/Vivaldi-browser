@@ -4,13 +4,14 @@
 
 #include <optional>
 
-#include "base/stl_util.h"
+#include "components/ad_blocker/content/adblock_navigation_tracker_impl.h"
 #include "components/ad_blocker/content/adblock_rule_service_impl.h"
 #include "components/ad_blocker/content/adblock_tab_state_and_logs_impl.h"
+#include "components/ad_blocker/content/simple_index_base_query.h"
+#include "components/ad_blocker/content/simple_index_request_query.h"
 #include "components/ad_blocker/content/utils.h"
 #include "components/ad_blocker/public/content/adblock_tab_state_and_logs.h"
 #include "components/ad_blocker/public/core/adblock_rule_manager.h"
-#include "components/ad_blocker/public/core/adblock_stats_data.h"
 #include "components/ad_blocker/public/core/adblock_types.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_handle.h"
@@ -39,7 +40,7 @@ void StateAndLogsImpl::OnTrackerInfosUpdated(
     RuleGroup group,
     const ActiveRuleSource& source,
     base::Value::Dict new_tracker_infos) {
-  auto& tracker_infos = tracker_infos_[static_cast<size_t>(group)];
+  auto& tracker_infos = tracker_infos_[group];
   std::erase_if(tracker_infos, [&source](auto& tracker) {
     tracker.second.erase(source.core.id());
     return tracker.second.empty();
@@ -53,7 +54,7 @@ void StateAndLogsImpl::OnTrackerInfosUpdated(
 const std::map<uint32_t, base::Value>* StateAndLogsImpl::GetTrackerInfo(
     RuleGroup group,
     const std::string& domain) const {
-  auto& tracker_infos = tracker_infos_[static_cast<size_t>(group)];
+  auto& tracker_infos = tracker_infos_[group];
   const auto& tracker_info = tracker_infos.find(domain);
   if (tracker_info == tracker_infos.end())
     return nullptr;
@@ -66,7 +67,7 @@ void StateAndLogsImpl::OnUrlBlocked(RuleGroup group,
                                     GURL url,
                                     content::RenderFrameHost* frame) {
   CHECK(frame);
-  TabStateAndLogsImpl* tab_helper = CreateTabHelperImpl(frame);
+  TabStateAndLogsImpl* tab_helper = GetTabHelperImpl(frame);
 
   bool is_known_tracker = false;
 
@@ -80,7 +81,7 @@ void StateAndLogsImpl::OnUrlBlocked(RuleGroup group,
     for (size_t position = 0;; ++position) {
       const std::string subdomain(host.substr(position));
 
-      if (tracker_infos_[static_cast<size_t>(group)].count(subdomain)) {
+      if (tracker_infos_[group].count(subdomain)) {
         tab_helper->OnTrackerBlocked(group, subdomain, url);
         is_known_tracker = true;
         break;
@@ -101,7 +102,7 @@ void StateAndLogsImpl::OnUrlBlocked(RuleGroup group,
                                               base::Time::Now(), group);
   }
 
-  tabs_with_new_blocks_[static_cast<size_t>(group)].insert(
+  tabs_with_new_blocks_[group].insert(
       content::WebContents::FromRenderFrameHost(frame));
 
   PrepareNewNotifications();
@@ -117,28 +118,29 @@ void StateAndLogsImpl::SetTabAdQueryTriggers(
     return;
   }
 
-  CreateTabHelperImpl(frame)->SetAdQueryTriggers(ad_url,
-                                                 std::move(ad_query_triggers));
+  GetTabHelperImpl(frame)->SetAdQueryTriggers(ad_url,
+                                              std::move(ad_query_triggers));
 }
 
-bool StateAndLogsImpl::DoesAdAttributionMatch(
+std::optional<RulesIndex::AdAttributionMatchParams>
+StateAndLogsImpl::GetAdAttributionMatchParams(
+    content::RenderFrameHost* frame) const {
+  if (!frame || frame->GetBrowserContext()->IsOffTheRecord()) {
+    return std::nullopt;
+  }
+
+  return GetTabHelperImpl(frame)->GetAdAttributionMatchParams();
+}
+
+void StateAndLogsImpl::OnMatchedAttributionTracker(
     content::RenderFrameHost* frame,
-    std::string_view tracker_url_spec,
-    std::string_view ad_domain_and_query_trigger) {
-  CHECK(frame);
-  if (frame->GetBrowserContext()->IsOffTheRecord()) {
-    return false;
-  }
-  bool result = CreateTabHelperImpl(frame)->DoesAdAttributionMatch(
-      tracker_url_spec, ad_domain_and_query_trigger);
+    const GURL& url) {
+  CHECK(frame && !frame->GetBrowserContext()->IsOffTheRecord());
+  GetTabHelperImpl(frame)->OnMatchedAttributionTracker(url);
 
-  if (result) {
-    tabs_with_new_attribution_trackers_.insert(
-        content::WebContents::FromRenderFrameHost(frame));
-    PrepareNewNotifications();
-  }
-
-  return result;
+  tabs_with_new_attribution_trackers_.insert(
+      content::WebContents::FromRenderFrameHost(frame));
+  PrepareNewNotifications();
 }
 
 bool StateAndLogsImpl::IsPopup(RuleGroup group,
@@ -147,14 +149,22 @@ bool StateAndLogsImpl::IsPopup(RuleGroup group,
                                bool disable_generic_rules) {
   RulesIndex* index =
       rules_service_->GetRuleIndex(static_cast<RuleGroup>(group));
-  if (index && index->FindMatchingBeforeRequestRule(
-                   target_url, false /*must_intersect_host*/,
-                   opener_frame_origin, flat::ResourceType_POPUP,
-                   GetPartyMatcher(target_url, opener_frame_origin),
-                   disable_generic_rules, std::nullopt)) {
-    return true;
+  if (!index) {
+    return false;
   }
-  return false;
+
+  const std::optional<RequestFilterRuleStub>& rule_stub =
+      index->FindMatchingBeforeRequestRule(
+          SimpleIndexRequestQuery(target_url, opener_frame_origin,
+                                  "" /*method*/, disable_generic_rules),
+          false /*must_intersect_host*/, ResourceType::kPopup, std::nullopt);
+  CHECK(!rule_stub || rule_stub->modify_block);
+
+  if (!rule_stub || rule_stub->decision == RuleDecision::kPass) {
+    return false;
+  }
+
+  return true;
 }
 bool StateAndLogsImpl::IsPopunder(RuleGroup group,
                                   GURL opener_url,
@@ -165,52 +175,87 @@ bool StateAndLogsImpl::IsPopunder(RuleGroup group,
   if (!index) {
     return false;
   }
-  if (index->FindMatchingBeforeRequestRule(
-          opener_url, false /*must_intersect_host*/, target_origin,
-          flat::ResourceType_POPUNDER,
-          GetPartyMatcher(opener_url, target_origin), disable_generic_rules,
-          std::nullopt)) {
-    return true;
-  }
+  SimpleIndexRequestQuery query(opener_url, target_origin, "" /*method*/,
+                                disable_generic_rules);
+  {
+    const std::optional<RequestFilterRuleStub>& rule_stub =
+        index->FindMatchingBeforeRequestRule(
+            query, false /*must_intersect_host*/, ResourceType::kPopunder,
+            std::nullopt);
 
-  if (!opener_url.has_host()) {
-    return false;
+    CHECK(!rule_stub || rule_stub->modify_block);
+
+    if (rule_stub && rule_stub->decision != RuleDecision::kPass) {
+      return true;
+    }
+
+    if (!opener_url.has_host()) {
+      return false;
+    }
   }
 
   // Matching uBlock behavior: We look for matching popup rules. If they match
   // and the match contains some of the host part of the url, consider it a
   // popunder
 
-  if (index->FindMatchingBeforeRequestRule(
-          opener_url, true /*must_intersect_host*/, target_origin,
-          flat::ResourceType_POPUP, GetPartyMatcher(opener_url, target_origin),
-          disable_generic_rules, std::nullopt)) {
-    return true;
+  {
+    const std::optional<RequestFilterRuleStub>& rule_stub =
+        index->FindMatchingBeforeRequestRule(
+            query, true /*must_intersect_host*/, ResourceType::kPopup,
+            std::nullopt);
+
+    CHECK(!rule_stub || rule_stub->modify_block);
+
+    if (rule_stub && rule_stub->decision != RuleDecision::kPass) {
+      return true;
+    }
   }
 
   GURL origin_only = opener_url.GetWithEmptyPath();
-  return origin_only.is_valid() &&
-         index->FindMatchingBeforeRequestRule(
-             origin_only, true /*must_intersect_host*/, target_origin,
-             flat::ResourceType_POPUP,
-             GetPartyMatcher(origin_only, target_origin), disable_generic_rules,
-             std::nullopt);
+  if (!origin_only.is_valid()) {
+    return false;
+  }
+
+  const std::optional<RequestFilterRuleStub>& rule_stub =
+      index->FindMatchingBeforeRequestRule(
+          SimpleIndexRequestQuery(origin_only, target_origin, "" /*method*/,
+                                  disable_generic_rules),
+          true /*must_intersect_host*/, ResourceType::kPopup, std::nullopt);
+
+  CHECK(!rule_stub || rule_stub->modify_block);
+
+  if (rule_stub && rule_stub->decision != RuleDecision::kPass) {
+    return true;
+  }
+  return false;
 }
 
-std::array<std::optional<TabStateAndLogs::RuleData>, kRuleGroupCount>
-StateAndLogsImpl::WasNavigationBlocked(
-    const content::NavigationHandle* navigation) const {
-  TabStateAndLogsImpl* tab_state_and_logs =
-      GetTabHelperImpl(navigation->GetRenderFrameHost());
-  if (!tab_state_and_logs) {
-    return {std::nullopt, std::nullopt};
+void StateAndLogsImpl::OnNavigationTrackerCreated(
+    NavigationTrackerImpl* tracker) {
+  // No entry is expected to be present for this key.
+  CHECK(navigation_trackers_.insert_or_assign(tracker->navigation_id(), tracker)
+            .second);
+}
+
+void StateAndLogsImpl::OnNavigationTrackerDestroyed(
+    NavigationTrackerImpl* tracker) {
+  navigation_trackers_.erase(tracker->navigation_id());
+}
+
+NavigationTrackerImpl* StateAndLogsImpl::GetNavigationTrackerFromNavigationId(
+    int64_t navigation_id) const {
+  auto tracker = navigation_trackers_.find(navigation_id);
+  if (tracker == navigation_trackers_.end()) {
+    return nullptr;
   }
-  return tab_state_and_logs->WasNavigationBlocked(navigation);
+
+  return tracker->second;
 }
 
 void StateAndLogsImpl::OnTabRemoved(content::WebContents* contents) {
-  for (size_t group = 0; group < kRuleGroupCount; group++)
-    tabs_with_new_blocks_[group].erase(contents);
+  for (auto [group, contents_set] : tabs_with_new_blocks_) {
+    contents_set.erase(contents);
+  }
 }
 
 void StateAndLogsImpl::OnAllowAttributionChanged(
@@ -220,12 +265,19 @@ void StateAndLogsImpl::OnAllowAttributionChanged(
   }
 }
 
-std::optional<RulesIndex::ActivationResults>
-StateAndLogsImpl::GetLocalActivations(RuleGroup group,
-                                      const url::Origin& parent_origin,
-                                      const GURL& url) {
-  if (!CanFilterUrl(url) || !url.is_valid()) {
-    return RulesIndex::ActivationResults{};
+std::optional<ActivationResults> StateAndLogsImpl::GetLocalActivations(
+    RuleGroup group,
+    const url::Origin& parent_origin,
+    const GURL& url) {
+  const std::optional<std::string_view> browser_owned_frame_url_prefix =
+      rules_service_->GetBrowserOwnedFrameUrlPrefix();
+  if (browser_owned_frame_url_prefix && url.possibly_invalid_spec().starts_with(
+                                            *browser_owned_frame_url_prefix)) {
+    return ActivationResults{.document_exception = true};
+  }
+
+  if (!CanFilterUrl(url, false) || !url.is_valid()) {
+    return ActivationResults{};
   }
 
   RulesIndex* index = rules_service_->GetRuleIndex(group);
@@ -233,9 +285,13 @@ StateAndLogsImpl::GetLocalActivations(RuleGroup group,
     return std::nullopt;
   }
 
-  return index->FindActivations(
-      base::BindRepeating(&IsOriginWanted, rules_service_, group),
-      parent_origin, url);
+  ActivationResults result =
+      index->FindActivations(SimpleIndexBaseQuery(url, parent_origin));
+  if (rules_service_->GetRuleManager()->IsExemptOfFiltering(
+          group, url::Origin::Create(url))) {
+    result.document_exception = true;
+  }
+  return result;
 }
 
 void StateAndLogsImpl::AddObserver(Observer* observer) {
@@ -266,36 +322,27 @@ void StateAndLogsImpl::PrepareNewNotifications() {
                      weak_factory_.GetWeakPtr()));
 }
 
+void StateAndLogsImpl::CreateTabHelper(content::WebContents* contents) {
+  TabStateAndLogsImpl::CreateForWebContents(contents,
+                                            weak_factory_.GetWeakPtr());
+}
+
 TabStateAndLogs* StateAndLogsImpl::GetTabHelper(
     content::WebContents* contents) const {
   return GetTabHelperImpl(contents);
 }
 
-TabStateAndLogs* StateAndLogsImpl::CreateTabHelper(
-    content::WebContents* contents) {
-  return CreateTabHelperImpl(contents);
-}
-
-TabStateAndLogsImpl* StateAndLogsImpl::CreateTabHelperImpl(
-    content::RenderFrameHost* frame) {
-  CHECK(frame);
-  return CreateTabHelperImpl(content::WebContents::FromRenderFrameHost(frame));
-}
-
-TabStateAndLogsImpl* StateAndLogsImpl::CreateTabHelperImpl(
-    content::WebContents* contents) {
-  TabStateAndLogsImpl::CreateForWebContents(contents,
-                                            weak_factory_.GetWeakPtr());
-  return GetTabHelperImpl(contents);
+NavigationTracker* StateAndLogsImpl::GetNavigationTracker(
+    content::NavigationHandle& navigation_handle) const {
+  return NavigationTrackerImpl::GetForNavigationHandle(navigation_handle);
 }
 
 void StateAndLogsImpl::SendNotifications() {
-  for (size_t group = 0; group < kRuleGroupCount; group++) {
-    if (!tabs_with_new_blocks_[group].empty()) {
+  for (auto [group, contents_set] : tabs_with_new_blocks_) {
+    if (!contents_set.empty()) {
       for (Observer& observer : observers_)
-        observer.OnNewBlockedUrlsReported(RuleGroup(group),
-                                          tabs_with_new_blocks_[group]);
-      tabs_with_new_blocks_[group].clear();
+        observer.OnNewBlockedUrlsReported(group, contents_set);
+      contents_set.clear();
     }
   }
 

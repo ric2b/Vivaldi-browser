@@ -12,6 +12,7 @@
 
 namespace optimization_guide {
 
+
 PageContextEligibility::PageContextEligibility(
     const PageContextEligibilityAPI* api)
     : api_(api) {}
@@ -32,6 +33,7 @@ std::unique_ptr<PageContextEligibility> PageContextEligibility::Create() {
   // use cases for it in browser.
   static base::NoDestructor<std::unique_ptr<OptimizationGuideLibraryHolder>>
       holder{OptimizationGuideLibraryHolder::Create()};
+
   // Pointer will be null if the library was not created.
   OptimizationGuideLibraryHolder* holder_ptr = holder->get();
   if (!holder_ptr) {

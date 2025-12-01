@@ -2,6 +2,7 @@
 
 #include "browser/vivaldi_default_bookmarks_updater_client_impl.h"
 
+#include "base/logging.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"

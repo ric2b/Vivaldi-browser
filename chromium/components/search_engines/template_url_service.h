@@ -80,11 +80,15 @@ class Origin;
 // TemplateURLService is the backend for keywords. It's used by
 // KeywordAutocomplete.
 //
-// TemplateURLService stores a vector of TemplateURLs. The TemplateURLs are
-// persisted to the database maintained by KeywordWebDataService.
-// *ALL* mutations to the TemplateURLs must funnel through TemplateURLService.
-// This allows TemplateURLService to notify listeners of changes as well as keep
-// the database in sync.
+// TemplateURLService stores a vector of TemplateURLs. It manages both "local"
+// and "account" search engines. Local search engines are stored on the device
+// and are not synced. Account search engines are synced with the user's
+// account.
+//
+// The TemplateURLs are persisted to the database maintained by
+// KeywordWebDataService. *ALL* mutations to the TemplateURLs must funnel
+// through TemplateURLService. This allows TemplateURLService to notify
+// listeners of changes as well as keep the database in sync.
 //
 // TemplateURLService does not load the vector of TemplateURLs in its
 // constructor (except for testing). Use the Load method to trigger a load.
@@ -226,8 +230,8 @@ class TemplateURLService final : public WebDataServiceConsumer,
                            bool supports_replacement_only,
                            TemplateURLVector* turls);
 
-  // Looks up |keyword| and returns the best TemplateURL for it.  Returns
-  // nullptr if the keyword was not found. The caller should not try to delete
+  // Looks up `keyword` and returns the best `TemplateURL` for it. Returns
+  // `nullptr` if the keyword was not found. The caller should not try to delete
   // the returned pointer; the data store retains ownership of it.
   TemplateURL* GetTemplateURLForKeyword(const std::u16string& keyword);
   const TemplateURL* GetTemplateURLForKeyword(

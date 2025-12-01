@@ -169,6 +169,10 @@ MEDIA_EXPORT extern const base::FeatureParam<int> kAudioDuckingAttenuation;
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kAudioDuckingWin);
 #endif  // BUILDFLAG(IS_WIN)
 
+#if BUILDFLAG(ENABLE_FFMPEG)
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kAudioDecoderAudioFileReader);
+#endif
+
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kAudioFocusDuckFlash);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kAudioInputConfirmReadsViaShmem);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kAutoPictureInPictureForVideoPlayback);
@@ -289,6 +293,7 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kHardwareSecureDecryptionRequireServerCert);
 #endif
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kInternalMediaSession);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kOnDeviceWebSpeech);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kOnDeviceWebSpeechGeminiNano);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kLiveCaption);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kLiveCaptionAutomaticLanguageDownload);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kLiveCaptionRightClick);
@@ -318,7 +323,6 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaOptimizer);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaPowerExperiment);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMemoryPressureBasedSourceBufferGC);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kOverlayFullscreenVideo);
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kPauseBackgroundMutedAudio);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kPauseBackgroundTimer);
 #if !BUILDFLAG(IS_ANDROID)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kPictureInPictureOcclusionTracking);
@@ -358,7 +362,6 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kSpeakerChangeDetection);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kSpecCompliantCanPlayThrough);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kSuspendMediaForFrozenFrames);
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kSuspendMutedAudio);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kUnifiedAutoplay);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kUseAndroidOverlayForSecureOnly);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kUseFakeDeviceForMediaStream);
@@ -393,11 +396,12 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kWidevinePersistentLicenseSupport);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kResolutionBasedDecoderPriority);
 
 #if BUILDFLAG(IS_ANDROID)
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kAllowNonSecureOverlays);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kAllowEnhancedPipTransition);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kAutoPictureInPictureAndroid);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kContextMenuPictureInPictureAndroid);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kEnableSurfaceInputForAndroidVEA);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaCodecBlockModel);
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaCodecCodedSizeGuessing);
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaCodecElideEOS);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaCodecLowDelayMode);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaControlsExpandGesture);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaDrmPersistentLicense);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaDrmPreprovisioning);
@@ -422,7 +426,7 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kBuiltInHlsPlayer);
 #if BUILDFLAG(USE_LINUX_VIDEO_ACCELERATION)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kChromeOSHWVBREncoding);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kLimitConcurrentDecoderInstances);
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kUSeSequencedTaskRunnerForVEA);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kUseSequencedTaskRunnerForVEA);
 #if defined(ARCH_CPU_ARM_FAMILY)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kUseGLForScaling);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kPreferGLImageProcessor);
@@ -525,14 +529,13 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kLibaomUseChromeThreads);
 #if BUILDFLAG(IS_WIN)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kD3D12VideoDecoder);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kD3D12VideoEncodeAccelerator);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kD3D12VideoEncodeAcceleratorL1T3);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(
+    kD3D12VideoEncodeAcceleratorSharedHandleCaching);
 
 MEDIA_EXPORT extern const base::FeatureParam<double> kAudioOffloadBufferTimeMs;
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kAudioOffload);
 #endif  // BUILDFLAG(IS_WIN)
-
-#if BUILDFLAG(IS_WIN) && defined(ARCH_CPU_ARM64)
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaFoundationAcceleratedEncodeOnArm64);
-#endif
 
 #if BUILDFLAG(IS_WIN)
 // Enables D3D12 video encode accelerator taking shared image as input.
@@ -540,15 +543,20 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kD3D12SharedImageEncode);
 
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaFoundationD3DVideoProcessing);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaFoundationSharedImageEncode);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaFoundationVideoEncodeAccelerator);
 #endif
 
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kRenderMutedAudio);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kPauseMutedBackgroundAudio);
 
 // Enable experimental headless captions.
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kHeadlessLiveCaption);
 
 // Enable site-specific media link helpers.
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaLinkHelpers);
+
+// Enables showing auto picture-in-picture permission details in page info.
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kAutoPictureInPicturePageInfoDetails);
 
 // Based on a |command_line| and the current platform, returns the effective
 // autoplay policy. In other words, it will take into account the default policy

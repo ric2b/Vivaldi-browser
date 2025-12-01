@@ -18,13 +18,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.robolectric.Shadows.shadowOf;
-
-import android.app.Application;
-import android.content.Context;
-import android.os.UserManager;
-
-import androidx.test.core.app.ApplicationProvider;
 
 import org.junit.After;
 import org.junit.Before;
@@ -34,13 +27,11 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.mockito.quality.Strictness;
 import org.mockito.stubbing.Answer;
 import org.robolectric.annotation.LooperMode;
-import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.Callback;
@@ -75,8 +66,6 @@ import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.metrics.SignoutReason;
 import org.chromium.components.signin.test.util.FakeIdentityManager;
 import org.chromium.components.signin.test.util.TestAccounts;
-import org.chromium.components.user_prefs.UserPrefs;
-import org.chromium.components.user_prefs.UserPrefsJni;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -99,7 +88,6 @@ public class SigninManagerImplTest {
 
     @Mock private SigninManagerImpl.Natives mNativeMock;
     @Mock private BrowsingDataBridge.Natives mBrowsingDataBridgeNativeMock;
-    @Mock private UserPrefs.Natives mUserPrefsNativeMock;
     @Mock private PrefChangeRegistrar.Natives mPrefChangeRegistrarNativeMock;
     @Mock private PrefService mPrefService;
     @Mock private IdentityMutator mIdentityMutator;
@@ -114,10 +102,8 @@ public class SigninManagerImplTest {
     public void setUp() {
         SigninManagerImplJni.setInstanceForTesting(mNativeMock);
         BrowsingDataBridgeJni.setInstanceForTesting(mBrowsingDataBridgeNativeMock);
-        UserPrefsJni.setInstanceForTesting(mUserPrefsNativeMock);
         PrefChangeRegistrarJni.setInstanceForTesting(mPrefChangeRegistrarNativeMock);
 
-        when(mUserPrefsNativeMock.get(mProfile)).thenReturn(mPrefService);
         ExternalAuthUtils.setInstanceForTesting(mExternalAuthUtils);
         BookmarkModel.setInstanceForTesting(FakeBookmarkModel.createModel());
 
@@ -542,13 +528,6 @@ public class SigninManagerImplTest {
         createSigninManager();
         when(mExternalAuthUtils.canUseGooglePlayServices()).thenReturn(true);
 
-        // Make sure that the user is not a demo user.
-        ShadowApplication shadowApplication =
-                shadowOf((Application) ApplicationProvider.getApplicationContext());
-        UserManager userManager = Mockito.mock(UserManager.class);
-        Mockito.when(userManager.isDemoUser()).thenReturn(false);
-        shadowApplication.setSystemService(Context.USER_SERVICE, userManager);
-
         assertTrue(mSigninManager.isSigninSupported(/* requireUpdatedPlayServices= */ true));
         assertTrue(mSigninManager.isSigninSupported(/* requireUpdatedPlayServices= */ false));
     }
@@ -557,13 +536,6 @@ public class SigninManagerImplTest {
     public void signInShouldNotBeSupportedWhenGooglePlayServicesIsRequiredAndNotAvailable() {
         createSigninManager();
         when(mExternalAuthUtils.canUseGooglePlayServices()).thenReturn(false);
-
-        // Make sure that the user is not a demo user.
-        ShadowApplication shadowApplication =
-                shadowOf((Application) ApplicationProvider.getApplicationContext());
-        UserManager userManager = Mockito.mock(UserManager.class);
-        Mockito.when(userManager.isDemoUser()).thenReturn(false);
-        shadowApplication.setSystemService(Context.USER_SERVICE, userManager);
 
         assertFalse(mSigninManager.isSigninSupported(/* requireUpdatedPlayServices= */ true));
     }
@@ -574,6 +546,7 @@ public class SigninManagerImplTest {
                         SigninManagerImpl.create(
                                 NATIVE_SIGNIN_MANAGER,
                                 mProfile,
+                                mPrefService,
                                 mIdentityManager,
                                 mIdentityMutator);
         mSigninManager.addSignInStateObserver(mSignInStateObserver);

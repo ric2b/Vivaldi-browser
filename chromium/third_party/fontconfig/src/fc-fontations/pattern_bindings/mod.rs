@@ -24,7 +24,7 @@
 
 pub mod fc_wrapper;
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::fmt::Debug;
 
 use fcint_bindings::{
@@ -161,6 +161,19 @@ impl FcPatternBuilder {
     #[allow(unused)]
     pub fn append_element(&mut self, element: PatternElement) {
         self.elements.push(element);
+    }
+
+    pub fn family_names(&self) -> impl Iterator<Item = &CStr> {
+        self.elements.iter().filter_map(|element| {
+            if element.object_id == FC_FAMILY_OBJECT as i32 {
+                if let PatternValue::String(s) = &element.value {
+                    if !s.is_empty() {
+                        return Some(s.as_c_str());
+                    }
+                }
+            }
+            None
+        })
     }
 
     #[allow(unused)]

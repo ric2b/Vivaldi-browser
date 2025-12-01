@@ -70,7 +70,7 @@ bool TouchToFillPaymentMethodViewImpl::IsReadyToShow(
   return true;
 }
 
-bool TouchToFillPaymentMethodViewImpl::ShowCreditCards(
+bool TouchToFillPaymentMethodViewImpl::ShowPaymentMethods(
     TouchToFillPaymentMethodViewController* controller,
     base::span<const Suggestion> suggestions,
     bool should_show_scan_credit_card) {
@@ -112,7 +112,7 @@ bool TouchToFillPaymentMethodViewImpl::ShowCreditCards(
             android_icon_id, suggestion.HasDeactivatedStyle(),
             payments_payload.CreateJavaObject()));
   }
-  Java_TouchToFillPaymentMethodViewBridge_showCreditCards(
+  Java_TouchToFillPaymentMethodViewBridge_showPaymentMethods(
       env, java_object_, std::move(suggestions_array),
       should_show_scan_credit_card);
   return true;
@@ -153,6 +153,59 @@ bool TouchToFillPaymentMethodViewImpl::ShowLoyaltyCards(
       env, java_object_, affiliated_loyalty_cards, all_loyalty_cards,
       first_time_usage);
 
+  return true;
+}
+
+bool TouchToFillPaymentMethodViewImpl::UpdateBnplPaymentMethod(
+    std::optional<uint64_t> extracted_amount,
+    bool is_amount_supported_by_any_issuer) {
+  if (!java_object_) {
+    return false;
+  }
+  std::optional<int64_t> final_extracted_amount;
+  if (extracted_amount.has_value()) {
+    final_extracted_amount = static_cast<int64_t>(extracted_amount.value());
+  }
+  Java_TouchToFillPaymentMethodViewBridge_updateBnplPaymentMethod(
+      base::android::AttachCurrentThread(), java_object_,
+      final_extracted_amount, is_amount_supported_by_any_issuer);
+  return true;
+}
+
+bool TouchToFillPaymentMethodViewImpl::ShowProgressScreen(
+    TouchToFillPaymentMethodViewController* controller) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+
+  // If the TTF surface isn't already showing, and a new surface is not ready to
+  // show, return that showing the progress screen failed, as the progress
+  // screen can not be shown.
+  if (!java_object_ && !IsReadyToShow(controller, env)) {
+    return false;
+  }
+
+  // Use either the old `java_object_` or the new one created in
+  // `IsReadyToShow()` to show the progress screen.
+  Java_TouchToFillPaymentMethodViewBridge_showProgressScreen(env, java_object_);
+  return true;
+}
+
+bool TouchToFillPaymentMethodViewImpl::ShowBnplIssuers(
+    base::span<const autofill::BnplIssuer> bnpl_issuers_to_suggest) {
+  if (!java_object_) {
+    return false;
+  }
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  std::vector<base::android::ScopedJavaLocalRef<jobject>> issuers_array;
+  issuers_array.reserve(bnpl_issuers_to_suggest.size());
+  for (const autofill::BnplIssuer& issuer : bnpl_issuers_to_suggest) {
+    issuers_array.push_back(
+        PersonalDataManagerAndroid::CreateJavaBnplIssuerFromNative(env,
+                                                                   issuer));
+  }
+
+  Java_TouchToFillPaymentMethodViewBridge_showBnplIssuers(
+      env, java_object_, std::move(issuers_array));
   return true;
 }
 

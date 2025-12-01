@@ -14,6 +14,7 @@
 #include "chrome/browser/touch_to_fill/autofill/android/touch_to_fill_payment_method_view.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
+#include "components/autofill/core/browser/data_model/payments/bnpl_issuer.h"
 #include "components/autofill/core/browser/data_model/valuables/android/loyalty_card_android.h"
 #include "components/autofill/core/browser/data_model/valuables/loyalty_card.h"
 #include "components/autofill/core/browser/foundations/autofill_manager.h"
@@ -76,7 +77,7 @@ TouchToFillPaymentMethodControllerImpl::
   ResetJavaObject();
 }
 
-bool TouchToFillPaymentMethodControllerImpl::ShowCreditCards(
+bool TouchToFillPaymentMethodControllerImpl::ShowPaymentMethods(
     std::unique_ptr<TouchToFillPaymentMethodView> view,
     base::WeakPtr<TouchToFillDelegate> delegate,
     base::span<const Suggestion> suggestions) {
@@ -89,8 +90,8 @@ bool TouchToFillPaymentMethodControllerImpl::ShowCreditCards(
     return false;
   }
 
-  if (!view->ShowCreditCards(this, suggestions,
-                             delegate->ShouldShowScanCreditCard())) {
+  if (!view->ShowPaymentMethods(this, suggestions,
+                                delegate->ShouldShowScanCreditCard())) {
     ResetJavaObject();
     return false;
   }
@@ -147,6 +148,49 @@ bool TouchToFillPaymentMethodControllerImpl::ShowLoyaltyCards(
   }
 
   view_ = std::move(view);
+  delegate_ = std::move(delegate);
+  return true;
+}
+
+bool TouchToFillPaymentMethodControllerImpl::UpdateBnplPaymentMethod(
+    std::optional<uint64_t> extracted_amount,
+    bool is_amount_supported_by_any_issuer) {
+  if (!view_ || !view_->UpdateBnplPaymentMethod(
+                    extracted_amount, is_amount_supported_by_any_issuer)) {
+    return false;
+  }
+  return true;
+}
+
+bool TouchToFillPaymentMethodControllerImpl::ShowProgressScreen(
+    std::unique_ptr<TouchToFillPaymentMethodView> view,
+    base::WeakPtr<TouchToFillDelegate> delegate) {
+  if (view) {
+    // If there is a view already being shown, reset it and use the new provided
+    // view.
+    if (view_) {
+      ResetJavaObject();
+    }
+    view_ = std::move(view);
+  }
+
+  if (!view_ || !view_->ShowProgressScreen(this)) {
+    ResetJavaObject();
+    return false;
+  }
+
+  delegate_ = delegate;
+  return true;
+}
+
+bool TouchToFillPaymentMethodControllerImpl::ShowBnplIssuers(
+    base::WeakPtr<TouchToFillDelegate> delegate,
+    base::span<const BnplIssuer> bnpl_issuers_to_suggest) {
+  if (!view_ || !view_->ShowBnplIssuers(bnpl_issuers_to_suggest)) {
+    ResetJavaObject();
+    return false;
+  }
+
   delegate_ = std::move(delegate);
   return true;
 }

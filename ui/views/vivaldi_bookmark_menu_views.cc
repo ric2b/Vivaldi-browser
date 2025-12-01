@@ -94,12 +94,17 @@ void VivaldiBookmarkMenuViews::Show() {
       button_rect_);
 }
 
+void VivaldiBookmarkMenuViews::Close() {
+  controller_->Cancel();
+}
+
 void VivaldiBookmarkMenuViews::BookmarkMenuControllerDeleted(
     BookmarkMenuController* controller) {
-  if (observer_) {
-    observer_->BookmarkMenuClosed(this);
-  }
   controller_ = nullptr;
+  if (observer_) {
+    observer_->BookmarkMenuWillDelete(this);
+  }
+  delete this;
 }
 
 base::RepeatingCallback<content::PageNavigator*()>

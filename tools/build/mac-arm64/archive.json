@@ -15,6 +15,7 @@
   "sparkle_lib/Build/Products/Release/generate_appcast": {},
   "dump_syms": {},
   "minidump_stackwalk": {},
+  "minidump_dump": {},
   "Vivaldi.dSYM.tar.bz2": { "versioned": true },
   "background-bundle.js.map": { "versioned": true },
   "bundle.js.map": { "versioned": true },

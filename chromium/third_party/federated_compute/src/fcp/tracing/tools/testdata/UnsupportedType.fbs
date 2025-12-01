@@ -1,0 +1,12 @@
+include "fcp/tracing/tracing_schema_common.fbs";
+
+struct Vec3 {
+  x: float;
+  y: float;
+  z: float;
+}
+
+table Monster(tag: "MONS") {
+  hp: int32;
+  pos: Vec3;
+}

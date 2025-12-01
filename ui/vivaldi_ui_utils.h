@@ -37,8 +37,6 @@ extern content::WebContents* GetWebContentsFromTabStrip(
     content::BrowserContext* browser_context,
     std::string* error = nullptr);
 
-extern bool IsOutsideAppWindow(int screen_x, int screen_y);
-
 extern Browser* FindBrowserForPersistentTabs(Browser* current_browser);
 extern bool MoveTabToWindow(Browser* source_browser,
                             Browser* target_browser,

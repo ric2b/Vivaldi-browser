@@ -28,7 +28,6 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkSerialProcs.h"
 #include "include/core/SkSize.h"
-#include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
 #include "include/core/SkYUVAInfo.h"
@@ -73,10 +72,9 @@
 #include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
-#include "tools/gpu/FenceSync.h"
+#include "tools/ganesh/ProxyUtils.h"
+#include "tools/ganesh/TestContext.h"
 #include "tools/gpu/ManagedBackendTexture.h"
-#include "tools/gpu/ProxyUtils.h"
-#include "tools/gpu/TestContext.h"
 
 #include <algorithm>
 #include <cmath>
@@ -203,9 +201,9 @@ static sk_sp<SkImage> create_codec_image() {
     sk_sp<SkData> data(create_image_data(&info));
     SkBitmap bitmap;
     bitmap.installPixels(info, data->writable_data(), info.minRowBytes());
-    SkDynamicMemoryWStream stream;
-    SkASSERT_RELEASE(SkPngEncoder::Encode(&stream, bitmap.pixmap(), {}));
-    return SkImages::DeferredFromEncodedData(stream.detachAsData());
+    sk_sp<SkData> encoded = SkPngEncoder::Encode(bitmap.pixmap(), {});
+    SkASSERT_RELEASE(encoded);
+    return SkImages::DeferredFromEncodedData(encoded);
 }
 static sk_sp<SkImage> create_gpu_image(GrRecordingContext* rContext,
                                        bool withMips = false,

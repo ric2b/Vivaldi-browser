@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,7 +20,7 @@ import {TargetManager} from './TargetManager.js';
 
 const UIStrings = {
   /**
-   *@description Text in Overlay Model
+   * @description Text in Overlay Model
    */
   pausedInDebugger: 'Paused in debugger',
 } as const;
@@ -73,7 +73,7 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
   readonly #domModel: DOMModel;
   overlayAgent: ProtocolProxyApi.OverlayApi;
   readonly #debuggerModel: DebuggerModel|null;
-  #inspectModeEnabledInternal = false;
+  #inspectModeEnabled = false;
   #hideHighlightTimeout: number|null = null;
   #defaultHighlighter: Highlighter;
   #highlighter: Highlighter;
@@ -87,7 +87,7 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
   #showViewportSizeOnResize = true;
   #persistentHighlighter: OverlayPersistentHighlighter|null;
   readonly #sourceOrderHighlighter: SourceOrderHighlighter;
-  #sourceOrderModeActiveInternal = false;
+  #sourceOrderModeActive = false;
   #windowControls: WindowControls;
 
   constructor(target: Target) {
@@ -294,17 +294,17 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
   async setInspectMode(mode: Protocol.Overlay.InspectMode, showDetailedTooltip: boolean|undefined = true):
       Promise<void> {
     await this.#domModel.requestDocument();
-    this.#inspectModeEnabledInternal = mode !== Protocol.Overlay.InspectMode.None;
+    this.#inspectModeEnabled = mode !== Protocol.Overlay.InspectMode.None;
     this.dispatchEventToListeners(Events.INSPECT_MODE_WILL_BE_TOGGLED, this);
     void this.#highlighter.setInspectMode(mode, this.buildHighlightConfig('all', showDetailedTooltip));
   }
 
   inspectModeEnabled(): boolean {
-    return this.#inspectModeEnabledInternal;
+    return this.#inspectModeEnabled;
   }
 
   highlightInOverlay(data: HighlightData, mode?: string, showInfo?: boolean): void {
-    if (this.#sourceOrderModeActiveInternal) {
+    if (this.#sourceOrderModeActive) {
       // Return early if the source order is currently being shown the in the
       // overlay, so that it is not cleared by the highlight
       return;
@@ -460,7 +460,7 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
   }
 
   setSourceOrderActive(isActive: boolean): void {
-    this.#sourceOrderModeActiveInternal = isActive;
+    this.#sourceOrderModeActive = isActive;
   }
 
   private delayedHideHighlight(delay: number): void {
@@ -743,7 +743,7 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
     }
   }
 
-  static setInspectNodeHandler(handler: (arg0: DOMNode) => void): void {
+  static setInspectNodeHandler(handler: (arg0: DOMNode) => Promise<void>): void {
     OverlayModel.inspectNodeHandler = handler;
   }
 
@@ -752,7 +752,7 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
     if (OverlayModel.inspectNodeHandler) {
       void deferredNode.resolvePromise().then(node => {
         if (node && OverlayModel.inspectNodeHandler) {
-          OverlayModel.inspectNodeHandler(node);
+          void OverlayModel.inspectNodeHandler(node);
         }
       });
     } else {
@@ -770,7 +770,7 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
     this.dispatchEventToListeners(Events.EXITED_INSPECT_MODE);
   }
 
-  static inspectNodeHandler: ((node: DOMNode) => void)|null = null;
+  static inspectNodeHandler: ((node: DOMNode) => Promise<void>)|null = null;
 
   getOverlayAgent(): ProtocolProxyApi.OverlayApi {
     return this.overlayAgent;

@@ -9,7 +9,7 @@ if (fontations.enabled())
     include_directories: incbase,
     args: [
       '--merge-extern-blocks',
-      '--allowlist-item=(FcCharSet.*|FC_(SLANT|WEIGHT|WIDTH)_.*|FcFontSet(Add|Create|Destroy).*|FcLangSet(Create|Destroy|Copy|Add|HasLang)|FcWeightFromOpenType.*|FC_DUAL|FC_MONO)',
+      '--allowlist-item=(FcCharSet.*|FC_(SLANT|WEIGHT|WIDTH)_.*|FcFontSet(Add|Create|Destroy).*|FcLangSet(Create|Destroy|Copy|Add|HasLang)|FcWeightFromOpenType.*|FC_DUAL|FC_MONO|FC_FAMILY_(UNKNOWN|SANS|SERIF|MONO|EMOJI|MATH))',
       '--raw-line=#![allow(nonstandard_style,unused)]',
     ],
     # FC_NO_MT=1 is added here to reduce required headers in bindings generation.
@@ -62,10 +62,11 @@ if (fontations.enabled())
       pattern_lib,
       fontations_query_lib,
     ],
+    rust_args: ['-Dunsafe-op-in-unsafe-fn', '-Dwarnings'],
     rust_abi: 'c',
     dependencies: [
-      dependency('skrifa-0.31-rs'),
-      dependency('read-fonts-0.29-rs'),
+      dependency('skrifa-0.34-rs'),
+      dependency('read-fonts-0.32-rs'),
       dependency('font-types-0.9-rs'),
       dependency('libc-0.2-rs'),
     ],

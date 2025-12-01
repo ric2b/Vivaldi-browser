@@ -377,10 +377,10 @@ void PushMessagingManager::Register(PushMessagingManager::RegisterData data) {
 
 void PushMessagingManager::DidRequestPermissionInIncognito(
     RegisterData data,
-    blink::mojom::PermissionStatus status) {
+    PermissionResult permission_result) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // Notification permission should always be denied in incognito.
-  DCHECK_EQ(blink::mojom::PermissionStatus::DENIED, status);
+  DCHECK_EQ(blink::mojom::PermissionStatus::DENIED, permission_result.status);
   SendSubscriptionError(
       std::move(data),
       blink::mojom::PushRegistrationStatus::INCOGNITO_PERMISSION_DENIED);
@@ -754,8 +754,8 @@ void PushMessagingManager::GetSubscriptionDidGetInfo(
 
     // Uh-oh! Although there was a cached subscription in the Service Worker
     // database, it did not have matching counterparts in the
-    // PushMessagingAppIdentifier map and/or GCM Store. Unsubscribe to fix this
-    // inconsistency.
+    // push_messaging::AppIdentifier map and/or GCM Store. Unsubscribe to fix
+    // this inconsistency.
     blink::mojom::PushGetRegistrationStatus status =
         blink::mojom::PushGetRegistrationStatus::STORAGE_CORRUPT;
 

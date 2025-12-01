@@ -8,53 +8,42 @@
 <translation id="1158211211994409885">Сайт <ph name="HOST_NAME" /> неожиданно разорвал соединение.</translation>
 <translation id="1161325031994447685">Подключитесь к сети Wi-Fi ещё раз</translation>
 <translation id="1175364870820465910">&amp;Печать...</translation>
-<translation id="1204778305310783648">“Неправильно превращать интернет в экономику слежки”: Йон фон Тэчнер на Web Summit 2023.</translation>
 <translation id="1285320974508926690">Никогда не переводить этот сайт</translation>
 <translation id="1375198122581997741">Сведения о версии</translation>
 <translation id="139305205187523129">Сайт <ph name="HOST_NAME" /> не отправил данных.</translation>
-<translation id="1489123210863708132">Включите блокировщик слежки и рекламы для защиты своих данных и получения отчёта о приватности.</translation>
-<translation id="1500787357908295021">Ваша статистика приватности</translation>
 <translation id="1555191101192706055">На этом сайте злоумышленники могут обманом заставить вас установить вредоносное ПО, которое будет мешать вашей работе в браузере (например, менять главную страницу или показывать дополнительную рекламу на сайтах).</translation>
 <translation id="1559528461873125649">Нет такого файла или каталога</translation>
-<translation id="16328381871867323">Законодатели наконец обратили внимание на опасения по поводу слежки, сбора и хранения наших цифровых данных. Узнайте, что означает это новаторское решение и как оно может повлиять на нас.</translation>
 <translation id="1640244768702815859">Попробуйте <ph name="BEGIN_LINK" />открыть главную страницу сайта<ph name="END_LINK" />.</translation>
+<translation id="1644574205037202324">История</translation>
 <translation id="1645368109819982629">Неподдерживаемый протокол</translation>
 <translation id="1662550410081243962">Сохранять и подставлять платежные данные</translation>
 <translation id="1710259589646384581">ОС</translation>
 <translation id="1728677426644403582">Вы просматриваете код страницы</translation>
 <translation id="1734878702283171397">Обратитесь за помощью к системному администратору.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Попробуйте запустить средства диагностики сети Windows<ph name="END_LINK" />.</translation>
-<translation id="1919345977826869612">Реклама</translation>
-<translation id="1970180444859658569">Настройка 'Не отслеживать меня' получает юридическую поддержку в Германии</translation>
 <translation id="1974060860693918893">Подробнее</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Проверьте настройки прокси-сервера и брандмауэра<ph name="END_LINK" /></translation>
 <translation id="2048261947532620704">Перевод страницы</translation>
 <translation id="2119505898009119320">Кому выдан: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
+<translation id="2148716181193084225">Сегодня</translation>
 <translation id="2166378884831602661">Этот сайт не может обеспечить безопасное соединение</translation>
 <translation id="2178904466768126352">На этом сайте злоумышленники могут установить вредоносное ПО, которое крадет или удаляет личную информацию, например пароли, фотографии, сообщения или данные кредитных карт.</translation>
-<translation id="2187317261103489799">Определять (по умолчанию)</translation>
 <translation id="2224337661447660594">Нет подключения к Интернету</translation>
-<translation id="2225863440766607138">Отслеживания</translation>
 <translation id="2283340219607151381">Сохранять и подставлять адреса</translation>
 <translation id="2292556288342944218">Доступ в Интернет отсутствует</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> запрашивает имя пользователя и пароль.</translation>
 <translation id="2337852623177822836">Эта настройка управляется администратором</translation>
 <translation id="2355395290879513365">Злоумышленники могут видеть изображения, которые видны вам, и изменять их в целях мошенничества.</translation>
-<translation id="2356070529366658676">Спрашивать</translation>
 <translation id="2359808026110333948">Продолжить</translation>
 <translation id="2388886110302389394">Открыть страницу в новом приватном окне (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Провести диагностику сети<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Эта страница была заблокирована расширением</translation>
-<translation id="2539524384386349900">Определять</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> отправил неверный ответ.</translation>
 <translation id="2634124572758952069">Не удалось найти IP-адрес сервера <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Доступ к файлу запрещён</translation>
-<translation id="2690699652723742414">За 30 дней</translation>
 <translation id="2705137772291741111">Невозможно прочитать копию сайта, сохранённую в кэше.</translation>
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Выполните диагностику подключения<ph name="END_LINK" /></translation>
-<translation id="2741210449864955442">https://vivaldi.com/blog/technology/vivaldi-browser-at-the-web-summit/</translation>
-<translation id="2765309692777226484">Блокировщик слежки и рекламы отключен.</translation>
 <translation id="2784949926578158345">Соединение сброшено.</translation>
 <translation id="2826760142808435982">Соединение зашифровано и проверено с помощью <ph name="CIPHER" />. В качестве механизма обмена ключами используется <ph name="KX" />.</translation>
 <translation id="290376772003165898">Язык страницы не <ph name="LANGUAGE" />?</translation>
@@ -67,20 +56,14 @@
 <translation id="3037605927509011580">Да что ж такое!</translation>
 <translation id="3041612393474885105">Данные сертификата</translation>
 <translation id="3109728660330352905">У вас нет прав для просмотра этой страницы.</translation>
-<translation id="3119245580849443327">Отчёт о приватности</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Выполните диагностику подключения<ph name="END_LINK" />.</translation>
-<translation id="3126903660515914763">https://vivaldi.com/blog/news/alert-no-google-topics-in-vivaldi/</translation>
 <translation id="3154506275960390542">Эта страница содержит форму, которая может быть не защищена. Отправленные вами данные могут быть просмотрены третьими лицами во время передачи, а также могут быть изменены злоумышленником до получения сервером.</translation>
-<translation id="3156779787905856989">Manifest V3, webRequest и блокировщики</translation>
 <translation id="3176929007561373547">Проверьте настройки прокси-сервера или попросите администратора
           задать верные параметры. В противном случае используйте:
           <ph name="PLATFORM_TEXT" /></translation>
-<translation id="3191389212681074619">https://help.vivaldi.com/android/android-privacy/android-tracker-and-ad-blocker/</translation>
 <translation id="3226128629678568754">Чтобы повторно ввести данные, необходимые для загрузки страницы, обновите страницу.</translation>
-<translation id="3234666976984236645">Всегда определять важный контент на этом сайте</translation>
 <translation id="3384522979010096022">Ваша организация запрещает просматривать этот сайт</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> недоступен.</translation>
-<translation id="3427092606871434483">Разрешать (по умолчанию)</translation>
 <translation id="3447661539832366887">Владелец этого устройства отключил игру с динозавром.</translation>
 <translation id="3447884698081792621">Показать сертификат (издатель: <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Скрыть подробности</translation>
@@ -91,13 +74,10 @@
 <translation id="3614001939154393113">Возможно, злоумышленники пытаются похитить вашу информацию с сайта <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (например пароли, сообщения и данные кредитных карт). Подробнее <ph name="BEGIN_LEARN_MORE_LINK" />об этом предупреждении<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3630155396527302611">Если программа входит в список тех, которым разрешён доступ к сети,
       удалите её из списка и добавьте туда снова.</translation>
-<translation id="3658742229777143148">Версия</translation>
+<translation id="3658742229777143148">Идентификатор</translation>
 <translation id="3681007416295224113">Данные сертификата</translation>
-<translation id="3694122362646626770">Веб-сайты</translation>
-<translation id="3716128635228495027">Назад в Vivaldi</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Проверьте настройки прокси-сервера, брандмауэра и DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Если вы используете прокси-сервер...</translation>
-<translation id="3861977424605124250">Показывать при запуске</translation>
 <translation id="3950820424414687140">Вход</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> заблокирован</translation>
 <translation id="3987940399970879459">Менее 1 МБ</translation>
@@ -105,7 +85,6 @@
 <translation id="4075732493274867456">Клиент и сервер поддерживают разные версии протокола SSL или набора шифров.</translation>
 <translation id="4116663294526079822">Всегда разрешать на этом сайте</translation>
 <translation id="4130226655945681476">Проверьте сетевые кабели, модем и маршрутизатор</translation>
-<translation id="4151403195736952345">Использовать глобально (определять)</translation>
 <translation id="4165986682804962316">Настройки сайта</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Проверьте настройки брандмауэра и антивирусного ПО<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Попробуйте провести диагностику сети<ph name="END_LINK" />.</translation>
@@ -114,11 +93,8 @@
 <translation id="4250431568374086873">Подключение к сайту слабо защищено</translation>
 <translation id="4265872034478892965">Разрешено администратором</translation>
 <translation id="4305666528087210886">Нет доступа к вашему файлу</translation>
-<translation id="430967081421617822">Всё время</translation>
-<translation id="4312866146174492540">Блокировать (по умолчанию)</translation>
 <translation id="4408413947728134509">Настройки файлов cookie <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544">Ваш сертификат отклонён сайтом <ph name="HOST_NAME" /> или не был выдан.</translation>
-<translation id="4474776280324528449">https://vivaldi.com/blog/do-no-track-gets-legal-backing-in-germany/</translation>
 <translation id="4506599922270137252">Обратитесь за помощью к системному администратору</translation>
 <translation id="4522570452068850558">Подробнее</translation>
 <translation id="4558551763791394412">Попробуйте отключить расширения.</translation>
@@ -134,15 +110,12 @@
 <translation id="4943872375798546930">Нет результатов</translation>
 <translation id="5017554619425969104">Скопированный текст</translation>
 <translation id="5023310440958281426">Проверьте правила, установленные администратором</translation>
-<translation id="5039804452771397117">Разрешить</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(используется 1 файл cookie)}one{(используется # файл cookie)}few{(используется # файла cookie)}many{(используется # файлов cookie)}other{(используется # файла cookie)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Проверьте адрес прокси-сервера<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 бита)</translation>
-<translation id="5216593085343845370">Присоединяйтесь к позиции Vivaldi против слежки и верните себе контроль над приватностью.
-    Читайте подробнее о том, как мы защищаем пользователей, в статье ниже.</translation>
+<translation id="5216942107514965959">Последние посещённые сегодня</translation>
 <translation id="5355557959165512791">Сертификат веб-сайта <ph name="SITE" /> отозван. Открыть сайт в настоящее время нельзя. Сбой мог быть вызван сетевой ошибкой или действиями злоумышленников. Скорее всего, сайт заработает через некоторое время.</translation>
 <translation id="5386426401304769735">В цепочке сертификатов этого сайта есть сертификат, подписанный с помощью алгоритма SHA-1.</translation>
-<translation id="5398772614898833570">Реклам блокировано</translation>
 <translation id="5452270690849572955">Страница <ph name="HOST_NAME" /> не найдена</translation>
 <translation id="5457113250005438886">Недействительный</translation>
 <translation id="5492298309214877701">Этот сайт в интранете организации или учебного заведения имеет тот же адрес, что и сайт в Интернете.
@@ -150,16 +123,14 @@
     Обратитесь к системному администратору.</translation>
 <translation id="5510766032865166053">Возможно, он был перемещён или удалён.</translation>
 <translation id="5556459405103347317">Обновить</translation>
-<translation id="5583322400766491358">Данные Personal Insight надёжно хранятся на вашем устройстве и никогда не передаются третьим лицам.</translation>
 <translation id="5610142619324316209">Проверка подключения к Интернету</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> выполнил переадресацию слишком много раз.</translation>
-<translation id="5648166631817621825">За 7 дней</translation>
 <translation id="5675650730144413517">Страница недоступна</translation>
-<translation id="5741670635761443575">Внимание: Google Topics нет в Vivaldi.</translation>
 <translation id="5785756445106461925">Обратите внимание, что на странице обнаружен небезопасный контент. Возможно, при передаче ресурсы просматриваются третьими лицами, а злоумышленники могут получить доступ к странице и изменить её поведение или внешний вид.</translation>
 <translation id="5799902971440853357">Прямо сейчас вы не можете открыть <ph name="SITE" /> потому, что сайт отправил некорректные данные авторизации. Как правило, ошибки сети или атаки злоумышленников носят временный характер, данная страница может быть доступна позже.</translation>
 <translation id="5810442152076338065">Соединение с <ph name="DOMAIN" /> зашифровано с помощью устаревшего набора шифров.</translation>
 <translation id="5838278095973806738">Не вводите на этом сайте конфиденциальную информацию (например, пароли и номера банковских карт). К ней могут получить доступ злоумышленники.</translation>
+<translation id="5863515189965725638">Изменить IBAN</translation>
 <translation id="5869405914158311789">Не удаётся получить доступ к сайту</translation>
 <translation id="5920262536204764679">{NUM_COOKIES,plural, =1{Используется 1 файл cookie}one{Используется # файл cookie}few{Используется # файла cookie}many{Используется # файлов cookie}other{Используется # файла cookie}}</translation>
 <translation id="5932224571077948991">Сайт показывает навязчивую рекламу</translation>
@@ -182,18 +153,13 @@
 <translation id="6447842834002726250">Файлы сookie</translation>
 <translation id="6451458296329894277">Подтвердите повторную отправку формы</translation>
 <translation id="6569060085658103619">Вы просматриваете страницу расширения</translation>
-<translation id="6653655836861174026">С профилями Vivaldi вы можете создавать профили для друзей и семьи или разделять их между работой и развлечениями.</translation>
 <translation id="6657585470893396449">Пароль</translation>
 <translation id="6711464428925977395">На прокси-сервере возникла проблема или адрес указан неверно.</translation>
-<translation id="6736243959894955139">Адрес</translation>
 <translation id="6757797048963528358">Ваш компьютер перешёл в спящий режим.</translation>
 <translation id="6890956352250146925">Параметры для файлов cookie и данных сайтов</translation>
 <translation id="6897140037006041989">User Agent</translation>
 <translation id="6935179587384421592"><ph name="SIZE" />. Некоторые сайты могут загружаться медленнее в следующий раз.</translation>
 <translation id="6957624206566198865">Открыть страницу в новой приватной вкладке</translation>
-<translation id="7013466836883158999">Возможно ли создавать продукты без слежки за пользователями? Как выглядит работа в сети будущего? Смотрите ответы Йона фон Тэчнера, CEO Vivaldi, на Web Summit 2023.</translation>
-<translation id="7053983685419859001">Блокировать</translation>
-<translation id="7066262000446496119">Кто использует Vivaldi?</translation>
 <translation id="7096937462164235847">Подлинность этого сайта не подтверждена.</translation>
 <translation id="7108819624672055576">Разрешено расширением</translation>
 <translation id="7111012039238467737">(действительный)</translation>
@@ -201,19 +167,14 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> не соответствует стандартам безопасности.</translation>
 <translation id="7219179957768738017">В этом подключении используется протокол <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Показывать уведомления</translation>
-<translation id="7277237102285741596">https://vivaldi.com/blog/manifest-v3-webrequest-and-ad-blockers/</translation>
-<translation id="7283555985781738399">Гостевой режим</translation>
 <translation id="7353601530677266744">Командная строка</translation>
 <translation id="7419106976560586862">Путь к профилю</translation>
-<translation id="7421665776469827022">Сохранённые данные</translation>
-<translation id="7454640759045234067">Слежек блокировано</translation>
 <translation id="7455133967321480974">Использовать глобально (блокировать)</translation>
 <translation id="7518003948725431193">Не найдена страница для веб-адреса: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Для корректного отображения веб-страницы требуются введённые ранее данные. Их можно отправить повторно, но в этом случае все действия на странице будут выполнены снова.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> пока не может обработать этот запрос.</translation>
 <translation id="7662298039739062396">Эта настройка управляется расширением</translation>
 <translation id="7663736086183791259">Сертификат <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7698231949697067951">Нам не интересно, что вы делаете в сети! Ниже вы можете видеть, как мы помогаем сохранять вашу приватность.</translation>
 <translation id="7714464543167945231">Сертификат</translation>
 <translation id="7716147886133743102">Заблокировано администратором</translation>
 <translation id="7716424297397655342">Не удалось загрузить сайт из кэша</translation>
@@ -222,13 +183,10 @@
 <translation id="7800304661137206267">Соединение зашифровано с помощью <ph name="CIPHER" />, для аутентификации сообщений используется <ph name="MAC" />, для обмена ключами используется <ph name="KX" />.</translation>
 <translation id="7834399512844817676">Обычно сайт <ph name="SITE" /> использует шифрование для защиты ваших данных. Но сейчас при попытке подключиться к сайту <ph name="SITE" /> были получены неверные данные авторизации. Возможно, злоумышленники пытались замаскироваться под сайт <ph name="SITE" /> или окно подключения к Wi-Fi нарушило соединение. Ваши данные по-прежнему защищены - браузер разорвал соединение до того, как произошёл обмен данными.</translation>
 <translation id="7878562273885520351">Злоумышленники могут узнать ваш пароль</translation>
-<translation id="788493840831967104">Сохранённое время</translation>
 <translation id="7951415247503192394">(32 бит)</translation>
 <translation id="7953236668995583915">Перезагрузите страницу для вступления изменений в силу</translation>
-<translation id="7981965265950405093">Vivaldi обладает встроенным блокировщиком рекламы и слежки, множеством вариантов настройки, встроенной почтой и календарём и многим другим. Как он зависит от позиции Google по Manifest V3? Разработчик Vivaldi, Жюльен Пикалауза, подробно отвечает на этот вопрос.</translation>
-<translation id="8034402064393340023">Наше обязательство о вашей приватности</translation>
-<translation id="8037357227543935929">Спрашивать (по умолчанию)</translation>
 <translation id="8041940743680923270">Использовать глобально (спрашивать)</translation>
+<translation id="8076492880354921740">Вкладки</translation>
 <translation id="808894953321890993">Сменить пароль</translation>
 <translation id="8149426793427495338">Ваш компьютер перешёл в спящий режим.</translation>
 <translation id="8150722005171944719">Файл по адресу <ph name="URL" /> недоступен. Возможно, он был удалён или перемещён, либо права доступа к нему ограничены.</translation>
@@ -236,7 +194,6 @@
 <translation id="8211406090763984747">Подключение безопасно</translation>
 <translation id="8241707690549784388">Страница, на которую вы переходите, содержала введённые вами данные. При возврате может потребоваться повторить выполненные ранее действия. Продолжить?</translation>
 <translation id="8241712895048303527">Блокировать на этом сайте</translation>
-<translation id="8248593573177859437">Отчёт о приватности</translation>
 <translation id="8286036467436129157">Вход</translation>
 <translation id="8288807391153049143">Показать сертификат</translation>
 <translation id="8289355894181816810">Уточните информацию у администратора сети.</translation>
@@ -256,13 +213,12 @@
 <translation id="9062620674789239642">Возможно, он был перемещён, изменён или удалён.</translation>
 <translation id="9069693763241529744">Заблокировано расширением</translation>
 <translation id="9073799351042754113">Вы отключили предупреждения системы безопасности для этого сайта.</translation>
-<translation id="9118360612142967597">Шпионить за поведением людей и профилировать их — неправильно. Вот почему мы позаботились о том, чтобы Google Topics были отключены двумя разными способами в браузере Vivaldi.</translation>
 <translation id="9168814207360376865">Разрешить сайтам проверять наличие сохраненных способов оплаты</translation>
 <translation id="9169664750068251925">Всегда блокировать на этом сайте</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> использует неподдерживаемый протокол.</translation>
-<translation id="9188210215803842004">Данные о веб-сайтах и слежке</translation>
 <translation id="936602727769022409">Вы можете потерять доступ к учётной записи Google. Рекомендуем сменить пароль. После этого потребуется снова войти в учётную запись.</translation>
 <translation id="969892804517981540">Официальная сборка</translation>
 <translation id="984275831282074731">Способы оплаты</translation>
 <translation id="988159990683914416">Режим разработчика</translation>
+<translation id="995755448277384931">Добавить IBAN</translation>
 </translationbundle>

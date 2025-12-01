@@ -491,7 +491,9 @@ static int klv_read_packet(MXFContext *mxf, KLVPacket *klv, AVIOContext *pb)
         return AVERROR_INVALIDDATA;
 
     memcpy(klv->key, mxf_klv_key, 4);
-    avio_read(pb, klv->key + 4, 12);
+    int ret = ffio_read_size(pb, klv->key + 4, 12);
+    if (ret < 0)
+        return ret;
     length = klv_decode_ber_length(pb, &llen);
     if (length < 0)
         return length;
@@ -953,7 +955,7 @@ static int mxf_add_metadata_set(MXFContext *mxf, MXFMetadataSet **metadata_set, 
     int ret;
 
     // Index Table is special because it might be added manually without
-    // partition and we iterate thorugh all instances of them. Also some files
+    // partition and we iterate through all instances of them. Also some files
     // use the same Instance UID for different index tables...
     if (type != IndexTableSegment) {
         for (int i = 0; i < mg->metadata_sets_count; i++) {
@@ -1683,7 +1685,7 @@ static const MXFCodecUL mxf_sound_essence_container_uls[] = {
 
 static const MXFCodecUL mxf_data_essence_container_uls[] = {
     { { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x09,0x0d,0x01,0x03,0x01,0x02,0x0d,0x00,0x00 }, 16, AV_CODEC_ID_NONE,      "vbi_smpte_436M", 11 },
-    { { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x09,0x0d,0x01,0x03,0x01,0x02,0x0e,0x00,0x00 }, 16, AV_CODEC_ID_NONE, "vbi_vanc_smpte_436M", 11 },
+    { { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x09,0x0d,0x01,0x03,0x01,0x02,0x0e,0x00,0x00 }, 16, AV_CODEC_ID_SMPTE_436M_ANC, "vbi_vanc_smpte_436M", 11 },
     { { 0x06,0x0e,0x2b,0x34,0x04,0x01,0x01,0x09,0x0d,0x01,0x03,0x01,0x02,0x13,0x01,0x01 }, 16, AV_CODEC_ID_TTML },
     { { 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 },  0, AV_CODEC_ID_NONE },
 };
@@ -3113,9 +3115,7 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
                 st->codecpar->codec_type = type;
             if (container_ul->desc)
                 av_dict_set(&st->metadata, "data_type", container_ul->desc, 0);
-            if (mxf->eia608_extract &&
-                container_ul->desc &&
-                !strcmp(container_ul->desc, "vbi_vanc_smpte_436M")) {
+            if (mxf->eia608_extract && st->codecpar->codec_id == AV_CODEC_ID_SMPTE_436M_ANC) {
                 st->codecpar->codec_type = AVMEDIA_TYPE_SUBTITLE;
                 st->codecpar->codec_id = AV_CODEC_ID_EIA_608;
             }

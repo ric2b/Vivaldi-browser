@@ -3379,6 +3379,10 @@ static int64_t rd_pick_intrabc_mode_sb(const AV1_COMP *cpi, MACROBLOCK *x,
   if (!av1_allow_intrabc(cm) || !cpi->oxcf.kf_cfg.enable_intrabc ||
       !cpi->sf.mv_sf.use_intrabc || cpi->sf.rt_sf.use_nonrd_pick_mode)
     return INT64_MAX;
+  if (cpi->sf.mv_sf.intrabc_search_level >= 1 && bsize != BLOCK_4X4 &&
+      bsize != BLOCK_8X8 && bsize != BLOCK_16X16) {
+    return INT64_MAX;
+  }
   const int num_planes = av1_num_planes(cm);
 
   MACROBLOCKD *const xd = &x->e_mbd;
@@ -3499,19 +3503,29 @@ static int64_t rd_pick_intrabc_mode_sb(const AV1_COMP *cpi, MACROBLOCK *x,
 
     const int step_param = cpi->mv_search_params.mv_step_param;
     IntraBCHashInfo *intrabc_hash_info = &x->intrabc_hash_info;
-    int_mv best_mv, best_hash_mv;
+    int_mv best_mv;
     FULLPEL_MV_STATS best_mv_stats;
+    int bestsme = INT_MAX;
 
-    int bestsme =
-        av1_full_pixel_search(start_mv, &fullms_params, step_param, NULL,
-                              &best_mv.as_fullmv, &best_mv_stats, NULL);
-    const int hashsme = av1_intrabc_hash_search(
-        cpi, xd, &fullms_params, intrabc_hash_info, &best_hash_mv.as_fullmv);
-    if (hashsme < bestsme) {
-      best_mv = best_hash_mv;
-      bestsme = hashsme;
+    // Perform a hash search first, and see if we get any matches.
+    if (!cpi->sf.mv_sf.hash_max_8x8_intrabc_blocks || bsize <= BLOCK_8X8) {
+      bestsme = av1_intrabc_hash_search(cpi, xd, &fullms_params,
+                                        intrabc_hash_info, &best_mv.as_fullmv);
     }
 
+    // If intrabc_search_level is not 0 and we found a hash search match, do
+    // not proceed with pixel search as the hash match is very likely to be the
+    // best intrabc candidate anyway.
+    if (bestsme == INT_MAX || cpi->sf.mv_sf.intrabc_search_level == 0) {
+      int_mv best_pixel_mv;
+      const int pixelsme =
+          av1_full_pixel_search(start_mv, &fullms_params, step_param, NULL,
+                                &best_pixel_mv.as_fullmv, &best_mv_stats, NULL);
+      if (pixelsme < bestsme) {
+        bestsme = pixelsme;
+        best_mv = best_pixel_mv;
+      }
+    }
     if (bestsme == INT_MAX) continue;
     const MV dv = get_mv_from_fullmv(&best_mv.as_fullmv);
     if (!av1_is_fullmv_in_range(&fullms_params.mv_limits,

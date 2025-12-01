@@ -432,7 +432,7 @@ NoteRemoteUpdatesHandler::ReorderValidUpdates(
 const SyncedNoteTrackerEntity*
 NoteRemoteUpdatesHandler::DetermineLocalTrackedEntityToUpdate(
     const syncer::EntityData& update_entity,
-    bool* should_ignore_update) {
+    bool* should_ignore_update) const {
   *should_ignore_update = false;
 
   // If there's nothing other than a server ID to issue a lookup, just do that

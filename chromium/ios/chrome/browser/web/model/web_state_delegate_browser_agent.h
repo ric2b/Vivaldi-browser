@@ -95,9 +95,23 @@ class WebStateDelegateBrowserAgent
   id<CRWResponderInputView> GetResponderInputView(
       web::WebState* source) override;
   void OnNewWebViewCreated(web::WebState* source) override;
+  void ShouldAllowCopy(web::WebState* source,
+                       base::OnceCallback<void(bool)> callback) override;
+  void ShouldAllowPaste(web::WebState* source,
+                        base::OnceCallback<void(bool)> callback) override;
+  void ShouldAllowCut(web::WebState* source,
+                      base::OnceCallback<void(bool)> callback) override;
+  bool CanRunOpenPanel(web::WebState* source) const override
+      API_AVAILABLE(ios(18.4));
+  void RunOpenPanel(web::WebState* source,
+                    WKOpenPanelParameters* parameters,
+                    WKFrameInfo* frame,
+                    base::OnceCallback<void(NSArray<NSURL*>*)> completion)
+      const override API_AVAILABLE(ios(18.4));
 
   raw_ptr<WebStateList> web_state_list_ = nullptr;
-  raw_ptr<TabInsertionBrowserAgent> tab_insertion_agent_ = nullptr;
+  raw_ptr<TabInsertionBrowserAgent, DanglingUntriaged> tab_insertion_agent_ =
+      nullptr;
 
   OverlayJavaScriptDialogPresenter java_script_dialog_presenter_;
 

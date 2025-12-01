@@ -67,9 +67,9 @@ impl Writer for PngWriter {
                 eprintln!("Warning: Ignoring XMP data because it is not a valid UTF-8 string");
             }
         }
-        let mut writer = encoder.write_header().or(Err(AvifError::UnknownError(
-            "Could not write the PNG header".into(),
-        )))?;
+        let mut writer = encoder
+            .write_header()
+            .map_err(AvifError::map_unknown_error)?;
         let mut rgba_pixel_buffer: Vec<u8> = Vec::new();
         let rgba_slice = if is_monochrome {
             for y in 0..image.height {
@@ -114,12 +114,8 @@ impl Writer for PngWriter {
         };
         writer
             .write_image_data(rgba_slice)
-            .or(Err(AvifError::UnknownError(
-                "Could not write PNG image data".into(),
-            )))?;
-        writer.finish().or(Err(AvifError::UnknownError(
-            "Could not finalize the PNG encoder".into(),
-        )))?;
+            .map_err(AvifError::map_unknown_error)?;
+        writer.finish().map_err(AvifError::map_unknown_error)?;
         Ok(())
     }
 }

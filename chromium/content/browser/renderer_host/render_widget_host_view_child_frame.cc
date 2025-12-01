@@ -107,7 +107,7 @@ RenderWidgetHostViewChildFrame::~RenderWidgetHostViewChildFrame() {
     DetachFromTouchSelectionClientManagerIfNecessary();
 
   if (is_frame_sink_id_owner() && GetHostFrameSinkManager()) {
-    GetHostFrameSinkManager()->InvalidateFrameSinkId(frame_sink_id_, this);
+    GetHostFrameSinkManager()->InvalidateFrameSinkId(frame_sink_id_, this, {});
   }
 }
 
@@ -141,16 +141,6 @@ void RenderWidgetHostViewChildFrame::
   if (!selection_controller_client_)
     return;
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-  // NOTE(igor@vivaldi.com): Chromium code assumes that the root view stays the
-  // same. This is wrong. The root view changes whenever the code calls
-  // WebContentsImpl::DetachFromOuterWebContents() leading later to attempt to
-  // remove the observer from the wrong manager here.
-  if (vivaldi::IsVivaldiRunning()) {
-    selection_controller_client_->manager_->RemoveObserver(this);
-  } else {
-    /* clang-format off */
-#endif // !IS_ANDROID && !IS_IOS
   auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
   if (root_view) {
     auto* manager = root_view->GetTouchSelectionControllerClientManager();
@@ -167,10 +157,6 @@ void RenderWidgetHostViewChildFrame::
     // https://crbug.com/760074.
     base::debug::DumpWithoutCrashing();
   }
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-    /* clang-format on */
-  }
-#endif // !IS_ANDROID && !IS_IOS
 
   selection_controller_client_.reset();
 }
@@ -414,7 +400,10 @@ gfx::NativeView RenderWidgetHostViewChildFrame::GetNativeView() {
 
 gfx::NativeViewAccessible
 RenderWidgetHostViewChildFrame::GetNativeViewAccessible() {
-  NOTREACHED();
+  if (!GetRootView()) {
+    return gfx::NativeViewAccessible();
+  }
+  return GetRootView()->GetNativeViewAccessible();
 }
 
 void RenderWidgetHostViewChildFrame::UpdateFrameSinkIdRegistration() {
@@ -629,7 +618,10 @@ void RenderWidgetHostViewChildFrame::RegisterFrameSinkId() {
 
 void RenderWidgetHostViewChildFrame::UnregisterFrameSinkId() {
   DCHECK(host());
-  UpdateFrameSinkIdRegistration();
+  if (host()->delegate() && host()->delegate()->GetInputEventRouter()) {
+    host()->delegate()->GetInputEventRouter()->RemoveFrameSinkIdOwner(
+        frame_sink_id_);
+  }
   DetachFromTouchSelectionClientManagerIfNecessary();
 }
 
@@ -933,7 +925,7 @@ void RenderWidgetHostViewChildFrame::SetWindowFrameInScreen(
 void RenderWidgetHostViewChildFrame::ShowSharePicker(
     const std::string& title,
     const std::string& text,
-    const std::string& url,
+    const GURL& url,
     const std::vector<std::string>& file_paths,
     blink::mojom::ShareService::ShareCallback callback) {}
 
@@ -1060,6 +1052,13 @@ RenderWidgetHostViewChildFrame::DidUpdateVisualProperties(
           &RenderWidgetHostViewChildFrame::OnDidUpdateVisualPropertiesComplete),
       weak_factory_.GetWeakPtr(), metadata);
   return viz::ScopedSurfaceIdAllocator(std::move(allocation_task));
+}
+
+input::CursorManager* RenderWidgetHostViewChildFrame::GetCursorManager() {
+  if (!GetRootView()) {
+    return nullptr;
+  }
+  return GetRootView()->GetCursorManager();
 }
 
 ui::TextInputType RenderWidgetHostViewChildFrame::GetTextInputType() const {

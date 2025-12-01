@@ -20,6 +20,7 @@ import org.chromium.base.ResettersForTesting;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.lifetime.Destroyable;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.build.BuildConfig;
 import org.chromium.build.annotations.Initializer;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -134,7 +135,7 @@ public class SearchEngineUtils implements Destroyable, TemplateUrlServiceObserve
 
         mSearchEngineLogoTargetSizePixels =
                 mContext.getResources()
-                        .getDimensionPixelSize(R.dimen.omnibox_search_engine_logo_favicon_size);
+                        .getDimensionPixelSize(R.dimen.omnibox_search_engine_logo_composed_size);
 
         // Apply safe fallback values.
         setSearchBoxHintText(
@@ -207,8 +208,7 @@ public class SearchEngineUtils implements Destroyable, TemplateUrlServiceObserve
             return;
         }
 
-        if (OmniboxFeatures.sOmniboxMobileParityUpdate.isEnabled()
-                && !TextUtils.isEmpty(templateUrl.getShortName())) {
+        if (!TextUtils.isEmpty(templateUrl.getShortName())) {
             setSearchBoxHintText(
                     OmniboxResourceProvider.getString(
                             mContext,
@@ -227,7 +227,7 @@ public class SearchEngineUtils implements Destroyable, TemplateUrlServiceObserve
             CachedZeroSuggestionsManager.saveSearchEngineMetadata(mDefaultSearchEngineMetadata);
         }
 
-        retrieveFavicon(templateUrl);
+        retrieveFaviconFromBrandedResources(templateUrl);
     }
 
     /** Add observer to be notified whenever the Omnibox hint text changes. */
@@ -275,7 +275,7 @@ public class SearchEngineUtils implements Destroyable, TemplateUrlServiceObserve
     }
 
     @VisibleForTesting
-    void retrieveFavicon(TemplateUrl templateUrl) {
+    void retrieveFaviconFromDefaultResources(TemplateUrl templateUrl) {
         if (!mTemplateUrlService.isDefaultSearchEngineGoogle()
                 || mIsOffTheRecord) { // Vivaldi Ref. VAB-11533
             // Fall back to next source.
@@ -295,15 +295,17 @@ public class SearchEngineUtils implements Destroyable, TemplateUrlServiceObserve
             }
             // End Vivaldi
 
-            retrieveFaviconFromBuiltinResources(templateUrl);
+            retrieveFaviconFromOriginUrl(templateUrl);
             return;
         }
 
         setSearchEngineIcon(new StatusIconResource(R.drawable.ic_logo_googleg_20dp, 0));
     }
 
-    private void retrieveFaviconFromBuiltinResources(TemplateUrl templateUrl) {
-        if (OmniboxFeatures.sOmniboxParityRetrieveBuiltInEngineIcon.getValue()) {
+    private void retrieveFaviconFromBrandedResources(TemplateUrl templateUrl) {
+        // Branded resources are only available on Chrome branded builds.
+        if (BuildConfig.IS_CHROME_BRANDED
+                && OmniboxFeatures.sOmniboxParityRetrieveBuiltInEngineIcon.getValue()) {
             @Nullable Bitmap bm = templateUrl.getBuiltInSearchEngineIcon();
             if (bm != null) {
                 onFaviconRetrieveCompleted(templateUrl.getFaviconURL(), bm);
@@ -311,29 +313,7 @@ public class SearchEngineUtils implements Destroyable, TemplateUrlServiceObserve
             }
         }
 
-        retrieveFaviconFromFaviconUrl(templateUrl);
-    }
-
-    private void retrieveFaviconFromFaviconUrl(TemplateUrl templateUrl) {
-        var faviconUrl = templateUrl.getFaviconURL();
-        if (!OmniboxFeatures.sOmniboxParityRetrieveTrueFavicon.getValue()
-                || GURL.isEmptyOrInvalid(faviconUrl)) {
-            // Fall back to next source.
-            retrieveFaviconFromOriginUrl(templateUrl);
-            return;
-        }
-
-        ImageFetcher.Params params =
-                ImageFetcher.Params.create(faviconUrl, ImageFetcher.OMNIBOX_UMA_CLIENT_NAME);
-        mImageFetcher.fetchImage(
-                params,
-                bitmap -> {
-                    if (bitmap == null) {
-                        retrieveFaviconFromOriginUrl(templateUrl);
-                    } else {
-                        onFaviconRetrieveCompleted(faviconUrl, bitmap);
-                    }
-                });
+        retrieveFaviconFromDefaultResources(templateUrl);
     }
 
     private void retrieveFaviconFromOriginUrl(TemplateUrl templateUrl) {

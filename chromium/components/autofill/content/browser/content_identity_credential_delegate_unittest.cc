@@ -6,8 +6,13 @@
 
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
+#include "base/test/task_environment.h"
+#include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/browser/form_structure_test_api.h"
+#include "components/autofill/core/browser/foundations/test_autofill_client.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
-#include "content/public/browser/webid/federated_auth_autofill_source.h"
+#include "components/autofill/core/common/autofill_test_utils.h"
+#include "content/public/browser/webid/autofill_source.h"
 #include "content/public/browser/webid/identity_request_dialog_controller.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -21,11 +26,10 @@ using ::testing::_;
 using ::testing::NiceMock;
 using ::testing::Return;
 
-class MockFederatedAuthAutofillSource
-    : public content::FederatedAuthAutofillSource {
+class MockAutofillSource : public content::webid::AutofillSource {
  public:
-  MockFederatedAuthAutofillSource() = default;
-  ~MockFederatedAuthAutofillSource() override = default;
+  MockAutofillSource() = default;
+  ~MockAutofillSource() override = default;
 
   MOCK_METHOD(const std::optional<std::vector<IdentityRequestAccountPtr>>,
               GetAutofillSuggestions,
@@ -67,40 +71,62 @@ IdentityRequestAccountPtr CreateTestAccount() {
   return account;
 }
 
-class ContentIdentityCredentialDelegateTest : public ::testing::Test {};
+class ContentIdentityCredentialDelegateTest : public ::testing::Test {
+ public:
+  ContentIdentityCredentialDelegateTest() {
+    FormData form;
+    form.set_url(GURL("https://www.foo.com"));
+    form.set_fields({test::CreateTestFormField(
+        "unclassifiable label", "unclassifiable name", "unclassifiable value",
+        FormControlType::kInputText)});
+    form_structure_ = std::make_unique<FormStructure>(form);
+  }
+
+  TestAutofillClient& client() { return autofill_client_; }
+  FormStructure& form() { return *form_structure_; }
+  AutofillField& field() { return *form_structure_->fields().front(); }
+
+ private:
+  base::test::SingleThreadTaskEnvironment task_environment_;
+  test::AutofillUnitTestEnvironment autofill_test_environment_;
+  TestAutofillClient autofill_client_;
+  std::unique_ptr<FormStructure> form_structure_;
+};
 
 TEST_F(ContentIdentityCredentialDelegateTest, NoPendingRequest) {
   ContentIdentityCredentialDelegate delegate(base::BindLambdaForTesting([]() {
-    content::FederatedAuthAutofillSource* result = nullptr;
+    content::webid::AutofillSource* result = nullptr;
     return result;
   }));
-  std::vector<Suggestion> suggestions =
-      delegate.GetVerifiedAutofillSuggestions(EMAIL_ADDRESS);
+  test_api(form()).SetFieldTypes({EMAIL_ADDRESS});
+  std::vector<Suggestion> suggestions = delegate.GetVerifiedAutofillSuggestions(
+      form().ToFormData(), &form(), field(), &field(), client());
   ASSERT_EQ(0ul, suggestions.size());
 }
 
 TEST_F(ContentIdentityCredentialDelegateTest, NoAccounts) {
-  MockFederatedAuthAutofillSource mock;
+  MockAutofillSource mock;
 
   ContentIdentityCredentialDelegate delegate(
       base::BindLambdaForTesting([&mock]() {
-        content::FederatedAuthAutofillSource* result = &mock;
+        content::webid::AutofillSource* result = &mock;
         return result;
       }));
 
   EXPECT_CALL(mock, GetAutofillSuggestions).WillOnce(Return(std::nullopt));
 
-  std::vector<Suggestion> suggestions =
-      delegate.GetVerifiedAutofillSuggestions(EMAIL_ADDRESS);
+  test_api(form()).SetFieldTypes({EMAIL_ADDRESS});
+  std::vector<Suggestion> suggestions = delegate.GetVerifiedAutofillSuggestions(
+      form().ToFormData(), &form(), field(), &field(), client());
   ASSERT_EQ(0ul, suggestions.size());
 }
 
 TEST_F(ContentIdentityCredentialDelegateTest, EmptyAccounts) {
-  MockFederatedAuthAutofillSource mock;
+  MockAutofillSource mock;
 
   ContentIdentityCredentialDelegate delegate(
       base::BindLambdaForTesting([&mock]() {
-        content::FederatedAuthAutofillSource* result = &mock;
+        content::webid::AutofillSource* result = &mock;
         return result;
       }));
 
@@ -108,17 +134,18 @@ TEST_F(ContentIdentityCredentialDelegateTest, EmptyAccounts) {
 
   EXPECT_CALL(mock, GetAutofillSuggestions).WillOnce(Return(accounts));
 
-  std::vector<Suggestion> suggestions =
-      delegate.GetVerifiedAutofillSuggestions(EMAIL_ADDRESS);
+  test_api(form()).SetFieldTypes({EMAIL_ADDRESS});
+  std::vector<Suggestion> suggestions = delegate.GetVerifiedAutofillSuggestions(
+      form().ToFormData(), &form(), field(), &field(), client());
   ASSERT_EQ(0ul, suggestions.size());
 }
 
 TEST_F(ContentIdentityCredentialDelegateTest, UnsupportedFieldType) {
-  MockFederatedAuthAutofillSource mock;
+  MockAutofillSource mock;
 
   ContentIdentityCredentialDelegate delegate(
       base::BindLambdaForTesting([&mock]() {
-        content::FederatedAuthAutofillSource* result = &mock;
+        content::webid::AutofillSource* result = &mock;
         return result;
       }));
 
@@ -131,17 +158,18 @@ TEST_F(ContentIdentityCredentialDelegateTest, UnsupportedFieldType) {
 
   EXPECT_CALL(mock, GetAutofillSuggestions).WillOnce(Return(accounts));
 
-  std::vector<Suggestion> suggestions =
-      delegate.GetVerifiedAutofillSuggestions(IBAN_VALUE);
+  test_api(form()).SetFieldTypes({UNKNOWN_TYPE});
+  std::vector<Suggestion> suggestions = delegate.GetVerifiedAutofillSuggestions(
+      form().ToFormData(), &form(), field(), &field(), client());
   ASSERT_EQ(0ul, suggestions.size());
 }
 
 TEST_F(ContentIdentityCredentialDelegateTest, GetVerifiedEmailRequest) {
-  MockFederatedAuthAutofillSource mock;
+  MockAutofillSource mock;
 
   ContentIdentityCredentialDelegate delegate(
       base::BindLambdaForTesting([&mock]() {
-        content::FederatedAuthAutofillSource* result = &mock;
+        content::webid::AutofillSource* result = &mock;
         return result;
       }));
 
@@ -155,8 +183,9 @@ TEST_F(ContentIdentityCredentialDelegateTest, GetVerifiedEmailRequest) {
 
   EXPECT_CALL(mock, GetAutofillSuggestions).WillOnce(Return(accounts));
 
-  std::vector<Suggestion> suggestions =
-      delegate.GetVerifiedAutofillSuggestions(EMAIL_ADDRESS);
+  test_api(form()).SetFieldTypes({EMAIL_ADDRESS});
+  std::vector<Suggestion> suggestions = delegate.GetVerifiedAutofillSuggestions(
+      form().ToFormData(), &form(), field(), &field(), client());
   ASSERT_EQ(1ul, suggestions.size());
 
   Suggestion suggestion = suggestions[0];
@@ -185,11 +214,11 @@ TEST_F(ContentIdentityCredentialDelegateTest, GetVerifiedEmailRequest) {
 }
 
 TEST_F(ContentIdentityCredentialDelegateTest, SuggestPhoneNumbers) {
-  MockFederatedAuthAutofillSource mock;
+  MockAutofillSource mock;
 
   ContentIdentityCredentialDelegate delegate(
       base::BindLambdaForTesting([&mock]() {
-        content::FederatedAuthAutofillSource* result = &mock;
+        content::webid::AutofillSource* result = &mock;
         return result;
       }));
 
@@ -204,8 +233,9 @@ TEST_F(ContentIdentityCredentialDelegateTest, SuggestPhoneNumbers) {
 
   EXPECT_CALL(mock, GetAutofillSuggestions).WillOnce(Return(accounts));
 
-  std::vector<Suggestion> suggestions =
-      delegate.GetVerifiedAutofillSuggestions(PHONE_HOME_WHOLE_NUMBER);
+  test_api(form()).SetFieldTypes({PHONE_HOME_WHOLE_NUMBER});
+  std::vector<Suggestion> suggestions = delegate.GetVerifiedAutofillSuggestions(
+      form().ToFormData(), &form(), field(), &field(), client());
   ASSERT_EQ(1ul, suggestions.size());
 
   Suggestion suggestion = suggestions[0];
@@ -234,11 +264,11 @@ TEST_F(ContentIdentityCredentialDelegateTest, SuggestPhoneNumbers) {
 
 TEST_F(ContentIdentityCredentialDelegateTest,
        GetSuggestionForFieldThatWasntRequested) {
-  MockFederatedAuthAutofillSource mock;
+  MockAutofillSource mock;
 
   ContentIdentityCredentialDelegate delegate(
       base::BindLambdaForTesting([&mock]() {
-        content::FederatedAuthAutofillSource* result = &mock;
+        content::webid::AutofillSource* result = &mock;
         return result;
       }));
 
@@ -252,18 +282,19 @@ TEST_F(ContentIdentityCredentialDelegateTest,
 
   EXPECT_CALL(mock, GetAutofillSuggestions).WillOnce(Return(accounts));
 
-  std::vector<Suggestion> suggestions =
-      delegate.GetVerifiedAutofillSuggestions(NAME_FULL);
+  test_api(form()).SetFieldTypes({NAME_FULL});
+  std::vector<Suggestion> suggestions = delegate.GetVerifiedAutofillSuggestions(
+      form().ToFormData(), &form(), field(), &field(), client());
   ASSERT_EQ(0ul, suggestions.size());
 }
 
 TEST_F(ContentIdentityCredentialDelegateTest,
        GetSuggestionForFieldThatRequestedButIsUnavailable) {
-  MockFederatedAuthAutofillSource mock;
+  MockAutofillSource mock;
 
   ContentIdentityCredentialDelegate delegate(
       base::BindLambdaForTesting([&mock]() {
-        content::FederatedAuthAutofillSource* result = &mock;
+        content::webid::AutofillSource* result = &mock;
         return result;
       }));
 
@@ -282,18 +313,19 @@ TEST_F(ContentIdentityCredentialDelegateTest,
 
   EXPECT_CALL(mock, GetAutofillSuggestions).WillOnce(Return(accounts));
 
-  std::vector<Suggestion> suggestions =
-      delegate.GetVerifiedAutofillSuggestions(EMAIL_ADDRESS);
+  test_api(form()).SetFieldTypes({EMAIL_ADDRESS});
+  std::vector<Suggestion> suggestions = delegate.GetVerifiedAutofillSuggestions(
+      form().ToFormData(), &form(), field(), &field(), client());
   ASSERT_EQ(0ul, suggestions.size());
 }
 
 TEST_F(ContentIdentityCredentialDelegateTest,
        GetSuggestionsForDelegatedCredentialAvailableForSignUp) {
-  MockFederatedAuthAutofillSource mock;
+  MockAutofillSource mock;
 
   ContentIdentityCredentialDelegate delegate(
       base::BindLambdaForTesting([&mock]() {
-        content::FederatedAuthAutofillSource* result = &mock;
+        content::webid::AutofillSource* result = &mock;
         return result;
       }));
 
@@ -306,8 +338,9 @@ TEST_F(ContentIdentityCredentialDelegateTest,
 
   EXPECT_CALL(mock, GetAutofillSuggestions).WillOnce(Return(accounts));
 
-  std::vector<Suggestion> suggestions =
-      delegate.GetVerifiedAutofillSuggestions(PASSWORD);
+  test_api(form()).SetFieldTypes({PASSWORD});
+  std::vector<Suggestion> suggestions = delegate.GetVerifiedAutofillSuggestions(
+      form().ToFormData(), &form(), field(), &field(), client());
   ASSERT_EQ(1ul, suggestions.size());
 
   Suggestion suggestion = suggestions[0];
@@ -327,11 +360,11 @@ TEST_F(ContentIdentityCredentialDelegateTest,
 
 TEST_F(ContentIdentityCredentialDelegateTest,
        GetSuggestionsForPasswordUnavailableForSignUp) {
-  MockFederatedAuthAutofillSource mock;
+  MockAutofillSource mock;
 
   ContentIdentityCredentialDelegate delegate(
       base::BindLambdaForTesting([&mock]() {
-        content::FederatedAuthAutofillSource* result = &mock;
+        content::webid::AutofillSource* result = &mock;
         return result;
       }));
 
@@ -342,18 +375,19 @@ TEST_F(ContentIdentityCredentialDelegateTest,
 
   EXPECT_CALL(mock, GetAutofillSuggestions).WillOnce(Return(accounts));
 
-  std::vector<Suggestion> suggestions =
-      delegate.GetVerifiedAutofillSuggestions(PASSWORD);
+  test_api(form()).SetFieldTypes({PASSWORD});
+  std::vector<Suggestion> suggestions = delegate.GetVerifiedAutofillSuggestions(
+      form().ToFormData(), &form(), field(), &field(), client());
   EXPECT_TRUE(suggestions.empty());
 }
 
 TEST_F(ContentIdentityCredentialDelegateTest,
        GetSuggestionsForPasswordAvailableForSignIn) {
-  MockFederatedAuthAutofillSource mock;
+  MockAutofillSource mock;
 
   ContentIdentityCredentialDelegate delegate(
       base::BindLambdaForTesting([&mock]() {
-        content::FederatedAuthAutofillSource* result = &mock;
+        content::webid::AutofillSource* result = &mock;
         return result;
       }));
 
@@ -364,8 +398,9 @@ TEST_F(ContentIdentityCredentialDelegateTest,
 
   EXPECT_CALL(mock, GetAutofillSuggestions).WillOnce(Return(accounts));
 
-  std::vector<Suggestion> suggestions =
-      delegate.GetVerifiedAutofillSuggestions(PASSWORD);
+  test_api(form()).SetFieldTypes({PASSWORD});
+  std::vector<Suggestion> suggestions = delegate.GetVerifiedAutofillSuggestions(
+      form().ToFormData(), &form(), field(), &field(), client());
   ASSERT_EQ(1ul, suggestions.size());
 
   Suggestion suggestion = suggestions[0];
@@ -384,11 +419,11 @@ TEST_F(ContentIdentityCredentialDelegateTest,
 }
 
 TEST_F(ContentIdentityCredentialDelegateTest, GetProvidedNameRequest) {
-  MockFederatedAuthAutofillSource mock;
+  MockAutofillSource mock;
 
   ContentIdentityCredentialDelegate delegate(
       base::BindLambdaForTesting([&mock]() {
-        content::FederatedAuthAutofillSource* result = &mock;
+        content::webid::AutofillSource* result = &mock;
         return result;
       }));
 
@@ -402,8 +437,9 @@ TEST_F(ContentIdentityCredentialDelegateTest, GetProvidedNameRequest) {
 
   EXPECT_CALL(mock, GetAutofillSuggestions).WillOnce(Return(accounts));
 
-  std::vector<Suggestion> suggestions =
-      delegate.GetVerifiedAutofillSuggestions(NAME_FULL);
+  test_api(form()).SetFieldTypes({NAME_FULL});
+  std::vector<Suggestion> suggestions = delegate.GetVerifiedAutofillSuggestions(
+      form().ToFormData(), &form(), field(), &field(), client());
   ASSERT_EQ(1ul, suggestions.size());
 
   Suggestion suggestion = suggestions[0];

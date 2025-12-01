@@ -102,7 +102,6 @@ namespace autofill {
 
 namespace {
 
-using form_util::ExtractOption;
 using form_util::GetFieldRendererId;
 using form_util::GetFormByRendererId;
 using form_util::GetFormControlByRendererId;
@@ -1000,15 +999,18 @@ void PasswordAutofillAgent::PreviewField(FieldRendererId field_id,
 void PasswordAutofillAgent::FillField(
     FieldRendererId field_id,
     const std::u16string& value,
-    AutofillSuggestionTriggerSource suggestion_source) {
+    FieldPropertiesMask field_properties,
+    base::OnceCallback<void(bool)> success_callback) {
   WebFormControlElement form_control =
       form_util::GetFormControlByRendererId(field_id);
   WebInputElement input_element = form_control.DynamicTo<WebInputElement>();
   if (!input_element || input_element.IsReadOnly()) {
+    std::move(success_callback).Run(false);
     // Early return for non-input fields such as textarea.
     return;
   }
-  DoFillField(input_element, value, GetFieldFlags(suggestion_source));
+  DoFillField(input_element, value, field_properties);
+  std::move(success_callback).Run(true);
 }
 
 void PasswordAutofillAgent::FillChangePasswordForm(
@@ -1108,33 +1110,19 @@ void PasswordAutofillAgent::DoPreviewField(WebInputElement input,
 
 void PasswordAutofillAgent::DoFillField(WebInputElement input,
                                         const std::u16string& credential,
-                                        FieldPropertiesFlags flag) {
+                                        FieldPropertiesMask field_properties) {
   CHECK(input);
   input.SetAutofillValue(WebString::FromUTF16(credential));
   field_data_manager().UpdateFieldDataMap(form_util::GetFieldRendererId(input),
-                                          credential, flag);
+                                          credential, field_properties);
 
-  switch (flag) {
-    case kAutofilledOnUserTrigger:
-    case kAutofilledPasswordFormFilledViaManualFallback:
-      // Notify password manager when the user is modifying field values by
-      // manually filling the form.
-      NotifyPasswordManagerAboutUserFieldModification(
-          input, FieldModificationType::kFillingOnUserTrigger);
-      break;
-    case kAutofilledOnPageLoad:
-    case kAutofilledChangePasswordFormOnPageLoad:
-      // Autofilling on pageload is not initiated by the user.
-      break;
-    case kNoFlags:
-    case kUserTyped:
-    case kHadFocus:
-    case kErrorOccurred:
-    case kKnownValue:
-    case kAutofilled:
-      NOTREACHED();
+  if ((field_properties & kAutofilledOnUserTrigger) ||
+      (field_properties & kAutofilledPasswordFormFilledViaManualFallback)) {
+    // Notify password manager when the user is modifying field values by
+    // manually filling the form.
+    NotifyPasswordManagerAboutUserFieldModification(
+        input, FieldModificationType::kFillingOnUserTrigger);
   }
-
   TrackAutofilledElement(input);
 }
 
@@ -1232,8 +1220,7 @@ PasswordAutofillAgent::CreateSuggestionRequest(
           user_input, field_data_manager(),
           autofill_agent_->GetCallTimerState(
               CallTimerState::CallSite::kShowSuggestionPopup),
-          autofill_agent_->button_titles_cache(),
-          /*extract_options=*/{}, form_cache);
+          autofill_agent_->button_titles_cache(), form_cache);
   if (!form_and_field) {
     return std::nullopt;
   }
@@ -2146,7 +2133,7 @@ void PasswordAutofillAgent::FireHostSubmitEvent(
   NOTREACHED();
 }
 
-void PasswordAutofillAgent::OnFormSubmitted(FormData submitted_form) {
+void PasswordAutofillAgent::OnFormSubmitted(const FormData& submitted_form) {
   WebFormElement form_element =
       GetFormByRendererId(submitted_form.renderer_id());
   std::unique_ptr<RendererSavePasswordProgressLogger> logger;
@@ -2162,24 +2149,22 @@ void PasswordAutofillAgent::OnFormSubmitted(FormData submitted_form) {
     return;
   }
 
-  // TODO(crbug.com/40947729): Replace with `GetFormDataFromWebForm` with
-  // `SynchronousFormCache` when `AutofillOptimizeFormExtraction` launches.
-  ProcessFormDataAfterCreation(submitted_form, form_element,
-                               &username_detector_cache_);
+  std::optional<FormData> processed_submitted_form = GetFormDataFromWebForm(
+      form_element, SynchronousFormCache(submitted_form));
 
-  if (!HasTextInputs(submitted_form)) {
+  if (!processed_submitted_form || !HasTextInputs(*processed_submitted_form)) {
     return;
   }
 
-  submitted_form.set_submission_event(
+  processed_submitted_form->set_submission_event(
       SubmissionIndicatorEvent::HTML_FORM_SUBMISSION);
 
-  submitted_form.set_fields(FillNonTypedOrFilledPropertiesMasks(
-      submitted_form.ExtractFields(), field_data_manager()));
+  processed_submitted_form->set_fields(FillNonTypedOrFilledPropertiesMasks(
+      processed_submitted_form->ExtractFields(), field_data_manager()));
 
   base::UmaHistogramEnumeration(kSubmissionSourceHistogram,
                                 mojom::SubmissionSource::FORM_SUBMISSION);
-  GetPasswordManagerDriver().PasswordFormSubmitted(submitted_form);
+  GetPasswordManagerDriver().PasswordFormSubmitted(*processed_submitted_form);
 }
 
 void PasswordAutofillAgent::HidePopup() {

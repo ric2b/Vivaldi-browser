@@ -89,6 +89,9 @@ IOSOverflowMenuAction HistogramActionFromActionType(
       return IOSOverflowMenuAction::kReaderMode;
     case overflow_menu::ActionType::AskBWG:
       return IOSOverflowMenuAction::kAskBWG;
+    case overflow_menu::ActionType::HideToolbars:
+      return IOSOverflowMenuAction::kHideToolbars;
+
 
       // Vivaldi
     default:

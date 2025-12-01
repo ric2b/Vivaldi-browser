@@ -968,6 +968,10 @@ void ViewAccessibility::OnTooltipTextChanged(
 }
 
 void ViewAccessibility::OnViewAddedToWidget() {
+  if (ViewAccessibility* parent = GetUnignoredParent()) {
+    AXUpdateNotifier::Get()->NotifyChildAdded(this, parent);
+  }
+
   // The accessibility class name is set after the view has been attached
   // to a widget, ensuring the object is fully constructed and its class
   // name is stable.
@@ -989,6 +993,12 @@ void ViewAccessibility::OnViewAddedToWidget() {
 #endif  // BUILDFLAG(IS_WIN)
 
   SetClassName(effective_class);
+}
+
+void ViewAccessibility::OnViewRemovedFromWidget() {
+  if (ViewAccessibility* parent = GetUnignoredParent()) {
+    AXUpdateNotifier::Get()->NotifyChildRemoved(this, parent);
+  }
 }
 
 void ViewAccessibility::SetPlaceholder(const std::string& placeholder) {
@@ -1395,7 +1405,7 @@ void ViewAccessibility::SetChildTreeID(ui::AXTreeID tree_id) {
     data_.AddChildTreeId(tree_id);
 
     const views::Widget* widget = view_->GetWidget();
-    if (widget && widget->GetNativeView() && display::Screen::GetScreen()) {
+    if (widget && widget->GetNativeView() && display::Screen::Get()) {
       // TODO(accessibility): There potentially could be an issue where the
       // device scale factor changes from the time the tree ID is set to the
       // time `GetAccessibleNodeData` is queried. If this ever pops up, a
@@ -1404,7 +1414,7 @@ void ViewAccessibility::SetChildTreeID(ui::AXTreeID tree_id) {
       // display changes, we can update the scale factor in the cache, probably
       // by implementing `OnDisplayMetricsChanged`.
       const float scale_factor =
-          display::Screen::GetScreen()
+          display::Screen::Get()
               ->GetDisplayNearestView(widget->GetNativeView())
               .device_scale_factor();
       SetChildTreeScaleFactor(scale_factor);

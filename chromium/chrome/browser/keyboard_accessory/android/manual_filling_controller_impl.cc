@@ -31,7 +31,7 @@
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/plus_addresses/plus_address_service_factory.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
-#include "components/plus_addresses/features.h"
+#include "components/plus_addresses/core/common/features.h"
 #include "content/public/browser/web_contents.h"
 
 #include "app/vivaldi_apptools.h" // Vivaldi
@@ -485,6 +485,7 @@ AccessoryController* ManualFillingControllerImpl::GetControllerForAction(
     case AccessoryAction::MANAGE_LOYALTY_CARDS:
       return payment_method_controller_.get();
     case AccessoryAction::AUTOFILL_SUGGESTION:
+    case AccessoryAction::DISMISS:
     case AccessoryAction::AUTOFILL_SUGGESTION_FROM_ACCESSORY_SHEET:
     case AccessoryAction::COUNT:
       NOTREACHED() << "Controller not defined for action: "

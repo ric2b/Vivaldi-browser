@@ -78,6 +78,7 @@ class PLATFORM_EXPORT Color {
     kRec2020,
     kXYZD50,
     kXYZD65,
+
     // Serializes to lab(). The value of `param0_` is lightness and is
     // guaranteed to be non-negative. The value of `param1_` and `param2_` are
     // the a-axis and b-axis values and are unbounded.
@@ -93,29 +94,27 @@ class PLATFORM_EXPORT Color {
     kOklch,
     // Serializes to rgb() or rgba().
     // The values of `params0_`, `params1_`, and `params2_` are red, green, and
-    // blue sRGB values, and are guaranteed to be present and in the [0, 1]
+    // blue sRGB values, and are guaranteed to be present and in the [0, 255]
     // interval.
     kSRGBLegacy,
     // Serializes to rgb() or rgba() for non-relative colors and to hsl() for
     // unresolved relative colors.
     // The values of `params0_`, `params1_`, and `params2_` are Hue, Saturation,
-    // and Ligthness. These can be none. Hue is a namber in the range from 0.0
-    // to 6.0, and the rest are in the rance from 0.0 to 1.0.
-    // interval.
+    // and Lightness. These can be none. Hue is in the [0, 6] interval, and the
+    // rest are in the [0, 1] interval.
     kHSL,
     // Serializes to rgb() or rgba() for non-relative colors and to hwb() for
     // unresolved relative colors.
     // The values of `params0_`, `params1_`, and `params2_` are Hue, White,
-    // and Black. These can be none. Hue is a namber in the range from 0.0
-    // to 6.0, and the rest are in the rance from 0.0 to 1.0.
-    // interval.
+    // and Black. These can be none. Hue is in the [0, 6] interval, and the rest
+    // are in the [0, 1] interval.
     kHWB,
     // An uninitialized color.
     kNone,
   };
 
   // For testing purposes and for serializer.
-  static WTF::String ColorSpaceToString(Color::ColorSpace color_space);
+  static String ColorSpaceToString(Color::ColorSpace color_space);
 
   // https://www.w3.org/TR/css-color-4/#predefined
   static bool IsPredefinedColorSpace(ColorSpace color_space) {
@@ -276,28 +275,28 @@ class PLATFORM_EXPORT Color {
   // them.
   static bool IsBakedGamutMappingEnabled();
 
-  WTF::String SerializeInternal() const;
+  String SerializeInternal() const;
   // Returns the color serialized according to HTML5:
   // http://www.whatwg.org/specs/web-apps/current-work/#serialization-of-a-color
-  WTF::String SerializeAsCSSColor() const;
+  String SerializeAsCSSColor() const;
   // Canvas colors are serialized somewhat differently:
   // https://html.spec.whatwg.org/multipage/canvas.html#serialisation-of-a-color
-  WTF::String SerializeAsCanvasColor() const;
+  String SerializeAsCanvasColor() const;
   // For appending color interpolation spaces and hue interpolation methods to
   // the serialization of gradients and color-mix functions.
-  static WTF::String SerializeInterpolationSpace(
+  static String SerializeInterpolationSpace(
       Color::ColorSpace color_space,
       Color::HueInterpolationMethod hue_interpolation_method =
           Color::HueInterpolationMethod::kShorter);
 
   // Returns the color serialized as either #RRGGBB or #RRGGBBAA. The latter
   // format is not a valid CSS color, and should only be seen in DRT dumps.
-  WTF::String NameForLayoutTreeAsText() const;
+  String NameForLayoutTreeAsText() const;
 
   // Returns whether parsing succeeded. The resulting Color is arbitrary
   // if parsing fails.
-  bool SetFromString(const WTF::String&);
-  bool SetNamedColor(const WTF::String&);
+  bool SetFromString(const String&);
+  bool SetNamedColor(const String&);
 
   bool IsFullyTransparent() const { return Alpha() <= 0.0f; }
   bool IsOpaque() const { return Alpha() >= 1.0f; }
@@ -373,7 +372,6 @@ class PLATFORM_EXPORT Color {
            param1_ == other.param1_ && param2_ == other.param2_ &&
            alpha_ == other.alpha_;
   }
-  inline bool operator!=(const Color& other) const { return !(*this == other); }
 
   unsigned GetHash() const;
 
@@ -406,7 +404,7 @@ class PLATFORM_EXPORT Color {
   FRIEND_TEST_ALL_PREFIXES(BlinkColor, SubstituteMissingParameters);
 
  private:
-  WTF::String SerializeLegacyColorAsCSSColor() const;
+  String SerializeLegacyColorAsCSSColor() const;
   constexpr explicit Color(RGBA32 color)
       : param0_is_none_(0),
         param1_is_none_(0),

@@ -159,7 +159,7 @@ struct PushAllHelper<> {
   static void PushReverse(MaglevAssembler* masm) {}
 };
 
-inline void PushInput(MaglevAssembler* masm, const Input& input) {
+inline void PushInput(MaglevAssembler* masm, ConstInput input) {
   if (input.operand().IsConstant()) {
     input.node()->LoadToRegister(masm, kScratchRegister);
     masm->Push(kScratchRegister);
@@ -178,11 +178,10 @@ inline void PushInput(MaglevAssembler* masm, const Input& input) {
   }
 }
 
-template <typename T, typename... Args>
-inline void PushIterator(MaglevAssembler* masm, base::iterator_range<T> range,
-                         Args... args) {
-  for (auto iter = range.begin(), end = range.end(); iter != end; ++iter) {
-    masm->Push(*iter);
+template <std::ranges::range Range, typename... Args>
+inline void PushIterator(MaglevAssembler* masm, Range range, Args... args) {
+  for (const auto& value : range) {
+    masm->Push(value);
   }
   PushAllHelper<Args...>::Push(masm, args...);
 }
@@ -198,12 +197,11 @@ inline void PushIteratorReverse(MaglevAssembler* masm,
 
 template <typename... Args>
 struct PushAllHelper<Input, Args...> {
-  static void Push(MaglevAssembler* masm, const Input& arg, Args... args) {
+  static void Push(MaglevAssembler* masm, Input arg, Args... args) {
     PushInput(masm, arg);
     PushAllHelper<Args...>::Push(masm, args...);
   }
-  static void PushReverse(MaglevAssembler* masm, const Input& arg,
-                          Args... args) {
+  static void PushReverse(MaglevAssembler* masm, Input arg, Args... args) {
     PushAllHelper<Args...>::PushReverse(masm, args...);
     PushInput(masm, arg);
   }
@@ -211,7 +209,7 @@ struct PushAllHelper<Input, Args...> {
 template <typename Arg, typename... Args>
 struct PushAllHelper<Arg, Args...> {
   static void Push(MaglevAssembler* masm, Arg arg, Args... args) {
-    if constexpr (is_iterator_range<Arg>::value) {
+    if constexpr (is_iterator_range<Arg>::value || std::ranges::range<Arg>) {
       PushIterator(masm, arg, args...);
     } else {
       masm->MacroAssembler::Push(arg);
@@ -221,6 +219,9 @@ struct PushAllHelper<Arg, Args...> {
   static void PushReverse(MaglevAssembler* masm, Arg arg, Args... args) {
     if constexpr (is_iterator_range<Arg>::value) {
       PushIteratorReverse(masm, arg, args...);
+    } else if constexpr (std::ranges::range<Arg>) {
+      PushIteratorReverse(
+          masm, base::make_iterator_range(arg.begin(), arg.end()), args...);
     } else {
       PushAllHelper<Args...>::PushReverse(masm, args...);
       masm->Push(arg);
@@ -249,19 +250,15 @@ inline void MaglevAssembler::BindBlock(BasicBlock* block) {
 }
 
 inline Condition MaglevAssembler::TrySmiTagInt32(Register dst, Register src) {
+  CHECK(!SmiValuesAre32Bits());
   Move(dst, src);
-  if (SmiValuesAre31Bits()) {
-    addl(dst, dst);
-  } else {
-    SmiTag(dst);
-  }
+  addl(dst, dst);
   return kNoOverflow;
 }
 
 inline void MaglevAssembler::CheckInt32IsSmi(Register obj, Label* fail,
                                              Register scratch) {
-  DCHECK(!SmiValuesAre32Bits());
-
+  CHECK(!SmiValuesAre32Bits());
   if (scratch == Register::no_reg()) {
     scratch = kScratchRegister;
   }
@@ -311,10 +308,10 @@ inline void MaglevAssembler::MoveHeapNumber(Register dst, double value) {
 inline Condition MaglevAssembler::IsRootConstant(Input input,
                                                  RootIndex root_index) {
   if (input.operand().IsRegister()) {
-    CompareRoot(ToRegister(input), root_index);
+    CompareRoot(ToRegister(input.operand()), root_index);
   } else {
     DCHECK(input.operand().IsStackSlot());
-    CompareRoot(ToMemOperand(input), root_index);
+    CompareRoot(ToMemOperand(input.operand()), root_index);
   }
   return equal;
 }
@@ -329,10 +326,6 @@ inline MemOperand MaglevAssembler::GetStackSlot(
 inline MemOperand MaglevAssembler::ToMemOperand(
     const compiler::InstructionOperand& operand) {
   return GetStackSlot(compiler::AllocatedOperand::cast(operand));
-}
-
-inline MemOperand MaglevAssembler::ToMemOperand(const ValueLocation& location) {
-  return ToMemOperand(location.operand());
 }
 
 inline void MaglevAssembler::BuildTypedArrayDataPointer(Register data_pointer,
@@ -964,30 +957,23 @@ inline void MaglevAssembler::EmitEagerDeoptStress(Label* target) {
     return;
   }
 
-  ExternalReference counter = ExternalReference::stress_deopt_count(isolate());
-  // The following code assumes that `Isolate::stress_deopt_count_` is 8 bytes
-  // wide.
-  static constexpr size_t kSizeofRAX = 8;
-  static_assert(sizeof(decltype(*isolate()->stress_deopt_count_address())) ==
-                kSizeofRAX);
+  ExternalReference counter =
+      ExternalReference::Create(IsolateFieldId::kStressDeoptCount);
 
   Label fallthrough;
+  // pushfq / popfq to avoid modifying flags.
   pushfq();
-  pushq(rax);
-  load_rax(counter);
-  decl(rax);
+  decl(ExternalReferenceAsOperand(counter));
   JumpIf(not_zero, &fallthrough, Label::kNear);
 
-  RecordComment("-- deopt_every_n_times hit, jump to eager deopt");
-  Move(rax, v8_flags.deopt_every_n_times);
-  store_rax(counter);
-  popq(rax);
+  RecordComment("--deopt-every-n-times hit, jump to eager deopt");
+  // mov and jmp do not modify flags.
   popfq();
+  movl(ExternalReferenceAsOperand(counter),
+       Immediate(v8_flags.deopt_every_n_times.value()));
   JumpToDeopt(target);
 
   bind(&fallthrough);
-  store_rax(counter);
-  popq(rax);
   popfq();
 }
 
@@ -1039,7 +1025,7 @@ void MaglevAssembler::Float64SilenceNan(DoubleRegister value) {
   Subsd(value, kScratchDoubleReg);
 }
 
-#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#ifdef V8_ENABLE_UNDEFINED_DOUBLE
 void MaglevAssembler::JumpIfUndefinedNan(DoubleRegister value, Register scratch,
                                          Label* target,
                                          Label::Distance distance) {
@@ -1071,7 +1057,7 @@ void MaglevAssembler::JumpIfNotUndefinedNan(DoubleRegister value,
   CompareInt32AndJumpIf(scratch, kUndefinedNanUpper32, kNotEqual, target,
                         distance);
 }
-#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+#endif  // V8_ENABLE_UNDEFINED_DOUBLE
 
 void MaglevAssembler::JumpIfHoleNan(DoubleRegister value, Register scratch,
                                     Label* target, Label::Distance distance) {

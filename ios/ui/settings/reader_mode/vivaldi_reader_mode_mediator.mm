@@ -191,9 +191,12 @@
   }
 
   if (enabled) {
-    controller->ApplyReaderMode();
-
-    // Apply saved settings after enabling reader mode
+    if (!controller->IsReaderModeEnabled()) {
+      controller->ApplyReaderMode();
+    }
+    // Mediator opens only after reader view is enable
+    // So we don't need to enable/apply again
+    // Apply saved settings (eg. font, theme etc.) after enabling reader mode
     [self applyReaderModeSettings];
   } else {
     controller->DisableReaderMode();

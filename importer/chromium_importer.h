@@ -12,12 +12,14 @@
 #include "chrome/utility/importer/importer.h"
 #include "components/password_manager/core/browser/password_form.h"
 
+#include "importer/viv_import_result.h"
+
 class ImportedNoteEntry;
 
 class ChromiumImporter : public Importer {
  public:
   ChromiumImporter();
-  void ImportPasswords(user_data_importer::ImporterType importer_type);
+  ImportResult ImportPasswords(user_data_importer::ImporterType importer_type);
 
   // Importer
   void StartImport(const user_data_importer::SourceProfile& source_profile,
@@ -32,16 +34,19 @@ class ChromiumImporter : public Importer {
  private:
   base::FilePath profile_dir_;
   base::FilePath::StringType bookmarkfilename_;
-  void ImportBookMarks();
-  void ImportHistory();
-  void ImportExtensions();
-  void ImportTabs(user_data_importer::ImporterType importer_type);
+  ImportResult ImportBookMarks();
+  ImportResult ImportHistory();
+  ImportResult ImportExtensions();
+  ImportResult ImportTabs(user_data_importer::ImporterType importer_type);
 
-  bool ReadAndParseSignons(const base::FilePath& sqlite_file,
+  /// Tries to decrypt and set sign-ons (pwds), if even one fails decrypting, we report failure (but set what we can)
+  ImportResult ReadAndParseSignons(
+      const base::FilePath& sqlite_file,
       std::vector<user_data_importer::ImportedPasswordForm>* forms,
-      user_data_importer::ImporterType importer_type);
+      user_data_importer::ImporterType importer_type,
+      bool* failed_decrypt);
 
-  bool ReadAndParseHistory(const base::FilePath& sqlite_file,
+  ImportResult ReadAndParseHistory(const base::FilePath& sqlite_file,
       std::vector<user_data_importer::ImporterURLRow>* forms);
 };
 

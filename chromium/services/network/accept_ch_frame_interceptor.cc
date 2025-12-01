@@ -14,6 +14,7 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-shared.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 
 namespace network {
 
@@ -115,18 +116,16 @@ net::Error AcceptCHFrameInterceptor::OnConnected(
   // started. Otherwise, the callback to continue the network transaction will
   // be called and the URLLoader will continue as normal.
   auto record = [](net::CompletionOnceCallback callback,
-                   base::TimeTicks call_time, uint64_t trace_id, int status) {
+                   base::TimeTicks call_time, perfetto::Track track,
+                   int status) {
     base::UmaHistogramMicrosecondsTimes("Net.URLLoader.AcceptCH.RoundTripTime",
                                         base::TimeTicks::Now() - call_time);
     base::UmaHistogramSparse("Net.URLLoader.AcceptCH.Status", -status);
-    TRACE_EVENT_NESTABLE_ASYNC_END1(
-        "loading", "AcceptCHObserver::OnAcceptCHFrameReceived call",
-        TRACE_ID_LOCAL(trace_id), "status", status);
+    TRACE_EVENT_END("loading", track, "status", status);
     std::move(callback).Run(status);
   };
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
-      "loading", "AcceptCHObserver::OnAcceptCHFrameReceived call",
-      TRACE_ID_LOCAL(this), "url", url);
+  TRACE_EVENT_BEGIN("loading", "AcceptCHObserver::OnAcceptCHFrameReceived call",
+                    perfetto::Track::FromPointer(this), "url", url);
 
   // Explanation of callback lifetime safety:
   // The `callback` originates from a net/ layer object (e.g.,
@@ -137,7 +136,7 @@ net::Error AcceptCHFrameInterceptor::OnConnected(
   accept_ch_frame_observer_->OnAcceptCHFrameReceived(
       url::Origin::Create(url), hints,
       base::BindOnce(record, std::move(callback), base::TimeTicks::Now(),
-                     TRACE_ID_LOCAL(this).raw_id()));
+                     perfetto::Track::FromPointer(this)));
   return net::ERR_IO_PENDING;
 }
 
@@ -168,17 +167,30 @@ AcceptCHFrameInterceptor::NeedsObserverCheck(
   }
 
   CHECK(base::FeatureList::IsEnabled(features::kOffloadAcceptCHFrameCheck));
-  if (!std::all_of(hints.cbegin(), hints.cend(),
-                   [&](const network::mojom::WebClientHintsType& h) {
-                     const bool hint_enabled =
-                         base::Contains(enabled_client_hints_->hints, h);
-                     if (!hint_enabled) {
-                       base::UmaHistogramEnumeration(
-                           "Net.AcceptCHFrameInterceptor.MismatchClientHint",
-                           h);
-                     }
-                     return hint_enabled;
-                   })) {
+  // The Accept-CH frame can be offloaded (i.e., handled in the network
+  // service without an IPC to the browser process) if all hints in the frame
+  // are present in either the `hints` list (enabled and allowed) or the
+  // `not_allowed_hints` list (persisted but currently disallowed). If any hint
+  // is not in either list, we must fall back to the browser process to check.
+  bool needs_observer_check = false;
+  for (const auto& h : hints) {
+    const bool is_in_hints = base::Contains(enabled_client_hints_->hints, h);
+    const bool is_in_not_allowed_hints =
+        features::kAcceptCHFrameOffloadNotAllowedHints.Get() &&
+        base::Contains(enabled_client_hints_->not_allowed_hints, h);
+    const bool is_valid_for_offload = is_in_hints || is_in_not_allowed_hints;
+    if (is_in_not_allowed_hints && !is_in_hints) {
+      base::UmaHistogramEnumeration(
+          "Net.AcceptCHFrameInterceptor.OffloadSuccessForNotAllowedHint", h);
+    }
+    if (!is_valid_for_offload) {
+      needs_observer_check = true;
+      base::UmaHistogramEnumeration(
+          "Net.AcceptCHFrameInterceptor.MismatchClientHint2", h);
+    }
+  }
+
+  if (needs_observer_check) {
     return NeedsObserverCheckReason::kHintNotEnabled;
   }
 

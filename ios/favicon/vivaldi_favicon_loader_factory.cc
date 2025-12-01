@@ -54,8 +54,8 @@ VivaldiFaviconLoaderFactory::~VivaldiFaviconLoaderFactory() = default;
 
 std::unique_ptr<KeyedService>
 VivaldiFaviconLoaderFactory::BuildServiceInstanceFor(
-    web::BrowserState* context) const {
-  return BuildVivaldiFaviconLoader(context);
+    ProfileIOS* profile) const {
+  return BuildVivaldiFaviconLoader(profile);
 }
 
 }  // namespace ios

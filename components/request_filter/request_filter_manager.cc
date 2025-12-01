@@ -13,7 +13,6 @@
 #include "components/request_filter/request_filter_proxying_url_loader_factory.h"
 #include "components/request_filter/request_filter_proxying_websocket.h"
 #include "components/request_filter/request_filter_proxying_webtransport.h"
-#include "components/web_cache/browser/web_cache_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
@@ -110,19 +109,6 @@ void RequestFilterManager::AddFilter(
   }
   request_filters_.insert(filter_it, std::move(new_filter));
   ClearCacheOnNavigation();
-}
-
-void RequestFilterManager::RemoveFilter(RequestFilter* filter) {
-  request_filters_.erase(std::find_if(request_filters_.begin(),
-                                      request_filters_.end(),
-                                      [filter](const auto& request_filter) {
-                                        return request_filter.get() == filter;
-                                      }));
-  ClearCacheOnNavigation();
-}
-
-void RequestFilterManager::ClearCacheOnNavigation() {
-  web_cache::WebCacheManager::GetInstance()->ClearCacheOnNavigation();
 }
 
 bool RequestFilterManager::ProxyURLLoaderFactory(
@@ -798,6 +784,10 @@ void RequestFilterManager::RequestHandler::OnRequestWillBeDestroyed(
     const FilteredRequestInfo* request) {
   pending_requests_.erase(request->id);
   signaled_requests_.erase(request->id);
+
+  for (const auto& filter : filter_manager_->request_filters_) {
+    filter->OnRequestWillBeDestroyed(browser_context, request);
+  }
 }
 
 bool RequestFilterManager::RequestHandler::GetAndSetSignaled(

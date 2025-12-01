@@ -647,6 +647,11 @@ class QUICHE_EXPORT BalsaHeaders : public HeaderApi {
   // Removes all headers starting with 'key' [case insensitive]
   void RemoveAllHeadersWithPrefix(absl::string_view prefix) override;
 
+  // Removes all headers that satisfy the predicate.
+  void RemoveHeadersIf(
+      std::function<bool(const absl::string_view, const absl::string_view)>
+          predicate);
+
   // Returns true if we have at least one header with given prefix
   // [case insensitive]. Currently for test use only.
   bool HasHeadersWithPrefix(absl::string_view prefix) const override;
@@ -1048,7 +1053,8 @@ class QUICHE_EXPORT BalsaHeaders : public HeaderApi {
   friend bool ParseHTTPFirstLine(
       char* begin, char* end, bool is_request, BalsaHeaders* headers,
       BalsaFrameEnums::ErrorCode* error_code,
-      HttpValidationPolicy::FirstLineValidationOption whitespace_option);
+      HttpValidationPolicy::FirstLineValidationOption whitespace_option,
+      HttpValidationPolicy::FirstLineValidationOption multiple_spaces_option);
 
   // Reverse iterators have been removed for lack of use, refer to
   // cl/30618773 in case they are needed.

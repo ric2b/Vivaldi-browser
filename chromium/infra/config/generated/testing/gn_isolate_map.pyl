@@ -760,11 +760,6 @@
     "type": "additional_compile_target",
     "skip_usage_check": True,
   },
-  "cronet_perf_test_apk": {
-    "label": "//components/cronet/android:cronet_perf_test_apk",
-    "type": "additional_compile_target",
-    "skip_usage_check": True,
-  },
   "cronet_sample_test_apk": {
     "label": "//components/cronet/android:cronet_sample_test_apk",
     "type": "console_test_launcher",
@@ -1235,10 +1230,6 @@
     "label": "//third_party/leveldatabase:leveldb_unittests",
     "type": "console_test_launcher",
   },
-  "libcups_unittests": {
-    "label": "//chrome/services/cups_proxy:libcups_unittests",
-    "type": "console_test_launcher",
-  },
   "libjingle_xmpp_unittests": {
     "label": "//third_party/libjingle_xmpp:libjingle_xmpp_unittests",
     "type": "console_test_launcher",
@@ -1448,6 +1439,13 @@
     "label": "//components/optimization_guide/internal:ondevice_model_benchmark",
     "type": "additional_compile_target",
   },
+  "ondevice_model_benchmark_tests": {
+    "label": "//components/optimization_guide/internal/testing:ondevice_model_benchmark_tests",
+    "type": "generated_script",
+    "args": [
+      "--benchmark_binary_dir=./",
+    ],
+  },
   "ondevice_stability_tests": {
     "label": "//components/optimization_guide/internal/testing:ondevice_stability_tests",
     "type": "generated_script",
@@ -1455,6 +1453,11 @@
   "ondevice_stability_tests_light": {
     "label": "//components/optimization_guide/internal/testing:ondevice_stability_tests_light",
     "type": "generated_script",
+  },
+  "one_time_tokens_junit_tests": {
+    "label": "//components/one_time_tokens/android/backend/sms:one_time_tokens_junit_tests",
+    "type": "generated_script",
+    "skip_usage_check": True,
   },
   "openscreen_unittests": {
     "label": "//chrome/browser/media/router:openscreen_unittests",

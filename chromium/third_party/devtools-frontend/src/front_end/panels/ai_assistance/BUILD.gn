@@ -1,4 +1,4 @@
-# Copyright 2024 The Chromium Authors. All rights reserved.
+# Copyright 2024 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -26,6 +26,7 @@ devtools_module("ai_assistance") {
     "components/ChatView.ts",
     "components/ExploreWidget.ts",
     "components/MarkdownRendererWithCodeBlock.ts",
+    "components/PerformanceAgentMarkdownRenderer.ts",
     "components/UserActionRow.ts",
   ]
 
@@ -36,11 +37,13 @@ devtools_module("ai_assistance") {
     "../../core/i18n:bundle",
     "../../core/root:bundle",
     "../../models/ai_assistance:bundle",
+    "../../models/geometry:bundle",
     "../../models/persistence:bundle",
     "../../models/workspace:bundle",
     "../../models/workspace_diff:bundle",
     "../../panels/changes:bundle",
     "../../panels/common:bundle",
+    "../../panels/network:bundle",
     "../../panels/network/forward:bundle",
     "../../panels/timeline:bundle",
     "../../panels/timeline/utils:bundle",

@@ -91,7 +91,7 @@ FormFieldDataAndroidBridgeImpl::GetOrCreateJavaPeer(
                 env, FieldTypeToStringView(field_types.heuristic_type)),
       ConvertUTF8ToJavaString(env,
                               FieldTypeToStringView(field_types.server_type)),
-      ConvertUTF8ToJavaString(env, field_types.computed_type),
+      ConvertUTF8ToJavaString(env, field_types.overall_type),
       ToJavaArrayOfPredictionStrings(env, field_types.server_predictions),
       field.bounds().x(), field.bounds().y(), field.bounds().right(),
       field.bounds().bottom(),
@@ -99,7 +99,8 @@ FormFieldDataAndroidBridgeImpl::GetOrCreateJavaPeer(
       ProjectOptions(field.datalist_options(), &SelectOption::value),
       /*datalistLabels=*/
       ProjectOptions(field.datalist_options(), &SelectOption::text),
-      /*visible=*/field.IsFocusable(), field.is_autofilled());
+      field.IsFocusable(), field.is_visible(), field.is_autofilled(),
+      ConvertUTF8ToJavaString(env, field.origin().Serialize()));
   java_ref_ = JavaObjectWeakGlobalRef(env, obj);
   return obj;
 }
@@ -137,7 +138,7 @@ void FormFieldDataAndroidBridgeImpl::UpdateFieldTypes(
       env, obj,
       ConvertUTF8ToJavaString(env,
                               FieldTypeToStringView(field_types.server_type)),
-      ConvertUTF8ToJavaString(env, field_types.computed_type),
+      ConvertUTF8ToJavaString(env, field_types.overall_type),
       ToJavaArrayOfPredictionStrings(env, field_types.server_predictions));
 }
 
@@ -152,14 +153,14 @@ void FormFieldDataAndroidBridgeImpl::UpdateValue(std::u16string_view value) {
                                  ConvertUTF16ToJavaString(env, value));
 }
 
-void FormFieldDataAndroidBridgeImpl::UpdateVisible(bool visible) {
+void FormFieldDataAndroidBridgeImpl::UpdateFocusable(bool visible) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null()) {
     return;
   }
 
-  Java_FormFieldData_updateVisible(env, obj, visible);
+  Java_FormFieldData_updateFocusable(env, obj, visible);
 }
 
 }  // namespace autofill

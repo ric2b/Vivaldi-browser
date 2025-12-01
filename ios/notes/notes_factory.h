@@ -28,11 +28,9 @@ class NotesModelFactory : public ProfileKeyedServiceFactoryIOS {
   NotesModelFactory(const NotesModelFactory&) = delete;
   NotesModelFactory& operator=(const NotesModelFactory&) = delete;
 
-  // BrowserStateKeyedServiceFactory implementation.
-  void RegisterBrowserStatePrefs(
-      user_prefs::PrefRegistrySyncable* registry) override;
+  // ProfileKeyedServiceFactoryIOS implementation.
   std::unique_ptr<KeyedService> BuildServiceInstanceFor(
-      web::BrowserState* context) const override;
+      ProfileIOS* profile) const override;
 };
 
 }  // namespace vivaldi

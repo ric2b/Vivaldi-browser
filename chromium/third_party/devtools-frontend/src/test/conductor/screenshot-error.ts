@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,16 +72,27 @@ export class ScreenshotError extends Error {
    * Creates a ScreenshotError when an unexpected error occurs. Screenshots are
    * taken for both the inspected page and the DevTools page.
    */
-  static fromBase64Images(error: Error, inspectedPageScreenshot?: string, devToolsPageScreenshot?: string) {
+  static fromBase64Images(
+      error: Error, inspectedPageScreenshot?: string, devToolsPageScreenshot?: string,
+      collectedScreenshots?: Record<string, string>): Error {
     if (!inspectedPageScreenshot || !devToolsPageScreenshot) {
       console.error('No artifacts to save.');
       return error;
     }
-    const screenshots = {
+    const screenshots: ArtifactGroup = {
       inspectedPage: {filePath: this.saveArtifact(inspectedPageScreenshot)},
       devToolsPage: {filePath: this.saveArtifact(devToolsPageScreenshot)},
+      ...ScreenshotError.saveArtifacts(collectedScreenshots)
     };
     return new ScreenshotError(screenshots, undefined, error);
+  }
+
+  static saveArtifacts(collectedScreenshots: Record<string, string>|undefined) {
+    const screenshots: ArtifactGroup = {};
+    for (const name in collectedScreenshots) {
+      screenshots[name] = {filePath: this.saveArtifact(collectedScreenshots[name])};
+    }
+    return screenshots;
   }
 
   /**
@@ -128,3 +139,18 @@ export class ScreenshotError extends Error {
     return artifactPath;
   }
 }
+
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+export const ScreenshotErrorReporter = function(this: any, baseReporterDecorator: (arg0: unknown) => void) {
+  const JSON_PATH = path.join(GEN_DIR, 'test', '.generated', 'errors.js');
+
+  baseReporterDecorator(this);
+  this.onRunComplete = () => {
+    const screenshotErrors = ScreenshotError.errors.splice(0).map(
+        /* eslint-disable-next-line @typescript-eslint/naming-convention */
+        ({screenshotPath, screenshots: {expected_image, actual_image, image_diff}}) =>
+            ({screenshotPath, expected_image, actual_image, image_diff}));
+    fs.writeFileSync(JSON_PATH, `window.SCREENSHOT_ERRORS = ${JSON.stringify(screenshotErrors)}`);
+  };
+};
+ScreenshotErrorReporter.$inject = ['baseReporterDecorator'];

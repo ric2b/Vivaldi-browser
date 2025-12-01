@@ -97,23 +97,9 @@ content::WebContents* GetWebContentsFromTabStrip(
   return contents;
 }
 
-bool IsOutsideAppWindow(int screen_x, int screen_y) {
-  gfx::Point screen_point(screen_x, screen_y);
-
-  bool outside = true;
-  for (Browser* browser : *BrowserList::GetInstance()) {
-    gfx::Rect rect = browser->is_type_devtools()
-                         ? gfx::Rect()
-                         : browser->window()->GetBounds();
-    if (rect.Contains(screen_point)) {
-      outside = false;
-      break;
-    }
-  }
-  return outside;
-}
-
 Browser* FindBrowserForPersistentTabs(Browser* current_browser) {
+  if (!current_browser)
+    return nullptr;
   if (browser_shutdown::IsTryingToQuit() ||
       browser_shutdown::GetShutdownType() !=
           browser_shutdown::ShutdownType::kNotValid) {
@@ -122,6 +108,11 @@ Browser* FindBrowserForPersistentTabs(Browser* current_browser) {
   }
   for (Browser* browser : *BrowserList::GetInstance()) {
     if (browser == current_browser) {
+      continue;
+    }
+    TabStripModel* tab_strip = browser->tab_strip_model();
+    if (!tab_strip || tab_strip->empty() || tab_strip->closing_all()) {
+      // The browser window is not yet fully initialized or is about to close.
       continue;
     }
     VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
@@ -136,11 +127,6 @@ Browser* FindBrowserForPersistentTabs(Browser* current_browser) {
     }
     // Only move within the same profile.
     if (current_browser->profile() != browser->profile()) {
-      continue;
-    }
-    if (browser->tab_strip_model()->empty() ||
-        browser->tab_strip_model()->closing_all()) {
-      // The browser window is not yet fully initialized or is about to close.
       continue;
     }
     return browser;

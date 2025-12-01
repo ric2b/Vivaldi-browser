@@ -51,11 +51,15 @@ WebUIFactoryFunction GetVivaldiWebUIFactoryFunction(WebUI* web_ui,
     return &NewVivaldiWebUI<GameUI>;
 #endif
 
+#if BUILDFLAG(IS_ANDROID)
+  // Desktop is using a JS flag to enable the new privacy report UI.
   if (base::FeatureList::IsEnabled(vivaldi_features::kNewPrivacyReport)) {
     if (url.host() == vivaldi::kVivaldiPrivacyReportHost) {
       return &NewVivaldiWebUI<PrivacyReportUI>;
     }
   }
+#endif
+
   return NULL;
 }
 

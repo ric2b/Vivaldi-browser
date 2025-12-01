@@ -12,6 +12,7 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.ObserverList.RewindableIterator;
 import org.chromium.base.TerminationStatus;
 import org.chromium.base.ThreadUtils;
+import org.chromium.blink.mojom.FocusType;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.content_public.browser.GlobalRenderFrameHostId;
@@ -521,6 +522,23 @@ class WebContentsObserverProxy extends WebContentsObserver {
     }
 
     @Override
+    @CalledByNative
+    public void onFocusChangedInPage(
+            boolean isEditableNode,
+            int leftInView,
+            int topInView,
+            int rightInView,
+            int bottomInView,
+            @FocusType.EnumType int focusType) {
+        handleObserverCall();
+        for (WebContentsObserver observer : mObservers) {
+            observer.onFocusChangedInPage(
+                    isEditableNode, leftInView, topInView, rightInView, bottomInView, focusType);
+        }
+        finishObserverCall();
+    }
+
+    @Override
     public void onTopLevelNativeWindowChanged(@Nullable WindowAndroid windowAndroid) {
         handleObserverCall();
         Iterator<WebContentsObserver> observersIterator = mObservers.iterator();
@@ -537,6 +555,17 @@ class WebContentsObserverProxy extends WebContentsObserver {
         Iterator<WebContentsObserver> observersIterator = mObservers.iterator();
         for (; observersIterator.hasNext(); ) {
             observersIterator.next().mediaSessionCreated(mediaSession);
+        }
+        finishObserverCall();
+    }
+
+    @Override
+    @CalledByNative
+    public void didUpdateAudioMutingState(boolean muted) {
+        handleObserverCall();
+        Iterator<WebContentsObserver> observersIterator = mObservers.iterator();
+        for (; observersIterator.hasNext(); ) {
+            observersIterator.next().didUpdateAudioMutingState(muted);
         }
         finishObserverCall();
     }

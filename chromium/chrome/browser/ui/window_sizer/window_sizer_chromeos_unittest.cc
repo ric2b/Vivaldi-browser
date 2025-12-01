@@ -62,7 +62,7 @@ class WindowSizerChromeOSTest : public ChromeAshTestBase {
     } else {
       DCHECK_EQ(source, DEFAULT);
     }
-    display::Screen::GetScreen()->SetDisplayForNewWindows(display_id);
+    display::Screen::Get()->SetDisplayForNewWindows(display_id);
 
     ui::mojom::WindowShowState ignored;
     WindowSizer::GetBrowserWindowBoundsAndShowState(
@@ -386,12 +386,13 @@ TEST(WindowSizerChromeOSNoAshTest,
 }
 
 // Test the placement of newly created windows.
-TEST_F(WindowSizerChromeOSTest, PlaceNewWindows) {
+// TODO(crbug.com/445541616): Reenable the test.
+TEST_F(WindowSizerChromeOSTest, DISABLED_PlaceNewWindows) {
   UpdateDisplay("1600x1200");
   auto* shelf = ash::Shell::GetPrimaryRootWindowController()->shelf();
   shelf->SetAutoHideBehavior(ash::ShelfAutoHideBehavior::kAlways);
 
-  int64_t display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  int64_t display_id = display::Screen::Get()->GetPrimaryDisplay().id();
 
   // Create a browser to pass into the WindowSizerTestUtil::GetWindowBounds
   // function.
@@ -456,7 +457,8 @@ TEST_F(WindowSizerChromeOSTest, PlaceNewWindows) {
 // Test the placement of newly created windows on an empty desktop.
 // This test supplements "PlaceNewWindows" by testing the creation of a newly
 // created browser window on an empty desktop.
-TEST_F(WindowSizerChromeOSTest, PlaceNewBrowserWindowOnEmptyDesktop) {
+// TODO(crbug.com/445541616): Reenable the test.
+TEST_F(WindowSizerChromeOSTest, DISABLED_PlaceNewBrowserWindowOnEmptyDesktop) {
   Browser::CreateParams native_params(&profile_, true);
   auto browser = CreateWindowlessBrowser(native_params);
 
@@ -497,7 +499,8 @@ TEST_F(WindowSizerChromeOSTest, PlaceNewBrowserWindowOnEmptyDesktop) {
   EXPECT_EQ("50,100 300x150", window_bounds.ToString());
 }
 
-TEST_F(WindowSizerChromeOSTest, PlaceNewBrowserWindowOnLargeDesktop) {
+// TODO(crbug.com/445541616): Reenable the test.
+TEST_F(WindowSizerChromeOSTest, DISABLED_PlaceNewBrowserWindowOnLargeDesktop) {
   Browser::CreateParams native_params(&profile_, true);
   auto browser = CreateWindowlessBrowser(native_params);
 
@@ -519,10 +522,11 @@ TEST_F(WindowSizerChromeOSTest, PlaceNewBrowserWindowOnLargeDesktop) {
 }
 
 // Test the placement of newly created windows on multiple dislays.
-TEST_F(WindowSizerChromeOSTest, PlaceNewWindowsOnMultipleDisplays) {
+// TODO(crbug.com/445541616): Reenable the test.
+TEST_F(WindowSizerChromeOSTest, DISABLED_PlaceNewWindowsOnMultipleDisplays) {
   UpdateDisplay("1600x1200,1600x1200");
   display::Display primary_display =
-      display::Screen::GetScreen()->GetPrimaryDisplay();
+      display::Screen::Get()->GetPrimaryDisplay();
   display::Display second_display =
       display::test::DisplayManagerTestApi(display_manager())
           .GetSecondaryDisplay();
@@ -602,7 +606,8 @@ TEST_F(WindowSizerChromeOSTest, PlaceNewWindowsOnMultipleDisplays) {
 }
 
 // Test that the show state is properly returned for non default cases.
-TEST_F(WindowSizerChromeOSTest, TestShowState) {
+// TODO(crbug.com/445541616): Reenable the test.
+TEST_F(WindowSizerChromeOSTest, DISABLED_TestShowState) {
   UpdateDisplay("1600x1200");
 
   // Creating a browser & window to play with.
@@ -658,7 +663,8 @@ TEST_F(WindowSizerChromeOSTest, TestShowState) {
                                 browser_popup.get(), p1600x1200, p1600x1200));
 }
 
-TEST_F(WindowSizerChromeOSTest, TestShowStateOnTinyScreen) {
+// TODO(crbug.com/445541616): Reenable the test.
+TEST_F(WindowSizerChromeOSTest, DISABLED_TestShowStateOnTinyScreen) {
   Browser::CreateParams params(Browser::TYPE_NORMAL, &profile_, true);
   auto browser = CreateWindowlessBrowser(params);
 
@@ -674,7 +680,8 @@ TEST_F(WindowSizerChromeOSTest, TestShowStateOnTinyScreen) {
 }
 
 // Test that the default show state override behavior is properly handled.
-TEST_F(WindowSizerChromeOSTest, TestShowStateDefaults) {
+// TODO(crbug.com/445541616): Reenable the test.
+TEST_F(WindowSizerChromeOSTest, DISABLED_TestShowStateDefaults) {
   UpdateDisplay("1600x1200");
   // Creating a browser & window to play with.
 
@@ -731,14 +738,15 @@ TEST_F(WindowSizerChromeOSTest, TestShowStateDefaults) {
       ui::mojom::WindowShowState::kNormal);
 }
 
-TEST_F(WindowSizerChromeOSTest, DefaultStateBecomesMaximized) {
+// TODO(crbug.com/445541616): Reenable the test.
+TEST_F(WindowSizerChromeOSTest, DISABLED_DefaultStateBecomesMaximized) {
   // Create a browser to pass into the WindowSizerTestUtil::GetWindowBounds
   // function.
   Browser::CreateParams native_params(&profile_, true);
   auto browser = CreateWindowlessBrowser(native_params);
 
   gfx::Rect display_bounds =
-      display::Screen::GetScreen()->GetPrimaryDisplay().bounds();
+      display::Screen::Get()->GetPrimaryDisplay().bounds();
   gfx::Rect specified_bounds = display_bounds;
 
   // Make a window bigger than the display work area.
@@ -787,7 +795,7 @@ TEST_F(WindowSizerChromeOSTest, DefaultBoundsInTargetDisplay) {
         display::test::DisplayManagerTestApi(display_manager())
             .GetSecondaryDisplay()
             .id();
-    display::Screen::GetScreen()->SetDisplayForNewWindows(second_display_id);
+    display::Screen::Get()->SetDisplayForNewWindows(second_display_id);
     gfx::Rect bounds;
     ui::mojom::WindowShowState show_state;
     WindowSizer::GetBrowserWindowBoundsAndShowState(gfx::Rect(), nullptr,

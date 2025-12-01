@@ -84,7 +84,7 @@
 //! a different thread.
 
 // Proc-macro2 types in rustdoc of other crates get linked to here.
-#![doc(html_root_url = "https://docs.rs/proc-macro2/1.0.95")]
+#![doc(html_root_url = "https://docs.rs/proc-macro2/1.0.101")]
 #![cfg_attr(any(proc_macro_span, super_unstable), feature(proc_macro_span))]
 #![cfg_attr(super_unstable, feature(proc_macro_def_site))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -115,6 +115,7 @@
     clippy::used_underscore_binding,
     clippy::vec_init_then_push
 )]
+#![allow(unknown_lints, mismatched_lifetime_syntaxes)]
 
 #[cfg(all(procmacro2_semver_exempt, wrap_proc_macro, not(super_unstable)))]
 compile_error! {"\
@@ -140,6 +141,7 @@ extern crate proc_macro;
 
 mod marker;
 mod parse;
+mod probe;
 mod rcvec;
 
 #[cfg(wrap_proc_macro)]
@@ -172,7 +174,7 @@ use core::ops::RangeBounds;
 use core::str::FromStr;
 use std::error::Error;
 use std::ffi::CStr;
-#[cfg(procmacro2_semver_exempt)]
+#[cfg(span_locations)]
 use std::path::PathBuf;
 
 #[cfg(span_locations)]
@@ -469,10 +471,8 @@ impl Span {
     ///
     /// This might not correspond to a valid file system path. It might be
     /// remapped, or might be an artificial path such as `"<macro expansion>"`.
-    ///
-    /// This method is semver exempt and not exposed by default.
-    #[cfg(all(procmacro2_semver_exempt, any(not(wrap_proc_macro), super_unstable)))]
-    #[cfg_attr(docsrs, doc(cfg(procmacro2_semver_exempt)))]
+    #[cfg(span_locations)]
+    #[cfg_attr(docsrs, doc(cfg(feature = "span-locations")))]
     pub fn file(&self) -> String {
         self.inner.file()
     }
@@ -483,10 +483,8 @@ impl Span {
     ///
     /// This path should not be embedded in the output of the macro; prefer
     /// `file()` instead.
-    ///
-    /// This method is semver exempt and not exposed by default.
-    #[cfg(all(procmacro2_semver_exempt, any(not(wrap_proc_macro), super_unstable)))]
-    #[cfg_attr(docsrs, doc(cfg(procmacro2_semver_exempt)))]
+    #[cfg(span_locations)]
+    #[cfg_attr(docsrs, doc(cfg(feature = "span-locations")))]
     pub fn local_file(&self) -> Option<PathBuf> {
         self.inner.local_file()
     }

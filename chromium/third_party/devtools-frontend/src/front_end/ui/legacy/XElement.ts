@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,79 +39,3 @@ export class XElement extends HTMLElement {
     }
   }
 }
-
-class XBox extends XElement {
-  constructor(direction: string) {
-    super();
-    this.style.setProperty('display', 'flex');
-    this.style.setProperty('flex-direction', direction);
-    this.style.setProperty('justify-content', 'flex-start');
-  }
-
-  static override get observedAttributes(): string[] {
-    return super.observedAttributes.concat(['x-start', 'x-center', 'x-stretch', 'x-baseline', 'justify-content']);
-  }
-
-  override attributeChangedCallback(attr: string, oldValue: string|null, newValue: string|null): void {
-    if (attr === 'x-start' || attr === 'x-center' || attr === 'x-stretch' || attr === 'x-baseline') {
-      if (newValue === null) {
-        this.style.removeProperty('align-items');
-      } else {
-        this.style.setProperty('align-items', attr === 'x-start' ? 'flex-start' : attr.substr(2));
-      }
-      return;
-    }
-    super.attributeChangedCallback(attr, oldValue, newValue);
-  }
-}
-
-class XVBox extends XBox {
-  constructor() {
-    super('column');
-  }
-}
-
-class XHBox extends XBox {
-  constructor() {
-    super('row');
-  }
-}
-
-class XCBox extends XElement {
-  constructor() {
-    super();
-    this.style.setProperty('display', 'flex');
-    this.style.setProperty('flex-direction', 'column');
-    this.style.setProperty('justify-content', 'center');
-    this.style.setProperty('align-items', 'center');
-  }
-}
-
-class XDiv extends XElement {
-  constructor() {
-    super();
-    this.style.setProperty('display', 'block');
-  }
-}
-
-class XSpan extends XElement {
-  constructor() {
-    super();
-    this.style.setProperty('display', 'inline');
-  }
-}
-
-class XText extends XElement {
-  constructor() {
-    super();
-    this.style.setProperty('display', 'inline');
-    this.style.setProperty('white-space', 'pre');
-  }
-}
-
-customElements.define('x-vbox', XVBox);
-customElements.define('x-hbox', XHBox);
-customElements.define('x-cbox', XCBox);
-customElements.define('x-div', XDiv);
-customElements.define('x-span', XSpan);
-customElements.define('x-text', XText);

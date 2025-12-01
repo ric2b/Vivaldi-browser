@@ -79,10 +79,8 @@ struct State {
 
     Vector<core::ir::Let*, 8> lets_to_inline_{};
 
-    /// Function to texture replacements, this is done by hashcode since the
-    /// function pointer is combined with the parameters which are converted to
-    /// textures.
-    Hashmap<size_t, core::ir::Function*, 4> func_hash_to_func_{};
+    /// Function to texture replacements
+    Hashmap<core::ir::Function*, core::ir::Function*, 4> func_to_rewritten_{};
 
     /// Set of textures used in dref calls which need to be depth textures.
     Hashset<core::ir::Value*, 4> textures_to_convert_to_depth_{};
@@ -91,6 +89,8 @@ struct State {
 
     /// Process the module.
     void Process() {
+        ReplacePointerToHandle();
+
         for (auto* inst : *ir.root_block) {
             auto* var = inst->As<core::ir::Var>();
             if (!var) {
@@ -182,7 +182,12 @@ struct State {
             if (auto* builtin = inst->As<spirv::ir::BuiltinCall>()) {
                 switch (builtin->Func()) {
                     case spirv::BuiltinFn::kSampledImage:
-                        // Handled above.
+                        // Note, we _also_ do this here even though it was done above. The one above
+                        // registers for the depth functions, but, we may have forked functions in
+                        // the `UpdateValues` when it does the `ConvertUserCalls`. This would then
+                        // generate new `SampledImage` objects which need to be registered. In the
+                        // worse case, we just write the same data twice.
+                        SampledImage(builtin);
                         break;
                     case spirv::BuiltinFn::kImage:
                     case spirv::BuiltinFn::kImageRead:
@@ -245,7 +250,83 @@ struct State {
 
         // Destroy all the OpSampledImage instructions.
         for (auto res : sampled_images_) {
-            res.value->Destroy();
+            // If the sampled image was in a user function which was forked and the original
+            // destroyed then it will no longer be alive.
+            if (res.value->Alive()) {
+                res.value->Destroy();
+            }
+        }
+    }
+
+    void ReplacePointerToHandle() {
+        Vector<core::ir::Value*, 4> usages_to_update;
+        Hashset<core::ir::Function*, 4> called_functions_to_fixup;
+        for (auto& func : ir.DependencyOrderedFunctions()) {
+            for (auto* param : func->Params()) {
+                auto* ptr = param->Type()->As<core::type::Pointer>();
+                if (!ptr || !ptr->StoreType()->IsHandle()) {
+                    continue;
+                }
+
+                param->SetType(ptr->StoreType());
+                usages_to_update.Push(param);
+                called_functions_to_fixup.Add(func);
+            }
+        }
+
+        Vector<core::ir::Instruction*, 4> inst_to_delete;
+        while (!usages_to_update.IsEmpty()) {
+            auto* val = usages_to_update.Pop();
+            for (auto& usage : val->UsagesSorted()) {
+                tint::Switch(
+                    usage.instruction,  //
+                    [&](core::ir::Load* ld) {
+                        ld->Result()->ReplaceAllUsesWith(ld->From());
+                        inst_to_delete.Push(ld);
+                    },
+                    [&](core::ir::Let* l) {
+                        for (auto& u : l->Result()->UsagesSorted()) {
+                            usages_to_update.Push(u.instruction->Result());
+                        }
+                        l->Result()->ReplaceAllUsesWith(l->Value());
+                        inst_to_delete.Push(l);
+                    });
+            }
+        }
+
+        for (auto& fn : called_functions_to_fixup) {
+            for (auto& usage : fn->UsagesUnsorted()) {
+                auto* call = usage->instruction->As<core::ir::UserCall>();
+                if (!call) {
+                    continue;
+                }
+
+                auto args = call->Args();
+                for (size_t i = 0; i < args.Length(); ++i) {
+                    auto& arg = args[i];
+
+                    auto* ptr_ty = arg->Type()->As<core::type::Pointer>();
+                    if (!ptr_ty) {
+                        continue;
+                    }
+
+                    if (!ptr_ty->StoreType()->IsHandle()) {
+                        continue;
+                    }
+
+                    // We inject the load here but it will get cleaned up when we deal with the
+                    // function itself, if required.
+                    b.InsertBefore(usage->instruction, [&] {
+                        auto* ld = b.Load(arg);
+                        call->SetArg(i, ld->Result());
+                    });
+                }
+            }
+        }
+
+        while (!inst_to_delete.IsEmpty()) {
+            auto* inst = inst_to_delete.Pop();
+            inst->Destroy();
         }
     }
 
@@ -374,12 +455,7 @@ struct State {
             return;
         }
 
-        // Hash based on the original function pointer and the specific
-        // parameters we're converting.
-        auto hash = Hash(target);
-        hash = HashCombine(hash, to_convert);
-
-        auto* new_fn = func_hash_to_func_.GetOrAdd(hash, [&] {
+        auto* new_fn = func_to_rewritten_.GetOrAdd(target, [&] {
             core::ir::CloneContext ctx{ir};
             auto* fn = uc->Target()->Clone(ctx);
             ir.functions.Push(fn);
@@ -519,10 +595,27 @@ struct State {
     }
 
     void ProcessOffset(core::ir::Value* offset, Vector<core::ir::Value*, 5>& new_args) {
-        if (offset->Type()->IsUnsignedIntegerVector()) {
-            offset = b.Convert(ty.MatchWidth(ty.i32(), offset->Type()), offset)->Result();
+        if (offset->Type()->IsSignedIntegerVector()) {
+            new_args.Push(offset);
+            return;
         }
-        new_args.Push(offset);
+
+        auto* vec_ty = offset->Type()->As<core::type::Vector>();
+        TINT_ASSERT(vec_ty);
+
+        auto* ir_constant = offset->As<core::ir::Constant>();
+        TINT_ASSERT(ir_constant);
+
+        auto* constant_value = ir_constant->Value();
+
+        Vector<const core::constant::Value*, 4> new_values;
+        for (size_t i = 0; i < vec_ty->Width(); ++i) {
+            uint32_t v = constant_value->Index(i)->ValueAs<uint32_t>();
+            new_values.Push(b.ConstantValue(i32(v)));
+        }
+
+        auto* new_offset = b.Composite(ty.vec(ty.i32(), vec_ty->Width()), new_values);
+        new_args.Push(new_offset);
     }
 
     uint32_t GetOperandMask(core::ir::Value* val) {
@@ -917,7 +1010,6 @@ struct State {
                                       img->GetTexelFormat(), img->GetAccess());
         }
 
-        // TODO(dsinclair): Handle determining depth texture by usage
         if (img->GetDepth() == spirv::type::Depth::kDepth) {
             if (img->GetMultisampled() == spirv::type::Multisampled::kMultisampled) {
                 return ty.depth_multisampled_texture(ConvertDim(img->GetDim(), img->GetArrayed()));
@@ -940,8 +1032,10 @@ struct State {
 Result<SuccessType> Texture(core::ir::Module& ir) {
     auto result = ValidateAndDumpIfNeeded(ir, "spirv.Texture",
                                           core::ir::Capabilities{
+                                              core::ir::Capability::kAllowMultipleEntryPoints,
                                               core::ir::Capability::kAllowOverrides,
                                               core::ir::Capability::kAllowNonCoreTypes,
+                                              core::ir::Capability::kAllowPointerToHandle,
                                           });
     if (result != Success) {
         return result.Failure();

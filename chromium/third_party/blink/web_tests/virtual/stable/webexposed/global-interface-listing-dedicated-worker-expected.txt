@@ -1056,6 +1056,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method get
 [Worker]     method getAll
 [Worker]     method getAllKeys
+[Worker]     method getAllRecords
 [Worker]     method getKey
 [Worker]     method openCursor
 [Worker]     method openKeyCursor
@@ -1089,6 +1090,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method get
 [Worker]     method getAll
 [Worker]     method getAllKeys
+[Worker]     method getAllRecords
 [Worker]     method getKey
 [Worker]     method index
 [Worker]     method openCursor
@@ -1102,6 +1104,12 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method constructor
 [Worker]     setter onblocked
 [Worker]     setter onupgradeneeded
+[Worker] interface IDBRecord
+[Worker]     attribute @@toStringTag
+[Worker]     getter key
+[Worker]     getter primaryKey
+[Worker]     getter value
+[Worker]     method constructor
 [Worker] interface IDBRequest : EventTarget
 [Worker]     attribute @@toStringTag
 [Worker]     getter error
@@ -1663,6 +1671,17 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method getMetadata
 [Worker]     method toString
 [Worker]     setter data
+[Worker] interface RTCRtpScriptTransformer : EventTarget
+[Worker]     attribute @@toStringTag
+[Worker]     getter options
+[Worker]     getter readable
+[Worker]     getter writable
+[Worker]     method constructor
+[Worker]     method sendKeyFrameRequest
+[Worker] interface RTCTransformEvent : Event
+[Worker]     attribute @@toStringTag
+[Worker]     getter transformer
+[Worker]     method constructor
 [Worker] interface ReadableByteStreamController
 [Worker]     attribute @@toStringTag
 [Worker]     getter byobRequest
@@ -1737,6 +1756,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter referrer
 [Worker]     getter referrerPolicy
 [Worker]     getter signal
+[Worker]     getter targetAddressSpace
 [Worker]     getter url
 [Worker]     method arrayBuffer
 [Worker]     method blob
@@ -2014,7 +2034,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method createHTML
 [Worker]     method createScript
 [Worker]     method createScriptURL
-[Worker] interface TrustedTypePolicyFactory : EventTarget
+[Worker] interface TrustedTypePolicyFactory
 [Worker]     attribute @@toStringTag
 [Worker]     getter defaultPolicy
 [Worker]     getter emptyHTML
@@ -3859,6 +3879,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter name
 [Worker]     getter onmessage
 [Worker]     getter onmessageerror
+[Worker]     getter onrtctransform
 [Worker]     method cancelAnimationFrame
 [Worker]     method close
 [Worker]     method gc
@@ -3871,6 +3892,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     setter name
 [Worker]     setter onmessage
 [Worker]     setter onmessageerror
+[Worker]     setter onrtctransform
 PASS successfullyParsed is true
 
 TEST COMPLETE

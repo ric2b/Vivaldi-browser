@@ -12,9 +12,9 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/notimplemented.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -23,21 +23,17 @@
 #include "chrome/browser/extensions/menu_manager.h"
 #include "chrome/browser/extensions/permissions/site_permissions_helper.h"
 #include "chrome/browser/extensions/permissions_url_constants.h"
+#include "chrome/browser/policy/developer_tools_policy_handler.h"
+#include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/extensions/extension_side_panel_utils.h"
 #include "chrome/browser/ui/extensions/extensions_container.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/ui/views/side_panel/side_panel_entry_id.h"
-#include "chrome/browser/ui/views/side_panel/side_panel_entry_key.h"
-#include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
-#include "chrome/common/extensions/api/side_panel.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
@@ -53,15 +49,31 @@
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/permissions_manager.h"
 #include "extensions/browser/uninstall_reason.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_features.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/common/manifest_url_handlers.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "ui/base/base_window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/models/menu_separator_types.h"
+#include "ui/color/color_id.h"
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/extensions/extension_side_panel_utils.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_entry_id.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_entry_key.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
+#include "chrome/common/extensions/api/side_panel.h"
+#endif
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace extensions {
 
@@ -98,6 +110,35 @@ bool MenuItemMatchesAction(const std::optional<ActionInfo::Type> action_type,
 bool IsExtensionForcePinned(const Extension& extension, Profile* profile) {
   auto* management = ExtensionManagementFactory::GetForBrowserContext(profile);
   return base::Contains(management->GetForcePinnedList(), extension.id());
+}
+
+// Returns true if the given |extension| is allowed to be inspected based on
+// the Developer Tools Availability in the policy.
+bool IsExtensionInspectionAllowed(const Extension& extension,
+                                  Profile* profile) {
+  using Availability = policy::DeveloperToolsPolicyHandler::Availability;
+  Availability availability =
+      policy::DeveloperToolsPolicyHandler::GetEffectiveAvailability(profile);
+
+  switch (availability) {
+    case Availability::kDisallowed:
+      return false;
+    case Availability::kAllowed:
+      return true;
+    case Availability::kDisallowedForForceInstalledExtensions:
+      if (Manifest::IsPolicyLocation(extension.location())) {
+        return false;
+      }
+      // We also disallow inspecting component extensions, but only for managed
+      // profiles.
+      if (Manifest::IsComponentLocation(extension.location()) &&
+          profile->GetProfilePolicyConnector()->IsManaged()) {
+        return false;
+      }
+      return true;
+    default:
+      NOTREACHED() << "Unknown developer tools policy";
+  }
 }
 
 // Returns the id for the visibility command for the given |extension|.
@@ -221,11 +262,11 @@ void LogToggleVisibility(bool visible) {
   }
 }
 
-void OpenUrl(Browser& browser, const GURL& url) {
+void OpenUrl(content::WebContents* web_contents, const GURL& url) {
   content::OpenURLParams params(
       url, content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui::PAGE_TRANSITION_LINK, /*is_renderer_initiated=*/false);
-  browser.OpenURL(params, /*navigation_handle_callback=*/{});
+  web_contents->OpenURL(params, /*navigation_handle_callback=*/{});
 }
 
 // A stub for the uninstall dialog.
@@ -238,9 +279,11 @@ class UninstallDialogHelper : public ExtensionUninstallDialog::Delegate {
 
   // Kicks off the asynchronous process to confirm and uninstall the given
   // |extension|.
-  static void UninstallExtension(Browser* browser, const Extension* extension) {
+  static void UninstallExtension(Profile* profile,
+                                 gfx::NativeWindow parent,
+                                 const Extension* extension) {
     UninstallDialogHelper* helper = new UninstallDialogHelper();
-    helper->BeginUninstall(browser, extension);
+    helper->BeginUninstall(profile, parent, extension);
   }
 
  private:
@@ -248,9 +291,10 @@ class UninstallDialogHelper : public ExtensionUninstallDialog::Delegate {
   UninstallDialogHelper() = default;
   ~UninstallDialogHelper() override = default;
 
-  void BeginUninstall(Browser* browser, const Extension* extension) {
-    uninstall_dialog_ = ExtensionUninstallDialog::Create(
-        browser->profile(), browser->window()->GetNativeWindow(), this);
+  void BeginUninstall(Profile* profile,
+                      gfx::NativeWindow parent,
+                      const Extension* extension) {
+    uninstall_dialog_ = ExtensionUninstallDialog::Create(profile, parent, this);
     uninstall_dialog_->ConfirmUninstall(extension,
                                         UNINSTALL_REASON_USER_INITIATED,
                                         UNINSTALL_SOURCE_TOOLBAR_CONTEXT_MENU);
@@ -280,9 +324,10 @@ DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(ExtensionContextMenuModel,
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(ExtensionContextMenuModel,
                                       kPageAccessRunOnAllSitesSubmenuItem);
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 ExtensionContextMenuModel::ExtensionContextMenuModel(
     const Extension* extension,
-    Browser* browser,
+    BrowserWindowInterface* browser,
     bool is_pinned,
     PopupDelegate* delegate,
     bool can_show_icon_in_toolbar,
@@ -291,10 +336,33 @@ ExtensionContextMenuModel::ExtensionContextMenuModel(
       extension_id_(extension->id()),
       is_component_(Manifest::IsComponentLocation(extension->location())),
       browser_(browser),
-      profile_(browser->profile()),
+      profile_(browser->GetProfile()),
       delegate_(delegate),
       is_pinned_(is_pinned),
       source_(source) {
+  Init(extension, can_show_icon_in_toolbar);
+}
+#else
+ExtensionContextMenuModel::ExtensionContextMenuModel(
+    const Extension* extension,
+    Profile* profile,
+    content::WebContents* web_contents,
+    bool is_pinned,
+    bool can_show_icon_in_toolbar,
+    ContextMenuSource source)
+    : SimpleMenuModel(this),
+      extension_id_(extension->id()),
+      is_component_(Manifest::IsComponentLocation(extension->location())),
+      web_contents_(web_contents),
+      profile_(profile),
+      is_pinned_(is_pinned),
+      source_(source) {
+  Init(extension, can_show_icon_in_toolbar);
+}
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
+void ExtensionContextMenuModel::Init(const Extension* extension,
+                                     bool can_show_icon_in_toolbar) {
   if (GetActiveWebContents()) {
     origin_ =
         url::Origin::Create(GetActiveWebContents()->GetLastCommittedURL());
@@ -365,7 +433,8 @@ bool ExtensionContextMenuModel::IsCommandIdEnabled(int command_id) const {
       content::WebContents* web_contents = GetActiveWebContents();
       return web_contents && extension_action_ &&
              extension_action_->HasPopup(
-                 sessions::SessionTabHelper::IdForTab(web_contents).id());
+                 sessions::SessionTabHelper::IdForTab(web_contents).id()) &&
+             IsExtensionInspectionAllowed(*extension, profile_);
     }
     case UNINSTALL:
       // Uninstall is always enabled since it will only be visible when the
@@ -397,7 +466,7 @@ bool ExtensionContextMenuModel::IsCommandIdEnabled(int command_id) const {
     // Extension pinning/unpinning is not available for Incognito as this
     // leaves a trace of user activity.
     case TOGGLE_VISIBILITY:
-      return !browser_->profile()->IsOffTheRecord() &&
+      return !profile_->IsOffTheRecord() &&
              !IsExtensionForcePinned(*extension, profile_);
     // Manage extensions and view web permissions are always enabled.
     case MANAGE_EXTENSIONS:
@@ -426,25 +495,34 @@ void ExtensionContextMenuModel::ExecuteCommand(int command_id,
 
   switch (command_id) {
     case HOME_PAGE: {
-      OpenUrl(*browser_, ManifestURL::GetHomepageURL(extension));
+      OpenUrl(GetActiveWebContents(), ManifestURL::GetHomepageURL(extension));
       break;
     }
     case OPTIONS:
       DCHECK(OptionsPageInfo::HasOptionsPage(extension));
-      ExtensionTabUtil::OpenOptionsPage(extension, browser_);
+      ExtensionTabUtil::OpenOptionsPageFromWebContents(extension,
+                                                       GetActiveWebContents());
       break;
     case TOGGLE_VISIBILITY: {
       bool visible = !is_pinned_;
-      ToolbarActionsModel::Get(browser_->profile())
-          ->SetActionVisibility(extension->id(), visible);
+      ToolbarActionsModel::Get(profile_)->SetActionVisibility(extension->id(),
+                                                              visible);
       LogToggleVisibility(visible);
       break;
     }
     case UNINSTALL: {
-      UninstallDialogHelper::UninstallExtension(browser_, extension);
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+      UninstallDialogHelper::UninstallExtension(
+          profile_, browser_->GetWindow()->GetNativeWindow(), extension);
+#else
+      // TODO(crbug.com/441744719): Make it possible to uninstall extensions
+      // from here on Desktop Android.
+      NOTIMPLEMENTED();
+#endif
       break;
     }
     case TOGGLE_SIDE_PANEL_VISIBILITY: {
+#if !BUILDFLAG(IS_ANDROID)
       // Do nothing if the web contents have navigated to a different origin.
       auto* web_contents = GetActiveWebContents();
       if (!web_contents ||
@@ -463,14 +541,35 @@ void ExtensionContextMenuModel::ExecuteCommand(int command_id,
                                                                   tab_id)) {
         side_panel_util::ToggleExtensionSidePanel(browser_, extension->id());
       }
+#endif  // !BUILDFLAG(IS_ANDROID)
       break;
     }
     case MANAGE_EXTENSIONS: {
-      chrome::ShowExtensions(browser_, extension->id());
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+      chrome::ShowExtensions(browser_->GetBrowserForMigrationOnly(),
+                             extension->id());
+#else
+      const std::string& extension_to_highlight = extension->id();
+      GURL url(chrome::kChromeUIExtensionsURL);
+      if (!extension_to_highlight.empty()) {
+        GURL::Replacements replacements;
+        std::string query("id=");
+        query += extension_to_highlight;
+        replacements.SetQueryStr(query);
+        url = url.ReplaceComponents(replacements);
+      }
+      OpenUrl(GetActiveWebContents(), url);
+#endif
       break;
     }
     case VIEW_WEB_PERMISSIONS:
-      chrome::ShowSiteSettings(browser_, extension->url());
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+      chrome::ShowSiteSettings(browser_->GetBrowserForMigrationOnly(),
+                               extension->url());
+#else
+      // TODO(crbug.com/441744719): Show site settings page on Desktop Android.
+      NOTIMPLEMENTED();
+#endif
       break;
     case INSPECT_POPUP: {
       delegate_->InspectPopup();
@@ -508,13 +607,13 @@ void ExtensionContextMenuModel::ExecuteCommand(int command_id,
     case PAGE_ACCESS_PERMISSIONS_PAGE:
       LogPageAccessAction(command_id);
       OpenUrl(
-          *browser_,
+          GetActiveWebContents(),
           GURL(extension_permissions_constants::kExtensionsSitePermissionsURL));
       break;
     case PAGE_ACCESS_LEARN_MORE:
       LogPageAccessAction(command_id);
       OpenUrl(
-          *browser_,
+          GetActiveWebContents(),
           GURL(
               extension_permissions_constants::kRuntimeHostPermissionsHelpURL));
 
@@ -532,19 +631,27 @@ void ExtensionContextMenuModel::MenuClosed(ui::SimpleMenuModel* menu) {
   // `action_taken_` can be deleted when the extensions toggle menu is closed.
   if (action_taken_) {
     ContextMenuAction action = *action_taken_;
+#if !BUILDFLAG(IS_ANDROID)
     bool was_side_panel_action_taken =
         action_taken_ == ContextMenuAction::kToggleSidePanelVisibility;
+#endif
     UMA_HISTOGRAM_ENUMERATION("Extensions.ContextMenuAction", action);
 
     // Clear out the action to avoid any possible UAF if we close the parent
     // menu.
     action_taken_ = std::nullopt;
+
+#if !BUILDFLAG(IS_ANDROID)
     if (source_ == ContextMenuSource::kMenuItem &&
         was_side_panel_action_taken) {
-      browser_->window()->GetExtensionsContainer()->CloseOverflowMenuIfOpen();
+      browser_->GetBrowserForMigrationOnly()
+          ->window()
+          ->GetExtensionsContainer()
+          ->CloseOverflowMenuIfOpen();
       // WARNING: The overflow menu was the parent for this menu, so it's
       // possible `this` is now deleted.
     }
+#endif
   }
 }
 
@@ -722,7 +829,9 @@ void ExtensionContextMenuModel::InitMenuWithFeature(
     AddItemWithStringId(UNINSTALL, IDS_EXTENSIONS_UNINSTALL);
   }
 
+#if !BUILDFLAG(IS_ANDROID)
   AddSidePanelEntryIfPresent(*extension);
+#endif
 
   // Settings section.
   if (!is_component_) {
@@ -736,7 +845,14 @@ void ExtensionContextMenuModel::InitMenuWithFeature(
   if (delegate_ && !is_component_ && action_info && !action_info->synthesized &&
       profile_->GetPrefs()->GetBoolean(prefs::kExtensionsUIDeveloperMode)) {
     AddSeparator(ui::NORMAL_SEPARATOR);
-    AddItemWithStringId(INSPECT_POPUP, IDS_EXTENSION_ACTION_INSPECT_POPUP);
+    if (IsExtensionInspectionAllowed(*extension, profile_)) {
+      AddItemWithStringId(INSPECT_POPUP, IDS_EXTENSION_ACTION_INSPECT_POPUP);
+    } else {
+      AddItemWithStringIdAndIcon(
+          INSPECT_POPUP, IDS_EXTENSION_ACTION_INSPECT_POPUP,
+          ui::ImageModel::FromVectorIcon(vector_icons::kBusinessIcon,
+                                         ui::kColorIcon, 16));
+    }
   }
 }
 
@@ -804,7 +920,9 @@ void ExtensionContextMenuModel::InitMenu(const Extension* extension,
     }
   }
 
+#if !BUILDFLAG(IS_ANDROID)
   AddSidePanelEntryIfPresent(*extension);
+#endif
 
   if (!is_component_) {
     AddSeparator(ui::NORMAL_SEPARATOR);
@@ -820,6 +938,7 @@ void ExtensionContextMenuModel::InitMenu(const Extension* extension,
   }
 }
 
+#if !BUILDFLAG(IS_ANDROID)
 void ExtensionContextMenuModel::AddSidePanelEntryIfPresent(
     const Extension& extension) {
   if (!extension.permissions_data()->HasAPIPermission(
@@ -846,6 +965,7 @@ void ExtensionContextMenuModel::AddSidePanelEntryIfPresent(
                           ? IDS_EXTENSIONS_SUBMENU_CLOSE_SIDE_PANEL_ITEM
                           : IDS_EXTENSIONS_SUBMENU_OPEN_SIDE_PANEL_ITEM);
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 const Extension* ExtensionContextMenuModel::GetExtension() const {
   return ExtensionRegistry::Get(profile_)->enabled_extensions().GetByID(
@@ -914,11 +1034,17 @@ void ExtensionContextMenuModel::CreatePageAccessItems(
 }
 
 content::WebContents* ExtensionContextMenuModel::GetActiveWebContents() const {
-  return browser_->tab_strip_model()->GetActiveWebContents();
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  return browser_->GetActiveTabInterface()->GetContents();
+#else
+  return web_contents_;
+#endif
 }
 
+#if !BUILDFLAG(IS_ANDROID)
 SidePanelService* ExtensionContextMenuModel::GetSidePanelService() const {
   return SidePanelService::Get(profile_);
 }
+#endif
 
 }  // namespace extensions

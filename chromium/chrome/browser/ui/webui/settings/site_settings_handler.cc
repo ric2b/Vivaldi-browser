@@ -64,10 +64,8 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browsing_data/content/browsing_data_model.h"
 #include "components/browsing_topics/browsing_topics_service.h"
@@ -83,6 +81,7 @@
 #include "components/crx_file/id_util.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/permissions/contexts/bluetooth_chooser_context.h"
+#include "components/permissions/features.h"
 #include "components/permissions/object_permission_context_base.h"
 #include "components/permissions/permission_decision_auto_blocker.h"
 #include "components/permissions/permission_uma_util.h"
@@ -117,6 +116,12 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/url_constants.h"
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+#include "components/webapps/isolated_web_apps/scheme.h"
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/smart_card/smart_card_permission_context.h"
@@ -375,10 +380,11 @@ bool IsPatternValidForType(const std::string& pattern_string,
   // WebUI permissions are controlled by ContentSettingsRegistry
   // AllowlistedSchemes and WebUIAllowlist. Users shouldn't be able to grant
   // extra permissions or revoke existing permissions.
-  if (pattern.GetScheme() == ContentSettingsPattern::SCHEME_CHROME ||
-      pattern.GetScheme() == ContentSettingsPattern::SCHEME_CHROMEUNTRUSTED ||
-      pattern.GetScheme() == ContentSettingsPattern::SCHEME_DEVTOOLS ||
-      pattern.GetScheme() == ContentSettingsPattern::SCHEME_CHROMESEARCH) {
+  if (pattern.GetSchemeType() == ContentSettingsPattern::SCHEME_CHROME ||
+      pattern.GetSchemeType() ==
+          ContentSettingsPattern::SCHEME_CHROMEUNTRUSTED ||
+      pattern.GetSchemeType() == ContentSettingsPattern::SCHEME_DEVTOOLS ||
+      pattern.GetSchemeType() == ContentSettingsPattern::SCHEME_CHROMESEARCH) {
     *out_error = l10n_util::GetStringUTF8(IDS_SETTINGS_NOT_VALID_WEB_ADDRESS);
     return false;
   }
@@ -898,7 +904,7 @@ void SiteSettingsHandler::OnGetUsageInfo() {
   }
 
   if (size > 0) {
-    usage_string = base::UTF16ToUTF8(ui::FormatBytes(size));
+    usage_string = base::UTF16ToUTF8(ui::FormatBytes(base::ByteCount(size)));
   }
 
   auto* privacy_sandbox_service =
@@ -1120,6 +1126,8 @@ void SiteSettingsHandler::HandleSetDefaultValueForContentType(
   ContentSetting previous_setting =
       map->GetDefaultContentSetting(type, nullptr);
   map->SetDefaultContentSetting(type, default_setting);
+
+  content_settings_uma_util::RecordContentSettingChange(default_setting, type);
 
   if (type == ContentSettingsType::SOUND &&
       previous_setting != default_setting) {
@@ -1396,7 +1404,7 @@ void SiteSettingsHandler::HandleGetFormattedBytes(
     const base::Value::List& args) {
   AllowJavascript();
   CHECK_EQ(2U, args.size());
-  int64_t num_bytes = static_cast<int64_t>(args[1].GetDouble());
+  base::ByteCount num_bytes = base::ByteCount(args[1].GetDouble());
   ResolveJavascriptCallback(/*callback_id=*/args[0],
                             base::Value(ui::FormatBytes(num_bytes)));
 }
@@ -1659,7 +1667,22 @@ void SiteSettingsHandler::HandleSetOriginPermissions(
       PermissionDecisionAutoBlockerFactory::GetForProfile(profile_)
           ->RemoveEmbargoAndResetCounts(origin, content_type);
     }
-    map->SetContentSettingDefaultScope(origin, origin, content_type, setting);
+
+    content_settings::ContentSettingConstraints constraints;
+
+    // Enable last-visit tracking for eligible permissions granted from
+    // Site Settings UI. This allows Safety Hub to auto-revoke the permission
+    // if the site is not visited for a finite amount of time.
+    if (base::FeatureList::IsEnabled(
+            permissions::features::
+                kSafetyHubUnusedPermissionRevocationForAllSurfaces) &&
+        content_settings::CanBeAutoRevokedAsUnusedPermission(
+            content_type, content_settings::ContentSettingToValue(setting))) {
+      constraints.set_track_last_visit_for_autoexpiration(true);
+    }
+
+    map->SetContentSettingDefaultScope(origin, origin, content_type, setting,
+                                       constraints);
 
     const content_settings::WebsiteSettingsInfo::ScopingType scoping_type =
         content_settings::WebsiteSettingsRegistry::GetInstance()
@@ -1878,8 +1901,21 @@ void SiteSettingsHandler::HandleSetCategoryPermissionForPattern(
           target_profile, primary_pattern, secondary_pattern, content_type,
           permissions::PermissionSourceUI::SITE_SETTINGS);
 
+  content_settings::ContentSettingConstraints constraints;
+
+  // Enable last-visit tracking for eligible permissions granted from
+  // Site Settings UI. This allows Safety Hub to auto-revoke the permission
+  // if the site is not visited for a finite amount of time.
+  if (base::FeatureList::IsEnabled(
+          permissions::features::
+              kSafetyHubUnusedPermissionRevocationForAllSurfaces) &&
+      content_settings::CanBeAutoRevokedAsUnusedPermission(
+          content_type, content_settings::ContentSettingToValue(setting))) {
+    constraints.set_track_last_visit_for_autoexpiration(true);
+  }
+
   map->SetContentSettingCustomScope(primary_pattern, secondary_pattern,
-                                    content_type, setting);
+                                    content_type, setting, constraints);
 
   // Record which type of exception pattern was entered.
   if (primary_pattern == ContentSettingsPattern::Wildcard() ||
@@ -1999,6 +2035,8 @@ void SiteSettingsHandler::SendZoomLevels() {
 
   base::Value::List zoom_levels_exceptions;
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
   // Show any non-default Isolated Web App zoom levels at the top of the page.
   auto* web_app_provider = web_app::WebAppProvider::GetForWebApps(profile_);
   if (web_app_provider) {
@@ -2012,7 +2050,7 @@ void SiteSettingsHandler::SendZoomLevels() {
       auto* host_zoom_map =
           content::HostZoomMap::GetForStoragePartition(iwa_storage_partition);
       double iwa_zoom = host_zoom_map->GetZoomLevelForHostAndScheme(
-          chrome::kIsolatedAppScheme, iwa_url_info.origin().host());
+          webapps::kIsolatedAppScheme, iwa_url_info.origin().host());
       if (iwa_zoom == host_zoom_map->GetDefaultZoomLevel()) {
         continue;
       }
@@ -2031,6 +2069,8 @@ void SiteSettingsHandler::SendZoomLevels() {
                     *b.GetDict().FindString(site_settings::kDisplayName);
                 return name_a < name_b;
               });
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
   }
 
   content::HostZoomMap* host_zoom_map =
@@ -2096,7 +2136,10 @@ void SiteSettingsHandler::HandleRemoveZoomLevel(const base::Value::List& args) {
   const std::string& host_or_spec = args[0].GetString();
 
   GURL url(host_or_spec);
-  if (url.is_valid() && url.scheme() == chrome::kIsolatedAppScheme) {
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+  if (url.is_valid() && url.scheme() == webapps::kIsolatedAppScheme) {
     base::expected<web_app::IsolatedWebAppUrlInfo, std::string> iwa_url_info =
         web_app::IsolatedWebAppUrlInfo::Create(url);
     if (!iwa_url_info.has_value()) {
@@ -2111,6 +2154,8 @@ void SiteSettingsHandler::HandleRemoveZoomLevel(const base::Value::List& args) {
     host_zoom_map->SetZoomLevelForHost(url.host(), default_level);
     return;
   }
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
 
   content::HostZoomMap* host_zoom_map =
       content::HostZoomMap::GetDefaultForBrowserContext(profile_);

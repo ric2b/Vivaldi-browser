@@ -16,6 +16,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.CallbackController;
 import org.chromium.base.ResettersForTesting;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -28,6 +29,9 @@ import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderUtils;
 import org.chromium.components.browser_ui.desktop_windowing.AppHeaderState;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager.AppHeaderObserver;
+
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /** Class used to manage tab strip visibility and height updates. */
 @NullMarked
@@ -74,14 +78,8 @@ public class TabStripTransitionCoordinator implements ComponentCallbacks, AppHea
          */
         default void onFadeTransitionRequested(float newOpacity, int durationMs) {}
 
-        /**
-         * Called to get the current {@link StripVisibilityState} which may or may not be affected
-         * by strip transitions.
-         *
-         * @return The current {@link StripVisibilityState}.
-         */
-        @StripVisibilityState
-        int getStripVisibilityState();
+        /** Returns the observable supplier for the {@link StripVisibilityState}. */
+        ObservableSupplier<Integer> getStripVisibilityStateSupplier();
     }
 
     private final CallbackController mCallbackController = new CallbackController();
@@ -383,9 +381,11 @@ public class TabStripTransitionCoordinator implements ComponentCallbacks, AppHea
     }
 
     private @StripVisibilityState int getStripVisibilityState() {
+        // Note(david@vivaldi.com): In Vivaldi we do not use the TabStripTransitionDelegateSupplier.
+        if (BuildConfig.IS_VIVALDI) return StripVisibilityState.VISIBLE;
         assert mTabStripTransitionDelegateSupplier.get() != null
                 : "Expected a non-null strip transition delegate.";
-        return mTabStripTransitionDelegateSupplier.get().getStripVisibilityState();
+        return mTabStripTransitionDelegateSupplier.get().getStripVisibilityStateSupplier().get();
     }
 
     private int calculateTopPadding() {

@@ -8,7 +8,6 @@ import static org.chromium.build.NullUtil.assumeNonNull;
 
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.EnsuresNonNull;
 import org.chromium.build.annotations.Initializer;
 import org.chromium.build.annotations.NullMarked;
@@ -22,6 +21,8 @@ import org.chromium.chrome.browser.tabmodel.NextTabPolicy.NextTabPolicySupplier;
 import org.chromium.chrome.browser.tabmodel.TabCreator.NeedsTabModel;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.GURL;
+
+import java.util.function.Supplier;
 
 /** {@link TabModelSelector} for archived tabs. Must be instantiated and used on the UI thread. */
 @NullMarked
@@ -68,7 +69,8 @@ public class ArchivedTabModelSelectorImpl extends TabModelSelectorBase implement
      */
     @Initializer
     @Override
-    public void onNativeLibraryReady(TabContentManager tabContentProvider) {
+    public void onNativeLibraryReady(
+            TabContentManager tabContentProvider, boolean wasTabCollectionsActive) {
         assert mTabContentManager == null : "onNativeLibraryReady called twice!";
 
         TabCreator tabCreator = getTabCreatorManager().getTabCreator(false);
@@ -98,7 +100,8 @@ public class ArchivedTabModelSelectorImpl extends TabModelSelectorBase implement
                         tabRemover,
                         /* supportUndo= */ true,
                         /* isArchivedTabModel= */ true,
-                        ArchivedTabModelSelectorImpl::createTabUngrouper);
+                        ArchivedTabModelSelectorImpl::createTabUngrouper,
+                        wasTabCollectionsActive);
         if (tabCreator instanceof NeedsTabModel needsTabModel) {
             needsTabModel.setTabModel(normalModelHolder.tabModel);
         }

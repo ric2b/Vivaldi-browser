@@ -52,10 +52,7 @@ void FormDataAndroid::OnFormFieldDidChange(size_t index,
 
 bool FormDataAndroid::GetFieldIndex(const FormFieldData& field, size_t* index) {
   for (size_t i = 0; i < form_.fields().size(); ++i) {
-    if (base::FeatureList::IsEnabled(
-            features::kAutofillUseDeepEqualInsteadOfSameFieldAs)
-            ? FormFieldData::DeepEqual(form_.fields()[i], field)
-            : form_.fields()[i].SameFieldAs(field)) {
+    if (FormFieldData::DeepEqual(form_.fields()[i], field)) {
       *index = i;
       return true;
     }
@@ -114,19 +111,19 @@ void FormDataAndroid::UpdateFieldTypes(const FormStructure& form_structure) {
         server_predictions.emplace_back(
             ToSafeFieldType(prediction.type(), NO_SERVER_DATA));
       }
-      std::string_view computed_type = [&] {
+      std::string_view overall_type = [&] {
         if (HtmlFieldType html_field_type = autofill_field->html_type();
             html_field_type != HtmlFieldType::kUnspecified &&
             html_field_type != HtmlFieldType::kUnrecognized) {
           return FieldTypeToStringView(html_field_type);
         }
         return FieldTypeToStringView(
-            GetMostRelevantFieldType(autofill_field->ComputedType()));
+            GetMostRelevantFieldType(autofill_field->Type()));
       }();
       form_field_data_android->UpdateFieldTypes(
           FormFieldDataAndroid::FieldTypes(
               autofill_field->heuristic_type(), autofill_field->server_type(),
-              computed_type, std::move(server_predictions)));
+              overall_type, std::move(server_predictions)));
     }
   }
 }

@@ -187,7 +187,7 @@ locale.  The strings in this file are specific to iOS.
         New Private Tab Page
       </message>
       <message name="IDS_IOS_APPLICATION_SHORTCUT_UNINSTALL_SURVEY_TITLE" desc="Title for uninstall survey from springboard force touch static shortcuts. [Length: unlimited] [iOS only]." meaning="3D Touch entry to create a new tab.">
-        🙄 Spotted an issue?
+        Spotted an issue?
       </message>
       <message name="IDS_IOS_APPLICATION_SHORTCUT_UNINSTALL_SURVEY_SUBTITLE" desc="Subitle for uninstall surveys from springboard force touch static shortcuts. [Length: unlimited] [iOS only]." meaning="3D Touch entry to create a new tab.">
         We’d love to hear your thoughts.
@@ -274,6 +274,9 @@ locale.  The strings in this file are specific to iOS.
        <message name="IDS_IOS_CONTENT_CONTEXT_OPENLINKINTABGROUP" desc="The iOS context menu item for opening a link in a tab group. [iOS only]">
         Open in Tab Stack
       </message>
+       <message name="IDS_IOS_CONTENT_CONTEXT_REMOVEFROMGROUP" desc="The iOS context menu item for removing a tab from a group. [iOS only]">
+         Remove From Stack
+       </message>
       <message name="IDS_IOS_CONTENT_CONTEXT_RENAMEGROUP" desc="The iOS context menu item for renaming a tab group. [iOS only]">
        Rename Stack
       </message>
@@ -377,6 +380,29 @@ locale.  The strings in this file are specific to iOS.
 <ph name="BEGIN_LINK">BEGIN_LINK</ph>Learn more<ph name="END_LINK">END_LINK</ph>
       </message>
       <!-- End Tab Group -> Stack -->
+      <!-- PASSWORD MANAGER -->
+      <message name="IDS_IOS_OFFER_TO_SAVE_PASSWORDS_PASSKEYS" desc="Title for the switch item in Settings that can be toggled allowing users to be prompted if they want to save their passwords when logging into webpages. [Length: 25em] [iOS only]">
+        Offer to save passwords
+      </message>
+      <message name="IDS_IOS_PASSWORD_SETTINGS_NO_CREDENTIAL_DELETION_TEXT" desc="Section title in password settings, explaining to the user there is no data to be deleted. [iOS Only]">
+        No saved passwords
+      </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORDS_PASSKEYS_SAVED_HEADING" desc="The title for a list of items, with each entry consisting of a password and a corresponding username and website. These items are already saved by the browser and can be deleted/edited. [Length: one line] [iOS only]">
+        Saved passwords
+      </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORDS_PASSKEYS_IN_OTHER_APPS_HEADER_IOS18" desc="The title of the view that teaches users to turn on iOS AutoFill from Vivaldi password manager. Used on iOS 18+. [iOS only]">
+        Autofill passwords
+      </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORDS_PASSKEYS_IN_OTHER_APPS_HEADER" desc="The title of the view that teaches users to turn on iOS AutoFill from Vivaldi password manager. [iOS only]">
+        Access your passwords from any app
+      </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORDS_PASSKEYS_IN_OTHER_APPS_IOS18" desc="The title of the view in password settings that allows users to turn on iOS AutoFill from Vivaldi password manager. Used on iOS 18+. [iOS only]">
+        Autofill passwords
+      </message>
+      <message name="IDS_IOS_PASSWORD_SETTINGS_CREDENTIAL_DELETION_TEXT" desc="Section title in password settings, explaining to the user what data will be deleted. [iOS Only]">
+        Passwords from Vivaldi Password Manager
+      </message>
+      <!-- END PASSWORD MANAGER -->
     </messages>
   </release>
 </grit>

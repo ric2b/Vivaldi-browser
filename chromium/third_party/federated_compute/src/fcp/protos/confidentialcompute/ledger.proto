@@ -1,0 +1,329 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.confidentialcompute;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "proto/attestation/endorsement.proto";
+import "proto/attestation/evidence.proto";
+import "proto/micro_rpc/options.proto";
+
+option java_multiple_files = true;
+
+// The Ledger is responsible for ensuring that access to encrypted blobs of data
+// conforms to a data access policy, including usage limits. This service also
+// ensures crypto erasure of the blobs by rotating the keypairs used to encrypt
+// them.
+//
+// This service defines the API for Ledger's Oak enclave app. The service
+// definition is compatible with the Oak microRPC libraries:
+// https://github.com/project-oak/oak/tree/main/micro_rpc.
+//
+// To use this service:
+//   1. Create one or more key pairs (CreateKey).
+//   2. Encrypt a blob using the public key and associate it with a data access
+//      policy (no interaction with the Ledger).
+//   3. Request that the Ledger service unwrap the blob's encryption key so that
+//      it can be read (AuthorizeAccess).
+service Ledger {
+  // Creates a new public/private keypair for encrypting the symmetric keys used
+  // to encrypt blobs.
+  //
+  // The resulting keypair can be used to encrypt many blobs; access to those
+  // blobs will be independently authorized. Access to the blobs will be
+  // disallowed once the keypair expires or is deleted.
+  // method_id: 1
+  rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse) {
+    option (.oak.micro_rpc.method_id) = 1;
+  }
+
+  // Deletes a public/private keypair. Once deleted, any blobs encrypted with
+  // the keypair will no longer be accessible.
+  //
+  // Use RevokeAccess instead to disallow access to a specific blob.
+  // method_id: 2
+  rpc DeleteKey(DeleteKeyRequest) returns (DeleteKeyResponse) {
+    option (.oak.micro_rpc.method_id) = 2;
+  }
+
+  // Authorizes the caller to read an encrypted blob. If the enclave requesting
+  // access is authorized by the blob's policy and the remaining access budget,
+  // the Ledger will decrypt and return the blob's symmetric key (re-encrypted
+  // so that only the enclave can read it).
+  //
+  // For more information about blob encryption and access policies, see
+  // https://github.com/google-parfait/confidential-federated-compute/tree/main/ledger_enclave_app#readme.
+  // method_id: 3
+  rpc AuthorizeAccess(AuthorizeAccessRequest)
+      returns (AuthorizeAccessResponse) {
+    option (.oak.micro_rpc.method_id) = 3;
+  }
+
+  // Prevents all future access to an encrypted blob; all subsequent
+  // AuthorizeAccess requests for the blob will fail.
+  // method_id: 4
+  rpc RevokeAccess(RevokeAccessRequest) returns (RevokeAccessResponse) {
+    option (.oak.micro_rpc.method_id) = 4;
+  }
+}
+
+message CreateKeyRequest {
+  // The current time, which must be monotonically increasing.
+  google.protobuf.Timestamp now = 1;
+
+  // The TTL of the created key.
+  google.protobuf.Duration ttl = 2;
+}
+
+message CreateKeyResponse {
+  // The serialized bytes of the public key.
+  //
+  // This field holds a CBOR Web Token (CWT; RFC 8392) signed by the application
+  // key in `attestation_evidence`. The CWT and COSE key (RFC 9052) will contain
+  // at least the following claims and parameters:
+  //
+  // CWT Claims (https://www.iana.org/assignments/cwt/cwt.xhtml)
+  //   -65537: COSE_Key containing the public key parameters (bstr)
+  //        4: Expiration Time (int)
+  //        6: Issued At (int)
+  //
+  // COSE Key Parameters (https://www.iana.org/assignments/cose/cose.xhtml)
+  //        1: Key Type (int)
+  //        2: Key ID (bstr)
+  //        3: Algorithm (int)
+  //
+  // Supported COSE Algorithms:
+  //   -65537: HPKE-Base-X25519-SHA256-AES128GCM
+  bytes public_key = 1;
+
+  reserved 2 to 5;
+}
+
+message DeleteKeyRequest {
+  // The public key CWT of the key to delete. This should match
+  // `CreateKeyResponse.public_key`.
+  bytes public_key = 2;
+
+  reserved 1;
+}
+
+message DeleteKeyResponse {}
+
+message AuthorizeAccessRequest {
+  // The current time, which must be monotonically increasing.
+  google.protobuf.Timestamp now = 1;
+
+  // The serialized fcp.confidentialcompute.AccessPolicy the blob is subject to.
+  // This must match the hash in the BlobHeader.
+  bytes access_policy = 2;
+
+  // The serialized fcp.confidentialcompute.BlobHeader of the blob being
+  // accessed. Use BlobMetadata.blob_header instead.
+  bytes blob_header = 3 [deprecated = true];
+
+  // Encapsulated HPKE secret key used (along with one of the Ledger's private
+  // keys) to decrypt `encrypted_symmetric_key`. The encapsulated key will have
+  // been produced as part of encrypting the blob's symmetric key using HPKE.
+  // Use BlobMetadata.encapsulated_key instead.
+  bytes encapsulated_key = 4 [deprecated = true];
+
+  // The blob's encrypted symmetric key, used to encrypt the blob data using
+  // AEAD. This symmetric key should have been encrypted using the Ledger-owned
+  // public key indicated in the blob header. The plaintext should be a COSE_Key
+  // structure (RFC 9052), but this is not enforced by this method.
+  // Use BlobMetadata.encrypted_symmetric_key instead.
+  bytes encrypted_symmetric_key = 5 [deprecated = true];
+
+  // Optional. The range of blobs to authorize access to in batches.
+  // If there is only a single blob, this field can be left unset.
+  Range blob_range = 12;
+
+  message Range {
+    // Beginning of the range, inclusive.
+    bytes start = 1;
+    // End of the range, exclusive.
+    bytes end = 2;
+  }
+
+  // The metadata of the blobs pertaining to the given range. This MUST be
+  // provided for range-based batch authorization requests.
+  repeated BlobMetadata blob_metadata = 13;
+
+  message BlobMetadata {
+    // The serialized fcp.confidentialcompute.BlobHeader of the blob being
+    // accessed.
+    bytes blob_header = 1;
+
+    // Encapsulated HPKE secret key used (along with one of the Ledger's private
+    // keys) to decrypt `encrypted_symmetric_key`. The encapsulated key will
+    // have been produced as part of encrypting the blob's symmetric key using
+    // HPKE.
+    bytes encapsulated_key = 2;
+
+    // The blob's encrypted symmetric key, used to encrypt the blob data using
+    // AEAD. This symmetric key should have been encrypted using the
+    // Ledger-owned public key indicated in the blob header. The plaintext
+    // should be a COSE_Key structure (RFC 9052), but this is not enforced by
+    // this method.
+    bytes encrypted_symmetric_key = 3;
+
+    // Nonce used by the recipient to ensure the same AuthorizeAccessResponse
+    // cannot be replayed multiple times by an unsealed portion of the stack to
+    // cause it to process the same data multiple times. The recipient will
+    // discard it after using it once as part of the associated data to decrypt
+    // the symmetric key. This nonce must be appended to the associated data for
+    // the symmetric key.
+    bytes recipient_nonce = 4;
+  }
+
+  // The public key to use to encrypt the response.
+  //
+  // This field holds a CBOR Web Token (CWT) signed by the application key in
+  // `recipient_attestation_evidence`. The CWT and COSE key (RFC 9052) will
+  // contain at least the following claims and parameters:
+  //
+  // CWT Claims (https://www.iana.org/assignments/cwt/cwt.xhtml)
+  //   -65537: COSE_Key containing the public key parameters (bstr)
+  //   -65538: google.protobuf.Struct containing app-specific config properties
+  //
+  // COSE Key Parameters (https://www.iana.org/assignments/cose/cose.xhtml)
+  //        1: Key Type (int)
+  //        3: Algorithm (int)
+  //
+  // Supported COSE Algorithms:
+  //   -65537: HPKE-Base-X25519-SHA256-AES128GCM
+  bytes recipient_public_key = 6;
+
+  // The attestation evidence for the application requesting access.
+  oak.attestation.v1.Evidence recipient_attestation_evidence = 9;
+
+  // The attestation endorsements for the application requesting access.
+  oak.attestation.v1.Endorsements recipient_attestation_endorsements = 11;
+
+  // Optional tag to disambiguate between otherwise identical accesses in the
+  // policy. This field is an orchestration-level hint, not something attested
+  // by the sealed application.
+  string recipient_tag = 8;
+
+  // Nonce used by the recipient to ensure the same AuthorizeAccessResponse
+  // cannot be replayed multiple times by an unsealed portion of the stack to
+  // cause it to process the same data multiple times. The recipient will
+  // discard it after using it once as part of the associated data to decrypt
+  // the symmetric key. This nonce must be appended to the associated data for
+  // the symmetric key. Use BlobMetadata.recipient_nonce instead.
+  bytes recipient_nonce = 10 [deprecated = true];
+
+  reserved 7;
+}
+
+message AuthorizeAccessResponse {
+  // Encapsulated HPKE secret key for decrypting `encrypted_symmetric_key`.
+  bytes encapsulated_key = 1 [deprecated = true];
+
+  // The symmetric key for reading the data, encrypted with HPKE using
+  // `AuthorizeAccessRequest.recipient_public_key`. The associated data for the
+  // hybrid encryption is `reencryption_public_key` +
+  // `AuthorizeAccessRequest::recipient_nonce`.
+  bytes encrypted_symmetric_key = 2 [deprecated = true];
+
+  // If the application will be re-encrypting its output, the CWT for the public
+  // key to use. The CWT has the same required claims and parameters as
+  // `CreateKeyResponse.public_key`. Reusing the same public key as the input
+  // ensures that derived objects have the same expiration time as the original
+  // data. This key can be ignored if the application doesn't encrypt its
+  // outputs (e.g., because it produces anonymized aggregate results).
+  bytes reencryption_public_key = 3;
+
+  // Re-wrapped keys for all the blobs in the request. This is only populated
+  // when using range-based batch authorization. The ordering of the blobs
+  // matches the ordering of the blob metadata in the request.
+  repeated AuthorizedBlobKeys authorized_blob_keys = 4;
+
+  message AuthorizedBlobKeys {
+    // Encapsulated HPKE secret key for decrypting `encrypted_symmetric_key`.
+    bytes encapsulated_key = 1;
+
+    // The symmetric key for reading the data, encrypted with HPKE using
+    // `AuthorizeAccessRequest.recipient_public_key`. The associated data for
+    // the hybrid encryption is `reencryption_public_key` +
+    // `AuthorizeAccessRequest::recipient_nonce`.
+    bytes encrypted_symmetric_key = 2;
+
+    // The status of the authorization request for this blob. If the status is
+    // not OK, the other fields in this message will be empty.
+    Status status = 3;
+  }
+}
+
+// Error status similar to google.rpc.Status.
+message Status {
+  int32 code = 1;
+  string message = 2;
+}
+
+message RevokeAccessRequest {
+  // The COSE "kid" property (RFC 9052) of the key used to encrypt the blob.
+  bytes key_id = 3;
+
+  // The id of the blob, matching the id in its header.
+  bytes blob_id = 2;
+
+  reserved 1;
+}
+
+message RevokeAccessResponse {}
+
+// LedgerRequest and LedgerResponse combine individual request and response
+// messages above, and used by the replicated implementation of the Ledger.
+message LedgerRequest {
+  oneof request {
+    // Creates a new public/private keypair for encrypting the symmetric keys
+    // used to encrypt blobs.
+    CreateKeyRequest create_key = 1;
+    // Deletes a public/private keypair. Once deleted, any blobs encrypted with
+    // the keypair will no longer be accessible.
+    DeleteKeyRequest delete_key = 2;
+    // Authorizes the caller to read an encrypted blob. If the enclave
+    // requesting access is authorized by the blob's policy and the remaining
+    // access budget, the Ledger will decrypt and return the blob's symmetric
+    // key (re-encrypted so that only the enclave can read it).
+    AuthorizeAccessRequest authorize_access = 3;
+    // Prevents all future access to an encrypted blob; all subsequent
+    // AuthorizeAccess requests for the blob will fail.
+    RevokeAccessRequest revoke_access = 4;
+  }
+}
+
+message LedgerResponse {
+  // Error status similar to google.rpc.Status.
+
+  oneof response {
+    // Response for CreateKeyRequest.
+    CreateKeyResponse create_key = 1;
+    // Response for DeleteKeyRequest.
+    DeleteKeyResponse delete_key = 2;
+    // Response for AuthorizeAccessRequest.
+    AuthorizeAccessResponse authorize_access = 3;
+    // Response for RevokeAccessRequest.
+    RevokeAccessResponse revoke_access = 4;
+    // Error response for all requests.
+    Status error = 5;
+  }
+}
+
+// Ledger configuration - used to configure replicated Ledger job.
+message LedgerConfig {}

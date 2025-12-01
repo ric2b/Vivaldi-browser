@@ -66,26 +66,32 @@ void RtpTransport::SetRtpPacketTransport(
     return;
   }
   if (rtp_packet_transport_) {
-    rtp_packet_transport_->SignalReadyToSend.disconnect(this);
+    rtp_packet_transport_->UnsubscribeReadyToSend(this);
     rtp_packet_transport_->DeregisterReceivedPacketCallback(this);
-    rtp_packet_transport_->SignalNetworkRouteChanged.disconnect(this);
-    rtp_packet_transport_->SignalWritableState.disconnect(this);
+    rtp_packet_transport_->UnsubscribeNetworkRouteChanged(this);
+    rtp_packet_transport_->UnsubscribeWritableState(this);
     rtp_packet_transport_->SignalSentPacket.disconnect(this);
     // Reset the network route of the old transport.
     SendNetworkRouteChanged(std::optional<NetworkRoute>());
   }
   if (new_packet_transport) {
-    new_packet_transport->SignalReadyToSend.connect(
-        this, &RtpTransport::OnReadyToSend);
+    new_packet_transport->SubscribeReadyToSend(
+        this, [this](PacketTransportInternal* transport) {
+          OnReadyToSend(transport);
+        });
     new_packet_transport->RegisterReceivedPacketCallback(
         this, [&](PacketTransportInternal* transport,
                   const ReceivedIpPacket& packet) {
           OnReadPacket(transport, packet);
         });
-    new_packet_transport->SignalNetworkRouteChanged.connect(
-        this, &RtpTransport::OnNetworkRouteChanged);
-    new_packet_transport->SignalWritableState.connect(
-        this, &RtpTransport::OnWritableState);
+    new_packet_transport->SubscribeNetworkRouteChanged(
+        this, [this](std::optional<NetworkRoute> network_route) {
+          OnNetworkRouteChanged(network_route);
+        });
+    new_packet_transport->SubscribeWritableState(
+        this, [this](PacketTransportInternal* transport) {
+          OnWritableState(transport);
+        });
     new_packet_transport->SignalSentPacket.connect(this,
                                                    &RtpTransport::OnSentPacket);
     // Set the network route for the new transport.
@@ -103,26 +109,32 @@ void RtpTransport::SetRtcpPacketTransport(
     return;
   }
   if (rtcp_packet_transport_) {
-    rtcp_packet_transport_->SignalReadyToSend.disconnect(this);
+    rtcp_packet_transport_->UnsubscribeReadyToSend(this);
     rtcp_packet_transport_->DeregisterReceivedPacketCallback(this);
-    rtcp_packet_transport_->SignalNetworkRouteChanged.disconnect(this);
-    rtcp_packet_transport_->SignalWritableState.disconnect(this);
+    rtcp_packet_transport_->UnsubscribeNetworkRouteChanged(this);
+    rtcp_packet_transport_->UnsubscribeWritableState(this);
     rtcp_packet_transport_->SignalSentPacket.disconnect(this);
     // Reset the network route of the old transport.
     SendNetworkRouteChanged(std::optional<NetworkRoute>());
   }
   if (new_packet_transport) {
-    new_packet_transport->SignalReadyToSend.connect(
-        this, &RtpTransport::OnReadyToSend);
+    new_packet_transport->SubscribeReadyToSend(
+        this, [this](PacketTransportInternal* transport) {
+          OnReadyToSend(transport);
+        });
     new_packet_transport->RegisterReceivedPacketCallback(
         this, [&](PacketTransportInternal* transport,
                   const ReceivedIpPacket& packet) {
           OnReadPacket(transport, packet);
         });
-    new_packet_transport->SignalNetworkRouteChanged.connect(
-        this, &RtpTransport::OnNetworkRouteChanged);
-    new_packet_transport->SignalWritableState.connect(
-        this, &RtpTransport::OnWritableState);
+    new_packet_transport->SubscribeNetworkRouteChanged(
+        this, [this](std::optional<NetworkRoute> network_route) {
+          OnNetworkRouteChanged(network_route);
+        });
+    new_packet_transport->SubscribeWritableState(
+        this, [this](PacketTransportInternal* transport) {
+          OnWritableState(transport);
+        });
     new_packet_transport->SignalSentPacket.connect(this,
                                                    &RtpTransport::OnSentPacket);
     // Set the network route for the new transport.
@@ -164,14 +176,6 @@ bool RtpTransport::SendPacket(bool rtcp,
   int ret = transport->SendPacket(packet->cdata<char>(), packet->size(),
                                   options, flags);
   if (ret != static_cast<int>(packet->size())) {
-    if (set_ready_to_send_false_if_send_fail_) {
-      // TODO: webrtc:361124449 - Remove SetReadyToSend if field trial
-      // WebRTC-SetReadyToSendFalseIfSendFail succeed 2024-12-01.
-      if (transport->GetError() == ENOTCONN) {
-        RTC_LOG(LS_WARNING) << "Got ENOTCONN from transport.";
-        SetReadyToSend(rtcp, false);
-      }
-    }
     return false;
   }
   return true;

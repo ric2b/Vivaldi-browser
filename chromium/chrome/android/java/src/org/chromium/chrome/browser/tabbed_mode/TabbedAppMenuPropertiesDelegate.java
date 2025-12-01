@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.tabbed_mode;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.util.SparseArray;
@@ -12,19 +14,17 @@ import android.view.View;
 
 import androidx.annotation.IdRes;
 import androidx.annotation.IntDef;
-import androidx.annotation.NonNull;
 import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.graphics.drawable.DrawableCompat;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.CallbackController;
 import org.chromium.base.DeviceInfo;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.Contract;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
@@ -63,9 +63,12 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuItemProperties;
 import org.chromium.chrome.browser.ui.extensions.ExtensionUi;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
-import org.chromium.components.browser_ui.accessibility.PageZoomCoordinator;
+import org.chromium.chrome.browser.ui.native_page.NativePage;
+import org.chromium.components.browser_ui.accessibility.PageZoomManager;
+import org.chromium.components.browser_ui.accessibility.PageZoomMenuItemCoordinator;
+import org.chromium.components.browser_ui.accessibility.PageZoomProperties;
+import org.chromium.components.browser_ui.accessibility.PageZoomUtils;
 import org.chromium.components.dom_distiller.core.DomDistillerFeatures;
-import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.user_prefs.UserPrefs;
@@ -75,6 +78,7 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.LayoutViewBuilder;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.ModelListAdapter;
+import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.GURL;
 
@@ -83,18 +87,26 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
 
+import org.vivaldi.browser.appmenu.AppMenuIconRow;
 import org.vivaldi.browser.appmenu.VivaldiMenuUtils;
 import org.vivaldi.browser.common.VivaldiDefaultBrowserUtils;
 import org.vivaldi.browser.common.VivaldiUrlConstants;
 import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /** An {@link AppMenuPropertiesDelegateImpl} for ChromeTabbedActivity. */
+@NullMarked
 public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateImpl {
-    @IntDef({TabbedAppMenuItemType.UPDATE_ITEM, TabbedAppMenuItemType.NEW_INCOGNITO_TAB})
+    @IntDef({
+        TabbedAppMenuItemType.UPDATE_ITEM,
+        TabbedAppMenuItemType.NEW_INCOGNITO_TAB,
+        TabbedAppMenuItemType.ZOOM_ITEM
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface TabbedAppMenuItemType {
         /** Regular Android menu item that contains a title and an icon if icon is specified. */
@@ -105,6 +117,9 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
          * It is different from the regular menu item because it contains two separate buttons.
          */
         int NEW_INCOGNITO_TAB = AppMenuHandler.AppMenuItemType.NUM_ENTRIES + 1;
+
+        /** Menu item that has a title and two buttons. */
+        int ZOOM_ITEM = AppMenuHandler.AppMenuItemType.NUM_ENTRIES + 2;
     }
 
     AppMenuDelegate mAppMenuDelegate;
@@ -113,6 +128,10 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     SnackbarManager mSnackbarManager;
 
     private boolean mUpdateMenuItemVisible;
+
+    // Vivaldi
+    private final ObservableSupplier<BookmarkModel> mBookmarkModelSupplier;
+    private @Nullable AppMenuIconRow mVivaldiMenuIconRow;
 
     /**
      * This is non null for the case of ChromeTabbedActivity when the corresponding {@link
@@ -123,6 +142,8 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     private @Nullable Runnable mUpdateStateChangeObserver;
 
     private final CallbackController mIncognitoReauthCallbackController = new CallbackController();
+
+    private final PageZoomMenuItemCoordinator mPageZoomMenuItemCoordinator;
 
     public TabbedAppMenuPropertiesDelegate(
             Context context,
@@ -137,10 +158,9 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
             WebFeedSnackbarController.FeedLauncher feedLauncher,
             ModalDialogManager modalDialogManager,
             SnackbarManager snackbarManager,
-            @NonNull
-                    OneshotSupplier<IncognitoReauthController>
-                            incognitoReauthControllerOneshotSupplier,
-            Supplier<ReadAloudController> readAloudControllerSupplier) {
+            OneshotSupplier<IncognitoReauthController> incognitoReauthControllerOneshotSupplier,
+            Supplier<ReadAloudController> readAloudControllerSupplier,
+            PageZoomManager pageZoomManager) {
         super(
                 context,
                 activityTabProvider,
@@ -155,12 +175,16 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
         mFeedLauncher = feedLauncher;
         mModalDialogManager = modalDialogManager;
         mSnackbarManager = snackbarManager;
+        mPageZoomMenuItemCoordinator = new PageZoomMenuItemCoordinator(pageZoomManager);
 
         incognitoReauthControllerOneshotSupplier.onAvailable(
                 mIncognitoReauthCallbackController.makeCancelable(
                         incognitoReauthController -> {
                             mIncognitoReauthController = incognitoReauthController;
                         }));
+
+        // Vivaldi
+        mBookmarkModelSupplier = bookmarkModelSupplier;
     }
 
     @Override
@@ -178,6 +202,11 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
                 TabbedAppMenuItemType.NEW_INCOGNITO_TAB,
                 new LayoutViewBuilder(R.layout.custom_view_menu_item),
                 IncognitoMenuItemViewBinder::bind);
+
+        modelListAdapter.registerType(
+                TabbedAppMenuItemType.ZOOM_ITEM,
+                new LayoutViewBuilder(R.layout.page_zoom_menu_item),
+                PageZoomMenuItemViewBinder::bind);
     }
 
     @Override
@@ -232,15 +261,18 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
         if (mUpdateMenuItemVisible) {
             modelList.add(buildUpdateItem());
             mUpdateStateChangeObserver = buildUpdateStateChangedObserver();
-            UpdateMenuItemHelper.getInstance(mTabModelSelector.getModel(false).getProfile())
+            UpdateMenuItemHelper.getInstance(getProfileFromTabModel())
                     .registerObserver(mUpdateStateChangeObserver);
         }
 
-        // New Tab
-        modelList.add(buildNewTabItem());
-
-        // New Incognito Tab
-        modelList.add(buildNewIncognitoTabItem());
+        // When the feature is enabled, show either "New Incognito tab" in incognito mode
+        // or "New tab" in normal mode. When the feature is disabled, show both.
+        if (!IncognitoUtils.shouldOpenIncognitoAsWindow() || !isIncognitoShowing()) {
+            modelList.add(buildNewTabItem());
+        }
+        if (!IncognitoUtils.shouldOpenIncognitoAsWindow() || isIncognitoShowing()) {
+            modelList.add(buildNewIncognitoTabItem());
+        }
 
         // Add to Group
         if (shouldShowAddToGroup()) modelList.add(buildAddToGroupItem(currentTab));
@@ -296,7 +328,10 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
                         buildModelForDivider(R.id.divider_line_id)));
 
         // Page Zoom
-        if (shouldShowPageZoomItem(currentTab)) modelList.add(buildPageZoomItem(currentTab));
+        // Disable page zoom menu item on Reading Mode pages.
+        if (shouldShowPageZoomItem(currentTab) && !isReaderModeShowing(currentTab)) {
+            modelList.add(buildPageZoomItem(currentTab));
+        }
 
         // Share
         if (ShareUtils.shouldEnableShare(currentTab)) {
@@ -410,7 +445,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
                 assert false : "ModelList should not be null";
                 return;
             }
-            for (MVCListAdapter.ListItem listItem : getModelList()) {
+            for (MVCListAdapter.ListItem listItem : modelList) {
                 if (listItem.model.get(AppMenuItemProperties.MENU_ITEM_ID) == R.id.update_menu_id) {
                     updateUpdateItemData(listItem.model);
                     return;
@@ -430,8 +465,16 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     }
 
     private void populateOverviewModeMenu(MVCListAdapter.ModelList modelList) {
-        modelList.add(buildNewTabItem());
-        modelList.add(buildNewIncognitoTabItem());
+        if (!IncognitoUtils.shouldOpenIncognitoAsWindow() || !isIncognitoShowing()) {
+            modelList.add(buildNewTabItem());
+        }
+        if (!IncognitoUtils.shouldOpenIncognitoAsWindow() || isIncognitoShowing()) {
+            modelList.add(buildNewIncognitoTabItem());
+        }
+        if (shouldShowNewIncognitoWindow()) {
+            modelList.add(buildNewWindowItem());
+            modelList.add(buildNewIncognitoWindowItem());
+        }
         if (ChromeFeatureList.sTabGroupEntryPointsAndroid.isEnabled()) {
             modelList.add(buildNewTabGroupItem());
         }
@@ -444,7 +487,12 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     private void populateTabletEmptyModeMenu(MVCListAdapter.ModelList modelList) {
         modelList.add(buildNewTabItem());
-        modelList.add(buildNewIncognitoTabItem());
+        if (IncognitoUtils.shouldOpenIncognitoAsWindow()) {
+            modelList.add(buildNewWindowItem());
+            modelList.add(buildNewIncognitoWindowItem());
+        } else {
+            modelList.add(buildNewIncognitoTabItem());
+        }
         modelList.add(buildSettingsItem());
         if (shouldShowQuickDeleteItem()) modelList.add(buildQuickDeleteItem());
     }
@@ -466,9 +514,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     private void updateUpdateItemData(PropertyModel model) {
         MenuItemState itemState =
-                UpdateMenuItemHelper.getInstance(mTabModelSelector.getModel(false).getProfile())
-                        .getUiState()
-                        .itemState;
+                UpdateMenuItemHelper.getInstance(getProfileFromTabModel()).getUiState().itemState;
         if (itemState == null) {
             assert false : "The update state should be non-null";
             model.set(AppMenuItemProperties.ENABLED, false);
@@ -508,11 +554,16 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     }
 
     private MVCListAdapter.ListItem buildNewIncognitoTabItem() {
+        int iconRes = 0;
+        if (shouldShowIconBeforeItem()) {
+            iconRes =
+                    IncognitoUtils.shouldOpenIncognitoAsWindow()
+                            ? R.drawable.ic_add_box_rounded_corner
+                            : R.drawable.ic_incognito;
+        }
         PropertyModel model =
                 buildModelForStandardMenuItem(
-                        R.id.new_incognito_tab_menu_id,
-                        R.string.menu_new_incognito_tab,
-                        shouldShowIconBeforeItem() ? R.drawable.ic_incognito : 0);
+                        R.id.new_incognito_tab_menu_id, R.string.menu_new_incognito_tab, iconRes);
         model.set(
                 AppMenuItemProperties.ENABLED, isIncognitoEnabled() && !isIncognitoReauthShowing());
         return new MVCListAdapter.ListItem(TabbedAppMenuItemType.NEW_INCOGNITO_TAB, model);
@@ -541,7 +592,9 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     @Contract("null -> false")
     private boolean shouldShowTogglePinTabItem(Tab currentTab) {
-        return ChromeFeatureList.sAndroidPinnedTabs.isEnabled() && currentTab != null;
+        return (ChromeFeatureList.sAndroidPinnedTabsTabletTabStrip.isEnabled()
+                        || ChromeFeatureList.sAndroidPinnedTabs.isEnabled())
+                && currentTab != null;
     }
 
     private MVCListAdapter.ListItem buildTogglePinTabItem(Tab currentTab) {
@@ -588,16 +641,12 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     private MVCListAdapter.ListItem buildManageWindowsItem() {
         assert MultiWindowUtils.shouldShowManageWindowsMenu();
-        PropertyModel model =
+        return new MVCListAdapter.ListItem(
+                AppMenuHandler.AppMenuItemType.STANDARD,
                 buildModelForStandardMenuItem(
                         R.id.manage_all_windows_menu_id,
                         R.string.menu_manage_all_windows,
-                        shouldShowIconBeforeItem() ? R.drawable.ic_select_window : 0);
-        model.set(
-                AppMenuItemProperties.TITLE,
-                mContext.getString(R.string.menu_manage_all_windows, getInstanceCount()));
-
-        return new MVCListAdapter.ListItem(AppMenuHandler.AppMenuItemType.STANDARD, model);
+                        shouldShowIconBeforeItem() ? R.drawable.ic_select_window : 0));
     }
 
     private MVCListAdapter.ListItem buildHistoryItem() {
@@ -643,7 +692,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     private boolean shouldShowExtensionsItem() {
         // TODO(crbug.com/422307625): Remove this check once extensions are ready for dogfooding.
-        return ExtensionUi.isEnabled(mTabModelSelector.getCurrentModel().getProfile());
+        return ExtensionUi.isEnabled(getProfileFromTabModel());
     }
 
     private MVCListAdapter.ListItem buildExtensionsItem() {
@@ -659,11 +708,40 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     private boolean shouldShowPageZoomItem(Tab currentTab) {
         return currentTab != null
                 && shouldShowWebContentsDependentMenuItem(currentTab)
-                && PageZoomCoordinator.shouldShowMenuItem();
+                && PageZoomUtils.shouldShowZoomMenuItem();
+    }
+
+    private boolean shouldShowLFFPageZoomItem() {
+        return ChromeFeatureList.sAndroidZoomIndicator.isEnabled()
+                && DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext);
+    }
+
+    private PropertyModel buildNewPageZoomModel() {
+        PropertyKey[] keys =
+                PropertyModel.concatKeys(
+                        AppMenuItemProperties.ALL_KEYS, PageZoomProperties.ALL_KEYS_FOR_MENU_ITEM);
+        Drawable icon =
+                shouldShowIconBeforeItem()
+                        ? AppCompatResources.getDrawable(mContext, R.drawable.ic_zoom)
+                        : null;
+        PropertyModel model =
+                populateBaseModelForTextItem(new PropertyModel.Builder(keys), R.id.page_zoom_id)
+                        .with(
+                                AppMenuItemProperties.TITLE,
+                                mContext.getString(R.string.page_zoom_menu_title))
+                        .with(AppMenuItemProperties.MENU_ITEM_ID, R.id.page_zoom_id)
+                        .with(AppMenuItemProperties.ICON, icon)
+                        .build();
+        return model;
     }
 
     private MVCListAdapter.ListItem buildPageZoomItem(Tab currentTab) {
         assert shouldShowPageZoomItem(currentTab);
+        if (shouldShowLFFPageZoomItem()) {
+            PropertyModel model = buildNewPageZoomModel();
+            mPageZoomMenuItemCoordinator.setModel(model);
+            return new MVCListAdapter.ListItem(TabbedAppMenuItemType.ZOOM_ITEM, model);
+        }
         return new MVCListAdapter.ListItem(
                 AppMenuHandler.AppMenuItemType.STANDARD,
                 buildModelForStandardMenuItem(
@@ -682,11 +760,27 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
                         shouldShowIconBeforeItem() ? R.drawable.ic_file_download_white_24dp : 0));
     }
 
+    /** Determines whether the "Print" menu item should be shown for a given tab. */
     private boolean shouldShowPrintItem(@Nullable Tab currentTab) {
-        return currentTab != null
-                && ShareUtils.shouldEnableShare(currentTab)
-                && DeviceInfo.isDesktop()
-                && UserPrefs.get(currentTab.getProfile()).getBoolean(Pref.PRINTING_ENABLED);
+        // A tab must exist to print from it.
+        if (currentTab == null) {
+            return false;
+        }
+
+        // Check if sharing (which includes printing) is generally enabled for this tab's content.
+        boolean canShareTab = ShareUtils.shouldEnableShare(currentTab);
+
+        // Check if printing is specifically enabled in user preferences for the current profile.
+        Profile profile = currentTab.getProfile();
+        boolean isPrintingEnabled = UserPrefs.get(profile).getBoolean(Pref.PRINTING_ENABLED);
+
+        // Show print item if we're on a desktop device or if the current tab is displaying a native
+        // PDF.
+        NativePage nativePage = currentTab.getNativePage();
+        boolean isPdfPage = nativePage != null && nativePage.isPdf();
+        boolean isEligibleForPrint = DeviceInfo.isDesktop() || isPdfPage;
+
+        return canShareTab && isPrintingEnabled && isEligibleForPrint;
     }
 
     private MVCListAdapter.ListItem buildPrintItem(Tab currentTab) {
@@ -700,21 +794,22 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     }
 
     private boolean shouldShowReaderModeItem(@Nullable Tab currentTab) {
-        return currentTab != null
-                && (DomDistillerFeatures.showAlwaysOnEntryPoint()
-                        || DomDistillerFeatures.sReaderModeDistillInApp.isEnabled());
-    }
+        if (currentTab == null) {
+            return false;
+        }
 
-    private MVCListAdapter.ListItem buildReaderModeItem(Tab currentTab) {
-        assert shouldShowReaderModeItem(currentTab);
-        return new MVCListAdapter.ListItem(
-                AppMenuHandler.AppMenuItemType.STANDARD,
-                buildModelForStandardMenuItem(
-                        R.id.reader_mode_menu_id,
-                        DomDistillerUrlUtils.isDistilledPage(currentTab.getUrl())
-                                ? R.string.hide_reading_mode_text
-                                : R.string.show_reading_mode_text,
-                        shouldShowIconBeforeItem() ? R.drawable.ic_reader_mode_24dp : 0));
+        GURL url = currentTab.getUrl();
+        boolean isChromeOrNativePage =
+                url.getScheme().equals(UrlConstants.CHROME_SCHEME)
+                        || url.getScheme().equals(UrlConstants.CHROME_NATIVE_SCHEME)
+                        || currentTab.isNativePage();
+
+        if (isChromeOrNativePage) {
+            return false;
+        }
+
+        return (DomDistillerFeatures.showAlwaysOnEntryPoint()
+                || DomDistillerFeatures.sReaderModeDistillInApp.isEnabled());
     }
 
     private boolean shouldShowGetImageDescriptionsItem(@Nullable Tab currentTab) {
@@ -904,7 +999,8 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     private boolean shouldShowFindInPageItem(@Nullable Tab currentTab) {
         return currentTab != null
                 && (shouldShowWebContentsDependentMenuItem(currentTab)
-                        || (currentTab.isNativePage() && currentTab.getNativePage().isPdf()));
+                        || (currentTab.isNativePage()
+                                && assumeNonNull(currentTab.getNativePage()).isPdf()));
     }
 
     private MVCListAdapter.ListItem buildFindInPageItem(@Nullable Tab currentTab) {
@@ -917,7 +1013,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
                         shouldShowIconBeforeItem() ? R.drawable.ic_find_in_page : 0));
     }
 
-    private MVCListAdapter.ListItem maybeBuildAiMenuItem(@Nullable Tab currentTab) {
+    private MVCListAdapter.@Nullable ListItem maybeBuildAiMenuItem(@Nullable Tab currentTab) {
         if (currentTab == null
                 || currentTab.getWebContents() == null
                 || !ChromeFeatureList.isEnabled(
@@ -973,7 +1069,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
     public boolean shouldShowNewWindow() {
         // Hide the menu on automotive devices.
-        if (BuildInfo.getInstance().isAutomotive) return false;
+        if (DeviceInfo.isAutomotive()) return false;
 
         // Vivaldi: Hide the menu in automotive builds.
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return false;
@@ -1022,9 +1118,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
      * @return Whether the update Chrome menu item should be displayed.
      */
     protected boolean shouldShowUpdateMenuItem() {
-        return UpdateMenuItemHelper.getInstance(mTabModelSelector.getModel(false).getProfile())
-                        .getUiState()
-                        .itemState
+        return UpdateMenuItemHelper.getInstance(getProfileFromTabModel()).getUiState().itemState
                 != null;
     }
 
@@ -1057,6 +1151,19 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     @Override
     public @Nullable View buildFooterView(AppMenuHandler appMenuHandler) {
+        // Vivaldi - We use the footer to display our menu bar when address bar is at the bottom.
+        boolean isToolbarAtBottom = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                VivaldiPreferences.ADDRESS_BAR_TO_BOTTOM, false);
+        Tab currentTab = mActivityTabProvider.get();
+        if (BuildConfig.IS_VIVALDI && currentTab != null && isToolbarAtBottom
+                && shouldShowIconRow()) {
+            mVivaldiMenuIconRow = (AppMenuIconRow) LayoutInflater.from(mContext).inflate(
+                    R.layout.icon_row_menu_layout, null);
+            mVivaldiMenuIconRow.initialize(
+                    appMenuHandler, mBookmarkModelSupplier, currentTab, mAppMenuDelegate);
+            return mVivaldiMenuIconRow;
+        } // Vivaldi End
+
         if (!shouldShowWebFeedMenuItem()) {
             return null;
         }
@@ -1116,13 +1223,18 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
         super.onMenuDismissed();
         if (mUpdateMenuItemVisible) {
             UpdateMenuItemHelper updateHelper =
-                    UpdateMenuItemHelper.getInstance(
-                            mTabModelSelector.getModel(false).getProfile());
+                    UpdateMenuItemHelper.getInstance(getProfileFromTabModel());
             updateHelper.onMenuDismissed();
-            updateHelper.unregisterObserver(mUpdateStateChangeObserver);
+            updateHelper.unregisterObserver(assumeNonNull(mUpdateStateChangeObserver));
             mUpdateMenuItemVisible = false;
             mUpdateStateChangeObserver = null;
         }
+    }
+
+    private Profile getProfileFromTabModel() {
+        var profile = mTabModelSelector.getModel(false).getProfile();
+        assert profile != null;
+        return profile;
     }
 
     // Vivaldi ref. VAB-11054
@@ -1260,7 +1372,9 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
                         || url.getScheme().equals(UrlConstants.CHROME_NATIVE_SCHEME)
                         || (currentTab != null && currentTab.isNativePage());
 
-        if (shouldShowIconRow()) {
+        boolean isToolbarAtBottom = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                VivaldiPreferences.ADDRESS_BAR_TO_BOTTOM, false);
+        if (shouldShowIconRow() && !isToolbarAtBottom) {
             List<PropertyModel> iconModels = new ArrayList<>();
             int[] menuArray = VivaldiMenuUtils.getMenuItems(mContext);
 
@@ -1438,13 +1552,6 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
                 maybeBuildSimplifiedViewItem(currentTab, isNativePage, shouldShowIconBeforeItem());
         if (simplifiedViewItem != null) modelList.add(simplifiedViewItem);
 
-        // Reader Mode Prefs (Appearance)
-        if (shouldShowReaderModePrefs(currentTab) && canShowMenuItem(R.id.reader_mode_menu_id)) {
-            MVCListAdapter.ListItem readerModePrefsItem = buildReaderModePrefsItem();
-            replaceMenuIcon(readerModePrefsItem, R.drawable.ic_reader_mode_24dp);
-            modelList.add(readerModePrefsItem);
-        }
-
         // Capture page
         if (shouldShowCapturePageItem(currentTab) && canShowMenuItem(R.id.capture_page_id)) {
             modelList.add(buildCapturePageItem(currentTab));
@@ -1574,4 +1681,12 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
         return true;
     }
 
+    // Vivaldi
+    @Override
+    public void loadingStateChanged(boolean isLoading) {
+        super.loadingStateChanged(isLoading);
+        if (mVivaldiMenuIconRow != null)
+            mVivaldiMenuIconRow.loadingStateChanged(isLoading);
+    }
+    // End Vivaldi
 }

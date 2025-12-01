@@ -15,8 +15,9 @@ namespace vivaldi {
 
 syncer::SyncInvalidationsService*
 VivaldiSyncInvalidationsServiceFactory::GetForProfile(ProfileIOS* profile) {
-  return static_cast<syncer::SyncInvalidationsService*>(
-      GetInstance()->GetServiceForBrowserState(profile, /*create=*/true));
+  return static_cast<syncer::SyncInvalidationsService*>(GetInstance()
+     ->GetServiceForProfileAs<syncer::SyncInvalidationsService>(
+         profile, /*create=*/true));
 }
 
 VivaldiSyncInvalidationsServiceFactory*
@@ -35,8 +36,7 @@ VivaldiSyncInvalidationsServiceFactory::
 
 std::unique_ptr<KeyedService>
 VivaldiSyncInvalidationsServiceFactory::BuildServiceInstanceFor(
-    web::BrowserState* context) const {
-  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
+    ProfileIOS* profile) const {
   return std::make_unique<VivaldiSyncInvalidationsService>(
       GetApplicationContext()->GetLocalState()->GetString(
           vivaldiprefs::kVivaldiSyncNotificationsServerUrl),

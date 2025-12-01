@@ -11,6 +11,10 @@
 #ifndef LIBANGLE_RENDERER_VULKAN_VK_CACHE_UTILS_H_
 #define LIBANGLE_RENDERER_VULKAN_VK_CACHE_UTILS_H_
 
+#ifdef UNSAFE_BUFFERS_BUILD
+#    pragma allow_unsafe_buffers
+#endif
+
 #include <deque>
 
 #include "common/Color.h"
@@ -68,7 +72,7 @@ class Context;
 class BufferHelper;
 class DynamicDescriptorPool;
 class SamplerHelper;
-enum class ImageLayout;
+enum class ImageAccess;
 class PipelineCacheAccess;
 class RenderPassCommandBufferHelper;
 class PackedClearValuesArray;
@@ -448,7 +452,7 @@ struct PackedAttachmentOpsDesc final
     uint16_t isStencilInvalidated : 1;
     uint16_t padding1 : 6;
 
-    // Layouts take values from ImageLayout, so they are small.  Layouts that are possible here are
+    // Layouts take values from ImageAccess, so they are small.  Layouts that are possible here are
     // placed at the beginning of that enum.
     uint16_t initialLayout : 5;
     uint16_t finalLayout : 5;
@@ -474,12 +478,12 @@ class AttachmentOpsArray final
 
     // Initialize an attachment op with all load and store operations.
     void initWithLoadStore(PackedAttachmentIndex index,
-                           ImageLayout initialLayout,
-                           ImageLayout finalLayout);
+                           ImageAccess initialLayout,
+                           ImageAccess finalLayout);
 
     void setLayouts(PackedAttachmentIndex index,
-                    ImageLayout initialLayout,
-                    ImageLayout finalLayout);
+                    ImageAccess initialLayout,
+                    ImageAccess finalLayout);
     void setOps(PackedAttachmentIndex index, RenderPassLoadOp loadOp, RenderPassStoreOp storeOp);
     void setStencilOps(PackedAttachmentIndex index,
                        RenderPassLoadOp loadOp,
@@ -503,8 +507,8 @@ struct PackedAttribDesc final
     uint8_t format;
     uint8_t divisor;
     uint16_t offset : kAttributeOffsetMaxBits;
-    uint16_t compressed : 1;
 };
+static_assert(kAttributeOffsetMaxBits == 16, "Keep PackedAttribDesc struct tightly packed");
 
 constexpr size_t kPackedAttribDescSize = sizeof(PackedAttribDesc);
 static_assert(kPackedAttribDescSize == 4, "Size mismatch");
@@ -898,6 +902,9 @@ struct GraphicsPipelineShadersInfo final
     friend class GraphicsPipelineDesc;
 };
 
+angle::FormatID PatchVertexAttribComponentType(angle::FormatID format,
+                                               gl::ComponentType vsInputType);
+
 // State changes are applied through the update methods. Each update method can also have a
 // sibling method that applies the update without marking a state transition. The non-transition
 // update methods are used for internal shader pipelines. Not every non-transition update method
@@ -945,7 +952,6 @@ class GraphicsPipelineDesc final
                            GLuint stride,
                            GLuint divisor,
                            angle::FormatID format,
-                           bool compressed,
                            GLuint relativeOffset);
     void setVertexShaderComponentTypes(gl::AttributesMask activeAttribLocations,
                                        gl::ComponentTypeMask componentTypeMask);
@@ -1109,7 +1115,6 @@ class GraphicsPipelineDesc final
 
     static VkFormat getPipelineVertexInputStateFormat(ErrorContext *context,
                                                       angle::FormatID formatID,
-                                                      bool compressed,
                                                       const gl::ComponentType programAttribType,
                                                       uint32_t attribIndex);
 
@@ -2107,13 +2112,13 @@ class DescriptorSetDescBuilder final
     void updateOneUniformBufferOffset(const size_t blockIndex,
                                       const gl::OffsetBindingPointer<gl::Buffer> &bufferBinding,
                                       const WriteDescriptorDescs &writeDescriptorDescs);
-    angle::Result updateImages(Context *context,
+    angle::Result updateImages(ContextVk *contextVk,
                                const gl::ProgramExecutable &executable,
                                const ShaderInterfaceVariableInfoMap &variableInfoMap,
                                const gl::ActiveTextureArray<TextureVk *> &activeImages,
                                const std::vector<gl::ImageUnit> &imageUnits,
                                const WriteDescriptorDescs &writeDescriptorDescs);
-    angle::Result updateInputAttachments(vk::Context *context,
+    angle::Result updateInputAttachments(ContextVk *contextVk,
                                          const gl::ProgramExecutable &executable,
                                          const ShaderInterfaceVariableInfoMap &variableInfoMap,
                                          const FramebufferVk *framebufferVk,
@@ -2882,7 +2887,7 @@ class SamplerCache final : public HasCacheStats<VulkanCacheType::Sampler>
     SamplerCache();
     ~SamplerCache() override;
 
-    void destroy(vk::Renderer *renderer);
+    void destroy(vk::Renderer *renderer, bool orphanReferencedSamplers);
 
     angle::Result getSampler(ContextVk *contextVk,
                              const vk::SamplerDesc &desc,
@@ -2900,7 +2905,7 @@ class SamplerYcbcrConversionCache final
     SamplerYcbcrConversionCache();
     ~SamplerYcbcrConversionCache() override;
 
-    void destroy(vk::Renderer *renderer);
+    void destroy(vk::Renderer *renderer, bool orphanConversionInfo);
 
     angle::Result getSamplerYcbcrConversion(vk::ErrorContext *context,
                                             const vk::YcbcrConversionDesc &ycbcrConversionDesc,

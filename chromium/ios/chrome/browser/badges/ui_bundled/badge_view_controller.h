@@ -32,6 +32,10 @@
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
+// Vivaldi
+@property(nonatomic, strong) UIColor* displayedBadgeTintColor;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_BADGES_UI_BUNDLED_BADGE_VIEW_CONTROLLER_H_

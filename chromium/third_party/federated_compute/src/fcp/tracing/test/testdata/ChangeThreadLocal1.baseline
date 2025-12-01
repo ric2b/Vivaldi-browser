@@ -1,0 +1,4 @@
+${TIME} ${ID}: BEGIN
+${TIME} ${ID}: BEGIN SpanWithId { id: 1 } parent: 0
+${TIME} ${ID}: END SpanWithId { id: 1 }
+${TIME} ${ID}: END

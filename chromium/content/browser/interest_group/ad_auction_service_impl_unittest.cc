@@ -9910,7 +9910,7 @@ function scoreAd(
 
   base::RunLoop run_loop;
   EXPECT_CALL(mock_private_aggregation_cb_, Run)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&](PrivateAggregationHost::ReportRequestGenerator generator,
               PrivateAggregationPendingContributions::Wrapper contributions,
               PrivateAggregationBudgetKey budget_key,
@@ -9935,7 +9935,7 @@ function scoreAd(
                 null_report_behavior,
                 PrivateAggregationHost::NullReportBehavior::kDontSendReport);
             run_loop.Quit();
-          }));
+          });
 
   std::optional<GURL> auction_result = RunAdAuctionAndFlush(auction_config);
   EXPECT_NE(auction_result, std::nullopt);
@@ -10973,6 +10973,8 @@ class AdAuctionServiceImplKAnonTest
       case auction_worklet::mojom::KAnonymityBidMode::kEnforce:
         enabled_features.push_back(blink::features::kFledgeConsiderKAnonymity);
         enabled_features.push_back(blink::features::kFledgeEnforceKAnonymity);
+        disabled_features.push_back(
+            features::kCookieDeprecationFacilitatedTesting);
         break;
       case auction_worklet::mojom::KAnonymityBidMode::kSimulate:
         enabled_features.push_back(blink::features::kFledgeConsiderKAnonymity);
@@ -13162,7 +13164,7 @@ TEST_F(AdAuctionServiceImplBAndATest, EncryptsPayloadWithKAnon) {
           blink::features::kFledgeConsiderKAnonymity,
           blink::features::kFledgeEnforceKAnonymity,
       },
-      {});
+      {features::kCookieDeprecationFacilitatedTesting});
   ProvideKeys();
   NavigateAndCommit(kUrlA);
   url::Origin test_origin = url::Origin::Create(GURL(kOriginStringA));
@@ -14335,7 +14337,7 @@ TEST_F(AdAuctionServiceImplBAndATest,
 
   base::RunLoop run_loop;
   EXPECT_CALL(mock_private_aggregation_cb_, Run)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&](PrivateAggregationHost::ReportRequestGenerator generator,
               PrivateAggregationPendingContributions::Wrapper contributions,
               PrivateAggregationBudgetKey budget_key,
@@ -14353,7 +14355,7 @@ TEST_F(AdAuctionServiceImplBAndATest,
                         /*filtering_id=*/std::nullopt)));
             EXPECT_EQ(request.shared_info().reporting_origin, kOriginA);
             run_loop.Quit();
-          }));
+          });
 
   std::optional<GURL> result = RunAdAuctionWithPromiseAndFlushForFrame(
       auction_config,
@@ -14498,7 +14500,7 @@ function reportResult(auctionConfig, browserSignals) {
 
   base::RunLoop run_loop;
   EXPECT_CALL(mock_private_aggregation_cb_, Run)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&](PrivateAggregationHost::ReportRequestGenerator generator,
               PrivateAggregationPendingContributions::Wrapper contributions,
               PrivateAggregationBudgetKey budget_key,
@@ -14519,7 +14521,7 @@ function reportResult(auctionConfig, browserSignals) {
                         /*filtering_id=*/std::nullopt)));
             EXPECT_EQ(request.shared_info().reporting_origin, kOriginA);
             run_loop.Quit();
-          }));
+          });
 
   std::optional<GURL> result = RunAdAuctionWithPromiseAndFlushForFrame(
       auction_config,
@@ -14631,7 +14633,7 @@ TEST_F(AdAuctionServiceImplBAndATest,
 
   base::RunLoop run_loop;
   EXPECT_CALL(mock_private_aggregation_cb_, Run)
-      .WillOnce(testing::Invoke(
+      .WillOnce(
           [&](PrivateAggregationHost::ReportRequestGenerator generator,
               PrivateAggregationPendingContributions::Wrapper contributions,
               PrivateAggregationBudgetKey budget_key,
@@ -14652,7 +14654,7 @@ TEST_F(AdAuctionServiceImplBAndATest,
                         /*filtering_id=*/std::nullopt)));
             EXPECT_EQ(request.shared_info().reporting_origin, kOriginA);
             run_loop.Quit();
-          }));
+          });
 
   std::optional<GURL> result = RunAdAuctionWithPromiseAndFlushForFrame(
       auction_config,
@@ -17904,7 +17906,8 @@ class AdAuctionServiceImplBAndAKAnonEnabledTest
             /*enabled_features=*/{blink::features::kFledgeConsiderKAnonymity,
                                   blink::features::kFledgeEnforceKAnonymity,
                                   features::kEnableBandAKAnonEnforcement},
-            /*disabled_features=*/{});
+            /*disabled_features=*/{
+                features::kCookieDeprecationFacilitatedTesting});
         break;
     }
   }
@@ -18727,7 +18730,7 @@ TEST_P(AdAuctionServiceImplBAndAKAnonEnabledTest,
   base::RunLoop run_loop;
   if (GetParam() == KAnonState::kEnforceOnDeviceEnforceOnServer) {
     EXPECT_CALL(mock_private_aggregation_cb_, Run)
-        .WillOnce(testing::Invoke(
+        .WillOnce(
             [&](PrivateAggregationHost::ReportRequestGenerator generator,
                 PrivateAggregationPendingContributions::Wrapper contributions,
                 PrivateAggregationBudgetKey budget_key,
@@ -18743,7 +18746,7 @@ TEST_P(AdAuctionServiceImplBAndAKAnonEnabledTest,
                           /*filtering_id=*/std::nullopt)));
               EXPECT_EQ(request.shared_info().reporting_origin, kOriginA);
               run_loop.Quit();
-            }));
+            });
   }
 
   blink::AuctionConfig auction_config;

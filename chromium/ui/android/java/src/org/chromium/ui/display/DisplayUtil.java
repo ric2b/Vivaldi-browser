@@ -123,14 +123,24 @@ public abstract class DisplayUtil {
 
     /** Returns the given value converted from px to dp. */
     public static int pxToDp(DisplayAndroid display, int value) {
-        // Adding .5 is what Android does when doing this conversion.
-        return (int) (value / display.getDipScale() + 0.5f);
+        return Math.round(value / display.getDipScale());
     }
 
     /** Returns the given value converted from dp to px. */
     public static int dpToPx(DisplayAndroid display, int value) {
-        // Adding .5 is what Android does when doing this conversion.
-        return (int) (value * display.getDipScale() + 0.5f);
+        return Math.round(value * display.getDipScale());
+    }
+
+    /**
+     * Returns the display size in inches.
+     *
+     * @param display The display to get the size of.
+     * @return The display size in inches.
+     */
+    public static double getDisplaySizeInInches(DisplayAndroid display) {
+        double xInches = display.getDisplayWidth() / display.getXdpi();
+        double yInches = display.getDisplayHeight() / display.getYdpi();
+        return Math.sqrt(Math.pow(xInches, 2) + Math.pow(yInches, 2));
     }
 
     /**
@@ -411,6 +421,71 @@ public abstract class DisplayUtil {
     }
 
     /**
+     * Converts global dip coordinates (as in Web API spec) to local coordinates (display and pixel
+     * coordinates relative to the origin of the display). Display is chosen by the most
+     * intersection area. If none of the displays intersect with the given area a pair of {null,
+     * null} is returned.
+     *
+     * @param globalDipCoordinates Global coordinates in dip.
+     * @return A pair of {@link DisplayAndroid} and local coordinates in pixels.
+     */
+    public static Pair<DisplayAndroid, Rect> convertGlobalDipToLocalPxCoordinates(
+            Rect globalDipCoordinates) {
+        DisplayAndroid display =
+                DisplayAndroidManager.getInstance().getDisplayMatching(globalDipCoordinates);
+
+        if (display == null) {
+            return Pair.create(null, null);
+        }
+
+        final Rect displayGlobalDipBounds = display.getBounds();
+        final Rect displayLocalPxBounds = display.getLocalBounds();
+        final float displayDipScale = display.getDipScale();
+
+        final RectF floatLocalCoordinatesPx =
+                new RectF(
+                        displayLocalPxBounds.left
+                                + (globalDipCoordinates.left - displayGlobalDipBounds.left)
+                                        * displayDipScale,
+                        displayLocalPxBounds.top
+                                + (globalDipCoordinates.top - displayGlobalDipBounds.top)
+                                        * displayDipScale,
+                        displayLocalPxBounds.right
+                                + (globalDipCoordinates.right - displayGlobalDipBounds.right)
+                                        * displayDipScale,
+                        displayLocalPxBounds.bottom
+                                + (globalDipCoordinates.bottom - displayGlobalDipBounds.bottom)
+                                        * displayDipScale);
+
+        final Rect localCoordinatesPx = new Rect();
+        floatLocalCoordinatesPx.roundOut(localCoordinatesPx);
+
+        return Pair.create(display, localCoordinatesPx);
+    }
+
+    /**
+     * Scales a given rectangle by a specified factor and rounds the result to the smallest
+     * integer-based rectangle that encloses it.
+     *
+     * @param rect The original {@link android.graphics.Rect} to be scaled.
+     * @param scale The scaling factor.
+     * @return The new {@link android.graphics.Rect} that encloses the scaled rectangle.
+     */
+    public static Rect scaleToEnclosingRect(Rect rect, float scale) {
+        final RectF scaledRect =
+                new RectF(
+                        rect.left * scale,
+                        rect.top * scale,
+                        rect.right * scale,
+                        rect.bottom * scale);
+
+        final Rect enclosingRect = new Rect();
+        scaledRect.roundOut(enclosingRect);
+
+        return enclosingRect;
+    }
+
+    /**
      * Determine whether the given context is associated with the default display.
      *
      * @param context The context to determine display state.
@@ -456,6 +531,44 @@ public abstract class DisplayUtil {
         } catch (NameNotFoundException e) {
             return false;
         }
+    }
+
+    /**
+     * If the provided Rect fits fully inside given display's bounds, this method returns a copy of
+     * the provided Rect.
+     *
+     * <p>Otherwise, the Rect returned will be a copy of the provided Rect modified so that it is
+     * fully inside given display's bounds and is the closest match to the provided Rect,
+     * prioritising preserving original width and height first, then minimizing the Manhattan
+     * distance between the original Rect and the adjusted one.
+     *
+     * <p>If the provided Rect is longer than given display's bounds in precisely one axis, the
+     * displacement alongside the other axis will be minimised between the provided Rect and the
+     * adjusted one.
+     *
+     * <p>If the provided Rect is longer than given display's bounds in both axes, the display's
+     * bounds will be returned.
+     *
+     * @param boundsPx The rectangle to adjust, in pixels. Its coordinates should be relative to the
+     *     display, with (0, 0) at the top-left corner and positive axes going rightward and
+     *     downward.
+     * @param display The display that defines the containing bounds.
+     * @return A new Rect, guaranteed to be fully within the display bounds. Uses the same
+     *     coordinate system as the initial Rect.
+     */
+    @SuppressWarnings("CheckResult")
+    public static Rect clampWindowToDisplay(Rect boundsPx, DisplayAndroid display) {
+        final Rect output = new Rect(boundsPx);
+        final Rect limitingBounds = display.getLocalBounds();
+
+        output.offset(Math.max(limitingBounds.left - output.left, 0), 0);
+        output.offset(Math.min(limitingBounds.right - output.right, 0), 0);
+        output.offset(0, Math.max(limitingBounds.top - output.top, 0));
+        output.offset(0, Math.min(limitingBounds.bottom - output.bottom, 0));
+
+        output.intersect(limitingBounds);
+
+        return output;
     }
 
     public static void setCarmaPhase1Version2ComplianceForTesting(

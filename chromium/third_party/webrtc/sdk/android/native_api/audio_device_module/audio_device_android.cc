@@ -10,23 +10,26 @@
 
 #include "sdk/android/native_api/audio_device_module/audio_device_android.h"
 
+#include <jni.h>
 #include <stdlib.h>
 
 #include <memory>
 #include <utility>
 
+#include "api/audio/audio_device.h"
+#include "api/audio/audio_device_defines.h"
 #include "api/environment/environment.h"
 #include "api/scoped_refptr.h"
 #include "rtc_base/logging.h"
-#include "rtc_base/ref_count.h"
 #include "sdk/android/native_api/jni/application_context_provider.h"
 #include "sdk/android/native_api/jni/jvm.h"
+#include "sdk/android/src/jni/audio_device/audio_common.h"
+#include "sdk/android/src/jni/audio_device/audio_device_module.h"
 #include "sdk/android/src/jni/audio_device/audio_record_jni.h"
 #include "sdk/android/src/jni/audio_device/audio_track_jni.h"
+#include "sdk/android/src/jni/audio_device/opensles_common.h"
 #include "sdk/android/src/jni/audio_device/opensles_player.h"
 #include "sdk/android/src/jni/audio_device/opensles_recorder.h"
-#include "sdk/android/src/jni/jvm.h"
-#include "system_wrappers/include/metrics.h"
 #include "third_party/jni_zero/jni_zero.h"
 
 #if defined(WEBRTC_AUDIO_DEVICE_INCLUDE_ANDROID_AAUDIO)
@@ -42,7 +45,8 @@ void GetDefaultAudioParameters(JNIEnv* env,
                                jobject application_context,
                                AudioParameters* input_parameters,
                                AudioParameters* output_parameters) {
-  const jni_zero::JavaParamRef<jobject> j_context(env, application_context);
+  const auto j_context =
+      jni_zero::JavaParamRef<jobject>::CreateLeaky(env, application_context);
   const jni_zero::ScopedJavaLocalRef<jobject> j_audio_manager =
       jni::GetAudioManager(env, j_context);
   const int input_sample_rate = jni::GetDefaultSampleRate(env, j_audio_manager);
@@ -83,7 +87,8 @@ CreateJavaInputAndAAudioOutputAudioDeviceModule(JNIEnv* env,
                                                 jobject application_context) {
   RTC_DLOG(LS_INFO) << __FUNCTION__;
   // Get default audio input/output parameters.
-  const jni_zero::JavaParamRef<jobject> j_context(env, application_context);
+  const auto j_context =
+      jni_zero::JavaParamRef<jobject>::CreateLeaky(env, application_context);
   const jni_zero::ScopedJavaLocalRef<jobject> j_audio_manager =
       jni::GetAudioManager(env, j_context);
   AudioParameters input_parameters;
@@ -111,7 +116,8 @@ scoped_refptr<AudioDeviceModule> CreateJavaAudioDeviceModule(
     jobject application_context) {
   RTC_DLOG(LS_INFO) << __FUNCTION__;
   // Get default audio input/output parameters.
-  const jni_zero::JavaParamRef<jobject> j_context(env, application_context);
+  const auto j_context =
+      jni_zero::JavaParamRef<jobject>::CreateLeaky(env, application_context);
   const jni_zero::ScopedJavaLocalRef<jobject> j_audio_manager =
       jni::GetAudioManager(env, j_context);
   AudioParameters input_parameters;
@@ -166,7 +172,8 @@ CreateJavaInputAndOpenSLESOutputAudioDeviceModule(JNIEnv* env,
                                                   jobject application_context) {
   RTC_DLOG(LS_INFO) << __FUNCTION__;
   // Get default audio input/output parameters.
-  const jni_zero::JavaParamRef<jobject> j_context(env, application_context);
+  const auto j_context =
+      jni_zero::JavaParamRef<jobject>::CreateLeaky(env, application_context);
   const jni_zero::ScopedJavaLocalRef<jobject> j_audio_manager =
       jni::GetAudioManager(env, j_context);
   AudioParameters input_parameters;

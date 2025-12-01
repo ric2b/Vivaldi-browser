@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/bubble_anchor_util.h"
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/tab_sharing/tab_sharing_ui.h"
+#include "chrome/browser/ui/views/screen_sharing_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
@@ -269,7 +270,8 @@ infobars::InfoBar* TabSharingInfoBarDelegate::Create(
     bool captured_surface_control_active,
     TabSharingUI* ui,
     TabShareType capture_type) {
-  DCHECK(infobar_manager);
+  CHECK(infobar_manager);
+  CHECK(ui);
 
   // Vivaldi
   Browser* const browser = chrome::FindBrowserWithTab(web_contents);
@@ -291,7 +293,8 @@ infobars::InfoBar* TabSharingInfoBarDelegate::Create(
           web_contents, role, share_this_tab_instead_button_state, focus_target,
           captured_surface_control_active, ui, capture_type)),
       shared_tab_id, capturer_id, shared_tab_name, capturer_name, role,
-      capture_type);
+      capture_type, ui->GetUmaLogger().GetWeakPtr());
+
   return old_infobar ? infobar_manager->ReplaceInfoBar(old_infobar,
                                                        std::move(new_infobar))
                      : infobar_manager->AddInfoBar(std::move(new_infobar));

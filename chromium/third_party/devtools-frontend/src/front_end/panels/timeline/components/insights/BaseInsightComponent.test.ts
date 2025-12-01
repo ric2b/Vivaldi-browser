@@ -1,16 +1,17 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import type * as Common from '../../../../core/common/common.js';
 import * as Root from '../../../../core/root/root.js';
+import * as AIAssistance from '../../../../models/ai_assistance/ai_assistance.js';
+import * as Badges from '../../../../models/badges/badges.js';
 import * as Trace from '../../../../models/trace/trace.js';
 import {dispatchClickEvent, renderElementIntoDOM} from '../../../../testing/DOMHelpers.js';
 import {describeWithEnvironment, updateHostConfig} from '../../../../testing/EnvironmentHelpers.js';
 import * as RenderCoordinator from '../../../../ui/components/render_coordinator/render_coordinator.js';
 import * as UI from '../../../../ui/legacy/legacy.js';
 import * as Lit from '../../../../ui/lit/lit.js';
-import * as Utils from '../../utils/utils.js';
 
 import * as Insights from './insights.js';
 
@@ -103,6 +104,34 @@ describeWithEnvironment('BaseInsightComponent', () => {
       const contentElement = component.shadowRoot.querySelector<HTMLElement>('.insight-content');
       assert.isNotNull(contentElement);
       assert.strictEqual(contentElement.textContent, 'test content');
+    });
+
+    it('records badge action when an insight is clicked', async () => {
+      const recordAction = sinon.stub(Badges.UserBadges.instance(), 'recordAction');
+
+      const component = new TestInsightComponentNoAISupport();
+      component.selected = false;
+      component.insightSetKey = 'test-key';
+      component.model = {
+        insightKey: 'LCPBreakdown',
+        strings: {},
+        title: 'LCP by Phase' as Common.UIString.LocalizedString,
+        description: 'some description' as Common.UIString.LocalizedString,
+        category: Trace.Insights.Types.InsightCategory.ALL,
+        state: 'fail',
+        frameId: '123',
+      };
+      renderElementIntoDOM(component);
+      await RenderCoordinator.done();
+
+      assert.isNotNull(component.shadowRoot);
+      const header = component.shadowRoot.querySelector<HTMLElement>('header');
+      assert.isNotNull(header);
+
+      dispatchClickEvent(header);
+      await RenderCoordinator.done();
+
+      sinon.assert.calledWith(recordAction, Badges.BadgeAction.PERFORMANCE_INSIGHT_CLICKED);
     });
   });
 
@@ -212,7 +241,6 @@ describeWithEnvironment('BaseInsightComponent', () => {
   });
 
   describe('Ask AI Insights', () => {
-    const FAKE_PARSED_TRACE = {} as unknown as Trace.Handlers.Types.ParsedTrace;
     const FAKE_LCP_MODEL = {
       insightKey: 'LCPBreakdown',
       strings: {},
@@ -231,7 +259,6 @@ describeWithEnvironment('BaseInsightComponent', () => {
       component.selected = true;
       component.model = FAKE_LCP_MODEL;
       // We don't need a real trace for these tests.
-      component.parsedTrace = FAKE_PARSED_TRACE;
       component.bounds = FAKE_INSIGHT_SET_BOUNDS;
       renderElementIntoDOM(component);
 
@@ -315,6 +342,8 @@ describeWithEnvironment('BaseInsightComponent', () => {
     });
 
     it('sets the context when the user clicks the button', async () => {
+      // @ts-expect-error: don't need real data.
+      const focus = new AIAssistance.AgentFocus({});
       updateHostConfig({
         aidaAvailability: {
           enabled: true,
@@ -325,6 +354,7 @@ describeWithEnvironment('BaseInsightComponent', () => {
         }
       });
       const component = await renderComponent({insightHasAISupport: true});
+      component.agentFocus = focus;
       assert.isOk(component.shadowRoot);
       const button = component.shadowRoot.querySelector('devtools-button[data-insights-ask-ai]');
       assert.isOk(button);
@@ -338,19 +368,33 @@ describeWithEnvironment('BaseInsightComponent', () => {
           .returns(FAKE_ACTION);
 
       dispatchClickEvent(button);
-      const context = UI.Context.Context.instance().flavor(Utils.AIContext.AgentFocus);
-      assert.instanceOf(context, Utils.AIContext.AgentFocus);
+      const newFocus = UI.Context.Context.instance().flavor(AIAssistance.AgentFocus);
+      assert.instanceOf(newFocus, AIAssistance.AgentFocus);
     });
 
-    it('clears the active context when it gets toggled shut', async () => {
-      const focus = {data: {type: 'insight'}} as unknown as Utils.AIContext.AgentFocus;
-      UI.Context.Context.instance().setFlavor(Utils.AIContext.AgentFocus, focus);
+    it('clears "insight" from the active context when it gets toggled shut', async () => {
+      const mockInsight = {
+        insightKey: 'LCPBreakdown',
+        strings: {},
+        title: 'LCP by Phase' as Common.UIString.LocalizedString,
+        description: 'some description' as Common.UIString.LocalizedString,
+        category: Trace.Insights.Types.InsightCategory.ALL,
+        state: 'fail',
+        frameId: '123',
+      } as const;
+      // @ts-expect-error: don't need real data.
+      const focus = new AIAssistance.AgentFocus({parsedTrace: true, insight: mockInsight});
+      UI.Context.Context.instance().setFlavor(AIAssistance.AgentFocus, focus);
       const component = await renderComponent({insightHasAISupport: true});
+      component.agentFocus = focus;
+      component.insightSetKey = 'key';
+      component.model = mockInsight;
       const header = component.shadowRoot?.querySelector('header');
       assert.isOk(header);
       dispatchClickEvent(header);
-      const context = UI.Context.Context.instance().flavor(Utils.AIContext.AgentFocus);
-      assert.isNull(context);
+      const newFocus = UI.Context.Context.instance().flavor(AIAssistance.AgentFocus);
+      assert.isNull(newFocus?.insight);
+      assert.isTrue(newFocus?.parsedTrace);
     });
 
     it('does not render the "Ask AI" button when the perf agent is not enabled', async () => {

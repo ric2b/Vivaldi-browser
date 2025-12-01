@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,12 +14,14 @@ import type * as Models from './Models.js';
 export type InsightSetContext = InsightSetContextWithoutNavigation|InsightSetContextWithNavigation;
 
 export interface InsightSetContextWithoutNavigation {
+  options: Types.Configuration.ParseOptions;
   bounds: Types.Timing.TraceWindowMicro;
   frameId: string;
   navigation?: never;
 }
 
 export interface InsightSetContextWithNavigation {
+  options: Types.Configuration.ParseOptions;
   bounds: Types.Timing.TraceWindowMicro;
   frameId: string;
   navigation: Types.Events.NavigationStart;
@@ -150,4 +152,5 @@ export const enum InsightKeys {
   SLOW_CSS_SELECTOR = 'SlowCSSSelector',
   VIEWPORT = 'Viewport',
   MODERN_HTTP = 'ModernHTTP',
+  CACHE = 'Cache',
 }

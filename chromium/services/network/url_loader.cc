@@ -17,6 +17,7 @@
 #include "base/command_line.h"
 #include "base/containers/enum_set.h"
 #include "base/containers/fixed_flat_set.h"
+#include "base/feature_list.h"
 #include "base/files/file.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -39,6 +40,7 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/typed_macros.h"
+#include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/shared_remote.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
@@ -85,6 +87,7 @@
 #include "services/network/accept_ch_frame_interceptor.h"
 #include "services/network/ad_heuristic_cookie_overrides.h"
 #include "services/network/cookie_settings.h"
+#include "services/network/devtools_durable_msg.h"
 #include "services/network/file_opener_for_upload.h"
 #include "services/network/orb/orb_impl.h"
 #include "services/network/public/cpp/client_hints.h"
@@ -125,6 +128,8 @@
 #include "services/network/slop_bucket.h"
 #include "services/network/ssl_private_key_proxy.h"
 #include "services/network/throttling/scoped_throttling_token.h"
+#include "services/network/throttling/throttling_controller.h"
+#include "services/network/throttling/throttling_network_interceptor.h"
 #include "services/network/trust_tokens/trust_token_request_helper.h"
 #include "services/network/trust_tokens/trust_token_url_loader_interceptor.h"
 #include "services/network/url_loader_factory.h"
@@ -135,6 +140,8 @@
 namespace network {
 
 namespace {
+
+BASE_FEATURE(kDelayedCookieNotification, base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Cannot use 0, because this means "default" in
 // mojo::core::Core::CreateDataPipe
@@ -371,7 +378,8 @@ URLLoader::URLLoader(
         device_bound_session_observer,
     mojo::PendingRemote<mojom::AcceptCHFrameObserver> accept_ch_frame_observer,
     bool shared_storage_writable_eligible,
-    SharedResourceChecker& shared_resource_checker)
+    SharedResourceChecker& shared_resource_checker,
+    base::WeakPtr<DevtoolsDurableMessage> devtools_durable_message)
     : url_request_context_(context.GetUrlRequestContext()),
       network_context_client_(context.GetNetworkContextClient()),
       delete_callback_(std::move(delete_callback)),
@@ -455,7 +463,8 @@ URLLoader::URLLoader(
           request.trusted_params.has_value()),
       provide_data_use_updates_(context.DataUseUpdatesEnabled()),
       partial_decoder_decoding_buffer_size_(net::kMaxBytesToSniff),
-      permissions_policy_(request.permissions_policy) {
+      permissions_policy_(request.permissions_policy),
+      devtools_durable_message_(devtools_durable_message) {
   DCHECK(delete_callback_);
 
   if (options_ & mojom::kURLLoadOptionReadAndDiscardBody) {
@@ -1139,10 +1148,14 @@ void URLLoader::OnResponseStarted(net::URLRequest* url_request, int net_error) {
         internal::FetchKeepAliveRequestNetworkMetricType::kOnResponse);
   }
 
-  // Use `true` to force sending the cookie accessed update now. This is because
-  // for navigations the CookieObserver might get torn down by the time the
-  // request completes.
-  ReportFlaggedResponseCookies(true);
+  // Wait to report for main frame navigations. This is because handling the
+  // cookie notification contends with ReadyToCommitNavigation, which is in the
+  // critical path for loading. Additionally, cookie observers for navigations
+  // now outlive the NavigationRequest.
+  bool delay_cookie_call =
+      url_request_->isolation_info().IsMainFrameRequest() &&
+      base::FeatureList::IsEnabled(kDelayedCookieNotification);
+  ReportFlaggedResponseCookies(!delay_cookie_call);
 
   if (net_error != net::OK) {
     NotifyCompleted(net_error);
@@ -1311,6 +1324,13 @@ void URLLoader::ContinueOnResponseStarted() {
     }
   }
 
+  // If client-side content decoding is requested, store the types of decoding
+  // to be used with the Durable Message so it can decode on retrieval.
+  if (devtools_durable_message_) {
+    devtools_durable_message_->set_client_decoding_types(
+        response_->client_side_content_decoding_types);
+  }
+
   // If client-side content decoding is requested and either ORB or MIME
   // sniffing is needed, use PartialDecoder to get decoded data for sniffing.
   if (!response_->client_side_content_decoding_types.empty() &&
@@ -1471,6 +1491,7 @@ void URLLoader::ReadMore() {
       pending_write_buffer_offset_ = partial_decoder_result_->ConsumeRawData(
           base::as_writable_byte_span(*pending_write_));
       CHECK(pending_write_buffer_offset_);
+      MaybeCollectDurableMessage(0, pending_write_buffer_offset_);
       CompletePendingWrite(true);
     }
     // Check if the partial decoder finished with a specific status.
@@ -1612,6 +1633,8 @@ void URLLoader::DidRead(int num_bytes,
   url_read_state_ = URLReadState::kWaitMojoPipeWritable;
 
   size_t new_data_offset = pending_write_buffer_offset_;
+  MaybeCollectDurableMessage(new_data_offset, num_bytes);
+
   if (num_bytes > 0) {
     if (!into_slop_bucket) {
       pending_write_buffer_offset_ += num_bytes;
@@ -2175,11 +2198,22 @@ void URLLoader::DispatchOnRawRequest(
         *site_has_cookie_in_other_partition;
   }
 
+  std::optional<base::UnguessableToken> applied_network_conditions_id;
+  if (throttling_token_) {
+    ThrottlingNetworkInterceptor* interceptor =
+        ThrottlingController::GetInterceptor(throttling_token_->source_id(),
+                                             url_request_->url());
+    if (interceptor) {
+      applied_network_conditions_id = interceptor->conditions().rule_id();
+    }
+  }
+
   devtools_observer_->OnRawRequest(
       devtools_request_id().value(), url_request_->maybe_sent_cookies(),
       std::move(headers), load_timing_info.request_start,
       private_network_access_interceptor_.CloneClientSecurityState(),
-      std::move(other_partition_info));
+      std::move(other_partition_info),
+      std::move(applied_network_conditions_id));
 }
 
 void URLLoader::DispatchOnRawResponse() {
@@ -2585,6 +2619,28 @@ void URLLoader::ResetRawHeadersForRedirect() {
   raw_request_line_size_ = 0;
   raw_request_headers_size_ = 0;
   raw_response_headers_ = nullptr;
+}
+
+void URLLoader::MaybeCollectDurableMessage(size_t new_data_offset,
+                                           int num_bytes) {
+  if (!pending_write_ || !devtools_durable_message_) {
+    return;
+  }
+
+  if (num_bytes <= 0) {
+    devtools_durable_message_->MarkComplete();
+    return;
+  }
+
+  int64_t raw_bytes_cur_size = url_request_->GetRawBodyBytes();
+  int64_t raw_bytes_delta =
+      raw_bytes_cur_size - devtools_durable_message_raw_size_;
+  devtools_durable_message_->AddBytes(
+      base::as_byte_span(
+          base::span(*pending_write_)
+              .subspan(new_data_offset, static_cast<size_t>(num_bytes))),
+      raw_bytes_delta);
+  devtools_durable_message_raw_size_ = raw_bytes_cur_size;
 }
 
 }  // namespace network

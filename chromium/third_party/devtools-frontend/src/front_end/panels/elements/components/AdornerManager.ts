@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,9 +24,11 @@ export interface RegisteredAdorner {
 export enum RegisteredAdorners {
   GRID = 'grid',
   SUBGRID = 'subgrid',
+  MASONRY = 'masonry',
   FLEX = 'flex',
   AD = 'ad',
   SCROLL_SNAP = 'scroll-snap',
+  STARTING_STYLE = 'starting-style',
   CONTAINER = 'container',
   SLOT = 'slot',
   TOP_LAYER = 'top-layer',
@@ -52,6 +54,12 @@ export function getRegisteredAdorner(which: RegisteredAdorners): RegisteredAdorn
         category: AdornerCategories.LAYOUT,
         enabledByDefault: true,
       };
+    case RegisteredAdorners.MASONRY:
+      return {
+        name: 'masonry',
+        category: AdornerCategories.LAYOUT,
+        enabledByDefault: true,
+      };
     case RegisteredAdorners.FLEX:
       return {
         name: 'flex',
@@ -67,6 +75,12 @@ export function getRegisteredAdorner(which: RegisteredAdorners): RegisteredAdorn
     case RegisteredAdorners.SCROLL_SNAP:
       return {
         name: 'scroll-snap',
+        category: AdornerCategories.LAYOUT,
+        enabledByDefault: true,
+      };
+    case RegisteredAdorners.STARTING_STYLE:
+      return {
+        name: 'starting-style',
         category: AdornerCategories.LAYOUT,
         enabledByDefault: true,
       };

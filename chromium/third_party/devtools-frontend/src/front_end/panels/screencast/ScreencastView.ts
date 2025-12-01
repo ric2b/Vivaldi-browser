@@ -1,32 +1,6 @@
-/*
- * Copyright (C) 2013 Google Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *     * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
- * copyright notice, this list of conditions and the following disclaimer
- * in the documentation and/or other materials provided with the
- * distribution.
- *     * Neither the name of Google Inc. nor the names of its
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// Copyright 2013 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 /* eslint-disable rulesdir/no-imperative-dom-api */
 
@@ -44,39 +18,39 @@ import screencastViewStyles from './screencastView.css.js';
 
 const UIStrings = {
   /**
-   *@description Accessible alt text for the screencast canvas rendering of the debug target webpage
+   * @description Accessible alt text for the screencast canvas rendering of the debug target webpage
    */
   screencastViewOfDebugTarget: 'Screencast view of debug target',
   /**
-   *@description Glass pane element text content in Screencast View of the Remote Devices tab when toggling screencast
+   * @description Glass pane element text content in Screencast View of the Remote Devices tab when toggling screencast
    */
   theTabIsInactive: 'The tab is inactive',
   /**
-   *@description Glass pane element text content in Screencast View of the Remote Devices tab when toggling screencast
+   * @description Glass pane element text content in Screencast View of the Remote Devices tab when toggling screencast
    */
   profilingInProgress: 'Profiling in progress',
   /**
-   *@description Accessible text for the screencast back button
+   * @description Accessible text for the screencast back button
    */
   back: 'back',
   /**
-   *@description Accessible text for the screencast forward button
+   * @description Accessible text for the screencast forward button
    */
   forward: 'forward',
   /**
-   *@description Accessible text for the screencast reload button
+   * @description Accessible text for the screencast reload button
    */
   reload: 'reload',
   /**
-   *@description Accessible text for the address bar in screencast view
+   * @description Accessible text for the address bar in screencast view
    */
   addressBar: 'Address bar',
   /**
-   *@description Accessible text for the touch emulation button.
+   * @description Accessible text for the touch emulation button.
    */
   touchInput: 'Use touch',
   /**
-   *@description Accessible text for the mouse emulation button.
+   * @description Accessible text for the mouse emulation button.
    */
   mouseInput: 'Use mouse',
 } as const;
@@ -694,7 +668,8 @@ export class ScreencastView extends UI.Widget.VBox implements SDK.OverlayModel.H
     this.mouseInputToggle.disabled = true;
     {
       this.mouseInputToggleIcon = this.mouseInputToggle.appendChild(new IconButton.Icon.Icon());
-      this.mouseInputToggleIcon.data = {color: 'var(--icon-toggled)', iconName: 'mouse'};
+      this.mouseInputToggleIcon.name = 'mouse';
+      this.mouseInputToggleIcon.classList.toggle('toggled', true);
     }
     UI.ARIAUtils.setLabel(this.mouseInputToggle, i18nString(UIStrings.mouseInput));
 
@@ -767,14 +742,8 @@ export class ScreencastView extends UI.Widget.VBox implements SDK.OverlayModel.H
     }
     this.mouseInputToggle.disabled = !value;
     this.touchInputToggle.disabled = value;
-    this.mouseInputToggleIcon.data = {
-      ...this.mouseInputToggleIcon.data,
-      color: this.mouseInputToggle.disabled ? 'var(--icon-toggled)' : 'var(--icon-default)',
-    };
-    this.touchInputToggleIcon.data = {
-      ...this.touchInputToggleIcon.data,
-      color: this.touchInputToggle.disabled ? 'var(--icon-toggled)' : 'var(--icon-default)',
-    };
+    this.mouseInputToggleIcon.classList.toggle('toggled', this.mouseInputToggle.disabled);
+    this.touchInputToggleIcon.classList.toggle('toggled', this.touchInputToggle.disabled);
     this.canvasContainerElement.classList.toggle('touchable', value);
   }
 

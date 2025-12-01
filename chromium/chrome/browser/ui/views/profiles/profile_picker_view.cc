@@ -33,9 +33,9 @@
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/ui/accelerator_table.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
-#include "chrome/browser/ui/views/accelerator_table.h"
 #include "chrome/browser/ui/views/profiles/first_run_flow_controller.h"
 #include "chrome/browser/ui/views/profiles/profile_management_flow_controller.h"
 #include "chrome/browser/ui/views/profiles/profile_management_flow_controller_impl.h"
@@ -84,6 +84,10 @@
 #if BUILDFLAG(IS_LINUX)
 #include "chrome/browser/shell_integration_linux.h"
 #endif
+
+// NOTE(ondrej@vivaldi) VB-119563
+#include "third_party/skia/include/core/SkRegion.h"
+#include "app/vivaldi_apptools.h"
 
 namespace {
 
@@ -176,15 +180,6 @@ void ProfilePicker::Show(Params&& params) {
     g_profile_picker_view = new ProfilePickerView(std::move(params));
   }
   g_profile_picker_view->Display();
-}
-
-// static
-base::FilePath ProfilePicker::GetSwitchProfilePath() {
-  if (g_profile_picker_view) {
-    return g_profile_picker_view->GetProfilePickerFlowController()
-        ->GetSwitchProfilePathOrEmpty();
-  }
-  return base::FilePath();
 }
 
 // static
@@ -421,7 +416,8 @@ void ProfilePickerView::Clear() {
 }
 
 bool ProfilePickerView::ShouldUseDarkColors() const {
-  return GetNativeTheme()->ShouldUseDarkColors();
+  return GetNativeTheme()->preferred_color_scheme() ==
+         ui::NativeTheme::PreferredColorScheme::kDark;
 }
 
 content::WebContents* ProfilePickerView::GetPickerContents() const {
@@ -546,11 +542,9 @@ ProfilePickerView::ProfilePickerView(ProfilePicker::Params&& params)
   // Record creation metrics.
   base::UmaHistogramEnumeration("ProfilePicker.Shown", params_.entry_point());
   if (params_.entry_point() == ProfilePicker::EntryPoint::kOnStartup) {
-    DCHECK(creation_time_on_startup_.is_null());
-    creation_time_on_startup_ = base::TimeTicks::Now();
     base::UmaHistogramTimes(
         "ProfilePicker.StartupTime.BeforeCreation",
-        creation_time_on_startup_ -
+        base::TimeTicks::Now() -
             startup_metric_utils::GetCommon().MainEntryPointTicks());
   }
 }
@@ -638,6 +632,9 @@ void ProfilePickerView::Init(Profile* picker_profile) {
   // The widget is owned by the native widget.
   new ProfilePickerWidget(this);
 
+  // NOTE(ondrej@vivaldi) 119563
+  InitVivaldiFrame();
+
 #if BUILDFLAG(IS_WIN)
   // Set the app id for the user manager to the app id of its parent.
   ui::win::SetAppIdForWindow(
@@ -657,12 +654,6 @@ void ProfilePickerView::FinishInit() {
   if (IsClassicProfilePickerFlow(params_)) {
     PrefService* prefs = g_browser_process->local_state();
     prefs->SetBoolean(prefs::kBrowserProfilePickerShown, true);
-  }
-
-  if (params_.entry_point() == ProfilePicker::EntryPoint::kOnStartup) {
-    DCHECK(!creation_time_on_startup_.is_null());
-    base::UmaHistogramTimes("ProfilePicker.StartupTime.WebViewCreated",
-                            base::TimeTicks::Now() - creation_time_on_startup_);
   }
 
   if (g_profile_picker_opened_callback_for_testing) {

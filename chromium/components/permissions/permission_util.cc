@@ -105,7 +105,7 @@ std::string PermissionUtil::GetPermissionString(
     ContentSettingsType content_type) {
   PermissionType permission;
   bool success = PermissionUtil::GetPermissionType(content_type, &permission);
-  DCHECK(success);
+  DCHECK(success) << content_type;
 
   return blink::GetPermissionString(permission);
 }
@@ -235,11 +235,21 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
                                        PermissionType* out) {
   switch (type) {
     case ContentSettingsType::GEOLOCATION:
-      *out = PermissionType::GEOLOCATION;
-      break;
+      if (!base::FeatureList::IsEnabled(
+              content_settings::features::kApproximateGeolocationPermission)) {
+        *out = PermissionType::GEOLOCATION;
+        break;
+      } else {
+        return false;
+      }
     case ContentSettingsType::GEOLOCATION_WITH_OPTIONS:
-      *out = PermissionType::GEOLOCATION;
-      break;
+      if (base::FeatureList::IsEnabled(
+              content_settings::features::kApproximateGeolocationPermission)) {
+        *out = PermissionType::GEOLOCATION;
+        break;
+      } else {
+        return false;
+      }
     case ContentSettingsType::NOTIFICATIONS:
       *out = PermissionType::NOTIFICATIONS;
       break;
@@ -674,12 +684,13 @@ bool PermissionUtil::HasUserGesture(PermissionPrompt::Delegate* delegate) {
 bool PermissionUtil::CanPermissionRequestIgnoreStatus(
     const std::unique_ptr<PermissionRequestData>& request,
     content::PermissionStatusSource source) {
-  if (!request->embedded_permission_element_initiated) {
+  if (!request->IsEmbeddedPermissionElementInitiated()) {
     return false;
   }
 
   switch (source) {
     case content::PermissionStatusSource::KILL_SWITCH:
+    case content::PermissionStatusSource::ACTOR_OVERRIDE:
     case content::PermissionStatusSource::FEATURE_POLICY:
     case content::PermissionStatusSource::FENCED_FRAME:
     case content::PermissionStatusSource::INSECURE_ORIGIN:
@@ -702,6 +713,16 @@ bool PermissionUtil::DoesPlatformSupportChip() {
 #else
   return true;
 #endif
+}
+
+// static
+ContentSettingsType PermissionUtil::GetGeolocationType() {
+  if (base::FeatureList::IsEnabled(
+          content_settings::features::kApproximateGeolocationPermission)) {
+    return ContentSettingsType::GEOLOCATION_WITH_OPTIONS;
+  } else {
+    return ContentSettingsType::GEOLOCATION;
+  }
 }
 
 }  // namespace permissions

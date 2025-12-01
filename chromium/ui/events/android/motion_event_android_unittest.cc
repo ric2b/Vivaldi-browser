@@ -8,7 +8,7 @@
 #include <cmath>
 #include <limits>
 
-#include "base/android/build_info.h"
+#include "base/android/android_info.h"
 #include "base/android/jni_android.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/numerics/angle_conversions.h"
@@ -17,7 +17,6 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/events/android/motion_event_android_factory.h"
 #include "ui/events/android/motion_event_android_java.h"
-#include "ui/events/android/motion_event_android_native.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/test/motion_event_test_utils.h"
 #include "ui/events/test/scoped_event_test_tick_clock.h"
@@ -119,7 +118,7 @@ TEST(MotionEventAndroidTest, Constructor) {
   EXPECT_EQ(MotionEvent::Action::DOWN, event->GetAction());
   EXPECT_EQ(oldest_event_time, event->GetEventTime());
   EXPECT_EQ(latest_event_time, event->GetLatestEventTime());
-  EXPECT_EQ(event->GetDownTime(), down_time_ms);
+  EXPECT_EQ(event->GetRawDownTime(), down_time_ms);
   EXPECT_EQ(p0.pos_x_pixels * kPixToDip, event->GetX(0));
   EXPECT_EQ(p0.pos_y_pixels * kPixToDip, event->GetY(0));
   EXPECT_EQ(p1.pos_x_pixels * kPixToDip, event->GetX(1));
@@ -382,8 +381,8 @@ TEST(MotionEventAndroidTest, ActionIndexForPointerDown) {
 }
 
 TEST(MotionEventAndroidTest, NativeBackedConstructor) {
-  if (base::android::BuildInfo::GetInstance()->sdk_int() <
-      base::android::SDK_VERSION_S) {
+  if (base::android::android_info::sdk_int() <
+      base::android::android_info::SDK_VERSION_S) {
     GTEST_SKIP()
         << "AMotionEvent_fromJava used in test is only available on S+";
   }
@@ -418,7 +417,7 @@ TEST(MotionEventAndroidTest, NativeBackedConstructor) {
 
   EXPECT_EQ(event->GetEventTime(),
             base::TimeTicks::FromUptimeMillis(event_time_ms));
-  EXPECT_EQ(event->GetDownTime(),
+  EXPECT_EQ(event->GetRawDownTime(),
             base::TimeTicks::FromUptimeMillis(down_time_ms));
 }
 

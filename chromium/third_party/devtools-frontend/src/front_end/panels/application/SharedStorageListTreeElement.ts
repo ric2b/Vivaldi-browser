@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,7 @@ import {SharedStorageEventsView} from './SharedStorageEventsView.js';
 
 const UIStrings = {
   /**
-   *@description Text in SharedStorage Category View of the Application panel
+   * @description Text in SharedStorage Category View of the Application panel
    */
   sharedStorage: 'Shared storage',
 } as const;

@@ -267,6 +267,39 @@ DumpAccessibilityTestBase::DumpUnfilteredAccessibilityTreeAsString() {
   return FormatWebContentsTree(*formatter);
 }
 
+std::vector<ui::AXPropertyFilter> DumpAccessibilityTestBase::DefaultFilters()
+    const {
+  std::vector<ui::AXPropertyFilter> property_filters;
+  if (GetParam() == ui::AXApiType::kMac) {
+    return property_filters;
+  }
+
+  property_filters.emplace_back("value='*'", ui::AXPropertyFilter::ALLOW);
+  // The value attribute on the document object contains the URL of the
+  // current page which will not be the same every time the test is run.
+  property_filters.emplace_back("value='http*'", ui::AXPropertyFilter::DENY);
+  // Object attributes.value
+  property_filters.emplace_back("layout-guess:*", ui::AXPropertyFilter::ALLOW);
+  property_filters.emplace_back("details-from:*", ui::AXPropertyFilter::ALLOW);
+
+  property_filters.emplace_back("select*", ui::AXPropertyFilter::ALLOW);
+  property_filters.emplace_back("selectedFromFocus=*",
+                                ui::AXPropertyFilter::DENY);
+  property_filters.emplace_back("descript*", ui::AXPropertyFilter::ALLOW);
+  property_filters.emplace_back("check*", ui::AXPropertyFilter::ALLOW);
+  property_filters.emplace_back("horizontal", ui::AXPropertyFilter::ALLOW);
+  property_filters.emplace_back("multiselectable", ui::AXPropertyFilter::ALLOW);
+  property_filters.emplace_back("placeholder=*", ui::AXPropertyFilter::ALLOW);
+  property_filters.emplace_back("ispopup*", ui::AXPropertyFilter::ALLOW);
+
+  // Deny most empty values.
+  property_filters.emplace_back("*=''", ui::AXPropertyFilter::DENY);
+  // After denying empty values, we need to add the following filter because we
+  // want to allow name=''.
+  property_filters.emplace_back("name=*", ui::AXPropertyFilter::ALLOW_EMPTY);
+  return property_filters;
+}
+
 std::string DumpAccessibilityTestBase::FormatWebContentsTree(
     const ui::AXTreeFormatter& formatter) const {
   std::string contents =
@@ -352,12 +385,7 @@ void DumpAccessibilityTestBase::PerformAndWaitForDefaultActions() {
 
   // Perform default action on any elements specified by the test.
   for (const auto& str : scenario_.default_action_on) {
-    // TODO(accessibility) Consider waiting for kEndOfTest instead (but change
-    // the name to something more like kAccessibilityClean).
-    AccessibilityNotificationWaiter waiter(GetWebContents(),
-                                           ax::mojom::Event::kClicked);
     ui::BrowserAccessibility* action_element;
-
     // TODO(accessibility) base/strings/string_split.h might be cleaner here.
     size_t parent_node_delimiter_index = str.find(",");
     if (parent_node_delimiter_index != std::string::npos) {
@@ -370,6 +398,18 @@ void DumpAccessibilityTestBase::PerformAndWaitForDefaultActions() {
     } else {
       action_element = FindNode(str);
     }
+
+    // TODO(accessibility) Consider waiting for kEndOfTest instead (but change
+    // the name to something more like kAccessibilityClean).
+    bool is_listbox =
+        action_element->GetData().role == ax::mojom::Role::kListBoxOption;
+    // Options in ListBox select elements emit a click when the select isn't
+    // focused yet, but don't emit a click when the select is already focused.
+    // In this case, we have to wait for something other than the click. See
+    // HTMLSelectElement::SelectOptionByAccessKey.
+    AccessibilityNotificationWaiter waiter(
+        GetWebContents(), is_listbox ? ax::mojom::Event::kCheckedStateChanged
+                                     : ax::mojom::Event::kClicked);
 
     ui::AXActionData action_data;
     action_data.action = ax::mojom::Action::kDoDefault;

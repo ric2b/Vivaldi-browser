@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /* eslint-disable rulesdir/no-imperative-dom-api */
@@ -48,11 +48,8 @@ export class HelpQuickOpen extends Provider {
     const provider = this.providers[itemIndex];
 
     const iconElement = new IconButton.Icon.Icon();
-    iconElement.data = {
-      iconName: provider.iconName,
-      color: 'var(--icon-default)',
-      width: '18px',
-    };
+    iconElement.name = provider.iconName;
+    iconElement.classList.add('large');
     titleElement.parentElement?.parentElement?.insertBefore(iconElement, titleElement.parentElement);
 
     UI.UIUtils.createTextChild(titleElement, provider.title);

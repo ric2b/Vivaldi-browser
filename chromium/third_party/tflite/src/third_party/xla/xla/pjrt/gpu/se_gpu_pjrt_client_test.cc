@@ -36,6 +36,7 @@ limitations under the License.
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
+#include "absl/status/status_matchers.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_format.h"
@@ -108,6 +109,7 @@ limitations under the License.
 namespace xla {
 namespace {
 
+using ::testing::ElementsAre;
 using ::testing::ElementsAreArray;
 using ::testing::Eq;
 using ::testing::FloatEq;
@@ -115,8 +117,6 @@ using ::testing::Ge;
 using ::testing::Gt;
 using ::testing::HasSubstr;
 using ::testing::SizeIs;
-using ::tsl::testing::IsOkAndHolds;
-using ::tsl::testing::StatusIs;
 
 absl::StatusOr<std::unique_ptr<xla::PjRtLoadedExecutable>> CompileExecutable(
     absl::string_view program, xla::PjRtClient& client,
@@ -264,9 +264,26 @@ ENTRY main.5 {
 }
 #endif  // defined(GOOGLE_CUDA) || defined(TENSORFLOW_USE_ROCM)
 
+TEST(StreamExecutorGpuClientTest, CreateErrorBuffer) {
+  TF_ASSERT_OK_AND_ASSIGN(auto client,
+                          GetStreamExecutorGpuClient(DefaultOptions()));
+
+  xla::Shape shape = ShapeUtil::MakeShape(U32, {3, 2});
+  for (PjRtMemorySpace* memory_space : client->memory_spaces()) {
+    TF_ASSERT_OK_AND_ASSIGN(
+        auto buffer,
+        client->CreateErrorBuffer(Internal("foobar"), shape, memory_space));
+    EXPECT_THAT(
+        buffer->ToLiteralSync(),
+        absl_testing::StatusIs(tsl::error::INTERNAL, HasSubstr("foobar")));
+    EXPECT_EQ(buffer->memory_space(), memory_space);
+  }
+}
+
 TEST(StreamExecutorGpuClientTest, PropagateError) {
   TF_ASSERT_OK_AND_ASSIGN(auto client,
                           GetStreamExecutorGpuClient(DefaultOptions()));
+
   auto shape = xla::ShapeUtil::MakeScalarShape(xla::F32);
   absl::Status input_error = absl::InvalidArgumentError("input error");
   TF_ASSERT_OK_AND_ASSIGN(
@@ -1278,11 +1295,11 @@ TEST(StreamExecutorGpuClientTest, GpuDeviceDescriptionTest) {
                           GetStreamExecutorGpuClient(DefaultOptions()));
   for (int device_index = 0; device_index < client->device_count();
        device_index++) {
-    auto coords =
-        static_cast<PjRtStreamExecutorDevice*>(client->devices()[device_index])
-            ->description()
-            .coords();
-    EXPECT_EQ(coords[0], device_index);
+    auto device =
+        static_cast<PjRtStreamExecutorDevice*>(client->devices()[device_index]);
+    auto coords = device->description().coords();
+    // All devices are in the same partition & process.
+    EXPECT_THAT(coords, ElementsAre(0, 0, device->local_device_id().value()));
   }
 }
 
@@ -2657,7 +2674,8 @@ absl::Status ShardedAutotuningWorksTestBody(const int node_id,
 
   const std::string optimized_hlo =
       executable->GetExecutable()->GetHloModules()->front()->ToString();
-  TF_RET_CHECK(absl::StrContains(optimized_hlo, "triton_gemm"))
+  TF_RET_CHECK(absl::StrContains(optimized_hlo, "triton_gemm") ||
+               absl::StrContains(optimized_hlo, "__triton_nested_gemm_fusion"))
       << optimized_hlo;
 
   return absl::OkStatus();

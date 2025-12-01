@@ -74,7 +74,7 @@ Label 	 Allowed values 	 Description </tr>
 <td> </tr></td>
 <td> <tr></td>
 <td> <td> Cr-Platform</td></td>
-<td> <td> Developer Platform and Tools (Ext, AppsV2, NaCl, DevTools)</td></td>
+<td> <td> Developer Platform and Tools (Ext, AppsV2, DevTools)</td></td>
 <td> </tr></td>
 <td> <tr></td>
 <td> <td> Cr-UI-Shell</td></td>

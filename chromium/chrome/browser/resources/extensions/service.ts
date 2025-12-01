@@ -39,6 +39,7 @@ export interface ServiceInterface extends ActivityLogDelegate,
   shouldIgnoreUpdate(
       extensionId: string,
       eventType: chrome.developerPrivate.EventType): boolean;
+  showSiteSettings(extensionId: string): void;
 }
 
 export class Service implements ServiceInterface {
@@ -268,6 +269,27 @@ export class Service implements ServiceInterface {
       incognito: view.incognito,
       isServiceWorker: view.type === 'EXTENSION_SERVICE_WORKER_BACKGROUND',
     });
+  }
+
+  openDevToolsForError(error: chrome.developerPrivate.RuntimeError): void {
+    const devToolsProperties: chrome.developerPrivate.OpenDevToolsProperties = {
+      extensionId: error.extensionId,
+      renderProcessId: error.renderProcessId,
+      renderViewId: error.renderViewId,
+      incognito: error.fromIncognito,
+      isServiceWorker: error.isServiceWorker,
+    };
+
+    // Get stack trace information if available to open the correct file and
+    // line.
+    const stackFrame = error.stackTrace && error.stackTrace[0];
+    if (stackFrame) {
+      devToolsProperties.url = stackFrame.url;
+      devToolsProperties.lineNumber = stackFrame.lineNumber;
+      devToolsProperties.columnNumber = stackFrame.columnNumber;
+    }
+
+    chrome.developerPrivate.openDevTools(devToolsProperties);
   }
 
   openUrl(url: string): void {
@@ -546,6 +568,10 @@ export class Service implements ServiceInterface {
 
   uploadItemToAccount(id: string): Promise<boolean> {
     return chrome.developerPrivate.uploadExtensionToAccount(id);
+  }
+
+  showSiteSettings(extensionId: string) {
+    chrome.developerPrivate.showSiteSettings(extensionId);
   }
 
   static getInstance(): ServiceInterface {

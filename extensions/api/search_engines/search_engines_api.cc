@@ -12,6 +12,7 @@
 #include "components/ad_blocker/public/content/adblock_rule_service.h"
 #include "components/country_codes/country_codes.h"
 #include "components/prefs/pref_service.h"
+#include "components/search_engines/search_engines_helper.h"
 #include "components/search_engines/search_engines_manager.h"
 #include "components/search_engines/search_engines_managers_factory.h"
 #include "components/search_engines/search_engines_prompt_manager.h"
@@ -25,35 +26,8 @@
 namespace extensions {
 
 namespace {
-const char kSearchTermsParameterFull[] = "{searchTerms}";
-const char kGoogleUnescapedSearchTermsParameterFull[] =
-    "{google:unescapedSearchTerms}";
 const char kTemplateServiceNotAvailable[] =
     "TemplateURLService not available for profile.";
-// Display value for kSearchTermsParameter.
-const char kDisplaySearchTerms[] = "%s";
-
-// Display value for kGoogleUnescapedSearchTermsParameter.
-const char kDisplayUnescapedSearchTerms[] = "%S";
-
-std::string ToDisplay(const std::string& turl_param) {
-  std::string result(turl_param);
-  base::ReplaceSubstringsAfterOffset(&result, 0, kSearchTermsParameterFull,
-                                     kDisplaySearchTerms);
-  base::ReplaceSubstringsAfterOffset(&result, 0,
-                                     kGoogleUnescapedSearchTermsParameterFull,
-                                     kDisplayUnescapedSearchTerms);
-  return result;
-}
-
-std::string FromDisplay(const std::string& display_string) {
-  std::string result(display_string);
-  base::ReplaceSubstringsAfterOffset(&result, 0, kDisplaySearchTerms,
-                                     kSearchTermsParameterFull);
-  base::ReplaceSubstringsAfterOffset(&result, 0, kDisplayUnescapedSearchTerms,
-                                     kGoogleUnescapedSearchTermsParameterFull);
-  return result;
-}
 
 vivaldi::search_engines::TemplateURL TemplateURLToJSType(
     const TemplateURL* template_url,
@@ -69,14 +43,15 @@ vivaldi::search_engines::TemplateURL TemplateURLToJSType(
   result_turl.name = base::UTF16ToUTF8(template_url->short_name());
   result_turl.keyword = base::UTF16ToUTF8(template_url->keyword());
   result_turl.favicon_url = template_url->favicon_url().spec();
-  result_turl.url = ToDisplay(template_url->url());
-  result_turl.post_params = ToDisplay(template_url->search_url_post_params());
-  result_turl.suggest_url = ToDisplay(template_url->suggestions_url());
+  result_turl.url = GetUrlToDisplay(template_url->url());
+  result_turl.post_params =
+      GetUrlToDisplay(template_url->search_url_post_params());
+  result_turl.suggest_url = GetUrlToDisplay(template_url->suggestions_url());
   result_turl.suggest_post_params =
-      ToDisplay(template_url->suggestions_url_post_params());
-  result_turl.image_url = ToDisplay(template_url->image_url());
+      GetUrlToDisplay(template_url->suggestions_url_post_params());
+  result_turl.image_url = GetUrlToDisplay(template_url->image_url());
   result_turl.image_post_params =
-      ToDisplay(template_url->image_url_post_params());
+      GetUrlToDisplay(template_url->image_url_post_params());
   result_turl.prepopulate_id = template_url->prepopulate_id();
   result_turl.starter_pack_id = template_url->starter_pack_id();
   result_turl.is_active = static_cast<int>(template_url->is_active());
@@ -335,14 +310,15 @@ ExtensionFunction::ResponseAction SearchEnginesAddTemplateUrlFunction::Run() {
   TemplateURLData data;
   data.SetShortName(base::UTF8ToUTF16(params->template_url.name));
   data.SetKeyword(base::UTF8ToUTF16(params->template_url.keyword));
-  data.SetURL(FromDisplay(params->template_url.url));
-  data.suggestions_url = FromDisplay(params->template_url.suggest_url);
-  data.image_url = FromDisplay(params->template_url.image_url);
-  data.search_url_post_params = FromDisplay(params->template_url.post_params);
+  data.SetURL(GetUrlFromDisplay(params->template_url.url));
+  data.suggestions_url = GetUrlFromDisplay(params->template_url.suggest_url);
+  data.image_url = GetUrlFromDisplay(params->template_url.image_url);
+  data.search_url_post_params =
+      GetUrlFromDisplay(params->template_url.post_params);
   data.suggestions_url_post_params =
-      FromDisplay(params->template_url.suggest_post_params);
+      GetUrlFromDisplay(params->template_url.suggest_post_params);
   data.image_url_post_params =
-      FromDisplay(params->template_url.image_post_params);
+      GetUrlFromDisplay(params->template_url.image_post_params);
   data.favicon_url = GURL(params->template_url.favicon_url);
   data.safe_for_autoreplace = false;
 
@@ -440,12 +416,12 @@ SearchEnginesUpdateTemplateUrlFunction::Run() {
   service->ResetTemplateURL(
       turl_to_update, base::UTF8ToUTF16(params->template_url.name),
       base::UTF8ToUTF16(params->template_url.keyword),
-      FromDisplay(params->template_url.url),
-      FromDisplay(params->template_url.post_params),
-      FromDisplay(params->template_url.suggest_url),
-      FromDisplay(params->template_url.suggest_post_params),
-      FromDisplay(params->template_url.image_url),
-      FromDisplay(params->template_url.image_post_params),
+      GetUrlFromDisplay(params->template_url.url),
+      GetUrlFromDisplay(params->template_url.post_params),
+      GetUrlFromDisplay(params->template_url.suggest_url),
+      GetUrlFromDisplay(params->template_url.suggest_post_params),
+      GetUrlFromDisplay(params->template_url.image_url),
+      GetUrlFromDisplay(params->template_url.image_post_params),
       GURL(params->template_url.favicon_url));
   return RespondNow(ArgumentList(
       vivaldi::search_engines::UpdateTemplateUrl::Results::Create(true)));
@@ -577,7 +553,8 @@ SearchEnginesRepairPrepopulatedTemplateUrlsFunction::Run() {
   TemplateURLService::TemplateURLVector template_urls =
       service->GetTemplateURLs();
   for (const auto template_url : template_urls) {
-    if (template_url->prepopulate_id() == 0)
+    if (template_url->prepopulate_id() == 0 &&
+        template_url->starter_pack_id() == 0)
       service->Remove(template_url);
   }
 

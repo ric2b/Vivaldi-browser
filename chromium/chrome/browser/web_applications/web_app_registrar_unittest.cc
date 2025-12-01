@@ -43,16 +43,17 @@
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_management_type.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
-#include "chrome/common/url_constants.h"
 #include "components/sync/test/mock_data_type_local_change_processor.h"
 #include "components/webapps/browser/uninstall_result_code.h"
 #include "components/webapps/common/web_app_id.h"
+#include "components/webapps/isolated_web_apps/scheme.h"
 #include "components/webapps/isolated_web_apps/types/storage_location.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/common/content_features.h"
@@ -954,7 +955,7 @@ TEST_F(WebAppRegistrarTest, GetAllIsolatedWebAppStoragePartitionConfigs) {
       "berugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaic";
   constexpr char kExpectedIwaStoragePartitionDomain[] =
       "i1kr80qqyjuuVC4UFPN7ovBngVoA2HbXGtTXtmQn6/H4=";
-  GURL start_url(base::StrCat({chrome::kIsolatedAppScheme,
+  GURL start_url(base::StrCat({webapps::kIsolatedAppScheme,
                                url::kStandardSchemeSeparator, kIwaHostname}));
   auto isolated_web_app = test::CreateWebApp(start_url);
   const webapps::AppId app_id = isolated_web_app->app_id();
@@ -963,7 +964,7 @@ TEST_F(WebAppRegistrarTest, GetAllIsolatedWebAppStoragePartitionConfigs) {
   isolated_web_app->SetIsolationData(
       IsolationData::Builder(
           IwaStorageOwnedBundle{"random_name", /*dev_mode=*/false},
-          base::Version("1.0.0"))
+          *IwaVersion::Create("1.0.0"))
           .Build());
   RegisterAppUnsafe(std::move(isolated_web_app));
 
@@ -993,7 +994,7 @@ TEST_F(
   isolated_web_app->SetIsolationData(
       IsolationData::Builder(
           IwaStorageOwnedBundle{"random_name", /*dev_mode=*/false},
-          base::Version("1.0.0"))
+          *IwaVersion::Create("1.0.0"))
           .Build());
   isolated_web_app->SetInstallState(
       proto::InstallState::SUGGESTED_FROM_ANOTHER_DEVICE);
@@ -1013,7 +1014,7 @@ TEST_F(WebAppRegistrarTest, SaveAndGetInMemoryControlledFramePartitionConfig) {
       "berugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaic";
   constexpr char kExpectedIwaStoragePartitionDomain[] =
       "i1kr80qqyjuuVC4UFPN7ovBngVoA2HbXGtTXtmQn6/H4=";
-  GURL start_url(base::StrCat({chrome::kIsolatedAppScheme,
+  GURL start_url(base::StrCat({webapps::kIsolatedAppScheme,
                                url::kStandardSchemeSeparator, kIwaHostname}));
   auto isolated_web_app = test::CreateWebApp(start_url);
   const webapps::AppId app_id = isolated_web_app->app_id();
@@ -1024,7 +1025,7 @@ TEST_F(WebAppRegistrarTest, SaveAndGetInMemoryControlledFramePartitionConfig) {
   isolated_web_app->SetIsolationData(
       IsolationData::Builder(
           IwaStorageOwnedBundle{"random_name", /*dev_mode=*/false},
-          base::Version("1.0.0"))
+          *IwaVersion::Create("1.0.0"))
           .Build());
   RegisterAppUnsafe(std::move(isolated_web_app));
 
@@ -1109,7 +1110,7 @@ TEST_F(WebAppRegistrarTest,
   web_app->SetIsolationData(
       IsolationData::Builder(
           IwaStorageOwnedBundle{"random_name", /*dev_mode=*/false},
-          base::Version("1.0.0"))
+          *IwaVersion::Create("1.0.0"))
           .Build());
 
   RegisterAppUnsafe(std::move(web_app));
@@ -1134,7 +1135,7 @@ TEST_F(WebAppRegistrarTest,
   web_app->SetIsolationData(
       IsolationData::Builder(
           IwaStorageOwnedBundle{"random_name", /*dev_mode=*/false},
-          base::Version("1.0.0"))
+          *IwaVersion::Create("1.0.0"))
           .Build());
 
   RegisterAppUnsafe(std::move(web_app));
@@ -1158,7 +1159,7 @@ TEST_F(WebAppRegistrarTest,
   web_app->SetIsolationData(
       IsolationData::Builder(
           IwaStorageOwnedBundle{"random_name", /*dev_mode=*/false},
-          base::Version("1.0.0"))
+          *IwaVersion::Create("1.0.0"))
           .Build());
 
   RegisterAppUnsafe(std::move(web_app));
@@ -1310,14 +1311,7 @@ TEST_F(WebAppRegistrarTest, AppsDoNotOverlapIfNestedScope) {
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
-class WebAppRegistrarTest_ScopeExtensions : public WebAppRegistrarTest {
- public:
-  WebAppRegistrarTest_ScopeExtensions() = default;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      blink::features::kWebAppEnableScopeExtensions};
-};
+using WebAppRegistrarTest_ScopeExtensions = WebAppRegistrarTest;
 
 TEST_F(WebAppRegistrarTest_ScopeExtensions, IsUrlInAppExtendedScope) {
   StartWebAppProvider();
@@ -1702,6 +1696,35 @@ TEST_F(WebAppRegistrarTest, MultipleTrustedIconsUseSmallerCloserToSize) {
                 app_id, /*input_size=*/512));
 }
 
+TEST_F(WebAppRegistrarTest, TrustedIconMetrics) {
+  base::HistogramTester histogram_tester;
+
+  // Set up the registry with 10 apps, and set trusted icons on 5 of them.
+  Registry test_registry =
+      CreateRegistryForTesting("https://example.com/path", 10);
+  int i = 0;
+  apps::IconInfo icon_info(GURL("https://www.example.com/icon.png"),
+                           icon_size::k48);
+  for (auto& apps : test_registry) {
+    if (i % 2 == 0) {
+      apps.second->SetTrustedIcons({icon_info});
+    }
+    i++;
+  }
+
+  PopulateRegistry(std::move(test_registry));
+  StartWebAppProvider();
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples("WebApp.InstalledCount.HasTrustedIcons"),
+      base::BucketsAre(base::Bucket(/*min=*/5,
+                                    /*count=*/1)));
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples("WebApp.InstalledCount.HasNoTrustedIcons"),
+      base::BucketsAre(base::Bucket(/*min=*/5,
+                                    /*count=*/1)));
+}
+
 #if BUILDFLAG(IS_CHROMEOS)
 
 class WebAppRegistrarAshTest : public WebAppTest {
@@ -1801,7 +1824,7 @@ class WebAppRegistrarDisplayModeTest
       constexpr char kIwaHostname[] =
           "berugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaic";
       start_url =
-          GURL(base::StrCat({chrome::kIsolatedAppScheme,
+          GURL(base::StrCat({webapps::kIsolatedAppScheme,
                              url::kStandardSchemeSeparator, kIwaHostname}));
     }
     auto web_app = test::CreateWebApp(start_url);
@@ -1817,7 +1840,7 @@ class WebAppRegistrarDisplayModeTest
       web_app->SetIsolationData(
           IsolationData::Builder(
               IwaStorageOwnedBundle{"random_name", /*dev_mode=*/false},
-              base::Version("1.0.0"))
+              *IwaVersion::Create("1.0.0"))
               .Build());
     }
 
@@ -2092,7 +2115,7 @@ TEST_P(WebAppRegistrarParameterizedTest, Filter_IsIsolatedApp) {
 
   constexpr char kIwaHostname[] =
       "berugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaic";
-  GURL app_url(base::StrCat({chrome::kIsolatedAppScheme,
+  GURL app_url(base::StrCat({webapps::kIsolatedAppScheme,
                              url::kStandardSchemeSeparator, kIwaHostname}));
   auto isolated_web_app = test::CreateWebApp(app_url);
   const webapps::AppId app_id = isolated_web_app->app_id();
@@ -2101,7 +2124,7 @@ TEST_P(WebAppRegistrarParameterizedTest, Filter_IsIsolatedApp) {
   isolated_web_app->SetIsolationData(
       IsolationData::Builder(
           IwaStorageOwnedBundle{"random_name", /*dev_mode=*/false},
-          base::Version("1.0.0"))
+          *IwaVersion::Create("1.0.0"))
           .Build());
   isolated_web_app->SetDisplayMode(DisplayMode::kBrowser);
   isolated_web_app->SetUserDisplayMode(mojom::UserDisplayMode::kBrowser);

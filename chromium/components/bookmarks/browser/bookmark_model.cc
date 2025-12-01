@@ -825,8 +825,11 @@ void BookmarkModel::SetNodeMetaInfoMap(
   // NOTE(jarle@vivaldi.com): The index doesn't support changing metadata
   // (description, nickname), instead we remove the node and then add it back.
   #if defined(VIVALDI_BUILD)
-  if (node->is_url())
+  if (node->is_url()) {
     titled_url_index_->Remove(node);
+  } else if (node->is_folder()) {
+    titled_url_index_->RemovePath(node);
+  }
   #endif
 
   AsMutable(node)->SetMetaInfoMap(meta_info_map);
@@ -834,6 +837,8 @@ void BookmarkModel::SetNodeMetaInfoMap(
   #if defined(VIVALDI_BUILD)
   if (node->is_url()) {
     titled_url_index_->Add(node);
+  } else if (node->is_folder()) {
+    titled_url_index_->AddPath(node);
   }
   #endif
 

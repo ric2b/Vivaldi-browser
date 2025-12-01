@@ -12,12 +12,14 @@
 #include "base/path_service.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/glic/glic_enabling.h"
+#include "chrome/browser/actor/actor_keyed_service.h"
+#include "chrome/browser/actor/ui/actor_ui_state_manager_interface.h"
 #include "chrome/browser/glic/glic_pref_names.h"
 #include "chrome/browser/glic/host/glic.mojom.h"
 #include "chrome/browser/glic/host/glic_cookie_synchronizer.h"
 #include "chrome/browser/glic/host/glic_page_handler.h"
 #include "chrome/browser/glic/host/host.h"
+#include "chrome/browser/glic/public/glic_enabling.h"
 #include "chrome/browser/glic/public/glic_keyed_service.h"
 #include "chrome/browser/glic/public/glic_keyed_service_factory.h"
 #include "chrome/browser/glic/test_support/glic_test_environment.h"
@@ -39,9 +41,12 @@
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "chrome/test/user_education/interactive_feature_promo_test.h"
 #include "components/feature_engagement/public/feature_constants.h"
+#include "content/public/browser/web_contents.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/interaction/element_identifier.h"
 #include "ui/base/interaction/interactive_test.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/views/interaction/element_tracker_views.h"
 #include "url/gurl.h"
 #include "url/url_util.h"
 
@@ -250,11 +255,25 @@ class InteractiveGlicTestT : public T {
     switch (window_mode) {
       case GlicWindowMode::kAttached:
         return Api::PressButton(kGlicButtonElementId)
-            .SetContext(
-                ui::ElementContext(browser()->TopContainer()->GetWidget()));
+            .SetContext(views::ElementTrackerViews::GetContextForView(
+                browser()->TopContainer()));
       case GlicWindowMode::kDetached:
         return Api::Do(
             [this] { window_controller().ShowDetachedForTesting(); });
+    }
+  }
+
+  // Toggles Glic through a specific InvocationSource.
+  auto ToggleGlicWindowFromSource(GlicWindowMode window_mode,
+                                  ui::ElementIdentifier element_id,
+                                  mojom::InvocationSource invocation_source) {
+    switch (window_mode) {
+      case GlicWindowMode::kAttached:
+        return Api::PressButton(element_id);
+      case GlicWindowMode::kDetached:
+        return Api::Do([this, invocation_source] {
+          window_controller().Toggle(browser(), false, invocation_source);
+        });
     }
   }
 
@@ -409,12 +428,17 @@ class InteractiveGlicTestT : public T {
   }
 
   content::RenderFrameHost* FindGlicGuestMainFrame() {
-    for (GlicPageHandler* handler : host().GetPageHandlersForTesting()) {
+    for (GlicPageHandler* handler :
+         GetHostForActiveTab()->GetPageHandlersForTesting()) {
       if (handler->GetGuestMainFrame()) {
         return handler->GetGuestMainFrame();
       }
     }
     return nullptr;
+  }
+
+  content::WebContents* FindGlicWebUIContents() {
+    return GetHostForActiveTab()->webui_contents();
   }
 
   glic::GlicTestEnvironment& glic_test_environment() {
@@ -423,6 +447,14 @@ class InteractiveGlicTestT : public T {
 
   glic::GlicTestEnvironmentService& glic_test_service() {
     return *glic_test_environment_.GetService(browser()->GetProfile());
+  }
+
+  // Send a task state update to show the actor task icon in the tab strip.
+  void StartTaskAndShowActorTaskIcon() {
+    auto actor_service = actor::ActorKeyedService::Get(browser()->GetProfile());
+    actor::TaskId task_id = actor_service->CreateTask();
+    actor::ui::StartTask start_task_event(task_id);
+    actor_service->GetActorUiStateManager()->OnUiEvent(start_task_event);
   }
 
  protected:
@@ -435,7 +467,11 @@ class InteractiveGlicTestT : public T {
     return glic_service()->window_controller();
   }
 
-  Host& host() { return glic_service()->host(); }
+  Host* GetHostForActiveTab() {
+    GlicInstance* instance = glic_service()->GetInstanceForActiveTab(browser());
+    CHECK(instance);
+    return &instance->host();
+  }
 
   template <typename... M>
   auto EnsureGlicWindowState(const std::string& desc, M&&... matchers) {

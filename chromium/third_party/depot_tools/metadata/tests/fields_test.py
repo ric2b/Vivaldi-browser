@@ -18,6 +18,7 @@ sys.path.insert(0, _ROOT_DIR)
 import metadata.fields.known as known_fields
 import metadata.fields.field_types as field_types
 import metadata.validation_result as vr
+import metadata.fields.custom.cpe_prefix as cpe_prefix_util
 import metadata.fields.custom.mitigated
 import metadata.fields.custom.update_mechanism
 
@@ -71,6 +72,33 @@ class FieldValidationTest(unittest.TestCase):
             error_values=["", "\n", "Probably yes"],
             warning_values=["Yes?", "not"],
         )
+
+    def test_cpe_prefix_has_version_component(self):
+        """Test has_version_component for CPE prefix."""
+        # CPE 2.3 Formatted String
+        self.assertTrue(
+            cpe_prefix_util.has_version_component(
+                "cpe:2.3:a:vendor:product:1.2.3:*:*:*:*:*:*:*"))
+        self.assertFalse(
+            cpe_prefix_util.has_version_component(
+                "cpe:2.3:a:vendor:product:*:*:*:*:*:*:*:*"))
+        self.assertFalse(
+            cpe_prefix_util.has_version_component(
+                "cpe:2.3:a:vendor:product:-:*:*:*:*:*:*:*"))
+        self.assertFalse(
+            cpe_prefix_util.has_version_component("cpe:2.3:a:vendor:product"))
+
+        # CPE 2.2 URN
+        self.assertTrue(
+            cpe_prefix_util.has_version_component("cpe:/a:vendor:product:1.2.3"))
+        self.assertFalse(
+            cpe_prefix_util.has_version_component("cpe:/a:vendor:product"))
+        self.assertFalse(cpe_prefix_util.has_version_component("cpe:/a:vendor"))
+        self.assertFalse(cpe_prefix_util.has_version_component("cpe:/a"))
+        self.assertFalse(cpe_prefix_util.has_version_component("cpe:/"))
+
+        # Invalid
+        self.assertFalse(cpe_prefix_util.has_version_component("not a cpe"))
 
     def test_cpe_prefix_validation(self):
         self._run_field_validation(

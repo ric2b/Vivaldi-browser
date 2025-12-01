@@ -478,12 +478,16 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   static size_t Columns(size_t plane, VideoPixelFormat format, int width);
 
   // Given a crypto/hash Hasher, hash in the pixels from a single VideoFrame.
+  // If `visible_data_only` is true only the frame's visible area will be
+  // hashed, if false then the entire coded frame area will be hashed.
   static void UpdateHashWithFrameForTesting(crypto::hash::Hasher& hasher,
-                                            const VideoFrame& frame);
+                                            const VideoFrame& frame,
+                                            bool visible_data_only = true);
 
   // Convenience wrapper around UpdateHashWithFrameForTesting(): produces the
   // SHA-256 hash of a single video frame's pixels, as a lowercase hex string.
-  static std::string HexHashOfFrameForTesting(const VideoFrame& frame);
+  static std::string HexHashOfFrameForTesting(const VideoFrame& frame,
+                                              bool visible_data_only = true);
 
   // Returns true if |frame| is accessible mapped in the VideoFrame memory
   // space.
@@ -627,6 +631,10 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   int row_bytes(size_t plane) const;
   int rows(size_t plane) const;
 
+  // Similar to row_bytes() and rows(), but instead refers to the visible area.
+  int GetVisibleRowBytes(size_t plane) const;
+  int GetVisibleRows(size_t plane) const;
+
   // Returns the number of columns for a given plane.
   int columns(size_t plane) const;
 
@@ -645,6 +653,18 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
     CHECK(IsValidPlane(format(), plane));
     CHECK(IsMappable());
     return data_[plane];
+  }
+
+  std::optional<base::span<uint8_t>> writable_span(size_t plane) {
+    if (storage_type_ == STORAGE_SHMEM ||
+        storage_type_ == STORAGE_UNOWNED_MEMORY) {
+      return std::nullopt;
+    }
+    auto const_span = data_span(plane);
+    // SAFETY: We take data() and size() from another span, which supposedly
+    // refers to a valid range in memory.
+    return UNSAFE_BUFFERS(
+        base::span(const_cast<uint8_t*>(const_span.data()), const_span.size()));
   }
 
   uint8_t* writable_data(size_t plane) {

@@ -9,7 +9,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "base/memory/scoped_refptr.h"
@@ -20,17 +19,17 @@
 #include "base/time/time.h"
 #include "components/autofill/core/browser/country_type.h"
 #include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
-#include "components/autofill/core/browser/strike_databases/address_suggestion_strike_database.h"
-#include "components/autofill/core/browser/strike_databases/autofill_profile_migration_strike_database.h"
-#include "components/autofill/core/browser/strike_databases/autofill_profile_save_strike_database.h"
-#include "components/autofill/core/browser/strike_databases/autofill_profile_update_strike_database.h"
-#include "components/autofill/core/browser/strike_databases/strike_database_base.h"
+#include "components/autofill/core/browser/strike_databases/addresses/address_suggestion_strike_database.h"
+#include "components/autofill/core/browser/strike_databases/addresses/autofill_profile_migration_strike_database.h"
+#include "components/autofill/core/browser/strike_databases/addresses/autofill_profile_save_strike_database.h"
+#include "components/autofill/core/browser/strike_databases/addresses/autofill_profile_update_strike_database.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service_observer.h"
 #include "components/autofill/core/common/dense_set.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/prefs/pref_member.h"
 #include "components/signin/public/identity_manager/account_info.h"
+#include "components/strike_database/strike_database_base.h"
 #include "components/sync/service/sync_service.h"
 #include "components/webdata/common/web_data_service_consumer.h"
 
@@ -42,6 +41,7 @@ class PrefService;
 
 namespace autofill {
 
+class AccountNameEmailStore;
 class AddressDataCleaner;
 class AlternativeStateNameMapUpdater;
 class ContactInfoPreconditionChecker;
@@ -91,7 +91,7 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence {
                      PrefService* local_state,
                      syncer::SyncService* sync_service,
                      signin::IdentityManager* identity_manager,
-                     StrikeDatabaseBase* strike_database,
+                     strike_database::StrikeDatabaseBase* strike_database,
                      GeoIpCountryCode variation_country_code,
                      std::string app_locale);
 
@@ -131,6 +131,8 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence {
 
   // Returns the profiles to suggest to the user for filling, ordered by
   // frecency.
+  // If kAccountNameEmail is present in `profiles_`, it is always moved to the
+  // end of the vector unless this is the first time it is suggested.
   std::vector<const AutofillProfile*> GetProfilesToSuggest() const;
 
   // Returns all `GetProfiles()` in the order that the should be shown in the
@@ -147,9 +149,9 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence {
   // Updates |profile| which already exists in the web database.
   virtual void UpdateProfile(const AutofillProfile& profile);
 
-  // Tivial wrapper that simply calls `RemoveProfileImpl()`.
+  // Trivial wrapper that simply calls `RemoveProfileImpl()`.
   void RemoveProfile(const std::string& guid,
-                     bool is_deduplication_initiated = false);
+                     bool non_permanent_account_profile_removal = false);
 
   // Removes all local profiles modified on or after `delete_begin` and strictly
   // before `delete_end`. Used for browsing data deletion purposes.
@@ -251,12 +253,12 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence {
   // but is forwarded from the PDM's history observer.
   void OnHistoryDeletions(const history::DeletionInfo& deletion_info);
 
-  // Returns true if the PDM is currently awaiting an address-related responses
+  // Returns true if the ADM is currently awaiting an address-related responses
   // from the database. In this case, the PDM's address data is currently
   // potentially inconsistent with the database. Once the state has converged,
-  // PersonalDataManagerObserver:: OnPersonalDataChanged() will be called.
+  // AddressDataManagerObserver::OnAddressDataChanged() will be called.
   bool IsAwaitingPendingAddressChanges() const {
-    return ProfileChangesAreOngoing() || pending_profile_query_ != 0;
+    return !ongoing_profile_changes_.empty() || pending_profile_query_ != 0;
   }
 
   // Returns the value of the AutofillProfileEnabled pref.
@@ -311,7 +313,7 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence {
   friend class AddressDataManagerTestApi;
 
   void SetPrefService(PrefService* pref_service);
-  void SetStrikeDatabase(StrikeDatabaseBase* strike_database);
+  void SetStrikeDatabase(strike_database::StrikeDatabaseBase* strike_database);
 
   // Used to get a pointer to the strike database for migrating existing
   // profiles. Note, the result can be a nullptr, for example, on incognito
@@ -368,17 +370,12 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence {
   // in the PDM after the task on the DB sequence has finished.
   void UpdateProfileInDB(const AutofillProfile& profile);
 
-  // Look at the next profile change for profile with guid = |guid|, and handle
-  // it.
-  void HandleNextProfileChange(const std::string& guid);
-  // returns true if there is any profile change that's still ongoing.
-  bool ProfileChangesAreOngoing() const;
-  // returns true if there is any ongoing change for profile with guid = |guid|
-  // that's still ongoing.
-  bool ProfileChangesAreOngoing(const std::string& guid) const;
-  // Remove the change from the |ongoing_profile_changes_|, handle next task or
-  // Refresh.
-  void OnProfileChangeDone(const std::string& guid);
+  // Look at the next `ongoing_profile_changes_` and schedules the corresponding
+  // database operation.
+  void HandleNextProfileChange();
+
+  // Remove the first `ongoing_profile_changes_` and schedules the next one.
+  void OnProfileChangeDone();
 
   // Logs metrics around the number of stored profiles after the initial load
   // has finished.
@@ -387,11 +384,11 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence {
   // Called when `prefs::kAutofillProfileEnabled` changed.
   void OnAutofillProfilePrefChanged();
 
-  // Removes the profile by `guid`. If `is_deduplication_initiated` is true and
-  // the profile is coming from the account, it will be removed from the local
-  // database and marked `invisible_in_autofill` on the server.
+  // Removes the profile by `guid`. If `non_permanent_account_profile_removal`
+  // is true and the profile is coming from the account, the removal will be
+  // treated as `AutofillProfileChange::HIDE_IN_AUTOFILL`.
   virtual void RemoveProfileImpl(const std::string& guid,
-                                 bool is_deduplication_initiated);
+                                 bool non_permanent_account_profile_removal);
 
   base::ObserverList<Observer> observers_;
 
@@ -419,9 +416,11 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence {
                           AutofillWebDataServiceObserverOnUISequence>
       webdata_service_observer_{this};
 
-  // A timely ordered list of ongoing changes for each profile.
-  std::unordered_map<std::string, std::deque<QueuedAutofillProfileChange>>
-      ongoing_profile_changes_;
+  // A timely ordered list of ongoing changes. Changes for different GUIDs
+  // cannot be processed in parallel, since e.g. an add should only be performed
+  // if this doesn't create a duplicate. If a removal of a profile is pending,
+  // an addition of another profile might otherwise be incorrectly dropped.
+  std::deque<QueuedAutofillProfileChange> ongoing_profile_changes_;
 
   // An observer to listen for changes to prefs::kAutofillProfileEnabled.
   std::unique_ptr<BooleanPrefMember> profile_enabled_pref_;
@@ -460,6 +459,11 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence {
   // Manages metadata sync for Home and Work addresses. Non-null if Home and
   // Work support is enabled and a pref service is available.
   std::unique_ptr<HomeAndWorkMetadataStore> home_and_work_metadata_;
+
+  // Manages Account Name Email autofill profile and prefs related to it.
+  // Non-null if Account Name Email support is enabled and pref service is
+  // available.
+  std::unique_ptr<AccountNameEmailStore> account_name_email_store_;
 
   // If true, new addresses imports are automatically accepted without a prompt.
   // Only to be used for testing.

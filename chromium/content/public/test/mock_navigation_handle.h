@@ -24,6 +24,7 @@
 #include "net/base/isolation_info.h"
 #include "net/http/http_connection_info.h"
 #include "net/http/http_request_headers.h"
+#include "net/http/http_response_headers.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/mojom/loader/referrer.mojom.h"
@@ -99,7 +100,7 @@ class MockNavigationHandle : public NavigationHandle {
   }
   MOCK_METHOD0(GetPreviousRenderFrameHostId, GlobalRenderFrameHostId());
   MOCK_METHOD(ChildProcessId, GetExpectedRenderProcessHostId, ());
-  bool IsServedFromBackForwardCache() override {
+  bool IsServedFromBackForwardCache() const override {
     return is_served_from_bfcache_;
   }
   bool IsPageActivation() const override {
@@ -195,6 +196,7 @@ class MockNavigationHandle : public NavigationHandle {
   MOCK_METHOD0(IsSignedExchangeInnerResponse, bool());
   MOCK_METHOD0(HasPrefetchedAlternativeSubresourceSignedExchange, bool());
   bool WasResponseCached() override { return was_response_cached_; }
+  bool NetworkAccessed() override { return network_accessed_; }
   const std::string& GetHrefTranslate() override { return href_translate_; }
   const std::optional<blink::Impression>& GetImpression() override {
     return impression_;
@@ -402,6 +404,7 @@ class MockNavigationHandle : public NavigationHandle {
   content::GlobalRequestID global_request_id_;
   bool is_form_submission_ = false;
   bool was_response_cached_ = false;
+  bool network_accessed_ = false;
   std::optional<url::Origin> initiator_origin_;
   std::optional<GURL> initiator_base_url_;
   ReloadType reload_type_ = content::ReloadType::NONE;

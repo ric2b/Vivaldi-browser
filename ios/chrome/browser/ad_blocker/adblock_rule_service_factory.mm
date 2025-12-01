@@ -46,18 +46,17 @@ RuleServiceFactory::RuleServiceFactory()
 RuleServiceFactory::~RuleServiceFactory() {}
 
 std::unique_ptr<KeyedService> RuleServiceFactory::BuildServiceInstanceFor(
-    web::BrowserState* browser_state) const {
+    ProfileIOS* profile) const {
   PrefService* local_state = GetApplicationContext()->GetLocalState();
   std::string locale =
       local_state->HasPrefPath(language::prefs::kApplicationLocale)
           ? local_state->GetString(language::prefs::kApplicationLocale)
           : GetApplicationContext()->GetApplicationLocaleStorage()->Get();
 
-  PrefService* pref_service =
-      ProfileIOS::FromBrowserState(browser_state)->GetPrefs();
+  PrefService* pref_service = profile->GetPrefs();
 
   auto rule_service = std::make_unique<RuleServiceImpl>(
-      browser_state, pref_service,
+      profile, pref_service,
       base::BindRepeating(
           &CompileIosRules,
           pref_service->GetBoolean(

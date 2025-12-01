@@ -218,9 +218,9 @@ std::optional<Builtin> WasmImportWrapperCache::BuiltinForWrapper(
 }
 
 std::shared_ptr<WasmImportWrapperHandle> WasmImportWrapperCache::Get(
-    Isolate* isolate, ImportCallKind kind, CanonicalTypeIndex type_index,
-    int expected_arity, Suspend suspend, const wasm::CanonicalSig* sig) {
-  CacheKey cache_key(kind, type_index, expected_arity, suspend);
+    Isolate* isolate, ImportCallKind kind, int expected_arity, Suspend suspend,
+    const wasm::CanonicalSig* sig) {
+  CacheKey cache_key(kind, sig->index(), expected_arity, suspend);
 
   {
     base::MutexGuard lock(&mutex_);
@@ -281,12 +281,12 @@ bool WasmImportWrapperCache::HasCodeForTesting(ImportCallKind kind,
 }
 
 std::shared_ptr<WasmImportWrapperHandle> WasmImportWrapperCache::GetCompiled(
-    Isolate* isolate, ImportCallKind kind, CanonicalTypeIndex type_index,
-    int expected_arity, Suspend suspend, const CanonicalSig* sig) {
+    Isolate* isolate, ImportCallKind kind, int expected_arity, Suspend suspend,
+    const CanonicalSig* sig) {
   CHECK_NE(kind, ImportCallKind::kWasmToJSFastApi);
   DCHECK(!v8_flags.wasm_jitless);
 
-  CacheKey cache_key{kind, type_index, expected_arity, suspend};
+  CacheKey cache_key{kind, sig->index(), expected_arity, suspend};
 
   std::shared_ptr<wasm::WasmImportWrapperHandle> wrapper_handle;
   {
@@ -307,6 +307,9 @@ std::shared_ptr<WasmImportWrapperHandle> WasmImportWrapperCache::GetCompiled(
 std::shared_ptr<WasmImportWrapperHandle> WasmImportWrapperCache::CompileWrapper(
     Isolate* isolate, const CacheKey& cache_key, const CanonicalSig* sig,
     std::shared_ptr<WasmImportWrapperHandle> wrapper_handle) {
+#if !V8_ENABLE_TURBOFAN
+  UNREACHABLE();
+#else
   wasm::WasmCompilationResult result;
   wasm::WasmCode::Kind code_kind;
   switch (cache_key.kind) {
@@ -368,8 +371,10 @@ std::shared_ptr<WasmImportWrapperHandle> WasmImportWrapperCache::CompileWrapper(
   }
 
   return wrapper_handle;
+#endif
 }
 
+#ifdef V8_ENABLE_TURBOFAN
 std::shared_ptr<WasmImportWrapperHandle>
 WasmImportWrapperCache::CompileWasmJsFastCallWrapper(
     Isolate* isolate, DirectHandle<JSReceiver> callable,
@@ -403,6 +408,7 @@ WasmImportWrapperCache::CompileWasmJsFastCallWrapper(
 
   return wrapper_handle;
 }
+#endif
 
 WasmCode* WasmImportWrapperCache::Lookup(Address pc) const {
   // This can be called from the disassembler via `code->MaybePrint()` in

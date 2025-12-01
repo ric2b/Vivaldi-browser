@@ -27,7 +27,7 @@ enum class ContentSuggestionsModuleType {
   // Removed: kSafetyCheckMultiRow = 8,
   // Removed: kSafetyCheckMultiRowOverflow = 9,
   kTabResumption = 10,
-  kParcelTracking = 11,
+  // Removed: kParcelTracking = 11,
   // Removed: kParcelTrackingSeeMore = 12,
   kSetUpListNotifications = 13,
   kPlaceholder = 14,
@@ -43,7 +43,9 @@ enum class ContentSuggestionsModuleType {
   // Removed: kSetUpListDocking = 19,
   // Removed: kSetUpListAddressBar = 20,
   kShopCard = 21,
-  kMaxValue = kShopCard,
+  kAppBundlePromo = 22,
+  kDefaultBrowser = 23,
+  kMaxValue = kDefaultBrowser,
 };
 // LINT.ThenChange(/tools/metrics/histograms/metadata/ios/enums.xml)
 

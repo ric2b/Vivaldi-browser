@@ -198,7 +198,8 @@ content::DesktopMediaID GetDesktopMediaID(Browser* browser, int tab) {
 
 views::Widget* GetContentsBorder(Browser* browser) {
   return BrowserView::GetBrowserViewForBrowser(browser)
-      ->contents_border_widget();
+      ->GetActiveContentsContainerView()
+      ->capture_contents_border_widget();
 }
 
 scoped_refptr<MediaStreamCaptureIndicator> GetCaptureIndicator() {
@@ -336,6 +337,15 @@ class TabSharingUIViewsBrowserTestBase : public InProcessBrowserTest {
       if (has_border) {
         ActivateTab(browser, i);
         EXPECT_EQ(i == captured_tab, contents_border->IsVisible());
+
+        // The contents border should surround the contents container view
+        BrowserView* const browser_view =
+            BrowserView::GetBrowserViewForBrowser(browser);
+        content::WebContents* const web_contents =
+            browser->tab_strip_model()->GetWebContentsAt(i);
+        EXPECT_EQ(contents_border->GetWindowBoundsInScreen(),
+                  browser_view->GetContentsContainerViewFor(web_contents)
+                      ->GetBoundsInScreen());
       }
 
       // Tab capture indicator is only displayed on the shared tab.

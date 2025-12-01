@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -136,6 +136,13 @@ describe('AnnotationHelpers', () => {
       const event = new Timeline.ModificationsManager.AnnotationModifiedEvent(overlay, 'Add');
       const text = ariaAnnouncementForModifiedEvent(event);
       assert.strictEqual(text, 'The entry label annotation has been added');
+    });
+
+    it('does not return text if the aria notifcations are muted', async () => {
+      const overlay: Trace.Types.Overlays.EntryLabel = {type: 'ENTRY_LABEL', entry: FAKE_ENTRY_1, label: 'Hello world'};
+      const event = new Timeline.ModificationsManager.AnnotationModifiedEvent(overlay, 'Add', true);
+      const text = ariaAnnouncementForModifiedEvent(event);
+      assert.isNull(text);
     });
 
     it('does not return an announcement for new empty labels', async () => {

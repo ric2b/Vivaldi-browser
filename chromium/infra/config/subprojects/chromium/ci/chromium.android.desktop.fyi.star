@@ -58,7 +58,6 @@ ci.builder(
         android_config = builder_config.android_config(
             config = "base_config",
         ),
-        build_gs_bucket = "chromium-android-desktop-archive",
     ),
     gn_args = gn_args.config(
         configs = [
@@ -75,7 +74,7 @@ ci.builder(
         ],
     ),
     targets = targets.bundle(
-        targets = "android_desktop_fyi_tests",
+        targets = "android_desktop_fyi_gtests",
         mixins = [
             "15-desktop-x64-emulator",
             "emulator-8-cores",

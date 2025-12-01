@@ -14,6 +14,9 @@
 
 # The package contains libraries that are common to both FuzzTest and Centipede.
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 VISIBILITY = ["//visibility:public"]
 
 EXTENDED_API_VISIBILITY = VISIBILITY
@@ -40,7 +43,7 @@ cc_library(
     srcs = ["bazel.cc"],
     hdrs = ["bazel.h"],
     deps = [
-        "@abseil-cpp//absl/log:check",
+        ":logging",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/time",
@@ -64,8 +67,6 @@ cc_library(
         ":status_macros",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/base:nullability",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:str_format",
@@ -106,8 +107,8 @@ cc_library(
     name = "logging",
     hdrs = ["logging.h"],
     deps = [
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/log:absl_check",
+        "@abseil-cpp//absl/log:absl_log",
     ],
 )
 
@@ -124,7 +125,6 @@ cc_library(
                ":logging",
                ":status_macros",
                "@abseil-cpp//absl/base:nullability",
-               "@abseil-cpp//absl/log:check",
                "@abseil-cpp//absl/status",
                "@abseil-cpp//absl/status:statusor",
                "@abseil-cpp//absl/strings",
@@ -156,8 +156,6 @@ cc_library(
         ":logging",
         ":status_macros",
         "@abseil-cpp//absl/base:nullability",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
@@ -186,8 +184,8 @@ cc_library(
     name = "status_macros",
     hdrs = ["status_macros.h"],
     deps = [
+        ":logging",
         "@abseil-cpp//absl/base:core_headers",
-        "@abseil-cpp//absl/log",
     ],
 )
 
@@ -200,8 +198,6 @@ cc_library(
         ":blob_file",
         ":defs",
         ":logging",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
         "@googletest//:gtest",
@@ -213,7 +209,7 @@ cc_library(
     srcs = ["temp_dir.cc"],
     hdrs = ["temp_dir.h"],
     deps = [
-        "@abseil-cpp//absl/log:check",
+        ":logging",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:string_view",
     ],
@@ -254,7 +250,6 @@ cc_library(
         ":logging",
         ":remote_file",
         ":test_util",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/time",
         "@googletest//:gtest",

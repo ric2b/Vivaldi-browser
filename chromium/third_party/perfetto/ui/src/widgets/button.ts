@@ -59,6 +59,13 @@ interface CommonAttrs extends HTMLButtonAttrs {
   //   on toolbars.
   // Defaults to Filled.
   variant?: ButtonVariant;
+  // Turns the button into a pill shape.
+  rounded?: boolean;
+  // Makes the button shrink to fit inside it's container, rather than its width
+  // being defined by its content. Useful for when you have buttons with dynamic
+  // content that may change size, and you don't want the button to change size
+  // as that happens. Defaults to false.
+  shrink?: boolean;
 }
 
 interface IconButtonAttrs extends CommonAttrs {
@@ -75,6 +82,10 @@ interface LabelButtonAttrs extends CommonAttrs {
 
 export type ButtonAttrs = LabelButtonAttrs | IconButtonAttrs;
 
+function isLabelButtonAttrs(attrs: ButtonAttrs): attrs is LabelButtonAttrs {
+  return (attrs as LabelButtonAttrs).label !== undefined;
+}
+
 export class Button implements m.ClassComponent<ButtonAttrs> {
   view({attrs}: m.CVnode<ButtonAttrs>) {
     const {
@@ -87,10 +98,12 @@ export class Button implements m.ClassComponent<ButtonAttrs> {
       iconFilled,
       intent = Intent.None,
       variant = ButtonVariant.Minimal,
+      rounded,
+      shrink,
       ...htmlAttrs
     } = attrs;
 
-    const label = 'label' in attrs ? attrs.label : undefined;
+    const label = isLabelButtonAttrs(attrs) ? attrs.label : undefined;
     const iconOnly = Boolean(icon && !label);
 
     const classes = classNames(
@@ -100,6 +113,8 @@ export class Button implements m.ClassComponent<ButtonAttrs> {
       classForIntent(intent),
       iconOnly && 'pf-icon-only',
       dismissPopup && Popup.DISMISS_POPUP_GROUP_CLASS,
+      rounded && 'pf-button--rounded',
+      shrink && 'pf-button--shrink',
       className,
     );
 
@@ -110,7 +125,7 @@ export class Button implements m.ClassComponent<ButtonAttrs> {
         className: classes,
       },
       this.renderIcon(attrs),
-      label || '\u200B', // Zero width space keeps button in-flow
+      m('span', {className: 'pf-button__label'}, label),
       rightIcon &&
         m(Icon, {
           className: 'pf-right-icon',

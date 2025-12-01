@@ -4,8 +4,6 @@
 
 #import "ios/chrome/browser/lens_overlay/coordinator/lens_result_page_mediator.h"
 
-#import <MaterialComponents/MaterialSnackbar.h>
-
 #import <memory>
 
 #import "base/functional/bind.h"
@@ -26,7 +24,8 @@
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
+#import "ios/chrome/browser/shared/public/snackbar/snackbar_message.h"
+#import "ios/chrome/browser/shared/public/snackbar/snackbar_message_action.h"
 #import "ios/chrome/browser/tabs/model/tab_helper_util.h"
 #import "ios/chrome/browser/web/model/blocked_popup_tab_helper.h"
 #import "ios/chrome/browser/web/model/web_navigation_util.h"
@@ -232,7 +231,6 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
 - (void)disconnect {
   if (_webState) {
     [self detachWebState];
-    _webState.reset();
   }
   _webStateObserverBridge.reset();
   _webStateDelegateBridge.reset();
@@ -332,11 +330,11 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
     }
 
     if (IsMaximizeBottomSheetURL(URL)) {
-      [self.presentationDelegate requestMaximizeBottomSheet];
+      [self.bottomSheetCommands requestMaximizeBottomSheet];
       return;
     }
 
-    [self.delegate lensResultPageOpenURLInNewTabRequsted:URL];
+    [self.delegate lensResultPageOpenURLInNewTabRequested:URL];
     [self.delegate
          lensResultPageMediator:self
         didOpenNewTabFromSource:lens::LensOverlayNewTabSource::kWebNavigation];
@@ -347,12 +345,14 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
     // AIM SRP requires lns_surface, but we can't use Chromnient's (4), so use
     // CHROME_SEARCH.
     URL = net::AppendOrReplaceQueryParameter(URL, "lns_surface", "45");
-    [self.delegate lensResultPageOpenURLInNewTabRequsted:URL];
+    [self.delegate lensResultPageOpenURLInNewTabRequested:URL];
     [self.delegate
          lensResultPageMediator:self
         didOpenNewTabFromSource:lens::LensOverlayNewTabSource::kExploreBarTab];
   } else if (base::FeatureList::IsEnabled(kLensSearchHeadersCheckEnabled) &&
-             lens::IsGoogleHostURL(URL) && [self shouldAddHeaders:request]) {
+             requestInfo.target_frame_is_main && lens::IsGoogleHostURL(URL) &&
+             [self shouldAddHeaders:request]) {
+    // Only attach headers for navigation clicks targeting main frame.
     [self loadResultsURL:URL httpHeaders:_latestHttpHeaders];
     decisionHandler(web::WebStatePolicyDecider::PolicyDecision::Cancel());
   } else {
@@ -501,7 +501,7 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
     }
   }
   // Open the URL in a new tab.
-  [self.delegate lensResultPageOpenURLInNewTabRequsted:URL];
+  [self.delegate lensResultPageOpenURLInNewTabRequested:URL];
   [self.delegate
        lensResultPageMediator:self
       didOpenNewTabFromSource:lens::LensOverlayNewTabSource::kWebNavigation];
@@ -548,9 +548,10 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
 - (void)contextMenuConfigurationProvider:
             (ContextMenuConfigurationProvider*)configurationProvider
         didOpenNewTabInBackgroundWithURL:(GURL)URL {
-  MDCSnackbarMessage* snackbarMessage = CreateSnackbarMessage(
-      l10n_util::GetNSString(IDS_IOS_LENS_OVERLAY_NEW_TAB_MESSAGE));
-  MDCSnackbarMessageAction* action = [[MDCSnackbarMessageAction alloc] init];
+  SnackbarMessage* snackbarMessage = [[SnackbarMessage alloc]
+      initWithTitle:l10n_util::GetNSString(
+                        IDS_IOS_LENS_OVERLAY_NEW_TAB_MESSAGE)];
+  SnackbarMessageAction* action = [[SnackbarMessageAction alloc] init];
   __weak __typeof__(self) weakSelf = self;
   action.handler = ^() {
     [weakSelf activateWebStateWithURL:URL];

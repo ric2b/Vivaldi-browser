@@ -46,7 +46,9 @@ class ClockTrackerTest : public ::testing::Test {
 
   // using ClockId = uint64_t;
   TraceProcessorContext context_;
-  ClockTracker ct_{&context_};
+  std::unique_ptr<ClockSynchronizerListenerImpl> ct_companion_ =
+      std::make_unique<ClockSynchronizerListenerImpl>(&context_);
+  ClockTracker ct_{std::move(ct_companion_)};
   base::StatusOr<int64_t> Convert(ClockTracker::ClockId src_clock_id,
                                   int64_t src_timestamp,
                                   ClockTracker::ClockId target_clock_id) {
@@ -347,7 +349,7 @@ TEST_F(ClockTrackerTest, ClockOffset) {
       std::make_unique<MachineTracker>(&context_, 0x1001);
 
   // Client-to-host BOOTTIME offset is -10000 ns.
-  ct_.SetClockOffset(BOOTTIME, -10000);
+  ct_.SetRemoteClockOffset(BOOTTIME, -10000);
 
   ct_.AddSnapshot({{REALTIME, 10}, {BOOTTIME, 10010}});
   ct_.AddSnapshot({{REALTIME, 20}, {BOOTTIME, 20220}});
@@ -427,8 +429,8 @@ TEST_F(ClockTrackerTest, NonDefaultTraceTimeClock) {
       std::make_unique<MachineTracker>(&context_, 0x1001);
 
   ct_.SetTraceTimeClock(MONOTONIC);
-  ct_.SetClockOffset(MONOTONIC, -2000);
-  ct_.SetClockOffset(BOOTTIME, -10000);  // This doesn't take effect.
+  ct_.SetRemoteClockOffset(MONOTONIC, -2000);
+  ct_.SetRemoteClockOffset(BOOTTIME, -10000);  // This doesn't take effect.
 
   ct_.AddSnapshot({{REALTIME, 10}, {BOOTTIME, 10010}});
   ct_.AddSnapshot({{MONOTONIC, 1000}, {BOOTTIME, 100000}});

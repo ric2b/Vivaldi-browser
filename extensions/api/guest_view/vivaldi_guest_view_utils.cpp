@@ -19,7 +19,7 @@ bool IsVivaldiEditorFrame(content::RenderFrameHost* render_frame_host) {
     return false;
 
   extensions::WebViewGuest* webview_guest = extensions::WebViewGuest::FromWebContents(web_contents);
-  if (!webview_guest)
+  if (!webview_guest || !webview_guest->owner_rfh())
     return false;
 
   // Check embedder extension ID via owner URL scheme+host.

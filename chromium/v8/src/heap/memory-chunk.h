@@ -46,13 +46,17 @@ class TestDebugHelper;
 // metadata object that can be retrieved via `Metadata()` and its friends.
 class V8_EXPORT_PRIVATE MemoryChunk final {
  public:
-  // All possible flags that can be set on a page. While the value of flags
-  // doesn't matter in principle, keep flags used in the write barrier together
-  // in order to have dense page flag checks in the write barrier.
+  // Memory chunk flags that for sandbox builds can be corrupted. Users of these
+  // flags need to assume that the flags are inconsistent. In practice, only
+  // flags that are required for fast paths should be kept here. All other flags
+  // should be placed on the trusted counterparts, e.g. `MemoryChunkMetadata`.
+  //
+  // TODO(429538831): Replace the flags in here with their trusted counterparts
+  // as much as performance allows.
   enum Flag : uintptr_t {
     NO_FLAGS = 0u,
 
-    // This page belongs to a shared heap.
+    // Chunk belongs to the writeable shared space.
     IN_WRITABLE_SHARED_SPACE = 1u << 0,
 
     // These two flags are used in the write barrier to catch "interesting"
@@ -60,52 +64,46 @@ class V8_EXPORT_PRIVATE MemoryChunk final {
     POINTERS_TO_HERE_ARE_INTERESTING = 1u << 1,
     POINTERS_FROM_HERE_ARE_INTERESTING = 1u << 2,
 
-    // A page in the from-space or a young large page that was not scavenged
+    // Chunk in the from-space or a young large page that was not scavenged
     // yet.
     FROM_PAGE = 1u << 3,
-    // A page in the to-space or a young large page that was scavenged.
+    // Chunk in the to-space or a young large page that was scavenged.
     TO_PAGE = 1u << 4,
 
-    // |INCREMENTAL_MARKING|: Indicates whether incremental marking is currently
-    // enabled.
+    // Indicates whether incremental marking is currently enabled.
     INCREMENTAL_MARKING = 1u << 5,
 
-    // The memory chunk belongs to the read-only heap and does not participate
-    // in garbage collection. This is used instead of owner for identity
-    // checking since read-only chunks have no owner once they are detached.
+    // Chunk belongs to the read-only heap and does not participate in garbage
+    // collection.
+    //
+    // Note that read-only chunks have no owner so this is required for checking
+    // space identity for these chunks.
     READ_ONLY_HEAP = 1u << 6,
 
-    // Used in young generation checks. When sticky mark-bits are enabled and
-    // major GC in progress, treat all objects as old.
-    IS_MAJOR_GC_IN_PROGRESS = 1u << 7,
-
-    // Used to mark chunks belonging to spaces that do not suppor young gen
-    // allocations. Such chunks can never contain any young objects.
-    CONTAINS_ONLY_OLD = 1u << 8,
-
-    // Page was allocated during major incremental marking. May only contain old
+    // Chunk was allocated during major incremental marking. Only contains old
     // objects.
-    BLACK_ALLOCATED = 1u << 9,
+    BLACK_ALLOCATED = 1u << 7,
 
-    // ----------------------------------------------------------------
-    // Values below here are not critical for the heap write barrier.
+    // The chunk represents a large chunk of non-uniform size.
+    LARGE_PAGE = 1u << 8,
 
-    LARGE_PAGE = 1u << 10,
-    EVACUATION_CANDIDATE = 1u << 11,
+    // The chunk was selected as evacuation candidate, meaning that objects on
+    // this chunk are being relocated.
+    EVACUATION_CANDIDATE = 1u << 9,
 
-    // |COMPACTION_WAS_ABORTED|: Indicates that the compaction in this page
-    //   has been aborted and needs special handling by the sweeper.
-    COMPACTION_WAS_ABORTED = 1u << 17,
+    // The chunk is in the the new space of the young generation and already
+    // survived at least one garbage collection cycle.
+    NEW_SPACE_BELOW_AGE_MARK = 1u << 10,
 
-    NEW_SPACE_BELOW_AGE_MARK = 1u << 18,
+#if V8_ENABLE_STICKY_MARK_BITS_BOOL
+    // Sticky markbits only: Used to mark chunks belonging to spaces that do not
+    // support young generation objects.
+    STICKY_MARK_BIT_CONTAINS_ONLY_OLD = 1u << 11,
 
-    // A Page with code objects.
-    IS_EXECUTABLE = 1u << 21,
-
-    // The memory chunk belongs to the trusted space. When the sandbox is
-    // enabled, the trusted space is located outside of the sandbox and so its
-    // content cannot be corrupted by an attacker.
-    IS_TRUSTED = 1u << 22,
+    // Sticky markbits only: Used in young generation checks. When sticky
+    // mark-bits are enabled and major GC in progress, treat all objects as old.
+    STICKY_MARK_BIT_IS_MAJOR_GC_IN_PROGRESS = 1u << 12,
+#endif
   };
 
   using MainThreadFlags = base::Flags<Flag, uintptr_t>;
@@ -126,9 +124,12 @@ class V8_EXPORT_PRIVATE MemoryChunk final {
   static constexpr MainThreadFlags kSkipEvacuationSlotsRecordingMask =
       MainThreadFlags(kEvacuationCandidateMask) |
       MainThreadFlags(kIsInYoungGenerationMask);
+
+#if V8_ENABLE_STICKY_MARK_BITS_BOOL
   static constexpr MainThreadFlags kIsOnlyOldOrMajorGCInProgressMask =
-      MainThreadFlags(CONTAINS_ONLY_OLD) |
-      MainThreadFlags(IS_MAJOR_GC_IN_PROGRESS);
+      MainThreadFlags(STICKY_MARK_BIT_CONTAINS_ONLY_OLD) |
+      MainThreadFlags(STICKY_MARK_BIT_IS_MAJOR_GC_IN_PROGRESS);
+#endif  // V8_ENABLE_STICKY_MARK_BITS_BOOL
 
   MemoryChunk(MainThreadFlags flags, MemoryChunkMetadata* metadata);
 
@@ -164,14 +165,23 @@ class V8_EXPORT_PRIVATE MemoryChunk final {
   V8_INLINE MemoryChunkMetadata* MetadataNoIsolateCheck();
   V8_INLINE const MemoryChunkMetadata* MetadataNoIsolateCheck() const;
 
-  V8_INLINE bool IsFlagSet(Flag flag) const {
-    return untrusted_main_thread_flags_ & flag;
-  }
-
   V8_INLINE bool IsMarking() const { return IsFlagSet(INCREMENTAL_MARKING); }
 
   V8_INLINE bool InWritableSharedSpace() const {
     return IsFlagSet(IN_WRITABLE_SHARED_SPACE);
+  }
+
+  V8_INLINE bool IsBlackAllocatedPage() const {
+    return IsFlagSet(BLACK_ALLOCATED);
+  }
+
+  V8_INLINE bool ContainsOnlyOldObjects() const {
+#if V8_ENABLE_STICKY_MARK_BITS_BOOL
+    DCHECK(v8_flags.sticky_mark_bits);
+    return IsFlagSet(STICKY_MARK_BIT_CONTAINS_ONLY_OLD);
+#else
+    UNREACHABLE();
+#endif
   }
 
   V8_INLINE bool InYoungGeneration() const {
@@ -209,20 +219,10 @@ class V8_EXPORT_PRIVATE MemoryChunk final {
   bool SandboxSafeInReadOnlySpace() const;
 #endif
 
-  V8_INLINE bool InCodeSpace() const { return IsFlagSet(IS_EXECUTABLE); }
-
-  V8_INLINE bool InTrustedSpace() const { return IsFlagSet(IS_TRUSTED); }
-
   V8_INLINE bool IsEvacuationCandidate() const;
 
   bool ShouldSkipEvacuationSlotRecording() const {
-    MainThreadFlags flags = GetFlags();
-    return ((flags & kSkipEvacuationSlotsRecordingMask) != 0) &&
-           ((flags & COMPACTION_WAS_ABORTED) == 0);
-  }
-
-  Executability executable() const {
-    return IsFlagSet(IS_EXECUTABLE) ? EXECUTABLE : NOT_EXECUTABLE;
+    return ((GetFlags() & kSkipEvacuationSlotsRecordingMask) != 0);
   }
 
   bool IsFromPage() const {
@@ -235,22 +235,30 @@ class V8_EXPORT_PRIVATE MemoryChunk final {
   }
   bool IsLargePage() const { return IsFlagSet(LARGE_PAGE); }
   bool InNewSpace() const { return InYoungGeneration() && !IsLargePage(); }
+  bool InNewSpaceBelowAgeMark() const {
+    return IsFlagSet(NEW_SPACE_BELOW_AGE_MARK);
+  }
   bool InNewLargeObjectSpace() const {
     return InYoungGeneration() && IsLargePage();
   }
   bool IsOnlyOldOrMajorMarkingOn() const {
+#if V8_ENABLE_STICKY_MARK_BITS_BOOL
+    DCHECK(v8_flags.sticky_mark_bits);
     return GetFlags() & kIsOnlyOldOrMajorGCInProgressMask;
+#else
+    UNREACHABLE();
+#endif
+  }
+  bool PointersToHereAreInteresting() const {
+    return IsFlagSet(POINTERS_TO_HERE_ARE_INTERESTING);
+  }
+  bool PointersFromHereAreInteresting() const {
+    return IsFlagSet(POINTERS_FROM_HERE_ARE_INTERESTING);
   }
 
   V8_INLINE static constexpr bool IsAligned(Address address) {
     return (address & kAlignmentMask) == 0;
   }
-
-#ifdef DEBUG
-  bool IsTrusted() const;
-#else
-  bool IsTrusted() const { return IsFlagSet(IS_TRUSTED); }
-#endif
 
   static intptr_t GetAlignmentForAllocation() { return kAlignment; }
   // The macro and code stub assemblers need access to the alignment mask to
@@ -277,11 +285,13 @@ class V8_EXPORT_PRIVATE MemoryChunk final {
 
 #ifdef V8_ENABLE_SANDBOX
   static void ClearMetadataPointer(MemoryChunkMetadata* metadata);
-  static void ResetMetadataPointer(Isolate* isolate,
-                                   MemoryChunkMetadata* metadata);
 #endif
 
  private:
+  V8_INLINE bool IsFlagSet(Flag flag) const {
+    return untrusted_main_thread_flags_ & flag;
+  }
+
   // Keep offsets and masks private to only expose them with matching friend
   // declarations.
   static constexpr intptr_t FlagsOffset() {
@@ -349,6 +359,9 @@ class V8_EXPORT_PRIVATE MemoryChunk final {
   friend class MacroAssembler;
   template <typename Next>
   friend class compiler::turboshaft::TurboshaftAssemblerOpInterface;
+  // For IsFlagSet().
+  friend class IsolateGroup;
+  friend class MemoryChunkMetadata;
 };
 
 DEFINE_OPERATORS_FOR_FLAGS(MemoryChunk::MainThreadFlags)

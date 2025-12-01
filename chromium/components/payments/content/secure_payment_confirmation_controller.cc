@@ -8,6 +8,7 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -179,14 +180,14 @@ void SecurePaymentConfirmationController::
   // accepted/rejected without user interaction. We deliberately wait until
   // after the dialog is created and shown to handle this, in order to keep the
   // automation codepath as close to the 'real' one as possible.
-  if (request_->spc_transaction_mode() != SPCTransactionMode::NONE) {
+  if (request_->spc_transaction_mode() != SPCTransactionMode::kNone) {
     // TODO(crbug.com/417426346): Once the desktop SPC controller supports the
     // new fallback flow, it should handle SPCTransactionMode::
-    // AUTOAUTHANOTHERWAY here.
-    if (request_->spc_transaction_mode() == SPCTransactionMode::AUTOACCEPT) {
+    // kAutoAuthAnotherWay here.
+    if (request_->spc_transaction_mode() == SPCTransactionMode::kAutoAccept) {
       OnConfirm();
     } else if (request_->spc_transaction_mode() ==
-               SPCTransactionMode::AUTOOPTOUT) {
+               SPCTransactionMode::kAutoOptOut) {
       OnOptOut();
     } else {
       OnCancel();
@@ -247,6 +248,9 @@ void SecurePaymentConfirmationController::OnInitialized(
 }
 
 void SecurePaymentConfirmationController::OnCancel() {
+  base::UmaHistogramEnumeration("SecurePaymentRequest.Transaction.Outcome",
+                                SecurePaymentRequestOutcome::kAnotherWay);
+
   CloseDialog();
 
   if (!request_)
@@ -257,6 +261,9 @@ void SecurePaymentConfirmationController::OnCancel() {
 }
 
 void SecurePaymentConfirmationController::OnOptOut() {
+  base::UmaHistogramEnumeration("SecurePaymentRequest.Transaction.Outcome",
+                                SecurePaymentRequestOutcome::kOptOut);
+
   // Set the opt out clicked state on the model so that the view knows not to
   // call back to OnCancel when the dialog is closed.
   model_.set_opt_out_clicked(true);
@@ -270,6 +277,9 @@ void SecurePaymentConfirmationController::OnOptOut() {
 }
 
 void SecurePaymentConfirmationController::OnConfirm() {
+  base::UmaHistogramEnumeration("SecurePaymentRequest.Transaction.Outcome",
+                                SecurePaymentRequestOutcome::kAccept);
+
   if (!request_)
     return;
 

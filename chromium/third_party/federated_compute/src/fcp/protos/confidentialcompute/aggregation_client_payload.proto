@@ -1,0 +1,53 @@
+// Copyright 2024 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package fcp.confidentialcompute;
+
+option java_multiple_files = true;
+
+// Describes the type of compression that has been applied to the data before it
+// was encrypted.
+enum CompressionType {
+  COMPRESSION_TYPE_UNSPECIFIED = 0;
+  // No compression was applied.
+  COMPRESSION_TYPE_NONE = 1;
+  // GZIP compression was applied.
+  COMPRESSION_TYPE_GZIP = 2;
+}
+
+// A header describing key details about a client's uploaded ciphertext.
+//
+// The actual ciphertext data will be passed out of band from this message.
+// The out of band ciphertext data must be encrypted using AES-128-GCM.
+message AggregationClientPayloadHeader {
+  // The symmetric key used to encrypt the payload's ciphertext, encrypted using
+  // HPKE. The key is encoded as a COSE_Key struct (RFC 9052); at least the
+  // following algorithms should be supported:
+  //   -65538: AEAD_AES_128_GCM_SIV (fixed nonce)
+  bytes encrypted_symmetric_key = 1;
+
+  // The ephemeral Diffie-Hellman key needed to derive the symmetric key used
+  // to encrypt `encrypted_symmetric_key`.
+  bytes encapsulated_public_key = 2;
+
+  // The serialized `fcp.confidentialcompute.BlobHeader` message associated with
+  // the ciphertext. This serves as the associated data for both the encrypted
+  // cipher text and the `encrypted_symmetric_key`.
+  bytes blob_header = 3;
+
+  // The type of compression applied to the data before it was encrypted.
+  CompressionType compression_type = 4;
+}

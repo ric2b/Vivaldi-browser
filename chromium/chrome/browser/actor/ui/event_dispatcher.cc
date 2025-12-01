@@ -19,10 +19,15 @@
 #include "chrome/browser/actor/ui/ui_event.h"
 #include "chrome/browser/actor/ui/ui_event_debugstring.h"
 #include "chrome/common/actor/action_result.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_context.h"
 #include "third_party/abseil-cpp/absl/functional/overload.h"
 
 namespace actor::ui {
+
+// Constructs a MouseMove that may have a computed_target.
+AsyncUiEvent ComputedMouseMove(tabs::TabInterface::Handle tab,
+                               const PageTarget& target);
 namespace {
 
 using ::actor::mojom::ActionResultCode;
@@ -48,43 +53,51 @@ auto NoUiEvents = [](const T& tr) -> EventSequence<AsyncUiEvent> {
 constexpr absl::Overload PreToolEventsFn{
     [](const ClickToolRequest& tr) {
       return EventSequence<AsyncUiEvent>{
-          MouseMove(tr.GetTabHandle(), tr.GetTarget()),
+          ComputedMouseMove(tr.GetTabHandle(), tr.GetTarget()),
           MouseClick(tr.GetTabHandle(), tr.GetClickType(), tr.GetClickCount())};
     },
     NoUiEvents<ActivateTabToolRequest>,
+    NoUiEvents<ActivateWindowToolRequest>,
     NoUiEvents<CloseTabToolRequest>,
+    NoUiEvents<CloseWindowToolRequest>,
     NoUiEvents<CreateTabToolRequest>,
+    NoUiEvents<CreateWindowToolRequest>,
     NoUiEvents<DragAndReleaseToolRequest>,
     NoUiEvents<HistoryToolRequest>,
     [](const MoveMouseToolRequest& tr) {
       return EventSequence<AsyncUiEvent>{
-          MouseMove(tr.GetTabHandle(), tr.GetTarget())};
+          ComputedMouseMove(tr.GetTabHandle(), tr.GetTarget())};
     },
     NoUiEvents<NavigateToolRequest>,
     NoUiEvents<ScrollToolRequest>,
     NoUiEvents<SelectToolRequest>,
     [](const TypeToolRequest& tr) {
       return EventSequence<AsyncUiEvent>{
-          MouseMove(tr.GetTabHandle(), tr.GetTarget())};
+          ComputedMouseMove(tr.GetTabHandle(), tr.GetTarget())};
     },
     NoUiEvents<WaitToolRequest>,
     NoUiEvents<AttemptLoginToolRequest>,
-    NoUiEvents<ScriptToolRequest>};
+    NoUiEvents<ScriptToolRequest>,
+    NoUiEvents<ScrollToToolRequest>};
 
-constexpr absl::Overload PostToolEventsFn{
-    NoUiEvents<ClickToolRequest>,          NoUiEvents<ActivateTabToolRequest>,
-    NoUiEvents<CloseTabToolRequest>,       NoUiEvents<CreateTabToolRequest>,
-    NoUiEvents<DragAndReleaseToolRequest>, NoUiEvents<HistoryToolRequest>,
-    NoUiEvents<MoveMouseToolRequest>,      NoUiEvents<NavigateToolRequest>,
-    NoUiEvents<ScrollToolRequest>,         NoUiEvents<SelectToolRequest>,
-    NoUiEvents<TypeToolRequest>,           NoUiEvents<WaitToolRequest>,
-    NoUiEvents<AttemptLoginToolRequest>,   NoUiEvents<ScriptToolRequest>};
-
-// TODO(crbug.com/425784083): Remove FirstActEventsFn once functionality moves
-// to ActorTaskChangeFn.
-constexpr absl::Overload FirstActEventsFn{
-    NoUiEvents<UiEventDispatcher::FirstActInfo>,
-};
+constexpr absl::Overload PostToolEventsFn{NoUiEvents<ClickToolRequest>,
+                                          NoUiEvents<ActivateTabToolRequest>,
+                                          NoUiEvents<ActivateWindowToolRequest>,
+                                          NoUiEvents<CloseTabToolRequest>,
+                                          NoUiEvents<CloseWindowToolRequest>,
+                                          NoUiEvents<CreateTabToolRequest>,
+                                          NoUiEvents<CreateWindowToolRequest>,
+                                          NoUiEvents<DragAndReleaseToolRequest>,
+                                          NoUiEvents<HistoryToolRequest>,
+                                          NoUiEvents<MoveMouseToolRequest>,
+                                          NoUiEvents<NavigateToolRequest>,
+                                          NoUiEvents<ScrollToolRequest>,
+                                          NoUiEvents<SelectToolRequest>,
+                                          NoUiEvents<TypeToolRequest>,
+                                          NoUiEvents<WaitToolRequest>,
+                                          NoUiEvents<AttemptLoginToolRequest>,
+                                          NoUiEvents<ScriptToolRequest>,
+                                          NoUiEvents<ScrollToToolRequest>};
 
 constexpr absl::Overload ActorTaskAsyncChangeFn{
     [](const UiEventDispatcher::AddTab& c) {
@@ -122,11 +135,6 @@ struct VisitorTraits<PostToolEventsFn> {
 };
 
 template <>
-struct VisitorTraits<FirstActEventsFn> {
-  static constexpr const char* phase_name = "FirstAct";
-};
-
-template <>
 struct VisitorTraits<ActorTaskAsyncChangeFn> {
   static constexpr const char* phase_name = "ActorTaskAsyncChange";
 };
@@ -151,18 +159,6 @@ struct InputTraits<ToolRequest> {
   static constexpr auto debug_info = [](const ToolRequest& tr) {
     return tr.JournalEvent();
   };
-};
-
-template <>
-struct InputTraits<UiEventDispatcher::FirstActInfo> {
-  static constexpr const char* name = "FirstActInfo";
-  static constexpr auto convert_fn = std::identity();
-  static constexpr auto debug_info =
-      [](const UiEventDispatcher::FirstActInfo& info) {
-        return absl::StrFormat("task_id=%d tab? %s",
-                               info.task_id.GetUnsafeValue(),
-                               info.tab_handle.has_value() ? "yes" : "no");
-      };
 };
 
 template <>
@@ -215,11 +211,6 @@ class UiEventDispatcherImpl : public UiEventDispatcher {
 
   void OnPostTool(const ToolRequest& tr, UiCompleteCallback callback) override {
     On<PostToolEventsFn>(tr, std::move(callback));
-  }
-
-  void OnPreFirstAct(const FirstActInfo& first_act_info,
-                     UiCompleteCallback callback) override {
-    On<FirstActEventsFn>(first_act_info, std::move(callback));
   }
 
   void OnActorTaskAsyncChange(const ActorTaskAsyncChange& change,

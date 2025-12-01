@@ -36,16 +36,19 @@ import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
+import org.chromium.chrome.browser.dom_distiller.ReaderModeManager.EntryPoint;
 import org.chromium.chrome.browser.download.DownloadTestRule;
 import org.chromium.chrome.browser.download.DownloadTestRule.CustomMainActivityStart;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -70,6 +73,7 @@ import org.chromium.components.messages.MessageDispatcherProvider;
 import org.chromium.components.messages.MessageIdentifier;
 import org.chromium.components.messages.MessageStateHandler;
 import org.chromium.components.messages.MessagesTestHelper;
+import org.chromium.content_public.browser.HostZoomMap;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -133,14 +137,19 @@ public class ReaderModeTest implements CustomMainActivityStart {
         String innerHtml = getInnerHtml(originalTab);
         assertThat(innerHtml).doesNotContain("article-header");
 
+        HistogramWatcher watcher =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "DomDistiller.Android.EntryPoint.CCT", EntryPoint.TOOLBAR_BUTTON);
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     originalTab
                             .getUserDataHost()
                             .getUserData(ReaderModeManager.USER_DATA_KEY)
-                            .activateReaderMode();
+                            .activateReaderMode(EntryPoint.TOOLBAR_BUTTON);
                 });
+
         CustomTabActivity customTabActivity = waitForCustomTabActivity();
+        watcher.assertExpected();
         CriteriaHelper.pollUiThread(
                 () -> Criteria.checkThat(customTabActivity.getActivityTab(), notNullValue()));
         @NonNull
@@ -151,6 +160,7 @@ public class ReaderModeTest implements CustomMainActivityStart {
     @Test
     @MediumTest
     @EnableFeatures(DomDistillerFeatures.READER_MODE_DISTILL_IN_APP)
+    @DisabledTest(message = "https://crbug.com/436904664")
     public void testReaderModeInRegularTab() throws TimeoutException {
         mDownloadTestRule.loadUrl(mURL);
 
@@ -160,7 +170,7 @@ public class ReaderModeTest implements CustomMainActivityStart {
                     originalTab
                             .getUserDataHost()
                             .getUserData(ReaderModeManager.USER_DATA_KEY)
-                            .activateReaderMode();
+                            .activateReaderMode(EntryPoint.APP_MENU);
                 });
         waitForDistillation(PAGE_TITLE, originalTab);
     }
@@ -181,7 +191,7 @@ public class ReaderModeTest implements CustomMainActivityStart {
                     originalTab
                             .getUserDataHost()
                             .getUserData(ReaderModeManager.USER_DATA_KEY)
-                            .activateReaderMode();
+                            .activateReaderMode(EntryPoint.APP_MENU);
                 });
         CustomTabActivity customTabActivity = waitForCustomTabActivity();
         CriteriaHelper.pollUiThread(
@@ -239,7 +249,7 @@ public class ReaderModeTest implements CustomMainActivityStart {
                     originalTab
                             .getUserDataHost()
                             .getUserData(ReaderModeManager.USER_DATA_KEY)
-                            .activateReaderMode();
+                            .activateReaderMode(EntryPoint.APP_MENU);
                 });
         CustomTabActivity customTabActivity = waitForCustomTabActivity();
         CriteriaHelper.pollUiThread(
@@ -292,7 +302,7 @@ public class ReaderModeTest implements CustomMainActivityStart {
                     originalTab
                             .getUserDataHost()
                             .getUserData(ReaderModeManager.USER_DATA_KEY)
-                            .activateReaderMode();
+                            .activateReaderMode(EntryPoint.APP_MENU);
                 });
         CustomTabActivity customTabActivity = waitForCustomTabActivity();
         CriteriaHelper.pollUiThread(() -> customTabActivity.getActivityTab() != null);
@@ -315,6 +325,62 @@ public class ReaderModeTest implements CustomMainActivityStart {
         waitForDistillation(PAGE_TITLE, tab);
 
         doTestSettingPreferences(mDownloadTestRule.getActivity(), tab);
+    }
+
+    @Test
+    @MediumTest
+    public void testZoomLevelPrefsCallbackUpdatesFontScaling() throws TimeoutException {
+        final DistilledPagePrefs distilledPagePrefs = getDistilledPagePrefs();
+
+        // Check that the initial font scaling is tied to the default zoom level.
+        final double initialZoomLevel =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () ->
+                                HostZoomMap.getDefaultZoomLevel(
+                                        mDownloadTestRule.getActivityTab().getProfile()));
+        final float initialZoomFactor = (float) Math.pow(1.2, initialZoomLevel);
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    Assert.assertEquals(
+                            initialZoomFactor, distilledPagePrefs.getFontScaling(), 0.001f);
+                });
+
+        // Change the default zoom level and ensure the distilled page prefs are
+        // updated to reflect the change.
+        final double newZoomLevel = 2.0;
+        final float newZoomFactor = (float) Math.pow(1.2, newZoomLevel);
+
+        final CallbackHelper fontScalingChangedCallback = new CallbackHelper();
+        DistilledPagePrefs.Observer observer =
+                new DistilledPagePrefs.Observer() {
+                    @Override
+                    public void onChangeTheme(int theme) {}
+
+                    @Override
+                    public void onChangeFontFamily(int font) {}
+
+                    @Override
+                    public void onChangeFontScaling(float fontScaling) {
+                        if (Math.abs(fontScaling - newZoomFactor) < 0.001f) {
+                            fontScalingChangedCallback.notifyCalled();
+                        }
+                    }
+                };
+        ThreadUtils.runOnUiThreadBlocking(() -> distilledPagePrefs.addObserver(observer));
+
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    HostZoomMap.setDefaultZoomLevel(
+                            mDownloadTestRule.getActivityTab().getProfile(), newZoomLevel);
+                });
+
+        fontScalingChangedCallback.waitForCallback(0);
+
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    Assert.assertEquals(newZoomFactor, distilledPagePrefs.getFontScaling(), 0.001f);
+                    distilledPagePrefs.removeObserver(observer);
+                });
     }
 
     /**

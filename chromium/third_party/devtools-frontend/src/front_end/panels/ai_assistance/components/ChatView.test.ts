@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,7 @@ describeWithEnvironment('ChatView', () => {
       onFeedbackSubmit: noop,
       onCancelClick: noop,
       onContextClick: noop,
+      onCopyResponseClick: noop,
       onNewConversation: noop,
       onTextInputChange: noop,
       changeManager: new AiAssistanceModel.ChangeManager(),
@@ -41,6 +42,7 @@ describeWithEnvironment('ChatView', () => {
       inputPlaceholder: i18n.i18n.lockedString('input placeholder'),
       disclaimerText: i18n.i18n.lockedString('disclaimer text'),
       isTextInputEmpty: true,
+      markdownRenderer: new AiAssistancePanel.MarkdownRendererWithCodeBlock(),
       ...options,
     };
   }

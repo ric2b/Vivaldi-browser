@@ -17,11 +17,13 @@
 #import "ios/chrome/browser/toolbar/ui_bundled/buttons/toolbar_button.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/buttons/toolbar_button_factory.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/buttons/toolbar_configuration.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/public/omnibox_position_util.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_constants.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_height_delegate.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_utils.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/secondary_toolbar_keyboard_state_provider.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/secondary_toolbar_view.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/toolbar_progress_bar.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
 
 // Vivaldi
@@ -167,9 +169,6 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark - UIKeyboardNotification
 
 - (void)keyboardWillShow:(NSNotification*)notification {
-  if (![self hasOmnibox]) {
-    return;
-  }
   [self constraintToKeyboard:YES withNotification:notification];
 }
 
@@ -235,54 +234,140 @@ using vivaldi::IsVivaldiRunning;
 
 /// Updates keyboard constraints with `notification`. When
 /// `constraintToKeyboard`, the toolbar is collapsed above the keyboard.
-- (void)constraintToKeyboard:(BOOL)constraintToKeyboard
+- (void)constraintToKeyboard:(BOOL)shouldConstraintToKeyboard
             withNotification:(NSNotification*)notification {
-  if (constraintToKeyboard) {
-    if ([self.keyboardStateProvider keyboardIsActiveForWebContent]) {
-      // Enable the constraint only when the keyboard is showing for web
-      // content. This will not evaluate to true each time the keyboard's frame
-      // is updating. Thus, update the keyboard's frame even if this is false.
-      if (![self.view.locationBarKeyboardConstraint isActive]) {
+  BOOL followSteadyStateEnabled =
+      omnibox::ShouldFocusedOmniboxFollowSteadyStatePosition();
+  BOOL keyboardActiveForWebContent =
+      [self.keyboardStateProvider keyboardIsActiveForWebContent];
+  BOOL hasOmnibox = [self hasOmnibox];
+  BOOL locationIndicatorConstraintActive =
+      self.view.locationBarKeyboardConstraint.active;
 
-        // Vivaldi:(prio@vivaldi.com) - when location bar is visible when
-        // keyboard is active because a field in the web content is focused we
-        // show the steady view only that shows the address of the active web
-        // page. Location/Address bar is not visible in that case.
-        // Therefore we should not have the non-collasped Location bar rather
-        // have only the height that is required for collapsed state steady view.
-        // So, move the Location bar below keyboard just enough to show only
-        // steady view.
-        self.view.locationBarKeyboardConstraint.constant
-            = -kToolbarHeightFullscreen;
-        // End Vivaldi
+  // Whether to show the secondary toolbar as a location indicator when keyboard
+  // is active for web content. Bottom omnibox exclusive.
+  BOOL showLocationIndicator = shouldConstraintToKeyboard &&
+                               keyboardActiveForWebContent && hasOmnibox &&
+                               !locationIndicatorConstraintActive;
+  // Whether to cleanup the location indication previously shown for web
+  // content.
+  BOOL hideLocationIndicator =
+      !shouldConstraintToKeyboard && locationIndicatorConstraintActive;
+  // Whether the toolbar containing the omnibox should follow the keyboard.
+  // This behavior does not happen when the user interacts with text fields in
+  // the web content.
+  BOOL attachOmniboxToKeyboard =
+      !keyboardActiveForWebContent && hasOmnibox && followSteadyStateEnabled;
 
-        self.view.locationBarKeyboardConstraint.active = YES;
-        [self collapseForKeyboard];
-        [self.view layoutIfNeeded];
-      }
-    }
+  if (showLocationIndicator) {
 
-    // Vivaldi:(prio@vivaldi.com) - Important!!!
-    // Chrome moves the location bar container only for input field of webStates
-    // But, we move it when omnibox is activated too. Also, they pin keyboard
-    // top to location bar top with a constant bottom padding.
-    else {
-      if (![self.view.locationBarKeyboardConstraint isActive]) {
-        self.view.locationBarKeyboardConstraint.constant =
-            kBottomAdaptiveLocationBarBottomMargin;
-        self.view.locationBarKeyboardConstraint.active = YES;
-        self.view.bottomSeparator.alpha = 0.0;
-        [self.toolbarHeightDelegate secondaryToolbarMovedAboveKeyboard];
-        [self.view layoutIfNeeded];
-      }
-    }
+    // Vivaldi:(prio@vivaldi.com) - when location bar is visible when
+    // keyboard is active because a field in the web content is focused we
+    // show the steady view only that shows the address of the active web
+    // page. Location/Address bar is not visible in that case.
+    // Therefore we should not have the non-collasped Location bar rather
+    // have only the height that is required for collapsed state steady view.
+    // So, move the Location bar below keyboard just enough to show only
+    // steady view.
+    self.view.locationBarKeyboardConstraint.constant
+        = -kToolbarHeightFullscreen;
     // End Vivaldi
 
-  } else if ([self.view.locationBarKeyboardConstraint isActive]) {
+    self.view.locationBarKeyboardConstraint.active = YES;
+    [self collapseForKeyboard];
+    [self.view layoutIfNeeded];
+  } else if (hideLocationIndicator) {
     self.view.locationBarKeyboardConstraint.active = NO;
     [self removeFromKeyboard];
     [self.view layoutIfNeeded];
+  } else if (attachOmniboxToKeyboard) {
+    NSDictionary* userInfo = notification.userInfo;
+    NSTimeInterval duration =
+        [userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    UIViewAnimationCurve curve = (UIViewAnimationCurve)
+        [userInfo[UIKeyboardAnimationCurveUserInfoKey] integerValue];
+    CGFloat visibleKeyboardHeight =
+        shouldConstraintToKeyboard
+            ? [self keyboardHeightInWindowFromNotification:notification]
+            : 0;
+
+    if (IsVivaldiRunning()) {
+      // When tab bar disabled the bottom toolbar buttons shows up below
+      // keyboard when omnibox is moved above. Hide the control buttons
+      // during transition.
+      if (!self.view.tabBarEnabled) {
+        if (shouldConstraintToKeyboard && IsSplitToolbarMode(self)) {
+          [self hideControlButtons];
+        } else if (!shouldConstraintToKeyboard && IsSplitToolbarMode(self)) {
+          [self showControlButtons];
+        }
+      }
+    } // End Vivaldi
+
+    [self.toolbarHeightDelegate
+        adjustSecondaryToolbarForKeyboardHeight:visibleKeyboardHeight
+                                       duration:duration
+                                          curve:curve];
   }
+}
+
+// Returns the user visible height of the keyboard.
+- (CGFloat)keyboardHeightInWindowFromNotification:
+    (NSNotification*)notification {
+  NSDictionary* userInfo = notification.userInfo;
+  // Part of the keyboard might be hidden. Keep only the visible area.
+  CGRect keyboardFrame = [userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+  id<UICoordinateSpace> fromCoordinateSpace =
+      ((UIScreen*)notification.object).coordinateSpace;
+  id<UICoordinateSpace> toCoordinateSpace = self.view.window;
+  CGRect keyboardFrameInWindow =
+      [fromCoordinateSpace convertRect:keyboardFrame
+                     toCoordinateSpace:toCoordinateSpace];
+  return CGRectIntersection(keyboardFrameInWindow, self.view.window.bounds)
+      .size.height;
+}
+
+#pragma mark - ToolbarAnimatee
+
+- (void)expandLocationBar {
+  self.view.expanded = YES;
+  [self.view layoutIfNeeded];
+}
+
+- (void)contractLocationBar {
+  self.view.expanded = NO;
+  [self.view layoutIfNeeded];
+}
+
+- (void)showCancelButton {
+  self.view.cancelButton.hidden = NO;
+}
+
+- (void)hideCancelButton {
+  self.view.cancelButton.hidden = YES;
+}
+
+- (void)showControlButtons {
+  self.view.progressBar.alpha = 1;
+  self.view.buttonStackView.hidden = NO;
+}
+
+- (void)hideControlButtons {
+  self.view.progressBar.alpha = 0;
+  self.view.buttonStackView.hidden = YES;
+}
+
+- (void)setLocationBarHeightToMatchFakeOmnibox {
+  // NO-OP
+}
+
+- (void)setLocationBarHeightExpanded {
+  // NO-OP
+}
+
+// Changes related to the toolbar itself.
+- (void)setToolbarFaded:(BOOL)faded {
+  self.view.alpha = faded ? 0 : 1;
 }
 
 #pragma mark - Vivaldi
@@ -346,16 +431,6 @@ using vivaldi::IsVivaldiRunning;
   [super setLocationBarViewController:locationBarViewController];
   [self updateForFullscreenProgress:1];
 }
-
-#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  if (@available(iOS 17, *)) {
-    return;
-  }
-  [self updateToolbarButtonsTintColor];
-}
-#endif
 // End Vivaldi
 
 @end

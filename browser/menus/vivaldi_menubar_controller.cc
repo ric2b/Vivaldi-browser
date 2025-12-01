@@ -5,6 +5,7 @@
 
 #include "base/base64.h"
 #include "base/functional/bind.h"
+#include "base/no_destructor.h"
 #include "browser/menus/vivaldi_bookmark_context_menu.h"
 #include "browser/menus/vivaldi_menu_enums.h"
 #include "browser/vivaldi_browser_finder.h"
@@ -12,7 +13,6 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.h"
@@ -21,8 +21,6 @@
 #include "components/prefs/pref_service.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/tools/vivaldi_tools.h"
-#include "ui/base/mojom/menu_source_type.mojom-shared.h"
-#include "ui/base/theme_provider.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/views/controls/menu/menu_controller.h"
@@ -35,7 +33,7 @@
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace vivaldi {
-
+namespace {
 static bool IsBookmarkCommand(int command_id) {
   return command_id >= IDC_FIRST_UNBOUNDED_MENU;
 }
@@ -49,7 +47,12 @@ SkColor TextColorForMenu(views::MenuItemView* menu, views::Widget* widget) {
   }
 }
 
-std::unique_ptr<MenubarController> MenubarController::active_controller_;
+std::unique_ptr<MenubarController>& GetInstanceOwner() {
+  static base::NoDestructor<std::unique_ptr<MenubarController>>
+      active_controller;
+  return *active_controller;
+}
+}  // namespace
 
 // This is the maximum id we can assing a menu element starting from 0 in JS
 // when setting up a menu. We add IDC_VIV_MENU_FIRST to ids from JS here in the
@@ -63,24 +66,22 @@ int MenubarController::GetMaximumId() {
 MenubarController* MenubarController::Create(
     VivaldiBrowserWindow* browser_window,
     std::optional<Params> params) {
-  active_controller_.reset(new MenubarController(
-    browser_window, std::move(params)));
-  return active_controller_.get();
+  GetInstanceOwner().reset(
+      new MenubarController(browser_window, std::move(params)));
+  return GetInstanceOwner().get();
 }
 
 // The Menubar controller is a support class for the MenubarMenu api. The api
 // handles both horizontal and vertical (vivaldi menu) modes. Menus are created
 // on demand just before shown to mimimize impact of large menus.
-MenubarController::MenubarController(
-  VivaldiBrowserWindow* browser_window,
-  std::optional<Params> params)
+MenubarController::MenubarController(VivaldiBrowserWindow* browser_window,
+                                     std::optional<Params> params)
     : browser_window_(browser_window),
       web_contents_(browser_window->web_contents()),
-      browser_(FindBrowserForEmbedderWebContents(
-          browser_window->web_contents())),
+      browser_(
+          FindBrowserForEmbedderWebContents(browser_window->web_contents())),
       params_(std::move(params)),
       run_types_(views::MenuRunner::SHOULD_SHOW_MNEMONICS) {
-
   browser_window_->GetWidget()->AddObserver(this);
 
   state_.siblings.reserve(params_->properties.siblings.size());
@@ -114,7 +115,7 @@ MenubarController::~MenubarController() {
 void MenubarController::OnWidgetDestroying(views::Widget* widget) {
   browser_window_->GetWidget()->RemoveObserver(this);
   browser_window_ = nullptr;
-  active_controller_.reset(nullptr);
+  GetInstanceOwner().reset();
 }
 
 Profile* MenubarController::GetProfile() {
@@ -167,9 +168,8 @@ void MenubarController::PopulateModel(int menu_id,
   std::vector<Menu>& list = params_->properties.siblings;
   for (const Menu& sibling : list) {
     if (sibling.id == menu_id) {
-      std::string error =
-          PopulateModel(sibling.id, dark_text_color,
-                        sibling.children, simple_menu_model);
+      std::string error = PopulateModel(sibling.id, dark_text_color,
+                                        sibling.children, simple_menu_model);
       if (!error.empty()) {
         extensions::MenubarMenuAPI::SendError(GetProfile(), error);
       }
@@ -200,11 +200,10 @@ void MenubarController::PopulateSubmodel(int menu_id,
   }
 }
 
-
 std::string MenubarController::PopulateModel(int menu_id,
-    bool dark_text_color,
-    const std::vector<Element>& list,
-    ui::SimpleMenuModel* menu_model) {
+                                             bool dark_text_color,
+                                             const std::vector<Element>& list,
+                                             ui::SimpleMenuModel* menu_model) {
   bool prev_is_bookmarks = false;
   namespace menubar_menu = extensions::vivaldi::menubar_menu;
   for (const Element& child : list) {
@@ -418,10 +417,7 @@ void MenubarController::PopulateBookmarks() {
   views::Widget* parent = views::Widget::GetWidgetForNativeWindow(
       browser_->window()->GetNativeWindow());
   bookmark_menu_delegate_.reset(new BookmarkMenuDelegate(
-      browser_,
-      parent,
-      this, BookmarkLaunchLocation::kNone
-    ));
+      browser_, parent, this, BookmarkLaunchLocation::kNone));
   bookmark_menu_delegate_->BuildFullMenu(bookmark_menu_);
 }
 
@@ -442,11 +438,12 @@ void MenubarController::PopulateMenu(views::MenuItemView* parent,
   }
 }
 
-views::MenuItemView* MenubarController::AddMenuItem(views::MenuItemView* parent,
-                                          int menu_index,
-                                          ui::MenuModel* model,
-                                          int model_index,
-                                          ui::MenuModel::ItemType menu_type) {
+views::MenuItemView* MenubarController::AddMenuItem(
+    views::MenuItemView* parent,
+    int menu_index,
+    ui::MenuModel* model,
+    int model_index,
+    ui::MenuModel::ItemType menu_type) {
   int command_id = model->GetCommandIdAt(model_index);
   views::MenuItemView* menu_item =
       views::MenuModelAdapter::AddMenuItemFromModelAt(
@@ -466,7 +463,7 @@ views::MenuItemView* MenubarController::AddMenuItem(views::MenuItemView* parent,
 
 void MenubarController::Show() {
   views::Widget* parent = views::Widget::GetWidgetForNativeWindow(
-    browser_->window()->GetNativeWindow());
+      browser_->window()->GetNativeWindow());
   if (!parent) {
     extensions::MenubarMenuAPI::SendError(GetProfile(), "No parent");
     extensions::MenubarMenuAPI::SendClose(GetProfile());
@@ -474,8 +471,8 @@ void MenubarController::Show() {
     extensions::MenubarMenuAPI::SendError(GetProfile(), "No menu");
     extensions::MenubarMenuAPI::SendClose(GetProfile());
   } else {
-    Profile* profile = Profile::FromBrowserContext(
-        web_contents_->GetBrowserContext());
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents_->GetBrowserContext());
     views::MenuController::VivaldiSetCompactLayout(
         profile->GetPrefs()->GetBoolean(vivaldiprefs::kMenuCompact));
     views::MenuController::VivaldiSetContextMenu(false);
@@ -542,8 +539,9 @@ bool MenubarController::IsShowing() const {
   return menu_runner_.get() && menu_runner_->IsRunning();
 }
 
-bool MenubarController::ShouldExecuteCommandWithoutClosingMenu(int id,
-                                                     const ui::Event& e) {
+bool MenubarController::ShouldExecuteCommandWithoutClosingMenu(
+    int id,
+    const ui::Event& e) {
   if (IsBookmarkCommand(id) || IsVivaldiMenuItem(id)) {
     bookmark_menu_delegate_->ShouldExecuteCommandWithoutClosingMenu(id, e);
   }
@@ -565,8 +563,8 @@ void MenubarController::ExecuteCommand(int id, int mouse_event_flags) {
   if (IsBookmarkCommand(id) || IsVivaldiMenuItem(id)) {
     bookmark_menu_delegate_->ExecuteCommand(id, mouse_event_flags);
   } else {
-    extensions::MenubarMenuAPI::SendAction(
-        GetProfile(), id, mouse_event_flags, false);
+    extensions::MenubarMenuAPI::SendAction(GetProfile(), id, mouse_event_flags,
+                                           false);
   }
 }
 
@@ -576,7 +574,7 @@ void MenubarController::OnMenuClosed(views::MenuItemView* menu) {
 }
 
 bool MenubarController::IsTriggerableEvent(views::MenuItemView* menu,
-                                 const ui::Event& e) {
+                                           const ui::Event& e) {
   return IsBookmarkCommand(menu->GetCommand())
              ? bookmark_menu_delegate_->IsTriggerableEvent(menu, e)
              : MenuDelegate::IsTriggerableEvent(menu, e);
@@ -609,7 +607,8 @@ bool MenubarController::IsCommandEnabled(int id) const {
 
 bool MenubarController::GetAccelerator(int id,
                                        ui::Accelerator* accelerator) const {
-  std::map<int, ui::Accelerator>::const_iterator it = id_to_accelerator_map_.find(id);
+  std::map<int, ui::Accelerator>::const_iterator it =
+      id_to_accelerator_map_.find(id);
   if (it == id_to_accelerator_map_.end()) {
     return false;
   } else {
@@ -666,23 +665,23 @@ views::MenuItemView* MenubarController::GetNextSiblingMenu(
     }
   }
   *has_mnemonics = true;
-  return GetVivaldiSiblingMenu(
-      nullptr, state_.siblings.at(index).rect.origin(), rect, anchor);
+  return GetVivaldiSiblingMenu(nullptr, state_.siblings.at(index).rect.origin(),
+                               rect, anchor);
 }
 
 void MenubarController::OnHover(const std::string& url) {
   extensions::MenubarMenuAPI::SendHover(GetProfile(),
-      params_->properties.window_id, url);
+                                        params_->properties.window_id, url);
 }
 
 void MenubarController::OnOpenBookmark(int64_t bookmark_id, int event_state) {
-  extensions::MenubarMenuAPI::SendOpenBookmark(GetProfile(),
-      params_->properties.window_id, bookmark_id, event_state);
+  extensions::MenubarMenuAPI::SendOpenBookmark(
+      GetProfile(), params_->properties.window_id, bookmark_id, event_state);
 }
 
 void MenubarController::OnBookmarkAction(int64_t bookmark_id, int command) {
-  extensions::MenubarMenuAPI::SendBookmarkAction(GetProfile(),
-      params_->properties.window_id, bookmark_id, command);
+  extensions::MenubarMenuAPI::SendBookmarkAction(
+      GetProfile(), params_->properties.window_id, bookmark_id, command);
 }
 
 // Note: This is not used by bookmarks. That uses a separate system.
@@ -696,9 +695,9 @@ void MenubarController::RequestFavicon(int id,
       return;
   }
 
-  favicon_base::FaviconImageCallback callback = base::BindOnce(
-      &MenubarController::OnFaviconAvailable, base::Unretained(this), id,
-          menu_id);
+  favicon_base::FaviconImageCallback callback =
+      base::BindOnce(&MenubarController::OnFaviconAvailable,
+                     base::Unretained(this), id, menu_id);
 
   favicon_service_->GetFaviconImageForPageURL(GURL(url), std::move(callback),
                                               &cancelable_task_tracker_);

@@ -18,6 +18,7 @@
 #include "base/types/optional_util.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "net/base/features.h"
 #include "net/base/load_flags.h"
 #include "net/base/network_handle.h"
 #include "net/http/http_request_headers.h"
@@ -243,6 +244,8 @@ CorsURLLoaderFactory::CorsURLLoaderFactory(
       factory_cookie_setting_overrides_(params->cookie_setting_overrides),
       devtools_cookie_setting_overrides_(
           params->devtools_cookie_setting_overrides),
+      is_main_frame_origin_recently_accessed_(
+          params->is_main_frame_origin_recently_accessed),
       origin_access_list_(origin_access_list),
       owner_(owner) {
   TRACE_EVENT("loading", "CorsURLLoaderFactory::CorsURLLoaderFactory",
@@ -383,6 +386,13 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
     mojo::Remote<mojom::URLLoaderClient>(std::move(client))
         ->OnComplete(URLLoaderCompletionStatus(net::ERR_INVALID_ARGUMENT));
     return;
+  }
+
+  if (base::FeatureList::IsEnabled(
+          net::features::kUpdateIsMainFrameOriginRecentlyAccessed) &&
+      is_main_frame_origin_recently_accessed_) {
+    resource_request.load_flags |=
+        net::LOAD_IS_MAIN_FRAME_ORIGIN_RECENTLY_ACCESSED;
   }
 
   if (resource_request.destination ==
@@ -544,6 +554,11 @@ bool CorsURLLoaderFactory::IsValidCorsExemptHeaders(
   return true;
 }
 
+bool CorsURLLoaderFactory::IsMultiNetworkCCTWorkFlow() const {
+  return context_->url_request_context()->bound_network() !=
+         net::handles::kInvalidNetworkHandle;
+}
+
 bool CorsURLLoaderFactory::IsCorsPreflighLoadOptionAllowed() const {
   // kURLLoadOptionAsCorsPreflight is set by CorsURLLoader itself, when
   // starting a request, if CORS preflight request is needed.
@@ -578,9 +593,7 @@ bool CorsURLLoaderFactory::IsCorsPreflighLoadOptionAllowed() const {
   // a valid network. So, given that this config is security critical, it's best
   // to "peek into implementation details" rather than granting this exception
   // to a bigger group.
-  return allow_external_preflights_for_testing_ ||
-         context_->url_request_context()->bound_network() !=
-             net::handles::kInvalidNetworkHandle;
+  return allow_external_preflights_for_testing_ || IsMultiNetworkCCTWorkFlow();
 }
 
 bool CorsURLLoaderFactory::IsValidRequest(const ResourceRequest& request,
@@ -602,12 +615,52 @@ bool CorsURLLoaderFactory::IsValidRequest(const ResourceRequest& request,
     return false;
   }
 
-  // Reject request with trusted params if factory is not for a trusted
-  // consumer.
-  if (request.trusted_params && !is_trusted_) {
-    mojo::ReportBadMessage(
-        "CorsURLLoaderFactory: Untrusted caller making trusted request");
-    return false;
+  // Reject requests with load flags that are only for use internally by the
+  // network service itself.
+  if (request.load_flags &
+      (net::LOAD_CAN_USE_SHARED_DICTIONARY |
+       net::LOAD_DISABLE_SHARED_DICTIONARY_AFTER_CROSS_ORIGIN_REDIRECT)) {
+    // In the multi-network CCT workflow, when fetching the subresource, we
+    // create a nested CorsURLLoaderFactory to run the same request on a
+    // specific network. That causes this check to be invoked twice: the first
+    // invocation performs the authoritative validation, and later passes may
+    // add internal flags to the request. Re-validating here is unnecessary and
+    // can falsely reject otherwise valid requests (See
+    // CorsURLLoaderFactory::IsCorsPreflighLoadOptionAllowed for the rational).
+    // Note: Skipping this check is appropriate for subresource requests.
+    // For main page loads or navigation requests, ideally the check should
+    // still be performed as there is no nesting. However, since this is only
+    // a sanity check, skipping it here is safe.
+    // TODO(crbug.com/449098586): refactor to get rid of nested
+    // CorsURLLoaderFactory to make the design clearer.
+    if (!IsMultiNetworkCCTWorkFlow()) {
+      mojo::ReportBadMessage(
+          "CorsURLLoaderFactory: Internal load flag received");
+      return false;
+    }
+  }
+
+  // Check if this is an untrusted factory being provided parameters that should
+  // only be passed if it's trusted.
+  if (!is_trusted_) {
+    if (request.trusted_params) {
+      mojo::ReportBadMessage(
+          "CorsURLLoaderFactory: Untrusted caller making trusted request");
+      return false;
+    }
+
+    // Apply allowlist for which flags untrusted factories are allowed to use.
+    if (request.load_flags &
+        ~(net::LOAD_VALIDATE_CACHE | net::LOAD_BYPASS_CACHE |
+          net::LOAD_SKIP_CACHE_VALIDATION | net::LOAD_ONLY_FROM_CACHE |
+          net::LOAD_DISABLE_CACHE | net::LOAD_PREFETCH |
+          net::LOAD_IGNORE_LIMITS | net::LOAD_DO_NOT_USE_EMBEDDED_IDENTITY |
+          net::LOAD_SUPPORT_ASYNC_REVALIDATION |
+          net::LOAD_RESTRICTED_PREFETCH_FOR_MAIN_FRAME)) {
+      mojo::ReportBadMessage(
+          "CorsURLLoaderFactory: Untrusted caller using restricted load flag");
+      return false;
+    }
   }
 
   // Reject request if the restricted prefetch load flag is set but the
@@ -716,6 +769,15 @@ bool CorsURLLoaderFactory::IsValidRequest(const ResourceRequest& request,
       case mojom::RequestMode::kNoCors:
         // SOP enforced by ORB.
         break;
+    }
+
+    // Only the browser process is allowed to initiate FedCM requests.
+    if (request.destination ==
+        network::mojom::RequestDestination::kWebIdentity) {
+      mojo::ReportBadMessage(
+          "CorsURLLoaderFactory: attempt to use forbidden destination from "
+          "renderer");
+      return false;
     }
   }
 

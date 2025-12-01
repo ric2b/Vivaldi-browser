@@ -1382,16 +1382,8 @@ _shortestPath:   /* cur, last_pos, best_mlen, best_off have to be set */
             assert(storeEnd < ZSTD_OPT_SIZE);
             DEBUGLOG(6, "last stretch copied into pos=%u (llen=%u,mlen=%u,ofc=%u)",
                         storeEnd, lastStretch.litlen, lastStretch.mlen, lastStretch.off);
-            if (lastStretch.litlen > 0) {
-                /* last "sequence" is unfinished: just a bunch of literals */
-                opt[storeEnd].litlen = lastStretch.litlen;
-                opt[storeEnd].mlen = 0;
-                storeStart = storeEnd-1;
-                opt[storeStart] = lastStretch;
-            } {
-                opt[storeEnd] = lastStretch;  /* note: litlen will be fixed */
-                storeStart = storeEnd;
-            }
+            opt[storeEnd] = lastStretch;  /* note: litlen will be fixed */
+            storeStart = storeEnd;
             while (1) {
                 ZSTD_optimal_t nextStretch = opt[stretchPos];
                 opt[storeStart].litlen = nextStretch.litlen;

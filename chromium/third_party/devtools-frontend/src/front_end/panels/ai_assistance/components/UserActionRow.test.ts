@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,6 +25,7 @@ describeWithEnvironment('UserActionRow', () => {
       showRateButtons: true,
       canShowFeedbackForm: true,
       onSuggestionClick: sinon.stub(),
+      onCopyResponseClick: sinon.stub(),
       onFeedbackSubmit: sinon.stub(),
     });
 
@@ -46,6 +47,7 @@ describeWithEnvironment('UserActionRow', () => {
       showRateButtons: true,
       canShowFeedbackForm: false,
       onSuggestionClick: sinon.stub(),
+      onCopyResponseClick: sinon.stub(),
       onFeedbackSubmit: sinon.stub(),
     });
 
@@ -67,6 +69,7 @@ describeWithEnvironment('UserActionRow', () => {
       showRateButtons: true,
       canShowFeedbackForm: true,
       onSuggestionClick: sinon.stub(),
+      onCopyResponseClick: sinon.stub(),
       onFeedbackSubmit: sinon.stub(),
     });
 
@@ -102,6 +105,7 @@ describeWithEnvironment('UserActionRow', () => {
           {
             onRatingClick: () => {},
             onReportClick: () => {},
+            onCopyResponseClick: () => {},
             scrollSuggestionsScrollContainer: () => {},
             onSuggestionsScrollOrResize: () => {},
             onSuggestionClick: () => {},

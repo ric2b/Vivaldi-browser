@@ -119,6 +119,11 @@ struct ObjectTypeOf {};
   struct ObjectTypeOf<Name> {                                 \
     static constexpr ObjectType value = ObjectType::kOddball; \
   };
+#define OBJECT_TYPE_HOLE_CASE(Name, ...)                   \
+  template <>                                              \
+  struct ObjectTypeOf<Name> {                              \
+    static constexpr ObjectType value = ObjectType::kHole; \
+  };
 OBJECT_TYPE_CASE(Object)
 OBJECT_TYPE_CASE(Smi)
 OBJECT_TYPE_CASE(TaggedIndex)
@@ -134,6 +139,7 @@ OBJECT_TYPE_ODDBALL_CASE(Null)
 OBJECT_TYPE_ODDBALL_CASE(Undefined)
 OBJECT_TYPE_ODDBALL_CASE(True)
 OBJECT_TYPE_ODDBALL_CASE(False)
+HOLE_LIST(OBJECT_TYPE_HOLE_CASE)
 #undef OBJECT_TYPE_CASE
 #undef OBJECT_TYPE_STRUCT_CASE
 #undef OBJECT_TYPE_TEMPLATE_CASE
@@ -696,7 +702,7 @@ class V8_EXPORT_PRIVATE CodeAssembler {
 
   template <class T>
   TNode<T> Parameter(int value,
-                     const SourceLocation& loc = SourceLocation::Current()) {
+                     SourceLocation loc = SourceLocation::Current()) {
     static_assert(
         std::is_convertible_v<TNode<T>, TNode<Object>>,
         "Parameter is only for tagged types. Use UncheckedParameter instead.");
@@ -745,13 +751,12 @@ class V8_EXPORT_PRIVATE CodeAssembler {
   // Hack for supporting SourceLocation alongside template packs.
   struct MessageWithSourceLocation {
     const char* message;
-    const SourceLocation& loc;
+    SourceLocation loc;
 
     // Allow implicit construction, necessary for the hack.
     // NOLINTNEXTLINE
-    MessageWithSourceLocation(
-        const char* message,
-        const SourceLocation& loc = SourceLocation::Current())
+    MessageWithSourceLocation(const char* message,
+                              SourceLocation loc = SourceLocation::Current())
         : message(message), loc(loc) {}
   };
   template <class... Args>
@@ -842,6 +847,9 @@ class V8_EXPORT_PRIVATE CodeAssembler {
 
   void Switch(Node* index, Label* default_label, const int32_t* case_values,
               Label** case_labels, size_t case_count);
+  template <typename Value>
+  void Switch(Node* index, Label* default_label,
+              const std::initializer_list<std::pair<Value, Label*>>& cases);
 
   // Access to the frame pointer.
   TNode<RawPtrT> LoadFramePointer();

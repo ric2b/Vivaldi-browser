@@ -6,6 +6,7 @@
 
 #import "base/apple/foundation_util.h"
 #import "base/functional/bind.h"
+#import "base/ios/ios_util.h"
 #import "base/location.h"
 #import "base/strings/string_number_conversions.h"
 #import "base/strings/sys_string_conversions.h"
@@ -21,6 +22,7 @@
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/password_manager/core/browser/leak_detection/mock_bulk_leak_check_service.h"
 #import "components/password_manager/core/browser/password_form.h"
+#import "components/password_manager/core/browser/password_manager_constants.h"
 #import "components/password_manager/core/browser/password_manager_test_utils.h"
 #import "components/password_manager/core/browser/password_store/test_password_store.h"
 #import "ios/chrome/browser/affiliations/model/ios_chrome_affiliation_service_factory.h"
@@ -88,21 +90,19 @@ class PasswordManagerViewControllerTest
     TestProfileIOS::Builder builder;
     builder.AddTestingFactory(
         IOSChromeProfilePasswordStoreFactory::GetInstance(),
-        base::BindRepeating(
-            &password_manager::BuildPasswordStore<web::BrowserState,
+        base::BindOnce(
+            &password_manager::BuildPasswordStore<ProfileIOS,
                                                   TestPasswordStore>));
     builder.AddTestingFactory(
         IOSChromeBulkLeakCheckServiceFactory::GetInstance(),
-        base::BindRepeating(base::BindLambdaForTesting([](web::BrowserState*) {
-          return std::unique_ptr<KeyedService>(
-              std::make_unique<MockBulkLeakCheckService>());
-        })));
+        base::BindOnce([](ProfileIOS*) -> std::unique_ptr<KeyedService> {
+          return std::make_unique<MockBulkLeakCheckService>();
+        }));
     builder.AddTestingFactory(
         IOSChromeAffiliationServiceFactory::GetInstance(),
-        base::BindRepeating(base::BindLambdaForTesting([](web::BrowserState*) {
-          return std::unique_ptr<KeyedService>(
-              std::make_unique<affiliations::FakeAffiliationService>());
-        })));
+        base::BindOnce([](ProfileIOS*) -> std::unique_ptr<KeyedService> {
+          return std::make_unique<affiliations::FakeAffiliationService>();
+        }));
 
     profile_ = std::move(builder).Build();
     browser_ = std::make_unique<TestBrowser>(profile_.get());
@@ -635,7 +635,15 @@ TEST_F(PasswordManagerViewControllerTest,
 
 // Tests that opening the PasswordManagerViewController in search mode shows the
 // expected content.
-TEST_F(PasswordManagerViewControllerTest, TestOpenInSearchMode) {
+// TODO(crbug.com/437314312): Deflake the test.
+TEST_F(PasswordManagerViewControllerTest, FLAKY_TestOpenInSearchMode) {
+  // TODO(crbug.com/437314312): Re-enable on device.
+#if !TARGET_OS_SIMULATOR
+  if (base::ios::IsRunningOnIOS26OrLater()) {
+    return;
+  }
+#endif
+
   // Call `settingsWillBeDismissed` on the initial view controller so that its
   // observers are reset.
   [GetPasswordManagerViewController() settingsWillBeDismissed];
@@ -1304,29 +1312,6 @@ TEST_F(PasswordManagerViewControllerTest, WidgetPromoMoreInfoButtonMetric) {
   histogram_tester.ExpectBucketCount(
       kPasswordManagerWidgetPromoActionHistogram,
       PasswordManagerWidgetPromoAction::kOpenInstructions, 1);
-
-  [GetPasswordManagerViewController() settingsWillBeDismissed];
-}
-
-// Test verifies that the Trusted Vault widget promo cell is not displayed when
-// the flag
-// `password_manager::features::kIOSEnablePasswordManagerTrustedVaultWidget` is
-// disabled.
-TEST_F(PasswordManagerViewControllerTest,
-       TrustedVaultWidgetPromoWhenFlagIsDisabled) {
-  base::HistogramTester histogram_tester;
-  AddSavedForm1();
-
-  GetPasswordManagerViewController().shouldShowTrustedVaultWidgetPromo = YES;
-  [GetPasswordManagerViewController() reloadData];
-
-  EXPECT_FALSE([GetPasswordManagerViewController().tableViewModel
-      hasSectionForSectionIdentifier:SectionIdentifierTrustedVaultWidgetPromo]);
-
-  // Bucket count should be zero.
-  histogram_tester.ExpectBucketCount(
-      kPasswordManagerPromoWithTrustedVaultKeyRetrievalActionHistogram,
-      PasswordManagerPromoWithTrustedVaultKeyRetrievalAction::kDisplayed, 0);
 
   [GetPasswordManagerViewController() settingsWillBeDismissed];
 }
